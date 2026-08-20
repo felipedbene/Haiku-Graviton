@@ -117,7 +117,10 @@ BTimeUnitFormat::Format(BString& buffer, const int32 value,
 	if (unit < 0 || unit > B_TIME_UNIT_LAST)
 		return B_BAD_VALUE;
 
-	if (fFormatter == NULL)
+	// The constructor leaves fFormatter non-NULL when the underlying ICU
+	// object reports a failure, so a null check alone is not enough: calling
+	// into a partially constructed TimeUnitFormat crashes inside ICU.
+	if (fFormatter == NULL || fInitStatus != B_OK)
 		return B_NO_INIT;
 
 	UErrorCode icuStatus = U_ZERO_ERROR;

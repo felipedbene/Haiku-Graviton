@@ -51,6 +51,9 @@ BDurationFormat::BDurationFormat(const BLanguage& language,
 		fInitStatus = B_NO_MEMORY;
 		return;
 	}
+
+	if (!U_SUCCESS(icuStatus))
+		fInitStatus = B_ERROR;
 }
 
 
@@ -67,6 +70,9 @@ BDurationFormat::BDurationFormat(const BString& separator,
 		fInitStatus = B_NO_MEMORY;
 		return;
 	}
+
+	if (!U_SUCCESS(icuStatus))
+		fInitStatus = B_ERROR;
 }
 
 
@@ -125,6 +131,9 @@ status_t
 BDurationFormat::Format(BString& buffer, const bigtime_t startValue,
 	const bigtime_t stopValue) const
 {
+	if (fCalendar == NULL || fInitStatus != B_OK)
+		return B_NO_INIT;
+
 	UErrorCode icuStatus = U_ZERO_ERROR;
 	fCalendar->setTime((UDate)startValue / 1000, icuStatus);
 	if (!U_SUCCESS(icuStatus))
