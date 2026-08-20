@@ -901,6 +901,26 @@ ena_setup_io_queues(ena_haiku_device* device)
 }
 
 
+/*!	Destroys the queue pair and forgets its handlers.
+
+	Shared with the ena_init_device() unwind, so it has to tolerate a pair that
+	was never created, and it clears the handlers so that a second call is a no
+	operation.
+*/
+static void
+ena_release_io_queues(ena_haiku_device* device)
+{
+	if (device->rxSubmissionQueue != NULL)
+		ena_com_destroy_io_queue(&device->comDev, ENA_RX_QUEUE_ID);
+	if (device->txSubmissionQueue != NULL)
+		ena_com_destroy_io_queue(&device->comDev, ENA_TX_QUEUE_ID);
+	device->rxSubmissionQueue = NULL;
+	device->rxCompletionQueue = NULL;
+	device->txSubmissionQueue = NULL;
+	device->txCompletionQueue = NULL;
+}
+
+
 /*!	Allocates one contiguous DMA area of \a count packet slots.
 
 	Carving a single contiguous area means each slot's physical address is a
@@ -989,6 +1009,35 @@ ena_setup_buffers(ena_haiku_device* device)
 	device->txFreeCount = device->txRingSize;
 
 	return B_OK;
+}
+
+
+/*!	Releases everything ena_setup_buffers() allocated.
+
+	Shared with the ena_init_device() unwind, so it has to cope with an
+	allocation that only got part way. Every field is reset as well as released:
+	this runs once per close, not once per lifetime, and the next open starts
+	from these values.
+*/
+static void
+ena_release_buffers(ena_haiku_device* device)
+{
+	if (device->rxBufferArea >= 0) {
+		delete_area(device->rxBufferArea);
+		device->rxBufferArea = -1;
+	}
+	if (device->txBufferArea >= 0) {
+		delete_area(device->txBufferArea);
+		device->txBufferArea = -1;
+	}
+	free(device->rxBuffers);
+	free(device->txBuffers);
+	free(device->txFreeIds);
+	device->rxBuffers = NULL;
+	device->txBuffers = NULL;
+	device->txFreeIds = NULL;
+	device->txFreeCount = 0;
+	device->rxNextToFill = 0;
 }
 
 
@@ -1255,7 +1304,15 @@ ena_init_device(void* _info, void** _cookie)
 	*_cookie = device;
 	return B_OK;
 
+	/* The device manager does not call UninitDevice for a device whose
+	   InitDevice failed, so this is the only chance to give any of it back --
+	   and since InitDevice is reference counted per open(), an ifconfig up that
+	   fails here will be tried again. It therefore has to undo everything
+	   above, in the same order as ena_uninit_device(), and leave every handle
+	   at the value ena_init_driver() set so a later teardown is harmless. */
 err_device:
+	ena_release_io_queues(device);
+
 	if (device->ioIrqInstalled) {
 		remove_io_interrupt_handler(device->ioIrq, ena_io_interrupt, device);
 		device->ioIrqInstalled = false;
@@ -1265,6 +1322,13 @@ err_device:
 			ena_management_interrupt, device);
 		device->managementIrqInstalled = false;
 	}
+
+	ena_com_rss_destroy(&device->comDev);
+
+	/* Before the buffer areas, which the device can still DMA into; see the
+	   comment on ena_destroy_device(). */
+	ena_destroy_device(device);
+
 	/* Keyed on msixConfigured, not msixEnabled: configure_msix() may have
 	   succeeded while enable_msix() failed, and unconfigure_msi() is what
 	   releases the vectors in either case. */
@@ -1273,8 +1337,13 @@ err_device:
 		device->msixConfigured = false;
 		device->msixEnabled = false;
 	}
-	ena_destroy_device(device);
+
+	ena_release_buffers(device);
 err_unmap:
+	if (device->memoryArea >= 0) {
+		delete_area(device->memoryArea);
+		device->memoryArea = -1;
+	}
 	if (device->registerArea >= 0) {
 		delete_area(device->registerArea);
 		device->registerArea = -1;
@@ -1291,14 +1360,7 @@ ena_uninit_device(void* _cookie)
 
 	device->running = false;
 
-	if (device->rxSubmissionQueue != NULL)
-		ena_com_destroy_io_queue(&device->comDev, ENA_RX_QUEUE_ID);
-	if (device->txSubmissionQueue != NULL)
-		ena_com_destroy_io_queue(&device->comDev, ENA_TX_QUEUE_ID);
-	device->rxSubmissionQueue = NULL;
-	device->rxCompletionQueue = NULL;
-	device->txSubmissionQueue = NULL;
-	device->txCompletionQueue = NULL;
+	ena_release_io_queues(device);
 
 	if (device->ioIrqInstalled) {
 		remove_io_interrupt_handler(device->ioIrq, ena_io_interrupt, device);
@@ -1329,25 +1391,7 @@ ena_uninit_device(void* _cookie)
 	mutex_destroy(&device->txLock);
 	mutex_destroy(&device->rxLock);
 
-	/* This runs once per close, not once per lifetime: the device manager
-	   reference counts InitDevice/UninitDevice. Everything torn down here has
-	   to be reset, or the next open starts from dangling values. */
-	if (device->rxBufferArea >= 0) {
-		delete_area(device->rxBufferArea);
-		device->rxBufferArea = -1;
-	}
-	if (device->txBufferArea >= 0) {
-		delete_area(device->txBufferArea);
-		device->txBufferArea = -1;
-	}
-	free(device->rxBuffers);
-	free(device->txBuffers);
-	free(device->txFreeIds);
-	device->rxBuffers = NULL;
-	device->txBuffers = NULL;
-	device->txFreeIds = NULL;
-	device->txFreeCount = 0;
-	device->rxNextToFill = 0;
+	ena_release_buffers(device);
 
 	if (device->memoryArea >= 0) {
 		delete_area(device->memoryArea);
