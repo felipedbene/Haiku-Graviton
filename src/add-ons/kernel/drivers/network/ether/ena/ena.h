@@ -39,6 +39,25 @@ extern "C" {
 #define ENA_DRIVER_VERSION_SUBMINOR	0
 #define ENA_HAIKU_REVISION		59996
 
+/* Printed at attach, before anything else the driver says, so that a boot log
+   can be tied to the source it was built from.
+
+   This exists because of a real incident: reverting an experiment with `mv`
+   restored a source file whose mtime predated the object built from the patched
+   version, jam compared mtimes and kept the stale object, and days of boots
+   silently tested code that was no longer in the tree. `git diff` was clean, a
+   checksum against upstream was clean, and nothing in any log distinguished the
+   two builds.
+
+   Bump ENA_BUILD_TAG whenever you want a boot to be attributable to a specific
+   change. The compiler-provided timestamp beside it is the more useful half: it
+   is the moment *this translation unit* was actually compiled, so a stale ena.o
+   announces itself. Note it cannot prove anything about the vendored HAL's
+   object -- that one is only guaranteed by removing the driver's object
+   directory before building, which is the habit to keep. */
+#define ENA_BUILD_TAG		"mtu-frameSize"
+#define ENA_BUILD_STAMP		__DATE__ " " __TIME__
+
 /* BAR 0 holds the registers; BAR 2 is the Low Latency Queue push window. The
    MSI-X table lives in BAR 1, which the PCI bus manager maps itself. */
 #define ENA_REGISTER_BAR	0
