@@ -183,8 +183,14 @@ ScreenManager::ScreenChanged(Screen* screen)
 
 	for (int32 i = 0; i < fScreenList.CountItems(); i++) {
 		screen_item* item = fScreenList.ItemAt(i);
-		if (item->screen.Get() == screen)
-			item->owner->ScreenChanged(screen);
+		if (item->screen.Get() == screen) {
+			// A screen with no owner is legitimate -- AcquireScreens() leaves
+			// owner NULL for screens nobody claimed -- so notifying is
+			// conditional. The dereference used to be unconditional, which is a
+			// latent null dereference rather than a bug we ever hit.
+			if (item->owner != NULL)
+				item->owner->ScreenChanged(screen);
+		}
 	}
 }
 
