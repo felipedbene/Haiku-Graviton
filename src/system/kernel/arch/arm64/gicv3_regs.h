@@ -159,6 +159,7 @@
 #define GITS_CMD_MAPTI			0x0a
 #define GITS_CMD_INV			0x0c
 #define GITS_CMD_INVALL			0x0d
+#define GITS_CMD_DISCARD		0x0f
 #define GITS_CMD_SYNC			0x05
 
 // PROPBASER/PENDBASER cacheability and shareability, matching the tables we

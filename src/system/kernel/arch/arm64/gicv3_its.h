@@ -68,6 +68,9 @@ private:
 									uint64 target, bool valid);
 			status_t			_MapInterrupt(uint32 deviceID, uint32 eventID,
 									uint32 lpi, uint32 collection);
+			status_t			_Discard(uint32 deviceID, uint32 eventID);
+
+			void				_ReleaseVector(uint32 index);
 
 			addr_t				fRegs;
 			phys_addr_t			fTranslaterPhysical;

@@ -471,6 +471,43 @@ GICv3ITS::_MapInterrupt(uint32 deviceID, uint32 eventID, uint32 lpi,
 }
 
 
+// The counterpart of MAPTI: it removes the (DeviceID, EventID) entry from the
+// device's ITT and clears the LPI's pending state. The architecture requires it
+// before that EventID may be mapped again, which INVALL does not cover -- INVALL
+// only makes the ITS re-read the property table, and never touches the ITT.
+status_t
+GICv3ITS::_Discard(uint32 deviceID, uint32 eventID)
+{
+	uint64 command[4];
+	command[0] = GITS_CMD_DISCARD | ((uint64)deviceID << 32);
+	command[1] = eventID;
+	command[2] = 0;
+	command[3] = 0;
+	return _SubmitCommand(command);
+}
+
+
+// Undoes one vector's worth of AllocateVectors(). The caller owns the INVALL and
+// the SYNC that have to follow, since releasing a run of vectors needs only one
+// of each. Nothing happens for a vector that is not allocated: fVectorDevice and
+// fVectorEvent are only meaningful while the bit is set, so a stray DISCARD
+// built from them could unmap an event belonging to some other device.
+void
+GICv3ITS::_ReleaseVector(uint32 index)
+{
+	if ((fAllocated[index / 32] & (1u << (index % 32))) == 0)
+		return;
+
+	const uint32 lpi = GIC_LPI_BASE + index;
+	((volatile uint8*)fPropertyTable)[lpi - GIC_LPI_BASE]
+		= GIC_PRIORITY_DEFAULT;
+
+	_Discard(fVectorDevice[index], fVectorEvent[index]);
+
+	fAllocated[index / 32] &= ~(1u << (index % 32));
+}
+
+
 its_device*
 GICv3ITS::_DeviceFor(uint32 requesterID)
 {
@@ -573,8 +610,28 @@ GICv3ITS::AllocateVectors(uint32 requesterID, uint32 count,
 			= GIC_PRIORITY_DEFAULT | GIC_LPI_CONFIG_ENABLE;
 
 		status_t status = _MapInterrupt(requesterID, i, lpi, 0);
-		if (status != B_OK)
+		if (status != B_OK) {
+			// Returning with the earlier vectors still committed would leak
+			// them for the rest of the boot -- FreeVectors() is never called
+			// for a request that failed -- and leave their LPIs enabled in the
+			// shared property table with nothing mapped behind them. This one
+			// never reached the ITT, so it gets its bookkeeping cleared but no
+			// DISCARD.
+			((volatile uint8*)fPropertyTable)[lpi - GIC_LPI_BASE]
+				= GIC_PRIORITY_DEFAULT;
+			fAllocated[index / 32] &= ~(1u << (index % 32));
+
+			for (uint32 j = 0; j < i; j++)
+				_ReleaseVector((uint32)found + j);
+
+			__asm__ __volatile__("dsb sy" ::: "memory");
+
+			uint64 invall[4] = { GITS_CMD_INVALL, 0, 0, 0 };
+			_SubmitCommand(invall);
+			_Sync();
+
 			return status;
+		}
 	}
 
 	__asm__ __volatile__("dsb sy" ::: "memory");
@@ -598,10 +655,7 @@ GICv3ITS::FreeVectors(uint32 count, uint32 startVector)
 {
 	int32 index = (int32)startVector - fVectorBase;
 	while (count > 0 && index >= 0 && index < GIC_ITS_MAX_VECTORS) {
-		const uint32 lpi = GIC_LPI_BASE + index;
-		((volatile uint8*)fPropertyTable)[lpi - GIC_LPI_BASE]
-			= GIC_PRIORITY_DEFAULT;
-		fAllocated[index / 32] &= ~(1u << (index % 32));
+		_ReleaseVector((uint32)index);
 
 		index++;
 		count--;
