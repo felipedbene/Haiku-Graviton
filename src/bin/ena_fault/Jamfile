@@ -1,0 +1,5 @@
+SubDir HAIKU_TOP src bin ena_fault ;
+
+Application ena_fault :
+	ena_fault.cpp
+;
