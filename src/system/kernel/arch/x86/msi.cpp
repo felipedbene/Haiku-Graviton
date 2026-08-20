@@ -78,6 +78,28 @@ msi_allocate_vectors(uint32 count, uint32 *startVector, uint64 *address,
 }
 
 
+/*!	Allocates MSI vectors on behalf of a specific PCI requester.
+
+	x86 has no interrupt-translation hardware in the message path: an MSI write
+	targets a local APIC directly, encoded in the address and data the caller
+	programs into the device. Nothing needs to know which device sent it, so the
+	requester id is deliberately ignored here.
+
+	This exists so that the shared PCI bus manager can call one function on every
+	architecture. On the arm64/riscv64 side the same entry point is implemented by
+	arch/generic/generic_msi.cpp, where the requester id *is* load-bearing --
+	a GICv3 ITS keys its device table on it and cannot route an MSI without it.
+	generic_msi.cpp is not built for x86, so without this the pci add-on has an
+	undefined reference and no PCI device works at all.
+*/
+status_t
+msi_allocate_vectors_for_device(uint32 requesterID, uint32 count,
+	uint32 *startVector, uint64 *address, uint32 *data)
+{
+	return msi_allocate_vectors(count, startVector, address, data);
+}
+
+
 void
 msi_free_vectors(uint32 count, uint32 startVector)
 {
