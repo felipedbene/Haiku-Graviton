@@ -1022,6 +1022,11 @@ ena_init_device(void* _info, void** _cookie)
 	CALLED();
 	ena_haiku_device* device = (ena_haiku_device*)_info;
 
+	/* First thing in the log, so every boot is attributable to a build. See the
+	   comment on ENA_BUILD_TAG in ena.h for why this is not decoration. */
+	TRACE_ALWAYS("driver build %s, compiled %s (hrev%d)\n", ENA_BUILD_TAG,
+		ENA_BUILD_STAMP, ENA_HAIKU_REVISION);
+
 	device_node* parent = sDeviceManager->get_parent_node(device->node);
 	sDeviceManager->get_driver(parent, (driver_module_info**)&device->pci,
 		(void**)&device->pciDevice);
@@ -1182,20 +1187,24 @@ ena_init_device(void* _info, void** _cookie)
 	   instance type, and this was the last SET_FEATURE whose position or value
 	   still differed from the reference.
 
-	   The value now matches theirs too. Note that this decouples the device MTU
-	   from frameSize, which is what we report to the stack and what our
-	   single-descriptor receive path can actually handle: a 9001 byte device MTU
-	   with 2048 byte buffers would need multi-descriptor receive, which we do
-	   not have. That is tolerable only because nothing on this link will send us
-	   frames larger than the MTU we advertise. If moving this command is what
-	   fixes queue creation, the follow-up is to keep the position and put the
-	   value back to frameSize. */
+	   Only the *position* is load-bearing, and it is what stays. The value is
+	   frameSize, not the reference's 9001: what the device is told here has to
+	   agree with what the receive path can actually accept, and ours posts one
+	   2048 byte buffer per frame with max_bufs = 1. Telling the device 9001
+	   while advertising 1500 to the stack left a window where a peer that
+	   ignored our advertised MTU could put a frame on the wire that the device
+	   would accept and we could not reassemble. Nothing on an EC2 link does
+	   that, so it never bit -- but it was an inconsistency held in place only by
+	   the good manners of the other end, which is not a property to depend on.
+
+	   Raising this again is a prerequisite for jumbo frames, and it is a
+	   two-part change: multi-descriptor receive first, then this value. */
 	{
-		const uint32 deviceMtu = min_c((uint32)9001, device->maxSupportedMtu);
+		const uint32 deviceMtu = device->frameSize;
 		int mtuResult = ena_com_set_dev_mtu(&device->comDev, deviceMtu);
 		TRACE_ALWAYS("set device MTU %" B_PRIu32 " after queue creation "
-			"(reporting %" B_PRIu32 " to the stack): %s\n", deviceMtu,
-			device->frameSize, mtuResult == ENA_COM_OK ? "ok" : "FAILED");
+			"(matching what we report to the stack): %s\n", deviceMtu,
+			mtuResult == ENA_COM_OK ? "ok" : "FAILED");
 		if (mtuResult != ENA_COM_OK) {
 			status = ena_translate_error(mtuResult);
 			goto err_device;
