@@ -7,6 +7,7 @@
 
 #include <SupportDefs.h>
 #include <arch/generic/msi.h>
+#include <lock.h>
 
 
 // Number of MSI vectors the ITS hands out. Each one consumes an LPI and an
@@ -71,6 +72,12 @@ private:
 			status_t			_Discard(uint32 deviceID, uint32 eventID);
 
 			void				_ReleaseVector(uint32 index);
+
+			// Guards the command queue and the vector allocator against
+			// concurrent AllocateVectors()/FreeVectors() callers. Not taken by
+			// VectorForLpi(), which runs from the interrupt path and only reads
+			// state that Init() fixes once.
+			mutex				fLock;
 
 			addr_t				fRegs;
 			phys_addr_t			fTranslaterPhysical;

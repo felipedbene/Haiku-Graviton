@@ -8,6 +8,7 @@
 #include <interrupts.h>
 #include <kernel.h>
 #include <smp.h>
+#include <util/AutoLock.h>
 #include <vm/vm.h>
 #include <KernelExport.h>
 
@@ -60,6 +61,11 @@ status_t
 GICv3ITS::Init(phys_addr_t regs, size_t size, addr_t gicdRegs, addr_t gicrRegs,
 	phys_addr_t gicrPhysical, size_t gicrSize, size_t gicrStride)
 {
+	// Nothing in Init() takes fLock: it runs single-threaded during boot, and
+	// the interface is not reachable from anywhere else until the
+	// msi_set_interface() at the end publishes it.
+	mutex_init(&fLock, "gicv3 its");
+
 	memset(fAllocated, 0, sizeof(fAllocated));
 	memset(fDevices, 0, sizeof(fDevices));
 	fCommandIndex = 0;
@@ -576,6 +582,14 @@ GICv3ITS::AllocateVectors(uint32 requesterID, uint32 count,
 	if (count == 0 || count > GIC_ITS_EVENTS_PER_DEVICE)
 		return B_BAD_VALUE;
 
+	// A mutex rather than a spinlock: every path from here reaches
+	// _SubmitCommand(), which spins on GITS_CREADR for as long as it takes the
+	// ITS to drain the queue, and this is only ever called from a driver's
+	// attach path -- msi_allocate_vectors_for_device() is reached through the
+	// PCI bus manager, which maps areas immediately either side of the call, so
+	// the caller can already block and interrupts are enabled.
+	MutexLocker locker(fLock);
+
 	its_device* device = _DeviceFor(requesterID);
 	if (device == NULL)
 		return B_NO_MEMORY;
@@ -653,6 +667,8 @@ GICv3ITS::AllocateVectors(uint32 requesterID, uint32 count,
 void
 GICv3ITS::FreeVectors(uint32 count, uint32 startVector)
 {
+	MutexLocker locker(fLock);
+
 	int32 index = (int32)startVector - fVectorBase;
 	while (count > 0 && index >= 0 && index < GIC_ITS_MAX_VECTORS) {
 		_ReleaseVector((uint32)index);
