@@ -1,0 +1,8 @@
+SubDir HAIKU_TOP src bin cloud_init_lite ;
+
+# libnetwork provides the sockets and sethostname(); nothing else is needed,
+# which is rather the point of this program.
+Application cloud_init_lite :
+	cloud_init_lite.cpp
+	: libnetwork.so
+;

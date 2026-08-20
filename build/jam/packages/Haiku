@@ -238,6 +238,7 @@ AddFilesToPackage :
 	;
 AddFilesToPackage bin :
 	$(SYSTEM_BIN)
+	cloud_init_lite
 	consoled
 	;
 AddFilesToPackage apps
