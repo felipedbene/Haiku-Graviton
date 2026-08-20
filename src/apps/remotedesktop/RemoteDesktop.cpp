@@ -168,7 +168,11 @@ main(int argc, char *argv[])
 			char portNumber[10];
 			sprintf(portNumber, "%" B_PRIu16, sshPort);
 
-			int result = execl("ssh", "-C", "-L", localRedirect,
+			// execl() takes a path, not a command name -- it does no PATH
+			// search (see exec.cpp), so "ssh" could only ever have worked from
+			// a directory containing an ssh binary. This is why -s always
+			// failed with "failed to execute ssh process in child".
+			int result = execl("/bin/ssh", "ssh", "-C", "-L", localRedirect,
 				"-p", portNumber, "-o", "ExitOnForwardFailure=yes", host,
 				shellCommand, NULL);
 
