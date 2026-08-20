@@ -616,6 +616,13 @@ ena_destroy_device(ena_haiku_device* device)
 	ena_com_set_admin_running_state(&device->comDev, false);
 	ena_com_dev_reset(&device->comDev, ENA_REGS_RESET_NORMAL);
 
+	/* Not any earlier: the device's host attribute registers point at this page
+	   until the reset above. comDev belongs to the driver rather than to the
+	   open device, so it survives every init/uninit cycle -- and with it
+	   host_attr.host_info, which the next ena_config_host_info() would replace
+	   with a fresh page and orphan this one. */
+	ena_com_delete_host_info(&device->comDev);
+
 	ena_com_admin_destroy(&device->comDev);
 	ena_com_mmio_reg_read_request_destroy(&device->comDev);
 }
