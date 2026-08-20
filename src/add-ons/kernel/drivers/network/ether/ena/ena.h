@@ -55,7 +55,7 @@ extern "C" {
    announces itself. Note it cannot prove anything about the vendored HAL's
    object -- that one is only guaranteed by removing the driver's object
    directory before building, which is the habit to keep. */
-#define ENA_BUILD_TAG		"mtu-frameSize"
+#define ENA_BUILD_TAG		"review-fixes"
 #define ENA_BUILD_STAMP		__DATE__ " " __TIME__
 
 /* BAR 0 holds the registers; BAR 2 is the Low Latency Queue push window. The
@@ -155,6 +155,12 @@ struct ena_haiku_device {
 	int32				ioInterrupts;
 	bool				managementIrqInstalled;
 	bool				ioIrqInstalled;
+	/* Two states, not one: configure_msix() claims the vectors and is undone by
+	   unconfigure_msi(), while enable_msix() only flips the device's enable bit.
+	   The teardown paths key on msixConfigured, because a failure between the
+	   two would otherwise leave the bus manager holding vectors forever and
+	   every later ConfigureMSIX() returning B_BUSY. */
+	bool				msixConfigured;
 	bool				msixEnabled;
 
 	struct ena_com_io_sq*		txSubmissionQueue;
@@ -180,6 +186,9 @@ struct ena_haiku_device {
 	area_id				rxBufferArea;
 	uint16				rxNextToFill;
 	mutex				rxLock;
+	/* Guards the per-device datapath setup in ena_open()/ena_close(), which must
+	   happen once however many times the node is opened. */
+	int32				openCount;
 	sem_id				rxReady;
 
 	uint8				macAddress[ETHER_ADDRESS_LENGTH];

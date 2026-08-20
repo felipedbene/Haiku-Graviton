@@ -250,6 +250,15 @@ ena_enable_msix(ena_haiku_device* device)
 	if (status != B_OK)
 		return status;
 
+	/* Set before the next call can fail. configure_msix() has already claimed
+	   vectors and set the bus manager's configured_count, and unconfigure_msi()
+	   is the only way to release them -- so from here on the unwind path *must*
+	   run even if nothing was ever enabled. Getting this wrong is not a leak
+	   that a reboot merely tidies up: PCI::ConfigureMSIX() returns B_BUSY while
+	   configured_count is non-zero, so a single failure here would make the
+	   interface permanently unattachable for the rest of the boot. */
+	device->msixConfigured = true;
+
 	status = device->pci->enable_msix(device->pciDevice);
 	if (status != B_OK)
 		return status;
@@ -1249,8 +1258,12 @@ err_device:
 			ena_management_interrupt, device);
 		device->managementIrqInstalled = false;
 	}
-	if (device->msixEnabled) {
+	/* Keyed on msixConfigured, not msixEnabled: configure_msix() may have
+	   succeeded while enable_msix() failed, and unconfigure_msi() is what
+	   releases the vectors in either case. */
+	if (device->msixConfigured) {
 		device->pci->unconfigure_msi(device->pciDevice);
+		device->msixConfigured = false;
 		device->msixEnabled = false;
 	}
 	ena_destroy_device(device);
@@ -1297,8 +1310,12 @@ ena_uninit_device(void* _cookie)
 
 	/* There is no disable_msix(); unconfigure_msi() tries MSI-X first and
 	   handles it, which is the only teardown path the bus manager exposes. */
-	if (device->msixEnabled) {
+	/* Keyed on msixConfigured, not msixEnabled: configure_msix() may have
+	   succeeded while enable_msix() failed, and unconfigure_msi() is what
+	   releases the vectors in either case. */
+	if (device->msixConfigured) {
 		device->pci->unconfigure_msi(device->pciDevice);
+		device->msixConfigured = false;
 		device->msixEnabled = false;
 	}
 
@@ -1344,12 +1361,28 @@ ena_open(void* _info, const char* path, int openMode, void** _cookie)
 
 	device->nonBlocking = (openMode & O_NONBLOCK) != 0;
 
+	/* Everything below is per-device state, not per-open, so only the first
+	   opener may set it up. A second open used to create a fresh pair of
+	   semaphores -- leaking the first pair and leaving the earlier opener's
+	   ena_close() to delete the newcomer's -- and, worse, reset rxNextToFill to
+	   zero while the device still owned the whole ring. The refill then posted
+	   nothing (no free entries), so the index pointed at slot 0 while the device
+	   held 0..rxRingSize-2, and the next per-packet refill handed the device
+	   descriptors it already owned: two descriptors sharing one req_id and one
+	   2 KB buffer, which duplicates frames and lets the stack read a buffer
+	   while DMA is still writing it. */
+	if (atomic_add(&device->openCount, 1) != 0) {
+		*_cookie = device;
+		return B_OK;
+	}
+
 	device->rxReady = create_sem(0, "ena rx ready");
 	device->txCompleted = create_sem(0, "ena tx completed");
 	if (device->rxReady < B_OK || device->txCompleted < B_OK) {
 		delete_sem(device->rxReady);
 		delete_sem(device->txCompleted);
 		device->rxReady = device->txCompleted = -1;
+		atomic_add(&device->openCount, -1);
 		return B_NO_MORE_SEMS;
 	}
 
@@ -1373,6 +1406,11 @@ ena_close(void* cookie)
 {
 	CALLED();
 	ena_haiku_device* device = (ena_haiku_device*)cookie;
+
+	/* Mirror of ena_open(): only the last closer tears the semaphores down, or
+	   one process closing would strand every other reader in acquire_sem(). */
+	if (atomic_add(&device->openCount, -1) != 1)
+		return B_OK;
 
 	sem_id rxReady = device->rxReady;
 	sem_id txCompleted = device->txCompleted;
