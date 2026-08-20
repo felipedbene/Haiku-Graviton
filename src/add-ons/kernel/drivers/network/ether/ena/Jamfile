@@ -1,0 +1,25 @@
+SubDir HAIKU_TOP src add-ons kernel drivers network ether ena ;
+
+UsePrivateKernelHeaders ;
+UsePrivateHeaders drivers net ;
+
+SubDirHdrs [ FDirName $(SUBDIR) ena-com ] ;
+
+# ena-com is Amazon's, copied in verbatim, and is not warning-clean under the
+# flags Haiku uses for its own code. Do not "fix" it here: keeping it identical
+# to upstream is what makes it updatable.
+SubDirCcFlags -Wno-unused-parameter -Wno-sign-compare -Wno-missing-braces ;
+SubDirC++Flags -Wno-unused-parameter ;
+
+KernelAddon ena :
+	ena.cpp
+	ena_plat.cpp
+
+	# ena-com (vendor HAL, BSD-3-Clause)
+	ena_com.c
+	ena_eth_com.c
+	;
+
+SEARCH on [ FGristFiles ena_com.c ena_eth_com.c ]
+	= [ FDirName $(HAIKU_TOP) src add-ons kernel drivers network ether ena
+		ena-com ] ;

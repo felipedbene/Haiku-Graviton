@@ -1,0 +1,179 @@
+/*
+ * Copyright 2026, Haiku, Inc. All rights reserved.
+ * Distributed under the terms of the MIT License.
+ *
+ * Driver for the AWS Elastic Network Adapter (ENA), the only network device
+ * offered by EC2 Nitro instances.
+ */
+#ifndef ENA_H
+#define ENA_H
+
+
+#include <ByteOrder.h>
+#include <KernelExport.h>
+
+#include <bus/PCI.h>
+#include <device_manager.h>
+#include <ethernet.h>
+#include <ether_driver.h>
+#include <lock.h>
+#include <net_buffer.h>
+
+extern "C" {
+#include "ena-com/ena_com.h"
+#include "ena-com/ena_eth_com.h"
+}
+
+
+#define ENA_DRIVER_MODULE_NAME	"drivers/network/ena/driver_v1"
+#define ENA_DEVICE_MODULE_NAME	"drivers/network/ena/device_v1"
+#define ENA_DEVICE_ID_GENERATOR	"ena/device_id"
+
+#define ENA_PCI_VENDOR_AMAZON	0x1d0f
+
+/* Reported to the device in the host attributes. The device records these for
+   AWS support telemetry, but it also decides what to advertise back to us based
+   on what we declare, so they are worth filling in properly. */
+#define ENA_DRIVER_VERSION_MAJOR	1
+#define ENA_DRIVER_VERSION_MINOR	0
+#define ENA_DRIVER_VERSION_SUBMINOR	0
+#define ENA_HAIKU_REVISION		59996
+
+/* BAR 0 holds the registers; BAR 2 is the Low Latency Queue push window. The
+   MSI-X table lives in BAR 1, which the PCI bus manager maps itself. */
+#define ENA_REGISTER_BAR	0
+#define ENA_MEMORY_BAR		2
+
+/* The revision-id bit that says memory-mapped register reads are unavailable,
+   forcing the read-less path through the admin queue. */
+#define ENA_MMIO_DISABLE_REG_READ	BIT(0)
+
+/* One TX/RX pair. ENA supports many, but a single pair is enough to make an
+   instance reachable and keeps the completion paths simple; scaling out is a
+   separate change (see the TODO in ena_setup_io_queues). */
+#define ENA_IO_QUEUE_PAIRS	1
+#define ENA_TX_QUEUE_ID		0
+#define ENA_RX_QUEUE_ID		1
+
+/* Descriptor ring depth. Must be a power of two and is clamped to whatever the
+   device reports it can do. */
+/* Match the reference driver, which uses 512 transmit and 1024 receive
+   entries on this hardware. Depths below these are rejected by the device with
+   an unqualified error, so they are not merely a performance preference. */
+#define ENA_DEFAULT_TX_RING_SIZE	512
+#define ENA_DEFAULT_RX_RING_SIZE	1024
+
+/* v1 receives each frame into one descriptor, so the buffer has to hold a
+   whole frame. EC2 links allow a 9001 byte MTU, but jumbo frames need
+   multi-descriptor receive; we ask the device for 1500 to match these buffers
+   and leave jumbo for later. */
+#define ENA_FRAME_SIZE		1500
+#define ENA_PACKET_BUFFER_SIZE	2048
+
+#define ENA_ADMIN_POLL_TIMEOUT_US	500000
+#define ENA_MIN_POLL_DELAY_US		100
+
+#define ENA_MAX_MULTICAST	32
+
+/* Refuse to attach below this, rather than dividing by a zero ring size if a
+   device ever reports a nonsense depth. */
+#define ENA_MIN_RING_SIZE	16
+
+/* The narrower of the two LLQ ring entry sizes. Anything larger is the "wide"
+   256 byte entry, which carries its own maximum queue depth. */
+#define ENA_LLQ_NARROW_ENTRY_SIZE	128
+
+/* RSS indirection table size, as a log2, matching Amazon's drivers. */
+#define ENA_RSS_TABLE_LOG_SIZE	7
+#define ENA_RSS_TABLE_SIZE	(1 << ENA_RSS_TABLE_LOG_SIZE)
+#define ENA_RSS_HASH_KEY_SIZE	40
+
+
+/* One bounce slot per descriptor, in each direction. The transmit and receive
+   rings both number their request ids from zero, so they must not share
+   storage. */
+struct ena_packet_buffer {
+	void*		data;
+	phys_addr_t	physicalAddress;
+	uint32		index;
+};
+
+
+struct ena_tx_buffer {
+	ena_packet_buffer slot;
+	net_buffer*	buffer;
+	/* How many submission-queue entries this packet occupied, so the right
+	   number can be acknowledged on completion. */
+	uint16		descriptors;
+};
+
+
+/* Named to match the forward declaration ena_plat.h hands to ena-com as
+   ena_netdev. ena-com only stores the pointer. */
+struct ena_haiku_device {
+	device_node*			node;
+	pci_device_module_info*		pci;
+	pci_device*			pciDevice;
+	pci_info			pciInfo;
+
+	struct ena_com_dev		comDev;
+	struct ena_bus			bus;
+	area_id				registerArea;
+	area_id				memoryArea;
+
+	/* Physical address width the device advertises. Anything we hand it for
+	   DMA must fit, so allocations are bounded by this. */
+	uint32				dmaWidth;
+
+	uint32				managementIrq;
+	uint32				ioIrq;
+	/* Diagnostics: MSI-X delivery on this arm64/GICv3+ITS port is new, and a
+	   silently undelivered vector is otherwise indistinguishable from a
+	   device that never completed a command. */
+	/* Which MSI-X table index the io queues were actually created with. */
+	uint32				ioVector;
+	int32				managementInterrupts;
+	int32				ioInterrupts;
+	bool				managementIrqInstalled;
+	bool				ioIrqInstalled;
+	bool				msixEnabled;
+
+	struct ena_com_io_sq*		txSubmissionQueue;
+	struct ena_com_io_cq*		txCompletionQueue;
+	struct ena_com_io_sq*		rxSubmissionQueue;
+	struct ena_com_io_cq*		rxCompletionQueue;
+
+	uint16				txRingSize;
+	uint16				rxRingSize;
+
+	/* TX. txFreeIds is a stack of unused request ids; the device echoes a
+	   request id back on completion, which is how we find the net_buffer to
+	   release. */
+	ena_tx_buffer*			txBuffers;
+	area_id				txBufferArea;
+	uint16*				txFreeIds;
+	uint16				txFreeCount;
+	mutex				txLock;
+	sem_id				txCompleted;
+
+	/* RX. One preallocated buffer per descriptor, indexed by request id. */
+	ena_packet_buffer*		rxBuffers;
+	area_id				rxBufferArea;
+	uint16				rxNextToFill;
+	mutex				rxLock;
+	sem_id				rxReady;
+
+	uint8				macAddress[ETHER_ADDRESS_LENGTH];
+	uint32				frameSize;
+	uint32				maxSupportedMtu;
+	bool				linkUp;
+	bool				nonBlocking;
+	bool				promiscuous;
+	bool				running;
+
+	uint32				multicastCount;
+	ether_address_t			multicast[ENA_MAX_MULTICAST];
+};
+
+
+#endif	/* ENA_H */

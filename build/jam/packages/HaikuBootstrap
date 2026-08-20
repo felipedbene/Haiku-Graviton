@@ -95,6 +95,7 @@ AddNewDriversToPackage power :
 	acpi_battery@x86
 	;
 AddNewDriversToPackage network :
+	ena
 	virtio_net
 	;
 AddNewDriversToPackage display :
