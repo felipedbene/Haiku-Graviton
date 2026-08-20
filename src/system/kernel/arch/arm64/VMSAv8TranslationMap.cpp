@@ -140,17 +140,39 @@ VMSAv8TranslationMap::~VMSAv8TranslationMap()
 	ASSERT(!fIsKernel);
 	ASSERT(fRefcount == 0);
 
+	// Retire the ASID before freeing the translation tables. We must not hold
+	// sAsidLock across the latter: it disables interrupts, while FreeTable()
+	// frees pages, and vm_page_free_etc() takes an rw_lock (and
+	// vm_page_unreserve_pages() a mutex) that may block.
+	//
+	// Invalidating the whole ASID here makes FreeTable()'s per-entry
+	// invalidation unnecessary, so it no longer needs fASID to be stable: all
+	// entries of a user map are non-global, and flush_va_if_accessed() is a
+	// no-op for those once fASID is -1. Whoever gets this ASID next flushes it
+	// wholesale in SwitchUserMap(). Flushing before clearing the entries is
+	// safe because no CPU can have fPageTable installed in TTBR0 here:
+	// fRefcount is 0, and taking sAsidLock serialises us against any
+	// SwitchUserMap() still in flight.
+	{
+		InterruptsSpinLocker locker(sAsidLock);
+
+		if (fASID != -1) {
+			flush_tlb_whole_asid(fASID);
+			sAsidMapping[fASID] = NULL;
+			free_asid(fASID);
+			fASID = -1;
+		}
+	}
+
+	// The root table is allocated lazily by Map(), so it may not exist.
+	if (fPageTable == 0)
+		return;
+
 	ThreadCPUPinner pinner(thread_get_current_thread());
-	InterruptsSpinLocker locker(sAsidLock);
 
 	vm_page_reservation reservation = {};
 	FreeTable(fPageTable, 0, fInitialLevel, &reservation);
 	vm_page_unreserve_pages(&reservation);
-
-	if (fASID != -1) {
-		sAsidMapping[fASID] = NULL;
-		free_asid(fASID);
-	}
 }
 
 

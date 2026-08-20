@@ -55,7 +55,7 @@ extern "C" {
    announces itself. Note it cannot prove anything about the vendored HAL's
    object -- that one is only guaranteed by removing the driver's object
    directory before building, which is the habit to keep. */
-#define ENA_BUILD_TAG		"watchdog"
+#define ENA_BUILD_TAG		"wd-asid"
 #define ENA_BUILD_STAMP		__DATE__ " " __TIME__
 
 /* BAR 0 holds the registers; BAR 2 is the Low Latency Queue push window. The
