@@ -1591,7 +1591,35 @@ ena_receive(ena_haiku_device* device, net_buffer** _buffer)
 		int result = ena_com_rx_pkt(device->rxCompletionQueue,
 			device->rxSubmissionQueue, &context);
 		if (result != ENA_COM_OK) {
-			ERROR("receive failed: %d\n", result);
+			/* Every error return leaves the completion descriptors consumed --
+			   ena_com_cdesc_rx_pkt_get() advances io_cq->head before any of the
+			   checks that can fail -- but skips the io_sq->next_to_comp update
+			   that hands the matching receive buffers back to us, and does not
+			   say how many they were: ena_rx_ctx::descs is written on success
+			   only. The difference between the two counters is exactly that
+			   number, since one receive descriptor produces one completion
+			   descriptor, so acknowledge and repost it. Otherwise
+			   ena_com_free_q_entries() counts those buffers as in flight for
+			   good, and since it is what gates the refill the ring shrinks
+			   permanently on every error with nothing to grow it back.
+
+			   NO_SPACE is the reachable case: it is what a frame spanning more
+			   than one descriptor produces against max_bufs = 1. The device MTU
+			   is deliberately set to match these buffers, so it should not
+			   happen today -- see the SET_FEATURE(MTU) comment in
+			   ena_init_device() -- but the accounting has to be right before
+			   that MTU can be raised for jumbo frames. */
+			const uint16 stranded = (uint16)(device->rxCompletionQueue->head
+				- device->rxSubmissionQueue->next_to_comp);
+
+			ERROR("receive failed: %d, reclaiming %u descriptor(s)\n", result,
+				stranded);
+
+			if (stranded > 0) {
+				ena_com_comp_ack(device->rxSubmissionQueue, stranded);
+				ena_refill_receive_ring(device, stranded);
+			}
+
 			return ena_translate_error(result);
 		}
 
