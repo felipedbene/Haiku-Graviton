@@ -200,6 +200,10 @@ GICv3ITS::_InitTables()
 		size_t granule = its_baser_granule(baser);
 		area_id area = -1;
 		uint64 readback = 0;
+		// The geometry the ITS finally accepted, kept outside the retry loop so
+		// it can still be reported after it.
+		phys_addr_t tablePhysical = 0;
+		size_t tableSize = 0;
 
 		for (int attempt = 0; attempt < 3; attempt++) {
 			size_t size = ROUNDUP(bytes, granule);
@@ -217,6 +221,9 @@ GICv3ITS::_InitTables()
 				ERROR("unable to allocate table type %" B_PRIu32 "\n", type);
 				return status;
 			}
+
+			tablePhysical = physical;
+			tableSize = size;
 
 			uint64 pageSize = GITS_BASER_PAGE_SIZE_64K;
 			if (granule == 4 * 1024)
@@ -257,8 +264,6 @@ GICv3ITS::_InitTables()
 			return B_ERROR;
 		}
 
-		const size_t size = ROUNDUP(bytes, granule);
-
 		// An implementation is allowed to ignore what we asked for. If it
 		// downgraded the table to non-cacheable then it reads around our
 		// caches, and every update would need cleaning to the point of
@@ -274,7 +279,7 @@ GICv3ITS::_InitTables()
 		}
 
 		TRACE("table type %" B_PRIu32 ": %" B_PRIuSIZE " bytes at %#"
-			B_PRIxPHYSADDR "\n", type, size, physical);
+			B_PRIxPHYSADDR "\n", type, tableSize, tablePhysical);
 	}
 
 	return B_OK;
