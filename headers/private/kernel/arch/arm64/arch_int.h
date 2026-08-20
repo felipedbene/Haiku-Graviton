@@ -10,7 +10,9 @@
 #include <kernel/arch/arm64/arm_registers.h>
 
 
-#define NUM_IO_VECTORS			1024
+// The GICv3 driver reserves 1020 vectors for SGIs, PPIs and SPIs; LPIs
+// allocated by the ITS for MSIs need space beyond that.
+#define NUM_IO_VECTORS			2048
 
 static inline void
 arch_int_enable_interrupts_inline(void)

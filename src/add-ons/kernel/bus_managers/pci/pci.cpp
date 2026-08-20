@@ -2167,6 +2167,16 @@ PCI::GetMSICount(PCIDev *device)
 }
 
 
+// PCI requester ID, as message-signalled interrupt translation hardware sees
+// it on the bus.
+static inline uint32
+pci_requester_id(PCIDev *device)
+{
+	return ((uint32)device->bus << 8) | ((uint32)device->device << 3)
+		| (uint32)device->function;
+}
+
+
 status_t
 PCI::ConfigureMSI(PCIDev *device, uint32 count, uint32 *startVector)
 {
@@ -2188,7 +2198,8 @@ PCI::ConfigureMSI(PCIDev *device, uint32 count, uint32 *startVector)
 	if (info->configured_count != 0)
 		return B_BUSY;
 
-	status_t result = msi_allocate_vectors(count, &info->start_vector,
+	status_t result = msi_allocate_vectors_for_device(
+		pci_requester_id(device), count, &info->start_vector,
 		&info->address_value, &info->data_value);
 	if (result != B_OK)
 		return result;
@@ -2380,7 +2391,8 @@ PCI::ConfigureMSIX(PCIDev *device, uint32 count, uint32 *startVector)
 		info->pba_area_id = -1;
 	info->pba_address = address + info->pba_offset;
 
-	status_t result = msi_allocate_vectors(count, &info->start_vector,
+	status_t result = msi_allocate_vectors_for_device(
+		pci_requester_id(device), count, &info->start_vector,
 		&info->address_value, &info->data_value);
 	if (result != B_OK) {
 		delete_area(info->pba_area_id);

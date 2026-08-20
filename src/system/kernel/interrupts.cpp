@@ -641,7 +641,10 @@ allocate_io_interrupt_vectors(int32 count, int32 *startVector,
 	MutexLocker locker(&sIOInterruptVectorAllocationLock);
 
 	int32 vector = 0;
-	bool runFound = true;
+	// Must start false: if every candidate is already allocated the loop below
+	// never reaches its body's tail, and a stale "true" would report success
+	// while returning vector 0 on top of an existing allocation.
+	bool runFound = false;
 	for (int32 i = 0; i < NUM_IO_VECTORS - (count - 1); i++) {
 		if (sAllocatedIOInterruptVectors[i])
 			continue;

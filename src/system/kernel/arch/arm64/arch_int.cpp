@@ -25,6 +25,7 @@
 
 #include "soc.h"
 #include "arch_int_gicv2.h"
+#include "arch_int_gicv3.h"
 
 #define TRACE_ARCH_INT
 #ifdef TRACE_ARCH_INT
@@ -94,6 +95,13 @@ arch_int_init_post_vm(kernel_args *args)
 		ic = new(std::nothrow) GICv2InterruptController(
 			args->arch_args.interrupt_controller.regs1.start,
 			args->arch_args.interrupt_controller.regs2.start);
+	} else if (strcmp(args->arch_args.interrupt_controller.kind,
+			INTC_KIND_GICV3) == 0) {
+		ic = new(std::nothrow) GICv3InterruptController(
+			args->arch_args.interrupt_controller.regs1.start,
+			args->arch_args.interrupt_controller.regs1.size,
+			args->arch_args.interrupt_controller.regs2.start,
+			args->arch_args.interrupt_controller.regs2.size);
 	}
 
 	if (ic == NULL)
@@ -106,6 +114,18 @@ arch_int_init_post_vm(kernel_args *args)
 status_t
 arch_int_init_io(kernel_args* args)
 {
+	// The ITS needs to allocate its translation tables, so it can only be set
+	// up once the kernel heap is usable -- later than arch_int_init_post_vm().
+	InterruptController* ic = InterruptController::Get();
+	if (ic != NULL && strcmp(args->arch_args.interrupt_controller.kind,
+			INTC_KIND_GICV3) == 0) {
+		status_t status = static_cast<GICv3InterruptController*>(ic)->InitITS(
+			args->arch_args.interrupt_controller.regs3.start,
+			args->arch_args.interrupt_controller.regs3.size);
+		if (status != B_OK && status != B_NAME_NOT_FOUND)
+			dprintf("gicv3: ITS init failed: %s\n", strerror(status));
+	}
+
 	return B_OK;
 }
 

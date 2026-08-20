@@ -74,6 +74,16 @@ arch_smp_register_cpu(platform_cpu_info** cpu)
 }
 
 
+// Called from the ACPI path, where the PSCI conduit comes from the FADT's
+// ARM_BOOT_ARCH flags rather than from a device tree node.
+void
+arch_smp_set_psci_conduit(bool useHvc)
+{
+	sPsciCallFn = useHvc ? arm64_psci_call_hvc : arm64_psci_call_smc;
+	sCpuEnableMethod = CpuEnableMethod::Psci;
+}
+
+
 int
 arch_smp_get_current_cpu(void)
 {

@@ -35,6 +35,7 @@ const struct supported_interrupt_controllers {
 	{ "arm,cortex-a9-gic", INTC_KIND_GICV1 },
 	{ "arm,cortex-a15-gic", INTC_KIND_GICV2 },
 	{ "arm,gic-400", INTC_KIND_GICV2 },
+	{ "arm,gic-v3", INTC_KIND_GICV3 },
 	{ "ti,omap3-intc", INTC_KIND_OMAP3 },
 	{ "marvell,pxa-intc", INTC_KIND_PXA },
 };

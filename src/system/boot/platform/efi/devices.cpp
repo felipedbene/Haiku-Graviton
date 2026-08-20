@@ -69,26 +69,53 @@ EfiDevice::ReadAt(void *cookie, off_t pos, void *buffer, size_t bufferSize)
 	TRACE("%s called. pos: %" B_PRIdOFF ", %p, %" B_PRIuSIZE "\n", __func__,
 		pos, buffer, bufferSize);
 
-	off_t offset = pos % BlockSize();
-	pos /= BlockSize();
-
-	uint32 numBlocks = (offset + bufferSize + BlockSize() - 1) / BlockSize();
-
-	// TODO: We really should implement memalign and align all requests to
-	// fBlockIo->Media->IoAlign. This static alignment is large enough though
-	// to catch most required alignments.
-	char readBuffer[numBlocks * BlockSize()]
-		__attribute__((aligned(2048)));
-
-	if (fBlockIo->ReadBlocks(fBlockIo, fBlockIo->Media->MediaId,
-		pos, sizeof(readBuffer), readBuffer) != EFI_SUCCESS) {
-		dprintf("%s: blockIo error reading from device!\n", __func__);
+	const uint32 blockSize = BlockSize();
+	if (blockSize == 0)
 		return B_ERROR;
+
+	// Reads must start on a block boundary and land in a buffer the firmware
+	// considers suitably aligned, so they go through a bounce buffer.
+	//
+	// This buffer must be of a fixed size. It used to be a variable length
+	// array sized from the caller's request, which put an unbounded
+	// allocation on the boot loader's stack: a 16 KB partition entry array or
+	// a kernel image read is enough to run off the end of it. Some firmware
+	// faults and resets the machine rather than reporting anything, which
+	// makes the failure look like a spontaneous reboot. Being static also
+	// keeps it out of the stack entirely; the loader is single threaded.
+	static const size_t kBounceSize = 65536;
+	static char sBounceBuffer[kBounceSize] __attribute__((aligned(4096)));
+
+	if (blockSize > kBounceSize)
+		return B_ERROR;
+
+	size_t totalRead = 0;
+	while (bufferSize > 0) {
+		const off_t block = pos / blockSize;
+		const uint32 offset = pos % blockSize;
+
+		uint32 blocks = (offset + bufferSize + blockSize - 1) / blockSize;
+		if (blocks * blockSize > kBounceSize)
+			blocks = kBounceSize / blockSize;
+
+		if (fBlockIo->ReadBlocks(fBlockIo, fBlockIo->Media->MediaId, block,
+				blocks * blockSize, sBounceBuffer) != EFI_SUCCESS) {
+			dprintf("%s: blockIo error reading from device!\n", __func__);
+			return totalRead > 0 ? (ssize_t)totalRead : B_ERROR;
+		}
+
+		size_t chunk = blocks * blockSize - offset;
+		if (chunk > bufferSize)
+			chunk = bufferSize;
+
+		memcpy((char*)buffer + totalRead, sBounceBuffer + offset, chunk);
+
+		totalRead += chunk;
+		pos += chunk;
+		bufferSize -= chunk;
 	}
 
-	memcpy(buffer, readBuffer + offset, bufferSize);
-
-	return bufferSize;
+	return totalRead;
 }
 
 

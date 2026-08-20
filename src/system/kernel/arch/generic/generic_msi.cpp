@@ -31,6 +31,15 @@ msi_allocate_vectors(uint32 count, uint32 *startVector, uint64 *address, uint32 
 }
 
 
+status_t
+msi_allocate_vectors_for_device(uint32 requesterID, uint32 count,
+	uint32 *startVector, uint64 *address, uint32 *data)
+{
+	return sMSIInterface->AllocateVectors(requesterID, count, *startVector,
+		*address, *data);
+}
+
+
 void
 msi_free_vectors(uint32 count, uint32 startVector)
 {

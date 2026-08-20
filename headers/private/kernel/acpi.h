@@ -11,6 +11,7 @@
 #define ACPI_XSDT_SIGNATURE		"XSDT"
 #define ACPI_MADT_SIGNATURE		"APIC"
 #define ACPI_MCFG_SIGNATURE		"MCFG"
+#define ACPI_FADT_SIGNATURE		"FACP"
 #define ACPI_SPCR_SIGNATURE		"SPCR"
 #define ACPI_DBG2_SIGNATURE		"DBG2"
 
@@ -241,6 +242,78 @@ typedef struct acpi_gic_distributor {
 	uint8 gic_version;
 	uint8 reserved[3];
 } _PACKED acpi_gic_distributor;
+
+/* Fixed ACPI Description Table. Only defined as far as ARM_BOOT_ARCH, which
+   tells us on ARM systems whether firmware is PSCI compliant and which
+   conduit (SMC or HVC) to use. On ACPI-only machines -- Amazon's Nitro
+   platform among them -- this is the only place that information exists,
+   as there is no device tree to read an "enable-method" from. */
+typedef struct acpi_fadt {
+	acpi_descriptor_header	header;			/* "FACP" signature */
+	uint32	firmware_ctrl;
+	uint32	dsdt;
+	uint8	reserved1;
+	uint8	preferred_pm_profile;
+	uint16	sci_int;
+	uint32	smi_cmd;
+	uint8	acpi_enable;
+	uint8	acpi_disable;
+	uint8	s4bios_req;
+	uint8	pstate_cnt;
+	uint32	pm1a_evt_blk;
+	uint32	pm1b_evt_blk;
+	uint32	pm1a_cnt_blk;
+	uint32	pm1b_cnt_blk;
+	uint32	pm2_cnt_blk;
+	uint32	pm_tmr_blk;
+	uint32	gpe0_blk;
+	uint32	gpe1_blk;
+	uint8	pm1_evt_len;
+	uint8	pm1_cnt_len;
+	uint8	pm2_cnt_len;
+	uint8	pm_tmr_len;
+	uint8	gpe0_blk_len;
+	uint8	gpe1_blk_len;
+	uint8	gpe1_base;
+	uint8	cst_cnt;
+	uint16	p_lvl2_lat;
+	uint16	p_lvl3_lat;
+	uint16	flush_size;
+	uint16	flush_stride;
+	uint8	duty_offset;
+	uint8	duty_width;
+	uint8	day_alrm;
+	uint8	mon_alrm;
+	uint8	century;
+	uint16	iapc_boot_arch;
+	uint8	reserved2;
+	uint32	flags;
+	uint8	reset_reg[12];
+	uint8	reset_value;
+	uint16	arm_boot_arch;			/* ACPI_FADT_ARM_* below */
+	uint8	minor_version;
+} _PACKED acpi_fadt;
+
+/* ARM_BOOT_ARCH flags */
+#define ACPI_FADT_ARM_PSCI_COMPLIANT	0x0001
+#define ACPI_FADT_ARM_PSCI_USE_HVC		0x0002
+
+typedef struct acpi_gic_its {
+	uint8 type;
+	uint8 length;
+	uint16 reserved;
+	uint32 its_id;
+	uint64 base_address;
+	uint32 reserved2;
+} _PACKED acpi_gic_its;
+
+typedef struct acpi_gic_redistributor {
+	uint8 type;
+	uint8 length;
+	uint16 reserved;
+	uint64 base_address;
+	uint32 range_length;
+} _PACKED acpi_gic_redistributor;
 
 typedef struct acpi_gas {
 	uint8 address_space_id;

@@ -33,6 +33,7 @@ struct platform_cpu_info {
 };
 
 void arch_smp_register_cpu(platform_cpu_info** cpu);
+void arch_smp_set_psci_conduit(bool useHvc);
 #endif
 
 int arch_smp_get_current_cpu(void);
