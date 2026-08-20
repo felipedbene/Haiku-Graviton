@@ -20,6 +20,8 @@
 #include <Autolock.h>
 #include <NetEndpoint.h>
 
+#include <netinet/in.h>
+
 #include <new>
 #include <string.h>
 
@@ -72,7 +74,18 @@ RemoteHWInterface::RemoteHWInterface(const char* target)
 		return;
 	}
 
-	fInitStatus = fListenEndpoint->Bind(fListenPort);
+	// Loopback only, never INADDR_ANY. The remote protocol has no
+	// authentication and no encryption of any kind: anything that can reach this
+	// port gets full control of the session, including every keystroke. Binding
+	// the wildcard address -- which BNetEndpoint::Bind(int) does -- puts that on
+	// every interface the machine has, which on a cloud instance means the
+	// public one. Access is therefore deliberately only possible through an SSH
+	// tunnel, so that SSH provides the authentication the protocol lacks.
+	//
+	// INADDR_LOOPBACK is in host order and BNetAddress stores the address as it
+	// will appear in sockaddr_in, so it has to be converted.
+	BNetAddress loopback((uint32)htonl(INADDR_LOOPBACK), fListenPort);
+	fInitStatus = fListenEndpoint->Bind(loopback);
 	if (fInitStatus != B_OK)
 		return;
 
