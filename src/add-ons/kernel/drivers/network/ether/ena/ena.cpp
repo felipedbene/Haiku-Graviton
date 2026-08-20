@@ -1228,6 +1228,14 @@ ena_watchdog_reset(ena_haiku_device* device,
 
 	device->running = false;
 
+	/* Zero the interrupt counters so "first management/io interrupt delivered"
+	   prints again for the *new* vectors. Without this the reset is
+	   indistinguishable in the log from a reset whose IO vector was never armed --
+	   which is the failure mode that looks exactly like success. Criterion A in
+	   docs/watchdog-design.md depends on this line. */
+	atomic_set(&device->managementInterrupts, 0);
+	atomic_set(&device->ioInterrupts, 0);
+
 	/* --- bring-up ------------------------------------------------------- */
 
 	status_t status = ena_device_bringup(device);
@@ -1259,8 +1267,10 @@ ena_watchdog_reset(ena_haiku_device* device,
 	   for a link that is already up, and on EC2 it always is. */
 	device->linkUp = true;
 
-	TRACE_ALWAYS("device reset completed in %" B_PRId64 " ms\n",
-		(system_time() - startedAt) / 1000);
+	TRACE_ALWAYS("device reset completed in %" B_PRId64 " ms (reset #%" B_PRId32
+		"); interrupts since: %" B_PRId32 " management, %" B_PRId32 " io\n",
+		(system_time() - startedAt) / 1000, device->resetCount,
+		device->managementInterrupts, device->ioInterrupts);
 
 	return B_OK;
 }
