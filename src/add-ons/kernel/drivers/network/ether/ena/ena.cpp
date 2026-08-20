@@ -110,9 +110,32 @@ ena_aenq_link_change(void* data, struct ena_admin_aenq_entry* entry)
 static void
 ena_aenq_keep_alive(void* data, struct ena_admin_aenq_entry* entry)
 {
-	/* The device expects someone to notice these; there is nothing to do
-	   until we implement a watchdog that resets the device when they stop
-	   arriving. */
+	ena_haiku_device* device = (ena_haiku_device*)data;
+	struct ena_admin_aenq_keep_alive_desc* description
+		= (struct ena_admin_aenq_keep_alive_desc*)entry;
+
+	/* Both reference drivers pull the device's own drop counters out of this
+	   descriptor while they are here; it is the only place they are reported. */
+	device->hwRxDrops = ((uint64)description->rx_drops_high << 32)
+		| description->rx_drops_low;
+	device->hwTxDrops = ((uint64)description->tx_drops_high << 32)
+		| description->tx_drops_low;
+
+#ifdef ENA_DEBUG_FAULT_INJECTION
+	/* Debug fault injection: stop advancing the timestamp so the watchdog sees a
+	   dead device while the device is in fact perfectly healthy. That way a
+	   failure during the test is unambiguously ours. */
+	if (device->suppressKeepAlive != 0) {
+		if (device->suppressKeepAlive == 1)
+			device->suppressKeepAlive = 0;
+		return;
+	}
+#endif
+
+	/* Deliberately the only thing this handler decides: record, never act. The
+	   watchdog thread does the deciding, because a reset issues admin commands
+	   and blocks, and this runs from the management interrupt. */
+	atomic_set64(&device->lastKeepAlive, system_time());
 }
 
 
@@ -443,7 +466,14 @@ ena_device_init(ena_haiku_device* device,
 			| BIT(ENA_ADMIN_KEEP_ALIVE);
 		groups &= features->aenq.supported_groups;
 
-		TRACE_ALWAYS("configuring AENQ groups %#" B_PRIx32 "\n", groups);
+		/* The watchdog is only legitimate if the device agreed to send
+		   keep-alives. Both references gate on exactly this, rather than
+		   resetting a device in a loop for failing to send something it never
+		   promised. */
+		device->watchdogActive = (groups & BIT(ENA_ADMIN_KEEP_ALIVE)) != 0;
+
+		TRACE_ALWAYS("configuring AENQ groups %#" B_PRIx32 "%s\n", groups,
+			device->watchdogActive ? "" : " (no keep-alive: watchdog disabled)");
 
 		result = ena_com_set_aenq_config(comDev, groups);
 		if (result != ENA_COM_OK) {
@@ -1081,6 +1111,439 @@ ena_refill_receive_ring(ena_haiku_device* device, uint16 count)
 //	#pragma mark - device module API
 
 
+
+//	#pragma mark - device watchdog
+
+
+/* Defined below, next to ena_init_device(), because that is where the sequence it
+   performs belongs conceptually. The watchdog reset is its second caller. */
+static status_t	ena_device_bringup(ena_haiku_device* device);
+
+
+/*!	Tears the device down and brings it back, in the one order that is safe.
+
+	Ordering here is not stylistic. Three things in particular:
+
+	- \a ena_com_dev_reset() runs **before** the descriptor rings are freed. After
+	  ena_com_set_admin_running_state(false), ena_com_submit_admin_cmd() returns
+	  immediately, so the DESTROY_SQ/DESTROY_CQ commands inside
+	  ena_com_destroy_io_queue() never reach the device -- while the free happens
+	  regardless. Freeing first would hand rings back to the VM while the device
+	  still holds their addresses and has not been told to stop, which is silent,
+	  delayed corruption of whatever gets that memory next. FreeBSD resets in
+	  ena_down() before destroying queues, for exactly this reason.
+
+	- The frees happen with \a txLock and \a rxLock held. The resetting flag alone
+	  cannot close the window: a receiver already inside ena_com_rx_pkt() when the
+	  rings go away dereferences a null page, and the net stack's reader retries
+	  every 10 ms, so there is no window to be lucky in.
+
+	- Bring-up is ena_device_bringup(), the same function attach uses, so the
+	  command sequence cannot drift between the two paths.
+*/
+static status_t
+ena_watchdog_reset(ena_haiku_device* device,
+	enum ena_regs_reset_reason_types reason)
+{
+	MutexLocker resetLocker(device->resetLock);
+
+	/* Losing a race with teardown is not a failure; it means there is nothing
+	   left worth resetting. */
+	if (device->watchdogExiting || device->deviceDead)
+		return B_CANCELED;
+
+	const bigtime_t startedAt = system_time();
+	atomic_add(&device->resetCount, 1);
+	TRACE_ALWAYS("resetting the device, reason %d (reset #%" B_PRId32 ")\n",
+		(int)reason, device->resetCount);
+
+	/* Publish the flag before anything is dismantled, so a datapath call that
+	   takes txLock/rxLock after this point sees it and returns instead of
+	   touching a queue that is about to disappear. */
+	device->resetting = true;
+
+	/* Tell the stack the link is gone. This is the single most consequential
+	   line here: ethernet_link_checker() polls ETHER_GET_LINK_STATE every second
+	   and a cleared IFF_LINK makes AutoconfigLooper delete the DHCP client and
+	   renegotiate on the way back up. That is measured rather than designed
+	   around -- see docs/watchdog-design.md, criterion B. */
+	device->linkUp = false;
+
+	/* Wake everyone who is blocked, with a count: release_sem() wakes exactly
+	   one waiter, and there can be several. They re-check under the locks. */
+	if (device->rxReady >= 0)
+		release_sem_etc(device->rxReady, 8, B_DO_NOT_RESCHEDULE);
+	if (device->txCompleted >= 0)
+		release_sem_etc(device->txCompleted, 8, B_DO_NOT_RESCHEDULE);
+
+	/* --- teardown ------------------------------------------------------- */
+
+	/* First, and before the rings are touched: stop the device dead. This is a
+	   register write, not an admin command, so it works regardless of admin
+	   state. */
+	int result = ena_com_dev_reset(&device->comDev, reason);
+	if (result != ENA_COM_OK) {
+		/* Worth logging loudly but not worth aborting: the rest of the teardown
+		   is still the best available way back to a known state. */
+		ERROR("device reset register write failed: %d\n", result);
+	}
+
+	ena_com_set_admin_running_state(&device->comDev, false);
+
+	if (device->ioIrqInstalled) {
+		remove_io_interrupt_handler(device->ioIrq, ena_io_interrupt, device);
+		device->ioIrqInstalled = false;
+	}
+	if (device->managementIrqInstalled) {
+		remove_io_interrupt_handler(device->managementIrq,
+			ena_management_interrupt, device);
+		device->managementIrqInstalled = false;
+	}
+
+	/* The rings and the bounce buffers, with the datapath excluded. */
+	{
+		MutexLocker txLocker(device->txLock);
+		MutexLocker rxLocker(device->rxLock);
+
+		ena_release_io_queues(device);
+		ena_release_buffers(device);
+	}
+
+	ena_com_rss_destroy(&device->comDev);
+	ena_com_abort_admin_commands(&device->comDev);
+	ena_com_wait_for_abort_completion(&device->comDev);
+	ena_com_admin_destroy(&device->comDev);
+	ena_com_mmio_reg_read_request_destroy(&device->comDev);
+
+	/* One contiguous page per reset cycle if this is forgotten. comDev outlives
+	   the reset, so the bring-up allocates a fresh host_info over the old
+	   pointer. */
+	ena_com_delete_host_info(&device->comDev);
+
+	if (device->msixConfigured) {
+		device->pci->unconfigure_msi(device->pciDevice);
+		device->msixConfigured = false;
+		device->msixEnabled = false;
+	}
+
+	device->running = false;
+
+	/* --- bring-up ------------------------------------------------------- */
+
+	status_t status = ena_device_bringup(device);
+	if (status != B_OK) {
+		/* Leave the device inert rather than half-built, and stop the watchdog
+		   from trying again forever. An operator can still see this in the
+		   syslog; the alternative is a reset loop that makes the instance worse
+		   than the wedged NIC it was trying to fix. */
+		ERROR("reset failed to bring the device back: %s -- device is now "
+			"inert and the watchdog is disabled\n", strerror(status));
+		device->deviceDead = true;
+		device->resetting = false;
+		return status;
+	}
+
+	/* The receive ring belongs to the reset, not to ena_open(): the buffers were
+	   freed and reallocated above, so the descriptors have to be reposted. Only
+	   if somebody actually has the device open -- otherwise ena_open() will do
+	   it, and posting now would race with it. */
+	if (atomic_get(&device->openCount) > 0) {
+		MutexLocker rxLocker(device->rxLock);
+		device->rxNextToFill = 0;
+		ena_refill_receive_ring(device, device->rxRingSize);
+	}
+
+	device->resetting = false;
+
+	/* Optimistic, exactly as at attach: the device does not send a link event
+	   for a link that is already up, and on EC2 it always is. */
+	device->linkUp = true;
+
+	TRACE_ALWAYS("device reset completed in %" B_PRId64 " ms\n",
+		(system_time() - startedAt) / 1000);
+
+	return B_OK;
+}
+
+
+/*!	The watchdog. One second of sleep, one check, and a reset if it is overdue.
+
+	A thread rather than add_timer(), because add_timer() fires in interrupt
+	context and a reset issues admin commands and blocks. This thread *is* the
+	deferred context FreeBSD gets from its taskqueue.
+*/
+static int32
+ena_watchdog(void* arg)
+{
+	ena_haiku_device* device = (ena_haiku_device*)arg;
+
+	while (true) {
+		/* A semaphore rather than snooze(), so teardown wakes us immediately
+		   instead of waiting out the remaining second. */
+		acquire_sem_etc(device->watchdogWake, 1, B_RELATIVE_TIMEOUT,
+			ENA_WATCHDOG_INTERVAL_US);
+
+		if (device->watchdogExiting)
+			break;
+
+		/* Do not even look before the device is running, or while a reset is in
+		   flight. Double entry is prevented here, by construction, rather than
+		   by a flag test at the trigger. */
+		if (!device->watchdogActive || !device->running || device->resetting
+			|| device->deviceDead) {
+			continue;
+		}
+
+		const bigtime_t last = atomic_get64(&device->lastKeepAlive);
+		const bigtime_t age = system_time() - last;
+		if (age <= ENA_KEEP_ALIVE_TIMEOUT_US)
+			continue;
+
+		/* If a keep-alive is sitting unconsumed in the AENQ then the device is
+		   alive and it is our interrupt that went missing. Distinguishing the
+		   two costs nothing and is the difference between blaming the device and
+		   blaming ourselves. */
+		enum ena_regs_reset_reason_types reason = ENA_REGS_RESET_KEEP_ALIVE_TO;
+		if (ena_com_aenq_has_keep_alive(&device->comDev))
+			reason = ENA_REGS_RESET_MISSING_ADMIN_INTERRUPT;
+
+		ERROR("keep-alive watchdog timeout: %" B_PRId64 " ms since the last "
+			"event (limit %d ms), reason %s\n", age / 1000,
+			ENA_KEEP_ALIVE_TIMEOUT_US / 1000,
+			reason == ENA_REGS_RESET_MISSING_ADMIN_INTERRUPT
+				? "missing admin interrupt" : "keep-alive timeout");
+
+		ena_watchdog_reset(device, reason);
+	}
+
+	return 0;
+}
+
+
+static void
+ena_watchdog_start(ena_haiku_device* device)
+{
+	if (!device->watchdogActive) {
+		TRACE_ALWAYS("watchdog not started: the device did not grant "
+			"keep-alive events\n");
+		return;
+	}
+
+	device->watchdogExiting = false;
+	atomic_set64(&device->lastKeepAlive, system_time());
+
+	device->watchdogWake = create_sem(0, "ena watchdog");
+	if (device->watchdogWake < B_OK) {
+		ERROR("cannot create the watchdog semaphore: %s\n",
+			strerror(device->watchdogWake));
+		return;
+	}
+
+	/* Above normal: on a busy system a watchdog that is scheduled late measures
+	   scheduler latency rather than device health. */
+	device->watchdogThread = spawn_kernel_thread(ena_watchdog, "ena watchdog",
+		B_URGENT_DISPLAY_PRIORITY, device);
+	if (device->watchdogThread < B_OK) {
+		ERROR("cannot spawn the watchdog thread: %s\n",
+			strerror(device->watchdogThread));
+		delete_sem(device->watchdogWake);
+		device->watchdogWake = -1;
+		return;
+	}
+
+	resume_thread(device->watchdogThread);
+	TRACE_ALWAYS("watchdog running: %d ms keep-alive timeout, %d ms cadence\n",
+		ENA_KEEP_ALIVE_TIMEOUT_US / 1000, ENA_WATCHDOG_INTERVAL_US / 1000);
+}
+
+
+static void
+ena_watchdog_stop(ena_haiku_device* device)
+{
+	if (device->watchdogThread < B_OK)
+		return;
+
+	/* Ask, wake, then wait. The thread tests watchdogExiting after taking
+	   resetLock, so a reset already in flight finishes and the join is bounded
+	   by the admin command timeouts rather than being open-ended. */
+	device->watchdogExiting = true;
+	if (device->watchdogWake >= B_OK)
+		release_sem(device->watchdogWake);
+
+	status_t exitValue;
+	wait_for_thread(device->watchdogThread, &exitValue);
+	device->watchdogThread = -1;
+
+	if (device->watchdogWake >= B_OK) {
+		delete_sem(device->watchdogWake);
+		device->watchdogWake = -1;
+	}
+}
+
+
+/*!	Brings the device itself up: everything from the admin queue to the buffers.
+
+	Called by both \a ena_init_device() at attach and by the watchdog reset. It
+	exists as one function on purpose. The order it performs -- host attributes,
+	device attributes, LLQ placement, ring sizes, MSI-X, interrupt handlers,
+	interrupt moderation, RSS, queue pairs, RSS flush, and MTU *last* -- is a
+	conjunction the device validates as a whole, and finding it cost a week (see
+	FINDINGS.md). Two copies of that sequence would drift, and the drift would
+	present as CREATE_CQ failing again months later for no visible reason.
+
+	Deliberately does **not** touch anything per-open or per-lifetime: not the
+	mutexes, not the semaphores, not openCount, not the BAR mappings, and not
+	linkUp. Those belong to the caller. A reset re-runs this and nothing else.
+*/
+static status_t
+ena_device_bringup(ena_haiku_device* device)
+{
+	struct ena_com_dev_get_features_ctx features;
+	memset(&features, 0, sizeof(features));
+
+	status_t status;
+
+	status = ena_device_init(device, &features);
+	if (status != B_OK)
+		return status;
+
+	memcpy(device->macAddress, features.dev_attr.mac_addr,
+		ETHER_ADDRESS_LENGTH);
+	device->maxSupportedMtu = features.dev_attr.max_mtu;
+	device->frameSize = min_c((uint32)ENA_FRAME_SIZE, device->maxSupportedMtu);
+
+	TRACE_ALWAYS("MAC %02x:%02x:%02x:%02x:%02x:%02x, device MTU limit %"
+		B_PRIu32 ", using %" B_PRIu32 "\n",
+		device->macAddress[0], device->macAddress[1], device->macAddress[2],
+		device->macAddress[3], device->macAddress[4], device->macAddress[5],
+		device->maxSupportedMtu, device->frameSize);
+
+	ena_configure_placement_policy(device, &features.llq);
+	ena_calculate_ring_sizes(device, &features);
+	if (device->txRingSize < ENA_MIN_RING_SIZE
+		|| device->rxRingSize < ENA_MIN_RING_SIZE) {
+		ERROR("device offers unusably short rings (%u tx, %u rx)\n",
+			device->txRingSize, device->rxRingSize);
+		status = B_NOT_SUPPORTED;
+		return status;
+	}
+
+	status = ena_enable_msix(device);
+	if (status != B_OK)
+		return status;
+
+	status = install_io_interrupt_handler(device->managementIrq,
+		ena_management_interrupt, device, 0);
+	if (status != B_OK) {
+		ERROR("cannot install the management interrupt handler: %s\n",
+			strerror(status));
+		return status;
+	}
+	device->managementIrqInstalled = true;
+
+	status = install_io_interrupt_handler(device->ioIrq, ena_io_interrupt,
+		device, 0);
+	if (status != B_OK) {
+		ERROR("cannot install the io interrupt handler: %s\n",
+			strerror(status));
+		return status;
+	}
+	device->ioIrqInstalled = true;
+
+	/* The reference drivers initialise interrupt moderation here, while still
+	   polling, and the device is evidently particular about how much of its
+	   configuration exists before queues are created. */
+	if (ena_com_init_interrupt_moderation(&device->comDev) != ENA_COM_OK)
+		TRACE_ALWAYS("interrupt moderation unavailable; continuing\n");
+
+	/* Interrupts are live now, so the admin queue no longer has to be
+	   polled and asynchronous events can start arriving. */
+	ena_com_set_admin_polling_mode(&device->comDev, false);
+
+	/* Belt and braces, and deliberately not a substitute for working
+	   interrupts: with auto-polling the HAL notices an admin completion that
+	   arrived without an interrupt and finishes the command by polling instead
+	   of failing it. Admin commands only happen during setup and
+	   reconfiguration, so the cost is irrelevant, and it keeps a
+	   misconfigured or undelivered management vector from making the device
+	   unusable outright. The datapath still depends on real interrupts. */
+	ena_com_set_admin_auto_polling_mode(&device->comDev, true);
+
+	device->running = true;
+	ena_com_admin_aenq_enable(&device->comDev);
+
+	status = ena_prepare_rss(device);
+	if (status != B_OK)
+		return status;
+
+	status = ena_setup_io_queues(device);
+	if (status != B_OK)
+		return status;
+
+	/* Only now that the queues exist can the indirection table be translated
+	   into device queue indices. */
+	ena_flush_rss(device);
+
+	/* MTU last, which is where Amazon's drivers put it -- their SET_FEATURE(MTU)
+	   is the final admin command, after all four queue pairs exist, where ours
+	   used to be the command immediately before CREATE_CQ. The maintainers'
+	   answer on amzn/amzn-drivers#381 was that CREATE_CQ can be refused when
+	   host features provided earlier via SET_FEATURE are incompatible with the
+	   instance type, and this was the last SET_FEATURE whose position or value
+	   still differed from the reference.
+
+	   Only the *position* is load-bearing, and it is what stays. The value is
+	   frameSize, not the reference's 9001: what the device is told here has to
+	   agree with what the receive path can actually accept, and ours posts one
+	   2048 byte buffer per frame with max_bufs = 1. Telling the device 9001
+	   while advertising 1500 to the stack left a window where a peer that
+	   ignored our advertised MTU could put a frame on the wire that the device
+	   would accept and we could not reassemble. Nothing on an EC2 link does
+	   that, so it never bit -- but it was an inconsistency held in place only by
+	   the good manners of the other end, which is not a property to depend on.
+
+	   Raising this again is a prerequisite for jumbo frames, and it is a
+	   two-part change: multi-descriptor receive first, then this value. */
+	{
+		const uint32 deviceMtu = device->frameSize;
+		int mtuResult = ena_com_set_dev_mtu(&device->comDev, deviceMtu);
+		TRACE_ALWAYS("set device MTU %" B_PRIu32 " after queue creation "
+			"(matching what we report to the stack): %s\n", deviceMtu,
+			mtuResult == ENA_COM_OK ? "ok" : "FAILED");
+		if (mtuResult != ENA_COM_OK) {
+			status = ena_translate_error(mtuResult);
+			return status;
+		}
+	}
+
+	/* After the queues, because the device may have forced a smaller depth
+	   than we asked for and the buffer pools are sized from it. */
+	status = ena_setup_buffers(device);
+	if (status != B_OK) {
+		ERROR("cannot allocate packet buffers: %s\n", strerror(status));
+		return status;
+	}
+
+	/* Arm the io vector. A completion queue created by ena_com_create_io_queue()
+	   starts masked, and ena_io_interrupt() only re-arms *after* an interrupt has
+	   arrived -- so without this first unmask the first interrupt never comes and
+	   therefore neither does the re-arm. The interface would then look perfectly
+	   healthy in every log line and never receive another frame, which is the
+	   hardest possible failure to spot in a reset. */
+	if (device->txCompletionQueue != NULL) {
+		struct ena_eth_io_intr_reg interruptRegister;
+		ena_com_update_intr_reg(&interruptRegister, 0, 0, true, true);
+		ena_com_unmask_intr(device->txCompletionQueue, &interruptRegister);
+	}
+
+	/* Seed the watchdog deadline: the device has not sent a keep-alive yet, and
+	   a zero (or stale) timestamp here means the watchdog would fire six seconds
+	   from now against a device that is perfectly healthy. */
+	atomic_set64(&device->lastKeepAlive, system_time());
+
+	return B_OK;
+}
+
 static status_t
 ena_init_device(void* _info, void** _cookie)
 {
@@ -1160,129 +1623,10 @@ ena_init_device(void* _info, void** _cookie)
 	device->comDev.net_device = device;
 	device->comDev.ena_min_poll_delay_us = ENA_MIN_POLL_DELAY_US;
 
-	struct ena_com_dev_get_features_ctx features;
-	memset(&features, 0, sizeof(features));
-
-	status = ena_device_init(device, &features);
-	if (status != B_OK)
-		goto err_unmap;
-
-	memcpy(device->macAddress, features.dev_attr.mac_addr,
-		ETHER_ADDRESS_LENGTH);
-	device->maxSupportedMtu = features.dev_attr.max_mtu;
-	device->frameSize = min_c((uint32)ENA_FRAME_SIZE, device->maxSupportedMtu);
-
-	TRACE_ALWAYS("MAC %02x:%02x:%02x:%02x:%02x:%02x, device MTU limit %"
-		B_PRIu32 ", using %" B_PRIu32 "\n",
-		device->macAddress[0], device->macAddress[1], device->macAddress[2],
-		device->macAddress[3], device->macAddress[4], device->macAddress[5],
-		device->maxSupportedMtu, device->frameSize);
-
-	ena_configure_placement_policy(device, &features.llq);
-	ena_calculate_ring_sizes(device, &features);
-	if (device->txRingSize < ENA_MIN_RING_SIZE
-		|| device->rxRingSize < ENA_MIN_RING_SIZE) {
-		ERROR("device offers unusably short rings (%u tx, %u rx)\n",
-			device->txRingSize, device->rxRingSize);
-		status = B_NOT_SUPPORTED;
-		goto err_device;
-	}
-
-	status = ena_enable_msix(device);
+	status = ena_device_bringup(device);
 	if (status != B_OK)
 		goto err_device;
 
-	status = install_io_interrupt_handler(device->managementIrq,
-		ena_management_interrupt, device, 0);
-	if (status != B_OK) {
-		ERROR("cannot install the management interrupt handler: %s\n",
-			strerror(status));
-		goto err_device;
-	}
-	device->managementIrqInstalled = true;
-
-	status = install_io_interrupt_handler(device->ioIrq, ena_io_interrupt,
-		device, 0);
-	if (status != B_OK) {
-		ERROR("cannot install the io interrupt handler: %s\n",
-			strerror(status));
-		goto err_device;
-	}
-	device->ioIrqInstalled = true;
-
-	/* The reference drivers initialise interrupt moderation here, while still
-	   polling, and the device is evidently particular about how much of its
-	   configuration exists before queues are created. */
-	if (ena_com_init_interrupt_moderation(&device->comDev) != ENA_COM_OK)
-		TRACE_ALWAYS("interrupt moderation unavailable; continuing\n");
-
-	/* Interrupts are live now, so the admin queue no longer has to be
-	   polled and asynchronous events can start arriving. */
-	ena_com_set_admin_polling_mode(&device->comDev, false);
-
-	/* Belt and braces, and deliberately not a substitute for working
-	   interrupts: with auto-polling the HAL notices an admin completion that
-	   arrived without an interrupt and finishes the command by polling instead
-	   of failing it. Admin commands only happen during setup and
-	   reconfiguration, so the cost is irrelevant, and it keeps a
-	   misconfigured or undelivered management vector from making the device
-	   unusable outright. The datapath still depends on real interrupts. */
-	ena_com_set_admin_auto_polling_mode(&device->comDev, true);
-
-	device->running = true;
-	ena_com_admin_aenq_enable(&device->comDev);
-
-	status = ena_prepare_rss(device);
-	if (status != B_OK)
-		goto err_device;
-
-	status = ena_setup_io_queues(device);
-	if (status != B_OK)
-		goto err_device;
-
-	/* Only now that the queues exist can the indirection table be translated
-	   into device queue indices. */
-	ena_flush_rss(device);
-
-	/* MTU last, which is where Amazon's drivers put it -- their SET_FEATURE(MTU)
-	   is the final admin command, after all four queue pairs exist, where ours
-	   used to be the command immediately before CREATE_CQ. The maintainers'
-	   answer on amzn/amzn-drivers#381 was that CREATE_CQ can be refused when
-	   host features provided earlier via SET_FEATURE are incompatible with the
-	   instance type, and this was the last SET_FEATURE whose position or value
-	   still differed from the reference.
-
-	   Only the *position* is load-bearing, and it is what stays. The value is
-	   frameSize, not the reference's 9001: what the device is told here has to
-	   agree with what the receive path can actually accept, and ours posts one
-	   2048 byte buffer per frame with max_bufs = 1. Telling the device 9001
-	   while advertising 1500 to the stack left a window where a peer that
-	   ignored our advertised MTU could put a frame on the wire that the device
-	   would accept and we could not reassemble. Nothing on an EC2 link does
-	   that, so it never bit -- but it was an inconsistency held in place only by
-	   the good manners of the other end, which is not a property to depend on.
-
-	   Raising this again is a prerequisite for jumbo frames, and it is a
-	   two-part change: multi-descriptor receive first, then this value. */
-	{
-		const uint32 deviceMtu = device->frameSize;
-		int mtuResult = ena_com_set_dev_mtu(&device->comDev, deviceMtu);
-		TRACE_ALWAYS("set device MTU %" B_PRIu32 " after queue creation "
-			"(matching what we report to the stack): %s\n", deviceMtu,
-			mtuResult == ENA_COM_OK ? "ok" : "FAILED");
-		if (mtuResult != ENA_COM_OK) {
-			status = ena_translate_error(mtuResult);
-			goto err_device;
-		}
-	}
-
-	/* After the queues, because the device may have forced a smaller depth
-	   than we asked for and the buffer pools are sized from it. */
-	status = ena_setup_buffers(device);
-	if (status != B_OK) {
-		ERROR("cannot allocate packet buffers: %s\n", strerror(status));
-		goto err_device;
-	}
 
 	mutex_init(&device->txLock, "ena tx");
 	mutex_init(&device->rxLock, "ena rx");
@@ -1293,6 +1637,9 @@ ena_init_device(void* _info, void** _cookie)
 	   send one for a link that is already up when we attach. On EC2 the link
 	   is always up, so start optimistic and let an event correct us. */
 	device->linkUp = true;
+
+	mutex_init(&device->resetLock, "ena reset");
+	ena_watchdog_start(device);
 
 	TRACE_ALWAYS("attached; interrupts so far: %" B_PRId32 " management, %"
 		B_PRId32 " io%s\n", device->managementInterrupts,
@@ -1339,7 +1686,11 @@ err_device:
 	}
 
 	ena_release_buffers(device);
-err_unmap:
+
+	/* Reached only by falling through from err_device now: the BAR-mapping
+	   failures that used to jump here live inside ena_device_bringup() since the
+	   split, and return rather than goto. The unmapping still has to happen, so
+	   the code stays and only the label goes. */
 	if (device->memoryArea >= 0) {
 		delete_area(device->memoryArea);
 		device->memoryArea = -1;
@@ -1357,6 +1708,12 @@ ena_uninit_device(void* _cookie)
 {
 	CALLED();
 	ena_haiku_device* device = (ena_haiku_device*)_cookie;
+
+	/* Before anything is dismantled: the watchdog must not be mid-reset while the
+	   device is being torn down under it. Stopping it takes resetLock into
+	   account, so a reset in flight completes first. */
+	ena_watchdog_stop(device);
+	mutex_destroy(&device->resetLock);
 
 	device->running = false;
 
@@ -1440,6 +1797,12 @@ ena_open(void* _info, const char* path, int openMode, void** _cookie)
 	/* Post every receive descriptor before the first interrupt can arrive. */
 	device->rxNextToFill = 0;
 	ena_refill_receive_ring(device, device->rxRingSize);
+
+	/* Third and last seeding point for the watchdog deadline (the others are
+	   thread start and the end of a reset). The interface can have been down long
+	   enough for the timestamp to go stale while nothing was watching it, and a
+	   stale timestamp here is a reset six seconds after ifconfig up. */
+	atomic_set64(&device->lastKeepAlive, system_time());
 
 	/* Arm the io vector; it starts masked. Through the transmit CQ, for the
 	   reason given in ena_io_interrupt(). */
@@ -1532,6 +1895,14 @@ ena_send(ena_haiku_device* device, net_buffer* buffer)
 {
 	MutexLocker locker(device->txLock);
 
+	/* Checked here, under the lock, and not before it. The reset holds txLock
+	   across the frees, so anything that gets this far is guaranteed that
+	   txBuffers, txFreeIds and the submission queue still exist. A bare flag test
+	   outside the lock would be check-then-act and the window is a
+	   use-after-free, not a lost packet. */
+	if (device->resetting || device->deviceDead)
+		return B_DEV_NOT_READY;
+
 	ena_reclaim_transmitted(device);
 
 	/* The submission queue runs out before the request-id pool does: it
@@ -1622,6 +1993,12 @@ ena_receive(ena_haiku_device* device, net_buffer** _buffer)
 
 	MutexLocker locker(device->rxLock);
 
+	/* Same reasoning as the transmit side: under the lock, because the reset
+	   frees the completion queue's descriptor ring and ena_com_rx_pkt() reads it
+	   with no NULL check. */
+	if (device->resetting || device->deviceDead)
+		return B_DEV_NOT_READY;
+
 	while (true) {
 		memset(&context, 0, sizeof(context));
 		context.ena_bufs = bufferInfo;
@@ -1685,6 +2062,13 @@ ena_receive(ena_haiku_device* device, net_buffer** _buffer)
 			acquire_sem_etc(device->rxReady, count, B_RELATIVE_TIMEOUT, 0);
 
 		locker.Lock();
+
+		/* The lock was dropped while blocked, so a reset may have run in the
+		   meantime -- and it is the reset that woke us. Re-check before going back
+		   round into ena_com_rx_pkt(), which is the call that would touch the
+		   freed ring. */
+		if (device->resetting || device->deviceDead)
+			return B_DEV_NOT_READY;
 	}
 
 	uint16 requestId = bufferInfo[0].req_id;
@@ -1746,6 +2130,22 @@ ena_ioctl(void* cookie, uint32 op, void* buffer, size_t length)
 	ena_haiku_device* device = (ena_haiku_device*)cookie;
 
 	switch (op) {
+#ifdef ENA_DEBUG_FAULT_INJECTION
+		case ENA_IOCTL_SUPPRESS_KEEP_ALIVE:
+		{
+			int32 mode = 0;
+			if (length != sizeof(mode))
+				return B_BAD_VALUE;
+			if (user_memcpy(&mode, buffer, sizeof(mode)) != B_OK)
+				return B_BAD_ADDRESS;
+
+			device->suppressKeepAlive = mode;
+			TRACE_ALWAYS("fault injection: keep-alive suppression = %" B_PRId32
+				"\n", mode);
+			return B_OK;
+		}
+#endif
+
 		case ETHER_INIT:
 			return B_OK;
 
