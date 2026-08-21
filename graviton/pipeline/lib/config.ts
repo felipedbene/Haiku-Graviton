@@ -73,8 +73,8 @@ export function loadConfig(scope: Construct): HaikuPipelineConfig {
 
     buildtoolsRepo: ctx(scope, 'haiku:buildtoolsRepo', 'HAIKU_BUILDTOOLS_REPO', 'https://github.com/haiku/buildtools.git'),
     buildtoolsBranch: ctx(scope, 'haiku:buildtoolsBranch', 'HAIKU_BUILDTOOLS_BRANCH', 'master'),
-    haikuOnEc2Repo: ctx(scope, 'haiku:haikuOnEc2Repo', 'HAIKU_ON_EC2_REPO', 'https://github.com/haiku/haiku-on-ec2.git'),
-    haikuOnEc2Branch: ctx(scope, 'haiku:haikuOnEc2Branch', 'HAIKU_ON_EC2_BRANCH', 'master'),
+    haikuOnEc2Repo: ctx(scope, 'haiku:haikuOnEc2Repo', 'HAIKU_ON_EC2_REPO', 'https://github.com/felipedbene/haiku-on-ec2.git'),
+    haikuOnEc2Branch: ctx(scope, 'haiku:haikuOnEc2Branch', 'HAIKU_ON_EC2_BRANCH', 'main'),
 
     buildComputeType: ctx(scope, 'haiku:buildComputeType', 'HAIKU_BUILD_COMPUTE', 'BUILD_GENERAL1_2XLARGE'),
     buildImage: ctx(scope, 'haiku:buildImage', 'HAIKU_BUILD_IMAGE', 'public.ecr.aws/ubuntu/ubuntu:24.04'),

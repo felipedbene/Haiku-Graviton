@@ -23,16 +23,16 @@
     "haiku:region": "us-west-2",
 
     "//source": "Where the Haiku fork/branch lives. A CodeConnections (formerly CodeStar) connection ARN is required for GitHub sources; create it once in the console and paste the ARN here or pass -c haiku:connectionArn=...",
-    "haiku:repoOwner": "REPLACE_ME_github_owner",
-    "haiku:repoName": "haiku",
+    "haiku:repoOwner": "felipedbene",
+    "haiku:repoName": "Haiku-Graviton",
     "haiku:branch": "graviton",
-    "haiku:connectionArn": "REPLACE_ME_arn:aws:codeconnections:us-west-2:668984504585:connection/xxxxxxxx",
+    "haiku:connectionArn": "arn:aws:codeconnections:us-west-2:668984504585:connection/7dd677af-e17b-4535-8267-fdfc549b385e",
 
     "//aux-repos": "Auxiliary git repos the cross-build clones. buildtools provides the arm64 cross-tools sources; haiku-on-ec2 provides scripts/make-gpt-image.sh.",
     "haiku:buildtoolsRepo": "https://github.com/haiku/buildtools.git",
     "haiku:buildtoolsBranch": "master",
-    "haiku:haikuOnEc2Repo": "https://github.com/haiku/haiku-on-ec2.git",
-    "haiku:haikuOnEc2Branch": "master",
+    "haiku:haikuOnEc2Repo": "https://github.com/felipedbene/haiku-on-ec2.git",
+    "haiku:haikuOnEc2Branch": "main",
 
     "//build": "CodeBuild compute + image. 2XLARGE ARM ~= 72 vCPU / 144 GB, comparable to the c7g builder. The image must be an arm64 Ubuntu 24.04 to match the validated bake environment.",
     "haiku:buildComputeType": "BUILD_GENERAL1_2XLARGE",
