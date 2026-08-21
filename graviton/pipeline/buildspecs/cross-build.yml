@@ -26,7 +26,7 @@ phases:
       - >-
         apt-get install -y --no-install-recommends
         git build-essential g++ make bison flex gawk nasm
-        wget curl xz-utils zlib1g-dev libtool autoconf automake texinfo
+        wget curl xz-utils zstd zlib1g-dev libzstd-dev libtool autoconf automake texinfo
         gettext python3 python-is-python3 gdisk rsync sudo attr ca-certificates
         unzip file
       # awscli v2 (arm64) for pulling/pushing the cross-tools cache.
