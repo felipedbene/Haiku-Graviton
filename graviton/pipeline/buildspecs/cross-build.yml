@@ -102,8 +102,9 @@ phases:
       # ---- MBR mmc -> GPT raw --------------------------------------------
       - echo "== make-gpt-image.sh (MBR -> GPT) =="
       - MMC="$(ls -1 "$GEN"/haiku-*.mmc "$GEN"/haiku-minimum.mmc 2>/dev/null | head -1)"
-      - test -n "$MMC" || { echo "no .mmc image produced by jam" >&2; ls -l "$GEN"/*.mmc || true; exit 1; }
-      - echo "mmc image: $MMC"
+      - |
+        test -n "$MMC" || { echo "no .mmc image produced by jam" >&2; ls -l "$GEN"/*.mmc || true; exit 1; }
+        echo "mmc image: $MMC"
       - bash "$HAIKU_TOP/../haiku-on-ec2/scripts/make-gpt-image.sh" "$MMC" "$HAIKU_TOP/haiku-ec2.raw" "$ROOT_VOLUME_BYTES"
   post_build:
     commands:
@@ -117,7 +118,8 @@ phases:
           aws s3 cp /tmp/ct.tar.zst "s3://$WORK_BUCKET/$CACHE_PREFIX/cross-tools-arm64.tar.zst" \
             --region "$AWS_DEFAULT_REGION" || echo "cross-tools cache upload failed (non-fatal)"
         fi
-      - ls -l "$HAIKU_TOP/haiku-ec2.raw" || echo "WARNING: raw image missing"
+      - |
+        ls -l "$HAIKU_TOP/haiku-ec2.raw" || echo "WARNING: raw image missing"
 
 artifacts:
   files:

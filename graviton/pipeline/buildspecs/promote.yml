@@ -13,7 +13,8 @@ phases:
   build:
     commands:
       - set -euo pipefail
-      - test -n "${AMI_ID:-}" || { echo "AMI_ID not provided by the Register stage" >&2; exit 1; }
+      - |
+        test -n "${AMI_ID:-}" || { echo "AMI_ID not provided by the Register stage" >&2; exit 1; }
       - export AWS_REGION="${AWS_REGION:-$AWS_DEFAULT_REGION}"
       - echo "Promoting $AMI_ID to canonical in $AWS_REGION"
       - bash "$CODEBUILD_SRC_DIR/graviton/scripts/haiku-canonical" promote "$AMI_ID"

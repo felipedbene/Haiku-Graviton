@@ -20,8 +20,10 @@ phases:
       - set -euo pipefail
       - RAW_DIR="${CODEBUILD_SRC_DIR_RawImage:-$CODEBUILD_SRC_DIR}"
       - export RAW_IMAGE="$RAW_DIR/haiku-ec2.raw"
-      - test -f "$RAW_IMAGE" || { echo "raw image not found at $RAW_IMAGE" >&2; ls -l "$RAW_DIR" || true; exit 1; }
+      - |
+        test -f "$RAW_IMAGE" || { echo "raw image not found at $RAW_IMAGE" >&2; ls -l "$RAW_DIR" || true; exit 1; }
       - export AMI_ID_OUT=/tmp/ami_id
       - bash "$CODEBUILD_SRC_DIR/graviton/pipeline/scripts/import-and-register.sh"
       - export AMI_ID="$(cat /tmp/ami_id)"
-      - echo "Registered candidate AMI: $AMI_ID"
+      - |
+        echo "Registered candidate AMI: $AMI_ID"
