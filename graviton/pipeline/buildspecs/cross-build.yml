@@ -109,9 +109,10 @@ phases:
       - HG_SSH_DIR="$HG_SSH_DIR" HAIKU_REVISION="$HAIKU_REVISION" jam -q -j"$NPROC" @minimum-mmc
       # ---- MBR mmc -> GPT raw --------------------------------------------
       - echo "== make-gpt-image.sh (MBR -> GPT) =="
-      - MMC="$(ls -1 "$GEN"/haiku-*.mmc "$GEN"/haiku-minimum.mmc 2>/dev/null | head -1)"
+      - MMC="$(ls -1 "$GEN"/haiku-mmc.image "$GEN"/haiku-*.mmc "$GEN"/haiku-minimum.mmc 2>/dev/null | head -1)"
       - |
-        test -n "$MMC" || { echo "no .mmc image produced by jam" >&2; ls -l "$GEN"/*.mmc || true; exit 1; }
+        [ -n "$MMC" ] || MMC="$(find "$GEN" -maxdepth 2 \( -name 'haiku-mmc.image' -o -name 'haiku-*.mmc' \) 2>/dev/null | head -1)"
+        test -n "$MMC" || { echo "no mmc/sd image produced by jam" >&2; ls -l "$GEN"/*.image "$GEN"/*.mmc 2>/dev/null || true; exit 1; }
         echo "mmc image: $MMC"
       - bash "$HAIKU_TOP/../haiku-on-ec2/scripts/make-gpt-image.sh" "$MMC" "$HAIKU_TOP/haiku-ec2.raw" "$ROOT_VOLUME_BYTES"
   post_build:
