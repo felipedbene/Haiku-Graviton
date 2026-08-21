@@ -209,6 +209,9 @@ EOF
 
 HPKG=$OUT/openssh-$OSSH_VERSION-$PKG_REVISION-arm64.hpkg
 rm -f "$HPKG"
+# The host 'package' tool links libroot_build.so from the build's linux objects,
+# which is not on the default loader search path -- point LD_LIBRARY_PATH at it.
+export LD_LIBRARY_PATH="$GEN/objects/linux/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
 (cd "$STAGE" && "$PACKAGE_TOOL" create -q "$HPKG")
 "$PACKAGE_TOOL" list -i "$HPKG" | head -12
 ls -l "$HPKG"
@@ -222,6 +225,13 @@ cp "$SRCDIR/files/sshd_config"     "$OUT/image/sshd_config"
 cp "$SRCDIR/files/launch-sshd"     "$OUT/image/launch-sshd"
 cp "$SRCDIR/files/services"        "$OUT/image/services"
 cp "$SRCDIR/files/authorized_keys" "$OUT/image/authorized_keys"
+# The rest of what UserBuildConfig injects (cloud_init_lite launch job, the
+# browser remote-desktop session, and its TARGET_SCREEN setup) must be staged
+# here too, or the injecting image build fails on the missing source files.
+cp "$SRCDIR/files/launch-cloud-init"     "$OUT/image/launch-cloud-init"
+cp "$SRCDIR/files/launch-remote-desktop" "$OUT/image/launch-remote-desktop"
+cp "$SRCDIR/files/remote-desktop.sh"     "$OUT/image/remote-desktop.sh"
+cp "$SRCDIR/files/UserSetupEnvironment"  "$OUT/image/UserSetupEnvironment"
 cp "$OUT/pkgroot/boot/system/settings/ssh/ssh_config" "$OUT/image/ssh_config"
 ls -l "$OUT/image"
 
