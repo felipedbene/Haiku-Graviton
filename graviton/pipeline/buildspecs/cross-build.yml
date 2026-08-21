@@ -25,7 +25,7 @@ phases:
       # rsync/sudo/attr (build-openssh sysroot staging), and the awscli for cache.
       - >-
         apt-get install -y --no-install-recommends
-        git build-essential gcc-multilib g++ make bison flex gawk nasm
+        git build-essential g++ make bison flex gawk nasm
         wget curl xz-utils zlib1g-dev libtool autoconf automake texinfo
         gettext python3 python-is-python3 gdisk rsync sudo attr ca-certificates
         unzip file
