@@ -198,6 +198,12 @@ export class HaikuGravitonPipelineStack extends cdk.Stack {
       connectionArn: cfg.connectionArn,
       output: sourceArtifact,
       triggerOnPush: false, // bakes are expensive; trigger manually / on demand.
+      // Full clone: hand CodeBuild a real git clone instead of a zip artifact.
+      // The Haiku tree relies on symlinks (e.g. src/libs/libsolv/solv/repo_haiku.h
+      // -> ../ext/repo_haiku.h); the default zip artifact turns symlinks into
+      // text files, which breaks the build (repo_haiku.h parsed as C). A clone
+      // preserves them. Requires the build role to UseConnection (granted below).
+      codeBuildCloneOutput: true,
     });
 
     const crossBuildAction = new cpactions.CodeBuildAction({
