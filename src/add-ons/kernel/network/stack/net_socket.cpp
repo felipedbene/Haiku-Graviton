@@ -608,11 +608,26 @@ socket_acquire(net_socket* _socket)
 	// During destruction, the socket might still be accessible over its
 	// endpoint protocol. We need to make sure the endpoint cannot acquire the
 	// socket anymore -- while not obvious, the endpoint protocol is responsible
-	// for the proper locking here.
-	if (socket->CountReferences() == 0)
+	// for keeping the socket object itself alive for the duration of this call
+	// (e.g. TCP's EndpointManager holds its lock while the endpoint is looked
+	// up).
+	//
+	// Testing the reference count and acquiring a reference must happen
+	// atomically: doing them as two separate steps races with the final
+	// ReleaseReference(). The final release can observe the count drop to zero
+	// (and commit to deleting the object) in between our check and our
+	// increment, so a plain AcquireReference() would resurrect an object that
+	// is already being deleted -- a use-after-free. Use the weak-reference
+	// upgrade instead, which increments the use count with a compare-and-swap
+	// that only succeeds while the count is still non-zero.
+	BReference<net_socket_private> reference
+		= BWeakReference<net_socket_private>(socket).GetReference();
+	if (!reference.IsSet())
 		return false;
 
-	socket->AcquireReference();
+	// Hand the acquired reference over to the caller; it is balanced by the
+	// matching socket_release().
+	reference.Detach();
 	return true;
 }
 
