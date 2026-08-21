@@ -124,12 +124,14 @@ ena_aenq_keep_alive(void* data, struct ena_admin_aenq_entry* entry)
 #ifdef ENA_DEBUG_FAULT_INJECTION
 	/* Debug fault injection: stop advancing the timestamp so the watchdog sees a
 	   dead device while the device is in fact perfectly healthy. That way a
-	   failure during the test is unambiguously ours. */
-	if (device->suppressKeepAlive != 0) {
-		if (device->suppressKeepAlive == 1)
-			device->suppressKeepAlive = 0;
+	   failure during the test is unambiguously ours.
+	   Mode 1 means "suppress until the watchdog has fired once", not "drop one
+	   event". Dropping a single keep-alive cannot ever trigger a timeout, because
+	   this device emits them roughly once a second against a six-second deadline
+	   -- measured: 90 s after a mode-1 request, zero triggers. It is the reset
+	   path that clears mode 1, so both modes stay suppressed here. */
+	if (device->suppressKeepAlive != 0)
 		return;
-	}
 #endif
 
 	/* Deliberately the only thing this handler decides: record, never act. The
@@ -1162,6 +1164,18 @@ ena_watchdog_reset(ena_haiku_device* device,
 	   touching a queue that is about to disappear. */
 	device->resetting = true;
 
+#ifdef ENA_DEBUG_FAULT_INJECTION
+	/* Mode 1 is "one timeout", and this is the point at which that timeout has
+	   happened, so it is the right place to clear it. Doing it in the keep-alive
+	   handler instead -- which is what the first version did -- cleared the flag
+	   on the next event and so never produced a timeout at all. */
+	if (device->suppressKeepAlive == 1) {
+		device->suppressKeepAlive = 0;
+		TRACE_ALWAYS("fault injection: single-timeout request satisfied, "
+			"suppression cleared\n");
+	}
+#endif
+
 	/* Tell the stack the link is gone. This is the single most consequential
 	   line here: ethernet_link_checker() polls ETHER_GET_LINK_STATE every second
 	   and a cleared IFF_LINK makes AutoconfigLooper delete the DHCP client and
@@ -1208,6 +1222,27 @@ ena_watchdog_reset(ena_haiku_device* device,
 		ena_release_io_queues(device);
 		ena_release_buffers(device);
 	}
+
+#ifdef ENA_DEBUG_FAULT_INJECTION
+	/* Debug only: widen the reset window so a concurrent teardown can be aimed at
+	   it.
+	   A reset takes 27-84 ms on this hardware, which is far too narrow to hit
+	   from a shell -- the torture campaign could not test `ifconfig down` landing
+	   *inside* a reset, so resetLock and the `resetting` flag guarding against a
+	   concurrent ena_uninit_device() were verified by code structure only, which
+	   is the weakest result of the whole campaign (docs/watchdog-design.md
+	   section 8).
+	   This is deliberately the widest point: the rings and bounce buffers are
+	   gone, admin is about to be torn down, and the device is at its least
+	   consistent. If the guards are wrong, this is where it shows. */
+	int32 holdMs = atomic_get(&device->holdResetMs);
+	if (holdMs > 0) {
+		TRACE_ALWAYS("fault injection: holding the reset open for %" B_PRId32
+			" ms -- teardown may be raced now\n", holdMs);
+		snooze((bigtime_t)holdMs * 1000);
+		TRACE_ALWAYS("fault injection: reset hold over, continuing\n");
+	}
+#endif
 
 	ena_com_rss_destroy(&device->comDev);
 	ena_com_abort_admin_commands(&device->comDev);
@@ -2152,6 +2187,22 @@ ena_ioctl(void* cookie, uint32 op, void* buffer, size_t length)
 			device->suppressKeepAlive = mode;
 			TRACE_ALWAYS("fault injection: keep-alive suppression = %" B_PRId32
 				"\n", mode);
+			return B_OK;
+		}
+
+		case ENA_IOCTL_HOLD_RESET:
+		{
+			int32 milliseconds = 0;
+			if (length != sizeof(milliseconds))
+				return B_BAD_VALUE;
+			if (user_memcpy(&milliseconds, buffer, sizeof(milliseconds)) != B_OK)
+				return B_BAD_ADDRESS;
+			if (milliseconds < 0 || milliseconds > ENA_MAX_RESET_HOLD_MS)
+				return B_BAD_VALUE;
+
+			atomic_set(&device->holdResetMs, milliseconds);
+			TRACE_ALWAYS("fault injection: reset hold = %" B_PRId32 " ms\n",
+				milliseconds);
 			return B_OK;
 		}
 #endif

@@ -55,7 +55,7 @@ extern "C" {
    announces itself. Note it cannot prove anything about the vendored HAL's
    object -- that one is only guaranteed by removing the driver's object
    directory before building, which is the habit to keep. */
-#define ENA_BUILD_TAG		"wd-asid"
+#define ENA_BUILD_TAG		"hold-desktop"
 #define ENA_BUILD_STAMP		__DATE__ " " __TIME__
 
 /* BAR 0 holds the registers; BAR 2 is the Low Latency Queue push window. The
@@ -112,9 +112,30 @@ extern "C" {
 
    Value picked well above the ETHER_* range. Compiled out by default; the whole
    feature exists only when ENA_DEBUG_FAULT_INJECTION is defined at build time.
-   Argument: 0 = off, 1 = suppress a single keep-alive, 2 = suppress until
-   cleared (for the repeated-reset scenario). */
+   Argument: 0 = off, 1 = suppress until the watchdog fires once, 2 = suppress
+   until cleared (for the repeated-reset scenario).
+
+   Mode 1 originally meant "drop one keep-alive event" and was useless: this
+   device emits them about once a second against a six-second deadline, so a
+   single drop can never reach the timeout. Measured, not guessed -- 90 s after a
+   mode-1 request, zero triggers. The flag is now cleared by the reset path, at
+   the moment the timeout it asked for has actually happened. */
 #define ENA_IOCTL_SUPPRESS_KEEP_ALIVE	9800
+
+/* Hold a reset open for N milliseconds at its widest point, so a concurrent
+   teardown can be aimed at it.
+   The reason this exists: a real reset is 27-84 ms on this hardware, which is far
+   too narrow to hit from a shell. The torture campaign therefore never tested
+   `ifconfig down` landing *inside* a reset, leaving resetLock and the `resetting`
+   flag verified by code reading alone -- the weakest result in
+   docs/watchdog-design.md section 8. Widening the window is the cheapest way to
+   turn that into a real experiment.
+
+   Bounded, because the hold happens with the rings already freed and the
+   interface down: a long one is indistinguishable from a hang to anything using
+   the network, including the ssh session running the test. */
+#define ENA_IOCTL_HOLD_RESET		9801
+#define ENA_MAX_RESET_HOLD_MS		30000
 #endif
 
 /* Refuse to attach below this, rather than dividing by a zero ring size if a
@@ -252,9 +273,13 @@ struct ena_haiku_device {
 #ifdef ENA_DEBUG_FAULT_INJECTION
 	/* Debug only, compiled out by default: makes the keep-alive handler stop
 	   updating lastKeepAlive so the watchdog observes a dead device while the
-	   device is in fact healthy. 0 = off, 1 = suppress one timeout,
-	   2 = suppress until cleared. */
+	   device is in fact healthy. 0 = off, 1 = suppress until one timeout has
+	   fired (cleared by the reset path), 2 = suppress until cleared. */
 	int32				suppressKeepAlive;
+	/* Milliseconds to stall inside a reset, at the point where the rings are
+	   already freed. Lets a concurrent ifconfig down/up be aimed at a window that
+	   is otherwise 27-84 ms wide. */
+	int32				holdResetMs;
 #endif
 
 	uint8				macAddress[ETHER_ADDRESS_LENGTH];
