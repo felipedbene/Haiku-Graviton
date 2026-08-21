@@ -1,5 +1,5 @@
 /*
- * Copyright 2010, Haiku, Inc. All Rights Reserved.
+ * Copyright 2010-2026, Haiku, Inc. All Rights Reserved.
  * Distributed under the terms of the MIT License.
  *
  * Authors:
@@ -122,6 +122,10 @@ BTimeUnitFormat::Format(BString& buffer, const int32 value,
 	// into a partially constructed TimeUnitFormat crashes inside ICU.
 	if (fFormatter == NULL || fInitStatus != B_OK)
 		return B_NO_INIT;
+
+	// fFormatter is not cleared when it failed to initialize.
+	if (fInitStatus != B_OK)
+		return fInitStatus;
 
 	UErrorCode icuStatus = U_ZERO_ERROR;
 	TimeUnitAmount* timeUnitAmount

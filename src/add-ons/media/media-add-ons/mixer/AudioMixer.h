@@ -32,7 +32,6 @@ public:
 	// AudioMixer support
 			void				ApplySettings();
 
-			void				PublishEventLatencyChange();
 			void				UpdateParameterWeb();
 
 			void				HandleInputBuffer(BBuffer* buffer,
@@ -126,7 +125,14 @@ protected:
 									bigtime_t lateness,
 									bool realTimeEvent = false);
 
+protected:
+			void				PublishTimeSourceChange(BTimeSource* newTimeSource);
+			void				PublishEventLatencyChange();
+
 private:
+			void				_AutoStart();
+			void				_AutoStop();
+
 			BMediaAddOn*		fAddOn;
 			MixerCore*			fCore;
 			BParameterWeb*		fWeb;

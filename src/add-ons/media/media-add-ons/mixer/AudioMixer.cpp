@@ -291,10 +291,14 @@ AudioMixer::DisposeInputCookie(int32 cookie)
 void
 AudioMixer::BufferReceived(BBuffer *buffer)
 {
-
 	if (buffer->Header()->type == B_MEDIA_PARAMETERS) {
 		TRACE("Control Buffer Received\n");
 		ApplyParameterData(buffer->Data(), buffer->SizeUsed());
+		buffer->Recycle();
+		return;
+	}
+
+	if (buffer->Header()->time_source != TimeSource()->ID()) {
 		buffer->Recycle();
 		return;
 	}
@@ -386,6 +390,63 @@ AudioMixer::GetLatencyFor(const media_destination &for_whom,
 }
 
 
+void
+AudioMixer::_AutoStart()
+{
+	MixerOutput* mixerOutput = fCore->Output();
+	if (mixerOutput == NULL)
+		return;
+
+	BMediaRoster* roster = BMediaRoster::Roster();
+	media_node_id outputID = roster->NodeIDFor(mixerOutput->MediaOutput().destination.port);
+	media_node output;
+	if (roster->GetNodeFor(outputID, &output) != B_OK)
+		return;
+
+	bigtime_t startLatency = 10000;
+	roster->GetStartLatencyFor(output, &startLatency);
+	status_t status = roster->StartNode(output, startLatency);
+	if (status == B_OK) {
+		// We need to wait for the node to actually start. Otherwise, a stale
+		// TimeSource could confuse the just-connected node.
+		bigtime_t performanceTime, realTime;
+		float drift;
+		bigtime_t timeout = system_time() + 1 * 1000 * 1000;
+		while (TimeSource()->GetTime(&performanceTime, &realTime, &drift) != B_OK
+			|| (realTime + 1 * 1000 * 1000) <= system_time()) {
+			snooze(100);
+			if (system_time() >= timeout)
+				break;
+		}
+	}
+
+	roster->ReleaseNode(output);
+
+	fCore->Start();
+}
+
+
+void
+AudioMixer::_AutoStop()
+{
+	fCore->Stop();
+
+	MixerOutput* mixerOutput = fCore->Output();
+	if (mixerOutput == NULL)
+		return;
+
+	BMediaRoster* roster = BMediaRoster::Roster();
+	media_node_id outputID = roster->NodeIDFor(mixerOutput->MediaOutput().destination.port);
+	media_node output;
+	if (roster->GetNodeFor(outputID, &output) != B_OK)
+		return;
+
+	roster->StopNode(output, 0, true);
+
+	roster->ReleaseNode(output);
+}
+
+
 status_t
 AudioMixer::Connected(const media_source &producer,
 	const media_destination &where, const media_format &with_format,
@@ -432,35 +493,8 @@ AudioMixer::Connected(const media_source &producer,
 
 	fCore->Settings()->LoadConnectionSettings(input);
 
-	if (fAutoStop && fCore->CountInputs() == 1) {
-		// Start our destination node.
-		BMediaRoster* roster = BMediaRoster::Roster();
-		media_node_id outputID = roster->NodeIDFor(
-			fCore->Output()->MediaOutput().destination.port);
-		media_node output;
-		roster->GetNodeFor(outputID, &output);
-
-		bigtime_t startLatency = 10000;
-		roster->GetStartLatencyFor(output,
-			&startLatency);
-		status_t status = roster->StartNode(output, 0 + startLatency);
-		if (status == B_OK) {
-			// We need to wait for the node to actually start. Otherwise, a stale
-			// TimeSource could confuse the just-connected node.
-			bigtime_t performanceTime, realTime;
-			float drift;
-			bigtime_t timeout = system_time() + 1 * 1000 * 1000;
-			while (TimeSource()->GetTime(&performanceTime, &realTime, &drift) != B_OK
-					|| (realTime + 1 * 1000 * 1000) <= system_time()) {
-				snooze(100);
-				if (system_time() >= timeout)
-					break;
-			}
-		}
-
-		roster->ReleaseNode(output);
-		fCore->Start();
-	}
+	if (fAutoStop && fCore->CountInputs() == 1)
+		_AutoStart();
 
 	fCore->Unlock();
 
@@ -493,9 +527,8 @@ AudioMixer::Disconnected(const media_source &producer,
 		TRACE("AudioMixer::Disconnected can't remove input\n");
 	}
 
-	if (fAutoStop && fCore->CountInputs() == 0) {
-		// TODO: stop the mixer and the output node
-	}
+	if (fAutoStop && fCore->CountInputs() == 0)
+		_AutoStop();
 
 	fCore->Unlock();
 	UpdateParameterWeb();
@@ -941,9 +974,22 @@ AudioMixer::Connect(status_t error, const media_source &source,
 		strcpy(io_name, "Mixer Output");
 
 	// Now that we're connected, we can determine our downstream latency.
-	media_node_id id;
-	FindLatencyFor(dest, &fDownstreamLatency, &id);
+	media_node_id timesourceID;
+	FindLatencyFor(dest, &fDownstreamLatency, &timesourceID);
 	TRACE("AudioMixer: Downstream Latency is %lld usecs\n", fDownstreamLatency);
+
+	BTimeSource* newTimeSource = NULL;
+	if (TimeSource() == NULL || TimeSource()->ID() != timesourceID) {
+		// Change our timesource.
+		BMediaRoster* roster = BMediaRoster::CurrentRoster();
+		roster->SetTimeSourceFor(ID(), timesourceID);
+
+		// The "set timesource" message won't be processed yet, so fetch the
+		// new timesource directly.
+		media_node timeSourceNode;
+		roster->GetTimeSource(&timeSourceNode);
+		newTimeSource = roster->MakeTimeSourceFor(timeSourceNode);
+	}
 
 	// SetDuration of one buffer
 	SetBufferDuration(buffer_duration(format.u.raw_audio));
@@ -957,8 +1003,10 @@ AudioMixer::Connect(status_t error, const media_source &source,
 
 	SetEventLatency(fDownstreamLatency + fInternalLatency);
 
-	// we need to inform all connected *inputs* about *our* change in latency
-	PublishEventLatencyChange();
+	if (newTimeSource == NULL) {
+		// we need to inform all connected *inputs* about *our* change in latency
+		PublishEventLatencyChange();
+	}
 
 	fCore->Lock();
 
@@ -966,7 +1014,7 @@ AudioMixer::Connect(status_t error, const media_source &source,
 	// us a buffer group (via SetBufferGroup()) prior to this.  That can
 	// happen, for example, if the consumer calls SetOutputBuffersFor() on
 	// us from within its Connected() method.
-	if (!fBufferGroup) {
+	if (fBufferGroup == NULL) {
 		BBufferGroup *group = NULL;
 		if (CreateBufferGroup(&group) != B_OK)
 			return;
@@ -985,12 +1033,25 @@ AudioMixer::Connect(status_t error, const media_source &source,
 	fCore->Output()->MediaOutput().destination = dest;
 
 	fCore->EnableOutput(true);
-	fCore->SetTimingInfo(TimeSource(), fDownstreamLatency);
+	fCore->SetTimingInfo(newTimeSource != NULL ? newTimeSource : TimeSource(),
+		fDownstreamLatency);
 	fCore->SetOutputBufferGroup(fBufferGroup);
 
 	fCore->Settings()->LoadConnectionSettings(fCore->Output());
+	if (fAutoStop && fCore->CountInputs() > 0)
+		_AutoStart();
 
 	fCore->Unlock();
+
+	if (newTimeSource != NULL) {
+		PublishTimeSourceChange(newTimeSource);
+		newTimeSource->Release();
+
+		// Any queued buffers will be for the old timesource.
+		EventQueue()->FlushEvents(0, BTimedEventQueue::B_ALWAYS, true,
+			BTimedEventQueue::B_HANDLE_BUFFER);
+	}
+
 	UpdateParameterWeb();
 }
 
@@ -1016,6 +1077,9 @@ AudioMixer::Disconnect(const media_source& what, const media_destination& where)
 	// frame rate and channel count.
 	fDefaultFormat.u.raw_audio.frame_rate = 96000;
 	fDefaultFormat.u.raw_audio.channel_count = 2;
+
+	if (fAutoStop)
+		_AutoStop();
 
 	fCore->RemoveOutput();
 
@@ -1151,6 +1215,29 @@ AudioMixer::HandleEvent(const media_timed_event *event, bigtime_t lateness,
 
 
 //	#pragma mark - AudioMixer methods
+
+
+void
+AudioMixer::PublishTimeSourceChange(BTimeSource* newTimeSource)
+{
+	// the time source has changed, and we need to tell all inputs about this
+
+	TRACE("AudioMixer::PublishTimeSourceChange\n");
+
+	fCore->Lock();
+
+	BMediaRoster *roster = BMediaRoster::CurrentRoster();
+	media_node_id timeSourceID = newTimeSource->ID();
+	MixerInput *input;
+	for (int i = 0; (input = fCore->Input(i)) != NULL; i++) {
+		media_node_id inputID = roster->NodeIDFor(input->MediaInput().source.port);
+		roster->SetTimeSourceFor(inputID, timeSourceID);
+	}
+
+	PublishEventLatencyChange();
+
+	fCore->Unlock();
+}
 
 
 void
