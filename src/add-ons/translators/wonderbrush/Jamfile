@@ -1,6 +1,10 @@
 SubDir HAIKU_TOP src add-ons translators wonderbrush ;
 
 SubDirHdrs [ FDirName $(SUBDIR) $(DOTDOT) shared ] ;
+# The support/ sources (bitmap_compression, blending, ...) provide headers that
+# are included unqualified by the top-level translator sources (e.g. Layer.cpp),
+# so their directory must be on the header search path, not just SEARCH_SOURCE.
+SubDirHdrs [ FDirName $(SUBDIR) support ] ;
 
 AddResources WonderBrushTranslator : WonderBrushTranslator.rdef ;
 
