@@ -1966,6 +1966,14 @@ ena_send(ena_haiku_device* device, net_buffer* buffer)
 			return status;
 
 		locker.Lock();
+
+		/* The lock was dropped while blocked on txCompleted, so a reset may have
+		   run and freed the TX ring -- and it is the reset that woke us. Re-check
+		   before ena_reclaim_transmitted(), which would touch the freed ring.
+		   This mirrors the equivalent guard on the receive path. */
+		if (device->resetting || device->deviceDead)
+			return B_DEV_NOT_READY;
+
 		ena_reclaim_transmitted(device);
 	}
 
