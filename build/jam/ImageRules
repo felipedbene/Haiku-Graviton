@@ -1602,10 +1602,8 @@ actions BuildFloppyBootImageFixupM68K
 
 rule BuildCDBootImageEFI image : bootfloppy : bootefi : extrafiles
 {
-	Depends $(image) : $(bootfloppy) ;
 	Depends $(image) : $(bootefi) ;
 	Depends $(image) : $(extrafiles) ;
-	BOOTIMG on $(image) = $(bootfloppy) ;
 
 	if $(HAIKU_NIGHTLY_BUILD) = 1 {
 		VOLID on $(image) = haiku-nightly-$(TARGET_ARCH) ;
@@ -1614,14 +1612,29 @@ rule BuildCDBootImageEFI image : bootfloppy : bootefi : extrafiles
 	}
 
 	BOOTEFI on $(image) = $(bootefi) ;
-	BuildCDBootImageEFI1 $(image) : $(bootfloppy) $(bootefi) $(extrafiles) ;
+
+	# On BIOS-capable targets (x86/x86_64) the legacy boot floppy is embedded as
+	# the default (BIOS) El Torito boot entry, with the EFI System Partition as
+	# the alternate entry. On EFI-only targets (arm64, arm, riscv64) there is no
+	# BIOS, so the floppy is never executed -- and the arm64 EFI loader is too
+	# large for the floppy layout anyway. Omit it there and boot purely from the
+	# EFI System Partition entry.
+	if $(bootfloppy) {
+		Depends $(image) : $(bootfloppy) ;
+		BOOTIMG on $(image) = $(bootfloppy) ;
+		ELTORITOARGS on $(image) = -b $(bootfloppy) -eltorito-alt-boot ;
+		BuildCDBootImageEFI1 $(image) : $(bootfloppy) $(bootefi) $(extrafiles) ;
+	} else {
+		ELTORITOARGS on $(image) = ;
+		BuildCDBootImageEFI1 $(image) : $(bootefi) $(extrafiles) ;
+	}
 }
 
 actions BuildCDBootImageEFI1
 {
 	$(RM) $(<)
-	xorriso -as mkisofs -b $(BOOTIMG) -eltorito-alt-boot -no-emul-boot -e $(BOOTEFI) \
-		-r -J -V $(VOLID) -o $(<) $(>[1]) $(>[2]) $(>[3-])
+	xorriso -as mkisofs $(ELTORITOARGS) -no-emul-boot -e $(BOOTEFI) \
+		-r -J -V $(VOLID) -o $(<) $(>)
 }
 
 

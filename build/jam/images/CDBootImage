@@ -40,7 +40,16 @@ if $(TARGET_ARCH) = ppc {
 				MakeLocateDebug $(efiPartition) : system boot ;
 				BuildEfiSystemPartition $(efiPartition) : $(efiLoader) ;
 
-				BuildCDBootImageEFI $(HAIKU_CD_BOOT_IMAGE) : $(HAIKU_BOOT_FLOPPY)
+				# The legacy BIOS boot floppy is only ever booted on x86/x86_64.
+				# EFI-only targets (arm64, arm, riscv64) boot from the EFI System
+				# Partition, so don't embed -- or require building -- the floppy
+				# there (the arm64 EFI loader also exceeds the floppy layout).
+				local bootFloppy = ;
+				if $(TARGET_ARCH) = x86 || $(TARGET_ARCH) = x86_64 {
+					bootFloppy = $(HAIKU_BOOT_FLOPPY) ;
+				}
+
+				BuildCDBootImageEFI $(HAIKU_CD_BOOT_IMAGE) : $(bootFloppy)
 					: $(efiPartition) : $(extras) ;
 			}
 		}
