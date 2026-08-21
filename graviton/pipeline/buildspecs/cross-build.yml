@@ -41,6 +41,14 @@ phases:
       # buildtools (arm64 cross-tools sources) alongside the Haiku tree.
       - git clone --depth 1 --branch "$BUILDTOOLS_BRANCH" "$BUILDTOOLS_REPO" "$HAIKU_TOP/../buildtools"
       - export BUILDTOOLS="$HAIKU_TOP/../buildtools"
+      # jam is not preinstalled in the CodeBuild image; build + install Haiku's
+      # jam from buildtools so the @minimum-mmc build below can find it on PATH.
+      - |
+        if ! command -v jam >/dev/null 2>&1; then
+          echo "== build + install jam from buildtools =="
+          (cd "$BUILDTOOLS/jam" && make && ./jam0 install)
+          command -v jam || { echo "jam still not on PATH after install" >&2; exit 1; }
+        fi
       # haiku-on-ec2 for scripts/make-gpt-image.sh (MBR->GPT converter).
       - git clone --depth 1 --branch "$HAIKU_ON_EC2_BRANCH" "$HAIKU_ON_EC2_REPO" "$HAIKU_TOP/../haiku-on-ec2"
       # Try to restore a cross-tools cache to skip the ~1h build.
