@@ -1,0 +1,21 @@
+version: 0.2
+
+# Promote stage: make the approved candidate AMI the single canonical=true
+# image. This runs only after the manual approval gate, and it delegates to the
+# existing invariant-enforcing tool (graviton/scripts/haiku-canonical) rather
+# than reimplementing the tag dance -- promote atomically strips canonical from
+# every prior holder and sets it on $AMI_ID.
+#
+# AMI_ID is injected as an environment variable from the Register stage's
+# exported pipeline variable.
+
+phases:
+  build:
+    commands:
+      - set -euo pipefail
+      - test -n "${AMI_ID:-}" || { echo "AMI_ID not provided by the Register stage" >&2; exit 1; }
+      - export AWS_REGION="${AWS_REGION:-$AWS_DEFAULT_REGION}"
+      - echo "Promoting $AMI_ID to canonical in $AWS_REGION"
+      - bash "$CODEBUILD_SRC_DIR/graviton/scripts/haiku-canonical" promote "$AMI_ID"
+      - echo "== verifying single-canonical invariant =="
+      - bash "$CODEBUILD_SRC_DIR/graviton/scripts/haiku-canonical" check

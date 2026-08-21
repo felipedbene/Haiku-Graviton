@@ -1,0 +1,88 @@
+import { Construct } from 'constructs';
+
+/**
+ * All tunable inputs for the bake pipeline. Every field is sourced from CDK
+ * context (see cdk.json) with an environment-variable fallback, so nothing is
+ * hardcoded in the stack and no secrets live in the tree.
+ */
+export interface HaikuPipelineConfig {
+  /** Target AWS account (defaults to the Haiku-on-Graviton Isengard account). */
+  readonly account: string;
+  /** Target region (us-west-2). */
+  readonly region: string;
+
+  /** GitHub owner/org of the Haiku fork. */
+  readonly repoOwner: string;
+  /** GitHub repository name (the Haiku source tree). */
+  readonly repoName: string;
+  /** Branch to bake (this fork's `graviton`). */
+  readonly branch: string;
+  /**
+   * ARN of a CodeConnections (formerly CodeStar) connection to GitHub. Created
+   * once in the console; it is the only "credential" and it is a reference, not
+   * a secret value.
+   */
+  readonly connectionArn: string;
+
+  /** Haiku buildtools repo (arm64 cross-tools sources). */
+  readonly buildtoolsRepo: string;
+  readonly buildtoolsBranch: string;
+  /** haiku-on-ec2 repo (provides scripts/make-gpt-image.sh). */
+  readonly haikuOnEc2Repo: string;
+  readonly haikuOnEc2Branch: string;
+
+  /** CodeBuild compute type for the cross-build (e.g. BUILD_GENERAL1_2XLARGE). */
+  readonly buildComputeType: string;
+  /** arm64 Ubuntu 24.04 build image matching the validated bake environment. */
+  readonly buildImage: string;
+  /** HAIKU_REVISION stamped into the build. */
+  readonly haikuRevision: string;
+
+  /** AMI name prefix (a timestamp is appended at register time). */
+  readonly amiNamePrefix: string;
+  /** Root EBS volume size in bytes for the raw image / registered AMI. */
+  readonly rootVolumeBytes: string;
+
+  /**
+   * Optional deterministic name for the S3 work bucket (raw image + cross-tools
+   * cache). Set this so the pre-existing `vmimport` role can be authorized
+   * against it out of band. Empty => CDK generates a name.
+   */
+  readonly workBucketName?: string;
+}
+
+function ctx(scope: Construct, key: string, envKey: string, fallback?: string): string {
+  const fromCtx = scope.node.tryGetContext(key);
+  const value = process.env[envKey] ?? fromCtx ?? fallback;
+  if (value === undefined) {
+    throw new Error(`Missing required config '${key}': set it in cdk.json context or env ${envKey}`);
+  }
+  return String(value);
+}
+
+export function loadConfig(scope: Construct): HaikuPipelineConfig {
+  const workBucketName = process.env.HAIKU_WORK_BUCKET ?? scope.node.tryGetContext('haiku:workBucketName');
+  return {
+    account: ctx(scope, 'haiku:account', 'HAIKU_ACCOUNT', '668984504585'),
+    region: ctx(scope, 'haiku:region', 'HAIKU_REGION', 'us-west-2'),
+
+    repoOwner: ctx(scope, 'haiku:repoOwner', 'HAIKU_REPO_OWNER'),
+    repoName: ctx(scope, 'haiku:repoName', 'HAIKU_REPO_NAME', 'haiku'),
+    branch: ctx(scope, 'haiku:branch', 'HAIKU_BRANCH', 'graviton'),
+    connectionArn: ctx(scope, 'haiku:connectionArn', 'HAIKU_CONNECTION_ARN'),
+
+    buildtoolsRepo: ctx(scope, 'haiku:buildtoolsRepo', 'HAIKU_BUILDTOOLS_REPO', 'https://github.com/haiku/buildtools.git'),
+    buildtoolsBranch: ctx(scope, 'haiku:buildtoolsBranch', 'HAIKU_BUILDTOOLS_BRANCH', 'master'),
+    haikuOnEc2Repo: ctx(scope, 'haiku:haikuOnEc2Repo', 'HAIKU_ON_EC2_REPO', 'https://github.com/haiku/haiku-on-ec2.git'),
+    haikuOnEc2Branch: ctx(scope, 'haiku:haikuOnEc2Branch', 'HAIKU_ON_EC2_BRANCH', 'master'),
+
+    buildComputeType: ctx(scope, 'haiku:buildComputeType', 'HAIKU_BUILD_COMPUTE', 'BUILD_GENERAL1_2XLARGE'),
+    buildImage: ctx(scope, 'haiku:buildImage', 'HAIKU_BUILD_IMAGE', 'public.ecr.aws/ubuntu/ubuntu:24.04'),
+    haikuRevision: ctx(scope, 'haiku:haikuRevision', 'HAIKU_REVISION', 'hrev59996'),
+
+    amiNamePrefix: ctx(scope, 'haiku:amiNamePrefix', 'HAIKU_AMI_PREFIX', 'haiku-graviton'),
+    rootVolumeBytes: ctx(scope, 'haiku:rootVolumeBytes', 'HAIKU_ROOT_VOLUME_BYTES', '2147483648'),
+
+    workBucketName: workBucketName ? String(workBucketName) : undefined,
+  };
+}

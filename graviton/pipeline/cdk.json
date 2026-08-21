@@ -1,0 +1,49 @@
+{
+  "app": "npx ts-node --prefer-ts-exts bin/pipeline.ts",
+  "watch": {
+    "include": ["**"],
+    "exclude": [
+      "README.md",
+      "cdk*.json",
+      "**/*.d.ts",
+      "**/*.js",
+      "tsconfig.json",
+      "package*.json",
+      "node_modules",
+      "test"
+    ]
+  },
+  "context": {
+    "@aws-cdk/aws-iam:minimizePolicies": true,
+    "@aws-cdk/core:checkSecretUsage": true,
+
+    "//": "------------------------------------------------------------------",
+    "//comment": "Deployment parameters. Override on the CLI with -c key=value, or edit here. account/region default to the Haiku-on-Graviton Isengard account (668984504585 / us-west-2).",
+    "haiku:account": "668984504585",
+    "haiku:region": "us-west-2",
+
+    "//source": "Where the Haiku fork/branch lives. A CodeConnections (formerly CodeStar) connection ARN is required for GitHub sources; create it once in the console and paste the ARN here or pass -c haiku:connectionArn=...",
+    "haiku:repoOwner": "REPLACE_ME_github_owner",
+    "haiku:repoName": "haiku",
+    "haiku:branch": "graviton",
+    "haiku:connectionArn": "REPLACE_ME_arn:aws:codeconnections:us-west-2:668984504585:connection/xxxxxxxx",
+
+    "//aux-repos": "Auxiliary git repos the cross-build clones. buildtools provides the arm64 cross-tools sources; haiku-on-ec2 provides scripts/make-gpt-image.sh.",
+    "haiku:buildtoolsRepo": "https://github.com/haiku/buildtools.git",
+    "haiku:buildtoolsBranch": "master",
+    "haiku:haikuOnEc2Repo": "https://github.com/haiku/haiku-on-ec2.git",
+    "haiku:haikuOnEc2Branch": "master",
+
+    "//build": "CodeBuild compute + image. 2XLARGE ARM ~= 72 vCPU / 144 GB, comparable to the c7g builder. The image must be an arm64 Ubuntu 24.04 to match the validated bake environment.",
+    "haiku:buildComputeType": "BUILD_GENERAL1_2XLARGE",
+    "haiku:buildImage": "public.ecr.aws/ubuntu/ubuntu:24.04",
+    "haiku:haikuRevision": "hrev59996",
+
+    "//image": "AMI naming + sizing.",
+    "haiku:amiNamePrefix": "haiku-graviton",
+    "haiku:rootVolumeBytes": "2147483648",
+
+    "//naming": "Deterministic name for the work bucket so the pre-existing vmimport role can be authorized against it out of band (see README).",
+    "haiku:workBucketName": ""
+  }
+}

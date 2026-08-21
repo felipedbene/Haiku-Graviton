@@ -1,0 +1,27 @@
+version: 0.2
+
+# Register stage: take the raw image produced by the cross-build, import it as
+# an EBS snapshot and register the arm64/uefi/ena AMI, tagging it as a
+# *candidate*. Canonical promotion is a separate, human-gated stage.
+#
+# Inputs:
+#   primary   = source artifact (the Haiku tree; has graviton/pipeline/scripts)
+#   RawImage  = build artifact (haiku-ec2.raw), at $CODEBUILD_SRC_DIR_RawImage
+#
+# Exports AMI_ID as a pipeline variable so the Promote stage can consume it.
+
+env:
+  exported-variables:
+    - AMI_ID
+
+phases:
+  build:
+    commands:
+      - set -euo pipefail
+      - RAW_DIR="${CODEBUILD_SRC_DIR_RawImage:-$CODEBUILD_SRC_DIR}"
+      - export RAW_IMAGE="$RAW_DIR/haiku-ec2.raw"
+      - test -f "$RAW_IMAGE" || { echo "raw image not found at $RAW_IMAGE" >&2; ls -l "$RAW_DIR" || true; exit 1; }
+      - export AMI_ID_OUT=/tmp/ami_id
+      - bash "$CODEBUILD_SRC_DIR/graviton/pipeline/scripts/import-and-register.sh"
+      - export AMI_ID="$(cat /tmp/ami_id)"
+      - echo "Registered candidate AMI: $AMI_ID"

@@ -1,0 +1,125 @@
+version: 0.2
+
+# Cross-build stage: reproduce the manual bake recipe on a CodeBuild arm64
+# (Graviton) worker running arm64 Ubuntu 24.04.
+#
+#   configure --build-cross-tools arm64  (cached in S3 to skip the ~1h rebuild)
+#   graviton/ssh/build-openssh-arm64.sh  (cross-build OpenSSH -> hpkg)
+#   cp graviton/ssh/UserBuildConfig      (jam injection hook)
+#   jam @minimum-mmc                     (two passes: stage packages, then inject)
+#   make-gpt-image.sh                    (MBR mmc -> GPT raw, from haiku-on-ec2)
+#
+# The source artifact is the Haiku tree itself, so $CODEBUILD_SRC_DIR is HAIKU_TOP.
+# Everything below only *reads* the recipe from graviton/ — no logic is rewritten.
+
+env:
+  variables:
+    GEN_SUBDIR: "generated.arm64"
+
+phases:
+  install:
+    commands:
+      - export DEBIAN_FRONTEND=noninteractive
+      - apt-get update -qq
+      # Haiku cross-tools + jam build prerequisites, plus sgdisk (make-gpt-image),
+      # rsync/sudo/attr (build-openssh sysroot staging), and the awscli for cache.
+      - >-
+        apt-get install -y --no-install-recommends
+        git build-essential gcc-multilib g++ make bison flex gawk nasm
+        wget curl xz-utils zlib1g-dev libtool autoconf automake texinfo
+        gettext python3 python-is-python3 gdisk rsync sudo attr ca-certificates
+        unzip file
+      # awscli v2 (arm64) for pulling/pushing the cross-tools cache.
+      - curl -sSLf "https://awscli.amazonaws.com/awscli-exe-linux-aarch64.zip" -o /tmp/awscliv2.zip
+      - (cd /tmp && unzip -q awscliv2.zip && ./aws/install)
+  pre_build:
+    commands:
+      - set -euo pipefail
+      - export HAIKU_TOP="$CODEBUILD_SRC_DIR"
+      - export GEN="$HAIKU_TOP/$GEN_SUBDIR"
+      - echo "HAIKU_TOP=$HAIKU_TOP  GEN=$GEN"
+      # buildtools (arm64 cross-tools sources) alongside the Haiku tree.
+      - git clone --depth 1 --branch "$BUILDTOOLS_BRANCH" "$BUILDTOOLS_REPO" "$HAIKU_TOP/../buildtools"
+      - export BUILDTOOLS="$HAIKU_TOP/../buildtools"
+      # haiku-on-ec2 for scripts/make-gpt-image.sh (MBR->GPT converter).
+      - git clone --depth 1 --branch "$HAIKU_ON_EC2_BRANCH" "$HAIKU_ON_EC2_REPO" "$HAIKU_TOP/../haiku-on-ec2"
+      # Try to restore a cross-tools cache to skip the ~1h build.
+      - CT_CACHE="s3://$WORK_BUCKET/$CACHE_PREFIX/cross-tools-arm64.tar.zst"
+      - mkdir -p "$GEN"
+      - |
+        if aws s3 cp "$CT_CACHE" /tmp/ct.tar.zst --region "$AWS_DEFAULT_REGION" 2>/dev/null; then
+          echo "== restoring cross-tools cache =="
+          tar --zstd -xf /tmp/ct.tar.zst -C "$GEN"
+          export HAVE_CROSS_TOOLS=1
+        else
+          echo "== no cross-tools cache; will build from source (~1h) =="
+          export HAVE_CROSS_TOOLS=0
+        fi
+      - echo "HAVE_CROSS_TOOLS=$HAVE_CROSS_TOOLS" > /tmp/ct.env
+  build:
+    commands:
+      - set -euo pipefail
+      - export HAIKU_TOP="$CODEBUILD_SRC_DIR"
+      - export GEN="$HAIKU_TOP/$GEN_SUBDIR"
+      - export BUILDTOOLS="$HAIKU_TOP/../buildtools"
+      - . /tmp/ct.env
+      - NPROC="$(nproc)"
+      - cd "$GEN"
+      # ---- configure -----------------------------------------------------
+      - |
+        if [ "$HAVE_CROSS_TOOLS" = "1" ] && [ -x "$GEN/cross-tools-arm64/bin/aarch64-unknown-haiku-gcc" ]; then
+          echo "== configure (reuse cached cross-tools) =="
+          "$HAIKU_TOP/configure" \
+            --cross-tools-prefix "$GEN/cross-tools-arm64/bin/aarch64-unknown-haiku-" \
+            --use-gcc-pipe -j"$NPROC"
+        else
+          echo "== configure --build-cross-tools arm64 (this is the ~1h step) =="
+          "$HAIKU_TOP/configure" \
+            --build-cross-tools arm64 \
+            --cross-tools-source "$BUILDTOOLS" \
+            --use-gcc-pipe -j"$NPROC"
+        fi
+      # ---- first jam pass: stage the haiku / haiku_devel packages --------
+      # build-openssh-arm64.sh reads the packages_build/minimum staging dirs,
+      # which only exist after jam has assembled the base packages. This first
+      # pass populates them (and produces an ssh-less image we discard).
+      - echo "== jam pass 1 (@minimum-mmc, stages packages) =="
+      - HAIKU_REVISION="$HAIKU_REVISION" jam -q -j"$NPROC" @minimum-mmc
+      # ---- cross-build OpenSSH -> hpkg + image files ---------------------
+      - echo "== build-openssh-arm64.sh =="
+      - mkdir -p "$HG_SSH_DIR"
+      - HAIKU_TOP="$HAIKU_TOP" GEN="$GEN" OUT="$HG_SSH_DIR" bash "$HAIKU_TOP/graviton/ssh/build-openssh-arm64.sh"
+      # Stage the desktop/cloud-init image files the UserBuildConfig also expects
+      # (build-openssh only emits the ssh subset; copy the rest from the recipe).
+      - |
+        for f in launch-cloud-init remote-desktop.sh launch-remote-desktop UserSetupEnvironment; do
+          cp "$HAIKU_TOP/graviton/ssh/files/$f" "$HG_SSH_DIR/image/$f"
+        done
+      # ---- inject the UserBuildConfig hook + second jam pass -------------
+      - echo "== inject UserBuildConfig, jam pass 2 (final image with ssh) =="
+      - cp "$HAIKU_TOP/graviton/ssh/UserBuildConfig" "$GEN/UserBuildConfig"
+      - HG_SSH_DIR="$HG_SSH_DIR" HAIKU_REVISION="$HAIKU_REVISION" jam -q -j"$NPROC" @minimum-mmc
+      # ---- MBR mmc -> GPT raw --------------------------------------------
+      - echo "== make-gpt-image.sh (MBR -> GPT) =="
+      - MMC="$(ls -1 "$GEN"/haiku-*.mmc "$GEN"/haiku-minimum.mmc 2>/dev/null | head -1)"
+      - test -n "$MMC" || { echo "no .mmc image produced by jam" >&2; ls -l "$GEN"/*.mmc || true; exit 1; }
+      - echo "mmc image: $MMC"
+      - bash "$HAIKU_TOP/../haiku-on-ec2/scripts/make-gpt-image.sh" "$MMC" "$HAIKU_TOP/haiku-ec2.raw" "$ROOT_VOLUME_BYTES"
+  post_build:
+    commands:
+      - export HAIKU_TOP="$CODEBUILD_SRC_DIR"
+      - export GEN="$HAIKU_TOP/$GEN_SUBDIR"
+      # Refresh the cross-tools cache (cheap insurance; overwrites on every run).
+      - |
+        if [ -x "$GEN/cross-tools-arm64/bin/aarch64-unknown-haiku-gcc" ]; then
+          echo "== caching cross-tools =="
+          tar --zstd -cf /tmp/ct.tar.zst -C "$GEN" cross-tools-arm64
+          aws s3 cp /tmp/ct.tar.zst "s3://$WORK_BUCKET/$CACHE_PREFIX/cross-tools-arm64.tar.zst" \
+            --region "$AWS_DEFAULT_REGION" || echo "cross-tools cache upload failed (non-fatal)"
+        fi
+      - ls -l "$HAIKU_TOP/haiku-ec2.raw" || echo "WARNING: raw image missing"
+
+artifacts:
+  files:
+    - haiku-ec2.raw
+  name: raw-image
