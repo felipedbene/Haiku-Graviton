@@ -238,3 +238,22 @@ actions BuildMBR
 		$(2) -o $(1) $(MBRFLAGS) -nostdlib -m32 -Wl,--oformat,binary -Wl,-z,notext \
 		-Xlinker -S -Xlinker -N -Xlinker --entry=start -Xlinker -Ttext=0x600
 }
+
+
+rule CreateSignedEmptyMBR binary
+{
+	# Produce a 512-byte MBR containing only the 0x55AA boot signature and no
+	# x86 boot code. Used on non-x86 (UEFI) targets, where the mbr.S x86 boot
+	# sector cannot be assembled, but the anyboot tool still needs a valid
+	# sector 0 to overlay the MBR partition table onto and firmware requires
+	# the boot signature to locate it.
+	MakeLocateDebug $(binary) ;
+}
+
+actions CreateSignedEmptyMBR
+{
+	# NOTE: jam actions run under /bin/sh (dash), whose printf does not support
+	# \xHH escapes -- use the POSIX octal form (0x55=\125, 0xAA=\252).
+	dd if=/dev/zero of=$(1) bs=512 count=1 2>/dev/null
+	printf '\125\252' | dd of=$(1) bs=1 seek=510 conv=notrunc 2>/dev/null
+}

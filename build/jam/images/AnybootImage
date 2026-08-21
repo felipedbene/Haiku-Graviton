@@ -22,7 +22,14 @@ actions BuildAnybootImageEfi1 {
 
 local baseMBR = base_mbr.bin ;
 local mbrSource = [ FDirName $(HAIKU_TOP) src bin writembr mbr.S ] ;
-BuildMBR $(baseMBR) : $(mbrSource) ;
+if $(HAIKU_PACKAGING_ARCHS) in x86_gcc2 x86 x86_64 {
+	BuildMBR $(baseMBR) : $(mbrSource) ;
+} else {
+	# arm64/riscv64 etc. never execute the x86 boot code and cannot assemble
+	# mbr.S, but the anyboot tool still needs a valid sector 0 (0x55AA signature)
+	# to overlay the MBR partition table onto.
+	CreateSignedEmptyMBR $(baseMBR) ;
+}
 MakeLocate $(baseMBR) : $(HAIKU_OUTPUT_DIR) ;
 MakeLocate $(HAIKU_ANYBOOT) : $(HAIKU_ANYBOOT_DIR) ;
 

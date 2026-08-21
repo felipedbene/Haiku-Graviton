@@ -1,7 +1,10 @@
 # arm64 `@nightly-anyboot`: the `base_mbr.bin` / `-m32` problem
 
-Status: **investigated, fix proposed, NOT yet tested.** Do not apply the fix until
-the boot test below passes — the MBR is load-bearing for UEFI partition discovery.
+Status: **fix implemented and build-validated** (base_mbr.bin builds without -m32;
+sector 0 has the 0x55AA signature and the anyboot tool overlays the 0xeb/0xef
+partition entries correctly). UEFI boot-test still pending. NOTE: the full
+`@nightly-anyboot` image is additionally blocked by an unrelated, pre-existing arm64
+failure — see "Separate blocker" below.
 
 ## Symptom
 
@@ -53,9 +56,15 @@ Sketch (new action, e.g. in `BootRules`):
 # the x86 boot code is never executed but the partition table + 0x55AA are required.
 actions CreateSignedEmptyMBR {
     dd if=/dev/zero of=$(1) bs=512 count=1 2>/dev/null
-    printf '\x55\xAA' | dd of=$(1) bs=1 seek=510 conv=notrunc 2>/dev/null
+    printf '\125\252' | dd of=$(1) bs=1 seek=510 conv=notrunc 2>/dev/null
 }
 ```
+
+**IMPORTANT (dash):** jam actions run under `/bin/sh` = dash, whose `printf` does
+**not** interpret `\xHH`. Using `printf '\x55\xAA'` writes the literal 8-byte string
+and produces a 518-byte file. Use the POSIX **octal** form: `0x55=\125`, `0xAA=\252`.
+This is implemented in `build/jam/BootRules` (rule/actions `CreateSignedEmptyMBR`) and
+gated in `build/jam/images/AnybootImage`.
 
 ## Relationship to the EC2 image path
 
@@ -76,6 +85,29 @@ all before prioritizing.
    anyboot artifact is needed for EC2 or only for USB/CD.
 5. Record results (hexdump + boot outcome) below.
 
-## Results
+## Separate blocker (full @nightly-anyboot, unrelated to the MBR)
 
-_(pending test)_
+With the MBR fix in place, the full `@nightly-anyboot` still fails earlier in image
+assembly, on arm64, independent of this change:
+
+    BuildFloppyBootImage1 haiku-boot-floppy.image
+    haiku_loader.efi is too big (427627) to fit before the boot archive starting at 196608
+
+The arm64 `haiku_loader.efi` (~427 KB) exceeds the boot-floppy layout budget (offset
+196608 = 192 KB). This is its own issue (loader size / floppy layout on arm64) and
+must be addressed separately before a full anyboot image can be produced.
+
+## Results (build-validated 2026-08-21)
+
+- `base_mbr.bin` builds via `CreateSignedEmptyMBR` — no `-m32`, `jam` exit 0.
+- `hexdump -C base_mbr.bin`: exactly 512 bytes, all zero except the signature:
+
+      000001f0  00 00 00 00 00 00 00 00  00 00 00 00 00 00 55 aa
+      00000200
+
+- Running the built `anyboot` host tool with the new MBR + dummy parts and hexdumping
+  sector 0 confirmed the overlay works and the signature is preserved:
+  partition entry 0 type `0xeb` (offset 450), entry 1 type `0xef` (offset 466, EFI
+  System Partition), `55 aa` at 510-511. Boot-code area (0-445) all zero.
+- UEFI boot-test: still to do (QEMU aarch64 + EDK2, or EC2), and gated on the
+  separate `haiku_loader.efi`-too-big issue above for a full image.
