@@ -1,0 +1,42 @@
+# UserSetupEnvironment -- Haiku on AWS Graviton.
+#
+# Sourced by /system/boot/SetupEnvironment (see its lines 48-49), which
+# data/launch/user applies with `env` to the whole `desktop` target. So this is
+# the one place that puts a variable into the environment of *every* service in
+# the user session, which is exactly what is needed here.
+#
+# WHY THIS FILE EXISTS
+#
+# A Nitro instance has no framebuffer, so the only Desktop app_server can build
+# is a remote one, and a Desktop is keyed on (uid, TARGET_SCREEN). An application
+# sends its own getenv("TARGET_SCREEN") when it asks for a Desktop
+# (src/kits/app/AppMisc.cpp:223), and AppServer::_FindDesktop() only returns an
+# existing Desktop when that string matches.
+#
+# data/launch/user launches Tracker and Deskbar as *services*, and
+# SetupEnvironment does not set TARGET_SCREEN. So without this file they ask for
+# a Desktop with target == NULL, get no match, and
+# AppServer::_CreateDesktop(uid, NULL) fails inside Desktop::_Init():
+# ScreenManager::AcquireScreens() finds no unowned screen (there is no
+# framebuffer) and cannot create one either, because that branch requires a
+# non-NULL target. It returns B_ENTRY_NOT_FOUND, _Init() returns early, and the
+# Desktop never finishes construction:
+#
+#     app_server: Failed to initialize virtual screen configuration:
+#     No such file or directory
+#
+# The app then exits, launch_daemon restarts the service with no back-off, and
+# the result is a hot loop -- roughly 185 teams per second, and about 145 copies
+# of that message per console interval, which is what dominated every serial log
+# of the watchdog campaign. Nothing ever draws, because the object that owns the
+# window list never exists.
+#
+# Setting it here fixes the cause rather than the symptom: launch_daemon's own
+# Tracker and Deskbar join the remote Desktop, so no second launcher is needed
+# and remote-desktop.sh no longer has to start them.
+#
+# The value is a bare port number, matching what src/apps/remotedesktop
+# exports (RemoteDesktop.cpp:139). Keep it in step with
+# HAIKU_REMOTE_DESKTOP_PORT in remote-desktop.sh and with DESKTOP_PORT in
+# desktop-client/connect-desktop.sh.
+export TARGET_SCREEN=10900

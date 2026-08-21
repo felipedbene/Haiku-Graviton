@@ -1,0 +1,19 @@
+# launch_daemon job for the remote desktop. Installed as
+# /boot/system/settings/launch/remote_desktop, read by the *system*
+# launch_daemon -- see the note in launch-sshd about why the system context and
+# not the user one: data/launch/user only runs inside a logged-in session, and on
+# a machine with no framebuffer that session never comes up.
+#
+# "service", not "job": the script stays resident and re-checks the session every
+# 30 seconds, so if input_server, Tracker or Deskbar dies it comes back. If the
+# script itself dies, launch_daemon restarts it (the script has its own
+# anti-hot-loop guard, since launch_daemon applies no back-off).
+#
+# No "on <event>" condition. The desktop does not depend on the network being
+# configured -- RemoteHWInterface binds 127.0.0.1 and simply listens -- so there
+# is nothing to wait for. A client arrives whenever an SSH tunnel is opened.
+
+service x-vnd.haiku-remote_desktop {
+	launch /bin/sh /boot/system/non-packaged/bin/remote-desktop.sh
+	legacy
+}

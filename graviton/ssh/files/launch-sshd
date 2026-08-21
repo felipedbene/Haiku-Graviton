@@ -1,0 +1,23 @@
+# launch_daemon job for sshd. Installed as /boot/system/settings/launch/sshd,
+# which the *system* launch_daemon reads (B_FIND_PATH_SETTINGS_DIRECTORY +
+# "launch", B_FIND_PATHS_SYSTEM_ONLY -- see LaunchDaemon::ReadyToRun()).
+#
+# Why the system context and not the user one: data/launch/user (app_server,
+# Tracker, Deskbar, the "desktop" target) only runs inside a logged-in user
+# session. On EC2 there is no framebuffer, so app_server fails in a loop and
+# the desktop never comes up. Jobs declared here are launched by the system
+# launch_daemon alongside registrar/net_server/syslog_daemon, before and
+# independently of any of that.
+#
+# "service" (not "job") is what makes launch_daemon restart the process if it
+# dies. "legacy" means "not a launch-aware BApplication", so launch_daemon does
+# not create and hand over a default port -- same as net_server/power_daemon.
+#
+# No "on <event>" condition and no "no_safemode": sshd must come up on every
+# boot, including safe mode, and must not wait for the network to be
+# configured.
+
+service x-vnd.openssh-sshd {
+	launch /bin/sh /boot/system/bin/sshd_boot.sh
+	legacy
+}

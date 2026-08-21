@@ -1,0 +1,16 @@
+#service telnet {
+#	launch	telnetd
+#}
+
+#service ftp {
+#	launch	ftpd
+#}
+
+# haiku-graviton: sshd is started by launch_daemon instead, via
+# /boot/system/settings/launch/sshd. Two mechanisms would mean two sshd
+# processes racing for port 22, and net_server never restarts a stand_alone
+# service that dies. Left here, commented, so it is obvious this was a choice.
+#service ssh {
+#	launch	/boot/system/bin/sshd -D
+#	stand_alone
+#}

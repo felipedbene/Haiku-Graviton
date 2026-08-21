@@ -1,0 +1,59 @@
+# sshd_config for Haiku/arm64 on AWS Graviton.
+# Installed as /boot/system/settings/ssh/sshd_config.
+#
+# SSH is the *primary* management interface for these instances (EC2 Nitro has
+# no framebuffer, so the GUI is unreachable and the serial console is the only
+# other way in). Everything here is chosen so that sshd comes up and listens
+# unconditionally, with no dependency on the network being configured, on DNS,
+# or on any GUI component.
+
+Port 22
+
+# Bind the IPv4 wildcard address explicitly. This succeeds even when no
+# interface has an address yet, so sshd is already listening by the time
+# DHCP finishes -- or by the time the ENA driver brings a NIC up at all.
+# Nothing here names an interface, so virtio_net and ena are equivalent.
+AddressFamily inet
+ListenAddress 0.0.0.0
+#ListenAddress ::
+
+# This build is configured --without-openssl (no OpenSSL exists for
+# Haiku/arm64), so Ed25519 is the only usable host key algorithm.
+HostKey /boot/system/settings/ssh/ssh_host_ed25519_key
+
+# --- authentication -------------------------------------------------------
+# Haiku's single account ("baron" by default) has uid 0, i.e. it *is* root, and
+# it has no password. So password auth could never work, and is turned off
+# explicitly; public keys are the only way in.
+PubkeyAuthentication yes
+AuthorizedKeysFile config/settings/ssh/authorized_keys
+PermitRootLogin prohibit-password
+PasswordAuthentication no
+PermitEmptyPasswords no
+KbdInteractiveAuthentication no
+
+# The image build creates files with mode 0664, which StrictModes rejects.
+# sshd_boot.sh tightens the modes at boot, but do not let a stale mode lock us
+# out of the only management path.
+StrictModes no
+
+# --- robustness -----------------------------------------------------------
+# Never do a reverse DNS lookup on the client: with no working resolver (the
+# normal case before ENA/DHCP work) that just adds a login delay.
+UseDNS no
+
+# Keep dead sessions from wedging: 3 x 30s.
+ClientAliveInterval 30
+ClientAliveCountMax 3
+
+PidFile /boot/system/var/sshd.pid
+Subsystem sftp /boot/system/lib/openssh/sftp-server
+
+PrintMotd no
+PrintLastLog no
+X11Forwarding no
+
+# VERBOSE while the port is still being brought up: auth failures are otherwise
+# very hard to diagnose over a serial console. Drop to INFO once stable.
+SyslogFacility AUTH
+LogLevel VERBOSE

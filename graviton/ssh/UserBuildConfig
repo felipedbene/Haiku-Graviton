@@ -1,0 +1,140 @@
+# UserBuildConfig -- Haiku on AWS Graviton: put OpenSSH into the arm64 image.
+#
+# Copy (or symlink) this file to $HAIKU_OUTPUT_DIR/UserBuildConfig, i.e.
+#   /opt/haiku/haiku/generated.arm64/UserBuildConfig
+# It is picked up automatically by Jamrules and is the build system's own
+# supported extension point, so no Haiku source file has to be patched.
+#
+# It expects the artefacts produced by ssh/build-openssh-arm64.sh:
+#   $HG_SSH_DIR/openssh-10.4p1-1-arm64.hpkg   cross-built OpenSSH package
+#   $HG_SSH_DIR/image/sshd_config             our sshd configuration
+#   $HG_SSH_DIR/image/ssh_config              client configuration
+#   $HG_SSH_DIR/image/launch-sshd             launch_daemon job -> settings/launch/sshd
+#   $HG_SSH_DIR/image/services                replacement network services file
+#   $HG_SSH_DIR/image/authorized_keys         baked-in public key (fallback)
+#   $HG_SSH_DIR/image/launch-cloud-init       launch_daemon job -> settings/launch/cloud_init_lite
+#   $HG_SSH_DIR/image/remote-desktop.sh       remote desktop session bringup
+#   $HG_SSH_DIR/image/launch-remote-desktop   launch_daemon job -> settings/launch/remote_desktop
+#
+# HG_SSH_DIR defaults to /opt/haiku/ssh (see below).
+
+HG_SSH_DIR ?= /opt/haiku/ssh ;
+HG_SSH_IMAGE_DIR = $(HG_SSH_DIR)/image ;
+HG_SSH_PACKAGE = openssh-10.4p1-1-arm64.hpkg ;
+
+rule UserBuildConfigRulePreImage
+{
+	# The hook fires more than once for an MMC build (each image definition
+	# invokes it), which would duplicate the passwd/group entries. Run once.
+	if $(HG_SSH_PRE_IMAGE_DONE) {
+		return ;
+	}
+	HG_SSH_PRE_IMAGE_DONE = 1 ;
+
+	Echo "haiku-graviton: adding OpenSSH to the image" ;
+
+	# --- the package -------------------------------------------------------
+	# A locally cross-built hpkg, added straight to system/packages so it is
+	# pre-activated in the image. Using a package (rather than dropping the
+	# binaries into system/non-packaged/bin) is what preserves the executable
+	# bits: packagefs stores the mode, whereas the image copy step does not
+	# reliably carry it.
+	local sshPackage = <haiku-graviton>$(HG_SSH_PACKAGE) ;
+	SEARCH on $(sshPackage) = $(HG_SSH_DIR) ;
+	AddPackageFilesToHaikuImage system packages : $(sshPackage) ;
+
+	# --- configuration ------------------------------------------------------
+	# /boot/system/settings is a packagefs "shine through" directory, i.e. a
+	# real writable BFS directory, so these are plain image files.
+	local sshdConfig = <haiku-graviton-ssh>sshd_config ;
+	local sshConfig  = <haiku-graviton-ssh>ssh_config ;
+	SEARCH on $(sshdConfig) $(sshConfig) = $(HG_SSH_IMAGE_DIR) ;
+	AddFilesToHaikuImage system settings ssh : $(sshdConfig) $(sshConfig) ;
+
+	# launch_daemon job. The system launch_daemon reads
+	# B_FIND_PATH_SETTINGS_DIRECTORY/launch, so this lands as
+	# /boot/system/settings/launch/sshd.
+	local sshdLaunch = <haiku-graviton-ssh>launch-sshd ;
+	SEARCH on $(sshdLaunch) = $(HG_SSH_IMAGE_DIR) ;
+	AddFilesToHaikuImage system settings launch : $(sshdLaunch) : sshd ;
+
+	# --- cloud_init_lite: the instance's own SSH key ------------------------
+	# This is the TODO(ENA/IMDS) that used to live below, now done: with ENA
+	# working there is a network at boot, so cloud_init_lite fetches the key pair
+	# the instance was launched with from the metadata service and *merges* it
+	# into authorized_keys. The baked-in key below stays as the fallback, which
+	# is what keeps an image usable when it is launched with no key pair, or with
+	# IMDS blocked by an instance-profile policy.
+	#
+	# The program itself is a normal Haiku command (src/bin/cloud_init_lite),
+	# added to the Haiku package rather than dropped into the image, so its
+	# executable bit survives -- the same reason OpenSSH is packaged above.
+	local cloudInitLaunch = <haiku-graviton-ssh>launch-cloud-init ;
+	SEARCH on $(cloudInitLaunch) = $(HG_SSH_IMAGE_DIR) ;
+	AddFilesToHaikuImage system settings launch
+		: $(cloudInitLaunch) : cloud_init_lite ;
+
+	# --- desktop in a browser -----------------------------------------------
+	# TARGET_SCREEN, for the whole user session. This is the load-bearing half:
+	# data/launch/user launches Tracker and Deskbar as services under
+	# `env /system/boot/SetupEnvironment`, and SetupEnvironment sources this file
+	# (its lines 48-49), so it is the only place that reaches every service in the
+	# session. Without it those services ask app_server for a Desktop with a NULL
+	# target, which on a machine with no framebuffer cannot be created at all, and
+	# they crash-loop forever without drawing anything. The full chain is in the
+	# file's own header; the short version is that a Desktop is keyed on
+	# (uid, TARGET_SCREEN).
+	local setupEnv = <haiku-graviton-ssh>UserSetupEnvironment ;
+	SEARCH on $(setupEnv) = $(HG_SSH_IMAGE_DIR) ;
+	AddFilesToHaikuImage home config settings boot : $(setupEnv) ;
+
+	# A launch_daemon service that brings up the parts of the session that
+	# launch_daemon does not own: input_server first, because Tracker and Deskbar
+	# segfault in BKeymap without a published keymap. The order is load-bearing --
+	# see the header of remote-desktop.sh and docs/stage-b-remote-desktop.md.
+	#
+	# The script goes to system/non-packaged/bin rather than system/bin because
+	# the latter is packagefs and cannot take image files. It is invoked as
+	# "/bin/sh <path>", so the executable bit does not matter -- which is what
+	# lets it be a plain image file instead of needing its own package.
+	local desktopScript = <haiku-graviton-ssh>remote-desktop.sh ;
+	local desktopLaunch = <haiku-graviton-ssh>launch-remote-desktop ;
+	SEARCH on $(desktopScript) $(desktopLaunch) = $(HG_SSH_IMAGE_DIR) ;
+	AddFilesToHaikuImage system non-packaged bin : $(desktopScript) ;
+	AddFilesToHaikuImage system settings launch
+		: $(desktopLaunch) : remote_desktop ;
+
+	# --- baked-in authorized key, now the fallback -------------------------
+	local authorizedKeys = <haiku-graviton-ssh>authorized_keys ;
+	SEARCH on $(authorizedKeys) = $(HG_SSH_IMAGE_DIR) ;
+	AddFilesToHaikuImage home config settings ssh : $(authorizedKeys) ;
+
+	# --- exactly one thing must own port 22 --------------------------------
+	# data/settings/network/services already contains
+	#     service ssh { launch /boot/system/bin/sshd -D  stand_alone }
+	# so net_server would spawn a second sshd, which loses the race for port 22
+	# and dies. net_server also never restarts a stand_alone service it started
+	# (Services::_LaunchService has no child reaping), which is why we drive
+	# sshd from launch_daemon instead. Redirect the existing jam target for the
+	# services file at our copy, which has that entry commented out.
+	SEARCH on <network-settings>services = $(HG_SSH_IMAGE_DIR) ;
+
+	# --- make the box actually usable over ssh -----------------------------
+	# @minimum only ships bash + coreutils, so a remote shell has no grep, sed,
+	# find or less. These all exist as arm64 bootstrap packages in
+	# build/jam/repositories/HaikuPorts/arm64, so they cost nothing but space.
+	AddHaikuImageSystemPackages
+		findutils
+		grep
+		less
+		sed
+		;
+
+	# --- privilege separation ----------------------------------------------
+	# sshd is built --with-privsep-user=sshd; privilege separation is mandatory
+	# in OpenSSH >= 7.5, so the account has to exist. /boot/system/var/empty is
+	# created by build/jam/images/definitions/common-tail.
+	AddUserToHaikuImage sshd : 999 : 999 : /boot/system/var/empty
+		: /bin/true : "sshd privilege separation user" ;
+	AddGroupToHaikuImage sshd : 999 : ;
+}

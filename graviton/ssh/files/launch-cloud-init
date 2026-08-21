@@ -1,0 +1,21 @@
+# launch_daemon job for cloud_init_lite. Installed as
+# /boot/system/settings/launch/cloud_init_lite, read by the *system*
+# launch_daemon (see the note in launch-sshd about why the system context and
+# not the user one -- there is no desktop on a Nitro instance).
+#
+# "job", not "service": this is one-shot. A service would be restarted forever
+# by launch_daemon, and there is nothing to restart -- once the key is merged and
+# the hostname set, the work is done. The program is idempotent anyway, so a
+# re-run is harmless, but it should not be a background process that never ends.
+#
+# No "on <event>" condition. Haiku's launch_daemon has no
+# "network is configured and has a lease" event to wait for, and inventing one is
+# a bigger change than this feature deserves, so the program waits for DHCP
+# itself with a bounded retry. That waiting happens here, in its own job, and
+# therefore delays nothing else -- in particular sshd is a separate job and
+# comes up immediately, which is what keeps a non-EC2 boot from being held up.
+
+job x-vnd.haiku-cloud_init_lite {
+	launch /boot/system/bin/cloud_init_lite
+	legacy
+}
