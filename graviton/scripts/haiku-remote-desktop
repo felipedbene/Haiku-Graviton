@@ -1,0 +1,121 @@
+#!/usr/bin/env bash
+#
+# Open a Haiku browser remote desktop against a Graviton test instance, in one
+# command. The instance already runs app_server's RemoteHWInterface on the
+# loopback port TARGET_SCREEN (10900 in our images); this script carries that
+# private port out over SSH, bridges it to a WebSocket the browser can speak,
+# and serves the in-repo HTML5 client — no software installed on the Haiku side.
+#
+# Pipeline (all local to your laptop):
+#
+#   browser ──ws://localhost:$WS_PORT──▶ websockify ──tcp──▶ localhost:$LOCAL_PORT
+#                                                                     │ (ssh -L)
+#                                                     Haiku 127.0.0.1:$SCREEN_PORT
+#
+# The HTML5 client's "Remote Host" field defaults to ws://localhost:5000, so with
+# the defaults below you just click Connect.
+#
+# Usage:
+#   haiku-remote-desktop <public-ip-or-dns>
+#   haiku-remote-desktop --tag Name=haiku-canonical-validate      # resolve via AWS
+#
+# Options (env or flags):
+#   --key   PATH   SSH identity            (default ~/.ssh/haiku-graviton-ed25519)
+#   --user  NAME   SSH user                (default baron)
+#   --screen-port  N  loopback port on Haiku / TARGET_SCREEN (default 10900)
+#   --ws-port      N  local WebSocket port the browser hits    (default 5000)
+#   --http-port    N  local port serving the HTML client       (default 8000)
+#   --tag   K=V    resolve the public IP from a running EC2 instance with this tag
+#                  (needs awscli + creds; region from AWS_REGION, default us-west-2)
+#
+# Requires: ssh, python3 with the `websockify` module (`pip install websockify`).
+# Ctrl-C tears down the tunnel, the bridge, and the web server.
+
+set -euo pipefail
+
+KEY="${HAIKU_RD_KEY:-$HOME/.ssh/haiku-graviton-ed25519}"
+USER_NAME="${HAIKU_RD_USER:-baron}"
+SCREEN_PORT="${HAIKU_RD_SCREEN_PORT:-10900}"
+WS_PORT="${HAIKU_RD_WS_PORT:-5000}"
+HTTP_PORT="${HAIKU_RD_HTTP_PORT:-8000}"
+LOCAL_PORT="$SCREEN_PORT"   # local end of the ssh -L tunnel; mirror the screen port
+REGION="${AWS_REGION:-us-west-2}"
+HOST=""
+TAG=""
+
+die() { echo "haiku-remote-desktop: $*" >&2; exit 1; }
+
+while [ $# -gt 0 ]; do
+	case "$1" in
+		--key)         KEY="$2"; shift 2 ;;
+		--user)        USER_NAME="$2"; shift 2 ;;
+		--screen-port) SCREEN_PORT="$2"; LOCAL_PORT="$2"; shift 2 ;;
+		--ws-port)     WS_PORT="$2"; shift 2 ;;
+		--http-port)   HTTP_PORT="$2"; shift 2 ;;
+		--tag)         TAG="$2"; shift 2 ;;
+		-h|--help)     sed -n '2,40p' "$0"; exit 0 ;;
+		-*)            die "unknown option $1" ;;
+		*)             HOST="$1"; shift ;;
+	esac
+done
+
+# Resolve the client files relative to this script's location in the tree.
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+CLIENT_DIR="$(cd "$SCRIPT_DIR/../../src/tools/html5_remote_desktop" 2>/dev/null && pwd || true)"
+[ -n "$CLIENT_DIR" ] && [ -f "$CLIENT_DIR/HaikuRemoteDesktop.html" ] \
+	|| die "HTML5 client not found (expected src/tools/html5_remote_desktop/); run from a repo checkout"
+
+# Resolve the host from a tag if asked.
+if [ -z "$HOST" ] && [ -n "$TAG" ]; then
+	key="${TAG%%=*}"; val="${TAG#*=}"
+	HOST="$(aws ec2 describe-instances --region "$REGION" \
+		--filters "Name=tag:$key,Values=$val" "Name=instance-state-name,Values=running" \
+		--query 'Reservations[].Instances[].PublicIpAddress' --output text 2>/dev/null | awk '{print $1}')"
+	[ -n "$HOST" ] && [ "$HOST" != "None" ] || die "no running instance found with tag $TAG"
+	echo "resolved $TAG -> $HOST"
+fi
+[ -n "$HOST" ] || die "no host given (pass a public IP/DNS or --tag K=V)"
+[ -f "$KEY" ] || die "ssh key not found: $KEY"
+command -v ssh >/dev/null || die "ssh not found"
+python3 -c 'import websockify' 2>/dev/null || python3 -m websockify --help >/dev/null 2>&1 \
+	|| die "websockify not available: pip install websockify"
+
+PIDS=()
+cleanup() {
+	echo; echo "tearing down..."
+	for p in "${PIDS[@]:-}"; do [ -n "$p" ] && kill "$p" 2>/dev/null || true; done
+	# The tunnel is a detached ssh master; close it explicitly.
+	ssh -O exit -o ControlPath="$CTL" "$USER_NAME@$HOST" 2>/dev/null || true
+	rm -f "$CTL" 2>/dev/null || true
+}
+trap cleanup EXIT INT TERM
+
+CTL="$(mktemp -u "${TMPDIR:-/tmp}/haiku-rd-ctl.XXXXXX")"
+
+echo "== SSH tunnel: localhost:$LOCAL_PORT -> $HOST:127.0.0.1:$SCREEN_PORT =="
+ssh -f -N -M -o ControlPath="$CTL" \
+	-o ExitOnForwardFailure=yes -o ConnectTimeout=15 \
+	-i "$KEY" -L "$LOCAL_PORT:127.0.0.1:$SCREEN_PORT" "$USER_NAME@$HOST" \
+	|| die "ssh tunnel failed (reachability/auth)"
+
+echo "== websockify: ws://localhost:$WS_PORT -> localhost:$LOCAL_PORT =="
+python3 -m websockify "$WS_PORT" "localhost:$LOCAL_PORT" >/dev/null 2>&1 &
+PIDS+=($!)
+
+echo "== serving HTML5 client on http://localhost:$HTTP_PORT =="
+( cd "$CLIENT_DIR" && python3 -m http.server "$HTTP_PORT" >/dev/null 2>&1 ) &
+PIDS+=($!)
+
+sleep 1
+URL="http://localhost:$HTTP_PORT/HaikuRemoteDesktop.html"
+echo
+echo "Ready. Open:  $URL"
+echo "In the client, Remote Host is ws://localhost:$WS_PORT (default) — click Connect."
+echo "Press Ctrl-C here to close the tunnel and bridge."
+# Best-effort browser launch.
+if command -v open >/dev/null; then open "$URL" 2>/dev/null || true
+elif command -v xdg-open >/dev/null; then xdg-open "$URL" 2>/dev/null || true
+fi
+
+# Keep the tunnel/bridge alive until interrupted.
+wait
