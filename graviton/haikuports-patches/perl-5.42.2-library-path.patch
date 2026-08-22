@@ -1,0 +1,40 @@
+Make perl's LDLIBPTH additive on Haiku.
+
+Haiku's runtime_loader *replaces* the default library search path with
+LIBRARY_PATH whenever that variable is set -- it returns the value verbatim and
+never appends the defaults (src/system/runtime_loader/runtime_loader.cpp, which
+carries an upstream TODO about exactly this).
+
+perl's generated Makefile sets LDLIBPTH = LIBRARY_PATH=<build dir>, which it needs
+in order to find the freshly built shared libperl.so (-Duseshrplib). As written it
+also hides libroot.so, so every $(MINIPERL) / $(RUN_PERL) / $(RUN_TESTS)
+invocation dies with the loader's exit code 3 and no output. The build then fails
+at "Failed to build miniperl. Please run make minitest" even though miniperl is a
+perfectly good binary -- run it by hand with LIBRARY_PATH unset and it prints its
+version happily. Do not chase the compiler; this is an environment defect.
+
+Do NOT simply clear LDLIBPTH: with -Duseshrplib the build genuinely needs the
+build directory on the path.
+
+Applies to: input-source-packages/develop/sources/perl-5.42.2-1/perl-5.42.2.recipe
+--- a/perl-5.42.2.recipe
++++ b/perl-5.42.2.recipe
+@@ -132,6 +132,18 @@
+ 		-Dusesitecustomize \
+ 		-de
+ 
++	# Haiku's runtime_loader *replaces* the default library search path with
++	# LIBRARY_PATH whenever that variable is set -- it returns the value verbatim
++	# and never appends the defaults (src/system/runtime_loader/runtime_loader.cpp,
++	# which carries an upstream TODO about exactly this). perl's Makefile sets
++	# LDLIBPTH = LIBRARY_PATH=<build dir>, which is needed to find the freshly
++	# built shared libperl.so, but as written it also hides libroot.so, so every
++	# $(MINIPERL) / $(RUN_PERL) / $(RUN_TESTS) invocation dies with the loader's
++	# exit code 3 -- the build fails at "Failed to build miniperl" even though
++	# miniperl itself is fine. Make the path additive instead of exclusive.
++	sed -i -e "s|^\\(LDLIBPTH = LIBRARY_PATH=.*\\)$|\\1:%A/lib:/boot/system/non-packaged/lib:/boot/system/lib|" Makefile
++	grep -n "^LDLIBPTH" Makefile
++
+ 	# force-remove path from sed
+ 	sed -i -e 's/LOC_SED\s*"\/bin\/sed/LOC_SED "sed/' config.h
+ 

@@ -1,0 +1,40 @@
+STAGE-1 EXPEDIENT: cut autoconf's html documentation build.
+
+THIS PRODUCES A PACKAGE THAT MUST BE REBUILT. It belongs in
+hpkg-out/arm64/stage1/ and must never be published to a shipping repository.
+
+makeinfo cannot run in this image at all: the texinfo_bootstrap package ships the
+Texinfo/ directory but *zero* .pm files, so texi2any dies in its BEGIN block with
+"Can't locate Texinfo/ModulePath.pm in @INC" under any perl. Building a real
+texinfo first is not possible yet -- its dependencies form a 10-deep cycle:
+texinfo -> libintl -> groff -> pnmcrop/netpbm -> libjasper -> cmake -> libcurl
+-> libpsl -> libidn2 -> gtkdocize.
+
+Emptying HTMLS is preferred over stubbing makeinfo: install-html-am then has no
+prerequisites, so the doc/*.html rules never run and no bogus placeholder files
+are installed. The prebuilt .info files in the tarball are still installed by
+"make install", so info documentation is not lost.
+
+Two other cuts do NOT work here, both worth knowing:
+  - MAKEINFO=true: the rule is followed by "mv doc/autoconf.htp doc/autoconf.html",
+    so the command must actually create its -o file.
+  - touching the doc targets (the idiom this recipe already uses for man/*.1 and
+    configure): defeated by the guest's clock skew.
+
+Note also that the doc rule uses $(MAKEINFOHTML) (Makefile:323, expanded by the
+doc/autoconf.html rule at Makefile:1055), not $(MAKEINFO), and that `all` never
+depends on $(HTMLS) -- only install-html does. That is why patching BUILD()
+cannot fix this and INSTALL() is the right place.
+
+Applies to: input-source-packages/develop/sources/autoconf-2.72-1/autoconf-2.72.recipe
+--- a/autoconf-2.72.recipe
++++ b/autoconf-2.72.recipe
+@@ -69,7 +69,7 @@
+ INSTALL()
+ {
+ 	make install
+-	make install-html
++	make install-html HTMLS=
+ }
+ 
+ TEST()
