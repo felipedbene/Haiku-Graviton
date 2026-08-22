@@ -86,7 +86,7 @@ cleanup() {
 	for p in "${PIDS[@]:-}"; do [ -n "$p" ] && kill "$p" 2>/dev/null || true; done
 	# The tunnel is a detached ssh master; close it explicitly.
 	ssh -O exit -o ControlPath="$CTL" "$USER_NAME@$HOST" 2>/dev/null || true
-	rm -f "$CTL" 2>/dev/null || true
+	rm -f "$CTL" "${WS_LOG:-}" 2>/dev/null || true
 }
 trap cleanup EXIT INT TERM
 
@@ -94,12 +94,38 @@ CTL="$(mktemp -u "${TMPDIR:-/tmp}/haiku-rd-ctl.XXXXXX")"
 
 echo "== SSH tunnel: localhost:$LOCAL_PORT -> $HOST:127.0.0.1:$SCREEN_PORT =="
 ssh -f -N -M -o ControlPath="$CTL" \
+	-o StrictHostKeyChecking=accept-new \
 	-o ExitOnForwardFailure=yes -o ConnectTimeout=15 \
 	-i "$KEY" -L "$LOCAL_PORT:127.0.0.1:$SCREEN_PORT" "$USER_NAME@$HOST" \
 	|| die "ssh tunnel failed (reachability/auth)"
 
-echo "== websockify: ws://localhost:$WS_PORT -> localhost:$LOCAL_PORT =="
-python3 -m websockify "$WS_PORT" "localhost:$LOCAL_PORT" >/dev/null 2>&1 &
+# Prove the forward actually reaches a live app_server before starting the
+# bridge. Skipping this is what turns a dead screen port into a "blink": the
+# browser WebSocket opens, websockify then fails to reach the target and closes
+# it, and the HTML5 client's onClose tears the canvas straight back down. We
+# speak the real handshake (RP_INIT_CONNECTION = bytes 01 00 06 00 00 00, LE)
+# and require a reply, so a silent listener can't pass.
+echo "== verifying the tunnel reaches app_server on the remote :$SCREEN_PORT =="
+python3 - "$LOCAL_PORT" <<'PY' || die "tunnel is up but the remote :$SCREEN_PORT isn't serving the desktop protocol — is the remote_desktop service running on the guest? (reboot it, or the instance, to clear a stale session)"
+import socket, sys
+port = int(sys.argv[1])
+s = socket.create_connection(('localhost', port), timeout=6)
+s.sendall(bytes([1, 0, 6, 0, 0, 0]))
+s.settimeout(5)
+try:
+	got = s.recv(1)
+except Exception:
+	got = b''
+s.close()
+sys.exit(0 if got else 1)
+PY
+echo "   ok: app_server answered the remote-desktop handshake"
+
+# Keep websockify's output — the line "Failed to connect to downstream server"
+# is the single clearest symptom when the tunnel drops mid-session.
+WS_LOG="$(mktemp "${TMPDIR:-/tmp}/haiku-rd-ws.XXXXXX.log")"
+echo "== websockify: ws://localhost:$WS_PORT -> localhost:$LOCAL_PORT  (log: $WS_LOG) =="
+python3 -m websockify "$WS_PORT" "localhost:$LOCAL_PORT" >"$WS_LOG" 2>&1 &
 PIDS+=($!)
 
 echo "== serving HTML5 client on http://localhost:$HTTP_PORT =="
@@ -111,6 +137,8 @@ URL="http://localhost:$HTTP_PORT/HaikuRemoteDesktop.html"
 echo
 echo "Ready. Open:  $URL"
 echo "In the client, Remote Host is ws://localhost:$WS_PORT (default) — click Connect."
+echo "If the desktop blinks and disappears, tail $WS_LOG:"
+echo "  \"Failed to connect to downstream server\" there means the tunnel dropped."
 echo "Press Ctrl-C here to close the tunnel and bridge."
 # Best-effort browser launch.
 if command -v open >/dev/null; then open "$URL" 2>/dev/null || true
