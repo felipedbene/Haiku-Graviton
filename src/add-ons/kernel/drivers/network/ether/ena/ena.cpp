@@ -205,10 +205,29 @@ ena_io_interrupt(void* arg)
 	   the last interrupt we ever see. Each completion queue carries its own
 	   unmask register offset, and both of Amazon's drivers re-arm a queue pair
 	   through its *transmit* CQ -- so this must be txCompletionQueue even
-	   though receive is what we mostly care about. */
+	   though receive is what we mostly care about.
+
+	   Re-arming also reprograms the device's moderation timers, which is the
+	   only thing keeping this vector from firing once per completion: with
+	   no_moderation_update = false the intervals below take effect, and the
+	   device then waits out that interval before raising the vector again.
+	   Passing zeroes with no_moderation_update = true -- which is what this did
+	   until now -- explicitly asks for no moderation at all.
+
+	   XXX STRUCTURAL FIX STILL OWED: this unmask belongs *after* the ring has
+	   been drained, not here. The reference driver re-arms at the end of its
+	   cleanup task, once ena_tx_cleanup()/ena_rx_cleanup() have emptied the
+	   completion queues, so a re-raised vector means genuinely new work. We
+	   unmask while every completion is still unconsumed, so moderation is the
+	   only backstop we have; without it each completion re-raised the vector
+	   immediately. Moving the unmask into the reader threads (ena_receive() and
+	   ena_reclaim_transmitted(), after the drain loop) is Haiku-specific work:
+	   this vector is shared by both directions, so it needs both sides to agree
+	   on who re-arms. Deliberately out of scope here. */
 	if (device->txCompletionQueue != NULL) {
 		struct ena_eth_io_intr_reg interruptRegister;
-		ena_com_update_intr_reg(&interruptRegister, 0, 0, true, true);
+		ena_com_update_intr_reg(&interruptRegister, ENA_RX_IRQ_INTERVAL,
+			ENA_TX_IRQ_INTERVAL, true, false);
 		ena_com_unmask_intr(device->txCompletionQueue, &interruptRegister);
 	}
 
@@ -1054,6 +1073,38 @@ ena_setup_buffers(ena_haiku_device* device)
 static void
 ena_release_buffers(ena_haiku_device* device)
 {
+	/* The net_buffers of packets that were still in flight. Each one is owned by
+	   the driver from ena_send() until ena_reclaim_transmitted() sees its
+	   completion, and a reset destroys the queues underneath them: the
+	   completions are never delivered, so nothing else will ever free these.
+	   Leaking them is unbounded in the number of resets, and on an instance whose
+	   NIC is wedging repeatedly that is the failure mode that turns a recoverable
+	   NIC into an out-of-memory kernel. The reference driver frees them in
+	   ena_free_tx_bufs() for the same reason, and warns once per ring because an
+	   uncompleted packet at teardown is worth knowing about.
+
+	   Runs before the areas go away, since the slot each entry bounced through
+	   lives in txBufferArea. Callers already hold txLock (the reset path) or have
+	   destroyed it along with the rest of the device (ena_uninit_device()), so
+	   this deliberately takes no lock of its own. */
+	if (device->txBuffers != NULL) {
+		uint16 outstanding = 0;
+		for (uint16 i = 0; i < device->txRingSize; i++) {
+			if (device->txBuffers[i].buffer == NULL)
+				continue;
+
+			sBufferModule->free(device->txBuffers[i].buffer);
+			device->txBuffers[i].buffer = NULL;
+			device->txBuffers[i].descriptors = 0;
+			outstanding++;
+		}
+
+		if (outstanding > 0) {
+			TRACE_ALWAYS("released %u uncompleted transmit buffer(s)\n",
+				outstanding);
+		}
+	}
+
 	if (device->rxBufferArea >= 0) {
 		delete_area(device->rxBufferArea);
 		device->rxBufferArea = -1;
@@ -1574,10 +1625,19 @@ ena_device_bringup(ena_haiku_device* device)
 	   arrived -- so without this first unmask the first interrupt never comes and
 	   therefore neither does the re-arm. The interface would then look perfectly
 	   healthy in every log line and never receive another frame, which is the
-	   hardest possible failure to spot in a reset. */
+	   hardest possible failure to spot in a reset.
+
+	   The moderation intervals are programmed here as well as in
+	   ena_io_interrupt(), so that the very first interrupt after a bring-up or a
+	   reset is already moderated. The reference driver leaves them at zero in
+	   its equivalent (ena_unmask_all_io_irqs()) because its cleanup task sets
+	   them a moment later; ours would be running unmoderated until the first
+	   interrupt arrived, and after a reset that is precisely the window where a
+	   completion storm is least welcome. */
 	if (device->txCompletionQueue != NULL) {
 		struct ena_eth_io_intr_reg interruptRegister;
-		ena_com_update_intr_reg(&interruptRegister, 0, 0, true, true);
+		ena_com_update_intr_reg(&interruptRegister, ENA_RX_IRQ_INTERVAL,
+			ENA_TX_IRQ_INTERVAL, true, false);
 		ena_com_unmask_intr(device->txCompletionQueue, &interruptRegister);
 	}
 
@@ -1814,6 +1874,36 @@ ena_open(void* _info, const char* path, int openMode, void** _cookie)
 
 	device->nonBlocking = (openMode & O_NONBLOCK) != 0;
 
+	/* Held across the whole of the first-opener setup below, which is what the
+	   reference driver's global sx lock does around ena_up() and
+	   ena_reset_task(). Two things need it:
+
+	   - The setup touches the queues (ena_refill_receive_ring() and the unmask)
+	     with no lock at all, and the reset path frees them and leaves the
+	     pointers NULL (ena_release_io_queues()). An `ifconfig up` landing inside
+	     a reset therefore dereferenced a null queue in the kernel. Testing the
+	     flags without the lock would not fix it: the window between the test and
+	     the refill is exactly the window the reset needs.
+
+	   - It settles who posts the receive descriptors. The reset reposts them only
+	     if openCount is already above zero, on the stated assumption that
+	     ena_open() will do it otherwise (see ena_watchdog_reset()); that hand-off
+	     is only sound if the increment and the refill cannot interleave with the
+	     reset's own test, which the lock is what guarantees.
+
+	   Order is resetLock before rxLock, the same direction the reset path takes
+	   them, and nothing here sleeps: the refill posts descriptors and returns, so
+	   the reset waits at worst the length of this function. */
+	MutexLocker resetLocker(device->resetLock);
+
+	/* No reset can be in flight while resetLock is held, so `resetting` is only
+	   tested to keep this guard correct if some later path comes to set it
+	   elsewhere; `deviceDead` is the real case. A reset that failed to bring the
+	   device back leaves it inert with its queues destroyed, and the honest
+	   answer to `ifconfig up` then is that the device is not there. */
+	if (device->resetting || device->deviceDead)
+		return B_DEV_NOT_READY;
+
 	/* Everything below is per-device state, not per-open, so only the first
 	   opener may set it up. A second open used to create a fresh pair of
 	   semaphores -- leaking the first pair and leaving the earlier opener's
@@ -1839,9 +1929,15 @@ ena_open(void* _info, const char* path, int openMode, void** _cookie)
 		return B_NO_MORE_SEMS;
 	}
 
-	/* Post every receive descriptor before the first interrupt can arrive. */
-	device->rxNextToFill = 0;
-	ena_refill_receive_ring(device, device->rxRingSize);
+	/* Post every receive descriptor before the first interrupt can arrive. Under
+	   rxLock, as the reset path does it: a second opener returns above without
+	   waiting for this, so it can already be inside ena_receive() touching the
+	   same submission queue. */
+	{
+		MutexLocker rxLocker(device->rxLock);
+		device->rxNextToFill = 0;
+		ena_refill_receive_ring(device, device->rxRingSize);
+	}
 
 	/* Third and last seeding point for the watchdog deadline (the others are
 	   thread start and the end of a reset). The interface can have been down long
@@ -1850,10 +1946,16 @@ ena_open(void* _info, const char* path, int openMode, void** _cookie)
 	atomic_set64(&device->lastKeepAlive, system_time());
 
 	/* Arm the io vector; it starts masked. Through the transmit CQ, for the
-	   reason given in ena_io_interrupt(). */
-	struct ena_eth_io_intr_reg interruptRegister;
-	ena_com_update_intr_reg(&interruptRegister, 0, 0, true, true);
-	ena_com_unmask_intr(device->txCompletionQueue, &interruptRegister);
+	   reason given in ena_io_interrupt(), and with the moderation intervals for
+	   the reason given there too. The NULL test cannot fire while resetLock is
+	   held and the device is neither resetting nor dead, and is kept only to
+	   match the other two unmask sites. */
+	if (device->txCompletionQueue != NULL) {
+		struct ena_eth_io_intr_reg interruptRegister;
+		ena_com_update_intr_reg(&interruptRegister, ENA_RX_IRQ_INTERVAL,
+			ENA_TX_IRQ_INTERVAL, true, false);
+		ena_com_unmask_intr(device->txCompletionQueue, &interruptRegister);
+	}
 
 	*_cookie = device;
 	return B_OK;
