@@ -32,6 +32,7 @@
 #include "efi_platform.h"
 #include "mmu.h"
 #include "quirks.h"
+#include "rtc.h"
 #include "serial.h"
 #include "smp.h"
 #include "timer.h"
@@ -188,6 +189,10 @@ platform_start_kernel(void)
 	dprintf("  text: %#" B_PRIx64 ", %#" B_PRIx64 "\n", textRegion.start, textRegion.size);
 	dprintf("  data: %#" B_PRIx64 ", %#" B_PRIx64 "\n", dataRegion.start, dataRegion.size);
 	dprintf("  entry: %#lx\n", kernelEntry);
+
+	// Sample the firmware clock this late, since the kernel gets the value
+	// as-is: whatever the loader spends after this point is lost from it.
+	rtc_init();
 
 	debug_cleanup();
 

@@ -40,6 +40,12 @@ typedef struct {
 	// seems to be ignored entirely?
 
 	apm_info	apm;
+
+	uint64		firmware_time;
+		// Wall clock in seconds since 1970 as reported by the EFI runtime
+		// services just before entering the kernel, 0 if the firmware has no
+		// clock. Only of interest to architectures that cannot read a real
+		// time clock themselves.
 } _PACKED platform_kernel_args;
 
 
