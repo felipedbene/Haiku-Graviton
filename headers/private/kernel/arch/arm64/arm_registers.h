@@ -193,6 +193,10 @@
 #define	 ID_AA64DFR0_PMU_VER_NONE	(0x0 << ID_AA64DFR0_PMU_VER_SHIFT)
 #define	 ID_AA64DFR0_PMU_VER_3		(0x1 << ID_AA64DFR0_PMU_VER_SHIFT)
 #define	 ID_AA64DFR0_PMU_VER_3_1	(0x4 << ID_AA64DFR0_PMU_VER_SHIFT)
+#define	 ID_AA64DFR0_PMU_VER_3_4	(0x5 << ID_AA64DFR0_PMU_VER_SHIFT)
+#define	 ID_AA64DFR0_PMU_VER_3_5	(0x6 << ID_AA64DFR0_PMU_VER_SHIFT)
+#define	 ID_AA64DFR0_PMU_VER_3_7	(0x7 << ID_AA64DFR0_PMU_VER_SHIFT)
+#define	 ID_AA64DFR0_PMU_VER_3_8	(0x8 << ID_AA64DFR0_PMU_VER_SHIFT)
 #define	 ID_AA64DFR0_PMU_VER_IMPL	(0xf << ID_AA64DFR0_PMU_VER_SHIFT)
 #define	ID_AA64DFR0_BRPS_SHIFT		12
 #define	ID_AA64DFR0_BRPS_MASK		(0xf << ID_AA64DFR0_BRPS_SHIFT)
@@ -664,6 +668,7 @@
 #define	PMCR_X		(1 << 4) /* Export to ext. monitoring (ETM) */
 #define	PMCR_DP		(1 << 5) /* Disable CCNT if non-invasive debug*/
 #define	PMCR_LC		(1 << 6) /* Long cycle count enable */
+#define	PMCR_LP		(1 << 7) /* 64 bit event counters, FEAT_PMUv3p5 only */
 #define	PMCR_IMP_SHIFT	24 /* Implementer code */
 #define	PMCR_IMP_MASK	(0xff << PMCR_IMP_SHIFT)
 #define	PMCR_IDCODE_SHIFT	16 /* Identification code */
@@ -673,5 +678,88 @@
 #define	 PMCR_IDCODE_CORTEX_A53	0x03
 #define	PMCR_N_SHIFT	11       /* Number of counters implemented */
 #define	PMCR_N_MASK	(0x1f << PMCR_N_SHIFT)
+#define	PMCR_N(x)	(((x) & PMCR_N_MASK) >> PMCR_N_SHIFT)
+
+/*
+ * PMCNTENSET_EL0, PMCNTENCLR_EL0, PMOVSSET_EL0, PMOVSCLR_EL0 and
+ * PMINTENSET/CLR_EL1 all share one bit layout: bit n selects event counter n,
+ * bit 31 selects the dedicated cycle counter PMCCNTR_EL0.
+ */
+#define	PMU_CYCLE_COUNTER_BIT	(1U << 31)
+#define	PMU_EVENT_COUNTER_BIT(n)	(1U << (n))
+#define	PMU_ALL_COUNTERS_MASK	0xffffffffU
+
+/* PMSELR_EL0 - selects which counter PMXEVTYPER/PMXEVCNTR alias */
+#define	PMSELR_SEL_MASK		0x1f
+
+/*
+ * PMEVTYPER<n>_EL0 (and, for the P/U/NSK/NSU/NSH bits, PMCCFILTR_EL0).
+ * The exception-level filter bits are inhibits: setting P stops the counter
+ * counting in EL1, setting U stops it counting in EL0.
+ */
+#define	PMEVTYPER_EVTCOUNT_MASK	0xffffUL
+#define	PMEVTYPER_MT		(1UL << 25)
+#define	PMEVTYPER_NSH		(1UL << 27)
+#define	PMEVTYPER_NSU		(1UL << 28)
+#define	PMEVTYPER_NSK		(1UL << 29)
+#define	PMEVTYPER_U		(1UL << 30)
+#define	PMEVTYPER_P		(1UL << 31)
+
+/*
+ * PMUSERENR_EL0 - EL0 access to the performance monitors. All four bits off
+ * means EL0 gets nothing, which is what we want (see arch_pmu.cpp).
+ */
+#define	PMUSERENR_EN		(1UL << 0)
+#define	PMUSERENR_SW		(1UL << 1)
+#define	PMUSERENR_CR		(1UL << 2)
+#define	PMUSERENR_ER		(1UL << 3)
+
+/*
+ * PMCEID0_EL0 / PMCEID1_EL0 - bitmaps of the common architectural events the
+ * implementation actually provides. PMCEID0 bit n covers event n (0x00-0x1f)
+ * and PMCEID1 bit n covers event 0x20+n; the upper halves cover the 0x4000
+ * range added by ARMv8.1. Checking these is the only way to tell an event that
+ * did not happen from an event this core cannot count.
+ */
+#define	PMCEID_EVENT_IMPLEMENTED(ceid0, ceid1, event)			\
+	(((event) < 0x20)						\
+		? (((ceid0) & (1ULL << (event))) != 0)			\
+		: (((event) < 0x40)					\
+			? (((ceid1) & (1ULL << ((event) - 0x20))) != 0)	\
+			: 0))
+
+/*
+ * Common architectural PMU event numbers (ARM ARM, "Performance Monitors
+ * Extension", common event numbers). Only the ones we program are listed.
+ */
+#define	PMU_EVENT_SW_INCR		0x0000
+#define	PMU_EVENT_L1I_CACHE_REFILL	0x0001
+#define	PMU_EVENT_L1I_TLB_REFILL	0x0002
+#define	PMU_EVENT_L1D_CACHE_REFILL	0x0003
+#define	PMU_EVENT_L1D_CACHE		0x0004
+#define	PMU_EVENT_L1D_TLB_REFILL	0x0005
+#define	PMU_EVENT_INST_RETIRED		0x0008
+#define	PMU_EVENT_EXC_TAKEN		0x0009
+#define	PMU_EVENT_BR_MIS_PRED		0x0010
+#define	PMU_EVENT_CPU_CYCLES		0x0011
+#define	PMU_EVENT_BR_PRED		0x0012
+#define	PMU_EVENT_MEM_ACCESS		0x0013
+#define	PMU_EVENT_L1I_CACHE		0x0014
+#define	PMU_EVENT_L2D_CACHE		0x0016
+#define	PMU_EVENT_L2D_CACHE_REFILL	0x0017
+#define	PMU_EVENT_BUS_ACCESS		0x0019
+#define	PMU_EVENT_INST_SPEC		0x001b
+#define	PMU_EVENT_BR_RETIRED		0x0021
+#define	PMU_EVENT_BR_MIS_PRED_RETIRED	0x0022
+#define	PMU_EVENT_STALL_FRONTEND	0x0023
+#define	PMU_EVENT_STALL_BACKEND		0x0024
+#define	PMU_EVENT_L1D_TLB		0x0025
+#define	PMU_EVENT_L1I_TLB		0x0026
+#define	PMU_EVENT_L2D_TLB_REFILL	0x002d
+#define	PMU_EVENT_L2D_TLB		0x002f
+#define	PMU_EVENT_DTLB_WALK		0x0034
+#define	PMU_EVENT_ITLB_WALK		0x0035
+#define	PMU_EVENT_LL_CACHE_RD		0x0036
+#define	PMU_EVENT_LL_CACHE_MISS_RD	0x0037
 
 #endif /* !_MACHINE_ARMREG_H_ */

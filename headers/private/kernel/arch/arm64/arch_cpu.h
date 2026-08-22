@@ -139,7 +139,22 @@ extern "C" {
 
 static inline void arch_cpu_pause(void)
 {
-	arm64_yield();
+	// This is the back-off every spin loop in the kernel goes through, and it
+	// needs to cost something. `yield` does not: the architecture permits it
+	// to have no effect whatsoever, its only defined purpose is hinting to a
+	// multithreaded core that another thread could use the issue slots, and
+	// Neoverse cores are single-threaded and treat it as a NOP. The loop then
+	// re-issues its load as fast as it can retire it, which is the behaviour
+	// x86 code uses PAUSE to avoid. A single ISB forces a pipeline
+	// resynchronisation and so delivers a real, bounded, cheap delay; it is
+	// what AWS recommends as the drop-in PAUSE replacement on Graviton.
+	//
+	// ISB is an instruction barrier, not a data barrier, so this changes no
+	// ordering guarantee: no caller relies on arch_cpu_pause() for ordering
+	// (they use the atomics/barriers in arch_atomic.h), and the "memory"
+	// clobber only stops the compiler hoisting the polled load out of the
+	// loop, exactly as it did for `yield`.
+	arm64_isb();
 }
 
 
