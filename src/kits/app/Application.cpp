@@ -1454,6 +1454,20 @@ BApplication::_ConnectToServer()
 void
 BApplication::_ReconnectToServer()
 {
+	if (fServerLink->TargetTeam() < 0) {
+		// We never had an app_server connection in the first place: this
+		// application was constructed without a GUI context (a BServer with
+		// initGUI == false, like net_server or syslog_daemon). There is
+		// nothing to reconnect, and trying anyway is actively harmful --
+		// _ConnectToServer() does not initialize the interface kit, so on
+		// success we would end up with a half-built GUI context we never asked
+		// for, and on failure the debugger() call below takes the whole team
+		// down. The latter is the normal outcome on a machine with no display
+		// hardware, where the app_server runs but has no usable desktop, so a
+		// missing monitor would cost us every non-GUI server on the system.
+		return;
+	}
+
 	team_info dummy;
 	if (get_team_info(fServerLink->TargetTeam(), &dummy) == B_OK) {
 		// We're already connected to the correct server.
