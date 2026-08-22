@@ -1,0 +1,39 @@
+#!/usr/bin/env bash
+#
+# haiku-status-hook -- SessionStart wrapper around haiku-status.
+#
+# Wired from .claude/settings.json. Runs the snapshot and hands it back in the
+# documented hook envelope (hookSpecificOutput.additionalContext) so the state of
+# the metal builder, its KVM guests and any in-flight build is in context from
+# the first message of a cold session -- the case this exists for is a
+# workstation reboot for patching, which leaves every remote build running but
+# takes all of the session's knowledge of it with it.
+#
+# Always exits 0 and always emits valid JSON: a snapshot is a convenience, and
+# must never be able to block a session from starting.
+
+set -uo pipefail
+
+here=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
+status_script="$here/haiku-status"
+
+if [ ! -x "$status_script" ]; then
+	out="haiku-status not found or not executable at $status_script"
+else
+	# Hard ceiling on top of the script's own budget: belt and braces, because a
+	# hung AWS call must not stall session start.
+	out=$(timeout 90 "$status_script" 2>&1) \
+		|| out="${out:-}
+(haiku-status exited non-zero or timed out; snapshot may be incomplete)"
+fi
+
+OUT="$out" python3 -c '
+import json, os
+print(json.dumps({
+    "hookSpecificOutput": {
+        "hookEventName": "SessionStart",
+        "additionalContext": os.environ.get("OUT", ""),
+    }
+}))
+'
+exit 0
