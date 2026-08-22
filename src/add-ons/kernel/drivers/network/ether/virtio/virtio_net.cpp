@@ -553,9 +553,13 @@ virtio_net_open(void* _info, const char* path, int openMode, void** _cookie)
 			offsetof(struct virtio_net_config, mtu),
 			&mtu, sizeof(mtu));
 		// check against minimum MTU
-		if (mtu > 68)
-			info->maxframesize = mtu;
-		else
+		if (mtu > 68) {
+			// Never advertise more than we can actually carry: both the rx area
+			// and the tx buffers are allocated at MAX_FRAME_SIZE, and
+			// virtio_net_write() silently truncates to that. A host is free to
+			// offer a jumbo MTU here, so clamp rather than trust it.
+			info->maxframesize = MIN(MAX_FRAME_SIZE, mtu);
+		} else
 			info->virtio->clear_feature(info->virtio_device, VIRTIO_NET_F_MTU);
 	} else {
 		dprintf("virtio_net: no mtu feature\n");
