@@ -181,25 +181,30 @@ Volume::Volume(fs_volume* fsVolume)
 
 Volume::~Volume()
 {
-	// remove the packages from the node tree
+	// Tear down the packages and the indices with the volume write-locked. The
+	// index destructors unregister themselves as node listeners, which requires
+	// the write lock. packagefs_unmount() enters us with the lock held, but the
+	// mount error path drops it before deleting us.
 	{
 		VolumeWriteLocker systemVolumeLocker(_SystemVolumeIfNotSelf());
 		VolumeWriteLocker volumeLocker(this);
+
+		// remove the packages from the node tree
 		for (PackageFileNameHashTable::Iterator it = fPackages.GetIterator();
 			Package* package = it.Next();) {
 			_RemovePackageContent(package, NULL, false);
 		}
-	}
 
-	// delete the packages
-	_RemoveAllPackages();
+		// delete the packages
+		_RemoveAllPackages();
 
-	// delete all indices
-	Index* index = fIndices.Clear(true);
-	while (index != NULL) {
-		Index* next = index->IndexHashLink();
-		delete index;
-		index = next;
+		// delete all indices
+		Index* index = fIndices.Clear(true);
+		while (index != NULL) {
+			Index* next = index->IndexHashLink();
+			delete index;
+			index = next;
+		}
 	}
 
 	// remove all nodes from the ID hash table
@@ -1954,6 +1959,11 @@ Volume::_RemovePackageLinksNode(Node* node)
 inline Volume*
 Volume::_SystemVolumeIfNotSelf() const
 {
+	// We can be asked before having been registered with a PackageFSRoot -- from
+	// the destructor, when Mount() failed before the registration.
+	if (fPackageFSRoot == NULL)
+		return NULL;
+
 	if (Volume* systemVolume = fPackageFSRoot->SystemVolume())
 		return systemVolume == this ? NULL : systemVolume;
 	return NULL;

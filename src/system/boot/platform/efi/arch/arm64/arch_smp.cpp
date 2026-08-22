@@ -81,6 +81,8 @@ arch_smp_set_psci_conduit(bool useHvc)
 {
 	sPsciCallFn = useHvc ? arm64_psci_call_hvc : arm64_psci_call_smc;
 	sCpuEnableMethod = CpuEnableMethod::Psci;
+	gKernelArgs.arch_args.psci_conduit
+		= useHvc ? PSCI_CONDUIT_HVC : PSCI_CONDUIT_SMC;
 }
 
 
@@ -269,8 +271,10 @@ arm64_handle_fdt_psci_node(const void *fdt, int node)
 
 	if (strcmp(method, "smc") == 0) {
 		sPsciCallFn = arm64_psci_call_smc;
+		gKernelArgs.arch_args.psci_conduit = PSCI_CONDUIT_SMC;
 	} else if (strcmp(method, "hvc") == 0) {
 		sPsciCallFn = arm64_psci_call_hvc;
+		gKernelArgs.arch_args.psci_conduit = PSCI_CONDUIT_HVC;
 	}
 }
 

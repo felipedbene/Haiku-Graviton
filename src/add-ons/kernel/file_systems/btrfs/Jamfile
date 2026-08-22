@@ -14,7 +14,10 @@ DEFINES += DEBUG_APP="\\\"btrfs\\\"" ;
 
 UseHeaders [ FDirName $(HAIKU_TOP) src libs uuid ] : true ;
 
-Includes [ FGristFiles Inode.cpp ]
+Includes [ FGristFiles btrfs_disk_system.cpp kernel_interface.cpp Attribute.cpp
+		AttributeIterator.cpp BTree.cpp Chunk.cpp CRCTable.cpp DebugSupport.cpp
+		DeviceOpener.cpp DirectoryIterator.cpp ExtentAllocator.cpp Inode.cpp
+		Journal.cpp Volume.cpp ]
 	: [ BuildFeatureAttribute zlib : headers ] ;
 
 if [ FIsBuildFeatureEnabled zstd ] {

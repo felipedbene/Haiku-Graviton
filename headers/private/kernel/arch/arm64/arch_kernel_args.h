@@ -19,6 +19,15 @@
 
 #define MAX_VIRTUAL_RANGES_TO_KEEP	32
 
+// Instruction used to enter the PSCI implementation (ARM DEN 0022). Only the
+// boot loader can find this out, from the FADT's ARM_BOOT_ARCH flags or the
+// device tree's psci node, so it has to be handed to the kernel.
+enum {
+	PSCI_CONDUIT_NONE	= 0,
+	PSCI_CONDUIT_SMC,
+	PSCI_CONDUIT_HVC
+};
+
 typedef struct {
 	uint64	phys_pgdir;
 	uint64	vir_pgdir;
@@ -34,6 +43,8 @@ typedef struct {
 
 	uart_info	uart;
 	intc_info	interrupt_controller;
+
+	uint32		psci_conduit;
 
 } _PACKED arch_kernel_args;
 

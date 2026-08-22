@@ -15,6 +15,54 @@
 extern "C" void _exception_vectors(void);
 
 
+// PSCI function IDs (ARM DEN 0022, SMC32 calling convention). Both are
+// mandatory from PSCI 0.2 on, which is the version the FADT and the device
+// tree bindings the boot loader looks at describe.
+#define PSCI_SYSTEM_OFF		0x84000008
+#define PSCI_SYSTEM_RESET	0x84000009
+
+// The SMC calling convention only guarantees x18 and above are preserved, so
+// everything the compiler could be keeping in a caller-saved register has to
+// be declared clobbered. This matters on the error return: PSCI_SYSTEM_OFF and
+// PSCI_SYSTEM_RESET do not come back when they succeed.
+#define PSCI_CLOBBERS \
+	"x4", "x5", "x6", "x7", "x8", "x9", "x10", "x11", "x12", "x13", "x14", \
+	"x15", "x16", "x17", "memory"
+
+
+static uint32 sPsciConduit = PSCI_CONDUIT_NONE;
+
+
+static uint64
+psci_call_smc(uint32 function)
+{
+	register uint64 x0 asm("x0") = function;
+	register uint64 x1 asm("x1") = 0;
+	register uint64 x2 asm("x2") = 0;
+	register uint64 x3 asm("x3") = 0;
+	asm volatile("smc #0"
+		: "+r" (x0), "+r" (x1), "+r" (x2), "+r" (x3)
+		:
+		: PSCI_CLOBBERS);
+	return x0;
+}
+
+
+static uint64
+psci_call_hvc(uint32 function)
+{
+	register uint64 x0 asm("x0") = function;
+	register uint64 x1 asm("x1") = 0;
+	register uint64 x2 asm("x2") = 0;
+	register uint64 x3 asm("x3") = 0;
+	asm volatile("hvc #0"
+		: "+r" (x0), "+r" (x1), "+r" (x2), "+r" (x3)
+		:
+		: PSCI_CLOBBERS);
+	return x0;
+}
+
+
 status_t
 arch_cpu_preboot_init_percpu(kernel_args *args, int curr_cpu)
 {
@@ -48,6 +96,11 @@ arch_cpu_init_percpu(kernel_args *args, int curr_cpu)
 status_t
 arch_cpu_init(kernel_args *args)
 {
+	sPsciConduit = args->arch_args.psci_conduit;
+	dprintf("PSCI conduit: %s\n",
+		sPsciConduit == PSCI_CONDUIT_SMC ? "smc"
+			: sPsciConduit == PSCI_CONDUIT_HVC ? "hvc" : "none");
+
 	for (uint32 i = 0; i < args->num_cpus; i++) {
 		cpu_ent* cpu = &gCPU[i];
 
@@ -76,7 +129,22 @@ arch_cpu_init_post_modules(kernel_args *args)
 status_t
 arch_cpu_shutdown(bool reboot)
 {
-	// never reached
+	if (sPsciConduit == PSCI_CONDUIT_NONE) {
+		dprintf("arch_cpu_shutdown: no PSCI conduit, cannot %s\n",
+			reboot ? "reset the system" : "power the system off");
+		return B_ERROR;
+	}
+
+	uint32 function = reboot ? PSCI_SYSTEM_RESET : PSCI_SYSTEM_OFF;
+
+	disable_interrupts();
+
+	uint64 result = sPsciConduit == PSCI_CONDUIT_HVC
+		? psci_call_hvc(function) : psci_call_smc(function);
+
+	// A successful call does not return, so getting here is always a failure.
+	dprintf("arch_cpu_shutdown: PSCI call %#" B_PRIx32 " returned %" B_PRId64
+		"\n", function, (int64)result);
 	return B_ERROR;
 }
 

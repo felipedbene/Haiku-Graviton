@@ -1,0 +1,151 @@
+#!/usr/bin/env bash
+#
+# haiku-status -- one-shot snapshot of the Graviton/arm64 work in flight.
+#
+# Why this exists: none of the work lives on the workstation. Builds, guests and
+# images all live on the c7g.metal builder, so a workstation reboot (they happen
+# for patching) costs no work but costs all *context* -- and reconstructing it by
+# hand from SSM history takes many round trips. This prints the whole picture in
+# one shot, cheaply, and is safe to run from a SessionStart hook.
+#
+# Read-only by construction: describe/list calls plus one shell probe on the
+# builder. It never starts, stops, or modifies anything.
+#
+# Exit code is always 0 -- a snapshot that cannot be taken must not break a
+# session or a hook. Missing credentials degrade to a one-line hint.
+
+set -uo pipefail
+
+REGION="${HAIKU_GRAVITON_REGION:-us-west-2}"
+PROJECT_TAG="${HAIKU_GRAVITON_TAG:-haiku-graviton}"
+BUILDER_NAME="${HAIKU_GRAVITON_BUILDER:-haiku-builder}"
+# Total wall-clock budget. A hook must not hang a session start.
+BUDGET="${HAIKU_GRAVITON_TIMEOUT:-45}"
+
+say() { printf '%s\n' "$*"; }
+aws_q() { timeout 15 aws --region "$REGION" "$@" 2>/dev/null; }
+
+say "=== Haiku/Graviton status ($(date -u '+%Y-%m-%d %H:%M UTC')) ==="
+
+# ---------------------------------------------------------------- credentials
+ident=$(timeout 12 aws sts get-caller-identity --query Account --output text 2>/dev/null)
+if [ -z "$ident" ] || [ "$ident" = "None" ]; then
+	say "credentials: NONE / expired -- refresh with:"
+	say "  ada credentials update --account 668984504585 --role Admin --provider isengard --once"
+	exit 0
+fi
+say "account: $ident   region: $REGION"
+
+# ------------------------------------------------------------------ instances
+say ""
+say "--- instances (Project=$PROJECT_TAG) ---"
+aws_q ec2 describe-instances \
+	--filters "Name=tag:Project,Values=$PROJECT_TAG" \
+	          "Name=instance-state-name,Values=running,stopped,pending,stopping" \
+	--query 'Reservations[].Instances[].[Tags[?Key==`Name`]|[0].Value,InstanceId,InstanceType,State.Name]' \
+	--output text | sort | while read -r name id type state; do
+		printf '  %-22s %-20s %-13s %s\n' "$name" "$id" "$type" "$state"
+	done
+
+# The golden image is whichever AMI carries canonical=true -- never the newest.
+say ""
+say "--- canonical AMI (tag canonical=true) ---"
+aws_q ec2 describe-images --owners self \
+	--filters "Name=tag:canonical,Values=true" \
+	--query 'Images[].[ImageId,Name,CreationDate]' --output text \
+	| while read -r id nm created; do printf '  %s  %s  %s\n' "$id" "$nm" "$created"; done
+cand=$(aws_q ec2 describe-images --owners self \
+	--filters "Name=tag:candidate,Values=true" \
+	--query 'length(Images)' --output text)
+[ -n "$cand" ] && say "  untested candidate AMIs: ${cand:-0}"
+
+# -------------------------------------------------------------- builder probe
+builder=$(aws_q ec2 describe-instances \
+	--filters "Name=tag:Name,Values=$BUILDER_NAME" "Name=instance-state-name,Values=running" \
+	--query 'Reservations[].Instances[0].InstanceId' --output text)
+
+say ""
+if [ -z "$builder" ] || [ "$builder" = "None" ]; then
+	say "--- builder ($BUILDER_NAME) is not running: no guest/build state to report ---"
+	exit 0
+fi
+say "--- builder $builder: guests, builds, packages ---"
+
+# One round trip. Everything the metal knows about its own in-flight work.
+# shellcheck disable=SC2016
+probe='
+echo "host: $(uptime | sed "s/^ *//")"
+echo
+echo "KVM guests (a workstation reboot does NOT stop these):"
+pgrep -af qemu-system-aarch64 2>/dev/null | while read -r pid rest; do
+    img=$(echo "$rest" | grep -o "file=[^,]*\.img" | head -1 | cut -d= -f2)
+    port=$(echo "$rest" | grep -o "hostfwd=tcp::[0-9]*" | head -1 | sed "s/.*:://")
+    printf "  pid %-8s port %-6s %s\n" "$pid" "${port:-none}" "${img:-?}"
+    if [ -n "$port" ]; then
+        # ssh -n is load-bearing: without it ssh reads this loop'"'"'s stdin and eats
+        # the remaining pgrep lines, so only the first guest is ever reported.
+        if timeout 6 ssh -n -p "$port" -o StrictHostKeyChecking=no \
+             -o UserKnownHostsFile=/dev/null -o ConnectTimeout=5 \
+             -i /home/ubuntu/.ssh/haiku-ed25519 baron@127.0.0.1 true 2>/dev/null; then
+            echo "      ssh: OK"
+        else
+            echo "      ssh: NO (guest netless, sshd down, or still booting)"
+        fi
+    fi
+done
+[ -z "$(pgrep -f qemu-system-aarch64 2>/dev/null)" ] && echo "  (none running)"
+echo
+echo "builds in flight:"
+pgrep -af "[j]am " 2>/dev/null | head -5 || true
+pgrep -af "[h]aikuporter" 2>/dev/null | head -5 || true
+[ -z "$(pgrep -f "[j]am |[h]aikuporter" 2>/dev/null)" ] && echo "  (none)"
+echo
+echo "native packages built (hpkg-out):"
+find /opt/haiku/hpkg-out -name "*.hpkg" 2>/dev/null | wc -l | sed "s/^/  count: /"
+find /opt/haiku/hpkg-out -name "*.hpkg" -printf "  %TY-%Tm-%Td %TH:%TM %f\n" 2>/dev/null \
+    | sort | tail -8
+echo
+echo "most recent run dirs / logs:"
+ls -1dt /opt/haiku/run*/ /opt/hnet/ 2>/dev/null | head -4 | while read -r d; do
+    printf "  %s\n" "$d"
+    ls -1t "$d" 2>/dev/null | grep -E "\.(log|done)$" | head -4 | sed "s/^/      /"
+done
+'
+# Pass the probe as real JSON, not CLI shorthand: the shorthand parser splits on
+# commas, and this script contains them (e.g. grep -o "file=[^,]*\.img"), which
+# silently mangles the command into nonsense.
+req=$(mktemp -t haiku-status-probe.XXXXXX.json) || exit 0
+trap 'rm -f "$req"' EXIT
+INSTANCE="$builder" PROBE="$probe" python3 -c '
+import json, os, sys
+json.dump({
+    "InstanceIds": [os.environ["INSTANCE"]],
+    "DocumentName": "AWS-RunShellScript",
+    "Parameters": {"commands": [os.environ["PROBE"]]},
+}, open(sys.argv[1], "w"))
+' "$req" || exit 0
+
+cid=$(aws_q ssm send-command --cli-input-json "file://$req" \
+	--query 'Command.CommandId' --output text)
+
+if [ -z "$cid" ] || [ "$cid" = "None" ]; then
+	say "  (could not start SSM probe -- is the SSM agent up?)"
+	exit 0
+fi
+
+deadline=$((SECONDS + BUDGET))
+while [ $SECONDS -lt $deadline ]; do
+	sleep 4
+	st=$(aws_q ssm get-command-invocation --command-id "$cid" \
+		--instance-id "$builder" --query Status --output text)
+	case "$st" in
+		Success|Failed|Cancelled|TimedOut)
+			aws_q ssm get-command-invocation --command-id "$cid" \
+				--instance-id "$builder" --query StandardOutputContent --output text \
+				| sed 's/^/  /'
+			exit 0
+			;;
+	esac
+done
+say "  (probe still running after ${BUDGET}s -- re-run: graviton/scripts/haiku-status)"
+exit 0

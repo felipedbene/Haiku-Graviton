@@ -25,3 +25,7 @@ build/user_config_headers
 
 # clangd related tooling for IDE code completion
 compile_commands.json
+
+# Per-user Claude Code settings (permissions etc). The shared hook config in
+# .claude/settings.json IS tracked; this file is personal and must not be.
+.claude/settings.local.json

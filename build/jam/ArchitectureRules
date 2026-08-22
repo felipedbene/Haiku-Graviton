@@ -38,7 +38,18 @@ rule ArchitectureSetup architecture
 	switch $(cpu) {
 		case ppc : archFlags += -mcpu=440fp ;
 		case arm : archFlags += -march=armv7-a -mfloat-abi=hard ;
-		case arm64 : archFlags += -march=armv8-a+crc ;
+		# Neoverse-N1 is the AWS Graviton2 core and the oldest core the arm64
+		# port targets; Graviton3 (Neoverse-V1) and Graviton4 (Neoverse-V2) are
+		# feature supersets of it, so a single image stays portable across the
+		# fleet. Over plain armv8-a this buys LSE atomics (ARMv8.1) -- every
+		# __atomic builtin in the kernel and libroot becomes a single
+		# cas/ldadd/swp instead of an out-of-line __aarch64_* helper call --
+		# plus RCpc loads, dot product, and Neoverse instruction scheduling.
+		# CRC32 is mandatory from ARMv8.1 on, so +crc need not be spelled out;
+		# +crypto (AES/SHA/PMULL) is not implied by the core definition but is
+		# present on every Graviton, and is what lets accelerated checksum and
+		# crypto code be built without touching this line again.
+		case arm64 : archFlags += -mcpu=neoverse-n1+crypto ;
 		case x86 : archFlags += -march=pentium ;
 		case riscv64 : archFlags += -march=rv64gc ;
 	}

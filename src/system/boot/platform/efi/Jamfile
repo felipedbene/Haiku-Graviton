@@ -39,6 +39,7 @@ local platform_src =
 	menu.cpp
 	devices.cpp
 	quirks.cpp
+	rtc.cpp
 	smp.cpp
 	serial.cpp
 

@@ -61,29 +61,37 @@ static void* sDtbTable = NULL;
 static uint32 sDtbSize = 0;
 
 template <typename T> DebugUART*
-get_uart(addr_t base, int64 clock) {
+get_uart(addr_t base, int64 clock, int8 regShift) {
 	static char buffer[sizeof(T)];
 	return new(buffer) T(base, clock);
+}
+
+
+// Only the 8250 has a configurable register stride to pass on.
+static DebugUART*
+get_uart_8250(addr_t base, int64 clock, int8 regShift) {
+	static char buffer[sizeof(DebugUART8250)];
+	return new(buffer) DebugUART8250(base, clock, regShift);
 }
 
 
 const struct supported_uarts {
 	const char*	dtb_compat;
 	const char*	kind;
-	DebugUART*	(*uart_driver_init)(addr_t base, int64 clock);
+	DebugUART*	(*uart_driver_init)(addr_t base, int64 clock, int8 regShift);
 } kSupportedUarts[] = {
-	{ "ns16550a", UART_KIND_8250, &get_uart<DebugUART8250> },
-	{ "ns16550", UART_KIND_8250, &get_uart<DebugUART8250> },
-	{ "snps,dw-apb-uart", UART_KIND_8250, &get_uart<DebugUART8250> },
+	{ "ns16550a", UART_KIND_8250, &get_uart_8250 },
+	{ "ns16550", UART_KIND_8250, &get_uart_8250 },
+	{ "snps,dw-apb-uart", UART_KIND_8250, &get_uart_8250 },
 #if defined(__riscv)
 	{ "sifive,uart0", UART_KIND_SIFIVE, &get_uart<ArchUARTSifive> },
 #elif defined(__ARM__)
 	{ "arm,pl011", UART_KIND_PL011, &get_uart<ArchUARTPL011> },
-	{ "brcm,bcm2835-aux-uart", UART_KIND_8250, &get_uart<DebugUART8250> },
+	{ "brcm,bcm2835-aux-uart", UART_KIND_8250, &get_uart_8250 },
 #elif defined(__aarch64__)
 	{ "arm,pl011", UART_KIND_PL011, &get_uart<ArchUARTPL011> },
 	{ "fsl,s32-linflexuart", UART_KIND_LINFLEX, &get_uart<ArchUARTlinflex> },
-	{ "brcm,bcm2835-aux-uart", UART_KIND_8250, &get_uart<DebugUART8250> },
+	{ "brcm,bcm2835-aux-uart", UART_KIND_8250, &get_uart_8250 },
 	{ "apple,s5l-uart", UART_KIND_SAMSUNG, &get_uart<ArchUARTSamsung> },
 #endif
 };
@@ -541,6 +549,18 @@ dtb_get_clock_frequency(const void* fdt, int node)
 }
 
 
+static int8
+dtb_get_reg_shift(const void* fdt, int node)
+{
+	int len = 0;
+	uint32* prop = (uint32*)fdt_getprop(fdt, node, "reg-shift", &len);
+	if (prop == NULL || len != (int)sizeof(uint32))
+		return UART_REG_SHIFT_UNSET;
+
+	return (int8)fdt32_to_cpu(*prop);
+}
+
+
 static void
 dtb_handle_fdt(const void* fdt, int node)
 {
@@ -566,9 +586,10 @@ dtb_handle_fdt(const void* fdt, int node)
 				dtb_get_reg(fdt, node, 0, uart.regs);
 				uart.irq = dtb_get_interrupt(fdt, node);
 				uart.clock = dtb_get_clock_frequency(fdt, node);
+				uart.reg_shift = dtb_get_reg_shift(fdt, node);
 
 				gUART = kSupportedUarts[i].uart_driver_init(uart.regs.start,
-					uart.clock);
+					uart.clock, uart.reg_shift);
 				gUARTSkipInit = fdt_getprop(fdt, node, "skip-init", NULL) != NULL;
 			}
 		}

@@ -89,6 +89,20 @@ extern "C" {
 #define ENA_FRAME_SIZE		1500
 #define ENA_PACKET_BUFFER_SIZE	2048
 
+/* Non-adaptive interrupt moderation intervals, in microseconds, handed to the
+   device in the interrupt-unmask register every time a vector is re-armed. The
+   values are the reference driver's (ena.h:145 ENA_RX_IRQ_INTERVAL, ena.h:146
+   ENA_TX_IRQ_INTERVAL), which is also where the asymmetry comes from: transmit
+   completions only free descriptors, so they can wait longer than a frame that
+   a socket is blocked on.
+
+   Zero here does not mean "default", it means "interrupt on every completion",
+   which is what this driver used to ask for. Both fields are 15 bits wide
+   (ENA_ETH_IO_INTR_REG_{RX,TX}_INTR_DELAY_MASK), so these fit with room to
+   spare. */
+#define ENA_RX_IRQ_INTERVAL	20
+#define ENA_TX_IRQ_INTERVAL	50
+
 /* Watchdog cadence and timeout, both matching Linux and FreeBSD exactly: a
    one-second timer against a six-second keep-alive deadline
    (ena_netdev.h:130 ENA_DEVICE_KALIVE_TIMEOUT, ena.h:173
