@@ -27,9 +27,10 @@
 #include <new>
 
 
-DebugUART8250::DebugUART8250(addr_t base, int64 clock)
+DebugUART8250::DebugUART8250(addr_t base, int64 clock, int8 regShift)
 	:
-	DebugUART(base, clock)
+	DebugUART(base, clock),
+	fRegShift(regShift)
 {
 }
 
@@ -86,6 +87,33 @@ DebugUART8250::~DebugUART8250()
 #define LSR_THRE	0x20	/* Xmit holding register empty */
 #define LSR_TEMT	0x40	/* Xmitter empty */
 #define LSR_ERR		0x80	/* Error */
+
+
+// The base class assumes a fixed 32-bit register stride on ARM, which only
+// holds for the SoC UARTs it was written for. Where the register spacing is
+// actually known -- from the ACPI SPCR/DBG2 address structure or the device
+// tree "reg-shift" property -- honour it, or the accesses land outside the
+// register block entirely.
+void
+DebugUART8250::Out8(int reg, uint8 value)
+{
+	if (fRegShift < 0) {
+		DebugUART::Out8(reg, value);
+		return;
+	}
+
+	*(volatile uint8*)(Base() + (reg << fRegShift)) = value;
+}
+
+
+uint8
+DebugUART8250::In8(int reg)
+{
+	if (fRegShift < 0)
+		return DebugUART::In8(reg);
+
+	return *(volatile uint8*)(Base() + (reg << fRegShift));
+}
 
 
 void
@@ -183,10 +211,10 @@ DebugUART8250::FlushRx()
 
 
 DebugUART8250*
-arch_get_uart_8250(addr_t base, int64 clock)
+arch_get_uart_8250(addr_t base, int64 clock, int8 regShift)
 {
 	static char buffer[sizeof(DebugUART8250)];
-	DebugUART8250* uart = new(buffer) DebugUART8250(base, clock);
+	DebugUART8250* uart = new(buffer) DebugUART8250(base, clock, regShift);
 	return uart;
 }
 

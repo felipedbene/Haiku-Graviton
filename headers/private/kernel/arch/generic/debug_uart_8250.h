@@ -14,6 +14,8 @@
 
 #include <SupportDefs.h>
 
+#include <boot/uart.h>
+
 #include "debug_uart.h"
 
 
@@ -22,7 +24,8 @@
 
 class DebugUART8250 : public DebugUART {
 public:
-							DebugUART8250(addr_t base, int64 clock);
+							DebugUART8250(addr_t base, int64 clock,
+								int8 regShift = UART_REG_SHIFT_UNSET);
 							~DebugUART8250();
 
 			void			InitEarly();
@@ -34,10 +37,18 @@ public:
 
 			void			FlushTx();
 			void			FlushRx();
+
+protected:
+	virtual	void			Out8(int reg, uint8 value);
+	virtual	uint8			In8(int reg);
+
+private:
+			int8			fRegShift;
 };
 
 
-DebugUART8250* arch_get_uart_8250(addr_t base, int64 clock);
+DebugUART8250* arch_get_uart_8250(addr_t base, int64 clock,
+	int8 regShift = UART_REG_SHIFT_UNSET);
 
 
 #endif /* _KERNEL_ARCH_DEBUG_UART_8250_H */

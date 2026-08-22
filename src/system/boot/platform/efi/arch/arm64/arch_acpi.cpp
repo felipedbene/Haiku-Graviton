@@ -38,7 +38,67 @@ static void arch_acpi_get_uart_8250(const uart_info &uart)
 	// 16550 input clock of 1.8432 MHz.
 	static char sUART[sizeof(DebugUART8250)];
 	gUART = new(sUART) DebugUART8250(uart.regs.start,
-		uart.clock != 0 ? uart.clock : 1843200);
+		uart.clock != 0 ? uart.clock : 1843200, uart.reg_shift);
+}
+
+
+// SPCR interface types and DBG2 serial port subtypes are numbered alike.
+static const char *
+arch_acpi_uart_kind(uint32 interfaceType)
+{
+	switch (interfaceType) {
+		case ACPI_SPCR_INTERFACE_TYPE_16550:
+		case ACPI_SPCR_INTERFACE_TYPE_16550_SUBSET:
+			return UART_KIND_8250;
+		case ACPI_SPCR_INTERFACE_TYPE_PL011:
+		case ACPI_SPCR_INTERFACE_TYPE_SBSA_32BIT:
+		case ACPI_SPCR_INTERFACE_TYPE_SBSA:
+			return UART_KIND_PL011;
+	}
+
+	return NULL;
+}
+
+
+// The generic address structure describes how wide a single register is, which
+// for a 16550 is also how far apart consecutive registers sit: byte-packed on
+// AWS Graviton, 32-bit spaced on the SoCs the driver was originally written
+// for. Report "unknown" for anything else and let the driver keep its default.
+static int8
+arch_acpi_uart_reg_shift(const acpi_gas &address)
+{
+	if (address.access_size == ACPI_GAS_ACCESS_SIZE_BYTE
+		|| address.bit_width == 8) {
+		return 0;
+	}
+
+	if (address.access_size == ACPI_GAS_ACCESS_SIZE_WORD
+		|| address.bit_width == 16) {
+		return 1;
+	}
+
+	if (address.access_size == ACPI_GAS_ACCESS_SIZE_DWORD
+		|| address.bit_width == 32) {
+		return 2;
+	}
+
+	return UART_REG_SHIFT_UNSET;
+}
+
+
+static void
+arch_acpi_setup_uart(uart_info &uart, const char *kind)
+{
+	// Firmware handed us a console it has already programmed (SPCR/DBG2 only
+	// describe consoles that are in use), so re-running InitPort would only
+	// risk clobbering a working setup -- and on a byte-strided 16550 its DLAB
+	// dance transmits a stray byte.
+	gUARTSkipInit = true;
+
+	if (strcmp(kind, UART_KIND_PL011) == 0)
+		arch_acpi_get_uart_pl011(uart);
+	else if (strcmp(kind, UART_KIND_8250) == 0)
+		arch_acpi_get_uart_8250(uart);
 }
 
 
@@ -48,25 +108,23 @@ arch_handle_acpi()
 	acpi_spcr *spcr = (acpi_spcr*)acpi_find_table(ACPI_SPCR_SIGNATURE);
 	if (spcr != NULL) {
 		uart_info &uart = gKernelArgs.arch_args.uart;
+		const char *kind = arch_acpi_uart_kind(spcr->interface_type);
 
-		if (spcr->interface_type == ACPI_SPCR_INTERFACE_TYPE_PL011) {
-			strcpy(uart.kind, UART_KIND_PL011);
-		} else if (spcr->interface_type == ACPI_SPCR_INTERFACE_TYPE_16550) {
-			strcpy(uart.kind, UART_KIND_8250);
-		}
+		if (kind != NULL)
+			strcpy(uart.kind, kind);
 
 		uart.regs.start = spcr->base_address.address;
 		uart.regs.size = B_PAGE_SIZE;
 		uart.irq = spcr->gisv;
 		uart.clock = spcr->clock;
+		uart.reg_shift = arch_acpi_uart_reg_shift(spcr->base_address);
 
-		if (spcr->interface_type == ACPI_SPCR_INTERFACE_TYPE_PL011)
-			arch_acpi_get_uart_pl011(uart);
-		else if (spcr->interface_type == ACPI_SPCR_INTERFACE_TYPE_16550)
-			arch_acpi_get_uart_8250(uart);
+		if (kind != NULL)
+			arch_acpi_setup_uart(uart, kind);
 
-		dprintf("discovered uart from acpi: base=%lx, irq=%u, clock=%lu\n",
-			uart.regs.start, uart.irq, uart.clock);
+		dprintf("discovered uart from acpi: base=%lx, irq=%u, clock=%lu, "
+			"reg_shift=%d\n", uart.regs.start, uart.irq, uart.clock,
+			uart.reg_shift);
 	} else {
 		acpi_dbg2 *dbg2 = (acpi_dbg2*)acpi_find_table(ACPI_DBG2_SIGNATURE);
 		if (dbg2 != NULL) {
@@ -75,11 +133,10 @@ arch_handle_acpi()
 			while (info != (acpi_dbg2_device_info*)((char*)dbg2 + dbg2->header.length)) {
 				if (info->port_type == ACPI_DBG2_PORT_TYPE_SERIAL && info->num_addresses > 0) {
 					uart_info &uart = gKernelArgs.arch_args.uart;
+					const char *kind = arch_acpi_uart_kind(info->port_subtype);
 
-					if (info->port_subtype == ACPI_DBG2_PORT_SUBTYPE_PL011)
-						strcpy(uart.kind, UART_KIND_PL011);
-					else if (info->port_subtype == ACPI_DBG2_PORT_SUBTYPE_16550)
-						strcpy(uart.kind, UART_KIND_8250);
+					if (kind != NULL)
+						strcpy(uart.kind, kind);
 
 					acpi_gas *base_addr = (acpi_gas*)((char*)info + info->base_addr_offset);
 					uint32 *base_size = (uint32*)((char*)info + info->addr_size_offset);
@@ -88,13 +145,13 @@ arch_handle_acpi()
 					uart.regs.size = *base_size;
 					uart.irq = 0;
 					uart.clock = 0;
+					uart.reg_shift = arch_acpi_uart_reg_shift(*base_addr);
 
-					if (info->port_subtype == ACPI_DBG2_PORT_SUBTYPE_PL011)
-						arch_acpi_get_uart_pl011(uart);
-					else if (info->port_subtype == ACPI_DBG2_PORT_SUBTYPE_16550)
-						arch_acpi_get_uart_8250(uart);
+					if (kind != NULL)
+						arch_acpi_setup_uart(uart, kind);
 
-					dprintf("discovered uart from dbg2 acpi: base=%lx\n", uart.regs.start);
+					dprintf("discovered uart from dbg2 acpi: base=%lx, "
+						"reg_shift=%d\n", uart.regs.start, uart.reg_shift);
 					break;
 				}
 
