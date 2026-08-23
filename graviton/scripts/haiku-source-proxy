@@ -1,0 +1,471 @@
+#!/usr/bin/env python3
+#
+# haiku-source-proxy -- fetch HaikuPorts sources on the metal, serve them to the
+# QEMU Haiku guests over plain HTTP.
+#
+# Why this exists: haikuporter fetches http(s) SOURCE_URIs by shelling out to
+# `wget` (HaikuPorter/SourceFetcher.py, SourceFetcherForDownload.fetch). The arm64
+# guest images have no wget and no curl at all, so every recipe that downloads its
+# own tarball dies on "Error: 'wget' is not available, please install it" before it
+# compiles a single line. Building wget for the guest is circular -- wget itself is
+# a port that would have to be downloaded. The guests can, however, reach the metal
+# at 10.0.2.2 (the QEMU user-net gateway), and the metal has real HTTPS egress. So
+# the metal does the fetching and the guest only speaks plain HTTP to it.
+#
+# Traps this is built to defend against, each of which has burned this project:
+#
+#  1. A truncated file in the cache poisons every later build with a checksum
+#     mismatch that looks like an upstream problem. So an upstream fetch goes to a
+#     temp file in the cache dir and is os.replace()d into place only after it is
+#     complete; a short read against an advertised Content-Length is a hard
+#     failure, not a smaller-than-expected success. A failed fetch caches nothing.
+#  2. Silence read as success. Every request logs one line saying hit/miss, byte
+#     count and status, and a failed upstream fetch answers non-2xx so the shim's
+#     exit code is nonzero and haikuporter raises instead of proceeding with a
+#     zero-byte tarball.
+#  3. Anything living only inside a guest is lost when the guest is swapped, which
+#     is why the shim is a committed file installed by `install-shim` rather than
+#     something typed into a guest once.
+#
+# Scope: loopback only by default. QEMU's slirp aliases the guest-visible
+# 10.0.2.2 to the host's loopback interface (verified from guests 2229/2230/2231),
+# so binding 127.0.0.1 is reachable from every guest while remaining unreachable
+# from the VPC. No auth, because there is nothing to authenticate on loopback.
+#
+# Usage (on the c7g.metal builder):
+#   haiku-source-proxy start                  # detach, pidfile + logfile
+#   haiku-source-proxy serve [--port N]       # run in the foreground
+#   haiku-source-proxy status
+#   haiku-source-proxy stop
+#   haiku-source-proxy fetch <url>            # warm the cache / test by hand
+#   haiku-source-proxy install-shim <sshport> [<sshport>...]
+#
+# Endpoints:
+#   GET /fetch?url=<percent-encoded http(s) url>   -> the bytes, or non-2xx
+#   GET /health                                    -> "ok"
+
+import hashlib
+import os
+import re
+import shutil
+import subprocess
+import sys
+import tempfile
+import threading
+import time
+import urllib.error
+import urllib.parse
+import urllib.request
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+
+DEFAULT_PORT = 8079
+DEFAULT_BIND = '127.0.0.1'
+CACHE_DIR = os.environ.get('HAIKU_SRCCACHE', '/opt/haiku/srccache')
+LOG_DIR = os.environ.get('HAIKU_LOG_DIR', '/opt/haiku/logs')
+LOG_FILE = os.path.join(LOG_DIR, 'haiku-source-proxy.log')
+PID_FILE = '/opt/haiku/srccache/.proxy.pid'
+
+# Upstream distfile hosts are frequently slow rather than dead; a stingy timeout
+# turns a slow mirror into a build failure. This is a per-socket-operation
+# timeout, not a total deadline.
+UPSTREAM_TIMEOUT = 120
+
+# Some distfile hosts answer python-urllib's default User-Agent with a 403.
+USER_AGENT = 'Wget/1.21.3 (haiku-source-proxy)'
+
+SHIM_NAME = 'haiku-wget-shim'
+GUEST_SHIM_DIR = '/boot/home/config/non-packaged/bin'
+SSH_KEY = os.environ.get('HAIKU_SSH_KEY', '/home/ubuntu/.ssh/haiku-ed25519')
+SSH_OPTS = [
+	'-o', 'StrictHostKeyChecking=no',
+	'-o', 'UserKnownHostsFile=/dev/null',
+	'-o', 'ConnectTimeout=20',
+	'-o', 'LogLevel=ERROR',
+]
+
+_log_lock = threading.Lock()
+
+
+def log(message):
+	"""One line per event, to the logfile, and to stderr when interactive.
+
+	The tty test is not decoration: `start` redirects the child's stderr into
+	LOG_FILE, so echoing unconditionally would write every line to that file
+	twice and make the log a misleading record of how many fetches happened.
+	"""
+	line = '%s %s' % (time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime()), message)
+	with _log_lock:
+		try:
+			os.makedirs(LOG_DIR, exist_ok=True)
+			with open(LOG_FILE, 'a') as handle:
+				handle.write(line + '\n')
+		except OSError as exc:
+			print('haiku-source-proxy: cannot write %s: %s' % (LOG_FILE, exc),
+				file=sys.stderr)
+		if sys.stderr.isatty():
+			print(line, file=sys.stderr, flush=True)
+
+
+def cache_path(url):
+	"""sha256 of the whole URL, so two URLs never collide, plus the real
+	basename appended so a human can tell what is in the cache dir at a glance.
+	"""
+	digest = hashlib.sha256(url.encode('utf-8')).hexdigest()
+	basename = os.path.basename(urllib.parse.urlsplit(url).path) or 'download'
+	# Keep the cache dir to safe, boring filenames whatever the URL says.
+	basename = re.sub(r'[^A-Za-z0-9._+-]', '_', basename)[:96]
+	return os.path.join(CACHE_DIR, '%s-%s' % (digest, basename))
+
+
+def fetch_to_cache(url):
+	"""Fetch url into the cache. Returns (path, cache_hit, error_or_None).
+
+	The rename-on-success discipline here is the whole point of the script: a
+	half-downloaded tarball must never become a cache entry.
+	"""
+	scheme = urllib.parse.urlsplit(url).scheme.lower()
+	if scheme not in ('http', 'https'):
+		return None, False, 'refusing scheme %r (http/https only)' % scheme
+
+	target = cache_path(url)
+	if os.path.exists(target) and os.path.getsize(target) > 0:
+		return target, True, None
+
+	os.makedirs(CACHE_DIR, exist_ok=True)
+	request = urllib.request.Request(url, headers={'User-Agent': USER_AGENT})
+	handle = None
+	temp_fd, temp_path = tempfile.mkstemp(dir=CACHE_DIR, prefix='.part-')
+	try:
+		handle = urllib.request.urlopen(request, timeout=UPSTREAM_TIMEOUT)
+		advertised = handle.headers.get('Content-Length')
+		advertised = int(advertised) if advertised and advertised.isdigit() else None
+
+		written = 0
+		with os.fdopen(temp_fd, 'wb') as out:
+			temp_fd = -1
+			while True:
+				chunk = handle.read(256 * 1024)
+				if not chunk:
+					break
+				out.write(chunk)
+				written += len(chunk)
+
+		# A short read against an advertised length is a truncated download.
+		# Caching it would hand every later build a checksum mismatch and send
+		# somebody upstream hunting a bug that is not there.
+		if advertised is not None and written != advertised:
+			return None, False, ('short read: got %d bytes of an advertised %d'
+				% (written, advertised))
+		if written == 0:
+			return None, False, 'upstream returned an empty body'
+
+		# mkstemp creates 0600; the cache is meant to be readable by whoever is
+		# poking at a build (the proxy may run as root, the builder as ubuntu).
+		os.chmod(temp_path, 0o644)
+		os.replace(temp_path, target)
+		temp_path = None
+		return target, False, None
+	except urllib.error.HTTPError as exc:
+		return None, False, 'upstream HTTP %s %s' % (exc.code, exc.reason)
+	except Exception as exc:
+		return None, False, '%s: %s' % (type(exc).__name__, exc)
+	finally:
+		if handle is not None:
+			handle.close()
+		if temp_fd >= 0:
+			os.close(temp_fd)
+		if temp_path is not None:
+			try:
+				os.unlink(temp_path)
+			except OSError:
+				pass
+
+
+class ProxyHandler(BaseHTTPRequestHandler):
+	server_version = 'haiku-source-proxy/1'
+
+	def log_message(self, fmt, *args):
+		pass  # The per-request line we care about is emitted in do_GET.
+
+	def _reply(self, status, body, content_type='text/plain; charset=utf-8'):
+		payload = body if isinstance(body, bytes) else body.encode('utf-8')
+		self.send_response(status)
+		self.send_header('Content-Type', content_type)
+		self.send_header('Content-Length', str(len(payload)))
+		self.end_headers()
+		if self.command != 'HEAD':
+			self.wfile.write(payload)
+
+	def do_GET(self):
+		split = urllib.parse.urlsplit(self.path)
+		if split.path == '/health':
+			self._reply(200, 'ok\n')
+			return
+		if split.path != '/fetch':
+			self._reply(404, 'no such endpoint; try /fetch?url=... or /health\n')
+			return
+
+		params = urllib.parse.parse_qs(split.query)
+		urls = params.get('url') or []
+		if not urls:
+			self._reply(400, 'missing the url parameter\n')
+			log('BADREQ 400 - - (no url parameter)')
+			return
+		url = urls[0]
+
+		started = time.time()
+		path, cache_hit, error = fetch_to_cache(url)
+		elapsed = time.time() - started
+
+		if error is not None:
+			log('FAIL 502 0 %.1fs %s -- %s' % (elapsed, url, error))
+			self._reply(502, 'haiku-source-proxy: %s\n' % error)
+			return
+
+		size = os.path.getsize(path)
+		log('%s 200 %d %.1fs %s' % ('HIT ' if cache_hit else 'MISS', size,
+			elapsed, url))
+		try:
+			self.send_response(200)
+			self.send_header('Content-Type', 'application/octet-stream')
+			self.send_header('Content-Length', str(size))
+			self.send_header('X-Haiku-Cache', 'hit' if cache_hit else 'miss')
+			self.end_headers()
+			with open(path, 'rb') as handle:
+				shutil.copyfileobj(handle, self.wfile, 256 * 1024)
+		except (BrokenPipeError, ConnectionResetError):
+			log('ABORT - %d %.1fs %s (client went away mid-transfer)'
+				% (size, time.time() - started, url))
+
+	do_HEAD = do_GET
+
+
+def script_dir():
+	return os.path.dirname(os.path.abspath(__file__))
+
+
+def shim_source():
+	path = os.path.join(script_dir(), SHIM_NAME)
+	if not os.path.exists(path):
+		sys.exit('haiku-source-proxy: cannot find %s next to this script' % SHIM_NAME)
+	return path
+
+
+def cmd_serve(argv):
+	port, bind = DEFAULT_PORT, DEFAULT_BIND
+	while argv:
+		flag = argv.pop(0)
+		if flag == '--port':
+			port = int(argv.pop(0))
+		elif flag == '--bind':
+			bind = argv.pop(0)
+		else:
+			sys.exit('haiku-source-proxy: unknown serve option %r' % flag)
+
+	os.makedirs(CACHE_DIR, exist_ok=True)
+	server = ThreadingHTTPServer((bind, port), ProxyHandler)
+	server.daemon_threads = True
+	log('SERVE listening on %s:%d cache=%s' % (bind, port, CACHE_DIR))
+	try:
+		server.serve_forever()
+	except KeyboardInterrupt:
+		log('SERVE stopped')
+	return 0
+
+
+def _running_pid():
+	try:
+		with open(PID_FILE) as handle:
+			pid = int(handle.read().strip())
+	except (OSError, ValueError):
+		return None
+	try:
+		os.kill(pid, 0)
+	except OSError:
+		return None
+	return pid
+
+
+def cmd_start(argv):
+	pid = _running_pid()
+	if pid:
+		print('already running as pid %d (log: %s)' % (pid, LOG_FILE))
+		return 0
+
+	os.makedirs(CACHE_DIR, exist_ok=True)
+	os.makedirs(LOG_DIR, exist_ok=True)
+	with open(LOG_FILE, 'a') as logfile:
+		child = subprocess.Popen(
+			[sys.executable, os.path.abspath(__file__), 'serve'] + argv,
+			stdout=logfile, stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL,
+			start_new_session=True)
+	with open(PID_FILE, 'w') as handle:
+		handle.write('%d\n' % child.pid)
+
+	# Do not report success on the strength of a fork returning. Prove the
+	# listener answers before saying it is up.
+	deadline = time.time() + 15
+	port = DEFAULT_PORT
+	if '--port' in argv:
+		port = int(argv[argv.index('--port') + 1])
+	while time.time() < deadline:
+		time.sleep(0.5)
+		if child.poll() is not None:
+			print('haiku-source-proxy: died immediately, see %s' % LOG_FILE,
+				file=sys.stderr)
+			return 1
+		try:
+			body = urllib.request.urlopen(
+				'http://127.0.0.1:%d/health' % port, timeout=3).read()
+			if body.strip() == b'ok':
+				print('haiku-source-proxy: up as pid %d on 127.0.0.1:%d '
+					'(cache %s, log %s)' % (child.pid, port, CACHE_DIR, LOG_FILE))
+				return 0
+		except Exception:
+			continue
+	print('haiku-source-proxy: started pid %d but /health never answered'
+		% child.pid, file=sys.stderr)
+	return 1
+
+
+def cmd_stop(argv):
+	pid = _running_pid()
+	if not pid:
+		print('not running')
+		return 0
+	os.kill(pid, 15)
+	print('stopped pid %d' % pid)
+	try:
+		os.unlink(PID_FILE)
+	except OSError:
+		pass
+	return 0
+
+
+def cmd_status(argv):
+	pid = _running_pid()
+	port = DEFAULT_PORT
+	if '--port' in argv:
+		port = int(argv[argv.index('--port') + 1])
+	print('pid:   %s' % (pid if pid else 'not running'))
+	print('cache: %s' % CACHE_DIR)
+	if os.path.isdir(CACHE_DIR):
+		entries = [e for e in os.listdir(CACHE_DIR) if not e.startswith('.')]
+		total = sum(os.path.getsize(os.path.join(CACHE_DIR, e)) for e in entries)
+		print('       %d file(s), %.1f MiB' % (len(entries), total / 1048576.0))
+	print('log:   %s' % LOG_FILE)
+	try:
+		body = urllib.request.urlopen(
+			'http://127.0.0.1:%d/health' % port, timeout=3).read()
+		print('health: %s' % body.decode().strip())
+		return 0
+	except Exception as exc:
+		print('health: UNREACHABLE (%s: %s)' % (type(exc).__name__, exc))
+		return 1
+
+
+def cmd_fetch(argv):
+	if not argv:
+		sys.exit('usage: haiku-source-proxy fetch <url>')
+	url = argv[0]
+	path, cache_hit, error = fetch_to_cache(url)
+	if error is not None:
+		print('FAILED: %s' % error, file=sys.stderr)
+		return 1
+	digest = hashlib.sha256()
+	with open(path, 'rb') as handle:
+		for chunk in iter(lambda: handle.read(1024 * 1024), b''):
+			digest.update(chunk)
+	print('%s  %s  %d bytes  sha256=%s'
+		% ('hit ' if cache_hit else 'miss', path, os.path.getsize(path),
+			digest.hexdigest()))
+	return 0
+
+
+def cmd_install_shim(argv):
+	if not argv:
+		sys.exit('usage: haiku-source-proxy install-shim <sshport> [<sshport>...]')
+	source = shim_source()
+	with open(source, 'rb') as handle:
+		body = handle.read()
+
+	failures = 0
+	for port in argv:
+		target = '%s/wget' % GUEST_SHIM_DIR
+		print('--- guest on ssh port %s ---' % port)
+		base = ['ssh', '-p', port, '-i', SSH_KEY] + SSH_OPTS + ['baron@127.0.0.1']
+
+		# `ssh` with a script on stdin must NOT get -n, or it reads nothing. The
+		# reachability probe below is a separate call precisely so it can use -n
+		# without that interfering.
+		probe = subprocess.run(base[:1] + ['-n'] + base[1:] + ['true'],
+			capture_output=True, text=True)
+		if probe.returncode != 0:
+			print('  UNREACHABLE: %s' % (probe.stderr.strip() or 'ssh failed'))
+			failures += 1
+			continue
+
+		install = subprocess.run(
+			base + ['mkdir -p %s && cat > %s.new && mv %s.new %s '
+				'&& chmod 755 %s && echo INSTALL_OK'
+				% (GUEST_SHIM_DIR, target, target, target, target)],
+			input=body, capture_output=True)
+		if b'INSTALL_OK' not in install.stdout:
+			print('  INSTALL FAILED: %s'
+				% (install.stderr.decode(errors='replace').strip() or 'no output'))
+			failures += 1
+			continue
+
+		# Trust nothing: confirm the shim is what PATH resolves to and that it
+		# can actually reach the proxy from inside the guest.
+		check = subprocess.run(base[:1] + ['-n'] + base[1:] +
+			['command -v wget && wget --proxy-check'],
+			capture_output=True, text=True)
+		print('  %s' % (check.stdout.strip() or '(no output)').replace('\n', '\n  '))
+		if check.returncode != 0:
+			print('  SELF-CHECK FAILED: %s' % check.stderr.strip())
+			failures += 1
+		else:
+			print('  OK')
+	return 1 if failures else 0
+
+
+COMMANDS = {
+	'serve': cmd_serve,
+	'start': cmd_start,
+	'stop': cmd_stop,
+	'status': cmd_status,
+	'fetch': cmd_fetch,
+	'install-shim': cmd_install_shim,
+}
+
+
+USAGE = """\
+haiku-source-proxy -- fetch HaikuPorts sources on the metal for the QEMU guests.
+
+  start [--port N] [--bind ADDR]   detach and wait until /health answers
+  serve [--port N] [--bind ADDR]   run in the foreground
+  status [--port N]                pid, cache size, health
+  stop
+  fetch <url>                      warm the cache by hand, print the sha256
+  install-shim <sshport>...        install the wget shim into guests
+
+Defaults: bind %s:%d, cache %s, log %s
+Endpoint: GET /fetch?url=<percent-encoded http(s) url>
+""" % (DEFAULT_BIND, DEFAULT_PORT, CACHE_DIR, LOG_FILE)
+
+
+def main(argv):
+	if not argv or argv[0] in ('-h', '--help', 'help'):
+		print(USAGE, file=sys.stderr)
+		return 0 if argv else 2
+	command = argv[0]
+	if command not in COMMANDS:
+		print('haiku-source-proxy: unknown command %r (try --help)' % command,
+			file=sys.stderr)
+		return 2
+	return COMMANDS[command](argv[1:])
+
+
+if __name__ == '__main__':
+	sys.exit(main(sys.argv[1:]))
