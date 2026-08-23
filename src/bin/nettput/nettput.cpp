@@ -17,12 +17,22 @@
  * per mebibyte transferred, derived from cpu_info::active_time deltas summed
  * over all CPUs. The second number is the one to compare across MTUs.
  *
- *   nettput -c <host> [-p port] [-n bytes] [-b bufsize] [-r] [-L label]
+ *   nettput -c <host> [-p port] [-n bytes] [-b bufsize] [-w win] [-r] [-L label]
  *
  *     -r   reverse: this host receives instead of transmits
  *     -n   bytes to move, accepts K/M/G suffixes (default 512M)
  *     -b   read/write chunk size (default 64K)
+ *     -w   SO_SNDBUF/SO_RCVBUF, set before connect
  *     -L   free-form label echoed into the output, e.g. the MTU under test
+ *
+ * -w exists because the first measurements taken with this tool were not
+ * measuring the network at all. Transmit came out at 1600 Mbit/s, and
+ * 65535 bytes / 0.326 ms of round trip is 1608 Mbit/s: the number was the
+ * default socket buffer divided by the round-trip time, to three digits. Haiku
+ * hard-codes both socket buffers to 65535 in net_socket.cpp and never grows
+ * them, so a single stream cannot exceed one buffer per round trip no matter
+ * what the driver or the wire can do. Sweeping -w separates "the stack is
+ * capped" from "the driver is slow", which otherwise look identical.
  *
  * The peer is graviton/scripts/nettput-peer.py, which needs nothing but python3.
  * A byte count is negotiated up front rather than a duration, so both ends know
@@ -206,8 +216,26 @@ read_fully(int socket, void* buffer, size_t size)
 }
 
 
+// Must happen before connect(): the window scale factor is negotiated in the
+// SYN, so a buffer enlarged afterwards cannot raise the scale that was already
+// agreed, and the socket stays capped at the size it had when it shook hands.
+static void
+set_socket_buffers(int socketFD, int wanted)
+{
+	if (wanted <= 0)
+		return;
+
+	if (setsockopt(socketFD, SOL_SOCKET, SO_SNDBUF, &wanted, sizeof(wanted)) != 0)
+		fprintf(stderr, "nettput: SO_SNDBUF %d rejected: %s\n", wanted,
+			strerror(errno));
+	if (setsockopt(socketFD, SOL_SOCKET, SO_RCVBUF, &wanted, sizeof(wanted)) != 0)
+		fprintf(stderr, "nettput: SO_RCVBUF %d rejected: %s\n", wanted,
+			strerror(errno));
+}
+
+
 static int
-connect_to_peer(const char* host, int port)
+connect_to_peer(const char* host, int port, int windowSize)
 {
 	char service[16];
 	snprintf(service, sizeof(service), "%d", port);
@@ -230,6 +258,8 @@ connect_to_peer(const char* host, int port)
 		socketFD = socket(info->ai_family, info->ai_socktype, info->ai_protocol);
 		if (socketFD < 0)
 			continue;
+
+		set_socket_buffers(socketFD, windowSize);
 
 		if (connect(socketFD, info->ai_addr, info->ai_addrlen) == 0)
 			break;
@@ -327,6 +357,8 @@ usage(int status)
 		"  -p <port>     peer port (default %d)\n"
 		"  -n <bytes>    bytes to transfer, K/M/G suffixes ok (default 512M)\n"
 		"  -b <bytes>    read/write chunk size (default 64K)\n"
+		"  -w <bytes>    SO_SNDBUF/SO_RCVBUF, set before connect (default: leave\n"
+		"                the system default alone)\n"
 		"  -r            receive instead of transmit\n"
 		"  -L <label>    label echoed into the result, e.g. \"mtu 9001\"\n"
 		"  -h            this help\n",
@@ -343,10 +375,11 @@ main(int argc, char** argv)
 	int port = DEFAULT_PORT;
 	off_t bytes = DEFAULT_BYTES;
 	off_t bufferSize = DEFAULT_BUFFER;
+	int windowSize = 0;
 	char mode = MODE_TRANSMIT;
 
 	int option;
-	while ((option = getopt(argc, argv, "c:p:n:b:rL:h")) != -1) {
+	while ((option = getopt(argc, argv, "c:p:n:b:w:rL:h")) != -1) {
 		switch (option) {
 			case 'c':
 				host = optarg;
@@ -372,6 +405,15 @@ main(int argc, char** argv)
 					return 1;
 				}
 				break;
+			case 'w': {
+				off_t wanted = parse_size(optarg);
+				if (wanted <= 0 || wanted > 512 * 1024 * 1024) {
+					fprintf(stderr, "nettput: bad window size \"%s\"\n", optarg);
+					return 1;
+				}
+				windowSize = (int)wanted;
+				break;
+			}
 			case 'r':
 				mode = MODE_RECEIVE;
 				break;
@@ -404,7 +446,7 @@ main(int argc, char** argv)
 	for (off_t i = 0; i < bufferSize; i++)
 		buffer[i] = (uint8)(i & 0xff);
 
-	int socketFD = connect_to_peer(host, port);
+	int socketFD = connect_to_peer(host, port, windowSize);
 	if (socketFD < 0) {
 		free(buffer);
 		return 1;

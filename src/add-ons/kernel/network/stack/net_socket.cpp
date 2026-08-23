@@ -103,7 +103,26 @@ net_socket_private::net_socket_private()
 	mutex_init(&lock, "socket");
 
 	// set defaults (may be overridden by the protocols)
-	send.buffer_size = 65535;
+	//
+	// A single TCP stream cannot have more than one send buffer in flight per
+	// round trip, so this value divided by the round-trip time is a hard ceiling
+	// on transmit throughput. At 65535 bytes that ceiling is about 1.6 Gbit/s at
+	// a third of a millisecond, which is what an AWS Graviton instance measured:
+	// 1611 Mbit/s, against 65535 * 8 / 0.326 ms = 1608 Mbit/s. The number was the
+	// default, not the hardware. Raising the send default to 256 KiB took the
+	// same machine to 4376-4421 Mbit/s -- close to three times as fast -- and cut
+	// the CPU spent per mebibyte from ~3900 us to ~2221 us, because far fewer,
+	// larger bursts do the same work. Beyond roughly 288 KiB the gain reverses.
+	//
+	// This is a cap on queued data, not an allocation: a socket that never sends
+	// in bulk still costs nothing, so idle sockets are unaffected.
+	//
+	// The receive default is deliberately left alone. Measured the same way, the
+	// existing 65535 already reached 4942 Mbit/s, and every larger value tested
+	// was equal or worse -- so there is no evidence for raising it, and raising a
+	// receive buffer does grow the window this host advertises to a peer that may
+	// then have it in flight.
+	send.buffer_size = 256 * 1024;
 	send.low_water_mark = 1;
 	send.timeout = B_INFINITE_TIMEOUT;
 	receive.buffer_size = 65535;

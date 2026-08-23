@@ -1,0 +1,153 @@
+#!/usr/bin/env bash
+#
+# ssm-run -- run a shell script on a Graviton instance and get all of its output.
+#
+# Three traps this exists to avoid, each of which has already cost a wrong
+# conclusion at least once:
+#
+#  1. `--parameters commands=...` uses the CLI shorthand parser, which splits on
+#     commas. Any script containing a comma (a grep character class, an awk
+#     field list, a C expression) is silently mangled into nonsense that still
+#     "succeeds". The script is therefore base64-encoded and decoded on the far
+#     side, so the transport carries no shell metacharacters at all.
+#  2. get-command-invocation truncates StandardOutputContent at 24 KB. A build
+#     log read that way ends mid-sentence and looks like a build that stopped.
+#     Output goes to S3 and is fetched from there, so it is complete or the
+#     script says so.
+#  3. A polling loop with no deadline hangs a session on an instance whose SSM
+#     agent has gone away.
+#
+# Usage:
+#   ssm-run <instance-id> <<'EOF'          # script on stdin
+#   ...commands...
+#   EOF
+#   ssm-run <instance-id> -f script.sh
+#
+#   -t <seconds>   wall-clock deadline (default 900)
+#   -q             print only the command output, no progress chatter
+#
+# Exit code is the remote script's exit code where SSM reports one, 1 on a
+# transport or timeout failure -- so `ssm-run ... && echo ok` means what it looks
+# like it means.
+
+set -uo pipefail
+
+REGION="${HAIKU_GRAVITON_REGION:-us-west-2}"
+BUCKET="${HAIKU_GRAVITON_BUCKET:-haiku-graviton-668984504585-us-west-2}"
+PREFIX="${HAIKU_GRAVITON_SSM_PREFIX:-ssm-out}"
+DEADLINE_SECS=900
+QUIET=0
+SCRIPT_FILE=""
+
+die() { printf 'ssm-run: %s\n' "$*" >&2; exit 1; }
+chatter() { [ "$QUIET" = 1 ] || printf 'ssm-run: %s\n' "$*" >&2; }
+
+[ $# -ge 1 ] || die "usage: ssm-run <instance-id> [-f script] [-t secs] [-q]"
+INSTANCE="$1"; shift
+
+while getopts "f:t:q" opt; do
+	case "$opt" in
+		f) SCRIPT_FILE="$OPTARG" ;;
+		t) DEADLINE_SECS="$OPTARG" ;;
+		q) QUIET=1 ;;
+		*) die "bad option" ;;
+	esac
+done
+
+if [ -n "$SCRIPT_FILE" ]; then
+	[ -r "$SCRIPT_FILE" ] || die "cannot read $SCRIPT_FILE"
+	payload=$(base64 -w0 < "$SCRIPT_FILE")
+else
+	payload=$(base64 -w0)
+fi
+[ -n "$payload" ] || die "empty script"
+
+# A unique prefix per run, so concurrent runs never read each other's output.
+run_id="run-$$-$(od -An -N3 -tx1 /dev/urandom | tr -d ' \n')"
+s3_prefix="$PREFIX/$run_id"
+
+# AWS-RunShellScript runs its commands under /bin/sh, which on Amazon Linux is
+# dash: no `set -o pipefail`, and several bashisms a build script will reasonably
+# use are missing. So the wrapper stays strictly POSIX and hands the decoded
+# script to bash, where pipefail is set for it -- a failing stage in a pipeline
+# must not be hidden by a succeeding tail.
+remote="printf '%s' '$payload' | base64 -d > /tmp/$run_id.sh
+bash -o pipefail /tmp/$run_id.sh
+rc=\$?
+rm -f /tmp/$run_id.sh
+exit \$rc"
+
+req=$(mktemp -t ssm-run.XXXXXX.json) || die "cannot create a temp file"
+trap 'rm -f "$req"' EXIT
+
+INSTANCE="$INSTANCE" REMOTE="$remote" BUCKET="$BUCKET" S3PREFIX="$s3_prefix" \
+	TIMEOUT="$DEADLINE_SECS" python3 -c '
+import json, os, sys
+json.dump({
+    "InstanceIds": [os.environ["INSTANCE"]],
+    "DocumentName": "AWS-RunShellScript",
+    "Parameters": {"commands": [os.environ["REMOTE"]],
+                   "executionTimeout": [str(max(60, int(os.environ["TIMEOUT"])))]},
+    "OutputS3BucketName": os.environ["BUCKET"],
+    "OutputS3KeyPrefix": os.environ["S3PREFIX"],
+}, open(sys.argv[1], "w"))
+' "$req" || die "cannot build the request"
+
+cid=$(aws --region "$REGION" ssm send-command --cli-input-json "file://$req" \
+	--query 'Command.CommandId' --output text 2>&1)
+case "$cid" in
+	""|None|*error*|*Error*) die "send-command failed: $cid" ;;
+esac
+chatter "command $cid on $INSTANCE (s3://$BUCKET/$s3_prefix)"
+
+status=""
+deadline=$((SECONDS + DEADLINE_SECS))
+while [ $SECONDS -lt $deadline ]; do
+	sleep 5
+	status=$(aws --region "$REGION" ssm get-command-invocation \
+		--command-id "$cid" --instance-id "$INSTANCE" \
+		--query Status --output text 2>/dev/null)
+	case "$status" in
+		Success|Failed|Cancelled|TimedOut) break ;;
+	esac
+done
+
+# S3 is the source of truth for the output; the inline copy is only a fallback
+# for the case where the instance profile cannot write to the bucket.
+out=$(aws --region "$REGION" s3 cp \
+	"s3://$BUCKET/$s3_prefix/$cid/$INSTANCE/awsrunShellScript/0.awsrunShellScript/stdout" \
+	- 2>/dev/null)
+err=$(aws --region "$REGION" s3 cp \
+	"s3://$BUCKET/$s3_prefix/$cid/$INSTANCE/awsrunShellScript/0.awsrunShellScript/stderr" \
+	- 2>/dev/null)
+
+if [ -z "$out" ] && [ -z "$err" ]; then
+	chatter "no S3 output found, falling back to the truncated inline copy"
+	out=$(aws --region "$REGION" ssm get-command-invocation --command-id "$cid" \
+		--instance-id "$INSTANCE" --query StandardOutputContent --output text 2>/dev/null)
+	err=$(aws --region "$REGION" ssm get-command-invocation --command-id "$cid" \
+		--instance-id "$INSTANCE" --query StandardErrorContent --output text 2>/dev/null)
+fi
+
+[ -n "$out" ] && printf '%s\n' "$out"
+[ -n "$err" ] && printf '%s\n' "$err" >&2
+
+case "$status" in
+	Success)
+		chatter "Success"
+		exit 0
+		;;
+	""|Pending|InProgress|Delayed)
+		chatter "still running after ${DEADLINE_SECS}s -- command id $cid"
+		exit 1
+		;;
+	*)
+		rc=$(aws --region "$REGION" ssm get-command-invocation --command-id "$cid" \
+			--instance-id "$INSTANCE" --query ResponseCode --output text 2>/dev/null)
+		chatter "$status (exit ${rc:-unknown})"
+		case "$rc" in
+			''|*[!0-9-]*) exit 1 ;;
+			*) [ "$rc" -gt 0 ] && exit "$rc" || exit 1 ;;
+		esac
+		;;
+esac
