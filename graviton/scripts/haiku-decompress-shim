@@ -1,0 +1,191 @@
+#!/bin/env python3
+#
+# haiku-decompress-shim -- decompress one gzip/bzip2/xz file on the metal for a
+# QEMU Haiku arm64 guest that cannot decompress anything at all.
+#
+# Installed as /boot/home/config/non-packaged/bin/haiku-proxy-decompress (mode
+# 755) by `haiku-source-proxy install-shim <sshport>`.
+#
+# Why this exists: the guest's python3.10_bootstrap was built with none of the
+# compression extension modules -- `import zlib`, `import _bz2` and `import
+# _lzma` all raise ModuleNotFoundError -- and the image carries no gzip, bzip2,
+# xz or tar binary either. HaikuPorter/Utils.py unpackArchive() unpacks
+# .tar.gz/.tar.bz2/.tar.xz purely through Python's own tarfile, so
+# tarfile.is_tarfile() answers False for every one of them and the build dies
+# with "Unrecognized archive type in file ..." immediately after a *successful*
+# download and checksum. That gates every recipe that fetches its own tarball,
+# and no recipe in the ports tree ships an uncompressed .tar to fall back on.
+#
+# Installing an xz or tar binary would not help on its own, because
+# unpackArchive never invokes an external tool for these three formats -- see
+# haikuports-patches/haikuporter-unpack-compressed-tar.patch, which teaches it
+# to, the way it already does for .lz/.7z/.zst.
+#
+# Building the missing pieces inside the guest is circular in three steps: the
+# _lzma module needs liblzma, liblzma comes from xz_utils, and xz_utils cannot
+# even configure without gettext's autopoint (gettext in turn wants libiconv).
+# The metal's python has zlib, bz2 and lzma, so the metal decompresses -- the
+# same division of labour as haiku-wget-shim, which already routes every
+# download through the metal.
+#
+# Traps this defends against:
+#
+#  - Deliberately NOT named gzip/bzip2/xz. A file named `gzip` on the guest's
+#    PATH would be found by every configure script and by `make install` rules
+#    that compress man pages, and this shim cannot compress -- it would quietly
+#    corrupt packages. Only the haikuporter patch calls it, by this name.
+#  - A partial answer read as a whole one. The proxy sends Content-Length; a
+#    short read exits nonzero with an explanation instead of handing back a
+#    truncated tar that would surface much later as a mangled source tree.
+#  - Memory. Source tarballs run to hundreds of megabytes uncompressed (llvm12),
+#    so the request body is streamed from the file and the response is streamed
+#    to stdout; neither is ever held whole in the guest's RAM.
+#  - Shebang: Haiku has /bin/env but no /usr/bin/env, so `#!/usr/bin/env
+#    python3` would install cleanly and then fail to execute.
+#
+# Set HAIKU_SOURCE_PROXY to point somewhere other than http://10.0.2.2:8079
+# (10.0.2.2 is the QEMU user-net gateway, which slirp aliases to the metal's
+# loopback where the proxy binds).
+
+import os
+import sys
+import urllib.parse
+
+PROXY = os.environ.get('HAIKU_SOURCE_PROXY', 'http://10.0.2.2:8079')
+
+# Per-socket-operation timeout. The metal has to read the whole archive in and
+# decompress it before it answers the first byte, so this is generous on
+# purpose: a stingy timeout would turn a large-but-healthy tarball into a
+# build failure.
+TIMEOUT = 1800
+
+CHUNK = 256 * 1024
+
+# What the caller may ask for, mapped to the format name the proxy expects.
+FORMATS = {
+	'gz': 'gz', 'gzip': 'gz', 'tgz': 'gz',
+	'bz2': 'bz2', 'bzip2': 'bz2', 'tbz': 'bz2', 'tbz2': 'bz2',
+	'xz': 'xz', 'txz': 'xz', 'lzma': 'xz',
+}
+
+USAGE = """\
+usage: haiku-proxy-decompress <gz|bz2|xz> <file>   # plain bytes to stdout
+       haiku-proxy-decompress --proxy-check
+"""
+
+
+def say(message):
+	# stderr, so stdout stays a clean binary stream for the caller to pipe.
+	print('haiku-proxy-decompress: %s' % message, file=sys.stderr, flush=True)
+
+
+def connect():
+	"""http.client rather than urllib, because urllib cannot stream a request
+	body from a file object without us buffering it first."""
+	import http.client
+
+	split = urllib.parse.urlsplit(PROXY)
+	if split.scheme != 'http':
+		say('refusing %r: this speaks plain HTTP to the metal only' % PROXY)
+		return None
+	return http.client.HTTPConnection(split.hostname, split.port or 80,
+		timeout=TIMEOUT)
+
+
+def proxy_check():
+	connection = connect()
+	if connection is None:
+		return 1
+	try:
+		connection.request('GET', '/health')
+		response = connection.getresponse()
+		body = response.read().decode(errors='replace').strip()
+	except Exception as exc:
+		say('proxy %s UNREACHABLE (%s: %s)' % (PROXY, type(exc).__name__, exc))
+		return 1
+	finally:
+		connection.close()
+	say('proxy %s health=%s' % (PROXY, body))
+	return 0 if body == 'ok' else 1
+
+
+def main(argv):
+	if '--proxy-check' in argv:
+		return proxy_check()
+	if len(argv) != 2 or argv[0] in ('-h', '--help'):
+		sys.stderr.write(USAGE)
+		return 2
+
+	requested, path = argv
+	fmt = FORMATS.get(requested.lower().lstrip('.'))
+	if fmt is None:
+		say('unknown format %r; known: %s'
+			% (requested, ', '.join(sorted(set(FORMATS)))))
+		return 2
+	try:
+		size = os.path.getsize(path)
+	except OSError as exc:
+		say('cannot read %s: %s' % (path, exc))
+		return 2
+	if size == 0:
+		say('%s is empty' % path)
+		return 2
+
+	connection = connect()
+	if connection is None:
+		return 1
+
+	target = '/decompress?' + urllib.parse.urlencode(
+		{'fmt': fmt, 'name': os.path.basename(path)})
+	say('%s (%s, %d bytes) -> %s%s' % (path, fmt, size, PROXY, target))
+
+	try:
+		with open(path, 'rb') as body:
+			connection.request('POST', target, body=body, headers={
+				'Content-Length': str(size),
+				'Content-Type': 'application/octet-stream',
+			})
+			response = connection.getresponse()
+			if response.status != 200:
+				detail = response.read().decode(errors='replace').strip()
+				say('proxy answered HTTP %d %s -- %s'
+					% (response.status, response.reason, detail))
+				return 1
+
+			advertised = response.getheader('Content-Length')
+			advertised = int(advertised) if advertised \
+				and advertised.isdigit() else None
+
+			written = 0
+			out = sys.stdout.buffer
+			while True:
+				chunk = response.read(CHUNK)
+				if not chunk:
+					break
+				out.write(chunk)
+				written += len(chunk)
+			out.flush()
+	except Exception as exc:
+		say('FAILED talking to the proxy (%s: %s)' % (type(exc).__name__, exc))
+		say('is haiku-source-proxy running on the metal? '
+			'(haiku-source-proxy status)')
+		return 1
+	finally:
+		connection.close()
+
+	# A truncated tar would be extracted as a partial source tree and blamed on
+	# the recipe, so a short read is a hard failure even though bytes did flow.
+	if advertised is not None and written != advertised:
+		say('FAILED short read: %d of an advertised %d bytes'
+			% (written, advertised))
+		return 1
+	if written == 0:
+		say('FAILED: proxy returned an empty body')
+		return 1
+
+	say('decompressed to %d bytes' % written)
+	return 0
+
+
+if __name__ == '__main__':
+	sys.exit(main(sys.argv[1:]))

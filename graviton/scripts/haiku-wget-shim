@@ -1,0 +1,203 @@
+#!/bin/env python3
+#
+# haiku-wget-shim -- stand in for wget inside a QEMU Haiku arm64 guest.
+#
+# Installed as /boot/home/config/non-packaged/bin/wget (mode 755) by
+# `haiku-source-proxy install-shim <sshport>`. It does not download anything
+# itself: it hands the URL to haiku-source-proxy on the metal at 10.0.2.2:8079,
+# which has the HTTPS egress the guest does not.
+#
+# Why a shim and not a real wget: the guest images have neither wget nor curl, and
+# wget is itself a HaikuPorts recipe that would have to be downloaded to be built.
+# haikuporter only needs three things from wget, all of which are cheap to fake:
+#
+#  1. To exist on PATH. HaikuPorter/Utils.py isCommandAvailable() is a literal
+#     os.path.exists(dir + '/' + command) walk over $PATH -- no packagefs provides
+#     entry is involved, so a plain file named wget on PATH satisfies it.
+#  2. To honour `-O <target>` and write the payload there. The exact argv
+#     haikuporter builds is
+#       wget -c --tries=1 --timeout=10 --progress=dot:mega -O <target> <url>
+#     so -O comes before the URL and the URL is last -- but this parses argv
+#     properly rather than trusting those positions, because a recipe or a future
+#     haikuporter could reorder them.
+#  3. To exit 0 on success and nonzero on failure. SourceFetcherForDownload
+#     retries three times and raises CalledProcessError on a nonzero final code,
+#     so a wrong exit code here either hides a failure or invents one.
+#
+# Traps this defends against:
+#
+#  - A truncated tarball that still exits 0 becomes a checksum mismatch three
+#     steps later and looks like an upstream problem. The payload is written to
+#     <target>.part and renamed only after the byte count matches the proxy's
+#     Content-Length, so a failed fetch leaves no target file at all.
+#  - HTTPS from the guest does not work (no curl, and no trusted root store to
+#     speak of), so this speaks plain HTTP to the metal only. The TLS happens on
+#     the metal.
+#  - Shebang: Haiku has /bin/env but no /usr/bin/env, so `#!/usr/bin/env python3`
+#     would install cleanly and then fail to execute.
+#
+# Set HAIKU_SOURCE_PROXY to point somewhere other than http://10.0.2.2:8079.
+# `wget --proxy-check` probes the proxy's /health and exits 0/1 without fetching.
+
+import os
+import sys
+import urllib.parse
+import urllib.request
+
+PROXY = os.environ.get('HAIKU_SOURCE_PROXY', 'http://10.0.2.2:8079')
+
+# Per-socket-operation timeout. Deliberately unrelated to wget's --timeout=10,
+# which haikuporter passes and which would abort perfectly healthy large
+# downloads: the metal may be fetching a slow mirror on our behalf.
+TIMEOUT = 900
+
+# Short flags that consume the following argv element. Anything here must not be
+# mistaken for the URL.
+VALUE_FLAGS = {'-O', '-o', '-a', '-P', '-t', '-T', '-U', '-e', '-A', '-R', '-D',
+	'-I', '-X', '-w', '-Q', '-B', '-i', '-b', '--output-document', '--timeout',
+	'--tries', '--directory-prefix', '--user-agent', '--header'}
+
+
+def say(message):
+	# stdout, because haikuporter reads the child's merged stdout into its own
+	# info() log -- this is how the build log shows what happened.
+	print('wget-shim: %s' % message, flush=True)
+
+
+def parse_args(argv):
+	"""Returns (url, target). Unknown flags are ignored rather than fatal: the
+	point is to tolerate whatever real-wget flags a recipe throws.
+	"""
+	target = None
+	candidates = []
+	index = 0
+	while index < len(argv):
+		arg = argv[index]
+		if arg == '--':
+			candidates.extend(argv[index + 1:])
+			break
+		if arg in ('-O', '--output-document'):
+			if index + 1 < len(argv):
+				target = argv[index + 1]
+			index += 2
+			continue
+		if arg.startswith('-O') and len(arg) > 2:
+			target = arg[2:]
+			index += 1
+			continue
+		if arg.startswith('--output-document='):
+			target = arg.split('=', 1)[1]
+			index += 1
+			continue
+		if arg.startswith('--'):
+			index += 1  # --flag=value and valueless long flags alike
+			if arg in VALUE_FLAGS and '=' not in arg:
+				index += 1
+			continue
+		if arg.startswith('-') and len(arg) > 1:
+			if arg in VALUE_FLAGS:
+				index += 2
+			else:
+				index += 1  # bundled short flags such as -c, -nv, -qO
+			continue
+		candidates.append(arg)
+		index += 1
+
+	# The URL is the last bare argument; earlier bare arguments would be extra
+	# URLs, which haikuporter never passes.
+	return (candidates[-1] if candidates else None), target
+
+
+def main(argv):
+	if '--proxy-check' in argv:
+		try:
+			body = urllib.request.urlopen(PROXY + '/health', timeout=15).read()
+		except Exception as exc:
+			say('proxy %s UNREACHABLE (%s: %s)' % (PROXY, type(exc).__name__, exc))
+			return 1
+		say('proxy %s health=%s' % (PROXY, body.decode(errors='replace').strip()))
+		return 0
+
+	if '--version' in argv:
+		# Some recipes probe this to decide wget exists and is usable.
+		print('GNU Wget 1.21.3 (haiku-source-proxy shim)')
+		return 0
+
+	url, target = parse_args(argv)
+	if not url:
+		say('no URL in argv: %r' % (argv,))
+		return 2  # wget's own "command line parse error" code
+
+	if not target:
+		target = os.path.basename(urllib.parse.urlsplit(url).path) or 'index.html'
+
+	request = PROXY + '/fetch?' + urllib.parse.urlencode({'url': url})
+	say('%s -> %s via %s' % (url, target, PROXY))
+
+	partial = target + '.part'
+	try:
+		handle = urllib.request.urlopen(request, timeout=TIMEOUT)
+	except Exception as exc:
+		detail = ''
+		body = getattr(exc, 'read', None)
+		if body is not None:
+			try:
+				detail = ' -- ' + body().decode(errors='replace').strip()
+			except Exception:
+				pass
+		say('FAILED to reach the proxy or fetch upstream (%s: %s)%s'
+			% (type(exc).__name__, exc, detail))
+		say('is haiku-source-proxy running on the metal? '
+			'(haiku-source-proxy status)')
+		return 8  # wget's "error response from server"
+
+	advertised = handle.headers.get('Content-Length')
+	advertised = int(advertised) if advertised and advertised.isdigit() else None
+	cached = handle.headers.get('X-Haiku-Cache', 'unknown')
+
+	written = 0
+	try:
+		directory = os.path.dirname(partial)
+		if directory:
+			os.makedirs(directory, exist_ok=True)
+		with open(partial, 'wb') as out:
+			while True:
+				chunk = handle.read(256 * 1024)
+				if not chunk:
+					break
+				out.write(chunk)
+				written += len(chunk)
+	except Exception as exc:
+		say('FAILED writing %s (%s: %s)' % (partial, type(exc).__name__, exc))
+		_discard(partial)
+		return 3  # wget's "file I/O error"
+	finally:
+		handle.close()
+
+	# A short read must not be allowed to look like a small download. Renaming it
+	# into place would poison the build with a checksum mismatch that points
+	# nowhere near the real cause.
+	if advertised is not None and written != advertised:
+		say('FAILED short read: %d of %d bytes; leaving no target file'
+			% (written, advertised))
+		_discard(partial)
+		return 8
+	if written == 0:
+		say('FAILED empty body')
+		_discard(partial)
+		return 8
+
+	os.replace(partial, target)
+	say('saved %s -- %d bytes (proxy cache %s)' % (target, written, cached))
+	return 0
+
+
+def _discard(path):
+	try:
+		os.unlink(path)
+	except OSError:
+		pass
+
+
+if __name__ == '__main__':
+	sys.exit(main(sys.argv[1:]))
