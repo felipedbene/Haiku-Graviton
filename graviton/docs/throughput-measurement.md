@@ -118,9 +118,13 @@ transmit went 1148 → 3852 Mbit/s (**3.35×**) and receive 952 → 4936 Mbit/s
 Health after 3.32 GB in and 3.34 GB out across 1.9 M packets: **0 errors,
 0 dropped**, no ENA reset, leak or stranded-descriptor messages.
 
-## Open finding: a throughput cliff between 65535 and 65536
+## Explained: the throughput cliff between 65535 and 65536
 
-Not explained, and recorded rather than guessed at.
+Recorded here as measured; the cause is traced in
+[tcp-rcvbuf-cliff.md](tcp-rcvbuf-cliff.md). Short version: it is not the one
+byte. 65535 is the *default*, which is never set through `setsockopt`, and any
+explicit `SO_RCVBUF` used to switch off the receive-window growth that carries
+the default case past 64 KiB. The cliff is between "asked" and "did not ask".
 
 | receive buffer | rate |
 |---|---|
@@ -143,14 +147,40 @@ if (fReceiveWindowShift < 8 && !IsLocal())
 ```
 
 Tempting, but the second clause forces the shift to 8 for every non-local
-connection either way, so the loop cannot be the whole story. The remaining
-suspect is the `setsockopt` path itself: `tcp_setsockopt` calls
-`SetReceiveBufferSize()` and *then* falls through to the generic handler which
-assigns `socket->receive.buffer_size` again, while `TCPEndpoint` has already
-captured `fReceiveWindow` from the old value at construction. That is a
-hypothesis and has not been tested. **A dedicated hunt is warranted** -- if
-`SO_RCVBUF` can make a socket 3× slower, applications that set it "to be helpful"
-are being punished for it.
+connection either way, so the loop cannot be the whole story. It was not the
+story at all: `TCPEndpoint::SetReceiveBufferSize()` cleared
+`FLAG_AUTO_RECEIVE_BUFFER_SIZE`, so an application that set `SO_RCVBUF` to *any*
+size lost the window growth that took the untouched default to 4942 Mbit/s.
+Applications that set it "to be helpful" were indeed being punished for it. See
+[tcp-rcvbuf-cliff.md](tcp-rcvbuf-cliff.md).
+
+### Confirmed by experiment, and the original framing was wrong
+
+Tested directly on one node, one boot, interleaved, receive direction, 512 MiB
+per run (`c7g.large`, RTT 0.18 ms):
+
+| requested | rate |
+|---|---|
+| no `-w` — default, never set | 4950, 4950, 4950 Mbit/s |
+| `-w 65535` | 3747, 3472, 3832 Mbit/s |
+| `-w 65536` | 3751, 3623, 3643 Mbit/s |
+| `-w 65537` | 3803, 3807, 3597 Mbit/s |
+
+**65535, 65536 and 65537 are indistinguishable.** There is no one-byte boundary,
+and the section title above is kept only because that is how the effect was first
+described. The real division is *asked* versus *did not ask*, exactly as the
+mechanism predicts.
+
+The original 65535-vs-65536 comparison was **confounded**: the 65535 row was the
+default (never set, free to grow) and the 65536 row was explicitly set (pinned).
+The difference was attributed to the byte when it was caused by the act of
+setting.
+
+The magnitude is **RTT-dependent**, which is why the first measurement looked so
+much more dramatic. A pinned window yields roughly `W / RTT`, so the same 64 KiB
+pin costs ~3.4× on the first node (RTT 0.326 ms, 1474 Mbit/s) and only ~1.3× here
+(RTT 0.18 ms, ~3700 Mbit/s). Quoting a *ratio* for this defect without quoting
+the RTT is meaningless — a lesson worth more than the number.
 
 ## Method notes worth keeping
 
@@ -176,7 +206,9 @@ are being punished for it.
 
 ## Still open
 
-- The 65535/65536 receive cliff above.
+- The fix for the receive cliff above is **built but not yet measured on
+  hardware** -- see the confirmation runs in
+  [tcp-rcvbuf-cliff.md](tcp-rcvbuf-cliff.md).
 - **No send-buffer autotuning.** 256 KiB is a better fixed guess than 65535, but
   every fixed guess is wrong somewhere: it is a waste on a LAN and too small on a
   long fat path. Linux autotunes for good reason.

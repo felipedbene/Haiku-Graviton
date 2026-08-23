@@ -29,10 +29,15 @@
  * measuring the network at all. Transmit came out at 1600 Mbit/s, and
  * 65535 bytes / 0.326 ms of round trip is 1608 Mbit/s: the number was the
  * default socket buffer divided by the round-trip time, to three digits. Haiku
- * hard-codes both socket buffers to 65535 in net_socket.cpp and never grows
- * them, so a single stream cannot exceed one buffer per round trip no matter
- * what the driver or the wire can do. Sweeping -w separates "the stack is
- * capped" from "the driver is slow", which otherwise look identical.
+ * has no send-buffer autotuning, so a single stream cannot transmit faster than
+ * one send buffer per round trip no matter what the driver or the wire can do.
+ * Sweeping -w separates "the stack is capped" from "the driver is slow", which
+ * otherwise look identical.
+ *
+ * Receiving is not symmetric, and -w is not a free knob there: TCP does grow its
+ * own receive window towards the bandwidth-delay product, and a -w smaller than
+ * the default replaces that growth with a fixed size, so it can measure slower
+ * than passing no -w at all. See graviton/docs/tcp-rcvbuf-cliff.md.
  *
  * The peer is graviton/scripts/nettput-peer.py, which needs nothing but python3.
  * A byte count is negotiated up front rather than a duration, so both ends know

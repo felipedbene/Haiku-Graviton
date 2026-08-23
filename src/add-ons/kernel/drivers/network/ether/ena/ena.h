@@ -55,7 +55,7 @@ extern "C" {
    announces itself. Note it cannot prove anything about the vendored HAL's
    object -- that one is only guaranteed by removing the driver's object
    directory before building, which is the habit to keep. */
-#define ENA_BUILD_TAG		"hold-desktop"
+#define ENA_BUILD_TAG		"rxbuf-1920"
 #define ENA_BUILD_STAMP		__DATE__ " " __TIME__
 
 /* BAR 0 holds the registers; BAR 2 is the Low Latency Queue push window. The
@@ -82,7 +82,7 @@ extern "C" {
 #define ENA_DEFAULT_TX_RING_SIZE	512
 #define ENA_DEFAULT_RX_RING_SIZE	1024
 
-/* Packet buffers stay at 2048 bytes whatever the MTU: a frame larger than one
+/* Packet buffers are a fixed size whatever the MTU: a frame larger than one
    buffer arrives as a *chain* of descriptors and is reassembled in
    ena_receive() (and split across a chain of slots in ena_send()). The
    reference driver does the same -- its default receive buffer is one page and
@@ -95,7 +95,21 @@ extern "C" {
    because memory has fragmented leaves the instance with no network at all,
    which is strictly worse than the wedged NIC the watchdog was trying to
    fix. */
-#define ENA_PACKET_BUFFER_SIZE	2048
+/* 1920 rather than the obvious 2048, and the 128 bytes are not waste -- they are
+   the difference between a flat memcpy and a linked walk on every received
+   segment. The stack's net_buffer slab is BUFFER_SIZE (2048) and a fresh data
+   header holds BUFFER_SIZE - DATA_HEADER_SIZE - DATA_NODE_SIZE = 1952 usable
+   bytes (net_buffer.cpp:42,147-149). Posting 2048-byte receive buffers therefore
+   overflowed *every* segment by 96 bytes: append() had to allocate a further
+   data_header and returned no contiguous buffer, which sends append_data() down
+   the node-walking write_data() path instead of a single copy. On a jumbo frame
+   that is roughly nine header and nine node allocations where five of each would
+   do, on the busiest thread in the system, tens of thousands of times a second.
+   Fitting inside 1952 costs 6% of the buffer and removes all of it.
+   ceil(ETHER_MAX_JUMBO_FRAME_SIZE / 1920) is still 5, the same chain length as
+   2048, so the negotiated MTU cannot regress; 1920 is also a multiple of 64 and
+   so stays cacheline aligned. */
+#define ENA_PACKET_BUFFER_SIZE	1920
 
 /* MTU floor and fallback. ENA_DEFAULT_MTU is only what we use if the device
    reports a max_mtu that small; the MTU actually requested is derived from the
