@@ -24,6 +24,14 @@
 	the right thread anyway, but time spent in an interrupt that arrives while a
 	CPU is idle is charged to the idle thread and so escapes active_time
 	entirely. That shows up here as a negative residual.
+
+	Idle threads are deliberately left out of the partition and reported apart
+	from it. Their kernel_time advances for the whole time they are on the CPU,
+	so each one accrues an entire wall-clock window and would swamp the table --
+	and TrackActivity() excludes them from active_time for exactly the same
+	reason, so including them here would break the reconciliation the tool
+	exists to perform. They are still worth printing: idle time is the headroom
+	left, which is the other half of any statement about cost.
 */
 
 #include <errno.h>
@@ -45,6 +53,7 @@ struct thread_sample {
 	team_id		team;
 	bigtime_t	userTime;
 	bigtime_t	kernelTime;
+	int32		priority;
 	char		name[B_OS_NAME_LENGTH];
 	char		teamName[B_OS_NAME_LENGTH];
 };
@@ -102,6 +111,7 @@ take_snapshot(struct snapshot* snapshot)
 			sample->team = threadInfo.team;
 			sample->userTime = threadInfo.user_time;
 			sample->kernelTime = threadInfo.kernel_time;
+			sample->priority = threadInfo.priority;
 			strlcpy(sample->name, threadInfo.name, sizeof(sample->name));
 			strlcpy(sample->teamName, teamInfo.name, sizeof(sample->teamName));
 		}
@@ -262,10 +272,20 @@ main(int argc, char** argv)
 	// silently dropped.
 	int32 deltaCount = 0;
 	bigtime_t threadSum = 0;
+	bigtime_t idleSum = 0;
 	for (int32 i = 0; i < sAfter.threadCount; i++) {
 		const struct thread_sample* after = &sAfter.threads[i];
 		const struct thread_sample* before
 			= find_thread(&sBefore, after->thread);
+
+		// See the note on idle threads at the top of the file: they run for the
+		// whole window and are excluded from active_time, so counting them
+		// would both dominate the table and break the reconciliation.
+		if (after->priority == B_IDLE_PRIORITY) {
+			idleSum += (after->userTime + after->kernelTime)
+				- (before != NULL ? before->userTime + before->kernelTime : 0);
+			continue;
+		}
 
 		struct delta* delta = &sDeltas[deltaCount];
 		delta->thread = after->thread;
@@ -348,6 +368,8 @@ main(int argc, char** argv)
 	printf("  residual              : %10" B_PRId64 " us (%+.2f%%)\n",
 		activeSum - threadSum,
 		threadSum > 0 ? 100.0 * (activeSum - threadSum) / threadSum : 0.0);
+	printf("  idle (excluded)       : %10" B_PRId64 " us of %" B_PRId64
+		" us available\n", idleSum, wall * (bigtime_t)sAfter.cpuCount);
 	if (mib > 0.0) {
 		printf("  cost of %.1f MiB       : %10.1f us/MiB (threads),"
 			" %.1f us/MiB (cpus)\n", mib, threadSum / mib, activeSum / mib);
