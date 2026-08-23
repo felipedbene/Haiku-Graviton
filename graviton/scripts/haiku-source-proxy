@@ -40,11 +40,24 @@
 #   haiku-source-proxy fetch <url>            # warm the cache / test by hand
 #   haiku-source-proxy install-shim <sshport> [<sshport>...]
 #
+# The metal also decompresses for the guest, via POST /decompress. That looks
+# like scope creep on a *fetch* proxy, but it is the same missing capability:
+# the guest's python3.10_bootstrap has no zlib, _bz2 or _lzma module and the
+# image has no gzip/bzip2/xz/tar binary, so it can neither download nor unpack a
+# tarball. Only the metal can do either. See haiku-decompress-shim and
+# haikuports-patches/haikuporter-unpack-compressed-tar.patch for the rest of
+# that story; retiring it needs a python3.10 built against liblzma, which needs
+# xz_utils, which needs gettext, which needs libiconv.
+#
 # Endpoints:
-#   GET /fetch?url=<percent-encoded http(s) url>   -> the bytes, or non-2xx
-#   GET /health                                    -> "ok"
+#   GET  /fetch?url=<percent-encoded http(s) url>  -> the bytes, or non-2xx
+#   POST /decompress?fmt=<gz|bz2|xz>               -> the plain bytes, or non-2xx
+#   GET  /health                                   -> "ok"
 
+import bz2
+import gzip
 import hashlib
+import lzma
 import os
 import re
 import shutil
@@ -73,8 +86,29 @@ UPSTREAM_TIMEOUT = 120
 # Some distfile hosts answer python-urllib's default User-Agent with a 403.
 USER_AGENT = 'Wget/1.21.3 (haiku-source-proxy)'
 
-SHIM_NAME = 'haiku-wget-shim'
+# Guest-side pieces, as (file next to this script, name to install it under).
+# Both are installed together because they are two halves of the same thing: the
+# guest can neither fetch nor decompress on its own.
+SHIMS = (
+	('haiku-wget-shim', 'wget'),
+	('haiku-decompress-shim', 'haiku-proxy-decompress'),
+)
 GUEST_SHIM_DIR = '/boot/home/config/non-packaged/bin'
+
+# Streaming decompressors, keyed by the fmt the shim asks for. The file-object
+# wrappers are used rather than raw decompressobj()s because they handle
+# multi-stream archives (concatenated gzip/bzip2 members) correctly, which a
+# single decompressobj silently truncates at the end of the first member.
+DECOMPRESSORS = {
+	'gz': gzip.GzipFile,
+	'bz2': bz2.BZ2File,
+	'xz': lzma.LZMAFile,
+}
+
+# A decompressed source tree is much bigger than the tarball, so the scratch
+# files live beside the cache -- the same volume that was sized for distfiles --
+# rather than in /tmp, which on this metal is small.
+SCRATCH_DIR = os.path.join(CACHE_DIR, 'scratch')
 SSH_KEY = os.environ.get('HAIKU_SSH_KEY', '/home/ubuntu/.ssh/haiku-ed25519')
 SSH_OPTS = [
 	'-o', 'StrictHostKeyChecking=no',
@@ -239,15 +273,117 @@ class ProxyHandler(BaseHTTPRequestHandler):
 
 	do_HEAD = do_GET
 
+	def do_POST(self):
+		split = urllib.parse.urlsplit(self.path)
+		if split.path != '/decompress':
+			self._reply(404, 'no such endpoint; try POST /decompress?fmt=xz\n')
+			return
+
+		params = urllib.parse.parse_qs(split.query)
+		fmt = (params.get('fmt') or [''])[0]
+		name = (params.get('name') or ['-'])[0]
+		opener = DECOMPRESSORS.get(fmt)
+		if opener is None:
+			log('BADREQ 400 0 - decompress %s (fmt=%r)' % (name, fmt))
+			self._reply(400, 'unknown fmt %r; known: %s\n'
+				% (fmt, ', '.join(sorted(DECOMPRESSORS))))
+			return
+
+		length = self.headers.get('Content-Length')
+		if not (length and length.isdigit()):
+			log('BADREQ 411 0 - decompress %s (no Content-Length)' % name)
+			self._reply(411, 'send a Content-Length\n')
+			return
+		length = int(length)
+
+		started = time.time()
+		os.makedirs(SCRATCH_DIR, exist_ok=True)
+		packed = unpacked = None
+		try:
+			# The body is spooled to disk and its length checked before a single
+			# byte is decompressed. Decompressing a short body would produce a
+			# plausible-looking partial tar, and a partial source tree is
+			# diagnosed as a broken recipe rather than as a broken transfer.
+			packed = self._spool(length)
+			if packed is None:
+				return
+
+			unpacked_fd, unpacked = tempfile.mkstemp(dir=SCRATCH_DIR,
+				prefix='.plain-')
+			with os.fdopen(unpacked_fd, 'wb') as out:
+				with opener(packed, 'rb') as source:
+					shutil.copyfileobj(source, out, 256 * 1024)
+			size = os.path.getsize(unpacked)
+			if size == 0:
+				raise ValueError('decompressed to zero bytes')
+
+			elapsed = time.time() - started
+			log('PLAIN 200 %d %.1fs decompress %s (%s, %d in)'
+				% (size, elapsed, name, fmt, length))
+			self.send_response(200)
+			self.send_header('Content-Type', 'application/x-tar')
+			self.send_header('Content-Length', str(size))
+			self.end_headers()
+			with open(unpacked, 'rb') as handle:
+				shutil.copyfileobj(handle, self.wfile, 256 * 1024)
+		except (BrokenPipeError, ConnectionResetError):
+			log('ABORT - - %.1fs decompress %s (client went away)'
+				% (time.time() - started, name))
+		except Exception as exc:
+			# Answering non-2xx is what makes the shim exit nonzero and
+			# haikuporter raise, instead of extracting garbage.
+			log('FAIL 502 0 %.1fs decompress %s (%s) -- %s: %s'
+				% (time.time() - started, name, fmt, type(exc).__name__, exc))
+			try:
+				self._reply(502, 'haiku-source-proxy: cannot decompress %s as '
+					'%s: %s: %s\n' % (name, fmt, type(exc).__name__, exc))
+			except Exception:
+				pass
+		finally:
+			for path in (packed, unpacked):
+				if path:
+					try:
+						os.unlink(path)
+					except OSError:
+						pass
+
+	def _spool(self, length):
+		"""Read exactly length bytes of request body to a scratch file.
+
+		Returns the path, or None having already answered non-2xx.
+		"""
+		spool_fd, spool_path = tempfile.mkstemp(dir=SCRATCH_DIR, prefix='.packed-')
+		read = 0
+		try:
+			with os.fdopen(spool_fd, 'wb') as out:
+				while read < length:
+					chunk = self.rfile.read(min(256 * 1024, length - read))
+					if not chunk:
+						break
+					out.write(chunk)
+					read += len(chunk)
+		except Exception:
+			os.unlink(spool_path)
+			raise
+		if read != length:
+			os.unlink(spool_path)
+			log('FAIL 400 0 - decompress (body was %d of %d bytes)'
+				% (read, length))
+			self._reply(400, 'short request body: %d of %d bytes\n'
+				% (read, length))
+			return None
+		return spool_path
+
 
 def script_dir():
 	return os.path.dirname(os.path.abspath(__file__))
 
 
-def shim_source():
-	path = os.path.join(script_dir(), SHIM_NAME)
+def shim_source(filename):
+	path = os.path.join(script_dir(), filename)
 	if not os.path.exists(path):
-		sys.exit('haiku-source-proxy: cannot find %s next to this script' % SHIM_NAME)
+		sys.exit('haiku-source-proxy: cannot find %s next to this script'
+			% filename)
 	return path
 
 
@@ -385,13 +521,13 @@ def cmd_fetch(argv):
 def cmd_install_shim(argv):
 	if not argv:
 		sys.exit('usage: haiku-source-proxy install-shim <sshport> [<sshport>...]')
-	source = shim_source()
-	with open(source, 'rb') as handle:
-		body = handle.read()
+	payloads = []
+	for filename, installAs in SHIMS:
+		with open(shim_source(filename), 'rb') as handle:
+			payloads.append((installAs, handle.read()))
 
 	failures = 0
 	for port in argv:
-		target = '%s/wget' % GUEST_SHIM_DIR
 		print('--- guest on ssh port %s ---' % port)
 		base = ['ssh', '-p', port, '-i', SSH_KEY] + SSH_OPTS + ['baron@127.0.0.1']
 
@@ -405,25 +541,33 @@ def cmd_install_shim(argv):
 			failures += 1
 			continue
 
-		install = subprocess.run(
-			base + ['mkdir -p %s && cat > %s.new && mv %s.new %s '
-				'&& chmod 755 %s && echo INSTALL_OK'
-				% (GUEST_SHIM_DIR, target, target, target, target)],
-			input=body, capture_output=True)
-		if b'INSTALL_OK' not in install.stdout:
-			print('  INSTALL FAILED: %s'
-				% (install.stderr.decode(errors='replace').strip() or 'no output'))
-			failures += 1
+		broken = False
+		for installAs, body in payloads:
+			target = '%s/%s' % (GUEST_SHIM_DIR, installAs)
+			install = subprocess.run(
+				base + ['mkdir -p %s && cat > %s.new && mv %s.new %s '
+					'&& chmod 755 %s && echo INSTALL_OK'
+					% (GUEST_SHIM_DIR, target, target, target, target)],
+				input=body, capture_output=True)
+			if b'INSTALL_OK' not in install.stdout:
+				print('  %s INSTALL FAILED: %s' % (installAs,
+					install.stderr.decode(errors='replace').strip() or 'no output'))
+				failures += 1
+				broken = True
+		if broken:
 			continue
 
-		# Trust nothing: confirm the shim is what PATH resolves to and that it
+		# Trust nothing: confirm each shim is what PATH resolves to and that it
 		# can actually reach the proxy from inside the guest.
 		check = subprocess.run(base[:1] + ['-n'] + base[1:] +
-			['command -v wget && wget --proxy-check'],
+			['command -v wget && wget --proxy-check '
+				'&& command -v haiku-proxy-decompress '
+				'&& haiku-proxy-decompress --proxy-check'],
 			capture_output=True, text=True)
-		print('  %s' % (check.stdout.strip() or '(no output)').replace('\n', '\n  '))
+		output = ((check.stdout or '') + (check.stderr or '')).strip()
+		print('  %s' % (output or '(no output)').replace('\n', '\n  '))
 		if check.returncode != 0:
-			print('  SELF-CHECK FAILED: %s' % check.stderr.strip())
+			print('  SELF-CHECK FAILED (exit %d)' % check.returncode)
 			failures += 1
 		else:
 			print('  OK')
@@ -448,10 +592,11 @@ haiku-source-proxy -- fetch HaikuPorts sources on the metal for the QEMU guests.
   status [--port N]                pid, cache size, health
   stop
   fetch <url>                      warm the cache by hand, print the sha256
-  install-shim <sshport>...        install the wget shim into guests
+  install-shim <sshport>...        install the wget + decompress shims
 
 Defaults: bind %s:%d, cache %s, log %s
-Endpoint: GET /fetch?url=<percent-encoded http(s) url>
+Endpoints: GET  /fetch?url=<percent-encoded http(s) url>
+           POST /decompress?fmt=<gz|bz2|xz>  (body = the compressed file)
 """ % (DEFAULT_BIND, DEFAULT_PORT, CACHE_DIR, LOG_FILE)
 
 

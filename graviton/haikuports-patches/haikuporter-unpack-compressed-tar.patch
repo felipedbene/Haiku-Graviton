@@ -1,0 +1,127 @@
+# haikuporter: unpack .tar.gz / .tar.bz2 / .tar.xz with an external decompressor
+#
+# Not a recipe patch -- this patches haikuporter itself. It is here because it is
+# a build-environment expedient of the same kind as the recipe cuts beside it,
+# and because it is lost every time a builder guest is swapped.
+#
+# WHAT BREAKS WITHOUT IT
+#
+# Every recipe that downloads its own tarball dies immediately after a
+# *successful* fetch and a *valid* checksum:
+#
+#   Downloading: https://distfiles.dereferenced.org/pkgconf/pkgconf-1.5.3.tar.xz ...
+#   wget-shim: saved .../pkgconf-1.5.3.tar.xz -- 290240 bytes (proxy cache hit)
+#   Validating checksum of pkgconf-1.5.3.tar.xz
+#   Error: Unrecognized archive type in file .../pkgconf-1.5.3.tar.xz
+#
+# WHY
+#
+# HaikuPorter/Utils.py unpackArchive() shells out to an external tool for exactly
+# three formats -- .lz (lzip), .7z (7za) and .zst (zstd). Everything else is
+# handed to Python's own tarfile/zipfile, which decompress through the zlib,
+# _bz2 and _lzma extension modules. The arm64 guest's python3.10_bootstrap was
+# built with none of them:
+#
+#   $ python3.10 -c "import zlib"   -> ModuleNotFoundError: No module named 'zlib'
+#   $ python3.10 -c "import _bz2"   -> ModuleNotFoundError: No module named '_bz2'
+#   $ python3.10 -c "import _lzma"  -> ModuleNotFoundError: No module named '_lzma'
+#
+# so tarfile.is_tarfile() answers False for every compressed tarball (internally:
+# CompressionError('gzip module is not available') and the bz2/lzma equivalents),
+# the ext dispatch has no branch for gz/bz2/xz, and control reaches the final
+# else. libz.so.1 *is* in the image -- gzip support is purely a Python build
+# configuration gap; liblzma and libbz2 are genuinely absent.
+#
+# This gates the whole download-fetching half of the ports tree. A census of
+# SOURCE_URI over the tree: 3128 .tar.gz, 874 .tar.xz, 445 .tar.bz2, 312 .zip,
+# 104 .tgz -- and zero recipes shipping an uncompressed .tar to fall back on.
+#
+# Installing an xz or tar binary does not help on its own, because unpackArchive
+# never invokes one for these formats. That is what this patch changes.
+#
+# WHAT IT DOES
+#
+# Adds gz/tgz/bz2/tbz/tbz2/xz/txz to the same external-tool dispatch that .lz,
+# .7z and .zst already use. Each format lists its candidates most-preferred
+# first: the standard tool (gzip/bzip2/xz), then `haiku-proxy-decompress`, which
+# is graviton/scripts/haiku-decompress-shim -- the guest has no gzip, bzip2 or xz
+# binary either, so the helper POSTs the file to haiku-source-proxy on the metal
+# and reads back the plain tar, exactly as the wget shim already routes every
+# download through the metal.
+#
+# The branch is unreachable on a healthy Python: is_tarfile() succeeds and
+# returns True before the dispatch is entered. So this is additive, not a
+# behaviour change for anyone whose python has the compression modules.
+#
+# HOW IT IS APPLIED
+#
+# By graviton/scripts/haiku-haikuporter-patch, not by patch(1): the packaged tree
+# at /boot/system/lib/haikuporter is packagefs and read-only, so the tree is
+# copied to /boot/home/config/non-packaged/lib/haikuporter, patched there, and
+# shadowed by a wrapper on /boot/home/config/non-packaged/bin (first on PATH).
+# That script verifies the override is the tree haikuporter actually imports
+# rather than trusting that the files exist. Re-run it after every guest swap.
+#
+# RETIRE WHEN
+#
+# python3.10 is built against zlib/libbz2/liblzma, at which point tarfile handles
+# all three itself and none of this is reached. That chain is currently
+# tar -> libtool -> libiconv -> gettext -> xz_utils, plus openssl3, sqlite and
+# libedit for python3.10 itself -- see graviton/docs/sequencing.md.
+#
+# STILL NOT FIXED BY THIS
+#
+# .zip (312 recipes). zipfile.is_zipfile() succeeds without zlib but extracting a
+# deflated member then raises "Compression requires the (missing) zlib module",
+# and that path has no external-tool dispatch to hook into at all.
+
+--- a/HaikuPorter/Utils.py
++++ b/HaikuPorter/Utils.py
+@@ -98,6 +98,23 @@
+ 
+ 	return string.replace('\\', '\\\\').replace('"', '\\"')
+ 
++# Fallback decompressors for the compressed tar formats that Python's tarfile
++# normally handles on its own, most preferred first. haiku-proxy-decompress is
++# the Haiku-Graviton builder guest's last resort: that image has no gzip, bzip2
++# or xz binary either, so the helper hands the file to haiku-source-proxy on the
++# build host and reads back the plain tar. See graviton/scripts/ in the
++# Haiku-Graviton tree. Retire the whole table once python3.10 is built against
++# zlib/libbz2/liblzma, at which point none of it is ever reached.
++externalDecompressors = {
++	'gz': [['gzip', '-c', '-d'], ['haiku-proxy-decompress', 'gz']],
++	'tgz': [['gzip', '-c', '-d'], ['haiku-proxy-decompress', 'gz']],
++	'bz2': [['bzip2', '-c', '-d'], ['haiku-proxy-decompress', 'bz2']],
++	'tbz': [['bzip2', '-c', '-d'], ['haiku-proxy-decompress', 'bz2']],
++	'tbz2': [['bzip2', '-c', '-d'], ['haiku-proxy-decompress', 'bz2']],
++	'xz': [['xz', '-c', '-d'], ['haiku-proxy-decompress', 'xz']],
++	'txz': [['xz', '-c', '-d'], ['haiku-proxy-decompress', 'xz']],
++}
++
+ def unpackArchive(archiveFile, targetBaseDir, subdir):
+ 	"""Unpack archive into a directory"""
+ 
+@@ -118,6 +135,23 @@
+ 			ensureCommandIsAvailable('zstd')
+ 			process = Popen(['zstd', '-c', '-d', archiveFile],
+ 				bufsize=10240, stdin=PIPE, stdout=PIPE, stderr=PIPE)
++		elif ext in externalDecompressors:
++			# Dead code on a complete Python: tarfile handles compressed tars
++			# itself and is_tarfile() would have answered True above. It fires only
++			# on a Python built without the zlib/_bz2/_lzma extension modules --
++			# the arm64 bootstrap python3.10 is one -- where every compressed
++			# tarball otherwise reached "Unrecognized archive type" below.
++			command = None
++			for candidate in externalDecompressors[ext]:
++				if isCommandAvailable(candidate[0]):
++					command = candidate + [archiveFile]
++					break
++			if command is None:
++				sysExit('unable to unpack ' + archiveFile + ': this python cannot'
++					' decompress .' + ext + ' and none of these are on PATH: '
++					+ ', '.join([c[0] for c in externalDecompressors[ext]]))
++			process = Popen(command, bufsize=10240, stdin=PIPE, stdout=PIPE,
++				stderr=PIPE)
+ 
+ 	if subdir and not subdir.endswith('/'):
+ 		subdir += '/'

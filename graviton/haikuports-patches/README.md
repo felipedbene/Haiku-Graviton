@@ -48,7 +48,25 @@ built before that fix still shows it, so keep pinning until the guest is known g
 |---|---|---|
 | `perl-5.42.2-library-path.patch` | **Real fix.** Makes perl's `LDLIBPTH` additive, because Haiku's `runtime_loader` *replaces* the library search path when `LIBRARY_PATH` is set instead of prepending to it. Without it every `$(MINIPERL)`/`$(RUN_PERL)` dies with loader exit code 3 and the build reports the misleading *"Failed to build miniperl"* — while `miniperl` is a perfectly good binary. | Never (unless the loader is changed to prepend, which is the upstream TODO) |
 | `autoconf-2.72-doc-cut-stage1.patch` | **Stage-1 expedient.** Empties `HTMLS` so `install-html` cannot invoke `makeinfo`, which cannot run in this image at all: `texinfo_bootstrap` ships the `Texinfo/` directory but **zero `.pm` files**. Resulting package has no html docs (info docs survive, they ship prebuilt in the tarball). | A real `texinfo` exists → rebuild with a plain `make install-html`, expect real docs |
+| `haikuporter-unpack-compressed-tar.patch` | **Patches haikuporter, not a recipe.** Adds `gz`/`bz2`/`xz` to `unpackArchive()`'s external-decompressor dispatch, because the guest python has no `zlib`/`_bz2`/`_lzma` and every downloaded `.tar.gz`/`.tar.bz2`/`.tar.xz` therefore died on *"Unrecognized archive type"* right after a **valid** checksum. Applied by `graviton/scripts/haiku-haikuporter-patch`, which also puts a real `patch(1)` on the guest PATH. | `python3.10` is built against zlib/libbz2/liblzma — then `tarfile` handles all three and the added branch is unreachable |
 
 Any port whose build invokes `makeinfo` will fail the same way, so expect to repeat that
 cut. Stage-1 artifacts go to `hpkg-out/arm64/stage1/`, never to a shipping repo — see the
 ledger in `graviton/docs/sequencing.md`.
+
+## Every non-ISP port must be built with `haikuporter -G`
+
+Ports whose sources come from an input source package are unpacked from an hpkg and never
+touch git. Everything that *downloads* a tarball does: `Source.patch()` creates an implicit
+git repo per source dir and aborts with `Error: 'git' is not available, please install it`.
+git is not buildable here yet (curl, openssl3, expat, libiconv …), so pass `-G`
+(`--no-git-repo`), which makes haikuporter use `patch(1)` instead — it requires `patch`
+unconditionally, even for a port with no patches, which is why
+`haiku-haikuporter-patch` installs it. Guest-side pieces to reinstate after a guest swap,
+in order:
+
+```sh
+haiku-source-proxy start                     # on the metal, no init script
+haiku-source-proxy install-shim <sshport>    # wget + haiku-proxy-decompress
+haiku-haikuporter-patch <sshport>            # unpack patch + patch(1)
+```

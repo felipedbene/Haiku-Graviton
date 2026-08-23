@@ -1,0 +1,397 @@
+#!/usr/bin/env python3
+#
+# haiku-haikuporter-patch -- install a patched HaikuPorter into a QEMU Haiku
+# arm64 builder guest so that .tar.gz / .tar.bz2 / .tar.xz sources can be
+# unpacked at all.
+#
+# Run on the c7g.metal builder:
+#   haiku-haikuporter-patch <sshport> [<sshport>...]   install + verify
+#   haiku-haikuporter-patch --check <sshport>...       verify only
+#   haiku-haikuporter-patch --revert <sshport>...      remove the override
+#
+# It also puts a real patch(1) on the guest's PATH, because the two go together:
+# builds in these guests must be driven as `haikuporter -G ...`. Without -G,
+# Source.patch() insists on an implicit git repo per source dir and dies with
+# "Error: 'git' is not available, please install it" -- and git cannot be built
+# here yet (it wants curl, openssl3, expat, libiconv...). With -G, haikuporter
+# applies patchsets with patch(1) instead, but requires it unconditionally, even
+# for a port with no patches at all. patch itself is trivial to build (it is
+# input-source-package backed: cmd:awk, cmd:gcc, cmd:make and nothing else), but
+# it cannot be pkgman-installed into the guest -- every hpkg built here REQUIRES
+# `haiku >= r1~beta6_hrev59996_dirty-1` while the image has the non-dirty
+# hrev59996 -- so the binary is extracted from the hpkg onto PATH instead.
+#
+# Why this exists: HaikuPorter/Utils.py unpackArchive() shells out to an external
+# tool only for .lz, .7z and .zst; every compressed *tar* is handed to Python's
+# tarfile, which needs the zlib/_bz2/_lzma extension modules. The guest's
+# python3.10_bootstrap has none of them, so tarfile.is_tarfile() answers False
+# for every .tar.gz/.tar.bz2/.tar.xz and the build dies with "Unrecognized
+# archive type in file ..." straight after a successful download and a *valid*
+# checksum. That gates every recipe that fetches its own tarball; nothing in the
+# ports tree ships a plain .tar. The patch adds those three formats to the same
+# external-tool dispatch the other three already use. See
+# graviton/haikuports-patches/haikuporter-unpack-compressed-tar.patch.
+#
+# Why an override tree and not an edit in place: /boot/system/lib/haikuporter is
+# packagefs, which is read-only -- `touch` there fails. So the packaged tree is
+# copied to /boot/home/config/non-packaged/lib/haikuporter, patched there, and
+# shadowed by a wrapper at /boot/home/config/non-packaged/bin/haikuporter.
+# That directory is *first* on the guest's PATH (verified: PATH starts with
+# /boot/home/config/non-packaged/bin), which is the same mechanism the wget shim
+# already relies on. Nothing in the image is modified, so `--revert` is a delete.
+#
+# Traps this defends against:
+#
+#  - An override that is silently not used. The build would then fail with the
+#    original error and the patch would look like it never applied. So the
+#    verification is not "the file exists": it runs the wrapper and makes it
+#    print the __file__ of the Utils module it actually imported, and refuses to
+#    report success unless that is the patched copy.
+#  - A drifting anchor. The insertion is an anchored string replacement that
+#    requires its anchor to appear exactly once; a haikuporter update that moves
+#    the .zst branch makes this fail loudly instead of installing a no-op.
+#  - Re-running on an already-patched guest. The copy is made fresh from
+#    packagefs every time, so the patch is never applied twice.
+#  - Anything living only inside a guest is lost when the guest is swapped, which
+#    is why this is a committed script rather than an edit typed into a guest.
+
+import glob
+import subprocess
+import sys
+
+PACKAGED_TREE = '/boot/system/lib/haikuporter'
+OVERRIDE_TREE = '/boot/home/config/non-packaged/lib/haikuporter'
+WRAPPER = '/boot/home/config/non-packaged/bin/haikuporter'
+GUEST_BIN = '/boot/home/config/non-packaged/bin'
+
+# Where the metal keeps the hpkgs built so far; patch is harvested from here.
+HPKG_OUT = '/opt/haiku/hpkg-out/arm64'
+GUEST_PACKAGES = '/boot/home/haikuports/packages'
+
+SSH_KEY = '/home/ubuntu/.ssh/haiku-ed25519'
+SSH_OPTS = [
+	'-o', 'StrictHostKeyChecking=no',
+	'-o', 'UserKnownHostsFile=/dev/null',
+	'-o', 'ConnectTimeout=20',
+	'-o', 'LogLevel=ERROR',
+]
+
+# The anchor: the last branch of unpackArchive()'s existing external-tool
+# dispatch. Tabs, because Utils.py is tab-indented.
+ANCHOR = """\
+\t\telif ext == 'zst':
+\t\t\tensureCommandIsAvailable('zstd')
+\t\t\tprocess = Popen(['zstd', '-c', '-d', archiveFile],
+\t\t\t\tbufsize=10240, stdin=PIPE, stdout=PIPE, stderr=PIPE)
+"""
+
+# What replaces it: the anchor plus one more branch.
+NEW_BRANCH = ANCHOR + """\
+\t\telif ext in externalDecompressors:
+\t\t\t# Dead code on a complete Python: tarfile handles compressed tars
+\t\t\t# itself and is_tarfile() would have answered True above. It fires only
+\t\t\t# on a Python built without the zlib/_bz2/_lzma extension modules --
+\t\t\t# the arm64 bootstrap python3.10 is one -- where every compressed
+\t\t\t# tarball otherwise reached "Unrecognized archive type" below.
+\t\t\tcommand = None
+\t\t\tfor candidate in externalDecompressors[ext]:
+\t\t\t\tif isCommandAvailable(candidate[0]):
+\t\t\t\t\tcommand = candidate + [archiveFile]
+\t\t\t\t\tbreak
+\t\t\tif command is None:
+\t\t\t\tsysExit('unable to unpack ' + archiveFile + ': this python cannot'
+\t\t\t\t\t' decompress .' + ext + ' and none of these are on PATH: '
+\t\t\t\t\t+ ', '.join([c[0] for c in externalDecompressors[ext]]))
+\t\t\tprocess = Popen(command, bufsize=10240, stdin=PIPE, stdout=PIPE,
+\t\t\t\tstderr=PIPE)
+"""
+
+# The table, inserted immediately before unpackArchive().
+TABLE_ANCHOR = 'def unpackArchive(archiveFile, targetBaseDir, subdir):\n'
+TABLE = """\
+# Fallback decompressors for the compressed tar formats that Python's tarfile
+# normally handles on its own, most preferred first. haiku-proxy-decompress is
+# the Haiku-Graviton builder guest's last resort: that image has no gzip, bzip2
+# or xz binary either, so the helper hands the file to haiku-source-proxy on the
+# build host and reads back the plain tar. See graviton/scripts/ in the
+# Haiku-Graviton tree. Retire the whole table once python3.10 is built against
+# zlib/libbz2/liblzma, at which point none of it is ever reached.
+externalDecompressors = {
+\t'gz': [['gzip', '-c', '-d'], ['haiku-proxy-decompress', 'gz']],
+\t'tgz': [['gzip', '-c', '-d'], ['haiku-proxy-decompress', 'gz']],
+\t'bz2': [['bzip2', '-c', '-d'], ['haiku-proxy-decompress', 'bz2']],
+\t'tbz': [['bzip2', '-c', '-d'], ['haiku-proxy-decompress', 'bz2']],
+\t'tbz2': [['bzip2', '-c', '-d'], ['haiku-proxy-decompress', 'bz2']],
+\t'xz': [['xz', '-c', '-d'], ['haiku-proxy-decompress', 'xz']],
+\t'txz': [['xz', '-c', '-d'], ['haiku-proxy-decompress', 'xz']],
+}
+
+""" + TABLE_ANCHOR
+
+WRAPPER_BODY = """\
+#!/bin/sh
+# Generated by graviton/scripts/haiku-haikuporter-patch -- do not edit here.
+# Shadows the packaged /boot/system/bin/haikuporter so that unpackArchive() can
+# unpack compressed tarballs in a guest whose python has no compression modules.
+exec python3 %s/haikuporter.py "$@"
+""" % OVERRIDE_TREE
+
+# Runs inside the guest. Substitutions are repr()d by the caller, so no amount of
+# quoting or tabs in the payload can break the program text.
+GUEST_INSTALL = '''
+import os, shutil, sys
+
+packaged = %(packaged)r
+override = %(override)r
+wrapper = %(wrapper)r
+anchor = %(anchor)r
+newBranch = %(newBranch)r
+tableAnchor = %(tableAnchor)r
+table = %(table)r
+wrapperBody = %(wrapperBody)r
+
+def die(message):
+	print('PATCH_FAILED: ' + message)
+	sys.exit(1)
+
+if not os.path.isdir(packaged):
+	die('no packaged haikuporter at ' + packaged)
+
+# Always re-copy from packagefs, so the patch can never be applied twice.
+if os.path.isdir(override):
+	shutil.rmtree(override)
+os.makedirs(os.path.dirname(override), exist_ok=True)
+shutil.copytree(packaged, override, symlinks=True)
+
+utils = os.path.join(override, 'HaikuPorter', 'Utils.py')
+with open(utils, 'r') as handle:
+	text = handle.read()
+
+for name, needle in (('the .zst branch', anchor), ('unpackArchive()', tableAnchor)):
+	count = text.count(needle)
+	if count != 1:
+		die('anchor %%s appears %%d times in Utils.py, expected once -- '
+			'haikuporter has changed, re-check the patch' %% (name, count))
+
+text = text.replace(anchor, newBranch)
+text = text.replace(tableAnchor, table)
+with open(utils, 'w') as handle:
+	handle.write(text)
+
+# A syntax error here would surface as a confusing traceback mid-build.
+import py_compile
+try:
+	py_compile.compile(utils, cfile='/tmp/.hp-utils-check.pyc', doraise=True)
+except Exception as exc:
+	die('patched Utils.py does not compile: %%s: %%s' %% (type(exc).__name__, exc))
+
+os.makedirs(os.path.dirname(wrapper), exist_ok=True)
+with open(wrapper, 'w') as handle:
+	handle.write(wrapperBody)
+os.chmod(wrapper, 0o755)
+print('PATCH_APPLIED')
+'''
+
+# Also runs inside the guest. Proves the override is the tree haikuporter really
+# imports -- not merely that the files are on disk.
+GUEST_VERIFY = '''
+import os, subprocess, sys
+
+override = %(override)r
+wrapper = %(wrapper)r
+
+resolved = None
+for directory in os.environ.get('PATH', '').split(':'):
+	candidate = os.path.join(directory, 'haikuporter')
+	if os.path.exists(candidate):
+		resolved = candidate
+		break
+print('PATH_RESOLVES_TO: %%s' %% resolved)
+
+probe = subprocess.run(['python3', '-c',
+	'import sys; sys.path.insert(0, %%r); from HaikuPorter import Utils; '
+	'print("UTILS_FILE: " + Utils.__file__); '
+	'print("FORMATS: " + ",".join(sorted(Utils.externalDecompressors)))'
+	%% override], capture_output=True, text=True)
+sys.stdout.write(probe.stdout)
+sys.stdout.write(probe.stderr)
+
+for name in ('zlib', '_bz2', '_lzma'):
+	try:
+		__import__(name)
+		print('PYMODULE %%s: ok' %% name)
+	except Exception as exc:
+		print('PYMODULE %%s: MISSING (%%s)' %% (name, exc))
+
+for tool in ('gzip', 'bzip2', 'xz', 'tar', 'git', 'patch',
+		'haiku-proxy-decompress'):
+	found = 'no'
+	for directory in os.environ.get('PATH', '').split(':'):
+		if os.path.exists(os.path.join(directory, tool)):
+			found = os.path.join(directory, tool)
+			break
+	print('TOOL %%s: %%s' %% (tool, found))
+
+if resolved != wrapper:
+	print('VERIFY_FAILED: PATH resolves haikuporter to %%s, not the override %%s'
+		%% (resolved, wrapper))
+	sys.exit(1)
+if 'UTILS_FILE: ' + os.path.join(override, 'HaikuPorter', 'Utils.py') \\
+		not in probe.stdout:
+	print('VERIFY_FAILED: the imported Utils is not the patched one')
+	sys.exit(1)
+print('VERIFY_OK')
+'''
+
+
+def guestProgram(template):
+	return template % {
+		'packaged': PACKAGED_TREE,
+		'override': OVERRIDE_TREE,
+		'wrapper': WRAPPER,
+		'anchor': ANCHOR,
+		'newBranch': NEW_BRANCH,
+		'tableAnchor': TABLE_ANCHOR,
+		'table': TABLE,
+		'wrapperBody': WRAPPER_BODY,
+	}
+
+
+GUEST_EXTRACT_PATCH = '''
+import os, subprocess, sys
+
+hpkg = %r
+guestBin = %r
+
+if not os.path.exists(hpkg):
+	print('PATCH_TOOL_FAILED: %%s did not arrive' %% hpkg)
+	sys.exit(1)
+
+scratch = '/tmp/.hp-patch-extract'
+subprocess.run(['rm', '-rf', scratch], check=False)
+os.makedirs(scratch)
+# `package extract` is in the image; there is no tar or unzip to do this with.
+extract = subprocess.run(['package', 'extract', hpkg, 'bin/patch'],
+	cwd=scratch, capture_output=True, text=True)
+binary = os.path.join(scratch, 'bin', 'patch')
+if extract.returncode != 0 or not os.path.exists(binary):
+	print('PATCH_TOOL_FAILED: package extract said %%r %%r'
+		%% (extract.stdout.strip(), extract.stderr.strip()))
+	sys.exit(1)
+
+os.makedirs(guestBin, exist_ok=True)
+target = os.path.join(guestBin, 'patch')
+with open(binary, 'rb') as source, open(target + '.new', 'wb') as out:
+	out.write(source.read())
+os.chmod(target + '.new', 0o755)
+os.replace(target + '.new', target)
+
+# Exists is not enough -- it has to run, and a binary whose libraries are
+# missing exits 3 out of the runtime loader without printing anything useful.
+proof = subprocess.run([target, '--version'], capture_output=True, text=True)
+if proof.returncode != 0:
+	print('PATCH_TOOL_FAILED: %%s --version exited %%d %%r'
+		%% (target, proof.returncode, proof.stderr.strip()))
+	sys.exit(1)
+print('PATCH_TOOL_OK: ' + proof.stdout.splitlines()[0])
+'''
+
+
+def onPathInGuest(port, command):
+	"""Whether command resolves on the guest's PATH -- the same os.path.exists
+	walk haikuporter's own isCommandAvailable() does."""
+	result = runInGuest(port,
+		'import os\n'
+		'print(any(os.path.exists(os.path.join(d, %r))\n'
+		'\tfor d in os.environ.get("PATH", "").split(":")))\n' % command)
+	return 'True' in result.stdout
+
+
+def ensureHostPatch(port):
+	"""Put a working patch(1) on the guest's PATH. Returns True on success."""
+	if onPathInGuest(port, 'patch'):
+		print('  patch(1): already on PATH')
+		return True
+
+	candidates = sorted(glob.glob('%s/patch-*-arm64.hpkg' % HPKG_OUT))
+	candidates = [c for c in candidates if '_debuginfo' not in c
+		and '_source' not in c]
+	if not candidates:
+		print('  patch(1): MISSING and no patch-*.hpkg in %s -- build it first '
+			'(`haikuporter -y patch`; it needs no download)' % HPKG_OUT)
+		return False
+	hpkg = candidates[-1]
+
+	copy = subprocess.run(['scp', '-P', str(port), '-i', SSH_KEY] + SSH_OPTS
+		+ [hpkg, 'baron@127.0.0.1:%s/' % GUEST_PACKAGES],
+		capture_output=True, text=True)
+	if copy.returncode != 0:
+		print('  patch(1): scp failed: %s' % copy.stderr.strip())
+		return False
+
+	guestHpkg = '%s/%s' % (GUEST_PACKAGES, hpkg.rsplit('/', 1)[-1])
+	result = runInGuest(port, GUEST_EXTRACT_PATCH % (guestHpkg, GUEST_BIN))
+	show(result)
+	return 'PATCH_TOOL_OK' in result.stdout
+
+
+def runInGuest(port, program):
+	"""Feed a python program to the guest on stdin.
+
+	No -n here: with a program on stdin, -n would hand ssh /dev/null and the
+	guest would run an empty program and report success.
+	"""
+	command = ['ssh', '-p', str(port), '-i', SSH_KEY] + SSH_OPTS \
+		+ ['baron@127.0.0.1', 'python3 -']
+	return subprocess.run(command, input=program, capture_output=True, text=True)
+
+
+def show(result):
+	text = (result.stdout + result.stderr).strip()
+	print('  ' + (text or '(no output)').replace('\n', '\n  '))
+
+
+def main(argv):
+	mode = 'install'
+	if argv and argv[0] in ('--check', '--revert'):
+		mode = argv[0][2:]
+		argv = argv[1:]
+	if not argv or argv[0].startswith('-'):
+		print(__doc__ or '', file=sys.stderr)
+		sys.exit('usage: haiku-haikuporter-patch [--check|--revert] <sshport>...')
+
+	failures = 0
+	for port in argv:
+		print('--- guest on ssh port %s ---' % port)
+		if mode == 'revert':
+			result = runInGuest(port, 'import shutil, os\n'
+				'shutil.rmtree(%r, ignore_errors=True)\n'
+				'try:\n\tos.unlink(%r)\nexcept OSError:\n\tpass\n'
+				'print("REVERTED")\n' % (OVERRIDE_TREE, WRAPPER))
+			show(result)
+			if 'REVERTED' not in result.stdout:
+				failures += 1
+			continue
+
+		if mode == 'install':
+			result = runInGuest(port, guestProgram(GUEST_INSTALL))
+			show(result)
+			if 'PATCH_APPLIED' not in result.stdout:
+				failures += 1
+				continue
+			if not ensureHostPatch(port):
+				failures += 1
+				continue
+
+		result = runInGuest(port, guestProgram(GUEST_VERIFY))
+		show(result)
+		if 'VERIFY_OK' not in result.stdout:
+			print('  FAILED')
+			failures += 1
+		else:
+			print('  OK -- drive builds as `haikuporter -G <port>`')
+	return 1 if failures else 0
+
+
+if __name__ == '__main__':
+	sys.exit(main(sys.argv[1:]))
