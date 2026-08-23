@@ -47,6 +47,23 @@
  * Transmit runs are timed until the peer acknowledges the last byte, not until
  * the last write returns. Without that the socket buffer alone would report an
  * impressive and entirely fictitious rate on short runs.
+ *
+ * -A shifts the data buffer off its natural alignment, which sounds like a knob
+ * nobody needs and is in fact the only way to measure one specific thing from
+ * userland. arm64 uses string/arch/generic/generic_memcpy.c, which copies one
+ * byte at a time unless source and destination are misaligned by the same
+ * amount; a received TCP payload starts 54 bytes into the frame, so the copy out
+ * to this buffer is mismatched and takes the byte loop. Sweeping -A moves the
+ * destination through all eight phases, so if the penalty is real one offset
+ * must be measurably cheaper than the other seven.
+ *
+ * It only works at an MTU whose MSS is a multiple of 8. At MTU 9001 the MSS is
+ * 8961, so the destination's phase advances by one byte per segment and drifts
+ * through every value regardless of where the buffer starts -- which is why the
+ * penalty cannot be dodged by aligning anything and has to be fixed in memcpy.
+ * At MTU 9000 the MSS is 8960 and the phase is constant, so the sweep has
+ * something to find. Running both is the experiment: a dip at 9000 next to a
+ * flat line at 9001 is the alignment penalty and cannot be anything else.
  */
 
 
@@ -362,6 +379,10 @@ usage(int status)
 		"  -p <port>     peer port (default %d)\n"
 		"  -n <bytes>    bytes to transfer, K/M/G suffixes ok (default 512M)\n"
 		"  -b <bytes>    read/write chunk size (default 64K)\n"
+		"  -A <offset>   shift the data buffer this many bytes past its\n"
+		"                natural alignment (0..63, default 0). Only useful for\n"
+		"                probing whether a copy in the kernel is paying an\n"
+		"                alignment penalty -- see the note in the source.\n"
 		"  -w <bytes>    SO_SNDBUF/SO_RCVBUF, set before connect (default: leave\n"
 		"                the system default alone)\n"
 		"  -r            receive instead of transmit\n"
@@ -381,10 +402,11 @@ main(int argc, char** argv)
 	off_t bytes = DEFAULT_BYTES;
 	off_t bufferSize = DEFAULT_BUFFER;
 	int windowSize = 0;
+	int bufferAlignment = 0;
 	char mode = MODE_TRANSMIT;
 
 	int option;
-	while ((option = getopt(argc, argv, "c:p:n:b:w:rL:h")) != -1) {
+	while ((option = getopt(argc, argv, "c:p:n:b:w:A:rL:h")) != -1) {
 		switch (option) {
 			case 'c':
 				host = optarg;
@@ -393,6 +415,14 @@ main(int argc, char** argv)
 				port = atoi(optarg);
 				if (port <= 0 || port > 65535) {
 					fprintf(stderr, "nettput: bad port \"%s\"\n", optarg);
+					return 1;
+				}
+				break;
+			case 'A':
+				bufferAlignment = atoi(optarg);
+				if (bufferAlignment < 0 || bufferAlignment > 63) {
+					fprintf(stderr, "nettput: buffer offset must be 0..63,"
+						" not \"%s\"\n", optarg);
 					return 1;
 				}
 				break;
@@ -439,12 +469,15 @@ main(int argc, char** argv)
 	// a signal that kills the run before it can report anything.
 	signal(SIGPIPE, SIG_IGN);
 
-	uint8* buffer = (uint8*)malloc(bufferSize);
-	if (buffer == NULL) {
+	// The extra 64 bytes give -A somewhere to shift the buffer into without
+	// running off the end of the allocation.
+	uint8* allocation = (uint8*)malloc(bufferSize + 64);
+	if (allocation == NULL) {
 		fprintf(stderr, "nettput: cannot allocate a %" B_PRIdOFF " byte buffer\n",
 			bufferSize);
 		return 1;
 	}
+	uint8* buffer = allocation + bufferAlignment;
 
 	// Non-constant payload, so nothing along the path can shortcut a run of
 	// zeroes, and a mis-delivered buffer is at least in principle detectable.
@@ -453,7 +486,7 @@ main(int argc, char** argv)
 
 	int socketFD = connect_to_peer(host, port, windowSize);
 	if (socketFD < 0) {
-		free(buffer);
+		free(allocation);
 		return 1;
 	}
 
@@ -468,7 +501,7 @@ main(int argc, char** argv)
 		fprintf(stderr, "nettput: cannot send the request header: %s\n",
 			strerror(errno));
 		close(socketFD);
-		free(buffer);
+		free(allocation);
 		return 1;
 	}
 
@@ -534,7 +567,7 @@ main(int argc, char** argv)
 
 	take_cpu_snapshot(after);
 	close(socketFD);
-	free(buffer);
+	free(allocation);
 
 	if (failed)
 		return 1;
