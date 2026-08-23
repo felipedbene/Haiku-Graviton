@@ -1,0 +1,83 @@
+REAL FIX (class-wide): skip gnulib's re_compile_pattern *run* test, which hangs
+forever on arm64 Haiku.
+
+Symptom: `haikuporter -y tar` never finishes. The build log stops dead at
+
+    checking for working re_compile_pattern...
+
+and stays there. Nothing fails, nothing times out, there is no error to grep
+for -- the build simply sits. `ps` in the guest shows why:
+
+    /bin/sh ./configure --prefix=/packages/tar-1.35-2/.self --sysco   64352
+    /bin/sh ./configure --prefix=/packages/tar-1.35-2/.self --sysco   69516
+    ./conftest                                                       69517
+
+`./conftest` is wedged, and two log-line samples 30 s apart both read 542 lines.
+
+That check is gnulib's `AC_RUN_IFELSE` for the regex module: it *compiles and
+runs* a program against the system's `re_compile_pattern`. Something in Haiku's
+arm64 regex implementation does not return, so configure blocks on a child that
+never exits.
+
+## Why nothing hit this until now
+
+Every gnulib-heavy tool already in the image -- grep, sed, findutils, gawk,
+coreutils -- was **cross**-compiled on the metal as a `_bootstrap` package. Read
+the configure source (tar-1.35/configure:40985):
+
+    *)      gl_cv_func_re_compile_pattern_working="$gl_cross_guess_normal" ;;
+
+so when cross compiling autoconf cannot run the test and substitutes a guess. The
+test only actually executes on a **native** build. This is therefore not a tar
+bug: it will hang every native gnulib-based port, and it is the first thing to
+suspect whenever a native build goes quiet rather than failing.
+
+## The fix
+
+`--with-included-regex` is a documented gnulib configure option that
+short-circuits the whole thing. From the same configure
+(tar-1.35/configure:40963):
+
+      case $with_included_regex in #(
+      yes|no) ac_use_included_regex=$with_included_regex
+    ...
+      *)
+        # ... following run test ...
+        { printf "%s\n" "... checking for working re_compile_pattern" >&5
+
+The `checking for working re_compile_pattern` block lives only in the `*)`
+default branch, so passing an explicit yes/no never reaches it. No cache-variable
+seeding, no timeout wrapper, no patched conftest.
+
+`--with-included-regex` (yes) rather than `--without-included-regex` is the
+conservative choice: gnulib then builds its own regex.c instead of trusting the
+system one. Since the probe *hangs* we have no evidence that Haiku's
+`re_compile_pattern` is correct, and asserting "no" would be claiming a result
+the test never produced.
+
+Follow-up worth filing separately: the hang itself is a genuine arm64 Haiku
+defect in libroot's regex, not just a build-system annoyance. This patch routes
+around it; it does not fix it.
+
+Applies to: input-source-packages/develop/sources/tar-1.35-2/tar-1.35.recipe
+Note the comment goes *above* runConfigure, not among its arguments: the argument
+list is one backslash-continued command, so a `#` line inside it would terminate
+the command and drop everything after it.
+
+--- a/tar-1.35.recipe
++++ b/tar-1.35.recipe
+@@ -/+ BUILD()
++	# --with-included-regex: gnulib's "checking for working re_compile_pattern"
++	# is an AC_RUN_IFELSE whose conftest never returns on arm64 Haiku, so
++	# configure hangs with no error at all. Passing an explicit yes/no skips
++	# that run test entirely (configure:40963). yes is chosen because the probe
++	# never produced a result, so claiming the system regex works would be
++	# unfounded. Cross-built _bootstrap packages never hit this: cross
++	# compiling substitutes $gl_cross_guess_normal instead of running the test.
+ 	runConfigure --omit-dirs binDir ./configure --bindir=$commandBinDir \
+ 		--disable-nls \
+ 		--disable-gcc-warnings \
++		--with-included-regex \
+ 		LDFLAGS="-lnetwork" CFLAGS="-D_BSD_SOURCE" \
+ 		FORCE_UNSAFE_CONFIGURE=1 \
+ 		$yearArg
