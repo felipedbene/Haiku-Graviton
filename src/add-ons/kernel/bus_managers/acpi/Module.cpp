@@ -187,7 +187,19 @@ acpi_module_register_child_devices(void* cookie)
 	if (status != B_OK)
 		return status;
 
-	if ((AcpiGbl_FADT.Flags & ACPI_FADT_POWER_BUTTON) == 0) {
+	// The fixed-feature power and sleep buttons live in the PM1 event block. On
+	// hardware-reduced platforms (HW_REDUCED_ACPI, i.e. every ARM server) that
+	// block does not exist -- PM1a_EVT_BLK is 0 -- so there is nothing for
+	// AcpiInstallFixedEventHandler() to hook and a fixed button cannot fire.
+	// Register the pseudo-HID nodes only where the registers are really there,
+	// otherwise acpi_button attaches to a device that can never report anything
+	// and publishes /dev/power/button/power_fixed, which power_daemon then sits
+	// on forever while the real, control-method button goes unwatched.
+	const bool hasFixedFeatureRegisters
+		= (AcpiGbl_FADT.Flags & ACPI_FADT_HW_REDUCED) == 0;
+
+	if (hasFixedFeatureRegisters
+			&& (AcpiGbl_FADT.Flags & ACPI_FADT_POWER_BUTTON) == 0) {
 		dprintf("registering power button\n");
 		device_attr attrs[] = {
 			// info about device
@@ -205,7 +217,8 @@ acpi_module_register_child_devices(void* cookie)
 		gDeviceManager->register_node(node, ACPI_DEVICE_MODULE_NAME, attrs,
 				NULL, &deviceNode);
 	}
-	if ((AcpiGbl_FADT.Flags & ACPI_FADT_SLEEP_BUTTON) == 0) {
+	if (hasFixedFeatureRegisters
+			&& (AcpiGbl_FADT.Flags & ACPI_FADT_SLEEP_BUTTON) == 0) {
 		dprintf("registering sleep button\n");
 		device_attr attrs[] = {
 			// info about device
