@@ -6,6 +6,7 @@
 
 #include <KernelExport.h>
 
+#include <arch/arm64/arch_pmu.h>
 #include <arch/cpu.h>
 #include <boot/kernel_args.h>
 #include <commpage.h>
@@ -89,6 +90,12 @@ arch_cpu_init_percpu(kernel_args *args, int curr_cpu)
 
 	gCPU[curr_cpu].arch.mpidr = READ_SPECIALREG(MPIDR_EL1);
 
+	// Every CPU has to program its own performance monitors; this is the only
+	// hook that runs on all of them. It is a no-op unless the facility was
+	// asked for, because reaching the PMU registers is not safe everywhere
+	// this image boots (see arch_pmu.cpp).
+	arm64_pmu_init_percpu(args, curr_cpu);
+
 	return 0;
 }
 
@@ -108,6 +115,11 @@ arch_cpu_init(kernel_args *args)
 		cpu->topology_id[CPU_TOPOLOGY_CORE] = i;
 		cpu->topology_id[CPU_TOPOLOGY_SMT] = 0;
 	}
+
+	// Detection only, and deliberately before arch_cpu_init_percpu() runs: it
+	// decides whether any CPU programs its counters at all.
+	arm64_pmu_init(args);
+
 	return B_OK;
 }
 
@@ -122,6 +134,9 @@ arch_cpu_init_post_vm(kernel_args *args)
 status_t
 arch_cpu_init_post_modules(kernel_args *args)
 {
+	// Late enough that add_debugger_command_etc() can allocate.
+	arm64_pmu_init_post_modules(args);
+
 	return B_OK;
 }
 

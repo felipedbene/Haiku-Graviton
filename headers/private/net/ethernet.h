@@ -15,6 +15,18 @@
 
 #define ETHER_MIN_FRAME_SIZE	64
 #define ETHER_MAX_FRAME_SIZE	1514
+	// Standard ethernet: a 1500 byte payload plus ETHER_HEADER_LENGTH. This
+	// keeps its historical value on purpose -- some callers use it to size
+	// queues or as the default MTU of a device that negotiates nothing, and
+	// those must not grow just because jumbo frames became possible.
+
+// Ceiling on what a device may negotiate when it advertises more than
+// standard ethernet via ETHER_GETFRAMESIZE. 9001 is the jumbo MTU offered by
+// AWS ENA and is the largest we are prepared to allocate for on receive; a
+// fixed ceiling keeps a misreporting driver from making the stack allocate
+// unbounded amounts per packet.
+#define ETHER_MAX_JUMBO_MTU			9001
+#define ETHER_MAX_JUMBO_FRAME_SIZE	(ETHER_MAX_JUMBO_MTU + ETHER_HEADER_LENGTH)
 
 struct ether_header {
 	uint8	destination[ETHER_ADDRESS_LENGTH];

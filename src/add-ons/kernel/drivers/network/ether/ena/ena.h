@@ -82,12 +82,59 @@ extern "C" {
 #define ENA_DEFAULT_TX_RING_SIZE	512
 #define ENA_DEFAULT_RX_RING_SIZE	1024
 
-/* v1 receives each frame into one descriptor, so the buffer has to hold a
-   whole frame. EC2 links allow a 9001 byte MTU, but jumbo frames need
-   multi-descriptor receive; we ask the device for 1500 to match these buffers
-   and leave jumbo for later. */
-#define ENA_FRAME_SIZE		1500
+/* Packet buffers stay at 2048 bytes whatever the MTU: a frame larger than one
+   buffer arrives as a *chain* of descriptors and is reassembled in
+   ena_receive() (and split across a chain of slots in ena_send()). The
+   reference driver does the same -- its default receive buffer is one page and
+   a 9001 byte frame arrives in three descriptors (ena.c:424, ena_sysctl.h:81).
+
+   Sizing the buffers to hold a whole jumbo frame instead is the obvious
+   alternative and is deliberately rejected: it would want
+   rxRingSize * 9216 bytes of *physically contiguous* memory, and that
+   allocation has to succeed again on every device reset. A reset that fails
+   because memory has fragmented leaves the instance with no network at all,
+   which is strictly worse than the wedged NIC the watchdog was trying to
+   fix. */
 #define ENA_PACKET_BUFFER_SIZE	2048
+
+/* MTU floor and fallback. ENA_DEFAULT_MTU is only what we use if the device
+   reports a max_mtu that small; the MTU actually requested is derived from the
+   device's advertised limit, capped by ETHER_MAX_JUMBO_MTU (what the ethernet
+   device layer is prepared to allocate for, see ethernet.cpp) and by how much a
+   descriptor chain can carry. ENA_MIN_MTU matches the reference (ena.h:148). */
+#define ENA_DEFAULT_MTU		1500
+#define ENA_MIN_MTU		128
+
+/* Upper bound on the descriptors a single frame may span in either direction,
+   and therefore the size of the per-packet ena_com_buf/ena_com_rx_buf_info
+   arrays built on the stack. The reference driver's equivalent is
+   ENA_PKT_MAX_BUFS (ena.h:117) = 19; ours only has to cover
+   ceil(ETHER_MAX_JUMBO_FRAME_SIZE / ENA_PACKET_BUFFER_SIZE) = 5, and the
+   device's own per-packet descriptor limit is applied on top of this at
+   bring-up. The slack above 5 is there because the *device* decides how finely
+   to split a received frame, and it is only obliged to respect the buffer
+   lengths we posted -- not to use as few descriptors as possible. */
+#define ENA_MAX_PACKET_DESCRIPTORS	8
+
+/* How many completed packets' worth of descriptors are accumulated before
+   ena_com_comp_ack() is called, mirroring the reference's ENA_TX_COMMIT
+   (ena.h:131). Note that ena_com_comp_ack() is a plain `next_to_comp += n`
+   with no register write, so this saves work rather than bus traffic. */
+#define ENA_TX_COMMIT		32
+
+/* Receive refill threshold: descriptors are handed back to the device in
+   batches rather than one per frame, because each batch costs exactly one
+   submission-queue doorbell write and that write is the expensive part. The
+   reference uses min(ring_size / 8, 256) with a strict `>` test
+   (ena_datapath.c:694-701, ENA_RX_REFILL_THRESH_DIVIDER / _PACKET).
+
+   Holding descriptors back cannot starve the ring: at most
+   rxRefillThreshold - 1 + ENA_MAX_PACKET_DESCRIPTORS of them are unposted at
+   any moment, so with a 1024 entry ring the device always owns at least ~880.
+   That also means an idle interface can sit with a partial batch unposted
+   indefinitely, which is harmless for the same reason. */
+#define ENA_RX_REFILL_DIVISOR		8
+#define ENA_RX_REFILL_MAX_THRESHOLD	256
 
 /* Non-adaptive interrupt moderation intervals, in microseconds, handed to the
    device in the interrupt-unmask register every time a vector is re-armed. The
@@ -180,8 +227,22 @@ struct ena_tx_buffer {
 	ena_packet_buffer slot;
 	net_buffer*	buffer;
 	/* How many submission-queue entries this packet occupied, so the right
-	   number can be acknowledged on completion. */
+	   number can be acknowledged on completion. This is what
+	   ena_com_prepare_tx() reported, so it includes a meta descriptor if one
+	   was emitted. */
 	uint16		descriptors;
+
+	/* A frame longer than one bounce slot is copied into a chain of them. The
+	   slots are drawn from the same txFreeIds stack as request ids -- a slot
+	   and a request id are the same resource, since txBuffers is indexed by
+	   request id -- so a five-slot frame consumes five ids and gives all five
+	   back on completion. Only segmentIds[0] is told to the device as the
+	   request id, and only txBuffers[segmentIds[0]].buffer is non-NULL, so the
+	   other entries are invisible to the reclaim and teardown paths.
+
+	   segments is 0 exactly when this entry is not in use. */
+	uint16		segments;
+	uint16		segmentIds[ENA_MAX_PACKET_DESCRIPTORS];
 };
 
 
@@ -243,6 +304,13 @@ struct ena_haiku_device {
 	ena_packet_buffer*		rxBuffers;
 	area_id				rxBufferArea;
 	uint16				rxNextToFill;
+	/* Descriptors that have been drained but not yet handed back to the
+	   device. Flushed by ena_return_receive_descriptors() once it reaches
+	   rxRefillThreshold, so that one doorbell write covers a whole batch.
+	   Reset wherever rxNextToFill is, because the two describe the same ring
+	   and a stale count would post descriptors the device already owns. */
+	uint16				rxPendingRefill;
+	uint16				rxRefillThreshold;
 	mutex				rxLock;
 	/* Guards the per-device datapath setup in ena_open()/ena_close(), which must
 	   happen once however many times the node is opened. */
@@ -297,8 +365,22 @@ struct ena_haiku_device {
 #endif
 
 	uint8				macAddress[ETHER_ADDRESS_LENGTH];
+	/* frameSize is the L3 MTU: what SET_FEATURE(MTU) was given and what the
+	   stack derives its own MTU from. maxFrameSize is the same thing plus the
+	   ethernet header, i.e. the largest buffer->size ena_send() will accept and
+	   what ETHER_GETFRAMESIZE reports. */
 	uint32				frameSize;
+	uint32				maxFrameSize;
 	uint32				maxSupportedMtu;
+
+	/* How many descriptors one frame may span, per direction. Derived at
+	   bring-up from the device's advertised per-packet limits and clamped to
+	   ENA_MAX_PACKET_DESCRIPTORS; frameSize is then capped so that a maximum
+	   frame always fits in this many ENA_PACKET_BUFFER_SIZE buffers. The
+	   transmit figure already excludes the slot ena_com_prepare_tx() may need
+	   for a meta descriptor. */
+	uint16				rxMaxDescriptors;
+	uint16				txMaxDescriptors;
 	bool				linkUp;
 	bool				nonBlocking;
 	bool				promiscuous;

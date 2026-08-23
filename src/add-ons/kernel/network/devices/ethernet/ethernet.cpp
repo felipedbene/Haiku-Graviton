@@ -199,13 +199,27 @@ ethernet_up(net_device *_device)
 		device->frame_size = ETHER_MAX_FRAME_SIZE;
 	}
 
-#if 1
-	// The network stack does not handle path MTU discovery correctly at present,
-	// so don't report frame sizes larger than the standard ethernet maximum.
-	// (We will still handle receiving frames larger than this.)
-	if (device->frame_size > ETHER_MAX_FRAME_SIZE)
+	// A driver may advertise more than standard ethernet, but we can only use
+	// it if it does net_buffer I/O: the read()/write() fallback paths below
+	// need the whole frame in one *contiguous* net_buffer chunk, and a chunk
+	// is only BUFFER_SIZE (2048) bytes, so append_size() would hand back a
+	// chained buffer and receiving would fail outright. This is not
+	// hypothetical -- the FreeBSD compat layer probes SIOCSIFMTU with
+	// ETHERMTU_JUMBO for every driver it hosts, so plenty of devices report a
+	// jumbo frame size without being able to deliver one that way.
+	if (device->frame_size > ETHER_MAX_FRAME_SIZE
+		&& !device->supports_net_buffer) {
 		device->frame_size = ETHER_MAX_FRAME_SIZE;
-#endif
+	}
+
+	// Cap whatever is left at the jumbo ceiling we are willing to allocate for.
+	if (device->frame_size > ETHER_MAX_JUMBO_FRAME_SIZE)
+		device->frame_size = ETHER_MAX_JUMBO_FRAME_SIZE;
+
+	// A frame size that cannot even hold a header would underflow the MTU
+	// computation below.
+	if (device->frame_size <= ETHER_HEADER_LENGTH)
+		device->frame_size = ETHER_MAX_FRAME_SIZE;
 
 	if (update_link_state(device, false) == B_OK) {
 		// device supports retrieval of the link state
@@ -381,7 +395,17 @@ ethernet_set_mtu(net_device *_device, size_t mtu)
 {
 	ethernet_device *device = (ethernet_device *)_device;
 
-	if (mtu > device->frame_size - ETHER_HEADER_LENGTH
+	// The upper bound is what this particular device negotiated in
+	// ethernet_up(), not a compile-time constant, so a jumbo-capable device
+	// can be taken up to its full MTU while everything else stays at 1500.
+	// frame_size is still zero if the device was never brought up, in which
+	// case the subtraction below would underflow, so fall back to standard
+	// ethernet until we know better.
+	size_t frameSize = device->frame_size;
+	if (frameSize <= ETHER_HEADER_LENGTH)
+		frameSize = ETHER_MAX_FRAME_SIZE;
+
+	if (mtu > frameSize - ETHER_HEADER_LENGTH
 		|| mtu <= ETHER_HEADER_LENGTH + 10)
 		return B_BAD_VALUE;
 

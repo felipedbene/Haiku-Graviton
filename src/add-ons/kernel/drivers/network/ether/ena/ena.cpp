@@ -14,10 +14,12 @@
  * driver proper: PCI attach, interrupts, queue setup and the Haiku ethernet
  * device API.
  *
- * Scope of this version: one TX/RX queue pair, descriptors in host memory
- * (no Low Latency Queue push mode), one receive descriptor per frame and
- * therefore a 1500 byte MTU. That is enough to make an instance reachable;
- * multiple queues with RSS, LLQ and jumbo frames are each separate changes.
+ * Scope of this version: one TX/RX queue pair, and a frame may span several
+ * descriptors in either direction, so the MTU is whatever the device advertises
+ * up to the jumbo ceiling the ethernet device layer will accept. Frames are
+ * still copied through per-descriptor bounce buffers, transmit checksum
+ * offload is not implemented, and multiple queues with RSS remain a separate
+ * change.
  */
 
 
@@ -660,6 +662,119 @@ ena_calculate_ring_sizes(ena_haiku_device* device,
 }
 
 
+/*!	Works out how many descriptors a frame may span, and hence the MTU.
+
+	Three separate limits meet here, and the MTU is the smallest of them:
+
+	- what the device says it will accept (\a dev_attr.max_mtu),
+	- what the ethernet device layer is prepared to allocate for on receive
+	  (ETHER_MAX_JUMBO_MTU; it clamps ETHER_GETFRAMESIZE to it regardless of what
+	  we report, so asking for more would only desynchronise the two),
+	- and what a chain of ENA_PACKET_BUFFER_SIZE buffers can actually carry,
+	  which is what makes this a driver limit rather than a policy.
+
+	The third is the one that has to be got right. The device chooses how to
+	split a received frame across the descriptors we posted; if it needs more
+	than \a rxMaxDescriptors of them, ena_com_rx_pkt() refuses the whole packet
+	with ENA_COM_NO_SPACE and we drop a frame we told the device it could send.
+	So the MTU is reduced until the worst case fits, rather than hoping it does.
+
+	The 256 bytes held back from the receive capacity are for \a pkt_offset: we
+	advertise ENA_ADMIN_HOST_INFO_RX_OFFSET, so the device may place the payload
+	at an offset inside the *first* buffer, and ena_rx_ctx::pkt_offset is a u8 so
+	that offset is bounded by 255.
+
+	Must run after ena_calculate_ring_sizes(), which is where rxRingSize comes
+	from, and before both SET_FEATURE(MTU) and ena_setup_buffers().
+*/
+static status_t
+ena_calculate_frame_limits(ena_haiku_device* device,
+	struct ena_com_dev_get_features_ctx* features)
+{
+	uint16 maxRxDescriptors;
+	uint16 maxTxDescriptors;
+
+	if ((device->comDev.supported_features
+			& BIT(ENA_ADMIN_MAX_QUEUES_EXT)) != 0) {
+		struct ena_admin_queue_ext_feature_fields* fields
+			= &features->max_queue_ext.max_queue_ext;
+		maxRxDescriptors = fields->max_per_packet_rx_descs;
+		maxTxDescriptors = fields->max_per_packet_tx_descs;
+	} else {
+		struct ena_admin_queue_feature_desc* fields = &features->max_queues;
+		maxRxDescriptors = fields->max_packet_rx_descs;
+		maxTxDescriptors = fields->max_packet_tx_descs;
+	}
+
+	/* A device that reports nothing here is not saying "no limit", it is a
+	   device we cannot make a chaining decision about -- so assume the one
+	   descriptor per frame this driver used to be limited to. */
+	if (maxRxDescriptors == 0)
+		maxRxDescriptors = 1;
+	if (maxTxDescriptors == 0)
+		maxTxDescriptors = 1;
+
+	/* The transmit figure counts the meta descriptor, which ena_com_prepare_tx()
+	   may emit ahead of ours, so one has to be reserved out of it. The reference
+	   does the same by sizing its DMA tag at max_tx_sgl_size - 1 (ena.c:514,
+	   and see ena_check_and_collapse_mbuf()). */
+	if (maxTxDescriptors > 1)
+		maxTxDescriptors--;
+
+	device->rxMaxDescriptors = min_c((uint16)ENA_MAX_PACKET_DESCRIPTORS,
+		maxRxDescriptors);
+	device->txMaxDescriptors = min_c((uint16)ENA_MAX_PACKET_DESCRIPTORS,
+		maxTxDescriptors);
+
+	uint32 receiveCapacity = (uint32)device->rxMaxDescriptors
+		* ENA_PACKET_BUFFER_SIZE;
+	/* Worst-case pkt_offset in the first buffer; see above. */
+	receiveCapacity -= min_c(receiveCapacity, (uint32)256);
+
+	uint32 transmitCapacity = (uint32)device->txMaxDescriptors
+		* ENA_PACKET_BUFFER_SIZE;
+
+	uint32 capacity = min_c(receiveCapacity, transmitCapacity);
+	capacity -= min_c(capacity, (uint32)ETHER_HEADER_LENGTH);
+
+	uint32 mtu = device->maxSupportedMtu;
+	if (mtu == 0)
+		mtu = ENA_DEFAULT_MTU;
+	mtu = min_c(mtu, (uint32)ETHER_MAX_JUMBO_MTU);
+	mtu = min_c(mtu, capacity);
+
+	if (mtu < ENA_MIN_MTU) {
+		ERROR("cannot reach even a %d byte MTU: device limit %" B_PRIu32
+			", chain capacity %" B_PRIu32 " (%u rx, %u tx descriptors of %d "
+			"bytes)\n", ENA_MIN_MTU, device->maxSupportedMtu, capacity,
+			device->rxMaxDescriptors, device->txMaxDescriptors,
+			ENA_PACKET_BUFFER_SIZE);
+		return B_NOT_SUPPORTED;
+	}
+
+	device->frameSize = mtu;
+	device->maxFrameSize = mtu + ETHER_HEADER_LENGTH;
+
+	/* Same shape as the reference (ena_datapath.c:696-698): a fraction of the
+	   ring, but never a batch so large that a small ring would never reach
+	   it. */
+	device->rxRefillThreshold = (uint16)min_c(
+		(uint32)device->rxRingSize / ENA_RX_REFILL_DIVISOR,
+		(uint32)ENA_RX_REFILL_MAX_THRESHOLD);
+	if (device->rxRefillThreshold < 1)
+		device->rxRefillThreshold = 1;
+
+	TRACE_ALWAYS("MTU %" B_PRIu32 " (device limit %" B_PRIu32 ", stack ceiling "
+		"%d, chain capacity %" B_PRIu32 "); a frame may span %u receive and %u "
+		"transmit descriptors; receive refill batch %u\n", device->frameSize,
+		device->maxSupportedMtu, ETHER_MAX_JUMBO_MTU, capacity,
+		device->rxMaxDescriptors, device->txMaxDescriptors,
+		device->rxRefillThreshold);
+
+	return B_OK;
+}
+
+
 /*!	Resets the device and tears down the admin queue.
 
 	Order matters: the device keeps writing keep-alive events into the AENQ
@@ -1096,6 +1211,7 @@ ena_release_buffers(ena_haiku_device* device)
 			sBufferModule->free(device->txBuffers[i].buffer);
 			device->txBuffers[i].buffer = NULL;
 			device->txBuffers[i].descriptors = 0;
+			device->txBuffers[i].segments = 0;
 			outstanding++;
 		}
 
@@ -1121,14 +1237,28 @@ ena_release_buffers(ena_haiku_device* device)
 	device->txFreeIds = NULL;
 	device->txFreeCount = 0;
 	device->rxNextToFill = 0;
+	/* Both halves of the receive ring's position, together: a surviving
+	   rxPendingRefill would make the next refill post descriptors against a
+	   ring that no longer exists in the form it was counted for. */
+	device->rxPendingRefill = 0;
 }
 
 
-/*!	Hands every receive descriptor to the device and rings the doorbell. */
-static status_t
-ena_refill_receive_ring(ena_haiku_device* device, uint16 count)
+/*!	Posts up to \a count receive descriptors and rings the doorbell once.
+
+	Returns how many were actually posted, which can be fewer than asked for --
+	the submission queue may be full, and the caller has to know that so the
+	remainder stays owed rather than being forgotten. One doorbell write covers
+	the whole batch, which is the entire reason batching exists; the reference
+	driver rings it in exactly the same place, once, at the end
+	(ena.c:1163-1164).
+
+	Must be called with rxLock held.
+*/
+static uint16
+ena_post_receive_descriptors(ena_haiku_device* device, uint16 count)
 {
-	uint16 refilled = 0;
+	uint16 posted = 0;
 
 	for (uint16 i = 0; i < count; i++) {
 		/* Free entries minus one: ENA treats a completely full submission
@@ -1148,16 +1278,93 @@ ena_refill_receive_ring(ena_haiku_device* device, uint16 count)
 		if (result != ENA_COM_OK)
 			break;
 
-		refilled++;
+		posted++;
 	}
 
-	if (refilled > 0) {
-		device->rxNextToFill = (device->rxNextToFill + refilled)
+	if (posted > 0) {
+		device->rxNextToFill = (device->rxNextToFill + posted)
 			% device->rxRingSize;
 		ena_com_write_sq_doorbell(device->rxSubmissionQueue);
 	}
 
-	return refilled > 0 ? B_OK : B_ERROR;
+	return posted;
+}
+
+
+/*!	Gives \a count drained descriptors back to the device, in batches.
+
+	This is the normal datapath return path, and it deliberately does *not* post
+	immediately: each post costs a doorbell write, and at a jumbo MTU a single
+	frame drains up to five descriptors, so posting per frame would be five
+	register writes per packet. Descriptors are accumulated instead and flushed
+	when a batch's worth has built up, or when \a force says the caller cannot
+	afford to leave any owed.
+
+	Holding descriptors back is safe against starving the ring -- see the note on
+	ENA_RX_REFILL_DIVISOR in ena.h -- but it does depend on the count surviving
+	only as long as the ring it describes. Every place that reallocates the
+	receive buffers resets rxPendingRefill along with rxNextToFill.
+
+	Must be called with rxLock held.
+*/
+static void
+ena_return_receive_descriptors(ena_haiku_device* device, uint16 count,
+	bool force = false)
+{
+	device->rxPendingRefill += count;
+
+	/* The ring cannot owe more descriptors than it has. Both callers that can
+	   pass a device-derived count -- the descriptor-count and stranded-count
+	   paths in ena_receive() -- take it from a completion descriptor or from a
+	   u16 subtraction of two device-advanced counters, so neither is trustworthy
+	   on its own. An inflated count could not actually make
+	   ena_post_receive_descriptors() hand the device a descriptor it already
+	   owns, because ena_com_free_q_entries() bounds that independently, but it
+	   would leave a permanent fictional debt that defeats the batching for the
+	   life of the ring. */
+	if (device->rxPendingRefill > device->rxRingSize) {
+		ERROR("receive refill debt of %u exceeds the %u entry ring; clamping\n",
+			device->rxPendingRefill, device->rxRingSize);
+		device->rxPendingRefill = device->rxRingSize;
+	}
+
+	if (!force && device->rxPendingRefill < device->rxRefillThreshold)
+		return;
+
+	/* Only what was actually posted is no longer owed. A partial post leaves
+	   the rest pending, and the next frame's return -- or the next forced
+	   flush -- picks it up. */
+	uint16 posted = ena_post_receive_descriptors(device,
+		device->rxPendingRefill);
+	device->rxPendingRefill -= posted;
+}
+
+
+/*!	Fills the receive ring from empty, after the buffers have been (re)created.
+
+	Used by the two paths that own the whole ring: the first open, and the end of
+	a reset. Anything left over stays owed, exactly as during normal operation,
+	rather than being silently dropped.
+
+	Must be called with rxLock held.
+*/
+static void
+ena_refill_receive_ring(ena_haiku_device* device)
+{
+	device->rxNextToFill = 0;
+	device->rxPendingRefill = 0;
+
+	/* One short of the ring, not the whole ring: ena_com_free_q_entries() is
+	   q_depth - 1 - outstanding, so the last entry can never be posted and
+	   asking for it would report a phantom shortfall on every open. The
+	   reference asks for ring_size - 1 for the same reason (ena.c:1483). */
+	const uint16 wanted = (uint16)(device->rxRingSize - 1);
+	ena_return_receive_descriptors(device, wanted, true);
+
+	if (device->rxPendingRefill != 0) {
+		TRACE_ALWAYS("receive ring only partly filled: %u of %u descriptors "
+			"still owed\n", device->rxPendingRefill, wanted);
+	}
 }
 
 
@@ -1343,8 +1550,7 @@ ena_watchdog_reset(ena_haiku_device* device,
 	   it, and posting now would race with it. */
 	if (atomic_get(&device->openCount) > 0) {
 		MutexLocker rxLocker(device->rxLock);
-		device->rxNextToFill = 0;
-		ena_refill_receive_ring(device, device->rxRingSize);
+		ena_refill_receive_ring(device);
 	}
 
 	device->resetting = false;
@@ -1506,13 +1712,12 @@ ena_device_bringup(ena_haiku_device* device)
 	memcpy(device->macAddress, features.dev_attr.mac_addr,
 		ETHER_ADDRESS_LENGTH);
 	device->maxSupportedMtu = features.dev_attr.max_mtu;
-	device->frameSize = min_c((uint32)ENA_FRAME_SIZE, device->maxSupportedMtu);
 
 	TRACE_ALWAYS("MAC %02x:%02x:%02x:%02x:%02x:%02x, device MTU limit %"
-		B_PRIu32 ", using %" B_PRIu32 "\n",
+		B_PRIu32 "\n",
 		device->macAddress[0], device->macAddress[1], device->macAddress[2],
 		device->macAddress[3], device->macAddress[4], device->macAddress[5],
-		device->maxSupportedMtu, device->frameSize);
+		device->maxSupportedMtu);
 
 	ena_configure_placement_policy(device, &features.llq);
 	ena_calculate_ring_sizes(device, &features);
@@ -1523,6 +1728,12 @@ ena_device_bringup(ena_haiku_device* device)
 		status = B_NOT_SUPPORTED;
 		return status;
 	}
+
+	/* After the ring sizes, because the receive refill batch is a fraction of
+	   the ring; before SET_FEATURE(MTU) below, which is the whole point. */
+	status = ena_calculate_frame_limits(device, &features);
+	if (status != B_OK)
+		return status;
 
 	status = ena_enable_msix(device);
 	if (status != B_OK)
@@ -1589,17 +1800,15 @@ ena_device_bringup(ena_haiku_device* device)
 	   still differed from the reference.
 
 	   Only the *position* is load-bearing, and it is what stays. The value is
-	   frameSize, not the reference's 9001: what the device is told here has to
-	   agree with what the receive path can actually accept, and ours posts one
-	   2048 byte buffer per frame with max_bufs = 1. Telling the device 9001
-	   while advertising 1500 to the stack left a window where a peer that
-	   ignored our advertised MTU could put a frame on the wire that the device
-	   would accept and we could not reassemble. Nothing on an EC2 link does
-	   that, so it never bit -- but it was an inconsistency held in place only by
-	   the good manners of the other end, which is not a property to depend on.
-
-	   Raising this again is a prerequisite for jumbo frames, and it is a
-	   two-part change: multi-descriptor receive first, then this value. */
+	   still frameSize rather than a constant, and it still has to agree with
+	   what the receive path can accept -- telling the device a larger MTU than
+	   we can reassemble leaves a window where a peer that ignores our advertised
+	   MTU puts a frame on the wire that the device accepts and we drop. What has
+	   changed is that frameSize is no longer pinned to 1500: the receive path
+	   reassembles a frame from a chain of descriptors now, and
+	   ena_calculate_frame_limits() derives frameSize from the device's own
+	   max_mtu bounded by how much that chain can carry, so the two agree by
+	   construction rather than by both being 1500. */
 	{
 		const uint32 deviceMtu = device->frameSize;
 		int mtuResult = ena_com_set_dev_mtu(&device->comDev, deviceMtu);
@@ -1935,8 +2144,7 @@ ena_open(void* _info, const char* path, int openMode, void** _cookie)
 	   same submission queue. */
 	{
 		MutexLocker rxLocker(device->rxLock);
-		device->rxNextToFill = 0;
-		ena_refill_receive_ring(device, device->rxRingSize);
+		ena_refill_receive_ring(device);
 	}
 
 	/* Third and last seeding point for the watchdog deadline (the others are
@@ -2001,6 +2209,16 @@ ena_free(void* cookie)
 static void
 ena_reclaim_transmitted(ena_haiku_device* device)
 {
+	/* Descriptors completed but not yet acknowledged, and how many packets that
+	   is. Acknowledging is a plain `next_to_comp += n` inside ena-com with no
+	   register write, so batching it in ENA_TX_COMMIT-sized groups is about not
+	   touching the submission queue's shared state once per packet rather than
+	   about bus traffic. This mirrors ena_tx_cleanup() (ena_datapath.c:299-317),
+	   including the remainder flush after the loop -- which every `break` below
+	   falls through to, so nothing is left unacknowledged on an error exit. */
+	uint16 pendingDescriptors = 0;
+	uint16 completed = 0;
+
 	while (true) {
 		uint16 requestId = 0;
 		if (ena_com_tx_comp_req_id_get(device->txCompletionQueue, &requestId)
@@ -2018,7 +2236,9 @@ ena_reclaim_transmitted(ena_haiku_device* device)
 		if (entry->buffer == NULL) {
 			/* Not outstanding. Pushing it back would put the same id on the
 			   free stack twice and, repeated, run txFreeCount past the end of
-			   the array. */
+			   the array. This is also what a completion naming one of a
+			   multi-slot packet's *secondary* slots looks like, since only the
+			   primary carries the net_buffer. */
 			ERROR("device completed transmit request id %u that was not in "
 				"use\n", requestId);
 			break;
@@ -2027,13 +2247,45 @@ ena_reclaim_transmitted(ena_haiku_device* device)
 		sBufferModule->free(entry->buffer);
 		entry->buffer = NULL;
 
-		device->txFreeIds[device->txFreeCount++] = requestId;
+		/* Give back every bounce slot the frame was copied into, not just the
+		   one the device echoed. segments is set under txLock in ena_send()
+		   together with buffer, so a non-NULL buffer implies a valid chain --
+		   but this is the one place where getting it wrong overruns txFreeIds,
+		   so it is checked rather than assumed. */
+		if (entry->segments == 0
+			|| entry->segments > ENA_MAX_PACKET_DESCRIPTORS) {
+			ERROR("transmit request id %u has an impossible segment count %u; "
+				"reclaiming it alone\n", requestId, entry->segments);
+			entry->segments = 1;
+			entry->segmentIds[0] = requestId;
+		}
 
-		/* Acknowledge exactly what this packet occupied; it is only 1 while we
-		   emit no meta descriptor. */
-		ena_com_comp_ack(device->txSubmissionQueue, entry->descriptors);
+		for (uint16 i = 0; i < entry->segments; i++) {
+			const uint16 slot = entry->segmentIds[i];
+			if (slot >= device->txRingSize) {
+				ERROR("transmit request id %u names an out-of-range slot %u; "
+					"leaking it rather than corrupting the free stack\n",
+					requestId, slot);
+				continue;
+			}
+			device->txFreeIds[device->txFreeCount++] = slot;
+		}
+		entry->segments = 0;
+
+		/* Whatever ena_com_prepare_tx() reported this packet occupied,
+		   including a meta descriptor if it emitted one. */
+		pendingDescriptors += entry->descriptors;
 		entry->descriptors = 0;
+
+		if (++completed >= ENA_TX_COMMIT) {
+			ena_com_comp_ack(device->txSubmissionQueue, pendingDescriptors);
+			pendingDescriptors = 0;
+			completed = 0;
+		}
 	}
+
+	if (pendingDescriptors > 0)
+		ena_com_comp_ack(device->txSubmissionQueue, pendingDescriptors);
 }
 
 
@@ -2052,12 +2304,42 @@ ena_send(ena_haiku_device* device, net_buffer* buffer)
 
 	ena_reclaim_transmitted(device);
 
+	/* Worked out before the wait loop, because it is what the loop has to wait
+	   for. A frame longer than one bounce slot is copied into a chain of them,
+	   one submission-queue descriptor each.
+
+	   The size check is a backstop: ethernet_send_data() already refuses
+	   anything above the frame size we reported through ETHER_GETFRAMESIZE. It
+	   stays because the descriptor arithmetic below is only bounded if this is,
+	   and because a driver that trusts its caller for a bound on a memcpy length
+	   is one refactor away from a heap overrun. */
+	const size_t size = buffer->size;
+	if (size == 0 || size > device->maxFrameSize) {
+		ERROR("refusing a %" B_PRIuSIZE " byte frame; the limit is %" B_PRIu32
+			"\n", size, device->maxFrameSize);
+		return B_BAD_VALUE;
+	}
+
+	const uint16 segments = (uint16)((size + ENA_PACKET_BUFFER_SIZE - 1)
+		/ ENA_PACKET_BUFFER_SIZE);
+	if (segments > device->txMaxDescriptors) {
+		/* Unreachable while maxFrameSize is derived from txMaxDescriptors in
+		   ena_calculate_frame_limits(); here so that it stays unreachable. */
+		ERROR("a %" B_PRIuSIZE " byte frame needs %u descriptors, more than the "
+			"%u this device allows\n", size, segments,
+			device->txMaxDescriptors);
+		return B_BAD_VALUE;
+	}
+
 	/* The submission queue runs out before the request-id pool does: it
 	   refuses at q_depth - 1 outstanding, and ena_com_prepare_tx() wants room
-	   for the packet plus a possible meta descriptor. Waiting on txFreeCount
-	   alone would never block, and we would drop frames instead. */
-	while (device->txFreeCount == 0
-			|| !ena_com_sq_have_enough_space(device->txSubmissionQueue, 2)) {
+	   for the packet's descriptors plus a possible meta descriptor -- which is
+	   exactly the `num_bufs + 1` it checks for itself (ena_eth_com.c:457).
+	   Waiting on txFreeCount alone would never block, and we would drop frames
+	   instead. */
+	while (device->txFreeCount < segments
+			|| !ena_com_sq_have_enough_space(device->txSubmissionQueue,
+				(uint16)(segments + 1))) {
 		locker.Unlock();
 
 		if (device->nonBlocking)
@@ -2079,24 +2361,41 @@ ena_send(ena_haiku_device* device, net_buffer* buffer)
 		ena_reclaim_transmitted(device);
 	}
 
-	uint16 requestId = device->txFreeIds[--device->txFreeCount];
+	/* Claim one slot per segment. A slot and a request id are the same
+	   resource -- txBuffers is indexed by request id -- so the chain is drawn
+	   from the same stack, and the first id claimed becomes the request id the
+	   device echoes back. The rest exist only as bounce storage and are
+	   deliberately left with a NULL buffer, so ena_reclaim_transmitted() and
+	   ena_release_buffers() ignore them; the chain is recorded on the primary
+	   entry and released as a whole on completion. */
+	uint16 slotIds[ENA_MAX_PACKET_DESCRIPTORS];
+	for (uint16 i = 0; i < segments; i++)
+		slotIds[i] = device->txFreeIds[--device->txFreeCount];
+
+	const uint16 requestId = slotIds[0];
 	ena_tx_buffer* entry = &device->txBuffers[requestId];
 
-	/* The frame has to be in one physically contiguous piece to go out in a
-	   single descriptor, and a net_buffer is not, so it is copied into this
-	   request id's bounce slot. TODO: map the net_buffer's own pages and build
-	   a multi-descriptor request instead of copying. */
-	size_t size = buffer->size;
-	if (size > ENA_PACKET_BUFFER_SIZE) {
-		device->txFreeIds[device->txFreeCount++] = requestId;
-		ERROR("refusing a %" B_PRIuSIZE " byte frame; the limit is %d\n", size,
-			ENA_PACKET_BUFFER_SIZE);
-		return B_BAD_VALUE;
-	}
+	/* Each descriptor's buffer has to be physically contiguous, and a
+	   net_buffer's storage is neither contiguous nor addressed by physical
+	   address through any interface the buffer module offers -- get_memory_map
+	   is a NULL entry in net_buffer_module_info -- so the frame is copied. See
+	   the note above ena_receive() for why that copy is still here. */
+	struct ena_com_buf comBuffers[ENA_MAX_PACKET_DESCRIPTORS];
+	size_t copied = 0;
+	for (uint16 i = 0; i < segments; i++) {
+		ena_packet_buffer* slot = &device->txBuffers[slotIds[i]].slot;
+		const size_t chunk = min_c(size - copied,
+			(size_t)ENA_PACKET_BUFFER_SIZE);
 
-	if (sBufferModule->read(buffer, 0, entry->slot.data, size) != B_OK) {
-		device->txFreeIds[device->txFreeCount++] = requestId;
-		return B_BAD_DATA;
+		if (sBufferModule->read(buffer, copied, slot->data, chunk) != B_OK) {
+			for (uint16 j = 0; j < segments; j++)
+				device->txFreeIds[device->txFreeCount++] = slotIds[j];
+			return B_BAD_DATA;
+		}
+
+		comBuffers[i].paddr = slot->physicalAddress;
+		comBuffers[i].len = (uint16)chunk;
+		copied += chunk;
 	}
 
 	struct ena_com_tx_ctx context;
@@ -2104,46 +2403,116 @@ ena_send(ena_haiku_device* device, net_buffer* buffer)
 	context.req_id = requestId;
 
 	/* In LLQ mode the leading bytes of the frame are pushed straight into the
-	   device's memory window rather than fetched by DMA, so the descriptor only
-	   covers whatever is left over. A short frame can be entirely header, in
-	   which case there is no buffer descriptor at all. */
+	   device's memory window rather than fetched by DMA, so the descriptors only
+	   cover whatever is left over. A short frame can be entirely header, in
+	   which case there is no buffer descriptor at all.
+
+	   The header must be one contiguous run, which is why it is taken from the
+	   first segment and capped at that segment's length: tx_max_header_size is
+	   bounded by the LLQ ring entry size (96 or 224 bytes in practice, and
+	   ena-com clamps its own copy to 256), so this cap never actually bites --
+	   but it is what makes the pointer arithmetic below true by construction
+	   rather than by knowing that number. */
 	uint16 headerLength = 0;
 	if (device->comDev.tx_mem_queue_type == ENA_ADMIN_PLACEMENT_POLICY_DEV) {
-		headerLength = (uint16)min_c((size_t)size,
-			(size_t)device->txSubmissionQueue->tx_max_header_size);
-		context.push_header = entry->slot.data;
+		headerLength = (uint16)min_c(
+			(size_t)device->txSubmissionQueue->tx_max_header_size,
+			(size_t)comBuffers[0].len);
+		context.push_header = device->txBuffers[requestId].slot.data;
 		context.header_len = headerLength;
 	}
 
-	struct ena_com_buf comBuffer;
-	if (size > headerLength) {
-		comBuffer.paddr = entry->slot.physicalAddress + headerLength;
-		comBuffer.len = (uint16)(size - headerLength);
-		context.ena_bufs = &comBuffer;
-		context.num_bufs = 1;
+	/* Skip the pushed header in the first descriptor. It can consume that
+	   descriptor entirely, which only happens for a single-segment frame that is
+	   all header -- a longer frame's first segment is a whole 2048 byte slot and
+	   the header is far smaller. */
+	uint16 firstBuffer = 0;
+	if (headerLength > 0) {
+		comBuffers[0].paddr += headerLength;
+		comBuffers[0].len = (uint16)(comBuffers[0].len - headerLength);
+		if (comBuffers[0].len == 0)
+			firstBuffer = 1;
 	}
+
+	if (segments > firstBuffer) {
+		context.ena_bufs = &comBuffers[firstBuffer];
+		context.num_bufs = (uint16)(segments - firstBuffer);
+	}
+
+	/* Before ena_com_prepare_tx(), and using this packet's context, exactly as
+	   the reference does (ena_datapath.c:1030-1036): the question it answers is
+	   "will the descriptors I am about to write still fit in the device's
+	   remaining LLQ burst?", so asking after writing them would be too late.
+
+	   It can only ever return true in LLQ mode -- it is `false` outright for host
+	   placement -- and while we ring the doorbell for every frame below, a
+	   doorbell resets the burst allowance anyway, so today this fires only for a
+	   frame that needs more LLQ entries than a whole burst. It is here because it
+	   is the piece that has to be in the right place for doorbell coalescing to
+	   become a one-line change once the stack can hand us more than one frame per
+	   call; see the comment after the doorbell. */
+	if (ena_com_is_doorbell_needed(device->txSubmissionQueue, &context))
+		ena_com_write_sq_doorbell(device->txSubmissionQueue);
 
 	int descriptors = 0;
 	int result = ena_com_prepare_tx(device->txSubmissionQueue, &context,
 		&descriptors);
 	if (result != ENA_COM_OK) {
-		device->txFreeIds[device->txFreeCount++] = requestId;
+		for (uint16 j = 0; j < segments; j++)
+			device->txFreeIds[device->txFreeCount++] = slotIds[j];
 		ERROR("cannot prepare a transmit descriptor: %d\n", result);
 		return ena_translate_error(result);
 	}
 
 	entry->buffer = buffer;
 	entry->descriptors = (uint16)descriptors;
+	entry->segments = segments;
+	for (uint16 i = 0; i < segments; i++)
+		entry->segmentIds[i] = slotIds[i];
+
+	/* One doorbell per frame, which is the thing the reference amortises and we
+	   cannot. Its ena_start_xmit() drains a queue of packets and rings the
+	   doorbell every ENA_DB_THRESHOLD (64) of them plus once at the end of the
+	   drain; the end-of-drain flush is what makes deferring safe. Haiku's
+	   ethernet device layer calls ETHER_SEND_NET_BUFFER once per net_buffer
+	   (ethernet.cpp:281) and tells us nothing about whether another is coming, so
+	   there is no "end" to flush at: a deferred doorbell with no successor is a
+	   frame that is never sent at all -- a single ping that hangs, not a slow
+	   one. Coalescing here therefore needs a batched transmit entry point in the
+	   stack, or a timer, and neither belongs in this change. */
 	ena_com_write_sq_doorbell(device->txSubmissionQueue);
 
 	return B_OK;
 }
 
 
+/*!	Takes one frame off the receive ring, reassembling it if it was split.
+
+	A frame larger than one ENA_PACKET_BUFFER_SIZE buffer arrives as a chain of
+	completion descriptors, and the device -- not the driver -- decides how
+	finely to split it: all it is obliged to respect is the length of each
+	descriptor we posted. So this walks however many descriptors the completion
+	reports and appends each one's bytes to a single net_buffer.
+
+	Everything the chain says about itself comes out of device-written
+	descriptors, so all of it is treated as untrusted and the *whole* chain is
+	validated before a single byte is copied. Validating as we go would leave a
+	half-built net_buffer to unwind on the failure of the last descriptor, and
+	the failure mode of getting it wrong is a copy past the end of a buffer
+	area, so the two passes are worth their cost.
+
+	The bytes are still copied. Handing the receive buffer itself up the stack
+	instead would need net_buffer to be able to take ownership of driver-owned
+	memory with a release callback, and net_buffer_module_info has no such
+	entry point (its get_memory_map slot is a literal NULL); the alternative,
+	allocating a fresh DMA-capable buffer per frame and posting that, replaces a
+	copy with an allocation on every packet. Neither is a change to this
+	function -- see the report accompanying this work.
+*/
 static status_t
 ena_receive(ena_haiku_device* device, net_buffer** _buffer)
 {
-	struct ena_com_rx_buf_info bufferInfo[2];
+	struct ena_com_rx_buf_info bufferInfo[ENA_MAX_PACKET_DESCRIPTORS];
 	struct ena_com_rx_ctx context;
 
 	MutexLocker locker(device->rxLock);
@@ -2157,7 +2526,12 @@ ena_receive(ena_haiku_device* device, net_buffer** _buffer)
 	while (true) {
 		memset(&context, 0, sizeof(context));
 		context.ena_bufs = bufferInfo;
-		context.max_bufs = 1;
+		/* Bounded by the size of bufferInfo above, and set at bring-up from the
+		   device's own per-packet descriptor limit. ena_com_rx_pkt() enforces it
+		   -- a completion naming more descriptors than this is refused with
+		   ENA_COM_NO_SPACE before it writes anything into bufferInfo -- so this
+		   assignment is what keeps the array from being overrun. */
+		context.max_bufs = device->rxMaxDescriptors;
 
 		/* ena_com_rx_pkt() returns 0 on success and reports how many
 		   descriptors it consumed in context.descs; every failure is a small
@@ -2179,12 +2553,24 @@ ena_receive(ena_haiku_device* device, net_buffer** _buffer)
 			   good, and since it is what gates the refill the ring shrinks
 			   permanently on every error with nothing to grow it back.
 
-			   NO_SPACE is the reachable case: it is what a frame spanning more
-			   than one descriptor produces against max_bufs = 1. The device MTU
-			   is deliberately set to match these buffers, so it should not
-			   happen today -- see the SET_FEATURE(MTU) comment in
-			   ena_init_device() -- but the accounting has to be right before
-			   that MTU can be raised for jumbo frames. */
+			   NO_SPACE now means the device split a frame more finely than
+			   rxMaxDescriptors allows, which is what ena_calculate_frame_limits()
+			   sizes the MTU to prevent; it used to be the ordinary consequence of
+			   any frame spanning more than one descriptor, because max_bufs was 1.
+
+			   One thing this deliberately does not do, and the reference does:
+			   treat the error as a reason to reset the device. FreeBSD maps
+			   NO_SPACE to ENA_REGS_RESET_TOO_MANY_RX_DESCS, FAULT to
+			   RX_DESCRIPTOR_MALFORMED and anything else to INV_RX_REQ_ID, and
+			   resets in every case (ena_datapath.c:612-626). It has a reason to:
+			   after a FAULT, ena-com's partial-packet accumulator
+			   (io_cq->cur_rx_pkt_cdesc_count and cur_rx_pkt_cdesc_start_idx) is
+			   left describing a packet whose completion descriptors we have just
+			   acknowledged, so the next call reads from a stale start index.
+			   Reclaiming and carrying on is what this driver has shipped with and
+			   keeps a recoverable link recoverable; escalating to a reset is a
+			   separate decision about which failure is worse on a console-less
+			   instance, and is not made here. */
 			const uint16 stranded = (uint16)(device->rxCompletionQueue->head
 				- device->rxSubmissionQueue->next_to_comp);
 
@@ -2193,7 +2579,11 @@ ena_receive(ena_haiku_device* device, net_buffer** _buffer)
 
 			if (stranded > 0) {
 				ena_com_comp_ack(device->rxSubmissionQueue, stranded);
-				ena_refill_receive_ring(device, stranded);
+				/* Forced rather than batched: this is error recovery, and the
+				   number of descriptors involved may well be under the batch
+				   threshold, so waiting for a batch to fill would mean waiting
+				   for traffic that the missing descriptors are part of carrying. */
+				ena_return_receive_descriptors(device, stranded, true);
 			}
 
 			return ena_translate_error(result);
@@ -2226,40 +2616,98 @@ ena_receive(ena_haiku_device* device, net_buffer** _buffer)
 			return B_DEV_NOT_READY;
 	}
 
-	uint16 requestId = bufferInfo[0].req_id;
-	if (requestId >= device->rxRingSize) {
-		ERROR("device returned an out-of-range receive request id %u\n",
-			requestId);
+	/* How many descriptors this frame occupied, and therefore how many are owed
+	   back to the device however this function goes on to end. ena_com_rx_pkt()
+	   has already advanced the submission queue's next_to_comp by exactly this
+	   many on the success path, so unlike the error path above there is no
+	   ena_com_comp_ack() to pair with the repost. */
+	const uint16 descriptors = context.descs;
+
+	/* ena_com_rx_pkt() refuses a completion with more descriptors than
+	   max_bufs, so this cannot fire -- but bufferInfo is a fixed stack array
+	   being indexed by a count the device chose, and that is not a place to rely
+	   on a check made in another file. */
+	if (descriptors > ENA_MAX_PACKET_DESCRIPTORS) {
+		ERROR("device reported a frame spanning %u descriptors, more than the "
+			"%d this driver can hold\n", descriptors,
+			ENA_MAX_PACKET_DESCRIPTORS);
+		ena_return_receive_descriptors(device, descriptors, true);
 		return B_IO_ERROR;
 	}
 
-	ena_packet_buffer* slot = &device->rxBuffers[requestId];
-	uint16 length = bufferInfo[0].len;
+	/* First pass: validate the whole chain, copy nothing.
 
-	/* Both of these come straight out of a completion descriptor, so treat
-	   them as untrusted: an oversized length would read past this slot and,
-	   for the last slot, past the area. */
-	if (context.pkt_offset >= ENA_PACKET_BUFFER_SIZE
-		|| length > ENA_PACKET_BUFFER_SIZE - context.pkt_offset) {
-		ERROR("device reported a %u byte frame at offset %u, which does not "
-			"fit a %d byte buffer\n", length, context.pkt_offset,
-			ENA_PACKET_BUFFER_SIZE);
-		ena_refill_receive_ring(device, 1);
+	   Every field here comes out of a device-written completion descriptor and
+	   is untrusted. An oversized length reads past the end of a slot and, for
+	   the last slot in the area, past the area itself; an out-of-range request id
+	   indexes rxBuffers out of bounds. Only the *first* descriptor carries
+	   pkt_offset -- ena_com_rx_pkt() takes it from the first completion
+	   descriptor alone (ena_eth_com.c:634) and the reference applies it only to
+	   the head segment (ena_datapath.c:456) -- so every later segment starts at
+	   the beginning of its buffer.
+
+	   No check on the total: a chain of validated segments is bounded by
+	   ENA_MAX_PACKET_DESCRIPTORS * ENA_PACKET_BUFFER_SIZE whatever the device
+	   claims, so nothing here depends on it, and rejecting a frame merely for
+	   exceeding maxFrameSize would drop a legitimately VLAN-tagged frame four
+	   bytes over the MTU we asked for. */
+	size_t total = 0;
+	for (uint16 i = 0; i < descriptors; i++) {
+		if (bufferInfo[i].req_id >= device->rxRingSize) {
+			ERROR("device returned an out-of-range receive request id %u in "
+				"descriptor %u of %u\n", bufferInfo[i].req_id, i, descriptors);
+			ena_return_receive_descriptors(device, descriptors, true);
+			return B_IO_ERROR;
+		}
+
+		const uint16 offset = (i == 0) ? context.pkt_offset : 0;
+		if (offset >= ENA_PACKET_BUFFER_SIZE
+			|| bufferInfo[i].len > ENA_PACKET_BUFFER_SIZE - offset) {
+			ERROR("device reported a %u byte segment at offset %u in descriptor "
+				"%u of %u, which does not fit a %d byte buffer\n",
+				bufferInfo[i].len, offset, i, descriptors,
+				ENA_PACKET_BUFFER_SIZE);
+			ena_return_receive_descriptors(device, descriptors, true);
+			return B_IO_ERROR;
+		}
+
+		total += bufferInfo[i].len;
+	}
+
+	if (total == 0) {
+		ERROR("device reported an empty frame across %u descriptor(s)\n",
+			descriptors);
+		ena_return_receive_descriptors(device, descriptors, true);
 		return B_IO_ERROR;
 	}
 
 	net_buffer* buffer = sBufferModule->create(0);
 	if (buffer == NULL) {
-		/* Give the descriptor back rather than losing it. */
-		ena_refill_receive_ring(device, 1);
+		/* Give the descriptors back rather than losing them. */
+		ena_return_receive_descriptors(device, descriptors, true);
 		return B_NO_MEMORY;
 	}
 
-	status_t status = sBufferModule->append(buffer,
-		(uint8*)slot->data + context.pkt_offset, length);
+	/* Second pass: copy. Every segment has been bounds-checked above, so this
+	   loop cannot read out of range; the only thing that can fail is the
+	   allocation append() does to grow the buffer. */
+	status_t status = B_OK;
+	for (uint16 i = 0; i < descriptors && status == B_OK; i++) {
+		if (bufferInfo[i].len == 0)
+			continue;
 
-	/* The device is done with the slot the moment we have copied out of it. */
-	ena_refill_receive_ring(device, 1);
+		ena_packet_buffer* slot = &device->rxBuffers[bufferInfo[i].req_id];
+		const uint16 offset = (i == 0) ? context.pkt_offset : 0;
+
+		status = sBufferModule->append(buffer, (uint8*)slot->data + offset,
+			bufferInfo[i].len);
+	}
+
+	/* The device is done with every slot the moment its bytes have been copied
+	   out, so the whole chain goes back here -- batched, because at a jumbo MTU
+	   this is up to five descriptors per frame and each immediate post would be
+	   its own doorbell write. */
+	ena_return_receive_descriptors(device, descriptors);
 
 	if (status != B_OK) {
 		sBufferModule->free(buffer);
@@ -2328,8 +2776,12 @@ ena_ioctl(void* cookie, uint32 op, void* buffer, size_t length)
 		{
 			/* The ethernet device layer derives the interface MTU by
 			   subtracting the header length from this, so report the frame
-			   size. frameSize itself is the L3 MTU we gave the device. */
-			uint32 frameSize = device->frameSize + ETHER_HEADER_LENGTH;
+			   size rather than the MTU. It clamps whatever we say to
+			   ETHER_MAX_JUMBO_FRAME_SIZE and, if the driver does not do
+			   net_buffer I/O, all the way back to ETHER_MAX_FRAME_SIZE; we do,
+			   and ena_calculate_frame_limits() has already applied the same
+			   ceiling, so what it uses is what we asked for. */
+			uint32 frameSize = device->maxFrameSize;
 			if (length != sizeof(frameSize))
 				return B_BAD_VALUE;
 			return user_memcpy(buffer, &frameSize, sizeof(frameSize));
