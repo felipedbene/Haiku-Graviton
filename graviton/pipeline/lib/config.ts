@@ -49,6 +49,31 @@ export interface HaikuPipelineConfig {
    * against it out of band. Empty => CDK generates a name.
    */
   readonly workBucketName?: string;
+
+  /**
+   * Hardware performance gate (the Test stage, between Register and Approve).
+   *
+   * The gate boots the candidate AMI for real and measures it, so it needs to
+   * know where to put the instance and who its traffic peer is. The peer is the
+   * SSM-managed metal builder: it already holds the ssh key for Haiku nodes, the
+   * nettput peer script and a jumbo-capable interface, so nothing has to be
+   * installed anywhere for a measurement to happen.
+   *
+   * testInstanceType must not be a t-family instance: T instances throttle CPU
+   * to a baseline once credits run out, and CPU cost per byte is half of what
+   * the gate measures.
+   *
+   * The floors are regression thresholds, set far below the measured figures
+   * (~4900 receive, ~3850 transmit on a c7g.large) on purpose. A gate that trips
+   * on ordinary variance gets switched off, and then it guards nothing.
+   */
+  readonly builderInstanceId: string;
+  readonly testSubnetId: string;
+  readonly testSecurityGroupId: string;
+  readonly testInstanceType: string;
+  readonly testKeyName: string;
+  readonly minReceiveMbps: string;
+  readonly minTransmitMbps: string;
 }
 
 function ctx(scope: Construct, key: string, envKey: string, fallback?: string): string {
@@ -84,5 +109,15 @@ export function loadConfig(scope: Construct): HaikuPipelineConfig {
     rootVolumeBytes: ctx(scope, 'haiku:rootVolumeBytes', 'HAIKU_ROOT_VOLUME_BYTES', '2147483648'),
 
     workBucketName: workBucketName ? String(workBucketName) : undefined,
+
+    builderInstanceId: ctx(scope, 'haiku:builderInstanceId', 'HAIKU_BUILDER_INSTANCE', 'i-0f7f6f3e8922acffd'),
+    testSubnetId: ctx(scope, 'haiku:testSubnetId', 'HAIKU_TEST_SUBNET', 'subnet-0888405da8f10d1b2'),
+    testSecurityGroupId: ctx(scope, 'haiku:testSecurityGroupId', 'HAIKU_TEST_SG', 'sg-0b99fabc8cb8bce88'),
+    // Never a t-family instance: burstable CPU throttles to a baseline when
+    // credits run out, which corrupts the CPU-cost-per-byte half of the result.
+    testInstanceType: ctx(scope, 'haiku:testInstanceType', 'HAIKU_TEST_TYPE', 'c7g.large'),
+    testKeyName: ctx(scope, 'haiku:testKeyName', 'HAIKU_TEST_KEY', 'haiku-uaf-ed25519'),
+    minReceiveMbps: ctx(scope, 'haiku:minReceiveMbps', 'HAIKU_MIN_RX_MBPS', '3000'),
+    minTransmitMbps: ctx(scope, 'haiku:minTransmitMbps', 'HAIKU_MIN_TX_MBPS', '2000'),
   };
 }

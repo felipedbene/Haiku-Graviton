@@ -1,0 +1,49 @@
+version: 0.2
+
+# Test stage: boot the freshly registered candidate AMI on real Graviton
+# hardware, measure throughput against the metal builder, and fail if it
+# regressed.
+#
+# This sits between Register and Approve on purpose. Before it existed, the
+# approval gate could only mean "I tested this out of band and I vouch for it" --
+# nothing in the pipeline knew whether the image booted, whether jumbo still
+# negotiated, or whether throughput had halved. Now the approver is looking at
+# numbers taken minutes earlier on the actual image.
+#
+# All the logic lives in graviton/scripts/haiku-perf-gate so it can be run by
+# hand against any AMI, which is how it gets debugged. Keeping the buildspec thin
+# matches the other stages here.
+#
+# AMI_ID is injected from the Register stage's exported pipeline variable.
+
+phases:
+  install:
+    commands:
+      # The gate drives the builder over SSM and parses text; nothing else needed.
+      - set -euo pipefail
+  build:
+    commands:
+      - set -euo pipefail
+      - |
+        test -n "${AMI_ID:-}" || { echo "AMI_ID not provided by the Register stage" >&2; exit 1; }
+      - export AWS_REGION="${AWS_REGION:-$AWS_DEFAULT_REGION}"
+      - echo "== performance gate for $AMI_ID =="
+      - bash "$CODEBUILD_SRC_DIR/graviton/scripts/haiku-perf-gate" "$AMI_ID"
+  post_build:
+    commands:
+      # haiku-perf-gate terminates its instance from an EXIT trap, so a failure
+      # above has already cleaned up. This is a belt-and-braces sweep for the
+      # case where the container itself was killed mid-run and the trap never
+      # fired -- an ephemeral gate instance must never outlive its build.
+      - |
+        set +e
+        stragglers=$(aws --region "${AWS_REGION:-$AWS_DEFAULT_REGION}" ec2 describe-instances \
+          --filters "Name=tag:Name,Values=haiku-perf-gate" "Name=tag:ephemeral,Values=true" \
+                    "Name=instance-state-name,Values=running,pending,stopped" \
+          --query 'Reservations[].Instances[].InstanceId' --output text 2>/dev/null)
+        if [ -n "$stragglers" ]; then
+          echo "sweeping leaked gate instances: $stragglers"
+          aws --region "${AWS_REGION:-$AWS_DEFAULT_REGION}" ec2 terminate-instances \
+            --instance-ids $stragglers >/dev/null 2>&1
+        fi
+        exit 0

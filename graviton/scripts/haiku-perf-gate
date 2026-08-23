@@ -1,0 +1,184 @@
+#!/usr/bin/env bash
+#
+# haiku-perf-gate -- boot a candidate AMI on real hardware, measure it, and fail
+# the build if it regressed.
+#
+# This exists because the manual approval gate it sits in front of could only
+# ever mean "I tested this out of band and I vouch for it". Nothing in the
+# pipeline knew whether the image worked at all, let alone whether it was as fast
+# as the last one. Now Approve means the numbers are already on the screen.
+#
+# It is a *regression* gate, not a benchmark. The thresholds are deliberately far
+# below the measured figures (receive ~4900 and transmit ~3850 Mbit/s at MTU 9001
+# on a c7g.large), because a gate that trips on ordinary variance gets disabled
+# by whoever it wakes up, and then it protects nothing. It is here to catch "the
+# network is broken" and "we lost a factor of two", not to police 10%.
+#
+# Shape of the run, and why:
+#   - c7g.large, never a t-family instance: T instances throttle CPU to a
+#     baseline when credits run out, and CPU cost per byte is half of what is
+#     being measured.
+#   - The peer and the driver of the test are the metal builder, reached with
+#     SSM. It already holds the ssh key for the Haiku nodes, the peer script and
+#     a working jumbo-capable interface, so nothing has to be installed anywhere.
+#   - The instance is terminated by an EXIT trap, so a failure part way through
+#     cannot leak a running instance. That matters more than usual here: this is
+#     unattended, and the failure path is the likely path.
+#
+# Usage: haiku-perf-gate <ami-id>
+#
+# Environment (all have defaults suitable for this project):
+#   HG_BUILDER_INSTANCE   SSM-managed builder that acts as peer and driver
+#   HG_TEST_SUBNET        subnet to launch the candidate in
+#   HG_TEST_SG            security group for the candidate
+#   HG_TEST_TYPE          instance type (default c7g.large)
+#   HG_MIN_RX_MBPS        receive floor in Mbit/s (default 3000)
+#   HG_MIN_TX_MBPS        transmit floor in Mbit/s (default 2000)
+#   HG_TEST_BYTES         bytes per run (default 512M)
+
+set -uo pipefail
+
+REGION="${AWS_REGION:-${AWS_DEFAULT_REGION:-us-west-2}}"
+BUILDER="${HG_BUILDER_INSTANCE:-i-0f7f6f3e8922acffd}"
+SUBNET="${HG_TEST_SUBNET:-subnet-0888405da8f10d1b2}"
+TEST_SG="${HG_TEST_SG:-}"
+TEST_TYPE="${HG_TEST_TYPE:-c7g.large}"
+MIN_RX="${HG_MIN_RX_MBPS:-3000}"
+MIN_TX="${HG_MIN_TX_MBPS:-2000}"
+BYTES="${HG_TEST_BYTES:-512M}"
+KEY_NAME="${HG_TEST_KEY:-haiku-uaf-ed25519}"
+
+here=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
+SSM_RUN="$here/ssm-run"
+
+die() { printf 'perf-gate: %s\n' "$*" >&2; exit 1; }
+say() { printf 'perf-gate: %s\n' "$*"; }
+
+AMI="${1:-}"
+[ -n "$AMI" ] || die "usage: haiku-perf-gate <ami-id>"
+[ -x "$SSM_RUN" ] || die "ssm-run not found next to this script"
+[ -n "$TEST_SG" ] || die "HG_TEST_SG must be set (the test security group)"
+
+INSTANCE=""
+cleanup() {
+	if [ -n "$INSTANCE" ]; then
+		say "terminating $INSTANCE"
+		aws --region "$REGION" ec2 terminate-instances --instance-ids "$INSTANCE" \
+			--query 'TerminatingInstances[].CurrentState.Name' --output text 2>&1 | sed 's/^/  /'
+	fi
+	# Best effort: never leave the peer running on the shared builder.
+	"$SSM_RUN" "$BUILDER" -t 90 -q >/dev/null 2>&1 <<-'STOP'
+		pkill -f nettput-peer.py 2>/dev/null || true
+	STOP
+}
+trap cleanup EXIT
+
+# ------------------------------------------------------------------ launch
+say "launching $TEST_TYPE from $AMI"
+INSTANCE=$(aws --region "$REGION" ec2 run-instances \
+	--image-id "$AMI" --instance-type "$TEST_TYPE" \
+	--key-name "$KEY_NAME" --subnet-id "$SUBNET" --security-group-ids "$TEST_SG" \
+	--tag-specifications "ResourceType=instance,Tags=[{Key=Project,Value=haiku-graviton},{Key=Name,Value=haiku-perf-gate},{Key=ephemeral,Value=true}]" \
+	--query 'Instances[0].InstanceId' --output text 2>&1)
+case "$INSTANCE" in
+	i-*) ;;
+	*) INSTANCE=""; die "run-instances failed: $INSTANCE" ;;
+esac
+
+IP=$(aws --region "$REGION" ec2 describe-instances --instance-ids "$INSTANCE" \
+	--query 'Reservations[0].Instances[0].PrivateIpAddress' --output text 2>/dev/null)
+[ -n "$IP" ] && [ "$IP" != "None" ] || die "no private IP for $INSTANCE"
+say "instance $INSTANCE at $IP"
+
+# ------------------------------------------------------- wait for the node
+# Haiku has no SSM agent, so readiness means "sshd answers", asked from the
+# builder. A node that never answers is a boot failure and must fail the gate --
+# that is arguably the single most valuable thing this stage catches.
+say "waiting for sshd (a node that never answers is a boot failure)"
+ready=0
+for attempt in $(seq 1 20); do
+	out=$("$SSM_RUN" "$BUILDER" -t 120 -q 2>/dev/null <<-EOF
+		SO="-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ConnectTimeout=8 -o LogLevel=ERROR -i /home/ubuntu/.ssh/haiku-ed25519"
+		sudo -u ubuntu ssh -n \$SO baron@$IP 'uname -a' 2>/dev/null && echo GATE_READY
+	EOF
+	)
+	if printf '%s' "$out" | grep -q GATE_READY; then
+		ready=1
+		say "node up: $(printf '%s' "$out" | head -1)"
+		break
+	fi
+	say "  not ready yet (attempt $attempt)"
+	sleep 20
+done
+[ "$ready" = 1 ] || die "candidate $AMI never brought sshd up -- treating as a failed image"
+
+# --------------------------------------------------------------- measure
+# The peer is the builder, so the address the Haiku node must dial is the
+# *builder's* private IP. Resolve it here rather than inside the remote script:
+# `hostname -I` there would be right, but this heredoc is expanded locally and it
+# would silently substitute the CodeBuild container's address instead.
+PEER_IP=$(aws --region "$REGION" ec2 describe-instances --instance-ids "$BUILDER" \
+	--query 'Reservations[0].Instances[0].PrivateIpAddress' --output text 2>/dev/null)
+[ -n "$PEER_IP" ] && [ "$PEER_IP" != "None" ] || die "cannot resolve the builder's private IP"
+
+say "measuring against peer $PEER_IP (MTU 9001, $BYTES per run)"
+results=$("$SSM_RUN" "$BUILDER" -t 900 -q 2>&1 <<-EOF
+	set -uo pipefail
+	SO="-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ConnectTimeout=8 -o LogLevel=ERROR -i /home/ubuntu/.ssh/haiku-ed25519"
+	S="sudo -u ubuntu ssh -n \$SO baron@$IP"
+
+	pkill -f nettput-peer.py 2>/dev/null
+	sleep 1
+	sudo -u ubuntu nohup python3 /opt/haiku/nettput/nettput-peer.py -p 5301 > /tmp/perf-gate-peer.log 2>&1 &
+	sleep 2
+
+	echo "MTU: \$(\$S 'ifconfig /dev/net/ena/0' 2>&1 | sed -n 's/.*MTU: *\([0-9]*\).*/\1/p' | head -1)"
+
+	for dir in "" "-r"; do
+	    label=TX; [ -n "\$dir" ] && label=RX
+	    for rep in 1 2; do
+	        out=\$(\$S "nettput -c $PEER_IP -p 5301 -n $BYTES \$dir" 2>&1)
+	        r=\$(printf '%s' "\$out" | sed -n 's/.*throughput *: *\([0-9.]*\) Mbit.*/\1/p' | head -1)
+	        c=\$(printf '%s' "\$out" | sed -n 's/.*cost per MiB *: *\([0-9.]*\) us.*/\1/p' | head -1)
+	        echo "SAMPLE \$label \${r:-0} \${c:-0}"
+	    done
+	done
+	pkill -f nettput-peer.py 2>/dev/null
+EOF
+)
+printf '%s\n' "$results" | sed 's/^/  /'
+
+# ----------------------------------------------------------------- assert
+# Take the best of the repeats per direction. This is a floor check, so one
+# unlucky run on a shared virtual NIC must not fail an otherwise good image.
+best_of() {
+	printf '%s' "$results" | awk -v want="$1" '
+		$1 == "SAMPLE" && $2 == want && $3+0 > best { best = $3+0 }
+		END { if (best > 0) printf "%.1f", best }'
+}
+rx=$(best_of RX)
+tx=$(best_of TX)
+mtu=$(printf '%s' "$results" | sed -n 's/^MTU: \([0-9]*\).*/\1/p' | tail -1)
+
+say "----------------------------------------"
+say "MTU $mtu   receive ${rx:-none} Mbit/s (floor $MIN_RX)   transmit ${tx:-none} Mbit/s (floor $MIN_TX)"
+
+fail=0
+[ -n "$rx" ] || { say "FAIL: no receive result at all"; fail=1; }
+[ -n "$tx" ] || { say "FAIL: no transmit result at all"; fail=1; }
+if [ "${mtu:-0}" != "9001" ]; then
+	say "FAIL: interface came up at MTU ${mtu:-unknown}, expected 9001 -- jumbo negotiation regressed"
+	fail=1
+fi
+if [ -n "$rx" ] && ! awk -v a="$rx" -v b="$MIN_RX" 'BEGIN{exit !(a>=b)}'; then
+	say "FAIL: receive $rx Mbit/s is below the $MIN_RX floor"
+	fail=1
+fi
+if [ -n "$tx" ] && ! awk -v a="$tx" -v b="$MIN_TX" 'BEGIN{exit !(a>=b)}'; then
+	say "FAIL: transmit $tx Mbit/s is below the $MIN_TX floor"
+	fail=1
+fi
+
+[ "$fail" = 0 ] || die "performance gate failed for $AMI"
+say "PASS: $AMI boots, negotiates jumbo, and meets both floors"
+exit 0
