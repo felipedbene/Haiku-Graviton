@@ -117,11 +117,13 @@ net_socket_private::net_socket_private()
 	// This is a cap on queued data, not an allocation: a socket that never sends
 	// in bulk still costs nothing, so idle sockets are unaffected.
 	//
-	// The receive default is deliberately left alone. Measured the same way, the
-	// existing 65535 already reached 4942 Mbit/s, and every larger value tested
-	// was equal or worse -- so there is no evidence for raising it, and raising a
-	// receive buffer does grow the window this host advertises to a peer that may
-	// then have it in flight.
+	// The receive default is deliberately left alone, because for TCP it is only
+	// a starting point: the endpoint grows its own receive window towards the
+	// bandwidth-delay product, which is how the existing 65535 still reached
+	// 4942 Mbit/s on that machine. Larger values measured equal or worse, and
+	// where they were measured by setting SO_RCVBUF the number said nothing about
+	// the default at all -- an explicit request used to switch that growth off
+	// (see TCPEndpoint::SetReceiveBufferSize()), so it measured a pinned window.
 	send.buffer_size = 256 * 1024;
 	send.low_water_mark = 1;
 	send.timeout = B_INFINITE_TIMEOUT;

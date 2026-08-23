@@ -1084,8 +1084,19 @@ status_t
 TCPEndpoint::SetReceiveBufferSize(size_t length)
 {
 	MutexLocker _(fLock);
+
+	// Only a request for a smaller buffer than we already have may switch
+	// auto-sizing off: that is a request to bound memory use, which growing the
+	// window again would defeat. A request for a larger buffer merely states a
+	// minimum, and must never cost throughput -- the default size is applied by
+	// the socket layer and never passes through here, so pinning the window for
+	// every explicit SO_RCVBUF made asking for 64 KiB three times slower than
+	// asking for nothing at all, because only the untouched default was left
+	// free to grow with the bandwidth-delay product.
+	if (length < fReceiveQueue.Size())
+		fFlags &= ~FLAG_AUTO_RECEIVE_BUFFER_SIZE;
+
 	fReceiveQueue.SetMaxBytes(length);
-	fFlags &= ~FLAG_AUTO_RECEIVE_BUFFER_SIZE;
 	return B_OK;
 }
 
