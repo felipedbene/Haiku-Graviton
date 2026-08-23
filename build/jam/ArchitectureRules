@@ -406,6 +406,16 @@ rule KernelArchitectureSetup architecture
 			HAIKU_KERNEL_PIC_LINKFLAGS = -shared ;
 
 		case arm64 :
+			# Always keep the frame pointer, as x86_64 does below: every
+			# arm64 stack walker in the kernel -- KDL's "sc", and
+			# arch_debug_get_stack_trace() which the system profiler samples
+			# through -- follows the x29 frame-record chain. At -O2 the
+			# compiler is otherwise free to omit that chain in precisely the
+			# small hot leaf functions a profile most needs to attribute, and
+			# the walk then truncates or reports a stale caller with no
+			# indication that anything went wrong.
+			HAIKU_KERNEL_CCFLAGS += -fno-omit-frame-pointer ;
+			HAIKU_KERNEL_C++FLAGS += -fno-omit-frame-pointer ;
 			HAIKU_KERNEL_PIC_LINKFLAGS += -z max-page-size=0x1000 ;
 			HAIKU_KERNEL_ADDON_LINKFLAGS += -z max-page-size=0x1000 ;
 			HAIKU_KERNEL_PIC_CCFLAGS = -fpic ;
