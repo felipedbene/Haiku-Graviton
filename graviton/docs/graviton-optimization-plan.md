@@ -698,7 +698,33 @@ are unavailable to us; the driver's own counters are the substitute.
 11 — AWS warns Graviton's faster packet processing raises the interrupt rate, and
 our driver never configures a coalescing interval.
 
-## 6. Jumbo frames
+## 6. Jumbo frames -- DONE, HARDWARE-VERIFIED 2026-08-23
+
+**Result.** MTU **9001** on `/dev/net/ena/0` on a real Graviton instance
+(`t4g.medium` from `ami-0d3f218d86ec93745`). Guest log:
+`ena: set device MTU 9001 after queue creation (matching what we report to the
+stack): ok`.
+
+- **RX chaining proven**: metal -> Haiku with **DF set** (`ping -M do -s 8973`, so
+  fragmentation cannot occur) -- 3/3 received, 8981 bytes back, 0.275 ms.
+- **TX chaining proven**: Haiku -> metal `-s 8973` -- 3/3, 0.316 ms avg.
+- **Boundary sweep** across the 2048-byte bounce slot: 1472, 2034, 2035, 2036,
+  4083, 8972, 8973 -- all replied.
+- **0 errors, 0 dropped** over 199 rx / 227 tx packets; no reset, leak or
+  stranded-descriptor messages.
+
+It took **both** halves: the ethernet layer's unconditional 1514 clamp (the real
+binding constraint) had to become capability-gated, and the driver needed
+multi-descriptor RX/TX. Note `ETHER_MAX_FRAME_SIZE` was deliberately *not*
+bumped -- `tunnel.cpp` sizes queues with it and uses it directly as an MTU.
+
+**Still open:** this proves jumbo *correct*, not *faster*. No throughput number
+exists yet; that needs item 13's PMU work plus a load generator. Transmit
+doorbell coalescing and TX checksum offload remain blocked in the stack (see
+item 5a and the ENA notes).
+
+<details>
+<summary>Original analysis, kept for the record</summary>
 
 > **CORRECTION, 2026-08-22 — our 1500 cap is not the binding constraint; the stack is.**
 > Raising `ENA_FRAME_SIZE` and implementing multi-descriptor RX is necessary but **not
@@ -746,6 +772,8 @@ per-queue buffer pool sizing once item 5 lands.
 
 **AWS guide (2026-08-22).** Nothing. Jumbo frames, MTU 9001 and in-VPC MTU are
 not discussed anywhere in the repo. No change to the plan above.
+
+</details>
 
 ## 7. Barriers & cacheline alignment
 
