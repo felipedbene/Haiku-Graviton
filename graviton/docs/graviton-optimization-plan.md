@@ -698,7 +698,14 @@ are unavailable to us; the driver's own counters are the substitute.
 11 — AWS warns Graviton's faster packet processing raises the interrupt rate, and
 our driver never configures a coalescing interval.
 
-## 6. Jumbo frames -- DONE, HARDWARE-VERIFIED 2026-08-23
+## 6. Jumbo frames -- DONE, HARDWARE-VERIFIED 2026-08-23, THROUGHPUT MEASURED 2026-08-23
+
+**Throughput (added 2026-08-23, `c7g.large`, one boot, MTU changed with
+`ifconfig` between rows):** receive **952 → 4933 Mbit/s (+418%)** at **0.24× the
+CPU per byte**; transmit 1148 → 1419 Mbit/s (+23.5%) at 0.47× the CPU per byte.
+Transmit's small gain was later shown to be the socket send buffer, not the
+driver — see item 15. Details in `throughput-measurement.md`.
+
 
 **Result.** MTU **9001** on `/dev/net/ena/0` on a real Graviton instance
 (`t4g.medium` from `ami-0d3f218d86ec93745`). Guest log:
@@ -1210,6 +1217,37 @@ discussion is about Linux guests preempting userspace spinlock holders — Haiku
 `acquire_spinlock()` disables interrupts, so the kernel side does not apply, though
 the general hazard (preempting a lock holder starves every waiter) is worth
 remembering for Haiku *userland* spin loops.
+
+---
+
+## 15. Default socket send buffer — DONE, MEASURED 2026-08-23
+
+**The single largest throughput win found so far, and it is not in the driver.**
+
+`net_socket.cpp` hard-coded both socket buffers to 65535 with no autotuning. A
+TCP stream cannot hold more than one send buffer in flight per round trip, so on
+a `c7g.large` at 0.326 ms RTT that is a hard ceiling of
+`65535 * 8 / 0.000326 = 1608 Mbit/s`. Transmit measured **1611 Mbit/s**. The
+number being measured was the default, to three digits.
+
+Raising `send.buffer_size` to **256 KiB**: transmit **1611/1397 → 4376/4421
+Mbit/s (~3×)**, CPU per mebibyte **3900 → 2221 µs (−45%)**. A 64 KiB–4 MiB sweep
+puts the plateau at 192–288 KiB with the gain reversing above it, so 256 KiB is
+the measured optimum rather than a round number.
+
+The receive default was left at 65535 on evidence: it already reached 4942 Mbit/s
+and every larger value tested was equal or worse.
+
+Full method, tables and the interleaved controls: `throughput-measurement.md`.
+
+**Still open from the same measurements:**
+
+- A **throughput cliff between a receive buffer of 65535 and 65536** — one byte,
+  a factor of 3–4 (4942 → 1474 Mbit/s), reproducible. Mechanism unexplained;
+  the `tcp_setsockopt` double-assignment path is the standing suspect. If
+  `SO_RCVBUF` can make a socket 3× slower, that is a bug worth a dedicated hunt.
+- **No autotuning.** 256 KiB beats 65535 but every fixed value is wrong
+  somewhere — a waste on a LAN, too small on a long fat path.
 
 ---
 
