@@ -240,6 +240,7 @@ AddFilesToPackage bin :
 	$(SYSTEM_BIN)
 	cloud_init_lite
 	ena_fault
+	nettput
 	consoled
 	;
 AddFilesToPackage apps
