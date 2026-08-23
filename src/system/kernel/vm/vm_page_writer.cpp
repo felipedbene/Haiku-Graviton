@@ -564,9 +564,25 @@ ModifiedPageQueue::_PageWriter()
 
 	while (fWriterThread >= 0) {
 		if (queue.Count() < kNumPages) {
-			// wait the full amount when no one triggers us
-			if (!fPageWriterCondition.Wait(PAGES_FLUSH_DURATION_LOCAL_QUOTA, true))
-				continue;
+			// Wait the full amount when no one triggers us.
+			//
+			// The return value must be ignored. BinarySemaphore::Wait() reports
+			// false on timeout, and the timeout *is* the periodic flush: it is
+			// the only thing that ever gets a small number of dirty pages to
+			// disk on an otherwise idle system. Treating it as "nothing to do"
+			// and going back to sleep means a queue that never reaches
+			// kNumPages is never written at all, so file data written at
+			// runtime stays in the page cache indefinitely while the inode that
+			// describes it is journalled out by the block cache -- a power loss
+			// then yields a file of the right size, mode and mtime whose blocks
+			// still hold their previous contents.
+			//
+			// Being woken early instead means either that there is work
+			// (NotifyWriter(), WaitIfOverQuota()) or that the queue is being
+			// torn down (~ModifiedPageQueue sets fWriterThread to -1 and wakes
+			// us). Both want the loop body to run: the former to write, the
+			// latter to drain what is left before the loop condition ends it.
+			fPageWriterCondition.Wait(PAGES_FLUSH_DURATION_LOCAL_QUOTA, true);
 		}
 
 		page_num_t modifiedPages = queue.Count();
@@ -726,8 +742,15 @@ ModifiedPageQueue::_PageWriter()
 		else
 			pagesSinceLastSuccessfulWrite = 0;
 
-		if (failedPages == 0 && numPages >= 8)
-			fLastAveragePageWriteDuration = (system_time() - runStart) / numPages;
+		if (failedPages == 0 && numPages > 0) {
+			// Runs of fewer than 8 pages are too short to average usefully, but
+			// the estimate has to stop being zero at some point: while it is
+			// zero IsOverQuota() can never return true, so WaitIfOverQuota()
+			// never wakes this thread and the back-pressure path stays
+			// permanently disarmed. Take a noisy sample over an accurate zero.
+			if (numPages >= 8 || fLastAveragePageWriteDuration == 0)
+				fLastAveragePageWriteDuration = (system_time() - runStart) / numPages;
+		}
 
 		if (!IsOverQuota())
 			fUnderQuotaCondition.NotifyAll();
