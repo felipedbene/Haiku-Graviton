@@ -345,7 +345,7 @@ is already wedged, so the only real remedy there is a different guest.
 
 Built = a verified `.hpkg` on the builder **and** in
 `s3://haiku-graviton-668984504585-us-west-2/hpkg/arm64/`, confirmed by `ls`/`s3 ls` and
-never inferred from an exit code. **17 ports built, 68 hpkgs in S3** (was 9 and 51).
+never inferred from an exit code. **18 ports built, 71 hpkgs in S3** (was 9 and 51).
 
 | Port | State | Note |
 |---|---|---|
@@ -365,20 +365,36 @@ never inferred from an exit code. **17 ports built, 68 hpkgs in S3** (was 9 and 
 | **pkgconf 1.5.3 (+devel +debuginfo)** | **built** | first port fetched *and* unpacked through the proxy |
 | **zip 3.0** | **built** | second proof of the unpack fix, `.tar.gz` |
 | **patch 2.7.6** | **built** | needed by `haikuporter -G`, see below |
-| sqlite 3.50.4.0 | in flight | `devel:libreadline` now satisfied; compiling the 9 MB amalgamation |
-| groff 1.23.0 | in flight | gates gettext |
+| **sqlite 3.50.4.0 (+devel +debuginfo)** | **built** | unblocked by readline |
+| groff 1.23.0 | blocked | `build-prerequires "cmd:pnmcrop"` — **the netpbm cycle**, see below |
 | gettext 1.0 | blocked on groff | `build-prerequires "cmd:groff"` |
 | xz_utils 5.8.3 | blocked on gettext | `build-prerequires "cmd:autopoint"` |
 | zstd 1.5.6 | blocked on xz_utils | `build-requires "devel:liblzma"` |
 | openssl3 3.5.7 | blocked on zstd | `build-requires "devel:libzstd"` |
 | libxml2 2.15.3 | blocked | `build-prerequires "cmd:python3.14"` |
 
-The remaining ladder is a plain build order, not a set of defects:
+### The remaining chain is not a plain ladder
+
+`sqlite` fell out as soon as `readline` existed, but the rest converges on one point:
 
 ```
-groff -> gettext -> xz_utils -> zstd -> openssl3
-python3.14 -> libxml2
+zstd, openssl3  ->  xz_utils  ->  gettext  ->  groff  ->  pnmcrop (netpbm)
+libxml2         ->  python3.14
 ```
+
+and `groff -> pnmcrop/netpbm` is the entrance to the **same 10-deep cycle already
+documented for `texinfo`** in `graviton/haikuports-patches/README.md`:
+
+```
+texinfo -> libintl -> groff -> pnmcrop/netpbm -> libjasper -> cmake -> libcurl
+        -> libpsl -> libidn2 -> gtkdocize
+```
+
+So `openssl3`, `libxml2`, `gettext` and `zstd` are **not** one build away — four of the
+five original "leaf" ports sit behind that cycle. `groff` is only a *build-prerequisite*
+of `gettext` (man pages), so the tractable move is the same stage-1 expedient used for
+autoconf: cut the documentation step rather than try to build the cycle. That produces
+packages that must be rebuilt later and belong in `hpkg-out/arm64/stage1/`.
 
 ## Two more traps worth propagating
 
@@ -392,8 +408,9 @@ python3.14 -> libxml2
 
 ## What remains
 
-1. Finish the ladder above: `groff` → `gettext` → `xz_utils` → `zstd` → `openssl3`, and
-   `python3.14` for `libxml2`.
+1. Break the `groff` → `pnmcrop`/netpbm cycle, or cut groff out of `gettext` as a
+   stage-1 expedient. That single edge is what gates `gettext`, `xz_utils`, `zstd` and
+   `openssl3`. Separately, `python3.14` gates `libxml2`.
 2. Build `python3.10` with zlib/`_bz2`/`_lzma` so the unpack fix can be retired. It is
    currently *routed around*, not fixed — `haiku-haikuporter-patch --check` prints the
    three modules' status on every run so this cannot be quietly forgotten. The chain is
