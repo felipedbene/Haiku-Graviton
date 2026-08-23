@@ -110,6 +110,64 @@ reference_memcpy(void* dest, const void* source, size_t count)
 typedef void* (*copy_func)(void*, const void*, size_t);
 
 
+/*!	Checks reference_memcpy() against memcpy() at every alignment pair and at
+	every size where its internal cases meet.
+
+	A faster copy that is wrong is worthless, and the failure mode of a
+	block-at-a-time copy is exactly an off-by-one where its head, body and tail
+	cases join -- which timing alone would never catch, because a routine that
+	copies too few bytes is a *fast* one. Every size up to 96 is therefore
+	covered exhaustively along with the sizes either side of each threshold, at
+	all 64 alignment pairs, and the bytes just outside the destination are
+	checked too so that an overrun cannot pass.
+*/
+static int
+verify(void)
+{
+	static const size_t kExtra[] = { 127, 128, 129, 1447, 1448, 1920, 8961,
+		65535 };
+	const size_t kGuard = 16;
+	uint8_t* expected = (uint8_t*)malloc(65535 + 64 + 2 * kGuard);
+	uint8_t* actual = (uint8_t*)malloc(65535 + 64 + 2 * kGuard);
+	int failures = 0;
+
+	if (expected == NULL || actual == NULL)
+		return -1;
+
+	for (size_t i = 0; i < 65535 + 64; i++)
+		sSource[i] = (uint8_t)(i * 31 + 7);
+
+	for (size_t index = 0; index < 97 + sizeof(kExtra) / sizeof(kExtra[0]);
+			index++) {
+		const size_t size = index < 97 ? index : kExtra[index - 97];
+
+		for (int sourceOffset = 0; sourceOffset < 8; sourceOffset++) {
+			for (int destOffset = 0; destOffset < 8; destOffset++) {
+				memset(expected, 0xcc, size + 64 + 2 * kGuard);
+				memset(actual, 0xcc, size + 64 + 2 * kGuard);
+
+				memcpy(expected + kGuard + destOffset,
+					sSource + sourceOffset, size);
+				reference_memcpy(actual + kGuard + destOffset,
+					sSource + sourceOffset, size);
+
+				if (memcmp(expected, actual, size + 64 + 2 * kGuard) != 0) {
+					if (failures < 10) {
+						printf("  MISMATCH size %zu source+%d dest+%d\n",
+							size, sourceOffset, destOffset);
+					}
+					failures++;
+				}
+			}
+		}
+	}
+
+	free(expected);
+	free(actual);
+	return failures;
+}
+
+
 /*!	Copies \a size bytes repeatedly, walking the whole buffer so that every
 	read misses if \a cold is set, and returns nanoseconds per byte.
 */
@@ -188,6 +246,22 @@ main(void)
 
 	printf("memcpybench: %d MiB buffers, cycles at a nominal %.1f GHz\n",
 		BUFFER_SIZE / (1024 * 1024), NOMINAL_GHZ);
+	printf("\n");
+	printf("correctness of the reference copy against memcpy():\n");
+	int failures = verify();
+	if (failures < 0) {
+		printf("  could not allocate the comparison buffers\n");
+		return 1;
+	}
+	printf("  %s (%d mismatches over 64 alignment pairs x 105 sizes)\n",
+		failures == 0 ? "identical" : "DIFFERS", failures);
+	if (failures > 0)
+		return 1;
+
+	/* The verify() pass filled the front of the source buffer with a pattern;
+	   restore the whole thing so the timings below are not measuring a copy out
+	   of a partly cold, partly hot region. */
+	memset(sSource, 0xa5, BUFFER_SIZE + 4096);
 	printf("\n");
 	printf("  %-26s %6s %5s %5s %-5s  %8s %7s   %8s %7s  %6s\n",
 		"case", "size", "s.off", "d.off", "temp",
