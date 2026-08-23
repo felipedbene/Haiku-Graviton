@@ -86,7 +86,15 @@ function ctx(scope: Construct, key: string, envKey: string, fallback?: string): 
 }
 
 export function loadConfig(scope: Construct): HaikuPipelineConfig {
-  const workBucketName = process.env.HAIKU_WORK_BUCKET ?? scope.node.tryGetContext('haiku:workBucketName');
+  // Deliberately NOT read from the environment. A bucket name is a
+  // replacement-triggering property, so whether HAIKU_WORK_BUCKET happened to be
+  // exported in the deploying shell decided whether the work bucket survived the
+  // deploy. It did not survive once: the rename orphaned the vmimport
+  // authorization the Register stage depends on, and stranded the cross-tools
+  // cache. Reading it only from context means the value lives in the tree, is
+  // reviewed with the rest of the change, and cannot differ between two people
+  // deploying the same commit.
+  const workBucketName = scope.node.tryGetContext('haiku:workBucketName');
   return {
     account: ctx(scope, 'haiku:account', 'HAIKU_ACCOUNT', '668984504585'),
     region: ctx(scope, 'haiku:region', 'HAIKU_REGION', 'us-west-2'),

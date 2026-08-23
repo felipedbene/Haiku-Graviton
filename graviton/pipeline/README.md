@@ -119,7 +119,28 @@ Set in `cdk.json` `context`, or override per-invocation with `-c key=value`
 | `haiku:haikuOnEc2Repo` / `Branch` | | haiku/haiku-on-ec2 | provides `make-gpt-image.sh`. |
 | `haiku:haikuRevision` | `HAIKU_REVISION` | `hrev59996` | stamped into the build + a tag. |
 | `haiku:rootVolumeBytes` | `HAIKU_ROOT_VOLUME_BYTES` | `2147483648` | 2 GiB root volume. |
-| `haiku:workBucketName` | `HAIKU_WORK_BUCKET` | (generated) | set a deterministic name so `vmimport` can be pre-authorized. |
+| `haiku:workBucketName` | (context only, **not** env) | (generated) | **leave empty.** See the warning below. |
+
+> **Do not name the work bucket, and do not set `HAIKU_WORK_BUCKET`.** A bucket
+> name is a replacement-triggering CloudFormation property, so changing it — in
+> either direction, including setting it to the name the bucket already has —
+> destroys and recreates the bucket, and the recreate collides with the retained
+> original. This bit once: a deploy from a shell that did not export
+> `HAIKU_WORK_BUCKET` renamed the bucket, which orphaned the `vmimport`
+> authorization the Register stage depends on (it cannot import a snapshot from a
+> bucket `vmimport` cannot read) and stranded the cross-tools cache in the old
+> bucket. Nothing was lost — the bucket is `RETAIN` — but the next bake would have
+> failed. An always-generated name cannot drift with whoever is deploying.
+>
+> Consequence: after a *first* deploy, read `WorkBucketName` from the stack
+> outputs and authorize `vmimport` against that name, rather than choosing a name
+> up front. There is a policy per bucket on the `vmimport` role
+> (`vmimport-haiku-work`, `vmimport-haiku-work2`, ...) for exactly this reason.
+
+| `haiku:builderInstanceId` | `HAIKU_BUILDER_INSTANCE` | the metal builder | SSM-managed peer/driver for the Test stage. |
+| `haiku:testSubnetId` / `testSecurityGroupId` | `HAIKU_TEST_SUBNET` / `HAIKU_TEST_SG` | project subnet / `haiku-graviton-test` | where the perf gate boots the candidate. |
+| `haiku:testInstanceType` | `HAIKU_TEST_TYPE` | `c7g.large` | **never a t-family type** — burstable CPU throttles once credits run out, which corrupts the CPU-cost-per-byte measurement. |
+| `haiku:minReceiveMbps` / `minTransmitMbps` | `HAIKU_MIN_RX_MBPS` / `HAIKU_MIN_TX_MBPS` | `3000` / `2000` | regression floors, well under the measured ~4950/~4490. |
 
 The **only** credential is the CodeConnections ARN — a reference to a connection
 you authorize once in the console, not a secret in the tree. The Ed25519

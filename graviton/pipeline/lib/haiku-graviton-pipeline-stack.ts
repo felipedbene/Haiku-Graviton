@@ -197,10 +197,15 @@ export class HaikuGravitonPipelineStack extends cdk.Stack {
         },
       },
     });
-    // The gate writes its SSM command output through the work bucket, the same
-    // way graviton/scripts/ssm-run does everywhere else -- inline SSM output is
-    // truncated at 24 KB, which silently cuts a result table in half.
-    workBucket.grantReadWrite(perfTest, 'ssm-out/*');
+    // ssm-run routes command output through S3 because inline SSM output is
+    // truncated at 24 KB. That object is written by the *builder's* instance
+    // role, not by this project, and that role is scoped to exactly one bucket --
+    // so the gate must read from that bucket rather than from the pipeline's work
+    // bucket. Granting the work bucket instead would leave the gate silently
+    // falling back to the truncated inline copy.
+    const ssmOutBucket = s3.Bucket.fromBucketName(
+      this, 'SsmOutBucket', 'haiku-graviton-668984504585-us-west-2');
+    ssmOutBucket.grantRead(perfTest, 'ssm-out/*');
 
     // Launch and describe an ephemeral test instance. RunInstances does not
     // usefully support resource-level scoping for a freshly created instance, so
