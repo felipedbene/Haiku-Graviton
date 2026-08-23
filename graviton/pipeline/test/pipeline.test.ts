@@ -19,6 +19,13 @@ const config: HaikuPipelineConfig = {
   haikuRevision: 'hrev59996',
   amiNamePrefix: 'haiku-graviton',
   rootVolumeBytes: '2147483648',
+  builderInstanceId: 'i-000000000000000aa',
+  testSubnetId: 'subnet-000000000000000aa',
+  testSecurityGroupId: 'sg-000000000000000aa',
+  testInstanceType: 'c7g.large',
+  testKeyName: 'test-key',
+  minReceiveMbps: '3000',
+  minTransmitMbps: '2000',
 };
 
 function synth(): Template {
@@ -30,22 +37,42 @@ function synth(): Template {
   return Template.fromStack(stack);
 }
 
-test('creates a five-stage pipeline', () => {
+test('creates a six-stage pipeline with the hardware gate before approval', () => {
   const t = synth();
   t.hasResourceProperties('AWS::CodePipeline::Pipeline', {
     Stages: [
       { Name: 'Source' },
       { Name: 'CrossBuild' },
       { Name: 'Register' },
+      { Name: 'Test' },
       { Name: 'Approve' },
       { Name: 'Promote' },
     ].map((s) => ({ Name: s.Name })),
   });
 });
 
-test('creates three CodeBuild projects', () => {
+test('creates four CodeBuild projects', () => {
   const t = synth();
-  t.resourceCountIs('AWS::CodeBuild::Project', 3);
+  t.resourceCountIs('AWS::CodeBuild::Project', 4);
+});
+
+// The perf gate runs unattended and holds ec2:TerminateInstances. Without a tag
+// condition it would also hold the right to terminate the metal builder, which
+// is the one machine the whole project depends on. Assert the guard explicitly
+// so it cannot be dropped by a later edit without a test going red.
+test('the perf gate may only terminate its own ephemeral instances', () => {
+  const t = synth();
+  const policies = t.findResources('AWS::IAM::Policy');
+  const statements = Object.values(policies).flatMap(
+    (p: any) => p.Properties.PolicyDocument.Statement as any[],
+  );
+  const terminators = statements.filter((s) =>
+    ([] as string[]).concat(s.Action ?? []).includes('ec2:TerminateInstances'),
+  );
+  expect(terminators).toHaveLength(1);
+  const condition = terminators[0].Condition.StringEquals;
+  expect(condition['ec2:ResourceTag/ephemeral']).toBe('true');
+  expect(condition['ec2:ResourceTag/Name']).toBe('haiku-perf-gate');
 });
 
 test('has a retained encrypted work bucket', () => {

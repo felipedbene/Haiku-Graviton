@@ -25,8 +25,13 @@ export interface HaikuGravitonPipelineStackProps extends cdk.StackProps {
  *   Register     CodeBuild: upload raw to S3, ec2 import-snapshot, poll,
  *                register-image (arm64/uefi/ena/hvm/xvda), tag as a candidate
  *                (canonical is NOT set here). Exports AMI_ID.
+ *   Test         CodeBuild: boot the candidate on a real c7g.large, measure
+ *                throughput against the metal builder over SSM, and fail unless
+ *                it boots, negotiates MTU 9001 and clears both throughput
+ *                floors. The ephemeral instance is always torn down.
  *   Approve      Manual approval gate — canonical promotion happens only after
- *                a human approves.
+ *                a human approves, now with the Test stage's measurements in
+ *                hand rather than a promise that someone checked out of band.
  *   Promote      CodeBuild: graviton/scripts/haiku-canonical promote <AMI_ID>,
  *                enforcing the single-canonical invariant.
  */
@@ -157,7 +162,102 @@ export class HaikuGravitonPipelineStack extends cdk.Stack {
     );
 
     // ---------------------------------------------------------------------
-    // Stage 3 project: canonical promotion. The only privileged tag mutation.
+    // Stage 3 project: hardware performance gate. Boots the candidate AMI on a
+    // real Graviton instance, measures throughput against the metal builder over
+    // SSM, and fails the pipeline if the image does not boot, does not negotiate
+    // jumbo, or has lost a large fraction of its throughput.
+    //
+    // Before this stage existed the approval gate could only mean "I tested this
+    // out of band and I vouch for it" -- nothing in the pipeline knew whether the
+    // image worked. It sits before Approve so a human is deciding with numbers.
+    // ---------------------------------------------------------------------
+    const perfTest = new codebuild.PipelineProject(this, 'PerfTest', {
+      projectName: `${cfg.amiNamePrefix}-perf-test`,
+      environment: smallArmEnvironment,
+      // Boot plus two runs per direction; the boot wait dominates.
+      timeout: cdk.Duration.minutes(45),
+      environmentVariables: {
+        ...commonEnvVars,
+        AWS_REGION: { value: cfg.region },
+        HG_BUILDER_INSTANCE: { value: cfg.builderInstanceId },
+        HG_TEST_SUBNET: { value: cfg.testSubnetId },
+        HG_TEST_SG: { value: cfg.testSecurityGroupId },
+        HG_TEST_TYPE: { value: cfg.testInstanceType },
+        HG_TEST_KEY: { value: cfg.testKeyName },
+        HG_MIN_RX_MBPS: { value: cfg.minReceiveMbps },
+        HG_MIN_TX_MBPS: { value: cfg.minTransmitMbps },
+      },
+      buildSpec: codebuild.BuildSpec.fromSourceFilename('graviton/pipeline/buildspecs/perf-test.yml'),
+      logging: {
+        cloudWatch: {
+          logGroup: new logs.LogGroup(this, 'PerfTestLogs', {
+            retention: logs.RetentionDays.ONE_MONTH,
+            removalPolicy: cdk.RemovalPolicy.DESTROY,
+          }),
+        },
+      },
+    });
+    // The gate writes its SSM command output through the work bucket, the same
+    // way graviton/scripts/ssm-run does everywhere else -- inline SSM output is
+    // truncated at 24 KB, which silently cuts a result table in half.
+    workBucket.grantReadWrite(perfTest, 'ssm-out/*');
+
+    // Launch and describe an ephemeral test instance. RunInstances does not
+    // usefully support resource-level scoping for a freshly created instance, so
+    // constrain by region and rely on the terminate policy below being narrow.
+    perfTest.addToRolePolicy(
+      new iam.PolicyStatement({
+        sid: 'LaunchEphemeralTestInstance',
+        actions: [
+          'ec2:RunInstances',
+          'ec2:DescribeInstances',
+          'ec2:DescribeImages',
+          'ec2:CreateTags',
+        ],
+        resources: ['*'],
+        conditions: regionCondition,
+      }),
+    );
+    // Termination is restricted to instances this gate created. Without the tag
+    // condition an unattended stage would hold the right to terminate the metal
+    // builder, which is the one machine the whole project depends on.
+    perfTest.addToRolePolicy(
+      new iam.PolicyStatement({
+        sid: 'TerminateOnlyOwnEphemeralInstances',
+        actions: ['ec2:TerminateInstances'],
+        resources: ['*'],
+        conditions: {
+          StringEquals: {
+            'aws:RequestedRegion': cfg.region,
+            'ec2:ResourceTag/ephemeral': 'true',
+            'ec2:ResourceTag/Name': 'haiku-perf-gate',
+          },
+        },
+      }),
+    );
+    // Drive the builder over SSM: it is the traffic peer and the only host that
+    // can reach a Haiku node (Haiku runs no SSM agent of its own).
+    perfTest.addToRolePolicy(
+      new iam.PolicyStatement({
+        sid: 'DriveBuilderOverSsm',
+        actions: ['ssm:SendCommand'],
+        resources: [
+          `arn:aws:ec2:${cfg.region}:${cfg.account}:instance/${cfg.builderInstanceId}`,
+          `arn:aws:ssm:${cfg.region}::document/AWS-RunShellScript`,
+        ],
+      }),
+    );
+    perfTest.addToRolePolicy(
+      new iam.PolicyStatement({
+        sid: 'ReadSsmCommandResults',
+        actions: ['ssm:GetCommandInvocation', 'ssm:ListCommandInvocations'],
+        resources: ['*'],
+        conditions: regionCondition,
+      }),
+    );
+
+    // ---------------------------------------------------------------------
+    // Stage 4 project: canonical promotion. The only privileged tag mutation.
     // Tightly scoped to describe/create/delete tags in the target region.
     // ---------------------------------------------------------------------
     const promote = new codebuild.PipelineProject(this, 'Promote', {
@@ -223,11 +323,22 @@ export class HaikuGravitonPipelineStack extends cdk.Stack {
       variablesNamespace: 'reg',
     });
 
+    const perfTestAction = new cpactions.CodeBuildAction({
+      actionName: 'Hardware_Perf_Gate',
+      project: perfTest,
+      input: sourceArtifact,
+      environmentVariables: {
+        AMI_ID: { value: registerAction.variable('AMI_ID') },
+      },
+    });
+
     const approvalAction = new cpactions.ManualApprovalAction({
       actionName: 'Approve_Canonical_Promotion',
       additionalInformation:
-        'Approve to make the freshly-registered AMI (#{reg.AMI_ID}) the single canonical=true image. ' +
-        'This removes canonical from every prior holder.',
+        'The Test stage already booted AMI #{reg.AMI_ID} on real Graviton hardware and ' +
+        'checked that it comes up, negotiates MTU 9001, and meets both throughput floors -- ' +
+        'its log has the measured numbers. Approve to make this the single canonical=true ' +
+        'image, which removes canonical from every prior holder.',
     });
 
     const promoteAction = new cpactions.CodeBuildAction({
@@ -248,6 +359,7 @@ export class HaikuGravitonPipelineStack extends cdk.Stack {
         { stageName: 'Source', actions: [sourceAction] },
         { stageName: 'CrossBuild', actions: [crossBuildAction] },
         { stageName: 'Register', actions: [registerAction] },
+        { stageName: 'Test', actions: [perfTestAction] },
         { stageName: 'Approve', actions: [approvalAction] },
         { stageName: 'Promote', actions: [promoteAction] },
       ],
