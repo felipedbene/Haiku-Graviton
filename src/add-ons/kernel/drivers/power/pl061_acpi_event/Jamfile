@@ -1,0 +1,14 @@
+SubDir HAIKU_TOP src add-ons kernel drivers power pl061_acpi_event ;
+
+UsePrivateKernelHeaders ;
+
+# The ACPI resource descriptors (ACPI_RESOURCE and friends) are ACPICA types;
+# ACPI.h only forward-declares them. Same arrangement as the pch_i2c driver.
+SubDirHdrs [ FDirName $(SUBDIR) $(DOTDOT) $(DOTDOT) $(DOTDOT)
+	bus_managers acpi acpica include ] ;
+SubDirHdrs [ FDirName $(SUBDIR) $(DOTDOT) $(DOTDOT) $(DOTDOT)
+	bus_managers acpi acpica include platform ] ;
+
+KernelAddon pl061_acpi_event :
+	pl061_acpi_event.cpp
+	;
