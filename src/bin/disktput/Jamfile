@@ -1,0 +1,8 @@
+SubDir HAIKU_TOP src bin disktput ;
+
+# The CPU accounting comes from libroot, which is linked implicitly; the worker
+# threads that create the request depth need the pthread interface, which on
+# Haiku also lives in libroot.
+Application disktput :
+	disktput.cpp
+;
