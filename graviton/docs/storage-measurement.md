@@ -469,7 +469,14 @@ a kernel change rather than a module one.
 
 ### Buffered writes are irreproducible and get *slower* with concurrency
 
-This is the finding that matters. Identical repetitions of the identical cell:
+> **RETRACTED.** Both halves of this subsection are wrong, and the reason is worth
+> more than the claim was: the write path degrades over the life of a boot, and this
+> sweep ran its thread counts in ascending order, so degradation over *time* was
+> measured and reported as an effect of *concurrency*. See
+> "RETRACTED and replaced" below for the corrected numbers, and
+> "The real finding" for what was actually going on -- which is worse.
+
+Identical repetitions of the identical cell:
 
 | cell | rep 1 | rep 2 | spread |
 |---|---|---|---|
@@ -590,6 +597,166 @@ The gap is a genuine portability defect that happens to be free on the only
 hardware this project targets. Also tested once, at one file size, and it says
 nothing about a sub-3-second window.
 
+## RETRACTED and replaced: the buffered-write "irreproducibility" and "anti-scaling"
+
+Two claims in Result 4 above were investigated with progress tracing and **do not
+survive**. They are left in place rather than deleted, per this document's
+convention, because how they were wrong is more useful than the claims were.
+
+### What was claimed
+
+- Buffered writes vary **4.4×** between identical repetitions (324.11 vs 73.24 MiB/s).
+- Buffered writes **anti-scale**: 114.77 → 80.01 → 67.23 MiB/s for t=1 → 4 → 16.
+
+### What is actually true
+
+**Neither is a concurrency or variance effect. Both are the same underlying thing:
+the write path degrades monotonically over the life of a boot, and my sweep ran
+its thread counts in ascending order.** The "anti-scaling" is the degradation
+measured against time and mislabelled as concurrency — a direct violation of this
+document's own interleaving rule, committed while writing the rule down.
+
+Ten identical 20 s buffered writes at depth 1, on a 4 GiB file:
+
+| rep | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 |
+|---|---|---|---|---|---|---|---|---|---|---|
+| MiB/s | **430.2** | 202.6 | 201.6 | 202.3 | 195.5 | 197.3 | 187.9 | 205.0 | 193.8 | 198.5 |
+
+Repetition 1 is a first-run effect — an empty cache absorbing writes at memory
+speed. Repetitions 2–10 agree to **±5%**. There is no 4.4× variance.
+
+And with 1 s progress tracing, buffered writes **scale up**, weakly:
+
+| depth | throughput | p50 | p99 | max |
+|---|---|---|---|---|
+| 1 | 177.7 MiB/s | 658 µs | 4008 µs | 23,014 µs |
+| 4 | 219.1 MiB/s | 4339 µs | 10,811 µs | 32,266 µs |
+| 16 | **281.6 MiB/s** | 13,182 µs | **61,331 µs** | **174,510 µs** |
+
+`NO PROGRESS` intervals across 45 s at each of the three depths, plus the control:
+**zero**. No stall, no lost wakeup, no wedge at this load.
+
+The buffered path is also *faster* than the uncached path at depth 1 — 177.7 vs
+81.8 MiB/s — because the page writer batches `kNumPages = 256` pages (1 MiB) per
+round instead of the caller's 256 KiB per operation.
+
+### What the page writer is and is not responsible for
+
+The negative control settles this. Uncached write, depth 16, same file, same
+everything: **199.3 MiB/s, p99 34,367 µs, max 43,429 µs.**
+
+- The **~200 MiB/s ceiling on BFS writes is present in the uncached path too**, and
+  the uncached path never touches the page writer's quota. So the ceiling is
+  **BFS**, not the page writer. The earlier attribution ("suspect the single
+  journal") stands; the "page writer is the prime suspect" framing does not.
+- What the page writer *does* add is **tail latency**: p99 61 ms against 34 ms, and
+  max 175 ms against 43 ms. That is back-pressure, and it is consistent with
+  `WaitIfOverQuota` being entered with `flags = 0` — see below, where it stops
+  being a tail and becomes a liveness bug.
+
+## The real finding: sustained write load degrades without recovering, and then wedges
+
+This replaces the retracted claims and is more serious than either.
+
+### Progressive degradation
+
+After ~48 GiB had been written to the volume during one boot, the *same cells* that
+had measured 178–282 MiB/s measured **18–80 MiB/s**, with p99 in the hundreds of
+milliseconds and single `pwrite` calls taking up to **1.53 seconds**:
+
+| cell | earlier this boot | after 48 GiB written | max latency |
+|---|---|---|---|
+| buffered write, depth 1 | 177.7 MiB/s | **18.7 MiB/s** | 376,875 µs |
+| buffered write, depth 4 | 219.1 MiB/s | **20.2 MiB/s** | 356,439 µs |
+| buffered write, depth 16 | 281.6 MiB/s | **79.6 MiB/s** | 1,004,289 µs |
+| worst single write observed | — | — | **1,527,413 µs (1.53 s)** |
+
+Interleaved between a 4 GiB file (fits in the 31.5 GiB of RAM) and a 45 GiB file
+(cannot), the two arms were **indistinguishable** — 18.66 vs 18.72 MiB/s at depth 1.
+So this is **not** a working-set-exceeds-RAM effect either; the whole write path had
+degraded regardless of which file was touched. That was the hypothesis this
+experiment was built to test, and it is disproven.
+
+### Then it wedged
+
+Attempting to measure the degraded state further, the node stopped responding
+entirely. The state is unambiguous and was captured:
+
+| probe | result |
+|---|---|
+| EC2 instance / system status | **ok / ok, running** |
+| ICMP ping | **4/4, 0% loss, 0.22 ms** |
+| TCP connect to :22 | **accepted** |
+| SSH banner | **never arrives** |
+| recovery over 5 retries / ~2 min | **none** |
+| console: panic, KDL, low-resource message | **none — last line is ordinary boot chatter** |
+
+So: **the kernel is alive, interrupts work, the network stack and the ENA driver
+work, sshd's listening socket still accepts — and no userland process can make
+progress.** Ping is answered in the interrupt/kernel path; anything that has to
+touch a file does not return. That is a liveness bug, not a slow benchmark, and it
+is the behaviour `WaitIfOverQuota(additionalPages, 0, B_CAN_INTERRUPT)` permits:
+
+```c
+// file_cache.cpp:840
+status_t status = modifiedQueue->WaitIfOverQuota(toModified, 0, B_CAN_INTERRUPT);
+```
+
+`timeout` is 0 and **no timeout flag is set**, so `WaitIfOverQuota` skips its
+relative-to-absolute conversion and calls `waitEntry.Wait(B_CAN_INTERRUPT, 0)` —
+an indefinite wait. Any thread that dirties pages while the modified queue is over
+quota blocks until the page writer says otherwise, forever if it never does. The
+quota it is tested against is derived from `fLastAveragePageWriteDuration`, which
+despite the name is **the most recent sample, not an average**:
+
+```c
+if (numPages >= 8 || fLastAveragePageWriteDuration == 0)
+    fLastAveragePageWriteDuration = (system_time() - runStart) / numPages;
+```
+
+One slow round — and 1.5-second writes were being observed — raises the estimate,
+which makes `IsOverQuota()` true at a much smaller `fCount`, which blocks more
+writers, which is self-reinforcing. That is a plausible ratchet and it matches the
+observed monotonic, non-recovering degradation.
+
+**Confidence, stated honestly.** The wedge is **reproduced once**. The mechanism
+above is the best fit to the evidence but is **not proven**: nothing was
+instrumented inside the kernel, and the alternative that BFS's journal or block
+allocator is the thing that stopped making progress is not excluded — the ~200
+MiB/s ceiling is already known to be BFS's rather than the page writer's, so BFS is
+a live suspect for the wedge too. Distinguishing them needs a KDL session on a
+wedged node (`bt` on a blocked thread would settle it in one line) or kernel
+counters, and both need a bake.
+
+### Reproduction recipe
+
+On a `c7g.4xlarge` from the canonical AMI, with a 100 GiB gp3 (16,000 IOPS,
+1,000 MiB/s) scratch volume:
+
+```bash
+mkfs -q -t bfs -o 'block_size 4096' /dev/disk/nvme/1/raw Scratch
+mount -t bfs /dev/disk/nvme/1/raw /pw
+disktput -f /pw/tf  -m seqwrite -b 1M -t 16 -T 150 -D -s 4G      # 4 GiB file
+disktput -f /pw/big -m seqwrite -b 1M -t 16 -T 400 -D -s 48G     # 48 GiB file
+# then repeated buffered writes with -S; throughput falls from ~180 to ~19 MiB/s
+# and the node stops answering ssh while still answering ping
+disktput -f /pw/tf -m seqwrite -b 256K -t 1 -T 20 -s 4G -S -i 1
+```
+
+`-i 1` matters: without progress tracing this presents as "the benchmark is slow"
+rather than as "the machine has stopped".
+
+### Why this changes the priority
+
+A path that goes 10× slower and then stops answering, with no panic and no log
+line, on ordinary buffered file writes, is worse than any throughput number in this
+document. It is also the same machinery that produced this project's worst bug. It
+should be reproduced deterministically and then fixed — and the cheapest first fix
+is bounding that wait: a timeout on `WaitIfOverQuota` would convert an indefinite
+hang into a slow write, which is survivable, without needing the quota heuristic to
+be right.
+
+
 ## Rules this exercise established
 
 Two of the errors below were caught before they became published numbers. Both
@@ -679,8 +846,8 @@ under the same one-request-per-thread condition.
 | BFS read vs raw read | 0–1.5% overhead | — | **free** |
 | durability across hard power loss | 0 bad blocks | — | **passes on EBS** ¹ |
 | seq read, 1 MiB, depth 1 | 158.3 MiB/s | 598.0 | **3.8× gap** |
-| BFS buffered write reproducibility | 4.4× between reps | 1.001× uncached | **defect** |
-| BFS write, depth 16 | 192.4 MiB/s | 1020 raw | **5.3× gap** |
+| BFS write, depth 16 | ~200 MiB/s buffered *and* uncached | 1020 raw | **5.1× gap, in BFS** |
+| sustained write load | 180 → 19 MiB/s, then **wedges** | — | **liveness bug** |
 | read through the page cache | 123.5 MiB/s | 173.2 uncached | **cache costs 29%** |
 
 ¹ Passes *because EBS has no volatile write cache*, not because `fsync` is a
@@ -688,16 +855,21 @@ barrier — it is not. See Result 5; the caveat must travel with the claim.
 
 Four things are worth someone's time, in this order:
 
-1. **BFS buffered writes are irreproducible and anti-scale.** A 4.4× spread
-   between identical repetitions is a correctness-adjacent defect, not a tuning
-   opportunity, and the page writer's quota heuristic is the prime suspect. Needs
-   the writer instrumented before anything is changed. Kernel change.
+1. **Sustained buffered write load degrades ~10× and then wedges userland
+   indefinitely**, with the kernel still answering ping and sshd still accepting
+   connections, and with no panic or log line. Reproduced once; recipe in "The
+   real finding" below. The cheapest first fix is to bound the indefinite wait in
+   `WaitIfOverQuota` so a hang becomes a slow write. Kernel change.
+   *(This replaces what was listed here as "buffered writes are irreproducible and
+   anti-scale", which was an artifact of my own un-interleaved sweep.)*
 2. **No read-ahead in the file cache**, which is why going through the page cache
    is 29% *slower* than bypassing it on a large sequential read. Probably the
    largest available win for real workloads. Kernel change, so it needs a bake.
-3. **Writes through BFS cap at a fifth of the device** at depth 16. Suspect the
-   single journal and its per-commit `block_cache_sync` + device flush; not yet
-   attributed by measurement.
+3. **Writes through BFS cap at about a fifth of the device** at depth 16 —
+   ~200 MiB/s against 1020. Now attributed to BFS rather than the page writer,
+   because the uncached path, which never touches the page writer's quota, caps at
+   the same place. Suspect the single journal and its per-commit
+   `block_cache_sync`.
 4. **Requests larger than 256 KiB are issued serially** by `nvme_disk`
    (`await_status()` per chopped command). Worth 3.8× on raw-device bulk I/O at
    low concurrency, nothing on file I/O — the file cache never emits a request
@@ -707,6 +879,71 @@ Four things are worth someone's time, in this order:
 Deliberately not pursued: multi-queue. `qpair count: 2` is what the EBS
 controller offers, and Linux reports the same, so the per-CPU queue selection
 already in the driver is correct and complete for this hardware.
+
+## Scoping finding 2: read-ahead in the file cache
+
+The measured cost: reading a file through the page cache runs at **123.5 MiB/s
+against 173.2 MiB/s with `O_NOCACHE`** — the cache makes a large sequential read
+**29% slower**. Every ordinary program reads through the cache, so this is the
+largest real-workload win in this document.
+
+### Why it is smaller work than it looks
+
+**The sequential-access detector already exists and already works.**
+`file_cache.cpp` keeps a ring of the last accesses per `file_cache_ref`
+(`last_access[LAST_ACCESSES]`, `push_access()`) and exposes
+`access_is_sequential(ref)`. It is currently consulted in exactly one place —
+`reserve_pages()`, to decide *what to evict* when memory is low — and never to
+decide what to fetch. So the detection half of read-ahead is done; what is
+missing is issuing the fetch.
+
+**There is also already a prefetch path.** `cache_prefetch_vnode()` takes a vnode,
+offset and size, resolves the `file_cache_ref`, clamps to the file size, rounds to
+pages and checks resources before reading. It is used at boot and by mmap
+fault-around. A read-ahead would reuse this rather than inventing a mechanism.
+
+### What actually has to be written
+
+1. **A per-`file_cache_ref` read-ahead window** — current size and the offset the
+   last readahead reached, so the window can grow on continued sequential access
+   and reset on a seek. This is new state on `file_cache_ref`, which is the only
+   structural change.
+2. **A hook in the cached read path** that, when `access_is_sequential()` is true,
+   issues an asynchronous fetch for the next window beyond the current read.
+3. **Asynchrony.** This is the one genuinely hard part. The win comes from the
+   next range being fetched *while the caller consumes the current one*; a
+   synchronous prefetch just moves the same wait earlier and buys nothing. The
+   read path currently blocks in `read_into_cache()`. Either the prefetch is
+   handed to a worker, or it is issued as a non-waiting `IORequest` whose
+   completion unbusies the pages.
+4. **A cap and a back-off.** Read-ahead that guesses wrong evicts useful pages and
+   wastes device bandwidth. Needs a maximum window, and it must not run when
+   `low_resource_state(B_KERNEL_RESOURCE_PAGES)` is set — the same condition
+   `reserve_pages()` already tests.
+
+### Sizing, and why 128 KiB is the number to beat
+
+The cached read path chops at `MAX_IO_VECS * B_PAGE_SIZE` = **128 KiB**, and the
+driver blocks per command, so a cached sequential read is one 128 KiB round trip
+at a time. At the measured ~1.4 ms per round trip that is ~90–125 MiB/s, which is
+what 123.5 MiB/s is. A read-ahead window of 8 × 128 KiB would put ~1 MiB in
+flight and should approach the depth-8 figure of ~1008 MiB/s. **Predicted, not
+measured** — and worth stating as a prediction so it can be falsified.
+
+### Cost and risk
+
+- **Kernel proper, so it needs a bake**, and the bake is the operator's job.
+- Risk is moderate and mostly in the asynchronous fetch: a prefetch that leaves
+  pages busy or double-frees on error is a corruption bug, not a slow path. It
+  wants the `-P`/`-m verify` content check from `disktput` run against it, not
+  just a throughput number.
+- The interaction with `reserve_pages()`'s low-memory eviction needs care: that
+  code already treats sequential access as a reason to *drop* pages, and
+  read-ahead would be adding them. Those two must not fight, which is a design
+  question to settle before writing code.
+
+Recommendation: worth doing, after finding 1 has a fix, and it should ship with a
+durability/content assertion rather than a rate.
 
 ## Reproducing this
 
