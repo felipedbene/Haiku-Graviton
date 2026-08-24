@@ -147,6 +147,26 @@ GICv3InterruptController::_MapRedistributors(const intc_info& info)
 		region.stride = ranges[i].stride;
 		region.count = ranges[i].size / ranges[i].stride;
 
+		// A firmware-declared window is generous, not an array: a guest declares
+		// 0xfdf0000 bytes, which is 2031 strides on a machine with at most 96
+		// PEs. Left at that, the only thing keeping the walk short is
+		// GICR_TYPER.Last -- and Last is not dependably set, since Graviton3
+		// metal omits it entirely on some hosts. So bound it by the number of
+		// PEs the firmware described, which is an exact upper bound on how many
+		// redistributors can exist.
+		//
+		// Deliberately not smp_get_num_cpus(): that is how many PEs we *use*,
+		// capped at SMP_MAX_CPUS, and it is smaller than the number that exist
+		// on exactly the machines this matters for -- a 96-PE guest runs 64,
+		// and clamping to 64 would cut off 32 real, backed redistributors and
+		// silently make the diagnostic under-report.
+		if (!measured && info.pe_count != 0 && region.count > info.pe_count) {
+			dprintf("gicv3: region %" B_PRIu32 " spans %" B_PRIu32 " strides for"
+				" %" B_PRIu32 " pe(s); walking %" B_PRIu32 "\n", i,
+				region.count, info.pe_count, info.pe_count);
+			region.count = info.pe_count;
+		}
+
 		// A coalesced region is an exact number of redistributors by
 		// construction, so a remainder there means the loader and the kernel
 		// disagree about the geometry -- the count truncates, so the effect is

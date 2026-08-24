@@ -49,6 +49,12 @@ typedef struct {
 	// region; otherwise these do, and regs2 is just the lowest of them.
 	uint32 gicr_region_count;
 	gicr_region_info gicr_regions[INTC_MAX_GICR_REGIONS];
+
+	// How many PEs the firmware described, including any the kernel has no room
+	// to run. An exact upper bound on the number of redistributors that can
+	// exist, which is the only safe way to bound a walk across a region whose
+	// declared size is a generous window rather than an array. Zero if unknown.
+	uint32 pe_count;
 } __attribute__((packed)) intc_info;
 
 
