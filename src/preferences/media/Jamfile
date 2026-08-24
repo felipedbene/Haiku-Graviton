@@ -2,6 +2,31 @@ SubDir HAIKU_TOP src preferences media ;
 
 UsePrivateHeaders media midi shared ;
 
+# This deliberately does NOT link libmidi.so. src/kits/midi/Jamfile declares that
+# library only when the fluidlite build feature is enabled, so linking it would
+# make the whole Media preferences panel unbuildable on every architecture
+# without fluidlite -- arm64 among them -- and `jam all` there ends in "don't
+# know how to make libmidi.so".
+#
+# Guarding the panel on fluidlite instead was rejected: this is a core
+# preference panel whose audio and video pages have nothing to do with MIDI, and
+# dropping it to satisfy a synth dependency is the wrong trade.
+#
+# It turns out nothing here needs the MIDI Kit proper. The only libmidi symbols
+# reached are BPrivate::read_midi_settings() and write_midi_settings() from
+# <MidiSettings.h>, used by MidiSettingsView to pick a SoundFont. Their
+# implementation, src/kits/midi/MidiSettings.cpp, is 79 lines over
+# driver_settings and includes nothing from the MIDI Kit and nothing from
+# fluidlite. So it is compiled in directly, the same way src/servers/midi
+# borrows NodeMonitorHandler.cpp from the storage kit.
+#
+# This keeps the MIDI tab fully functional everywhere. The SoundFont it records
+# is consumed by BSoftSynth, which does need fluidlite -- so on a build without
+# it the setting is stored and simply has no synth to act on yet, which is the
+# right behaviour: the choice survives until one exists.
+#
+# MidiSettings.h is a private header, so no third-party ABI depends on where
+# these two functions live.
 Application Media :
 	Media.cpp
 	MediaIcons.cpp
@@ -9,7 +34,10 @@ Application Media :
 	MediaViews.cpp
 	MediaWindow.cpp
 	MidiSettingsView.cpp
-	: media midi be localestub [ TargetLibsupc++ ]
+
+	# midi kit
+	MidiSettings.cpp
+	: media be localestub [ TargetLibsupc++ ]
 	: media.rdef
 	;
 
@@ -19,3 +47,6 @@ DoCatalogs Media
 	  MediaWindow.cpp
 	  MidiSettingsView.cpp
 ;
+
+SEARCH on [ FGristFiles MidiSettings.cpp ]
+	+= [ FDirName $(SUBDIR) $(DOTDOT) $(DOTDOT) kits midi ] ;
