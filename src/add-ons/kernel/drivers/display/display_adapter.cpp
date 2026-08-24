@@ -196,14 +196,15 @@ register_displays(const char *parentName, device_node *node)
 	status_t status = gAcpi->evaluate_object(acpiHandle, "_DOD", NULL, pkgData,
 		128);
 	if (status != B_OK || pkgData->object_type != ACPI_TYPE_PACKAGE) {
-		dprintf("%s: fail. %ld %lu\n", __func__, status, pkgData->object_type);
+		dprintf("%s: fail. %" B_PRId32 " %" B_PRIu32 "\n", __func__, status,
+			pkgData->object_type);
 		free(pkgData);
 		return status;	
 	}
 
 	acpi_object_type *displayIDs = pkgData->package.objects;
 	for (uint32 i = 0; i < pkgData->package.count; i++) {
-		dprintf("Display ID = %lld\n", displayIDs[i].integer.integer);
+		dprintf("Display ID = %" B_PRIu64 "\n", displayIDs[i].integer.integer);
 	}
     
 	acpi_object_type result;
@@ -218,7 +219,7 @@ register_displays(const char *parentName, device_node *node)
 			!= B_OK)
 			continue;
 		
-		dprintf("Child _adr %llu\n", result.integer.integer);
+		dprintf("Child _adr %" B_PRIu64 "\n", result.integer.integer);
 		uint32 i;
 		for (i = 0; i < pkgData->package.count; i++)
 			if (displayIDs[i].integer.integer == result.integer.integer) break;
