@@ -198,6 +198,15 @@ Why this is the right change rather than a wider redesign:
   core-heap key (`scheduler_cpu.cpp:554,563`). Today an oversubscribed core and
   a busy-but-fine core have the same key, so `PeekMinimum()` cannot tell them
   apart; afterwards oversubscribed cores correctly sort last.
+- **The core heaps already tolerate keys above `kMaxLoad` today.** In
+  `_UpdateLoad()` (`scheduler_cpu.cpp:554`) the key is
+  `intervalSkipped ? fCurrentLoad : GetLoad()` — and `fCurrentLoad` is the
+  **raw** sum of demands, neither divided by `fCPUCount` nor clamped. So
+  whenever a load-measurement interval is skipped on an oversubscribed core, the
+  existing code already inserts an unclamped key into the heap, on every
+  architecture. That is empirical evidence that unclamped keys are safe here, and
+  it is also a pre-existing inconsistency: the two branches of that ternary are
+  in different units.
 - **Core-heap *membership* is unchanged.** The low/high split is at `kHighLoad =
   700`, below `kMaxLoad = 1000`, so any core that the clamp could have affected
   was already in `gCoreHighLoadHeap` at its clamped value of 1000 and stays
