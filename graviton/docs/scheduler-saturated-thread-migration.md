@@ -11,38 +11,71 @@ that was hiding it on x86 desktops.
 
 ## 1. The symptom
 
-Measured on a 16-vCPU `c7g.4xlarge` with `src/bin/smpscale`, which gives every
-thread an *identical, fixed* work unit. Perfect scaling therefore holds wall
-time constant as N rises; perfect serialisation makes it proportional to N.
+Reproduced first-hand on instance `i-059bc5d23bc47a09e`, a 16-vCPU
+`c7g.4xlarge` booted from the canonical AMI `ami-0d61e3910062bb80a`
+(`hrev59996`), with `src/bin/smpscale`, which gives every thread an *identical,
+fixed* work unit. Perfect scaling therefore holds wall time constant as N rises;
+perfect serialisation makes it proportional to N. Binary verified by artifact:
+identical `sha256` on the build host, this desktop and the node
+(`138c39ce…2eec2`), and the hot loop confirmed in `objdump` to be a
+register-bound `madd` / `eor …, lsr #29` dependency chain with **zero memory
+operands**.
 
-> **Provenance:** the ladder below is the *reported* measurement that opened this
-> investigation. It has not yet been independently reproduced by the author of
-> this document; that reproduction is in flight and this section will be replaced
-> with first-hand numbers, including the runs that disagree, before any code
-> lands. Recorded this way deliberately — this project has a history of results
-> that were measured once, propagated, and then retracted.
+Four identical repeats of the full ladder, `-t 3000`:
 
 ```
-threads:  1     2     4     6     8    10    12    13    14    15    16    17    20
-eff:    1.000 1.000 1.000 1.000 1.000 1.000 1.000 1.000 1.000 1.000 0.500 0.500 0.333
+threads:    1     2     4     6     8    10    12    13    14    15    16    17    20
+run 1:  1.000 1.000 1.000 1.000 1.000 1.000 1.000 1.000 1.000 1.000 1.000 0.500 0.200
+run 2:  1.000 1.000 1.000 1.000 1.000 1.000 1.000 1.000 1.000 1.000 0.500 0.500 0.333
+run 3:  1.000 1.000 1.000 1.000 1.000 1.000 1.000 1.000 1.000 1.000 0.500 0.500 0.333
+run 4:  1.000 1.000 1.000 1.000 1.000 1.000 1.000 1.000 1.000 1.000 1.000 0.333 0.250
 ```
 
-Efficiency is **exactly 0.500 at N = 16**: one CPU runs two threads for the
-entire run while another CPU stays completely idle. The machine delivers 8x on
-16 threads, not 16x.
+### 1.1 Two corrections to the original framing
 
-Two properties make the diagnosis unambiguous, and both must be reproduced
-before any code is touched:
+Recorded because both matter for what the fix has to achieve, and because
+getting them wrong would have meant claiming a result that is not there.
 
-- **The 0.500 is exact, and it appears exactly at N = ncpus.** Not 0.6, not
-  drifting — one CPU with precisely twice the work.
-- **The imbalance scales with the work unit.** A 2000 ms unit gives a 4002 ms
-  max; an 8000 ms unit gives a **16006 ms** max. Sixteen seconds with a fully
-  idle CPU next door. This rules out transient placement noise: there is no
-  rebalancing at all, not slow rebalancing.
+- **N = 16 is *not* deterministic, and the reported "exactly 0.500, 8/8" does
+  not reproduce.** It was perfect (1.000) in runs 1 and 4 and broken (0.500) in
+  runs 2 and 3 — **2 of 4**. Placement is a coin toss, so the claim in the
+  original brief that mechanism 4 makes "a collision certain at N = ncpus" is
+  **refuted**: it makes one *likely*, not certain. Any A/B of the fix therefore
+  needs enough repeats to separate a real change from this coin toss, which a
+  single before/after pair could not do.
+- **The overflow does not spread one-per-core; it concentrates on a single
+  core**, and this is far worse than reported. At N = 20 the four extra threads
+  should land on four different CPUs (ideal max 6000 ms). Instead run 1 put
+  **all five on cpu1** — 15019 ms — and run 4 put four on cpu6 (12014 ms). The
+  scheduler picks a victim and keeps feeding it. See §2.6, which turned out to
+  be a *third* mechanism, not a restatement of mechanism 4.
 
-It reproduced 8/8 times with the colliding CPU varying (1, 4, 6, 12, 14), so it
-is not a pinned or broken CPU.
+### 1.2 What did reproduce, exactly as reported
+
+- **The imbalance scales with the work unit**, confirming there is no
+  rebalancing at all rather than slow rebalancing. A 2000 ms unit gives a
+  **4002.0 ms** max with cpu15 at **1 ms**; an 8000 ms unit gives a **16005.4 ms**
+  max with cpu8 at **2 ms**. Eight full seconds of a completely idle CPU beside a
+  doubled-up one, and no migration at any duration.
+- **N = 32 is catastrophic**: 51279.8 ms against an ideal 6000 ms — **8.5x** —
+  with `cpus>10%` collapsing to **2**. cpu9 absorbed roughly **17 of the 32
+  threads** (51249 ms) while cpu3 got 24 ms. Fourteen CPUs each ran one thread
+  and then idled for 48 seconds rather than take any of cpu9's 16-deep queue.
+- **The victim CPU varies** (cpu1, cpu4, cpu6, cpu7, cpu8, cpu9, cpu13, cpu15
+  across runs), so this is not one masked or broken CPU.
+- **Both witnesses agree.** Summed `cpu_info::active_time` equals
+  `N x 3000 ms` to within 0.1 % in every row, and per-CPU `active_time` tracks
+  wall-clock `max_ms` to within a millisecond. No CPU time goes missing: the work
+  is all executed, just placed catastrophically. `min_ms` is always ~3000, so the
+  *fast* threads are perfectly served — only the victims stack up.
+
+### 1.3 A metric artifact to be careful of
+
+In the single-point runs (`-t 2000 16`, `-t 8000 16`, `-t 3000 32`) `smpscale`
+prints `eff 1.000`, which is meaningless: `baseWall` is taken from the first
+ladder row, so with one row `eff` is trivially 1. Those runs must be read from
+`max_ms` and the per-CPU table, never from `eff`. Anything quoting `eff` from a
+single-point run is quoting an artifact.
 
 ---
 

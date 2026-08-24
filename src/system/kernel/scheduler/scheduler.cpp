@@ -33,6 +33,7 @@
 #include "scheduler_cpu.h"
 #include "scheduler_locking.h"
 #include "scheduler_modes.h"
+#include "scheduler_placement_trace.h"
 #include "scheduler_profiler.h"
 #include "scheduler_thread.h"
 #include "scheduler_tracing.h"
@@ -756,6 +757,7 @@ scheduler_init()
 	scheduler_set_operation_mode(SCHEDULER_MODE_LOW_LATENCY);
 
 	init_debug_commands();
+	trace_placement_init();
 
 #if SCHEDULER_TRACING
 	add_debugger_command_etc("scheduler", &cmd_scheduler,
@@ -864,6 +866,18 @@ _user_estimate_max_scheduling_latency(thread_id id)
 status_t
 _user_set_scheduler_mode(int32 mode)
 {
+#if SCHEDULER_TRACE_PLACEMENT
+	// Instrumentation escape hatch, NOT FOR MERGE. The placement trace has to be
+	// dumped from ordinary thread context, because formatting it does blocking
+	// per-character serial I/O that would be ruinous anywhere near the scheduler.
+	// Reusing this syscall avoids adding one for a throwaway debug kernel, and
+	// the magic value cannot collide with a real scheduler_mode.
+	if (mode == 0x5350) {
+		Scheduler::trace_placement_dump();
+		return B_OK;
+	}
+#endif
+
 	scheduler_mode schedulerMode = static_cast<scheduler_mode>(mode);
 	status_t error = scheduler_set_operation_mode(schedulerMode);
 	if (error == B_OK)

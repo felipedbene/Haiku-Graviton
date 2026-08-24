@@ -9,6 +9,7 @@
 #include "scheduler_common.h"
 #include "scheduler_cpu.h"
 #include "scheduler_modes.h"
+#include "scheduler_placement_trace.h"
 #include "scheduler_profiler.h"
 #include "scheduler_thread.h"
 
@@ -59,6 +60,7 @@ choose_core(const ThreadData* threadData)
 	CPUSet mask = threadData->GetCPUMask();
 	const bool useMask = !mask.IsEmpty();
 
+	placement_event event = PLACEMENT_IDLE_CORE;
 	CoreEntry* core = NULL;
 	if (package != NULL) {
 		do {
@@ -72,15 +74,23 @@ choose_core(const ThreadData* threadData)
 		do {
 			core = gCoreLoadHeap.PeekMinimum(index++);
 		} while (useMask && core != NULL && !core->CPUMask().Matches(mask));
+		event = PLACEMENT_LOAD_HEAP;
 		if (core == NULL) {
 			index = 0;
 			do {
 				core = gCoreHighLoadHeap.PeekMinimum(index++);
 			} while (useMask && core != NULL && !core->CPUMask().Matches(mask));
+			event = PLACEMENT_HIGH_LOAD_HEAP;
 		}
 	}
 
 	ASSERT(core != NULL);
+
+	// Which of the three paths placed the thread, and on which core, is the one
+	// fact that decides whether the fix belongs in placement or in rebalancing.
+	trace_placement(event, threadData->GetThread()->id, core->ID(),
+		core->GetLoad(), threadData->GetLoad());
+
 	return core;
 }
 
@@ -119,8 +129,14 @@ rebalance(const ThreadData* threadData)
 	// the current one.
 	int32 coreLoad = core->GetLoad();
 	int32 otherLoad = other->GetLoad();
-	if (other == core || otherLoad + kLoadDifference >= coreLoad)
+	if (other == core || otherLoad + kLoadDifference >= coreLoad) {
+		// Record whether a genuinely less loaded core existed at this moment.
+		// If declines happen in their thousands while such a core exists, the
+		// migration predicate is the problem; if they happen while every core
+		// looks identically loaded, the load metric is.
+		trace_placement_decline(other != core && otherLoad < coreLoad);
 		return core;
+	}
 
 	// Check whether migrating the current thread would result in both core
 	// loads become closer to the average.
@@ -128,7 +144,14 @@ rebalance(const ThreadData* threadData)
 	ASSERT(difference > 0);
 
 	int32 threadLoad = threadData->GetLoad() / core->CPUCount();
-	return difference >= threadLoad ? other : core;
+	if (difference < threadLoad) {
+		trace_placement_decline(true);
+		return core;
+	}
+
+	trace_placement(PLACEMENT_MIGRATE, threadData->GetThread()->id,
+		other->ID(), coreLoad, otherLoad);
+	return other;
 }
 
 
