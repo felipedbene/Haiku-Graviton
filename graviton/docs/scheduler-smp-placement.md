@@ -316,6 +316,77 @@ fix and this document is wrong about causation.
 
 ---
 
+## 5.5 The leading fix candidate, and why it satisfies both hypotheses at once
+
+Both §1.4 and §1.5 are failures of the *same kind*: `choose_core()` decides using
+a quantity that has **not yet caught up with the threads already placed**. The
+idle-core list lags until the target CPU reschedules; the heap key lags because a
+new thread inherits ~0 demand from its parent so the key does not move.
+
+There is already a counter in the tree with **neither lag**:
+
+```c++
+CoreEntry::ThreadCount() = fThreadCount + fCPUCount - fIdleCPUCount
+```
+(`scheduler_cpu.h:351`) — queued threads plus running threads. `fThreadCount` is
+incremented by `atomic_add` inside `CoreEntry::PushBack()`/`PushFront()`
+(`scheduler_cpu.cpp:435,445`), which runs during `Enqueue()`, i.e. **at the moment
+of placement**. Checked against the burst case:
+
+| state | fThreadCount | fIdleCPUCount | `ThreadCount()` |
+|---|---|---|---|
+| idle core, nothing placed | 0 | 1 | **0** |
+| one thread placed, CPU not yet woken | 1 | 1 | **1** |
+| that thread now running | 0 | 0 | **1** |
+| two threads placed on the same idle core | 2 | 1 | **2** |
+
+The row that matters is the fourth: the second placement is visible
+**immediately**, which is exactly what the idle-core list and the load heap both
+fail to show. There is also precedent for treating this as the oversubscription
+measure — `ComputeQuantum()` already uses `fCore->ThreadCount()` divided by
+`CPUCount()` (`scheduler_thread.cpp:207-209`).
+
+**Candidate: use `ThreadCount() / CPUCount()` as a tie-breaker in
+`choose_core()`, not as a replacement for load.** The distinction is important
+and is what keeps the change safe:
+
+- `ThreadCount()` is a *bad* general load metric — a core with five sleepy
+  threads has `ThreadCount() == 5` but almost no load, and a core with one
+  saturated thread has `ThreadCount() == 1`. Preferring the latter would be
+  actively wrong.
+- So load stays the primary criterion and thread count breaks ties. Behaviour
+  then changes **only when the load metric cannot discriminate**, which is
+  precisely the burst pathology and nothing else.
+
+This also has the property the §4 constraint demands: it is a pure placement
+change and **does not touch `CoreEntry::GetLoad()`'s contract at all**, so it
+cannot reach the live `panic()` in `_RequestPerformanceLevel` or alter the heap
+key.
+
+### 5.6 The two fixes are separable, and the migration count separates them
+
+The concern that "the efficiency ladder cannot distinguish a placement fix from a
+rebalance fix" is real, but the **migration count can**, which is why it is a
+required criterion rather than a nice-to-have:
+
+| | busy sets at N = 16 | migrations |
+|---|---|---|
+| today | broken ~50 % of runs | **0** |
+| placement fix only | correct | **~0** |
+| rebalance fix only | correct | **burst at startup**, then 0 |
+| both | correct | ~0 |
+
+So the layering is deliberate, and both are wanted for different reasons:
+
+- **Placement (primary)** — stop creating the collision. Cheap, and the only one
+  that avoids paying cache and TLB cost to unwind a bad start.
+- **Rebalance (secondary)** — repair collisions that placement cannot foresee,
+  because a thread's demand can *rise after* it is placed. No placement fix
+  addresses the >80 %-duty thread of §3 whose load grows later; only a working
+  repair path does.
+
+---
+
 ## 6. Acceptance criteria
 
 Efficiency numbers are **not** acceptable evidence (§1.2). Required:
