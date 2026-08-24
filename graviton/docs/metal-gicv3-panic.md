@@ -1,8 +1,10 @@
 # c7g.metal: the GICv3 panic, and what bare metal presents that a guest does not
 
-Status: **fixed and hardware-verified on two `c7g.metal` hosts.** The GIC now
-brings up all 64 CPUs on bare metal. Metal does not yet reach userland, but the
-remaining blocker is in PCI, not the GIC — see §10.
+Status: **fixed and hardware-verified.** The GIC brings up all 64 CPUs on bare
+metal across three hosts of two different redistributor shapes, and with the PCI
+segment fix (`metal-pci-segment.md`) `c7g.metal` **now boots DeBeOS to
+userland** — 53 PCI devices, NVMe root mounted, package daemon running first-boot
+processing.
 
 `c7g.metal` was the one Graviton instance class DeBeOS would not boot on. It is
 also the class of our own build machine, so the project could not dogfood its
@@ -415,6 +417,52 @@ two hosts of different shapes were booted.
   every metal redistributor and `vlpis 0` on every guest one, so ArchRev and
   VLPIS agree on both platforms and cannot be told apart here. The revert to
   ArchRev rests on Arm IHI 0069G 12.10 alone, which is the right basis.
+
+### Verification round on ami-0200e8f97df35c16c (branch head 08485ea811)
+
+Four instances, one image. Gating first.
+
+| class | result |
+|---|---|
+| `c7g.large` | **PASS** — `2 redistributor(s) across 1 region(s) for 2 cpu(s); 0 report vlpis, 1 report last`; `lpis enabled on 2, 0 skipped`; `ecam region: addr 20000000, segment: 0`; four PCI devices; `ena: attached` |
+| `c7g.4xlarge` | **PASS** — `16 redistributor(s) … for 16 cpu(s)`; `lpis enabled on 16, 0 skipped, 1024 KiB`; four PCI devices; `ena: attached` |
+| `c7g.metal` | **BOOTS TO USERLAND** — 53 PCI devices across buses 0–4, `bfs: mounted "Haiku"`, `ena: found an ENA device`, first-boot processing through package 15 |
+| `c8g.24xlarge` | GIC **PASS**; boot stalls later, identically on both images — see below |
+
+Note `1 report last` on the guests: KVM *does* set `GICR_TYPER.Last`, unlike metal
+host A which sets it nowhere. The two platforms differ on exactly the bit that
+cannot be relied upon.
+
+The truncation fix is hardware-verified, and only this class exercises it:
+
+```
+c8g.24xlarge: gicv3: 96 redistributor(s) across 1 region(s) for 64 cpu(s)
+              gicv3-its: lpis enabled on 64 redistributor(s), 32 skipped as
+                         cpu-less, 4096 KiB of pending tables
+```
+
+64 enabled, 32 skipped, 4 MiB instead of 6 MiB, and no `GICR_CTLR.EnableLPIs`
+latched on a redistributor belonging to a CPU that will never start.
+
+Two caveats recorded rather than glossed:
+
+* **Metal's ENA attach outcome is unknown.** `ena: found an ENA device` and the
+  driver's build banner are the last ENA lines in the window; the console ring
+  ended before an attach or a failure. Metal networking is **not** verified.
+* **The 64 KiB console ring is now the binding constraint on metal.** 53 PCI
+  devices at ~15 dumped lines each is around 800 lines, which evicted the GIC
+  summary from this boot's window entirely — the same O(n) eviction that the
+  per-redistributor `dprintf` was moved behind `TRACE_GICV3` to avoid, this time
+  from `pci_print_info()`. Future metal verification should sample the console
+  early, or that dump needs gating too.
+
+### `c8g.24xlarge` stalls after NVMe, on both images
+
+Reaches `publish device: … disk/nvme/0/raw`, `1/raw`, `2/raw` and stops, with the
+capture unchanged across repeated polls minutes apart. **Identical on the
+pre-PCI-fix image and this one**, so it is not a regression from either branch —
+it is a separate, previously unverified instance class (Graviton4). Its GIC and
+ITS come up correctly, which is what this round needed from it.
 
 ### 96 vCPU: the loader hang is fixed
 

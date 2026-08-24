@@ -1,7 +1,8 @@
 # c7g.metal: no PCI, because its one ECAM region is numbered 1
 
-Status: **diagnosed and fixed; compiling; awaiting the metal boot that proves
-NVMe attaches.**
+Status: **fixed and hardware-verified.** With this change `c7g.metal` enumerates
+53 PCI devices across buses 0–4, publishes NVMe, mounts its root volume and
+reaches userland.
 
 This is the blocker that follows the GICv3 fix (`metal-gicv3-panic.md`). With the
 interrupt controller working, all 64 CPUs up and the ITS ready, `c7g.metal` still
@@ -111,10 +112,42 @@ than claiming multiple segments are unsupported while rejecting a single one.
 Real support would mean carrying a segment from the controller through the bus
 manager to every config-space access, and nothing in the tree carries one today.
 
+## Verified on hardware
+
+`ami-0200e8f97df35c16c`, `c7g.metal`:
+
+```
+PCI: [dom 0, bus  0] bus 0, device 0, function 0: vendor 1d0f, device 0200
+PCI: [dom 0, bus  1] bus 1, device 0, function 0: vendor 1d0f, device cec2
+...  53 devices in total, across buses 0-4
+publish device: ... path disk/nvme/0/raw, module drivers/disk/nvme_disk/device_v1
+Identified boot partition by partition offset.
+bfs: mounted "Haiku" (root node at 131072, device = /dev/disk/nvme/0/1)
+Mounted boot partition: /dev/disk/nvme/0/1
+ena: found an ENA device
+... Doing first boot processing #15 for package gcc_syslibs-...
+```
+
+The guests are unaffected: `c7g.large` and `c7g.4xlarge` log
+`PCI: ecam region: addr 20000000, segment: 0, buses: 0-ff`, choose it, and
+enumerate the same four devices as before.
+
+One thing the boots corrected in this change's own diagnostic: a 96-vCPU guest
+lists **three** MCFG regions that are all segment 0 and differ only by bus range
+(0-0, 1-43, 44-56). Saying "ignoring all but segment 0" there is useless when all
+three are segment 0, so the message now names the region taken — segment *and*
+bus range. The region chosen is the same one the old code chose, so no behaviour
+changed.
+
 ## Open
 
-* Whether NVMe actually attaches on metal once PCI initialises. This is the
-  point of the next boot; everything above is diagnosis and inspection.
+* **Metal ENA attach is unverified.** `ena: found an ENA device` and the driver
+  banner are the last ENA lines before the console ring ended. Networking on
+  metal is not yet demonstrated either way.
+* Whether the multiple-region case should eventually pick by bus range rather
+  than taking the first. Nothing needs it today — every device we care about on
+  every class tested is on the chosen region — but a device behind buses 44-56 on
+  that guest would be invisible.
 * Whether the ITS then hands out MSIs correctly on metal — untested, because no
   MSI-capable device has attached there yet. `GITS_TYPER.PTA` is 0 and the ITS
   reports 18 DeviceID bits against our `min(fDeviceIDBits, 16)` device-table cap,
