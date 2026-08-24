@@ -353,6 +353,18 @@ Per frame, at MTU 9001:
 × 2.6 GHz (Neoverse V1)   ≈ 47,000 cycles per 9 KB frame
 ```
 
+> **CORRECTION (2026-08-24): the per-frame framing below is wrong, and it undercuts
+> §6.** A later 15-point MTU sweep fits the cost as **2.34 µs/frame + 1.85 ns/byte**
+> (R² 0.94), so at MTU 9001 the split is **12% per-frame / 88% per-byte**. Dividing
+> total CPU by frame count, as done here, silently attributes the per-byte 88% to the
+> frame and makes per-frame work look like the lever. It is not. Anything in this
+> document that argues from "cycles per frame" — including the §6 rankings — is
+> targeting the smaller half of the cost. The per-byte path is where the remaining
+> ~10× sits, and most of it is **still unexplained** (the two bounce copies account
+> for at most 0.78 of the 1.85 ns/B, and it is not memory bandwidth). See
+> `net-receive-profile.md`. The arithmetic below is retained because the *totals* are
+> correct and the thread occupancy conclusion still holds.
+
 **47,000 cycles to receive one 9 KB frame is roughly an order of magnitude more than
 it should be.** Receive is spread across exactly two threads (reader and consumer),
 so on a 2-vCPU box those two threads are each running at ~62 % occupancy and the

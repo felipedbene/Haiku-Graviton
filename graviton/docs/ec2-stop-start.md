@@ -310,10 +310,18 @@ HVC branch and c7g will be the first SMC user.
 
 ## Notes for the next person
 
-- **The serial console works on t4g.medium and is blank on c7g.** On a c7g guest
-  SPCR advertises a 16550 at MMIO `0x090a0000`, but the console actually captured
-  is a *PCI* UART (`0000:00:01.0: ttyS0 at MMIO 0x80048000`). There is no PL011
-  anywhere in the DSDT. Use t4g when you need a boot log.
+- ~~The serial console works on t4g.medium and is blank on c7g.~~ **DISPROVEN —
+  the console works fine on c7g.** A live `c7g.large` returns the full boot log
+  (775 lines, byte-comparable to `t4g.medium` from the same image). The original
+  conclusion came from calling `get-console-output` about 90 seconds after launch
+  and giving up. **Pass `--latest` and allow several minutes.**
+  For the record, the captured device *is* a PCI 16550 (`1d0f:8250` at
+  `0000:00:01.0`) and there is no PL011 anywhere — but the SPCR alias at
+  `0x090a0000` reaches that same console, verified by booting with it as the only
+  console path, and there is **no DBG2 table** on any Graviton instance. Do not
+  chase the BAR: it moves with device population (t4g `0x80008000`, c7g.large
+  `0x80048000`, metal `0xe2f00000`) and is reassignable mid-boot, whereas the SPCR
+  alias is fixed. See `arm64-serial-console-c7g.md`.
 - launch_daemon prints only on *failure* (`Launching %s failed: %s`), so the
   absence of an sshd line in a console log means the script ran, not that it
   didn't.

@@ -1242,10 +1242,20 @@ Full method, tables and the interleaved controls: `throughput-measurement.md`.
 
 **Still open from the same measurements:**
 
-- A **throughput cliff between a receive buffer of 65535 and 65536** — one byte,
-  a factor of 3–4 (4942 → 1474 Mbit/s), reproducible. Mechanism unexplained;
-  the `tcp_setsockopt` double-assignment path is the standing suspect. If
-  `SO_RCVBUF` can make a socket 3× slower, that is a bug worth a dedicated hunt.
+- ~~A throughput cliff between a receive buffer of 65535 and 65536 — one byte~~
+  **RESOLVED, and the framing above was wrong. There is no one-byte boundary:**
+  65535, 65536 and 65537 measure identically when all three are set explicitly
+  (3747/3751/3803 Mbit/s). The original comparison was confounded — the "65535"
+  datapoint was the *default*, never set, and the "65536" datapoint was explicitly
+  set, so the difference came from **the act of setting**, not from the value.
+  Cause: `TCPEndpoint::SetReceiveBufferSize()` cleared
+  `FLAG_AUTO_RECEIVE_BUFFER_SIZE`, the sole gate on receive-window growth, so *any*
+  explicit `SO_RCVBUF` pinned the window forever. Fixed: pin only when the request
+  is **smaller** than the queue already has. Verified — explicit 65536 went
+  ~3650 → 4950 Mbit/s while a shrink to 16 K is still honoured.
+  Note the magnitude is **RTT-dependent** (the same pin costs 3.4× at 0.326 ms and
+  1.3× at 0.18 ms), so quoting a ratio for this class without the RTT is
+  meaningless. See `tcp-rcvbuf-cliff.md`.
 - **No autotuning.** 256 KiB beats 65535 but every fixed value is wrong
   somewhere — a waste on a LAN, too small on a long fat path.
 
