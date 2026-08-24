@@ -497,9 +497,18 @@ explicitly **not for merge**):
   `_kern_set_scheduler_mode`, since formatting does blocking serial I/O and must
   never run near the scheduler. `smpscale -p` asks for it.
 
-Build state: `jam -q kernel_arm64` and `jam -q smpscale` both succeed on
-`a195688e46` plus this branch, with **no diagnostics** naming
-`scheduler_placement_trace`, `low_latency`, `scheduler.cpp` or `smpscale.cpp`.
+Build state: `jam -q kernel_arm64` and `jam -q smpscale` both succeed with the
+three fixes applied on `37ec8d088b`, with **no diagnostics** naming
+`scheduler_cpu.h`, `low_latency.cpp`, `power_saving.cpp`,
+`scheduler_placement_trace` or `smpscale.cpp`. The nine scheduler translation
+units were deleted and force-recompiled to rule out stale objects.
+
+That is stronger than it sounds: `build/jam/ArchitectureRules:806` applies
+`EnableWerror src system kernel`, and the `-Wno-error=` exemption list does **not**
+include `maybe-uninitialized` or `unused-variable`. Both of those would therefore
+have been hard errors rather than warnings, so their absence is a positive result
+and not merely a quiet log. Only two warnings appear in the whole kernel build, both
+pre-existing upstream and in unrelated files (`elf.cpp`, `interrupts.cpp`).
 `smpscale` now links from the committed tree (previously it was hand-compiled and
 not reproducible), pulling `libgnu.so` for `sched_getcpu()` and resolving
 `_kern_set_scheduler_mode` against `libroot.so`; its hot loop is still a
