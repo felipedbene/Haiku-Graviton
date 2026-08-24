@@ -82,7 +82,17 @@ hs "$BIN -h" 2>&1 | grep -q "Usage: disktput" \
 echo "--- preparing $MOUNT ---"
 hs "mkfs -q -t bfs -o 'block_size 4096' $DEVICE QV 2>&1 | tail -1"
 hs "mkdir -p $MOUNT 2>/dev/null; mount -t bfs $DEVICE $MOUNT 2>&1 | head -1"
-hs "df 2>&1 | grep -i ' $MOUNT'" || echo "  WARNING: $MOUNT does not look mounted"
+# Checked by writing, not by parsing df: Haiku prints the mount point on its own
+# line so a "df | grep ' /w'" match never fires, and the first version of this
+# script warned that the volume was unmounted while 16 GiB was landing on it
+# correctly. A write that succeeds and lands on the right device is the fact; the
+# df text is a rendering of it.
+if hs "touch $MOUNT/.probe && rm -f $MOUNT/.probe" 2>/dev/null; then
+	hs "df 2>&1 | grep -A1 -i '$MOUNT'" | tail -1
+else
+	echo "FATAL: $MOUNT is not writable -- refusing to measure the wrong volume" >&2
+	exit 2
+fi
 hs "rm -f $MOUNT/new-* $MOUNT/log-*; sync" >/dev/null 2>&1
 
 TOTAL=$((GIB_PER_CELL * CELLS))
@@ -133,8 +143,14 @@ if [ -z "$LINE" ]; then
 else
 	echo "  $LINE"
 fi
-ZEROQ=$(hs 'grep -c "quota wait timed out.*queue 0 pages" /var/log/syslog' 2>/dev/null | head -1)
-echo "  timeout lines carrying 'queue 0 pages': ${ZEROQ:-0}"
+# Sanitised to digits: grep -c exits non-zero on no match, and through the ssh
+# wrapper that produced "0\n0", which then failed the integer test below. The
+# value was right and the comparison was broken -- the same shape as everything
+# else in this document.
+ZEROQ=$(hs 'grep -c "quota wait timed out.*queue 0 pages" /var/log/syslog' 2>/dev/null \
+	| tr -dc '0-9' | head -c 6)
+[ -n "$ZEROQ" ] || ZEROQ=0
+echo "  timeout lines carrying 'queue 0 pages': $ZEROQ"
 echo "    (that string was the cross-device coupling signature; its return means"
 echo "     the page-bound global quota has regressed to a duration sum)"
 
