@@ -54,6 +54,13 @@
  *        can be swept: -s 0 against -s 1000 is the experiment.
  *   -p   after the ladder, ask an instrumented kernel to dump its choose_core()
  *        placement trace. No effect on a stock kernel.
+ *   -r   make thread 0 B_REAL_TIME_DISPLAY_PRIORITY and report rt/max, the ratio
+ *        of its span to the slowest thread's. rebalance() is PRIORITY-BLIND --
+ *        it compares core loads and never consults GetEffectivePriority() -- so
+ *        any change that makes high-load threads migratable could start bouncing
+ *        a real-time thread every quantum. rt/max near 1.0 means the RT thread
+ *        finished with the pack, i.e. it was not favoured OR starved; well below
+ *        1.0 means it was served first, which is the healthy direction.
  *   -i   IMMEDIATE start: no release barrier at all -- each worker begins real
  *        work the instant it is resumed. USE THIS WITH -s. Without it, -s is
  *        INERT, and the reason is worth knowing: with the barrier every worker
@@ -187,6 +194,7 @@ struct worker_arg {
 	uint64			chunkIterations;
 	bigtime_t		snoozeMicros;	// > 0 makes this a sleeper, not CPU-bound
 	bigtime_t		releaseTime;	// absolute instant to wake at, 0 = now
+	bool			realTime;		// thread 0 only, under -r
 
 	// Results, written by the worker only.
 	bigtime_t		start;
@@ -287,13 +295,14 @@ struct run_result {
 	// because averaging the two classes together would hide a straggler.
 	bigtime_t	busyMax;
 	bigtime_t	busyMin;
+	bigtime_t	rtThread;	// -r only: thread 0's own span
 };
 
 
 static bool
 run_ladder_point(uint32 threads, uint64 iterations, bool stream,
 	uint64 chunkIterations, bigtime_t sleeperSnooze, bigtime_t staggerMicros,
-	bool immediate, run_result& out)
+	bool immediate, bool realTime, run_result& out)
 {
 	static worker_arg args[MAX_THREADS];
 	static thread_id ids[MAX_THREADS];
@@ -316,6 +325,7 @@ run_ladder_point(uint32 threads, uint64 iterations, bool stream,
 		args[i].cpuVisited = 0;
 		args[i].lastCpu = -1;
 		args[i].snoozeMicros = 0;
+		args[i].realTime = realTime && i == 0;
 		// Mixed workload: odd threads are sleepers on a ~20 % duty cycle and do
 		// a sixteenth of the work, so they finish on a comparable timescale
 		// while generating a lot of wake/sleep traffic through the rebalance
@@ -372,8 +382,13 @@ run_ladder_point(uint32 threads, uint64 iterations, bool stream,
 		snprintf(name, sizeof(name), "smpscale%" B_PRIu32, i);
 		// B_NORMAL_PRIORITY: we want the ordinary scheduler behaviour, not a
 		// real-time priority that might mask a scheduler that refuses to
-		// migrate work off CPU 0.
-		ids[i] = spawn_thread(worker, name, B_NORMAL_PRIORITY, &args[i]);
+		// migrate work off CPU 0. Under -r thread 0 alone is real-time, so that
+		// a change to the migration predicate can be checked for disturbing it:
+		// rebalance() is priority-blind, it compares loads and never consults
+		// GetEffectivePriority().
+		ids[i] = spawn_thread(worker, name,
+			args[i].realTime ? B_REAL_TIME_DISPLAY_PRIORITY : B_NORMAL_PRIORITY,
+			&args[i]);
 		if (ids[i] < B_OK) {
 			fprintf(stderr, "smpscale: spawn_thread %" B_PRIu32 " failed: %s\n",
 				i, strerror(ids[i]));
@@ -448,6 +463,8 @@ run_ladder_point(uint32 threads, uint64 iterations, bool stream,
 			out.maxMigrations = args[i].migrations;
 		visited |= args[i].cpuVisited;
 
+		if (args[i].realTime)
+			out.rtThread = args[i].end - args[i].start;
 		if (args[i].snoozeMicros == 0) {
 			bigtime_t span = args[i].end - args[i].start;
 			if (span > out.busyMax)
@@ -493,6 +510,7 @@ main(int argc, char** argv)
 	bigtime_t staggerMicros = 0;
 	bool dumpPlacement = false;
 	bool immediate = false;
+	bool realTime = false;
 	uint32 ladder[MAX_LADDER];
 	uint32 ladderSize = 0;
 
@@ -510,6 +528,8 @@ main(int argc, char** argv)
 			dumpPlacement = true;
 		else if (strcmp(argv[i], "-i") == 0)
 			immediate = true;
+		else if (strcmp(argv[i], "-r") == 0)
+			realTime = true;
 		else if (strcmp(argv[i], "-g") == 0)
 			countMigrations = true;
 		else if (strcmp(argv[i], "-x") == 0) {
@@ -554,7 +574,7 @@ main(int argc, char** argv)
 		bigtime_t elapsed = 0;
 		while (elapsed < targetMicros / 4 && iterations < (1 << 20)) {
 			run_result probe;
-			if (!run_ladder_point(1, iterations, true, 0, 0, 0, false, probe))
+			if (!run_ladder_point(1, iterations, true, 0, 0, 0, false, false, probe))
 				return 1;
 			elapsed = probe.wall;
 			if (elapsed >= targetMicros / 4)
@@ -626,7 +646,8 @@ main(int argc, char** argv)
 
 	for (uint32 k = 0; k < ladderSize; k++) {
 		if (!run_ladder_point(ladder[k], iterations, stream, chunkIterations,
-				mixed ? 4000 : 0, staggerMicros, immediate, results[k])) {
+				mixed ? 4000 : 0, staggerMicros, immediate, realTime,
+				results[k])) {
 			return 1;
 		}
 
@@ -741,6 +762,18 @@ main(int argc, char** argv)
 				printf("%" B_PRIu32 " ", c);
 		}
 		printf("\n");
+	}
+
+	if (realTime) {
+		printf("\nReal-time thread (thread 0 at B_REAL_TIME_DISPLAY_PRIORITY).\n");
+		printf("%8s %10s %10s %9s\n", "threads", "rt_ms", "max_ms", "rt/max");
+		for (uint32 k = 0; k < ladderSize; k++) {
+			run_result& r = results[k];
+			printf("%8" B_PRIu32 " %10.1f %10.1f %9.3f\n", r.threads,
+				(double)r.rtThread / 1000.0, (double)r.maxThread / 1000.0,
+				r.maxThread > 0
+					? (double)r.rtThread / (double)r.maxThread : 0.0);
+		}
 	}
 
 	printf("\nsink %llu (printed so the work cannot be optimised away)\n",
