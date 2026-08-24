@@ -42,14 +42,50 @@ const directory_which kLibraryDirectories[] = {
 };
 
 
-static const char *
-search_path_for_type(image_type type)
-{
-	const char *path = NULL;
+/*!	Returns the search path list specified via the environment variable
+	belonging to \a type, or \c NULL, if it isn't set or must be ignored.
 
+	The returned list is only ever searched *in addition to* the standard
+	system paths returned by default_search_path_for_type() -- it does not
+	replace them. Entries given here take precedence, since they are searched
+	first.
+*/
+static const char *
+environment_search_path_for_type(image_type type)
+{
 	// If "user add-ons" are disabled via safemode settings, we bypass the
-	// environment and defaults and return a different set of paths without
-	// the user or non-packaged ones.
+	// environment entirely, so that only the reduced set of system paths in
+	// default_search_path_for_type() is searched.
+	if (gProgramArgs->disable_user_addons)
+		return NULL;
+
+	switch (type) {
+		// B_APP_IMAGE (PATH) is handled in default_search_path_for_type(),
+		// where it still replaces the standard paths -- see the TODO there.
+		case B_APP_IMAGE:
+			return NULL;
+		case B_LIBRARY_IMAGE:
+			return getenv("LIBRARY_PATH");
+		case B_ADD_ON_IMAGE:
+			return getenv("ADDON_PATH");
+
+		default:
+			return NULL;
+	}
+}
+
+
+/*!	Returns the standard system search path list for \a type.
+
+	These directories are always searched, after any directories specified via
+	the environment variable belonging to \a type. Since the kernel does not
+	set any variables, this is also what allows the root shell to be started.
+*/
+static const char *
+default_search_path_for_type(image_type type)
+{
+	// If "user add-ons" are disabled via safemode settings, we return a
+	// different set of paths without the user or non-packaged ones.
 	if (gProgramArgs->disable_user_addons) {
 		switch (type) {
 			case B_APP_IMAGE:
@@ -70,31 +106,16 @@ search_path_for_type(image_type type)
 		}
 	}
 
-	// TODO: The *PATH variables should not include the standard system paths.
-	// Instead those paths should always be used after the directories specified
-	// via the variables.
-	switch (type) {
-		case B_APP_IMAGE:
-			path = getenv("PATH");
-			break;
-		case B_LIBRARY_IMAGE:
-			path = getenv("LIBRARY_PATH");
-			break;
-		case B_ADD_ON_IMAGE:
-			path = getenv("ADDON_PATH");
-			break;
-
-		default:
-			return NULL;
+	// TODO: PATH still replaces the standard system paths instead of being
+	// searched before them, unlike LIBRARY_PATH and ADDON_PATH. It is left that
+	// way deliberately for now: PATH has POSIX-defined meaning as the
+	// authoritative list of directories to search for a command, so always
+	// appending the system paths would make it impossible to restrict a
+	// command search, which callers do rely on.
+	if (type == B_APP_IMAGE) {
+		if (const char *path = getenv("PATH"))
+			return path;
 	}
-
-	if (path != NULL)
-		return path;
-
-	// The environment variables may not have been set yet - in that case,
-	// we're returning some useful defaults.
-	// Since the kernel does not set any variables, this is also needed
-	// to start the root shell.
 
 	switch (type) {
 		case B_APP_IMAGE:
@@ -352,10 +373,20 @@ open_executable(char *name, image_type type, const char *rpath, const char* runp
 		}
 	}
 
-	// If not found yet, let's evaluate the system path variables to find the
-	// shared object.
+	// If not found yet, let's evaluate the search path list given via the
+	// environment variable for this image type, if any.
 	if (fd < 0) {
-		if (const char *paths = search_path_for_type(type)) {
+		if (const char *paths = environment_search_path_for_type(type)) {
+			fd = search_executable_in_path_list(name, paths, strlen(paths),
+				programPath, NULL, abiSpecificSubDir, buffer, sizeof(buffer));
+		}
+	}
+
+	// The standard system paths are always searched afterwards, so that setting
+	// the environment variable adds directories to the search path instead of
+	// replacing it.
+	if (fd < 0) {
+		if (const char *paths = default_search_path_for_type(type)) {
 			fd = search_executable_in_path_list(name, paths, strlen(paths),
 				programPath, NULL, abiSpecificSubDir, buffer, sizeof(buffer));
 		}
