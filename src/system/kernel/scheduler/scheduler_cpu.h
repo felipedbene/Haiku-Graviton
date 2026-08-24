@@ -157,6 +157,7 @@ public:
 											bigtime_t activeTime);
 
 	inline				int32			GetLoad() const;
+	inline				int32			GetUnclampedLoad() const;
 	inline				uint32			LoadMeasurementEpoch() const
 											{ return fLoadMeasurementEpoch; }
 
@@ -404,6 +405,36 @@ CoreEntry::GetLoad() const
 
 	ASSERT(fCPUCount > 0);
 	return std::min(fLoad / fCPUCount, kMaxLoad);
+}
+
+
+/*!	The same quantity as GetLoad(), demand per logical CPU, but without the clamp
+	at kMaxLoad -- so an oversubscribed core reports 2000 rather than 1000 and is
+	distinguishable from a merely saturated one.
+
+	fLoad is the running sum of the fNeededLoad of the threads assigned to this
+	core, and fNeededLoad is DEMAND, not supply: ThreadData's available-time
+	accounting excludes time spent runnable in the run queue, so a CPU-bound
+	thread reports kMaxLoad however little CPU it actually gets. The sum is
+	therefore genuinely unbounded and meaningful above kMaxLoad, and the clamp in
+	GetLoad() is what makes oversubscription invisible.
+
+	Use this ONLY in the rebalance predicates. GetLoad() keeps its clamp
+	deliberately, because its other consumers need a bounded ratio: in particular
+	CPUEntry::_RequestPerformanceLevel() feeds it to the cpufreq interface behind
+	an ASSERT_PRINT(load <= kMaxLoad), and KDEBUG is on in the checked-in build,
+	so widening GetLoad() itself would be a live panic() on any machine that has a
+	cpufreq module -- i.e. x86, where it could not be tested from here. The
+	core load heap keys and the kHighLoad/kMediumLoad band decision also read
+	GetLoad() and must keep their present meaning.
+*/
+inline int32
+CoreEntry::GetUnclampedLoad() const
+{
+	SCHEDULER_ENTER_FUNCTION();
+
+	ASSERT(fCPUCount > 0);
+	return fLoad / fCPUCount;
 }
 
 

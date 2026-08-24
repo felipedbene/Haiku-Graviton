@@ -128,8 +128,16 @@ rebalance(const ThreadData* threadData)
 
 	// Check if the least loaded core is significantly less loaded than
 	// the current one.
-	int32 coreLoad = core->GetLoad();
-	int32 otherLoad = other->GetLoad();
+	//
+	// Unclamped, or this test cannot pass. GetLoad() saturates at kMaxLoad, so
+	// coreLoad <= kMaxLoad and otherLoad >= 0 bound the difference below at
+	// kMaxLoad - kLoadDifference == 0.8 * kMaxLoad, while threadLoad for a
+	// CPU-bound thread on a non-SMT core is kMaxLoad. 0.8 * kMaxLoad >= kMaxLoad
+	// is false for every value of kMaxLoad: ANY thread above 80% duty could never
+	// be migrated, however idle the machine. It only works on x86 because SMT
+	// makes CPUCount() 2 and halves threadLoad below.
+	int32 coreLoad = core->GetUnclampedLoad();
+	int32 otherLoad = other->GetUnclampedLoad();
 	if (other == core || otherLoad + kLoadDifference >= coreLoad) {
 		// Record whether a genuinely less loaded core existed at this moment.
 		// If declines happen in their thousands while such a core exists, the
