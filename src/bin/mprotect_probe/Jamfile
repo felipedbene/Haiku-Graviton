@@ -1,0 +1,5 @@
+SubDir HAIKU_TOP src bin mprotect_probe ;
+
+Application mprotect_probe :
+	mprotect_probe.c
+;

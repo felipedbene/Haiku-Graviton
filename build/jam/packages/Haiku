@@ -246,6 +246,7 @@ AddFilesToPackage bin :
 	cloud_init_lite
 	disktput
 	ena_fault
+	mprotect_probe
 	nettput
 	smpscale
 	consoled
