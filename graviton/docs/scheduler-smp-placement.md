@@ -622,6 +622,55 @@ So the layering is deliberate, and both are wanted for different reasons:
 
 ---
 
+## 5.9 Pre-registered predictions for the A/B
+
+Written down **before** the fixed kernel boots, so that the result cannot be
+rationalised afterwards. Each is falsifiable and each names which fix it tests.
+
+1. **Fix 1 reproduces the stagger result without the stagger.** `-i -s 0` at
+   N = 8 and N = 12 should match what `-i -s 5` gave on the stock kernel:
+   `busy == N`, `max/min <= 1.01`, **5 of 5 repeats**. On the stock kernel `-s 0`
+   gave 3 of 5. If N = 8 still fails at `-s 0`, Fix 1 does not do what §1.7 says
+   it does.
+2. **Fix 2 fixes N = 16, which no stagger value could.** N = 16 should reach
+   `busy = 16, idle = 0, max/min < 1.1` in **5 of 5** repeats. On the stock kernel
+   the best any stagger achieved was 2 of 5, and 0 of 5 at most values. This is
+   the sharpest single discriminator in the whole exercise, because it is the one
+   result that Fix 1 *cannot* produce.
+3. **Migration counts stay small and non-zero.** `-g` at N = 16 should show
+   `migr_tot` on the order of **1–20** per run — a handful of corrective moves —
+   not the 0 of the stock kernel and not thousands. Specifically `migr_max` should
+   be small (single digits). **If `migr/1ks` rises above ~5, that is thrashing and
+   the fix is wrong even if the busy sets look perfect.**
+4. **N = 17 does not change.** It should stay at `max/min ≈ 2.00` with all 16 CPUs
+   busy, because 17 threads on 16 cores must double exactly one. An "improvement"
+   here means something is migrating pointlessly.
+5. **N = 32 degrades gracefully.** `max/min ≈ 2.0` rather than the ~8.5 measured
+   on the stock kernel, with all 16 CPUs busy and no CPU absorbing 17 threads.
+6. **The mixed workload does not regress.** Sleepers must still spread (13–14
+   distinct CPUs) *and* the CPU-bound half must now come out level — on the stock
+   kernel the sleepers spread while the CPU-bound threads stayed stacked 3–4x.
+   Sleeper migration counts must not explode.
+7. **The real-time thread is not disturbed.** 15 normal spinners plus one
+   `B_REAL_TIME_DISPLAY_PRIORITY` spinner currently gives `rt/max = 0.998`. It must
+   stay there. `rebalance()` is **priority-blind** — it compares loads and never
+   consults `GetEffectivePriority()` — so making high-load threads migratable is
+   exactly the change that could start bouncing an RT thread every quantum. This
+   is the prediction most likely to fail, and the network stack's reader thread
+   runs at that priority.
+
+A/B commands, run interleaved against the canonical AMI on the same instance type:
+
+```
+smpscale -i -t 1000 -s 0 8 ; smpscale -i -t 1000 -s 0 12      # prediction 1
+smpscale -t 3000 1 8 12 16 17                                  # predictions 2, 4
+smpscale -t 3000 -g 8 16                                       # prediction 3
+smpscale -t 3000 32                                            # prediction 5
+smpscale -t 3000 -x 16                                         # prediction 6
+```
+
+---
+
 ## 6. Acceptance criteria
 
 Efficiency numbers are **not** acceptable evidence (§1.2). Required:
