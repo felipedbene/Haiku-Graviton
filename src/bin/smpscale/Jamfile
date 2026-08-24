@@ -1,0 +1,8 @@
+SubDir HAIKU_TOP src bin smpscale ;
+
+# Only libroot is needed: get_system_info(), get_cpu_info(), spawn_thread() and
+# system_time() all live there and it is linked implicitly.
+Application smpscale :
+	smpscale.cpp
+	:
+;
