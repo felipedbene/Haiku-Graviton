@@ -1,7 +1,28 @@
 SubDir HAIKU_TOP src system libroot posix string arch arm64 ;
 
-# Optimizations create infinite recursion otherwise.
+# Optimizations create infinite recursion otherwise -- and that is not a
+# theoretical worry, it is verified on the generated object code. generic_memset.c
+# contains a byte loop that *is* memset, so the compiler may recognise it and
+# replace it with a call to memset, from inside memset. With this tree's GCC
+# 13.3 and no guard, generic_memset.o carries an R_AARCH64_CALL26 relocation
+# against memset itself at both -O2 and -O3: unbounded recursion in every
+# process that clears a buffer. (-Os happens not to, and the kernel build of the
+# same file is saved incidentally by -fno-tree-vectorize. Neither is a guarantee
+# of anything.) The new arm64 memcpy.c, by contrast, stays clean in all eighteen
+# combinations of the three flag sets, three optimisation levels and both
+# guards -- see graviton/docs/arm64-memcpy.md.
+#
+# -fno-builtin is the historical guard and suffices today.
+# -fno-tree-loop-distribute-patterns names the pass that actually performs the
+# substitution, and is *not* implied by -fno-builtin -- glibc and the Linux
+# kernel both pass it explicitly for exactly this. Measured here, either flag
+# alone suppresses the call; both are set so the guard does not depend on which
+# of the two a future compiler keeps honouring. It is a GCC spelling, so it is
+# only passed to GCC.
 SubDirCcFlags -fno-builtin ;
+if $(HAIKU_CC_IS_CLANG_arm64) != 1 {
+	SubDirCcFlags -fno-tree-loop-distribute-patterns ;
+}
 
 local architectureObject ;
 for architectureObject in [ MultiArchSubDirSetup arm64 ] {

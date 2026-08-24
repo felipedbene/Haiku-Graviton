@@ -363,12 +363,27 @@ Findings:
   infinite recursion otherwise"; the kernel build was protected only by
   `-fno-tree-vectorize`. So the commit's instinct was right and its example was
   wrong.
-- **Kernel and libroot now emit byte-identical code.** They did not before:
-  libroot auto-vectorised the body to 128-bit `ldr q`/`str q` while the kernel,
-  built `-fno-tree-vectorize`, used `ldp`/`stp`. Spelling the wide access as
-  `__uint128_t` rather than leaving it to the vectoriser removes that
-  divergence, which also removes any question about SIMD register use inside the
-  kernel.
+- **Kernel and libroot now emit byte-identical code, and that is a deliberate
+  property rather than a coincidence.** They did not before: libroot
+  auto-vectorised the body to 128-bit `ldr q`/`str q` while the kernel, built
+  `-fno-tree-vectorize`, used `ldp`/`stp` — so the same C produced two different
+  routines and testing one said nothing about the other. Spelling the wide access
+  as `__uint128_t`, rather than writing 8-byte accesses and hoping the vectoriser
+  widens them, makes the width part of the source instead of part of the
+  optimiser's mood. Three things follow, and they are worth protecting:
+
+  * one disassembly to review instead of two, and a test of either one is a test
+    of both;
+  * **zero `q`/SIMD registers and zero stack spills in either build**, which
+    removes the kernel-NEON question entirely — no question of FP state, of
+    `CPACR` trapping, or of whether an exception path may touch vector
+    registers;
+  * the code no longer changes shape when someone adds or removes
+    `-fno-tree-vectorize` from a Jamfile.
+
+  A future SIMD rewrite (§6.7) **reopens all three**. That is not an argument
+  against it — glibc's 2x is real — but it means the kernel-SIMD policy question
+  has to be answered explicitly at that point rather than inherited.
 - Verified on the **shipped artifacts** (`libroot.so`, `kernel_arm64`), not
   only on the intermediate `.o`.
 
@@ -457,30 +472,45 @@ arm64. ACPI is already explicitly fixed for this exact hazard --
 memory does not support unaligned access. Two in-tree acknowledgements that the
 hazard class is known here.
 
-**One real arm64-general exposure, not reachable on Graviton.**
-`src/system/kernel/debug/frame_buffer_console.cpp:489-493` maps the framebuffer
-with no memory type -- so Device-nGnRnE -- and only repairs it to
-write-combining later, in `init_post_modules`. In that window `console_blit`
-does one `memmove` per scanline (`:330-337`), and musl's `memmove`
-(`src/system/libroot/posix/musl/string/memmove.c:16`) forwards to `memcpy` for
-non-overlapping ranges. The only caller is `blue_screen.cpp:100` with
-`srcx == destx == 0`, so source and destination differ by exactly
-`bytes_per_row` and are congruent mod 8 unless the stride is odd or the depth is
-24bpp. So: a KDL before `init_post_modules`, on an odd-stride or 24bpp mode, on
-an arm64 machine that has a framebuffer at all. Graviton has no video device,
-and the arm64 EFI loader uses UEFI `ConOut` rather than the framebuffer console.
-**Not a blocker for this target; a genuine one for arm64 in general, including
-the QEMU/virtio-gpu guests this project boots.** The right fix is at the source
--- pass `B_WRITE_COMBINING_MEMORY` at map time rather than repairing it
-afterwards -- and it is not this change's to make.
+**Three real exposures, none reachable on Graviton, listed here as a target list
+for the follow-up.** None of them is caused by this change. All three are made
+*reachable* by it, because the routine it replaces byte-copied whenever the two
+misalignments differed and a byte access to Device memory never faults.
 
-Two adjacent latent bugs found on the way, neither caused by this change and
-both of which make it more dangerous: `frame_buffer_console.cpp:489` and
-`framebuffer.cpp:62` should name their memory type at map time; and
-`hda_controller.cpp:603-605,910-912,950-952` calls
-`vm_set_area_memory_type(..., B_UNCACHED_MEMORY)` on `create_area` RAM DMA
-buffers when `!dma_snooping`, which on arm64 turns ordinary RAM into
-strongly-ordered Device memory -- and `hda` *is* built for arm64.
+1. `src/system/kernel/debug/frame_buffer_console.cpp:489-493` maps the
+   framebuffer with **no memory type**, so Device-nGnRnE, and only repairs it to
+   write-combining later in `init_post_modules`. In that window `console_blit`
+   does one `memmove` per scanline (`:330-337`), and musl's `memmove`
+   (`src/system/libroot/posix/musl/string/memmove.c:16`) forwards to `memcpy`
+   for non-overlapping ranges. The only caller is `blue_screen.cpp:100` with
+   `srcx == destx == 0`, so source and destination differ by exactly
+   `bytes_per_row` and are congruent mod 8 unless the stride is odd or the depth
+   is 24bpp. Reachable only in a KDL before `init_post_modules`, on an
+   odd-stride or 24bpp mode, on an arm64 machine that has a framebuffer.
+   Graviton has no video device and the arm64 EFI loader uses UEFI `ConOut`, so
+   not this target — but a genuine one for arm64 in general, including the
+   QEMU/virtio-gpu guests this project boots.
+2. `src/add-ons/kernel/drivers/graphics/framebuffer/framebuffer.cpp:62` has the
+   same shape: maps without naming a memory type.
+3. **`src/add-ons/kernel/drivers/audio/hda/hda_controller.cpp:603-605`,
+   `:910-912`, `:950-952` call
+   `vm_set_area_memory_type(..., B_UNCACHED_MEMORY)` on `create_area` RAM DMA
+   buffers when `!dma_snooping`** — which on arm64 turns *ordinary RAM* into
+   strongly-ordered Device memory, where every unaligned or wide access faults.
+   **`hda` is built for arm64.** This is the one that matters most, because it
+   is not a display path and not confined to a KDL: it is a driver turning
+   general-purpose memory into Device memory on a live system. **It is a latent
+   bug independent of this change and it deserves its own follow-up**, not a
+   line in this document.
+
+The right fix for all three is the same and it is at the *source*: name the
+memory type at map time (`B_WRITE_COMBINING_MEMORY` for a framebuffer, and for
+hda, do not ask for `B_UNCACHED_MEMORY` on arm64 at all — Normal-Non-Cacheable
+is what the driver actually wants and it does not fault on unaligned access).
+Repairing the attribute afterwards, as `frame_buffer_console` does, leaves a
+window. That work is deliberately **not** done here: it touches three drivers
+and a memory-type policy question, and bundling it with a memcpy change would
+make both harder to review.
 
 **The boot loader is unaffected.** `src/system/boot/Jamfile:318` names
 `generic_memcpy.c` into `boot_libroot_efi.o`, and
