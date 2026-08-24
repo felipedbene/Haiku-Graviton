@@ -3307,6 +3307,11 @@ vm_set_area_protection(area_id areaID, uint32 newProtection,
 }
 
 
+/*!	Returns the physical address \a vaddr is mapped to.
+
+	Fails with \c B_BAD_ADDRESS if there is no mapping. \a paddr is only
+	meaningful when this returns \c B_OK.
+*/
 status_t
 vm_get_page_mapping(team_id team, addr_t vaddr, phys_addr_t* paddr)
 {
@@ -3317,12 +3322,35 @@ vm_get_page_mapping(team_id team, addr_t vaddr, phys_addr_t* paddr)
 	VMTranslationMap* map = addressSpace->TranslationMap();
 
 	map->Lock();
-	uint32 dummyFlags;
-	status_t status = map->Query(vaddr, paddr, &dummyFlags);
+	uint32 flags;
+	status_t status = map->Query(vaddr, paddr, &flags);
 	map->Unlock();
 
 	addressSpace->Put();
-	return status;
+
+	if (status != B_OK)
+		return status;
+
+	// Query() reports an absent mapping as B_OK with PAGE_PRESENT clear and
+	// *paddr zeroed -- it only returns an error when the walk itself could not
+	// be done. Every implementation does this (grep PAGE_PRESENT in the arch
+	// paging code), so returning Query()'s status alone said "success, the
+	// physical address is 0" for any unmapped address.
+	//
+	// That made every caller's error handling unreachable. arch_vm_init_end()
+	// on arm, ppc, riscv64 and sparc reads
+	//
+	//	if (vm_get_page_mapping(...) != B_OK)
+	//		panic("arch_vm_init_end(): No page mapping for %p\n", address);
+	//
+	// and then passes the physical address to vm_map_physical_memory(). With
+	// the panic unreachable, an unmapped range silently mapped *physical page
+	// zero* as the boot loader reserved area instead of failing. The same shape
+	// appears in the m68k and ppc exception-context setup.
+	if ((flags & PAGE_PRESENT) == 0)
+		return B_BAD_ADDRESS;
+
+	return B_OK;
 }
 
 
