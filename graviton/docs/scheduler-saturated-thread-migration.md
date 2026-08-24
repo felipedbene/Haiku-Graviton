@@ -69,6 +69,24 @@ kMaxLoad` no matter how little CPU it actually gets.** That is deliberate:
 `fNeededLoad` measures how much CPU a thread *wants*, given the opportunities it
 had — demand, not supply.
 
+Two objections that would have broken this, both checked and closed:
+
+- *"A thread that never sleeps never recomputes its load, so `fNeededLoad` sits
+  at its initial 0."* No. `ThreadData::Continues()` (`scheduler_thread.h:337`)
+  calls `_ComputeNeededLoad()`, and `reschedule()` calls `Continues()` on every
+  `B_THREAD_RUNNING`/`B_THREAD_READY` transition (`scheduler.cpp:360`) and again
+  on the incoming thread (`:459`). A saturated thread recomputes roughly every
+  millisecond.
+- *"The EWMA in `compute_load()` will not actually reach `kMaxLoad`."* It
+  reaches it exactly. `compute_load` is invoked as
+  `compute_load(fLastMeasureAvailableTime, fMeasureAvailableActiveTime,
+  fNeededLoad, fMeasureAvailableTime)`, so its `deltaTime` is elapsed
+  *available* time and its `measureActiveTime` is active time in the same
+  window. For a thread that never sleeps `UpdateActivity()` increments both by
+  the identical amount, so `deltaTime == measureActiveTime` and
+  `newLoad = kMaxLoad` exactly — not asymptotically. The EWMA then holds at
+  `kMaxLoad`.
+
 Consequently `CoreEntry::fLoad`, which is just the running sum of the
 `fNeededLoad` of the threads assigned to the core (`AddLoad`/`RemoveLoad`/
 `ChangeLoad`, `scheduler_cpu.h:409-460`), is an **unbounded sum of demands**. A
