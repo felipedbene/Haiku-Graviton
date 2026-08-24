@@ -306,6 +306,14 @@ explicitly **not for merge**):
   `_kern_set_scheduler_mode`, since formatting does blocking serial I/O and must
   never run near the scheduler. `smpscale -p` asks for it.
 
+Build state: `jam -q kernel_arm64` and `jam -q smpscale` both succeed on
+`a195688e46` plus this branch, with **no diagnostics** naming
+`scheduler_placement_trace`, `low_latency`, `scheduler.cpp` or `smpscale.cpp`.
+`smpscale` now links from the committed tree (previously it was hand-compiled and
+not reproducible), pulling `libgnu.so` for `sched_getcpu()` and resolving
+`_kern_set_scheduler_mode` against `libroot.so`; its hot loop is still a
+five-instruction `madd` / `eor …, lsr #29` chain with zero memory operands.
+
 Predictions, so the experiment can fail: if §1.4 is right, a 16-thread burst
 shows most placements taking the `idle-core-list` path early and then repeatedly
 returning **the same core ID**, with the recorded core load stuck at a stale
