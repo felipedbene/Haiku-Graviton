@@ -1147,6 +1147,36 @@ to the point of hanging the machine — and snapping upward would reintroduce
 exactly the single-sample sensitivity being fixed. Memory remains protected by the
 global page bound in the meantime.
 
+### Pre-bake prediction, stated so the measurement can falsify it
+
+Working the fix through the numbers actually observed, before booting it. RAM was
+33,784,201,216 bytes = **8,248,096 pages**, so the new global limit is
+`8,248,096 >> 3` = **1,031,012 pages (3.93 GiB)**. Peak observed global dirty was
+**221,186 pages (864 MiB) — 21% of the new limit**, which is the quantitative form
+of "it fired while 32.6 GB of 33.8 was free".
+
+**Would the sshd writer still block?** Root disk, empty queue, `additionalPages ≤ 32`:
+
+| check | arithmetic | result |
+|---|---|---|
+| local (time) | `0 × 883 + 883 × 32` = 28,256 µs vs 3,000,000 | under |
+| global (pages) | `221,218` vs `1,031,012` pages | under |
+
+**Not throttled.** Previously the global summed duration was 6.86 s against a 5 s
+deadline, so it blocked — indefinitely, before the wait was bounded.
+
+**Is back-pressure preserved on the busy disk?** Scratch, 221,186 pages at 31 µs:
+
+| check | arithmetic | result |
+|---|---|---|
+| local (time) | `221,186 × 31 + 31 × 32` = 6,857,758 µs vs 3,000,000 | **over — still throttled** |
+
+Both halves are what they should be: the writer that had no business waiting does
+not wait, and the writer that caused the backlog still does. If the boot shows
+`waits == 0`, this arithmetic is wrong somewhere and the throttle has been removed
+rather than retargeted.
+
+
 ### What success looks like, and what would mean I broke back-pressure
 
 The failure mode of a fix like this is removing the throttle rather than fixing
