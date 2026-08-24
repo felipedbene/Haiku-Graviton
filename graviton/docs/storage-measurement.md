@@ -1088,9 +1088,10 @@ a machine with 31.5 GiB of RAM, because of one stale sample.
 
 The bound is a liveness guarantee, not a cure. In order:
 
-1. ~~Make the global quota not couple idle devices to busy ones.~~ **Done**, and
-   unverified pending a bake — see "The fixes" below.
-2. ~~Make the estimate an actual average, and decay it.~~ **Done**, same caveat.
+1. ~~Make the global quota not couple idle devices to busy ones.~~ **Done and
+   hardware-verified** — 0 of 2 timeouts on an idle queue, against 15 of 19 before.
+2. ~~Make the estimate an actual average, and decay it.~~ **Done**, verified
+   indirectly only; see "What was not obtained".
 3. Still open: revisit the quota constants. They cannot be judged until the two
    fixes above are measured, because until now the estimate feeding them was
    unreliable and the aggregation was wrong.
@@ -1339,6 +1340,111 @@ second at 15 s), against *every* sample stalled from 0 s to 1663 s on the pre-fi
 kernel with the identical load. That is the bounded wait working as a liveness
 backstop, and it stays in place after these two fixes precisely because it does not
 depend on the diagnosis being right.
+
+
+## VERIFIED on hardware: `ami-07c5e3b00b4dcee34`
+
+Built from `9e3d6f942e` with a source precheck in the clone
+(`arch_debug_console.cpp: 0`, `debug.cpp: 2`). `c7g.4xlarge`, 100 GiB gp3 scratch at
+**125 MiB/s**, the identical 16 GiB load that previously starved a machine.
+
+### Result 1 — it boots
+
+| check | value |
+|---|---|
+| `PANIC` | **0** |
+| `Kernel Debugging Land` | **0** |
+| `spawn_kernel_thread` in a trace | **0** |
+| `nvme_disk` *(positive control)* | 16 |
+| `io batch size` | 2 |
+| `bfs: mounted` | 1 |
+
+First hardware evidence for the boot fix, and it retroactively validates the
+cherry-pick sitting on `graviton`'s tip.
+
+### Result 2 — liveness: the starvation is gone
+
+14 consecutive samples of the ICMP → TCP → banner ladder, 15 s apart, **every one
+`healthy`**: 0 STARVED, 0 no-ICMP. All eight files reached exactly 2,147,483,648
+bytes, and the volume went to 16% used, so the 16 GiB landed on the scratch device
+and not the 300 MiB root.
+
+| | pre-fix kernel | this image |
+|---|---|---|
+| ssh samples starved | **every one**, 0 s → 1663 s | **0 of 14** |
+| 16 GiB load | never completed under observation | **completed** |
+
+### Result 3 — back-pressure survived, which was the falsifiable half
+
+From KDL, `page_writer_quota`:
+
+```
+  global dirty limit      : 1031012 of 8248096 pages  (1/8 of RAM)
+  quota waits             : 14684
+  quota wait timeouts     : 2  (bound 5000000 us)
+  total time waiting      : 447533488 us
+  longest single wait     : 5000005 us
+```
+
+**`waits = 14684`.** The stated falsifier was `waits == 0` meaning the throttle had
+been removed rather than retargeted; it did not fire. The quota engages ~14.7
+thousand times and reaches the 5 s bound **twice**, with a mean wait of
+**30.5 ms** (447.5 s over 14,684 waits). That is back-pressure working with a
+safety valve, which is exactly the target shape.
+
+### Result 4 — the cross-device coupling is gone
+
+| | pre-fix | this image |
+|---|---|---|
+| timeouts reporting `queue 0 pages` | **15 of 19** | **0 of 2** |
+
+Only two timeout lines exist in the whole run, and both are on a device with a real
+backlog — 333,825 and 173,569 pages queued, at 30–31 µs per page:
+
+```
+(waits 1, timeouts 1, longest 5000005 us, per-page estimate 30 us, queue 333825 pages)
+(waits 2, timeouts 2, longest 5000005 us, per-page estimate 31 us, queue 173569 pages)
+```
+
+Those are precisely the writers that *should* be throttled: 333,825 × 30 µs = 10.0 s
+of estimated drain against a 3 s local quota. **No writer on an idle queue was
+blocked at all**, which was the defect.
+
+### Result 5 — the prediction was right to the page
+
+Predicted before the boot: `8,248,096` pages of RAM, global limit
+`8,248,096 >> 3` = **1,031,012 pages**. KDL reports
+`global dirty limit : 1031012 of 8248096 pages`. Exact.
+
+### What was *not* obtained, and why
+
+**The idle-disk per-page estimate was not read directly.** `page_writer_quota` dumps
+`vm_page_default_modified_queue()` only — the default queue, not the per-disk ones —
+and that queue was unused this boot, so it reported `pages queued: 0` and
+`per-page write estimate: 0 us`. The wait counters *are* static members and
+therefore system-wide, which is why `waits`/`timeouts` are trustworthy; the
+per-device estimates are not in that dump.
+
+The evidence for fix 2 is therefore **indirect but strong**: zero timeouts on an
+idle queue, where the pre-fix run had 15 of 19 driven by an idle disk stuck at
+883 µs. The estimate no longer freezes high enough to throttle an idle device.
+**Follow-up:** `page_writer_quota` should iterate every `ModifiedPageQueue`, not just
+the default one. That is a real gap in my own instrument and it should be closed
+before anyone relies on it for a per-device number.
+
+### And KDL worked, for the first time on arm64
+
+```
+Thread 38 "serial debug listener" running on CPU 14
+kdebug> page_writer_quota
+```
+
+The listener thread caught the `kdl` trigger, the typed commands were read
+correctly rather than as a stream of `0xFF`, and `continue` resumed the machine
+cleanly (ping and ssh both confirmed afterwards). The capability that was dead on
+this architecture is the capability that produced the one number the syslog could
+not — `waits` — because the log line only fires on a timeout and the fix reduced
+timeouts to two.
 
 
 ## The capture plan, revised: the fork can be answered without KDL
