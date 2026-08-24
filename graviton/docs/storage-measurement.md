@@ -871,10 +871,12 @@ Four things are worth someone's time, in this order:
    the same place. Suspect the single journal and its per-commit
    `block_cache_sync`.
 4. **Requests larger than 256 KiB are issued serially** by `nvme_disk`
-   (`await_status()` per chopped command). Worth 3.8× on raw-device bulk I/O at
-   low concurrency, nothing on file I/O — the file cache never emits a request
-   larger than 128 KiB. This one is a **kernel module**, so it can be hot-swapped
-   onto a running node without a bake, which makes it the cheapest to try.
+   (`await_status()` per chopped command). Worth up to 3.8× on raw-device bulk I/O
+   at low concurrency, nothing on file I/O — the file cache never emits a request
+   larger than 128 KiB. **A fix is written and committed but unverified:** the boot
+   disk driver turns out *not* to be hot-swappable, because the non-packaged
+   directory that would override it lives on the filesystem the driver is needed to
+   mount. It needs a bake. See "Finding 4" below.
 
 Deliberately not pursued: multi-queue. `qpair count: 2` is what the EBS
 controller offers, and Linux reports the same, so the per-CPU queue selection
