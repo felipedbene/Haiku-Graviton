@@ -135,6 +135,13 @@ _start(kernel_args *bootKernelArgs, int currentCPU)
 		debug_init(&sKernelArgs);
 		set_dprintf_enabled(true);
 		dprintf("Welcome to kernel debugger output!\n");
+		// The DeBeOS line is additive on purpose. "Haiku revision:" carries the
+		// actual hrev and is grepped for by tooling and by half the notes in
+		// graviton/docs, so replacing it would break things for a branding
+		// string. On a headless cloud instance this banner is the only place the
+		// project name is ever seen at boot -- there is no framebuffer, so a
+		// splash screen would be baked in and never displayed.
+		dprintf("DeBeOS -- ARM-first, descended from Haiku/BeOS\n");
 		dprintf("Haiku revision: %s, debug level: %d\n", get_haiku_revision(),
 			KDEBUG_LEVEL);
 

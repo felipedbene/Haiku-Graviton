@@ -1,3 +1,5 @@
+<img src="data/artwork/debeos/debeos-logo-256.png" alt="DeBeOS" width="180" align="right">
+
 # DeBeOS
 
 **DeBeOS is an independent operating system project, descended from
