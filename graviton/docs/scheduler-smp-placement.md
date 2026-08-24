@@ -1,7 +1,13 @@
 # SMP work is placed badly and never repaired
 
-Status: **implemented** on `fix/scheduler-saturated-migration`, three commits,
-awaiting hardware A/B. Design was reviewed and approved before implementation. The causation question has
+Status: **implemented and verified on hardware.** Three fixes on
+`fix/scheduler-saturated-migration`, A/B measured against the canonical AMI on
+16-vCPU Graviton (§5.11). Headline: 32 threads went from **60.0 s with one CPU
+running 17 of them** to **6.05 s across all 16 CPUs**, a 9.9x speedup within 0.8 %
+of optimum; 16 threads from `max/min` 3.00–4.02 with up to 7 CPUs idle to
+16-on-16 at 1.014–1.017, **5/5 where the baseline managed 0/5**. Five of seven
+pre-registered predictions passed; the two that failed were errors in my
+*predictions*, recorded as failures in §5.13 and §5.14. Not merged, not pushed. The causation question has
 been settled by measurement on hardware (§1.7) without needing a bake. One
 remaining question — the mechanism of defect B — needs the kernel instrumentation
 in §5 and therefore one image bake, but it does not change the shape of the fix.
@@ -892,11 +898,17 @@ Efficiency numbers are **not** acceptable evidence (§1.2). Required:
    with a balanced ladder — otherwise exactly the outcome that gets declared a
    success. A per-thread counter for `rebalance()` returning `other != core` is
    in the kernel instrumentation; the userland `-g` counter cross-checks it.
-3. **N = 17 must stay at eff 0.500**, which is already optimal.
+3. ~~**N = 17 must stay at eff 0.500**, which is already optimal.~~
+   **WRONG, see §5.13.** The baseline measures `max/min` 3.01–5.02 at N = 17, so it
+   was never optimal there, and 0.500 is not the floor once migration works. The
+   fix improved it to 1.51. Criterion replaced by: **N = 17 must not get *worse*,
+   and any improvement must be explained** — here it is explained, the surplus
+   thread's work is split across two CPUs mid-run.
 4. **Mixed workload** (`-x`): sleepers must not start migrating.
-5. **Real-time regression test.** 15 normal spinners plus one
-   `B_REAL_TIME_DISPLAY_PRIORITY` spinner currently gives `rt/max = 0.998`, so RT
-   is **not** starved today. But `rebalance()` is **priority-blind** — it compares
+5. **Real-time regression test**, and score it on `rt_ms`, **not** on `rt/max`
+   (§5.14): `rt/max` is dominated by the slowest *normal* thread and so cannot
+   isolate real-time health. 15 normal spinners plus one
+   `B_REAL_TIME_DISPLAY_PRIORITY` spinner. RT is **not** starved today. But `rebalance()` is **priority-blind** — it compares
    loads and never consults `GetEffectivePriority()` — so any change that lets
    high-load threads migrate freely can bounce an RT thread every quantum. The
    network stack's reader thread runs at that priority, which is why this matters
