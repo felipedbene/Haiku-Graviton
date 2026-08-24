@@ -30,7 +30,8 @@
 DebugUART8250::DebugUART8250(addr_t base, int64 clock, int8 regShift)
 	:
 	DebugUART(base, clock),
-	fRegShift(regShift)
+	fRegShift(regShift),
+	fTxBatch(1)
 {
 }
 
@@ -87,6 +88,18 @@ DebugUART8250::~DebugUART8250()
 #define LSR_THRE	0x20	/* Xmit holding register empty */
 #define LSR_TEMT	0x40	/* Xmitter empty */
 #define LSR_ERR		0x80	/* Error */
+
+/* Bits 7:6 of IIR -- the read side of the FCR address -- are the only report the
+   chip makes about its own FIFO: 0b11 is FIFO mode, 0b10 is a FIFO the original
+   16550 erratum makes unusable, 0b00 is no FIFO at all. */
+#define IIR_FIFO_MASK		0xc0
+#define IIR_FIFO_ENABLED	0xc0
+
+/* Largest transmit batch this driver will accept, from the probe or from a
+   setting. A 16550A holds 16 bytes; there is nothing to gain from writing more
+   than one FIFO between status polls, and the cost of guessing high is dropped
+   characters. */
+#define MAX_TX_BATCH		16
 
 
 // The base class assumes a fixed 32-bit register stride on ARM, which only
@@ -185,6 +198,106 @@ DebugUART8250::PutChar(char c)
 
 	Out8(UART_THR, c);
 	return 0;
+}
+
+
+/*!	Set the number of bytes PutChars() may write between two reads of LSR.
+
+	Clamped to 1..MAX_TX_BATCH. 1 means one poll per byte, which is what PutChar()
+	does and therefore the behaviour this class has always had; it is the default,
+	and the only value that is safe without knowing the FIFO is on.
+*/
+void
+DebugUART8250::SetTxBatch(uint8 batch)
+{
+	if (batch < 1)
+		batch = 1;
+	else if (batch > MAX_TX_BATCH)
+		batch = MAX_TX_BATCH;
+
+	fTxBatch = batch;
+}
+
+
+/*!	Ask the chip whether its transmit FIFO is usable and pick a batch depth.
+
+	Returns the depth installed: \a limit if the FIFO reports itself enabled,
+	otherwise 1.
+
+	This has to be a runtime question, not a build-time constant, because the two
+	platforms this one class serves disagree and neither answer is available from
+	the source. InitPort() writes FCR = 0, which disables the FIFO -- but on a UART
+	discovered through ACPI the boot loader sets gUARTSkipInit and InitPort() is
+	never called at all, so the FIFO is in whatever state the firmware left it.
+	On a device tree without a "skip-init" property InitPort() does run, and the
+	FIFO is then definitively off.
+
+	Anything other than a clean "FIFO mode" report falls back to 1, including
+	values that should not occur. Guessing high costs dropped characters in exactly
+	the output being relied on to diagnose the machine, so an ambiguous answer is
+	treated as a no.
+
+	Note the deliberate asymmetry: this reports what is *enabled*, never how
+	*deep* it is. IIR carries no depth field, a 16550A is 16 bytes deep and later
+	and emulated parts are various, so the caller is expected to pass a limit it
+	is willing to defend rather than the largest depth that might be there.
+*/
+uint8
+DebugUART8250::ProbeTxBatch(uint8 limit)
+{
+	uint8 batch = 1;
+	if ((In8(UART_IIR) & IIR_FIFO_MASK) == IIR_FIFO_ENABLED)
+		batch = limit;
+
+	SetTxBatch(batch);
+	return fTxBatch;
+}
+
+
+/*!	Write \a length characters, polling LSR once per batch rather than per byte.
+
+	The invariant this rests on: at every write that is not directly preceded by
+	an observation of LSR_THRE, at most fTxBatch - 1 bytes have been written since
+	the last such observation, within this same call. On a 16550 with the FIFO
+	enabled THRE says the transmit FIFO is *empty*, so any fTxBatch no larger than
+	the true FIFO depth cannot overflow it.
+
+	All of the batch state is local to the call; nothing survives it. That is the
+	point rather than an incidental style choice. A count carried in the object
+	would have to stay correct across a KDL entry, across a panic raised from
+	inside this function, and across firmware that re-initialises the port behind
+	our back -- and a stale count overflows the FIFO and corrupts precisely the
+	output being used to find out what went wrong.
+
+	Caveat, stated rather than hidden: two writers running concurrently without
+	serialising would each read THRE, each believe the whole FIFO was theirs, and
+	together could overflow it. Such writers already interleave their characters
+	today, so this widens a failure mode that exists rather than creating one, and
+	the kernel debug output path serialises on a spinlock.
+*/
+void
+DebugUART8250::PutChars(const char* string, size_t length)
+{
+	const size_t batch = fTxBatch;
+	size_t written = 0;
+
+	while (written < length) {
+		// wait for room in the tx holding register / fifo
+		int32 timeout = 256 * 1024;
+		while (!(In8(UART_LSR) & LSR_THRE)) {
+			if (--timeout == 0)
+				return;
+		}
+
+		size_t chunk = length - written;
+		if (chunk > batch)
+			chunk = batch;
+
+		for (size_t i = 0; i < chunk; i++)
+			Out8(UART_THR, string[written + i]);
+
+		written += chunk;
+	}
 }
 
 

@@ -30,6 +30,23 @@ public:
 	virtual	void			Disable() { fEnabled = false; }
 
 	virtual	int				PutChar(char c) = 0;
+
+							// Write a run of characters at once.
+							//
+							// The default implementation walks the string
+							// through PutChar(), so a driver that does not
+							// override it behaves exactly as it did before this
+							// entry point existed. A driver whose transmit flow
+							// control is per-queue rather than per-character can
+							// override it and amortise one wait over several
+							// bytes.
+							//
+							// Callers holding more than one character should
+							// prefer this over a PutChar() loop: the loop throws
+							// away, at the call site, the only information that
+							// would let the driver batch.
+	virtual	void			PutChars(const char* string, size_t length);
+
 	virtual	int				GetChar(bool wait) = 0;
 
 	virtual	void			FlushTx() = 0;
