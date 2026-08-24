@@ -1,3 +1,8 @@
+- **The end-to-end network number is now measured; see §6.8.** Receive CPU cost
+  fell **8.4%**, which is 0.213 of the modelled 1.85 ns/B per-byte term, i.e.
+  **11.5% of it**. That is well short of what the copies alone predicted, and
+  §6.8 says by how much and what is left.
+
 # The arm64 `memcpy()`: design, verification, and what it is worth
 
 Status: **verified in userland on real hardware, against the exact object code
@@ -837,3 +842,140 @@ Any self-contained arch leaf: `generic_memset.c`, `memcmp`, `strlen`, the
 `compute_checksum()` cost noted in §6.7 is the obvious next candidate -- it is a
 leaf, it is measurable, and it is currently 2.4x off a straightforward 64-bit
 unrolled version.
+
+## 8. The measurement, on the baked image
+
+`ami-0164f43c17f24cd7b`, built from this branch at `9e4547eabf`. Baseline is the
+canonical pre-change image `ami-0d61e3910062bb80a`. **c7g.4xlarge**, not
+c7g.large: transmit cost on c7g.large is bimodal with the mode chosen at boot and
+the two modes 19% apart, which is wider than the effect being measured. Peer is
+the metal builder. MTU confirmed 9001 on every node before any rate was believed.
+The *same* `nettput` binary was pushed to all six nodes, so the instrument is
+identical on both sides of the comparison rather than whatever each image
+happened to bake.
+
+**Three independent boots per image**, three runs per boot, alternating
+new/new/new/old/old/old per round so that no drift across the session can be read
+as a difference between the images. One warm-up transfer per node is discarded:
+the very first transfer after boot ran at 151 Mbit/s against 4907 for a
+subsequent one, with *nearly identical* CPU per MiB -- it was stalling, not
+computing -- and including it would have poisoned everything.
+
+### 8.1 Receive, MTU 9001
+
+| | mean µs/MiB | median | range | per-boot means |
+|---|---|---|---|---|
+| **new** | **2452.4** | 2444 | 2390-2511 | 2479.3, 2463.3, 2414.7 |
+| old | 2676.2 | 2677 | 2593-2725 | 2705.0, 2681.7, 2642.0 |
+
+**-223.8 µs/MiB, a 8.4% reduction.** The ranges are **fully disjoint** -- the
+worst new run (2511) is better than the best old run (2593) -- and all three new
+boots come in below all three old boots, so this is not one lucky boot.
+
+Throughput: **4936 Mbit/s on both, to within 2 Mbit/s.** That is the expected
+result and not a disappointment: receive is already at 99.9% of Linux
+single-flow on this part, so there is no rate headroom for an improvement to
+appear in. The whole effect shows up as CPU cost per byte, which is why µs/MiB is
+the number reported.
+
+### 8.2 A number I had to revise downward, and how
+
+The first receive measurement used **one boot per image** and gave
+2448.9 vs 2802.4 µs/MiB -- **12.6%**. Across three boots it is **8.4%**.
+
+The new image's figure barely moved (2448.9 -> 2452.4, a 0.1% difference; it is
+very reproducible). The *baseline* moved, from 2802.4 to 2676.2 -- 4.5% -- because
+the old image varies more from boot to boot. A single-boot A/B therefore
+overstated the win by half again, in precisely the way four earlier claims in this
+project were overstated, and the only reason it was caught is that the second
+measurement was run at all. **8.4% is the number. 12.6% was wrong.**
+
+### 8.3 Transmit, MTU 9001 -- weaker, and reported as weaker
+
+| | mean | median | range |
+|---|---|---|---|
+| new | 2096.7 | 2082 | 2042-2257 |
+| old | 2228.6 | 2193 | 2161-2570 |
+
+Medians differ by **111 µs/MiB, 5.1%**. Each distribution has one outlier -- the
+old one at 2570 came with the throughput down at 4333 Mbit/s, a visibly degraded
+run -- and **excluding those two the ranges are disjoint** (new 2042-2098, old
+2161-2202).
+
+It is reported with less confidence than receive, for reasons that are not
+resolvable with this image:
+
+- The effect (5%) is well inside the 19% boot-to-boot bimodality documented for
+  transmit cost. Three boots per image with disjoint interquartile ranges is
+  better evidence than a single pair, but it is not the same as having shown the
+  bimodality is absent here.
+- The send buffer could not be pinned. `nettput -P`, which collapses within-boot
+  transmit spread to 1.2%, is on a **different branch** and is not in this image;
+  the `-w` option that is present sets `SO_SNDBUF` *and* `SO_RCVBUF`, and an
+  explicit `SO_RCVBUF` is known to suppress window growth, so it is not a
+  substitute.
+- An earlier no-warm-up pass put the old image at 2328-2371 with the rate at
+  4426, and the warm-up pass puts it at 2161-2202 with the rate at 4966. The
+  baseline's transmit behaviour depends on conditions this measurement does not
+  control.
+
+**So: receive 8.4%, established. Transmit about 5%, indicative.** Re-measure
+transmit once `-P` is available in a single image alongside this change.
+
+### 8.4 Controls
+
+- **Null control -- round-trip latency.** A copy routine cannot change RTT, and
+  it did not: 0.174 ms mean on new against 0.167 ms on old over 20 pings, both
+  with the same min and mdev. Had this moved, the throughput numbers would not
+  have been trustworthy either.
+- **Instrument control.** On the *old* image, `memcpybench` compares libroot's
+  memcpy against its own transcription of the incumbent -- the same algorithm
+  twice -- and reports **1.00x on every single row**. On the new image the same
+  binary reports 1.23x-6.63x. That is the cleanest possible demonstration that
+  the benchmark's two columns are measuring genuinely different code where they
+  should and identical code where they should.
+- **Unchanged-component control.** `libbe.so` hashes identically on both images
+  (`94ca427e...`) while `libroot.so` and `kernel_arm64` differ, which is what a
+  correctly scoped change looks like.
+- **Predictive check, MTU 1500: underpowered, and reported as such.** The
+  per-byte term is 53% of receive cost at MTU 1500 against 88% at 9001, so the
+  improvement should shrink. Measured: new 10870, old 10800 µs/MiB -- **no
+  resolvable difference**. The predicted saving is ~3% of that total and the
+  within-group spread is ~4%, so this test could not have seen the effect either
+  way. It neither confirms nor refutes; it is recorded because it was run.
+  (The MTU 1500 rate collapsing to ~800 Mbit/s is a separate matter and not
+  this change's.)
+
+### 8.5 How much of the per-byte cost this actually explains
+
+The microbenchmark, run on the node itself, measures the receive path's two
+copies at 1920 bytes cold:
+
+| copy | old | new | saving |
+|---|---|---|---|
+| driver -> net_buffer (aligned) | 0.121 | 0.099 | 0.022 ns/B |
+| net_buffer -> user (source +6) | 0.411 | 0.109 | 0.302 ns/B |
+| | | | **0.324 ns/B = 339.7 µs/MiB** |
+
+Measured end-to-end saving: **223.8 µs/MiB, which is 66% of that.** The
+microbenchmark over-predicts by half. Candidate reasons, none of them established
+here: the real copies are not all at 1920 bytes or at 6 mod 8; a fragmented
+`net_buffer` may present some segments already aligned; and the cold/warm mix in
+the live path is not the bench's. The `-A` option added on the profiling branch
+exists to probe exactly this and was not used.
+
+Against the receive cost model -- **2.34 µs/frame + 1.85 ns/B**, R² 0.94 --
+0.213 ns/B was removed, which is **11.5% of the per-byte term**. So:
+
+> **About 88% of the per-byte receive cost is still unexplained by the copies.**
+
+This change was the largest measured lever in the tree and it moved receive CPU
+cost by 8.4%. Both of those statements are true at once, and the second does not
+diminish the first: it means the per-byte term was never mostly the copies. One
+comparable term is already identified and is *not* in this image --
+`compute_checksum()` measures 0.228 ns/B against 0.055 for a 64-bit unrolled
+version, and the size that matters there is 1988 bytes rather than a whole frame,
+because `checksum_data()` sees one `data_node` at a time. That is a second
+per-byte term of the same order as the one removed here. It is a confound for
+*attribution* but not for this measurement, which was taken on a single image
+with the checksum unchanged on both sides.
