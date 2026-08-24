@@ -748,6 +748,138 @@ discipline.
 
 ---
 
+## 5.11 A/B RESULT: all three fixes work; two of my seven predictions were
+mis-specified
+
+Measured on `ami-0432d67e38222905a` (`52822a3be4` on the frozen base
+`37ec8d088b`), node `i-037ae68c87785941e`, against the canonical AMI
+`ami-0d61e3910062bb80a` on `i-059bc5d23bc47a09e`. Interleaved, **the identical
+`smpscale` binary on both sides**, sha256 `49c2eca4…d86042` verified on each.
+
+**Kernel identity gate passed.** The fixed node's syslog carries
+`sched_placement:` lines; the baseline's does not (`grep -c` = 0). Since that
+output is emitted by the kernel and not the userland binary, it proves the patch
+actually reached the running kernel — the failure mode where a build reports
+`rc=0` from a tree whose patch never applied.
+
+### The headline
+
+| | baseline | fixed |
+|---|---|---|
+| 8 threads on 16 CPUs | 8 threads on **7** CPUs, one doubled, 5/5 runs | **8 on 8**, `max/min` 1.003, 5/5 |
+| 12 threads | 12 on **11**, 4/5 runs | **12 on 12**, `max/min` ≤1.003, 5/5 |
+| 16 threads | `max/min` **3.00–4.02**, 4–7 CPUs idle, 5/5 | **16 on 16, 0 idle**, `max/min` 1.014–1.017, **5/5** |
+| 32 threads | one CPU ran **17 threads for 60.0 s**; wall 60.0–75.0 s | **6.05 s**, all 16 CPUs at ~6000 ms, `max/min` 1.016 |
+
+**N = 32 is the starkest single number: 60024.9 ms → 6065.9 ms, a 9.9x speedup,
+and within 0.8 % of the 6000 ms theoretical optimum.**
+
+### The seven predictions, scored as written
+
+| # | prediction | outcome |
+|---|---|---|
+| 1 | Fix 1 gives `busy == N`, `max/min <= 1.01`, 5/5 at N = 8 and 12 without stagger | **PASS.** 8/8 and 12/12, `max/min` ≤ 1.003, 5/5 each |
+| 2 | N = 16 reaches `busy 16, idle 0, max/min < 1.1`, 5/5 — unreachable by Fix 1 alone | **PASS.** 16/16, 0 idle, 1.014–1.017, **5/5**. Baseline 0/5 |
+| 3 | `migr_tot` 1–20 per run, `migr/1ks` below the ~5 thrash threshold | **PASS on the falsification criterion.** `migr_tot` 4–16; `migr/1ks` 0.17–0.31, i.e. **16x below** my threshold. But see §5.12 — the *direction* was backwards |
+| 4 | N = 17 must **not** change, stays at `max/min ≈ 2.00` | **FAILED — wrong premise.** It improved, to `max/min` 1.509–1.515. §5.13 |
+| 5 | N = 32 degrades gracefully to `max/min ≈ 2.0`, 16 busy | **PASS on substance, wrong number.** 16 busy, but `max/min` **1.016**, not 2.0. §5.13 |
+| 6 | Mixed workload does not regress; sleepers still spread, CPU-bound half now level | **PASS.** `busy_max` 3025–3030 ms vs baseline 6006–6026; sleepers on 15/16/15 CPUs vs 15/14/14 |
+| 7 | Real-time thread undisturbed | **PASS on substance, wrong metric.** `rt_ms` is **3004.6–3005.1 ms on both kernels**. §5.14 |
+
+Five clean passes, and the two failures are both defects in my *predictions*, not in
+the fix. Recording them as failures anyway, because a prediction that gets
+reinterpreted after the fact is worth nothing.
+
+### 5.12 Prediction 3's direction was backwards, and I should have seen it
+
+I framed prediction 3 as "migrations should rise from the baseline's ~zero to a
+small number". The threshold I wrote down held comfortably — `migr/1ks` 0.17–0.31
+against a 5.0 thrash limit — but the *comparison* is the wrong way round from what
+I implied: the fixed kernel migrates **more** than the baseline in 8/8, 3/3 and
+9/10 comparisons (Runs C, E, G), the single exception being Run G rep 2 at 12
+threads (baseline 0.25 vs fixed 0.22).
+
+That is not a defect, and the `cpus` column says why: **the baseline migrates less
+because it is only using 5–14 of the 16 CPUs, so it has less spreading to do.** The
+fixed kernel pays 0.1–0.15 extra migrations per thousand samples to use the whole
+machine. Still, "more migrations than baseline" is the literal opposite of a
+naive reading of my prediction, so it goes down as written.
+
+### 5.13 Predictions 4 and 5: my "arithmetic optimum" assumed migration never works
+
+This is the substantive error, and it is in §4.6 of this document.
+
+I derived the optimum as `eff = 1 / ceil(N / ncpus)`, giving `max/min = 2.00` as
+the floor for N = 17. **That formula assumes threads cannot move once placed** —
+i.e. it silently bakes in the very defect being fixed. Once migration works, a
+thread's work is effectively divisible across CPUs and the floor is
+`eff = ncpus / N`:
+
+| N = 17 on 16 CPUs | makespan | `max/min` |
+|---|---|---|
+| no migration (my assumed floor) | 2.000 units = 6000 ms | 2.00 |
+| **observed, fixed** | **1.505 units = 4516 ms** | **1.51** |
+| perfectly divisible floor | 1.063 units = 3187 ms | 1.00 |
+| observed, baseline | 3.0–5.0 units | 3.01–5.02 |
+
+The per-CPU table shows the mechanism plainly: two CPUs at ~4500 ms and fourteen
+at ~2995 ms, totalling 51000 ms = 17 × 3000. The seventeenth thread's work was
+**split across two CPUs mid-run** — which is migration doing exactly its job.
+
+So prediction 4 was wrong twice over: N = 17 was *not* already optimal on the
+baseline (3.01–5.02, far worse than 2.00, so my earlier "N = 17's 0.500 is already
+optimal" claim was also wrong), and the fix improved it past the floor I thought
+existed. **§4.6 and §6 need the `1/ceil(N/ncpus)` formula struck out.** Prediction
+5 has the same root: I wrote `max/min ≈ 2.0` for N = 32 when `max/min` is computed
+over *busy* CPUs, and 32 threads spread 2-per-CPU makes every CPU equal — so 1.016
+is the correct answer and 2.0 was never reachable.
+
+There is still headroom at N = 17: 4516 ms against a 3187 ms divisible floor. Not a
+regression, but not solved either.
+
+### 5.14 Prediction 7 passed, but `rt/max` was the wrong instrument
+
+`rt/max` moved from 0.250–0.498 (baseline) to 0.987–0.991 (fixed), which looks like
+a dramatic improvement in real-time behaviour. **It is not, and quoting it that way
+would be misleading.** `rt_ms` — the real-time thread's own completion time — is
+**3004.6–3005.1 ms on both kernels, in all ten runs**. The RT thread was never
+delayed on either. The entire ratio change comes from the denominator: the slowest
+*normal* thread went from 6030–12031 ms to 3032–3044 ms.
+
+So `rt/max` measures the normal threads, not the RT thread, and cannot isolate RT
+health. The right metric is `rt_ms`, and by that measure the answer is clean: **the
+priority-blind repair path did not disturb the real-time thread at all.** The
+concern that motivated the test — `rebalance()` never consulting
+`GetEffectivePriority()`, so a now-live repair path could bounce an RT thread every
+quantum — **did not materialise**. The likely reason is structural: an RT thread
+alone on a core wins every reschedule, so `nextThread == oldThread` and
+`enqueue()`/`Rebalance()` is never reached for it.
+
+A contingency guard (`if (threadData->IsRealTime()) return core;`) was prepared and
+is **not** being applied, because the evidence does not call for it and it would be
+an unmeasured change.
+
+### 5.15 Residual findings, not blockers
+
+- **The fixed kernel still reports 21 888 rebalance declines with a less-loaded
+  core available**, out of 163 412 declines over the whole session. Some are
+  correct (at N = 32 every core is equally loaded; declining is right), but the
+  figure deserves a look. It is the instrumentation earning its place.
+- **N = 17 is not at the divisible floor** (1.51 vs 1.00). Follow-up, not a
+  regression.
+- **The baseline is not deterministically broken**: Run A N = 12 rep 2 was perfect
+  on the *baseline*, 1 in 5. This is why every criterion was specified at 5
+  repeats; a single before/after pair could have shown anything.
+- **`smpscale`'s `unit_ms` was itself buggy** and distorted every baseline figure —
+  see the commit fixing it. The conclusions survive only because the per-CPU
+  `active_time` table and `cpus>10%` were read instead of the `busy` column.
+- **A `base64` decode returning `rc=0` is not evidence of a correct transfer.** A
+  dropped ssh chunk produced a *shorter* file that decoded cleanly and gave the
+  wrong sha256 (132 939 bytes instead of 144 339). The sha gate caught it. Same
+  family as the "artifact must announce itself" rule.
+
+---
+
 ## 6. Acceptance criteria
 
 Efficiency numbers are **not** acceptable evidence (§1.2). Required:
