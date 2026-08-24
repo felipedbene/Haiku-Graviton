@@ -1169,7 +1169,7 @@ runs at the right EL to read, and touches no existing path.
 
 **Verify.** Cross-check `ipc` against a known-shape workload (a tight scalar loop
 should approach the core's issue width); sanity-check `PMCCNTR_EL0` against the
-generic timer, which the port already uses.
+generic timer, which DeBeOS already uses.
 
 **Open questions.** Whether `PMUSERENR_EL0` should ever be opened to userland
 (probably not, initially); whether counters survive our idle path — AWS warns
@@ -1205,7 +1205,7 @@ Two consequences:
    effectively "off" for us; if we are running translated, there is headroom.
 
 **Recommendation.** Investigation only, no code. Determine from the ACPI tables
-(IORT) whether an SMMUv3 is described on c7g.metal and what the port does with it,
+(IORT) whether an SMMUv3 is described on c7g.metal and what DeBeOS does with it,
 then decide whether anything is worth changing. Low priority relative to items 5
 and 13, but cheap, and it belongs on the record before ENA numbers are quoted.
 

@@ -119,7 +119,7 @@ Set in `cdk.json` `context`, or override per-invocation with `-c key=value`
 |---|---|---|---|
 | `haiku:account` | `HAIKU_ACCOUNT` | `668984504585` | Isengard account. |
 | `haiku:region` | `HAIKU_REGION` | `us-west-2` | |
-| `haiku:repoOwner` | `HAIKU_REPO_OWNER` | — **required** | GitHub owner of the fork. |
+| `haiku:repoOwner` | `HAIKU_REPO_OWNER` | — **required** | GitHub owner of the DeBeOS repository. |
 | `haiku:repoName` | `HAIKU_REPO_NAME` | `haiku` | |
 | `haiku:branch` | `HAIKU_BRANCH` | `graviton` | |
 | `haiku:connectionArn` | `HAIKU_CONNECTION_ARN` | — **required** | CodeConnections GitHub connection ARN. |
