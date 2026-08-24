@@ -1,0 +1,125 @@
+Give ruby's Haiku stack-overflow handler the arm64 register names.
+
+REAL FIX, not a cut. Nothing is disabled and no declared dependency changes; the
+handler keeps working, it just reads the registers that exist on this machine.
+
+## The failure
+
+    signal.c:870:36: error: 'mcontext_t' {aka 'const struct vregs'} has no member
+                     named 'esp'; did you mean 'sp'?
+    signal.c:871:34: error: 'mcontext_t' {aka 'const struct vregs'} has no member
+                     named 'ebp'
+    make: *** [Makefile:468: signal.o] Error 1
+
+## Why
+
+`check_stack_overflow()` compares the faulting address against the stack and frame
+pointers taken out of the signal's `mcontext_t`, and reads them per platform. The
+`__HAIKU__` arm of that `#if` was written when Haiku was x86-only and then extended
+once, for x86_64:
+
+    # elif defined __HAIKU__
+    #   if defined(__amd64__)
+        const unsigned long sp = mctx->rsp;
+        const unsigned long bp = mctx->rbp;
+    #   else
+        const unsigned long sp = mctx->esp;
+        const unsigned long bp = mctx->ebp;
+    #   endif
+
+so every non-amd64 Haiku architecture falls through to the **x86** names. On arm64
+`mcontext_t` is `struct vregs` from `headers/posix/arch/arm64/signal.h`:
+
+    struct vregs {
+        ulong       x[30];
+        ulong       lr;
+        ulong       sp;
+        ulong       elr;
+        ulong       spsr;
+        __uint128_t fp_q[32];
+        u_int       fpsr;
+        u_int       fpcr;
+    };
+
+There is no `esp` and no `ebp`. The stack pointer is `sp`, and the frame pointer on
+AArch64 is **x29**, i.e. `x[29]` — note that `x[]` holds x0..x29, so `lr` (x30) is a
+separate member and `x[29]` really is the FP rather than an off-by-one.
+
+## The fix
+
+Add an `__aarch64__` arm to that same `#if` rather than rewriting the `#   else`
+lines, so the x86 and x86_64 Haiku builds are bit-for-bit untouched:
+
+    # elif defined __HAIKU__
+    #   if defined(__amd64__)
+        const unsigned long sp = mctx->rsp;
+        const unsigned long bp = mctx->rbp;
+    #   elif defined(__aarch64__)
+        const unsigned long sp = mctx->sp;
+        const unsigned long bp = mctx->x[29];
+    #   else
+        const unsigned long sp = mctx->esp;
+        const unsigned long bp = mctx->ebp;
+    #   endif
+
+Applied from the recipe's `BUILD()` with a `sed` whose address range is the
+`# elif defined __HAIKU__` ... `# endif` block, so it cannot touch the Darwin arm
+(which also spells `esp`/`ebp`, via `MCTX_SS_REG`) or the FreeBSD arm (`mc_esp`).
+
+**The edit is verified by content, not by sed's exit code** — `sed` returns 0 when it
+matches nothing, which is precisely how this would silently fail to apply after any
+upstream reformatting:
+
+    grep -q 'mctx->x\[29\]' signal.c || { echo "FATAL: ..."; exit 1; }
+
+## Why this port matters here
+
+`ruby` is not optional decoration on the way to a browser. It gates `vim`, and `vim`
+is the only affordable provider of `cmd:xxd`, which `netsurf-3.11` build-requires.
+The tree's only other `cmd:xxd` provider is `qvim-8.0.197`, which wants
+`devel:libQt5Core` and `devel:libQt5Gui`.
+
+## The other thing that had to be true first
+
+Before this compile error was even reachable, ruby died at its *first* `make` with
+
+    runtime_loader: Cannot open file libroot.so (needed by /boot/system/bin/make)
+
+because the recipe does `export LIBRARY_PATH=$LIBRARY_PATH:%A` — written assuming
+prepend semantics — and Haiku's `runtime_loader` used to *replace* the search path.
+That is a platform defect, fixed separately in
+`runtime_loader: make LIBRARY_PATH and ADDON_PATH additive`, and it needs a host
+carrying that fix. The recipe was always right about that part; do not add a
+workaround for it.
+
+Applies to: haikuports/dev-lang/ruby/ruby-3.2.9.recipe (tree copy -- ruby has no
+input source package, so the tree recipe is the operative one)
+
+--- a/ruby-3.2.9.recipe
++++ b/ruby-3.2.9.recipe
+@@ BUILD()
+ BUILD()
+ {
++	# graviton: ruby's stack-overflow handler reads the faulting SP and FP out of
++	# mcontext_t. Its __HAIKU__ branch (signal.c, "elif defined __HAIKU__") handles
++	# only __amd64__ and falls through to the x86 names esp/ebp for everything else,
++	# so on arm64 it fails to compile:
++	#   signal.c:870: error: 'mcontext_t' {aka 'const struct vregs'} has no member
++	#                 named 'esp'; did you mean 'sp'?
++	# Haiku's arm64 struct vregs (headers/posix/arch/arm64/signal.h) is
++	# { ulong x[30]; ulong lr; ulong sp; ulong elr; ulong spsr; ... }, so the stack
++	# pointer is sp and the frame pointer is the AArch64 FP, x29 == x[29]. Add an
++	# __aarch64__ arm to that #if rather than rewriting the x86 lines, so the x86
++	# and x86_64 builds are untouched. This is a portability fix, not a cut: the
++	# handler keeps working, it just reads the right registers.
++	sed -i '/^# elif defined __HAIKU__/,/^# endif/{
++		s|^#   else$|#   elif defined(__aarch64__)\n    const unsigned long sp = mctx->sp;\n    const unsigned long bp = mctx->x[29];\n#   else|
++	}' signal.c
++	# Verify by content, never by sed's exit code -- sed returns 0 when it matches
++	# nothing, which is exactly how this edit would silently not happen.
++	grep -q 'mctx->x\[29\]' signal.c || { echo "FATAL: aarch64 mcontext arm not inserted"; exit 1; }
++	grep -n -A2 'elif defined(__aarch64__)' signal.c | head -8
++
+ 	CFLAGS="-O2 -g -D_BSD_SOURCE" \
+ 	LDFLAGS="-lbsd" \
+ 	runConfigure --omit-dirs binDir ./configure \
