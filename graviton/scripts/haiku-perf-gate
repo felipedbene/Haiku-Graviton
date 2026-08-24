@@ -24,6 +24,11 @@
 #   - The instance is terminated by an EXIT trap, so a failure part way through
 #     cannot leak a running instance. That matters more than usual here: this is
 #     unattended, and the failure path is the likely path.
+#   - Before the numbers, a two-second behavioural check that `mimeset` still
+#     writes a MIME type. That defect was a *silent* no-op returning rc 0, so it
+#     is invisible to every other check here; see the long comment on that
+#     section. It runs first because it is cheap and because failing in seconds
+#     beats failing after 45 minutes.
 #   - After the numbers are in, the instance is stopped and started again and
 #     asked for sshd a second time. Throughput is measured on a machine that
 #     never went down, so it says nothing about whether the image's writes
@@ -189,6 +194,95 @@ wait_for_sshd() {
 say "waiting for sshd (a node that never answers is a boot failure)"
 wait_for_sshd "first boot" "$BOOT_WAIT" \
 	|| die "candidate $AMI never brought sshd up -- treating as a failed image"
+
+# ------------------------------------------------------ mimeset regression check
+# `mimeset` was a complete silent no-op on every headless Haiku: it constructs a
+# BApplication before its file loop, and BApplication::_InitData() calls exit(0)
+# -- a *success* status -- when app_server is absent. So it terminated in the
+# constructor reporting success, and haikuporter's packaging step, which checks
+# only the exit status, saw rc 0 and moved on. 145 of 262 packages in the pool
+# ended up with no MIME types and no resource-to-attribute icon copy.
+#
+# This check exists because that regression is invisible everywhere else. The
+# failure is silent by construction: nothing errors, nothing logs, exit statuses
+# are 0, and the packages look fine until someone reads their attributes. An
+# image built from a tree without the fix would sail through every other check in
+# this script -- it boots, it does jumbo, it survives a stop/start -- and quietly
+# produce untyped packages for as long as it stayed in service.
+#
+# It is a *behavioural* check on the running artifact, not a hash or a version
+# comparison, because what matters is whether mimeset writes the attribute on
+# this image, and because the same binary can be present and still not be the one
+# that runs. It is cheap (a couple of seconds) and it is placed before the
+# measurement so a broken image fails in seconds instead of after 45 minutes.
+say "----------------------------------------"
+say "mimeset regression check (a silent no-op here costs every package built on this image)"
+ms=$("$SSM_RUN" "$BUILDER" -t 180 -q 2>&1 <<-EOF
+	set -uo pipefail
+	SO="-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ConnectTimeout=8 -o LogLevel=ERROR -i /home/ubuntu/.ssh/haiku-ed25519"
+	sudo -u ubuntu ssh -n \$SO baron@$IP '
+		set -u
+		d=/boot/home/.gate-mimeset
+		rm -rf \$d && mkdir -p \$d && cd \$d
+
+		# Sniffable content, so the assertion does not depend on the
+		# extension-vs-sniffer precedence in the MIME database.
+		printf "<html><body>x</body></html>\n" > probe.html
+
+		# The before-state is part of the evidence: a fresh file on BFS carries
+		# no attributes, so "present afterwards" means mimeset wrote it rather
+		# than something having been inherited from a copy.
+		catattr BEOS:TYPE probe.html >/dev/null 2>&1 \
+			&& echo "GATE_MIMESET_BASELINE_DIRTY" \
+			|| echo "GATE_MIMESET_BASELINE_CLEAN"
+
+		out=\$(mimeset --all . 2>&1); rc=\$?
+		echo "GATE_MIMESET_RC \$rc"
+		echo "GATE_MIMESET_TYPE \$(catattr -d BEOS:TYPE probe.html 2>/dev/null)"
+
+		# Diagnostics that make a PASS interpretable rather than merely green.
+		# If app_server were somehow running, even an unfixed mimeset would work
+		# and the check would be vacuous -- so record which world we are in.
+		ps 2>/dev/null | grep -q "[a]pp_server" \
+			&& echo "GATE_MIMESET_APPSERVER present" \
+			|| echo "GATE_MIMESET_APPSERVER absent"
+		case "\$out" in
+			*"continuing without it"*) echo "GATE_MIMESET_WARNING present" ;;
+			*)                         echo "GATE_MIMESET_WARNING absent"  ;;
+		esac
+		cd /; rm -rf \$d
+	' 2>/dev/null
+EOF
+)
+printf '%s\n' "$ms" | grep '^GATE_MIMESET' | sed 's/^/  /'
+
+ms_field() { printf '%s' "$ms" | sed -n "s/^GATE_MIMESET_$1 //p" | tail -1; }
+ms_type=$(ms_field TYPE)
+ms_appserver=$(ms_field APPSERVER)
+ms_warning=$(ms_field WARNING)
+
+if ! printf '%s' "$ms" | grep -q GATE_MIMESET_BASELINE_CLEAN; then
+	die "mimeset check is invalid: the probe file already had a BEOS:TYPE before mimeset ran"
+fi
+if [ -z "$ms_type" ]; then
+	say "FAIL: mimeset wrote no BEOS:TYPE at all (app_server $ms_appserver, warning $ms_warning)"
+	say "  This is the headless exit(0) defect. Every package built on this image"
+	say "  loses its MIME types and its resource-to-attribute icon copy, silently,"
+	say "  with rc 0 from haikuporter. Check that src/bin/mimeset.cpp still passes a"
+	say "  status_t* to BApplication, and that this image was built from a tree that has it."
+	die "mimeset regression gate failed for $AMI"
+fi
+if [ "$ms_type" != "text/html" ]; then
+	say "FAIL: mimeset typed the probe as '$ms_type', expected text/html"
+	say "  mimeset ran, so this is not the exit(0) defect -- suspect the MIME database"
+	say "  in the image (data/mime_db) rather than the tool."
+	die "mimeset regression gate failed for $AMI"
+fi
+say "mimeset OK: typed a fresh file as $ms_type (app_server $ms_appserver, headless warning $ms_warning)"
+if [ "$ms_appserver" = "present" ]; then
+	say "  NOTE: app_server is running, so this pass does not prove the headless path works."
+	say "  On Graviton there is no display device at all, so that is unexpected -- look into it."
+fi
 
 # --------------------------------------------------------------- measure
 # The peer is the builder, so the address the Haiku node must dial is the
@@ -494,6 +588,7 @@ if [ "$warn" = 1 ]; then
 	say "  survives a stop/start. See the WARNING lines above for what was off."
 	exit 0
 fi
-say "PASS: $AMI boots, negotiates jumbo, meets both floors, shuts down cleanly"
-say "  in ${stop_secs}s, and comes back from a stop/start with sshd answering"
+say "PASS: $AMI boots, negotiates jumbo, meets both floors, types files with"
+say "  mimeset, shuts down cleanly in ${stop_secs}s, and comes back from a"
+say "  stop/start with sshd answering"
 exit 0
