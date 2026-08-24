@@ -902,21 +902,26 @@ old code.
 | `vm: bound the modified-page quota wait...` | the liveness fix + its instrumentation + the `page_writer_quota` KDL command | `vm_page_writer.cpp`, `file_cache.cpp` — kernel proper |
 | `arm64: make KDL 'bt <thread>' actually trace that thread` | **prerequisite for the diagnosis** | `arch_debug.cpp` — kernel proper |
 | `disktput: trace progress over time...` | `-i` interval tracing and `-m verify` | userland, so it *can* be pushed by hand, but the image's own `disktput` needs it to be in the tree |
+| `arm64: fix serial getchar, and give KDL a way in...` | makes KDL usable on arm64 at all | **found after the bake started, so it is NOT in it** — see "The capture plan, revised" |
 
-### The KDL prerequisites are satisfied — checked, not assumed
+### The KDL prerequisites — the two checkable ones pass, the guest side did not
 
 Interactive KDL on an EC2 instance needs serial **input**, not just the output
-that `get-console-output` returns. Both halves work:
+that `get-console-output` returns. The AWS side and the UART driver are fine:
 
 - **EC2 Serial Console access is enabled** for account 668984504585
   (`get-serial-console-access-status` → `True`), so
   `send-serial-console-ssh-public-key` plus ssh to the serial-console endpoint
   gives a bidirectional console.
-- **arm64 can read it.** `arch_debug_serial_getchar()` is implemented
-  (`sArchDebugUART->GetChar(false)`), so KDL can accept typed commands. Note that
-  `arch_debug_serial_try_getchar()` is still a TODO that falls through to the
-  blocking version; that has not caused a problem here but is worth knowing if
-  KDL behaves oddly.
+- **The UART itself can read.** `DebugUART::GetChar()` works in both blocking and
+  non-blocking modes.
+
+But the kernel above it could not, and the `try_getchar` TODO noted here in an
+earlier revision turned out to be the whole problem rather than a curiosity: it
+made the function incapable of returning -1, so KDL's `kgetc()` read 0xFF forever
+instead of waiting. And nothing on arm64 could enter KDL on demand in the first
+place. Both are fixed, neither is in the current bake. See "The capture plan,
+revised".
 
 ### Why the `bt` fix is on the critical path and not a side quest
 
@@ -929,6 +934,94 @@ count arguments, and then unconditionally traces the calling thread — so
 wrongly, and it would have been read as the answer. It is fixed here, with the
 frame-pointer index verified against the `stp` ordering in `arch_asm.S` rather
 than inferred from the comment on the struct.
+
+
+## The capture plan, revised: the fork can be answered without KDL
+
+Preparing the KDL capture turned up three more defects in the debugger path on
+arm64 (see the `arm64: fix serial getchar...` commit). Their combined effect is
+blunt:
+
+**Interactive KDL does not work on arm64 today, and cannot work on the image
+currently being baked.**
+
+- There is **no way to enter KDL on demand at all**.
+  `debug_emergency_key_pressed()` is called from exactly three places — x86's
+  console interrupt handler, USB HID, and PS/2 — and arm64 has none of them. A
+  headless Graviton instance has no keyboard: it logs a failed search for
+  `bus_managers/ps2/v1` and has no USB HID. The debugger is reachable only by a
+  panic, and the starvation does not panic.
+- Even once inside, **typed commands would be garbage**.
+  `arch_debug_serial_try_getchar()` could never return -1, because it returned a
+  `char` and plain `char` is unsigned on AArch64, so `GetChar(false)`'s -1 became
+  255. `kgetc()` tests `c >= 0`, so it accepted an endless stream of 0xFF instead
+  of waiting for input.
+
+Both are fixed, but the fixes were written **after** the bake started, so they
+are not in it. Do not plan a KDL session against this image.
+
+### What is in the bake, and why that is enough for the fork
+
+The bounded quota wait and its counters **are** in the bake, and they answer the
+question KDL was wanted for, without any interactivity — the output goes to the
+serial console, which `get-console-output` returns.
+
+| observation on the baked image | conclusion |
+|---|---|
+| starvation gone or greatly shortened, **and** `page writer: quota wait timed out ...` lines appear with `timeouts` climbing | **the page writer's quota is the mechanism.** Writers that used to block indefinitely now hit the 5 s bound and proceed |
+| starvation persists essentially unchanged, **and no timeout lines appear at all** | **not the quota.** Threads are blocking somewhere else, and BFS's journal is the standing suspect |
+| starvation persists **and** timeouts are logged | both are involved: the quota fires, but something else also blocks. The counters bound how much of it the quota owns |
+
+That is the same fork — "several threads parked in `WaitIfOverQuota`" versus
+"several parked in a BFS transaction" — decided by whether the wait is entered at
+all, rather than by reading a stack. It is weaker evidence than a stack trace, in
+that it says *whether* the quota path is implicated rather than showing the exact
+call chain. It is also unavailable to misinterpretation in the way a silently
+wrong `bt` would have been.
+
+### Procedure for the baked image
+
+```bash
+# 1. Verify the image carries the changes BEFORE spending a boot on it.
+#    The boot log stamps the driver; the quota lines only appear under load.
+grep "io batch size" /var/log/syslog        # nvme batching present
+
+# 2. Reproduce the starvation. Queue the cells ON THE NODE so the load
+#    outlives the harness and the machine stays starved.
+mkfs -q -t bfs -o 'block_size 4096' /dev/disk/nvme/1/raw W
+mount -t bfs /dev/disk/nvme/1/raw /w
+for i in $(seq 1 8); do
+    disktput -f /w/new-$i -m seqwrite -b 256K -t 4 -n 2G -s 2G -S
+done &
+
+# 3. Watch from OUTSIDE, because ssh is what stops answering. The serial
+#    console is readable without a working userland.
+aws ec2 get-console-output --instance-id <id> --output text \
+  | grep -i "quota wait timed out"
+```
+
+Use a **125 MiB/s** scratch volume: it reaches the stall in 12 GiB rather than 20.
+
+Two things to record either way: whether ssh stays responsive throughout (the
+liveness fix working), and the `timeouts` / `longest` figures from the dprintf
+(the decay still being visible, which is what the instrumentation was for).
+
+### Then, for the follow-up bake
+
+With the serial fixes in, KDL becomes usable on arm64 for the first time:
+
+```
+# from the metal builder -- corp blocks :22 outbound from the workstation
+aws ec2-instance-connect send-serial-console-ssh-public-key \
+    --instance-id <id> --serial-port 0 --ssh-public-key file://k.pub
+ssh -i k <id>.port0@serial-console.ec2-instance-connect.us-west-2.aws
+# then type: kdl
+#   bt <thread-id>        now traces THAT thread (see the arm64 bt fix)
+#   page_writer_quota     queue depth, drain estimates, wait statistics
+```
+
+Account-level Serial Console access is already enabled, which was checked rather
+than assumed.
 
 
 ## Rules this exercise established
