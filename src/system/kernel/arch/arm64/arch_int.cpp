@@ -273,14 +273,28 @@ do_sync_handler(iframe * frame)
 #endif
 
 	InterruptScope scope(frame);
-	debug_exception_type exceptionType;
-	uint32 signalNumber;
-	int32 signalCode;
-	uint64 signalAddress = 0;
+
+	// Default to "illegal instruction at the faulting PC". Only a handful of
+	// exception classes are decoded below, and every other one -- a trapped
+	// MSR/MRS, an undefined instruction, a breakpoint -- used to fall through
+	// to the signal delivery at the end of this function with these three
+	// still uninitialized, so an unlucky userland fault raised whatever signal
+	// number happened to be on the stack instead of a diagnosable one.
+	debug_exception_type exceptionType = B_INVALID_OPCODE_EXCEPTION;
+	uint32 signalNumber = SIGILL;
+	int32 signalCode = ILL_ILLOPC;
+	uint64 signalAddress = frame->elr;
 
 	bool isUser = (frame->spsr & PSR_M_MASK) == PSR_M_EL0t;
 	bool isExec = false;
 	switch (ESR_ELx_EXCEPTION(frame->esr)) {
+		case EXCP_MSR:
+			// An MSR/MRS naming a system register EL0 may not reach. Reported
+			// apart from a plain undefined instruction because the encoding is
+			// a valid one that the very same code executes fine at EL1.
+			signalCode = ILL_PRVREG;
+			break;
+
 		case EXCP_PC_ALIGN:
 			exceptionType = B_ALIGNMENT_EXCEPTION;
 			signalNumber = SIGBUS;
@@ -330,8 +344,18 @@ do_sync_handler(iframe * frame)
 				break;
 			}
 
-			if (!known)
+			if (!known) {
+				// A fault status the block above does not translate into a
+				// page fault: an external abort, a tag check, a permission
+				// fault at level 0. Still a memory access that failed at a
+				// known address, so say that rather than falling back on the
+				// illegal-instruction default.
+				exceptionType = B_SEGMENT_VIOLATION;
+				signalNumber = SIGSEGV;
+				signalCode = SEGV_MAPERR;
+				signalAddress = frame->far;
 				break;
+			}
 
 			if (debug_debugger_running()) {
 				Thread* thread = thread_get_current_thread();

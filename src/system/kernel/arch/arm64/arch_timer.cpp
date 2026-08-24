@@ -22,8 +22,8 @@ static bigtime_t sTimerMaxInterval;
 
 #define TIMER_IRQ 27
 
-// CNTKCTL_EL1 bits granting EL0 access to the counters. Without one of them
-// set, CNTFRQ_EL0 is not readable from EL0 either.
+// CNTKCTL_EL1 bits granting EL0 access to the counters. Either one of them
+// also makes CNTFRQ_EL0 readable from EL0.
 #define CNTKCTL_EL0PCTEN (1 << 0)
 #define CNTKCTL_EL0VCTEN (1 << 1)
 
@@ -73,7 +73,15 @@ arch_init_timer(kernel_args *args)
 	// EL0, which is only allowed while this is set. The boot loader sets it as
 	// well, but only on the path where it does not have to drop from EL2 to
 	// EL1 first.
-	WRITE_SPECIALREG(CNTKCTL_EL1, CNTKCTL_EL0VCTEN | CNTKCTL_EL0PCTEN);
+	//
+	// Grant the virtual counter only, as Linux does. The physical counter is
+	// not rebased by a hypervisor, so under KVM it reads the host's counter,
+	// which has been running since the host powered on and bears no relation to
+	// this machine's uptime. Userland that reads it therefore gets a plausible
+	// but wrong time silently; a build chroot carrying a stale libroot.so that
+	// read CNTPCT_EL0 ran 18 hours behind for a day before anyone noticed. With
+	// EL0PCTEN clear it faults instead.
+	WRITE_SPECIALREG(CNTKCTL_EL1, CNTKCTL_EL0VCTEN);
 
 	WRITE_SPECIALREG(CNTV_CTL_EL0, TIMER_DISABLED);
 	install_io_interrupt_handler(TIMER_IRQ, &arch_timer_interrupt, NULL, 0);

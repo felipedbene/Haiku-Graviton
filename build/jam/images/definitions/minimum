@@ -345,8 +345,21 @@ SYSTEM_ADD_ONS_DRIVERS_NET = [ FFilterByBuildFeatures
 ] ;
 
 SYSTEM_ADD_ONS_DRIVERS_POWER = [ FFilterByBuildFeatures
+	# acpi_button is architecture-neutral -- it only talks to the ACPI bus
+	# manager, which is itself built for arm64 below. Without it /dev/power is
+	# empty, and power_daemon (which *is* in the arm64 image) has nothing to
+	# watch, so a platform power-button event has nowhere to arrive. On an ARM
+	# server that event is how the hypervisor asks for a clean shutdown.
+	acpi_button@x86,x86_64,arm64
+
+	# The other half of the same story: on a hardware-reduced platform the
+	# button is a control-method device whose _Exx method is run when a GPIO pin
+	# toggles, so something has to own the GPIO controller and run that method.
+	# arm64 only: a PL061 is an ARM peripheral, and the ACPI bus manager this
+	# driver talks to is not built for 32-bit arm.
+	pl061_acpi_event@arm64
+
 	x86,x86_64 @{
-		acpi_button
 		acpi_thermal
 		amd_thermal
 		pch_thermal

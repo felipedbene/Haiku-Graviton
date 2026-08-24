@@ -21,6 +21,12 @@
 extern const char* granule_type_str(int tg);
 
 
+// CNTKCTL_EL1 bit granting EL0 access to the virtual counter, and with it to
+// CNTFRQ_EL0. The physical counter is deliberately left inaccessible; see
+// arch_init_timer() in the kernel, which sets this register again for good.
+#define CNTKCTL_EL0VCTEN (1 << 1)
+
+
 // From entry.S
 extern "C" void arch_enter_kernel(struct kernel_args* kernelArgs,
 	addr_t kernelEntry, addr_t kernelStackTop, uint32 cpu);
@@ -67,7 +73,7 @@ arm64_common_cpu_startup()
 	// EL2 without E2H enabled does not, so we need to drop to EL1
 	if (el == 1 || e2h) {
 		arm64_mmu_setup();
-		WRITE_SPECIALREG(CNTKCTL_EL1, 0b11);
+		WRITE_SPECIALREG(CNTKCTL_EL1, CNTKCTL_EL0VCTEN);
 	} else {
 		arm64_mmu_setup();
 		_arch_transition_EL2_EL1();
