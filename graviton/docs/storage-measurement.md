@@ -1088,14 +1088,12 @@ a machine with 31.5 GiB of RAM, because of one stale sample.
 
 The bound is a liveness guarantee, not a cure. In order:
 
-1. **Make the global quota not couple idle devices to busy ones.** A writer whose
-   own queue is empty should not be stopped by another disk's backlog. This is the
-   whole reason a shell became unusable.
-2. **Make `fLastAveragePageWriteDuration` an actual average, and decay it.** A
-   single stale sample setting a 13 MiB threshold on an idle device is the ratchet,
-   and it is now measured rather than suspected.
-3. Only then revisit the quota constants, which cannot be judged while the
-   estimate feeding them is unreliable.
+1. ~~Make the global quota not couple idle devices to busy ones.~~ **Done**, and
+   unverified pending a bake — see "The fixes" below.
+2. ~~Make the estimate an actual average, and decay it.~~ **Done**, same caveat.
+3. Still open: revisit the quota constants. They cannot be judged until the two
+   fixes above are measured, because until now the estimate feeding them was
+   unreliable and the aggregation was wrong.
 
 ### Method note: `get-console-output` needs `--latest`
 
@@ -1105,6 +1103,97 @@ quota never fires" for exactly that reason. What caught it was a **positive
 control** — grepping for `nvme_disk`, a string known to be present — before
 believing an empty result. With `--latest`: 48,943 bytes and 16 matches. The
 procedure earlier in this document omitted `--latest` and has been corrected.
+
+
+## The fixes, and how to tell whether they worked
+
+Both are committed in `vm: stop the modified-page quota starving writers to idle
+disks`, both are **unverified pending a bake**, and they are deliberately in this
+order: the coupling is what made a shell unusable, and the estimate cannot be
+judged while the thing it feeds is aggregating the wrong quantity.
+
+### Fix 1 — the global bound counts pages, not summed time
+
+`sGlobalEstimatedWriteDuration` added every device's estimated drain and compared
+the total to one 5 s deadline. Durations do not sum across devices: each
+`ModifiedPageQueue` has its own page writer and its own disk, and they drain in
+**parallel**. 6.86 s on one disk plus 0 s on another means the system needs
+6.86 s, not 6.86 s that a writer to the *second* disk must sit through.
+
+The global limit is now **1/8th of RAM may be dirty across all devices** — pages
+do genuinely sum, because they all occupy the same memory. The per-device time
+quota is untouched and remains the flush-latency bound its name always described.
+The summed duration is still maintained and still printed; it just no longer
+decides anything.
+
+Deliberately generous, and that is the point: the defect it replaces fired when
+memory was in no danger at all — 32.6 GB free of 33.8. A bound that only speaks up
+when memory really is at risk is the correct replacement for one that spoke up
+about the wrong quantity.
+
+### Fix 2 — the estimate is an average, and it decays
+
+`fAveragePageWriteDuration` was the most recent sample despite its name. Now an
+exponentially weighted moving average (α = 1/4), so one slow round cannot set the
+threshold, and **halved on every idle round**, so a stale figure fades instead of
+freezing. It stops at 1 rather than 0, because a zero estimate makes
+`IsOverQuota()` always false and disarms back-pressure entirely — which is why the
+original code special-cased zero.
+
+**Stated trade-off:** after decaying low, the average climbs back over several
+rounds rather than snapping to the first large sample, so back-pressure is weak at
+the start of a burst. That is the safe direction — the defect was over-throttling
+to the point of hanging the machine — and snapping upward would reintroduce
+exactly the single-sample sensitivity being fixed. Memory remains protected by the
+global page bound in the meantime.
+
+### What success looks like, and what would mean I broke back-pressure
+
+The failure mode of a fix like this is removing the throttle rather than fixing
+it, so both directions have to be checked. Run the same 16 GiB load on a 125 MiB/s
+volume:
+
+| signal | fixed | broke back-pressure | not fixed |
+|---|---|---|---|
+| timeouts with `queue 0 pages` | **none** | none | present |
+| `waits` | **still > 0** | **0** | > 0 |
+| `timeouts` | **≈0** | 0 | > 0 |
+| idle disk's per-page estimate | **~1–30 µs** | any | 883 µs |
+| ssh during load | responsive | responsive | stalls |
+
+`waits > 0` with `timeouts ≈ 0` is the target: writers to a genuinely backed-up
+device still wait, and nobody waits the full 5 s. **`waits == 0` would mean the
+quota never engages at all**, which is not a fix — it is the throttle deleted, and
+it would show up later as unbounded dirty memory rather than as a hang.
+
+Also worth recording: the global dirty count against its new 1/8-of-RAM limit,
+from `page_writer_quota`, to confirm the replacement bound sits in a sane place
+under real load rather than never engaging or engaging constantly.
+
+### The KDL cross-check is now available
+
+With the serial/KDL-entry fix merged, the capture originally planned can finally
+be done as a *cross-check* on the counters rather than as the primary evidence:
+
+```
+ssh -i k <instance-id>.port0@serial-console.ec2-instance-connect.us-west-2.aws
+# type: kdl
+  page_writer_quota          # queue depths, both bounds, wait statistics
+  bt <thread-id>             # now traces that thread -- see the arm64 bt fix
+  page_writer_quota_trace 0  # silence the log line if it is in the way
+```
+
+If any writer is still blocked, `bt` on it now says where. Under the fix the
+expectation is that there is nothing to catch.
+
+### Liveness evidence from the bounded wait, consolidated
+
+Two independent pollers ran across the two 16 GiB loads on the bounded-wait image:
+**93 ssh samples, 0 stalled** (59 in the first window at 20 s intervals, 34 in the
+second at 15 s), against *every* sample stalled from 0 s to 1663 s on the pre-fix
+kernel with the identical load. That is the bounded wait working as a liveness
+backstop, and it stays in place after these two fixes precisely because it does not
+depend on the diagnosis being right.
 
 
 ## The capture plan, revised: the fork can be answered without KDL
