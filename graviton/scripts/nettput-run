@@ -68,9 +68,36 @@ echo "ssh as: $HAIKU_USER"
 hssh() { timeout 300 ssh -n $SSH_OPTS "$HAIKU_USER@$HAIKU_IP" "$@"; }
 
 # ------------------------------------------------------------------- start peer
-pkill -f "nettput-peer.py" 2>/dev/null
-sleep 1
-PEER_LOG=/tmp/nettput-peer.log
+# Several agents share the builder, so this must only ever touch *its own* peer.
+# `pkill -f nettput-peer.py` matches on the program name and has twice now killed
+# a concurrent run's listener on a different port. A killed peer does not fail
+# loudly: the other run's transfers come back degraded or absent, and a degraded
+# one lands as a plausible low number. This is the process-level form of "never
+# terminate an instance you did not create".
+#
+# So: kill only what is listening on *our* port, and only after confirming it is
+# a nettput peer rather than something else that happens to be there.
+peer_owner_pid() {
+	local pid
+	pid=$(ss -ltnpH "sport = :$PEER_PORT" 2>/dev/null \
+		| sed -n 's/.*pid=\([0-9]*\).*/\1/p' | head -1)
+	[ -n "$pid" ] || return 1
+	ps -o args= -p "$pid" 2>/dev/null | grep -q "nettput-peer.py" || return 1
+	printf '%s' "$pid"
+}
+
+if existing=$(peer_owner_pid); then
+	echo "port $PEER_PORT already has a nettput peer (pid $existing); reclaiming it"
+	kill "$existing" 2>/dev/null
+fi
+# SO_REUSEADDR does not let a second process bind while the first still holds the
+# socket, so wait for the port rather than racing it.
+for _ in $(seq 1 30); do
+	ss -ltn "sport = :$PEER_PORT" 2>/dev/null | grep -q LISTEN || break
+	sleep 0.5
+done
+
+PEER_LOG=/tmp/nettput-peer-$PEER_PORT.log
 nohup python3 "$PEER_SCRIPT" -p "$PEER_PORT" > "$PEER_LOG" 2>&1 &
 PEER_PID=$!
 sleep 2
