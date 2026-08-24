@@ -319,12 +319,40 @@ reproduce **at the clean base**, so neither is caused by this work:
   builds it. Worth a separate fix; adding `using` declarations or overriding both
   overloads would do it.
 
-### Pass condition for the next boot
+### Pass condition for the next boot, written before it
 
-One domain per bridge with **disjoint** device sets; exactly **one** NVMe disk;
-an ENA present; `"multiple host bridges not supported!"` firing **zero** times;
-and no abort while probing. If the stall clears too, that is a bonus and will
-only be claimed if the boot goes past where it stalled.
+Pre-registered so the result cannot be rationalised after the fact. Expected on
+`c8g.24xlarge`, one block per root bridge:
+
+```
+PCI: ECAM at 20000000 (bus 0  base 20000000), segment 0, buses 0-0,   1 decoded,  1 MiB
+PCI: ECAM buses 1-43  at 20000000 belong to another bridge; not mapped here
+PCI: ECAM buses 44-56 at 20000000 belong to another bridge; not mapped here
+PCI: of 3 ECAM region(s): 1 mapped here, 2 other bridges' buses, 0 separate windows
+   ... and correspondingly for buses 1-43 (base 20100000, 67 MiB)
+   ... and for buses 44-56 (base 24400000, 19 MiB)
+```
+
+and device lines carrying the **absolute** bus per domain, `0:00:…`, `1:01:…`,
+`2:44:…` rather than three domains all reporting `00`.
+
+Pass requires all of: **disjoint** device sets across the three domains; exactly
+**one** `disk/nvme/*/raw`; an ENA (`device ec20`) present; the sibling-bus lines
+naming the right buses; and no abort.
+
+The three failure modes are distinguishable in advance, which is the point of
+writing them down:
+
+| observation | conclusion |
+|---|---|
+| domains 1 and 2 enumerate **nothing** (no `1:` or `2:` device lines) | the root-bus fix did not take effect — look at `get_bus_range()` being NULL or `AddController()` |
+| domains 1 and 2 enumerate the **same** devices as domain 0 | the base reading is wrong: `0x20100000` aliases bus 0, so the base is per-allocation after all and the mapping must go back to `chosen->address` with `fBusOffset = startBus` |
+| domains 1 and 2 enumerate **different** devices, no ENA among them | base reading correct; buses `1-0x56` simply hold no Ethernet controller, and the missing NIC on this class is a separate question |
+| disjoint sets **with** an ENA | done — 96-vCPU Graviton4 has networking |
+
+Metal is deliberately **not** in this matrix: it has a single region, is already
+verified across three redistributor layouts, and re-confirming it would spend
+bare-metal time to learn nothing.
 
 ## Open
 
@@ -335,8 +363,8 @@ only be claimed if the boot goes past where it stalled.
   than taking the first. Nothing needs it today — every device we care about on
   every class tested is on the chosen region — but a device behind buses 44-56 on
   that guest would be invisible.
-* Whether the ITS then hands out MSIs correctly on metal — untested, because no
-  MSI-capable device has attached there yet. `GITS_TYPER.PTA` is 0 and the ITS
-  reports 18 DeviceID bits against our `min(fDeviceIDBits, 16)` device-table cap,
-  which is slack for ENA at requester ID `0x2400` but is now load-bearing where
-  it was not on the guest.
+* `<pci>designware` is unbuildable on arm64 and has been since the ITS's
+  requester-ID `AllocateVectors` overload landed. Its own small branch; the fix
+  is a `using` declaration or overriding both overloads. The wider issue it
+  exposes is that the arm64 build does not compile every driver, so a shared
+  interface change can break an unbuilt one silently.
