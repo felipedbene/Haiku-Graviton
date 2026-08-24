@@ -98,11 +98,13 @@ So, on Graviton3 bare metal:
   range.
 * **They are not contiguous.** 64 redistributors in two runs of 32, at
   `0xb800140000` and `0xbc00140000` — a gap of `0x3ff840000`, about 16 GiB.
-* **The stride is `0x40000`, not `0x20000`.** A GICv4 PE owns four 64 KB frames
-  (RD, SGI, VLPI, reserved) where a GICv3 PE owns two. Linux sizes each region
-  from `GICD_PIDR2.ArchRev`, and the `0x40000`-sized GICR ranges in
-  `/proc/iomem` are that calculation's output — independent confirmation of the
-  MADT's `version=4`.
+* **The spacing is `0x40000`, not `0x20000`.** A GICv4 PE with virtual LPIs owns
+  four 64 KB frames (RD, SGI, VLPI, reserved) where a GICv3 PE owns two. Two
+  independent confirmations: the `0x40000`-sized GICR ranges in `/proc/iomem`
+  are the output of Linux's `GICD_PIDR2.ArchRev` region sizing, and the
+  `GICv4 features:` dmesg line below is printed only when
+  `GICR_TYPER.VLPIS` is set on **every** redistributor (Linux AND-reduces it).
+  The second is the one that matters — see §5.2 for why.
 * Linux on the same machine also reports `GICv3: GICD_CTLR.DS=0, SCR_EL3.FIQ=1`,
   `960 SPIs implemented`, `48 PPIs, DirectLPI`, `GICv4 features: DirectLPI
   RVPEID Valid+Dirty`, and the ITS in `GICv4.1 mode`.
@@ -151,7 +153,7 @@ this PE's `MPIDR_EL1` actually packs to, and searches every region.
 
 ## 5. The fix
 
-Three commits on `fix/arm64-metal-gicv3`. Both `kernel_arm64` and
+Four code commits on `fix/arm64-metal-gicv3`. Both `kernel_arm64` and
 `haiku_loader.efi` compile clean; **not yet hardware-verified.**
 
 1. **`arm64: find every GIC redistributor, not just the first contiguous run`**
@@ -159,9 +161,8 @@ Three commits on `fix/arm64-metal-gicv3`. Both `kernel_arm64` and
      `INTC_MAX_GICR_REGIONS`, 16) instead of one range.
    * The loader collects every GICC's GICR base, sorts them, and coalesces them
      into contiguous runs. The spacing is taken from the addresses themselves
-     (a neighbour exactly one v3 or v4 stride away continues the run), falling
-     back on the MADT's GIC version only for a lone redistributor — the
-     firmware's own numbers rather than an assumption.
+     (a neighbour exactly one v3 or v4 stride away continues the run) rather
+     than from any claim about how big a redistributor is.
    * The kernel maps each region separately.
    * All three redistributor walks — `_PrefaultRedistributors()`,
      `_CurrentRedistributor()`, and the ITS's `_InitLpis()` — iterate regions,
