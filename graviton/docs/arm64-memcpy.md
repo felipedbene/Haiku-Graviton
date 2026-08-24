@@ -383,6 +383,18 @@ Findings:
   relocations and zero undefined symbols, and `libroot.so` and `kernel_arm64`
   each contain a `memcpy` and a `memset` with no `bl` in either.
 
+  **The guard changes no generated code today, and that was checked rather than
+  assumed.** All four of `{kernel,libroot} x {memcpy.o, generic_memset.o}` were
+  rebuilt at the commit before the guard and at the commit after it, and the
+  disassembly md5s are identical across the pair (`e77b9950dacb605c` for both
+  memcpy objects, `cd7fe8988d620b73` for both memset objects -- note that the
+  kernel and libroot builds now agree byte for byte on memset too, not only on
+  memcpy). `-fno-builtin` was already suppressing the substitution;
+  `-fno-tree-loop-distribute-patterns` is insurance against a compiler that stops
+  honouring it. This matters operationally as well as intellectually: an image
+  baked before the guard contains exactly the same machine code as one baked
+  after, so the guard does not invalidate a bake in flight.
+
   **Not fixed, and named so it is not forgotten:** no other architecture's
   `src/system/kernel/lib/arch/*/Jamfile` has this guard -- arm64's came from
   `577dbc9895`. They are safe today purely because kernel builds pass
