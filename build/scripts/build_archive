@@ -18,7 +18,21 @@ shift
 # zip
 # NOTE: rmAttrs and zip are only passed in when building zip
 #
-. $1
+
+# See the long comment in build_haiku_image: POSIX '.' searches $PATH for an
+# operand with no slash and will not look in the current directory, so a bare
+# filename fails under dash. Jam reroots these to absolute paths, but that
+# depends on $(PWD) and so silently degrades when PWD is missing from jam's
+# environment. Prefix "./" only when there is no slash, and quote.
+sourceScript()
+{
+	case "$1" in
+		*/*)	. "$1" ;;
+		*)	. "./$1" ;;
+	esac
+}
+
+sourceScript "$1"
 shift
 
 outputDir=$tmpDir/archive
@@ -55,7 +69,7 @@ $mkdir -p $outputDir
 # populate output dir
 echo "Preparing contents of archive $archive ..."
 while [ $# -gt 0 ]; do
-	. $1
+	sourceScript "$1"
 	shift
 done
 

@@ -29,8 +29,22 @@ packagePath="$1"
 packageInfoPath="$2"
 shift 2
 
+# See the long comment in build_haiku_image: POSIX '.' searches $PATH for an
+# operand with no slash and will not look in the current directory, so a bare
+# filename fails under dash. PackageRules currently always passes paths under
+# objects/<arch>/packaging/, which contain slashes, so this script is not
+# presently exposed -- it is guarded for the same reason and to fix the unquoted
+# operand, so that a future caller passing a bare name does not resurrect the bug.
+sourceScript()
+{
+	case "$1" in
+		*/*)	. "$1" ;;
+		*)	. "./$1" ;;
+	esac
+}
+
 if [ $# -gt 0 ]; then
-	. $1
+	sourceScript "$1"
 	shift
 fi
 
@@ -102,7 +116,7 @@ extractFile()
 # execute the scripts preparing the package contents
 echo "$packageName: Collecting package contents ..."
 while [ $# -gt 0 ]; do
-	. $1
+	sourceScript "$1"
 	shift
 done
 
