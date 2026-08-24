@@ -299,7 +299,7 @@ dump_device_nodes(int argc, char** argv)
 static void
 publish_directories(const char* subPath)
 {
-	if (gBootDevice < 0) {
+	if (!has_boot_device()) {
 		if (subPath[0]) {
 			// we only support the top-level directory for modules
 			return;

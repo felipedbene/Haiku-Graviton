@@ -478,7 +478,7 @@ put_module_image(module_image* image)
 	// Don't unload anything when there is no boot device yet
 	// (because chances are that we will never be able to access it again)
 
-	if (refCount == 1 && gBootDevice > 0)
+	if (refCount == 1 && has_boot_device())
 		unload_module_image(image, true);
 }
 
@@ -2004,7 +2004,7 @@ open_module_list_etc(const char* prefix, const char* suffix)
 	if (suffix != NULL)
 		iterator->suffix_length = strlen(iterator->suffix);
 
-	if (gBootDevice > 0) {
+	if (has_boot_device()) {
 		// We do have a boot device to scan
 
 		// first, we'll traverse over the built-in modules
@@ -2203,7 +2203,7 @@ get_module(const char* path, module_info** _info)
 
 		module->info = moduleImage->info[module->offset];
 		module->module_image = moduleImage;
-	} else if ((module->flags & B_BUILT_IN_MODULE) == 0 && gBootDevice < 0
+	} else if ((module->flags & B_BUILT_IN_MODULE) == 0 && !has_boot_device()
 		&& module->ref_count == 0) {
 		// The boot volume isn't available yet. I.e. instead of searching the
 		// right module image, we already know it and just increment the ref
@@ -2230,7 +2230,7 @@ get_module(const char* path, module_info** _info)
 		&& module->ref_count == 0) {
 		// initialization failed -- release the image reference
 		put_module_image(module->module_image);
-		if (gBootDevice >= 0)
+		if (has_boot_device())
 			module->module_image = NULL;
 	}
 
@@ -2276,7 +2276,7 @@ put_module(const char* path)
 			// Unless we don't have a boot device yet, we clear the module's
 			// image pointer if the ref count dropped to 0. get_module() will
 			// have to reload the image.
-			if (gBootDevice >= 0)
+			if (has_boot_device())
 				module->module_image = NULL;
 		}
 	}

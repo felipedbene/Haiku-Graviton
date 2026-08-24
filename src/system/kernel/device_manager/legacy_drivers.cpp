@@ -349,7 +349,7 @@ republish_driver(legacy_driver* driver)
 		devfs_unpublish_device(device, true);
 	}
 
-	if (exported == 0 && driver->devices_used == 0 && gBootDevice >= 0) {
+	if (exported == 0 && driver->devices_used == 0 && has_boot_device()) {
 		TRACE(("devfs: driver \"%s\" does not publish any more nodes and is "
 			"unloaded\n", driver->path));
 		unload_driver(driver);
@@ -1182,7 +1182,7 @@ probe_for_drivers(const char* type)
 {
 	TRACE(("probe_for_drivers(type = %s)\n", type));
 
-	if (gBootDevice < 0)
+	if (!has_boot_device())
 		return B_OK;
 
 	DriverEntryList drivers;
@@ -1485,7 +1485,7 @@ legacy_driver_probe(const char* subPath)
 	snprintf(devicePath, sizeof(devicePath), "drivers/dev%s%s",
 		subPath[0] ? "/" : "", subPath);
 
-	if (!sWatching && gBootDevice > 0) {
+	if (!sWatching && has_boot_device()) {
 		// We're probing the actual boot volume for the first time,
 		// let's watch its driver directories for changes
 		KPath path;

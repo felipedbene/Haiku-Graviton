@@ -209,7 +209,7 @@ scan_mode(void)
 	//  - once before there is a boot device,
 	//  - and once when there is one
 
-	return gBootDevice >= 0 ? kNormalScan : kBootScan;
+	return has_boot_device() ? kNormalScan : kBootScan;
 }
 
 
@@ -220,7 +220,23 @@ scan_for_drivers_if_needed(devfs_vnode* dir)
 
 	MutexLocker _(dir->stream.u.dir.scan_lock);
 
-	if (dir->stream.u.dir.scanned >= scan_mode())
+	// Sample the mode once, and record that same value afterwards.
+	//
+	// It used to be read a second time to decide what to record, with the whole
+	// probe in between -- and gBootDevice can change in that window. When it
+	// did, a scan that had run with no boot device, and which therefore walked
+	// no module search path at all (open_module_list_etc() only offers already
+	// resident modules in that case), was recorded as a completed kNormalScan.
+	// Since that record is a latch, the directory was then never scanned again
+	// for the life of the boot: a scan that never looked, indistinguishable
+	// from one that looked and found nothing.
+	//
+	// gBootDevice only ever goes from unset to set, so recording the value the
+	// scan actually ran under is strictly safe: the worst case is recording
+	// kBootScan and letting the normal scan happen later, which is what should
+	// have happened all along.
+	const int32 mode = scan_mode();
+	if (dir->stream.u.dir.scanned >= mode)
 		return B_OK;
 
 	KPath path;
@@ -231,14 +247,35 @@ scan_for_drivers_if_needed(devfs_vnode* dir)
 	path.UnlockBuffer();
 
 	TRACE(("scan_for_drivers_if_needed: mode %" B_PRId32 ": %s\n",
-		scan_mode(), path.Path()));
+		mode, path.Path()));
 
 	// scan for drivers at this path
 	static int32 updateCycle = 1;
-	device_manager_probe(path.Path(), updateCycle++);
-	legacy_driver_probe(path.Path());
+	status_t probeStatus = device_manager_probe(path.Path(), updateCycle++);
+	status_t legacyStatus = legacy_driver_probe(path.Path());
 
-	dir->stream.u.dir.scanned = scan_mode();
+	dir->stream.u.dir.scanned = mode;
+
+	// Say what this scan looked at and what it recorded.
+	//
+	// The record above is a latch, so this is the only scan this directory will
+	// get, and until this line existed a scan that enumerated nothing left
+	// exactly the same trace as one that enumerated everything: none at all.
+	// Deciding after the fact whether a boot's /dev/net was ever really scanned
+	// then meant arguing from the absence of unrelated lines further down the
+	// log. Both probe results are also discarded by this function, so they are
+	// reported here rather than lost.
+	//
+	// Cost is one line per /dev subdirectory, on the order of ten per boot, and
+	// it is emitted after both probes have returned, so it cannot perturb the
+	// scan it describes. scan_mode() is deliberately re-read for the print: if
+	// it disagrees with the sampled mode, the window described above opened on
+	// this boot and the conservative value was recorded.
+	dprintf("devfs: scanned \"%s\": mode %" B_PRId32 " -> %" B_PRId32
+		", latched %" B_PRId32 ", probe %s, legacy %s\n", path.Path(),
+		mode, scan_mode(), dir->stream.u.dir.scanned, strerror(probeStatus),
+		strerror(legacyStatus));
+
 	return B_OK;
 }
 
