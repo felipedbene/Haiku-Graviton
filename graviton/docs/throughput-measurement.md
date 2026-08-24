@@ -209,9 +209,14 @@ the RTT is meaningless — a lesson worth more than the number.
 - The fix for the receive cliff above is **built but not yet measured on
   hardware** -- see the confirmation runs in
   [tcp-rcvbuf-cliff.md](tcp-rcvbuf-cliff.md).
-- **No send-buffer autotuning.** 256 KiB is a better fixed guess than 65535, but
-  every fixed guess is wrong somewhere: it is a waste on a LAN and too small on a
-  long fat path. Linux autotunes for good reason.
+- ~~**No send-buffer autotuning.**~~ Done, and it was worse than this note
+  guessed: a fixed 256 KiB is not merely "too small on a long fat path", it is
+  **16x** too small at 10 ms of round trip, and it is also the *worst* of the
+  three fixed values tested there. See
+  [tcp-send-autotune.md](tcp-send-autotune.md). The 256 KiB default stays, as a
+  floor rather than a guess, because the measured short-path optimum turns out to
+  be *above* twice the bandwidth-delay product and auto-sizing on its own
+  converges just below it.
 - Transmit **doorbell coalescing** still needs a batched transmit entry point in
   the stack (`ETHER_SEND_NET_BUFFER` is called once per `net_buffer` with no
   "more coming" signal).

@@ -324,12 +324,25 @@ enum {
 	FLAG_OPTION_SACK_PERMITTED	= 0x80,
 	FLAG_AUTO_RECEIVE_BUFFER_SIZE = 0x100,
 	FLAG_CAN_NOTIFY 			= 0x200,
-	FLAG_USER_CLOSED			= 0x400
+	FLAG_USER_CLOSED			= 0x400,
+	FLAG_AUTO_SEND_BUFFER_SIZE	= 0x800
 };
 
 
 static const int kTimestampFactor = 1000;
 	// conversion factor between usec system time and msec tcp time
+
+static const uint32 kMaxAutoSendBufferSize = 8 * 1024 * 1024;
+	// Ceiling for send-buffer auto-sizing (see _UpdateSendBuffer()). Deliberately
+	// half of what the receive side may reach (UINT16_MAX << 8 = 16 MB): receive
+	// queue occupancy needs a peer that chooses to send that much, while a send
+	// queue is filled on demand by a local writer, so the same number is not the
+	// same risk. It is also where the measurements stop improving: on a c7g.large
+	// with 10 ms of round trip, 512 MiB per run, an 8 MB send queue reached
+	// 3165-3730 Mbit/s while a 16 MB one -- requested explicitly, since
+	// auto-sizing will not go there by itself -- reached 1577 Mbit/s. With no
+	// validation of the congestion window a very large send queue simply
+	// overdrives the path, so there is nothing above this to win.
 
 
 static inline bigtime_t
@@ -437,6 +450,11 @@ TCPEndpoint::TCPEndpoint(net_socket* socket)
 	fSendMaxSegmentSize(TCP_DEFAULT_MAX_SEGMENT_SIZE),
 	fSendMaxSegments(0),
 	fSendQueue(socket->send.buffer_size),
+	fSendSizingReference(0),
+	fSendSizingTimestamp(0),
+	fSendProbeSequence(0),
+	fSendProbeTime(0),
+	fMinRoundTripTime(-1),
 	fInitialSendSequence(0),
 	fPreviousHighestAcknowledge(0),
 	fDuplicateAcknowledgeCount(0),
@@ -459,7 +477,8 @@ TCPEndpoint::TCPEndpoint(net_socket* socket)
 	fSlowStartThreshold(0),
 	fState(CLOSED),
 	fFlags(FLAG_OPTION_WINDOW_SCALE | FLAG_OPTION_TIMESTAMP
-		| FLAG_OPTION_SACK_PERMITTED | FLAG_AUTO_RECEIVE_BUFFER_SIZE)
+		| FLAG_OPTION_SACK_PERMITTED | FLAG_AUTO_RECEIVE_BUFFER_SIZE
+		| FLAG_AUTO_SEND_BUFFER_SIZE)
 {
 	// TODO: to be replaced with a real read/write locking strategy!
 	mutex_init(&fLock, "tcp lock");
@@ -1075,6 +1094,16 @@ status_t
 TCPEndpoint::SetSendBufferSize(size_t length)
 {
 	MutexLocker _(fLock);
+
+	// Same rule as SetReceiveBufferSize(): only a request for less than the
+	// queue already holds may switch auto-sizing off, because that is a request
+	// to bound memory and re-growing behind the application's back would ignore
+	// it. A request for more is a floor and nothing else -- it must never cost
+	// throughput, and an application that sets SO_SNDBUF "to be helpful" must
+	// not thereby lose the growth it would have had for free.
+	if (length < fSendQueue.Size())
+		fFlags &= ~FLAG_AUTO_SEND_BUFFER_SIZE;
+
 	fSendQueue.SetMaxBytes(length);
 	return B_OK;
 }
@@ -1098,6 +1127,22 @@ TCPEndpoint::SetReceiveBufferSize(size_t length)
 
 	fReceiveQueue.SetMaxBytes(length);
 	return B_OK;
+}
+
+
+size_t
+TCPEndpoint::SendBufferSize()
+{
+	MutexLocker _(fLock);
+	return fSendQueue.Size();
+}
+
+
+size_t
+TCPEndpoint::ReceiveBufferSize()
+{
+	MutexLocker _(fLock);
+	return fReceiveQueue.Size();
 }
 
 
@@ -1439,6 +1484,153 @@ TCPEndpoint::_UpdateReceiveBuffer()
 
 	fReceiveQueue.SetMaxBytes(newWindowSize);
 	TRACE("TCPEndpoint: updated receive buffer size to %" B_PRIu32 "\n", newWindowSize);
+}
+
+
+/*!	Grows the send queue towards the bandwidth-delay product of the path.
+
+	A byte cannot be sent before it is queued and cannot leave the queue before
+	it is acknowledged, so the send queue's maximum is a hard ceiling on the
+	amount this endpoint can have in flight, and therefore on throughput: queue
+	size divided by the round-trip time, no matter what the driver or the wire
+	can do. A fixed default is wrong in both directions -- too small on a long
+	path, and on a short one large enough to be actively harmful, because with no
+	validation of the congestion window the send queue is in practice the only
+	thing keeping this stack from overdriving a short path. Both halves of that
+	are measured in graviton/docs/tcp-send-autotune.md: at 10 ms of round trip a
+	fixed 256 KiB costs 18x, and at 0.16 ms a fixed 8 MiB costs 45%.
+
+	So the target is the bandwidth-delay product and it has to be the real one:
+
+		target = 2 * delivery rate * minimum round-trip time
+
+	Both factors are measured, and which measurement is used matters more than
+	the formula. The rate is bytes acknowledged over the interval, which is
+	goodput and not what was pushed at the interface. The round trip is the
+	*minimum* seen on the connection, in microseconds, not the smoothed estimate,
+	for two independent reasons:
+
+	 - The smoothed estimate rises when our own data queues in the network, so
+	   sizing against it is a feedback loop: a larger queue inflates the delay,
+	   which inflates the target, which enlarges the queue. An earlier version of
+	   this function sized against the observed flight size, which has exactly
+	   the same defect, and it measured 25% *slower* than the fixed default on a
+	   0.16 ms path because it grew to 1-3.5 MB there. The minimum round trip is
+	   the one part of the delay our own queueing cannot inflate, so the product
+	   converges on the pipe rather than chasing it.
+	 - It has to be in microseconds. tcp_now() ticks in milliseconds and a
+	   data-centre round trip of a sixth of a millisecond smooths to zero, so an
+	   estimate taken from fSmoothedRoundTripTime would be zero on exactly the
+	   path this was written for. fSendProbeTime is therefore a separate
+	   microsecond probe -- one outstanding sample at a time, timed locally at
+	   both ends, so it does not depend on the peer echoing a timestamp.
+
+	The factor of two is one round trip of data in flight plus one already queued
+	behind it, so that an acknowledgement is never what the writer waits for.
+	It is the same factor, for the same reason, as Linux's tcp_sndbuf_expand().
+
+	Growth is inherently at most a doubling per interval and needs no separate
+	clamp: while the queue is the binding constraint the rate cannot exceed
+	size / minimum round trip, so the target cannot exceed twice the size.
+	Equally, once the path rather than the queue is the constraint the rate stops
+	rising, the target stops rising with it, and growth stops on its own.
+
+	Called from _Acknowledged() on every acknowledgement that advances.
+*/
+void
+TCPEndpoint::_UpdateSendBuffer()
+{
+	if ((fFlags & FLAG_AUTO_SEND_BUFFER_SIZE) == 0)
+		return;
+	if (fMinRoundTripTime <= 0)
+		return;
+
+	const bigtime_t now = system_time();
+
+	if (fSendSizingTimestamp == 0) {
+		fSendSizingTimestamp = now;
+		fSendSizingReference = fSendUnacknowledged;
+		return;
+	}
+
+	// One round trip of acknowledgements per decision. The queue can only double
+	// per decision -- while it is the binding constraint the rate cannot exceed
+	// size / minimum round trip -- so the interval is also the ramp rate, and a
+	// path that needs 8 MB has to make five decisions to get there. Measured at
+	// two round trips the ramp cost 8% of a 512 MiB transfer on a 10 ms path
+	// against a buffer that was the right size from the first byte; one round
+	// trip halves that, and a round trip is still hundreds of segments of
+	// acknowledgement at any rate where the answer matters.
+	const bigtime_t elapsed = now - fSendSizingTimestamp;
+	if (elapsed < fMinRoundTripTime)
+		return;
+
+	const uint32 acknowledged
+		= (fSendUnacknowledged - fSendSizingReference).Number();
+
+	fSendSizingTimestamp = now;
+	fSendSizingReference = fSendUnacknowledged;
+
+	// The application's own request -- or the system default, when it never
+	// asked -- is the floor auto-sizing may not fall below, and the size to
+	// return to when memory gets tight. Unlike the receive queue, whose
+	// occupancy needs a peer that chooses to send, a send queue is filled on
+	// demand by a local writer, so an enlarged send queue is memory this host
+	// volunteered and should be the first to hand back.
+	const size_t floor = socket->send.buffer_size;
+
+	if (low_resource_state(B_KERNEL_RESOURCE_MEMORY) != B_NO_LOW_RESOURCE) {
+		if (fSendQueue.Size() > floor) {
+			fSendQueue.SetMaxBytes(floor);
+			TRACE("TCPEndpoint: gave the send buffer back, now %" B_PRIuSIZE,
+				floor);
+		}
+		return;
+	}
+
+	if (fSendQueue.Size() >= kMaxAutoSendBufferSize)
+		return;
+
+	uint64 target = ((uint64)acknowledged * (uint64)fMinRoundTripTime * 2)
+		/ (uint64)elapsed;
+	if (target <= fSendQueue.Size())
+		return;
+
+	// Whole segments only, so the queue's limit never cuts a segment short.
+	if (fSendMaxSegmentSize > 0)
+		target = (target / fSendMaxSegmentSize) * fSendMaxSegmentSize;
+
+	uint32 newBufferSize = (uint32)min_c(target, (uint64)kMaxAutoSendBufferSize);
+	if (newBufferSize <= fSendQueue.Size())
+		return;
+
+	fSendQueue.SetMaxBytes(newBufferSize);
+	TRACE("TCPEndpoint: updated send buffer size to %" B_PRIu32, newBufferSize);
+}
+
+
+/*!	One microsecond round-trip sample per round trip, for _UpdateSendBuffer().
+
+	Separate from _UpdateRoundTripTime() and its smoothed estimate on purpose:
+	that one exists to set the retransmit timeout, is quantised to the
+	millisecond tick, and is deliberately slow to move. Buffer sizing needs the
+	opposite -- the *minimum* delay of the path, at a resolution finer than the
+	round trip being measured -- and must not perturb the retransmit timeout
+	while getting it.
+*/
+void
+TCPEndpoint::_SampleMinRoundTripTime(const tcp_segment_header& segment)
+{
+	if (fSendProbeTime == 0 || fSendProbeSequence >= segment.acknowledge)
+		return;
+
+	const bigtime_t sample = system_time() - fSendProbeTime;
+	fSendProbeTime = 0;
+
+	if (sample <= 0)
+		return;
+	if (fMinRoundTripTime < 0 || sample < fMinRoundTripTime)
+		fMinRoundTripTime = sample;
 }
 
 
@@ -2241,6 +2433,14 @@ TCPEndpoint::_PrepareAndSend(tcp_segment_header& segment, net_buffer* buffer,
 		fRoundTripStartSequence = segment.sequence;
 	}
 
+	// A retransmit cannot be timed: an acknowledgement for that sequence may
+	// have been provoked by the original, which would report a delay shorter
+	// than the path has, and this sample is used as a minimum.
+	if (fSendProbeTime == 0 && !isRetransmit && segmentLength != 0) {
+		fSendProbeTime = system_time();
+		fSendProbeSequence = segment.sequence;
+	}
+
 	if (segment.flags & TCP_FLAG_ACKNOWLEDGE) {
 		fLastAcknowledgeSent = segment.acknowledge;
 		gStackModule->cancel_timer(&fDelayedAcknowledgeTimer);
@@ -2491,6 +2691,10 @@ TCPEndpoint::_PrepareSendPath(const sockaddr* peer)
 	fSendUrgentOffset = fInitialSendSequence;
 	fRecover = fInitialSendSequence.Number();
 
+	fSendSizingTimestamp = 0;
+	fSendProbeTime = 0;
+	fMinRoundTripTime = -1;
+
 	// we are counting the SYN here
 	fSendQueue.SetInitialSequence(fSendNext + 1);
 
@@ -2525,11 +2729,14 @@ TCPEndpoint::_Acknowledged(tcp_segment_header& segment)
 	ASSERT(fSendUnacknowledged <= segment.acknowledge);
 
 	if (fSendUnacknowledged < segment.acknowledge) {
+		_SampleMinRoundTripTime(segment);
+
 		fSendQueue.RemoveUntil(segment.acknowledge);
 
 		uint32 bytesAcknowledged = segment.acknowledge - fSendUnacknowledged.Number();
 		fPreviousHighestAcknowledge = fSendUnacknowledged;
 		fSendUnacknowledged = segment.acknowledge;
+		_UpdateSendBuffer();
 		uint32 flightSize = (fSendMax - fSendUnacknowledged).Number();
 		int32 expectedSamples = flightSize / (fSendMaxSegmentSize << 1);
 

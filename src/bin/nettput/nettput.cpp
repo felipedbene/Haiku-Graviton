@@ -23,6 +23,7 @@
  *     -n   bytes to move, accepts K/M/G suffixes (default 512M)
  *     -b   read/write chunk size (default 64K)
  *     -w   SO_SNDBUF/SO_RCVBUF, set before connect
+ *     -P   pin the send buffer to a fixed size, defeating auto-sizing
  *     -L   free-form label echoed into the output, e.g. the MTU under test
  *
  * -w exists because the first measurements taken with this tool were not
@@ -34,10 +35,16 @@
  * Sweeping -w separates "the stack is capped" from "the driver is slow", which
  * otherwise look identical.
  *
- * Receiving is not symmetric, and -w is not a free knob there: TCP does grow its
- * own receive window towards the bandwidth-delay product, and a -w smaller than
- * the default replaces that growth with a fixed size, so it can measure slower
- * than passing no -w at all. See graviton/docs/tcp-rcvbuf-cliff.md.
+ * -w is not a free knob, and this is the subtle part. Both queues now grow
+ * towards the bandwidth-delay product on their own, and a request for *more*
+ * than the current size is treated as a floor rather than as a pin, precisely so
+ * that asking cannot cost throughput (graviton/docs/tcp-rcvbuf-cliff.md). Only a
+ * request for *less* switches auto-sizing off. So -w 1M does not measure a fixed
+ * 1 MiB buffer -- it measures auto-sizing starting from 1 MiB.
+ *
+ * -P is how a genuinely fixed size is measured: it asks for twice the size
+ * first, so the following request is a shrink, which pins. Comparing -P against
+ * no arguments at all is the honest test of whether auto-sizing is worth having.
  *
  * The peer is graviton/scripts/nettput-peer.py, which needs nothing but python3.
  * A byte count is negotiated up front rather than a duration, so both ends know
@@ -239,8 +246,34 @@ set_socket_buffers(int socketFD, int wanted)
 }
 
 
+// Pin the send buffer at exactly \a wanted bytes, auto-sizing off.
+//
+// Only a request for less than the queue currently has counts as a request to
+// bound memory, and only that switches auto-sizing off; a request for more is a
+// floor. So the way to pin an arbitrary size is to grow past it and then come
+// back down, which is what these two calls do. A single setsockopt() cannot
+// express "and stop growing" at all, which is deliberate.
+static void
+pin_send_buffer(int socketFD, int wanted)
+{
+	if (wanted <= 0)
+		return;
+
+	int high = wanted * 2;
+	if (high < wanted)
+		high = wanted;
+
+	if (setsockopt(socketFD, SOL_SOCKET, SO_SNDBUF, &high, sizeof(high)) != 0
+		|| setsockopt(socketFD, SOL_SOCKET, SO_SNDBUF, &wanted,
+			sizeof(wanted)) != 0) {
+		fprintf(stderr, "nettput: cannot pin SO_SNDBUF at %d: %s\n", wanted,
+			strerror(errno));
+	}
+}
+
+
 static int
-connect_to_peer(const char* host, int port, int windowSize)
+connect_to_peer(const char* host, int port, int windowSize, int pinnedSend)
 {
 	char service[16];
 	snprintf(service, sizeof(service), "%d", port);
@@ -265,6 +298,7 @@ connect_to_peer(const char* host, int port, int windowSize)
 			continue;
 
 		set_socket_buffers(socketFD, windowSize);
+		pin_send_buffer(socketFD, pinnedSend);
 
 		if (connect(socketFD, info->ai_addr, info->ai_addrlen) == 0)
 			break;
@@ -288,6 +322,11 @@ connect_to_peer(const char* host, int port, int windowSize)
 // Printed alongside every result: a socket buffer smaller than the
 // bandwidth-delay product caps throughput on its own, and would silently look
 // like a driver that failed to get faster.
+//
+// Printed twice -- before and after -- because on this fork getsockopt() reports
+// the size the queue actually has rather than the size last requested, so the
+// difference between the two lines is auto-sizing being caught in the act. It is
+// the only direct observation of the mechanism available from userland.
 static void
 report_socket_buffers(int socket)
 {
@@ -304,6 +343,7 @@ report_socket_buffers(int socket)
 
 	printf("  socket buffers  : send %d, receive %d bytes\n", sendSize,
 		receiveSize);
+	fflush(stdout);
 }
 
 
@@ -363,7 +403,10 @@ usage(int status)
 		"  -n <bytes>    bytes to transfer, K/M/G suffixes ok (default 512M)\n"
 		"  -b <bytes>    read/write chunk size (default 64K)\n"
 		"  -w <bytes>    SO_SNDBUF/SO_RCVBUF, set before connect (default: leave\n"
-		"                the system default alone)\n"
+		"                the system default alone). A value above the current\n"
+		"                size is a floor, not a pin: auto-sizing still runs.\n"
+		"  -P <bytes>    pin the send buffer at exactly this size, auto-sizing\n"
+		"                off -- the way to measure a fixed buffer\n"
 		"  -r            receive instead of transmit\n"
 		"  -L <label>    label echoed into the result, e.g. \"mtu 9001\"\n"
 		"  -h            this help\n",
@@ -381,10 +424,11 @@ main(int argc, char** argv)
 	off_t bytes = DEFAULT_BYTES;
 	off_t bufferSize = DEFAULT_BUFFER;
 	int windowSize = 0;
+	int pinnedSend = 0;
 	char mode = MODE_TRANSMIT;
 
 	int option;
-	while ((option = getopt(argc, argv, "c:p:n:b:w:rL:h")) != -1) {
+	while ((option = getopt(argc, argv, "c:p:n:b:w:P:rL:h")) != -1) {
 		switch (option) {
 			case 'c':
 				host = optarg;
@@ -419,6 +463,15 @@ main(int argc, char** argv)
 				windowSize = (int)wanted;
 				break;
 			}
+			case 'P': {
+				off_t wanted = parse_size(optarg);
+				if (wanted <= 0 || wanted > 256 * 1024 * 1024) {
+					fprintf(stderr, "nettput: bad pinned size \"%s\"\n", optarg);
+					return 1;
+				}
+				pinnedSend = (int)wanted;
+				break;
+			}
 			case 'r':
 				mode = MODE_RECEIVE;
 				break;
@@ -451,7 +504,7 @@ main(int argc, char** argv)
 	for (off_t i = 0; i < bufferSize; i++)
 		buffer[i] = (uint8)(i & 0xff);
 
-	int socketFD = connect_to_peer(host, port, windowSize);
+	int socketFD = connect_to_peer(host, port, windowSize, pinnedSend);
 	if (socketFD < 0) {
 		free(buffer);
 		return 1;
@@ -533,6 +586,12 @@ main(int argc, char** argv)
 	}
 
 	take_cpu_snapshot(after);
+
+	// After the snapshot, so the query itself cannot land inside the measured
+	// interval, and before close(), while the endpoint still exists to answer.
+	printf("after the transfer:\n");
+	report_socket_buffers(socketFD);
+
 	close(socketFD);
 	free(buffer);
 

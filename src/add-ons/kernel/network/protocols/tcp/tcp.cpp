@@ -562,6 +562,22 @@ tcp_getsockopt(net_protocol* _protocol, int level, int option, void* value,
 	if (level == IPPROTO_TCP)
 		return protocol->GetOption(option, value, _length);
 
+	if (level == SOL_SOCKET && (option == SO_SNDBUF || option == SO_RCVBUF)) {
+		// Report the size the queue actually has rather than the size that was
+		// last requested. Both queues auto-size towards the bandwidth-delay
+		// product, so the socket layer's stored value is only ever the starting
+		// point or a floor, and answering with it would hide the entire
+		// mechanism from anyone trying to observe it -- including from a
+		// measurement trying to establish whether it works.
+		if (_length == NULL || *_length < (int)sizeof(int))
+			return B_BAD_VALUE;
+
+		*(int*)value = (int)(option == SO_SNDBUF
+			? protocol->SendBufferSize() : protocol->ReceiveBufferSize());
+		*_length = sizeof(int);
+		return B_OK;
+	}
+
 	return protocol->next->module->getsockopt(protocol->next, level, option,
 		value, _length);
 }
