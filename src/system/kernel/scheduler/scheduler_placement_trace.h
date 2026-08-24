@@ -27,7 +27,27 @@
 	all I/O deferred until after the burst is over.
 */
 
-#define SCHEDULER_TRACE_PLACEMENT 1
+// OFF BY DEFAULT. Uncomment to chase a placement or rebalance question; it is not
+// something to carry in a release image.
+//
+// Cost when enabled: trace_placement_decline() is one atomic_add on a SINGLE
+// GLOBAL, called from rebalance() on every decline, so the rate is bounded by
+// reschedules -- 16 k/s typical and 160 k/s worst case at the 100 us
+// minimal_quantum across 16 CPUs. At 100-200 ns for a contended shared line that
+// is 0.24 % typical and ~2.4 % worst case, plus 12 KB of permanently resident
+// buffer.
+//
+// Nothing is left enabled, deliberately. The counters are the cheapest part but
+// they are also the ones in the hottest path, and a shared-line atomic in
+// rebalance() cannot be justified for a diagnostic. Making them per-CPU would be
+// nearly free and is the obvious refinement -- but that is an unmeasured change to
+// a hot path, and the whole point of this branch is not to make those.
+//
+// Worth turning on for: the fixed kernel still reports 21 888 rebalance declines
+// with a less-loaded core available, out of 163 412 declines. Some of those are
+// correct -- at N == 2 * ncpus every core really is equally loaded -- but the
+// number has not been explained and it is the obvious next thread to pull.
+//#define SCHEDULER_TRACE_PLACEMENT
 
 
 namespace Scheduler {
@@ -45,7 +65,7 @@ enum placement_event {
 };
 
 
-#if SCHEDULER_TRACE_PLACEMENT
+#ifdef SCHEDULER_TRACE_PLACEMENT
 
 void trace_placement_init();
 
@@ -69,11 +89,10 @@ void trace_placement_dump();
 
 #else
 
-static inline void trace_placement_init() {}
-static inline void trace_placement(placement_event, int32, int32, int32, int32)
-	{}
-static inline void trace_placement_decline(bool) {}
-static inline void trace_placement_dump() {}
+inline void trace_placement_init() {}
+inline void trace_placement(placement_event, int32, int32, int32, int32) {}
+inline void trace_placement_decline(bool) {}
+inline void trace_placement_dump() {}
 
 #endif	// SCHEDULER_TRACE_PLACEMENT
 

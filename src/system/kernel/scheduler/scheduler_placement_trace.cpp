@@ -13,7 +13,7 @@
 #include <util/atomic.h>
 
 
-#if SCHEDULER_TRACE_PLACEMENT
+#ifdef SCHEDULER_TRACE_PLACEMENT
 
 namespace Scheduler {
 

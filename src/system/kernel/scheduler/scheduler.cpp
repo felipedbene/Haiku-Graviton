@@ -866,7 +866,7 @@ _user_estimate_max_scheduling_latency(thread_id id)
 status_t
 _user_set_scheduler_mode(int32 mode)
 {
-#if SCHEDULER_TRACE_PLACEMENT
+#ifdef SCHEDULER_TRACE_PLACEMENT
 	// Instrumentation escape hatch, NOT FOR MERGE. The placement trace has to be
 	// dumped from ordinary thread context, because formatting it does blocking
 	// per-character serial I/O that would be ruinous anywhere near the scheduler.
