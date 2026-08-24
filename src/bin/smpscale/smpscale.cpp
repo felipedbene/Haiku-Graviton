@@ -26,7 +26,7 @@
  *    one of them is broken and we learn that too, instead of trusting a single
  *    number.
  *
- * Usage: smpscale [-w warmup_ms] [-t target_ms] [-m] [threads ...]
+ * Usage: smpscale [-w warmup_ms] [-t target_ms] [-m] [-g] [-x] [threads ...]
  *   -w   per-run warmup in ms (default 200)
  *   -t   calibrate the work unit so ONE thread takes about this long
  *        (default 3000 ms). Bigger swamps timing error; 3 s against a 1 us
@@ -35,6 +35,18 @@
  *        memory-bandwidth saturation. The network receive path is 88 %
  *        per-byte cost, so whether memory bandwidth scales matters as much as
  *        whether cores do.
+ *   -g   COUNT MIGRATIONS. Break the work into ~1 ms chunks and have each
+ *        thread sample sched_getcpu() between them, so a fix that reaches full
+ *        efficiency by thrashing is distinguishable from one that reaches it by
+ *        migrating a bounded number of times. This costs a syscall per chunk,
+ *        so its wall times are NOT comparable with the plain ladder -- run it
+ *        as a separate experiment, never as the primary evidence.
+ *   -x   MIXED WORKLOAD negative control (implies -g). Odd-numbered threads
+ *        sleep 4 ms per 1 ms of work and do a sixteenth of the work; even ones
+ *        stay purely CPU-bound. Sleepers pass through the scheduler's
+ *        rebalance path on every wake, so this is where an over-eager
+ *        balancer would show up. The CPU-bound half is reported separately,
+ *        since averaging the two classes would hide a straggler.
  *   threads   the ladder; default "1 2 4 8 16"
  */
 
@@ -44,6 +56,13 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+
+// From libgnu.so. Declared here rather than pulled in via <sched.h>, which only
+// exposes it under _DEFAULT_SOURCE and from the gnu compatibility include dir.
+// On every non-x86_64 target this is a straight _kern_get_cpu() syscall
+// (src/libs/gnu/sched_getcpu.cpp), so a thread asking which CPU it is on gets
+// an authoritative answer from the kernel.
+extern "C" int sched_getcpu(void);
 
 
 #define MAX_CPUS		256
@@ -129,10 +148,22 @@ struct worker_arg {
 	volatile uint64* buffer;
 	size_t			words;
 
+	// Chunked mode. When chunkIterations is non-zero the work is broken into
+	// pieces and sched_getcpu() is sampled between them, which counts
+	// migrations from userland with no kernel change and no image bake. It is
+	// deliberately a SEPARATE mode: the syscall between chunks costs time, so
+	// it must never contaminate the timing ladder that is the primary evidence.
+	uint64			chunkIterations;
+	bigtime_t		snoozeMicros;	// > 0 makes this a sleeper, not CPU-bound
+
 	// Results, written by the worker only.
 	bigtime_t		start;
 	bigtime_t		end;
 	uint64			sink;
+	uint32			migrations;
+	uint32			samples;
+	uint64			cpuVisited;		// bitmask over CPUs 0..63
+	int32			lastCpu;
 };
 
 
@@ -153,7 +184,38 @@ worker(void* data)
 		;
 
 	arg->start = system_time();
-	if (arg->stream)
+	if (arg->chunkIterations > 0) {
+		// Chunked: same total work, but observable. Counting transitions of
+		// sched_getcpu() as seen BY THE THREAD ITSELF is authoritative for
+		// where it is now; it can only miss migrations faster than the sample
+		// interval, so it is a sensitive detector of thrashing (the thing we
+		// need to rule out) even though it is a lower bound on the true count.
+		uint64 remaining = arg->iterations;
+		uint64 x = arg->seed;
+		while (remaining > 0) {
+			uint64 chunk = remaining < arg->chunkIterations
+				? remaining : arg->chunkIterations;
+			x = spin_chain(chunk, x);
+			remaining -= chunk;
+
+			int32 cpu = sched_getcpu();
+			if (cpu >= 0) {
+				arg->samples++;
+				if (cpu < 64)
+					arg->cpuVisited |= 1ULL << cpu;
+				if (arg->lastCpu >= 0 && cpu != arg->lastCpu)
+					arg->migrations++;
+				arg->lastCpu = cpu;
+			}
+
+			// A sleeper blocks, so it goes through GoesAway()/Enqueue() and
+			// therefore through the scheduler's rebalance path, which is
+			// exactly what a mixed workload needs to exercise.
+			if (arg->snoozeMicros > 0)
+				snooze(arg->snoozeMicros);
+		}
+		arg->sink = x;
+	} else if (arg->stream)
 		arg->sink = spin_stream(arg->iterations, arg->buffer, arg->words);
 	else
 		arg->sink = spin_chain(arg->iterations, arg->seed);
@@ -174,12 +236,22 @@ struct run_result {
 	uint32		cpusUsed;		// CPUs whose active_time moved >10% of wall
 	uint32		cpuCount;
 	bigtime_t	perCpu[MAX_CPUS];
+
+	// Chunked mode only.
+	uint32		migrations;		// summed over threads
+	uint32		maxMigrations;	// worst single thread
+	uint32		samples;
+	uint32		distinctCpus;	// CPUs any thread was ever observed on
+	// Mixed mode only: the CPU-bound half, measured apart from the sleepers,
+	// because averaging the two classes together would hide a straggler.
+	bigtime_t	busyMax;
+	bigtime_t	busyMin;
 };
 
 
 static bool
 run_ladder_point(uint32 threads, uint64 iterations, bool stream,
-	run_result& out)
+	uint64 chunkIterations, bigtime_t sleeperSnooze, run_result& out)
 {
 	static worker_arg args[MAX_THREADS];
 	static thread_id ids[MAX_THREADS];
@@ -196,6 +268,20 @@ run_ladder_point(uint32 threads, uint64 iterations, bool stream,
 		args[i].stream = stream;
 		args[i].words = words;
 		args[i].buffer = NULL;
+		args[i].chunkIterations = chunkIterations;
+		args[i].migrations = 0;
+		args[i].samples = 0;
+		args[i].cpuVisited = 0;
+		args[i].lastCpu = -1;
+		args[i].snoozeMicros = 0;
+		// Mixed workload: odd threads are sleepers on a ~20 % duty cycle and do
+		// a sixteenth of the work, so they finish on a comparable timescale
+		// while generating a lot of wake/sleep traffic through the rebalance
+		// path. Even threads stay purely CPU-bound.
+		if (sleeperSnooze > 0 && (i % 2) == 1) {
+			args[i].snoozeMicros = sleeperSnooze;
+			args[i].iterations = iterations / 16;
+		}
 		if (stream) {
 			if (buffers[i] == NULL) {
 				buffers[i] = (volatile uint64*)malloc(STREAM_BYTES);
@@ -261,6 +347,28 @@ run_ladder_point(uint32 threads, uint64 iterations, bool stream,
 	}
 	out.wall = out.maxThread;
 
+	uint64 visited = 0;
+	out.busyMin = -1;
+	for (uint32 i = 0; i < threads; i++) {
+		out.migrations += args[i].migrations;
+		out.samples += args[i].samples;
+		if (args[i].migrations > out.maxMigrations)
+			out.maxMigrations = args[i].migrations;
+		visited |= args[i].cpuVisited;
+
+		if (args[i].snoozeMicros == 0) {
+			bigtime_t span = args[i].end - args[i].start;
+			if (span > out.busyMax)
+				out.busyMax = span;
+			if (out.busyMin < 0 || span < out.busyMin)
+				out.busyMin = span;
+		}
+	}
+	for (uint32 c = 0; c < 64; c++) {
+		if ((visited & (1ULL << c)) != 0)
+			out.distinctCpus++;
+	}
+
 	out.cpuCount = before.count;
 	if (before.count > 0 && before.count == after.count) {
 		for (uint32 i = 0; i < before.count; i++) {
@@ -288,6 +396,8 @@ main(int argc, char** argv)
 	bigtime_t targetMicros = 3000000;
 	bigtime_t warmupMicros = 200000;
 	bool stream = false;
+	bool countMigrations = false;
+	bool mixed = false;
 	uint32 ladder[MAX_LADDER];
 	uint32 ladderSize = 0;
 
@@ -299,7 +409,12 @@ main(int argc, char** argv)
 			warmupMicros = (bigtime_t)atoll(argv[++i]) * 1000;
 		else if (strcmp(argv[i], "-m") == 0)
 			stream = true;
-		else if (argv[i][0] == '-') {
+		else if (strcmp(argv[i], "-g") == 0)
+			countMigrations = true;
+		else if (strcmp(argv[i], "-x") == 0) {
+			mixed = true;
+			countMigrations = true;
+		} else if (argv[i][0] == '-') {
 			fprintf(stderr, "smpscale: unknown option %s\n", argv[i]);
 			return 1;
 		} else
@@ -338,7 +453,7 @@ main(int argc, char** argv)
 		bigtime_t elapsed = 0;
 		while (elapsed < targetMicros / 4 && iterations < (1 << 20)) {
 			run_result probe;
-			if (!run_ladder_point(1, iterations, true, probe))
+			if (!run_ladder_point(1, iterations, true, 0, 0, probe))
 				return 1;
 			elapsed = probe.wall;
 			if (elapsed >= targetMicros / 4)
@@ -380,6 +495,24 @@ main(int argc, char** argv)
 			sGlobalSink += spin_chain(100000, 999);
 	}
 
+	// One chunk per millisecond of single-thread work: a 1 kHz migration
+	// sampler. Only used in -g/-x mode.
+	uint64 chunkIterations = 0;
+	if (countMigrations) {
+		chunkIterations = iterations * 1000 / (uint64)targetMicros;
+		if (chunkIterations == 0)
+			chunkIterations = 1;
+		printf("smpscale: migration sampling on, %llu iterations per chunk"
+			" (~1 ms, so ~1 kHz per thread)\n",
+			(unsigned long long)chunkIterations);
+		printf("smpscale: NOTE this mode adds a syscall between chunks, so its"
+			" times are NOT comparable to the plain ladder\n");
+	}
+	if (mixed) {
+		printf("smpscale: mixed workload, odd threads sleep 4 ms per 1 ms of"
+			" work and do 1/16 the work\n");
+	}
+
 	printf("\n");
 	printf("%8s %10s %10s %10s %8s %10s %8s %9s\n",
 		"threads", "wall_ms", "min_ms", "max_ms", "speedup", "cpu_busy_ms",
@@ -391,8 +524,10 @@ main(int argc, char** argv)
 	double baseWall = 0.0;
 
 	for (uint32 k = 0; k < ladderSize; k++) {
-		if (!run_ladder_point(ladder[k], iterations, stream, results[k]))
+		if (!run_ladder_point(ladder[k], iterations, stream, chunkIterations,
+				mixed ? 4000 : 0, results[k])) {
 			return 1;
+		}
 
 		run_result& r = results[k];
 		double wallMs = (double)r.wall / 1000.0;
@@ -431,6 +566,35 @@ main(int argc, char** argv)
 		for (uint32 c = 0; c < cpuCount; c++)
 			printf(" %6.0f", (double)results[k].perCpu[c] / 1000.0);
 		printf("\n");
+	}
+
+	// Migrations are COUNTED, not inferred from throughput. A fix that reaches
+	// efficiency 1.000 by migrating threads thousands of times per second has
+	// traded one defect for another, and only a count can tell the difference.
+	if (countMigrations) {
+		printf("\nMigrations, counted by each thread sampling sched_getcpu()"
+			" between work chunks:\n");
+		printf("%8s %10s %10s %10s %10s %8s", "threads", "migr_tot",
+			"migr_max", "samples", "migr/1ks", "cpus");
+		if (mixed)
+			printf(" %10s %10s", "busy_min", "busy_max");
+		printf("\n");
+		for (uint32 k = 0; k < ladderSize; k++) {
+			run_result& r = results[k];
+			// Per thousand samples, i.e. roughly per second per thread, so the
+			// number does not silently scale with run length or thread count.
+			double rate = r.samples > 0
+				? 1000.0 * (double)r.migrations / (double)r.samples : 0.0;
+			printf("%8" B_PRIu32 " %10" B_PRIu32 " %10" B_PRIu32 " %10" B_PRIu32
+				" %10.2f %8" B_PRIu32,
+				r.threads, r.migrations, r.maxMigrations, r.samples, rate,
+				r.distinctCpus);
+			if (mixed) {
+				printf(" %10.1f %10.1f", (double)r.busyMin / 1000.0,
+					(double)r.busyMax / 1000.0);
+			}
+			printf("\n");
+		}
 	}
 
 	printf("\nsink %llu (printed so the work cannot be optimised away)\n",

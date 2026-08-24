@@ -1,8 +1,10 @@
 SubDir HAIKU_TOP src bin smpscale ;
 
-# Only libroot is needed: get_system_info(), get_cpu_info(), spawn_thread() and
-# system_time() all live there and it is linked implicitly.
+# libroot supplies get_system_info(), get_cpu_info(), spawn_thread() and
+# system_time(); it is linked implicitly. libgnu supplies sched_getcpu(), which
+# the -g/-x migration counter needs -- on every non-x86_64 target that is a
+# straight _kern_get_cpu() syscall.
 Application smpscale :
 	smpscale.cpp
-	:
+	: libgnu.so
 ;
