@@ -179,6 +179,15 @@ extern "C" {
 
 #define ENA_MAX_MULTICAST	32
 
+/* Printed at attach, and the only reliable way to tell which copy of this driver
+   is running. A drop-in replacement can lose the module-selection tie to the
+   packaged copy in silence -- _FindBestDriver() takes strictly greater support --
+   and this project has already lost a day to an unmoved measurement that turned
+   out to be an unloaded driver rather than an ineffective change. Bump it with
+   any change being measured, and read it back out of the syslog before believing
+   a number. */
+#define ENA_BUILD_STAMP		"irq-cadence-1"
+
 #ifdef ENA_DEBUG_FAULT_INJECTION
 /* Private ioctl for provoking a watchdog timeout without breaking hardware: it
    makes the keep-alive handler stop advancing the timestamp, so the watchdog sees
@@ -227,6 +236,65 @@ extern "C" {
    graviton/docs/ena-tx-offload.md. */
 #define ENA_IOCTL_TX_EXTRA_DOORBELLS	9802
 #define ENA_MAX_EXTRA_DOORBELLS		64
+
+/* Read-only counter snapshot, always compiled in. What it exists to answer is
+   how many frames one io interrupt actually accounts for: an interrupt rate on
+   its own cannot tell a well-moderated device from a driver being woken once per
+   frame, and that ratio is the entire subject of the interrupt-cadence work. A
+   driver that is re-armed before it has consumed anything is bounded by the
+   moderation interval and drains a handful of frames per interrupt; one that is
+   re-armed after the drain lets a whole burst accumulate behind a masked vector
+   and drains as many frames as arrived. The two are indistinguishable from
+   throughput alone, so the ratio is measured directly.
+
+   Deliberately raw totals rather than a rate: the caller picks the interval and
+   the driver keeps no timers. Also deliberately outside any debug ifdef -- a
+   measurement that only exists in a special build cannot be used to check that
+   a change did anything in the build that ships. */
+#define ENA_IOCTL_GET_IRQ_STATS		9803
+
+/* Selects where the shared io vector is re-armed, so that the change this driver
+   exists to make can be measured against the behaviour it replaces:
+
+     0  in the interrupt handler, with every completion still unconsumed. What
+        this driver shipped with. The device's moderation interval is then the
+        only thing bounding the interrupt rate.
+     1  at the end of a drain, once the queue reads empty (the default, and what
+        both reference drivers do).
+
+   Runtime rather than a build-time switch for the same reason as the doorbell
+   knob above: separating the two arms by a reboot would put the boot-to-boot
+   variation of this hardware between them, and that variation is large enough to
+   swamp the effect. One binary, both arms, interleaved inside a single boot --
+   and no module swap, which on this platform is the most expensive and most
+   error-prone step in the loop. Reported back by ENA_IOCTL_GET_IRQ_STATS so a
+   sample says which arm produced it. */
+#define ENA_IOCTL_REARM_MODE		9804
+#define ENA_REARM_IN_HANDLER		0
+#define ENA_REARM_AFTER_DRAIN		1
+
+struct ena_irq_stats {
+	uint64	ioInterrupts;
+	/* Unmask writes. Fewer than ioInterrupts means a vector was re-armed by one
+	   direction for an interrupt the other direction also serviced, which is the
+	   intended collapsing and not a lost interrupt. */
+	uint64	irqArms;
+	uint64	rxFrames;
+	/* Times the receive ring read back empty, i.e. completed drains. rxFrames
+	   divided by this is the average burst one wakeup was worth. */
+	uint64	rxDrainCycles;
+	uint64	txFrames;
+	/* Not a cadence figure: it is here so a sample can invalidate itself. The
+	   reset path zeroes ioInterrupts and does not zero rxFrames, so a reset
+	   landing inside a sampling interval yields a frames-per-interrupt ratio that
+	   is wrong without looking wrong. A caller that sees this move must throw the
+	   sample away rather than report it. */
+	uint64	resetCount;
+	/* Which arm this sample was taken under: ENA_REARM_IN_HANDLER or
+	   ENA_REARM_AFTER_DRAIN. Reported so a number cannot be attributed to the
+	   wrong one. */
+	uint64	rearmMode;
+};
 
 /* Refuse to attach below this, rather than dividing by a zero ring size if a
    device ever reports a nonsense depth. */
@@ -301,6 +369,21 @@ struct ena_haiku_device {
 	uint32				ioVector;
 	int32				managementInterrupts;
 	int32				ioInterrupts;
+	/* Whether the shared io vector is currently armed. The device masks a vector
+	   by raising it, and the re-arm happens at the end of a drain rather than in
+	   the handler, so this is what stops the two directions from both writing the
+	   unmask register for the same interrupt. Written with atomic_test_and_set()
+	   from either datapath and cleared by the handler; see
+	   ena_rearm_io_interrupt(). */
+	int32				irqArmed;
+	/* How many unmask writes that produced, as a check that the re-arm is
+	   actually reached: zero arms with a rising interrupt count would mean the
+	   vector is being re-armed by something other than the drain. */
+	int32				irqArms;
+	/* ENA_REARM_IN_HANDLER or ENA_REARM_AFTER_DRAIN; see ENA_IOCTL_REARM_MODE.
+	   Read on the interrupt path, so a plain atomic load rather than anything
+	   that could block. */
+	int32				rearmMode;
 	bool				managementIrqInstalled;
 	bool				ioIrqInstalled;
 	/* Two states, not one: configure_msix() claims the vectors and is undone by
@@ -431,6 +514,11 @@ struct ena_haiku_device {
 	   build; they are two increments on a path that already does a memcpy per
 	   frame. Read under rxLock, like everything else here. */
 	uint64				rxFrames;
+	/* Completed receive drains: incremented where ena_com_rx_pkt() reads the ring
+	   empty, which is the point the vector is re-armed. rxFrames / rxDrainCycles
+	   is the average number of frames one wakeup was worth, and is the number the
+	   interrupt-cadence work has to move. Under rxLock with the rest of these. */
+	uint64				rxDrainCycles;
 	uint64				rxL4CsumChecked;
 	uint64				rxL4CsumErrors;
 	uint64				rxL3Ipv4Frames;

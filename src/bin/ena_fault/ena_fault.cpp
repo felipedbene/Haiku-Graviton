@@ -20,6 +20,8 @@
  *   ena_fault 2            suppress until cleared (repeated resets)
  *   ena_fault hold <ms>    stall the next reset for <ms>, 0 to disable
  *   ena_fault doorbells <n>  ring the transmit doorbell n extra times per frame
+ *   ena_fault stats [s]    sample the counters for s seconds and report frames
+ *                          per io interrupt
  *
  * The doorbell knob is a measurement tool rather than a fault, and unlike the
  * other two it is always compiled into the driver. It prices one doorbell write
@@ -50,10 +52,24 @@
 #define ENA_IOCTL_SUPPRESS_KEEP_ALIVE	9800
 #define ENA_IOCTL_HOLD_RESET		9801
 #define ENA_IOCTL_TX_EXTRA_DOORBELLS	9802
+#define ENA_IOCTL_GET_IRQ_STATS		9803
+#define ENA_IOCTL_REARM_MODE		9804
+#define ENA_REARM_IN_HANDLER		0
+#define ENA_REARM_AFTER_DRAIN		1
 #define ENA_MAX_RESET_HOLD_MS		30000
 #define ENA_MAX_EXTRA_DOORBELLS		64
 
 #define ENA_DEVICE_PATH			"/dev/net/ena/0"
+
+struct ena_irq_stats {
+	uint64	ioInterrupts;
+	uint64	irqArms;
+	uint64	rxFrames;
+	uint64	rxDrainCycles;
+	uint64	txFrames;
+	uint64	resetCount;
+	uint64	rearmMode;
+};
 
 
 static void
@@ -62,6 +78,13 @@ usage(const char* program)
 	fprintf(stderr, "usage: %s <0|1|2>\n"
 		"       %s hold <milliseconds>\n"
 		"       %s doorbells <n>\n"
+		"       %s stats [seconds]\n"
+		"       %s rearm <0|1>\n"
+		"  stats [s]     sample the driver's counters over [s] seconds "
+		"(default 10)\n"
+		"                and report frames per io interrupt\n"
+		"  rearm <0|1>   where the io vector is re-armed: 0 in the interrupt\n"
+		"                handler (the old cadence), 1 after the drain (default)\n"
 		"  0             stop suppressing keep-alive\n"
 		"  1             suppress until the watchdog fires once\n"
 		"  2             suppress until cleared (repeated resets)\n"
@@ -69,7 +92,7 @@ usage(const char* program)
 		"                concurrent \"ifconfig down\" can be aimed at it; 0 disables\n"
 		"  doorbells <n> ring the transmit doorbell <n> extra times per frame, to\n"
 		"                price one doorbell write; 0 restores normal behaviour\n",
-		program, program, program);
+		program, program, program, program, program);
 }
 
 
@@ -98,9 +121,131 @@ send_value(const char* program, uint32 op, int32 value, const char* description)
 }
 
 
+/*!	Samples the driver's counters twice and reports the rates between them.
+
+	Frames per interrupt is the point of this. The driver is re-armed at the end
+	of a drain, so a burst that arrives while the vector is masked is consumed by
+	one wakeup: the ratio is how many frames that turned out to be, and it is the
+	only figure that distinguishes an interrupt cadence change from a throughput
+	change that happened for some other reason.
+
+	Deltas rather than totals, so it can be run against a load that is already in
+	flight without counting the idle period before it.
+*/
+static int
+show_stats(const char* program, int seconds)
+{
+	int fd = open(ENA_DEVICE_PATH, O_RDWR);
+	if (fd < 0) {
+		fprintf(stderr, "%s: cannot open %s: %s\n", program, ENA_DEVICE_PATH,
+			strerror(errno));
+		return 1;
+	}
+
+	struct ena_irq_stats before;
+	struct ena_irq_stats after;
+
+	if (ioctl(fd, ENA_IOCTL_GET_IRQ_STATS, &before, sizeof(before)) < 0) {
+		fprintf(stderr, "%s: ioctl failed: %s\n"
+			"  (does this driver have ENA_IOCTL_GET_IRQ_STATS? check the build "
+			"stamp in the syslog)\n", program, strerror(errno));
+		close(fd);
+		return 1;
+	}
+
+	sleep(seconds);
+
+	if (ioctl(fd, ENA_IOCTL_GET_IRQ_STATS, &after, sizeof(after)) < 0) {
+		fprintf(stderr, "%s: second ioctl failed: %s\n", program,
+			strerror(errno));
+		close(fd);
+		return 1;
+	}
+
+	close(fd);
+
+	/* The reset path zeroes ioInterrupts and leaves rxFrames alone, so a reset
+	   inside the interval produces a ratio that is wrong without looking wrong.
+	   Refuse to print one. */
+	if (after.resetCount != before.resetCount) {
+		fprintf(stderr, "%s: the device reset during the interval "
+			"(resetCount %llu -> %llu); sample discarded\n", program,
+			(unsigned long long)before.resetCount,
+			(unsigned long long)after.resetCount);
+		return 1;
+	}
+
+	/* Likewise for the arm itself: a sample that spans a mode change belongs to
+	   neither arm. */
+	if (after.rearmMode != before.rearmMode) {
+		fprintf(stderr, "%s: the rearm mode changed during the interval "
+			"(%llu -> %llu); sample discarded\n", program,
+			(unsigned long long)before.rearmMode,
+			(unsigned long long)after.rearmMode);
+		return 1;
+	}
+
+	const uint64 interrupts = after.ioInterrupts - before.ioInterrupts;
+	const uint64 arms = after.irqArms - before.irqArms;
+	const uint64 frames = after.rxFrames - before.rxFrames;
+	const uint64 drains = after.rxDrainCycles - before.rxDrainCycles;
+	const uint64 txFrames = after.txFrames - before.txFrames;
+
+	printf("rearm mode          %llu (%s)\n",
+		(unsigned long long)after.rearmMode,
+		after.rearmMode == ENA_REARM_IN_HANDLER
+			? "in handler -- the old cadence" : "after drain");
+	printf("interval            %d s\n", seconds);
+	printf("io interrupts       %llu (%.0f/s)\n", (unsigned long long)interrupts,
+		(double)interrupts / seconds);
+	printf("vector re-arms      %llu\n", (unsigned long long)arms);
+	printf("rx frames           %llu (%.0f/s)\n", (unsigned long long)frames,
+		(double)frames / seconds);
+	printf("rx drain cycles     %llu\n", (unsigned long long)drains);
+	printf("tx frames           %llu (%.0f/s)\n",
+		(unsigned long long)txFrames, (double)txFrames / seconds);
+
+	if (interrupts > 0) {
+		printf("FRAMES/INTERRUPT    %.2f\n", (double)frames / interrupts);
+	} else {
+		printf("FRAMES/INTERRUPT    n/a (no interrupts in the interval -- if "
+			"frames moved, this driver is not the one being measured)\n");
+	}
+	if (drains > 0)
+		printf("frames/drain        %.2f\n", (double)frames / drains);
+
+	return 0;
+}
+
+
 int
 main(int argc, char** argv)
 {
+	if (argc == 3 && strcmp(argv[1], "rearm") == 0) {
+		int32 mode = (int32)strtol(argv[2], NULL, 10);
+		if (mode != ENA_REARM_IN_HANDLER && mode != ENA_REARM_AFTER_DRAIN) {
+			fprintf(stderr, "%s: rearm mode must be %d (in handler) or %d "
+				"(after drain)\n", argv[0], ENA_REARM_IN_HANDLER,
+				ENA_REARM_AFTER_DRAIN);
+			return 1;
+		}
+
+		return send_value(argv[0], ENA_IOCTL_REARM_MODE, mode,
+			"io vector rearm mode set to");
+	}
+
+	if (argc >= 2 && strcmp(argv[1], "stats") == 0) {
+		int seconds = 10;
+		if (argc == 3)
+			seconds = (int)strtol(argv[2], NULL, 10);
+		if (argc > 3 || seconds < 1 || seconds > 3600) {
+			fprintf(stderr, "%s: stats takes an interval of 1-3600 seconds\n",
+				argv[0]);
+			return 1;
+		}
+		return show_stats(argv[0], seconds);
+	}
+
 	if (argc == 3 && strcmp(argv[1], "doorbells") == 0) {
 		int32 extra = (int32)strtol(argv[2], NULL, 10);
 		if (extra < 0 || extra > ENA_MAX_EXTRA_DOORBELLS) {
