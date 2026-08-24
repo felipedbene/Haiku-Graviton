@@ -21,7 +21,13 @@
 set -uo pipefail
 
 PEER_SCRIPT="${PEER_SCRIPT:-/opt/haiku/nettput/nettput-peer.py}"
-PEER_PORT="${PEER_PORT:-5301}"
+# 5302-5310 is the range the builder's security group accepts from the test
+# security group. 5301 is accepted only from the builder's *own* group, so a
+# transfer from any node we test on fails with "cannot connect: Operation would
+# block" -- a connect timeout, which is easy to misread as a dead guest. That cost
+# two boots before it was chased. Pick a port in the range, and pick a distinct one
+# per agent so two concurrent runs do not land on the same listener.
+PEER_PORT="${PEER_PORT:-5307}"
 KEY="${KEY:-/home/ubuntu/.ssh/haiku-ed25519}"
 IFACE="/dev/net/ena/0"
 BYTES="256M"
@@ -68,17 +74,35 @@ echo "ssh as: $HAIKU_USER"
 hssh() { timeout 300 ssh -n $SSH_OPTS "$HAIKU_USER@$HAIKU_IP" "$@"; }
 
 # ------------------------------------------------------------------- start peer
-pkill -f "nettput-peer.py" 2>/dev/null
-sleep 1
-PEER_LOG=/tmp/nettput-peer.log
+# Kill only a peer of ours, matched on *our* port, never `pkill -f nettput-peer.py`:
+# several agents share this builder, and a blanket match takes down someone else's
+# listener mid-run. That produced a set of runs that failed together and were
+# initially misattributed. Same reason the log and pidfile are per-port.
+PEER_LOG="/tmp/nettput-peer-$PEER_PORT.log"
+PEER_PIDFILE="/tmp/nettput-peer-$PEER_PORT.pid"
+if [ -f "$PEER_PIDFILE" ]; then
+	OLD_PID=$(cat "$PEER_PIDFILE" 2>/dev/null || true)
+	if [ -n "${OLD_PID:-}" ] && kill -0 "$OLD_PID" 2>/dev/null \
+			&& tr '\0' ' ' < "/proc/$OLD_PID/cmdline" 2>/dev/null \
+				| grep -q "nettput-peer.py"; then
+		echo "stopping our previous peer on port $PEER_PORT (pid $OLD_PID)"
+		kill "$OLD_PID" 2>/dev/null || true
+		sleep 1
+	fi
+	rm -f "$PEER_PIDFILE"
+fi
 nohup python3 "$PEER_SCRIPT" -p "$PEER_PORT" > "$PEER_LOG" 2>&1 &
 PEER_PID=$!
+echo "$PEER_PID" > "$PEER_PIDFILE"
 sleep 2
 if ! kill -0 "$PEER_PID" 2>/dev/null; then
-	echo "FATAL: peer failed to start:" >&2; cat "$PEER_LOG" >&2; exit 1
+	echo "FATAL: peer failed to start on port $PEER_PORT:" >&2
+	cat "$PEER_LOG" >&2
+	echo "  (if the port is in use, another agent may hold it -- pick another in 5302-5310)" >&2
+	exit 1
 fi
 echo "peer running as pid $PEER_PID on port $PEER_PORT"
-trap 'kill "$PEER_PID" 2>/dev/null' EXIT
+trap 'kill "$PEER_PID" 2>/dev/null; rm -f "$PEER_PIDFILE"' EXIT
 
 # ------------------------------------------------------------------ sanity gate
 echo
