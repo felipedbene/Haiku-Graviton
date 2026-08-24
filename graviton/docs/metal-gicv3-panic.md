@@ -352,19 +352,49 @@ processing. The guest MADT is byte-identical across `c7g.large`, `t4g.small` and
 coalescing path is unreachable on the guest fleet by firmware rather than by
 luck.
 
-### Metal: 64 of 64, on three distinct layouts
+### Metal: 64 of 64, on two hosts of different shapes
 
-| host | regions | redistributors per region |
-|---|---|---|
-| this engagement, A | 2 | 32 + 32 |
-| this engagement, B | 3 | 14 + 18 + 32 |
-| independent review, a/b/c | 2–3 | 33 + 13 + 18; 12 + 20 + 32; 32 + 32 |
+Two hosts were booted, deliberately, because they differ: host A came up as two
+regions of 32, host B as three of 14 + 18 + 32. Both reach `64
+redistributor(s)`, `found 64 logical cpus` and `lpis enabled on 64
+redistributor(s)`. See the cluster-shape finding above for the full fleet
+picture.
 
-Region sizes of 12, 13, 14, 18, 20, 32 and **33** have now been seen. The
-clusters are *not* fixed at 32 and the harvest pattern is arbitrary per host —
-which is exactly why coalescing by address delta is right, and why any "two runs
-of 32" special case would have been wrong. All hosts reach `64 redistributor(s)`,
-`found 64 logical cpus`, `lpis enabled on 64 redistributor(s)`.
+### Finding: `GICR_TYPER.Last` is not a reliable region terminator on Graviton3
+
+Named separately because it is exactly what a future reader would lean on, and
+because the original code used it as one of its two bounds.
+
+| host | redistributors setting `Last` |
+|---|---|
+| A (2 regions, 32+32) | **none at all** |
+| B (3 regions, 14+18+32) | **one**, mid-list, at the end of the low cluster (index 31, Aff2 = 32) |
+
+The architecture has `Last` mark the final redistributor of a contiguous range,
+but this firmware does not supply it consistently: one host omits it entirely,
+the other sets it where a *cluster* ends rather than where the address range
+does. So it cannot bound a walk. The region's size and the count derived from it
+do the real work now, and `Last` is only an early exit — which is safe, since
+exiting early on a spurious `Last` can only end a region that the count would
+have ended anyway.
+
+### Finding: nothing about cluster shape can be assumed
+
+Region sizes observed across seven distinct `c7g.metal` hosts, all running
+identical `GRVTN003` firmware:
+
+```
+12, 13, 14, 18, 20, 32, 33
+```
+
+as 2-region layouts (32+32) and 3-region layouts (14+18+32, 12+20+32,
+33+13+18). Cores are fused off or harvested per host, and a hole in the Aff2
+sequence splits what would otherwise be one run. There is no fixed cluster size,
+no fixed region count, and no fixed number of regions per socket half. Any code
+that special-cases "two runs of 32" is wrong on the majority of hosts. This list
+is the evidence for coalescing by address delta rather than by any assumed
+geometry — and it is also why one metal boot cannot validate the coalescing, so
+two hosts of different shapes were booted.
 
 ### Theories killed by measurement
 
@@ -385,10 +415,6 @@ of 32" special case would have been wrong. All hosts reach `64 redistributor(s)`
   every metal redistributor and `vlpis 0` on every guest one, so ArchRev and
   VLPIS agree on both platforms and cannot be told apart here. The revert to
   ArchRev rests on Arm IHI 0069G 12.10 alone, which is the right basis.
-* **`GICR_TYPER.Last` is a reliable region terminator.** No — and this one is a
-  live hazard. Host A sets `Last` on *no* redistributor at all; host B sets it
-  once, mid-list, at the end of the low cluster. The region size and count are
-  doing the real work; `Last` is only an early exit.
 
 ### 96 vCPU: the loader hang is fixed
 
@@ -421,7 +447,7 @@ RID 65535 would silently have no translation.
 
 ## 10. What remains: metal does not boot, and it is not the GIC
 
-All three metal hosts now end at:
+All metal hosts now end at:
 
 ```
 PCI: mechanism addr: e010000000, seg: 1, start: 0, end: ff
@@ -430,32 +456,10 @@ PCI: multiple segments not supported!driver busses/pci/ecam/driver_v1 init faile
 PANIC: did not find any boot partitions!
 ```
 
-`c7g.metal`'s MCFG (`AMAZON GRVTN003`) describes PCI **segment 1**, and
-`ECAMPCIControllerACPI::ReadResourceInfo()` rejects any segment other than 0. No
-PCI means no NVMe, which means no boot partition. The GIC brings up all 64 CPUs
-and the ITS is ready well before this point, so the interrupt controller is done;
-this is the next blocker and it lives in
-`src/add-ons/kernel/busses/pci/ecam/ECAMPCIControllerACPI.cpp:58`. Tracked
-separately as `fix/arm64-pci-segment`.
-
-Scoped, and it is smaller than the message suggests. **There is only one ECAM
-region on this machine — it is simply numbered 1.** Evidence: the MCFG is
-`0x3c` = 60 bytes, which is the 44-byte header plus exactly one 16-byte
-allocation; and the neighbouring `"multiple host bridges not supported!"`
-warning, which fires when `alloc + 1 != end`, appears **zero** times on either
-metal host. So nothing here needs to start carrying a segment: the ECAM offset is
-`(bus << 20) | (device << 15) | (function << 12)` regardless of segment number,
-and the segment only selects which base to use when there is more than one.
-The check is rejecting a valid single-bridge machine, and its diagnostic
-misdescribes what happened.
-
-Two things to verify while fixing it, rather than assumed:
-
-* whether anything downstream assumes segment 0 when binding ACPI namespace
-  devices to PCI devices;
-* that metal's absent PCI I/O window is tolerated. Its `_CRS` yields a bus range,
-  a 32-bit MMIO window and a 64-bit MMIO window, where the guest also yields an
-  I/O port range.
+The GIC brings up all 64 CPUs and the ITS is ready well before this point, so the
+interrupt controller is done. The next blocker is in the PCI ECAM controller and
+is tracked separately, in `graviton/docs/metal-pci-segment.md` and on
+`fix/arm64-pci-segment`.
 
 Still open beyond that:
 
