@@ -880,6 +880,95 @@ Deliberately not pursued: multi-queue. `qpair count: 2` is what the EBS
 controller offers, and Linux reports the same, so the per-CPU queue selection
 already in the driver is correct and complete for this hardware.
 
+## Finding 4: the serialisation quantified, a fix written, and why it needs a bake
+
+### The serialisation, measured exactly
+
+Stock driver, raw device, one thread, 15 s cells, three repetitions agreeing to
+**0.02%**:
+
+| block size | commands | throughput | mean latency | latency ÷ 256K latency |
+|---|---|---|---|---|
+| 256 KiB | 1 | 173.50 MiB/s | 1441 µs | 1.00 |
+| 512 KiB | 2 | 145.58 MiB/s | 3434 µs | **2.38** |
+| 1 MiB | 4 | 158.35 MiB/s | 6315 µs | **4.38** |
+| 2 MiB | 8 | 165.72 MiB/s | 12,068 µs | **8.37** |
+
+Latency scales with the **number of chopped commands**, essentially one-for-one.
+That is the serialisation, measured rather than inferred: a request is split at
+`max_xfer_size` and each piece waits for the previous one. Linux on the same
+volume gets 327.7 MiB/s at 512 KiB and 598.0 at 1 MiB, because it issues the same
+pieces concurrently.
+
+Note also that 512 KiB is *slower than* 256 KiB (145.6 vs 173.5) — two serial
+commands cost slightly more than twice one, so the chop is worse than neutral.
+
+### The fix
+
+`nvme_disk.cpp`: `submit_nvme_io_request()` is split out of
+`do_nvme_io_request()`, and `do_io()` now submits up to `NVME_IO_BATCH_SIZE` = 8
+chopped commands before reaping any of them. Reaping in submission order costs the
+slowest command rather than the sum. The qpair is now chosen **once per request**
+rather than per command, which also fixes a latent bug: `await_status()` polls a
+specific qpair and `get_qpair()` picks by current CPU, so a thread that migrated
+between submitting and waiting could previously poll a queue its command was not
+on.
+
+Only the contiguous prefix of successful commands is counted as transferred, so a
+later command completing cannot make an earlier failed one's bytes look valid.
+
+**Predicted, not measured:** 512 KiB → ~300 MiB/s, 1 MiB → ~550 MiB/s, i.e. close
+to the Linux figures, with 2 MiB (8 commands, exactly the batch size) benefiting
+most.
+
+### Why it is not verified: the boot disk driver cannot be hot-swapped
+
+The module was built, installed at
+`/boot/home/config/non-packaged/add-ons/kernel/drivers/disk/nvme_disk`, made
+executable, hash-verified against the builder, and the node cold-booted. The
+driver logs a deliberate version stamp (`io batch size: 8`) so the loaded copy can
+be identified rather than inferred from a number moving. **The stamp did not
+appear: the kernel loaded the stock module from `/boot/system`.**
+
+The reason is structural, not a wrong path. `kModulePaths` is walked backwards, so
+the user non-packaged directory really is searched first — but
+`B_USER_NONPACKAGED_ADDONS_DIRECTORY` resolves under **`/boot/home`**, which is on
+the filesystem that `nvme_disk` itself is required to mount. At the moment the
+kernel needs the disk driver, the directory that would override it does not exist
+yet. `/boot/system/add-ons` cannot be used instead because it is packagefs and
+read-only.
+
+**This corrects a piece of this project's operating knowledge.** "Drop a kernel
+module in `non-packaged/add-ons/kernel` and reboot, 4 minutes instead of 25" is
+true for modules loaded *after* the boot volume is mounted — a network driver, a
+non-root file system. It is **structurally impossible for the boot storage
+driver**, and the failure is silent: the module sits there, the machine boots
+happily, and it is the old code that runs. Anyone testing a storage driver this
+way and reading a number would conclude the change did nothing.
+
+So the change is committed but **unverified**, and it needs an image bake — which
+is the operator's job. The version stamp is deliberately left in so that the first
+boot of a baked image proves which driver is running before any number is taken
+from it.
+
+### What to run once it is baked
+
+```bash
+# expect ~300 MiB/s at 512K and ~550 at 1M, against the 145.6/158.4 baseline
+disktput -f /dev/disk/nvme/1/raw -m seqread -b 512K -t 1 -T 15 -s 8G -J
+disktput -f /dev/disk/nvme/1/raw -m seqread -b 1M   -t 1 -T 15 -s 8G -J
+disktput -f /dev/disk/nvme/1/raw -m seqread -b 2M   -t 1 -T 15 -s 8G -J
+# and prove it did not corrupt anything -- this is a data path change
+disktput -f /dev/disk/nvme/1/raw -m seqwrite -b 1M -t 4 -n 4G -s 8G -P -y
+disktput -f /dev/disk/nvme/1/raw -m verify   -b 1M -t 4 -n 4G -s 8G
+# negative control: 256K is one command and must NOT move
+disktput -f /dev/disk/nvme/1/raw -m seqread -b 256K -t 1 -T 15 -s 8G -J
+```
+
+The 256 KiB row is the negative control: it is a single command, so the batching
+cannot touch it, and if it moves then something other than batching changed.
+
+
 ## Scoping finding 2: read-ahead in the file cache
 
 The measured cost: reading a file through the page cache runs at **123.5 MiB/s
