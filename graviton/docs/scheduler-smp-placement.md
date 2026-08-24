@@ -1,6 +1,7 @@
 # SMP work is placed badly and never repaired
 
-Status: **design ready for review; not implemented.** The causation question has
+Status: **implemented** on `fix/scheduler-saturated-migration`, three commits,
+awaiting hardware A/B. Design was reviewed and approved before implementation. The causation question has
 been settled by measurement on hardware (§1.7) without needing a bake. One
 remaining question — the mechanism of defect B — needs the kernel instrumentation
 in §5 and therefore one image bake, but it does not change the shape of the fix.
@@ -455,6 +456,30 @@ synchronously** (`arch/arm64/arch_debug_console.cpp:70-82`, via
 `debug.cpp:1553`). One line is milliseconds — and §1.4 establishes that the
 defect *disappears* once spawns are separated by about a millisecond. Logging
 inside the burst would stagger it and report health. A textbook Heisenbug.
+
+### On this platform, `dprintf` is not a probe — it is a barrier
+
+Worth stating as a general rule, because it will catch other work in this project.
+
+`dprintf()` reaches the console through `arch_debug_serial_puts()`, which loops
+over the string calling `arch_debug_serial_putchar()` — one UART register write per
+character, synchronously, with no buffering
+(`arch/arm64/arch_debug_console.cpp:61-82`, reached from `debug.cpp:1553`). An
+80-character line is on the order of **milliseconds**.
+
+So any timing-sensitive kernel path instrumented with `dprintf` is not being
+observed, it is being **serialised**. The effect is not a perturbation to be
+corrected for afterwards; it is larger than most of the phenomena worth measuring.
+Here the defect vanishes once thread spawns are separated by **5 µs** (§1.7), so a
+single `dprintf` inside `choose_core()` would have staggered the burst by roughly
+a thousand times the threshold and reported a healthy scheduler. The instrument
+would have created the very condition that hides the bug.
+
+The rule: **to observe anything in the kernel faster than a millisecond, record to
+memory and format later.** Recording must be a few plain stores plus at most one
+atomic; every `printf`-family call, every lock, and every allocation belongs in the
+deferred dump, which must itself run in ordinary thread context. This is also why
+the dump here is triggered by a syscall rather than from the scheduler.
 
 Implemented instead (`scheduler_placement_trace.{h,cpp}`, `SCHEDULER_TRACE_PLACEMENT`,
 explicitly **not for merge**):
