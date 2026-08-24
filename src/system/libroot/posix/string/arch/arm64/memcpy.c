@@ -9,46 +9,159 @@
 #undef memcpy
 
 
-/*!	An arm64 memcpy() that does not care whether its arguments agree in
-	alignment.
+/*!	An arm64 memcpy() that does not fall to a byte loop on mismatched alignment.
 
-	arm64 previously used string/arch/generic/generic_memcpy.c, which reaches its
-	word-at-a-time loop only when source and destination are misaligned by the
-	*same* amount, and copies the whole region one byte at a time otherwise. That
-	condition exists for architectures on which an unaligned load traps or is
-	microcoded. arm64 is not one of them: it performs unaligned loads and stores
-	in hardware, so the requirement bought nothing here and cost a byte loop in
-	the case that matters most.
+	arm64 previously used string/arch/generic/generic_memcpy.c, which reaches
+	its word-at-a-time loop only when source and destination are misaligned by
+	the *same* amount and copies the whole region one byte at a time otherwise.
+	That condition exists for architectures on which an unaligned access traps
+	or is microcoded. arm64 performs unaligned accesses to Normal memory in
+	hardware, so the requirement bought nothing here and cost a byte loop in the
+	case that matters most.
 
 	The case that matters most is measured, not assumed. A received TCP payload
 	begins 54 bytes into the frame (14 ethernet + 20 IPv4 + 20 TCP), so copying
 	it out to an application buffer obtained from malloc() puts a source at
 	6 mod 8 against an aligned destination -- mismatched, hence the byte loop.
-	Worse, the mismatch is self-sustaining across a fragmented buffer: once the
-	first misaligned segment has advanced the destination out of phase, every
-	following segment copy is mismatched too, even the ones whose source is
-	perfectly aligned. On a c7g.large moving 4.9 Gbit/s that single effect was
-	3.5 of the 19 microseconds of CPU spent per 9 KB frame; measured on hardware
-	with tests/system/benchmarks/memcpybench.c, the mismatched case cost
-	0.388 ns/byte against 0.074 ns/byte aligned -- a factor of 5.2 -- and this
-	routine does 0.058 ns/byte at every alignment.
+	The mismatch is also self-sustaining across a fragmented net_buffer: once
+	the first misaligned segment has advanced the destination out of phase,
+	every following segment copy is mismatched too, even the ones whose source
+	is perfectly aligned.
 
-	So misalignment is absorbed on the load side, and only the destination is
-	aligned, because stores are the side that benefits from it. The body moves 32
-	bytes per iteration rather than 8 for a second reason the same measurements
-	showed: reading memory a device has just written by DMA is a cache miss every
-	time, and a loop with one load in flight is bounded by memory latency rather
-	than bandwidth. Four independent loads per iteration give the core enough to
-	overlap.
+	Structure, and why each part is the way it is:
+
+	- Sizes up to 32, and the tail of a longer copy, are done with a fixed
+	  number of overlapping fixed-width accesses and no loop at all. Short
+	  copies are much the commonest kind, and the first version of this routine
+	  byte-copied everything below 16 bytes -- which lost up to 50% against the
+	  generic routine at n = 8, because a short copy whose operands *do* agree
+	  in alignment is exactly the case the generic routine handled well. Every
+	  access lies inside [dest, dest + count), so a few destination bytes are
+	  written twice; memcpy is free to do that, and it is much cheaper than a
+	  branch per byte.
+
+	- 33..128 bytes are done with at most four 32-byte accesses, still with no
+	  loop and no alignment work, because below roughly this size a prologue
+	  costs more than aligned stores save.
+
+	- Only above 128 bytes is the destination aligned, and it is aligned to 16,
+	  not 8. The first version of this routine aligned to 8 on the stated
+	  grounds that "stores are the side that benefits"; that reasoning did not
+	  survive contact with the compiler, which widens the body to 16-byte
+	  accesses (ldr q/str q in libroot, ldp/stp in the kernel, which is built
+	  -fno-tree-vectorize). Aligning to 8 and then storing 16 at a time leaves
+	  half the stores crossing an alignment boundary anyway, and measured
+	  *slower* at 8961 bytes than the case where the prologue happened to align
+	  the source instead. Align to the width actually emitted, or do not
+	  bother.
+
+	- The body moves 64 bytes an iteration. Reading memory a device has just
+	  written by DMA misses in every cache, and a loop with one access in
+	  flight is bounded by memory latency rather than by bandwidth.
+
+	Two properties are relied upon elsewhere and should not be lost. The routine
+	never reads or writes outside [dest, dest + count) -- which is what makes it
+	safe when either end abuts an unmapped page, and is checked by
+	tests/system/libroot/posix/string/memcpy_test.c against PROT_NONE guard
+	pages. And dest == source returns immediately without writing, because the
+	generic routine short-circuited it, the tree has callers that rely on it,
+	and this routine is also user_memcpy() and the kernel's memcpy: a write to a
+	read-only mapping is a caught SIGSEGV in userland but a KDL panic in the
+	kernel.
+
+	Known limitation, arm64-general rather than specific to this routine: an
+	unaligned or wider-than-8-byte access to Device-nGnRnE memory raises an
+	Alignment fault, and vm_map_physical_memory() silently defaults to
+	B_UNCACHED_MEMORY -- which VMSAv8TranslationMap maps to Device-nGnRnE -- for
+	any caller that does not name a memory type. Copying to or from MMIO with
+	memcpy() was already wrong on arm64; with this routine it fails rather than
+	working by accident. See graviton/docs/arm64-memcpy.md for the audit of
+	which callers that reaches.
 */
 
 
-/*!	Spells "load that may be unaligned" in a way the compiler turns into a plain
-	ldr, rather than into a call back into memcpy() -- which is what
-	__builtin_memcpy() would become here, since this file is compiled
-	-fno-builtin, and would recurse forever.
+/*!	Unaligned, may-alias access types.
+
+	aligned(1) tells the compiler the pointer may be unaligned, so it emits a
+	plain ldr/str instead of assuming otherwise. may_alias is what makes the
+	uint8_t-to-wider punning below defined rather than merely working: the tree
+	is built -fno-strict-aliasing (build/jam/ArchitectureRules), so it would
+	work without it, but the one routine whose miscompilation is undetectable
+	should not rest on a global build flag.
+
+	__uint128_t rather than a two-element struct on purpose. A struct assignment
+	is exactly the shape the compiler is permitted to lower into a call to
+	memcpy, and a call to memcpy from inside memcpy does not return; a scalar
+	assignment cannot become a call. This is verified on the generated object
+	code for both the kernel and libroot builds, not assumed -- see the doc.
 */
-typedef uint64_t __attribute__((aligned(1))) unaligned_uint64;
+typedef uint32_t __attribute__((may_alias, aligned(1))) unaligned_uint32;
+typedef uint64_t __attribute__((may_alias, aligned(1))) unaligned_uint64;
+typedef __uint128_t __attribute__((may_alias, aligned(1))) unaligned_uint128;
+
+
+static inline void
+copy_16(uint8_t* d, const uint8_t* s)
+{
+	*(unaligned_uint128*)d = *(const unaligned_uint128*)s;
+}
+
+
+static inline void
+copy_32(uint8_t* d, const uint8_t* s)
+{
+	const unaligned_uint128 a = ((const unaligned_uint128*)s)[0];
+	const unaligned_uint128 b = ((const unaligned_uint128*)s)[1];
+
+	((unaligned_uint128*)d)[0] = a;
+	((unaligned_uint128*)d)[1] = b;
+}
+
+
+static inline void
+copy_64(uint8_t* d, const uint8_t* s)
+{
+	const unaligned_uint128 a = ((const unaligned_uint128*)s)[0];
+	const unaligned_uint128 b = ((const unaligned_uint128*)s)[1];
+	const unaligned_uint128 c = ((const unaligned_uint128*)s)[2];
+	const unaligned_uint128 e = ((const unaligned_uint128*)s)[3];
+
+	((unaligned_uint128*)d)[0] = a;
+	((unaligned_uint128*)d)[1] = b;
+	((unaligned_uint128*)d)[2] = c;
+	((unaligned_uint128*)d)[3] = e;
+}
+
+
+/*!	Copies 0..32 bytes in a fixed number of accesses, without a loop.
+
+	The pairs overlap for any size that is not an exact multiple of the access
+	width, which writes a few destination bytes twice and reads a few source
+	bytes twice. Both stay strictly inside the caller's range, so this cannot
+	fault where a byte loop would not.
+*/
+static inline void
+copy_0_to_32(uint8_t* d, const uint8_t* s, size_t count)
+{
+	if (count >= 16) {
+		copy_16(d, s);
+		copy_16(d + count - 16, s + count - 16);
+	} else if (count >= 8) {
+		*(unaligned_uint64*)d = *(const unaligned_uint64*)s;
+		*(unaligned_uint64*)(d + count - 8)
+			= *(const unaligned_uint64*)(s + count - 8);
+	} else if (count >= 4) {
+		*(unaligned_uint32*)d = *(const unaligned_uint32*)s;
+		*(unaligned_uint32*)(d + count - 4)
+			= *(const unaligned_uint32*)(s + count - 4);
+	} else if (count > 0) {
+		/* 1..3 bytes in three accesses, which coincide for 1 and overlap
+		   for 2. */
+		d[0] = s[0];
+		d[count >> 1] = s[count >> 1];
+		d[count - 1] = s[count - 1];
+	}
+}
 
 
 void*
@@ -57,50 +170,51 @@ memcpy(void* dest, const void* source, size_t count)
 	uint8_t* d = (uint8_t*)dest;
 	const uint8_t* s = (const uint8_t*)source;
 
-	/* Below a couple of words the alignment work costs more than it saves, and
-	   short copies are much the most frequent kind. */
-	if (count < 16) {
-		while (count > 0) {
-			*d++ = *s++;
-			count--;
-		}
+	if (count == 0 || dest == source)
+		return dest;
+
+	if (count <= 32) {
+		copy_0_to_32(d, s, count);
 		return dest;
 	}
 
-	/* Align the destination. count >= 16 above guarantees this cannot exhaust
-	   it, so the loops below need no further guarding. */
-	while (((uintptr_t)d & 7) != 0) {
-		*d++ = *s++;
-		count--;
+	if (count <= 128) {
+		copy_32(d, s);
+		if (count > 64) {
+			copy_32(d + 32, s + 32);
+			if (count > 96)
+				copy_32(d + count - 64, s + count - 64);
+		}
+		copy_32(d + count - 32, s + count - 32);
+		return dest;
 	}
 
-	while (count >= 32) {
-		const uint64_t a = ((const unaligned_uint64*)s)[0];
-		const uint64_t b = ((const unaligned_uint64*)s)[1];
-		const uint64_t c = ((const unaligned_uint64*)s)[2];
-		const uint64_t e = ((const unaligned_uint64*)s)[3];
+	/* Align the destination to 16 by copying 16 unaligned bytes and then
+	   advancing to the boundary. count > 128 above, so this cannot exhaust it
+	   and the loop below needs no further guarding. The bytes between the
+	   boundary and d + 16 are written a second time by the loop, with the same
+	   data. */
+	{
+		const size_t advance = 16 - ((uintptr_t)d & 15);
 
-		((uint64_t*)d)[0] = a;
-		((uint64_t*)d)[1] = b;
-		((uint64_t*)d)[2] = c;
-		((uint64_t*)d)[3] = e;
-
-		d += 32;
-		s += 32;
-		count -= 32;
+		copy_16(d, s);
+		d += advance;
+		s += advance;
+		count -= advance;
 	}
 
-	while (count >= 8) {
-		*(uint64_t*)d = *(const unaligned_uint64*)s;
-		d += 8;
-		s += 8;
-		count -= 8;
+	while (count >= 64) {
+		copy_64(d, s);
+		d += 64;
+		s += 64;
+		count -= 64;
 	}
 
-	while (count > 0) {
-		*d++ = *s++;
-		count--;
-	}
+	if (count >= 32) {
+		copy_32(d, s);
+		copy_32(d + count - 32, s + count - 32);
+	} else
+		copy_0_to_32(d, s, count);
 
 	return dest;
 }
