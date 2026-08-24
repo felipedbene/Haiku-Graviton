@@ -132,14 +132,9 @@ in the reference section.
   binary, and one of them overwrote a working one. An empty file deploys
   perfectly happily and a shell reports success.
 
-### Deploying to a DeBeOS node: base64 over ssh truncates at 64 KiB
-
-`scp` to a DeBeOS node does not work; the established workaround is
-`base64 -w 200 <file> | ssh <node> 'base64 -d > /path'`. That has a limit worth
-recording: a single ssh stdin transfer to this sshd **truncates at exactly 65536
-bytes and then drops the connection**, so any binary over 64 KiB of base64
-arrives corrupt or empty. `disktput-run` and the deploy path split the base64
-into 32 KiB pieces and append them, then verify the hash.
+Deploying the binary to the node has its own failure mode that silently produces
+an empty file; it is important enough to be stated as a rule rather than a note.
+See "Rules this exercise established" below.
 
 ## The reference ceiling: Linux + fio on the same volume
 
@@ -216,7 +211,11 @@ DeBeOS block sweep below was run to test.
 | 16 | 16,534 |
 | 32 | 16,153 |
 
-### Disproven: "only 2 qpairs" is not a DeBeOS limitation
+### Disproven, and a correction to this project's stated premise: "only 2 qpairs" is not a DeBeOS limitation
+
+This one contradicts a premise the storage work was handed: that the NVMe driver
+was "already multi-queue by design" and merely needed verifying. That premise was
+wrong in the direction described *and* irrelevant in the direction that matters.
 
 DeBeOS logs `qpair count: 2` on a 16-vCPU instance, which looks like the
 negotiation in `nvme_disk.cpp` giving up 14 queues. It is not: Linux on the same
@@ -565,61 +564,87 @@ The 40 GiB `tf` file also came back at full size, and BFS remounted with no
 journal replay error. The checksums are `sha256sum` on the node, so the verdict
 does not rest on the same tool that wrote the data.
 
-**Conclusion: the write path is durable on EBS.** The 3-second periodic flush
-fired and got un-`fsync`ed data to the device inside a 5-second window, which is a
-direct regression test for the page-writer bug — the failure that lost an sshd
-host key would have shown up here as `zero` blocks, and there are none. `fsync`'s
-missing device flush costs nothing because the controller has no volatile write
-cache, and the metadata that makes the data reachable was committed alongside it.
+**Conclusion: the write path is durable on EBS — and that is a property of EBS,
+not evidence that `fsync` is correct.**
 
-**Scope of the claim:** this shows the *page writer and journal* are behaving,
-tested once, at one file size, on a device with no volatile write cache. It does
-**not** show that a sub-3-second window is safe, and it does not generalise to
-hardware where `B_FLUSH_DRIVE_CACHE` is not a no-op.
+Both halves of that sentence are load-bearing and must travel together.
 
-## Error 1, caught: an unaligned buffer measures a different code path
+What was demonstrated: the 3-second periodic flush fired and got un-`fsync`ed data
+to the device inside a 5-second window. That is a direct regression test for the
+page-writer bug — the failure that lost an sshd host key would have appeared here
+as `zero` blocks, and there are none — and the metadata making the data reachable
+was committed alongside it.
 
-`nvme_disk` checks every vec of a request and diverts to a bounce path if the
-middle vecs are not page-aligned in address and length. That path is capped by
-`kMaxBounceBufferSize` in `dma_resources.cpp`, which is `4 * B_PAGE_SIZE` =
-**16 KiB**, so a misaligned 256 KiB request is not one command but sixteen
-sequential ones — and a bounced *write* additionally takes `rounded_write_lock`
-exclusively, serialising against every other write on the device.
+What was **not** demonstrated: that `fsync()` is a durability barrier. It is not.
+`fsync()` never issues `B_FLUSH_DRIVE_CACHE` (traced above), so it returns once the
+data has been handed to the driver, not once the device has committed it. The only
+reason that is safe here is that this controller advertises **no volatile write
+cache** — Linux on the same volume reports `write_cache: write through` and
+`fua: 0`, so an EBS write is durable on acknowledgement and a flush would be a
+no-op. **On any device with a volatile write cache the identical code would
+acknowledge an `fsync` for data that a power loss then destroys.**
 
-The first version of `disktput` used `malloc`, which guarantees no such
-alignment. It was changed to `posix_memalign` before any number was taken, and
-alignment became a reportable parameter so the cliff could be measured on purpose
-rather than stumbled into.
+So this result licenses "DeBeOS does not lose data on Graviton/EBS". It does not
+license "DeBeOS's `fsync` is correct", and it must not be quoted as the latter.
+The gap is a genuine portability defect that happens to be free on the only
+hardware this project targets. Also tested once, at one file size, and it says
+nothing about a sub-3-second window.
 
-## Error 2, caught: fixed-size runs measured an EBS burst, not throughput
+## Rules this exercise established
 
-The first concurrency sweep used a fixed 1 GiB per cell and produced this:
+Two of the errors below were caught before they became published numbers. Both
+are general, both would silently invalidate an entire matrix rather than produce
+an obviously wrong cell, and both are stated here as rules rather than as
+anecdotes.
 
-| threads | seqread | scaling |
-|---|---|---|
-| 1 | 173.4 MiB/s | 1.00× |
-| 2 | 344.5 MiB/s | 1.99× |
-| 4 | 685.4 MiB/s | 3.95× |
-| 8 | 1359.9 MiB/s | 7.84× |
-| 16 | **2635.5 MiB/s** | **15.20×** |
+### Rule: repeatability is not validity
 
-Consistent to under 1% across three repetitions, which is exactly what makes it
-seductive. It is also **impossible**: 2,635 MiB/s is 2.2× the instance's
-documented hard maximum of 1,250 MB/s, a limit enforced at the Nitro card. A
-fixed byte count makes each cell a different duration — the 16-thread cell
-finished in 0.39 s — and EBS rate limiting is a token bucket that a third of a
-second does not begin to drain. Every cell was measuring burst credit, and the
-higher the thread count, the shorter the run and the less the limiter bound.
+The strongest illustration this project has. A fixed-size concurrency sweep
+produced 2635 MiB/s at 16 threads — **2.2× the instance's hard maximum of
+1250 MB/s, a limit enforced at the Nitro card** — and did so **repeatably to
+under 1% across three repetitions**. Three reps agreed because all three were
+wrong in the same way: each cell was short enough (0.39 s at the top of the
+sweep) that the EBS token bucket never bound, so every cell measured burst
+credit.
 
-Repeatability across three reps did nothing to catch this, because all three reps
-were wrong in the same way. Only comparing against the documented hardware
-ceiling caught it. The tool grew `-T` for this, and the harness now times every
-cell rather than sizing it.
+Repetition detects noise. It cannot detect a systematic artefact, because a
+systematic artefact repeats. **The only thing that caught this was comparing the
+result against the hardware's documented ceiling.** Therefore: every throughput
+number gets checked against a published limit before it is believed, and a number
+that exceeds one is treated as a broken measurement rather than a discovery.
 
-The scaling *shape* below 8 threads survives this correction and is the real
-finding; the absolute numbers above 4 threads did not.
+### Rule: `malloc` and `posix_memalign` measure different code paths
 
-## Disproven: the page writer bug is not still present
+`malloc` guarantees no page alignment. `nvme_disk` diverts a request whose vecs
+are not page-aligned to a bounce path capped at `kMaxBounceBufferSize`
+(`4 * B_PAGE_SIZE` = 16 KiB), so a misaligned 256 KiB request becomes sixteen
+sequential commands, and a bounced write additionally takes `rounded_write_lock`
+exclusively. A benchmark that simply `malloc`s its buffer therefore measures
+whichever path that day's allocator happened to hand it, and the two differ by
+more than an order of magnitude.
+
+Therefore: an I/O buffer is `posix_memalign`ed, and its alignment is **reported
+with the result**, so no figure can be quoted without the code path it came from.
+`disktput` takes `-A`/`-U` so alignment is a variable rather than an accident.
+
+### Rule: deploying to a DeBeOS node requires chunking and a hash check
+
+Not an optimisation — a correctness requirement, because this failure mode
+**fails closed in the worst possible way: you get a file, it is just empty.**
+
+`scp` to a DeBeOS node does not work, and the documented workaround
+`base64 -w 200 <file> | ssh <node> 'base64 -d > /path'` **truncates at exactly
+65536 bytes and then drops the connection.** Any binary over 64 KiB of base64
+arrives empty or corrupt. It happened twice while this was being written, and
+once it overwrote a working binary with a zero-byte one; the shell reported
+success both times, and a subsequent run reported nothing at all rather than
+failing loudly.
+
+Therefore the standard is: **split the base64 into 32 KiB pieces, append them,
+and compare SHA-256 on the node against the builder before measuring anything.**
+`disktput-run` prints the build stamp and the hash for exactly this reason.
+
+## Disproven, and a correction to a reported regression: the page writer bug is not still present
 
 A code review of this tree reported that the page-writer flush bug was
 unfixed — that `vm_page_writer.cpp` still reads
@@ -652,11 +677,14 @@ under the same one-request-per-thread condition.
 | seq write, depth 16, sustained | 1008.0 MiB/s | ~1008 volume ceiling | **at ceiling** |
 | random 4 KiB read, depth 16 | 17,066 IOPS | 16,534 / 16,000 provisioned | **at ceiling** |
 | BFS read vs raw read | 0–1.5% overhead | — | **free** |
-| durability across hard power loss | 0 bad blocks | — | **passes** |
+| durability across hard power loss | 0 bad blocks | — | **passes on EBS** ¹ |
 | seq read, 1 MiB, depth 1 | 158.3 MiB/s | 598.0 | **3.8× gap** |
 | BFS buffered write reproducibility | 4.4× between reps | 1.001× uncached | **defect** |
 | BFS write, depth 16 | 192.4 MiB/s | 1020 raw | **5.3× gap** |
 | read through the page cache | 123.5 MiB/s | 173.2 uncached | **cache costs 29%** |
+
+¹ Passes *because EBS has no volatile write cache*, not because `fsync` is a
+barrier — it is not. See Result 5; the caveat must travel with the claim.
 
 Four things are worth someone's time, in this order:
 
