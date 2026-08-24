@@ -7,7 +7,7 @@ version: 0.2
 #   graviton/ssh/build-openssh-arm64.sh  (cross-build OpenSSH -> hpkg)
 #   cp graviton/ssh/UserBuildConfig      (jam injection hook)
 #   jam @minimum-mmc                     (two passes: stage packages, then inject)
-#   make-gpt-image.sh                    (MBR mmc -> GPT raw, from haiku-on-ec2)
+#   make-gpt-image.sh                    (MBR mmc -> GPT raw)
 #
 # The source artifact is the Haiku tree itself, so $CODEBUILD_SRC_DIR is HAIKU_TOP.
 # Everything below only *reads* the recipe from graviton/ — no logic is rewritten.
@@ -49,8 +49,6 @@ phases:
           (cd "$BUILDTOOLS/jam" && make && ./jam0 install)
           command -v jam || { echo "jam still not on PATH after install" >&2; exit 1; }
         fi
-      # haiku-on-ec2 for scripts/make-gpt-image.sh (MBR->GPT converter).
-      - git clone --depth 1 --branch "$HAIKU_ON_EC2_BRANCH" "$HAIKU_ON_EC2_REPO" "$HAIKU_TOP/../haiku-on-ec2"
       # Try to restore a cross-tools cache to skip the ~1h build.
       - CT_CACHE="s3://$WORK_BUCKET/$CACHE_PREFIX/cross-tools-arm64.tar.zst"
       - mkdir -p "$GEN"
@@ -114,7 +112,7 @@ phases:
         [ -n "$MMC" ] || MMC="$(find "$GEN" -maxdepth 2 \( -name 'haiku-mmc.image' -o -name 'haiku-*.mmc' \) 2>/dev/null | head -1)"
         test -n "$MMC" || { echo "no mmc/sd image produced by jam" >&2; ls -l "$GEN"/*.image "$GEN"/*.mmc 2>/dev/null || true; exit 1; }
         echo "mmc image: $MMC"
-      - bash "$HAIKU_TOP/../haiku-on-ec2/scripts/make-gpt-image.sh" "$MMC" "$HAIKU_TOP/haiku-ec2.raw" "$ROOT_VOLUME_BYTES"
+      - bash "$HAIKU_TOP/graviton/builder/make-gpt-image.sh" "$MMC" "$HAIKU_TOP/haiku-ec2.raw" "$ROOT_VOLUME_BYTES"
   post_build:
     commands:
       - export HAIKU_TOP="$CODEBUILD_SRC_DIR"
