@@ -5,16 +5,31 @@
 
 # The arm64 `memcpy()`: design, verification, and what it is worth
 
-Status: **verified in userland on real hardware, against the exact object code
-that ships; not yet booted.** Sections 1-5 were written *before* any of it was
-run, so the plan can be judged on more than its conclusion, and they are left as
-written even where the results went on to contradict them -- §3.3 and §3.4 in
-particular were partly wrong, and §6 says how. Section 6 is the result.
+Status: **booted and measured on real Graviton hardware. Recommended for
+merge**, with two named gaps (§8.5, §9.3).
 
-Recommendation: **do not merge until it has booted.** Everything short of a boot
-now passes, including five defects that this work found and fixed, three of them
-after the change had already been reviewed. See §6.7 for exactly what a bake
-would settle.
+Sections 1-5 were written *before* any of it was run, so the plan can be judged
+on more than its conclusion, and they are left as written even where the results
+went on to contradict them -- §3.3 and §3.4 in particular were partly wrong, and
+§6 says how. §6 is the userland result against the exact object code that ships;
+§7 is the reusable technique that made it possible; §8 is the boot and the
+on-node artifact and correctness checks; §9 is the measurement.
+
+Headline: **receive CPU cost down 8.4%** (2676.2 -> 2452.4 µs/MiB, three
+independent boots per image, disjoint ranges), throughput unchanged because there
+is no rate headroom left. **509,882 correctness checks, 0 failures**, against the
+node's own libroot, with the test's negative controls confirming the checks are
+not vacuous. Six defects found and fixed along the way, four of them after the
+change had already been reviewed once, and one of them a bug this work introduced
+into its own fix and then caught.
+
+Two things are *not* done and should not be assumed: `ena_fault` reset injection
+could not run because the image was not built with `ENA_DEBUG_FAULT_INJECTION`
+(§8.5), and the transmit figure (~5%) is indicative rather than established
+because it sits inside a documented 19% boot-to-boot bimodality and the option
+that suppresses that spread is on another branch (§9.3). And one number in this
+document was revised **down** from 12.6% to 8.4% when it was measured across
+boots instead of within one (§9.2).
 
 ## 1. What the change is
 
