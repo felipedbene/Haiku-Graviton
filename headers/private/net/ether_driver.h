@@ -28,6 +28,14 @@ enum {
 
 	ETHER_SEND_NET_BUFFER,					/* send a net_buffer */
 	ETHER_RECEIVE_NET_BUFFER,				/* receive a net_buffer */
+
+	ETHER_GET_TX_CHECKSUM_OFFLOAD,
+		/* which checksums the device will compute on transmit (uint32 *),
+		   as net_device_tx_checksum bits -- see net_device.h. Optional: a
+		   driver that does not implement it offloads nothing, which is the
+		   safe answer and the one every existing driver gives by failing the
+		   call. Append new opcodes here and nowhere else: the values are
+		   positional and shared with out-of-tree drivers. */
 };
 
 

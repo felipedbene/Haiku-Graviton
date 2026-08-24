@@ -194,6 +194,20 @@ ethernet_up(net_device *_device)
 			device->supports_net_buffer = true;
 	}
 
+	// Only worth asking of a driver that takes whole net_buffers: the
+	// read()/write() fallback below hands the driver a flat copy and there is
+	// nothing there to carry a per-buffer "finish this checksum" request.
+	device->tx_checksum_offload = 0;
+	if (device->supports_net_buffer) {
+		uint32 offload = 0;
+		if (ioctl(device->fd, ETHER_GET_TX_CHECKSUM_OFFLOAD, &offload,
+				sizeof(offload)) == 0) {
+			device->tx_checksum_offload = offload;
+			dprintf("%s: transmit checksum offload 0x%" B_PRIx32 "\n",
+				device->name, offload);
+		}
+	}
+
 	if (ioctl(device->fd, ETHER_GETFRAMESIZE, &device->frame_size, sizeof(uint32)) < 0) {
 		// this call is obviously optional
 		device->frame_size = ETHER_MAX_FRAME_SIZE;
@@ -259,6 +273,9 @@ ethernet_down(net_device *_device)
 	ethernet_device *device = (ethernet_device *)_device;
 
 	MutexLocker _(sListLock);
+
+	// Whatever the driver advertised applies only while it is open.
+	device->tx_checksum_offload = 0;
 
 	// if the device is still part of the list, remove it
 	if (device->GetDoublyLinkedListLink()->next != NULL

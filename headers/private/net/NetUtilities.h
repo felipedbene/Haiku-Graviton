@@ -63,19 +63,25 @@ public:
 		return *this;
 	}
 
-	inline operator uint16()
+	//! The folded sum, *not* complemented -- what a partial checksum carries.
+	inline uint16 Sum()
 	{
 		while (fSum >> 16) {
 			fSum = (fSum & 0xffff) + (fSum >> 16);
 		}
-		uint16 result = (uint16)fSum;
-		result ^= 0xFFFF;
-		return result;
+		return (uint16)fSum;
+	}
+
+	inline operator uint16()
+	{
+		return (uint16)(Sum() ^ 0xFFFF);
 	}
 
 	static uint16 PseudoHeader(net_address_module_info* addressModule,
 		net_buffer_module_info* bufferModule, net_buffer* buffer,
 		uint16 protocol);
+	static uint16 PartialPseudoHeader(net_address_module_info* addressModule,
+		net_buffer* buffer, uint16 protocol);
 
 private:
 	uint32 fSum;
@@ -92,6 +98,29 @@ Checksum::PseudoHeader(net_address_module_info* addressModule,
 	checksum << (uint16)htons(protocol) << (uint16)htons(buffer->size)
 		<< Checksum::BufferHelper(buffer, bufferModule);
 	return checksum;
+}
+
+
+/*!	The pseudo-header half of a layer-4 checksum, and nothing else.
+
+	Stored raw in the packet's checksum field it is a *partial* checksum: a
+	device asked to finish the job sums the remaining bytes -- which includes
+	this field -- folds and complements. This is the same convention as Linux's
+	CHECKSUM_PARTIAL and as what ENA calls l4_csum_partial.
+
+	Unlike PseudoHeader() this never walks the payload, so it costs a handful of
+	adds regardless of how large the segment is. That difference is the entire
+	point of transmit checksum offload.
+*/
+inline uint16
+Checksum::PartialPseudoHeader(net_address_module_info* addressModule,
+	net_buffer* buffer, uint16 protocol)
+{
+	Checksum checksum;
+	addressModule->checksum_address(&checksum, buffer->source);
+	addressModule->checksum_address(&checksum, buffer->destination);
+	checksum << (uint16)htons(protocol) << (uint16)htons(buffer->size);
+	return checksum.Sum();
 }
 
 
