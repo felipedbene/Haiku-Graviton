@@ -14,6 +14,8 @@
 
 #include <util/DoublyLinkedList.h>
 
+#include "utility.h"
+
 
 struct net_device_handler : DoublyLinkedListLinkImpl<net_device_handler> {
 	net_receive_func	func;
@@ -46,6 +48,18 @@ struct net_device_interface : DoublyLinkedListLinkImpl<net_device_interface> {
 
 	thread_id			consumer_thread;
 	net_fifo			receive_queue;
+
+	// Receive-drop attribution. net_device::stats.receive.dropped is a single
+	// counter incremented from two unrelated failures in the reader thread, so
+	// on its own it cannot say which one is happening. These split it; their sum
+	// is the aggregate, which keeps its existing meaning for every reader.
+	uint64				receive_deframe_dropped;
+	uint64				receive_enqueue_dropped;
+
+	// Occupancy instrumentation for receive_queue. See utility.h; this is what
+	// lets the fifo limit being reached be shown rather than inferred from a
+	// drop count.
+	net_fifo_watermark	receive_queue_diagnostics;
 };
 
 typedef DoublyLinkedList<net_device_interface> DeviceInterfaceList;
@@ -82,6 +96,7 @@ status_t unregister_device_monitor(struct net_device* device,
 status_t device_link_changed(net_device* device);
 status_t device_removed(net_device* device);
 status_t device_enqueue_buffer(net_device* device, net_buffer* buffer);
+void dump_receive_queue_diagnostics(net_device_interface* interface);
 
 status_t init_device_interfaces();
 status_t uninit_device_interfaces();

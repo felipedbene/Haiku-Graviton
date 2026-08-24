@@ -65,17 +65,20 @@ device_reader_thread(void* _interface)
 			if (interface->deframe_func(interface->device, buffer) != B_OK) {
 				gNetBufferModule.free(buffer);
 				atomic_add((int32*)&device->stats.receive.dropped, 1);
+				interface->receive_deframe_dropped++;
 				continue;
 			}
 
 			const size_t packetSize = buffer->size;
-			status = fifo_enqueue_buffer(&interface->receive_queue, buffer);
+			status = fifo_enqueue_buffer_tracked(&interface->receive_queue,
+				buffer, &interface->receive_queue_diagnostics);
 			if (status == B_OK) {
 				atomic_add((int32*)&device->stats.receive.packets, 1);
 				atomic_add64((int64*)&device->stats.receive.bytes, packetSize);
 			} else {
 				gNetBufferModule.free(buffer);
 				atomic_add((int32*)&device->stats.receive.dropped, 1);
+				interface->receive_enqueue_dropped++;
 			}
 		} else if (status == B_DEVICE_NOT_FOUND) {
 			device_removed(device);
@@ -101,8 +104,9 @@ device_consumer_thread(void* _interface)
 	net_buffer* buffer;
 
 	while (atomic_get(&interface->ref_count) > 0) {
-		ssize_t status = fifo_dequeue_buffer(&interface->receive_queue, 0,
-			B_INFINITE_TIMEOUT, &buffer);
+		ssize_t status = fifo_dequeue_buffer_tracked(&interface->receive_queue, 0,
+			B_INFINITE_TIMEOUT, &buffer,
+			&interface->receive_queue_diagnostics);
 		if (status != B_OK) {
 			if (status == B_INTERRUPTED)
 				continue;
@@ -192,6 +196,11 @@ allocate_device_interface(net_device* device, net_device_module_info* module)
 	if (init_fifo(&interface->receive_queue, name, 16 * 1024 * 1024) < B_OK)
 		goto error1;
 
+	interface->receive_deframe_dropped = 0;
+	interface->receive_enqueue_dropped = 0;
+	init_fifo_watermark(&interface->receive_queue_diagnostics,
+		interface->receive_queue.max_bytes);
+
 	interface->device = device;
 	interface->up_count = 0;
 	interface->ref_count = 1;
@@ -273,6 +282,19 @@ dump_device_interface(int argc, char** argv)
 
 	kprintf("receive_lock:      %p\n", &interface->receive_lock);
 	kprintf("receive_queue:     %p\n", &interface->receive_queue);
+	kprintf("  limit/current:   %" B_PRIuSIZE " / %" B_PRIuSIZE " bytes, %"
+		B_PRIu32 " packets\n", interface->receive_queue.max_bytes,
+		interface->receive_queue.current_bytes,
+		interface->receive_queue_diagnostics.current_packets);
+	kprintf("  peak:            %" B_PRIuSIZE " bytes, %" B_PRIu32 " packets\n",
+		interface->receive_queue_diagnostics.peak_bytes,
+		interface->receive_queue_diagnostics.peak_packets);
+	kprintf("  dropped:         %" B_PRIu64 " deframe, %" B_PRIu64 " enqueue\n",
+		interface->receive_deframe_dropped, interface->receive_enqueue_dropped);
+	kprintf("  enqueue failed:  %" B_PRIu64 " (%" B_PRIu64 " ENOBUFS, %" B_PRIu64
+		" other)\n", interface->receive_queue_diagnostics.fail_total,
+		interface->receive_queue_diagnostics.fail_nobufs,
+		interface->receive_queue_diagnostics.fail_other);
 	kprintf("receive_funcs:\n");
 	DeviceHandlerList::Iterator handlerIterator
 		= interface->receive_funcs.GetIterator();
@@ -838,10 +860,58 @@ device_enqueue_buffer(net_device* device, net_buffer* buffer)
 		return status;
 	}
 
-	status = fifo_enqueue_buffer(&interface->receive_queue, buffer);
+	status = fifo_enqueue_buffer_tracked(&interface->receive_queue, buffer,
+		&interface->receive_queue_diagnostics);
 
 	put_device_interface(interface);
 	return status;
+}
+
+
+/*!	Prints the receive queue drop attribution and occupancy for \a interface.
+
+	Every line carries the instrumentation version, so a measurement can never be
+	attributed to the wrong build, and a single prefix so the whole block can be
+	pulled out of the log with one grep.
+
+	This is deliberately a few lines emitted on demand rather than anything
+	per-frame: on this platform the serial console does not use its FIFO, so a
+	line of output costs on the order of a millisecond and a per-frame print would
+	create the very stalls it was meant to observe.
+*/
+void
+dump_receive_queue_diagnostics(net_device_interface* interface)
+{
+	net_fifo_watermark diagnostics;
+	snapshot_fifo_watermark(&interface->receive_queue,
+		&interface->receive_queue_diagnostics, &diagnostics, true);
+
+	const char* name = interface->device->name;
+	const uint64 deframeDropped = interface->receive_deframe_dropped;
+	const uint64 enqueueDropped = interface->receive_enqueue_dropped;
+
+	dprintf(NET_RX_DIAG_VERSION " %s drops total=%" B_PRIu64 " deframe=%" B_PRIu64
+		" enqueue=%" B_PRIu64 "\n", name, deframeDropped + enqueueDropped,
+		deframeDropped, enqueueDropped);
+
+	dprintf(NET_RX_DIAG_VERSION " %s enqfail total=%" B_PRIu64 " nobufs=%" B_PRIu64
+		" other=%" B_PRIu64 " depth=%" B_PRIuSIZE "..%" B_PRIuSIZE "\n", name,
+		diagnostics.fail_total, diagnostics.fail_nobufs, diagnostics.fail_other,
+		diagnostics.fail_bytes_min == (size_t)-1 ? 0 : diagnostics.fail_bytes_min,
+		diagnostics.fail_bytes_max);
+
+	dprintf(NET_RX_DIAG_VERSION " %s queue limit=%" B_PRIuSIZE " cur=%" B_PRIuSIZE
+		" curpkts=%" B_PRIu32 " peak=%" B_PRIuSIZE " peakpkts=%" B_PRIu32
+		" enq=%" B_PRIu64 " deq=%" B_PRIu64 "\n", name, diagnostics.limit_bytes,
+		diagnostics.current_bytes, diagnostics.current_packets,
+		diagnostics.peak_bytes, diagnostics.peak_packets, diagnostics.enqueued,
+		diagnostics.dequeued);
+
+	// receive.errors is a third and separate bucket - receive_data() failing in
+	// the driver - and is deliberately not folded into either of the above.
+	dprintf(NET_RX_DIAG_VERSION " %s packets=%" B_PRIu32 " errors=%" B_PRIu32 "\n",
+		name, interface->device->stats.receive.packets,
+		interface->device->stats.receive.errors);
 }
 
 
@@ -855,6 +925,12 @@ init_device_interfaces()
 
 	new (&sInterfaces) DeviceInterfaceList;
 		// static C++ objects are not initialized in the module startup
+
+	dprintf("network/stack: " NET_RX_DIAG_VERSION " receive drop attribution "
+		"active\n");
+		// Announce the instrumentation build. A hot-swapped module that did not
+		// load looks exactly like a change that had no effect, so every number
+		// taken from this build is gated on this line appearing.
 
 #if ENABLE_DEBUGGER_COMMANDS
 	add_debugger_command("net_device_interface", &dump_device_interface,
