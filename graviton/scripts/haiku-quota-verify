@@ -14,11 +14,18 @@
 # harder to attribute. So it also requires that the quota still engages.
 #
 # The liveness probe is a three-signal ladder rather than an ssh check, because a
-# storage liveness regression and the live NIC intermittent produce the *same*
+# storage liveness regression and a node that has lost its NIC produce the *same*
 # outward symptom -- a node that stops answering ssh. They are separable by
 # measurement: across ~72 samples taken while the starvation was happening, ICMP
 # answered and TCP :22 accepted every single time and only the banner never
 # arrived. A lost NIC gives no ICMP at all.
+#
+# This said "the live NIC intermittent" until 2026-08-24, implying a known recurring
+# fault at a known rate. That rate (~1 in 6 warm reboots) did not survive
+# measurement: 0 failures in 125 trials. The ladder is kept regardless, because it
+# rests on the ~72-sample signature above and not on how often NIC loss happens --
+# and because collapsing the two causes into one "ssh failed" verdict is what would
+# make this assertion misattribute a failure.
 #
 #   ICMP ok + TCP ok + banner        -> healthy
 #   ICMP ok + TCP ok + NO banner     -> userland starved: the regression

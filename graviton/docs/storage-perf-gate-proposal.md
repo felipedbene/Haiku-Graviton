@@ -15,6 +15,22 @@ landed. This is no longer purely a proposal.**
 > The framing reason still applies to what is left: **a gate which flakes gets
 > disabled and then protects nothing.** Assertions 1 and 2 still want review.
 
+> **Correction 2026-08-24 — the "NIC intermittent" rate this document was built
+> around is retired.** Several passages below were premised on a NIC-attach failure
+> occurring *roughly one warm reboot in six on `c7g.large`*. That rate does not
+> survive measurement: **0 failures in 125 trials.** The original figure was a
+> single observation with a ratio attached to it, and it should never have been
+> written as a frequency.
+>
+> What this does *not* change: the three-outcome ICMP ladder still earns its place,
+> for a reason that was measured independently of any NIC failure rate — across ~72
+> samples taken while page-writer starvation was happening, **ICMP answered and TCP
+> `:22` accepted every time, and only the banner never arrived.** Distinguishing
+> that signature from a node that has genuinely lost its NIC is valuable however
+> rarely the latter happens. The design survives; the number motivating it does not.
+> Passages below are corrected in place rather than deleted, because a reader
+> arriving from the git history needs to know the premise changed.
+
 Baseline numbers, method and controls are in
 [storage-measurement.md](storage-measurement.md).
 
@@ -83,8 +99,8 @@ disktput -f /pw/probe -m verify -b 256K -n 64M -t 1 -s 64M          # assert 0 b
 
 New since the first draft, and the reason this document needed revisiting: the
 page-writer starvation fix landed, and **its failure mode is a node that stops
-answering ssh.** A gate that cannot distinguish that from the NIC intermittent
-will blame the wrong subsystem; a gate that only asks "did the starvation stop"
+answering ssh.** A gate that cannot distinguish that from a node which has lost its
+NIC will blame the wrong subsystem; a gate that only asks "did the starvation stop"
 will pass a change that removed back-pressure altogether.
 
 ```
@@ -157,11 +173,16 @@ The existing gate treats "sshd never answered" as a failed image. That cannot be
 carried over, and the reason is sharper than when this was first drafted:
 
 - **A storage liveness regression presents as a node that stops answering ssh.**
-- **The live NIC intermittent — roughly one warm reboot in six on `c7g.large`,
-  reproducing on canonical — also presents as a node that stops answering ssh.**
+- **A node that has lost its NIC also presents as a node that stops answering ssh.**
+  *(Corrected 2026-08-24: this previously read "roughly one warm reboot in six on
+  `c7g.large`, reproducing on canonical". **0 failures in 125 trials** — the rate is
+  retired. Treat NIC loss as a failure mode of unknown, and possibly negligible,
+  frequency.)*
 
 Identical outward symptom, opposite causes. A gate that conflates them will either
-block good images or, worse, be switched off.
+block good images or, worse, be switched off. **This argument does not depend on the
+rate** — it needs only that both causes are possible and produce the same symptom,
+which is why the ladder stays even though the frequency behind it was wrong.
 
 ### The discriminator, from measurement rather than guesswork
 
@@ -193,12 +214,14 @@ fire.
 
 Further mitigations, unchanged in intent:
 
-- **Use `c7g.4xlarge`, not `c7g.large`.** The NIC intermittent is characterised on
-  `c7g.large`, and 4xlarge is also the only size with enough EBS bandwidth for the
-  throughput threshold to mean anything.
-- **Prefer stop/start over warm reboot** for the durability half. The intermittent
-  is described on *warm reboot*; stop/start is a cold boot on fresh placement.
-  Stated as a mitigation with an unknown residual, not as immunity.
+- **Use `c7g.4xlarge`, not `c7g.large`.** *(The NIC-intermittent half of this
+  reasoning is retired — 0/125. What still stands on its own: 4xlarge is the only
+  size with enough EBS bandwidth for the throughput threshold to mean anything.)*
+- **Prefer stop/start over warm reboot** for the durability half. *(Also no longer
+  justified by the intermittent.* The independent reason to keep it: stop/start is a
+  cold boot on fresh placement, so it exercises strictly more of the boot path than a
+  warm reboot does — and it is the path on which the **zero-byte host key** defect
+  appeared, which a warm reboot does not reach.)
 - **Run the reboot-free assertions first** — sequential read, and the write
   liveness test — so a regression in either is reported even when the durability
   half ends INCONCLUSIVE. This remains the single most useful property of the
@@ -219,7 +242,9 @@ image.
 
 Whether the durability assertion belongs in the promotion gate at all, or in a
 nightly. It is the highest-value assertion in this document and also the only one
-that reboots, which is where the known intermittent lives.
+that reboots. *(It previously said "which is where the known intermittent lives" —
+retired, 0/125. The reboot is still the expensive and slowest part of the gate, which
+is reason enough to keep it off the promotion path.)*
 
 My recommendation is: **depth-8 read and the write-liveness assertion per
 candidate** — both reboot-free, both cheap to attribute — and **durability
@@ -229,9 +254,11 @@ does fail someone looks at it instead of disabling it.
 > **Partly acted on already (2026-08-24):** the write-liveness half is in the gate;
 > the depth-8 read is not. And note the *other* reboot now in play — the gate performs
 > a **stop/start on every run** (`128a3f1761`), so "reboot-free" is no longer a
-> property of the gate as a whole. That strengthens rather than weakens the case for
-> keeping durability out of it: the ~1-in-6 NIC-attach intermittent on `c7g.large` now
-> has an occasion to fire regardless.
+> property of the gate as a whole. *(The original argument here — that a ~1-in-6
+> NIC-attach intermittent "now has an occasion to fire regardless" — is retired with
+> the rate, 0/125. The observation about `128a3f1761` stands on its own: the gate is
+> not reboot-free, so "avoids a reboot" can no longer be claimed as a reason to
+> prefer one assertion over another.)*
 
 The write-liveness assertion earns its place per-candidate rather than nightly
 because the defect it guards was a machine that reported healthy and did nothing,
