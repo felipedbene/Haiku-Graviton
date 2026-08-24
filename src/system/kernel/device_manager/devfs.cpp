@@ -251,10 +251,31 @@ scan_for_drivers_if_needed(devfs_vnode* dir)
 
 	// scan for drivers at this path
 	static int32 updateCycle = 1;
-	device_manager_probe(path.Path(), updateCycle++);
-	legacy_driver_probe(path.Path());
+	status_t probeStatus = device_manager_probe(path.Path(), updateCycle++);
+	status_t legacyStatus = legacy_driver_probe(path.Path());
 
 	dir->stream.u.dir.scanned = mode;
+
+	// Say what this scan looked at and what it recorded.
+	//
+	// The record above is a latch, so this is the only scan this directory will
+	// get, and until this line existed a scan that enumerated nothing left
+	// exactly the same trace as one that enumerated everything: none at all.
+	// Deciding after the fact whether a boot's /dev/net was ever really scanned
+	// then meant arguing from the absence of unrelated lines further down the
+	// log. Both probe results are also discarded by this function, so they are
+	// reported here rather than lost.
+	//
+	// Cost is one line per /dev subdirectory, on the order of ten per boot, and
+	// it is emitted after both probes have returned, so it cannot perturb the
+	// scan it describes. scan_mode() is deliberately re-read for the print: if
+	// it disagrees with the sampled mode, the window described above opened on
+	// this boot and the conservative value was recorded.
+	dprintf("devfs: scanned \"%s\": mode %" B_PRId32 " -> %" B_PRId32
+		", latched %" B_PRId32 ", probe %s, legacy %s\n", path.Path(),
+		mode, scan_mode(), dir->stream.u.dir.scanned, strerror(probeStatus),
+		strerror(legacyStatus));
+
 	return B_OK;
 }
 
