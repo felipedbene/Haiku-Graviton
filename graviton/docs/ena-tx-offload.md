@@ -764,27 +764,73 @@ It would — no pseudo-header seed, no `Checksum` change, nothing for the stack 
 compute. **The device does not offer it:** `ipv4 l4 csum full 0` (§2). Only the
 partial contract exists, so the pseudo-header work is not a design choice.
 
-### 7.3 One boot in six lost the NIC, and it was not this change
+### 7.3 A boot came up with no network, and it was not this change
 
-Boot 3/off never came up. The serial console shows **no panic and no KDL**; it
-shows PCI enumerating only `0:0:0` and `0:1:0`, no `ena: found an ENA device`, and
-a boot that proceeds normally to packagefs verification and then has no network.
-The device was absent from the PCI bus on that boot, which is below anything this
-change touches (it does not go near attach or enumeration). Recorded as an
-observed reboot flake — 1 in 6 warm reboots on `c7g.large` — rather than
-attributed. The node was replaced and the remaining work repeated on a fresh one.
+Boot 3/off never came up: **no panic and no KDL**, a boot that proceeds normally to
+packagefs verification and then has no network. It is not this change — whatever
+happened is upstream of anything transmit offload touches. The node was replaced
+and the remaining work repeated on a fresh one.
 
 The full serial capture of the failing boot — and of the healthy boot immediately
 before it, in the same 64 KiB window, which is what makes the comparison possible —
 is kept at
-`s3://haiku-graviton-668984504585-us-west-2/evidence/warm-reboot-nic-loss-i-02bab0e2575cde9a7-console.txt`.
-The decisive part is that the second boot's PCI section enumerates only `0:0:0`
-and `0:1:0` and contains no `found an ENA device`, while the first boot's contains
-the full attach sequence.
+`s3://haiku-graviton-668984504585-us-west-2/evidence/warm-reboot-nic-loss-i-02bab0e2575cde9a7-console.txt`
+(the `nic-loss` in that object name is from the retired reading below; the object
+is unchanged).
 
-**This will surface as a spurious perf-gate failure**, not as a visible NIC
-problem: the gate's symptom is "sshd never answered", which is exactly what a
-booted machine with no network looks like.
+**Correction. This section previously concluded that the device was "absent from
+the PCI bus" on the failing boot. That was a misreading, and the capture says the
+opposite.** The lines that were read as enumeration are
+`PCI: find_pci_capability ERROR <bdf> capability 0x.. empty list`, and they name
+only `0:0:0` and `0:1:0` — 40 of them, 20 per boot, on **both** boots including the
+healthy one. They are capability-list probes against two devices, not a list of the
+devices that are present.
+
+The enumeration dump proper says something else. **Both** boots enumerate all four
+devices:
+
+| bdf | vendor:device | `class_base` | |
+|---|---|---|---|
+| `0:0:0` | `1d0f:0200` | 06 | host bridge |
+| `0:1:0` | `1d0f:8250` | 07 | serial |
+| `0:4:0` | `1d0f:8061` | 01 | NVMe |
+| `0:5:0` | `1d0f:ec20` | **02** | **ENA** |
+
+and ENA's config-space block is **byte-identical** between the healthy and the
+failing boot: same BARs (`80046000`, `80044000`, `80000000`), same
+`interrupt_line 04`, same `Capabilities: PCIe, MSI-X, PM`. The device was present,
+enumerated, and indistinguishable on the boot that had no network.
+
+What does differ sits one layer up. The healthy boot has the full `ena:` attach
+sequence; the failing boot has **no `ena:` line at all**, not even
+`found an ENA device`. The driver was never asked. The failure is not a device that
+went missing, it is a device that was never probed — which is why nothing in the
+log complains.
+
+**Conclusion replaced, diagnosis retained.** The reasoning that put this outside
+this change stands, and is if anything firmer: a device that is never probed is
+upstream of every line of transmit-offload code. What is retired is the verdict
+"absent from the PCI bus" — and with it the "1 in 6 warm reboots on `c7g.large`"
+rate that was attached to that verdict, because a later attempt to reproduce it saw
+**0 failures in 125 warm reboots** across two hosts and three shutdown variants.
+
+The strongest current candidate for the mechanism is a **`devfs` scan latch**. A
+`/dev` subdirectory is scanned for drivers once per boot, and the outcome is
+recorded and short-circuited thereafter whether or not it found anything. A scan
+that begins before there is a boot device walks no module search path at all, so it
+can find nothing on the volume; if the scan mode is then re-read *after* the probe,
+that empty scan can be recorded as a completed full scan and `/dev/net` is finished
+with for the rest of the boot. That is `scan_for_drivers_if_needed()` sampling
+`scan_mode()` twice, and sampling it once — which removes the only path to an
+unrecoverable latch value — is merged, as is a line reporting what each scan looked
+at and what it latched. It is offered as **the best available candidate and not a
+proven cause**: it has never been observed firing, which is consistent both with 0
+in 125 and with a window one particular scan wide.
+
+**This surfaces as "sshd never answered"** — exactly what a booted machine with no
+network adapter looks like from outside, and no reason at all for the reader to
+look at `/dev/net`. Until the scan started reporting itself, a scan that enumerated
+nothing left byte-for-byte the same trace as one that enumerated everything: none.
 
 ### 7.4 A software fallback in the driver: considered, rejected
 
