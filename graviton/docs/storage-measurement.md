@@ -1395,6 +1395,44 @@ empty result, grep for something you know is present.** A positive control on th
 console fetch (`nvme_disk`, 16 matches) is what exposed the `--latest` requirement
 in one step. An empty result is a claim about the instrument until proven otherwise.
 
+### Rule: an artifact check proves the change arrived, and only that
+
+The sharper half of "an artifact must announce itself", and it cost a boot to
+learn. The `serial debug listener` string **was** present in
+`ami-0fe2b76a049766507`. The artifact check passed. The image was unbootable,
+because the string was in the binary and the **call site was wrong**.
+
+So a `strings`, `nm` or version-stamp check rules out exactly one hypothesis —
+*"my change never arrived"* — and rules out nothing else. It does not establish
+that the change is correct, that it runs, that it runs at the right time, or that
+the machine survives it. Those need a boot.
+
+Both halves are needed and neither substitutes for the other: without the stamp,
+"the number did not move" and "the code did not load" are indistinguishable (which
+is how the hot-swapped nvme driver was caught); with only the stamp, "the code
+loaded" gets mistaken for "the code works" (which is how the boot panic got as far
+as an AMI).
+
+### Rule: watch for the operation that is only valid once something else exists
+
+Four defects in this work are the same shape — an operation performed before the
+subsystem it depends on is ready — and the shape is worth recognising directly,
+because none of the four looks like the others at the point of failure:
+
+| operation | required first | how it presented |
+|---|---|---|
+| `spawn_kernel_thread()` from `arch_debug_console_init_settings()` (`main.cpp:168`) | `thread_init()` (`main.cpp:212`) | boot panic, `FAR=30`, in early VM setup |
+| `bt <thread>` on a thread running elsewhere | `arch_debug_save_registers()` saving a frame pointer — it was an empty stub | a plausible, wrong stack |
+| loading `nvme_disk` from `/boot/home/config/non-packaged` | the filesystem `nvme_disk` itself is needed to mount | silently ran the old driver |
+| reading a `dprintf` from the console | the console buffer being fetched at all (`--latest`) | an empty result read as "never fired" |
+
+Three of the four **fail silently or plausibly** rather than loudly, which is what
+makes the shape worth naming: the failure mode of a missing precondition is usually
+a confident wrong answer, not an error. The check that generalises is to ask, of
+any call in an init path or a diagnostic path, *what has to be true already* — and
+for init paths specifically, to read the actual ordering in `main.cpp` rather than
+inferring it from the name of the hook.
+
 ### Rule: repeatability is not validity
 
 The strongest illustration this project has. A fixed-size concurrency sweep
