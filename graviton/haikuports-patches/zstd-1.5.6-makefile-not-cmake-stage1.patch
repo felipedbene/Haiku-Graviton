@@ -1,0 +1,157 @@
+STAGE-1 EXPEDIENT: build zstd with its own upstream Makefile instead of cmake,
+so that `cmd:cmake` is not needed at all.
+
+This is what actually freed `zstd` and, behind it, `openssl3`. It replaced a much
+more ambitious attempt to build cmake itself, which failed (see
+cmake-4.1.6-bundled-libs-stage1.patch and Blocker 6 in
+graviton/docs/package-chain-status.md).
+
+## Why cmake was the blocker
+
+`zstd-1.5.6.recipe:102` lists `cmd:cmake` in BUILD_PREREQUIRES, and cmake sits in
+a four-node link cycle:
+
+    cmake -> devel:libcurl -> openssl3 -> devel:libzstd -> zstd -> cmd:cmake
+
+Note the status doc previously recorded zstd as "blocked on xz_utils
+(devel:liblzma)". liblzma was real but it was not the binding constraint —
+`cmd:cmake` was, and satisfying liblzma alone would never have freed zstd.
+
+## Why the Makefile route is a small sacrifice
+
+zstd's `Makefile` / `lib/Makefile` / `programs/Makefile` are a first-class,
+upstream-maintained build path, not a legacy fallback. The build log confirms the
+result is equivalent where it matters:
+
+    compiling multi-threaded dynamic library 1.5.6
+    creating versioned links
+    release build completed
+    ==> building with threading support
+    ==> building zstd with .gz compression support
+    ==> building zstd with .xz/.lzma compression support
+    ==> building zstd with .lz4 compression support
+
+Same `libzstd.so.1.5.6` with soname `libzstd.so.1`, same headers, same
+`libzstd.pc`, and the CLI picked up gz/xz/lz4 support — including the liblzma from
+the `xz_utils` built earlier in this same chain.
+
+**What is lost:** the CMake package-config files
+(`lib/cmake/zstd/zstdTargets*.cmake`, and the recipe's `fixCMake` + two `sed`
+fixups that rewrite them). Consumers using `find_package(zstd CONFIG)` will not
+find it; `pkg-config --libs libzstd` still works, and that is what autotools
+consumers — including openssl3 — actually use. Restore the cmake `BUILD()`/
+`INSTALL()` verbatim once `cmd:cmake` exists.
+
+## Two traps this hit, both of the "read the actual Makefile" kind
+
+1. **`contrib/pzstd` died with `Error 127`.**
+
+       aarch64-unknown-haiku-g++ ... -c main.cpp -o main.o
+       make: aarch64-unknown-haiku-g++: No such file or directory
+
+   `contrib/pzstd/Makefile` uses `$(CXX)`, which haikuporter sets to the triplet
+   name. That binary *does* exist (`/boot/system/develop/tools/bin/`) but is not on
+   the sub-make's PATH, so it fails while `lib/` and `programs/` — which had
+   already completed — used plain `cc`. Fixed with `CXX=g++`. Same family as the
+   `aclocal-1.17` failure in libtool: a tool name baked into a Makefile that does
+   not exist under that name here.
+
+2. **`MANDIR=` is silently ignored; the variable is `MAN1DIR`.** From
+   `programs/Makefile`:
+
+       389:  man1dir     ?= $(mandir)/man1
+       393:    MAN1DIR ?= $(MANDIR)/man1      # BSD branch only
+       395:    MAN1DIR ?= $(man1dir)          # <- Haiku takes this one
+
+   Only the BSD branch derives `MAN1DIR` from `MANDIR`, so on Haiku a `MANDIR=`
+   override does nothing and the pages land in `$prefix/share/man/man1`. The
+   failure surfaced far away, in `packageEntries`:
+
+       mv: cannot stat '/packages/zstd-1.5.6-2/.self/documentation/man/man1'
+
+   Passing `MAN1DIR=$manDir/man1` is correct and works on both branches.
+   `PKGCONFIGDIR` is deliberately *not* overridden — the default
+   `$(libdir)/pkgconfig` is where `fixPkgconfig` expects it, matching every
+   autotools port here.
+
+Applies to: input-source-packages/develop/sources/zstd-1.5.6-2/zstd-1.5.6.recipe
+
+--- a/zstd-1.5.6.recipe
++++ b/zstd-1.5.6.recipe
+@@ BUILD_PREREQUIRES
+ 	cmd:gcc$secondaryArchSuffix
+-	cmd:cmake
++#	cmd:cmake	# graviton: built with zstd's own Makefile instead
+ 	cmd:make
+ 	cmd:sed
+ 	cmd:find
+@@ BUILD() / INSTALL()
++# STAGE-1 NOTE (graviton): built with zstd's OWN upstream Makefile instead of
++# cmake. cmd:cmake is the edge that keeps zstd inside the link cycle
++# cmake -> libcurl -> openssl3 -> libzstd -> zstd -> cmd:cmake, and no cmake
++# exists natively yet. zstd's Makefile build is a fully supported upstream path
++# (lib/Makefile + programs/Makefile) and produces the same libzstd.so.1.5.6 with
++# soname libzstd.so.1, the same headers and the same libzstd.pc.
++# What is lost relative to the cmake build: the CMake package-config files
++# (lib/cmake/zstd/zstdTargets*.cmake), so find_package(zstd CONFIG) will not
++# work for consumers -- pkg-config still does. Restore the cmake BUILD()/INSTALL()
++# once cmd:cmake exists.
+ BUILD()
+ {
+-	cmake -B bld -S build/cmake -DCMAKE_BUILD_TYPE=Release \
+-		$cmakeDirArgs \
+-		-DCMAKE_INSTALL_BINDIR=$commandBinDir \
+-		-DZSTD_BUILD_STATIC=OFF \
+-		-DZSTD_BUILD_TESTS=ON \
+-		-DZSTD_PROGRAMS_LINK_SHARED=ON
+-	make -C bld $jobArgs
++	make $jobArgs
++	# CXX=g++: contrib/pzstd/Makefile uses $(CXX), which haikuporter sets to the
++	# triplet name aarch64-unknown-haiku-g++ -- that binary is not on PATH in the
++	# chroot (only g++/c++ are), so pzstd died with 'No such file or directory'
++	# and Error 127 while lib/ and programs/ had already built fine.
++	make -C contrib/pzstd $jobArgs CXX=g++
+ }
+
+ INSTALL()
+ {
+-	make -C bld install
++	make install \
++		PREFIX=$prefix \
++		LIBDIR=$libDir \
++		INCLUDEDIR=$includeDir \
++		BINDIR=$commandBinDir \
++		MAN1DIR=$manDir/man1
++	# MAN1DIR, not MANDIR: programs/Makefile:389 has "man1dir ?= $(mandir)/man1"
++	# and :395 "MAN1DIR ?= $(man1dir)", and only the BSD branch (:393) derives
++	# MAN1DIR from MANDIR. Haiku takes the else branch, so a MANDIR= override is
++	# silently ignored and the pages land in $prefix/share/man/man1 -- which then
++	# broke packageEntries with "mv: cannot stat .../documentation/man/man1".
++	# pkgconfig is deliberately left at its default $(libdir)/pkgconfig, which is
++	# where fixPkgconfig expects it (same as every autotools port here).
++
++	# the Makefile build installs a static lib too; the recipe ships shared only
++	rm -f $libDir/libzstd.a
++
++	install -m 755 contrib/pzstd/pzstd $commandBinDir/pzstd
+
+ 	mkdir -p $docDir
+ 	cp doc/zstd_manual.html $docDir
+
+ 	prepareInstalledDevelLib libzstd
+ 	fixPkgconfig
+-	fixCMake
+-
+-	sed "s|$libDir|$developLibDir|g" \
+-		-i $developLibDir/cmake/zstd/zstdTargets-release.cmake
+-	sed "/INTERFACE_INCLUDE_DIRECTORIES/c INTERFACE_INCLUDE_DIRECTORIES \"$includeDir;\"" \
+-		-i $developLibDir/cmake/zstd/zstdTargets.cmake
+
+ 	packageEntries bin \
+ 		$commandBinDir
+@@ TEST()
+ TEST()
+ {
+-	make -C bld test
++	make test
+ }

@@ -341,6 +341,167 @@ is already wedged, so the only real remedy there is a different guest.
   `<sources>/<port>-<ver>-N/work-<ver>` before re-testing a recipe change, or you are
   measuring the debris of previous failures.
 
+## Blocker 5 — the "netpbm cycle" is **two** independent knots — **BROKEN**
+
+Patches: `gettext-1.0-groff-doc-cut-stage1.patch`,
+`zstd-1.5.6-makefile-not-cmake-stage1.patch`.
+
+The single biggest error in the earlier write-up was treating this as one cycle.
+It is two, sharing no edge, and only one of them was ever on the path to
+`zstd`/`openssl3`.
+
+**Knot A — documentation (gates `gettext` only).**
+
+```
+groff -> cmd:pnmcrop, cmd:pnmtopng, cmd:pnmtops (netpbm) + cmd:psselect (psutils)
+      -> netpbm -> libjasper, libjpeg, libpng16, libtiff, libxml2
+groff also needs cmd:makeinfo, which is the non-functional texinfo_bootstrap stub
+```
+
+`groff` therefore needs **five** unavailable commands, not one, and `cmd:pnmcrop`
+was never special. But `gettext` needs `groff` for *one thing*: `MAN2HTML = groff
+-mandoc -Thtml` (`gettext-{runtime,tools}/man/Makefile.in:2299`/`:3957`). Dropping
+`cmd:groff` from gettext's BUILD_PREREQUIRES — **one line** — released the entire
+downstream chain, and `groff` never had to be built at all. The HTML man pages
+ship prebuilt in the tarball, so the package is complete; see the patch for why
+`all-am` *does* reach `$(man_HTML)` and why that still does not invoke groff.
+
+**Knot B — linkage (gates `zstd`, `openssl3`, and cmake itself).**
+
+```
+cmake    --BUILD_REQUIRES devel:libcurl--> libcurl
+libcurl  --BUILD_REQUIRES devel:libssl --> openssl3
+openssl3 --BUILD_REQUIRES devel:libzstd--> zstd        (openssl3-3.5.7.recipe:80)
+zstd     --BUILD_PREREQUIRES cmd:cmake --> cmake       (zstd-1.5.6.recipe:102)
+```
+
+This knot has nothing to do with netpbm or groff. **It was broken by leaving cmake
+alone and building `zstd` with its own upstream Makefile**, which removes
+`cmd:cmake` from the picture entirely. `openssl3` then follows from `devel:libzstd`.
+
+Corollary worth keeping: `zstd` was recorded here as "blocked on `xz_utils`
+(`devel:liblzma`)". liblzma was real but not binding — `cmd:cmake` was. Read the
+whole `BUILD_PREREQUIRES`, not just the dependency the last failure happened to
+name.
+
+## Blocker 6 — cmake cannot be built with bundled libraries on Haiku — **DEAD END**
+
+Patch kept for the record: `cmake-4.1.6-bundled-libs-stage1.patch`. **Do not
+retry this route as-is.**
+
+The idea was sound and the recipe already blesses it (`# use the embedded copy to
+avoid circular deps` for libarchive/libcppdap/libjsoncpp): drop `--system-curl`,
+`--system-expat`, `--system-librhash`, `--system-libuv` so cmake uses
+`Utilities/cmcurl`, `cmexpat`, `cmlibrhash`, `cmlibuv`. Three things were learned,
+in order, and the third kills it:
+
+1. **`cmd:which` was missing** and looked like part of the cycle. It is not —
+   `sys-apps/which/which-2.21` is a ~15 KB GNU package needing only
+   `cmd:awk cmd:gcc cmd:grep cmd:make cmd:sed`. Built in under a minute. **Check
+   whether an unresolved edge is a cycle or just an unbuilt leaf.**
+2. **Bundled curl fails, and is fixable.** `Utilities/cmcurl/lib/transfer.c:57`
+   fires `#error "We cannot compile without socket() support!"` because
+   `HAVE_SOCKET` is undefined. `Utilities/cmcurl/CMakeLists.txt:751-753` *does*
+   have a Haiku branch, but it appends `network` only to `CURL_LIBS` — never to
+   `CMAKE_REQUIRED_LIBRARIES`, which is what the `check_symbol_exists("socket"
+   ...)` probe at `:1987` links against. Haiku keeps `socket()` in `libnetwork`,
+   so the probe fails. `export LDFLAGS="-lbsd -lnetwork"` seeds
+   `CMAKE_EXE_LINKER_FLAGS` and fixes it — **verified: the build then ran to 97%.**
+3. **Bundled libuv does not build on Haiku, and that is not cheaply fixable.** At
+   97%:
+
+   ```
+   undefined reference to `uv__hrtime'
+   undefined reference to `uv__platform_loop_init'
+   undefined reference to `uv__platform_loop_delete'
+   undefined reference to `uv__platform_invalidate_fd'
+   undefined reference to `uv__io_poll'
+   undefined reference to `uv__io_check_fd'
+   undefined reference to `uv__fs_event_close'
+   ```
+
+   Every missing symbol is *platform* libuv. cmlibuv's CMake platform dispatch has
+   no Haiku branch, so no platform source file is compiled. cmake's **bootstrap**
+   has its own hand-written file list (`uv-src-unix-posix-poll.c.o`,
+   `uv-src-unix-no-fsevents.c.o`, …), which is exactly why the bootstrap cmake
+   linked fine and only the real build failed — a misleading signal worth knowing.
+
+**The viable route instead:** `libexpat`, `librhash` and `libuv` are *not cycle
+members*, just unbuilt leaves. Build those three natively, keep
+`--system-expat --system-librhash --system-libuv`, and bundle **only** curl with
+the `-lnetwork` fix from (2). That reduces the cut to the one genuine cycle edge.
+Check first whether `libuv`'s own recipe needs `cmd:cmake` — if it does, that
+sub-cycle needs its own answer.
+
+## Blocker 7 — the chroot clock bug, and why it invalidated every package — **ROOT-CAUSED ELSEWHERE, CONSEQUENCES HERE**
+
+The ~18-23 h backwards chroot clock was root-caused (by parallel work) to a
+**stale `haiku.hpkg` in `/boot/home/haikuports/packages/`** — a different file
+from the one the guest boots — whose `libroot.so` still had the pre-fix
+`system_time()` reading `CNTPCT_EL0`. It was self-perpetuating because the harvest
+step copied `guest:packages/*.hpkg` back into `/opt/haiku/hpkg-out/arm64/`, the
+guest seed. Two consequences landed squarely on this work:
+
+1. **It made cmake unbuildable for a reason that looks nothing like a clock bug.**
+   `Source/Checks/cm_cxx_features.cmake:67`
+
+   ```cmake
+   if(check_output MATCHES "(^|[ :])[Ww][Aa][Rr][Nn][Ii][Nn][Gg]")
+     set(CMake_HAVE_CXX_${FEATURE} OFF CACHE INTERNAL "TRY_COMPILE" FORCE)
+   ```
+
+   treats *any* unfiltered "warning" in a `try_compile` output as "feature
+   broken". Its filter list (lines 39-65) covers ninja, MSBuild, MSVC, ld, distcc,
+   icpc and xcodebuild — but **not GNU make**. So
+
+   ```
+   make: Warning: File 'Makefile' has modification time 82393 s in the future
+   make[1]: warning:  Clock skew detected.
+   ```
+
+   turned all three of `make_unique`, `unique_ptr` and `filesystem` into "no", and
+   cmake hard-errored at `CMakeLists.txt:168` *"The C++ compiler does not support
+   C++11"*. `CMakeError.log` shows both the compile and the link succeeding with
+   **zero compiler diagnostics** — there was never a C++ problem. Worked around by
+   pre-seeding the three cache variables via `bootstrap --init=FILE` (line 6's
+   `if(NOT DEFINED ...)` guard); the values are not guesses, cmake's own bootstrap
+   had already proved them by passing `-DCMake_HAVE_CXX_MAKE_UNIQUE=1
+   -DCMake_HAVE_CXX_FILESYSTEM=1`. **Retire that seed with the clock fix, not with
+   the bundled libs.** On a fixed guest the skew warnings are gone (verified: zero
+   occurrences in the zstd log on guest 2230), so the seed should now be
+   unnecessary — re-test before keeping it.
+
+2. **Fixing the clock invalidated the entire existing native package set.** Every
+   base package built so far records
+
+   ```
+   requires haiku >= r1~beta6_hrev59996_dirty-1
+   ```
+
+   because it was built against the stale, `_dirty` chroot `haiku`/`haiku_devel`.
+   A guest whose chroot has been repaired provides the **non-dirty**
+   `r1~beta6_hrev59996-1`, so none of them resolve any more:
+
+   ```
+   requires "haiku_devel >= r1~beta6_hrev59996_dirty-1" of package "xz_utils_devel-5.8.3-1" could not be resolved
+   requires "haiku >= r1~beta6_hrev59996_dirty-1" of package "libiconv-1.18-1" could not be resolved
+   ```
+
+   This is not confined to one package. A survey of all 48 non-bootstrap hpkgs on
+   the guest shows **every base package carries a `_dirty` reference** (the
+   `_devel`/`_debuginfo` subpackages mostly do not, because they require only their
+   own base — `xz_utils_devel` is an exception, since its recipe lists
+   `haiku_devel` explicitly). So on a repaired guest the chain cannot even rebuild
+   `gettext`, because that needs `lib:libiconv` → `libiconv-1.18` → dirty `haiku`.
+
+   **The whole ~19-port set must be rebuilt bottom-up against the fixed
+   `haiku_devel`.** That is a large but embarrassingly parallel job and is the
+   single most important outstanding item. Until it happens, repaired guests
+   (2230, 2231) and the existing hpkg set are **mutually incompatible**, and work
+   must be done on one or the other consistently — which is why `zstd` and
+   `openssl3` were built on guest **2229**, deliberately left with its original
+   `_dirty` chroot so it matches the existing packages.
+
 ## Where every port stands
 
 Built = a verified `.hpkg` on the builder **and** in
@@ -366,12 +527,15 @@ never inferred from an exit code. **18 ports built, 71 hpkgs in S3** (was 9 and 
 | **zip 3.0** | **built** | second proof of the unpack fix, `.tar.gz` |
 | **patch 2.7.6** | **built** | needed by `haikuporter -G`, see below |
 | **sqlite 3.50.4.0 (+devel +debuginfo)** | **built** | unblocked by readline |
-| groff 1.23.0 | blocked | `build-prerequires "cmd:pnmcrop"` — **the netpbm cycle**, see below |
-| gettext 1.0 | blocked on groff | `build-prerequires "cmd:groff"` |
-| xz_utils 5.8.3 | blocked on gettext | `build-prerequires "cmd:autopoint"` |
-| zstd 1.5.6 | blocked on xz_utils | `build-requires "devel:liblzma"` |
-| openssl3 3.5.7 | blocked on zstd | `build-requires "devel:libzstd"` |
-| libxml2 2.15.3 | blocked | `build-prerequires "cmd:python3.14"` |
+| **gzip 1.14** | **built** | no recipe change, 43 s |
+| **gettext 1.0 (+devel +doc +libintl +libintl_devel)** | **built (stage 1)** | `gettext-1.0-groff-doc-cut-stage1.patch` — **Blocker 5**, the one line that opened the chain |
+| **xz_utils 5.8.3 (+devel +debuginfo)** | **built** | no recipe change; `cmd:autopoint` came free with gettext |
+| **which 2.21 (+debuginfo)** | **built** | no recipe change; nothing in the image provided `cmd:which`, which cmake needs |
+| **zstd 1.5.6 (+bin +devel)** | **built (stage 1)** | `zstd-1.5.6-makefile-not-cmake-stage1.patch` — built with zstd's own Makefile, sidestepping `cmd:cmake` entirely |
+| cmake 4.1.6 | **NOT built** | The `devel:libcurl` cycle edge *was* cut successfully and bundled curl *was* made to work, but **bundled libuv does not build on Haiku**. See Blocker 6 — this is a dead end, not a near miss |
+| openssl3 3.5.7 | building at time of writing (see below) | unblocked by zstd; `Configure` ran and it is compiling `crypto/` |
+| groff 1.23.0 | blocked, **and no longer on the critical path** | needs `cmd:pnmcrop`/`pnmtopng`/`pnmtops` (netpbm) + `cmd:psselect` (psutils) + the broken `cmd:makeinfo`. Cutting `cmd:groff` out of gettext removed the need to build it at all |
+| libxml2 2.15.3 | blocked | python3.14 is **cheap** (one shell variable); `cmd:doxygen` is the real edge — see below |
 
 ### The remaining chain is not a plain ladder
 
