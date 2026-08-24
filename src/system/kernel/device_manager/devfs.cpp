@@ -220,7 +220,23 @@ scan_for_drivers_if_needed(devfs_vnode* dir)
 
 	MutexLocker _(dir->stream.u.dir.scan_lock);
 
-	if (dir->stream.u.dir.scanned >= scan_mode())
+	// Sample the mode once, and record that same value afterwards.
+	//
+	// It used to be read a second time to decide what to record, with the whole
+	// probe in between -- and gBootDevice can change in that window. When it
+	// did, a scan that had run with no boot device, and which therefore walked
+	// no module search path at all (open_module_list_etc() only offers already
+	// resident modules in that case), was recorded as a completed kNormalScan.
+	// Since that record is a latch, the directory was then never scanned again
+	// for the life of the boot: a scan that never looked, indistinguishable
+	// from one that looked and found nothing.
+	//
+	// gBootDevice only ever goes from unset to set, so recording the value the
+	// scan actually ran under is strictly safe: the worst case is recording
+	// kBootScan and letting the normal scan happen later, which is what should
+	// have happened all along.
+	const int32 mode = scan_mode();
+	if (dir->stream.u.dir.scanned >= mode)
 		return B_OK;
 
 	KPath path;
@@ -231,14 +247,14 @@ scan_for_drivers_if_needed(devfs_vnode* dir)
 	path.UnlockBuffer();
 
 	TRACE(("scan_for_drivers_if_needed: mode %" B_PRId32 ": %s\n",
-		scan_mode(), path.Path()));
+		mode, path.Path()));
 
 	// scan for drivers at this path
 	static int32 updateCycle = 1;
 	device_manager_probe(path.Path(), updateCycle++);
 	legacy_driver_probe(path.Path());
 
-	dir->stream.u.dir.scanned = scan_mode();
+	dir->stream.u.dir.scanned = mode;
 	return B_OK;
 }
 
