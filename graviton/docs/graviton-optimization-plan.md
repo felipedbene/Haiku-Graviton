@@ -1,9 +1,59 @@
 # Graviton / ARM64 optimization plan
 
-Status: **planning** — every item below is verified against the tree at the
-state of branch `graviton`; nothing here has been implemented. This is a
-worklist for a future engineer/agent. Each claim cites `file:line` evidence;
-where the source alone cannot settle a question it is marked **unverified**.
+Status as of **2026-08-24**: **partly delivered, partly closed on evidence, and
+no longer a pure plan.**
+
+> ~~Status: **planning** — every item below is verified against the tree at the
+> state of branch `graviton`; nothing here has been implemented.~~
+>
+> **That line was true when written and is now false.** It survived several
+> rounds of landed work and told at least one reader that finished items were
+> open. Current state, per item, verified against `graviton` on 2026-08-24:
+>
+> | Item | State on 2026-08-24 | Evidence |
+> |---|---|---|
+> | 1 LSE atomics | **MERGED, hardware-verified** (via item 2) | `20bf8f2711` |
+> | 2 `-mcpu`/`-march` | **MERGED** — `-mcpu=neoverse-n1+crypto`, `ArchitectureRules:52` | `20bf8f2711` |
+> | 3 crc/crypto baseline | baseline **MERGED** with item 2; **intrinsic** crc32c/AES/SHA/PMULL still open | `20bf8f2711` |
+> | 4 ENA LLQ | **ANSWERED on hardware** — the device *does* offer LLQ; see item 4 | `ena-tx-offload.md` |
+> | 5 Multi-queue + RSS | **CANCELLED on evidence** — see item 5 | `ena-multiqueue-headroom.md` §5 |
+> | 5a Doorbell/ack batching | **DEAD on evidence** — see item 5a | `219d8ab858` |
+> | 6 Jumbo frames | **MERGED, hardware-verified** both directions | `21348b03b9` |
+> | 7 Barriers & alignment | open (audit said "mostly correct") | — |
+> | 8 Spinlock WFE/SEV | open — *not* closed by 8a | — |
+> | 8a `arch_cpu_pause()` → `isb` | **MERGED** | `af7e48b94c` |
+> | 9 Cacheline constants | **CLOSED — audit only, already correct** | — |
+> | 10 16K/64K granules | open (research) | — |
+> | 11 Interrupt moderation | **partly MERGED**; the structural fix is still owed — see item 11 | `aa8cbd0c8e` |
+> | 12 Runtime feature detection | open | — |
+> | 13 PMUv3 counters | **facility MERGED**; *nothing measured with it yet* | `af7e48b94c` |
+> | 14 SMMU / IOMMU on metal | open (investigate) | — |
+> | 15 Default socket send buffer | **MERGED, measured** | `ed4ea6413a` |
+>
+> ### Two reading rules for this document, and for `graviton/docs/` generally
+>
+> **1. "Merged" is not "measured."** Items **8a** and **13** merged in a single commit
+> (`af7e48b94c`) whose own message ends *"Nothing has been measured; no numbers are
+> claimed anywhere."* Item 2 was proven at the instruction level with **no performance
+> number attached**. A ticked box here means the code is in the tree — it does **not**
+> mean anyone has read a number off it. This distinction is the one these documents
+> most often lost.
+>
+> **2. Distrust the forward-looking sections, not the measurements.** Every stale
+> claim found in the 2026-08-24 sweep of `graviton/docs/` was in a section that looked
+> *forward* — `## Open`, `## Next steps`, `## What I want baked`, `## Recommendation`,
+> "Still open". The measurements, diagnoses and dead-hypothesis records held up almost
+> without exception. When you pick up one of these files, trust what it says it
+> *observed* and re-check everything it says it *intends*.
+>
+> Items below still carry their original "current state" prose because the
+> *diagnosis* is the valuable part. Where an item has landed or been closed, a
+> dated banner says so at the top of that item. **Trust the banners over the
+> surrounding prose**, and trust neither over `git log graviton`.
+
+Each claim cites `file:line` evidence against the tree as it was when the item
+was written; line numbers drift. Where the source alone cannot settle a question
+it is marked **unverified**.
 
 ## What and why
 
@@ -24,36 +74,56 @@ userland build flags that gate both.
 > difference must be resolved at **compile time** by the baseline in item 2. See
 > the new item 12.
 
-The headline finding: **arm64 atomics today are LL/SC, not LSE**, purely because
-the compiler baseline is `-march=armv8-a+crc` (ARMv8.0). Fixing that one line
-(item 2) turns every atomic in the kernel and libroot — including the socket
-refcount CAS and the locks we have been hardening — into single LSE
-instructions. It is the highest-leverage, lowest-risk change on the list.
+The headline finding, ~~as of writing~~ **FIXED and merged 2026-08-24
+(`20bf8f2711`)**: **arm64 atomics were LL/SC, not LSE**, purely because the
+compiler baseline was `-march=armv8-a+crc` (ARMv8.0). Fixing that one line (item 2)
+turned every atomic in the kernel and libroot — including the socket refcount CAS
+and the locks we had been hardening — into single LSE instructions. It was the
+highest-leverage, lowest-risk change on the list, and it is done: the baseline is
+now `-mcpu=neoverse-n1+crypto` at `ArchitectureRules:52`.
+
+> **The part of this that was more interesting than the fix**, and the reason to
+> read item 2 rather than just noting it closed: the real defect was worse than
+> "no LSE". GCC 13.3 defaults to `-moutline-atomics`, and the kernel's
+> `__aarch64_have_lse_atomics` flag is a `.bss` symbol with no constructor — hence
+> permanently zero. So every atomic paid an **outline call *and* took the LL/SC
+> path**. Verified at the instruction level: kernel outline calls 1173 → 4, inline
+> LSE 10 → 1179, `ldapr` 0 → 168. **No performance number was ever attached** — see
+> item 13.
 
 ## Priority table
 
 | # | Item | Category | Current state (evidence) | Recommended change | Effort | Risk | Benefit |
 |---|------|----------|--------------------------|--------------------|--------|------|---------|
-| 1 | LSE atomics | compiler | LL/SC. Atomics are `__atomic`/`std::atomic` builtins (`SupportDefs.h:319`, `generic_atomic.cpp:12`); no LSE because baseline is ARMv8.0 | Gated by item 2 — arch baseline enables LSE | — | — | High (every lock/refcount) |
-| 2 | `-mcpu`/`-march` | build config | `-march=armv8-a+crc` (`ArchitectureRules:41`); no `-mcpu`, no LSE, no crypto | `-mcpu=neoverse-n1` (or `armv8.2-a` + `-moutline-atomics`) | S | Low | High |
-| 3 | CRC32 / AES / SHA / PMULL | build config | `+crc` present (`ArchitectureRules:41`); no `+crypto`. crc32c is a software table (`shared/crc32.cpp`) | Fold into item 2 baseline; intrinsic crc32c is a separate follow-up | S–M | Low | Low–Med (disk fs only) |
-| 4 | ENA LLQ | driver | Full negotiation exists (`ena.cpp:504-562`); "not support" branch is device-driven (`ena.cpp:510`). BAR2 is mapped + WC (`ena.cpp:1649-1660`) | Confirm whether device advertises LLQ per instance type; likely instance/feature gap, not driver gap | S (investigate) | Low | Med (tx latency) |
-| 5 | Multi-queue + RSS | driver | One pair, `ENA_MSIX_VECTOR_COUNT=2` (`ena.cpp:53`); RSS table built but "buys us nothing" with one queue (`ena.cpp:682`); single-pair struct (`ena.h:210-236`); `TODO` at `ena.cpp:844` | Per-vCPU IO queues, one MSI-X vector + ring each, RSS spread | L | Med | **High** (throughput) |
-| 6 | Jumbo frames | driver | MTU pinned to 1500 (`ena.h:89`, `ena.cpp:1553`); device limit read but unused (`ena.cpp:1457`); needs multi-descriptor RX | Multi-descriptor RX, then raise device MTU | M | Med | Med (in-VPC) |
+| 1 | LSE atomics | compiler | **MERGED** `20bf8f2711` — LL/SC. Atomics are `__atomic`/`std::atomic` builtins (`SupportDefs.h:319`, `generic_atomic.cpp:12`); no LSE because baseline is ARMv8.0 | Gated by item 2 — arch baseline enables LSE | — | — | High (every lock/refcount) |
+| 2 | `-mcpu`/`-march` | build config | **MERGED** `20bf8f2711` — `-march=armv8-a+crc` (`ArchitectureRules:41`); no `-mcpu`, no LSE, no crypto | `-mcpu=neoverse-n1` (or `armv8.2-a` + `-moutline-atomics`) | S | Low | High |
+| 3 | CRC32 / AES / SHA / PMULL | build config | baseline **MERGED** `20bf8f2711`; intrinsics still open — `+crc` present (`ArchitectureRules:41`); no `+crypto`. crc32c is a software table (`shared/crc32.cpp`) | Fold into item 2 baseline; intrinsic crc32c is a separate follow-up | S–M | Low | Low–Med (disk fs only) |
+| 4 | ENA LLQ | driver | **ANSWERED on hardware, device offers LLQ** — Full negotiation exists (`ena.cpp:504-562`); "not support" branch is device-driven (`ena.cpp:510`). BAR2 is mapped + WC (`ena.cpp:1649-1660`) | Confirm whether device advertises LLQ per instance type; likely instance/feature gap, not driver gap | S (investigate) | Low | Med (tx latency) |
+| 5 | Multi-queue + RSS | driver | **CANCELLED on evidence 2026-08-24, do not start** — One pair, `ENA_MSIX_VECTOR_COUNT=2` (`ena.cpp:53`); RSS table built but "buys us nothing" with one queue (`ena.cpp:682`); single-pair struct (`ena.h:210-236`); `TODO` at `ena.cpp:844` | Per-vCPU IO queues, one MSI-X vector + ring each, RSS spread | L | Med | **High** (throughput) |
+| 6 | Jumbo frames | driver | **MERGED, hardware-verified** `21348b03b9` — MTU pinned to 1500 (`ena.h:89`, `ena.cpp:1553`); device limit read but unused (`ena.cpp:1457`); needs multi-descriptor RX | Multi-descriptor RX, then raise device MTU | M | Med | Med (in-VPC) |
 | 7 | Barriers & alignment | driver | Already conservative: `wmb/rmb/mb = dsb sy` (`ena_plat.h:374-386`); ena-com structs `aligned(64)` (`ena_plat.h:123`) | Mostly correct; optional: relax over-strong barriers, align per-queue structs when item 5 lands | S | Med | Low |
 | 8 | Spinlock WFE/SEV | kernel | Busy-`yield`: `cpu_wait`→`arch_cpu_pause`→`arm64_yield` (`arch_cpu.h:140-143`, `cpu.cpp:355-360`). `arm64_wfe`/`arm64_sev` defined but unused (`arch_cpu.h:23-24`) | WFE/SEV monitored wait in the spin loop | M | Med | Med (contention/power) |
-| 9 | Cacheline constants | kernel | `CACHE_LINE_SIZE 64` for arm64 (`arch_cpu.h:10`); runtime CTR_EL0 read is correct (`arch_cpu.cpp:87-91`) | No change — verified correct for Graviton | — | — | None (audit) |
+| 9 | Cacheline constants | kernel | **CLOSED, audit only** — `CACHE_LINE_SIZE 64` for arm64 (`arch_cpu.h:10`); runtime CTR_EL0 read is correct (`arch_cpu.cpp:87-91`) | No change — verified correct for Graviton | — | — | None (audit) |
 | 10 | Larger granules (16K/64K) | kernel/MMU | Map is parameterized by `fPageBits` but instantiated at **4K** (`arch_vm_translation_map.cpp:42`, `pageBits=12`); `B_PAGE_SIZE`/`max-page-size=0x1000` everywhere | RESEARCH only — global `B_PAGE_SIZE` change; **new 10a**: contiguous-bit/block mappings at 4K instead | L | High | Med (TLB) |
-| 11 | ENA interrupt moderation | driver | `ena_com_init_interrupt_moderation()` is called (`ena.cpp:1501`) but **no interval is ever set and adaptive moderation is never enabled** — no other call site in `ena.cpp` | Set a non-adaptive RX/TX interval, or enable adaptive; AWS warns Graviton's faster packet processing *raises* the interrupt rate | S | Low | Med (irq load) |
+| 11 | ENA interrupt moderation | driver | **partly MERGED** `aa8cbd0c8e`, structural fix still owed — `ena_com_init_interrupt_moderation()` is called (`ena.cpp:1501`) but **no interval is ever set and adaptive moderation is never enabled** — no other call site in `ena.cpp` | Set a non-adaptive RX/TX interval, or enable adaptive; AWS warns Graviton's faster packet processing *raises* the interrupt rate | S | Low | Med (irq load) |
 | 12 | Runtime feature detection | kernel/libroot | **Absent entirely.** No `AT_HWCAP`, no `getauxval`, no `ID_AA64ISAR0_EL1` reader, no MRS trap emulation (`grep` over `headers/`+`src/`) | Kernel-published HWCAP word + libroot accessor; and/or force `-mno-outline-atomics` into recipe CFLAGS | M | Low | Med (unblocks userland LSE + crypto) |
-| 13 | PMU (PMUv3) counters | kernel | **No PMU code at all** for arm64 (`grep -i pmcr_el0\|pmevcntr src headers` → zero) | Read-only counter facility so AWS's runbook ratios (`ipc`, `stall_*_pkc`, `*-mpki`, `data-tlb-tw-pki`) can be measured on Haiku | M | Low | **High** (unblocks every measurement below) |
+| 13 | PMU (PMUv3) counters | kernel | **facility MERGED** `af7e48b94c`, nothing measured with it yet — **No PMU code at all** for arm64 (`grep -i pmcr_el0\|pmevcntr src headers` → zero) | Read-only counter facility so AWS's runbook ratios (`ipc`, `stall_*_pkc`, `*-mpki`, `data-tlb-tw-pki`) can be measured on Haiku | M | Low | **High** (unblocks every measurement below) |
 | 14 | SMMU / IOMMU on metal | kernel/platform | Unaudited. c7g.metal exposes an SMMU; virtualized instances do not | Determine whether the SMMU is on and translating for ENA DMA; AWS reports turning it off "speed[s] up IO handling" on metal | S (investigate) | Med | Med (metal IO only) |
 
 ## Sequencing
 
-> **Status (2026-08-22): step 1 is DONE and hardware-verified.** Items 2, 1 and 3 landed
-> as `-mcpu=neoverse-n1+crypto` (`graviton-mcpu-neoverse.patch`, uncommitted), and item 9
-> was audited as already correct. The premise below was wrong in an important way — GCC
+> **Status (2026-08-22, re-checked 2026-08-24): step 1 is DONE and hardware-verified.**
+> Items 2, 1 and 3 landed as `-mcpu=neoverse-n1+crypto` — merged as **`20bf8f2711`
+> "arm64: build with -mcpu=neoverse-n1+crypto"**, now `ArchitectureRules:52` — and item 9
+> was audited as already correct.
+>
+> > **Pointer corrected 2026-08-24.** This used to read "(`graviton-mcpu-neoverse.patch`,
+> > uncommitted)". That file is **not tracked on `graviton`**; it is a leftover in a
+> > checkout parked behind the branch, so a reader following the pointer finds nothing
+> > and may conclude the work was lost. **Cite the merged commit, never a root-level
+> > `graviton-*.patch`.** The same correction applies anywhere else in `graviton/docs/`.
+>
+> The premise below was wrong in an important way — GCC
 > 13.3 defaults to `-moutline-atomics` and the kernel's `__aarch64_have_lse_atomics` flag
 > is a `.bss` symbol with no constructor, hence permanently zero, so atomics paid a call
 > **and** took LL/SC. Measured: kernel outline calls 1173 → 4, inline LSE 10 → 1179,
@@ -68,13 +138,19 @@ instructions. It is the highest-leverage, lowest-risk change on the list.
    and the spinlock/refcount paths we have been hardening. Rebuild + boot-test
    on Graviton; it is a portable Neoverse-N1 baseline, so a single AMI still
    runs across Graviton2/3/4. This is the cheapest, broadest win.
-2. **Item 5 (ENA multi-queue + RSS)** next — the real throughput lever, but a
-   large driver refactor (per-queue structs, N MSI-X vectors, RSS spread).
-3. **Item 4 (LLQ investigation)** alongside item 5: confirm on hardware whether
-   the device advertises LLQ; it changes the tx-placement path multi-queue uses.
-4. Then items 6 (jumbo), 8 (WFE/SEV), 7 (barrier tuning) as independent
-   follow-ups. Item 10 is a research spike, not a scheduled change. Item 9 is
-   already correct (audit only).
+2. ~~**Item 5 (ENA multi-queue + RSS)** next — the real throughput lever, but a
+   large driver refactor (per-queue structs, N MSI-X vectors, RSS spread).~~
+   **CANCELLED on evidence, 2026-08-24. Do not start this.** It was never the
+   lever this line calls it; see item 5 below for the deciding control.
+3. ~~**Item 4 (LLQ investigation)** alongside item 5: confirm on hardware whether
+   the device advertises LLQ; it changes the tx-placement path multi-queue uses.~~
+   **ANSWERED on hardware, 2026-08-24.** The device does offer LLQ. See item 4.
+4. ~~Then items 6 (jumbo), 8 (WFE/SEV), 7 (barrier tuning) as independent
+   follow-ups.~~ **Item 6 (jumbo) is MERGED and hardware-verified** (`21348b03b9`).
+   Items 8 (WFE/SEV) and 7 (barrier tuning) remain open — note **8a landed
+   (`af7e48b94c`) and does *not* close 8**; `isb` is backoff, it does not stop the
+   contended line being snooped. Item 10 is a research spike, not a scheduled
+   change. Item 9 is already correct (audit only).
 5. **Added 2026-08-22, from the AWS cross-check below.** Two of the new items are
    cheaper than anything remaining on the original list and are not gated on a
    userland workload: **item 8a** (`arch_cpu_pause()` → `isb` instead of `yield`)
@@ -85,6 +161,25 @@ instructions. It is the highest-leverage, lowest-risk change on the list.
    research spike answerable rather than open-ended. **Item 12** belongs with
    Phase 2/4 in [sequencing.md](sequencing.md), not here, because it gates the
    ~150-package userland rather than the kernel.
+
+   > **Outcome (2026-08-24).** All three of those calls were acted on. **Item 8a
+   > merged** (`af7e48b94c`) and **item 11 partly merged** (`aa8cbd0c8e`). **Item 13
+   > merged as a facility in the same commit as 8a** (`af7e48b94c`,
+   > `src/system/kernel/arch/arm64/arch_pmu.cpp`, off unless the `arm64_pmu` boot
+   > setting or KDL `pmu on` asks for it).
+   >
+   > **But the argument for pulling item 13 forward has not yet paid off, and it is
+   > important not to read "merged" as "measured".** The commit message says so in
+   > terms: *"Nothing has been measured; no numbers are claimed anywhere."* Every
+   > "measure" line in this document is therefore still owed a number — the
+   > instrument now exists, the readings do not. A reader who sees item 13 ticked
+   > off and assumes the ratios in its table have been collected will be wrong.
+
+6. **What is actually next, as of 2026-08-24.** The open kernel/driver items on
+   this list are 3 (intrinsics, not the baseline), 7, 8 (WFE/SEV proper), 10, 12
+   and 14, plus **using** item 13's facility. The live network bottleneck is *not*
+   on this list under its own number: it is **ENA interrupt cadence**, the
+   `XXX STRUCTURAL FIX STILL OWED` at `ena.cpp:221`, tracked under item 11 below.
 
 ---
 
@@ -247,6 +342,13 @@ Everything, and the GCC manual explains the mechanism we found:
 
 ### Methodology we can adopt for the open measurement gap
 
+> **Still current as of 2026-08-24, with three pointers updated.** The methodology
+> here has not been superseded; what changed is that the PMU *facility* now exists
+> (item 13, `af7e48b94c`) while the *readings* still do not, so "the open
+> measurement gap" is now a gap in effort rather than in capability. Two references
+> below point at **item 5, which was cancelled** — read those as pointing at
+> **item 11** (interrupt cadence), which is where the network question now lives.
+
 Our one acknowledged gap is that the atomics change is proven at the instruction
 level with no performance number. AWS's `perfrunbook` prescribes a methodology;
 here is the honest split.
@@ -272,18 +374,25 @@ here is the honest split.
   needs nothing but a boot argument.
 - *`vCPU` counting.* "Graviton processors do not implement SMT (Hyper-Threading),
   so vCPUs map 1:1 to physical cores" (`configuring_your_sut.md`); dpdk_spdk.md:
-  "in Graviton, every vCPU is a full CPU". No halving anywhere (relevant to item
-  5's queue count).
+  "in Graviton, every vCPU is a full CPU". No halving anywhere
+  (~~relevant to item 5's queue count~~ — item 5 is cancelled; this survives only as a
+  general rule: never halve a worker count on Graviton out of x86 habit).
 - *CloudWatch network allowances,* which are read from **outside** the guest and
   so work fine against Haiku: `bw_in_allowance_exceeded`,
   `bw_out_allowance_exceeded`, `conntrack_allowance_exceeded`,
   `linklocal_allowance_exceeded`, `pps_allowance_exceeded`
   (`debug_system_perf.md`). These distinguish "our driver is slow" from "we hit
-  an instance allowance" — genuinely useful for item 5.
+  an instance allowance" — genuinely useful, and now aimed at **item 11** rather than
+  the cancelled item 5. Note the related hazard recorded elsewhere in
+  `graviton/docs/`: burst credits and per-flow caps make EC2 throughput numbers
+  drift between boots, so a single run is not a measurement.
 - *The PMU itself.* See item 13. PMUv3 is architectural and readable at EL1;
   `debug_hw_perf.md`'s full ratio set and thresholds are reproducible on Haiku
-  once counters exist, and AWS lists `*7g` as having full PMU support at
-  16xlarge/metal — **c7g.metal qualifies**.
+  ~~once counters exist~~ — **the counters now exist** (`af7e48b94c`, gated behind the
+  `arm64_pmu` boot setting or KDL `pmu on`). AWS lists `*7g` as having full PMU
+  support at 16xlarge/metal — **`c7g.metal` qualifies, and as of `f5367b3602` it also
+  boots to userland**, so this is executable now. **No ratio in that table has been
+  collected yet.**
 
 **Does NOT transfer (Linux-only, absent on Haiku):** APerf; `perf` in every form
 (`perf stat`, `perf record`, `perf report`, `perf script`, `perf c2c`); the
@@ -344,7 +453,12 @@ Called out so nobody mistakes silence for agreement:
 
 ---
 
-## 1. LSE atomics (ARMv8.1)
+## 1. LSE atomics (ARMv8.1) — MERGED 2026-08-24 (`20bf8f2711`), via item 2
+
+> **Done.** The "Current state" below describes the tree *before* `20bf8f2711`; the
+> baseline is now `-mcpu=neoverse-n1+crypto`, so these builtins compile to single LSE
+> instructions. Verified at the instruction level, **not** by a performance
+> measurement (see item 13). Retained for the diagnosis.
 
 **Current state.** arm64 has no hand-written atomic assembly. The primitives are
 compiler builtins:
@@ -407,7 +521,13 @@ expectation of the payoff — "up to an order of magnitude" on contended locks a
 high core counts — is **AWS's number, not ours**; see the cross-check section for
 how to turn it into a falsifiable experiment.
 
-## 2. `-mcpu` / `-march` targeting
+## 2. `-mcpu` / `-march` targeting — MERGED 2026-08-24 (`20bf8f2711`)
+
+> **Done: `case arm64 : archFlags += -mcpu=neoverse-n1+crypto ;`, now
+> `ArchitectureRules:52`.** Clean boot on real Neoverse cores. The "Current state"
+> below describes the pre-fix `-march=armv8-a+crc`. See also the settled `-mcpu`
+> discussion above, which is the reasoning behind `neoverse-n1` rather than a newer
+> core: a single portable AMI has to run across Graviton generations.
 
 **Current state.** The single place arm64 arch flags are set:
 
@@ -479,7 +599,18 @@ does not have and which this kernel neither enables nor context-switches.
 `crypto`) and safe (present on Graviton2-5). The comment block at
 `ArchitectureRules:41-51` needs no correction.
 
-## 3. HW extensions: CRC32 / AES / SHA / PMULL
+## 3. HW extensions: CRC32 / AES / SHA / PMULL — baseline MERGED; intrinsics STILL OPEN
+
+> **Half done, and the half that is done is the easy half.** `+crypto` is in the
+> baseline as of `20bf8f2711`, so *our* code may use AES/SHA/PMULL and the compiler
+> may auto-generate them. **What has not happened:** nothing has been rewritten to
+> use them. `crc32c` is still the software table in
+> `src/add-ons/kernel/file_systems/shared/crc32.cpp` — no intrinsic version exists.
+> **Do not read the closed baseline as a closed item.**
+>
+> Note also the negative result recorded at the end of this item: `+crypto` does
+> **not** unlock third-party crypto dispatch, because Haiku arm64 has no runtime
+> feature-detection mechanism for a library to query (item 12).
 
 **Current state.**
 
@@ -533,6 +664,27 @@ now tracked as item 12.
 
 ## 4. ENA LLQ (Low-Latency Queues)
 
+> **ANSWERED on hardware 2026-08-24 — the device *does* offer LLQ, and the driver
+> is using it.** The "Recommendation: investigate before coding" and "Open
+> questions" below are **spent**; do not re-run them. Captured from a boot log on
+> the target instance (`ena-tx-offload.md` §5.1):
+>
+> ```
+> ena: LLQ configured: 256 byte entries, 16 descriptors per entry,
+>      max 2 per burst, transmit header limit 224
+> ```
+>
+> So question 1 below ("does `supported_features` carry `BIT(ENA_ADMIN_LLQ)`") is
+> **yes**, and the earlier "device does not support LLQ; using host placement"
+> console line came from a different boot, not from a driver gap — exactly as the
+> analysis below predicted.
+>
+> **The consequence nobody expected, and the reason this item still matters:** the
+> LLQ burst allowance is **2 ring entries**, and at MTU 9001 a single jumbo frame
+> consumes both. That is what **killed item 5a** (see below). LLQ being *present*
+> is what makes doorbell coalescing impossible, not what would have made it
+> possible.
+
 **Current state.** The driver is **not** missing LLQ support — it implements the
 full negotiation:
 
@@ -575,7 +727,33 @@ not in `optimizing.md`, `optimization_recommendation.md`, or `dpdk_spdk.md` (whi
 mentions no ENA driver or PMD requirements at all). The plan above is unchanged
 and unassisted; the hardware boot-log capture remains the only way to answer it.
 
-## 5. Multi-queue + RSS
+## 5. Multi-queue + RSS — CANCELLED on evidence 2026-08-24
+
+> **CANCELLED 2026-08-24. Do not start this, and do not re-derive it.** The
+> 2026-08-22 correction below reclassified this from driver work to network-stack
+> work. A control run afterwards closed it outright:
+>
+> **Linux on the same instance class, forced down to ONE ENA queue, does
+> 29826 Mbit/s — against 29823 on eight** (interleaved A/B, four runs,
+> `c7g.16xlarge`; `ena-multiqueue-headroom.md` §5). One queue already carries
+> ~30 Gbps. DeBeOS's plateau on that class is **9.0–10.2 Gbit/s**. More queues
+> cannot lift a ceiling that a single queue clears three times over, so queue count
+> is not the limiter and cannot be.
+>
+> Two supporting facts, both worth keeping so the design below is not resurrected
+> on a hunch:
+>
+> - The device's IO-queue grant is a **fixed 8 for the whole C7g family** — it is
+>   *not* a function of vCPU count. So step 1's `min(num_io_queues_from_device,
+>   ncpus) + 1` would have produced 9 vectors on a 2-vCPU instance and 9 on a
+>   64-vCPU one, which is not the scaling story the step implies.
+> - **The real limiter is interrupt cadence, item 11** — the
+>   `XXX STRUCTURAL FIX STILL OWED` at `ena.cpp:221`. That is where the ~3× gap
+>   lives, and it is a *single-queue* problem. Spending the large refactor below
+>   would not have touched it.
+>
+> Everything from "CORRECTION, 2026-08-22" to the end of this item is retained as
+> the record of how a plausible lever was ruled out. **It is not a worklist.**
 
 > **CORRECTION, 2026-08-22 — this is not driver work, and it is not the lever this
 > document has been calling it.** Haiku's network stack cannot consume multiple
@@ -605,7 +783,36 @@ and unassisted; the hardware boot-log capture remains the only way to answer it.
 > What actually pays now, in the driver, and is ungated: interrupt moderation (item 11),
 > and the RX-refill / completion-ack batching in item 5a below.
 
-### 5a. Doorbell and ack batching (ungated, no stack change needed)
+### 5a. Doorbell and ack batching — DEAD on evidence 2026-08-24
+
+> **DEAD. Measured, not argued — and the measurement says the best case saves
+> exactly zero.** Merged as `219d8ab858` ("ena: account for transmit doorbells, and
+> settle whether they can be coalesced"), which added the accounting rather than the
+> coalescing, because the accounting settled it.
+>
+> The device grants a burst of **2 LLQ ring entries between doorbells**, and a
+> doorbell is what refills the allowance. At MTU 9001 one jumbo frame needs both
+> entries, so a deferred doorbell is *forced* by the very next frame. Instrumented
+> immediately before the doorbell:
+>
+> ```
+> ena: tx: 200000 frames, 200000 doorbells, burst left min 0, exhausted 199880
+> ```
+>
+> **99.94 % of transmit frames already leave the burst allowance at zero**
+> (98.7–99.4 % with checksum offload on, for a `meta_valid` accounting reason that
+> does not change the conclusion), and `burst left min` never rose above 0 in any
+> run. Achievable coalescing ratio at MTU 9001: **1:1.**
+>
+> Scope of the claim, so it is not over-read: this is **MTU 9001**, which is what we
+> run. At MTU 1500 a frame needs one entry, so two fit a burst and the ceiling on
+> the saving is half the doorbells — still bounded by what a doorbell costs, which
+> `ena-tx-offload.md` §5.2 puts a number on. Full working: `ena-tx-offload.md` §5.
+>
+> The **~40 lines** and "the win is available today" below were both wrong. Retained
+> because the shape of the error is instructive: the reference driver amortises these
+> three thresholds, and copying a reference optimisation without checking the
+> capability the local device actually grants is how this item got written.
 
 **Current state.** Everything is per-packet: the TX doorbell is rung for every frame
 (`ena.cpp` TX path), the completion is acked per packet, and the RX ring is refilled one
@@ -782,7 +989,13 @@ not discussed anywhere in the repo. No change to the plan above.
 
 </details>
 
-## 7. Barriers & cacheline alignment
+## 7. Barriers & cacheline alignment — STILL OPEN (audit only, 2026-08-24)
+
+> **Open.** No code change has landed for this item. The audit's conclusion —
+> "mostly correct" — still stands and is the reason it has stayed low priority.
+> One dependency below is now void: the "align per-queue structs when item 5
+> lands" clause, because **item 5 was cancelled**. There will be no per-queue
+> structs.
 
 **Current state — largely already correct/hardened.** AArch64 is weakly
 ordered, and the driver's platform layer treats device-visible ordering
@@ -846,7 +1059,13 @@ on Haiku**; the fallback is item 13's PMU counters plus wall-clock throughput.
 There is also a new, unrelated metal-only IO consideration — the SMMU — split out
 as item 14.
 
-## 8. Spinlock backoff with WFE/SEV
+## 8. Spinlock backoff with WFE/SEV — STILL OPEN (item 8a did NOT close it)
+
+> **Open as of 2026-08-24, and easy to mistake for closed.** `af7e48b94c` changed
+> `arch_cpu_pause()` from `yield` to `isb` — that is **item 8a**, a backoff hint.
+> This item is the monitored-wait redesign (`arm64_wfe`/`arm64_sev`), which stops
+> the contended line being snooped at all. `isb` does not do that. The commit that
+> landed 8a says so explicitly. Nothing here has landed.
 
 **Current state — busy-`yield`, not WFE/SEV.**
 
@@ -884,7 +1103,23 @@ throughput under contention and idle power. Confirm no missed-wakeup hangs.
 whether an explicit `sev` in `release_spinlock` is needed or the store-release
 event suffices.
 
-### 8a. `arch_cpu_pause()` → `isb` instead of `yield` (new, and much cheaper)
+### 8a. `arch_cpu_pause()` → `isb` instead of `yield` — MERGED 2026-08-24
+
+> **Merged** as `af7e48b94c`. `yield` is a no-effect hint on Neoverse cores, so every
+> spin loop in the kernel had no backoff at all; on arm64 `cpu_wait()` always reaches
+> `arch_cpu_pause()` (the cpuidle modules are x86-only), so this is live on every
+> path. All 21 call sites were audited.
+>
+> **Two caveats recorded with the change, worth carrying:** `spin()` and the KDL
+> CPU-halt timeout poll the clock rather than counting iterations, so an extra
+> pipeline flush per iteration coarsens their granularity slightly; and
+> `SPINLOCK_DEADLOCK_COUNT` counts iterations rather than duration, so a real deadlock
+> now takes proportionally longer in wall-clock to panic. Neither is a correctness
+> change.
+>
+> **This does NOT close item 8.** `isb` is backoff; it does not stop the contended
+> line being snooped, which is what the WFE/SEV redesign in item 8 is for. Item 8
+> remains open. No performance number was taken for 8a either.
 
 **AWS guide (2026-08-22).** `optimization_recommendation.md` §"Locks and
 synchronization" gives two recommendations, neither of which this plan was
@@ -947,7 +1182,13 @@ anywhere), which matches `CACHE_LINE_SIZE 64` (`arch_cpu.h:10`) and ena-com's
 `____cacheline_aligned` (`ena_plat.h:123`). The repo gives no cache-line or
 false-sharing *guidance* beyond that. Item stays closed.
 
-## 10. Larger translation granules / huge pages (16K/64K) — RESEARCH
+## 10. Larger translation granules / huge pages (16K/64K) — STILL OPEN, RESEARCH (2026-08-24)
+
+> **Open.** No code, and still correctly classified as a research spike rather than
+> a scheduled change. **The gate named below is now buildable rather than
+> hypothetical:** this item was waiting on `data-tlb-tw-pki`, and item 13's PMUv3
+> facility merged in `af7e48b94c` — so the counter can now be programmed. It has
+> not been read yet. That is the next step here, and it is cheap.
 
 **Current state (scoped, not a quick win).** The translation map is *written* to
 be granule-parameterized but is *instantiated* at 4K:
@@ -1026,9 +1267,38 @@ Three things, in order of usefulness:
    open-ended, and we cannot read it today** — hence item 13. Sequence 13 before
    10.
 
-## 11. ENA interrupt moderation / coalescing (NEW, 2026-08-22)
+## 11. ENA interrupt moderation / coalescing — partly MERGED; the structural fix is STILL OPEN
 
-**Current state — initialised but never configured.** `ena_setup_io_irqs()` calls
+> **State on 2026-08-24: this is the live network bottleneck, and someone is on it.**
+> Do not pick it up without checking who; do not mark it done.
+>
+> **What landed** (`aa8cbd0c8e` "ena: enable interrupt moderation, stop leaking
+> buffers, guard open"): moderation is now actually configured. `ena_io_interrupt()`
+> re-arms the vector with `ena_com_update_intr_reg(..., ENA_RX_IRQ_INTERVAL,
+> ENA_TX_IRQ_INTERVAL, true, false)` — the final `false` is
+> `no_moderation_update`, so the intervals take effect. Previously it passed zeroes
+> with `no_moderation_update = true`, which explicitly asks for *no moderation at
+> all*. So the "never configured" diagnosis below is fixed.
+>
+> **What is still owed, and it is the bigger half.** `ena.cpp:221` carries a live
+> `XXX STRUCTURAL FIX STILL OWED`: the unmask belongs *after* the ring has been
+> drained, not in the interrupt handler. We unmask while every completion is still
+> unconsumed, so **moderation is the only backstop we have** rather than a tuning
+> knob on top of correct structure. Moving the unmask into the reader threads
+> (`ena_receive()` / `ena_reclaim_transmitted()`, after the drain loop) is
+> Haiku-specific work because the vector is shared by both directions, so both sides
+> must agree on who re-arms.
+>
+> **The gap this is responsible for:** DeBeOS plateaus at **9.0–10.2 Gbit/s** on
+> `c7g.16xlarge` where Linux does **29.8 Gbit/s** — and Linux does that on *one*
+> queue, which is why item 5 was cancelled and this was promoted. Roughly 3×.
+>
+> **One figure to quote carefully.** The "**2.82 frames per interrupt**" number in
+> `ena-multiqueue-headroom.md` is a **lower bound, not a measurement** — it is
+> `141,217 / 50,000` and assumes *every* interrupt is used, which is the most
+> favourable assumption available. Do not cite it as the observed cadence.
+
+**Current state (2026-08-22, superseded above) — initialised but never configured.** `ena_setup_io_irqs()` calls
 `ena_com_init_interrupt_moderation(&device->comDev)` and only logs on failure
 (`ena.cpp:1501-1502`), with a comment explaining the ordering ("The reference
 drivers initialise interrupt moderation here, while still polling"). That is the
@@ -1069,7 +1339,14 @@ interrupts-per-packet before and after at a fixed offered load.
 all (`ena_com_init_interrupt_moderation()` is allowed to fail and we continue);
 what interval the reference drivers actually pick. **Unverified.**
 
-## 12. Runtime CPU feature detection — absent entirely (NEW, 2026-08-22)
+## 12. Runtime CPU feature detection — absent entirely; STILL OPEN 2026-08-24
+
+> **Open, re-verified 2026-08-24.** No `AT_HWCAP`/`getauxval`/`ID_AA64ISAR0_EL1`
+> reader has landed. One correction to the reasoning below: it argues from "the
+> kernel already reads ID registers at EL1" — that is now more true than when
+> written, because `arch_pmu.cpp` (`af7e48b94c`) reads `ID_AA64DFR0_EL1` and
+> `PMCEID0/1` and does exactly this kind of capability decoding. It is a working
+> in-tree pattern to copy, not just an assertion.
 
 **Current state — the mechanism does not exist.** Verified by grep over the tree:
 
@@ -1121,9 +1398,33 @@ what interval the reference drivers actually pick. **Unverified.**
 whole-userland atomics regression risk — neither of which is a kernel throughput
 win, which is why it belongs in the Phase 2/4 sequence rather than Phase 7.
 
-## 13. PMU (PMUv3) counters — the missing measurement floor (NEW, 2026-08-22)
+## 13. PMU (PMUv3) counters — facility MERGED 2026-08-24; NOTHING MEASURED WITH IT YET
 
-**Current state — nothing.** `grep -riE 'pmcr_el0|pmevcntr|pmuserenr|pmccntr'`
+> **The facility exists. The readings do not. Keep those two apart.**
+>
+> **Merged** as part of `af7e48b94c` ("arm64: back off spin loops with isb, and add a
+> PMUv3 counter facility") — `src/system/kernel/arch/arm64/arch_pmu.cpp`,
+> `headers/private/kernel/arch/arm64/arch_pmu.h`. It is the read-only facility this
+> item asked for: `PMUVer` is read from `ID_AA64DFR0_EL1` with both "absent" and
+> "implementation-defined" rejected; every programmed event is checked against
+> `PMCEID0/1` and flagged if unimplemented (an unimplemented event reads zero, which
+> is indistinguishable from an event that never happened); counters are 32-bit on
+> Neoverse-N1/-V1 so they are software-extended, with `PMOVSCLR_EL0` read and cleared
+> each sample to flag a wrap; `PMINTENCLR_EL1` is forced clear and `PMUSERENR_EL0`
+> zeroed.
+>
+> **It is off unless asked for** — the `arm64_pmu` boot setting, or `pmu on` in KDL —
+> because a hypervisor at EL2 may set `MDCR_EL2.TPM` and trap our accesses.
+>
+> **So the "Recommendation" below is done and the "Why it should move up the order"
+> argument has NOT yet been cashed in.** The commit message is explicit: *"Nothing
+> has been measured; no numbers are claimed anywhere."* Every "measure" line
+> elsewhere in this document is still owed a number. The open work here is **using**
+> this, not building it — starting with the two things this item was justified by: a
+> real performance number for the LSE change (item 2), and `data-tlb-tw-pki` as
+> item 10's gate.
+
+**Current state (2026-08-22, superseded above) — nothing.** `grep -riE 'pmcr_el0|pmevcntr|pmuserenr|pmccntr'`
 over `src/` and `headers/` returns zero hits. The arm64 port has no access to the
 performance monitors at all, which is why every item in this document ends in
 "measure" and none of them can.
@@ -1181,7 +1482,13 @@ routine unmasks interrupts, which is why AWS uses pseudo-NMI
 (`CONFIG_ARM64_PSEUDO_NMI`, `irqchip.gicv3_pseudo_nmi=1`) — sampling must arrive in
 a context we have not masked. **All unverified; no PMU code exists yet.**
 
-## 14. SMMU / IOMMU on metal (NEW, 2026-08-22) — INVESTIGATE
+## 14. SMMU / IOMMU on metal — STILL OPEN, INVESTIGATE (2026-08-24)
+
+> **Open; no audit done.** One premise below has since been settled and makes this
+> item *reachable* rather than blocked: `c7g.metal` now boots to userland and
+> enumerates its PCI devices (the ECAM multi-region fix, `f5367b3602`, merged via
+> `e270548f33`), so the IORT can actually be read on the target. Previously this
+> could not be checked on metal at all.
 
 **AWS guide.** `linux_kernel.md` §"Metal IO tuning" states that on Graviton2 and
 newer **metal** instances, turning the System MMU off will "speed up IO handling"
@@ -1256,8 +1563,27 @@ Full method, tables and the interleaved controls: `throughput-measurement.md`.
   Note the magnitude is **RTT-dependent** (the same pin costs 3.4× at 0.326 ms and
   1.3× at 0.18 ms), so quoting a ratio for this class without the RTT is
   meaningless. See `tcp-rcvbuf-cliff.md`.
-- **No autotuning.** 256 KiB beats 65535 but every fixed value is wrong
-  somewhere — a waste on a LAN, too small on a long fat path.
+- ~~**No autotuning.** 256 KiB beats 65535 but every fixed value is wrong
+  somewhere — a waste on a LAN, too small on a long fat path.~~
+  **FIXED and merged 2026-08-24 (`85f9d73594` "tcp: autotune the send buffer
+  towards the bandwidth-delay product").** The diagnosis was right, and the
+  measurement is worth quoting because it shows how wrong a fixed value gets: on
+  `c7g.large`, 512 MiB per run, interleaved — at **10.17 ms** RTT a pinned 256 KiB
+  gives **206 Mbit/s** against **3165** for 8 MiB, while at **0.16 ms** the same
+  8 MiB gives **2915** against **4318** for 256 KiB. The best fixed value is a
+  different value at every round-trip time. `_UpdateSendBuffer()` now mirrors
+  `_UpdateReceiveBuffer()`, targeting twice the bandwidth-delay product, capped at
+  8 MiB.
+
+  **Two implementation traps recorded with that change, because a first attempt hit
+  both.** Size against the **minimum** round trip and **acknowledged** bytes, never
+  the smoothed estimate or the observed flight size — anything our own queueing
+  inflates is a feedback loop (larger queue → higher delay → higher target → larger
+  queue), and the version that used flight size grew to 1–3.5 MB on a 0.16 ms path
+  and measured **25% slower than the fixed default it replaced**. And the probe must
+  be in **microseconds**: `tcp_now()` ticks in milliseconds, so a data-centre round
+  trip smooths to zero — exactly the path this feature exists for. Full method:
+  `tcp-send-autotune.md`.
 
 ---
 
@@ -1302,5 +1628,3 @@ Added by the 2026-08-22 AWS cross-check:
   `aws-graviton-getting-started` pages listed in that section's source table, and
   the GCC 13.3.0 AArch64 options manual (for `neoverse-512tvb`,
   `-moutline-atomics`, and the `+crypto`/`+lse`/`+crc` defaults)
-</content>
-</invoke>
