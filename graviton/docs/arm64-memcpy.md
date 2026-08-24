@@ -1,7 +1,7 @@
-- **The end-to-end network number is now measured; see §6.8.** Receive CPU cost
+- **The end-to-end network number is now measured; see §9.** Receive CPU cost
   fell **8.4%**, which is 0.213 of the modelled 1.85 ns/B per-byte term, i.e.
   **11.5% of it**. That is well short of what the copies alone predicted, and
-  §6.8 says by how much and what is left.
+  §9 says by how much and what is left.
 
 # The arm64 `memcpy()`: design, verification, and what it is worth
 
@@ -668,13 +668,14 @@ but it changes how it is broken.
 
 ### 6.7 What is not done, and what it would take
 
-- **Not booted, and not run on Haiku at all.** Everything above is the shipping
-  machine code exercised in userland on the right core, under Linux. Nothing here
-  has run inside a Haiku kernel or libroot, which is the one thing the original
-  commit message asked for and the one thing that still needs an image. Wanted:
-  boot, serial console clean through early boot, `nettput` both directions at
-  MTU 9001 watching for checksum failures rather than only for rate, a filesystem
-  workload verified by hash, `ena_fault`, and `profile -a -k`.
+- **Booted -- see §8 and §9, which supersede this bullet.** Everything in §6 is
+  the shipping machine code exercised in userland on the right core, under Linux.
+  That has since been followed by a real image: it boots, the running `libroot.so`
+  and `kernel_arm64` were disassembled off the node and do contain the routine,
+  the full battery passes against the node's own libroot with its negative
+  controls firing correctly, and a filesystem and read-path workload is
+  hash-clean. Two items remain undone: `ena_fault` (the image was not built with
+  `ENA_DEBUG_FAULT_INJECTION`, §8.5) and `profile -a -k`.
 
   **Correction, recorded because the first version of this paragraph was wrong.**
   It said the canonical AMI accepted none of the private keys on this host. It
@@ -843,7 +844,102 @@ Any self-contained arch leaf: `generic_memset.c`, `memcmp`, `strlen`, the
 leaf, it is measurable, and it is currently 2.4x off a straightforward 64-bit
 unrolled version.
 
-## 8. The measurement, on the baked image
+## 8. On the baked image: boot, artifacts, correctness
+
+`ami-0164f43c17f24cd7b`, built from this branch at `9e4547eabf`, on
+c7g.4xlarge. Everything in §6 was userland-only; this is the part that needed the
+image.
+
+### 8.1 It boots
+
+Both a new-image node and a canonical-image node came up and answered ssh
+(`baron@`, key `haiku-ed25519`). `hrev59996`, arm64. The EC2 serial console
+returned no output for either node in the window checked, so the "clean early
+boot" claim rests on the system reaching multi-user and running a network stack
+and a filesystem rather than on a clean console log -- worth stating plainly
+rather than implying a console was read.
+
+### 8.2 The running artifacts contain the routine -- disassembled, not assumed
+
+`libroot.so` and `kernel_arm64` were pulled **off the running nodes** and
+disassembled on the builder, because this project once lost days to a stale
+package whose version string was right and whose code was old.
+
+| node | file | memcpy | `bl` | SIMD `q` | `ccmp` (dest==src) | `cmp #0x80` | `ands #0xf` |
+|---|---|---|---|---|---|---|---|
+| new | `libroot.so` | **256 insns** | 0 | 0 | 1 | 1 | 1 |
+| new | `kernel_arm64` | **256 insns** | 0 | 0 | 1 | 1 | 1 |
+| old | `libroot.so` | 40 insns | 0 | 0 | 1 | 0 | 0 |
+| old | `kernel_arm64` | 40 insns | 0 | 0 | 1 | 0 | 0 |
+
+The new nodes carry the 256-instruction routine with the `dest == source`
+short-circuit, the 128-byte threshold and the align-to-16 prologue
+(`ands x3, x4, #0xf`); the old nodes carry the 40-instruction incumbent. So the
+two sides of every comparison below really are different code.
+
+`memset` is 40 instructions with no `bl` on **both** images, which is the
+expected consequence of §6.1: the guard added there changes no generated code.
+
+**Instruction identity confirmed on the running binaries.** Comparing the
+*encodings* rather than the operand text -- the first attempt compared mnemonics
+and operands, which contain absolute branch targets and therefore differ
+trivially -- libroot's and the kernel's `memcpy` are identical word for word on
+both images (256 words on the new, 40 on the old).
+
+### 8.3 The full battery against the node's real libroot
+
+`memcpy_test` run on the nodes themselves, against whatever `memcpy` their
+libroot actually exports:
+
+| image | result |
+|---|---|
+| new | **509,882 checks, 0 failures** |
+| old (control) | 509,882 checks, 0 failures |
+
+Neither run printed *"the PROT_NONE guard page did NOT fault"* nor *"a write to
+the read-only page did NOT fault"*, so **Haiku's `mprotect` and `sigsetjmp`
+behave as the test requires and the passes are not vacuous** -- which was the one
+thing the userland-only work could not establish. The overlap report also
+separates cleanly: the new image shows 14,111 of 65,280 overlapping cases
+differing from the incumbent with `dest < source` identical everywhere, the old
+image shows 0 differing, exactly as the object-code runs predicted.
+
+`memcpybench`'s own gate -- 1024 alignment pairs mod 32 x 361 sizes against a
+byte-loop oracle -- reports `correct (0 failures)` on both images.
+
+### 8.4 Filesystem and read-path workload
+
+On both images: 6 x 1 MiB files written, copied and re-read; odd sizes 1, 3, 7,
+33, 129, 1000, 4095, 4097 and 65537 bytes copied; 400 small files; and
+`kernel_arm64`, `libroot.so` and `libbe.so` each hashed nine times, plus a
+redirect-versus-pipe comparison to vary the buffer sizes and alignments the read
+path sees. **Every hash matched on both images.**
+
+Two harness faults are recorded because they first looked like corruption, and
+because what identified them as harness faults was that the **old image failed
+identically**:
+
+- A 6 x 32 MiB workload reported six "COPY MISMATCH"es on *both* images. Cause:
+  `No space left on device`. The nodes have very little free space on `/boot`.
+- A tar round-trip reported mismatches on *both* images. Cause: **`tar` is not on
+  the image at all**, so the comparison hashed a file that was never created.
+
+Also: Haiku has no `awk`, and its `df` output is not the POSIX layout, so a
+free-space calculation silently produced an empty string. Anything scripted
+against these nodes should assume a small userland.
+
+### 8.5 `ena_fault` could not be run
+
+`/boot/home/ena_fault` reports `ioctl failed: Not a tty -- is the driver built
+with ENA_DEBUG_FAULT_INJECTION?`. **The fault-injection path is not compiled into
+this image**, so the reset/error-unwind exercise asked for did not happen. It
+needs a bake with that option enabled, and it is the one item of the boot plan
+that remains entirely undone. Nothing about this change makes it more likely to
+be needed than usual -- `memcpy` is not on the reset path in any special way --
+but it was asked for and it was not delivered.
+
+
+## 9. The measurement, on the baked image
 
 `ami-0164f43c17f24cd7b`, built from this branch at `9e4547eabf`. Baseline is the
 canonical pre-change image `ami-0d61e3910062bb80a`. **c7g.4xlarge**, not
@@ -861,7 +957,7 @@ the very first transfer after boot ran at 151 Mbit/s against 4907 for a
 subsequent one, with *nearly identical* CPU per MiB -- it was stalling, not
 computing -- and including it would have poisoned everything.
 
-### 8.1 Receive, MTU 9001
+### 9.1 Receive, MTU 9001
 
 | | mean µs/MiB | median | range | per-boot means |
 |---|---|---|---|---|
@@ -878,7 +974,7 @@ single-flow on this part, so there is no rate headroom for an improvement to
 appear in. The whole effect shows up as CPU cost per byte, which is why µs/MiB is
 the number reported.
 
-### 8.2 A number I had to revise downward, and how
+### 9.2 A number I had to revise downward, and how
 
 The first receive measurement used **one boot per image** and gave
 2448.9 vs 2802.4 µs/MiB -- **12.6%**. Across three boots it is **8.4%**.
@@ -890,7 +986,7 @@ overstated the win by half again, in precisely the way four earlier claims in th
 project were overstated, and the only reason it was caught is that the second
 measurement was run at all. **8.4% is the number. 12.6% was wrong.**
 
-### 8.3 Transmit, MTU 9001 -- weaker, and reported as weaker
+### 9.3 Transmit, MTU 9001 -- weaker, and reported as weaker
 
 | | mean | median | range |
 |---|---|---|---|
@@ -922,7 +1018,7 @@ resolvable with this image:
 **So: receive 8.4%, established. Transmit about 5%, indicative.** Re-measure
 transmit once `-P` is available in a single image alongside this change.
 
-### 8.4 Controls
+### 9.4 Controls
 
 - **Null control -- round-trip latency.** A copy routine cannot change RTT, and
   it did not: 0.174 ms mean on new against 0.167 ms on old over 20 pings, both
@@ -946,7 +1042,7 @@ transmit once `-P` is available in a single image alongside this change.
   (The MTU 1500 rate collapsing to ~800 Mbit/s is a separate matter and not
   this change's.)
 
-### 8.5 How much of the per-byte cost this actually explains
+### 9.5 How much of the per-byte cost this actually explains
 
 The microbenchmark, run on the node itself, measures the receive path's two
 copies at 1920 bytes cold:
