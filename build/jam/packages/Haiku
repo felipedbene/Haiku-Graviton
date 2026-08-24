@@ -42,8 +42,13 @@ AddFilesToPackage add-ons kernel busses i2c :
 AddFilesToPackage add-ons kernel busses mmc :
 	sdhci
 	;
+# designware is listed for arm64 as well as riscv64: the driver is architecture
+# neutral (a device tree driver for an IP core used on both), and listing it for
+# an architecture that gets built nightly is what keeps it compiling. It stays
+# out of the arm64 boot module links below, since no arm64 machine we boot has
+# this controller.
 AddFilesToPackage add-ons kernel busses pci :
-	<pci>designware@riscv64
+	<pci>designware@riscv64,arm64
 	<pci>ecam@riscv64,arm,arm64
 	<pci>x86@x86,x86_64
 	;

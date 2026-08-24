@@ -165,6 +165,11 @@ public:
 
 			status_t			Init(PciDbiRegs volatile* dbiRegs, int32 msiIrq);
 
+			// This controller hands out a plain address/data pair, so it has no
+			// use for the emitting device's requester ID; inherit the base
+			// class's requester-ID form, which forwards to the one below.
+			using MSIInterface::AllocateVectors;
+
 			status_t			AllocateVectors(uint32 count, uint32& startVector, uint64& address,
 									uint32& data) final;
 			void				FreeVectors(uint32 count, uint32 startVector) final;
