@@ -487,8 +487,34 @@ atomic; every `printf`-family call, every lock, and every allocation belongs in 
 deferred dump, which must itself run in ordinary thread context. This is also why
 the dump here is triggered by a syscall rather than from the scheduler.
 
-Implemented instead (`scheduler_placement_trace.{h,cpp}`, `SCHEDULER_TRACE_PLACEMENT`,
-explicitly **not for merge**):
+### And a success code is not an artifact
+
+The companion rule, learned the same night from three different directions.
+
+- A `base64 -d` that returns **`rc = 0` is not evidence of a correct transfer.** A
+  dropped `ssh` chunk produced a *shorter* file that decoded perfectly cleanly and
+  gave the wrong `sha256` — 132 939 bytes where 144 339 were expected. Only the
+  hash caught it.
+- A build returning **`rc = 0` on every target is not evidence the patch applied.**
+  `git apply` errors can surface before the build output, so a later success code
+  says nothing about them.
+- A **null result is indistinguishable from a change that never arrived**, which is
+  the dangerous case: "my fix does nothing" and "my fix is not in this binary" look
+  identical from the outside.
+
+So: **an artifact must announce itself.** In this branch that is
+`sched_placement:` in the kernel log — emitted by the *kernel*, not by the
+userland binary, so its presence proves the patch reached the running image and its
+absence on the baseline proves the two sides really differ. The A/B was gated on
+that before any number was recorded. A version stamp, a build sentinel and a
+kernel-emitted log line are all the same idea, and a `sha256` is the cheapest form
+of it.
+
+Implemented instead (`scheduler_placement_trace.{h,cpp}`, gated on
+`SCHEDULER_TRACE_PLACEMENT`, **off by default**; it merges switchable rather than
+being deleted, because the 21 888 unexplained declines in §5.15 are worth chasing
+and the cost — 0.24 % typical, ~2.4 % worst case, 12 KB resident — is only
+acceptable when someone has deliberately asked for it):
 
 - A lock-free ring buffer; recording is a few stores plus one `atomic_add`, with
   **all formatting and all I/O deferred** until after the burst.
