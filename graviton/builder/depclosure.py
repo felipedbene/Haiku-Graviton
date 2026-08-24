@@ -220,6 +220,25 @@ def saturate(tree, sat, already):
 
 	Returns wave[port] = the iteration at which it became buildable. Ports absent
 	from wave are unreachable no matter what order anything is built in.
+
+	A port is promoted only when BOTH its build requirements and its own runtime
+	`requires` are satisfied. The runtime half is not pedantry: haikuporter has to
+	*install* every build dependency into the chroot, so a dependency that builds but
+	cannot be installed is not usable. Measured the hard way -- `meson` failed with
+
+	    requires "packaging_python314" of package "build_python3.14-1.5.0-1" could not be resolved
+	    build-requires "build_python314" of package "meson-1.11.1" could not be resolved
+
+	*after* `build` had itself built cleanly at RC=0. Walking build edges alone said
+	meson was ready; it was not, because `build_python3.14` needs `packaging` at
+	runtime. Note which line is which: haikuporter prints the real cause first and the
+	misleading summary last, so a tail(1) blames `build_python314` instead of naming
+	`packaging`.
+
+	The same shape hides a costlier one: `psutils` builds fine but requires
+	`puremagic_python310` and `pypdf_python310`, so `cmd:psselect` cannot be installed
+	for groff until those two exist. Before this fix the tool reported groff's distance
+	without them, i.e. it under-counted.
 	"""
 	sat = set(sat)
 	wave = {p: 0 for p in already}
@@ -230,8 +249,12 @@ def saturate(tree, sat, already):
 		for port, inf in tree.ports.items():
 			if port in wave:
 				continue
-			if all(r in sat for r in inf['build']):
-				promoted.append(port)
+			if not all(r in sat for r in inf['build']):
+				continue
+			# Installability: a build dependency must be installable, not merely built.
+			if not all(r in sat for r in inf['requires']):
+				continue
+			promoted.append(port)
 		if not promoted:
 			return wave, n - 1
 		for port in promoted:
@@ -244,7 +267,12 @@ def minimal_set(tree, target, wave, sat):
 	"""Backward walk restricted to strictly-lower waves, choosing one provider per
 	requirement -- the reachable one with the lowest wave, i.e. the cheapest. Because
 	every chosen provider has a strictly smaller wave, the result is acyclic by
-	construction."""
+	construction.
+
+	Walks build requirements AND runtime `requires`, because a build dependency has to
+	be installable into the chroot, not merely built. Omitting the runtime half is what
+	made an earlier run of this tool leave `packaging`, `puremagic` and `pypdf` out of
+	groff's build set entirely."""
 	chosen, order = {}, []
 	stack = [target]
 	seen = set()
@@ -257,7 +285,7 @@ def minimal_set(tree, target, wave, sat):
 		if not inf:
 			continue
 		deps = set()
-		for req in inf['build']:
+		for req in inf['build'] + inf['requires']:
 			if req in sat:
 				continue
 			cands = [c for c in tree.providers.get(req, ()) if c in wave and wave[c] < wave[port]]
