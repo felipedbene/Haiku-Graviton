@@ -713,6 +713,41 @@ smpscale -t 3000 -x 16                                         # prediction 6
 
 ---
 
+## 5.10 Why the network path probably does not care, stated in advance
+
+The brief asked whether the receive path is affected, since a 2x straggler on a
+shared-FIFO critical path is worse than for a batch job, and warned against
+manufacturing a result. So the expectation goes here **before** any `nettput` run.
+
+**Prediction: little to no effect, and I do not intend to claim one.** The defect
+now has a specific shape — a *burst* of thread placements inside a window shorter
+than ICI-plus-reschedule latency (§1.7), plus a repair path that cannot move a
+>80 %-duty thread (§3). The receive path is two long-lived threads (reader and
+consumer) plus interrupt work. Two threads created once at driver attach are not a
+burst, so **defect A cannot apply**. Defects B and C need `N >= ncpus`, which two
+threads plus interrupts do not reach on a 16-vCPU instance.
+
+There is one way it *could* matter and it is worth naming rather than dismissing:
+if the reader and consumer happen to land on the **same** core at attach time, the
+repair path is what would separate them, and today it cannot for any thread above
+80 % duty. That would be a real 2x on a serial pipeline. But it is a **coin flip at
+attach**, not a systematic effect, so demonstrating it would need many boots rather
+than many runs — and a per-boot experiment is a different and much more expensive
+design than the ladder.
+
+If a `nettput` measurement is run at all it will be reported as a **negative
+control** (throughput must not regress), not as evidence for the fix. The ladder is
+the primary evidence and this section exists so that a later positive number gets
+treated with suspicion rather than enthusiasm.
+
+Operational note for any such run: the harness default peer port has moved off
+5301, and the earlier story that 5301 was blocked from test nodes was **wrong** —
+5301 is open from the test SG under a permanent rule, and the failures behind that
+story were on port 5311. Ports 5302–5310 exist for per-agent distinct-port
+discipline.
+
+---
+
 ## 6. Acceptance criteria
 
 Efficiency numbers are **not** acceptable evidence (§1.2). Required:
