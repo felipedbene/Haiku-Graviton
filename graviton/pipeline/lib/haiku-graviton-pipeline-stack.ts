@@ -26,9 +26,11 @@ export interface HaikuGravitonPipelineStackProps extends cdk.StackProps {
  *                register-image (arm64/uefi/ena/hvm/xvda), tag as a candidate
  *                (canonical is NOT set here). Exports AMI_ID.
  *   Test         CodeBuild: boot the candidate on a real c7g.large, measure
- *                throughput against the metal builder over SSM, and fail unless
- *                it boots, negotiates MTU 9001 and clears both throughput
- *                floors. The ephemeral instance is always torn down.
+ *                throughput against the metal builder over SSM, then stop and
+ *                start the instance and require sshd to answer again. Fails
+ *                unless it boots, negotiates MTU 9001, clears both throughput
+ *                floors and survives the power cycle. The ephemeral instance is
+ *                always torn down.
  *   Approve      Manual approval gate — canonical promotion happens only after
  *                a human approves, now with the Test stage's measurements in
  *                hand rather than a promise that someone checked out of band.
@@ -162,10 +164,18 @@ export class HaikuGravitonPipelineStack extends cdk.Stack {
     );
 
     // ---------------------------------------------------------------------
-    // Stage 3 project: hardware performance gate. Boots the candidate AMI on a
+    // Stage 3 project: hardware regression gate. Boots the candidate AMI on a
     // real Graviton instance, measures throughput against the metal builder over
-    // SSM, and fails the pipeline if the image does not boot, does not negotiate
-    // jumbo, or has lost a large fraction of its throughput.
+    // SSM, then stops and starts it and requires sshd to answer again. Fails the
+    // pipeline if the image does not boot, does not negotiate jumbo, has lost a
+    // large fraction of its throughput, or does not survive a power cycle.
+    //
+    // The stop/start case was added after a data-loss bug shipped straight past
+    // the throughput-only version of this gate: the image measured perfectly and
+    // then could not survive being stopped, because the kernel's page writer
+    // never flushed a short modified-page queue and the sshd host key came back
+    // present-but-zeroed. Anything measured on a machine that never went down is
+    // blind to whether the writes reached the disk.
     //
     // Before this stage existed the approval gate could only mean "I tested this
     // out of band and I vouch for it" -- nothing in the pipeline knew whether the
@@ -174,8 +184,21 @@ export class HaikuGravitonPipelineStack extends cdk.Stack {
     const perfTest = new codebuild.PipelineProject(this, 'PerfTest', {
       projectName: `${cfg.amiNamePrefix}-perf-test`,
       environment: smallArmEnvironment,
-      // Boot plus two runs per direction; the boot wait dominates.
-      timeout: cdk.Duration.minutes(45),
+      // Measured: a passing run is ~2.5 min (boot, two runs per direction, a
+      // 32 s clean stop, then a second boot), against ~90 s before the stop/start
+      // check. A run that fails the stop/start is ~14 min, because it spends the
+      // full ACPI grace period stopping and then the whole sshd budget waiting for
+      // a node that will never answer. The cycle is what costs the minutes and
+      // there is no way to shorten it.
+      //
+      // 75 min rather than something snug, because every wait in haiku-perf-gate
+      // is bounded by an explicit budget and those budgets add up to a ~46 min
+      // ceiling (420 boot + 900 measure + 600 stop + 300 start + 420 boot again +
+      // 90 cleanup). The timeout must sit above the script's own ceiling: if
+      // CodeBuild kills the container first, the EXIT trap never runs and the
+      // ephemeral instance leaks, which is exactly what the trap exists to
+      // prevent. Better to let the script fail on its own terms and clean up.
+      timeout: cdk.Duration.minutes(75),
       environmentVariables: {
         ...commonEnvVars,
         AWS_REGION: { value: cfg.region },
@@ -230,6 +253,31 @@ export class HaikuGravitonPipelineStack extends cdk.Stack {
       new iam.PolicyStatement({
         sid: 'TerminateOnlyOwnEphemeralInstances',
         actions: ['ec2:TerminateInstances'],
+        resources: ['*'],
+        conditions: {
+          StringEquals: {
+            'aws:RequestedRegion': cfg.region,
+            'ec2:ResourceTag/ephemeral': 'true',
+            'ec2:ResourceTag/Name': 'haiku-perf-gate',
+          },
+        },
+      }),
+    );
+    // Stopping and starting the candidate is the stop/start regression check:
+    // Haiku once came back from a stop/start reachable by ping but with nothing
+    // on :22, because the page writer never flushed a short modified-page queue
+    // and the sshd host key returned present-but-zeroed. Throughput is measured
+    // on a machine that never went down, so only a real power cycle sees it.
+    //
+    // Scoped with exactly the same tag condition as TerminateInstances, and for
+    // the same reason: an unattended stage that could stop any instance in the
+    // account could stop the metal builder, which is the one machine the whole
+    // project depends on. Stopping it would be less final than terminating it but
+    // would still break every other bake and every agent driving it over SSM.
+    perfTest.addToRolePolicy(
+      new iam.PolicyStatement({
+        sid: 'CycleOnlyOwnEphemeralInstances',
+        actions: ['ec2:StopInstances', 'ec2:StartInstances'],
         resources: ['*'],
         conditions: {
           StringEquals: {
@@ -341,9 +389,13 @@ export class HaikuGravitonPipelineStack extends cdk.Stack {
       actionName: 'Approve_Canonical_Promotion',
       additionalInformation:
         'The Test stage already booted AMI #{reg.AMI_ID} on real Graviton hardware and ' +
-        'checked that it comes up, negotiates MTU 9001, and meets both throughput floors -- ' +
-        'its log has the measured numbers. Approve to make this the single canonical=true ' +
-        'image, which removes canonical from every prior holder.',
+        'checked that it comes up, negotiates MTU 9001, meets both throughput floors, and ' +
+        'survives a stop/start with sshd answering again -- its log has the measured ' +
+        'numbers and the shutdown duration. Read the log for a WARNING line: a stop that ' +
+        'consumed EC2\'s full ACPI grace period means the guest never handled the power ' +
+        'button, which passes on purpose but is worth knowing before you promote. ' +
+        'Approve to make this the single canonical=true image, which removes canonical ' +
+        'from every prior holder.',
     });
 
     const promoteAction = new cpactions.CodeBuildAction({

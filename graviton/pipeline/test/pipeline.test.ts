@@ -75,6 +75,50 @@ test('the perf gate may only terminate its own ephemeral instances', () => {
   expect(condition['ec2:ResourceTag/Name']).toBe('haiku-perf-gate');
 });
 
+// The stop/start regression check needs Stop/StartInstances, which must carry the
+// same tag condition as the terminate grant. An unattended stage able to stop any
+// instance in the account could stop the metal builder -- less final than
+// terminating it, but it would still break every other bake and every agent
+// driving it over SSM. Asserted separately from the terminate test so that
+// dropping the condition from either grant turns a test red on its own.
+test('the perf gate may only stop and start its own ephemeral instances', () => {
+  const t = synth();
+  const policies = t.findResources('AWS::IAM::Policy');
+  const statements = Object.values(policies).flatMap(
+    (p: any) => p.Properties.PolicyDocument.Statement as any[],
+  );
+  for (const action of ['ec2:StopInstances', 'ec2:StartInstances']) {
+    const granting = statements.filter((s) =>
+      ([] as string[]).concat(s.Action ?? []).includes(action),
+    );
+    expect(granting).toHaveLength(1);
+    const condition = granting[0].Condition.StringEquals;
+    expect(condition['ec2:ResourceTag/ephemeral']).toBe('true');
+    expect(condition['ec2:ResourceTag/Name']).toBe('haiku-perf-gate');
+    expect(condition['aws:RequestedRegion']).toBe(config.region);
+  }
+});
+
+// The gate's lifecycle powers are the ones worth bounding, so assert the negative
+// too: nothing in the stack may grant an instance-lifecycle action without a tag
+// condition. This catches a future grant added with only a region condition,
+// which the two positive tests above would not notice.
+test('no instance-lifecycle grant is left tag-unconditioned', () => {
+  const t = synth();
+  const policies = t.findResources('AWS::IAM::Policy');
+  const statements = Object.values(policies).flatMap(
+    (p: any) => p.Properties.PolicyDocument.Statement as any[],
+  );
+  const lifecycle = ['ec2:TerminateInstances', 'ec2:StopInstances', 'ec2:StartInstances', 'ec2:RebootInstances'];
+  for (const s of statements) {
+    const actions = ([] as string[]).concat(s.Action ?? []);
+    if (!actions.some((a) => lifecycle.includes(a))) continue;
+    const condition = s.Condition?.StringEquals ?? {};
+    expect(condition['ec2:ResourceTag/ephemeral']).toBe('true');
+    expect(condition['ec2:ResourceTag/Name']).toBe('haiku-perf-gate');
+  }
+});
+
 test('has a retained encrypted work bucket', () => {
   const t = synth();
   t.hasResource('AWS::S3::Bucket', { DeletionPolicy: 'Retain' });

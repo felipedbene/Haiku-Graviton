@@ -73,6 +73,15 @@ GitHub (fork/branch)            CodeBuild arm64 (Graviton, Ubuntu 24.04)
                                   tag candidate=true   (canonical NOT set)
                                         │  exports AMI_ID
                                         ▼
+                                CodeBuild  Test  (hardware regression gate)
+                                  run-instances c7g.large from $AMI_ID
+                                  wait for sshd (via the metal builder over SSM)
+                                  nettput both directions; assert MTU + floors
+                                  stop-instances ; wait 'stopped'  (time it)
+                                  start-instances ; assert sshd answers again
+                                  terminate from an EXIT trap, always
+                                        │
+                                        ▼
                                 Manual Approval  ◀── human gate for canonical
                                         │
                                         ▼
@@ -95,6 +104,7 @@ The buildspecs (`buildspecs/*.yml`) are intentionally thin — they invoke the
 | `lib/haiku-graviton-pipeline-stack.ts` | The pipeline, three CodeBuild projects, least-privilege IAM, the S3 work bucket, and the manual approval gate. |
 | `buildspecs/cross-build.yml` | Cross-tools + OpenSSH + two-pass `jam @minimum-mmc` + `make-gpt-image.sh`. |
 | `buildspecs/register-image.yml` | Invokes the import/register helper; exports `AMI_ID`. |
+| `buildspecs/perf-test.yml` | Thin wrapper around `graviton/scripts/haiku-perf-gate`, plus a straggler sweep for a container killed mid-run. |
 | `buildspecs/promote.yml` | Runs `haiku-canonical promote` + `check`. |
 | `scripts/import-and-register.sh` | `import-snapshot` → `register-image` (arm64/uefi/ena) → candidate tags. |
 
@@ -204,6 +214,17 @@ executions from the CodePipeline console/CLI. When the pipeline reaches
   `CreateTags`, all constrained to `us-west-2` via an `aws:RequestedRegion`
   condition. (These EC2 actions don't support resource-level scoping, so the
   region condition is the tightest available bound.)
+- **PerfTest** role: `RunInstances`/`DescribeInstances`/`DescribeImages`/
+  `CreateTags` region-scoped, plus `ssm:SendCommand` scoped to the single builder
+  instance and the `AWS-RunShellScript` document. The three instance-lifecycle
+  actions — `TerminateInstances`, `StopInstances`, `StartInstances` — are
+  additionally conditioned on `ec2:ResourceTag/ephemeral=true` **and**
+  `ec2:ResourceTag/Name=haiku-perf-gate`, so the gate can only cycle instances it
+  launched itself. Without that condition an unattended stage would hold the
+  right to stop or terminate the metal builder, which is the one machine the whole
+  project depends on. Two unit tests assert the condition on every lifecycle
+  grant, including a negative test that fails if a future grant is added without
+  it.
 - **Promote** role: only `ec2:DescribeImages` + `CreateTags` + `DeleteTags`,
   region-scoped. This is the sole role allowed to mutate the `canonical` tag.
 
@@ -216,6 +237,95 @@ negligible S3 (a couple GB of raw image, expired after 14 days, plus the
 cross-tools cache), the EBS snapshot created by the import, and near-zero
 CodePipeline/Logs. The registered AMI + its snapshot incur ongoing EBS snapshot
 storage (~$0.05/GB-month) until deregistered.
+
+---
+
+## The hardware regression gate (Test stage)
+
+All the logic is in `graviton/scripts/haiku-perf-gate`, which takes an AMI id and
+runs standalone — that is how it gets debugged:
+
+```sh
+HG_TEST_SG=sg-0b99fabc8cb8bce88 AWS_REGION=us-west-2 \
+  bash graviton/scripts/haiku-perf-gate <ami-id>
+```
+
+Resolve the AMI by its `canonical=true` tag, never by newest creation date.
+
+What it asserts, and how hard:
+
+| Check | On failure | Why |
+|---|---|---|
+| sshd answers after first boot | **fail** | A candidate that never comes up is a dead image. |
+| interface negotiates MTU 9001 | **fail** | Jumbo negotiation has regressed before. |
+| receive ≥ 3000 Mbit/s | **fail** | Floor, vs ~4950 measured. |
+| transmit ≥ 2000 Mbit/s | **fail** | Floor, vs ~4490 measured. |
+| sshd answers again after a stop/start | **fail** | See below. |
+| the stop finished inside EC2's ACPI grace period | **warn** | See below. |
+
+Every floor sits far below the measured figure on purpose. This is a *regression*
+gate, not a benchmark: a gate that trips on ordinary variance gets switched off by
+whoever it wakes up, and then it guards nothing. It exists to catch "the network
+is broken" and "we lost a factor of two".
+
+### Why the stop/start case exists
+
+A data-loss bug shipped straight past the throughput-only version of this gate.
+The image measured perfectly and then could not survive being stopped: it came
+back answering ping in 0.17 ms with nothing listening on `:22`.
+
+The cause was a generic kernel bug. `vm_page_writer.cpp` treated
+`BinarySemaphore::Wait()` returning false on **timeout** as "nothing to do" — but
+that timeout *is* the periodic flush, so a modified-page queue holding fewer than
+256 pages was never written to disk at all. BFS journals the inode but not file
+data, so the sshd host key came back with the correct size, mode and mtime and
+411 bytes of zeros, and `sshd_boot.sh` only regenerated it `if [ ! -f ]` — a
+zeroed file exists. Ping answered because the kernel was healthy; only the disk
+had lied. The decisive experiment: the same AMI, given a single `sync` before the
+stop, came back with `:22` open in ~15 s.
+
+Throughput is measured on a machine that never went down, so it is structurally
+blind to whether writes reached the disk. Cycling the instance is the only thing
+that sees it. The gate deliberately runs **no `sync`** of its own — the point is
+to test the image as it will ship. Before the fix this failed 100% of the time,
+which is what makes it a test rather than a coin toss.
+
+### Why the shutdown timing is only a warning
+
+EC2 asks a guest to shut down by pressing the virtual ACPI power button and
+allows roughly 3–4 minutes before cutting power regardless, so the duration of
+the stop is a free second signal: tens of seconds means the guest handled the
+event (the `pl061_acpi_event` driver did its job), while consuming the whole
+grace period means nobody answered and EC2 pulled the plug.
+
+That is reported loudly but **does not fail the build**. `pl061_acpi_event` is
+new, and an unclean stop does not by itself produce a bad image — the stop/start
+assertion is what protects the data, and it stays a hard failure. Failing on the
+timing would let a brand-new driver block every bake, and a gate that blocks
+every bake gets switched off, which would cost us the assertion that does matter.
+Promote it to a failure once the driver has a few clean bakes behind it.
+
+### Wall clock and the CodeBuild timeout
+
+Measured by hand against the canonical AMI:
+
+| Outcome | Wall clock | Where it goes |
+|---|---|---|
+| pass | **~2.5 min** | boot ~30 s, measure ~60 s, clean stop 32 s, second boot ~30 s |
+| stop/start failure | **~14 min** | the stop burns EC2's full ~4 min grace period, then the sshd wait burns its whole 420 s budget on a node that will never answer |
+
+It was ~90 s before the stop/start check. The power cycle is what costs the extra
+minutes and there is no way to shorten it.
+
+Every wait in the script is bounded by an explicit wall-clock budget
+(`HG_BOOT_WAIT_SECS` 420, `HG_STOP_WAIT_SECS` 600, `HG_START_WAIT_SECS` 300, plus
+a 900 s measurement) rather than an attempt count, so the script has a knowable
+ceiling of about **46 minutes**. The CodeBuild timeout is **75 minutes** — it must
+sit above the script's own ceiling, because if CodeBuild kills the container first
+the `EXIT` trap never runs and the ephemeral instance leaks, which is exactly what
+the trap exists to prevent. `buildspecs/perf-test.yml` still sweeps stragglers in
+`post_build` as a backstop, now including the `stopping`/`stopped` states the gate
+legitimately puts an instance into.
 
 ---
 

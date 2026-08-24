@@ -1,8 +1,8 @@
 version: 0.2
 
 # Test stage: boot the freshly registered candidate AMI on real Graviton
-# hardware, measure throughput against the metal builder, and fail if it
-# regressed.
+# hardware, measure throughput against the metal builder, then stop and start it
+# and require sshd to answer again. Fail if any of that regressed.
 #
 # This sits between Register and Approve on purpose. Before it existed, the
 # approval gate could only mean "I tested this out of band and I vouch for it" --
@@ -35,11 +35,16 @@ phases:
       # above has already cleaned up. This is a belt-and-braces sweep for the
       # case where the container itself was killed mid-run and the trap never
       # fired -- an ephemeral gate instance must never outlive its build.
+      #
+      # stopping/stopped are in the state list because the gate now deliberately
+      # cycles the instance: a container killed during the stop/start check leaves
+      # a gate instance parked in one of those states, where it is easy to forget
+      # and still bills for its EBS volume.
       - |
         set +e
         stragglers=$(aws --region "${AWS_REGION:-$AWS_DEFAULT_REGION}" ec2 describe-instances \
           --filters "Name=tag:Name,Values=haiku-perf-gate" "Name=tag:ephemeral,Values=true" \
-                    "Name=instance-state-name,Values=running,pending,stopped" \
+                    "Name=instance-state-name,Values=running,pending,stopping,stopped" \
           --query 'Reservations[].Instances[].InstanceId' --output text 2>/dev/null)
         if [ -n "$stragglers" ]; then
           echo "sweeping leaked gate instances: $stragglers"
