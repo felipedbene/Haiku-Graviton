@@ -79,9 +79,15 @@ ECAMPCIControllerACPI::ReadResourceInfo(device_node* parent)
 	// segment select which base an address belongs to, and nothing downstream
 	// of this driver carries a segment to select with -- pci_segment appears
 	// nowhere else in the tree.
+	// Say which region was taken rather than which segment: an MCFG may list
+	// several regions that are all in the same segment and differ only by bus
+	// range, which a 96-vCPU guest does (buses 0-0, 1-43 and 44-56), and
+	// "ignoring all but segment 0" is no help at all when every one of them is
+	// segment 0.
 	if (count > 1) {
-		dprintf("PCI: %" B_PRIu32 " ECAM regions found but only one can be "
-			"used; ignoring all but segment %x\n", count, chosen->pci_segment);
+		dprintf("PCI: %" B_PRIu32 " ECAM regions in MCFG; using only segment "
+			"%x buses %x-%x\n", count, chosen->pci_segment,
+			chosen->start_bus_number, chosen->end_bus_number);
 	}
 
 	fStartBusNumber = chosen->start_bus_number;

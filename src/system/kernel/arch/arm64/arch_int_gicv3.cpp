@@ -99,6 +99,11 @@ GICv3InterruptController::_MapRedistributors(const intc_info& info)
 	gicr_region_info ranges[INTC_MAX_GICR_REGIONS];
 	uint32 count = info.gicr_region_count;
 
+	// Whether the geometry was measured for us, or is a window we are guessing
+	// our way through. Only the former is expected to be an exact number of
+	// redistributors.
+	const bool measured = count != 0;
+
 	if (count > INTC_MAX_GICR_REGIONS)
 		count = INTC_MAX_GICR_REGIONS;
 
@@ -142,11 +147,14 @@ GICv3InterruptController::_MapRedistributors(const intc_info& info)
 		region.stride = ranges[i].stride;
 		region.count = ranges[i].size / ranges[i].stride;
 
-		// A size that is not a whole number of strides means the two were
-		// derived from different ideas of the geometry. Say so: the count above
-		// truncates, so the effect is redistributors that go unfound rather
-		// than reads off the end, but it is a bug either way.
-		if ((ranges[i].size % ranges[i].stride) != 0) {
+		// A coalesced region is an exact number of redistributors by
+		// construction, so a remainder there means the loader and the kernel
+		// disagree about the geometry -- the count truncates, so the effect is
+		// redistributors that go unfound rather than reads off the end, but it
+		// is a bug either way. A single firmware-declared range is just a
+		// generous window and its size means nothing in particular: a guest
+		// reports 0xfdf0000, which is 2031 and a half strides, every boot.
+		if (measured && (ranges[i].size % ranges[i].stride) != 0) {
 			dprintf("gicv3: redistributor region %" B_PRIu32 " at %#" B_PRIx64
 				" is %#" B_PRIx64 " bytes, not a multiple of its %#" B_PRIx64
 				" stride\n", i, ranges[i].start, ranges[i].size,
