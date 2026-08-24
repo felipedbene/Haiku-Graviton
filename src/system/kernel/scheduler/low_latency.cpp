@@ -56,16 +56,17 @@ choose_core(const ThreadData* threadData)
 		package = PackageEntry::GetMostIdlePackage();
 	}
 
-	int32 index = 0;
+	int32 index;
 	CPUSet mask = threadData->GetCPUMask();
 	const bool useMask = !mask.IsEmpty();
 
 	placement_event event = PLACEMENT_IDLE_CORE;
 	CoreEntry* core = NULL;
 	if (package != NULL) {
-		do {
-			core = package->GetIdleCore(index++);
-		} while (useMask && core != NULL && !core->CPUMask().Matches(mask));
+		// Not GetIdleCore(0): during a burst that keeps returning the same core,
+		// because a core is only removed from the idle list once its CPU actually
+		// reschedules. See PackageEntry::GetLeastClaimedIdleCore().
+		core = package->GetLeastClaimedIdleCore(useMask ? &mask : NULL);
 	}
 	if (core == NULL) {
 		ReadSpinLocker coreLocker(gCoreHeapsLock);

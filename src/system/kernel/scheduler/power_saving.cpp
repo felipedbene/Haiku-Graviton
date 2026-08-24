@@ -75,8 +75,12 @@ choose_idle_core()
 	if (package == NULL)
 		package = gIdlePackageList.Last();
 
-	if (package != NULL)
-		return package->GetIdleCore();
+	if (package != NULL) {
+		// Same reasoning as in low_latency's choose_core(): a core stays in the
+		// idle list until its CPU reschedules, so taking the head of the list
+		// hands a burst the same core repeatedly.
+		return package->GetLeastClaimedIdleCore();
+	}
 	return NULL;
 }
 

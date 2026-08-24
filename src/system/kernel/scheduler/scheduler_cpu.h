@@ -234,6 +234,8 @@ public:
 	inline				void				CoreWakesUp(CoreEntry* core);
 
 	inline				CoreEntry*			GetIdleCore(int32 index = 0) const;
+	inline				CoreEntry*			GetLeastClaimedIdleCore(
+											const CPUSet* mask = NULL) const;
 
 						void				AddIdleCore(CoreEntry* core);
 						void				RemoveIdleCore(CoreEntry* core);
@@ -550,6 +552,59 @@ PackageEntry::GetIdleCore(int32 index) const
 		element = fIdleCores.GetPrevious(element);
 
 	return element;
+}
+
+
+/*!	Returns the idle core with the fewest threads already assigned to it, or NULL
+	if this package has no idle core matching \a mask (NULL matches any).
+
+	choose_core() must not simply take GetIdleCore(0). A core leaves fIdleCores
+	only when one of its CPUs actually reschedules onto a thread -- CPUWakesUp(),
+	reached from CPUEntry::UpdatePriority() -- but enqueue() merely asks that CPU
+	to reschedule, with an asynchronous ICI. For the length of that lag the core
+	is still advertised as idle, and because CoreGoesIdle() appends while
+	GetIdleCore(0) returns fIdleCores.Last(), a burst of placements is handed the
+	SAME core over and over. Measured on a 16-CPU Graviton: eight threads spawned
+	back to back land on seven cores, leaving one core doubled and one idle, and
+	separating the spawns by as little as 5 us -- ICI plus reschedule latency --
+	makes it correct in 40 runs out of 40.
+
+	ThreadCount() is the tie-breaker because it is the only measure here with no
+	lag: CoreEntry::PushBack() does atomic_add(&fThreadCount, 1) from within
+	ThreadData::Enqueue(), which completes before the next placement's
+	choose_core() call, so a core claimed a moment ago already reports 1. Core
+	load cannot serve that purpose -- a new thread inherits its parent's
+	fNeededLoad (ThreadData::Init()), which is ~0 for a parent that is about to
+	block, so placing a thread need not move the core's load at all.
+
+	Note this walks from Last(), so a genuinely free core is returned on the first
+	iteration and the existing LIFO preference (and its cache locality) is kept
+	intact; the walk only continues when the head of the list is already claimed.
+*/
+inline CoreEntry*
+PackageEntry::GetLeastClaimedIdleCore(const CPUSet* mask) const
+{
+	SCHEDULER_ENTER_FUNCTION();
+
+	CoreEntry* best = NULL;
+	int32 bestCount = 0;
+
+	for (CoreEntry* core = fIdleCores.Last(); core != NULL;
+			core = fIdleCores.GetPrevious(core)) {
+		if (mask != NULL && !core->CPUMask().Matches(*mask))
+			continue;
+
+		int32 count = core->ThreadCount();
+		if (count <= 0)
+			return core;
+
+		if (best == NULL || count < bestCount) {
+			best = core;
+			bestCount = count;
+		}
+	}
+
+	return best;
 }
 
 
