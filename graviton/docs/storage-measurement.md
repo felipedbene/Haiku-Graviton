@@ -1211,7 +1211,57 @@ Also worth recording: the global dirty count against its new 1/8-of-RAM limit,
 from `page_writer_quota`, to confirm the replacement bound sits in a sane place
 under real load rather than never engaging or engaging constantly.
 
-### The verification did not happen: the image did not boot, and that was my bug
+### RETRACTED ATTRIBUTION: the boot panic is not the serial listener
+
+I attributed the boot panic below to my own serial KDL listener —
+`spawn_kernel_thread()` from `arch_debug_console_init_settings()` at
+`main.cpp:168` against `thread_init()` at 212 — and that reasoning was sound in
+isolation. **It was the wrong cause, and a second bake disproved it.**
+
+| AMI | branch-head | boots? | contents |
+|---|---|---|---|
+| `ami-02d5e711d25cc2d49` | `e1e5a0f531` | **BOOTS** | my branch *before* the graviton merge |
+| `ami-0fe2b76a049766507` | `8b674f3cae` | PANICS | graviton `d733822a15` + the quota fix |
+| `ami-0a3c20e1085a75e16` | — | **PANICS identically** | graviton `5d97144c1a`, *including the boot fix* |
+
+The panic is **byte-identical** in both failing images — same `FAR=30`, same
+`ELR=ffff0000000b2c4c`, same frame addresses:
+
+```
+PANIC: unhandled pagefault! FAR=30 ELR=ffff0000000b2c4c ESR=96000004
+... after arch_vm_translation_map_init_post_area
+```
+
+The two images have **different snapshots** (`snap-086021847de985b10` vs
+`snap-0e9192e77c3744edf`), so the third really is a new build carrying the fix.
+The fix changed nothing, therefore it was not the cause. That two different builds
+produce identical addresses is itself consistent: my changes were in `debug.cpp`
+and `arch_debug_console.cpp`, so anything linked before them keeps its address.
+
+**Also checked and ruled out:** the alarming
+`reserve_boot_loader_ranges(): Skipping range: 0xffffff0400000000, 32715571200`
+(30.5 GiB) and `mark_page_range_in_use(0x0, 0x40000): start page is before free
+list` appear **identically in the image that boots**. They are normal here and not
+the cause. I had them as a hypothesis and they were wrong.
+
+**What remains.** The panic entered between `e1e5a0f531` and the graviton merge, so
+the suspect set is *either* the merge itself — which brought other work into
+`graviton` (arm64 `memcpy` assembly, GICv3, PCI ECAM multiregion, checksum, TX
+offload, scheduler) — *or* my quota fix. One bake of **graviton HEAD without the
+quota fix** separates them, and that is the same image wanted for the promotion
+gate, so the isolation is free.
+
+I could not resolve `ELR=ffff0000000b2c4c` to a symbol: the only kernel binary
+available to me is from a different tree, where that address maps to nonsense
+(`getrlimit`, at early VM init). Resolving it needs `addr2line` against the
+`kernel_arm64` from *that bake*, which names the faulting function in one command.
+
+**The retained value of the boot fix:** `spawn_kernel_thread()` before
+`thread_init()` is still an unmet precondition and still wrong, and moving the
+listener into the generic debugger is still the better design. It is a real latent
+defect fixed — just not this panic's cause.
+
+### The verification did not happen: the image did not boot
 
 `ami-0fe2b76a049766507` panics during early VM setup:
 
@@ -1220,7 +1270,8 @@ PANIC: unhandled pagefault! FAR=30 ESR=96000004
 ... arch_vm_translation_map_init_post_area
 ```
 
-Cause, and it is mine. The serial KDL listener was spawned from
+Cause, as I first diagnosed it — **and see the retraction above, because this was
+wrong.** The serial KDL listener was spawned from
 `arch_debug_console_init_settings()`, which `main.cpp` reaches via
 `debug_init_post_settings()` at line **168**. `thread_init()` is at line **212**.
 So `spawn_kernel_thread()` ran 44 lines before the threading system existed and
