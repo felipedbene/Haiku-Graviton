@@ -1,0 +1,270 @@
+#!/usr/bin/env bash
+#
+# disktput-run -- drive a storage measurement matrix against a DeBeOS node.
+#
+# Runs ON the metal builder, which is the only host that can reach a test node
+# over ssh (corporate egress blocks :22 from the workstation). It drives
+# src/bin/disktput on the far side and prints medians.
+#
+# Three things this harness exists to get right, each of which will otherwise
+# produce a confidently wrong storage number:
+#
+#  1. A never-written region of a fresh gp3 volume reads back as zeros WITHOUT
+#     the backend being touched, and a volume restored from a snapshot is loaded
+#     lazily and reads slowly on first touch. Either one fakes a read result --
+#     in opposite directions. So the span is written once, in full, before any
+#     read is measured, and the harness refuses to report reads if that has not
+#     happened. This is the single easiest way to publish a fictitious number.
+#
+#  2. Concurrency is the variable that matters here and is the one usually left
+#     at 1. The NVMe driver selects its submission queue with
+#     smp_get_current_cpu() % qpair_count and then blocks in await_status()
+#     until that one command completes, so a single-threaded run measures one
+#     request's latency repeated, no matter what the device can do. Every row is
+#     therefore swept over thread count, and the sweep is the result -- a single
+#     -t 1 figure is not "the disk speed", it is 256 KiB divided by one
+#     round trip.
+#
+#  3. Interleaved A/B, never before-then-after. EBS is shared, and this project
+#     has already had to retract four numbers that were each measured once in one
+#     condition. Repetitions alternate between the arms of a comparison so that
+#     drift cannot masquerade as an effect, and the median of each cell is
+#     reported rather than the mean so one outlier cannot tell the story.
+#
+# Usage: disktput-run <node-ip> [-d device] [-n bytes] [-r reps] [-S span]
+#                     [-m matrix] [-u user] [-k key]
+#
+#   -m  which matrix to run: threads | blocks | random | align | all
+#                            (default all)
+#   -S  span to confine the test to, and to initialise (default 64G)
+#   -T  seconds per cell (default 20). Cells are timed, not sized: see run_cell.
+#
+# The span default is deliberately larger than the 32 GiB of RAM on a
+# c7g.4xlarge, so that a random read cannot be answered from memory.
+
+set -uo pipefail
+
+NODE=""
+DEVICE="/dev/disk/nvme/1/raw"
+BYTES="1G"
+DURATION="20"
+REPS=3
+SPAN="64G"
+MATRIX="all"
+USERS="baron user root"
+KEY="${KEY:-/home/ubuntu/.ssh/haiku-ed25519}"
+REMOTE_BIN="${REMOTE_BIN:-/boot/home/bench/disktput}"
+
+[ $# -ge 1 ] || { echo "usage: disktput-run <node-ip> [-d dev] [-n bytes] [-r reps] [-S span] [-m matrix]" >&2; exit 1; }
+NODE="$1"; shift
+while getopts "d:n:r:S:m:u:k:T:" opt; do
+	case "$opt" in
+		d) DEVICE="$OPTARG" ;;
+		n) BYTES="$OPTARG" ;;
+		T) DURATION="$OPTARG" ;;
+		r) REPS="$OPTARG" ;;
+		S) SPAN="$OPTARG" ;;
+		m) MATRIX="$OPTARG" ;;
+		u) USERS="$OPTARG" ;;
+		k) KEY="$OPTARG" ;;
+		*) exit 1 ;;
+	esac
+done
+
+SSH_OPTS="-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null
+	-o ConnectTimeout=10 -o LogLevel=ERROR -i $KEY"
+
+# ------------------------------------------------------------------ find a user
+NODE_USER=""
+for candidate in $USERS; do
+	# -n matters: without it ssh eats this loop's stdin, which has previously
+	# made a perfectly healthy guest look dead.
+	if timeout 20 ssh -n $SSH_OPTS "$candidate@$NODE" true 2>/dev/null; then
+		NODE_USER="$candidate"
+		break
+	fi
+done
+[ -n "$NODE_USER" ] || { echo "FATAL: cannot ssh to $NODE as any of: $USERS" >&2; exit 1; }
+echo "node: $NODE   ssh as: $NODE_USER   device: $DEVICE"
+
+hssh() { timeout 1200 ssh -n $SSH_OPTS "$NODE_USER@$NODE" "$@"; }
+
+# ------------------------------------------------------------------ sanity gate
+echo "--- is disktput present, and which build? ---"
+if ! hssh "$REMOTE_BIN -h" 2>&1 | grep -q "Usage: disktput"; then
+	echo "FATAL: $REMOTE_BIN is not on the node" >&2
+	exit 1
+fi
+# The build stamp is printed so a result can always be tied back to a binary.
+# "Verify by artifact, not by exit code" is a rule this project learned the hard
+# way -- an empty file deploys perfectly happily and reports nothing.
+hssh "$REMOTE_BIN -h" 2>&1 | grep -i "^Build:" || true
+hssh "sha256sum $REMOTE_BIN" 2>&1 || true
+
+echo "--- what is the device? ---"
+hssh "ls -l $DEVICE" 2>&1 | head -3
+
+RESULTS=/tmp/disktput-results.txt
+: > "$RESULTS"
+
+# One cell: run disktput once and record the machine-readable line it prints.
+# label mode block threads extra
+run_cell() {
+	local label="$1" mode="$2" block="$3" threads="$4" extra="${5:-}"
+	local out rate iops cost p99
+	# -T, not -n: every cell must occupy the same wall time or the EBS token
+	# bucket does not bind equally across the sweep, and high thread counts
+	# report a burst rate above the instance's documented maximum.
+	out=$(hssh "$REMOTE_BIN -f $DEVICE -m $mode -b $block -t $threads -T $DURATION -s $SPAN -J $extra -L '$label'" 2>&1)
+	local line
+	line=$(printf '%s' "$out" | grep '^DISKTPUT' | head -1)
+	if [ -z "$line" ]; then
+		echo "    $label: FAILED"
+		printf '%s\n' "$out" | sed 's/^/        /' | tail -5
+		return 1
+	fi
+	rate=$(printf '%s' "$line" | cut -f6)
+	iops=$(printf '%s' "$line" | cut -f7)
+	p99=$(printf '%s' "$line" | cut -f10)
+	cost=$(printf '%s' "$line" | cut -f11)
+	printf '    %-28s %10s MiB/s %9s iops %9s us p99 %8s us/MiB\n' \
+		"$label" "$rate" "$iops" "$p99" "$cost"
+	printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
+		"$label" "$mode" "$block" "$threads" "$rate" "$iops" "$cost" >> "$RESULTS"
+}
+
+# --------------------------------------------------------------- initialise it
+# Written with high concurrency because at one request in flight this would take
+# most of an hour, and the point of the pass is only that every block has been
+# touched once.
+INIT_STAMP="/boot/home/bench/.initialised-$(echo "$DEVICE$SPAN" | tr -c 'a-zA-Z0-9' '-')"
+if hssh "test -f $INIT_STAMP" 2>/dev/null; then
+	echo "--- span already initialised ($INIT_STAMP) ---"
+else
+	echo "--- initialising $SPAN of $DEVICE so reads reach the backend ---"
+	echo "    (an unwritten gp3 block returns zeros without a backend read;"
+	echo "     a snapshot-backed one loads lazily. Both fake the read result.)"
+	hssh "$REMOTE_BIN -f $DEVICE -m seqwrite -b 1M -t 16 -n $SPAN -s $SPAN -y -L initialise" 2>&1 \
+		| grep -E "throughput|elapsed|transferred|failed" | sed 's/^/    /'
+	hssh "touch $INIT_STAMP; sync" 2>/dev/null
+fi
+
+# ------------------------------------------------------------------- the matrix
+want() { [ "$MATRIX" = "all" ] || [ "$MATRIX" = "$1" ]; }
+
+if want threads; then
+	echo
+	echo "=== concurrency sweep, 256K blocks (this is the headline result) ==="
+	echo "    one thread == one request outstanding, because the driver blocks"
+	echo "    in await_status() per command"
+	for rep in $(seq 1 "$REPS"); do
+		echo "  rep $rep:"
+		# Interleaved: read and write alternate within a rep, and thread counts
+		# ascend, so a slow patch of the volume hits both arms equally.
+		for t in 1 2 4 8 16; do
+			run_cell "seqread-t$t" seqread 256K "$t"
+			run_cell "seqwrite-t$t" seqwrite 256K "$t" "-y"
+		done
+	done
+fi
+
+if want blocks; then
+	echo
+	echo "=== block size sweep ==="
+	echo "    the driver chops every request at max_xfer_size (MDTS), so the"
+	echo "    knee is expected at 256K and nothing above it should help"
+	for rep in $(seq 1 "$REPS"); do
+		echo "  rep $rep:"
+		for b in 4K 16K 64K 256K 1M; do
+			run_cell "seqread-b$b-t1" seqread "$b" 1
+			run_cell "seqread-b$b-t8" seqread "$b" 8
+		done
+	done
+fi
+
+if want random; then
+	echo
+	echo "=== random 4K, the IOPS question ==="
+	for rep in $(seq 1 "$REPS"); do
+		echo "  rep $rep:"
+		for t in 1 4 16 32; do
+			run_cell "randread-t$t" randread 4K "$t"
+		done
+		run_cell "randwrite-t16" randwrite 4K 16 "-y"
+	done
+fi
+
+if want align; then
+	echo
+	echo "=== buffer alignment A/B: the 16 KiB bounce path ==="
+	echo "    nvme_disk bounces a request whose vecs are not page aligned, and"
+	echo "    dma_resources caps the bounce buffer at 4 * B_PAGE_SIZE = 16 KiB,"
+	echo "    so a misaligned 256K request becomes 16 sequential commands."
+	echo "    Interleaved, because this is a claim about a ratio."
+	for rep in $(seq 1 "$REPS"); do
+		echo "  rep $rep:"
+		run_cell "aligned-t1"    seqread 256K 1
+		run_cell "misaligned-t1" seqread 256K 1 "-U 512"
+		run_cell "aligned-t8"    seqread 256K 8
+		run_cell "misaligned-t8" seqread 256K 8 "-U 512"
+	done
+fi
+
+# ---------------------------------------------------------------------- summary
+echo
+echo "=== medians over $REPS rep(s) ==="
+python3 - "$RESULTS" <<'PY'
+import statistics, sys
+from collections import defaultdict, OrderedDict
+
+rows = OrderedDict()
+with open(sys.argv[1]) as handle:
+    for line in handle:
+        parts = line.rstrip("\n").split("\t")
+        if len(parts) != 7:
+            continue
+        label, mode, block, threads, rate, iops, cost = parts
+        rows.setdefault(label, []).append(
+            (float(rate), float(iops), float(cost)))
+
+print("  %-28s %12s %10s %14s" % ("cell", "MiB/s", "iops", "us of cpu/MiB"))
+table = {}
+for label, samples in rows.items():
+    rate = statistics.median([s[0] for s in samples])
+    iops = statistics.median([s[1] for s in samples])
+    costs = [s[2] for s in samples if s[2] > 0]
+    cost = statistics.median(costs) if costs else 0.0
+    table[label] = (rate, iops, cost)
+    print("  %-28s %12.1f %10.0f %14.0f" % (label, rate, iops, cost))
+
+# State the comparisons rather than leaving them to be eyeballed. Scaling
+# efficiency is the number that says whether the per-CPU queues are real: if
+# 8 threads do not move 8x what 1 thread does, something above the driver is
+# serialising, which is exactly the trap the network path fell into.
+def scaling(prefix):
+    base = table.get(prefix + "1")
+    if not base or base[0] <= 0:
+        return
+    print()
+    print("  %s concurrency scaling (ideal is linear):" % prefix.rstrip("-t"))
+    for t in (1, 2, 4, 8, 16, 32):
+        cell = table.get("%s%d" % (prefix, t))
+        if not cell:
+            continue
+        print("    t=%-3d %9.1f MiB/s   %5.2fx of t=1   %4.0f%% of linear"
+              % (t, cell[0], cell[0] / base[0], 100.0 * (cell[0] / base[0]) / t))
+
+for prefix in ("seqread-t", "seqwrite-t", "randread-t"):
+    scaling(prefix)
+
+for t in ("t1", "t8"):
+    a, m = table.get("aligned-" + t), table.get("misaligned-" + t)
+    if a and m and m[0] > 0:
+        print()
+        print("  alignment, %s: aligned %.1f MiB/s vs misaligned %.1f MiB/s"
+              " -- %.2fx" % (t, a[0], m[0], a[0] / m[0]))
+PY
+
+echo
+echo "--- device complaints in the syslog, if any ---"
+hssh "tail -n 500 /var/log/syslog | grep -iE 'nvme|bfs|error|panic|bounce' | tail -20" 2>&1
