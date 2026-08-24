@@ -1,15 +1,28 @@
 # Proposal: a storage assertion in haiku-perf-gate
 
-**Status: PROPOSAL. Not implemented, not deployed.** Wants review before anything
-lands, on the grounds that a gate which flakes gets disabled and then protects
-nothing.
+**Status as of 2026-08-24: PARTLY IMPLEMENTED — one of the three assertions has
+landed. This is no longer purely a proposal.**
+
+> ~~**Status: PROPOSAL. Not implemented, not deployed.**~~ Verified against the tree
+> on 2026-08-24:
+>
+> | Assertion | State |
+> |---|---|
+> | **1. Sequential read at depth 8** (`disktput -m seqread`, 900 MiB/s floor) | **NOT landed.** `graviton/scripts/haiku-perf-gate` contains no `disktput`, no `seqread`, no 900 MiB/s floor and no scratch-volume attachment. |
+> | **2. Durability across a hard power loss** | **NOT landed.** |
+> | **3. Write liveness / the three-outcome ICMP ladder** | **LANDED.** `haiku-perf-gate` implements it (`db509e9c9f`, `e290a17561`) — see its "Retries only the case that deserves it" block: an ICMP-answering node is a real verdict either way and is decided immediately; a node with no ICMP at all is retried. A fuller prototype exists as `graviton/scripts/haiku-quota-verify`. |
+>
+> The framing reason still applies to what is left: **a gate which flakes gets
+> disabled and then protects nothing.** Assertions 1 and 2 still want review.
 
 Baseline numbers, method and controls are in
 [storage-measurement.md](storage-measurement.md).
 
 ## What to assert, and why only these three
 
-Two assertions. Both were chosen because they are stable across runs *and*
+~~Two assertions. Both were chosen~~ **Three assertions** — there are three numbered
+subsections below, and "Two" contradicted this section's own heading one line above.
+*(Corrected 2026-08-24.)* They were chosen because they are stable across runs *and*
 sensitive to the code most likely to regress; everything else measured is either
 noisy, at a hardware ceiling that would mask a regression, or both.
 
@@ -19,8 +32,21 @@ noisy, at a hardware ceiling that would mask a regression, or both.
 disktput -f /dev/disk/nvme/1/raw -m seqread -b 256K -t 8 -T 120 -s 64G -J
 ```
 
-- **Measured:** 1007.72, 1007.72, 1007.32 MiB/s across three runs at 120–180 s —
+- **Measured on `c7g.4xlarge`** (Graviton3 / Neoverse V1, 16 vCPU), `us-west-2`,
+  **2026-08-24**, on a **dedicated 100 GiB gp3 at 16,000 IOPS / 1,000 MiB/s**:
+  1007.72, 1007.72, 1007.32 MiB/s across three runs at 120–180 s —
   **stable to 0.04%**, which is the tightest repeatability of anything measured.
+  *(Instance class, date and volume spec added 2026-08-24 — without all three, this
+  row and the threshold derived from it mean nothing, and "Use `c7g.4xlarge`, not
+  `c7g.large`" is 130 lines further down.)*
+
+  > **What 0.04% repeatability does NOT buy you.** This project has a storage
+  > measurement that was repeatable to **under 1% across three reps** and was
+  > **2.2× the instance's hard maximum** — every cell was short enough that the EBS
+  > token bucket never bound, so all three measured burst credit. Repeatability
+  > cannot detect a systematic artefact, because a systematic artefact repeats. The
+  > reason *this* row is trustworthy is the bullet below: it sits **at** a known
+  > provisioned ceiling rather than above it.
 - **Sensitive to:** the NVMe driver's submission and completion path, the DMA
   restrictions, and devfs. A regression in any of them shows here.
 - **Threshold:** fail below **900 MiB/s** (a 10% margin). Do *not* assert an
@@ -63,7 +89,18 @@ will pass a change that removed back-pressure altogether.
 
 ```
 # 16 GiB of allocating buffered writes, queued ON THE NODE so the load
-# outlives the harness. Use the 125 MiB/s scratch: onset is at 12 GiB.
+# outlives the harness.
+#
+# CONFLICT, flagged 2026-08-24: "use the 125 MiB/s scratch" contradicts the
+# section "The volume is part of the assertion" below, which requires a
+# 1,000 MiB/s volume and tells the gate to REFUSE TO RUN if the provisioning
+# does not match. As written, the gate must refuse to run on the very volume
+# this line tells it to use. Decide before either assertion lands: assertion 1
+# needs the fast volume to clear its 900 MiB/s floor, while this assertion
+# wants a slow one because it reaches the stall in 12 GiB instead of 20.
+# Two volumes, or a per-assertion provisioning check -- not one shared
+# "the scratch".
+# Use the 125 MiB/s scratch: onset is at 12 GiB.
 for i in $(seq 1 8); do
     disktput -f /w/new-$i -m seqwrite -b 256K -t 4 -n 2G -s 2G -S
 done &
@@ -98,7 +135,9 @@ mean the page-bound global quota had regressed to a duration sum.
 
 **The gate must attach a dedicated scratch volume: gp3, 100 GiB, 16,000 IOPS,
 1,000 MiB/s.** Not the root volume, which is 2 GiB gp3 sitting at the gp3 floor of
-3,000 IOPS / 125 MiB/s with a 300 MiB filesystem on it. Measured there, the 900
+3,000 IOPS / 125 MiB/s with a 300 MiB filesystem on it. **(See the conflict flagged
+in assertion 3's recipe above: that recipe asks for the 125 MiB/s volume, which the
+`describe-volumes` check in the next paragraph would reject.)** Measured there, the 900
 MiB/s threshold is unreachable by construction and the assertion would fail every
 image forever.
 
@@ -176,14 +215,23 @@ every build, the depth-8 read alone is ~3 minutes with no reboot and still catch
 driver regressions; the durability half could run on a schedule rather than per
 image.
 
-## Open question for review
+## ~~Open question for review~~ — answered in this same section (heading fixed 2026-08-24)
 
 Whether the durability assertion belongs in the promotion gate at all, or in a
 nightly. It is the highest-value assertion in this document and also the only one
-that reboots, which is where the known intermittent lives. My recommendation is now: **depth-8 read and the write-liveness assertion per
+that reboots, which is where the known intermittent lives.
+
+My recommendation is: **depth-8 read and the write-liveness assertion per
 candidate** — both reboot-free, both cheap to attribute — and **durability
 nightly**, so the only half that reboots can never block a promotion, and when it
 does fail someone looks at it instead of disabling it.
+
+> **Partly acted on already (2026-08-24):** the write-liveness half is in the gate;
+> the depth-8 read is not. And note the *other* reboot now in play — the gate performs
+> a **stop/start on every run** (`128a3f1761`), so "reboot-free" is no longer a
+> property of the gate as a whole. That strengthens rather than weakens the case for
+> keeping durability out of it: the ~1-in-6 NIC-attach intermittent on `c7g.large` now
+> has an occasion to fire regardless.
 
 The write-liveness assertion earns its place per-candidate rather than nightly
 because the defect it guards was a machine that reported healthy and did nothing,
