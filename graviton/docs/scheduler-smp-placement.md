@@ -212,10 +212,93 @@ is resumed — the realistic case, and the only condition under which `-s` can m
 placement. The sweep must be re-run with `-i -s`, and that is the outstanding
 experiment.
 
-**§1.4 is now disfavoured but not dead**, and §5's kernel instrumentation still
-discriminates cleanly: if the idle-core-list path (`PLACEMENT_IDLE_CORE`)
-dominates and repeats a core ID, §1.5 is confirmed; if placements come from
-`gCoreLoadHeap` with a stale key, §1.4 survives.
+### 1.7 The corrected sweep: the knee is at or below 5 microseconds, and the
+defect splits into three
+
+90 runs of `smpscale -i -t 1000 -s <µs> <N>` on the same node, staggers
+0/5/10/20/50/100/200/500/1000 µs, N = 8 and 16, 5 repeats each. Plus a 10-run
+control without `-i`.
+
+**At N = 8 the knee is at or below 5 µs:**
+
+| stagger (µs) | 0 | 5 | 10 | 20 | 50 | 100 | 200 | 500 | 1000 |
+|---|---|---|---|---|---|---|---|---|---|
+| clean of 5 | **3** | 5 | 5 | 5 | 5 | 5 | 5 | 5 | 5 |
+
+**40 of 40 runs perfect for every stagger from 5 µs upward** (max/min
+1.000–1.004); at 0 µs, 2 of 5 collapse to 8 threads on 7 cores. 5 µs was the
+smallest non-zero value tested, so the true threshold is **≤ 5 µs and still
+unresolved below that**.
+
+**This is three orders of magnitude away from `kLoadMeasureInterval`.** It
+confirms §1.5 (the asynchronous wake IPI leaves a core in the idle-core list for
+IPI-plus-reschedule latency) and **refutes §1.4**: a stale load-heap key could
+only be cleared by a stagger on the order of the 1000 µs load-tracking interval,
+and 5 µs is nowhere near it.
+
+**The control confirms `-i` is what makes `-s` live.** Without `-i`, staggers 0
+and 1000 µs at N = 16 are statistically indistinguishable — walls 3025–4034 ms
+against a 1000 ms unit, only 9–13 CPUs ever above 10 % — exactly as §1.6
+predicted.
+
+**But N = 16 has no knee at all**, and that is the second finding. No stagger
+achieves 5/5; success is sporadic and **non-monotonic** in stagger (3 of 45 runs,
+s = 200 giving 2/5, s = 1000 giving 1/5, every other value 0/5), while a run with
+*no* stagger succeeds 1 of 3. And the failure signature is strikingly precise:
+**exactly one core doubled, exactly one core left idle, and the other fourteen
+running one thread each** — decoded from `unit_ms ≈ 2000, busy = 1, part = 14,
+idle = 1`, whose active-time total is 2000 + 14×1000 = 16000 ms = 16 × 1 unit.
+
+So there are **three distinct defects**, not one:
+
+| | signature | when | mechanism | fixed by |
+|---|---|---|---|---|
+| **A** | several cores doubled, many idle, varies run to run | N < ncpus, sub-5 µs bursts | idle-core-list lag; `GetIdleCore(0)` returns `fIdleCores.Last()` until the target CPU reschedules — **confirmed** | placement |
+| **B** | **exactly one** core doubled, **exactly one** idle | N == ncpus, stagger-independent | not yet established (§1.8) | **rebalance** |
+| **C** | one core absorbing 5, or 17 of 32 threads | N > ncpus | heap path: keys clamped equal and a new thread adds ~0 load, so `PeekMinimum` repeats a core | placement + rebalance |
+
+Defect A's mechanism is now **confirmed from the code as well as behaviourally**:
+`PackageEntry::CoreGoesIdle()` does `fIdleCores.Add(core)` (appends) and
+`GetIdleCore(0)` returns `fIdleCores.Last()` (`scheduler_cpu.h:545,481`), so a
+burst is handed the *same* most-recently-idled core until its CPU reschedules.
+
+### 1.8 Defect B is a repair problem, and that settles the scope question
+
+Defect B is the original reported symptom — 0.500 at N = 16 — now isolated from
+defect A and shown to be **stagger-independent**, i.e. not a burst artifact at all.
+
+The candidate mechanism is the parent thread: while it is spawning, it occupies one
+CPU, so only `ncpus - 1` cores are genuinely free; thread number `ncpus` finds no
+idle core, falls to the heap path and doubles someone; the parent then blocks in
+`wait_for_thread()` and **its core goes idle and stays idle forever**. That
+produces exactly one doubled core and exactly one idle core.
+
+**This is stated as a candidate, not a finding.** It does not obviously survive
+the stagger-independence: at staggers of 500–1000 µs the parent `snooze()`s between
+spawns and its core should re-enter the idle list, which ought to change the
+outcome, and it does not. The kernel placement trace of §5 is what will settle it,
+and this is the strongest remaining reason to bake.
+
+**But the fix does not depend on which core it is.** Whatever the mechanism,
+defect B is a case where a core becomes idle *after* the placement decision was
+taken. **No placement fix can ever address it**, because the information did not
+exist when the choice was made. Only a working repair path can — and the repair
+path is arithmetically dead (§3).
+
+That is the empirical answer to "decide explicitly whether placement is in scope":
+
+- **Placement fix is necessary** — it is the only thing that fixes defect A, which
+  is the most common case (N below ncpus) and is confirmed.
+- **Rebalance fix is necessary** — it is the only thing that can fix defect B, and
+  defect B is precisely the originally reported symptom.
+- **Neither is sufficient.** They address disjoint, separately measured
+  signatures. Doing only one and reporting a clean ladder would be the failure
+  mode warned about.
+
+`-i` alone, with no stagger, already gives **8/8 and 12/12 CPUs busy with max/min
+≤ 1.001, 3 of 3 repeats** — so defect A really is the whole story below `ncpus`,
+and N = 17 comes out at max/min 2.00 with all 16 CPUs busy, which is the
+arithmetic optimum and must not be "improved".
 
 ---
 
