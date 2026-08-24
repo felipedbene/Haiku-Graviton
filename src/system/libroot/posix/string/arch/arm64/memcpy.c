@@ -30,26 +30,26 @@
 
 	Structure, and why each part is the way it is:
 
-	- Sizes up to 32, and the tail of a longer copy, are done with a fixed
-	  number of overlapping fixed-width accesses and no loop at all. Short
-	  copies are much the commonest kind, and the first version of this routine
+	- Sizes up to 64, and the tail of a longer copy, are done as a single group
+	  of at most four fixed-width accesses, with no loop at all. Short copies
+	  are much the commonest kind, and the first version of this routine
 	  byte-copied everything below 16 bytes -- which lost up to 50% against the
 	  generic routine at n = 8, because a short copy whose operands *do* agree
-	  in alignment is exactly the case the generic routine handled well. Every
-	  access lies inside [dest, dest + count), so a few destination bytes are
-	  written twice; memcpy is free to do that, and it is much cheaper than a
-	  branch per byte.
+	  in alignment is exactly the case the generic routine handled well. The
+	  accesses overlap for any size that is not an exact multiple of their
+	  width, so a few destination bytes are written twice; memcpy is free to do
+	  that, and it is much cheaper than a branch per byte. Every access still
+	  lies inside [dest, dest + count).
 
-	- 33..128 bytes are done with at most four 32-byte accesses, still with no
-	  loop and no alignment work, because below roughly this size a prologue
-	  costs more than aligned stores save.
+	- 65..128 bytes are 64 bytes, then the remainder as one more such group,
+	  still with no loop and no alignment work: below roughly this size a
+	  prologue costs more than aligned stores save.
 
 	- Only above 128 bytes is the destination aligned, and it is aligned to 16,
 	  not 8. The first version of this routine aligned to 8 on the stated
 	  grounds that "stores are the side that benefits"; that reasoning did not
 	  survive contact with the compiler, which widens the body to 16-byte
-	  accesses (ldr q/str q in libroot, ldp/stp in the kernel, which is built
-	  -fno-tree-vectorize). Aligning to 8 and then storing 16 at a time leaves
+	  accesses regardless. Aligning to 8 and then storing 16 at a time leaves
 	  half the stores crossing an alignment boundary anyway, and measured
 	  *slower* at 8961 bytes than the case where the prologue happened to align
 	  the source instead. Align to the width actually emitted, or do not
@@ -79,12 +79,36 @@
 	`memcpy(p, p + k, n)` that in-place header removal produces. memcpy is
 	undefined on any overlap and this is not a promise, but both the routine
 	this replaces and glibc happen to tolerate that direction, so a caller that
-	works today should not start failing. Two rules give it for free: within any
-	one group of accesses every load is issued before every store, and the
-	groups write ascending, non-overlapping ranges with at most one overlapping
-	access at the very end. The final tail is safe because it reads the highest
-	source bytes, which nothing earlier can have written over. dest above source
-	remains wrong, as it must be for any forward copy, and as it was before.
+	works today should not start failing.
+
+	The rule that gives it is narrower than it first appears, and the obvious
+	form of it is wrong. Writing destination byte p destroys the source byte at
+	that address, which is source index p - delta for delta = source - dest > 0.
+	So a group of accesses that reads source [x, y) is safe exactly when no
+	earlier write has touched [x + delta, y + delta). Two consequences:
+
+	- A group that reads and writes the same ascending, non-overlapping range is
+	  always safe, for any delta: earlier writes covered [0, x), and x + delta
+	  is at least x.
+	- An *overlapping* group -- one whose write range starts before the previous
+	  write ended, which is how a tail is handled without a loop -- is safe only
+	  if the previous writes stopped at or before its start plus delta. With
+	  delta as small as 1 that means: not at all, unless the previous writes
+	  stopped exactly at its start.
+
+	The first attempt at this routine got that wrong. It wrote [0, 32) and then
+	an overlapping tail at [count - 32, count), which for count = 33 reads
+	source bytes that the first access had already written over; the test found
+	it at size 33, displacement 1. So: every group writes a range that begins
+	exactly where the previous one ended, and every group issues all of its
+	loads before any of its stores, which absorbs the overlap *within* a group.
+	That is why the 33..128 case is one load-everything-then-store-everything
+	group rather than a ladder of four, and why the destination-alignment
+	prologue copies exactly the bytes it consumes rather than a full 16 with a
+	short advance.
+
+	dest above source remains wrong, as it must be for any forward copy, and as
+	it was before.
 
 	Known limitation, arm64-general rather than specific to this routine: an
 	unaligned or wider-than-8-byte access to Device-nGnRnE memory raises an
@@ -115,24 +139,6 @@
 typedef uint32_t __attribute__((may_alias, aligned(1))) unaligned_uint32;
 typedef uint64_t __attribute__((may_alias, aligned(1))) unaligned_uint64;
 typedef __uint128_t __attribute__((may_alias, aligned(1))) unaligned_uint128;
-
-
-static inline void
-copy_16(uint8_t* d, const uint8_t* s)
-{
-	*(unaligned_uint128*)d = *(const unaligned_uint128*)s;
-}
-
-
-static inline void
-copy_32(uint8_t* d, const uint8_t* s)
-{
-	const unaligned_uint128 a = ((const unaligned_uint128*)s)[0];
-	const unaligned_uint128 b = ((const unaligned_uint128*)s)[1];
-
-	((unaligned_uint128*)d)[0] = a;
-	((unaligned_uint128*)d)[1] = b;
-}
 
 
 static inline void
@@ -196,6 +202,30 @@ copy_0_to_32(uint8_t* d, const uint8_t* s, size_t count)
 }
 
 
+/*!	Copies 0..64 bytes as a single group: every load issued before every store,
+	so the overlap inside the group is harmless, and 64 bytes needs only eight
+	registers. Used both for short copies and for the tail of a long one, where
+	it is the last group and so may begin exactly where the previous write
+	ended.
+*/
+static inline void
+copy_0_to_64(uint8_t* d, const uint8_t* s, size_t count)
+{
+	if (count >= 32) {
+		const unaligned_uint128 a = ((const unaligned_uint128*)s)[0];
+		const unaligned_uint128 b = ((const unaligned_uint128*)s)[1];
+		const unaligned_uint128 c = *(const unaligned_uint128*)(s + count - 32);
+		const unaligned_uint128 e = *(const unaligned_uint128*)(s + count - 16);
+
+		((unaligned_uint128*)d)[0] = a;
+		((unaligned_uint128*)d)[1] = b;
+		*(unaligned_uint128*)(d + count - 32) = c;
+		*(unaligned_uint128*)(d + count - 16) = e;
+	} else
+		copy_0_to_32(d, s, count);
+}
+
+
 void*
 memcpy(void* dest, const void* source, size_t count)
 {
@@ -205,21 +235,16 @@ memcpy(void* dest, const void* source, size_t count)
 	if (count == 0 || dest == source)
 		return dest;
 
-	if (count <= 32) {
-		copy_0_to_32(d, s, count);
-		return dest;
-	}
-
 	if (count <= 128) {
-		/* Ascending and non-overlapping, then one overlapping access for the
-		   tail. See the note on ordering below. */
-		copy_32(d, s);
-		if (count > 64) {
-			copy_32(d + 32, s + 32);
-			if (count > 96)
-				copy_32(d + 64, s + 64);
+		if (count <= 64)
+			copy_0_to_64(d, s, count);
+		else {
+			/* [0, 64) first, then 1..64 more as the trailing group -- which
+			   begins exactly where that write ended, so it is safe to let its
+			   two halves overlap each other. */
+			copy_64(d, s);
+			copy_0_to_64(d + 64, s + 64, count - 64);
 		}
-		copy_32(d + count - 32, s + count - 32);
 		return dest;
 	}
 
@@ -246,11 +271,8 @@ memcpy(void* dest, const void* source, size_t count)
 		count -= 64;
 	}
 
-	if (count >= 32) {
-		copy_32(d, s);
-		copy_32(d + count - 32, s + count - 32);
-	} else
-		copy_0_to_32(d, s, count);
+	/* 0..63 left, as the trailing group. */
+	copy_0_to_64(d, s, count);
 
 	return dest;
 }
