@@ -190,6 +190,50 @@ ena_management_interrupt(void* arg)
 }
 
 
+/*!	Re-arms the shared io vector, at most once per interrupt.
+
+	ENA masks a vector when it raises it, so it must be re-armed or the interrupt
+	just taken is the last one we ever see. Each completion queue carries its own
+	unmask register offset, and both of Amazon's drivers re-arm a queue pair
+	through its \em transmit CQ -- so this must be txCompletionQueue even though
+	receive is what we mostly care about. Re-arming also reprograms the moderation
+	timers, which is why the intervals are passed on every call.
+
+	Called at the end of a drain, never from the interrupt handler: that is what
+	makes a delivered interrupt mean "work has arrived" rather than "work has
+	arrived and is still sitting there". While the vector stays masked the whole
+	of a burst accumulates behind it and is consumed by one wakeup, instead of
+	each completion re-raising a vector that only the device's moderation
+	interval was holding back.
+
+	\a force is for the bring-up and reset paths, where the completion queue has
+	just been created and starts masked whatever \c irqArmed happens to say.
+*/
+static void
+ena_rearm_io_interrupt(ena_haiku_device* device, bool force)
+{
+	if (device->txCompletionQueue == NULL)
+		return;
+
+	if (force)
+		atomic_set(&device->irqArmed, 0);
+
+	/* Whichever direction finishes draining first performs the single unmask
+	   write; the other finds the vector already armed and skips it. Both have to
+	   try, because either one can be the last to finish -- see the ownership note
+	   in ena_io_interrupt() for why this is not a two-sided handshake. */
+	if (atomic_test_and_set(&device->irqArmed, 1, 0) != 0)
+		return;
+
+	struct ena_eth_io_intr_reg interruptRegister;
+	ena_com_update_intr_reg(&interruptRegister, ENA_RX_IRQ_INTERVAL,
+		ENA_TX_IRQ_INTERVAL, true, false);
+	ena_com_unmask_intr(device->txCompletionQueue, &interruptRegister);
+
+	atomic_add(&device->irqArms, 1);
+}
+
+
 static int32
 ena_io_interrupt(void* arg)
 {
@@ -198,42 +242,48 @@ ena_io_interrupt(void* arg)
 	if (atomic_add(&device->ioInterrupts, 1) == 0)
 		TRACE_ALWAYS("first io interrupt delivered\n");
 
+	/* The device masked this vector by raising it, and this handler deliberately
+	   does not re-arm it -- the drain does, once there is nothing left to
+	   consume. Record that it is masked so that whichever reader gets there
+	   first does the one unmask.
+
+	   Ownership is the whole difficulty, because the two directions share this
+	   vector and are not symmetric:
+
+	   - Receive has a thread of its own. This handler wakes it and it always
+	     comes back round into ena_receive(), so it is a guaranteed re-armer.
+	   - Transmit has no thread at all. ena_reclaim_transmitted() runs only from
+	     ena_send(), so on a receive-only workload nothing on the transmit side
+	     ever executes.
+
+	   So a scheme where both directions had to acknowledge before the vector was
+	   re-armed would leave it masked forever the moment transmit went idle: a
+	   dead NIC, and dead precisely under the receive-only load this is meant to
+	   speed up. Instead either direction may re-arm as soon as its own queue
+	   reads empty, the atomic in ena_rearm_io_interrupt() collapses that to a
+	   single write, and liveness rests on the receive reader alone -- which is
+	   the one context this handler is certain to have woken.
+
+	   The cost of that asymmetry is bounded and benign: receive can re-arm while
+	   transmit completions are still unconsumed, which may cost one extra
+	   interrupt. That interrupt does real work (it is what wakes a sender waiting
+	   on a full ring), so it is not the storm this replaces, where every
+	   completion re-raised a vector nothing had yet looked at. */
+	if (atomic_get(&device->rearmMode) == ENA_REARM_IN_HANDLER) {
+		/* The behaviour this replaces, kept switchable so the two can be
+		   measured against each other in one boot. Forcing the write here also
+		   leaves irqArmed set, which is what makes the re-arms at the end of both
+		   drains no-ops without needing to test the mode again. */
+		ena_rearm_io_interrupt(device, true);
+	} else
+		atomic_set(&device->irqArmed, 0);
+
 	/* Both directions share this vector, so wake both waiters and let them
 	   find out whether there was anything for them. */
 	if (device->rxReady >= 0)
 		release_sem_etc(device->rxReady, 1, B_DO_NOT_RESCHEDULE);
 	if (device->txCompleted >= 0)
 		release_sem_etc(device->txCompleted, 1, B_DO_NOT_RESCHEDULE);
-
-	/* ENA masks a vector when it raises it, so it must be re-armed or this is
-	   the last interrupt we ever see. Each completion queue carries its own
-	   unmask register offset, and both of Amazon's drivers re-arm a queue pair
-	   through its *transmit* CQ -- so this must be txCompletionQueue even
-	   though receive is what we mostly care about.
-
-	   Re-arming also reprograms the device's moderation timers, which is the
-	   only thing keeping this vector from firing once per completion: with
-	   no_moderation_update = false the intervals below take effect, and the
-	   device then waits out that interval before raising the vector again.
-	   Passing zeroes with no_moderation_update = true -- which is what this did
-	   until now -- explicitly asks for no moderation at all.
-
-	   XXX STRUCTURAL FIX STILL OWED: this unmask belongs *after* the ring has
-	   been drained, not here. The reference driver re-arms at the end of its
-	   cleanup task, once ena_tx_cleanup()/ena_rx_cleanup() have emptied the
-	   completion queues, so a re-raised vector means genuinely new work. We
-	   unmask while every completion is still unconsumed, so moderation is the
-	   only backstop we have; without it each completion re-raised the vector
-	   immediately. Moving the unmask into the reader threads (ena_receive() and
-	   ena_reclaim_transmitted(), after the drain loop) is Haiku-specific work:
-	   this vector is shared by both directions, so it needs both sides to agree
-	   on who re-arms. Deliberately out of scope here. */
-	if (device->txCompletionQueue != NULL) {
-		struct ena_eth_io_intr_reg interruptRegister;
-		ena_com_update_intr_reg(&interruptRegister, ENA_RX_IRQ_INTERVAL,
-			ENA_TX_IRQ_INTERVAL, true, false);
-		ena_com_unmask_intr(device->txCompletionQueue, &interruptRegister);
-	}
 
 	return B_INVOKE_SCHEDULER;
 }
@@ -1787,13 +1837,34 @@ ena_watchdog(void* arg)
 		   by a flag test at the trigger. */
 		if (!device->watchdogActive || !device->running || device->resetting
 			|| device->deviceDead) {
+			/* Not being watched, so any run of misses recorded before this is
+			   over: carrying it across a down/up or a reset would let two
+			   unrelated samples add up to a reset. */
+			device->keepAliveMisses = 0;
 			continue;
 		}
 
+		/* Did the datapath move at all since the last check? Sampled every tick,
+		   before the age test, so it describes the interval just ended whether or
+		   not a deadline was missed during it. */
+		const uint64 traffic = device->rxFrames + device->txFrames;
+		const bool moving = traffic != device->watchdogLastTraffic;
+		device->watchdogLastTraffic = traffic;
+
 		const bigtime_t last = atomic_get64(&device->lastKeepAlive);
 		const bigtime_t age = system_time() - last;
-		if (age <= ENA_KEEP_ALIVE_TIMEOUT_US)
+		if (age <= ENA_KEEP_ALIVE_TIMEOUT_US) {
+			if (device->keepAliveMisses != 0) {
+				/* Logged, because this is the line that says a reset was
+				   correctly *not* performed. Without it the fix is invisible
+				   when it works, and a fix that is invisible when it works is
+				   indistinguishable from a broken watchdog. */
+				TRACE_ALWAYS("keep-alive recovered after %" B_PRIu32 " missed "
+					"deadline(s); no reset\n", device->keepAliveMisses);
+				device->keepAliveMisses = 0;
+			}
 			continue;
+		}
 
 		/* If a keep-alive is sitting unconsumed in the AENQ then the device is
 		   alive and it is our interrupt that went missing. Distinguishing the
@@ -1803,12 +1874,43 @@ ena_watchdog(void* arg)
 		if (ena_com_aenq_has_keep_alive(&device->comDev))
 			reason = ENA_REGS_RESET_MISSING_ADMIN_INTERRUPT;
 
+		device->keepAliveMisses++;
+
+		/* How many misses this device has to accumulate before it is reset. A
+		   device that is still moving frames has demonstrably not stopped, so a
+		   late keep-alive earns more patience -- but a bounded amount, because a
+		   device that moves frames while its management path is dead is exactly
+		   the partial wedge the watchdog exists to catch. See
+		   ENA_KEEP_ALIVE_MISSES_WITH_TRAFFIC. */
+		const uint32 required = moving
+			? ENA_KEEP_ALIVE_MISSES_WITH_TRAFFIC
+			: ENA_KEEP_ALIVE_MISSES_BEFORE_RESET;
+
+		/* One missed deadline is not evidence of a dead device -- measured, see
+		   ENA_KEEP_ALIVE_MISSES_BEFORE_RESET. Say so and look again next tick;
+		   the run has to continue for the device to be reset. */
+		if (device->keepAliveMisses < required) {
+			TRACE_ALWAYS("keep-alive deadline missed (%" B_PRId64 " ms since the "
+				"last event, limit %d ms, reason %s); miss %" B_PRIu32 " of %"
+				B_PRIu32 "%s, not resetting yet\n", age / 1000,
+				ENA_KEEP_ALIVE_TIMEOUT_US / 1000,
+				reason == ENA_REGS_RESET_MISSING_ADMIN_INTERRUPT
+					? "missing admin interrupt" : "keep-alive timeout",
+				device->keepAliveMisses, required,
+				moving ? " (datapath still moving)" : " (datapath idle)");
+			continue;
+		}
+
 		ERROR("keep-alive watchdog timeout: %" B_PRId64 " ms since the last "
-			"event (limit %d ms), reason %s\n", age / 1000,
+			"event (limit %d ms), reason %s, after %" B_PRIu32 " consecutive "
+			"missed deadlines%s\n", age / 1000,
 			ENA_KEEP_ALIVE_TIMEOUT_US / 1000,
 			reason == ENA_REGS_RESET_MISSING_ADMIN_INTERRUPT
-				? "missing admin interrupt" : "keep-alive timeout");
+				? "missing admin interrupt" : "keep-alive timeout",
+			device->keepAliveMisses,
+			moving ? " (datapath still moving -- resetting anyway)" : "");
 
+		device->keepAliveMisses = 0;
 		ena_watchdog_reset(device, reason);
 	}
 
@@ -2038,25 +2140,17 @@ ena_device_bringup(ena_haiku_device* device)
 	}
 
 	/* Arm the io vector. A completion queue created by ena_com_create_io_queue()
-	   starts masked, and ena_io_interrupt() only re-arms *after* an interrupt has
-	   arrived -- so without this first unmask the first interrupt never comes and
-	   therefore neither does the re-arm. The interface would then look perfectly
-	   healthy in every log line and never receive another frame, which is the
-	   hardest possible failure to spot in a reset.
+	   starts masked, and the re-arm now happens at the end of a drain -- which
+	   nothing will reach until an interrupt has woken a reader. Without this first
+	   unmask the first interrupt never comes and therefore neither does the
+	   re-arm. The interface would then look perfectly healthy in every log line
+	   and never receive another frame, which is the hardest possible failure to
+	   spot in a reset.
 
-	   The moderation intervals are programmed here as well as in
-	   ena_io_interrupt(), so that the very first interrupt after a bring-up or a
-	   reset is already moderated. The reference driver leaves them at zero in
-	   its equivalent (ena_unmask_all_io_irqs()) because its cleanup task sets
-	   them a moment later; ours would be running unmoderated until the first
-	   interrupt arrived, and after a reset that is precisely the window where a
-	   completion storm is least welcome. */
-	if (device->txCompletionQueue != NULL) {
-		struct ena_eth_io_intr_reg interruptRegister;
-		ena_com_update_intr_reg(&interruptRegister, ENA_RX_IRQ_INTERVAL,
-			ENA_TX_IRQ_INTERVAL, true, false);
-		ena_com_unmask_intr(device->txCompletionQueue, &interruptRegister);
-	}
+	   Forced, because irqArmed describes the vector belonging to the queue that
+	   has just been destroyed and recreated: whatever it says, this one is
+	   masked. */
+	ena_rearm_io_interrupt(device, true);
 
 	/* Seed the watchdog deadline: the device has not sent a keep-alive yet, and
 	   a zero (or stale) timestamp here means the watchdog would fire six seconds
@@ -2163,9 +2257,9 @@ ena_init_device(void* _info, void** _cookie)
 	mutex_init(&device->resetLock, "ena reset");
 	ena_watchdog_start(device);
 
-	TRACE_ALWAYS("attached; interrupts so far: %" B_PRId32 " management, %"
-		B_PRId32 " io%s\n", device->managementInterrupts,
-		device->ioInterrupts,
+	TRACE_ALWAYS("attached [build " ENA_BUILD_STAMP "]; interrupts so far: %"
+		B_PRId32 " management, %" B_PRId32 " io%s\n",
+		device->managementInterrupts, device->ioInterrupts,
 		device->managementInterrupts == 0
 			? " (management vector never fired -- admin queue is polling)"
 			: "");
@@ -2361,17 +2455,10 @@ ena_open(void* _info, const char* path, int openMode, void** _cookie)
 	   stale timestamp here is a reset six seconds after ifconfig up. */
 	atomic_set64(&device->lastKeepAlive, system_time());
 
-	/* Arm the io vector; it starts masked. Through the transmit CQ, for the
-	   reason given in ena_io_interrupt(), and with the moderation intervals for
-	   the reason given there too. The NULL test cannot fire while resetLock is
-	   held and the device is neither resetting nor dead, and is kept only to
-	   match the other two unmask sites. */
-	if (device->txCompletionQueue != NULL) {
-		struct ena_eth_io_intr_reg interruptRegister;
-		ena_com_update_intr_reg(&interruptRegister, ENA_RX_IRQ_INTERVAL,
-			ENA_TX_IRQ_INTERVAL, true, false);
-		ena_com_unmask_intr(device->txCompletionQueue, &interruptRegister);
-	}
+	/* Arm the io vector; it starts masked. Forced for the same reason as in the
+	   reset path: this queue is newly created, so irqArmed cannot be describing
+	   it. */
+	ena_rearm_io_interrupt(device, true);
 
 	*_cookie = device;
 	return B_OK;
@@ -2494,6 +2581,18 @@ ena_reclaim_transmitted(ena_haiku_device* device)
 
 	if (pendingDescriptors > 0)
 		ena_com_comp_ack(device->txSubmissionQueue, pendingDescriptors);
+
+	/* The loop above leaves only when the completion queue reads empty, so this
+	   is the transmit side's end-of-drain and the mirror of the re-arm in
+	   ena_receive(). It earns its keep on a transmit-heavy workload, where the
+	   receive reader can be sitting idle with nothing to wake it; under receive
+	   load the receive side gets there first and this is a no-op.
+
+	   The early `break`s above are error paths that may leave the queue
+	   non-empty, so re-arming here can cost one spurious interrupt in a case that
+	   has already logged a device protocol violation. Not worth a second exit
+	   path to avoid. */
+	ena_rearm_io_interrupt(device, false);
 }
 
 
@@ -2803,6 +2902,10 @@ ena_receive(ena_haiku_device* device, net_buffer** _buffer)
 	struct ena_com_rx_buf_info bufferInfo[ENA_MAX_PACKET_DESCRIPTORS];
 	struct ena_com_rx_ctx context;
 
+	/* Whether this call has already re-armed the vector for the drain it is in,
+	   and therefore whether an empty ring means "look again" or "sleep". */
+	bool rearmed = false;
+
 	MutexLocker locker(device->rxLock);
 
 	/* Same reasoning as the transmit side: under the lock, because the reset
@@ -2879,6 +2982,29 @@ ena_receive(ena_haiku_device* device, net_buffer** _buffer)
 
 		if (context.descs > 0)
 			break;
+
+		/* The ring has read back empty, so this is the end of the drain and the
+		   point the reference driver re-arms at. Done while rxLock is still held:
+		   a reset takes rxLock before freeing the queues, so holding it is what
+		   stops txCompletionQueue being freed underneath the unmask.
+
+		   Then go round once more before sleeping rather than blocking straight
+		   away. A completion posted between the read above and the unmask landed
+		   while the vector was masked, and whether the device replays it on
+		   unmask is the device's business -- not something worth betting a
+		   stalled flow on. Re-running the loop closes that window using the same
+		   read, with the same error handling: a second copy of the ena_com_rx_pkt()
+		   call would have to repeat the stranded-descriptor reclaim below or leak
+		   the ring away one error at a time. Anything arriving after the unmask
+		   raises an interrupt, and rxReady counts, so nothing is lost either
+		   side of it. */
+		if (!rearmed) {
+			device->rxDrainCycles++;
+			ena_rearm_io_interrupt(device, false);
+			rearmed = true;
+			continue;
+		}
+		rearmed = false;
 
 		locker.Unlock();
 
@@ -3156,6 +3282,62 @@ ena_ioctl(void* cookie, uint32 op, void* buffer, size_t length)
 			return B_OK;
 		}
 
+		case ENA_IOCTL_REARM_MODE:
+		{
+			int32 value;
+			if (length != sizeof(value))
+				return B_BAD_VALUE;
+			if (user_memcpy(&value, buffer, sizeof(value)) != B_OK)
+				return B_BAD_ADDRESS;
+			if (value != ENA_REARM_IN_HANDLER
+				&& value != ENA_REARM_AFTER_DRAIN) {
+				return B_BAD_VALUE;
+			}
+
+			/* Switching arms mid-flight is safe in both directions, and it has to
+			   be, because interleaving the two inside one boot is the whole point
+			   of the knob:
+
+			   - to ENA_REARM_IN_HANDLER: the next interrupt re-arms from the
+			     handler, whatever the drains do.
+			   - to ENA_REARM_AFTER_DRAIN: the vector is either armed now (so the
+			     next interrupt masks it and a drain re-arms it) or a drain is
+			     already on its way to re-arming it.
+
+			   Neither ordering can leave it masked with nobody due to re-arm, so
+			   no quiescing is needed. */
+			atomic_set(&device->rearmMode, value);
+			TRACE_ALWAYS("rearm mode now %" B_PRId32 " (%s) at %" B_PRId32
+				" io interrupts, %" B_PRIu64 " rx frames\n", value,
+				value == ENA_REARM_IN_HANDLER ? "in handler" : "after drain",
+				device->ioInterrupts, device->rxFrames);
+			return B_OK;
+		}
+
+		case ENA_IOCTL_GET_IRQ_STATS:
+		{
+			struct ena_irq_stats stats;
+			if (length != sizeof(stats))
+				return B_BAD_VALUE;
+
+			/* Read without either datapath lock. Every field here is written by
+			   one side only and none of them gates anything, so the worst a
+			   snapshot straddling an update can be is one frame out over a run of
+			   millions -- whereas taking rxLock would serialise a diagnostic
+			   against the path it is measuring, which is the one thing an
+			   instrument for interrupt cadence must not do. */
+			stats.ioInterrupts = (uint64)(uint32)atomic_get(
+				&device->ioInterrupts);
+			stats.irqArms = (uint64)(uint32)atomic_get(&device->irqArms);
+			stats.rxFrames = device->rxFrames;
+			stats.rxDrainCycles = device->rxDrainCycles;
+			stats.txFrames = device->txFrames;
+			stats.resetCount = (uint64)(uint32)atomic_get(&device->resetCount);
+			stats.rearmMode = (uint64)(uint32)atomic_get(&device->rearmMode);
+
+			return user_memcpy(buffer, &stats, sizeof(stats));
+		}
+
 		case ETHER_NONBLOCK:
 		{
 			int32 value;
@@ -3290,6 +3472,11 @@ ena_init_driver(device_node* node, void** cookie)
 	device->txBufferArea = -1;
 	device->rxReady = -1;
 	device->txCompleted = -1;
+
+	/* Not the calloc default: 0 is ENA_REARM_IN_HANDLER, the behaviour being
+	   replaced. Set explicitly so that forgetting to set it cannot quietly ship
+	   the old cadence. */
+	device->rearmMode = ENA_REARM_AFTER_DRAIN;
 
 	*cookie = device;
 	return B_OK;

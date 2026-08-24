@@ -174,10 +174,59 @@ extern "C" {
 #define ENA_WATCHDOG_INTERVAL_US	1000000
 #define ENA_KEEP_ALIVE_TIMEOUT_US	6000000
 
+/* How many consecutive checks must find the deadline missed before the device is
+   reset. One is not enough, and that is measured rather than supposed: under
+   sustained receive load the deadline was missed by 2.9% to 9.3% -- ages of 6174
+   to 6560 ms against a 6000 ms limit -- and every one of those reset a device
+   that was carrying traffic perfectly well. Ten occurrences, not one of them a
+   device that had stopped. See
+   graviton/docs/ena-keepalive-watchdog-false-reset.md.
+
+   Requiring two consecutive misses is deliberately not the same thing as raising
+   the deadline. A late keep-alive is transient: the next one arrives,
+   lastKeepAlive advances, the count returns to zero and nothing is reset. What
+   this refuses to do is reset on a single sample. A device that has genuinely
+   stopped stays silent, keeps missing, and is still reset -- which is the whole
+   point of the watchdog and must survive the fix.
+
+   The arithmetic, stated plainly because the constant hides it: checks are
+   ENA_WATCHDOG_INTERVAL_US apart, so N misses means silence of
+   ENA_KEEP_ALIVE_TIMEOUT_US + (N-1) * ENA_WATCHDOG_INTERVAL_US, i.e. 7 s at
+   N = 2 -- not 12 s. That is 0.44 s of margin over the worst stretch yet seen,
+   and this is the one constant to raise if a heavier load exceeds it (N = 7 would
+   give 12 s). Because the non-final misses are logged, a cadence that starts
+   creeping becomes visible before it becomes a reset. */
+#define ENA_KEEP_ALIVE_MISSES_BEFORE_RESET	2
+
+/* And how many are required while the datapath is demonstrably still moving.
+   N = 2 was measured and found insufficient: with it in place a healthy device
+   under load was still reset once per 150 s, having gone quiet for 7290 ms.
+   Raising the plain count again would just be a new guess about a tail we have
+   not seen, so instead this asks a different question -- is the device actually
+   dead? -- and only relaxes the deadline when the answer is demonstrably no.
+
+   Frames still arriving or leaving is direct evidence the device has not stopped,
+   so a keep-alive that is merely late costs nothing. It is a *bound*, not a
+   disable: once this many deadlines have been missed the device is reset even
+   with traffic flowing, which is what keeps a partial wedge -- a device still
+   moving frames but whose management path has genuinely died -- catchable. At
+   eight misses that is ~13 s of silence, comfortably past the 7290 ms observed
+   while healthy and still far short of anything a user would call a hang. */
+#define ENA_KEEP_ALIVE_MISSES_WITH_TRAFFIC	8
+
 #define ENA_ADMIN_POLL_TIMEOUT_US	500000
 #define ENA_MIN_POLL_DELAY_US		100
 
 #define ENA_MAX_MULTICAST	32
+
+/* Printed at attach, and the only reliable way to tell which copy of this driver
+   is running. A drop-in replacement can lose the module-selection tie to the
+   packaged copy in silence -- _FindBestDriver() takes strictly greater support --
+   and this project has already lost a day to an unmoved measurement that turned
+   out to be an unloaded driver rather than an ineffective change. Bump it with
+   any change being measured, and read it back out of the syslog before believing
+   a number. */
+#define ENA_BUILD_STAMP		"irq-cadence-3-wd2"
 
 #ifdef ENA_DEBUG_FAULT_INJECTION
 /* Private ioctl for provoking a watchdog timeout without breaking hardware: it
@@ -227,6 +276,65 @@ extern "C" {
    graviton/docs/ena-tx-offload.md. */
 #define ENA_IOCTL_TX_EXTRA_DOORBELLS	9802
 #define ENA_MAX_EXTRA_DOORBELLS		64
+
+/* Read-only counter snapshot, always compiled in. What it exists to answer is
+   how many frames one io interrupt actually accounts for: an interrupt rate on
+   its own cannot tell a well-moderated device from a driver being woken once per
+   frame, and that ratio is the entire subject of the interrupt-cadence work. A
+   driver that is re-armed before it has consumed anything is bounded by the
+   moderation interval and drains a handful of frames per interrupt; one that is
+   re-armed after the drain lets a whole burst accumulate behind a masked vector
+   and drains as many frames as arrived. The two are indistinguishable from
+   throughput alone, so the ratio is measured directly.
+
+   Deliberately raw totals rather than a rate: the caller picks the interval and
+   the driver keeps no timers. Also deliberately outside any debug ifdef -- a
+   measurement that only exists in a special build cannot be used to check that
+   a change did anything in the build that ships. */
+#define ENA_IOCTL_GET_IRQ_STATS		9803
+
+/* Selects where the shared io vector is re-armed, so that the change this driver
+   exists to make can be measured against the behaviour it replaces:
+
+     0  in the interrupt handler, with every completion still unconsumed. What
+        this driver shipped with. The device's moderation interval is then the
+        only thing bounding the interrupt rate.
+     1  at the end of a drain, once the queue reads empty (the default, and what
+        both reference drivers do).
+
+   Runtime rather than a build-time switch for the same reason as the doorbell
+   knob above: separating the two arms by a reboot would put the boot-to-boot
+   variation of this hardware between them, and that variation is large enough to
+   swamp the effect. One binary, both arms, interleaved inside a single boot --
+   and no module swap, which on this platform is the most expensive and most
+   error-prone step in the loop. Reported back by ENA_IOCTL_GET_IRQ_STATS so a
+   sample says which arm produced it. */
+#define ENA_IOCTL_REARM_MODE		9804
+#define ENA_REARM_IN_HANDLER		0
+#define ENA_REARM_AFTER_DRAIN		1
+
+struct ena_irq_stats {
+	uint64	ioInterrupts;
+	/* Unmask writes. Fewer than ioInterrupts means a vector was re-armed by one
+	   direction for an interrupt the other direction also serviced, which is the
+	   intended collapsing and not a lost interrupt. */
+	uint64	irqArms;
+	uint64	rxFrames;
+	/* Times the receive ring read back empty, i.e. completed drains. rxFrames
+	   divided by this is the average burst one wakeup was worth. */
+	uint64	rxDrainCycles;
+	uint64	txFrames;
+	/* Not a cadence figure: it is here so a sample can invalidate itself. The
+	   reset path zeroes ioInterrupts and does not zero rxFrames, so a reset
+	   landing inside a sampling interval yields a frames-per-interrupt ratio that
+	   is wrong without looking wrong. A caller that sees this move must throw the
+	   sample away rather than report it. */
+	uint64	resetCount;
+	/* Which arm this sample was taken under: ENA_REARM_IN_HANDLER or
+	   ENA_REARM_AFTER_DRAIN. Reported so a number cannot be attributed to the
+	   wrong one. */
+	uint64	rearmMode;
+};
 
 /* Refuse to attach below this, rather than dividing by a zero ring size if a
    device ever reports a nonsense depth. */
@@ -301,6 +409,21 @@ struct ena_haiku_device {
 	uint32				ioVector;
 	int32				managementInterrupts;
 	int32				ioInterrupts;
+	/* Whether the shared io vector is currently armed. The device masks a vector
+	   by raising it, and the re-arm happens at the end of a drain rather than in
+	   the handler, so this is what stops the two directions from both writing the
+	   unmask register for the same interrupt. Written with atomic_test_and_set()
+	   from either datapath and cleared by the handler; see
+	   ena_rearm_io_interrupt(). */
+	int32				irqArmed;
+	/* How many unmask writes that produced, as a check that the re-arm is
+	   actually reached: zero arms with a rising interrupt count would mean the
+	   vector is being re-armed by something other than the drain. */
+	int32				irqArms;
+	/* ENA_REARM_IN_HANDLER or ENA_REARM_AFTER_DRAIN; see ENA_IOCTL_REARM_MODE.
+	   Read on the interrupt path, so a plain atomic load rather than anything
+	   that could block. */
+	int32				rearmMode;
 	bool				managementIrqInstalled;
 	bool				ioIrqInstalled;
 	/* Two states, not one: configure_msix() claims the vectors and is undone by
@@ -366,6 +489,16 @@ struct ena_haiku_device {
 	   "last seen at the epoch" and would reset a healthy NIC six seconds into
 	   every boot. */
 	int64				lastKeepAlive;
+	/* Consecutive watchdog checks that have found the keep-alive deadline
+	   missed. Reset by the first check that finds the device talking again, so it
+	   counts a run of misses and not a total. Touched only by the watchdog
+	   thread, so it needs no atomics; see ENA_KEEP_ALIVE_MISSES_BEFORE_RESET. */
+	uint32				keepAliveMisses;
+	/* rxFrames + txFrames as of the previous watchdog check, so the watchdog can
+	   tell whether the datapath moved at all in the last interval. Read without
+	   either datapath lock: the question is only "did this change", and a torn or
+	   stale read can at worst cost one interval's worth of patience. */
+	uint64				watchdogLastTraffic;
 
 	/* Set for the duration of a reset. The datapath tests it *under* txLock or
 	   rxLock, never on its own: a bare flag is check-then-act, and a receiver
@@ -431,6 +564,11 @@ struct ena_haiku_device {
 	   build; they are two increments on a path that already does a memcpy per
 	   frame. Read under rxLock, like everything else here. */
 	uint64				rxFrames;
+	/* Completed receive drains: incremented where ena_com_rx_pkt() reads the ring
+	   empty, which is the point the vector is re-armed. rxFrames / rxDrainCycles
+	   is the average number of frames one wakeup was worth, and is the number the
+	   interrupt-cadence work has to move. Under rxLock with the rest of these. */
+	uint64				rxDrainCycles;
 	uint64				rxL4CsumChecked;
 	uint64				rxL4CsumErrors;
 	uint64				rxL3Ipv4Frames;
