@@ -654,7 +654,12 @@ everything: **199.3 MiB/s, p99 34,367 µs, max 43,429 µs.**
   `WaitIfOverQuota` being entered with `flags = 0` — see below, where it stops
   being a tail and becomes a liveness bug.
 
-## The real finding: sustained write load degrades without recovering, and then wedges
+## The real finding: sustained write load degrades, and starves userland
+
+> **PARTIALLY CORRECTED.** The degradation and the multi-second write latencies
+> below are measured and stand. The word "wedge" and the claim of no recovery do
+> not: reproducing it three more times showed the machine recovers once the write
+> load stops. See "CORRECTED: it is unbounded starvation, not a permanent wedge".
 
 This replaces the retracted claims and is more serious than either.
 
@@ -755,6 +760,110 @@ should be reproduced deterministically and then fixed — and the cheapest first
 is bounding that wait: a timeout on `WaitIfOverQuota` would convert an indefinite
 hang into a slow write, which is survivable, without needing the quota heuristic to
 be right.
+
+
+## CORRECTED: it is unbounded starvation, not a permanent wedge
+
+The section above calls this a wedge and says "no recovery". **That overstates it,
+and the correction came from reproducing it rather than from care.** Recorded here
+in full because the difference matters for how alarming the defect is and for what
+the fix has to do.
+
+### What reproducing it three more times showed
+
+The recipe was made cheaper (below), and run on two nodes differing only in volume
+provisioning. Both stopped answering ssh, exactly as before — ping fine, `:22`
+accepting, no banner. But when checked again after the harness had exited,
+**both were responsive**:
+
+| node | wedged at | later check |
+|---|---|---|
+| slow volume (125 MiB/s) | round 4, **12 GiB** written | **recovered** |
+| fast volume (1000 MiB/s) | round 6, **20 GiB** written | **recovered** |
+
+The harness classified them as wedged because its ssh call timed out at 400 s and
+the node still answered ping. It never retried ssh later. So "no recovery" was an
+artifact of not waiting long enough — the same class of error as the original
+ascending-order sweep: **the instrument, not the system.**
+
+The original occurrence was probed for only about two minutes before the instance
+was terminated, so it was **never established as permanent either.**
+
+### What is actually true
+
+A deliberate sustained-load test — eight 2 GiB buffered writes queued back to back
+on the node, so the load does not stop when the harness stops — left the machine
+**unresponsive to ssh for over 17 minutes and still going**, while ICMP stayed at
+0% loss throughout.
+
+So the correct statement is: **under sustained buffered write load, userland stops
+making progress for as long as the load continues, and recovers when it stops.**
+Not a deadlock. Unbounded-duration starvation, which from outside is
+indistinguishable from a deadlock and is just as unusable — a machine that will not
+answer ssh for seventeen minutes because something is writing files is broken —
+but it is not the same defect and must not be described as one.
+
+The directly measured single-operation latencies are not in doubt, and stand on
+their own: individual buffered `pwrite` calls of 256 KiB taking **8.9 s, 13.9 s,
+15.7 s and 26.9 s**, from a tool that timed each one.
+
+### New evidence for the ratchet, and what it does not settle
+
+Two things from these runs point at a global, non-recovering estimate rather than
+at per-file or per-transaction filesystem cost:
+
+1. **The slower volume degraded sooner** — 12 GiB against 20 GiB. A quota derived
+   from a per-page write-duration estimate should trip earlier on a device where
+   each page costs more, which is what happened.
+2. **The non-allocating arm was healthy until the allocating arm ran once, and
+   never recovered afterwards.** On the fast node, rewriting a fixed pre-existing
+   2 GiB file measured **147.23 MiB/s with a 955 µs worst case** in round 1. After
+   one round of writing a *new* file, that same rewrite cell never again exceeded
+   **78 MiB/s**, and picked up multi-second worst cases:
+
+   | round | rewrite (no allocation) | allocate a new file |
+   |---|---|---|
+   | 1 | **147.23 MiB/s**, max 955 µs | 84.28 MiB/s, max 13.99 s |
+   | 2 | 78.24, max 0.12 s | 95.66, max 10.48 s |
+   | 3 | 77.13, max 8.95 s | 94.75, max 10.82 s |
+   | 4 | 77.89, max 8.95 s | 87.58, max 13.19 s |
+   | 5 | 77.18, max 0.11 s | 93.48, max 11.88 s |
+
+   Allocation is what first produces multi-second stalls, but the damage is not
+   confined to the allocating path — it degrades a path that allocates nothing, by
+   47%, permanently. `fLastAveragePageWriteDuration` is a single sample shared by
+   every writer on the device, and `sGlobalEstimatedWriteDuration` is shared across
+   devices, so one arm poisoning the other is exactly what that design permits.
+
+**What it does not settle:** both arms write to the same volume and the same BFS
+filesystem, so BFS-global state — free-space layout, journal behaviour as the
+volume fills — also changed between round 1 and round 2. That is a live alternative
+explanation for the rewrite arm's degradation and this experiment cannot exclude
+it. `bt` on a stalled thread still decides it, which is why the arm64 `bt` fix is
+in the bake.
+
+### The cheap reproduction
+
+Roughly 4× cheaper than the original 48 GiB, and it stalls on the first arm that
+allocates:
+
+```bash
+# c7g.4xlarge, canonical AMI, plus a gp3 scratch volume.
+# Use a SLOW volume -- 125 MiB/s / 3000 IOPS -- it reaches the stall in 12 GiB
+# rather than 20, which is itself evidence for the estimate-driven quota.
+mkfs -q -t bfs -o 'block_size 4096' /dev/disk/nvme/1/raw W
+mount -t bfs /dev/disk/nvme/1/raw /w
+disktput -f /w/fixed -m seqwrite -b 1M -t 8 -T 120 -D -s 2G     # rewrite target
+
+# then alternate, 2 GiB per cell, and watch max latency in the -J line:
+disktput -f /w/fixed  -m seqwrite -b 256K -t 4 -n 2G -s 2G -S -J   # no allocation
+disktput -f /w/new-$n -m seqwrite -b 256K -t 4 -n 2G -s 2G -S -J   # allocates
+```
+
+Interleave the two arms — the ascending-order mistake above is easy to repeat here.
+To hold the machine in the stalled state (for a KDL capture), queue several
+allocating cells back to back on the node so the load does not stop when the
+harness does; it recovers within a minute or two of the load ending.
 
 
 ## What the bake has to carry, and why none of it can be dropped in
@@ -917,18 +1026,22 @@ under the same one-request-per-thread condition.
 | durability across hard power loss | 0 bad blocks | — | **passes on EBS** ¹ |
 | seq read, 1 MiB, depth 1 | 158.3 MiB/s | 598.0 | **3.8× gap** |
 | BFS write, depth 16 | ~200 MiB/s buffered *and* uncached | 1020 raw | **5.1× gap, in BFS** |
-| sustained write load | 180 → 19 MiB/s, then **wedges** | — | **liveness bug** |
+| sustained write load | 180 → 19 MiB/s, userland starved 17+ min | — | **liveness bug** ² |
 | read through the page cache | 123.5 MiB/s | 173.2 uncached | **cache costs 29%** |
+
+² Starvation, not deadlock: it recovers when the write load stops. Reproduced
+3/3 times; cheapest recipe is 12 GiB on a 125 MiB/s volume.
 
 ¹ Passes *because EBS has no volatile write cache*, not because `fsync` is a
 barrier — it is not. See Result 5; the caveat must travel with the claim.
 
 Four things are worth someone's time, in this order:
 
-1. **Sustained buffered write load degrades ~10× and then wedges userland
-   indefinitely**, with the kernel still answering ping and sshd still accepting
-   connections, and with no panic or log line. Reproduced once; recipe in "The
-   real finding" below. The cheapest first fix is to bound the indefinite wait in
+1. **Sustained buffered write load degrades ~10× and starves userland for as
+   long as the load lasts** — over 17 minutes observed — with the kernel still
+   answering ping and sshd still accepting connections, and no panic or log line.
+   **Reproduced 3/3**; the cheap recipe is 12 GiB on a 125 MiB/s volume.
+   It recovers when the load stops, so it is starvation rather than deadlock. The cheapest first fix is to bound the indefinite wait in
    `WaitIfOverQuota` so a hang becomes a slow write. Kernel change.
    *(This replaces what was listed here as "buffered writes are irreproducible and
    anti-scale", which was an artifact of my own un-interleaved sweep.)*
