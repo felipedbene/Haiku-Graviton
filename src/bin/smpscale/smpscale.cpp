@@ -54,6 +54,16 @@
  *        can be swept: -s 0 against -s 1000 is the experiment.
  *   -p   after the ladder, ask an instrumented kernel to dump its choose_core()
  *        placement trace. No effect on a stock kernel.
+ *   -i   IMMEDIATE start: no release barrier at all -- each worker begins real
+ *        work the instant it is resumed. USE THIS WITH -s. Without it, -s is
+ *        INERT, and the reason is worth knowing: with the barrier every worker
+ *        blocks the moment it is spawned, so its CPU never reschedules onto it,
+ *        so CoreEntry::CPUWakesUp() never runs and the core is never removed
+ *        from the package idle-core list. choose_core() therefore keeps handing
+ *        out the SAME idle core no matter how far apart the spawns are. In -i
+ *        mode each thread is genuinely running before the next is placed, which
+ *        is both the realistic case (a thread pool spawns and works) and the
+ *        only condition under which the stagger can change placement.
  *   threads   the ladder; default "1 2 4 8 16"
  *
  * READ THE PER-CPU TABLE, NOT `eff`. `eff` is baseWall/wallMs against the FIRST
@@ -209,6 +219,10 @@ worker(void* data)
 		snooze_until(arg->releaseTime, B_SYSTEM_TIMEBASE);
 	while (atomic_get((int32*)&sGo) == 0)
 		snooze(200);
+	// In immediate mode both of the above fall straight through: sGo is already
+	// set and releaseTime is 0, so the thread begins real work the moment it is
+	// resumed. That is the only way a spawn stagger can affect placement -- see
+	// the -i comment in the header.
 
 	arg->start = system_time();
 	if (arg->chunkIterations > 0) {
@@ -279,7 +293,7 @@ struct run_result {
 static bool
 run_ladder_point(uint32 threads, uint64 iterations, bool stream,
 	uint64 chunkIterations, bigtime_t sleeperSnooze, bigtime_t staggerMicros,
-	run_result& out)
+	bool immediate, run_result& out)
 {
 	static worker_arg args[MAX_THREADS];
 	static thread_id ids[MAX_THREADS];
@@ -328,12 +342,30 @@ run_ladder_point(uint32 threads, uint64 iterations, bool stream,
 
 	sGo = 0;
 
-	// Every worker wakes at the same absolute instant, far enough ahead that
-	// even a staggered spawn has finished by then.
-	bigtime_t releaseTime = system_time() + 200000
-		+ (bigtime_t)threads * staggerMicros;
-	for (uint32 i = 0; i < threads; i++)
-		args[i].releaseTime = releaseTime;
+	// Unless -i was given, every worker wakes at one absolute instant, far
+	// enough ahead that even a staggered spawn has finished by then. That is the
+	// right default for timing -- thread creation lands outside the measurement
+	// -- but it makes -s inert, so the two are mutually exclusive by design.
+	bigtime_t releaseTime = 0;
+	if (immediate) {
+		// No barrier at all: open the gate first, so each worker starts working
+		// as soon as it is resumed.
+		atomic_set((int32*)&sGo, 1);
+		for (uint32 i = 0; i < threads; i++)
+			args[i].releaseTime = 0;
+	} else {
+		releaseTime = system_time() + 200000
+			+ (bigtime_t)threads * staggerMicros;
+		for (uint32 i = 0; i < threads; i++)
+			args[i].releaseTime = releaseTime;
+	}
+
+	cpu_snapshot beforeImmediate;
+	bigtime_t spanStartImmediate = 0;
+	if (immediate) {
+		take_cpu_snapshot(beforeImmediate);
+		spanStartImmediate = system_time();
+	}
 
 	for (uint32 i = 0; i < threads; i++) {
 		char name[32];
@@ -350,27 +382,41 @@ run_ladder_point(uint32 threads, uint64 iterations, bool stream,
 			return false;
 		}
 		resume_thread(ids[i]);
-		// Spawn stagger. The whole imbalance vanishes once spawns are separated
-		// by about a millisecond, which is kLoadMeasureInterval -- so making the
-		// stagger a controllable variable turns that observation into a dial
-		// this tool can sweep.
+		// Spawn stagger. Only meaningful together with -i; see the header. An
+		// earlier build of this tool reported that the imbalance vanished at
+		// about 1 ms of stagger and that this matched kLoadMeasureInterval, but
+		// that build had a busy-wait gate, so a staggered spawn left each thread
+		// RUNNING while the next was placed. What the stagger actually bought
+		// was time for the wake-up IPI to land and take the core out of the
+		// idle-core list; the resemblance to kLoadMeasureInterval was a
+		// coincidence, and a sweep with the blocking gate is flat at every value
+		// from 0 to 2000 us.
 		if (staggerMicros > 0)
 			snooze(staggerMicros);
 	}
 
-	// Flip the gate BEFORE the release instant, so that when the workers wake
-	// they see it already set and never enter the polling loop. Polling would
-	// have them sleeping and waking repeatedly right before the measurement,
-	// which lowers their fNeededLoad -- the exact quantity placement keys on.
-	snooze_until(releaseTime - 20000, B_SYSTEM_TIMEBASE);
-	atomic_set((int32*)&sGo, 1);
-
-	// Now start the clock at the instant the workers actually wake.
-	snooze_until(releaseTime, B_SYSTEM_TIMEBASE);
-
 	cpu_snapshot before;
-	take_cpu_snapshot(before);
-	bigtime_t spanStart = system_time();
+	bigtime_t spanStart;
+	if (immediate) {
+		// The workers are already running; the snapshot was taken before the
+		// spawn loop, so per-CPU deltas still cover all of the work.
+		spanStart = spanStartImmediate;
+		before = beforeImmediate;
+	} else {
+		// Flip the gate BEFORE the release instant, so that when the workers
+		// wake they see it already set and never enter the polling loop.
+		// Polling would have them sleeping and waking repeatedly right before
+		// the measurement, which lowers their fNeededLoad -- the exact quantity
+		// placement keys on.
+		snooze_until(releaseTime - 20000, B_SYSTEM_TIMEBASE);
+		atomic_set((int32*)&sGo, 1);
+
+		// Now start the clock at the instant the workers actually wake.
+		snooze_until(releaseTime, B_SYSTEM_TIMEBASE);
+
+		take_cpu_snapshot(before);
+		spanStart = system_time();
+	}
 
 	for (uint32 i = 0; i < threads; i++) {
 		status_t exit;
@@ -446,6 +492,7 @@ main(int argc, char** argv)
 	bool mixed = false;
 	bigtime_t staggerMicros = 0;
 	bool dumpPlacement = false;
+	bool immediate = false;
 	uint32 ladder[MAX_LADDER];
 	uint32 ladderSize = 0;
 
@@ -461,6 +508,8 @@ main(int argc, char** argv)
 			staggerMicros = (bigtime_t)atoll(argv[++i]);
 		else if (strcmp(argv[i], "-p") == 0)
 			dumpPlacement = true;
+		else if (strcmp(argv[i], "-i") == 0)
+			immediate = true;
 		else if (strcmp(argv[i], "-g") == 0)
 			countMigrations = true;
 		else if (strcmp(argv[i], "-x") == 0) {
@@ -505,7 +554,7 @@ main(int argc, char** argv)
 		bigtime_t elapsed = 0;
 		while (elapsed < targetMicros / 4 && iterations < (1 << 20)) {
 			run_result probe;
-			if (!run_ladder_point(1, iterations, true, 0, 0, 0, probe))
+			if (!run_ladder_point(1, iterations, true, 0, 0, 0, false, probe))
 				return 1;
 			elapsed = probe.wall;
 			if (elapsed >= targetMicros / 4)
@@ -577,7 +626,7 @@ main(int argc, char** argv)
 
 	for (uint32 k = 0; k < ladderSize; k++) {
 		if (!run_ladder_point(ladder[k], iterations, stream, chunkIterations,
-				mixed ? 4000 : 0, staggerMicros, results[k])) {
+				mixed ? 4000 : 0, staggerMicros, immediate, results[k])) {
 			return 1;
 		}
 
