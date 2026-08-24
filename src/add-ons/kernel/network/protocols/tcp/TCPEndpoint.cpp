@@ -23,8 +23,11 @@
 #include <KernelExport.h>
 #include <Select.h>
 
+#include <net/route.h>
+
 #include <net_buffer.h>
 #include <net_datalink.h>
+#include <net_device.h>
 #include <net_stat.h>
 #include <NetBufferUtilities.h>
 #include <NetUtilities.h>
@@ -2372,6 +2375,52 @@ TCPEndpoint::_PrepareSendSegment()
 }
 
 
+/*!	Whether the device this endpoint's route leads to will finish the segment
+	checksum, so that _PrepareAndSend() can leave the payload unread.
+
+	Recomputed per segment rather than cached at _PrepareSendPath(): it is four
+	loads and a mask against a pass over the whole segment, and a route's
+	interface address can be replaced under a long-lived endpoint (see
+	InterfaceAddress reference counting in interfaces.h) -- a stale "yes" here
+	would silently corrupt every segment sent afterwards.
+
+	Two exclusions, both load-bearing:
+
+	- RTF_LOCAL. datalink_send_routed_data() takes such a buffer and pushes it
+	  straight back into the *receive* queue (datalink.cpp:389-397). No device
+	  ever sees it, so nothing would finish the checksum and the receiving half
+	  of this same machine would drop it as corrupt.
+	- a family the device did not claim. Offload capability is per address
+	  family because hardware support routinely is; ENA on Graviton advertises
+	  IPv4 and not IPv6.
+*/
+bool
+TCPEndpoint::_CanOffloadChecksum() const
+{
+	if (fRoute == NULL || (fRoute->flags & RTF_LOCAL) != 0)
+		return false;
+
+	net_interface_address* address = fRoute->interface_address;
+	if (address == NULL || address->interface == NULL
+		|| address->interface->device == NULL || address->domain == NULL)
+		return false;
+
+	uint32 wanted;
+	switch (address->domain->family) {
+		case AF_INET:
+			wanted = NET_DEVICE_TX_CHECKSUM_IPV4_L4;
+			break;
+		case AF_INET6:
+			wanted = NET_DEVICE_TX_CHECKSUM_IPV6_L4;
+			break;
+		default:
+			return false;
+	}
+
+	return (address->interface->device->tx_checksum_offload & wanted) != 0;
+}
+
+
 status_t
 TCPEndpoint::_PrepareAndSend(tcp_segment_header& segment, net_buffer* buffer,
 	bool isRetransmit)
@@ -2397,7 +2446,8 @@ TCPEndpoint::_PrepareAndSend(tcp_segment_header& segment, net_buffer* buffer,
 
 	PROBE(buffer, sendWindow);
 
-	status_t status = add_tcp_header(AddressModule(), segment, buffer);
+	status_t status = add_tcp_header(AddressModule(), segment, buffer,
+		_CanOffloadChecksum());
 	if (status != B_OK) {
 		gBufferModule->free(buffer);
 		return status;

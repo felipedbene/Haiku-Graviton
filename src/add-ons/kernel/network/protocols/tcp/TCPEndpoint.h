@@ -84,6 +84,7 @@ private:
 							uint32 flightSize);
 			status_t	_PrepareAndSend(tcp_segment_header& segment, net_buffer* buffer,
 							bool isRetransmit);
+			bool		_CanOffloadChecksum() const;
 			status_t	_SendAcknowledge(bool force = false);
 			status_t	_SendReset(bool force = false);
 			status_t	_SendQueued(bool force = false);

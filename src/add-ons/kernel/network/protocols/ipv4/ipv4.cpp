@@ -600,6 +600,66 @@ reassemble_fragments(const ipv4_header &header, net_buffer** _buffer)
 }
 
 
+/*!	Finishes a layer-4 checksum that a device was going to be asked to complete.
+
+	A partial checksum cannot survive fragmentation. The sum has to cover the
+	whole datagram, but only the first fragment carries the layer-4 header to put
+	the answer in, and no NIC offloads a checksum across IP fragments. So a
+	datagram that reaches send_fragments() still carrying
+	NET_BUFFER_L4_CHECKSUM_NEEDED has to have the work done here instead.
+
+	The checksum field already holds the folded pseudo-header sum, and it lies
+	inside the range being summed, so one pass over the layer-4 bytes picks it up
+	along with everything else -- no need to read it out and add it back.
+
+	For TCP this should be unreachable: a segment is sized from the same MTU this
+	function fragments against. "Should be" is not "cannot be" -- a route's MTU
+	can shrink under an established endpoint -- and the failure mode without this
+	is a peer silently discarding every fragment of every such datagram.
+*/
+static status_t
+finish_l4_checksum(net_buffer* buffer, uint16 headerLength, uint8 protocol)
+{
+	uint16 fieldOffset;
+	switch (protocol) {
+		case IPPROTO_TCP:
+			fieldOffset = 16;
+			break;
+		case IPPROTO_UDP:
+			fieldOffset = 6;
+			break;
+		default:
+			// Nothing else ever asks for offload, so there is no correct
+			// software answer to fall back to.
+			return B_NOT_SUPPORTED;
+	}
+
+	if (buffer->size < (uint32)headerLength + fieldOffset + sizeof(uint16))
+		return B_BAD_VALUE;
+
+	int32 sum = gBufferModule->checksum(buffer, headerLength,
+		buffer->size - headerLength, false);
+	if (sum < 0)
+		return sum;
+
+	uint16 result = (uint16)~(uint16)sum;
+	if (protocol == IPPROTO_UDP && result == 0) {
+		// Zero means "no checksum" in UDP, so the all-ones representation of
+		// the same value is used instead (RFC 768).
+		result = 0xffff;
+	}
+
+	status_t status = gBufferModule->write(buffer, headerLength + fieldOffset,
+		&result, sizeof(result));
+	if (status != B_OK)
+		return status;
+
+	buffer->buffer_flags &= ~NET_BUFFER_L4_CHECKSUM_NEEDED;
+	buffer->buffer_flags |= NET_BUFFER_L4_CHECKSUM_VALID;
+	return B_OK;
+}
+
+
 /*!	Fragments the incoming buffer and send all fragments via the specified
 	\a route.
 */
@@ -618,6 +678,16 @@ send_fragments(ipv4_protocol* protocol, struct net_route* route,
 	uint32 bytesLeft = buffer->size - headerLength;
 	uint32 fragmentOffset = 0;
 	status_t status = B_OK;
+
+	// Before the split: split_buffer() copies buffer_flags into every fragment
+	// (net_buffer.cpp:1340), so an unfinished checksum would be inherited by
+	// fragments that cannot possibly carry one.
+	if ((buffer->buffer_flags & NET_BUFFER_L4_CHECKSUM_NEEDED) != 0) {
+		status = finish_l4_checksum(buffer, headerLength,
+			originalHeader->protocol);
+		if (status != B_OK)
+			return status;
+	}
 
 	net_buffer* headerBuffer = gBufferModule->split(buffer, headerLength);
 	if (headerBuffer == NULL)
