@@ -1,7 +1,8 @@
 # c7g.metal: the GICv3 panic, and what bare metal presents that a guest does not
 
-Status: **panic reproduced and diagnosed; fix written and compiling; awaiting a
-bake for hardware verification.**
+Status: **fixed and hardware-verified on two `c7g.metal` hosts.** The GIC now
+brings up all 64 CPUs on bare metal. Metal does not yet reach userland, but the
+remaining blocker is in PCI, not the GIC — see §10.
 
 `c7g.metal` was the one Graviton instance class DeBeOS would not boot on. It is
 also the class of our own build machine, so the project could not dogfood its
@@ -142,14 +143,27 @@ past the end of the window.
 redistributor of *the region it appears in*, so even a window large enough to
 span both blocks would have stopped the walk at core 31.
 
-**Open, unresolved — do not close this by assumption.**  The test instance's panic reports affinity
-`0x200000` (Aff2 = 32, Aff3 = 0), whereas the build host's MADT gives core 32
-`mpidr=0x100000000` (Aff3 = 1, Aff2 = 0), which packs to `0x1000000`. Both are
-"core 32, first CPU of the second redistributor block", so the diagnosis does
-not depend on which encoding a given machine uses — but the two `c7g.metal`
-instances do appear to differ in MPIDR layout, and that is unexplained. The fix
-is affinity-encoding agnostic: it matches `GICR_TYPER[63:32]` against whatever
-this PE's `MPIDR_EL1` actually packs to, and searches every region.
+**Solved.** The two `c7g.metal` instances really do differ, and the reason is
+core harvesting. Boot `metalB` logged this:
+
+```
+gicv3: redistributor 13 (region 0) affinity 0xd0000,   processor 13, vlpis 1, last 0
+gicv3: redistributor 14 (region 1) affinity 0xf0000,   processor 15, vlpis 1, last 0
+gicv3: redistributor 31 (region 1) affinity 0x200000,  processor 32, vlpis 1, last 1
+gicv3: redistributor 32 (region 2) affinity 0x1000000, processor 64, vlpis 1, last 0
+```
+
+Aff2 = 14 is absent — a fused-off or harvested core — so the 32 live cores of
+the low cluster occupy 33 Aff2 slots, 0 through 32. MADT index 31 therefore has
+Aff2 = 32, which packs to **`0x200000`**: the exact value the original panic
+reported. On a host with no hole (`metalA`) index 32 is the first core of the
+*high* cluster and packs to `0x1000000` instead, which is what the build host's
+MADT showed.
+
+Same MPIDR layout on every host; different harvest patterns. `_CurrentRedistributor()`
+compares packed affinity against `GICR_TYPER[63:32]`, so it is layout-agnostic
+and this has no bearing on the fix — but it is why one panic value looked
+impossible against another host's tables.
 
 ## 5. The fix
 
@@ -213,7 +227,8 @@ Four code commits on `fix/arm64-metal-gicv3`. Both `kernel_arm64` and
    needed fixing before a boot could be taken as evidence either way.
 
 3. **`arm64: enable group 1 on a distributor with two security states`**
-   (PLAUSIBLE — spec-derived, *not* observed. Note that it writes `GICD_CTLR`,
+   (Conclusion CONFIRMED by measurement, original reasoning DISPROVEN — see §8.
+   Note that it writes `GICD_CTLR`,
    a distributor-wide control register, on **every** arm64 platform, not just
    metal; the added bit is reserved rather than meaningful where `DS=1`, which
    is the case on every GIC we have booted so far, but this is not a
@@ -316,29 +331,119 @@ Kept here deliberately.
   This is why the ceiling looked untested: every class at or below 64 vCPU is
   unaffected.
 
-## 8. What remains
+## 8. Hardware results (CONFIRMED, observed)
 
-* **The gating test is virtualised Graviton, not metal.** Commit `e64c666d62`
-  rewrites redistributor discovery for *all* arm64. `c7g.large` and
-  `c7g.4xlarge` must still find every CPU and still come up with networking, and
-  that must be checked whatever the metal boot does. Today they take the
-  `gicr_region_count == 0` path (a GICR structure with a real length), so they
-  exercise the new single-region fallback plus the new per-frame stride
-  (`VLPIS=0` → 0x20000, identical to the old constant) plus the `GICD_CTLR`
-  change. A fix that trades the flagship target for the nice-to-have does not
-  merge.
-* **A bake and a metal boot.** The code compiles but nothing here is
-  hardware-verified. One boot of `c7g.metal` will say whether the redistributor
-  walk now finds 64 of 64, whether `GICD_CTLR` took both group-1 bits, what
-  `GITS_TYPER.PTA` really is, and what the MPIDR layout on that machine is.
-* If the group-1 fix is right and the boot continues, the ITS is the next
-  unexplored surface: PTA, `GITS_BASER.Indirect` (Linux chooses an indirect
-  device table here, we request a flat one and do not check the readback), and
-  the 256-vector / 32-device ceilings against what metal presents.
-* `c8g.24xlarge` should be re-tested after the bake to confirm it boots on 64 of
-  its 96 CPUs rather than hanging.
-* QEMU was deliberately not used. It can model GICv3 with configurable
-  redistributor counts, but it cannot easily reproduce the thing that actually
-  broke — two redistributor blocks 16 GiB apart described per-GICC with no GICR
-  structure — and this project has already been burned by treating QEMU
-  agreement as evidence about EC2.
+Booted `ami-01a60ed26f29bb722` (branch head `d76a97940e`) on five instances.
+
+### Gating: virtualised Graviton — PASS, no regression
+
+```
+c7g.large    gicv3: gicd 0x10000000 (size 0x10000), arch rev 3, typer 0x7a3003, stride 0x20000
+             gicv3: redistributor region 0: 0x10200000 size 0xfdf0000
+             gicv3: 2 redistributor(s) across 1 region(s) for 2 cpu(s)
+c7g.4xlarge  16 redistributor(s) across 1 region(s) for 16 cpu(s)
+```
+
+Both take the `regs2` single-region fallback with firmware's own size, report
+`arch rev 3` and stride `0x20000` — identical to the constant it replaced — and
+boot through ENA link-up, MSI-X, first I/O interrupt and first-boot package
+processing. The guest MADT is byte-identical across `c7g.large`, `t4g.small` and
+`c8g.large` (one GICR subtable, every `GICC.gicr_address` zero), so the
+coalescing path is unreachable on the guest fleet by firmware rather than by
+luck.
+
+### Metal: 64 of 64, on three distinct layouts
+
+| host | regions | redistributors per region |
+|---|---|---|
+| this engagement, A | 2 | 32 + 32 |
+| this engagement, B | 3 | 14 + 18 + 32 |
+| independent review, a/b/c | 2–3 | 33 + 13 + 18; 12 + 20 + 32; 32 + 32 |
+
+Region sizes of 12, 13, 14, 18, 20, 32 and **33** have now been seen. The
+clusters are *not* fixed at 32 and the harvest pattern is arbitrary per host —
+which is exactly why coalescing by address delta is right, and why any "two runs
+of 32" special case would have been wrong. All hosts reach `64 redistributor(s)`,
+`found 64 logical cpus`, `lpis enabled on 64 redistributor(s)`.
+
+### Theories killed by measurement
+
+* **`GITS_TYPER.PTA` might be 1 on real hardware.** Dead. Metal reports
+  `typer 0xbf700022f33` → **PTA = 0**, ITT entry size 4, 16 EventID bits, 18
+  DeviceID bits. Collections name a processor number on metal exactly as on the
+  guest.
+* **`GICD_CTLR` bit 0 is needed when `DS=0`** — the premise of the group-1
+  commit. Dead. We write `0x13`; metal reads back **`0x12`** (`ARE_NS` +
+  `EnableGrp1`, bit 0 clear, `DS` clear) and guests read back **`0x52`**
+  (`DS` + `ARE_NS` + `EnableGrp1`, bit 0 clear). Bit 0 is *write-ignored on both
+  AWS platforms* — KVM's `vgic_mmio_write_v3_misc()` does not model Group 0 at
+  all, and on metal non-secure software cannot set it. The commit's conclusion
+  (harmless, keep it, Linux does) is right and now measured; its reasoning about
+  which bit does the work was wrong. It does **not** enable Group 0 on the
+  flagship.
+* **`GICR_TYPER.VLPIS` distinguishes the stride empirically.** No: `vlpis 1` on
+  every metal redistributor and `vlpis 0` on every guest one, so ArchRev and
+  VLPIS agree on both platforms and cannot be told apart here. The revert to
+  ArchRev rests on Arm IHI 0069G 12.10 alone, which is the right basis.
+* **`GICR_TYPER.Last` is a reliable region terminator.** No — and this one is a
+  live hazard. Host A sets `Last` on *no* redistributor at all; host B sets it
+  once, mid-list, at the end of the low cluster. The region size and count are
+  doing the real work; `Last` is only an early exit.
+
+### 96 vCPU: the loader hang is fixed
+
+`c8g.24xlarge` now gets past the MADT walk and reports `96 redistributor(s)
+across 1 region(s) for 64 cpu(s)`, `found 64 logical cpus`, ITS ready, NVMe
+disks published. It boots on 64 of its 96 CPUs instead of wedging.
+
+That 96-vs-64 line exposed two further problems, both now fixed:
+
+* The walk is bounded by region size and `Last`, not by the CPU count, so
+  `_InitLpis` was allocating a 128 KiB contiguous pending table per
+  *redistributor* — 12 MiB here, a third of it for CPUs that will never exist,
+  24 MiB at 192 vCPUs — and latching `GICR_CTLR.EnableLPIs`, which is one-way,
+  on redistributors belonging to parked CPUs. It now skips redistributors whose
+  affinity matches no CPU, and reports the skipped count.
+* The one-line-per-redistributor `dprintf` is O(PEs): 96 lines is ~9 KB, which
+  wrapped the firmware console ring and evicted the loader's own discovery
+  lines — destroying the log it was added to serve. It is now behind
+  `TRACE_GICV3`, with its aggregate signal (how many report VLPIS, how many
+  report Last) folded into the O(1) summary. The O(1) instruments stay: they are
+  what made this round decidable without `/dev/mem`.
+
+## 9. Note on the DeviceID cap
+
+`_InitTables()` caps the ITS device table at `min(fDeviceIDBits, 16)` = 65536
+entries. Metal reports **18** DeviceID bits where the guest reports 16, so this
+cap is now load-bearing on metal where it was slack on the guest. ENA on metal is
+bus `0x24`, requester ID `0x2400`, comfortably inside 65536 — but a device above
+RID 65535 would silently have no translation.
+
+## 10. What remains: metal does not boot, and it is not the GIC
+
+All three metal hosts now end at:
+
+```
+PCI: mechanism addr: e010000000, seg: 1, start: 0, end: ff
+PCI: multiple segments not supported!driver busses/pci/ecam/driver_v1 init failed: General system error
+...
+PANIC: did not find any boot partitions!
+```
+
+`c7g.metal`'s MCFG (`AMAZON GRVTN003`) describes PCI **segment 1**, and
+`ECAMPCIControllerACPI::ReadResourceInfo()` rejects any segment other than 0. No
+PCI means no NVMe, which means no boot partition. The GIC brings up all 64 CPUs
+and the ITS is ready before this point, so the interrupt controller is done; this
+is the next blocker and it lives in `src/add-ons/kernel/busses/pci/ecam/`.
+Tracked separately as `fix/arm64-pci-segment`. Non-zero segments imply multiple
+independent ECAM regions, so it is probably more than deleting a check.
+
+Still open beyond that:
+
+* The ITS surface at scale — `GITS_BASER.Indirect` (Linux picks an indirect
+  device table on this hardware; we request flat and do not check the readback)
+  and the 256-vector / 32-device ceilings — is untested because no MSI device
+  attaches on metal yet.
+* `INTC_MAX_GICR_REGIONS` is 16. The worst case is one region per CPU, which
+  64 single-redistributor regions would exceed. Not observed; smallest region
+  seen is 12.

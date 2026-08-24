@@ -20,6 +20,19 @@
 #define ICI_IRQ 0
 
 
+// One line per redistributor is O(PEs), and at 96 PEs it is around 9 KB -- more
+// than enough to push the loader's own discovery lines out of the firmware's
+// console ring and destroy the very log it was added to serve. The summary that
+// follows it is O(1) and carries what actually decides whether discovery
+// worked; this is what you turn on when the summary and the CPU count disagree.
+//#define TRACE_GICV3
+#ifdef TRACE_GICV3
+#	define TRACE(x...) dprintf(x)
+#else
+#	define TRACE(x...) ;
+#endif
+
+
 GICv3InterruptController::GICv3InterruptController(const intc_info& info)
 	:
 	InterruptController(),
@@ -273,6 +286,8 @@ void
 GICv3InterruptController::_PrefaultRedistributors()
 {
 	uint32 found = 0;
+	uint32 vlpis = 0;
+	uint32 last = 0;
 
 	for (uint32 region = 0; region < fGicrRegionCount; region++) {
 		addr_t frame = fGicrRegions[region].base;
@@ -283,13 +298,22 @@ GICv3InterruptController::_PrefaultRedistributors()
 			// The SGI/PPI frame is a separate page from the RD frame.
 			(void)gic_read32(frame + GICR_SGI_FRAME + GICR_IGROUPR0);
 
-			dprintf("gicv3: redistributor %" B_PRIu32 " (region %" B_PRIu32
+			TRACE("gicv3: redistributor %" B_PRIu32 " (region %" B_PRIu32
 				") affinity %#" B_PRIx32 ", processor %" B_PRIu32 ", vlpis %d,"
 				" last %d\n", found, region, (uint32)(typer >> 32),
 				(uint32)GICR_TYPER_PROC_NUM(typer),
-				(typer & GICR_TYPER_VLPIS) != 0 ? 1 : 0,
-				(typer & GICR_TYPER_LAST) != 0 ? 1 : 0);
+				(uint32)((typer & GICR_TYPER_VLPIS) != 0 ? 1 : 0),
+				(uint32)((typer & GICR_TYPER_LAST) != 0 ? 1 : 0));
 			found++;
+
+			// Aggregates of what the per-PE line carries, so the interesting
+			// part survives at O(1): a mixed vlpis report would mean the frame
+			// geometry is not uniform, and where Last falls says how much of
+			// the walk's bound the hardware is actually supplying.
+			if ((typer & GICR_TYPER_VLPIS) != 0)
+				vlpis++;
+			if ((typer & GICR_TYPER_LAST) != 0)
+				last++;
 
 			if ((typer & GICR_TYPER_LAST) != 0)
 				break;
@@ -299,8 +323,9 @@ GICv3InterruptController::_PrefaultRedistributors()
 	}
 
 	dprintf("gicv3: %" B_PRIu32 " redistributor(s) across %" B_PRIu32
-		" region(s) for %" B_PRId32 " cpu(s)\n", found, fGicrRegionCount,
-		smp_get_num_cpus());
+		" region(s) for %" B_PRId32 " cpu(s); %" B_PRIu32 " report vlpis, %"
+		B_PRIu32 " report last\n", found, fGicrRegionCount,
+		smp_get_num_cpus(), vlpis, last);
 }
 
 

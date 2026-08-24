@@ -5,6 +5,7 @@
 
 #include <string.h>
 
+#include <cpu.h>
 #include <interrupts.h>
 #include <kernel.h>
 #include <smp.h>
@@ -54,6 +55,23 @@ allocate_its_table(const char* name, size_t size, size_t alignment,
 
 	memset((void*)virtualAddress, 0, size);
 	return B_OK;
+}
+
+
+// Whether any CPU the kernel actually runs on lives behind this redistributor.
+// An emulated GIC hands out a redistributor per PE the platform could ever have,
+// so on a machine with more PEs than SMP_MAX_CPUS -- or with CPUs firmware
+// disabled -- a good many of them belong to nobody.
+static bool
+redistributor_has_cpu(uint32 affinity)
+{
+	const int32 cpuCount = smp_get_num_cpus();
+	for (int32 i = 0; i < cpuCount; i++) {
+		if (gic_packed_affinity(gCPU[i].arch.mpidr) == affinity)
+			return true;
+	}
+
+	return false;
 }
 
 
@@ -364,12 +382,27 @@ GICv3ITS::_InitLpis(addr_t gicdRegs, const gicr_region* gicrRegions,
 
 	bool haveTarget = false;
 	uint32 redistributors = 0;
+	uint32 skipped = 0;
 	for (uint32 region = 0; region < gicrRegionCount; region++) {
 		addr_t frame = gicrRegions[region].base;
 		phys_addr_t framePhysical = gicrRegions[region].physicalBase;
 
 		for (uint32 i = 0; i < gicrRegions[region].count; i++) {
 			const uint64 typer = gic_read64(frame + GICR_TYPER);
+			const uint32 affinity = (uint32)(typer >> 32);
+
+			// Skip the ones no CPU sits behind. Each costs a physically
+			// contiguous pending table, and GICR_CTLR.EnableLPIs is a one-way
+			// latch -- there is no reason to spend either on a PE that will
+			// never be started.
+			if (!redistributor_has_cpu(affinity)) {
+				skipped++;
+				if ((typer & GICR_TYPER_LAST) != 0)
+					break;
+				frame += gicrRegions[region].stride;
+				framePhysical += gicrRegions[region].stride;
+				continue;
+			}
 
 			addr_t pending;
 			phys_addr_t pendingPhysical;
@@ -397,7 +430,7 @@ GICv3ITS::_InitLpis(addr_t gicdRegs, const gicr_region* gicrRegions,
 
 			redistributors++;
 
-			if ((uint32)(typer >> 32) == bootAffinity) {
+			if (affinity == bootAffinity) {
 				// Collections name their target either by physical
 				// redistributor address or by the processor number the
 				// redistributor reports.
@@ -421,9 +454,19 @@ GICv3ITS::_InitLpis(addr_t gicdRegs, const gicr_region* gicrRegions,
 	}
 
 	dprintf("gicv3-its: lpis enabled on %" B_PRIu32 " redistributor(s), %"
-		B_PRIu32 " lpi intid bits, %" B_PRIuSIZE " KiB of pending tables, "
-		"collection target %#" B_PRIx64 "\n", redistributors, fLpiIDBits,
+		B_PRIu32 " skipped as cpu-less, %" B_PRIu32 " lpi intid bits, %"
+		B_PRIuSIZE " KiB of pending tables, collection target %#" B_PRIx64
+		"\n", redistributors, skipped, fLpiIDBits,
 		(redistributors * pendingSize) / 1024, fCollectionTarget);
+
+	// The count should be exactly the CPUs we run on. Anything else means the
+	// affinity match above is not seeing what it thinks it is, and the
+	// consequence -- LPIs enabled on the wrong set of redistributors -- is
+	// quiet, so say it out loud here.
+	if (redistributors != (uint32)smp_get_num_cpus()) {
+		ERROR("lpis enabled on %" B_PRIu32 " redistributor(s) for %" B_PRId32
+			" cpu(s)\n", redistributors, smp_get_num_cpus());
+	}
 
 	return B_OK;
 }
