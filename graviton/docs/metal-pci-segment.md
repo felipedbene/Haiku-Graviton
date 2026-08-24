@@ -228,6 +228,97 @@ c8g bridge 2     crs=0x1-0x43  -> buses 0x1-0x43   offset 0x1   base 0x20100000 
 c8g bridge 3     crs=0x44-0x56 -> buses 0x44-0x56  offset 0x44  base 0x24400000     19 MiB
 ```
 
+### Hardware result (CONFIRMED)
+
+`ami-02e994c907fc6484b`. Per-bridge selection works: each bridge mapped its own
+allocation, exactly as simulated.
+
+```
+PCI: ECAM at 20000000 (bus 0  base 20000000), buses 0-0,   1 decoded,  1 MiB
+PCI: ECAM at 20000000 (bus 1  base 20100000), buses 1-43, 67 decoded, 67 MiB
+PCI: ECAM at 20000000 (bus 44 base 24400000), buses 44-56,19 decoded, 19 MiB
+```
+
+Three of the five pass conditions met outright, and one better than hoped:
+
+* **Exactly one NVMe disk.** `disk/nvme/0/raw` alone, where the pre-fix image
+  published `/0`, `/1` and `/2` for one controller. The triplication is gone.
+* **No abort while probing**, on any bridge.
+* **The stall is fixed.** The pre-fix image stopped after publishing three NVMe
+  devices; this one mounts its root volume, reaches `first boot processing #0`
+  and goes on into `input_server` add-on loading. That confirms the stall and the
+  duplication were one bug, as §above argued.
+* `"multiple host bridges not supported!"` fires zero times — but that is *not*
+  evidence, because this branch deleted the message. Recorded so nobody counts
+  it as a pass later.
+
+**The ENA is still missing**, and the reason was a defect in this branch rather
+than anything about the machine: bridges 2 and 3 enumerated *nothing at all*.
+The device count stayed at bus 0's three devices across all three domains.
+
+**Enumeration was starting below those bridges' windows.** `PCI::AddController()`
+created every domain's root `PCIBus` with its number left at zero:
+
+```c
+data.bus = new(std::nothrow) PCIBus {
+        .domain = domain,          // .bus omitted, so 0
+```
+
+so a bridge whose window begins at bus 1 was probed at bus 0. Its controller
+correctly refused — bus 0 is outside its window — `ReadConfig()` returned
+`ERANGE`, every device on the probe was skipped, and because the only route to a
+non-zero bus is a PCI-to-PCI bridge discovered on bus 0, buses `1-0x43` were
+never reached at all.
+
+### A wrong turn worth recording
+
+The first diagnosis blamed the bus-number rebasing and removed it, reasoning that
+Haiku's controller interface is window-relative where Linux's is absolute. The
+*observation* was right — the root bus really is created at 0 — but the
+*conclusion* was wrong twice over:
+
+* The rebasing is what Linux's **arm64 ACPI** ECAM path does.
+  `pci_ecam_map_bus()` subtracts `cfg->busr.start` before shifting, and
+  `pci_mcfg_lookup()` takes the window base as `e->addr + (bus_res->start << 20)`.
+  That is byte-for-byte the `fBusOffset` plus `address + (startBus << 20)` this
+  branch already had. The earlier citation of `PCI_MMCFG_BUS_OFFSET` pointed at
+  Linux's **x86** `pci_mmconfig` path, which does the opposite — the mechanism was
+  right and the reference was for the wrong architecture.
+* Removing it would not have restored the ENA anyway. Bridge 2 would still have
+  begun enumerating at bus 0, and the valid-bus bitmap would still — correctly —
+  have refused it. It would have traded a general mechanism for one that only
+  works while every window shares a base, and still missed the goal.
+
+So the rebasing is restored and the root bus is created at the window's first
+bus, via an optional `get_bus_range()` on the controller interface. Controllers
+that do not implement it get bus 0 exactly as before, which is every other
+implementation in the tree. This is the second time on this branch that a Linux
+mechanism was reached for without first checking that the surrounding interface
+matched; the first was the redistributor stride, where the citation was real but
+answered a different question.
+
+Whether buses `1-0x56` actually hold an ENA is still unknown, and is the next
+boot's question.
+
+### Sibling drivers: two pre-existing arm64 breakages
+
+Checked because this change touches a public struct in
+`headers/os/drivers/bus/PCI.h` that three controllers implement. Both failures
+reproduce **at the clean base**, so neither is caused by this work:
+
+* `<pci>x86` — `X86PCIController.cpp: fatal error: ioapic.h: No such file or
+  directory`. An x86-only driver that cannot cross-build for arm64. Its *shared*
+  sources (`ECAMPCIController.cpp`, `ECAMPCIControllerACPI.cpp`,
+  `kernel_interface.cpp`) do compile in that directory's context, so the changes
+  here are exercised by it.
+* `<pci>designware` — `msi.h: 'MSIInterface::AllocateVectors(uint32, uint32,
+  uint32&, uint64&, uint32&)' was hidden [-Werror=overloaded-virtual=]`. The
+  second `AllocateVectors` overload — the requester-ID one the GICv3 ITS needs —
+  hides the base in designware's MSI class. **That driver has been unbuildable on
+  arm64 since that overload was added**, which nothing had noticed because nothing
+  builds it. Worth a separate fix; adding `using` declarations or overriding both
+  overloads would do it.
+
 ### Pass condition for the next boot
 
 One domain per bridge with **disjoint** device sets; exactly **one** NVMe disk;
