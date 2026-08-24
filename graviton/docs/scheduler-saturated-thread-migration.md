@@ -334,18 +334,59 @@ not zero, and not thousands.
 
 ---
 
+## 4.6 What "fixed" means: efficiency is the wrong yardstick above N = ncpus
+
+`smpscale`'s `eff` is `speedup / N` with `speedup = N * baseWall / wall`. With a
+fixed per-thread work unit and perfect packing, `wall = ceil(N / ncpus)` units,
+so the **arithmetic optimum** is
+
+```
+eff_optimal = 1 / ceil(N / ncpus)
+```
+
+which on 16 CPUs is 1.000 for N <= 16, 0.500 for 17..32, 0.333 for 33..48. So
+`eff` falling as N passes `ncpus` is *correct behaviour*, and reading the raw
+figure as a defect would manufacture a result. Against the measured ladder:
+
+| N | measured eff | optimal eff | verdict |
+|---|---|---|---|
+| 1..15 | 1.000 | 1.000 | fine |
+| **16** | **0.500** | **1.000** | **defect — a whole core lost** |
+| 17 | 0.500 | 0.500 | **already optimal, no defect** |
+| **20** | **0.333** | **0.500** | **defect — a core ran 3 threads** |
+| **32** | ~0.059 | 0.500 | **defect — one core ran 17 threads** |
+
+The N = 17 column matters: it is the one point on the ladder where the observed
+0.500 is *not* a bug, and a fix that "improves" it would be doing something
+wrong. Claiming credit for it would be exactly the kind of once-measured,
+propagated-then-retracted result this project has been burned by.
+
+The metric to use above `ncpus` is therefore the **imbalance ratio**
+
+```
+imbalance = observed max thread time / (ceil(N / ncpus) * unit)
+```
+
+where 1.0 is optimal regardless of N. Today that is **2.0 at N = 16**, 1.5 at
+N = 20 and ~8.5 at N = 32. The fix must drive all of them to ~1.0, and must
+leave N = 17 exactly where it is.
+
+---
+
 ## 5. How the fix will be proved
 
 Primary evidence is the ladder; everything else is corroboration.
 
 1. **The ladder, interleaved A/B**, fixed vs. canonical kernel, several repeats,
-   variance shown. Target: efficiency at N = 16 goes from 0.500 to ~1.000.
+   variance shown. Target: efficiency at N = 16 goes from 0.500 to ~1.000, and
+   **N = 17 stays at 0.500** because that is already optimal (§4.6).
 2. **Duration scaling as a negative control on the *fix*:** the N = 16 max time
    must now stay flat at ~1x the unit for 2000 ms and 8000 ms units, where today
    it is 2x both times.
-3. **Graceful degradation, not serialisation:** N = 20 should approach 20/16 =
-   1.25x the unit (eff ~0.8, the arithmetic optimum) and N = 32 about 2x
-   (eff ~0.5) — *not* one CPU running 17 threads for 51 s.
+3. **Graceful degradation, not serialisation**, judged by imbalance ratio
+   (§4.6), which is 1.0 at the optimum for every N: N = 20 should go from 1.5 to
+   ~1.0 (eff 0.333 → ~0.500) and N = 32 from ~8.5 to ~1.0 (eff ~0.059 → ~0.500)
+   — *not* one CPU running 17 threads for 51 s.
 4. **Mixed workload negative control:** some threads sleeping, some CPU-bound.
    Must not regress, and must not start migrating the sleepers.
 5. **Migration thrashing, counted, not inferred from throughput.** `arm64` has a
