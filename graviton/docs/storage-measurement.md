@@ -58,10 +58,13 @@ limitation would be a straightforward mistake.
 | scratch volume | gp3, 100 GiB, **16,000 IOPS, 1,000 MiB/s** provisioned | `describe-volumes` |
 | instance EBS baseline | **625 MB/s, 20,000 IOPS** | `describe-instance-types` |
 | instance EBS maximum (burst) | **1,250 MB/s, 40,000 IOPS** | `describe-instance-types` |
-| **effective sustained ceiling** | **≈596 MiB/s** (625 MB/s) | the lower of the two |
+| **effective sustained ceiling** | **~1008 MiB/s**, set by the volume | *measured*, see below |
 
-The scratch volume is deliberately over-provisioned relative to the instance so
-that the *instance* is the ceiling and the OS is what is being measured.
+The prediction here was that the instance's 625 MB/s baseline would bind first.
+It did not: measured sustained throughput is ~1008 MiB/s in both directions, i.e.
+the volume's provisioned 1,000 MiB/s. Recorded as a wrong prediction rather than
+quietly corrected, because the ceiling is the thing every other number is read
+against and it should be clear that it was measured and not assumed.
 
 ### Which volume — this determines whether any number here means anything
 
@@ -90,11 +93,6 @@ provisioning, the same instance type and the same availability zone. The 100 GiB
 size also means the DeBeOS filesystem tests below have a 100 GiB BFS volume
 available rather than a 232 MiB one, so a working set larger than RAM is possible.
 
-The scratch volume is deliberately over-provisioned relative to the instance so
-that the *instance* — or DeBeOS — is the ceiling rather than the volume. In the
-event the volume's 1,000 MiB/s turned out to bind first; see the ceiling
-measurement below.
-
 What the driver reports on this hardware, from the boot log:
 
 ```
@@ -108,8 +106,14 @@ nvme_disk: using MSI-X
 `262144` is **not** a driver choice: it is the controller's MDTS. `libnvme`
 starts from `NVME_MAX_PRP_LIST_ENTRIES * PAGE_SIZE` (2,072,576 bytes) and clamps
 it to `min_page_size << mdts`; 262144 = 4096 × 2⁶, so the Nitro controller
-reports MDTS = 6. Both the logical and the physical sector size are 512, so the
-4096-physical-sector read-modify-write concern does not apply to this volume.
+reports MDTS = 6.
+
+DeBeOS reports **both** the logical and the physical sector size as 512. Linux on
+the same volume reports logical 512 but **physical 4096**, so DeBeOS is echoing the
+logical size into `bytes_per_physical_sector` rather than reporting what the
+controller says. Nothing measured here depends on it, but anything that later
+tries to align to the physical sector will be misinformed. See the minor-gap note
+in the reference section.
 
 ## Method, and the controls
 
