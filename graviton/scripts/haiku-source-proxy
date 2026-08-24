@@ -157,9 +157,23 @@ def fetch_to_cache(url):
 	The rename-on-success discipline here is the whole point of the script: a
 	half-downloaded tarball must never become a cache entry.
 	"""
-	scheme = urllib.parse.urlsplit(url).scheme.lower()
+	# An ftp:// SOURCE_URI used to be refused outright, which made the port read
+	# as unbuildable. gdbm-1.26 forced this open: its only live SOURCE_URI is
+	# ftp://ftp.gnu.org/gnu/gdbm/gdbm-1.26.tar.gz, and haikuporter's fallback
+	# location (ports-mirror.haiku-os.org) no longer resolves at all, so
+	# "refusing scheme 'ftp'" was the entire failure. Every mirror that
+	# publishes a tree over ftp also publishes it over https -- ftp.gnu.org
+	# certainly does -- and https is what actually gets out of here, so retry
+	# the same host over https. The cache stays keyed on the URL the guest
+	# asked for, so the rewrite is invisible to the caller and to the checksum
+	# haikuporter verifies afterwards.
+	parts = urllib.parse.urlsplit(url)
+	scheme = parts.scheme.lower()
+	if scheme == 'ftp':
+		url = urllib.parse.urlunsplit(('https',) + tuple(parts)[1:])
+		scheme = 'https'
 	if scheme not in ('http', 'https'):
-		return None, False, 'refusing scheme %r (http/https only)' % scheme
+		return None, False, 'refusing scheme %r (http/https/ftp only)' % scheme
 
 	target = cache_path(url)
 	if os.path.exists(target) and os.path.getsize(target) > 0:
