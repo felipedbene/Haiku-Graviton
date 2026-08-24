@@ -3,3 +3,13 @@ SubDir HAIKU_TOP src tests system libroot posix string ;
 SimpleTest compare_test
 	: compare_test.cpp
 ;
+
+# Built -fno-builtin so that the oracle's byte loop and the test's own calls
+# stay calls, rather than becoming whatever the compiler thinks a copy is.
+# Testing GCC's inlined memcpy instead of libroot's leaves no trace in the
+# output.
+SubDirCcFlags -fno-builtin ;
+
+SimpleTest memcpy_test
+	: memcpy_test.c
+;
