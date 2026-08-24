@@ -38,6 +38,12 @@ extern "C" {
 #	define TRACE(x...) ;
 #endif
 #define TRACE_ALWAYS(x...)	dprintf("nvme_disk: " x)
+
+// How many chopped commands of one io_request may be in flight together. Eight
+// is enough to hide the round trip of a request several times larger than
+// max_xfer_size, and small enough that the batch stays on the kernel stack
+// (nvme_io_request is a plain struct of a few words).
+#define NVME_IO_BATCH_SIZE		8
 #define TRACE_ERROR(x...)	dprintf("\33[33mnvme_disk:\33[0m " x)
 #define CALLED() 			TRACE("CALLED %s\n", __PRETTY_FUNCTION__)
 
@@ -234,6 +240,10 @@ nvme_disk_init_device(void* _info, void** _cookie)
 	TRACE_ALWAYS("attached to NVMe device \"%s (%s)\"\n", cstat->mn, cstat->sn);
 	TRACE_ALWAYS("\tmaximum transfer size: %" B_PRIuSIZE "\n", cstat->max_xfer_size);
 	TRACE_ALWAYS("\tqpair count: %d\n", cstat->io_qpairs);
+	// Stamped so that a hot-swapped module can be proven to be the one running,
+	// rather than inferred from a number having moved. nvme_disk serves the root
+	// filesystem, so which copy the kernel actually loaded is not obvious.
+	TRACE_ALWAYS("\tio batch size: %d\n", NVME_IO_BATCH_SIZE);
 
 	// TODO: export more than just the first namespace!
 	info->ns = nvme_ns_open(info->ctrlr, cstat->ns_ids[0]);
@@ -611,20 +621,24 @@ ior_next_sge(nvme_io_request* request, uint64_t* address, uint32_t* length)
 }
 
 
-static status_t
-do_nvme_io_request(nvme_disk_driver_info* info, nvme_io_request* request)
+// Queue one command without waiting for it. Split out of
+// do_nvme_io_request() so that a request larger than the controller's
+// max_xfer_size can have all of its pieces in flight at once instead of one at
+// a time; see the batching loop in do_io().
+static int
+submit_nvme_io_request(nvme_disk_driver_info* info, struct nvme_qpair* qpair,
+	nvme_io_request* request)
 {
 	request->status = EINPROGRESS;
 
-	qpair_info* qpinfo = get_qpair(info);
 	int ret = -1;
 	if (request->write) {
-		ret = nvme_ns_writev(info->ns, qpinfo->qpair, request->lba_start,
+		ret = nvme_ns_writev(info->ns, qpair, request->lba_start,
 			request->lba_count, (nvme_cmd_cb)io_finished_callback, request,
 			0, (nvme_req_reset_sgl_cb)ior_reset_sgl,
 			(nvme_req_next_sge_cb)ior_next_sge);
 	} else {
-		ret = nvme_ns_readv(info->ns, qpinfo->qpair, request->lba_start,
+		ret = nvme_ns_readv(info->ns, qpair, request->lba_start,
 			request->lba_count, (nvme_cmd_cb)io_finished_callback, request,
 			0, (nvme_req_reset_sgl_cb)ior_reset_sgl,
 			(nvme_req_next_sge_cb)ior_next_sge);
@@ -637,6 +651,19 @@ do_nvme_io_request(nvme_disk_driver_info* info, nvme_io_request* request)
 		request->lba_count = 0;
 		return ret;
 	}
+
+	return 0;
+}
+
+
+static status_t
+do_nvme_io_request(nvme_disk_driver_info* info, nvme_io_request* request)
+{
+	qpair_info* qpinfo = get_qpair(info);
+
+	int ret = submit_nvme_io_request(info, qpinfo->qpair, request);
+	if (ret != 0)
+		return ret;
 
 	await_status(info, qpinfo->qpair, request->status);
 
@@ -849,34 +876,97 @@ do_io(nvme_disk_handle* handle, io_request* request)
 		return status;
 	}
 
+	// A request longer than the controller's max_xfer_size, or wider than one
+	// SGL can describe, has to be chopped into several commands. This loop used
+	// to submit one piece and then block in await_status() before building the
+	// next, which makes those pieces strictly serial: a 1 MiB read against a
+	// 256 KiB max_xfer_size cost four full round trips rather than one, and
+	// measured 158 MiB/s where Linux -- which issues the same four commands
+	// concurrently -- reached 598 MiB/s on the same volume. Submitting a batch
+	// and then reaping it costs the time of the slowest command instead of the
+	// sum of all of them.
 	const uint32 max_io_blocks = handle->info->max_io_blocks;
 	int32 remaining = nvme_request.iovec_count;
-	nvme_request.lba_start = rounded_pos / block_size;
-	while (remaining > 0) {
-		nvme_request.iovec_count = min_c(remaining,
-			NVME_MAX_SGL_DESCRIPTORS / 2);
+	physical_entry* iovecs = nvme_request.iovecs;
+	off_t lba = rounded_pos / block_size;
+	size_t transferredBlocks = 0;
 
-		nvme_request.lba_count = 0;
-		for (int i = 0; i < nvme_request.iovec_count; i++) {
-			uint32 new_lba_count = nvme_request.lba_count
-				+ (nvme_request.iovecs[i].size / block_size);
-			if (nvme_request.lba_count > 0 && new_lba_count > max_io_blocks) {
-				// We already have a nonzero length, and adding this vec would
-				// make us go over (or we already are over.) Stop adding.
-				nvme_request.iovec_count = i;
+	// One qpair for every command of this request. await_status() polls a
+	// specific qpair, and get_qpair() picks by current CPU, so a thread that
+	// migrated between submitting and waiting would otherwise poll a queue its
+	// commands are not on.
+	qpair_info* qpinfo = get_qpair(handle->info);
+
+	while (remaining > 0 && status == B_OK) {
+		nvme_io_request batch[NVME_IO_BATCH_SIZE];
+		int32 batched = 0;
+
+		while (batched < NVME_IO_BATCH_SIZE && remaining > 0) {
+			nvme_io_request& sub = batch[batched];
+			sub.write = nvme_request.write;
+			sub.iovecs = iovecs;
+			sub.iovec_i = 0;
+			sub.iovec_offset = 0;
+			sub.lba_start = lba;
+
+			int32 vecs = min_c(remaining, NVME_MAX_SGL_DESCRIPTORS / 2);
+			size_t lba_count = 0;
+			for (int32 i = 0; i < vecs; i++) {
+				size_t new_lba_count = lba_count + (iovecs[i].size / block_size);
+				if (lba_count > 0 && new_lba_count > max_io_blocks) {
+					// We already have a nonzero length, and adding this vec
+					// would make us go over (or we already are over.) Stop
+					// adding.
+					vecs = i;
+					break;
+				}
+
+				lba_count = new_lba_count;
+			}
+			sub.iovec_count = vecs;
+			sub.lba_count = lba_count;
+
+			if (submit_nvme_io_request(handle->info, qpinfo->qpair, &sub) != 0) {
+				// The submission queue would not take it. Whatever is already
+				// in flight still has to be reaped, so stop adding here and go
+				// and wait; these vecs are picked up on the next pass of the
+				// outer loop. Only if nothing at all could be queued is this an
+				// error, which is handled below.
 				break;
 			}
 
-			nvme_request.lba_count = new_lba_count;
+			iovecs += vecs;
+			remaining -= vecs;
+			lba += lba_count;
+			batched++;
 		}
 
-		status = do_nvme_io_request(handle->info, &nvme_request);
-		if (status != B_OK)
+		if (batched == 0) {
+			// Not one command could be queued, so there is nothing to wait for
+			// and going round again would spin.
+			status = B_ERROR;
 			break;
+		}
 
-		nvme_request.iovecs += nvme_request.iovec_count;
-		remaining -= nvme_request.iovec_count;
-		nvme_request.lba_start += nvme_request.lba_count;
+		// They are all already in flight, so reaping them in submission order
+		// costs the slowest one rather than the sum.
+		for (int32 i = 0; i < batched; i++)
+			await_status(handle->info, qpinfo->qpair, batch[i].status);
+
+		// Only the contiguous prefix that succeeded counts as transferred: a
+		// later command completing does not make the bytes of an earlier failed
+		// one valid.
+		for (int32 i = 0; i < batched; i++) {
+			if (batch[i].status != B_OK) {
+				status = batch[i].status;
+				TRACE_ERROR("%s at LBA %" B_PRIdOFF " of %" B_PRIuSIZE
+					" blocks failed!\n", batch[i].write ? "write" : "read",
+					batch[i].lba_start, batch[i].lba_count);
+				break;
+			}
+
+			transferredBlocks += batch[i].lba_count;
+		}
 	}
 
 	if (status != B_OK)
@@ -885,7 +975,7 @@ do_io(nvme_disk_handle* handle, io_request* request)
 	readLocker.Unlock();
 
 	request->SetTransferredBytes(status != B_OK,
-		(nvme_request.lba_start * block_size) - rounded_pos);
+		transferredBlocks * block_size);
 	request->SetStatusAndNotify(status);
 	return status;
 }
