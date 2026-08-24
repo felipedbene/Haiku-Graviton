@@ -353,6 +353,16 @@ is already wedged, so the only real remedy there is a different guest.
 Patches: `gettext-1.0-groff-doc-cut-stage1.patch`,
 `zstd-1.5.6-makefile-not-cmake-stage1.patch`.
 
+**A correction found by measuring instead of assuming.** The autoconf stage-1 note
+implied the `makeinfo` stub produced empty documentation. It did not: `autoconf.info`
+is **1,221,536 bytes in both** the stage-1 and the retired build, byte-for-byte the
+same size, because the tarball **ships prebuilt `.info` files** and `make` installed
+those regardless of what the stub wrote. What the cut actually cost was only
+`make install-html` — the stage-1 hpkg has no `.html` entry whatsoever, and the
+rebuild adds `autoconf.html` (2,274,731 B) and `standards.html` (412,748 B). So the
+debt was real but a third the size it was written up as, and the same caution applies
+to the gettext cut, whose HTML man pages ship prebuilt too.
+
 The single biggest error in the earlier write-up was treating this as one cycle.
 It is two, sharing no edge, and only one of them was ever on the path to
 `zstd`/`openssl3`.
@@ -391,55 +401,155 @@ Corollary worth keeping: `zstd` was recorded here as "blocked on `xz_utils`
 whole `BUILD_PREREQUIRES`, not just the dependency the last failure happened to
 name.
 
-## Blocker 6 — cmake cannot be built with bundled libraries on Haiku — **DEAD END**
+## Blocker 6 — cmake — **SOLVED (2026-08-24). There was never a cycle.**
 
-Patch kept for the record: `cmake-4.1.6-bundled-libs-stage1.patch`. **Do not
-retry this route as-is.**
+Recipe (source of truth): `graviton/haikuports-patches/recipes/cmake-4.1.6.recipe`.
+`cmake-4.1.6-bundled-libs-stage1.patch` is kept **only** as a record of a route that
+was taken for the wrong reason; do not use it.
 
-The idea was sound and the recipe already blesses it (`# use the embedded copy to
-avoid circular deps` for libarchive/libcppdap/libjsoncpp): drop `--system-curl`,
-`--system-expat`, `--system-librhash`, `--system-libuv` so cmake uses
-`Utilities/cmcurl`, `cmexpat`, `cmlibrhash`, `cmlibuv`. Three things were learned,
-in order, and the third kills it:
+**The headline: cmake 4.1.6 builds natively on arm64 with the *pristine* upstream
+recipe and no cut at all.** What was missing was never a cycle — it was five
+unbuilt leaves.
 
-1. **`cmd:which` was missing** and looked like part of the cycle. It is not —
-   `sys-apps/which/which-2.21` is a ~15 KB GNU package needing only
-   `cmd:awk cmd:gcc cmd:grep cmd:make cmd:sed`. Built in under a minute. **Check
-   whether an unresolved edge is a cycle or just an unbuilt leaf.**
-2. **Bundled curl fails, and is fixable.** `Utilities/cmcurl/lib/transfer.c:57`
-   fires `#error "We cannot compile without socket() support!"` because
-   `HAVE_SOCKET` is undefined. `Utilities/cmcurl/CMakeLists.txt:751-753` *does*
-   have a Haiku branch, but it appends `network` only to `CURL_LIBS` — never to
-   `CMAKE_REQUIRED_LIBRARIES`, which is what the `check_symbol_exists("socket"
-   ...)` probe at `:1987` links against. Haiku keeps `socket()` in `libnetwork`,
-   so the probe fails. `export LDFLAGS="-lbsd -lnetwork"` seeds
-   `CMAKE_EXE_LINKER_FLAGS` and fixes it — **verified: the build then ran to 97%.**
-3. **Bundled libuv does not build on Haiku, and that is not cheaply fixable.** At
-   97%:
+### The cycle in this document was real once and had already dissolved
 
+Every earlier write-up, including this one, asserted:
+
+```
+cmake --devel:libcurl--> curl --devel:libssl--> openssl3 --devel:libzstd--> zstd --cmd:cmake--> cmake
+```
+
+That loop was genuine when it was written. **It stopped existing the moment
+`zstd` and `openssl3` were built** (Blocker 5/8) — the `zstd -> cmd:cmake` edge was
+removed by building zstd from its own Makefile, and with it the only path back to
+cmake. Afterwards `devel:libcurl` was just an **unbuilt leaf**, and the document
+went on calling it "the one genuine cycle edge" for another day. The
+`cmake-4.1.6.recipe` comment even wrote `(unbuilt)` next to it and still called it
+a cycle edge.
+
+What actually stood between us and native curl was three more leaves and one
+doc-dependency cut, all cheap:
+
+| Port | What it needed | Time |
+|---|---|---|
+| `expat-2.8.2` | autotools; nothing missing | 46 s |
+| `rhash-1.4.6` | plain `./configure`; nothing missing | 30 s |
+| `libuv-1.52.1` | autotools; nothing missing | 41 s |
+| `nghttp2-1.63.0` | `haiku_devel` only | 49 s |
+| `ca_root_certificates` | pure data package, no build deps at all | 13 s |
+| `libssh2-1.11.1` | `devel:libssl/libcrypto` (openssl3, built) | 36 s |
+| `curl-8.21.0` | the three above + a `libpsl` cut | 1 m 51 s |
+
+**Total: under six minutes of build time for the thing that had blocked the chain
+for days.** Not one of them needed `cmd:cmake`; not one was in a cycle.
+
+### `libuv` does not need cmake — the question that gated everything
+
+It is **autotools**: `./autogen.sh` then `./configure`, and its
+`BUILD_PREREQUIRES` is `awk autoconf automake gcc ld libtoolize make pkg_config`,
+every one already built. Its recipe *already* carries `LDFLAGS="-lnetwork"`, so
+upstream knows about Haiku. There was no libuv/cmake sub-cycle to settle and no
+`_bootstrap` recipe variant was needed.
+
+### The `libpsl` cut, and why it is the only one left
+
+`curl` wants `devel:libpsl`; `libpsl` wants `libidn2`; `libidn2-2.0.5.recipe`
+**does exist in the tree** (`net-dns/libidn/libidn2-2.0.5.recipe` — an earlier note
+that it was absent is wrong) but needs `cmd:gtkdocize` from gtk-doc, which is not
+buildable here. curl's recipe already carried `--without-libpsl` behind an
+`x86_gcc2` guard, so the cut is to apply it on every architecture: three
+guarded blocks, in `graviton/haikuports-patches/recipes/curl-8.21.0.recipe`.
+This is exactly the class of cut that worked for `cmd:groff` in gettext — it drops
+a dependency edge, not a capability curl needs here. PSL supplies public-suffix
+checking for cookie-domain validation only.
+
+### The bundled-curl route worked, and shipped a cmake with no TLS
+
+This is the part worth propagating, because the build **succeeded** and the defect
+was invisible from the build log, from `RC=0`, and from a functional
+"does cmake compile a project" test — all of which passed.
+
+Bundling only curl (keeping `--system-expat --system-librhash --system-libuv`)
+does build, and the resulting cmake configures and builds real projects. But
+`Utilities/cmcurl/CMakeLists.txt:24` reads
+`CURL_USE_OPENSSL="${CMAKE_USE_OPENSSL}"`, and **`CMAKE_USE_OPENSSL` is set
+nowhere in cmake's top-level `CMakeLists.txt`** — so bundled cmcurl is compiled
+with no TLS backend whatsoever, even though `openssl3` was built and
+`devel:libssl` was available:
+
+```
+file(DOWNLOAD https://...)  ->  1;"Unsupported protocol"
+file(DOWNLOAD http://...)   ->  0;"No error"
+```
+
+`FetchContent`, `ExternalProject_Add` and `ctest --submit` are all dead in that
+build, and since nearly every modern CMake project fetches over https, the
+breakage would have surfaced later as *the other port's* bug. Two further costs:
+`CMakeLists.txt:96-97` forces system nghttp2 **only** when system curl is used, so
+bundling curl also bundles nghttp2 (27 `cmnghttp2` + 177 `cmcurl` objects), and
+the bundled curl is **8.14.1** against HaikuPorts' **8.21.0** — seven minor
+releases behind in network-facing code, and invisible to `pkgman` because
+`lib:libcurl` had been commented out of `REQUIRES`.
+
+**Rule this yields: when a cut removes a library, test the capability that library
+provided, not just that the build finished.** A build-tool package can pass every
+build-level test and still have had a feature silently amputated.
+
+### The `-lnetwork` finding — still true, still worth keeping
+
+If you ever *do* bundle curl: `Utilities/cmcurl/lib/transfer.c:57` fires
+`#error "We cannot compile without socket() support!"` because `HAVE_SOCKET` is
+undefined. `Utilities/cmcurl/CMakeLists.txt:751-753` has a Haiku branch, but it
+appends `network` only to `CURL_LIBS`, never to `CMAKE_REQUIRED_LIBRARIES`, which
+is what the `check_symbol_exists("socket" ...)` probe at `:1987` links against —
+and Haiku keeps `socket()` in `libnetwork`. `export LDFLAGS="-lbsd -lnetwork"`
+seeds `CMAKE_EXE_LINKER_FLAGS` and fixes it (verified: `-- Looking for socket -
+found`). Note this works only because Haiku's `ld` is not `--as-needed`, which
+puts `-lnetwork` before the object on the probe's link line; and note `cmcurl` has
+**no `HAVE_LIBNETWORK` probe at all**, so the `elseif(HAVE_LIBNETWORK)` at `:1976`
+can never fire. **None of this is needed by the all-native build**, which is why
+no patchset hunk was added: the right fix was to stop bundling curl.
+
+### "cmlibuv is not cheaply fixable" was wrong, and nobody should trust it
+
+Recorded so the word *dead end* is not trusted again. The failure was **109
+reference lines over 9 distinct symbols**, not ~120 symbols, and
+`Utilities/cmlibuv/src/unix/haiku.c` **is shipped in the tarball**. All 9 are
+defined by four in-tree files — `posix-poll.c`, `posix-hrtime.c`,
+`no-proctitle.c`, `no-fsevents.c` — which are byte-for-byte the **QNX** branch's
+file list, sitting four lines above where a Haiku branch should be in cmlibuv's
+CMake platform dispatch. A ~10-line CMake block would have fixed it. The route is
+still not worth taking (all-native is better), but it was never a dead end.
+
+The one genuinely useful signal from that episode stands: cmake's **bootstrap**
+has its own hand-written libuv file list, which is why the bootstrap linked and
+only the real build failed.
+
+### Habits this blocker paid for twice
+
+1. **Check whether an unresolved edge is a genuine cycle or just an unbuilt leaf.**
+   `cmd:which` (15 KB, under a minute) taught this; `devel:libcurl` had to teach it
+   again, and it cost more the second time because the ledger had written the wrong
+   answer down as fact.
+2. **Build a provides index before concluding anything is blocked.** Reading
+   recipes alone, `gawk`, `gperf`, `bison`, `flex`, `yacc` and `lib:libicudata`
+   all looked missing. Every one was already provided by a `_bootstrap` package.
+   The index is one loop:
+
+   ```sh
+   for f in packages/*.hpkg /boot/system/packages/*.hpkg; do
+     package list -i "$f" | grep provides:
+   done | sed -e 's/^\s*provides:\s*//' -e 's/ .*//' | sort -u
    ```
-   undefined reference to `uv__hrtime'
-   undefined reference to `uv__platform_loop_init'
-   undefined reference to `uv__platform_loop_delete'
-   undefined reference to `uv__platform_invalidate_fd'
-   undefined reference to `uv__io_poll'
-   undefined reference to `uv__io_check_fd'
-   undefined reference to `uv__fs_event_close'
-   ```
-
-   Every missing symbol is *platform* libuv. cmlibuv's CMake platform dispatch has
-   no Haiku branch, so no platform source file is compiled. cmake's **bootstrap**
-   has its own hand-written file list (`uv-src-unix-posix-poll.c.o`,
-   `uv-src-unix-no-fsevents.c.o`, …), which is exactly why the bootstrap cmake
-   linked fine and only the real build failed — a misleading signal worth knowing.
-
-**The viable route instead:** `libexpat`, `librhash` and `libuv` are *not cycle
-members*, just unbuilt leaves. Build those three natively, keep
-`--system-expat --system-librhash --system-libuv`, and bundle **only** curl with
-the `-lnetwork` fix from (2). That reduces the cut to the one genuine cycle edge.
-Check first whether `libuv`'s own recipe needs `cmd:cmake` — if it does, that
-sub-cycle needs its own answer.
-
+3. **`provides` is not function.** `cmd:makeinfo` resolved happily for weeks from
+   `texinfo_bootstrap`, which is a stub that dies in its `BEGIN` block. The index
+   answers *resolvability*; only running the tool answers *works*. Where two
+   packages provide the same `cmd:`, quarantine the bad one rather than trusting
+   the solver's choice — that is how `autoconf` finally got real docs.
+4. **Read the *first* failure.** `libssh2` failed on `lib:libcrypto`, which looked
+   like an openssl3 problem. The real line above it was
+   `requires "ca_root_certificates" of package "openssl3-3.5.7-1" could not be
+   resolved` — a missing pure-data package.
 ## Blocker 7 — the chroot clock bug, and why it invalidated every package — **ROOT-CAUSED ELSEWHERE, CONSEQUENCES HERE**
 
 The ~18-23 h backwards chroot clock was root-caused (by parallel work) to a
@@ -640,15 +750,24 @@ by construction.
 
 Built = a verified `.hpkg` on the builder **and** in
 `s3://haiku-graviton-668984504585-us-west-2/hpkg/arm64/`, confirmed by `ls`/`s3 ls` and
-never inferred from an exit code. **23 ports built, 52 non-bootstrap hpkgs**, all of them
-rebuilt against the non-dirty `haiku` on 2026-08-24 (Blocker 8). The count went 24 → 23
-because `cmake` was never built and should not have been listed as a port; the 52 hpkgs
-are the same 52 names as before, with different contents.
+never inferred from an exit code. All were built against the non-dirty `haiku`
+(Blocker 8), so every one is `pkgman`-installable.
 
-The five ports added in the cycle-breaking pass are `gettext`, `xz_utils`, `which`,
-`zstd` and `openssl3` — 17 hpkgs. Of those, only **two** needed a recipe change
-(`gettext`: one line; `zstd`: build system); `xz_utils`, `which` and `openssl3`
-built unmodified once their prerequisites existed.
+**The cmake pass of 2026-08-24 added 14 ports** on top of the 23 from Blocker 8:
+`expat`, `rhash`, `libuv`, `nghttp2`, `ca_root_certificates`, `libssh2`, `curl`,
+`cmake`, `gawk`, `gperf`, `texinfo`, `bison`, `flex`, `doxygen`. **Only one of the
+fourteen needed a recipe change at all** — `curl`, for the `libpsl` cut. Every other
+one built from its pristine recipe, which is the real measure of how wrong
+"cmake is a dead end behind a cycle" was.
+
+Two stage-1 cuts were **retired** in the same pass, both by rebuilding from the
+pristine recipe rather than by writing a new patch:
+
+| Cut | Retired how | Verified by |
+|---|---|---|
+| `autoconf-2.72` doc cut | real `texinfo-7.2` now provides a working `makeinfo`; rebuilt from the pristine recipe, `make install-html` restored | `autoconf.html` (2,274,731 B) and `standards.html` (412,748 B) now present; the stage-1 hpkg has **no** `.html` entry at all |
+| `gettext-1.0` groff doc cut | **not retired** — see "Why a real groff is still out of reach" | — |
+| `zstd-1.5.6` Makefile-instead-of-cmake cut | `cmd:cmake` now exists; rebuilt from the pristine cmake-based recipe | the cmake package-config files (`lib/cmake/zstd/zstdTargets*.cmake`) that the Makefile build cannot produce |
 
 > **Consistency:** every hpkg in this set now requires
 > `haiku >= r1~beta6_hrev59996-1` (non-dirty) and resolves — and `pkgman install`s —
@@ -680,10 +799,84 @@ built unmodified once their prerequisites existed.
 | **xz_utils 5.8.3 (+devel +debuginfo)** | **built** | no recipe change; `cmd:autopoint` came free with gettext |
 | **which 2.21 (+debuginfo)** | **built** | no recipe change; nothing in the image provided `cmd:which`, which cmake needs |
 | **zstd 1.5.6 (+bin +devel)** | **built (stage 1)** | `zstd-1.5.6-makefile-not-cmake-stage1.patch` — built with zstd's own Makefile, sidestepping `cmd:cmake` entirely |
-| cmake 4.1.6 | **NOT built** | The `devel:libcurl` cycle edge *was* cut successfully and bundled curl *was* made to work, but **bundled libuv does not build on Haiku**. See Blocker 6 — this is a dead end, not a near miss |
+| **cmake 4.1.6 (+debuginfo)** | **built** | **pristine recipe, no cut** — all five `--system-*` libs. See Blocker 6 |
+| **curl 8.21.0 (+devel +debuginfo)** | **built** | `curl-8.21.0.recipe` — the `libpsl` cut, the only recipe change in the whole pass |
+| **expat 2.8.2 (+devel +debuginfo)** | **built** | pristine; an unbuilt leaf, never a cycle member |
+| **rhash 1.4.6 (+devel)** | **built** | pristine; unbuilt leaf |
+| **libuv 1.52.1 (+devel +debuginfo)** | **built** | pristine; **autotools, does not need cmake** |
+| **nghttp2 1.63.0 (+devel +debuginfo)** | **built** | pristine; `BUILD_REQUIRES` is `haiku_devel` only |
+| **libssh2 1.11.1 (+devel)** | **built** | pristine; blocked only by a missing `ca_root_certificates` |
+| **ca_root_certificates 2026_07_16** | **built** | pure data package, zero build deps; its absence made `openssl3` unresolvable |
+| **texinfo 7.2** | **built** | pristine; a **functional** `makeinfo`, unlike the bootstrap stub. Retires the autoconf doc cut |
+| **bison 3.8.2 (+debuginfo)** | **built** | pristine; the bootstrap bison's `--version` fails, which broke doxygen's `FindBISON` |
+| **flex 2.6.4** | **built** | pristine; doxygen needs >= 2.5.37, the bootstrap is 2.5.35 |
+| **doxygen 1.14.0** | **built** | pristine; needed real `bison` + `flex`, then built straight through |
+| **gawk 5.3.0 (+debuginfo)** | **built** | pristine; upgrade over the bootstrap 3.1.8 (was **not** a blocker — see Blocker 6, habit 2) |
+| **gperf 3.1** | **built** | pristine; likewise not a blocker |
 | **openssl3 3.5.7 (+devel +man +debuginfo)** | **built** | **no recipe change at all** — it simply needed `devel:libzstd`. The whole four-port cascade turned on one line in gettext plus zstd's build system |
-| groff 1.23.0 | blocked, **and no longer on the critical path** | needs `cmd:pnmcrop`/`pnmtopng`/`pnmtops` (netpbm) + `cmd:psselect` (psutils) + the broken `cmd:makeinfo`. Cutting `cmd:groff` out of gettext removed the need to build it at all |
-| libxml2 2.15.3 | blocked | python3.14 is **cheap** (one shell variable); `cmd:doxygen` is the real edge — see below |
+| groff 1.23.0 | **still blocked**, and still not on the critical path | `cmd:makeinfo` is now real, but it also needs `cmd:pnmcrop`/`pnmtopng`/`pnmtops` (netpbm) and `cmd:psselect` (psutils). See "Why a real groff is still out of reach" below — this is the one deliverable of the cmake pass that did **not** land |
+| libxml2 2.15.3 | see below | `cmd:doxygen` was the only real edge and it now exists; `lib:libicudata` was already provided by the icu bootstrap and `cmd:python3.14` is gated off by `pythonModuleEnabled` |
+
+### Why a real groff is still out of reach — and so the gettext cut stands
+
+This is the one thing the cmake pass was meant to unlock and did **not**. Recording
+the depth so nobody re-scopes it as cheap.
+
+`groff` needs five commands. `cmd:makeinfo` is now real, and that leaves four:
+`cmd:pnmcrop`, `cmd:pnmtopng`, `cmd:pnmtops` (all `netpbm`) and `cmd:psselect`
+(`psutils`). Both providers are expensive for reasons that have nothing to do with
+cmake:
+
+**`netpbm` → `jasper` → OpenGL.** netpbm needs `devel:libjasper`, and
+`jasper-2.0.33.recipe:62-63` requires `devel:libGL` + `devel:libglu` with
+`-DJAS_ENABLE_OPENGL=ON` hardcoded at `:86`. `devel:libGL` means **`mesa-25.3.6`**,
+whose own `BUILD_REQUIRES`/`BUILD_PREREQUIRES` include `devel:libLLVM`,
+`devel:libvulkan`, `libglvnd_devel`, `cmd:meson`, `cmd:ninja`,
+`cmd:glslangValidator` and **`cmd:git`** — and git is documented in this file as
+unbuildable here. LLVM alone is a multi-hour build.
+
+There *is* a plausible shortcut: jasper's OpenGL is only for its `jiv` viewer, so
+flipping `-DJAS_ENABLE_OPENGL=OFF`, dropping the two `devel:libGL*` lines and the
+`jiv` subpackage would break that edge. netpbm's other four deps are all cheap or
+now-available — `devel:libjpeg` from `jpeg-9c` (pure autotools leaf),
+`devel:libpng16` (leaf), `devel:libtiff` (leaf once libjpeg exists), `devel:libxml2`
+(now built). So netpbm is roughly four leaves plus one OpenGL cut.
+
+**`psutils` is the harder half, and it is Python packaging, not C.**
+`psutils-3.3.11` `BUILD_REQUIRES` is `installer_python310` and it `REQUIRES`
+`puremagic_python310` + `pypdf_python310`. Those are PEP-517 Python packages — the
+exact knot that `--do-bootstrap` was abandoned over (see `sequencing.md` Phase 2).
+`cmd:python3.10` itself is present, so this is a packaging problem, not an
+interpreter problem.
+
+**Net:** a real `groff` is about five more ports, one new OpenGL cut, and a first
+answer to PEP-517 packaging. It is tractable but it is not a follow-on to cmake, and
+it should be scoped as its own piece of work.
+
+**Consequently the `gettext` stage-1 cut is NOT retired.** Worth being precise about
+what that debt actually is, because it is smaller than it reads: gettext used groff
+for exactly one thing, `MAN2HTML = groff -mandoc -Thtml`, and the HTML man pages
+**ship prebuilt in the tarball**. The measured autoconf case above showed the same
+pattern — prebuilt docs get installed regardless of whether the generator ran. So
+the gettext cut is a *dependency-declaration* cut whose content cost is plausibly
+zero; that should be confirmed by diffing the shipped man HTML against a
+groff-built one whenever groff exists, rather than assumed in either direction.
+
+### Source packages are never checksum-verified, and that is a standing gap
+
+`grep -ci 'validating checksum'` is **0** across every build log in this pass. It is
+not a regression and not contamination — it is structural. The 116
+`*_source_rigged-*.hpkg` input source packages hold an **uncompressed source tree**
+rather than the upstream tarball, so the recipe's `CHECKSUM_SHA256` has nothing to
+hash and haikuporter skips the check entirely. Only ports fetched through the
+source proxy (Blocker 2) get a real checksum, and those *do* pass one.
+
+Provenance was spot-checked rather than assumed: for `libuv`, 469 of 469 files
+matched upstream, with exactly 3 differing, and those 3 are precisely the files the
+port's own patchset touches. So the trees are good — but **the gate is absent, not
+passing**, and anything rebuilt from these inputs inherits that. Either restore
+verification (hash the extracted tree against a recorded manifest) or keep this
+paragraph, but do not let a silent checksum bypass stay undocumented.
 
 ### The remaining chain is not a plain ladder
 
@@ -731,21 +924,29 @@ packages that must be rebuilt later and belong in `hpkg-out/arm64/stage1/`.
    **DONE 2026-08-24** — 23 ports, 52 hpkgs, verified non-dirty and `pkgman`-installable.
    See Blocker 8. The scripts that did it (`graviton/builder/prepguest.sh`,
    `rebuild.sh`) are reusable for the next time a chroot input changes version.
-2. `libxml2` — **the `python3.14` half is cheap, the other half is not.** The python
-   module is gated on a single shell variable: `pythonModuleEnabled` is set at
-   `libxml2-2.15.3.recipe:27-37` and, when false, `BUILD()` simply passes
-   `--without-python` and the `cmd:python3.14`/`setuptools_python314` entries are
-   never added to `BUILD_REQUIRES` at all (`:105-110`). So dropping the python
-   binding costs one line and one sub-package. **But `cmd:doxygen` is also in
-   `BUILD_PREREQUIRES` (`:116`), and doxygen is cmake-based
-   (`doxygen-1.14.0.recipe:47,63`)** — so libxml2 is gated behind cmake, which is
-   Blocker 6. Not worth chasing until cmake exists.
-3. Build a real `cmake` by the route in Blocker 6 (native `libexpat`/`librhash`/
-   `libuv` as leaves, bundle only curl with `LDFLAGS=-lnetwork`), then rebuild
-   `zstd` from its unmodified cmake recipe and retire
-   `zstd-1.5.6-makefile-not-cmake-stage1.patch`. cmake also unlocks doxygen →
-   libxml2, and `netpbm` → a real `groff` → retiring the gettext and autoconf doc
-   cuts.
+2. ~~`libxml2`~~ **DONE 2026-08-24.** `cmd:doxygen` was the only real edge and it now
+   exists; `lib:libicudata` was already provided by the icu bootstrap. The
+   `cmd:python3.14` half turned out **not** to be free — `pythonModuleEnabled` really
+   does evaluate true on arm64 — so it is carried as a narrow stage-1 cut
+   (`recipes/libxml2-2.15.3.recipe`) that drops only the `libxml2_python3.14`
+   subpackage. **Retire by deleting one line once `cmd:python3.14` exists.**
+3. ~~Build a real `cmake`~~ **DONE 2026-08-24 — see Blocker 6.** Built from the
+   **pristine** recipe with all five `--system-*` libraries and no cut, after building
+   `expat`, `rhash`, `libuv`, `nghttp2`, `ca_root_certificates`, `libssh2` and
+   `curl-8.21.0` as the leaves they always were. `zstd` and `autoconf` were rebuilt
+   from pristine recipes, **retiring both of those stage-1 cuts.** `doxygen` and
+   `libxml2` followed.
+
+   Still open from this item: **a real `groff`, and therefore the `gettext` cut.**
+   See "Why a real groff is still out of reach" — it is ~5 more ports, a new
+   `-DJAS_ENABLE_OPENGL=OFF` cut in jasper (the alternative is mesa + LLVM + `cmd:git`),
+   and a first answer to PEP-517 Python packaging for `psutils`. Scope it as its own
+   piece of work, not as a follow-on.
+3b. **The bundled-curl cmake shipped without TLS and every build-level test passed.**
+   If any future cut removes a library, test the *capability* that library provided.
+   See Blocker 6. Related standing gap: **input source packages are never
+   checksum-verified** (`grep -ci 'validating checksum'` is 0 in every log), because the
+   rigged hpkgs hold uncompressed trees and `CHECKSUM_SHA256` has nothing to hash.
 4. Build `python3.10` with zlib/`_bz2`/`_lzma` so the unpack fix can be retired. It is
    currently *routed around*, not fixed — `haiku-haikuporter-patch --check` prints the
    three modules' status on every run so this cannot be quietly forgotten. The chain is
@@ -755,8 +956,15 @@ packages that must be rebuilt later and belong in `hpkg-out/arm64/stage1/`.
    zlib module`, and that path has no external-tool dispatch to hook into.
 6. Give the source proxy an init unit so it survives a metal reboot; today it must be
    restarted by hand with `haiku-source-proxy start`.
-7. Rebuild the stage-1 `autoconf` package once a real `texinfo` is buildable
-   (`graviton/haikuports-patches/README.md`).
+7. ~~Rebuild the stage-1 `autoconf` package once a real `texinfo` is buildable.~~
+   **DONE 2026-08-24.** `texinfo-7.2` built with no recipe change at all — every one of
+   its dependencies (`devel:libiconv`, `devel:libintl`, `devel:libncurses`, `cmd:gawk`,
+   `cmd:gperf`, `cmd:gettext`) was already satisfied, and it had looked unreachable only
+   because `cmd:makeinfo` *resolved* the whole time from the non-functional
+   `texinfo_bootstrap` stub. `makeinfo` was verified by converting a `.texi` to real
+   `.info` **and** `.html`, not by `--version`. The bootstrap stub is now quarantined out
+   of `packages/` on the guests that build doc-producing ports, because both packages
+   provide `cmd:makeinfo` and the solver's choice is otherwise arbitrary.
 8. **Two real arm64 kernel defects were surfaced here and are not fixed:**
    - `re_compile_pattern` hangs and the resulting process is **unkillable**, which then
      wedges `unmount -f` and `mount -t bindfs` guest-wide. Blocker 4 routes around the
@@ -769,7 +977,26 @@ packages that must be rebuilt later and belong in `hpkg-out/arm64/stage1/`.
      sqlite, `82393 s` during cmake). The `touch -r` discipline in the libtool recipe
      stays regardless: it costs nothing and it is what makes that recipe independent of
      the clock at all.
-9. **Guest inventory as of 2026-08-24 01:20Z.** The `_dirty`/non-dirty split that used to
+9. **Guest state changed by the cmake pass (2026-08-24 ~04:35Z).** Recorded because
+   two of these will surprise the next person:
+
+   - **Bootstrap packages quarantined** to `/boot/home/quarantine/` (moved, not
+     deleted) so the *real* build tools win dependency resolution, since both
+     versions provide the same `cmd:`:
+     `texinfo-7.2_bootstrap` on **2222/2227/2230**, and
+     `flex-2.5.35_bootstrap` + `bison-3.8.2_bootstrap` on **2230**.
+     Without this, `autoconf` could silently get the stub `makeinfo` again and
+     doxygen fails on `flex >= 2.5.37`. Move them back if a port genuinely needs the
+     bootstrap version.
+   - **Packages installed into boot environments for acceptance testing** (activation
+     state backed up automatically, so each is one `pkgman` rollback away):
+     **2222** libiconv/perl/gettext_libintl/texinfo; **2227** the full cmake closure
+     incl. curl/openssl3/zstd; **2229** cmake/libuv/rhash/expat/zlib; **2230**
+     cmake/expat/rhash/libuv/zlib. These guests are no longer pristine build hosts.
+   - **2231** received the whole shared pool and was used only for the provides index
+     and the seed-`haiku.hpkg` check; it built nothing.
+
+10. **Guest inventory as of 2026-08-24 01:20Z.** The `_dirty`/non-dirty split that used to
    decide whether your dependencies resolved is **gone** — all five guests now carry the
    repaired chroot `haiku` (`r1~beta6_hrev59996-1`) and the rebuilt package set:
 
@@ -797,7 +1024,7 @@ packages that must be rebuilt later and belong in `hpkg-out/arm64/stage1/`.
    The harvest loop that kept re-importing the stale `haiku.hpkg` is closed in all
    driver scripts — `gworker.sh`, `cwork.sh`, `worker.sh`, `worker-full.sh` and the new
    `rebuild.sh` all stage-and-drop `haiku*.hpkg`.
-10. ~~`/opt/haiku/logs/builder-boot.pcap` is 5.6 GB and still growing.~~ **Fixed.** It was
+11. ~~`/opt/haiku/logs/builder-boot.pcap` is 5.6 GB and still growing.~~ **Fixed.** It was
     not `tcpdump`: the 2222 guest's qemu command line carried
     `-object filter-dump,id=f0,netdev=n0,file=/opt/haiku/logs/builder-boot.pcap`. Killing
     that guest stopped the growth and the file was deleted (5.96 GB reclaimed).
