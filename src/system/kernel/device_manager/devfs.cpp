@@ -209,7 +209,7 @@ scan_mode(void)
 	//  - once before there is a boot device,
 	//  - and once when there is one
 
-	return gBootDevice >= 0 ? kNormalScan : kBootScan;
+	return has_boot_device() ? kNormalScan : kBootScan;
 }
 
 
