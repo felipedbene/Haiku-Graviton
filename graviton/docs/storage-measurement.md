@@ -1200,6 +1200,47 @@ Also worth recording: the global dirty count against its new 1/8-of-RAM limit,
 from `page_writer_quota`, to confirm the replacement bound sits in a sane place
 under real load rather than never engaging or engaging constantly.
 
+### The verification did not happen: the image did not boot, and that was my bug
+
+`ami-0fe2b76a049766507` panics during early VM setup:
+
+```
+PANIC: unhandled pagefault! FAR=30 ESR=96000004
+... arch_vm_translation_map_init_post_area
+```
+
+Cause, and it is mine. The serial KDL listener was spawned from
+`arch_debug_console_init_settings()`, which `main.cpp` reaches via
+`debug_init_post_settings()` at line **168**. `thread_init()` is at line **212**.
+So `spawn_kernel_thread()` ran 44 lines before the threading system existed and
+faulted on an uninitialised structure. The previous image booted only because it
+predated the listener; this was the first image to carry it.
+
+Fixed by moving the listener to `debug_init_post_modules()` (line 369, after
+`thread_init` at 212 and `vm_init_post_thread` at 222), and by moving it out of
+arm64 into the **generic** debugger, where it belonged:
+`arch_debug_serial_try_getchar()` is already architecture-neutral and nothing in
+the polling loop is CPU-specific, so every architecture with a debug serial line
+now gets on-demand KDL entry rather than only arm64.
+
+**So no quota numbers yet.** `waits`, `timeouts`, the idle-disk per-page estimate
+and the `queue 0 pages` check all require a booting image, and the pre-bake
+prediction above stands untested.
+
+Two things worth keeping from this:
+
+- **"UNVERIFIED ON HARDWARE" was doing real work.** Every kernel commit on this
+  branch carries that label, and this is why: the change compiled cleanly, was
+  reviewed, was correct in its logic, and bricked the machine on a boot-ordering
+  constraint that no build or reading of the diff would surface. A bake is not a
+  formality between writing a kernel change and believing it.
+- **The failure was in the same class as the one I keep finding in tooling** — a
+  call that is only valid after some other subsystem exists, made before it does.
+  It is worth noting that I found it in under ten minutes only because the console
+  output was checked with `--latest` and read rather than assumed; the instinct that
+  caught other people's empty results caught my own panic.
+
+
 ### The KDL cross-check is now available
 
 With the serial/KDL-entry fix merged, the capture originally planned can finally
