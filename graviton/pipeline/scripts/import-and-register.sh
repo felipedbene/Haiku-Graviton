@@ -78,14 +78,42 @@ AMI_ID=$(aws ec2 register-image --region "$AWS_DEFAULT_REGION" \
   --query 'ImageId' --output text)
 echo "    AMI: $AMI_ID"
 
+# Provenance. Without this, "what is actually in canonical?" is answerable only
+# from CodePipeline execution history, which ages out -- and the AMI that was
+# promoted on 2026-08-24 had no source-commit at all, so the question could not be
+# answered from the image itself.
+#
+# Derived defensively on purpose: this script runs under `set -euo pipefail`, and
+# a missing tag must never be the reason a bake fails. Every branch here ends in a
+# value, never a non-zero exit.
+SRC_COMMIT="${CODEBUILD_RESOLVED_SOURCE_VERSION:-}"
+if [ -z "$SRC_COMMIT" ]; then
+  SRC_COMMIT="$(git -C "${CODEBUILD_SRC_DIR:-.}" rev-parse HEAD 2>/dev/null || true)"
+fi
+[ -n "$SRC_COMMIT" ] || SRC_COMMIT="unknown"
+
+SRC_BRANCH="${HAIKU_SOURCE_BRANCH:-}"
+if [ -z "$SRC_BRANCH" ]; then
+  SRC_BRANCH="$(git -C "${CODEBUILD_SRC_DIR:-.}" rev-parse --abbrev-ref HEAD 2>/dev/null || true)"
+fi
+# A CODEBUILD_CLONE_REF checkout can be detached, in which case --abbrev-ref
+# reports "HEAD", which is worse than admitting we do not know.
+if [ -z "$SRC_BRANCH" ] || [ "$SRC_BRANCH" = "HEAD" ]; then
+  SRC_BRANCH="unknown"
+fi
+
 echo "==> tagging as candidate (canonical NOT set here)"
+echo "    source-commit: $SRC_COMMIT"
+echo "    source-branch: $SRC_BRANCH"
 aws ec2 create-tags --region "$AWS_DEFAULT_REGION" --resources "$AMI_ID" "$SNAP_ID" \
   --tags \
     "Key=Name,Value=${NAME}" \
     "Key=project,Value=haiku-graviton" \
     "Key=baked-by,Value=cdk-pipeline" \
     "Key=candidate,Value=true" \
-    "Key=haiku-revision,Value=${HAIKU_REVISION:-unknown}"
+    "Key=haiku-revision,Value=${HAIKU_REVISION:-unknown}" \
+    "Key=source-commit,Value=${SRC_COMMIT}" \
+    "Key=source-branch,Value=${SRC_BRANCH}"
 
 echo "$AMI_ID" > "$AMI_ID_OUT"
 echo "==> wrote AMI id to $AMI_ID_OUT"
