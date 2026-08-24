@@ -16,6 +16,54 @@ This document is the baseline. It also records two measurement errors caught
 before they became published numbers, and one claim from a code review that
 turned out to be an artifact.
 
+## Two generic Haiku defects found as prerequisites — read these first
+
+Neither was introduced by this project, neither is storage-specific, and both were
+found only because this investigation needed the kernel debugger. They are here at
+the top rather than buried in the setup because a future contributor would
+otherwise rediscover them the hard way, and in both cases the tool answers
+*plausibly and wrongly* rather than failing.
+
+### `bt <thread>` on arm64 traced the calling thread, not the named one
+
+arm64's `stack_trace()` advertises `[ <thread id> ]` in its usage string, parses
+`argv` only far enough to validate the argument count, and then does
+`thread_get_current_thread()`. So `bt <blocked-thread>` printed the *debugger's own*
+stack, correctly formatted and completely wrong. x86_64 has the same usage string
+and does the work via `setup_for_thread()`.
+
+Fixed in `arm64: make KDL 'bt <thread>' actually trace that thread`, which also
+found that **`arch_debug_save_registers()` was an empty stub** — so the frame
+pointer for a thread running on another CPU was whatever the struct happened to
+contain. `bt` across CPUs has therefore been quietly wrong on arm64 for as long as
+it has existed.
+
+### KDL has never usefully worked on arm64 at all
+
+Three compounding defects, fixed in `arm64: fix serial getchar, and give KDL a way
+in on a headless machine`:
+
+1. **No way to enter KDL on demand.** `debug_emergency_key_pressed()` has exactly
+   three callers — x86's console interrupt handler, USB HID, PS/2 — and arm64 has
+   none of them. A headless Graviton instance has no keyboard either. The debugger
+   was reachable *only* by a panic.
+2. **Typed commands would have been garbage.** `arch_debug_serial_try_getchar()`
+   returned a `char`; **plain `char` is unsigned on AArch64**; so
+   `DebugUART::GetChar(false)`'s -1 ("nothing waiting") became 255. `kgetc()` tests
+   `c >= 0`, so KDL accepted an endless stream of `0xFF` instead of waiting for
+   input.
+3. `arch_debug_serial_getchar()`, the *blocking* half, passed `wait=false` and
+   returned 255 immediately on an empty FIFO.
+
+The second is a textbook signedness bug in a place nobody would look, and it is why
+a whole debugging facility has been dead on this architecture.
+
+**Consequence worth stating plainly:** until that fix ships, no hang, deadlock or
+starvation on Graviton can be inspected interactively. That is a permanent
+capability gap rather than an inconvenience, and it is why the page-writer
+diagnosis below had to be done with counters instead of stack traces.
+
+
 ## The tool
 
 `src/bin/disktput`, plus the harness `graviton/scripts/disktput-run`. Same split
@@ -936,6 +984,108 @@ frame-pointer index verified against the `stp` ordering in `arch_asm.S` rather
 than inferred from the comment on the struct.
 
 
+## ANSWERED: the page writer's quota is the mechanism, and it starves across devices
+
+Run on `ami-02d5e711d25cc2d49` (tagged `feature=storage-quota-bound`,
+`branch-head=e1e5a0f531`), `c7g.4xlarge`, 100 GiB gp3 scratch at **125 MiB/s**, the
+identical 16 GiB load that previously starved a machine for 27.7+ minutes: eight
+2 GiB buffered writes with `fsync`, queued on the node so the load outlives the
+harness.
+
+The counters settle the fork. **Not BFS. The quota.**
+
+```
+page writer: quota wait timed out after 5000006 us, proceeding over quota
+  (waits 4102, timeouts 16, longest 5000007 us, per-page estimate 28 us, queue 216320 pages)
+page writer: quota wait timed out after 5000004 us, proceeding over quota
+  (waits 4224, timeouts 19, longest 5000007 us, per-page estimate 883 us, queue 0 pages)
+```
+
+19 timeouts against **4,224 waits** — so 99.5% of waits completed normally and the
+bound is a safety valve rather than the common path. Every `longest` is
+**5,000,00x µs**, i.e. exactly the 5 s bound, which is the direct evidence that
+these waits were previously *unbounded*: the bound is the only thing terminating
+them.
+
+### The finding that explains sshd: it starves across devices
+
+**15 of the 19 timeouts report `queue 0 pages`.** A thread was blocked over quota
+while the queue it was writing to was *empty*. That cannot be a BFS journal or an
+allocation cost — there was nothing queued on that device at all.
+
+`IsOverQuota()` checks two things, and the second is global:
+
+```c
+if ((estimatedWriteDuration + additionalPagesDuration) > PAGES_FLUSH_DURATION_LOCAL_QUOTA)
+    return true;
+return ((atomic_get64(&sGlobalEstimatedWriteDuration) + additionalPagesDuration)
+    > PAGES_FLUSH_DURATION_GLOBAL_QUOTA);
+```
+
+`sGlobalEstimatedWriteDuration` is summed across **every** `ModifiedPageQueue`, and
+there is one per disk device. The numbers from the two devices in this machine:
+
+| device | queue depth | per-page estimate | estimated drain |
+|---|---|---|---|
+| scratch (being hammered) | **221,186 pages** (864 MiB) | 31 µs | **6.86 s** |
+| root (idle) | **0 pages** | 883 µs | 0 s |
+
+6.86 s from the scratch device alone exceeds both the 3 s local quota *and* the 5 s
+`PAGES_FLUSH_DURATION_GLOBAL_QUOTA`. So a writer to the **idle root disk** fails the
+global check and blocks — and before the bound, blocked indefinitely.
+
+**That is precisely why sshd starved.** sshd writes to the root filesystem: logs,
+`utmp`, the session. Its disk was idle and its queue empty. It was stopped by a
+backlog on a completely different device. Any process touching any file on any
+disk is throttled by the busiest disk in the machine.
+
+### The stale-sample defect, confirmed by measurement rather than by reading
+
+`fLastAveragePageWriteDuration` is named like a mean and is the **most recent
+sample**. The two devices above show what that costs: the busy device measures
+**27–31 µs** per page; the idle one reports **883 µs**, a 30× higher figure that is
+simply old. It never refreshes, because the writer only updates it on rounds of
+≥8 pages and an idle device never has such a round.
+
+The consequence is a threshold that is wrong in the dangerous direction. At
+883 µs/page the local quota trips once that device holds
+`3,000,000 / 883` ≈ **3,397 pages = 13 MiB** of dirty data. Thirteen mebibytes, on
+a machine with 31.5 GiB of RAM, because of one stale sample.
+
+### The fix works, and both halves were recorded
+
+- **Liveness:** the identical 16 GiB load **completed in about 7 minutes** with ssh
+  answering, against 27.7+ minutes of unbroken starvation and no completion within
+  observation on the pre-fix kernel. Same load, same volume provisioning, same
+  instance type — the kernel is the only variable.
+- **The decay is still visible**, which is what the instrumentation was for:
+  4,224 waits, 19 timeouts, `longest` pinned at the bound, and the per-device
+  estimates and queue depths printed alongside. A machine that stops hanging but
+  logs these is still reporting that write-back cannot keep up.
+
+### What to fix next, now that the mechanism is known
+
+The bound is a liveness guarantee, not a cure. In order:
+
+1. **Make the global quota not couple idle devices to busy ones.** A writer whose
+   own queue is empty should not be stopped by another disk's backlog. This is the
+   whole reason a shell became unusable.
+2. **Make `fLastAveragePageWriteDuration` an actual average, and decay it.** A
+   single stale sample setting a 13 MiB threshold on an idle device is the ratchet,
+   and it is now measured rather than suspected.
+3. Only then revisit the quota constants, which cannot be judged while the
+   estimate feeding them is unreliable.
+
+### Method note: `get-console-output` needs `--latest`
+
+Without it the API returns an **empty body** for a running Nitro instance, and every
+`grep` against it counts zero. The first attempt at this measurement reported "the
+quota never fires" for exactly that reason. What caught it was a **positive
+control** — grepping for `nvme_disk`, a string known to be present — before
+believing an empty result. With `--latest`: 48,943 bytes and 16 matches. The
+procedure earlier in this document omitted `--latest` and has been corrected.
+
+
 ## The capture plan, revised: the fork can be answered without KDL
 
 Preparing the KDL capture turned up three more defects in the debugger path on
@@ -996,8 +1146,8 @@ done &
 
 # 3. Watch from OUTSIDE, because ssh is what stops answering. The serial
 #    console is readable without a working userland.
-aws ec2 get-console-output --instance-id <id> --output text \
-  | grep -i "quota wait timed out"
+aws ec2 get-console-output --instance-id <id> --latest --output text \
+  | grep -i "quota wait timed out"     # --latest is REQUIRED; see the method note
 ```
 
 Use a **125 MiB/s** scratch volume: it reaches the stall in 12 GiB rather than 20.
