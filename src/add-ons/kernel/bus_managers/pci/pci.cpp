@@ -526,7 +526,7 @@ static int
 pcirefresh(int argc, char **argv)
 {
 	gPCI->RefreshDeviceInfo();
-	pci_print_info();
+	pci_print_info_verbose();
 	return 0;
 }
 

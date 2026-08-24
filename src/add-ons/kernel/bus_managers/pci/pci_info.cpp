@@ -291,13 +291,65 @@ print_info_basic(const pci_info *info, bool verbose)
 }
 
 
+// One line per device: which devices exist, and enough of each to recognise it.
+// This is what a boot log has to keep, because "there is no ethernet controller"
+// is only visible if every device is named.
+static void
+print_info_line(const pci_info *info)
+{
+	uint8 domain;
+	uint8 bus;
+
+	__pci_resolve_virtual_bus(info->bus, &domain, &bus);
+
+	dprintf("PCI: %d:%02x:%02x.%x vendor %04x device %04x class %02x.%02x.%02x "
+		"rev %02x\n", domain, bus, info->device, info->function,
+		info->vendor_id, info->device_id, info->class_base, info->class_sub,
+		info->class_api, info->revision);
+}
+
+
+// print_info_basic() emits fourteen or more lines per device. On a machine with
+// fifty of them -- c7g.metal has fifty-three -- that is around 740 lines, three
+// quarters of everything the kernel prints before userland, and it is enough to
+// wrap both the 64 KiB console ring and the 64 KiB kernel syslog buffer and
+// evict every earlier line: on a successful metal boot `grep -ci gic` over the
+// console returns zero, so the interrupt controller's own summary is gone and a
+// GIC regression there would be invisible.
+//
+// So the boot listing is one line per device plus a count, and the full dump is
+// kept for the `pcirefresh` debugger command, which is asked for explicitly and
+// is not competing with anything. Same shape as the redistributor walk's
+// per-PE line: an O(1) summary always, the O(n) detail on request.
+static void
+print_all(bool verbose)
+{
+	pci_info info;
+	long count = 0;
+
+	for (long index = 0; B_OK == pci_get_nth_pci_info(index, &info); index++) {
+		if (verbose)
+			print_info_basic(&info, PCI_VERBOSE);
+		else
+			print_info_line(&info);
+		count++;
+	}
+
+	dprintf("PCI: %ld device(s)\n", count);
+}
+
+
 void
 pci_print_info()
 {
-	pci_info info;
-	for (long index = 0; B_OK == pci_get_nth_pci_info(index, &info); index++) {
-		print_info_basic(&info, PCI_VERBOSE);
-	}
+	print_all(false);
+}
+
+
+void
+pci_print_info_verbose()
+{
+	print_all(true);
 }
 
 
