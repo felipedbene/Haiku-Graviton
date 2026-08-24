@@ -117,6 +117,51 @@ say "instance $INSTANCE at $IP"
 # Factored into a function because it is needed twice: once for the first boot,
 # and again after the stop/start check below. Bounded by a wall-clock budget
 # rather than a fixed attempt count so the caller knows the ceiling it is buying.
+# A cold stop/start, used only to recover from the NIC intermittent -- roughly one
+# warm reboot in six on c7g.large loses the NIC, and it reproduces on canonical. A
+# cold cycle gets fresh placement and usually brings it back.
+#
+# This exists so that "we could not tell" does not have to resolve to either
+# "ship it" or "block it": two extra cycles take a 1-in-6 intermittent to about
+# 1-in-216, after which a still-dead NIC is worth failing on.
+recycle_instance() {
+	local why="$1" s ip
+	say "$why: recycling the instance (cold stop/start)"
+
+	aws --region "$REGION" ec2 stop-instances --instance-ids "$INSTANCE" \
+		>/dev/null 2>&1
+	local deadline=$((SECONDS + STOP_WAIT))
+	s=""
+	while [ "$SECONDS" -lt "$deadline" ]; do
+		sleep 5
+		s=$(aws --region "$REGION" ec2 describe-instances --instance-ids "$INSTANCE" \
+			--query 'Reservations[0].Instances[0].State.Name' --output text 2>/dev/null)
+		[ "$s" = "stopped" ] && break
+	done
+	[ "$s" = "stopped" ] || { say "  recycle: never reached 'stopped'"; return 1; }
+
+	aws --region "$REGION" ec2 start-instances --instance-ids "$INSTANCE" \
+		>/dev/null 2>&1
+	deadline=$((SECONDS + START_WAIT))
+	s=""
+	while [ "$SECONDS" -lt "$deadline" ]; do
+		sleep 5
+		s=$(aws --region "$REGION" ec2 describe-instances --instance-ids "$INSTANCE" \
+			--query 'Reservations[0].Instances[0].State.Name' --output text 2>/dev/null)
+		[ "$s" = "running" ] && break
+	done
+	[ "$s" = "running" ] || { say "  recycle: never returned to 'running'"; return 1; }
+
+	ip=$(aws --region "$REGION" ec2 describe-instances --instance-ids "$INSTANCE" \
+		--query 'Reservations[0].Instances[0].PrivateIpAddress' --output text 2>/dev/null)
+	if [ -n "$ip" ] && [ "$ip" != "None" ]; then
+		[ "$ip" != "$IP" ] && say "  recycle: private IP moved $IP -> $ip"
+		IP="$ip"
+	fi
+	return 0
+}
+
+
 wait_for_sshd() {
 	local why="$1" budget="$2"
 	local deadline=$((SECONDS + budget)) attempt=0 out
@@ -319,19 +364,89 @@ if [ -n "$IP2" ] && [ "$IP2" != "None" ] && [ "$IP2" != "$IP" ]; then
 	IP="$IP2"
 fi
 
-wait_for_sshd "after stop/start" "$BOOT_WAIT" || die \
-	"FAIL: $AMI came back from a stop/start with nothing answering on :22.
-  This is the data-loss signature: the instance is running and reachable at the
-  network level, but its root filesystem did not survive the power cycle, so the
-  sshd host key (or whatever else was still sitting in a short modified-page
-  queue) is present-but-zeroed. See the page-writer periodic-flush fix. Do not
-  promote this image."
+# Retries only the case that deserves it. An ICMP-answering node is a real
+# verdict either way and is decided immediately; a node with no ICMP at all is the
+# apparatus, and gets up to two more cold cycles before anything is concluded.
+# "We could not tell" must resolve to neither "ship it" nor "block it" without
+# having tried again.
+sshd_ok=0
+icmp=fail
+tcp=fail
+attempt=0
+while [ "$attempt" -lt 3 ]; do
+	attempt=$((attempt + 1))
+
+	if wait_for_sshd "after stop/start (attempt $attempt)" "$BOOT_WAIT"; then
+		sshd_ok=1
+		break
+	fi
+
+	# "Nothing on :22" had one cause when this gate was written and now has at
+	# least three, so probe before naming one. The message used to assert the
+	# instance was "reachable at the network level" without checking it, which
+	# points the reader at the page writer even when the NIC is gone.
+	#
+	# The three separate by measurement rather than by reasoning: during the
+	# page-writer starvation ICMP answered and :22 accepted the connection at
+	# every one of ~72 samples and only the banner never arrived, whereas a lost
+	# NIC gives no ICMP at all.
+	icmp=fail
+	ping -c 3 -W 2 "$IP" >/dev/null 2>&1 && icmp=ok
+	tcp=fail
+	timeout 8 bash -c "cat < /dev/null > /dev/tcp/$IP/22" 2>/dev/null && tcp=ok
+	say "probe after the failed sshd wait: ICMP=$icmp TCP:22=$tcp banner=no"
+
+	# ICMP answering means the guest is alive and this is a genuine verdict about
+	# the image. Do not retry it -- retrying a real failure is how a gate learns
+	# to pass bad images.
+	[ "$icmp" = ok ] && break
+
+	if [ "$attempt" -lt 3 ]; then
+		recycle_instance "no ICMP on attempt $attempt" \
+			|| say "  recycle failed; will decide on the evidence so far"
+	fi
+done
+
+if [ "$sshd_ok" != 1 ]; then
+	if [ "$icmp" = fail ]; then
+		die "FAIL: $AMI never answered ICMP after 3 stop/start attempts.
+  The guest is not reachable at all, so this is NOT the data-loss signature and
+  NOT a storage verdict -- there is no evidence either way about the filesystem.
+  Three cold cycles is far past the ~1-in-6 NIC intermittent this retries for, so
+  treat it as a real networking failure in this image and capture the console
+  output. Do not promote."
+	fi
+
+	if [ "$tcp" = ok ]; then
+		die "FAIL: $AMI answers ICMP and accepts TCP on :22 but never sends an
+  ssh banner. The kernel, the interrupt path and the NIC are alive and userland is
+  not making progress -- this is the page-writer starvation signature, NOT the
+  present-but-zeroed data-loss one. Check the console for 'quota wait timed out'
+  and run page_writer_quota in KDL. Do not promote this image."
+	fi
+
+	die "FAIL: $AMI answers ICMP but refuses TCP on :22 after a stop/start.
+  The network stack is up and sshd is not listening. The likeliest cause remains
+  the data-loss signature this gate was built for: the sshd host key, or whatever
+  else was still sitting in a short modified-page queue, is present-but-zeroed, so
+  sshd cannot start. See the page-writer periodic-flush fix. Do not promote this
+  image."
+fi
+
+if [ "$attempt" -gt 1 ]; then
+	warn=1
+	say "WARNING: sshd only answered on attempt $attempt; the earlier attempts saw"
+	say "WARNING: no ICMP, which is the NIC intermittent rather than this image."
+fi
 
 # ------------------------------------------------------------------- verdict
 say "----------------------------------------"
 if [ "$warn" = 1 ]; then
+	# Deliberately does not name a cause: there is now more than one thing that
+	# sets warn, and asserting the wrong one is exactly the failure this gate's
+	# stop/start message already made once.
 	say "PASS WITH WARNINGS: $AMI boots, negotiates jumbo, meets both floors and"
-	say "  survives a stop/start -- but its shutdown was not clean (see WARNING above)."
+	say "  survives a stop/start. See the WARNING lines above for what was off."
 	exit 0
 fi
 say "PASS: $AMI boots, negotiates jumbo, meets both floors, shuts down cleanly"

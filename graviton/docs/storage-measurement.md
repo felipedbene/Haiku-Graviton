@@ -1538,6 +1538,54 @@ Account-level Serial Console access is already enabled, which was checked rather
 than assumed.
 
 
+## Before the promotion numbers: which of these results can move for reasons that are not regressions
+
+`graviton`'s tip now carries eleven merges, and **each was verified on a different
+base**: the scheduler work was measured on a deliberately frozen base without the
+PCI and GIC changes, `memcpy` was measured before the checksum work existed, and
+the checksum and offload numbers were each taken in the other's absence. The
+promotion image is the first time any of it runs together. So a number that moves
+there may be **composition rather than regression**, and it is worth saying which
+of the storage figures are exposed *before* they are re-measured, so the
+explanation is not reached for afterwards.
+
+### Exposed, and expected to move
+
+| result | why composition touches it | direction |
+|---|---|---|
+| concurrency sweeps (173.5 / 343.9 / 685.5 / 1072.5 MiB/s at depth 1/2/4/8) | the scheduler decides how many of the tool's threads actually run at once, and threads *are* the queue depth here | either; better scheduling should help the deeper rows |
+| **the page cache costing 29%** (123.5 vs 173.2 MiB/s uncached) | that penalty is a copy plus no read-ahead, and arm64 `memcpy` was optimised since | the penalty should **shrink** — which would look like my finding was wrong |
+| every `CPU µs per MiB` figure | all of them include copies | should fall |
+| random 4 KiB at depth 16 (17,066 IOPS) | scheduler-sensitive at that thread count | either |
+| `waits = 14684` | the scheduler changes how many writers contend for the quota | either, and neither direction is a defect |
+
+The page-cache one deserves emphasis: **if the 29% penalty shrinks, that is
+`memcpy` working, not a storage result being retracted.** The finding was "the
+cache costs a copy and gives no read-ahead in return"; a cheaper copy narrows the
+gap without changing the read-ahead conclusion, which is the part that matters for
+finding 2.
+
+### Not exposed
+
+- The **volume ceiling** (~1008 MiB/s sustained) — that is EBS, not us.
+- The **global dirty limit** (1,031,012 of 8,248,096 pages) — arithmetic from RAM
+  size; it cannot move unless the instance changes.
+- **nvme batching** — it has never produced a hardware number, only a boot and an
+  `io batch size` line. There is no prior figure on that path, so its first
+  measurement is a **result, not a comparison**.
+
+### Why the 256 KiB negative control survives composition
+
+256 KiB at depth 1 is one NVMe command, so batching cannot affect it — but
+`memcpy` touches every read, so in principle the control is not perfectly inert.
+It holds anyway because **the effect sizes are orders of magnitude apart**:
+batching changes latency by a factor of about four (1441 → 6315 µs was four serial
+commands), while a faster `memcpy` changes a 1441 µs device round trip by
+microseconds. A control does not need to be perfectly isolated, only to be
+insensitive to everything except the effect it is guarding against, by a margin
+large enough that the two cannot be confused.
+
+
 ## Rules this exercise established
 
 Two of the errors below were caught before they became published numbers. Both
