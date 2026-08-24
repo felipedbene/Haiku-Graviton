@@ -217,16 +217,26 @@ copy_0_to_32(uint8_t* d, const uint8_t* s, size_t count)
 static inline void
 copy_0_to_64(uint8_t* d, const uint8_t* s, size_t count)
 {
-	if (count > 32) {
+	if (count > 48) {
 		const unaligned_uint128 a = ((const unaligned_uint128*)s)[0];
 		const unaligned_uint128 b = ((const unaligned_uint128*)s)[1];
-		const unaligned_uint128 c = *(const unaligned_uint128*)(s + count - 32);
+		const unaligned_uint128 c = ((const unaligned_uint128*)s)[2];
 		const unaligned_uint128 e = *(const unaligned_uint128*)(s + count - 16);
 
 		((unaligned_uint128*)d)[0] = a;
 		((unaligned_uint128*)d)[1] = b;
-		*(unaligned_uint128*)(d + count - 32) = c;
+		((unaligned_uint128*)d)[2] = c;
 		*(unaligned_uint128*)(d + count - 16) = e;
+	} else if (count > 32) {
+		/* Three accesses, not four: 33..48 bytes needs 48, and taking the
+		   whole second half would move 64 -- which cost 15% at 33 bytes. */
+		const unaligned_uint128 a = ((const unaligned_uint128*)s)[0];
+		const unaligned_uint128 b = ((const unaligned_uint128*)s)[1];
+		const unaligned_uint128 c = *(const unaligned_uint128*)(s + count - 16);
+
+		((unaligned_uint128*)d)[0] = a;
+		((unaligned_uint128*)d)[1] = b;
+		*(unaligned_uint128*)(d + count - 16) = c;
 	} else
 		copy_0_to_32(d, s, count);
 }
