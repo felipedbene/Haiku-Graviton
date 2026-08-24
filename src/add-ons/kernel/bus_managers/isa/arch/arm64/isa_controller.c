@@ -14,59 +14,58 @@
 #include "arch_cpu.h"
 #include "isa_arch.h"
 
-//#define TRACE_ISA
-#ifdef TRACE_ISA
-#       define TRACE(x) dprintf x
-#else
-#       define TRACE(x) ;
-#endif
+
+/*!	arm64 has no ISA bus and no port IO space: there is no instruction that
+	addresses one, and no window that stands in for one. This file was a
+	verbatim copy of the x86 implementation, calling the in8()/out8() family
+	that only the x86 arch headers define, so it had never compiled -- and had
+	it been made to compile by supplying those, every accessor would have
+	dereferenced a small integer as an address and faulted.
+
+	So the accessors do nothing and arch_isa_init() declines. isa.cpp returns
+	arch_isa_init() from B_MODULE_INIT, so declining is what keeps the bus
+	manager from publishing an ISA bus that is not there and from handing these
+	accessors to a driver. Should an arm64 machine ever reach an ISA bridge
+	through a memory window, this is the file that maps it and stops declining.
+*/
 
 
 uint8
 arch_isa_read_io_8(int mapped_io_addr)
 {
-	uint8 value = in8(mapped_io_addr);
-
-	TRACE(("isa_read8(%x->%x)\n", mapped_io_addr, value));
-
-	return value;
+	return 0;
 }
 
 
 void
 arch_isa_write_io_8(int mapped_io_addr, uint8 value)
 {
-	TRACE(("isa_write8(%x->%x)\n", value, mapped_io_addr));
-
-	out8(value, mapped_io_addr);
 }
 
 
 uint16
 arch_isa_read_io_16(int mapped_io_addr)
 {
-	return in16(mapped_io_addr);
+	return 0;
 }
 
 
 void
 arch_isa_write_io_16(int mapped_io_addr, uint16 value)
 {
-	out16(value, mapped_io_addr);
 }
 
 
 uint32
 arch_isa_read_io_32(int mapped_io_addr)
 {
-	return in32(mapped_io_addr);
+	return 0;
 }
 
 
 void
 arch_isa_write_io_32(int mapped_io_addr, uint32 value)
 {
-	out32(value, mapped_io_addr);
 }
 
 
@@ -81,5 +80,5 @@ arch_isa_ram_address(phys_addr_t physical_address_in_system_memory)
 status_t
 arch_isa_init(void)
 {
-	return B_OK;
+	return B_NOT_SUPPORTED;
 }
