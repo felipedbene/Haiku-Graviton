@@ -1,0 +1,80 @@
+Let json-c 0.15 configure under cmake 4.
+
+TOOLCHAIN COMPATIBILITY FLAG, NOT A CUT. Nothing is removed from the build, no
+declared dependency changes, and the package that comes out is what json-c intends.
+It is deliberately not filed with the stage-1 cuts.
+
+## The failure
+
+    CMake Error at CMakeLists.txt:3 (cmake_minimum_required):
+      Compatibility with CMake < 3.5 has been removed from CMake.
+
+      Update the VERSION argument <min> value.  Or, use the <min>...<max> syntax
+      to tell CMake that the project requires at least <min> but has been updated
+      to work with policies introduced by <max> or earlier.
+
+      Or, add -DCMAKE_POLICY_VERSION_MINIMUM=3.5 to try configuring anyway.
+
+    -- Configuring incomplete, errors occurred!
+
+json-c 0.15 predates that removal and declares a minimum below 3.5. cmake 4.1.6 now
+refuses it outright, at `CMakeLists.txt:3` — before looking at compilers, headers or
+anything else. So this is not a portability problem with the code; the configure step
+never gets far enough to have one.
+
+## The fix
+
+    -DCMAKE_POLICY_VERSION_MINIMUM=3.5
+
+which restores the pre-3.5 policy defaults, i.e. exactly the behaviour cmake 3.x gave
+this project when it was released and tested. The alternative — editing
+`cmake_minimum_required` in the upstream `CMakeLists.txt` — changes the same thing
+less honestly, since it would claim the project had been reviewed against newer
+policies when it has not.
+
+Preferred over bumping the port to a newer json-c because the tree's only other
+recipe is `json_c4-0.13.1`, which is *older* and has the same problem.
+
+## Why this port is needed here
+
+`hubbub`, NetSurf's HTML parser, has `devel:libjson_c` in `BUILD_REQUIRES`, and
+`hubbub` is on the critical path to `netsurf-3.11`. Without json-c the browser chain
+stops one wave short.
+
+## Verification
+
+`json_c-0.15-4-arm64.hpkg` (28,028 B), `json_c_devel` (27,333 B) and
+`json_c_debuginfo` (57,865 B), `_dirty` requirement count **0** on all three, and the
+devel package provides what hubbub actually asks for:
+
+    provides: devel:libjson_c = 5.1.0 (compatible >= 5)
+    requires: json_c==0.15
+
+Watch for this in other pre-2020 cmake ports; it is a property of cmake 4, not of
+json-c, so any recipe carrying an old `cmake_minimum_required` will hit it.
+
+Applies to: haikuports/dev-libs/json_c/json_c-0.15.recipe (tree copy -- json_c has no
+input source package, so the tree recipe is the operative one)
+
+--- a/json_c-0.15.recipe
++++ b/json_c-0.15.recipe
+@@ BUILD()
+ BUILD()
+ {
++	# graviton: json-c 0.15 declares cmake_minimum_required(VERSION < 3.5), and cmake 4
++	# removed compatibility with < 3.5 outright, so configure dies at CMakeLists.txt:3
++	# before looking at anything else. This flag restores the pre-3.5 policy defaults,
++	# i.e. exactly what cmake 3.x did with this project. It removes nothing from the
++	# build and changes no declared dependency -- the package that comes out is what
++	# json-c intends -- so it is a toolchain compatibility flag, not a content cut.
++	# Drop it when the recipe is updated to a json-c release that declares a cmake
++	# 3.5+ minimum. Needed because hubbub build-requires devel:libjson_c.
+ 	cmake -Bbuild -DCMAKE_BUILD_TYPE=RelWithDebInfo \
++		-DCMAKE_POLICY_VERSION_MINIMUM=3.5 \
+ 		$cmakeDirArgs . \
+ 		-DENABLE_THREADING=ON \
+ 		-DENABLE_RDRAND=OFF \
+ 		-DBUILD_STATIC_LIBS=OFF
+
+ 	cmake --build build $jobArgs
+ }

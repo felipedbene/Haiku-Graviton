@@ -4,24 +4,48 @@ State of the native package build running in the QEMU Haiku guests on the c7g.me
 builder (`i-0f7f6f3e8922acffd`). Companion to `graviton/docs/sequencing.md` (Phase 2)
 and to the recipe patches in `graviton/haikuports-patches/`.
 
-## Where this stands — **2026-08-24 16:30Z**
+## Where this stands — **2026-08-24 19:19Z**
 
-**Every numbered blocker, 1 through 8, is closed.** Blocker 6 (cmake) was solved at
+## **`netsurf-3.11` IS BUILT.**
+
+`netsurf-3.11-3-arm64.hpkg`, 4,003,742 B, `_dirty` requirement count **0**, containing a
+12,144,892 B **ELF64 / AArch64** executable that links all twenty chain libraries
+(`libcss`, `libdom`, `libhubbub`, `libparserutils`, `libwapcaplet`, `libnsbmp`, `libnsgif`,
+`libnslog`, `libnspsl`, `libnsutils`, `libsvgtiny`, `libutf8proc`, `libcurl`, `libssl`,
+`libcrypto`, `libpng16`, `libjpeg`, `libexpat`, `libz`, `libiconv`) plus Haiku's own
+`libbe`/`libtranslation`/`libtracker`/`libnetwork`. `depclosure.py` now answers **wave 0,
+minimal build set 0 ports**.
+
+> **What that claim does and does not cover.** It is *built and linked*, verified from
+> inside the hpkg. It has **not been run and has not rendered a page** — these instances
+> have no video device at all, so that cannot be tested here and is not being claimed.
+> "A browser builds" and "a browser works" are different statements, and this document has
+> been bitten before by a build result wearing a capability result's clothes.
+
+**Every numbered blocker, 1 through 10, is closed.** Blocker 6 (cmake) was solved at
 04:41Z; the header of this document went on calling it "the open one" for ten hours
 afterwards, and Blocker 3's heading said `OPEN` for a day after its fix merged. Both are
-corrected below. If you are picking this up, read **Blocker 9** — it is the only open
-one, and it is not what the earlier text said it was.
+corrected below. Blocker 9 closed at 18:05Z with the `gettext` cut retired; **Blocker 10
+closed at 19:16Z**, with `vim` reduced to a CLI-only, ruby-less `xxd` provider and netsurf
+built on top of it.
+
+**The fixed `LIBRARY_PATH` loader turned out *not* to be a prerequisite for the browser.**
+That was measured rather than assumed, and it corrects an earlier statement in this very
+file — see "Does the chain need the fixed loader?" below. One genuine platform defect was
+found on the way and handed off: an **arm64 kernel panic in `mprotect()`**, now separately
+owned.
 
 ### Counts, with the units named
 
 The three numbers this document used to mix are genuinely different. Measured on the
-builder at 15:05Z:
+builder at **19:19Z**:
 
 | Number | Value | What it counts |
 |---|---|---|
-| **ports built natively** | **69** | distinct recipes we have built on arm64 |
-| **hpkgs produced natively** | **156** | package files those ports emitted (base + `_devel`/`_debuginfo`/`_doc`/per-Python-flavour/…) |
-| **`.hpkg` files in `hpkg-out/arm64/`** | **192** | the 156 above **+ 28** cross-built `_bootstrap` inputs **+ 8** chroot inputs (`haiku*.hpkg`, `makefile_engine`, `netfs`, `userland_fs`) — build *inputs*, not our output |
+| **ports built natively** | **106** (69 at 15:05Z; **+37** in the netsurf pass) | distinct recipes we have built on arm64. Count with care: a naive strip of subpackage suffixes reports **113** because `git` emits nine subpackages (`git_arch`, `git_svn`, `git_web`, …) that are not separate ports |
+| **hpkgs produced natively** | **227** (156 at 15:05Z) | package files those ports emitted (base + `_devel`/`_debuginfo`/`_doc`/per-Python-flavour/…) |
+| **`depclosure.py` "ports already built"** | **119** (82 before the pass) | its own basis, which counts what it can resolve provides from — **not** the same as the row above, and the +35 delta is the number to quote for this session |
+| **`.hpkg` files in `hpkg-out/arm64/`** | **263** | the 225 above **+ 28** cross-built `_bootstrap` inputs **+ 8** chroot inputs (`haiku*.hpkg`, `makefile_engine`, `netfs`, `userland_fs`) — build *inputs*, not our output |
 | **files under `hpkg-out/` entirely** | **~330** | the above **plus two other directories**: `arm64-nondirty/` (the shared build pool, a duplicate) and `arm64-dirty-20260824/` (the 52-file pre-clock-fix snapshot kept as evidence). Mostly duplicates and superseded files |
 
 > **Do not read an mtime as a build date here.** `rebuild.sh` harvests with
@@ -864,8 +888,10 @@ by construction.
 > corrections; the outcome is at the end under "What actually happened".
 
 
-This is the only open blocker. It replaces the "Why a real `groff` is still out of reach"
-section below, which is **wrong in its central claim** and is kept only as a record.
+~~This is the only open blocker.~~ **Blocker 9 is now closed too, and there is a Blocker
+10** — the `LIBRARY_PATH` loader, and behind it an arm64 kernel panic in `mprotect()`. Read
+Blocker 10 for the current state. This section replaces "Why groff *used to be* out of
+reach" below, which is wrong in its central claim and is kept only as a record.
 
 ### Method: stop reading recipes, saturate the graph
 
@@ -945,10 +971,12 @@ returning 0. The graph said they were leaves and they were.
    this is a correction rather than a plan.
 
 **What *is* right in the old section:** `groff` genuinely needs four commands beyond
-`cmd:makeinfo` (`cmd:pnmcrop`, `cmd:pnmtopng`, `cmd:pnmtops`, `cmd:psselect`), the `gettext`
-cut therefore still stands, and the estimate that a real groff "should be scoped as its own
-piece of work" is sound. It was wrong only about *why*, and it under-counted the depth by
-about five times ("about five more ports" versus 24).
+`cmd:makeinfo` (`cmd:pnmcrop`, `cmd:pnmtopng`, `cmd:pnmtops`, `cmd:psselect`), and the
+estimate that a real groff "should be scoped as its own piece of work" was sound. It was
+wrong about *why*, and it under-counted the depth by about five times ("about five more
+ports" versus 24). ~~the `gettext` cut therefore still stands~~ — **that clause is dead as
+of 2026-08-24**: groff is built, `cmd:groff` was restored, and gettext was rebuilt from the
+restored recipe. See the cut ledger.
 
 ### The single chokepoint is Python, and it has a real defect under it
 
@@ -1109,12 +1137,292 @@ Counts are from 15:26Z, i.e. **after** this session's nine ports.
 | `python3.10`/`python3.14` | no | **0 — DONE** | PGO/LTO cut + additive `RUNSHARED` | both built |
 | PEP-517 ladder → `meson`/`ninja` | no | **0 — DONE** | none | 8 ports, ~4 min total |
 | `groff` | no | **0 — DONE** | 1 (jasper `jiv`, for GLUT) | done; **verified by rendering** |
-| `netsurf` | no | **~22** | **0 new** (inherits groff's jasper cut) | breadth: ~15 netsurf-specific libs, plus `git`, `vim`, `ruby` |
+| `netsurf` | no | **0 — BUILT** (`depclosure.py` measured **38** for the chain; the earlier "~22" was wrong. All 38 built, in about 75 minutes) | **0 new of its own.** netsurf's recipe is unmodified. It *inherits* jasper's GLUT cut and vim's two cuts, and the `json_c` compatibility flag | done |
 | `haikuwebkit` | no | **~14** | **1 new** (rav1e codec) + groff's | **LLVM ≥ 21** — hours, and it is most of the remaining cost |
 
 **"Cuts needed" counts *new* cuts.** Everything downstream of `groff` inherits the jasper
 `jiv`/GLUT cut, so neither browser is cut-free; the column says what each *adds*. That
 distinction is the one this document got wrong twice, in opposite directions.
+
+## Blocker 10 — the netsurf chain is gated on the *loader*, not on any recipe
+
+**Measured 2026-08-24, 18:05Z–18:40Z.** Running the closure produced 35 of netsurf's 38
+ports in about half an hour across four guests. What did not build says more than what did.
+
+### `ruby` is a fourth instance of the `LIBRARY_PATH` defect — and it is on the critical path
+
+`ruby-3.2.9` died with:
+
+```
+runtime_loader: Cannot open file libroot.so (needed by /boot/system/bin/make): No such file or directory
+Warning: Command '['bash', '-c', '. /wrapper-script']' returned non-zero exit status 3.
+```
+
+immediately after configure, at the first `make`. The cause is in the recipe, but it is not
+a recipe *defect* — `ruby-3.2.9.recipe` lines 120, 126 and 137 each do:
+
+```sh
+export LIBRARY_PATH=$LIBRARY_PATH:%A
+```
+
+which is written **assuming prepend semantics**. On the pre-fix loader, setting
+`LIBRARY_PATH` at all *replaced* the search path, and since `$LIBRARY_PATH` was empty the
+result held no `libroot.so` — so `make` itself could not start. The recipe is correct; the
+platform was wrong. This is the same defect as perl's `LDLIBPTH` and python's `RUNSHARED`,
+found for the third and fourth time, and it is the first time it has sat on the critical
+path to a deliverable rather than merely cost a workaround.
+
+`ruby` gates `vim`, and `vim` is the only affordable provider of `cmd:xxd`, which
+`netsurf-3.11` build-requires. The tree's only other `cmd:xxd` provider is
+`qvim-8.0.197`, which needs `devel:libQt5Core` and `devel:libQt5Gui` — far dearer than
+ruby.
+
+> ~~**So on a pre-fix host the browser chain cannot finish, and cutting a recipe is the
+> wrong answer to that.**~~ **Both halves of that sentence turned out to be wrong, and it
+> is corrected rather than deleted because the reasoning is instructive.** Cutting a recipe
+> *was* the answer: ruby was cut out of vim once the kernel defect behind it had been
+> attributed and assigned, so the cut conceals nothing. And the chain does **not** need a
+> post-fix host — `vim` and `netsurf` were both built on a pre-fix guest, measured on both
+> arms. The `LIBRARY_PATH` requirement was specific to ruby all along. See "The two `vim`
+> cuts" and "Does the chain need the fixed loader?" below.
+
+### The A/B, with the host loader as the single variable
+
+The whole build fleet was still running the pre-fix loader — all five guests answered
+`exit 3` and printed nothing to `LIBRARY_PATH=/tmp /bin/echo`, with the plain run as the
+negative control. A sixth guest was cloned and given the fixed loader, and ruby rebuilt
+there from the **pristine** recipe (verified: no `graviton` marker in it, the three
+`export LIBRARY_PATH` lines untouched):
+
+| | pre-fix guest | post-fix guest |
+|---|---|---|
+| `/boot/system/runtime_loader` | `2eca21fe…` | `1caa4250…` |
+| `LIBRARY_PATH=<empty dir> /bin/echo` | exit 3, silent | prints |
+| chroot input `haiku.hpkg` | `f684f67a…` | `f684f67a…` — **unchanged** |
+| ruby recipe | pristine | pristine |
+| `Cannot open file libroot.so` in the log | 1 | **0** |
+| result | died at the first `make` | past configure, compiling |
+
+**It is the host loader that decides, not the chroot's `haiku.hpkg`.** That is worth
+stating plainly because the intuition runs the other way: haikuporter builds inside a
+chroot whose `/boot/system` comes from an activated `haiku.hpkg`, so one expects the
+chroot's copy to govern. It does not — the acceptance run left the chroot input package at
+its old checksum and changed only the host's `/boot/system/runtime_loader`, and that was
+sufficient both times.
+
+### How to give an existing guest the fixed loader — and how not to
+
+The wrong way, tried first and recorded because the failure is expensive to re-derive:
+**do not drop in a whole `haiku-r1~beta6_hrev59996-1-arm64.hpkg` from a different build
+tree.** The guest died with `Synchronous Exception at 0x…` immediately after
+`Calling ExitBootServices`, i.e. in the boot path, before any kernel output — the EFI
+`haiku_loader` on the disk belongs to the original build and the kernel it was handed did
+not. Note also that the *version string is identical* (`hrev59996` either way), so nothing
+warns you.
+
+The right way is to change only the file under test, rebuilding the guest's **own** system
+package in place:
+
+```sh
+cp -f $P /boot/home/haiku-system-orig.hpkg      # keep the original, outside packages/
+cp -f $P /boot/home/haiku-mod.hpkg
+package list /boot/home/haiku-mod.hpkg | grep -c '^runtime_loader'   # positive control: 1
+package add -f -C /boot/home/rlstage /boot/home/haiku-mod.hpkg runtime_loader
+cd /boot/home/rlcheck && package extract /boot/home/haiku-mod.hpkg runtime_loader
+sha256sum runtime_loader                        # must be the new one, checked before swapping
+sync; sync; rm -f $P; mv /boot/home/haiku-mod.hpkg $P; sync; sync
+```
+
+then `system_reset` through the QEMU monitor. Everything except `runtime_loader` stays
+byte-identical to the image that is known to boot. `sync` on both sides of the rename is
+load-bearing — see the note on file data never being flushed.
+
+**Consequence for the fleet — narrower than first written.** ~~Finishing netsurf~~ and
+consuming the perl/python workaround retirements require build guests whose loader is
+additive. Either re-seed guests from a post-fix image, or apply the surgical swap above.
+Until then those retirements are real but unusable on these guests.
+
+**Finishing netsurf does *not* require it** — that clause was struck after measuring it on
+both arms; only ruby ever needed the additive loader. So the re-seed is worth doing for the
+perl/python retirements and for any future `LIBRARY_PATH`-setting port, but it never blocked
+the browser. Keeping `run15` (ssh 2235) as the standing control for this class of defect is
+the cheap half of that.
+
+### And behind the loader there were two more layers — the second one is a kernel bug
+
+Clearing the loader defect did not make ruby build. It made two further failures visible,
+which is the point of clearing a blocker rather than working around it.
+
+**Layer 2 — a real arm64 portability bug in ruby, fixed.**
+
+```
+signal.c:870:36: error: 'mcontext_t' {aka 'const struct vregs'} has no member named 'esp'; did you mean 'sp'?
+signal.c:871:34: error: 'mcontext_t' {aka 'const struct vregs'} has no member named 'ebp'
+make: *** [Makefile:468: signal.o] Error 1
+```
+
+ruby's stack-overflow handler reads the faulting SP and FP out of `mcontext_t`, and its
+`__HAIKU__` arm handles only `__amd64__`, falling through to the **x86** names for
+everything else. Haiku's arm64 `struct vregs` has `sp` and — for the AArch64 frame
+pointer, x29 — `x[29]`. Adding an `__aarch64__` arm to that same `#if` compiles;
+see `graviton/haikuports-patches/ruby-3.2.9-arm64-mcontext.patch`. **A fix, not a cut.**
+
+**Layer 3 — `miniruby` panics the arm64 kernel. This is the current hard blocker.**
+
+```
+PANIC: area 0xffff0000dd38f8c0 looking up page failed for pa 0x0
+Thread 15856 "miniruby" running on CPU 9
+ 4 ... <kernel_arm64> _user_set_memory_protection + 0x9e0
+ 5 ... <kernel_arm64> syscall_dispatcher + 0x750
+ 8 ... </boot/system/lib/libroot.so> _kern_set_memory_protection (nearest) + 0x04
+ 9 ... </sources/ruby-3.2.9/miniruby> rb_dbl_complex_new (nearest) + 0x144c
+12 ... </sources/ruby-3.2.9/miniruby> ruby_setup + 0x180
+13 ... </sources/ruby-3.2.9/miniruby> ruby_init + 0x10
+15 ... </sources/ruby-3.2.9/miniruby> _start + 0x50
+```
+
+`ESR=0x560000d8`, `FAR=0x000000bc34576000`; the guest dropped into KDL and was recovered
+with a monitor `system_reset`. So a plain `mprotect()` from a user program, during
+`ruby_init`, panics the kernel — a userland process should not be able to do that whatever
+it passes. Note ruby configures with **MJIT support: yes**, so JIT page protection is the
+plausible caller.
+
+This is generic arm64 kernel/VM territory (`src/system/kernel/`), **not** a packaging
+problem, and it is not this track's to fix — handing it over rather than working around it,
+because the obvious workaround (`--disable-jit-support`) would *hide* an OS defect that any
+JIT-using application will hit, and a browser is exactly such an application. **Recorded as
+a single observation**: it has been seen once, with a full stack trace, and has not yet been
+reduced to a minimal reproducer.
+
+### The two `vim` cuts, and why they are not shortcuts
+
+**Decision taken:** route around the kernel panic by cutting ruby out of `vim`. netsurf
+wants `cmd:xxd` and nothing else from vim, and across the whole recipe tree only
+`vim-9.1.1618` and `qvim-8.0.197` provide it — qvim wants `devel:libQt5Core` and
+`devel:libQt5Gui`. So vim is built here as a *build tool*, to obtain one 33 KB hex dumper.
+Full write-up: `graviton/haikuports-patches/vim-9.1.1618-cli-only-no-ruby.patch`.
+
+**Cut 1 — no ruby interpreter. Cost, plainly: vim has no `:ruby` command.** Nothing else
+changes; `REQUIRES` never mentioned libruby, so the package has no runtime change either.
+Dropped: `devel:libruby`, `cmd:ruby`, and both `--enable-rubyinterp=dynamic` flags.
+`--enable-fail-if-missing=yes` is deliberately kept — it is why a missing interpreter fails
+loudly rather than being silently skipped, so the *flag* has to go rather than the
+dependency merely being absent.
+
+**Why this is acceptable, and the one clause that matters.** Cutting ruby removes an
+**arm64 kernel panic in `mprotect()`** from the critical path. On its own that would be the
+wrong trade — it would *mask* an OS defect that any JIT-using application will eventually
+hit, and a browser is exactly such an application. **What makes the cut acceptable is that
+the defect is not concealed by it: it is separately owned and being fixed**, diagnosed as
+`VMSAv8TranslationMap::Query()` setting `PAGE_PRESENT` unconditionally with no valid-bit
+test, so an empty leaf PTE reports "present, pa=0" and the generic VM's `vm_lookup_page(0)`
+panics.
+
+> **Written down so it is not re-litigated.** If you are reading this and wondering whether
+> the ruby cut was a shortcut past a hard problem: it was not, because the thing it would
+> have concealed had already been found, attributed and assigned before the cut was taken.
+> The `mprotect` observation is what *found* it. When that kernel fix lands, the honest
+> move is to try ruby again — `ruby-3.2.9-arm64-mcontext.patch` is kept in the tree for
+> exactly that, even though ruby is not currently built, because it is a real portability
+> fix (ruby read the x86 `esp`/`ebp` out of an arm64 `mcontext_t`).
+
+**Cut 2 — no GUI build. Cost, plainly: no GUI vim.** This one was *not* pre-planned; it was
+forced, and it is disclosed here as a second cut rather than folded into the first. With the
+GUI configured, `make install` selects `HAIKUGUI_INSTALL` and reaches `installglinks_haiku`
+(`src/Makefile:3769`), whose first line dies:
+
+```
+@catattr -r "BEOS:ICON" $(DEST_BIN)/$(GVIMTARGET) > ~icon.attr
+catattr: ".../bin/gvim", attribute "BEOS:ICON": No such file or directory
+make[1]: *** [Makefile:3770: installglinks_haiku] Error 1
+```
+
+The GUI binary compiles and links fine; what fails is *installing its icon*. vim reads
+`BEOS:ICON` back off the installed binary to stamp it onto the `g*` wrapper scripts, and in
+this chroot the binary comes out of `xres` + `mimeset` with no such filesystem attribute.
+`cmd:vim`, `cmd:vi`, `cmd:view`, `cmd:ex`, `cmd:vimdiff`, `cmd:vimtutor`, `cmd:rvim`,
+`cmd:rview` and `cmd:xxd` all survive; `cmd:gvim`, `cmd:gview`, `cmd:gvimdiff`, `cmd:rgvim`
+and `cmd:rgview` are gone — **and their `PROVIDES` entries were removed in the same edit.**
+A `PROVIDES` line for a binary the build no longer produces is the same species of quiet
+falsehood as the `gettext` groff cut, and that one cost a day to unpick.
+
+*Ruled out, so nobody repeats it:* this is **not** a symlink-following problem. `gvim` is a
+symlink to `vim` at that moment, which is the tempting explanation, but `catattr` follows
+symlinks here — checked directly (`addattr` a string attribute to a file, read it back
+through a symlink: reads fine). The attribute is genuinely absent from the binary.
+*Not established:* **why** `mimeset` produces no `BEOS:ICON` here. The plausible cause is
+that the chroot has no usable MIME database or registrar, so `mimeset` is a no-op — but
+that was **not tested and is a hypothesis, not a finding**. It is worth chasing, because it
+would affect any port whose install step depends on `mimeset` writing attributes. Dropping
+the GUI pass removes the dependency on that step rather than silencing an unexplained
+failure, which is why it was preferred to making the icon step non-fatal.
+
+### New or inherited? — stated explicitly, because this column has been wrong twice
+
+| Cut | New in | Inherited by | Does it degrade the *shipped browser*? |
+|---|---|---|---|
+| jasper `-DJAS_ENABLE_OPENGL=OFF` (GLUT absent) | `jasper` | `netpbm` → `groff` → everything downstream, incl. **netsurf** | **No.** It removes jasper's `jiv` viewer. groff uses jasper's library, not its viewer |
+| vim Cut 1 (no ruby) | `vim` | **netsurf** (uses vim's `xxd` at build time) | **No.** Build-time tool only; `xxd` has no ruby involvement |
+| vim Cut 2 (no GUI) | `vim` | **netsurf** (same) | **No.** Same reason |
+| `json_c` cmake-4 policy flag | `json_c` | `hubbub` → **netsurf** | **No** — and it is a compatibility flag, not a cut: nothing removed, no declaration changed |
+
+**`netsurf` itself adds zero cuts** — its recipe is unmodified. Everything in its column is
+inherited. The distinction that matters and that this document has muddled in both
+directions: all four items above are cuts to **build-time dependencies whose removed
+feature is not used downstream**. None of them reduces the browser. Saying "netsurf is not
+cut-free" is true about its *ancestry* and misleading about its *artifact*; say which.
+
+### Does the chain need the fixed loader? — measured, and the earlier answer was wrong
+
+This file previously said the fleet needed the additive-`LIBRARY_PATH` loader to finish
+netsurf. **That was too strong.** The requirement was specific to `ruby`, whose recipe does
+`export LIBRARY_PATH=$LIBRARY_PATH:%A`. With ruby out of the chain, it was tested rather
+than assumed: `vim` was built on **both** a pre-fix guest (`runtime_loader` `2eca21fe…`,
+`LIBRARY_PATH=<empty dir> /bin/echo` exits 3 silently) and the post-fix guest
+(`1caa4250…`, prints), from the same recipe.
+
+| | pre-fix loader guest | post-fix loader guest |
+|---|---|---|
+| `vim` | **built**, 14,513,009 B, `_dirty` 0 | **built**, RC=0, 14,512,906 B |
+| `Cannot open file libroot.so` in log | 0 | 0 |
+| `BEOS:ICON` failure after Cut 2 | 0 | 0 |
+| `netsurf` | **built**, 4,003,742 B, `_dirty` 0 | not attempted — the pre-fix arm already answers it |
+
+Both arms succeed, and `netsurf` itself was built on the **pre-fix** guest. (The size
+differs by 103 bytes between arms, which is build-path/timestamp noise, not a content
+difference.)
+
+**Conclusion: re-seeding the build fleet with the fixed loader is OPTIONAL, not blocking.**
+It remains worth doing — it is what retires the perl and python workarounds in practice, and
+it is what any future `LIBRARY_PATH`-setting port will need — but nothing in the browser
+chain is waiting on it. The one guest that has it (`run15`, ssh 2235) is worth keeping as
+the standing control for that class of defect.
+
+## Two build-infrastructure gaps found by walking the closure
+
+Neither is a port problem, and both would have read as "unbuildable port".
+
+**`ftp://` source URIs were refused outright.** `gdbm-1.26`'s only live `SOURCE_URI` is
+`ftp://ftp.gnu.org/gnu/gdbm/gdbm-1.26.tar.gz`, and haikuporter's fallback location
+`ports-mirror.haiku-os.org` **no longer resolves at all**. The guests have no egress of
+their own: a `wget` shim hands every URL to `haiku-source-proxy` on the metal, and that
+script answered `refusing scheme 'ftp' (http/https only)`. So the whole failure was one
+`if`. It now rewrites `ftp://HOST/PATH` to `https://HOST/PATH` before fetching — every
+mirror that publishes a tree over ftp publishes it over https too, and https is what
+actually gets out. The rewrite happens before the cache key is computed, so the two
+spellings share one entry, which is right: same bytes. Controls: the exact failing URL now
+fetches (1,226,591 B, `sha256=6a24504a…`) and `gopher://` is still refused. `gdbm` then
+built with **no recipe change**.
+
+**`json_c-0.15` needs a cmake-4 compatibility flag.** It declares
+`cmake_minimum_required` below 3.5 and cmake 4 removed that compatibility, so configure
+dies at `CMakeLists.txt:3` before looking at anything else.
+`-DCMAKE_POLICY_VERSION_MINIMUM=3.5` restores the pre-3.5 policy defaults — precisely what
+cmake 3.x did with this project. **This is not a cut**: nothing is removed from the build,
+no declared dependency changes, and the package that comes out is what json-c intends. It
+is needed because `hubbub`, netsurf's HTML parser, build-requires `devel:libjson_c`, and
+the tree's only alternative recipe (`json_c4-0.13.1`) is older still. Worth watching for
+in other pre-2020 cmake ports.
 
 **Correction to an earlier recommendation of mine.** I argued netsurf was attractive partly
 because it skipped the groff chain. It does not: `netsurf-3.11` build-requires `cmd:git`,
@@ -1287,7 +1595,7 @@ pristine recipe rather than by writing a new patch:
 | Cut | Retired how | Verified by |
 |---|---|---|
 | `autoconf-2.72` doc cut | real `texinfo-7.2` now provides a working `makeinfo`; rebuilt from the pristine recipe, `make install-html` restored | `autoconf.html` (2,274,731 B) and `standards.html` (412,748 B) now present; the stage-1 hpkg has **no** `.html` entry at all |
-| `gettext-1.0` groff doc cut | **not retired** — see "Why a real groff is still out of reach" | — |
+| `gettext-1.0` groff doc cut | **RETIRED 2026-08-24.** `groff-1.23.0` is built, so `cmd:groff` went back into `BUILD_PREREQUIRES` and gettext was rebuilt from that recipe | `RC=0`, five hpkgs, `_dirty` 0 on each, and the content inventory is **identical** to the cut build — 96 html entries in `gettext_doc`, the same 31 `name.N.html` man pages, same entry counts in all five subpackages. haikuporter listed `groff-1.23.0-2-arm64.hpkg` among the chroot's active packages, so the restored prerequisite genuinely resolves rather than being quietly ignored |
 | `zstd-1.5.6` Makefile-instead-of-cmake cut | `cmd:cmake` now exists; rebuilt from the pristine cmake-based recipe | the cmake package-config files (`lib/cmake/zstd/zstdTargets*.cmake`) that the Makefile build cannot produce |
 
 > **Consistency:** every hpkg in this set now requires
@@ -1360,11 +1668,18 @@ pristine recipe rather than by writing a new patch:
 | **libxml2 2.15.3 (+devel +doc +python3.14)** | **rebuilt — cut RETIRED** | `xmlfix.sh`; the `libxml2_python3.14` subpackage is back. This was **critical path**, not cosmetic |
 | libxml2 2.15.3 | see below | `cmd:doxygen` was the only real edge and it now exists; `lib:libicudata` was already provided by the icu bootstrap and `cmd:python3.14` is gated off by `pythonModuleEnabled` |
 
-### Why a real groff is still out of reach — and so the gettext cut stands
+### Why groff *used to be* out of reach — historical, and its verdict has since been overturned
 
-> **SUPERSEDED by Blocker 9 (2026-08-24), and wrong in its central claim.** Kept because
-> the conclusion survives — groff is not cheap and the gettext cut stands — but the
-> mechanism below is not the real one. Measured corrections:
+> **FULLY SUPERSEDED (2026-08-24). Both its mechanism and its conclusion are now wrong.**
+> This section is kept only as the record of how the estimate was arrived at. `groff-1.23.0`
+> is **built and verified by rendering**, and the `gettext` cut it argued for is
+> **RETIRED** — see the cut ledger above and Blocker 9. An earlier revision of this same
+> note claimed "the conclusion survives — groff is not cheap and the gettext cut stands",
+> which was true when written and false a few hours later; that sentence is exactly the
+> failure mode this document keeps warning about, so it is replaced rather than annotated.
+> **If you are reading this section for a current answer, you are in the wrong section.**
+>
+> The other measured corrections, still accurate:
 > **`devel:libgl` comes from `libglvnd-1.7.0`, not from `mesa`**, so there is no
 > mesa/LLVM/vulkan/`cmd:git` wall — but **the `-DJAS_ENABLE_OPENGL=OFF` cut below is still
 > needed**, because jasper then fails on GLUT, which has no recipe in the tree at all. The
@@ -1404,14 +1719,14 @@ interpreter problem.
 answer to PEP-517 packaging. It is tractable but it is not a follow-on to cmake, and
 it should be scoped as its own piece of work.
 
-**Consequently the `gettext` stage-1 cut is NOT retired.** Worth being precise about
-what that debt actually is, because it is smaller than it reads: gettext used groff
-for exactly one thing, `MAN2HTML = groff -mandoc -Thtml`, and the HTML man pages
-**ship prebuilt in the tarball**. The measured autoconf case above showed the same
-pattern — prebuilt docs get installed regardless of whether the generator ran. So
-the gettext cut is a *dependency-declaration* cut whose content cost is plausibly
-zero; that should be confirmed by diffing the shipped man HTML against a
-groff-built one whenever groff exists, rather than assumed in either direction.
+**~~Consequently the `gettext` stage-1 cut is NOT retired.~~ — OVERTAKEN 2026-08-24: it
+is retired.** What this paragraph got right is the *size* of the debt: gettext used groff
+for exactly one thing, `MAN2HTML = groff -mandoc -Thtml`, and the HTML man pages **ship
+prebuilt in the tarball**, so the cut was a *dependency-declaration* cut whose content
+cost was plausibly zero. It asked for that to be confirmed by comparison rather than
+assumed in either direction, and it now has been: rebuilding with `cmd:groff` restored
+produces the **same 31 `name.N.html` man pages and the same 96 html entries** as the cut
+build, in five hpkgs with `_dirty` 0. Content cost of the cut: zero, measured.
 
 ### Source packages are never checksum-verified, and that is a standing gap
 
@@ -1488,11 +1803,13 @@ packages that must be rebuilt later and belong in `hpkg-out/arm64/stage1/`.
    from pristine recipes, **retiring both of those stage-1 cuts.** `doxygen` and
    `libxml2` followed.
 
-   Still open from this item: **a real `groff`, and therefore the `gettext` cut.**
-   See "Why a real groff is still out of reach" — it is ~5 more ports, a new
-   `-DJAS_ENABLE_OPENGL=OFF` cut in jasper (the alternative is mesa + LLVM + `cmd:git`),
-   and a first answer to PEP-517 Python packaging for `psutils`. Scope it as its own
-   piece of work, not as a follow-on.
+   ~~Still open from this item: a real `groff`, and therefore the `gettext` cut.~~
+   **CLOSED 2026-08-24.** `groff-1.23.0` is built and verified by rendering, and the
+   `gettext` cut is retired — rebuilt with `cmd:groff` restored, five hpkgs, `_dirty` 0,
+   content identical to the cut build. The estimate quoted here was wrong in both
+   directions: it was 24 ports and 12 waves rather than "~5 more ports", and the jasper
+   `-DJAS_ENABLE_OPENGL=OFF` cut was needed for **GLUT's total absence from the tree**,
+   not because of mesa + LLVM + `cmd:git`.
 3b. **The bundled-curl cmake shipped without TLS and every build-level test passed.**
    If any future cut removes a library, test the *capability* that library provided.
    See Blocker 6. Related standing gap: **input source packages are never
