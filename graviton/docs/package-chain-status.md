@@ -57,15 +57,32 @@ chore, not a build failure; see Blocker 9.
 
 **Blocker 9 — the remaining chain is deep but it contains no cycles.** Measured with
 `graviton/builder/depclosure.py` against haikuporter's own graph, not read off the
-recipes. **There is no cycle anywhere on the path to a browser.** The previous write-up's
-"mesa + LLVM + `cmd:git`" account of why `groff` was out of reach is **wrong** —
-`devel:libgl` comes from `libglvnd`, and no OpenGL cut is needed. The whole remainder
-converged on one chokepoint, **`python3.10`/`python3.14`**, and **both were built this
-session** after fixing two real defects that were not dependency problems at all (a
-missing-LTO toolchain gap, and `LIBRARY_PATH` replacing rather than prepending the loader
-path). **`groff` is now built and verified by rendering** — the deliverable this document called
-"the one that did not land" and scoped as its own piece of work. That retires the `gettext`
-cut. What remains is a browser, and its dominant cost is LLVM, not any knot. See Blocker 9.
+recipes. **There is no cycle anywhere on the path to a browser.**
+
+The previous write-up's *mechanism* for why `groff` was out of reach — "`netpbm` → `jasper`
+→ OpenGL → `mesa-25.3.6` → `libLLVM` + `libvulkan` + `cmd:git`" — is **wrong**.
+`devel:libgl` comes from **`libglvnd-1.7.0`** (~70 s to build, with `glu`), and jasper's
+cmake **does find OpenGL**. But its *conclusion* — that jasper needs an OpenGL cut — is
+**right**, for an unrelated reason: jasper fails on **GLUT**, and **GLUT has no recipe
+anywhere in the tree**. So `-DJAS_ENABLE_OPENGL=OFF` **is** needed, and it is a cut against
+GLUT's absence, not against a mesa/LLVM/`cmd:git` wall. Separately, `libglvnd` needed a
+**two-line Haiku portability fix** — a real fix, not a cut. Details in Blocker 9.
+
+> **Why this sentence is worded so carefully.** An earlier revision of this very line said
+> "no OpenGL cut is needed", which contradicted the body once GLUT was measured — the same
+> header-versus-body split this document was just corrected for, reintroduced hours later.
+> **A conclusion that survives while its mechanism is replaced is the most dangerous kind of
+> correction**, because the summary sentence keeps on looking right and nothing prompts you
+> to re-read it. When you replace a mechanism, re-check every sentence that asserted the
+> conclusion, not just the paragraph that explained it.
+
+The whole remainder converged on one chokepoint, **`python3.10`/`python3.14`**, and **both
+were built this session** after fixing two real defects that were not dependency problems at
+all (a missing-LTO toolchain gap, and `LIBRARY_PATH` replacing rather than prepending the
+loader path). **`groff` is now built and verified by rendering** — the deliverable this
+document called "the one that did not land" and scoped as its own piece of work. That
+retires the `gettext` cut. What remains is a browser, and its dominant cost is LLVM, not any
+knot. See Blocker 9.
 
 ## Blocker 1 — `libtool`: `Error 127` on `aclocal.m4` — **FIXED**
 
@@ -873,7 +890,11 @@ this honestly, because when several ports provide the same name — `jasper` *an
 both provide `devel:libjasper`; `python3.10` *and* `python3.14` both provide a `cmd:python3*`
 — unioning the providers inflates the answer. Saturation just needs one of them.
 
-### Result: `groff` is 24 ports and 12 waves away, with no cuts and no cycle
+### Result as first measured: `groff` is 24 ports and 12 waves away, and not a cycle
+
+> The "no cuts" this section originally claimed **did not survive contact with jasper**: one
+> cut turned out to be needed, against GLUT's absence. Corrected under "The jasper OpenGL cut
+> was needed" below. The port count and the absence of a cycle both held.
 
 ```
 wave 1  (5)  autoconf_archive libedit libffi libpng16 nasm
@@ -901,9 +922,15 @@ returning 0. The graph said they were leaves and they were.
    `cmd:glslangValidator` + `cmd:git`" — wrong.** `devel:libgl` in this tree is provided by
    **`libglvnd-1.7.0`**, whose entire build requirement list is
    `awk gcc ld meson ninja python3 sed haiku_devel`. No mesa, no LLVM, no vulkan, no git.
-   Consequently the proposed `-DJAS_ENABLE_OPENGL=OFF` cut in jasper, and dropping its
-   `jiv` subpackage, are **not needed at all** — `jasper` builds with OpenGL on, against
-   libglvnd's dispatch library.
+   `libglvnd` does need a two-line Haiku portability fix to compile at all (see below), but
+   that is a fix, not a cut, and it costs about seventy seconds together with `glu`.
+
+   **What this does *not* license, though an earlier revision of this document said it did:**
+   the conclusion that jasper needs no OpenGL cut. It does. jasper's cmake finds OpenGL
+   perfectly well and then fails on **GLUT**, which has no recipe in the tree at all, so
+   `-DJAS_ENABLE_OPENGL=OFF` and dropping `jiv` are **still required** — for GLUT's absence,
+   not for a mesa wall. Only the *mechanism* in this claim was wrong; the remedy it argued
+   against is the remedy that worked.
 2. **"`psutils` is the harder half, and it is the exact knot `--do-bootstrap` was abandoned
    over" — wrong; it is a ladder.** The PEP-517 set is
    `flit_core → installer → {setuptools, wheel, tomli, pyproject_hooks} → build`, seven
@@ -1057,10 +1084,21 @@ actually requires `cmd:llvm_config >= 21`, i.e. `llvm21`/`llvm22`. That is still
 time**: LLVM is a multi-hour build on its own, and it depends on `groff`, so a browser
 inherits the entire groff chain rather than avoiding it.
 
-**A lighter browser is reachable with no cuts at all.** `netsurf-3.11` saturates at wave 15
-with a 52-port minimal set and **zero recipe edits required** — no LLVM, no Rust, no libpsl.
-It is a far weaker browser, but as the first thing that renders HTML on this platform it is
-strictly cheaper and carries no cut debt. Worth pricing before committing to WebKit.
+**A lighter browser needs no cut of its own.** `netsurf-3.11` saturates at wave 15 with a
+52-port minimal set and **no netsurf-specific recipe edit** — no LLVM, no Rust, no libpsl.
+
+Two corrections to how that was first written up here, both found by pricing it properly:
+
+- It is **not** "zero recipe edits" and **not** free of cut debt. netsurf build-requires
+  `cmd:git`, `git` sits above `groff`, and groff carries the jasper `jiv`/GLUT cut. netsurf
+  inherits that cut like everything else downstream of groff.
+- It therefore does **not** avoid the groff chain, which was the main reason to prefer it.
+  That chain was on the critical path to **both** browsers, so it was shared work and browser
+  choice could safely be deferred until after it — which is what happened.
+
+What survives, and is still the interesting part: netsurf needs **no LLVM**, so its cost is
+breadth (~15 netsurf-specific libraries plus `git`, `vim`, `ruby`) rather than one multi-hour
+build. Worth pricing against WebKit on that basis, not on cut debt.
 
 ### Honest summary of the distance
 
@@ -1071,8 +1109,12 @@ Counts are from 15:26Z, i.e. **after** this session's nine ports.
 | `python3.10`/`python3.14` | no | **0 — DONE** | PGO/LTO cut + additive `RUNSHARED` | both built |
 | PEP-517 ladder → `meson`/`ninja` | no | **0 — DONE** | none | 8 ports, ~4 min total |
 | `groff` | no | **0 — DONE** | 1 (jasper `jiv`, for GLUT) | done; **verified by rendering** |
-| `netsurf` | no | **~22** | **none known** | breadth: ~15 netsurf-specific libs, plus `git`, `vim`, `ruby` |
-| `haikuwebkit` | no | **~14** | **1** (rav1e codec) | **LLVM ≥ 21** — hours, and it is most of the remaining cost |
+| `netsurf` | no | **~22** | **0 new** (inherits groff's jasper cut) | breadth: ~15 netsurf-specific libs, plus `git`, `vim`, `ruby` |
+| `haikuwebkit` | no | **~14** | **1 new** (rav1e codec) + groff's | **LLVM ≥ 21** — hours, and it is most of the remaining cost |
+
+**"Cuts needed" counts *new* cuts.** Everything downstream of `groff` inherits the jasper
+`jiv`/GLUT cut, so neither browser is cut-free; the column says what each *adds*. That
+distinction is the one this document got wrong twice, in opposite directions.
 
 **Correction to an earlier recommendation of mine.** I argued netsurf was attractive partly
 because it skipped the groff chain. It does not: `netsurf-3.11` build-requires `cmd:git`,
@@ -1324,7 +1366,9 @@ pristine recipe rather than by writing a new patch:
 > the conclusion survives — groff is not cheap and the gettext cut stands — but the
 > mechanism below is not the real one. Measured corrections:
 > **`devel:libgl` comes from `libglvnd-1.7.0`, not from `mesa`**, so there is no
-> mesa/LLVM/vulkan/`cmd:git` wall and **no OpenGL cut is needed**; and the `psutils`
+> mesa/LLVM/vulkan/`cmd:git` wall — but **the `-DJAS_ENABLE_OPENGL=OFF` cut below is still
+> needed**, because jasper then fails on GLUT, which has no recipe in the tree at all. The
+> cut this section proposed is right; its stated reason is not. And the `psutils`
 > Python packaging is a **seven-port ladder, not a knot**, because `flit_core` needs only
 > the interpreters. The depth was also under-counted by roughly five times: groff is
 > **24 ports and 12 waves**, not "about five more ports". Read Blocker 9 instead.
