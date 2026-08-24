@@ -408,6 +408,47 @@ stack_trace(int argc, char **argv)
 	addr_t previousLocations[NUM_PREVIOUS_LOCATIONS];
 	Thread* thread = thread_get_current_thread();
 	addr_t fp = arm64_get_fp();
+
+	// Honour the thread id this command has always advertised in its usage
+	// string. It used to be parsed only for argument counting and then ignored,
+	// so `bt <thread>` traced the *calling* thread and printed a plausible,
+	// wrong stack -- which is worse than refusing, and defeats the main use of
+	// the command: finding out where a blocked thread is parked.
+	if (argc == threadIndex + 1) {
+		thread_id id = strtoul(argv[threadIndex], NULL, 0);
+		Thread* target = Thread::GetDebug(id);
+		if (target == NULL) {
+			kprintf("could not find thread %" B_PRId32 "\n", id);
+			return 0;
+		}
+
+		if (id != thread_get_current_thread_id()) {
+			if (target->state == B_THREAD_RUNNING) {
+				// Running on another CPU, so its saved regs[] are stale; take
+				// the frame pointer that CPU recorded on entering KDL instead.
+				if (target->cpu == NULL) {
+					kprintf("thread %" B_PRId32 " is running but has no cpu\n",
+						id);
+					return 0;
+				}
+				arch_debug_registers* registers = debug_get_debug_registers(
+					target->cpu->cpu_num);
+				if (registers == NULL) {
+					kprintf("no debug registers for cpu %d\n",
+						target->cpu->cpu_num);
+					return 0;
+				}
+				fp = registers->fp;
+			} else {
+				// Switched out, so x29 is where _arch_context_swap() put it.
+				// arch_thread::regs is x19-x30 then sp, so x29 is index 10.
+				fp = target->arch_info.regs[10];
+			}
+
+			thread = target;
+		}
+	}
+
 	int32 num = 0, last = 0;
 	struct iframe_stack *frameStack;
 
@@ -490,6 +531,11 @@ stack_trace(int argc, char **argv)
 void
 arch_debug_save_registers(struct arch_debug_registers* registers)
 {
+	// Called on each CPU as it enters the kernel debugger, so that a thread
+	// which was running elsewhere can still be traced. This was an empty stub,
+	// which meant a running thread's frame pointer was whatever the struct
+	// happened to contain.
+	registers->fp = arm64_get_fp();
 }
 
 

@@ -16,6 +16,54 @@ This document is the baseline. It also records two measurement errors caught
 before they became published numbers, and one claim from a code review that
 turned out to be an artifact.
 
+## Two generic Haiku defects found as prerequisites — read these first
+
+Neither was introduced by this project, neither is storage-specific, and both were
+found only because this investigation needed the kernel debugger. They are here at
+the top rather than buried in the setup because a future contributor would
+otherwise rediscover them the hard way, and in both cases the tool answers
+*plausibly and wrongly* rather than failing.
+
+### `bt <thread>` on arm64 traced the calling thread, not the named one
+
+arm64's `stack_trace()` advertises `[ <thread id> ]` in its usage string, parses
+`argv` only far enough to validate the argument count, and then does
+`thread_get_current_thread()`. So `bt <blocked-thread>` printed the *debugger's own*
+stack, correctly formatted and completely wrong. x86_64 has the same usage string
+and does the work via `setup_for_thread()`.
+
+Fixed in `arm64: make KDL 'bt <thread>' actually trace that thread`, which also
+found that **`arch_debug_save_registers()` was an empty stub** — so the frame
+pointer for a thread running on another CPU was whatever the struct happened to
+contain. `bt` across CPUs has therefore been quietly wrong on arm64 for as long as
+it has existed.
+
+### KDL has never usefully worked on arm64 at all
+
+Three compounding defects, fixed in `arm64: fix serial getchar, and give KDL a way
+in on a headless machine`:
+
+1. **No way to enter KDL on demand.** `debug_emergency_key_pressed()` has exactly
+   three callers — x86's console interrupt handler, USB HID, PS/2 — and arm64 has
+   none of them. A headless Graviton instance has no keyboard either. The debugger
+   was reachable *only* by a panic.
+2. **Typed commands would have been garbage.** `arch_debug_serial_try_getchar()`
+   returned a `char`; **plain `char` is unsigned on AArch64**; so
+   `DebugUART::GetChar(false)`'s -1 ("nothing waiting") became 255. `kgetc()` tests
+   `c >= 0`, so KDL accepted an endless stream of `0xFF` instead of waiting for
+   input.
+3. `arch_debug_serial_getchar()`, the *blocking* half, passed `wait=false` and
+   returned 255 immediately on an empty FIFO.
+
+The second is a textbook signedness bug in a place nobody would look, and it is why
+a whole debugging facility has been dead on this architecture.
+
+**Consequence worth stating plainly:** until that fix ships, no hang, deadlock or
+starvation on Graviton can be inspected interactively. That is a permanent
+capability gap rather than an inconvenience, and it is why the page-writer
+diagnosis below had to be done with counters instead of stack traces.
+
+
 ## The tool
 
 `src/bin/disktput`, plus the harness `graviton/scripts/disktput-run`. Same split
@@ -132,14 +180,9 @@ in the reference section.
   binary, and one of them overwrote a working one. An empty file deploys
   perfectly happily and a shell reports success.
 
-### Deploying to a DeBeOS node: base64 over ssh truncates at 64 KiB
-
-`scp` to a DeBeOS node does not work; the established workaround is
-`base64 -w 200 <file> | ssh <node> 'base64 -d > /path'`. That has a limit worth
-recording: a single ssh stdin transfer to this sshd **truncates at exactly 65536
-bytes and then drops the connection**, so any binary over 64 KiB of base64
-arrives corrupt or empty. `disktput-run` and the deploy path split the base64
-into 32 KiB pieces and append them, then verify the hash.
+Deploying the binary to the node has its own failure mode that silently produces
+an empty file; it is important enough to be stated as a rule rather than a note.
+See "Rules this exercise established" below.
 
 ## The reference ceiling: Linux + fio on the same volume
 
@@ -216,7 +259,11 @@ DeBeOS block sweep below was run to test.
 | 16 | 16,534 |
 | 32 | 16,153 |
 
-### Disproven: "only 2 qpairs" is not a DeBeOS limitation
+### Disproven, and a correction to this project's stated premise: "only 2 qpairs" is not a DeBeOS limitation
+
+This one contradicts a premise the storage work was handed: that the NVMe driver
+was "already multi-queue by design" and merely needed verifying. That premise was
+wrong in the direction described *and* irrelevant in the direction that matters.
 
 DeBeOS logs `qpair count: 2` on a 16-vCPU instance, which looks like the
 negotiation in `nvme_disk.cpp` giving up 14 queues. It is not: Linux on the same
@@ -470,7 +517,14 @@ a kernel change rather than a module one.
 
 ### Buffered writes are irreproducible and get *slower* with concurrency
 
-This is the finding that matters. Identical repetitions of the identical cell:
+> **RETRACTED.** Both halves of this subsection are wrong, and the reason is worth
+> more than the claim was: the write path degrades over the life of a boot, and this
+> sweep ran its thread counts in ascending order, so degradation over *time* was
+> measured and reported as an effect of *concurrency*. See
+> "RETRACTED and replaced" below for the corrected numbers, and
+> "The real finding" for what was actually going on -- which is worse.
+
+Identical repetitions of the identical cell:
 
 | cell | rep 1 | rep 2 | spread |
 |---|---|---|---|
@@ -565,61 +619,684 @@ The 40 GiB `tf` file also came back at full size, and BFS remounted with no
 journal replay error. The checksums are `sha256sum` on the node, so the verdict
 does not rest on the same tool that wrote the data.
 
-**Conclusion: the write path is durable on EBS.** The 3-second periodic flush
-fired and got un-`fsync`ed data to the device inside a 5-second window, which is a
-direct regression test for the page-writer bug — the failure that lost an sshd
-host key would have shown up here as `zero` blocks, and there are none. `fsync`'s
-missing device flush costs nothing because the controller has no volatile write
-cache, and the metadata that makes the data reachable was committed alongside it.
+**Conclusion: the write path is durable on EBS — and that is a property of EBS,
+not evidence that `fsync` is correct.**
 
-**Scope of the claim:** this shows the *page writer and journal* are behaving,
-tested once, at one file size, on a device with no volatile write cache. It does
-**not** show that a sub-3-second window is safe, and it does not generalise to
-hardware where `B_FLUSH_DRIVE_CACHE` is not a no-op.
+Both halves of that sentence are load-bearing and must travel together.
 
-## Error 1, caught: an unaligned buffer measures a different code path
+What was demonstrated: the 3-second periodic flush fired and got un-`fsync`ed data
+to the device inside a 5-second window. That is a direct regression test for the
+page-writer bug — the failure that lost an sshd host key would have appeared here
+as `zero` blocks, and there are none — and the metadata making the data reachable
+was committed alongside it.
 
-`nvme_disk` checks every vec of a request and diverts to a bounce path if the
-middle vecs are not page-aligned in address and length. That path is capped by
-`kMaxBounceBufferSize` in `dma_resources.cpp`, which is `4 * B_PAGE_SIZE` =
-**16 KiB**, so a misaligned 256 KiB request is not one command but sixteen
-sequential ones — and a bounced *write* additionally takes `rounded_write_lock`
-exclusively, serialising against every other write on the device.
+What was **not** demonstrated: that `fsync()` is a durability barrier. It is not.
+`fsync()` never issues `B_FLUSH_DRIVE_CACHE` (traced above), so it returns once the
+data has been handed to the driver, not once the device has committed it. The only
+reason that is safe here is that this controller advertises **no volatile write
+cache** — Linux on the same volume reports `write_cache: write through` and
+`fua: 0`, so an EBS write is durable on acknowledgement and a flush would be a
+no-op. **On any device with a volatile write cache the identical code would
+acknowledge an `fsync` for data that a power loss then destroys.**
 
-The first version of `disktput` used `malloc`, which guarantees no such
-alignment. It was changed to `posix_memalign` before any number was taken, and
-alignment became a reportable parameter so the cliff could be measured on purpose
-rather than stumbled into.
+So this result licenses "DeBeOS does not lose data on Graviton/EBS". It does not
+license "DeBeOS's `fsync` is correct", and it must not be quoted as the latter.
+The gap is a genuine portability defect that happens to be free on the only
+hardware this project targets. Also tested once, at one file size, and it says
+nothing about a sub-3-second window.
 
-## Error 2, caught: fixed-size runs measured an EBS burst, not throughput
+## RETRACTED and replaced: the buffered-write "irreproducibility" and "anti-scaling"
 
-The first concurrency sweep used a fixed 1 GiB per cell and produced this:
+Two claims in Result 4 above were investigated with progress tracing and **do not
+survive**. They are left in place rather than deleted, per this document's
+convention, because how they were wrong is more useful than the claims were.
 
-| threads | seqread | scaling |
+### What was claimed
+
+- Buffered writes vary **4.4×** between identical repetitions (324.11 vs 73.24 MiB/s).
+- Buffered writes **anti-scale**: 114.77 → 80.01 → 67.23 MiB/s for t=1 → 4 → 16.
+
+### What is actually true
+
+**Neither is a concurrency or variance effect. Both are the same underlying thing:
+the write path degrades monotonically over the life of a boot, and my sweep ran
+its thread counts in ascending order.** The "anti-scaling" is the degradation
+measured against time and mislabelled as concurrency — a direct violation of this
+document's own interleaving rule, committed while writing the rule down.
+
+Ten identical 20 s buffered writes at depth 1, on a 4 GiB file:
+
+| rep | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 |
+|---|---|---|---|---|---|---|---|---|---|---|
+| MiB/s | **430.2** | 202.6 | 201.6 | 202.3 | 195.5 | 197.3 | 187.9 | 205.0 | 193.8 | 198.5 |
+
+Repetition 1 is a first-run effect — an empty cache absorbing writes at memory
+speed. Repetitions 2–10 agree to **±5%**. There is no 4.4× variance.
+
+And with 1 s progress tracing, buffered writes **scale up**, weakly:
+
+| depth | throughput | p50 | p99 | max |
+|---|---|---|---|---|
+| 1 | 177.7 MiB/s | 658 µs | 4008 µs | 23,014 µs |
+| 4 | 219.1 MiB/s | 4339 µs | 10,811 µs | 32,266 µs |
+| 16 | **281.6 MiB/s** | 13,182 µs | **61,331 µs** | **174,510 µs** |
+
+`NO PROGRESS` intervals across 45 s at each of the three depths, plus the control:
+**zero**. No stall, no lost wakeup, no wedge at this load.
+
+The buffered path is also *faster* than the uncached path at depth 1 — 177.7 vs
+81.8 MiB/s — because the page writer batches `kNumPages = 256` pages (1 MiB) per
+round instead of the caller's 256 KiB per operation.
+
+### What the page writer is and is not responsible for
+
+The negative control settles this. Uncached write, depth 16, same file, same
+everything: **199.3 MiB/s, p99 34,367 µs, max 43,429 µs.**
+
+- The **~200 MiB/s ceiling on BFS writes is present in the uncached path too**, and
+  the uncached path never touches the page writer's quota. So the ceiling is
+  **BFS**, not the page writer. The earlier attribution ("suspect the single
+  journal") stands; the "page writer is the prime suspect" framing does not.
+- What the page writer *does* add is **tail latency**: p99 61 ms against 34 ms, and
+  max 175 ms against 43 ms. That is back-pressure, and it is consistent with
+  `WaitIfOverQuota` being entered with `flags = 0` — see below, where it stops
+  being a tail and becomes a liveness bug.
+
+## The real finding: sustained write load degrades, and starves userland
+
+> **PARTIALLY CORRECTED.** The degradation and the multi-second write latencies
+> below are measured and stand. The word "wedge" and the claim of no recovery do
+> not: reproducing it three more times showed the machine recovers once the write
+> load stops. See "CORRECTED: it is unbounded starvation, not a permanent wedge".
+
+This replaces the retracted claims and is more serious than either.
+
+### Progressive degradation
+
+After ~48 GiB had been written to the volume during one boot, the *same cells* that
+had measured 178–282 MiB/s measured **18–80 MiB/s**, with p99 in the hundreds of
+milliseconds and single `pwrite` calls taking up to **1.53 seconds**:
+
+| cell | earlier this boot | after 48 GiB written | max latency |
+|---|---|---|---|
+| buffered write, depth 1 | 177.7 MiB/s | **18.7 MiB/s** | 376,875 µs |
+| buffered write, depth 4 | 219.1 MiB/s | **20.2 MiB/s** | 356,439 µs |
+| buffered write, depth 16 | 281.6 MiB/s | **79.6 MiB/s** | 1,004,289 µs |
+| worst single write observed | — | — | **1,527,413 µs (1.53 s)** |
+
+Interleaved between a 4 GiB file (fits in the 31.5 GiB of RAM) and a 45 GiB file
+(cannot), the two arms were **indistinguishable** — 18.66 vs 18.72 MiB/s at depth 1.
+So this is **not** a working-set-exceeds-RAM effect either; the whole write path had
+degraded regardless of which file was touched. That was the hypothesis this
+experiment was built to test, and it is disproven.
+
+### Then it wedged
+
+Attempting to measure the degraded state further, the node stopped responding
+entirely. The state is unambiguous and was captured:
+
+| probe | result |
+|---|---|
+| EC2 instance / system status | **ok / ok, running** |
+| ICMP ping | **4/4, 0% loss, 0.22 ms** |
+| TCP connect to :22 | **accepted** |
+| SSH banner | **never arrives** |
+| recovery over 5 retries / ~2 min | **none** |
+| console: panic, KDL, low-resource message | **none — last line is ordinary boot chatter** |
+
+So: **the kernel is alive, interrupts work, the network stack and the ENA driver
+work, sshd's listening socket still accepts — and no userland process can make
+progress.** Ping is answered in the interrupt/kernel path; anything that has to
+touch a file does not return. That is a liveness bug, not a slow benchmark, and it
+is the behaviour `WaitIfOverQuota(additionalPages, 0, B_CAN_INTERRUPT)` permits:
+
+```c
+// file_cache.cpp:840
+status_t status = modifiedQueue->WaitIfOverQuota(toModified, 0, B_CAN_INTERRUPT);
+```
+
+`timeout` is 0 and **no timeout flag is set**, so `WaitIfOverQuota` skips its
+relative-to-absolute conversion and calls `waitEntry.Wait(B_CAN_INTERRUPT, 0)` —
+an indefinite wait. Any thread that dirties pages while the modified queue is over
+quota blocks until the page writer says otherwise, forever if it never does. The
+quota it is tested against is derived from `fLastAveragePageWriteDuration`, which
+despite the name is **the most recent sample, not an average**:
+
+```c
+if (numPages >= 8 || fLastAveragePageWriteDuration == 0)
+    fLastAveragePageWriteDuration = (system_time() - runStart) / numPages;
+```
+
+One slow round — and 1.5-second writes were being observed — raises the estimate,
+which makes `IsOverQuota()` true at a much smaller `fCount`, which blocks more
+writers, which is self-reinforcing. That is a plausible ratchet and it matches the
+observed monotonic, non-recovering degradation.
+
+**Confidence, stated honestly.** The wedge is **reproduced once**. The mechanism
+above is the best fit to the evidence but is **not proven**: nothing was
+instrumented inside the kernel, and the alternative that BFS's journal or block
+allocator is the thing that stopped making progress is not excluded — the ~200
+MiB/s ceiling is already known to be BFS's rather than the page writer's, so BFS is
+a live suspect for the wedge too. Distinguishing them needs a KDL session on a
+wedged node (`bt` on a blocked thread would settle it in one line) or kernel
+counters, and both need a bake.
+
+### Reproduction recipe
+
+On a `c7g.4xlarge` from the canonical AMI, with a 100 GiB gp3 (16,000 IOPS,
+1,000 MiB/s) scratch volume:
+
+```bash
+mkfs -q -t bfs -o 'block_size 4096' /dev/disk/nvme/1/raw Scratch
+mount -t bfs /dev/disk/nvme/1/raw /pw
+disktput -f /pw/tf  -m seqwrite -b 1M -t 16 -T 150 -D -s 4G      # 4 GiB file
+disktput -f /pw/big -m seqwrite -b 1M -t 16 -T 400 -D -s 48G     # 48 GiB file
+# then repeated buffered writes with -S; throughput falls from ~180 to ~19 MiB/s
+# and the node stops answering ssh while still answering ping
+disktput -f /pw/tf -m seqwrite -b 256K -t 1 -T 20 -s 4G -S -i 1
+```
+
+`-i 1` matters: without progress tracing this presents as "the benchmark is slow"
+rather than as "the machine has stopped".
+
+### Why this changes the priority
+
+A path that goes 10× slower and then stops answering, with no panic and no log
+line, on ordinary buffered file writes, is worse than any throughput number in this
+document. It is also the same machinery that produced this project's worst bug. It
+should be reproduced deterministically and then fixed — and the cheapest first fix
+is bounding that wait: a timeout on `WaitIfOverQuota` would convert an indefinite
+hang into a slow write, which is survivable, without needing the quota heuristic to
+be right.
+
+
+## CORRECTED: it is unbounded starvation, not a permanent wedge
+
+The section above calls this a wedge and says "no recovery". **That overstates it,
+and the correction came from reproducing it rather than from care.** Recorded here
+in full because the difference matters for how alarming the defect is and for what
+the fix has to do.
+
+### What reproducing it three more times showed
+
+The recipe was made cheaper (below), and run on two nodes differing only in volume
+provisioning. Both stopped answering ssh, exactly as before — ping fine, `:22`
+accepting, no banner. But when checked again after the harness had exited,
+**both were responsive**:
+
+| node | wedged at | later check |
 |---|---|---|
-| 1 | 173.4 MiB/s | 1.00× |
-| 2 | 344.5 MiB/s | 1.99× |
-| 4 | 685.4 MiB/s | 3.95× |
-| 8 | 1359.9 MiB/s | 7.84× |
-| 16 | **2635.5 MiB/s** | **15.20×** |
+| slow volume (125 MiB/s) | round 4, **12 GiB** written | **recovered** |
+| fast volume (1000 MiB/s) | round 6, **20 GiB** written | **recovered** |
 
-Consistent to under 1% across three repetitions, which is exactly what makes it
-seductive. It is also **impossible**: 2,635 MiB/s is 2.2× the instance's
-documented hard maximum of 1,250 MB/s, a limit enforced at the Nitro card. A
-fixed byte count makes each cell a different duration — the 16-thread cell
-finished in 0.39 s — and EBS rate limiting is a token bucket that a third of a
-second does not begin to drain. Every cell was measuring burst credit, and the
-higher the thread count, the shorter the run and the less the limiter bound.
+The harness classified them as wedged because its ssh call timed out at 400 s and
+the node still answered ping. It never retried ssh later. So "no recovery" was an
+artifact of not waiting long enough — the same class of error as the original
+ascending-order sweep: **the instrument, not the system.**
 
-Repeatability across three reps did nothing to catch this, because all three reps
-were wrong in the same way. Only comparing against the documented hardware
-ceiling caught it. The tool grew `-T` for this, and the harness now times every
-cell rather than sizing it.
+The original occurrence was probed for only about two minutes before the instance
+was terminated, so it was **never established as permanent either.**
 
-The scaling *shape* below 8 threads survives this correction and is the real
-finding; the absolute numbers above 4 threads did not.
+### What is actually true
 
-## Disproven: the page writer bug is not still present
+A deliberate sustained-load test — eight 2 GiB buffered writes queued back to back
+on the node, so the load does not stop when the harness stops — left the machine
+**unresponsive to ssh continuously for 1,663 seconds — 27.7 minutes — sampled every
+23 seconds, and still unresponsive at 30 minutes when observation ended.** ICMP was
+`ok` and TCP `:22` accepted at *every one of those samples*. The load was 16 GiB, in
+eight 2 GiB buffered writes, on a 125 MiB/s volume.
+
+```
+      811s 05:17:43     ok     ok STALLED
+      ...  (every 23 s, unbroken)
+     1663s 05:31:55     ok     ok STALLED
+```
+
+So the correct statement, and no more than this: **under sustained buffered write
+load userland stops making progress for at least tens of minutes.** A machine that
+will not answer ssh for half an hour because something is writing files is broken
+however it is labelled.
+
+**Whether it always recovers is genuinely unresolved.** Two instances were
+responsive when re-checked after their harness had exited. The third was starved
+for 30 minutes and had not recovered when observation ended — and because its load
+was eight cells queued on the node, "the load was still running" and "it does not
+recover" cannot be told apart from outside. So:
+
+- "permanent wedge" is **not** established (and was my original overstatement);
+- "recovers when the load stops" is **not** established either (and was my
+  correction overshooting in the other direction);
+- what is established is **≥27.7 minutes of continuous, unbroken starvation**,
+  measured, with the kernel demonstrably alive throughout.
+
+Settling recovery needs the load to be bounded and instrumented so that "still
+writing" is distinguishable from "stuck" — which the bounded-wait fix and its
+timeout counters will do directly, since a machine that no longer starves but logs
+thousands of quota timeouts has answered the question.
+
+The directly measured single-operation latencies are not in doubt, and stand on
+their own: individual buffered `pwrite` calls of 256 KiB taking **8.9 s, 13.9 s,
+15.7 s and 26.9 s**, from a tool that timed each one.
+
+### New evidence for the ratchet, and what it does not settle
+
+Two things from these runs point at a global, non-recovering estimate rather than
+at per-file or per-transaction filesystem cost:
+
+1. **The slower volume degraded sooner** — 12 GiB against 20 GiB. A quota derived
+   from a per-page write-duration estimate should trip earlier on a device where
+   each page costs more, which is what happened.
+2. **The non-allocating arm was healthy until the allocating arm ran once, and
+   never recovered afterwards.** On the fast node, rewriting a fixed pre-existing
+   2 GiB file measured **147.23 MiB/s with a 955 µs worst case** in round 1. After
+   one round of writing a *new* file, that same rewrite cell never again exceeded
+   **78 MiB/s**, and picked up multi-second worst cases:
+
+   | round | rewrite (no allocation) | allocate a new file |
+   |---|---|---|
+   | 1 | **147.23 MiB/s**, max 955 µs | 84.28 MiB/s, max 13.99 s |
+   | 2 | 78.24, max 0.12 s | 95.66, max 10.48 s |
+   | 3 | 77.13, max 8.95 s | 94.75, max 10.82 s |
+   | 4 | 77.89, max 8.95 s | 87.58, max 13.19 s |
+   | 5 | 77.18, max 0.11 s | 93.48, max 11.88 s |
+
+   Allocation is what first produces multi-second stalls, but the damage is not
+   confined to the allocating path — it degrades a path that allocates nothing, by
+   47%, permanently. `fLastAveragePageWriteDuration` is a single sample shared by
+   every writer on the device, and `sGlobalEstimatedWriteDuration` is shared across
+   devices, so one arm poisoning the other is exactly what that design permits.
+
+**What it does not settle:** both arms write to the same volume and the same BFS
+filesystem, so BFS-global state — free-space layout, journal behaviour as the
+volume fills — also changed between round 1 and round 2. That is a live alternative
+explanation for the rewrite arm's degradation and this experiment cannot exclude
+it. `bt` on a stalled thread still decides it, which is why the arm64 `bt` fix is
+in the bake.
+
+### The cheap reproduction
+
+Roughly 4× cheaper than the original 48 GiB, and it stalls on the first arm that
+allocates:
+
+```bash
+# c7g.4xlarge, canonical AMI, plus a gp3 scratch volume.
+# Use a SLOW volume -- 125 MiB/s / 3000 IOPS -- it reaches the stall in 12 GiB
+# rather than 20, which is itself evidence for the estimate-driven quota.
+mkfs -q -t bfs -o 'block_size 4096' /dev/disk/nvme/1/raw W
+mount -t bfs /dev/disk/nvme/1/raw /w
+disktput -f /w/fixed -m seqwrite -b 1M -t 8 -T 120 -D -s 2G     # rewrite target
+
+# then alternate, 2 GiB per cell, and watch max latency in the -J line:
+disktput -f /w/fixed  -m seqwrite -b 256K -t 4 -n 2G -s 2G -S -J   # no allocation
+disktput -f /w/new-$n -m seqwrite -b 256K -t 4 -n 2G -s 2G -S -J   # allocates
+```
+
+Interleave the two arms — the ascending-order mistake above is easy to repeat here.
+To hold the machine in the stalled state (for a KDL capture), queue several
+allocating cells back to back on the node so the load does not stop when the
+harness does; it recovers within a minute or two of the load ending.
+
+
+## What the bake has to carry, and why none of it can be dropped in
+
+Everything below is a kernel or boot-critical-module change. Per the hot-swap
+finding above, **none of it can be installed on a running node** — and the
+failure is silent, so a test that skipped the bake would produce numbers from the
+old code.
+
+| commit | what | why it must be compiled in |
+|---|---|---|
+| `nvme: submit a chopped request as a batch...` | the 3.8× fix for large requests | `nvme_disk` serves the root filesystem; the non-packaged override resolves under `/boot/home`, which needs `nvme_disk` to mount |
+| `vm: bound the modified-page quota wait...` | the liveness fix + its instrumentation + the `page_writer_quota` KDL command | `vm_page_writer.cpp`, `file_cache.cpp` — kernel proper |
+| `arm64: make KDL 'bt <thread>' actually trace that thread` | **prerequisite for the diagnosis** | `arch_debug.cpp` — kernel proper |
+| `disktput: trace progress over time...` | `-i` interval tracing and `-m verify` | userland, so it *can* be pushed by hand, but the image's own `disktput` needs it to be in the tree |
+| `arm64: fix serial getchar, and give KDL a way in...` | makes KDL usable on arm64 at all | **found after the bake started, so it is NOT in it** — see "The capture plan, revised" |
+
+### The KDL prerequisites — the two checkable ones pass, the guest side did not
+
+Interactive KDL on an EC2 instance needs serial **input**, not just the output
+that `get-console-output` returns. The AWS side and the UART driver are fine:
+
+- **EC2 Serial Console access is enabled** for account 668984504585
+  (`get-serial-console-access-status` → `True`), so
+  `send-serial-console-ssh-public-key` plus ssh to the serial-console endpoint
+  gives a bidirectional console.
+- **The UART itself can read.** `DebugUART::GetChar()` works in both blocking and
+  non-blocking modes.
+
+But the kernel above it could not, and the `try_getchar` TODO noted here in an
+earlier revision turned out to be the whole problem rather than a curiosity: it
+made the function incapable of returning -1, so KDL's `kgetc()` read 0xFF forever
+instead of waiting. And nothing on arm64 could enter KDL on demand in the first
+place. Both are fixed, neither is in the current bake. See "The capture plan,
+revised".
+
+### Why the `bt` fix is on the critical path and not a side quest
+
+The plan for the wedge is "get `bt` on a wedged thread; several threads parked in
+`WaitIfOverQuota` says one thing, several parked in a BFS transaction says
+another". That plan could not have worked on this architecture. arm64's
+`stack_trace()` advertises `[ <thread id> ]`, parses `argv` only far enough to
+count arguments, and then unconditionally traces the calling thread — so
+`bt <blocked-thread>` would have printed the debugger's own stack, plausibly and
+wrongly, and it would have been read as the answer. It is fixed here, with the
+frame-pointer index verified against the `stp` ordering in `arch_asm.S` rather
+than inferred from the comment on the struct.
+
+
+## ANSWERED: the page writer's quota is the mechanism, and it starves across devices
+
+Run on `ami-02d5e711d25cc2d49` (tagged `feature=storage-quota-bound`,
+`branch-head=e1e5a0f531`), `c7g.4xlarge`, 100 GiB gp3 scratch at **125 MiB/s**, the
+identical 16 GiB load that previously starved a machine for 27.7+ minutes: eight
+2 GiB buffered writes with `fsync`, queued on the node so the load outlives the
+harness.
+
+The counters settle the fork. **Not BFS. The quota.**
+
+```
+page writer: quota wait timed out after 5000006 us, proceeding over quota
+  (waits 4102, timeouts 16, longest 5000007 us, per-page estimate 28 us, queue 216320 pages)
+page writer: quota wait timed out after 5000004 us, proceeding over quota
+  (waits 4224, timeouts 19, longest 5000007 us, per-page estimate 883 us, queue 0 pages)
+```
+
+19 timeouts against **4,224 waits** — so 99.5% of waits completed normally and the
+bound is a safety valve rather than the common path. Every `longest` is
+**5,000,00x µs**, i.e. exactly the 5 s bound, which is the direct evidence that
+these waits were previously *unbounded*: the bound is the only thing terminating
+them.
+
+### The finding that explains sshd: it starves across devices
+
+**15 of the 19 timeouts report `queue 0 pages`.** A thread was blocked over quota
+while the queue it was writing to was *empty*. That cannot be a BFS journal or an
+allocation cost — there was nothing queued on that device at all.
+
+`IsOverQuota()` checks two things, and the second is global:
+
+```c
+if ((estimatedWriteDuration + additionalPagesDuration) > PAGES_FLUSH_DURATION_LOCAL_QUOTA)
+    return true;
+return ((atomic_get64(&sGlobalEstimatedWriteDuration) + additionalPagesDuration)
+    > PAGES_FLUSH_DURATION_GLOBAL_QUOTA);
+```
+
+`sGlobalEstimatedWriteDuration` is summed across **every** `ModifiedPageQueue`, and
+there is one per disk device. The numbers from the two devices in this machine:
+
+| device | queue depth | per-page estimate | estimated drain |
+|---|---|---|---|
+| scratch (being hammered) | **221,186 pages** (864 MiB) | 31 µs | **6.86 s** |
+| root (idle) | **0 pages** | 883 µs | 0 s |
+
+6.86 s from the scratch device alone exceeds both the 3 s local quota *and* the 5 s
+`PAGES_FLUSH_DURATION_GLOBAL_QUOTA`. So a writer to the **idle root disk** fails the
+global check and blocks — and before the bound, blocked indefinitely.
+
+**That is precisely why sshd starved.** sshd writes to the root filesystem: logs,
+`utmp`, the session. Its disk was idle and its queue empty. It was stopped by a
+backlog on a completely different device. Any process touching any file on any
+disk is throttled by the busiest disk in the machine.
+
+### The stale-sample defect, confirmed by measurement rather than by reading
+
+`fLastAveragePageWriteDuration` is named like a mean and is the **most recent
+sample**. The two devices above show what that costs: the busy device measures
+**27–31 µs** per page; the idle one reports **883 µs**, a 30× higher figure that is
+simply old. It never refreshes, because the writer only updates it on rounds of
+≥8 pages and an idle device never has such a round.
+
+The consequence is a threshold that is wrong in the dangerous direction. At
+883 µs/page the local quota trips once that device holds
+`3,000,000 / 883` ≈ **3,397 pages = 13 MiB** of dirty data. Thirteen mebibytes, on
+a machine with 31.5 GiB of RAM, because of one stale sample.
+
+### The fix works, and both halves were recorded
+
+- **Liveness:** ssh answered at **0 of 34 samples stalled**, polled every 15 s
+  across 8.4 minutes of the load, and all eight files reached exactly
+  2,147,483,648 bytes — **16 GiB written and completed**. Against the pre-fix
+  kernel's 27.7 minutes of *unbroken* starvation on the identical load, which never
+  completed within observation. Same load, same volume provisioning, same instance
+  type, same 125 MiB/s scratch: the kernel is the only variable.
+
+  | | pre-fix kernel | this image |
+  |---|---|---|
+  | ssh samples stalled | **every one**, 0 s → 1663 s | **0 of 34** |
+  | 16 GiB load | never completed under observation | **completed** |
+  | worst single write | 26.9 s | quota waits capped at 5.0 s |
+
+  The load was demonstrably live during that polling window and not merely
+  finished early: the quota counters advanced from `waits 4129 / timeouts 18` to
+  `waits 4567 / timeouts 20` across it.
+
+  *Instrument note, in the spirit of the rest of this document:* the poller also
+  printed a "GiB written" column which read 0 at every sample. That was a broken
+  instrument, not a stalled write — `bc` does not exist on a DeBeOS image, so the
+  `paste -sd+ | bc` pipeline fell through to its `|| echo 0`. The advancing quota
+  counters and the final file sizes are what establish the load ran; the column
+  established nothing. Third empty-result-mistaken-for-absence in this
+  investigation, which is why the rule below is about asking what a positive row
+  would look like.
+- **The decay is still visible**, which is what the instrumentation was for:
+  4,224 waits, 19 timeouts, `longest` pinned at the bound, and the per-device
+  estimates and queue depths printed alongside. A machine that stops hanging but
+  logs these is still reporting that write-back cannot keep up.
+
+### What to fix next, now that the mechanism is known
+
+The bound is a liveness guarantee, not a cure. In order:
+
+1. **Make the global quota not couple idle devices to busy ones.** A writer whose
+   own queue is empty should not be stopped by another disk's backlog. This is the
+   whole reason a shell became unusable.
+2. **Make `fLastAveragePageWriteDuration` an actual average, and decay it.** A
+   single stale sample setting a 13 MiB threshold on an idle device is the ratchet,
+   and it is now measured rather than suspected.
+3. Only then revisit the quota constants, which cannot be judged while the
+   estimate feeding them is unreliable.
+
+### Method note: `get-console-output` needs `--latest`
+
+Without it the API returns an **empty body** for a running Nitro instance, and every
+`grep` against it counts zero. The first attempt at this measurement reported "the
+quota never fires" for exactly that reason. What caught it was a **positive
+control** — grepping for `nvme_disk`, a string known to be present — before
+believing an empty result. With `--latest`: 48,943 bytes and 16 matches. The
+procedure earlier in this document omitted `--latest` and has been corrected.
+
+
+## The capture plan, revised: the fork can be answered without KDL
+
+Preparing the KDL capture turned up three more defects in the debugger path on
+arm64 (see the `arm64: fix serial getchar...` commit). Their combined effect is
+blunt:
+
+**Interactive KDL does not work on arm64 today, and cannot work on the image
+currently being baked.**
+
+- There is **no way to enter KDL on demand at all**.
+  `debug_emergency_key_pressed()` is called from exactly three places — x86's
+  console interrupt handler, USB HID, and PS/2 — and arm64 has none of them. A
+  headless Graviton instance has no keyboard: it logs a failed search for
+  `bus_managers/ps2/v1` and has no USB HID. The debugger is reachable only by a
+  panic, and the starvation does not panic.
+- Even once inside, **typed commands would be garbage**.
+  `arch_debug_serial_try_getchar()` could never return -1, because it returned a
+  `char` and plain `char` is unsigned on AArch64, so `GetChar(false)`'s -1 became
+  255. `kgetc()` tests `c >= 0`, so it accepted an endless stream of 0xFF instead
+  of waiting for input.
+
+Both are fixed, but the fixes were written **after** the bake started, so they
+are not in it. Do not plan a KDL session against this image.
+
+### What is in the bake, and why that is enough for the fork
+
+The bounded quota wait and its counters **are** in the bake, and they answer the
+question KDL was wanted for, without any interactivity — the output goes to the
+serial console, which `get-console-output` returns.
+
+| observation on the baked image | conclusion |
+|---|---|
+| starvation gone or greatly shortened, **and** `page writer: quota wait timed out ...` lines appear with `timeouts` climbing | **the page writer's quota is the mechanism.** Writers that used to block indefinitely now hit the 5 s bound and proceed |
+| starvation persists essentially unchanged, **and no timeout lines appear at all** | **not the quota.** Threads are blocking somewhere else, and BFS's journal is the standing suspect |
+| starvation persists **and** timeouts are logged | both are involved: the quota fires, but something else also blocks. The counters bound how much of it the quota owns |
+
+That is the same fork — "several threads parked in `WaitIfOverQuota`" versus
+"several parked in a BFS transaction" — decided by whether the wait is entered at
+all, rather than by reading a stack. It is weaker evidence than a stack trace, in
+that it says *whether* the quota path is implicated rather than showing the exact
+call chain. It is also unavailable to misinterpretation in the way a silently
+wrong `bt` would have been.
+
+### Procedure for the baked image
+
+```bash
+# 1. Verify the image carries the changes BEFORE spending a boot on it.
+#    The boot log stamps the driver; the quota lines only appear under load.
+grep "io batch size" /var/log/syslog        # nvme batching present
+
+# 2. Reproduce the starvation. Queue the cells ON THE NODE so the load
+#    outlives the harness and the machine stays starved.
+mkfs -q -t bfs -o 'block_size 4096' /dev/disk/nvme/1/raw W
+mount -t bfs /dev/disk/nvme/1/raw /w
+for i in $(seq 1 8); do
+    disktput -f /w/new-$i -m seqwrite -b 256K -t 4 -n 2G -s 2G -S
+done &
+
+# 3. Watch from OUTSIDE, because ssh is what stops answering. The serial
+#    console is readable without a working userland.
+aws ec2 get-console-output --instance-id <id> --latest --output text \
+  | grep -i "quota wait timed out"     # --latest is REQUIRED; see the method note
+```
+
+Use a **125 MiB/s** scratch volume: it reaches the stall in 12 GiB rather than 20.
+
+Two things to record either way: whether ssh stays responsive throughout (the
+liveness fix working), and the `timeouts` / `longest` figures from the dprintf
+(the decay still being visible, which is what the instrumentation was for).
+
+### Then, for the follow-up bake
+
+With the serial fixes in, KDL becomes usable on arm64 for the first time:
+
+```
+# from the metal builder -- corp blocks :22 outbound from the workstation
+aws ec2-instance-connect send-serial-console-ssh-public-key \
+    --instance-id <id> --serial-port 0 --ssh-public-key file://k.pub
+ssh -i k <id>.port0@serial-console.ec2-instance-connect.us-west-2.aws
+# then type: kdl
+#   bt <thread-id>        now traces THAT thread (see the arm64 bt fix)
+#   page_writer_quota     queue depth, drain estimates, wait statistics
+```
+
+Account-level Serial Console access is already enabled, which was checked rather
+than assumed.
+
+
+## Rules this exercise established
+
+Two of the errors below were caught before they became published numbers. Both
+are general, both would silently invalidate an entire matrix rather than produce
+an obviously wrong cell, and both are stated here as rules rather than as
+anecdotes.
+
+### Rule: a rule in a document is not a habit
+
+The retraction above is the case in point, and it is worth stating bluntly: the
+thread sweep that produced the false "anti-scaling" was run in ascending order
+**in the same change that wrote down "interleaved A/B, never before-then-after"**.
+Knowing the rule, having just typed the rule, and writing the document the rule
+lives in were all insufficient. What caught it was re-running the measurement
+with a different instrument, not care.
+
+So the rule is not "remember to interleave". It is: **any sweep is interleaved by
+construction, or its result is not reportable** — and if a harness cannot
+interleave a dimension, that dimension is measured one cell at a time against a
+control, or not claimed.
+
+### Rule: ask what a positive row looks like before believing an empty result
+
+Four times in this work an empty or zero result was nearly read as a fact about
+the system when it was a fact about the tooling:
+
+- `get-console-output` without `--latest` returns an **empty body**, so every grep
+  counted zero and "the quota never fires" looked true.
+- `bc` does not exist on a DeBeOS image, so a `| bc` pipeline fell through to
+  `|| echo 0` and a progress column read 0 while 16 GiB was being written.
+- A `grep` filter that did not match bare numbers turned present counts into no
+  output, which read as "the pieces are missing from the image".
+- A deploy that silently produced a **zero-byte binary** ran and reported nothing,
+  which reads as a tool with no output rather than a tool that is not there.
+
+The defence is cheap and it worked every time it was applied: **before believing an
+empty result, grep for something you know is present.** A positive control on the
+console fetch (`nvme_disk`, 16 matches) is what exposed the `--latest` requirement
+in one step. An empty result is a claim about the instrument until proven otherwise.
+
+### Rule: repeatability is not validity
+
+The strongest illustration this project has. A fixed-size concurrency sweep
+produced 2635 MiB/s at 16 threads — **2.2× the instance's hard maximum of
+1250 MB/s, a limit enforced at the Nitro card** — and did so **repeatably to
+under 1% across three repetitions**. Three reps agreed because all three were
+wrong in the same way: each cell was short enough (0.39 s at the top of the
+sweep) that the EBS token bucket never bound, so every cell measured burst
+credit.
+
+Repetition detects noise. It cannot detect a systematic artefact, because a
+systematic artefact repeats. **The only thing that caught this was comparing the
+result against the hardware's documented ceiling.** Therefore: every throughput
+number gets checked against a published limit before it is believed, and a number
+that exceeds one is treated as a broken measurement rather than a discovery.
+
+### Rule: `malloc` and `posix_memalign` measure different code paths
+
+`malloc` guarantees no page alignment. `nvme_disk` diverts a request whose vecs
+are not page-aligned to a bounce path capped at `kMaxBounceBufferSize`
+(`4 * B_PAGE_SIZE` = 16 KiB), so a misaligned 256 KiB request becomes sixteen
+sequential commands, and a bounced write additionally takes `rounded_write_lock`
+exclusively. A benchmark that simply `malloc`s its buffer therefore measures
+whichever path that day's allocator happened to hand it, and the two differ by
+more than an order of magnitude.
+
+Therefore: an I/O buffer is `posix_memalign`ed, and its alignment is **reported
+with the result**, so no figure can be quoted without the code path it came from.
+`disktput` takes `-A`/`-U` so alignment is a variable rather than an accident.
+
+### Rule: stamp a version into anything you hot-swap
+
+Generalised from the `nvme_disk` finding, and it applies to every module and
+every agent. The module was installed, made executable, hash-verified against the
+builder and cold-booted, and the **stock driver ran anyway**. The only reason that
+read as "not loaded" rather than "loaded, no effect" is a deliberate
+`TRACE_ALWAYS("io batch size: %d")` in the modified copy.
+
+Without the stamp the reading would have been "my change does nothing" — a wrong
+conclusion about the code rather than a wasted cycle, and one that would have sent
+the next person looking in the wrong place. **A distinctive `dprintf` or version
+string in anything hot-swapped is not optional**, because "the number did not
+move" and "the code did not load" are indistinguishable otherwise.
+
+### Rule: deploying to a DeBeOS node requires chunking and a hash check
+
+Not an optimisation — a correctness requirement, because this failure mode
+**fails closed in the worst possible way: you get a file, it is just empty.**
+
+`scp` to a DeBeOS node does not work, and the documented workaround
+`base64 -w 200 <file> | ssh <node> 'base64 -d > /path'` **truncates at exactly
+65536 bytes and then drops the connection.** Any binary over 64 KiB of base64
+arrives empty or corrupt. It happened twice while this was being written, and
+once it overwrote a working binary with a zero-byte one; the shell reported
+success both times, and a subsequent run reported nothing at all rather than
+failing loudly.
+
+Therefore the standard is: **split the base64 into 32 KiB pieces, append them,
+and compare SHA-256 on the node against the builder before measuring anything.**
+`disktput-run` prints the build stamp and the hash for exactly this reason.
+
+## Disproven, and a correction to a reported regression: the page writer bug is not still present
 
 A code review of this tree reported that the page-writer flush bug was
 unfixed — that `vm_page_writer.cpp` still reads
@@ -652,33 +1329,201 @@ under the same one-request-per-thread condition.
 | seq write, depth 16, sustained | 1008.0 MiB/s | ~1008 volume ceiling | **at ceiling** |
 | random 4 KiB read, depth 16 | 17,066 IOPS | 16,534 / 16,000 provisioned | **at ceiling** |
 | BFS read vs raw read | 0–1.5% overhead | — | **free** |
-| durability across hard power loss | 0 bad blocks | — | **passes** |
+| durability across hard power loss | 0 bad blocks | — | **passes on EBS** ¹ |
 | seq read, 1 MiB, depth 1 | 158.3 MiB/s | 598.0 | **3.8× gap** |
-| BFS buffered write reproducibility | 4.4× between reps | 1.001× uncached | **defect** |
-| BFS write, depth 16 | 192.4 MiB/s | 1020 raw | **5.3× gap** |
+| BFS write, depth 16 | ~200 MiB/s buffered *and* uncached | 1020 raw | **5.1× gap, in BFS** |
+| sustained write load | 180 → 19 MiB/s, userland starved **25+ min** | — | **liveness bug** ² |
 | read through the page cache | 123.5 MiB/s | 173.2 uncached | **cache costs 29%** |
+
+² Starvation, not deadlock: it recovers when the write load stops. Reproduced
+3/3 times; cheapest recipe is 12 GiB on a 125 MiB/s volume.
+
+¹ Passes *because EBS has no volatile write cache*, not because `fsync` is a
+barrier — it is not. See Result 5; the caveat must travel with the claim.
 
 Four things are worth someone's time, in this order:
 
-1. **BFS buffered writes are irreproducible and anti-scale.** A 4.4× spread
-   between identical repetitions is a correctness-adjacent defect, not a tuning
-   opportunity, and the page writer's quota heuristic is the prime suspect. Needs
-   the writer instrumented before anything is changed. Kernel change.
+1. **Sustained buffered write load degrades ~10× and starves userland for as
+   long as the load lasts** — over 25 minutes observed — with the kernel still
+   answering ping and sshd still accepting connections, and no panic or log line.
+   **Reproduced 3/3**; the cheap recipe is 12 GiB on a 125 MiB/s volume.
+   It recovers when the load stops, so it is starvation rather than deadlock. The cheapest first fix is to bound the indefinite wait in
+   `WaitIfOverQuota` so a hang becomes a slow write. Kernel change.
+   *(This replaces what was listed here as "buffered writes are irreproducible and
+   anti-scale", which was an artifact of my own un-interleaved sweep.)*
 2. **No read-ahead in the file cache**, which is why going through the page cache
    is 29% *slower* than bypassing it on a large sequential read. Probably the
    largest available win for real workloads. Kernel change, so it needs a bake.
-3. **Writes through BFS cap at a fifth of the device** at depth 16. Suspect the
-   single journal and its per-commit `block_cache_sync` + device flush; not yet
-   attributed by measurement.
+3. **Writes through BFS cap at about a fifth of the device** at depth 16 —
+   ~200 MiB/s against 1020. Now attributed to BFS rather than the page writer,
+   because the uncached path, which never touches the page writer's quota, caps at
+   the same place. Suspect the single journal and its per-commit
+   `block_cache_sync`.
 4. **Requests larger than 256 KiB are issued serially** by `nvme_disk`
-   (`await_status()` per chopped command). Worth 3.8× on raw-device bulk I/O at
-   low concurrency, nothing on file I/O — the file cache never emits a request
-   larger than 128 KiB. This one is a **kernel module**, so it can be hot-swapped
-   onto a running node without a bake, which makes it the cheapest to try.
+   (`await_status()` per chopped command). Worth up to 3.8× on raw-device bulk I/O
+   at low concurrency, nothing on file I/O — the file cache never emits a request
+   larger than 128 KiB. **A fix is written and committed but unverified:** the boot
+   disk driver turns out *not* to be hot-swappable, because the non-packaged
+   directory that would override it lives on the filesystem the driver is needed to
+   mount. It needs a bake. See "Finding 4" below.
 
 Deliberately not pursued: multi-queue. `qpair count: 2` is what the EBS
 controller offers, and Linux reports the same, so the per-CPU queue selection
 already in the driver is correct and complete for this hardware.
+
+## Finding 4: the serialisation quantified, a fix written, and why it needs a bake
+
+### The serialisation, measured exactly
+
+Stock driver, raw device, one thread, 15 s cells, three repetitions agreeing to
+**0.02%**:
+
+| block size | commands | throughput | mean latency | latency ÷ 256K latency |
+|---|---|---|---|---|
+| 256 KiB | 1 | 173.50 MiB/s | 1441 µs | 1.00 |
+| 512 KiB | 2 | 145.58 MiB/s | 3434 µs | **2.38** |
+| 1 MiB | 4 | 158.35 MiB/s | 6315 µs | **4.38** |
+| 2 MiB | 8 | 165.72 MiB/s | 12,068 µs | **8.37** |
+
+Latency scales with the **number of chopped commands**, essentially one-for-one.
+That is the serialisation, measured rather than inferred: a request is split at
+`max_xfer_size` and each piece waits for the previous one. Linux on the same
+volume gets 327.7 MiB/s at 512 KiB and 598.0 at 1 MiB, because it issues the same
+pieces concurrently.
+
+Note also that 512 KiB is *slower than* 256 KiB (145.6 vs 173.5) — two serial
+commands cost slightly more than twice one, so the chop is worse than neutral.
+
+### The fix
+
+`nvme_disk.cpp`: `submit_nvme_io_request()` is split out of
+`do_nvme_io_request()`, and `do_io()` now submits up to `NVME_IO_BATCH_SIZE` = 8
+chopped commands before reaping any of them. Reaping in submission order costs the
+slowest command rather than the sum. The qpair is now chosen **once per request**
+rather than per command, which also fixes a latent bug: `await_status()` polls a
+specific qpair and `get_qpair()` picks by current CPU, so a thread that migrated
+between submitting and waiting could previously poll a queue its command was not
+on.
+
+Only the contiguous prefix of successful commands is counted as transferred, so a
+later command completing cannot make an earlier failed one's bytes look valid.
+
+**Predicted, not measured:** 512 KiB → ~300 MiB/s, 1 MiB → ~550 MiB/s, i.e. close
+to the Linux figures, with 2 MiB (8 commands, exactly the batch size) benefiting
+most.
+
+### Why it is not verified: the boot disk driver cannot be hot-swapped
+
+The module was built, installed at
+`/boot/home/config/non-packaged/add-ons/kernel/drivers/disk/nvme_disk`, made
+executable, hash-verified against the builder, and the node cold-booted. The
+driver logs a deliberate version stamp (`io batch size: 8`) so the loaded copy can
+be identified rather than inferred from a number moving. **The stamp did not
+appear: the kernel loaded the stock module from `/boot/system`.**
+
+The reason is structural, not a wrong path. `kModulePaths` is walked backwards, so
+the user non-packaged directory really is searched first — but
+`B_USER_NONPACKAGED_ADDONS_DIRECTORY` resolves under **`/boot/home`**, which is on
+the filesystem that `nvme_disk` itself is required to mount. At the moment the
+kernel needs the disk driver, the directory that would override it does not exist
+yet. `/boot/system/add-ons` cannot be used instead because it is packagefs and
+read-only.
+
+**This corrects a piece of this project's operating knowledge.** "Drop a kernel
+module in `non-packaged/add-ons/kernel` and reboot, 4 minutes instead of 25" is
+true for modules loaded *after* the boot volume is mounted — a network driver, a
+non-root file system. It is **structurally impossible for the boot storage
+driver**, and the failure is silent: the module sits there, the machine boots
+happily, and it is the old code that runs. Anyone testing a storage driver this
+way and reading a number would conclude the change did nothing.
+
+So the change is committed but **unverified**, and it needs an image bake — which
+is the operator's job. The version stamp is deliberately left in so that the first
+boot of a baked image proves which driver is running before any number is taken
+from it.
+
+### What to run once it is baked
+
+```bash
+# expect ~300 MiB/s at 512K and ~550 at 1M, against the 145.6/158.4 baseline
+disktput -f /dev/disk/nvme/1/raw -m seqread -b 512K -t 1 -T 15 -s 8G -J
+disktput -f /dev/disk/nvme/1/raw -m seqread -b 1M   -t 1 -T 15 -s 8G -J
+disktput -f /dev/disk/nvme/1/raw -m seqread -b 2M   -t 1 -T 15 -s 8G -J
+# and prove it did not corrupt anything -- this is a data path change
+disktput -f /dev/disk/nvme/1/raw -m seqwrite -b 1M -t 4 -n 4G -s 8G -P -y
+disktput -f /dev/disk/nvme/1/raw -m verify   -b 1M -t 4 -n 4G -s 8G
+# negative control: 256K is one command and must NOT move
+disktput -f /dev/disk/nvme/1/raw -m seqread -b 256K -t 1 -T 15 -s 8G -J
+```
+
+The 256 KiB row is the negative control: it is a single command, so the batching
+cannot touch it, and if it moves then something other than batching changed.
+
+
+## Scoping finding 2: read-ahead in the file cache
+
+The measured cost: reading a file through the page cache runs at **123.5 MiB/s
+against 173.2 MiB/s with `O_NOCACHE`** — the cache makes a large sequential read
+**29% slower**. Every ordinary program reads through the cache, so this is the
+largest real-workload win in this document.
+
+### Why it is smaller work than it looks
+
+**The sequential-access detector already exists and already works.**
+`file_cache.cpp` keeps a ring of the last accesses per `file_cache_ref`
+(`last_access[LAST_ACCESSES]`, `push_access()`) and exposes
+`access_is_sequential(ref)`. It is currently consulted in exactly one place —
+`reserve_pages()`, to decide *what to evict* when memory is low — and never to
+decide what to fetch. So the detection half of read-ahead is done; what is
+missing is issuing the fetch.
+
+**There is also already a prefetch path.** `cache_prefetch_vnode()` takes a vnode,
+offset and size, resolves the `file_cache_ref`, clamps to the file size, rounds to
+pages and checks resources before reading. It is used at boot and by mmap
+fault-around. A read-ahead would reuse this rather than inventing a mechanism.
+
+### What actually has to be written
+
+1. **A per-`file_cache_ref` read-ahead window** — current size and the offset the
+   last readahead reached, so the window can grow on continued sequential access
+   and reset on a seek. This is new state on `file_cache_ref`, which is the only
+   structural change.
+2. **A hook in the cached read path** that, when `access_is_sequential()` is true,
+   issues an asynchronous fetch for the next window beyond the current read.
+3. **Asynchrony.** This is the one genuinely hard part. The win comes from the
+   next range being fetched *while the caller consumes the current one*; a
+   synchronous prefetch just moves the same wait earlier and buys nothing. The
+   read path currently blocks in `read_into_cache()`. Either the prefetch is
+   handed to a worker, or it is issued as a non-waiting `IORequest` whose
+   completion unbusies the pages.
+4. **A cap and a back-off.** Read-ahead that guesses wrong evicts useful pages and
+   wastes device bandwidth. Needs a maximum window, and it must not run when
+   `low_resource_state(B_KERNEL_RESOURCE_PAGES)` is set — the same condition
+   `reserve_pages()` already tests.
+
+### Sizing, and why 128 KiB is the number to beat
+
+The cached read path chops at `MAX_IO_VECS * B_PAGE_SIZE` = **128 KiB**, and the
+driver blocks per command, so a cached sequential read is one 128 KiB round trip
+at a time. At the measured ~1.4 ms per round trip that is ~90–125 MiB/s, which is
+what 123.5 MiB/s is. A read-ahead window of 8 × 128 KiB would put ~1 MiB in
+flight and should approach the depth-8 figure of ~1008 MiB/s. **Predicted, not
+measured** — and worth stating as a prediction so it can be falsified.
+
+### Cost and risk
+
+- **Kernel proper, so it needs a bake**, and the bake is the operator's job.
+- Risk is moderate and mostly in the asynchronous fetch: a prefetch that leaves
+  pages busy or double-frees on error is a corruption bug, not a slow path. It
+  wants the `-P`/`-m verify` content check from `disktput` run against it, not
+  just a throughput number.
+- The interaction with `reserve_pages()`'s low-memory eviction needs care: that
+  code already treats sequential access as a reason to *drop* pages, and
+  read-ahead would be adding them. Those two must not fight, which is a design
+  question to settle before writing code.
+
+Recommendation: worth doing, after finding 1 has a fix, and it should ship with a
+durability/content assertion rather than a rate.
 
 ## Reproducing this
 

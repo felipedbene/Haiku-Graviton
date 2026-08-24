@@ -357,6 +357,7 @@ struct run_config {
 	off_t		misalign;
 	bigtime_t	duration;		// 0 = move -n bytes instead of running for a time
 	bool		patterned;		// stamp each block so it can be verified later
+	bigtime_t	interval;		// >0: trace progress every this many us
 };
 
 
@@ -421,6 +422,7 @@ struct worker {
 	bigtime_t*		samples;
 	uint32			sampleCount;
 	off_t			samplesRecorded;
+	volatile bool	finished;
 	off_t			zeroBlocks;
 	off_t			staleBlocks;
 	off_t			corruptBlocks;
@@ -553,6 +555,7 @@ worker_main(void* data)
 	}
 
 	self->elapsed = system_time() - start;
+	self->finished = true;
 	return NULL;
 }
 
@@ -702,10 +705,11 @@ report(const run_config& config, const char* label, off_t bytes, off_t operation
 	// One line the harness can parse without caring about the prose above.
 	if (machineReadable) {
 		printf("DISKTPUT\t%s\t%" B_PRIdOFF "\t%d\t%s\t%.2f\t%.0f\t%.0f\t%"
-			B_PRIdBIGTIME "\t%" B_PRIdBIGTIME "\t%.0f\t%" B_PRIdOFF "\n",
+			B_PRIdBIGTIME "\t%" B_PRIdBIGTIME "\t%.0f\t%" B_PRIdOFF "\t%"
+			B_PRIdBIGTIME "\n",
 			mode_name(config.mode), config.blockSize, config.threads,
 			config.noCache ? "nocache" : "cached", rate, iops, meanLatency,
-			p50, p99, costPerMiB, config.misalign);
+			p50, p99, costPerMiB, config.misalign, latencyMax);
 	}
 }
 
@@ -819,6 +823,91 @@ populate(const char* path, off_t needed, off_t blockSize)
 }
 
 
+// Progress tracing exists to tell three different failures apart, which a single
+// aggregate rate cannot do:
+//
+//   - smooth degradation      -> contention for a shared resource
+//   - periodic dead intervals -> a lost wakeup, or a wait with no timeout
+//   - permanent dead interval -> a wedge, which is a bug and not a slow result
+//
+// It matters here because DeBeOS's buffered write path varies by a factor of four
+// between identical runs. An aggregate number cannot say whether that is a path
+// that is uniformly slower on some runs or a path that stops dead for seconds at
+// a time, and those implicate different code. The global maximum latency is
+// reprinted each interval because a single pwrite that blocks for seconds -- the
+// signature of a page-writer quota wait entered with no timeout -- shows up there
+// and nowhere else.
+static void
+trace_progress(worker* workers, int count, const run_config& config,
+	bigtime_t startTime)
+{
+	off_t lastBytes = 0;
+	bigtime_t lastAt = startTime;
+	bigtime_t worstStall = 0;
+	bigtime_t stallStart = 0;
+	bool stalled = false;
+	int slot = 0;
+
+	printf("  %8s %12s %12s %12s\n", "at (s)", "MiB in slot", "MiB/s now",
+		"max lat (us)");
+	fflush(stdout);
+
+	while (true) {
+		snooze(config.interval);
+
+		off_t bytes = 0;
+		bigtime_t maxLatency = 0;
+		int done = 0;
+		for (int i = 0; i < count; i++) {
+			bytes += workers[i].bytesMoved;
+			if (workers[i].latencyMax > maxLatency)
+				maxLatency = workers[i].latencyMax;
+			if (workers[i].finished)
+				done++;
+		}
+
+		bigtime_t now = system_time();
+		double slotSeconds = (double)(now - lastAt) / 1000000.0;
+		double slotMiB = (double)(bytes - lastBytes) / (1024.0 * 1024.0);
+
+		printf("  %8.1f %12.1f %12.1f %12" B_PRIdBIGTIME "%s\n",
+			(double)(now - startTime) / 1000000.0, slotMiB,
+			slotSeconds > 0 ? slotMiB / slotSeconds : 0.0, maxLatency,
+			(bytes == lastBytes) ? "   <-- NO PROGRESS" : "");
+		fflush(stdout);
+
+		// A stall is measured across consecutive dead intervals rather than per
+		// interval, so a wait longer than the sampling period is reported at its
+		// real length instead of as several short ones.
+		if (bytes == lastBytes) {
+			if (!stalled) {
+				stalled = true;
+				stallStart = lastAt;
+			}
+		} else if (stalled) {
+			stalled = false;
+			if (now - stallStart > worstStall)
+				worstStall = now - stallStart;
+		}
+
+		lastBytes = bytes;
+		lastAt = now;
+		slot++;
+
+		if (done == count)
+			break;
+	}
+
+	if (stalled && lastAt - stallStart > worstStall)
+		worstStall = lastAt - stallStart;
+
+	if (worstStall > 0) {
+		printf("  longest stall   : %.3f s with zero bytes moved\n",
+			(double)worstStall / 1000000.0);
+	}
+}
+
+
 static int
 usage(int status)
 {
@@ -856,6 +945,9 @@ usage(int status)
 		"                16 KiB buffer, so this is not a cosmetic knob\n"
 		"  -U <bytes>    deliberately offset the buffer this far past its\n"
 		"                alignment, to measure the bounce path on purpose\n"
+		"  -i <secs>     trace progress every <secs>, so a path that stalls can\n"
+		"                be told apart from one that is merely slow, and a\n"
+		"                wedge from either\n"
 		"  -P            stamp every written block with its own offset, so a\n"
 		"                later -m verify can prove the data is the data that\n"
 		"                belongs there -- not zeros, and not some other\n"
@@ -892,7 +984,7 @@ main(int argc, char** argv)
 	bool machineReadable = false;
 
 	int option;
-	while ((option = getopt(argc, argv, "f:m:b:n:t:s:o:e:A:U:L:T:PDSFyJh")) != -1) {
+	while ((option = getopt(argc, argv, "f:m:b:n:t:s:o:e:A:U:L:T:i:PDSFyJh")) != -1) {
 		switch (option) {
 			case 'f':
 				config.path = optarg;
@@ -992,6 +1084,15 @@ main(int argc, char** argv)
 			case 'F':
 				config.syncEveryOp = true;
 				break;
+			case 'i': {
+				double seconds = strtod(optarg, NULL);
+				if (seconds <= 0 || seconds > 600) {
+					fprintf(stderr, "disktput: bad interval \"%s\"\n", optarg);
+					return 1;
+				}
+				config.interval = (bigtime_t)(seconds * 1000000.0);
+				break;
+			}
 			case 'P':
 				config.patterned = true;
 				break;
@@ -1201,6 +1302,9 @@ main(int argc, char** argv)
 
 	take_cpu_snapshot(before);
 	barrier_wait(gate);				// the run starts here
+
+	if (config.interval > 0)
+		trace_progress(workers, config.threads, config, before.wall);
 
 	for (int i = 0; i < config.threads; i++)
 		pthread_join(workers[i].thread, NULL);
