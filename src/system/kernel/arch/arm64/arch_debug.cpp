@@ -6,6 +6,8 @@
 
 #include <arch/debug.h>
 
+#include <limits.h>
+
 #include <arch_cpu.h>
 #include <debug.h>
 #include <debug_heap.h>
@@ -13,6 +15,7 @@
 #include <kernel.h>
 #include <kimage.h>
 #include <thread.h>
+#include <vm/vm.h>
 #include <vm/vm_types.h>
 #include <vm/VMAddressSpace.h>
 #include <vm/VMArea.h>
@@ -56,6 +59,68 @@ get_next_frame(addr_t fp, addr_t *next, addr_t *ip)
 	}
 
 	return B_BAD_VALUE;
+}
+
+
+static bool
+is_kernel_stack_address(Thread* thread, addr_t address)
+{
+	// Early in the boot process there is no thread pointer yet, and a thread
+	// may exist before its kernel stack has been assigned; in both cases being
+	// a kernel address is the best answer available.
+	if (thread == NULL || thread->kernel_stack_base == 0)
+		return IS_KERNEL_ADDRESS(address);
+
+	return address >= thread->kernel_stack_base
+		&& address < thread->kernel_stack_top;
+}
+
+
+static bool
+is_iframe(Thread* thread, addr_t fp)
+{
+	iframe_stack* frameStack = thread != NULL
+		? &thread->arch_info.iframes : &gBootFrameStack;
+
+	for (int32 i = 0; i < frameStack->index; i++) {
+		if (fp == (addr_t)frameStack->frames[i])
+			return true;
+	}
+
+	return false;
+}
+
+
+/*!	Reads the AAPCS64 frame record at \a fp without ever faulting.
+
+	Unlike the KDL walker's get_next_frame(), this is called from a timer
+	interrupt on a live system (the system profiler samples from
+	SystemProfiler::_DoSample()), so a stale or wild frame pointer -- routine
+	when a thread is interrupted mid-prologue, or when the chain runs off the
+	end of a stack -- must yield an error rather than a page fault.
+*/
+static status_t
+get_next_frame_no_debugger(addr_t fp, addr_t* _next, addr_t* _ip,
+	bool onKernelStack, Thread* thread)
+{
+	// A frame record is a pair of 64-bit words and the ABI keeps the frame
+	// pointer 16-byte aligned, so anything else cannot be one.
+	if (fp == 0 || (fp & 0xf) != 0)
+		return B_BAD_ADDRESS;
+
+	addr_t frame[2];
+	if (onKernelStack
+			&& is_kernel_stack_address(thread, fp + sizeof(frame) - 1)) {
+		memcpy(frame, (void*)fp, sizeof(frame));
+	} else if (!IS_USER_ADDRESS(fp)
+			|| user_memcpy(frame, (void*)fp, sizeof(frame)) != B_OK) {
+		return B_BAD_ADDRESS;
+	}
+
+	*_next = frame[0];
+	*_ip = frame[1];
+
+	return B_OK;
 }
 
 
@@ -443,18 +508,100 @@ arch_debug_stack_trace(void)
 }
 
 
+/*!	Walks the frame-pointer chain of the current thread, recording return
+	addresses.
+
+	This is the non-KDL counterpart of stack_trace() above and the hook the
+	system profiler samples through (SystemProfiler::_DoSample()), so unlike
+	that function it must be safe to run from a timer interrupt on a live
+	system and must never fault on a bad frame pointer.
+
+	The walk relies on two arm64 specifics established by EXCEPTION_ENTRY in
+	arch_asm.S: the iframe is carved out of the interrupted thread's kernel
+	stack, and `mov x29, x0` (arch_asm.S) hands the iframe pointer to the C
+	handler as its frame pointer. The chain therefore arrives exactly at an
+	iframe address, which is not a frame record -- its first two words are
+	`elr` and `spsr` -- so iframes must be recognised and stepped over
+	explicitly rather than dereferenced.
+*/
 int32
 arch_debug_get_stack_trace(addr_t* returnAddresses, int32 maxCount,
 	int32 skipIframes, int32 skipFrames, uint32 flags)
 {
-	return 0;
+	// Skipping iframes means skipping every frame until the requested number
+	// of kernel/user transitions has been crossed; the caller does not know
+	// how many normal frames that is.
+	if (skipIframes > 0)
+		skipFrames = INT_MAX;
+
+	Thread* thread = thread_get_current_thread();
+	int32 count = 0;
+	addr_t fp = arm64_get_fp();
+	bool onKernelStack = true;
+
+	// A cycle in a corrupt chain would otherwise spin forever here, because
+	// skipFrames == INT_MAX leaves `count` pinned at 0 and the loop bound with
+	// it. Interrupt context is the wrong place to hang.
+	int32 iterationsLeft = maxCount + 2 * IFRAME_TRACE_DEPTH + 32;
+
+	while (fp != 0 && count < maxCount && iterationsLeft-- > 0) {
+		onKernelStack = onKernelStack && is_kernel_stack_address(thread, fp);
+		if (!onKernelStack && (flags & STACK_TRACE_USER) == 0)
+			break;
+
+		addr_t ip;
+		addr_t nextFp;
+
+		if (onKernelStack && is_iframe(thread, fp)) {
+			iframe* frame = (iframe*)fp;
+			ip = frame->elr;
+			nextFp = frame->fp;
+
+			if (skipIframes > 0) {
+				if (--skipIframes == 0)
+					skipFrames = 0;
+			}
+		} else {
+			if (get_next_frame_no_debugger(fp, &nextFp, &ip, onKernelStack,
+					thread) != B_OK) {
+				break;
+			}
+		}
+
+		if (ip == 0)
+			break;
+
+		if (skipFrames > 0)
+			skipFrames--;
+		else
+			returnAddresses[count++] = ip;
+
+		fp = nextFp;
+	}
+
+	return count;
 }
 
 
 void*
 arch_debug_get_interrupt_pc(bool* _isSyscall)
 {
-	return NULL;
+	Thread* thread = debug_get_debugged_thread();
+	iframe_stack* frameStack = thread != NULL
+		? &thread->arch_info.iframes : &gBootFrameStack;
+
+	if (frameStack->index <= 0)
+		return NULL;
+
+	iframe* frame = frameStack->frames[frameStack->index - 1];
+
+	if (_isSyscall != NULL) {
+		// ESR_EL1 exception class 0x15 is "SVC instruction execution in
+		// AArch64 state", which is how a Haiku syscall enters the kernel.
+		*_isSyscall = ((frame->esr >> 26) & 0x3f) == 0x15;
+	}
+
+	return (void*)(addr_t)frame->elr;
 }
 
 

@@ -1,0 +1,8 @@
+SubDir HAIKU_TOP src bin netprof ;
+
+# Everything it needs -- get_next_team_info(), get_next_thread_info(),
+# get_cpu_info() -- is in libroot, which is linked implicitly.
+Application netprof :
+	netprof.cpp
+	:
+;

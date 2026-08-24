@@ -21,6 +21,26 @@ SEARCH_SOURCE += [ FDirName $(posixSources) arch $(TARGET_ARCH) ] ;
 SEARCH_SOURCE += [ FDirName $(posixSources) string arch generic ] ;
 SEARCH_SOURCE += [ FDirName $(posixSources) string arch $(TARGET_ARCH) ] ;
 
+# memcpy.c and generic_memset.c each define a function whose body contains a
+# loop that *is* that function, so the compiler is free to recognise the loop
+# and replace it with a call to the function it is inside. The guards below are
+# checked on the generated object code rather than trusted: see
+# graviton/docs/arm64-memcpy.md. Without them, generic_memset.o carries an
+# R_AARCH64_CALL26 against memset itself at -O2 and -O3 under libroot's flags.
+# The kernel's own flags happen to avoid it via -fno-tree-vectorize, which is
+# incidental and is not something a memset should depend on -- note that the
+# other architectures' kernel Jamfiles have no guard here at all and rely
+# entirely on that side effect.
+#
+# -fno-tree-loop-distribute-patterns names the pass that actually performs the
+# substitution and is not implied by -fno-builtin; glibc and the Linux kernel
+# both pass it explicitly for this. It is a GCC spelling, so it is only passed
+# to GCC.
+local stringGuardFlags = -fno-builtin ;
+if $(HAIKU_CC_IS_CLANG_arm64) != 1 {
+	stringGuardFlags += -fno-tree-loop-distribute-patterns ;
+}
+
 KernelMergeObject kernel_lib_posix_arch_$(TARGET_ARCH).o :
 	siglongjmp.S
 	sigsetjmp.S
@@ -28,7 +48,7 @@ KernelMergeObject kernel_lib_posix_arch_$(TARGET_ARCH).o :
 	kernel_setjmp_save_sigs.c
 
 	generic_memset.c
-	generic_memcpy.c
+	memcpy.c
 
-	: $(TARGET_KERNEL_PIC_CCFLAGS)
+	: $(TARGET_KERNEL_PIC_CCFLAGS) $(stringGuardFlags)
 ;

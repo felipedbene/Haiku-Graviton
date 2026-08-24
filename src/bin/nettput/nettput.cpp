@@ -54,6 +54,36 @@
  * Transmit runs are timed until the peer acknowledges the last byte, not until
  * the last write returns. Without that the socket buffer alone would report an
  * impressive and entirely fictitious rate on short runs.
+ *
+ * -A shifts the data buffer off its natural alignment, which sounds like a knob
+ * nobody needs and is in fact the only way to measure one specific thing from
+ * userland. arm64 uses string/arch/generic/generic_memcpy.c, which copies one
+ * byte at a time unless source and destination are misaligned by the same
+ * amount; a received TCP payload starts 54 bytes into the frame, so the copy out
+ * to this buffer is mismatched and takes the byte loop. Sweeping -A moves the
+ * destination through all eight phases, so if the penalty is real one offset
+ * must be measurably cheaper than the other seven.
+ *
+ * Three conditions all have to hold or the sweep measures nothing, and the first
+ * attempt at it fell over the third:
+ *
+ *  - The MSS must be a multiple of 8. At MTU 9001 it is 8961, so the
+ *    destination's phase advances one byte per segment and drifts through every
+ *    value whatever the buffer address is -- which is also why the penalty
+ *    cannot be dodged by aligning anything and has to be fixed in memcpy. MTU
+ *    9000 gives an MSS of 8960 and a phase that holds still.
+ *  - The chunk must be a whole number of segments, so that a read never begins
+ *    or ends inside one. 8960 * 7 = 62720 fits under the default 65535 receive
+ *    buffer.
+ *  - -W is required. Without MSG_WAITALL, recv() returns however much happens to
+ *    be queued, so each call starts at an essentially arbitrary offset and the
+ *    destination phase is randomised no matter what -A is set to. A sweep run
+ *    without it comes out flat and means nothing, which is exactly what the
+ *    first one did.
+ *
+ * The experiment is then: sweep -A 0..7 at MTU 9000 with -b 62720 -W, and again
+ * at MTU 9001 as a control where no offset can align anything. A dip in one and
+ * a flat line in the other is the alignment penalty and admits no other reading.
  */
 
 
@@ -205,13 +235,13 @@ write_fully(int socket, const void* buffer, size_t size)
 
 
 static ssize_t
-read_fully(int socket, void* buffer, size_t size)
+read_fully(int socket, void* buffer, size_t size, int flags)
 {
 	uint8* at = (uint8*)buffer;
 	size_t remaining = size;
 
 	while (remaining > 0) {
-		ssize_t bytesRead = recv(socket, at, remaining, 0);
+		ssize_t bytesRead = recv(socket, at, remaining, flags);
 		if (bytesRead < 0) {
 			if (errno == EINTR)
 				continue;
@@ -402,6 +432,13 @@ usage(int status)
 		"  -p <port>     peer port (default %d)\n"
 		"  -n <bytes>    bytes to transfer, K/M/G suffixes ok (default 512M)\n"
 		"  -b <bytes>    read/write chunk size (default 64K)\n"
+		"  -W            recv() with MSG_WAITALL, so every read moves exactly\n"
+		"                the chunk size. Needed to make -A mean anything; see\n"
+		"                the note in the source.\n"
+		"  -A <offset>   shift the data buffer this many bytes past its\n"
+		"                natural alignment (0..63, default 0). Only useful for\n"
+		"                probing whether a copy in the kernel is paying an\n"
+		"                alignment penalty -- see the note in the source.\n"
 		"  -w <bytes>    SO_SNDBUF/SO_RCVBUF, set before connect (default: leave\n"
 		"                the system default alone). A value above the current\n"
 		"                size is a floor, not a pin: auto-sizing still runs.\n"
@@ -425,10 +462,12 @@ main(int argc, char** argv)
 	off_t bufferSize = DEFAULT_BUFFER;
 	int windowSize = 0;
 	int pinnedSend = 0;
+	int bufferAlignment = 0;
+	int receiveFlags = 0;
 	char mode = MODE_TRANSMIT;
 
 	int option;
-	while ((option = getopt(argc, argv, "c:p:n:b:w:P:rL:h")) != -1) {
+	while ((option = getopt(argc, argv, "c:p:n:b:w:P:A:WrL:h")) != -1) {
 		switch (option) {
 			case 'c':
 				host = optarg;
@@ -437,6 +476,17 @@ main(int argc, char** argv)
 				port = atoi(optarg);
 				if (port <= 0 || port > 65535) {
 					fprintf(stderr, "nettput: bad port \"%s\"\n", optarg);
+					return 1;
+				}
+				break;
+			case 'W':
+				receiveFlags |= MSG_WAITALL;
+				break;
+			case 'A':
+				bufferAlignment = atoi(optarg);
+				if (bufferAlignment < 0 || bufferAlignment > 63) {
+					fprintf(stderr, "nettput: buffer offset must be 0..63,"
+						" not \"%s\"\n", optarg);
 					return 1;
 				}
 				break;
@@ -492,12 +542,15 @@ main(int argc, char** argv)
 	// a signal that kills the run before it can report anything.
 	signal(SIGPIPE, SIG_IGN);
 
-	uint8* buffer = (uint8*)malloc(bufferSize);
-	if (buffer == NULL) {
+	// The extra 64 bytes give -A somewhere to shift the buffer into without
+	// running off the end of the allocation.
+	uint8* allocation = (uint8*)malloc(bufferSize + 64);
+	if (allocation == NULL) {
 		fprintf(stderr, "nettput: cannot allocate a %" B_PRIdOFF " byte buffer\n",
 			bufferSize);
 		return 1;
 	}
+	uint8* buffer = allocation + bufferAlignment;
 
 	// Non-constant payload, so nothing along the path can shortcut a run of
 	// zeroes, and a mis-delivered buffer is at least in principle detectable.
@@ -506,7 +559,7 @@ main(int argc, char** argv)
 
 	int socketFD = connect_to_peer(host, port, windowSize, pinnedSend);
 	if (socketFD < 0) {
-		free(buffer);
+		free(allocation);
 		return 1;
 	}
 
@@ -521,7 +574,7 @@ main(int argc, char** argv)
 		fprintf(stderr, "nettput: cannot send the request header: %s\n",
 			strerror(errno));
 		close(socketFD);
-		free(buffer);
+		free(allocation);
 		return 1;
 	}
 
@@ -558,7 +611,7 @@ main(int argc, char** argv)
 			shutdown(socketFD, SHUT_WR);
 
 			uint8 ack = 0;
-			if (read_fully(socketFD, &ack, 1) != 1 || ack != 'A') {
+			if (read_fully(socketFD, &ack, 1, 0) != 1 || ack != 'A') {
 				fprintf(stderr, "nettput: peer did not acknowledge the"
 					" transfer\n");
 				failed = true;
@@ -568,7 +621,7 @@ main(int argc, char** argv)
 		while (moved < bytes) {
 			size_t chunk = (size_t)((bytes - moved) < bufferSize
 				? (bytes - moved) : bufferSize);
-			ssize_t bytesRead = read_fully(socketFD, buffer, chunk);
+			ssize_t bytesRead = read_fully(socketFD, buffer, chunk, receiveFlags);
 			if (bytesRead < 0) {
 				fprintf(stderr, "nettput: receive failed after %" B_PRIdOFF
 					" bytes: %s\n", moved, strerror(errno));
@@ -593,7 +646,7 @@ main(int argc, char** argv)
 	report_socket_buffers(socketFD);
 
 	close(socketFD);
-	free(buffer);
+	free(allocation);
 
 	if (failed)
 		return 1;

@@ -4,6 +4,10 @@ SimpleTest memspeedTest :
 	memspeed.c
 ;
 
+SimpleTest memcpybenchTest :
+	memcpybench.c
+;
+
 SimpleTest syscallbenchTest :
 	syscallbench.c
 ;
