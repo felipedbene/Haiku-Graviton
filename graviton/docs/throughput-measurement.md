@@ -51,9 +51,22 @@ RTT is 0.326 ms:
 ```
 
 The number was the *default*, to three digits. A single TCP stream cannot have
-more than one send buffer in flight per round trip, and Haiku hard-codes both
+more than one send buffer in flight per round trip, and ~~Haiku hard-codes both
 socket buffers to 65535 in `net_socket.cpp` with **no autotuning anywhere** --
-`TCPEndpoint` sizes both queues from `buffer_size` once, at construction.
+`TCPEndpoint` sizes both queues from `buffer_size` once, at construction.~~
+
+> **All three clauses are now stale (corrected 2026-08-24).** This was the state
+> *before* this document's own findings were acted on, and it contradicts the rest of
+> this file:
+> - the **send default is 256 KiB** (`ed4ea6413a`), as this document's own §"the
+>   default was the number being measured" goes on to establish;
+> - **send-buffer autotuning is merged** (`85f9d73594`) — see the struck-out "Still
+>   open" bullet below and `tcp-send-autotune.md`;
+> - **receive auto-sizing already existed** when this was written; the bug was that
+>   any explicit `SO_RCVBUF` switched it off (`d32920e691`), which this file discusses
+>   further down.
+>
+> Read the sentence as the historical premise of the experiment, not as current state.
 
 Sweeping `SO_SNDBUF`/`SO_RCVBUF` (nettput's `-w`, set before `connect` so the
 window scale is negotiated correctly), MTU 9001, 512 MiB per run:
@@ -206,9 +219,15 @@ the RTT is meaningless — a lesson worth more than the number.
 
 ## Still open
 
-- The fix for the receive cliff above is **built but not yet measured on
+- ~~The fix for the receive cliff above is **built but not yet measured on
   hardware** -- see the confirmation runs in
-  [tcp-rcvbuf-cliff.md](tcp-rcvbuf-cliff.md).
+  [tcp-rcvbuf-cliff.md](tcp-rcvbuf-cliff.md).~~
+  **MERGED and hardware-verified: `d32920e691` (2026-08-23).** The confirmation runs
+  have been performed; do not re-run them. On `c7g.large` an explicit `SO_RCVBUF` of
+  65536 went ~3650 → **4950 Mbit/s**. Note also that the *"cliff"* framing is
+  retracted — there is no one-byte 65535/65536 boundary; the finding is that **any**
+  explicit `SO_RCVBUF` disabled window growth. Set explicitly, 65535/65536/65537
+  measure 3747/3751/3803 Mbit/s.
 - ~~**No send-buffer autotuning.**~~ Done, and it was worse than this note
   guessed: a fixed 256 KiB is not merely "too small on a long fat path", it is
   **16x** too small at 10 ms of round trip, and it is also the *worst* of the
@@ -217,10 +236,31 @@ the RTT is meaningless — a lesson worth more than the number.
   floor rather than a guess, because the measured short-path optimum turns out to
   be *above* twice the bandwidth-delay product and auto-sizing on its own
   converges just below it.
-- Transmit **doorbell coalescing** still needs a batched transmit entry point in
+- ~~Transmit **doorbell coalescing** still needs a batched transmit entry point in
   the stack (`ETHER_SEND_NET_BUFFER` is called once per `net_buffer` with no
-  "more coming" signal).
-- **Multi-queue / RSS** remains blocked in the stack, so all of the above is
-  single-queue. 4.4 Gbit/s is from one queue on one core pair.
-- PMU counters (`arch_pmu`) are still KDL-only, so cycles-per-byte is inferred
-  from `active_time` rather than counted. A userland readout would sharpen this.
+  "more coming" signal).~~
+  **DEAD, and not for the reason given — the device forbids it.** `219d8ab858`
+  measured it: LLQ grants a burst of **2 ring entries**, one jumbo frame consumes
+  both, and **99.94% of transmit frames already leave the allowance at zero**. The
+  achievable coalescing ratio at MTU 9001 is **1:1 — the saving is exactly zero**,
+  whatever a doorbell costs. A batched transmit entry point would not have helped.
+- ~~**Multi-queue / RSS** remains blocked in the stack, so all of the above is
+  single-queue.~~ **CANCELLED on evidence, not blocked.** The deciding control:
+  **Linux forced to ONE ENA queue does 29826 Mbit/s against 29823 on eight**
+  (`c7g.16xlarge`, interleaved A/B). One queue already carries ~30 Gbps, so more
+  queues cannot lift a ceiling one queue clears three times over. The ENA IO-queue
+  grant is also a **fixed 8 for the whole C7g family**, not a function of vCPU count.
+  See `ena-multiqueue-headroom.md` §5. The single-queue caveat on the numbers here
+  still stands: 4.4 Gbit/s is one queue on one core pair, on **`c7g.large`**.
+- ~~PMU counters (`arch_pmu`) are still KDL-only~~ — **the PMUv3 facility is merged**
+  (`af7e48b94c`), gated behind the `arm64_pmu` boot setting or KDL `pmu on`. It is
+  **merged but unused: nothing has been measured with it.** So cycles-per-byte is
+  still inferred from `active_time` rather than counted — the instrument now exists,
+  the reading does not. A userland readout would still sharpen this.
+- **The live network gap, added 2026-08-24:** ENA **interrupt cadence** — the
+  `XXX STRUCTURAL FIX STILL OWED` at `ena.cpp:221`. DeBeOS plateaus at
+  **9.0–10.2 Gbit/s** on `c7g.16xlarge` where Linux does **29.8**. This is the ~3×,
+  and it is a single-queue problem.
+- **Also still open:** ~88% of the per-byte receive cost is unexplained. Receive fits
+  **2.34 µs/frame + 1.85 ns/byte**; **there is no transmit fit** — do not apply that
+  split to transmit.

@@ -1,8 +1,39 @@
-# The SO_RCVBUF throughput cliff
+# ~~The SO_RCVBUF throughput cliff~~ — there is no cliff; any explicit `SO_RCVBUF` killed window growth
+
+> **This title is wrong and is kept only because the filename is linked from
+> elsewhere.** Read the finding as: **any explicit `SO_RCVBUF`, of any value,
+> disabled receive-window growth for the life of the socket.** There is **no
+> one-byte 65535/65536 boundary** — that framing came from a **confounded
+> measurement and is retracted**. The body below reaches the right conclusion; the
+> title and the opening table do not.
+>
+> **Status: FIXED, merged and hardware-verified.** `d32920e691` "tcp: don't let a
+> larger SO_RCVBUF disable receive window growth" (2026-08-23), on `graviton`.
+> Verified on hardware: an explicit `SO_RCVBUF` of 65536 went from ~3650 to
+> **4950 Mbit/s** on `c7g.large`, while a shrink to 16 KiB is still honoured.
+>
+> **The deconfounded control, which is the measurement that should be quoted:**
+> with all three values set *explicitly*, 65535 / 65536 / 65537 measure
+> **3747 / 3751 / 3803 Mbit/s** — identical. The byte does nothing.
+>
+> **And one figure that must never be quoted bare: the magnitude is RTT-dependent.**
+> The same pin costs 3.4× at 0.326 ms and 1.3× at 0.18 ms, so a ratio for this class
+> without its RTT is meaningless.
+
+## The confounded original measurement (RETRACTED — kept as the record)
+
+> **Do not cite this table as evidence of a cliff.** It is invalid *as a
+> comparison*: the "65535" row is the **built-in default, never set**, and the
+> "65536" row is **explicitly set**. The two rows therefore differ in whether
+> `setsockopt` was called, not in the buffer value — so the one-byte gap is an
+> artefact of the experiment design. **Note what did *not* catch this: the runs were
+> interleaved and internally consistent. Repeatability is not validity.** What
+> caught it was setting all three values the same way (see the banner above).
 
 A bulk receive on a `c7g.large` (MTU 9001, RTT 0.33 ms, 512 MiB from a Linux peer
-on the same subnet) ran three to four times slower when the application asked for
-a 64 KiB receive buffer than when it asked for nothing at all:
+on the same subnet) *appeared* to run three to four times slower when the
+application asked for a 64 KiB receive buffer than when it asked for nothing at
+all:
 
 | receive buffer | measured rate |
 |---|---|
@@ -10,7 +41,9 @@ a 64 KiB receive buffer than when it asked for nothing at all:
 | **65536 -- one byte more, set with `setsockopt` before `connect`** | **1474, 1116 Mbit/s** |
 | 262144 -- set with `setsockopt` before `connect` | 3953, 4949 Mbit/s |
 
-Runs were interleaved, so drift and thermals cannot explain it.
+Runs were interleaved, so drift and thermals cannot explain it — but interleaving
+does nothing about a confound in *what the two arms differ by*, which is what this
+table actually suffered from.
 
 ## Root cause
 
@@ -154,9 +187,17 @@ confusion:
   both socket buffers to 65535 and never grows them". True of the send side, not
   of the receive side.
 
-Built for arm64 (`jam -q tcp`) clean, no new warnings. Not yet run on hardware.
+Built for arm64 (`jam -q tcp`) clean, no new warnings. ~~Not yet run on
+hardware.~~ **Merged as `d32920e691` (2026-08-23) and hardware-verified — see the
+banner at the top of this file.**
 
 ## Confidence
+
+> **Superseded 2026-08-24: the fix IS measured.** `d32920e691` is merged and
+> verified on `c7g.large` (explicit 65536: ~3650 → 4950 Mbit/s; a shrink to 16 KiB
+> still honoured). The section below is the pre-measurement confidence statement,
+> retained because its final sentence names the gap that the confirmation runs then
+> closed.
 
 **High on the mechanism, unmeasured on the fix.** The code path is not
 ambiguous -- the flag is cleared on that line, it is the sole gate on window
@@ -167,9 +208,22 @@ the band predicted by a pinned window while the unpinned case does not. What has
 possibility that something else also keys off the same call is not formally
 excluded.
 
-## Confirmation runs
+## Confirmation runs — ALREADY RUN, 2026-08-23. Do not re-run these.
 
-The first one needs **no new build**: `nettput` is already in the canonical
+> **These experiments have been performed and they answered the question. Anyone
+> reading this section as a to-do list is about to redo finished work.**
+>
+> Run 1's prediction was **confirmed**: asking for the exact default value is slow,
+> so it is the *act of asking* and not the number. The stated falsification
+> condition — "if `-w 65535` comes out fast, this root cause is wrong" — did **not**
+> fire. The fully deconfounded three-way control (65535 / 65536 / 65537 all set
+> explicitly → 3747 / 3751 / 3803 Mbit/s) is reported in the banner at the top.
+>
+> They are kept below because the *design* is the reusable part: run 1 is a clean
+> example of separating "the value" from "the act of setting the value", and it
+> states its own falsification condition up front.
+
+The first one needed **no new build**: `nettput` was already in the canonical
 image, and its `-w` flag sets `SO_SNDBUF`/`SO_RCVBUF` before `connect()`.
 
 1. **Separate "the number 65536" from "the act of asking" (current image).**
