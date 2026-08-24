@@ -1,0 +1,210 @@
+SUMMARY="The XML C parser and toolkit of Gnome"
+DESCRIPTION="Libxml2 is the XML C parser and toolkit developed for the Gnome \
+project, but is usable outside of the Gnome platform as well.
+XML itself is a metalanguage to design markup languages, i.e. text language \
+where semantic and structure are added to the content using extra \"markup\" \
+information enclosed between angle brackets. HTML is the most well-known \
+markup language.
+Though the library is written in C a variety of language bindings make it \
+available in other environments."
+HOMEPAGE="http://www.xmlsoft.org/"
+COPYRIGHT="1998-2012 Daniel Veillard.  All Rights Reserved."
+LICENSE="MIT"
+REVISION="1"
+SOURCE_URI="https://download.gnome.org/sources/libxml2/${portVersion%.*}/libxml2-$portVersion.tar.xz"
+CHECKSUM_SHA256="78262a6e7ac170d6528ebfe2efccdf220191a5af6a6cd61ea4a9a9a5042c7a07"
+SOURCE_DIR="libxml2-$portVersion"
+SOURCE_URI_2="https://www.w3.org/XML/Test/xmlts20130923.tar.gz"
+CHECKSUM_SHA256_2="9b61db9f5dbffa545f4b8d78422167083a8568c59bd1129f94138f936cf6fc1f"
+PATCHES="libxml2-$portVersion.patchset"
+
+ARCHITECTURES="all"
+SECONDARY_ARCHITECTURES="x86"
+
+libVersion="16.1.3"
+libVersionCompat="$libVersion compat >= ${libVersion%%.*}"
+
+pythonModuleEnabled=false
+if [ "$targetArchitecture" = x86_gcc2 ]; then
+	if [ -n "$secondaryArchSuffix" ]; then
+		pythonModuleEnabled=true
+	fi
+else
+	if [ -z "$secondaryArchSuffix" ]; then
+		pythonModuleEnabled=true
+	fi
+fi
+
+# STAGE-1 CUT (graviton): force the Python binding OFF.
+# For arm64 the block above sets pythonModuleEnabled=true, which pulls in
+# cmd:python3.14 and setuptools_python314. The guests have python3.10, and
+# python3.14 is a large port with its own PEP-517 packaging knot -- it is not a
+# cheap leaf. What is lost is ONLY the libxml2_python3.14 subpackage; the
+# lib:libxml2 / devel:libxml2 that netpbm, groff's chain and everything else in
+# this tree actually need are unaffected, and the C library is built identically
+# (--without-python changes no library code path).
+# RETIRE: delete the single assignment below once cmd:python3.14 exists.
+pythonModuleEnabled=false
+
+pythonVersion=3.14
+pythonPackage=python${pythonVersion//.}
+
+PROVIDES="
+	libxml2$secondaryArchSuffix = $portVersion compat >= 2
+	lib:libxml2$secondaryArchSuffix = $libVersionCompat
+	"
+if [ -z "$secondaryArchSuffix" ]; then
+	PROVIDES="$PROVIDES
+		cmd:xmlcatalog = $portVersion compat >= 2
+		cmd:xmllint = $portVersion compat >= 2
+		"
+fi
+REQUIRES="
+	haiku$secondaryArchSuffix
+	lib:libz$secondaryArchSuffix
+	lib:libiconv$secondaryArchSuffix
+	"
+
+PROVIDES_devel="
+	libxml2${secondaryArchSuffix}_devel = $portVersion
+	cmd:xml2_config$secondaryArchSuffix = $portVersion compat >= 2
+	devel:libxml2$secondaryArchSuffix = $libVersionCompat
+	"
+REQUIRES_devel="
+	libxml2$secondaryArchSuffix == $portVersion base
+	devel:libiconv$secondaryArchSuffix
+	devel:libz$secondaryArchSuffix
+	"
+
+ARCHITECTURES_doc="any"
+
+PROVIDES_doc="
+	libxml2_doc
+	"
+
+if $pythonModuleEnabled; then
+	# Allows using dot in sub-package names (eg: "_python3.10" vs "_python310"):
+	eval "PACKAGE_NAME_$pythonPackage=\"${portName}_python$pythonVersion\""
+
+	eval "SUMMARY_$pythonPackage=\"The python module for libxml2\""
+
+	eval "PROVIDES_$pythonPackage=\"
+		${portName}_python$pythonVersion = $portVersion
+		\""
+
+	if [ -n "$secondaryArchSuffix" ]; then
+		eval "PROVIDES_${pythonPackage}+=\"
+			${portBaseName}_python$pythonVersion= $portVersion
+			\""
+	fi
+
+	eval "REQUIRES_$pythonPackage=\"
+		libxml2$secondaryArchSuffix == $portVersion base
+		haiku$secondaryArchSuffix
+		lib:libz$secondaryArchSuffix
+		cmd:python$pythonVersion
+		\""
+
+	eval "REPLACES_$pythonPackage=\"${portName}_python\""
+fi
+
+BUILD_REQUIRES="
+	haiku${secondaryArchSuffix}_devel
+	devel:libiconv$secondaryArchSuffix
+	devel:libz$secondaryArchSuffix
+	"
+if $pythonModuleEnabled; then
+	BUILD_REQUIRES+="
+		cmd:python$pythonVersion
+		setuptools_$pythonPackage
+		"
+fi
+BUILD_PREREQUIRES="
+	lib:libicudata$secondaryArchSuffix
+	cmd:aclocal
+	cmd:autoconf
+	cmd:automake
+	cmd:doxygen
+	cmd:gcc$secondaryArchSuffix
+	cmd:ld$secondaryArchSuffix
+	cmd:libtoolize$secondaryArchSuffix
+	cmd:make
+	cmd:sed
+	cmd:pkg_config$secondaryArchSuffix
+	"
+
+BUILD()
+{
+	withPython=
+	if $pythonModuleEnabled; then
+		withPython="--with-python"
+	else
+		withPython="--without-python"
+	fi
+
+	autoreconf -vi
+	runConfigure ./configure LDFLAGS="-lnetwork"  \
+		--disable-static \
+		--with-legacy \
+		$withPython
+	make $jobArgs
+}
+
+INSTALL()
+{
+	make install
+
+	# documentation
+	mkdir -p $documentationDir/packages/libxml2 $manDir/man1
+	cp -r dist-doc/html/* $prefix/documentation/packages/libxml2
+	cp -r dist-doc/*.html $prefix/documentation/packages/libxml2
+	cp dist-doc/*.1 $manDir/man1
+	cp doc/xml2-config.1 $manDir/man1
+
+	mkdir -p $dataDir/aclocal
+	cp aclocal.m4 $dataDir/aclocal
+
+	# remove libtool file
+	rm $libDir/libxml2.la
+	if [ -n "$secondaryArchSuffix" ]; then
+		rm $prefix/lib/python$pythonVersion/vendor-packages/libxml2mod.la
+	fi
+
+	prepareInstalledDevelLib \
+		libxml2
+	fixPkgconfig
+	fixDevelopLibDirReferences $binDir/xml2-config
+
+	# python package
+	if $pythonModuleEnabled; then
+		packageEntries $pythonPackage \
+			$prefix/lib/python$pythonVersion
+	fi
+
+	# devel package
+	packageEntries devel \
+		$binDir/xml2-config \
+		$dataDir \
+		$developDir \
+		$manDir/man1/xml2-config.1 \
+		$libDir/cmake
+
+	packageEntries doc \
+		$prefix/documentation/packages/libxml2
+
+	# Remove stuff we don't need in the secondary architecture base package.
+	if [ -n "$secondaryArchSuffix" ]; then
+		rm -rf $binDir
+		rm -rf $documentationDir
+	else
+		# left-over since all contents has been moved to other packages
+		rm -rf $prefix/documentation/packages
+	fi
+}
+
+TEST()
+{
+	# link the conformance suite
+	ln -sf ../../sources-2/xmlconf
+	make check
+}
