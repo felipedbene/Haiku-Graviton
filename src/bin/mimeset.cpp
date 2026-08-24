@@ -229,7 +229,20 @@ main(int argc, const char** argv)
 
 	// process files
 
-	BApplication app("application/x-vnd.haiku.mimeset");
+	// Use the constructor form that reports the error instead of the one that
+	// exits on failure: without an app_server (i.e. on a headless system)
+	// BApplication's GUI initialization fails, and the exiting form would then
+	// terminate us -- with status 0, no less -- before we ever look at a file.
+	// None of the work below needs a GUI connection, only the registrar, so a
+	// failure here is not fatal. If the registrar is unavailable as well, the
+	// individual update_mime_info()/create_app_meta_mime() calls will fail and
+	// be reported per file.
+	status_t appError;
+	BApplication app("application/x-vnd.haiku.mimeset", &appError);
+	if (appError != B_OK) {
+		fprintf(stderr, "%s: warning: application init failed (%s); "
+			"continuing without it.\n", sProgramName, strerror(appError));
+	}
 
 	for (; optind < argc; optind++) {
 		const char* arg = argv[optind];
