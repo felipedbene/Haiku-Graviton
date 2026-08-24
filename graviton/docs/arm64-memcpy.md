@@ -355,14 +355,39 @@ Findings:
   in principle but does not fire here, and the flag it adds to the kernel
   Jamfile is defensive rather than load-bearing. Keep it anyway; it costs
   nothing and the next compiler may differ.
-- **The hazard does fire, on `memset`.** `generic_memset.c` compiled with
-  libroot's flags but *without* `-fno-builtin` emits
-  `R_AARCH64_CALL26 memset + 0` -- memset calling itself, unbounded recursion.
-  libroot is protected by a pre-existing `SubDirCcFlags -fno-builtin` in
-  `string/arch/arm64/Jamfile` whose comment already says "Optimizations create
-  infinite recursion otherwise"; the kernel build was protected only by
-  `-fno-tree-vectorize`. So the commit's instinct was right and its example was
-  wrong.
+- **The hazard does fire, on `memset`.** The same battery was then run over
+  `generic_memset.c`, `generic_memcpy.c` and the new `memcpy.c` across all three
+  flag sets this tree uses (libroot, kernel, boot loader) at `-O2`, `-O3` and
+  `-Os`, with and without each guard. Result:
+
+  | file | flags | guard | outcome |
+  |---|---|---|---|
+  | `generic_memset.c` | libroot | none, `-O2` / `-O3` | **`R_AARCH64_CALL26 memset`** |
+  | `generic_memset.c` | libroot | `-fno-builtin` *or* `-fno-tree-loop-distribute-patterns` | clean |
+  | `generic_memset.c` | libroot | none, `-Os` | clean (incidentally) |
+  | `generic_memset.c` | kernel | none, any `-O` | clean -- `-fno-tree-vectorize` |
+  | `generic_memset.c` | boot | none, any `-O` | clean -- `-Os` and `-fno-tree-vectorize` |
+  | new `memcpy.c` | all three | all combinations (18) | clean |
+  | `generic_memcpy.c` | boot | all combinations | clean |
+
+  That relocation is memset calling itself: unbounded recursion in every process
+  that clears a buffer. **Either guard alone suppresses it, which identifies
+  `-ftree-loop-distribute-patterns` as the pass responsible** -- and that pass is
+  not disabled by `-fno-builtin`, which is why glibc and the Linux kernel pass
+  `-fno-tree-loop-distribute-patterns` explicitly. So the commit's instinct was
+  right and its example was wrong.
+
+  Both flags are now set on both the kernel and libroot builds of this
+  directory, gated on GCC. Confirmed afterwards on the built objects: all four
+  of `{kernel,libroot} x {memcpy.o, generic_memset.o}` carry zero call
+  relocations and zero undefined symbols, and `libroot.so` and `kernel_arm64`
+  each contain a `memcpy` and a `memset` with no `bl` in either.
+
+  **Not fixed, and named so it is not forgotten:** no other architecture's
+  `src/system/kernel/lib/arch/*/Jamfile` has this guard -- arm64's came from
+  `577dbc9895`. They are safe today purely because kernel builds pass
+  `-fno-tree-vectorize`, which nobody would think to preserve for the sake of
+  `memset`. Every *libroot* arch Jamfile does carry `-fno-builtin` already.
 - **Kernel and libroot now emit byte-identical code, and that is a deliberate
   property rather than a coincidence.** They did not before: libroot
   auto-vectorised the body to 128-bit `ldr q`/`str q` while the kernel, built
@@ -634,13 +659,36 @@ but it changes how it is broken.
   MTU 9001 watching for checksum failures rather than only for rate, a filesystem
   workload verified by hash, `ena_fault`, and `profile -a -k`.
 
-  Not even the *unchanged* routine could be exercised on a Haiku node from here:
-  the canonical AMI's baked `authorized_keys` accepts none of the private keys
-  present on this host, and `haiku-uaf-ed25519` -- the key the launch parameters
-  name -- is not one of them. SSH-over-SSM through the metal works
-  (`AWS-StartPortForwardingSessionToRemoteHost`, `session-manager-plugin` is
-  installed, sshd answers), so this is a missing key and nothing more, but it
-  means the Haiku-side run has to be done by whoever holds it.
+  **Correction, recorded because the first version of this paragraph was wrong.**
+  It said the canonical AMI accepted none of the private keys on this host. It
+  does. `~/.ssh/haiku-graviton-ed25519` here and
+  `/home/ubuntu/.ssh/haiku-ed25519` on the metal builder are the same key --
+  `SHA256:WNS7PS4zeMUERF5gCL6MLA6f7ShpUqpKgV6htzu/nyM`, verified with
+  `ssh-keygen -lf` on both. The failure was the **username**: the Haiku account
+  is `baron`, and only `user` and `root` were tried. `haiku-uaf-ed25519` is the
+  EC2 *key-pair name* passed to `run-instances`, which is a different thing
+  entirely and is irrelevant here -- Haiku has no cloud-init, so the AMI's baked
+  `authorized_keys` is what decides, and the key-pair name at launch has no
+  effect at all.
+
+  Two ways in, both working:
+
+  ```sh
+  # from this host: SSM port-forward through the metal, then SSH locally
+  aws ssm start-session --region us-west-2 --target <metal-instance-id> \
+      --document-name AWS-StartPortForwardingSessionToRemoteHost \
+      --parameters '{"host":["<haiku-node-ip>"],"portNumber":["22"],"localPortNumber":["50022"]}' &
+  ssh -p 50022 -i ~/.ssh/haiku-graviton-ed25519 baron@127.0.0.1
+
+  # or from the metal builder over ssm-run, as the perf gate does
+  SO="-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ConnectTimeout=8 \
+      -o LogLevel=ERROR -i /home/ubuntu/.ssh/haiku-ed25519"
+  sudo -u ubuntu ssh -n $SO baron@<haiku-node-ip> 'uname -a'
+  ```
+
+  `scp` to a Haiku node fails; copy with
+  `base64 -w 200 <file> | ssh ... 'base64 -d > /path'`, and run `sync` on the
+  Haiku side before rebooting or the file lands zero-length.
 
   That gap does not put a bake at risk of proving nothing, because the two
   subtests whose validity depends on the host OS each carry a negative control:
@@ -674,3 +722,106 @@ but it changes how it is broken.
   copies straddling an `mprotect` performed by another thread. Out of scope.
 - **`generic_memcpy.c` is untouched**, so no other architecture is affected, and
   the arm64 boot loader continues to use it.
+
+## 7. Reusing this: putting kernel object code under a userland test
+
+This is the part of the work most likely to be useful to something other than
+`memcpy`, so it is written out in full rather than left implicit.
+
+### The problem it solves
+
+A leaf routine in the kernel is the worst thing in the tree to test. There is no
+unit-test harness, `mmap`/`mprotect` are not available to reason about faults,
+a fault is a KDL prompt rather than a signal you can catch and continue from,
+and every iteration costs an image bake of roughly twenty-five minutes. So
+kernel leaf routines get tested by booting and hoping, which for a copy routine
+means hoping that silent data corruption would have shown up as something.
+
+Worse, testing the *libroot* build of the same source does not test the kernel
+build. Before this change the two were compiled with different flags and GCC
+emitted genuinely different instructions from the same C -- 128-bit NEON
+`ldr q`/`str q` in libroot, `ldp`/`stp` in the kernel. A test of one said
+nothing about the other, and nothing in the tree would have told you that.
+
+### The observation
+
+A self-contained leaf routine compiles to an object file with **no relocations
+and no undefined symbols**. Check it:
+
+```sh
+$XT/readelf -r memcpy.o     # -> "There are no relocations in this file."
+$XT/nm -u memcpy.o          # -> nothing
+```
+
+An object like that is pure position-independent machine code with no
+dependency on its runtime, its libc, or its OS. Since Haiku and Linux on arm64
+share the AAPCS64 calling convention and the ELF format, such an object can be
+linked into a Linux binary and called directly. It is the same instruction bytes
+the kernel will execute, running on the same core.
+
+That is what makes it possible to point a full userland test battery -- guard
+bands, `PROT_NONE` pages either side, `sigsetjmp` fault recovery, millions of
+cases -- at the kernel's own object code, in seconds, with no bake.
+
+### The recipe
+
+```sh
+XT=<...>/cross-tools-arm64/bin/aarch64-unknown-haiku-
+
+# 1. Build the object through the real build, so the flags are the real flags.
+#    Do not hand-write a compile line; extract it if you need to see it:
+#      jam -n -a kernel_lib_posix_arch_arm64.o | grep -F 'memcpy.c'
+jam -q kernel_lib_posix_arch_arm64.o
+
+# 2. Confirm the object is self-contained. If this fails, stop -- the technique
+#    does not apply and the failure itself is worth knowing about.
+${XT}readelf -r <obj>/memcpy.o
+${XT}nm -u <obj>/memcpy.o
+
+# 3. Rename the symbol so it does not collide with the host libc's, which lets
+#    the test link both and compare them.
+${XT}objcopy --redefine-sym memcpy=kernel_memcpy <obj>/memcpy.o k.o
+
+# 4. Neutralise the ELF OS/ABI byte so the host linker does not object.
+#    (Byte 7 of e_ident. Harmless: nothing in a leaf object depends on it.)
+printf '\x00' | dd of=k.o bs=1 seek=7 count=1 conv=notrunc status=none
+
+# 5. Build the test against it with the *host* compiler, selecting the routine
+#    under test by macro so one source covers every variant.
+gcc -O2 -fno-builtin -mcpu=neoverse-n1+crypto \
+    -DCOPY_UNDER_TEST=kernel_memcpy -o mt_kernel memcpy_test.c k.o
+
+taskset -c 4 ./mt_kernel
+```
+
+`-fno-builtin` on the test itself matters, and so does reaching the routine
+through a `volatile` function pointer: otherwise the compiler inlines or folds
+the call and you measure GCC's idea of a copy instead of the object's, which
+leaves no trace in the output.
+
+### What it does and does not establish
+
+It establishes everything about the **machine code**: correctness at every size
+and alignment, that it does not touch memory outside its arguments, that it does
+not fault where a correct routine would not, and its cost in ns/byte on the
+right core. Four variants were run through one battery here -- the incumbent,
+glibc, the libroot object and the kernel object -- and having the incumbent and
+glibc in the same run is what turned "the tests pass" into "the tests pass, they
+would have failed, and here is what a *different* correct implementation scores
+on them".
+
+It establishes nothing about **integration**: that libroot exports the symbol,
+that the kernel links it, that it survives early boot before caches and page
+tables are in their final state, or that Haiku's own `mmap`/`mprotect`/signal
+semantics match the host's. Those still need a boot. Where a subtest depends on
+host-OS behaviour, give it a negative control -- the guard-page test here
+deliberately faults against its own `PROT_NONE` page and fails loudly if that
+does *not* fault, so the same binary run on Haiku cannot pass vacuously.
+
+### Where else it applies
+
+Any self-contained arch leaf: `generic_memset.c`, `memcmp`, `strlen`, the
+`byteorder.S` helpers, `generic_atomic.cpp`, checksum routines. The
+`compute_checksum()` cost noted in §6.7 is the obvious next candidate -- it is a
+leaf, it is measurable, and it is currently 2.4x off a straightforward 64-bit
+unrolled version.
