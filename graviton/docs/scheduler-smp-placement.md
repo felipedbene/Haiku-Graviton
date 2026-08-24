@@ -631,6 +631,39 @@ So the layering is deliberate, and both are wanted for different reasons:
 
 ---
 
+## 5.8 The cost of my own instrumentation, checked rather than assumed
+
+Having argued that `dprintf` is too slow to be a probe, I owe the same arithmetic
+for the ring buffer, and I had not done it. Doing it now, before the numbers exist.
+
+`trace_placement_decline()` is one `atomic_add` on a **single global**, called from
+`rebalance()` on every decline. `rebalance()` runs on quantum end whenever a
+different thread is chosen next, so the rate is bounded by reschedules:
+`minimal_quantum` is 100 us and `base_quantum` 1000 us
+(`low_latency.cpp:217-218`), giving 16 k/s typical and 160 k/s worst case across
+16 CPUs. A contended atomic on a shared cache line across 16 cores is order
+100-200 ns, so **0.24 % typical and ~2.4 % worst case**. `trace_placement()` is a
+handful of plain stores plus one `atomic_add`, but it runs once per *placement*,
+which is thousands of times rarer. Acceptable -- but not free, and worth naming.
+
+**The asymmetry matters more than the magnitude, and it runs in the safe
+direction.** The A/B baseline is the canonical AMI, which carries **no
+instrumentation at all**, against a fixed kernel which carries all of it. So the
+overhead penalises the *fixed* kernel -- the one I am arguing for -- and any win it
+shows is understated rather than inflated. Had it been the other way round (stock
+instrumented, fixed clean) the instrumentation would have manufactured an
+improvement, because the stock kernel declines thousands of times a second while
+the fixed one should barely decline at all.
+
+Consequence for how the A/B is read: **compare busy sets, max/min and migration
+counts across the two kernels, never absolute wall times.** The primary metrics are
+placement properties and a sub-percent constant cannot move whether 16 CPUs are
+busy; wall times can move by a percent or two for reasons that have nothing to do
+with the fix. `smpscale` recalibrates its work unit per run on each kernel, so
+`unit_ms` is not comparable across images either.
+
+---
+
 ## 5.9 Pre-registered predictions for the A/B
 
 Written down **before** the fixed kernel boots, so that the result cannot be
