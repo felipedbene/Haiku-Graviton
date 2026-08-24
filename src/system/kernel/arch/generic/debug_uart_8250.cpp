@@ -161,12 +161,24 @@ DebugUART8250::Init()
 }
 
 
+// Wait for room in the transmit holding register, not for the transmitter to
+// run dry. LSR_TEMT (0x40) is only set once the shift register has emptied too,
+// so waiting on it serialises every character against the full bit time of its
+// predecessor and leaves the FIFO permanently unused: one character in flight at
+// a time, no matter how deep the hardware queue is. LSR_THRE (0x20) is the "you
+// may write another byte" flag, which is what this loop wants.
+//
+// On a 16550 with the FIFO enabled, THRE means the whole FIFO is available, so
+// this is the difference between paying a character time per character and
+// paying one per FIFO-full. dprintf() is written a byte at a time and
+// synchronously from a spinlock, which makes that cost a barrier in front of
+// every kernel diagnostic rather than a detail of the console.
 int
 DebugUART8250::PutChar(char c)
 {
-	// wait for the last char to get out
+	// wait for room in the tx holding register / fifo
 	int32 timeout = 256 * 1024;
-	while (!(In8(UART_LSR) & (1<<6))) {
+	while (!(In8(UART_LSR) & LSR_THRE)) {
 		if (--timeout == 0)
 			return -1;
 	}
@@ -181,10 +193,10 @@ int
 DebugUART8250::GetChar(bool wait)
 {
 	if (wait) {
-		while (!(In8(UART_LSR) & (1<<0)));
+		while (!(In8(UART_LSR) & LSR_DR));
 			// wait for data to show up in the rx fifo
 	} else {
-		if (!(In8(UART_LSR) & (1<<0)))
+		if (!(In8(UART_LSR) & LSR_DR))
 			return -1;
 	}
 	return In8(UART_RHR);
@@ -194,7 +206,10 @@ DebugUART8250::GetChar(bool wait)
 void
 DebugUART8250::FlushTx()
 {
-	while (!(In8(UART_LSR) & (1<<6)));
+	// LSR_TEMT and not LSR_THRE on purpose: a flush is the one caller that does
+	// want the shift register drained as well, so that the last byte has really
+	// left the wire before, say, a reset or a jump to the kernel.
+	while (!(In8(UART_LSR) & LSR_TEMT));
 		// wait for the last char to get out
 }
 
@@ -203,7 +218,7 @@ void
 DebugUART8250::FlushRx()
 {
 	// empty the rx fifo
-	while (In8(UART_LSR) & (1<<0)) {
+	while (In8(UART_LSR) & LSR_DR) {
 		volatile char c = In8(UART_RHR);
 		(void)c;
 	}
