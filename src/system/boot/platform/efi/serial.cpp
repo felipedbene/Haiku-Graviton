@@ -38,7 +38,24 @@ serial_putc(char ch)
 	if (!sSerialEnabled)
 		return;
 
-	// First we use EFI serial_io output if available
+	// Once firmware has told us where the console UART is -- via ACPI SPCR/DBG2
+	// or the device tree -- that port is by definition the one the platform
+	// designates as its console, so prefer it over EFI serial_io. serial_io is
+	// only a handle onto whichever port the firmware happened to bind a driver
+	// to, which need not be the same device: on AWS Graviton bare metal the
+	// loader is silent for exactly this reason, while the kernel -- which has
+	// only the SPCR address to go on -- prints fine. Using the same port in both
+	// also means an address or register-stride mistake shows up in the loader
+	// log instead of only after ExitBootServices.
+	if (gUART != NULL) {
+		// A stalled port must not cost us the rest of the boot log, so fall
+		// back to serial_io rather than retrying every character.
+		if (gUART->PutChar(ch) < 0)
+			gUART = NULL;
+		else
+			return;
+	}
+
 	if (sEFISerialIO != NULL) {
 		size_t bufSize = 1;
 		sEFISerialIO->Write(sEFISerialIO, &bufSize, &ch);
@@ -55,15 +72,6 @@ serial_putc(char ch)
 		return;
 	}
 #endif
-
-	// If EFI services are unavailable... try any UART
-	// this can happen when serial_io is unavailable, or EFI
-	// is exiting
-	if (gUART != NULL) {
-		if (gUART->PutChar(ch) < 0)
-			gUART = NULL;
-		return;
-	}
 }
 
 
