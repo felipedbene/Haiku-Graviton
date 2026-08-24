@@ -19,8 +19,10 @@ AddFilesToPackage add-ons kernel busses ata :
 	highpoint_ide_pci
 	ide_isa@x86
 	;
+# See the note in packages/Haiku: designware is listed for arm64 too so that a
+# build that actually runs keeps compiling it.
 AddFilesToPackage add-ons kernel busses pci :
-	<pci>designware@riscv64
+	<pci>designware@riscv64,arm64
 	<pci>ecam@riscv64,arm,arm64
 	<pci>x86@x86,x86_64
 	;
