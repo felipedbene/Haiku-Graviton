@@ -140,7 +140,7 @@ past the end of the window.
 redistributor of *the region it appears in*, so even a window large enough to
 span both blocks would have stopped the walk at core 31.
 
-Note one honest discrepancy. The test instance's panic reports affinity
+**Open, unresolved — do not close this by assumption.**  The test instance's panic reports affinity
 `0x200000` (Aff2 = 32, Aff3 = 0), whereas the build host's MADT gives core 32
 `mpidr=0x100000000` (Aff3 = 1, Aff2 = 0), which packs to `0x1000000`. Both are
 "core 32, first CPU of the second redistributor block", so the diagnosis does
@@ -162,8 +162,7 @@ Three commits on `fix/arm64-metal-gicv3`. Both `kernel_arm64` and
      (a neighbour exactly one v3 or v4 stride away continues the run), falling
      back on the MADT's GIC version only for a lone redistributor — the
      firmware's own numbers rather than an assumption.
-   * The kernel maps each region separately and derives the stride from
-     `GICD_PIDR2.ArchRev`, the same source Linux uses.
+   * The kernel maps each region separately.
    * All three redistributor walks — `_PrefaultRedistributors()`,
      `_CurrentRedistributor()`, and the ITS's `_InitLpis()` — iterate regions,
      treating `GICR_TYPER.Last` as the end of a region rather than the end of
@@ -173,8 +172,52 @@ Three commits on `fix/arm64-metal-gicv3`. Both `kernel_arm64` and
      plus found-vs-CPU-count. One boot on this hardware costs a bake, so it
      should yield many facts.
 
-2. **`arm64: enable group 1 on a distributor with two security states`**
-   (PLAUSIBLE — spec-derived, *not* observed.) `GICD_CTLR_ENABLE_G1NS` was
+2. **`arm64: step the redistributor walk by what each redistributor reports`**
+   The first version of this work derived one global stride from
+   `GICD_PIDR2.ArchRev`, citing Linux. That citation was wrong, and the claim
+   was load-bearing, so it is recorded here rather than quietly amended.
+
+   Linux uses `ArchRev` in `gic_acpi_parse_madt_gicc()` to choose how many bytes
+   to `ioremap` for a region — and it never *walks* those regions, marking them
+   `single_redist` and stopping after the first redistributor. Where it does
+   walk, `gic_iterate_rdists()` advances by asking the frame it is standing on:
+
+   ```c
+   ptr += SZ_64K * 2;                  /* Skip RD_base + SGI_base */
+   if (typer & GICR_TYPER_VLPIS)
+           ptr += SZ_64K * 2;          /* Skip VLPI_base + reserved page */
+   ```
+
+   That is also what the architecture guarantees. The extra pair of frames
+   belongs to redistributors that implement virtual LPIs, reported *per
+   redistributor* by `GICR_TYPER.VLPIS`, and that field is RES0 where virtual
+   LPIs are unsupported. A GICv4 implementation whose redistributors lack VLPIs
+   is legal, and a global 0x40000 stride would then step through 0x20000 frames:
+   every other redistributor read, the rest silently missed, no panic. Worse
+   than the bug in §4, and correctly identified as such before any of it
+   shipped.
+
+   All three walks now step by `gicr_frame_stride(typer)`. `ArchRev` survives
+   only where Linux uses it — sizing a window when firmware gives neither a
+   length nor a region list — and the member is named `fGicrFallbackStride` to
+   keep that scope visible. The ITS no longer takes a stride at all.
+
+   `GICR_TYPER.VLPIS` on this hardware is confirmed from an artifact, not
+   inferred: Linux computes `has_vlpis &= !!(typer & GICR_TYPER_VLPIS)` across
+   every redistributor and prints `GICv4 features:` only if that survives. The
+   build host's dmesg has the line, so VLPIS is set on all 64. KVM sets
+   `GICR_TYPER.PLPIS` and not VLPIS, so the guest gets 0x20000 — identical to
+   the pre-existing behaviour. **Both derivations agree on both platforms under
+   test; only the counterexample separates them**, which is exactly why this
+   needed fixing before a boot could be taken as evidence either way.
+
+3. **`arm64: enable group 1 on a distributor with two security states`**
+   (PLAUSIBLE — spec-derived, *not* observed. Note that it writes `GICD_CTLR`,
+   a distributor-wide control register, on **every** arm64 platform, not just
+   metal; the added bit is reserved rather than meaningful where `DS=1`, which
+   is the case on every GIC we have booted so far, but this is not a
+   metal-only change and the virtualised regression test covers it.)
+   `GICD_CTLR_ENABLE_G1NS` was
    `1u << 1`, which is the enable bit only when `GICD_CTLR.DS` is set. Linux
    reports `DS=0` on this hardware, and in the non-secure view of a
    two-security-state distributor with affinity routing on, non-secure group 1
@@ -185,8 +228,39 @@ Three commits on `fix/arm64-metal-gicv3`. Both `kernel_arm64` and
    redistributor fix, not the current blocker. `GICD_CTLR` is now logged on
    readback so the next boot says which bits stuck.
 
-3. **`arm64/efi: don't spin forever when the MADT lists more CPUs than we
+4. **`arm64/efi: don't spin forever when the MADT lists more CPUs than we
    support`** — see §7.
+
+### What the coalescing does with awkward firmware
+
+Asked of it explicitly, because it infers spacing from addresses:
+
+* **MADT entries out of address order** — handled. The bases are insertion
+  sorted before coalescing; ACPI does not require address order and Graviton's
+  happen to be ordered, so this is not exercised by the machines we have.
+* **A single CPU in a region** — the run ends immediately, no spacing can be
+  inferred, and the region is sized `GICR_STRIDE_V3`: exactly the `RD_base` and
+  `SGI_base` frames the kernel reads. The walk's guard is
+  `frame + GICR_STRIDE_V3 <= end`, so it runs once and stops. Nothing is
+  assumed about frames we never touch. This is the case Linux's ACPI path
+  always takes, one region per CPU.
+* **Gaps from absent or unusable CPUs** — a delta that is neither one stride nor
+  the other ends the run, so a gap splits the list into two regions and both are
+  walked. The same mechanism that handles Graviton's 16 GiB gap handles a small
+  one. Note we currently record a base only for a GICC we could register, so a
+  CPU past `SMP_MAX_CPUS` leaves a gap by construction — which is correct: we
+  neither start that CPU nor need its redistributor.
+* **An irregular layout** (mixed 0x20000 and 0x40000 spacing in one run) — the
+  run is broken where the delta changes, producing more regions than strictly
+  necessary but never a wrong one. Per-frame `VLPIS` stepping then walks each
+  correctly. Degrades into more regions, not into a wrong address.
+* **More than `INTC_MAX_GICR_REGIONS` (16) regions** — reported by the loader,
+  and the CPUs behind the surplus will fail to find a redistributor. That is a
+  loud panic in `_CurrentRedistributor()`, not silence. A machine that needs
+  more than 16 disjoint runs would need the ceiling raised; 64 single-CPU
+  regions is the pathological case and would hit it.
+* **Bases the kernel cannot map** — `_MapRedistributors()` panics naming the
+  region and address rather than continuing with a partial list.
 
 ## 6. Hypotheses considered and disproven
 
@@ -243,6 +317,15 @@ Kept here deliberately.
 
 ## 8. What remains
 
+* **The gating test is virtualised Graviton, not metal.** Commit `e64c666d62`
+  rewrites redistributor discovery for *all* arm64. `c7g.large` and
+  `c7g.4xlarge` must still find every CPU and still come up with networking, and
+  that must be checked whatever the metal boot does. Today they take the
+  `gicr_region_count == 0` path (a GICR structure with a real length), so they
+  exercise the new single-region fallback plus the new per-frame stride
+  (`VLPIS=0` → 0x20000, identical to the old constant) plus the `GICD_CTLR`
+  change. A fix that trades the flagship target for the nice-to-have does not
+  merge.
 * **A bake and a metal boot.** The code compiles but nothing here is
   hardware-verified. One boot of `c7g.metal` will say whether the redistributor
   walk now finds 64 of 64, whether `GICD_CTLR` took both group-1 bits, what
