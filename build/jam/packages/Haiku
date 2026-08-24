@@ -239,6 +239,7 @@ AddFilesToPackage :
 AddFilesToPackage bin :
 	$(SYSTEM_BIN)
 	cloud_init_lite
+	disktput
 	ena_fault
 	nettput
 	consoled
