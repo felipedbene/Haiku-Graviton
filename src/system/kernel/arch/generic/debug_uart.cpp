@@ -8,6 +8,14 @@
 
 
 void
+DebugUART::PutChars(const char* string, size_t length)
+{
+	for (size_t i = 0; i < length; i++)
+		PutChar(string[i]);
+}
+
+
+void
 DebugUART::Out8(int reg, uint8 value)
 {
 #if defined(__ARM__) || defined(__aarch64__)
