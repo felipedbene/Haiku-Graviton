@@ -9,6 +9,7 @@
 #include "scheduler_common.h"
 #include "scheduler_cpu.h"
 #include "scheduler_modes.h"
+#include "scheduler_placement_trace.h"
 #include "scheduler_profiler.h"
 #include "scheduler_thread.h"
 
@@ -55,15 +56,17 @@ choose_core(const ThreadData* threadData)
 		package = PackageEntry::GetMostIdlePackage();
 	}
 
-	int32 index = 0;
+	int32 index;
 	CPUSet mask = threadData->GetCPUMask();
 	const bool useMask = !mask.IsEmpty();
 
+	placement_event event = PLACEMENT_IDLE_CORE;
 	CoreEntry* core = NULL;
 	if (package != NULL) {
-		do {
-			core = package->GetIdleCore(index++);
-		} while (useMask && core != NULL && !core->CPUMask().Matches(mask));
+		// Not GetIdleCore(0): during a burst that keeps returning the same core,
+		// because a core is only removed from the idle list once its CPU actually
+		// reschedules. See PackageEntry::GetLeastClaimedIdleCore().
+		core = package->GetLeastClaimedIdleCore(useMask ? &mask : NULL);
 	}
 	if (core == NULL) {
 		ReadSpinLocker coreLocker(gCoreHeapsLock);
@@ -72,15 +75,23 @@ choose_core(const ThreadData* threadData)
 		do {
 			core = gCoreLoadHeap.PeekMinimum(index++);
 		} while (useMask && core != NULL && !core->CPUMask().Matches(mask));
+		event = PLACEMENT_LOAD_HEAP;
 		if (core == NULL) {
 			index = 0;
 			do {
 				core = gCoreHighLoadHeap.PeekMinimum(index++);
 			} while (useMask && core != NULL && !core->CPUMask().Matches(mask));
+			event = PLACEMENT_HIGH_LOAD_HEAP;
 		}
 	}
 
 	ASSERT(core != NULL);
+
+	// Which of the three paths placed the thread, and on which core, is the one
+	// fact that decides whether the fix belongs in placement or in rebalancing.
+	trace_placement(event, threadData->GetThread()->id, core->ID(),
+		core->GetLoad(), threadData->GetLoad());
+
 	return core;
 }
 
@@ -117,10 +128,24 @@ rebalance(const ThreadData* threadData)
 
 	// Check if the least loaded core is significantly less loaded than
 	// the current one.
-	int32 coreLoad = core->GetLoad();
-	int32 otherLoad = other->GetLoad();
-	if (other == core || otherLoad + kLoadDifference >= coreLoad)
+	//
+	// Unclamped, or this test cannot pass. GetLoad() saturates at kMaxLoad, so
+	// coreLoad <= kMaxLoad and otherLoad >= 0 bound the difference below at
+	// kMaxLoad - kLoadDifference == 0.8 * kMaxLoad, while threadLoad for a
+	// CPU-bound thread on a non-SMT core is kMaxLoad. 0.8 * kMaxLoad >= kMaxLoad
+	// is false for every value of kMaxLoad: ANY thread above 80% duty could never
+	// be migrated, however idle the machine. It only works on x86 because SMT
+	// makes CPUCount() 2 and halves threadLoad below.
+	int32 coreLoad = core->GetUnclampedLoad();
+	int32 otherLoad = other->GetUnclampedLoad();
+	if (other == core || otherLoad + kLoadDifference >= coreLoad) {
+		// Record whether a genuinely less loaded core existed at this moment.
+		// If declines happen in their thousands while such a core exists, the
+		// migration predicate is the problem; if they happen while every core
+		// looks identically loaded, the load metric is.
+		trace_placement_decline(other != core && otherLoad < coreLoad);
 		return core;
+	}
 
 	// Check whether migrating the current thread would result in both core
 	// loads become closer to the average.
@@ -128,7 +153,14 @@ rebalance(const ThreadData* threadData)
 	ASSERT(difference > 0);
 
 	int32 threadLoad = threadData->GetLoad() / core->CPUCount();
-	return difference >= threadLoad ? other : core;
+	if (difference < threadLoad) {
+		trace_placement_decline(true);
+		return core;
+	}
+
+	trace_placement(PLACEMENT_MIGRATE, threadData->GetThread()->id,
+		other->ID(), coreLoad, otherLoad);
+	return other;
 }
 
 

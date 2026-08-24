@@ -157,6 +157,7 @@ public:
 											bigtime_t activeTime);
 
 	inline				int32			GetLoad() const;
+	inline				int32			GetUnclampedLoad() const;
 	inline				uint32			LoadMeasurementEpoch() const
 											{ return fLoadMeasurementEpoch; }
 
@@ -234,6 +235,8 @@ public:
 	inline				void				CoreWakesUp(CoreEntry* core);
 
 	inline				CoreEntry*			GetIdleCore(int32 index = 0) const;
+	inline				CoreEntry*			GetLeastClaimedIdleCore(
+											const CPUSet* mask = NULL) const;
 
 						void				AddIdleCore(CoreEntry* core);
 						void				RemoveIdleCore(CoreEntry* core);
@@ -405,6 +408,36 @@ CoreEntry::GetLoad() const
 }
 
 
+/*!	The same quantity as GetLoad(), demand per logical CPU, but without the clamp
+	at kMaxLoad -- so an oversubscribed core reports 2000 rather than 1000 and is
+	distinguishable from a merely saturated one.
+
+	fLoad is the running sum of the fNeededLoad of the threads assigned to this
+	core, and fNeededLoad is DEMAND, not supply: ThreadData's available-time
+	accounting excludes time spent runnable in the run queue, so a CPU-bound
+	thread reports kMaxLoad however little CPU it actually gets. The sum is
+	therefore genuinely unbounded and meaningful above kMaxLoad, and the clamp in
+	GetLoad() is what makes oversubscription invisible.
+
+	Use this ONLY in the rebalance predicates. GetLoad() keeps its clamp
+	deliberately, because its other consumers need a bounded ratio: in particular
+	CPUEntry::_RequestPerformanceLevel() feeds it to the cpufreq interface behind
+	an ASSERT_PRINT(load <= kMaxLoad), and KDEBUG is on in the checked-in build,
+	so widening GetLoad() itself would be a live panic() on any machine that has a
+	cpufreq module -- i.e. x86, where it could not be tested from here. The
+	core load heap keys and the kHighLoad/kMediumLoad band decision also read
+	GetLoad() and must keep their present meaning.
+*/
+inline int32
+CoreEntry::GetUnclampedLoad() const
+{
+	SCHEDULER_ENTER_FUNCTION();
+
+	ASSERT(fCPUCount > 0);
+	return fLoad / fCPUCount;
+}
+
+
 inline void
 CoreEntry::AddLoad(int32 load, uint32 epoch, bool updateLoad)
 {
@@ -550,6 +583,59 @@ PackageEntry::GetIdleCore(int32 index) const
 		element = fIdleCores.GetPrevious(element);
 
 	return element;
+}
+
+
+/*!	Returns the idle core with the fewest threads already assigned to it, or NULL
+	if this package has no idle core matching \a mask (NULL matches any).
+
+	choose_core() must not simply take GetIdleCore(0). A core leaves fIdleCores
+	only when one of its CPUs actually reschedules onto a thread -- CPUWakesUp(),
+	reached from CPUEntry::UpdatePriority() -- but enqueue() merely asks that CPU
+	to reschedule, with an asynchronous ICI. For the length of that lag the core
+	is still advertised as idle, and because CoreGoesIdle() appends while
+	GetIdleCore(0) returns fIdleCores.Last(), a burst of placements is handed the
+	SAME core over and over. Measured on a 16-CPU Graviton: eight threads spawned
+	back to back land on seven cores, leaving one core doubled and one idle, and
+	separating the spawns by as little as 5 us -- ICI plus reschedule latency --
+	makes it correct in 40 runs out of 40.
+
+	ThreadCount() is the tie-breaker because it is the only measure here with no
+	lag: CoreEntry::PushBack() does atomic_add(&fThreadCount, 1) from within
+	ThreadData::Enqueue(), which completes before the next placement's
+	choose_core() call, so a core claimed a moment ago already reports 1. Core
+	load cannot serve that purpose -- a new thread inherits its parent's
+	fNeededLoad (ThreadData::Init()), which is ~0 for a parent that is about to
+	block, so placing a thread need not move the core's load at all.
+
+	Note this walks from Last(), so a genuinely free core is returned on the first
+	iteration and the existing LIFO preference (and its cache locality) is kept
+	intact; the walk only continues when the head of the list is already claimed.
+*/
+inline CoreEntry*
+PackageEntry::GetLeastClaimedIdleCore(const CPUSet* mask) const
+{
+	SCHEDULER_ENTER_FUNCTION();
+
+	CoreEntry* best = NULL;
+	int32 bestCount = 0;
+
+	for (CoreEntry* core = fIdleCores.Last(); core != NULL;
+			core = fIdleCores.GetPrevious(core)) {
+		if (mask != NULL && !core->CPUMask().Matches(*mask))
+			continue;
+
+		int32 count = core->ThreadCount();
+		if (count <= 0)
+			return core;
+
+		if (best == NULL || count < bestCount) {
+			best = core;
+			bestCount = count;
+		}
+	}
+
+	return best;
 }
 
 

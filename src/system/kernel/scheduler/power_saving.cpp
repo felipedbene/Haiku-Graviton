@@ -75,8 +75,12 @@ choose_idle_core()
 	if (package == NULL)
 		package = gIdlePackageList.Last();
 
-	if (package != NULL)
-		return package->GetIdleCore();
+	if (package != NULL) {
+		// Same reasoning as in low_latency's choose_core(): a core stays in the
+		// idle list until its CPU reschedules, so taking the head of the list
+		// hands a burst the same core repeatedly.
+		return package->GetLeastClaimedIdleCore();
+	}
 	return NULL;
 }
 
@@ -138,7 +142,10 @@ rebalance(const ThreadData* threadData)
 
 	CoreEntry* core = threadData->Core();
 
-	int32 coreLoad = core->GetLoad();
+	// Unclamped: see CoreEntry::GetUnclampedLoad(). Without it an oversubscribed
+	// core is indistinguishable from a merely saturated one and none of the tests
+	// below can tell that threads are being delayed.
+	int32 coreLoad = core->GetUnclampedLoad();
 	int32 threadLoad = threadData->GetLoad() / core->CPUCount();
 	if (coreLoad > kHighLoad) {
 		if (sSmallTaskCore == core) {
@@ -152,7 +159,15 @@ rebalance(const ThreadData* threadData)
 			return coreLoad > kVeryHighLoad ? smallTaskCore : core;
 		}
 
-		if (threadLoad >= coreLoad / 2)
+		// Packing threads onto few cores is the point of this mode, and the guard
+		// below expresses that: if this thread is at least half the core's load,
+		// moving it just moves the problem. But that stops being true once the
+		// core is oversubscribed. With two saturated threads on a non-SMT core it
+		// reads 1000 >= 2000/2, true, so it declines -- and for EXACTLY two
+		// threads, the commonest case, that is the wrong answer: moving one to an
+		// idle core takes the peak from 2000 to 1000. Pack up to saturation, not
+		// past it.
+		if (coreLoad <= kMaxLoad && threadLoad >= coreLoad / 2)
 			return core;
 
 		ReadSpinLocker coreLocker(gCoreHeapsLock);
@@ -171,7 +186,17 @@ rebalance(const ThreadData* threadData)
 		ASSERT(other != NULL);
 
 		int32 coreNewLoad = coreLoad - threadLoad;
-		int32 otherNewLoad = other->GetLoad() + threadLoad;
+		int32 otherNewLoad = other->GetUnclampedLoad() + threadLoad;
+		if (coreLoad > kMaxLoad) {
+			// Oversubscribed: make the move whenever it strictly lowers the peak,
+			// even if it leaves the two cores equal. The packing criterion below
+			// wants this core to stay meaningfully busier than the target
+			// afterwards, which rejects precisely the balancing move that unwinds
+			// a doubled core -- 2000 and 0 becomes 1000 and 1000, a difference of
+			// zero. Still declines when every core is busy, since otherNewLoad
+			// then reaches coreLoad and moving only moves the collision.
+			return otherNewLoad < coreLoad ? other : core;
+		}
 		return coreNewLoad - otherNewLoad >= kLoadDifference / 2 ? other : core;
 	}
 

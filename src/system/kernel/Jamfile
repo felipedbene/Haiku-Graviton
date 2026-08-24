@@ -70,6 +70,7 @@ KernelMergeObject kernel_core.o :
 	scheduler.cpp
 	scheduler_cpu.cpp
 	scheduler_load.cpp
+	scheduler_placement_trace.cpp
 	scheduler_profiler.cpp
 	scheduler_thread.cpp
 	scheduler_tracing.cpp
