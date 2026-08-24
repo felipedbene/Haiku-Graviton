@@ -151,8 +151,8 @@ extern "C" {
 #define ENA_RX_REFILL_DIVISOR		8
 #define ENA_RX_REFILL_MAX_THRESHOLD	256
 
-/* Non-adaptive interrupt moderation intervals, in microseconds, handed to the
-   device in the interrupt-unmask register every time a vector is re-armed. The
+/* Non-adaptive interrupt moderation intervals, handed to the device in the
+   interrupt-unmask register every time a vector is re-armed. The
    values are the reference driver's (ena.h:145 ENA_RX_IRQ_INTERVAL, ena.h:146
    ENA_TX_IRQ_INTERVAL), which is also where the asymmetry comes from: transmit
    completions only free descriptors, so they can wait longer than a frame that
@@ -161,9 +161,23 @@ extern "C" {
    Zero here does not mean "default", it means "interrupt on every completion",
    which is what this driver used to ask for. Both fields are 15 bits wide
    (ENA_ETH_IO_INTR_REG_{RX,TX}_INTR_DELAY_MASK), so these fit with room to
-   spare. */
+   spare.
+
+   The unit is *device resolution ticks*, not microseconds, and the difference
+   matters as soon as anyone tunes these. ena_com_update_intr_reg() writes its
+   arguments straight into the register's delay fields; the microsecond ->  tick
+   division lives in ena_com_update_nonadaptive_moderation_interval_rx/tx(),
+   which divides by the device-reported intr_delay_resolution and which this
+   driver does not call. So a tick is a microsecond exactly when the device
+   reports a resolution of 1, and the value is logged at attach rather than
+   assumed -- see the trace next to ena_com_init_interrupt_moderation(). */
 #define ENA_RX_IRQ_INTERVAL	20
 #define ENA_TX_IRQ_INTERVAL	50
+
+/* The delay fields are 15 bits, so this is the largest interval the register can
+   carry; anything wider would be silently truncated by the mask rather than
+   rejected. */
+#define ENA_MAX_IRQ_INTERVAL	32767
 
 /* Watchdog cadence and timeout, both matching Linux and FreeBSD exactly: a
    one-second timer against a six-second keep-alive deadline
@@ -226,7 +240,7 @@ extern "C" {
    out to be an unloaded driver rather than an ineffective change. Bump it with
    any change being measured, and read it back out of the syslog before believing
    a number. */
-#define ENA_BUILD_STAMP		"irq-cadence-3-wd2"
+#define ENA_BUILD_STAMP		"rx-cadence-4-mod"
 
 #ifdef ENA_DEBUG_FAULT_INJECTION
 /* Private ioctl for provoking a watchdog timeout without breaking hardware: it
@@ -313,6 +327,27 @@ extern "C" {
 #define ENA_REARM_IN_HANDLER		0
 #define ENA_REARM_AFTER_DRAIN		1
 
+/* Sets the receive moderation interval that the next re-arm will program, in the
+   same device ticks as ENA_RX_IRQ_INTERVAL. Runtime for the same reason as the
+   re-arm knob above, and the reason is worth restating because it is the whole
+   apparatus: moderation is the second of the two mechanisms by which interrupt
+   cadence could bound receive throughput, and the first one was already measured
+   to move frames-per-interrupt by 27% while leaving goodput at 6.4 Gbit/s. Only
+   a sweep can tell a lever from a coincidence, and a sweep whose points are
+   separated by reboots measures this hardware's boot-to-boot drift instead of
+   the lever.
+
+   Transmit is deliberately *not* settable. One variable per arm: with rx alone
+   moving, a change in the interrupt rate has one possible cause. Note that the
+   device raises the vector when either timer expires, so the transmit interval
+   still bounds the interrupt rate from below however long rx is made -- which is
+   why lengthening rx cannot drive the interrupt rate to zero.
+
+   Takes effect on the next re-arm rather than immediately, because the register
+   is only written there. Under ENA_REARM_AFTER_DRAIN that is within one drain;
+   the sampling windows here are seconds. */
+#define ENA_IOCTL_RX_MODERATION		9805
+
 struct ena_irq_stats {
 	uint64	ioInterrupts;
 	/* Unmask writes. Fewer than ioInterrupts means a vector was re-armed by one
@@ -334,6 +369,15 @@ struct ena_irq_stats {
 	   ENA_REARM_AFTER_DRAIN. Reported so a number cannot be attributed to the
 	   wrong one. */
 	uint64	rearmMode;
+	/* The receive moderation interval in force, for the same reason: the two
+	   knobs together identify the arm, and a sample that cannot name its own arm
+	   is not evidence. */
+	uint64	rxIrqInterval;
+	/* The device's reported interrupt delay resolution, which is what converts
+	   the interval above from ticks into time. Carried in the same snapshot so
+	   that the conversion is a measurement taken alongside the numbers it
+	   applies to, rather than an assumption made later. */
+	uint64	intrDelayResolution;
 };
 
 /* Refuse to attach below this, rather than dividing by a zero ring size if a
@@ -424,6 +468,10 @@ struct ena_haiku_device {
 	   Read on the interrupt path, so a plain atomic load rather than anything
 	   that could block. */
 	int32				rearmMode;
+	/* The receive moderation interval the next re-arm will program, in device
+	   ticks; see ENA_IOCTL_RX_MODERATION. Read on the re-arm path, which can run
+	   from the interrupt handler, so again a plain atomic load. */
+	int32				rxIrqInterval;
 	bool				managementIrqInstalled;
 	bool				ioIrqInstalled;
 	/* Two states, not one: configure_msix() claims the vectors and is undone by
