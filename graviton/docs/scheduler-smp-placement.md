@@ -26,9 +26,18 @@ The original framing — perfect scaling to N = 15, then exactly 0.500 at
 N = 16 — is **wrong in both directions**, and the error was caused by the metric.
 
 - **It starts at N = 8 on a 16-CPU machine, with 8 CPUs completely idle.**
-  N = 8 failed 5 of 6 runs; N = 12 failed 4 of 6.
-- **Severity exceeds 2x.** Observed max/min over busy CPUs reaches **3.0 and
-  4.03** — three and four saturated threads stacked on one core.
+  N = 8 failed 5 of 6 runs; N = 12 failed 4 of 6. **Independently confirmed
+  first-hand**: a `-t 3000 1 8 12 16 17` ladder, 5 repeats, gave `max/min` of
+  **2.00–4.01 at every one of N = 8, 12, 16, 17 in all five repeats**, while N = 1
+  was always clean. Worst single point: N = 16 with cpu15 at **15022 ms** — five
+  threads stacked — and nine CPUs at 0 ms.
+- **Severity exceeds 2x.** Observed max/min over busy CPUs reaches **3.0, 4.03
+  and 5.02** — up to five saturated threads stacked on one core.
+- **`cpu_busy_ms` is always ≈ N × unit**, so no CPU time is lost and no work is
+  duplicated. The defect is *purely* placement. Corroborating signature: the walls
+  are **exact integer multiples** of the work unit (2.0x, 3.0x, 4.0x, 5.0x, never
+  1.4x or 2.6x), which is threads stacked K-deep and run to completion rather than
+  threads sharing CPUs broadly.
 - **Up to 9 of 16 CPUs idle**, i.e. more than half the machine wasted.
 - **N = 16 is not deterministic.** It was perfect in 2 of 6 runs in one round and
   2 of 4 in another. The reported "8/8" does not reproduce. Any A/B therefore
@@ -66,6 +75,18 @@ per-CPU state at 50 ms across 12 runs, ~37 intervals each:
   cpu13 read 100 %.
 - So there are **zero migrations, in either direction**, and the imbalance
   predates the first sample: it is established during the spawn burst.
+- **Confirmed independently and by a different method.** `smpscale -g` has each
+  thread sample `sched_getcpu()` at ~1 kHz and count its own transitions. Over
+  three repeats at N = 8 and 16: **`migr_max` = 1 in every single run** — no
+  thread moved more than once in 3–12 s of running — with totals of 2–10
+  migrations across 24 000–48 000 samples (0.08–0.21 per thousand samples). Once
+  a thread is placed it never moves.
+- The mixed workload (`-x`) is the sharpest version: the **sleepers** land on
+  13–14 distinct CPUs, so the wake path is demonstrably alive and placing threads
+  widely, yet the **CPU-bound threads remain stacked 3.0x–4.0x** with only 13–17
+  migrations in 25 512 samples. The repair path is not merely slow, it is absent
+  for exactly the threads that need it — which is precisely what §3's
+  ">80 % duty can never migrate" predicts.
 
 Therefore `rebalance()` is **the mechanism that fails to repair, not the
 mechanism that creates.** Everything in §3 about its arithmetic is still true and
@@ -140,10 +161,61 @@ test program. `smpscale -s <µs>` exists for exactly this. Sweeping 0, 10, 25, 5
 mechanism. This is the cheapest decisive experiment available and it is being run
 before any bake is requested.
 
-**All of §1.4 and §1.5 are hypotheses, not findings.** The stagger sweep
-discriminates between them; §5 is the kernel instrumentation that confirms
-whichever survives, by recording which `choose_core()` path was taken and which
-core it returned.
+### 1.6 The sweep was run, and it identifies the mechanism — via my own bug
+
+A 100-run sweep (staggers 0, 5, 10, 25, 50, 100, 250, 500, 1000, 2000 µs; N = 8
+and 16; 5 repeats) came back **completely flat**: 0 of 5 clean at every stagger
+for N = 16, and 1 of 100 overall, which is indistinguishable from the coin toss.
+No knee anywhere.
+
+That looked like a null result. It is not — it is the mechanism, and it was
+exposed by a flaw I introduced myself.
+
+Replacing the busy-wait gate with a blocking `snooze_until()` barrier (§8) was
+correct on its own terms: the busy-wait fabricated N runnable CPU-bound threads
+during the very burst under investigation. But it **silently destroyed the only
+mechanism by which a spawn stagger could matter**. With the barrier, every worker
+blocks the instant it is spawned, so:
+
+- its CPU never reschedules onto it, so `CPUEntry::UpdatePriority()` never sees a
+  transition out of `B_IDLE_PRIORITY`, so **`CoreEntry::CPUWakesUp()` never
+  runs**, so the core is **never removed from the package idle-core list**;
+- `choose_core()`'s first path therefore keeps returning **the same idle core**,
+  however far apart the spawns are.
+
+Contrast the two builds, which together form a natural experiment:
+
+| gate | staggered spawn | do threads run between placements? | core leaves idle list? | placement |
+|---|---|---|---|---|
+| busy-wait (old) | yes | **yes**, they spin | **yes** | **spreads** — the reported "1 ms fixes it" |
+| blocking barrier (new) | yes | no, they block | no | **piles up at every stagger** |
+
+**This selects §1.5 over §1.4.** The variable that decides placement is whether
+the core has left the idle-core list, not whether a load-heap key has been
+refreshed. It also reinterprets the original datapoint: what 1 ms of stagger
+bought in the old build was time for the **asynchronous wake-up IPI**
+(`smp_send_ici(..., SMP_MSG_FLAG_ASYNC)`, `scheduler.cpp:136`) to land and the
+target CPU to reschedule. The resemblance to `kLoadMeasureInterval` was a
+**coincidence**, and the claim that the threshold "is exactly
+`kLoadMeasureInterval`" should be discarded.
+
+One further detail closes the loop on why the barrier run still misplaces
+everything. `has_cache_expired()` compares against the **core's active time**, not
+wall time (`low_latency.cpp:36-44`). During an idle 200 ms barrier the cores
+accumulate almost no active time, so the cache does **not** expire; on wake each
+thread takes the `Rebalance()` path, which declines (all loads ~0), and so the
+**spawn-time layout is preserved verbatim**. Placement decides everything and
+nothing ever repairs it.
+
+`smpscale -i` now drops the barrier so each worker starts real work the instant it
+is resumed — the realistic case, and the only condition under which `-s` can move
+placement. The sweep must be re-run with `-i -s`, and that is the outstanding
+experiment.
+
+**§1.4 is now disfavoured but not dead**, and §5's kernel instrumentation still
+discriminates cleanly: if the idle-core-list path (`PLACEMENT_IDLE_CORE`)
+dominates and repeats a core ID, §1.5 is confirmed; if placements come from
+`gCoreLoadHeap` with a stale key, §1.4 survives.
 
 ---
 
