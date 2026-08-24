@@ -433,10 +433,29 @@ PANIC: did not find any boot partitions!
 `c7g.metal`'s MCFG (`AMAZON GRVTN003`) describes PCI **segment 1**, and
 `ECAMPCIControllerACPI::ReadResourceInfo()` rejects any segment other than 0. No
 PCI means no NVMe, which means no boot partition. The GIC brings up all 64 CPUs
-and the ITS is ready before this point, so the interrupt controller is done; this
-is the next blocker and it lives in `src/add-ons/kernel/busses/pci/ecam/`.
-Tracked separately as `fix/arm64-pci-segment`. Non-zero segments imply multiple
-independent ECAM regions, so it is probably more than deleting a check.
+and the ITS is ready well before this point, so the interrupt controller is done;
+this is the next blocker and it lives in
+`src/add-ons/kernel/busses/pci/ecam/ECAMPCIControllerACPI.cpp:58`. Tracked
+separately as `fix/arm64-pci-segment`.
+
+Scoped, and it is smaller than the message suggests. **There is only one ECAM
+region on this machine — it is simply numbered 1.** Evidence: the MCFG is
+`0x3c` = 60 bytes, which is the 44-byte header plus exactly one 16-byte
+allocation; and the neighbouring `"multiple host bridges not supported!"`
+warning, which fires when `alloc + 1 != end`, appears **zero** times on either
+metal host. So nothing here needs to start carrying a segment: the ECAM offset is
+`(bus << 20) | (device << 15) | (function << 12)` regardless of segment number,
+and the segment only selects which base to use when there is more than one.
+The check is rejecting a valid single-bridge machine, and its diagnostic
+misdescribes what happened.
+
+Two things to verify while fixing it, rather than assumed:
+
+* whether anything downstream assumes segment 0 when binding ACPI namespace
+  devices to PCI devices;
+* that metal's absent PCI I/O window is tolerated. Its `_CRS` yields a bus range,
+  a 32-bit MMIO window and a 64-bit MMIO window, where the guest also yields an
+  I/O port range.
 
 Still open beyond that:
 
