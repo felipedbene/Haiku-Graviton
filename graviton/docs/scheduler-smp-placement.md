@@ -104,8 +104,46 @@ key and `PeekMinimum` hands out **the same core repeatedly**. That explains the
 concentration (all five surplus threads on one CPU; 17 on cpu9) far better than
 anything in `rebalance()` does.
 
-**This is a hypothesis, not yet a finding.** §5 is the instrumentation that
-settles it.
+### 1.5 A second, sharper placement mechanism — and the stagger threshold is not
+yet measured
+
+There is a competing explanation that fits the data better, and it is
+distinguishable by a cheap experiment.
+
+A core leaves the package idle-core list only when one of its CPUs **actually
+reschedules onto a real thread**: `CPUEntry::UpdatePriority()` calls
+`fCore->CPUWakesUp()` when the old priority was `B_IDLE_PRIORITY`
+(`scheduler_cpu.cpp:190`), and `UpdatePriority()` is called from `reschedule()`.
+But `enqueue()` only *requests* that the target CPU reschedule — it sends an
+inter-processor interrupt (`scheduler.cpp:130-137`). **Until that CPU gets round
+to rescheduling, its core is still in the idle-core list.**
+
+So during a spawn burst on the parent's CPU: thread 1 is placed on idle core A
+and an IPI is sent; before A wakes, thread 2 is placed and `GetIdleCore(0)`
+**still returns A**; and so on. The window is IPI-plus-reschedule latency, not a
+load-measurement interval.
+
+**This matters because the two mechanisms predict different thresholds**, and the
+reported threshold is not actually measured:
+
+- The claim "the threshold is ~1 ms, which is exactly `kLoadMeasureInterval`" rests
+  on **two points**, 0 µs and 1000 µs. Two points cannot locate a threshold; they
+  only bracket it. The true knee could be anywhere in between.
+- If the knee is at **tens of microseconds**, the mechanism is the idle-list lag
+  above and `kLoadMeasureInterval` is a coincidence.
+- If the knee is at **~1000 µs**, the mechanism is the stale heap key of §1.4.
+
+**A stagger sweep settles this and needs no kernel change and no image bake** — it
+runs on the stock canonical AMI, because the stagger is entirely a property of the
+test program. `smpscale -s <µs>` exists for exactly this. Sweeping 0, 10, 25, 50,
+100, 250, 500, 1000, 2000 µs with repeats locates the knee, and the knee names the
+mechanism. This is the cheapest decisive experiment available and it is being run
+before any bake is requested.
+
+**All of §1.4 and §1.5 are hypotheses, not findings.** The stagger sweep
+discriminates between them; §5 is the kernel instrumentation that confirms
+whichever survives, by recording which `choose_core()` path was taken and which
+core it returned.
 
 ---
 
