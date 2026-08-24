@@ -34,8 +34,12 @@
 # Usage: disktput-run <node-ip> [-d device] [-n bytes] [-r reps] [-S span]
 #                     [-m matrix] [-u user] [-k key]
 #
-#   -m  which matrix to run: threads | blocks | random | align | all
+#   -m  which matrix to run: threads | blocks | nvme | random | align | all
 #                            (default all)
+#
+#       nvme is the targeted A/B for the request-batching change: block sizes
+#       above max_xfer_size at depth 1, with 256K as a negative control that
+#       must NOT move because it is a single command.
 #   -S  span to confine the test to, and to initialise (default 64G)
 #   -T  seconds per cell (default 20). Cells are timed, not sized: see run_cell.
 #
@@ -171,14 +175,44 @@ fi
 if want blocks; then
 	echo
 	echo "=== block size sweep ==="
-	echo "    the driver chops every request at max_xfer_size (MDTS), so the"
-	echo "    knee is expected at 256K and nothing above it should help"
+	echo "    the driver chops every request at max_xfer_size (MDTS). Before the"
+	echo "    batching change nothing above 256K helped, and 512K was actually"
+	echo "    SLOWER than 256K. See the nvme matrix for the targeted A/B."
 	for rep in $(seq 1 "$REPS"); do
 		echo "  rep $rep:"
 		for b in 4K 16K 64K 256K 1M; do
 			run_cell "seqread-b$b-t1" seqread "$b" 1
 			run_cell "seqread-b$b-t8" seqread "$b" 8
 		done
+	done
+fi
+
+if want nvme; then
+	echo
+	echo "=== nvme batching: does a chopped request still cost one round trip each? ==="
+	echo "    A request over max_xfer_size (256K here) is split into several"
+	echo "    commands. They used to be issued one at a time, so latency scaled"
+	echo "    with the command count: 1441 / 3434 / 6315 / 12068 us measured at"
+	echo "    256K / 512K / 1M / 2M, ratios 1.00 / 2.38 / 4.38 / 8.37. With a"
+	echo "    batch of 8 they are submitted before any is reaped, so latency"
+	echo "    should stay near flat and throughput should climb."
+	echo
+	echo "    256K IS THE NEGATIVE CONTROL: one command, so batching cannot touch"
+	echo "    it. If 256K moves, something other than batching changed in this"
+	echo "    image -- and several things did land in it."
+	echo
+	echo "    Depth 1 on purpose: at depth 8 the volume ceiling hides the effect."
+	for rep in $(seq 1 "$REPS"); do
+		echo "  rep $rep:"
+		for b in 256K 512K 1M 2M; do
+			run_cell "seqread-b$b-t1" seqread "$b" 1
+		done
+	done
+	echo
+	echo "    for reference, the same sizes at depth 8 (expected: all at the"
+	echo "    volume ceiling, i.e. no longer distinguishable)"
+	for b in 256K 1M; do
+		run_cell "seqread-b$b-t8" seqread "$b" 8
 	done
 fi
 
