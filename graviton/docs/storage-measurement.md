@@ -1,0 +1,696 @@
+# Storage on Graviton: the first numbers
+
+**Date:** 2026-08-24. **Hardware:** `c7g.4xlarge` (Graviton3 / Neoverse V1,
+16 vCPU, 32 GiB RAM), `us-west-2`, canonical AMI `ami-0d61e3910062bb80a`,
+DeBeOS `hrev59996`. **Reference:** an identical `c7g.4xlarge` running Amazon
+Linux 2023 with `fio` 3.32, on an identically provisioned volume.
+
+Storage had never been measured in this tree. There was not a single disk
+throughput or IOPS figure anywhere in `graviton/docs/`, which is a conspicuous
+gap given that the worst bug found in the whole project was on this path: the
+page writer never flushed file data at all, and it was found by accident when an
+EC2 stop/start lost an sshd host key that came back with the right size, mode and
+mtime and 411 bytes of zeros in it.
+
+This document is the baseline. It also records two measurement errors caught
+before they became published numbers, and one claim from a code review that
+turned out to be an artifact.
+
+## The tool
+
+`src/bin/disktput`, plus the harness `graviton/scripts/disktput-run`. Same split
+as `nettput`/`nettput-run` and for the same reason: a stock image has no `fio`,
+no `bonnie`, no reliable `dd` and no compiler, so before this there was no way to
+ask whether a storage change helped.
+
+It reports, per run: throughput, IOPS, mean/p50/p99/max latency, and **CPU
+microseconds per mebibyte** summed from `cpu_info::active_time` across every CPU.
+The last one is the number that separates a slow device from an expensive
+software path, and it is the reason `nettput` was able to show that jumbo frames
+cut per-byte cost to a quarter while barely moving the rate.
+
+Four things in it exist because a storage number is easy to get wrong in a
+specific way:
+
+- **Concurrency is an explicit parameter, and threads are the queue depth.** See
+  the finding below: the driver blocks per command, so one thread is one request
+  outstanding no matter what the hardware allows.
+- **Buffer alignment is an explicit parameter** (`-A`, `-U`). `malloc` gives no
+  page-alignment guarantee, and on this driver an unaligned buffer silently
+  diverts to a 16 KiB bounce path. A benchmark that just calls `malloc` measures
+  whichever path it happened to land in.
+- **Runs are timed, not sized** (`-T`). See "Error 2" below — this one produced a
+  number above the instance's hard ceiling.
+- **The cache state is printed with every result**, so a figure cannot be quoted
+  without it. On a regular file `-D` opens with `O_NOCACHE`, which BFS honours by
+  calling `file_cache_disable()` on the inode for as long as the descriptor is
+  open; on a raw device the report says the file cache is not applicable, because
+  devfs installs none.
+
+## What the hardware actually allows — state this before any result
+
+Both the volume's provisioned limits and the instance's own EBS limits matter,
+and the ceiling is the lower of the two. Reporting a provisioned cap as an OS
+limitation would be a straightforward mistake.
+
+| | value | source |
+|---|---|---|
+| scratch volume | gp3, 100 GiB, **16,000 IOPS, 1,000 MiB/s** provisioned | `describe-volumes` |
+| instance EBS baseline | **625 MB/s, 20,000 IOPS** | `describe-instance-types` |
+| instance EBS maximum (burst) | **1,250 MB/s, 40,000 IOPS** | `describe-instance-types` |
+| **effective sustained ceiling** | **≈596 MiB/s** (625 MB/s) | the lower of the two |
+
+The scratch volume is deliberately over-provisioned relative to the instance so
+that the *instance* is the ceiling and the OS is what is being measured.
+
+### Which volume — this determines whether any number here means anything
+
+**The canonical AMI's root volume is 2 GiB gp3, which sits at the gp3 floor of
+3,000 IOPS / 125 MiB/s.** Anything measured against the root disk measures that
+floor and nothing about the OS: no result above ~125 MiB/s on that volume can
+have come from the device, and a "gap" found below it would be fictional. That
+volume also carries a 300 MiB BFS filesystem with ~232 MiB free — 135× smaller
+than the machine's 31.5 GiB of RAM, so no working set that fits on it can defeat
+the page cache, and buffered reads there have been measured at 6.4–8.5 GiB/s, a
+50–70× inflation.
+
+**None of the results in this document were taken on the root volume.** Every
+number is from a separately attached scratch volume, and the reference was taken
+on an identically provisioned one:
+
+| | DeBeOS node | Linux reference node |
+|---|---|---|
+| instance | `i-001f6d2794826239f`, c7g.4xlarge, us-west-2a | `i-055f9686cf04f7f28`, c7g.4xlarge, us-west-2a |
+| **measured volume** | `/dev/sdf` → `vol-01f1cf7ebabcd78b3` | `/dev/sdf` → `vol-0f14f1d7285e0f1a2` |
+| provisioning | **gp3, 100 GiB, 16,000 IOPS, 1,000 MiB/s** | **gp3, 100 GiB, 16,000 IOPS, 1,000 MiB/s** |
+| root volume (*not measured*) | `/dev/xvda`, 2 GiB, 3,000/125 | `/dev/xvda`, 8 GiB, 3,000/125 |
+
+Both arms of every comparison are therefore the same volume type, the same
+provisioning, the same instance type and the same availability zone. The 100 GiB
+size also means the DeBeOS filesystem tests below have a 100 GiB BFS volume
+available rather than a 232 MiB one, so a working set larger than RAM is possible.
+
+The scratch volume is deliberately over-provisioned relative to the instance so
+that the *instance* — or DeBeOS — is the ceiling rather than the volume. In the
+event the volume's 1,000 MiB/s turned out to bind first; see the ceiling
+measurement below.
+
+What the driver reports on this hardware, from the boot log:
+
+```
+nvme_disk: attached to NVMe device "Amazon Elastic Block Store (vol...)"
+nvme_disk:      maximum transfer size: 262144
+nvme_disk:      qpair count: 2
+nvme_disk:      block size: 512, stripe size: 0
+nvme_disk: using MSI-X
+```
+
+`262144` is **not** a driver choice: it is the controller's MDTS. `libnvme`
+starts from `NVME_MAX_PRP_LIST_ENTRIES * PAGE_SIZE` (2,072,576 bytes) and clamps
+it to `min_page_size << mdts`; 262144 = 4096 × 2⁶, so the Nitro controller
+reports MDTS = 6. Both the logical and the physical sector size are 512, so the
+4096-physical-sector read-modify-write concern does not apply to this volume.
+
+## Method, and the controls
+
+- **The span is fully written before any read is measured.** A never-written
+  block of a fresh gp3 volume reads back as zeros *without the backend being
+  touched*, and a snapshot-backed volume is loaded lazily and reads slowly on
+  first touch. Those two fake a read result in opposite directions. 64 GiB is
+  written once, and the harness records that it happened.
+- **The span is 64 GiB, larger than the 32 GiB of RAM**, so a random read cannot
+  be answered from memory.
+- **Interleaved A/B, never before-then-after**, and the median of repetitions
+  rather than the mean.
+- **Verified by artifact.** Every run prints its build stamp, and the harness
+  checks the binary's SHA-256 on the node against the one on the builder. This
+  was not ceremony: two deploys in this session silently produced a **zero-byte**
+  binary, and one of them overwrote a working one. An empty file deploys
+  perfectly happily and a shell reports success.
+
+### Deploying to a DeBeOS node: base64 over ssh truncates at 64 KiB
+
+`scp` to a DeBeOS node does not work; the established workaround is
+`base64 -w 200 <file> | ssh <node> 'base64 -d > /path'`. That has a limit worth
+recording: a single ssh stdin transfer to this sshd **truncates at exactly 65536
+bytes and then drops the connection**, so any binary over 64 KiB of base64
+arrives corrupt or empty. `disktput-run` and the deploy path split the base64
+into 32 KiB pieces and append them, then verify the hash.
+
+## The reference ceiling: Linux + fio on the same volume
+
+An identical `c7g.4xlarge` running Amazon Linux 2023, with an identically
+provisioned 100 GiB gp3 volume (16,000 IOPS / 1,000 MiB/s), same 64 GiB
+initialised span, `fio` 3.32, `--direct=1` on the raw device.
+
+Two engines were measured, and the distinction is what makes the DeBeOS numbers
+interpretable:
+
+- **`psync`** — one blocking request per thread. This is *structurally the same
+  shape as `disktput`*, and as DeBeOS's driver, which blocks in `await_status()`
+  per command. Comparing against this asks "is our code as good as Linux's at the
+  same queue depth?"
+- **`libaio` with `iodepth=32`** — a deep queue. This asks "what does the
+  hardware allow at all?", which is the ceiling.
+
+**Ceiling (libaio, deep queue):**
+
+| workload | result |
+|---|---|
+| sequential read, 256 KiB, qd32 | **1015 MiB/s** |
+| sequential read, 1 MiB, qd32 × 4 jobs | **1025 MiB/s** |
+| sequential write, 256 KiB, qd32 | **1023 MiB/s** |
+| sequential write, 1 MiB, qd32 × 4 jobs | **1024 MiB/s** |
+| random read, 4 KiB, qd64 × 4 jobs | **16,534 IOPS** (64.6 MiB/s) |
+| random write, 4 KiB, qd64 × 4 jobs | **16,262 IOPS** (63.5 MiB/s) |
+
+So the binding limit is the **volume's provisioned 1,000 MiB/s and 16,000 IOPS**,
+not the instance's 1,250 MB/s. ~1024 MiB/s and ~16.5k IOPS are the ceiling every
+number below should be read against.
+
+**`psync`, one blocking request per thread — the directly comparable arm:**
+
+| threads | sequential read | sequential write |
+|---|---|---|
+| 1 | 174.4 MiB/s | 82.1 MiB/s |
+| 2 | 348.9 MiB/s | 164.2 MiB/s |
+| 4 | 698.0 MiB/s | 328.3 MiB/s |
+| 8 | 1039.3 MiB/s | 656.5 MiB/s |
+| 16 | 1015.4 MiB/s | 1039.3 MiB/s |
+
+Linux scales linearly to the ceiling and then flattens, exactly as a token bucket
+should. Note that **Linux is also latency-bound at one thread**: 174 MiB/s is
+1/6th of what the same volume does at depth 32. One blocking thread is not a
+measure of a disk; it is a measure of one round trip.
+
+**Block size sweep, one blocking thread, read** — the row that matters most:
+
+| block size | Linux MiB/s | mean latency |
+|---|---|---|
+| 4 KiB | 6.9 | 565 µs |
+| 16 KiB | 25.7 | 608 µs |
+| 64 KiB | 77.7 | 804 µs |
+| 128 KiB | 127.0 | 984 µs |
+| 256 KiB | 179.0 | 1397 µs |
+| 512 KiB | 327.7 | 1526 µs |
+| 1 MiB | **598.0** | 1672 µs |
+
+`max_hw_sectors_kb` is **256 on Linux too**, so Linux splits a 1 MiB request into
+four 256 KiB commands for the same reason DeBeOS does. The difference is that
+Linux **issues the four concurrently**: latency rises only from 1397 µs to
+1672 µs for four times the data, and throughput therefore keeps climbing well past
+the 256 KiB chop. This is the one place where DeBeOS's per-command
+`await_status()` should cost real throughput, and it is the hypothesis the
+DeBeOS block sweep below was run to test.
+
+**Random 4 KiB read, blocking:**
+
+| threads | Linux IOPS |
+|---|---|
+| 1 | 1,772 |
+| 4 | 7,075 |
+| 16 | 16,534 |
+| 32 | 16,153 |
+
+### Disproven: "only 2 qpairs" is not a DeBeOS limitation
+
+DeBeOS logs `qpair count: 2` on a 16-vCPU instance, which looks like the
+negotiation in `nvme_disk.cpp` giving up 14 queues. It is not: Linux on the same
+instance and the same volume reports `nr_hw_queues: 2` as well. **Two IO queues
+is what this EBS controller offers.** There is no missing multi-queue work here,
+and the per-CPU selection the driver already does is the right design for it.
+
+### Minor gap: the physical sector size is not picked up
+
+Linux reports `logical_block_size 512` / `physical_block_size 4096` for this
+volume. DeBeOS's `B_GET_GEOMETRY` reports `bytes_per_physical_sector` as **512**,
+i.e. it echoes the logical size rather than the controller's reported physical
+size. Nothing here depends on it, but anything that later tries to align to the
+physical sector will be misinformed.
+
+## Result 1: sequential storage is at Linux parity, and reaches the ceiling
+
+Raw device `/dev/disk/nvme/1/raw`, 256 KiB blocks, 64 GiB initialised span,
+**15 s timed cells**, 2 repetitions, median. The Linux column is `fio --ioengine=psync`
+on the identically provisioned volume — the same one-blocking-request-per-thread
+shape.
+
+| threads | DeBeOS read | Linux read | DeBeOS write | Linux write |
+|---|---|---|---|---|
+| 1 | 173.5 MiB/s | 174.4 | 81.9 MiB/s | 82.1 |
+| 2 | 343.9 | 348.9 | 162.8 | 164.2 |
+| 4 | 685.5 | 698.0 | 326.2 | 328.3 |
+| 8 | **1072.5** | 1039.3 | 651.1 | 656.5 |
+| 16 | **1072.5** | 1015.4 | **1020.0** | 1039.3 |
+
+**DeBeOS is within 1–3% of Linux at every point, and slightly ahead at depth 8.**
+Both saturate at ~1010–1070 MiB/s, which is the volume's provisioned 1,000 MiB/s.
+
+### The duration control: 15 s cells overstate saturated rows by 6%, not by 70%
+
+Even after `-T` was added, a 15 s cell could in principle still be riding burst
+credit. Tested directly, interleaved 15 s / 120 s / 15 s / 120 s at each depth on
+one volume at one offset, so only duration varies:
+
+| depth | 15 s | 120 s | 15 s | 120 s | 180 s |
+|---|---|---|---|---|---|
+| 1 | 173.50 | 173.60 | 173.48 | 173.48 | — |
+| 8 | 1072.52 | **1007.72** | 1021.34 | **1007.72** | **1007.32** |
+
+**Depth 1 is completely duration-independent** — four measurements inside 0.07%.
+It is latency-bound, nowhere near any rate limit, and needs no correction.
+
+**Depth 8 decays 6.4% from 15 s to 120 s and then holds** at 1007.7 MiB/s across
+120 s and 180 s. A sustained 120 s write at depth 16 gives **1008.0 MiB/s**. So
+the honest sustained ceiling is **~1008 MiB/s**, and the saturated rows in the
+table above are 15 s figures that overstate it by about 6%.
+
+This is worth stating precisely because a 23–70% overshoot has been measured
+elsewhere in this project on a **2 GiB gp3** volume, where 125 MiB/s of provisioned
+throughput sits under a large burst bucket. On a volume provisioned at 1,000 MiB/s
+there is far less burst headroom relative to the provisioned rate, and the
+overshoot is correspondingly small. The size of this artifact is a property of the
+volume, not a constant — which is the argument for measuring it rather than
+assuming a correction factor.
+
+The Linux reference used 30 s runs, so both arms sit at comparable durations and
+the parity conclusion is unaffected.
+
+Corrected sustained figures, which are the ones to quote:
+
+| | DeBeOS sustained | ceiling |
+|---|---|---|
+| sequential read, depth 8, 120–180 s | **1007.3–1007.7 MiB/s** | ~1008 (volume) |
+| sequential write, depth 16, 120 s | **1008.0 MiB/s** | ~1008 (volume) |
+| sequential read, depth 1, any duration | **173.5 MiB/s** | latency-bound |
+
+One tail worth recording from the 120 s depth-16 write: p50 3980 µs, p99 4254 µs,
+but **max 28,772 µs** — a single 28.7 ms outlier in 483,872 operations. Not
+enough to move a median, and exactly what a p99-and-max report exists to surface.
+
+Scaling is 99% of linear to 4 threads, 77% at 8, and then flat — flat because the
+volume ceiling has been reached, not because anything in DeBeOS gave up. Random
+4 KiB tells the same story against the same ceiling:
+
+| threads | DeBeOS IOPS | Linux IOPS |
+|---|---|---|
+| 1 | 1,760 | 1,772 |
+| 4 | 6,977 | 7,075 |
+| 16 | **17,066** | 16,534 |
+| 32 | 16,228 | 16,153 |
+
+Both reach the volume's provisioned 16,000 IOPS; DeBeOS is marginally ahead.
+
+**There is no sequential throughput gap and no IOPS gap.** That is the honest
+headline, and the reason to say it plainly is that it would have been easy to
+manufacture a project out of the single-threaded figure alone.
+
+## Result 2: the one real throughput gap — large requests at low concurrency
+
+Block size sweep, read, one thread:
+
+| block size | DeBeOS | Linux | DeBeOS latency |
+|---|---|---|---|
+| 4 KiB | 6.9 MiB/s | 6.9 | 760 µs |
+| 16 KiB | 25.5 | 25.7 | 831 µs |
+| 64 KiB | 80.3 | 77.7 | 1087 µs |
+| 128 KiB | — | 127.0 | — |
+| 256 KiB | 173.5 | 179.0 | 1782 µs |
+| 512 KiB | — | 327.7 | — |
+| **1 MiB** | **158.3** | **598.0** | **7449 µs** |
+
+Parity everywhere up to 256 KiB, then a **3.8× gap** at 1 MiB — and DeBeOS at
+1 MiB is *slower than it is at 256 KiB*, while Linux at 1 MiB is 3.3× **faster**
+than at 256 KiB.
+
+The mechanism is visible in the latency column and is not a guess.
+`max_hw_sectors_kb` is 256 on Linux too, so both split a 1 MiB request into four
+256 KiB commands. DeBeOS's latency goes 1782 → 7449 µs, a factor of **4.18** —
+four commands, strictly one after another. Linux's goes 1397 → 1672 µs, a factor
+of 1.20 — the four overlap.
+
+The cause is `nvme_disk.cpp`: the chopping loop calls `do_nvme_io_request` per
+piece, and that function submits one command and then blocks in `await_status()`
+before the loop can submit the next:
+
+```c
+status = do_nvme_io_request(handle->info, &nvme_request);   // submits, then waits
+...
+nvme_request.iovecs += nvme_request.iovec_count;            // only now the next one
+```
+
+**Scope, which matters for how much this is worth.** At depth 8 the same 1 MiB
+block reaches 1071.7 MiB/s — the ceiling — so the gap only exists at low
+concurrency. And it cannot affect buffered file I/O at all: the file cache chops
+at `MAX_IO_VECS * B_PAGE_SIZE` = **128 KiB**, below the 256 KiB MDTS, so a
+file-backed request never produces more than one NVMe command. The gap is
+confined to large-block I/O on the **raw device** — imaging, `dd`-style bulk
+copies, the boot path — not to ordinary file access.
+
+## Result 3: the completion path costs 70× more CPU per operation at depth 16
+
+Not a throughput finding — throughput is at the ceiling — but the most striking
+number in the whole exercise. CPU microseconds per 4 KiB random read operation,
+derived from the `us of cpu/MiB` column:
+
+| threads | CPU µs per operation | IOPS |
+|---|---|---|
+| 1 | **4.1** | 1,760 |
+| 4 | 13.4 | 6,977 |
+| 16 | **287** | 17,066 |
+| 32 | 133 | 16,228 |
+
+At depth 16 the machine spends about **4.9 CPU-seconds per wall second**, roughly
+30% of a 16-core c7g.4xlarge, to deliver 67 MiB/s. Per-operation cost rising with
+the number of *waiters* rather than with the work is the signature of a
+thundering herd, and the code has one: there is a single MSI-X vector
+(`configure_msix(pcidev, 1, &msixVector)`) and a single per-device condition
+variable that the interrupt handler `NotifyAll()`s, so every completion wakes
+every waiting thread and each then polls its own qpair. On ARM64
+`arch_int_assign_to_cpu()` is a no-op, so the vector cannot be steered either.
+
+This costs no throughput against a 16,000 IOPS volume, but it is CPU an
+application would rather have, and it would cost throughput on a faster volume.
+**Unmeasured claim:** that the herd is the cause is inferred from the code plus
+the shape of the curve; it has not been confirmed by instrumenting wakeups.
+
+## Not reproduced: the 16 KiB bounce-path cliff
+
+The prediction was that a buffer offset off a page boundary would divert to
+`nvme_disk`'s bounce path, capped at `kMaxBounceBufferSize = 4 * B_PAGE_SIZE` =
+16 KiB, turning a 256 KiB request into sixteen commands. Interleaved A/B with
+`-U 512`:
+
+| | aligned | misaligned by 512 B | ratio |
+|---|---|---|---|
+| depth 1 | 173.4 MiB/s | 173.4 MiB/s | **1.00×** |
+| depth 8 | 1072.5 MiB/s | 1019.6 MiB/s | 1.05× |
+
+**No cliff.** The honest reading is not "the cliff does not exist" but "this test
+could not have found it": a single contiguous userland buffer produces a
+*single-vec* request, and the single-vec check in `nvme_disk.cpp` is lenient —
+it requires only 4-byte address alignment and an LBA-multiple size, not page
+alignment. The page-alignment requirement applies to the *middle* vecs of a
+multi-vec request. Reproducing the bounce path therefore needs a scattered
+request (`readv`/`writev` with several unaligned vecs, or an unaligned file
+offset), which `disktput` does not currently generate. The cliff remains
+**untested**, not disproven, and `-A`/`-U` are retained because the alignment of
+the buffer must still be stated for the numbers above to mean anything.
+
+## Verified: `fsync()` on BFS never flushes the device cache — and on EBS that is free
+
+Confirmed by reading the tree, not taken on trust:
+
+- `bfs_fsync(volume, node, bool dataOnly)` → `return inode->Sync();` — **`dataOnly`
+  is accepted and ignored**, so `fsync` and `fdatasync` are the same call.
+- `Inode::Sync()` → `return file_cache_sync(FileCache());` and returns.
+- `common_sync()` in `vfs.cpp`, which is what `fsync(2)` reaches, calls
+  `FS_CALL(vnode, fsync, dataOnly)` **and nothing else**.
+- The only `B_FLUSH_DRIVE_CACHE` on this path in `vfs.cpp` is at line 8203, inside
+  the whole-mount `fs_sync` — i.e. `sync()`, not `fsync()`.
+
+So `fsync()` pushes dirty pages to the driver but never asks the device to commit
+its write cache. **On this hardware that costs nothing**, and the reason is
+checkable rather than assumed: Linux on the same volume reports
+
+```
+/sys/block/nvme1n1/queue/write_cache : write through
+/sys/block/nvme1n1/queue/fua         : 0
+```
+
+`write_cache = write through` is what Linux sets when the controller advertises
+**no volatile write cache** (`VWC = 0`). An EBS write is durable once
+acknowledged, so `B_FLUSH_DRIVE_CACHE` is a no-op here and its absence cannot
+lose data on Graviton.
+
+It is still a real portability gap — the same code on a device with a real
+volatile cache would silently not be durable — and `dataOnly` being ignored means
+`fdatasync` does more work than asked. Recorded as correctness, not as a
+Graviton risk. The metadata half of the question (whether the inode that makes
+the data reachable is committed) is tested separately below.
+
+## Result 4: through BFS — reads are free, writes are where the problems are
+
+The scratch volume was then formatted `mkfs -t bfs -o 'block_size 4096'` (BFS
+defaults to **2048**, which would make every metadata write a sub-page write) and
+a 40 GiB file created on it — larger than the machine's 31.5 GiB of RAM, so the
+page cache cannot hold the working set. 20 s timed cells, 256 KiB blocks.
+
+### Reads through the file system cost essentially nothing
+
+| threads | BFS file, `-D` uncached | raw device | overhead |
+|---|---|---|---|
+| 1 | 173.24 MiB/s | 173.5 | 0.1% |
+| 4 | 685.32 | 685.5 | 0.0% |
+| 16 | 1055.89 | 1072.5 | 1.5% |
+
+**BFS adds no measurable read cost.** Whatever else is true, the read path from
+`pread` through the file cache, BFS, `file_map_translate`, devfs and the driver is
+not where anything is being lost.
+
+### The page cache makes large sequential reads *slower*
+
+| | MiB/s |
+|---|---|
+| read, cache in use | 123.49, 123.32 |
+| read, `-D` (cache bypassed) | 173.23, 173.16 |
+
+**Going through the page cache costs 29%.** That is not a paradox: the file cache
+has **no read-ahead** — `read_into_cache` fetches exactly the requested range and
+nothing beyond, and the only prefetch facility in the tree is
+`cache_prefetch_vnode`, used at boot and by mmap fault-around. So the cache adds an
+allocation and a memcpy per block and contributes no lookahead, and on a working
+set larger than RAM it cannot amortise that with hits either. Read-ahead in the
+file cache is the most promising unexploited win found in this exercise, and it is
+a kernel change rather than a module one.
+
+### Buffered writes are irreproducible and get *slower* with concurrency
+
+This is the finding that matters. Identical repetitions of the identical cell:
+
+| cell | rep 1 | rep 2 | spread |
+|---|---|---|---|
+| buffered write, no fsync | **324.11 MiB/s** | **73.24 MiB/s** | **4.4×** |
+| buffered write + fsync | 153.67 | 57.11 | 2.7× |
+| uncached write + fsync | 81.76 | 81.81 | **1.001×** |
+
+The uncached path is reproducible to one part in a thousand. The buffered path
+varies by a factor of 4.4 between two runs of the same command on the same file.
+And it anti-scales:
+
+| threads | buffered write + fsync | uncached write + fsync |
+|---|---|---|
+| 1 | **114.77 MiB/s** | 81.81 |
+| 4 | **80.01** | 109.65 |
+| 16 | **67.23** | 192.44 |
+
+**Adding writer threads makes buffered writes monotonically slower**, 115 → 67
+MiB/s, while the uncached path speeds up. Buffered writes do not do their own
+I/O: they dirty pages and the *page writer* writes them back, and there is one
+page-writer thread per disk device. More writers therefore add contention for a
+single flusher and nothing else. This is consistent with the writer's quota
+machinery being involved — `fLastAveragePageWriteDuration` is the last sample
+rather than an average, it is only updated on rounds of ≥8 pages with no
+failures, and `WaitIfOverQuota` is entered with `flags = 0`, so a writer waits
+indefinitely. Bimodal, irreproducible sustained-write numbers are exactly the
+shape that predicts.
+
+**Unmeasured:** that the single page-writer thread and the quota heuristic are
+*the* cause is inferred from the code and from the anti-scaling, not confirmed by
+instrumenting the writer. Someone should confirm it before changing the heuristic.
+
+### Uncached writes through BFS reach only a fifth of the raw device
+
+| threads | BFS file `-D` | raw device | gap |
+|---|---|---|---|
+| 1 | 81.81 MiB/s | 81.9 | — |
+| 4 | 109.65 | 326.2 | 3.0× |
+| 16 | 192.44 | 1020.0 | **5.3×** |
+
+At one thread BFS matches the raw device exactly. By 16 threads it delivers
+192 MiB/s where the device does 1020. Writes through a file system serialise on
+something the raw path does not have — the obvious candidate being BFS's single
+journal, which commits a transaction per allocation and calls `FlushDevice()`
+(a whole `block_cache_sync`) plus `B_FLUSH_DRIVE_CACHE` per commit. **Not
+attributed by measurement**; it is the next thing to instrument.
+
+### Extending a file is far more expensive than rewriting it
+
+Creating the 40 GiB file averaged **20.7 MiB/s** over 660 s, against **81.8 MiB/s**
+for rewriting the same region afterwards at the same depth — a 4× difference
+between allocating blocks and writing blocks. Every 1 MiB extension takes BFS
+through a block-map update and a journal transaction. Worth knowing before
+concluding anything from a benchmark that creates its own file.
+
+### What fsync actually costs
+
+Writing 64 MiB buffered and then calling `fsync` once: the write reports
+**4840–4897 MiB/s** and the `fsync` takes **0.81–0.84 s**, which is **98.5% of the
+run**. The 4.9 GiB/s figure is memory bandwidth and nothing else. Any buffered
+write benchmark that does not fsync is measuring RAM, and this is what that error
+looks like when quantified.
+
+## Result 5: the write path is durable across a hard power loss
+
+The question that matters more than any rate, given that this project's worst bug
+was silent data loss on this exact path. `fsync()` never issues
+`B_FLUSH_DRIVE_CACHE` (verified above), so the question is empirical.
+
+Method: two 64 MiB files written to BFS with `-P`, so every block carries a magic
+and its own absolute offset and can be classified afterwards as ok / zero / stale
+/ corrupt.
+
+- `nosync` — buffered, **no `fsync` at all**
+- `fsynced` — buffered + `fsync`
+- **no `sync()` was issued for either**, and then the instance was
+  `stop-instances --force`'d **5 seconds** after the writes completed.
+
+The force stop is a genuine power-loss test rather than a shutdown: DeBeOS does
+not act on the inbound ACPI request, so nothing in the guest gets a chance to
+flush. 5 seconds is also a deliberately tight margin against the page writer's
+3-second flush interval.
+
+Result after stop, start, and remount:
+
+| | size | sha256 vs pre-boot | blocks bad |
+|---|---|---|---|
+| `nosync` | 67,108,864 ✓ | **identical** | **0 zero, 0 stale, 0 corrupt** |
+| `fsynced` | 67,108,864 ✓ | **identical** | **0 zero, 0 stale, 0 corrupt** |
+
+The 40 GiB `tf` file also came back at full size, and BFS remounted with no
+journal replay error. The checksums are `sha256sum` on the node, so the verdict
+does not rest on the same tool that wrote the data.
+
+**Conclusion: the write path is durable on EBS.** The 3-second periodic flush
+fired and got un-`fsync`ed data to the device inside a 5-second window, which is a
+direct regression test for the page-writer bug — the failure that lost an sshd
+host key would have shown up here as `zero` blocks, and there are none. `fsync`'s
+missing device flush costs nothing because the controller has no volatile write
+cache, and the metadata that makes the data reachable was committed alongside it.
+
+**Scope of the claim:** this shows the *page writer and journal* are behaving,
+tested once, at one file size, on a device with no volatile write cache. It does
+**not** show that a sub-3-second window is safe, and it does not generalise to
+hardware where `B_FLUSH_DRIVE_CACHE` is not a no-op.
+
+## Error 1, caught: an unaligned buffer measures a different code path
+
+`nvme_disk` checks every vec of a request and diverts to a bounce path if the
+middle vecs are not page-aligned in address and length. That path is capped by
+`kMaxBounceBufferSize` in `dma_resources.cpp`, which is `4 * B_PAGE_SIZE` =
+**16 KiB**, so a misaligned 256 KiB request is not one command but sixteen
+sequential ones — and a bounced *write* additionally takes `rounded_write_lock`
+exclusively, serialising against every other write on the device.
+
+The first version of `disktput` used `malloc`, which guarantees no such
+alignment. It was changed to `posix_memalign` before any number was taken, and
+alignment became a reportable parameter so the cliff could be measured on purpose
+rather than stumbled into.
+
+## Error 2, caught: fixed-size runs measured an EBS burst, not throughput
+
+The first concurrency sweep used a fixed 1 GiB per cell and produced this:
+
+| threads | seqread | scaling |
+|---|---|---|
+| 1 | 173.4 MiB/s | 1.00× |
+| 2 | 344.5 MiB/s | 1.99× |
+| 4 | 685.4 MiB/s | 3.95× |
+| 8 | 1359.9 MiB/s | 7.84× |
+| 16 | **2635.5 MiB/s** | **15.20×** |
+
+Consistent to under 1% across three repetitions, which is exactly what makes it
+seductive. It is also **impossible**: 2,635 MiB/s is 2.2× the instance's
+documented hard maximum of 1,250 MB/s, a limit enforced at the Nitro card. A
+fixed byte count makes each cell a different duration — the 16-thread cell
+finished in 0.39 s — and EBS rate limiting is a token bucket that a third of a
+second does not begin to drain. Every cell was measuring burst credit, and the
+higher the thread count, the shorter the run and the less the limiter bound.
+
+Repeatability across three reps did nothing to catch this, because all three reps
+were wrong in the same way. Only comparing against the documented hardware
+ceiling caught it. The tool grew `-T` for this, and the harness now times every
+cell rather than sizing it.
+
+The scaling *shape* below 8 threads survives this correction and is the real
+finding; the absolute numbers above 4 threads did not.
+
+## Disproven: the page writer bug is not still present
+
+A code review of this tree reported that the page-writer flush bug was
+unfixed — that `vm_page_writer.cpp` still reads
+`if (!fPageWriterCondition.Wait(PAGES_FLUSH_DURATION_LOCAL_QUOTA, true)) continue;`,
+so the periodic flush never fires. That would have invalidated every buffered
+write measurement here.
+
+It is an artifact of reading the wrong branch. Commit `8331882470`
+*"kernel/vm: don't skip the page writer's periodic flush on timeout"* is present
+in `graviton` and removes the `continue`; the branch that was read had forked
+before it. Recorded here because the reasoning about `BinarySemaphore::Wait()`
+returning `false` on timeout is correct and worth keeping — it is exactly why the
+bug existed — and because "which branch is this" is a live hazard in a tree with
+a dozen concurrent worktrees.
+
+## Summary
+
+The headline is that **there is no storage throughput crisis**. Sequential and
+random I/O on the raw device are at Linux parity to within 1–3% and reach the
+volume's provisioned ceiling, and reads through BFS cost nothing measurable.
+Saying that plainly matters, because the single-threaded figure of 173 MiB/s
+looks alarming next to a 1,000 MiB/s volume and would have supported a
+manufactured optimisation project. It is not a defect: Linux measures 174 MiB/s
+under the same one-request-per-thread condition.
+
+| | DeBeOS | Linux / ceiling | verdict |
+|---|---|---|---|
+| seq read, depth 1 | 173.5 MiB/s | 174.4 | **parity** |
+| seq read, depth 8, sustained | 1007.7 MiB/s | ~1008 volume ceiling | **at ceiling** |
+| seq write, depth 16, sustained | 1008.0 MiB/s | ~1008 volume ceiling | **at ceiling** |
+| random 4 KiB read, depth 16 | 17,066 IOPS | 16,534 / 16,000 provisioned | **at ceiling** |
+| BFS read vs raw read | 0–1.5% overhead | — | **free** |
+| durability across hard power loss | 0 bad blocks | — | **passes** |
+| seq read, 1 MiB, depth 1 | 158.3 MiB/s | 598.0 | **3.8× gap** |
+| BFS buffered write reproducibility | 4.4× between reps | 1.001× uncached | **defect** |
+| BFS write, depth 16 | 192.4 MiB/s | 1020 raw | **5.3× gap** |
+| read through the page cache | 123.5 MiB/s | 173.2 uncached | **cache costs 29%** |
+
+Four things are worth someone's time, in this order:
+
+1. **BFS buffered writes are irreproducible and anti-scale.** A 4.4× spread
+   between identical repetitions is a correctness-adjacent defect, not a tuning
+   opportunity, and the page writer's quota heuristic is the prime suspect. Needs
+   the writer instrumented before anything is changed. Kernel change.
+2. **No read-ahead in the file cache**, which is why going through the page cache
+   is 29% *slower* than bypassing it on a large sequential read. Probably the
+   largest available win for real workloads. Kernel change, so it needs a bake.
+3. **Writes through BFS cap at a fifth of the device** at depth 16. Suspect the
+   single journal and its per-commit `block_cache_sync` + device flush; not yet
+   attributed by measurement.
+4. **Requests larger than 256 KiB are issued serially** by `nvme_disk`
+   (`await_status()` per chopped command). Worth 3.8× on raw-device bulk I/O at
+   low concurrency, nothing on file I/O — the file cache never emits a request
+   larger than 128 KiB. This one is a **kernel module**, so it can be hot-swapped
+   onto a running node without a bake, which makes it the cheapest to try.
+
+Deliberately not pursued: multi-queue. `qpair count: 2` is what the EBS
+controller offers, and Linux reports the same, so the per-CPU queue selection
+already in the driver is correct and complete for this hardware.
+
+## Reproducing this
+
+```bash
+# on the metal builder, against a DeBeOS node with a scratch volume attached
+graviton/scripts/disktput-run <node-ip> -d /dev/disk/nvme/1/raw -m threads -T 15 -r 3
+graviton/scripts/disktput-run <node-ip> -m blocks -T 15 -r 2
+graviton/scripts/disktput-run <node-ip> -m random -T 15 -r 2
+```
+
+Do not measure the root volume: it is a 2 GiB gp3 at the 125 MiB/s floor with a
+300 MiB filesystem on it, and nothing measured there describes the OS.
+
+If storage acquires a regression-worthy number, the candidate for
+`graviton/scripts/haiku-perf-gate` is **sequential read at depth 8** (stable to
+0.1% across runs, and sensitive to both the driver and the cache) together with
+the **durability check** — write with `-P`, hard stop, `-m verify`, assert zero
+bad blocks. That last one is the assertion that would have caught the bug this
+project actually shipped. Proposed, not deployed.
