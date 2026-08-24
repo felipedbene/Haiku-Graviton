@@ -395,6 +395,32 @@ struct ena_haiku_device {
 	   for a meta descriptor. */
 	uint16				rxMaxDescriptors;
 	uint16				txMaxDescriptors;
+
+	/* The device's stateless offload descriptor, as read at bring-up. Kept and
+	   logged rather than discarded, because it had never been looked at and
+	   because what it says is surprising: on c7g the device reports
+	   rx_supported 0x7 and rx_enabled 0x0 while measurably validating L4
+	   checksums on 98% of frames. So rx_enabled does not describe what the device
+	   is doing and must not be used to gate anything -- these are diagnostics,
+	   not control inputs. The receive path keys off the per-frame descriptor bits
+	   instead; see ena_receive(). */
+	uint32				offloadRxSupported;
+	uint32				offloadRxEnabled;
+
+	/* What the device actually reports per frame, as opposed to what it says it
+	   supports. rx_enabled reading 0 while rx_supported reads 0x7 is ambiguous on
+	   its own -- it could mean the device is not checking, or it could mean
+	   rx_enabled is vestigial and the per-descriptor bits are the real answer --
+	   and those two cases call for opposite code. Counting the descriptor bits
+	   settles it. Deliberately outside any debug ifdef so they exist in every
+	   build; they are two increments on a path that already does a memcpy per
+	   frame. Read under rxLock, like everything else here. */
+	uint64				rxFrames;
+	uint64				rxL4CsumChecked;
+	uint64				rxL4CsumErrors;
+	uint64				rxL3Ipv4Frames;
+	uint64				rxL3CsumErrors;
+
 	bool				linkUp;
 	bool				nonBlocking;
 	bool				promiscuous;

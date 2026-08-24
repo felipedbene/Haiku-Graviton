@@ -1719,6 +1719,19 @@ ena_device_bringup(ena_haiku_device* device)
 		device->macAddress[3], device->macAddress[4], device->macAddress[5],
 		device->maxSupportedMtu);
 
+	/* Read once and kept, because the receive path needs it per frame and
+	   because it had never been looked at: the descriptor was fetched at
+	   bring-up and discarded. Logged for the same reason -- on c7g the device
+	   reports rx_supported 0x7 and rx_enabled 0x0, i.e. it can verify the IPv4
+	   header checksum and both L4 checksums and is doing none of them, which is
+	   not a thing anyone could have known from this driver's output. */
+	device->offloadRxSupported = features.offload.rx_supported;
+	device->offloadRxEnabled = features.offload.rx_enabled;
+
+	TRACE_ALWAYS("offloads: tx %#" B_PRIx32 ", rx supported %#" B_PRIx32
+		", rx enabled %#" B_PRIx32 "\n", features.offload.tx,
+		features.offload.rx_supported, features.offload.rx_enabled);
+
 	ena_configure_placement_policy(device, &features.llq);
 	ena_calculate_ring_sizes(device, &features);
 	if (device->txRingSize < ENA_MIN_RING_SIZE
@@ -2714,13 +2727,63 @@ ena_receive(ena_haiku_device* device, net_buffer** _buffer)
 		return status;
 	}
 
-	/* Pass on what the device already checked so the stack need not redo it. */
+	/* Pass on what the device already checked so the stack need not redo it.
+
+	   NET_BUFFER_L4_CHECKSUM_VALID tells tcp.cpp:718 and udp.cpp:849 to skip
+	   their own verification, so the test must be "did the device check this",
+	   not "could it have". l4_csum_checked is exactly that bit, and the device
+	   sets it: measured at 983 of the first 1000 frames on c7g. So this branch is
+	   both correct and load bearing -- it is why receive computes no TCP checksum
+	   at all today.
+
+	   There is deliberately no L3 equivalent. The receive descriptor carries
+	   l3_csum_err with no l3_csum_checked beside it, so there is no way to
+	   distinguish "the header checksum was verified and was good" from "the
+	   device never looked", and l3_csum_err reads 0 in both cases. This used to
+	   set NET_BUFFER_L3_CHECKSUM_VALID on `l3_proto == IPV4 && !l3_csum_err`,
+	   which reads as though it closes that gap and does not: l3_proto says the
+	   device *parsed* the frame as IPv4, which it does for steering regardless of
+	   whether it validated anything. The result was that every received IPv4
+	   frame arrived stamped as verified by nobody, and ipv4.cpp:1771 skipped the
+	   check on the strength of it -- so a corrupted total length, protocol or
+	   address was parsed rather than dropped.
+
+	   rx_enabled cannot be used as a stand-in for the missing bit either: it
+	   reads 0 on c7g while the device demonstrably is checking L4, so it does not
+	   describe what the device is doing.
+
+	   Not claiming it is therefore the only honest option, and it is nearly free:
+	   the IPv4 header is 20 bytes against a 9001 byte frame, so verifying it in
+	   software costs about 0.2% of the bytes the frame already costs. This is
+	   also precisely what Linux's ena driver does -- ena_rx_checksum() sets
+	   CHECKSUM_UNNECESSARY only from the L4 branch, never from L3, and Linux's IP
+	   stack always verifies the header itself. */
 	if (context.l4_csum_checked && !context.l4_csum_err)
 		buffer->buffer_flags |= NET_BUFFER_L4_CHECKSUM_VALID;
-	/* l3_csum_err is also zero when the device never looked, so the protocol
-	   has to be confirmed before claiming the checksum was verified. */
-	if (context.l3_proto == ENA_ETH_IO_L3_PROTO_IPV4 && !context.l3_csum_err)
-		buffer->buffer_flags |= NET_BUFFER_L3_CHECKSUM_VALID;
+
+	device->rxFrames++;
+	if (context.l4_csum_checked)
+		device->rxL4CsumChecked++;
+	if (context.l4_csum_err)
+		device->rxL4CsumErrors++;
+	if (context.l3_proto == ENA_ETH_IO_L3_PROTO_IPV4)
+		device->rxL3Ipv4Frames++;
+	if (context.l3_csum_err)
+		device->rxL3CsumErrors++;
+
+	/* Once per power-of-four-ish milestone rather than on a timer, so a short
+	   run reports early and a long one does not flood: the question these answer
+	   is settled by the first few thousand frames. */
+	if (device->rxFrames == 1000 || device->rxFrames == 50000
+			|| device->rxFrames == 500000) {
+		TRACE_ALWAYS("rx offload observed after %" B_PRIu64 " frames: "
+			"l4_csum_checked %" B_PRIu64 ", l4_csum_err %" B_PRIu64 ", "
+			"l3_proto==ipv4 %" B_PRIu64 ", l3_csum_err %" B_PRIu64 " "
+			"(rx_supported %#" B_PRIx32 ", rx_enabled %#" B_PRIx32 ")\n",
+			device->rxFrames, device->rxL4CsumChecked, device->rxL4CsumErrors,
+			device->rxL3Ipv4Frames, device->rxL3CsumErrors,
+			device->offloadRxSupported, device->offloadRxEnabled);
+	}
 
 	*_buffer = buffer;
 	return B_OK;
