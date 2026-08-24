@@ -16,6 +16,7 @@
 
 #include <condition_variable.h>
 #include <net_buffer.h>
+#include <string.h>
 #include <syscall_restart.h>
 #include <util/AutoLock.h>
 
@@ -193,6 +194,89 @@ fifo_enqueue_buffer(net_fifo* fifo, net_buffer* buffer)
 }
 
 
+//	#pragma mark - fifo instrumentation
+
+
+void
+init_fifo_watermark(net_fifo_watermark* diagnostics, size_t limitBytes)
+{
+	memset(diagnostics, 0, sizeof(*diagnostics));
+	diagnostics->limit_bytes = limitBytes;
+	diagnostics->fail_bytes_min = (size_t)-1;
+}
+
+
+/*!	Copies \a diagnostics into \a snapshot under the fifo lock, so the caller
+	gets a self-consistent set of numbers.
+
+	If \a resetPeaks is true, the high-water fields are cleared after being copied,
+	so the next snapshot reports the peak over the interval between the two reads
+	rather than over all time. The monotonic counters are never cleared:
+	differencing two snapshots gives the counts for the interval.
+
+	The caller must not print while holding the fifo lock. On this platform a
+	single dprintf line costs on the order of a millisecond, which would stall the
+	reader thread long enough to manufacture the very overflow being measured.
+*/
+void
+snapshot_fifo_watermark(net_fifo* fifo, net_fifo_watermark* diagnostics,
+	net_fifo_watermark* snapshot, bool resetPeaks)
+{
+	MutexLocker locker(fifo->lock);
+
+	diagnostics->current_bytes = fifo->current_bytes;
+	memcpy(snapshot, diagnostics, sizeof(*snapshot));
+
+	if (resetPeaks) {
+		diagnostics->peak_bytes = fifo->current_bytes;
+		diagnostics->peak_packets = diagnostics->current_packets;
+		diagnostics->fail_bytes_min = (size_t)-1;
+		diagnostics->fail_bytes_max = 0;
+	}
+}
+
+
+/*!	As fifo_enqueue_buffer(), but records occupancy and failure detail.
+
+	The point of the failure bookkeeping is that a caller which counts a dropped
+	packet can then say *why* it was dropped: the queue being full (ENOBUFS) is a
+	completely different defect from any other failure, and one counter covering
+	both cannot tell them apart.
+*/
+status_t
+fifo_enqueue_buffer_tracked(net_fifo* fifo, net_buffer* buffer,
+	net_fifo_watermark* diagnostics)
+{
+	MutexLocker locker(fifo->lock);
+
+	status_t status = base_fifo_enqueue_buffer(fifo, buffer);
+	if (status == B_OK) {
+		diagnostics->enqueued++;
+		diagnostics->current_packets++;
+		diagnostics->current_bytes = fifo->current_bytes;
+
+		if (fifo->current_bytes > diagnostics->peak_bytes)
+			diagnostics->peak_bytes = fifo->current_bytes;
+		if (diagnostics->current_packets > diagnostics->peak_packets)
+			diagnostics->peak_packets = diagnostics->current_packets;
+	} else {
+		diagnostics->fail_total++;
+		if (status == ENOBUFS)
+			diagnostics->fail_nobufs++;
+		else
+			diagnostics->fail_other++;
+
+		diagnostics->current_bytes = fifo->current_bytes;
+		if (fifo->current_bytes < diagnostics->fail_bytes_min)
+			diagnostics->fail_bytes_min = fifo->current_bytes;
+		if (fifo->current_bytes > diagnostics->fail_bytes_max)
+			diagnostics->fail_bytes_max = fifo->current_bytes;
+	}
+
+	return status;
+}
+
+
 /*!	Gets the first buffer from the FIFO. If there is no buffer, it
 	will wait depending on the \a flags and \a timeout.
 	The following flags are supported:
@@ -205,6 +289,20 @@ fifo_enqueue_buffer(net_fifo* fifo, net_buffer* buffer)
 ssize_t
 fifo_dequeue_buffer(net_fifo* fifo, uint32 flags, bigtime_t timeout,
 	net_buffer** _buffer)
+{
+	return fifo_dequeue_buffer_tracked(fifo, flags, timeout, _buffer, NULL);
+}
+
+
+/*!	As fifo_dequeue_buffer(), and additionally maintains the occupancy counters.
+
+	\a diagnostics may be NULL. The packet count has to be maintained on this side
+	too, because net_fifo itself only tracks bytes and a depth in frames is what
+	makes the byte figure interpretable.
+*/
+ssize_t
+fifo_dequeue_buffer_tracked(net_fifo* fifo, uint32 flags, bigtime_t timeout,
+	net_buffer** _buffer, net_fifo_watermark* diagnostics)
 {
 	if ((flags & ~(MSG_DONTWAIT | MSG_PEEK)) != 0)
 		return EOPNOTSUPP;
@@ -227,6 +325,13 @@ fifo_dequeue_buffer(net_fifo* fifo, uint32 flags, bigtime_t timeout,
 			} else {
 				list_remove_item(&fifo->buffers, buffer);
 				fifo->current_bytes -= buffer->size;
+
+				if (diagnostics != NULL) {
+					diagnostics->dequeued++;
+					if (diagnostics->current_packets > 0)
+						diagnostics->current_packets--;
+					diagnostics->current_bytes = fifo->current_bytes;
+				}
 			}
 
 			*_buffer = buffer;
