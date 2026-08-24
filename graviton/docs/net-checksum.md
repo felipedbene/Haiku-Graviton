@@ -7,10 +7,13 @@
 
 Three results, in decreasing order of how well established they are.
 
-1. **`compute_checksum()` is 4.15× faster and no longer overflows**, worth a
-   measured **+2.37% of transmit CPU per MiB** end to end (p = 0.014, clean
-   negative control). Verified bit-identical against two oracles over 3,539,802
-   cases on hardware. §1–§4, §7.2.
+1. **`compute_checksum()` is 4.15× faster and no longer overflows** — and **3.83×
+   faster measured in the kernel itself**, 264 → 69 ps/byte. Worth **about 2% of
+   transmit CPU per MiB** end to end, from two independent designs that agree:
+   cross-boot interleaved 2.37% (p = 0.014) and within-boot port-switched 1.82%
+   (p = 0.011), the latter better controlled. Verified bit-identical against two
+   oracles over 3,539,802 cases, plus 831 live-traffic cross-checks in the kernel with
+   zero mismatches. §1–§4, §7.2–§7.3.
 2. **The driver was telling the stack the device had verified the IPv4 header
    checksum when nothing had.** Fixed; hardware-verified. §5.
 3. **Receive checksum offload was never disabled** — the reading that said it was
@@ -32,17 +35,23 @@ number at all depended on both:
   was 2217–2715. With `-P 256K` (pinned, auto-sizing off) it collapsed to 1.2%.
   The noise was the send-buffer auto-sizer, not the network.
 
-And **one open puzzle, with four explanations killed and the instrument cleared**:
-only 27% of the routine's saving materialises end to end. Eliminated in turn — cache
-residency; the Haiku cross-compiler's codegen, by linking the shipped object into a
-native harness; the node-walk access pattern; and the transmit path skipping bytes,
-by a counter showing it walks **100.016%** of the payload with a receive control that
-moved by exactly zero. Then the metric itself was calibrated by *injecting* a known
-quantity of work, which it reported at **105–118%** — so **`cpu_info::active_time` is
-sound and every µs/MiB figure this project has published stands as measured.** The
-shortfall is real, specific to this change, in the path rather than the tool, and
-unexplained. §7.3 records the one hypothesis left (memory-bandwidth contention,
-untested) and the in-situ timing that would settle it.
+Plus **one finding that came out of chasing why the end-to-end number was smaller
+than the routine's own speedup, and is worth more than the change**:
+
+- **M3. On this path the cost metric attributes *added* CPU work in full and
+  *removed* CPU work at about a fifth.** Both directions measured on the same path:
+  injecting ~241 µs/MiB of checksum is reported at 253 (**105%**), while removing
+  ~205 µs/MiB is reported at ~45 (**22%**) — with the walk's own timer confirming the
+  work is genuinely gone (264 → 69 ps/byte in situ). Six explanations were eliminated
+  to get here: cache residency, the cross-compiler's codegen (by linking the shipped
+  object into a native harness), the node-walk access pattern, the path skipping bytes
+  (a counter says it walks **100.016%** of the payload, with a receive control that
+  moved by exactly zero), the metric under-reporting (calibrated at 105–118%), and
+  memory-bandwidth contention in situ (the fast routine loses only 23%, not 3×). So
+  **`cpu_info::active_time` is sound and the project's µs/MiB figures stand as
+  measured** — but a µs/MiB measurement of a *removal* on a window-limited path may
+  understate it several-fold. §7.3 names the mechanism to test and the instrument
+  to test it with.
 
 And one technique worth copying, because it is why the worst bug here was caught
 before it shipped rather than after: **make the tested code be the shipped code
@@ -642,39 +651,95 @@ the injection counted 6,393,376,522 bytes against the 6,442,450,944 implied by
 (1×3 + 3×3) × 512 MiB (99.2%, the shortfall being the last report line lagging), and
 the leaf saw 11,226,003,493 — the sum of both, as it must.
 
-#### So the shortfall is real, specific to this change, and unexplained
+#### In-situ timing: the routine really is ~4x faster in the kernel
 
-This is the fourth hypothesis to die and I am not going to guess a fifth into the
-record as though it were established. What is now known:
+Both implementations in one module, selected by destination port — 5307 the loop
+graviton ships, 5308 the one `feat/net-checksum-fast` would ship — so both arms run
+in the same boot against the same traffic, timed with `cntvct_el0` (1.05 GHz) around
+the walk. A sampled cross-check runs both routines over the same bytes and compares:
+**831 cross-checks, 0 mismatches**, so the fast routine is computing the right answer
+on live traffic and a transcription error cannot be hiding in this result.
 
-- Adding one pass of the old loop to this exact path costs **253 µs/MiB**, and the
-  metric sees it.
-- Therefore the old loop genuinely costs ~253 µs/MiB in situ, consistent with its
-  benchmarked 0.2295–0.2383 ns/byte.
-- Replacing it with a routine benchmarked at 0.0546–0.0566 ns/byte should therefore
-  have saved ~190 µs/MiB.
-- §7.2 measured **52 µs/MiB**, solidly (p = 0.014, complete separation across boots).
+| | in situ | isolated | ratio |
+|---|---|---|---|
+| old loop | **264 ps/B** | 238 ps/B | 1.11× |
+| new loop | **69 ps/B** | 56 ps/B | 1.23× |
+| speedup | **3.83×** | 4.25× | |
 
-**Every explanation that would have been comfortable is now excluded**: the bytes are
-all there (100.016%), the shipped codegen is as fast as the host build, the access
-pattern does not matter, and the instrument attributes work correctly.
+Over 1,048,747 bytes per MiB that is 277 µs/MiB for the old loop, 72 for the new, and
+**205 µs/MiB of walk time removed**.
 
-The hypothesis I would test next, **untested and recorded as such**: the asymmetry
-between added and removed work is exactly what memory-bandwidth contention would
-produce. An injected extra pass re-reads data already in cache, so it costs its full
-ALU price and is fully visible. The *first* pass pulls the payload from DRAM, and the
-new routine's 0.0566 ns/byte is 17.7 GB/s — at the single-core streaming limit with no
-headroom — while in situ the memory system is simultaneously serving the NIC's DMA
-read of those same bytes and the `write()` copy that produced them. If the first pass
-is memory-bound in situ, making its arithmetic 4× faster cannot recover 4× of its
-time, and speeding up a *second, cache-warm* pass would.
+**Both predictions about this were wrong, mine and the one put to me.**
 
-**The measurement that would settle it, rather than another inference:** time the walk
-*in situ* — read the cycle counter around `csum_walk()` and accumulate — and get the
-actual in-situ ns/byte for the old and new modules directly. That converts the whole
-question from a difference between a benchmark and a throughput number into one
-number measured in the place it matters. It is one more counter on
-`diag/checksum-byte-count`.
+- It was suggested the *old* loop would measure well below its isolated 238 ps/B,
+  because in situ it was never ALU-bound. It measures **264**, slightly *above*. I
+  argued this before measuring, on the grounds that 238 ps/B is 4.36 GB/s against a
+  15.8 GB/s streaming floor — four times the memory headroom — so the old loop is
+  ALU-bound in every cache condition, and nothing in situ can make arithmetic faster.
+- **My own memory-bandwidth hypothesis is falsified.** I predicted the new loop would
+  degrade to 150–190 ps/B in situ, because its isolated 56 ps/B is 17.7 GB/s — the
+  single-core streaming limit, no headroom — while in situ the memory system also
+  serves the NIC's DMA read of those bytes and the `write()` copy. It measures **69**.
+  Contention costs it 23%, not the 3× the hypothesis needed. That is the fifth
+  explanation to die.
+
+#### A properly powered within-boot A/B, which confirms §7.2
+
+The port-switch design needs **no reboots**, so it can be repeated cheaply — which
+makes it a better experiment than §7.2's cross-boot A/B, not merely a cross-check.
+Ten paired repetitions, alternating arms, one boot, one module, same traffic:
+
+| arm | mean | median | sd |
+|---|---|---|---|
+| old | 2284.5 | 2286.5 | 15.2 |
+| new | 2266.1 | 2246.5 | 62.8 |
+
+Paired differences: 44, 69, 39, 1, 34, 48, **−153**, 8, 45, 49 µs/MiB.
+**Median +41.5 µs/MiB (1.82%), positive in 9 of 10, sign test p = 0.0107.**
+
+The −153 is one run whose rate also fell to 4567 Mbit/s — a clear outlier, and the
+reason the median and the sign test are quoted rather than the mean (new's sd of 62.8
+is that single run; without it the arm is as tight as the other).
+
+**So §7.2 stands.** Two independent designs — cross-boot interleaved (52 µs/MiB,
+2.37%) and within-boot port-switched (41.5 µs/MiB, 1.82%) — agree on a real effect of
+roughly **40–50 µs/MiB, about 2%**. The within-boot figure is the better-controlled
+one and is slightly smaller; take ~2% as the number.
+
+#### The final shape: a measured asymmetry between adding and removing work
+
+Everything now reconciles into one statement, with **both directions measured on the
+same path with the same metric**:
+
+| | work | metric reports | attribution |
+|---|---|---|---|
+| **adding** one checksum pass | ~241 µs/MiB | 253 µs/MiB | **105%** |
+| **removing** ~205 µs/MiB of checksum | 205 µs/MiB | ~45 µs/MiB | **22%** |
+
+And the walk's own timer confirms the work really is gone: 264 → 69 ps/B.
+
+This is no longer a discrepancy between an estimate and a measurement — that framing
+is retired. It is a reproducible asymmetry: **on this path the cost metric attributes
+added CPU work in full and removed CPU work at about a fifth.**
+
+The mechanism I would test next, **stated as untested**: at baseline the sender is not
+the bottleneck — the rate is window-limited and pinned near 4700 Mbit/s in every run
+of every experiment here. Adding work pushes the sender toward being the bottleneck,
+which is visible both in `active_time` and in the rate (4805 → 4210 → 3288 across the
+injection sweep). Removing work from a thread that is *already* waiting frees time
+that has nowhere to go but the waiting path — so if the send loop spins or retries
+rather than blocking cleanly, the saved checksum time is converted into wait-loop time
+and nets out. That predicts the asymmetry exactly, predicts that it would vanish on a
+CPU-bound rather than window-bound transfer, and is testable by attributing per-thread
+time with `netprof` across the two arms.
+
+One instrument limitation to name, since it bears on the 205 µs/MiB: `cntvct_el0` is a
+**wall-clock** counter, so the walk timing is elapsed time, not CPU time. For the old
+loop elapsed and CPU should coincide closely — it agrees with an isolated userspace
+benchmark to 11% — but any interrupt or preemption landing inside a walk is counted
+against it. A per-thread CPU-time source, or a PMU cycle counter with interrupts
+excluded, would separate "elapsed in the walk" from "CPU spent in the walk" and is the
+right instrument if anyone pushes further.
 
 #### What this means for the project's other numbers: nothing changes
 
@@ -803,7 +868,10 @@ factor as a prior for anything.
   2× point and 118% by the fitted slope over three magnitudes, with an intercept
   within 12 µs/MiB of baseline. The instrument is sound and the project's µs/MiB
   figures stand. §7.3.
-- **Pricing an offload by the isolated cost of the work it removes.** This one
-  survives, but relocated: the estimate over-predicted the measured saving by 3.7×
-  and the cause is in the transmit path, not the metric. Treat "costs X ns/byte, so
-  removing it saves X" as an upper bound here until measured in situ. §7.3, §8.2.
+- **"Memory-bandwidth contention in situ explains the shortfall."** My own, and the
+  fifth to die: the fast routine measures 69 ps/byte in the kernel against 56
+  isolated — contention costs it 23%, where the hypothesis needed 3×. §7.3.
+- **"The shortfall is a mismatch between an estimate and a measurement."** Retired as
+  a framing: with the walk timed in situ, both sides are now measurements, and what
+  is left is a directional asymmetry in the metric (105% on added work, 22% on
+  removed). §7.3, M3.
