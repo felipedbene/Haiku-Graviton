@@ -198,6 +198,22 @@ extern "C" {
    creeping becomes visible before it becomes a reset. */
 #define ENA_KEEP_ALIVE_MISSES_BEFORE_RESET	2
 
+/* And how many are required while the datapath is demonstrably still moving.
+   N = 2 was measured and found insufficient: with it in place a healthy device
+   under load was still reset once per 150 s, having gone quiet for 7290 ms.
+   Raising the plain count again would just be a new guess about a tail we have
+   not seen, so instead this asks a different question -- is the device actually
+   dead? -- and only relaxes the deadline when the answer is demonstrably no.
+
+   Frames still arriving or leaving is direct evidence the device has not stopped,
+   so a keep-alive that is merely late costs nothing. It is a *bound*, not a
+   disable: once this many deadlines have been missed the device is reset even
+   with traffic flowing, which is what keeps a partial wedge -- a device still
+   moving frames but whose management path has genuinely died -- catchable. At
+   eight misses that is ~13 s of silence, comfortably past the 7290 ms observed
+   while healthy and still far short of anything a user would call a hang. */
+#define ENA_KEEP_ALIVE_MISSES_WITH_TRAFFIC	8
+
 #define ENA_ADMIN_POLL_TIMEOUT_US	500000
 #define ENA_MIN_POLL_DELAY_US		100
 
@@ -210,7 +226,7 @@ extern "C" {
    out to be an unloaded driver rather than an ineffective change. Bump it with
    any change being measured, and read it back out of the syslog before believing
    a number. */
-#define ENA_BUILD_STAMP		"irq-cadence-2-wd"
+#define ENA_BUILD_STAMP		"irq-cadence-3-wd2"
 
 #ifdef ENA_DEBUG_FAULT_INJECTION
 /* Private ioctl for provoking a watchdog timeout without breaking hardware: it
@@ -478,6 +494,11 @@ struct ena_haiku_device {
 	   counts a run of misses and not a total. Touched only by the watchdog
 	   thread, so it needs no atomics; see ENA_KEEP_ALIVE_MISSES_BEFORE_RESET. */
 	uint32				keepAliveMisses;
+	/* rxFrames + txFrames as of the previous watchdog check, so the watchdog can
+	   tell whether the datapath moved at all in the last interval. Read without
+	   either datapath lock: the question is only "did this change", and a torn or
+	   stale read can at worst cost one interval's worth of patience. */
+	uint64				watchdogLastTraffic;
 
 	/* Set for the duration of a reset. The datapath tests it *under* txLock or
 	   rxLock, never on its own: a bare flag is check-then-act, and a receiver

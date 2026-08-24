@@ -1844,6 +1844,13 @@ ena_watchdog(void* arg)
 			continue;
 		}
 
+		/* Did the datapath move at all since the last check? Sampled every tick,
+		   before the age test, so it describes the interval just ended whether or
+		   not a deadline was missed during it. */
+		const uint64 traffic = device->rxFrames + device->txFrames;
+		const bool moving = traffic != device->watchdogLastTraffic;
+		device->watchdogLastTraffic = traffic;
+
 		const bigtime_t last = atomic_get64(&device->lastKeepAlive);
 		const bigtime_t age = system_time() - last;
 		if (age <= ENA_KEEP_ALIVE_TIMEOUT_US) {
@@ -1869,27 +1876,39 @@ ena_watchdog(void* arg)
 
 		device->keepAliveMisses++;
 
+		/* How many misses this device has to accumulate before it is reset. A
+		   device that is still moving frames has demonstrably not stopped, so a
+		   late keep-alive earns more patience -- but a bounded amount, because a
+		   device that moves frames while its management path is dead is exactly
+		   the partial wedge the watchdog exists to catch. See
+		   ENA_KEEP_ALIVE_MISSES_WITH_TRAFFIC. */
+		const uint32 required = moving
+			? ENA_KEEP_ALIVE_MISSES_WITH_TRAFFIC
+			: ENA_KEEP_ALIVE_MISSES_BEFORE_RESET;
+
 		/* One missed deadline is not evidence of a dead device -- measured, see
 		   ENA_KEEP_ALIVE_MISSES_BEFORE_RESET. Say so and look again next tick;
 		   the run has to continue for the device to be reset. */
-		if (device->keepAliveMisses < ENA_KEEP_ALIVE_MISSES_BEFORE_RESET) {
+		if (device->keepAliveMisses < required) {
 			TRACE_ALWAYS("keep-alive deadline missed (%" B_PRId64 " ms since the "
-				"last event, limit %d ms, reason %s); miss %" B_PRIu32 " of %d, "
-				"not resetting yet\n", age / 1000,
+				"last event, limit %d ms, reason %s); miss %" B_PRIu32 " of %"
+				B_PRIu32 "%s, not resetting yet\n", age / 1000,
 				ENA_KEEP_ALIVE_TIMEOUT_US / 1000,
 				reason == ENA_REGS_RESET_MISSING_ADMIN_INTERRUPT
 					? "missing admin interrupt" : "keep-alive timeout",
-				device->keepAliveMisses, ENA_KEEP_ALIVE_MISSES_BEFORE_RESET);
+				device->keepAliveMisses, required,
+				moving ? " (datapath still moving)" : " (datapath idle)");
 			continue;
 		}
 
 		ERROR("keep-alive watchdog timeout: %" B_PRId64 " ms since the last "
 			"event (limit %d ms), reason %s, after %" B_PRIu32 " consecutive "
-			"missed deadlines\n", age / 1000,
+			"missed deadlines%s\n", age / 1000,
 			ENA_KEEP_ALIVE_TIMEOUT_US / 1000,
 			reason == ENA_REGS_RESET_MISSING_ADMIN_INTERRUPT
 				? "missing admin interrupt" : "keep-alive timeout",
-			device->keepAliveMisses);
+			device->keepAliveMisses,
+			moving ? " (datapath still moving -- resetting anyway)" : "");
 
 		device->keepAliveMisses = 0;
 		ena_watchdog_reset(device, reason);

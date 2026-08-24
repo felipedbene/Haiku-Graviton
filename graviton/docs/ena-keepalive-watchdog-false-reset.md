@@ -61,15 +61,49 @@ management vector is therefore monotonically **less** likely with the change tha
 without it — and the measurement above agrees: 2 resets on shipped code, 1 with
 the change, 0 while switching.
 
-## Candidate fixes, not yet tested
+## The fix, and why the obvious version was not enough
 
-- Raise `ENA_KEEP_ALIVE_TIMEOUT_US`, or derive it from the observed keep-alive
-  interval rather than assuming one second holds under load.
-- Treat one missed deadline as a warning and require two consecutive misses
-  before resetting, so jitter cannot reset a working NIC.
-- Do not reset when the device is demonstrably alive: traffic is flowing, so the
-  keep-alive is not the only evidence available. A watchdog that ignores the
-  datapath will always be guessing.
+Requiring **two consecutive** missed deadlines was tried first and **measured
+insufficient**. It halved the rate — 2 resets per 150 s down to 1 — but did not
+eliminate it, because the gap reaches further than anything previously observed:
+
+```
+6288 ms   miss 1 of 2, not resetting yet
+7290 ms   reset, after 2 consecutive missed deadlines
+```
+
+Those two samples are one watchdog poll apart with no keep-alive in between, so
+the device was silent for 7.29 s while carrying 87,137 frames/s. Any plain count
+is a guess about a tail not yet seen, and 7.29 s is what that guess cost.
+
+So the fix asks a different question — *is the device actually dead?* — and uses
+the datapath as the evidence:
+
+- deadline missed, datapath **idle**: reset after
+  `ENA_KEEP_ALIVE_MISSES_BEFORE_RESET` (2) misses, ~7 s;
+- deadline missed, frames **still moving**: up to
+  `ENA_KEEP_ALIVE_MISSES_WITH_TRAFFIC` (8) misses, ~13 s, then reset anyway.
+
+The second is a **bound, not a disable**, and that distinction is the design. A
+device still moving frames whose management path has died is a partial wedge and
+is exactly what a watchdog exists to catch, so traffic buys patience and never
+immunity. Non-final misses and recoveries are both logged, so the fix is visible
+on the occasions when it works — a fix that is silent when it works cannot be told
+apart from a broken watchdog.
+
+## Verification
+
+The risk here is not that spurious resets survive, which is easy to measure, but
+that they were removed by breaking the watchdog — which stays silent until a
+device genuinely wedges. Three controls, using the driver's fault-injection path
+(`HAIKU_ENA_FAULT_INJECTION`, `ena_fault 1`) to stall keep-alives on a device that
+is otherwise perfectly healthy:
+
+| control | expectation |
+|---|---|
+| stall while idle | reset still fires, after **2** misses (~7 s) |
+| stall under load | reset still fires, after **8** misses (~13 s) — the partial-wedge case |
+| load, no stall | **0** resets in 150 s, against 2 on shipped code |
 
 ## Protocol
 
