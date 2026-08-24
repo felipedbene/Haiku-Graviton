@@ -34,8 +34,16 @@ q() { ssh $S $G "$1" 2>&1 | grep -v 'Permanently added'; }
 echo "=== pycheck $PY (want version $WANT) on guest $PORT ==="
 q "ls -la $GP/${FULL}-arm64.hpkg"
 
-echo "---- install the port plus the local packages it needs ----"
-q "pkgman install -y $GP/${FULL}-arm64.hpkg $GP/file-5.43-2-arm64.hpkg 2>&1 | tail -8"
+echo "---- install the port plus every local package it needs ----"
+# Name them all in one pkgman call. The first run of this check passed only the port and
+# file-5.43, and pkgman refused with "nothing provides file_data==5.43" and "nothing
+# provides lib:libbz2>=1.0.8" -- both of which were sitting built in the very same
+# directory. A directory of hpkgs is not a repository: pkgman resolves against what you
+# name plus what is activated, and will not go looking next to the file you handed it.
+DEPS=$(q "ls $GP/file-5.43-*-arm64.hpkg $GP/file_data-5.43-*-any.hpkg $GP/bzip2-1*-arm64.hpkg 2>/dev/null \
+	| grep -vE '_devel|_debuginfo' | tr '\n' ' '")
+echo "also naming: $DEPS"
+q "pkgman install -y $GP/${FULL}-arm64.hpkg $DEPS 2>&1 | tail -10"
 
 got=$(q "$PY -V 2>&1" | tail -1)
 echo "---- interpreter on PATH: $got (want Python $WANT) ----"
