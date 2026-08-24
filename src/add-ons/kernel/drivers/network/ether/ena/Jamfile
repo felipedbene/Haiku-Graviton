@@ -11,6 +11,20 @@ SubDirHdrs [ FDirName $(SUBDIR) ena-com ] ;
 SubDirCcFlags -Wno-unused-parameter -Wno-sign-compare -Wno-missing-braces ;
 SubDirC++Flags -Wno-unused-parameter ;
 
+# Fault injection (see the long comment on ENA_IOCTL_FAULT in ena.h) is compiled
+# out by default: it is an ioctl that deliberately makes the watchdog see a dead
+# device, so it has no business in an image anyone might promote. It is also the
+# only way to exercise the reset and descriptor-reclaim unwind paths, which more
+# than one piece of work now depends on -- so it needs to be switchable without
+# hand-editing this file.
+#
+# Build a verification image with:  jam -sHAIKU_ENA_FAULT_INJECTION=1 @minimum-mmc
+# and tag the resulting AMI so it can never be promoted.
+if $(HAIKU_ENA_FAULT_INJECTION) {
+	SubDirC++Flags -DENA_DEBUG_FAULT_INJECTION ;
+	Echo "ena: fault injection COMPILED IN -- verification image, do not promote" ;
+}
+
 KernelAddon ena :
 	ena.cpp
 	ena_plat.cpp
