@@ -1,9 +1,10 @@
 # `mimeset` is a silent no-op on a headless Haiku — and it is not alone
 
-**Status 2026-08-24.** The defect is understood and the `mimeset` fix is **built for arm64**
-but **NOT yet deployed or runtime-verified**. This document is a checkpoint written ahead of
-a session restart; read the "What is measured / inferred / untested" table before acting on
-anything here.
+**Status 2026-08-24 (updated).** The defect is understood, the `mimeset` fix is built for
+arm64, and it is now **runtime-verified on guest 2235** — including one package end-to-end
+(`vim`: **0 of 2454 files → 2454 of 2454** carrying a `BEOS:` attribute). Remediation path
+(a) is priced and proven to round-trip. What remains is a single decision that is the
+owner's, not an agent's: see section 7.
 
 Branch: `fix/mimeset-headless`. Fix commit: `3eb457b35e`.
 
@@ -233,9 +234,11 @@ this investigation ends on.
 | Blast-radius GUI/non-GUI classification | **INFERRED** per tool from its includes and calls |
 | `setmime` bitmaps lack `B_BITMAP_NO_SERVER_LINK` | **MEASURED** (`setmime.cpp:763,768,854,860`) |
 | Fixed `mimeset` cross-builds for arm64 | **MEASURED** — `jam -q mimeset` rc=0, binary differs from stock, and the new warning string is present in the fixed binary and absent from the stock one (the artifact announces itself) |
-| **Fixed `mimeset` actually writes `BEOS:TYPE` on a guest** | **UNTESTED — NOT DEPLOYED.** This is the gap. |
-| **One-package end-to-end (`vim`) rebuild carrying `BEOS:` attrs** | **UNTESTED — not started.** |
-| Remediation cost for the 145 packages | **NOT ESTIMATED — not started.** |
+| **Fixed `mimeset` actually writes `BEOS:TYPE` on a guest** | **MEASURED** — see section 6. Stock: rc 0, zero attributes. Fixed: rc 0, `BEOS:TYPE` on every file. |
+| **One-package end-to-end (`vim`) carrying `BEOS:` attrs** | **MEASURED** — 0/2454 → 2454/2454, via haikuporter's exact argv. |
+| Remediation cost for the 145 packages | **MEASURED** for path (a) — ~9.5 s for `vim`; see section 7. |
+| Headless type assignments match the working reference | **MEASURED** — controlled against host-built `mimeset` output; see section 6.3. |
+| Attributes survive `package create` | **MEASURED** — repack → re-extract → 2454/2454. |
 
 The prior session's report that a compiled probe calling
 `update_mime_info(path, true, true, FORCE_UPDATE_ALL)` with **no** `BApplication` returned
@@ -254,25 +257,145 @@ It was built by borrowing `/opt/haiku/haiku-opt` (the only tree with a prebuilt
 `libbe.so` + `mimeset`), which was **restored afterwards**: `src/bin/mimeset.cpp` is back
 to blob `263bdefe32c8bdeee076143ed3338886a8fc5d83` and the stock binary relinked, leaving
 only that tree's two pre-existing dirty files (`build/jam/ArchitectureRules`,
-`src/add-ons/kernel/file_systems/btrfs/Jamfile`). **Guest 2235 was never touched.**
+`src/add-ons/kernel/file_systems/btrfs/Jamfile`).
+
+Guest 2235 has since been used for the verification in section 6. Nothing in its
+`/boot/system` was modified — packagefs is read-only and the binaries were run from
+`/boot/home`. The scratch dirs it left are `/boot/home/{mstest,vimcheck,pricea,mdb-none,mdb-sys,ctl}`
+plus `/boot/home/mimeset.{ORIG,FIXED}`; all are disposable.
 
 Note the source blob for `src/bin/mimeset.cpp` is identical (`263bdefe32…`) across
 `graviton@8e365e576d` and every tree on the metal, so the binary built in `haiku-opt`
 corresponds exactly to the committed source.
 
-## 6. Next steps for whoever picks this up
+## 6. Runtime verification on guest 2235 (MEASURED)
 
-1. `scp` `/opt/haiku/mimeset-fix/mimeset.FIXED` into guest **2235** (port-forward; see
-   [[metal-builder-guest-topology]]) — `ssh -p 2235 -i /home/ubuntu/.ssh/haiku-ed25519 baron@127.0.0.1`,
-   run as `ubuntu` on the metal.
-2. **Positive control first.** Run `catattr BEOS:TYPE <file known to have it>` and show a
-   populated row *before* interpreting any empty result. An empty `catattr` proves nothing
-   on its own; this project has lost three sessions to zero-row filters read as absence
-   (see [[verification-discipline-five-rules]]).
-3. Then A/B on a file with no `BEOS:TYPE`: stock `mimeset` → still empty, rc 0;
-   `mimeset.FIXED` → populated `BEOS:TYPE`. Expect the stderr warning to appear — its
-   absence would mean the binary did not run.
-4. One package end-to-end (`vim` is a good pick: it is one of the 145, and its GUI cut was
-   priced on this false cause).
-5. **Then stop and price** (a) unpack→mimeset→repack vs (b) rebuild. Do not remediate 145
-   packages; the choice is the owner's.
+Guest 2235 is `Haiku shredder R1~beta6+development hrev59996 arm64`. `ps` confirms the
+predicted configuration exactly: **`registrar` is running, `app_server` is not.**
+
+### 6.1 Positive control, then A/B
+
+The control ran first, because an empty `catattr` proves nothing on its own
+([[verification-discipline-five-rules]]): `/boot/system/bin/bash` returns
+`'MIMS' : text/plain`, so `catattr` demonstrably prints a populated row on this system.
+
+Four fresh files on the writable BFS volume, `0 bytes total in attributes` each:
+
+| | `plain.txt` | `page.html` | `script.sh` | `code.c` |
+|---|---|---|---|---|
+| baseline | — | — | — | — |
+| stock `mimeset --all .`, **rc 0** | — | — | — | — |
+| fixed `mimeset --all .`, **rc 0** | `text/plain` | `text/html` | `text/plain` | `text/plain` |
+
+The stock binary is the silent no-op at runtime, confirmed: **exit status 0 and not one
+attribute written.** The fixed binary emits
+`mimeset.FIXED: warning: application init failed (Bad port ID); continuing without it.`
+on stderr — the artifact announces itself, so a silent run would have meant the wrong
+binary executed.
+
+`Bad port ID` is the concrete failure behind `fInitError`: no `app_server` port to find.
+
+### 6.2 One package end-to-end — `vim`
+
+`vim-9.1.1618-1-arm64.hpkg` (14.5 MB, 2454 files) is one of the 145. Extracted, then
+re-run through **haikuporter's exact argv** (`Package.py:238-242`,
+`mimeset --all --mimedb data/mime_db --mimedb /boot/system/data/mime_db .`):
+
+```
+SHIPPED:      0 of 2454 files carry a BEOS: attribute
+AFTER-FIXED:  2454 of 2454 files carry a BEOS: attribute
+```
+
+`bin/vim` and its seven siblings (`ex`, `rview`, `rvim`, `vi`, `view`, `vimdiff`, `xxd`)
+are typed `application/x-vnd.be-elfexecutable` — the type Tracker and Deskbar need. This
+is the direct, positive confirmation that **vim's GUI cut was priced on a false cause**:
+its `xres` + `mimeset` + `catattr BEOS:ICON` chain was correct all along, and `mimeset`
+simply never ran.
+
+`data/mime_db` came out empty for `vim`, so haikuporter's `rmdir` branch is the one that
+applies; `vim` declares no new MIME types.
+
+### 6.3 Control: are the headless type assignments *correct*?
+
+Worth asking, because a remediation that stamps 145 packages with **wrong** types is worse
+than leaving them empty. `code.c` → `text/plain` looked wrong: `c` **is** in
+`text/x-source-code`'s `META:EXTENS` list, and shipped `.h` files carry
+`text/x-source-code`.
+
+Two things resolve it, and the concern does not survive:
+
+1. `--mimedb` makes **no difference** to any assignment (A/B run, identical output with and
+   without both flags). So the earlier no-`--mimedb` run was not the confound.
+2. What actually decides is the **sniffer rule**, not the extension.
+   `text/x-source-code`'s rule is
+   `0.30 ([0]"//" | [0]"/*" | [0:32]"#include" | [0:32]"#ifndef" | [0:32]"#ifdef" | [0]"SUMMARY=")`.
+   `hdr.h` (`#ifndef H`) matches it and is typed `text/x-source-code`. `code.c`
+   (`int main(){return 0;}`) matches nothing and falls back to `text/plain`.
+
+The decisive control is a shipped file whose type could only have come from its extension.
+**Shipped `.py` files under `/boot/system/lib/python3.10/` carry `text/plain`** — and those
+were typed at image-build time by the *working* host-built `mimeset`, even though `py` is
+in the extension list. So extension lookup is subordinate to sniffing in the reference
+implementation too.
+
+**Our headless output agrees with the working reference. There is no type-quality
+regression** — the fix restores exactly the behaviour the image build already gets. The
+extension-vs-sniffer precedence is a pre-existing upstream trait, out of scope here.
+
+> One measurement in this area was confounded and is discarded: re-typing a *copy* of a
+> shipped `.c` file. Haiku's `cp` preserves attributes, so the copy arrived already typed
+> and `mimeset` had nothing to do. The `.py` control above is unconfounded and sufficient.
+
+## 7. Remediation — path (a) is priced and proven; the choice is yours
+
+The pool is **262 packages, 370.7 MiB**, of which 145 have no `BEOS:` attributes.
+
+### Path (a) unpack → mimeset → repack — MEASURED on `vim`, the worst case in the pool
+
+| step | time |
+|---|---|
+| `package extract -i .PackageInfo` | 2.4 s |
+| `package extract` (2454 files) | 2.8 s |
+| `mimeset` | 0.4 s |
+| `package create -i .PackageInfo` | 3.8 s |
+| **total** | **≈ 9.5 s** |
+
+Round-trip integrity is verified, not assumed: repack → re-extract → **2454 of 2454** files
+still carry `BEOS:`, and `bin/vim` still reads `application/x-vnd.be-elfexecutable`. Size
+grows 14512906 → 14535981 B (**+0.16%**).
+
+`vim` at 14.5 MB in 9.5 s is ≈0.65 s/MB, so the whole 370.7 MiB pool is **single-digit
+minutes**, and the 145-package subset less. Faithfulness is good: the *only* haikuporter
+step between `mimeset` and `package create` is normalising `data/mime_db` mtimes to
+2001-08-18 (`Package.py:249-252`), and that branch is skipped whenever `data/mime_db` is
+empty — as it was for `vim`.
+
+**The cost that is not time:** every repacked hpkg gets a new hash
+(`13528bae…` → `ec7ea9c3…`) and is no longer the artifact its build produced. That is a
+provenance change, and it is the real argument against (a).
+
+### Path (b) rebuild
+
+Correct by construction and keeps provenance intact, but it re-runs the package chain that
+took days across six guests — three to four orders of magnitude more expensive than (a) —
+and the chain still has open blockers, so a clean 145-package sweep is not currently a
+button anyone can press.
+
+### If (a) is chosen, one detail makes it cheap
+
+`Configuration.py:373` resolves the tool with `which("mimeset")`, and the guest's `PATH`
+puts `/boot/home/config/non-packaged/bin` **first**, ahead of `/boot/system/bin`. Dropping
+the fixed binary there makes every future haikuporter run pick it up with no image rebake —
+consistent with [[kernel-module-hotswap-no-bake]]. **Doing that fixes the pipeline going
+forward and is independent of whether the existing 145 are remediated at all.**
+
+### Still open, and not an agent's call
+
+1. **(a) vs (b) vs neither** for the existing 145 packages.
+2. `exit(0)` → `exit(1)` in `Application.cpp`. One line; stops all 160 sites reporting
+   success on failure; changes no control flow. Recommended in the commit message,
+   deliberately not done.
+3. The 29 class-(b) tools that need no GUI and die anyway — `setmime` is the one on the
+   critical path, and it is **not** a constructor swap (its bitmaps at
+   `setmime.cpp:763,768,854,860` lack `B_BITMAP_NO_SERVER_LINK`, so its icon paths
+   genuinely need `app_server` while its type/extension/sniffer paths do not).
