@@ -5,8 +5,10 @@
 
 # The arm64 `memcpy()`: design, verification, and what it is worth
 
-Status: **booted and measured on real Graviton hardware. Recommended for
-merge**, with two named gaps (§8.5, §9.3).
+Status: **merged into `graviton` at `f76217c69b`**, after booting and being
+measured on real Graviton hardware. Six open items are tracked in §10; two of
+them (`ena_fault`, and establishing the transmit figure) are gaps in *this*
+change's own verification rather than future work.
 
 Sections 1-5 were written *before* any of it was run, so the plan can be judged
 on more than its conclusion, and they are left as written even where the results
@@ -690,7 +692,8 @@ but it changes how it is broken.
   the full battery passes against the node's own libroot with its negative
   controls firing correctly, and a filesystem and read-path workload is
   hash-clean. Two items remain undone: `ena_fault` (the image was not built with
-  `ENA_DEBUG_FAULT_INJECTION`, §8.5) and `profile -a -k`.
+  `ENA_DEBUG_FAULT_INJECTION`, §8.5) and `profile -a -k`. Both are tracked in
+  §10 as open items against this change, not as future work.
 
   **Correction, recorded because the first version of this paragraph was wrong.**
   It said the canonical AMI accepted none of the private keys on this host. It
@@ -867,6 +870,25 @@ host-OS behaviour, give it a negative control -- the guard-page test here
 deliberately faults against its own `PROT_NONE` page and fails loudly if that
 does *not* fault, so the same binary run on Haiku cannot pass vacuously.
 
+### The principle underneath it
+
+The technique is one route to a more general rule that this tree has now arrived
+at twice, independently, on the same night: **make the tested code *be* the
+shipped code, structurally, rather than a transcription of it.**
+
+The two routes differ and both are worth knowing. This one takes the shipped
+object and links it into the harness, which works for anything self-contained and
+requires no change to the code under test. The other restructured an algorithm
+into a dependency-free header so that a harness could `#include` the shipping
+source directly -- which needs a change to the code but then also works for code
+that is *not* self-contained.
+
+The failure both routes exist to prevent is the one described in §3.2 and §6.3:
+a test whose subject has quietly drifted from the thing that ships, passing
+confidently and proving nothing. That drift cost this project the entire value of
+`memcpybench.c`'s original `verify()`. Between them the two routes caught a carry
+bug in one project and validated 509,882 checks in this one.
+
 ### Where else it applies
 
 Any self-contained arch leaf: `generic_memset.c`, `memcmp`, `strlen`, the
@@ -967,7 +989,7 @@ this image**, so the reset/error-unwind exercise asked for did not happen. It
 needs a bake with that option enabled, and it is the one item of the boot plan
 that remains entirely undone. Nothing about this change makes it more likely to
 be needed than usual -- `memcpy` is not on the reset path in any special way --
-but it was asked for and it was not delivered.
+but it was asked for and it was not delivered. Tracked as open item 1 in §10.
 
 
 ## 9. The measurement, on the baked image
@@ -1036,18 +1058,22 @@ resolvable with this image:
   transmit cost. Three boots per image with disjoint interquartile ranges is
   better evidence than a single pair, but it is not the same as having shown the
   bimodality is absent here.
-- The send buffer could not be pinned. `nettput -P`, which collapses within-boot
-  transmit spread to 1.2%, is on a **different branch** and is not in this image;
-  the `-w` option that is present sets `SO_SNDBUF` *and* `SO_RCVBUF`, and an
-  explicit `SO_RCVBUF` is known to suppress window growth, so it is not a
-  substitute.
+- The send buffer could not be pinned. `nettput -P`, which pins the send buffer
+  with auto-sizing off and collapses within-boot transmit spread to 1.2%, was on
+  a **different branch** at the time of this measurement and was not in the image
+  measured; the `-w` option that was present sets `SO_SNDBUF` *and* `SO_RCVBUF`,
+  and an explicit `SO_RCVBUF` is known to suppress window growth, so it was not a
+  substitute. **`-P` is now in `graviton` alongside this change** (the merge
+  resolved the `nettput.cpp` conflict as the union of `-A`/`-W` and `-P`), so the
+  re-measure below is now possible in a single image and only wants a bake.
 - An earlier no-warm-up pass put the old image at 2328-2371 with the rate at
   4426, and the warm-up pass puts it at 2161-2202 with the rate at 4966. The
   baseline's transmit behaviour depends on conditions this measurement does not
   control.
 
 **So: receive 8.4%, established. Transmit about 5%, indicative.** Re-measure
-transmit once `-P` is available in a single image alongside this change.
+transmit with `-P -n 512M` on three boots per image, now that `-P` and this
+change are in one branch; see the open items in §10.
 
 ### 9.4 Controls
 
@@ -1085,8 +1111,19 @@ copies at 1920 bytes cold:
 | | | | **0.324 ns/B = 339.7 µs/MiB** |
 
 Measured end-to-end saving: **223.8 µs/MiB, which is 66% of that.** The
-microbenchmark over-predicts by half. Candidate reasons, none of them established
-here: the real copies are not all at 1920 bytes or at 6 mod 8; a fragmented
+microbenchmark over-predicts by half.
+
+**This is a pattern on this path, not a quirk of this measurement.** A second,
+independent piece of work on the receive path the same night found the same
+shape: a routine measured in isolation predicted appreciably more saving than
+arrived end to end, by roughly the same factor of two. The working rule that
+follows is worth more than either datum: **an isolated microbenchmark of a
+receive-path routine over-predicts its delivered end-to-end saving by about 2x**,
+so treat isolated ns/byte as an upper bound on what a change is worth and never
+as the claim. It is also a reason to be suspicious of any future proposal
+justified only by a microbenchmark.
+
+Candidate reasons for the gap here, none of them established: the real copies are not all at 1920 bytes or at 6 mod 8; a fragmented
 `net_buffer` may present some segments already aligned; and the cold/warm mix in
 the live path is not the bench's. The `-A` option added on the profiling branch
 exists to probe exactly this and was not used.
@@ -1106,3 +1143,49 @@ because `checksum_data()` sees one `data_node` at a time. That is a second
 per-byte term of the same order as the one removed here. It is a confound for
 *attribution* but not for this measurement, which was taken on a single image
 with the checksum unchanged on both sides.
+
+## 10. Open items against this change
+
+Recorded here rather than left to be inferred from their absence.
+
+1. **`ena_fault` reset injection has not been run.** The image this change was
+   validated on was not built with `ENA_DEBUG_FAULT_INJECTION`, so
+   `/boot/home/ena_fault` reports `ioctl failed: Not a tty` and the reset,
+   error-unwind and descriptor-reclaim paths were never exercised with the new
+   `memcpy` in place. This is the one item of the verification plan (§4, V5) that
+   is **entirely undone**. Nothing about this change makes it especially likely to
+   matter -- `memcpy` is not on the reset path in any distinctive way -- but the
+   plan asked for it and it did not happen, and fault injection is now wanted by
+   more than one project, so the next bake is expected to carry the option.
+   *Status: waiting on a bake with `ENA_DEBUG_FAULT_INJECTION`.*
+
+2. **The transmit figure is indicative, not established.** ~5.1% (§9.3), inside a
+   documented 19% boot-to-boot bimodality, measured without a pinned send buffer.
+   `-P` is now in `graviton` alongside this change, so the re-measure is possible
+   in one image: `-P` at a fixed size, `-n 512M`, three boots per image,
+   interleaved across boots, with the receive number re-taken in the same session
+   as a cross-check that nothing else drifted. *Status: wants a bake; the tooling
+   is ready.*
+
+3. **`profile -a -k` was not used.** `arch_debug_get_stack_trace()` works as of
+   `830d8d0814`, which makes the sampling profiler a real instrument for the first
+   time, and it would be the direct way to attack the ~88% of the per-byte receive
+   cost that is *not* the copies (§9.5). Not needed to justify this change; needed
+   to find the next one.
+
+4. **Three Device-nGnRnE exposures** (§6.4) are accepted as a separate follow-up.
+   The one that matters is `hda_controller.cpp`, which turns `create_area` RAM DMA
+   buffers into Device memory on arm64 with `hda` actually built for arm64 -- a
+   latent bug independent of this change. The two framebuffer sites are
+   display-path and not reachable on Graviton.
+
+5. **`generic_memset.c` is unguarded on every other architecture's
+   `kernel/lib/arch/*/Jamfile`** (§6.1). They are safe today only as a side effect
+   of kernel builds passing `-fno-tree-vectorize`. Deliberately not changed from an
+   arm64 branch; named in the Jamfile comment so that removing that flag does not
+   silently reintroduce an infinite recursion in `memset`.
+
+6. **glibc remains up to 2.0x faster above 32 bytes** (§6.7). Structural, needs
+   SIMD intrinsics, and reopens the kernel-NEON question that the `__uint128_t`
+   spelling currently closes (§6.1). Should be done against the test battery this
+   change added, not before it.
