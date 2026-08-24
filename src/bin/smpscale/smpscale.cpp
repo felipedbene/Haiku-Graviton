@@ -724,14 +724,25 @@ main(int argc, char** argv)
 	// busiest was against the least busy of the working ones. Unlike `eff` this
 	// does not saturate -- it separates "one core doubled" from "five cores
 	// doubled and nine CPUs idle", which is the distinction the ladder hid.
-	printf("\nPer-CPU busy set. unit_ms is the single-thread work unit; a CPU is"
-		"\n'busy' at >=90%% of one unit and 'idle' at <10%%. max/min is over the"
-		"\nbusy CPUs only, so 1.00 is perfect and 2.00 means a doubled core.\n");
+	// unit_ms MUST be the calibrated single-thread work unit, not anything derived
+	// from this run's own timings. It used to be baseWall, i.e. the SLOWEST
+	// thread's wall time, which is self-defeating: on a kernel that stacks threads
+	// the unit inflates to 2x-20x, every honestly-busy CPU then falls under the
+	// 90% bar and gets counted 'part', and the busy column collapses to 1 or even
+	// 0 with max/min 0.000 -- making a badly broken kernel look like an idle one.
+	// The calibration target is known a priori and is identical on both sides of
+	// an A/B, so it is the only defensible reference.
+	const double unit = (double)targetMicros / 1000.0;
+	printf("\nPer-CPU busy set. unit_ms is the CALIBRATED single-thread work unit"
+		"\n(%.1f ms); a CPU is 'busy' at >=90%% of one unit and 'idle' at <10%%."
+		"\nmax/min is over the busy CPUs only, so 1.00 is perfect and 2.00 means a"
+		"\ndoubled core. Caveat: -g adds a syscall per chunk and -x gives sleepers"
+		"\n1/16 the work, so under those flags some CPUs land in 'part' legitimately."
+		"\n", unit);
 	printf("%8s %8s %6s %6s %6s %9s %9s\n", "threads", "unit_ms", "busy",
 		"idle", "part", "max/min", "idle_cpus");
 	for (uint32 k = 0; k < ladderSize; k++) {
 		run_result& r = results[k];
-		double unit = baseWall;
 		uint32 busy = 0;
 		uint32 idle = 0;
 		uint32 partial = 0;
