@@ -393,8 +393,11 @@ datalink_send_routed_data(struct net_route* route, net_buffer* buffer)
 
 		// this one goes back to the domain directly
 		const size_t packetSize = buffer->size;
-		status_t status = fifo_enqueue_buffer(
-			&interface->DeviceInterface()->receive_queue, buffer);
+		status_t status = fifo_enqueue_buffer_tracked(
+			&interface->DeviceInterface()->receive_queue, buffer,
+			&interface->DeviceInterface()->receive_queue_diagnostics);
+			// locally routed traffic shares the device receive queue, so it has
+			// to be accounted for here too or the occupancy figures do not add up
 		update_device_send_stats(interface->DeviceInterface()->device,
 			status, packetSize);
 		return status;
@@ -886,7 +889,8 @@ interface_protocol_control(net_datalink_protocol* _protocol, int32 option,
 		case SIOCGIFSTATS:
 		{
 			// get stats
-			struct ifreq_stats stats = interface->DeviceInterface()->device->stats;
+			net_device_interface* deviceInterface = interface->DeviceInterface();
+			struct ifreq_stats stats = deviceInterface->device->stats;
 
 			struct ifreq_stats deviceStats;
 			if (protocol->device_module->control(protocol->device, SIOCGIFSTATS,
@@ -896,6 +900,26 @@ interface_protocol_control(net_datalink_protocol* _protocol, int32 option,
 				stats.send = deviceStats.send;
 				stats.collisions += deviceStats.collisions;
 			}
+
+			// Report the receive drop attribution through two fields that are
+			// otherwise never written on this path, so that the split is visible
+			// to plain ifconfig without changing the size or the meaning of any
+			// shared structure. receive.dropped keeps its existing meaning: it is
+			// still the sum of the two.
+			//
+			// DIAGNOSTIC BUILD ONLY. "mcasts" is really the count of frames
+			// dropped because the receive queue would not take them, and
+			// "Collisions" is really the count dropped because deframing failed.
+			stats.receive.multicast_packets
+				= (uint32)deviceInterface->receive_enqueue_dropped;
+			stats.collisions
+				= (uint32)deviceInterface->receive_deframe_dropped;
+
+			// Reading the stats is also what emits the detailed block to the
+			// kernel log, and it re-arms the high-water marks. Read it exactly
+			// once at each end of a measurement window: each read reports the
+			// peaks since the previous read, and a stray reader steals them.
+			dump_receive_queue_diagnostics(deviceInterface);
 
 			return user_memcpy(&((struct ifreq*)argument)->ifr_stats,
 				&stats, sizeof(struct ifreq_stats));
