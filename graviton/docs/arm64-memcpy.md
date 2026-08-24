@@ -596,13 +596,29 @@ but it changes how it is broken.
 
 ### 6.7 What is not done, and what it would take
 
-- **Not booted.** Everything above is the shipping machine code exercised in
-  userland on the right core. Nothing here has run inside a Haiku kernel or
-  libroot, which is the one thing the original commit message asked for and the
-  one thing that still needs an image. Wanted: boot, serial console clean
-  through early boot, `nettput` both directions at MTU 9001 watching for
-  checksum failures rather than only for rate, a filesystem workload verified by
-  hash, `ena_fault`, and `profile -a -k`.
+- **Not booted, and not run on Haiku at all.** Everything above is the shipping
+  machine code exercised in userland on the right core, under Linux. Nothing here
+  has run inside a Haiku kernel or libroot, which is the one thing the original
+  commit message asked for and the one thing that still needs an image. Wanted:
+  boot, serial console clean through early boot, `nettput` both directions at
+  MTU 9001 watching for checksum failures rather than only for rate, a filesystem
+  workload verified by hash, `ena_fault`, and `profile -a -k`.
+
+  Not even the *unchanged* routine could be exercised on a Haiku node from here:
+  the canonical AMI's baked `authorized_keys` accepts none of the private keys
+  present on this host, and `haiku-uaf-ed25519` -- the key the launch parameters
+  name -- is not one of them. SSH-over-SSM through the metal works
+  (`AWS-StartPortForwardingSessionToRemoteHost`, `session-manager-plugin` is
+  installed, sshd answers), so this is a missing key and nothing more, but it
+  means the Haiku-side run has to be done by whoever holds it.
+
+  That gap does not put a bake at risk of proving nothing, because the two
+  subtests whose validity depends on the host OS each carry a negative control:
+  the guard-page test deliberately faults against its own `PROT_NONE` page and
+  fails loudly if that does *not* fault, and the read-only self-copy test
+  deliberately writes to the read-only page for the same reason. If Haiku's
+  `mprotect` or `sigsetjmp` behaved differently, the test would say so rather
+  than passing quietly.
 - **The end-to-end network number is not measured.** The microbenchmark says the
   copies got 3.4-9.8x cheaper in the receive path's configuration. It does not
   say what that is worth in µs/MiB, because that needs a baked image. From the
