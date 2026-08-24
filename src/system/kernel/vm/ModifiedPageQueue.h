@@ -42,6 +42,11 @@ public:
 			bool				IsOverQuota(page_num_t additionalPages = 0);
 
 			// KDL only; see the page_writer_quota debugger command.
+			// DumpAllQuotaStates() walks every queue, because there is one per
+			// disk device and the per-device write-duration estimate is the
+			// interesting number -- dumping only the default queue reports the
+			// state of whichever queue happens not to be the one under load.
+	static	void				DumpAllQuotaStates();
 			void				DumpQuotaState();
 
 			// Returns B_TIMED_OUT if the wait was bounded and expired. Callers
@@ -68,6 +73,18 @@ private:
 			// old sample on a device that had gone quiet -- set the throttling
 			// threshold for every writer on that device.
 			bigtime_t			fAveragePageWriteDuration;
+
+			// Identifies this queue in the KDL dump: the device path for a disk
+			// queue, "default" for the anonymous one. Copied rather than
+			// referenced, because KDiskDevice passes a string it owns.
+			char				fName[64];
+
+			// Registry of every live queue, for DumpAllQuotaStates(). A plain
+			// list rather than anything cleverer: it is mutated only when a disk
+			// appears or goes away, and it is read from KDL with the rest of the
+			// machine stopped.
+			ModifiedPageQueue*	fNextQueue = NULL;
+	static	ModifiedPageQueue*	sQueues;
 
 private:
 	static	int64				sGlobalModifiedCount;

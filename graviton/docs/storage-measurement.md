@@ -1090,8 +1090,9 @@ The bound is a liveness guarantee, not a cure. In order:
 
 1. ~~Make the global quota not couple idle devices to busy ones.~~ **Done and
    hardware-verified** — 0 of 2 timeouts on an idle queue, against 15 of 19 before.
-2. ~~Make the estimate an actual average, and decay it.~~ **Done**, verified
-   indirectly only; see "What was not obtained".
+2. ~~Make the estimate an actual average, and decay it.~~ **Done**; verified
+   indirectly so far, and `page_writer_quota` now dumps every queue so the
+   promotion image can measure it directly.
 3. Still open: revisit the quota constants. They cannot be judged until the two
    fixes above are measured, because until now the estimate feeding them was
    unreliable and the aggregation was wrong.
@@ -1428,9 +1429,11 @@ per-device estimates are not in that dump.
 The evidence for fix 2 is therefore **indirect but strong**: zero timeouts on an
 idle queue, where the pre-fix run had 15 of 19 driven by an idle disk stuck at
 883 µs. The estimate no longer freezes high enough to throttle an idle device.
-**Follow-up:** `page_writer_quota` should iterate every `ModifiedPageQueue`, not just
-the default one. That is a real gap in my own instrument and it should be closed
-before anyone relies on it for a per-device number.
+**Gap closed** in `vm: dump every modified page queue, not just the default one`:
+the command now walks a registry of live queues, prints the per-device figures per
+queue, and prints the shared counters once under a `system-wide:` heading so they
+cannot be misread as per-device. The per-device estimate is therefore a direct
+measurement on the promotion image rather than an inference.
 
 ### And KDL worked, for the first time on arm64
 
