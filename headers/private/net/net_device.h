@@ -19,6 +19,18 @@ struct net_hardware_address {
 	uint8	length;
 };
 
+
+// What a device is willing to compute on transmit, advertised in
+// net_device::tx_checksum_offload. A protocol that sees its bit here may leave
+// the layer-4 checksum unfinished and set NET_BUFFER_L4_CHECKSUM_NEEDED on the
+// buffer instead (see net_buffer.h for the exact convention). Split by address
+// family because hardware routinely supports one and not the other -- the ENA
+// device on Graviton advertises IPv4 only.
+enum net_device_tx_checksum {
+	NET_DEVICE_TX_CHECKSUM_IPV4_L4	= (1 << 0),
+	NET_DEVICE_TX_CHECKSUM_IPV6_L4	= (1 << 1),
+};
+
 typedef struct net_device {
 	struct net_device_module_info* module;
 
@@ -35,6 +47,11 @@ typedef struct net_device {
 	struct net_hardware_address address;
 
 	struct ifreq_stats stats;
+
+	// net_device_tx_checksum bits. Filled in by the device module while the
+	// device is up; zero means "offload nothing", which is what every device
+	// that does not know about this field gets.
+	uint32	tx_checksum_offload;
 } net_device;
 
 

@@ -17,8 +17,25 @@
 
 
 enum net_buffer_flags {
-	NET_BUFFER_L3_CHECKSUM_VALID = (1 << 0),
-	NET_BUFFER_L4_CHECKSUM_VALID = (1 << 1),
+	// Receive: this checksum has already been verified -- by hardware, or by a
+	// layer below -- and the protocol may skip verifying it again.
+	NET_BUFFER_L3_CHECKSUM_VALID	= (1 << 0),
+	NET_BUFFER_L4_CHECKSUM_VALID	= (1 << 1),
+
+	// Transmit: this checksum is deliberately *unfinished* and the device is
+	// expected to complete it. The field in the packet holds the folded,
+	// uncomplemented one's-complement sum of the pseudo-header only -- the same
+	// convention as Linux's CHECKSUM_PARTIAL -- so a device that sums the
+	// remaining bytes, folds and complements produces the right answer.
+	//
+	// Only ever set for a device that advertised the corresponding bit in
+	// net_device::tx_checksum_offload (see net_device.h), because a packet that
+	// reaches the wire with one of these still set is a packet the peer will
+	// discard. Anything that redirects such a buffer away from that device --
+	// fragmentation, loopback re-injection -- has to finish the sum in software
+	// and swap the flag for the _VALID one above.
+	NET_BUFFER_L3_CHECKSUM_NEEDED	= (1 << 2),
+	NET_BUFFER_L4_CHECKSUM_NEEDED	= (1 << 3),
 };
 
 

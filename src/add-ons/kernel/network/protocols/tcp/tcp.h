@@ -297,7 +297,8 @@ EndpointManager* get_endpoint_manager(net_domain* domain);
 void put_endpoint_manager(EndpointManager* manager);
 
 status_t add_tcp_header(net_address_module_info* addressModule,
-	tcp_segment_header& segment, net_buffer* buffer);
+	tcp_segment_header& segment, net_buffer* buffer,
+	bool offloadChecksum = false);
 size_t tcp_options_length(tcp_segment_header& segment);
 
 const char* name_for_state(tcp_state state);

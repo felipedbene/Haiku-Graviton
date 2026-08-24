@@ -18,6 +18,7 @@
 #include <ether_driver.h>
 #include <lock.h>
 #include <net_buffer.h>
+#include <net_device.h>
 
 extern "C" {
 #include "ena-com/ena_com.h"
@@ -212,6 +213,20 @@ extern "C" {
 #define ENA_IOCTL_HOLD_RESET		9801
 #define ENA_MAX_RESET_HOLD_MS		30000
 #endif
+
+/* Measurement knob, always compiled in: ring the transmit doorbell N extra
+   times per frame. The extra writes carry the same tail the device has already
+   been told about, so they change nothing except how much MMIO the transmit path
+   pays -- which is exactly how the cost of one doorbell was priced without first
+   building the batched transmit entry point that real coalescing would need.
+
+   Settable at runtime rather than only through driver settings so that the A/B
+   can be interleaved inside a single boot; run-to-run transmit cost on this
+   hardware is bimodal at about +-10%, which swamps the effect being measured if
+   the conditions are separated by a reboot. See
+   graviton/docs/ena-tx-offload.md. */
+#define ENA_IOCTL_TX_EXTRA_DOORBELLS	9802
+#define ENA_MAX_EXTRA_DOORBELLS		64
 
 /* Refuse to attach below this, rather than dividing by a zero ring size if a
    device ever reports a nonsense depth. */
@@ -428,6 +443,45 @@ struct ena_haiku_device {
 
 	uint32				multicastCount;
 	ether_address_t			multicast[ENA_MAX_MULTICAST];
+
+	/* --- transmit doorbell accounting ------------------------------------ */
+	/* Measurement, not diagnostics: the question these answer is whether
+	   deferring the per-frame doorbell could ever amortise it on this device.
+	   In LLQ mode the device grants a burst of only
+	   llq_info.max_entries_in_tx_burst ring entries between doorbells, and a
+	   doorbell is what refills that allowance -- so if one frame consumes the
+	   whole burst, no two consecutive frames can share a doorbell however
+	   clever the caller is. txBurstExhausted counts frames that left the
+	   allowance at zero. See graviton/docs/ena-tx-offload.md. */
+	uint64				txFrames;
+	uint64				txDoorbells;
+	uint64				txBurstExhausted;
+	uint16				txBurstLeftMin;
+
+	/* Debug knob, driver settings "tx_extra_doorbells": ring the doorbell this
+	   many extra times per frame. Writing the same tail again is a no-op for
+	   the device, so the only thing it changes is how much MMIO the transmit
+	   path pays -- which is how the cost of one doorbell was priced without
+	   having to build the batched entry point first. Zero unless asked for. */
+	int32				txExtraDoorbells;
+
+	/* --- transmit checksum offload --------------------------------------- */
+	/* net_device_tx_checksum bits, as reported through
+	   ETHER_GET_TX_CHECKSUM_OFFLOAD. Zero unless the device advertised the
+	   partial (pseudo-header-seeded) form *and* transmit runs in LLQ placement
+	   *and* the driver settings did not turn it off. Once this is non-zero the
+	   stack stops computing TCP checksums for this interface, so it must never
+	   claim more than ena_prepare_tx_checksum() can actually deliver. */
+	uint32				txChecksumOffload;
+
+	/* Frames handed to the device with the checksum left to it, and frames that
+	   arrived asking for that but did not survive validation. The second must
+	   stay at zero: it means something above set
+	   NET_BUFFER_L4_CHECKSUM_NEEDED on a frame this device cannot finish, and
+	   those frames are dropped rather than put on the wire with a wrong
+	   checksum. */
+	uint64				txChecksumOffloaded;
+	uint64				txChecksumRejected;
 };
 
 

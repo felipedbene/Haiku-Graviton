@@ -393,7 +393,7 @@ name_for_state(tcp_state state)
 */
 status_t
 add_tcp_header(net_address_module_info* addressModule,
-	tcp_segment_header& segment, net_buffer* buffer)
+	tcp_segment_header& segment, net_buffer* buffer, bool offloadChecksum)
 {
 	buffer->protocol = IPPROTO_TCP;
 
@@ -433,9 +433,23 @@ add_tcp_header(net_address_module_info* addressModule,
 		"win %u\n", buffer, segment.flags, segment.sequence,
 		segment.acknowledge, segment.urgent_offset, segment.advertised_window));
 
-	*TCPChecksumField(buffer) = Checksum::PseudoHeader(addressModule,
-		gBufferModule, buffer, IPPROTO_TCP);
-	buffer->buffer_flags |= NET_BUFFER_L4_CHECKSUM_VALID;
+	if (offloadChecksum) {
+		// Leave the payload out of it: only the pseudo-header goes into the
+		// field, and the device folds in the rest. Computing the full sum here
+		// is a pass over every byte of every segment, which at jumbo MTU is the
+		// single most expensive thing this function does.
+		//
+		// The caller has already established that the device this segment is
+		// routed to will finish the job; if that is ever wrong the peer
+		// discards the segment, so the check belongs there and not here.
+		*TCPChecksumField(buffer) = Checksum::PartialPseudoHeader(addressModule,
+			buffer, IPPROTO_TCP);
+		buffer->buffer_flags |= NET_BUFFER_L4_CHECKSUM_NEEDED;
+	} else {
+		*TCPChecksumField(buffer) = Checksum::PseudoHeader(addressModule,
+			gBufferModule, buffer, IPPROTO_TCP);
+		buffer->buffer_flags |= NET_BUFFER_L4_CHECKSUM_VALID;
+	}
 
 	return B_OK;
 }
