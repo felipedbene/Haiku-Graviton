@@ -1,17 +1,28 @@
 # SMP work is placed badly and never repaired
 
-Status: **implemented and verified on hardware.** Three fixes on
-`fix/scheduler-saturated-migration`, A/B measured against the canonical AMI on
-16-vCPU Graviton (§5.11). Headline: 32 threads went from **60.0 s with one CPU
-running 17 of them** to **6.05 s across all 16 CPUs**, a 9.9x speedup within 0.8 %
-of optimum; 16 threads from `max/min` 3.00–4.02 with up to 7 CPUs idle to
-16-on-16 at 1.014–1.017, **5/5 where the baseline managed 0/5**. Five of seven
-pre-registered predictions passed; the two that failed were errors in my
-*predictions*, recorded as failures in §5.13 and §5.14. Not merged, not pushed. The causation question has
-been settled by measurement on hardware (§1.7) without needing a bake. One
-remaining question — the mechanism of defect B — needs the kernel instrumentation
-in §5 and therefore one image bake, but it does not change the shape of the fix.
-Verified against the tree at `a195688e46`.
+Status: **MERGED and verified on hardware, 2026-08-24** — `fix/scheduler-saturated-migration`
+merged as `4cafdaa4c4`. A/B measured against the canonical AMI on **`c7g.4xlarge`
+(Graviton3 / Neoverse V1, 16 vCPU)**, `us-west-2` (§5.11). Headline, all on that
+class: 32 threads went from **60024.9 ms with one CPU running 17 of them** to
+**6065.9 ms across all 16 CPUs**, a **9.9× speedup within 0.8 % of optimum**; 16
+threads from `max/min` 3.00–4.02 with up to 7 CPUs idle to 16-on-16 at
+1.014–1.017, **5/5 where the baseline managed 0/5**. Five of seven pre-registered
+predictions passed; the two that failed were errors in my *predictions*, recorded
+as failures in §5.13 and §5.14.
+
+> **Two status claims corrected 2026-08-24.**
+>
+> 1. ~~"Not merged, not pushed."~~ **It is merged** (`4cafdaa4c4`). That clause sat
+>    one sentence away from "implemented and verified on hardware" and is the kind
+>    of contradiction that gets finished work re-done.
+> 2. ~~"One remaining question — the mechanism of defect B — needs the kernel
+>    instrumentation in §5 and therefore one image bake."~~ **The bake happened.**
+>    §5.11 reports the A/B from a baked image with the `sched_placement:` tracing
+>    live, and §5.15 quotes **163,412 declines** from exactly that instrumentation.
+>    Nothing here is waiting on a bake.
+>
+> The causation question was settled by measurement on hardware (§1.7). Verified
+> against the tree at `a195688e46`; **now on `graviton`.**
 
 **Summary for review.** The reported "0.500 at N = 16" is three separate defects.
 Below `ncpus` it is a *placement* failure with a confirmed mechanism (a core stays
@@ -78,8 +89,18 @@ that artifact.
 The honest measures, now emitted by the tool, are **per-CPU busy sets** (how many
 CPUs did a full unit of work, how many idled, which ones) and **max/min over the
 busy CPUs**, which does not saturate. Also note `eff`'s optimum is
-`1 / ceil(N / ncpus)`, so it *should* fall as N passes `ncpus`: at N = 17, 0.500
-is already optimal and "improving" it would mean something is wrong.
+~~`1 / ceil(N / ncpus)`, so it *should* fall as N passes `ncpus`: at N = 17, 0.500
+is already optimal and "improving" it would mean something is wrong.~~
+
+> **STRUCK OUT 2026-08-24 — this formula is wrong, and §5.15 asked for exactly this
+> strike-out but pointed at a section number that does not exist, so it never
+> happened.** `1 / ceil(N / ncpus)` **assumes threads cannot move once placed** —
+> it silently bakes in the very defect this document is about. Once migration works,
+> a thread's work is effectively divisible and the floor is `eff = ncpus / N`.
+> Measured at N = 17 on 16 CPUs: `max/min` **1.509–1.515**, not 2.00 — better than
+> the "floor" this formula predicted. See §5.15 for the full derivation and the
+> per-CPU evidence (two CPUs at ~4500 ms, fourteen at ~2995 ms: the 17th thread's
+> work was split across two CPUs mid-run).
 
 ### 1.3 The imbalance is created at placement and frozen — the causation is the
 opposite of the original story
@@ -118,7 +139,13 @@ alone *also* makes the ladder read 1.000 while `rebalance()` stays dead. **The
 efficiency ladder cannot distinguish these two**, which is precisely why the
 acceptance criteria in §6 are stated in busy sets and migration counts.
 
-### 1.4 The likely root cause, and it is cheap to test
+### 1.4 ~~The likely root cause~~ — REFUTED in §1.7, see banner
+
+> **REFUTED 2026-08-24. This is not the root cause.** §1.7 measured the stagger
+> threshold at **≤ 5 µs**, not ~1 ms, and records explicitly that *"the resemblance
+> to `kLoadMeasureInterval` was a **coincidence**"*. Read this section as a dead
+> hypothesis — a good one, cheaply killed by the right experiment. The real
+> mechanism is in §1.5/§1.7.
 
 **1 ms of spawn stagger eliminates the defect entirely.** 0 ms gives 11 and 15
 busy CPUs with max/min 2.010 / 2.003; 1 ms gives 16 and 16 with 1.010 / 1.008.
@@ -143,7 +170,14 @@ key and `PeekMinimum` hands out **the same core repeatedly**. That explains the
 concentration (all five surplus threads on one CPU; 17 on cpu9) far better than
 anything in `rebalance()` does.
 
-### 1.5 A second, sharper placement mechanism — and the stagger threshold is not
+### 1.5 A second, sharper placement mechanism — ~~and the stagger threshold is not
+yet measured~~ (MEASURED in §1.7, 2026-08-24)
+
+> The mechanism in this section is the one that survived. The "not yet measured"
+> in the heading is stale: §1.7, immediately below, measures the threshold at
+> **≤ 5 µs**.
+
+### (original heading) A second, sharper placement mechanism — and the stagger threshold is not
 yet measured
 
 There is a competing explanation that fits the data better, and it is
@@ -176,7 +210,8 @@ reported threshold is not actually measured:
 runs on the stock canonical AMI, because the stagger is entirely a property of the
 test program. `smpscale -s <µs>` exists for exactly this. Sweeping 0, 10, 25, 50,
 100, 250, 500, 1000, 2000 µs with repeats locates the knee, and the knee names the
-mechanism. This is the cheapest decisive experiment available and it is being run
+mechanism. ~~This is the cheapest decisive experiment available and it is being run~~
+**— RUN, 2026-08-24; results in §1.6 and §1.7. Do not re-run it.** It is being run
 before any bake is requested.
 
 ### 1.6 The sweep was run, and it identifies the mechanism — via my own bug
@@ -227,7 +262,8 @@ nothing ever repairs it.
 
 `smpscale -i` now drops the barrier so each worker starts real work the instant it
 is resumed — the realistic case, and the only condition under which `-s` can move
-placement. The sweep must be re-run with `-i -s`, and that is the outstanding
+placement. ~~The sweep must be re-run with `-i -s`, and that is the outstanding~~
+**— DONE in §1.7, the very next section. Not outstanding.** The sweep must be re-run with `-i -s`, and that is the outstanding
 experiment.
 
 ### 1.7 The corrected sweep: the knee is at or below 5 microseconds, and the
@@ -315,8 +351,13 @@ That is the empirical answer to "decide explicitly whether placement is in scope
 
 `-i` alone, with no stagger, already gives **8/8 and 12/12 CPUs busy with max/min
 ≤ 1.001, 3 of 3 repeats** — so defect A really is the whole story below `ncpus`,
-and N = 17 comes out at max/min 2.00 with all 16 CPUs busy, which is the
-arithmetic optimum and must not be "improved".
+and N = 17 comes out at max/min 2.00 with all 16 CPUs busy, ~~which is the
+arithmetic optimum and must not be "improved"~~.
+
+> **Corrected 2026-08-24: 2.00 is NOT the arithmetic optimum** — see the strike-out
+> in §1.2. It is the optimum only if threads never migrate. With migration working,
+> N = 17 measures **1.509–1.515**, and the divisible floor is 1.00. The clause "must
+> not be improved" would have told a reader to stop at 2.00.
 
 ---
 
@@ -560,6 +601,12 @@ warning's precondition is never met.
 not reproducible), pulling `libgnu.so` for `sched_getcpu()` and resolving
 `_kern_set_scheduler_mode` against `libroot.so`; its hot loop is still a
 five-instruction `madd` / `eor …, lsr #29` chain with zero memory operands.
+
+> **Dead text, flagged 2026-08-24.** The predictions below are conditioned on
+> **§1.4, which was already refuted two sections earlier** (threshold ≤ 5 µs, not
+> ~1 ms). They were never resolved because the hypothesis they test was gone before
+> the experiment was reached. Kept as a record of pre-registration discipline, not
+> as a live experiment.
 
 Predictions, so the experiment can fail: if §1.4 is right, a 16-thread burst
 shows most placements taking the `idle-core-list` path early and then repeatedly
@@ -862,7 +909,13 @@ naive reading of my prediction, so it goes down as written.
 
 ### 5.13 Predictions 4 and 5: my "arithmetic optimum" assumed migration never works
 
-This is the substantive error, and it is in §4.6 of this document.
+This is the substantive error. ~~It is in §4.6 of this document.~~
+
+> **Cross-reference corrected 2026-08-24: there is no §4.6.** §4 has no
+> subsections. The sections that actually carry the bad formula are **§1.2** and
+> **§1.8**, and both have now been struck out in place. This dangling pointer is
+> exactly why the requested correction below never landed — the instruction was
+> right and the address was wrong, so nobody could act on it.
 
 I derived the optimum as `eff = 1 / ceil(N / ncpus)`, giving `max/min = 2.00` as
 the floor for N = 17. **That formula assumes threads cannot move once placed** —
@@ -884,7 +937,8 @@ at ~2995 ms, totalling 51000 ms = 17 × 3000. The seventeenth thread's work was
 So prediction 4 was wrong twice over: N = 17 was *not* already optimal on the
 baseline (3.01–5.02, far worse than 2.00, so my earlier "N = 17's 0.500 is already
 optimal" claim was also wrong), and the fix improved it past the floor I thought
-existed. **§4.6 and §6 need the `1/ceil(N/ncpus)` formula struck out.** Prediction
+existed. **~~§4.6~~ §1.2, §1.8 and §6 need the `1/ceil(N/ncpus)` formula struck out.**
+**DONE 2026-08-24** — all three now carry the strike-out. Prediction
 5 has the same root: I wrote `max/min ≈ 2.0` for N = 32 when `max/min` is computed
 over *busy* CPUs, and 32 threads spread 2-per-CPU makes every CPU equal — so 1.016
 is the correct answer and 2.0 was never reachable.
