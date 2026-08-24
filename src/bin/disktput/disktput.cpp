@@ -99,8 +99,75 @@ enum io_mode {
 	MODE_SEQ_READ,
 	MODE_SEQ_WRITE,
 	MODE_RAND_READ,
-	MODE_RAND_WRITE
+	MODE_RAND_WRITE,
+	MODE_VERIFY
 };
+
+
+// A block written with -P carries its own absolute offset. That turns a
+// durability test into something a benchmark can actually assert, because the
+// failure this project has already suffered on this path was not a missing file:
+// the sshd host key came back with the right size, the right mode and the right
+// mtime, and 411 bytes of zeros inside. A length check would have passed it.
+//
+// Stamping the offset also catches the other half of the same failure -- a block
+// that holds some *other* block's data because the inode's block map was
+// committed while the data was not. Zeros and stale-but-valid-looking data are
+// reported separately, since they implicate different layers.
+#define DISKTPUT_STAMP		0x44424f53544d5031ULL		/* "DBOSTMP1" */
+#define STAMP_HEADER		16
+
+
+static void
+stamp_block(uint8* buffer, off_t size, off_t offset)
+{
+	uint64 magic = DISKTPUT_STAMP;
+	memcpy(buffer, &magic, sizeof(magic));
+	memcpy(buffer + 8, &offset, sizeof(offset));
+	if (size > STAMP_HEADER) {
+		memset(buffer + STAMP_HEADER, (int)((offset >> 12) & 0xff),
+			(size_t)(size - STAMP_HEADER));
+	}
+}
+
+
+enum block_verdict {
+	BLOCK_OK,
+	BLOCK_ZERO,			// never reached the device, or reached it as a hole
+	BLOCK_STALE,		// real data, but not the data that belongs here
+	BLOCK_CORRUPT		// right offset, wrong payload
+};
+
+
+static block_verdict
+check_block(const uint8* buffer, off_t size, off_t offset)
+{
+	bool zero = true;
+	for (off_t i = 0; i < size; i++) {
+		if (buffer[i] != 0) {
+			zero = false;
+			break;
+		}
+	}
+	if (zero)
+		return BLOCK_ZERO;
+
+	uint64 magic = 0;
+	off_t stamped = 0;
+	memcpy(&magic, buffer, sizeof(magic));
+	memcpy(&stamped, buffer + 8, sizeof(stamped));
+
+	if (magic != DISKTPUT_STAMP || stamped != offset)
+		return BLOCK_STALE;
+
+	uint8 fill = (uint8)((offset >> 12) & 0xff);
+	for (off_t i = STAMP_HEADER; i < size; i++) {
+		if (buffer[i] != fill)
+			return BLOCK_CORRUPT;
+	}
+
+	return BLOCK_OK;
+}
 
 
 static const char*
@@ -111,6 +178,7 @@ mode_name(io_mode mode)
 		case MODE_SEQ_WRITE:	return "seqwrite";
 		case MODE_RAND_READ:	return "randread";
 		case MODE_RAND_WRITE:	return "randwrite";
+		case MODE_VERIFY:		return "verify";
 	}
 	return "?";
 }
@@ -288,6 +356,7 @@ struct run_config {
 	off_t		alignment;
 	off_t		misalign;
 	bigtime_t	duration;		// 0 = move -n bytes instead of running for a time
+	bool		patterned;		// stamp each block so it can be verified later
 };
 
 
@@ -352,6 +421,10 @@ struct worker {
 	bigtime_t*		samples;
 	uint32			sampleCount;
 	off_t			samplesRecorded;
+	off_t			zeroBlocks;
+	off_t			staleBlocks;
+	off_t			corruptBlocks;
+	off_t			firstBadOffset;
 	status_t		error;
 	off_t			errorOffset;
 };
@@ -412,6 +485,8 @@ worker_main(void* data)
 
 		ssize_t moved;
 		if (mode_is_write(config.mode)) {
+			if (config.patterned)
+				stamp_block(self->buffer, config.blockSize, offset);
 			moved = pwrite(self->fd, self->buffer, config.blockSize, offset);
 			if (moved > 0 && config.syncEveryOp) {
 				if (fsync(self->fd) != 0) {
@@ -422,6 +497,25 @@ worker_main(void* data)
 			}
 		} else {
 			moved = pread(self->fd, self->buffer, config.blockSize, offset);
+			if (moved == config.blockSize && config.mode == MODE_VERIFY) {
+				switch (check_block(self->buffer, config.blockSize, offset)) {
+					case BLOCK_OK:
+						break;
+					case BLOCK_ZERO:
+						self->zeroBlocks++;
+						break;
+					case BLOCK_STALE:
+						self->staleBlocks++;
+						break;
+					case BLOCK_CORRUPT:
+						self->corruptBlocks++;
+						break;
+				}
+				if (self->zeroBlocks + self->staleBlocks + self->corruptBlocks == 1
+					&& self->firstBadOffset < 0) {
+					self->firstBadOffset = offset;
+				}
+			}
 		}
 
 		bigtime_t latency = system_time() - opStart;
@@ -736,7 +830,7 @@ usage(int status)
 		"on a raw device (/dev/disk/nvme/0/raw) or through the file system.\n"
 		"\n"
 		"  -f <path>     device or file to measure (required)\n"
-		"  -m <mode>     seqread | seqwrite | randread | randwrite\n"
+		"  -m <mode>     seqread | seqwrite | randread | randwrite | verify\n"
 		"                (default seqread)\n"
 		"  -b <bytes>    block size per operation, K/M suffixes ok"
 			" (default 64K)\n"
@@ -762,6 +856,10 @@ usage(int status)
 		"                16 KiB buffer, so this is not a cosmetic knob\n"
 		"  -U <bytes>    deliberately offset the buffer this far past its\n"
 		"                alignment, to measure the bounce path on purpose\n"
+		"  -P            stamp every written block with its own offset, so a\n"
+		"                later -m verify can prove the data is the data that\n"
+		"                belongs there -- not zeros, and not some other\n"
+		"                block. Use for durability tests across a stop/start\n"
 		"  -y            confirm writing to a raw device, destroying its"
 			" contents\n"
 		"  -J            also print one tab-separated line for a harness\n"
@@ -794,7 +892,7 @@ main(int argc, char** argv)
 	bool machineReadable = false;
 
 	int option;
-	while ((option = getopt(argc, argv, "f:m:b:n:t:s:o:e:A:U:L:T:DSFyJh")) != -1) {
+	while ((option = getopt(argc, argv, "f:m:b:n:t:s:o:e:A:U:L:T:PDSFyJh")) != -1) {
 		switch (option) {
 			case 'f':
 				config.path = optarg;
@@ -808,6 +906,8 @@ main(int argc, char** argv)
 					config.mode = MODE_RAND_READ;
 				else if (strcmp(optarg, "randwrite") == 0)
 					config.mode = MODE_RAND_WRITE;
+				else if (strcmp(optarg, "verify") == 0)
+					config.mode = MODE_VERIFY;
 				else {
 					fprintf(stderr, "disktput: unknown mode \"%s\"\n", optarg);
 					return 1;
@@ -891,6 +991,9 @@ main(int argc, char** argv)
 				break;
 			case 'F':
 				config.syncEveryOp = true;
+				break;
+			case 'P':
+				config.patterned = true;
 				break;
 			case 'y':
 				confirmed = true;
@@ -1016,6 +1119,7 @@ main(int argc, char** argv)
 		current.index = i;
 		current.error = B_OK;
 		current.fd = -1;
+		current.firstBadOffset = -1;
 
 		current.fd = open(config.path, openFlags);
 		if (current.fd < 0 && config.noCache) {
@@ -1125,6 +1229,10 @@ main(int argc, char** argv)
 	bigtime_t latencyTotal = 0;
 	bigtime_t latencyMax = 0;
 	uint32 sampleCount = 0;
+	off_t zeroBlocks = 0;
+	off_t staleBlocks = 0;
+	off_t corruptBlocks = 0;
+	off_t firstBadOffset = -1;
 	bool failed = false;
 
 	for (int i = 0; i < config.threads; i++) {
@@ -1135,6 +1243,13 @@ main(int argc, char** argv)
 		if (current.latencyMax > latencyMax)
 			latencyMax = current.latencyMax;
 		sampleCount += current.sampleCount;
+		zeroBlocks += current.zeroBlocks;
+		staleBlocks += current.staleBlocks;
+		corruptBlocks += current.corruptBlocks;
+		if (current.firstBadOffset >= 0
+			&& (firstBadOffset < 0 || current.firstBadOffset < firstBadOffset)) {
+			firstBadOffset = current.firstBadOffset;
+		}
 		if (current.error != B_OK) {
 			fprintf(stderr, "disktput: thread %d failed at offset %" B_PRIdOFF
 				" after %" B_PRIdOFF " operations: %s\n", i,
@@ -1165,6 +1280,28 @@ main(int argc, char** argv)
 		report(config, label, bytes, operations, after.wall - before.wall,
 			cpu_busy_between(before, after), before.count, samples, at,
 			latencyTotal, latencyMax, syncTime, machineReadable);
+
+		// The verdict, stated rather than left to be inferred from a rate. The
+		// three categories are separated because they implicate different
+		// layers: zeros mean the data never reached the device, stale means the
+		// block map was committed ahead of the data it points at, and corrupt
+		// means it arrived and was damaged.
+		if (config.mode == MODE_VERIFY) {
+			off_t bad = zeroBlocks + staleBlocks + corruptBlocks;
+			printf("  verify          : %" B_PRIdOFF " of %" B_PRIdOFF
+				" blocks bad (%" B_PRIdOFF " zero, %" B_PRIdOFF " stale, %"
+				B_PRIdOFF " corrupt)\n", bad, operations, zeroBlocks,
+				staleBlocks, corruptBlocks);
+			if (firstBadOffset >= 0) {
+				printf("  first bad at    : offset %" B_PRIdOFF "\n",
+					firstBadOffset);
+			}
+			printf("  VERDICT         : %s\n", bad == 0
+				? "all blocks hold the data written to them"
+				: "DATA LOSS -- see the breakdown above");
+			if (bad != 0)
+				failed = true;
+		}
 	}
 
 	free(samples);
