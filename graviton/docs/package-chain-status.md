@@ -4,12 +4,85 @@ State of the native package build running in the QEMU Haiku guests on the c7g.me
 builder (`i-0f7f6f3e8922acffd`). Companion to `graviton/docs/sequencing.md` (Phase 2)
 and to the recipe patches in `graviton/haikuports-patches/`.
 
-**Where this stands (2026-08-24 01:20Z).** 23 ports / 52 non-bootstrap hpkgs, all built
-against the repaired non-dirty chroot `haiku` and all `pkgman`-installable; five healthy
-guests, no `_dirty`/non-dirty split left; zero clock-skew warnings anywhere. Blockers 1–5
-and 7–8 are closed; **Blocker 6 (cmake) is the open one**, and it gates `doxygen` →
-`libxml2`, a real `groff`, and retiring the `zstd` and `gettext` stage-1 cuts. Read
-Blocker 8 first if you are picking this up.
+## Where this stands — **2026-08-24 16:30Z**
+
+**Every numbered blocker, 1 through 8, is closed.** Blocker 6 (cmake) was solved at
+04:41Z; the header of this document went on calling it "the open one" for ten hours
+afterwards, and Blocker 3's heading said `OPEN` for a day after its fix merged. Both are
+corrected below. If you are picking this up, read **Blocker 9** — it is the only open
+one, and it is not what the earlier text said it was.
+
+### Counts, with the units named
+
+The three numbers this document used to mix are genuinely different. Measured on the
+builder at 15:05Z:
+
+| Number | Value | What it counts |
+|---|---|---|
+| **ports built natively** | **69** | distinct recipes we have built on arm64 |
+| **hpkgs produced natively** | **156** | package files those ports emitted (base + `_devel`/`_debuginfo`/`_doc`/per-Python-flavour/…) |
+| **`.hpkg` files in `hpkg-out/arm64/`** | **192** | the 156 above **+ 28** cross-built `_bootstrap` inputs **+ 8** chroot inputs (`haiku*.hpkg`, `makefile_engine`, `netfs`, `userland_fs`) — build *inputs*, not our output |
+| **files under `hpkg-out/` entirely** | **~330** | the above **plus two other directories**: `arm64-nondirty/` (the shared build pool, a duplicate) and `arm64-dirty-20260824/` (the 52-file pre-clock-fix snapshot kept as evidence). Mostly duplicates and superseded files |
+
+> **Do not read an mtime as a build date here.** `rebuild.sh` harvests with
+> `cp --remove-destination` and then `aws s3 sync`, so a listing sorted by mtime can show
+> the entire directory as "just modified". Ports built in a session are identified from the
+> `rebuild-<guest>.log` markers, not from `ls -lt`.
+
+So a "~254 files in `hpkg-out`" reading — which is where that figure came from — is
+**not** a package count; it is one directory of output plus a duplicate pool plus a
+snapshot of packages that have been *replaced*. Quote `hpkg-out/arm64/*.hpkg` minus
+`_bootstrap` minus the chroot inputs, or quote ports. Always with a timestamp: this
+number moved four times in one day.
+
+**Superseded earlier figures, for orientation only:** "23 ports / 52 hpkgs" was the
+Blocker 8 rebuild at 01:20Z; the cmake pass took it to 38 ports / 82 hpkgs by 04:32Z.
+**This session built 31 ports, 38 → 69**, and closed the groff chain end to end:
+
+```
+autoconf_archive libedit libffi libpng16 nasm python3.10 python3.14 file
+flit_core libjpeg_turbo ninja setuptools installer tiff pyproject_hooks tomli
+wheel psutils packaging meson build puremagic pypdf typing_extensions libpaper2
+itstool libxml2(recut) libglvnd glu jasper netpbm groff
+```
+
+Everything is built against the repaired non-dirty chroot `haiku`; five healthy guests; no
+`_dirty`/non-dirty split; zero clock-skew warnings. All 47 ports carry a non-`_dirty`
+`requires haiku` and so *resolve*, but **`pkgman`-installable is not a blanket claim** —
+`python3.10-3.10.20` currently will not install, because it wants `lib:libbz2` activated
+and a `file_data` subpackage the `file` build did not emit. That is a runtime-activation
+chore, not a build failure; see Blocker 9.
+
+### The one open item
+
+**Blocker 9 — the remaining chain is deep but it contains no cycles.** Measured with
+`graviton/builder/depclosure.py` against haikuporter's own graph, not read off the
+recipes. **There is no cycle anywhere on the path to a browser.**
+
+The previous write-up's *mechanism* for why `groff` was out of reach — "`netpbm` → `jasper`
+→ OpenGL → `mesa-25.3.6` → `libLLVM` + `libvulkan` + `cmd:git`" — is **wrong**.
+`devel:libgl` comes from **`libglvnd-1.7.0`** (~70 s to build, with `glu`), and jasper's
+cmake **does find OpenGL**. But its *conclusion* — that jasper needs an OpenGL cut — is
+**right**, for an unrelated reason: jasper fails on **GLUT**, and **GLUT has no recipe
+anywhere in the tree**. So `-DJAS_ENABLE_OPENGL=OFF` **is** needed, and it is a cut against
+GLUT's absence, not against a mesa/LLVM/`cmd:git` wall. Separately, `libglvnd` needed a
+**two-line Haiku portability fix** — a real fix, not a cut. Details in Blocker 9.
+
+> **Why this sentence is worded so carefully.** An earlier revision of this very line said
+> "no OpenGL cut is needed", which contradicted the body once GLUT was measured — the same
+> header-versus-body split this document was just corrected for, reintroduced hours later.
+> **A conclusion that survives while its mechanism is replaced is the most dangerous kind of
+> correction**, because the summary sentence keeps on looking right and nothing prompts you
+> to re-read it. When you replace a mechanism, re-check every sentence that asserted the
+> conclusion, not just the paragraph that explained it.
+
+The whole remainder converged on one chokepoint, **`python3.10`/`python3.14`**, and **both
+were built this session** after fixing two real defects that were not dependency problems at
+all (a missing-LTO toolchain gap, and `LIBRARY_PATH` replacing rather than prepending the
+loader path). **`groff` is now built and verified by rendering** — the deliverable this
+document called "the one that did not land" and scoped as its own piece of work. That
+retires the `gettext` cut. What remains is a browser, and its dominant cost is LLVM, not any
+knot. See Blocker 9.
 
 ## Blocker 1 — `libtool`: `Error 127` on `aclocal.m4` — **FIXED**
 
@@ -229,9 +302,45 @@ play, only `pkgconf` lacks an input source package; `tar`, `libiconv`, `openssl3
 among the **116 input source packages** already on the guest and build with no download
 at all.
 
-## Blocker 3 — haikuporter cannot unpack compressed tarballs (**OPEN**)
+## Blocker 3 — haikuporter cannot unpack compressed tarballs — **FIXED (routed around), two named residuals**
 
-Immediately *after* the successful fetch and checksum, `pkgconf` dies with
+Fix: **`56106d5afb graviton: let haikuporter unpack compressed tarballs in the guest`**,
+merged on `graviton`, with `graviton/haikuports-patches/haikuporter-unpack-compressed-tar.patch`
+and `graviton/scripts/haiku-decompress-shim`.
+
+> **This heading said `OPEN` for a day after the fix merged.** The body below described
+> the defect accurately and never mentioned that it had been fixed, so anyone reading the
+> heading would have rebuilt a working mechanism. Corrected 2026-08-24.
+
+**Evidence it is fixed** — two ports fetched *and* unpacked end to end, each verified by a
+resulting hpkg and not by an exit code: `pkgconf-1.5.3` (`.tar.xz`) and `zip-3.0`
+(`.tar.gz`), both listed as built in the port table below. The fetch → checksum → unpack →
+source-tree path was additionally walked for `wdiff` (`.tar.gz`), `libgpg-error`
+(`.tar.bz2`) and `zip30` (`.tar.gz`).
+
+`unpackArchive`'s existing external-tool dispatch was extended to
+`gz/tgz/bz2/tbz/tbz2/xz/txz`, preferring a real tool when present and otherwise handing the
+archive to the metal — which does have `zlib`/`bz2`/`lzma` — and reading back a plain
+`.tar` that stdlib `tarfile` opens with no compression module. Same division of labour as
+the wget shim. The helper is installed as `haiku-proxy-decompress` and deliberately **not**
+as `gzip`/`xz`: a fake `gzip` on `PATH` would be picked up by configure scripts and by
+`make install` man-page rules and would silently corrupt packages.
+
+**Two residuals, both still real** (these are why the heading says "routed around"):
+
+1. `zlib`/`_bz2`/`_lzma` are still missing from the Python that haikuporter runs under.
+   This routes around them; it does not fix them.
+   `haiku-haikuporter-patch --check` prints all three modules' status on every run so it
+   cannot be quietly forgotten. The real fix is item 4 of "What remains" — and note that
+   `python3.10` is now **one build away** (Blocker 9), so this residual is close to
+   retirable for the first time.
+2. **`.zip` sources (312 recipes) remain unsupported.** `zipfile.is_zipfile()` succeeds
+   without `zlib` and extraction only *then* raises `Compression requires the (missing)
+   zlib module`, and that path has no external-tool dispatch to hook into.
+
+### What the defect was
+
+Immediately *after* the successful fetch and checksum, `pkgconf` died with
 
 ```
 Error: Unrecognized archive type in file .../pkgconf-1.5.3.tar.xz
@@ -252,16 +361,18 @@ Python's `tarfile`/`zipfile`. So installing an `xz` or `tar` **binary does not h
 haikuporter never invokes one for these formats. `libz.so.1` *is* in the image, so gzip
 is purely a Python build-config gap; liblzma and libbz2 are genuinely absent.
 
-This gates every download-fetching recipe: no recipe in the tree ships an uncompressed
-`.tar`. It does **not** gate the current chain, all of which is served by input source
-packages.
+That gated every download-fetching recipe: no recipe in the tree ships an uncompressed
+`.tar`. It never gated the chain of the time, all of which was served by input source
+packages — which is exactly why the stale `OPEN` heading was able to survive so long
+without anyone tripping over it.
 
-Intended fix chain, all immune to this blocker because they are input source packages:
-`xz_utils-5.8.3-1` (liblzma) → non-bootstrap `dev-lang/python3.10-3.10.20-3` picking up
-zlib + libbz2 + liblzma → activate it so haikuporter runs under it. `bzip2`,
-`bzip2_devel` and `zlib_devel` are already built. A fallback worth evaluating is
-teaching `unpackArchive` to shell out to `tar`/`xz` for the compressed tar formats the
-way it already does for `.lz`/`.7z`/`.zst`, which becomes possible once `tar` exists.
+The fallback listed here as "worth evaluating" — teach `unpackArchive` to shell out for
+the compressed tar formats the way it already does for `.lz`/`.7z`/`.zst` — **is the route
+that was taken**, and it is the merged fix above. The deeper route (a non-bootstrap
+`python3.10` picking up zlib + libbz2 + liblzma, then running haikuporter under it) remains
+the way to retire residual 1, and it is now much closer than when this was written:
+`xz_utils`, `bzip2`, `bzip2_devel`, `zlib_devel`, `sqlite`, `openssl3` and `libedit` are
+all built, so `python3.10` is a **single build** away (Blocker 9).
 
 ## Blocker 4 — gnulib's `re_compile_pattern` run test hangs, and strands the guest — **FIXED**
 
@@ -746,6 +857,416 @@ Because `mkguest.sh` seeds from `hpkg-out/arm64/`, and that directory now holds 
 repaired `haiku*.hpkg` **and** the rebuilt 52, any guest made from here on is consistent
 by construction.
 
+## Blocker 9 — the rest of the chain: deep, no cycles — **groff CLOSED, browser OPEN**
+
+> **Resolved for groff on 2026-08-24 16:25Z.** `groff-1.23.0-2-arm64.hpkg` is built and
+> **verified by rendering**, not by RC=0. The section below records the method and the
+> corrections; the outcome is at the end under "What actually happened".
+
+
+This is the only open blocker. It replaces the "Why a real `groff` is still out of reach"
+section below, which is **wrong in its central claim** and is kept only as a record.
+
+### Method: stop reading recipes, saturate the graph
+
+Every cycle claim in this document's history was made by reading recipes and following the
+edge that the last failure happened to name. That method produced three wrong answers in a
+row (`zstd -> cmd:cmake`, `devel:libcurl`, and the netpbm/OpenGL story below). So this pass
+used haikuporter's own machine-readable graph instead — the 3667
+`haikuports/repository/*.DependencyInfo` files — with
+**`graviton/builder/depclosure.py`**.
+
+It works by **saturation**, deliberately not by a backward walk from the target:
+
+> Start from the provides that the built hpkgs actually supply. Repeatedly promote any
+> recipe whose *every* build dependency is already satisfied, adding what it provides to
+> the satisfied set. Run to a fixpoint.
+
+That settles the cycle question with no judgement calls. If the target is reached it is
+**not** behind a cycle — it is behind however many waves the saturation took, and each wave
+is a set of ports that can be built in parallel. If the target is never reached, whatever
+is still unreached at the fixpoint is the genuinely stuck set. A backward walk cannot do
+this honestly, because when several ports provide the same name — `jasper` *and* `jasper7`
+both provide `devel:libjasper`; `python3.10` *and* `python3.14` both provide a `cmd:python3*`
+— unioning the providers inflates the answer. Saturation just needs one of them.
+
+### Result as first measured: `groff` is 24 ports and 12 waves away, and not a cycle
+
+> The "no cuts" this section originally claimed **did not survive contact with jasper**: one
+> cut turned out to be needed, against GLUT's absence. Corrected under "The jasper OpenGL cut
+> was needed" below. The port count and the absence of a cycle both held.
+
+```
+wave 1  (5)  autoconf_archive libedit libffi libpng16 nasm
+wave 2  (3)  libjpeg_turbo python3.10 python3.14
+wave 3  (4)  flit_core ninja setuptools tiff
+wave 4  (1)  installer
+wave 5  (4)  psutils pyproject_hooks tomli wheel
+wave 6  (1)  build
+wave 7  (1)  meson
+wave 8  (1)  libglvnd
+wave 9  (1)  glu
+wave 10 (1)  jasper
+wave 11 (1)  netpbm
+wave 12 (1)  groff
+```
+
+**Wave 1 is built and verified** (2026-08-24 14:54–14:56Z): `autoconf_archive`, `libedit`,
+`libffi`, `libpng16`, `nasm` — five ports in **101 seconds**, every one from its **pristine
+recipe** with no edit, each confirmed by its hpkg and by `package list -i | grep -c _dirty`
+returning 0. The graph said they were leaves and they were.
+
+### Three claims in the old section that are wrong
+
+1. **"`netpbm` → `jasper` → OpenGL → `mesa-25.3.6` → `libLLVM` + `libvulkan` +
+   `cmd:glslangValidator` + `cmd:git`" — wrong.** `devel:libgl` in this tree is provided by
+   **`libglvnd-1.7.0`**, whose entire build requirement list is
+   `awk gcc ld meson ninja python3 sed haiku_devel`. No mesa, no LLVM, no vulkan, no git.
+   `libglvnd` does need a two-line Haiku portability fix to compile at all (see below), but
+   that is a fix, not a cut, and it costs about seventy seconds together with `glu`.
+
+   **What this does *not* license, though an earlier revision of this document said it did:**
+   the conclusion that jasper needs no OpenGL cut. It does. jasper's cmake finds OpenGL
+   perfectly well and then fails on **GLUT**, which has no recipe in the tree at all, so
+   `-DJAS_ENABLE_OPENGL=OFF` and dropping `jiv` are **still required** — for GLUT's absence,
+   not for a mesa wall. Only the *mechanism* in this claim was wrong; the remedy it argued
+   against is the remedy that worked.
+2. **"`psutils` is the harder half, and it is the exact knot `--do-bootstrap` was abandoned
+   over" — wrong; it is a ladder.** The PEP-517 set is
+   `flit_core → installer → {setuptools, wheel, tomli, pyproject_hooks} → build`, seven
+   ports, strictly ordered. The reason it is not a knot is one fact worth writing down:
+   **`flit_core`'s only build requirements are the two Python interpreters** — it does *not*
+   need `installer`. That is by upstream design; flit_core is the one PEP-517 backend that
+   can install itself, which is precisely why the ecosystem bootstraps through it. Once
+   `flit_core` exists, `installer` follows, and everything else follows from `installer`.
+3. **"`git` is not buildable here" — wrong.** `git-2.54.0` is reachable at wave 14; its only
+   unsatisfied requirements are `cmd:man` (mandoc), `cmd:nano` (nano) and
+   `devel:libpcre2_8` (libpcre2). It is not needed for anything on the critical path, so
+   this is a correction rather than a plan.
+
+**What *is* right in the old section:** `groff` genuinely needs four commands beyond
+`cmd:makeinfo` (`cmd:pnmcrop`, `cmd:pnmtopng`, `cmd:pnmtops`, `cmd:psselect`), the `gettext`
+cut therefore still stands, and the estimate that a real groff "should be scoped as its own
+piece of work" is sound. It was wrong only about *why*, and it under-counted the depth by
+about five times ("about five more ports" versus 24).
+
+### The single chokepoint is Python, and it has a real defect under it
+
+Everything above wave 2 hangs off `python3.14`/`python3.10`. Both are **one build** from
+done — three of their four dependencies were wave 1, now built — and both **failed on
+first attempt for two different reasons, neither of them a missing dependency**. All
+dependencies resolved; the builds reached the compiler.
+
+| Port | First failure | Cause |
+|---|---|---|
+| `python3.14` | `cc1: error: LTO support has not been enabled in this configuration` | the recipe sets `--enable-optimizations --with-lto` when `optimizedBuild=true`, and the cross-built bootstrap **gcc 13.3.0 in this image has no LTO support compiled in**. `configure` cheerfully reports `checking for --with-lto... yes` — it probes the flag, not the capability |
+| `python3.10` | `runtime_loader: Cannot open file libnetwork.so (needed by /sources/Python-3.10.20/python)` then `generate-posix-vars failed` | PGO runs the freshly linked `./python` to produce `pybuilddir.txt`, and **`LIBRARY_PATH` replaces the loader path rather than prepending to it**, so `/boot/system/lib` drops out. Same defect class as `perl-5.42.2-library-path.patch` |
+
+Both are the *optimisation* machinery, not Python. The cut — `graviton/builder/pyfix.sh` —
+blanks `maybeEnableOptimizations` in the one line of each recipe that sets it, and
+**deliberately keeps `-O3`**: the alternative switch `optimizedBuild=false` also drops to
+`-O0`, and this interpreter is about to build the whole PEP-517 ladder, meson and ninja.
+
+Fixing only that exposed a **second, independent defect underneath**, which is the more
+generally useful of the two because it is version-independent and it is *ours*, not
+upstream's. With PGO gone, both versions then failed at the identical place:
+
+```
+LIBRARY_PATH=/sources/Python-3.10.20 ./python -E -S -m sysconfig --generate-posix-vars
+runtime_loader: Cannot open file libnetwork.so (needed by .../python)
+generate-posix-vars failed
+make: *** [Makefile:1159: pybuilddir.txt] Error 3
+```
+
+Python's generated `Makefile` sets `RUNSHARED= LIBRARY_PATH=<build dir>` (line 199 in 3.10)
+so the freshly linked `./python` can find its own `libpython3.x.so`. But **Haiku's
+`runtime_loader` replaces the default library search path with `LIBRARY_PATH` instead of
+prepending to it**, so `/boot/system/lib` drops out and `libnetwork.so` — which the recipe
+links via `LIBS="-lnetwork -lintl -lbsd"` — becomes unfindable. `Error 3` is the loader's
+own exit code, the same signature `perl-5.42.2-library-path.patch` documents for `LDLIBPTH`.
+The remedy is the same: make the path **additive**, and specifically *not* empty, because
+the build directory is genuinely needed.
+
+**This is a third instance of one underlying Haiku defect** (`perl`'s `LDLIBPTH`, this
+`RUNSHARED`, and the general note in "Operational hazards"). It will recur in any port whose
+build runs a freshly linked binary out of its own build tree. It is worth fixing in
+`runtime_loader` rather than patching recipe by recipe — there is an upstream `TODO` at
+exactly that spot.
+
+**Result — measured 2026-08-24 15:14–15:22Z, both from `RC=0` *and* the hpkg:**
+
+| Port | Result | Evidence |
+|---|---|---|
+| `python3.10-3.10.20-3` | **built** | `python3.10-3.10.20-3-arm64.hpkg`, 17,178,266 B, `_dirty` count 0, 7371-line log (the failing runs were 1027–1290 lines) |
+| `python3.14-3.14.7-1` | **built** | `python3.14-3.14.7-1-arm64.hpkg`, `_dirty` count 0, 5634-line log |
+| `file-5.43-2` | **built** | needed to *activate* python3.10 (`cmd:file`); a wave-1 leaf, pristine recipe |
+
+**The compression extensions are present**, confirmed by listing the package contents
+rather than by the build log:
+
+```
+zlib.cpython-310.so     151936      _ssl.cpython-310.so      317752
+_bz2.cpython-310.so     144480      _sqlite3.cpython-310.so  174952
+_lzma.cpython-310.so    151760      readline.cpython-310.so  150168
+```
+
+So **Blocker 3's residual 1 is substantively answered** — an interpreter that can unpack
+compressed tarballs unaided now exists as a package.
+
+> **Not yet verified, and deliberately not claimed: that the interpreter *runs* with those
+> modules.** Activating it needs two more runtime dependencies (`lib:libbz2` from `bzip2`,
+> and a `file_data` subpackage that the `file` build did not emit), so `pkgman install`
+> still refuses. Until then `python3.10` on `PATH` is the **bootstrap**, and the version is
+> the discriminator: the bootstrap is **3.10.21**, the port is **3.10.20**.
+>
+> This nearly produced a confident false negative. The first capability run reported all of
+> `zlib`/`bz2`/`lzma`/`ssl`/`sqlite3`/`readline` **missing** — it was testing the bootstrap,
+> because the install had failed and both packages provide `cmd:python3.10`. `graviton/builder/pycheck.sh`
+> now pins the expected version and **exits 2 rather than report module results for an
+> unconfirmed binary**. Blocker 6's habit 3 was *"`provides` is not function"*; this is the
+> next step down — **resolving a `cmd:` tells you nothing about which binary actually ran.**
+
+**State of the critical path after this session** (same tool, re-measured): `groff` is down
+from 24 ports / 12 waves to **17 ports / 10 waves**, and the four ports to build next are
+all leaves with every dependency satisfied — **`flit_core`, `libjpeg_turbo`, `ninja`,
+`setuptools`**. `flit_core` is the one that matters: it opens `installer`, and `installer`
+opens the rest of the PEP-517 ladder.
+
+> **Note the shape of the `python3.14` failure, because it generalises.** A `configure`
+> check that tests whether the *compiler accepts a flag* is not a test of whether the
+> feature works. This is the same lesson as "`provides` is not function" (Blocker 6, habit
+> 3) one level down: `cmd:` resolvability does not imply the tool works, and flag
+> acceptance does not imply the capability exists. Anything else in the tree that turns on
+> `-flto` will fail identically on this image.
+
+### Distance to a browser
+
+Asked of the same graph, with the same method.
+
+**`haikuwebkit-1.10.0` is reachable, and not behind a cycle** — but only after two
+dependency cuts, and one of the 34 ports is LLVM:
+
+```
+wave 1  (8)  gdbm giflib gmp libexecinfo libjpeg_turbo libyaml python3.10 python3.14
+wave 2  (6)  flit_core libxslt ninja ruby setuptools tiff
+wave 3  (4)  brotli installer lcms libwebp
+wave 4  (5)  psutils pyproject_hooks tomli wheel woff2
+wave 5  (1)  build
+wave 6  (1)  meson
+wave 7  (2)  dav1d libglvnd
+wave 8  (2)  glu libavif1.0
+wave 9  (1)  jasper
+wave 10 (1)  netpbm
+wave 11 (1)  groff
+wave 12 (1)  llvm          <- see the caveat below
+wave 13 (1)  haikuwebkit
+```
+
+Only **two** edges are genuinely hard, and both have an established precedent for cutting:
+
+- **`devel:libavif` → `libavif1.0` → `devel:librav1e` → `rav1e`, which needs
+  `cmd:cargo`/`cmd:cargo_cbuild`/`cmd:cargo_cinstall` — nothing in the tree provides any of
+  them.** That is a Rust toolchain, and it is the one genuinely absent thing found in this
+  pass. But `rav1e` is an AV1 **encoder**; a browser needs to **decode** AV1, and the
+  decoder `dav1d` is reachable at wave 7. So this should be an
+  `-DAVIF_CODEC_RAV1E=OFF`-shaped cut, not a Rust bootstrap.
+- **`devel:libpsl` → `libpsl` → `devel:libidn2` → `libidn2` → `cmd:gtkdocize` → `gtk_doc`.**
+  `curl-8.21.0` already carries exactly this cut (`--without-libpsl` on every architecture),
+  so the precedent is in this repository. Note that `gtk_doc` itself is *not* impossible —
+  it needs `pygments`, `itstool`, `meson`, `libxslt` and the two docbook packages, all
+  reachable — so this is a cut of convenience, not of necessity.
+
+**Caveat on the LLVM row, stated because the tool cannot see it:** `depclosure.py`
+deliberately ignores version constraints, so its minimal set picks `llvm12`. haikuwebkit
+actually requires `cmd:llvm_config >= 21`, i.e. `llvm21`/`llvm22`. That is still reachable
+(its unsatisfied deps are `cmd:groff`, `cmd:ninja`, `cmd:python3.10` and
+`setuptools_python310`, all on the list above) but **the port count is misleading about the
+time**: LLVM is a multi-hour build on its own, and it depends on `groff`, so a browser
+inherits the entire groff chain rather than avoiding it.
+
+**A lighter browser needs no cut of its own.** `netsurf-3.11` saturates at wave 15 with a
+52-port minimal set and **no netsurf-specific recipe edit** — no LLVM, no Rust, no libpsl.
+
+Two corrections to how that was first written up here, both found by pricing it properly:
+
+- It is **not** "zero recipe edits" and **not** free of cut debt. netsurf build-requires
+  `cmd:git`, `git` sits above `groff`, and groff carries the jasper `jiv`/GLUT cut. netsurf
+  inherits that cut like everything else downstream of groff.
+- It therefore does **not** avoid the groff chain, which was the main reason to prefer it.
+  That chain was on the critical path to **both** browsers, so it was shared work and browser
+  choice could safely be deferred until after it — which is what happened.
+
+What survives, and is still the interesting part: netsurf needs **no LLVM**, so its cost is
+breadth (~15 netsurf-specific libraries plus `git`, `vim`, `ruby`) rather than one multi-hour
+build. Worth pricing against WebKit on that basis, not on cut debt.
+
+### Honest summary of the distance
+
+Counts are from 15:26Z, i.e. **after** this session's nine ports.
+
+| Target | Cycle? | Ports left | Cuts needed | Real cost driver |
+|---|---|---|---|---|
+| `python3.10`/`python3.14` | no | **0 — DONE** | PGO/LTO cut + additive `RUNSHARED` | both built |
+| PEP-517 ladder → `meson`/`ninja` | no | **0 — DONE** | none | 8 ports, ~4 min total |
+| `groff` | no | **0 — DONE** | 1 (jasper `jiv`, for GLUT) | done; **verified by rendering** |
+| `netsurf` | no | **~22** | **0 new** (inherits groff's jasper cut) | breadth: ~15 netsurf-specific libs, plus `git`, `vim`, `ruby` |
+| `haikuwebkit` | no | **~14** | **1 new** (rav1e codec) + groff's | **LLVM ≥ 21** — hours, and it is most of the remaining cost |
+
+**"Cuts needed" counts *new* cuts.** Everything downstream of `groff` inherits the jasper
+`jiv`/GLUT cut, so neither browser is cut-free; the column says what each *adds*. That
+distinction is the one this document got wrong twice, in opposite directions.
+
+**Correction to an earlier recommendation of mine.** I argued netsurf was attractive partly
+because it skipped the groff chain. It does not: `netsurf-3.11` build-requires `cmd:git`,
+and `git` requires `cmd:man`/`cmd:nano`/`devel:libpcre2_8` and sits above groff. So the
+groff chain was on the critical path to **both** browsers, which is why doing it first was
+right for a reason other than the one given — the work is unconditionally shared, and
+browser choice could safely be deferred until after it. It now is.
+
+**And `libpsl` is no longer a required cut for WebKit.** Retiring the `libxml2` cut gave
+`libxml2_python3.14` → `itstool` (built) → `gtk_doc` → `libidn2` → `libpsl`, so that edge
+can be built rather than cut. `rav1e` remains genuinely unbuildable (no Rust: nothing
+provides `cmd:cargo`), but it is an AV1 **encoder** and `dav1d`, the decoder, is reachable —
+so it should be an `-DAVIF_CODEC_RAV1E=OFF`-shaped cut, the same class as jasper's `jiv`.
+
+**Nothing on the critical path is behind a real knot.** The chain is deep and serial, and
+its cost is now dominated by two things that are not dependency problems at all: the
+**PGO/LTO toolchain gap** above, and **LLVM's build time** if the target is WebKit.
+
+### What actually happened — groff is built, and the last mile was all runtime deps
+
+**`groff-1.23.0-2-arm64.hpkg`, RC=0, `_dirty` count 0, verified by rendering.** The
+capability test (`graviton/builder/groffcheck.sh`) extracts the package rather than
+installing it and feeds a man page through every device:
+
+```
+  -Tascii       368 bytes   marker: 1
+  -Tutf8        372 bytes   marker: 1
+  -Tps         7286 bytes   marker: 0   <- expected: PostScript emits glyph operators, not literal text
+  -Thtml       1167 bytes   marker: 1   <- this is MAN2HTML, the one thing gettext wanted
+```
+
+All four of the commands that supposedly made groff unreachable — `pnmcrop`, `pnmtopng`,
+`pnmtops`, `psselect` — are present and were exercised.
+
+**Consequently the `gettext` stage-1 cut is now retirable** (it dropped only
+`cmd:groff` for `MAN2HTML = groff -mandoc -Thtml`, and `-Thtml` demonstrably works).
+That is the obvious next step and it is one rebuild.
+
+#### The jasper OpenGL cut was needed — for the opposite reason to the one on record
+
+This deserves its own note because "the cut was needed" would otherwise read as
+confirmation of an explanation that is wrong.
+
+The old account: jasper needs `devel:libGL` → `mesa-25.3.6` → `libLLVM` + `libvulkan` +
+`cmd:glslangValidator` + `cmd:git`, hence a multi-hour wall, hence cut OpenGL.
+
+What was measured: `libglvnd-1.7.0` and `glu-9.0.0` supply `devel:libGL` and
+`devel:libglu` and **both build here in about seventy seconds combined**. jasper's cmake
+then says
+
+```
+-- Found OpenGL: /boot/system/develop/lib/libGL.so
+OpenGL libraries: /boot/system/develop/lib/libGL.so;/boot/system/develop/lib/libGLU.so
+```
+
+— OpenGL is fine and mesa was never in the picture. It fails one line later on
+**GLUT**: `Could NOT find GLUT (missing: GLUT_glut_LIBRARY)` from
+`build/cmake/modules/JasOpenGL.cmake:16`. And **there is no GLUT recipe anywhere in the
+tree** — no `glut`, no `freeglut`, and nothing provides `devel:libglut`, `cmd:glut` or
+`devel:libfreeglut`. That is the real blocker and, unlike mesa, it genuinely cannot be
+built.
+
+So `graviton/builder/jasperfix.sh` sets `-DJAS_ENABLE_OPENGL=OFF` and stops advertising
+`cmd:jiv`. Note what it does *not* do: `devel:libGL`/`devel:libglu` stay in
+`BUILD_REQUIRES`, because they now resolve and removing a satisfied dependency would be a
+pointless divergence. **Capability cost, stated as a capability:** GLUT is used only by
+jasper's `jiv` image *viewer*; netpbm wants `devel:libjasper`, the JPEG-2000 codec, which
+is untouched — and netpbm building against it *is* that test, rather than jasper's exit
+code.
+
+#### libglvnd did not compile, and it was two lines
+
+`libglvnd` failed at 77 of 102 objects with
+
+```
+../src/HGL/GLView.cpp:76:29: error: 'PTHREAD_RECURSIVE_MUTEX_INITIALIZER' was not declared
+    in this scope; did you mean 'PTHREAD_RECURSIVE_MUTEX_INITIALIZER_NP'?
+```
+
+Haiku's `<pthread.h>` defines only the `_NP` spelling — read the header, line 81, no plain
+form exists. The two uses are in `src/HGL/`, libglvnd's *Haiku* backend, so this is a
+Haiku portability bug in the port and **not** an arm64 one: `entry_aarch64_tsd.c` in the
+same build compiled cleanly. `graviton/builder/glvndfix.sh` rewrites both. This is a real
+fix, not a cut, and it is upstream-worthy as-is.
+
+#### The instrument was wrong in a new way: build edges are not the whole graph
+
+`depclosure.py` originally followed only `buildRequires`/`buildPrerequires`. That is not
+what haikuporter does: it has to **install** each build dependency into the chroot, so the
+dependency's own runtime `requires` matter too. `meson` proved it, *after* `build` had
+itself built at RC=0:
+
+```
+requires "packaging_python314" of package "build_python3.14-1.5.0-1" could not be resolved
+build-requires "build_python314" of package "meson-1.11.1" could not be resolved
+```
+
+Note the ordering: haikuporter prints the **real cause first** and a misleading summary
+last, so a `tail` blames `build_python314` when the missing port is `packaging`. That same
+shape then repeated three more times on the way to groff, each one a runtime-only
+dependency of `psutils`:
+
+| Missing | Wanted by | Found because |
+|---|---|---|
+| `packaging` | `build_python3.14` | meson failed |
+| `puremagic`, `pypdf` | `psutils` | surveyed the runtime requires after meson |
+| `libpaper2` (`cmd:paper`) | `psutils` | groff failed — **my survey had filtered out `cmd:`-prefixed requires and hid it** |
+| `typing_extensions` | `pypdf_python310` | groff failed again |
+
+`saturate()` now requires a port's runtime `requires` to be satisfied before promoting it,
+and `minimal_set()` walks `build + requires`. Two lessons, both cheap to state and
+expensive to learn:
+
+1. **A dependency that builds is not a dependency you can use.** Installability is part of
+   reachability, and an estimate built from build edges alone is a lower bound.
+2. **A filter in the diagnostic is a place for the answer to hide.** Excluding `cmd:` from
+   a survey of runtime requires is exactly why `libpaper2` cost an extra build cycle. The
+   project rule "a zero-row filter is not evidence of absence" applies to filters you wrote
+   yourself, not just to empty query results.
+
+### A limitation of this instrument, recorded rather than left to be discovered
+
+`depclosure.py` credits a port with every provides its *recipe* declares. That makes it
+over-optimistic for a port we built with a subpackage-dropping cut — and there is exactly
+one such case, which matters:
+
+**our `libxml2` was built with the stage-1 cut that drops `libxml2_python3.14`**, so the tool
+reports `libxml2_python3.14` as satisfied when the hpkg set does not contain it. `itstool`
+requires it, and `itstool` gates `gtk_doc → libidn2 → libpsl`. So retiring that libxml2 cut
+(item 2 of "What remains" — "delete one line once `cmd:python3.14` exists") is **on the
+critical path to a browser without the libpsl cut**, not the cosmetic cleanup it is filed as.
+`cmd:python3.14` is one build away, so this is cheap to retire now.
+
+Two smaller instrument notes, both fixed in the committed version and both worth knowing
+because each produced a *confident wrong* answer first:
+
+- Promoting a port must credit its **subpackages'** provides, not just its base package's.
+  Crediting only the base made `flit_core_python310` and `jasper_devel` look unprovided and
+  reported reachable ports as stuck. Symptom: reachable-port count 1329, saturation stopping
+  after 4 rounds. After the fix: **2495 reachable, 16 rounds.**
+- Eight of the 3667 markers (`pygments`, `pytest`, `sip`, `pluggy`, `iniconfig`, `mozfile`,
+  `trove_classifiers`, `noto_serif_cjk`) are `ARCHITECTURES="any"` pure-Python ports with
+  **no base `DependencyInfo`** — their build requirements live in the per-flavour subpackage
+  files. Skipping them made `pygments_python310` read as *"nothing in the tree provides
+  this"*, which is what turned `gtk_doc → libidn2 → libpsl` into a false hard stop and
+  briefly made a browser look unreachable outright.
+
+The first two versions of this analysis both said "UNREACHABLE" for things that are
+reachable. The disagreement between the backward walk and the saturation is what exposed
+the bug — neither alone would have. **Two methods that disagree are worth more than one
+method that answers confidently.**
+
 ## Where every port stands
 
 Built = a verified `.hpkg` on the builder **and** in
@@ -814,13 +1335,43 @@ pristine recipe rather than by writing a new patch:
 | **gawk 5.3.0 (+debuginfo)** | **built** | pristine; upgrade over the bootstrap 3.1.8 (was **not** a blocker — see Blocker 6, habit 2) |
 | **gperf 3.1** | **built** | pristine; likewise not a blocker |
 | **openssl3 3.5.7 (+devel +man +debuginfo)** | **built** | **no recipe change at all** — it simply needed `devel:libzstd`. The whole four-port cascade turned on one line in gettext plus zstd's build system |
-| groff 1.23.0 | **still blocked**, and still not on the critical path | `cmd:makeinfo` is now real, but it also needs `cmd:pnmcrop`/`pnmtopng`/`pnmtops` (netpbm) and `cmd:psselect` (psutils). See "Why a real groff is still out of reach" below — this is the one deliverable of the cmake pass that did **not** land |
+| **autoconf_archive 2024.10.16** | **built** | pristine; wave-1 leaf, 18 s. Needed by both Pythons |
+| **libedit 20230828_3.1 (+devel +debuginfo)** | **built** | pristine; wave-1 leaf, 44 s |
+| **libffi 3.4.6 (+devel)** | **built** | pristine; wave-1 leaf, 32 s |
+| **libpng16 1.6.53 (+devel)** | **built** | pristine; wave-1 leaf, 55 s. On the netpbm side |
+| **nasm 2.16.03 (+debuginfo)** | **built** | pristine; wave-1 leaf, 46 s. Needed by libjpeg_turbo |
+| **python3.10 3.10.20** | **built (stage 1)** | `pyfix.sh` — PGO cut + additive `RUNSHARED`. **Carries `zlib`/`_bz2`/`_lzma`/`_ssl`/`_sqlite3`/`readline`**, verified inside the hpkg. Not yet activatable — see Blocker 9 |
+| **python3.14 3.14.7** | **built (stage 1)** | `pyfix.sh` — PGO/**LTO** cut + additive `RUNSHARED`. Provides the unversioned `cmd:python3` that `meson`/`ninja` need |
+| **file 5.43 (+devel +debuginfo)** | **built** | pristine; wave-1 leaf. Provides `cmd:file`, which python3.10 needs to activate |
+| **groff 1.23.0** | **built — and verified by rendering** | `-Tascii`/`-Tutf8`/`-Thtml` all produce real output containing a marker; `-Thtml` is the `MAN2HTML` gettext wanted. **Retires the gettext cut.** See Blocker 9 |
+| **libglvnd 1.7.0 (+devel)** | **built** | `graviton/builder/glvndfix.sh` — a two-line Haiku portability fix (`PTHREAD_RECURSIVE_MUTEX_INITIALIZER` → `..._NP`). **Provides `devel:libgl`; no mesa, no LLVM, no git** |
+| **glu 9.0.0 (+devel +debuginfo)** | **built** | pristine; provides `devel:libglu` |
+| **jasper 2.0.33 (+devel +doc +tools)** | **built (cut)** | `jasperfix.sh` — `-DJAS_ENABLE_OPENGL=OFF` and no `cmd:jiv`, because **GLUT has no recipe in the tree**. Codec unaffected; netpbm linking it is the proof |
+| **netpbm 10.86.42 (+devel)** | **built** | pristine; provides `cmd:pnmcrop`/`pnmtopng`/`pnmtops` |
+| **psutils 3.3.11** | **built** | pristine, 17 s. Provides `cmd:psselect`. Needed `puremagic`, `pypdf`, `typing_extensions`, `libpaper2` at *runtime* to be installable |
+| **meson 1.11.1** | **built** | pristine; needed `packaging` via `build`'s runtime requires |
+| **ninja 1.13.2 (+zsh)** | **built** | pristine; needed only `cmd:python3` |
+| **flit_core 3.12.0**, **installer 1.0.1**, **setuptools 82.0.1**, **wheel 0.47.0**, **tomli 2.0.1**, **pyproject_hooks 1.2.0**, **build 1.5.0**, **packaging 26.2** | **built** | the PEP-517 ladder, all pristine, ~4 minutes total. `flit_core` first — it needs only the interpreters |
+| **puremagic 1.27**, **pypdf 4.3.1**, **typing_extensions 4.12.2** | **built** | pristine; runtime deps of `psutils` |
+| **libpaper2 2.2.6 (+devel +debuginfo)** | **built** | pristine; `cmd:paper`, a runtime dep of `psutils` |
+| **itstool 2.0.7** | **built** | pristine; **functional proof the libxml2 recut worked** — it requires `libxml2_python3.14` |
+| **libjpeg_turbo 3.1.4.1 (+devel +tools +debuginfo)** | **built** | pristine; needed `nasm` |
+| **tiff 4.7.0 (+devel +tools +debuginfo)** | **built** | pristine |
+| **libxml2 2.15.3 (+devel +doc +python3.14)** | **rebuilt — cut RETIRED** | `xmlfix.sh`; the `libxml2_python3.14` subpackage is back. This was **critical path**, not cosmetic |
 | libxml2 2.15.3 | see below | `cmd:doxygen` was the only real edge and it now exists; `lib:libicudata` was already provided by the icu bootstrap and `cmd:python3.14` is gated off by `pythonModuleEnabled` |
 
 ### Why a real groff is still out of reach — and so the gettext cut stands
 
-This is the one thing the cmake pass was meant to unlock and did **not**. Recording
-the depth so nobody re-scopes it as cheap.
+> **SUPERSEDED by Blocker 9 (2026-08-24), and wrong in its central claim.** Kept because
+> the conclusion survives — groff is not cheap and the gettext cut stands — but the
+> mechanism below is not the real one. Measured corrections:
+> **`devel:libgl` comes from `libglvnd-1.7.0`, not from `mesa`**, so there is no
+> mesa/LLVM/vulkan/`cmd:git` wall — but **the `-DJAS_ENABLE_OPENGL=OFF` cut below is still
+> needed**, because jasper then fails on GLUT, which has no recipe in the tree at all. The
+> cut this section proposed is right; its stated reason is not. And the `psutils`
+> Python packaging is a **seven-port ladder, not a knot**, because `flit_core` needs only
+> the interpreters. The depth was also under-counted by roughly five times: groff is
+> **24 ports and 12 waves**, not "about five more ports". Read Blocker 9 instead.
 
 `groff` needs five commands. `cmd:makeinfo` is now real, and that leaves four:
 `cmd:pnmcrop`, `cmd:pnmtopng`, `cmd:pnmtops` (all `netpbm`) and `cmd:psselect`
@@ -947,10 +1498,15 @@ packages that must be rebuilt later and belong in `hpkg-out/arm64/stage1/`.
    See Blocker 6. Related standing gap: **input source packages are never
    checksum-verified** (`grep -ci 'validating checksum'` is 0 in every log), because the
    rigged hpkgs hold uncompressed trees and `CHECKSUM_SHA256` has nothing to hash.
-4. Build `python3.10` with zlib/`_bz2`/`_lzma` so the unpack fix can be retired. It is
-   currently *routed around*, not fixed — `haiku-haikuporter-patch --check` prints the
-   three modules' status on every run so this cannot be quietly forgotten. The chain is
-   `xz_utils` plus libssl, libsqlite3, libedit and libintl.
+4. ~~Build `python3.10` with zlib/`_bz2`/`_lzma` so the unpack fix can be retired.~~
+   **BUILT 2026-08-24** — `python3.10-3.10.20-3`, and `python3.14-3.14.7-1` alongside it.
+   Both needed `graviton/builder/pyfix.sh`: a PGO/LTO cut (the bootstrap gcc has **no LTO
+   support at all**) and an additive `RUNSHARED` (`LIBRARY_PATH` replaces the loader path).
+   The three modules are present in the hpkg. **Still to do before the unpack fix can
+   actually be retired:** activate it — that needs `lib:libbz2` activated from the built
+   `bzip2`, and a `file_data` subpackage the `file` build did not emit — then confirm
+   `python3.10 -V` reports **3.10.20** (the bootstrap is 3.10.21) and re-run
+   `graviton/builder/pycheck.sh`. Keep `haiku-haikuporter-patch --check` until that passes.
 5. `.zip` sources (312 recipes) are still unsupported: `zipfile.is_zipfile()` succeeds
    without zlib and extraction only *then* raises `Compression requires the (missing)
    zlib module`, and that path has no external-tool dispatch to hook into.

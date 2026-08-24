@@ -177,14 +177,16 @@ A minimal Haiku guest agent giving **command execution and file transfer with ze
 networking**, read from a second serial port by a launch_daemon job (first cut can be a
 shell loop; a small C daemon if framing demands it).
 
-**Do not port `qemu-guest-agent`:** it needs **GLib**, and `glib2` is meson-only —
-blocked behind the very PEP-517 knot Phase 2 routes around — and its native transport is
+**Do not port `qemu-guest-agent`:** it needs **GLib**, and `glib2` is meson-only — so it
+sits behind the PEP-517 Python chain (which is a **7-port ladder, not a knot**; see
+`package-chain-status.md` Blocker 9) — and its native transport is
 **virtio-serial**, for which Haiku has no driver (only `pc_serial`/`usb_serial`).
 `pc_serial` is already packaged **ungated in every image** (`build/jam/packages/Haiku:203`,
 `HaikuBootstrap:146`), so the cheap transport exists today.
 
-Motivation, all of which has already cost time: bootstrap images have dead guest
-networking (`net_server`/`syslog_daemon`/`power_daemon` die); the EC2 test instance's
+Motivation, all of which has already cost time: ~~bootstrap images have dead guest
+networking (`net_server`/`syslog_daemon`/`power_daemon` die)~~ — **that one is fixed**, see
+"headless images lose networking" below (`44b5b4a233`); the EC2 test instance's
 security group allows `:22` only from external CIDRs so the metal cannot SSH in;
 corporate egress blocks outbound `:22` from the workstation; and guests are currently
 driven by base64-through-SSM plus hand-rolled QEMU-monitor Python.
@@ -289,24 +291,57 @@ Buildmaster plus a Graviton builder fleet for the ~3936-recipe long tail. Gated 
 green toolchain: until the chain builds *anything*, every builder would fail identically
 on the same cycle.
 
-## Blocker: headless images lose networking (IN PROGRESS)
+## Blocker: headless images lose networking — **FIXED (merged)**
+
+Fix: **`44b5b4a233 app: don't reconnect a GUI-less BApplication to app_server`**, on
+`graviton` in `src/kits/app/Application.cpp`. Cite the commit, not a patch file — the
+`graviton-*.patch` files that older notes point at are **untracked leftovers** in a
+checkout parked behind `graviton`, not unlanded work (`git ls-tree -r graviton` matches
+none of them).
+
+### What the defect was
 
 On any image without a framebuffer — i.e. **every bare EC2 instance**, since Graviton has
-no display device — boot produces a deterministic cascade:
+no display device — boot produced a deterministic cascade:
 `app_server: Failed to initialize virtual screen configuration` →
 `Can't reconnect to app server!` → **`Killing team … (net_server)`**. With `net_server`
-dead there is no DHCP and no interface, so **you cannot SSH into a Haiku EC2 instance at
-all.** This blocked the in-guest half of two separate hardware verifications today (the
-RTC's in-guest `date`, and the PSCI reset/power-off tests), each of which had to fall back
-to reading the serial console. It is pre-existing, not a regression, and the security group
-is *not* the cause.
+dead there was no DHCP and no interface, so you could not SSH into a Haiku EC2 instance at
+all. That blocked the in-guest half of two hardware verifications (the RTC's in-guest
+`date`, and the PSCI reset/power-off tests), each of which had to fall back to the serial
+console. It was pre-existing, not a regression, and the security group was never the cause.
 
-Being fixed as `graviton-headless-netserver.patch`. The likely template is `power_daemon`,
-which is a `BServer` constructed with **`initGUI=false`** and therefore survives headless.
-Explicitly **not** the fix: shipping a fake screen or the `TARGET_SCREEN` remote-desktop
-plumbing in every image — that hides the defect rather than fixing it. Related: arm64 has
-**no serial break-in for KDL** (the break-in path is x86/PS2-only), so KDL is unreachable
-on a live guest and a harness image is needed to drive one.
+### The fix
+
+`BApplication::_ReconnectToServer()` now returns early when `fServerLink->TargetTeam() < 0`
+— i.e. when there was never an app_server connection to begin with, which is the case for
+a `BServer` constructed with `initGUI == false` (`net_server`, `syslog_daemon`). Reconnecting
+in that state was actively harmful in both directions: on success it built a half-initialised
+GUI context nobody asked for, and on failure the `debugger()` call took the whole team down.
+The latter was the *normal* outcome on a machine with no display hardware, which is why a
+missing monitor cost the system every non-GUI server.
+
+Explicitly **not** the fix, and still rejected: shipping a fake screen or the
+`TARGET_SCREEN` remote-desktop plumbing in every image — that hides the defect.
+
+### Evidence
+
+- The guard is present in `graviton:src/kits/app/Application.cpp` (`_ReconnectToServer`).
+- **Independent corroboration, and the stronger of the two:** the pipeline's perf-gate
+  stage SSHes into every candidate node and measures it. That is impossible if `net_server`
+  is being killed at boot, so a green gate run is a live end-to-end refutation of the
+  original symptom — not an inference from the diff.
+
+### Serial KDL on arm64 — also **FIXED (merged)**
+
+The related claim that arm64 has *no serial break-in for KDL, so KDL is unreachable on a
+live guest and a harness image is needed* is **no longer true**. Merged:
+**`d4cf4a5cec arm64: fix serial getchar, and give KDL a way in on a headless machine`** and
+**`5d97144c1a kernel: start the serial KDL listener after thread_init, not before`**.
+Interactive KDL over serial worked on arm64 for the first time on 2026-08-24 and produced a
+number the syslog structurally could not.
+
+> Do **not** reintroduce the boot-panic attribution that once accompanied this: it was
+> retracted in `9e3d6f942e` — the panic was **not** the serial listener.
 
 ## Cross-cutting operational notes
 
