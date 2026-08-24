@@ -68,6 +68,9 @@ int64 ModifiedPageQueue::sGlobalModifiedCount = 0;
 // command; on by default because a quota timeout is still an abnormal event.
 static bool sQuotaTraceEnabled = true;
 
+ModifiedPageQueue* ModifiedPageQueue::sQueues = NULL;
+static spinlock sQueueListLock = B_SPINLOCK_INITIALIZER;
+
 int64 ModifiedPageQueue::sQuotaWaits = 0;
 int64 ModifiedPageQueue::sQuotaTimeouts = 0;
 bigtime_t ModifiedPageQueue::sQuotaWaitTime = 0;
@@ -989,6 +992,17 @@ vm_page_schedule_write_page_range(struct VMCache *cache, uint32 firstPage,
 
 ModifiedPageQueue::~ModifiedPageQueue()
 {
+	// Unregister first, so a KDL dump can never walk into a queue whose writer
+	// is already being torn down.
+	{
+		InterruptsSpinLocker locker(sQueueListLock);
+		ModifiedPageQueue** link = &sQueues;
+		while (*link != NULL && *link != this)
+			link = &(*link)->fNextQueue;
+		if (*link == this)
+			*link = fNextQueue;
+	}
+
 	thread_id writerThread = fWriterThread;
 	if (writerThread < 0)
 		return;
@@ -1020,13 +1034,7 @@ set_page_writer_quota_trace(int argc, char** argv)
 static int
 dump_page_writer_quota(int argc, char** argv)
 {
-	ModifiedPageQueue* queue = vm_page_default_modified_queue();
-	if (queue == NULL) {
-		kprintf("no default modified queue\n");
-		return 0;
-	}
-
-	queue->DumpQuotaState();
+	ModifiedPageQueue::DumpAllQuotaStates();
 	return 0;
 }
 
@@ -1037,6 +1045,14 @@ ModifiedPageQueue::StartWriter(const char* name)
 	fPageWriterCondition.Init("pgwr");
 	fUnderQuotaCondition.Init(this, "pguq");
 	fAveragePageWriteDuration = 0;
+
+	strlcpy(fName, name != NULL ? name : "?", sizeof(fName));
+
+	{
+		InterruptsSpinLocker locker(sQueueListLock);
+		fNextQueue = sQueues;
+		sQueues = this;
+	}
 
 	char threadName[B_OS_NAME_LENGTH];
 	snprintf(threadName, sizeof(threadName), "page writer: %s", name);
@@ -1064,22 +1080,55 @@ ModifiedPageQueue::StartWriter(const char* name)
 void
 ModifiedPageQueue::DumpQuotaState()
 {
-	kprintf("modified queue %p\n", this);
-	kprintf("  pages queued            : %" B_PRIuPHYSADDR "\n",
+	// Per-queue only. The counters and limits below are shared, so
+	// DumpAllQuotaStates() prints them once rather than repeating them per disk
+	// and inviting them to be read as per-device figures.
+	kprintf("  queue \"%s\" (%p), writer thread %" B_PRId32 "\n", fName, this,
+		fWriterThread);
+	kprintf("    pages queued          : %" B_PRIuPHYSADDR "\n",
 		(phys_addr_t)Count());
-	kprintf("  per-page write estimate : %" B_PRIdBIGTIME " us"
+	kprintf("    per-page estimate     : %" B_PRIdBIGTIME " us"
 		"  (decaying average)\n", fAveragePageWriteDuration);
-	kprintf("  estimated drain time    : %" B_PRIdBIGTIME " us  (local quota %d us)\n",
-		(bigtime_t)Count() * fAveragePageWriteDuration,
-		PAGES_FLUSH_DURATION_LOCAL_QUOTA);
-	kprintf("  global modified count   : %" B_PRId64 "\n",
+	kprintf("    estimated drain       : %" B_PRIdBIGTIME " us  vs local quota %d"
+		" us%s\n", (bigtime_t)Count() * fAveragePageWriteDuration,
+		PAGES_FLUSH_DURATION_LOCAL_QUOTA,
+		((bigtime_t)Count() * fAveragePageWriteDuration)
+			> PAGES_FLUSH_DURATION_LOCAL_QUOTA ? "   <-- OVER" : "");
+}
+
+
+/*static*/ void
+ModifiedPageQueue::DumpAllQuotaStates()
+{
+	// Walks every queue. Dumping only the default one reported whichever queue
+	// happened not to be under load: on the run that verified the quota fixes,
+	// the default queue was idle and showed a zero estimate while the disk being
+	// hammered held 173,569 pages at 31 us a page, so the number that mattered
+	// was the one not printed.
+	//
+	// Read without the list lock, deliberately: this runs from KDL with the rest
+	// of the machine stopped, and taking a lock there can deadlock against
+	// whatever held it when the debugger was entered.
+	int32 count = 0;
+	for (ModifiedPageQueue* queue = sQueues; queue != NULL;
+			queue = queue->fNextQueue) {
+		queue->DumpQuotaState();
+		count++;
+	}
+
+	if (count == 0)
+		kprintf("  no modified page queues registered\n");
+
+	// Shared across every queue, so stated once and labelled as such.
+	kprintf("\nsystem-wide:\n");
+	kprintf("  global modified count   : %" B_PRId64 " pages\n",
 		atomic_get64(&sGlobalModifiedCount));
-	kprintf("  global estimated drain  : %" B_PRIdBIGTIME " us  (reported only,"
-		" no longer gates)\n", atomic_get64(&sGlobalEstimatedWriteDuration));
 	kprintf("  global dirty limit      : %" B_PRId64 " of %" B_PRIuPHYSADDR
 		" pages  (1/%d of RAM)\n",
 		(int64)(vm_page_num_pages() >> PAGES_FLUSH_GLOBAL_DIRTY_SHIFT),
 		(phys_addr_t)vm_page_num_pages(), 1 << PAGES_FLUSH_GLOBAL_DIRTY_SHIFT);
+	kprintf("  global estimated drain  : %" B_PRIdBIGTIME " us  (reported only,"
+		" no longer gates)\n", atomic_get64(&sGlobalEstimatedWriteDuration));
 	kprintf("  quota waits             : %" B_PRId64 "\n",
 		atomic_get64(&sQuotaWaits));
 	kprintf("  quota wait timeouts     : %" B_PRId64 "  (bound %d us)\n",
@@ -1088,7 +1137,6 @@ ModifiedPageQueue::DumpQuotaState()
 		atomic_get64(&sQuotaWaitTime));
 	kprintf("  longest single wait     : %" B_PRIdBIGTIME " us\n",
 		atomic_get64(&sQuotaWaitMax));
-	kprintf("  writer thread           : %" B_PRId32 "\n", fWriterThread);
 }
 
 
