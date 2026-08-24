@@ -1,0 +1,182 @@
+#!/usr/bin/env bash
+#
+# haiku-quota-verify -- check the modified-page quota fixes on a booted node.
+#
+# Runs ON the metal builder, which is the only host that can reach a test node.
+# This is the prototype of the write-liveness assertion proposed in
+# graviton/docs/storage-perf-gate-proposal.md, and it exists because the defect it
+# guards is a machine that reports healthy and does nothing.
+#
+# It is deliberately two-sided. Asserting only "the starvation stopped" would pass
+# a change that removed back-pressure altogether, because that question answers yes
+# in both the fixed and the broken case: no throttle means no starvation and also
+# means dirty memory is unbounded, which resurfaces much later as something far
+# harder to attribute. So it also requires that the quota still engages.
+#
+# The liveness probe is a three-signal ladder rather than an ssh check, because a
+# storage liveness regression and the live NIC intermittent produce the *same*
+# outward symptom -- a node that stops answering ssh. They are separable by
+# measurement: across ~72 samples taken while the starvation was happening, ICMP
+# answered and TCP :22 accepted every single time and only the banner never
+# arrived. A lost NIC gives no ICMP at all.
+#
+#   ICMP ok + TCP ok + banner        -> healthy
+#   ICMP ok + TCP ok + NO banner     -> userland starved: the regression
+#   ICMP fail                        -> apparatus, NOT a storage verdict
+#
+# "The node answered" therefore means ICMP answered. Using ssh as the liveness
+# precondition would make the assertion unable to fire, since ssh not answering is
+# the symptom under test.
+#
+# Usage: haiku-quota-verify <node-ip> [-d device] [-s seconds] [-u user] [-k key]
+
+set -uo pipefail
+
+NODE=""
+DEVICE="/dev/disk/nvme/1/raw"
+MOUNT="/w"
+GIB_PER_CELL=2
+CELLS=8
+INTERVAL=15
+USERS="baron user root"
+KEY="${KEY:-/home/ubuntu/.ssh/haiku-ed25519}"
+BIN="${BIN:-/bin/disktput}"
+
+[ $# -ge 1 ] || { echo "usage: haiku-quota-verify <node-ip> [-d device] [-u user] [-k key]" >&2; exit 1; }
+NODE="$1"; shift
+while getopts "d:s:u:k:" opt; do
+	case "$opt" in
+		d) DEVICE="$OPTARG" ;;
+		s) INTERVAL="$OPTARG" ;;
+		u) USERS="$OPTARG" ;;
+		k) KEY="$OPTARG" ;;
+		*) exit 1 ;;
+	esac
+done
+
+SO="-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null
+	-o ConnectTimeout=8 -o LogLevel=ERROR -i $KEY"
+
+NODE_USER=""
+for candidate in $USERS; do
+	if timeout 20 ssh -n $SO "$candidate@$NODE" true 2>/dev/null; then
+		NODE_USER="$candidate"; break
+	fi
+done
+[ -n "$NODE_USER" ] || { echo "FATAL: cannot ssh to $NODE as any of: $USERS" >&2; exit 1; }
+hs() { timeout 300 ssh -n $SO "$NODE_USER@$NODE" "$@"; }
+
+echo "node $NODE (as $NODE_USER), device $DEVICE"
+
+# ------------------------------------------------------------------ preflight
+echo "--- is this an image with the fixes in it? ---"
+if hs 'grep -q "io batch size" /var/log/syslog' 2>/dev/null; then
+	echo "  nvme batching: present"
+else
+	echo "  nvme batching: ABSENT -- probably the wrong image" >&2
+fi
+hs "$BIN -h" 2>&1 | grep -q "Usage: disktput" \
+	|| { echo "FATAL: $BIN missing on the node" >&2; exit 1; }
+
+# ---------------------------------------------------------------- the workload
+echo "--- preparing $MOUNT ---"
+hs "mkfs -q -t bfs -o 'block_size 4096' $DEVICE QV 2>&1 | tail -1"
+hs "mkdir -p $MOUNT 2>/dev/null; mount -t bfs $DEVICE $MOUNT 2>&1 | head -1"
+# Checked by writing, not by parsing df: Haiku prints the mount point on its own
+# line so a "df | grep ' /w'" match never fires, and the first version of this
+# script warned that the volume was unmounted while 16 GiB was landing on it
+# correctly. A write that succeeds and lands on the right device is the fact; the
+# df text is a rendering of it.
+if hs "touch $MOUNT/.probe && rm -f $MOUNT/.probe" 2>/dev/null; then
+	hs "df 2>&1 | grep -A1 -i '$MOUNT'" | tail -1
+else
+	echo "FATAL: $MOUNT is not writable -- refusing to measure the wrong volume" >&2
+	exit 2
+fi
+hs "rm -f $MOUNT/new-* $MOUNT/log-*; sync" >/dev/null 2>&1
+
+TOTAL=$((GIB_PER_CELL * CELLS))
+echo "--- launching ${TOTAL} GiB of allocating buffered writes, on the node ---"
+echo "    (queued remotely on purpose: the load must outlive this script's ssh)"
+hs "(for i in \$(seq 1 $CELLS); do $BIN -f $MOUNT/new-\$i -m seqwrite -b 256K -t 4 \
+	-n ${GIB_PER_CELL}G -s ${GIB_PER_CELL}G -S > $MOUNT/log-\$i.txt 2>&1; done \
+	> /dev/null 2>&1 &) ; echo launched"
+
+# ----------------------------------------------------------- the liveness ladder
+echo
+echo "--- liveness ladder, every ${INTERVAL}s ---"
+printf '  %8s %6s %6s %8s  %s\n' time icmp tcp22 banner state
+starved=0; noicmp=0; total=0
+deadline=$((SECONDS + 1200))
+while [ $SECONDS -lt $deadline ]; do
+	I=fail; ping -c 1 -W 2 "$NODE" >/dev/null 2>&1 && I=ok
+	T=fail; timeout 5 bash -c "cat < /dev/null > /dev/tcp/$NODE/22" 2>/dev/null && T=ok
+	B=fail; timeout 12 ssh -n $SO "$NODE_USER@$NODE" true 2>/dev/null && B=ok
+
+	state=healthy
+	if [ "$I" = fail ]; then
+		state="APPARATUS"; noicmp=$((noicmp + 1))
+	elif [ "$B" != ok ]; then
+		# ICMP and (usually) TCP are fine but nothing completes: the signature
+		# this whole exercise is about.
+		state="STARVED"; starved=$((starved + 1))
+	fi
+	total=$((total + 1))
+	printf '  %8s %6s %6s %8s  %s\n' "$(date -u +%H:%M:%S)" "$I" "$T" "$B" "$state"
+
+	# stop once every cell has produced its full file
+	if [ "$B" = ok ]; then
+		done_count=$(hs "ls -l $MOUNT/new-* 2>/dev/null | grep -c ' $((GIB_PER_CELL * 1073741824)) '" 2>/dev/null || echo 0)
+		[ "${done_count:-0}" -ge "$CELLS" ] && { echo "  all ${TOTAL} GiB written"; break; }
+	fi
+	sleep "$INTERVAL"
+done
+
+# ------------------------------------------------------------------- the counters
+echo
+echo "--- quota counters (the other side: did back-pressure survive?) ---"
+LINE=$(hs 'grep "quota wait timed out" /var/log/syslog | tail -1' 2>/dev/null)
+if [ -z "$LINE" ]; then
+	echo "  no quota-timeout lines at all"
+	echo "  NOTE: that is the GOOD outcome for timeouts, but it says nothing about"
+	echo "        whether the quota engages. Read the KDL counters below for waits."
+else
+	echo "  $LINE"
+fi
+# Sanitised to digits: grep -c exits non-zero on no match, and through the ssh
+# wrapper that produced "0\n0", which then failed the integer test below. The
+# value was right and the comparison was broken -- the same shape as everything
+# else in this document.
+ZEROQ=$(hs 'grep -c "quota wait timed out.*queue 0 pages" /var/log/syslog' 2>/dev/null \
+	| tr -dc '0-9' | head -c 6)
+[ -n "$ZEROQ" ] || ZEROQ=0
+echo "  timeout lines carrying 'queue 0 pages': $ZEROQ"
+echo "    (that string was the cross-device coupling signature; its return means"
+echo "     the page-bound global quota has regressed to a duration sum)"
+
+echo
+echo "--- verdict ---"
+echo "  liveness ladder : $total samples, $starved STARVED, $noicmp no-ICMP"
+if [ "$noicmp" -gt 0 ]; then
+	echo "  RESULT: INCONCLUSIVE -- the node stopped answering ICMP, which is an"
+	echo "          apparatus failure and never a storage verdict."
+	exit 2
+fi
+if [ "$starved" -gt 0 ]; then
+	echo "  RESULT: FAIL -- userland starved while the kernel answered ICMP."
+	exit 1
+fi
+if [ "${ZEROQ:-0}" -gt 0 ]; then
+	echo "  RESULT: FAIL -- cross-device coupling has returned."
+	exit 1
+fi
+echo "  RESULT: liveness PASSED."
+echo
+echo "  Still to check by hand, because it cannot be read from the syslog:"
+echo "    waits > 0 and the per-device estimates, via KDL:"
+echo "      ssh -i <k> <instance-id>.port0@serial-console.ec2-instance-connect.<region>.aws"
+echo "      kdl"
+echo "      page_writer_quota"
+echo "    waits == 0 would mean the quota never engages -- not a fix, a deleted"
+echo "    throttle, which passes every starvation test and unbounds dirty memory."
+exit 0

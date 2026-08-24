@@ -1088,14 +1088,13 @@ a machine with 31.5 GiB of RAM, because of one stale sample.
 
 The bound is a liveness guarantee, not a cure. In order:
 
-1. **Make the global quota not couple idle devices to busy ones.** A writer whose
-   own queue is empty should not be stopped by another disk's backlog. This is the
-   whole reason a shell became unusable.
-2. **Make `fLastAveragePageWriteDuration` an actual average, and decay it.** A
-   single stale sample setting a 13 MiB threshold on an idle device is the ratchet,
-   and it is now measured rather than suspected.
-3. Only then revisit the quota constants, which cannot be judged while the
-   estimate feeding them is unreliable.
+1. ~~Make the global quota not couple idle devices to busy ones.~~ **Done and
+   hardware-verified** — 0 of 2 timeouts on an idle queue, against 15 of 19 before.
+2. ~~Make the estimate an actual average, and decay it.~~ **Done**, verified
+   indirectly only; see "What was not obtained".
+3. Still open: revisit the quota constants. They cannot be judged until the two
+   fixes above are measured, because until now the estimate feeding them was
+   unreliable and the aggregation was wrong.
 
 ### Method note: `get-console-output` needs `--latest`
 
@@ -1105,6 +1104,347 @@ quota never fires" for exactly that reason. What caught it was a **positive
 control** — grepping for `nvme_disk`, a string known to be present — before
 believing an empty result. With `--latest`: 48,943 bytes and 16 matches. The
 procedure earlier in this document omitted `--latest` and has been corrected.
+
+
+## The fixes, and how to tell whether they worked
+
+Both are committed in `vm: stop the modified-page quota starving writers to idle
+disks`, both are **unverified pending a bake**, and they are deliberately in this
+order: the coupling is what made a shell unusable, and the estimate cannot be
+judged while the thing it feeds is aggregating the wrong quantity.
+
+### Fix 1 — the global bound counts pages, not summed time
+
+`sGlobalEstimatedWriteDuration` added every device's estimated drain and compared
+the total to one 5 s deadline. Durations do not sum across devices: each
+`ModifiedPageQueue` has its own page writer and its own disk, and they drain in
+**parallel**. 6.86 s on one disk plus 0 s on another means the system needs
+6.86 s, not 6.86 s that a writer to the *second* disk must sit through.
+
+The global limit is now **1/8th of RAM may be dirty across all devices** — pages
+do genuinely sum, because they all occupy the same memory. The per-device time
+quota is untouched and remains the flush-latency bound its name always described.
+The summed duration is still maintained and still printed; it just no longer
+decides anything.
+
+Deliberately generous, and that is the point: the defect it replaces fired when
+memory was in no danger at all — 32.6 GB free of 33.8. A bound that only speaks up
+when memory really is at risk is the correct replacement for one that spoke up
+about the wrong quantity.
+
+### Fix 2 — the estimate is an average, and it decays
+
+`fAveragePageWriteDuration` was the most recent sample despite its name. Now an
+exponentially weighted moving average (α = 1/4), so one slow round cannot set the
+threshold, and **halved on every idle round**, so a stale figure fades instead of
+freezing. It stops at 1 rather than 0, because a zero estimate makes
+`IsOverQuota()` always false and disarms back-pressure entirely — which is why the
+original code special-cased zero.
+
+**Stated trade-off:** after decaying low, the average climbs back over several
+rounds rather than snapping to the first large sample, so back-pressure is weak at
+the start of a burst. That is the safe direction — the defect was over-throttling
+to the point of hanging the machine — and snapping upward would reintroduce
+exactly the single-sample sensitivity being fixed. Memory remains protected by the
+global page bound in the meantime.
+
+### Pre-bake prediction, stated so the measurement can falsify it
+
+Working the fix through the numbers actually observed, before booting it. RAM was
+33,784,201,216 bytes = **8,248,096 pages**, so the new global limit is
+`8,248,096 >> 3` = **1,031,012 pages (3.93 GiB)**. Peak observed global dirty was
+**221,186 pages (864 MiB) — 21% of the new limit**, which is the quantitative form
+of "it fired while 32.6 GB of 33.8 was free".
+
+**Would the sshd writer still block?** Root disk, empty queue, `additionalPages ≤ 32`:
+
+| check | arithmetic | result |
+|---|---|---|
+| local (time) | `0 × 883 + 883 × 32` = 28,256 µs vs 3,000,000 | under |
+| global (pages) | `221,218` vs `1,031,012` pages | under |
+
+**Not throttled.** Previously the global summed duration was 6.86 s against a 5 s
+deadline, so it blocked — indefinitely, before the wait was bounded.
+
+**Is back-pressure preserved on the busy disk?** Scratch, 221,186 pages at 31 µs:
+
+| check | arithmetic | result |
+|---|---|---|
+| local (time) | `221,186 × 31 + 31 × 32` = 6,857,758 µs vs 3,000,000 | **over — still throttled** |
+
+Both halves are what they should be: the writer that had no business waiting does
+not wait, and the writer that caused the backlog still does. If the boot shows
+`waits == 0`, this arithmetic is wrong somewhere and the throttle has been removed
+rather than retargeted.
+
+
+**Precondition checked on the quota change itself**, applying the rule above rather
+than trusting that the same mistake was not made twice. `IsOverQuota()` now calls
+`vm_page_num_pages()`, which returns `sNumPages - sNonExistingPages`; if those were
+still zero the global limit would be zero and *every* writer would be permanently
+over quota — a worse regression than the one being fixed, and silent. They are set
+in `vm_page_init_num_pages()`, reached from `vm_init()` at `main.cpp:156`, whereas
+the earliest `StartWriter()` is in `vm_page_init_post_thread()` at `main.cpp:222`,
+and the per-disk queues are created later still by `KDiskDevice`. So the value is
+always initialised before any page writer exists to read it.
+
+
+### What success looks like, and what would mean I broke back-pressure
+
+The failure mode of a fix like this is removing the throttle rather than fixing
+it, so both directions have to be checked. Run the same 16 GiB load on a 125 MiB/s
+volume:
+
+| signal | fixed | broke back-pressure | not fixed |
+|---|---|---|---|
+| timeouts with `queue 0 pages` | **none** | none | present |
+| `waits` | **still > 0** | **0** | > 0 |
+| `timeouts` | **≈0** | 0 | > 0 |
+| idle disk's per-page estimate | **~1–30 µs** | any | 883 µs |
+| ssh during load | responsive | responsive | stalls |
+
+`waits > 0` with `timeouts ≈ 0` is the target: writers to a genuinely backed-up
+device still wait, and nobody waits the full 5 s. **`waits == 0` would mean the
+quota never engages at all**, which is not a fix — it is the throttle deleted, and
+it would show up later as unbounded dirty memory rather than as a hang.
+
+Also worth recording: the global dirty count against its new 1/8-of-RAM limit,
+from `page_writer_quota`, to confirm the replacement bound sits in a sane place
+under real load rather than never engaging or engaging constantly.
+
+### The boot panic: diagnosed, retracted, and un-retracted — the retraction was the error
+
+I attributed the boot panic below to my own serial KDL listener —
+`spawn_kernel_thread()` from `arch_debug_console_init_settings()` at
+`main.cpp:168` against `thread_init()` at 212. A second bake appeared to disprove
+it, so I retracted. **The retraction was wrong: the original diagnosis was right,
+and the second bake had compiled the same source as the first.**
+
+The resolved backtrace, from the kernel binary of that bake:
+
+```
+ffff0000000b2c4c -> spawn_kernel_thread
+ffff00000017fb10 -> arch_debug_console_init_settings     <- the caller
+ffff0000000da0cc -> debug_init_post_settings
+ffff000000090b10 -> _start
+```
+
+And the faulting instruction pins the mechanism exactly: `bl team_get_kernel_team`
+followed by `ldr w2, [x0, #48]`, with **`FAR=30`, and 0x30 = 48**. So
+`team_get_kernel_team()` returned NULL — because the team structures do not exist
+until `thread_init()` — and the load faulted at offset 48 of a null pointer. The
+precondition was unmet in precisely the way predicted.
+
+The reason the second bake looked identical is that it *was* identical: the branch
+was baked from its pushed remote ref, which still pointed at the pre-rebase commit
+without the fix. Same source in, same binary out.
+
+| AMI | branch-head | boots? | contents |
+|---|---|---|---|
+| `ami-02d5e711d25cc2d49` | `e1e5a0f531` | **BOOTS** | my branch *before* the graviton merge |
+| `ami-0fe2b76a049766507` | `8b674f3cae` | PANICS | graviton `d733822a15` + the quota fix |
+| `ami-0a3c20e1085a75e16` | — | **PANICS identically** | graviton `5d97144c1a`, *including the boot fix* |
+
+The panic is **byte-identical** in both failing images — same `FAR=30`, same
+`ELR=ffff0000000b2c4c`, same frame addresses:
+
+```
+PANIC: unhandled pagefault! FAR=30 ELR=ffff0000000b2c4c ESR=96000004
+... after arch_vm_translation_map_init_post_area
+```
+
+The two images have **different snapshots** (`snap-086021847de985b10` vs
+`snap-0e9192e77c3744edf`), so the third really is a new build carrying the fix.
+The fix changed nothing, therefore it was not the cause. That two different builds
+produce identical addresses is itself consistent: my changes were in `debug.cpp`
+and `arch_debug_console.cpp`, so anything linked before them keeps its address.
+
+**Also checked and ruled out:** the alarming
+`reserve_boot_loader_ranges(): Skipping range: 0xffffff0400000000, 32715571200`
+(30.5 GiB) and `mark_page_range_in_use(0x0, 0x40000): start page is before free
+list` appear **identically in the image that boots**. They are normal here and not
+the cause. I had them as a hypothesis and they were wrong.
+
+**What the evidence actually was.** Everything below in this subsection was
+reasoned correctly from what I could see, and what I could see was a stale build.
+The bisection table stands as a record of the reasoning, but its conclusion does
+not: the cause is the serial listener's call site, not the graviton merge, and the
+merge is exonerated.
+
+**The fix is the fix**, and moving the listener into the generic debugger remains
+the better design independently of that.
+
+### The verification did not happen: the image did not boot
+
+`ami-0fe2b76a049766507` panics during early VM setup:
+
+```
+PANIC: unhandled pagefault! FAR=30 ESR=96000004
+... arch_vm_translation_map_init_post_area
+```
+
+Cause, and the resolved backtrace above confirms it. The serial KDL listener was
+spawned from
+`arch_debug_console_init_settings()`, which `main.cpp` reaches via
+`debug_init_post_settings()` at line **168**. `thread_init()` is at line **212**.
+So `spawn_kernel_thread()` ran 44 lines before the threading system existed and
+faulted on an uninitialised structure. The previous image booted only because it
+predated the listener; this was the first image to carry it.
+
+Fixed by moving the listener to `debug_init_post_modules()` (line 369, after
+`thread_init` at 212 and `vm_init_post_thread` at 222), and by moving it out of
+arm64 into the **generic** debugger, where it belonged:
+`arch_debug_serial_try_getchar()` is already architecture-neutral and nothing in
+the polling loop is CPU-specific, so every architecture with a debug serial line
+now gets on-demand KDL entry rather than only arm64.
+
+**So no quota numbers yet.** `waits`, `timeouts`, the idle-disk per-page estimate
+and the `queue 0 pages` check all require a booting image, and the pre-bake
+prediction above stands untested.
+
+Two things worth keeping from this:
+
+- **"UNVERIFIED ON HARDWARE" was doing real work.** Every kernel commit on this
+  branch carries that label, and this is why: the change compiled cleanly, was
+  reviewed, was correct in its logic, and bricked the machine on a boot-ordering
+  constraint that no build or reading of the diff would surface. A bake is not a
+  formality between writing a kernel change and believing it.
+- **The failure was in the same class as the one I keep finding in tooling** — a
+  call that is only valid after some other subsystem exists, made before it does.
+  It is worth noting that I found it in under ten minutes only because the console
+  output was checked with `--latest` and read rather than assumed; the instinct that
+  caught other people's empty results caught my own panic.
+
+
+### The KDL cross-check is now available
+
+With the serial/KDL-entry fix merged, the capture originally planned can finally
+be done as a *cross-check* on the counters rather than as the primary evidence:
+
+```
+ssh -i k <instance-id>.port0@serial-console.ec2-instance-connect.us-west-2.aws
+# type: kdl
+  page_writer_quota          # queue depths, both bounds, wait statistics
+  bt <thread-id>             # now traces that thread -- see the arm64 bt fix
+  page_writer_quota_trace 0  # silence the log line if it is in the way
+```
+
+If any writer is still blocked, `bt` on it now says where. Under the fix the
+expectation is that there is nothing to catch.
+
+### Liveness evidence from the bounded wait, consolidated
+
+Two independent pollers ran across the two 16 GiB loads on the bounded-wait image:
+**93 ssh samples, 0 stalled** (59 in the first window at 20 s intervals, 34 in the
+second at 15 s), against *every* sample stalled from 0 s to 1663 s on the pre-fix
+kernel with the identical load. That is the bounded wait working as a liveness
+backstop, and it stays in place after these two fixes precisely because it does not
+depend on the diagnosis being right.
+
+
+## VERIFIED on hardware: `ami-07c5e3b00b4dcee34`
+
+Built from `9e3d6f942e` with a source precheck in the clone
+(`arch_debug_console.cpp: 0`, `debug.cpp: 2`). `c7g.4xlarge`, 100 GiB gp3 scratch at
+**125 MiB/s**, the identical 16 GiB load that previously starved a machine.
+
+### Result 1 — it boots
+
+| check | value |
+|---|---|
+| `PANIC` | **0** |
+| `Kernel Debugging Land` | **0** |
+| `spawn_kernel_thread` in a trace | **0** |
+| `nvme_disk` *(positive control)* | 16 |
+| `io batch size` | 2 |
+| `bfs: mounted` | 1 |
+
+First hardware evidence for the boot fix, and it retroactively validates the
+cherry-pick sitting on `graviton`'s tip.
+
+### Result 2 — liveness: the starvation is gone
+
+14 consecutive samples of the ICMP → TCP → banner ladder, 15 s apart, **every one
+`healthy`**: 0 STARVED, 0 no-ICMP. All eight files reached exactly 2,147,483,648
+bytes, and the volume went to 16% used, so the 16 GiB landed on the scratch device
+and not the 300 MiB root.
+
+| | pre-fix kernel | this image |
+|---|---|---|
+| ssh samples starved | **every one**, 0 s → 1663 s | **0 of 14** |
+| 16 GiB load | never completed under observation | **completed** |
+
+### Result 3 — back-pressure survived, which was the falsifiable half
+
+From KDL, `page_writer_quota`:
+
+```
+  global dirty limit      : 1031012 of 8248096 pages  (1/8 of RAM)
+  quota waits             : 14684
+  quota wait timeouts     : 2  (bound 5000000 us)
+  total time waiting      : 447533488 us
+  longest single wait     : 5000005 us
+```
+
+**`waits = 14684`.** The stated falsifier was `waits == 0` meaning the throttle had
+been removed rather than retargeted; it did not fire. The quota engages ~14.7
+thousand times and reaches the 5 s bound **twice**, with a mean wait of
+**30.5 ms** (447.5 s over 14,684 waits). That is back-pressure working with a
+safety valve, which is exactly the target shape.
+
+### Result 4 — the cross-device coupling is gone
+
+| | pre-fix | this image |
+|---|---|---|
+| timeouts reporting `queue 0 pages` | **15 of 19** | **0 of 2** |
+
+Only two timeout lines exist in the whole run, and both are on a device with a real
+backlog — 333,825 and 173,569 pages queued, at 30–31 µs per page:
+
+```
+(waits 1, timeouts 1, longest 5000005 us, per-page estimate 30 us, queue 333825 pages)
+(waits 2, timeouts 2, longest 5000005 us, per-page estimate 31 us, queue 173569 pages)
+```
+
+Those are precisely the writers that *should* be throttled: 333,825 × 30 µs = 10.0 s
+of estimated drain against a 3 s local quota. **No writer on an idle queue was
+blocked at all**, which was the defect.
+
+### Result 5 — the prediction was right to the page
+
+Predicted before the boot: `8,248,096` pages of RAM, global limit
+`8,248,096 >> 3` = **1,031,012 pages**. KDL reports
+`global dirty limit : 1031012 of 8248096 pages`. Exact.
+
+### What was *not* obtained, and why
+
+**The idle-disk per-page estimate was not read directly.** `page_writer_quota` dumps
+`vm_page_default_modified_queue()` only — the default queue, not the per-disk ones —
+and that queue was unused this boot, so it reported `pages queued: 0` and
+`per-page write estimate: 0 us`. The wait counters *are* static members and
+therefore system-wide, which is why `waits`/`timeouts` are trustworthy; the
+per-device estimates are not in that dump.
+
+The evidence for fix 2 is therefore **indirect but strong**: zero timeouts on an
+idle queue, where the pre-fix run had 15 of 19 driven by an idle disk stuck at
+883 µs. The estimate no longer freezes high enough to throttle an idle device.
+**Follow-up:** `page_writer_quota` should iterate every `ModifiedPageQueue`, not just
+the default one. That is a real gap in my own instrument and it should be closed
+before anyone relies on it for a per-device number.
+
+### And KDL worked, for the first time on arm64
+
+```
+Thread 38 "serial debug listener" running on CPU 14
+kdebug> page_writer_quota
+```
+
+The listener thread caught the `kdl` trigger, the typed commands were read
+correctly rather than as a stream of `0xFF`, and `continue` resumed the machine
+cleanly (ping and ssh both confirmed afterwards). The capability that was dead on
+this architecture is the capability that produced the one number the syslog could
+not — `waits` — because the log line only fires on a timeout and the fix reduced
+timeouts to two.
 
 
 ## The capture plan, revised: the fork can be answered without KDL
@@ -1234,6 +1574,79 @@ The defence is cheap and it worked every time it was applied: **before believing
 empty result, grep for something you know is present.** A positive control on the
 console fetch (`nvme_disk`, 16 matches) is what exposed the `--latest` requirement
 in one step. An empty result is a claim about the instrument until proven otherwise.
+
+### Rule: an artifact check proves the change arrived, and only that
+
+The sharper half of "an artifact must announce itself", and it cost a boot to
+learn. The `serial debug listener` string **was** present in
+`ami-0fe2b76a049766507`. The artifact check passed. The image was unbootable,
+because the string was in the binary and the **call site was wrong**.
+
+So a `strings`, `nm` or version-stamp check rules out exactly one hypothesis —
+*"my change never arrived"* — and rules out nothing else. It does not establish
+that the change is correct, that it runs, that it runs at the right time, or that
+the machine survives it. Those need a boot.
+
+Both halves are needed and neither substitutes for the other: without the stamp,
+"the number did not move" and "the code did not load" are indistinguishable (which
+is how the hot-swapped nvme driver was caught); with only the stamp, "the code
+loaded" gets mistaken for "the code works" (which is how the boot panic got as far
+as an AMI).
+
+### Rule: a byte-identical failure across two builds means one build
+
+The lesson I most wish I had had four hours earlier, and I had the evidence in hand
+and drew the wrong conclusion from it.
+
+A fix was applied, a second image was baked, and the panic came back **byte for
+byte**: same `FAR=30`, same `ELR=ffff0000000b2c4c`, same frame addresses, same
+ordering. I read that as "the fix was ineffective, so my diagnosis was wrong" and
+retracted a correct finding. The right reading was the opposite and much simpler:
+**identical addresses are near-proof that the same binary is running.** The fix had
+moved a function between two translation units, which shifts link order; a genuinely
+rebuilt kernel could hardly have reproduced the same addresses. What had actually
+happened was that the bake pulled a stale remote ref, so the second build compiled
+the first build's source.
+
+I even reasoned *past* the evidence — noting that identical addresses were
+"self-consistent" if the faulting code were linked before the files I changed — which
+is true, but it is a weaker explanation than "it is the same build" and I should have
+tested the stronger one first. **The cheap test I skipped was comparing the two AMIs'
+snapshot IDs against what the sources should have produced, and confirming the ref
+that was actually built.** I did compare snapshots, found them different, and treated
+that as proof the source differed — but a different snapshot only proves a different
+*build run*, not different *input*.
+
+So: when a fix appears to change nothing and the failure is *identical* rather than
+merely similar, the first hypothesis is **"the fix is not in what I ran"**, not "the
+fix is wrong". Distinguish them by checking the input — the commit that was built —
+rather than the output. Identical output is the signature of identical input, and
+that is a much more common failure than an ineffective fix.
+
+This is the same shape as the artifact rule two sections up, pointed the other way.
+An artifact check proves a change *arrived*; a source precheck on the tree that is
+about to be compiled proves *which* change is arriving. Neither substitutes for the
+other, and the bake now does both.
+
+### Rule: watch for the operation that is only valid once something else exists
+
+Four defects in this work are the same shape — an operation performed before the
+subsystem it depends on is ready — and the shape is worth recognising directly,
+because none of the four looks like the others at the point of failure:
+
+| operation | required first | how it presented |
+|---|---|---|
+| `spawn_kernel_thread()` from `arch_debug_console_init_settings()` (`main.cpp:168`) | `thread_init()` (`main.cpp:212`) | boot panic, `FAR=30`, in early VM setup |
+| `bt <thread>` on a thread running elsewhere | `arch_debug_save_registers()` saving a frame pointer — it was an empty stub | a plausible, wrong stack |
+| loading `nvme_disk` from `/boot/home/config/non-packaged` | the filesystem `nvme_disk` itself is needed to mount | silently ran the old driver |
+| reading a `dprintf` from the console | the console buffer being fetched at all (`--latest`) | an empty result read as "never fired" |
+
+Three of the four **fail silently or plausibly** rather than loudly, which is what
+makes the shape worth naming: the failure mode of a missing precondition is usually
+a confident wrong answer, not an error. The check that generalises is to ask, of
+any call in an init path or a diagnostic path, *what has to be true already* — and
+for init paths specifically, to read the actual ordering in `main.cpp` rather than
+inferring it from the name of the hook.
 
 ### Rule: repeatability is not validity
 
