@@ -32,11 +32,14 @@ number at all depended on both:
   was 2217–2715. With `-P 256K` (pinned, auto-sizing off) it collapsed to 1.2%.
   The noise was the send-buffer auto-sizer, not the network.
 
-And one open question, stated because the answer is not what was predicted:
-**only 29% of the isolated routine's saving materialises end to end** — 0.050
-ns/byte of the 0.173 the microbenchmark measures. The obvious explanation, that the
-kernel's walk is memory-bound where the microbenchmark is cache-hot, was tested and
-**disproved**. §7.3.
+And one open question, sharpened rather than answered: **only 27% of the routine's
+saving materialises end to end**, and it is **not the routine's fault**. Cache
+residency, the Haiku cross-compiler's codegen (checked by linking the shipped object
+into a native harness) and the node-walk access pattern were each tested and
+eliminated — the shipped bytes deliver 0.18 ns/byte on the exact access pattern the
+kernel uses. So either the transmit path puts only ~27% of the payload through it,
+or `nettput`'s cost metric is not capturing the removed work. One byte counter
+settles which; §7.3 specifies it. One of the two answers is a bug.
 
 And one technique worth copying, because it is why the worst bug here was caught
 before it shipped rather than after: **make the tested code be the shipped code
@@ -485,44 +488,102 @@ are *absent*, not wrong, so they reduce n rather than biasing it; they are why n
 expect this**, and a future harness should use a distinct peer port and not
 blanket-`pkill`.
 
-### 7.3 Only 29% of the predicted saving appears, and the obvious reason is wrong
+### 7.3 Only 27% of the saving appears, and it is not the routine
 
 Predicted 0.173 ns/byte from the isolated routine. Measured 0.0496 ns/byte end to
-end — **29%**. The prediction was too high by about 3×, and that gap is the most
-interesting thing left here.
+end. Three candidate explanations were tested. **All three are wrong**, and what is
+left is a sharper question than the one I started with.
 
-The obvious hypothesis: the microbenchmark re-reads one small buffer, so it is
-L1-resident and ALU-bound, whereas the kernel checksums each payload exactly once
-from memory the application or DMA has just written, so it is memory-bound — and
-making the arithmetic 4× faster buys nothing against a memory wall.
+**Hypothesis 1: the kernel's walk is memory-bound where the microbenchmark is
+cache-hot.** Making arithmetic 4× faster buys nothing against a memory wall.
 
-**Tested and disproved.** Same two routines, 1988-byte chunks, on Neoverse V1:
+*Disproved.* Same two routines, 1988-byte chunks, Neoverse V1:
 
 | condition | replaced | current | speedup | saving |
 |---|---|---|---|---|
 | L1-resident, re-read | 0.2295 | 0.0555 | 4.14× | 0.1740 ns/B |
 | 512 MB streamed, each chunk touched once | 0.2290 | 0.0566 | 4.05× | 0.1725 ns/B |
 
-Cold and hot are the same to within 2%: the hardware prefetcher keeps a linear walk
-fed, and the streaming-read floor on this core is 0.0635 ns/B (15.8 GB/s) — which
-the *new* routine at 0.0566 essentially reaches, while the old one at 0.229 was
-nowhere near it. So the replaced routine was ALU-bound, the new one is at the memory
-limit, and neither fact depends on cache residency. The saving is real on cold data.
+Identical to within 2%. The prefetcher keeps a linear walk fed; the streaming-read
+floor on this core is 0.0635 ns/B (15.8 GB/s), which the *new* routine essentially
+reaches while the old one was nowhere near it. So the replaced routine was
+ALU-bound, the new one sits at the memory limit, and neither fact depends on cache
+residency.
 
-So 0.12 ns/byte of expected saving is unaccounted for. What is *not* the
-explanation, checked: the kernel loop is present and inlined (§4.1, `ldp` pairs
-covering the 32-byte iteration, no `bl`); the transmit path walks each payload byte
-exactly once (`add_tcp_header` → `PseudoHeader` → `checksum_data(buffer, 0,
-buffer->size)`); and per-node call overhead is far too small at ~1900 bytes per
-node to account for it.
+**Hypothesis 2: the Haiku cross-gcc produced worse code than the host build.**
+Plausible on the evidence: the kernel add-on compiles with `-fno-tree-vectorize`
+and `-mcpu=neoverse-n1+crypto` — tuning for *Graviton2* on a Graviton3/4 host —
+neither of which the host benchmark had.
 
-**The decisive next experiment, named rather than done:** extract the
-*Haiku-cross-compiled* `checksum_data` out of the built kernel object with `objcopy`
-and benchmark it natively — the technique §3.0 credits to another agent on this
-tree. That separates "the Haiku cross-gcc produced worse code than the host gcc
-did" from "the transmit path does not spend as much in this routine as the
-arithmetic says it should". Until one of those is shown, **treat +2.37% as the
-measured value and 8.3% as a discredited estimate**, not the other way round.
+*Disproved, by linking the actually-shipped object into a native harness.*
+`compute_checksum` sits at `.text+0x38c` in the built `utility.o`, size 0x110 (68
+instructions, the whole loop inlined), and — checked, because it is the
+precondition for this technique — has **zero relocations** in that range: a
+self-contained leaf. Extracted with `objcopy --dump-section`, `mmap`ed executable,
+and called through a function pointer on the builder's Neoverse V1 core, alongside
+host-compiled copies of the same source.
+
+Gate first: the extracted blob agreed with both host-compiled routines on every
+length 0..600 × every alignment 0..7, **0 mismatches**, so the timings below are of
+the real thing.
+
+| variant | hot ns/B | cold ns/B |
+|---|---|---|
+| replaced loop (host gcc) | 0.2303 | 0.2312 |
+| new (host gcc, default flags) | 0.0497 | 0.0532 |
+| **new (Haiku cross gcc, the shipped bytes)** | **0.0501** | **0.0546** |
+
+**Within 1% hot and 3% cold.** Re-running the whole harness with `-O2
+-fno-tree-vectorize -mcpu=neoverse-n1+crypto` changed nothing (0.0495/0.0531), so
+those flags are not costing anything here either. The codegen is exonerated.
+
+**Hypothesis 3: the node walk.** `checksum_data()` gets one `data_node` at a time —
+about five per jumbo frame — pointer-chasing across freshly allocated, cache-cold
+slab memory. That is a different access pattern from a linear 512 MB stream, and
+the streaming control specifically showed the *linear* case is prefetcher-friendly.
+
+*Disproved.* Simulating it — 5 nodes of 1900 bytes per frame, nodes spaced 2048
+bytes apart as the slab allocates them, whole 512 MB working set, cold:
+
+| variant | node-walk ns/B |
+|---|---|
+| replaced loop | 0.2383 |
+| new (host gcc) | 0.0546 |
+| new (shipped kernel bytes) | 0.0560 |
+
+Saving **0.1823 ns/byte** — if anything *larger* than the linear case, not smaller.
+The access pattern is not it either.
+
+#### What that leaves
+
+The routine genuinely delivers **~0.18 ns/byte, with the exact bytes the kernel
+ships, on the exact access pattern the kernel uses**. The transmit path delivers
+0.0496. So the conclusion is arithmetic:
+
+> **The transmit path puts only about 27% of the payload through this routine** —
+> 0.0496 / 0.1823 — or else `nettput`'s cost metric does not attribute all of the
+> removed work.
+
+That is not a dilution effect and not a measurement artefact of the A/B, which is
+solid (§7.2). It is a statement about the transmit path that contradicts a reading
+of the code: `add_tcp_header()` prepends the header and *then* calls
+`Checksum::PseudoHeader()` → `checksum_data(buffer, 0, buffer->size, false)`, which
+should walk header plus every payload byte, once per segment, for 100% of the data.
+
+**The experiment that closes it, named and not done:** add a byte counter to
+`checksum_data()` — exactly the technique that settled the ENA receive-offload
+question in §6, where counting what the device actually did overturned what the
+capability word said. Sum the `size` argument over a transfer of known length and
+compare against the bytes sent. If it comes back at ~27% of the payload, the
+transmit path is not checksumming what the code appears to say it does, and *that*
+is the finding. If it comes back at 100%, then `nettput`'s summed
+`cpu_info::active_time` is not capturing ~130 µs/MiB of removed work and the metric
+needs auditing before anyone prices another offload with it. Either answer is worth
+having, and one of them is a bug.
+
+Until then: **+2.37% is the measured value and 8.3% is a discredited estimate**, and
+the discrepancy is a property of the transmit path or of the cost metric, not of the
+checksum.
 
 ## 8. What shipped, and what it interacts with
 
@@ -534,25 +595,50 @@ measured value and 8.3% as a discredited estimate**, not the other way round.
 Measured end to end at **+2.37% transmit CPU per MiB** (p = 0.014) across 8
 interleaved boots on `c7g.4xlarge`, with receive as a clean negative control. §7.2.
 
-**Interaction with `feat/ena-tx-offload` transmit checksum offload, stated
-plainly: these two are partly substitutes, not additive.** The device supports
-IPv4 L4 partial checksum on transmit. Where offload applies it removes the walk
-entirely, and this change's saving is subsumed rather than added to.
+### 8.1 What this change is *for*: breadth, not a share of the transmit number
 
-There is a warning for that work in §7.3, and it is worth taking seriously: the
-isolated routine predicted 0.173 ns/byte and the transmit path delivered 0.0496.
-Whatever causes that 3× shortfall is a property of the transmit path, not of the
-arithmetic — so **an offload estimate built the same way, by pricing the removed
-checksum at its isolated cost, will be too high by a similar factor.** The honest
-prior for TX checksum offload on this path is therefore closer to 2–3% than to the
-~11% that 0.228 ns/byte against 2.09 ns/byte suggests. Worth measuring rather than
-assuming, on 4xlarge, with a pinned send buffer and arms interleaved across boots. This change is still
-worth having for everything offload cannot cover — IPv6 while bit 3 stays clear,
-non-TCP/UDP protocols, fragments, loopback, any future non-ENA driver — and for
-the overflow fixes, which are correctness rather than speed. But if transmit
-checksum offload lands and works, the marginal value of the faster loop on the
-ENA transmit path drops to roughly nothing, and whoever sequences this should
-expect that rather than adding the two numbers.
+Stated first, because it is the durable answer and the transmit percentage is not.
+
+**On the TCP transmit path over ENA, this change and `feat/ena-tx-offload`'s
+checksum offload are near-complete substitutes, not partial ones.** Once offload is
+on, TCP does not call `compute_checksum()` over the payload at all — there is no
+residual walk for a faster loop to speed up. That is a correction to my own earlier
+"partly substitutes" framing, and it moves *against* this change: with the real
+4.15× rather than the 2.4× that agent had assumed, the arithmetic is that the loop
+costs ~239 µs/MiB today and ~58 µs/MiB after this change, so this removes ~181,
+while offload removes a measured 301–361. Combined ≈12.6–15.1%, **not** the ~20%
+that summing the two headlines would give.
+
+So the value of this change is what offload cannot reach:
+
+- **loopback**, which has no device to offload to
+- **any non-ENA device**, and ENA before/without the offload path
+- **IPv6**, for as long as offload bit 3 stays clear (§6) — which is to say, for as
+  long as we do not declare the host_info bit
+- **non-TCP/UDP protocols**, ICMP and ICMPv6
+- **IP fragments**, and the per-fragment header checksum in `ipv4.cpp:647`
+- **receive**, wherever the device did not validate — including every IPv4 header
+  now that §5 stopped pretending it had been checked
+- and the **two overflow fixes**, which are correctness and do not substitute for
+  anything
+
+That list, plus "it made a decades-old TODO false", is the case for it. The +2.37%
+is a true number about one path that is likely to be superseded on that path.
+
+### 8.2 A warning for anyone pricing an offload
+
+§7.3 is the transferable result: the isolated routine predicted 0.173 ns/byte and
+the transmit path delivered 0.0496, and the shortfall is **not** in the routine —
+codegen, cache residency and node-walk access pattern were each tested and
+eliminated. It is in the path or in the cost metric.
+
+So **an estimate built by pricing a removed operation at its isolated cost is
+unreliable on this path, in the direction of being too high**, by ~3.7× in the one
+case where both the estimate and the measurement exist. Anyone estimating TX
+checksum offload the same way should expect the same discount until §7.3's byte
+counter says otherwise, and should measure on 4xlarge with a pinned send buffer and
+arms interleaved across boots (M1, M2) rather than on `c7g.large`, where cost is
+bimodal by boot at 19%.
 
 The L3 fix moves in the opposite direction by a negligible amount: the stack now
 verifies 20 bytes of IPv4 header per frame that it previously skipped, ~0.2% of a
@@ -571,10 +657,16 @@ verifies 20 bytes of IPv4 header per frame that it previously skipped, ~0.2% of 
   carry-heavy data. §2.
 - **Measuring a module A/B on `c7g.large`.** Defeated by per-boot bimodality. §7.0.
   Redone successfully on `c7g.4xlarge`, where the bimodality is absent. §7.2.
-- **"The kernel's checksum walk is memory-bound, which is why only 29% of the
-  isolated saving appears."** The most plausible explanation for the shortfall, and
-  wrong: cold-streamed 512 MB gives the same 4.05× and the same 0.1725 ns/byte
-  saving as an L1-resident buffer. Still unexplained. §7.3.
+- **Three explanations for why only 27% of the isolated saving appears, all wrong.**
+  (a) *Memory-bound walk*: cold-streamed 512 MB gives the same 4.05× and the same
+  0.1725 ns/byte saving as an L1-resident buffer, and the new routine sits at the
+  core's streaming-read floor. (b) *Haiku cross-gcc codegen*, suspected because the
+  kernel builds with `-fno-tree-vectorize` and `-mcpu=neoverse-n1` on a Graviton3/4
+  host: the shipped bytes, extracted with `objcopy` and run natively, are within 1%
+  hot and 3% cold of the host build, and adding those flags to the host build changes
+  nothing. (c) *Node-walk pointer-chasing over cold slab memory*: simulated at 5
+  nodes of 1900 bytes per frame, 2048-byte stride, and the saving is 0.1823 ns/byte —
+  *larger* than the linear case. The shortfall is in the path or the metric. §7.3.
 - **Pricing an offload by the isolated cost of the work it removes.** The routine
   said 0.173 ns/byte; the path delivered 0.0496. Any estimate built that way,
   including for TX checksum offload, should be discounted until measured. §8.
