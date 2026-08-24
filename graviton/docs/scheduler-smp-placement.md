@@ -687,9 +687,17 @@ rationalised afterwards. Each is falsifiable and each names which fix it tests.
    result that Fix 1 *cannot* produce.
 3. **Migration counts stay small and non-zero.** `-g` at N = 16 should show
    `migr_tot` on the order of **1–20** per run — a handful of corrective moves —
-   not the 0 of the stock kernel and not thousands. Specifically `migr_max` should
-   be small (single digits). **If `migr/1ks` rises above ~5, that is thrashing and
-   the fix is wrong even if the busy sets look perfect.**
+   not thousands. **If `migr/1ks` rises above ~5, that is thrashing and the fix is
+   wrong even if the busy sets look perfect.**
+
+   > **Wording corrected after the fact (§5.12).** As first written this said "not
+   > the 0 of the stock kernel", implying the baseline migrates ~zero and the fix
+   > would raise it slightly. The baseline is *near* zero but not zero
+   > (`migr/1ks` 0.08–0.25), and more importantly the comparison is not the
+   > interesting one: the baseline migrates **less** precisely because it only ever
+   > uses 5–14 of 16 CPUs, so it has less spreading to do. The falsification
+   > criterion — `migr/1ks` above ~5 — is the part that matters and is unchanged.
+   > The prediction is scored against that.
 4. **N = 17 does not change.** It should stay at `max/min ≈ 2.00` with all 16 CPUs
    busy, because 17 threads on 16 cores must double exactly one. An "improvement"
    here means something is migrating pointlessly.
