@@ -1,13 +1,27 @@
-# Haiku — Graviton/ARM64 branch (AGENTS.md)
+# DeBeOS — ARM-first OS (AGENTS.md)
 
 Guidance for AI agents and human contributors working in this tree.
 
-## What this branch is
+## What this is
 
-This is a fork of [Haiku](https://www.haiku-os.org/) (a BeOS-inspired open-source
-OS) whose `graviton` branch tracks upstream `master` (see `.gitreview` →
-`haiku.git`) and adds work to bring Haiku up on **AWS Graviton / ARM64 EC2**.
-The active work concentrates in two areas:
+**DeBeOS**, an independent operating system project descended from
+[Haiku](https://www.haiku-os.org/) and BeOS (see [README.md](README.md)). Haiku and
+BeOS are the **historical lineage** and the bulk of the code is still Haiku's, under
+its own licence — but DeBeOS **does not track or merge from upstream Haiku**. A
+read-only `haiku-upstream` remote exists for reference and lineage only, and is never
+merged.
+
+Practically, that means: **work here is DeBeOS's own implementation, not a patch
+meant for Haiku.** Frame driver and kernel changes that way. Several bugs fixed in
+this tree are generic Haiku bugs affecting every architecture; they are fixed here and
+documented plainly, and that is the end of the obligation. If something is genuinely
+upstream-worthy for Haiku itself, say so as a separate, explicit, optional path —
+never as the default (Haiku's contribution policy rules out most AI-assisted patches
+anyway).
+
+DeBeOS is **ARM-first**: AWS Graviton / ARM64 EC2 is the current flagship, with
+Raspberry Pi 5, Raspberry Pi 3 and RISC-V on the roadmap. The active work
+concentrates in two areas:
 
 - **arm64 kernel** — `src/system/kernel/arch/arm64/`
   - GICv3 ITS interrupt controller: `gicv3_its.cpp`, `gicv3_its.h`, `gicv3_regs.h`
@@ -114,12 +128,15 @@ Booting is verified on real AWS Graviton (arm64) EC2 instances in **us-west-2**.
 
 ## Contributing / workflow
 
-- `origin` is this fork: `github.com/felipedbene/Haiku-Graviton`. The `master`
-  branch mirrors upstream Haiku and `graviton` is the working branch; upstream
-  is periodically merged in (`Merge branch 'haiku:master' into graviton`).
-- `.gitreview` (haiku.git / Gerrit) is vestigial config inherited from upstream
-  Haiku — it is **not** the push target here. Work lands via `fix/issue-N`
-  topic branches merged into `graviton` on the fork.
+- `origin` is DeBeOS: `github.com/felipedbene/Haiku-Graviton` (repository not yet
+  renamed). `graviton` is the working branch and DeBeOS's own trunk. The `master`
+  branch is a historical mirror of upstream Haiku and is **no longer updated**.
+- **`haiku-upstream` is read-only and is never merged.** Historical
+  `Merge branch 'haiku:master'` commits predate the split and stay as-is for lineage
+  credit; there will be no more of them. `.gitreview` (haiku.git / Gerrit) has been
+  removed — it was inherited config and was never the push target.
+- Work lands via topic branches merged into `graviton`. **Never commit directly to
+  `graviton`.**
 - Follow upstream code style; the C++ style guide still applies:
   <https://www.haiku-os.org/development/coding-guidelines/>.
 - Do not commit or push unless asked. When you do, keep unrelated changes in

@@ -241,7 +241,7 @@ image, and its `-w` flag sets `SO_SNDBUF`/`SO_RCVBUF` before `connect()`.
    showed up here.
 5. **No send-side auto-sizing exists at all**, so `SetSendBufferSize()` has no
    flag to clear and this defect has no send-side twin. The trap is still there
-   in a different shape: since this fork raised the send default to 256 KiB, an
+   in a different shape: since DeBeOS raised the send default to 256 KiB, an
    application that sets `SO_SNDBUF` to 64 KiB now makes its own transmits three
    times slower, and the kernel is right to obey it. Send auto-sizing is the real
    answer and remains open.
