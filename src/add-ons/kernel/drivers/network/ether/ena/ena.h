@@ -174,6 +174,30 @@ extern "C" {
 #define ENA_WATCHDOG_INTERVAL_US	1000000
 #define ENA_KEEP_ALIVE_TIMEOUT_US	6000000
 
+/* How many consecutive checks must find the deadline missed before the device is
+   reset. One is not enough, and that is measured rather than supposed: under
+   sustained receive load the deadline was missed by 2.9% to 9.3% -- ages of 6174
+   to 6560 ms against a 6000 ms limit -- and every one of those reset a device
+   that was carrying traffic perfectly well. Ten occurrences, not one of them a
+   device that had stopped. See
+   graviton/docs/ena-keepalive-watchdog-false-reset.md.
+
+   Requiring two consecutive misses is deliberately not the same thing as raising
+   the deadline. A late keep-alive is transient: the next one arrives,
+   lastKeepAlive advances, the count returns to zero and nothing is reset. What
+   this refuses to do is reset on a single sample. A device that has genuinely
+   stopped stays silent, keeps missing, and is still reset -- which is the whole
+   point of the watchdog and must survive the fix.
+
+   The arithmetic, stated plainly because the constant hides it: checks are
+   ENA_WATCHDOG_INTERVAL_US apart, so N misses means silence of
+   ENA_KEEP_ALIVE_TIMEOUT_US + (N-1) * ENA_WATCHDOG_INTERVAL_US, i.e. 7 s at
+   N = 2 -- not 12 s. That is 0.44 s of margin over the worst stretch yet seen,
+   and this is the one constant to raise if a heavier load exceeds it (N = 7 would
+   give 12 s). Because the non-final misses are logged, a cadence that starts
+   creeping becomes visible before it becomes a reset. */
+#define ENA_KEEP_ALIVE_MISSES_BEFORE_RESET	2
+
 #define ENA_ADMIN_POLL_TIMEOUT_US	500000
 #define ENA_MIN_POLL_DELAY_US		100
 
@@ -186,7 +210,7 @@ extern "C" {
    out to be an unloaded driver rather than an ineffective change. Bump it with
    any change being measured, and read it back out of the syslog before believing
    a number. */
-#define ENA_BUILD_STAMP		"irq-cadence-1"
+#define ENA_BUILD_STAMP		"irq-cadence-2-wd"
 
 #ifdef ENA_DEBUG_FAULT_INJECTION
 /* Private ioctl for provoking a watchdog timeout without breaking hardware: it
@@ -449,6 +473,11 @@ struct ena_haiku_device {
 	   "last seen at the epoch" and would reset a healthy NIC six seconds into
 	   every boot. */
 	int64				lastKeepAlive;
+	/* Consecutive watchdog checks that have found the keep-alive deadline
+	   missed. Reset by the first check that finds the device talking again, so it
+	   counts a run of misses and not a total. Touched only by the watchdog
+	   thread, so it needs no atomics; see ENA_KEEP_ALIVE_MISSES_BEFORE_RESET. */
+	uint32				keepAliveMisses;
 
 	/* Set for the duration of a reset. The datapath tests it *under* txLock or
 	   rxLock, never on its own: a bare flag is check-then-act, and a receiver

@@ -1837,13 +1837,27 @@ ena_watchdog(void* arg)
 		   by a flag test at the trigger. */
 		if (!device->watchdogActive || !device->running || device->resetting
 			|| device->deviceDead) {
+			/* Not being watched, so any run of misses recorded before this is
+			   over: carrying it across a down/up or a reset would let two
+			   unrelated samples add up to a reset. */
+			device->keepAliveMisses = 0;
 			continue;
 		}
 
 		const bigtime_t last = atomic_get64(&device->lastKeepAlive);
 		const bigtime_t age = system_time() - last;
-		if (age <= ENA_KEEP_ALIVE_TIMEOUT_US)
+		if (age <= ENA_KEEP_ALIVE_TIMEOUT_US) {
+			if (device->keepAliveMisses != 0) {
+				/* Logged, because this is the line that says a reset was
+				   correctly *not* performed. Without it the fix is invisible
+				   when it works, and a fix that is invisible when it works is
+				   indistinguishable from a broken watchdog. */
+				TRACE_ALWAYS("keep-alive recovered after %" B_PRIu32 " missed "
+					"deadline(s); no reset\n", device->keepAliveMisses);
+				device->keepAliveMisses = 0;
+			}
 			continue;
+		}
 
 		/* If a keep-alive is sitting unconsumed in the AENQ then the device is
 		   alive and it is our interrupt that went missing. Distinguishing the
@@ -1853,12 +1867,31 @@ ena_watchdog(void* arg)
 		if (ena_com_aenq_has_keep_alive(&device->comDev))
 			reason = ENA_REGS_RESET_MISSING_ADMIN_INTERRUPT;
 
+		device->keepAliveMisses++;
+
+		/* One missed deadline is not evidence of a dead device -- measured, see
+		   ENA_KEEP_ALIVE_MISSES_BEFORE_RESET. Say so and look again next tick;
+		   the run has to continue for the device to be reset. */
+		if (device->keepAliveMisses < ENA_KEEP_ALIVE_MISSES_BEFORE_RESET) {
+			TRACE_ALWAYS("keep-alive deadline missed (%" B_PRId64 " ms since the "
+				"last event, limit %d ms, reason %s); miss %" B_PRIu32 " of %d, "
+				"not resetting yet\n", age / 1000,
+				ENA_KEEP_ALIVE_TIMEOUT_US / 1000,
+				reason == ENA_REGS_RESET_MISSING_ADMIN_INTERRUPT
+					? "missing admin interrupt" : "keep-alive timeout",
+				device->keepAliveMisses, ENA_KEEP_ALIVE_MISSES_BEFORE_RESET);
+			continue;
+		}
+
 		ERROR("keep-alive watchdog timeout: %" B_PRId64 " ms since the last "
-			"event (limit %d ms), reason %s\n", age / 1000,
+			"event (limit %d ms), reason %s, after %" B_PRIu32 " consecutive "
+			"missed deadlines\n", age / 1000,
 			ENA_KEEP_ALIVE_TIMEOUT_US / 1000,
 			reason == ENA_REGS_RESET_MISSING_ADMIN_INTERRUPT
-				? "missing admin interrupt" : "keep-alive timeout");
+				? "missing admin interrupt" : "keep-alive timeout",
+			device->keepAliveMisses);
 
+		device->keepAliveMisses = 0;
 		ena_watchdog_reset(device, reason);
 	}
 
