@@ -18,6 +18,7 @@
 #include <ether_driver.h>
 #include <lock.h>
 #include <net_buffer.h>
+#include <net_device.h>
 
 extern "C" {
 #include "ena-com/ena_com.h"
@@ -437,6 +438,24 @@ struct ena_haiku_device {
 	   path pays -- which is how the cost of one doorbell was priced without
 	   having to build the batched entry point first. Zero unless asked for. */
 	int32				txExtraDoorbells;
+
+	/* --- transmit checksum offload --------------------------------------- */
+	/* net_device_tx_checksum bits, as reported through
+	   ETHER_GET_TX_CHECKSUM_OFFLOAD. Zero unless the device advertised the
+	   partial (pseudo-header-seeded) form *and* transmit runs in LLQ placement
+	   *and* the driver settings did not turn it off. Once this is non-zero the
+	   stack stops computing TCP checksums for this interface, so it must never
+	   claim more than ena_prepare_tx_checksum() can actually deliver. */
+	uint32				txChecksumOffload;
+
+	/* Frames handed to the device with the checksum left to it, and frames that
+	   arrived asking for that but did not survive validation. The second must
+	   stay at zero: it means something above set
+	   NET_BUFFER_L4_CHECKSUM_NEEDED on a frame this device cannot finish, and
+	   those frames are dropped rather than put on the wire with a wrong
+	   checksum. */
+	uint64				txChecksumOffloaded;
+	uint64				txChecksumRejected;
 };
 
 

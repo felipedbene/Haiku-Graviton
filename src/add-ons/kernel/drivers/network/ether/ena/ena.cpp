@@ -16,9 +16,9 @@
  *
  * Scope of this version: one TX/RX queue pair, and a frame may span several
  * descriptors in either direction, so the MTU is whatever the device advertises
- * up to the jumbo ceiling the ethernet device layer will accept. Frames are
- * still copied through per-descriptor bounce buffers, transmit checksum
- * offload is not implemented, and multiple queues with RSS remain a separate
+ * up to the jumbo ceiling the ethernet device layer will accept. Layer-4
+ * checksums are offloaded in both directions. Frames are still copied through
+ * per-descriptor bounce buffers, and multiple queues with RSS remain a separate
  * change.
  */
 
@@ -30,6 +30,7 @@
 #include <string.h>
 
 #include <net/if_media.h>
+#include <netinet/in.h>
 
 #include <driver_settings.h>
 #include <kernel.h>
@@ -586,10 +587,12 @@ ena_configure_placement_policy(ena_haiku_device* device,
 
 /*!	Records what the device says it can offload, and reads the transmit knobs.
 
-	Nothing here changes behaviour on its own. The capability word is put on the
-	record because the doorbell question (see the txBurst* counters in ena.h)
-	needed the LLQ burst allowance settled before any code was written for it, and
-	because transmit checksum offload will want the rest of it.
+	Nothing here changes behaviour on its own. The capability word is wanted for
+	two separate reasons: transmit checksum offload needs to know whether the
+	device will finish a partially-computed L4 sum or insists on computing the
+	whole thing, and the doorbell question (see the txBurst* counters in ena.h)
+	needed the LLQ burst allowance on the record before any code was written for
+	it.
 
 	The bit layout is documented at ena_admin_defs.h:846-858.
 */
@@ -613,9 +616,32 @@ ena_report_offload_capabilities(ena_haiku_device* device,
 		offload->rx_supported, offload->rx_enabled);
 
 	device->txBurstLeftMin = 0xffff;
+	device->txChecksumOffload = 0;
 
+	/* Only the *partial* form is any use to us, and it is also the only form
+	   this device offers (tx 0x3 on Graviton3: ipv4 l3 csum and ipv4 l4 csum
+	   part, with full absent). Partial means the packet arrives with the folded
+	   pseudo-header sum already in the checksum field and the device folds the
+	   rest in -- which is precisely the contract
+	   NET_BUFFER_L4_CHECKSUM_NEEDED describes, and it is what lets the stack
+	   skip its pass over the payload.
+
+	   The "full" variant is deliberately not used even if a device offers it:
+	   the two are mutually exclusive in the descriptor (l4_csum_partial), the
+	   stack would have to be told which convention to write, and computing a
+	   pseudo-header sum costs a handful of adds either way. One code path.
+
+	   IPv6 is claimed only if the device claims it; this one does not. */
+	bool partialIPv4
+		= get_ena_admin_feature_offload_desc_TX_L4_ipv4_csum_part(offload) != 0;
+	bool partialIPv6
+		= get_ena_admin_feature_offload_desc_TX_L4_ipv6_csum_part(offload) != 0;
+
+	bool enabled = true;
 	void* handle = load_driver_settings("ena");
 	if (handle != NULL) {
+		enabled = get_driver_boolean_parameter(handle, "tx_checksum_offload",
+			true, true);
 		const char* value = get_driver_parameter(handle,
 			"tx_extra_doorbells", NULL, NULL);
 		if (value != NULL) {
@@ -627,6 +653,127 @@ ena_report_offload_capabilities(ena_haiku_device* device,
 		}
 		unload_driver_settings(handle);
 	}
+
+	/* LLQ only. In device placement the frame's headers are pushed into the
+	   device's own memory window, so the descriptor's header_length already
+	   means "bytes pushed" and covering the layer-4 header is free. Host
+	   placement needs header_length set to the layer-4 offset plus header size
+	   instead -- a different rule, on a path this hardware never takes, and
+	   untested code in a checksum path is worse than no code. */
+	if (device->comDev.tx_mem_queue_type != ENA_ADMIN_PLACEMENT_POLICY_DEV) {
+		TRACE_ALWAYS("transmit checksum offload off: host placement\n");
+		return;
+	}
+	if (!enabled) {
+		TRACE_ALWAYS("transmit checksum offload off by driver settings\n");
+		return;
+	}
+
+	if (partialIPv4)
+		device->txChecksumOffload |= NET_DEVICE_TX_CHECKSUM_IPV4_L4;
+	if (partialIPv6)
+		device->txChecksumOffload |= NET_DEVICE_TX_CHECKSUM_IPV6_L4;
+
+	TRACE_ALWAYS("transmit checksum offload: advertising %#" B_PRIx32 "\n",
+		device->txChecksumOffload);
+}
+
+
+/*!	Asks the device to finish this frame's layer-4 checksum.
+
+	Returns true if the request was programmed into \a context, false if the
+	frame is not one this device can finish -- in which case the caller must not
+	transmit it, because the protocol above has already declined to compute the
+	checksum and nothing else will.
+
+	Everything is read out of \a frame, the contiguous bounce copy the caller has
+	just made, rather than out of the net_buffer: the headers are then a pointer
+	dereference away instead of a walk across a node chain.
+
+	The validation is deliberately stricter than the negotiation. The stack only
+	sets NET_BUFFER_L4_CHECKSUM_NEEDED for TCP over a family this device claimed,
+	so every rejection here is a bug somewhere above -- which is exactly why it is
+	checked rather than assumed, and why the caller counts and drops instead of
+	putting a frame with a half-computed checksum on the wire.
+*/
+static bool
+ena_prepare_tx_checksum(ena_haiku_device* device,
+	struct ena_com_tx_ctx* context, const uint8* frame, size_t frameLength,
+	size_t pushedHeaderLength)
+{
+	/* Big-endian 16-bit read from an arbitrary offset. Byte-wise so that it
+	   does not depend on unaligned loads being legal. */
+	#define ENA_READ_BE16(p) \
+		((uint16)(((uint16)((p)[0]) << 8) | (uint16)((p)[1])))
+
+	if (frameLength < ETHER_HEADER_LENGTH + 20)
+		return false;
+
+	if (ENA_READ_BE16(frame + 12) != ETHER_TYPE_IP)
+		return false;
+	if ((device->txChecksumOffload & NET_DEVICE_TX_CHECKSUM_IPV4_L4) == 0)
+		return false;
+
+	const uint8* ip = frame + ETHER_HEADER_LENGTH;
+	if ((ip[0] >> 4) != 4)
+		return false;
+	const uint16 ipHeaderLength = (uint16)((ip[0] & 0x0f) * 4);
+	if (ipHeaderLength < 20)
+		return false;
+
+	/* A fragment carries only part of the layer-4 payload, and the sum has to
+	   cover all of it, so neither the offset nor the more-fragments bit may be
+	   set. The remaining bit of that field is DF, which the descriptor wants
+	   told separately. */
+	const uint16 fragmentField = ENA_READ_BE16(ip + 6);
+	if ((fragmentField & 0x3fff) != 0)
+		return false;
+
+	const uint8 protocol = ip[9];
+	if (protocol != IPPROTO_TCP && protocol != IPPROTO_UDP)
+		return false;
+
+	const size_t l4Offset = ETHER_HEADER_LENGTH + ipHeaderLength;
+	uint16 l4HeaderLength;
+	if (protocol == IPPROTO_TCP) {
+		if (frameLength < l4Offset + 20)
+			return false;
+		l4HeaderLength = (uint16)((frame[l4Offset + 12] >> 4) * 4);
+		if (l4HeaderLength < 20)
+			return false;
+	} else
+		l4HeaderLength = 8;
+
+	if (frameLength < l4Offset + l4HeaderLength)
+		return false;
+
+	/* The device modifies the checksum field, so the whole layer-4 header has
+	   to be inside what was pushed into its memory window. With a 224 byte push
+	   limit and headers that cannot exceed 14 + 60 + 60 this never bites; it is
+	   here so that it cannot start to. */
+	if (pushedHeaderLength < l4Offset + l4HeaderLength)
+		return false;
+
+	context->meta_valid = 1;
+	context->l3_proto = ENA_ETH_IO_L3_PROTO_IPV4;
+	context->l4_proto = protocol == IPPROTO_TCP
+		? ENA_ETH_IO_L4_PROTO_TCP : ENA_ETH_IO_L4_PROTO_UDP;
+	context->l4_csum_enable = 1;
+	context->l4_csum_partial = 1;
+	context->df = (fragmentField & 0x4000) != 0 ? 1 : 0;
+
+	/* mss is for TSO, which is not enabled; the header geometry is what the
+	   device needs to find the field. l4_hdr_len is in 32-bit words, matching
+	   the TCP data-offset field it came from. The meta descriptor is cached by
+	   ena-com and only re-emitted when one of these changes, so a steady stream
+	   costs no extra descriptor at all. */
+	context->ena_meta.mss = 0;
+	context->ena_meta.l3_hdr_offset = ETHER_HEADER_LENGTH;
+	context->ena_meta.l3_hdr_len = ipHeaderLength;
+	context->ena_meta.l4_hdr_len = (uint16)(l4HeaderLength / 4);
+
+	#undef ENA_READ_BE16
+	return true;
 }
 
 
@@ -2470,6 +2617,33 @@ ena_send(ena_haiku_device* device, net_buffer* buffer)
 		context.header_len = headerLength;
 	}
 
+	/* Ahead of ena_com_is_doorbell_needed() below, which counts the meta
+	   descriptor this may add, and ahead of the descriptor adjustment further
+	   down, which moves comBuffers[0] past the pushed header. */
+	if ((buffer->buffer_flags & NET_BUFFER_L4_CHECKSUM_NEEDED) != 0) {
+		if (ena_prepare_tx_checksum(device, &context,
+				(const uint8*)device->txBuffers[requestId].slot.data, size,
+				headerLength)) {
+			device->txChecksumOffloaded++;
+		} else {
+			/* The frame's checksum was never computed and this device will not
+			   compute it either, so there is nothing to send: on the wire it
+			   would be silently discarded by the peer, which is strictly worse
+			   than a drop the sender can see. Only reachable if something above
+			   asked for offload on a frame the negotiation does not cover, so
+			   it is loud. */
+			device->txChecksumRejected++;
+			if (device->txChecksumRejected <= 8) {
+				ERROR("a %" B_PRIuSIZE " byte frame asked for transmit checksum "
+					"offload this device cannot do; dropping it (%" B_PRIu64
+					" so far)\n", size, device->txChecksumRejected);
+			}
+			for (uint16 j = 0; j < segments; j++)
+				device->txFreeIds[device->txFreeCount++] = slotIds[j];
+			return B_NOT_SUPPORTED;
+		}
+	}
+
 	/* Skip the pushed header in the first descriptor. It can consume that
 	   descriptor entirely, which only happens for a single-segment frame that is
 	   all header -- a longer frame's first segment is a whole 2048 byte slot and
@@ -2571,10 +2745,12 @@ ena_send(ena_haiku_device* device, net_buffer* buffer)
 	if ((device->txFrames % 100000) == 0) {
 		TRACE_ALWAYS("tx: %" B_PRIu64 " frames, %" B_PRIu64 " doorbells "
 			"(+%" B_PRId32 " forced per frame), burst left min %u, exhausted %"
-			B_PRIu64 " (%u entries per burst, %u descs before header, %u descs "
-			"per entry; this frame %" B_PRIuSIZE " bytes in %d descriptors)\n",
+			B_PRIu64 ", csum offloaded %" B_PRIu64 " rejected %" B_PRIu64
+			" (%u entries per burst, %u descs before header, %u descs per "
+			"entry; this frame %" B_PRIuSIZE " bytes in %d descriptors)\n",
 			device->txFrames, device->txDoorbells, device->txExtraDoorbells,
 			device->txBurstLeftMin, device->txBurstExhausted,
+			device->txChecksumOffloaded, device->txChecksumRejected,
 			device->comDev.llq_info.max_entries_in_tx_burst,
 			device->comDev.llq_info.descs_num_before_header,
 			device->comDev.llq_info.descs_per_entry,
@@ -2884,6 +3060,17 @@ ena_ioctl(void* cookie, uint32 op, void* buffer, size_t length)
 			if (length != sizeof(frameSize))
 				return B_BAD_VALUE;
 			return user_memcpy(buffer, &frameSize, sizeof(frameSize));
+		}
+
+		case ETHER_GET_TX_CHECKSUM_OFFLOAD:
+		{
+			/* Answered from a value settled once at bring-up, so a reset cannot
+			   change it under the stack: the stack reads this when the interface
+			   comes up and then stops computing checksums for it. */
+			uint32 offload = device->txChecksumOffload;
+			if (length != sizeof(offload))
+				return B_BAD_VALUE;
+			return user_memcpy(buffer, &offload, sizeof(offload));
 		}
 
 		case ENA_IOCTL_TX_EXTRA_DOORBELLS:
