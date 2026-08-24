@@ -19,6 +19,13 @@
  *   ena_fault 1            suppress until the watchdog fires once
  *   ena_fault 2            suppress until cleared (repeated resets)
  *   ena_fault hold <ms>    stall the next reset for <ms>, 0 to disable
+ *   ena_fault doorbells <n>  ring the transmit doorbell n extra times per frame
+ *
+ * The doorbell knob is a measurement tool rather than a fault, and unlike the
+ * other two it is always compiled into the driver. It prices one doorbell write
+ * without needing the batched transmit entry point that real coalescing would
+ * require, and because it takes effect immediately the A/B can be interleaved
+ * inside one boot.
  *
  * Opening the device while the network stack holds it open is safe and is
  * deliberately part of the test: it exercises the open-count guard that makes a
@@ -42,7 +49,9 @@
    into a userland tool. */
 #define ENA_IOCTL_SUPPRESS_KEEP_ALIVE	9800
 #define ENA_IOCTL_HOLD_RESET		9801
+#define ENA_IOCTL_TX_EXTRA_DOORBELLS	9802
 #define ENA_MAX_RESET_HOLD_MS		30000
+#define ENA_MAX_EXTRA_DOORBELLS		64
 
 #define ENA_DEVICE_PATH			"/dev/net/ena/0"
 
@@ -52,12 +61,15 @@ usage(const char* program)
 {
 	fprintf(stderr, "usage: %s <0|1|2>\n"
 		"       %s hold <milliseconds>\n"
+		"       %s doorbells <n>\n"
 		"  0             stop suppressing keep-alive\n"
 		"  1             suppress until the watchdog fires once\n"
 		"  2             suppress until cleared (repeated resets)\n"
 		"  hold <ms>     stall the next reset for <ms> at its widest point, so a\n"
-		"                concurrent \"ifconfig down\" can be aimed at it; 0 disables\n",
-		program, program);
+		"                concurrent \"ifconfig down\" can be aimed at it; 0 disables\n"
+		"  doorbells <n> ring the transmit doorbell <n> extra times per frame, to\n"
+		"                price one doorbell write; 0 restores normal behaviour\n",
+		program, program, program);
 }
 
 
@@ -89,6 +101,18 @@ send_value(const char* program, uint32 op, int32 value, const char* description)
 int
 main(int argc, char** argv)
 {
+	if (argc == 3 && strcmp(argv[1], "doorbells") == 0) {
+		int32 extra = (int32)strtol(argv[2], NULL, 10);
+		if (extra < 0 || extra > ENA_MAX_EXTRA_DOORBELLS) {
+			fprintf(stderr, "%s: doorbells must be between 0 and %d\n", argv[0],
+				ENA_MAX_EXTRA_DOORBELLS);
+			return 1;
+		}
+
+		return send_value(argv[0], ENA_IOCTL_TX_EXTRA_DOORBELLS, extra,
+			"extra transmit doorbells per frame set to");
+	}
+
 	if (argc == 3 && strcmp(argv[1], "hold") == 0) {
 		int32 milliseconds = (int32)strtol(argv[2], NULL, 10);
 		if (milliseconds < 0 || milliseconds > ENA_MAX_RESET_HOLD_MS) {

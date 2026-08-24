@@ -31,6 +31,7 @@
 
 #include <net/if_media.h>
 
+#include <driver_settings.h>
 #include <kernel.h>
 #include <util/AutoLock.h>
 #include <vm/vm.h>
@@ -580,6 +581,52 @@ ena_configure_placement_policy(ena_haiku_device* device,
 		comDev->llq_info.descs_per_entry,
 		comDev->llq_info.max_entries_in_tx_burst,
 		comDev->tx_max_header_size);
+}
+
+
+/*!	Records what the device says it can offload, and reads the transmit knobs.
+
+	Nothing here changes behaviour on its own. The capability word is put on the
+	record because the doorbell question (see the txBurst* counters in ena.h)
+	needed the LLQ burst allowance settled before any code was written for it, and
+	because transmit checksum offload will want the rest of it.
+
+	The bit layout is documented at ena_admin_defs.h:846-858.
+*/
+static void
+ena_report_offload_capabilities(ena_haiku_device* device,
+	struct ena_com_dev_get_features_ctx* features)
+{
+	const struct ena_admin_feature_offload_desc* offload = &features->offload;
+
+	TRACE_ALWAYS("offload: tx %#" B_PRIx32 " (ipv4 l3 csum %d, ipv4 l4 csum "
+		"part %d full %d, ipv6 l4 csum part %d full %d, tso v4 %d v6 %d), "
+		"rx supported %#" B_PRIx32 ", rx enabled %#" B_PRIx32 "\n",
+		offload->tx,
+		(int)get_ena_admin_feature_offload_desc_TX_L3_csum_ipv4(offload),
+		(int)get_ena_admin_feature_offload_desc_TX_L4_ipv4_csum_part(offload),
+		(int)get_ena_admin_feature_offload_desc_TX_L4_ipv4_csum_full(offload),
+		(int)get_ena_admin_feature_offload_desc_TX_L4_ipv6_csum_part(offload),
+		(int)get_ena_admin_feature_offload_desc_TX_L4_ipv6_csum_full(offload),
+		(int)get_ena_admin_feature_offload_desc_tso_ipv4(offload),
+		(int)get_ena_admin_feature_offload_desc_tso_ipv6(offload),
+		offload->rx_supported, offload->rx_enabled);
+
+	device->txBurstLeftMin = 0xffff;
+
+	void* handle = load_driver_settings("ena");
+	if (handle != NULL) {
+		const char* value = get_driver_parameter(handle,
+			"tx_extra_doorbells", NULL, NULL);
+		if (value != NULL) {
+			int extra = atoi(value);
+			if (extra > 0 && extra <= ENA_MAX_EXTRA_DOORBELLS)
+				device->txExtraDoorbells = extra;
+			TRACE_ALWAYS("settings: tx_extra_doorbells %" B_PRId32 " (asked "
+				"for %s)\n", device->txExtraDoorbells, value);
+		}
+		unload_driver_settings(handle);
+	}
 }
 
 
@@ -1720,6 +1767,7 @@ ena_device_bringup(ena_haiku_device* device)
 		device->maxSupportedMtu);
 
 	ena_configure_placement_policy(device, &features.llq);
+	ena_report_offload_capabilities(device, &features);
 	ena_calculate_ring_sizes(device, &features);
 	if (device->txRingSize < ENA_MIN_RING_SIZE
 		|| device->rxRingSize < ENA_MIN_RING_SIZE) {
@@ -2470,17 +2518,68 @@ ena_send(ena_haiku_device* device, net_buffer* buffer)
 	for (uint16 i = 0; i < segments; i++)
 		entry->segmentIds[i] = slotIds[i];
 
-	/* One doorbell per frame, which is the thing the reference amortises and we
-	   cannot. Its ena_start_xmit() drains a queue of packets and rings the
-	   doorbell every ENA_DB_THRESHOLD (64) of them plus once at the end of the
-	   drain; the end-of-drain flush is what makes deferring safe. Haiku's
-	   ethernet device layer calls ETHER_SEND_NET_BUFFER once per net_buffer
-	   (ethernet.cpp:281) and tells us nothing about whether another is coming, so
-	   there is no "end" to flush at: a deferred doorbell with no successor is a
-	   frame that is never sent at all -- a single ping that hangs, not a slow
-	   one. Coalescing here therefore needs a batched transmit entry point in the
-	   stack, or a timer, and neither belongs in this change. */
+	/* One doorbell per frame, and -- measured, not assumed -- there is nothing
+	   here to amortise on this device.
+
+	   In LLQ placement the device grants a burst of
+	   llq_info.max_entries_in_tx_burst ring entries and a doorbell is what
+	   refills the allowance. This device grants **two**, and one jumbo frame
+	   consumes both: ena_com_is_doorbell_needed() wants
+	   1 + ceil((num_bufs - descs_num_before_header) / descs_per_entry) entries,
+	   which for a 9 KB frame in five bounce slots is 2. The counters below
+	   confirm it on hardware -- 99.94 % of transmit frames leave the allowance
+	   at zero -- so a deferred doorbell is forced by the very next frame and the
+	   achievable coalescing ratio is 1:1. See
+	   graviton/docs/ena-tx-offload.md section 5.
+
+	   Two things anyone reconsidering this needs, because neither is visible from
+	   here. First, deferring does not merely risk a frame going unsent: the wait
+	   loop above blocks on txCompleted with no timeout, and completions only
+	   arrive for descriptors the device has been told about, so a batch that
+	   fills the ring with un-rung descriptors waits on itself forever. Any
+	   implementation must ring before that wait, not after it. Second, the
+	   reference's guard for the several early returns above,
+	   ena_com_used_q_entries(), does not exist in the vendored
+	   ena_freebsd_2.8.4 HAL and cannot be added to it -- and ena_com_io_sq keeps
+	   no record of the last value written to db_addr, so a caller has to track
+	   its own. */
+
+	/* Read *before* the doorbell, because the doorbell is what refills the
+	   allowance. This is the measurement that decides whether the batched entry
+	   point is worth building at all: if one frame leaves zero entries, the very
+	   next frame is forced to ring anyway and there is nothing to amortise. */
+	const uint16 burstLeft
+		= device->txSubmissionQueue->entries_in_tx_burst_left;
+	if (burstLeft < device->txBurstLeftMin)
+		device->txBurstLeftMin = burstLeft;
+	if (burstLeft == 0)
+		device->txBurstExhausted++;
+	device->txFrames++;
+
 	ena_com_write_sq_doorbell(device->txSubmissionQueue);
+	device->txDoorbells++;
+
+	/* Debug knob only; zero unless driver settings asked otherwise. Writing the
+	   same tail again tells the device nothing new, so this buys nothing and
+	   costs exactly one MMIO write each -- which is the point: it prices a
+	   doorbell without having to build the batched entry point first. */
+	for (int32 i = 0; i < device->txExtraDoorbells; i++) {
+		ena_com_write_sq_doorbell(device->txSubmissionQueue);
+		device->txDoorbells++;
+	}
+
+	if ((device->txFrames % 100000) == 0) {
+		TRACE_ALWAYS("tx: %" B_PRIu64 " frames, %" B_PRIu64 " doorbells "
+			"(+%" B_PRId32 " forced per frame), burst left min %u, exhausted %"
+			B_PRIu64 " (%u entries per burst, %u descs before header, %u descs "
+			"per entry; this frame %" B_PRIuSIZE " bytes in %d descriptors)\n",
+			device->txFrames, device->txDoorbells, device->txExtraDoorbells,
+			device->txBurstLeftMin, device->txBurstExhausted,
+			device->comDev.llq_info.max_entries_in_tx_burst,
+			device->comDev.llq_info.descs_num_before_header,
+			device->comDev.llq_info.descs_per_entry,
+			size, descriptors);
+	}
 
 	return B_OK;
 }
@@ -2785,6 +2884,26 @@ ena_ioctl(void* cookie, uint32 op, void* buffer, size_t length)
 			if (length != sizeof(frameSize))
 				return B_BAD_VALUE;
 			return user_memcpy(buffer, &frameSize, sizeof(frameSize));
+		}
+
+		case ENA_IOCTL_TX_EXTRA_DOORBELLS:
+		{
+			int32 value;
+			if (length != sizeof(value))
+				return B_BAD_VALUE;
+			if (user_memcpy(&value, buffer, sizeof(value)) != B_OK)
+				return B_BAD_ADDRESS;
+			if (value < 0 || value > ENA_MAX_EXTRA_DOORBELLS)
+				return B_BAD_VALUE;
+			/* Plain store, no lock: the transmit path only reads it, and a
+			   frame that straddles the change is measured under whichever value
+			   it happens to see -- which over a multi-second run is one frame in
+			   millions. */
+			device->txExtraDoorbells = value;
+			TRACE_ALWAYS("tx_extra_doorbells now %" B_PRId32 " (at %" B_PRIu64
+				" frames, %" B_PRIu64 " doorbells)\n", value, device->txFrames,
+				device->txDoorbells);
+			return B_OK;
 		}
 
 		case ETHER_NONBLOCK:

@@ -213,6 +213,20 @@ extern "C" {
 #define ENA_MAX_RESET_HOLD_MS		30000
 #endif
 
+/* Measurement knob, always compiled in: ring the transmit doorbell N extra
+   times per frame. The extra writes carry the same tail the device has already
+   been told about, so they change nothing except how much MMIO the transmit path
+   pays -- which is exactly how the cost of one doorbell was priced without first
+   building the batched transmit entry point that real coalescing would need.
+
+   Settable at runtime rather than only through driver settings so that the A/B
+   can be interleaved inside a single boot; run-to-run transmit cost on this
+   hardware is bimodal at about +-10%, which swamps the effect being measured if
+   the conditions are separated by a reboot. See
+   graviton/docs/ena-tx-offload.md. */
+#define ENA_IOCTL_TX_EXTRA_DOORBELLS	9802
+#define ENA_MAX_EXTRA_DOORBELLS		64
+
 /* Refuse to attach below this, rather than dividing by a zero ring size if a
    device ever reports a nonsense depth. */
 #define ENA_MIN_RING_SIZE	16
@@ -402,6 +416,27 @@ struct ena_haiku_device {
 
 	uint32				multicastCount;
 	ether_address_t			multicast[ENA_MAX_MULTICAST];
+
+	/* --- transmit doorbell accounting ------------------------------------ */
+	/* Measurement, not diagnostics: the question these answer is whether
+	   deferring the per-frame doorbell could ever amortise it on this device.
+	   In LLQ mode the device grants a burst of only
+	   llq_info.max_entries_in_tx_burst ring entries between doorbells, and a
+	   doorbell is what refills that allowance -- so if one frame consumes the
+	   whole burst, no two consecutive frames can share a doorbell however
+	   clever the caller is. txBurstExhausted counts frames that left the
+	   allowance at zero. See graviton/docs/ena-tx-offload.md. */
+	uint64				txFrames;
+	uint64				txDoorbells;
+	uint64				txBurstExhausted;
+	uint16				txBurstLeftMin;
+
+	/* Debug knob, driver settings "tx_extra_doorbells": ring the doorbell this
+	   many extra times per frame. Writing the same tail again is a no-op for
+	   the device, so the only thing it changes is how much MMIO the transmit
+	   path pays -- which is how the cost of one doorbell was priced without
+	   having to build the batched entry point first. Zero unless asked for. */
+	int32				txExtraDoorbells;
 };
 
 
