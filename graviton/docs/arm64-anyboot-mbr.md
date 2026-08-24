@@ -1,10 +1,24 @@
 # arm64 `@nightly-anyboot`: the `base_mbr.bin` / `-m32` problem
 
-Status: **fix implemented and build-validated** (base_mbr.bin builds without -m32;
+Status: **fix MERGED and build-validated** — `d5d9a4809e` "anyboot: build a signed
+empty MBR on non-x86 targets" (2026-08-21). `base_mbr.bin` builds without `-m32`;
 sector 0 has the 0x55AA signature and the anyboot tool overlays the 0xeb/0xef
-partition entries correctly). UEFI boot-test still pending. NOTE: the full
-`@nightly-anyboot` image is additionally blocked by an unrelated, pre-existing arm64
-failure — see "Separate blocker" below.
+partition entries correctly.
+
+> **Second half of this status corrected 2026-08-24.** It used to read: *"NOTE: the
+> full `@nightly-anyboot` image is additionally blocked by an unrelated, pre-existing
+> arm64 failure — see 'Separate blocker' below."* **That blocker is FIXED**
+> (`949bac43cc`) — see the "Separate blocker" section, which now carries its
+> resolution. Nothing here is blocked on it.
+>
+> **Still genuinely outstanding:** the **UEFI boot-test** of an anyboot image. That
+> was gated on the separate blocker and is now unblocked, but I found no record of it
+> having been run — **UNVERIFIED as of 2026-08-24**.
+>
+> Note also that the two headings below — "Proposed fix (to validate)" and "Test plan
+> (must pass before applying)" — are stale as *headings*: the fix is applied and
+> merged. They are kept because the reasoning and the hexdump checks are the useful
+> part.
 
 ## Symptom
 
@@ -85,17 +99,39 @@ all before prioritizing.
    anyboot artifact is needed for EC2 or only for USB/CD.
 5. Record results (hexdump + boot outcome) below.
 
-## Separate blocker (full @nightly-anyboot, unrelated to the MBR)
+## ~~Separate blocker~~ RESOLVED 2026-08-24 (full @nightly-anyboot, unrelated to the MBR)
 
-With the MBR fix in place, the full `@nightly-anyboot` still fails earlier in image
-assembly, on arm64, independent of this change:
+> **FIXED and merged: `949bac43cc` "anyboot/cd: build a pure-UEFI El Torito ISO on
+> EFI-only arches".**
+>
+> The diagnosis below is right about the numbers and wrong about what they mean. The
+> boot floppy is **only the BIOS El Torito image** embedded in the CD/anyboot ISO —
+> and **arm64 has no BIOS**; it boots via the EFI System Partition, so the floppy is
+> **vestigial** there, exactly parallel to the x86 MBR boot code this very document
+> is about. The fix is therefore not "make the loader smaller" or "grow the floppy
+> budget": it is to stop building a BIOS artefact on an arch that has no BIOS. The
+> floppy is passed only on x86/x86_64; elsewhere `-b`/`-eltorito-alt-boot` are
+> omitted and a pure-UEFI El Torito ISO is built with `-no-emul-boot -e esp.image`.
+>
+> Validated: `haiku-boot-cd.iso` builds with the loader in the ESP
+> (`/EFI/BOOT/BOOTAA64.EFI`) and no BIOS boot entry.
+>
+> **The generalisable point, and it is the same one twice in one file:** two separate
+> arm64 image failures both turned out to be *x86 boot artefacts being built for an
+> arch that cannot use them*. When an image step fails on arm64 with a size or layout
+> budget, ask first whether the artefact should exist at all.
+
+As it stood, with the MBR fix in place, the full `@nightly-anyboot` still failed
+earlier in image assembly, on arm64, independent of this change:
 
     BuildFloppyBootImage1 haiku-boot-floppy.image
     haiku_loader.efi is too big (427627) to fit before the boot archive starting at 196608
 
 The arm64 `haiku_loader.efi` (~427 KB) exceeds the boot-floppy layout budget (offset
-196608 = 192 KB). This is its own issue (loader size / floppy layout on arm64) and
-must be addressed separately before a full anyboot image can be produced.
+196608 = 192 KB). ~~This is its own issue (loader size / floppy layout on arm64) and
+must be addressed separately before a full anyboot image can be produced.~~ It was
+its own issue, and it was addressed — but **not** as a loader-size or floppy-layout
+problem. See the banner above.
 
 ## Results (build-validated 2026-08-21)
 
@@ -109,5 +145,10 @@ must be addressed separately before a full anyboot image can be produced.
   sector 0 confirmed the overlay works and the signature is preserved:
   partition entry 0 type `0xeb` (offset 450), entry 1 type `0xef` (offset 466, EFI
   System Partition), `55 aa` at 510-511. Boot-code area (0-445) all zero.
-- UEFI boot-test: still to do (QEMU aarch64 + EDK2, or EC2), and gated on the
-  separate `haiku_loader.efi`-too-big issue above for a full image.
+- UEFI boot-test: **still to do as far as I can establish — UNVERIFIED as of
+  2026-08-24** (QEMU aarch64 + EDK2, or EC2). ~~Gated on the separate
+  `haiku_loader.efi`-too-big issue above for a full image~~ — **that gate is
+  removed** (`949bac43cc`), so this is now actionable. Caveat from elsewhere in this
+  tree: **a QEMU pass is not an EC2 pass** — the GED-vs-PL061 power-button and the
+  PL011-vs-16550 serial divergences both bit this project. Prefer EC2 for the
+  boot-test, or treat a QEMU result as provisional.

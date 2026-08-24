@@ -143,7 +143,14 @@ which is right, and it works.
 | `t4g.medium` | 38751 B / 775 lines | full boot to first-login |
 | `c7g.large` | 38938 B / 775 lines | full boot to first-login |
 | `c7g.4xlarge` | 46981 B | full boot to first-login |
-| `c7g.metal` | 42040 B | kernel log fine; **loader log missing**; panics in GICv3 |
+| `c7g.metal` | 42040 B | kernel log fine; **loader log missing**; ~~panics in GICv3~~ — **STALE, see note below** |
+
+> **Table row corrected 2026-08-24.** `c7g.metal` **no longer panics in GICv3, and it
+> now boots to userland** — 53 PCI devices, NVMe root mounted. Two fixes closed it:
+> arm64 GICv3 redistributor discovery (verified across multiple metal redistributor
+> layouts) and the PCI ECAM multi-region fix (`f5367b3602`, merged via `e270548f33`).
+> See `metal-gicv3-panic.md` and `metal-pci-segment.md`. The byte count and the
+> missing-loader-log observation are still accurate; the panic is not.
 
 With timestamps stripped, the `c7g.large` and `t4g.medium` logs differ only in
 values that *must* differ: heap/object pointers, EBS volume ids, PCI BAR
@@ -169,7 +176,23 @@ instance has no such event, so the default form is empty.
 
 For Haiku this is permanent, not transient, because of two existing constraints:
 a Haiku node **must never be stopped** (it does not survive stop/start), and
-Haiku's arm64 ACPI reboot is still a no-op inbound. So a Haiku node never
+~~Haiku's arm64 ACPI reboot is still a no-op inbound.~~ **Corrected 2026-08-24: an
+inbound path is now IMPLEMENTED and merged** — `e6c9102f8c` receives the platform
+power button through the **PL061 GPIO** (not the GED; a QEMU proxy misleadingly
+suggested GED and diverged from EC2 here). Register base, interrupt and pin numbers
+are all read from the ACPI namespace because they differ between instance types of
+one family.
+
+**How far this is verified, stated precisely:** nodes **can** now be stopped and
+started — `128a3f1761` makes the hardware gate stop the instance, wait for
+`stopped`, start it and require sshd to answer, and that gate passes. Whether the
+**PL061 event itself fires** (a graceful ACPI shutdown) as opposed to EC2 falling
+back to a forced stop is **UNVERIFIED as of 2026-08-24** from the evidence I could
+find: the commit implementing it claims no hardware confirmation, and reaching the
+`stopped` state does not by itself distinguish the two. The wall-clock time of the
+stop would distinguish them; I did not find that recorded.
+
+As written: so a Haiku node never
 generates a lifecycle event, and the non-`--latest` form will *never* return
 anything for one — while any Linux node that has been rebooted once will happily
 return output either way. That asymmetry is a very good match for
@@ -178,6 +201,15 @@ from what they were running.
 
 **Always pass `--latest`.** This is the actual fix for the reported blind spot and
 it needs no code change.
+
+> **The advice above is still right; its stated *reason* no longer holds (2026-08-24).**
+> The argument ran: a Haiku node never generates a lifecycle event, therefore the
+> non-`--latest` form never returns anything. That premise is gone — nodes are now
+> stopped and started routinely, because the hardware perf gate cycles the instance
+> on every run. **Keep passing `--latest`** (it is free and it removes a whole class
+> of empty-result confusion); just do not rely on the "no lifecycle event" reasoning,
+> and above all **do not conclude from this section that a Haiku node cannot be
+> stopped** — it can, and there is a pipeline stage that depends on it.
 
 
 ## Secondary finding: no loader output on c7g.metal
@@ -195,7 +227,10 @@ console, and the `gUART` fallback is one failed character away from being
 switched off for the rest of the boot.
 
 This matters because that missing loader log is exactly what you would want in
-order to debug the GICv3 redistributor panic metal currently dies in.
+order to debug ~~the GICv3 redistributor panic metal currently dies in~~ **a metal
+boot problem** — but note (2026-08-24) that **metal no longer dies in a GICv3 panic**;
+that specific panic is fixed and metal reaches userland. The loader-log gap remains a
+real diagnostic gap for whatever comes next.
 
 ### Change made
 

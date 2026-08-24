@@ -1,8 +1,28 @@
 # The 18-hour clock step inside the haikuporter build chroot
 
-Status: **root-caused and reproduced to the second**. The cause is a stale artifact,
-not a bug in this tree; the cure is to refresh two packages in the build guests
-(below). This branch adds the hardening that would have made it loud.
+Status: **root-caused, reproduced to the second, and RESOLVED — cure applied and
+hardening merged. Updated 2026-08-24.**
+
+> The cause is a stale artifact, not a bug in this tree.
+>
+> - **The cure was applied.** The package refresh described in "The fix" below has
+>   happened: the whole set was rebuilt non-dirty, with no `_dirty`/non-dirty split
+>   left and zero clock-skew warnings anywhere. The live package state is in
+>   `package-chain-status.md`, not here.
+> - **The hardening merged** as `a81fbddb28` "arm64: do not let EL0 read the physical
+>   counter" — ~~this branch adds~~ *added* the check that would have made it loud.
+>
+> **So "The fix" section below is a historical to-do list, not a live one**, and its
+> imperatives ("the cure is to stop shipping the Aug 20 package", "then re-run one
+> small port and confirm no `in the future` line survives") are all discharged.
+> Likewise the closing note about "guest 2222, **still running** the pre-fix image"
+> is stale — there is no split left.
+>
+> **What to take from this document is the mechanism and the trap**, which is why it
+> is worth keeping: a stale `haiku.hpkg` *inside* the chroot held a pre-fix
+> `system_time()`, and the harvest loop kept re-importing it — so fixing the source
+> tree did not fix the chroot, and each rebuild reintroduced the defect. That
+> self-reinfecting shape is the reusable lesson.
 
 ## Symptom
 
