@@ -255,6 +255,7 @@ arch_handle_acpi()
 		// not generous enough to spend half a kilobyte on it.
 		static uint64 gicr_bases[SMP_MAX_CPUS];
 		uint32 gicr_base_count = 0;
+		uint32 pe_count = 0;
 		bool reportedTooManyCpus = false;
 
 		// A subtable is allowed to be the last thing in the table but not to
@@ -279,6 +280,13 @@ arch_handle_acpi()
 				acpi_gic_interface *acpi_gicc = (acpi_gic_interface*)desc;
 				if (acpi_gicc->cpu_interface_num == 0)
 					gicc_base = acpi_gicc->base_address;
+
+				// Every PE the firmware mentions, whether or not it is enabled
+				// and whether or not we have room for it. This is what bounds
+				// the kernel's walk across a redistributor window, so it has to
+				// count the frames it will step over as well as the ones it
+				// will use.
+				pe_count++;
 
 				// ACPI does not promise that a disabled CPU's redistributor is
 				// even accessible, and we now map and read every base rather
@@ -358,9 +366,11 @@ arch_handle_acpi()
 			intc.regs3.start = its_base;
 			intc.regs3.size = its_base != 0 ? 0x20000 : 0;
 
+			intc.pe_count = pe_count;
+
 			dprintf("discovered gic from acpi: version=%d, gicd=%lx, "
-				"gicr=%lx (size %lx), its=%lx\n", version, gicd_base,
-				gicr_base, gicr_size, its_base);
+				"gicr=%lx (size %lx), its=%lx, %u pes\n", version, gicd_base,
+				gicr_base, gicr_size, its_base, pe_count);
 
 			arch_acpi_set_gicr_regions(intc, gicr_bases, gicr_base_count,
 				version);

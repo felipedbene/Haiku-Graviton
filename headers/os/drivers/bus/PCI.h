@@ -94,6 +94,12 @@ typedef struct pci_controller_module_info {
 
 	status_t	(*finalize)(void *cookie);
 
+	// The bus numbers this controller decodes. A controller whose window does
+	// not begin at bus 0 needs its domain's root bus created at the right
+	// number, or enumeration starts below the window and finds nothing. May be
+	// NULL, which means the window begins at bus 0.
+	status_t	(*get_bus_range)(void *cookie, uint8 *start, uint8 *end);
+
 } pci_controller_module_info;
 
 

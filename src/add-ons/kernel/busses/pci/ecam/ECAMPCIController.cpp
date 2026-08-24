@@ -112,11 +112,21 @@ ECAMPCIController::UninitDriver()
 addr_t
 ECAMPCIController::ConfigAddress(uint8 bus, uint8 device, uint8 function, uint16 offset)
 {
+	// The window need not start at bus 0, but the address computed here is an
+	// offset into that window, so the caller's absolute bus number has to be
+	// rebased onto it. Linux does the same, as PCI_MMCFG_BUS_OFFSET(). Without
+	// it, a window starting above bus 0 returns the wrong device for every bus,
+	// hides the top of the range, and invents devices below the start.
+	// fBusOffset is 0 wherever the window does start at bus 0, which leaves this
+	// exactly as it was.
+	if (bus < fBusOffset || !IsBusValid(bus))
+		return 0;
+
 	PciAddressEcam address {
 		.offset = offset,
 		.function = function,
 		.device = device,
-		.bus = bus
+		.bus = (uint8)(bus - fBusOffset)
 	};
 	if ((ROUNDDOWN(address.val, 4) + 4) > fRegsLen)
 		return 0;
@@ -164,6 +174,20 @@ ECAMPCIController::WriteConfig(uint8 bus, uint8 device, uint8 function,
 			return B_BAD_VALUE;
 	}
 
+	return B_OK;
+}
+
+
+// Derived from the mapping rather than stored separately: the window begins at
+// fBusOffset and is fRegsLen long, and ECAM gives each bus a megabyte.
+status_t
+ECAMPCIController::GetBusRange(uint8& start, uint8& end)
+{
+	if (fRegsLen < (1 << 20))
+		return B_ERROR;
+
+	start = fBusOffset;
+	end = (uint8)(fBusOffset + (fRegsLen >> 20) - 1);
 	return B_OK;
 }
 
