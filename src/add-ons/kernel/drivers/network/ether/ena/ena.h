@@ -55,7 +55,14 @@ extern "C" {
    is the moment *this translation unit* was actually compiled, so a stale ena.o
    announces itself. Note it cannot prove anything about the vendored HAL's
    object -- that one is only guaranteed by removing the driver's object
-   directory before building, which is the habit to keep. */
+   directory before building, which is the habit to keep.
+
+   Reading this back also catches the driver never having loaded at all: a
+   drop-in replacement can lose the module-selection tie to the packaged copy in
+   silence, because _FindBestDriver() takes strictly greater support. A day went
+   into an unmoved measurement that turned out to be an unloaded driver rather
+   than an ineffective change, so read the stamp out of the syslog before
+   believing a number. */
 #define ENA_BUILD_TAG		"rxbuf-1920"
 #define ENA_BUILD_STAMP		__DATE__ " " __TIME__
 
@@ -232,15 +239,6 @@ extern "C" {
 #define ENA_MIN_POLL_DELAY_US		100
 
 #define ENA_MAX_MULTICAST	32
-
-/* Printed at attach, and the only reliable way to tell which copy of this driver
-   is running. A drop-in replacement can lose the module-selection tie to the
-   packaged copy in silence -- _FindBestDriver() takes strictly greater support --
-   and this project has already lost a day to an unmoved measurement that turned
-   out to be an unloaded driver rather than an ineffective change. Bump it with
-   any change being measured, and read it back out of the syslog before believing
-   a number. */
-#define ENA_BUILD_STAMP		"rx-cadence-4-mod"
 
 #ifdef ENA_DEBUG_FAULT_INJECTION
 /* Private ioctl for provoking a watchdog timeout without breaking hardware: it
