@@ -757,12 +757,68 @@ hang into a slow write, which is survivable, without needing the quota heuristic
 be right.
 
 
+## What the bake has to carry, and why none of it can be dropped in
+
+Everything below is a kernel or boot-critical-module change. Per the hot-swap
+finding above, **none of it can be installed on a running node** — and the
+failure is silent, so a test that skipped the bake would produce numbers from the
+old code.
+
+| commit | what | why it must be compiled in |
+|---|---|---|
+| `nvme: submit a chopped request as a batch...` | the 3.8× fix for large requests | `nvme_disk` serves the root filesystem; the non-packaged override resolves under `/boot/home`, which needs `nvme_disk` to mount |
+| `vm: bound the modified-page quota wait...` | the liveness fix + its instrumentation + the `page_writer_quota` KDL command | `vm_page_writer.cpp`, `file_cache.cpp` — kernel proper |
+| `arm64: make KDL 'bt <thread>' actually trace that thread` | **prerequisite for the diagnosis** | `arch_debug.cpp` — kernel proper |
+| `disktput: trace progress over time...` | `-i` interval tracing and `-m verify` | userland, so it *can* be pushed by hand, but the image's own `disktput` needs it to be in the tree |
+
+### The KDL prerequisites are satisfied — checked, not assumed
+
+Interactive KDL on an EC2 instance needs serial **input**, not just the output
+that `get-console-output` returns. Both halves work:
+
+- **EC2 Serial Console access is enabled** for account 668984504585
+  (`get-serial-console-access-status` → `True`), so
+  `send-serial-console-ssh-public-key` plus ssh to the serial-console endpoint
+  gives a bidirectional console.
+- **arm64 can read it.** `arch_debug_serial_getchar()` is implemented
+  (`sArchDebugUART->GetChar(false)`), so KDL can accept typed commands. Note that
+  `arch_debug_serial_try_getchar()` is still a TODO that falls through to the
+  blocking version; that has not caused a problem here but is worth knowing if
+  KDL behaves oddly.
+
+### Why the `bt` fix is on the critical path and not a side quest
+
+The plan for the wedge is "get `bt` on a wedged thread; several threads parked in
+`WaitIfOverQuota` says one thing, several parked in a BFS transaction says
+another". That plan could not have worked on this architecture. arm64's
+`stack_trace()` advertises `[ <thread id> ]`, parses `argv` only far enough to
+count arguments, and then unconditionally traces the calling thread — so
+`bt <blocked-thread>` would have printed the debugger's own stack, plausibly and
+wrongly, and it would have been read as the answer. It is fixed here, with the
+frame-pointer index verified against the `stp` ordering in `arch_asm.S` rather
+than inferred from the comment on the struct.
+
+
 ## Rules this exercise established
 
 Two of the errors below were caught before they became published numbers. Both
 are general, both would silently invalidate an entire matrix rather than produce
 an obviously wrong cell, and both are stated here as rules rather than as
 anecdotes.
+
+### Rule: a rule in a document is not a habit
+
+The retraction above is the case in point, and it is worth stating bluntly: the
+thread sweep that produced the false "anti-scaling" was run in ascending order
+**in the same change that wrote down "interleaved A/B, never before-then-after"**.
+Knowing the rule, having just typed the rule, and writing the document the rule
+lives in were all insufficient. What caught it was re-running the measurement
+with a different instrument, not care.
+
+So the rule is not "remember to interleave". It is: **any sweep is interleaved by
+construction, or its result is not reportable** — and if a harness cannot
+interleave a dimension, that dimension is measured one cell at a time against a
+control, or not claimed.
 
 ### Rule: repeatability is not validity
 
@@ -793,6 +849,20 @@ more than an order of magnitude.
 Therefore: an I/O buffer is `posix_memalign`ed, and its alignment is **reported
 with the result**, so no figure can be quoted without the code path it came from.
 `disktput` takes `-A`/`-U` so alignment is a variable rather than an accident.
+
+### Rule: stamp a version into anything you hot-swap
+
+Generalised from the `nvme_disk` finding, and it applies to every module and
+every agent. The module was installed, made executable, hash-verified against the
+builder and cold-booted, and the **stock driver ran anyway**. The only reason that
+read as "not loaded" rather than "loaded, no effect" is a deliberate
+`TRACE_ALWAYS("io batch size: %d")` in the modified copy.
+
+Without the stamp the reading would have been "my change does nothing" — a wrong
+conclusion about the code rather than a wasted cycle, and one that would have sent
+the next person looking in the wrong place. **A distinctive `dprintf` or version
+string in anything hot-swapped is not optional**, because "the number did not
+move" and "the code did not load" are indistinguishable otherwise.
 
 ### Rule: deploying to a DeBeOS node requires chunking and a hash check
 
