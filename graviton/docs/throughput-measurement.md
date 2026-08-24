@@ -118,7 +118,7 @@ transmit went 1148 → 3852 Mbit/s (**3.35×**) and receive 952 → 4936 Mbit/s
 Health after 3.32 GB in and 3.34 GB out across 1.9 M packets: **0 errors,
 0 dropped**, no ENA reset, leak or stranded-descriptor messages.
 
-## Explained: the throughput cliff between 65535 and 65536
+## Explained: the "cliff" was asking versus not asking, not one byte
 
 Recorded here as measured; the cause is traced in
 [tcp-rcvbuf-cliff.md](tcp-rcvbuf-cliff.md). Short version: it is not the one
