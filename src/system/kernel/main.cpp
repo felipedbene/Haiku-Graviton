@@ -72,6 +72,18 @@
 #endif
 
 
+// A build identity for the kernel binary, distinct from HAIKU_REVISION. Every
+// build script pins the hrev, so it names a release and never a build; the
+// compile timestamp is what says whether the kernel that booted is the one just
+// built. Kernel-proper changes cannot be hot-swapped, so a bake that silently
+// shipped a stale kernel is otherwise indistinguishable from a fix that did not
+// work. Tag and timestamp are separate macros, each defined exactly once --
+// ena.h defines its stamp twice and the second definition quietly ate the
+// timestamp half, which is the failure mode this is here to catch.
+#define KERNEL_BUILD_TAG	"query-page-present-1"
+#define KERNEL_BUILD_STAMP	__DATE__ " " __TIME__
+
+
 void *__dso_handle;
 
 bool gKernelStartup = true;
@@ -144,6 +156,8 @@ _start(kernel_args *bootKernelArgs, int currentCPU)
 		dprintf("DeBeOS -- ARM-first, descended from Haiku/BeOS\n");
 		dprintf("Haiku revision: %s, debug level: %d\n", get_haiku_revision(),
 			KDEBUG_LEVEL);
+		dprintf("kernel build %s, compiled %s\n", KERNEL_BUILD_TAG,
+			KERNEL_BUILD_STAMP);
 
 		// init modules
 		TRACE("init CPU\n");
