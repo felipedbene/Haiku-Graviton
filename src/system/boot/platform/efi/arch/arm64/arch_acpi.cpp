@@ -112,9 +112,14 @@ arch_acpi_setup_uart(uart_info &uart, const char *kind)
 // rather than from the GIC version, because it is the one thing the firmware
 // states unambiguously: a GICv3 PE owns two 64 KB frames and a GICv4 PE four,
 // and a run whose neighbours are that far apart is contiguous by definition.
+//
+// A region is sized to end at the last frame the kernel will actually touch,
+// so nothing here has to be right about how big a redistributor is -- only
+// about where the next one starts. A lone redistributor therefore gets the
+// smaller size: the kernel reads its RD_base and SGI_base frames and no more,
+// and a GICv4 PE's virtual-LPI frames are none of our business.
 static void
-arch_acpi_set_gicr_regions(intc_info &intc, const uint64 *bases, uint32 count,
-	uint8 version)
+arch_acpi_set_gicr_regions(intc_info &intc, const uint64 *bases, uint32 count)
 {
 	intc.gicr_region_count = 0;
 	if (count == 0)
@@ -132,6 +137,9 @@ arch_acpi_set_gicr_regions(intc_info &intc, const uint64 *bases, uint32 count,
 		sorted[j] = bases[i];
 	}
 
+	// RD_base + SGI_base, and the two further frames a GICv4 PE adds. Spelled
+	// out rather than shared with the kernel's gicv3_regs.h, which is private
+	// to the kernel and not on the loader's include path.
 	const uint64 kStrideV3 = 0x20000;
 	const uint64 kStrideV4 = 0x40000;
 
@@ -151,9 +159,9 @@ arch_acpi_set_gicr_regions(intc_info &intc, const uint64 *bases, uint32 count,
 		}
 
 		// A region holding a single redistributor says nothing about the
-		// spacing, so fall back on what the distributor claims to be.
+		// spacing, and does not need to: two frames is all the kernel reads.
 		if (stride == 0)
-			stride = (version >= 4) ? kStrideV4 : kStrideV3;
+			stride = kStrideV3;
 
 		if (regions >= (uint32)INTC_MAX_GICR_REGIONS) {
 			dprintf("acpi: more than %d gic redistributor regions; the CPUs "
@@ -328,8 +336,7 @@ arch_handle_acpi()
 				"gicr=%lx (size %lx), its=%lx\n", version, gicd_base,
 				gicr_base, gicr_size, its_base);
 
-			arch_acpi_set_gicr_regions(intc, gicr_bases, gicr_base_count,
-				version);
+			arch_acpi_set_gicr_regions(intc, gicr_bases, gicr_base_count);
 		}
 	}
 

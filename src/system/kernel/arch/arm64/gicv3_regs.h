@@ -30,9 +30,12 @@
 #define GICD_CTLR_ARE_NS		(1u << 4)
 #define GICD_CTLR_RWP			(1u << 31)
 
-// GICD_PIDR2.ArchRev: 3 for a GICv3 implementation, 4 for GICv4. This is what
-// decides how many 64 KB frames each redistributor occupies, and it is the
-// only in-band way to find that out before touching a redistributor.
+// GICD_PIDR2.ArchRev: 3 for a GICv3 implementation, 4 for GICv4. This says
+// nothing definite about any individual redistributor's size -- see
+// gicr_frame_stride() -- and is used only to guess a window to map when
+// firmware describes the redistributors with neither a length nor a set of
+// regions. Linux makes the same guess for the same reason, in
+// gic_acpi_parse_madt_gicc().
 #define GICD_PIDR2				0xffe8
 #define GICD_PIDR2_ARCH(v)		(((v) >> 4) & 0xf)
 
@@ -67,6 +70,23 @@
 // for the virtual LPI frames.
 #define GICR_STRIDE_V3			0x20000
 #define GICR_STRIDE_V4			0x40000
+
+
+// How far the next redistributor is from this one. The extra pair of GICv4
+// frames exists only where the redistributor actually implements virtual LPIs,
+// which each redistributor reports for itself in GICR_TYPER.VLPIS; the
+// distributor's architecture revision does not decide it, and GICR_TYPER.VLPIS
+// is RES0 on an implementation without virtual LPI support. So this has to be
+// asked of the frame being stepped over, not of the GIC as a whole -- getting
+// it from the architecture revision would silently skip every other
+// redistributor on a GICv4 implementation whose redistributors lack VLPIs,
+// which is legal. Linux advances the same way, in gic_iterate_rdists().
+static inline size_t
+gicr_frame_stride(uint64 typer)
+{
+	return ((typer & GICR_TYPER_VLPIS) != 0)
+		? GICR_STRIDE_V4 : GICR_STRIDE_V3;
+}
 
 
 // One mapped run of redistributor frames. There is more than one whenever

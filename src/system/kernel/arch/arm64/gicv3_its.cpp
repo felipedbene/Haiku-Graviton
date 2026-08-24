@@ -59,7 +59,7 @@ allocate_its_table(const char* name, size_t size, size_t alignment,
 
 status_t
 GICv3ITS::Init(phys_addr_t regs, size_t size, addr_t gicdRegs,
-	const gicr_region* gicrRegions, uint32 gicrRegionCount, size_t gicrStride)
+	const gicr_region* gicrRegions, uint32 gicrRegionCount)
 {
 	// Nothing in Init() takes fLock: it runs single-threaded during boot, and
 	// the interface is not reachable from anywhere else until the
@@ -116,7 +116,7 @@ GICv3ITS::Init(phys_addr_t regs, size_t size, addr_t gicdRegs,
 
 	gic_write32(fRegs + GITS_CTLR, GITS_CTLR_ENABLED);
 
-	status = _InitLpis(gicdRegs, gicrRegions, gicrRegionCount, gicrStride);
+	status = _InitLpis(gicdRegs, gicrRegions, gicrRegionCount);
 	if (status != B_OK)
 		return status;
 
@@ -319,7 +319,7 @@ GICv3ITS::_InitCommandQueue()
 
 status_t
 GICv3ITS::_InitLpis(addr_t gicdRegs, const gicr_region* gicrRegions,
-	uint32 gicrRegionCount, size_t gicrStride)
+	uint32 gicrRegionCount)
 {
 	// The LPI configuration table is shared by every redistributor, so it is
 	// allocated once. One byte per LPI. Never claim more INTID bits than the
@@ -359,7 +359,7 @@ GICv3ITS::_InitLpis(addr_t gicdRegs, const gicr_region* gicrRegions,
 		phys_addr_t framePhysical = gicrRegions[region].physicalBase;
 		const addr_t end = frame + gicrRegions[region].size;
 
-		while (frame + gicrStride <= end) {
+		while (frame + GICR_STRIDE_V3 <= end) {
 			const uint64 typer = gic_read64(frame + GICR_TYPER);
 
 			addr_t pending;
@@ -393,8 +393,9 @@ GICv3ITS::_InitLpis(addr_t gicdRegs, const gicr_region* gicrRegions,
 			if ((typer & GICR_TYPER_LAST) != 0)
 				break;
 
-			frame += gicrStride;
-			framePhysical += gicrStride;
+			const size_t stride = gicr_frame_stride(typer);
+			frame += stride;
+			framePhysical += stride;
 		}
 	}
 

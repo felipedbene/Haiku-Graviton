@@ -26,7 +26,7 @@ GICv3InterruptController::GICv3InterruptController(const intc_info& info)
 	fGicdRegs(0),
 	fITS(NULL),
 	fGicrRegionCount(0),
-	fGicrStride(GICR_STRIDE_V3),
+	fGicrFallbackStride(GICR_STRIDE_V3),
 	fIrqCount(GIC_SPECIAL_BASE)
 {
 	reserve_io_interrupt_vectors(GIC_SPECIAL_BASE, 0, INTERRUPT_TYPE_IRQ);
@@ -43,20 +43,17 @@ GICv3InterruptController::GICv3InterruptController(const intc_info& info)
 	if (gicdArea < 0)
 		panic("gicv3: unable to map the distributor registers\n");
 
-	// How far apart the redistributors are depends on whether this is a GICv4
-	// implementation, which adds two virtual-LPI frames to each PE's pair. A
-	// hypervisor's emulated distributor reports v3 and a real GIC-700 reports
-	// v4, so getting this from the hardware rather than assuming v3 is the
-	// difference between finding every redistributor and finding every other
-	// one.
+	// Only used to size a window when firmware describes the redistributors
+	// with neither a length nor a set of regions. The walks themselves step by
+	// what each redistributor reports -- see gicr_frame_stride().
 	const uint32 pidr2 = _ReadGicd(GICD_PIDR2);
 	if (GICD_PIDR2_ARCH(pidr2) >= 4)
-		fGicrStride = GICR_STRIDE_V4;
+		fGicrFallbackStride = GICR_STRIDE_V4;
 
 	dprintf("gicv3: gicd %#" B_PRIx64 " (size %#" B_PRIxSIZE "), arch rev %"
-		B_PRIu32 ", typer %#" B_PRIx32 ", redistributor stride %#" B_PRIxSIZE
-		"\n", info.regs1.start, gicdSize, GICD_PIDR2_ARCH(pidr2),
-		_ReadGicd(GICD_TYPER), fGicrStride);
+		B_PRIu32 ", typer %#" B_PRIx32 ", fallback stride %#" B_PRIxSIZE "\n",
+		info.regs1.start, gicdSize, GICD_PIDR2_ARCH(pidr2),
+		_ReadGicd(GICD_TYPER), fGicrFallbackStride);
 
 	_MapRedistributors(info);
 
@@ -89,7 +86,7 @@ GICv3InterruptController::_MapRedistributors(const intc_info& info)
 		// means firmware did not say, so guess at one frame set per CPU.
 		ranges[0].start = info.regs2.start;
 		ranges[0].size = info.regs2.size != 0
-			? info.regs2.size : fGicrStride * smp_get_num_cpus();
+			? info.regs2.size : fGicrFallbackStride * smp_get_num_cpus();
 		count = 1;
 	} else {
 		for (uint32 i = 0; i < count; i++)
@@ -116,8 +113,9 @@ GICv3InterruptController::_MapRedistributors(const intc_info& info)
 		fGicrRegionCount++;
 
 		dprintf("gicv3: redistributor region %" B_PRIu32 ": %#" B_PRIx64
-			" size %#" B_PRIx64 " (up to %" B_PRIu64 " PEs)\n", i,
-			ranges[i].start, ranges[i].size, ranges[i].size / fGicrStride);
+			" size %#" B_PRIx64 " (at most %" B_PRIu64 " PEs)\n", i,
+			ranges[i].start, ranges[i].size,
+			ranges[i].size / GICR_STRIDE_V3);
 	}
 }
 
@@ -219,7 +217,9 @@ GICv3InterruptController::_PrefaultRedistributors()
 		addr_t frame = fGicrRegions[region].base;
 		const addr_t end = frame + fGicrRegions[region].size;
 
-		while (frame + fGicrStride <= end) {
+		// A redistributor is only walked if its RD_base and SGI_base frames --
+		// the two we touch -- are inside the region firmware described.
+		while (frame + GICR_STRIDE_V3 <= end) {
 			const uint64 typer = gic_read64(frame + GICR_TYPER);
 
 			// The SGI/PPI frame is a separate page from the RD frame.
@@ -236,7 +236,7 @@ GICv3InterruptController::_PrefaultRedistributors()
 			if ((typer & GICR_TYPER_LAST) != 0)
 				break;
 
-			frame += fGicrStride;
+			frame += gicr_frame_stride(typer);
 		}
 	}
 
@@ -260,7 +260,7 @@ GICv3InterruptController::_CurrentRedistributor()
 		addr_t frame = fGicrRegions[region].base;
 		const addr_t end = frame + fGicrRegions[region].size;
 
-		while (frame + fGicrStride <= end) {
+		while (frame + GICR_STRIDE_V3 <= end) {
 			const uint64 typer = gic_read64(frame + GICR_TYPER);
 			if ((uint32)(typer >> 32) == affinity)
 				return frame;
@@ -268,7 +268,7 @@ GICv3InterruptController::_CurrentRedistributor()
 			if ((typer & GICR_TYPER_LAST) != 0)
 				break;
 
-			frame += fGicrStride;
+			frame += gicr_frame_stride(typer);
 		}
 	}
 
@@ -440,7 +440,7 @@ GICv3InterruptController::InitITS(phys_addr_t regs, size_t size)
 		return B_NO_MEMORY;
 
 	status_t status = its->Init(regs, size, fGicdRegs, fGicrRegions,
-		fGicrRegionCount, fGicrStride);
+		fGicrRegionCount);
 	if (status != B_OK) {
 		delete its;
 		return status;
