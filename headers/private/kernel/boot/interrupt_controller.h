@@ -18,12 +18,25 @@
 #define		INTC_KIND_SUN4I		"sun4i"
 
 
+// GICv3/v4 redistributors are not necessarily one contiguous run of frames.
+// ACPI describes them either with a single MADT GICR structure, or with a
+// per-CPU base address in each GICC entry -- and the per-CPU form exists
+// precisely for the case where the frames are *not* contiguous, which real
+// hardware does use. Adjacent frames are coalesced into these regions.
+#define		INTC_MAX_GICR_REGIONS	16
+
+
 typedef struct {
 	char kind[32];
 	addr_range regs1;
 	addr_range regs2;
 	// GICv3 only: the ITS, which translates MSIs into LPIs. Zero when absent.
 	addr_range regs3;
+
+	// GICv3 only. When zero, regs2 describes the one and only redistributor
+	// region; otherwise these do, and regs2 is just the lowest of them.
+	uint32 gicr_region_count;
+	addr_range gicr_regions[INTC_MAX_GICR_REGIONS];
 } __attribute__((packed)) intc_info;
 
 

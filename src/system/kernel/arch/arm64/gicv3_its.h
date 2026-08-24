@@ -9,6 +9,8 @@
 #include <arch/generic/msi.h>
 #include <lock.h>
 
+#include "gicv3_regs.h"
+
 
 // Number of MSI vectors the ITS hands out. Each one consumes an LPI and an
 // entry in the kernel's I/O interrupt vector space.
@@ -34,8 +36,9 @@ public:
 	virtual						~GICv3ITS() {}
 
 			status_t			Init(phys_addr_t regs, size_t size,
-									addr_t gicdRegs, addr_t gicrRegs,
-									phys_addr_t gicrPhysical, size_t gicrSize,
+									addr_t gicdRegs,
+									const gicr_region* gicrRegions,
+									uint32 gicrRegionCount,
 									size_t gicrStride);
 
 			// MSIInterface
@@ -55,8 +58,9 @@ public:
 private:
 			status_t			_InitTables();
 			status_t			_InitCommandQueue();
-			status_t			_InitLpis(addr_t gicdRegs, addr_t gicrRegs,
-									phys_addr_t gicrPhysical, size_t gicrSize,
+			status_t			_InitLpis(addr_t gicdRegs,
+									const gicr_region* gicrRegions,
+									uint32 gicrRegionCount,
 									size_t gicrStride);
 
 			its_device*			_DeviceFor(uint32 requesterID);

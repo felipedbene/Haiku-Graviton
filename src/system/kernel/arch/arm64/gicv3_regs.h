@@ -22,6 +22,12 @@
 #define GICD_CTLR_ARE_NS		(1u << 4)
 #define GICD_CTLR_RWP			(1u << 31)
 
+// GICD_PIDR2.ArchRev: 3 for a GICv3 implementation, 4 for GICv4. This is what
+// decides how many 64 KB frames each redistributor occupies, and it is the
+// only in-band way to find that out before touching a redistributor.
+#define GICD_PIDR2				0xffe8
+#define GICD_PIDR2_ARCH(v)		(((v) >> 4) & 0xf)
+
 // GICD_TYPER.ITLinesNumber: max SPI is 32*(N+1) - 1
 #define GICD_TYPER_ITLINES(t)	((((t) & 0x1f) + 1) * 32)
 
@@ -36,8 +42,10 @@
 #define GICR_WAKER_PROCESSOR_SLEEP	(1u << 1)
 #define GICR_WAKER_CHILDREN_ASLEEP	(1u << 2)
 
-// GICR_TYPER: bit 4 marks the last redistributor in the region,
-// bits [63:32] hold this redistributor's packed affinity value.
+// GICR_TYPER: bit 1 reports support for virtual LPIs (and therefore the
+// presence of the two extra GICv4 frames), bit 4 marks the last redistributor
+// in the region, bits [63:32] hold this redistributor's packed affinity value.
+#define GICR_TYPER_VLPIS		(1ull << 1)
 #define GICR_TYPER_LAST			(1ull << 4)
 
 // Redistributor SGI/PPI frame lives one 64K page after RD_base
@@ -51,6 +59,16 @@
 // for the virtual LPI frames.
 #define GICR_STRIDE_V3			0x20000
 #define GICR_STRIDE_V4			0x40000
+
+
+// One mapped run of redistributor frames. There is more than one whenever
+// firmware describes the redistributors per-CPU instead of with a single
+// range, which it does exactly when they are not all adjacent.
+struct gicr_region {
+	addr_t		base;
+	phys_addr_t	physicalBase;
+	size_t		size;
+};
 
 // Interrupt ID layout
 #define GIC_SGI_BASE			0

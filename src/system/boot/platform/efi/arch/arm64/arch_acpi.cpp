@@ -102,6 +102,80 @@ arch_acpi_setup_uart(uart_info &uart, const char *kind)
 }
 
 
+// Turn the per-CPU redistributor base addresses from the MADT's GICC entries
+// into the smallest set of contiguous regions that covers them. Firmware only
+// uses that form when a single GICR structure would not do -- on AWS Graviton3
+// the 64 redistributors sit in two runs of 32 about 16 GiB apart -- so the
+// gaps are real and must survive into the kernel.
+//
+// The distance between neighbours is taken from the addresses themselves
+// rather than from the GIC version, because it is the one thing the firmware
+// states unambiguously: a GICv3 PE owns two 64 KB frames and a GICv4 PE four,
+// and a run whose neighbours are that far apart is contiguous by definition.
+static void
+arch_acpi_set_gicr_regions(intc_info &intc, const uint64 *bases, uint32 count,
+	uint8 version)
+{
+	intc.gicr_region_count = 0;
+	if (count == 0)
+		return;
+
+	// Insertion sort; the MADT is not required to list the CPUs in address
+	// order and coalescing needs them to be.
+	static uint64 sorted[SMP_MAX_CPUS];
+	for (uint32 i = 0; i < count; i++) {
+		uint32 j = i;
+		while (j > 0 && sorted[j - 1] > bases[i]) {
+			sorted[j] = sorted[j - 1];
+			j--;
+		}
+		sorted[j] = bases[i];
+	}
+
+	const uint64 kStrideV3 = 0x20000;
+	const uint64 kStrideV4 = 0x40000;
+
+	uint32 regions = 0;
+	for (uint32 i = 0; i < count; ) {
+		uint64 stride = 0;
+		uint32 j = i + 1;
+		while (j < count) {
+			const uint64 delta = sorted[j] - sorted[j - 1];
+			if (delta != kStrideV3 && delta != kStrideV4)
+				break;
+			if (stride == 0)
+				stride = delta;
+			else if (delta != stride)
+				break;
+			j++;
+		}
+
+		// A region holding a single redistributor says nothing about the
+		// spacing, so fall back on what the distributor claims to be.
+		if (stride == 0)
+			stride = (version >= 4) ? kStrideV4 : kStrideV3;
+
+		if (regions >= (uint32)INTC_MAX_GICR_REGIONS) {
+			dprintf("acpi: more than %d gic redistributor regions; the CPUs "
+				"behind the rest will not be usable\n",
+				INTC_MAX_GICR_REGIONS);
+			break;
+		}
+
+		intc.gicr_regions[regions].start = sorted[i];
+		intc.gicr_regions[regions].size = (sorted[j - 1] - sorted[i]) + stride;
+		dprintf("  gicr region %u: %lx (size %lx), %u redistributors, "
+			"stride %lx\n", regions, intc.gicr_regions[regions].start,
+			intc.gicr_regions[regions].size, j - i, stride);
+		regions++;
+
+		i = j;
+	}
+
+	intc.gicr_region_count = regions;
+}
+
+
 void
 arch_handle_acpi()
 {
@@ -169,6 +243,13 @@ arch_handle_acpi()
 		uint64 its_base = 0;
 		uint8 version = 0;
 
+		// Redistributor base addresses collected from the GICC entries, for
+		// firmware that describes them per-CPU rather than with a GICR
+		// structure. Static rather than automatic: the boot loader's stack is
+		// not generous enough to spend half a kilobyte on it.
+		static uint64 gicr_bases[SMP_MAX_CPUS];
+		uint32 gicr_base_count = 0;
+
 		acpi_apic *desc = (acpi_apic*)(madt + 1);
 		while (desc != (acpi_apic*)((char*)madt + madt->header.length)) {
 			if (desc->type == ACPI_MADT_GIC_INTERFACE) {
@@ -184,11 +265,14 @@ arch_handle_acpi()
 				cpu->mpidr = acpi_gicc->mpidr;
 
 				// Firmware may describe the redistributors per-CPU here
-				// instead of via a GICR structure. The frames are
-				// contiguous, so the lowest base wins.
+				// instead of via a GICR structure. Remember every base:
+				// unlike a GICR structure, these are not required to
+				// describe one contiguous range.
 				if (acpi_gicc->gicr_address != 0
-					&& (gicr_base == 0 || acpi_gicc->gicr_address < gicr_base)) {
-					gicr_base = acpi_gicc->gicr_address;
+					&& gicr_base_count < SMP_MAX_CPUS) {
+					gicr_bases[gicr_base_count++] = acpi_gicc->gicr_address;
+					if (gicr_base == 0 || acpi_gicc->gicr_address < gicr_base)
+						gicr_base = acpi_gicc->gicr_address;
 				}
 			} else if (desc->type == ACPI_MADT_GIC_DISTRIBUTOR) {
 				acpi_gic_distributor *acpi_gicd = (acpi_gic_distributor*)desc;
@@ -232,6 +316,9 @@ arch_handle_acpi()
 			dprintf("discovered gic from acpi: version=%d, gicd=%lx, "
 				"gicr=%lx (size %lx), its=%lx\n", version, gicd_base,
 				gicr_base, gicr_size, its_base);
+
+			arch_acpi_set_gicr_regions(intc, gicr_bases, gicr_base_count,
+				version);
 		}
 	}
 

@@ -98,10 +98,7 @@ arch_int_init_post_vm(kernel_args *args)
 	} else if (strcmp(args->arch_args.interrupt_controller.kind,
 			INTC_KIND_GICV3) == 0) {
 		ic = new(std::nothrow) GICv3InterruptController(
-			args->arch_args.interrupt_controller.regs1.start,
-			args->arch_args.interrupt_controller.regs1.size,
-			args->arch_args.interrupt_controller.regs2.start,
-			args->arch_args.interrupt_controller.regs2.size);
+			args->arch_args.interrupt_controller);
 	}
 
 	if (ic == NULL)

@@ -20,36 +20,45 @@
 #define ICI_IRQ 0
 
 
-GICv3InterruptController::GICv3InterruptController(phys_addr_t gicdRegs,
-	size_t gicdSize, phys_addr_t gicrRegs, size_t gicrSize)
+GICv3InterruptController::GICv3InterruptController(const intc_info& info)
 	:
 	InterruptController(),
 	fGicdRegs(0),
-	fGicrRegs(0),
-	fGicrPhysical(gicrRegs),
 	fITS(NULL),
-	fGicrSize(gicrSize),
+	fGicrRegionCount(0),
 	fGicrStride(GICR_STRIDE_V3),
 	fIrqCount(GIC_SPECIAL_BASE)
 {
 	reserve_io_interrupt_vectors(GIC_SPECIAL_BASE, 0, INTERRUPT_TYPE_IRQ);
 
+	memset(fGicrRegions, 0, sizeof(fGicrRegions));
+
+	size_t gicdSize = info.regs1.size;
 	if (gicdSize == 0)
 		gicdSize = 0x10000;
-	if (fGicrSize == 0)
-		fGicrSize = fGicrStride * smp_get_num_cpus();
 
 	area_id gicdArea = vm_map_physical_memory(B_SYSTEM_TEAM, "intc-gicv3-gicd",
 		(void**)&fGicdRegs, B_ANY_KERNEL_ADDRESS, gicdSize,
-		B_KERNEL_READ_AREA | B_KERNEL_WRITE_AREA, gicdRegs, false);
+		B_KERNEL_READ_AREA | B_KERNEL_WRITE_AREA, info.regs1.start, false);
 	if (gicdArea < 0)
 		panic("gicv3: unable to map the distributor registers\n");
 
-	area_id gicrArea = vm_map_physical_memory(B_SYSTEM_TEAM, "intc-gicv3-gicr",
-		(void**)&fGicrRegs, B_ANY_KERNEL_ADDRESS, fGicrSize,
-		B_KERNEL_READ_AREA | B_KERNEL_WRITE_AREA, gicrRegs, false);
-	if (gicrArea < 0)
-		panic("gicv3: unable to map the redistributor registers\n");
+	// How far apart the redistributors are depends on whether this is a GICv4
+	// implementation, which adds two virtual-LPI frames to each PE's pair. A
+	// hypervisor's emulated distributor reports v3 and a real GIC-700 reports
+	// v4, so getting this from the hardware rather than assuming v3 is the
+	// difference between finding every redistributor and finding every other
+	// one.
+	const uint32 pidr2 = _ReadGicd(GICD_PIDR2);
+	if (GICD_PIDR2_ARCH(pidr2) >= 4)
+		fGicrStride = GICR_STRIDE_V4;
+
+	dprintf("gicv3: gicd %#" B_PRIx64 " (size %#" B_PRIxSIZE "), arch rev %"
+		B_PRIu32 ", typer %#" B_PRIx32 ", redistributor stride %#" B_PRIxSIZE
+		"\n", info.regs1.start, gicdSize, GICD_PIDR2_ARCH(pidr2),
+		_ReadGicd(GICD_TYPER), fGicrStride);
+
+	_MapRedistributors(info);
 
 	_DistributorInit();
 	_PrefaultRedistributors();
@@ -59,6 +68,57 @@ GICv3InterruptController::GICv3InterruptController(phys_addr_t gicdRegs,
 	}, this);
 
 	EnableInterrupt(ICI_IRQ);
+}
+
+
+// The redistributors reach us either as a single range or, when firmware
+// describes them per-CPU because they are not all adjacent, as several. Map
+// each one separately: the gaps between them on real hardware are measured in
+// gigabytes and hold other devices.
+void
+GICv3InterruptController::_MapRedistributors(const intc_info& info)
+{
+	addr_range ranges[INTC_MAX_GICR_REGIONS];
+	uint32 count = info.gicr_region_count;
+
+	if (count > INTC_MAX_GICR_REGIONS)
+		count = INTC_MAX_GICR_REGIONS;
+
+	if (count == 0) {
+		// One contiguous range, described the other way round. A size of zero
+		// means firmware did not say, so guess at one frame set per CPU.
+		ranges[0].start = info.regs2.start;
+		ranges[0].size = info.regs2.size != 0
+			? info.regs2.size : fGicrStride * smp_get_num_cpus();
+		count = 1;
+	} else {
+		for (uint32 i = 0; i < count; i++)
+			ranges[i] = info.gicr_regions[i];
+	}
+
+	for (uint32 i = 0; i < count; i++) {
+		if (ranges[i].size == 0)
+			continue;
+
+		addr_t mapped = 0;
+		area_id area = vm_map_physical_memory(B_SYSTEM_TEAM, "intc-gicv3-gicr",
+			(void**)&mapped, B_ANY_KERNEL_ADDRESS, ranges[i].size,
+			B_KERNEL_READ_AREA | B_KERNEL_WRITE_AREA, ranges[i].start, false);
+		if (area < 0) {
+			panic("gicv3: unable to map redistributor region %" B_PRIu32
+				" at %#" B_PRIx64 "\n", i, ranges[i].start);
+			return;
+		}
+
+		fGicrRegions[fGicrRegionCount].base = mapped;
+		fGicrRegions[fGicrRegionCount].physicalBase = ranges[i].start;
+		fGicrRegions[fGicrRegionCount].size = ranges[i].size;
+		fGicrRegionCount++;
+
+		dprintf("gicv3: redistributor region %" B_PRIu32 ": %#" B_PRIx64
+			" size %#" B_PRIx64 " (up to %" B_PRIu64 " PEs)\n", i,
+			ranges[i].start, ranges[i].size, ranges[i].size / fGicrStride);
+	}
 }
 
 
@@ -130,6 +190,9 @@ GICv3InterruptController::_DistributorInit()
 	_WriteGicd(GICD_CTLR, GICD_CTLR_ARE_NS | GICD_CTLR_ENABLE_G1NS);
 	_WaitForRwp();
 
+	dprintf("gicv3: %" B_PRIu32 " interrupt lines, gicd_ctlr %#" B_PRIx32
+		"\n", fIrqCount, _ReadGicd(GICD_CTLR));
+
 	// With ARE enabled, SPI targeting is by affinity rather than a CPU bitmask.
 	// Route everything to the boot CPU until something asks otherwise.
 	uint64 route = gic_routing_affinity(READ_SPECIALREG(MPIDR_EL1));
@@ -148,40 +211,63 @@ GICv3InterruptController::_DistributorInit()
 void
 GICv3InterruptController::_PrefaultRedistributors()
 {
-	addr_t frame = fGicrRegs;
-	addr_t end = fGicrRegs + fGicrSize;
-	while (frame + fGicrStride <= end) {
-		uint64 typer = gic_read64(frame + GICR_TYPER);
+	uint32 found = 0;
 
-		// The SGI/PPI frame is a separate page from the RD frame.
-		(void)gic_read32(frame + GICR_SGI_FRAME + GICR_IGROUPR0);
+	for (uint32 region = 0; region < fGicrRegionCount; region++) {
+		addr_t frame = fGicrRegions[region].base;
+		const addr_t end = frame + fGicrRegions[region].size;
 
-		if ((typer & GICR_TYPER_LAST) != 0)
-			break;
+		while (frame + fGicrStride <= end) {
+			const uint64 typer = gic_read64(frame + GICR_TYPER);
 
-		frame += fGicrStride;
+			// The SGI/PPI frame is a separate page from the RD frame.
+			(void)gic_read32(frame + GICR_SGI_FRAME + GICR_IGROUPR0);
+
+			dprintf("gicv3: redistributor %" B_PRIu32 " (region %" B_PRIu32
+				") affinity %#" B_PRIx32 ", processor %" B_PRIu32 ", vlpis %d,"
+				" last %d\n", found, region, (uint32)(typer >> 32),
+				(uint32)GICR_TYPER_PROC_NUM(typer),
+				(typer & GICR_TYPER_VLPIS) != 0 ? 1 : 0,
+				(typer & GICR_TYPER_LAST) != 0 ? 1 : 0);
+			found++;
+
+			if ((typer & GICR_TYPER_LAST) != 0)
+				break;
+
+			frame += fGicrStride;
+		}
 	}
+
+	dprintf("gicv3: %" B_PRIu32 " redistributor(s) across %" B_PRIu32
+		" region(s) for %" B_PRId32 " cpu(s)\n", found, fGicrRegionCount,
+		smp_get_num_cpus());
 }
 
 
 // Walk the redistributor frames looking for the one whose GICR_TYPER affinity
-// matches this PE, and return the address of its SGI/PPI frame.
+// matches this PE, and return the address of its RD_base frame. GICR_TYPER.Last
+// only marks the end of the region it appears in, so a machine whose
+// redistributors are split across several regions has several of them; running
+// out of one region is a reason to try the next, not to give up.
 addr_t
 GICv3InterruptController::_CurrentRedistributor()
 {
 	uint32 affinity = gic_packed_affinity(READ_SPECIALREG(MPIDR_EL1));
 
-	addr_t frame = fGicrRegs;
-	addr_t end = fGicrRegs + fGicrSize;
-	while (frame + fGicrStride <= end) {
-		uint64 typer = gic_read64(frame + GICR_TYPER);
-		if ((uint32)(typer >> 32) == affinity)
-			return frame;
+	for (uint32 region = 0; region < fGicrRegionCount; region++) {
+		addr_t frame = fGicrRegions[region].base;
+		const addr_t end = frame + fGicrRegions[region].size;
 
-		if ((typer & GICR_TYPER_LAST) != 0)
-			break;
+		while (frame + fGicrStride <= end) {
+			const uint64 typer = gic_read64(frame + GICR_TYPER);
+			if ((uint32)(typer >> 32) == affinity)
+				return frame;
 
-		frame += fGicrStride;
+			if ((typer & GICR_TYPER_LAST) != 0)
+				break;
+
+			frame += fGicrStride;
+		}
 	}
 
 	panic("gicv3: no redistributor for affinity %#" B_PRIx32 "\n", affinity);
@@ -351,8 +437,8 @@ GICv3InterruptController::InitITS(phys_addr_t regs, size_t size)
 	if (its == NULL)
 		return B_NO_MEMORY;
 
-	status_t status = its->Init(regs, size, fGicdRegs, fGicrRegs,
-		fGicrPhysical, fGicrSize, fGicrStride);
+	status_t status = its->Init(regs, size, fGicdRegs, fGicrRegions,
+		fGicrRegionCount, fGicrStride);
 	if (status != B_OK) {
 		delete its;
 		return status;

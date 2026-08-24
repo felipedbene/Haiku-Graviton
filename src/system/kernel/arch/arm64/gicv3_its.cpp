@@ -58,8 +58,8 @@ allocate_its_table(const char* name, size_t size, size_t alignment,
 
 
 status_t
-GICv3ITS::Init(phys_addr_t regs, size_t size, addr_t gicdRegs, addr_t gicrRegs,
-	phys_addr_t gicrPhysical, size_t gicrSize, size_t gicrStride)
+GICv3ITS::Init(phys_addr_t regs, size_t size, addr_t gicdRegs,
+	const gicr_region* gicrRegions, uint32 gicrRegionCount, size_t gicrStride)
 {
 	// Nothing in Init() takes fLock: it runs single-threaded during boot, and
 	// the interface is not reachable from anywhere else until the
@@ -94,9 +94,10 @@ GICv3ITS::Init(phys_addr_t regs, size_t size, addr_t gicdRegs, addr_t gicrRegs,
 	fDeviceIDBits = GITS_TYPER_DEV_BITS(typer);
 	fPhysicalTargetAddress = (typer & GITS_TYPER_PTA) != 0;
 
-	dprintf("gicv3-its: itt entry size %" B_PRIu32 ", %" B_PRIu32 " event id "
-		"bits, %" B_PRIu32 " device id bits, pta %d\n", fIttEntrySize,
-		fEventIDBits, fDeviceIDBits, fPhysicalTargetAddress ? 1 : 0);
+	dprintf("gicv3-its: typer %#" B_PRIx64 ": itt entry size %" B_PRIu32 ", %"
+		B_PRIu32 " event id bits, %" B_PRIu32 " device id bits, pta %d\n",
+		typer, fIttEntrySize, fEventIDBits, fDeviceIDBits,
+		fPhysicalTargetAddress ? 1 : 0);
 
 	// The ITS must be quiescent before its tables can be reprogrammed.
 	gic_write32(fRegs + GITS_CTLR, 0);
@@ -115,7 +116,7 @@ GICv3ITS::Init(phys_addr_t regs, size_t size, addr_t gicdRegs, addr_t gicrRegs,
 
 	gic_write32(fRegs + GITS_CTLR, GITS_CTLR_ENABLED);
 
-	status = _InitLpis(gicdRegs, gicrRegs, gicrPhysical, gicrSize, gicrStride);
+	status = _InitLpis(gicdRegs, gicrRegions, gicrRegionCount, gicrStride);
 	if (status != B_OK)
 		return status;
 
@@ -317,8 +318,8 @@ GICv3ITS::_InitCommandQueue()
 
 
 status_t
-GICv3ITS::_InitLpis(addr_t gicdRegs, addr_t gicrRegs, phys_addr_t gicrPhysical,
-	size_t gicrSize, size_t gicrStride)
+GICv3ITS::_InitLpis(addr_t gicdRegs, const gicr_region* gicrRegions,
+	uint32 gicrRegionCount, size_t gicrStride)
 {
 	// The LPI configuration table is shared by every redistributor, so it is
 	// allocated once. One byte per LPI. Never claim more INTID bits than the
@@ -349,49 +350,62 @@ GICv3ITS::_InitLpis(addr_t gicdRegs, addr_t gicrRegs, phys_addr_t gicrPhysical,
 
 	// Each redistributor needs its own pending table, and LPIs have to be
 	// enabled on all of them even though only the boot CPU is targeted today.
+	// GICR_TYPER.Last ends the region it is in, not the walk: firmware that
+	// describes the redistributors per-CPU may hand us several regions.
 	bool haveTarget = false;
-	addr_t frame = gicrRegs;
-	phys_addr_t framePhysical = gicrPhysical;
-	const addr_t end = gicrRegs + gicrSize;
-	while (frame + gicrStride <= end) {
-		const uint64 typer = gic_read64(frame + GICR_TYPER);
+	uint32 redistributors = 0;
+	for (uint32 region = 0; region < gicrRegionCount; region++) {
+		addr_t frame = gicrRegions[region].base;
+		phys_addr_t framePhysical = gicrRegions[region].physicalBase;
+		const addr_t end = frame + gicrRegions[region].size;
 
-		addr_t pending;
-		phys_addr_t pendingPhysical;
-		status = allocate_its_table("gicv3-lpi-pending",
-			ROUNDUP((1ul << fLpiIDBits) / 8, GICR_PENDBASER_ALIGNMENT),
-			GICR_PENDBASER_ALIGNMENT, area, pending, pendingPhysical);
-		if (status != B_OK) {
-			ERROR("unable to allocate an LPI pending table\n");
-			return status;
+		while (frame + gicrStride <= end) {
+			const uint64 typer = gic_read64(frame + GICR_TYPER);
+
+			addr_t pending;
+			phys_addr_t pendingPhysical;
+			status = allocate_its_table("gicv3-lpi-pending",
+				ROUNDUP((1ul << fLpiIDBits) / 8, GICR_PENDBASER_ALIGNMENT),
+				GICR_PENDBASER_ALIGNMENT, area, pending, pendingPhysical);
+			if (status != B_OK) {
+				ERROR("unable to allocate an LPI pending table\n");
+				return status;
+			}
+
+			gic_write64(frame + GICR_PROPBASER, propbaser);
+			gic_write64(frame + GICR_PENDBASER,
+				(pendingPhysical & 0x000ffffffff0000ull)
+					| GICR_BASER_INNER_CACHE | GICR_BASER_SHAREABILITY);
+			gic_write32(frame + GICR_CTLR,
+				gic_read32(frame + GICR_CTLR) | GICR_CTLR_ENABLE_LPIS);
+
+			redistributors++;
+
+			if (!haveTarget) {
+				// Collections name their target either by physical
+				// redistributor address or by the processor number the
+				// redistributor reports.
+				fCollectionTarget = fPhysicalTargetAddress
+					? (framePhysical >> 16) : GICR_TYPER_PROC_NUM(typer);
+				haveTarget = true;
+			}
+
+			if ((typer & GICR_TYPER_LAST) != 0)
+				break;
+
+			frame += gicrStride;
+			framePhysical += gicrStride;
 		}
-
-		gic_write64(frame + GICR_PROPBASER, propbaser);
-		gic_write64(frame + GICR_PENDBASER,
-			(pendingPhysical & 0x000ffffffff0000ull) | GICR_BASER_INNER_CACHE
-				| GICR_BASER_SHAREABILITY);
-		gic_write32(frame + GICR_CTLR,
-			gic_read32(frame + GICR_CTLR) | GICR_CTLR_ENABLE_LPIS);
-
-		if (!haveTarget) {
-			// Collections name their target either by physical redistributor
-			// address or by the processor number the redistributor reports.
-			fCollectionTarget = fPhysicalTargetAddress
-				? (framePhysical >> 16) : GICR_TYPER_PROC_NUM(typer);
-			haveTarget = true;
-		}
-
-		if ((typer & GICR_TYPER_LAST) != 0)
-			break;
-
-		frame += gicrStride;
-		framePhysical += gicrStride;
 	}
 
 	if (!haveTarget) {
 		ERROR("no redistributor found for the LPI collection\n");
 		return B_ERROR;
 	}
+
+	dprintf("gicv3-its: lpis enabled on %" B_PRIu32 " redistributor(s), %"
+		B_PRIu32 " lpi intid bits, collection target %#" B_PRIx64 "\n",
+		redistributors, fLpiIDBits, fCollectionTarget);
 
 	return B_OK;
 }
