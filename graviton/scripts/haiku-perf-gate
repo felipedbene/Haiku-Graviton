@@ -319,13 +319,48 @@ if [ -n "$IP2" ] && [ "$IP2" != "None" ] && [ "$IP2" != "$IP" ]; then
 	IP="$IP2"
 fi
 
-wait_for_sshd "after stop/start" "$BOOT_WAIT" || die \
-	"FAIL: $AMI came back from a stop/start with nothing answering on :22.
-  This is the data-loss signature: the instance is running and reachable at the
-  network level, but its root filesystem did not survive the power cycle, so the
-  sshd host key (or whatever else was still sitting in a short modified-page
-  queue) is present-but-zeroed. See the page-writer periodic-flush fix. Do not
+if ! wait_for_sshd "after stop/start" "$BOOT_WAIT"; then
+	# "Nothing on :22" had one cause when this gate was written and now has at
+	# least three, so probe before naming one. The message used to assert that
+	# the instance was "reachable at the network level" without checking it,
+	# which sends the reader to the page writer even when the NIC is gone.
+	#
+	# The three are separable, and by measurement rather than by reasoning:
+	# during the page-writer starvation ICMP answered and :22 accepted the
+	# connection at every one of ~72 samples and only the banner never arrived,
+	# whereas a lost NIC gives no ICMP at all.
+	icmp=fail
+	ping -c 3 -W 2 "$IP" >/dev/null 2>&1 && icmp=ok
+	tcp=fail
+	timeout 8 bash -c "cat < /dev/null > /dev/tcp/$IP/22" 2>/dev/null && tcp=ok
+
+	say "probe after the failed sshd wait: ICMP=$icmp TCP:22=$tcp banner=no"
+
+	if [ "$icmp" = fail ]; then
+		die "FAIL: $AMI did not answer ICMP after the stop/start.
+  The guest is not reachable at all, so this is NOT the data-loss signature and
+  NOT a storage verdict -- there is no evidence either way about the filesystem.
+  Suspect the apparatus: roughly one warm reboot in six on c7g.large loses the
+  NIC, and it reproduces on canonical. Retry once before believing this image is
+  bad; if it recurs on a retry, capture the console output."
+	fi
+
+	if [ "$tcp" = ok ]; then
+		die "FAIL: $AMI answers ICMP and accepts TCP on :22 but never sends an
+  ssh banner. The kernel, the interrupt path and the NIC are alive and userland
+  is not making progress -- this is the page-writer starvation signature, NOT the
+  present-but-zeroed data-loss one. Suspect the modified-page quota: check the
+  console for 'quota wait timed out' and run page_writer_quota in KDL. Do not
   promote this image."
+	fi
+
+	die "FAIL: $AMI answers ICMP but refuses TCP on :22 after a stop/start.
+  The network stack is up and sshd is not listening. The likeliest cause remains
+  the data-loss signature this gate was built for: the sshd host key, or whatever
+  else was still sitting in a short modified-page queue, is present-but-zeroed, so
+  sshd cannot start. See the page-writer periodic-flush fix. Do not promote this
+  image."
+fi
 
 # ------------------------------------------------------------------- verdict
 say "----------------------------------------"
