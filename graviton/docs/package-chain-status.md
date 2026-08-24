@@ -977,7 +977,26 @@ packages that must be rebuilt later and belong in `hpkg-out/arm64/stage1/`.
      sqlite, `82393 s` during cmake). The `touch -r` discipline in the libtool recipe
      stays regardless: it costs nothing and it is what makes that recipe independent of
      the clock at all.
-9. **Guest inventory as of 2026-08-24 01:20Z.** The `_dirty`/non-dirty split that used to
+9. **Guest state changed by the cmake pass (2026-08-24 ~04:35Z).** Recorded because
+   two of these will surprise the next person:
+
+   - **Bootstrap packages quarantined** to `/boot/home/quarantine/` (moved, not
+     deleted) so the *real* build tools win dependency resolution, since both
+     versions provide the same `cmd:`:
+     `texinfo-7.2_bootstrap` on **2222/2227/2230**, and
+     `flex-2.5.35_bootstrap` + `bison-3.8.2_bootstrap` on **2230**.
+     Without this, `autoconf` could silently get the stub `makeinfo` again and
+     doxygen fails on `flex >= 2.5.37`. Move them back if a port genuinely needs the
+     bootstrap version.
+   - **Packages installed into boot environments for acceptance testing** (activation
+     state backed up automatically, so each is one `pkgman` rollback away):
+     **2222** libiconv/perl/gettext_libintl/texinfo; **2227** the full cmake closure
+     incl. curl/openssl3/zstd; **2229** cmake/libuv/rhash/expat/zlib; **2230**
+     cmake/expat/rhash/libuv/zlib. These guests are no longer pristine build hosts.
+   - **2231** received the whole shared pool and was used only for the provides index
+     and the seed-`haiku.hpkg` check; it built nothing.
+
+10. **Guest inventory as of 2026-08-24 01:20Z.** The `_dirty`/non-dirty split that used to
    decide whether your dependencies resolved is **gone** — all five guests now carry the
    repaired chroot `haiku` (`r1~beta6_hrev59996-1`) and the rebuilt package set:
 
@@ -1005,7 +1024,7 @@ packages that must be rebuilt later and belong in `hpkg-out/arm64/stage1/`.
    The harvest loop that kept re-importing the stale `haiku.hpkg` is closed in all
    driver scripts — `gworker.sh`, `cwork.sh`, `worker.sh`, `worker-full.sh` and the new
    `rebuild.sh` all stage-and-drop `haiku*.hpkg`.
-10. ~~`/opt/haiku/logs/builder-boot.pcap` is 5.6 GB and still growing.~~ **Fixed.** It was
+11. ~~`/opt/haiku/logs/builder-boot.pcap` is 5.6 GB and still growing.~~ **Fixed.** It was
     not `tcpdump`: the 2222 guest's qemu command line carried
     `-object filter-dump,id=f0,netdev=n0,file=/opt/haiku/logs/builder-boot.pcap`. Killing
     that guest stopped the growth and the file was deleted (5.96 GB reclaimed).
