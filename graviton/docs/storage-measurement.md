@@ -793,15 +793,38 @@ was terminated, so it was **never established as permanent either.**
 
 A deliberate sustained-load test — eight 2 GiB buffered writes queued back to back
 on the node, so the load does not stop when the harness stops — left the machine
-**unresponsive to ssh for over 17 minutes and still going**, while ICMP stayed at
-0% loss throughout.
+**unresponsive to ssh continuously for 1,663 seconds — 27.7 minutes — sampled every
+23 seconds, and still unresponsive at 30 minutes when observation ended.** ICMP was
+`ok` and TCP `:22` accepted at *every one of those samples*. The load was 16 GiB, in
+eight 2 GiB buffered writes, on a 125 MiB/s volume.
 
-So the correct statement is: **under sustained buffered write load, userland stops
-making progress for as long as the load continues, and recovers when it stops.**
-Not a deadlock. Unbounded-duration starvation, which from outside is
-indistinguishable from a deadlock and is just as unusable — a machine that will not
-answer ssh for seventeen minutes because something is writing files is broken —
-but it is not the same defect and must not be described as one.
+```
+      811s 05:17:43     ok     ok STALLED
+      ...  (every 23 s, unbroken)
+     1663s 05:31:55     ok     ok STALLED
+```
+
+So the correct statement, and no more than this: **under sustained buffered write
+load userland stops making progress for at least tens of minutes.** A machine that
+will not answer ssh for half an hour because something is writing files is broken
+however it is labelled.
+
+**Whether it always recovers is genuinely unresolved.** Two instances were
+responsive when re-checked after their harness had exited. The third was starved
+for 30 minutes and had not recovered when observation ended — and because its load
+was eight cells queued on the node, "the load was still running" and "it does not
+recover" cannot be told apart from outside. So:
+
+- "permanent wedge" is **not** established (and was my original overstatement);
+- "recovers when the load stops" is **not** established either (and was my
+  correction overshooting in the other direction);
+- what is established is **≥27.7 minutes of continuous, unbroken starvation**,
+  measured, with the kernel demonstrably alive throughout.
+
+Settling recovery needs the load to be bounded and instrumented so that "still
+writing" is distinguishable from "stuck" — which the bounded-wait fix and its
+timeout counters will do directly, since a machine that no longer starves but logs
+thousands of quota timeouts has answered the question.
 
 The directly measured single-operation latencies are not in doubt, and stand on
 their own: individual buffered `pwrite` calls of 256 KiB taking **8.9 s, 13.9 s,
@@ -1026,7 +1049,7 @@ under the same one-request-per-thread condition.
 | durability across hard power loss | 0 bad blocks | — | **passes on EBS** ¹ |
 | seq read, 1 MiB, depth 1 | 158.3 MiB/s | 598.0 | **3.8× gap** |
 | BFS write, depth 16 | ~200 MiB/s buffered *and* uncached | 1020 raw | **5.1× gap, in BFS** |
-| sustained write load | 180 → 19 MiB/s, userland starved 17+ min | — | **liveness bug** ² |
+| sustained write load | 180 → 19 MiB/s, userland starved **25+ min** | — | **liveness bug** ² |
 | read through the page cache | 123.5 MiB/s | 173.2 uncached | **cache costs 29%** |
 
 ² Starvation, not deadlock: it recovers when the write load stops. Reproduced
@@ -1038,7 +1061,7 @@ barrier — it is not. See Result 5; the caveat must travel with the claim.
 Four things are worth someone's time, in this order:
 
 1. **Sustained buffered write load degrades ~10× and starves userland for as
-   long as the load lasts** — over 17 minutes observed — with the kernel still
+   long as the load lasts** — over 25 minutes observed — with the kernel still
    answering ping and sshd still accepting connections, and no panic or log line.
    **Reproduced 3/3**; the cheap recipe is 12 GiB on a 125 MiB/s volume.
    It recovers when the load stops, so it is starvation rather than deadlock. The cheapest first fix is to bound the indefinite wait in
