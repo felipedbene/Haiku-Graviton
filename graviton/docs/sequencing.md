@@ -110,6 +110,33 @@ bookkeeping, enforced:
 | Port | Cut | Why | Retire when |
 |---|---|---|---|
 | `autoconf-2.72` | `makeinfo` replaced by a stub that creates an empty `-o` file; `make install-html` dropped | `makeinfo` cannot run at all in this image (see hazard 1) | a real `texinfo` exists → rebuild, expect real docs |
+| `gettext-1.0` | `cmd:groff` dropped from `BUILD_PREREQUIRES` (declaration only — nothing removed from build or install) | groff's only use is `MAN2HTML = groff -mandoc -Thtml`. `make all` *does* reach `$(man_HTML)`, but all 27 HTML man pages ship prebuilt and none is stale, so groff is never executed | a real `groff` exists → restore the line. **Sacrifice: none in the artifact** — the package has real, complete docs. The debt is that the declared prereq set is now untrue, and a future *patch to a gettext man page* would fire the rule and fail on missing groff |
+| `zstd-1.5.6` | built with zstd's own upstream `Makefile` instead of cmake; `cmd:cmake` commented out of `BUILD_PREREQUIRES`, `BUILD()`/`INSTALL()`/`TEST()` rewritten | `cmd:cmake` (`zstd-1.5.6.recipe:102`) is what holds zstd inside the link cycle, and no native cmake exists. zstd's Makefile build is a first-class upstream path | `cmd:cmake` exists → restore the cmake `BUILD()`/`INSTALL()` verbatim. **Sacrifice: the CMake package-config files** (`lib/cmake/zstd/zstdTargets*.cmake`), so `find_package(zstd CONFIG)` fails for consumers; `pkg-config` still works, which is what autotools consumers (incl. openssl3) use |
+| `cmake-4.1.6` | **ABANDONED — do not retry as-is.** Bundled `cmcurl`/`cmexpat`/`cmlibrhash`/`cmlibuv` instead of system copies | The intent was right (`devel:libcurl` is the cycle edge, and the recipe already bundles libarchive/libcppdap/libjsoncpp "to avoid circular deps"), but **bundled libuv does not build on Haiku** — cmlibuv's CMake platform dispatch has no Haiku branch, so `uv__hrtime`, `uv__io_poll`, `uv__platform_*` are all undefined at 97% | n/a — superseded. The viable cut is: build `libexpat`/`librhash`/`libuv` (unbuilt *leaves*, not cycle members), keep `--system-*` for those three, and bundle **only** curl plus `LDFLAGS=-lnetwork`. Patch retained for its two verified findings |
+| `cmake-4.1.6` (feature-check seed) | `bootstrap --init=FILE` pre-seeding `CMake_HAVE_CXX_MAKE_UNIQUE`/`UNIQUE_PTR`/`FILESYSTEM` | Not unknown values — *false negatives*. `Source/Checks/cm_cxx_features.cmake:67` treats any unfiltered "warning" in `try_compile` output as feature-broken, and GNU make's clock-skew warning is not in its filter list, so cmake hard-errored "does not support C++11" while compile+link emitted zero diagnostics | **the chroot clock fix**, not the bundled libs. Skew warnings are already gone on repaired guests (verified: 0 occurrences in the zstd log on 2230), so re-test and delete |
+
+**Two corrections to the record, both of which had misdirected the work:**
+
+1. **There are *two* independent knots, not one "netpbm cycle".** The doc knot
+   (`groff → pnmcrop/pnmtopng/pnmtops` from netpbm, `psselect` from psutils, plus
+   the broken `makeinfo`) and the link knot
+   (`cmake → libcurl → openssl3 → libzstd → zstd → cmd:cmake`) share no edge.
+   Only the second one is on the path to `zstd`/`openssl3`. Treating them as one
+   made `groff` look load-bearing for the whole chain when it gates nothing but
+   `gettext`, via a single line.
+2. **`zstd` was recorded as "blocked on `xz_utils` (`devel:liblzma`)". That was
+   incomplete and it mattered.** `cmd:cmake` (`zstd-1.5.6.recipe:102`) is what
+   actually held zstd inside the loop; satisfying liblzma alone would never have
+   freed it. Re-read the whole `BUILD_PREREQUIRES`, not just the dep that the
+   last failure happened to name.
+
+**A missing `cmd:` provider can masquerade as part of a cycle.** cmake's first
+attempt died on `build-prerequires "cmd:which" ... could not be resolved` — the
+four cut edges had resolved silently and this was all that was left. Nothing in
+the image provides `cmd:which`. It needed no expedient at all: `sys-apps/which`
+is a ~15 KB GNU package (`cmd:awk cmd:gcc cmd:grep cmd:make cmd:sed`) that built
+in under a minute. Check whether an unresolved edge is a cycle or just an
+unbuilt leaf before designing a cut for it.
 
 **Hazards found the hard way, all of which cost time (2026-08-22):**
 

@@ -63,6 +63,8 @@ Two related gotchas:
 | script | role |
 |---|---|
 | `mkguest.sh` | create a QEMU Haiku build guest, seeded from `hpkg-out/arm64/` |
+| `prepguest.sh` | make one guest ready for a bottom-up rebuild: refuse it if its chroot `haiku` is still `_dirty`, quarantine every non-input hpkg out of `packages/`, install the edited recipes with pinned mtimes, install the wget/decompress shims and `patch(1)` |
+| `rebuild.sh` | rebuild ports in one guest against the repaired non-dirty chroot, pushing the shared pool in and harvesting out, so several guests can cooperate on one dependency graph |
 | `boot-qemu.sh`, `runboot.sh` | boot a guest with the forwarded-ssh setup |
 | `cwork.sh`, `gworker.sh` | run `haikuporter` per port in a guest, then harvest + S3 sync |
 | `worker.sh`, `worker-full.sh`, `fanout2.sh`, `dolt.sh`, `dolt2.sh` | port fan-out across guests |
@@ -87,3 +89,13 @@ pipeline logic.
   satisfied" caused a fan-out onto six ports that were all blocked.
 - **Never diagnose from `tail -18` of a build log.** That destroyed the decisive
   evidence on `libtool` more than once.
+- **Verifying a port with `ls | grep "^<port>[-_]"` is not enough**, because the guest's
+  `packages/` also holds the cross-built bootstrap set. `ls | grep '^m4[-_]'` matched
+  `m4-1.4.19_bootstrap-1-arm64.hpkg` and reported a successful `m4` rebuild that had never
+  happened; it was only caught by diffing the finished set against the list of names being
+  replaced. `rebuild.sh` now appends `| grep -v _bootstrap`.
+- **Do not overwrite one of these scripts while a copy of it is running.** bash reads a
+  script incrementally by byte offset, so replacing the file mid-run makes the running
+  shell resume at a shifted offset: a live `rebuild.sh` ended up executing
+  `remove-destination: command not found` and `syntax error near unexpected token 'done'`
+  out of the middle of its own loop. Install to a new name, or wait for the `.done` marker.

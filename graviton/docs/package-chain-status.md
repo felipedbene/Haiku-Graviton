@@ -4,6 +4,13 @@ State of the native package build running in the QEMU Haiku guests on the c7g.me
 builder (`i-0f7f6f3e8922acffd`). Companion to `graviton/docs/sequencing.md` (Phase 2)
 and to the recipe patches in `graviton/haikuports-patches/`.
 
+**Where this stands (2026-08-24 01:20Z).** 23 ports / 52 non-bootstrap hpkgs, all built
+against the repaired non-dirty chroot `haiku` and all `pkgman`-installable; five healthy
+guests, no `_dirty`/non-dirty split left; zero clock-skew warnings anywhere. Blockers 1–5
+and 7–8 are closed; **Blocker 6 (cmake) is the open one**, and it gates `doxygen` →
+`libxml2`, a real `groff`, and retiring the `zstd` and `gettext` stage-1 cuts. Read
+Blocker 8 first if you are picking this up.
+
 ## Blocker 1 — `libtool`: `Error 127` on `aclocal.m4` — **FIXED**
 
 Patch: `graviton/haikuports-patches/libtool-2.5.4-no-bootstrap.patch`.
@@ -341,11 +348,313 @@ is already wedged, so the only real remedy there is a different guest.
   `<sources>/<port>-<ver>-N/work-<ver>` before re-testing a recipe change, or you are
   measuring the debris of previous failures.
 
+## Blocker 5 — the "netpbm cycle" is **two** independent knots — **BROKEN**
+
+Patches: `gettext-1.0-groff-doc-cut-stage1.patch`,
+`zstd-1.5.6-makefile-not-cmake-stage1.patch`.
+
+The single biggest error in the earlier write-up was treating this as one cycle.
+It is two, sharing no edge, and only one of them was ever on the path to
+`zstd`/`openssl3`.
+
+**Knot A — documentation (gates `gettext` only).**
+
+```
+groff -> cmd:pnmcrop, cmd:pnmtopng, cmd:pnmtops (netpbm) + cmd:psselect (psutils)
+      -> netpbm -> libjasper, libjpeg, libpng16, libtiff, libxml2
+groff also needs cmd:makeinfo, which is the non-functional texinfo_bootstrap stub
+```
+
+`groff` therefore needs **five** unavailable commands, not one, and `cmd:pnmcrop`
+was never special. But `gettext` needs `groff` for *one thing*: `MAN2HTML = groff
+-mandoc -Thtml` (`gettext-{runtime,tools}/man/Makefile.in:2299`/`:3957`). Dropping
+`cmd:groff` from gettext's BUILD_PREREQUIRES — **one line** — released the entire
+downstream chain, and `groff` never had to be built at all. The HTML man pages
+ship prebuilt in the tarball, so the package is complete; see the patch for why
+`all-am` *does* reach `$(man_HTML)` and why that still does not invoke groff.
+
+**Knot B — linkage (gates `zstd`, `openssl3`, and cmake itself).**
+
+```
+cmake    --BUILD_REQUIRES devel:libcurl--> libcurl
+libcurl  --BUILD_REQUIRES devel:libssl --> openssl3
+openssl3 --BUILD_REQUIRES devel:libzstd--> zstd        (openssl3-3.5.7.recipe:80)
+zstd     --BUILD_PREREQUIRES cmd:cmake --> cmake       (zstd-1.5.6.recipe:102)
+```
+
+This knot has nothing to do with netpbm or groff. **It was broken by leaving cmake
+alone and building `zstd` with its own upstream Makefile**, which removes
+`cmd:cmake` from the picture entirely. `openssl3` then follows from `devel:libzstd`.
+
+Corollary worth keeping: `zstd` was recorded here as "blocked on `xz_utils`
+(`devel:liblzma`)". liblzma was real but not binding — `cmd:cmake` was. Read the
+whole `BUILD_PREREQUIRES`, not just the dependency the last failure happened to
+name.
+
+## Blocker 6 — cmake cannot be built with bundled libraries on Haiku — **DEAD END**
+
+Patch kept for the record: `cmake-4.1.6-bundled-libs-stage1.patch`. **Do not
+retry this route as-is.**
+
+The idea was sound and the recipe already blesses it (`# use the embedded copy to
+avoid circular deps` for libarchive/libcppdap/libjsoncpp): drop `--system-curl`,
+`--system-expat`, `--system-librhash`, `--system-libuv` so cmake uses
+`Utilities/cmcurl`, `cmexpat`, `cmlibrhash`, `cmlibuv`. Three things were learned,
+in order, and the third kills it:
+
+1. **`cmd:which` was missing** and looked like part of the cycle. It is not —
+   `sys-apps/which/which-2.21` is a ~15 KB GNU package needing only
+   `cmd:awk cmd:gcc cmd:grep cmd:make cmd:sed`. Built in under a minute. **Check
+   whether an unresolved edge is a cycle or just an unbuilt leaf.**
+2. **Bundled curl fails, and is fixable.** `Utilities/cmcurl/lib/transfer.c:57`
+   fires `#error "We cannot compile without socket() support!"` because
+   `HAVE_SOCKET` is undefined. `Utilities/cmcurl/CMakeLists.txt:751-753` *does*
+   have a Haiku branch, but it appends `network` only to `CURL_LIBS` — never to
+   `CMAKE_REQUIRED_LIBRARIES`, which is what the `check_symbol_exists("socket"
+   ...)` probe at `:1987` links against. Haiku keeps `socket()` in `libnetwork`,
+   so the probe fails. `export LDFLAGS="-lbsd -lnetwork"` seeds
+   `CMAKE_EXE_LINKER_FLAGS` and fixes it — **verified: the build then ran to 97%.**
+3. **Bundled libuv does not build on Haiku, and that is not cheaply fixable.** At
+   97%:
+
+   ```
+   undefined reference to `uv__hrtime'
+   undefined reference to `uv__platform_loop_init'
+   undefined reference to `uv__platform_loop_delete'
+   undefined reference to `uv__platform_invalidate_fd'
+   undefined reference to `uv__io_poll'
+   undefined reference to `uv__io_check_fd'
+   undefined reference to `uv__fs_event_close'
+   ```
+
+   Every missing symbol is *platform* libuv. cmlibuv's CMake platform dispatch has
+   no Haiku branch, so no platform source file is compiled. cmake's **bootstrap**
+   has its own hand-written file list (`uv-src-unix-posix-poll.c.o`,
+   `uv-src-unix-no-fsevents.c.o`, …), which is exactly why the bootstrap cmake
+   linked fine and only the real build failed — a misleading signal worth knowing.
+
+**The viable route instead:** `libexpat`, `librhash` and `libuv` are *not cycle
+members*, just unbuilt leaves. Build those three natively, keep
+`--system-expat --system-librhash --system-libuv`, and bundle **only** curl with
+the `-lnetwork` fix from (2). That reduces the cut to the one genuine cycle edge.
+Check first whether `libuv`'s own recipe needs `cmd:cmake` — if it does, that
+sub-cycle needs its own answer.
+
+## Blocker 7 — the chroot clock bug, and why it invalidated every package — **ROOT-CAUSED ELSEWHERE, CONSEQUENCES HERE**
+
+The ~18-23 h backwards chroot clock was root-caused (by parallel work) to a
+**stale `haiku.hpkg` in `/boot/home/haikuports/packages/`** — a different file
+from the one the guest boots — whose `libroot.so` still had the pre-fix
+`system_time()` reading `CNTPCT_EL0`. It was self-perpetuating because the harvest
+step copied `guest:packages/*.hpkg` back into `/opt/haiku/hpkg-out/arm64/`, the
+guest seed. Two consequences landed squarely on this work:
+
+1. **It made cmake unbuildable for a reason that looks nothing like a clock bug.**
+   `Source/Checks/cm_cxx_features.cmake:67`
+
+   ```cmake
+   if(check_output MATCHES "(^|[ :])[Ww][Aa][Rr][Nn][Ii][Nn][Gg]")
+     set(CMake_HAVE_CXX_${FEATURE} OFF CACHE INTERNAL "TRY_COMPILE" FORCE)
+   ```
+
+   treats *any* unfiltered "warning" in a `try_compile` output as "feature
+   broken". Its filter list (lines 39-65) covers ninja, MSBuild, MSVC, ld, distcc,
+   icpc and xcodebuild — but **not GNU make**. So
+
+   ```
+   make: Warning: File 'Makefile' has modification time 82393 s in the future
+   make[1]: warning:  Clock skew detected.
+   ```
+
+   turned all three of `make_unique`, `unique_ptr` and `filesystem` into "no", and
+   cmake hard-errored at `CMakeLists.txt:168` *"The C++ compiler does not support
+   C++11"*. `CMakeError.log` shows both the compile and the link succeeding with
+   **zero compiler diagnostics** — there was never a C++ problem. Worked around by
+   pre-seeding the three cache variables via `bootstrap --init=FILE` (line 6's
+   `if(NOT DEFINED ...)` guard); the values are not guesses, cmake's own bootstrap
+   had already proved them by passing `-DCMake_HAVE_CXX_MAKE_UNIQUE=1
+   -DCMake_HAVE_CXX_FILESYSTEM=1`.
+
+   **The seed is now retired, and that was verified rather than assumed.** cmake
+   4.1.6 was rebuilt on the repaired guest 2227 from
+   `cmake-4.1.6-bundled-libs-stage1.patch` **plus `LDFLAGS="-lbsd -lnetwork"` and
+   with no `--init=` cache file at all**. Result: **0** occurrences of *"does not
+   support C++11"*, **0** clock-skew or "in the future" warnings in a 2581-line log,
+   and the build ran to **97%** before dying on the same **120 undefined `uv__*`
+   references** documented below. So the C++11 error really was a clock artefact,
+   nothing else was hiding behind it, and Blocker 6's dead end is independently
+   reconfirmed at the same place.
+
+2. **Fixing the clock invalidated the entire existing native package set.** Every
+   base package built so far records
+
+   ```
+   requires haiku >= r1~beta6_hrev59996_dirty-1
+   ```
+
+   because it was built against the stale, `_dirty` chroot `haiku`/`haiku_devel`.
+   A guest whose chroot has been repaired provides the **non-dirty**
+   `r1~beta6_hrev59996-1`, so none of them resolve any more:
+
+   ```
+   requires "haiku_devel >= r1~beta6_hrev59996_dirty-1" of package "xz_utils_devel-5.8.3-1" could not be resolved
+   requires "haiku >= r1~beta6_hrev59996_dirty-1" of package "libiconv-1.18-1" could not be resolved
+   ```
+
+   This is not confined to one package. A survey of all 48 non-bootstrap hpkgs on
+   the guest shows **every base package carries a `_dirty` reference** (the
+   `_devel`/`_debuginfo` subpackages mostly do not, because they require only their
+   own base — `xz_utils_devel` is an exception, since its recipe lists
+   `haiku_devel` explicitly). So on a repaired guest the chain cannot even rebuild
+   `gettext`, because that needs `lib:libiconv` → `libiconv-1.18` → dirty `haiku`.
+
+   **The whole set had to be rebuilt bottom-up against the fixed `haiku_devel`.**
+   That was done on 2026-08-24 — see Blocker 8. All 52 hpkgs are now non-dirty and
+   the two package sets are no longer mutually incompatible; the pre-fix set is kept
+   only as evidence, in `/opt/haiku/hpkg-out/arm64-dirty-20260824/`.
+
+## Blocker 8 — the bottom-up rebuild against the non-dirty `haiku` — **DONE (2026-08-24)**
+
+**23 ports, 52 hpkgs, rebuilt in 34 minutes of wall clock** (00:45:29 → 01:19 UTC)
+across four QEMU guests, every one verified by `ls` of its hpkg and by the absence of
+a `_dirty` requirement inside it. Nothing was relabelled:
+**0 of the 52 files is byte-identical to its pre-fix predecessor.**
+
+### What was actually decisive
+
+Three proofs, in increasing order of how much they settle:
+
+1. **Per-hpkg requirement check.** Every rebuilt package answers
+   `requires: haiku>=r1~beta6_hrev59996-1`. Across all 52, `package list -i | grep -c
+   _dirty` is **0**.
+2. **`pkgman install` works.** The old note in this document — *"nothing built in these
+   guests can be `pkgman install`ed"* — no longer holds. On a repaired guest,
+   `pkgman install gzip-1.14-1-arm64.hpkg` completes and `gzip --version` prints
+   `gzip 1.14`.
+3. **The negative control on the same guest.** A pre-fix hpkg from the snapshot is
+   still refused there, with the exact original error:
+
+   ```
+   problem 1: nothing provides haiku>=r1~beta6_hrev59996_dirty-1 needed by lz4-1.9.4-2
+   ```
+
+   Same guest, same `pkgman`, one package installs and the other does not. That rules
+   out "the solver got more permissive" as an explanation.
+
+Beyond that, the chain proved itself as it went: `gettext` consumed the rebuilt
+`libiconv`, `zstd` consumed the rebuilt `xz_utils`/`lz4`/`zlib`, and `openssl3`
+consumed the rebuilt `zstd`. A bottom-up rebuild that resolves at every step *is* the
+consistency test.
+
+### The corrected clock, measured
+
+**Zero** clock-skew warnings — `grep -c -i 'clock skew\|modification time.*in the
+future'` over all **25** full build logs returns 0 everywhere. Before the fix these
+appeared in essentially every make-based port (`66159 s in the future` during libtool,
+`64825 s` during sqlite, `82393 s` during cmake). This is the first time the whole set
+has been built under a correct clock, and the one thing that visibly changed as a
+result is cmake's C++11 check (Blocker 6/7).
+
+No port behaved differently in any other way: every one that had built before built
+again, with the same recipe edits and no new failures.
+
+### How the work was split
+
+The graph is a **spine plus leaves**, so four guests do not give four-way speedup:
+
+```
+perl -> help2man -> m4 -> autoconf -> automake -> tar -> libtool -> libiconv
+     -> gettext -> xz_utils -> zstd -> openssl3          (12 serial steps)
+```
+
+| Guest | Ports |
+|---|---|
+| 2230 | the spine: `perl help2man m4`… then `diffutils autoconf automake tar libtool libiconv gettext xz_utils zstd openssl3` |
+| 2222 | `which patch gzip`, then `zlib lz4 zip pkgconf bzip2`, then `readline sqlite`, then `m4` |
+| 2231 | recycled mid-run (see below); ended as the verification guest |
+| 2227 | the cmake C++11 experiment |
+
+`graviton/builder/rebuild.sh` is what makes several guests cooperate on one dependency
+graph: before each port it pushes every package in the shared pool
+(`/opt/haiku/hpkg-out/arm64-nondirty/`) that the guest does not yet have, and after each
+port it harvests back into that pool **and** over the canonical `hpkg-out/arm64/`. The
+canonical copy is overwritten with `cp --remove-destination`, because the file of the
+same name there is the pre-fix build and a plain `cp -p` onto a hardlink would also
+rewrite the snapshot kept as evidence.
+
+`graviton/builder/prepguest.sh` is the other half: a rebuild guest must start with a
+`packages/` directory holding **only** the chroot's inputs — the 5 repaired
+`haiku*.hpkg`, the 28 cross-built `_bootstrap` packages and
+`makefile_engine`/`netfs`/`userland_fs`: 36 files. Leaving the pre-fix
+hpkgs there is what blocked the repaired guests in the first place: haikuporter picks
+`libiconv-1.18` to satisfy `lib:libiconv` and *then* fails to resolve its `_dirty`
+requirement. They are **moved**, to `/boot/home/dirtypkgs/`, not deleted, so
+`package extract` still works on them and a wrong diagnosis destroys nothing.
+
+### Four things that cost time, none of them the rebuild itself
+
+1. **One missing package looked like five broken ports.** `autoconf`, `automake`, `tar`
+   and `libtool` all failed within seconds of each other; the reasons read as a cascade
+   (`cmd:cmp`, then `cmd:autoconf`, `cmd:automake`, `cmd:aclocal`) but the root was a
+   single ordering mistake — **`cmd:cmp` comes from `diffutils`**, which had been queued
+   on a different guest. `diffutils` first, and all four built. Read the *first*
+   failure's reason, not the last.
+2. **`ls | grep "^m4[-_]"` reported an `m4` that was never built.** It matched
+   `m4-1.4.19_bootstrap-1-arm64.hpkg`, which is a build *input*. "Verify by `ls`, not by
+   exit code" is right but insufficient: the check must exclude `_bootstrap`, and the
+   real safety net was diffing the finished 52 names against the list being replaced.
+   `m4` was then built on its own and the set completed.
+3. **Guest 2231 was wedged and had to be recycled.** Its `zlib` sat for six minutes with
+   a 238-byte log. `ps` showed the exact signature from Blocker 4: the unkillable
+   `./conftest` (pid 69517, still alive from an earlier `tar` attempt), a stuck
+   `unmount -f`, and a hung `mount -t bindfs -p "source /dev" dev`. Nothing builds on
+   such a guest. `mkguest.sh 11` produced a working replacement in **4 minutes**, which
+   is the real lesson: recycling a wedged guest is far cheaper than investigating one.
+4. **Overwriting a running script corrupts the running copy.** `rebuild.sh` was
+   reinstalled with the `_bootstrap` fix while guest 2230's copy was mid-loop; bash
+   resumed at a shifted byte offset and executed fragments —
+   `remove-destination: command not found`, `syntax error near unexpected token 'done'`.
+   It happened after the last harvest so nothing was lost, but install under a new name
+   or wait for the `.done` marker.
+
+### Guest capacity
+
+Four builders instead of two, which is the single biggest lever on wall clock here:
+
+- **2222** — the pre-fix guest (24 h clock skew, corrupt haikuporter pickle cache) was
+  killed and recreated from `mkguest.sh 2`. It also carried the stray
+  `-object filter-dump` that had grown `/opt/haiku/logs/builder-boot.pcap` to **5.6 GB**;
+  killing that qemu stopped it and the file was deleted.
+- **2227** — was simply down (connection refused). Recreated with `mkguest.sh 7`.
+- **2231** — recycled mid-run as above.
+- **2229** — the last `_dirty`-consistent guest, deliberately untouched until the rebuild
+  finished. **Now swapped**: its five chroot `haiku*.hpkg` were replaced with the repaired
+  ones (`_dirty-1` → `r1~beta6_hrev59996-1`) and it was run through `prepguest.sh`. All
+  five guests now report the same non-dirty chroot version.
+
+Because `mkguest.sh` seeds from `hpkg-out/arm64/`, and that directory now holds the
+repaired `haiku*.hpkg` **and** the rebuilt 52, any guest made from here on is consistent
+by construction.
+
 ## Where every port stands
 
 Built = a verified `.hpkg` on the builder **and** in
 `s3://haiku-graviton-668984504585-us-west-2/hpkg/arm64/`, confirmed by `ls`/`s3 ls` and
-never inferred from an exit code. **18 ports built, 71 hpkgs in S3** (was 9 and 51).
+never inferred from an exit code. **23 ports built, 52 non-bootstrap hpkgs**, all of them
+rebuilt against the non-dirty `haiku` on 2026-08-24 (Blocker 8). The count went 24 → 23
+because `cmake` was never built and should not have been listed as a port; the 52 hpkgs
+are the same 52 names as before, with different contents.
+
+The five ports added in the cycle-breaking pass are `gettext`, `xz_utils`, `which`,
+`zstd` and `openssl3` — 17 hpkgs. Of those, only **two** needed a recipe change
+(`gettext`: one line; `zstd`: build system); `xz_utils`, `which` and `openssl3`
+built unmodified once their prerequisites existed.
+
+> **Consistency:** every hpkg in this set now requires
+> `haiku >= r1~beta6_hrev59996-1` (non-dirty) and resolves — and `pkgman install`s —
+> inside any repaired guest. All five guests carry the repaired chroot as of
+> 2026-08-24 01:19 UTC, so there is no longer a split to keep track of. The pre-fix
+> set is retained for evidence only, in `/opt/haiku/hpkg-out/arm64-dirty-20260824/`.
 
 | Port | State | Note |
 |---|---|---|
@@ -366,14 +675,22 @@ never inferred from an exit code. **18 ports built, 71 hpkgs in S3** (was 9 and 
 | **zip 3.0** | **built** | second proof of the unpack fix, `.tar.gz` |
 | **patch 2.7.6** | **built** | needed by `haikuporter -G`, see below |
 | **sqlite 3.50.4.0 (+devel +debuginfo)** | **built** | unblocked by readline |
-| groff 1.23.0 | blocked | `build-prerequires "cmd:pnmcrop"` — **the netpbm cycle**, see below |
-| gettext 1.0 | blocked on groff | `build-prerequires "cmd:groff"` |
-| xz_utils 5.8.3 | blocked on gettext | `build-prerequires "cmd:autopoint"` |
-| zstd 1.5.6 | blocked on xz_utils | `build-requires "devel:liblzma"` |
-| openssl3 3.5.7 | blocked on zstd | `build-requires "devel:libzstd"` |
-| libxml2 2.15.3 | blocked | `build-prerequires "cmd:python3.14"` |
+| **gzip 1.14** | **built** | no recipe change, 43 s |
+| **gettext 1.0 (+devel +doc +libintl +libintl_devel)** | **built (stage 1)** | `gettext-1.0-groff-doc-cut-stage1.patch` — **Blocker 5**, the one line that opened the chain |
+| **xz_utils 5.8.3 (+devel +debuginfo)** | **built** | no recipe change; `cmd:autopoint` came free with gettext |
+| **which 2.21 (+debuginfo)** | **built** | no recipe change; nothing in the image provided `cmd:which`, which cmake needs |
+| **zstd 1.5.6 (+bin +devel)** | **built (stage 1)** | `zstd-1.5.6-makefile-not-cmake-stage1.patch` — built with zstd's own Makefile, sidestepping `cmd:cmake` entirely |
+| cmake 4.1.6 | **NOT built** | The `devel:libcurl` cycle edge *was* cut successfully and bundled curl *was* made to work, but **bundled libuv does not build on Haiku**. See Blocker 6 — this is a dead end, not a near miss |
+| **openssl3 3.5.7 (+devel +man +debuginfo)** | **built** | **no recipe change at all** — it simply needed `devel:libzstd`. The whole four-port cascade turned on one line in gettext plus zstd's build system |
+| groff 1.23.0 | blocked, **and no longer on the critical path** | needs `cmd:pnmcrop`/`pnmtopng`/`pnmtops` (netpbm) + `cmd:psselect` (psutils) + the broken `cmd:makeinfo`. Cutting `cmd:groff` out of gettext removed the need to build it at all |
+| libxml2 2.15.3 | blocked | python3.14 is **cheap** (one shell variable); `cmd:doxygen` is the real edge — see below |
 
 ### The remaining chain is not a plain ladder
+
+> **Superseded — kept for the reasoning, not the conclusion.** This section describes the
+> picture *before* Blocker 5. `gettext`, `xz_utils`, `zstd` and `openssl3` are all built;
+> `groff` never had to be. The part still worth reading is *why* it looked like one cycle
+> when it was two. For the actual dependency order used in the rebuild, see Blocker 8.
 
 `sqlite` fell out as soon as `readline` existed, but the rest converges on one point:
 
@@ -402,39 +719,85 @@ packages that must be rebuilt later and belong in `hpkg-out/arm64/stage1/`.
   `Source.patch()` dies on `Error: 'git' is not available`, and git is not buildable here.
   `-G` uses `patch(1)` instead, but demands it unconditionally — even for ports that have
   no patches at all — which is why `patch-2.7.6` had to be built first.
-- **Nothing built in these guests can be `pkgman install`ed.** Every hpkg records
-  `REQUIRES haiku >= r1~beta6_hrev59996_dirty-1` while the image reports a non-dirty
-  `hrev59996`, so the solver refuses. Use `package extract <hpkg> bin/<tool>` instead.
+- ~~**Nothing built in these guests can be `pkgman install`ed.**~~ **No longer true**
+  since the 2026-08-24 rebuild (Blocker 8). It was true while every hpkg recorded
+  `REQUIRES haiku >= r1~beta6_hrev59996_dirty-1` against an image reporting a non-dirty
+  `hrev59996`. `package extract <hpkg> bin/<tool>` is still the right move for a *pre-fix*
+  hpkg out of the snapshot, and for putting a tool on PATH without activating a package.
 
 ## What remains
 
-1. Break the `groff` → `pnmcrop`/netpbm cycle, or cut groff out of `gettext` as a
-   stage-1 expedient. That single edge is what gates `gettext`, `xz_utils`, `zstd` and
-   `openssl3`. Separately, `python3.14` gates `libxml2`.
-2. Build `python3.10` with zlib/`_bz2`/`_lzma` so the unpack fix can be retired. It is
+1. ~~Rebuild the whole set bottom-up against the fixed, non-dirty `haiku_devel`.~~
+   **DONE 2026-08-24** — 23 ports, 52 hpkgs, verified non-dirty and `pkgman`-installable.
+   See Blocker 8. The scripts that did it (`graviton/builder/prepguest.sh`,
+   `rebuild.sh`) are reusable for the next time a chroot input changes version.
+2. `libxml2` — **the `python3.14` half is cheap, the other half is not.** The python
+   module is gated on a single shell variable: `pythonModuleEnabled` is set at
+   `libxml2-2.15.3.recipe:27-37` and, when false, `BUILD()` simply passes
+   `--without-python` and the `cmd:python3.14`/`setuptools_python314` entries are
+   never added to `BUILD_REQUIRES` at all (`:105-110`). So dropping the python
+   binding costs one line and one sub-package. **But `cmd:doxygen` is also in
+   `BUILD_PREREQUIRES` (`:116`), and doxygen is cmake-based
+   (`doxygen-1.14.0.recipe:47,63`)** — so libxml2 is gated behind cmake, which is
+   Blocker 6. Not worth chasing until cmake exists.
+3. Build a real `cmake` by the route in Blocker 6 (native `libexpat`/`librhash`/
+   `libuv` as leaves, bundle only curl with `LDFLAGS=-lnetwork`), then rebuild
+   `zstd` from its unmodified cmake recipe and retire
+   `zstd-1.5.6-makefile-not-cmake-stage1.patch`. cmake also unlocks doxygen →
+   libxml2, and `netpbm` → a real `groff` → retiring the gettext and autoconf doc
+   cuts.
+4. Build `python3.10` with zlib/`_bz2`/`_lzma` so the unpack fix can be retired. It is
    currently *routed around*, not fixed — `haiku-haikuporter-patch --check` prints the
    three modules' status on every run so this cannot be quietly forgotten. The chain is
    `xz_utils` plus libssl, libsqlite3, libedit and libintl.
-3. `.zip` sources (312 recipes) are still unsupported: `zipfile.is_zipfile()` succeeds
+5. `.zip` sources (312 recipes) are still unsupported: `zipfile.is_zipfile()` succeeds
    without zlib and extraction only *then* raises `Compression requires the (missing)
    zlib module`, and that path has no external-tool dispatch to hook into.
-4. Give the source proxy an init unit so it survives a metal reboot; today it must be
+6. Give the source proxy an init unit so it survives a metal reboot; today it must be
    restarted by hand with `haiku-source-proxy start`.
-5. Rebuild the stage-1 `autoconf` package once a real `texinfo` is buildable
+7. Rebuild the stage-1 `autoconf` package once a real `texinfo` is buildable
    (`graviton/haikuports-patches/README.md`).
-6. **Two real arm64 kernel defects were surfaced here and are not fixed:**
+8. **Two real arm64 kernel defects were surfaced here and are not fixed:**
    - `re_compile_pattern` hangs and the resulting process is **unkillable**, which then
      wedges `unmount -f` and `mount -t bindfs` guest-wide. Blocker 4 routes around the
      hang; the underlying libroot/regex defect and the unkillable-process behaviour both
      remain.
-   - The chroot clock still steps backwards. Observed as
-     `File 'Makefile' has modification time 66159 s in the future` (18h22m) during
-     libtool and `64825 s in the future` during sqlite, so it is general, not
-     port-specific. The libtool fix is deliberately immune to it by using `touch -r`,
-     but any recipe that trusts wall-clock timestamps is not.
-7. Guests **2227** and **2231** are wedged and should be recycled; **2222** is unusable
-   (corrupt haikuporter pickle cache, 24 h clock skew). **2229** and **2230** are the
-   healthy ones, and **2230** carries the haikuporter unpack override, `patch(1)` and a
-   seeded package repository.
-8. Unrelated but noticed: `/opt/haiku/logs/builder-boot.pcap` is 5.6 GB and still
-   growing — something left `tcpdump` running on the metal.
+   - ~~The chroot clock still steps backwards.~~ **Not observed any more.** Zero
+     clock-skew and zero "modification time … in the future" warnings across all 25
+     full build logs of the 2026-08-24 rebuild, where before the fix they appeared in
+     essentially every make-based port (`66159 s` during libtool, `64825 s` during
+     sqlite, `82393 s` during cmake). The `touch -r` discipline in the libtool recipe
+     stays regardless: it costs nothing and it is what makes that recipe independent of
+     the clock at all.
+9. **Guest inventory as of 2026-08-24 01:20Z.** The `_dirty`/non-dirty split that used to
+   decide whether your dependencies resolved is **gone** — all five guests now carry the
+   repaired chroot `haiku` (`r1~beta6_hrev59996-1`) and the rebuilt package set:
+
+   | Guest | State |
+   |---|---|
+   | **2222** | **recreated** (`mkguest.sh 2`) after the pre-fix guest was killed. Built `which patch gzip zlib lz4 zip pkgconf bzip2 readline sqlite m4`. |
+   | **2227** | **recreated** (`mkguest.sh 7`) after being found down. Used for the cmake C++11 experiment. |
+   | **2229** | **swapped** to the repaired chroot packages once the rebuild was complete, then re-prepped. Was the last `_dirty`-consistent guest. |
+   | **2230** | the spine guest: `perl help2man m4 diffutils autoconf automake tar libtool libiconv gettext xz_utils zstd openssl3`. |
+   | **2231** | **recycled** (`mkguest.sh 11`) after wedging on the Blocker 4 `./conftest`; now the verification guest. |
+
+   Two operational notes for whoever picks this up:
+
+   - The recipes tarball on the metal (`haikuports-recipes.tar.gz`, 22 Aug) **predates
+     `dev-util/pkgconf`**, so a guest made by `mkguest.sh` has no pkgconf recipe and
+     `haikuporter pkgconf` dies with `Error: pkgconf not found in repository` — which
+     looks like a broken port rather than a missing recipe. It was copied across from
+     2230 by hand; refresh the tarball to fix this properly.
+   - A fresh guest has **no extracted `input-source-packages/develop/sources/<port>-<ver>/`
+     directories** — haikuporter creates each one on first use. So the recipe overlay
+     cannot be pre-installed on a brand-new guest, and every port needing a recipe edit
+     must be built on a guest that has already seen it once. During this rebuild all six
+     edited ports were therefore put on 2230.
+
+   The harvest loop that kept re-importing the stale `haiku.hpkg` is closed in all
+   driver scripts — `gworker.sh`, `cwork.sh`, `worker.sh`, `worker-full.sh` and the new
+   `rebuild.sh` all stage-and-drop `haiku*.hpkg`.
+10. ~~`/opt/haiku/logs/builder-boot.pcap` is 5.6 GB and still growing.~~ **Fixed.** It was
+    not `tcpdump`: the 2222 guest's qemu command line carried
+    `-object filter-dump,id=f0,netdev=n0,file=/opt/haiku/logs/builder-boot.pcap`. Killing
+    that guest stopped the growth and the file was deleted (5.96 GB reclaimed).

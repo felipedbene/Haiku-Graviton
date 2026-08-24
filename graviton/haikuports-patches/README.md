@@ -49,10 +49,43 @@ built before that fix still shows it, so keep pinning until the guest is known g
 | `perl-5.42.2-library-path.patch` | **Real fix.** Makes perl's `LDLIBPTH` additive, because Haiku's `runtime_loader` *replaces* the library search path when `LIBRARY_PATH` is set instead of prepending to it. Without it every `$(MINIPERL)`/`$(RUN_PERL)` dies with loader exit code 3 and the build reports the misleading *"Failed to build miniperl"* — while `miniperl` is a perfectly good binary. | Never (unless the loader is changed to prepend, which is the upstream TODO) |
 | `autoconf-2.72-doc-cut-stage1.patch` | **Stage-1 expedient.** Empties `HTMLS` so `install-html` cannot invoke `makeinfo`, which cannot run in this image at all: `texinfo_bootstrap` ships the `Texinfo/` directory but **zero `.pm` files**. Resulting package has no html docs (info docs survive, they ship prebuilt in the tarball). | A real `texinfo` exists → rebuild with a plain `make install-html`, expect real docs |
 | `haikuporter-unpack-compressed-tar.patch` | **Patches haikuporter, not a recipe.** Adds `gz`/`bz2`/`xz` to `unpackArchive()`'s external-decompressor dispatch, because the guest python has no `zlib`/`_bz2`/`_lzma` and every downloaded `.tar.gz`/`.tar.bz2`/`.tar.xz` therefore died on *"Unrecognized archive type"* right after a **valid** checksum. Applied by `graviton/scripts/haiku-haikuporter-patch`, which also puts a real `patch(1)` on the guest PATH. | `python3.10` is built against zlib/libbz2/liblzma — then `tarfile` handles all three and the added branch is unreachable |
+| `gettext-1.0-groff-doc-cut-stage1.patch` | **Stage-1 expedient, declaration-only.** Drops `cmd:groff` from `BUILD_PREREQUIRES`. groff appears in gettext solely as `MAN2HTML = groff -mandoc -Thtml`; `make all` *does* reach `$(man_HTML)`, but all 27 HTML man pages ship prebuilt and none is stale, so groff is never executed and **the package is complete**. This one line released the whole `gettext → xz_utils → zstd → openssl3` chain. | a real `groff` exists → restore the line. If a gettext man page is ever patched the rule fires and fails loudly — flatten timestamps then, never stub groff |
+| `cmake-4.1.6-bundled-libs-stage1.patch` | **Stage-1 expedient.** Builds cmake against its bundled `Utilities/cmcurl`, `cmexpat`, `cmlibrhash`, `cmlibuv` instead of system copies. `devel:libcurl` is the real cycle edge (`cmake → libcurl → openssl3 → libzstd → zstd → cmd:cmake`); the other three are simply unbuilt. Extends the technique this recipe already uses for libarchive/libcppdap/libjsoncpp. `--system-zlib` kept. | curl/expat/rhash/libuv are native — which this cmake is what unblocks. Bundled **curl** is the security-relevant one; keep out of shipping repos |
+
+| `zstd-1.5.6-makefile-not-cmake-stage1.patch` | **Stage-1 expedient.** Builds zstd with its own upstream `Makefile` instead of cmake, which removes `cmd:cmake` — and with it the `cmake → libcurl → openssl3 → libzstd → zstd` cycle — from the picture entirely. Same `libzstd.so.1.5.6`, same headers, same `libzstd.pc`; what is lost is the CMake package-config files, so `find_package(zstd CONFIG)` will not work. Needs `CXX=g++` for `contrib/pzstd` and `MAN1DIR=`, not `MANDIR=`. | `cmd:cmake` exists → restore the cmake `BUILD()`/`INSTALL()` verbatim |
 
 Any port whose build invokes `makeinfo` will fail the same way, so expect to repeat that
 cut. Stage-1 artifacts go to `hpkg-out/arm64/stage1/`, never to a shipping repo — see the
 ledger in `graviton/docs/sequencing.md`.
+
+## `recipes/` — the whole edited recipe, not just the diff
+
+`recipes/` holds the six recipes in their edited form:
+
+```
+perl-5.42.2.recipe  autoconf-2.72.recipe  libtool-2.5.4.recipe
+tar-1.35.recipe     gettext-1.0.recipe    zstd-1.5.6.recipe
+```
+
+Two reasons, both learned by losing work:
+
+1. **The guest copies get silently reverted.** During the 2026-08-24 rebuild a survey of
+   all live guests found **no guest still carrying the libtool edit** and none carrying the
+   perl or autoconf edits, even though all three ports had been built with them. The mtime
+   pin is per-guest state; anything that resets it (a swap, a re-extract, a fresh guest)
+   takes the edit with it, and the next build fails with the *original* error, which reads
+   as a regression rather than as a lost patch.
+2. **Not every patch file in this directory is machine-appliable.** The gettext, tar and
+   zstd notes use illustrative hunk headers (`@@ BUILD_PREREQUIRES`) rather than real
+   line-numbered ones, because the prose is the point. `patch(1)` cannot apply those. The
+   libtool edit had to be reconstructed by hand from the diff in
+   `libtool-2.5.4-no-bootstrap.patch` for exactly this reason.
+
+So: the `.patch` files remain the explanation of *why*, and `recipes/` is what you install.
+`graviton/builder/prepguest.sh` copies them into a guest and pins each mtime against the
+matching `*_source_rigged-*.hpkg`. The metal keeps its working copies in
+`/opt/haiku/recipe-overlay/`; this directory is the version-controlled one, so edit here and
+copy out.
 
 ## Every non-ISP port must be built with `haikuporter -G`
 

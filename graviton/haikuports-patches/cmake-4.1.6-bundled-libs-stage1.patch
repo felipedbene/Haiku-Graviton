@@ -1,0 +1,151 @@
+STAGE-1 EXPEDIENT: build cmake against its own *bundled* libcurl, libexpat,
+librhash and libuv instead of system copies.
+
+This is the cut that breaks the cycle at its actual centre. `devel:libcurl` is
+the load-bearing edge; the other three are dropped only because they are not
+built yet.
+
+## The cycle, precisely
+
+The chain that was blocking `zstd` and `openssl3` is *not* the doc chain that was
+blocking `gettext`. It is a tight four-node loop, all of it real linkage rather
+than documentation:
+
+    cmake  --BUILD_REQUIRES devel:libcurl-->  libcurl
+    libcurl --BUILD_REQUIRES devel:libssl-->  openssl3
+    openssl3 --BUILD_REQUIRES devel:libzstd--> zstd
+    zstd   --BUILD_PREREQUIRES cmd:cmake -->  cmake
+
+Evidence, from the recipes:
+  - dev-build/cmake/cmake-4.1.6.recipe:50            devel:libcurl
+  - dev-libs/openssl/openssl3-3.5.7.recipe:80        devel:libzstd
+  - app-arch/zstd/zstd-1.5.6.recipe:102              cmd:cmake
+
+**The status doc previously recorded `zstd` as "blocked on xz_utils
+(devel:liblzma)". That was incomplete and it mattered**: liblzma was only the
+*visible* dependency. `cmd:cmake` at zstd-1.5.6.recipe:102 is the one that keeps
+zstd inside the loop, so satisfying liblzma alone would never have freed it.
+
+Note this loop does not pass through netpbm or groff at all. groff/netpbm is a
+separate, parallel knot (groff needs `cmd:pnmcrop`/`pnmtopng`/`pnmtops` from
+netpbm plus `cmd:psselect` from psutils, and netpbm needs
+libjasper/libjpeg/libpng16/libtiff/libxml2). The two knots were conflated
+because both were described as "the netpbm cycle"; they are independent, and
+only this one is on the path to zstd and openssl3.
+
+## Why cutting here is the right place
+
+cmake vendors every one of these libraries in its own tree -- `Utilities/cmcurl`,
+`Utilities/cmexpat`, `Utilities/cmlibrhash`, `Utilities/cmlibuv` -- precisely so
+that it can bootstrap on a machine with nothing installed. `./configure
+--no-system-libs` is the upstream-supported configuration, not a hack, and cmake
+does not need curl for anything on the zstd path: curl serves `file(DOWNLOAD)`,
+`ExternalProject` downloads and `ctest --submit`.
+
+The recipe **already applies exactly this technique** three lines below, with the
+comment `# use the embedded copy to avoid circular deps.` for libarchive,
+libcppdap and libjsoncpp. This change extends an established decision in the same
+file rather than inventing one.
+
+`--system-zlib` is deliberately kept: `zlib-1.3.2` and `zlib_devel` are built, so
+there is no reason to bundle it. The build log confirms it was honoured
+(`-- Using system-installed ZLIB`).
+
+## What it costs
+
+- **cmake carries four bundled libraries.** They will not receive security
+  updates from the system packages, which for a bundled *curl* is the entry that
+  matters. This package must not reach a shipping repository.
+- `cmd:cmake` from this package cannot be trusted for anything that downloads
+  over the network or submits to CDash. It is fine as a *build tool* for
+  compiling other ports, which is its only job here.
+- The `REQUIRES` lines were commented out to match, so the package does not
+  declare runtime deps it no longer links.
+
+## A second, unrelated blocker found here
+
+The first attempt failed in dependency resolution, not in the build:
+
+    build-prerequires "cmd:which" of package "cmake-4.1.6" could not be resolved
+    Error: unable to resolve prerequired packages for build for cmake-4.1.6
+
+Nothing in the image provides `cmd:which` -- Haiku has no `which` binary and no
+installed package declares it. The four cut edges resolved silently, so this was
+the *only* thing left. It is **not** an expedient and needed no cut: the provider
+is `sys-apps/which/which-2.21`, a ~15 KB GNU package whose entire
+BUILD_PREREQUIRES is `cmd:awk cmd:gcc cmd:grep cmd:make cmd:sed`. It was built in
+under a minute (`which-2.21-6-arm64.hpkg`, plus debuginfo) and cmake then
+resolved. Worth remembering as a class: a missing `cmd:` provider can look like
+part of a cycle when it is just an unbuilt leaf.
+
+## Retire when
+
+curl, expat, rhash and libuv exist as native arm64 packages -- which becomes
+possible the moment this cmake exists, because that is what was blocking them.
+Restore the four `--system-*` flags plus `--bootstrap-system-libuv` and
+`--bootstrap-system-librhash`, uncomment the four `devel:` and four `lib:` lines,
+and rebuild. Then rebuild anything compiled by the stage-1 cmake is *not*
+required -- cmake is a build tool, its bundled libs do not leak into the packages
+it builds -- but cmake itself must be replaced.
+
+Applies to: input-source-packages/develop/sources/cmake-4.1.6-1/cmake-4.1.6.recipe
+
+--- a/cmake-4.1.6.recipe
++++ b/cmake-4.1.6.recipe
+@@ -24,15 +24,22 @@
+ 	cmd:cpack = $portVersionCompat
+ 	cmd:ctest = $portVersionCompat
+ 	"
++# STAGE-1 NOTE (graviton): libcurl / libexpat / librhash / libuv switched to
++# cmake's *bundled* copies (Utilities/cmcurl, cmexpat, cmlibrhash, cmlibuv).
++# devel:libcurl is the cycle edge: cmake -> libcurl -> openssl3 -> libzstd -> zstd
++# -> cmd:cmake. The other three are simply not built yet. This is the technique the
++# recipe already applies to libarchive/libcppdap/libjsoncpp below ("use the embedded
++# copy to avoid circular deps"). Restore the four --system-* flags and the four dep
++# lines once curl/expat/rhash/libuv exist natively.
+ REQUIRES="
+ 	haiku$secondaryArchSuffix
+-	lib:libcurl$secondaryArchSuffix
+-	lib:libexpat$secondaryArchSuffix
++#	lib:libcurl$secondaryArchSuffix	# graviton stage-1: bundled copy
++#	lib:libexpat$secondaryArchSuffix	# graviton stage-1: bundled copy
+ 	lib:libform$secondaryArchSuffix	# from ncurses.
+ 	lib:libncurses$secondaryArchSuffix
+-	lib:librhash$secondaryArchSuffix
++#	lib:librhash$secondaryArchSuffix	# graviton stage-1: bundled copy
+ 	lib:libstdc++$secondaryArchSuffix
+-	lib:libuv$secondaryArchSuffix
++#	lib:libuv$secondaryArchSuffix	# graviton stage-1: bundled copy
+ 	lib:libz$secondaryArchSuffix
+ 	# use the embedded copy to avoid circular deps.
+ #	lib:libarchive$secondaryArchSuffix
+@@ -47,11 +54,11 @@
+
+ BUILD_REQUIRES="
+ 	haiku${secondaryArchSuffix}_devel
+-	devel:libcurl$secondaryArchSuffix
+-	devel:libexpat$secondaryArchSuffix
++#	devel:libcurl$secondaryArchSuffix	# graviton stage-1: bundled copy
++#	devel:libexpat$secondaryArchSuffix	# graviton stage-1: bundled copy
+ 	devel:libncurses$secondaryArchSuffix
+-	devel:librhash$secondaryArchSuffix
+-	devel:libuv$secondaryArchSuffix
++#	devel:librhash$secondaryArchSuffix	# graviton stage-1: bundled copy
++#	devel:libuv$secondaryArchSuffix	# graviton stage-1: bundled copy
+ 	devel:libz$secondaryArchSuffix
+ #	devel:nlohmann_json
+ 	# use the embedded copy to avoid circular deps.
+@@ -95,13 +102,7 @@
+ 		--mandir=/$relativeManDir \
+ 		--xdgdatadir=/$relativeDataDir \
+ 		--no-system-libs \
+-		--system-curl \
+-		--system-expat \
+-		--system-librhash \
+-		--system-libuv \
+ 		--system-zlib \
+-		--bootstrap-system-libuv \
+-		--bootstrap-system-librhash \
+ 		--parallel=${jobArgs#-j}
+ 		# These do not seem to be used anyway (libarchive at least links to libz/libzstd):
+ 		# --system-bzip2 --system-liblzma --system-zstd, --system-nghttp2

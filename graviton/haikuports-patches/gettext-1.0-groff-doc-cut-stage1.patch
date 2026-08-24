@@ -1,0 +1,121 @@
+STAGE-1 EXPEDIENT (declaration-only): drop `cmd:groff` from gettext's
+BUILD_PREREQUIRES.
+
+This is the cut that broke the netpbm/cmake deadlock. It is the cheapest edge in
+the whole knot: one line, in one recipe, and it releases `gettext` ->
+`cmd:autopoint` -> `xz_utils` -> `devel:liblzma` -> `zstd` -> `openssl3`.
+
+THE PACKAGE ITSELF IS NOT CRIPPLED. Unlike the autoconf cut, nothing was removed
+from the build or the install: groff is simply never *executed*, so the shipped
+package contains the real, complete HTML man pages. What is untrue after this
+patch is only the recipe's declared prerequisite set. That is why this is filed
+as stage-1 bookkeeping rather than a functional regression -- but it is still
+recorded, because a *rebuild from modified man page sources* would silently lose
+the regeneration step (see "the one real risk" below).
+
+## Why groff was in there
+
+Its only appearance in gettext-1.0 is as a man-page-to-HTML converter, in exactly
+two files (evidence from the 32 MB tarball, unpacked and grepped):
+
+    gettext-1.0/gettext-tools/man/Makefile.in:3957:   MAN2HTML = groff -mandoc -Thtml
+    gettext-1.0/gettext-runtime/man/Makefile.in:2299: MAN2HTML = groff -mandoc -Thtml
+
+and nowhere else -- `grep -rn groff` over every Makefile.in / Makefile.am /
+configure / configure.ac in the tree returns those two definitions, their two
+surrounding comments, and nothing more. groff is not used for typesetting, PDF,
+PostScript, or any part of the compile.
+
+## Why the build does not need it, stated correctly
+
+An earlier version of this note claimed `all-am` "never depends on $(man_HTML)".
+**That is wrong**, and the wrong reason is worth recording because it would make
+a reader trust the cut for the wrong cause. The dependency chain really does
+reach the HTML files (gettext-tools/man/Makefile.in):
+
+    4096:  all-am: Makefile $(MANS) all-local
+    4225:  all-local: html-local
+    4285:  html-local: $(man_HTML)
+
+So `make all` *does* ask for `msgcmp.1.html` and its 20 siblings. The reason
+groff is never invoked is different, and is stated by the tarball itself at
+Makefile.in:4220:
+
+    # We distribute both the man pages and their HTML equivalent.
+
+All of them ship prebuilt -- 21 files in `gettext-tools/man`, 6 in
+`gettext-runtime/man` -- and each `$(man_HTML)` entry has a single explicit
+prerequisite, its own man page (`msgcmp.1.html: msgcmp.1`, Makefile.in:4294 ff).
+make only rebuilds a target whose prerequisite is *strictly newer*, and a scan of
+the pristine tarball finds **no** `.1` newer than its `.1.html`. Every one of
+those rules is therefore already satisfied on arrival and its recipe is never
+run.
+
+The same argument covers `cmd:makeinfo`, which was left in place: gettext-tools/
+doc does put `$(INFO_DEPS)` in `all-am` (Makefile.in:4318, INFO_DEPS =
+$(srcdir)/gettext.info), but `gettext.info` ships prebuilt and dated 2026-01-28
+against `gettext.texi` at 2026-01-27 -- already newer, so the rule at
+Makefile.in:4150 does not fire. `html-split` likewise resolves to the shipped
+`gettext_toc.html` and its 36 siblings, and uses `TEXI2HTML = @PERL@
+build-aux/texi2html` rather than makeinfo anyway. This matters because the image's
+`makeinfo` is the non-functional `texinfo_bootstrap` stub that kills any port
+which actually invokes it (see autoconf-2.72-doc-cut-stage1.patch) -- gettext
+gets away with it purely because it never calls it.
+
+Confirmed empirically, not just by reading: the successful build log
+(`/boot/home/c-gettext.log`, 23405 lines, kept at
+`/opt/haiku/logs/agent-cycle/c-gettext.log`) contains no groff invocation and no
+makeinfo invocation, and ends with all five hpkgs created.
+
+## The one real risk this leaves behind
+
+If anyone ever patches a gettext man page, the corresponding `.1` becomes newer
+than the shipped `.1.html`, the rule fires, and the build dies on a missing
+`groff` -- or, worse, if a fake groff is ever put on PATH, installs a garbage
+HTML page. So the failure mode is loud (missing command) unless someone stubs it.
+Do not stub it.
+
+## Why not the alternatives
+
+- **Build a stage-1 `groff` instead.** Much more expensive and it does not even
+  avoid this file. groff's own BUILD_PREREQUIRES needs *five* unavailable
+  commands -- `cmd:pnmcrop`, `cmd:pnmtopng`, `cmd:pnmtops` (netpbm) and
+  `cmd:psselect` (psutils) -- plus `cmd:makeinfo`, which is the broken stub. So
+  that route means cutting five edges across two packages instead of one edge
+  across one, and netpbm is itself gated on libjasper/libtiff/libpng16/libxml2.
+- **Timestamp-flattening (the libtool trick).** Would also work, and is strictly
+  more robust -- it would survive the man-page-edit case by disabling the rule
+  rather than relying on it being satisfied. It was not needed here because the
+  tarball's own timestamps are already consistent. Reach for it if the risk above
+  ever materialises.
+
+Applies to: input-source-packages/develop/sources/gettext-1.0-1/gettext-1.0.recipe
+
+--- a/gettext-1.0.recipe
++++ b/gettext-1.0.recipe
+@@ BUILD_PREREQUIRES
++# STAGE-1 NOTE (graviton): cmd:groff removed from BUILD_PREREQUIRES.
++# groff appears in this tarball only as MAN2HTML in gettext-{runtime,tools}/man/
++# Makefile.in (:2299 / :3957), i.e. man-page-to-HTML conversion.
++# "all-am: Makefile $(MANS) all-local" -> "all-local: html-local" ->
++# "html-local: $(man_HTML)" does reach the html files, but the tarball ships all
++# 27 of them prebuilt ("We distribute both the man pages and their HTML
++# equivalent", Makefile.in:4220) and no .1 is newer than its .1.html, so every
++# rule is already satisfied and groff is never executed. Verified: no groff in
++# the build log. Restore this line once a real groff exists -- it is behind the
++# netpbm/psutils cycle. If a gettext man page is ever patched, the rule WILL
++# fire and the build will fail loudly on missing groff: flatten the source
++# timestamps then (see libtool-2.5.4-no-bootstrap.patch), do not stub groff.
+ BUILD_PREREQUIRES="
+ 	cmd:aclocal
+ 	cmd:autoconf
+ 	cmd:automake
+ 	cmd:autoheader
+ 	cmd:gcc$secondaryArchSuffix
+-	cmd:groff
+ 	cmd:gzip
+ 	cmd:ld$secondaryArchSuffix
+ 	cmd:libtoolize$secondaryArchSuffix
+ 	cmd:make
+ 	cmd:makeinfo
+ 	"
