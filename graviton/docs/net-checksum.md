@@ -383,9 +383,24 @@ is bits 0 and 1 only** — IPv4 header checksum and IPv4 L4 *partial*. Bit 3
 hazard: we do not declare `ENA_ADMIN_HOST_INFO_TX_IPV6_CSUM_OFFLOAD_MASK`, and
 Linux does. On a newer Linux kernel that declares it, `ethtool` reports
 `tx-checksum-ipv6: on`; on an older one it reports `off [fixed]`. Declaring that
-bit is likely all that stands between us and IPv6 transmit checksum offload. Bits
+bit is **an untested hypothesis** for what stands between us and IPv6 transmit
+checksum offload — *not* a known fix. Bits
 5 and 6 are clear, independently confirming from our own admin queue that the
 device does not support TSO.
+
+> **Status of this paragraph, 2026-08-24.** The **measurement** is settled and is the
+> authoritative statement of this device's transmit capability: **`tx 0x3` = IPv4 L3 +
+> IPv4 L4 partial, and nothing else.** No IPv6, no `_FULL`, no TSO. Treat "no IPv6
+> transmit offload" as the fact.
+>
+> The **host_info hypothesis** below is a good hypothesis with real in-driver
+> precedent, and it is still untested. Two cautions before anyone spends on it:
+> `tcp-tso.md` §0.4 stated outright that the device offers IPv6 offload — inferred
+> from Linux `ethtool` on a newer kernel — and that claim has had to be corrected
+> against this very admin-queue read. **A capability inferred from another OS's
+> tooling is not a capability.** So if the bit is declared, the test of success is a
+> re-read of `GET_FEATURE(OFFLOAD)` from our own admin queue, not an `ethtool` output
+> from anywhere.
 
 **Corroborated independently**, by a second agent reaching the same conclusion by a
 different route, and there is direct precedent in this driver's own comments: a
@@ -393,8 +408,12 @@ missing `driver_supported_features` declaration once made the device **stop
 advertising LLQ support entirely** (`ena.cpp:361-368`, on
 `RSS_CONFIGURABLE_FUNCTION_KEY`). The device's advertisement is contingent on what
 the driver declares, and one undeclared bit is enough. This is a one-bit
-experiment, and it belongs to whoever owns `ena.cpp` — not attempted here to avoid
-colliding with `feat/ena-tx-offload`.
+experiment, and it belongs to whoever owns `ena.cpp` — ~~not attempted here to avoid
+colliding with `feat/ena-tx-offload`~~.
+
+> **The reason for not attempting it is gone (2026-08-24): `feat/ena-tx-offload` is
+> MERGED** (`c2753e0030`). There is nothing left to collide with, so this experiment
+> is unblocked and unclaimed as far as I can establish.
 
 ## 7. The end-to-end measurement
 
@@ -757,10 +776,18 @@ saves X" should be treated as upper bounds here until someone measures in situ.
 
 ## 8. What shipped, and what it interacts with
 
-| change | branch | evidence |
+*(Column relabelled 2026-08-24: both rows were listed by branch, which read as
+unlanded. Both are merged.)*
+
+| change | state | evidence |
 |---|---|---|
-| `compute_checksum()` 4.15×, both accumulators widened, `checksum.h`, first unit test for it | `feat/net-checksum-fast` | 3.54M-case exhaustive verification; microbenchmark; kernel disassembly |
-| Stop claiming the device verified the IPv4 header | `fix/ena-rx-csum-guard` | 270 MB each way, 0 errors, 0 dropped, no rate change |
+| `compute_checksum()` 4.15×, both accumulators widened, `checksum.h`, first unit test for it | **MERGED** `63e1ca7b15` (was `feat/net-checksum-fast`) | 3.54M-case exhaustive verification; microbenchmark; kernel disassembly |
+| Stop claiming the device verified the IPv4 header | **MERGED** `62315721f1` (was `fix/ena-rx-csum-guard`) | 270 MB each way, 0 errors, 0 dropped, no rate change |
+
+> **On that second row, a detail that costs time if missed:** the fix was to *remove*
+> a false `NET_BUFFER_L3_CHECKSUM_VALID` claim, not to add validation. And
+> **`rx_enabled` is not a usable guard** — it reads `0x0` while the device demonstrably
+> validates L4 on ~98% of frames. Do not gate anything on it.
 
 Measured end to end at **+2.37% transmit CPU per MiB** (p = 0.014) across 8
 interleaved boots on `c7g.4xlarge`, with receive as a clean negative control. §7.2.
@@ -776,8 +803,19 @@ residual walk for a faster loop to speed up. That is a correction to my own earl
 "partly substitutes" framing, and it moves *against* this change: with the real
 4.15× rather than the 2.4× that agent had assumed, the arithmetic is that the loop
 costs ~239 µs/MiB today and ~58 µs/MiB after this change, so this removes ~181,
-while offload removes a measured 301–361. Combined ≈12.6–15.1%, **not** the ~20%
+while offload removes ~~a measured 301–361. Combined ≈12.6–15.1%,~~ **not** the ~20%
 that summing the two headlines would give.
+
+> **The offload figure used here is WITHDRAWN (corrected 2026-08-24), so this
+> arithmetic needs re-deriving.** The 301–361 µs/MiB came from the **−12.6%** transmit
+> measurement, which was **retracted as a confound** — the send buffer was not pinned
+> (`aa6196bf96`). The replicated result is **−3.54%, p = 0.0079**. Every combined
+> figure in this paragraph inherits the bad number, so the "≈12.6–15.1%" total is not
+> usable as written.
+>
+> **The qualitative conclusion is unaffected and is the part to keep:** the two
+> changes are *partly* substitutive rather than additive, so summing their headlines
+> overstates the benefit. That was the point of the paragraph, and it survives.
 
 So the value of this change is what offload cannot reach:
 
@@ -831,9 +869,18 @@ There is also a live possibility that cuts *for* offload rather than against it:
 checksum's in-situ cost is limited by memory bandwidth rather than arithmetic (§7.3's
 untested hypothesis), then **offload, which removes the CPU's read of those bytes
 entirely rather than merely speeding it up, would not be subject to the same
-shortfall.** That would make offload's measured −12.6% credible on its own terms and
-this change's 2.37% the anomalous one. Worth keeping in mind before treating my
-factor as a prior for anything.
+shortfall.**
+
+> **The hypothesis is still live and interesting; the number it was reaching for is
+> gone (corrected 2026-08-24).** ~~That would make offload's measured −12.6% credible
+> on its own terms and this change's 2.37% the anomalous one.~~ **−12.6% is
+> withdrawn** — it was a confound (unpinned send buffer), and the replicated figure is
+> **−3.54%**. So there is no longer a large offload result needing to be explained
+> away, and **this change's ~2% is no longer the anomalous one**: the two are now the
+> same order of magnitude, which is the *un*surprising outcome. The memory-bandwidth
+> hypothesis in §7.3 remains untested and worth testing on its own merits.
+
+Worth keeping in mind before treating my factor as a prior for anything.
 
 ## 9. Disproved or abandoned along the way
 

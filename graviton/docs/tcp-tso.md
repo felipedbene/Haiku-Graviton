@@ -33,13 +33,37 @@ which is the cheapest possible place for it to arrive.
    been quoting is a *receive* measurement — transmit has never been decomposed,
    and an earlier draft of this document wrongly applied one to the other. §4.4.
 4. **What ENA *does* offer on transmit is partial (pseudo-header) checksum
-   offload, on both IPv4 and IPv6.** That is bits 1 and 3 of the offload
-   descriptor, not the "full checksum" bits 2 and 4 — a distinction that changes
-   how the concurrent checksum-offload work must be written. §5.
+   offload** ~~, on both IPv4 and IPv6. That is bits 1 and 3 of the offload
+   descriptor,~~ **— IPv4 ONLY.** Not the "full checksum" bits either — a
+   distinction that changes how the concurrent checksum-offload work must be
+   written. §5.
+
+   > **CORRECTED 2026-08-24: the IPv6 half of this claim is wrong.** It was inferred
+   > from Linux `ethtool` on a newer kernel. A **first-party admin-queue read** of
+   > `GET_FEATURE(OFFLOAD)` on the instance under test says:
+   >
+   > ```
+   > ena: offload: tx 0x3 (ipv4 l3 csum 1, ipv4 l4 csum part 1 full 0,
+   >                       ipv6 l4 csum part 0 full 0, tso v4 0 v6 0),
+   >      rx supported 0x7, rx enabled 0x0
+   > ```
+   >
+   > **`tx 0x3` is bits 0 and 1 only: IPv4 L3 + IPv4 L4 *partial*.** The IPv6 L4 bit
+   > is **clear**. So there is no IPv6 transmit checksum offload on this device, no
+   > `_FULL` of any kind, and no TSO. Anywhere this document treats IPv6 offload as
+   > available — or as "one bit away" — it is wrong. A device's own capability word
+   > beats an inference from another OS's tooling.
 5. **The biggest remaining transmit levers are per-byte, and none of them is
-   TSO.** Measured on Neoverse V1: Haiku's checksum loop runs at 0.229 ns/byte
+   TSO.** ~~Measured on Neoverse V1: Haiku's checksum loop runs at 0.229 ns/byte
    where a 64-bit unrolled version does 0.095 — 2.4× — worth ~7% of the per-byte
-   term. Ranking in §6.
+   term.~~ Ranking in §6.
+
+   > **Superseded 2026-08-24.** Both numbers moved and the "~7%" should never have
+   > been written. `compute_checksum()` is **merged** at **4.15× at 1988 bytes** —
+   > and 1988 is the size that matters, because `checksum_data()` gets one
+   > `data_node` at a time out of 2048-byte buffers. **The "~7% of the per-byte
+   > term" is deleted, not corrected: that term is the *receive* fit, and this is a
+   > transmit change.** See §4.4, and the correction box in §6.1.
 
 ---
 
@@ -324,7 +348,17 @@ All per-byte — not because the 88% figure applies to transmit (it does not; se
 §4.4) but because each of these removes or shrinks a whole pass over every byte,
 and because the only transmit cost actually measured here is per-byte.
 
-### 6.1 Haiku's checksum loop is 2.4× slower than it needs to be — measured
+### 6.1 ~~Haiku's checksum loop is 2.4× slower than it needs to be~~ — FIXED, 4.15×, merged
+
+> **MERGED 2026-08-24** as `e63fe3f24a` "net: make the internet checksum 4x faster,
+> and stop it overflowing" (via `63e1ca7b15`). The measured speed-up is **4.15× at
+> 1988 bytes**, not 2.4×.
+>
+> **Why the size matters more than the ratio, and this is the transferable lesson:**
+> `checksum_data()` is handed **one `data_node` at a time**, out of 2048-byte
+> buffers — so **1988 bytes is the length to optimise**. Tuning for "one 8949-byte
+> jumbo frame", which is the intuitive choice at MTU 9001, would have optimised a
+> size the routine never sees.
 
 `compute_checksum()` (`stack/utility.cpp:101-131`) is a 16-bit-at-a-time
 accumulate loop that still carries its original comments:
@@ -355,9 +389,24 @@ The per-byte rate is flat across a 45× size range in both variants, which is th
 built-in control: the result is the loop, not a cache-residency artefact. Checksums
 matched at every size.
 
-**Saving: 0.134 ns/byte, or ~7% of the 1.85 ns/byte per-byte term** — the same
-order as the arm64 `memcpy` fix already proven here (6.4%), and the same root
+**Saving: 0.134 ns/byte** ~~, or ~7% of the 1.85 ns/byte per-byte term~~ — ~~the same
+order as the arm64 `memcpy` fix already proven here (6.4%)~~ — and the same root
 cause: a generic C loop where the architecture wanted a real implementation.
+
+> **Two corrections, 2026-08-24.**
+>
+> 1. **The percentage is deleted, not adjusted. `1.85 ns/byte` is the RECEIVE fit,
+>    and this is a TRANSMIT change.** There is **no per-frame/per-byte decomposition
+>    of the transmit path anywhere in this tree** — which §4.4 of *this document*
+>    states explicitly and forbids. Expressing a transmit saving as a fraction of a
+>    receive term is the exact error §4.4 was written to stop, committed here in §6.
+>    Leaving it in place is how it spread to other documents.
+> 2. **The comparison figure is stale twice over.** `compute_checksum()` is now
+>    **merged** and the measured speed-up is **4.15× at 1988 bytes** (not 2.4×), and
+>    **1988 is the size that matters** because `checksum_data()` receives one
+>    `data_node` at a time from 2048-byte buffers — sizing the optimisation for "one
+>    8949-byte frame" would have tuned the wrong length. The `memcpy` figure is
+>    **8.4%**, not 6.4%.
 Caveat, stated because it will move the number: this is a warm-cache userspace
 measurement on contiguous memory. In the kernel the walk traverses a `data_node`
 chain (`net_buffer.cpp:2207-2253`) with per-node overhead, and the data is
@@ -369,10 +418,10 @@ The kernel number will be worse for both variants; the ratio should survive.
 | lever | term | status |
 |---|---|---|
 | **Zero-copy transmit** — implement `get_memory_map` in the buffer module, real scatter-gather in `ena_send()`, retire the 1920-byte bounce slots | per-byte, removes a whole copy | **held** — largest single item, but it touches `ena.cpp` and the transmit path where two branches are live; sequenced behind them. Design notes in §6.4 |
-| **TX checksum offload** — removes the 0.229 ns/B walk entirely for ENA | per-byte, ~12% | `feat/ena-tx-offload`, in progress |
-| **Optimise `compute_checksum()`** — 2.4× measured, ~7% | per-byte | unclaimed, cheap, and *not* redundant: it also serves loopback, other drivers, IPv6 on older kernels, and any path where offload is unavailable |
-| **TX doorbell coalescing / batched transmit entry point** | per-frame | `feat/ena-tx-offload`, in progress |
-| ~~TSO~~ | per-frame, ≤12% at MTU 9001 | **impossible — device does not support it** |
+| **TX checksum offload** — removes the 0.229 ns/B walk entirely for ENA | per-byte. ~~~12%~~ **−3.54%, p = 0.0079** | **MERGED** `c2753e0030` (2026-08-24). The ~12% traced to an earlier **−12.6%** figure that is **withdrawn as a confound** (unpinned send buffer) |
+| **Optimise `compute_checksum()`** — ~~2.4× measured, ~7%~~ **4.15× at 1988 bytes** | per-byte | **MERGED** `63e1ca7b15` (2026-08-24), *not* unclaimed. Still correctly *not* redundant with offload: it also serves loopback, other drivers, and any path where offload is unavailable |
+| **TX doorbell coalescing / batched transmit entry point** | per-frame | **DEAD** — `219d8ab858`. LLQ grants 2 burst entries, one jumbo frame consumes both, **99.94% of frames already leave the allowance at zero**; ratio 1:1, saving exactly zero at MTU 9001. The batched transmit entry point is not coming |
+| ~~TSO~~ | per-frame, ~~≤12% at MTU 9001~~ (that bound came from the **receive** split and should never have been applied here — §4.4) | **IMPOSSIBLE — the device does not advertise it.** `tso v4 0 v6 0` |
 
 Note that the first three are all per-byte and the two offload items are partly
 redundant with each other: for ENA IPv4/IPv6 traffic, checksum offload makes §6.1
@@ -395,9 +444,18 @@ moot. They are not redundant in general.
 
 ### 6.4 Zero-copy transmit — design notes, held not started
 
-Held deliberately: it touches `ena.cpp` and the transmit path where
+~~Held deliberately: it touches `ena.cpp` and the transmit path where
 `feat/ena-tx-offload` and `feat/ena-multiqueue` are both live, and it is not worth
-a three-way conflict. Recorded here so the survey is not lost.
+a three-way conflict.~~
+
+> **Reason for the hold is GONE, 2026-08-24 — this is unblocked.** `feat/ena-tx-offload`
+> is **merged** (`c2753e0030`) and `feat/ena-multiqueue` is **closed/cancelled** (see
+> `ena-multiqueue-headroom.md` §5). There is no three-way conflict left to avoid.
+> Zero-copy transmit is genuinely still open — note the known obstacle recorded
+> elsewhere in this tree: **`get_memory_map` returns NULL**, which is the first thing
+> the design below has to solve.
+
+Recorded here so the survey is not lost.
 
 **The cost being removed.** Every transmitted byte is copied once, in
 `ena_send()`:

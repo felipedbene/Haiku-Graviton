@@ -1,7 +1,45 @@
-# ENA multi-queue + RSS: what is blocked, what is not, and what to do first
+# ENA multi-queue + RSS: ~~what is blocked~~ CANCELLED on evidence — do not implement this
 
-**Date:** 2026-08-23. **Scope:** analysis and design only — nothing in this document
-has been implemented. **Method:** static reading of this tree at `graviton`; every
+> ## STOP. This project is CANCELLED as of 2026-08-24. This document is a design that
+> ## was never built and must not be built.
+>
+> **The deciding control, which post-dates everything below:** **Linux, forced down to
+> ONE ENA queue, does 29826 Mbit/s — against 29823 on eight** (`c7g.16xlarge`,
+> interleaved A/B, four runs; `ena-multiqueue-headroom.md` §5). One queue already
+> carries ~30 Gbps. DeBeOS's plateau on that class is **9.0–10.2 Gbit/s**. More queues
+> cannot lift a ceiling that a single queue clears three times over, so **queue count
+> is not the limiter and cannot be**.
+>
+> **Two further facts that void specific parts of the design below:**
+>
+> - The ENA IO-queue grant is a **fixed 8 for the whole C7g family** — it is **not** a
+>   function of vCPU count. Any "one queue per vCPU" scaling story here is wrong about
+>   the device.
+> - **The real limiter is interrupt cadence** — the `XXX STRUCTURAL FIX STILL OWED` at
+>   `ena.cpp:221`, which is a **single-queue** problem. That is §7 step 2 of this
+>   document, and it is the only part still worth doing. A pair is working it as of
+>   2026-08-24; check before starting.
+>
+> ### The specific error in this document, because it is the transferable one
+>
+> §6.1 extrapolates a **"~8 Gbit/s ceiling"** from 4936 Mbit/s consuming **62 % of a
+> 2-vCPU `c7g.large`**. **The arithmetic is fine. The label is not.** That figure is
+> "the ceiling **on `c7g.large`**" — a 2-vCPU saturation point — and it was written,
+> and then read, as *the* ceiling. The instance class was in the working and absent
+> from the conclusion.
+>
+> **Rule: never let a saturation or ceiling figure stand without its instance class.**
+> A number that means "this 2-vCPU box is out of CPU" reads, one paragraph later, as
+> "the driver cannot go faster than this" — and a 16xlarge then measured 10.2 Gbit/s
+> against Linux's 29.8, which the "8 Gbit/s ceiling" would have declared impossible.
+>
+> Everything below is retained as the record of the analysis. Its `file:line`
+> groundwork and its "what is blocked in the stack" survey are accurate and useful;
+> its **recommendations and rankings are void**.
+
+**Date:** 2026-08-23. **Status: CANCELLED 2026-08-24.** **Scope:** analysis and design
+only — nothing in this document
+has been implemented, and nothing in it should be. **Method:** static reading of this tree at `graviton`; every
 claim below carries a `file:line` so it can be checked or refuted without a boot.
 Where a claim needs hardware to settle, it is marked **[needs hardware]** and the
 exact command that settles it is given.
@@ -14,9 +52,13 @@ exact command that settles it is given.
 neither of them the driver.** Transmit multi-queue is *not* blocked. And the honest
 headline is uncomfortable:
 
-> **Multi-queue is not the next lever. It is not even the second lever.** At the
+> **Multi-queue is not the next lever. It is not even the second lever.** *(This
+> judgement was right, and a later control made it final — see the banner at the top.)*
+> At the
 > measured cost of ~18 µs of CPU per 9 KB frame, receive at 4.9 Gbit/s already burns
-> **62 % of the entire 2-vCPU c7g.large** (arithmetic in §6.1). The bottleneck is
+> **62 % of the entire 2-vCPU c7g.large** (arithmetic in §6.1) — **a saturation figure
+> for that class only; it is not a fleet-wide ceiling, and §6.1 went on to read it as
+> one.** The bottleneck is
 > per-frame cost, not per-core parallelism, and the largest single contributor found
 > is a **one-line mismatch between `ENA_PACKET_BUFFER_SIZE` and what a `net_buffer`
 > data node can actually hold** (§6.2). That is shippable now, needs no stack change,
@@ -368,12 +410,32 @@ Per frame, at MTU 9001:
 **47,000 cycles to receive one 9 KB frame is roughly an order of magnitude more than
 it should be.** Receive is spread across exactly two threads (reader and consumer),
 so on a 2-vCPU box those two threads are each running at ~62 % occupancy and the
-ceiling is around 8 Gbit/s of pure CPU — *with both cores fully consumed and nothing
-left for the application*. Two conclusions follow:
+ceiling ~~is around 8 Gbit/s of pure CPU~~ **on `c7g.large` is around 8 Gbit/s of pure
+CPU** — *with both cores fully consumed and nothing left for the application*.
 
-1. **On c7g.large, multi-queue is provably worthless.** There is no third core to put
+> ### The "~8 Gbit/s ceiling" — corrected 2026-08-24, and this is the lesson to keep
+>
+> **The arithmetic is right; calling it "the ceiling" was the error.** It is the
+> ceiling **on `c7g.large`**, a 2-vCPU instance: the number says *this box runs out of
+> CPU at about 8 Gbit/s*. It says nothing about the device or the driver on any other
+> class. Written without its instance class in the conclusion, it was then read as a
+> driver ceiling — and a `c7g.16xlarge` subsequently measured **10.2 Gbit/s** against
+> Linux's **29.8**, which "8 Gbit/s" would have ruled out.
+>
+> **Rule: a saturation or ceiling figure without its instance class is not a finding,
+> it is a trap.** The class was present in the working two paragraphs above and absent
+> from the sentence people quote.
+
+Two conclusions follow:
+
+1. **On c7g.large, multi-queue is provably worthless.** *(Correct — and the reason
+   generalised further than this argument could see. Multi-queue is worthless on
+   `c7g.16xlarge` too, where there are plenty of spare cores: Linux on **one** queue
+   does 29826 Mbit/s. So the conclusion holds fleet-wide, but **not** for the
+   "no third core" reason given here.)* There is no third core to put
    a third queue's work on, and the device on a 2-vCPU instance is unlikely to grant
-   more than 2 pairs anyway (**[needs hardware]**, §7 step 0).
+   more than 2 pairs anyway ~~(**[needs hardware]**, §7 step 0)~~ — **answered: the
+   grant is a fixed 8 across the whole C7g family, independent of vCPU count.**
 2. **Per-frame cost is the lever with roughly 10× of headroom in it.** Parallelism has
    at most `ncpus` in it, and only on an instance we are not currently testing on.
 
@@ -524,10 +586,21 @@ experiment that sizes this expensive one.
 
 ---
 
-## 7. Sequenced plan
+## 7. Sequenced plan — VOID except for step 2 (see banner at top of file)
 
-Ordered so that everything shippable and low-risk precedes anything requiring deep
-surgery, and so that each step's *measurement* informs whether the next is worth it.
+> **Do not work this plan (2026-08-24).** Status of each step:
+>
+> | Step | State |
+> |---|---|
+> | **0** — settle three facts | **ANSWERED.** The queue grant is a **fixed 8 across the whole C7g family**, not a function of vCPU. And SMP *is* live — the "if only CPU 0 is online" worry below is resolved: `c7g.metal` brings up **64 of 64 CPUs**, and the scheduler-placement work measured a **9.9×** speed-up at 32 threads on 16 CPUs, which is not possible on one core. |
+> | **1** — the `ENA_PACKET_BUFFER_SIZE` / `net_buffer` data-node mismatch | **SHIPPED** — `017f72cecd` "ena: post 1920 byte receive buffers so segments fit a net_buffer node". This was the best call in this document. |
+> | **2** — move the interrupt unmask after the ring drain | **STILL OPEN and now the main event.** `ena.cpp:221`. A pair is on it; check first. Driver-only and hot-swappable — but **verify the swap took effect with a compiled-in version stamp**, not by watching a number move (`ena-multiqueue-headroom.md` §6). |
+> | **3** — per-queue struct refactor + N TX queues | **VOID.** Multi-queue is cancelled on evidence. |
+> | anything else premised on parallelism | **VOID.** |
+>
+> Ordered so that everything shippable and low-risk precedes anything requiring deep
+> surgery, and so that each step's *measurement* informs whether the next is worth it.
+> That ordering principle was sound, and it is why step 1 shipped and step 3 never did.
 
 ### Step 0 — Settle three facts from data we may already have. **Zero code.**
 
@@ -577,11 +650,17 @@ moderation is the only thing preventing an interrupt per completion.
 - **Verify:** interrupt count per MiB should fall; `nettput` µs/MiB should improve or
   hold. Soak ≥ 30 min plus a fault-injected reset to prove re-arming survives it.
 
-### Step 3 — Per-queue struct refactor + N TX queues. **No stack change needed.**
+### Step 3 — ~~Per-queue struct refactor + N TX queues~~ **VOID — do not do this**
 
-Do the refactor *now* only if step 0 says the instance has ≥ 4 vCPUs and ≥ 4 queue
+> **CANCELLED 2026-08-24.** Its own guard condition ("only if the instance has ≥ 4
+> vCPUs and ≥ 4 queue pairs") is *satisfied* on the larger classes — which is exactly
+> why the guard was not enough. A `c7g.16xlarge` has plenty of both, and multi-queue
+> still buys nothing there: **Linux on one queue does 29826 Mbit/s.** The guard tested
+> for *capacity to parallelise*, never for *whether parallelism was the constraint*.
+
+~~Do the refactor *now* only if step 0 says the instance has ≥ 4 vCPUs and ≥ 4 queue
 pairs; otherwise defer, because it is unmeasurable and it multiplies the reset and
-descriptor-reclaim paths.
+descriptor-reclaim paths.~~
 
 - **Changes:** promote `ena.h:285-318` into a `struct ena_io_queue` (SQ/CQ pointers,
   lock, buffer pool, free-id stack, semaphore, MSI-X vector), **cache-line aligned**

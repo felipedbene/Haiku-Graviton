@@ -5,6 +5,26 @@ Some claims below were re-verified by hand; those are marked **[verified]**. The
 come from the comparison pass and are marked **[reported]** — trust them enough to plan
 with, not enough to skip reading the code before acting.
 
+> ## Re-checked against `graviton` on 2026-08-24 — the P3 section is largely wrong now
+>
+> **A `[verified]` tag records that a claim was checked *once, on 2026-08-22*. It is not
+> a guarantee of currency, and at least one `[verified]` claim below has since become
+> false — which is worse than an untagged one, because the tag suppresses re-checking.**
+>
+> | Item | State on 2026-08-24 |
+> |---|---|
+> | Fault injector inert, no `-D` in the Jamfile | **FIXED** — `2ef6ffe3e5` makes it a build switch (`HAIKU_ENA_FAULT_INJECTION`), plus keep-alive / hold-reset / extra-doorbell ioctls |
+> | P3: "multi-queue, RSS and jumbo frames are blocked in the stack" | **All three wrong now** — see the box in §P3 |
+> | P3: doorbell / ack / RX-refill batching is "available today" | **DEAD** — the device forbids it |
+> | P3: TX checksum offload as future work | **MERGED**, −3.54%, p = 0.0079 |
+> | P3: bounce copies are "the prerequisite for jumbo" | **False** — jumbo shipped without touching them |
+> | Missing `docs/watchdog-design.md`, `FINDINGS.md`, `HANDOFF.md` | **STILL TRUE** — and the count is **eight** citations, not six |
+> | `hwRxDrops`/`hwTxDrops` unreadable, no ioctl | **STILL TRUE** |
+> | P1 watchdog gaps (`DEVICE_REQUEST_RESET`, `NOTIFICATION` unhandled) | **STILL TRUE** — only `LINK_CHANGE` and `KEEP_ALIVE` are registered |
+> | `XXX STRUCTURAL FIX STILL OWED` (unmask before drain) | **STILL OPEN** — `ena.cpp:221`. This is now the project's main network bottleneck, and a pair is on it |
+>
+> **The P1 list is still the right list.** It is P3 that has been overtaken.
+
 ## What the reference actually is
 
 - **`~/Projects/ENA` is *not* a host driver.** It is `ssh://git.amazon.com/pkg/ENA`,
@@ -76,27 +96,72 @@ production-risk reduction available. **[reported]**
   content. Needs an ioctl + a small userland tool.
 - We store `hwRxDrops`/`hwTxDrops` and **no ioctl reads them** — write-only counters. No
   packet/byte counters at all. **[reported]**
-- **The fault injector is dead in every shipped build**: four `#ifdef
+- ~~**The fault injector is dead in every shipped build**: four `#ifdef
   ENA_DEBUG_FAULT_INJECTION` sites and **no `-D` in the Jamfile**, so `ena_fault` is inert.
-  **[verified]** One-line fix to a debug profile, then add hooks for the four failure modes
+  **[verified]** One-line fix to a debug profile~~ — **FIXED and merged 2026-08-24**,
+  `2ef6ffe3e5` "ena: make fault injection a build switch instead of a hand edit". The
+  Jamfile now carries `if $(HAIKU_ENA_FAULT_INJECTION) { SubDirC++Flags
+  -DENA_DEBUG_FAULT_INJECTION ; }`, and the suppress-keep-alive / hold-reset /
+  extra-doorbell ioctls exist. Still open: hooks for the remaining failure modes
   P1 adds detection for.
-- **`docs/watchdog-design.md`, `FINDINGS.md`, `HANDOFF.md` are cited from six places in
-  the code and do not exist.** **[verified]** Every "verified, see section 8" claim in the
-  driver is currently unauditable.
+- **`docs/watchdog-design.md`, `FINDINGS.md`, `HANDOFF.md` are cited from ~~six~~
+  **eight** places in the code and do not exist.** **[verified 2026-08-22; RE-VERIFIED
+  and still true 2026-08-24 — the count was low]** The citations are at `ena.h:173,207,352`
+  and `ena.cpp:1246,1635,1685,1722,1887`; the driver directory contains only `Jamfile`,
+  `ena-com/`, `ena.cpp`, `ena.h`, `ena_plat.cpp`. Every "verified, see section 8" claim in
+  the driver is unauditable.
 
 ### P3 — throughput, and the part that is *not* driver work
 
-See the corrections at items 5 and 6 of `graviton-optimization-plan.md`: **multi-queue,
+> ### This whole subsection is superseded (2026-08-24). Do not plan from it.
+>
+> Every item below has been settled, and three were settled in a direction this text
+> does not allow for. **This is the clearest example in the corpus of a `[verified]`
+> tag outliving the fact it certified.**
+>
+> - ~~**Jumbo frames blocked in the stack**~~ — **SHIPPED and hardware-verified both
+>   directions at MTU 9001.** `ethernet.cpp` now clamps at
+>   `ETHER_MAX_JUMBO_FRAME_SIZE` when the device supports `net_buffer`s, and the
+>   driver posts 1920-byte receive buffers so segments fit a `data_node`
+>   (`017f72cecd`). It needed a stack clamp fix **and** driver multi-descriptor
+>   RX/TX.
+> - ~~**Multi-queue + RSS blocked in the stack**~~ — **CANCELLED on evidence, which is
+>   a different verdict from "blocked".** "Blocked" invites someone to unblock it.
+>   The deciding control: **Linux forced to ONE ENA queue does 29826 Mbit/s against
+>   29823 on eight** (`c7g.16xlarge`, interleaved A/B). One queue already carries
+>   ~30 Gbps. Also, the IO-queue grant is a **fixed 8 for the whole C7g family**, not
+>   a function of vCPU count. See `ena-multiqueue-headroom.md` §5.
+> - ~~**Doorbell / completion-ack / RX-refill batching is available today, ~40
+>   lines**~~ — **DEAD.** `219d8ab858` measured it: LLQ grants **2 ring entries per
+>   burst**, one jumbo frame consumes both, and **99.94% of transmit frames already
+>   leave the allowance at zero**. Ratio 1:1; **the saving is exactly zero** at
+>   MTU 9001. The 40-line estimate was fine; the premise was not.
+> - ~~**TX checksum offload** as future work~~ — **MERGED** (`c2753e0030`),
+>   **−3.54%, p = 0.0079**. Beware an earlier **−12.6%** figure: withdrawn as a
+>   confound (the send buffer was not pinned). Related: a false
+>   `NET_BUFFER_L3_CHECKSUM_VALID` receive claim had to be *removed*
+>   (`710f546d51`), and `rx_enabled` reads `0x0` while the device demonstrably
+>   validates L4 on ~98% of frames — so it is **not** a usable guard.
+> - ~~**Bounce copies are the prerequisite for jumbo**~~ — **false.** Jumbo shipped
+>   without eliminating them. Zero-copy transmit is still genuinely open and worth
+>   doing on its own terms; note the obstacle: **`get_memory_map` returns NULL.**
+>
+> **What actually belongs in P3 now:** the interrupt-cadence structural fix at
+> `ena.cpp:221`. DeBeOS plateaus at **9.0–10.2 Gbit/s** on `c7g.16xlarge` against
+> Linux's **29.8** — that ~3× is the throughput story, and it is a single-queue
+> problem. A pair is working it; check before picking it up.
+
+~~See the corrections at items 5 and 6 of `graviton-optimization-plan.md`: **multi-queue,
 RSS and jumbo frames are blocked in Haiku's network stack**, not in this driver
 (**[verified]**: single-buffer `receive_data` with no queue index, one reader thread per
 interface, `ETHER_MAX_FRAME_SIZE` 1514 clamped by the ethernet module). Reclassify them as
-stack projects.
+stack projects.~~
 
-What *is* available in the driver today: **doorbell / completion-ack / RX-refill
+~~What *is* available in the driver today: **doorbell / completion-ack / RX-refill
 batching** (~40 lines, ported from `ena_datapath.c`), then TX checksum offload (logic
 ports; the header parsing must be rewritten against `net_buffer`), then eliminating the
-TX/RX bounce copies — which is also the prerequisite for jumbo. No reference help for the
-last one: `ena_tx_map_mbuf`/`ena_rx_mbuf` are pure `bus_dma`/mbuf.
+TX/RX bounce copies — which is also the prerequisite for jumbo.~~ No reference help for
+the last one: `ena_tx_map_mbuf`/`ena_rx_mbuf` are pure `bus_dma`/mbuf.
 
 ## Where the reference cannot help at all
 
