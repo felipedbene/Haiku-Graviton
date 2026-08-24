@@ -186,8 +186,10 @@ GICv3InterruptController::_DistributorInit()
 	_WaitForRwp();
 
 	// Enable affinity routing (mandatory for GICv3) together with group 1
-	// non-secure interrupts.
-	_WriteGicd(GICD_CTLR, GICD_CTLR_ARE_NS | GICD_CTLR_ENABLE_G1NS);
+	// non-secure interrupts. See GICD_CTLR_ENABLE_G1 for why both enable bits
+	// are written.
+	_WriteGicd(GICD_CTLR,
+		GICD_CTLR_ARE_NS | GICD_CTLR_ENABLE_G1 | GICD_CTLR_ENABLE_G1NS);
 	_WaitForRwp();
 
 	dprintf("gicv3: %" B_PRIu32 " interrupt lines, gicd_ctlr %#" B_PRIx32

@@ -18,6 +18,14 @@
 #define GICD_ICFGR				0x0c00
 #define GICD_IROUTER			0x6000
 
+// Which bit enables non-secure group 1 depends on something software cannot
+// see: with GICD_CTLR.DS set (a single security state, which is what a
+// hypervisor's emulated distributor presents) it is bit 1, but on a
+// distributor with two security states the non-secure view puts it at bit 0
+// and leaves bit 1 reserved once affinity routing is on. DS itself is only
+// readable from the secure view, so both bits get written -- the one that does
+// not apply is reserved, not harmful.
+#define GICD_CTLR_ENABLE_G1		(1u << 0)
 #define GICD_CTLR_ENABLE_G1NS	(1u << 1)
 #define GICD_CTLR_ARE_NS		(1u << 4)
 #define GICD_CTLR_RWP			(1u << 31)
