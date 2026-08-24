@@ -239,9 +239,10 @@ image, and its `-w` flag sets `SO_SNDBUF`/`SO_RCVBUF` before `connect()`.
    `FLAG_OPTION_SACK_PERMITTED` (`TCPEndpoint.cpp:1544`). Growth does not
    obviously depend on SACK; Linux always offers it, which is why this never
    showed up here.
-5. **No send-side auto-sizing exists at all**, so `SetSendBufferSize()` has no
-   flag to clear and this defect has no send-side twin. The trap is still there
-   in a different shape: since this fork raised the send default to 256 KiB, an
-   application that sets `SO_SNDBUF` to 64 KiB now makes its own transmits three
-   times slower, and the kernel is right to obey it. Send auto-sizing is the real
-   answer and remains open.
+5. ~~**No send-side auto-sizing exists at all**~~, so `SetSendBufferSize()` had no
+   flag to clear and this defect had no send-side twin. It has one now, and it was
+   given the same rule -- a shrink pins, a growth is only a floor -- in
+   [tcp-send-autotune.md](tcp-send-autotune.md). An application that asks for
+   64 KiB of send buffer is still obeyed exactly, which on a 10 ms path measured
+   51.7 Mbit/s where letting it grow gave 3702; that is the price of honouring the
+   request, and it is still the right answer.
