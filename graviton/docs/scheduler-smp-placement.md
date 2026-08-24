@@ -1,8 +1,19 @@
 # SMP work is placed badly and never repaired
 
-Status: **investigation; instrumentation written, awaiting a bake. Design NOT
-final** — one measurement decides its shape, and that measurement has not been
-taken yet. Verified against the tree at `a195688e46`.
+Status: **design ready for review; not implemented.** The causation question has
+been settled by measurement on hardware (§1.7) without needing a bake. One
+remaining question — the mechanism of defect B — needs the kernel instrumentation
+in §5 and therefore one image bake, but it does not change the shape of the fix.
+Verified against the tree at `a195688e46`.
+
+**Summary for review.** The reported "0.500 at N = 16" is three separate defects.
+Below `ncpus` it is a *placement* failure with a confirmed mechanism (a core stays
+in the idle-core list until its CPU reschedules, so a sub-5-µs burst is handed the
+same core repeatedly). At exactly `ncpus` it is a *repair* failure — a core becomes
+idle after the placement decision and nothing ever moves work onto it. Above
+`ncpus` it is both. The proposed fix is therefore two independent changes, each
+tied to a measured signature, and **neither touches `CoreEntry::GetLoad()`'s
+contract**.
 
 This is **upstream Haiku behaviour, not a Graviton regression.** Nothing in the
 arm64 port changed the predicates involved; the absence of SMT merely removed a
@@ -509,9 +520,19 @@ fail to show. There is also precedent for treating this as the oversubscription
 measure — `ComputeQuantum()` already uses `fCore->ThreadCount()` divided by
 `CPUCount()` (`scheduler_thread.cpp:207-209`).
 
-**Candidate: use `ThreadCount() / CPUCount()` as a tie-breaker in
-`choose_core()`, not as a replacement for load.** The distinction is important
-and is what keeps the change safe:
+**Fix 1 (placement, cures defects A and C): prefer an idle core that has not
+already been claimed.** `choose_core()`'s idle-core path currently takes
+`fIdleCores.Last()` and keeps taking it until that core's CPU reschedules. Walk
+the idle list once and prefer the candidate with the smallest `ThreadCount()`,
+falling back to the least-claimed one rather than to the load heap. The walk
+already exists — `GetIdleCore(index)` is called in a loop for the CPU-mask check —
+so the added cost is one `ThreadCount()` read per candidate, and the common case
+exits on the first entry because it is genuinely free. (Better still, add a
+purpose-built `PackageEntry` method that walks `fIdleCores` once: `GetIdleCore(i)`
+is O(i), so looping it is O(n²) in the idle-list length.)
+
+**Use `ThreadCount()` as a tie-breaker, never as a replacement for load.** The
+distinction is what keeps the change safe:
 
 - `ThreadCount()` is a *bad* general load metric — a core with five sleepy
   threads has `ThreadCount() == 5` but almost no load, and a core with one
@@ -525,6 +546,32 @@ This also has the property the §4 constraint demands: it is a pure placement
 change and **does not touch `CoreEntry::GetLoad()`'s contract at all**, so it
 cannot reach the live `panic()` in `_RequestPerformanceLevel` or alter the heap
 key.
+
+**Fix 2 (repair, cures defect B): make the migration predicate satisfiable, via a
+new accessor rather than by changing `GetLoad()`.** Add an unclamped
+`CoreEntry::GetLoadUnclamped()` (or similar) returning `fLoad / fCPUCount`, and use
+it **only** in the rebalance predicates — `low_latency.cpp:120,121` and
+`power_saving.cpp:141,174,184`. `GetLoad()` keeps its clamp and its contract, so
+the cpufreq assert, the heap key, and the `kHighLoad`/`kMediumLoad` band decision
+are all untouched and provably unaffected (§4).
+
+Worked through for the defect-B signature — one core with two saturated threads,
+one core idle: `coreLoad = 2000`, `otherLoad = 0`, `difference = 1800`,
+`threadLoad = 1000` → migrate; afterwards `otherLoad + 200 >= coreLoad` is
+`1200 >= 1000` → decline. One migration, then stable. And at N = 17 (all cores at
+1000 except one at 2000, none idle) `difference = 800 < 1000` → decline, which is
+correct: moving a thread would only move the collision. `kLoadDifference` needs no
+change.
+
+**Fix 3 (`power_saving`, same change): the mode fails by exactly one unit.**
+`power_saving.cpp:142-155` gates on `threadLoad >= coreLoad / 2`, and for exactly
+two saturated threads on a non-SMT core that is `1000 >= 1000` — true, so it
+declines. It therefore fails for **exactly two** threads, the commonest case, and
+no low-latency ladder would ever reveal it. Using the unclamped accessor makes
+`coreLoad = 2000` and the test `1000 >= 1000` still true, so this one needs its own
+touch: the guard must compare against the *unclamped* half, or be bypassed when a
+core is genuinely oversubscribed. **Stated explicitly rather than left silent**:
+without this, `power_saving` stays broken for the two-thread case.
 
 ### 5.6 The two fixes are separable, and the migration count separates them
 
