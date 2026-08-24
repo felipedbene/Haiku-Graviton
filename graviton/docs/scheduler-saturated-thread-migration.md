@@ -15,6 +15,13 @@ Measured on a 16-vCPU `c7g.4xlarge` with `src/bin/smpscale`, which gives every
 thread an *identical, fixed* work unit. Perfect scaling therefore holds wall
 time constant as N rises; perfect serialisation makes it proportional to N.
 
+> **Provenance:** the ladder below is the *reported* measurement that opened this
+> investigation. It has not yet been independently reproduced by the author of
+> this document; that reproduction is in flight and this section will be replaced
+> with first-hand numbers, including the runs that disagree, before any code
+> lands. Recorded this way deliberately — this project has a history of results
+> that were measured once, propagated, and then retracted.
+
 ```
 threads:  1     2     4     6     8    10    12    13    14    15    16    17    20
 eff:    1.000 1.000 1.000 1.000 1.000 1.000 1.000 1.000 1.000 1.000 0.500 0.500 0.333
