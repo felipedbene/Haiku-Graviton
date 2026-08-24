@@ -167,11 +167,17 @@ copy_64(uint8_t* d, const uint8_t* s)
 	what keeps the routine correct when the ranges overlap with the destination
 	below the source -- see the note on ordering at memcpy() below.
 
-	The comparisons are strict on purpose. At exactly the access width the two
-	halves coincide, so `>=` would move every byte twice; measured, that cost
-	15% at 32 bytes and 5% at 16 against the routine this replaces, which is a
-	regression rather than an improvement. A count equal to the width falls to
-	the next case down, where two accesses of half the width cover it exactly.
+	The comparisons are strict where it pays and not where it does not, and
+	which is which was measured rather than reasoned. At exactly the access
+	width the two halves coincide, so `>=` moves every byte twice: at 32 bytes
+	that cost 15% against the routine this replaces, so 32 falls through to two
+	16-byte accesses that cover it exactly. At 8 bytes the same substitution
+	loses, because the case below is two 4-byte accesses and two narrow accesses
+	cost more than one wide one repeated -- 0.542 against 0.496 ns/B -- so the
+	8-byte comparison stays non-strict. The 4-byte one must stay non-strict for
+	correctness: the case below is the three-access byte trick, which covers only
+	bytes 0, count>>1 and count-1, and at a count of 4 would silently drop
+	byte 1.
 */
 static inline void
 copy_0_to_32(uint8_t* d, const uint8_t* s, size_t count)
@@ -182,7 +188,7 @@ copy_0_to_32(uint8_t* d, const uint8_t* s, size_t count)
 
 		*(unaligned_uint128*)d = a;
 		*(unaligned_uint128*)(d + count - 16) = b;
-	} else if (count > 8) {
+	} else if (count >= 8) {
 		const uint64_t a = *(const unaligned_uint64*)s;
 		const uint64_t b = *(const unaligned_uint64*)(s + count - 8);
 
