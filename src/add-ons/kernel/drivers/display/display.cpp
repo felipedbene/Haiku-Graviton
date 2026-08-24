@@ -68,7 +68,7 @@ display_close(void* cookie)
 static status_t
 display_free(void* cookie)
 {
-	display_device_info *device = (display_device_info *)cookie;
+	// Nothing to do: the cookie is the device, which display_uninit() frees.
 	return B_OK;
 }
 
