@@ -1,0 +1,11 @@
+SubDir HAIKU_TOP src tests add-ons kernel network checksum ;
+
+# checksum.h is dependency-free on purpose, so this needs the stack's source
+# directory on the header path and nothing else -- no kernelland_emu, unlike
+# tcp_shell, which has to link the whole of utility.cpp.
+SubDirHdrs [ FDirName $(HAIKU_TOP) src add-ons kernel network stack ] ;
+UsePrivateHeaders net ;
+
+SimpleTest net_checksum_test :
+	checksum_test.cpp
+	;

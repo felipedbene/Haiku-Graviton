@@ -9,6 +9,8 @@
 
 #include "utility.h"
 
+#include "checksum.h"
+
 #include <ByteOrder.h>
 #include <KernelExport.h>
 
@@ -98,43 +100,21 @@ UserBuffer::PadToNext(size_t length)
 // #pragma mark -
 
 
+/*!	Exported for net_stack_module_info::checksum and for the stack's own use;
+	the implementation lives in checksum.h so that a userspace test can compile
+	the same source. Both of these are forwarders and must stay that way.
+*/
 uint16
 compute_checksum(uint8* _buffer, size_t length)
 {
-	uint16* buffer = (uint16*)_buffer;
-	uint32 sum = 0;
-
-	// TODO: unfold loop for speed
-	// TODO: write processor dependent version for speed
-	while (length >= 2) {
-		sum += *buffer++;
-		length -= 2;
-	}
-
-	if (length) {
-		// give the last byte it's proper endian-aware treatment
-#if B_HOST_IS_LENDIAN
-		sum += *(uint8*)buffer;
-#else
-		uint8 ordered[2];
-		ordered[0] = *(uint8*)buffer;
-		ordered[1] = 0;
-		sum += *(uint16*)ordered;
-#endif
-	}
-
-	while (sum >> 16) {
-		sum = (sum & 0xffff) + (sum >> 16);
-	}
-
-	return sum;
+	return net_checksum_compute(_buffer, length);
 }
 
 
 uint16
 checksum(uint8* buffer, size_t length)
 {
-	return ~compute_checksum(buffer, length);
+	return ~net_checksum_compute(buffer, length);
 }
 
 

@@ -10,6 +10,8 @@
 
 #include "utility.h"
 
+#include "checksum.h"
+
 #include <net_buffer.h>
 #include <slab/Slab.h>
 #include <tracing.h>
@@ -2219,18 +2221,28 @@ checksum_data(net_buffer* _buffer, uint32 offset, size_t size, bool finalize)
 
 	offset -= node->offset;
 
-	// Since the maximum buffer size is 65536 bytes, it's impossible
-	// to overlap 32 bit - we don't need to handle this overlap in
-	// the loop, we can safely do it afterwards
-	uint32 sum = 0;
+	// One folded 16-bit value per node, accumulated wide and folded once at the
+	// end. A uint32 here was very nearly enough -- 65535 nodes of 0xffff each
+	// reach 0xfffe0001 -- but a buffer of more than 65536 single-byte nodes
+	// overflows it and silently corrupts the checksum in both directions. Nothing
+	// can build such a buffer today: net_buffer::size is capped at 0xffff by
+	// ipv4.cpp:1579 on transmit and by uint16 arithmetic in reassembly. It is a
+	// uint64 because that cap is the only thing holding, it is enforced one layer
+	// away from here, and any future aggregation (LRO, or a software segmentation
+	// path) would lift it without knowing this loop depended on it.
+	uint64 sum = 0;
 
+	// net_checksum_compute() rather than compute_checksum() so that the inner
+	// loop inlines into this one instead of being a call per node; the two are
+	// the same code, see checksum.h.
 	while (true) {
 		size_t bytes = min_c(size, node->used - offset);
 		if ((offset + node->offset) & 1) {
-			// if we're at an uneven offset, we have to swap the checksum
-			sum += __swap_int16(compute_checksum(node->start + offset, bytes));
+			// A node beginning at an odd offset has every word straddling the
+			// boundary, so its own sum is byte-swapped with respect to this one.
+			sum += __swap_int16(net_checksum_compute(node->start + offset, bytes));
 		} else
-			sum += compute_checksum(node->start + offset, bytes);
+			sum += net_checksum_compute(node->start + offset, bytes);
 
 		size -= bytes;
 		if (size == 0)
