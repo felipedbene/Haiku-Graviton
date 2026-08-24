@@ -1054,10 +1054,31 @@ a machine with 31.5 GiB of RAM, because of one stale sample.
 
 ### The fix works, and both halves were recorded
 
-- **Liveness:** the identical 16 GiB load **completed in about 7 minutes** with ssh
-  answering, against 27.7+ minutes of unbroken starvation and no completion within
-  observation on the pre-fix kernel. Same load, same volume provisioning, same
-  instance type — the kernel is the only variable.
+- **Liveness:** ssh answered at **0 of 34 samples stalled**, polled every 15 s
+  across 8.4 minutes of the load, and all eight files reached exactly
+  2,147,483,648 bytes — **16 GiB written and completed**. Against the pre-fix
+  kernel's 27.7 minutes of *unbroken* starvation on the identical load, which never
+  completed within observation. Same load, same volume provisioning, same instance
+  type, same 125 MiB/s scratch: the kernel is the only variable.
+
+  | | pre-fix kernel | this image |
+  |---|---|---|
+  | ssh samples stalled | **every one**, 0 s → 1663 s | **0 of 34** |
+  | 16 GiB load | never completed under observation | **completed** |
+  | worst single write | 26.9 s | quota waits capped at 5.0 s |
+
+  The load was demonstrably live during that polling window and not merely
+  finished early: the quota counters advanced from `waits 4129 / timeouts 18` to
+  `waits 4567 / timeouts 20` across it.
+
+  *Instrument note, in the spirit of the rest of this document:* the poller also
+  printed a "GiB written" column which read 0 at every sample. That was a broken
+  instrument, not a stalled write — `bc` does not exist on a DeBeOS image, so the
+  `paste -sd+ | bc` pipeline fell through to its `|| echo 0`. The advancing quota
+  counters and the final file sizes are what establish the load ran; the column
+  established nothing. Third empty-result-mistaken-for-absence in this
+  investigation, which is why the rule below is about asking what a positive row
+  would look like.
 - **The decay is still visible**, which is what the instrumentation was for:
   4,224 waits, 19 timeouts, `longest` pinned at the bound, and the per-device
   estimates and queue depths printed alongside. A machine that stops hanging but
@@ -1194,6 +1215,25 @@ So the rule is not "remember to interleave". It is: **any sweep is interleaved b
 construction, or its result is not reportable** — and if a harness cannot
 interleave a dimension, that dimension is measured one cell at a time against a
 control, or not claimed.
+
+### Rule: ask what a positive row looks like before believing an empty result
+
+Four times in this work an empty or zero result was nearly read as a fact about
+the system when it was a fact about the tooling:
+
+- `get-console-output` without `--latest` returns an **empty body**, so every grep
+  counted zero and "the quota never fires" looked true.
+- `bc` does not exist on a DeBeOS image, so a `| bc` pipeline fell through to
+  `|| echo 0` and a progress column read 0 while 16 GiB was being written.
+- A `grep` filter that did not match bare numbers turned present counts into no
+  output, which read as "the pieces are missing from the image".
+- A deploy that silently produced a **zero-byte binary** ran and reported nothing,
+  which reads as a tool with no output rather than a tool that is not there.
+
+The defence is cheap and it worked every time it was applied: **before believing an
+empty result, grep for something you know is present.** A positive control on the
+console fetch (`nvme_disk`, 16 matches) is what exposed the `--latest` requirement
+in one step. An empty result is a claim about the instrument until proven otherwise.
 
 ### Rule: repeatability is not validity
 
