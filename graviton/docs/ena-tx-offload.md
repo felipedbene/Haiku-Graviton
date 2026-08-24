@@ -16,10 +16,16 @@ the device rather than by a marginal measurement.
 
 1. **TX checksum offload ships.** IPv4 TCP only, negotiated at run time from the
    device's own advertisement, `l4_csum_partial = 1` (pseudo-header seeded by the
-   stack, payload summed by the device). **−301 µs/MiB of transmit CPU (−12.6 %) by the mean, −361 (−15.1 %) by the
-   median, *p* ≈ 0.006, across five alternating boots** — with a negative control
-   that does not move (§4) and wire-level confirmation from the peer that the
-   checksums the device produced are correct (§4.3).
+   stack, payload summed by the device). Hardware-verified on **c7g.4xlarge**:
+   **−78.0 µs/MiB of transmit CPU, −3.54 %, permutation *p* = 0.0079** over ten
+   alternating boots — with a negative control that does not move (*p* = 0.60) and
+   wire-level confirmation from the peer that the checksums the device produced
+   are correct (§4.4).
+
+   **An earlier −12.6 % figure from `c7g.large` is withdrawn.** It was measured on
+   the wrong instrument, and the replication that retired it is §4.1. The
+   correction is 3.6×, in the unflattering direction, and it is the most important
+   thing in this document.
 2. **TX doorbell coalescing is cancelled, and not on cost grounds.** The device
    grants a burst of **2 LLQ ring entries between doorbells** and **one jumbo
    frame consumes both**. Measured on the wire: **99.94 % of transmit frames
@@ -28,11 +34,13 @@ the device rather than by a marginal measurement.
    at MTU 9001 is **1:1 — exactly zero saving**, whatever a doorbell costs. The
    batched transmit entry point the stack would need is a ~250-line change across
    five modules for a provably empty win.
-3. **This change and the pending `compute_checksum()` optimisation are near-complete
-   substitutes on this path, not partial ones.** Offload dominates (301–361 µs/MiB
-   against the loop fix's 181), but their combined effect on ENA transmit is
-   ≈ 12.6–15.1 %, *not* the sum of the two headlines. Whichever merges second must
-   quote the combined figure. See §6.
+3. **This and the `compute_checksum()` optimisation are near-complete substitutes,
+   and the loop fix is the better change.** Measured on the same instance class with
+   the same instrument: loop fix +2.37 %, offload +3.54 %, **combined ≈ 3.5 % not
+   5.9 %**, and offload's marginal value once the loop fix lands is **≈ 1.2 %**. The
+   two agree to 12 % on the size of the pass they both attack, which is the strongest
+   coherence evidence here. Whichever merges second must quote the combined figure.
+   See §6.
 
 ---
 
@@ -56,9 +64,11 @@ differs in the direction that helps this project:
   `Checksum::BufferHelper` into the sum — a full pass over every byte of every
   segment, in the sending thread, on the caller's own stack.
 
-So transmit's per-byte share is *higher* than receive's 88 %, and the single
-largest identifiable per-byte term on transmit was a checksum that the hardware
-was willing to compute for free.
+So the single largest *identifiable* per-byte term on transmit was a checksum the
+hardware was willing to compute for free. Note what this does not say: it does not
+say the checksum was a large share of transmit cost. Measured, it is **3.5 %** (§4.2)
+— worth having, and an order of magnitude less than the framing in the brief implied.
+Most of transmit's per-byte cost is still unattributed.
 
 `net-receive-profile.md` §7 lists "Transmit checksum offload" under **"not worth
 doing on this evidence"**. That judgement was reached from a receive measurement,
@@ -289,68 +299,123 @@ descriptors and needs no doorbell on the error path.
 
 ## 4. Measured
 
+### 4.1 First, the result that was wrong, and why
 
-Every number below is 2 GiB per run at MTU 9001 on `c7g.large`, driven from the
-metal peer. The condition is selected by a **driver settings file**
-(`tx_checksum_offload false`), so **both conditions run the same binary** — the
-only difference is whether the driver advertises the capability and therefore
-whether the stack computes the sum.
+The first version of this document reported **−301 to −361 µs/MiB (−12.6 % to
+−15.1 %), *p* ≈ 0.006** on `c7g.large`. **That figure is withdrawn.** Re-measured
+on `c7g.4xlarge` with a method built to resolve a small effect, the answer is
+**−78.0 µs/MiB (−3.54 %)** — a 3.6× over-statement.
 
-### 4.1 The A/B, alternating boots
+Three defects in the original, in descending order of how much they matter:
 
-Offload cannot be toggled inside a boot: `ethernet_up()` reads the capability
-once. So the conditions alternate at boot level, four runs per boot after a
-discarded warm-up. Transmit CPU, µs/MiB:
+1. **The send buffer was not pinned.** Runs there autotuned to 474 933 and
+   510 777 bytes, and `throughput-measurement.md`'s own sweep shows 512 KiB is
+   *worse* than 256 KiB. The two arms were therefore not sampling the same socket
+   configuration, and the slower arm had more opportunity to land in the worse
+   part of that curve. This is a confound I introduced, not a platform property.
+2. **`c7g.large` boot-to-boot transmit cost is bimodal at ~19 %** (visible in the
+   raw runs: an `on` arm spanning 1991–2309 and an `off` arm spanning 2174–2581).
+   An effect of a few percent cannot be resolved against that with five boots.
+3. **The statistics treated runs as independent.** Runs inside one boot share a
+   kernel load, a DHCP lease, a driver state and a bandwidth-allowance history. A
+   Mann-Whitney over 20 runs claims a confidence the design does not support; the
+   unit of analysis is the boot.
 
-| boot | offload | runs | median | mean |
-|---|---|---|---|---|
-| 1 | **on** | 1991, 2035, 2035, 2022 | 2028 | 2020.8 |
-| 1 | off | 2564, 2210, 2227, 2581 | 2395 | 2395.5 |
-| 2 | **on** | 2031, 2272, 2003, 2291 | 2151 | 2149.3 |
-| 2 | off | 2579, 2574, 2190, 2191 | 2382 | 2383.5 |
-| 3 | **on** | 2000, 2309, 2034, 2034 | 2034 | 2094.3 |
-| 3 | off | — the node failed to boot; see §7.3 | | |
+There is a further possibility I did **not** settle and which must not be used to
+rescue the old number: `c7g.large` is 2 vCPU at ~61 % busy, so the sending thread
+contends with the driver's reader and consumer threads, and relieving it may buy
+more than the work removed. If that effect is real the true `c7g.large` figure
+would sit above 3.5 % — but the three defects above are sufficient to explain the
+gap on their own, and **an unvalidated mechanism is not a defence of an invalidated
+measurement.** Recorded as open, not as mitigation.
 
-| | n | mean µs/MiB | median | mean Mbit/s |
-|---|---|---|---|---|
-| offload **on** | 12 | **2088.1** | **2034** | **4847.9** |
-| offload off | 8 | 2389.5 | 2395.5 | 4208.7 |
-| **difference** | | **−301.4 (−12.6 %)** | **−361.5 (−15.1 %)** | **+15.2 %** |
+### 4.2 The replication: `c7g.4xlarge`, ten alternating boots
 
-Mann-Whitney U = 12 of a possible 96, *z* = −2.74, ***p* ≈ 0.006**. The
-distributions barely overlap: only two of eight `off` runs fall below three of
-twelve `on` runs.
+Method, all of it chosen to make a small effect resolvable:
 
-Paired within a boot pair, on the means: boot 1 −374.7 µs/MiB (−15.6 %), boot 2
-−234.2 (−9.8 %).
+- **One arm per boot**, alternating, in **two sequences with opposite starting
+  arms** — `on off on off on off` then `off on off on` — so sequence position
+  cannot pose as treatment. 5 boots per arm.
+- **Send buffer pinned** with `nettput -P 262144`, auto-sizing off. This is what
+  collapses within-boot spread to ~1 %.
+- **2 GiB per run**, 5 transmit and 3 receive runs per boot, first run after each
+  boot discarded, ≥12 s between runs (§8).
+- **Verified every boot, by artefact:** MTU is 9001; `listimage` shows **8**
+  modules loaded from `non-packaged/add-ons/kernel`; and the driver's advertised
+  capability word matches the arm (`0x1` for `on`, `0x0` for `off`). All ten boots
+  passed all three. Same binary throughout — only a driver settings file differs.
+- **Permutation test on the boot medians**, not a *t*-test on runs.
 
-**Read µs/MiB, not Mbit/s.** The rate is window-limited, and it moved anyway
-(+15.2 %) because a cheaper sender keeps the window fuller — but the CPU cost is
-the number the change acts on.
+Transmit, µs/MiB, per boot:
 
-### 4.2 The negative control: receive must not move
+| boot | arm | runs | median |
+|---|---|---|---|
+| S1:1 | **on** | 2090, 2114, 2122, 2173 | **2118** |
+| S1:2 | off | 2199, 2174, 2198, 2201, 2204 | 2199 |
+| S1:3 | **on** | 2132, 2128, 2302, 2115, 2295 | **2132** |
+| S1:4 | off | 2213, 2214, 2204, 2200, 2215 | 2213 |
+| S1:5 | **on** | 2135, 2130, 2133, 2123, 2129 | **2130** |
+| S1:6 | off | 2217, 2576, 2215, 2208, 2206 | 2215 |
+| S2:1 | off | 2193, 2204, 2200, 2201, 2201 | 2201 |
+| S2:2 | **on** | 2090, 2116, 2090, 2132, 2116 | **2116** |
+| S2:3 | off | 2206, 2182, 2181, 2167, 2182 | 2182 |
+| S2:4 | **on** | 2121, 2132, 2113, 2124, 2129 | **2124** |
 
-Receive checksums were already offloaded before this change, so transmit checksum
-offload must leave receive alone. Same runs, same boots, interleaved with the
-transmit runs above:
+> **within-arm boot-median spread: on 0.75 %, off 1.50 %** — against ~19 % on
+> `c7g.large`. This is the precondition, and it is what makes the platform a usable
+> instrument. Establish it before trusting anything measured on a new instance size.
 
-| | n | mean µs/MiB |
+| | mean of boot medians |
+|---|---|
+| offload **on** | **2124.0 µs/MiB** |
+| offload off | 2202.0 µs/MiB |
+| **difference** | **−78.0 µs/MiB, −3.54 %** |
+
+**Permutation test on boot medians: 2 of 252 label assignments reach
+|diff| ≥ 78.0 → two-sided *p* = 0.0079**, which is the floor for 5 versus 5 — the
+observed split is the most extreme of all 252 possible.
+
+### 4.3 Sensitivity, because one number at one setting is not a result
+
+| variant | difference | *p* |
 |---|---|---|
-| offload **on** | 6 | 2210.8 |
-| offload off | 4 | 2250.8 |
-| difference | | −40.0 (−1.8 %) |
+| all 10 boots, boot medians (headline) | −78.0 µs/MiB (−3.54 %) | 0.0079 (floor 0.0079) |
+| drop S1:1, which has 4 tx runs not 5 | −76.5 (−3.47 %) | 0.0079 (floor 0.0159) |
+| boot **means** instead of medians, keeping the 2576 outlier | −78.1 (−3.53 %) | 0.0159 |
+| sequence S1 alone (3 v 3) | −82.3 (−3.73 %) | 0.1000 (floor 0.1000) |
+| sequence S2 alone (2 v 2) | −71.5 (−3.26 %) | 0.3333 (floor 0.3333) |
 
-Mann-Whitney U = 8 of 24, *z* = −0.75, ***p* ≈ 0.45 — not significant**, with
-heavily overlapping ranges (on 2114–2278, off 2181–2277). **The control passes:**
-the thing that should not move does not, while the thing that should moves by
-seven times as much at a hundredth of the *p*-value.
+The two sequences were run with **opposite starting arms** and agree in sign and to
+within 0.5 percentage points, each hitting its own floor. Neither is significant
+alone — that is arithmetic, not weak evidence, since three-versus-three cannot go
+below *p* = 0.1.
 
-### 4.3 The wire check, which a throughput test cannot substitute for
+**Negative control — receive, which must not move** (receive checksums were already
+offloaded before this change):
 
-A checksum that is wrong by a bitwise NOT (§3.3) does not show up as a bad
-throughput number if TCP retransmits around it, so goodput is not evidence. The
-peer was asked directly, with `tcpdump -vv` on the receiving interface — which
-sees exactly the bytes the ENA device emitted:
+| | mean of boot medians |
+|---|---|
+| offload **on** | 2733.5 µs/MiB |
+| offload off | 2717.6 µs/MiB |
+| difference | **+15.9 µs/MiB, +0.59 %, *p* = 0.5952** |
+
+**The control passes.** It also sets the noise floor at ~0.6 %, so a −3.54 %
+transmit effect is roughly six times the floor. (An independent agent's control on
+the same instance class came out at ~0.7 %.)
+
+**Throttling audit.** Every transmit run but one sat at 4953–4957 Mbit/s and every
+receive run at 4960. The single exception — 4318 Mbit/s, 2576 µs/MiB — fell in the
+**off** arm, which is the direction that would flatter this change, and the
+per-boot median excluded it. Recomputing with boot *means*, which keeps it, moves
+the result by 0.1 µs/MiB. That is the per-boot median doing the job it was chosen
+for.
+
+### 4.4 The wire check, which no throughput test can substitute for
+
+A checksum wrong by a bitwise NOT (§3.3) does not show up as a bad throughput
+number if TCP retransmits around it, so goodput is not evidence. The peer was asked
+directly, with `tcpdump -vv` on the receiving interface — which sees exactly the
+bytes the ENA device emitted:
 
 ```
 10.42.0.79.40056 > 10.42.0.149.5301: Flags [.], cksum 0x3f3c (correct),
@@ -366,16 +431,16 @@ sees exactly the bytes the ENA device emitted:
 
 **Positive control for the instrument.** "`correct`" is only worth something if
 `tcpdump` would say otherwise. The peer is Linux with its own transmit checksum
-offload, so its *outbound* segments are captured before its NIC fills the field
-in — and there `tcpdump` reports **12 of 12 `(incorrect -> 0x…)`**. The verdict is
-real, not a default.
+offload, so its *outbound* segments are captured before its NIC fills the field in —
+and there `tcpdump` reports **12 of 12 `(incorrect -> 0x…)`**. The verdict is real,
+not a default.
 
 **The one `(incorrect)`, named rather than dismissed.** Its length was **26847 =
-3 × 8949**, and `generic-receive-offload: on` on the peer's interface. GRO
-coalesced three wire segments into one pseudo-segment before the capture tap,
-keeping the first segment's checksum field, so `tcpdump` summed three segments
-against one segment's checksum. Disabling GRO and re-capturing gave **200 of 200
-correct** — that is the confirmation, not the argument.
+3 × 8949**, and `generic-receive-offload: on` on the peer's interface. GRO coalesced
+three wire segments into one pseudo-segment before the capture tap, keeping the
+first segment's checksum field, so `tcpdump` summed three segments against one
+segment's checksum. Disabling GRO and re-capturing gave **200 of 200 correct** — that
+is the confirmation, not the argument.
 
 **Peer-side counters over one 2 GiB offloaded transmit** (`nstat` delta):
 
@@ -386,50 +451,52 @@ TcpInErrs:             0
 TcpRetransSegs:        0
 ```
 
-Zero checksum errors and **zero retransmissions** in 234 114 segments. Nothing was
-silently dropped and re-sent.
+Zero checksum errors and **zero retransmissions** in 234 114 segments.
 
-### 4.4 Coherence with an independently measured quantity
+### 4.5 Coherence with an independent change, measured the same way
 
-`compute_checksum()` was independently measured at **0.229 ns/byte**. One pass
-over a mebibyte is therefore `1048576 × 0.229 ns` = **240 µs/MiB** predicted,
-against **301 measured** (mean) or **361** (median).
+This replaces a comparison the first version of this document should not have made.
+It compared a measured µs/MiB saving against a first-principles figure derived from
+ns/byte, and **those two are not commensurable**: `nettput`'s summed
+`cpu_info::active_time` is understood to *understate* CPU actually removed (by
+roughly 3.7× in one calibration), so it is a **lower bound** whose sign and ranking
+are trustworthy but whose absolute magnitude cannot be set against an isolated
+microbenchmark. Two µs/MiB numbers remain comparable **to each other**, which is all
+an A/B needs — and that is the comparison to make:
 
-Predicting the right *size* from a completely different instrument is worth more
-than either number alone. The 25–50 % excess is where it should be:
-`checksum_data()` does not run that loop over a flat buffer, it walks a node
-chain — five nodes per jumbo frame at 1920 bytes each — and it touches a mebibyte
-of data an extra time on a machine where the receive profile already showed
-per-byte cost is dominated by things other than the arithmetic.
+`feat/net-checksum-fast` makes `compute_checksum()` **4.15×** faster and measures
+**+2.37 %** end to end on this same instance class with this same instrument. A
+4.15× loop removes `1 − 1/4.15 = 75.9 %` of the pass, so:
 
-### 4.5 Soak and health
+| route | whole pass, end to end |
+|---|---|
+| loop fix: 2.37 % ÷ 0.759 | **3.12 %** |
+| offload, which removes all of it: measured directly | **3.54 %** |
+
+**Two changes, two agents, two mechanisms, agreeing to 12 % on the size of the same
+pass.** That is worth more than either number alone, and it is the coherence check
+the earlier version tried and failed to make.
+
+### 4.6 Soak, health and fault injection
 
 - One **8 GiB** transfer, offloaded: 4944.2 Mbit/s at 2042 µs/MiB, 1.06 M frames.
-- **`txChecksumRejected == 0` across every run in this document**, roughly
-  **7.6 million transmitted frames**. That counter is the canary for §3.6: it
-  going non-zero means something above set `_NEEDED` on a frame this device
-  cannot finish.
-- `csum offloaded` tracks frames to within about five per boot — the difference is
-  ARP and DHCP, which are not TCP and correctly do not ask.
-- No leak, stranded-descriptor, out-of-range or reset messages other than the two
-  deliberately injected ones.
+- **`txChecksumRejected` = 0 across every run in this document**, roughly **9 million
+  transmitted frames**. That counter is the canary for §3.6.
+- `csum offloaded` tracks frames to within about five per boot — ARP and DHCP, which
+  are not TCP and correctly do not ask.
+- No leak, stranded-descriptor or out-of-range messages; no resets other than the
+  two deliberately injected.
 
-### 4.6 Fault injection: reset, and the trap it was aimed at
-
-Two watchdog resets were injected mid-transfer with `ena_fault 1` (against a
-driver built with `-DENA_DEBUG_FAULT_INJECTION`), both recovering in **33 ms**.
-
-The reason this specific test matters is narrow and worth stating.
-`ena_com_create_io_queue()` memsets `io_sq`, which **zeroes
-`cached_tx_meta`**. Since `ena_com_meta_desc_changed()` compares only the four
-geometry fields, a driver that filled `ena_meta` with zeros would memcmp-match
-that fresh cache, emit no meta descriptor at all, and ask the device to checksum
-a packet whose header offsets it does not know — a silent failure that only shows
-up as corrupt packets. Because the geometry is filled unconditionally, the first
-frame after a reset differs from the zeroed cache and the descriptor is
-re-emitted. **Verified, not reasoned: post-reset captures are 16/16 and 200/200
-correct.**
-
+Two watchdog resets were injected mid-transfer with `ena_fault 1`, both recovering
+in **33 ms**. The reason this specific test matters is narrow.
+`ena_com_create_io_queue()` memsets `io_sq`, which **zeroes `cached_tx_meta`**. Since
+`ena_com_meta_desc_changed()` compares only the four geometry fields, a driver that
+filled `ena_meta` with zeros would memcmp-match that fresh cache, emit no meta
+descriptor at all, and ask the device to checksum a packet whose header offsets it
+does not know — a silent failure visible only as corrupt packets. Because the
+geometry is filled unconditionally, the first frame after a reset differs from the
+zeroed cache and the descriptor is re-emitted. **Verified, not reasoned: post-reset
+captures are 16/16 and 200/200 correct.**
 
 ---
 
@@ -551,63 +618,50 @@ burst-allowance finding instead.
 
 ---
 
-## 6. Honest sizing: this and `compute_checksum()` overlap, and offload dominates
+## 6. Honest sizing: this and `compute_checksum()` overlap, and neither should be added to the other
 
+Two changes are chasing the same bytes, and now that both are measured end to end on
+the same instance class with the same instrument, the arithmetic is settled rather
+than estimated.
 
-This has to be said plainly, because two changes are chasing the same bytes, and
-the honest answer is less flattering to this change than the headline in §4.
+| change | mechanism | measured, `c7g.4xlarge` |
+|---|---|---|
+| `compute_checksum()` at 4.15× (`feat/net-checksum-fast`) | makes the pass cheaper | **+2.37 %** (*p* = 0.0143) |
+| TX checksum offload (this branch) | removes the pass | **+3.54 %** (*p* = 0.0079) |
+| implied whole-pass cost, from the loop fix (2.37 ÷ 0.759) | | 3.12 % |
+| **combined** | | **≈ 3.5 %, not 5.9 %** |
+| **offload's marginal value once the loop fix has landed** | | **≈ 1.2 %** |
 
-`compute_checksum()` in `stack/utility.cpp` is a 2-bytes-per-iteration scalar loop
-with its `TODO: unfold loop for speed` still in place. On `feat/net-checksum-fast`
-it is independently measured at **0.228 → 0.055 ns/byte, a 4.15× speed-up**. That
-is faster than the 2.4× this section originally assumed, and the better the loop
-gets the less offload is left to remove.
+So:
 
-Per mebibyte, one pass over the payload:
+- **They are near-complete substitutes on this path, not partial ones.** Once offload
+  is on, TCP does not call `compute_checksum()` over the payload at all, so the loop
+  fix contributes approximately nothing to *this* measurement — and vice versa, most
+  of what offload removes is what the faster loop would also have removed.
+- **Adding the two headlines gives ~5.9 % and is wrong by about 1.7×.** Whoever merges
+  second must measure the delta on top of the other and quote the combined figure.
+- **Offload's marginal value after the loop fix is ~1.2 %** — the residue a faster loop
+  cannot reach: `checksum_data()`'s walk across five `net_buffer` nodes per jumbo
+  frame, and one extra touch of a mebibyte of the sender's data.
 
-| | ns/byte | µs/MiB | µs per 9001-byte segment |
-|---|---|---|---|
-| the loop as it is today | 0.228 | 239 | 2.05 |
-| the loop at 4.15× | 0.055 | 58 | 0.50 |
-| **what the loop fix removes** | | **181** | **1.55** |
-| **what offload removes (measured, §4)** | | **301–361** | **2.6–3.1** |
+**On that evidence, offload is the weaker of the two changes to ship first**, and it
+should be said plainly: the loop fix is 2.37 % across *every* checksum in the system —
+loopback, every device that does not offload, IP and ICMP headers — while this is
+3.54 % on one device's transmit path and 1.2 % once the loop fix exists. If only one
+could ship, it should be the loop fix.
 
-So the accounting is:
+Both still ship, for reasons the percentage does not carry:
 
-- **Offload strictly dominates on this path.** It removes 301–361 µs/MiB; the loop
-  fix removes a *subset* of that, 181 µs/MiB. The 120–180 µs/MiB difference is the
-  part that is not arithmetic at all — `checksum_data()`'s walk across five
-  `net_buffer` nodes per jumbo frame, and touching a mebibyte of the sender's data
-  an extra time on a machine whose per-byte cost is dominated by memory behaviour
-  rather than by instructions.
-- **Once offload is on, the loop fix contributes approximately nothing to *this*
-  measurement**, because TCP no longer calls `compute_checksum()` over the payload
-  at all. These two are not "partial substitutes" on the ENA transmit path — they
-  are near-complete substitutes, with offload the larger of the two.
-- **After the loop fix lands, offload's remaining marginal value is 120–180 µs/MiB,
-  or roughly 5–8 %** of a post-loop-fix transmit baseline of ~2208 µs/MiB — down
-  from the 12.6–15.1 % in §4.
-- **The combined effect of both changes on ENA transmit is therefore ≈ offload's
-  effect alone, 12.6–15.1 %, not the sum of the two headlines.** Adding them gives
-  roughly 20 %, which would be wrong by about a factor of 1.5.
-
-**Consequence for whoever merges second: measure the delta on top of the other, and
-quote the combined figure rather than your own.** Either change measured against
-the unmodified baseline will legitimately claim most of the same microseconds.
-
-The loop fix is still clearly worth having — it is just worth having for reasons
-this measurement cannot see: loopback, every device that does not offload, IP and
-ICMP header checksums, and any future protocol that has to compute in software.
-Its value is breadth. This change's value is that it deletes a traversal rather
-than accelerating one, which is why it still leads by 120–180 µs/MiB even against
-a 4.15× loop.
-
-If the arithmetic had come out the other way — if the loop fix had covered the
-whole 301 µs/MiB — the right recommendation would have been to ship the loop fix
-alone and drop this change, and that would be written here instead. It did not:
-the measured saving exceeds the *entire* cost of the loop it replaces (301–361
-against 239), which is only possible because most of what offload removes was never
-the loop.
+1. **The correctness work is the durable part.** The `_NEEDED` contract, the
+   capability negotiation, the `RTF_LOCAL` and fragmentation exclusions, and the
+   `cached_tx_meta` trap in §3.4 are the mechanism *any* future offload needs —
+   receive hashing for RSS, or checksum offload on another device — and none of it
+   existed.
+2. **It deletes a traversal rather than accelerating one**, which is why it still
+   leads a 4.15× loop by 1.2 %.
+3. It is the change that established the transmit cost model has an order of
+   magnitude more per-byte than per-frame in it (§6.1), which is what cancelled the
+   doorbell half of this project.
 
 ### 6.1 What this contributes to the transmit cost model
 
@@ -618,12 +672,13 @@ the two extremes:
 
 | term | measured | share of transmit CPU at MTU 9001 |
 |---|---|---|
-| doorbell — **purely per-frame** | 238 ns each, 116.3 per MiB | **1.3 %** |
-| TCP checksum — **purely per-byte** | 301–361 µs/MiB | **12.6–15.1 %** |
+| doorbell — **purely per-frame** | 238 ns each, 116.3 per MiB (`c7g.large`) | **1.3 %** |
+| TCP checksum — **purely per-byte** | 78 µs/MiB (`c7g.4xlarge`) | **3.5 %** |
 
-(The checksum row is the cost of the *whole pass*, of which the scalar loop itself
-is 239 µs/MiB and the node walk and extra data touch are the remaining 62–122 —
-see §6.)
+Both are small in absolute terms, and the point is the *ratio*: the per-byte term is
+2.7× the per-frame one here, and the per-frame one has a hard ceiling of zero (§5).
+Note the two rows come from different instance sizes and are not directly
+subtractable; each is a within-instance A/B.
 
 The per-byte term is an order of magnitude larger than the per-frame one, which
 is the same shape receive has, arrived at independently on the transmit path.
@@ -636,10 +691,33 @@ and it is why the per-frame item was cancelled and the per-byte one shipped.
 ## 7. What was disproven or abandoned, kept on the record
 
 
+### 7.0 My own −12.6 %, withdrawn
+
+The first version of this document reported −12.6 % to −15.1 % on `c7g.large` at
+*p* ≈ 0.006. The replication on `c7g.4xlarge` returns **−3.54 %**. The old figure is
+withdrawn, the causes are in §4.1, and the largest of them was mine: **I did not pin
+the send buffer**, so the two arms were not sampling the same socket configuration.
+
+Worth stating for the next person, because the failure was not a lack of care — the
+first matrix on that instance was already discarded for bandwidth-allowance
+contamination, and the second had a negative control that passed:
+
+> **A passing negative control does not license a noisy instrument.** Receive moved
+> only 1.8 % while transmit moved 12.6 %, and I read that as the effect being real
+> and large. It was evidence that the effect was real; it was not evidence that its
+> *magnitude* was right, because the confound that inflated it — send-buffer
+> autotuning — acts only on the transmit path and so could not show up in the
+> control.
+
+The general lesson is to choose the instrument before the experiment: `c7g.large` has
+~19 % boot-to-boot transmit spread and cannot resolve a few percent, and no amount of
+care within a run fixes that.
+
 ### 7.1 "Transmit checksum offload is not worth doing on this evidence"
 
-`net-receive-profile.md` §7 says exactly that. **Measured wrong, by 12.6–15.1 %
-of transmit CPU at *p* ≈ 0.006.** The reasoning was sound and the premise was
+`net-receive-profile.md` §7 says exactly that. **Measured wrong, by 3.54 % of
+transmit CPU at *p* = 0.0079** — a smaller correction than the first version of this
+document claimed (§7.0), but still a real one. The reasoning was sound and the premise was
 not: the judgement came from a receive measurement, and receive checksums were
 already offloaded, so the receive path contained none of the cost the transmit
 path was paying. That entry is superseded rather than deleted, and this is the
@@ -764,7 +842,49 @@ instance's baseline bandwidth, not its burst bandwidth.** The exact baseline for
 size matters less than the rule and the detector — the rate column tells you when
 you have got it wrong, and it is the only thing that does.
 
-### 8.3 What this does *not* excuse
+### 8.3 Three more preconditions, each of which cost a matrix
+
+**Pin the send buffer.** `nettput -P <bytes>`, auto-sizing off. Unpinned, the buffer
+autotunes to a different size per run (474 933 and 510 777 were both observed), and
+`throughput-measurement.md`'s sweep shows 512 KiB costs more per byte than 256 KiB —
+so the arms are not sampling the same socket configuration, and the effect is
+whatever the autotuner happened to do. Pinning collapses within-boot transmit spread
+to about 1 %. **This is what invalidated the first version of §4** (§7.0).
+
+**Choose the instrument before the experiment.** Within-arm boot-median spread is
+~19 % on `c7g.large` and **0.75–1.50 % on `c7g.4xlarge`**. A few-percent effect is
+not resolvable on the former at any sample size that is practical, and care inside a
+run does not compensate. Measure the spread for *your own arms* on a new instance size
+before believing anything, and report it — it is the number that says whether the rest
+of the result means anything.
+
+**Check the peer's inbound rules before blaming the code.** The builder's security
+group permitted **only port 5301** inbound; any other peer port fails with a connect
+error from every test node, which looks exactly like a broken build. `5302-5310` now
+exists from the test SG (rule `sgr-04fd3da4f6c85873b`, added by this work) so that
+concurrent agents can each hold their own port — the collision class this is meant to
+end cannot otherwise be avoided. This is the second time an SG rule has produced a
+false negative that looked like a driver bug; the first is in
+`throughput-measurement.md`.
+
+### 8.4 What µs/MiB is, and what it may not be compared with
+
+`nettput` derives µs/MiB from `cpu_info::active_time` summed over every CPU. That
+figure is understood to **understate** CPU actually removed — by roughly 3.7× in one
+calibration — so treat it as a **lower bound** whose *sign* and *ranking* are sound
+but whose absolute magnitude is not.
+
+The consequence is a rule, not a caveat: **compare µs/MiB against µs/MiB, never
+against a figure derived from an isolated microbenchmark.** Two A/B numbers taken with
+this instrument are comparable to each other, which is all an A/B needs — §4.5 does
+exactly that, and it agrees to 12 % with an independent change. The first version of
+this document instead set a measured µs/MiB saving beside a ns/byte prediction and
+called the match "coherence"; that comparison was meaningless and has been removed.
+Independently, two other measurements on this project have found isolated
+microbenchmarks over-predicting delivered savings by ~2×, so **an isolated cost is an
+upper bound on a delivered one, not a prediction of it.**
+
+### 8.5 What this does *not* excuse
 
 A duty cycle low enough to avoid throttling does not remove the need for
 interleaving. Run-to-run transmit cost here is still bimodal at roughly ±10 %
@@ -808,6 +928,15 @@ ssh baron@$NODE 'ifconfig /dev/net/ena/0 | grep MTU'
 # the A/B: same binary, different advertisement
 ssh baron@$NODE 'echo "tx_checksum_offload false" > \
     /boot/home/config/settings/kernel/drivers/ena; sync'   # then reboot
+
+# every run: pin the send buffer, and use a peer port in 5302-5310 (5301 is the
+# shared default and will collide with other agents)
+ssh baron@$NODE "nettput -c $PEER -p 5305 -n 2G -P 262144"
+
+# verify by artefact every boot, not once
+ssh baron@$NODE 'ifconfig /dev/net/ena/0 | grep "MTU: 9001"'
+ssh baron@$NODE 'listimage | grep -c non-packaged/add-ons/kernel'   # must be 8
+ssh baron@$NODE 'grep "transmit checksum offload 0x" /var/log/syslog | tail -1'
 
 # the wire check -- on the PEER, with GRO off or GRO will lie
 sudo ethtool -K $IF gro off
