@@ -1,9 +1,15 @@
 # The arm64 `memcpy()`: design, verification, and what it is worth
 
-Status: **verification in progress.** This document was written before the
-verification was run, so that the plan can be judged on more than its
-conclusion. Sections marked *RESULT* are filled in afterwards; sections marked
-*DISPROVED* record hypotheses that died, and are kept rather than deleted.
+Status: **verified in userland on real hardware, against the exact object code
+that ships; not yet booted.** Sections 1-5 were written *before* any of it was
+run, so the plan can be judged on more than its conclusion, and they are left as
+written even where the results went on to contradict them -- §3.3 and §3.4 in
+particular were partly wrong, and §6 says how. Section 6 is the result.
+
+Recommendation: **do not merge until it has booted.** Everything short of a boot
+now passes, including five defects that this work found and fixed, three of them
+after the change had already been reviewed. See §6.7 for exactly what a bake
+would settle.
 
 ## 1. What the change is
 
@@ -29,10 +35,19 @@ The case matters because a received TCP payload starts 54 bytes into the frame
 source at 6 mod 8 against an 8-or-better aligned destination: mismatched, every
 frame, ~68,500 times a second at MTU 9001.
 
-The new routine: byte loop below 16 bytes; then align the **destination** only
-(stores are the side that benefits); then 32 bytes per iteration with four
-independent unaligned 64-bit loads and four aligned 64-bit stores; then an
-8-byte loop; then a byte tail.
+The routine as originally proposed: byte loop below 16 bytes; then align the
+destination to 8 ("stores are the side that benefits"); then 32 bytes per
+iteration; then an 8-byte loop; then a byte tail. Three of those four decisions
+turned out to be wrong, and §6.3 says how.
+
+The routine as it now stands: no loop at all below 129 bytes, but a ladder of
+fixed-width overlapping accesses -- at most four, all loads issued before all
+stores; above 128 bytes, align the destination to **16** (the width the compiler
+actually emits) and then 64 bytes an iteration, with the same fixed-width ladder
+for the tail. `dest == source` returns without writing. Nothing is ever read or
+written outside `[dest, dest + count)`, and the access ordering keeps the routine
+correct for `dest < source` overlaps, which is the direction real callers
+accidentally depend on.
 
 ## 2. Why this is the most dangerous change in the tree
 
@@ -93,6 +108,14 @@ be replaced by the routine under test.
 
 ### 3.3 `-fno-builtin` is not sufficient to prevent recursion, and its blast radius is wider than documented
 
+> **Partly disproved by §6.1, and kept as written.** The reasoning below is
+> sound and the conclusion was wrong: GCC 13.3 emitted no recursive call for
+> `memcpy` under any of ten flag combinations, including with
+> `-ftree-loop-distribute-patterns` forced on. The pass *does* fire on
+> `generic_memset.c`, which is the same hazard in the same merge object, so the
+> instinct was right and the example was wrong. `-fno-tree-loop-distribute-patterns`
+> proved unnecessary and was not added.
+
 The commit adds `-fno-builtin` to the kernel Jamfile to stop the compiler
 recognising the byte loops inside `memcpy` as `memcpy` and calling into the
 function from itself. The commit message is right that the current build's
@@ -132,6 +155,12 @@ discusses decreasing alignment only in terms of `packed`). On arm64 the
 generated `ldr` is unaligned-safe either way, so this is a documentation-intent
 issue rather than a live bug — but it should be confirmed in the disassembly
 rather than assumed.
+
+> **Resolved.** `may_alias` was added, so the punning no longer depends on
+> `-fno-strict-aliasing`. The `aligned(1)` question was confirmed harmless in the
+> disassembly, and then made moot: the wide accesses are now `__uint128_t`, whose
+> `ldp`/`stp` lowering is unaligned-safe on Normal memory regardless of what the
+> compiler believes about alignment.
 
 ### 3.5 `memmove` and `bcopy` inherit the new routine, correctly
 
@@ -296,4 +325,306 @@ the same way — measured once, in one condition:
 
 ## 6. RESULT
 
-*To be filled in.*
+Every number below was taken on the c7g.metal builder (Neoverse-V1, the same
+core family the target runs), pinned with `taskset`, and reproduced on two
+different cores. The routine measured and tested is the **actual object code
+the Haiku cross-compiler emits for the kernel and for libroot** -- extracted
+with `objcopy --redefine-sym memcpy=...` and linked into a Linux harness --
+not a transcription of the algorithm. That is possible because the object has
+zero relocations and zero undefined symbols, and it is what makes it possible
+to put the kernel's own machine code under a `PROT_NONE` guard-page test
+without baking an image.
+
+### 6.1 V1 -- object code
+
+| | kernel build | libroot build |
+|---|---|---|
+| relocations | 0 | 0 |
+| undefined symbols | none | none |
+| stack spills (`stp/ldp` vs `sp`) | 0 | 0 |
+| SIMD/`q` register accesses | 0 | 0 |
+| `ldxr/stxr/ldar/stlr/casp/dc zva` | 0 | 0 |
+| disassembly md5 | *identical* | *identical* |
+
+Findings:
+
+- **No recursion, and `-fno-builtin` is not what prevents it.** memcpy was
+  compiled ten ways -- with and without `-fno-builtin`, at `-O2`, `-O3` and
+  `-Os`, and with `-ftree-loop-distribute-patterns` forced on -- and emitted no
+  outbound call in any of them. So the hazard the commit message flags is real
+  in principle but does not fire here, and the flag it adds to the kernel
+  Jamfile is defensive rather than load-bearing. Keep it anyway; it costs
+  nothing and the next compiler may differ.
+- **The hazard does fire, on `memset`.** `generic_memset.c` compiled with
+  libroot's flags but *without* `-fno-builtin` emits
+  `R_AARCH64_CALL26 memset + 0` -- memset calling itself, unbounded recursion.
+  libroot is protected by a pre-existing `SubDirCcFlags -fno-builtin` in
+  `string/arch/arm64/Jamfile` whose comment already says "Optimizations create
+  infinite recursion otherwise"; the kernel build was protected only by
+  `-fno-tree-vectorize`. So the commit's instinct was right and its example was
+  wrong.
+- **Kernel and libroot now emit byte-identical code.** They did not before:
+  libroot auto-vectorised the body to 128-bit `ldr q`/`str q` while the kernel,
+  built `-fno-tree-vectorize`, used `ldp`/`stp`. Spelling the wide access as
+  `__uint128_t` rather than leaving it to the vectoriser removes that
+  divergence, which also removes any question about SIMD register use inside the
+  kernel.
+- Verified on the **shipped artifacts** (`libroot.so`, `kernel_arm64`), not
+  only on the intermediate `.o`.
+
+### 6.2 V2/V3 -- correctness
+
+509,882 checks per routine. Four routines were run through the identical
+battery, and the two controls are what make the result mean anything:
+
+| routine | result |
+|---|---|
+| `generic_memcpy` (the incumbent), as a control | **PASS**, 0 failures |
+| glibc's aarch64 memcpy, as a control | FAIL, 11 -- all of them `memcpy(p, p, n)` on a read-only page |
+| the **libroot** build's object code | **PASS**, 0 failures |
+| the **kernel** build's object code | **PASS**, 0 failures |
+
+The incumbent passing is the control that says the battery is not simply
+accepting anything. glibc failing exactly one check, and only that one, is the
+calibration: glibc does not short-circuit `dest == source`, so **that check is a
+compatibility requirement of this tree rather than a standards requirement** --
+it is asserted because `generic_memcpy` had it, because callers may rely on it,
+and because on arm64 this routine is also `user_memcpy()` and the kernel's
+memcpy, where the consequence is a KDL panic rather than a signal.
+
+Covered: sizes 0..256 exhaustively plus 35 boundary sizes to 65535, at all 64
+alignment pairs mod 8; all 4096 alignment pairs mod 64 over 40 sizes; the return
+value; 64 bytes of poisoned guard band either side of every destination, checked
+after every copy; 4 MiB copies; `memmove`/`bcopy` over every overlap in
+-256..256; and 12,288 copies arranged to end at, or begin at, the boundary of a
+page whose neighbour is `PROT_NONE`.
+
+The page-boundary subtest carries its own negative control -- a copy deliberately
+aimed at the guard page, which must fault. Without it, a run in which `mprotect`
+had quietly not taken effect would have passed while proving nothing.
+
+### 6.3 Five defects found, four of them not by review
+
+Two were found by the adversarial reviewer, three by this test. All are fixed.
+
+1. **The verification tested a different function.** `memcpybench.c`'s
+   `verify()` called a static `reference_memcpy()` inside the benchmark, which
+   had drifted from the shipped routine in exactly the two places the shipped
+   routine was non-obvious: the `count < 16` early-out (absent from the
+   reference) and the alignment-loop guard. Those two are interlocked -- the
+   early-out is the only justification for dropping the guard -- so the one
+   piece of reasoning that could be wrong was precisely what nothing checked,
+   while the commit message reported it as verified at 64 alignment pairs.
+2. **Short copies regressed up to 50%.** Below 16 bytes the routine byte-copied
+   unconditionally, but `generic_memcpy` took its *word* path whenever the two
+   misalignments matched -- which is what a short copy between two aligned
+   pointers is. 8 bytes went 0.482 -> 0.723 ns/B.
+3. **The stated design rationale was false.** "Only the destination is aligned,
+   because stores are the side that benefits" -- but the compiler widened the
+   body to 16-byte accesses, so aligning to 8 left half the stores crossing a
+   boundary. At 8961 bytes the case where the prologue *incidentally* aligned
+   the source beat the aligned-destination case it was designed for.
+4. **`memcpy(p, p, n)` faulted on read-only memory**, because the
+   `dest == source` short-circuit had been dropped.
+5. **`dest < source` overlap tolerance was lost** -- found by this test, and
+   *introduced by the first version of the fix for 2*. The overlapping-access
+   construction that makes short copies fast breaks the one overlap direction
+   that both the incumbent and glibc happen to get right, and that real callers
+   accidentally rely on (`memcpy(p, p + k, n)`, in-place header removal). The
+   first attempt at a rule for this was itself wrong and the test found the
+   counterexample at size 33, displacement 1. See §6.6.
+
+### 6.4 V4 -- device memory
+
+On arm64 MMIO really is Device-nGnRnE, and unaligned access to it really does
+fault: `vm_map_physical_memory()` (`src/system/kernel/vm/vm.cpp:1986-1997`)
+silently defaults to `B_UNCACHED_MEMORY` for any caller that names no memory
+type, and `GetMemoryAttr()`
+(`src/system/kernel/arch/arm64/VMSAv8TranslationMap.cpp:558-580`) maps that to
+`MAIR_DEVICE_nGnRnE`. `arch_vm_set_memory_type()` on arm64 is a no-op, so
+nothing weakens the request.
+
+**No Graviton-live caller is at risk.** ENA keeps MMIO behind sized `volatile`
+accessors and converts its LLQ window to `B_WRITE_COMBINING_MEMORY` (Normal-NC)
+before touching it, with a hand-rolled 64-bit store loop whose comment says "the
+device requires 64-bit wide stores, so this cannot go through memcpy"; GICv3/ITS
+tables are `create_area(B_CONTIGUOUS)` RAM; the arm64 linear physmap is
+Normal-WB and covers only RAM, which clears `vm_memcpy_from/to_physical()`;
+`norflash.cpp` and `53c8xx.c`, the two textbook offenders, are not built for
+arm64. ACPI is already explicitly fixed for this exact hazard --
+`ACPICAHaiku.cpp:493-507` forces write-back under
+`#if __HAIKU_ARCH_ARM || __HAIKU_ARCH_ARM64` with a comment saying ARM uncached
+memory does not support unaligned access. Two in-tree acknowledgements that the
+hazard class is known here.
+
+**One real arm64-general exposure, not reachable on Graviton.**
+`src/system/kernel/debug/frame_buffer_console.cpp:489-493` maps the framebuffer
+with no memory type -- so Device-nGnRnE -- and only repairs it to
+write-combining later, in `init_post_modules`. In that window `console_blit`
+does one `memmove` per scanline (`:330-337`), and musl's `memmove`
+(`src/system/libroot/posix/musl/string/memmove.c:16`) forwards to `memcpy` for
+non-overlapping ranges. The only caller is `blue_screen.cpp:100` with
+`srcx == destx == 0`, so source and destination differ by exactly
+`bytes_per_row` and are congruent mod 8 unless the stride is odd or the depth is
+24bpp. So: a KDL before `init_post_modules`, on an odd-stride or 24bpp mode, on
+an arm64 machine that has a framebuffer at all. Graviton has no video device,
+and the arm64 EFI loader uses UEFI `ConOut` rather than the framebuffer console.
+**Not a blocker for this target; a genuine one for arm64 in general, including
+the QEMU/virtio-gpu guests this project boots.** The right fix is at the source
+-- pass `B_WRITE_COMBINING_MEMORY` at map time rather than repairing it
+afterwards -- and it is not this change's to make.
+
+Two adjacent latent bugs found on the way, neither caused by this change and
+both of which make it more dangerous: `frame_buffer_console.cpp:489` and
+`framebuffer.cpp:62` should name their memory type at map time; and
+`hda_controller.cpp:603-605,910-912,950-952` calls
+`vm_set_area_memory_type(..., B_UNCACHED_MEMORY)` on `create_area` RAM DMA
+buffers when `!dma_snooping`, which on arm64 turns ordinary RAM into
+strongly-ordered Device memory -- and `hda` *is* built for arm64.
+
+**The boot loader is unaffected.** `src/system/boot/Jamfile:318` names
+`generic_memcpy.c` into `boot_libroot_efi.o`, and
+`src/system/boot/arch/arm64/Jamfile:20` sets `kernelLibArchSources = ;` empty.
+The `SEARCH` there pointing at `string/arch/arm64` is vestigial. So early boot
+before the kernel keeps the old routine, which removes a whole class of
+early-boot risk from this change.
+
+### 6.5 V6 -- measurement
+
+Interleaved within one binary: the incumbent, the new libroot object, the new
+kernel object and glibc, each measured in turn per row, best of repeats, pinned,
+reproduced on two cores. Every row also re-measures the incumbent a second time
+as a **harness control** -- if that differs from the first measurement, the row
+is noise. The control was under 1% on almost every row; it exceeded 3% only at
+sizes below 16 bytes and on three cold rows, and those rows are called out as
+unresolvable rather than reported as results.
+
+ns/byte, and the ratio the change is worth:
+
+| case | size | incumbent | new | vs incumbent | glibc | glibc vs new |
+|---|---|---|---|---|---|---|
+| **the receive path, cold** | | | | | | |
+| driver -> net_buffer | 1920 | 0.0862 | 0.0735 | **1.17x** | 0.0690 | 1.07x faster |
+| net_buffer -> user (src+6) | 1920 | 0.3905 | 0.0784 | **4.98x** | 0.0667 | 1.18x |
+| MTU 1500 payload (src+6) | 1448 | 0.4262 | 0.1199 | **3.55x** | 0.1027 | 1.17x |
+| MTU 9001 payload (src+6) | 8961 | 0.3911 | 0.0586 | **6.67x** | 0.0461 | 1.27x |
+| MTU 9001, aligned | 8961 | 0.0663 | 0.0512 | **1.30x** | 0.0462 | 1.11x |
+| a socket read (src+6) | 65535 | 0.3874 | 0.0440 | **8.81x** | 0.0392 | 1.12x |
+| **jumbo, warm (instruction cost only)** | | | | | | |
+| aligned | 8961 | 0.0497 | 0.0283 | **1.76x** | 0.0194 | 1.46x |
+| src+6 | 8961 | 0.3871 | 0.0397 | **9.75x** | 0.0197 | 2.01x |
+| **short, matching alignment** | | | | | | |
+| | 1 | 4.407 | 4.715 | 0.93x | 4.475 | 1.05x |
+| | 8 | 0.5060 | 0.5202 | 0.97x | 0.5362 | *0.97x -- new is faster* |
+| | 16 | 0.2587 | 0.2594 | 1.00x | 0.2683 | *0.97x -- new is faster* |
+| | 32 | 0.1371 | 0.1241 | **1.11x** | 0.1215 | 1.02x |
+| | 33 | 0.1415 | 0.1403 | 1.01x | 0.1267 | 1.11x |
+| | 48 | 0.1107 | 0.0904 | **1.23x** | 0.0843 | 1.07x |
+| | 64 | 0.0919 | 0.0672 | **1.37x** | 0.0400 | 1.68x |
+| | 128 | 0.0742 | 0.0505 | **1.47x** | 0.0319 | 1.58x |
+| | 256 | 0.0622 | 0.0487 | **1.28x** | 0.0275 | 1.77x |
+| **short, mismatched (src+6)** | | | | | | |
+| | 8 | 0.6801 | 0.5208 | **1.31x** | 0.5342 | *0.97x -- new is faster* |
+| | 32 | 0.4726 | 0.1452 | **3.26x** | 0.1259 | 1.15x |
+| | 256 | 0.3942 | 0.0573 | **6.87x** | 0.0300 | 1.91x |
+
+Reproduced on core 20: the same rows land within a few percent, and the ratios
+that matter are unchanged (net_buffer -> user 4.22x, MTU 9001 payload 6.78x,
+socket read 8.86x, 8961 warm src+6 9.80x).
+
+So: **1.1x to 9.8x faster than the routine it replaces at every size from 12
+bytes upward, and at every mismatched alignment including the shortest** -- and
+the mismatched case, which is the one the network receive path actually performs,
+is between 3.3x and 9.8x.
+
+What remains, stated plainly:
+
+- **One byte costs 7% more than it did** (4.41 -> 4.72 ns for the call), and
+  8, 16 and 24 bytes at matching alignment are at parity, 0.97x-1.00x, which is
+  within a percent or two of the harness's own repeatability at those sizes. That
+  is the price of dispatching on size at all, and no general-purpose routine
+  avoids it: glibc is *slower than the incumbent* at 8 and 16 bytes for the same
+  reason. `generic_memcpy`'s path for a short matched-alignment copy is one
+  alignment test and one word copy, and there is nothing left to shave. It is
+  worth being clear that the earlier versions of this routine were 50% slower at
+  8 bytes and 15% slower at 32 -- those were real regressions, they were found by
+  measurement rather than review, and they are gone.
+- **glibc is still faster than this routine above 32 bytes -- up to 2.0x.** That
+  is not noise, and it will not close by tuning. glibc's aarch64 memcpy loads up
+  to 128 bytes into `q` registers before storing any of it, which needs only
+  eight registers; `__uint128_t` lowers to *pairs* of general-purpose registers,
+  so the same structure would spill, which is why the group size here is 64
+  bytes. Closing the gap means SIMD intrinsics. See §6.7. Below 32 bytes this
+  routine is already at or slightly ahead of glibc, because it dispatches in
+  fewer branches.
+
+### 6.6 The overlap rule, including the version of it that was wrong
+
+`memcpy` is undefined on overlap, so none of this is a promise. It is asserted
+anyway because both the incumbent and glibc happen to tolerate
+`dest < source`, and a caller that works today should not start failing for a
+reason no bug report could ever explain.
+
+Writing destination byte *p* destroys the source byte living at that address,
+which is source index *p - delta* for *delta = source - dest > 0*. A group of
+accesses reading source *[x, y)* is therefore safe exactly when no earlier write
+touched *[x + delta, y + delta)*.
+
+The plausible rule -- "ascending non-overlapping writes, plus one overlapping
+access at the end" -- **is wrong**, and it is written here because someone will
+reach for it again. A trailing overlapping access is safe only if the previous
+writes stopped at or before its start *plus delta*, and with delta as small as 1
+that means: only if they stopped exactly at its start. The first version of the
+33..128 case wrote *[0, 32)* and then an overlapping tail at
+*[count - 32, count)*; at count 33 the tail re-read bytes the first access had
+already replaced. The test found it at size 33, displacement 1, on the first
+run.
+
+The rule that holds: every group writes a range beginning exactly where the
+previous one ended, and every group issues all of its loads before any of its
+stores, which absorbs the overlap *within* a group where it is harmless. That is
+why 33..128 is one load-everything-then-store-everything group and not a ladder
+of four, and why the alignment prologue copies exactly the bytes it consumes
+rather than a full 16 with a short advance.
+
+Measured: the incumbent and glibc agree with `memmove` truth on all 65,280
+`dest < source` cases; the new routine now does too. `dest > source` differs
+from the incumbent in 14,111 of 65,280 overlapping cases -- both are wrong,
+differently, as any forward copy must be, and as glibc also is (17,247). A
+latent caller that is wrong about *that* direction does not become newly broken,
+but it changes how it is broken.
+
+### 6.7 What is not done, and what it would take
+
+- **Not booted.** Everything above is the shipping machine code exercised in
+  userland on the right core. Nothing here has run inside a Haiku kernel or
+  libroot, which is the one thing the original commit message asked for and the
+  one thing that still needs an image. Wanted: boot, serial console clean
+  through early boot, `nettput` both directions at MTU 9001 watching for
+  checksum failures rather than only for rate, a filesystem workload verified by
+  hash, `ena_fault`, and `profile -a -k`.
+- **The end-to-end network number is not measured.** The microbenchmark says the
+  copies got 3.4-9.8x cheaper in the receive path's configuration. It does not
+  say what that is worth in µs/MiB, because that needs a baked image. From the
+  cost model (2.34 µs/frame + 1.85 ns/B, R² 0.94) the two bounce copies account
+  for at most 0.78 of the 1.85 ns/B per-byte term, so **even making the copies
+  free could not close more than ~42% of it** -- and this change makes them
+  about 6.75x cheaper at MTU 9001, not free. Expect the per-byte term to fall by
+  roughly 0.5-0.65 ns/B, i.e. a third of it, which at MTU 9001 is on the order of
+  25-30% of receive cost. **The majority of the per-byte cost will still be
+  unexplained afterwards**, and saying otherwise would be the same mistake this
+  project has had to retract four times. One known candidate is being handled
+  separately: `compute_checksum()` measures 0.229 ns/B against 0.095 for a
+  64-bit unrolled equivalent.
+- **glibc is still 1.1-2.0x faster.** Closing it means `<arm_neon.h>` and
+  `q`-register load-everything-first groups up to 128 bytes. That is a larger
+  and more interesting change than this one: it is the difference between a
+  routine that is much better than what we had and one that is competitive with
+  the best available. It also raises a kernel question this version deliberately
+  avoids -- whether SIMD registers may be used in kernel memcpy -- which is
+  answerable (exception entry eagerly saves all 32 `q` registers) but is a
+  policy decision, not a detail.
+- **Not tested:** concurrent modification of the source during a copy, and
+  copies straddling an `mprotect` performed by another thread. Out of scope.
+- **`generic_memcpy.c` is untouched**, so no other architecture is affected, and
+  the arm64 boot loader continues to use it.
