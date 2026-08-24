@@ -249,6 +249,7 @@ arch_handle_acpi()
 		// not generous enough to spend half a kilobyte on it.
 		static uint64 gicr_bases[SMP_MAX_CPUS];
 		uint32 gicr_base_count = 0;
+		bool reportedTooManyCpus = false;
 
 		acpi_apic *desc = (acpi_apic*)(madt + 1);
 		while (desc != (acpi_apic*)((char*)madt + madt->header.length)) {
@@ -257,22 +258,32 @@ arch_handle_acpi()
 				if (acpi_gicc->cpu_interface_num == 0)
 					gicc_base = acpi_gicc->base_address;
 
+				// A CPU we have no room for must not abort the rest of this
+				// walk: the entry still has to be stepped over, or the loop
+				// never advances and the loader spins here for ever.
 				platform_cpu_info* cpu = NULL;
 				arch_smp_register_cpu(&cpu);
-				if (cpu == NULL)
-					continue;
-				cpu->id = acpi_gicc->cpu_interface_num;
-				cpu->mpidr = acpi_gicc->mpidr;
+				if (cpu == NULL) {
+					if (!reportedTooManyCpus) {
+						dprintf("acpi: the MADT describes more CPUs than this "
+							"build supports (%d); ignoring the rest\n",
+							SMP_MAX_CPUS);
+						reportedTooManyCpus = true;
+					}
+				} else {
+					cpu->id = acpi_gicc->cpu_interface_num;
+					cpu->mpidr = acpi_gicc->mpidr;
 
-				// Firmware may describe the redistributors per-CPU here
-				// instead of via a GICR structure. Remember every base:
-				// unlike a GICR structure, these are not required to
-				// describe one contiguous range.
-				if (acpi_gicc->gicr_address != 0
-					&& gicr_base_count < SMP_MAX_CPUS) {
-					gicr_bases[gicr_base_count++] = acpi_gicc->gicr_address;
-					if (gicr_base == 0 || acpi_gicc->gicr_address < gicr_base)
-						gicr_base = acpi_gicc->gicr_address;
+					// Firmware may describe the redistributors per-CPU here
+					// instead of via a GICR structure. Remember every base:
+					// unlike a GICR structure, these are not required to
+					// describe one contiguous range.
+					if (acpi_gicc->gicr_address != 0
+						&& gicr_base_count < SMP_MAX_CPUS) {
+						gicr_bases[gicr_base_count++] = acpi_gicc->gicr_address;
+						if (gicr_base == 0 || acpi_gicc->gicr_address < gicr_base)
+							gicr_base = acpi_gicc->gicr_address;
+					}
 				}
 			} else if (desc->type == ACPI_MADT_GIC_DISTRIBUTOR) {
 				acpi_gic_distributor *acpi_gicd = (acpi_gic_distributor*)desc;
