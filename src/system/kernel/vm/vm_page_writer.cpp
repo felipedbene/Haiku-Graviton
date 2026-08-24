@@ -48,9 +48,26 @@
 
 #define PAGES_FLUSH_DURATION_LOCAL_QUOTA		(3 * 1000 * 1000)
 #define PAGES_FLUSH_DURATION_GLOBAL_QUOTA		(5 * 1000 * 1000)
+	// Retained for the reported figure only; see IsOverQuota(). It no longer
+	// gates anything, because summing a duration across devices that drain in
+	// parallel throttled writers to idle disks.
+
+#define PAGES_FLUSH_GLOBAL_DIRTY_SHIFT			3
+	// At most 1/8th of RAM may be dirty across all devices at once. Deliberately
+	// generous: the defect this replaced fired when memory was in no danger
+	// whatsoever (32.6 GB free of 33.8), so a bound that only speaks up when
+	// memory really is at risk is the correct replacement for one that spoke up
+	// about the wrong quantity.
 	// target maximum time needed to write out all modified pages, in one & all queues
 
 int64 ModifiedPageQueue::sGlobalModifiedCount = 0;
+// The counters are always maintained -- they are two atomic adds on a path that
+// is already sleeping -- but the log line is switchable, because the interesting
+// case is a machine under enough write pressure that a per-event line would
+// itself become the bottleneck. Toggled by the page_writer_quota_trace KDL
+// command; on by default because a quota timeout is still an abnormal event.
+static bool sQuotaTraceEnabled = true;
+
 int64 ModifiedPageQueue::sQuotaWaits = 0;
 int64 ModifiedPageQueue::sQuotaTimeouts = 0;
 bigtime_t ModifiedPageQueue::sQuotaWaitTime = 0;
@@ -590,8 +607,24 @@ ModifiedPageQueue::_PageWriter()
 		}
 
 		page_num_t modifiedPages = queue.Count();
-		if (modifiedPages == 0)
+		if (modifiedPages == 0) {
+			// Nothing to write, so decay the estimate rather than leaving it to
+			// sit. It is only ever updated by a completed write round, so a
+			// device that goes quiet freezes its last sample indefinitely and
+			// keeps throttling writers on a figure that no longer describes it.
+			// Measured: an idle disk held 883 us per page while a busy one
+			// measured 27-31 us, and at 883 us the local quota trips once that
+			// device holds 3,397 pages -- 13 MiB of dirty data on a machine with
+			// 31.5 GiB of RAM.
+			//
+			// Halving per idle round fades a stale value within a few rounds
+			// while leaving a device that is merely between bursts with
+			// something usable. It stops at 1 rather than 0 so that the estimate
+			// is never zero, which would disarm the quota entirely.
+			if (fAveragePageWriteDuration > 1)
+				fAveragePageWriteDuration /= 2;
 			continue;
+		}
 
 		if (modifiedPages <= pagesSinceLastSuccessfulWrite) {
 			// We ran through the whole queue without being able to write a
@@ -747,13 +780,24 @@ ModifiedPageQueue::_PageWriter()
 			pagesSinceLastSuccessfulWrite = 0;
 
 		if (failedPages == 0 && numPages > 0) {
-			// Runs of fewer than 8 pages are too short to average usefully, but
-			// the estimate has to stop being zero at some point: while it is
+			// Runs of fewer than 8 pages are too short to be a useful sample,
+			// but the estimate has to stop being zero at some point: while it is
 			// zero IsOverQuota() can never return true, so WaitIfOverQuota()
 			// never wakes this thread and the back-pressure path stays
 			// permanently disarmed. Take a noisy sample over an accurate zero.
-			if (numPages >= 8 || fLastAveragePageWriteDuration == 0)
-				fLastAveragePageWriteDuration = (system_time() - runStart) / numPages;
+			if (numPages >= 8 || fAveragePageWriteDuration == 0) {
+				bigtime_t sample = (system_time() - runStart) / numPages;
+				if (fAveragePageWriteDuration == 0)
+					fAveragePageWriteDuration = sample;
+				else {
+					// Exponentially weighted, alpha = 1/4. This used to be a
+					// plain assignment despite the name, so a single slow round
+					// set the throttling threshold for every writer on the
+					// device until some later round happened to replace it.
+					fAveragePageWriteDuration
+						+= (sample - fAveragePageWriteDuration) / 4;
+				}
+			}
 		}
 
 		if (!IsOverQuota())
@@ -960,6 +1004,20 @@ ModifiedPageQueue::~ModifiedPageQueue()
 // threads are parked here or somewhere else, and what the quota thinks, and both
 // answers have to be obtainable without a working userland.
 static int
+set_page_writer_quota_trace(int argc, char** argv)
+{
+	if (argc == 2) {
+		sQuotaTraceEnabled = (strcmp(argv[1], "0") != 0
+			&& strcmp(argv[1], "off") != 0);
+	}
+
+	kprintf("page writer quota trace is %s\n",
+		sQuotaTraceEnabled ? "on" : "off");
+	return 0;
+}
+
+
+static int
 dump_page_writer_quota(int argc, char** argv)
 {
 	ModifiedPageQueue* queue = vm_page_default_modified_queue();
@@ -978,7 +1036,7 @@ ModifiedPageQueue::StartWriter(const char* name)
 {
 	fPageWriterCondition.Init("pgwr");
 	fUnderQuotaCondition.Init(this, "pguq");
-	fLastAveragePageWriteDuration = 0;
+	fAveragePageWriteDuration = 0;
 
 	char threadName[B_OS_NAME_LENGTH];
 	snprintf(threadName, sizeof(threadName), "page writer: %s", name);
@@ -994,6 +1052,9 @@ ModifiedPageQueue::StartWriter(const char* name)
 		sCommandAdded = true;
 		add_debugger_command("page_writer_quota", &dump_page_writer_quota,
 			"dump the modified-page quota state and its wait statistics");
+		add_debugger_command("page_writer_quota_trace",
+			&set_page_writer_quota_trace,
+			"[0|1] - report the quota trace setting, or turn it off/on");
 	}
 
 	return resume_thread(fWriterThread);
@@ -1007,15 +1068,18 @@ ModifiedPageQueue::DumpQuotaState()
 	kprintf("  pages queued            : %" B_PRIuPHYSADDR "\n",
 		(phys_addr_t)Count());
 	kprintf("  per-page write estimate : %" B_PRIdBIGTIME " us"
-		"  (last sample, not a mean)\n", fLastAveragePageWriteDuration);
+		"  (decaying average)\n", fAveragePageWriteDuration);
 	kprintf("  estimated drain time    : %" B_PRIdBIGTIME " us  (local quota %d us)\n",
-		(bigtime_t)Count() * fLastAveragePageWriteDuration,
+		(bigtime_t)Count() * fAveragePageWriteDuration,
 		PAGES_FLUSH_DURATION_LOCAL_QUOTA);
 	kprintf("  global modified count   : %" B_PRId64 "\n",
 		atomic_get64(&sGlobalModifiedCount));
-	kprintf("  global estimated drain  : %" B_PRIdBIGTIME " us  (global quota %d us)\n",
-		atomic_get64(&sGlobalEstimatedWriteDuration),
-		PAGES_FLUSH_DURATION_GLOBAL_QUOTA);
+	kprintf("  global estimated drain  : %" B_PRIdBIGTIME " us  (reported only,"
+		" no longer gates)\n", atomic_get64(&sGlobalEstimatedWriteDuration));
+	kprintf("  global dirty limit      : %" B_PRId64 " of %" B_PRIuPHYSADDR
+		" pages  (1/%d of RAM)\n",
+		(int64)(vm_page_num_pages() >> PAGES_FLUSH_GLOBAL_DIRTY_SHIFT),
+		(phys_addr_t)vm_page_num_pages(), 1 << PAGES_FLUSH_GLOBAL_DIRTY_SHIFT);
 	kprintf("  quota waits             : %" B_PRId64 "\n",
 		atomic_get64(&sQuotaWaits));
 	kprintf("  quota wait timeouts     : %" B_PRId64 "  (bound %d us)\n",
@@ -1033,7 +1097,7 @@ ModifiedPageQueue::IsOverQuota(page_num_t additionalPages)
 {
 	InterruptsSpinLocker _(fLock);
 
-	bigtime_t estimatedWriteDuration = (fCount * fLastAveragePageWriteDuration);
+	bigtime_t estimatedWriteDuration = (fCount * fAveragePageWriteDuration);
 	if ((int64)fCount != fLastReportedModifiedCount
 			|| estimatedWriteDuration != fLastReportedEstimatedWriteDuration) {
 		atomic_add64(&sGlobalModifiedCount, fCount - fLastReportedModifiedCount);
@@ -1044,13 +1108,34 @@ ModifiedPageQueue::IsOverQuota(page_num_t additionalPages)
 		fLastReportedEstimatedWriteDuration = estimatedWriteDuration;
 	}
 
-	bigtime_t additionalPagesDuration = fLastAveragePageWriteDuration * additionalPages;
+	bigtime_t additionalPagesDuration = fAveragePageWriteDuration * additionalPages;
 	if ((estimatedWriteDuration + additionalPagesDuration)
 			> PAGES_FLUSH_DURATION_LOCAL_QUOTA)
 		return true;
 
-	return ((atomic_get64(&sGlobalEstimatedWriteDuration) + additionalPagesDuration)
-		> PAGES_FLUSH_DURATION_GLOBAL_QUOTA);
+	// The global bound is on dirty PAGES, not on summed drain time.
+	//
+	// Durations do not sum across devices. Each ModifiedPageQueue has its own
+	// page writer and its own disk and they drain in parallel, so a 6.9 second
+	// backlog on one disk plus nothing on another means the system needs 6.9
+	// seconds, not 6.9 seconds that a writer to the *second* disk must sit
+	// through. Adding them and treating the total as a deadline is what made a
+	// writer to an idle disk wait for a busy one: measured, 15 of 19 quota
+	// timeouts were threads blocked over quota with `queue 0 pages` -- nothing
+	// at all queued on the device they were writing to -- while a different
+	// device held 221,186 dirty pages. sshd writes to the root filesystem, and
+	// it starved because a scratch volume was busy.
+	//
+	// Pages, unlike durations, genuinely do sum: they all occupy the same RAM.
+	// So the global limit is now the thing its name always implied it was, a
+	// bound on how much of memory may be dirty at once, while the per-device
+	// time quota above remains the flush-latency bound it was named for. The
+	// summed duration is still maintained and still reported, because it is
+	// useful to see; it just no longer decides anything.
+	int64 globalDirtyLimit
+		= (int64)(vm_page_num_pages() >> PAGES_FLUSH_GLOBAL_DIRTY_SHIFT);
+	return ((atomic_get64(&sGlobalModifiedCount) + (int64)additionalPages)
+		> globalDirtyLimit);
 }
 
 
@@ -1117,6 +1202,9 @@ ModifiedPageQueue::_RecordQuotaWait(bigtime_t waitStart, bool timedOut)
 
 	atomic_add64(&sQuotaTimeouts, 1);
 
+	if (!sQuotaTraceEnabled)
+		return;
+
 	static bigtime_t sLastComplaint = 0;
 	bigtime_t now = system_time();
 	if (now - sLastComplaint < 1000000)
@@ -1128,6 +1216,6 @@ ModifiedPageQueue::_RecordQuotaWait(bigtime_t waitStart, bool timedOut)
 		", longest %" B_PRIdBIGTIME " us, per-page estimate %" B_PRIdBIGTIME
 		" us, queue %" B_PRIuPHYSADDR " pages)\n", waited,
 		atomic_get64(&sQuotaWaits), atomic_get64(&sQuotaTimeouts),
-		atomic_get64(&sQuotaWaitMax), fLastAveragePageWriteDuration,
+		atomic_get64(&sQuotaWaitMax), fAveragePageWriteDuration,
 		(phys_addr_t)Count());
 }

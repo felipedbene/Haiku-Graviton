@@ -62,7 +62,12 @@ private:
 			BinarySemaphore		fPageWriterCondition;
 			ConditionVariable	fUnderQuotaCondition;
 
-			bigtime_t			fLastAveragePageWriteDuration;
+			// An exponentially weighted moving average of the time to write one
+			// page, decayed while the queue is idle. It was previously the most
+			// recent sample despite the name, which let one slow round -- or one
+			// old sample on a device that had gone quiet -- set the throttling
+			// threshold for every writer on that device.
+			bigtime_t			fAveragePageWriteDuration;
 
 private:
 	static	int64				sGlobalModifiedCount;
