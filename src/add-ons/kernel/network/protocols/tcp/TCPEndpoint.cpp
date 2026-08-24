@@ -365,6 +365,33 @@ posix_error(status_t error)
 }
 
 
+/*!	The same mapping for connect(), which needs a different answer.
+
+	Everywhere else in this file a wait that returns B_TIMED_OUT means either a
+	socket timeout (SO_RCVTIMEO / SO_SNDTIMEO) or a non-blocking call that could
+	not proceed, and EWOULDBLOCK is what POSIX asks for. connect() is the
+	exception: POSIX gives it ETIMEDOUT for "the attempt to connect timed out
+	before a connection was made", and the non-blocking case never reaches the
+	wait at all -- it returns EINPROGRESS before it.
+
+	This is not cosmetic. A failed three-way handshake reported as "Operation
+	would block" sends whoever reads the message hunting for a non-blocking-socket
+	mistake in their own code, when what actually happened is that the peer never
+	answered: a full listen backlog, a dropped SYN, a firewall rule. It cost real
+	time during the multi-queue throughput measurements, where several concurrent
+	connections to a peer with a shallow backlog failed with
+	"cannot connect: Operation would block" and looked like a Haiku socket bug.
+*/
+static inline status_t
+connect_error(status_t error)
+{
+	if (error == B_TIMED_OUT)
+		return ETIMEDOUT;
+
+	return error;
+}
+
+
 static inline bool
 in_window(const tcp_sequence& sequence, const tcp_sequence& receiveNext,
 	uint32 receiveWindow)
@@ -643,7 +670,7 @@ TCPEndpoint::Connect(const sockaddr* address)
 		status_t status = _WaitForEstablished(locker, timeout);
 		TRACE("  Connect(): Connection complete: %s (timeout was %"
 			B_PRIdBIGTIME ")", strerror(status), timeout);
-		return posix_error(status);
+		return connect_error(status);
 	}
 
 	// Can only call connect() from CLOSED or LISTEN states
@@ -706,7 +733,7 @@ TCPEndpoint::Connect(const sockaddr* address)
 	status = _WaitForEstablished(locker, absoluteTimeout);
 	TRACE("  Connect(): Connection complete: %s (timeout was %" B_PRIdBIGTIME
 		")", strerror(status), timeout);
-	return posix_error(status);
+	return connect_error(status);
 }
 
 
