@@ -26,15 +26,19 @@ GICv3InterruptController::GICv3InterruptController(const intc_info& info)
 	fGicdRegs(0),
 	fITS(NULL),
 	fGicrRegionCount(0),
-	fGicrFallbackStride(GICR_STRIDE_V3),
+	fGicrStride(GICR_STRIDE_V3),
 	fIrqCount(GIC_SPECIAL_BASE)
 {
 	reserve_io_interrupt_vectors(GIC_SPECIAL_BASE, 0, INTERRUPT_TYPE_IRQ);
 
 	memset(fGicrRegions, 0, sizeof(fGicrRegions));
 
+	// GICD_PIDR2 lives at 0xffe8, so the whole 64 KB frame has to be mapped
+	// whatever a device tree claims the distributor's size to be -- reading it
+	// through a short mapping would fault here, inside the constructor of the
+	// object that would have to report the fault.
 	size_t gicdSize = info.regs1.size;
-	if (gicdSize == 0)
+	if (gicdSize < 0x10000)
 		gicdSize = 0x10000;
 
 	area_id gicdArea = vm_map_physical_memory(B_SYSTEM_TEAM, "intc-gicv3-gicd",
@@ -43,17 +47,21 @@ GICv3InterruptController::GICv3InterruptController(const intc_info& info)
 	if (gicdArea < 0)
 		panic("gicv3: unable to map the distributor registers\n");
 
-	// Only used to size a window when firmware describes the redistributors
-	// with neither a length nor a set of regions. The walks themselves step by
-	// what each redistributor reports -- see gicr_frame_stride().
+	// How far apart the redistributors are depends on whether this is a GICv4
+	// implementation, which gives each PE four 64 KB frames rather than two --
+	// unconditionally, not only where virtual LPIs are implemented (Arm IHI
+	// 0069G 12.10). A hypervisor's emulated distributor reports v3 and a real
+	// GIC-700 reports v4. This is only consulted when firmware handed us no
+	// regions to walk; a region always arrives with the stride that was used to
+	// measure it.
 	const uint32 pidr2 = _ReadGicd(GICD_PIDR2);
 	if (GICD_PIDR2_ARCH(pidr2) >= 4)
-		fGicrFallbackStride = GICR_STRIDE_V4;
+		fGicrStride = GICR_STRIDE_V4;
 
 	dprintf("gicv3: gicd %#" B_PRIx64 " (size %#" B_PRIxSIZE "), arch rev %"
-		B_PRIu32 ", typer %#" B_PRIx32 ", fallback stride %#" B_PRIxSIZE "\n",
-		info.regs1.start, gicdSize, GICD_PIDR2_ARCH(pidr2),
-		_ReadGicd(GICD_TYPER), fGicrFallbackStride);
+		B_PRIu32 ", typer %#" B_PRIx32 ", fallback stride %#" B_PRIxSIZE
+		"\n", info.regs1.start, gicdSize, GICD_PIDR2_ARCH(pidr2),
+		_ReadGicd(GICD_TYPER), fGicrStride);
 
 	_MapRedistributors(info);
 
@@ -75,18 +83,21 @@ GICv3InterruptController::GICv3InterruptController(const intc_info& info)
 void
 GICv3InterruptController::_MapRedistributors(const intc_info& info)
 {
-	addr_range ranges[INTC_MAX_GICR_REGIONS];
+	gicr_region_info ranges[INTC_MAX_GICR_REGIONS];
 	uint32 count = info.gicr_region_count;
 
 	if (count > INTC_MAX_GICR_REGIONS)
 		count = INTC_MAX_GICR_REGIONS;
 
 	if (count == 0) {
-		// One contiguous range, described the other way round. A size of zero
-		// means firmware did not say, so guess at one frame set per CPU.
+		// One contiguous range, described the other way round, and with no
+		// stride attached -- so here, and only here, the architecture revision
+		// decides it. A size of zero means firmware did not say, so guess at
+		// one frame set per CPU.
 		ranges[0].start = info.regs2.start;
 		ranges[0].size = info.regs2.size != 0
-			? info.regs2.size : fGicrFallbackStride * smp_get_num_cpus();
+			? info.regs2.size : fGicrStride * smp_get_num_cpus();
+		ranges[0].stride = fGicrStride;
 		count = 1;
 	} else {
 		for (uint32 i = 0; i < count; i++)
@@ -94,8 +105,12 @@ GICv3InterruptController::_MapRedistributors(const intc_info& info)
 	}
 
 	for (uint32 i = 0; i < count; i++) {
-		if (ranges[i].size == 0)
+		if (ranges[i].size == 0 || ranges[i].stride == 0) {
+			dprintf("gicv3: ignoring redistributor region %" B_PRIu32 " at %#"
+				B_PRIx64 ": size %#" B_PRIx64 ", stride %#" B_PRIx64 "\n", i,
+				ranges[i].start, ranges[i].size, ranges[i].stride);
 			continue;
+		}
 
 		addr_t mapped = 0;
 		area_id area = vm_map_physical_memory(B_SYSTEM_TEAM, "intc-gicv3-gicr",
@@ -107,15 +122,40 @@ GICv3InterruptController::_MapRedistributors(const intc_info& info)
 			return;
 		}
 
-		fGicrRegions[fGicrRegionCount].base = mapped;
-		fGicrRegions[fGicrRegionCount].physicalBase = ranges[i].start;
-		fGicrRegions[fGicrRegionCount].size = ranges[i].size;
+		gicr_region& region = fGicrRegions[fGicrRegionCount];
+		region.base = mapped;
+		region.physicalBase = ranges[i].start;
+		region.size = ranges[i].size;
+		region.stride = ranges[i].stride;
+		region.count = ranges[i].size / ranges[i].stride;
+
+		// A size that is not a whole number of strides means the two were
+		// derived from different ideas of the geometry. Say so: the count above
+		// truncates, so the effect is redistributors that go unfound rather
+		// than reads off the end, but it is a bug either way.
+		if ((ranges[i].size % ranges[i].stride) != 0) {
+			dprintf("gicv3: redistributor region %" B_PRIu32 " at %#" B_PRIx64
+				" is %#" B_PRIx64 " bytes, not a multiple of its %#" B_PRIx64
+				" stride\n", i, ranges[i].start, ranges[i].size,
+				ranges[i].stride);
+		}
+
+		// Linux checks this and we did not: if there is no redistributor at the
+		// base we were given, everything read from here is meaningless.
+		const uint32 rpidr2 = gic_read32(mapped + GICR_PIDR2);
+		const uint32 rarch = GICD_PIDR2_ARCH(rpidr2);
+		if (rarch != 3 && rarch != 4) {
+			dprintf("gicv3: no redistributor at region %" B_PRIu32 " base %#"
+				B_PRIx64 ": GICR_PIDR2 %#" B_PRIx32 " (arch rev %" B_PRIu32
+				")\n", i, ranges[i].start, rpidr2, rarch);
+		}
+
 		fGicrRegionCount++;
 
 		dprintf("gicv3: redistributor region %" B_PRIu32 ": %#" B_PRIx64
-			" size %#" B_PRIx64 " (at most %" B_PRIu64 " PEs)\n", i,
-			ranges[i].start, ranges[i].size,
-			ranges[i].size / GICR_STRIDE_V3);
+			" size %#" B_PRIx64 ", stride %#" B_PRIx64 ", %" B_PRIu32
+			" PEs, arch rev %" B_PRIu32 "\n", i, ranges[i].start,
+			ranges[i].size, ranges[i].stride, region.count, rarch);
 	}
 }
 
@@ -181,17 +221,38 @@ GICv3InterruptController::_DistributorInit()
 	for (uint32 irq = GIC_SPI_BASE; irq < fIrqCount; irq += 16)
 		_WriteGicd(GICD_ICFGR + (irq / 16) * 4, 0);
 
+	// Extended SPIs, INTID 4096 and up, exist on real hardware -- Graviton3
+	// implements 128 of them -- and reset into group 0, which non-secure
+	// software cannot take. Nothing allocates one today, so nothing can raise
+	// one; but if anything ever did, the CPU interface would hand
+	// HandleInterrupt() a reserved INTID, which it drops without an EOI, and
+	// the interrupt would be re-presented for ever. That is a livelock with no
+	// panic to point at it, so put the whole range in group 1 and leave it
+	// disabled. Only group and enable are programmed: priority, configuration
+	// and routing would also have to be set before any of these could actually
+	// be used.
+	const uint32 typer = _ReadGicd(GICD_TYPER);
+	uint32 espiCount = 0;
+	if ((typer & GICD_TYPER_ESPI) != 0)
+		espiCount = GICD_TYPER_ESPI_COUNT(typer);
+
+	for (uint32 i = 0; i < espiCount / 32; i++) {
+		_WriteGicd(GICD_ICENABLERE + i * 4, 0xffffffff);
+		_WriteGicd(GICD_IGROUPRE + i * 4, 0xffffffff);
+	}
+
 	_WaitForRwp();
 
 	// Enable affinity routing (mandatory for GICv3) together with group 1
-	// non-secure interrupts. See GICD_CTLR_ENABLE_G1 for why both enable bits
-	// are written.
+	// non-secure interrupts. See GICD_CTLR_ENABLE_G1 for which bit does the
+	// work and why the other is written too.
 	_WriteGicd(GICD_CTLR,
 		GICD_CTLR_ARE_NS | GICD_CTLR_ENABLE_G1 | GICD_CTLR_ENABLE_G1NS);
 	_WaitForRwp();
 
-	dprintf("gicv3: %" B_PRIu32 " interrupt lines, gicd_ctlr %#" B_PRIx32
-		"\n", fIrqCount, _ReadGicd(GICD_CTLR));
+	dprintf("gicv3: %" B_PRIu32 " interrupt lines, %" B_PRIu32 " extended "
+		"spis, gicd_ctlr %#" B_PRIx32 "\n", fIrqCount, espiCount,
+		_ReadGicd(GICD_CTLR));
 
 	// With ARE enabled, SPI targeting is by affinity rather than a CPU bitmask.
 	// Route everything to the boot CPU until something asks otherwise.
@@ -215,11 +276,8 @@ GICv3InterruptController::_PrefaultRedistributors()
 
 	for (uint32 region = 0; region < fGicrRegionCount; region++) {
 		addr_t frame = fGicrRegions[region].base;
-		const addr_t end = frame + fGicrRegions[region].size;
 
-		// A redistributor is only walked if its RD_base and SGI_base frames --
-		// the two we touch -- are inside the region firmware described.
-		while (frame + GICR_STRIDE_V3 <= end) {
+		for (uint32 i = 0; i < fGicrRegions[region].count; i++) {
 			const uint64 typer = gic_read64(frame + GICR_TYPER);
 
 			// The SGI/PPI frame is a separate page from the RD frame.
@@ -236,7 +294,7 @@ GICv3InterruptController::_PrefaultRedistributors()
 			if ((typer & GICR_TYPER_LAST) != 0)
 				break;
 
-			frame += gicr_frame_stride(typer);
+			frame += fGicrRegions[region].stride;
 		}
 	}
 
@@ -258,9 +316,8 @@ GICv3InterruptController::_CurrentRedistributor()
 
 	for (uint32 region = 0; region < fGicrRegionCount; region++) {
 		addr_t frame = fGicrRegions[region].base;
-		const addr_t end = frame + fGicrRegions[region].size;
 
-		while (frame + GICR_STRIDE_V3 <= end) {
+		for (uint32 i = 0; i < fGicrRegions[region].count; i++) {
 			const uint64 typer = gic_read64(frame + GICR_TYPER);
 			if ((uint32)(typer >> 32) == affinity)
 				return frame;
@@ -268,7 +325,7 @@ GICv3InterruptController::_CurrentRedistributor()
 			if ((typer & GICR_TYPER_LAST) != 0)
 				break;
 
-			frame += gicr_frame_stride(typer);
+			frame += fGicrRegions[region].stride;
 		}
 	}
 
@@ -298,6 +355,19 @@ GICv3InterruptController::_PerCpuInit()
 	// SGIs and PPIs: group 1 non-secure, all disabled, uniform priority.
 	gic_write32(sgiBase + GICR_IGROUPR0, 0xffffffff);
 	gic_write32(sgiBase + GICR_ICENABLER0, 0xffffffff);
+
+	// And the extended PPI range where it exists -- Graviton3 reaches INTID
+	// 1087 -- for the same reason as the extended SPIs above.
+	const uint32 ppiNum = GICR_TYPER_PPI_NUM(gic_read64(rdBase + GICR_TYPER));
+	if (ppiNum >= 1) {
+		gic_write32(sgiBase + GICR_IGROUPR1E, 0xffffffff);
+		gic_write32(sgiBase + GICR_ICENABLER1E, 0xffffffff);
+	}
+	if (ppiNum >= 2) {
+		gic_write32(sgiBase + GICR_IGROUPR2E, 0xffffffff);
+		gic_write32(sgiBase + GICR_ICENABLER2E, 0xffffffff);
+	}
+
 	for (uint32 irq = 0; irq < GIC_SPI_BASE; irq += 4) {
 		gic_write32(sgiBase + GICR_IPRIORITYR + irq,
 			0x01010101u * GIC_PRIORITY_DEFAULT);
@@ -440,7 +510,7 @@ GICv3InterruptController::InitITS(phys_addr_t regs, size_t size)
 		return B_NO_MEMORY;
 
 	status_t status = its->Init(regs, size, fGicdRegs, fGicrRegions,
-		fGicrRegionCount);
+		fGicrRegionCount, fGicrStride);
 	if (status != B_OK) {
 		delete its;
 		return status;

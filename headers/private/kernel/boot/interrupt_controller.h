@@ -26,6 +26,18 @@
 #define		INTC_MAX_GICR_REGIONS	16
 
 
+// A region carries the distance between its redistributors as well as its
+// extent. Whoever worked out where the region ends is the only party that can
+// say how to step through it, and having the two derived independently at
+// either end of the boot handoff is how a region ends up yielding no
+// redistributors at all.
+typedef struct {
+	uint64 start;
+	uint64 size;
+	uint64 stride;
+} __attribute__((packed)) gicr_region_info;
+
+
 typedef struct {
 	char kind[32];
 	addr_range regs1;
@@ -36,7 +48,7 @@ typedef struct {
 	// GICv3 only. When zero, regs2 describes the one and only redistributor
 	// region; otherwise these do, and regs2 is just the lowest of them.
 	uint32 gicr_region_count;
-	addr_range gicr_regions[INTC_MAX_GICR_REGIONS];
+	gicr_region_info gicr_regions[INTC_MAX_GICR_REGIONS];
 } __attribute__((packed)) intc_info;
 
 

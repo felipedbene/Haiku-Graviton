@@ -51,7 +51,7 @@ private:
 
 			gicr_region			fGicrRegions[INTC_MAX_GICR_REGIONS];
 			uint32				fGicrRegionCount;
-			size_t				fGicrFallbackStride;
+			size_t				fGicrStride;
 
 			uint32				fIrqCount;
 };

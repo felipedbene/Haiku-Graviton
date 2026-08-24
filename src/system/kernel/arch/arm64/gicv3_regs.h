@@ -18,29 +18,38 @@
 #define GICD_ICFGR				0x0c00
 #define GICD_IROUTER			0x6000
 
-// Which bit enables non-secure group 1 depends on something software cannot
-// see: with GICD_CTLR.DS set (a single security state, which is what a
-// hypervisor's emulated distributor presents) it is bit 1, but on a
-// distributor with two security states the non-secure view puts it at bit 0
-// and leaves bit 1 reserved once affinity routing is on. DS itself is only
-// readable from the secure view, so both bits get written -- the one that does
-// not apply is reserved, not harmful.
+// Bit 1 is the enable that matters here. This driver always sets ARE_NS, and
+// with affinity routing on, the non-secure view's bit 0 (EnableGrp1) is RES0
+// while bit 1 (EnableGrp1A) is what enables non-secure group 1. Bit 0 is
+// written anyway, as Linux does, so that the enable is also correct in the
+// transitional case where ARE_NS did not take -- and it is measurably inert
+// otherwise: writing 0x13 reads back as 0x12 on Graviton3 metal
+// (GICD_CTLR.DS=0) and 0x52 on virtualised Graviton (DS=1, where KVM
+// implements only bit 1), so bit 0 does not stick on either and in particular
+// does not enable group 0 anywhere.
 #define GICD_CTLR_ENABLE_G1		(1u << 0)
 #define GICD_CTLR_ENABLE_G1NS	(1u << 1)
 #define GICD_CTLR_ARE_NS		(1u << 4)
+#define GICD_CTLR_DS			(1u << 6)
 #define GICD_CTLR_RWP			(1u << 31)
 
-// GICD_PIDR2.ArchRev: 3 for a GICv3 implementation, 4 for GICv4. This says
-// nothing definite about any individual redistributor's size -- see
-// gicr_frame_stride() -- and is used only to guess a window to map when
-// firmware describes the redistributors with neither a length nor a set of
-// regions. Linux makes the same guess for the same reason, in
-// gic_acpi_parse_madt_gicc().
+// GICD_PIDR2.ArchRev: 3 for a GICv3 implementation, 4 for GICv4. This is what
+// decides how many 64 KB frames each redistributor occupies, and it is the
+// only in-band way to find that out before touching a redistributor.
 #define GICD_PIDR2				0xffe8
 #define GICD_PIDR2_ARCH(v)		(((v) >> 4) & 0xf)
 
 // GICD_TYPER.ITLinesNumber: max SPI is 32*(N+1) - 1
 #define GICD_TYPER_ITLINES(t)	((((t) & 0x1f) + 1) * 32)
+
+// GICD_TYPER.ESPI says whether the extended SPI range (INTID 4096 up) exists,
+// and ESPI_range how much of it: 32*(N+1) interrupts.
+#define GICD_TYPER_ESPI			(1u << 8)
+#define GICD_TYPER_ESPI_COUNT(t)	(((((t) >> 27) & 0x1f) + 1) * 32)
+
+// Extended SPI copies of the group and enable registers.
+#define GICD_IGROUPRE			0x1000
+#define GICD_ICENABLERE			0x1400
 
 // Interrupt Routing Mode: 1 = deliver to any participating PE
 #define GICD_IROUTER_IRM		(1ull << 31)
@@ -59,6 +68,10 @@
 #define GICR_TYPER_VLPIS		(1ull << 1)
 #define GICR_TYPER_LAST			(1ull << 4)
 
+// GICR_PIDR2.ArchRev, same encoding as GICD_PIDR2. Anything other than 3 or 4
+// means there is no redistributor at the address we were handed.
+#define GICR_PIDR2				0xffe8
+
 // Redistributor SGI/PPI frame lives one 64K page after RD_base
 #define GICR_SGI_FRAME			0x10000
 #define GICR_IGROUPR0			0x0080
@@ -66,36 +79,36 @@
 #define GICR_ICENABLER0			0x0180
 #define GICR_IPRIORITYR			0x0400
 
+// Extended PPI copies of the same, present according to GICR_TYPER.PPInum:
+// 0 means the PPI range stops at INTID 31, 1 that it reaches 1087, 2 that it
+// reaches 1119.
+#define GICR_TYPER_PPI_NUM(t)	(((t) >> 24) & 0xf)
+#define GICR_IGROUPR1E			0x0084
+#define GICR_IGROUPR2E			0x0088
+#define GICR_ICENABLER1E		0x0184
+#define GICR_ICENABLER2E		0x0188
+
 // GICv3 redistributors occupy two 64K frames per PE; GICv4 adds two more
 // for the virtual LPI frames.
 #define GICR_STRIDE_V3			0x20000
 #define GICR_STRIDE_V4			0x40000
 
 
-// How far the next redistributor is from this one. The extra pair of GICv4
-// frames exists only where the redistributor actually implements virtual LPIs,
-// which each redistributor reports for itself in GICR_TYPER.VLPIS; the
-// distributor's architecture revision does not decide it, and GICR_TYPER.VLPIS
-// is RES0 on an implementation without virtual LPI support. So this has to be
-// asked of the frame being stepped over, not of the GIC as a whole -- getting
-// it from the architecture revision would silently skip every other
-// redistributor on a GICv4 implementation whose redistributors lack VLPIs,
-// which is legal. Linux advances the same way, in gic_iterate_rdists().
-static inline size_t
-gicr_frame_stride(uint64 typer)
-{
-	return ((typer & GICR_TYPER_VLPIS) != 0)
-		? GICR_STRIDE_V4 : GICR_STRIDE_V3;
-}
-
-
 // One mapped run of redistributor frames. There is more than one whenever
 // firmware describes the redistributors per-CPU instead of with a single
 // range, which it does exactly when they are not all adjacent.
+//
+// `count` is how many redistributors the region holds, worked out once from the
+// stride that came with it. Walking by a count rather than by comparing
+// addresses against the end means a stride and a size that disagree can only
+// produce a wrong count -- which is reported -- and never a loop that silently
+// runs zero times or one that steps past the mapping.
 struct gicr_region {
 	addr_t		base;
 	phys_addr_t	physicalBase;
 	size_t		size;
+	size_t		stride;
+	uint32		count;
 };
 
 // Interrupt ID layout

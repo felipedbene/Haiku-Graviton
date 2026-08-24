@@ -38,7 +38,8 @@ public:
 			status_t			Init(phys_addr_t regs, size_t size,
 									addr_t gicdRegs,
 									const gicr_region* gicrRegions,
-									uint32 gicrRegionCount);
+									uint32 gicrRegionCount,
+									size_t gicrStride);
 
 			// MSIInterface
 			status_t			AllocateVectors(uint32 count,
@@ -59,7 +60,8 @@ private:
 			status_t			_InitCommandQueue();
 			status_t			_InitLpis(addr_t gicdRegs,
 									const gicr_region* gicrRegions,
-									uint32 gicrRegionCount);
+									uint32 gicrRegionCount,
+									size_t gicrStride);
 
 			its_device*			_DeviceFor(uint32 requesterID);
 
