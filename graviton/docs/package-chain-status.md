@@ -4,29 +4,48 @@ State of the native package build running in the QEMU Haiku guests on the c7g.me
 builder (`i-0f7f6f3e8922acffd`). Companion to `graviton/docs/sequencing.md` (Phase 2)
 and to the recipe patches in `graviton/haikuports-patches/`.
 
-## Where this stands — **2026-08-24 18:50Z**
+## Where this stands — **2026-08-24 19:19Z**
 
-**Every numbered blocker, 1 through 9, is closed.** Blocker 6 (cmake) was solved at
+## **`netsurf-3.11` IS BUILT.**
+
+`netsurf-3.11-3-arm64.hpkg`, 4,003,742 B, `_dirty` requirement count **0**, containing a
+12,144,892 B **ELF64 / AArch64** executable that links all twenty chain libraries
+(`libcss`, `libdom`, `libhubbub`, `libparserutils`, `libwapcaplet`, `libnsbmp`, `libnsgif`,
+`libnslog`, `libnspsl`, `libnsutils`, `libsvgtiny`, `libutf8proc`, `libcurl`, `libssl`,
+`libcrypto`, `libpng16`, `libjpeg`, `libexpat`, `libz`, `libiconv`) plus Haiku's own
+`libbe`/`libtranslation`/`libtracker`/`libnetwork`. `depclosure.py` now answers **wave 0,
+minimal build set 0 ports**.
+
+> **What that claim does and does not cover.** It is *built and linked*, verified from
+> inside the hpkg. It has **not been run and has not rendered a page** — these instances
+> have no video device at all, so that cannot be tested here and is not being claimed.
+> "A browser builds" and "a browser works" are different statements, and this document has
+> been bitten before by a build result wearing a capability result's clothes.
+
+**Every numbered blocker, 1 through 10, is closed.** Blocker 6 (cmake) was solved at
 04:41Z; the header of this document went on calling it "the open one" for ten hours
 afterwards, and Blocker 3's heading said `OPEN` for a day after its fix merged. Both are
-corrected below. **Blocker 9 closed at 18:05Z** — the `gettext` cut is retired and the
-netsurf closure was measured and then mostly built. If you are picking this up, read
-**Blocker 10**: netsurf is **3 ports** from done and every one of those three is blocked by
-platform defects rather than packaging — the `LIBRARY_PATH` loader (fixed in the OS, not yet
-on the build fleet) and, behind it, **an arm64 kernel panic in `mprotect()`** that is not
-this track's to fix.
+corrected below. Blocker 9 closed at 18:05Z with the `gettext` cut retired; **Blocker 10
+closed at 19:16Z**, with `vim` reduced to a CLI-only, ruby-less `xxd` provider and netsurf
+built on top of it.
+
+**The fixed `LIBRARY_PATH` loader turned out *not* to be a prerequisite for the browser.**
+That was measured rather than assumed, and it corrects an earlier statement in this very
+file — see "Does the chain need the fixed loader?" below. One genuine platform defect was
+found on the way and handed off: an **arm64 kernel panic in `mprotect()`**, now separately
+owned.
 
 ### Counts, with the units named
 
 The three numbers this document used to mix are genuinely different. Measured on the
-builder at **18:43Z**:
+builder at **19:19Z**:
 
 | Number | Value | What it counts |
 |---|---|---|
-| **ports built natively** | **104** (69 at 15:05Z; **+35** in the netsurf pass) | distinct recipes we have built on arm64. Count with care: a naive strip of subpackage suffixes reports **113** because `git` emits nine subpackages (`git_arch`, `git_svn`, `git_web`, …) that are not separate ports |
-| **hpkgs produced natively** | **225** (156 at 15:05Z) | package files those ports emitted (base + `_devel`/`_debuginfo`/`_doc`/per-Python-flavour/…) |
-| **`depclosure.py` "ports already built"** | **117** (82 before the pass) | its own basis, which counts what it can resolve provides from — **not** the same as the row above, and the +35 delta is the number to quote for this session |
-| **`.hpkg` files in `hpkg-out/arm64/`** | **261** | the 225 above **+ 28** cross-built `_bootstrap` inputs **+ 8** chroot inputs (`haiku*.hpkg`, `makefile_engine`, `netfs`, `userland_fs`) — build *inputs*, not our output |
+| **ports built natively** | **106** (69 at 15:05Z; **+37** in the netsurf pass) | distinct recipes we have built on arm64. Count with care: a naive strip of subpackage suffixes reports **113** because `git` emits nine subpackages (`git_arch`, `git_svn`, `git_web`, …) that are not separate ports |
+| **hpkgs produced natively** | **227** (156 at 15:05Z) | package files those ports emitted (base + `_devel`/`_debuginfo`/`_doc`/per-Python-flavour/…) |
+| **`depclosure.py` "ports already built"** | **119** (82 before the pass) | its own basis, which counts what it can resolve provides from — **not** the same as the row above, and the +35 delta is the number to quote for this session |
+| **`.hpkg` files in `hpkg-out/arm64/`** | **263** | the 225 above **+ 28** cross-built `_bootstrap` inputs **+ 8** chroot inputs (`haiku*.hpkg`, `makefile_engine`, `netfs`, `userland_fs`) — build *inputs*, not our output |
 | **files under `hpkg-out/` entirely** | **~330** | the above **plus two other directories**: `arm64-nondirty/` (the shared build pool, a duplicate) and `arm64-dirty-20260824/` (the 52-file pre-clock-fix snapshot kept as evidence). Mostly duplicates and superseded files |
 
 > **Do not read an mtime as a build date here.** `rebuild.sh` harvests with
@@ -1118,7 +1137,7 @@ Counts are from 15:26Z, i.e. **after** this session's nine ports.
 | `python3.10`/`python3.14` | no | **0 — DONE** | PGO/LTO cut + additive `RUNSHARED` | both built |
 | PEP-517 ladder → `meson`/`ninja` | no | **0 — DONE** | none | 8 ports, ~4 min total |
 | `groff` | no | **0 — DONE** | 1 (jasper `jiv`, for GLUT) | done; **verified by rendering** |
-| `netsurf` | no | **3 left of 38** (was mis-stated as "~22"; `depclosure.py` measured **38** on 2026-08-24 at 18:05Z, and 35 of them built in ~30 min) | **0 new *cuts*** (inherits groff's jasper cut) + **1 compatibility flag** (`json_c`, see below) | breadth, and one **platform** blocker: `ruby` → `vim` → `netsurf`, gated on the additive-`LIBRARY_PATH` loader |
+| `netsurf` | no | **0 — BUILT** (`depclosure.py` measured **38** for the chain; the earlier "~22" was wrong. All 38 built, in about 75 minutes) | **0 new of its own.** netsurf's recipe is unmodified. It *inherits* jasper's GLUT cut and vim's two cuts, and the `json_c` compatibility flag | done |
 | `haikuwebkit` | no | **~14** | **1 new** (rav1e codec) + groff's | **LLVM ≥ 21** — hours, and it is most of the remaining cost |
 
 **"Cuts needed" counts *new* cuts.** Everything downstream of `groff` inherits the jasper
@@ -1156,8 +1175,16 @@ path to a deliverable rather than merely cost a workaround.
 `ruby` gates `vim`, and `vim` is the only affordable provider of `cmd:xxd`, which
 `netsurf-3.11` build-requires. The tree's only other `cmd:xxd` provider is
 `qvim-8.0.197`, which needs `devel:libQt5Core` and `devel:libQt5Gui` — far dearer than
-ruby. **So on a pre-fix host the browser chain cannot finish, and cutting a recipe is the
-wrong answer to that.**
+ruby.
+
+> ~~**So on a pre-fix host the browser chain cannot finish, and cutting a recipe is the
+> wrong answer to that.**~~ **Both halves of that sentence turned out to be wrong, and it
+> is corrected rather than deleted because the reasoning is instructive.** Cutting a recipe
+> *was* the answer: ruby was cut out of vim once the kernel defect behind it had been
+> attributed and assigned, so the cut conceals nothing. And the chain does **not** need a
+> post-fix host — `vim` and `netsurf` were both built on a pre-fix guest, measured on both
+> arms. The `LIBRARY_PATH` requirement was specific to ruby all along. See "The two `vim`
+> cuts" and "Does the chain need the fixed loader?" below.
 
 ### The A/B, with the host loader as the single variable
 
@@ -1210,10 +1237,16 @@ then `system_reset` through the QEMU monitor. Everything except `runtime_loader`
 byte-identical to the image that is known to boot. `sync` on both sides of the rename is
 load-bearing — see the note on file data never being flushed.
 
-**Consequence for the fleet.** Finishing netsurf, and consuming the perl/python workaround
-retirements, both require build guests whose loader is additive. Either re-seed guests from
-a post-fix image, or apply the surgical swap above. Until then the retirements are real but
-unusable on these guests.
+**Consequence for the fleet — narrower than first written.** ~~Finishing netsurf~~ and
+consuming the perl/python workaround retirements require build guests whose loader is
+additive. Either re-seed guests from a post-fix image, or apply the surgical swap above.
+Until then those retirements are real but unusable on these guests.
+
+**Finishing netsurf does *not* require it** — that clause was struck after measuring it on
+both arms; only ruby ever needed the additive loader. So the re-seed is worth doing for the
+perl/python retirements and for any future `LIBRARY_PATH`-setting port, but it never blocked
+the browser. Keeping `run15` (ssh 2235) as the standing control for this class of defect is
+the cheap half of that.
 
 ### And behind the loader there were two more layers — the second one is a kernel bug
 
@@ -1261,23 +1294,109 @@ JIT-using application will hit, and a browser is exactly such an application. **
 a single observation**: it has been seen once, with a full stack trace, and has not yet been
 reduced to a minimal reproducer.
 
-### If the kernel bug has to be routed around: the price of skipping ruby
+### The two `vim` cuts, and why they are not shortcuts
 
-Stated so the decision can be made without re-deriving it, **not** done — it is a new cut
-and this track does not add cuts unannounced.
+**Decision taken:** route around the kernel panic by cutting ruby out of `vim`. netsurf
+wants `cmd:xxd` and nothing else from vim, and across the whole recipe tree only
+`vim-9.1.1618` and `qvim-8.0.197` provide it — qvim wants `devel:libQt5Core` and
+`devel:libQt5Gui`. So vim is built here as a *build tool*, to obtain one 33 KB hex dumper.
+Full write-up: `graviton/haikuports-patches/vim-9.1.1618-cli-only-no-ruby.patch`.
 
-netsurf wants `cmd:xxd` and nothing else from vim. `xxd` is a standalone hex dumper in
-vim's source tree and has no connection to ruby. vim pulls ruby in only for its `:ruby`
-command, via `devel:libruby`, `cmd:ruby` and `--enable-rubyinterp=dynamic` — and
-`--enable-fail-if-missing=yes` is why a missing interpreter fails the build instead of
-being skipped. The recipe **already** guards the ruby requirement on architecture
-(`if [ $effectiveTargetArchitecture != "x86_gcc2" ]`), so there is a precedent for that
-shape. Dropping the three ruby lines would cost "vim has no `:ruby`" and nothing that a
-browser can observe, and it would take ruby *and* the kernel panic off the critical path.
+**Cut 1 — no ruby interpreter. Cost, plainly: vim has no `:ruby` command.** Nothing else
+changes; `REQUIRES` never mentioned libruby, so the package has no runtime change either.
+Dropped: `devel:libruby`, `cmd:ruby`, and both `--enable-rubyinterp=dynamic` flags.
+`--enable-fail-if-missing=yes` is deliberately kept — it is why a missing interpreter fails
+loudly rather than being silently skipped, so the *flag* has to go rather than the
+dependency merely being absent.
 
-The argument against is the whole reason the loader was fixed rather than worked around:
-routing around ruby leaves an arm64 kernel bug undiscovered by this pipeline, and the next
-thing to trip it will be harder to attribute.
+**Why this is acceptable, and the one clause that matters.** Cutting ruby removes an
+**arm64 kernel panic in `mprotect()`** from the critical path. On its own that would be the
+wrong trade — it would *mask* an OS defect that any JIT-using application will eventually
+hit, and a browser is exactly such an application. **What makes the cut acceptable is that
+the defect is not concealed by it: it is separately owned and being fixed**, diagnosed as
+`VMSAv8TranslationMap::Query()` setting `PAGE_PRESENT` unconditionally with no valid-bit
+test, so an empty leaf PTE reports "present, pa=0" and the generic VM's `vm_lookup_page(0)`
+panics.
+
+> **Written down so it is not re-litigated.** If you are reading this and wondering whether
+> the ruby cut was a shortcut past a hard problem: it was not, because the thing it would
+> have concealed had already been found, attributed and assigned before the cut was taken.
+> The `mprotect` observation is what *found* it. When that kernel fix lands, the honest
+> move is to try ruby again — `ruby-3.2.9-arm64-mcontext.patch` is kept in the tree for
+> exactly that, even though ruby is not currently built, because it is a real portability
+> fix (ruby read the x86 `esp`/`ebp` out of an arm64 `mcontext_t`).
+
+**Cut 2 — no GUI build. Cost, plainly: no GUI vim.** This one was *not* pre-planned; it was
+forced, and it is disclosed here as a second cut rather than folded into the first. With the
+GUI configured, `make install` selects `HAIKUGUI_INSTALL` and reaches `installglinks_haiku`
+(`src/Makefile:3769`), whose first line dies:
+
+```
+@catattr -r "BEOS:ICON" $(DEST_BIN)/$(GVIMTARGET) > ~icon.attr
+catattr: ".../bin/gvim", attribute "BEOS:ICON": No such file or directory
+make[1]: *** [Makefile:3770: installglinks_haiku] Error 1
+```
+
+The GUI binary compiles and links fine; what fails is *installing its icon*. vim reads
+`BEOS:ICON` back off the installed binary to stamp it onto the `g*` wrapper scripts, and in
+this chroot the binary comes out of `xres` + `mimeset` with no such filesystem attribute.
+`cmd:vim`, `cmd:vi`, `cmd:view`, `cmd:ex`, `cmd:vimdiff`, `cmd:vimtutor`, `cmd:rvim`,
+`cmd:rview` and `cmd:xxd` all survive; `cmd:gvim`, `cmd:gview`, `cmd:gvimdiff`, `cmd:rgvim`
+and `cmd:rgview` are gone — **and their `PROVIDES` entries were removed in the same edit.**
+A `PROVIDES` line for a binary the build no longer produces is the same species of quiet
+falsehood as the `gettext` groff cut, and that one cost a day to unpick.
+
+*Ruled out, so nobody repeats it:* this is **not** a symlink-following problem. `gvim` is a
+symlink to `vim` at that moment, which is the tempting explanation, but `catattr` follows
+symlinks here — checked directly (`addattr` a string attribute to a file, read it back
+through a symlink: reads fine). The attribute is genuinely absent from the binary.
+*Not established:* **why** `mimeset` produces no `BEOS:ICON` here. The plausible cause is
+that the chroot has no usable MIME database or registrar, so `mimeset` is a no-op — but
+that was **not tested and is a hypothesis, not a finding**. It is worth chasing, because it
+would affect any port whose install step depends on `mimeset` writing attributes. Dropping
+the GUI pass removes the dependency on that step rather than silencing an unexplained
+failure, which is why it was preferred to making the icon step non-fatal.
+
+### New or inherited? — stated explicitly, because this column has been wrong twice
+
+| Cut | New in | Inherited by | Does it degrade the *shipped browser*? |
+|---|---|---|---|
+| jasper `-DJAS_ENABLE_OPENGL=OFF` (GLUT absent) | `jasper` | `netpbm` → `groff` → everything downstream, incl. **netsurf** | **No.** It removes jasper's `jiv` viewer. groff uses jasper's library, not its viewer |
+| vim Cut 1 (no ruby) | `vim` | **netsurf** (uses vim's `xxd` at build time) | **No.** Build-time tool only; `xxd` has no ruby involvement |
+| vim Cut 2 (no GUI) | `vim` | **netsurf** (same) | **No.** Same reason |
+| `json_c` cmake-4 policy flag | `json_c` | `hubbub` → **netsurf** | **No** — and it is a compatibility flag, not a cut: nothing removed, no declaration changed |
+
+**`netsurf` itself adds zero cuts** — its recipe is unmodified. Everything in its column is
+inherited. The distinction that matters and that this document has muddled in both
+directions: all four items above are cuts to **build-time dependencies whose removed
+feature is not used downstream**. None of them reduces the browser. Saying "netsurf is not
+cut-free" is true about its *ancestry* and misleading about its *artifact*; say which.
+
+### Does the chain need the fixed loader? — measured, and the earlier answer was wrong
+
+This file previously said the fleet needed the additive-`LIBRARY_PATH` loader to finish
+netsurf. **That was too strong.** The requirement was specific to `ruby`, whose recipe does
+`export LIBRARY_PATH=$LIBRARY_PATH:%A`. With ruby out of the chain, it was tested rather
+than assumed: `vim` was built on **both** a pre-fix guest (`runtime_loader` `2eca21fe…`,
+`LIBRARY_PATH=<empty dir> /bin/echo` exits 3 silently) and the post-fix guest
+(`1caa4250…`, prints), from the same recipe.
+
+| | pre-fix loader guest | post-fix loader guest |
+|---|---|---|
+| `vim` | **built**, 14,513,009 B, `_dirty` 0 | **built**, RC=0, 14,512,906 B |
+| `Cannot open file libroot.so` in log | 0 | 0 |
+| `BEOS:ICON` failure after Cut 2 | 0 | 0 |
+| `netsurf` | **built**, 4,003,742 B, `_dirty` 0 | not attempted — the pre-fix arm already answers it |
+
+Both arms succeed, and `netsurf` itself was built on the **pre-fix** guest. (The size
+differs by 103 bytes between arms, which is build-path/timestamp noise, not a content
+difference.)
+
+**Conclusion: re-seeding the build fleet with the fixed loader is OPTIONAL, not blocking.**
+It remains worth doing — it is what retires the perl and python workarounds in practice, and
+it is what any future `LIBRARY_PATH`-setting port will need — but nothing in the browser
+chain is waiting on it. The one guest that has it (`run15`, ssh 2235) is worth keeping as
+the standing control for that class of defect.
 
 ## Two build-infrastructure gaps found by walking the closure
 

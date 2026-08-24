@@ -54,6 +54,7 @@ built before that fix still shows it, so keep pinning until the guest is known g
 
 | `zstd-1.5.6-makefile-not-cmake-stage1.patch` | **Stage-1 expedient.** Builds zstd with its own upstream `Makefile` instead of cmake, which removes `cmd:cmake` — and with it the `cmake → libcurl → openssl3 → libzstd → zstd` cycle — from the picture entirely. Same `libzstd.so.1.5.6`, same headers, same `libzstd.pc`; what is lost is the CMake package-config files, so `find_package(zstd CONFIG)` will not work. Needs `CXX=g++` for `contrib/pzstd` and `MAN1DIR=`, not `MANDIR=`. | `cmd:cmake` exists → restore the cmake `BUILD()`/`INSTALL()` verbatim |
 
+| `vim-9.1.1618-cli-only-no-ruby.patch` | **Two real cuts — the only deliberately reduced port in the netsurf chain.** vim exists in this tree solely as the affordable provider of `cmd:xxd`, which `netsurf-3.11` build-requires (the only other provider, `qvim`, wants Qt5). **Cut 1: no ruby interpreter** — cost is *vim has no `:ruby`*. Acceptable because the reason ruby is unbuildable here is an **arm64 kernel panic in `mprotect()`**, and that defect is separately owned and being fixed rather than concealed by this cut. **Cut 2: no GUI build** — cost is *no GUI vim*, i.e. `cmd:gvim`/`gview`/`gvimdiff`/`rgvim`/`rgview`, whose `PROVIDES` entries are removed in the same edit so the declaration cannot outlive the binaries. Needed because `make install` would reach `installglinks_haiku`, which reads back a `BEOS:ICON` attribute that `mimeset` does not produce in this chroot. Verified by **running** the extracted `xxd`, not by reading its `PROVIDES` line. | Cut 1: when the `VMSAv8TranslationMap::Query()` fix lands — then retry ruby, starting from `ruby-3.2.9-arm64-mcontext.patch`. Cut 2: when `mimeset` in the chroot produces `BEOS:ICON` |
 | `json_c-0.15-cmake4-policy.patch` | **Toolchain compatibility flag, not a cut.** json-c 0.15 declares `cmake_minimum_required` below 3.5 and cmake 4 removed that compatibility outright, so configure dies at `CMakeLists.txt:3` before it looks at anything else. `-DCMAKE_POLICY_VERSION_MINIMUM=3.5` restores the pre-3.5 policy defaults — exactly what cmake 3.x did with this project. **Nothing is removed from the build and no declared dependency changes**, so the resulting package is what json-c intends; it is not in the same class as the stage-1 cuts above. Needed because `hubbub`, netsurf's HTML parser, build-requires `devel:libjson_c`, and the tree's only other recipe (`json_c4-0.13.1`) is older still. | the recipe is updated to a json-c release declaring a cmake 3.5+ minimum |
 
 Any port whose build invokes `makeinfo` will fail the same way, so expect to repeat that
@@ -86,10 +87,17 @@ this defect — it reads as a corrupt binary rather than an environment problem.
 On the replacing loader `$LIBRARY_PATH` is empty, so the result contains no `libroot.so`
 and the very next `make` dies with
 `runtime_loader: Cannot open file libroot.so (needed by /boot/system/bin/make)` and exit
-status 3. `ruby` gates `vim`, which is the only affordable provider of `cmd:xxd`, which
-`netsurf-3.11` build-requires — so on a pre-fix host the browser chain simply cannot
-finish, and no recipe edit is the right answer to that. The recipe is correct; the loader
-was wrong.
+status 3. The recipe is correct; the loader was wrong.
+
+**Correction to what this paragraph first claimed.** It went on to say that because `ruby`
+gates `vim`, the only affordable provider of `cmd:xxd`, "on a pre-fix host the browser chain
+simply cannot finish, and no recipe edit is the right answer to that". Both halves were
+wrong. A recipe edit *was* the answer — ruby was cut out of `vim`, once the arm64 kernel
+panic sitting behind ruby had been attributed and assigned, so the cut hides nothing (see
+`vim-9.1.1618-cli-only-no-ruby.patch`). And the chain does **not** need a post-fix host:
+`vim` and `netsurf-3.11` were both built on a **pre-fix** guest, with the post-fix guest run
+as the other arm. The additive loader was only ever a `ruby` requirement. It is still needed
+to consume the perl/python retirements above — just not to build the browser.
 
 ## `recipes/` — the whole edited recipe, not just the diff
 

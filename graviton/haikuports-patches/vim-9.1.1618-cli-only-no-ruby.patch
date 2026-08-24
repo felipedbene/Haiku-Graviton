@@ -1,0 +1,188 @@
+Build vim as a CLI-only, ruby-less xxd provider.
+
+TWO CUTS in one recipe, both deliberate, with their costs stated. This is the only
+port in the netsurf chain that is deliberately reduced.
+
+## Why vim is in this tree at all
+
+`netsurf-3.11` `BUILD_PREREQUIRES` includes `cmd:xxd`. Across the whole recipe tree
+exactly two ports provide `cmd:xxd`: `vim-9.1.1618` and `qvim-8.0.197`, and qvim
+wants `devel:libQt5Core` + `devel:libQt5Gui`. So vim is built here as a *build tool*,
+to obtain one 33 KB hex dumper. Nothing in the browser links against it and nothing
+ships it.
+
+That is the frame for both cuts below: they are judged against "does netsurf still
+get a correct xxd", and the answer is yes, verified by exercising it rather than by
+reading the PROVIDES line.
+
+## CUT 1 -- no ruby interpreter
+
+Dropped: `devel:libruby` from the arch-conditional `BUILD_REQUIRES`, `cmd:ruby` from
+`BUILD_PREREQUIRES`, and both `--enable-rubyinterp=dynamic` flags.
+
+**Cost, plainly: vim has no `:ruby` command.** Nothing else changes. `REQUIRES` never
+mentioned libruby, so there is no runtime change to the package either.
+
+`--enable-fail-if-missing=yes` is deliberately left in place. It is why a missing
+interpreter fails the build loudly instead of being silently skipped, so the flag has
+to be *removed* rather than the dependency merely made unavailable.
+
+### Why this cut is acceptable, and why that was not obvious
+
+`ruby-3.2.9` could not be built here, for a reason that was not a packaging problem.
+Its build reached `ruby_init` and then **panicked the arm64 kernel**:
+
+    PANIC: area 0xffff0000dd38f8c0 looking up page failed for pa 0x0
+    Thread "miniruby" ... <kernel_arm64> _user_set_memory_protection + 0x9e0
+    ... </boot/system/lib/libroot.so> _kern_set_memory_protection
+    ... </sources/ruby-3.2.9/miniruby> ruby_setup / ruby_init / _start
+
+i.e. a plain `mprotect()` from a user process took the kernel down.
+
+Cutting ruby out of vim removes that from the critical path. On its own that would be
+the wrong trade -- it would **mask** an OS defect that every JIT-using application
+will eventually hit, and a browser is exactly such an application. **What makes the
+cut acceptable is that the defect is no longer hidden by it:** it is separately owned
+and being fixed, diagnosed as `VMSAv8TranslationMap::Query()` setting `PAGE_PRESENT`
+unconditionally with no valid-bit test, so an empty leaf PTE reports "present, pa=0"
+and the generic VM's `vm_lookup_page(0)` panics.
+
+**This paragraph is the whole justification. If you are reading this wondering whether
+the cut was a shortcut: it was not, because the thing it would have concealed was
+already caught, attributed and assigned before the cut was taken.** Do not re-derive
+this; and if that kernel fix lands, the honest move is to try ruby again.
+
+`graviton/haikuports-patches/ruby-3.2.9-arm64-mcontext.patch` is kept in the tree even
+though ruby is not built. It is a real portability fix (ruby read the x86 `esp`/`ebp`
+out of an arm64 `mcontext_t`) and it is what the next ruby attempt should start from.
+
+## CUT 2 -- no GUI build
+
+Dropped: the second `configure`+`make` pass, the five GUI entries from `PROVIDES`
+(`cmd:gvim`, `cmd:gview`, `cmd:gvimdiff`, `cmd:rgvim`, `cmd:rgview`), the
+`addAppDeskbarSymlink` on `gvim`, and the now-pointless `cp vim vim.con`.
+
+**Cost, plainly: no GUI vim.** `cmd:vim`, `cmd:vi`, `cmd:view`, `cmd:ex`, `cmd:vimdiff`,
+`cmd:vimtutor`, `cmd:rvim`, `cmd:rview` and `cmd:xxd` are all still built and still
+declared.
+
+Note the PROVIDES lines are removed rather than left in place. A `PROVIDES` entry for a
+binary the build no longer produces is the same species of quiet falsehood as the
+`gettext` groff cut, and that one cost a day to unpick. **When a cut removes a binary,
+remove its declaration in the same edit.**
+
+### Why the GUI had to go
+
+With the GUI configured, `make install` selects `HAIKUGUI_INSTALL` and reaches
+`installglinks_haiku` (`src/Makefile:3769`), whose first line is:
+
+    @catattr -r "BEOS:ICON" $(DEST_BIN)/$(GVIMTARGET) > ~icon.attr
+
+which fails:
+
+    catattr: ".../bin/gvim", attribute "BEOS:ICON": No such file or directory
+    make[1]: *** [Makefile:3770: installglinks_haiku] Error 1
+
+The GUI binary compiles and links fine. What fails is *installing its icon*: vim reads
+`BEOS:ICON` back off the installed binary in order to stamp it onto the `g*` wrapper
+scripts, and in this build chroot the binary comes out of `xres` + `mimeset` with no
+such filesystem attribute.
+
+**What was ruled out, so nobody repeats it:** this is *not* a symlink-following
+problem. `gvim` is a symlink to `vim` at that moment, which is a tempting explanation,
+but `catattr` follows symlinks here -- checked directly with a control (`addattr` a
+string attribute to a file, read it back through a symlink to it: reads fine). The
+attribute is genuinely absent from the binary.
+
+**What was NOT established:** *why* `mimeset` produces no `BEOS:ICON` here. The
+plausible cause is that the haikuporter chroot has no usable MIME database or
+registrar, so `mimeset` is effectively a no-op -- but that was not tested, and it is
+recorded as a hypothesis, not a finding. It is worth knowing because it would affect
+**any** port whose install step depends on `mimeset` writing attributes.
+
+Dropping the GUI pass removes the dependency on that step instead of suppressing its
+error, which is why it was preferred to making the icon step non-fatal: the cause is
+unexplained, and silencing an unexplained failure is how a real defect gets buried.
+It also halves the build (one configure+make instead of two).
+
+## Verification -- capability, not declaration
+
+`vim-9.1.1618-1-arm64.hpkg`, 14,513,009 B, `_dirty` requirement count **0**. Provides
+`cmd:xxd = 9.1.1618` and `cmd:vim`, and **does not** provide `cmd:gvim`/`cmd:gview`,
+so the declaration matches the cut.
+
+Then `xxd` was extracted from the hpkg and *run*, because "the PROVIDES line says
+cmd:xxd" is not evidence that a working hex dumper is inside:
+
+    $ ./bin/xxd in.bin
+    00000000: 4752 4156 4954 4f4e 2d58 5844 2d4d 4152  GRAVITON-XXD-MAR
+    00000010: 4b45 52                                  KER
+    $ ./bin/xxd in.bin | ./bin/xxd -r   ->  byte-identical (sha256 equal)
+
+with a control on the comparison itself (a deliberately altered file compares
+unequal), because a same-hash result from a broken comparison would look like success.
+
+Applies to: haikuports/app-editors/vim/vim-9.1.1618.recipe (tree copy -- vim has no
+input source package, so the tree recipe is the operative one)
+
+--- a/vim-9.1.1618.recipe
++++ b/vim-9.1.1618.recipe
+@@ PROVIDES
+ PROVIDES="
+ 	vim$secondaryArchSuffix = $portVersion
+ 	cmd:ex$commandSuffix = $portVersion
+-	cmd:gview$commandSuffix = $portVersion
+-	cmd:gvim$commandSuffix = $portVersion
+-	cmd:gvimdiff$commandSuffix = $portVersion
+-	cmd:rgview$commandSuffix = $portVersion
+-	cmd:rgvim$commandSuffix = $portVersion
+ 	cmd:rview$commandSuffix = $portVersion
+ 	cmd:rvim$commandSuffix = $portVersion
+ 	cmd:vi$commandSuffix = $portVersion
+@@ BUILD_REQUIRES
+-if [ $effectiveTargetArchitecture != "x86_gcc2" ] ; then
+-	BUILD_REQUIRES+="
+-		devel:libruby$secondaryArchSuffix
+-	"
+-fi
++# graviton: the devel:libruby BUILD_REQUIRES that used to be added here is dropped, along
++# with cmd:ruby and --enable-rubyinterp. vim is built here for exactly one reason -- it is
++# the only affordable provider of cmd:xxd, which netsurf-3.11 build-requires -- and xxd is
++# a standalone hex dumper in vim's source tree with no connection to ruby. The cost is that
++# vim has no :ruby command. See graviton/docs/package-chain-status.md.
+@@ BUILD_PREREQUIRES
+ 	cmd:python3
+-	cmd:ruby
+ 	cmd:sed
+@@ BUILD()
+ 		--enable-cscope \
+-		--enable-rubyinterp=dynamic \
+ 		--with-compiledby=HaikuPorts \
+ 		--enable-python3interp=dynamic
+
+ 	make $jobArgs
+-	cp vim vim.con # preserve gui-less executable
+-	rm objects/*.o
+-
+-# GUI -------------------------------------------
+-
+-	runConfigure --omit-dirs binDir ./configure \
+-		--bindir="$commandBinDir" \
+-		--with-features=huge \
+-		--enable-fail-if-missing=yes \
+-		--enable-cscope \
+-		--enable-rubyinterp=dynamic \
+-		--with-compiledby=HaikuPorts \
+-		--enable-python3interp=dynamic
+-
+-	make $jobArgs
++# GUI ------------------------------------------- REMOVED (graviton)
++# See vim-9.1.1618-cli-only-no-ruby.patch: make install would select HAIKUGUI_INSTALL
++# and reach installglinks_haiku, which dies on a missing BEOS:ICON attribute.
+ }
+@@ INSTALL()
+ 	rm -rf $dataDir/{applications,icons}
+-
+-	addAppDeskbarSymlink $commandBinDir/gvim Vim
++	# graviton: no Deskbar symlink; the GUI binary is not built. See BUILD().
+ }
