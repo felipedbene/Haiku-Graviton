@@ -1177,6 +1177,17 @@ not wait, and the writer that caused the backlog still does. If the boot shows
 rather than retargeted.
 
 
+**Precondition checked on the quota change itself**, applying the rule above rather
+than trusting that the same mistake was not made twice. `IsOverQuota()` now calls
+`vm_page_num_pages()`, which returns `sNumPages - sNonExistingPages`; if those were
+still zero the global limit would be zero and *every* writer would be permanently
+over quota — a worse regression than the one being fixed, and silent. They are set
+in `vm_page_init_num_pages()`, reached from `vm_init()` at `main.cpp:156`, whereas
+the earliest `StartWriter()` is in `vm_page_init_post_thread()` at `main.cpp:222`,
+and the per-disk queues are created later still by `KDiskDevice`. So the value is
+always initialised before any page writer exists to read it.
+
+
 ### What success looks like, and what would mean I broke back-pressure
 
 The failure mode of a fix like this is removing the throttle rather than fixing
