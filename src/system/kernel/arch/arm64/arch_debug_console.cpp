@@ -12,7 +12,6 @@
 #include <boot/kernel_args.h>
 #include <debug.h>
 #include <kernel.h>
-#include <thread.h>
 #include <vm/vm.h>
 #include <string.h>
 
@@ -149,71 +148,12 @@ arch_debug_console_init(kernel_args *args)
 
 
 
-/*!	Watches the debug serial line for a request to enter the kernel debugger.
-
-	x86 reaches KDL on demand through its keyboard interrupt handler, which
-	checks for Alt+SysReq+<key> and calls debug_emergency_key_pressed(). arm64
-	had no equivalent, and a headless machine has no keyboard at all -- the EC2
-	Graviton instances this runs on log "Search for bus_managers/ps2/v1 failed"
-	and have no USB HID either. So there was no way whatsoever to enter KDL on
-	demand: the debugger could only be reached by a panic.
-
-	That matters most in exactly the situation KDL is wanted for. A machine whose
-	userland has stopped making progress -- for instance every writer parked in
-	the page writer's quota wait -- cannot be asked to run a command, and does not
-	panic, so without this it cannot be inspected at all.
-
-	A polling thread rather than a UART interrupt: it is far less invasive, and it
-	still runs when userland is starved, because starved threads are blocked on a
-	condition variable rather than consuming CPU.
-
-	The trigger is the three-character sequence "kdl" rather than a single key,
-	because a serial line has no modifier keys to qualify it with and stray input
-	should not halt the machine. debug_emergency_key_pressed() applies the
-	existing `emergency_keys` safemode setting, so this respects that too.
-*/
-static status_t
-serial_debug_listener(void*)
-{
-	const char kTrigger[] = "kdl";
-	const size_t kTriggerLength = sizeof(kTrigger) - 1;
-	char recent[kTriggerLength];
-	size_t have = 0;
-
-	while (true) {
-		int c = arch_debug_serial_try_getchar();
-		if (c < 0) {
-			snooze(100000);
-			continue;
-		}
-
-		if (have == kTriggerLength) {
-			memmove(recent, recent + 1, kTriggerLength - 1);
-			have--;
-		}
-		recent[have++] = (char)c;
-
-		if (have == kTriggerLength
-			&& memcmp(recent, kTrigger, kTriggerLength) == 0) {
-			have = 0;
-			debug_emergency_key_pressed('d');
-		}
-	}
-
-	return B_OK;
-}
-
-
 status_t
 arch_debug_console_init_settings(kernel_args *args)
 {
-	if (sArchDebugUART == NULL)
-		return B_OK;
-
-	thread_id thread = spawn_kernel_thread(&serial_debug_listener,
-		"serial debug listener", B_LOW_PRIORITY, NULL);
-	if (thread >= 0)
-		resume_thread(thread);
-
+	// Nothing to do here, and in particular nothing that needs a thread: this
+	// runs from debug_init_post_settings(), which main.cpp calls well before
+	// thread_init(). The serial KDL listener lives in the generic debugger and
+	// is started from debug_init_post_modules() for that reason.
 	return B_OK;
 }
