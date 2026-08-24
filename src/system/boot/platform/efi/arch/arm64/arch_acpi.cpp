@@ -102,6 +102,86 @@ arch_acpi_setup_uart(uart_info &uart, const char *kind)
 }
 
 
+// Turn the per-CPU redistributor base addresses from the MADT's GICC entries
+// into the smallest set of contiguous regions that covers them. Firmware only
+// uses that form when a single GICR structure would not do -- on AWS Graviton3
+// the 64 redistributors sit in two runs of 32 about 16 GiB apart -- so the
+// gaps are real and must survive into the kernel.
+//
+// The distance between neighbours is taken from the addresses themselves
+// rather than from the GIC version, because it is the one thing the firmware
+// states unambiguously: a GICv3 PE owns two 64 KB frames and a GICv4 PE four,
+// and a run whose neighbours are that far apart is contiguous by definition.
+static void
+arch_acpi_set_gicr_regions(intc_info &intc, const uint64 *bases, uint32 count,
+	uint8 version)
+{
+	intc.gicr_region_count = 0;
+	if (count == 0)
+		return;
+
+	// Insertion sort; the MADT is not required to list the CPUs in address
+	// order and coalescing needs them to be.
+	static uint64 sorted[SMP_MAX_CPUS];
+	for (uint32 i = 0; i < count; i++) {
+		uint32 j = i;
+		while (j > 0 && sorted[j - 1] > bases[i]) {
+			sorted[j] = sorted[j - 1];
+			j--;
+		}
+		sorted[j] = bases[i];
+	}
+
+	const uint64 kStrideV3 = 0x20000;
+	const uint64 kStrideV4 = 0x40000;
+
+	uint32 regions = 0;
+	for (uint32 i = 0; i < count; ) {
+		uint64 stride = 0;
+		uint32 j = i + 1;
+		while (j < count) {
+			const uint64 delta = sorted[j] - sorted[j - 1];
+			if (delta != kStrideV3 && delta != kStrideV4)
+				break;
+			if (stride == 0)
+				stride = delta;
+			else if (delta != stride)
+				break;
+			j++;
+		}
+
+		// A region holding a single redistributor says nothing about the
+		// spacing, so fall back on the frame count the architecture revision
+		// implies: a GICv4 PE has four 64 KB frames whether or not it
+		// implements virtual LPIs (Arm IHI 0069G 12.10). A GIC version of 0
+		// means the firmware declined to say, in which case the smaller size
+		// is the safe answer -- it still covers RD_base and SGI_base, which is
+		// all the kernel reads.
+		if (stride == 0)
+			stride = (version >= 4) ? kStrideV4 : kStrideV3;
+
+		if (regions >= (uint32)INTC_MAX_GICR_REGIONS) {
+			dprintf("acpi: more than %d gic redistributor regions; the CPUs "
+				"behind the rest will not be usable\n",
+				INTC_MAX_GICR_REGIONS);
+			break;
+		}
+
+		intc.gicr_regions[regions].start = sorted[i];
+		intc.gicr_regions[regions].size = (sorted[j - 1] - sorted[i]) + stride;
+		intc.gicr_regions[regions].stride = stride;
+		dprintf("  gicr region %u: %lx (size %lx), %u redistributors, "
+			"stride %lx\n", regions, intc.gicr_regions[regions].start,
+			intc.gicr_regions[regions].size, j - i, stride);
+		regions++;
+
+		i = j;
+	}
+
+	intc.gicr_region_count = regions;
+}
+
+
 void
 arch_handle_acpi()
 {
@@ -169,26 +249,75 @@ arch_handle_acpi()
 		uint64 its_base = 0;
 		uint8 version = 0;
 
+		// Redistributor base addresses collected from the GICC entries, for
+		// firmware that describes them per-CPU rather than with a GICR
+		// structure. Static rather than automatic: the boot loader's stack is
+		// not generous enough to spend half a kilobyte on it.
+		static uint64 gicr_bases[SMP_MAX_CPUS];
+		uint32 gicr_base_count = 0;
+		bool reportedTooManyCpus = false;
+
+		// A subtable is allowed to be the last thing in the table but not to
+		// run past its end, and a zero length would never advance: both would
+		// otherwise leave this loop reading whatever follows the MADT, or
+		// spinning.
 		acpi_apic *desc = (acpi_apic*)(madt + 1);
-		while (desc != (acpi_apic*)((char*)madt + madt->header.length)) {
+		const char *madt_end = (char*)madt + madt->header.length;
+		while ((char*)desc + sizeof(acpi_apic) <= madt_end) {
+			if (desc->length == 0) {
+				dprintf("acpi: zero-length MADT subtable at offset %ld; "
+					"stopping\n", (char*)desc - (char*)madt);
+				break;
+			}
+			if ((char*)desc + desc->length > madt_end) {
+				dprintf("acpi: MADT subtable at offset %ld overruns the table; "
+					"stopping\n", (char*)desc - (char*)madt);
+				break;
+			}
+
 			if (desc->type == ACPI_MADT_GIC_INTERFACE) {
 				acpi_gic_interface *acpi_gicc = (acpi_gic_interface*)desc;
 				if (acpi_gicc->cpu_interface_num == 0)
 					gicc_base = acpi_gicc->base_address;
 
+				// ACPI does not promise that a disabled CPU's redistributor is
+				// even accessible, and we now map and read every base rather
+				// than just taking the lowest, so skip the ones firmware says
+				// are not there.
+				if ((acpi_gicc->flags & ACPI_MADT_GICC_ENABLED) == 0) {
+					dprintf("acpi: gicc %u is disabled (flags %#x); skipping "
+						"it and its redistributor\n",
+						acpi_gicc->cpu_interface_num, acpi_gicc->flags);
+					desc = (acpi_apic*)((char*)desc + desc->length);
+					continue;
+				}
+
+				// A CPU we have no room for must not abort the rest of this
+				// walk: the entry still has to be stepped over, or the loop
+				// never advances and the loader spins here for ever.
 				platform_cpu_info* cpu = NULL;
 				arch_smp_register_cpu(&cpu);
-				if (cpu == NULL)
-					continue;
-				cpu->id = acpi_gicc->cpu_interface_num;
-				cpu->mpidr = acpi_gicc->mpidr;
+				if (cpu == NULL) {
+					if (!reportedTooManyCpus) {
+						dprintf("acpi: the MADT describes more CPUs than this "
+							"build supports (%d); ignoring the rest\n",
+							SMP_MAX_CPUS);
+						reportedTooManyCpus = true;
+					}
+				} else {
+					cpu->id = acpi_gicc->cpu_interface_num;
+					cpu->mpidr = acpi_gicc->mpidr;
 
-				// Firmware may describe the redistributors per-CPU here
-				// instead of via a GICR structure. The frames are
-				// contiguous, so the lowest base wins.
-				if (acpi_gicc->gicr_address != 0
-					&& (gicr_base == 0 || acpi_gicc->gicr_address < gicr_base)) {
-					gicr_base = acpi_gicc->gicr_address;
+					// Firmware may describe the redistributors per-CPU here
+					// instead of via a GICR structure. Remember every base:
+					// unlike a GICR structure, these are not required to
+					// describe one contiguous range.
+					if (acpi_gicc->gicr_address != 0
+						&& gicr_base_count < SMP_MAX_CPUS) {
+						gicr_bases[gicr_base_count++] = acpi_gicc->gicr_address;
+						if (gicr_base == 0 || acpi_gicc->gicr_address < gicr_base)
+							gicr_base = acpi_gicc->gicr_address;
+					}
 				}
 			} else if (desc->type == ACPI_MADT_GIC_DISTRIBUTOR) {
 				acpi_gic_distributor *acpi_gicd = (acpi_gic_distributor*)desc;
@@ -232,6 +361,9 @@ arch_handle_acpi()
 			dprintf("discovered gic from acpi: version=%d, gicd=%lx, "
 				"gicr=%lx (size %lx), its=%lx\n", version, gicd_base,
 				gicr_base, gicr_size, its_base);
+
+			arch_acpi_set_gicr_regions(intc, gicr_bases, gicr_base_count,
+				version);
 		}
 	}
 

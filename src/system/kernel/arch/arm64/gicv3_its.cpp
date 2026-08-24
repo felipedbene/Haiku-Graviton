@@ -5,6 +5,7 @@
 
 #include <string.h>
 
+#include <cpu.h>
 #include <interrupts.h>
 #include <kernel.h>
 #include <smp.h>
@@ -57,9 +58,26 @@ allocate_its_table(const char* name, size_t size, size_t alignment,
 }
 
 
+// Whether any CPU the kernel actually runs on lives behind this redistributor.
+// An emulated GIC hands out a redistributor per PE the platform could ever have,
+// so on a machine with more PEs than SMP_MAX_CPUS -- or with CPUs firmware
+// disabled -- a good many of them belong to nobody.
+static bool
+redistributor_has_cpu(uint32 affinity)
+{
+	const int32 cpuCount = smp_get_num_cpus();
+	for (int32 i = 0; i < cpuCount; i++) {
+		if (gic_packed_affinity(gCPU[i].arch.mpidr) == affinity)
+			return true;
+	}
+
+	return false;
+}
+
+
 status_t
-GICv3ITS::Init(phys_addr_t regs, size_t size, addr_t gicdRegs, addr_t gicrRegs,
-	phys_addr_t gicrPhysical, size_t gicrSize, size_t gicrStride)
+GICv3ITS::Init(phys_addr_t regs, size_t size, addr_t gicdRegs,
+	const gicr_region* gicrRegions, uint32 gicrRegionCount, size_t gicrStride)
 {
 	// Nothing in Init() takes fLock: it runs single-threaded during boot, and
 	// the interface is not reachable from anywhere else until the
@@ -94,9 +112,10 @@ GICv3ITS::Init(phys_addr_t regs, size_t size, addr_t gicdRegs, addr_t gicrRegs,
 	fDeviceIDBits = GITS_TYPER_DEV_BITS(typer);
 	fPhysicalTargetAddress = (typer & GITS_TYPER_PTA) != 0;
 
-	dprintf("gicv3-its: itt entry size %" B_PRIu32 ", %" B_PRIu32 " event id "
-		"bits, %" B_PRIu32 " device id bits, pta %d\n", fIttEntrySize,
-		fEventIDBits, fDeviceIDBits, fPhysicalTargetAddress ? 1 : 0);
+	dprintf("gicv3-its: typer %#" B_PRIx64 ": itt entry size %" B_PRIu32 ", %"
+		B_PRIu32 " event id bits, %" B_PRIu32 " device id bits, pta %d\n",
+		typer, fIttEntrySize, fEventIDBits, fDeviceIDBits,
+		fPhysicalTargetAddress ? 1 : 0);
 
 	// The ITS must be quiescent before its tables can be reprogrammed.
 	gic_write32(fRegs + GITS_CTLR, 0);
@@ -115,7 +134,7 @@ GICv3ITS::Init(phys_addr_t regs, size_t size, addr_t gicdRegs, addr_t gicrRegs,
 
 	gic_write32(fRegs + GITS_CTLR, GITS_CTLR_ENABLED);
 
-	status = _InitLpis(gicdRegs, gicrRegs, gicrPhysical, gicrSize, gicrStride);
+	status = _InitLpis(gicdRegs, gicrRegions, gicrRegionCount, gicrStride);
 	if (status != B_OK)
 		return status;
 
@@ -317,8 +336,8 @@ GICv3ITS::_InitCommandQueue()
 
 
 status_t
-GICv3ITS::_InitLpis(addr_t gicdRegs, addr_t gicrRegs, phys_addr_t gicrPhysical,
-	size_t gicrSize, size_t gicrStride)
+GICv3ITS::_InitLpis(addr_t gicdRegs, const gicr_region* gicrRegions,
+	uint32 gicrRegionCount, size_t gicrStride)
 {
 	// The LPI configuration table is shared by every redistributor, so it is
 	// allocated once. One byte per LPI. Never claim more INTID bits than the
@@ -349,48 +368,104 @@ GICv3ITS::_InitLpis(addr_t gicdRegs, addr_t gicrRegs, phys_addr_t gicrPhysical,
 
 	// Each redistributor needs its own pending table, and LPIs have to be
 	// enabled on all of them even though only the boot CPU is targeted today.
+	// GICR_TYPER.Last ends the region it is in, not the walk: firmware that
+	// describes the redistributors per-CPU may hand us several regions.
+	// The collection every LPI is delivered to must name the redistributor of
+	// the CPU that will handle it. Init() runs on the boot CPU, so that is this
+	// PE's own affinity -- picking the first redistributor in the first region
+	// instead would name whichever one happens to sit at the lowest address.
+	const uint32 bootAffinity
+		= gic_packed_affinity(READ_SPECIALREG(MPIDR_EL1));
+
+	const size_t pendingSize
+		= ROUNDUP((1ul << fLpiIDBits) / 8, GICR_PENDBASER_ALIGNMENT);
+
 	bool haveTarget = false;
-	addr_t frame = gicrRegs;
-	phys_addr_t framePhysical = gicrPhysical;
-	const addr_t end = gicrRegs + gicrSize;
-	while (frame + gicrStride <= end) {
-		const uint64 typer = gic_read64(frame + GICR_TYPER);
+	uint32 redistributors = 0;
+	uint32 skipped = 0;
+	for (uint32 region = 0; region < gicrRegionCount; region++) {
+		addr_t frame = gicrRegions[region].base;
+		phys_addr_t framePhysical = gicrRegions[region].physicalBase;
 
-		addr_t pending;
-		phys_addr_t pendingPhysical;
-		status = allocate_its_table("gicv3-lpi-pending",
-			ROUNDUP((1ul << fLpiIDBits) / 8, GICR_PENDBASER_ALIGNMENT),
-			GICR_PENDBASER_ALIGNMENT, area, pending, pendingPhysical);
-		if (status != B_OK) {
-			ERROR("unable to allocate an LPI pending table\n");
-			return status;
+		for (uint32 i = 0; i < gicrRegions[region].count; i++) {
+			const uint64 typer = gic_read64(frame + GICR_TYPER);
+			const uint32 affinity = (uint32)(typer >> 32);
+
+			// Skip the ones no CPU sits behind. Each costs a physically
+			// contiguous pending table, and GICR_CTLR.EnableLPIs is a one-way
+			// latch -- there is no reason to spend either on a PE that will
+			// never be started.
+			if (!redistributor_has_cpu(affinity)) {
+				skipped++;
+				if ((typer & GICR_TYPER_LAST) != 0)
+					break;
+				frame += gicrRegions[region].stride;
+				framePhysical += gicrRegions[region].stride;
+				continue;
+			}
+
+			addr_t pending;
+			phys_addr_t pendingPhysical;
+			status = allocate_its_table("gicv3-lpi-pending", pendingSize,
+				GICR_PENDBASER_ALIGNMENT, area, pending, pendingPhysical);
+			if (status != B_OK) {
+				// One physically contiguous pending table per redistributor, so
+				// this is where a large machine runs out: say what it costs and
+				// what is lost, because the caller only logs and carries on with
+				// no MSI at all.
+				ERROR("unable to allocate an LPI pending table for "
+					"redistributor %" B_PRIu32 " of %" B_PRIu32 " (%"
+					B_PRIuSIZE " KiB contiguous each); MSI will be "
+					"unavailable\n", redistributors, gicrRegionCount,
+					pendingSize / 1024);
+				return status;
+			}
+
+			gic_write64(frame + GICR_PROPBASER, propbaser);
+			gic_write64(frame + GICR_PENDBASER,
+				(pendingPhysical & 0x000ffffffff0000ull)
+					| GICR_BASER_INNER_CACHE | GICR_BASER_SHAREABILITY);
+			gic_write32(frame + GICR_CTLR,
+				gic_read32(frame + GICR_CTLR) | GICR_CTLR_ENABLE_LPIS);
+
+			redistributors++;
+
+			if (affinity == bootAffinity) {
+				// Collections name their target either by physical
+				// redistributor address or by the processor number the
+				// redistributor reports.
+				fCollectionTarget = fPhysicalTargetAddress
+					? (framePhysical >> 16) : GICR_TYPER_PROC_NUM(typer);
+				haveTarget = true;
+			}
+
+			if ((typer & GICR_TYPER_LAST) != 0)
+				break;
+
+			frame += gicrRegions[region].stride;
+			framePhysical += gicrRegions[region].stride;
 		}
-
-		gic_write64(frame + GICR_PROPBASER, propbaser);
-		gic_write64(frame + GICR_PENDBASER,
-			(pendingPhysical & 0x000ffffffff0000ull) | GICR_BASER_INNER_CACHE
-				| GICR_BASER_SHAREABILITY);
-		gic_write32(frame + GICR_CTLR,
-			gic_read32(frame + GICR_CTLR) | GICR_CTLR_ENABLE_LPIS);
-
-		if (!haveTarget) {
-			// Collections name their target either by physical redistributor
-			// address or by the processor number the redistributor reports.
-			fCollectionTarget = fPhysicalTargetAddress
-				? (framePhysical >> 16) : GICR_TYPER_PROC_NUM(typer);
-			haveTarget = true;
-		}
-
-		if ((typer & GICR_TYPER_LAST) != 0)
-			break;
-
-		frame += gicrStride;
-		framePhysical += gicrStride;
 	}
 
 	if (!haveTarget) {
-		ERROR("no redistributor found for the LPI collection\n");
+		ERROR("no redistributor for the boot cpu's affinity %#" B_PRIx32
+			"; MSI will be unavailable\n", bootAffinity);
 		return B_ERROR;
+	}
+
+	dprintf("gicv3-its: lpis enabled on %" B_PRIu32 " redistributor(s), %"
+		B_PRIu32 " skipped as cpu-less, %" B_PRIu32 " lpi intid bits, %"
+		B_PRIuSIZE " KiB of pending tables, collection target %#" B_PRIx64
+		"\n", redistributors, skipped, fLpiIDBits,
+		(redistributors * pendingSize) / 1024, fCollectionTarget);
+
+	// The count should be exactly the CPUs we run on. Anything else means the
+	// affinity match above is not seeing what it thinks it is, and the
+	// consequence -- LPIs enabled on the wrong set of redistributors -- is
+	// quiet, so say it out loud here.
+	if (redistributors != (uint32)smp_get_num_cpus()) {
+		ERROR("lpis enabled on %" B_PRIu32 " redistributor(s) for %" B_PRId32
+			" cpu(s)\n", redistributors, smp_get_num_cpus());
 	}
 
 	return B_OK;

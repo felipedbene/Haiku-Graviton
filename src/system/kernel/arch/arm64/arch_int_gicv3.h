@@ -7,15 +7,17 @@
 
 #include <SupportDefs.h>
 
+#include <boot/interrupt_controller.h>
+
 #include "soc.h"
 #include "gicv3_its.h"
+#include "gicv3_regs.h"
 
 
 class GICv3InterruptController : public InterruptController {
 public:
 								GICv3InterruptController(
-									phys_addr_t gicdRegs, size_t gicdSize,
-									phys_addr_t gicrRegs, size_t gicrSize);
+									const intc_info& info);
 
 			void				EnableInterrupt(int32 irq);
 			void				DisableInterrupt(int32 irq);
@@ -29,10 +31,11 @@ public:
 
 private:
 			void				_PerCpuInit();
+			void				_MapRedistributors(const intc_info& info);
 			void				_PrefaultRedistributors();
 			void				_DistributorInit();
 
-			// Locates and returns this PE's redistributor SGI/PPI frame.
+			// Locates and returns this PE's redistributor RD_base frame.
 			addr_t				_CurrentRedistributor();
 
 			void				_WaitForRwp();
@@ -44,11 +47,12 @@ private:
 	static	void				_SendSgi(uint64 mpidr, uint32 sgiId);
 
 			addr_t				fGicdRegs;
-			addr_t				fGicrRegs;
-			phys_addr_t			fGicrPhysical;
 			GICv3ITS*			fITS;
-			size_t				fGicrSize;
+
+			gicr_region			fGicrRegions[INTC_MAX_GICR_REGIONS];
+			uint32				fGicrRegionCount;
 			size_t				fGicrStride;
+
 			uint32				fIrqCount;
 };
 

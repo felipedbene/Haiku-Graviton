@@ -46,33 +46,60 @@ ECAMPCIControllerACPI::ReadResourceInfo(device_node* parent)
 		return B_ERROR;
 
 	acpi_mcfg_allocation *end = (acpi_mcfg_allocation *) ((char*)mcfg + mcfg->header.length);
-	acpi_mcfg_allocation *alloc = (acpi_mcfg_allocation *) (mcfg + 1);
+	acpi_mcfg_allocation *first = (acpi_mcfg_allocation *) (mcfg + 1);
 
-	if (alloc + 1 != end)
-		dprintf("PCI: multiple host bridges not supported!");
+	uint32 count = 0;
+	acpi_mcfg_allocation *chosen = NULL;
+	for (acpi_mcfg_allocation *alloc = first; alloc + 1 <= end; alloc++) {
+		dprintf("PCI: ecam region: addr %" B_PRIx64 ", segment: %x, buses: %x-%x\n",
+			alloc->address, alloc->pci_segment, alloc->start_bus_number,
+			alloc->end_bus_number);
 
-	for (; alloc < end; alloc++) {
-		dprintf("PCI: mechanism addr: %" B_PRIx64 ", seg: %x, start: %x, end: %x\n",
-			alloc->address, alloc->pci_segment, alloc->start_bus_number, alloc->end_bus_number);
+		count++;
 
-		if (alloc->pci_segment != 0) {
-			dprintf("PCI: multiple segments not supported!");
-			continue;
-		}
-
-		fStartBusNumber = alloc->start_bus_number;
-		fEndBusNumber = alloc->end_bus_number;
-
-		fRegsLen = (uint64(fEndBusNumber) - fStartBusNumber + 1) << 20;
-		fRegsArea.SetTo(map_physical_memory("PCI Config MMIO",
-			alloc->address, fRegsLen, B_ANY_KERNEL_ADDRESS,
-			B_KERNEL_READ_AREA | B_KERNEL_WRITE_AREA, (void **)&fRegs));
-		CHECK_RET(fRegsArea.Get());
-
-		return B_OK;
+		// Prefer segment 0 where there is one, so that nothing which works
+		// today changes; otherwise the first region will do.
+		if (chosen == NULL || (chosen->pci_segment != 0 && alloc->pci_segment == 0))
+			chosen = alloc;
 	}
 
-	return B_ERROR;
+	if (chosen == NULL) {
+		dprintf("PCI: MCFG describes no ECAM region!\n");
+		return B_ERROR;
+	}
+
+	// The chosen region's segment *number* does not matter. A config address is
+	// (bus << 20) | (device << 15) | (function << 12) relative to that region's
+	// own base and contains no segment field, so a machine with a single region
+	// is completely described however that region happens to be numbered.
+	// AWS Graviton3 bare metal numbers its one and only region 1, and rejecting
+	// it left the machine with no PCI, and so no NVMe and no boot device.
+	//
+	// A *second* region is what is genuinely unsupported: only then does the
+	// segment select which base an address belongs to, and nothing downstream
+	// of this driver carries a segment to select with -- pci_segment appears
+	// nowhere else in the tree.
+	// Say which region was taken rather than which segment: an MCFG may list
+	// several regions that are all in the same segment and differ only by bus
+	// range, which a 96-vCPU guest does (buses 0-0, 1-43 and 44-56), and
+	// "ignoring all but segment 0" is no help at all when every one of them is
+	// segment 0.
+	if (count > 1) {
+		dprintf("PCI: %" B_PRIu32 " ECAM regions in MCFG; using only segment "
+			"%x buses %x-%x\n", count, chosen->pci_segment,
+			chosen->start_bus_number, chosen->end_bus_number);
+	}
+
+	fStartBusNumber = chosen->start_bus_number;
+	fEndBusNumber = chosen->end_bus_number;
+
+	fRegsLen = (uint64(fEndBusNumber) - fStartBusNumber + 1) << 20;
+	fRegsArea.SetTo(map_physical_memory("PCI Config MMIO",
+		chosen->address, fRegsLen, B_ANY_KERNEL_ADDRESS,
+		B_KERNEL_READ_AREA | B_KERNEL_WRITE_AREA, (void **)&fRegs));
+	CHECK_RET(fRegsArea.Get());
+
+	return B_OK;
 }
 
 

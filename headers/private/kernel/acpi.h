@@ -211,6 +211,11 @@ typedef struct acpi_local_x2_apic_nmi {
 	uint8	reserved3;				/* reserved (must be set to zero) */
 } _PACKED acpi_local_x2_apic_nmi;
 
+// acpi_gic_interface::flags. A GICC that is not enabled describes a PE that is
+// not present or not usable; ACPI makes no promise that its redistributor
+// frames respond at all.
+#define ACPI_MADT_GICC_ENABLED		(1u << 0)
+
 typedef struct acpi_gic_interface {
 	uint8 type;
 	uint8 length;
