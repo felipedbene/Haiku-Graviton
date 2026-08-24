@@ -129,6 +129,30 @@ protected:
 	uint8 volatile* fRegs{};
 	uint64 fRegsLen{};
 
+	// The bus number the mapping starts at. ConfigAddress() indexes by absolute
+	// bus number, so it has to subtract this; zero for a window that starts at
+	// bus 0, which is every case measured on AWS and the only case the device
+	// tree path produces.
+	uint8 fBusOffset{};
+
+	// Which bus numbers this controller actually decodes. Firmware may describe
+	// one controller's buses in several pieces, and those pieces need not tile
+	// the range they span -- a config access to a bus that nothing decodes is
+	// not guaranteed to read as all-ones and may abort instead, so the buses
+	// nobody claimed must not be probed. All ones by default, so any path that
+	// does not narrow it behaves exactly as before.
+	uint32 fValidBuses[8] = {
+		0xffffffff, 0xffffffff, 0xffffffff, 0xffffffff,
+		0xffffffff, 0xffffffff, 0xffffffff, 0xffffffff
+	};
+
+	void ClearValidBuses()
+		{ for (int i = 0; i < 8; i++) fValidBuses[i] = 0; }
+	void SetBusValid(uint32 bus)
+		{ fValidBuses[(bus >> 5) & 7] |= 1u << (bus & 31); }
+	bool IsBusValid(uint32 bus) const
+		{ return (fValidBuses[(bus >> 5) & 7] & (1u << (bus & 31))) != 0; }
+
 	Vector<pci_resource_range> fResourceRanges;
 };
 
@@ -145,6 +169,14 @@ protected:
 
 	uint8 fStartBusNumber{};
 	uint8 fEndBusNumber{};
+
+	// The bus range this root bridge decodes, from its _CRS. Firmware may put
+	// one ECAM allocation in the MCFG per bridge, in which case this is what
+	// selects the right one; without it every bridge takes the same allocation
+	// and they all enumerate the same devices.
+	uint32 fCrsBusStart{};
+	uint32 fCrsBusEnd{};
+	bool fHaveCrsBusRange{};
 
 private:
 	friend class X86PCIControllerMethPcie;
