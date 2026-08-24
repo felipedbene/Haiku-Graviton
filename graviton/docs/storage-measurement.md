@@ -1211,12 +1211,32 @@ Also worth recording: the global dirty count against its new 1/8-of-RAM limit,
 from `page_writer_quota`, to confirm the replacement bound sits in a sane place
 under real load rather than never engaging or engaging constantly.
 
-### RETRACTED ATTRIBUTION: the boot panic is not the serial listener
+### The boot panic: diagnosed, retracted, and un-retracted — the retraction was the error
 
 I attributed the boot panic below to my own serial KDL listener —
 `spawn_kernel_thread()` from `arch_debug_console_init_settings()` at
-`main.cpp:168` against `thread_init()` at 212 — and that reasoning was sound in
-isolation. **It was the wrong cause, and a second bake disproved it.**
+`main.cpp:168` against `thread_init()` at 212. A second bake appeared to disprove
+it, so I retracted. **The retraction was wrong: the original diagnosis was right,
+and the second bake had compiled the same source as the first.**
+
+The resolved backtrace, from the kernel binary of that bake:
+
+```
+ffff0000000b2c4c -> spawn_kernel_thread
+ffff00000017fb10 -> arch_debug_console_init_settings     <- the caller
+ffff0000000da0cc -> debug_init_post_settings
+ffff000000090b10 -> _start
+```
+
+And the faulting instruction pins the mechanism exactly: `bl team_get_kernel_team`
+followed by `ldr w2, [x0, #48]`, with **`FAR=30`, and 0x30 = 48**. So
+`team_get_kernel_team()` returned NULL — because the team structures do not exist
+until `thread_init()` — and the load faulted at offset 48 of a null pointer. The
+precondition was unmet in precisely the way predicted.
+
+The reason the second bake looked identical is that it *was* identical: the branch
+was baked from its pushed remote ref, which still pointed at the pre-rebase commit
+without the fix. Same source in, same binary out.
 
 | AMI | branch-head | boots? | contents |
 |---|---|---|---|
@@ -1244,22 +1264,14 @@ and `arch_debug_console.cpp`, so anything linked before them keeps its address.
 list` appear **identically in the image that boots**. They are normal here and not
 the cause. I had them as a hypothesis and they were wrong.
 
-**What remains.** The panic entered between `e1e5a0f531` and the graviton merge, so
-the suspect set is *either* the merge itself — which brought other work into
-`graviton` (arm64 `memcpy` assembly, GICv3, PCI ECAM multiregion, checksum, TX
-offload, scheduler) — *or* my quota fix. One bake of **graviton HEAD without the
-quota fix** separates them, and that is the same image wanted for the promotion
-gate, so the isolation is free.
+**What the evidence actually was.** Everything below in this subsection was
+reasoned correctly from what I could see, and what I could see was a stale build.
+The bisection table stands as a record of the reasoning, but its conclusion does
+not: the cause is the serial listener's call site, not the graviton merge, and the
+merge is exonerated.
 
-I could not resolve `ELR=ffff0000000b2c4c` to a symbol: the only kernel binary
-available to me is from a different tree, where that address maps to nonsense
-(`getrlimit`, at early VM init). Resolving it needs `addr2line` against the
-`kernel_arm64` from *that bake*, which names the faulting function in one command.
-
-**The retained value of the boot fix:** `spawn_kernel_thread()` before
-`thread_init()` is still an unmet precondition and still wrong, and moving the
-listener into the generic debugger is still the better design. It is a real latent
-defect fixed — just not this panic's cause.
+**The fix is the fix**, and moving the listener into the generic debugger remains
+the better design independently of that.
 
 ### The verification did not happen: the image did not boot
 
@@ -1270,8 +1282,8 @@ PANIC: unhandled pagefault! FAR=30 ESR=96000004
 ... arch_vm_translation_map_init_post_area
 ```
 
-Cause, as I first diagnosed it — **and see the retraction above, because this was
-wrong.** The serial KDL listener was spawned from
+Cause, and the resolved backtrace above confirms it. The serial KDL listener was
+spawned from
 `arch_debug_console_init_settings()`, which `main.cpp` reaches via
 `debug_init_post_settings()` at line **168**. `thread_init()` is at line **212**.
 So `spawn_kernel_thread()` ran 44 lines before the threading system existed and
@@ -1474,6 +1486,41 @@ Both halves are needed and neither substitutes for the other: without the stamp,
 is how the hot-swapped nvme driver was caught); with only the stamp, "the code
 loaded" gets mistaken for "the code works" (which is how the boot panic got as far
 as an AMI).
+
+### Rule: a byte-identical failure across two builds means one build
+
+The lesson I most wish I had had four hours earlier, and I had the evidence in hand
+and drew the wrong conclusion from it.
+
+A fix was applied, a second image was baked, and the panic came back **byte for
+byte**: same `FAR=30`, same `ELR=ffff0000000b2c4c`, same frame addresses, same
+ordering. I read that as "the fix was ineffective, so my diagnosis was wrong" and
+retracted a correct finding. The right reading was the opposite and much simpler:
+**identical addresses are near-proof that the same binary is running.** The fix had
+moved a function between two translation units, which shifts link order; a genuinely
+rebuilt kernel could hardly have reproduced the same addresses. What had actually
+happened was that the bake pulled a stale remote ref, so the second build compiled
+the first build's source.
+
+I even reasoned *past* the evidence — noting that identical addresses were
+"self-consistent" if the faulting code were linked before the files I changed — which
+is true, but it is a weaker explanation than "it is the same build" and I should have
+tested the stronger one first. **The cheap test I skipped was comparing the two AMIs'
+snapshot IDs against what the sources should have produced, and confirming the ref
+that was actually built.** I did compare snapshots, found them different, and treated
+that as proof the source differed — but a different snapshot only proves a different
+*build run*, not different *input*.
+
+So: when a fix appears to change nothing and the failure is *identical* rather than
+merely similar, the first hypothesis is **"the fix is not in what I ran"**, not "the
+fix is wrong". Distinguish them by checking the input — the commit that was built —
+rather than the output. Identical output is the signature of identical input, and
+that is a much more common failure than an ineffective fix.
+
+This is the same shape as the artifact rule two sections up, pointed the other way.
+An artifact check proves a change *arrived*; a source precheck on the tree that is
+about to be compiled proves *which* change is arriving. Neither substitutes for the
+other, and the bake now does both.
 
 ### Rule: watch for the operation that is only valid once something else exists
 
