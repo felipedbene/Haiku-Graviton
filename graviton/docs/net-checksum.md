@@ -32,18 +32,17 @@ number at all depended on both:
   was 2217–2715. With `-P 256K` (pinned, auto-sizing off) it collapsed to 1.2%.
   The noise was the send-buffer auto-sizer, not the network.
 
-And **a finding about the instrument, which is bigger than this change**: only 27%
-of the routine's saving materialises end to end, and after eliminating cache
-residency, the cross-compiler's codegen (by linking the shipped object into a native
-harness) and the node-walk access pattern, a byte counter showed the transmit path
-walks **100.016%** of the payload through the checksum — with a receive control that
-moved the counters by exactly zero. So the path is innocent, TCP checksums every byte
-it sends exactly once, and what is left is that **`nettput`'s summed
-`cpu_info::active_time` reports only 27% of a known 191 µs/MiB of removed CPU work.**
-If that holds up, every µs/MiB figure this project has published is a *lower bound*
-rather than an estimate. It is currently an inference by elimination, not a
-measurement of the instrument; §7.3 names the one-boot calibration that would settle
-it.
+And **one open puzzle, with four explanations killed and the instrument cleared**:
+only 27% of the routine's saving materialises end to end. Eliminated in turn — cache
+residency; the Haiku cross-compiler's codegen, by linking the shipped object into a
+native harness; the node-walk access pattern; and the transmit path skipping bytes,
+by a counter showing it walks **100.016%** of the payload with a receive control that
+moved by exactly zero. Then the metric itself was calibrated by *injecting* a known
+quantity of work, which it reported at **105–118%** — so **`cpu_info::active_time` is
+sound and every µs/MiB figure this project has published stands as measured.** The
+shortfall is real, specific to this change, in the path rather than the tool, and
+unexplained. §7.3 records the one hypothesis left (memory-bandwidth contention,
+untested) and the in-situ timing that would settle it.
 
 And one technique worth copying, because it is why the worst bug here was caught
 before it shipped rather than after: **make the tested code be the shipped code
@@ -605,45 +604,91 @@ For scale: at 0.2383 ns/byte the old checksum accounts for 128 ms of the 1.132 s
 CPU the run reports — 11.3% of transmit CPU — and removing 80% of it should have
 shown up as ~9%. It showed up as 2.37%.
 
-#### This is an inference about the instrument, not a measurement of it
+#### The instrument is sound. Measured, and it disproves my own inference.
 
-Stated plainly because it is the weakest link in the chain: I have measured that the
-bytes are all there and that the routine is fast on them, and I have measured the
-end-to-end saving. **I have not directly measured the metric's error.** Concluding
-"`cpu_info::active_time` under-attributes by ~3.7×" is what is left after the other
-explanations died, not something observed.
+The previous version of this section inferred, by elimination, that
+`cpu_info::active_time` under-attributes by ~3.7×, and flagged that as an inference
+rather than a measurement. **It has now been measured, and the inference was wrong.**
 
-Two mechanisms would produce it, and they are not equally comfortable:
+The calibration injects a *known* quantity of CPU work instead of removing one: extra
+passes of the old loop over the same bytes, result discarded, so the increment is an
+exact multiple of a cost established independently (0.2295 ns/byte hot ×
+1,048,747 bytes per MiB = **240.7 µs/MiB per extra pass**). The multiplier is chosen
+by **destination port**, not by a rebuild, so baseline, 2× and 4× all happen in one
+boot with one module — removing boot-to-boot variation, the thing most likely to fake
+this. `c7g.4xlarge`, MTU 9001, pinned send buffer, 512 MiB per run, three magnitudes
+interleaved across three repetitions.
 
-- **The metric under-counts.** `active_time` is *built* by summing each thread's
-  `kernel_time`/`user_time` deltas as it leaves the CPU
-  (`scheduler_cpu.cpp:264-276`, established in `net-receive-profile.md`). Any work
-  that is not attributed to a thread at a context switch — or is attributed at a
-  coarser granularity than it happens — is invisible to it.
-- **Freed CPU is reabsorbed.** The transfer is window-limited (rate pinned to three
-  digits across eight boots), so removing sender work cannot speed it up; if the
-  freed time is spent spinning or polling rather than idling, `active_time` does not
-  fall. Against this: the machine is only **8.0% busy** (1.132 s of CPU over 0.884 s
-  wall across 16 CPUs), so there is abundant idle to fall into rather than spin in.
+| passes | median µs/MiB | extra passes | increment | per pass | vs predicted | rate Mbit/s | cpu busy |
+|---|---|---|---|---|---|---|---|
+| 1 (baseline) | 2231 | 0 | — | — | — | 4805 | 1.142 s |
+| 2 | 2484 | 1 | +253 | **253.0** | **1.05×** | 4210 | 1.272 s |
+| 4 | 3075 | 3 | +844 | **281.3** | **1.17×** | 3288 | 1.574 s |
 
-**The experiment that discriminates them, and it is a clean one:** *inject* a known
-quantity of CPU work into this path — run the old checksum loop twice, doubling a
-cost already computed at 128 ms per 512 MiB — and see how much of that known
-increment the metric reports. If +128 ms of real work shows up as +35 ms, the
-instrument under-attributes by the same 3.7× and the finding is about
-`cpu_info::active_time`. If it shows up as +128 ms, then the instrument is fine on
-work that is *added* and something about *removing* work on a rate-limited path is
-different, which points at reabsorption. This calibrates the instrument directly
-rather than by difference, needs no A/B, and is one module build and one boot.
+Least squares over all three points: slope **283.4 µs/MiB per pass**, intercept
+**2219** — within 12 µs/MiB of the measured baseline, so the relationship is a clean
+proportionality with no offset. That is what two magnitudes buy: a constant factor,
+not a fixed error.
 
-#### Why this matters beyond this change
+**The metric reports 105% of injected work at the 2× point and 118% by the fitted
+slope. It does not under-report; if anything it slightly over-reports.** The 2× point
+is the trustworthy one: throughput falls from 4805 to 3288 Mbit/s across the sweep, so
+the sender thread is closer to single-core CPU-limited than the 8%-of-machine figure
+suggests, and at 4× it saturates and picks up scheduling cost that inflates the slope.
 
-**If the instrument is the answer, every µs/MiB figure this project has reported is
-a lower bound on the real CPU saving, not an estimate of it** — including the jumbo
-frame, send-buffer, multi-queue and offload numbers. It would not make any of them
-wrong in sign or in ranking between changes of the *same* kind, but it would make
-them incomparable to first-principles estimates, and it would mean this project has
-been systematically understating its own wins. That is worth one boot to find out.
+Counter cross-check, so the injection is known to have done what it claims: over nine
+runs the real path counted 4,832,635,952 bytes against 4,831,838,208 sent (100.02%),
+the injection counted 6,393,376,522 bytes against the 6,442,450,944 implied by
+(1×3 + 3×3) × 512 MiB (99.2%, the shortfall being the last report line lagging), and
+the leaf saw 11,226,003,493 — the sum of both, as it must.
+
+#### So the shortfall is real, specific to this change, and unexplained
+
+This is the fourth hypothesis to die and I am not going to guess a fifth into the
+record as though it were established. What is now known:
+
+- Adding one pass of the old loop to this exact path costs **253 µs/MiB**, and the
+  metric sees it.
+- Therefore the old loop genuinely costs ~253 µs/MiB in situ, consistent with its
+  benchmarked 0.2295–0.2383 ns/byte.
+- Replacing it with a routine benchmarked at 0.0546–0.0566 ns/byte should therefore
+  have saved ~190 µs/MiB.
+- §7.2 measured **52 µs/MiB**, solidly (p = 0.014, complete separation across boots).
+
+**Every explanation that would have been comfortable is now excluded**: the bytes are
+all there (100.016%), the shipped codegen is as fast as the host build, the access
+pattern does not matter, and the instrument attributes work correctly.
+
+The hypothesis I would test next, **untested and recorded as such**: the asymmetry
+between added and removed work is exactly what memory-bandwidth contention would
+produce. An injected extra pass re-reads data already in cache, so it costs its full
+ALU price and is fully visible. The *first* pass pulls the payload from DRAM, and the
+new routine's 0.0566 ns/byte is 17.7 GB/s — at the single-core streaming limit with no
+headroom — while in situ the memory system is simultaneously serving the NIC's DMA
+read of those same bytes and the `write()` copy that produced them. If the first pass
+is memory-bound in situ, making its arithmetic 4× faster cannot recover 4× of its
+time, and speeding up a *second, cache-warm* pass would.
+
+**The measurement that would settle it, rather than another inference:** time the walk
+*in situ* — read the cycle counter around `csum_walk()` and accumulate — and get the
+actual in-situ ns/byte for the old and new modules directly. That converts the whole
+question from a difference between a benchmark and a throughput number into one
+number measured in the place it matters. It is one more counter on
+`diag/checksum-byte-count`.
+
+#### What this means for the project's other numbers: nothing changes
+
+The previous version of this section warned that every µs/MiB figure this project has
+published might be a lower bound. **That warning is withdrawn.** The instrument
+attributes CPU work at 105–118% of a first-principles prediction, so the jumbo-frame,
+send-buffer, memcpy, multi-queue and offload figures stand as measurements of what
+they claim to measure, and nothing decided on them needs revisiting.
+
+What remains true, and is the transferable lesson, is narrower and points at the code
+rather than the tool: **on this transmit path a first-principles estimate of removed
+work over-predicted the measured saving by 3.7×, and the cause is in the path, not in
+the metric.** Estimates of the form "this operation costs X ns/byte, so removing it
+saves X" should be treated as upper bounds here until someone measures in situ.
 
 ## 8. What shipped, and what it interacts with
 
@@ -687,32 +732,43 @@ is a true number about one path that is likely to be superseded on that path.
 
 ### 8.2 A warning for anyone pricing an offload
 
-§7.3 is the transferable result: the isolated routine predicted 0.173 ns/byte and
-the transmit path delivered 0.0496, and the shortfall is **not** in the routine —
-codegen, cache residency and node-walk access pattern were each tested and
-eliminated. It is in the path or in the cost metric.
+§7.3 is the transferable result, and it survived a full round of elimination:
 
-So a first-principles estimate and a µs/MiB measurement **disagree by ~3.7× on this
-path**, and §7.3 has now placed the discrepancy in the instrument rather than in the
-code: the bytes are all there and the routine is fast on them.
+- The isolated routine predicted 0.1823 ns/byte over a **verified 100.016%** of the
+  payload — 191 µs/MiB of CPU work removed.
+- The measured saving was **52 µs/MiB** (§7.2), solidly.
+- The routine is not at fault: shipped codegen matches the host build, cache residency
+  does not matter, and the node-walk access pattern if anything favours it.
+- **The metric is not at fault either**: injecting a known 240.7 µs/MiB per pass is
+  reported at 105–118%.
 
-That changes what the warning is. It is **not** "offload will deliver less than you
-think" — offload may well deliver its full first-principles value in CPU terms. It is
-that **µs/MiB and first-principles estimates are not commensurable here**, in the
-direction of µs/MiB reading low. So:
+So a first-principles estimate over-predicted a measured saving by **3.7× on this
+path, with the cause in the path and not in the tool.**
 
-- Do not cite this document's 3.7× as a discount on anyone else's *measured* number.
-  It is a discount on *estimates* relative to *this metric*, which is a statement
-  about the metric.
-- Two µs/MiB measurements of similar changes remain comparable to each other, which
-  is why §7.2's A/B stands.
+What the warning is, precisely:
+
+- **"This operation costs X ns/byte in a benchmark, so removing it saves X" is an
+  upper bound here, not an estimate.** That held for the checksum by a factor of 3.7,
+  for reasons still unknown, and there is no reason to assume the transmit path
+  treats another removed operation differently.
+- **Do not cite this document's 3.7× as a discount on anyone's *measured* number.** It
+  is the gap between an estimate and a measurement on one specific change. A µs/MiB
+  measurement of TX checksum offload measures offload, and this factor says nothing
+  about it.
+- **µs/MiB measurements are sound and comparable to each other** — the calibration
+  establishes that — which is why §7.2's A/B stands and why the project's other
+  figures need no revisiting.
 - Anyone measuring TX checksum offload should still use 4xlarge with a pinned send
   buffer and arms interleaved across boots (M1, M2) rather than `c7g.large`, where
   cost is bimodal by boot at 19% — that reason is independent of any of this.
 
-The L3 fix moves in the opposite direction by a negligible amount: the stack now
-verifies 20 bytes of IPv4 header per frame that it previously skipped, ~0.2% of a
-9001-byte frame's bytes, and ~0.05% with the faster loop.
+There is also a live possibility that cuts *for* offload rather than against it: if the
+checksum's in-situ cost is limited by memory bandwidth rather than arithmetic (§7.3's
+untested hypothesis), then **offload, which removes the CPU's read of those bytes
+entirely rather than merely speeding it up, would not be subject to the same
+shortfall.** That would make offload's measured −12.6% credible on its own terms and
+this change's 2.37% the anomalous one. Worth keeping in mind before treating my
+factor as a prior for anything.
 
 ## 9. Disproved or abandoned along the way
 
@@ -741,8 +797,13 @@ verifies 20 bytes of IPv4 header per frame that it previously skipped, ~0.2% of 
   other three died, and it is also wrong: a byte counter says 100.016% of the payload
   goes through the checksum, in 65,138 data-segment calls averaging 8,222 bytes, over
   7.15 nodes each. TCP checksums every byte it sends, exactly once. §7.3.
-- **Pricing an offload by the isolated cost of the work it removes.** The routine
-  said 0.1823 ns/byte over a verified 100% of the payload — 191 µs/MiB — and the
-  metric reported 52. Any estimate built by pricing removed work, including for TX
-  checksum offload, is not commensurable with a µs/MiB measurement until the
-  instrument is calibrated. §7.3, §8.2.
+- **"`cpu_info::active_time` under-attributes by 3.7×."** My own inference by
+  elimination, published as an inference and then **disproved by measuring it**:
+  injecting a known 240.7 µs/MiB per extra checksum pass is reported at 105% at the
+  2× point and 118% by the fitted slope over three magnitudes, with an intercept
+  within 12 µs/MiB of baseline. The instrument is sound and the project's µs/MiB
+  figures stand. §7.3.
+- **Pricing an offload by the isolated cost of the work it removes.** This one
+  survives, but relocated: the estimate over-predicted the measured saving by 3.7×
+  and the cause is in the transmit path, not the metric. Treat "costs X ns/byte, so
+  removing it saves X" as an upper bound here until measured in situ. §7.3, §8.2.
