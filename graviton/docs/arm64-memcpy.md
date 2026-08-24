@@ -730,19 +730,35 @@ but it changes how it is broken.
   deliberately writes to the read-only page for the same reason. If Haiku's
   `mprotect` or `sigsetjmp` behaved differently, the test would say so rather
   than passing quietly.
-- **The end-to-end network number is not measured.** The microbenchmark says the
+- ~~**The end-to-end network number is not measured.**~~ **SUPERSEDED — it is
+  measured; see §9, and the first line of this document.** *(Correction added
+  2026-08-24: the sibling bullet above this one already carried a "superseded" note
+  and this one did not, so this was the last place in the file still asserting the
+  number was unmeasured.)* The microbenchmark says the
   copies got 3.4-9.8x cheaper in the receive path's configuration. It does not
   say what that is worth in µs/MiB, because that needs a baked image. From the
-  cost model (2.34 µs/frame + 1.85 ns/B, R² 0.94) the two bounce copies account
+  cost model (2.34 µs/frame + 1.85 ns/B, R² 0.94 — **a RECEIVE fit; there is no
+  transmit fit**) the two bounce copies account
   for at most 0.78 of the 1.85 ns/B per-byte term, so **even making the copies
   free could not close more than ~42% of it** -- and this change makes them
-  about 6.75x cheaper at MTU 9001, not free. Expect the per-byte term to fall by
+  about 6.75x cheaper at MTU 9001, not free. ~~Expect the per-byte term to fall by
   roughly 0.5-0.65 ns/B, i.e. a third of it, which at MTU 9001 is on the order of
-  25-30% of receive cost. **The majority of the per-byte cost will still be
-  unexplained afterwards**, and saying otherwise would be the same mistake this
-  project has had to retract four times. One known candidate is being handled
-  separately: `compute_checksum()` measures 0.229 ns/B against 0.095 for a
-  64-bit unrolled equivalent.
+  25-30% of receive cost.~~
+
+  > **The prediction was measured and it was too optimistic by about 3×.** Actual:
+  > **0.213 ns/B** and **8.4% of receive CPU** (three boots, `c7g.4xlarge`) — against
+  > a predicted 0.5–0.65 ns/B and 25–30%. Recorded because a prediction that misses
+  > is worth more than one that is quietly deleted.
+
+  **The majority of the per-byte cost is still
+  unexplained afterwards** — **confirmed: ~88% of it remains unexplained even after
+  both this change and the checksum landed.** Saying otherwise would be the same
+  mistake this project has had to retract four times. One known candidate was handled
+  separately and **has since merged**: `compute_checksum()` measured 0.228 ns/B
+  against **0.055** for a 64-bit unrolled version — **4.15×**, at **1988 bytes**,
+  which is the size that matters because `checksum_data()` gets one `data_node` at a
+  time from 2048-byte buffers. *(The "0.095 / 2.4×" figure that used to appear here is
+  the superseded early estimate; §9 of this file has the correct pair.)*
 - **glibc is still 1.1-2.0x faster.** Closing it means `<arm_neon.h>` and
   `q`-register load-everything-first groups up to 128 bytes. That is a larger
   and more interesting change than this one: it is the difference between a

@@ -24,6 +24,10 @@ injection**. This is why:
 
 ### 1. `graviton/ssh/build-openssh-arm64.sh` — cross-build OpenSSH → arm64 hpkg
 - HaikuPorts publishes **no arm64 repo**, so there is no prebuilt `openssh`.
+  *(Still true of **upstream** HaikuPorts. Note as of 2026-08-24 this tree has its
+  own arm64 hpkg repo — 23 ports / 52 non-bootstrap packages, `pkgman`-installable —
+  so read this as "upstream has none", not "none exists". See
+  `package-chain-status.md`.)*
   This cross-builds **OpenSSH 10.4p1** (+ static **zlib 1.3.1**) against the
   arm64 cross-tools and the already-built `haiku`/`haiku_devel` package staging
   dirs, then wraps it as `openssh-10.4p1-1-arm64.hpkg`.
@@ -33,7 +37,9 @@ injection**. This is why:
   symlinks into `generated.arm64` — jam recreates those dirs mid-build and
   symlinks vanish, yielding bogus `configure` results). Has a `sys/mman.h`
   canary to catch an incomplete sysroot early.
-- `--without-openssl` (no OpenSSL for arm64): **Ed25519 / ML-DSA keys only — no
+- `--without-openssl` (~~no OpenSSL for arm64~~ — **`openssl3` IS now built for arm64
+  and `pkgman`-installable, as of 2026-08-24; this is a choice of this build script,
+  not a platform limitation any more**): **Ed25519 / ML-DSA keys only — no
   RSA, no ECDSA**. Statically links zlib so sshd's only shared deps are
   `libroot`/`libnetwork`/`libbsd` (all in the base `haiku` package).
 - Also emits the image-level files consumed by `UserBuildConfig` under
@@ -62,6 +68,21 @@ Copy to `generated.arm64/UserBuildConfig` (jam's supported extension point;
   usable, and creates the `sshd` privsep user/group (mandatory in OpenSSH ≥7.5).
 
 ## Boot glue
+
+> **Updated 2026-08-24: the description below is the PRE-FIX behaviour and it
+> describes a bug.** "Generates the host key on first boot" was implemented as
+> `if [ ! -f ]`, and **a zero-byte file exists** — so after a stop/start that lost
+> the key's contents (the page writer never flushed file data), the guard was
+> satisfied by a 411-byte run of zeros and sshd came up unreachable. Fixed and merged
+> as `10a7d758bc` "graviton/ssh: make the sshd host key survive an unclean boot":
+> `sshd_boot.sh` now **parse-checks the key with `ssh-keygen -y`** rather than testing
+> for existence (one exec, and it turns the failure into a self-healing boot) and
+> **`sync`s** afterwards. The kernel-side cause was fixed separately
+> (`8331882470`). Full story: `ec2-stop-start.md`.
+>
+> **Do not re-derive the `if [ ! -f ]` pattern from this section.** The general rule
+> it taught: an existence test is not an integrity test.
+
 `graviton/ssh/files/sshd_boot.sh` (run by the sshd launch job): generates the
 Ed25519 (and ML-DSA) host key on first boot, guards against a hot restart loop,
 fixes `authorized_keys` modes, then `exec sshd -D` so `launch_daemon` tracks and
@@ -74,10 +95,16 @@ NIC/link appears — virtio_net or ena get served with no further action.
 2. **Ed25519 keys only** (`--without-openssl`). The existing EC2 key pair
    `haiku-graviton.pem` (RSA-2048) does **not** work against this sshd. Use an
    Ed25519 key (e.g. the baked-in `graviton/ssh/files/authorized_keys` pair).
+   *(Still true of the shipped sshd. But the **reason** changed: `openssl3` is now
+   available for arm64, so this is now a revisitable build choice rather than a
+   platform fact.)*
 3. **virtio-net needs `vectors=0`.** Under MSI-X the Haiku guest transmits but
    never receives → DHCP never completes → sshd unreachable though listening.
-   Forcing INTx fixes it. **Flagged as a likely ENA hazard too** — worth
-   checking against the ENA MSI-X path.
+   Forcing INTx fixes it. ~~**Flagged as a likely ENA hazard too** — worth
+   checking against the ENA MSI-X path.~~ **CHECKED, and the hazard did not
+   materialise (2026-08-24): ENA receives fine under MSI-X.** One MSI-X vector on
+   CPU 0 carries the whole ~10 Gbit/s ceiling. The virtio-net `vectors=0` workaround
+   is specific to virtio-net; do not carry it across to ENA.
 
 ## Build + bake flow
 ```sh

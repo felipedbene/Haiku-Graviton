@@ -1,10 +1,14 @@
 # c7g.metal: the GICv3 panic, and what bare metal presents that a guest does not
 
-Status: **fixed and hardware-verified.** The GIC brings up all 64 CPUs on bare
-metal across three hosts of two different redistributor shapes, and with the PCI
-segment fix (`metal-pci-segment.md`) `c7g.metal` **now boots DeBeOS to
-userland** — 53 PCI devices, NVMe root mounted, package daemon running first-boot
-processing.
+Status: **FIXED, merged and hardware-verified as of 2026-08-24.** The GIC brings
+up all 64 CPUs on bare metal across three hosts of two different redistributor
+shapes, and with the PCI ECAM fix (`metal-pci-segment.md`, `f5367b3602` merged via
+`e270548f33`) `c7g.metal` **now boots DeBeOS to userland** — 53 PCI devices, NVMe
+root mounted, package daemon running first-boot processing.
+
+**Both blockers in this document are closed.** Neither the GIC nor
+`pci_segment != 0` is "the next blocker" any more. §10 below still carries its
+original title and is corrected in place; read the banner there, not the heading.
 
 `c7g.metal` was the one Graviton instance class DeBeOS would not boot on. It is
 also the class of our own build machine, so the project could not dogfood its
@@ -170,7 +174,13 @@ impossible against another host's tables.
 ## 5. The fix
 
 Four code commits on `fix/arm64-metal-gicv3`. Both `kernel_arm64` and
-`haiku_loader.efi` compile clean; **not yet hardware-verified.**
+`haiku_loader.efi` compile clean.
+
+> **Corrected 2026-08-24.** This line used to end "**not yet hardware-verified**",
+> which contradicted this document's own status line and §8 "Hardware results
+> (CONFIRMED, observed)" below it. It **is** hardware-verified: 64 of 64 CPUs on
+> multiple metal hosts of differing redistributor shapes. The "not yet" was true
+> for about as long as it took to boot the image, and then sat here.
 
 1. **`arm64: find every GIC redistributor, not just the first contiguous run`**
    * `intc_info` carries a list of redistributor *regions* (up to
@@ -250,6 +260,17 @@ Four code commits on `fix/arm64-metal-gicv3`. Both `kernel_arm64` and
    support`** — see §7.
 
 ### What the coalescing does with awkward firmware
+
+> **Do not carry this coalescing pattern to PCI ECAM.** Coalescing is right *here*
+> because these pieces describe **one** redistributor array that firmware split up.
+> An MCFG's several allocations can instead be **one per root bridge** — genuinely
+> separate bridges owning disjoint bus ranges — and coalescing those into one span
+> and giving it to every bridge makes each bridge enumerate every device, which
+> published one NVMe controller three times on the 96-vCPU `c8g`. There the correct
+> operation is per-bridge *selection*, not union. See the boxed rule in
+> `metal-pci-segment.md` §"The fix, and the reading it depends on". Same-shaped
+> firmware description, opposite correct response; the deciding question is whether
+> the pieces describe one object or several.
 
 Asked of it explicitly, because it infers spacing from addresses:
 
@@ -493,9 +514,16 @@ cap is now load-bearing on metal where it was slack on the guest. ENA on metal i
 bus `0x24`, requester ID `0x2400`, comfortably inside 65536 — but a device above
 RID 65535 would silently have no translation.
 
-## 10. What remains: metal does not boot, and it is not the GIC
+## 10. ~~What remains: metal does not boot, and it is not the GIC~~ — RESOLVED 2026-08-24
 
-All metal hosts now end at:
+> **This section's heading is stale and is kept only so the diagnosis below stays
+> findable. `c7g.metal` boots to userland.** The PCI ECAM blocker described here was
+> fixed by `f5367b3602` ("pci/ecam: give each root bridge the ECAM region for its own
+> buses"), merged via `e270548f33` — see `metal-pci-segment.md`. The half of this
+> section that was true and remains true is its first claim: **the interrupt
+> controller was done at this point, and none of what follows was the GIC.**
+
+At the time of writing, all metal hosts ended at:
 
 ```
 PCI: mechanism addr: e010000000, seg: 1, start: 0, end: ff
@@ -505,16 +533,20 @@ PANIC: did not find any boot partitions!
 ```
 
 The GIC brings up all 64 CPUs and the ITS is ready well before this point, so the
-interrupt controller is done. The next blocker is in the PCI ECAM controller and
-is tracked separately, in `graviton/docs/metal-pci-segment.md` and on
-`fix/arm64-pci-segment`.
+interrupt controller is done. ~~The next blocker is in the PCI ECAM controller~~ —
+**that blocker is FIXED**, `f5367b3602` via `e270548f33`; `metal-pci-segment.md`
+carries the analysis and the hardware result.
 
-Still open beyond that:
+Still open beyond that, re-checked 2026-08-24:
 
 * The ITS surface at scale — `GITS_BASER.Indirect` (Linux picks an indirect
   device table on this hardware; we request flat and do not check the readback)
-  and the 256-vector / 32-device ceilings — is untested because no MSI device
-  attaches on metal yet.
+  and the 256-vector / 32-device ceilings. ~~Untested because no MSI device
+  attaches on metal yet.~~ **The stated reason no longer holds:** metal now
+  enumerates 53 PCI devices and mounts an NVMe root, so devices do attach. Whether
+  the ITS *at scale* has been exercised is **UNVERIFIED as of 2026-08-24** — it has
+  not been re-measured since the ECAM fix, and this bullet should be re-run rather
+  than either ticked off or left implying metal has no PCI.
 * `INTC_MAX_GICR_REGIONS` is 16. The worst case is one region per CPU, which
   64 single-redistributor regions would exceed. Not observed; smallest region
   seen is 12.

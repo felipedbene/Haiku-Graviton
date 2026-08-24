@@ -1,7 +1,26 @@
 # Bootstrapping arm64 HaikuPorts packages (browser chain, translators, …)
 
-Status: **method validated, blocked on a haikuporter chroot/permission setup issue.**
-No arm64 packages exist to shortcut this — they must be built from source.
+Status as of **2026-08-24**: **SUPERSEDED by `package-chain-status.md`. This file is a
+historical record of the first attempt; do not plan from it.**
+
+> ~~Status: **method validated, blocked on a haikuporter chroot/permission setup issue.**
+> No arm64 packages exist to shortcut this — they must be built from source.~~
+>
+> **Every blocking claim in this document is closed.** As of 2026-08-24 there are
+> **23 ports / 52 non-bootstrap arm64 hpkgs**, all built against the repaired
+> non-dirty chroot and all `pkgman`-installable, across five healthy build guests.
+> The chroot/permission problem (`haikuporter` running as an unprivileged user,
+> failing to chroot and failing to create the `lib` symlink), the missing `setfattr`,
+> and the "Next steps" list below were all resolved.
+>
+> Also stale: **"there is no arm64 package repo to point at"** and the 58-vs-398
+> package comparison — true of *upstream* HaikuPorts, but this tree now has its own
+> arm64 hpkg repo. And **"Nothing committed"** — the recipe patches are committed
+> under `graviton/haikuports-patches/`.
+>
+> **The live state, including the one blocker that is still open, is in
+> `package-chain-status.md`. Read that instead.** (That file is owned by another
+> agent as of this edit and is not summarised here beyond the counts above.)
 
 ## Why this is needed
 

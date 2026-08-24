@@ -6,6 +6,38 @@ queue, MTU 9001. **Peer:** the `c7g.metal` builder `10.42.0.149` on the same
 subnet. Modules cross-built on that builder and hot-swapped into
 `/boot/home/config/non-packaged/add-ons/kernel/` on the node; no image bake.
 
+> ### Note added 2026-08-24: the hot-swap method here is sound (an earlier note said otherwise)
+>
+> An earlier revision of this box claimed `ena` could **not** be hot-swapped, on the
+> grounds that the device manager's support-score competition hands a tie to the
+> packaged copy. **That was wrong**, and it is withdrawn. Re-read in full:
+>
+> - `_FindBestDriver()` (`device_manager.cpp:1794`) keeps a candidate only on
+>   `support > bestSupport` — **strictly greater** (`:1803`) — so a tie goes to
+>   **whichever copy is enumerated first**.
+> - Its iterator pushes `kModulePaths` **forward** (`module.cpp:2015`) onto a stack and
+>   pops **LIFO** (`:831`), so **`B_USER_NONPACKAGED_ADDONS_DIRECTORY` is searched
+>   first**.
+>
+> First-scanned wins the tie and non-packaged is first, so a same-score non-packaged
+> driver **wins**. `ena` returns a flat `0.8f` (`ena.cpp:3258`), and the hot-swaps
+> reported in this document are consistent with that.
+>
+> **The one real carve-out is the boot path, and it is about the filesystem rather
+> than about scoring:** the boot *storage* driver cannot be overridden because
+> `B_USER_NONPACKAGED_ADDONS_DIRECTORY` lives under `/boot/home`, on the volume that
+> driver must mount (`storage-measurement.md`). `ena` is not in the boot path, so it
+> does not apply here.
+>
+> **Two caveats to carry anyway.** All of the above is **reasoning-from-code, not a
+> measurement** — and this question has now been answered wrongly twice, in opposite
+> directions, from the same source. And **no version stamp was recorded in the driver
+> during this session**, so "the new code ran" and "the packaged code ran" are not
+> separable after the fact. That does not put §2's offload word in doubt (it is a
+> device capability read, consistent with everything else measured), but it does mean
+> the method has no independent provenance. **Stamp a distinctive string into anything
+> you hot-swap and check for it** — that, not code reading, is what settles this.
+
 Two changes were briefed together. **One shipped and one is cancelled, and the
 cancellation is the more useful result** because it is settled by a property of
 the device rather than by a marginal measurement.
@@ -81,7 +113,10 @@ rather than silent.
 ## 2. What the device actually offers
 
 Read out of the device's own `GET_FEATURE(OFFLOAD)` on the instance under test,
-by a driver-only hot-swap that logs the word (`ena_report_offload_capabilities()`):
+by a driver-only hot-swap that logs the word (`ena_report_offload_capabilities()`).
+This is a **first-party read of the device's own capability word**, which is what
+makes it authoritative over any inference from another OS's tooling — see the note at
+the top of this file on the hot-swap method, and on the missing version stamp:
 
 ```
 ena: offload: tx 0x3 (ipv4 l3 csum 1, ipv4 l4 csum part 1 full 0,

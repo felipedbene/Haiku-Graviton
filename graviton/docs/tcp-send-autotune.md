@@ -5,12 +5,30 @@ AMI `ami-0cff6f999ca5003ff` (`hrev59996`), MTU 9001. **Peer:** a `c7g.large`
 running `graviton/scripts/nettput-peer.py`, same subnet. **Tool:**
 `src/bin/nettput`, 512 MiB per run unless stated, comparisons interleaved.
 
+Status: **MERGED — `85f9d73594` "tcp: autotune the send buffer towards the
+bandwidth-delay product"** (added 2026-08-24).
+
 Haiku had no send-buffer autotuning at all. The fork's answer so far was a fixed
 `send.buffer_size = 256 * 1024`, which was three times better than the 65535 it
 replaced ([throughput-measurement.md](throughput-measurement.md)) and still just a
 guess. This replaces the guess with a measurement taken at run time, and the
 headline is that the guess was **16x wrong** one order of magnitude of round-trip
 time away from where it was chosen.
+
+> **Read the 16× with its measurement condition (noted 2026-08-24).** It comes from
+> the **10 ms *emulated*, one-direction** path, not from a physical link — the only
+> physical RTT measured here is **0.16 ms**, and the emulation is disclosed further
+> down. The 16× is real and it is the right headline for *why a fixed value cannot
+> work*; it is not a throughput result anyone will see on a same-subnet EC2 pair.
+>
+> **And be careful with the LAN comparison in the headline table.** This document's
+> own "Honest limits" section reports one 5-pair session where autotuning and pinned
+> 256 KiB were **a wash** (median ratio 1.03, 2 wins of 5), and records run-to-run
+> spread of **4293–5296 Mbit/s** for the same configuration. The defensible LAN claim
+> is the one that section states: **equal or better, never systematically worse** —
+> not a percentage. Note the headline's "it chose" column reads 256 KiB, i.e. the two
+> arms converge on the same buffer size, so a large LAN delta between them would need
+> explaining rather than quoting.
 
 ## The result first
 
@@ -266,8 +284,12 @@ Two smaller notes for the next person:
   measured optima above would move if congestion-window validation were ever
   added. Fixing that is the real work behind these numbers and is not attempted
   here.
-- **Single stream, single queue.** Multi-queue/RSS is still blocked in the stack,
-  and nothing here says anything about many concurrent sockets — including the
+- **Single stream, single queue.** ~~Multi-queue/RSS is still blocked in the stack,~~
+  **Multi-queue/RSS is CANCELLED on evidence, not blocked** (corrected 2026-08-24):
+  Linux forced to **one** ENA queue does **29826 Mbit/s** against 29823 on eight
+  (`c7g.16xlarge`), so queue count is not the limiter. "Blocked" invites someone to
+  unblock it. The single-stream caveat itself stands, and
+  nothing here says anything about many concurrent sockets — including the
   memory question, which is argued rather than measured.
 
 ## What is not fixed, deliberately

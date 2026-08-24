@@ -4,6 +4,35 @@
 `us-west-2`, AMI `ami-0b1569c656c3b6765`, Haiku `hrev59996`, single queue,
 MTU 9001, peer `c7g.metal` `10.42.0.149` on the same subnet.
 
+> ## READ THIS FIRST — the date above is misleading (banner added 2026-08-24)
+>
+> **The date says today; the body is pre-merge.** The *profiling* in this document
+> is sound and is still the reference for where receive CPU goes. But its §0 verdict,
+> §4, §7 and §8 describe work as pending that has since **landed**, and its
+> recommendations have been superseded by measurements taken after it was written.
+> Corrected in place below; the per-item summary:
+>
+> | This document says | Actual state, 2026-08-24 |
+> |---|---|
+> | "arm64 has no optimised `memcpy`" (§0.3, §4, §7) | **MERGED** — `f76217c69b`. See `arm64-memcpy.md`. |
+> | memcpy worth **6.4% ± 1.8%** of receive CPU | Superseded. That was an *in-situ floor*; the end-to-end figure is **8.4%** (itself self-revised **down** from a single-boot 12.6%). |
+> | the memcpy design: "align the destination, then 32 bytes per iteration" (§7) | **Not what shipped, and was measured wrong.** What shipped: no loop below 129 B, align to **16**, 64 B/iteration. |
+> | "run the string tests before trusting it" (§7) | **There is no string test suite in this tree** — `arm64-memcpy.md` §3.1. A correctness test was written as part of that work (`c4fbf637c5`). |
+> | profiler reports `100.00% unknown`, "fixing it is the bake I want" (§0.4, §8) | **MERGED** — `830d8d0814` implements `arch_debug_get_stack_trace()`. |
+> | "transmit checksum offload … not where the measured cost is" (§"Not worth doing") | **MERGED and it did pay** — **−3.54%, p = 0.0079**. |
+> | "multi-queue receive confirmed worthless on this instance" | **Correct, and now closed fleet-wide**: Linux on ONE ENA queue does 29826 Mbit/s vs 29823 on eight. |
+>
+> **What is still open and is this document's most valuable open question:** the
+> receive fit is **2.34 µs/frame + 1.85 ns/byte**, and **~88% of the per-byte term
+> remains unexplained** even after memcpy and the checksum were fixed. That is the
+> live thread.
+>
+> **One caveat this document is the origin of, so it is corrected here.** The
+> per-frame/per-byte split is a **receive** fit. **There is no transmit fit** — none
+> exists anywhere in this tree. §3's line "Transmit is the same shape, more extreme"
+> is an assumption, not a measurement, and it has since been propagated into other
+> documents as if it were one. Do not apply `1.85 ns/byte` to transmit.
+
 `throughput-measurement.md` established that receive costs ~2100 µs of CPU per
 mebibyte at 4.9 Gbit/s — about **19 µs of CPU per 9 KB frame**, roughly ten times
 what the work justifies. It could not say where that goes. This does, and the
@@ -24,18 +53,24 @@ its residuals are given; where an experiment failed, it is reported as failed.
 2. **Four threads account for 99.9% of it**, and the largest is not the driver
    and not the stack: it is the *application's own `read()` syscall*, at 46%,
    98% of it in kernel time.
-3. **arm64 has no optimised `memcpy`.** It uses the generic C one, which copies
+3. ~~**arm64 has no optimised `memcpy`.**~~ **FIXED and merged 2026-08-24
+   (`f76217c69b`); worth 8.4%, not 6.4%.** As written: it used the generic C one, which copies
    **one byte at a time** whenever source and destination differ in alignment
    mod 8 — the normal case on receive. Measured: **0.388 ns/byte mismatched
    against 0.074 aligned**, and a destination-aligning replacement does
    **0.056 at every alignment**. Removing the penalty is worth a measured
    **6.4% ± 1.8%** of receive CPU (paired, *p* ≈ 0.006), and the replacement is
-   ~30% faster in the aligned case too.
+   ~30% faster in the aligned case too. **Superseded:** 6.4% was an in-situ floor;
+   the end-to-end figure on the baked image is **8.4%** across three boots — itself
+   revised **down** from 12.6% measured on a single boot. Quote 8.4%.
 4. **I account for 100% of the 19 µs to a named thread and 22% to a named
    operation.** The remaining 78% is inside four known threads and needs a
    sampling profiler to break down further. That profiler exists, runs today, and
-   reports `100.00% unknown` because one arm64 hook is a stub. Fixing it is the
-   bake I want.
+   ~~reports `100.00% unknown` because one arm64 hook is a stub. Fixing it is the
+   bake I want.~~ **The hook is FIXED and merged (`830d8d0814`,
+   `arch_debug_get_stack_trace()` plus keeping the frame pointer). The profiler
+   attributes properly; the bake happened.** The 78% is still not broken down —
+   that work is available now, not blocked.
 
 ---
 
@@ -162,8 +197,18 @@ Raw, from one run (8 s window, 2 CPUs, 9,754,274 µs of `active_time`):
 
 **The single largest consumer of receive CPU is the receiving application's own
 syscall, and it is essentially all kernel time.** That is not where any previous
-analysis in this tree looked. Transmit is the same shape, more extreme: the
+analysis in this tree looked. ~~Transmit is the same shape, more extreme:~~ the
 sending thread is 73% of the cost at 88.8% of one whole CPU.
+
+> **Corrected 2026-08-24 — "the same shape" was an assumption and it propagated.**
+> The 73%/88.8% thread attribution *is* measured. What is **not** measured is that
+> transmit shares receive's per-frame/per-byte *decomposition*: **there is no
+> transmit fit anywhere in this tree.** This sentence was read as licence to apply
+> receive's `2.34 µs/frame + 1.85 ns/byte` to transmit, which then appeared in
+> `tcp-tso.md` §6 as a saving expressed as a fraction of "the 1.85 ns/byte per-byte
+> term" — for a transmit change. `tcp-tso.md` §4.4 retracts that explicitly. Two
+> thread-level cost profiles being lopsided in the same direction does not make the
+> underlying models transferable.
 
 One asymmetry worth recording: `net timer` is 8% on receive and **0.001%** on
 transmit (94 µs versus 792,327 µs over comparable windows). Whatever it is doing,
@@ -251,7 +296,12 @@ inflation as §3.2.)
 
 ---
 
-## 4. arm64 has no optimised memcpy, and the generic one has a byte loop
+## 4. ~~arm64 has no optimised memcpy~~ — FIXED and merged 2026-08-24 (`f76217c69b`)
+
+> The measurement in this section (0.388 ns/byte mismatched vs 0.074 aligned) is
+> the diagnosis that motivated the fix and it stands. The *state* it describes does
+> not: arm64 now has a hand-written `memcpy`. See `arm64-memcpy.md` for what
+> shipped, and note the shipped design differs from the one proposed in §7 here.
 
 `src/system/libroot/posix/string/arch/arm64/Jamfile` and
 `src/system/kernel/lib/arch/arm64/Jamfile` both build
@@ -403,7 +453,19 @@ These close `ena-multiqueue-plan.md` §7 step 0:
 
 ## 7. What to do, sized
 
-### Highest value: give arm64 a real `memcpy`. Worth ≥6%, small, system-wide.
+### ~~Highest value: give arm64 a real `memcpy`. Worth ≥6%, small, system-wide.~~ DONE
+
+> **MERGED 2026-08-24 (`f76217c69b`), and both the figure and the design below are
+> wrong. Do not implement from this section — read `arm64-memcpy.md`.**
+>
+> - **Value:** 8.4% end-to-end across three boots, not ≥6.4%. (A single boot said
+>   12.6%; that was revised **down**.)
+> - **Design:** "align the destination, then 32 bytes per iteration" is **not what
+>   shipped and was measured to be wrong.** What shipped: **no loop at all below
+>   129 bytes**, align to **16** not 8, **64 bytes per iteration**. Getting the
+>   small-copy and overlap-ordering cases right took four follow-up commits
+>   (`4a132e2208`, `4728c15c96`, `f112082559`, `fee5dba7eb`, `0a0805c6ea`) — the
+>   "one new 100-line file" estimate below was the most optimistic thing here.
 
 `src/system/libroot/posix/string/arch/arm64/memcpy.c` on this branch: align the
 destination, then 32 bytes per iteration with unaligned loads. Same shape as the
@@ -445,8 +507,15 @@ what the other 78% is, and how much of the per-byte cost is really cache misses
 - **Multi-queue receive.** Confirmed worthless on this instance: 2 vCPUs, 2 queue
   pairs, and the cost is per-byte anyway. Parallelism cannot reduce cost per byte.
 - **Further `net_buffer` node reduction** (§3.1).
-- **Transmit checksum offload.** The receive side is already offloaded; transmit
-  is not where the measured cost is.
+- ~~**Transmit checksum offload.** The receive side is already offloaded; transmit
+  is not where the measured cost is.~~ **WRONG, and it was filed under "not worth
+  doing". Merged 2026-08-24 and it paid: −3.54% of transmit CPU, p = 0.0079.** Two
+  further corrections in the same area: the receive side is **not** "already
+  offloaded" in the way implied — a false `NET_BUFFER_L3_CHECKSUM_VALID` claim had
+  to be *removed* (`710f546d51`), and `rx_enabled` reads `0x0` while the device
+  demonstrably validates L4 on ~98% of frames, so it is not a usable guard. Beware
+  also an earlier **−12.6%** figure for this change: withdrawn as a confound (the
+  send buffer was not pinned).
 
 ### Worth investigating next, in order
 
@@ -467,15 +536,20 @@ Both are on `fix/arm64-net-profiling`:
 | commit | what | why |
 |---|---|---|
 | `830d8d0814` | `arch_debug_get_stack_trace()` + frame pointers + `arch_debug_get_interrupt_pc()` | makes `profile -a -k` work; names the other 78% |
-| `577dbc9895` | arm64 `memcpy.c` + two Jamfiles | the fix, ≥6% measured, **needs the string tests and a boot** |
+| `577dbc9895` | arm64 `memcpy.c` + two Jamfiles | the fix, ≥6% measured, ~~**needs the string tests and a boot**~~ — **there is no string test suite in this tree** (`arm64-memcpy.md` §3.1); one was written for this work as `c4fbf637c5`. Merged via `f76217c69b`; measured **8.4%** |
 
 Also on the branch, needing no bake (they cross-build and `scp` onto a running
 node): `src/bin/netprof`, `src/tests/system/benchmarks/memcpybench.c`, and
 `nettput`'s `-A` / `-W`.
 
-**If only one thing is baked, bake the profiler.** The memcpy fix is worth a
-measured 6%; the profiler is worth the other 78%, and it would also settle
-whether the memcpy change is worth 6% or considerably more.
+~~**If only one thing is baked, bake the profiler.**~~ **BOTH ARE BAKED AND MERGED
+(2026-08-24): `830d8d0814` and `f76217c69b`.** This section is a spent request, not
+a to-do list.
+
+The reasoning was sound and its prediction resolved in an interesting direction:
+the profiler *was* the higher-value bake, and it did settle the memcpy question —
+**8.4%**, i.e. neither the ≥6% floor nor "considerably more". The 78% is still not
+broken down, but nothing is blocking that now.
 
 ---
 

@@ -1729,6 +1729,58 @@ Therefore: an I/O buffer is `posix_memalign`ed, and its alignment is **reported
 with the result**, so no figure can be quoted without the code path it came from.
 `disktput` takes `-A`/`-U` so alignment is a variable rather than an accident.
 
+### Rule: the boot-path carve-out is real; the "drivers can't be dropped in" version is NOT
+
+**Note added 2026-08-24, and it records a wrong turn rather than a finding.** An
+earlier revision of this section asserted that *no* driver can be hot-swapped —
+that `ena` in particular could not be, because the device manager's support-score
+competition would hand the tie to the packaged copy. **That is wrong. It was
+reasoned from code, and the code was read in the wrong direction.**
+
+What the code actually says, re-read in full:
+
+- `device_node::_FindBestDriver()` (`device_manager.cpp:1794`) enumerates candidates
+  through `open_module_list_etc()`, and keeps one only on
+  `if (support > bestSupport)` — **strictly greater** (`:1803`). So a tie is decided
+  by **whichever copy is enumerated first**.
+- That iterator's push loop (`module.cpp:2015`) walks `kModulePaths` **forward** —
+  `B_SYSTEM_ADDONS_DIRECTORY`, `B_SYSTEM_NONPACKAGED_ADDONS_DIRECTORY`,
+  `B_USER_ADDONS_DIRECTORY`, `B_USER_NONPACKAGED_ADDONS_DIRECTORY` — pushing each
+  onto a stack, and `iterator_pop_path_from_stack()` (`:831`) pops **LIFO**. So
+  `B_USER_NONPACKAGED_ADDONS_DIRECTORY` is searched **first**.
+
+**First-scanned wins a tie, and non-packaged is scanned first — so a non-packaged
+driver returning the same support score as the packaged one WINS.** `ena` returning
+a flat `0.8f` (`ena.cpp:3258`) is therefore droppable-in, and the successful
+driver-only `ena` hot-swaps reported in `ena-tx-offload.md` are consistent with the
+code rather than in conflict with it.
+
+**Where the wrong version came from.** There *is* a reverse walk over the same array
+— at `module.cpp:632` and `:1896` — but that is inside `search_module()`, a different
+path with a different job. Reaching for it to explain the `nvme_disk` failure gave a
+tidy mechanism for the wrong observation.
+
+**So the carve-out is narrow, and it is about the filesystem, not about scoring:**
+the **boot storage driver** cannot be overridden because
+`B_USER_NONPACKAGED_ADDONS_DIRECTORY` resolves under **`/boot/home`**, which is on
+the volume that driver is required to mount. At the moment the kernel needs it, the
+directory that would override it does not exist. **That does not generalise to
+drivers outside the boot path.** A network driver is not in the boot path and is
+hot-swappable.
+
+> ### The actual rule: settle this with a version stamp, not by reading code
+>
+> **This question has now been answered wrongly twice, in opposite directions, by
+> people reading the same source.** The scoring rule, the array order, the LIFO pop
+> and the boot-path exception all have to be composed correctly to get an answer, and
+> a plausible wrong composition is available at every step.
+>
+> **Everything above is reasoning-from-code, not a measurement.** Do not treat it as
+> settled. The cheap, decisive alternative is the subject of the next section:
+> **compile a distinctive version string into the module and look for it.** That is
+> what caught the `nvme_disk` case, and it is the only evidence in this whole episode
+> that never pointed the wrong way.
+
 ### Rule: stamp a version into anything you hot-swap
 
 Generalised from the `nvme_disk` finding, and it applies to every module and

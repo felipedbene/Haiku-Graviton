@@ -1,7 +1,34 @@
 # Stop, start, and no sshd
 
+Status: **FIXED, merged and hardware-verified. Banner added 2026-08-24 — this file
+previously had no status line at all, and opened in the present tense, so a reader
+skimming the first ten lines carried away a live bug that had been fixed.**
+
+> **All three fixes are merged on `graviton`:**
+>
+> | Fix | Commit | State |
+> |---|---|---|
+> | Page writer never flushed file data on the periodic timeout | `8331882470` | merged |
+> | `sshd_boot.sh` only regenerated the host key `if [ ! -f ]`, so a zero-byte key survived | `10a7d758bc` | merged |
+> | Inbound platform power button via the PL061 GPIO | `e6c9102f8c` | merged |
+>
+> **Verified:** the regression test that mattered — boot, confirm sshd, `stop`,
+> `start`, confirm sshd again — **now passes, and is a permanent stage in the
+> hardware gate** (`128a3f1761`). It used to fail 100% of the time.
+>
+> **The root cause is worth remembering because it is generic, not arm64 and not
+> ours:** file data was **never** flushed by the page writer's periodic path, so BFS
+> journalled the inode but not the contents and the sshd host key came back with the
+> right size, mode and mtime and **411 bytes of zeros**. A zeroed file exists, so
+> `if [ ! -f ]` was satisfied.
+
+Everything below is the original investigation, in the present tense of the time.
+**Read it as history.**
+
 A Haiku arm64 instance works on first boot. Stop it and start it again and it
-answers ping in 0.17 ms with nothing listening on port 22 -- a TCP RST, not a
+answers ping in 0.17 ms (**`c7g.large`; a later run of the same signature measured
+0.49 ms — the discrepancy is not resolved and neither figure carried a date when
+written**) with nothing listening on port 22 -- a TCP RST, not a
 timeout, so the host is up and the network stack is fine. 5301 and 80 are closed
 too. First boot on the same AMI brings sshd up every time.
 
@@ -296,17 +323,31 @@ Verified:
   ```
   (that directory was empty on arm64 before).
 
-**Not** verified: that the PL061 path actually fires on EC2. It cannot be tested
-locally -- QEMU's `virt` machine delivers the power button through the ACPI
+~~**Not** verified: that the PL061 path actually fires on EC2.~~ **Update
+2026-08-24 — very probably verified, by inference rather than by direct
+observation.** Nodes are now stopped and started on every hardware-gate run
+(`128a3f1761`) and the gate's **passing wall clock is ~2.5 minutes end to end**,
+covering boot, throughput measurement, `stop`, wait-for-`stopped`, `start` and
+wait-for-sshd. **A forced stop burns the full 3–4 minute grace period, which does
+not fit inside 2.5 minutes** — so the shutdown must be graceful, which is the PL061
+path firing. **What is still missing is the direct evidence this document itself
+asked for** (see "What to bake and test", item 2): a timed `stop` and the `pl061:`
+console lines. Treat the inference as strong, and the direct confirmation as
+**UNVERIFIED as of 2026-08-24**.
+
+The reasoning for why it could not be tested locally remains exactly right and is
+the reusable part: QEMU's `virt` machine delivers the power button through the ACPI
 **GED**, EC2 through the **PL061**, so a GED implementation passes under QEMU and
 does nothing on real hardware. Same divergence class as the PL011-vs-16550 serial
-trap. It has to be tested on a real instance.
+trap. **A passing emulator is not a passing platform.**
 
-Also unverified: the PSCI `SYSTEM_OFF` that `arch_cpu_shutdown()` now issues has
-never actually executed its SMC branch under Haiku. EC2 uses SMC; QEMU only ever
-advertises HVC. Interestingly a `t4g.medium` reports `conduit=hvc`
+~~Also unverified: the PSCI `SYSTEM_OFF` that `arch_cpu_shutdown()` now issues has
+never actually executed its SMC branch under Haiku.~~ **Also very probably
+exercised now, by the same inference:** the gate's default test instance is
+`c7g.large`, and a clean stop there means the SMC branch ran. EC2 uses SMC; QEMU
+only ever advertises HVC. A `t4g.medium` reports `conduit=hvc`
 (`discovered psci from acpi: conduit=hvc` in its boot log), so t4g exercises the
-HVC branch and c7g will be the first SMC user.
+HVC branch and **c7g was the first SMC user**.
 
 ## Notes for the next person
 
@@ -341,15 +382,19 @@ HVC branch and c7g will be the first SMC user.
 
 ## What to bake and test
 
-Branch `fix/haiku-ec2-stop-start` (three commits on top of `graviton`).
+~~Branch `fix/haiku-ec2-stop-start` (three commits on top of `graviton`).~~
+**MERGED into `graviton` as `5490e661da`.** Cite the merge, not the branch.
 
 `sshd_boot.sh` ships *inside* the OpenSSH hpkg
 (`build-openssh-arm64.sh` line 168 installs it to `bin/sshd_boot.sh`), so fix (2)
 needs `graviton/ssh/build-openssh-arm64.sh` re-run -- it is not picked up by a
 plain `jam` re-run.
 
-1. **The regression test that matters:** boot, confirm sshd, `stop`, `start`,
-   confirm sshd again. That currently fails 100% of the time and should now pass.
+1. ~~**The regression test that matters:** boot, confirm sshd, `stop`, `start`,
+   confirm sshd again. That currently fails 100% of the time and should now pass.~~
+   **DONE — it passes, and it is now a permanent stage of the hardware gate**
+   (`128a3f1761`), so it cannot silently regress. This is the one item on this list
+   that is fully closed.
 2. **Clean shutdown:** watch how long `stop` takes. Before, the instance always
    burned the full 3-4 minute grace period and was cut. If the PL061 path works
    it should stop in seconds. `get-console-output` on a t4g should show the

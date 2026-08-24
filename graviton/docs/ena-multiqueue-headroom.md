@@ -310,6 +310,27 @@ change, no stack change** — and because `ena` is a kernel *module* it can be
 hot-swapped into `/boot/home/config/non-packaged/add-ons/kernel/` on a running
 node, so it costs a 4-minute loop rather than a 25-minute image bake.
 
+> **The hot-swap claim above stands (checked 2026-08-24), but check it with a stamp
+> rather than trusting this paragraph.** An earlier revision of this note asserted the
+> opposite — that `ena` could not be dropped in because a support-score tie goes to the
+> packaged copy — and that was wrong. `_FindBestDriver()` keeps a candidate only on
+> `support > bestSupport`, strictly greater (`device_manager.cpp:1803`), so a tie is
+> decided by enumeration order; and the iterator pushes `kModulePaths` **forward**
+> (`module.cpp:2015`) onto a stack and pops **LIFO** (`:831`), so
+> `B_USER_NONPACKAGED_ADDONS_DIRECTORY` is searched **first**. First-scanned wins, and
+> non-packaged is first.
+>
+> **The real carve-out is the boot path, and it is a filesystem problem rather than a
+> scoring one:** the boot *storage* driver cannot be overridden because its override
+> directory lives under `/boot/home`, on the volume that driver must mount. `ena` is
+> not in the boot path.
+>
+> **Both of the above are reasoning-from-code, and this question has now been answered
+> wrongly twice from the same source.** So: **compile a distinctive version string into
+> anything you hot-swap and look for it.** Without that, "the number did not move" and
+> "the code did not load" are indistinguishable — which is exactly how the `nvme_disk`
+> case was caught.
+
 **Honest limits of this hypothesis.** 2.82 frames per interrupt is a *lower*
 bound on Haiku's batch size: if the real interrupt rate is below 50 k/s the batch
 is larger. The counter that would settle it is `ioInterrupts` (`ena.h:274`),
@@ -321,10 +342,16 @@ build the observability first.
 Two other candidates for the same 10 Gbit/s wall, neither excluded:
 
 - **One `net_buffer` per `receive_data()` call** (`net_device.h:54`) — one ioctl
-  per frame, 141 k/s at the ceiling. A batched receive entry point is the
+  per frame, 141 k/s at the ceiling. ~~A batched receive entry point is the
   symmetric twin of the batched *transmit* entry point that the doorbell and TSO
   work already needs, which makes it a more attractive project than it looks in
-  isolation.
+  isolation.~~
+
+  > **Withdrawn 2026-08-24: there is no twin.** Doorbell coalescing is **DEAD**
+  > (`219d8ab858`) and TSO is **impossible on this device** (`tso v4 0 v6 0`). "It
+  > comes free with two other projects" was the whole of the case for batched
+  > receive, and both of those projects are gone. It may still be worth doing — but
+  > argue it on its own merits.
 - **The single FIFO's plain mutex** (`stack/utility.cpp:211,232`), taken once per
   frame by the reader and once by the consumer.
 
@@ -507,20 +534,48 @@ That was the first sign that §4's conclusion was coming.
    per interrupt at the ceiling. This is the observability that §6's hypothesis
    needs and it is smaller than anything else on this list. If it cannot be
    observed, nothing below is worth starting.
-2. **Move the interrupt unmask after the ring drain** — `ena.cpp:219-228`, the
-   `XXX` that is already there, ~40–60 lines, driver-only, hot-swappable without
-   a bake. Then re-measure the §3 sweep. This is the whole of §6's hypothesis
-   and it is the cheapest thing on the list.
+2. **Move the interrupt unmask after the ring drain** — **`ena.cpp:221`** (the line
+   reference `219-228` has drifted), the `XXX STRUCTURAL FIX STILL OWED` that is
+   already there, ~40–60 lines, driver-only, hot-swappable without a bake — **but
+   verify the swap took effect with a compiled-in version stamp; see the note in §6.**
+   Then re-measure the §3 sweep. This is the whole of §6's hypothesis and it is still the cheapest thing
+   on the list. **Being worked as of 2026-08-24 — check before starting.**
 3. **A batched receive entry point** (`net_device.h:54`), if step 2 does not
-   close the gap. It is the twin of the batched *transmit* entry point that
+   close the gap. ~~It is the twin of the batched *transmit* entry point that
    doorbell coalescing and TSO already require, so the two projects share a
-   design and should share a decision.
+   design and should share a decision.~~
+
+   > **The stated justification has evaporated (2026-08-24), so this step must be
+   > argued on its own merits or dropped.** There is no batched *transmit* entry
+   > point coming: **doorbell coalescing is DEAD** (`219d8ab858` — LLQ grants 2 burst
+   > entries, one jumbo frame consumes both, 99.94% of frames already leave the
+   > allowance at zero, ratio 1:1, saving exactly zero at MTU 9001) and **TSO is
+   > impossible on this device** (`tso v4 0 v6 0`; tx offload `0x3` is IPv4 L3 +
+   > IPv4 L4 partial only). There is no twin and no shared design. Batched *receive*
+   > may still be worth doing — but "it comes free with two other projects" was the
+   > whole of the case for it, and both of those projects are gone.
 4. **Do not build multi-queue receive.** §5 is not a "probably not"; it is an
    interleaved A/B on the same hardware showing one queue and eight queues within
    0.01% of each other.
 
-And the transmit deficit — Haiku ~5.1 Gbit/s against Linux 9.5 on an unshaped
-path — is not this document's, but note it is the *same* shape of problem as §6:
-per-frame and protocol (one doorbell per `net_buffer`, no TSO, no TX checksum
-offload), at 8% of the machine, so N transmit queues fed from N CPUs cannot help
+And the transmit deficit — ~~Haiku ~5.1 Gbit/s against Linux 9.5 on an unshaped
+path~~ — is not this document's, but note it is the *same* shape of problem as §6:
+per-frame and protocol (one doorbell per `net_buffer`, ~~no TSO, no TX checksum
+offload~~), at 8% of the machine, so N transmit queues fed from N CPUs cannot help
 it either.
+
+> **Three corrections to the paragraph above, 2026-08-24.**
+>
+> 1. **The 5.1 / 9.5 Gbit/s pair is retracted data.** Those are the unshaped-path
+>    numbers that **§9.1 of this same document discards**: *"Those numbers cannot be
+>    compared with anything and all of them were discarded."* The closing paragraph
+>    reasoned from them anyway, with no marker and **no instance class or date**.
+>    Do not quote them.
+> 2. **"No TX checksum offload" is stale.** It shipped — `c2753e0030`, measured
+>    **−3.54%, p = 0.0079** (an earlier −12.6% is withdrawn as a confound).
+> 3. **"No TSO" understates it.** TSO is not missing, it is **impossible**: the
+>    device advertises `tso v4 0 v6 0`, and tx offload `0x3` is IPv4 L3 + IPv4 L4
+>    *partial* only. Listing it as a gap invites someone to try.
+>
+> **The conclusion survives all three** — N transmit queues fed from N CPUs still
+> cannot help a per-frame/protocol problem. Only the supporting figures were bad.

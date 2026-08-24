@@ -1,12 +1,24 @@
 # c7g.metal: no PCI, because its one ECAM region is numbered 1
 
-Status: **fixed and hardware-verified.** With this change `c7g.metal` enumerates
-53 PCI devices across buses 0–4, publishes NVMe, mounts its root volume and
-reaches userland.
+Status: **FIXED, merged and hardware-verified 2026-08-24** — `f5367b3602`
+"pci/ecam: give each root bridge the ECAM region for its own buses", merged via
+`e270548f33`. On `c7g.metal` this enumerates **53 PCI devices across buses 0–4**
+(matching Linux `lspci` on the same host), publishes NVMe, mounts its root volume
+and reaches userland. On the 96-vCPU `c8g` class it is what makes the ENA visible
+at all.
 
-This is the blocker that follows the GICv3 fix (`metal-gicv3-panic.md`). With the
-interrupt controller working, all 64 CPUs up and the ITS ready, `c7g.metal` still
-does not reach userland.
+**`pci_segment != 0` is no longer "the next blocker" anywhere.** If you were sent
+here by a doc that says metal does not boot, that doc is stale — say so.
+
+This was the blocker that followed the GICv3 fix (`metal-gicv3-panic.md`).
+
+> **Tense corrected 2026-08-24.** The next sentence used to read "… `c7g.metal`
+> **still does not** reach userland", directly contradicting the status line four
+> lines above it. It is kept in the past tense because the failure description that
+> follows is the valuable part.
+
+With the interrupt controller working, all 64 CPUs up and the ITS ready,
+`c7g.metal` **still did not** reach userland.
 
 ## The failure (CONFIRMED, observed on two hosts)
 
@@ -199,9 +211,31 @@ start bus" without putting three apertures at one physical address, but is
 consistent as one aperture based at bus 0 whose buses firmware listed in pieces.
 So the mapping begins at the start bus's offset into that aperture and
 `ConfigAddress()` rebases absolute bus numbers onto it, as Linux does with
-`PCI_MMCFG_BUS_OFFSET()`. This is the one thing here settled by argument rather
-than by measurement, and the next boot is expected to settle it: if bridge 2's
-devices appear at buses `1-0x43`, the reading is right.
+`PCI_MMCFG_BUS_OFFSET()`. This was the one thing here settled by argument rather
+than by measurement, and the next boot settled it: bridge 2's devices appeared at
+buses `1-0x43`, so **the reading is right** (confirmed 2026-08-24 — see "Hardware
+result" below).
+
+> ### Do NOT reach for the GICv3 "one array in pieces" analogy here
+>
+> **This is the trap this item is most likely to be re-broken by, so it is stated
+> as a rule.** The arm64 GICv3 redistributor work dealt with *one* array that
+> firmware had described in several pieces, and the right move there was to
+> **coalesce** the pieces into the span they cover. **That move is wrong for
+> ECAM, and applying it would make the 96-vCPU class worse than it was.**
+>
+> The difference is what the pieces belong to. On the 96-vCPU machine there are
+> **three separate root bridges**, each with its own `_CRS` bus range and its own
+> disjoint MMIO windows. They are not three descriptions of one thing. Coalescing
+> their allocations into a single `0x00`–`0x56` span and handing that to every
+> bridge reproduces the original bug exactly: all three bridges enumerate all the
+> same physical devices, and one NVMe controller gets published three times as
+> `disk/nvme/0`, `/1` and `/2`.
+>
+> The correct operation is **per-bridge selection, not union**: each bridge takes
+> the allocation covering *its own* buses, which is what `pci_ecam_map_bus()` does
+> on Linux's arm64 ACPI path and what `f5367b3602` does here. The single shared
+> base address is a property of the *aperture*; the *ownership* is per bridge.
 
 ### Why bus numbers nobody claimed are never probed
 
@@ -297,8 +331,9 @@ mechanism was reached for without first checking that the surrounding interface
 matched; the first was the redistributor stride, where the citation was real but
 answered a different question.
 
-Whether buses `1-0x56` actually hold an ENA is still unknown, and is the next
-boot's question.
+~~Whether buses `1-0x56` actually hold an ENA is still unknown, and is the next
+boot's question.~~ **ANSWERED 2026-08-24: they do.** The 96-vCPU `c8g` finds its
+ENA once each bridge maps its own buses.
 
 ### Sibling drivers: two pre-existing arm64 breakages
 
@@ -376,13 +411,28 @@ bare `0 device(s)`. The GIC lines are unchanged too.
 
 ## Open
 
-* **Metal ENA attach is unverified.** `ena: found an ENA device` and the driver
-  banner are the last ENA lines before the console ring ended. Networking on
-  metal is not yet demonstrated either way.
-* Whether the multiple-region case should eventually pick by bus range rather
+*Re-checked 2026-08-24. Two of the three bullets below are closed; they are kept
+with their resolutions because the second one is the whole point of this document.*
+
+* **Metal ENA attach — still not demonstrated end to end, as of 2026-08-24.**
+  `ena: found an ENA device` and the driver banner are the last ENA lines before
+  the console ring ended. Metal *networking* is still not shown working either way.
+  Distinguish this from two things it is not: the 96-vCPU `c8g` guest **does** now
+  find its ENA (that is closed, below), and there is a separate, pre-existing
+  **intermittent NIC attach** failure — roughly 1 warm reboot in 6 comes up with no
+  network — which another pair is investigating and which is not a regression from
+  this change.
+* ~~Whether the multiple-region case should eventually pick by bus range rather
   than taking the first. Nothing needs it today — every device we care about on
   every class tested is on the chosen region — but a device behind buses 44-56 on
-  that guest would be invisible.
+  that guest would be invisible.~~
+  **CLOSED — this is exactly what was needed, and it was needed immediately.**
+  "Nothing needs it today" was wrong within one class: the 96-vCPU `c8g` has a
+  device behind buses `0x44`–`0x56`, it *was* invisible, and that is why the machine
+  booted with no network at all. Picking by bus range is what `f5367b3602`
+  implements. **The lesson worth keeping: "nothing needs it today" was a statement
+  about the classes that had been booted, not about the fleet** — and it read as
+  the latter.
 * `<pci>designware` is unbuildable on arm64 and has been since the ITS's
   requester-ID `AllocateVectors` overload landed. Its own small branch; the fix
   is a `using` declaration or overriding both overloads. The wider issue it
