@@ -335,7 +335,10 @@ print_all(bool verbose)
 		count++;
 	}
 
-	dprintf("PCI: %ld device(s)\n", count);
+	// pci_module_init() calls this before any controller exists, and a bare
+	// "0 device(s)" on every platform is noise rather than information.
+	if (count > 0)
+		dprintf("PCI: %ld device(s)\n", count);
 }
 
 

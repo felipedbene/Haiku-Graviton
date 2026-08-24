@@ -703,8 +703,25 @@ PCI::AddController(pci_controller_module_info *controller,
 	data.controller_cookie = controllerCookie;
 	data.root_node = rootNode;
 
+	// The root bus is the first bus this controller decodes, which is not always
+	// zero: firmware may give each root bridge its own ECAM window covering a
+	// slice of the bus space. Creating the root at 0 regardless means a bridge
+	// whose window starts at bus 1 is probed at bus 0, below its own window --
+	// which its controller correctly refuses, so the bridge enumerates nothing
+	// and every device behind it is invisible.
+	uint8 rootBus = 0;
+	if (controller->get_bus_range != NULL) {
+		uint8 startBus = 0;
+		uint8 endBus = 0;
+		if (controller->get_bus_range(controllerCookie, &startBus, &endBus)
+				== B_OK) {
+			rootBus = startBus;
+		}
+	}
+
 	data.bus = new(std::nothrow) PCIBus {
 		.domain = domain,
+		.bus = rootBus,
 		.io_window = PCIResourceWindow(),
 		.memory_window = PCIResourceWindow(),
 	};

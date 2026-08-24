@@ -119,6 +119,7 @@ ECAMPCIControllerACPI::ReadResourceInfo(device_node* parent)
 	uint32 endBus = chosen->end_bus_number;
 	uint32 pieces = 0;
 	uint32 dropped = 0;
+	uint32 otherBuses = 0;
 
 	ClearValidBuses();
 	for (acpi_mcfg_allocation *alloc = first; alloc + 1 <= end; alloc++) {
@@ -137,7 +138,16 @@ ECAMPCIControllerACPI::ReadResourceInfo(device_node* parent)
 				SetBusValid(bus);
 			}
 			pieces++;
-		} else if (!sameWindow) {
+		} else if (sameWindow) {
+			// Same window, but outside this bridge's slice of it. These are
+			// somebody else's buses and this bridge will never see them, which
+			// is worth saying: a bridge reporting "1 decoded, 1 MiB" with no
+			// further comment looks like the whole machine.
+			dprintf("PCI: ECAM buses %x-%x at %" B_PRIx64 " belong to another "
+				"bridge; not mapped here\n", alloc->start_bus_number,
+				alloc->end_bus_number, alloc->address);
+			otherBuses++;
+		} else {
 			// A separate base or segment is a genuinely separate ECAM window,
 			// and this bridge maps one. Name it and what is lost: devices behind
 			// these buses will simply never be found, which is invisible unless
@@ -187,9 +197,10 @@ ECAMPCIControllerACPI::ReadResourceInfo(device_node* parent)
 		chosen->address, startBus, base, chosen->pci_segment, fStartBusNumber,
 		fEndBusNumber, decoded, fRegsLen >> 20);
 
-	if (dropped > 0) {
-		dprintf("PCI: %" B_PRIu32 " of %" B_PRIu32 " ECAM regions belong to "
-			"other windows\n", dropped, count);
+	if (dropped > 0 || otherBuses > 0) {
+		dprintf("PCI: of %" B_PRIu32 " ECAM region(s): %" B_PRIu32 " mapped "
+			"here, %" B_PRIu32 " other bridges' buses, %" B_PRIu32
+			" separate windows\n", count, pieces, otherBuses, dropped);
 	}
 
 	return B_OK;

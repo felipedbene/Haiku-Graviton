@@ -55,6 +55,9 @@ pci_controller_module_info gPciControllerDriver = {
 	},
 	.finalize = [](void *cookie) {
 		return static_cast<ECAMPCIController*>(cookie)->Finalize();
+	},
+	.get_bus_range = [](void* cookie, uint8* start, uint8* end) {
+		return static_cast<ECAMPCIController*>(cookie)->GetBusRange(*start, *end);
 	}
 };
 

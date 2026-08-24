@@ -178,6 +178,20 @@ ECAMPCIController::WriteConfig(uint8 bus, uint8 device, uint8 function,
 }
 
 
+// Derived from the mapping rather than stored separately: the window begins at
+// fBusOffset and is fRegsLen long, and ECAM gives each bus a megabyte.
+status_t
+ECAMPCIController::GetBusRange(uint8& start, uint8& end)
+{
+	if (fRegsLen < (1 << 20))
+		return B_ERROR;
+
+	start = fBusOffset;
+	end = (uint8)(fBusOffset + (fRegsLen >> 20) - 1);
+	return B_OK;
+}
+
+
 status_t
 ECAMPCIController::GetMaxBusDevices(int32& count)
 {

@@ -102,6 +102,10 @@ public:
 
 	status_t GetMaxBusDevices(int32& count);
 
+	// The bus numbers this controller decodes, so the bus manager can create
+	// this domain's root bus at the right number instead of assuming zero.
+	status_t GetBusRange(uint8& start, uint8& end);
+
 	status_t ReadIrq(
 				uint8 bus, uint8 device, uint8 function,
 				uint8 pin, uint8& irq);
