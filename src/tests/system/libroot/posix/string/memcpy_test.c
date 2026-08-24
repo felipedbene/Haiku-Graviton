@@ -729,6 +729,72 @@ next_size:
 }
 
 
+/*!	memcpy() with the destination *below* the source, on overlapping ranges.
+
+	Undefined behaviour, and not a promise. It is asserted anyway because it is
+	the accidental overlap that real code produces -- `memcpy(p, p + k, n)`, in
+	place header removal -- and because both the routine arm64 used before and
+	glibc happen to get it right, so a caller that works today would otherwise
+	start failing for no reason a bug report could ever explain. A forward copy
+	gets this for free if, and only if, it issues every load of a group before
+	every store of that group and writes ascending non-overlapping ranges with
+	at most one overlapping access at the end. It is easy to lose by
+	rearranging, and nothing else here would notice.
+
+	The other direction, destination above source, cannot be right for a forward
+	copy and is not asserted -- see the divergence report below.
+*/
+static void
+test_overlap_dest_below_source(void)
+{
+	const size_t kArena = 2048;
+	unsigned char* actual = (unsigned char*)malloc(kArena);
+	unsigned char* expected = (unsigned char*)malloc(kArena);
+	unsigned char* pattern = (unsigned char*)malloc(kArena);
+	size_t size;
+
+	printf("  overlapping copies with dest below source (asserted, though "
+		"memcpy overlap is undefined)\n");
+
+	if (actual == NULL || expected == NULL || pattern == NULL) {
+		fail("could not allocate the overlap arena");
+		free(actual); free(expected); free(pattern);
+		return;
+	}
+	fill_pattern(pattern, kArena, 61);
+
+	for (size = 1; size <= 320; size++) {
+		size_t displacement;
+
+		/* Every overlap, from one byte of overlap to complete. */
+		for (displacement = 1; displacement <= size; displacement++) {
+			sChecks++;
+			memcpy(actual, pattern, kArena);
+			memcpy(expected, pattern, kArena);
+
+			/* dest = base, source = base + displacement, so dest < source. */
+			sCopy(actual + 512, actual + 512 + displacement, size);
+			oracle_move(expected + 512, expected + 512 + displacement, size);
+
+			if (memcmp(actual, expected, kArena) != 0) {
+				size_t i = 0;
+				while (i < kArena && actual[i] == expected[i])
+					i++;
+				fail("overlap dest below source: size %zu displacement %zu "
+					"wrong at byte %zu (got 0x%02x want 0x%02x)", size,
+					displacement, i, actual[i], expected[i]);
+				goto done;
+			}
+		}
+	}
+
+done:
+	free(actual);
+	free(expected);
+	free(pattern);
+}
+
+
 /*!	memcpy() on overlapping ranges is undefined, so this reports rather than
 	fails. It is here because the tree may contain callers that are wrong about
 	it, and their symptom changes when the routine changes: the old byte loop
@@ -840,6 +906,8 @@ main(void)
 	test_self_copy_read_only();
 	printf("memmove and bcopy:\n");
 	test_memmove_and_bcopy();
+	printf("overlapping ranges:\n");
+	test_overlap_dest_below_source();
 	printf("overlap behaviour against the old generic routine (informational, "
 		"memcpy overlap is undefined):\n");
 	report_overlap_divergence();

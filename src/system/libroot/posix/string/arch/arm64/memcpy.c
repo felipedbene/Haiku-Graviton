@@ -59,15 +59,32 @@
 	  written by DMA misses in every cache, and a loop with one access in
 	  flight is bounded by memory latency rather than by bandwidth.
 
-	Two properties are relied upon elsewhere and should not be lost. The routine
-	never reads or writes outside [dest, dest + count) -- which is what makes it
-	safe when either end abuts an unmapped page, and is checked by
+	Three properties are relied upon elsewhere and should not be lost.
+
+	The routine never reads or writes outside [dest, dest + count). That is what
+	makes it safe when either end abuts an unmapped page, and it is checked by
 	tests/system/libroot/posix/string/memcpy_test.c against PROT_NONE guard
-	pages. And dest == source returns immediately without writing, because the
-	generic routine short-circuited it, the tree has callers that rely on it,
-	and this routine is also user_memcpy() and the kernel's memcpy: a write to a
+	pages.
+
+	dest == source returns immediately without writing, because the generic
+	routine short-circuited it, the tree has callers that rely on it, and this
+	routine is also user_memcpy() and the kernel's memcpy: a write to a
 	read-only mapping is a caught SIGSEGV in userland but a KDL panic in the
-	kernel.
+	kernel. (glibc does not do this, and fails that check; the point is
+	compatibility with what this tree's callers were built against, not a claim
+	about the standard.)
+
+	And the accesses are ordered so that the routine stays *correct* when the
+	ranges overlap with the destination below the source -- the accidental
+	`memcpy(p, p + k, n)` that in-place header removal produces. memcpy is
+	undefined on any overlap and this is not a promise, but both the routine
+	this replaces and glibc happen to tolerate that direction, so a caller that
+	works today should not start failing. Two rules give it for free: within any
+	one group of accesses every load is issued before every store, and the
+	groups write ascending, non-overlapping ranges with at most one overlapping
+	access at the very end. The final tail is safe because it reads the highest
+	source bytes, which nothing earlier can have written over. dest above source
+	remains wrong, as it must be for any forward copy, and as it was before.
 
 	Known limitation, arm64-general rather than specific to this routine: an
 	unaligned or wider-than-8-byte access to Device-nGnRnE memory raises an
@@ -139,27 +156,42 @@ copy_64(uint8_t* d, const uint8_t* s)
 	width, which writes a few destination bytes twice and reads a few source
 	bytes twice. Both stay strictly inside the caller's range, so this cannot
 	fault where a byte loop would not.
+
+	Every load is issued before every store, which costs nothing here and is
+	what keeps the routine correct when the ranges overlap with the destination
+	below the source -- see the note on ordering at memcpy() below.
 */
 static inline void
 copy_0_to_32(uint8_t* d, const uint8_t* s, size_t count)
 {
 	if (count >= 16) {
-		copy_16(d, s);
-		copy_16(d + count - 16, s + count - 16);
+		const unaligned_uint128 a = *(const unaligned_uint128*)s;
+		const unaligned_uint128 b = *(const unaligned_uint128*)(s + count - 16);
+
+		*(unaligned_uint128*)d = a;
+		*(unaligned_uint128*)(d + count - 16) = b;
 	} else if (count >= 8) {
-		*(unaligned_uint64*)d = *(const unaligned_uint64*)s;
-		*(unaligned_uint64*)(d + count - 8)
-			= *(const unaligned_uint64*)(s + count - 8);
+		const uint64_t a = *(const unaligned_uint64*)s;
+		const uint64_t b = *(const unaligned_uint64*)(s + count - 8);
+
+		*(unaligned_uint64*)d = a;
+		*(unaligned_uint64*)(d + count - 8) = b;
 	} else if (count >= 4) {
-		*(unaligned_uint32*)d = *(const unaligned_uint32*)s;
-		*(unaligned_uint32*)(d + count - 4)
-			= *(const unaligned_uint32*)(s + count - 4);
+		const uint32_t a = *(const unaligned_uint32*)s;
+		const uint32_t b = *(const unaligned_uint32*)(s + count - 4);
+
+		*(unaligned_uint32*)d = a;
+		*(unaligned_uint32*)(d + count - 4) = b;
 	} else if (count > 0) {
 		/* 1..3 bytes in three accesses, which coincide for 1 and overlap
 		   for 2. */
-		d[0] = s[0];
-		d[count >> 1] = s[count >> 1];
-		d[count - 1] = s[count - 1];
+		const uint8_t a = s[0];
+		const uint8_t b = s[count >> 1];
+		const uint8_t c = s[count - 1];
+
+		d[0] = a;
+		d[count >> 1] = b;
+		d[count - 1] = c;
 	}
 }
 
@@ -179,28 +211,32 @@ memcpy(void* dest, const void* source, size_t count)
 	}
 
 	if (count <= 128) {
+		/* Ascending and non-overlapping, then one overlapping access for the
+		   tail. See the note on ordering below. */
 		copy_32(d, s);
 		if (count > 64) {
 			copy_32(d + 32, s + 32);
 			if (count > 96)
-				copy_32(d + count - 64, s + count - 64);
+				copy_32(d + 64, s + 64);
 		}
 		copy_32(d + count - 32, s + count - 32);
 		return dest;
 	}
 
-	/* Align the destination to 16 by copying 16 unaligned bytes and then
-	   advancing to the boundary. count > 128 above, so this cannot exhaust it
-	   and the loop below needs no further guarding. The bytes between the
-	   boundary and d + 16 are written a second time by the loop, with the same
-	   data. */
+	/* Align the destination to 16. count > 128 above, so this cannot exhaust
+	   it and the loop below needs no further guarding. Exactly the bytes needed
+	   are copied, rather than a full 16 with a short advance, so that the loop
+	   does not re-read source bytes the prologue has already written over when
+	   the ranges overlap. */
 	{
-		const size_t advance = 16 - ((uintptr_t)d & 15);
+		const size_t advance = (-(uintptr_t)d) & 15;
 
-		copy_16(d, s);
-		d += advance;
-		s += advance;
-		count -= advance;
+		if (advance != 0) {
+			copy_0_to_32(d, s, advance);
+			d += advance;
+			s += advance;
+			count -= advance;
+		}
 	}
 
 	while (count >= 64) {
