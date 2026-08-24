@@ -117,13 +117,17 @@ say "instance $INSTANCE at $IP"
 # Factored into a function because it is needed twice: once for the first boot,
 # and again after the stop/start check below. Bounded by a wall-clock budget
 # rather than a fixed attempt count so the caller knows the ceiling it is buying.
-# A cold stop/start, used only to recover from the NIC intermittent -- roughly one
-# warm reboot in six on c7g.large loses the NIC, and it reproduces on canonical. A
-# cold cycle gets fresh placement and usually brings it back.
+# A cold stop/start, used only for the case where the node shows no sign of life at
+# all. A cold cycle gets fresh placement and a fresh boot, so it clears both a
+# placement problem and a once-per-boot software one.
 #
-# This exists so that "we could not tell" does not have to resolve to either
-# "ship it" or "block it": two extra cycles take a 1-in-6 intermittent to about
-# 1-in-216, after which a still-dead NIC is worth failing on.
+# This exists so that "we could not tell" does not have to resolve to either "ship
+# it" or "block it". It is deliberately *not* justified by a failure rate: this was
+# once written around a "roughly one warm reboot in six loses the NIC" figure, and
+# a later attempt to reproduce it saw 0 failures in 125 warm reboots across two
+# hosts. Retrying is still right for a no-evidence outcome, but the retry count is
+# a budget, not a probability calculation, and nothing here should be read as
+# characterising a hardware intermittent.
 recycle_instance() {
 	local why="$1" s ip
 	say "$why: recycling the instance (cold stop/start)"
@@ -370,8 +374,9 @@ fi
 # "We could not tell" must resolve to neither "ship it" nor "block it" without
 # having tried again.
 sshd_ok=0
-icmp=fail
-tcp=fail
+icmp=unknown
+tcp=unknown
+probe_log=""
 attempt=0
 while [ "$attempt" -lt 3 ]; do
 	attempt=$((attempt + 1))
@@ -390,11 +395,39 @@ while [ "$attempt" -lt 3 ]; do
 	# page-writer starvation ICMP answered and :22 accepted the connection at
 	# every one of ~72 samples and only the banner never arrived, whereas a lost
 	# NIC gives no ICMP at all.
-	icmp=fail
-	ping -c 3 -W 2 "$IP" >/dev/null 2>&1 && icmp=ok
-	tcp=fail
-	timeout 8 bash -c "cat < /dev/null > /dev/tcp/$IP/22" 2>/dev/null && tcp=ok
-	say "probe after the failed sshd wait: ICMP=$icmp TCP:22=$tcp banner=no"
+	#
+	# Probe from the builder over SSM, not from here. This script runs in a
+	# CodeBuild container with no VpcConfig, so it has no route into the test
+	# subnet: probing from here read "fail" for every candidate regardless of what
+	# the node was doing, which made the ICMP fast path below unreachable and left
+	# the verdict at the end asserting a cause it had not measured. The builder is
+	# also the origin the sshd wait uses, so the probe and the thing it explains
+	# now agree about whose network path they are describing.
+	#
+	# "unknown" is a third outcome and not folded into "fail": if the probe channel
+	# itself does not answer, that is a fact about this gate and not about the
+	# image, and it must not be reported as a dead NIC -- which is precisely the
+	# error the CodeBuild-side probe committed silently.
+	probe=$("$SSM_RUN" "$BUILDER" -t 120 -q 2>/dev/null <<-EOF
+		i=fail
+		ping -c 3 -W 2 $IP >/dev/null 2>&1 && i=ok
+		t=fail
+		timeout 8 bash -c "cat < /dev/null > /dev/tcp/$IP/22" 2>/dev/null && t=ok
+		echo "GATE_PROBE icmp=\$i tcp=\$t"
+	EOF
+	)
+	probe_line=$(printf '%s' "$probe" | grep -o 'GATE_PROBE icmp=[a-z]* tcp=[a-z]*' | tail -1)
+	if [ -n "$probe_line" ]; then
+		icmp=fail; tcp=fail
+		case "$probe_line" in *icmp=ok*) icmp=ok ;; esac
+		case "$probe_line" in *tcp=ok*) tcp=ok ;; esac
+		say "probe from the builder after the failed sshd wait: ICMP=$icmp TCP:22=$tcp banner=no"
+	else
+		icmp=unknown; tcp=unknown
+		say "probe from the builder did not report (ssm-run gave no GATE_PROBE line);"
+		say "  treating ICMP/TCP as unknown rather than as failed"
+	fi
+	probe_log="$probe_log attempt$attempt:ICMP=$icmp,TCP=$tcp"
 
 	# ICMP answering means the guest is alive and this is a genuine verdict about
 	# the image. Do not retry it -- retrying a real failure is how a gate learns
@@ -402,19 +435,27 @@ while [ "$attempt" -lt 3 ]; do
 	[ "$icmp" = ok ] && break
 
 	if [ "$attempt" -lt 3 ]; then
-		recycle_instance "no ICMP on attempt $attempt" \
+		recycle_instance "ICMP=$icmp on attempt $attempt" \
 			|| say "  recycle failed; will decide on the evidence so far"
 	fi
 done
 
 if [ "$sshd_ok" != 1 ]; then
+	if [ "$icmp" = unknown ]; then
+		die "FAIL: $AMI never brought sshd up, and the ICMP/TCP probe could not be
+  run at all -- ssm-run to the builder returned no GATE_PROBE line on any attempt.
+  So this run carries NO evidence about the node: it is not a NIC verdict, not a
+  storage verdict, and not a page-writer verdict. Fix the probe path (or the
+  builder) before reading anything into it, and capture the console output.
+  Do not promote, and do not record this as a diagnosed failure."
+	fi
+
 	if [ "$icmp" = fail ]; then
 		die "FAIL: $AMI never answered ICMP after 3 stop/start attempts.
   The guest is not reachable at all, so this is NOT the data-loss signature and
   NOT a storage verdict -- there is no evidence either way about the filesystem.
-  Three cold cycles is far past the ~1-in-6 NIC intermittent this retries for, so
-  treat it as a real networking failure in this image and capture the console
-  output. Do not promote."
+  Probed from the builder:$probe_log. Capture the console output and find out why
+  the node has no network before promoting anything. Do not promote."
 	fi
 
 	if [ "$tcp" = ok ]; then
@@ -435,8 +476,12 @@ fi
 
 if [ "$attempt" -gt 1 ]; then
 	warn=1
-	say "WARNING: sshd only answered on attempt $attempt; the earlier attempts saw"
-	say "WARNING: no ICMP, which is the NIC intermittent rather than this image."
+	say "WARNING: sshd only answered on attempt $attempt. What the earlier attempts"
+	say "WARNING: actually measured, and nothing more:$probe_log"
+	say "WARNING: A recovered boot has more than one possible cause -- among them a"
+	say "WARNING: /dev scan that latched an empty result, which leaves the adapter"
+	say "WARNING: undiscovered on an otherwise healthy boot. Read the probe readings"
+	say "WARNING: above and the console log; do not assume a hardware intermittent."
 fi
 
 # ------------------------------------------------------------------- verdict
