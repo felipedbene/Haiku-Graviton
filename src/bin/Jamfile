@@ -252,6 +252,7 @@ SubInclude HAIKU_TOP src bin cddb_lookup ;
 SubInclude HAIKU_TOP src bin cloud_init_lite ;
 SubInclude HAIKU_TOP src bin disktput ;
 SubInclude HAIKU_TOP src bin ena_fault ;
+SubInclude HAIKU_TOP src bin mprotect_probe ;
 SubInclude HAIKU_TOP src bin netprof ;
 SubInclude HAIKU_TOP src bin nettput ;
 SubInclude HAIKU_TOP src bin smpscale ;

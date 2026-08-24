@@ -81,6 +81,12 @@ alloc_first_free_asid(void)
 static bool
 is_pte_dirty(uint64_t pte)
 {
+	// An invalid entry has no dirty state. Without this test a zero PTE reads
+	// as dirty, because "not read-only" is how a writable-and-written entry is
+	// encoded. is_pte_accessed() below guards the same way.
+	if ((pte & kPteValidMask) == 0)
+		return false;
+
 	if ((pte & kAttrSWDIRTY) != 0)
 		return true;
 
@@ -773,9 +779,26 @@ VMSAv8TranslationMap::Query(addr_t va, phys_addr_t* pa, uint32* flags)
 	ThreadCPUPinner pinner(thread_get_current_thread());
 	ASSERT(ValidateVa(va));
 
+	// The root table is allocated lazily by Map(), so there may be nothing to
+	// walk yet. Report "not present" rather than dereferencing a null table.
+	if (fPageTable == 0)
+		return B_OK;
+
 	ProcessRange(fPageTable, fInitialLevel, va, B_PAGE_SIZE, nullptr,
 		[=](uint64_t* ptePtr, uint64_t effectiveVa) {
 			uint64_t pte = atomic_get64((int64_t*)ptePtr);
+
+			// ProcessRange() hands us every level-3 slot covered by the range,
+			// whether or not it holds a live mapping: a level-3 table exists as
+			// soon as any single page in its 2MB span is mapped, so slots for
+			// never-faulted pages are reached here holding an invalid entry.
+			// Such an entry carries neither a physical address nor attributes,
+			// so it must be reported as absent. Callers use PAGE_PRESENT to
+			// decide whether *pa is meaningful, and a zero *pa passed to
+			// vm_lookup_page() is fatal.
+			if ((pte & kPteValidMask) == 0)
+				return;
+
 			*pa = pte & kPteAddrMask;
 			*flags |= PAGE_PRESENT | B_KERNEL_READ_AREA;
 			if (is_pte_accessed(pte))
@@ -826,7 +849,19 @@ VMSAv8TranslationMap::Protect(addr_t start, addr_t end, uint32 attributes, uint3
 	ProcessRange(fPageTable, fInitialLevel, start, size, nullptr,
 		[=](uint64_t* ptePtr, uint64_t effectiveVa) {
 			ASSERT(effectiveVa <= end);
-			phys_addr_t pa = *ptePtr & kPteAddrMask;
+
+			uint64_t pte = atomic_get64((int64_t*)ptePtr);
+
+			// ProcessRange() also visits level-3 slots for pages that were
+			// never faulted in. Protection bits on an absent page mean
+			// nothing: Map() derives them afresh from the area's current
+			// protection when the fault arrives. Writing them here would only
+			// leave attributes behind in an invalid entry, and would pay for a
+			// break-before-make and a TLB invalidation to do it.
+			if ((pte & kPteValidMask) == 0)
+				return;
+
+			phys_addr_t pa = pte & kPteAddrMask;
 
 			// We need to use an atomic compare-swap loop because we must
 			// need to clear somes bits while setting others.
@@ -889,6 +924,12 @@ VMSAv8TranslationMap::ClearFlags(addr_t va, uint32 flags)
 
 	ProcessRange(fPageTable, fInitialLevel, va, B_PAGE_SIZE, nullptr,
 		[=](uint64_t* ptePtr, uint64_t effectiveVa) {
+			// An absent page has no accessed or dirty state to clear, and
+			// set_pte_clean() would otherwise leave kAttrAPReadOnly behind in
+			// an entry that should stay zero.
+			if ((atomic_get64((int64_t*)ptePtr) & kPteValidMask) == 0)
+				return;
+
 			if (clearAF && setRO) {
 				// We need to use an atomic compare-swap loop because we must
 				// need to clear one bit while setting the other.
@@ -942,6 +983,12 @@ VMSAv8TranslationMap::ClearAccessedAndModified(
 			// bit to proceed.
 			while (true) {
 				oldPte = atomic_get64((int64_t*)ptePtr);
+
+				// Nothing is mapped here, so there is no state to clear and
+				// nothing to unmap. Leave the entry alone.
+				if ((oldPte & kPteValidMask) == 0)
+					return;
+
 				uint64_t newPte = oldPte & ~kAttrAF;
 				newPte = set_pte_clean(newPte);
 
@@ -956,6 +1003,16 @@ VMSAv8TranslationMap::ClearAccessedAndModified(
 		});
 
 	pinner.Unlock();
+
+	// oldPte is still zero if the range had no level-3 table at all, or if the
+	// entry we found was invalid. Either way nothing was mapped: report no
+	// modification and do not hand a zero physical page number to
+	// UnaccessedPageUnmapped(), which would look it up and dereference NULL.
+	if ((oldPte & kPteValidMask) == 0) {
+		_modified = false;
+		return false;
+	}
+
 	_modified = is_pte_dirty(oldPte);
 
 	if (FlushVAIfAccessed(oldPte, address))
