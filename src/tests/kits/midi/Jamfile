@@ -1,6 +1,18 @@
 SubDir HAIKU_TOP src tests kits midi ;
 
-SimpleTest miditest1 : test1.cpp : libmidi.so be stdc++.r4 ;
+# Same reason as src/apps/patchbay/Jamfile: libmidi.so exists only where the
+# fluidlite build feature does, so declaring this test unconditionally breaks
+# `jam all` on architectures without it.
+local architectureObject ;
+for architectureObject in [ MultiArchSubDirSetup ] {
+	on $(architectureObject) {
+		if ! [ FIsBuildFeatureEnabled fluidlite ] {
+			continue ;
+		}
+
+		SimpleTest miditest1 : test1.cpp : libmidi.so be stdc++.r4 ;
+	}
+}
 
 SubInclude HAIKU_TOP src tests kits midi synth_file_reader ;
 

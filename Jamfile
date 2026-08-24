@@ -197,3 +197,61 @@ Depends catalogs : $(HAIKU_LOCALE_CATALOGS) ;
 
 NotFile catkeys ;
 Depends catkeys : $(HAIKU_LOCALE_OUTPUT_CATKEYS) ;
+
+# Pseudo-target for kernel add-ons that this architecture's image does not ship
+# but which must still compile for it.
+#
+# `all` is not a build-everything target: it tracks what the current
+# architecture's packages contain, so an add-on listed as <x>foo@somearch in
+# build/jam/packages/Haiku is never compiled here even though src/.../Jamfile
+# SubIncludes it unconditionally. Measured on arm64: touching a source under
+# busses/pci/ecam or busses/pci/designware makes `jam -n all` pick it up (both
+# ship on arm64), while touching generic/smbios or generic/bios produces nothing
+# at all. So `jam all` is green on arm64 and stays green while these rot.
+#
+# They do rot, and silently. The GICv3/ITS work added a second virtual
+# AllocateVectors() to MSIInterface, which -- with -Woverloaded-virtual -Werror
+# -- hid the 4-arg form in every subclass declaring only the old one and broke
+# `designware` without any build noticing. Two more were found already rotted:
+# `display_adapter` on printf format mismatches, and `isa`, whose arm64 sources
+# had existed in-tree without ever being compiled by any build, on any
+# architecture.
+#
+# Broadening the *package* guards to buy this coverage would be the wrong fix:
+# it would ship apple@ppc, sun@sparc, amiga_rdb@m68k and the hyperv drivers
+# inside arm64 images. Must-compile is not must-ship, which is exactly why this
+# is a separate target that links the add-ons without packaging them.
+#
+# Deliberately NOT wired into `all`. Making it a dependency of `all` is a
+# one-line change, but it turns every ordinary build red the moment one of these
+# breaks, and that is the operator's call rather than a default.
+NotFile kernel_addon_coverage ;
+Depends kernel_addon_coverage :
+	# repaired, and unprotected without this target
+	display_adapter
+	isa
+
+	# compile clean on arm64; only the package guard excludes them
+	acpi_battery
+	amiga_rdb
+	apple
+	ccp_rng
+	hyperv_hid
+	hyperv_ic
+	hyperv_scsi
+	ide_isa
+	openpic
+	pch_i2c
+	smbios
+	sun
+	wmi
+	;
+
+# Not listed above, and why: bios (redefines KERNEL_BASE), nvmm (x86 assembly),
+# amd_pstates, intel_pstates and x86_cstates (MSR access), <agp_gart>intel
+# (wbinvd) and <pci>x86 (ioapic.h) are genuinely x86-only, so their guards are
+# correct and there is nothing to protect. <kdebug>disasm and hyperv cannot be
+# listed either: both SubInclude an arch subdirectory that does not exist for
+# arm64, so they have no static library to link against. Every arm64 build
+# already prints those missing Jamfiles and nothing treats it as an error --
+# alongside src/bin/debug/ltrace/arch/arm64.
