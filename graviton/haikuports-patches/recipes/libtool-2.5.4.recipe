@@ -1,0 +1,146 @@
+SUMMARY="A generic library of support scripts"
+DESCRIPTION="GNU libtool is a set of shell scripts to automatically configure \
+UNIX architectures to build shared libraries in a generic fashion."
+HOMEPAGE="http://www.gnu.org/software/libtool"
+COPYRIGHT="2004-2024 Free Software Foundation, Inc."
+LICENSE="GNU GPL v2"
+REVISION="1"
+SOURCE_URI="https://ftp.gnu.org/gnu/libtool/libtool-$portVersion.tar.gz"
+CHECKSUM_SHA256="da8ebb2ce4dcf46b90098daf962cffa68f4b4f62ea60f798d0ef12929ede6adf"
+
+ARCHITECTURES="all"
+SECONDARY_ARCHITECTURES="x86_gcc2 x86"
+
+libVersion="7.3.2"
+libVersionCompat="$libVersion compat >= ${libVersion%%.*}"
+
+PROVIDES="
+	libtool$secondaryArchSuffix = $portVersion compat >= 2.5
+	cmd:libtool$secondaryArchSuffix = $portVersion compat >= 2.5
+	cmd:libtoolize$secondaryArchSuffix = $portVersion compat >= 2.5
+	devel:libltdl$secondaryArchSuffix = $libVersionCompat
+	"
+REQUIRES="
+	haiku$secondaryArchSuffix
+	libtool${secondaryArchSuffix}_libltdl == $portVersion base
+	cmd:aclocal
+	cmd:automake
+	cmd:find
+	cmd:sed
+	cmd:tar
+	cmd:xargs
+	"
+
+SUMMARY_libltdl="The libtool libltdl library"
+PROVIDES_libltdl="
+	libtool${secondaryArchSuffix}_libltdl = $portVersion compat >= 2.5
+	lib:libltdl$secondaryArchSuffix = $libVersionCompat
+	"
+REQUIRES_libltdl="
+	haiku$secondaryArchSuffix
+	"
+
+BUILD_REQUIRES="
+	haiku${secondaryArchSuffix}_devel
+	"
+BUILD_PREREQUIRES="
+	cmd:aclocal
+	cmd:autoconf >= 2.62
+	cmd:autoheader >= 2.62
+	cmd:find
+	cmd:gcc$secondaryArchSuffix
+	cmd:ld$secondaryArchSuffix
+	cmd:make
+	cmd:nm
+	cmd:ranlib
+	cmd:sed
+	cmd:xargs
+	"
+
+BUILD()
+{
+	export MAKEINFO=/bin/true
+	export HELP2MAN=/bin/true
+	export PATCH=/bin/true
+	export XZ=/bin/true
+	touch README-release
+
+	# Deliberately no ./bootstrap: it needs git to clone gnulib, this image has
+	# no git and the chroot has no network, so it aborts after two "git: command
+	# not found" lines without failing the build and regenerates nothing. The
+	# generated files stay as automake 1.17 emitted them, and Makefile.in
+	# hardcodes ACLOCAL/AUTOMAKE = missing aclocal-1.17/automake-1.17 while only
+	# automake 1.18.1 is installed. The cp/mv of m4/libtool.m4 that used to
+	# guard bootstrap goes with it: cp without -p restamped m4/libtool.m4 to
+	# now, which made it newer than aclocal.m4 and armed the very maintainer
+	# rule that then died on the missing aclocal-1.17.
+	#
+	# Flatten every timestamp in the pristine tree to one shared value instead.
+	# make only remakes a target when a prerequisite is *strictly* newer, so one
+	# identical mtime disables every maintainer rule at once without having to
+	# enumerate them -- and they do need disabling beyond the cp/mv, because the
+	# 2.5.4 tarball's own timestamps are inconsistent: libltdl/aclocal.m4 and
+	# libltdl/config-h.in ship at 19:41 while libltdl/Makefile.in, which
+	# automake would regenerate from them, ships at 19:01.
+	#
+	# The stamp comes from a reference file rather than a bare `touch` because
+	# this chroot's clock has stepped backwards -- make reports files "in the
+	# future" and warns about clock skew in the same run -- so a wall-clock stamp
+	# proves nothing. chmod first because the tarball ships m4/ltversion.m4 and
+	# libltdl/Makefile.am mode 444 and touch would fail on them.
+	touch -r configure.ac /tmp/lt-mtime-ref
+	find . -type f -exec chmod u+w {} +
+	find . -exec touch -r /tmp/lt-mtime-ref {} +
+	SED='sed' NM='nm' LD=ld runConfigure ./configure \
+		--with-gnu-ld \
+		--disable-static
+	make $jobArgs
+	# Desperate move to remove the absolute paths from libtool. For some reason
+	# only for the C++ compiler those are set (not for the C compiler). In
+	# openSuse libtool doesn't have those variables set either, but building
+	# according to their libroot.spec produces a libtool that has them set as
+	# well. My guess is that one has to build libtool without a C++ compiler
+	# installed to get that result.
+	sed -i -e 's@^predep_objects=".*"$@predep_objects=""'@ \
+		-e 's@^postdep_objects=".*"$@postdep_objects=""'@ \
+		-e 's@^postdeps=".*"$@postdeps=""'@ \
+		-e 's@^compiler_lib_search_path=".*"$@compiler_lib_search_path=""'@ \
+		-e 's@^compiler_lib_search_dirs=".*"$@compiler_lib_search_dirs=""'@ \
+		libtool
+}
+
+INSTALL()
+{
+	make install
+
+	# remove libtool file
+	rm -f $libDir/libltdl.la
+
+	prepareInstalledDevelLib libltdl
+
+	# libltdl package
+	packageEntries libltdl \
+		$libDir
+}
+
+TEST()
+{
+	make check
+}
+
+# Added by haikuporter:
+SOURCE_URI='pkg:/boot/home/haikuports/input-source-packages/libtool_source_rigged-2.5.4-1-arm64.hpkg'
+for i in {2..1000}; do
+	eval currentSrcUri=\$SOURCE_URI_$i
+	if [ -z "$currentSrcUri" ]; then
+		break
+	fi
+	eval SOURCE_URI_$i="$SOURCE_URI"
+done
+for i in {001..999}; do
+	eval currentSrcUri=\$SOURCE_URI_$i
+	if [ -z "$currentSrcUri" ]; then
+		break
+	fi
+	eval SOURCE_URI_$i="$SOURCE_URI"
+done

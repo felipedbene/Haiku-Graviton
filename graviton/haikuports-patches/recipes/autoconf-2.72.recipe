@@ -1,0 +1,134 @@
+# NOTE FOR EDITORS OF THIS FILE (haiku-graviton stage-1 builder):
+# haikuporter re-extracts this recipe from
+# input-source-packages/autoconf_source_rigged-2.72-1-arm64.hpkg whenever the
+# recipe's mtime is <= the source package's mtime -- see
+# Repository.py:_partiallyExtractSourcePackageIfNeeded. This builder guest's
+# clock runs ~3h behind the file timestamps in the image, so an edit saved here
+# is born "older" than the hpkg and is silently reverted on the next run. After
+# editing, pin the mtime forward past the hpkg, e.g.
+#     touch -r <the hpkg> -d "+1 day" this-file
+# Three earlier attempts at the cut below were lost exactly this way.
+
+SUMMARY="A tool to automatically configure source code"
+DESCRIPTION="GNU Autoconf is a tool for configuring source code and \
+makefiles. Using autoconf, programmers can create portable and configurable \
+packages, because the person building the package is allowed to specify \
+various configuration options."
+HOMEPAGE="http://www.gnu.org/software/autoconf/"
+COPYRIGHT="1996, 2000-2001, 2005, 2007-2017, 2020-2023 Free Software"
+LICENSE="GNU GPL v2
+	GNU GPL v3"
+REVISION="1"
+SOURCE_URI="http://ftp.gnu.org/gnu/autoconf/autoconf-$portVersion.tar.gz"
+CHECKSUM_SHA256="afb181a76e1ee72832f6581c0eddf8df032b83e2e0239ef79ebedc4467d92d6e"
+BUILD_PACKAGE_ACTIVATION_PHASE="INSTALL"
+
+ARCHITECTURES="all"
+
+PROVIDES="
+	autoconf = $portVersion compat >= 2.60
+	cmd:autoconf = $portVersion compat >= 2.60
+	cmd:autoheader = $portVersion compat >= 2.60
+	cmd:autom4te = $portVersion compat >= 2.60
+	cmd:autoreconf = $portVersion compat >= 2.60
+	cmd:autoscan = $portVersion compat >= 2.60
+	cmd:autoupdate = $portVersion compat >= 2.60
+	cmd:ifnames = $portVersion compat >= 2.60
+	"
+REQUIRES="
+	haiku
+	cmd:awk
+	cmd:cmp
+	cmd:expr
+	cmd:grep
+	cmd:m4 >= 1.4
+	cmd:mkdir
+	cmd:perl >= 5.8
+	cmd:sh
+	"
+
+BUILD_REQUIRES="
+	haiku_devel
+	"
+BUILD_PREREQUIRES="
+	cmd:awk
+	cmd:m4
+	cmd:make
+	cmd:makeinfo
+	cmd:perl >= 5
+	cmd:sed
+	cmd:cmp
+	"
+
+TEST_REQUIRES="
+	cmd:find
+	"
+
+BUILD()
+{
+	# make sure that the build system doesn't try to update the manpages,
+	# as that requires help2man, which isn't available
+	touch man/*.1
+	# same for the configure, which needs autoconf
+	touch configure
+
+	PERL="/bin/env perl" M4="m4" SED="sed" \
+		runConfigure ./configure
+	make $jobArgs
+}
+
+INSTALL()
+{
+	make install
+
+	# STAGE-1 EXPEDIENT -- THIS PACKAGE MUST BE REBUILT LATER.
+	#
+	# HTMLS= cuts the html documentation out of install-html. The generated
+	# Makefile builds doc/*.html with $(MAKEINFOHTML) (defined at Makefile line
+	# 323 as "$(MAKEINFO) --html" and expanded by the doc/autoconf.html rule at
+	# line 1055), and makeinfo cannot work in this image at all: the
+	# texinfo_bootstrap package ships the Texinfo/ directory but zero .pm files,
+	# so texi2any dies with "Can't locate Texinfo/ModulePath.pm in @INC" under
+	# any perl. Building a real texinfo first is not an option yet -- its
+	# dependencies form a 10-deep cycle (texinfo -> libintl -> groff ->
+	# pnmcrop/netpbm -> libjasper -> cmake -> libcurl -> libpsl -> libidn2 ->
+	# gtkdocize).
+	#
+	# Emptying HTMLS is preferred over stubbing makeinfo out: install-html-am
+	# then has no prerequisites, so the doc/*.html rules never run and no bogus
+	# placeholder files get installed. Note that MAKEINFO=true would not work --
+	# the rule is followed by "mv doc/autoconf.htp doc/autoconf.html", so the
+	# command must actually create its -o file -- and the touch idiom used in
+	# BUILD() above does not work here either, because of the clock skew
+	# described at the top of this file.
+	#
+	# CONSEQUENCE, ON THE RECORD: the resulting package ships NO html
+	# documentation. (The prebuilt .info files shipped in the tarball are still
+	# installed by "make install" above, so info docs are not lost.) This is a
+	# stage-1 artifact: it belongs in hpkg-out/arm64/stage1/, it must never be
+	# published to a shipping repo, and it must be rebuilt with this line
+	# restored to a plain "make install-html" once a real texinfo exists.
+	make install-html HTMLS=
+}
+
+TEST()
+{
+	make check
+}
+
+# Added by haikuporter:
+SOURCE_URI='pkg:/boot/home/haikuports/input-source-packages/autoconf_source_rigged-2.72-1-arm64.hpkg'
+for i in {2..1000}; do
+	eval currentSrcUri=\$SOURCE_URI_$i
+	if [ -z "$currentSrcUri" ]; then
+		break
+	fi
+	eval SOURCE_URI_$i="$SOURCE_URI"
+done
+for i in {001..999}; do
+	eval currentSrcUri=\$SOURCE_URI_$i
+	if [ -z "$currentSrcUri" ]; then
+		break
+	fi
+	eval SOURCE_URI_$i="$SOURCE_URI"
+done

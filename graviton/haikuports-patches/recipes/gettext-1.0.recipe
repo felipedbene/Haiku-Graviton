@@ -1,0 +1,229 @@
+SUMMARY="GNU locale utilities"
+DESCRIPTION="GNU 'gettext' is an important step for the GNU Translation \
+Project, as it is an asset on which we may build many other steps. This \
+package offers to programmers, translators, and even users, a well integrated \
+set of tools and documentation. Specifically, the GNU 'gettext' utilities are \
+a set of tools that provides a framework to help other GNU packages produce \
+multi-lingual messages. These tools include a set of conventions about how \
+programs should be written to support message catalogs, a directory and file \
+naming organization for the message catalogs themselves, a runtime library \
+supporting the retrieval of translated messages, and a few stand-alone \
+programs to massage in various ways the sets of translatable strings, or \
+already translated strings. A special GNU Emacs mode also helps interested \
+parties in preparing these sets, or bringing them up to date."
+HOMEPAGE="https://www.gnu.org/software/gettext/"
+COPYRIGHT="1998-2020 Free Software Foundation, Inc."
+LICENSE="GNU GPL v3"
+REVISION="1"
+SOURCE_URI="https://ftpmirror.gnu.org/gettext/gettext-$portVersion.tar.gz"
+CHECKSUM_SHA256="85d99b79c981a404874c02e0342176cf75c7698e2b51fe41031cf6526d974f1a"
+
+ARCHITECTURES="ALL !x86_gcc2"
+SECONDARY_ARCHITECTURES="x86"
+
+libasprintfVersion="0.0.0"
+libasprintfVersionCompat="$libasprintfVersion compat >= ${libasprintfVersion%%.*}"
+libgettextpoVersion="0.6.0"
+libgettextpoVersionCompat="$libgettextpoVersion compat >= ${libgettextpoVersion%%.*}"
+libtextstyleVersion="0.2.7"
+libtextstyleVersionCompat="$libtextstyleVersion compat >= ${libtextstyleVersion%%.*}"
+libintlVersion="8.4.6"
+libintlVersionCompat="$libintlVersion compat >= ${libintlVersion%%.*}"
+
+PROVIDES="
+	gettext$secondaryArchSuffix = $portVersion compat >= 0.22
+	cmd:autopoint$secondaryArchSuffix = $portVersion compat >= 0
+	cmd:envsubst$secondaryArchSuffix = $portVersion compat >= 0
+	cmd:gettext$secondaryArchSuffix = $portVersion compat >= 0
+	cmd:gettext.sh$secondaryArchSuffix = $portVersion compat >= 0
+	cmd:gettextize$secondaryArchSuffix = $portVersion compat >= 0
+	cmd:msgattrib$secondaryArchSuffix = $portVersion compat >= 0
+	cmd:msgcat$secondaryArchSuffix = $portVersion compat >= 0
+	cmd:msgcmp$secondaryArchSuffix = $portVersion compat >= 0
+	cmd:msgcomm$secondaryArchSuffix = $portVersion compat >= 0
+	cmd:msgconv$secondaryArchSuffix = $portVersion compat >= 0
+	cmd:msgen$secondaryArchSuffix = $portVersion compat >= 0
+	cmd:msgexec$secondaryArchSuffix = $portVersion compat >= 0
+	cmd:msgfilter$secondaryArchSuffix = $portVersion compat >= 0
+	cmd:msgfmt$secondaryArchSuffix = $portVersion compat >= 0
+	cmd:msggrep$secondaryArchSuffix = $portVersion compat >= 0
+	cmd:msginit$secondaryArchSuffix = $portVersion compat >= 0
+	cmd:msgmerge$secondaryArchSuffix = $portVersion compat >= 0
+	cmd:msgpre$secondaryArchSuffix = $portVersion compat >= 0
+	cmd:po_fetch$secondaryArchSuffix = $portVersion compat >= 0
+	cmd:printf_gettext$secondaryArchSuffix = $portVersion compat >= 0
+	cmd:printf_ngettext$secondaryArchSuffix = $portVersion compat >= 0
+	cmd:msgunfmt$secondaryArchSuffix = $portVersion compat >= 0
+	cmd:msguniq$secondaryArchSuffix = $portVersion compat >= 0
+	cmd:ngettext$secondaryArchSuffix = $portVersion compat >= 0
+	cmd:recode_sr_latin$secondaryArchSuffix = $portVersion compat >= 0
+	cmd:spit$secondaryArchSuffix = $portVersion compat >= 0
+	cmd:xgettext$secondaryArchSuffix = $portVersion compat >= 0
+	lib:libasprintf$secondaryArchSuffix = $libasprintfVersionCompat
+	lib:libgettextlib_$portVersion$secondaryArchSuffix
+	lib:libgettextpo$secondaryArchSuffix = $libgettextpoVersionCompat
+	lib:libgettextsrc_$portVersion$secondaryArchSuffix
+	lib:libtextstyle$secondaryArchSuffix = $libtextstyleVersionCompat
+	"
+REQUIRES="
+	haiku$secondaryArchSuffix
+	lib:libiconv$secondaryArchSuffix
+	lib:libintl$secondaryArchSuffix == $libintlVersion
+	lib:libncurses$secondaryArchSuffix
+	cmd:gzip
+	cmd:tar
+	"
+if [ "$effectiveTargetArchitecture" != x86_gcc2 ]; then
+	REQUIRES="$REQUIRES
+		lib:libgomp$secondaryArchSuffix
+		"
+fi
+
+SUMMARY_libintl="The gettext internationalization library"
+PROVIDES_libintl="
+	gettext${secondaryArchSuffix}_libintl = $portVersion compat >= 0.22
+	lib:libintl$secondaryArchSuffix = $libintlVersionCompat
+	"
+REQUIRES_libintl="
+	haiku$secondaryArchSuffix
+	lib:libiconv$secondaryArchSuffix
+	"
+SUMMARY_libintl_devel="The gettext internationalization library (development files)"
+PROVIDES_libintl_devel="
+	gettext${secondaryArchSuffix}_libintl_devel = $portVersion compat >= 0.22
+	devel:libintl$secondaryArchSuffix = $libintlVersionCompat
+	"
+REQUIRES_libintl_devel="
+	gettext${secondaryArchSuffix}_libintl == $portVersion
+	"
+
+PROVIDES_devel="
+	gettext${secondaryArchSuffix}_devel = $portVersion compat >= 0.22
+	devel:libasprintf$secondaryArchSuffix = $libasprintfVersionCompat
+	devel:libgettextlib$secondaryArchSuffix = $portVersion
+	devel:libgettextlib_$portVersion$secondaryArchSuffix
+	devel:libgettextpo$secondaryArchSuffix = $libgettextpoVersionCompat
+	devel:libgettextsrc$secondaryArchSuffix = $portVersion
+	devel:libgettextsrc_$portVersion$secondaryArchSuffix
+	devel:libtextstyle$secondaryArchSuffix = $libtextstyleVersionCompat
+	"
+REQUIRES_devel="
+	gettext$secondaryArchSuffix == $portVersion base
+	"
+
+ARCHITECTURES_doc="any"
+PROVIDES_doc="
+	gettext_doc
+	"
+
+BUILD_REQUIRES="
+	haiku${secondaryArchSuffix}_devel
+	devel:libiconv$secondaryArchSuffix
+	devel:libncurses$secondaryArchSuffix
+	"
+# STAGE-1 NOTE (graviton): cmd:groff removed from BUILD_PREREQUIRES.
+# groff appears in this tarball only as MAN2HTML in gettext-{runtime,tools}/man/
+# Makefile.in (:2299 / :3957). "all-am: Makefile $(MANS) all-local" depends on the
+# .1 pages, never on $(man_HTML); the html files are built solely by "html-local:
+# $(man_HTML)" (:4285) and installed solely by install-html-local (:4316), which
+# falls back to the prebuilt $(srcdir) copies shipped in the tarball. INSTALL()
+# runs plain "make install", so groff is never executed. Restore the line once a
+# real groff exists (it is behind the netpbm/cmake cycle).
+BUILD_PREREQUIRES="
+	cmd:aclocal
+	cmd:autoconf
+	cmd:automake
+	cmd:autoheader
+	cmd:gcc$secondaryArchSuffix
+	cmd:gzip
+	cmd:ld$secondaryArchSuffix
+	cmd:libtoolize$secondaryArchSuffix
+	cmd:make
+	cmd:makeinfo
+	"
+
+BUILD()
+{
+	runConfigure --omit-dirs docDir ./configure \
+		--docdir=$documentationDir/packages/gettext \
+		--disable-java \
+		--without-git \
+		--disable-rpath \
+		--disable-static \
+		--disable-maintainer-mode
+	make $jobArgs AUTOCONF=: AUTOMAKE=: AUTOHEADER=: ACLOCAL=:
+}
+
+INSTALL()
+{
+	make install AUTOCONF=: AUTOMAKE=: AUTOHEADER=: ACLOCAL=:
+
+	# remove libtool files & static libraries
+	rm -f $libDir/lib*.la $libDir/lib*.a
+
+	prepareInstalledDevelLibs \
+		libasprintf \
+		libgettextpo \
+		libintl \
+		libtextstyle
+
+	# These two need to be handled separately from the above, due to their
+	# naming pattern: "lib<name>-<version>.so", otherwise it results on
+	# broken links in the final package.
+	prepareInstalledDevelLib libgettextlib '*.so' '*'
+	prepareInstalledDevelLib libgettextsrc '*.so' '*'
+
+	# libintl package
+	packageEntries libintl \
+		$libDir/libintl*
+
+	# libintl_devel package
+	packageEntries libintl_devel \
+		$developLibDir/*libintl* \
+		$includeDir/libintl.h
+
+	# devel package
+	packageEntries devel \
+		$developDir \
+		$manDir/man3
+
+	# documentation package
+	packageEntries doc \
+		$documentationDir/packages
+
+	# cleanup
+#	rmdir $documentationDir/packages
+}
+
+TEST()
+{
+#============================================================================
+#Testsuite summary for gettext-tools 0.22.5
+#============================================================================
+# TOTAL: 395
+# PASS:  311
+# SKIP:  74
+# XFAIL: 0
+# FAIL:  10
+# XPASS: 0
+# ERROR: 0
+
+	make check
+}
+
+# Added by haikuporter:
+SOURCE_URI='pkg:/boot/home/haikuports/input-source-packages/gettext_source_rigged-1.0-1-arm64.hpkg'
+for i in {2..1000}; do
+	eval currentSrcUri=\$SOURCE_URI_$i
+	if [ -z "$currentSrcUri" ]; then
+		break
+	fi
+	eval SOURCE_URI_$i="$SOURCE_URI"
+done
+for i in {001..999}; do
+	eval currentSrcUri=\$SOURCE_URI_$i
+	if [ -z "$currentSrcUri" ]; then
+		break
+	fi
+	eval SOURCE_URI_$i="$SOURCE_URI"
+done
