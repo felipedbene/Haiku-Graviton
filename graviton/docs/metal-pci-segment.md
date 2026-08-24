@@ -319,40 +319,60 @@ reproduce **at the clean base**, so neither is caused by this work:
   builds it. Worth a separate fix; adding `using` declarations or overriding both
   overloads would do it.
 
-### Pass condition for the next boot, written before it
+### Result: row 4 — done (CONFIRMED)
 
-Pre-registered so the result cannot be rationalised after the fact. Expected on
-`c8g.24xlarge`, one block per root bridge:
+`ami-0f8d04437d5bdf50d`, built from the merge candidate. Every pre-registered
+condition met, and the geometry matched the prediction line for line:
 
 ```
-PCI: ECAM at 20000000 (bus 0  base 20000000), segment 0, buses 0-0,   1 decoded,  1 MiB
 PCI: ECAM buses 1-43  at 20000000 belong to another bridge; not mapped here
 PCI: ECAM buses 44-56 at 20000000 belong to another bridge; not mapped here
+PCI: ECAM at 20000000 (bus 0  base 20000000), segment 0, buses 0-0,   1 decoded,  1 MiB
 PCI: of 3 ECAM region(s): 1 mapped here, 2 other bridges' buses, 0 separate windows
-   ... and correspondingly for buses 1-43 (base 20100000, 67 MiB)
-   ... and for buses 44-56 (base 24400000, 19 MiB)
+PCI: ECAM at 20000000 (bus 1  base 20100000), segment 0, buses 1-43, 67 decoded, 67 MiB
+PCI: ECAM at 20000000 (bus 44 base 24400000), segment 0, buses 44-56,19 decoded, 19 MiB
 ```
 
-and device lines carrying the **absolute** bus per domain, `0:00:…`, `1:01:…`,
-`2:44:…` rather than three domains all reporting `00`.
+**The ENA is at `2:47:00.0`** — domain 2, bus `0x47`, inside bridge 3's window.
+It was never a missing device; it was a device nobody looked for, because bridge 3
+had mapped bus 0 only.
 
-Pass requires all of: **disjoint** device sets across the three domains; exactly
-**one** `disk/nvme/*/raw`; an ENA (`device ec20`) present; the sibling-bus lines
-naming the right buses; and no abort.
+```
+PCI: 2:47:00.0 vendor 1d0f device ec20 class 02.00.00 rev 00
+ena: found an ENA device   ->   ena: link is up   ->   ena: attached
+```
 
-The three failure modes are distinguishable in advance, which is the point of
-writing them down:
+Device sets are disjoint and each domain enumerates its own buses, recursing
+through the bridges it finds:
 
-| observation | conclusion |
-|---|---|
-| domains 1 and 2 enumerate **nothing** (no `1:` or `2:` device lines) | the root-bus fix did not take effect — look at `get_bus_range()` being NULL or `AddController()` |
-| domains 1 and 2 enumerate the **same** devices as domain 0 | the base reading is wrong: `0x20100000` aliases bus 0, so the base is per-allocation after all and the mapping must go back to `chosen->address` with `fBusOffset = startBus` |
-| domains 1 and 2 enumerate **different** devices, no ENA among them | base reading correct; buses `1-0x56` simply hold no Ethernet controller, and the missing NIC on this class is a separate question |
-| disjoint sets **with** an ENA | done — 96-vCPU Graviton4 has networking |
+| domain | buses | devices |
+|---|---|---|
+| 0 | `00` | 3 — host bridge, 16550, NVMe |
+| 1 | `01`, `02`, `03` | 66 — bridges |
+| 2 | `44`, `45`, `46`, `47` | 19 — bridges plus **the ENA** |
 
-Metal is deliberately **not** in this matrix: it has a single region, is already
-verified across three redistributor layouts, and re-confirming it would spend
-bare-metal time to learn nothing.
+88 in total, counted `3 -> 69 -> 88` as each domain was added. Exactly one
+`disk/nvme/0/raw`. No abort. 64 CPUs, ITS up with 32 redistributors skipped as
+cpu-less, root mounted, first-boot processing running.
+
+**Row 2 is ruled out by measurement, which settles the base reading.** Domains 1
+and 2 enumerated *different* devices from domain 0, not the same ones, so
+`0x20100000` does not alias bus 0 and the flat-aperture-based-at-bus-0 reading is
+correct — the interpretation that had flipped twice on this branch and had until
+now only an argument behind it. Pre-committing to what a duplicate set would have
+meant is what makes this a measurement rather than a rationalisation.
+
+### Guests unchanged
+
+`c7g.large` and `c7g.4xlarge`, byte-identical geometry:
+
+```
+PCI: ECAM at 20000000 (bus 0 base 20000000), segment 0, buses 0-ff, 256 decoded, 256 MiB
+PCI: 4 device(s)      one disk/nvme/0/raw      ena: attached
+```
+
+Single domain at bus `00`, no sibling-bus lines (there is only one region), and no
+bare `0 device(s)`. The GIC lines are unchanged too.
 
 ## Open
 
