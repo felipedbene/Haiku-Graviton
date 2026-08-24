@@ -1,0 +1,176 @@
+#!/usr/bin/env bash
+#
+# haiku-mimeset-verify -- assert that a build guest will actually write MIME types.
+#
+# Runs ON the metal builder, which is the only host that can reach the QEMU build
+# guests (they are ssh-to-localhost port forwards).
+#
+# What it guards. `mimeset` was a complete silent no-op on every headless Haiku:
+# it constructs a BApplication before its file loop, and BApplication::_InitData()
+# calls exit(0) -- a *success* status -- when app_server is absent, so it
+# terminated in the constructor reporting success. haikuporter's packaging step
+# checks only the exit status, saw rc 0, and moved on. 145 of 262 packages in the
+# pool came out with no MIME types and no resource-to-attribute icon copy.
+#
+# Why a separate check from the perf gate. The perf gate covers the *image*: it
+# boots a candidate AMI and asserts mimeset works there. That is a different
+# artifact from the one that matters for packaging. haikuporter packages inside a
+# chroot -- Port.py does os.chroot(self.workDir) -- where /boot/system is packagefs
+# over the *dependency packages*, so the binary that runs is the one inside
+# haikuports/packages/haiku.hpkg, not the guest's installed /boot/system/bin/mimeset
+# and not anything on the guest's PATH. That distinction cost a full wrong fix
+# once: dropping the fixed binary where `which mimeset` found it changed nothing,
+# and a real build still produced a package with 0 of 68 files typed.
+#
+# So this checks BOTH binaries a guest can end up using, because they regress
+# independently:
+#
+#   PATH      -- what a hand-run `mimeset` on the guest resolves to
+#   haiku.hpkg -- what the chroot uses, and therefore what every built package gets
+#
+# Both are checked BEHAVIOURALLY, by typing a scratch file and reading the
+# attribute back, never by hash or version. A hash says a file is the one you
+# expect; it does not say the binary runs, links, or is the copy that gets used --
+# and this project has a documented case of a hash-verified replacement that the
+# kernel never loaded.
+#
+# The exit status of mimeset is deliberately ignored as evidence. It is 0 in the
+# broken case; that is the whole defect.
+#
+# Usage:
+#   haiku-mimeset-verify                 # every guest with a forwarded ssh port
+#   haiku-mimeset-verify 2235 2231       # only these guest ports
+#
+# Exit 0 iff every guest checked passes both halves. Exit 1 on any failure, so it
+# can gate a build batch.
+
+set -uo pipefail
+
+KEY="${HG_GUEST_KEY:-/home/ubuntu/.ssh/haiku-ed25519}"
+USER_AT="${HG_GUEST_USER:-baron}@127.0.0.1"
+CHROOT_PKG="${HG_CHROOT_PKG:-/boot/home/haikuports/packages/haiku.hpkg}"
+
+say()  { printf 'mimeset-verify: %s\n' "$*"; }
+warn() { printf 'mimeset-verify: %s\n' "$*" >&2; }
+
+# Discover guests from the running QEMU processes rather than a hardcoded list, so
+# this does not quietly skip a guest that was added after it was written.
+# Capture only the HOST port. Matching every number in `hostfwd=tcp::2222-:22`
+# also yields the guest-side 22, which then shows up as an unreachable phantom
+# guest and fails the whole run -- it did exactly that on the first attempt.
+discover_ports() {
+	pgrep -af qemu-system-aarch64 2>/dev/null \
+		| sed -n 's/.*hostfwd=tcp::\([0-9]\{1,\}\)-:22.*/\1/p' \
+		| sort -u
+}
+
+guest() {  # guest <port> <command...>
+	local port="$1"; shift
+	sudo -u ubuntu ssh -n -p "$port" \
+		-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
+		-o ConnectTimeout=10 -o BatchMode=yes -o LogLevel=ERROR \
+		-i "$KEY" "$USER_AT" "$@" 2>/dev/null
+}
+
+# Type a scratch file with $2 and report what came back. The before-state is part
+# of the evidence: a fresh file on BFS has no attributes, so "present afterwards"
+# means this binary wrote it rather than it having been inherited from a copy --
+# Haiku's cp preserves attributes, which has already confounded one measurement
+# here.
+probe() {  # probe <port> <binary> ; echoes "<baseline> <type>"
+	guest "$1" "
+		set -u
+		d=\$(mktemp -d /boot/home/.msverify.XXXXXX) || exit 1
+		cd \$d
+		printf '<html><body>x</body></html>\n' > probe.html
+		if catattr BEOS:TYPE probe.html >/dev/null 2>&1; then base=DIRTY; else base=CLEAN; fi
+		$2 --all . >/dev/null 2>&1
+		printf '%s %s\n' \"\$base\" \"\$(catattr -d BEOS:TYPE probe.html 2>/dev/null)\"
+		cd /; rm -rf \$d
+	"
+}
+
+check_guest() {  # 0 = pass
+	local port="$1" rc=0 out base type
+
+	if ! guest "$port" true; then
+		warn "guest $port: UNREACHABLE"
+		return 1
+	fi
+
+	# --- half 1: whatever the guest's PATH resolves to -------------------
+	out=$(probe "$port" mimeset)
+	base=${out%% *}; type=${out#* }
+	if [ "$base" != CLEAN ]; then
+		warn "guest $port: PATH check invalid -- scratch file already carried a BEOS:TYPE"
+		rc=1
+	elif [ -z "$type" ]; then
+		warn "guest $port: FAIL (PATH) -- mimeset wrote no BEOS:TYPE; this is the headless exit(0) defect"
+		rc=1
+	elif [ "$type" != text/html ]; then
+		warn "guest $port: FAIL (PATH) -- typed as '$type', expected text/html; suspect data/mime_db, not the tool"
+		rc=1
+	else
+		say "guest $port: PATH ok ($type)"
+	fi
+
+	# --- half 2: the binary the CHROOT will use --------------------------
+	# Extract it from the package and run that exact copy. Nothing here trusts
+	# the extraction: if it produced no runnable binary, the probe below writes
+	# no attribute and the check fails, which is the correct outcome.
+	if ! guest "$port" "test -f $CHROOT_PKG"; then
+		warn "guest $port: no $CHROOT_PKG -- cannot check the chroot's mimeset"
+		return 1
+	fi
+	if ! guest "$port" "
+		set -u
+		rm -rf /boot/home/.msverify-pkg
+		mkdir -p /boot/home/.msverify-pkg && cd /boot/home/.msverify-pkg
+		package extract $CHROOT_PKG bin/mimeset >/dev/null 2>&1 && test -f bin/mimeset
+	"; then
+		warn "guest $port: FAIL (chroot) -- could not extract bin/mimeset from $CHROOT_PKG"
+		guest "$port" 'rm -rf /boot/home/.msverify-pkg'
+		return 1
+	fi
+
+	out=$(probe "$port" /boot/home/.msverify-pkg/bin/mimeset)
+	base=${out%% *}; type=${out#* }
+	guest "$port" 'rm -rf /boot/home/.msverify-pkg'
+
+	if [ "$base" != CLEAN ]; then
+		warn "guest $port: chroot check invalid -- scratch file already carried a BEOS:TYPE"
+		rc=1
+	elif [ -z "$type" ]; then
+		warn "guest $port: FAIL (chroot) -- the mimeset inside haiku.hpkg writes no BEOS:TYPE."
+		warn "guest $port:   EVERY package this guest builds will be silently untyped, with rc 0."
+		warn "guest $port:   Fix: package add -f $CHROOT_PKG bin/mimeset  (with a fixed binary)"
+		rc=1
+	elif [ "$type" != text/html ]; then
+		warn "guest $port: FAIL (chroot) -- typed as '$type', expected text/html"
+		rc=1
+	else
+		say "guest $port: chroot ok ($type)"
+	fi
+
+	return $rc
+}
+
+ports=("$@")
+if [ "${#ports[@]}" -eq 0 ]; then
+	mapfile -t ports < <(discover_ports)
+	[ "${#ports[@]}" -gt 0 ] || { warn "found no running QEMU guests to check"; exit 1; }
+	say "discovered guests: ${ports[*]}"
+fi
+
+failed=0 passed=0
+for p in "${ports[@]}"; do
+	if check_guest "$p"; then passed=$((passed + 1)); else failed=$((failed + 1)); fi
+done
+
+say "----------------------------------------"
+if [ "$failed" -gt 0 ]; then
+	warn "FAIL: $failed of $((passed + failed)) guests would build untyped packages"
+	exit 1
+fi
+say "PASS: all $passed guests write MIME types, on both the PATH and the chroot binary"
+exit 0
