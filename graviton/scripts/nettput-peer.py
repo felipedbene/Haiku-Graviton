@@ -22,10 +22,22 @@ gap is the story. A large disagreement on a transmit run means bytes were
 buffered and not yet delivered, which is exactly the error the acknowledgement
 exists to prevent.
 
-    nettput-peer.py [-p port] [-b bufsize] [--once]
+--concurrent forks a child per connection instead, so N simultaneous streams can
+share one port. That matters for two unrelated reasons. The measurement reason:
+aggregate multi-stream throughput is the only way to see whether the receive path
+is limited by one thread rather than by the machine, and serving the streams one
+after another measures nothing of the sort. The practical reason: one port needs
+one firewall rule, and a port *range* opened between two security groups is a
+change to shared infrastructure that every later experiment then has to trust.
+A forked child also puts each stream's Python interpreter on its own core, so the
+peer cannot quietly become the bottleneck the test is trying to find.
+
+    nettput-peer.py [-p port] [-b bufsize] [--once] [--concurrent]
 """
 
 import argparse
+import os
+import signal
 import socket
 import struct
 import sys
@@ -107,8 +119,7 @@ def serve_receive(sock, length, buffer_size):
           % (sent, elapsed, human_rate(sent, elapsed)))
 
 
-def serve_one(listener, buffer_size):
-    sock, address = listener.accept()
+def serve_connection(sock, address, buffer_size):
     print("connection from %s:%d" % address, flush=True)
     try:
         header = read_exactly(sock, HEADER_SIZE)
@@ -131,25 +142,69 @@ def serve_one(listener, buffer_size):
         sys.stdout.flush()
 
 
+def serve_one(listener, buffer_size):
+    sock, address = listener.accept()
+    serve_connection(sock, address, buffer_size)
+
+
+def serve_forking(listener, buffer_size):
+    """Accept forever, handing each connection to a child of its own.
+
+    Children are reaped by SIGCHLD/SIG_IGN rather than by waitpid, so the parent
+    never blocks in wait() while another stream is trying to connect -- with N
+    clients starting at once, a parent stuck reaping one of them staggers the
+    others and the aggregate rate then measures the stagger.
+    """
+    signal.signal(signal.SIGCHLD, signal.SIG_IGN)
+
+    while True:
+        try:
+            sock, address = listener.accept()
+        except InterruptedError:
+            continue
+
+        pid = os.fork()
+        if pid == 0:
+            # The child must not run the parent's finally: clause or its
+            # KeyboardInterrupt handler, and must not leave the listener open --
+            # otherwise the port stays bound after the parent is killed.
+            listener.close()
+            try:
+                serve_connection(sock, address, buffer_size)
+            finally:
+                os._exit(0)
+
+        sock.close()
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("-p", "--port", type=int, default=DEFAULT_PORT)
     parser.add_argument("-b", "--bufsize", type=int, default=DEFAULT_BUFFER)
     parser.add_argument("--once", action="store_true",
                         help="serve a single connection and exit")
+    parser.add_argument("--concurrent", action="store_true",
+                        help="fork a child per connection, so N simultaneous "
+                             "streams can share one port")
     args = parser.parse_args()
 
     listener = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     listener.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
     listener.bind(("0.0.0.0", args.port))
-    listener.listen(4)
-    print("nettput-peer listening on 0.0.0.0:%d" % args.port, flush=True)
+    # Deep enough that N clients connecting simultaneously all land in the
+    # backlog rather than being refused, which would look like a network fault.
+    listener.listen(64)
+    print("nettput-peer listening on 0.0.0.0:%d%s"
+          % (args.port, " (concurrent)" if args.concurrent else ""), flush=True)
 
     try:
-        while True:
-            serve_one(listener, args.bufsize)
-            if args.once:
-                break
+        if args.concurrent:
+            serve_forking(listener, args.bufsize)
+        else:
+            while True:
+                serve_one(listener, args.bufsize)
+                if args.once:
+                    break
     except KeyboardInterrupt:
         print("\nnettput-peer stopping")
     finally:
