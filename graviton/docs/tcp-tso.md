@@ -27,9 +27,11 @@ which is the cheapest possible place for it to arrive.
 3. **The premise that TSO attacks both cost terms was wrong**, independently of
    whether the device supports it. TCP's segmentation is already zero-copy
    (`BufferQueue::Get()` uses `append_cloned`, not a copy), so a super-buffer
-   saves no per-byte work. TSO attacks the per-frame term only — 12% of cost at
-   MTU 9001. Even a perfect implementation on a device that supported it would
-   have been a single-digit win at jumbo MTU. §4.
+   saves no per-byte work. TSO attacks the per-frame term only. Even a perfect
+   implementation on a device that supported it would have been a single-digit win
+   at jumbo MTU. §4. Note also that the per-frame/per-byte split this project has
+   been quoting is a *receive* measurement — transmit has never been decomposed,
+   and an earlier draft of this document wrongly applied one to the other. §4.4.
 4. **What ENA *does* offer on transmit is partial (pseudo-header) checksum
    offload, on both IPv4 and IPv6.** That is bits 1 and 3 of the offload
    descriptor, not the "full checksum" bits 2 and 4 — a distinction that changes
@@ -138,10 +140,16 @@ it was exercised.
   options (134) and IPv6 without extension headers (114); 96 would not have.
   This is worth knowing regardless of TSO — the number in the boot log is
   discarded, and reading it as a live constraint is a mistake.
-- **A 64 KiB super-buffer would not have fitted the current driver.** ENA reports
-  `max_per_packet_tx_descs = 17` including the metadata descriptor. The Haiku
-  driver clamps to `ENA_MAX_PACKET_DESCRIPTORS = 8` with 1920-byte bounce slots
-  (`ena.h:112,131`), i.e. 15360 bytes maximum per frame. 64 KiB needs 35 slots.
+- **A 64 KiB super-buffer would not have fitted the current driver.** The
+  effective transmit descriptor cap is **8**, not the 17 the boot log reports.
+  The chain is: the device reports `max_packet_tx_descs = 17`
+  (`ena.cpp:706`); the driver reserves one for the meta descriptor
+  `ena_com_prepare_tx()` may emit, giving 16 (`ena.cpp:721-722`); then
+  `min_c(ENA_MAX_PACKET_DESCRIPTORS, 16)` clamps it to 8 (`ena.cpp:726`,
+  `ena.h:131`). At `ENA_PACKET_BUFFER_SIZE = 1920` bytes per bounce slot
+  (`ena.h:112`) that is **8 × 1920 = 15360 bytes maximum per frame**. A 64 KiB
+  super-buffer needs 35 slots. Even lifting `ENA_MAX_PACKET_DESCRIPTORS` to the
+  device's 16 only reaches 30720.
   Real scatter-gather is impossible today because `get_memory_map` is a `NULL`
   entry in `net_buffer_module_info` (`stack/net_buffer.cpp:2394`) — there is no
   interface that yields physical addresses for a `net_buffer`. Even with it, 16
@@ -238,19 +246,35 @@ allocations, header constructions, route traversals, ioctls and doorbells, and
 **zero bytes of copying**. TSO is a per-frame optimisation, full stop. The
 per-byte checksum walk and the driver's bounce copy both survive it untouched.
 
-Against the measured model (2.34 µs/frame + 1.85 ns/byte, `net-receive-profile.md`):
+**A caveat on the sizing that must be stated first, because it invalidates the
+usual shortcut.** The 2.34 µs/frame + 1.85 ns/byte model comes from
+`net-receive-profile.md`, which is a **receive** measurement. **There is no
+per-frame/per-byte decomposition of the transmit path anywhere in this tree.**
+Applying the receive split to transmit — which the brief for this project did, and
+which an earlier draft of this document repeated — is not justified: transmit pays
+a full checksum walk that receive skips when the device validates
+(`tcp.cpp:718-719`), and receive pays a `read()`-side copy that the profile
+measured at 46% of its cost. The two paths should not be assumed to share a shape.
 
-| MTU | frames/MiB | per-frame share | ceiling if *all* per-frame cost vanished |
+Used only as an order-of-magnitude sanity check, and flagged as such:
+
+| MTU | frames/MiB | per-frame share *if the receive split held* | ceiling if *all* per-frame cost vanished |
 |---|---|---|---|
 | 9001 | 117 | 12% | 2211 → 1938 µs/MiB, **−12%** |
 | 1500 | 724 | 46% | 3635 → 1941 µs/MiB, **−47%** |
 
-The model reproduces the measured 2182 µs/MiB at MTU 9001 to within 1.3%, so the
-arithmetic is trustworthy. **The predicted win, stated before measuring as the
-house standard requires, was 5–8% at MTU 9001** (TSO removes the stack's share of
-the per-frame cost, not the driver's or the interrupt's) **and 25–35% at MTU
-1500.** Jumbo frames are already working and hardware-verified here, so the
-project would have been optimising the configuration we do not run.
+The receive model does happen to reproduce the measured transmit 2182 µs/MiB at
+MTU 9001 to within 1.3% — which is interesting and is *not* evidence, since a
+two-parameter fit landing on one point is nearly free. **The predicted win, stated
+before measuring as the house standard requires, was 5–8% at MTU 9001** (TSO
+removes the stack's share of the per-frame cost, not the driver's or the
+interrupt's) **and 25–35% at MTU 1500.** Jumbo frames are already working and
+hardware-verified here, so the project would have been optimising the
+configuration we do not run.
+
+The structural argument in the paragraph above — that `append_cloned` means TSO
+removes zero bytes of copying, so it cannot touch the per-byte term at all — does
+not depend on the disputed split, and is what actually decides the question.
 
 ---
 
@@ -296,7 +320,9 @@ is active; not harmless once the device starts interpreting the descriptor.
 ## 6. What the remaining transmit levers actually are
 
 Since the assigned lever does not exist, here is the measured replacement ranking.
-All per-byte, because 88% of the cost is per-byte.
+All per-byte — not because the 88% figure applies to transmit (it does not; see
+§4.4) but because each of these removes or shrinks a whole pass over every byte,
+and because the only transmit cost actually measured here is per-byte.
 
 ### 6.1 Haiku's checksum loop is 2.4× slower than it needs to be — measured
 
@@ -342,7 +368,7 @@ The kernel number will be worse for both variants; the ratio should survive.
 
 | lever | term | status |
 |---|---|---|
-| **Zero-copy transmit** — implement `get_memory_map` in the buffer module, real scatter-gather in `ena_send()`, retire the 1920-byte bounce slots | per-byte, removes a whole copy | unclaimed; the largest single item |
+| **Zero-copy transmit** — implement `get_memory_map` in the buffer module, real scatter-gather in `ena_send()`, retire the 1920-byte bounce slots | per-byte, removes a whole copy | **held** — largest single item, but it touches `ena.cpp` and the transmit path where two branches are live; sequenced behind them. Design notes in §6.4 |
 | **TX checksum offload** — removes the 0.229 ns/B walk entirely for ENA | per-byte, ~12% | `feat/ena-tx-offload`, in progress |
 | **Optimise `compute_checksum()`** — 2.4× measured, ~7% | per-byte | unclaimed, cheap, and *not* redundant: it also serves loopback, other drivers, IPv6 on older kernels, and any path where offload is unavailable |
 | **TX doorbell coalescing / batched transmit entry point** | per-frame | `feat/ena-tx-offload`, in progress |
@@ -366,6 +392,68 @@ moot. They are not redundant in general.
   or a stalled connection — is the one this project has least ability to detect.
 - **Waiting for a newer Graviton: no evidence for it.** Graviton4 / Neoverse V2
   with ENA driver 2.17.2g answers exactly as Graviton3 does.
+
+### 6.4 Zero-copy transmit — design notes, held not started
+
+Held deliberately: it touches `ena.cpp` and the transmit path where
+`feat/ena-tx-offload` and `feat/ena-multiqueue` are both live, and it is not worth
+a three-way conflict. Recorded here so the survey is not lost.
+
+**The cost being removed.** Every transmitted byte is copied once, in
+`ena_send()`:
+
+```c
+	if (sBufferModule->read(buffer, copied, slot->data, chunk) != B_OK)
+```
+
+— `ena.cpp:2385-2400`, looping over `segments` bounce slots of
+`ENA_PACKET_BUFFER_SIZE = 1920` bytes each, then handing the device the *slots'*
+physical addresses. That is a full payload `memcpy` per frame, on the per-byte
+term, in addition to the checksum walk of §6.1 and the user→kernel copy in
+`SendData()`. The driver already documents why (`ena.cpp:2378-2382`):
+
+> …no way to get a physical address through any interface the buffer module offers
+> — `get_memory_map` is a `NULL` entry in `net_buffer_module_info` — so the frame
+> is copied.
+
+**The blocker is one unimplemented slot in the stack, not the driver.**
+`net_buffer_module_info::get_memory_map` is declared (`net_buffer.h`) and wired to
+`NULL` (`net_buffer.cpp:2394`). Nothing in the tree implements it. So the work is
+in two halves, and only the second half is contended:
+
+1. *Stack side (uncontended).* Implement `get_memory_map` over the `data_node`
+   chain: for each node, translate its virtual range to physical extents,
+   splitting at page boundaries. The awkward part is that `net_buffer` payloads
+   live in a slab-allocated data area, so a node's bytes are contiguous virtually
+   but need `get_memory_map()`-style physical translation per page, and cloned
+   nodes (`append_cloned`, which is how TCP's send path builds every buffer —
+   `BufferQueue.cpp:324`) alias another buffer's pages. Aliasing is fine for DMA
+   *reads*; it does mean the buffer must not be freed until the device is done,
+   which the existing `entry->buffer` retention in `ena_send()` already provides.
+2. *Driver side (contended).* Replace the bounce loop with the returned extent
+   list. Two hard constraints fall out of the descriptor arithmetic in §3:
+   - **The descriptor cap is 8**, so a zero-copy frame may use at most 8 physical
+     extents. A 9001-byte jumbo frame spanning arbitrary page boundaries can
+     easily need more than 8 extents once TCP has cloned it out of several queue
+     buffers — so a *hybrid* is required, not a straight replacement: use the
+     extent list when it fits in 8, fall back to bouncing when it does not.
+     Raising `ENA_MAX_PACKET_DESCRIPTORS` to the device's 16 (`ena.cpp:721-726`)
+     widens the fast path considerably and is probably a precondition.
+   - **LLQ mode still needs a contiguous header** (`ena.cpp:2415-2435`,
+     `context.push_header`), which today is taken from bounce slot 0. Zero-copy
+     has to either keep a small header-only bounce slot or require the first
+     extent to cover `tx_max_header_size` (224 — see §3) contiguously.
+
+**Expected win, unmeasured.** One full payload copy. Using the memcpy figures
+already established here — 0.056 ns/byte for a good arm64 `memcpy`, against the
+0.229 ns/byte the checksum loop costs for a comparable single pass — the copy is
+plausibly 0.05–0.15 ns/byte of the per-byte term, i.e. the same order as §6.1 but
+probably smaller than checksum offload. That is a guess from the wrong end; the
+honest position is that **the transmit per-byte term has never been decomposed**
+(see the note in §4.4 about `net-receive-profile.md` being a *receive*
+measurement), and decomposing it should come before choosing between these levers.
+A transmit equivalent of `netprof`'s per-thread partition is the missing
+instrument.
 
 ---
 
