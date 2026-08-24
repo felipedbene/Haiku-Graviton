@@ -40,8 +40,32 @@ set -o errexit
 # generate_attribute_stores
 # isCD
 #
+
+# Source one of the scripts passed to us on the command line.
+#
+# POSIX '.' searches $PATH when its operand contains no slash, and unlike bash it
+# does not fall back to the current directory. So under dash a bare filename
+# fails with "not found" even when the file is sitting right there. Jam normally
+# hands us absolute paths -- ImageRules reroots them with
+# $(scripts:R=$(HAIKU_ABSOLUTE_OUTPUT_DIR)), which exists for exactly this
+# reason -- but Jamrules builds that variable from $(PWD), and PWD is absent from
+# the environment whenever jam is launched through sudo or anything else that
+# resets it. The reroot then collapses to ":R=." which is a no-op, and the names
+# arrive here bare.
+#
+# Adding "./" only when there is no slash leaves every already-working
+# invocation resolving identically, and quoting additionally fixes paths
+# containing whitespace.
+sourceScript()
+{
+	case "$1" in
+		*/*)	. "$1" ;;
+		*)	. "./$1" ;;
+	esac
+}
+
 if [ $# -gt 0 ]; then
-	. $1
+	sourceScript "$1"
 	shift
 fi
 
@@ -337,7 +361,7 @@ fi
 
 echo "Populating image ..."
 while [ $# -gt 0 ]; do
-	. $1
+	sourceScript "$1"
 	shift
 done
 
