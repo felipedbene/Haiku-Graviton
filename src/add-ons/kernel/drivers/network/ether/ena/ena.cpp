@@ -225,9 +225,14 @@ ena_rearm_io_interrupt(ena_haiku_device* device, bool force)
 	if (atomic_test_and_set(&device->irqArmed, 1, 0) != 0)
 		return;
 
+	/* The receive interval is read from the device rather than used as a constant
+	   so that it can be swept at runtime; see ENA_IOCTL_RX_MODERATION. Transmit
+	   stays at the compile-time value, because a sweep that moved both could not
+	   attribute a change in the interrupt rate to either. */
 	struct ena_eth_io_intr_reg interruptRegister;
-	ena_com_update_intr_reg(&interruptRegister, ENA_RX_IRQ_INTERVAL,
-		ENA_TX_IRQ_INTERVAL, true, false);
+	ena_com_update_intr_reg(&interruptRegister,
+		(uint32)atomic_get(&device->rxIrqInterval), ENA_TX_IRQ_INTERVAL, true,
+		false);
 	ena_com_unmask_intr(device->txCompletionQueue, &interruptRegister);
 
 	atomic_add(&device->irqArms, 1);
@@ -2073,6 +2078,15 @@ ena_device_bringup(ena_haiku_device* device)
 	if (ena_com_init_interrupt_moderation(&device->comDev) != ENA_COM_OK)
 		TRACE_ALWAYS("interrupt moderation unavailable; continuing\n");
 
+	/* Logged because the moderation intervals are written into the register as
+	   raw ticks and this is the only thing that says what a tick is worth. It had
+	   been inferred from an interrupt-rate ceiling and never read; an inference
+	   with a good fit is still not a measurement, and the whole moderation sweep
+	   is denominated in this number. */
+	TRACE_ALWAYS("interrupt delay resolution %u; rx interval %" B_PRId32
+		", tx interval %d\n", device->comDev.intr_delay_resolution,
+		atomic_get(&device->rxIrqInterval), ENA_TX_IRQ_INTERVAL);
+
 	/* Interrupts are live now, so the admin queue no longer has to be
 	   polled and asynchronous events can start arriving. */
 	ena_com_set_admin_polling_mode(&device->comDev, false);
@@ -3314,6 +3328,34 @@ ena_ioctl(void* cookie, uint32 op, void* buffer, size_t length)
 			return B_OK;
 		}
 
+		case ENA_IOCTL_RX_MODERATION:
+		{
+			int32 value;
+			if (length != sizeof(value))
+				return B_BAD_VALUE;
+			if (user_memcpy(&value, buffer, sizeof(value)) != B_OK)
+				return B_BAD_ADDRESS;
+			/* Rejected rather than masked. The register field would silently keep
+			   the low 15 bits of anything larger, so an out-of-range sweep point
+			   would come back as a plausible number for an interval nobody asked
+			   for -- the exact shape of error this instrument exists to rule out. */
+			if (value < 0 || value > ENA_MAX_IRQ_INTERVAL)
+				return B_BAD_VALUE;
+
+			/* No quiescing needed, and nothing to undo if the write races a
+			   re-arm: whichever value a concurrent re-arm reads is one of the two
+			   the caller asked for, and the next re-arm after this returns uses
+			   the new one. The stats snapshot reports the interval alongside the
+			   counters, so a sample taken across the boundary identifies itself as
+			   such rather than being silently mis-attributed. */
+			atomic_set(&device->rxIrqInterval, value);
+			TRACE_ALWAYS("rx moderation interval now %" B_PRId32 " ticks "
+				"(resolution %u) at %" B_PRId32 " io interrupts, %" B_PRIu64
+				" rx frames\n", value, device->comDev.intr_delay_resolution,
+				device->ioInterrupts, device->rxFrames);
+			return B_OK;
+		}
+
 		case ENA_IOCTL_GET_IRQ_STATS:
 		{
 			struct ena_irq_stats stats;
@@ -3333,6 +3375,9 @@ ena_ioctl(void* cookie, uint32 op, void* buffer, size_t length)
 			stats.rxDrainCycles = device->rxDrainCycles;
 			stats.txFrames = device->txFrames;
 			stats.resetCount = (uint64)(uint32)atomic_get(&device->resetCount);
+			stats.rxIrqInterval = (uint64)(uint32)atomic_get(
+				&device->rxIrqInterval);
+			stats.intrDelayResolution = device->comDev.intr_delay_resolution;
 			stats.rearmMode = (uint64)(uint32)atomic_get(&device->rearmMode);
 
 			return user_memcpy(buffer, &stats, sizeof(stats));
@@ -3477,6 +3522,12 @@ ena_init_driver(device_node* node, void** cookie)
 	   replaced. Set explicitly so that forgetting to set it cannot quietly ship
 	   the old cadence. */
 	device->rearmMode = ENA_REARM_AFTER_DRAIN;
+
+	/* Also not the calloc default, and for a sharper reason than the above: zero
+	   in this field does not mean "unset", it means "interrupt on every
+	   completion". Failing to set it here would not ship a stale default, it would
+	   ship no moderation at all. */
+	device->rxIrqInterval = ENA_RX_IRQ_INTERVAL;
 
 	*cookie = device;
 	return B_OK;
