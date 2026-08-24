@@ -198,6 +198,13 @@ Why this is the right change rather than a wider redesign:
   core-heap key (`scheduler_cpu.cpp:554,563`). Today an oversubscribed core and
   a busy-but-fine core have the same key, so `PeekMinimum()` cannot tell them
   apart; afterwards oversubscribed cores correctly sort last.
+- **Core-heap *membership* is unchanged.** The low/high split is at `kHighLoad =
+  700`, below `kMaxLoad = 1000`, so any core that the clamp could have affected
+  was already in `gCoreHighLoadHeap` at its clamped value of 1000 and stays
+  there unclamped. Only the *ordering within* the high-load heap changes, and it
+  changes to be correct. This also means `choose_small_task_core()`
+  (`power_saving.cpp:52`, which reads `gCoreLoadHeap.PeekMaximum()`) sees
+  exactly the same candidate set as before.
 
 ### 4.2 Required second change — a latent panic that makes "one line" wrong
 
