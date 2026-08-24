@@ -32,14 +32,18 @@ number at all depended on both:
   was 2217–2715. With `-P 256K` (pinned, auto-sizing off) it collapsed to 1.2%.
   The noise was the send-buffer auto-sizer, not the network.
 
-And one open question, sharpened rather than answered: **only 27% of the routine's
-saving materialises end to end**, and it is **not the routine's fault**. Cache
-residency, the Haiku cross-compiler's codegen (checked by linking the shipped object
-into a native harness) and the node-walk access pattern were each tested and
-eliminated — the shipped bytes deliver 0.18 ns/byte on the exact access pattern the
-kernel uses. So either the transmit path puts only ~27% of the payload through it,
-or `nettput`'s cost metric is not capturing the removed work. One byte counter
-settles which; §7.3 specifies it. One of the two answers is a bug.
+And **a finding about the instrument, which is bigger than this change**: only 27%
+of the routine's saving materialises end to end, and after eliminating cache
+residency, the cross-compiler's codegen (by linking the shipped object into a native
+harness) and the node-walk access pattern, a byte counter showed the transmit path
+walks **100.016%** of the payload through the checksum — with a receive control that
+moved the counters by exactly zero. So the path is innocent, TCP checksums every byte
+it sends exactly once, and what is left is that **`nettput`'s summed
+`cpu_info::active_time` reports only 27% of a known 191 µs/MiB of removed CPU work.**
+If that holds up, every µs/MiB figure this project has published is a *lower bound*
+rather than an estimate. It is currently an inference by elimination, not a
+measurement of the instrument; §7.3 names the one-boot calibration that would settle
+it.
 
 And one technique worth copying, because it is why the worst bug here was caught
 before it shipped rather than after: **make the tested code be the shipped code
@@ -554,36 +558,92 @@ bytes apart as the slab allocates them, whole 512 MB working set, cold:
 Saving **0.1823 ns/byte** — if anything *larger* than the linear case, not smaller.
 The access pattern is not it either.
 
-#### What that leaves
+#### What that leaves: the transmit path is innocent, so the metric is not
 
-The routine genuinely delivers **~0.18 ns/byte, with the exact bytes the kernel
-ships, on the exact access pattern the kernel uses**. The transmit path delivers
-0.0496. So the conclusion is arithmetic:
+The routine delivers **~0.18 ns/byte, with the exact bytes the kernel ships, on the
+exact access pattern the kernel uses**. So the remaining binary question was whether
+the transmit path puts only ~27% of the payload through it, or whether `nettput`'s
+cost metric misses the removed work.
 
-> **The transmit path puts only about 27% of the payload through this routine** —
-> 0.0496 / 0.1823 — or else `nettput`'s cost metric does not attribute all of the
-> removed work.
+**Instrumented and answered: the path walks 100.016% of the payload.** A byte
+counter in `checksum_data()` plus one in the `compute_checksum()` leaf, so no caller
+could be missed, over a 512 MiB transfer on `c7g.4xlarge`:
 
-That is not a dilution effect and not a measurement artefact of the A/B, which is
-solid (§7.2). It is a statement about the transmit path that contradicts a reading
-of the code: `add_tcp_header()` prepends the header and *then* calls
-`Checksum::PseudoHeader()` → `checksum_data(buffer, 0, buffer->size, false)`, which
-should walk header plus every payload byte, once per segment, for 100% of the data.
+| quantity | value | vs payload |
+|---|---|---|
+| application payload | 536,870,912 B | — |
+| bytes into `checksum_data()` | 536,958,717 B in 131,559 calls | **100.016%** |
+| …of which calls ≥1024 B (data segments) | 535,568,266 B in 65,138 calls | 99.76% |
+| bytes into the `compute_checksum()` leaf | 536,949,736 B in 465,657 calls | 100.015% |
 
-**The experiment that closes it, named and not done:** add a byte counter to
-`checksum_data()` — exactly the technique that settled the ENA receive-offload
-question in §6, where counting what the device actually did overturned what the
-capability word said. Sum the `size` argument over a transfer of known length and
-compare against the bytes sent. If it comes back at ~27% of the payload, the
-transmit path is not checksumming what the code appears to say it does, and *that*
-is the finding. If it comes back at 100%, then `nettput`'s summed
-`cpu_info::active_time` is not capturing ~130 µs/MiB of removed work and the metric
-needs auditing before anyone prices another offload with it. Either answer is worth
-having, and one of them is a bug.
+The 0.016% excess is TCP headers and options; 65,138 calls over 512 MiB is 8,222
+bytes per segment, and 465,657/65,138 = **7.15 leaf calls per segment**, i.e. the
+node walk, at about 1,150 bytes per node.
 
-Until then: **+2.37% is the measured value and 8.3% is a discredited estimate**, and
-the discrepancy is a property of the transmit path or of the cost metric, not of the
-checksum.
+**Direction control, and it is exact:** an immediately following 512 MiB *receive*
+transfer moved the counters by **zero bytes and zero calls** — identical strings
+before and after. Receive computes no TCP checksum (the device validates L4, §6) and
+on this image no IPv4 header checksum either (pre-§5 driver), so the transmit figure
+above is transmit and nothing else. That also means there was never a direction
+confound to worry about.
+
+**So there is no correctness bug**, and I want to be unambiguous about that because
+"TCP checksums only a quarter of what it sends" would have been serious: TCP
+checksums every byte it sends, exactly once, as `add_tcp_header()` reads.
+
+By elimination, then:
+
+| | |
+|---|---|
+| bytes through the routine, per MiB of app data | 1,048,747 |
+| measured saving of the routine on that access pattern | 0.1823 ns/byte |
+| **CPU work removed, from first principles** | **191 µs/MiB** |
+| **CPU time saved, as `nettput` measures it** | **52 µs/MiB** (§7.2) |
+| fraction of known removed work the metric reports | **27.2%** |
+
+For scale: at 0.2383 ns/byte the old checksum accounts for 128 ms of the 1.132 s of
+CPU the run reports — 11.3% of transmit CPU — and removing 80% of it should have
+shown up as ~9%. It showed up as 2.37%.
+
+#### This is an inference about the instrument, not a measurement of it
+
+Stated plainly because it is the weakest link in the chain: I have measured that the
+bytes are all there and that the routine is fast on them, and I have measured the
+end-to-end saving. **I have not directly measured the metric's error.** Concluding
+"`cpu_info::active_time` under-attributes by ~3.7×" is what is left after the other
+explanations died, not something observed.
+
+Two mechanisms would produce it, and they are not equally comfortable:
+
+- **The metric under-counts.** `active_time` is *built* by summing each thread's
+  `kernel_time`/`user_time` deltas as it leaves the CPU
+  (`scheduler_cpu.cpp:264-276`, established in `net-receive-profile.md`). Any work
+  that is not attributed to a thread at a context switch — or is attributed at a
+  coarser granularity than it happens — is invisible to it.
+- **Freed CPU is reabsorbed.** The transfer is window-limited (rate pinned to three
+  digits across eight boots), so removing sender work cannot speed it up; if the
+  freed time is spent spinning or polling rather than idling, `active_time` does not
+  fall. Against this: the machine is only **8.0% busy** (1.132 s of CPU over 0.884 s
+  wall across 16 CPUs), so there is abundant idle to fall into rather than spin in.
+
+**The experiment that discriminates them, and it is a clean one:** *inject* a known
+quantity of CPU work into this path — run the old checksum loop twice, doubling a
+cost already computed at 128 ms per 512 MiB — and see how much of that known
+increment the metric reports. If +128 ms of real work shows up as +35 ms, the
+instrument under-attributes by the same 3.7× and the finding is about
+`cpu_info::active_time`. If it shows up as +128 ms, then the instrument is fine on
+work that is *added* and something about *removing* work on a rate-limited path is
+different, which points at reabsorption. This calibrates the instrument directly
+rather than by difference, needs no A/B, and is one module build and one boot.
+
+#### Why this matters beyond this change
+
+**If the instrument is the answer, every µs/MiB figure this project has reported is
+a lower bound on the real CPU saving, not an estimate of it** — including the jumbo
+frame, send-buffer, multi-queue and offload numbers. It would not make any of them
+wrong in sign or in ranking between changes of the *same* kind, but it would make
+them incomparable to first-principles estimates, and it would mean this project has
+been systematically understating its own wins. That is worth one boot to find out.
 
 ## 8. What shipped, and what it interacts with
 
@@ -632,13 +692,23 @@ the transmit path delivered 0.0496, and the shortfall is **not** in the routine 
 codegen, cache residency and node-walk access pattern were each tested and
 eliminated. It is in the path or in the cost metric.
 
-So **an estimate built by pricing a removed operation at its isolated cost is
-unreliable on this path, in the direction of being too high**, by ~3.7× in the one
-case where both the estimate and the measurement exist. Anyone estimating TX
-checksum offload the same way should expect the same discount until §7.3's byte
-counter says otherwise, and should measure on 4xlarge with a pinned send buffer and
-arms interleaved across boots (M1, M2) rather than on `c7g.large`, where cost is
-bimodal by boot at 19%.
+So a first-principles estimate and a µs/MiB measurement **disagree by ~3.7× on this
+path**, and §7.3 has now placed the discrepancy in the instrument rather than in the
+code: the bytes are all there and the routine is fast on them.
+
+That changes what the warning is. It is **not** "offload will deliver less than you
+think" — offload may well deliver its full first-principles value in CPU terms. It is
+that **µs/MiB and first-principles estimates are not commensurable here**, in the
+direction of µs/MiB reading low. So:
+
+- Do not cite this document's 3.7× as a discount on anyone else's *measured* number.
+  It is a discount on *estimates* relative to *this metric*, which is a statement
+  about the metric.
+- Two µs/MiB measurements of similar changes remain comparable to each other, which
+  is why §7.2's A/B stands.
+- Anyone measuring TX checksum offload should still use 4xlarge with a pinned send
+  buffer and arms interleaved across boots (M1, M2) rather than `c7g.large`, where
+  cost is bimodal by boot at 19% — that reason is independent of any of this.
 
 The L3 fix moves in the opposite direction by a negligible amount: the stack now
 verifies 20 bytes of IPv4 header per frame that it previously skipped, ~0.2% of a
@@ -667,6 +737,12 @@ verifies 20 bytes of IPv4 header per frame that it previously skipped, ~0.2% of 
   nothing. (c) *Node-walk pointer-chasing over cold slab memory*: simulated at 5
   nodes of 1900 bytes per frame, 2048-byte stride, and the saving is 0.1823 ns/byte —
   *larger* than the linear case. The shortfall is in the path or the metric. §7.3.
+- **"The transmit path must be skipping bytes."** The surviving explanation after the
+  other three died, and it is also wrong: a byte counter says 100.016% of the payload
+  goes through the checksum, in 65,138 data-segment calls averaging 8,222 bytes, over
+  7.15 nodes each. TCP checksums every byte it sends, exactly once. §7.3.
 - **Pricing an offload by the isolated cost of the work it removes.** The routine
-  said 0.173 ns/byte; the path delivered 0.0496. Any estimate built that way,
-  including for TX checksum offload, should be discounted until measured. §8.
+  said 0.1823 ns/byte over a verified 100% of the payload — 191 µs/MiB — and the
+  metric reported 52. Any estimate built by pricing removed work, including for TX
+  checksum offload, is not commensurable with a µs/MiB measurement until the
+  instrument is calibrated. §7.3, §8.2.
