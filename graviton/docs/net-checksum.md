@@ -10,15 +10,29 @@ Three results, in decreasing order of how well established they are.
 1. **`compute_checksum()` is 4.15× faster and no longer overflows.** Verified
    bit-identical against two oracles over 3,539,802 cases on hardware. §1–§3.
 2. **The driver was telling the stack the device had verified the IPv4 header
-   checksum when nothing had.** Fixed; hardware-verified. §4.
+   checksum when nothing had.** Fixed; hardware-verified. §5.
 3. **Receive checksum offload was never disabled** — the reading that said it was
    is a field the device does not maintain. There is nothing to enable, and the
-   receive path already computes no TCP checksum at all. §5.
+   receive path already computes no TCP checksum at all. §6.
 
-And one honest failure: **the end-to-end µs/MiB effect of (1) could not be
-resolved on `c7g.large`**, because transmit cost is bimodal *per boot* with a
-±19% spread and a module A/B needs a reboot. §6. That measurement is owed on
-`c7g.4xlarge`.
+Plus **two methodology findings that constrain every future transmit measurement
+on this project**, not just this one. They are in §7, and they are the reason
+result (1) has no end-to-end number attached yet:
+
+- **M1. Transmit cost on `c7g.large` is bimodal, and the mode is chosen at boot.**
+  Two identical baseline boots: 2661 vs 2232 µs/MiB, 19% apart, with ~1.5% spread
+  *within* each boot. Since swapping a kernel module requires a reboot, **any
+  transmit effect below ~19% is unresolvable on a 2-vCPU instance.** Measure
+  transmit on `c7g.4xlarge` or larger, and interleave arms **across** boots rather
+  than only within one.
+- **M2. Pinning the send buffer is mandatory for any transmit-cost measurement.**
+  With `nettput -w 256K` (a floor, auto-sizing still running) within-boot spread
+  was 2217–2715. With `-P 256K` (pinned, auto-sizing off) it collapsed to 1.2%.
+  The noise was the send-buffer auto-sizer, not the network.
+
+And one technique worth copying, because it is why the worst bug here was caught
+before it shipped rather than after: **make the tested code be the shipped code
+structurally, not by transcription.** §3.
 
 ---
 
@@ -91,11 +105,39 @@ test came before the measurement.
 
 ## 3. Correctness evidence
 
-`src/tests/add-ons/kernel/network/checksum/`. It `#include`s the shipping
-`checksum.h` directly. That is deliberate: a sibling effort on this tree lost its
-entire evidentiary basis to a harness that benchmarked a *copy* differing from the
-shipping code in exactly the interesting place, and the file says so in a comment
-so nobody "simplifies" it back.
+`src/tests/add-ons/kernel/network/checksum/`.
+
+### 3.0 The technique: make the tested code *be* the shipped code
+
+The harness `#include`s the shipping `checksum.h` directly. That is the single most
+important structural decision here, and it is why §2's bug was caught.
+
+The failure mode it defends against is specific and this project has already paid
+for it once: a harness that tests a *transcription* of the routine tests a routine
+that can differ from the shipped one in exactly the place that matters, and a
+transcription is most likely to diverge precisely where the original is subtle —
+which is where the bugs are. A sibling effort on this tree lost its entire
+evidentiary basis that way.
+
+The whole reason `compute_checksum()`'s body moved out of `utility.cpp` into a new
+dependency-free header is to make this possible: `utility.cpp` is full of mutexes,
+condition variables and `dprintf`, so it cannot be compiled in a userspace harness,
+and before this change there was no way to test the algorithm except by copying it.
+`checksum.h` needs only integer typedefs and an endianness macro, which the test
+supplies through a `shim/` directory (types only — no algorithm, and the shim
+derives `B_HOST_IS_LENDIAN` from the compiler's own byte-order macro rather than
+assuming, so it cannot silently test the wrong convention). Under jam the real
+headers are used instead. The file carries a comment saying not to "simplify" this
+by pasting the loop in.
+
+Two independent routes to the same principle are now in use on this tree: this one
+(extract to a dependency-free header both the kernel and the harness compile), and
+another agent's (`objcopy` the compiled kernel object into a native harness). Either
+is fine. Transcribing the routine into the test is not.
+
+Verification of the technique itself, not just of the routine: the built kernel
+module was disassembled to confirm the shipped `checksum_data()` really does contain
+the new inner loop — see §4.1.
 
 **3,539,802 checks, 0 failures** on Neoverse V1:
 
@@ -208,7 +250,69 @@ And on the running node, `listimage` showed the loaded add-on as
 `bbd521b489b1c436fcda0d28d6a16587`, matching the builder. The packaged module was
 not loaded.
 
-## 5. What receive offload is actually doing
+## 5. The IPv4 header checksum claim, and why this bug is Haiku-specific
+
+`NET_BUFFER_L3_CHECKSUM_VALID` tells `ipv4.cpp:1771` to skip verifying the IPv4
+header. `ena_receive()` set it on:
+
+```c
+	if (context.l3_proto == ENA_ETH_IO_L3_PROTO_IPV4 && !context.l3_csum_err)
+```
+
+and its own comment said why that is not enough — `l3_csum_err` reads 0 on a frame
+the device never examined — and then guarded against the wrong thing. `l3_proto`
+says the device **parsed** the frame as IPv4, which it does for steering regardless
+of whether it validated anything. So every received IPv4 frame arrived stamped as
+verified by nobody, and the stack skipped the check on the strength of it. A
+corrupted total length, protocol or address was parsed rather than dropped.
+Ethernet's FCS catches most wire corruption, so what was lost is
+defence-in-depth rather than daily correctness — but it was lost silently, and the
+comment made it look handled.
+
+### 5.1 Why this is Haiku's bug and not inherited from anyone
+
+**Haiku's `NET_BUFFER_L3_CHECKSUM_VALID` is a stronger claim than anything Linux
+makes.** That asymmetry is the whole story.
+
+Linux's `ena_rx_checksum()` sets `skb->ip_summed = CHECKSUM_UNNECESSARY` **only**
+from the L4 branch, and only behind an explicit `if (likely(ena_rx_ctx->l4_csum_checked))`.
+It never sets it from L3. Its IPv4 handling is purely negative — on
+`l3_proto == IPV4 && l3_csum_err` it records a bad checksum and drops to
+`CHECKSUM_NONE`, meaning "unverified, stack must check". Linux's IP stack then
+verifies the header itself, always. Linux therefore has **no concept** of "the
+device verified the IP header, skip it", so it cannot have this bug.
+
+Haiku does have that concept, and there is no device bit that can honestly support
+it: the ENA receive descriptor carries `l3_csum_err` with no `l3_csum_checked`
+companion to the L4 bit, so "verified and good" and "never looked" are
+indistinguishable.
+
+### 5.2 The fix, and the guard that was written and then removed
+
+The fix is to **stop making the claim**: delete the L3 flag assignment. The stack
+then always verifies the header, which is what Linux does and what correctness
+requires.
+
+An earlier version instead gated the flag on
+`rx_enabled & ..._RX_L3_CSUM_IPV4_MASK`. That was written, built, and then removed,
+because §6 measured `rx_enabled` reading `0x0` while the device is demonstrably
+validating L4 checksums on 983 of the first 1000 frames. **`rx_enabled` does not
+describe what the device does**, so gating on it would have disabled a path for a
+false reason, and — worse — it would have looked like a principled capability check
+while resting on a field nobody maintains. Recorded here rather than deleted
+because the wrong fix is the more tempting one.
+
+The L4 branch is untouched and is correct: it requires the explicit
+`l4_csum_checked`, which the device does set.
+
+**Cost: 20 bytes of checksum against a 9001-byte frame — about 0.2% of the bytes
+the frame already costs, and ~0.05% with §4's faster loop.** For a header that is
+now genuinely verified.
+
+Hardware-verified on `c7g.large`: 270 MB received and 271 MB transmitted, **0
+errors, 0 dropped**, no throughput change.
+
+## 6. What receive offload is actually doing
 
 The starting position was that the device supports all three receive checksum
 offloads and the driver enables none: `rx_supported 0x7`, `rx_enabled 0x0`. Both
@@ -237,7 +341,7 @@ KERN: ena: rx offload observed after 1000 frames: l4_csum_checked 983,
    anything. Reproduced across two boots (983/1000 and 982/1000).
 2. **Receive L4 checksum offload is already working**, and the driver already
    consumes it correctly via `l4_csum_checked`. This is why receive computes no TCP
-   checksum at all — which the negative control in §6 independently confirms.
+   checksum at all — which the negative control in §7 independently confirms.
 3. **There is nothing to enable.** ena-com has `ena_com_get_offload_settings()`
    and **no setter** — no `ENA_ADMIN_STATELESS_OFFLOAD_CONFIG` set command exists
    in the shared HAL, so no driver on any OS enables this. `rx_enabled` appears
@@ -260,14 +364,26 @@ bit is likely all that stands between us and IPv6 transmit checksum offload. Bit
 5 and 6 are clear, independently confirming from our own admin queue that the
 device does not support TSO.
 
-## 6. The end-to-end measurement, which failed
+**Corroborated independently**, by a second agent reaching the same conclusion by a
+different route, and there is direct precedent in this driver's own comments: a
+missing `driver_supported_features` declaration once made the device **stop
+advertising LLQ support entirely** (`ena.cpp:361-368`, on
+`RSS_CONFIGURABLE_FUNCTION_KEY`). The device's advertisement is contingent on what
+the driver declares, and one undeclared bit is enough. This is a one-bit
+experiment, and it belongs to whoever owns `ena.cpp` — not attempted here to avoid
+colliding with `feat/ena-tx-offload`.
+
+## 7. The end-to-end measurement, which failed
 
 Predicted before measuring, as the house standard requires: saving 0.173 ns/byte
 against a transmit cost of 2182 µs/MiB (= 2.081 ns/byte) is **8.3% at the
 microbenchmark's face value, realistically 5–8%** once the kernel's per-node loop
 overhead, which the microbenchmark does not have, is paid.
 
-That could not be resolved, for a reason worth recording.
+That could not be resolved on `c7g.large`, for a reason that outlives this result
+and is the more useful finding.
+
+### 7.0 M1: transmit cost is bimodal per boot on a 2-vCPU instance
 
 **Transmit cost on `c7g.large` is bimodal, and the mode is chosen at boot.** Every
 row below is 8 repetitions on one boot, MTU confirmed at 9001, send buffer pinned
@@ -303,12 +419,24 @@ separation between arms. That is exactly as predicted — the device validates L
 this routine on payload and cannot move. A treatment that moved receive would have
 meant the reasoning was wrong.
 
-Also incidentally established: **the earlier `-w 256K` bimodality was the send
-buffer auto-sizer.** With `-w` the spread within a single boot was 2217–2715; with
-`-P` pinning the buffer it collapsed to 1.2%. Anything measuring transmit cost
-should pin the send buffer.
+### 7.1 M2: pin the send buffer, always
 
-## 7. What shipped, and what it interacts with
+Found on the way to M1 and independently binding on anyone measuring transmit.
+
+The first attempt used `nettput -w 256K`, and produced a *within-boot* spread of
+2217–2715 µs/MiB — 22%, which would have made even the 4xlarge measurement
+useless. `-w` sets a **floor**, not a pin: `_UpdateSendBuffer()` treats
+`socket->send.buffer_size` as the minimum and keeps auto-sizing above it. Switching
+to `-P 256K`, which pins the buffer and disables auto-sizing outright, collapsed
+the within-boot spread to **1.2%**.
+
+So the noise was the send-buffer auto-sizer converging differently run to run, not
+the network and not the NIC. **Any transmit-cost measurement on this project must
+use `-P`.** A corollary worth noting separately: the auto-sizer's own convergence
+is not repeatable at this resolution, which is a fact about the auto-sizer that
+nobody has looked at directly.
+
+## 8. What shipped, and what it interacts with
 
 | change | branch | evidence |
 |---|---|---|
@@ -330,15 +458,15 @@ The L3 fix moves in the opposite direction by a negligible amount: the stack now
 verifies 20 bytes of IPv4 header per frame that it previously skipped, ~0.2% of a
 9001-byte frame's bytes, and ~0.05% with the faster loop.
 
-## 8. Disproved or abandoned along the way
+## 9. Disproved or abandoned along the way
 
 - **"The driver enables no receive checksum offload, so enabling it is the big
   win."** The premise is false — the device does it anyway and the driver already
-  consumes it. There is no setter to call. §5.
+  consumes it. There is no setter to call. §6.
 - **`rx_enabled` as a capability gate.** Written, then removed: it reads 0 while
   the device is demonstrably checking, so gating on it would have permanently
   disabled a path for the wrong reason. The fix does not gate; it stops making an
-  unprovable claim. §4.
+  unprovable claim. §5.
 - **`sum += (uint32)a + (uint32)(a >> 32)`.** Correct on ordinary data, wrong on
   carry-heavy data. §2.
-- **Measuring a module A/B on `c7g.large`.** Defeated by per-boot bimodality. §6.
+- **Measuring a module A/B on `c7g.large`.** Defeated by per-boot bimodality. §7.
