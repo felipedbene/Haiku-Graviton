@@ -26,7 +26,8 @@
  *    one of them is broken and we learn that too, instead of trusting a single
  *    number.
  *
- * Usage: smpscale [-w warmup_ms] [-t target_ms] [-m] [-g] [-x] [threads ...]
+ * Usage: smpscale [-w warmup_ms] [-t target_ms] [-m] [-g] [-x] [-s us] [-p]
+ *                 [threads ...]
  *   -w   per-run warmup in ms (default 200)
  *   -t   calibrate the work unit so ONE thread takes about this long
  *        (default 3000 ms). Bigger swamps timing error; 3 s against a 1 us
@@ -47,7 +48,19 @@
  *        rebalance path on every wake, so this is where an over-eager
  *        balancer would show up. The CPU-bound half is reported separately,
  *        since averaging the two classes would hide a straggler.
+ *   -s   stagger thread spawns by this many MICROseconds. The imbalance
+ *        vanishes once spawns are separated by about 1 ms, which is exactly
+ *        kLoadMeasureInterval, so this turns that observation into a dial that
+ *        can be swept: -s 0 against -s 1000 is the experiment.
+ *   -p   after the ladder, ask an instrumented kernel to dump its choose_core()
+ *        placement trace. No effect on a stock kernel.
  *   threads   the ladder; default "1 2 4 8 16"
+ *
+ * READ THE PER-CPU TABLE, NOT `eff`. `eff` is baseWall/wallMs against the FIRST
+ * ladder row, so in a single-point run it is trivially 1.000 and means nothing.
+ * It also SATURATES: one doubled core pins it to 0.500 whether one core is
+ * doubled or five, and whether one CPU is idle or nine. The busy/idle CPU counts
+ * and max/min below it are the honest measures.
  */
 
 #include <OS.h>
@@ -63,6 +76,14 @@
 // (src/libs/gnu/sched_getcpu.cpp), so a thread asking which CPU it is on gets
 // an authoritative answer from the kernel.
 extern "C" int sched_getcpu(void);
+
+// Private libroot syscall. With an instrumented kernel, the magic value 0x5350
+// makes the kernel dprintf its choose_core() placement trace to the syslog and
+// serial console; on a stock kernel it simply fails, which is harmless. Dumping
+// has to be asked for from ordinary thread context because it does blocking
+// per-character serial I/O.
+extern "C" status_t _kern_set_scheduler_mode(int32 mode);
+#define SMPSCALE_DUMP_PLACEMENT	0x5350
 
 
 #define MAX_CPUS		256
@@ -155,6 +176,7 @@ struct worker_arg {
 	// it must never contaminate the timing ladder that is the primary evidence.
 	uint64			chunkIterations;
 	bigtime_t		snoozeMicros;	// > 0 makes this a sleeper, not CPU-bound
+	bigtime_t		releaseTime;	// absolute instant to wake at, 0 = now
 
 	// Results, written by the worker only.
 	bigtime_t		start;
@@ -176,12 +198,17 @@ worker(void* data)
 {
 	worker_arg* arg = (worker_arg*)data;
 
-	// All workers spin here until the parent flips sGo, so that thread
-	// creation cost -- which on Haiku is not free and which is exactly what a
-	// shell `&` loop would have measured instead of the work -- lands outside
-	// the timed region.
+	// Wait for the release without burning a CPU. The original gate was
+	// `while (atomic_get(&sGo) == 0) ;`, a busy-wait, which manufactures N
+	// extra runnable threads during the very spawn burst whose placement is
+	// under investigation -- it perturbs the thing being measured. An absolute
+	// deadline released by snooze_until() lets every worker sit blocked and wake
+	// on a common instant instead, so thread-creation cost still lands outside
+	// the timed region without inventing load.
+	if (arg->releaseTime > 0)
+		snooze_until(arg->releaseTime, B_SYSTEM_TIMEBASE);
 	while (atomic_get((int32*)&sGo) == 0)
-		;
+		snooze(200);
 
 	arg->start = system_time();
 	if (arg->chunkIterations > 0) {
@@ -251,7 +278,8 @@ struct run_result {
 
 static bool
 run_ladder_point(uint32 threads, uint64 iterations, bool stream,
-	uint64 chunkIterations, bigtime_t sleeperSnooze, run_result& out)
+	uint64 chunkIterations, bigtime_t sleeperSnooze, bigtime_t staggerMicros,
+	run_result& out)
 {
 	static worker_arg args[MAX_THREADS];
 	static thread_id ids[MAX_THREADS];
@@ -300,6 +328,13 @@ run_ladder_point(uint32 threads, uint64 iterations, bool stream,
 
 	sGo = 0;
 
+	// Every worker wakes at the same absolute instant, far enough ahead that
+	// even a staggered spawn has finished by then.
+	bigtime_t releaseTime = system_time() + 200000
+		+ (bigtime_t)threads * staggerMicros;
+	for (uint32 i = 0; i < threads; i++)
+		args[i].releaseTime = releaseTime;
+
 	for (uint32 i = 0; i < threads; i++) {
 		char name[32];
 		snprintf(name, sizeof(name), "smpscale%" B_PRIu32, i);
@@ -315,16 +350,27 @@ run_ladder_point(uint32 threads, uint64 iterations, bool stream,
 			return false;
 		}
 		resume_thread(ids[i]);
+		// Spawn stagger. The whole imbalance vanishes once spawns are separated
+		// by about a millisecond, which is kLoadMeasureInterval -- so making the
+		// stagger a controllable variable turns that observation into a dial
+		// this tool can sweep.
+		if (staggerMicros > 0)
+			snooze(staggerMicros);
 	}
 
-	// Give every worker time to reach the spin gate, so they start together.
-	snooze(100000);
+	// Flip the gate BEFORE the release instant, so that when the workers wake
+	// they see it already set and never enter the polling loop. Polling would
+	// have them sleeping and waking repeatedly right before the measurement,
+	// which lowers their fNeededLoad -- the exact quantity placement keys on.
+	snooze_until(releaseTime - 20000, B_SYSTEM_TIMEBASE);
+	atomic_set((int32*)&sGo, 1);
+
+	// Now start the clock at the instant the workers actually wake.
+	snooze_until(releaseTime, B_SYSTEM_TIMEBASE);
 
 	cpu_snapshot before;
 	take_cpu_snapshot(before);
 	bigtime_t spanStart = system_time();
-
-	atomic_set((int32*)&sGo, 1);
 
 	for (uint32 i = 0; i < threads; i++) {
 		status_t exit;
@@ -398,6 +444,8 @@ main(int argc, char** argv)
 	bool stream = false;
 	bool countMigrations = false;
 	bool mixed = false;
+	bigtime_t staggerMicros = 0;
+	bool dumpPlacement = false;
 	uint32 ladder[MAX_LADDER];
 	uint32 ladderSize = 0;
 
@@ -409,6 +457,10 @@ main(int argc, char** argv)
 			warmupMicros = (bigtime_t)atoll(argv[++i]) * 1000;
 		else if (strcmp(argv[i], "-m") == 0)
 			stream = true;
+		else if (strcmp(argv[i], "-s") == 0 && i + 1 < argc)
+			staggerMicros = (bigtime_t)atoll(argv[++i]);
+		else if (strcmp(argv[i], "-p") == 0)
+			dumpPlacement = true;
 		else if (strcmp(argv[i], "-g") == 0)
 			countMigrations = true;
 		else if (strcmp(argv[i], "-x") == 0) {
@@ -453,7 +505,7 @@ main(int argc, char** argv)
 		bigtime_t elapsed = 0;
 		while (elapsed < targetMicros / 4 && iterations < (1 << 20)) {
 			run_result probe;
-			if (!run_ladder_point(1, iterations, true, 0, 0, probe))
+			if (!run_ladder_point(1, iterations, true, 0, 0, 0, probe))
 				return 1;
 			elapsed = probe.wall;
 			if (elapsed >= targetMicros / 4)
@@ -525,7 +577,7 @@ main(int argc, char** argv)
 
 	for (uint32 k = 0; k < ladderSize; k++) {
 		if (!run_ladder_point(ladder[k], iterations, stream, chunkIterations,
-				mixed ? 4000 : 0, results[k])) {
+				mixed ? 4000 : 0, staggerMicros, results[k])) {
 			return 1;
 		}
 
@@ -597,7 +649,59 @@ main(int argc, char** argv)
 		}
 	}
 
+	// The honest summary, and the one the acceptance criteria are stated in:
+	// how many CPUs actually did work, how many sat idle, and how lopsided the
+	// busiest was against the least busy of the working ones. Unlike `eff` this
+	// does not saturate -- it separates "one core doubled" from "five cores
+	// doubled and nine CPUs idle", which is the distinction the ladder hid.
+	printf("\nPer-CPU busy set. unit_ms is the single-thread work unit; a CPU is"
+		"\n'busy' at >=90%% of one unit and 'idle' at <10%%. max/min is over the"
+		"\nbusy CPUs only, so 1.00 is perfect and 2.00 means a doubled core.\n");
+	printf("%8s %8s %6s %6s %6s %9s %9s\n", "threads", "unit_ms", "busy",
+		"idle", "part", "max/min", "idle_cpus");
+	for (uint32 k = 0; k < ladderSize; k++) {
+		run_result& r = results[k];
+		double unit = baseWall;
+		uint32 busy = 0;
+		uint32 idle = 0;
+		uint32 partial = 0;
+		double busyMaxMs = 0.0;
+		double busyMinMs = 0.0;
+		for (uint32 c = 0; c < r.cpuCount; c++) {
+			double ms = (double)r.perCpu[c] / 1000.0;
+			if (ms < unit * 0.10) {
+				idle++;
+				continue;
+			}
+			if (ms < unit * 0.90) {
+				partial++;
+				continue;
+			}
+			busy++;
+			if (busyMinMs == 0.0 || ms < busyMinMs)
+				busyMinMs = ms;
+			if (ms > busyMaxMs)
+				busyMaxMs = ms;
+		}
+		printf("%8" B_PRIu32 " %8.1f %6" B_PRIu32 " %6" B_PRIu32 " %6" B_PRIu32
+			" %9.3f  ", r.threads, unit, busy, idle, partial,
+			busyMinMs > 0.0 ? busyMaxMs / busyMinMs : 0.0);
+		// Name the idle CPUs: a fix must not leave any named while work queues.
+		for (uint32 c = 0; c < r.cpuCount; c++) {
+			if ((double)r.perCpu[c] / 1000.0 < unit * 0.10)
+				printf("%" B_PRIu32 " ", c);
+		}
+		printf("\n");
+	}
+
 	printf("\nsink %llu (printed so the work cannot be optimised away)\n",
 		(unsigned long long)sGlobalSink);
+
+	if (dumpPlacement) {
+		status_t status = _kern_set_scheduler_mode(SMPSCALE_DUMP_PLACEMENT);
+		printf("placement trace dump requested: %s (a stock kernel refuses;"
+			" look in the syslog / serial console for 'sched_placement:')\n",
+			strerror(status));
+	}
 	return 0;
 }
