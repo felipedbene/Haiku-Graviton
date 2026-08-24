@@ -43,7 +43,7 @@ SYSTEM_APPS += [ FFilterByBuildFeatures
 	Mail
 	MediaConverter
 	MediaPlayer
-	MidiPlayer
+	MidiPlayer@fluidlite
 	People
 	PoorMan
 	PowerStatus
@@ -98,7 +98,7 @@ SYSTEM_DEMOS += [ FFilterByBuildFeatures
 	Mandelbrot
 	OverlayImage
 	Pairs
-	PatchBay
+	PatchBay@fluidlite
 	Playground
 	Pulse
 	Sudoku

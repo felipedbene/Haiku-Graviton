@@ -1,21 +1,36 @@
 SubDir HAIKU_TOP src apps patchbay ;
 
-Application PatchBay
-	:
-	PatchApp.cpp
-	PatchWin.cpp
-	PatchView.cpp
-	PatchRow.cpp
-	EndpointInfo.cpp
-	MidiEventMeter.cpp
-	:
-	midi midi2 be libicon.a localestub [ TargetLibstdc++ ]
-	:
-	PatchBay.rdef
-;
+# PatchBay links libmidi.so, which src/kits/midi/Jamfile declares only when the
+# fluidlite build feature is enabled. Declared unconditionally, it makes `jam
+# all` end in "don't know how to make libmidi.so" on every architecture without
+# fluidlite -- arm64 among them -- so the whole build reports failure for a
+# reason unrelated to the tree's health. Guard it exactly as libmidi.so is
+# guarded.
+local architectureObject ;
+for architectureObject in [ MultiArchSubDirSetup ] {
+	on $(architectureObject) {
+		if ! [ FIsBuildFeatureEnabled fluidlite ] {
+			continue ;
+		}
 
-DoCatalogs PatchBay :
-	x-vnd.Haiku.PatchBay
-	:
-	PatchView.cpp
-;
+		Application PatchBay
+			:
+			PatchApp.cpp
+			PatchWin.cpp
+			PatchView.cpp
+			PatchRow.cpp
+			EndpointInfo.cpp
+			MidiEventMeter.cpp
+			:
+			midi midi2 be libicon.a localestub [ TargetLibstdc++ ]
+			:
+			PatchBay.rdef
+		;
+
+		DoCatalogs PatchBay :
+			x-vnd.Haiku.PatchBay
+			:
+			PatchView.cpp
+		;
+	}
+}
