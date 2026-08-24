@@ -7,8 +7,10 @@
 
 Three results, in decreasing order of how well established they are.
 
-1. **`compute_checksum()` is 4.15× faster and no longer overflows.** Verified
-   bit-identical against two oracles over 3,539,802 cases on hardware. §1–§3.
+1. **`compute_checksum()` is 4.15× faster and no longer overflows**, worth a
+   measured **+2.37% of transmit CPU per MiB** end to end (p = 0.014, clean
+   negative control). Verified bit-identical against two oracles over 3,539,802
+   cases on hardware. §1–§4, §7.2.
 2. **The driver was telling the stack the device had verified the IPv4 header
    checksum when nothing had.** Fixed; hardware-verified. §5.
 3. **Receive checksum offload was never disabled** — the reading that said it was
@@ -16,8 +18,8 @@ Three results, in decreasing order of how well established they are.
    receive path already computes no TCP checksum at all. §6.
 
 Plus **two methodology findings that constrain every future transmit measurement
-on this project**, not just this one. They are in §7, and they are the reason
-result (1) has no end-to-end number attached yet:
+on this project**, not just this one. They are in §7, and getting result (1)'s
+number at all depended on both:
 
 - **M1. Transmit cost on `c7g.large` is bimodal, and the mode is chosen at boot.**
   Two identical baseline boots: 2661 vs 2232 µs/MiB, 19% apart, with ~1.5% spread
@@ -29,6 +31,12 @@ result (1) has no end-to-end number attached yet:
   With `nettput -w 256K` (a floor, auto-sizing still running) within-boot spread
   was 2217–2715. With `-P 256K` (pinned, auto-sizing off) it collapsed to 1.2%.
   The noise was the send-buffer auto-sizer, not the network.
+
+And one open question, stated because the answer is not what was predicted:
+**only 29% of the isolated routine's saving materialises end to end** — 0.050
+ns/byte of the 0.173 the microbenchmark measures. The obvious explanation, that the
+kernel's walk is memory-bound where the microbenchmark is cache-hot, was tested and
+**disproved**. §7.3.
 
 And one technique worth copying, because it is why the worst bug here was caught
 before it shipped rather than after: **make the tested code be the shipped code
@@ -373,15 +381,16 @@ the driver declares, and one undeclared bit is enough. This is a one-bit
 experiment, and it belongs to whoever owns `ena.cpp` — not attempted here to avoid
 colliding with `feat/ena-tx-offload`.
 
-## 7. The end-to-end measurement, which failed
+## 7. The end-to-end measurement
 
 Predicted before measuring, as the house standard requires: saving 0.173 ns/byte
 against a transmit cost of 2182 µs/MiB (= 2.081 ns/byte) is **8.3% at the
 microbenchmark's face value, realistically 5–8%** once the kernel's per-node loop
 overhead, which the microbenchmark does not have, is paid.
 
-That could not be resolved on `c7g.large`, for a reason that outlives this result
-and is the more useful finding.
+**Measured: +2.37% on transmit (p = 0.014), and the prediction was too high by
+about 3×.** §7.2. It could not be measured at all on `c7g.large`, for a reason that
+outlives this result and is the more useful finding — that is M1, below.
 
 ### 7.0 M1: transmit cost is bimodal per boot on a 2-vCPU instance
 
@@ -408,16 +417,11 @@ than the worse baseline (2661) and the best is better than the better baseline
 a percentage from it would be exactly the kind of claim this project has had to
 retract four times. It is not reported.
 
-What is owed: the same A/B on **`c7g.4xlarge`**, where 16 vCPUs should remove the
-placement bistability, and where receive is already known to run at 99.9% of
-Linux's rate so the effect will appear as µs/MiB rather than as a rate.
-
-**The negative control worked, and is the one solid end-to-end result.** Receive
-µs/MiB across all four boots and both module versions: 2107–2332, with no
-separation between arms. That is exactly as predicted — the device validates L4,
-`l4_csum_checked` is set, the stack skips the TCP checksum, so receive never calls
-this routine on payload and cannot move. A treatment that moved receive would have
-meant the reasoning was wrong.
+**The negative control worked on this platform too.** Receive µs/MiB across all
+four boots and both module versions: 2107–2332, with no separation between arms.
+Exactly as predicted — the device validates L4, `l4_csum_checked` is set, the stack
+skips the TCP checksum, so receive never calls this routine on payload and cannot
+move. A treatment that moved receive would have meant the reasoning was wrong.
 
 ### 7.1 M2: pin the send buffer, always
 
@@ -436,6 +440,90 @@ use `-P`.** A corollary worth noting separately: the auto-sizer's own convergenc
 is not repeatable at this resolution, which is a fact about the auto-sizer that
 nobody has looked at directly.
 
+### 7.2 The result, on `c7g.4xlarge`
+
+Designed around M1 and M2: **arms interleaved across boots**, one arm per boot,
+send buffer pinned, 5 repetitions per direction per boot, 512 MiB per run. Two
+sequences run back to back and pooled, the second starting with the *opposite* arm
+so a sequence-order effect cannot masquerade as a treatment effect: `A B A B A B`
+then `B A B A`. Every boot's loaded module was verified by path from `listimage`
+and its MTU re-read before any run. **Stock ENA driver throughout**, so §5's L3 fix
+could not contaminate the receive control.
+
+**M1 does not hold on 4xlarge, which is the precondition for trusting any of this.**
+Per-boot medians within an arm span 1.4% (baseline) and 0.6% (treatment), against
+19% on `c7g.large`. So the boot-to-boot bistability is a 2-vCPU artefact and this
+platform can resolve a small effect.
+
+| arm | stack module | n boots | mean µs/MiB | sd | range |
+|---|---|---|---|---|---|
+| A | packaged (baseline) | 4 | **2193.0** | 14.5 | 2176–2206 |
+| B | mine | 4 | **2141.0** | 8.0 | 2132–2150 |
+
+**Transmit: +2.37%, or 52 µs/MiB = 0.0496 ns/byte.**
+
+- **Every baseline boot is worse than every treatment boot** — complete separation
+  of the per-boot medians, with a 26 µs/MiB gap between the two ranges.
+- Welch *t* = 6.28; exact permutation test on the 8 boot medians, one-tailed,
+  **p = 0.0143** (1 of 70 arrangements is as extreme).
+- Transmit rate was **4964–4965 Mbit/s in all eight boots** — pinned to three
+  digits. The path is window-limited, so as expected the effect appears only in
+  µs/MiB and not in rate.
+
+**Negative control — receive: +0.74%, not significant.** A 2720.5 ± 18.4, B
+2700.5 ± 19.2, ranges overlapping, permutation p = 0.10. Receive computes no TCP
+checksum (the device validates L4, §6) and no IPv4 header checksum (stock driver,
+§5), so it should not move, and it does not. Net of the control the transmit effect
+is ~1.6%; the control also sets the noise floor at ~0.7%, giving the transmit
+result a signal-to-noise of about 3:1.
+
+Two boots of the second sequence produced no data at all — all 20 runs failed
+together. Almost certainly a concurrent agent's `nettput-run`, which begins with
+`pkill -f nettput-peer.py` and would have killed my peer mid-sequence. Failed runs
+are *absent*, not wrong, so they reduce n rather than biasing it; they are why n is
+4 per arm and not 5. **Anyone sharing the builder as a throughput peer should
+expect this**, and a future harness should use a distinct peer port and not
+blanket-`pkill`.
+
+### 7.3 Only 29% of the predicted saving appears, and the obvious reason is wrong
+
+Predicted 0.173 ns/byte from the isolated routine. Measured 0.0496 ns/byte end to
+end — **29%**. The prediction was too high by about 3×, and that gap is the most
+interesting thing left here.
+
+The obvious hypothesis: the microbenchmark re-reads one small buffer, so it is
+L1-resident and ALU-bound, whereas the kernel checksums each payload exactly once
+from memory the application or DMA has just written, so it is memory-bound — and
+making the arithmetic 4× faster buys nothing against a memory wall.
+
+**Tested and disproved.** Same two routines, 1988-byte chunks, on Neoverse V1:
+
+| condition | replaced | current | speedup | saving |
+|---|---|---|---|---|
+| L1-resident, re-read | 0.2295 | 0.0555 | 4.14× | 0.1740 ns/B |
+| 512 MB streamed, each chunk touched once | 0.2290 | 0.0566 | 4.05× | 0.1725 ns/B |
+
+Cold and hot are the same to within 2%: the hardware prefetcher keeps a linear walk
+fed, and the streaming-read floor on this core is 0.0635 ns/B (15.8 GB/s) — which
+the *new* routine at 0.0566 essentially reaches, while the old one at 0.229 was
+nowhere near it. So the replaced routine was ALU-bound, the new one is at the memory
+limit, and neither fact depends on cache residency. The saving is real on cold data.
+
+So 0.12 ns/byte of expected saving is unaccounted for. What is *not* the
+explanation, checked: the kernel loop is present and inlined (§4.1, `ldp` pairs
+covering the 32-byte iteration, no `bl`); the transmit path walks each payload byte
+exactly once (`add_tcp_header` → `PseudoHeader` → `checksum_data(buffer, 0,
+buffer->size)`); and per-node call overhead is far too small at ~1900 bytes per
+node to account for it.
+
+**The decisive next experiment, named rather than done:** extract the
+*Haiku-cross-compiled* `checksum_data` out of the built kernel object with `objcopy`
+and benchmark it natively — the technique §3.0 credits to another agent on this
+tree. That separates "the Haiku cross-gcc produced worse code than the host gcc
+did" from "the transmit path does not spend as much in this routine as the
+arithmetic says it should". Until one of those is shown, **treat +2.37% as the
+measured value and 8.3% as a discredited estimate**, not the other way round.
+
 ## 8. What shipped, and what it interacts with
 
 | change | branch | evidence |
@@ -443,10 +531,22 @@ nobody has looked at directly.
 | `compute_checksum()` 4.15×, both accumulators widened, `checksum.h`, first unit test for it | `feat/net-checksum-fast` | 3.54M-case exhaustive verification; microbenchmark; kernel disassembly |
 | Stop claiming the device verified the IPv4 header | `fix/ena-rx-csum-guard` | 270 MB each way, 0 errors, 0 dropped, no rate change |
 
+Measured end to end at **+2.37% transmit CPU per MiB** (p = 0.014) across 8
+interleaved boots on `c7g.4xlarge`, with receive as a clean negative control. §7.2.
+
 **Interaction with `feat/ena-tx-offload` transmit checksum offload, stated
 plainly: these two are partly substitutes, not additive.** The device supports
-IPv4 L4 partial checksum on transmit. Where offload applies, it removes the whole
-0.228 ns/byte, and this change's 0.173 saving is subsumed. This change is still
+IPv4 L4 partial checksum on transmit. Where offload applies it removes the walk
+entirely, and this change's saving is subsumed rather than added to.
+
+There is a warning for that work in §7.3, and it is worth taking seriously: the
+isolated routine predicted 0.173 ns/byte and the transmit path delivered 0.0496.
+Whatever causes that 3× shortfall is a property of the transmit path, not of the
+arithmetic — so **an offload estimate built the same way, by pricing the removed
+checksum at its isolated cost, will be too high by a similar factor.** The honest
+prior for TX checksum offload on this path is therefore closer to 2–3% than to the
+~11% that 0.228 ns/byte against 2.09 ns/byte suggests. Worth measuring rather than
+assuming, on 4xlarge, with a pinned send buffer and arms interleaved across boots. This change is still
 worth having for everything offload cannot cover — IPv6 while bit 3 stays clear,
 non-TCP/UDP protocols, fragments, loopback, any future non-ENA driver — and for
 the overflow fixes, which are correctness rather than speed. But if transmit
@@ -469,4 +569,12 @@ verifies 20 bytes of IPv4 header per frame that it previously skipped, ~0.2% of 
   unprovable claim. §5.
 - **`sum += (uint32)a + (uint32)(a >> 32)`.** Correct on ordinary data, wrong on
   carry-heavy data. §2.
-- **Measuring a module A/B on `c7g.large`.** Defeated by per-boot bimodality. §7.
+- **Measuring a module A/B on `c7g.large`.** Defeated by per-boot bimodality. §7.0.
+  Redone successfully on `c7g.4xlarge`, where the bimodality is absent. §7.2.
+- **"The kernel's checksum walk is memory-bound, which is why only 29% of the
+  isolated saving appears."** The most plausible explanation for the shortfall, and
+  wrong: cold-streamed 512 MB gives the same 4.05× and the same 0.1725 ns/byte
+  saving as an L1-resident buffer. Still unexplained. §7.3.
+- **Pricing an offload by the isolated cost of the work it removes.** The routine
+  said 0.173 ns/byte; the path delivered 0.0496. Any estimate built that way,
+  including for TX checksum offload, should be discounted until measured. §8.
