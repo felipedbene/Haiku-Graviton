@@ -12,6 +12,23 @@
 #include "VMPageQueue.h"
 
 
+// How long a thread dirtying pages will wait for the page writer to get the
+// modified queue back under quota before giving up and going over it.
+//
+// There used to be no bound at all: file_cache.cpp passed timeout 0 with no
+// timeout flag, which makes ConditionVariableEntry::Wait() an indefinite wait.
+// A writer therefore blocked until the page writer said otherwise, and if the
+// writer never caught up it blocked forever -- observed as a machine that
+// answered ICMP and accepted TCP connections on :22 while no userland process
+// could make progress, with no panic, no KDL and nothing in the syslog.
+//
+// Five seconds is chosen to be far longer than any healthy wait (normally
+// microseconds to milliseconds) so that back-pressure still works, while
+// converting "hang forever" into "one slow write". Progress beats a quota that
+// is best-effort anyway.
+#define PAGES_FLUSH_QUOTA_WAIT_TIMEOUT		(5 * 1000 * 1000)
+
+
 struct ModifiedPageQueue : public BReferenceable, public VMPageQueue {
 public:
 	static	int64				GlobalModifiedCount()
@@ -23,12 +40,22 @@ public:
 			void				NotifyWriter() { fPageWriterCondition.WakeUp(); }
 
 			bool				IsOverQuota(page_num_t additionalPages = 0);
+
+			// KDL only; see the page_writer_quota debugger command.
+			void				DumpQuotaState();
+
+			// Returns B_TIMED_OUT if the wait was bounded and expired. Callers
+			// must treat that as permission to proceed over quota, NOT as a
+			// failed write: refusing the write instead would turn a slow disk
+			// into an I/O error visible to applications.
 			status_t			WaitIfOverQuota(page_num_t additionalPages,
 									bigtime_t timeout, uint32 flags);
 
 private:
 	static	status_t			_WriterThreadEntry(void* _this);
 			status_t			_PageWriter();
+			void				_RecordQuotaWait(bigtime_t waitStart,
+									bool timedOut);
 
 private:
 			thread_id			fWriterThread;
@@ -43,6 +70,15 @@ private:
 
 	static	bigtime_t			sGlobalEstimatedWriteDuration;
 			bigtime_t			fLastReportedEstimatedWriteDuration = 0;
+
+			// Kept so that bounding the wait does not hide the decay that made
+			// the wait necessary. A machine that no longer hangs but times out
+			// here thousands of times is still broken, and these are what say
+			// so.
+	static	int64				sQuotaWaits;
+	static	int64				sQuotaTimeouts;
+	static	bigtime_t			sQuotaWaitTime;
+	static	bigtime_t			sQuotaWaitMax;
 };
 
 

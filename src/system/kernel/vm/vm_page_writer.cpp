@@ -51,6 +51,10 @@
 	// target maximum time needed to write out all modified pages, in one & all queues
 
 int64 ModifiedPageQueue::sGlobalModifiedCount = 0;
+int64 ModifiedPageQueue::sQuotaWaits = 0;
+int64 ModifiedPageQueue::sQuotaTimeouts = 0;
+bigtime_t ModifiedPageQueue::sQuotaWaitTime = 0;
+bigtime_t ModifiedPageQueue::sQuotaWaitMax = 0;
 bigtime_t ModifiedPageQueue::sGlobalEstimatedWriteDuration = 0;
 
 
@@ -951,6 +955,24 @@ ModifiedPageQueue::~ModifiedPageQueue()
 }
 
 
+// Dumps the state that decides whether a writer blocks. Exists for the case this
+// was written to diagnose: on a wedged machine the useful question is whether
+// threads are parked here or somewhere else, and what the quota thinks, and both
+// answers have to be obtainable without a working userland.
+static int
+dump_page_writer_quota(int argc, char** argv)
+{
+	ModifiedPageQueue* queue = vm_page_default_modified_queue();
+	if (queue == NULL) {
+		kprintf("no default modified queue\n");
+		return 0;
+	}
+
+	queue->DumpQuotaState();
+	return 0;
+}
+
+
 status_t
 ModifiedPageQueue::StartWriter(const char* name)
 {
@@ -965,7 +987,44 @@ ModifiedPageQueue::StartWriter(const char* name)
 	if (fWriterThread < 0)
 		return fWriterThread;
 
+	// There is one queue per disk device, so guard against registering the
+	// command once per disk.
+	static bool sCommandAdded = false;
+	if (!sCommandAdded) {
+		sCommandAdded = true;
+		add_debugger_command("page_writer_quota", &dump_page_writer_quota,
+			"dump the modified-page quota state and its wait statistics");
+	}
+
 	return resume_thread(fWriterThread);
+}
+
+
+void
+ModifiedPageQueue::DumpQuotaState()
+{
+	kprintf("modified queue %p\n", this);
+	kprintf("  pages queued            : %" B_PRIuPHYSADDR "\n",
+		(phys_addr_t)Count());
+	kprintf("  per-page write estimate : %" B_PRIdBIGTIME " us"
+		"  (last sample, not a mean)\n", fLastAveragePageWriteDuration);
+	kprintf("  estimated drain time    : %" B_PRIdBIGTIME " us  (local quota %d us)\n",
+		(bigtime_t)Count() * fLastAveragePageWriteDuration,
+		PAGES_FLUSH_DURATION_LOCAL_QUOTA);
+	kprintf("  global modified count   : %" B_PRId64 "\n",
+		atomic_get64(&sGlobalModifiedCount));
+	kprintf("  global estimated drain  : %" B_PRIdBIGTIME " us  (global quota %d us)\n",
+		atomic_get64(&sGlobalEstimatedWriteDuration),
+		PAGES_FLUSH_DURATION_GLOBAL_QUOTA);
+	kprintf("  quota waits             : %" B_PRId64 "\n",
+		atomic_get64(&sQuotaWaits));
+	kprintf("  quota wait timeouts     : %" B_PRId64 "  (bound %d us)\n",
+		atomic_get64(&sQuotaTimeouts), PAGES_FLUSH_QUOTA_WAIT_TIMEOUT);
+	kprintf("  total time waiting      : %" B_PRIdBIGTIME " us\n",
+		atomic_get64(&sQuotaWaitTime));
+	kprintf("  longest single wait     : %" B_PRIdBIGTIME " us\n",
+		atomic_get64(&sQuotaWaitMax));
+	kprintf("  writer thread           : %" B_PRId32 "\n", fWriterThread);
 }
 
 
@@ -1005,21 +1064,70 @@ ModifiedPageQueue::WaitIfOverQuota(page_num_t additionalPages,
 		flags = (flags & ~B_RELATIVE_TIMEOUT) | B_ABSOLUTE_TIMEOUT;
 	}
 
+	bigtime_t waitStart = 0;
+
 	while (IsOverQuota(additionalPages)) {
 		ConditionVariableEntry waitEntry;
 		fUnderQuotaCondition.Add(&waitEntry);
 
 		if (!IsOverQuota(additionalPages))
-			return B_OK;
+			break;
+
+		if (waitStart == 0) {
+			waitStart = system_time();
+			atomic_add64(&sQuotaWaits, 1);
+		}
 
 		fPageWriterCondition.WakeUp();
 		status_t status = waitEntry.Wait(flags, timeout);
-		if (status != B_OK)
+		if (status != B_OK) {
+			// B_TIMED_OUT here is not a failure; it is this function declining
+			// to block the caller any longer. See the header.
+			_RecordQuotaWait(waitStart, status == B_TIMED_OUT);
 			return status;
+		}
 
 		// The queue itself is now under-quota, but it may still be over
 		// when considering additionalPages. So, we loop again.
 	}
 
+	if (waitStart != 0)
+		_RecordQuotaWait(waitStart, false);
+
 	return B_OK;
+}
+
+
+// Bounding the wait removes the hang but must not remove the evidence: a system
+// that times out here repeatedly is still failing to write back fast enough, and
+// without this it would merely look slow. Rate limited to one line a second,
+// because the case worth reporting is a machine under enough write pressure that
+// a per-write log line would itself become the bottleneck.
+void
+ModifiedPageQueue::_RecordQuotaWait(bigtime_t waitStart, bool timedOut)
+{
+	bigtime_t waited = system_time() - waitStart;
+
+	atomic_add64(&sQuotaWaitTime, waited);
+	if (waited > atomic_get64(&sQuotaWaitMax))
+		atomic_set64(&sQuotaWaitMax, waited);
+
+	if (!timedOut)
+		return;
+
+	atomic_add64(&sQuotaTimeouts, 1);
+
+	static bigtime_t sLastComplaint = 0;
+	bigtime_t now = system_time();
+	if (now - sLastComplaint < 1000000)
+		return;
+	sLastComplaint = now;
+
+	dprintf("page writer: quota wait timed out after %" B_PRIdBIGTIME " us,"
+		" proceeding over quota (waits %" B_PRId64 ", timeouts %" B_PRId64
+		", longest %" B_PRIdBIGTIME " us, per-page estimate %" B_PRIdBIGTIME
+		" us, queue %" B_PRIuPHYSADDR " pages)\n", waited,
+		atomic_get64(&sQuotaWaits), atomic_get64(&sQuotaTimeouts),
+		atomic_get64(&sQuotaWaitMax), fLastAveragePageWriteDuration,
+		(phys_addr_t)Count());
 }

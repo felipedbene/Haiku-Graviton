@@ -837,9 +837,25 @@ do_cache_io(void* _cacheRef, void* cookie, off_t offset, addr_t buffer,
 				}
 
 				locker.Unlock();
-				status_t status = modifiedQueue->WaitIfOverQuota(toModified, 0, B_CAN_INTERRUPT);
+				// This used to pass timeout 0 with no timeout flag, which makes
+				// the underlying ConditionVariableEntry::Wait() an *indefinite*
+				// wait: a thread dirtying pages while the queue was over quota
+				// blocked until the page writer said otherwise, and if the
+				// writer never caught up, forever. Observed as a machine that
+				// answered ICMP and accepted TCP on :22 while no userland
+				// process could make progress -- no panic, no KDL, nothing in
+				// the syslog.
+				status_t status = modifiedQueue->WaitIfOverQuota(toModified,
+					PAGES_FLUSH_QUOTA_WAIT_TIMEOUT,
+					B_RELATIVE_TIMEOUT | B_CAN_INTERRUPT);
 				locker.Lock();
-				if (status != B_OK) {
+				// B_TIMED_OUT is not an error: it is permission to go over
+				// quota. The quota is best-effort in any case -- mapped pages
+				// can be modified at any time without consulting it -- so
+				// exceeding it is already an ordinary condition, whereas
+				// failing the write here would turn a disk that cannot keep up
+				// into an I/O error an application has no way to handle.
+				if (status != B_OK && status != B_TIMED_OUT) {
 					if (bytesLeft == size)
 						return status;
 
