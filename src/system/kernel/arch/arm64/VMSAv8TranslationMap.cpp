@@ -773,9 +773,26 @@ VMSAv8TranslationMap::Query(addr_t va, phys_addr_t* pa, uint32* flags)
 	ThreadCPUPinner pinner(thread_get_current_thread());
 	ASSERT(ValidateVa(va));
 
+	// The root table is allocated lazily by Map(), so there may be nothing to
+	// walk yet. Report "not present" rather than dereferencing a null table.
+	if (fPageTable == 0)
+		return B_OK;
+
 	ProcessRange(fPageTable, fInitialLevel, va, B_PAGE_SIZE, nullptr,
 		[=](uint64_t* ptePtr, uint64_t effectiveVa) {
 			uint64_t pte = atomic_get64((int64_t*)ptePtr);
+
+			// ProcessRange() hands us every level-3 slot covered by the range,
+			// whether or not it holds a live mapping: a level-3 table exists as
+			// soon as any single page in its 2MB span is mapped, so slots for
+			// never-faulted pages are reached here holding an invalid entry.
+			// Such an entry carries neither a physical address nor attributes,
+			// so it must be reported as absent. Callers use PAGE_PRESENT to
+			// decide whether *pa is meaningful, and a zero *pa passed to
+			// vm_lookup_page() is fatal.
+			if ((pte & kPteValidMask) == 0)
+				return;
+
 			*pa = pte & kPteAddrMask;
 			*flags |= PAGE_PRESENT | B_KERNEL_READ_AREA;
 			if (is_pte_accessed(pte))
