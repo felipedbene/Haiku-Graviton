@@ -244,7 +244,10 @@ consumers need to be unbounded.**
 
 ### 4.3 Every other caller of `CoreEntry::GetLoad()`, checked
 
-Required before changing the meaning of a shared accessor.
+Required before changing the meaning of a shared accessor. The audit is
+**provably complete**: `scheduler_cpu.h` is included from nowhere outside
+`src/system/kernel/scheduler/`, so no consumer can exist beyond that directory
+and a grep over it enumerates every one.
 
 | Site | Effect of unclamping | Verdict |
 |---|---|---|
