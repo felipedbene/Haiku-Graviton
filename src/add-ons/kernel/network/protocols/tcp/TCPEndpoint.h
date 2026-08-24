@@ -52,6 +52,8 @@ public:
 
 			status_t	SetSendBufferSize(size_t length);
 			status_t	SetReceiveBufferSize(size_t length);
+			size_t		SendBufferSize();
+			size_t		ReceiveBufferSize();
 
 			status_t	GetOption(int option, void* value, int* _length);
 			status_t	SetOption(int option, const void* value, int length);
@@ -104,6 +106,9 @@ private:
 			void		_UpdateTimestamps(tcp_segment_header& segment,
 							size_t segmentLength);
 			void		_UpdateReceiveBuffer();
+			void		_UpdateSendBuffer();
+			void		_SampleMinRoundTripTime(
+								const tcp_segment_header& segment);
 			void		_MarkEstablished();
 			status_t	_WaitForEstablished(MutexLocker& lock,
 							bigtime_t timeout);
@@ -155,6 +160,11 @@ private:
 	uint32			fSendMaxSegmentSize;
 	uint32			fSendMaxSegments;
 	BufferQueue		fSendQueue;
+	tcp_sequence	fSendSizingReference;
+	bigtime_t		fSendSizingTimestamp;
+	tcp_sequence	fSendProbeSequence;
+	bigtime_t		fSendProbeTime;
+	bigtime_t		fMinRoundTripTime;
 	tcp_sequence	fLastAcknowledgeSent;
 	tcp_sequence	fInitialSendSequence;
 	tcp_sequence	fPreviousHighestAcknowledge;

@@ -109,10 +109,20 @@ net_socket_private::net_socket_private()
 	// on transmit throughput. At 65535 bytes that ceiling is about 1.6 Gbit/s at
 	// a third of a millisecond, which is what an AWS Graviton instance measured:
 	// 1611 Mbit/s, against 65535 * 8 / 0.326 ms = 1608 Mbit/s. The number was the
-	// default, not the hardware. Raising the send default to 256 KiB took the
-	// same machine to 4376-4421 Mbit/s -- close to three times as fast -- and cut
-	// the CPU spent per mebibyte from ~3900 us to ~2221 us, because far fewer,
-	// larger bursts do the same work. Beyond roughly 288 KiB the gain reverses.
+	// default, not the hardware.
+	//
+	// For TCP this is now only a starting point and a floor -- the endpoint grows
+	// its own send queue towards the bandwidth-delay product, see
+	// TCPEndpoint::_UpdateSendBuffer() -- but it is deliberately *not* lowered
+	// back to 65535, because on a short path the floor is doing work the
+	// auto-sizing cannot. Measured on a c7g.large at 0.16 ms of round trip, 512
+	// MiB per run: the auto-sizing target of twice the bandwidth-delay product
+	// comes to about 175 KiB there, while the measured optimum is 256-288 KiB, so
+	// a socket started at 65535 converges just below the best size and gave
+	// 4529 Mbit/s where one started at 256 KiB gave 5280-5296. Short flows are the
+	// same story with less room to recover. Above roughly 1 MiB the gain reverses
+	// hard -- 8 MiB measured 2915 Mbit/s on that path -- which is why the floor is
+	// not simply set high.
 	//
 	// This is a cap on queued data, not an allocation: a socket that never sends
 	// in bulk still costs nothing, so idle sockets are unaffected.
