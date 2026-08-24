@@ -93,7 +93,7 @@ GitHub (fork/branch)            CodeBuild arm64 (Graviton, Ubuntu 24.04)
 The buildspecs (`buildspecs/*.yml`) are intentionally thin — they invoke the
 **existing** vendored recipe rather than reimplementing it:
 `graviton/ssh/build-openssh-arm64.sh`, `graviton/ssh/UserBuildConfig`,
-`haiku-on-ec2`'s `make-gpt-image.sh`, and `graviton/scripts/haiku-canonical`.
+`graviton/builder/make-gpt-image.sh`, and `graviton/scripts/haiku-canonical`.
 
 ### Files
 
@@ -126,7 +126,7 @@ Set in `cdk.json` `context`, or override per-invocation with `-c key=value`
 | `haiku:buildComputeType` | `HAIKU_BUILD_COMPUTE` | `BUILD_GENERAL1_2XLARGE` | ~72 vCPU/144 GB arm64, comparable to the `c7g` builder. This is the "instance type" knob for the cross-build. |
 | `haiku:buildImage` | `HAIKU_BUILD_IMAGE` | `public.ecr.aws/ubuntu/ubuntu:24.04` | Must be arm64 Ubuntu 24.04 to match the validated bake host. |
 | `haiku:buildtoolsRepo` / `Branch` | | haiku/buildtools | arm64 cross-tools sources. |
-| `haiku:haikuOnEc2Repo` / `Branch` | | haiku/haiku-on-ec2 | provides `make-gpt-image.sh`. |
+| `haiku:haikuOnEc2Repo` / `Branch` | | felipedbene/haiku-on-ec2 | **vestigial.** Nothing reads these any more (see below); left in place because removing them replaces all four CodeBuild projects. |
 | `haiku:haikuRevision` | `HAIKU_REVISION` | `hrev59996` | stamped into the build + a tag. |
 | `haiku:rootVolumeBytes` | `HAIKU_ROOT_VOLUME_BYTES` | `2147483648` | 2 GiB root volume. |
 | `haiku:workBucketName` | (context only, **not** env) | (generated) | **leave empty.** See the warning below. |
