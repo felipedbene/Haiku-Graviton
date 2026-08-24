@@ -242,6 +242,7 @@ AddFilesToPackage bin :
 	disktput
 	ena_fault
 	nettput
+	smpscale
 	consoled
 	;
 AddFilesToPackage apps

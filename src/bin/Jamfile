@@ -254,6 +254,7 @@ SubInclude HAIKU_TOP src bin disktput ;
 SubInclude HAIKU_TOP src bin ena_fault ;
 SubInclude HAIKU_TOP src bin netprof ;
 SubInclude HAIKU_TOP src bin nettput ;
+SubInclude HAIKU_TOP src bin smpscale ;
 SubInclude HAIKU_TOP src bin consoled ;
 SubInclude HAIKU_TOP src bin desklink ;
 SubInclude HAIKU_TOP src bin fwcontrol ;
