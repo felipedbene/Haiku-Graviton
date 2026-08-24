@@ -43,7 +43,7 @@ aws s3 cp "$RAW_IMAGE" "s3://$WORK_BUCKET/$KEY" --region "$AWS_DEFAULT_REGION"
 
 echo "==> ec2 import-snapshot (Format=raw)"
 TASK_ID=$(aws ec2 import-snapshot --region "$AWS_DEFAULT_REGION" \
-  --description "haiku-graviton arm64 raw ${STAMP}" \
+  --description "DeBeOS arm64 raw ${STAMP}" \
   --disk-container "Format=raw,UserBucket={S3Bucket=${WORK_BUCKET},S3Key=${KEY}}" \
   --query 'ImportTaskId' --output text)
 echo "    import task: $TASK_ID"
@@ -68,7 +68,7 @@ echo "    snapshot: $SNAP_ID"
 echo "==> register-image (arm64/uefi/ena/hvm, root /dev/xvda)"
 AMI_ID=$(aws ec2 register-image --region "$AWS_DEFAULT_REGION" \
   --name "$NAME" \
-  --description "Haiku on Graviton (arm64) -- @minimum-mmc + OpenSSH, baked by CDK pipeline" \
+  --description "DeBeOS (arm64) -- ARM-first OS descended from Haiku/BeOS; @minimum-mmc + OpenSSH, baked by CDK pipeline" \
   --architecture arm64 \
   --boot-mode uefi \
   --ena-support \
