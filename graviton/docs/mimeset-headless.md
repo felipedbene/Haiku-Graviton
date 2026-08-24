@@ -1,10 +1,14 @@
 # `mimeset` is a silent no-op on a headless Haiku — and it is not alone
 
 **Status 2026-08-24 (updated).** The defect is understood, the `mimeset` fix is built for
-arm64, and it is now **runtime-verified on guest 2235** — including one package end-to-end
-(`vim`: **0 of 2454 files → 2454 of 2454** carrying a `BEOS:` attribute). Remediation path
-(a) is priced and proven to round-trip. What remains is a single decision that is the
-owner's, not an agent's: see section 7.
+arm64, and it is now **runtime-verified and deployed on all six build guests**. A real
+`haikuporter` build produces a package with types where it produced none before
+(`uri`: **0 of 68 → 68 of 68**, reproduced on two guests), and `vim`'s 2454 files go from
+0 to 2454 when re-mimeset directly. Remediation path (a) is priced and proven to round-trip.
+
+**Read section 7 before repeating any of this**: the obvious fix — dropping the binary on
+`PATH` — is *verifiably ineffective*, because haikuporter packages inside a chroot. What
+works is replacing `mimeset` inside `haiku.hpkg`.
 
 Branch: `fix/mimeset-headless`. Fix commit: `3eb457b35e`.
 
@@ -239,6 +243,8 @@ this investigation ends on.
 | Remediation cost for the 145 packages | **MEASURED** for path (a) — ~9.5 s for `vim`; see section 7. |
 | Headless type assignments match the working reference | **MEASURED** — controlled against host-built `mimeset` output; see section 6.3. |
 | Attributes survive `package create` | **MEASURED** — repack → re-extract → 2454/2454. |
+| A `PATH` drop fixes the haikuporter pipeline | **REFUTED** — `shutil.which` does return it, and a real build still produced 0/68. Packaging runs in a chroot. See section 7. |
+| Fixing `mimeset` inside `haiku.hpkg` fixes the pipeline | **MEASURED** — real `haikuporter` build: `uri` 0/68 → **68/68**, on two guests independently. |
 
 The prior session's report that a compiled probe calling
 `update_mime_info(path, true, true, FORCE_UPDATE_ALL)` with **no** `BApplication` returned
@@ -381,13 +387,55 @@ took days across six guests — three to four orders of magnitude more expensive
 and the chain still has open blockers, so a clean 145-package sweep is not currently a
 button anyone can press.
 
-### If (a) is chosen, one detail makes it cheap
+### Fixing the pipeline going forward — and the wrong turn on the way there
 
-`Configuration.py:373` resolves the tool with `which("mimeset")`, and the guest's `PATH`
-puts `/boot/home/config/non-packaged/bin` **first**, ahead of `/boot/system/bin`. Dropping
-the fixed binary there makes every future haikuporter run pick it up with no image rebake —
-consistent with [[kernel-module-hotswap-no-bake]]. **Doing that fixes the pipeline going
-forward and is independent of whether the existing 145 are remediated at all.**
+**A `PATH` drop does NOT fix the pipeline. That claim was made here and is withdrawn.**
+It is recorded rather than deleted because the reasoning was plausible and the refutation is
+the useful part.
+
+`Configuration.getMimesetCommand()` resolves the tool with `which("mimeset")` (Python's
+`shutil.which`, not the shell's — the guests have no shell `which` at all). The guests do put
+`/boot/home/config/non-packaged/bin` ahead of `/boot/system/bin`, and dropping the fixed
+binary there does make `shutil.which("mimeset")` return it — **verified directly, and still
+irrelevant.** A real `haikuporter` build afterwards produced `uri-5.34-2-any.hpkg` with
+**0 of 68** files carrying a `BEOS:` attribute, exactly as before.
+
+The reason is `Port.py`'s `os.chroot(self.workDir)`: **haikuporter packages inside a chroot
+rooted at the port's work dir.** Inside it, `/boot/system` is packagefs over the dependency
+packages and `/boot/home` is not the outer `/boot/home` at all, so the drop is invisible.
+The build log's `cleaning chroot folder` and `grabbing …hpkg and moving it to …` were the
+tell: the package is created inside the chroot and moved out.
+
+**What actually fixes it is the `mimeset` inside `haiku.hpkg`**, the package that populates
+the chroot's `/boot/system`. This is the same shape as the stale-`haiku.hpkg` defect in
+[[chroot-stale-libroot-clock-skew]] — a chroot carrying its own copy of a binary we thought
+we had fixed. A surgical single-entry replacement does it without a rebake:
+
+```
+cd <dir with bin/mimeset>            # the fixed binary
+package add -f /boot/home/haikuports/packages/haiku.hpkg bin/mimeset
+```
+
+**Result, on a real `haikuporter` build after that change: `uri` goes from 0 of 68 to
+68 of 68**, and the build log itself carries
+`mimeset: warning: application init failed (Bad port ID); continuing without it.`
+immediately after `mimesetting files for package uri-5.34-2-any.hpkg ...` — so the fix
+announces itself *from inside the chroot*, which is the only place the claim matters.
+**Reproduced on a second guest (2231), also 68 of 68.**
+
+This is a stopgap on existing guests, not the durable fix: the source change is merged, so
+any `haiku.hpkg` rebuilt from `graviton` carries it. A guest handed a *new* `haiku.hpkg`
+built from a tree without the fix would regress silently — worth knowing, since nothing
+checks it.
+
+### Deployment state (2026-08-24)
+
+All six QEMU guests (ports 2222, 2227, 2229, 2230, 2231, 2235) have **both**:
+`/boot/home/config/non-packaged/bin/mimeset` (helps only non-chroot invocations) and the
+fixed binary inside `/boot/home/haikuports/packages/haiku.hpkg` (the one that matters),
+each verified by reading the hash back **out** of the package: `5224f29290659b56…`.
+Every guest keeps `/boot/home/haiku.hpkg.bak-premimeset`, and on 2235 that backup was
+confirmed byte-identical to the pre-existing `haiku-system-orig.hpkg`.
 
 ### Still open, and not an agent's call
 
