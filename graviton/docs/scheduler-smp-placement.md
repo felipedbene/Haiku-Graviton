@@ -536,11 +536,26 @@ three fixes applied on `37ec8d088b`, with **no diagnostics** naming
 units were deleted and force-recompiled to rule out stale objects.
 
 That is stronger than it sounds: `build/jam/ArchitectureRules:806` applies
-`EnableWerror src system kernel`, and the `-Wno-error=` exemption list does **not**
-include `maybe-uninitialized` or `unused-variable`. Both of those would therefore
-have been hard errors rather than warnings, so their absence is a positive result
-and not merely a quiet log. Only two warnings appear in the whole kernel build, both
-pre-existing upstream and in unrelated files (`elf.cpp`, `interrupts.cpp`).
+`EnableWerror src system kernel`, and the `-Wno-error=` list at `:135-139` does
+**not** include `maybe-uninitialized` or `unused-variable` — the two candidate
+problems in these hunks, an uninitialised `index` in `choose_core()` and a
+conditionally-used `coreNewLoad` in `power_saving`. Both would have been hard
+errors, so their absence is a positive result and not merely a quiet log.
+
+**But `EnableWerror` does not mean every warning is fatal, and I overstated that
+earlier.** The demotion list is real and includes `unused-but-set-variable`,
+`array-bounds`, `address-of-packed-member`, `stringop-overread`, `cpp` and
+`register`. I had claimed a `-Wunused-but-set-variable` on the gated-off
+`placement_event event` would be a hard error; it would only have been a warning.
+The claim holds for the two diagnostics that actually mattered here, not in general.
+The proof it is not general is in the log itself: exactly two warnings survive a
+`-Werror` kernel build, both pre-existing upstream and in unrelated files
+(`elf.cpp` `-Waddress-of-packed-member`, `interrupts.cpp` `-Warray-bounds=`), and
+both are on the demotion list.
+
+Both configurations of the gate were built (§5.16), and the `event` variable does not
+warn in either — an argument to an empty inline still counts as a read, so the
+warning's precondition is never met.
 `smpscale` now links from the committed tree (previously it was hand-compiled and
 not reproducible), pulling `libgnu.so` for `sched_getcpu()` and resolving
 `_kern_set_scheduler_mode` against `libroot.so`; its hot loop is still a
@@ -917,6 +932,34 @@ an unmeasured change.
   dropped ssh chunk produced a *shorter* file that decoded cleanly and gave the
   wrong sha256 (132 939 bytes instead of 144 339). The sha gate caught it. Same
   family as the "artifact must announce itself" rule.
+
+### 5.16 Both gate configurations build, and a stale object nearly defeated the check
+
+The shipping configuration — tracing **off** — had never been compiled until after
+the A/B, which is the wrong order and worth admitting. Both are now verified on the
+rebased base `e270548f33`:
+
+- **Tracing off:** `kernel_arm64` and `smpscale` both `rc=0`, zero diagnostics in
+  any touched file. `scheduler_placement_trace.o` is produced but genuinely empty
+  (`text 0 / data 0 / bss 0`), confirming the whole facility compiles out rather
+  than merely going unused.
+- **Tracing on:** `rc=0`, zero non-link warnings, and
+  `scheduler_placement_trace.o` grows to `text 1196 / data 32 / bss 16400` —
+  confirming the enabled path is really compiled and not optimised away.
+- No fixes of any kind were needed in either configuration.
+
+**A genuine stale-object hazard was caught in the process.** A 5024-byte
+`scheduler_placement_trace.o` left over from a tracing-**on** build was still
+present when the tracing-**off** build began. Had it not been deleted, the
+"tracing off" kernel would have linked the tracing code in and the gate would have
+appeared not to work — or worse, appeared to work while shipping the cost. The
+kernel's scheduler objects land **flat** in the kernel object directory, not in a
+`scheduler/` subdirectory, which is why a naive `rm -rf .../scheduler/*.o` would
+have silently deleted nothing.
+
+Independent confirmation: after reverting to the shipping configuration and
+rebuilding, `kernel_arm64` reproduced the **identical** sha256
+`6d666772…cd92244`, so the two config-1 builds agree bit for bit.
 
 ---
 
