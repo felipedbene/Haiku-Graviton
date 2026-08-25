@@ -285,8 +285,26 @@ at all**:
   does `export CFLAGS="-O2 -g -DNDEBUG"` — so a flag injected downstream of the
   compiler default would be dropped there anyway.
 
-With no `--with-arch`, GCC's aarch64 default applies: **`-march=armv8-a`,
-ARMv8.0-A.**
+With no `--with-arch` or `--with-cpu`, GCC's aarch64 default applies. That
+default is **ARMv8.0-A**, and it is worth pinning down from GCC's own source
+rather than from prose, because the whole finding rests on it —
+`gcc/config/aarch64/aarch64.h:727-730`:
+
+```c
+/* If there is no CPU defined at configure, use generic as default.  */
+#ifndef TARGET_CPU_DEFAULT
+# define TARGET_CPU_DEFAULT TARGET_CPU_generic
+#endif
+```
+
+and `gcc/config/aarch64/aarch64.cc:2757` resolves `generic` to
+**`AARCH64_ARCH_V8A`**:
+
+```c
+  {"generic", generic, cortexa53, AARCH64_ARCH_V8A, ...
+```
+
+So: **`-march=armv8-a`, ARMv8.0-A, tuned for Cortex-A53.** Not Neoverse anything.
 
 ### 3.1 Why that is worse than merely "untuned"
 
@@ -882,7 +900,10 @@ checkable by a reader outside the project.
 
 - No `aarch64` case in `build/scripts/build_cross_tools_gcc4`; no
   `--with-arch`/`--with-cpu` in the haikuports GCC recipe; haikuporter injects no
-  arch flags. → userland is at GCC's `armv8-a` default. (§3)
+  arch flags. And GCC 13's own source fixes what that default *is* —
+  `aarch64.h:727-730` (`TARGET_CPU_generic`) and `aarch64.cc:2757`
+  (`generic` → `AARCH64_ARCH_V8A`, tuned `cortexa53`). → userland is at
+  **ARMv8.0-A, Cortex-A53-tuned**. (§3)
 - `libgcc/config/aarch64/lse-init.c` gates its only initialiser on
   `#ifdef __gnu_linux__`, so `__aarch64_have_lse_atomics` is permanently false on
   Haiku. (§3.1)
