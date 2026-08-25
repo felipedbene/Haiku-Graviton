@@ -185,6 +185,17 @@ struct net_stack_module_info {
 					void* previousData, ancillary_data_header* _header);
 	status_t	(*clone_ancillary_data)(const ancillary_data_container* from,
 					ancillary_data_container* to);
+
+	// Receive-path latency probe. Appended at the end of this structure so that
+	// every module built against an older copy of this header keeps every
+	// existing slot at its existing index; a module that does not know about this
+	// one simply never calls it. NULL when the stack was built without the probe,
+	// so a caller must test before calling.
+	//
+	// It exists because the accumulators live in the stack module and the sites
+	// worth timing are in the protocol modules, which cannot reach another
+	// add-on's symbols directly.
+	void		(*rxlat_add)(int which, uint64 delta);
 };
 
 

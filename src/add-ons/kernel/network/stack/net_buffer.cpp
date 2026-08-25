@@ -1132,6 +1132,11 @@ create_buffer(size_t headerSpace)
 	buffer->msg_flags = 0;
 	buffer->buffer_flags = 0;
 	buffer->size = 0;
+	// Zero means "never stamped", which the latency probe's consumer side tests
+	// for. These come from a slab, so without this a recycled object would carry
+	// a stale counter reading and put a spurious multi-second outlier into the
+	// residency histogram.
+	buffer->rx_probe_ticks = 0;
 
 	CHECK_BUFFER(buffer);
 	CREATE_PARANOIA_CHECK_SET(buffer, "net_buffer");

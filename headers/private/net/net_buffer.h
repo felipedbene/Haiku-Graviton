@@ -59,6 +59,18 @@ typedef struct net_buffer {
 	uint32					size;
 	uint8					protocol;
 	uint16					buffer_flags;
+
+	// Raw architected-counter reading, stamped by the device reader thread just
+	// before the buffer is put on a device interface's receive FIFO and read by
+	// the consumer thread just after it comes off, so that the queue's residency
+	// can be measured rather than inferred from a drop count. Written and read
+	// only inside the stack module.
+	//
+	// Appended at the end of the structure on purpose: every field above keeps
+	// its offset, so a module built against an older copy of this header still
+	// reads all of them correctly and only the allocating module needs to know
+	// that the object grew.
+	uint64					rx_probe_ticks;
 } net_buffer;
 
 struct ancillary_data_container;

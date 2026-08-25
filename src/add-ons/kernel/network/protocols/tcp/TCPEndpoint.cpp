@@ -461,6 +461,35 @@ state_needs_finish(int32 state)
 }
 
 
+// Receive-path latency probe. The accumulators live in the stack module, so this
+// reaches them through net_stack_module_info::rxlat_add, which is NULL when the
+// stack was built without the probe. Slot numbers are kept in step with
+// add-ons/kernel/network/stack/latency_probe.h by hand.
+#define RXLAT_TCP_ENDPOINT_LOCK		5
+#define RXLAT_TCP_SEGMENT			6
+#define RXLAT_TCP_NOTIFY_READER		7
+
+static inline uint64
+rxlat_now(void)
+{
+#if defined(__aarch64__)
+	uint64 value;
+	__asm__ __volatile__("mrs %0, cntvct_el0" : "=r" (value));
+	return value;
+#else
+	return (uint64)system_time();
+#endif
+}
+
+
+static inline void
+rxlat_tcp(int which, uint64 delta)
+{
+	if (gStackModule->rxlat_add != NULL)
+		gStackModule->rxlat_add(which, delta);
+}
+
+
 //	#pragma mark -
 
 
@@ -1688,8 +1717,10 @@ TCPEndpoint::_AvailableData() const
 void
 TCPEndpoint::_NotifyReader()
 {
+	const uint64 rxlatStart = rxlat_now();
 	fReceiveCondition.NotifyAll();
 	gSocketModule->notify(socket, B_SELECT_READ, _AvailableData());
+	rxlat_tcp(RXLAT_TCP_NOTIFY_READER, rxlat_now() - rxlatStart);
 }
 
 
@@ -2229,7 +2260,15 @@ TCPEndpoint::_Receive(tcp_segment_header& segment, net_buffer* buffer)
 int32
 TCPEndpoint::SegmentReceived(tcp_segment_header& segment, net_buffer* buffer)
 {
+	const uint64 rxlatEntry = rxlat_now();
 	MutexLocker locker(fLock);
+	const uint64 rxlatLocked = rxlat_now();
+	rxlat_tcp(RXLAT_TCP_ENDPOINT_LOCK, rxlatLocked - rxlatEntry);
+	struct RxlatSegmentTimer {
+		uint64 start;
+		~RxlatSegmentTimer() { rxlat_tcp(RXLAT_TCP_SEGMENT, rxlat_now() - start); }
+	} rxlatSegmentTimer = { rxlatEntry };
+	(void)rxlatSegmentTimer;
 
 	TRACE("SegmentReceived(): buffer %p (%" B_PRIu32 " bytes) address %s "
 		"to %s flags %#" B_PRIx8 ", seq %" B_PRIu32 ", ack %" B_PRIu32

@@ -34,6 +34,7 @@
 #include <net_stat.h>
 
 #include "ancillary_data.h"
+#include "latency_probe.h"
 #include "utility.h"
 
 
@@ -1199,6 +1200,15 @@ int
 socket_getsockopt(net_socket* socket, int level, int option, void* value,
 	int* _length)
 {
+	// A private level for the receive-path latency instrument. Intercepted here,
+	// above the protocol, so it answers on any socket and does not need a new
+	// device node: the alternative readout channels out of this module are a KDL
+	// command, which needs a serial console this platform can only just about
+	// drive, and dprintf, which on this platform is a synchronous per-character
+	// UART write and would perturb the very thing being measured.
+	if (level == RXLAT_SOL)
+		return rxlat_getsockopt(option, value, _length);
+
 	return socket->first_protocol->module->getsockopt(socket->first_protocol,
 		level, option, value, _length);
 }
@@ -1627,6 +1637,9 @@ int
 socket_setsockopt(net_socket* socket, int level, int option, const void* value,
 	int length)
 {
+	if (level == RXLAT_SOL)
+		return rxlat_setsockopt(option, value, length);
+
 	return socket->first_protocol->module->setsockopt(socket->first_protocol,
 		level, option, value, length);
 }

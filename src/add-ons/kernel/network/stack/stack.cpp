@@ -11,6 +11,7 @@
 #include "device_interfaces.h"
 #include "domains.h"
 #include "interfaces.h"
+#include "latency_probe.h"
 #include "link.h"
 #include "stack_private.h"
 #include "utility.h"
@@ -932,6 +933,16 @@ stack_std_ops(int32 op, ...)
 }
 
 
+/*!	Trampoline for net_stack_module_info::rxlat_add. rxlat_add() itself is a
+	static inline, so it needs an out-of-line copy to have an address.
+*/
+static void
+rxlat_add_hook(int which, uint64 delta)
+{
+	rxlat_add(which, delta);
+}
+
+
 net_stack_module_info gNetStackModule = {
 	{
 		NET_STACK_MODULE_NAME,
@@ -990,7 +1001,8 @@ net_stack_module_info gNetStackModule = {
 	remove_ancillary_data,
 	move_ancillary_data,
 	next_ancillary_data,
-	clone_ancillary_data
+	clone_ancillary_data,
+	rxlat_add_hook
 };
 
 module_info* modules[] = {

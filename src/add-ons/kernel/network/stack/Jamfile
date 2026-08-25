@@ -9,6 +9,7 @@ KernelAddon stack :
 	device_interfaces.cpp
 	domains.cpp
 	interfaces.cpp
+	latency_probe.cpp
 	net_buffer.cpp
 	net_socket.cpp
 	notifications.cpp

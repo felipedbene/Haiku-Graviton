@@ -10,6 +10,7 @@
 #include "device_interfaces.h"
 #include "domains.h"
 #include "interfaces.h"
+#include "latency_probe.h"
 #include "stack_private.h"
 #include "utility.h"
 
@@ -51,11 +52,19 @@ device_reader_thread(void* _interface)
 	net_device_interface* interface = (net_device_interface*)_interface;
 	net_device* device = interface->device;
 	status_t status = B_OK;
+	uint64 previousLoop = 0;
 
 	while ((device->flags & IFF_UP) != 0) {
 		net_buffer* buffer;
+		const uint64 beforeReceive = rxlat_ticks();
 		status = device->module->receive_data(device, &buffer);
 		if (status == B_OK) {
+			const uint64 afterReceive = rxlat_ticks();
+			rxlat_add(RXLAT_READER_RECEIVE_DATA, afterReceive - beforeReceive);
+			if (previousLoop != 0)
+				rxlat_add(RXLAT_READER_LOOP, afterReceive - previousLoop);
+			previousLoop = afterReceive;
+
 			// feed device monitors
 			if (atomic_get(&interface->monitor_count) > 0)
 				device_interface_monitor_receive(interface, buffer);
@@ -68,10 +77,20 @@ device_reader_thread(void* _interface)
 				interface->receive_deframe_dropped++;
 				continue;
 			}
+			const uint64 afterDeframe = rxlat_ticks();
+			rxlat_add(RXLAT_READER_DEFRAME, afterDeframe - afterReceive);
 
 			const size_t packetSize = buffer->size;
+			// Stamped before the enqueue, not after, so that the residency
+			// measured downstream includes any wait for the FIFO mutex the
+			// consumer also holds. A stamp taken after the lock was won would
+			// hide exactly the hand-off cost this exists to price.
+			buffer->rx_probe_ticks = afterDeframe;
 			status = fifo_enqueue_buffer_tracked(&interface->receive_queue,
 				buffer, &interface->receive_queue_diagnostics);
+			rxlat_add(RXLAT_READER_ENQUEUE, rxlat_ticks() - afterDeframe);
+			rxlat_add(RXLAT_ENQUEUE_DEPTH_BYTES,
+				interface->receive_queue_diagnostics.current_bytes);
 			if (status == B_OK) {
 				atomic_add((int32*)&device->stats.receive.packets, 1);
 				atomic_add64((int64*)&device->stats.receive.bytes, packetSize);
@@ -102,15 +121,33 @@ device_consumer_thread(void* _interface)
 	net_device_interface* interface = (net_device_interface*)_interface;
 	net_device* device = interface->device;
 	net_buffer* buffer;
+	uint64 previousLoop = 0;
 
 	while (atomic_get(&interface->ref_count) > 0) {
+		const uint64 beforeDequeue = rxlat_ticks();
 		ssize_t status = fifo_dequeue_buffer_tracked(&interface->receive_queue, 0,
 			B_INFINITE_TIMEOUT, &buffer,
 			&interface->receive_queue_diagnostics);
+		const uint64 afterDequeue = rxlat_ticks();
 		if (status != B_OK) {
 			if (status == B_INTERRUPTED)
 				continue;
 			break;
+		}
+		rxlat_add(RXLAT_CONSUMER_DEQUEUE, afterDequeue - beforeDequeue);
+		if (previousLoop != 0)
+			rxlat_add(RXLAT_CONSUMER_LOOP, afterDequeue - previousLoop);
+		previousLoop = afterDequeue;
+		rxlat_add(RXLAT_DEQUEUE_DEPTH_BYTES,
+			interface->receive_queue_diagnostics.current_bytes);
+		// Guarded against a buffer that reached the FIFO by some path other than
+		// the reader thread (device_enqueue_buffer, or a frame in flight when the
+		// probe was switched on) and so carries no stamp. Charging those a
+		// residency of "now" would put a multi-second outlier in the histogram.
+		if (buffer->rx_probe_ticks != 0
+			&& afterDequeue >= buffer->rx_probe_ticks) {
+			rxlat_add(RXLAT_FIFO_RESIDENCY,
+				afterDequeue - buffer->rx_probe_ticks);
 		}
 
 		if (buffer->interface_address != NULL) {
@@ -129,7 +166,10 @@ device_consumer_thread(void* _interface)
 
 			// Find handler for this packet
 
+			const uint64 beforeLock = rxlat_ticks();
 			RecursiveLocker locker(interface->receive_lock);
+			const uint64 afterLock = rxlat_ticks();
+			rxlat_add(RXLAT_CONSUMER_RECEIVE_LOCK, afterLock - beforeLock);
 
 			DeviceHandlerList::Iterator iterator
 				= interface->receive_funcs.GetIterator();
@@ -143,6 +183,7 @@ device_consumer_thread(void* _interface)
 					&& handler->func(handler->cookie, device, buffer) == B_OK)
 					buffer = NULL;
 			}
+			rxlat_add(RXLAT_CONSUMER_DISPATCH, rxlat_ticks() - afterLock);
 		}
 
 		if (buffer != NULL)
@@ -200,6 +241,13 @@ allocate_device_interface(net_device* device, net_device_module_info* module)
 	interface->receive_enqueue_dropped = 0;
 	init_fifo_watermark(&interface->receive_queue_diagnostics,
 		interface->receive_queue.max_bytes);
+
+	// The latency readout has to reach *some* interface's FIFO. Pick by name
+	// rather than by order: loopback has its own device interface and its own
+	// FIFO, and reporting the loopback queue's occupancy while asking about the
+	// NIC would be a silently wrong answer rather than a missing one.
+	if (gRxlatInterface == NULL || strstr(device->name, "/dev/net/") != NULL)
+		gRxlatInterface = interface;
 
 	interface->device = device;
 	interface->up_count = 0;
