@@ -1102,7 +1102,7 @@ corrected experiment in §7.1 comes before the change, not after it.
 build. It is AWS's own verification recipe (§1.6) applied to a library we have
 already shipped:
 
-> On the builder (`i-0f7f6f3e8922acffd`) or any Haiku arm64 guest, pick a
+> On the build host or any Haiku arm64 guest, pick a
 > shipped haikuports library — `libjpeg.so`, or better something atomic-heavy
 > like `libicuuc.so` — and count:
 >

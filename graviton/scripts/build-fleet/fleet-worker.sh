@@ -27,7 +27,9 @@ G=baron@127.0.0.1
 GP=/boot/home/haikuports/packages
 OUT=/opt/haiku/hpkg-out/arm64
 # Shared package repository. Same env-override convention as graviton/scripts/ssm-run.
-BUCKET="${HAIKU_GRAVITON_BUCKET:-haiku-graviton-668984504585-us-west-2}"
+# Deliberately no default: the bucket name embeds an account id, which does not
+# belong in a public repo. Export HAIKU_GRAVITON_BUCKET before running.
+BUCKET="${HAIKU_GRAVITON_BUCKET:?set HAIKU_GRAVITON_BUCKET to the package-repository bucket}"
 S3=s3://$BUCKET/hpkg/arm64/
 LOG=$FLEET/worker-$PORT.log
 exec >> "$LOG" 2>&1

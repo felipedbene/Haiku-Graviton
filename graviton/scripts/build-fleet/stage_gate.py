@@ -18,7 +18,9 @@ import sys
 import boto3
 
 # Same env-override convention as graviton/scripts/ssm-run.
-BUCKET = os.environ.get("HAIKU_GRAVITON_BUCKET", "haiku-graviton-668984504585-us-west-2")
+# Set HAIKU_GRAVITON_BUCKET to the package-repository bucket. Deliberately has no
+# default: the bucket name embeds an account id, which does not belong in a public repo.
+BUCKET = os.environ["HAIKU_GRAVITON_BUCKET"]
 PREFIX = "hpkg/arm64-gate/"
 SRC = "/opt/haiku/fleet/gate-out"
 
