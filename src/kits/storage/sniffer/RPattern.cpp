@@ -11,6 +11,11 @@
 	MIME sniffer rpattern implementation
 */
 
+#include <stddef.h>
+	// for offsetof(), used in Create() below. Reaching it transitively through
+	// another header is not guaranteed, and on a host with a newer libstdc++ it
+	// is not reached at all -- this file then fails to compile as a host tool.
+
 #include "Err.h"
 #include "RPattern.h"
 #include "Range.h"
