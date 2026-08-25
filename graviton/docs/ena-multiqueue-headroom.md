@@ -44,11 +44,15 @@ the *same sender program* could be pointed at a Linux receiver).
    64-vCPU machine is at 3.8%**. The plan's premise — that the receive path is
    limited by being single-threaded — is refuted by its own subject: the single
    thread is 39% idle at the ceiling. (§4.1)
-5. **The deficit is a cadence problem, not a parallelism problem.** Leading
-   hypothesis with the arithmetic behind it in §6, and the cheap experiment that
-   would settle it. It is driver-only, roughly 40–60 lines, needs no kernel or
-   stack change, and it is already written down in this tree as
-   `XXX STRUCTURAL FIX STILL OWED` at `ena.cpp:219-228`.
+5. **The deficit is not a parallelism problem.** ~~It is a cadence problem~~ —
+   **corrected 2026-08-25.** The cadence hypothesis (§6) was falsified and the
+   account is now in `ena-receive-latency-account.md`: the limiter is **bufferbloat in
+   the device-interface receive FIFO** — a standing ~13.7 ms, ~16 MiB queue that is
+   ~99.93% of a frame's transit time — **plus `TCPEndpoint::fLock`, ~47% of the
+   ceiling** (the consumer is 100% wall-clock saturated at only ~53% CPU-busy). §6's
+   "single FIFO's plain mutex" candidate was essentially right. The
+   `XXX STRUCTURAL FIX STILL OWED` at `ena.cpp:219-228` remains a worthwhile
+   **correctness** fix, but it is not the throughput lever.
 
 **What was built:** nothing in the kernel, nothing in the stack, nothing in the
 driver. Two small independently-useful fixes came out of the measurement work and
@@ -268,7 +272,14 @@ Three conclusions, and the first two are what close this project:
 
 ---
 
-## 6. Where the 2.9× actually is: interrupt cadence, not parallelism
+## 6. Where the 2.9× actually is: not parallelism ~~— interrupt cadence~~
+
+> **Resolved 2026-08-25 (`ena-receive-latency-account.md`).** The interrupt-cadence
+> hypothesis stated below was falsified. The 2.9× is **bufferbloat in the
+> device-interface receive FIFO** — a standing ~13.7 ms, ~16 MiB queue that is ~99.93%
+> of a frame's transit time — **plus `TCPEndpoint::fLock`, ~47% of the ceiling**. The
+> "single FIFO's plain mutex" candidate listed at the end of this section was
+> essentially right. The cadence arithmetic below is retained for the record only.
 
 Stated as the leading hypothesis with its arithmetic, **not** as a result.
 

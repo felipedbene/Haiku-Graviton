@@ -257,10 +257,19 @@ the RTT is meaningless — a lesson worth more than the number.
   **merged but unused: nothing has been measured with it.** So cycles-per-byte is
   still inferred from `active_time` rather than counted — the instrument now exists,
   the reading does not. A userland readout would still sharpen this.
-- **The live network gap, added 2026-08-24:** ENA **interrupt cadence** — the
-  `XXX STRUCTURAL FIX STILL OWED` at `ena.cpp:221`. DeBeOS plateaus at
-  **9.0–10.2 Gbit/s** on `c7g.16xlarge` where Linux does **29.8**. This is the ~3×,
-  and it is a single-queue problem.
-- **Also still open:** ~88% of the per-byte receive cost is unexplained. Receive fits
-  **2.34 µs/frame + 1.85 ns/byte**; **there is no transmit fit** — do not apply that
-  split to transmit.
+- **The network receive ceiling — RESOLVED 2026-08-25 (`ena-receive-latency-account.md`).**
+  DeBeOS plateaus at **9.0–10.2 Gbit/s** on `c7g.16xlarge` where Linux does **29.8**;
+  that ~3× is **bufferbloat in the device-interface receive FIFO** — a standing
+  ~13.7 ms, ~16 MiB queue that is ~99.93% of a frame's transit time — **plus
+  `TCPEndpoint::fLock`, ~47% of the ceiling**. The consumer thread is 100% wall-clock
+  saturated while only ~53% CPU-busy (its 10.167 µs/frame wall time predicts
+  7.09 Gbit/s, matching the 7.06 measured), which is why the CPU instruments here read
+  it as idle. The `ena.cpp:221` unmask-before-drain item is a correctness fix, not
+  this lever; interrupt cadence and multi-queue were falsified and stay falsified. A
+  time-based **CoDel** queue discipline was built and hardware-measured but **NOT
+  merged** (it cannot hit ≤0.2% loss and ≤1 ms latency together — Mathis loss–delay
+  coupling); **ECN** is the loss-free fix.
+- **On the per-byte cost:** receive fits **2.34 µs/frame + 1.85 ns/byte** and ~88% of
+  the per-byte term is not itemised, but the machine is 97.3% idle at the ceiling, so
+  that cost is not the throughput constraint. **There is no transmit fit** — do not
+  apply that split to transmit.
