@@ -75,9 +75,24 @@ for p in "$@"; do
 	SSHRC=$?
 	if [ $SSHRC -eq 124 ]; then
 		echo "!!! $p TIMED OUT after ${TMO}s -- reclaiming the guest"
-		# Best effort: stop the build so the slave is usable for the next recipe.
+		# Best effort: stop the build so the guest is usable for the next recipe.
+		#
+		# Haiku's `ps` prints "Team Id #Threads Gid Uid", and Team is the team's
+		# whole command line -- spaces included. So for
+		# `timeout 14400 haikuporter ...` field $2 is "14400", and for the
+		# matching pipeline itself it is "-i": never a pid. The Id is always the
+		# 4th field from the end, so $(NF-3) is right whether or not the command
+		# line contains spaces. Verified on a live guest: a team whose name has
+		# no spaces gives NF=5 with $2 == $(NF-3) == the Id.
+		#
+		# Two further guards, both needed:
+		#   - drop the matcher's own team. Its command line contains both
+		#     "haikuporter" and "grep", so without this the kill takes out the
+		#     very shell running it and never reaches `echo killed`.
+		#   - require a numeric result, so a short line can never yield a stray
+		#     word that kill would reject (or worse, misread).
 		timeout 60 ssh $S $G 'ps 2>/dev/null | grep -i haikuporter | head -5' || true
-		timeout 60 ssh $S $G 'kill -9 $(ps 2>/dev/null | grep -i "haikuporter\|conftest" | awk "{print \$2}") 2>/dev/null; echo killed' || true
+		timeout 60 ssh $S $G 'kill -9 $(ps 2>/dev/null | grep -iE "haikuporter|conftest" | grep -vE "grep|awk" | awk "NF>=5 { print \$(NF-3) }" | grep -E "^[0-9]+$") 2>/dev/null; echo killed' || true
 	fi
 
 	scp $SCP "$G:/boot/home/f-$p.log" "$FLEET/logs/f-$p-$PORT.log" 2>/dev/null
