@@ -128,6 +128,79 @@ The obvious-looking alternatives were all worse:
 None of them would have worked anyway, because ordering was never the cause.
 The buffer had no reader, and no arrangement of start-up order creates one.
 
+## Verification
+
+Two arms, 20 boots, on a `c7g.large` launched from the canonical AMI. The
+control arm is the AMI's own `app_server`; the test arm is that same binary with
+this patch applied, dropped into `/boot/system/non-packaged/servers/` and
+selected by a `~/config/settings/launch/` override that only replaces the
+`launch` line. Which one ran was confirmed each boot from `listimage`'s image
+path, not assumed.
+
+**The control needs no caveat.** Rebuilding this tree at `graviton` tip with the
+patch reverted produced an `app_server` whose md5 is *bit-identical* to the one
+in the AMI (`dba228479817b588899e644c90318671`). So exactly one thing differs
+between the arms: these four files.
+
+Pixels come from `graviton/scripts/rdcapture.py`, which completes the
+remote-display handshake, renders the ops it receives into a software
+framebuffer and counts pure-black pixels in the top-right 137x70. Its selftest
+(38 assertions, including PNG round-trip and exact fill arithmetic) passes, and
+a healthy Deskbar scores 213 on it — icon outlines plus a window-list row this
+renderer does not fill.
+
+### Virgin first boot — the condition the failure was reported under
+
+Re-armed each boot by removing `~/config/settings/deskbar` and touching
+`~/config/settings/first_login`, so `default_deskbar_items.sh` runs and talks to
+Deskbar synchronously.
+
+| boot | blocked send writer | Deskbar window port | `first_login` stamp cleared | Deskbar drawing ops | **black px in corner** |
+|---|---|---|---|---|---|
+| stock 1 | yes | 200 / 200 | no | 46 | **6075** |
+| stock 2 | yes | 200 / 200 | no | 3262 | 213 |
+| stock 3 | yes | 200 / 200 | no | 3180 | 213 |
+| stock 4 | yes | 200 / 200 | no | 46 | **6075** |
+| stock 5 | yes | 200 / 200 | no | 44 | **6075** |
+| fixed 1 | no | 0 / 200 | yes | 1056 | 213 |
+| fixed 2 | no | 0 / 200 | yes | 1056 | 213 |
+| fixed 3 | no | 0 / 200 | yes | 1056 | 213 |
+| fixed 4 | no | 0 / 200 | yes | 1056 | 213 |
+| fixed 5 | no | 0 / 200 | yes | 1056 | 213 |
+
+6075 is not an approximation of the field report's figure for a wedged Deskbar,
+it is the same number. The capture shows a black rectangle with a 1 px border
+and one grey band — no leaf, no tray — against a fixed arm that draws the leaf,
+the four tray replicants and the window-list row.
+
+Note where the race actually lives. The **defect** is deterministic: 5 of 5
+stock boots left a blocked writer, a window port jammed at capacity and a
+`first_login` chain that never finished. What varies is only whether connecting
+a client happens to rescue the Deskbar — 3 of 5 stayed black for good, 2 of 5
+recovered. A single stock boot therefore proves nothing in either direction,
+which is exactly what the field report warned.
+
+### Warm reboot, tray already populated
+
+| | blocked send writer | Deskbar window port |
+|---|---|---|
+| stock, 5 boots | yes, 5/5 | 200 / 200, 5/5 |
+| fixed, 5 boots | no, 0/5 | 0 / 200, 5/5 |
+
+Here the corner reads 213 on both arms, because the pre-connect wedge is
+released by the act of connecting: `_NewConnection()` cancels the blocked write
+and the fresh client asks for a full repaint. **A screenshot taken after
+connecting cannot see this bug** unless the recovery fails — which is what the
+first-boot load makes likely. That is why the semaphore and port-depth readings
+above carry the result and the pixels only corroborate it.
+
+**Verdict: closed for the mechanism, not merely narrowed.** The blocking wait
+that caused it no longer exists, and the condition is a property of the buffer
+rather than of start-up timing, so it covers "no client yet", "client died" and
+"client too slow" alike. What is *not* proven is the mid-session case: a
+disconnect-then-relaunch experiment did not reproduce a wedge on the stock
+binary either, so that leg is reasoned from the code, not measured.
+
 ## Loose ends worth a follow-up
 
 - `BDeskbar`'s synchronous calls have no timeout, so any wedged Deskbar still
@@ -138,3 +211,12 @@ The buffer had no reader, and no arrangement of start-up order creates one.
   the buffer, but the underlying race is still there.
 - A client that survives the reconnect can still show a stale black corner from
   its own cached drawing state; that is a client-side issue, not this one.
+- Unrelated but found while doing this: the image's sshd **silently truncates
+  large writes**. `scp` of a 1.9 MB binary stopped at 522 KB, and piping into
+  `ssh 'cat > file'` stopped at exactly 128 KiB. Splitting into 64 KiB chunks
+  still lost roughly one chunk in three, with no error on either end — the
+  transfer only succeeded because each chunk's size was verified and retried.
+  Anything that copies a file onto one of these guests should checksum it.
+- Useful side effect of the control build: `app_server` built from `graviton`
+  tip is byte-identical to the one in the canonical AMI, so an AMI binary can be
+  used directly as the control arm of an A/B without a provenance caveat.
