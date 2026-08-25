@@ -44,6 +44,9 @@ If you read nothing else:
    every configuration including headless; 2D rasterization matters only in the
    QEMU/`ramfb` verification rig. §5.
 
+And one piece of housekeeping: **`graviton-mcpu-neoverse.patch` is already
+merged (`20bf8f2711`) — delete the file, there is nothing to finish.** §3.3.
+
 ---
 
 ## 1. What the AWS guide actually recommends
