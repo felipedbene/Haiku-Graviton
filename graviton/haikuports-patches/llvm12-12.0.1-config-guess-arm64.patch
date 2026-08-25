@@ -1,0 +1,37 @@
+From 1a2b3c4d5e6f70819293a4b5c6d7e8f9a0b1c2d3 Mon Sep 17 00:00:00 2001
+From: Haiku Graviton <graviton@localhost>
+Date: Mon, 25 Aug 2026 16:35:00 +0000
+Subject: cmake/config.guess: recognise Haiku on arm64
+
+The config.guess bundled with LLVM 12 is dated 2011-08-20 and knows only the
+two Haiku hosts that existed then, BePC and x86_64. On arm64 "uname -m" reports
+"arm64", so no case matches, the script prints its "unable to guess system
+type" banner and exits non-zero. cmake/modules/GetHostTriple.cmake treats that
+as fatal, so configure dies with "Failed to execute cmake/config.guess" before
+a single object is compiled.
+
+Add an arm64 case emitting the triple the toolchain itself reports, which is
+aarch64-unknown-haiku as printed by "gcc [dash]dumpmachine", plus a generic
+Haiku fallback so a future architecture degrades to a plausible guess rather
+than aborting the configure outright.
+
+diff --git a/cmake/config.guess b/cmake/config.guess
+index 1315b1c8ba9c..2a3f4e5d6c71 100644
+--- a/cmake/config.guess
++++ b/cmake/config.guess
+@@ -1229,6 +1229,13 @@
+     x86_64:Haiku:*:*) # Haiku running on x86_64.
+ 	echo x86_64-unknown-haiku
+ 	exit ;;
++    arm64:Haiku:*:*)	# Haiku on arm64. uname -m reports "arm64", but
++			# the toolchain triple is aarch64-unknown-haiku.
++	echo aarch64-unknown-haiku
++	exit ;;
++    *:Haiku:*:*)	# Any other Haiku architecture.
++	echo ${UNAME_MACHINE}-unknown-haiku
++	exit ;;
+     SX-4:SUPER-UX:*:*)
+ 	echo sx4-nec-superux${UNAME_RELEASE}
+ 	exit ;;
+-- 
+2.30.0
