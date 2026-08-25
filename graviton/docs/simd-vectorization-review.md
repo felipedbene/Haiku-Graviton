@@ -515,16 +515,29 @@ full state is already in the iframe from the EL0 entry. Signals carry it too —
 
 **Deciding evidence:**
 
-- `CPACR_EL1` is written **exactly twice in the whole tree, both in the EFI boot
-  loader, never in the kernel** (`git grep CPACR -- src/system/kernel` → zero):
+- `CPACR_EL1` is written **exactly three times in the whole tree, all three in the
+  EFI boot loader, never once in the kernel** (`git grep CPACR --
+  src/system/kernel` → zero hits). **Every one of them writes `3 << 20` —
+  `FPEN` only:**
   - `src/system/boot/platform/efi/arch/arm64/arch_start.cpp:67` —
-    `WRITE_SPECIALREG(CPACR_EL1, CPACR_FPEN_TRAP_NONE);`, and note this is
-    inside the `el == 2 && FEAT_VHE` branch only.
-  - `src/system/boot/platform/efi/arch/arm64/arch_smp.cpp:160-161`, secondaries:
-    `mov x1, #0x300000` / `msr CPACR_EL1, x1`. **`0x300000` = bits 21:20, i.e.
-    `FPEN = 0b11` (no trap). Bits 17:16 — `ZEN` — are `0b00`.**
-  - `arm_registers.h:54-60` defines `CPACR_FPEN_*` and `CPACR_TTA`. **There is no
-    `CPACR_ZEN` definition at all.**
+    `WRITE_SPECIALREG(CPACR_EL1, CPACR_FPEN_TRAP_NONE);`, inside the
+    `el == 2 && FEAT_VHE` branch.
+  - `src/system/boot/platform/efi/arch/arm64/arch_smp.cpp:160-161`, secondary CPU
+    bring-up: `mov x1, #0x300000` / `msr CPACR_EL1, x1`.
+  - `src/system/boot/platform/efi/arch/arm64/transition.S:58-60`, the EL2→EL1
+    transition, under the comment `// Enable FP/SIMD`:
+    `mov x10, #3 << 20` / `msr cpacr_el1, x10`.
+  - **`0x300000` == `3 << 20` == bits 21:20, i.e. `FPEN = 0b11` (no trap). Bits
+    17:16 — `ZEN` — are left `0b00` by all three.**
+  - `arm_registers.h:54-60` defines `CPACR_FPEN_MASK`, the four
+    `CPACR_FPEN_TRAP_*` values and `CPACR_TTA`. **There is no `CPACR_ZEN`
+    definition at all.**
+
+  *(Anchor future checks to the greppable literals — `CPACR_FPEN_TRAP_NONE`,
+  `#0x300000`, `#3 << 20`, `CPACR_FPEN_MASK` — and query by branch
+  (`git grep -n <literal> refs/heads/graviton -- <path>`). Line numbers drift, and
+  a working tree parked behind the branch has already misled more than one reader
+  during this review.)*
 - `ZCR_EL1`: **0 hits.** `ID_AA64ZFR0`: **0 hits.** No `str z`/`ldr z`,
   no predicate registers, no `FFR` anywhere. Total `SVE` hits across
   `headers/`+`src/`: **five**, all dead mask macros at
@@ -536,8 +549,8 @@ full state is already in the iframe from the EL0 entry. Signals carry it too —
 `:287`) does not decode it, so it falls to the initialised defaults at `:281-284`
 — `B_INVALID_OPCODE_EXCEPTION` / `SIGILL` / `ILL_ILLOPC`.
 
-> **`SVE CONTEXT STATE: NOT PRESERVED, FAULTS ON USE`** — decided by
-> `src/system/boot/platform/efi/arch/arm64/arch_smp.cpp:161` (ZEN left zero) with
+> **`SVE CONTEXT STATE: NOT PRESERVED, FAULTS ON USE`** — decided by the three
+> `CPACR_EL1` writes above, none of which sets `ZEN`, together with
 > `headers/private/kernel/arch/arm64/arch_thread_types.h:15-20` (FPSIMD-only
 > save area).
 
@@ -563,10 +576,23 @@ tick.** Enabling ZEN is the one change that must never be made in isolation.
 
 ### 4.3 Sizing the SVE kernel project — and why it is still not worth starting
 
-~300–500 lines. Files: `arm_registers.h` (`CPACR_ZEN`, `ZCR_EL1`,
-`ID_AA64ZFR0`, `EXCP_SVE` defines, ~30 lines); `arch_cpu.cpp` (probe
-`ID_AA64PFR0_EL1.SVE`, probe max VL, set ZEN — `arch_cpu_init_percpu()` is the
-only all-CPU hook and already writes TCR_EL1, ~60 lines); `arch_asm.S`
+~300–500 lines, and — importantly — **it is bootloader *plus* kernel work, not
+kernel alone.** That scoping follows directly from §4.2: `CPACR_EL1` is only ever
+written by the EFI loader, so enabling `ZEN` means touching **all three** of those
+sites. Miss `arch_smp.cpp` and SVE would work on CPU 0 and trap on every
+secondary — a bug that would look like a scheduler or migration defect rather
+than a missing register write.
+
+**A design consideration that falls out of the same fact:** because CPACR is set
+once at boot and never touched again, **there is no existing per-thread FP
+enable/disable machinery to extend.** A lazy first-touch SVE scheme has to
+introduce that machinery from nothing. (The never-read `last_vfp_user` field in
+arm64's `arch_cpu_info` looks like a vestige of an abandoned attempt at exactly
+this — see §2.1.)
+
+Files: the three bootloader sites above; `arm_registers.h` (`CPACR_ZEN`,
+`ZCR_EL1`, `ID_AA64ZFR0`, `EXCP_SVE` defines, ~30 lines); `arch_cpu.cpp` (probe
+`ID_AA64PFR0_EL1.SVE`, probe max VL, ~60 lines); `arch_asm.S`
 (`_sve_save`/`_sve_restore` with `MUL VL` addressing, predicates, `rdffr`/`wrffr`,
 ~80 lines); `arch_int.cpp` (decode EC=0x19 as first-touch, ~40 lines);
 `arch_thread_types.h` + `asm_offsets.cpp`. Two hard design calls:
@@ -1186,9 +1212,11 @@ checkable by a reader outside the project.
 - `libgcc/config/aarch64/lse-init.c` gates its only initialiser on
   `#ifdef __gnu_linux__`, so `__aarch64_have_lse_atomics` is permanently false on
   Haiku. (§3.1)
-- `CPACR_EL1` written twice, both in the boot loader, `FPEN=0b11` and `ZEN=0b00`;
-  no `ZCR_EL1`, no SVE save/restore, five dead SVE macros. → SVE traps to
-  `SIGILL`. (§4.2)
+- `CPACR_EL1` written **three** times, all in the EFI boot loader
+  (`arch_start.cpp`, `arch_smp.cpp`, `transition.S`) and never in the kernel; all
+  three write `3 << 20`, so `FPEN=0b11` and `ZEN=0b00`; no `CPACR_ZEN` macro
+  exists; no `ZCR_EL1`, no SVE save/restore, five dead SVE macros. → SVE traps to
+  `SIGILL`, and enabling it is bootloader-plus-kernel work. (§4.2, §4.3)
 - FPSIMD state is eagerly saved on every exception and carried through signals
   and fork; 512-byte fixed save area. → NEON is safe. (§4.1)
 - No `getauxval`/HWCAP/auxv; no arm64 ID-register feature probe; no userland
