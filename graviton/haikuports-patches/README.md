@@ -24,6 +24,58 @@ Do not delete `input-source-packages/` to escape this: the guest's bootstrap `cu
 reports `Protocol "https" disabled`, so those 116 source packages are the only way the
 guest can obtain sources at all. Removing them is gated on a working HTTPS `curl`.
 
+**Per-port removal is a different, safer thing than deleting the directory.** A single
+source package can be moved aside if its sources are supplied another way, and that is how
+the `llvm12` fix below was proven: `llvm12_source_rigged-12.0.1-8-arm64.hpkg` was moved out
+of `input-source-packages/`, the eight upstream tarballs were copied into
+`sys-devel/llvm/download/`, and haikuporter then used the **ports-tree** recipe and
+patchset — logging `Skipping download of source for llvm-12.0.1.src.tar.xz` followed by a
+passing checksum for all eight. No network was involved, so the disabled-HTTPS `curl` never
+came into it. Use this when the fix you need lives in a `patches/*.patchset` rather than in
+the recipe body, since the source package carries its own copy of both.
+
+## A poisoned package can look exactly like a missing one
+
+`bison-3.8.2_bootstrap-1-arm64.hpkg` ships an **x86-64 Linux** executable as `bin/bison`:
+
+```
+$ readelf -l bin/bison | grep interpreter
+      [Requesting program interpreter: /lib64/ld-linux-x86-64.so.2]
+```
+
+`bison_bootstrap-3.8.2-1-arm64.hpkg` is wrong in the same way but for aarch64 Linux
+(`/lib/ld-linux-aarch64.so.1`). Both are inside `-arm64` Haiku packages and neither can
+run. The genuine `bison-3.8.2-1-arm64.hpkg` is a real Haiku binary, has no `INTERP` segment
+at all, ships both `bin/bison` and `bin/yacc`, and prints `bison (GNU Bison) 3.8.2` when
+executed.
+
+Two things make this expensive to diagnose:
+
+1. **haikuporter prefers the broken one.** `3.8.2_bootstrap` sorts *above* `3.8.2`, so a
+   pool holding both resolves `cmd:bison` to the poisoned package. The good package being
+   present is not enough; the bad one has to be gone.
+2. **The failure does not mention architecture.** What surfaces is a `runtime_loader`
+   complaint about a program header type:
+
+   ```
+   runtime_loader: /boot/system/bin/bison: Unhandled pheader type in parse 0x6474e553
+   ```
+
+   `0x6474e553` is `PT_GNU_PROPERTY`, which Haiku's `elf.h` does not define and
+   `parse_program_headers()` therefore rejects with `B_BAD_DATA`. That is a true statement
+   about the loader, but it is **not the bug here** — the binary was for the wrong
+   architecture *and* the wrong operating system and could never have run. Do not go fix
+   the loader on the strength of this message; check `readelf -l` for an `INTERP` line
+   first. (A loader that named the machine type before parsing segments would have made
+   this a five-second diagnosis, which is worth remembering separately.)
+
+The practical consequence is that **any port whose build runs `bison` fails until the
+poisoned packages are out of the pool** — the visible symptom being a build tool dying with
+no yacc-related message anywhere. `sys-devel/jam` was the case that exposed it. Both
+poisoned files are still present in `hpkg-out/arm64/` and in the shared package repository;
+they are build inputs rather than shipped output, but they should be quarantined at source
+rather than worked around per guest.
+
 ## The mtime trap — read before editing a recipe in the guest
 
 `HaikuPorter/Repository.py:_partiallyExtractSourcePackageIfNeeded` re-extracts the recipe
@@ -56,6 +108,10 @@ built before that fix still shows it, so keep pinning until the guest is known g
 
 | `vim-9.1.1618-cli-only-no-ruby.patch` | **Two real cuts — the only deliberately reduced port in the netsurf chain.** vim exists in this tree solely as the affordable provider of `cmd:xxd`, which `netsurf-3.11` build-requires (the only other provider, `qvim`, wants Qt5). **Cut 1: no ruby interpreter** — cost is *vim has no `:ruby`*. Acceptable because the reason ruby is unbuildable here is an **arm64 kernel panic in `mprotect()`**, and that defect is separately owned and being fixed rather than concealed by this cut. **Cut 2: no GUI build** — cost is *no GUI vim*, i.e. `cmd:gvim`/`gview`/`gvimdiff`/`rgvim`/`rgview`, whose `PROVIDES` entries are removed in the same edit so the declaration cannot outlive the binaries. Needed because `make install` would reach `installglinks_haiku`, which reads back a `BEOS:ICON` attribute that `mimeset` does not produce in this chroot. Verified by **running** the extracted `xxd`, not by reading its `PROVIDES` line. | Cut 1: when the `VMSAv8TranslationMap::Query()` fix lands — then retry ruby, starting from `ruby-3.2.9-arm64-mcontext.patch`. Cut 2: when `mimeset` in the chroot produces `BEOS:ICON` |
 | `json_c-0.15-cmake4-policy.patch` | **Toolchain compatibility flag, not a cut.** json-c 0.15 declares `cmake_minimum_required` below 3.5 and cmake 4 removed that compatibility outright, so configure dies at `CMakeLists.txt:3` before it looks at anything else. `-DCMAKE_POLICY_VERSION_MINIMUM=3.5` restores the pre-3.5 policy defaults — exactly what cmake 3.x did with this project. **Nothing is removed from the build and no declared dependency changes**, so the resulting package is what json-c intends; it is not in the same class as the stage-1 cuts above. Needed because `hubbub`, netsurf's HTML parser, build-requires `devel:libjson_c`, and the tree's only other recipe (`json_c4-0.13.1`) is older still. | the recipe is updated to a json-c release declaring a cmake 3.5+ minimum |
+| `llvm12-12.0.1-config-guess-arm64.patch` | **Portability fix, not a cut.** LLVM 12 bundles a `cmake/config.guess` dated **2011-08-20** that knows only `BePC` and `x86_64` Haiku hosts. On arm64 `uname -m` is `arm64`, nothing matches, the script exits non-zero and `cmake/modules/GetHostTriple.cmake` turns that into a fatal `Failed to execute .../cmake/config.guess` — configure dies before compiling anything. Adds an `arm64` case emitting `aarch64-unknown-haiku` (which is what `gcc -dumpmachine` reports) plus a generic `*:Haiku` fallback. Note there is **no `config.sub` in llvm12 at all**; `GetHostTriple.cmake` only ever runs `config.guess`. Appends to `sys-devel/llvm/patches/llvm-12.0.1.patchset`; recipe `REVISION` 8 &rarr; 9. | never — this is a straight portability fix, correct to keep |
+
+| `pe-2.5.0-metrowerks-flags.patch` | **UNFINISHED — explanation only, `pe` still does not build.** Kept because chasing it found the poisoned `bison` above and the x86-only `jam` install step, both of which mattered. Pe's own Jamfiles pass mwcc's `-prefix <header>` and `-w nounusedvar`, which gcc rejects; respelling `-prefix` as `-include` is not sufficient because `PREFIX_FILE` is empty for some targets and the flag then eats the following `-O7`. | `PREFIX_FILE` is made conditional, `-w nounusedvar` dropped, and the built Pe has been *run* |
+
 
 Any port whose build invokes `makeinfo` will fail the same way, so expect to repeat that
 cut. Stage-1 artifacts go to `hpkg-out/arm64/stage1/`, never to a shipping repo — see the

@@ -1,0 +1,80 @@
+Pe 2.5.0: Metrowerks-era compiler flags gcc will not accept
+===========================================================
+
+**Status: UNFINISHED. Do not treat this as a working recipe edit.** Two of the three
+blockers below are fixed and proven; the third is open. Pe still does not build on arm64.
+The recipe carrying the partial fix is deliberately *not* in `recipes/`, because that
+directory means "as actually built" and this is not.
+
+Why anyone cares about `pe`
+---------------------------
+
+Nothing depends on it. It was picked up only because it was the visible failure that read
+as "no yacc in the build environment", and chasing that diagnosis is what uncovered the
+poisoned `bison` bootstrap package described in `README.md` — which *did* matter, because
+it silently breaks any port whose build runs `bison`. Pe itself is a BeOS-era application
+and its build carries a stack of independent rot, each layer only visible once the one
+above it is cleared.
+
+The layers, in the order they appear
+------------------------------------
+
+1. **A poisoned `bison` (fixed — see `README.md`).** `sys-devel/jam`, which `pe`
+   build-requires, runs `bison -y -d jamgram.y`. haikuporter was resolving `cmd:bison`
+   to `bison-3.8.2_bootstrap-1-arm64.hpkg`, whose `bin/bison` is an **x86-64 Linux**
+   executable. Once that package is out of the way and the genuine
+   `bison-3.8.2-1-arm64.hpkg` is selected, the `Yacc1` step succeeds.
+
+2. **`jam`'s install step was x86-only (fixed — see `recipes/jam-2.5_2021_10_29.recipe`).**
+   It ran `install -v bin.haikux86/g/jam`, but jam builds into `bin.$OSPLAT`, which is
+   plain `bin.haiku` on an architecture its Jamfile has no `OSPLAT` spelling for. jam now
+   builds: `jam-2.5_2021_10_29-3-arm64.hpkg`.
+
+3. **Pe's own Jamfiles use `mwcc` flags (OPEN).** With jam available, `pe` reaches its own
+   compile and dies on the first object:
+
+       gcc: error: unrecognized command-line option '-prefix'; did you mean '--prefix'?
+
+   Two flags are involved, both Metrowerks C/C++ spellings that gcc has no equivalent for
+   at the same position:
+
+   | File | Flag | Meaning |
+   |---|---|---|
+   | `Sources/Jamfile:12` | `-prefix $(PREFIX_FILE)` | mwcc prefix file; gcc spells this `-include <header>` |
+   | `Languages/Sources/Jamfile:9` | `-prefix LanguageIncludes.h -w nounusedvar` | as above, plus an mwcc warning selector gcc reads as `-w` followed by an input filename |
+
+   `jamfile_cache` in the source tree also carries both lines, so it has to be removed or
+   the parsed cache reintroduces them.
+
+Why the obvious substitution is not enough
+------------------------------------------
+
+Rewriting `-prefix` to `-include` is necessary but **not sufficient**, and this is the open
+part. `PREFIX_FILE` is empty for at least one target, so the flag degenerates into
+`-include` with no argument and silently consumes the *next* token:
+
+       gcc -c -o objects-nodebug/Sources/HAppResFile.o ... -fno-omit-frame-pointer \
+           -include -O7 -DH_BUILDING_LIBHEKKEL ...
+
+`-O7` becomes the argument to `-include`, so the compile fails again — a different error
+with the same shape. The flag therefore has to be made conditional on `PREFIX_FILE` being
+non-empty rather than merely respelled, something like:
+
+    @@ Sources/Jamfile
+    -	C++FLAGS += -prefix $(PREFIX_FILE) ;
+    +	if $(PREFIX_FILE) {
+    +		C++FLAGS += -include $(PREFIX_FILE) ;
+    +	}
+
+(That hunk header is illustrative, not line-numbered — see `recipes/README.md` on why the
+`.patch` files in this directory are explanations rather than reliable `patch(1)` inputs.)
+Whether `-O7` itself survives is a separate question: it is not a gcc optimisation level
+either, and gcc only tolerates it because it clamps unknown `-O<n>` upward.
+
+Retire when
+-----------
+
+Pe builds with `PREFIX_FILE` handled conditionally and `-w nounusedvar` dropped, **and the
+result has been run**, not merely packaged. Until then the honest summary is: the
+*yacc* blocker named in the original report is closed and was never really about yacc,
+and `pe` has its own unrelated build rot that nobody has needed badly enough to finish.
