@@ -85,3 +85,30 @@ export XDG_CACHE_HOME="`finddir B_USER_CACHE_DIRECTORY`"
 # It is supposed to be cleaned up on last log-out.
 # Apps will fall back to /tmp usually anyway.
 #export XDG_RUNTIME_DIR="`finddir B_USER_VAR_DIRECTORY`/tmp"
+
+# ICU data archive
+#
+# The ICU package is built --with-data-packaging=archive: nearly all of its data
+# lives in a standalone icudt<ver>l.dat (30.8 MiB, measured) under
+# data/icu/<version>/, and libicudata itself is only a 135 KiB stub. The
+# compiled-in default data directory ICU searches does not resolve to where the
+# package actually installs that archive, so every ICU call needing real data
+# fails while ones served by the stub keep working -- which is why this stays
+# invisible until something reaches for it.
+#
+# ubrk_open() is such a call, and WebKit turns its failure into an abort:
+# Source/WTF/wtf/text/icu/TextBreakIteratorICU.h RELEASE_ASSERTs on the returned
+# iterator, so WebPositive died the instant it laid out its first line of text.
+# Pointing ICU_DATA at the archive that is really installed fixed that --
+# verified by screenshot on arm64: same binary, crash before, full page render
+# after.
+#
+# The loop takes the last match, so with several ICU versions installed the
+# highest wins. If nothing matches, ICU_DATA is left unset and ICU falls back to
+# its own search, i.e. exactly today's behaviour.
+for _icuDataDir in "`finddir B_SYSTEM_DATA_DIRECTORY`"/icu/*/ ; do
+	if [ -d "$_icuDataDir" ]; then
+		export ICU_DATA="$_icuDataDir"
+	fi
+done
+unset _icuDataDir
