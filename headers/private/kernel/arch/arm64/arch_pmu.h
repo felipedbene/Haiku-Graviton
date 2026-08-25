@@ -69,6 +69,18 @@ void		arm64_pmu_read(arm64_pmu_sample* sample);
 // call in a loop.
 void		arm64_pmu_dump(void);
 
+// Measures the core clock of the CPU this is called on, by counting
+// PMCCNTR_EL0 cycles over a known CNTVCT_EL0 interval. There is no register
+// that simply states the core clock on ARM, and CNTFRQ_EL0 is the timer's rate
+// rather than the core's, so counting is the only way to get it.
+//
+// Costs a few milliseconds and pins to one CPU with interrupts off for 1 ms at
+// a time, so this is for one-shot calibration, not for polling. Requires the
+// facility to be enabled, because it has to read a PMU register; returns
+// B_NOT_SUPPORTED if it is not, and B_ERROR if what it measured is not a
+// credible clock rate. Never reports success without a real measurement.
+status_t	arm64_pmu_measure_core_frequency(uint64* frequency);
+
 
 #ifdef __cplusplus
 }

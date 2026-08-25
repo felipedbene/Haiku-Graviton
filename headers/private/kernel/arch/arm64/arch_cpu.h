@@ -46,13 +46,17 @@
 #define	CPU_IMPL_BROADCOM	0x42
 #define	CPU_IMPL_CAVIUM		0x43
 #define	CPU_IMPL_DEC		0x44
+#define	CPU_IMPL_FUJITSU	0x46
 #define	CPU_IMPL_INFINEON	0x49
 #define	CPU_IMPL_FREESCALE	0x4D
 #define	CPU_IMPL_NVIDIA		0x4E
 #define	CPU_IMPL_APM		0x50
 #define	CPU_IMPL_QUALCOMM	0x51
 #define	CPU_IMPL_MARVELL	0x56
+#define	CPU_IMPL_APPLE		0x61
+#define	CPU_IMPL_MICROSOFT	0x6D
 #define	CPU_IMPL_INTEL		0x69
+#define	CPU_IMPL_AMPERE		0xC0
 
 #define	CPU_PART_THUNDER	0x0A1
 #define	CPU_PART_FOUNDATION	0xD00
@@ -63,6 +67,18 @@
 #define	CPU_PART_CORTEX_A72	0xD08
 #define	CPU_PART_CORTEX_A73	0xD09
 #define	CPU_PART_CORTEX_A75	0xD0A
+#define	CPU_PART_CORTEX_A76	0xD0B
+#define	CPU_PART_CORTEX_A78	0xD41
+// The server cores. Neoverse is what every arm64 machine this port is
+// expected to run on actually uses, and the list above stops in 2018, which
+// is why every such machine identified itself as unknown until now.
+#define	CPU_PART_NEOVERSE_N1	0xD0C
+#define	CPU_PART_NEOVERSE_E1	0xD4A
+#define	CPU_PART_NEOVERSE_V1	0xD40
+#define	CPU_PART_NEOVERSE_N2	0xD49
+#define	CPU_PART_NEOVERSE_V2	0xD4F
+#define	CPU_PART_NEOVERSE_V3	0xD84
+#define	CPU_PART_NEOVERSE_N3	0xD8E
 
 #define	CPU_REV_THUNDER_1_0	0x00
 #define	CPU_REV_THUNDER_1_1	0x01
