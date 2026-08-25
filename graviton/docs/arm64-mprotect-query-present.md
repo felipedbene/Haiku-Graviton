@@ -208,21 +208,28 @@ top-level call on an empty map.
 
 ## Still open, deliberately not fixed here
 
-- **`vm.cpp:6232` stays reachable for device areas.** `_user_set_memory_protection()` has no
-  `cache_type` filter, so a valid mapping to physical memory outside the `vm_page` array — an
-  MMIO / `CACHE_TYPE_DEVICE` area in a *user* address space — reaches `vm_lookup_page()` and
-  panics with a **non-zero** `pa`. That is architecture-independent and the arm64 valid-bit
-  fix cannot address it; it also cannot be the panic observed here, which reported `pa 0x0`.
-  `VMTranslationMap::PageUnmapped()` already special-cases `CACHE_TYPE_DEVICE`, which is
-  evidence such areas do reach translation maps. **Reachability is now PROVEN, unprivileged
-  (2026-08-25):** an ordinary process opens `/dev/graphics/framebuffer` (the devfs `access`
-  hook is `NULL`, so its `0644` mode bits are advisory) and calls the `VESA_CLONE_FRAME_BUFFER`
-  ioctl, which runs `vm_clone_area(..., true)` — the trailing `bool kernel` skips both the
-  `B_CLONEABLE_AREA` check and the `protection_max` clamp, landing a user-writable
-  `CACHE_TYPE_DEVICE` area whose `mprotect()` then panics with a non-zero `pa`. A `cache_type`
-  allowlist fix (`is_page_backed_cache_type` in `vm.cpp`) and a `device_area_probe` were built
-  for it (branch `fix/vm-device-area-mprotect`, not yet merged). Not reachable on bare EC2
-  Graviton, which has no framebuffer device — exercise it in a ramfb guest.
+- ~~**`vm.cpp:6232` stays reachable for device areas.**~~ **CLOSED — and the "reachability is
+  *inferred*" hedge was wrong in the cautious direction.** The bullet guessed the entry point
+  would be a driver `mmap` hook and found none, which is true and irrelevant: the actual route
+  is an **ioctl the graphics drivers already offer on purpose**. `VESA_CLONE_FRAME_BUFFER`
+  (`framebuffer/device.cpp:117-127`, byte-identical in `vesa/device.cpp`) calls
+  `vm_clone_area(B_CURRENT_TEAM, …, B_READ_AREA | B_WRITE_AREA, 0, info->frame_buffer_area,
+  /*kernel=*/true)`. That trailing `true` skips the `B_CLONEABLE_AREA` test *and* the
+  `protection_max` clamp — both are `!kernel`-gated — so the caller receives a
+  `CACHE_TYPE_DEVICE` area in its own address space with user read/write and
+  `protection_max == 0`. Nothing on the way checks a uid: `devfs` publishes nodes `0644` but
+  implements **no `access` hook**, and `vfs.cpp`'s `check_open_mode()` tests only flag sanity,
+  so mode bits on a device node are advisory. `mprotect()` on the result reaches
+  `vm_lookup_page()` with a valid non-zero MMIO address and panics. This is the same path
+  `app_server` uses to reach the framebuffer, so it is not a corner case — it is the
+  supported one. Fixed by an allowlist on the area's cache type in `vm.cpp`; reproducer
+  `src/bin/device_area_probe`. Second, weaker route, also unprivileged: `find_area()` is not
+  access-checked at all, and the boot console's `"frame buffer"` area
+  (`frame_buffer_console.cpp:489`) is `B_CLONEABLE_AREA` without `B_KERNEL_AREA`, so a plain
+  `clone_area()` takes it — until the framebuffer driver deletes that area on first open.
+  **Lesson: the search was for the wrong shape of hole.** "No driver has an `mmap` hook" was
+  checked and true; the question that mattered was "does any driver clone a device area into a
+  caller on request", and one grep for `vm_clone_area` in `src/add-ons` would have answered it.
 - **A guard/loop TOCTOU in `Protect()` and `ClearFlags()`**, argued benign: both valid-test a
   PTE read before the CAS loop, then re-read inside it without re-testing. Safe only because
   nothing flips a PTE valid→invalid concurrently — software writers hold `fLock`, and
