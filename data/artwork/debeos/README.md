@@ -66,5 +66,34 @@ project and bucket names and the `Project=haiku-graviton` tag. Those are stable 
 identifiers: the tag is load-bearing in an IAM condition, and renaming the prefix would
 force CloudFormation to replace the pipeline and its projects.
 
-The boot splash becomes worth doing for the **Raspberry Pi 5 / Pi 3** targets, which
-have displays.
+## The boot splash
+
+The splash is still invisible on a headless cloud instance, but it is now built anyway,
+for the **Raspberry Pi 5 / Pi 3** targets, which have displays.
+
+`splash_logo-debeos.png` (372x96) is the splash lockup: the mark at 84 px — above the
+64 px floor above — beside the wordmark, laid out horizontally to fit the same canvas
+Haiku uses. It is a **lightened** brand tint (`#4FB6D6`), not `#196D86`: the loader
+zero-fills the framebuffer to black before blitting, and the brand ink at its normal
+lightness only reaches about 3:1 against black. Alpha is not an option either — the
+converter strips it and the blit does no blending — so the black background is baked in.
+
+**Nothing in `build/jam/` converts a PNG into a splash.** The arrays live in checked-in
+headers, and `images-sans-tm.h` is the one a DeBeOS build uses (`images.h` picks it
+whenever `HAIKU_DISTRO_COMPATIBILITY_OFFICIAL` is unset, which is the default). After
+changing the art, regenerate it by hand and commit the result:
+
+```
+jam -q '<build>generate_boot_screen'
+cd data/artwork/boot_splash
+generate_boot_screen splash_logo-debeos.png 50 50 splash_icons.png 50 50 \
+        ../../../headers/private/kernel/boot/images-sans-tm.h
+```
+
+Two things to know before doing that. The logo and the icons are quantized **together**
+to one shared 256-colour palette, so replacing the logo re-encodes the icons' 8-bit copy
+as well — expect that hunk in the diff and do not read it as damage. And the logo arrays
+grew from ~276 bytes to ~15.8 KB, because the slot they replaced held
+`splash_logo-empty.png`, a blank image: the "sans-tm" variant historically shipped *no*
+logo at all rather than a rebranded one. That is charged against the boot loader's size
+budget, so keep an eye on it if the art gets more detailed.
