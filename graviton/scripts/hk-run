@@ -1,0 +1,72 @@
+#!/usr/bin/env bash
+#
+# hk-run -- run a script on a Haiku/arm64 test node, from a workstation that
+# cannot reach it.
+#
+# Corporate egress blocks outbound :22 from the workstation, and Haiku has no
+# SSM agent, so neither end of the obvious path works on its own. What does work
+# is two hops: SSM to a Linux instance inside the VPC, then ssh from there. This
+# wraps that.
+#
+# Both hops mangle scripts if you let them: SSM's `commands=` shorthand splits on
+# commas, and an `ssh host <<EOF` heredoc is re-parsed by the remote shell. So the
+# script is base64-encoded once for each hop and only decoded at the far end,
+# which means it can contain any character at all.
+#
+# Environment (or /tmp/rxlat.env):
+#   PEER      SSM-managed Linux instance id (the jump host and traffic peer)
+#   HKIP      Haiku node's private IP
+#   HKUSER    Haiku account (default: baron)
+#   HKKEY     private key path on the peer (default /root/.ssh/haiku-rxlat.pem)
+#
+# Usage:
+#   hk-run <<'EOF'      # script on stdin, runs on the Haiku node
+#   ...
+#   EOF
+#   hk-run -f script.sh
+#   hk-run -t <secs>    deadline handed to ssm-run
+
+set -uo pipefail
+
+here=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
+[ -r /tmp/rxlat.env ] && . /tmp/rxlat.env
+
+PEER="${PEER:-}"
+HKIP="${HAIKU_IP:-${HKIP:-}}"
+HKUSER="${HKUSER:-baron}"
+HKKEY="${HKKEY:-/root/.ssh/haiku-rxlat.pem}"
+DEADLINE=600
+FILE=""
+
+die() { printf 'hk-run: %s\n' "$*" >&2; exit 1; }
+[ -n "$PEER" ] || die "PEER is not set"
+[ -n "$HKIP" ] || die "HKIP is not set"
+
+while getopts "f:t:" opt; do
+	case "$opt" in
+		f) FILE="$OPTARG" ;;
+		t) DEADLINE="$OPTARG" ;;
+		*) die "bad option" ;;
+	esac
+done
+
+if [ -n "$FILE" ]; then
+	[ -r "$FILE" ] || die "cannot read $FILE"
+	inner=$(base64 -w0 < "$FILE")
+else
+	inner=$(base64 -w0)
+fi
+[ -n "$inner" ] || die "empty script"
+
+# The Haiku side runs /bin/sh. Decode into a file and run it there rather than
+# piping into `sh -s`, so that a script reading stdin (a here-doc of its own, a
+# `read`) is not fighting the transport for it.
+outer=$(cat <<EOF
+SO="-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ConnectTimeout=10 -o LogLevel=ERROR -i $HKKEY"
+printf '%s' '$inner' | base64 -d > /tmp/hk-inner.sh
+scp \$SO -q /tmp/hk-inner.sh $HKUSER@$HKIP:/tmp/hk-inner.sh || exit 111
+ssh -n \$SO $HKUSER@$HKIP 'sh /tmp/hk-inner.sh'
+EOF
+)
+
+printf '%s' "$outer" | "$here/ssm-run" "$PEER" -t "$DEADLINE" -q
