@@ -22,10 +22,20 @@ MTU 9001, peer `c7g.metal` `10.42.0.149` on the same subnet.
 > | "transmit checksum offload … not where the measured cost is" (§"Not worth doing") | **MERGED and it did pay** — **−3.54%, p = 0.0079**. |
 > | "multi-queue receive confirmed worthless on this instance" | **Correct, and now closed fleet-wide**: Linux on ONE ENA queue does 29826 Mbit/s vs 29823 on eight. |
 >
-> **What is still open and is this document's most valuable open question:** the
-> receive fit is **2.34 µs/frame + 1.85 ns/byte**, and **~88% of the per-byte term
-> remains unexplained** even after memcpy and the checksum were fixed. That is the
-> live thread.
+> **Resolved 2026-08-25 — what limits receive is now accounted for
+> (`ena-receive-latency-account.md`).** The receive fit is **2.34 µs/frame +
+> 1.85 ns/byte** and ~88% of the per-byte term is still not itemised as *cost* (the §0
+> measurement stands). But that per-byte cost is **not** what caps throughput, and it
+> was the wrong thing to call the "live thread": the machine is 97.3% idle at the
+> ceiling, so cost is not the constraint. The ceiling is **bufferbloat in the
+> device-interface receive FIFO** — a standing ~13.7 ms, ~16 MiB queue that is ~99.93%
+> of a frame's transit time — **plus `TCPEndpoint::fLock`, ~47% of the ceiling**. The
+> consumer thread is 100% wall-clock saturated while only ~53% CPU-busy, which is
+> precisely why every CPU-based instrument in this document missed it. A time-based
+> **CoDel** queue discipline was built and hardware-measured but **NOT merged** (it
+> cannot hit ≤0.2% loss and ≤1 ms latency together — TCP loss–delay coupling, Mathis);
+> the loss-free fix is **ECN**. Only the "unexplained / live thread" framing is
+> retired; the per-byte measurement itself is untouched.
 >
 > **One caveat this document is the origin of, so it is corrected here.** The
 > per-frame/per-byte split is a **receive** fit. **There is no transmit fit** — none

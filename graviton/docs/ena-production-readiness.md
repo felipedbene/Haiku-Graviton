@@ -21,16 +21,16 @@ with, not enough to skip reading the code before acting.
 > | Missing `docs/watchdog-design.md`, `FINDINGS.md`, `HANDOFF.md` | **STILL TRUE** — and the count is **eight** citations, not six |
 > | `hwRxDrops`/`hwTxDrops` unreadable, no ioctl | **STILL TRUE** |
 > | P1 watchdog gaps (`DEVICE_REQUEST_RESET`, `NOTIFICATION` unhandled) | **STILL TRUE** — only `LINK_CHANGE` and `KEEP_ALIVE` are registered |
-> | `XXX STRUCTURAL FIX STILL OWED` (unmask before drain) | **STILL OPEN** — `ena.cpp:221`. This is now the project's main network bottleneck, and a pair is on it |
+> | `XXX STRUCTURAL FIX STILL OWED` (unmask before drain) | **STILL OPEN** — `ena.cpp:221`. This is a **correctness/structural** fix, **not** the throughput lever: resolved 2026-08-25, the receive ceiling is bufferbloat in the receive FIFO + `TCPEndpoint::fLock` (`ena-receive-latency-account.md`) |
 >
 > **The P1 list is still the right list.** It is P3 that has been overtaken.
 
 ## What the reference actually is
 
-- **`~/Projects/ENA` is *not* a host driver.** It is `ssh://git.amazon.com/pkg/ENA`,
-  Annapurna Labs **device-side firmware** (admin-queue handlers, live migration, Alpine
-  SoC configs). **[verified]** — remote and HEAD `63f02f88` confirmed. Its value to us is
-  as *wire-protocol ground truth* (`ena_defs/`), not as copyable code.
+- **The vendor reference tree is *not* a host driver.** It is the NIC vendor's
+  **device-side firmware** (admin-queue handlers, live migration, SoC configs) — the *other*
+  end of the wire from our host driver. Its value to us is as *wire-protocol ground truth*
+  (`ena_defs/`), not as copyable code.
 - The host-driver reference is **`github.com/amzn/amzn-drivers`**, FreeBSD side at tag
   `ena_freebsd_2.8.4`. That is our lineage; the Linux copy under
   `kernel/linux/common/ena_com/` is a different (GPL) flavour and is **not**.
@@ -146,10 +146,18 @@ production-risk reduction available. **[reported]**
 >   without eliminating them. Zero-copy transmit is still genuinely open and worth
 >   doing on its own terms; note the obstacle: **`get_memory_map` returns NULL.**
 >
-> **What actually belongs in P3 now:** the interrupt-cadence structural fix at
-> `ena.cpp:221`. DeBeOS plateaus at **9.0–10.2 Gbit/s** on `c7g.16xlarge` against
-> Linux's **29.8** — that ~3× is the throughput story, and it is a single-queue
-> problem. A pair is working it; check before picking it up.
+> **What actually belongs in P3 now:** the unmask-before-drain fix at `ena.cpp:221`
+> is a **correctness/structural** item (we re-arm the vector before the ring has been
+> drained), **not** the throughput lever. Resolved 2026-08-25
+> (`ena-receive-latency-account.md`): the ~3× gap — DeBeOS plateaus at
+> **9.0–10.2 Gbit/s** on `c7g.16xlarge` against Linux's **29.8** — is **bufferbloat in
+> the device-interface receive FIFO** (a standing ~13.7 ms, ~16 MiB queue that is
+> ~99.93% of a frame's transit time) **plus `TCPEndpoint::fLock`, ~47% of the
+> ceiling**. The consumer thread is 100% wall-clock saturated at only ~53% CPU-busy. A
+> time-based **CoDel** queue discipline was built and hardware-measured but **NOT
+> merged** — it cannot hit ≤0.2% loss and ≤1 ms latency together (TCP loss–delay
+> coupling, Mathis); the loss-free fix is **ECN**. The interrupt-cadence and
+> multi-queue hypotheses were falsified earlier and remain falsified.
 
 ~~See the corrections at items 5 and 6 of `graviton-optimization-plan.md`: **multi-queue,
 RSS and jumbo frames are blocked in Haiku's network stack**, not in this driver

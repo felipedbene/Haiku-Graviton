@@ -147,9 +147,10 @@ try ruby again*. That condition is now met: the fix is merged, baked, canonical,
 verified against its own reproducer on hardware. `ruby-3.2.9-arm64-mcontext.patch` is
 already in the tree for that retry.
 
-Also relevant to the browser: netsurf is built but has never been *run*, and a JIT is
-exactly the kind of consumer this defect ate. Removing it is a precondition for trusting any
-future "it runs" claim, not merely a tidy-up.
+Also relevant to the browser: netsurf has now been *run* and has *rendered a page* on Graviton
+(screenshot-verified) — and a JIT is exactly the kind of consumer this defect ate. Fixing it was
+a precondition for trusting that "it runs" claim, not merely a tidy-up; the claim is now made and
+backed by a capture.
 
 ## Follow-up defect found by auditing this fix — the root-table guard
 
@@ -213,8 +214,15 @@ top-level call on an empty map.
   panics with a **non-zero** `pa`. That is architecture-independent and the arm64 valid-bit
   fix cannot address it; it also cannot be the panic observed here, which reported `pa 0x0`.
   `VMTranslationMap::PageUnmapped()` already special-cases `CACHE_TYPE_DEVICE`, which is
-  evidence such areas do reach translation maps. Reachability on this platform is *inferred*
-  — no device with a user `mmap` hook was identified.
+  evidence such areas do reach translation maps. **Reachability is now PROVEN, unprivileged
+  (2026-08-25):** an ordinary process opens `/dev/graphics/framebuffer` (the devfs `access`
+  hook is `NULL`, so its `0644` mode bits are advisory) and calls the `VESA_CLONE_FRAME_BUFFER`
+  ioctl, which runs `vm_clone_area(..., true)` — the trailing `bool kernel` skips both the
+  `B_CLONEABLE_AREA` check and the `protection_max` clamp, landing a user-writable
+  `CACHE_TYPE_DEVICE` area whose `mprotect()` then panics with a non-zero `pa`. A `cache_type`
+  allowlist fix (`is_page_backed_cache_type` in `vm.cpp`) and a `device_area_probe` were built
+  for it (branch `fix/vm-device-area-mprotect`, not yet merged). Not reachable on bare EC2
+  Graviton, which has no framebuffer device — exercise it in a ramfb guest.
 - **A guard/loop TOCTOU in `Protect()` and `ClearFlags()`**, argued benign: both valid-test a
   PTE read before the CAS loop, then re-read inside it without re-testing. Safe only because
   nothing flips a PTE valid→invalid concurrently — software writers hold `fLock`, and

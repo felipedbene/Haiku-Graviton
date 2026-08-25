@@ -15,10 +15,13 @@
 > - The ENA IO-queue grant is a **fixed 8 for the whole C7g family** — it is **not** a
 >   function of vCPU count. Any "one queue per vCPU" scaling story here is wrong about
 >   the device.
-> - **The real limiter is interrupt cadence** — the `XXX STRUCTURAL FIX STILL OWED` at
->   `ena.cpp:221`, which is a **single-queue** problem. That is §7 step 2 of this
->   document, and it is the only part still worth doing. A pair is working it as of
->   2026-08-24; check before starting.
+> - **The real limiter (corrected 2026-08-25) is bufferbloat in the device-interface
+>   receive FIFO** — a standing ~13.7 ms, ~16 MiB queue that is ~99.93% of a frame's
+>   transit time — **plus `TCPEndpoint::fLock`, ~47% of the ceiling**
+>   (`ena-receive-latency-account.md`). It is **not** interrupt cadence, which was
+>   falsified and stays falsified. The `XXX STRUCTURAL FIX STILL OWED` at `ena.cpp:221`
+>   (§7 step 2) is a **correctness** fix worth doing on its own terms, not the
+>   throughput lever.
 >
 > ### The specific error in this document, because it is the transferable one
 >
@@ -402,10 +405,13 @@ Per frame, at MTU 9001:
 > frame and makes per-frame work look like the lever. It is not. Anything in this
 > document that argues from "cycles per frame" — including the §6 rankings — is
 > targeting the smaller half of the cost. The per-byte path is where the remaining
-> ~10× sits, and most of it is **still unexplained** (the two bounce copies account
-> for at most 0.78 of the 1.85 ns/B, and it is not memory bandwidth). See
+> ~10× of *cost* sits, and most of it is still not itemised (the two bounce copies
+> account for at most 0.78 of the 1.85 ns/B, and it is not memory bandwidth). See
 > `net-receive-profile.md`. The arithmetic below is retained because the *totals* are
-> correct and the thread occupancy conclusion still holds.
+> correct and the thread occupancy conclusion still holds. **But note (2026-08-25):
+> per-byte cost is not what caps receive throughput — the machine is 97.3% idle at the
+> ceiling. The limiter is bufferbloat in the receive FIFO + `TCPEndpoint::fLock`
+> (`ena-receive-latency-account.md`).**
 
 **47,000 cycles to receive one 9 KB frame is roughly an order of magnitude more than
 it should be.** Receive is spread across exactly two threads (reader and consumer),
@@ -594,7 +600,7 @@ experiment that sizes this expensive one.
 > |---|---|
 > | **0** — settle three facts | **ANSWERED.** The queue grant is a **fixed 8 across the whole C7g family**, not a function of vCPU. And SMP *is* live — the "if only CPU 0 is online" worry below is resolved: `c7g.metal` brings up **64 of 64 CPUs**, and the scheduler-placement work measured a **9.9×** speed-up at 32 threads on 16 CPUs, which is not possible on one core. |
 > | **1** — the `ENA_PACKET_BUFFER_SIZE` / `net_buffer` data-node mismatch | **SHIPPED** — `017f72cecd` "ena: post 1920 byte receive buffers so segments fit a net_buffer node". This was the best call in this document. |
-> | **2** — move the interrupt unmask after the ring drain | **STILL OPEN and now the main event.** `ena.cpp:221`. A pair is on it; check first. Driver-only and hot-swappable — but **verify the swap took effect with a compiled-in version stamp**, not by watching a number move (`ena-multiqueue-headroom.md` §6). |
+> | **2** — move the interrupt unmask after the ring drain | **STILL OPEN as a correctness fix — NOT the throughput lever (corrected 2026-08-25).** `ena.cpp:221`. The receive ceiling is bufferbloat in the receive FIFO + `TCPEndpoint::fLock` (`ena-receive-latency-account.md`), not the unmask order. Driver-only and hot-swappable — but **verify the swap took effect with a compiled-in version stamp**, not by watching a number move (`ena-multiqueue-headroom.md` §6). |
 > | **3** — per-queue struct refactor + N TX queues | **VOID.** Multi-queue is cancelled on evidence. |
 > | anything else premised on parallelism | **VOID.** |
 >

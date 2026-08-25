@@ -201,3 +201,21 @@ partition above: the interface consumer and the driver's reader thread are
 separate threads with a queue between them, and the `net timer` thread costs 18%
 of a core at this rate. Neither is saturated, which is exactly why a latency
 account is needed rather than a throughput one.
+
+> **Resolved 2026-08-25 — the latency account is in and the ceiling is named
+> (`ena-receive-latency-account.md`).** The two leads above pointed the right way:
+> the constraint *is* the reader → consumer queue. But the mechanism is not the *cost*
+> of any hand-off (those are 0.04–0.22 µs each). It is **bufferbloat in the
+> device-interface receive FIFO** — a standing ~13.7 ms, ~16 MiB queue (11.5 MiB of a
+> 16 MiB cap, never empty) that is ~99.93% of a frame's transit time — **plus
+> `TCPEndpoint::fLock`, which accounts for ~47% of the ceiling** (the consumer blocks
+> ~4.9 µs/frame on it, a lock two layers up shared with the application's `read()`).
+> The consumer thread is 100% wall-clock saturated while only ~53% CPU-busy, which is
+> exactly why every CPU instrument in this tree read it as half idle: its 10.167 µs
+> per-frame wall time predicts 7.09 Gbit/s, matching the 7.06 measured. So the
+> hand-off-latency hypothesis is confirmed in *type* — a serialization worth half the
+> ceiling — and refuted in *mechanism*. A time-based **CoDel** queue discipline was
+> built and hardware-measured but **NOT merged**: it cannot reach ≤0.2% loss *and*
+> ≤1 ms latency at once because of TCP's own loss–delay coupling (Mathis); the
+> genuinely loss-free fix is **ECN** (mark instead of drop), a larger separate change.
+> The three dead hypotheses above remain dead.

@@ -16,11 +16,15 @@ and to the recipe patches in `graviton/haikuports-patches/`.
 `libbe`/`libtranslation`/`libtracker`/`libnetwork`. `depclosure.py` now answers **wave 0,
 minimal build set 0 ports**.
 
-> **What that claim does and does not cover.** It is *built and linked*, verified from
-> inside the hpkg. It has **not been run and has not rendered a page** — these instances
-> have no video device at all, so that cannot be tested here and is not being claimed.
-> "A browser builds" and "a browser works" are different statements, and this document has
-> been bitten before by a build result wearing a capability result's clothes.
+> **What that claim now covers (updated 2026-08-25): the browser RENDERS.** It is built and
+> linked (verified from inside the hpkg) **and it has now run and rendered a real page** —
+> screenshot-verified on Graviton silicon: a local `file://` page (title parsed, headings,
+> an em-dash decoded, a blue div measured to the pixel) and `example.com` over the network.
+> The render was done in a KVM guest with a synthetic framebuffer (`-device ramfb`), because
+> a *bare EC2* Graviton instance has no display device at all (proven: the EFI loader gets no
+> GOP) — so the browser paints via `RemoteHWInterface`/ramfb, not a local EC2 framebuffer.
+> "A browser builds" and "a browser works" were once different statements here; both are now
+> true. See `framebuffer-guest-capture.md` and the netsurf work for the capture evidence.
 
 **Every numbered blocker, 1 through 10, is closed.** Blocker 6 (cmake) was solved at
 04:41Z; the header of this document went on calling it "the open one" for ten hours

@@ -1269,8 +1269,14 @@ Three things, in order of usefulness:
 
 ## 11. ENA interrupt moderation / coalescing — partly MERGED; the structural fix is STILL OPEN
 
-> **State on 2026-08-24: this is the live network bottleneck, and someone is on it.**
-> Do not pick it up without checking who; do not mark it done.
+> **State on 2026-08-25: this is a correctness/structural fix, NOT the throughput
+> lever.** The receive ceiling was accounted for on 2026-08-25
+> (`ena-receive-latency-account.md`): it is **bufferbloat in the device-interface
+> receive FIFO** — a standing ~13.7 ms, ~16 MiB queue that is ~99.93% of a frame's
+> transit time — **plus `TCPEndpoint::fLock`, ~47% of the ceiling**. The unmask-order
+> item below is worth doing on correctness grounds (we re-arm the vector before the
+> ring is drained), but it is not the ~3× gap. Do not pick it up without checking who
+> is on it; do not mark it done.
 >
 > **What landed** (`aa8cbd0c8e` "ena: enable interrupt moderation, stop leaking
 > buffers, guard open"): moderation is now actually configured. `ena_io_interrupt()`
@@ -1289,9 +1295,14 @@ Three things, in order of usefulness:
 > Haiku-specific work because the vector is shared by both directions, so both sides
 > must agree on who re-arms.
 >
-> **The gap this is responsible for:** DeBeOS plateaus at **9.0–10.2 Gbit/s** on
-> `c7g.16xlarge` where Linux does **29.8 Gbit/s** — and Linux does that on *one*
-> queue, which is why item 5 was cancelled and this was promoted. Roughly 3×.
+> **The gap, and what it is actually responsible for (corrected 2026-08-25):** DeBeOS
+> plateaus at **9.0–10.2 Gbit/s** on `c7g.16xlarge` where Linux does **29.8 Gbit/s** —
+> and Linux does that on *one* queue, which is why item 5 was cancelled. But this ~3×
+> is **not** the unmask-order item: it is bufferbloat in the receive FIFO + the
+> `TCPEndpoint::fLock` serialization (`ena-receive-latency-account.md`; consumer 100%
+> wall-saturated at ~53% CPU-busy). A time-based **CoDel** queue discipline was built
+> and hardware-measured but **NOT merged** — it cannot hit ≤0.2% loss and ≤1 ms
+> latency together (Mathis loss–delay coupling); **ECN** is the loss-free fix.
 >
 > **One figure to quote carefully.** The "**2.82 frames per interrupt**" number in
 > `ena-multiqueue-headroom.md` is a **lower bound, not a measurement** — it is

@@ -122,9 +122,9 @@ Booting is verified on real AWS Graviton (arm64) EC2 instances in **us-west-2**.
 - Test instances are **SSM-managed nodes** — inspect/drive them with
   `aws ssm` (e.g. `describe-instance-information`, `send-command`,
   `start-session`) rather than SSH.
-- Credentials: `ada credentials update --account <id> --role Admin --provider
-  isengard --once` (this Isengard account has no `ReadOnly` role). Keep to
-  describe/list unless a change is intended.
+- Credentials: obtain admin credentials for the test account through your
+  organisation's credential tooling (the exact command is in the maintainer's
+  local, unpublished notes). Keep to describe/list unless a change is intended.
 
 ## Contributing / workflow
 

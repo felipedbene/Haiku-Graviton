@@ -30,8 +30,8 @@ say "=== Haiku/Graviton status ($(date -u '+%Y-%m-%d %H:%M UTC')) ==="
 # ---------------------------------------------------------------- credentials
 ident=$(timeout 12 aws sts get-caller-identity --query Account --output text 2>/dev/null)
 if [ -z "$ident" ] || [ "$ident" = "None" ]; then
-	say "credentials: NONE / expired -- refresh with:"
-	say "  ada credentials update --account 668984504585 --role Admin --provider isengard --once"
+	say "credentials: NONE / expired -- refresh with your org's credential tool"
+	say "  (exact command is in the maintainer's local, unpublished notes)"
 	exit 0
 fi
 say "account: $ident   region: $REGION"

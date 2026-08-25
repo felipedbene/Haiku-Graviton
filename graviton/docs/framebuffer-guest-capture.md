@@ -6,8 +6,14 @@ This is the rig that closes that gap, and the evidence that it is not lying.
 ## Why an instance cannot do this
 
 A Graviton EC2 instance has no display device at all — no VGA, no framebuffer.
-That was settled by booting Linux on the same instance shape as a control and
-finding nothing either. There is no framebuffer to be had.
+The load-bearing proof is that **Haiku's own EFI loader gets no GOP** on a booting
+Graviton instance (`GOP protocol not found` on the serial console, measured on c7g),
+so it hands the kernel `frame_buffer.enabled = false` — there is nothing for
+`app_server` to paint on locally. (Booting Linux and finding no `/dev/fb` was an
+earlier control, but it is weak on its own: `efifb` is not loaded by default, so Linux
+would show no framebuffer whether or not one existed. And the AWS AL2023 "EFI
+Framebuffer" note is a Linux kernel-*packaging* change, not a Graviton graphics
+feature.) There is no framebuffer to be had on the instance.
 
 The images we bake therefore set `TARGET_SCREEN`, and `app_server` builds a
 `RemoteHWInterface`: it listens on loopback and forwards a *display list* to a
