@@ -630,6 +630,30 @@ compute_area_page_commitment(VMArea* area)
 }
 
 
+/*!	Returns whether the mappings of an area with this cache type point at
+	physical memory that is described by a \c vm_page, i.e. whether
+	\c vm_lookup_page() can be expected to resolve them.
+
+	Device caches map physical memory that the page allocator does not own --
+	MMIO, or any other range outside the page array -- and null caches map
+	nothing at all. Anything that walks an area's mappings and wants the page
+	behind one has to ask this first, or it will hand \c vm_lookup_page() an
+	address it cannot resolve and then act on the NULL.
+
+	This is an allowlist rather than a test for \c CACHE_TYPE_DEVICE so that a
+	cache type added later is treated as page-less until someone says otherwise.
+	\c VMTranslationMap::PageUnmapped() and \c UnaccessedPageUnmapped() guard
+	the same \c vm_lookup_page() calls, and \c lock_memory_etc() /
+	\c unlock_memory_etc() skip such areas outright; they all spell the test out
+	inline.
+*/
+static inline bool
+is_page_backed_cache_type(uint32 cacheType)
+{
+	return cacheType == CACHE_TYPE_RAM || cacheType == CACHE_TYPE_VNODE;
+}
+
+
 static bool
 is_area_only_cache_user(VMArea* area)
 {
@@ -6214,6 +6238,15 @@ _user_set_memory_protection(void* _address, size_t size, uint32 protection)
 		if (area->page_protections == NULL)
 			area->protection = protection;
 
+		// A device area's mappings point at physical memory with no vm_page
+		// behind it, so they must not be looked up: the address is valid and
+		// non-zero, and vm_lookup_page() still returns NULL. Userland can hold
+		// such an area without any privilege -- the graphics drivers' frame
+		// buffer clone ioctl calls vm_clone_area() with kernel = true into
+		// B_CURRENT_TEAM, which is how app_server gets its mapping, and
+		// clone_area() accepts any device area published B_CLONEABLE_AREA.
+		const bool pageBacked = is_page_backed_cache_type(area->cache_type);
+
 		map->Lock();
 		for (addr_t pageAddress = area->Base() + offset;
 				pageAddress < currentAddress; pageAddress += B_PAGE_SIZE) {
@@ -6226,6 +6259,15 @@ _user_set_memory_protection(void* _address, size_t size, uint32 protection)
 			status_t error = map->Query(pageAddress, &physicalAddress, &flags);
 			if (error != B_OK || (flags & PAGE_PRESENT) == 0)
 				continue;
+
+			if (!pageBacked) {
+				// There is no page, hence no lower cache that making the
+				// mapping writable could expose, so the protection applies in
+				// full. ProtectPage() carries the area's memory type through,
+				// so an uncached device mapping stays uncached.
+				map->ProtectPage(area, pageAddress, protection);
+				continue;
+			}
 
 			vm_page* page = vm_lookup_page(physicalAddress / B_PAGE_SIZE);
 			if (page == NULL) {
