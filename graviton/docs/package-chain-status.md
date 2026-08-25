@@ -27,7 +27,8 @@ minimal build set 0 ports**.
 afterwards, and Blocker 3's heading said `OPEN` for a day after its fix merged. Both are
 corrected below. Blocker 9 closed at 18:05Z with the `gettext` cut retired; **Blocker 10
 closed at 19:16Z**, with `vim` reduced to a CLI-only, ruby-less `xxd` provider and netsurf
-built on top of it.
+built on top of it. **Both of those vim cuts were RETIRED on 2026-08-25** — vim is built from
+the pristine recipe again, with ruby and the GUI; see "The two `vim` cuts" below.
 
 **The fixed `LIBRARY_PATH` loader turned out *not* to be a prerequisite for the browser.**
 That was measured rather than assumed, and it corrects an earlier statement in this very
@@ -1296,6 +1297,17 @@ reduced to a minimal reproducer.
 
 ### The two `vim` cuts, and why they are not shortcuts
 
+> **BOTH CUTS RETIRED 2026-08-25 — the promises below were kept.** `vim-9.1.1618-1-arm64.hpkg`
+> is built from the **pristine** upstream recipe again, with the ruby interpreter *and* the
+> Haiku GUI, `_dirty` count 0. Cut 1 fell to the kernel `mprotect()` fix, which let
+> `ruby-3.2.9` build natively (`ruby` + `ruby_devel` are in `hpkg-out/arm64/`); vim's log then
+> shows `checking for ruby... /boot/system/bin/ruby` in both configure passes with
+> `--enable-fail-if-missing=yes` still in force. Cut 2 fell to the **`mimeset`** fix — the
+> icon failure was never about vim: `mimeset` is the sole writer of the `BEOS:ICON`
+> *attribute* that `catattr` reads back, and it had been a silent no-op on every headless
+> Haiku. `bin/gvim`/`gview`/`gvimdiff`/`rgvim`/`rgview` are real files and declared again.
+> Everything below is retained as the record of why each cut was acceptable while it stood.
+
 **Decision taken:** route around the kernel panic by cutting ruby out of `vim`. netsurf
 wants `cmd:xxd` and nothing else from vim, and across the whole recipe tree only
 `vim-9.1.1618` and `qvim-8.0.197` provide it — qvim wants `devel:libQt5Core` and
@@ -1362,8 +1374,8 @@ failure, which is why it was preferred to making the icon step non-fatal.
 | Cut | New in | Inherited by | Does it degrade the *shipped browser*? |
 |---|---|---|---|
 | jasper `-DJAS_ENABLE_OPENGL=OFF` (GLUT absent) | `jasper` | `netpbm` → `groff` → everything downstream, incl. **netsurf** | **No.** It removes jasper's `jiv` viewer. groff uses jasper's library, not its viewer |
-| vim Cut 1 (no ruby) | `vim` | **netsurf** (uses vim's `xxd` at build time) | **No.** Build-time tool only; `xxd` has no ruby involvement |
-| vim Cut 2 (no GUI) | `vim` | **netsurf** (same) | **No.** Same reason |
+| ~~vim Cut 1 (no ruby)~~ **RETIRED 2026-08-25** | `vim` | **netsurf** (uses vim's `xxd` at build time) | **No** — and moot: ruby-3.2.9 builds now, so vim ships `+ruby` again |
+| ~~vim Cut 2 (no GUI)~~ **RETIRED 2026-08-25** | `vim` | **netsurf** (same) | **No** — and moot: the cause was the `mimeset` no-op, now fixed, so the GUI builds |
 | `json_c` cmake-4 policy flag | `json_c` | `hubbub` → **netsurf** | **No** — and it is a compatibility flag, not a cut: nothing removed, no declaration changed |
 
 **`netsurf` itself adds zero cuts** — its recipe is unmodified. Everything in its column is
