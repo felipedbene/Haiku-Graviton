@@ -1,0 +1,9 @@
+SubDir HAIKU_TOP src bin device_area_probe ;
+
+UsePrivateHeaders drivers graphics ;
+UsePrivateHeaders [ FDirName graphics vesa ] ;
+UsePrivateHeaders [ FDirName graphics common ] ;
+
+Application device_area_probe :
+	device_area_probe.cpp
+;

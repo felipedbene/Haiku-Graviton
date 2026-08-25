@@ -244,6 +244,7 @@ AddFilesToPackage :
 AddFilesToPackage bin :
 	$(SYSTEM_BIN)
 	cloud_init_lite
+	device_area_probe
 	disktput
 	ena_fault
 	mprotect_probe
