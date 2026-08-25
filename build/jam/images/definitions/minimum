@@ -272,9 +272,27 @@ SYSTEM_ADD_ONS_ACCELERANTS = [ FFilterByBuildFeatures
 	}@ # riscv64
 ] ;
 
-SYSTEM_ADD_ONS_TRANSLATORS =
+SYSTEM_ADD_ONS_TRANSLATORS = [ FFilterByBuildFeatures
 	STXTTranslator
-;
+	AVIFTranslator@libavif
+	BMPTranslator
+	GIFTranslator
+	HVIFTranslator
+	ICOTranslator
+	ICNSTranslator@libicns
+	JPEGTranslator@jpeg	JPEG2000Translator@jasper
+	PCXTranslator
+	PNGTranslator@libpng
+	PPMTranslator
+	PSDTranslator
+	RAWTranslator
+	RTFTranslator
+	SGITranslator
+	TGATranslator
+	TIFFTranslator@tiff
+	WebPTranslator@libwebp
+	WonderBrushTranslator
+] ;
 
 SYSTEM_ADD_ONS_LOCALE_CATALOGS =
 	<catalog-addon>plaintext
