@@ -49,6 +49,41 @@ fixed, but this makes the step independent of it either way.
 | `cmake-4.1.6.recipe` | **NO — unmodified** | cmake needs no change at all once `expat`/`rhash`/`libuv`/`curl` exist. Stored to pin the exact upstream text, since the builder's tree is not a pristine reference |
 | `curl-8.21.0.recipe` | yes | `--without-libpsl` on every arch; `libpsl` → `libidn2` → `cmd:gtkdocize`, unbuildable here |
 | `libxml2-2.15.3.recipe` | yes, **stage-1** | forces `pythonModuleEnabled=false`; loses only the `libxml2_python3.14` subpackage. Retire when `cmd:python3.14` exists |
+| `ruby-3.2.9.recipe` | yes | adds an `__aarch64__` arm to `signal.c`'s `mcontext_t` read — ruby took the x86 `esp`/`ebp` names on every non-amd64 Haiku and failed to compile. **A portability fix, not a cut**: the handler keeps working and the x86 lines are untouched |
+
+## `ruby-3.2.9.recipe` does NOT go through the ISP path — read this before delivering it
+
+Every other recipe here is delivered by `prepguest.sh`, which copies
+`recipe-overlay/*.recipe` into `$ISP/develop/sources/<stem>-*/` and pins the mtime.
+**Ruby has no input source package at all** (`ls input-source-packages/ | grep -i ruby` is
+empty, where the `perl` control returns `perl_source_rigged-…hpkg`), so that loop finds no
+directory, prints `no ISP source dir`, and **skips it silently**. Ruby's operative recipe is
+the tree copy:
+
+```
+/boot/home/haikuports/dev-lang/ruby/ruby-3.2.9.recipe
+```
+
+Copy it there directly, and **do not** pin an mtime — there is no source package for the
+mtime comparison to be made against.
+
+This file was harvested from guest run15 on 2026-08-25 (md5
+`e7d6af3271f8448b650472c210e0a74a`, 159 lines) after living **only inside that one guest's
+filesystem** since 2026-08-24 18:42 — absent from `recipe-overlay/`, from this directory and
+from git. A guest re-seed would have destroyed it and it would have been hand-derived a
+second time. That is exactly the loss this directory exists to prevent, so the rule is worth
+restating: **the moment a recipe edit is proven to work in a guest, harvest it. A working
+edit that lives only on a guest disk is not saved.**
+
+The `.patch` form in the parent directory (`ruby-3.2.9-arm64-mcontext.patch`) is a
+**description, not an appliable patch** — its hunk header is `@@ BUILD()` rather than
+line-numbered. Use this recipe, not that file.
+
+The edit is **proven**: on run15 the `sed` landed (`signal.c` carries both `mctx->x[29]` and
+the untouched `mctx->esp`), ruby compiled and linked, and the build then reached `miniruby`,
+which panicked the guest kernel with the `mprotect` defect. So the compile blocker is closed
+and the *only* thing between here and a ruby package is a guest running a kernel with the
+`Query()` fix — see `graviton/docs/arm64-mprotect-query-present.md`.
 
 ## Two recipes here are kept only as history
 
