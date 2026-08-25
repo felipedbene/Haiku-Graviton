@@ -32,8 +32,10 @@ built on top of it.
 **The fixed `LIBRARY_PATH` loader turned out *not* to be a prerequisite for the browser.**
 That was measured rather than assumed, and it corrects an earlier statement in this very
 file — see "Does the chain need the fixed loader?" below. One genuine platform defect was
-found on the way and handed off: an **arm64 kernel panic in `mprotect()`**, now separately
-owned.
+found on the way and handed off: an **arm64 kernel panic in `mprotect()`** — since **fixed,
+baked and verified on hardware against its own reproducer** (2026-08-25), see
+[arm64-mprotect-query-present.md](arm64-mprotect-query-present.md). **The ruby cut below is
+therefore now un-blocked and due for retry.**
 
 ### Counts, with the units named
 
@@ -1267,7 +1269,11 @@ everything else. Haiku's arm64 `struct vregs` has `sp` and — for the AArch64 f
 pointer, x29 — `x[29]`. Adding an `__aarch64__` arm to that same `#if` compiles;
 see `graviton/haikuports-patches/ruby-3.2.9-arm64-mcontext.patch`. **A fix, not a cut.**
 
-**Layer 3 — `miniruby` panics the arm64 kernel. This is the current hard blocker.**
+**Layer 3 — `miniruby` panics the arm64 kernel.** ~~This is the current hard blocker.~~
+**FIXED AND HARDWARE-VERIFIED 2026-08-25** — `36d365a594` plus `34093ec4bf`, proven with a
+two-arm A/B on real Graviton in
+[arm64-mprotect-query-present.md](arm64-mprotect-query-present.md). The `ESR` below matches
+the reproducer's panic exactly. Kept in full because the diagnosis started here.
 
 ```
 PANIC: area 0xffff0000dd38f8c0 looking up page failed for pa 0x0
@@ -1290,9 +1296,11 @@ plausible caller.
 This is generic arm64 kernel/VM territory (`src/system/kernel/`), **not** a packaging
 problem, and it is not this track's to fix — handing it over rather than working around it,
 because the obvious workaround (`--disable-jit-support`) would *hide* an OS defect that any
-JIT-using application will hit, and a browser is exactly such an application. **Recorded as
+JIT-using application will hit, and a browser is exactly such an application. ~~**Recorded as
 a single observation**: it has been seen once, with a full stack trace, and has not yet been
-reduced to a minimal reproducer.
+reduced to a minimal reproducer.~~ **Superseded:** it *was* reduced to a minimal reproducer —
+`src/bin/mprotect_probe`, a few lines of unprivileged C — and that reproducer both panics an
+unpatched kernel and returns cleanly on a patched one, measured on hardware.
 
 ### The two `vim` cuts, and why they are not shortcuts
 
@@ -1313,10 +1321,10 @@ dependency merely being absent.
 **arm64 kernel panic in `mprotect()`** from the critical path. On its own that would be the
 wrong trade — it would *mask* an OS defect that any JIT-using application will eventually
 hit, and a browser is exactly such an application. **What makes the cut acceptable is that
-the defect is not concealed by it: it is separately owned and being fixed**, diagnosed as
-`VMSAv8TranslationMap::Query()` setting `PAGE_PRESENT` unconditionally with no valid-bit
-test, so an empty leaf PTE reports "present, pa=0" and the generic VM's `vm_lookup_page(0)`
-panics.
+the defect is not concealed by it: it is separately owned and ~~being fixed~~ **now FIXED and
+hardware-verified**, diagnosed as `VMSAv8TranslationMap::Query()` setting `PAGE_PRESENT`
+unconditionally with no valid-bit test, so an empty leaf PTE reports "present, pa=0" and the
+generic VM's `vm_lookup_page(0)` panics.
 
 > **Written down so it is not re-litigated.** If you are reading this and wondering whether
 > the ruby cut was a shortcut past a hard problem: it was not, because the thing it would
@@ -1325,6 +1333,13 @@ panics.
 > move is to try ruby again — `ruby-3.2.9-arm64-mcontext.patch` is kept in the tree for
 > exactly that, even though ruby is not currently built, because it is a real portability
 > fix (ruby read the x86 `esp`/`ebp` out of an arm64 `mcontext_t`).
+>
+> **That condition is now met (2026-08-25).** The kernel fix is merged, baked, canonical and
+> verified against its own reproducer on hardware —
+> [arm64-mprotect-query-present.md](arm64-mprotect-query-present.md). **The ruby retry is
+> owed.** Until it is attempted, the vim cuts stand on a promise that has come due rather
+> than on one that is still pending, which is a weaker position than the paragraph above
+> describes.
 
 **Cut 2 — no GUI build. Cost, plainly: no GUI vim.** This one was *not* pre-planned; it was
 forced, and it is disclosed here as a second cut rather than folded into the first. With the
