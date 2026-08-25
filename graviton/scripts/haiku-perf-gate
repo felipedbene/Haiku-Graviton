@@ -29,6 +29,12 @@
 #     is invisible to every other check here; see the long comment on that
 #     section. It runs first because it is cheap and because failing in seconds
 #     beats failing after 45 minutes.
+#   - Then `mprotect_probe`, also before the numbers. An unprivileged mprotect()
+#     could panic the arm64 kernel, and the probe that reproduces it shipped
+#     inside the canonical AMI for hours without ever being run against the
+#     kernel it was written for. Merging is not verifying and promoting is not
+#     verifying, so it is checked here on every candidate. An image that lacks
+#     the probe warns rather than passes: "cannot check" must not read as "fine".
 #   - After the numbers are in, the instance is stopped and started again and
 #     asked for sshd a second time. Throughput is measured on a machine that
 #     never went down, so it says nothing about whether the image's writes
@@ -84,6 +90,10 @@ AMI="${1:-}"
 [ -n "$TEST_SG" ] || die "HG_TEST_SG must be set (the test security group)"
 
 INSTANCE=""
+
+# Warnings are non-fatal but must survive to the verdict, so the counter is declared
+# here rather than beside the first check that happens to use it.
+warn=0
 cleanup() {
 	if [ -n "$INSTANCE" ]; then
 		say "terminating $INSTANCE"
@@ -284,6 +294,79 @@ if [ "$ms_appserver" = "present" ]; then
 	say "  On Graviton there is no display device at all, so that is unexpected -- look into it."
 fi
 
+# ------------------------------------------------ mprotect / VM regression check
+# An unprivileged mprotect() used to panic the arm64 kernel: Query() set PAGE_PRESENT
+# with no valid-bit test, so a slot for a never-faulted page reported "present,
+# pa=0", and _user_set_memory_protection() fed that zero to vm_lookup_page() and
+# panicked. Any process protecting a range that mixes faulted-in and untouched pages
+# could take the machine down; it was found because ruby's miniruby did exactly that.
+#
+# `mprotect_probe` ships in the image next to ena_fault and reproduces it in a few
+# lines of unprivileged C. It was shipping inside the canonical AMI for hours without
+# ever being run against the kernel it was written for -- merging is not verifying,
+# and promoting is not verifying either. So it runs here, on every candidate.
+#
+# Cheap and unambiguous: on a fixed kernel all four probes return and it prints PASS;
+# on a broken one the node drops into KDL and stops answering, which this catches as a
+# lost connection rather than a wrong string. Both failure shapes are handled below,
+# because "no output" and "wrong output" need different messages to be actionable.
+say "----------------------------------------"
+say "mprotect regression check (a panic here means any process can down the kernel)"
+mp=$("$SSM_RUN" "$BUILDER" -t 180 -q 2>&1 <<-EOF
+	SO="-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ConnectTimeout=8 -o LogLevel=ERROR -i /home/ubuntu/.ssh/haiku-ed25519"
+	# Report the kernel's own build identity first, so a PASS is attributable to a
+	# specific kernel rather than to "some image".
+	sudo -u ubuntu ssh -n \$SO baron@$IP '
+		echo "GATE_MP_KERNEL \$(grep "kernel build" /var/log/syslog 2>/dev/null | tail -1)"
+		if [ ! -x /bin/mprotect_probe ]; then echo "GATE_MP_RESULT absent"; exit 0; fi
+		out=\$(/bin/mprotect_probe 2>&1); rc=\$?
+		echo "GATE_MP_RC \$rc"
+		case "\$out" in
+			*"PASS (all probes returned"*) echo "GATE_MP_RESULT pass" ;;
+			*)                             echo "GATE_MP_RESULT partial" ;;
+		esac
+		echo "GATE_MP_RETURNED \$(printf "%s" "\$out" | grep -c ": returned")"
+	' 2>/dev/null || echo "GATE_MP_RESULT unreachable"
+	EOF
+)
+printf '%s\n' "$mp" | grep '^GATE_MP' | sed 's/^/  /'
+mp_field() { printf '%s' "$mp" | sed -n "s/^GATE_MP_$1 //p" | tail -1; }
+mp_result=$(mp_field RESULT)
+mp_returned=$(mp_field RETURNED)
+mp_kernel=$(mp_field KERNEL)
+
+case "$mp_result" in
+	pass)
+		say "mprotect OK: all 4 probes returned and the kernel survived"
+		say "  kernel: ${mp_kernel:-<no build banner -- kernel predates the stamp>}"
+		;;
+	absent)
+		# Not a pass. An image without the probe cannot be checked, and silently
+		# treating "cannot check" as "fine" is how the original defect survived.
+		say "WARNING: /bin/mprotect_probe is not in this image, so the VM check did not run."
+		say "  It is wired into build/jam/packages/Haiku next to ena_fault -- an image"
+		say "  without it was built from a tree predating that, and is unverified here."
+		warn=$((warn + 1))
+		;;
+	unreachable)
+		say "FAIL: the node stopped answering while running mprotect_probe."
+		say "  That is the signature of the kernel panicking into KDL, which is exactly"
+		say "  what this check exists to catch. Confirm with:"
+		say "    aws ec2 get-console-output --latest --instance-id $INSTANCE"
+		say "  (--latest is required; without it you get the cached boot snapshot and"
+		say "  the panic is simply absent from the output.)"
+		die "mprotect regression gate failed for $AMI"
+		;;
+	*)
+		say "FAIL: mprotect_probe ran but did not reach its PASS line"
+		say "  probes that returned: ${mp_returned:-0} of 4"
+		say "  A partial run means one specific probe shape is still broken. Check that"
+		say "  VMSAv8TranslationMap::Query() tests kPteValidMask, and that ProcessRange()"
+		say "  returns early when the root table is unallocated."
+		die "mprotect regression gate failed for $AMI"
+		;;
+esac
+
 # --------------------------------------------------------------- measure
 # The peer is the builder, so the address the Haiku node must dial is the
 # *builder's* private IP. Resolve it here rather than inside the remote script:
@@ -374,8 +457,6 @@ say "throughput OK: boots, negotiates jumbo, and meets both floors"
 # `sync` anywhere here -- the point is to test the image as it will be shipped.
 say "----------------------------------------"
 say "stop/start regression check (an unflushed root filesystem is invisible until now)"
-
-warn=0
 
 stop_started=$SECONDS
 state=$(aws --region "$REGION" ec2 stop-instances --instance-ids "$INSTANCE" \
