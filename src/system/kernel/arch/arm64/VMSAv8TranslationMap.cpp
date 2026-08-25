@@ -454,7 +454,28 @@ VMSAv8TranslationMap::ProcessRange(phys_addr_t ptPa, int level, addr_t va, size_
     vm_page_reservation* reservation, UpdatePte&& updatePte)
 {
 	ASSERT(level < 4);
-	ASSERT(ptPa != 0);
+
+	// The root table is allocated lazily by Map(), so a map that has never mapped
+	// anything has fPageTable == 0. Unmap() and Query() test for that themselves,
+	// but UnmapPage(), UnmapPages(), Protect(), ClearFlags() and
+	// ClearAccessedAndModified() all walk unconditionally, and this was only an
+	// ASSERT -- compiled out unless KDEBUG is on, so a release kernel had no check
+	// at all. TableFromPa(0) then treats physical page zero as the root table, and
+	// wherever the garbage there happens to have bits[1:0] == 0b11 the walk
+	// descends and the callbacks zero, or CAS attribute bits into, arbitrary
+	// physical memory. That is silent corruption, which is strictly worse to
+	// diagnose than the panic this file was just fixed to avoid.
+	//
+	// An absent table means there are no mappings, so "nothing to do" is the
+	// correct answer for every walker. Testing it here rather than in each caller
+	// covers all of them at once and cannot rot as callers are added -- riscv64
+	// centralises the same check in RISCV64VMTranslationMap::LookupPte(). Recursive
+	// calls cannot arrive with zero, because GetOrMakeTable() returning 0 is
+	// filtered by the `continue` below, so this only fires for a top-level call on
+	// an empty map. Map() is unaffected: it allocates the root table at first use
+	// before walking.
+	if (ptPa == 0)
+		return;
 
 	uint64_t pageMask = (1UL << fPageBits) - 1;
 	uint64_t vaMask = (1UL << fVaBits) - 1;
