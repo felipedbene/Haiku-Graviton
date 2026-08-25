@@ -583,6 +583,91 @@ arm64_pmu_dump(void)
 }
 
 
+status_t
+arm64_pmu_measure_core_frequency(uint64* _frequency)
+{
+	// ARMv8 has no register that states the core clock. CNTFRQ_EL0 is the
+	// generic timer's frequency and is not a substitute -- on the Graviton
+	// parts measured here it reads 1.05 GHz and 1.000 GHz on cores actually
+	// clocked at 2.6 GHz and 3.3 GHz. The only thing that counts core cycles
+	// is PMCCNTR_EL0, so the clock has to be derived by counting cycles over
+	// a known interval of a clock whose rate *is* stated.
+	//
+	// That makes this measurement gated on the PMU facility being on, and
+	// deliberately so: see the file comment. EL2 may trap EL1 accesses to the
+	// PMU registers on a virtualized instance, and a fault here has no
+	// handler. Reporting that the frequency is unknown is a far better outcome
+	// than an unbootable kernel, so an unprogrammed PMU is an error return and
+	// never a plausible-looking number.
+	if (!sAvailable || !sEnabled)
+		return B_NOT_SUPPORTED;
+
+	uint64 timerFrequency = READ_SPECIALREG(CNTFRQ_EL0);
+	if (timerFrequency == 0)
+		return B_NOT_SUPPORTED;
+
+	// A 1 ms window is ~10^6 timer ticks and ~10^6 core cycles at any clock
+	// rate worth reporting, so quantization contributes well under one part in
+	// 10^5 -- far below the precision anyone reads out of a MHz figure.
+	const uint64 windowTicks = timerFrequency / 1000;
+	if (windowTicks == 0)
+		return B_NOT_SUPPORTED;
+
+	uint64 best = 0;
+
+	// Take the largest of several windows rather than a mean or a median.
+	// Every way this measurement can be disturbed biases it in the same
+	// direction: if the hypervisor deschedules this vCPU mid-window, or the
+	// core clock-gates, CNTVCT_EL0 keeps advancing while PMCCNTR_EL0 does not,
+	// so the sample comes out low. Nothing makes it come out high. The
+	// maximum is therefore the closest estimate of the real clock, and
+	// averaging would only fold the outages in.
+	for (int attempt = 0; attempt < 5; attempt++) {
+		cpu_status state = disable_interrupts();
+
+		// Both counters have to be sampled as close together as possible at
+		// each end, and neither read may be hoisted out of the window.
+		arm64_isb();
+		uint64 startTicks = READ_SPECIALREG(CNTVCT_EL0);
+		uint64 startCycles = READ_SPECIALREG(PMCCNTR_EL0);
+		arm64_isb();
+
+		uint64 endTicks;
+		do {
+			endTicks = READ_SPECIALREG(CNTVCT_EL0);
+		} while (endTicks - startTicks < windowTicks);
+
+		arm64_isb();
+		uint64 endCycles = READ_SPECIALREG(PMCCNTR_EL0);
+		arm64_isb();
+
+		restore_interrupts(state);
+
+		uint64 ticks = endTicks - startTicks;
+		uint64 cycles = endCycles - startCycles;
+		if (ticks == 0 || cycles == 0)
+			continue;
+
+		// cycles / (ticks / timerFrequency), ordered so that the numerator
+		// cannot overflow: cycles is at most a few million here.
+		uint64 frequency = (cycles * timerFrequency) / ticks;
+		if (frequency > best)
+			best = frequency;
+	}
+
+	// A number this far from anything a real core runs at means the
+	// measurement did not work, not that the core is unusual, and passing it
+	// on would put a fabricated clock rate in front of the user. 50 MHz is
+	// below any core this kernel can boot on and 20 GHz is above anything
+	// silicon does, so the bound only ever catches a broken measurement.
+	if (best < 50000000ULL || best > 20000000000ULL)
+		return B_ERROR;
+
+	*_frequency = best;
+	return B_OK;
+}
+
+
 //	#pragma mark - KDL command
 
 

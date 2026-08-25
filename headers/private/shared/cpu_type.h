@@ -196,10 +196,14 @@ parse_amd(const char* name)
 static const char*
 get_cpu_vendor_string(enum cpu_vendor cpuVendor)
 {
-	// Should match vendors in OS.h
+	// Must match cpu_vendor in OS.h, in order and in length: this is indexed by
+	// the enum value. It had fallen three entries short of the enum, so Sun and
+	// Fujitsu were rejected by the bounds check below and came out as unknown
+	// vendors on hardware the enum already named.
 	static const char* vendorStrings[] = {
 		NULL, "AMD", "Cyrix", "IDT", "Intel", "National Semiconductor", "Rise",
-		"Transmeta", "VIA", "IBM", "Motorola", "NEC", "Hygon"
+		"Transmeta", "VIA", "IBM", "Motorola", "NEC", "Hygon", "Sun", "Fujitsu",
+		"ARM"
 	};
 
 	if ((size_t)cpuVendor >= sizeof(vendorStrings) / sizeof(const char*))
@@ -300,6 +304,57 @@ get_intel_brand_id_string(uint8 brandId, uint32 signature)
 #endif	/* __i386__ || __x86_64__ */
 
 
+#if defined(__aarch64__)
+
+/*!	Decodes the part number out of an MIDR_EL1 value, as published in the
+	topology's core model field by the arm64 kernel.
+
+	ARM has no equivalent of the CPUID brand string, so a name can only come
+	from a table. Only implementer 0x41's parts are named here: the part number
+	space is per-implementer, so 0xd40 means Neoverse-V1 from ARM and something
+	else entirely from anyone else, and guessing across implementers would
+	report a confidently wrong core.
+
+	The part numbers are the same ones in
+	headers/private/kernel/arch/arm64/arch_cpu.h; the kernel needs them for its
+	boot log and cannot include this header, and the topology API carries only
+	the numeric model, so both ends decode independently.
+*/
+static const char*
+get_arm64_model_string(uint32 midr)
+{
+	uint32 implementer = (midr >> 24) & 0xff;
+	uint32 part = (midr >> 4) & 0xfff;
+
+	if (implementer != 0x41)
+		return NULL;
+
+	switch (part) {
+		case 0xd00: return "Foundation";
+		case 0xd03: return "Cortex-A53";
+		case 0xd04: return "Cortex-A35";
+		case 0xd05: return "Cortex-A55";
+		case 0xd07: return "Cortex-A57";
+		case 0xd08: return "Cortex-A72";
+		case 0xd09: return "Cortex-A73";
+		case 0xd0a: return "Cortex-A75";
+		case 0xd0b: return "Cortex-A76";
+		case 0xd41: return "Cortex-A78";
+		case 0xd0c: return "Neoverse-N1";
+		case 0xd4a: return "Neoverse-E1";
+		case 0xd40: return "Neoverse-V1";
+		case 0xd49: return "Neoverse-N2";
+		case 0xd4f: return "Neoverse-V2";
+		case 0xd84: return "Neoverse-V3";
+		case 0xd8e: return "Neoverse-N3";
+		default:
+			return NULL;
+	}
+}
+
+#endif	/* __aarch64__ */
+
+
 static const char*
 get_cpu_model_string(enum cpu_platform platform, enum cpu_vendor cpuVendor,
 	uint32 cpuModel)
@@ -308,8 +363,18 @@ get_cpu_model_string(enum cpu_platform platform, enum cpu_vendor cpuVendor,
 	char cpuidName[49];
 #endif
 
+	(void)platform;
 	(void)cpuVendor;
 	(void)cpuModel;
+
+#if defined(__aarch64__)
+	if (platform != B_CPU_ARM_64)
+		return NULL;
+
+	// NULL for a part this table does not name, so that the caller falls back
+	// to showing the raw MIDR rather than a plausible-looking wrong core.
+	return get_arm64_model_string(cpuModel);
+#endif
 
 #if defined(__i386__) || defined(__x86_64__)
 	if (platform != B_CPU_x86 && platform != B_CPU_x86_64)
