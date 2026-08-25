@@ -17,14 +17,40 @@ import sys
 
 import boto3
 
-# Same env-override convention as graviton/scripts/ssm-run.
-# Set HAIKU_GRAVITON_BUCKET to the package-repository bucket. Deliberately has no
-# default: the bucket name embeds an account id, which does not belong in a public repo.
-BUCKET = os.environ["HAIKU_GRAVITON_BUCKET"]
+REGION = os.environ.get("AWS_REGION") or "us-west-2"
+
+
+def default_bucket() -> str:
+    """The package-repository bucket, haiku-graviton-<account>-<region>.
+
+    The account id is not written down anywhere in the tree -- this is a public
+    repository -- so it is resolved once, here, from whatever credentials this
+    process already has. Same convention as graviton/scripts/ssm-run;
+    HAIKU_GRAVITON_BUCKET names a different bucket outright and skips the call.
+
+    STS via boto3 rather than a shell-out to `aws`, because the host this runs on
+    has no CLI installed (see the module docstring). A failed lookup is fatal
+    rather than falling back, because interpolating an empty account id composes
+    "haiku-graviton--us-west-2": a valid bucket name that belongs to nobody, so
+    the upload would fail later with an access error naming the wrong problem.
+    """
+    try:
+        account = boto3.client("sts", region_name=REGION).get_caller_identity()["Account"]
+    except Exception as exc:  # no credentials, no IMDS, no network
+        raise SystemExit(
+            f"stage_gate: cannot resolve the AWS account id from STS ({exc}); "
+            "set HAIKU_GRAVITON_BUCKET to the package-repository bucket"
+        ) from exc
+    if not account.isdigit():
+        raise SystemExit(f"stage_gate: implausible account id from STS: {account!r}")
+    return f"haiku-graviton-{account}-{REGION}"
+
+
+BUCKET = os.environ.get("HAIKU_GRAVITON_BUCKET") or default_bucket()
 PREFIX = "hpkg/arm64-gate/"
 SRC = "/opt/haiku/fleet/gate-out"
 
-s3 = boto3.client("s3", region_name="us-west-2")
+s3 = boto3.client("s3", region_name=REGION)
 
 for name in ("haiku.hpkg", "haiku_datatranslators.hpkg"):
     path = os.path.join(SRC, name)

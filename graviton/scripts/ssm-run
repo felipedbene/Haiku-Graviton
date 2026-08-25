@@ -33,7 +33,7 @@
 set -uo pipefail
 
 REGION="${HAIKU_GRAVITON_REGION:-us-west-2}"
-BUCKET="${HAIKU_GRAVITON_BUCKET:-haiku-graviton-668984504585-us-west-2}"
+BUCKET="${HAIKU_GRAVITON_BUCKET:-}"
 PREFIX="${HAIKU_GRAVITON_SSM_PREFIX:-ssm-out}"
 DEADLINE_SECS=900
 QUIET=0
@@ -41,6 +41,28 @@ SCRIPT_FILE=""
 
 die() { printf 'ssm-run: %s\n' "$*" >&2; exit 1; }
 chatter() { [ "$QUIET" = 1 ] || printf 'ssm-run: %s\n' "$*" >&2; }
+
+# The bucket this project routes command output through is named
+# haiku-graviton-<account>-<region>. The account id is not written down anywhere
+# in the tree -- this is a public repository -- so it is resolved once, here, from
+# whatever credentials the caller already has, and every other script in
+# graviton/ follows the same convention. HAIKU_GRAVITON_BUCKET names a different
+# bucket outright and skips the lookup.
+#
+# The account id is checked rather than interpolated blind. A failed or empty
+# lookup would otherwise compose "haiku-graviton--us-west-2": a syntactically
+# valid bucket name that belongs to nobody, so the run would fail later with an
+# access error pointing at the wrong thing. Failing here names the real problem.
+if [ -z "$BUCKET" ]; then
+	ACCOUNT=$(aws --region "$REGION" sts get-caller-identity \
+		--query Account --output text) || ACCOUNT=""
+	case "$ACCOUNT" in
+		"" | *[!0-9]*)
+			die "cannot resolve the AWS account id (aws sts get-caller-identity);
+  refresh credentials, or set HAIKU_GRAVITON_BUCKET to the output bucket" ;;
+	esac
+	BUCKET="haiku-graviton-$ACCOUNT-$REGION"
+fi
 
 [ $# -ge 1 ] || die "usage: ssm-run <instance-id> [-f script] [-t secs] [-q]"
 INSTANCE="$1"; shift

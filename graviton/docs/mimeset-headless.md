@@ -296,7 +296,7 @@ everything measured above.
 
 ## 5. Build artifacts left on the metal
 
-On `i-0f7f6f3e8922acffd` (c7g.metal builder), in `/opt/haiku/mimeset-fix/`:
+On the c7g.metal builder, in `/opt/haiku/mimeset-fix/`:
 
 - `mimeset.FIXED` — arm64 binary with the fix, 284135 B
 - `mimeset.ORIG` — the stock arm64 binary for A/B, 284063 B

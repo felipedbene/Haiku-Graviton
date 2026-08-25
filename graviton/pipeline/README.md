@@ -117,8 +117,9 @@ Set in `cdk.json` `context`, or override per-invocation with `-c key=value`
 
 | Context key | Env | Default | Notes |
 |---|---|---|---|
-| `haiku:account` | `HAIKU_ACCOUNT` | `668984504585` | Isengard account. |
+| `haiku:account` | `HAIKU_ACCOUNT` | `CDK_DEFAULT_ACCOUNT` | The account your credentials point at. Not written down in this repo — it is public. Not set in `cdk.json`, and must not be added back as an empty string (an empty context value wins over the default). |
 | `haiku:region` | `HAIKU_REGION` | `us-west-2` | |
+| `haiku:ssmOutBucketName` | `HAIKU_GRAVITON_BUCKET` | `haiku-graviton-<account>-<region>` | Bucket the builder's role writes `ssm-run` output to; the Test stage is granted read on it. Derived from the two rows above, so it needs no configuration. Same env var the scripts under `graviton/` honour. |
 | `haiku:repoOwner` | `HAIKU_REPO_OWNER` | — **required** | GitHub owner of the DeBeOS repository. |
 | `haiku:repoName` | `HAIKU_REPO_NAME` | `haiku` | |
 | `haiku:branch` | `HAIKU_BRANCH` | `graviton` | |
@@ -147,7 +148,7 @@ Set in `cdk.json` `context`, or override per-invocation with `-c key=value`
 > up front. There is a policy per bucket on the `vmimport` role
 > (`vmimport-haiku-work`, `vmimport-haiku-work2`, ...) for exactly this reason.
 
-| `haiku:builderInstanceId` | `HAIKU_BUILDER_INSTANCE` | the metal builder | SSM-managed peer/driver for the Test stage. |
+| `haiku:builderInstanceId` | `HAIKU_BUILDER_INSTANCE` | — **required** | SSM-managed peer/driver for the Test stage (the `c7g.metal` builder). No default: an instance id cannot be derived the way the bucket name can, and this repo is public. |
 | `haiku:testSubnetId` / `testSecurityGroupId` | `HAIKU_TEST_SUBNET` / `HAIKU_TEST_SG` | project subnet / `haiku-graviton-test` | where the perf gate boots the candidate. |
 | `haiku:testInstanceType` | `HAIKU_TEST_TYPE` | `c7g.large` | **never a t-family type** — burstable CPU throttles once credits run out, which corrupts the CPU-cost-per-byte measurement. |
 | `haiku:minReceiveMbps` / `minTransmitMbps` | `HAIKU_MIN_RX_MBPS` / `HAIKU_MIN_TX_MBPS` | `3000` / `2000` | regression floors, well under the measured ~4950/~4490. |
@@ -162,10 +163,11 @@ at boot, baked key as fallback).
 
 ## Prerequisites before a deploy would work
 
-1. **CDK bootstrap** the account/region once: `cdk bootstrap aws://668984504585/us-west-2`.
+1. **CDK bootstrap** the account/region once:
+   `cdk bootstrap "aws://$(aws sts get-caller-identity --query Account --output text)/us-west-2"`.
 2. **CodeConnections GitHub connection** — create in the console, complete the
    GitHub handshake, paste its ARN into `haiku:connectionArn`.
-3. **`vmimport` role** — already exists in this account (`arn:aws:iam::668984504585:role/vmimport`).
+3. **`vmimport` role** — already exists in this account (`arn:aws:iam::<account-id>:role/vmimport`).
    Its policy must allow reading the import objects. After the first synth/deploy
    you get the exact ARN as a stack output (`VmimportPolicyHint`); ensure the
    role's policy includes, for the work bucket:
@@ -188,8 +190,14 @@ npx cdk diff         # safe — compares against deployed state
 # --- everything below creates/changes AWS resources; operator's call ---
 npx cdk deploy \
   -c haiku:repoOwner=<you> \
-  -c haiku:connectionArn=arn:aws:codeconnections:us-west-2:668984504585:connection/xxxx
+  -c haiku:builderInstanceId=i-<the c7g.metal builder> \
+  -c haiku:connectionArn=arn:aws:codeconnections:us-west-2:<account-id>:connection/<uuid>
 ```
+
+`haiku:account` is not passed: it defaults to `CDK_DEFAULT_ACCOUNT`, which the CDK
+CLI sets from the credentials you are already using. The connection ARN and the
+builder instance id are not stored in `cdk.json` because both embed identifiers
+this repository does not carry; pass them per deploy, or export `HAIKU_*`.
 
 A bake run is **manual**: `triggerOnPush` is off (bakes are expensive), so start
 executions from the CodePipeline console/CLI. When the pipeline reaches

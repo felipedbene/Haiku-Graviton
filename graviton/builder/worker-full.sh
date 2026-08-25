@@ -11,6 +11,21 @@ SCP="-P $PORT -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o Con
 LOG=/opt/haiku/worker-$PORT.log
 rm -f /opt/haiku/worker-$PORT.done
 exec >> $LOG 2>&1
+# Package-repository bucket, resolved from the caller's own credentials so that
+# no AWS account id is written down in a public tree. HAIKU_GRAVITON_BUCKET
+# overrides it. Same convention as graviton/scripts/ssm-run, which explains why
+# the lookup is validated rather than interpolated blind: an empty account id
+# composes "haiku-graviton--us-west-2", a valid bucket name that is nobody's.
+BUCKET="${HAIKU_GRAVITON_BUCKET:-}"
+if [ -z "$BUCKET" ]; then
+  ACCT=$(aws sts get-caller-identity --query Account --output text) || ACCT=""
+  case "$ACCT" in ""|*[!0-9]*)
+    echo "$(basename "$0"): cannot resolve the AWS account id; refresh credentials or set HAIKU_GRAVITON_BUCKET" >&2
+    exit 1 ;;
+  esac
+  BUCKET="haiku-graviton-$ACCT-${AWS_REGION:-us-west-2}"
+fi
+S3="s3://$BUCKET/hpkg/arm64/"
 echo "=== WORKER-FULL $PORT START $(date) : $* ==="
 ssh $S baron@127.0.0.1 'mkdir -p /boot/system/settings/fonts'
 for p in "$@"; do
@@ -32,7 +47,7 @@ for p in "$@"; do
   rm -f "$_harvest"/haiku*.hpkg
   if ls "$_harvest"/*.hpkg >/dev/null 2>&1; then mv -f "$_harvest"/*.hpkg /opt/haiku/hpkg-out/arm64/; fi
   rm -rf "$_harvest"
-  aws s3 sync /opt/haiku/hpkg-out/arm64/ s3://haiku-graviton-668984504585-us-west-2/hpkg/arm64/ \
+  aws s3 sync /opt/haiku/hpkg-out/arm64/ "$S3" \
       --exclude "*" --include "*.hpkg" >/dev/null 2>&1
   echo "########## $p done $(date)"
 done

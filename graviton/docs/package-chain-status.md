@@ -1,7 +1,7 @@
 # Native arm64 HaikuPorts chain — status
 
 State of the native package build running in the QEMU Haiku guests on the c7g.metal
-builder (`i-0f7f6f3e8922acffd`). Companion to `graviton/docs/sequencing.md` (Phase 2)
+builder. Companion to `graviton/docs/sequencing.md` (Phase 2)
 and to the recipe patches in `graviton/haikuports-patches/`.
 
 ## Where this stands — **2026-08-24 19:19Z**
@@ -240,7 +240,7 @@ libtool_libltdl-2.5.4-1-arm64.hpkg   52974 bytes
 ```
 
 Verified present in the guest's `packages/` directory and in
-`s3://haiku-graviton-668984504585-us-west-2/hpkg/arm64/`, not merely inferred from
+`s3://<package-repo-bucket>/hpkg/arm64/`, not merely inferred from
 `RC=0`.
 
 ### On the earlier negative results
@@ -1609,7 +1609,7 @@ method that answers confidently.**
 ## Where every port stands
 
 Built = a verified `.hpkg` on the builder **and** in
-`s3://haiku-graviton-668984504585-us-west-2/hpkg/arm64/`, confirmed by `ls`/`s3 ls` and
+`s3://<package-repo-bucket>/hpkg/arm64/`, confirmed by `ls`/`s3 ls` and
 never inferred from an exit code. All were built against the non-dirty `haiku`
 (Blocker 8), so every one is `pkgman`-installable.
 

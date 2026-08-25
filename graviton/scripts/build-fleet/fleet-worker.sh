@@ -26,10 +26,20 @@ SCP="-P $PORT $OPTS -i $KEY"
 G=baron@127.0.0.1
 GP=/boot/home/haikuports/packages
 OUT=/opt/haiku/hpkg-out/arm64
-# Shared package repository. Same env-override convention as graviton/scripts/ssm-run.
-# Deliberately no default: the bucket name embeds an account id, which does not
-# belong in a public repo. Export HAIKU_GRAVITON_BUCKET before running.
-BUCKET="${HAIKU_GRAVITON_BUCKET:?set HAIKU_GRAVITON_BUCKET to the package-repository bucket}"
+# Shared package repository, resolved from the caller's own credentials so that
+# no AWS account id is written down in a public tree. HAIKU_GRAVITON_BUCKET
+# overrides it. Same convention as graviton/scripts/ssm-run, which explains why
+# the lookup is validated rather than interpolated blind: an empty account id
+# composes "haiku-graviton--us-west-2", a valid bucket name that is nobody's.
+BUCKET="${HAIKU_GRAVITON_BUCKET:-}"
+if [ -z "$BUCKET" ]; then
+	ACCT=$(aws sts get-caller-identity --query Account --output text) || ACCT=""
+	case "$ACCT" in ""|*[!0-9]*)
+		echo "$(basename "$0"): cannot resolve the AWS account id; refresh credentials or set HAIKU_GRAVITON_BUCKET" >&2
+		exit 1 ;;
+	esac
+	BUCKET="haiku-graviton-$ACCT-${AWS_REGION:-us-west-2}"
+fi
 S3=s3://$BUCKET/hpkg/arm64/
 LOG=$FLEET/worker-$PORT.log
 exec >> "$LOG" 2>&1

@@ -227,7 +227,7 @@ export class HaikuGravitonPipelineStack extends cdk.Stack {
     // bucket. Granting the work bucket instead would leave the gate silently
     // falling back to the truncated inline copy.
     const ssmOutBucket = s3.Bucket.fromBucketName(
-      this, 'SsmOutBucket', 'haiku-graviton-668984504585-us-west-2');
+      this, 'SsmOutBucket', cfg.ssmOutBucketName);
     ssmOutBucket.grantRead(perfTest, 'ssm-out/*');
 
     // Launch and describe an ephemeral test instance. RunInstances does not

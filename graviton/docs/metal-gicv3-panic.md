@@ -16,8 +16,8 @@ own hardware. This is what was wrong.
 
 ## 1. The panic (CONFIRMED, observed)
 
-Booted the canonical AMI `ami-0d61e3910062bb80a` on a fresh `c7g.metal`
-(`i-0ac875282beb9fd6a`, us-west-2a) and read the serial console with
+Booted the canonical AMI `ami-0d61e3910062bb80a` on a fresh `c7g.metal` node
+under test (us-west-2a) and read the serial console with
 `aws ec2 get-console-output --latest`. The console works fine on metal; output
 became available a few minutes after launch.
 
@@ -73,8 +73,9 @@ Three differences, and the first two are the bug:
 
 ## 3. Ground truth from the hardware (CONFIRMED, observed)
 
-Rather than guess, read the same ACPI tables from Linux on the metal build host
-`i-0f7f6f3e8922acffd` (also `c7g.metal`), via SSM, read-only. Parsing
+Rather than guess, read the same ACPI tables from Linux on the metal build host —
+a *different* machine from the node under test above, also a `c7g.metal` — via
+SSM, read-only. Parsing
 `/sys/firmware/acpi/tables/APIC` directly:
 
 ```

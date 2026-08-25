@@ -3,13 +3,19 @@ import { Template } from 'aws-cdk-lib/assertions';
 import { HaikuGravitonPipelineStack } from '../lib/haiku-graviton-pipeline-stack';
 import { HaikuPipelineConfig } from '../lib/config';
 
+// Obviously-synthetic values throughout -- all-zero ids in the same style as the
+// subnet/SG/instance placeholders below. The real account id is not in this tree
+// (see loadConfig: it comes from CDK_DEFAULT_ACCOUNT at synth time), and these
+// tests assert on the *shape* of the template, so they must not need it.
+const ACCOUNT = '000000000000';
+
 const config: HaikuPipelineConfig = {
-  account: '668984504585',
+  account: ACCOUNT,
   region: 'us-west-2',
   repoOwner: 'test-owner',
   repoName: 'haiku',
   branch: 'graviton',
-  connectionArn: 'arn:aws:codeconnections:us-west-2:668984504585:connection/00000000-0000-0000-0000-000000000000',
+  connectionArn: `arn:aws:codeconnections:us-west-2:${ACCOUNT}:connection/00000000-0000-0000-0000-000000000000`,
   buildtoolsRepo: 'https://github.com/haiku/buildtools.git',
   buildtoolsBranch: 'master',
   haikuOnEc2Repo: 'https://github.com/haiku/haiku-on-ec2.git',
@@ -19,6 +25,7 @@ const config: HaikuPipelineConfig = {
   haikuRevision: 'hrev59996',
   amiNamePrefix: 'haiku-graviton',
   rootVolumeBytes: '2147483648',
+  ssmOutBucketName: `haiku-graviton-${ACCOUNT}-us-west-2`,
   builderInstanceId: 'i-000000000000000aa',
   testSubnetId: 'subnet-000000000000000aa',
   testSecurityGroupId: 'sg-000000000000000aa',
@@ -117,6 +124,20 @@ test('no instance-lifecycle grant is left tag-unconditioned', () => {
     expect(condition['ec2:ResourceTag/ephemeral']).toBe('true');
     expect(condition['ec2:ResourceTag/Name']).toBe('haiku-perf-gate');
   }
+});
+
+// The gate reads ssm-run's output from the *builder's* bucket, not the pipeline's
+// work bucket. That name used to be a literal in the stack; it is now a config
+// field derived from the account, so assert the grant actually follows the config.
+// A literal would keep pointing at one account's bucket after the account
+// changed, and the gate would then silently fall back to SSM's inline output --
+// truncated at 24 KB, which is the exact failure this bucket exists to avoid.
+// Matched as a substring so it holds whether or not CDK renders the ARN partition
+// as an Fn::Join token.
+test('the perf gate reads ssm-run output from the configured bucket', () => {
+  const t = synth();
+  const json = JSON.stringify(t.findResources('AWS::IAM::Policy'));
+  expect(json).toContain(`${config.ssmOutBucketName}/ssm-out/*`);
 });
 
 test('has a retained encrypted work bucket', () => {

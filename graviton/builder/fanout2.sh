@@ -1,13 +1,28 @@
 #!/bin/bash
 exec >> /opt/haiku/fanout2.log 2>&1
 set -x
+# Package-repository bucket, resolved from the caller's own credentials so that
+# no AWS account id is written down in a public tree. HAIKU_GRAVITON_BUCKET
+# overrides it. Same convention as graviton/scripts/ssm-run, which explains why
+# the lookup is validated rather than interpolated blind: an empty account id
+# composes "haiku-graviton--us-west-2", a valid bucket name that is nobody's.
+BUCKET="${HAIKU_GRAVITON_BUCKET:-}"
+if [ -z "$BUCKET" ]; then
+  ACCT=$(aws sts get-caller-identity --query Account --output text) || ACCT=""
+  case "$ACCT" in ""|*[!0-9]*)
+    echo "$(basename "$0"): cannot resolve the AWS account id; refresh credentials or set HAIKU_GRAVITON_BUCKET" >&2
+    exit 1 ;;
+  esac
+  BUCKET="haiku-graviton-$ACCT-${AWS_REGION:-us-west-2}"
+fi
+S3="s3://$BUCKET/hpkg/arm64/"
 KEY=/home/ubuntu/.ssh/haiku-ed25519
 O="-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ConnectTimeout=20 -i $KEY"
 echo "=== FANOUT2 $(date) ==="
 # 1. harvest what guest 2227 just built (diffutils + automake) and make it durable
 scp -P 2227 $O "baron@127.0.0.1:/boot/home/haikuports/packages/*.hpkg" /opt/haiku/hpkg-out/arm64/ 2>&1 | tail -1
 ls /opt/haiku/hpkg-out/arm64/ | grep -iE "diffutils|automake"
-aws s3 sync /opt/haiku/hpkg-out/arm64/ s3://haiku-graviton-668984504585-us-west-2/hpkg/arm64/ --exclude "*" --include "*.hpkg" 2>&1 | tail -2
+aws s3 sync /opt/haiku/hpkg-out/arm64/ "$S3" --exclude "*" --include "*.hpkg" 2>&1 | tail -2
 # 2. push the full package set to the other two guests so they can resolve deps
 for p in 2229 2230; do
   scp -P $p $O /opt/haiku/hpkg-out/arm64/*.hpkg baron@127.0.0.1:/boot/home/haikuports/packages/ 2>&1 | tail -1

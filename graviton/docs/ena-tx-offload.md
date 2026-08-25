@@ -774,9 +774,9 @@ and the remaining work repeated on a fresh one.
 The full serial capture of the failing boot — and of the healthy boot immediately
 before it, in the same 64 KiB window, which is what makes the comparison possible —
 is kept at
-`s3://haiku-graviton-668984504585-us-west-2/evidence/warm-reboot-nic-loss-i-02bab0e2575cde9a7-console.txt`
-(the `nic-loss` in that object name is from the retired reading below; the object
-is unchanged).
+`s3://<package-repo-bucket>/evidence/warm-reboot-nic-loss-<instance-id>-console.txt`,
+the console capture for the node that lost its NIC (the `nic-loss` in that object
+name is from the retired reading below; the object is unchanged).
 
 **Correction. This section previously concluded that the device was "absent from
 the PCI bus" on the failing boot. That was a misreading, and the capture says the

@@ -43,10 +43,14 @@
 #
 # Usage: haiku-perf-gate <ami-id>
 #
-# Environment (all have defaults suitable for this project):
+# Environment (defaults suitable for this project except where marked required;
+# the pipeline's Test stage sets all of these, so "required" only bites a manual
+# run -- see graviton/pipeline/lib/haiku-graviton-pipeline-stack.ts):
 #   HG_BUILDER_INSTANCE   SSM-managed builder that acts as peer and driver
+#                         (**required** -- an instance id cannot be derived, and
+#                         guessing one by tag risks driving the wrong machine)
 #   HG_TEST_SUBNET        subnet to launch the candidate in
-#   HG_TEST_SG            security group for the candidate
+#   HG_TEST_SG            security group for the candidate (**required**)
 #   HG_TEST_TYPE          instance type (default c7g.large)
 #   HG_MIN_RX_MBPS        receive floor in Mbit/s (default 3000)
 #   HG_MIN_TX_MBPS        transmit floor in Mbit/s (default 2000)
@@ -65,7 +69,7 @@
 set -uo pipefail
 
 REGION="${AWS_REGION:-${AWS_DEFAULT_REGION:-us-west-2}}"
-BUILDER="${HG_BUILDER_INSTANCE:-i-0f7f6f3e8922acffd}"
+BUILDER="${HG_BUILDER_INSTANCE:-}"
 SUBNET="${HG_TEST_SUBNET:-subnet-0888405da8f10d1b2}"
 TEST_SG="${HG_TEST_SG:-}"
 TEST_TYPE="${HG_TEST_TYPE:-c7g.large}"
@@ -88,6 +92,11 @@ AMI="${1:-}"
 [ -n "$AMI" ] || die "usage: haiku-perf-gate <ami-id>"
 [ -x "$SSM_RUN" ] || die "ssm-run not found next to this script"
 [ -n "$TEST_SG" ] || die "HG_TEST_SG must be set (the test security group)"
+# No default builder: naming one here would write an instance id into a public
+# tree, and an instance id is not derivable the way the output bucket's name is.
+# Discovering it by tag was considered and rejected -- a near-miss would silently
+# drive the wrong machine, which is worse than not starting.
+[ -n "$BUILDER" ] || die "HG_BUILDER_INSTANCE must be set (the SSM-managed builder used as peer and driver)"
 
 INSTANCE=""
 
