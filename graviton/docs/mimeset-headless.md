@@ -121,7 +121,7 @@ from the includes and calls in each file.
 | Tool | Site | Position | What it actually needs |
 |---|---|---|---|
 | `mimeset` | `src/bin/mimeset.cpp:232` | before loop (234) | registrar MIME db — **FIXED on this branch**. With `--mimedb` it needs *nothing* (purely local `Mime::Database`) |
-| **`setmime`** | `src/bin/setmime.cpp:1154` | first stmt of `main()` | registrar MIME db. **MIXED case — see below** |
+| **`setmime`** | `src/bin/setmime.cpp:1154` | first stmt of `main()` | registrar MIME db + app_server on **every typed invocation**. ~~MIXED case~~ — the "mixed" reading was wrong, see the correction below |
 | `version` | `src/bin/version.cpp:125` | first stmt | **nothing at all** — only `BFile` + `BAppFileInfo` |
 | `hey` | `src/bin/hey.cpp:268` | first stmt | `be_roster` + `BMessenger` scripting (registrar) |
 | `keymap` (CLI) | `src/bin/keymap/main.cpp:155` | before the mode switch (158) | **nothing** for `-c`/compile and save-source-from-file; only `SetToCurrent`/`SaveAsCurrent`/`RestoreSystemDefault` want app_server |
@@ -201,6 +201,48 @@ preferred-app paths do not. Fixing it properly means either adding
 `B_BITMAP_NO_SERVER_LINK` to those two allocations or failing only on the icon paths — a
 real change, not a constructor swap. **Not attempted here.**
 
+> ### CORRECTION 2026-08-25 — the paragraph above is wrong twice
+>
+> Both errors were found by a follow-up audit of the whole class and then verified
+> independently here, by reading the code rather than by trusting the audit.
+>
+> **1. `setmime` is NOT on the critical path.** There is no build-chain invocation of
+> `setmime` anywhere. Its single occurrence under `build/` is
+> `build/jam/images/definitions/minimum:99`, which is an image **contents** entry — a list
+> of files to ship, not a command that runs. *Positive control on the matcher, because a
+> zero-row result proves nothing on its own:* the same search for `mimeset` returns real
+> invocation sites (`build/jam/BeOSRules:174,175,197,199`,
+> `build/jam/RepositoryRules:486,491,611,616`). So the grep can match; `setmime` genuinely
+> is not called. Its only exposure is via upstream HaikuPorts recipes, which are not in
+> this repo — that exposure is therefore **unverified, not measured**, and none of our own
+> ten recipes under `graviton/haikuports-patches/recipes/` invokes it.
+>
+> **2. The "mixed case" split does not exist.** The claim that type/extension/sniffer paths
+> avoid app_server is false as the code is written. `MimeType::_SetTo()` runs on every
+> invocation that names a type — it is called unconditionally at `setmime.cpp:700`, under
+> the comment *"finally force to load mime-specific fileds"* — and it allocates **both**
+> icon buffers with the server-backed constructor at `setmime.cpp:854` and `860`:
+>
+> ```
+> fSmallIcon = new BBitmap(BRect(0, 0, 15, 15), B_COLOR_8_BIT);
+> fBigIcon   = new BBitmap(BRect(0, 0, 31, 31), B_COLOR_8_BIT);
+> ```
+>
+> So *every typed invocation* reaches for app_server, not just `-mimeicon`/`-appicon`. Only
+> `_SetTo(NULL)` — the iterate-all-types case — returns early without allocating.
+>
+> Note precisely what went wrong in the original, because it is a repeatable mistake: the
+> four line numbers `763,768,854,860` are **correct**, and the paragraph's error is one of
+> **attribution**. It treated all four as belonging to the icon-only path `_SetIcon()`, when
+> 854 and 860 are in `_SetTo()`, which is on the common path. Citing a correct line number
+> is not the same as establishing which path reaches it.
+>
+> The upside of the correction: this makes `setmime` a **smaller** fix than claimed, not a
+> larger one. Using `B_BITMAP_NO_SERVER_LINK` + `B_CMAP8` on all four allocations is the
+> idiom the storage kit already uses at ten sites on this same path, and
+> `B_COLOR_8_BIT` *is* `B_CMAP8` (`GraphicsDefs.h:274`), so there is no behaviour change.
+> Attempted on branch `fix/headless-tool-audit`.
+
 ### The wider question this raises — and the evidence that settles it
 
 The per-call-site fix is right for *this task*, but the honest reading is that `exit(0)` in
@@ -236,7 +278,8 @@ this investigation ends on.
 | The 5-arg `initGUI` ctor is private (friend-only) | **MEASURED** (`headers/os/app/Application.h:108`) |
 | Four dead `InitCheck()`/`if (be_app)` guards | **MEASURED** (line numbers read) |
 | Blast-radius GUI/non-GUI classification | **INFERRED** per tool from its includes and calls |
-| `setmime` bitmaps lack `B_BITMAP_NO_SERVER_LINK` | **MEASURED** (`setmime.cpp:763,768,854,860`) |
+| `setmime` bitmaps lack `B_BITMAP_NO_SERVER_LINK` | **MEASURED** (`setmime.cpp:763,768,854,860`) — but the *attribution* of those four sites was wrong; 854/860 are in `_SetTo`, not the icon path. See the correction below. |
+| `setmime` is on the build chain's critical path | **RETRACTED — it is not.** No build-chain invocation exists; see the correction below. |
 | Fixed `mimeset` cross-builds for arm64 | **MEASURED** — `jam -q mimeset` rc=0, binary differs from stock, and the new warning string is present in the fixed binary and absent from the stock one (the artifact announces itself) |
 | **Fixed `mimeset` actually writes `BEOS:TYPE` on a guest** | **MEASURED** — see section 6. Stock: rc 0, zero attributes. Fixed: rc 0, `BEOS:TYPE` on every file. |
 | **One-package end-to-end (`vim`) carrying `BEOS:` attrs** | **MEASURED** — 0/2454 → 2454/2454, via haikuporter's exact argv. |
@@ -443,7 +486,15 @@ confirmed byte-identical to the pre-existing `haiku-system-orig.hpkg`.
 2. `exit(0)` → `exit(1)` in `Application.cpp`. One line; stops all 160 sites reporting
    success on failure; changes no control flow. Recommended in the commit message,
    deliberately not done.
-3. The 29 class-(b) tools that need no GUI and die anyway — `setmime` is the one on the
+3. The 29 class-(b) tools that need no GUI and die anyway — ~~`setmime` is the one on the
    critical path, and it is **not** a constructor swap (its bitmaps at
    `setmime.cpp:763,768,854,860` lack `B_BITMAP_NO_SERVER_LINK`, so its icon paths
-   genuinely need `app_server` while its type/extension/sniffer paths do not).
+   genuinely need `app_server` while its type/extension/sniffer paths do not).~~
+   **Superseded 2026-08-25 — see the correction in §"The blast radius" above.** The class was
+   audited in full and the result is a *negative*: intersected with the tools our build chain
+   actually invokes, class (b) contains **exactly one** member, `mimeset`, already fixed. The
+   mimeset damage did not silently repeat anywhere else. `setmime` is not on the critical path
+   at all, and its fix *is* effectively a buffer-flag change. What remains is 17 CLI tools and
+   8 non-GUI daemons, **none of them invoked by the build chain** — worth noting only that
+   `UserlandFSServer` and `mountvolume` together mean headless volume management is broken end
+   to end, which could matter to the chroot and harvest loops.
