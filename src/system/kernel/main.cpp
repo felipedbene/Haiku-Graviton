@@ -80,7 +80,18 @@
 // work. Tag and timestamp are separate macros, each defined exactly once --
 // ena.h defines its stamp twice and the second definition quietly ate the
 // timestamp half, which is the failure mode this is here to catch.
-#define KERNEL_BUILD_TAG	"query-page-present-1"
+//
+// CAVEAT, learned the hard way: __DATE__/__TIME__ are expanded when *this file*
+// is compiled, not when the kernel is linked. An incremental build that changes
+// another file -- say VMSAv8TranslationMap.cpp -- relinks a genuinely different
+// kernel that still reports the previous timestamp, because main.cpp was not
+// recompiled. Two kernels then announce themselves identically, which is exactly
+// the confusion the stamp exists to prevent. So:
+//
+//   BUMP KERNEL_BUILD_TAG BY HAND whenever you build a kernel you intend to tell
+//   apart from the last one. The timestamp is a convenience, not an identity;
+//   sha256 of the kernel binary is the only identity that cannot be stale.
+#define KERNEL_BUILD_TAG	"roottable-guard-1"
 #define KERNEL_BUILD_STAMP	__DATE__ " " __TIME__
 
 
