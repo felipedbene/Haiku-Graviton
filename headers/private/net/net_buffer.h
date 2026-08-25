@@ -59,6 +59,19 @@ typedef struct net_buffer {
 	uint32					size;
 	uint8					protocol;
 	uint16					buffer_flags;
+
+	// Wall-clock time (system_time(), microseconds) at which the device reader
+	// thread put this buffer onto a device interface's receive FIFO. The
+	// consumer thread reads it back to compute how long the buffer sat in that
+	// queue -- its sojourn -- which is the quantity the receive FIFO's queue
+	// discipline bounds (see net_fifo_codel in the stack add-on). Zero means the
+	// buffer was never enqueued on such a FIFO and carries no sojourn.
+	//
+	// Appended at the end of the structure on purpose: every field above keeps
+	// its offset, so a module built against an older copy of this header still
+	// reads all of them correctly, and only the allocating module (the stack
+	// add-on's net_buffer.cpp) needs to know that the object grew.
+	bigtime_t				receive_enqueue_time;
 } net_buffer;
 
 struct ancillary_data_container;

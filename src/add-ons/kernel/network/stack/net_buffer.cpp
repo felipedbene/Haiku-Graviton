@@ -1132,6 +1132,11 @@ create_buffer(size_t headerSpace)
 	buffer->msg_flags = 0;
 	buffer->buffer_flags = 0;
 	buffer->size = 0;
+	// Zero means "never enqueued on a receive FIFO", which the queue
+	// discipline's consumer side tests for. These objects come from a slab, so
+	// without this a recycled buffer would carry a stale enqueue time and be
+	// charged a spurious multi-second sojourn.
+	buffer->receive_enqueue_time = 0;
 
 	CHECK_BUFFER(buffer);
 	CREATE_PARANOIA_CHECK_SET(buffer, "net_buffer");

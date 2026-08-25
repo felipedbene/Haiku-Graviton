@@ -70,6 +70,11 @@ device_reader_thread(void* _interface)
 			}
 
 			const size_t packetSize = buffer->size;
+			// Stamp the enqueue time so the consumer can measure how long this
+			// buffer sits in the queue and shed it if the queue is a standing
+			// one. Taken before the enqueue, not after winning the FIFO mutex,
+			// so the sojourn includes any wait for that lock.
+			buffer->receive_enqueue_time = system_time();
 			status = fifo_enqueue_buffer_tracked(&interface->receive_queue,
 				buffer, &interface->receive_queue_diagnostics);
 			if (status == B_OK) {
@@ -104,9 +109,9 @@ device_consumer_thread(void* _interface)
 	net_buffer* buffer;
 
 	while (atomic_get(&interface->ref_count) > 0) {
-		ssize_t status = fifo_dequeue_buffer_tracked(&interface->receive_queue, 0,
-			B_INFINITE_TIMEOUT, &buffer,
-			&interface->receive_queue_diagnostics);
+		ssize_t status = fifo_dequeue_buffer_codel(&interface->receive_queue,
+			&interface->receive_queue_codel, &interface->receive_queue_diagnostics,
+			&buffer);
 		if (status != B_OK) {
 			if (status == B_INTERRUPTED)
 				continue;
@@ -200,6 +205,8 @@ allocate_device_interface(net_device* device, net_device_module_info* module)
 	interface->receive_enqueue_dropped = 0;
 	init_fifo_watermark(&interface->receive_queue_diagnostics,
 		interface->receive_queue.max_bytes);
+	init_fifo_codel(&interface->receive_queue_codel, NET_FIFO_CODEL_TARGET,
+		NET_FIFO_CODEL_INTERVAL, NET_FIFO_CODEL_MIN_BYTES);
 
 	interface->device = device;
 	interface->up_count = 0;
@@ -295,6 +302,17 @@ dump_device_interface(int argc, char** argv)
 		" other)\n", interface->receive_queue_diagnostics.fail_total,
 		interface->receive_queue_diagnostics.fail_nobufs,
 		interface->receive_queue_diagnostics.fail_other);
+	kprintf("  codel:           target %" B_PRIdBIGTIME " us, interval %"
+		B_PRIdBIGTIME " us, min %" B_PRIuSIZE " bytes\n",
+		interface->receive_queue_codel.target,
+		interface->receive_queue_codel.interval,
+		interface->receive_queue_codel.min_bytes);
+	kprintf("  codel dropped:   %" B_PRIu64 " of %" B_PRIu64 " (sojourn last %"
+		B_PRIdBIGTIME " us, max %" B_PRIdBIGTIME " us)\n",
+		interface->receive_queue_codel.dropped,
+		interface->receive_queue_codel.evaluated,
+		interface->receive_queue_codel.last_sojourn,
+		interface->receive_queue_codel.max_sojourn);
 	kprintf("receive_funcs:\n");
 	DeviceHandlerList::Iterator handlerIterator
 		= interface->receive_funcs.GetIterator();

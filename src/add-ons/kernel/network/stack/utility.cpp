@@ -403,6 +403,208 @@ fifo_socket_enqueue_buffer(net_fifo* fifo, net_socket* socket, uint8 event,
 }
 
 
+//	#pragma mark - fifo sojourn-time queue discipline (CoDel)
+
+
+void
+init_fifo_codel(net_fifo_codel* codel, bigtime_t target, bigtime_t interval,
+	size_t minBytes)
+{
+	memset(codel, 0, sizeof(*codel));
+	codel->target = target;
+	codel->interval = interval;
+	codel->min_bytes = minBytes;
+}
+
+
+/*!	Integer square root, digit-by-digit. Used only on the drop path (i.e. only
+	while the queue is persistently overloaded), never on the common per-frame
+	path, so its cost does not matter; what matters is that it needs no FPU,
+	which the receive path does not have.
+*/
+static inline uint32
+codel_isqrt(uint32 n)
+{
+	uint32 result = 0;
+	uint32 bit = 1UL << 30;
+
+	while (bit > n)
+		bit >>= 2;
+
+	while (bit != 0) {
+		if (n >= result + bit) {
+			n -= result + bit;
+			result = (result >> 1) + bit;
+		} else
+			result >>= 1;
+		bit >>= 2;
+	}
+
+	return result;
+}
+
+
+/*!	CoDel's control law: the next drop is scheduled interval / sqrt(count) after
+	the reference time, so that a persisting overload is shed at an accelerating
+	rate until the sojourn falls back under target. Integer-only.
+*/
+static inline bigtime_t
+codel_control_law(bigtime_t reference, bigtime_t interval, uint32 count)
+{
+	uint32 root = codel_isqrt(count);
+	if (root == 0)
+		root = 1;
+	return reference + interval / root;
+}
+
+
+/*!	The CoDel state update for one just-dequeued buffer: does the queue look
+	persistently over target? Returns whether this buffer is a candidate to
+	drop. Cheap -- a subtraction and a couple of comparisons -- and this is the
+	only CoDel work done on the common (no-drop) per-frame path.
+*/
+static inline bool
+codel_update(net_fifo_codel* codel, bigtime_t now, bigtime_t sojourn,
+	size_t queueBytes)
+{
+	if (sojourn < codel->target || queueBytes < codel->min_bytes) {
+		// Below target, or the queue is down to about one packet: the standing
+		// queue has cleared, so restart the interval timer.
+		codel->first_above_time = 0;
+		return false;
+	}
+
+	if (codel->first_above_time == 0) {
+		// Just went above target; do not act until it has stayed above for a
+		// whole interval. This is what lets a transient burst through untouched.
+		codel->first_above_time = now + codel->interval;
+		return false;
+	}
+
+	return now >= codel->first_above_time;
+}
+
+
+static inline bigtime_t
+codel_sojourn(net_buffer* buffer, bigtime_t now)
+{
+	// A buffer that reached the FIFO by some path other than the timestamping
+	// enqueue (or one in flight when the discipline was reconfigured) carries no
+	// stamp; charge it no sojourn rather than a spurious multi-second one.
+	if (buffer->receive_enqueue_time == 0
+		|| now < buffer->receive_enqueue_time)
+		return 0;
+	return now - buffer->receive_enqueue_time;
+}
+
+
+/*!	Blocking dequeue with the sojourn-time queue discipline applied.
+
+	Returns exactly one buffer to dispatch (in \a _buffer, status B_OK), having
+	first shed any buffers the discipline decided were part of a standing queue.
+	Semantics for the caller are identical to fifo_dequeue_buffer_tracked() with
+	an infinite timeout: it blocks until there is something to hand back, and a
+	dropped buffer is freed here and never seen by the caller.
+
+	This is the textbook CoDel dequeue (Nichols & Jacobson), with the outer
+	"there is a packet" step being a blocking wait and the inner re-fetches
+	during a drop episode being non-blocking -- an empty queue mid-episode ends
+	the episode rather than blocking inside it.
+*/
+ssize_t
+fifo_dequeue_buffer_codel(net_fifo* fifo, net_fifo_codel* codel,
+	net_fifo_watermark* diagnostics, net_buffer** _buffer)
+{
+	while (true) {
+		net_buffer* buffer;
+		ssize_t status = fifo_dequeue_buffer_tracked(fifo, 0,
+			B_INFINITE_TIMEOUT, &buffer, diagnostics);
+		if (status != B_OK)
+			return status;
+
+		bigtime_t now = system_time();
+		bigtime_t sojourn = codel_sojourn(buffer, now);
+		size_t queueBytes = (diagnostics != NULL)
+			? diagnostics->current_bytes : fifo->current_bytes;
+
+		codel->evaluated++;
+		codel->last_sojourn = sojourn;
+		if (sojourn > codel->max_sojourn)
+			codel->max_sojourn = sojourn;
+
+		bool okToDrop = codel_update(codel, now, sojourn, queueBytes);
+
+		if (codel->dropping) {
+			if (!okToDrop) {
+				// Sojourn fell back under target: end the episode.
+				codel->dropping = false;
+			} else {
+				// Shed buffers as long as we are past the next scheduled drop
+				// time and the queue is still over target.
+				while (codel->dropping && now >= codel->drop_next) {
+					gNetBufferModule.free(buffer);
+					codel->dropped++;
+					codel->count++;
+
+					status = fifo_dequeue_buffer_tracked(fifo, MSG_DONTWAIT, 0,
+						&buffer, diagnostics);
+					if (status != B_OK) {
+						// Queue drained mid-episode: nothing left to hand back
+						// or to drop. Leave the episode and block afresh.
+						codel->dropping = false;
+						buffer = NULL;
+						break;
+					}
+
+					now = system_time();
+					sojourn = codel_sojourn(buffer, now);
+					queueBytes = (diagnostics != NULL)
+						? diagnostics->current_bytes : fifo->current_bytes;
+					codel->evaluated++;
+					codel->last_sojourn = sojourn;
+					if (sojourn > codel->max_sojourn)
+						codel->max_sojourn = sojourn;
+
+					okToDrop = codel_update(codel, now, sojourn, queueBytes);
+					if (!okToDrop)
+						codel->dropping = false;
+					else {
+						codel->drop_next = codel_control_law(codel->drop_next,
+							codel->interval, codel->count);
+					}
+				}
+
+				if (buffer == NULL)
+					continue;
+			}
+		} else if (okToDrop) {
+			// Enter a dropping episode: shed this buffer, then hand back the
+			// next one. Resuming an episode that ended recently keeps most of
+			// its drop rate; a fresh one starts from a single drop.
+			gNetBufferModule.free(buffer);
+			codel->dropped++;
+
+			if (codel->count > 2 && (now - codel->drop_next) < codel->interval)
+				codel->count -= 2;
+			else
+				codel->count = 1;
+
+			codel->dropping = true;
+			codel->drop_next = codel_control_law(now, codel->interval,
+				codel->count);
+
+			status = fifo_dequeue_buffer_tracked(fifo, MSG_DONTWAIT, 0,
+				&buffer, diagnostics);
+			if (status != B_OK)
+				continue;
+		}
+
+		*_buffer = buffer;
+		return B_OK;
+	}
+}
+
+
 //	#pragma mark - Timer
 
 
