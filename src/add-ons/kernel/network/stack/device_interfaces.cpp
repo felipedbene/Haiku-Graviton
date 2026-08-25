@@ -83,6 +83,13 @@ reader_loop(net_device_interface* interface, uint32 queue, net_fifo* fifo,
 			}
 
 			const size_t packetSize = buffer->size;
+			// Stamp the enqueue time so the consumer can measure how long this
+			// buffer sits in the queue and shed it if the queue is a standing
+			// one. Taken before the enqueue, not after winning the FIFO mutex,
+			// so the sojourn includes any wait for that lock. (fifo/diagnostics
+			// are the per-queue objects; for queue 0 they alias the interface's
+			// receive_queue.)
+			buffer->receive_enqueue_time = system_time();
 			status = fifo_enqueue_buffer_tracked(fifo, buffer, diagnostics);
 			if (status == B_OK) {
 				atomic_add((int32*)&device->stats.receive.packets, 1);
@@ -155,10 +162,13 @@ consumer_loop(net_device_interface* interface, net_fifo* fifo,
 	// the final put). An extra consumer must not rely on ref_count -- down()
 	// tears its fifo down without dropping ref_count -- so it exits as soon as
 	// the flag is set, before it can loop back to lock a destroyed fifo.
+	// The CoDel sojourn discipline drains the per-queue fifo; the codel state is
+	// interface-wide for now (only queue 0 is active until a driver enables extra
+	// queues -- then fifo == &interface->receive_queue and this is exact).
 	while ((stopping == NULL || atomic_get(stopping) == 0)
 			&& atomic_get(&interface->ref_count) > 0) {
-		ssize_t status = fifo_dequeue_buffer_tracked(fifo, 0,
-			B_INFINITE_TIMEOUT, &buffer, diagnostics);
+		ssize_t status = fifo_dequeue_buffer_codel(fifo,
+			&interface->receive_queue_codel, diagnostics, &buffer);
 		if (status != B_OK) {
 			if (status == B_INTERRUPTED)
 				continue;
@@ -276,6 +286,8 @@ allocate_device_interface(net_device* device, net_device_module_info* module)
 	interface->receive_enqueue_dropped = 0;
 	init_fifo_watermark(&interface->receive_queue_diagnostics,
 		interface->receive_queue.max_bytes);
+	init_fifo_codel(&interface->receive_queue_codel, NET_FIFO_CODEL_TARGET,
+		NET_FIFO_CODEL_INTERVAL, NET_FIFO_CODEL_MIN_BYTES);
 
 	interface->device = device;
 	interface->up_count = 0;
@@ -374,6 +386,17 @@ dump_device_interface(int argc, char** argv)
 		" other)\n", interface->receive_queue_diagnostics.fail_total,
 		interface->receive_queue_diagnostics.fail_nobufs,
 		interface->receive_queue_diagnostics.fail_other);
+	kprintf("  codel:           target %" B_PRIdBIGTIME " us, interval %"
+		B_PRIdBIGTIME " us, min %" B_PRIuSIZE " bytes\n",
+		interface->receive_queue_codel.target,
+		interface->receive_queue_codel.interval,
+		interface->receive_queue_codel.min_bytes);
+	kprintf("  codel dropped:   %" B_PRIu64 " of %" B_PRIu64 " (sojourn last %"
+		B_PRIdBIGTIME " us, max %" B_PRIdBIGTIME " us)\n",
+		interface->receive_queue_codel.dropped,
+		interface->receive_queue_codel.evaluated,
+		interface->receive_queue_codel.last_sojourn,
+		interface->receive_queue_codel.max_sojourn);
 
 	kprintf("receive_queue_cnt: %" B_PRIu32 "\n",
 		interface->receive_queue_count);
