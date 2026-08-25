@@ -192,26 +192,11 @@ SYSTEM_ADD_ONS_ACCELERANTS += [ FFilterByBuildFeatures
 	}@ # x86
 ] ;
 
-SYSTEM_ADD_ONS_TRANSLATORS += [ FFilterByBuildFeatures
-	AVIFTranslator@libavif
-	BMPTranslator
-	GIFTranslator
-	HVIFTranslator
-	ICOTranslator
-	ICNSTranslator@libicns
-	JPEGTranslator@jpeg	JPEG2000Translator@jasper
-	PCXTranslator
-	PNGTranslator@libpng
-	PPMTranslator
-	PSDTranslator
-	RAWTranslator
-	RTFTranslator
-	SGITranslator
-	TGATranslator
-	TIFFTranslator@tiff
-	WebPTranslator@libwebp
-	WonderBrushTranslator
-] ;
+# SYSTEM_ADD_ONS_TRANSLATORS: the image translators now live in the "minimum"
+# image definition (which this file includes), so every profile carries them.
+# FFilterByBuildFeatures still gates each one on its decoder library, so a
+# translator whose library is unavailable for the target is dropped, exactly as
+# before -- only the list's home moved up, the filtering is unchanged.
 
 SYSTEM_ADD_ONS_MEDIA += [ FFilterByBuildFeatures
 	cortex_audioadapter.media_addon
