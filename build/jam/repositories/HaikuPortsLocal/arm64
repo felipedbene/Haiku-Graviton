@@ -1,0 +1,38 @@
+# Packages that belong to the HaikuPorts repository for this build but that the
+# upstream arm64 build-packages repository does not serve, because we build them
+# natively on arm64 ourselves.
+#
+# These must NOT be moved into repositories/HaikuPorts/arm64. That file's SHA256
+# is what selects the remote package index
+# (RemotePackageRepository -> "$(repoUrl)/`cat $source`/repo"), so adding a line
+# to it makes the build ask the mirror for an index that was never published and
+# the fetch fails with HTTP 404. Declaring them here leaves that checksum alone.
+#
+# Every package listed here is only ever taken from $(HAIKU_DOWNLOAD_DIR) --
+# never fetched -- and is skipped (with a message) if the file is not staged
+# there. So listing something that is not built yet costs nothing but the
+# features that need it stay off.
+#
+# Versions and revisions must match the built file names exactly, e.g.
+# libpng16-1.6.53-1 -> libpng16-1.6.53-1-arm64.hpkg.
+
+LocalPackageRepository HaikuPorts
+	: arm64
+	:
+	# architecture "any" packages
+	:
+	# repository architecture packages
+	# primary architecture (arm64)
+
+	# Image translator libraries: these turn on the libpng, jpeg, tiff and
+	# jasper build features, and with them the PNG, JPEG, TIFF and JPEG2000
+	# translators.
+	jasper-2.0.33-2
+	jasper_devel-2.0.33-2
+	libjpeg_turbo-3.1.4.1-1
+	libjpeg_turbo_devel-3.1.4.1-1
+	libpng16-1.6.53-1
+	libpng16_devel-1.6.53-1
+	tiff-4.7.0-1
+	tiff_devel-4.7.0-1
+	;

@@ -43,10 +43,32 @@ rule AddRepositoryPackage repository : architecture : baseName : version
 		: $(baseName) ] ;
 	baseName = $(packageFamily:G=) ;
 
+	local requirePackageFile ;
+	local isLocalOnly ;
 	if $(HAIKU_NO_DOWNLOADS) = 1 && $(HAIKU_IS_BOOTSTRAP) != 1 {
 		# Only add packages to repository that already exist in download
 		# directory.
+		requirePackageFile = 1 ;
+	}
+	if $(baseName) in $(HAIKU_LOCAL_ONLY_PACKAGES) {
+		# The remote index does not list this package at all -- it only exists
+		# as a file we built ourselves. Requiring the file unconditionally keeps
+		# the build from ever asking the mirror for it, and makes availability
+		# mean "the file is really there".
+		requirePackageFile = 1 ;
+		isLocalOnly = 1 ;
+	}
+	if $(requirePackageFile) {
 		if ! [ Glob $(HAIKU_DOWNLOAD_DIR) : $(packageFileName) ] {
+			if $(isLocalOnly) {
+				# Say so. Dropping this silently is how a build ends up quietly
+				# missing the features that depend on it, with nothing in the
+				# log to explain why. The version and revision have to match the
+				# file name exactly.
+				Echo "Local package" $(packageFileName) "not found in"
+					$(HAIKU_DOWNLOAD_DIR) "-- packages depending on it will be"
+					"unavailable." ;
+			}
 			return ;
 		}
 	}
@@ -105,6 +127,44 @@ rule PackageRepository repository : architecture : anyPackages : packages
 }
 
 
+#pragma mark - Local Packages
+
+
+rule LocalPackageRepository repository : architecture : anyPackages : packages
+{
+	# LocalPackageRepository <repository> : <architecture> : <anyPackages>
+	#	: <packages> ;
+	#
+	# Declares packages that are part of <repository> for this build, but that
+	# the upstream repository does not serve -- typically because we built them
+	# natively for <architecture> ourselves. They are registered exactly like
+	# the packages named in the repository definition file, except that they are
+	# only ever taken from $(HAIKU_DOWNLOAD_DIR); see AddRepositoryPackage.
+	#
+	# This has to be declared *outside* the checksummed repository definition
+	# file: RemotePackageRepository keys the remote package index off the SHA256
+	# of that file, so appending a line to it asks the mirror for an index it
+	# has never published, and the fetch 404s. Keeping local-only packages here
+	# leaves that checksum untouched.
+
+	if $(architecture) != $(HAIKU_PACKAGING_ARCHS[1]) {
+		return ;
+	}
+
+	repository = $(repository:G=) ;
+
+	HAIKU_LOCAL_ONLY_ANY_PACKAGES_$(repository) += $(anyPackages) ;
+	HAIKU_LOCAL_ONLY_PACKAGES_$(repository) += $(packages) ;
+
+	# Record the base names, so AddRepositoryPackage can recognize them.
+	local package ;
+	for package in $(anyPackages) $(packages) {
+		local splitName = [ Match "([^-]*)-(.*)" : $(package) ] ;
+		HAIKU_LOCAL_ONLY_PACKAGES += $(splitName[1]:E=$(package)) ;
+	}
+}
+
+
 #pragma mark - Remote Repository
 
 
@@ -147,6 +207,15 @@ rule RemotePackageRepository repository : architecture : repositoryUrl
 		: RemoteRepositoryFetchPackage ;
 
 	HAIKU_REPOSITORY_URL on $(repository) = $(repositoryUrl) ;
+
+	# Merge in any locally-built packages declared for this repository. They are
+	# registered here rather than in the definition file above so that they do
+	# not perturb the definition file's checksum, which selects the remote
+	# package index. Merging them before PackageRepository runs means they also
+	# end up in the generated package list and in the locally built repository
+	# cache, exactly as if they had been listed upstream.
+	anyPackages += $(HAIKU_LOCAL_ONLY_ANY_PACKAGES_$(repository:G=)) ;
+	packages += $(HAIKU_LOCAL_ONLY_PACKAGES_$(repository:G=)) ;
 
 	PackageRepository $(repository) : $(architecture) : $(anyPackages)
 		: $(packages) : $(sourcePackages) : $(debugInfoPackages) ;

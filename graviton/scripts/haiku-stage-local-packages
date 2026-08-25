@@ -1,0 +1,67 @@
+#!/bin/sh
+#
+# Stage natively built hpkgs into a build's download directory, so that the
+# packages listed in build/jam/repositories/HaikuPortsLocal/<arch> resolve.
+#
+# Those packages are deliberately not in the checksummed HaikuPorts definition
+# file (see the comment at the top of the HaikuPortsLocal list), so jam never
+# downloads them -- it only ever picks them up out of $(HAIKU_DOWNLOAD_DIR),
+# which defaults to <generated dir>/download. This script puts them there.
+#
+# Names must match exactly, revision included: a mismatch means the package is
+# skipped and the build features that need it stay off. jam now prints a line
+# per missing package, so check its output rather than guessing.
+#
+# Usage: haiku-stage-local-packages <generated-dir> [<hpkg-pool-dir>]
+
+set -e
+
+GENERATED="$1"
+POOL="$2"
+ARCH="${ARCH:-arm64}"
+
+if [ -z "$GENERATED" ]; then
+	echo "usage: $0 <generated-dir> [<hpkg-pool-dir>]" >&2
+	exit 1
+fi
+if [ ! -d "$GENERATED" ]; then
+	echo "error: no such generated directory: $GENERATED" >&2
+	exit 1
+fi
+: "${POOL:=/opt/haiku/hpkg-out/$ARCH}"
+if [ ! -d "$POOL" ]; then
+	echo "error: no such package pool: $POOL" >&2
+	exit 1
+fi
+
+# Derive the wanted files from the repository list itself, so the two cannot
+# drift apart. Lines look like "\tlibpng16-1.6.53-1"; skip comments and the
+# rule invocation and argument separators.
+TOP=$(cd "$(dirname "$0")/../.." && pwd)
+LIST="$TOP/build/jam/repositories/HaikuPortsLocal/$ARCH"
+if [ ! -f "$LIST" ]; then
+	echo "error: no local package list: $LIST" >&2
+	exit 1
+fi
+
+DOWNLOAD="$GENERATED/download"
+mkdir -p "$DOWNLOAD"
+
+missing=0
+staged=0
+for pkg in $(sed -e 's/#.*//' "$LIST" \
+		| grep -Ev '^[[:space:]]*(LocalPackageRepository|:|;|$)' \
+		| tr -d '[:blank:]' | grep -E '^[A-Za-z0-9_]+-'); do
+	file="$pkg-$ARCH.hpkg"
+	if [ ! -f "$POOL/$file" ]; then
+		echo "MISSING in pool: $file"
+		missing=$((missing + 1))
+		continue
+	fi
+	cp -p "$POOL/$file" "$DOWNLOAD/$file"
+	echo "staged: $file"
+	staged=$((staged + 1))
+done
+
+echo "$staged staged into $DOWNLOAD, $missing missing from $POOL"
+[ "$missing" -eq 0 ] || exit 1
