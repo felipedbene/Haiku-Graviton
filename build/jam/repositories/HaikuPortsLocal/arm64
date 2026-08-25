@@ -35,4 +35,12 @@ LocalPackageRepository HaikuPorts
 	libpng16_devel-1.6.53-1
 	tiff-4.7.0-1
 	tiff_devel-4.7.0-1
+
+	# HaikuWebKit: turns on the webkit build feature, which is what makes
+	# src/apps/webpositive compile at all (it exits its Jamfile early unless
+	# FIsBuildFeatureEnabled webkit). Built natively on arm64 from our fork of
+	# the recipe, with -DUSE_AVIF=OFF -- libavif >= 16 needs librav1e, which is
+	# Rust, and there is no Rust for arm64 Haiku.
+	haikuwebkit-1.10.0-2
+	haikuwebkit_devel-1.10.0-2
 	;
