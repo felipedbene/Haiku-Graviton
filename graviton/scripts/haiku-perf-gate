@@ -670,6 +670,6 @@ if [ "$warn" = 1 ]; then
 	exit 0
 fi
 say "PASS: $AMI boots, negotiates jumbo, meets both floors, types files with"
-say "  mimeset, shuts down cleanly in ${stop_secs}s, and comes back from a"
+say "  mimeset, survives the mprotect probe, shuts down cleanly in ${stop_secs}s, and comes back from a"
 say "  stop/start with sshd answering"
 exit 0
