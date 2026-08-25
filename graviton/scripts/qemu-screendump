@@ -1,0 +1,136 @@
+#!/usr/bin/env python3
+"""qemu-screendump -- capture a QEMU guest's display AND say what is in it.
+
+    usage: qemu-screendump <monitor-socket> <outdir> <name>
+           qemu-screendump --inspect <file.ppm|file.png>
+           qemu-screendump --monitor <monitor-socket> '<hmp command>'
+
+WHY THE STATISTICS ARE NOT OPTIONAL
+
+A `screendump` that returns cleanly is not evidence of a picture. A guest whose
+display never got painted produces a file of exactly the right size, full of one
+colour, and exits 0 -- indistinguishable from success unless the pixels are
+looked at. A silently blank capture also looks exactly like "the application
+under test does not render", which sends the next person debugging the wrong
+thing. So every capture prints, unconditionally: geometry, the number of
+distinct RGB colours, the modal colour and its share, the percentage of
+non-modal pixels, and a verdict.
+
+CALIBRATION, measured on a Haiku arm64 guest at 1024x768x24 with ramfb:
+
+    synthesised uniform black frame     1 colour      0.0000% non-modal  BLANK
+    bare desktop, Deskbar + Tracker     1482 colours  1.5589% non-modal  content
+    same desktop + one app window       2383 colours 34.5140% non-modal  content
+
+Note the trap in the middle row: a correct, fully painted Haiku desktop is
+98.44% a single colour, because that colour is the default workspace blue
+rgb(51,102,152). "Almost all one colour" is therefore NOT the blank signature.
+The blank signature is <= 2 distinct colours, or under 0.5% of pixels differing
+from the modal one -- and this tool exits 1 and says BLANK/UNIFORM on that.
+
+That threshold was verified by feeding it a synthesised uniform frame and
+watching the verdict fire, rather than by assuming an untriggered check works.
+
+Frame-to-frame idle noise on that same guest, two captures 3 s apart with
+nothing happening, was a few hundred pixels (a clock and an uptime counter
+repainting). Treat a diff of that order as "nothing changed".
+"""
+
+import collections
+import os
+import re
+import socket
+import sys
+import time
+
+
+def hmp(sock_path, cmd):
+	"""Send one HMP command to a QEMU monitor socket and return the reply.
+
+	The HMP socket echoes every character and repaints the line with ANSI and
+	backspace sequences, so the raw stream is unreadable; the echo of our own
+	command is located and everything up to it discarded.
+	"""
+	s = socket.socket(socket.AF_UNIX)
+	s.connect(sock_path)
+	s.settimeout(1.5)
+	buf = b''
+
+	def drain():
+		nonlocal buf
+		try:
+			while True:
+				d = s.recv(65536)
+				if not d:
+					return
+				buf += d
+		except socket.timeout:
+			pass
+
+	drain()                                   # banner and prompt
+	buf = b''
+	s.sendall(cmd.encode() + b'\n')
+	time.sleep(0.5)
+	drain()
+	s.close()
+	txt = buf.decode('utf-8', 'replace')
+	txt = re.sub(r'\x1b\[[0-9;]*[A-Za-z]', '', txt)
+	txt = re.sub(r'.\x08', '', txt)
+	i = txt.rfind(cmd)
+	if i >= 0:
+		txt = txt[i + len(cmd):]
+	return txt.strip().strip('(qemu)').strip()
+
+
+def inspect(path):
+	"""Print the pixel-content statistics for an image and return the verdict."""
+	from PIL import Image
+	im = Image.open(path).convert('RGB')
+	w, h = im.size
+	px = list(im.getdata())
+	cnt = collections.Counter(px)
+	modal, n = cnt.most_common(1)[0]
+	nonmodal = 1.0 - n / len(px)
+	print('file      : %s (%d bytes)' % (path, os.path.getsize(path)))
+	print('geometry  : %dx%d' % (w, h))
+	print('distinct  : %d colours' % len(cnt))
+	print('modal     : rgb%s = %.2f%% of pixels' % (modal, 100.0 * n / len(px)))
+	print('non-modal : %.4f%% of pixels' % (100.0 * nonmodal))
+	print('top5      : %s' % (cnt.most_common(5),))
+	if len(cnt) <= 2 or nonmodal < 0.005:
+		print('VERDICT: BLANK/UNIFORM -- this capture contains no rendered content')
+		return 1
+	print('VERDICT: HAS CONTENT')
+	return 0
+
+
+def main(argv):
+	if len(argv) >= 2 and argv[1] == '--inspect':
+		return inspect(argv[2])
+	if len(argv) >= 2 and argv[1] == '--monitor':
+		print(hmp(argv[2], argv[3]) or '(no output)')
+		return 0
+	if len(argv) < 4:
+		print(__doc__)
+		return 2
+
+	sock_path, outdir, name = argv[1], argv[2], argv[3]
+	ppm = os.path.join(outdir, name + '.ppm')
+	png = os.path.join(outdir, name + '.png')
+	if os.path.exists(ppm):
+		os.unlink(ppm)
+	reply = hmp(sock_path, 'screendump ' + ppm)
+	if reply:
+		print('monitor   : %s' % reply)
+	if not os.path.exists(ppm):
+		print('VERDICT: NO FILE -- screendump wrote nothing')
+		return 2
+	rc = inspect(ppm)
+	from PIL import Image
+	Image.open(ppm).convert('RGB').save(png)
+	print('png       : %s' % png)
+	return rc
+
+
+if __name__ == '__main__':
+	sys.exit(main(sys.argv))
