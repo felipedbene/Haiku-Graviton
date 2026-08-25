@@ -106,6 +106,18 @@ for repository in $(repositories) {
 	local repositoryDirectory
 		= [ FDirName $(repositoriesDirectory) $(repository) ] ;
 	local file = [ Glob $(repositoryDirectory) : $(HAIKU_PACKAGING_ARCH) ] ;
+
+	# Read the optional list of locally built packages for this repository
+	# first, so that the repository definition can register them along with the
+	# packages it names itself. It has to be a separate file: the definition
+	# file's checksum selects the remote package index, so anything appended to
+	# it would make that index unfetchable.
+	local localFile = [ Glob [ FDirName $(repositoriesDirectory)
+		$(repository)Local ] : $(HAIKU_PACKAGING_ARCH) ] ;
+	if $(localFile) {
+		include $(localFile) ;
+	}
+
 	if $(file) {
 		HAIKU_REPOSITORY_JAMFILE = $(file) ;
 		include $(file) ;
