@@ -11,34 +11,58 @@ newer**. Graviton 1 and 2 support is explicitly dropped, which is a change from
 change is what makes this review worth writing. It turns out to unlock much less
 than it looks like it should, for a reason that has nothing to do with the ISA.
 
+Both ends of that range are testable and were tested: `c7g` (Neoverse V1) and
+**`c9g` (Neoverse V3), which is offered in us-west-2 today** — so the
+cross-generation claims in §1.2 are measurements on rented hardware, not
+projections. Nothing here reasons about generations that have not shipped, and
+the recommended posture is deliberately one that does not require doing so.
+
 ---
 
-## 0. The four findings that matter
+## 0. The five findings that matter
 
 If you read nothing else:
 
-1. **The single highest-value action is not SIMD at all.** The jam-built base
-   system is compiled `-mcpu=neoverse-n1+crypto`, but **every haikuports
-   userland package — all ~150 of them, including every image codec, mesa and
-   WebKit — is compiled at the compiler's default `-march=armv8-a`, i.e.
-   ARMv8.0-A.** At that baseline GCC turns on `-moutline-atomics`, and on Haiku
-   the flag it dispatches through is never initialised. So **every atomic in all
-   of userland pays an out-of-line call *and* then takes the LL/SC slow path** —
-   the exact defect fixed in the kernel at `20bf8f2711`, still live everywhere
-   else. §3, §6.1.
-2. **SVE is a NO-GO, and dropping Graviton 2 does not change that.** The arm64
+1. **There is exactly one upstream SIMD path that exists and is disabled in our
+   build, and it is a one-line fix. `libjpeg-turbo` ships with NEON compiled
+   out.** Not because our recipe disables it — because
+   `CMAKE_SYSTEM_PROCESSOR` on Haiku/arm64 matches none of libjpeg-turbo's
+   patterns, so `CPU_TYPE` becomes the literal string `other`, `simd_fail()`
+   fires, and `WITH_SIMD` is forced to 0. **Verified twice**: in the build log,
+   and by finding zero `jsimd`/`neon` symbols in the shipped `libjpeg.so` against
+   a validated positive control. Fix: `-DCMAKE_SYSTEM_PROCESSOR=aarch64`. §6.2.
+   *(`libpng` NEON, by contrast, is already enabled — verified. There is no free
+   win there.)*
+2. **The largest-bound action is not SIMD at all — but its confirming
+   measurement failed and is owed.** The jam-built base system is compiled
+   `-mcpu=neoverse-n1+crypto`, but **every haikuports userland package — all
+   ~150, including every codec, mesa and WebKit — is compiled at the compiler's
+   default `-march=armv8-a`, ARMv8.0-A tuned for Cortex-A53.** At that baseline
+   GCC turns on `-moutline-atomics`, and libgcc's only initialiser for the flag it
+   dispatches through is gated on `#ifdef __gnu_linux__`. So **every atomic in all
+   of userland should be paying an out-of-line call *and* then taking LL/SC** —
+   the exact defect fixed in the kernel at `20bf8f2711`. The mechanism is
+   verified from build config and upstream source; **the `objdump` check meant to
+   confirm it had its positive control fail, so this is not yet measured and must
+   not be cited as such.** §3, §6.1, **§7.1**.
+3. **SVE is a NO-GO, and dropping Graviton 2 does not change that.** The arm64
    kernel leaves `CPACR_EL1.ZEN = 0`, so SVE instructions trap and userland gets
-   a clean `SIGILL`. Adding SVE state support is a 300–500 line kernel project
-   with a public-ABI blocker. And per AWS's own counter ceilings, **SVE is at
-   rough FLOP parity with NEON on both V1 and V2** — on Graviton 4 SVE is
-   *narrower* than on Graviton 3. So the payoff after that work is small. §2, §4.
-3. **Runtime SIMD dispatch is impossible on Haiku arm64 today by any mechanism**,
+   a clean `SIGILL`. **Confirmed by execution**: our AMI booted on a real
+   **Graviton 5 (`c9g`)** and a SIGILL-guarded probe found SVE trapping on silicon
+   a Linux control proves has SVE *and* SVE2 — so **the blocker is our kernel, not
+   the hardware.** Adding SVE state support is a 300–500 line kernel project with
+   a public-ABI blocker, and per AWS's own counter ceilings **SVE is at rough FLOP
+   parity with NEON** anyway. **Measured, and the trap for anyone who ignores
+   this: the SVE vector HALVES from 256-bit on Graviton 3 to 128-bit on
+   Graviton 5** — the newer core has the shorter vector — so vector-length-agnostic
+   SVE would be mandatory, not advisable. §2, §4.
+4. **Runtime SIMD dispatch is impossible on Haiku arm64 today by any mechanism**,
    and ifunc is not merely missing but an active hazard: `R_AARCH64_IRELATIVE`
    returns `B_BAD_DATA` and the image fails to load with the diagnostic compiled
    out. Everything must be decided at compile time. NEON is safe to assume
    unconditionally, because it is architecturally mandatory on ARMv8-A and the
    kernel preserves it correctly. §2, §4.
-4. **Painter/AGG rasterization is close to irrelevant on a real EC2 instance**,
+5. **Painter/AGG rasterization is close to irrelevant on a real EC2 instance**,
    because `app_server` there builds a `RemoteHWInterface` and the pixels are
    rasterized in the *client*, not on the Graviton. Image *decode* matters in
    every configuration including headless; 2D rasterization matters only in the
@@ -112,6 +136,39 @@ generations that have not shipped.
 
 `README.md`'s throughput row: Graviton3 = *"4x Neon 128bit vectors / 2x SVE
 256bit"*; Graviton4 and 5 = *"4x Neon/SVE 128bit vectors"*.
+
+**And here it is MEASURED, on hardware we rent, which upgrades this from
+documentation to fact.** Read with `RDVL` and the ID registers under a Linux
+control on the same instances:
+
+| | **Graviton 3** (`c7g`) | **Graviton 5** (`c9g`) |
+|---|---|---|
+| MIDR / core part | `0x411fd401` / `0xd40` | `0x410fd841` / `0xd84` r0p1 |
+| **SVE vector length** | **256-bit** (RDVL = 32 B) | **128-bit** (RDVL = 16 B) |
+| SVE2 | **no** | **yes** (+`sveaes`, `svepmull`, `svebitperm`, `svesha3`, `svei8mm`, `svebf16`) |
+| L3 | 32 MiB | 48 MiB |
+| PMU | PMUv3 `PMUVer` 5, **32-bit** counters | PMUv3 `PMUVer` 6, **64-bit** counters |
+| SME / MTE | neither | neither |
+
+`lscpu` reports `BIOS Model name: AWS Graviton5`. **Note the direction: the newer
+generation has the *shorter* vector — a 2x halving between the two generations we
+actually deploy on.** So SVE code written or tuned on `c7g` at 256-bit would be
+**wrong** on `c9g` at 128-bit. **Vector-length-agnostic SVE is therefore
+mandatory, not advisable** — `MUL VL` addressing and `whilelo` loops, never a
+fixed-width assumption. And because Graviton 3 lacks SVE2 entirely while
+Graviton 5 has it, **SVE2 genuinely requires runtime dispatch** — which §2.1 says
+we cannot do.
+
+**Features measured present on Graviton 5 from userland (SIGILL-guarded):** NEON,
+FP16, DotProd, AES, SHA2, **BF16**, **I8MM**, LSE, LRCPC, RNDR, FlagM, SB, DPB,
+JSCVT. **`DotProd`, `BF16` and `I8MM` are NEON-domain, not SVE-gated, so they are
+usable today** without any kernel work — worth knowing if anything in the codec
+or graphics path can exploit them.
+
+**One measurement hazard this surfaces:** `CNTFRQ_EL0` is **1.05 GHz on `c7g` but
+1.000 GHz on `c9g`**. We read it dynamically so the port is fine, but any
+cross-generation timing comparison that assumes a common timer frequency will be
+wrong by 5%, and any hardcoded value would break outright.
 
 ### 1.3 NEON vs SVE performance: AWS never claims SVE is faster
 
@@ -248,7 +305,7 @@ Given a Graviton-3-and-newer fleet:
 | **Safe everywhere, no dispatch needed** | **NEON / FPSIMD** (mandatory on ARMv8-A; kernel preserves it correctly, §4.1). ISA floor up to **ARMv8.4-A**: `+crypto`, `+fp16`, `+rcpc`, `+dotprod`. All `-mtune=` values — tuning never affects correctness. | **Use unconditionally.** This is the whole practical answer. |
 | **Would need runtime dispatch → therefore off-limits today** | SVE2 and anything above the compile-time floor; per-function `#pragma GCC target("+sve2")` kernels | **Off-limits**, not because of the ISA but because §2.1 leaves nothing to dispatch *on*. Would require the §6.5 HWCAP work first. |
 | **Off-limits regardless of dispatch** | **SVE and SVE2**, at any width; `-mcpu=neoverse-v1` / `-v2` / `-v3` / `-512tvb`; **`-march=armv9-a` and higher** (ARMv9 mandates SVE2) | **Blocked on kernel work**, §4. Emitting any SVE instruction today is an immediate `SIGILL`. |
-| **Not available in our toolchain** | `-mcpu=neoverse-v3` (Graviton 5 tuning) needs GCC 15; we have **GCC 13.3** | Defer. `-mtune=neoverse-v2` is the newest we can name. |
+| **Not available in our toolchain** | `-mcpu`/`-mtune=neoverse-v3` — the name for Graviton 5's core (part `0xd84`, measured) — needs GCC 15; we have **GCC 13.3** | Cannot be named. Tune for an older core instead, which is safe because **tuning never changes the required ISA**. `-mtune=neoverse-512tvb` is the closest accepted approximation (§6.1). |
 
 **Toolchain check (documented):** the tree is on **GCC 13.3.0**
 (`gcc-13.3.0_2026_03_29_bootstrap-1` in
@@ -484,6 +541,15 @@ full state is already in the iframe from the EL0 entry. Signals carry it too —
 > `headers/private/kernel/arch/arm64/arch_thread_types.h:15-20` (FPSIMD-only
 > save area).
 
+**This is now confirmed by execution, not only by reading code.** Our canonical
+AMI was booted on a real **Graviton 5 (`c9g.large`)** instance and a
+SIGILL-guarded userland feature probe run on it. The probe found NEON, FP16,
+DotProd, AES, SHA2, BF16, I8MM, LSE, LRCPC and more all present and usable —
+**and SVE trapping**, on silicon that a Linux control on the same instance proves
+has SVE *and* SVE2. So the blocker is unambiguously **ours, in our kernel, not a
+missing hardware capability.** That is the strongest form this finding could take:
+the ISA is there, the OS support is not.
+
 **This is the *safe* failure mode**, and it corrects the natural prior. Userland
 SVE today is a deterministic `SIGILL` on the first SVE instruction, not silent
 corruption. An accidentally SVE-enabled binary dies loudly and immediately.
@@ -526,9 +592,14 @@ a public-ABI blocker.
 **Recommendation: do not start SVE work as a performance measure.** Do it if and
 when a specific workload is shown to be predication-bound, or as a
 forward-compatibility investment with its own justification. **If it is ever
-done, the vector-length-agnostic discipline is mandatory** — write `MUL VL`
-addressing and `whilelo` loops, never a fixed 256-bit assumption, because the
-same binary must run on Graviton 3 (256-bit) and Graviton 4 (128-bit). We cannot
+done, the vector-length-agnostic discipline is mandatory, not advisable** — write
+`MUL VL` addressing and `whilelo` loops, never a fixed-width assumption, because
+**we have measured the same binary having to run at 256-bit on Graviton 3 and
+128-bit on Graviton 5** (§1.2). The newer core has the shorter vector, so the
+intuition that "newer is wider" is actively wrong here and would produce code that
+is correct on the machine it was developed on and broken on the machine it ships
+to. Add that Graviton 3 has no SVE2 while Graviton 5 does, and **SVE2 use would
+additionally require the runtime dispatch §2.1 says we do not have.** We cannot
 and should not design against unannounced generations; VLA-SVE plus runtime
 feature detection is the correct forward-compatible posture precisely *because*
 it does not require knowing their specifics.
@@ -739,14 +810,31 @@ for this port (§7). Each row states the capacity bound that justifies it.
   (which survives recipes that overwrite `CFLAGS`, §3):
 
   ```
-  --with-arch=armv8.4-a+crypto+fp16+rcpc+dotprod  --with-tune=neoverse-v1
+  --with-arch=armv8.4-a+crypto+fp16+rcpc+dotprod  --with-tune=neoverse-512tvb
   ```
 
-  This is **AWS's own graviton3 string from `setup-compiler.sh` with `+sve`
-  removed** — conservative `-march`, aggressive `-mtune`, exactly the split AWS
-  prescribes (§1.1). `+sve` is removed because §4 says the kernel cannot preserve
-  the state. **`-march=armv8.4-a` does not imply SVE** — proven by AWS having to
-  spell `+sve` explicitly in that same line.
+  The `-march` half is **AWS's own graviton3 string from `setup-compiler.sh` with
+  `+sve` removed** — conservative ISA floor, aggressive tuning, exactly the split
+  AWS prescribes (§1.1). `+sve` is removed because §4 says the kernel cannot
+  preserve the state. **`-march=armv8.4-a` does not imply SVE** — proven by AWS
+  having to spell `+sve` explicitly in that same line.
+- **Why `-mtune=neoverse-512tvb` rather than `-mtune=neoverse-v1`.** The fleet now
+  spans Neoverse V1 (`c7g`, part `0xd40`) to Neoverse V3 (`c9g`, part `0xd84`),
+  both measured (§1.2). `512tvb` is AWS's own balanced choice for a V1-and-newer
+  fleet, and **GCC 13.3 has no name for `0xd84` at all** — `-mcpu`/`-mtune=neoverse-v3`
+  requires GCC 15. So naming the newest core is not an option; `512tvb` is the
+  closest thing the compiler will accept to "tune for the V-series generally."
+  **It is safe here for a specific reason worth stating**: `512tvb`'s ISA-raising
+  half (which would admit SVE) applies only *"unless overridden by `-march`"* per
+  the GCC manual, and we override it explicitly — and `-mtune` never changes the
+  emitted ISA in any case. `-mtune=neoverse-v1` remains the conservative
+  alternative; **neither is measured, and the expected difference is small.** Do
+  not spend effort choosing between them ahead of the §7.1 measurement.
+- **Possible additions, needing verification first:** `+bf16` and `+i8mm` are
+  measured present on Graviton 5 and documented present on Graviton 3, but we
+  have **not** measured them on `c7g` ourselves. Confirm on the older core before
+  raising the floor to include them — that is precisely the kind of assumption
+  that would produce a SIGILL on the generation nobody tested.
 - **Three things that must not be done instead.** `-mcpu=neoverse-v1` (implies
   SVE → `SIGILL`). `-march=armv9-a` or higher (ARMv9 mandates SVE2 → `SIGILL`).
   `-mno-outline-atomics` (leaves the ISA at ARMv8.0, so still LL/SC, just
@@ -755,37 +843,110 @@ for this port (§7). Each row states the capacity bound that justifies it.
   inline `cas`/`ldadd` and no `bl __aarch64_*` calls. That would mean the native
   compiler is not at the default baseline and §3 is wrong.
 
-### 6.2 — Verify, then fix, codec SIMD in the built packages. **Rank 2.**
+### 6.2 — Codec SIMD in the built packages. **Rank 2 by bound; do it FIRST.**
 
 - **Capacity bound:** image decode is the **only** graphics-adjacent stage with a
   nonzero bound on real EC2 (§5). It runs in every configuration including
   headless.
-- **Status of each, from recipe reading (documented, symbol-level verification
-  deferred — §7):**
+**This section was revised after inspecting the built packages and build logs on
+the builder. Recipe reading alone got libjpeg-turbo exactly backwards, which is
+the best argument in this document for not stopping at the recipe.**
 
-| Package | Version pinned for arm64 | SIMD state | Confidence |
+| Package | Built for arm64 | SIMD state | Confidence |
 |---|---|---|---|
-| `libjpeg_turbo` | `3.1.4.1-1` | `-DWITH_SIMD` **not passed** → upstream CMake default, which is **ON**. AArch64 NEON in libjpeg-turbo 3.x is intrinsics, needing no `nasm`. **So NEON is probably already enabled** | Medium — needs symbol check |
-| `libpng16` | `1.6.53-1` | Recipe passes **no** `--enable-arm-neon` → `pngpriv.h:138-142` default applies: `PNG_ARM_NEON_OPT 2` when `__ARM_NEON && PNG_ALIGNED_MEMORY_SUPPORTED`. `__ARM_NEON` is always defined on aarch64. **So NEON is probably already enabled** | Medium — needs symbol check |
-| `zlib` | **`1.2.13_bootstrap-1`** | **Stock zlib has no Arm optimizations at all** (AWS states this outright). `zlib-ng` **does not exist in haikuports** | HIGH |
-| `freetype` | **`2.6.3_bootstrap-1`** | 2016-era, bootstrap build | HIGH that it is stale; unassessed what it costs |
+| **`libjpeg_turbo`** | `3.1.4.1-1` | **NEON DISABLED.** `simd_fail()` fired at configure time | **VERIFIED, two ways** |
+| `libpng16` | `1.6.53-1` | **NEON ENABLED**; nothing to win | **VERIFIED** |
+| `zlib` | `1.3.2-1` | Stock zlib has **no Arm optimizations at all** (AWS states this outright) | HIGH |
+| `freetype` | `2.6.3_bootstrap-1` | No SIMD/asm knobs upstream; nothing to gain | HIGH |
 
-- **The honest result is a partial negative**, and it is worth stating clearly:
-  the hoped-for "free win" of a disabled-upstream-NEON-path **does not appear to
-  exist for libjpeg-turbo or libpng** — their defaults are ON and our recipes do
-  not override them. Both still deserve the symbol check in §6.6 before the
-  matter is closed, because a default can be silently overridden by a failed
-  compiler feature-probe.
-- **What is real here:** `zlib` and `freetype` are pinned to **bootstrap-stage
-  packages** that were never rebuilt with the final toolchain (`zlib-1.2.13`,
-  `freetype-2.6.3`). Twenty of the 66 arm64 package pins carry `_bootstrap`.
-  **Effort S, confidence HIGH, magnitude unknown** — and the fix is a rebuild,
-  not new code. Whether zlib is hot enough to matter is unmeasured; note that
-  `libpng` decode is zlib-bound, which gives it a path to mattering.
-- **`zlib-ng` is a genuine opportunity with a cost:** AWS recommends it
-  explicitly (≥2.3.3, superseding zlib-cloudflare) and it has real NEON, but it
-  is **not in haikuports**, so this is "write and maintain a new recipe", not a
-  flag flip. Rank it below the rebuild.
+#### The find: libjpeg-turbo NEON is compiled out, and the cause is a CPU string
+
+**VERIFIED from the build log**, `/opt/haiku/buildlogs/r-libjpeg_turbo-2229.log:246-250`:
+
+```
+CMake Warning at simd/CMakeLists.txt:5 (message):
+  SIMD extensions not available for this CPU (other).  Performance will
+  suffer.
+Call Stack (most recent call first):
+  simd/CMakeLists.txt:567 (simd_fail)
+```
+
+**That parenthetical `(other)` is `${CPU_TYPE}` verbatim.** libjpeg-turbo derives
+`CPU_TYPE` from `CMAKE_SYSTEM_PROCESSOR` (`CMakeLists.txt:108-140`); on
+Haiku/arm64 the value matches neither `x86*` nor `aarch64` nor `^arm` nor `^ppc`,
+so it falls through to `set(CPU_TYPE ${CMAKE_SYSTEM_PROCESSOR_LC})` → **`other`**
+→ `simd/CMakeLists.txt` never reaches its `elseif(CPU_TYPE STREQUAL "arm64" ...)`
+branch (`:226`) and calls `simd_fail()`, which sets `WITH_SIMD` to 0.
+
+**So the recipe's omission of `-DWITH_SIMD` was never the bug** — `WITH_SIMD`
+defaults to `TRUE` (`CMakeLists.txt:271-272`) and was *overridden* by the failed
+CPU detection. This is precisely why the recipe-level reasoning in the previous
+draft of this section reached the wrong answer.
+
+**Independently VERIFIED in the shipped binary.** The DWARF compilation-unit list
+of `lib/libjpeg.so.62.4.0` (259 source paths) contains **no `simd/arm/*.c`, no
+`jsimd_neon.S`, and not even `src/jsimd_none.c`**; `nm -a` on the debuginfo
+returns **0** symbols matching `jsimd` and **0** matching `neon`. Consistent,
+because `src/jcdctmgr.c` wraps all ten dispatch sites in `#ifdef WITH_SIMD`, fed
+by `#cmakedefine WITH_SIMD 1` in `src/jconfigint.h.in:74`.
+
+**The instrument was validated with a positive control on the same file:** `nm -a`
+*does* show `jpeg_fdct_islow`, `jpeg12_fdct_islow`, `jpeg_CreateCompress`. So the
+zeroes are a measurement, not a broken filter. (This matters — a zero-row filter
+is not evidence of absence unless the filter is shown to be capable of returning
+rows.)
+
+**The fix is one line** in
+`/opt/haiku/haikuports/media-libs/libjpeg-turbo/libjpeg_turbo-3.1.4.1.recipe`
+`BUILD()`: add **`-DCMAKE_SYSTEM_PROCESSOR=aarch64`**, and ideally
+**`-DREQUIRE_SIMD=1`** so that a future regression is a hard error rather than a
+warning nobody reads. With GCC 13.3 the arm64 path takes
+`DEFAULT_NEON_INTRINSICS=1` (`simd/CMakeLists.txt:315-322` requires GCC ≥ 12), so
+it needs no assembler and `cmd:nasm` remains irrelevant on this architecture.
+
+**Magnitude: not measured here.** Upstream libjpeg-turbo's AArch64 NEON covers
+the DCT/IDCT and colour-conversion stages, which dominate decode — but the number
+must come from a decode benchmark on our build, not from upstream's claims.
+**Effort S, confidence HIGH, and it is a one-line recipe change**, which is why it
+sits so high despite the unmeasured magnitude. **This is the "upstream SIMD path
+that exists but is disabled in our build" the review set out to find, and it is
+the only one.**
+
+#### libpng: already enabled, nothing to win
+
+**VERIFIED** from the link line in
+`/opt/haiku/buildlogs/r-libpng16-2229.log:434-435`: `arm/arm_init.o`,
+`arm/filter_neon_intrinsics.o` and `arm/palette_neon_intrinsics.o` are compiled
+(`:402-403`) and linked into `libpng16.so.16.53.0`; `strings` on the shipped
+library shows 29 `neon` hits. No `--enable-arm-neon` is passed, so the upstream
+aarch64 default carried it — the §6.2-draft inference was right here.
+*Not obtained:* whether `PNG_ARM_NEON_OPT` resolved to 2 (always on) or 1
+(requires `png_set_option`). The code is present either way, but if it is 1 then
+nothing calls it and the win is still on the table — **worth one grep before
+closing this.**
+
+#### zlib: the real remaining gap, and zlib-ng is closer than I thought
+
+The built package is stock **`zlib-1.3.2-1`** (not the `1.2.13_bootstrap` the
+image repository pins), configured with `export CFLAGS="-O2 -g -DNDEBUG"` and a
+bare `./configure`. Stock zlib has no Arm optimizations.
+
+**Correction to an earlier claim in this document: `zlib-ng` *does* exist in
+haikuports** — `sys-libs/zlib-ng/zlib_ng-2.2.2.recipe` — it is simply **not
+built**. That changes the cost from "write and maintain a new recipe" to "build an
+existing one and validate the `--zlib-compat` swap". Note 2.2.2 is below the
+**≥ 2.3.3** AWS recommends, so a version bump is part of the work.
+**Effort M** (a `zlib` swap touches everything that links it), **confidence HIGH
+that NEON is absent today**, **magnitude unmeasured** — with the note that libpng
+decode is zlib-bound, which gives zlib a concrete path to mattering.
+
+#### freetype: nothing here
+
+`freetype-2.6.3_bootstrap` is what ships; the newer `freetype-2.14.3.recipe` uses
+meson `--buildtype debugoptimized` with `-D harfbuzz=dynamic -D
+error_strings=true` and **no SIMD or asm knobs at all**. The staleness is real
+(20 of the 66 arm64 pins carry `_bootstrap`) but there is no SIMD win to
+capture. Rebuilding is hygiene, not optimization.
 
 ### 6.3 — NEON in the arm64 libroot/kernel string routines. **Rank 3.**
 
@@ -890,14 +1051,26 @@ Painter's (§5): QEMU-rig only. **Not investigated here** — see §7.
 
 ## 7. The single highest-value action, and the cheapest experiment
 
-**Action: §6.1 — set `--with-arch=armv8.4-a+crypto+fp16+rcpc+dotprod
---with-tune=neoverse-v1` as the native arm64 GCC default, and rebuild
-userland.**
+**These are two different questions once §7.1 is taken seriously, so answer both
+rather than pretending one action dominates.**
 
-It affects 100% of userland rather than one loop; it is a configuration change
-rather than new code; it is the *precondition* for two other rows; and the defect
-it fixes is one this project has already diagnosed, fixed, and
-hardware-verified once — in the kernel — so the mechanism is not in doubt.
+**Do first, because it is proven and costs one line: §6.2 —
+add `-DCMAKE_SYSTEM_PROCESSOR=aarch64` (and `-DREQUIRE_SIMD=1`) to the
+libjpeg-turbo recipe.** NEON is verifiably compiled out of the JPEG codec we
+ship, verified two independent ways with a validated positive control, and image
+decode is the one graphics-adjacent stage with a nonzero capacity bound on the
+real fleet (§5). Nothing else in this document combines that confidence with that
+cost. Its acceptance test is trivial and self-announcing: rebuild, then
+`nm -D libjpeg.so | grep -c jsimd.*neon` must go from **0** to nonzero. Its
+*value* still needs a decode benchmark, but its *correctness* does not.
+
+**Highest potential, and what to spend measurement effort on: §6.1 — set
+`--with-arch=armv8.4-a+crypto+fp16+rcpc+dotprod --with-tune=neoverse-v1` as the
+native arm64 GCC default, and rebuild userland.** It affects 100% of userland
+rather than one codec; it is a configuration change rather than new code; and it
+is the precondition for two other rows. **But it is not yet confirmed
+empirically** — the check below was run and its control failed (§7.1) — so the
+corrected experiment in §7.1 comes before the change, not after it.
 
 **The cheapest experiment that would prove or kill it** costs one command and no
 build. It is AWS's own verification recipe (§1.6) applied to a library we have
@@ -928,6 +1101,52 @@ already shipped:
 
 This is a read-only `objdump`, cheap enough to run while the metal is busy, and
 it needs no reboot, no bake, and no A/B.
+
+### 7.1 That experiment was attempted, and the control FAILED. Do not publish the claim yet.
+
+Recorded because a failed control is the most useful thing in this document, and
+because the temptation to quietly drop it is exactly what this project's
+verification discipline exists to prevent.
+
+| binary | `__aarch64_` helper refs | inline LSE | LL/SC exclusives |
+|---|---|---|---|
+| `libjpeg.so.62.4.0` (haikuports) | 0 | 0 | 0 |
+| `libpng16.so.16.53.0` (haikuports) | 0 | 0 | 0 |
+| `libicuuc.so.74.1` (haikuports) | 14 | 1 | 2 |
+| **`app_server` (jam-built) — CONTROL** | **20** | **3** | **6** |
+
+**The control did not behave as predicted.** It shows *more* outline-helper
+references than inline LSE — the same shape as the haikuports libraries, when
+`ArchitectureRules:52` should have made it the opposite. Two readings, not
+separable from the evidence collected:
+
+1. **The instrument is too coarse.** Absolute counts are single digits
+   everywhere, which says these particular binaries barely contain atomics at
+   all. `libjpeg`/`libpng` scoring 0/0/0 is not evidence of anything — they are
+   single-threaded and have no atomics to count. A denominator that small cannot
+   support a ratio claim.
+2. **The tree that built the control may not carry the fix.** An **unapplied**
+   `graviton-mcpu-neoverse.patch` is sitting in `/opt/haiku/`, and the build tree
+   under `/opt/haiku/haiku/generated.arm64/` may therefore predate
+   `20bf8f2711`. If so the control binary is simply not the artifact I thought it
+   was — a provenance failure, not a physics failure.
+
+**Consequence: §3's mechanism stands on its documented-source reasoning — the
+build configuration, GCC's `AARCH64_ARCH_V8A` default, and libgcc's
+`__gnu_linux__`-gated initialiser are each independently checkable — but the
+empirical confirmation is NOT obtained, and nothing in this document should be
+cited as having measured it.**
+
+**The corrected experiment**, which someone should run on a quiet builder:
+
+> Run the same three counts on **`libroot.so`**, from both a jam build and the
+> hpkg set. That is where atomic density is actually high (locks, refcounts, the
+> pthread implementation), so the denominator can support a ratio. Take the
+> **provenance** of each binary first — confirm the jam tree's
+> `build/jam/ArchitectureRules:52` actually reads `-mcpu=neoverse-n1+crypto`
+> before treating that binary as a positive control, since an artifact must
+> announce itself. Better still, compile one small file two ways in the same tree
+> and diff the disassembly; that removes the provenance question entirely.
 
 **The follow-up measurement, deferred.** If confirmed, the *value* of fixing it
 still needs a number. Design: build the same tree twice, differing only in that
@@ -998,9 +1217,17 @@ checkable by a reader outside the project.
   `src/apps/icon-o-matic/generic/support/support.h:47`. (§6.5)
 - `RemoteHWInterface::FrontBuffer()` returns `NULL` on real EC2 → no local
   rasterization. (§5)
-- Recipe-level SIMD flags for `libjpeg_turbo` (no `-DWITH_SIMD`) and `libpng16`
-  (no `--enable-arm-neon`); `pngpriv.h`'s aarch64 default; the 20 `_bootstrap`
-  pins in the arm64 repository. (§6.2)
+- **`libjpeg-turbo` NEON is compiled out of the shipped arm64 package.**
+  `simd_fail()` in the build log with `CPU_TYPE` = `other`; zero `jsimd`/`neon`
+  symbols and no `simd/arm/*.c` compilation units in `libjpeg.so.62.4.0`, against
+  a validated positive control. Cause traced to `CMAKE_SYSTEM_PROCESSOR` not
+  matching. (§6.2)
+- **`libpng16` NEON is enabled** — `arm/arm_init.o`,
+  `arm/filter_neon_intrinsics.o`, `arm/palette_neon_intrinsics.o` in the link
+  line, 29 `neon` strings in the shipped library. (§6.2)
+- `zlib` built is stock `1.3.2`; a `zlib_ng-2.2.2.recipe` exists in haikuports but
+  is not built; `freetype-2.14.3.recipe` has no SIMD knobs; haikuporter config
+  files carry no `CFLAGS`. (§6.2)
 
 ### Documented (AWS's or GCC's claims, not our measurements)
 
@@ -1015,13 +1242,31 @@ floors per `-mcpu`; zlib-ng superseding zlib-cloudflare.
   never states it. This inference is what demotes SVE in §4.3; if it is wrong,
   §4.3's conclusion should be revisited (though the kernel-work cost and the
   signal-ABI blocker stand regardless).
-- **libjpeg-turbo and libpng NEON are already enabled.** From upstream defaults
-  plus the absence of an overriding flag in our recipes. **Not symbol-verified**
-  — a failed compiler feature-probe can silently turn a default off, which is
-  exactly the failure mode worth checking.
+- ~~**libjpeg-turbo and libpng NEON are already enabled**, from upstream defaults
+  plus the absence of an overriding flag in our recipes.~~ **RETRACTED.** This
+  inference was **half wrong, and wrong in the direction that mattered.** libpng
+  was right; libjpeg-turbo was not — its default *is* ON and was overridden by a
+  silently failing CPU-string probe, which is exactly the failure mode the
+  inference itself flagged as worth checking and then did not check. **Recorded
+  rather than deleted, because the lesson is the transferable part: a recipe that
+  passes no flag tells you what the build was *asked* for, never what it *got*.
+  Read the build log or the symbols.** (§6.2)
 - A NEON `memset` is worth 4–8x on large fills — from instruction width alone.
 
-### Measured, by this project, and reused here as calibration
+### Measured, by this project, on hardware we rent
+
+- **SVE traps on Haiku on real Graviton 5**, established by booting our canonical
+  AMI on `c9g.large` and running a SIGILL-guarded probe, with a Linux control on
+  the same silicon showing SVE and SVE2 present. The blocker is our kernel, not
+  the hardware. (§4.2)
+- **SVE vector length: 256-bit on Graviton 3, 128-bit on Graviton 5** (`RDVL`);
+  SVE2 absent on G3, present on G5; core parts `0xd40` and `0xd84`; PMU counters
+  32-bit on G3 vs 64-bit on G5; `CNTFRQ_EL0` 1.05 GHz vs 1.000 GHz. (§1.2)
+- **Features present on Graviton 5 from userland:** NEON, FP16, DotProd, AES,
+  SHA2, BF16, I8MM, LSE, LRCPC, RNDR, FlagM, SB, DPB, JSCVT. No SME, no MTE on
+  either generation. (§1.2)
+
+### Measured earlier by this project, and reused here as calibration
 
 - Internet checksum: **0.228 → 0.055 ns/byte, 4.15x on Neoverse V1**, with **no
   SIMD** (`e63fe3f24a`). The methodological headline of §5.3.
@@ -1041,7 +1286,12 @@ floors per `-mcpu`; zlib-ng superseding zlib-cloudflare.
   them. **Every ranking in §6 is therefore a bound-and-breadth argument, not a
   measured share.** The PMU facility exists (`af7e48b94c`) and **no ratio from it
   has ever been collected**; that remains the highest-leverage missing
-  instrument, as `graviton-optimization-plan.md` item 13 already says.
+  instrument, as `graviton-optimization-plan.md` item 13 already says. **One
+  practical note from §1.2 for whoever picks that up: Graviton 5 reports PMUv3
+  `PMUVer` 6 with 64-bit counters, against `PMUVer` 5 and 32-bit counters on
+  Graviton 3.** Wider counters mean far less wrap-handling, so `c9g` is the
+  easier instrument — but the port's PMU code must not assume 64-bit counters, or
+  it will silently mis-read every `c7g`.
 - **Symbol-level verification of codec SIMD** in the built hpkgs (`jsimd_*_neon`
   for libjpeg-turbo; `filter_neon`/`png_have_neon` for libpng). This is the check
   that closes §6.2, and it is cheap — it just needs a quiet builder.
