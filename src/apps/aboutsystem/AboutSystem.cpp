@@ -62,6 +62,7 @@
 #include <AppMisc.h>
 #include <AutoDeleter.h>
 #include <AutoDeleterPosix.h>
+#include <Branding.h>
 #include <cpu_type.h>
 #include <parsedate.h>
 #include <system_revision.h>
@@ -440,7 +441,7 @@ LogoView::LogoView()
 	else
 		fLogo = BTranslationUtils::GetBitmap(B_PNG_FORMAT, "logo_dark.png");
 #else
-	fLogo = BTranslationUtils::GetBitmap(B_PNG_FORMAT, "walter_logo.png");
+	fLogo = BTranslationUtils::GetBitmap(B_PNG_FORMAT, "debeos_logo.png");
 #endif
 
 	// Set view color to panel background color when fLogo is NULL
@@ -1551,7 +1552,15 @@ AboutView::_CreateCreditsView()
 	font.SetSize(font.Size() + 4);
 
 	fCreditsView->SetFontAndColor(&font, B_FONT_ALL, &fHaikuGreenColor);
-	fCreditsView->Insert("Haiku\n");
+	fCreditsView->Insert(OS_DISPLAY_NAME "\n");
+
+	// Attribution to the upstream project, deliberately kept directly under
+	// the name rather than buried further down. Spelled out as a literal
+	// because collectcatkeys reads the source text, so it cannot see through
+	// OS_ATTRIBUTION_STRING.
+	fCreditsView->SetFontAndColor(be_plain_font, B_FONT_ALL, &fTextColor);
+	fCreditsView->Insert(B_TRANSLATE("based on Haiku"));
+	fCreditsView->Insert("\n");
 
 	time_t time = ::time(NULL);
 	struct tm* tm = localtime(&time);

@@ -14,6 +14,8 @@
 #include <boot/heap.h>
 #include <boot/PathBlocklist.h>
 #include <boot/stdio.h>
+
+#include <Branding.h>
 #include <system_revision.h>
 
 #include "file_systems/packagefs/packagefs.h"
@@ -57,7 +59,10 @@ main(stage2_args *args)
 	if (vfs_init(args) < B_OK)
 		panic("Could not initialize VFS!\n");
 
-	dprintf("Welcome to the Haiku boot loader!\n");
+	dprintf("Welcome to the " OS_DISPLAY_NAME " boot loader! ("
+		OS_ATTRIBUTION_STRING ")\n");
+	// Additive, like the kernel's banner: "Haiku revision:" carries the actual
+	// hrev and is grepped for by tooling, so the line keeps its exact shape.
 	dprintf("Haiku revision: %s\n", get_haiku_revision());
 
 	bool mountedAllVolumes = false;

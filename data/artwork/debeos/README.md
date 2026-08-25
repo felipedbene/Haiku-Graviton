@@ -55,6 +55,11 @@ actually seen:
   line, which carries the real `hrev` and is grepped for by tooling
 - the **AMI description** (`graviton/pipeline/scripts/import-and-register.sh`)
 - this repository's README
+- the **About System window** — the product name, and the logo, which now comes from
+  `debeos-logo-128.png` instead of the unofficial-distro placeholder
+- the **boot loader menu** and its serial banner
+  (`src/system/boot/platform/generic/text_menu.cpp`, `src/system/boot/loader/`)
+- the **shell login banner** (`data/etc/profile`)
 
 The **AMI name prefix stays `haiku-graviton`**, along with the pipeline, CodeBuild
 project and bucket names and the `Project=haiku-graviton` tag. Those are stable machine
