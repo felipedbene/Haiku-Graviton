@@ -10,14 +10,22 @@
 # HWInterface is a RemoteHWInterface listening on a TCP port. This script starts
 # the pieces of a session against that Desktop.
 #
-# **The order below is not arbitrary and must not be "tidied".** input_server has
-# to be running before anything that builds a menu. Without it there is no
-# current keymap, BKeymap holds nothing, and BKeymap::GetModifiedCharacters()
-# dereferences it -- which segfaults Terminal in TermWindow::_SetupMenu(), and
-# kills Deskbar and Tracker the same way. That failure is silent from the
-# outside: the processes appear in `ps` and simply never draw. Copying a keymap
-# into ~/config/settings/Key_map is *not* a substitute; the server is what is
-# needed. See docs/stage-b-remote-desktop.md.
+# input_server is started here because on a machine with no framebuffer nothing
+# else ever starts it. app_server only launches it from Desktop::_Init() when its
+# HWInterface produces no usable event stream, and RemoteHWInterface always
+# produces one (the client sends the input events), so that branch is never
+# taken. Without input_server there is no current keymap, and Terminal's
+# TermWindow::_SetupMenu() calls BKeymap::GetModifiedCharacters() without
+# checking SetToCurrent()'s status -- so keep starting it.
+#
+# What this ordering does NOT fix, contrary to what this comment used to claim,
+# is the "Deskbar is in `ps` for the whole boot and never draws" failure. That
+# had nothing to do with the keymap: Deskbar uses no keymap API at all, and the
+# wedge was reproduced on a boot where input_server was up first and completely
+# healthy. The cause was app_server's remote send buffer having no reader before
+# a client connects; it is fixed in RemoteHWInterface/StreamingRingBuffer. See
+# graviton/docs/remote-desktop-send-buffer-wedge.md. Do not re-derive an
+# ordering rule from the sleep below.
 #
 # Access is over an SSH tunnel only. RemoteHWInterface binds 127.0.0.1 (we
 # changed it from INADDR_ANY, deliberately), because the remote protocol has no
@@ -89,13 +97,20 @@ fi
 # worked -- so the guard that was meant to prevent duplicates instead made a
 # broken session permanent. See docs/desktop-by-default.md.
 #
-# input_server is not a launch_daemon job; normally Desktop::_LaunchInputServer()
-# starts it when a Desktop initialises (Desktop.cpp:2583). Starting it here first
-# is what keeps the keymap race closed: if Tracker builds a menu before a keymap
-# is published, BKeymap::GetModifiedCharacters() dereferences nothing and the app
-# dies silently.
+# input_server is not a launch_daemon job. On a framebuffer machine
+# Desktop::_LaunchInputServer() (Desktop.cpp) starts it, but only when the
+# HWInterface event stream is unusable -- and RemoteHWInterface's stream is
+# always usable, so on this image that call never happens and this line is the
+# only thing that starts it.
+#
+# Note this is the *system* launch_daemon context, and Tracker/Deskbar are in the
+# *user* one. There is therefore no ordering relationship between them and no way
+# to express one: `requires` is per-daemon, and naming a job the daemon does not
+# know makes it silently delete the job that named it. Nothing here should be
+# read as sequencing the session.
 start_once input_server /boot/system/servers/input_server
-# Give it a moment to publish a keymap before anything asks for one.
+# Let it finish registering before anything asks it for a keymap. This is
+# politeness, not a barrier -- it guarantees nothing.
 sleep 2
 
 # Stay alive so launch_daemon sees a running job rather than an instant exit, and

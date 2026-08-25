@@ -25,7 +25,8 @@
 #define TRACE_ERROR(x...)		TRACE_ALWAYS(x)
 
 
-StreamingRingBuffer::StreamingRingBuffer(size_t bufferSize)
+StreamingRingBuffer::StreamingRingBuffer(size_t bufferSize,
+	bool discardWithoutReader)
 	:
 	fReaderWaiting(false),
 	fWriterWaiting(false),
@@ -40,7 +41,9 @@ StreamingRingBuffer::StreamingRingBuffer(size_t bufferSize)
 	fBufferSize(bufferSize),
 	fReadable(0),
 	fReadPosition(0),
-	fWritePosition(0)
+	fWritePosition(0),
+	fDiscardWithoutReader(discardWithoutReader),
+	fReader(NULL)
 {
 	fReaderNotifier = create_sem(0, "StreamingRingBuffer read notify");
 	fWriterNotifier = create_sem(0, "StreamingRingBuffer write notify");
@@ -154,6 +157,13 @@ StreamingRingBuffer::Write(const void *buffer, size_t length)
 		return B_ERROR;
 
 	while (length > 0) {
+		// Nothing is draining this buffer, so waiting for space would wait
+		// forever. Discard instead: the writer is a drawing producer whose
+		// output has nowhere to go, and a reader that attaches later starts
+		// from an empty buffer and a full repaint anyway.
+		if (fDiscardWithoutReader && fReader == NULL)
+			return B_OK;
+
 		size_t copyLength = min_c(length, fBufferSize - fWritePosition);
 		copyLength = min_c(copyLength, fBufferSize - fReadable);
 
@@ -223,5 +233,40 @@ StreamingRingBuffer::MakeEmpty()
 		release_sem_etc(fReaderNotifier, 1, 0);
 		fReaderWaiting = false;
 		fCancelRead = true;
+	}
+}
+
+
+void
+StreamingRingBuffer::SetReader(void *reader)
+{
+	BAutolock dataLock(fDataLocker);
+	if (!dataLock.IsLocked())
+		return;
+
+	fReader = reader;
+}
+
+
+void
+StreamingRingBuffer::ClearReader(void *reader)
+{
+	BAutolock dataLock(fDataLocker);
+	if (!dataLock.IsLocked())
+		return;
+
+	// Guarded so that a reader shutting down after its successor has already
+	// registered cannot clear the live one.
+	if (fReader != reader)
+		return;
+
+	fReader = NULL;
+
+	// Release a writer that is waiting for space it is never going to get. It
+	// re-checks the discard condition and drops its data instead. Deliberately
+	// not a cancel: dropping output while unread is normal, not an error.
+	if (fWriterWaiting) {
+		release_sem_etc(fWriterNotifier, 1, 0);
+		fWriterWaiting = false;
 	}
 }

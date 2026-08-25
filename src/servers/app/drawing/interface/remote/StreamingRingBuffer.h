@@ -14,7 +14,12 @@
 
 class StreamingRingBuffer {
 public:
-								StreamingRingBuffer(size_t bufferSize);
+			/*!	With \a discardWithoutReader a full buffer that currently has
+				no registered reader makes Write() discard instead of block.
+				Without it (the default) Write() always blocks until space
+				appears, which deadlocks the writer if nobody ever reads. */
+								StreamingRingBuffer(size_t bufferSize,
+									bool discardWithoutReader = false);
 								~StreamingRingBuffer();
 
 		status_t				InitCheck();
@@ -25,6 +30,12 @@ public:
 		status_t				Write(const void *buffer, size_t length);
 
 		void					MakeEmpty();
+
+		// Reader registration; only meaningful with discardWithoutReader.
+		// ClearReader() is a no-op unless \a reader is the current one, so a
+		// reader being torn down cannot clear its successor.
+		void					SetReader(void *reader);
+		void					ClearReader(void *reader);
 
 private:
 		bool					fReaderWaiting;
@@ -43,6 +54,9 @@ private:
 		size_t					fReadable;
 		int32					fReadPosition;
 		int32					fWritePosition;
+
+		bool					fDiscardWithoutReader;
+		void *					fReader;
 };
 
 #endif // STREAMING_RING_BUFFER_H
