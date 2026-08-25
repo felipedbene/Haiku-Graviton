@@ -1,3 +1,39 @@
+**BOTH CUTS RETIRED 2026-08-25. This file is now a record, not an input.**
+
+`vim-9.1.1618-1-arm64.hpkg` is built from the **pristine** upstream recipe again — ruby
+interpreter and Haiku GUI included, `_dirty` requirement count 0, 16,403,967 B. Do not install
+the reduced recipe described below onto a guest expecting current behaviour. The reasoning is
+kept because both cuts were *conditional promises*, and it is worth recording that the
+conditions were actually met rather than quietly forgotten.
+
+What retired each, and how it was verified:
+
+- **Cut 1 (ruby)** — the arm64 kernel `mprotect()` panic is fixed and hardware-verified
+  (`graviton/docs/arm64-mprotect-query-present.md`), so `ruby-3.2.9` now builds natively:
+  `ruby-3.2.9-1-arm64.hpkg` plus `ruby_devel` (providing `devel:libruby`) are in
+  `hpkg-out/arm64/`. vim's build log then shows
+  `checking --enable-rubyinterp argument... dynamic` and
+  `checking for ruby... /boot/system/bin/ruby` in **both** configure passes, and `if_ruby.c`
+  compiled against `-I/boot/system/develop/headers/ruby-3.2.0/aarch64-haiku`.
+  `--enable-fail-if-missing=yes` was deliberately left in place throughout, which is what
+  makes that a real result and not a silent skip.
+- **Cut 2 (GUI)** — caused by the **`mimeset` headless no-op**, not by anything about vim.
+  `mimeset` is the *sole* writer of the `BEOS:ICON` filesystem attribute in this chain: `rc`
+  compiles the `vector_icon` into a `'VICN'` resource *named* `BEOS:ICON`, `xres` attaches the
+  **resource**, `mimeset` copies resource → **attribute**, and only then does `catattr` read it
+  back. With the fixed `mimeset` in the chroot's `haiku.hpkg`, the GUI pass completes: two
+  configure passes, the second with `-DFEAT_GUI_HAIKU`, then
+  `addattr -f ~icon.attr -t 'VICN' BEOS:ICON …` executes and there are **zero** `catattr`
+  failures. `bin/gvim`, `bin/gview`, `bin/gvimdiff`, `bin/rgvim` and `bin/rgview` are real
+  files in the package and are declared in `PROVIDES` again.
+
+The note below reasoned that the icon failure was "NOT a symlink-following problem" and that
+the binary "comes out of xres/mimeset with no BEOS:ICON attribute". Both correct as far as they
+went — what it could not know was *why*: `mimeset` was exiting 0 having done nothing at all, on
+every headless Haiku.
+
+---
+
 Build vim as a CLI-only, ruby-less xxd provider.
 
 TWO CUTS in one recipe, both deliberate, with their costs stated. This is the only
