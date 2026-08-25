@@ -27,10 +27,10 @@ with, not enough to skip reading the code before acting.
 
 ## What the reference actually is
 
-- **`~/Projects/ENA` is *not* a host driver.** It is `ssh://git.amazon.com/pkg/ENA`,
-  Annapurna Labs **device-side firmware** (admin-queue handlers, live migration, Alpine
-  SoC configs). **[verified]** — remote and HEAD `63f02f88` confirmed. Its value to us is
-  as *wire-protocol ground truth* (`ena_defs/`), not as copyable code.
+- **The vendor reference tree is *not* a host driver.** It is the NIC vendor's
+  **device-side firmware** (admin-queue handlers, live migration, SoC configs) — the *other*
+  end of the wire from our host driver. Its value to us is as *wire-protocol ground truth*
+  (`ena_defs/`), not as copyable code.
 - The host-driver reference is **`github.com/amzn/amzn-drivers`**, FreeBSD side at tag
   `ena_freebsd_2.8.4`. That is our lineage; the Linux copy under
   `kernel/linux/common/ena_com/` is a different (GPL) flavour and is **not**.
