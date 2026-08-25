@@ -131,7 +131,7 @@ on an identically provisioned one:
 
 | | DeBeOS node | Linux reference node |
 |---|---|---|
-| instance | `i-001f6d2794826239f`, c7g.4xlarge, us-west-2a | `i-055f9686cf04f7f28`, c7g.4xlarge, us-west-2a |
+| instance | a dedicated DeBeOS node, c7g.4xlarge, us-west-2a | a separate Linux node, c7g.4xlarge, us-west-2a |
 | **measured volume** | `/dev/sdf` → `vol-01f1cf7ebabcd78b3` | `/dev/sdf` → `vol-0f14f1d7285e0f1a2` |
 | provisioning | **gp3, 100 GiB, 16,000 IOPS, 1,000 MiB/s** | **gp3, 100 GiB, 16,000 IOPS, 1,000 MiB/s** |
 | root volume (*not measured*) | `/dev/xvda`, 2 GiB, 3,000/125 | `/dev/xvda`, 8 GiB, 3,000/125 |
@@ -957,7 +957,7 @@ old code.
 Interactive KDL on an EC2 instance needs serial **input**, not just the output
 that `get-console-output` returns. The AWS side and the UART driver are fine:
 
-- **EC2 Serial Console access is enabled** for account 668984504585
+- **EC2 Serial Console access is enabled** for the project's AWS account
   (`get-serial-console-access-status` → `True`), so
   `send-serial-console-ssh-public-key` plus ssh to the serial-console endpoint
   gives a bidirectional console.

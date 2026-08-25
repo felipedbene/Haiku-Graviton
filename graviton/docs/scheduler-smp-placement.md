@@ -854,8 +854,8 @@ discipline.
 mis-specified
 
 Measured on `ami-0432d67e38222905a` (`52822a3be4` on the frozen base
-`37ec8d088b`), node `i-037ae68c87785941e`, against the canonical AMI
-`ami-0d61e3910062bb80a` on `i-059bc5d23bc47a09e`. Interleaved, **the identical
+`37ec8d088b`) on the **test node**, against the canonical AMI
+`ami-0d61e3910062bb80a` on a second, **control node**. Interleaved, **the identical
 `smpscale` binary on both sides**, sha256 `49c2eca4…d86042` verified on each.
 
 **Kernel identity gate passed.** The fixed node's syslog carries

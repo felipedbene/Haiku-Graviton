@@ -38,7 +38,7 @@ these recipes must be built from source via haikuporter.
 
 ## Builder (metal) capabilities — the native-build route works
 
-`c7g.metal` (i-0f7f6f3e8922acffd): 64 cores, 125 G RAM, 462 G free, **`/dev/kvm`
+The build host, a `c7g.metal`: 64 cores, 125 G RAM, 462 G free, **`/dev/kvm`
 present**, `qemu-system-aarch64` installed. So the intended route — boot an arm64
 Haiku image under KVM and run haikuporter natively — is viable on this host.
 

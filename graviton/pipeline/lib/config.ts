@@ -6,7 +6,10 @@ import { Construct } from 'constructs';
  * hardcoded in the stack and no secrets live in the tree.
  */
 export interface HaikuPipelineConfig {
-  /** Target AWS account (defaults to the Haiku-on-Graviton Isengard account). */
+  /**
+   * Target AWS account. Defaults to `CDK_DEFAULT_ACCOUNT` — the account the
+   * deploying credentials belong to — so the id is never written down here.
+   */
   readonly account: string;
   /** Target region (us-west-2). */
   readonly region: string;
@@ -49,6 +52,16 @@ export interface HaikuPipelineConfig {
    * against it out of band. Empty => CDK generates a name.
    */
   readonly workBucketName?: string;
+
+  /**
+   * Bucket that `ssm-run` routes remote command output through, written by the
+   * *builder's* instance role rather than by this app. Named
+   * `haiku-graviton-<account>-<region>` by convention and defaulted from
+   * {@link account}/{@link region}, so the account id is never spelled out in
+   * this tree. Override with `HAIKU_GRAVITON_BUCKET` (the same variable the
+   * scripts under `graviton/` honour) or `-c haiku:ssmOutBucketName=`.
+   */
+  readonly ssmOutBucketName: string;
 
   /**
    * Hardware performance gate (the Test stage, between Register and Approve).
@@ -95,9 +108,20 @@ export function loadConfig(scope: Construct): HaikuPipelineConfig {
   // reviewed with the rest of the change, and cannot differ between two people
   // deploying the same commit.
   const workBucketName = scope.node.tryGetContext('haiku:workBucketName');
+
+  // The account id is deliberately not written down in this tree -- it is a
+  // public repository -- so it defaults to CDK_DEFAULT_ACCOUNT, which the CDK CLI
+  // sets from the credentials you are already deploying with. That is the
+  // idiomatic source, and it means `cdk synth`/`deploy` needs no extra
+  // configuration to target the usual account. `-c haiku:account=` or
+  // HAIKU_ACCOUNT still override it, and if none of the three is available ctx()
+  // throws by name rather than synthesizing a stack with an empty account.
+  const account = ctx(scope, 'haiku:account', 'HAIKU_ACCOUNT', process.env.CDK_DEFAULT_ACCOUNT);
+  const region = ctx(scope, 'haiku:region', 'HAIKU_REGION', 'us-west-2');
+
   return {
-    account: ctx(scope, 'haiku:account', 'HAIKU_ACCOUNT', '668984504585'),
-    region: ctx(scope, 'haiku:region', 'HAIKU_REGION', 'us-west-2'),
+    account,
+    region,
 
     repoOwner: ctx(scope, 'haiku:repoOwner', 'HAIKU_REPO_OWNER'),
     repoName: ctx(scope, 'haiku:repoName', 'HAIKU_REPO_NAME', 'haiku'),
@@ -118,7 +142,20 @@ export function loadConfig(scope: Construct): HaikuPipelineConfig {
 
     workBucketName: workBucketName ? String(workBucketName) : undefined,
 
-    builderInstanceId: ctx(scope, 'haiku:builderInstanceId', 'HAIKU_BUILDER_INSTANCE', 'i-0f7f6f3e8922acffd'),
+    // Not the pipeline's own work bucket: this is the bucket the builder's
+    // instance role writes ssm-run output to, and it is named
+    // haiku-graviton-<account>-<region> by convention. Derived from the account
+    // resolved above so the name matches graviton/scripts/ssm-run without either
+    // file naming the account. HAIKU_GRAVITON_BUCKET is the same override the
+    // shell scripts honour, so one export retargets the whole toolchain.
+    ssmOutBucketName: ctx(scope, 'haiku:ssmOutBucketName', 'HAIKU_GRAVITON_BUCKET',
+      `haiku-graviton-${account}-${region}`),
+
+    // No default: an instance id is not derivable, and hardcoding one would put
+    // it in a public tree. The Test stage passes it through as
+    // HG_BUILDER_INSTANCE, so supply it with -c haiku:builderInstanceId= or
+    // HAIKU_BUILDER_INSTANCE at deploy time.
+    builderInstanceId: ctx(scope, 'haiku:builderInstanceId', 'HAIKU_BUILDER_INSTANCE'),
     testSubnetId: ctx(scope, 'haiku:testSubnetId', 'HAIKU_TEST_SUBNET', 'subnet-0888405da8f10d1b2'),
     testSecurityGroupId: ctx(scope, 'haiku:testSecurityGroupId', 'HAIKU_TEST_SG', 'sg-0b99fabc8cb8bce88'),
     // Never a t-family instance: burstable CPU throttles to a baseline when

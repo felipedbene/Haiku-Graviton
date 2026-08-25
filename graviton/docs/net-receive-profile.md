@@ -565,7 +565,7 @@ broken down, but nothing is blocking that now.
 
 ## 9. Reproducing this
 
-From the metal builder (`i-0f7f6f3e8922acffd`), against a `c7g.large` booted
+From the metal builder, against a `c7g.large` booted
 from the canonical AMI:
 
 ```bash

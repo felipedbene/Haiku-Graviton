@@ -18,15 +18,15 @@
     "@aws-cdk/core:checkSecretUsage": true,
 
     "//": "------------------------------------------------------------------",
-    "//comment": "Deployment parameters. Override on the CLI with -c key=value, or edit here. account/region default to the Haiku-on-Graviton Isengard account (668984504585 / us-west-2).",
-    "haiku:account": "668984504585",
+    "//comment": "Deployment parameters. Override on the CLI with -c key=value, or edit here. This is a public repository, so no account id is written down: haiku:account is intentionally ABSENT and defaults to CDK_DEFAULT_ACCOUNT, i.e. whichever account your credentials point at. Use -c haiku:account=<id> or HAIKU_ACCOUNT to target a different one. Do NOT add the key back with an empty string: an empty context value still counts as set and would win over the default, synthesizing an account-less stack.",
     "haiku:region": "us-west-2",
 
-    "//source": "Where the Haiku fork/branch lives. A CodeConnections (formerly CodeStar) connection ARN is required for GitHub sources; create it once in the console and paste the ARN here or pass -c haiku:connectionArn=...",
+    "//source": "Where the Haiku fork/branch lives. A CodeConnections (formerly CodeStar) connection ARN is required for GitHub sources; create it once in the console, then pass -c haiku:connectionArn=arn:aws:codeconnections:<region>:<account>:connection/<uuid> at deploy time. It is not stored here because the ARN embeds the account id.",
     "haiku:repoOwner": "felipedbene",
     "haiku:repoName": "Haiku-Graviton",
     "haiku:branch": "graviton",
-    "haiku:connectionArn": "arn:aws:codeconnections:us-west-2:668984504585:connection/7dd677af-e17b-4535-8267-fdfc549b385e",
+
+    "//builder": "SSM-managed builder the Test stage uses as traffic peer and driver, passed through to haiku-perf-gate as HG_BUILDER_INSTANCE. No default, for the same reason an account id has none: supply -c haiku:builderInstanceId=i-... or HAIKU_BUILDER_INSTANCE at deploy time.",
 
     "//aux-repos": "Auxiliary git repos the cross-build clones. buildtools provides the arm64 cross-tools sources; haiku-on-ec2 provides scripts/make-gpt-image.sh.",
     "haiku:buildtoolsRepo": "https://github.com/haiku/buildtools.git",

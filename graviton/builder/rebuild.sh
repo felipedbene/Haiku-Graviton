@@ -26,10 +26,24 @@ GP=/boot/home/haikuports/packages
 ISP=/boot/home/haikuports/input-source-packages
 POOL=/opt/haiku/hpkg-out/arm64-nondirty
 CANON=/opt/haiku/hpkg-out/arm64
-S3=s3://haiku-graviton-668984504585-us-west-2/hpkg/arm64/
 LOG=/opt/haiku/rebuild-$PORT.log
 mkdir -p "$POOL" /opt/haiku/buildlogs
 exec >> "$LOG" 2>&1
+# Package-repository bucket, resolved from the caller's own credentials so that
+# no AWS account id is written down in a public tree. HAIKU_GRAVITON_BUCKET
+# overrides it. Same convention as graviton/scripts/ssm-run, which explains why
+# the lookup is validated rather than interpolated blind: an empty account id
+# composes "haiku-graviton--us-west-2", a valid bucket name that is nobody's.
+BUCKET="${HAIKU_GRAVITON_BUCKET:-}"
+if [ -z "$BUCKET" ]; then
+	ACCT=$(aws sts get-caller-identity --query Account --output text) || ACCT=""
+	case "$ACCT" in ""|*[!0-9]*)
+		echo "$(basename "$0"): cannot resolve the AWS account id; refresh credentials or set HAIKU_GRAVITON_BUCKET" >&2
+		exit 1 ;;
+	esac
+	BUCKET="haiku-graviton-$ACCT-${AWS_REGION:-us-west-2}"
+fi
+S3="s3://$BUCKET/hpkg/arm64/"
 
 echo "=== REBUILD $PORT START $(date -u) : $* ==="
 for p in "$@"; do
