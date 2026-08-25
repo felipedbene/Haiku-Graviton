@@ -583,7 +583,7 @@ only all-CPU hook and already writes TCR_EL1, ~60 lines); `arch_asm.S`
    existing arm64 binary. Linux solved this with a variable-length sigcontext
    extension chain, which Haiku has no equivalent of.
 
-**And after all that, §1.3 says the payoff is parity with NEON**, on both cores
+**And after all that, §1.3 says the payoff is parity with NEON**, on every core
 we can test. SVE's real advantages — predication (no scalar tail loop) and
 vector-length agnosticism — are genuine but are code-elegance and
 forward-portability wins, not the 2–4x that would justify a kernel project with
