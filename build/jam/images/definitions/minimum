@@ -200,6 +200,11 @@ rule HaikuImageGetSystemLibs
 			libdebugger.so@primary
 			libdevice.so
 			libgnu.so
+			# The Media Kit. WebKit links libmedia unconditionally when
+			# ENABLE_VIDEO is on (Source/WebCore/PlatformHaiku.cmake), so
+			# WebPositive cannot link without it -- and arm64 builds the library
+			# fine, it was simply never listed outside the regular profile.
+			libmedia.so
 			libnetwork.so
 			libpackage.so
 			libtextencoding.so
