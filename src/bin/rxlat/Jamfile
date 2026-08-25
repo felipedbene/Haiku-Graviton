@@ -1,0 +1,9 @@
+SubDir HAIKU_TOP src bin rxlat ;
+
+# The readout is a getsockopt, which lives in libnetwork, not libroot. The
+# calibration needs nothing at all: CNTVCT_EL0 is readable from EL0 on this
+# platform (see arch_timer.cpp's CNTKCTL_EL1 write).
+Application rxlat :
+	rxlat.cpp
+	: libnetwork.so
+;
