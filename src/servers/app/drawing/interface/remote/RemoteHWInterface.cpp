@@ -89,7 +89,12 @@ RemoteHWInterface::RemoteHWInterface(const char* target)
 	if (fInitStatus != B_OK)
 		return;
 
-	fSendBuffer.SetTo(new(std::nothrow) StreamingRingBuffer(16 * 1024));
+	// discardWithoutReader: the only drain of this buffer is the NetSender of
+	// the currently connected client, and there may be no client for an
+	// unbounded time -- before the first one arrives, and after one dies. A
+	// full buffer with no drain used to block whichever thread was drawing,
+	// forever; see the comment in _NewConnection().
+	fSendBuffer.SetTo(new(std::nothrow) StreamingRingBuffer(16 * 1024, true));
 	if (!fSendBuffer.IsSet()) {
 		fInitStatus = B_NO_MEMORY;
 		return;
@@ -353,6 +358,16 @@ RemoteHWInterface::_NewConnectionCallback(void *cookie, BNetEndpoint &endpoint)
 status_t
 RemoteHWInterface::_NewConnection(BNetEndpoint &endpoint)
 {
+	// Order matters. Destroying the old sender un-registers it as the reader of
+	// fSendBuffer, so between here and the new NetSender below the buffer
+	// discards rather than blocks. That window is what used to be permanent
+	// whenever no client had connected yet: the send buffer is 16 KiB, nothing
+	// drained it, and the first application to draw more than that -- Deskbar,
+	// whose tray icons cross the wire as raw bitmaps -- blocked in
+	// StreamingRingBuffer::Write() inside its app_server ServerWindow thread.
+	// Its client-side window thread then blocked on the reply while holding the
+	// window lock, its own looper port filled to capacity, and the application
+	// stayed alive in `ps` having drawn nothing at all for the rest of the boot.
 	fSender.Unset();
 
 	fSendBuffer->MakeEmpty();
