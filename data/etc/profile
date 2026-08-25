@@ -5,7 +5,10 @@
 
 _ARCH=`getarch 2>/dev/null`
 if [ "$_ARCH" = "`getarch -p 2>/dev/null`" ] ; then
-	echo -e "\nWelcome to the Haiku shell.\n"
+	# "uname" still reports Haiku on purpose -- config.guess, CMake and
+	# autotools detect the OS from it -- so the banner is the only place the
+	# shell says which system this actually is.
+	echo -e "\nWelcome to the DeBeOS shell (based on Haiku).\n"
 	PS1="\w"
 else
 	echo -e "\nSwitching to architecture `getarch`\n"

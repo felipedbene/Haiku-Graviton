@@ -71,9 +71,9 @@ respective holders. All rights reserved.
 
 #include <fs_attr.h>
 #include <fs_info.h>
-#include <sys/utsname.h>
 
 #include <AutoLocker.h>
+#include <Branding.h>
 #include <libroot/libroot_private.h>
 #include <system/syscalls.h>
 #include <system/syscall_load_image.h>
@@ -726,11 +726,11 @@ ConfirmChangeIfWellKnownDirectory(const BEntry* entry, DestructiveAction action,
 		// we already warned about moving home this time around
 		return true;
 
-	struct utsname name;
-	if (uname(&name) == -1)
-		warning.ReplaceFirst("%osName", "Haiku");
-	else
-		warning.ReplaceFirst("%osName", name.sysname);
+	// Deliberately the display name rather than uname()'s sysname: sysname has
+	// to keep reading "Haiku" so that config.guess and friends can detect the
+	// OS, but echoing that back at the user in an alert would name the wrong
+	// system.
+	warning.ReplaceFirst("%osName", OS_DISPLAY_NAME);
 
 	BString buttonLabel;
 	if (action == kRename) {

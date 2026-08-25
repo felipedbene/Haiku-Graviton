@@ -11,6 +11,8 @@
 #include <boot/platform/generic/text_menu.h>
 
 #include <string.h>
+
+#include <Branding.h>
 #include <system_revision.h>
 
 
@@ -224,9 +226,13 @@ draw_menu(Menu *menu)
 	console_clear_screen();
 
 	print_centered(1, "Welcome to the");
-	print_centered(2, "Haiku Boot Loader");
+	print_centered(2, OS_DISPLAY_NAME " Boot Loader");
 
 	console_set_color(kCopyrightColor, kBackgroundColor);
+	print_centered(3, OS_ATTRIBUTION_STRING);
+
+	// The revision is the upstream Haiku hrev, and tooling greps the console
+	// for it, so it stays exactly as it was.
 	print_right(console_height() - 1, get_haiku_revision());
 
 	console_set_color(kCopyrightColor, kBackgroundColor);
