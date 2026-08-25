@@ -360,6 +360,63 @@ sits alongside it.**
 
 ---
 
+## 3.3 Verdict on `graviton-mcpu-neoverse.patch`: already merged. Delete it.
+
+There is an untracked `graviton-mcpu-neoverse.patch` in the repository root of at
+least one working copy. **It is a stale artifact, not pending work.**
+
+- **What it does:** replaces `case arm64 : archFlags += -march=armv8-a+crc ;`
+  with `case arm64 : archFlags += -mcpu=neoverse-n1+crypto ;` in
+  `build/jam/ArchitectureRules`, plus an 11-line explanatory comment.
+- **Is it correct?** Yes, and it is **already in the tree** — merged as
+  **`20bf8f2711` "arm64: build with -mcpu=neoverse-n1+crypto"**, now
+  `build/jam/ArchitectureRules:41-52`, comment and all. It was
+  hardware-verified at the instruction level (kernel outline calls 1173 → 4,
+  inline LSE 10 → 1179, `ldapr` 0 → 168).
+- **Should it be finished or committed? No — there is nothing left to do, and
+  applying it would be a no-op at best.** The file appears "uncommitted" only
+  because the checkout containing it is parked ~314 commits behind `graviton`.
+- **Action: delete the file.** And note that
+  [graviton-optimization-plan.md](graviton-optimization-plan.md) already had to
+  issue a correction for exactly this trap — a pointer that read
+  "(`graviton-mcpu-neoverse.patch`, uncommitted)" led a reader to conclude the
+  work had been lost. **Cite the merged commit, never a root-level
+  `graviton-*.patch`.** The other `graviton-*.patch` files in that root were
+  scanned; none contains SIMD or codegen work. (`graviton-toolchain-fixes.patch`
+  touches build profiles and driver lists; the rest are the arm64 reset, RTC,
+  UART-stride, packagefs-unmount and headless-netserver changes.)
+
+## 3.4 The base system's own flag, under the new Graviton-3 baseline
+
+Distinct from §3 (which is about userland) and worth doing at the same time, for
+consistency between the two compilers.
+
+`ArchitectureRules:52` currently says `-mcpu=neoverse-n1+crypto`. That was the
+right call *when a single AMI had to boot on Graviton 2* — and `20bf8f2711`
+explicitly declined `neoverse-v1`/`-512tvb` because they raise the ISA floor to
+include SVE. **Both halves of that reasoning have now changed by exactly one
+half:** Graviton 2 is dropped, so the N1 ISA floor is no longer required; but §4
+shows the SVE objection **still stands**, unchanged.
+
+So the correct move is the same shape as §6.1 — raise the ISA floor and retune,
+without admitting SVE:
+
+```
+case arm64 : archFlags += -march=armv8.4-a+crypto+fp16+rcpc+dotprod -mtune=neoverse-v1 ;
+```
+
+This is a small change with a small expected effect on a mostly-scalar kernel
+(the optimization plan's own assessment of V1 retuning for the kernel was
+"~nil"), and its real value is **consistency**: after §6.1 both compilers would
+target the same ISA, so a reader can stop tracking which half of the system got
+which flag. **Lower priority than §6.1, and it should not be bundled with it** —
+the base system rebuild and the userland rebuild are separately verifiable, and
+`20bf8f2711`'s `objdump` method applies to each independently.
+
+**Do not "simplify" this to `-mcpu=neoverse-v1`.** That is the trap
+`20bf8f2711` already avoided once: it implies SVE, and §4.2 makes that an
+immediate `SIGILL`.
+
 ## 4. SVE: NO-GO, and why dropping Graviton 2 does not change the answer
 
 ### 4.1 NEON state: preserved correctly. Verified.
