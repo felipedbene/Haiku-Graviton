@@ -35,6 +35,30 @@ The keymap claim *is* still true of Terminal, which calls
 so `input_server` is still worth starting early. It just never explained this
 bug.
 
+Two further attempts to save an `input_server` explanation, both closed:
+
+- **"`input_server` is degraded on this image, and that shifts when the keymap
+  appears."** It is degraded — `input_server/devices/virtio` is absent and the
+  `shortcut_catcher` and `screen_saver` filters fail on missing `libgame.so` and
+  `libscreensaver.so`. But it cannot matter: the keymap is loaded by
+  `_InitKeyboardMouseStates()` in the `InputServer` *constructor*
+  (`InputServer.cpp:168`), and `fAddOnManager->LoadState()` — where every one of
+  those failures happens — is called twelve lines later (`:180`). `fKeys` is
+  populated before any add-on is touched, `IS_GET_KEY_MAP` is answered from
+  `fKeys`, and messages are not served at all until the constructor returns and
+  the looper runs. `_LoadSystemKeymap()` (`:281`) is a compiled-in fallback, so a
+  keymap exists even with no `Key_map` file. There is no window in which
+  `input_server` is answering and has no keymap.
+- **"It is a low-vCPU scheduling race: on one CPU, Deskbar loses to
+  `input_server` consistently."** Measured across three shapes, and it is not.
+  On every one of them `input_server` was *already running before Deskbar
+  started* — team 101 &lt; 139 on 1 vCPU, 113 &lt; 142 on 2 vCPU, 111 &lt; 148 on
+  8 vCPU — so there is no ordering left to lose. And the failure reproduces at 8
+  vCPU (see the shape matrix under Verification), pixel-for-pixel identical to 1
+  vCPU. vCPU count is not the variable; **being on a first boot is**, because
+  `default_deskbar_items.sh` adds four replicants and that is what pushes the
+  Deskbar's output past 16 KiB before a client exists.
+
 ## What it is
 
 `RemoteHWInterface` owns a **16 KiB** `StreamingRingBuffer` for outbound drawing
@@ -130,12 +154,12 @@ The buffer had no reader, and no arrangement of start-up order creates one.
 
 ## Verification
 
-Two arms, 20 boots, on a `c7g.large` launched from the canonical AMI. The
-control arm is the AMI's own `app_server`; the test arm is that same binary with
-this patch applied, dropped into `/boot/system/non-packaged/servers/` and
-selected by a `~/config/settings/launch/` override that only replaces the
-`launch` line. Which one ran was confirmed each boot from `listimage`'s image
-path, not assumed.
+Two arms, **35 boots across three instance shapes (1, 2 and 8 vCPU)** -- 17 stock, 18 patched, all from
+the canonical AMI. The control arm is the AMI's own `app_server`; the test arm is
+that same binary with this patch applied, dropped into
+`/boot/system/non-packaged/servers/` and selected by a
+`~/config/settings/launch/` override that only replaces the `launch` line. Which
+one ran was confirmed each boot from `listimage`'s image path, not assumed.
 
 **The control needs no caveat.** Rebuilding this tree at `graviton` tip with the
 patch reverted produced an `app_server` whose md5 is *bit-identical* to the one
@@ -149,36 +173,39 @@ framebuffer and counts pure-black pixels in the top-right 137x70. Its selftest
 a healthy Deskbar scores 213 on it — icon outlines plus a window-list row this
 renderer does not fill.
 
-### Virgin first boot — the condition the failure was reported under
+### First boot — the condition the failure was reported under
 
-Re-armed each boot by removing `~/config/settings/deskbar` and touching
-`~/config/settings/first_login`, so `default_deskbar_items.sh` runs and talks to
-Deskbar synchronously.
+The trigger is a **first boot**, not a shape: `default_deskbar_items.sh` adds four
+replicants, and that is the load that carries Deskbar's output past 16 KiB before
+any client exists. Re-armed between boots by removing
+`~/config/settings/deskbar` and touching `~/config/settings/first_login`; the
+first boot of each freshly launched instance is a genuine one, untouched.
 
-| boot | blocked send writer | Deskbar window port | `first_login` stamp cleared | Deskbar drawing ops | **black px in corner** |
-|---|---|---|---|---|---|
-| stock 1 | yes | 200 / 200 | no | 46 | **6075** |
-| stock 2 | yes | 200 / 200 | no | 3262 | 213 |
-| stock 3 | yes | 200 / 200 | no | 3180 | 213 |
-| stock 4 | yes | 200 / 200 | no | 46 | **6075** |
-| stock 5 | yes | 200 / 200 | no | 44 | **6075** |
-| fixed 1 | no | 0 / 200 | yes | 1056 | 213 |
-| fixed 2 | no | 0 / 200 | yes | 1056 | 213 |
-| fixed 3 | no | 0 / 200 | yes | 1056 | 213 |
-| fixed 4 | no | 0 / 200 | yes | 1056 | 213 |
-| fixed 5 | no | 0 / 200 | yes | 1056 | 213 |
+| shape | vCPU | arm | boots | blocked send writer | window port 200/200 | `first_login` stuck | **black px in corner** |
+|---|---|---|---|---|---|---|---|
+| `c7g.medium` | 1 | stock | 6 | **6 / 6** | 6 / 6 | 6 / 6 | 3422, 3422, 197, 197, 3422, 3422 → **4 black** |
+| `c7g.large` | 2 | stock | 5 | **5 / 5** | 5 / 5 | 5 / 5 | 6075, 213, 213, 6075, 6075 → **3 black** |
+| `c8g.2xlarge` | 8 | stock | 1 | **1 / 1** | 1 / 1 | 1 / 1 | 3422 → **1 black** |
+| `c7g.medium` | 1 | fixed | 5 | 0 / 5 | 0 / 5 | 0 / 5 | 197 ×5 |
+| `c7g.large` | 2 | fixed | 5 | 0 / 5 | 0 / 5 | 0 / 5 | 213 ×5 |
+| `c8g.2xlarge` | 8 | fixed | 3 | 0 / 3 | 0 / 3 | 0 / 3 | 213 ×3 |
 
-6075 is not an approximation of the field report's figure for a wedged Deskbar,
-it is the same number. The capture shows a black rectangle with a 1 px border
-and one grey band — no leaf, no tray — against a fixed arm that draws the leaf,
-the four tray replicants and the window-list row.
+**Stock: the defect is present in 12 of 12 first boots, on every shape.** Fixed:
+0 of 13, with the `first_login` chain completing and the tray populated every
+time. 6075 is not an approximation of the field report's figure for a wedged
+Deskbar, it is the same number; 3422 and 197 are the same states measured on a
+box with fewer desktop icons.
 
-Note where the race actually lives. The **defect** is deterministic: 5 of 5
-stock boots left a blocked writer, a window port jammed at capacity and a
-`first_login` chain that never finished. What varies is only whether connecting
-a client happens to rescue the Deskbar — 3 of 5 stayed black for good, 2 of 5
-recovered. A single stock boot therefore proves nothing in either direction,
-which is exactly what the field report warned.
+Note where the *race* lives, because it is not where it looks. The defect is
+deterministic. What varies is only whether connecting a client happens to rescue
+the Deskbar — 8 of 12 stock boots stayed black for good, 4 recovered — and that
+ratio is **the same at 1, 2 and 8 vCPU**. A single stock boot proves nothing in
+either direction on any shape, which is exactly what the field report warned.
+
+The wedged capture at 8 vCPU is pixel-for-pixel identical to the one at 1 vCPU:
+black where the leaf should be, an empty grey tray band, a black window-list row
+with one stray icon. That is what a "1 vCPU only" hypothesis has to explain and
+cannot.
 
 ### Warm reboot, tray already populated
 
@@ -197,9 +224,30 @@ above carry the result and the pixels only corroborate it.
 **Verdict: closed for the mechanism, not merely narrowed.** The blocking wait
 that caused it no longer exists, and the condition is a property of the buffer
 rather than of start-up timing, so it covers "no client yet", "client died" and
-"client too slow" alike. What is *not* proven is the mid-session case: a
-disconnect-then-relaunch experiment did not reproduce a wedge on the stock
-binary either, so that leg is reasoned from the code, not measured.
+"client too slow" alike. It was verified on the shape the failure was reported
+from (1 vCPU) as well as on the shape where it was believed absent (8 vCPU).
+
+What is *not* proven is the mid-session case: a disconnect-then-relaunch
+experiment did not reproduce a wedge on the stock binary either, so that leg is
+reasoned from the code, not measured.
+
+### If you need to reproduce it
+
+Launch from the canonical AMI and look **before connecting any client** — the act
+of connecting is what releases the wedge, so a screenshot taken afterwards may
+show a healthy Deskbar over a defect that was definitely there. Any shape will
+do. Two readings settle it, and both were 12/12 on stock:
+
+```
+AS=$(ps | grep -m1 servers/app_server | tr -s ' ' | cut -d' ' -f2)
+DB=$(ps | grep -m1 system/Deskbar     | tr -s ' ' | cut -d' ' -f2)
+listsem  $AS | grep 'write notif'   # count -1 == a producer is blocked
+listport $DB | grep ' Deskbar '     # 200 queued of 200 == the looper is wedged
+```
+
+To make it *visible* as well, force a first boot: `rm -rf
+~/config/settings/deskbar; touch ~/config/settings/first_login; sync; shutdown
+-r`. Expect roughly two boots in three to stay black.
 
 ## Loose ends worth a follow-up
 
