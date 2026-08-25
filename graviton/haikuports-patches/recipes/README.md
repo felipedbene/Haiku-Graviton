@@ -50,6 +50,7 @@ fixed, but this makes the step independent of it either way.
 | `curl-8.21.0.recipe` | yes | `--without-libpsl` on every arch; `libpsl` → `libidn2` → `cmd:gtkdocize`, unbuildable here |
 | `libxml2-2.15.3.recipe` | yes, **stage-1** | forces `pythonModuleEnabled=false`; loses only the `libxml2_python3.14` subpackage. Retire when `cmd:python3.14` exists |
 | `ruby-3.2.9.recipe` | yes | adds an `__aarch64__` arm to `signal.c`'s `mcontext_t` read — ruby took the x86 `esp`/`ebp` names on every non-amd64 Haiku and failed to compile. **A portability fix, not a cut**: the handler keeps working and the x86 lines are untouched |
+| `jam-2.5_2021_10_29.recipe` | yes | `INSTALL()` ran `install -v bin.haikux86/g/jam`, but jam builds into `bin.$OSPLAT` and that is plain `bin.haiku` on an architecture whose spelling its Jamfile does not know — arm64 among them. Now locates the binary under `bin.haiku*/g/jam` and fails loudly if there is none, instead of being silently x86-only. **A portability fix, not a cut.** Has no input source package, so the operative copy is the tree one at `sys-devel/jam/` and no mtime pin applies. Proven: `jam-2.5_2021_10_29-3-arm64.hpkg` |
 
 ## `ruby-3.2.9.recipe` does NOT go through the ISP path — read this before delivering it
 
