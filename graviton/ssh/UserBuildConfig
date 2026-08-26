@@ -249,7 +249,13 @@ rule UserBuildConfigRulePreImage
 
 		# Build tools the mirror DOES serve -- add by name so the mirror version
 		# is used (avoids the bootstrap-vs-mirror version conflict class).
-		AddHaikuImageSystemPackages make m4 ;
+		# haiku_devel is the linchpin for native compilation: it provides the C
+		# runtime startup objects (crti.o/crtn.o/start_dyn.o/init_term_dyn.o), the
+		# unversioned dev .so symlinks (libroot.so/libbe.so/libnetwork.so/... in
+		# develop/lib) and the system headers (develop/headers/{posix,os,...}).
+		# Without it rustc's `cc`/ld link fails: cannot find crti.o, then -lroot,
+		# then stdint.h. It is a locally-built system package (from the Haiku repo).
+		AddHaikuImageSystemPackages make m4 haiku_devel ;
 
 		# Global cargo config: rustflags for the aarch64-unknown-haiku target so
 		# cargo build/run link out of the box despite the ld 2.41 --gc-sections

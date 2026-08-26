@@ -120,16 +120,17 @@ phases:
           cp "$HAIKU_TOP/graviton/ssh/files/$f" "$HG_SSH_DIR/image/$f"
         done
       # ---- inject the UserBuildConfig hook + second jam pass -------------
-      # HAIKU_IMAGE_SIZE (MiB) is bumped from the ~450 minimum default because
-      # the full-parity closure (WebKit + WebPositive + Rust + gcc + the webkit
-      # runtime libs, ~275 MiB of hpkgs plus the mirror-resolved base) overflows
-      # it -- the default fails with "No space left on device" populating
-      # /system/packages. Kept under ROOT_VOLUME_BYTES (2 GiB) so make-gpt-image
-      # can grow the mmc into the raw (it requires raw >= mmc). SSH-only bakes
-      # (no pool) fit the default but the larger image is harmless for them.
+      # HAIKU_IMAGE_SIZE (MiB) is the BFS partition size. It must cover the
+      # full-parity closure (WebKit + WebPositive + Rust + the dev toolchain +
+      # mirror-resolved base, ~1.7 GiB) AND leave room for real work on the
+      # booted instance -- a single debug `cargo build` of a mid-size project
+      # (target/ + registry) needs ~2 GiB, and the old 1800 MiB image ran the
+      # root volume to 100% mid-link. 9000 MiB leaves ~7 GiB free. It must stay
+      # under ROOT_VOLUME_BYTES (10 GiB) so make-gpt-image can grow the mmc into
+      # the raw (it requires raw >= mmc). SSH-only bakes are unaffected in size.
       - echo "== inject UserBuildConfig, jam pass 2 (final image with ssh) =="
       - cp "$HAIKU_TOP/graviton/ssh/UserBuildConfig" "$GEN/UserBuildConfig"
-      - HG_POOL_DIR="${HG_POOL_DIR:-}" HG_SSH_DIR="$HG_SSH_DIR" HAIKU_REVISION="$HAIKU_REVISION" jam -q -j"$NPROC" -sHAIKU_IMAGE_SIZE=1800 @minimum-mmc
+      - HG_POOL_DIR="${HG_POOL_DIR:-}" HG_SSH_DIR="$HG_SSH_DIR" HAIKU_REVISION="$HAIKU_REVISION" jam -q -j"$NPROC" -sHAIKU_IMAGE_SIZE=9000 @minimum-mmc
       # ---- MBR mmc -> GPT raw --------------------------------------------
       - echo "== make-gpt-image.sh (MBR -> GPT) =="
       - MMC="$(ls -1 "$GEN"/haiku-mmc.image "$GEN"/haiku-*.mmc "$GEN"/haiku-minimum.mmc 2>/dev/null | head -1)"
