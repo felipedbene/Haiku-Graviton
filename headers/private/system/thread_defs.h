@@ -14,8 +14,16 @@
 /** Size of the stack given to teams in user space */
 #define USER_STACK_GUARD_SIZE		(4 * B_PAGE_SIZE)		// 16 kB
 #define MIN_USER_STACK_SIZE			(2 * B_PAGE_SIZE)		// 8 kB
-#define MAX_USER_STACK_SIZE			(16384 * B_PAGE_SIZE)	// 64 MB
-#define USER_MAIN_THREAD_STACK_SIZE	MAX_USER_STACK_SIZE
+// The ceiling for an *explicitly* requested thread stack (spawn_thread /
+// pthread_attr_setstacksize / RUST_MIN_STACK). Raised from 64 MB because rustc
+// overflows a 64 MB worker stack compiling macro/const-generic-heavy crates
+// (e.g. zerotrie, tinystr via the icu -> idna -> url -> reqwest chain) and
+// Haiku's kernel (thread.cpp) rejects any stack above this, so RUST_MIN_STACK
+// could not be raised past it. This only lifts the ceiling; a thread still gets
+// the small default stack unless it asks for more. The main-thread stack and
+// RLIMIT_STACK are pinned below on purpose so ordinary processes are unchanged.
+#define MAX_USER_STACK_SIZE			(131072 * B_PAGE_SIZE)	// 512 MB
+#define USER_MAIN_THREAD_STACK_SIZE	(16384 * B_PAGE_SIZE)	// 64 MB
 #define USER_STACK_SIZE				(64 * B_PAGE_SIZE)		// 256 kB
 
 
