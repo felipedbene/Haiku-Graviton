@@ -194,8 +194,19 @@ rule UserBuildConfigRulePreImage
 			<hg-pool>zstd-1.5.6-2-arm64.hpkg
 			<hg-pool>rust_bin-1.100.0~nightly_787af2b8c-2-arm64.hpkg
 			<hg-pool>gcc-13.3.0_2026_03_29_bootstrap-1-arm64.hpkg
+			# Archiving tools (cargo/dev workflows expect them, and the arm64
+			# mirror does not serve tar/gzip). Built natively; pooled like gcc.
+			<hg-pool>tar-1.35-2-arm64.hpkg
+			<hg-pool>gzip-1.14-1-arm64.hpkg
 			;
 		SEARCH on $(poolPkgs) = $(HG_POOL_DIR) ;
 		AddPackageFilesToHaikuImage system packages : $(poolPkgs) ;
+
+		# The linker rustc drives gcc into (`cc` -> collect2 -> ld). rust_bin does
+		# not list binutils in its requires, so nothing pulled ld in and cargo
+		# failed with "collect2: fatal error: cannot find 'ld'". The arm64 mirror
+		# DOES serve binutils (provides cmd:ld), so resolve it by name rather than
+		# pooling it.
+		AddHaikuImageSystemPackages binutils ;
 	}
 }
