@@ -924,6 +924,13 @@ rule AddPackagesAndRepositoryVariablesToContainerScript script : container
 			+= [ on $(repository) return $(HAIKU_REPOSITORY_CACHE_FILE) ] ;
 	}
 
+	# Companion caches built by RemotePackageRepository from locally-built
+	# packages the mirror index does not list (see RepositoryRules). The solver
+	# needs these to see e.g. lib:libjasper as a provider. They are fed here only
+	# -- not added to HAIKU_REPOSITORIES -- so the repository config/cache files
+	# installed into the image stay exactly the mirror's.
+	repositoryFiles += $(HAIKU_SOLVER_EXTRA_REPOSITORY_CACHES) ;
+
 	AddTargetVariableToScript $(script) : $(repositoryFiles) : repositories ;
 }
 
