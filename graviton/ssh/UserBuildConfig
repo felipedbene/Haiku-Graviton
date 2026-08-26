@@ -202,6 +202,62 @@ rule UserBuildConfigRulePreImage
 		SEARCH on $(poolPkgs) = $(HG_POOL_DIR) ;
 		AddPackageFilesToHaikuImage system packages : $(poolPkgs) ;
 
+		# Developer toolchain + its closure. These are natively-built packages the
+		# arm64 build-packages mirror does not serve, so they are pooled and
+		# force-added (their mirror-served deps -- bash/curl/icu/... -- resolve
+		# normally). The set was computed as the full dependency closure of the
+		# top-level tools (git, cmake, ninja, autotools, python3, perl, ruby, vim,
+		# nano, diffutils, which, xz/bzip2/zip) against the mirror, keeping only
+		# what the mirror lacks; get_package_dependencies resolved the whole set
+		# cleanly. make/m4/less come from the mirror (added below / already added).
+		local devPkgs =
+			<hg-pool>git-2.54.0-1-arm64.hpkg
+			<hg-pool>cmake-4.1.6-1-arm64.hpkg
+			<hg-pool>ninja-1.13.2-3-arm64.hpkg
+			<hg-pool>autoconf-2.72-1-arm64.hpkg
+			<hg-pool>automake-1.18.1-1-arm64.hpkg
+			<hg-pool>libtool-2.5.4-1-arm64.hpkg
+			<hg-pool>libtool_libltdl-2.5.4-1-arm64.hpkg
+			<hg-pool>python3.14-3.14.7-1-arm64.hpkg
+			<hg-pool>perl-5.42.2-1-arm64.hpkg
+			<hg-pool>ruby-3.2.9-1-arm64.hpkg
+			<hg-pool>vim-9.1.1618-1-arm64.hpkg
+			<hg-pool>nano-9.1-1-arm64.hpkg
+			<hg-pool>diffutils-3.12-1-arm64.hpkg
+			<hg-pool>which-2.21-6-arm64.hpkg
+			<hg-pool>xz_utils-5.8.3-1-arm64.hpkg
+			<hg-pool>zip-3.0-4-arm64.hpkg
+			# closure deps the mirror does not serve
+			<hg-pool>file-5.43-2-arm64.hpkg
+			<hg-pool>file_data-5.43-2-any.hpkg
+			<hg-pool>gdbm-1.26-1-arm64.hpkg
+			<hg-pool>gmp-6.3.0-1-arm64.hpkg
+			<hg-pool>libedit-20230828_3.1-1-arm64.hpkg
+			<hg-pool>libpcre2-10.45-1-arm64.hpkg
+			<hg-pool>libuv-1.52.1-1-arm64.hpkg
+			<hg-pool>libyaml-0.2.5-2-arm64.hpkg
+			<hg-pool>mandoc-1.14.6-1-arm64.hpkg
+			<hg-pool>openssl3_man-3.5.7-1-any.hpkg
+			<hg-pool>rhash-1.4.6-2-arm64.hpkg
+			<hg-pool>bzip2-1.0.8-3-arm64.hpkg
+			# newer libffi than the mirror's bootstrap one (python3.14/ruby need
+			# lib:libffi>=8.1.4); pooled because the mirror copy is too old.
+			<hg-pool>libffi-3.4.6-1-arm64.hpkg
+			;
+		SEARCH on $(devPkgs) = $(HG_POOL_DIR) ;
+		AddPackageFilesToHaikuImage system packages : $(devPkgs) ;
+
+		# Build tools the mirror DOES serve -- add by name so the mirror version
+		# is used (avoids the bootstrap-vs-mirror version conflict class).
+		AddHaikuImageSystemPackages make m4 ;
+
+		# Global cargo config: rustflags for the aarch64-unknown-haiku target so
+		# cargo build/run link out of the box despite the ld 2.41 --gc-sections
+		# stub bug (see the file header). Installed at /boot/home/.cargo/config.toml.
+		local cargoConfig = <haiku-graviton-ssh>cargo-config.toml ;
+		SEARCH on $(cargoConfig) = $(HG_SSH_IMAGE_DIR) ;
+		AddFilesToHaikuImage home ".cargo" : $(cargoConfig) : config.toml ;
+
 		# The linker rustc drives gcc into (`cc` -> collect2 -> ld). rust_bin does
 		# not list binutils in its requires, so nothing pulled ld in and cargo
 		# failed with "collect2: fatal error: cannot find 'ld'". The arm64 mirror

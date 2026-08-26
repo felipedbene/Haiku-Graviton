@@ -116,7 +116,7 @@ phases:
       # Stage the desktop/cloud-init image files the UserBuildConfig also expects
       # (build-openssh only emits the ssh subset; copy the rest from the recipe).
       - |
-        for f in launch-cloud-init remote-desktop.sh launch-remote-desktop UserSetupEnvironment; do
+        for f in launch-cloud-init remote-desktop.sh launch-remote-desktop UserSetupEnvironment cargo-config.toml; do
           cp "$HAIKU_TOP/graviton/ssh/files/$f" "$HG_SSH_DIR/image/$f"
         done
       # ---- inject the UserBuildConfig hook + second jam pass -------------
