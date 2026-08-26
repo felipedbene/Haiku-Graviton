@@ -262,6 +262,48 @@ rule RemotePackageRepository repository : architecture : repositoryUrl
 		DownloadLocatedFile $(repositoryFile)
 			: "$(repoUrl)/`cat $source`/repo"
 			: $(packagesChecksumFile) ;
+
+		# The downloaded cache is the mirror's index verbatim; it never lists the
+		# LocalPackageRepository packages, so the image dependency solver cannot
+		# see them as providers and image assembly fails with e.g. "nothing
+		# provides lib:libjasper". Build a *companion* cache from just the staged
+		# local files and hand it to the solver alongside the mirror index (see
+		# ImageRules, AddPackagesAndRepositoryVariablesToContainerScript). This
+		# keeps downloads on -- no HAIKU_NO_DOWNLOADS, no base-closure copy -- and
+		# does not touch HAIKU_REPOSITORIES, so the per-repo config/cache the image
+		# installs stays exactly the mirror's.
+		local localFiles ;
+		local localPackage ;
+		for localPackage in $(HAIKU_LOCAL_ONLY_ANY_PACKAGES_$(repository:G=)) {
+			local fileName = $(localPackage)-any.hpkg ;
+			if [ Glob $(HAIKU_DOWNLOAD_DIR) : $(fileName) ] {
+				local file = $(fileName:G=local-repo-file) ;
+				MakeLocate $(file) : $(HAIKU_DOWNLOAD_DIR) ;
+				localFiles += $(file) ;
+			}
+		}
+		for localPackage in $(HAIKU_LOCAL_ONLY_PACKAGES_$(repository:G=)) {
+			local fileName = $(localPackage)-$(architecture).hpkg ;
+			if [ Glob $(HAIKU_DOWNLOAD_DIR) : $(fileName) ] {
+				local file = $(fileName:G=local-repo-file) ;
+				MakeLocate $(file) : $(HAIKU_DOWNLOAD_DIR) ;
+				localFiles += $(file) ;
+			}
+		}
+		if $(localFiles) {
+			# Distinct on-disk name: MakeLocate binds by base name, so this must
+			# NOT reduce to the mirror cache's "HaikuPorts" or package_repo's mv
+			# would clobber the downloaded mirror index.
+			local localCache = $(repository:G=)-local ;
+			localCache = $(localCache:G=repository-local-cache) ;
+			MakeLocate $(localCache) : $(repositoriesDir) ;
+			# Reuse the mirror's repositoryInfo: get_package_dependencies requires
+			# a non-empty BaseURL, and the URLs it then prints resolve to files
+			# already staged in HAIKU_DOWNLOAD_DIR, which build_haiku_image's
+			# downloadFile skips -- so nothing is refetched.
+			RepositoryCache $(localCache) : $(repositoryInfo) : $(localFiles) ;
+			HAIKU_SOLVER_EXTRA_REPOSITORY_CACHES += $(localCache) ;
+		}
 	}
 
 	# build the repository info file

@@ -1,0 +1,19 @@
+# Baked global cargo config for the DeBeOS/Haiku arm64 canonical image.
+# Installed at /boot/home/.cargo/config.toml so `cargo build`/`cargo run`
+# work without manual flags.
+#
+# GNU ld 2.41 (the arm64 binutils in this image) has a stub-generation bug
+# that breaks Rust links built with --gc-sections (rustc's default), so
+# force --no-gc-sections for the native target. Same workaround used to
+# build ripgrep here.
+[target.aarch64-unknown-haiku]
+rustflags = ["-C", "link-arg=-Wl,--no-gc-sections"]
+
+# rustc runs macro expansion / type checking on a worker thread whose stack is
+# RUST_MIN_STACK. Macro/const-heavy crates (zerotrie, tinystr, ... from the
+# icu/url/reqwest chain) overflow the small default on arm64 and rustc dies with
+# SIGKILLTHR (Haiku signal 21). 256 MB clears them; it needs the raised
+# MAX_USER_STACK_SIZE (thread_defs.h) or the kernel rejects it. Set here (cargo
+# [env]) so it reaches rustc without enlarging cargo's own thread pool.
+[env]
+RUST_MIN_STACK = "268435456"

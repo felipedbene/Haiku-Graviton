@@ -17,7 +17,13 @@ provides {
 requires {
 	haiku
 
-#ifdef HAIKU_REGULAR_BUILD
+	/* Each library is required exactly when its build feature is enabled,
+	   which is also the condition under which the translator that links it
+	   gets built. These must not be gated on the build profile as well: a
+	   minimum image builds the same translators, so the profile guard only
+	   stopped their libraries from being pulled in.
+	   Comments here are C-style on purpose -- this file is run through
+	   gcc -E, which reads a leading '#' as a preprocessing directive. */
 #ifdef HAIKU_BUILD_FEATURE_%HAIKU_PACKAGING_ARCH%_ffmpeg_ENABLED
 	lib:libavcodec >= 60
 	lib:libavfilter >= 9
@@ -51,6 +57,5 @@ requires {
 #endif
 #ifdef HAIKU_BUILD_FEATURE_%HAIKU_PACKAGING_ARCH%_gutenprint_ENABLED
 	lib:libgutenprint
-#endif
 #endif
 }

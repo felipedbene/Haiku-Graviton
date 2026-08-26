@@ -137,4 +137,144 @@ rule UserBuildConfigRulePreImage
 	AddUserToHaikuImage sshd : 999 : 999 : /boot/system/var/empty
 		: /bin/true : "sshd privilege separation user" ;
 	AddGroupToHaikuImage sshd : 999 : ;
+
+	# --- Full canonical closure: WebPositive + HaikuWebKit + Rust ----------
+	# Added only when the bake supplies the hpkg pool (HG_POOL_DIR set by the CI
+	# cross-build, which also stages the translator + webkit build-feature
+	# packages BEFORE jam). With a pool this reproduces the full canonical image
+	# (WebPositive/HaikuWebKit, the PNG/JPEG/TIFF/JPEG2000 translators via the
+	# now-enabled build features, and the native Rust toolchain); with no pool it
+	# stays SSH-only. The translator runtime libs (libpng16/libjpeg_turbo/tiff/
+	# jasper) are omitted here on purpose -- their build features place them.
+	if $(HG_POOL_DIR) {
+		Echo "haiku-graviton: adding WebPositive + HaikuWebKit + Rust from $(HG_POOL_DIR)" ;
+
+		# WebPositive, built from this tree by the (staged) webkit build feature.
+		AddPackageFilesToHaikuImage system packages
+			: webpositive.hpkg : nameFromMetaInfo ;
+
+		# HaikuWebKit's measured runtime closure + the native aarch64-unknown-haiku
+		# Rust toolchain: rustc/cargo and the C linker it drives (gcc) plus cargo's
+		# HTTPS closure (curl/openssl3/zstd/nghttp2/libssh2 + CA bundle), so `cargo`
+		# and `cargo install` work online out of the box. gcc is pooled because the
+		# arm64 mirror does not serve a bare `gcc` compiler; gcc_syslibs and
+		# gcc_syslibs_devel are NOT pooled -- the mirror serves newer, non-bootstrap
+		# builds of them, so pooling the older _bootstrap ones made the solver want
+		# to uninstall them (rust_bin/HaikuWebKit require gcc_syslibs[_devel] >=, and
+		# the mirror copies satisfy that and avoid the bootstrap dangling-libgcc_s
+		# quirk). They resolve automatically as dependencies from the mirror.
+		local poolPkgs =
+			<hg-pool>haikuwebkit-1.10.0-2-arm64.hpkg
+			<hg-pool>jasper-2.0.33-2-arm64.hpkg
+			<hg-pool>libjpeg_turbo-3.1.4.1-1-arm64.hpkg
+			<hg-pool>libpng16-1.6.53-1-arm64.hpkg
+			<hg-pool>tiff-4.7.0-1-arm64.hpkg
+			<hg-pool>brotli-1.2.0-1-arm64.hpkg
+			<hg-pool>ca_root_certificates-2026_07_16-1-any.hpkg
+			<hg-pool>curl-8.21.0-1-arm64.hpkg
+			<hg-pool>gettext_libintl-1.0-1-arm64.hpkg
+			<hg-pool>giflib-5.2.2-1-arm64.hpkg
+			<hg-pool>lcms-2.19.1-1-arm64.hpkg
+			<hg-pool>libexecinfo-1.1-6-arm64.hpkg
+			<hg-pool>libglvnd-1.7.0-4-arm64.hpkg
+			<hg-pool>libgpg_error-1.61-2-arm64.hpkg
+			<hg-pool>libiconv-1.18-1-arm64.hpkg
+			<hg-pool>libpsl-0.21.5-2-arm64.hpkg
+			<hg-pool>libssh2-1.11.1-1-arm64.hpkg
+			<hg-pool>libunistring-1.3-1-arm64.hpkg
+			<hg-pool>libwebp-1.6.0-3-arm64.hpkg
+			<hg-pool>libxml2-2.15.3-1-arm64.hpkg
+			<hg-pool>libxslt-1.1.45-2-arm64.hpkg
+			<hg-pool>ncurses6-6.6_bootstrap-1-arm64.hpkg
+			<hg-pool>nghttp2-1.63.0-1-arm64.hpkg
+			<hg-pool>openssl3-3.5.7-1-arm64.hpkg
+			<hg-pool>readline-8.3.003-1-arm64.hpkg
+			<hg-pool>sqlite-3.50.4.0-1-arm64.hpkg
+			<hg-pool>woff2-1.0.2-3-arm64.hpkg
+			<hg-pool>zstd-1.5.6-2-arm64.hpkg
+			<hg-pool>rust_bin-1.100.0~nightly_787af2b8c-2-arm64.hpkg
+			<hg-pool>gcc-13.3.0_2026_03_29_bootstrap-1-arm64.hpkg
+			# Archiving tools (cargo/dev workflows expect them, and the arm64
+			# mirror does not serve tar/gzip). Built natively; pooled like gcc.
+			<hg-pool>tar-1.35-2-arm64.hpkg
+			<hg-pool>gzip-1.14-1-arm64.hpkg
+			;
+		SEARCH on $(poolPkgs) = $(HG_POOL_DIR) ;
+		AddPackageFilesToHaikuImage system packages : $(poolPkgs) ;
+
+		# Developer toolchain + its closure. These are natively-built packages the
+		# arm64 build-packages mirror does not serve, so they are pooled and
+		# force-added (their mirror-served deps -- bash/curl/icu/... -- resolve
+		# normally). The set was computed as the full dependency closure of the
+		# top-level tools (git, cmake, ninja, autotools, python3, perl, ruby, vim,
+		# nano, diffutils, which, xz/bzip2/zip) against the mirror, keeping only
+		# what the mirror lacks; get_package_dependencies resolved the whole set
+		# cleanly. make/m4/less come from the mirror (added below / already added).
+		local devPkgs =
+			<hg-pool>git-2.54.0-1-arm64.hpkg
+			<hg-pool>cmake-4.1.6-1-arm64.hpkg
+			<hg-pool>ninja-1.13.2-3-arm64.hpkg
+			<hg-pool>autoconf-2.72-1-arm64.hpkg
+			<hg-pool>automake-1.18.1-1-arm64.hpkg
+			<hg-pool>libtool-2.5.4-1-arm64.hpkg
+			<hg-pool>libtool_libltdl-2.5.4-1-arm64.hpkg
+			<hg-pool>python3.14-3.14.7-1-arm64.hpkg
+			<hg-pool>perl-5.42.2-1-arm64.hpkg
+			<hg-pool>ruby-3.2.9-1-arm64.hpkg
+			<hg-pool>vim-9.1.1618-1-arm64.hpkg
+			<hg-pool>nano-9.1-1-arm64.hpkg
+			<hg-pool>diffutils-3.12-1-arm64.hpkg
+			<hg-pool>which-2.21-6-arm64.hpkg
+			<hg-pool>xz_utils-5.8.3-1-arm64.hpkg
+			<hg-pool>zip-3.0-4-arm64.hpkg
+			# closure deps the mirror does not serve
+			<hg-pool>file-5.43-2-arm64.hpkg
+			<hg-pool>file_data-5.43-2-any.hpkg
+			<hg-pool>gdbm-1.26-1-arm64.hpkg
+			<hg-pool>gmp-6.3.0-1-arm64.hpkg
+			<hg-pool>libedit-20230828_3.1-1-arm64.hpkg
+			<hg-pool>libpcre2-10.45-1-arm64.hpkg
+			<hg-pool>libuv-1.52.1-1-arm64.hpkg
+			<hg-pool>libyaml-0.2.5-2-arm64.hpkg
+			<hg-pool>mandoc-1.14.6-1-arm64.hpkg
+			<hg-pool>openssl3_man-3.5.7-1-any.hpkg
+			<hg-pool>rhash-1.4.6-2-arm64.hpkg
+			<hg-pool>bzip2-1.0.8-3-arm64.hpkg
+			# newer libffi than the mirror's bootstrap one (python3.14/ruby need
+			# lib:libffi>=8.1.4); pooled because the mirror copy is too old.
+			<hg-pool>libffi-3.4.6-1-arm64.hpkg
+			;
+		SEARCH on $(devPkgs) = $(HG_POOL_DIR) ;
+		AddPackageFilesToHaikuImage system packages : $(devPkgs) ;
+
+		# Build tools the mirror DOES serve -- add by name so the mirror version
+		# is used (avoids the bootstrap-vs-mirror version conflict class).
+		AddHaikuImageSystemPackages make m4 ;
+
+		# haiku_devel is the linchpin for native compilation: it provides the C
+		# runtime startup objects (crti.o/crtn.o/start_dyn.o/init_term_dyn.o), the
+		# unversioned dev .so symlinks (libroot.so/libbe.so/libnetwork.so/... in
+		# develop/lib) and the system headers (develop/headers/{posix,os,...}).
+		# Without it rustc's `cc`/ld link fails: cannot find crti.o, then -lroot,
+		# then stdint.h. It is built into this tree (Haiku repo), but the only
+		# in-tree wiring that installs it -- the DevelopmentMin optional package --
+		# is gated to x86/x86_64, so on arm64 nothing adds it. Force-add the built
+		# hpkg exactly as WebPositive above (same packages dir, nameFromMetaInfo).
+		AddPackageFilesToHaikuImage system packages
+			: haiku_devel.hpkg : nameFromMetaInfo ;
+
+		# Global cargo config: rustflags for the aarch64-unknown-haiku target so
+		# cargo build/run link out of the box despite the ld 2.41 --gc-sections
+		# stub bug (see the file header). Installed at /boot/home/.cargo/config.toml.
+		local cargoConfig = <haiku-graviton-ssh>cargo-config.toml ;
+		SEARCH on $(cargoConfig) = $(HG_SSH_IMAGE_DIR) ;
+		AddFilesToHaikuImage home ".cargo" : $(cargoConfig) : config.toml ;
+
+		# The linker rustc drives gcc into (`cc` -> collect2 -> ld). rust_bin does
+		# not list binutils in its requires, so nothing pulled ld in and cargo
+		# failed with "collect2: fatal error: cannot find 'ld'". The arm64 mirror
+		# DOES serve binutils (provides cmd:ld), so resolve it by name rather than
+		# pooling it.
+		AddHaikuImageSystemPackages binutils ;
+	}
 }

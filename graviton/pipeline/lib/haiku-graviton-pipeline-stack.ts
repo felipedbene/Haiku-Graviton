@@ -113,6 +113,12 @@ export class HaikuGravitonPipelineStack extends cdk.Stack {
       },
     });
     workBucket.grantReadWrite(crossBuild, `${CACHE_PREFIX}/*`);
+    // Read-only on the optional hpkg pool: the natively-built local packages
+    // (translator/webkit build-feature hpkgs + the Rust toolchain) that
+    // cross-build.yml syncs to HG_POOL_DIR and stages so jam turns those
+    // features on. Populated out-of-band into s3://<workBucket>/hpkg-pool/;
+    // absent -> the bake stays SSH-only. Read-only: the pool is an input.
+    workBucket.grantRead(crossBuild, 'hpkg-pool/*');
 
     // ---------------------------------------------------------------------
     // Stage 2 project: import + register. Least-privilege EC2 for the disk
