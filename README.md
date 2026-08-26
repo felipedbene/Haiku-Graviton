@@ -5,7 +5,7 @@
 **DeBeOS is an independent operating system project, descended from
 [Haiku](https://www.haiku-os.org/) and BeOS.** It is **ARM-first**: AWS Graviton on
 EC2 is the current flagship target, with Raspberry Pi 5, Raspberry Pi 3 and RISC-V on
-the roadmap.
+the [roadmap](ROADMAP.md).
 
 Haiku and BeOS are DeBeOS's **historical lineage**, and the debt is real — this tree
 began as a Haiku checkout and the great majority of the code is Haiku's, under its
@@ -41,14 +41,27 @@ Everything here was measured on real AWS Graviton hardware, not emulated.
 
 | | |
 |---|---|
-| Boots on EC2 Graviton | `c7g`, `t4g`, and `c7g.metal` (metal still panics in GICv3 — a known open bug) |
+| Boots on EC2 Graviton | `c7g`, `t4g`, `c8g`, and `c7g.metal` — GICv3 redistributor discovery and per-bridge ECAM are fixed, so the bare-metal instance reaches userland |
 | AWS ENA networking | jumbo frames at MTU 9001, multi-descriptor RX/TX |
 | Throughput | **4.95 Gbit/s receive, ~4.4 Gbit/s transmit**, single queue |
 | Jumbo frames vs MTU 1500 | receive **+403%**, transmit **+184%**, at well under half the CPU per byte |
 | Clean shutdown | ACPI power button received over the PL061 GPIO; an EC2 stop completes in ~33 s instead of being force-killed |
 | Survives stop/start | verified, with the host key intact |
 | Serial console | full boot log via `get-console-output --latest` |
-| Native package builds | 24+ ports built natively on arm64 |
+| Web browser | WebPositive on HaikuWebKit renders real pages — JavaScript, CSS grid/flexbox/gradients/transforms |
+| Data translators | JPEG, PNG, TIFF, GIF, WebP and JPEG2000 decode |
+| Native Rust | `rustc` and `cargo` run on-device and build real crates fetched live from crates.io — ripgrep builds end-to-end natively |
+| Native package builds | hundreds of ports built natively — a full dev toolchain (git, cmake, ninja, python, ruby, perl, vim) alongside the Rust toolchain |
+
+## Roadmap
+
+DeBeOS is ARM-first and, after bring-up, oriented around **self-sufficiency** — building
+real software *on the machine* rather than only cross-compiling it. The full staged plan,
+with honest status and named open items, is in **[ROADMAP.md](ROADMAP.md)**. In short:
+Stage 0 (bring-up) is done; Stage 1 (self-sufficiency — native Rust and `cargo` against
+crates.io are proven; filesystem/toolchain reliability under heavy native builds is the
+current focus) is in progress; the package ecosystem, platform expansion (Raspberry Pi,
+RISC-V) and robustness stages follow.
 
 ## Repository layout
 
