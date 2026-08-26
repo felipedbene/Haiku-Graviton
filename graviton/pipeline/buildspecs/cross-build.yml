@@ -101,10 +101,18 @@ phases:
         for f in launch-cloud-init remote-desktop.sh launch-remote-desktop UserSetupEnvironment; do
           cp "$HAIKU_TOP/graviton/ssh/files/$f" "$HG_SSH_DIR/image/$f"
         done
+      # ---- optional hpkg pool: native Rust toolchain (+ cargo's HTTPS closure)
+      # UserBuildConfig bakes these in only when HG_POOL_DIR is set and non-empty,
+      # so a bake without a pool stays SSH-only. The pool lives in the same work
+      # bucket used for the cross-tools cache; the CrossBuild role already reads it.
+      - export HG_POOL_DIR="$HAIKU_TOP/hpkg-pool"
+      - mkdir -p "$HG_POOL_DIR"
+      - aws s3 sync "s3://$WORK_BUCKET/hpkg-pool/" "$HG_POOL_DIR/" --region "$AWS_DEFAULT_REGION" || echo "no hpkg pool; SSH-only image"
+      - if [ -z "$(ls -A "$HG_POOL_DIR" 2>/dev/null)" ]; then echo "empty pool; unsetting HG_POOL_DIR"; unset HG_POOL_DIR; else ls -la "$HG_POOL_DIR"; fi
       # ---- inject the UserBuildConfig hook + second jam pass -------------
       - echo "== inject UserBuildConfig, jam pass 2 (final image with ssh) =="
       - cp "$HAIKU_TOP/graviton/ssh/UserBuildConfig" "$GEN/UserBuildConfig"
-      - HG_SSH_DIR="$HG_SSH_DIR" HAIKU_REVISION="$HAIKU_REVISION" jam -q -j"$NPROC" @minimum-mmc
+      - HG_POOL_DIR="${HG_POOL_DIR:-}" HG_SSH_DIR="$HG_SSH_DIR" HAIKU_REVISION="$HAIKU_REVISION" jam -q -j"$NPROC" @minimum-mmc
       # ---- MBR mmc -> GPT raw --------------------------------------------
       - echo "== make-gpt-image.sh (MBR -> GPT) =="
       - MMC="$(ls -1 "$GEN"/haiku-mmc.image "$GEN"/haiku-*.mmc "$GEN"/haiku-minimum.mmc 2>/dev/null | head -1)"

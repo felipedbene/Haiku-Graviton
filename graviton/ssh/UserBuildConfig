@@ -137,4 +137,31 @@ rule UserBuildConfigRulePreImage
 	AddUserToHaikuImage sshd : 999 : 999 : /boot/system/var/empty
 		: /bin/true : "sshd privilege separation user" ;
 	AddGroupToHaikuImage sshd : 999 : ;
+
+	# --- Rust toolchain (rustc + cargo, online-capable) from the hpkg pool --
+	# Baked in ONLY when the bake supplies an hpkg pool via HG_POOL_DIR (the CI
+	# cross-build syncs it from the work bucket; a plain local minimum bake that
+	# leaves HG_POOL_DIR unset stays SSH-only). The set is the native
+	# aarch64-unknown-haiku Rust toolchain (rust_bin), the C linker it drives
+	# (gcc + gcc_syslibs[_devel], so `cargo build` can link), and cargo's HTTPS
+	# runtime closure (curl/openssl3/zstd/nghttp2/libssh2 + CA bundle) so cargo
+	# and `cargo install` work online out of the box. Added as prebuilt package
+	# files (not build features), so this needs no in-tree recipe or big build.
+	if $(HG_POOL_DIR) {
+		Echo "haiku-graviton: adding Rust toolchain from $(HG_POOL_DIR)" ;
+		local rustPkgs =
+			<hg-pool>rust_bin-1.100.0~nightly_787af2b8c-2-arm64.hpkg
+			<hg-pool>gcc-13.3.0_2026_03_29_bootstrap-1-arm64.hpkg
+			<hg-pool>gcc_syslibs-13.3.0_2026_03_29_bootstrap-1-arm64.hpkg
+			<hg-pool>gcc_syslibs_devel-13.3.0_2026_03_29_bootstrap-1-arm64.hpkg
+			<hg-pool>curl-8.21.0-1-arm64.hpkg
+			<hg-pool>ca_root_certificates-2026_07_16-1-any.hpkg
+			<hg-pool>openssl3-3.5.7-1-arm64.hpkg
+			<hg-pool>zstd-1.5.6-2-arm64.hpkg
+			<hg-pool>nghttp2-1.63.0-1-arm64.hpkg
+			<hg-pool>libssh2-1.11.1-1-arm64.hpkg
+			;
+		SEARCH on $(rustPkgs) = $(HG_POOL_DIR) ;
+		AddPackageFilesToHaikuImage system packages : $(rustPkgs) ;
+	}
 }
