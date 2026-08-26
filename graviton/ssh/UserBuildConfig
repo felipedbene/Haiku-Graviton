@@ -154,9 +154,15 @@ rule UserBuildConfigRulePreImage
 			: webpositive.hpkg : nameFromMetaInfo ;
 
 		# HaikuWebKit's measured runtime closure + the native aarch64-unknown-haiku
-		# Rust toolchain: rustc/cargo, the C linker it drives (gcc + gcc_syslibs
-		# [_devel]) and cargo's HTTPS closure (curl/openssl3/zstd/nghttp2/libssh2 +
-		# CA bundle), so `cargo` and `cargo install` work online out of the box.
+		# Rust toolchain: rustc/cargo and the C linker it drives (gcc) plus cargo's
+		# HTTPS closure (curl/openssl3/zstd/nghttp2/libssh2 + CA bundle), so `cargo`
+		# and `cargo install` work online out of the box. gcc is pooled because the
+		# arm64 mirror does not serve a bare `gcc` compiler; gcc_syslibs and
+		# gcc_syslibs_devel are NOT pooled -- the mirror serves newer, non-bootstrap
+		# builds of them, so pooling the older _bootstrap ones made the solver want
+		# to uninstall them (rust_bin/HaikuWebKit require gcc_syslibs[_devel] >=, and
+		# the mirror copies satisfy that and avoid the bootstrap dangling-libgcc_s
+		# quirk). They resolve automatically as dependencies from the mirror.
 		local poolPkgs =
 			<hg-pool>haikuwebkit-1.10.0-2-arm64.hpkg
 			<hg-pool>jasper-2.0.33-2-arm64.hpkg
@@ -188,8 +194,6 @@ rule UserBuildConfigRulePreImage
 			<hg-pool>zstd-1.5.6-2-arm64.hpkg
 			<hg-pool>rust_bin-1.100.0~nightly_787af2b8c-2-arm64.hpkg
 			<hg-pool>gcc-13.3.0_2026_03_29_bootstrap-1-arm64.hpkg
-			<hg-pool>gcc_syslibs-13.3.0_2026_03_29_bootstrap-1-arm64.hpkg
-			<hg-pool>gcc_syslibs_devel-13.3.0_2026_03_29_bootstrap-1-arm64.hpkg
 			;
 		SEARCH on $(poolPkgs) = $(HG_POOL_DIR) ;
 		AddPackageFilesToHaikuImage system packages : $(poolPkgs) ;
