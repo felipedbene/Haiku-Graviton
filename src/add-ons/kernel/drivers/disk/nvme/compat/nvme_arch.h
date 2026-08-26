@@ -24,7 +24,23 @@
 #endif
 
 
-#define nvme_wmb() memory_write_barrier()
+// The SQ-tail doorbell store (nvme_mmio_write_4 on sq_tdbl) kicks off DMA by an
+// external PCIe master -- on AWS Graviton/Nitro, not one of the CPUs. The SQ
+// entry and PRP-list stores must be visible to that master *before* the
+// doorbell, or it DMA-reads stale/partial descriptors and, worse, stale file
+// data -- which is how a heavy parallel build corrupts freshly written files
+// (undecodable rustc .rmeta, bad-reloc .rcgu.o). memory_write_barrier() is
+// `dsb ishst` (Inner-Shareable): it orders stores only within the CPUs'
+// coherency domain, not out to a DMA master. Linux/Amazon drivers publish to a
+// DMA device with dma_wmb()/wmb() (Outer-Shareable / system), *never* smp_wmb()
+// -- e.g. mic_dma "purposefully not smp_wmb() since we are also publishing to a
+// dma device". Use an Outer-Shareable store barrier on arm64 (the dma_wmb
+// domain, which includes PCIe masters); other arches keep the existing barrier.
+#if defined(__aarch64__)
+#	define nvme_wmb() __asm__ __volatile__("dsb oshst" : : : "memory")
+#else
+#	define nvme_wmb() memory_write_barrier()
+#endif
 
 
 typedef uint8 __u8;
