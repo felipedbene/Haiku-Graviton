@@ -120,17 +120,21 @@ phases:
           cp "$HAIKU_TOP/graviton/ssh/files/$f" "$HG_SSH_DIR/image/$f"
         done
       # ---- inject the UserBuildConfig hook + second jam pass -------------
-      # HAIKU_IMAGE_SIZE (MiB) is the BFS partition size. It must cover the
-      # full-parity closure (WebKit + WebPositive + Rust + the dev toolchain +
-      # mirror-resolved base, ~1.7 GiB) AND leave room for real work on the
-      # booted instance -- a single debug `cargo build` of a mid-size project
-      # (target/ + registry) needs ~2 GiB, and the old 1800 MiB image ran the
-      # root volume to 100% mid-link. 9000 MiB leaves ~7 GiB free. It must stay
-      # under ROOT_VOLUME_BYTES (10 GiB) so make-gpt-image can grow the mmc into
-      # the raw (it requires raw >= mmc). SSH-only bakes are unaffected in size.
+      # HAIKU_IMAGE_SIZE (MiB) is the BFS root-partition size, fixed at bake time
+      # -- the root does NOT auto-grow to a larger EBS (make-gpt-image only grows
+      # the raw volume + relocates the GPT backup header; the partition keeps this
+      # size, and BFS resize-while-mounted is unsupported, so a bigger EBS = wasted
+      # slack). It must cover the full-parity closure (WebKit + Rust + dev
+      # toolchain + base, ~1.7 GiB) AND leave real dev headroom -- several debug
+      # `target/` trees at ~2-4 GiB each. 19000 MiB (~18.6 GiB) leaves ~16 GiB
+      # free. It MUST stay under ROOT_VOLUME_BYTES (20 GiB, cdk.json) so
+      # make-gpt-image can grow the mmc into the raw (raw >= mmc). NOTE:
+      # import-snapshot time scales with image size, so this bake is slower than
+      # the 10 GiB one; don't grow it further without cause. SSH-only bakes are
+      # unaffected. Root-disk auto-grow at first boot is a Stage-4 (FS) item.
       - echo "== inject UserBuildConfig, jam pass 2 (final image with ssh) =="
       - cp "$HAIKU_TOP/graviton/ssh/UserBuildConfig" "$GEN/UserBuildConfig"
-      - HG_POOL_DIR="${HG_POOL_DIR:-}" HG_SSH_DIR="$HG_SSH_DIR" HAIKU_REVISION="$HAIKU_REVISION" jam -q -j"$NPROC" -sHAIKU_IMAGE_SIZE=9000 @minimum-mmc
+      - HG_POOL_DIR="${HG_POOL_DIR:-}" HG_SSH_DIR="$HG_SSH_DIR" HAIKU_REVISION="$HAIKU_REVISION" jam -q -j"$NPROC" -sHAIKU_IMAGE_SIZE=19000 @minimum-mmc
       # ---- MBR mmc -> GPT raw --------------------------------------------
       - echo "== make-gpt-image.sh (MBR -> GPT) =="
       - MMC="$(ls -1 "$GEN"/haiku-mmc.image "$GEN"/haiku-*.mmc "$GEN"/haiku-minimum.mmc 2>/dev/null | head -1)"

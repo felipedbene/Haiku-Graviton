@@ -41,7 +41,7 @@
 
     "//image": "AMI naming + sizing.",
     "haiku:amiNamePrefix": "haiku-graviton",
-    "haiku:rootVolumeBytes": "10737418240",
+    "haiku:rootVolumeBytes": "21474836480",
 
     "//naming": "Deterministic name for the work bucket so the pre-existing vmimport role can be authorized against it out of band (see README).",
     "_comment:workBucketName": "LEAVE THIS EMPTY, and do not set HAIKU_WORK_BUCKET when deploying. The bucket name is a replacement-triggering property: changing it (in either direction, including setting it to the name the bucket already has) makes CloudFormation destroy and recreate the bucket, and the recreate then collides with the retained original. A deploy from a shell that did not have HAIKU_WORK_BUCKET set renamed this bucket once already, which orphaned the vmimport authorization -- the Register stage cannot import a snapshot from a bucket vmimport cannot read -- and left the cross-tools cache behind. Nothing was lost because the bucket is RETAIN, but the next bake would have failed. An always-generated name cannot drift with the environment. Authorize vmimport against whatever name the stack outputs instead of trying to choose it.",
