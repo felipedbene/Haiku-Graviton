@@ -78,7 +78,9 @@ DeBeOS's own work lives in two places; everything else is the inherited tree.
 
 `graviton/docs/` is worth reading before changing anything in the networking or
 timekeeping paths — it records what was measured, what was concluded, and which
-conclusions were later overturned.
+conclusions were later overturned. Package management and distribution (the native
+package manager, and the S3 + CloudFront vending design) are written up under
+[`graviton/docs/packages/`](graviton/docs/packages/).
 
 ## Building
 

@@ -36,6 +36,14 @@ LocalPackageRepository HaikuPorts
 	tiff-4.7.0-1
 	tiff_devel-4.7.0-1
 
+	# OpenSSL/TLS: turns on the openssl build feature (see build/jam/BuildFeatures),
+	# so libnetapi builds BSecureSocket with real TLS instead of the B_UNSUPPORTED
+	# stub. Without it, https:// (any https BUrlRequest -- including https package
+	# repositories) fails with "Operation not supported". Upstream arm64
+	# build-packages does not serve openssl3; we build it natively.
+	openssl3-3.5.7-1
+	openssl3_devel-3.5.7-1
+
 	# HaikuWebKit: turns on the webkit build feature, which is what makes
 	# src/apps/webpositive compile at all (it exits its Jamfile early unless
 	# FIsBuildFeatureEnabled webkit). Built natively on arm64 from our fork of
