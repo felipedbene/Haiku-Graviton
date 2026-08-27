@@ -36,3 +36,10 @@ compile_commands.json
 # must never be committed. Keep the public files free of it.
 CLAUDE.local.md
 AGENTS.local.md
+
+# DeBeOS bug-audit: private/local outputs. Fleet inventory names accounts,
+# instance IDs and other employer-internal hardware details, so it must never be
+# committed to this PUBLIC repo. Per-run generated artifacts stay local too.
+graviton/audit/*.local.md
+graviton/audit/review/
+graviton/audit/reports/
