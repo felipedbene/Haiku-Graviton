@@ -1,0 +1,42 @@
+#!/usr/bin/env bash
+#
+# haiku-s3 -- fast S3 transfers via s5cmd (https://github.com/peak/s5cmd), with a
+# transparent `aws s3` fallback so a missing s5cmd never breaks a build.
+#
+# s5cmd parallelises both many-file syncs (the hpkg pool: ~400 files) and big
+# single objects (the ~19 GB raw image; the cross-tools cache) via concurrent
+# multipart, where `aws s3 cp/sync` is comparatively serial. Every call here
+# still works with plain `aws` if s5cmd is not installed -- that is the point.
+#
+# Usage:
+#   haiku-s3 get       <s3-uri>       <local-file>     # download one object
+#   haiku-s3 put       <local-file>   <s3-uri>         # upload one object
+#   haiku-s3 sync-down <s3-prefix/>   <local-dir/>     # mirror a prefix down
+#   haiku-s3 sync-up   <local-dir/>   <s3-prefix/>     # mirror a dir up
+#
+# Region: $AWS_DEFAULT_REGION / $AWS_REGION (s5cmd reads these too).
+set -uo pipefail
+
+REGION="${AWS_DEFAULT_REGION:-${AWS_REGION:-us-west-2}}"
+have_s5() { command -v s5cmd >/dev/null 2>&1; }
+
+verb="${1:?usage: haiku-s3 get|put|sync-down|sync-up <src> <dst>}"; src="${2:?src}"; dst="${3:?dst}"
+
+case "$verb" in
+  get)
+    if have_s5; then exec s5cmd --log error cp "$src" "$dst"
+    else exec aws s3 cp "$src" "$dst" --region "$REGION"; fi ;;
+  put)
+    if have_s5; then exec s5cmd --log error cp "$src" "$dst"
+    else exec aws s3 cp "$src" "$dst" --region "$REGION"; fi ;;
+  sync-down)
+    # s5cmd sync wants a wildcard source to mirror a prefix's contents
+    s5src="${src%/}/*"
+    if have_s5; then exec s5cmd --log error sync "$s5src" "$dst"
+    else exec aws s3 sync "$src" "$dst" --region "$REGION"; fi ;;
+  sync-up)
+    s5src="${src%/}/*"
+    if have_s5; then exec s5cmd --log error sync "$s5src" "$dst"
+    else exec aws s3 sync "$src" "$dst" --region "$REGION"; fi ;;
+  *) echo "haiku-s3: unknown verb '$verb'" >&2; exit 2 ;;
+esac
