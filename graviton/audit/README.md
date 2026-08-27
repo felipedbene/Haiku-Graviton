@@ -6,6 +6,14 @@ writes to the working tree, never commits, and never builds (there is no `aarch6
 cross-toolchain on the analysis host). Every fix comes back as a reviewable diff plus a Graviton
 hardware-verification plan.
 
+> **v2 (2026-08-27).** The interactive and overnight workflows are now **one** parameterized
+> workflow (`debeos-bugfix.workflow.js`). The v1 split let the interactive path drift *without* the
+> adversarial-verify stage — its shakedown returned 4/4 false-positives with no cross-check. v2 folds
+> in the overnight run's lessons: **verify is always on**, the **prosecutor is weighted** toward the
+> high-surface / FP-prone findings where the missed bugs hid, and a new **Adjudicate** stage resolves
+> every disputed false-positive to a verdict instead of leaving it for the human. See
+> `AUDIT_LOG.md` for the run that motivated each change.
+
 ## Pieces
 
 | File | Role |
@@ -13,62 +21,87 @@ hardware-verification plan.
 | `../../FINDINGS.md` | Phase 1+2 output: full static-sweep table + known-upstream cross-reference. |
 | `../../PRIORITY.md` | Phase 3 output: top-28 ranked candidates for a deep pass. |
 | `agent-sops/debeos-bugfix.sop.md` | The per-finding unit of work (RFC-2119 SOP). Confirm → classify → minimal-fix-as-diff → static self-verify → commit message + hardware plan. Runnable standalone by any agent. |
-| `agent-sops/debeos-hardware-proof.sop.md` | **Morning runbook** (gated, mutating): takes the overnight scoreboard's surviving real-bugs → topic branch → **build** on the cross-compile host → bake `candidate=true` AMI → boot a disposable target → run the subsystem workload → **human promotion gate** → `haiku-canonical promote` → teardown. Fail-closed; canonical untouched until approval. |
-| `debeos-bugfix.workflow.js` | Interactive fan-out: parse `PRIORITY.md` → one SOP agent per finding (own scratch worktree) → one review batch. Good for a small, targeted slice. |
-| `collect_candidates.py` | **Deterministic** collect+cluster: `FINDINGS.md` → active-surface bug-shaped findings, near-duplicates clustered, FP-prone value-flow checks on vendored/BSD down-ranked. Emits the `findings` array for the overnight run. |
-| `debeos-bugfix-overnight.workflow.js` | **Unattended overnight** orchestrator: SOP per cluster → **two-sided adversarial verify** (refuters attack real-bugs; a **prosecutor** attacks each false-positive → `disputed-FP` for human review) → morning **scoreboard** + review. Idempotent (skips finished reports), resumable, propose-only, no AWS. |
-| `review/latest-review.md`, `review/overnight-review.md`, `review/overnight-scoreboard.md` | Generated review artifacts (gitignored) — the human approval gate. |
+| `agent-sops/debeos-hardware-proof.sop.md` | **Morning runbook** (gated, mutating): surviving real-bugs → topic branch → **build** on the cross-compile host → bake `candidate=true` AMI → boot a disposable target → run the subsystem workload → **human promotion gate** → `haiku-canonical promote` → teardown. Fail-closed; canonical untouched until approval. |
+| `collect_candidates.py` | **Deterministic** collect+cluster: `FINDINGS.md` → active-surface bug-shaped findings, near-duplicates clustered, FP-prone value-flow checks on vendored/BSD down-ranked. Emits the `findings` array for the overnight mode. |
+| `debeos-bugfix.workflow.js` | **The workflow.** Collect → SOP-per-finding (isolated worktree) → two-sided adversarial verify (refuters attack real-bugs; weighted prosecutors attack false-positives) → **Adjudicate** each dispute → scoreboard + review. Propose-only, idempotent (skips finished reports), resumable, no AWS. Runs both a targeted slice and the full overnight sweep — pick with `args.mode`. |
+| `review/*-review.md`, `review/*-scoreboard.md`, `review/candidates.json` | Generated review artifacts (gitignored) — the human approval gate. |
 
-## Overnight run
+## The workflow (one file, two modes)
 
-```
-python3 graviton/audit/collect_candidates.py FINDINGS.md > /tmp/candidates.json   # deterministic collect+cluster
-# then pass its contents as args.findings:
-Workflow({ scriptPath: ".../graviton/audit/debeos-bugfix-overnight.workflow.js",
-           args: { findings: <contents of candidates.json>, refuters: 2 } })
-```
-- **Unattended-safe:** propose-only (no writes/commits) and **needs no AWS** — the 1-hour STS creds
-  can lapse overnight without affecting it. Hardware proof stays a separate daytime gated step.
-- **Resumable:** relaunch with `resumeFromRunId: <run>`; unchanged agents replay from cache, and each
-  finding's report persists on disk.
-- **Scale note:** processes all clusters (≈139 for the current tree) — far above the ≤15-agent
-  workflow-size guideline, which is expected for an explicitly-requested overnight run (raise/relax
-  it in `/config` → Dynamic workflow size if the harness caps it).
-- **Morning:** read `review/overnight-scoreboard.md` first (surviving real-bugs, FP rate), then the
-  full `review/overnight-review.md` for diffs.
+`args.mode` is inferred from what you pass, or forced explicitly:
 
-## Running it
+- **`slice`** — a small, targeted set parsed from `PRIORITY.md`. Default when you pass
+  `subsystems`/`limit` (or nothing). Keeps the fan-out near the ≤15-agent guideline.
+- **`overnight`** — the full clustered sweep. Default when you pass `findings` or `candidates_file`.
+
+### Slice (targeted)
 
 ```
 Workflow({ scriptPath: "<repo>/graviton/audit/debeos-bugfix.workflow.js",
            args: { subsystems: ["bfs"], limit: 6 } })
 ```
 
+### Overnight (unattended, full sweep)
+
+```
+python3 graviton/audit/collect_candidates.py FINDINGS.md > graviton/audit/review/candidates.json
+Workflow({ scriptPath: "<repo>/graviton/audit/debeos-bugfix.workflow.js",
+           args: { mode: "overnight", refuters: 2 } })          # loads candidates.json by default
+```
+
+- **Unattended-safe:** propose-only (no writes/commits) and **needs no AWS** — the 1-hour STS creds
+  can lapse overnight without affecting it. Hardware proof stays a separate daytime gated step.
+- **Resumable:** relaunch with `resumeFromRunId: <run>`; unchanged agents replay from cache, and each
+  finding's report persists on disk (the Fix stage skips any finding whose report already exists).
+- **Scale note:** overnight processes all clusters (≈139 for the current tree) — far above the
+  ≤15-agent guideline, which is expected for an explicitly-requested overnight run (raise/relax it in
+  `/config` → Dynamic workflow size if the harness caps it).
+- **Morning:** read `review/overnight-scoreboard.md` first — the **adjudicated-real** section is the
+  highest value (disputes the first pass got wrong), then the full `review/overnight-review.md`.
+
 `args` (all optional):
-- `subsystems`: array of `ena` / `network-stack` / `bfs` / `app_server-remote` / `kernel/arm64`. Omit = all active-surface.
-- `limit`: max findings this run (default 10). Keeps the fan-out near the ≤15-agent guideline; the workflow `log()`s whatever it defers rather than silently dropping.
+- `mode`: `slice` | `overnight` (inferred if omitted).
+- `subsystems`: array of `ena` / `network-stack` / `bfs` / `app_server-remote` / `kernel/arm64` (slice). Omit = all active-surface.
+- `limit`: max findings for a slice run (default 10); the workflow `log()`s whatever it defers rather than silently dropping.
+- `findings` / `candidates_file`: pre-parsed clustered array (overnight); defaults to `graviton/audit/review/candidates.json`.
+- `refuters` (default 2): defenders per real-bug (majority-refute kills it).
+- `prosecutors` (default 1): baseline offense per false-positive; **auto-raised** to 2–3 on high-surface (`ena`/`network-stack`) and FP-prone/vendored findings.
+- `adjudicators` (default 1): judges per disputed-FP (majority verdict; any `real-bug` majority promotes it).
 - `repo_root` (default `/local/home/benfelip/Haiku-Graviton`), `scratch_root` (default `/tmp/debeos-bugfix`).
-- `findings`: supply a pre-parsed findings array to skip the `PRIORITY.md` parse (for re-runs).
 
 Standalone (one finding, no workflow): dispatch an agent to read
 `agent-sops/debeos-bugfix.sop.md` and follow it with `finding`, `repo_root`, and `output_file`.
 
+## Adversarial verify + adjudicate (why two-sided, then a judge)
+
+The base SOP verdict is not trustworthy at scale — the overnight run hit a **94.9% false-positive
+rate** *and* mislabelled ≥4 real-ish findings as false-positive. Two roles attack it, and a third
+resolves the fight:
+
+- **Refuters** (defense) attack each `real-bug` — try to prove the fix over-reaches or the bug is an
+  FP. Majority-refute demotes it.
+- **Prosecutors** (offense) attack each `false-positive` — try to build a concrete triggering path
+  (callers, error paths, lock scopes, ARM64 weak-memory reordering) that makes the dismissal wrong.
+  A credible path marks the finding **disputed**. These are where the missed bugs live, so v2 spends
+  more prosecutors exactly on the high-surface / FP-prone findings.
+- **Adjudicator** (judge) reads the *code* plus both arguments for every dispute and rules it
+  `real-bug` (says whether the prosecutor located the root cause correctly), `false-positive`
+  (dismissal upheld), or `needs-hardware`. Disputes come back **resolved**, not dumped on the human.
+
 ## Morning run (hardware-proof & promotion)
 
-After the overnight run completes, follow `agent-sops/debeos-hardware-proof.sop.md` (needs **refreshed
-AWS creds** — the overnight STS token will have expired):
+After a run completes, follow `agent-sops/debeos-hardware-proof.sop.md` (needs **refreshed AWS
+creds** — the overnight STS token will have expired):
 
 ```
 Pre-flight (creds live? tree synced? read scoreboard) → topic branch + apply approved diffs
- → build on haiku-builder3 (fail-closed) → bake candidate=true AMI → boot disposable target
+ → build on the cross-compile host (fail-closed) → bake candidate=true AMI → boot disposable target
  → run subsystem workload (BFS durability / jumbo iperf / ena_fault / metal boot)
  → PROMOTION GATE (human "yes") → haiku-canonical promote → teardown + AUDIT_LOG entry
 ```
 
 Every mutating step (start builder, bake, launch, SG rule, promote) is **confirmed**; a build
-failure or failed workload **rejects** the fix; canonical is never touched until the gate. This is a
-sequential gated runbook, not an autonomous fan-out — the mutations and cost make human gates the
-right control.
+failure or failed workload **rejects** the fix; canonical is never touched until the gate.
 
 ## Guardrails (enforced by the SOP)
 
