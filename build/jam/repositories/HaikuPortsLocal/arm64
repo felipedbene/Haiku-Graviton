@@ -40,9 +40,12 @@ LocalPackageRepository HaikuPorts
 	# so libnetapi builds BSecureSocket with real TLS instead of the B_UNSUPPORTED
 	# stub. Without it, https:// (any https BUrlRequest -- including https package
 	# repositories) fails with "Operation not supported". Upstream arm64
-	# build-packages does not serve openssl3; we build it natively.
+	# build-packages does not serve openssl3; we build it natively. openssl3
+	# requires lib:libzstd (and lib:libz, satisfied by the base zlib), so zstd
+	# must be local too or the image solver fails "nothing provides lib:libzstd".
 	openssl3-3.5.7-1
 	openssl3_devel-3.5.7-1
+	zstd-1.5.6-2
 
 	# HaikuWebKit: turns on the webkit build feature, which is what makes
 	# src/apps/webpositive compile at all (it exits its Jamfile early unless
