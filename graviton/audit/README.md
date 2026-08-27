@@ -24,6 +24,9 @@ hardware-verification plan.
 | `agent-sops/debeos-hardware-proof.sop.md` | **Morning runbook** (gated, mutating): surviving real-bugs → topic branch → **build** on the cross-compile host → bake `candidate=true` AMI → boot a disposable target → run the subsystem workload → **human promotion gate** → `haiku-canonical promote` → teardown. Fail-closed; canonical untouched until approval. |
 | `collect_candidates.py` | **Deterministic** collect+cluster: `FINDINGS.md` → active-surface bug-shaped findings, near-duplicates clustered, FP-prone value-flow checks on vendored/BSD down-ranked. Emits the `findings` array for the overnight mode. |
 | `debeos-bugfix.workflow.js` | **The workflow.** Collect → SOP-per-finding (isolated worktree) → two-sided adversarial verify (refuters attack real-bugs; weighted prosecutors attack false-positives) → **Adjudicate** each dispute → scoreboard + review. Propose-only, idempotent (skips finished reports), resumable, no AWS. Runs both a targeted slice and the full overnight sweep — pick with `args.mode`. |
+| `ENHANCEMENTS.md` | The curated **enhancement backlog** (the `PRIORITY.md` analogue for features). Hand-written; each entry carries a measurable acceptance criterion. |
+| `agent-sops/debeos-enhance.sop.md` | The per-enhancement unit of work: assess worth+feasibility → implement as a **full diff** → static self-check → commit message + hardware plan. Propose-only. |
+| `debeos-enhance.workflow.js` | **The enhancement workflow.** Collect (`ENHANCEMENTS.md`) → SOP-per-enhancement (isolated worktree, full diff) → **pragmatic champion-vs-skeptic** review → scoreboard + review. Shorter than the bug-fix pass (no false-positive branch, no prosecutor/adjudicator). |
 | `review/*-review.md`, `review/*-scoreboard.md`, `review/candidates.json` | Generated review artifacts (gitignored) — the human approval gate. |
 
 ## The workflow (one file, two modes)
@@ -87,6 +90,32 @@ resolves the fight:
 - **Adjudicator** (judge) reads the *code* plus both arguments for every dispute and rules it
   `real-bug` (says whether the prosecutor located the root cause correctly), `false-positive`
   (dismissal upheld), or `needs-hardware`. Disputes come back **resolved**, not dumped on the human.
+
+## Enhancements (debeos-enhance)
+
+The same shape as the bug-fix pass, but for *chosen* improvements rather than static-analysis
+findings — so it is **shorter**. An enhancement is not a maybe-noise finding, so there is **no
+false-positive branch, no prosecutor, and no adjudicator**; the Verify phase becomes a single
+**pragmatic champion-vs-skeptic** review.
+
+```
+Workflow({ scriptPath: "<repo>/graviton/audit/debeos-enhance.workflow.js",
+           args: { subsystems: ["ena"], limit: 4 } })
+```
+
+- **Collect** — parse `ENHANCEMENTS.md` (curated backlog; filter by `args.subsystems`/`args.limit`).
+- **Design** — one SOP agent per enhancement, isolated worktree, implements a **full unified diff**
+  (or returns `needs-decomposition` / `reject` / `out-of-scope`).
+- **Review** — a **champion** (does it deliver the acceptance criterion? worth shipping?) and a
+  **skeptic** (concrete blocker only: real regression, scope-creep, a genuinely simpler equivalent,
+  or it doesn't deliver — *not* taste). Pragmatic rule: **ship-ready unless there's a material
+  blocker**.
+- **Report** — `review/enhance-scoreboard.md` + `review/enhance-review.md`.
+
+`args`: `subsystems`, `limit` (default 8 — full diffs are heavier), `enhancements` (pre-parsed array
+to skip the backlog parse), `backlog_file`, `repo_root`, `scratch_root`. Same guardrails as the
+bug-fix pass (propose-only, active-surface only, one enhancement per commit); a ship-ready diff still
+goes through the same `debeos-hardware-proof` pipeline runbook before it lands in canonical.
 
 ## Morning run (hardware-proof & promotion)
 
