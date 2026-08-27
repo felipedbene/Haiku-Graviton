@@ -172,6 +172,7 @@ static bool sInitialized;
 
 family::family(int _type)
 	:
+	next(NULL),
 	type(_type),
 	ref_count(0)
 {
@@ -229,6 +230,7 @@ family::Add(int type)
 
 chain::chain(int _family, int _type, int _protocol)
 	:
+	next(NULL),
 	family(_family),
 	type(_type),
 	protocol(_protocol),
@@ -439,6 +441,11 @@ get_domain_protocols(net_socket* socket)
 
 	// create net_protocol objects for the protocols in the chain
 	if (chain == NULL || chain->Acquire() != B_OK) {
+		// sFamilies is protected by sChainLock (family::Add/Release take it);
+		// this lookup must too, or it races a concurrent insert -- on arm64's
+		// weak memory model the reader can observe a just-published family node
+		// before its link fields are visible.
+		MutexLocker _(sChainLock);
 		if (::family::Lookup(socket->family) == NULL)
 			return EAFNOSUPPORT;
 		if (socket->type != 0 && socket->protocol == 0)
