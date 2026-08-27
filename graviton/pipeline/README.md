@@ -190,6 +190,7 @@ npx cdk diff         # safe — compares against deployed state
 # --- everything below creates/changes AWS resources; operator's call ---
 npx cdk deploy \
   -c haiku:repoOwner=<you> \
+  -c haiku:repoName=<repo> \
   -c haiku:builderInstanceId=i-<the c7g.metal builder> \
   -c haiku:connectionArn=arn:aws:codeconnections:us-west-2:<account-id>:connection/<uuid>
 ```
@@ -198,11 +199,38 @@ npx cdk deploy \
 CLI sets from the credentials you are already using. The connection ARN and the
 builder instance id are not stored in `cdk.json` because both embed identifiers
 this repository does not carry; pass them per deploy, or export `HAIKU_*`.
+`haiku:repoName` defaults to `haiku`, which is not this fork's name — pass it too.
+
+> **Deploy from a `graviton` checkout that is synced with `origin`.** The
+> CodeBuild environment this deploy bakes in — the root volume size
+> (`rootVolumeBytes`), the image size, whether the perf-gate **Test** stage
+> exists — comes from the branch you run `cdk deploy` *on*, independently of the
+> branch the pipeline later pulls as its git *source*. Deploying from a stale
+> topic branch silently regresses the live pipeline (it can reset
+> `rootVolumeBytes` to an old value and delete the Test stage). Before deploying,
+> confirm `git rev-parse graviton` equals `origin/graviton` and that `cdk.json`
+> shows the intended `rootVolumeBytes`.
 
 A bake run is **manual**: `triggerOnPush` is off (bakes are expensive), so start
 executions from the CodePipeline console/CLI. When the pipeline reaches
 **Approve**, review the candidate AMI id (surfaced in the approval message as
 `#{reg.AMI_ID}`) — boot-test it — then approve to run **Promote**.
+
+### Validating a candidate without the promotion gate
+
+The **Register** stage tags the new AMI `candidate=true` *before* Test/Approve/
+Promote, so a candidate can be validated even when the Test stage cannot run
+(e.g. the builder that drives the perf gate is stopped):
+
+1. Find it: `aws ec2 describe-images --owners self --filters Name=tag:candidate,Values=true`.
+2. Launch an instance from it on the instance type you care about, boot, and run
+   a representative workload. For the developer image that means a **parallel**
+   `cargo build` of a real project while watching `df` for headroom — the
+   [out-of-space post-mortem](../docs/arm64-native-build-out-of-space.md)
+   explains why a too-small root partition looks like build corruption.
+3. Promote when satisfied — `graviton/scripts/haiku-canonical promote <ami-id>`
+   (atomic; preserves the single-canonical invariant) — or approve the pipeline's
+   Approve step to run Promote.
 
 ### What deploying creates
 
