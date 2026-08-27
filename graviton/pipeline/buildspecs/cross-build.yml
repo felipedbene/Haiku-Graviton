@@ -97,7 +97,16 @@ phases:
       # (A FATTY bake would sync s3://$WORK_BUCKET/hpkg-pool/ and export HG_FATTY=1.)
       - export HG_POOL_DIR="$HAIKU_TOP/hpkg-pool"
       - mkdir -p "$HG_POOL_DIR"
-      - aws s3 sync "s3://$WORK_BUCKET/hpkg-pool-lean/" "$HG_POOL_DIR/" --region "$AWS_DEFAULT_REGION" || echo "no lean hpkg pool"
+      # Pull ONLY the lean set (openssl3 + openssl3_devel + zstd) out of the
+      # granted hpkg-pool/ prefix. The CrossBuild role's grantRead covers
+      # hpkg-pool/* but NOT a separate hpkg-pool-lean/* prefix, so syncing a
+      # dedicated lean prefix 403s (s3:GetObject AccessDenied) and silently
+      # drops openssl3 -- then "AddHaikuImagePackages: package openssl3 not
+      # available!", the openssl/TLS build feature never turns on, and
+      # BSecureSocket ships as the B_UNSUPPORTED stub (https "Operation not
+      # supported"). Filtering the already-granted pool keeps the image lean
+      # (3 packages, not the full ~69) without an IAM/pipeline redeploy.
+      - aws s3 sync "s3://$WORK_BUCKET/hpkg-pool/" "$HG_POOL_DIR/" --region "$AWS_DEFAULT_REGION" --exclude "*" --include "openssl3-*" --include "openssl3_devel-*" --include "zstd-*" || echo "no lean hpkg pool"
       - |
         if [ -z "$(ls -A "$HG_POOL_DIR" 2>/dev/null)" ]; then
           echo "empty hpkg pool; SSH-only image"; unset HG_POOL_DIR
