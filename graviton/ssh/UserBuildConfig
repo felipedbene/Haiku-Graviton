@@ -139,14 +139,17 @@ rule UserBuildConfigRulePreImage
 	AddGroupToHaikuImage sshd : 999 : ;
 
 	# --- Full canonical closure: WebPositive + HaikuWebKit + Rust ----------
-	# Added only when the bake supplies the hpkg pool (HG_POOL_DIR set by the CI
-	# cross-build, which also stages the translator + webkit build-feature
-	# packages BEFORE jam). With a pool this reproduces the full canonical image
+	# Added only for a FATTY bake (HG_FATTY set by the CI cross-build alongside a
+	# full hpkg pool). With HG_FATTY this reproduces the full canonical image
 	# (WebPositive/HaikuWebKit, the PNG/JPEG/TIFF/JPEG2000 translators via the
-	# now-enabled build features, and the native Rust toolchain); with no pool it
-	# stays SSH-only. The translator runtime libs (libpng16/libjpeg_turbo/tiff/
-	# jasper) are omitted here on purpose -- their build features place them.
-	if $(HG_POOL_DIR) {
+	# now-enabled build features, and the native Rust toolchain). A LEAN modular
+	# bake leaves HG_FATTY unset: it still stages the small openssl pool (so the
+	# openssl/TLS build feature turns on) but force-adds NONE of these, keeping
+	# the image at ~@minimum footprint -- every feature below is then installed
+	# on demand from the baked DeBeOS repo. The translator runtime libs
+	# (libpng16/libjpeg_turbo/tiff/jasper) are omitted here on purpose -- their
+	# build features place them.
+	if $(HG_FATTY) {
 		Echo "haiku-graviton: adding WebPositive + HaikuWebKit + Rust from $(HG_POOL_DIR)" ;
 
 		# WebPositive, built from this tree by the (staged) webkit build feature.

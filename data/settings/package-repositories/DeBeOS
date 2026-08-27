@@ -9,12 +9,14 @@ cfgversion=2
 # -- no other change needed. Fronted by Cloudflare -> CloudFront -> private S3.
 baseurl=http://packages.debene.dev/arm64
 
-# Stable identifier, consistent across mirrors. MUST equal the published
-# repo.info's identifier, so a later `pkgman add-repo http://packages.debene.dev/arm64`
-# recognises the same repo instead of double-registering it.
-identifier=tag:debeos.dev,2026:repositories/debeos/arm64
+# Stable identifier -- MUST equal the published repo.info's `url` field, so a
+# later `pkgman add-repo http://packages.debene.dev/arm64` recognises the same
+# repo instead of double-registering it. haiku-repo-publish writes the repo.info
+# `url` as the baseurl, so we match that here. (A future improvement is to
+# standardise both on a tag: URI, which needs the index rebuilt in lockstep.)
+identifier=http://packages.debene.dev/arm64
 
 # Deprecated alias of [identifier] for older OS versions.
-url=tag:debeos.dev,2026:repositories/debeos/arm64
+url=http://packages.debene.dev/arm64
 
 priority=1

@@ -85,17 +85,19 @@ phases:
             --cross-tools-source "$BUILDTOOLS" \
             --use-gcc-pipe -j"$NPROC"
         fi
-      # ---- stage local packages -> turn ON the build features ------------
-      # The full canonical needs the translator (jasper/jpeg/png/tiff) and
-      # HaikuWebKit build features, which only enable when their hpkgs are
-      # staged into $GEN/download (see build/jam/repositories/HaikuPortsLocal).
-      # Sync the hpkg pool from the work bucket and stage it BEFORE jam so both
-      # passes build with the features on. HG_POOL_DIR persists to jam pass 2,
-      # where UserBuildConfig adds the WebKit runtime closure + Rust from it.
-      # A bake with no pool stays SSH-only (HG_POOL_DIR unset -> guards skip).
+      # ---- stage local packages -> turn ON the openssl build feature -----
+      # LEAN MODULAR BAKE. This branch bakes a lean image (~@minimum footprint):
+      # it stages ONLY the small openssl pool (openssl3/openssl3_devel/zstd) so
+      # the openssl/TLS build feature turns on, and it deliberately does NOT set
+      # HG_FATTY, so UserBuildConfig force-adds none of the WebKit/Rust/dev
+      # closure -- every fatty feature is installed on demand from the baked
+      # DeBeOS repo instead. haiku-stage-local-packages will report the other
+      # HaikuPortsLocal entries as "MISSING in pool" and exit non-zero; that is
+      # expected and tolerated (their build features simply stay off).
+      # (A FATTY bake would sync s3://$WORK_BUCKET/hpkg-pool/ and export HG_FATTY=1.)
       - export HG_POOL_DIR="$HAIKU_TOP/hpkg-pool"
       - mkdir -p "$HG_POOL_DIR"
-      - aws s3 sync "s3://$WORK_BUCKET/hpkg-pool/" "$HG_POOL_DIR/" --region "$AWS_DEFAULT_REGION" || echo "no hpkg pool"
+      - aws s3 sync "s3://$WORK_BUCKET/hpkg-pool-lean/" "$HG_POOL_DIR/" --region "$AWS_DEFAULT_REGION" || echo "no lean hpkg pool"
       - |
         if [ -z "$(ls -A "$HG_POOL_DIR" 2>/dev/null)" ]; then
           echo "empty hpkg pool; SSH-only image"; unset HG_POOL_DIR
