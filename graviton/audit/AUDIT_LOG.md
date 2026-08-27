@@ -138,3 +138,33 @@ canonical AMI.
 fix-agent dismissed D1, the prosecutor re-opened it but pinned the wrong root cause, and only reading
 the lock scopes by hand located the actual unlocked-read race. The adjudicator stage exists to make
 that step routine rather than heroic.
+
+### Slice run (2026-08-27, v2 validation, network-stack/bfs/ena, 4 findings)
+
+First run of the unified v2 workflow, on the four highest-value un-mined leads: `arp.cpp:896`
+(null `entry`), `BPlusTree.cpp:1458` and `BlockAllocator.cpp:890` (the only static∩upstream
+matches), and ENA `ena_eth_com.c:46` (int-mult-as-pointer). **13 agents, 0 errors, ~4.5 min.
+Result: 4/4 false-positive, 0 real, 0 disputed.** Independently re-read; all four dismissals
+are correct:
+- `arp.cpp:896` — the `ARP_GET_ENTRIES` ioctl handler, **not** the L2 send hot path the finding
+  claimed; `entry` is provably non-NULL (the `i <= cookie` unsigned loop runs ≥1 pass, each pass
+  returns or assigns a non-NULL `iterator.Next()`). The finding also mislocated the code.
+- `BPlusTree.cpp:1458` — a legitimate bounds guard rejecting the one remaining OOB value
+  (`NumKeys()+1`); `NumKeys()` is an on-disk `uint16` the analyzer can't see, so not always-true.
+  It is the *correct* defense against the corruption class behind #11399/#14180, not a bug.
+- `BlockAllocator.cpp:890` — cppcheck is factually right it's always-true (complement of the
+  line-885 `continue`), but it's a benign redundant guard (2008 upstream), no defect; the #20230
+  negative-block tie is unsupported.
+- `ena_eth_com.c:46` — u16×u8 index math bounded by queue depth (~1.7e7 ≪ INT_MAX); no overflow.
+
+**Consequence:** the audit's remaining BFS/arp/ENA static leads are **retired**. Combined with the
+earlier radix.c retirement, the whole audit's confirmed real bugs are exactly three:
+`bluetooth_address.cpp:221`, `UnixDatagramEndpoint.cpp:24`, and the D1 `stack.cpp` unlocked-lookup
+race — all staged on `audit/hw-proof-2026-08-27`.
+
+**Tooling notes:** v2 ran clean end-to-end and the weighted prosecutor fired (3 prosecutors on the
+ENA/arp findings). But because no dismissal was disputed, the new **Adjudicate stage was still not
+exercised in practice** — its first real test is a future run that produces a genuine dispute. The
+`debeos-hardware-proof.sop.md` runbook was retargeted this round from the hand-driven metal builder
+to the `haiku-graviton-bake` CodePipeline (CrossBuild in CodeBuild → Register `candidate=true` →
+perf-gate → manual Approve → Promote); the c9g.metal is kept only for native/KVM builds.
