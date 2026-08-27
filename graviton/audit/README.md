@@ -27,6 +27,7 @@ hardware-verification plan.
 | `ENHANCEMENTS.md` | The curated **enhancement backlog** (the `PRIORITY.md` analogue for features). Hand-written; each entry carries a measurable acceptance criterion. |
 | `agent-sops/debeos-enhance.sop.md` | The per-enhancement unit of work: assess worth+feasibility → implement as a **full diff** → static self-check → commit message + hardware plan. Propose-only. |
 | `debeos-enhance.workflow.js` | **The enhancement workflow.** Collect (`ENHANCEMENTS.md`) → SOP-per-enhancement (isolated worktree, full diff) → **pragmatic champion-vs-skeptic** review → scoreboard + review. Shorter than the bug-fix pass (no false-positive branch, no prosecutor/adjudicator). |
+| `debeos-feature-cook.workflow.js` | **The feature-cook front half.** Given a feature spec (+ optional design doc): decompose → investigate the source (fan-out) → synthesize diffs → adversarially verify each → assemble a **bake-ready batch**. Propose-only; hands off to the hardware-proof SOP for the gated tail. Generalises the per-feature investigate→diff→verify pattern. |
 | `review/*-review.md`, `review/*-scoreboard.md`, `review/candidates.json` | Generated review artifacts (gitignored) — the human approval gate. |
 
 ## The workflow (one file, two modes)
@@ -116,6 +117,42 @@ Workflow({ scriptPath: "<repo>/graviton/audit/debeos-enhance.workflow.js",
 to skip the backlog parse), `backlog_file`, `repo_root`, `scratch_root`. Same guardrails as the
 bug-fix pass (propose-only, active-surface only, one enhancement per commit); a ship-ready diff still
 goes through the same `debeos-hardware-proof` pipeline runbook before it lands in canonical.
+
+## Feature cooking (end to end)
+
+"Cooking a feature" = taking an idea to a promoted canonical AMI. It is deliberately split into an
+**automated front half** (a workflow) and a **human-gated tail** (an SOP) — because the tail mutates
+trunk, bakes images, and moves the canonical tag, which must not be a headless fan-out.
+
+```
+spec / design doc
+   │
+   ▼  debeos-feature-cook.workflow.js          (automated, propose-only, no AWS)
+   │    decompose → investigate (fan-out) → synthesize diffs → adversarial verify → bake-ready batch
+   ▼
+stage confirmed diffs on a topic branch  →  PR → merge to graviton   (human review)
+   │
+   ▼  agent-sops/debeos-hardware-proof.sop.md   (gated, mutating)
+        bake candidate=true (pipeline) → boot disposable target → run the hardware_plan
+        → HUMAN promotion gate → haiku-canonical promote → teardown
+```
+
+- The workflow never builds (no cross-toolchain on the analysis host) and never commits — it emits
+  diffs + the hardware plan.
+- The pipeline builds from `graviton`, so the confirmed diffs land via a normal PR before the bake.
+- Canonical only moves behind the explicit human gate in the SOP.
+
+Run the front half:
+
+```
+Workflow({ scriptPath: "<repo>/graviton/audit/debeos-feature-cook.workflow.js",
+           args: { spec: "<what to build + measured ground truth>",
+                   design_doc: "graviton/docs/packages/vending-design.md" } })   # design_doc optional
+```
+
+`args`: `spec` (feature brief) and/or `design_doc` (repo-relative path read as authoritative);
+`max_angles` (default 4); `repo_root`; `out` (scratch dir). The worked reference example is the
+pkgman remote-repo feature (`graviton/docs/packages/vending-design.md` §4).
 
 ## Morning run (hardware-proof & promotion)
 
