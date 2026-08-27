@@ -1256,6 +1256,17 @@ VMAnonymousCache::_MergePagesSmallerConsumer(VMAnonymousCache* source)
 					&& sourcePage->mappings.IsEmpty(),
 				"sourcePage: %p, page: %p", sourcePage, page);
 			source->RemovePage(sourcePage);
+			if (sourcePage->State() == PAGE_STATE_MODIFIED) {
+				// A page can't be freed while MODIFIED: vm_page_free_etc()
+				// asserts this because the modified queue can't be resolved at
+				// free time. This source page is shadowed by the consumer page
+				// at the same offset and is being discarded, so its contents
+				// are stale and no writeback is needed -- just clear the
+				// modified state, exactly as the sibling free paths do
+				// (VMCache::Delete/Resize/FlushAndRemoveAllPages).
+				sourcePage->modified = false;
+				vm_page_set_state(sourcePage, PAGE_STATE_CACHED);
+			}
 			vm_page_free_etc(source, sourcePage, &reservation);
 		}
 
@@ -1308,6 +1319,14 @@ VMAnonymousCache::_MergeSwapPages(VMAnonymousCache* source)
 						DEBUG_PAGE_ACCESS_START(page);
 						ASSERT_PRINT(!page->busy, "page: %p", page);
 						source->RemovePage(page);
+						if (page->State() == PAGE_STATE_MODIFIED) {
+							// Shadowed by a consumer swap page and discarded;
+							// clear MODIFIED before freeing, as freeing a
+							// MODIFIED page is not allowed (see the comment in
+							// _MergePagesSmallerConsumer).
+							page->modified = false;
+							vm_page_set_state(page, PAGE_STATE_CACHED);
+						}
 						vm_page_free(source, page);
 					}
 				}
