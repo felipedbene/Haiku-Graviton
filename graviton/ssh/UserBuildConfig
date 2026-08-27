@@ -155,8 +155,14 @@ rule UserBuildConfigRulePreImage
 
 		# HaikuWebKit's measured runtime closure + the native aarch64-unknown-haiku
 		# Rust toolchain: rustc/cargo and the C linker it drives (gcc) plus cargo's
-		# HTTPS closure (curl/openssl3/zstd/nghttp2/libssh2 + CA bundle), so `cargo`
-		# and `cargo install` work online out of the box. gcc is pooled because the
+		# HTTPS closure (curl/nghttp2/libssh2 + CA bundle), so `cargo` and
+		# `cargo install` work online out of the box. openssl3 and its zstd
+		# dependency are NOT pooled here: they are declared in
+		# repositories/HaikuPortsLocal/arm64 and installed by the minimum
+		# profile's by-name `AddHaikuImageSystemPackages openssl3` (which also
+		# turns on the `openssl` build feature). Pooling them too would double-add
+		# openssl3/zstd and make the image solver "would need to uninstall" them.
+		# gcc is pooled because the
 		# arm64 mirror does not serve a bare `gcc` compiler; gcc_syslibs and
 		# gcc_syslibs_devel are NOT pooled -- the mirror serves newer, non-bootstrap
 		# builds of them, so pooling the older _bootstrap ones made the solver want
@@ -187,11 +193,9 @@ rule UserBuildConfigRulePreImage
 			<hg-pool>libxslt-1.1.45-2-arm64.hpkg
 			<hg-pool>ncurses6-6.6_bootstrap-1-arm64.hpkg
 			<hg-pool>nghttp2-1.63.0-1-arm64.hpkg
-			<hg-pool>openssl3-3.5.7-1-arm64.hpkg
 			<hg-pool>readline-8.3.003-1-arm64.hpkg
 			<hg-pool>sqlite-3.50.4.0-1-arm64.hpkg
 			<hg-pool>woff2-1.0.2-3-arm64.hpkg
-			<hg-pool>zstd-1.5.6-2-arm64.hpkg
 			<hg-pool>rust_bin-1.100.0~nightly_787af2b8c-2-arm64.hpkg
 			<hg-pool>gcc-13.3.0_2026_03_29_bootstrap-1-arm64.hpkg
 			# Archiving tools (cargo/dev workflows expect them, and the arm64

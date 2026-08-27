@@ -39,11 +39,21 @@ LocalPackageRepository HaikuPorts
 	# OpenSSL/TLS: turns on the openssl build feature (build/jam/BuildFeatures),
 	# so libnetapi builds BSecureSocket with real TLS instead of the
 	# B_UNSUPPORTED stub -- required for https:// (any https BUrlRequest,
-	# including https package repositories). Only openssl3_devel is declared
-	# here: the base openssl3 (added by the minimum profile) already resolves
-	# from the downloads-on companion repo, so re-listing it would duplicate
-	# the source and the solver aborts "would need to uninstall openssl3".
+	# including https package repositories). Both feature gates must be
+	# satisfied on arm64: gate A (IsHaikuImagePackageAdded openssl3) needs
+	# openssl3 *available* so the minimum profile's by-name add lands, and gate
+	# B (IsPackageAvailable openssl3_devel) needs the devel package declared.
+	# The checksummed repositories/HaikuPorts/arm64 mirror serves none of these,
+	# so we build and stage them ourselves. zstd is openssl3's lib:libzstd>=1.5.6
+	# dependency (runtime only -- this does NOT enable the zstd build feature,
+	# which gates on zstd_devel).
+	# NOTE: openssl3 and zstd must NOT also be force-added via <hg-pool> in
+	# graviton/ssh/UserBuildConfig -- the profile's by-name add installs one
+	# instance, so a second (file) instance makes the image solver report
+	# "would need to uninstall package openssl3".
+	openssl3-3.5.7-1
 	openssl3_devel-3.5.7-1
+	zstd-1.5.6-2
 
 	# HaikuWebKit: turns on the webkit build feature, which is what makes
 	# src/apps/webpositive compile at all (it exits its Jamfile early unless
