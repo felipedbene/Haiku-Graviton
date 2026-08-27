@@ -32,6 +32,12 @@ phases:
       # awscli v2 (arm64) for pulling/pushing the cross-tools cache.
       - curl -sSLf "https://awscli.amazonaws.com/awscli-exe-linux-aarch64.zip" -o /tmp/awscliv2.zip
       - (cd /tmp && unzip -q awscliv2.zip && ./aws/install)
+      # s5cmd for fast parallel S3 transfers (pool sync + image upload). Non-fatal:
+      # graviton/scripts/haiku-s3 falls back to `aws s3` if this is missing.
+      - >-
+        curl -sSLf "https://github.com/peak/s5cmd/releases/download/v2.3.0/s5cmd_2.3.0_Linux-arm64.tar.gz" -o /tmp/s5cmd.tgz
+        && tar -xzf /tmp/s5cmd.tgz -C /usr/local/bin s5cmd
+        || echo "s5cmd install failed (non-fatal; haiku-s3 uses aws s3)"
   pre_build:
     commands:
       - set -euo pipefail
@@ -95,7 +101,7 @@ phases:
       # A bake with no pool stays SSH-only (HG_POOL_DIR unset -> guards skip).
       - export HG_POOL_DIR="$HAIKU_TOP/hpkg-pool"
       - mkdir -p "$HG_POOL_DIR"
-      - aws s3 sync "s3://$WORK_BUCKET/hpkg-pool/" "$HG_POOL_DIR/" --region "$AWS_DEFAULT_REGION" || echo "no hpkg pool"
+      - bash "$HAIKU_TOP/graviton/scripts/haiku-s3" sync-down "s3://$WORK_BUCKET/hpkg-pool" "$HG_POOL_DIR" || echo "no hpkg pool"
       - |
         if [ -z "$(ls -A "$HG_POOL_DIR" 2>/dev/null)" ]; then
           echo "empty hpkg pool; SSH-only image"; unset HG_POOL_DIR

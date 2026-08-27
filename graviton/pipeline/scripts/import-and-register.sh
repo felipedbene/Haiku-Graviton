@@ -39,7 +39,12 @@ NAME="${AMI_NAME_PREFIX}-${STAMP}"
 ROOT_GIB=$(( (ROOT_VOLUME_BYTES + 1073741823) / 1073741824 ))
 
 echo "==> uploading $RAW_IMAGE -> s3://$WORK_BUCKET/$KEY"
-aws s3 cp "$RAW_IMAGE" "s3://$WORK_BUCKET/$KEY" --region "$AWS_DEFAULT_REGION"
+# s5cmd does concurrent multipart on this ~19 GB object; fall back to aws s3.
+if command -v s5cmd >/dev/null 2>&1; then
+	s5cmd --log error cp "$RAW_IMAGE" "s3://$WORK_BUCKET/$KEY"
+else
+	aws s3 cp "$RAW_IMAGE" "s3://$WORK_BUCKET/$KEY" --region "$AWS_DEFAULT_REGION"
+fi
 
 echo "==> ec2 import-snapshot (Format=raw)"
 TASK_ID=$(aws ec2 import-snapshot --region "$AWS_DEFAULT_REGION" \
