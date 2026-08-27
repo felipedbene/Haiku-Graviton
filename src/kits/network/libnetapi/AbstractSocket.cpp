@@ -233,9 +233,30 @@ BAbstractSocket::Connect(const BNetworkAddress& peer, int type,
 
 	BNetworkAddress normalized = peer;
 	if (connect(fSocket, normalized, normalized.Length()) != 0) {
-		TRACE("%p: connecting to %s: %s\n", this,
-			normalized.ToString().c_str(), strerror(errno));
-		return fInitStatus = errno;
+		if (errno == EINTR || errno == EINPROGRESS) {
+			// A signal can interrupt a blocking connect() (errno == EINTR); the
+			// connection attempt still proceeds in the background, so -- as with
+			// a non-blocking EINPROGRESS -- wait for the socket to become
+			// writable and then read SO_ERROR, rather than treating the
+			// interrupt as fatal or re-issuing connect() (which returns
+			// EALREADY/EISCONN). Without this an interrupted connect aborted
+			// every pkgman http(s) repository fetch with "Interrupted system
+			// call", while curl (which handles EINTR) fetched the same URL fine.
+			status_t writable = WaitForWritable(
+				timeout == 0 ? B_INFINITE_TIMEOUT : timeout);
+			if (writable != B_OK)
+				return fInitStatus = writable;
+			int error = 0;
+			socklen_t size = sizeof(error);
+			if (getsockopt(fSocket, SOL_SOCKET, SO_ERROR, &error, &size) != 0)
+				return fInitStatus = errno;
+			if (error != 0)
+				return fInitStatus = error;
+		} else {
+			TRACE("%p: connecting to %s: %s\n", this,
+				normalized.ToString().c_str(), strerror(errno));
+			return fInitStatus = errno;
+		}
 	}
 
 	fIsConnected = true;
