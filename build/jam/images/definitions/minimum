@@ -481,3 +481,15 @@ for repository in $(HAIKU_REPOSITORIES) {
 	AddFilesToHaikuImage system cache package-repositories
 		: $(cache) : $(repository:G=) ;
 }
+
+# DeBeOS CDN repository, pre-registered as a STANDALONE config file (deliberately
+# not a HAIKU_REPOSITORIES member): the CDN repo is published after the bake and
+# changes on every publish, so it is known-but-not-solved-against at bake time
+# (binding it to the image solve would force the index to exist at bake and fail
+# on a lagging 404). This is what makes a lean image modular -- a fresh boot can
+# `pkgman refresh && pkgman install <pkg>` from the repo with no manual add-repo.
+# arm64-only: the repo path is arm64 (multi-arch is future).
+if $(HAIKU_PACKAGING_ARCH) = arm64 {
+	AddFilesToHaikuImage system settings package-repositories
+		: [ FDirName $(HAIKU_TOP) data settings package-repositories DeBeOS ] ;
+}

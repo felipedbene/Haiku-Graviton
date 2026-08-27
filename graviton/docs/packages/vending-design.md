@@ -78,40 +78,62 @@ over both HTTP and HTTPS. The **infrastructure is correct**; the blocker is the 
 change on every publish → serve `no-cache`/short-TTL or issue a CloudFront invalidation for those two
 keys on each publish, or a stale index/checksum yields a `Bad data` / checksum-mismatch on refresh.
 
-## 3. The client gap — remote fetch on arm64 **[gap]**
+## 3. Remote fetch over HTTP — **[proven]**, and what the "EINTR" really was
 
-Measured on hardware against a known-good CDN endpoint (verified `200` + checksum-valid from outside):
+HTTP remote install works today with **no client change**. On real hardware, against the CDN:
+`pkgman add-repo http://<cdn>/<repo-path>` → `refresh` → `install <name>` resolved dependencies,
+downloaded the hpkgs from `/<repo-path>/packages/`, validated checksums, and **activated live**.
 
-- **HTTPS → "Operation not supported".** No TLS/HTTPS URL-protocol handler is present in the
-  `@minimum-mmc` image, so `pkgman add-repo https://…` fails immediately. (The built-in upstream
-  `https://` repos give the identical error — so that was never a dead upstream, it was the client.)
-- **HTTP → "Interrupted system call" (B_INTERRUPTED).** The HTTP handler *is* present — pkgman prints
-  *"Fetching repository info from http://…"* and the fetch thread runs — but a network syscall returns
-  `EINTR` and is not restarted, so the fetch aborts. `curl` on the same host fetches the same URL
-  fine (it retries `EINTR`), confirming the network and TLS are healthy and the defect is in the
-  package-kit fetch path, not the platform.
+The earlier "the HTTP fetch aborts with *Interrupted system call*" report was a **phantom**. The fetch
+was never interrupted: `pkgman` mis-reports an **HTTP 4xx** as `B_INTERRUPTED`. When `fOptStopOnError`
+is set and the status is ≥ 400, `HttpRequest.cpp` sets `fQuit = true` and returns `B_INTERRUPTED`
+("Interrupted system call") — so a plain *not found* surfaces as a syscall-interrupt error. The 4xx
+itself came from a **missing `repo.info` on the CDN**: only `repo` + `repo.sha256` had been uploaded,
+so `<base>/repo.info` returned **403** (S3 behind OAC returns 403, not 404, for an absent key). The
+fix was to **publish `repo.info`** — one file, no code, no bake.
 
-Net: `file://` repos work; remote (`http(s)://`) repos do not. This is why DeBeOS has been
-`file://`-only, and it is the one thing standing between the working CDN and true remote install.
+> Lesson baked into tooling: `haiku-repo-publish` always emits and uploads `repo.info`, and uploads
+> the index files *after* the packages, so a client refreshing mid-publish never sees a dangling index.
 
-## 4. Fix plan — enabling remote install **[design]**
+The two `EINTR`-restart commits (`BSocket::Read/Write`, `BAbstractSocket::Connect`) were chasing this
+phantom. They are harmless socket hardening and were kept, but they were **not** the fix.
 
-Two independent client fixes; both are ordinary DeBeOS source/build changes, provable on hardware:
+## 4. The one remaining gap — HTTPS on arm64 **[gap, parked]**
 
-1. **Include the HTTPS URL-protocol handler in the image.** Find where the `http(s)` `BUrlRequest`
-   handler / network-services backend is provided and ensure it (and its TLS dependency) is part of
-   the `@minimum-mmc` (and default) image definition, not only the larger profiles.
-2. **Restart `EINTR` in the fetch path.** Locate the socket call in the package-kit fetch
-   (`FetchFileJob` → the HTTP request → `BSocket`/`BHttpRequest`) that returns `B_INTERRUPTED` without
-   retrying, and wrap it in a restart loop (the standard `while (r == B_INTERRUPTED) retry`). `curl`'s
-   behaviour is the reference: transient signals must not abort the transfer.
+`pkgman add-repo https://…` still fails with **"Operation not supported"**: the `@minimum-mmc` arm64
+image links `libnetapi` without SSL (`BSecureSocket` is a `B_UNSUPPORTED` stub) because the `openssl`
+build feature is gated on `IsPackageAvailable openssl3_devel`, which arm64 did not advertise. This is
+the parked **openssl/TLS build-feature** task (cooking via the feature-cook workflow). It is *not* on
+the modular-AMI critical path — **HTTP vending is sufficient** and TLS is later hardening. When it
+lands, the repo base URL flips from `http://` to `https://` (one line in
+`data/settings/package-repositories/DeBeOS`).
 
-Verification: bake a candidate image with both fixes, boot a disposable target, and run
-`pkgman add-repo https://<cdn>/<repo-path>` → `refresh` → `install <name>` end-to-end. Promote only
-after that passes, following `graviton/audit/agent-sops/debeos-hardware-proof.sop.md`.
+## 5. Interim / offline: distribute via S3 as a `file://` repo **[proven]**
 
-## 5. Interim: distribute via S3 without the client fix **[proven]**
+Where HTTP to the CDN is undesirable (air-gapped, or pre-TLS on a sensitive network), the same repo
+installs locally: `aws s3 sync` (or `haiku-s3 sync-down`) the repo tree onto the target, then
+`pkgman add-repo file://<local-dir>`. Same index, local fetch — proven with dependency resolution and
+live activation. This is a fallback, not the default: §3 (HTTP CDN) is the modular-AMI path.
 
-Until §4 lands, packages can still be distributed through S3: `aws s3 sync` the repo tree from the
-bucket onto the target, then `pkgman add-repo file://<local-dir>`. Same repo, local fetch — proven to
-install with dependency resolution and live activation.
+## 6. Building & publishing the repo — `haiku-repo-publish`
+
+The `repo` index is a Haiku-tool artifact, so the repo is built on a **Haiku host** (the dev AMI or a
+metal build guest) and published to the CDN from there. `graviton/scripts/haiku-repo-publish`
+automates all of §2–§3:
+
+```sh
+# on a Haiku host with `package` + `package_repo`, POOL = the closure SET
+haiku-repo-publish build   --pool <closure-dir> --out /tmp/debeos-repo
+# then, with creds + config in the environment (no account names in the tool):
+HG_REPO_S3=s3://<bucket>/<prefix>/arm64 HG_CF_DIST=<dist-id> \
+    haiku-repo-publish publish --out /tmp/debeos-repo
+```
+
+It **re-stamps every hpkg to vendor `DeBeOS`** (metadata repackage, no rebuild) so the whole toolset
+lives in **one** repo despite mixed upstream vendors (§1's one-vendor rule), writes `repo.info` with
+`url http://packages.debene.dev/arm64`, builds the index + `repo.sha256`, uploads packages-then-index,
+and invalidates the CloudFront index keys. Feed `--pool` the closure computed by
+`haiku-package-closure`, not a raw pool, so the repo contains exactly what installs resolve against.
+
+The end-to-end sequence (closure → build missing → publish → lean bake → prove → promote) is the
+`graviton/docs/packages/modular-ami-buildout.md` runbook.

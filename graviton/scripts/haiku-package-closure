@@ -1,0 +1,133 @@
+#!/usr/bin/env python3
+"""Compute the dependency closure of a set of DeBeOS/Haiku packages.
+
+Given a pool of built .hpkg files and the set a base image already provides,
+work out the *complete* set of packages a target selection needs -- so a lean
+image lists only its true closure, and a repo can actually resolve an install.
+
+This is the deterministic answer to the whack-a-mole we hit enabling openssl
+(add package -> bake fails 'nothing provides lib:X' -> add X -> fail ...): it
+reads every hpkg's `requires`/`provides`, closes the graph against
+(base-provides U pool), and reports the closure + anything still MISSING.
+
+The same math serves two outputs:
+  * LEAN IMAGE  -- run with the minimal --want (boot + pkgman + TLS); the
+                   closure is exactly what the image must ship, nothing more.
+  * REPO SET    -- run with the full toolset; the closure is what the repo must
+                   contain for `pkgman install <tool>` to resolve.
+
+Deterministic: no network, no LLM. Reads hpkg metadata via the `package` tool.
+
+Usage:
+  haiku-package-closure --pool DIR --package-tool PATH \
+      --base BASE_PROVIDES_FILE --want pkg1,pkg2,... [--emit-local]
+
+  --base   file of provide-tokens the base image already has (one per line);
+           anything it provides is "free" and not pulled into the closure.
+  --want   comma-separated target package NAMES (e.g. openssl3,curl,cmake).
+  --emit-local  also print a build/jam/repositories/HaikuPortsLocal fragment.
+
+Exit 0 if the closure is fully satisfiable, 2 if anything is MISSING.
+"""
+import argparse, os, re, subprocess, sys, json
+from collections import defaultdict
+
+def sh(cmd):
+    return subprocess.run(cmd, capture_output=True, text=True).stdout
+
+def token(s):
+    # "lib:libzstd>=1.5.6" / "lib:libzstd = 1.5.6" / "haiku >= r1~beta6" -> "lib:libzstd" / "haiku"
+    return re.split(r'\s*(?:[<>=!]=?|=)\s*|\s+', s.strip(), 1)[0].strip()
+
+def read_meta(pkg_tool, hpkg):
+    """Return (name, provides:set, requires:set) for one hpkg."""
+    out = sh([pkg_tool, "list", "-i", hpkg])
+    name = None; provides = set(); requires = set()
+    for line in out.splitlines():
+        s = line.strip()
+        m = re.match(r'^(?:package\s+)?name:\s*(\S+)', s)
+        if m and name is None: name = m.group(1); continue
+        m = re.match(r'^provides:\s*(.+)', s)
+        if m: provides.add(token(m.group(1))); continue
+        m = re.match(r'^requires:\s*(.+)', s)
+        if m:
+            t = token(m.group(1))
+            if t and not t.startswith('haiku'):   # 'haiku' (the OS) is always in the image
+                requires.add(t)
+    if name is None:  # fall back to filename stem: name-version-rev-arch.hpkg
+        base = os.path.basename(hpkg)
+        name = re.sub(r'-[0-9].*$', '', base)
+    return name, provides, requires
+
+def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--pool", required=True)
+    ap.add_argument("--package-tool", required=True)
+    ap.add_argument("--base", required=True)
+    ap.add_argument("--want", required=True)
+    ap.add_argument("--emit-local", action="store_true")
+    a = ap.parse_args()
+
+    base_provides = set()
+    with open(a.base) as f:
+        for line in f:
+            t = line.strip()
+            if t and not t.startswith('#'): base_provides.add(token(t))
+
+    # index the pool
+    pkgs = {}                      # name -> (hpkg path, provides, requires)
+    provide_index = defaultdict(set)   # token -> set(name)
+    hpkgs = sorted(p for p in os.listdir(a.pool) if p.endswith('.hpkg'))
+    for h in hpkgs:
+        path = os.path.join(a.pool, h)
+        name, prov, req = read_meta(a.package_tool, path)
+        # prefer a real package over debuginfo when names collide
+        if name in pkgs and '_debuginfo' in h:  continue
+        pkgs[name] = (path, prov, req)
+        for t in prov: provide_index[t].add(name)
+        provide_index[name].add(name)   # a bare name is provided by itself
+
+    want = [w.strip() for w in a.want.split(',') if w.strip()]
+    closure = set(); missing = defaultdict(set)   # token -> set(requiring pkg)
+    frontier = list(want); seen = set()
+    while frontier:
+        item = frontier.pop()
+        if item in seen: continue
+        seen.add(item)
+        # resolve a wanted token/name to a providing pool package
+        providers = provide_index.get(item) or provide_index.get(token(item))
+        if not providers:
+            if token(item) in base_provides: continue        # base gives it: free
+            missing[token(item)].add("(want)")               # can't provide it at all
+            continue
+        name = sorted(providers, key=lambda n: ('_bootstrap' in n, '_debuginfo' in n, n))[0]
+        if name in closure: continue
+        closure.add(name)
+        _, prov, req = pkgs[name]
+        for r in req:
+            if r in base_provides:      continue              # base: free
+            if provide_index.get(r):    frontier.append(r)    # pool provides it
+            else:                        missing[r].add(name)  # nobody provides it
+
+    closure_files = sorted(os.path.basename(pkgs[n][0]) for n in closure)
+    report = {
+        "want": want,
+        "closure_count": len(closure),
+        "closure_packages": sorted(closure),
+        "closure_files": closure_files,
+        "missing": {k: sorted(v) for k, v in sorted(missing.items())},
+    }
+    print(json.dumps(report, indent=1))
+
+    if a.emit_local:
+        print("\n# ---- HaikuPortsLocal fragment (closure, minus base) ----", file=sys.stderr)
+        for f in closure_files:
+            stem = re.sub(r'-(arm64|any)\.hpkg$', '', f)
+            print("\t" + stem, file=sys.stderr)
+
+    if missing:
+        sys.stderr.write(f"\nMISSING {len(missing)} provider(s): {', '.join(sorted(missing))}\n")
+        sys.exit(2)
+
+if __name__ == "__main__":
+    main()

@@ -1,0 +1,187 @@
+#!/usr/bin/env bash
+#
+# haiku-repo-publish -- turn a pool of built .hpkg files into a single
+# DeBeOS-vendored package repository and (optionally) publish it to the CDN so
+# a lean DeBeOS image can `pkgman refresh && pkgman install <pkg>` from it.
+#
+# This is the "make the modular AMI real" tool: the lean base ships nothing but
+# boot + pkgman + a pre-registered repo config (data/settings/package-repositories/
+# DeBeOS -> http://packages.debene.dev/arm64), and every fatty feature (WebKit,
+# translators, toolchain, rust, ...) is vended from the repo this builds.
+#
+# It runs on a *Haiku host* (the dev AMI or a metal build guest) because the
+# repo index is a Haiku-tool artifact: `package_repo create` and `package` only
+# exist there. Everything after the index (S3 upload, CloudFront invalidation)
+# is standard AWS and is delegated to `haiku-s3` + the awscli.
+#
+# ---- the two decisions this bakes in -------------------------------------
+#   1. ONE repo, DeBeOS-owned. `package_repo create` refuses a set whose
+#      packages disagree with repo.info's `vendor`, so a single repo can only
+#      hold one vendor. We chose to RE-STAMP every hpkg to vendor "DeBeOS"
+#      (metadata repackage, no rebuild) rather than split by upstream vendor.
+#   2. repo.info's `url` is the PUBLIC base http://packages.debene.dev/arm64
+#      (Cloudflare -> CloudFront -> private S3). http until the arm64 openssl
+#      build feature lands; then a one-line flip to https.
+#
+# The repo layout MUST publish repo.info alongside repo + repo.sha256 (a missing
+# repo.info was the entire "Interrupted system call" fetch bug -- S3/OAC returns
+# 403 for the absent key and pkgman mis-reports the 4xx as EINTR).
+#
+# ---- usage ----------------------------------------------------------------
+#   haiku-repo-publish build   --pool DIR --out DIR [--package-tool P] [--no-revendor]
+#   haiku-repo-publish publish --out DIR            # needs HG_REPO_S3 (+ HG_CF_DIST)
+#   haiku-repo-publish all     --pool DIR --out DIR # build then publish
+#
+#   --pool DIR         directory of built *.hpkg to include (the repo SET; feed
+#                      it the closure from `haiku-package-closure`, not a raw pool).
+#   --out DIR          working/output dir; the publishable tree lands in DIR/repo-out
+#                      as  repo  repo.info  repo.sha256  packages/*.hpkg
+#   --package-tool P   path to Haiku's `package` (default: from PATH)
+#   --no-revendor      skip the re-stamp (only safe if every hpkg is already DeBeOS)
+#
+# Publish config (env, so no account-scoped names live in this tracked file):
+#   HG_REPO_S3   s3://<bucket>/<prefix>/arm64   destination prefix for the repo
+#   HG_CF_DIST   CloudFront distribution id to invalidate /repo* after upload
+#   AWS_DEFAULT_REGION / AWS_REGION            (default us-west-2)
+#
+set -euo pipefail
+
+VENDOR="DeBeOS"
+PKG_URL="http://packages.debene.dev/arm64"
+REPO_NAME="DeBeOS"
+ARCH="${ARCH:-arm64}"
+HERE="$(cd "$(dirname "$0")" && pwd)"
+
+die() { echo "haiku-repo-publish: $*" >&2; exit 1; }
+
+# ---- arg parse ------------------------------------------------------------
+CMD="${1:-}"; shift || true
+POOL=""; OUT=""; PKG_TOOL="package"; REVENDOR=1
+while [ $# -gt 0 ]; do
+	case "$1" in
+		--pool) POOL="$2"; shift 2 ;;
+		--out) OUT="$2"; shift 2 ;;
+		--package-tool) PKG_TOOL="$2"; shift 2 ;;
+		--no-revendor) REVENDOR=0; shift ;;
+		*) die "unknown arg: $1" ;;
+	esac
+done
+[ -n "$CMD" ] || die "usage: haiku-repo-publish build|publish|all --pool DIR --out DIR"
+
+# The repo tree we build and later upload verbatim.
+repo_out() { echo "${OUT%/}/repo-out"; }
+
+# ---- current vendor of an hpkg (via `package list -i`) --------------------
+hpkg_vendor() {
+	"$PKG_TOOL" list -i "$1" 2>/dev/null \
+		| sed -nE 's/^[[:space:]]*vendor:[[:space:]]*"?([^"]*)"?[[:space:]]*$/\1/p' \
+		| head -1
+}
+
+# ---- re-stamp one hpkg to vendor DeBeOS (metadata repackage, no rebuild) --
+# Extract the package tree (incl. .PackageInfo), rewrite the vendor line, and
+# recreate the hpkg from the same tree. `package create` reads .PackageInfo from
+# the base dir, so the recreated package is byte-for-byte the same content with
+# only the vendor attribute changed.
+revendor_into() {
+	local src="$1" destdir="$2"
+	local base; base="$(basename "$src")"
+	local cur; cur="$(hpkg_vendor "$src")"
+	if [ "$cur" = "$VENDOR" ]; then
+		cp -p "$src" "$destdir/$base"
+		return 0
+	fi
+	local tmp; tmp="$(mktemp -d)"
+	"$PKG_TOOL" extract -C "$tmp" "$src"
+	[ -f "$tmp/.PackageInfo" ] || { rm -rf "$tmp"; die "no .PackageInfo in $base"; }
+	# Rewrite an existing vendor line, or add one if the package had none.
+	if grep -qE '^[[:space:]]*vendor[[:space:]]' "$tmp/.PackageInfo"; then
+		sed -i -E "s/^([[:space:]]*vendor[[:space:]]+).*/\1\"$VENDOR\"/" "$tmp/.PackageInfo"
+	else
+		printf '\nvendor\t"%s"\n' "$VENDOR" >> "$tmp/.PackageInfo"
+	fi
+	"$PKG_TOOL" create -C "$tmp" "$destdir/$base"
+	rm -rf "$tmp"
+}
+
+do_build() {
+	[ -n "$POOL" ] || die "build needs --pool DIR"
+	[ -n "$OUT" ]  || die "build needs --out DIR"
+	[ -d "$POOL" ] || die "no such pool: $POOL"
+	command -v "$PKG_TOOL" >/dev/null 2>&1 || die "no '$PKG_TOOL' on PATH (run on a Haiku host)"
+	command -v package_repo >/dev/null 2>&1 || die "no 'package_repo' on PATH (run on a Haiku host)"
+
+	local ro; ro="$(repo_out)"
+	rm -rf "$ro"; mkdir -p "$ro/packages"
+
+	# 1. collect the package set, re-vendored to DeBeOS.
+	local n=0
+	local f
+	for f in "$POOL"/*.hpkg; do
+		[ -e "$f" ] || die "pool has no .hpkg files: $POOL"
+		if [ "$REVENDOR" = 1 ]; then
+			revendor_into "$f" "$ro/packages"
+		else
+			cp -p "$f" "$ro/packages/$(basename "$f")"
+		fi
+		n=$((n + 1))
+	done
+	echo "collected $n package(s) into $ro/packages (revendor=$REVENDOR -> $VENDOR)"
+
+	# 2. repo.info -- vendor MUST equal the packages' (now DeBeOS) or create aborts.
+	cat > "$ro/repo.info" <<EOF
+name $REPO_NAME
+vendor "$VENDOR"
+summary "DeBeOS package repository ($ARCH)"
+priority 1
+url $PKG_URL
+architecture $ARCH
+EOF
+
+	# 3. build the index and its checksum. package_repo writes the 'repo' file.
+	( cd "$ro" && package_repo create repo.info packages/*.hpkg )
+	[ -f "$ro/repo" ] || die "package_repo did not produce a 'repo' index"
+	# sha256 of the index; pkgman compares this before trusting a cached repo.
+	( cd "$ro" && sha256sum repo | awk '{print $1}' > repo.sha256 )
+
+	echo "built repo tree:"
+	ls -l "$ro"/repo "$ro"/repo.info "$ro"/repo.sha256
+	echo "packages: $(ls -1 "$ro"/packages | wc -l)"
+}
+
+do_publish() {
+	[ -n "$OUT" ] || die "publish needs --out DIR"
+	local ro; ro="$(repo_out)"
+	[ -f "$ro/repo" ] || die "no built repo at $ro (run 'build' first)"
+	[ -n "${HG_REPO_S3:-}" ] || die "set HG_REPO_S3=s3://<bucket>/<prefix>/$ARCH"
+
+	# Upload packages first (immutable), then the index files last, so a client
+	# refreshing mid-publish never sees an index that points at absent packages.
+	echo "==> uploading packages/ -> $HG_REPO_S3/packages/"
+	"$HERE/haiku-s3" sync-up "$ro/packages" "${HG_REPO_S3%/}/packages/"
+	echo "==> uploading index (repo, repo.info, repo.sha256)"
+	local region="${AWS_DEFAULT_REGION:-${AWS_REGION:-us-west-2}}"
+	local k
+	for k in repo repo.info repo.sha256; do
+		aws s3 cp "$ro/$k" "${HG_REPO_S3%/}/$k" --region "$region"
+	done
+
+	# CloudFront caches; the index files are mutable, so invalidate them (the
+	# packages are versioned filenames and cache forever).
+	if [ -n "${HG_CF_DIST:-}" ]; then
+		echo "==> invalidating CloudFront /$ARCH/repo* on $HG_CF_DIST"
+		aws cloudfront create-invalidation --distribution-id "$HG_CF_DIST" \
+			--paths "/$ARCH/repo" "/$ARCH/repo.info" "/$ARCH/repo.sha256" \
+			--query 'Invalidation.Id' --output text
+	else
+		echo "note: HG_CF_DIST unset -- skipping CloudFront invalidation" >&2
+	fi
+	echo "published: $PKG_URL"
+}
+
+case "$CMD" in
+	build)   do_build ;;
+	publish) do_publish ;;
+	all)     do_build; do_publish ;;
+	*) die "unknown command: $CMD (build|publish|all)" ;;
+esac

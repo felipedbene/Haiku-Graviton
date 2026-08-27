@@ -1,0 +1,20 @@
+cfgversion=2
+
+# The URL of the directory serving the repository data (repo, repo.sha256,
+# repo.info) for the DeBeOS package repository. Pre-registered so a fresh boot
+# can `pkgman refresh && pkgman install <pkg>` on demand -- no manual add-repo.
+#
+# HTTP for now: pkgman's HTTPS URL handler is not yet compiled on arm64 (the
+# openssl build feature is a separate work item). Flip to https once that lands
+# -- no other change needed. Fronted by Cloudflare -> CloudFront -> private S3.
+baseurl=http://packages.debene.dev/arm64
+
+# Stable identifier, consistent across mirrors. MUST equal the published
+# repo.info's identifier, so a later `pkgman add-repo http://packages.debene.dev/arm64`
+# recognises the same repo instead of double-registering it.
+identifier=tag:debeos.dev,2026:repositories/debeos/arm64
+
+# Deprecated alias of [identifier] for older OS versions.
+url=tag:debeos.dev,2026:repositories/debeos/arm64
+
+priority=1
