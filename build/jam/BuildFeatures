@@ -615,11 +615,13 @@ if [ IsPackageAvailable zstd_devel ] {
 			depends: base
 			library: $(developLibDir)/libzstd.so
 			headers: $(developHeadersDir)
-		# sources are required for the primary architecture only
-		primary @{
-			file: source zstd_source
-				sources: develop/sources/%portRevisionedName%/sources
-		}@
+		# DeBeOS/arm64: the primary-arch `source zstd_source` archive the upstream
+		# recipe would provide is intentionally omitted -- we only consume zstd as
+		# a link library (BZstdCompressionAlgorithm / packagefs hpkg decompression),
+		# never its sources, and @minimum-mmc is not a source-shipping profile. Its
+		# absence otherwise fails the cross-build with "package zstd_source not
+		# available!". This mirrors the openssl feature above, which also declares
+		# only base+devel. (zstd is BSD-licensed; no source-shipping obligation.)
 		;
 
 	EnableBuildFeatures zstd ;
