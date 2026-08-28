@@ -468,18 +468,33 @@ SEARCH on $(networkSettingsFiles)
 	= [ FDirName $(HAIKU_TOP) data settings network ] ;
 AddFilesToHaikuImage system settings network : $(networkSettingsFiles) ;
 
-# repository config and cache files
+# repository config and cache files.
+#
+# DeBeOS/arm64 MODULAR IMAGE: deliberately DO NOT ship the upstream repo configs
+# (Haiku / HaikuPorts / build-packages) in the arm64 image. Their base packages
+# (haiku, haiku_loader, and the kernel inside them) share the r1~beta6_hrevNNNNN
+# version line with DeBeOS's own build, and upstream publishes newer hrevs -- so
+# `pkgman update` silently prefers upstream and REPLACES the DeBeOS-patched,
+# Graviton-bootable base with STOCK Haiku, which faults right after
+# ExitBootServices (no DeBeOS GIC/ECAM/RTC/system_time/ENA bring-up). On the
+# modular AMI the base OS is delivered by the AMI itself; the ONLY runtime update
+# source is the DeBeOS CDN repo (the standalone config added below). This does
+# NOT change build-time package resolution -- that uses the repository caches fed
+# to the solver in ImageRules (PopulateHaikuImage), not these installed configs.
+# Other arches keep the upstream repos (non-modular, normal Haiku images).
 local repository ;
-for repository in $(HAIKU_REPOSITORIES) {
-	local config = [ on $(repository) return $(HAIKU_REPOSITORY_CONFIG_FILE) ] ;
-	local cache = [ on $(repository) return $(HAIKU_REPOSITORY_CACHE_FILE) ] ;
-	if $(HAIKU_UPDATE_ALL_PACKAGES) {
-		HAIKU_INCLUDE_IN_IMAGE on $(config) $(cache) = 1 ;
+if $(HAIKU_PACKAGING_ARCH) != arm64 {
+	for repository in $(HAIKU_REPOSITORIES) {
+		local config = [ on $(repository) return $(HAIKU_REPOSITORY_CONFIG_FILE) ] ;
+		local cache = [ on $(repository) return $(HAIKU_REPOSITORY_CACHE_FILE) ] ;
+		if $(HAIKU_UPDATE_ALL_PACKAGES) {
+			HAIKU_INCLUDE_IN_IMAGE on $(config) $(cache) = 1 ;
+		}
+		AddFilesToHaikuImage system settings package-repositories
+			: $(config) : $(repository:G=) ;
+		AddFilesToHaikuImage system cache package-repositories
+			: $(cache) : $(repository:G=) ;
 	}
-	AddFilesToHaikuImage system settings package-repositories
-		: $(config) : $(repository:G=) ;
-	AddFilesToHaikuImage system cache package-repositories
-		: $(cache) : $(repository:G=) ;
 }
 
 # DeBeOS CDN repository, pre-registered as a STANDALONE config file (deliberately
