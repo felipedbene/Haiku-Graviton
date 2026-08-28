@@ -1,0 +1,87 @@
+#!/usr/bin/env bash
+#
+# haiku-repo-publish-remote -- publish one or more locally-held .hpkg to the
+# LIVE DeBeOS package repository with a single command, from the workstation,
+# by driving the Haiku build host (the metal) over SSM. No manual metal/SSM
+# steps: it starts the builder if stopped, uploads the package(s) to the
+# incoming S3 prefix, ships the current haiku-repo-add to the host, runs it,
+# and streams the result. The host re-stamps to vendor DeBeOS, rebuilds the
+# index, uploads, and invalidates the CDN (see haiku-repo-add).
+#
+# The build host is only started, never stopped, by this script -- stop it
+# yourself when you are done publishing (it is a large billable instance).
+#
+# Config (env only -- NO account-scoped names in this tracked file):
+#   HG_BUILDER_ID   EC2 instance id of the Haiku build host (required)
+#   HG_REPO_S3      s3://<bucket>/<prefix>/<arch>  live repo prefix (required)
+#   HG_INCOMING_S3  s3://<bucket>/<prefix>         staging prefix for new hpkg (required)
+#   HG_CF_DIST      CloudFront distribution id to invalidate (optional but recommended)
+#   HG_REPO_URL     public base URL for repo.info (optional; haiku-repo-add default)
+#   ARCH            packaging arch (default arm64)
+#   AWS_DEFAULT_REGION / AWS_REGION (default us-west-2)
+#
+# Usage: haiku-repo-publish-remote <pkg1.hpkg> [<pkg2.hpkg> ...]
+#
+set -euo pipefail
+
+region="${AWS_DEFAULT_REGION:-${AWS_REGION:-us-west-2}}"
+ARCH="${ARCH:-arm64}"
+HERE="$(cd "$(dirname "$0")" && pwd)"
+
+die() { echo "haiku-repo-publish-remote: $*" >&2; exit 1; }
+: "${HG_BUILDER_ID:?set HG_BUILDER_ID=<metal instance id>}"
+: "${HG_REPO_S3:?set HG_REPO_S3=s3://<bucket>/<prefix>/$ARCH}"
+: "${HG_INCOMING_S3:?set HG_INCOMING_S3=s3://<bucket>/<prefix>}"
+[ $# -ge 1 ] || die "usage: $0 <pkg.hpkg> [pkg.hpkg ...]"
+for f in "$@"; do [ -f "$f" ] || die "no such file: $f"; done
+[ -f "$HERE/haiku-repo-add" ] || die "haiku-repo-add not found next to this script"
+
+echo "==> ensuring build host $HG_BUILDER_ID is running"
+state="$(aws ec2 describe-instances --region "$region" --instance-ids "$HG_BUILDER_ID" \
+	--query 'Reservations[0].Instances[0].State.Name' --output text 2>/dev/null || echo unknown)"
+if [ "$state" != "running" ]; then
+	aws ec2 start-instances --region "$region" --instance-ids "$HG_BUILDER_ID" >/dev/null
+	aws ec2 wait instance-running --region "$region" --instance-ids "$HG_BUILDER_ID"
+fi
+echo "==> waiting for SSM agent"
+for _ in $(seq 1 40); do
+	ping="$(aws ssm describe-instance-information --region "$region" \
+		--filters "Key=InstanceIds,Values=$HG_BUILDER_ID" \
+		--query 'InstanceInformationList[0].PingStatus' --output text 2>/dev/null || true)"
+	[ "$ping" = "Online" ] && break
+	sleep 10
+done
+[ "${ping:-}" = "Online" ] || die "SSM agent never came Online on $HG_BUILDER_ID"
+
+echo "==> uploading $# package(s) to $HG_INCOMING_S3"
+# clear stale incoming, then upload the requested set
+aws s3 rm "${HG_INCOMING_S3%/}/" --region "$region" --recursive --exclude "*" --include "*.hpkg" >/dev/null 2>&1 || true
+for f in "$@"; do
+	aws s3 cp "$f" "${HG_INCOMING_S3%/}/$(basename "$f")" --region "$region" --only-show-errors
+done
+
+echo "==> running haiku-repo-add on the build host over SSM"
+addb64="$(base64 -w0 "$HERE/haiku-repo-add" 2>/dev/null || base64 "$HERE/haiku-repo-add" | tr -d '\n')"
+# Export config into the remote shell, materialise the script, run it.
+remote="export HG_REPO_S3='$HG_REPO_S3' HG_INCOMING_S3='$HG_INCOMING_S3' HG_CF_DIST='${HG_CF_DIST:-}' HG_REPO_URL='${HG_REPO_URL:-}' ARCH='$ARCH' AWS_DEFAULT_REGION='$region'; echo $addb64 | base64 -d > /tmp/haiku-repo-add; bash /tmp/haiku-repo-add"
+cmd_id="$(aws ssm send-command --region "$region" --instance-ids "$HG_BUILDER_ID" \
+	--document-name AWS-RunShellScript --comment "haiku-repo-add (remote publish)" \
+	--parameters commands="[$(printf '%s' "$remote" | python3 -c 'import json,sys; print(json.dumps(sys.stdin.read()))')]" \
+	--timeout-seconds 900 --query 'Command.CommandId' --output text)"
+echo "    SSM command $cmd_id"
+for _ in $(seq 1 80); do
+	st="$(aws ssm get-command-invocation --region "$region" --command-id "$cmd_id" \
+		--instance-id "$HG_BUILDER_ID" --query 'Status' --output text 2>/dev/null || echo Pending)"
+	case "$st" in Success|Failed|Cancelled|TimedOut) break ;; esac
+	sleep 10
+done
+echo "==> result ($st):"
+aws ssm get-command-invocation --region "$region" --command-id "$cmd_id" \
+	--instance-id "$HG_BUILDER_ID" --query 'StandardOutputContent' --output text 2>/dev/null | tail -25
+if [ "$st" != "Success" ]; then
+	echo "---- stderr ----" >&2
+	aws ssm get-command-invocation --region "$region" --command-id "$cmd_id" \
+		--instance-id "$HG_BUILDER_ID" --query 'StandardErrorContent' --output text 2>/dev/null | tail -15 >&2
+	die "remote publish failed ($st)"
+fi
+echo "==> done. Remember to stop the build host ($HG_BUILDER_ID) when finished publishing."

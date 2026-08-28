@@ -1,0 +1,137 @@
+#!/usr/bin/env bash
+#
+# haiku-repo-add -- add one or more freshly-built .hpkg to the LIVE DeBeOS
+# package repository, in place, and refresh the CDN. This is the automated,
+# incremental counterpart to haiku-repo-publish (which rebuilds a repo from a
+# whole pool): it pulls the current published repo, re-stamps only the NEW
+# package(s) to vendor "DeBeOS", rebuilds the index over the full set, uploads
+# the new package(s) + index, and invalidates the CloudFront index paths.
+#
+# It runs on a *Haiku host* (a metal build guest or the dev tree on the metal
+# Linux host) because `package` and `package_repo` are Haiku-build artifacts.
+# Normally you do not run this by hand -- haiku-repo-publish-remote ships it to
+# the build host and runs it over SSM. See that script and the SOP.
+#
+# Why it exists: the DeBeOS repo is single-vendor (package_repo create refuses a
+# set whose packages disagree with repo.info's vendor), so every hpkg is
+# re-stamped to "DeBeOS". A package missing from the repo makes pkgman fall back
+# to the baked, unreachable HaikuPorts-BuildPackages repo and fail
+# "Resource not found" -- adding it here is the fix.
+#
+# Config (env only -- NO account-scoped names live in this tracked file):
+#   HG_REPO_S3      s3://<bucket>/<prefix>/<arch>   the live repo prefix (required)
+#   HG_INCOMING_S3  s3://<bucket>/<prefix>          new *.hpkg to add (required; consumed)
+#   HG_CF_DIST      CloudFront distribution id to invalidate /<arch>/repo* (optional)
+#   HG_REPO_URL     public base URL baked into repo.info (default packages.debene.dev)
+#   ARCH            packaging arch (default arm64)
+#   AWS_DEFAULT_REGION / AWS_REGION (default us-west-2)
+#   PKG_TOOL / PACKAGE_REPO_TOOL   tool paths (auto-detected under /opt/haiku if unset)
+#
+set -euo pipefail
+
+VENDOR="DeBeOS"
+REPO_NAME="DeBeOS"
+ARCH="${ARCH:-arm64}"
+PKG_URL="${HG_REPO_URL:-http://packages.debene.dev/$ARCH}"
+region="${AWS_DEFAULT_REGION:-${AWS_REGION:-us-west-2}}"
+
+die() { echo "haiku-repo-add: $*" >&2; exit 1; }
+: "${HG_REPO_S3:?set HG_REPO_S3=s3://<bucket>/<prefix>/$ARCH}"
+: "${HG_INCOMING_S3:?set HG_INCOMING_S3=s3://<bucket>/<prefix> (new *.hpkg)}"
+
+# ---- locate the Haiku host tools -----------------------------------------
+PKG_TOOL="${PKG_TOOL:-$(ls /opt/haiku/haiku/generated.$ARCH/objects/linux/*/release/tools/package/package 2>/dev/null | head -1)}"
+PACKAGE_REPO_TOOL="${PACKAGE_REPO_TOOL:-$(ls /opt/haiku/haiku/generated.$ARCH/objects/linux/*/release/tools/package_repo/package_repo 2>/dev/null | head -1)}"
+[ -x "${PKG_TOOL:-}" ] || die "no 'package' tool (set PKG_TOOL; run on a Haiku host)"
+[ -x "${PACKAGE_REPO_TOOL:-}" ] || die "no 'package_repo' tool (set PACKAGE_REPO_TOOL; run on a Haiku host)"
+
+WORK="$(mktemp -d)"; RO="$WORK/repo-out"
+trap 'rm -rf "$WORK"' EXIT
+mkdir -p "$RO/packages" "$WORK/incoming"
+
+echo "== 1. pull current repo packages from $HG_REPO_S3/packages/ =="
+aws s3 sync "${HG_REPO_S3%/}/packages/" "$RO/packages/" --region "$region" --only-show-errors
+before="$(ls -1 "$RO/packages" 2>/dev/null | wc -l)"
+echo "   $before package(s) currently published"
+
+echo "== 2. pull incoming new packages from $HG_INCOMING_S3 =="
+aws s3 sync "${HG_INCOMING_S3%/}/" "$WORK/incoming/" --region "$region" --only-show-errors --exclude "*" --include "*.hpkg"
+ls "$WORK/incoming"/*.hpkg >/dev/null 2>&1 || die "no incoming *.hpkg at $HG_INCOMING_S3"
+
+# canonical repo filename for an hpkg: <name>-<version>-<architecture>.hpkg,
+# independent of whatever the incoming file happened to be called. Staging under
+# the canonical name (overwriting) makes re-publishing idempotent and prevents
+# the "package <x> has already been added!" duplicate that a differently-named
+# copy of an already-published package would otherwise cause.
+canonical_name() {
+	"$PKG_TOOL" list -i "$1" 2>/dev/null | awk '
+		/^[[:space:]]*name:/         {n=$2}
+		/^[[:space:]]*version:/      {v=$2}
+		/^[[:space:]]*architecture:/ {a=$2}
+		END { if (n && v && a) printf "%s-%s-%s.hpkg", n, v, a }'
+}
+
+echo "== 3. re-stamp incoming to vendor $VENDOR and stage under canonical names =="
+added=0
+for f in "$WORK/incoming"/*.hpkg; do
+	base="$(basename "$f")"
+	cur="$("$PKG_TOOL" list -i "$f" 2>/dev/null | sed -nE 's/^[[:space:]]*vendor:[[:space:]]*"?([^"]*)"?[[:space:]]*$/\1/p' | head -1)"
+	staged="$WORK/staged.hpkg"; rm -f "$staged"
+	if [ "$cur" = "$VENDOR" ]; then
+		cp -p "$f" "$staged"
+	else
+		tmp="$(mktemp -d)"
+		"$PKG_TOOL" extract -C "$tmp" "$f"
+		[ -f "$tmp/.PackageInfo" ] || { rm -rf "$tmp"; die "no .PackageInfo in $base"; }
+		if grep -qE '^[[:space:]]*vendor[[:space:]]' "$tmp/.PackageInfo"; then
+			sed -i -E "s/^([[:space:]]*vendor[[:space:]]+).*/\1\"$VENDOR\"/" "$tmp/.PackageInfo"
+		else
+			printf '\nvendor\t"%s"\n' "$VENDOR" >> "$tmp/.PackageInfo"
+		fi
+		"$PKG_TOOL" create -C "$tmp" "$staged"
+		rm -rf "$tmp"
+	fi
+	canon="$(canonical_name "$staged")"
+	[ -n "$canon" ] || die "could not derive canonical name for $base"
+	# Drop any other on-disk version of the same package name so the repo does
+	# not accumulate stale versions of a package we are (re)publishing.
+	pkgname="${canon%%-*}"
+	find "$RO/packages" -maxdepth 1 -name "$pkgname-*.hpkg" ! -name "$canon" -delete 2>/dev/null || true
+	mv -f "$staged" "$RO/packages/$canon"
+	echo "   + $canon (from '$base', vendor '$cur' -> '$VENDOR')"
+	added=$((added + 1))
+done
+
+echo "== 4. rebuild repo.info + index over $(ls -1 "$RO/packages" | wc -l) package(s) =="
+cat > "$RO/repo.info" <<EOF
+name $REPO_NAME
+vendor "$VENDOR"
+summary "DeBeOS package repository ($ARCH)"
+priority 1
+url $PKG_URL
+architecture $ARCH
+EOF
+( cd "$RO" && "$PACKAGE_REPO_TOOL" create repo.info packages/*.hpkg )
+[ -f "$RO/repo" ] || die "package_repo produced no 'repo' index"
+( cd "$RO" && sha256sum repo | awk '{print $1}' > repo.sha256 )
+echo "   index sha256=$(cat "$RO/repo.sha256")"
+
+echo "== 5. upload packages (new, immutable) then index (last) =="
+aws s3 sync "$RO/packages/" "${HG_REPO_S3%/}/packages/" --region "$region" --only-show-errors
+for k in repo repo.info repo.sha256; do
+	aws s3 cp "$RO/$k" "${HG_REPO_S3%/}/$k" --region "$region" --only-show-errors
+done
+
+if [ -n "${HG_CF_DIST:-}" ]; then
+	echo "== 6. invalidate CloudFront /$ARCH/repo* on $HG_CF_DIST =="
+	aws cloudfront create-invalidation --distribution-id "$HG_CF_DIST" \
+		--paths "/$ARCH/repo" "/$ARCH/repo.info" "/$ARCH/repo.sha256" \
+		--query 'Invalidation.Id' --output text
+else
+	echo "note: HG_CF_DIST unset -- skipping CloudFront invalidation (index may serve stale until TTL)" >&2
+fi
+
+echo "== 7. clear consumed incoming prefix =="
+aws s3 rm "${HG_INCOMING_S3%/}/" --region "$region" --recursive --exclude "*" --include "*.hpkg" >/dev/null 2>&1 || true
+
+echo "PUBLISHED $added new package(s); repo now has $(ls -1 "$RO/packages" | wc -l) (was $before)."
