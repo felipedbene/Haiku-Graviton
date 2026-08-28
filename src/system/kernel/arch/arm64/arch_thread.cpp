@@ -7,9 +7,12 @@
 
 #include <arch_cpu.h>
 #include <arch/thread.h>
+#include <arch/arm64/arch_pmu.h>
 #include <boot/stage2.h>
 #include <commpage_defs.h>
+#include <debug.h>
 #include <kernel.h>
+#include <KernelExport.h>
 #include <thread.h>
 #include <tls.h>
 #include <vm/vm_types.h>
@@ -44,9 +47,38 @@ arm64_pop_iframe(struct iframe_stack *stack)
 }
 
 
+static int
+dump_thread_cycles(int argc, char** argv)
+{
+	if (!arm64_pmu_enabled()) {
+		kprintf("arm64_pmu is not enabled: per-thread cycle accounting is off "
+			"and CPU time is the timer-based estimate. Turn it on with the "
+			"\"arm64_pmu\" boot setting or the \"pmu on\" KDL command.\n");
+		return 0;
+	}
+
+	Thread* thread = thread_get_current_thread();
+
+	// cpu_cycles is only advanced at switch-out, so add the cycles run since the
+	// last switch-in to report a live figure. This reads the current core's
+	// counter, which is the core this thread is running on.
+	uint64 live = thread->arch_info.cpu_cycles
+		+ (READ_SPECIALREG(PMCCNTR_EL0) - thread->arch_info.cycle_ref);
+
+	kprintf("thread %" B_PRId32 " (%s): %" B_PRIu64 " CPU cycles\n",
+		thread->id, thread->name, live);
+	return 0;
+}
+
+
 status_t
 arch_thread_init(struct kernel_args *args)
 {
+	// Lets a per-thread cycle count be read back for verifying the PMU-driven
+	// accounting; a no-op report when the PMU facility is off.
+	add_debugger_command("thread_cycles", &dump_thread_cycles,
+		"Print the running thread's accumulated CPU cycles (arm64 PMU)");
+
 	return B_OK;
 }
 
@@ -61,6 +93,13 @@ arch_team_init_team_struct(Team *team, bool kernel)
 status_t
 arch_thread_init_thread_struct(Thread *thread)
 {
+	// Start every thread's PMU-driven cycle accounting from zero. The context
+	// switch path only ever adds a same-core delta to these, so they must not
+	// begin as uninitialised memory or the first switch-out would attribute a
+	// nonsense delta to the thread.
+	thread->arch_info.cpu_cycles = 0;
+	thread->arch_info.cycle_ref = 0;
+
 	return B_OK;
 }
 
@@ -90,6 +129,22 @@ extern "C" void _arch_context_swap(arch_thread *from, arch_thread *to);
 void
 arch_thread_context_switch(Thread *from, Thread *to)
 {
+	// Attribute the core cycles the outgoing thread just ran to it, and arm the
+	// incoming thread's reference point, before the register state is swapped.
+	// A no-op unless the PMU facility is on; when it is off, the timer-based
+	// CPU-time estimate stands unchanged. This is one register read plus a
+	// subtract and an add on the hot switch path. PMCCNTR_EL0 is a 64 bit
+	// counter here (PMCR_EL0.LC), so the unsigned delta cannot wrap in any
+	// useful timeframe. The snapshot for `to` is taken on this core and the
+	// delta for `from` was measured against a snapshot taken on this same core,
+	// so a later migration of either thread never compares counters between
+	// cores.
+	if (arm64_pmu_enabled()) {
+		uint64 now = READ_SPECIALREG(PMCCNTR_EL0);
+		from->arch_info.cpu_cycles += now - from->arch_info.cycle_ref;
+		to->arch_info.cycle_ref = now;
+	}
+
 	arch_vm_aspace_swap(from->team->address_space, to->team->address_space);
 	_arch_context_swap(&from->arch_info, &to->arch_info);
 }

@@ -53,6 +53,18 @@ struct arch_thread {
 
 	// used to track interrupts on this thread
 	struct iframe_stack	iframes;
+
+	// Per-thread CPU-cycle accounting, driven from PMCCNTR_EL0 on each context
+	// switch. Both stay zero and untouched while the arm64 PMU facility is off
+	// (arm64_pmu_enabled()), so the timer-based CPU-time estimate is unaffected.
+	uint64 cpu_cycles;
+		// Core cycles attributed to this thread, summed at each switch-out.
+	uint64 cycle_ref;
+		// PMCCNTR_EL0 sampled when this thread was last switched in. The
+		// switch-out delta (now - cycle_ref) is what gets added to cpu_cycles.
+		// The snapshot and the delta are always taken on the same core within
+		// one running interval, so the per-core counter's absolute value never
+		// has to be compared across a migration.
 };
 
 
