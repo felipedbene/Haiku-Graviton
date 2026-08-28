@@ -106,7 +106,15 @@ phases:
       # BSecureSocket ships as the B_UNSUPPORTED stub (https "Operation not
       # supported"). Filtering the already-granted pool keeps the image lean
       # (3 packages, not the full ~69) without an IAM/pipeline redeploy.
-      - aws s3 sync "s3://$WORK_BUCKET/hpkg-pool/" "$HG_POOL_DIR/" --region "$AWS_DEFAULT_REGION" --exclude "*" --include "openssl3-*" --include "openssl3_devel-*" --include "zstd-*" --include "ca_root_certificates-*" || echo "no lean hpkg pool"
+      # NOTE: do NOT stage ca_root_certificates here. The base @minimum-mmc
+      # HaikuPorts index already pins/provides it (2025_12_02), and image
+      # generation copies THAT version into system/packages. Staging a newer
+      # pool copy (2026_07_16) makes the by-name AddHaikuImageSystemPackages
+      # resolve to the pool version while the image carries the index version
+      # -- a skew that leaves ca_root_certificates present-but-not-activated
+      # (no CARootCertificates.pem, so TLS verify fails B_NOT_ALLOWED). Let the
+      # single index version be the one resolved and activated.
+      - aws s3 sync "s3://$WORK_BUCKET/hpkg-pool/" "$HG_POOL_DIR/" --region "$AWS_DEFAULT_REGION" --exclude "*" --include "openssl3-*" --include "openssl3_devel-*" --include "zstd-*" || echo "no lean hpkg pool"
       - |
         if [ -z "$(ls -A "$HG_POOL_DIR" 2>/dev/null)" ]; then
           echo "empty hpkg pool; SSH-only image"; unset HG_POOL_DIR
