@@ -67,6 +67,23 @@ cmd_promote() {
 	else
 		echo "warning: failed to update SSM parameter ${SSM_PARAM}" >&2
 	fi
+	# Keep the DeBeOS repo's version-locked `haiku_devel` matched to the new
+	# canonical's base `haiku` hrev, so native dev (cargo/cc) on the lean image
+	# resolves a compatible develop package instead of being forced to change the
+	# base (the brick vector). Idempotent + cheap: haiku-devel-publish is a no-op
+	# (one S3 ls, no metal spin-up) when the repo already serves this hrev, and it
+	# only does the heavy publish when the base hrev actually moved.
+	#
+	# Gated on HG_REPO_S3 so it runs ONLY where the repo env is configured (the
+	# maintainer workstation). The in-pipeline Promote stage leaves it unset, so
+	# that CodeBuild role needs no repo/SSM/CloudFront permissions -- promotion
+	# there stays a pure tag operation. Best-effort by contract: a failure here
+	# must never undo the canonical tag we just set, so it cannot abort promote.
+	if [ -n "${HG_REPO_S3:-}" ] && [ -x "$(dirname "$0")/haiku-devel-publish" ]; then
+		echo "== keeping repo haiku_devel matched to ${target} =="
+		AWS_REGION="$REGION" "$(dirname "$0")/haiku-devel-publish" "$target" \
+			|| echo "warning: haiku_devel publish did not complete; run haiku-devel-publish ${target} by hand (canonical tag is set regardless)" >&2
+	fi
 	cmd_check
 }
 

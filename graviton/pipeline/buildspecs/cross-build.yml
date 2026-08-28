@@ -177,6 +177,25 @@ phases:
     commands:
       - export HAIKU_TOP="$CODEBUILD_SRC_DIR"
       - export GEN="$HAIKU_TOP/$GEN_SUBDIR"
+      # Archive THIS build's haiku_devel so promotion can publish the exact
+      # version-matched develop package to the DeBeOS repo. haiku_devel is
+      # version-locked (`requires haiku == <hrev>`), so the repo copy must match
+      # whatever `haiku` the canonical AMI ships -- otherwise `pkgman install
+      # haiku_devel` would try to change the base (the same brick vector as the
+      # upstream-repo swap). Keyed by HAIKU_REVISION under the cache/ prefix
+      # (already writable by this role -- no extra IAM). haiku-devel-publish, run
+      # from promote, fetches this exact object. Best-effort: a missing devel
+      # archive must never fail a bake (the repo keeps its prior, matching copy).
+      - |
+        DEVEL_HPKG="$(find "$GEN" -name 'haiku_devel-*.hpkg' -o -name 'haiku_devel.hpkg' 2>/dev/null | head -1)"
+        if [ -n "$DEVEL_HPKG" ] && [ -n "${HAIKU_REVISION:-}" ]; then
+          DKEY="$CACHE_PREFIX/devel-closure/haiku_devel-${HAIKU_REVISION}-arm64.hpkg"
+          echo "== archiving haiku_devel ($DEVEL_HPKG) -> s3://$WORK_BUCKET/$DKEY =="
+          aws s3 cp "$DEVEL_HPKG" "s3://$WORK_BUCKET/$DKEY" \
+            --region "$AWS_DEFAULT_REGION" || echo "haiku_devel archive upload failed (non-fatal)"
+        else
+          echo "WARNING: no haiku_devel hpkg found under $GEN to archive (or HAIKU_REVISION unset)"
+        fi
       # Refresh the cross-tools cache (cheap insurance; overwrites on every run).
       - |
         if [ -x "$GEN/cross-tools-arm64/bin/aarch64-unknown-haiku-gcc" ]; then

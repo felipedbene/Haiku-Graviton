@@ -1,0 +1,135 @@
+#!/usr/bin/env bash
+#
+# haiku-devel-publish -- ensure the DeBeOS package repository serves the
+# `haiku_devel` that MATCHES a given AMI's base `haiku` package.
+#
+# Why this exists: on the lean modular DeBeOS AMI the base OS (haiku,
+# haiku_loader, kernel) is delivered by the AMI itself and the ONLY runtime
+# package source is the DeBeOS CDN repo. Native development (cargo/cc) needs
+# `haiku_devel` -- the develop package that provides the C-runtime glue objects
+# (crti.o / start_dyn.o / init_term_dyn.o) and the develop/lib symlinks. But
+# haiku_devel is VERSION-LOCKED: it `requires haiku == <exact hrev>`. So the
+# repo's haiku_devel must always match the CANONICAL AMI's `haiku` hrev; a
+# mismatched one would force a base change on install -- the same brick vector
+# as letting upstream own the base (see the modular-image repo design).
+#
+# This script closes that loop at PROMOTION time: given the AMI being promoted,
+# it resolves the AMI's `haiku-revision` tag (set by import-and-register.sh),
+# checks whether the repo already serves a haiku_devel for that hrev, and if not
+# fetches the version-matched hpkg that the cross-build archived and publishes it
+# to the repo via haiku-repo-publish-remote.
+#
+# It is IDEMPOTENT and CHEAP on the common path: when the repo already carries
+# the matching haiku_devel (the usual case -- the base hrev changes rarely) it
+# exits without starting the metal build host. It only does the heavy publish
+# when the canonical hrev actually moved. That makes it safe to call on EVERY
+# promote (haiku-canonical does).
+#
+# Best-effort by contract: callers (haiku-canonical promote) must NOT let a
+# failure here break the canonical-tag invariant. A stale-but-present repo
+# haiku_devel is a degraded state (native dev needs a manual publish), not a
+# broken boot.
+#
+# Config (env only -- NO account-scoped names in this tracked file):
+#   HG_REPO_S3           s3://<bucket>/<prefix>/<arch>  live repo prefix (required)
+#   HG_DEVEL_CLOSURE_S3  s3://<bucket>/<prefix>  where the bake archived
+#                        haiku_devel-<hrev>-<arch>.hpkg. OPTIONAL: if unset, the
+#                        pipeline work buckets (…bakepipeline…workbucket…) are
+#                        probed automatically for cache/devel-closure/<obj>, so
+#                        the operator need not know a generated bucket name. For
+#                        the CDK pipeline the location is
+#                        s3://<workBucket>/cache/devel-closure.
+#   HG_BUILDER_ID / HG_INCOMING_S3 / HG_CF_DIST / HG_REPO_URL
+#                        forwarded to haiku-repo-publish-remote (see it)
+#   ARCH                 packaging arch (default arm64)
+#   AWS_DEFAULT_REGION / AWS_REGION (default us-west-2)
+#
+# Usage:
+#   haiku-devel-publish <ami-id>            resolve hrev from the AMI tag
+#   haiku-devel-publish --hrev <hrevNNNNN>  publish for an explicit hrev
+#   haiku-devel-publish --file <hpkg>       publish a specific local hpkg (skips
+#                                           the archive fetch; still idempotent
+#                                           on the repo check by its hrev)
+#
+set -euo pipefail
+
+region="${AWS_DEFAULT_REGION:-${AWS_REGION:-us-west-2}}"
+ARCH="${ARCH:-arm64}"
+HERE="$(cd "$(dirname "$0")" && pwd)"
+
+log() { echo "haiku-devel-publish: $*"; }
+die() { echo "haiku-devel-publish: $*" >&2; exit 1; }
+
+# ---- parse args -----------------------------------------------------------
+AMI=""; HREV=""; LOCAL_FILE=""
+case "${1:-}" in
+	--hrev) HREV="${2:?--hrev needs an hrev}";;
+	--file) LOCAL_FILE="${2:?--file needs a path}";;
+	-*|"") die "usage: $(basename "$0") {<ami-id> | --hrev <hrevNNNNN> | --file <hpkg>}";;
+	*) AMI="$1";;
+esac
+
+: "${HG_REPO_S3:?set HG_REPO_S3=s3://<bucket>/<prefix>/$ARCH}"
+
+# ---- resolve the hrev we must match --------------------------------------
+if [ -n "$AMI" ]; then
+	log "resolving haiku-revision tag on $AMI"
+	HREV="$(aws ec2 describe-images --region "$region" --owners self --image-ids "$AMI" \
+		--query "Images[0].Tags[?Key=='haiku-revision'].Value | [0]" --output text 2>/dev/null || true)"
+	[ -n "$HREV" ] && [ "$HREV" != "None" ] || die "AMI $AMI has no 'haiku-revision' tag; pass --hrev explicitly"
+fi
+if [ -z "$HREV" ] && [ -n "$LOCAL_FILE" ]; then
+	# derive hrev from the file's version, for the idempotency check below
+	HREV="$(basename "$LOCAL_FILE" | sed -nE 's/.*(hrev[0-9]+).*/\1/p')"
+fi
+[ -n "$HREV" ] || die "could not determine the target hrev"
+log "target base revision: $HREV"
+
+# ---- idempotency: does the repo already serve a matching haiku_devel? ----
+# The published filename embeds the full version (r1~beta6_hrevNNNNN-R), which
+# contains the hrev, so a substring match on the S3 listing is sufficient.
+if aws s3 ls "${HG_REPO_S3%/}/packages/" --region "$region" 2>/dev/null \
+		| grep -E "haiku_devel-.*${HREV}[^0-9]" >/dev/null; then
+	log "repo already serves haiku_devel for ${HREV}; nothing to do (no metal spin-up)"
+	exit 0
+fi
+log "repo has no haiku_devel for ${HREV}; will publish the version-matched package"
+
+# ---- obtain the version-matched hpkg -------------------------------------
+WORK="$(mktemp -d)"; trap 'rm -rf "$WORK"' EXIT
+HPKG=""
+obj="haiku_devel-${HREV}-${ARCH}.hpkg"
+if [ -n "$LOCAL_FILE" ]; then
+	[ -f "$LOCAL_FILE" ] || die "no such file: $LOCAL_FILE"
+	HPKG="$LOCAL_FILE"
+else
+	# Where the bake archived the version-matched hpkg. Each variant pipeline
+	# archives to ITS OWN work bucket's cache/devel-closure/ (cross-build.yml,
+	# under a prefix that role already writes). The content is keyed by hrev and
+	# identical across variants, so any variant's copy for this hrev will do.
+	# HG_DEVEL_CLOSURE_S3 pins one location; if unset, discover it by probing the
+	# pipeline work buckets so the operator need not know a generated name.
+	prefixes=""
+	if [ -n "${HG_DEVEL_CLOSURE_S3:-}" ]; then
+		prefixes="${HG_DEVEL_CLOSURE_S3%/}"
+	else
+		log "HG_DEVEL_CLOSURE_S3 unset; discovering bake archive across pipeline work buckets"
+		for b in $(aws s3api list-buckets --query 'Buckets[?contains(Name, `bakepipeline`) && contains(Name, `workbucket`)].Name' --output text 2>/dev/null); do
+			prefixes="$prefixes s3://$b/cache/devel-closure"
+		done
+		[ -n "$prefixes" ] || die "no bake work buckets found; set HG_DEVEL_CLOSURE_S3 or pass --file"
+	fi
+	for p in $prefixes; do
+		log "trying $p/$obj"
+		if aws s3 cp "$p/$obj" "$WORK/$obj" --region "$region" --only-show-errors 2>/dev/null; then
+			HPKG="$WORK/$obj"; log "fetched from $p"; break
+		fi
+	done
+	[ -n "$HPKG" ] || die "no archived haiku_devel for ${HREV} in any known location -- rebake at this hrev, or publish by hand with --file <hpkg>"
+fi
+
+# ---- publish via the existing remote publisher ---------------------------
+[ -x "$HERE/haiku-repo-publish-remote" ] || die "haiku-repo-publish-remote not found next to this script"
+log "publishing $HPKG to the DeBeOS repo"
+"$HERE/haiku-repo-publish-remote" "$HPKG"
+log "done -- repo now serves the haiku_devel matching ${HREV}"
