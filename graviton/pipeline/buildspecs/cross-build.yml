@@ -106,7 +106,7 @@ phases:
       # BSecureSocket ships as the B_UNSUPPORTED stub (https "Operation not
       # supported"). Filtering the already-granted pool keeps the image lean
       # (3 packages, not the full ~69) without an IAM/pipeline redeploy.
-      - aws s3 sync "s3://$WORK_BUCKET/hpkg-pool/" "$HG_POOL_DIR/" --region "$AWS_DEFAULT_REGION" --exclude "*" --include "openssl3-*" --include "openssl3_devel-*" --include "zstd-*" || echo "no lean hpkg pool"
+      - aws s3 sync "s3://$WORK_BUCKET/hpkg-pool/" "$HG_POOL_DIR/" --region "$AWS_DEFAULT_REGION" --exclude "*" --include "openssl3-*" --include "openssl3_devel-*" --include "zstd-*" --include "ca_root_certificates-*" || echo "no lean hpkg pool"
       - |
         if [ -z "$(ls -A "$HG_POOL_DIR" 2>/dev/null)" ]; then
           echo "empty hpkg pool; SSH-only image"; unset HG_POOL_DIR

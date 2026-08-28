@@ -184,7 +184,15 @@ rule DefineDefaultBuildProfiles
 				HAIKU_IMAGE_SIZE ?= 450 ;
 			}
 
+			# openssl3 turns on the openssl/TLS build feature (so libbnetapi's
+			# BSecureSocket is real, not the B_UNSUPPORTED stub); ca_root_certificates
+			# installs /system/data/ssl/CARootCertificates.pem so BSecureSocket can
+			# verify peer certs. Without it TLS negotiates but every verify fails with
+			# B_NOT_ALLOWED ("Operation not allowed") -- so an https package repo (or
+			# any https BUrlRequest) can't be fetched. Both must be present in the
+			# bake pool, or AddHaikuImageSystemPackages silently skips them.
 			AddHaikuImageSystemPackages
+				ca_root_certificates
 				openssl3
 				;
 		}
