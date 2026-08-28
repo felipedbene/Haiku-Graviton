@@ -35,7 +35,19 @@ typedef struct arm64_pmu_sample {
 	uint32	wrapped;
 		// Bitmap of event counters that overflowed at least once since the
 		// previous sample, as reported by PMOVSCLR_EL0. Any bit set here means
-		// the corresponding value may have lost a multiple of 2^32.
+		// the corresponding value may have lost a multiple of 2^32. The cycle
+		// counter and the dedicated sampling counter are excluded.
+	bool	sampling;
+		// A counter is dedicated to overflow-driven sampling on this CPU
+		// (E-PMU-1a/1b). The three fields below are only meaningful when set.
+	uint32	sampleCounter;
+		// Event-counter index reserved for the CPU_CYCLES sampling source.
+	uint64	samplePeriod;
+		// Cycles between sampling-counter overflows.
+	uint64	sampleOverflows;
+		// Sampling overflow interrupts serviced on this CPU since the last
+		// reset. Under a CPU-bound load this climbs at ~(core clock / period)
+		// per second; a runaway would be an interrupt storm.
 } arm64_pmu_sample;
 
 

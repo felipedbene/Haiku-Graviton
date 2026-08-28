@@ -13,13 +13,22 @@
 	What this is: a fixed set of events programmed per CPU, read on demand,
 	printed by a KDL command or by arm64_pmu_dump() from kernel code.
 
+	What this is, additionally (E-PMU-1a/1b): one event counter is dedicated to
+	sampling. It is programmed to CPU_CYCLES and preloaded so it overflows once
+	every sample period; the overflow raises the PMU's PPI, whose handler
+	reloads the counter (so the rate is bounded -- no storm) and bumps a
+	per-CPU overflow count. PMCCNTR_EL0 is left free-running and untouched by
+	sampling, because arm64_pmu_measure_core_frequency() and the per-thread
+	cycle accounting both rely on it being monotonic; reloading it would inject
+	a discontinuity every period. There is no sample buffer and no
+	system_profiler coupling yet -- that is the separate E-PMU-2 step; this
+	layer only proves the interrupt plumbing.
+
 	What this deliberately is not:
 
-	- Not a sampling profiler. No overflow interrupt is enabled; we actively
-	  mask PMU interrupts because firmware or EL2 may have left them on and
-	  the GIC has no handler for the PMU PPI. Sampling would also need to
-	  arrive in a context we have not masked interrupts in, which is a much
-	  larger design problem.
+	- Not yet a full sampling profiler. The overflow interrupt is enabled and
+	  bounded, but the interrupted PC is not captured or attributed to anything
+	  (E-PMU-2). Everything here is inert unless the facility is enabled.
 	- Not a userland interface. There is no syscall, no /dev node, no
 	  per-thread accounting, and PMUSERENR_EL0 is explicitly written to zero
 	  rather than opening the counters to EL0. Three reasons: the counters are
@@ -58,6 +67,27 @@
 
 // The boot setting that turns the facility on for every CPU from early boot.
 #define ARM64_PMU_SAFEMODE_OPTION	"arm64_pmu"
+
+
+// The PMUv3 counter-overflow interrupt is a private peripheral interrupt (PPI)
+// and its INTID is fixed by the platform, not read from any PMU register. The
+// device-tree binding for "arm,armv8-pmuv3" specifies <GIC_PPI 7 ...> -- the
+// GIC-500 TRM Table A.3 recommendation -- and the device-tree PPI space maps
+// to GIC INTIDs at PPI + 16, so PPI 7 is INTID 23. This mirrors how
+// arch_timer.cpp hardcodes INTID 27 for the virtual-timer PPI (device-tree
+// cntv = <GIC_PPI 11> = 27) rather than parsing firmware, and that value is
+// cross-checked against real hardware (the virtual-timer PPI reads back as
+// INTID 27 on Graviton). Graviton follows the same architected PPI assignment;
+// on the ACPI boot path the same number is what the MADT GICC "Performance
+// Interrupt GSIV" carries. If a future part disagrees, this is the one value
+// to revisit -- there is no in-tree facility that reads it from firmware yet.
+#define PMU_OVERFLOW_INTID			23
+
+// Cycles between sampling-counter overflows. At ~2.6 GHz, 10^7 cycles is about
+// 260 overflows per second per CPU under a fully CPU-bound load -- plenty of
+// resolution for a profiler, and orders of magnitude below any rate that could
+// storm.
+#define PMU_DEFAULT_SAMPLE_PERIOD	10000000ULL
 
 
 // How each event's ratio is conventionally expressed, following the names
@@ -182,6 +212,12 @@ struct pmu_cpu_state {
 	uint16	events[ARM64_PMU_MAX_EVENT_COUNTERS];
 	uint32	last[ARM64_PMU_MAX_EVENT_COUNTERS];
 	uint64	total[ARM64_PMU_MAX_EVENT_COUNTERS];
+	bool	sampling;
+		// The dedicated sampling counter is programmed and its overflow armed
+		// on this CPU. Never set unless the facility is enabled.
+	uint64	overflowCount;
+		// Sampling-counter overflow interrupts serviced on this CPU since the
+		// last reset. Bumped only by the overflow handler; read from KDL.
 } CACHE_LINE_ALIGN;
 	// Aligned so that one CPU's block never shares a cache line with another's.
 
@@ -202,6 +238,16 @@ static uint64 sEventMap0;
 static uint64 sEventMap1;
 	// PMCEID0/1_EL0, likewise.
 static bool sCounterInfoValid;
+
+static uint32 sSampleCounter;
+	// The event-counter index reserved for the CPU_CYCLES sampling source
+	// (E-PMU-1a). Identical on every core, since all PEs in an instance are the
+	// same part. Set once, in pmu_read_implementation_info().
+static uint64 sSamplePeriod = PMU_DEFAULT_SAMPLE_PERIOD;
+	// Cycles between sampling overflows.
+static bool sOverflowInterruptInstalled;
+	// The PMU overflow PPI handler has been installed and its GIC line enabled.
+	// Idempotent guard; the install happens once, from normal context.
 
 static const pmu_preset* sPreset = &kPresets[0];
 static uint16 sEvents[ARM64_PMU_MAX_EVENT_COUNTERS];
@@ -280,6 +326,13 @@ pmu_read_implementation_info()
 	if (sCounterCount > ARM64_PMU_MAX_EVENT_COUNTERS)
 		sCounterCount = ARM64_PMU_MAX_EVENT_COUNTERS;
 
+	// Reserve the top event counter as the sampling source (E-PMU-1a). The
+	// general read facility gets the counters below it. On the 6-counter
+	// Neoverse parts this leaves 5 for the presets, which therefore program
+	// their first 5 events; the sixth is dropped, the same way the tail is
+	// dropped on a core with fewer counters.
+	sSampleCounter = sCounterCount > 0 ? sCounterCount - 1 : 0;
+
 	sEventMap0 = READ_SPECIALREG(PMCEID0_EL0);
 	sEventMap1 = READ_SPECIALREG(PMCEID1_EL0);
 
@@ -295,6 +348,23 @@ pmu_select_events(const uint16* events, uint32 count)
 
 	memcpy(sEvents, events, count * sizeof(uint16));
 	sEventCount = count;
+}
+
+
+/*!	The value to preload into the sampling counter so it overflows after
+	exactly one period. The counters count up, so this is the two's-complement
+	of the period: a 32 bit counter (the default; Neoverse-N1/-V1) keeps only
+	the low 32 bits and overflows at bit 31, a 64 bit counter (FEAT_PMUv3p5,
+	PMCR_EL0.LP set) keeps all 64 and overflows at bit 63 -- writing the
+	full-width negation is correct for both.
+*/
+static uint64
+pmu_sample_reload_value()
+{
+	if (sLongEventCounters)
+		return 0ULL - sSamplePeriod;
+
+	return (uint64)(uint32)(0ULL - sSamplePeriod);
 }
 
 
@@ -324,9 +394,15 @@ pmu_program_cpu(int32 cpu)
 	// Count cycles in both EL1 and EL0 (all filter bits clear = no inhibit).
 	WRITE_SPECIALREG(PMCCFILTR_EL0, 0);
 
+	// One event counter is dedicated to sampling (E-PMU-1a); the general read
+	// facility uses the counters below it. Reaching pmu_program_cpu() at all
+	// means the facility is enabled, so sampling is always set up here.
+	bool sampling = sCounterCount > 0;
+	uint32 generalCounters = sampling ? sCounterCount - 1 : sCounterCount;
+
 	uint32 count = sEventCount;
-	if (count > sCounterCount)
-		count = sCounterCount;
+	if (count > generalCounters)
+		count = generalCounters;
 
 	uint32 enableMask = PMU_CYCLE_COUNTER_BIT;
 	for (uint32 i = 0; i < count; i++) {
@@ -343,6 +419,18 @@ pmu_program_cpu(int32 cpu)
 	}
 
 	state.counterCount = count;
+	state.sampling = sampling;
+	state.overflowCount = 0;
+
+	// The sampling counter counts CPU_CYCLES. Select and type it here, but do
+	// not preload its value yet: PMCR_P below resets every event counter to
+	// zero, so the -period value has to be written *after* the PMCR write.
+	if (sampling) {
+		pmu_select_counter(sSampleCounter);
+		WRITE_SPECIALREG(PMXEVTYPER_EL0,
+			(uint64)PMU_EVENT_CPU_CYCLES & PMEVTYPER_EVTCOUNT_MASK);
+		enableMask |= PMU_EVENT_COUNTER_BIT(sSampleCounter);
+	}
 
 	WRITE_SPECIALREG(PMCNTENSET_EL0, enableMask);
 
@@ -358,6 +446,23 @@ pmu_program_cpu(int32 cpu)
 	WRITE_SPECIALREG(PMCR_EL0, pmcr);
 	arm64_isb();
 
+	// Now that PMCR_P's reset is behind us, preload the sampling counter and
+	// arm *only* its overflow interrupt (PMINTENCLR above masked every
+	// counter, so a wrap of any general counter never raises an IRQ). Arming
+	// PMINTENSET last, after the counter already holds the bounded reload
+	// value, guarantees the first overflow is one full period away and can
+	// never fire against a freshly-zeroed counter. Delivery to the CPU still
+	// requires the GIC PPI line, enabled once by pmu_install_overflow_interrupt();
+	// until then an overflow only latches PMOVSCLR (no storm), and the handler
+	// consumes it as soon as the line comes up.
+	if (sampling) {
+		pmu_select_counter(sSampleCounter);
+		WRITE_SPECIALREG(PMXEVCNTR_EL0, pmu_sample_reload_value());
+		WRITE_SPECIALREG(PMOVSCLR_EL0, PMU_EVENT_COUNTER_BIT(sSampleCounter));
+		WRITE_SPECIALREG(PMINTENSET_EL1, PMU_EVENT_COUNTER_BIT(sSampleCounter));
+		arm64_isb();
+	}
+
 	state.programmed = true;
 }
 
@@ -366,11 +471,95 @@ static void
 pmu_stop_cpu(int32 cpu)
 {
 	WRITE_SPECIALREG(PMCR_EL0, 0);
+	// Mask the overflow interrupt as well, so a "pmu off" on this CPU leaves
+	// the sampling counter fully disarmed: no PMINTEN, no enable, flags clear.
+	WRITE_SPECIALREG(PMINTENCLR_EL1, PMU_ALL_COUNTERS_MASK);
 	WRITE_SPECIALREG(PMCNTENCLR_EL0, PMU_ALL_COUNTERS_MASK);
 	WRITE_SPECIALREG(PMOVSCLR_EL0, PMU_ALL_COUNTERS_MASK);
 	arm64_isb();
 
 	sPerCPU[cpu].programmed = false;
+	sPerCPU[cpu].sampling = false;
+}
+
+
+//	#pragma mark - sampling overflow interrupt
+
+
+/*!	PMU counter-overflow PPI handler. Runs in interrupt context on whichever
+	CPU overflowed; the sampling counter and PMOVSCLR are per-CPU system
+	registers, so it touches only this CPU's state.
+
+	The reload is what bounds the interrupt rate. The overflow line is
+	level-sensitive: were the counter left wrapped, it would keep the line
+	asserted and re-fire the moment we returned -- an interrupt storm. Reloading
+	it to -period makes the next overflow exactly one period away, so the rate
+	is one interrupt per sSamplePeriod cycles and no more.
+
+	E-PMU-2 will read the interrupted PC here and hand it to system_profiler.
+	For now the handler only proves the plumbing: bounded rate, an observable
+	per-CPU count, and inert when the facility is off.
+*/
+static int32
+pmu_overflow_interrupt(void* data)
+{
+	// Inert unless the facility is enabled. Anything reached below touches PMU
+	// registers, which is only safe once the facility has been turned on (see
+	// the file comment); if it is off, this is not our interrupt to handle.
+	if (!sAvailable || !sEnabled)
+		return B_UNHANDLED_INTERRUPT;
+
+	int32 cpu = smp_get_current_cpu();
+	pmu_cpu_state& state = sPerCPU[cpu];
+	if (!state.sampling)
+		return B_UNHANDLED_INTERRUPT;
+
+	uint32 sampleBit = PMU_EVENT_COUNTER_BIT(sSampleCounter);
+	uint32 overflow = (uint32)READ_SPECIALREG(PMOVSCLR_EL0);
+	if ((overflow & sampleBit) == 0)
+		return B_UNHANDLED_INTERRUPT;
+
+	// Clear the sticky overflow flag (deasserts the level line) and reload the
+	// counter before returning, so exactly one more period elapses before the
+	// next interrupt.
+	WRITE_SPECIALREG(PMOVSCLR_EL0, sampleBit);
+	pmu_select_counter(sSampleCounter);
+	WRITE_SPECIALREG(PMXEVCNTR_EL0, pmu_sample_reload_value());
+	arm64_isb();
+
+	state.overflowCount++;
+
+	return B_HANDLED_INTERRUPT;
+}
+
+
+/*!	Installs the overflow PPI handler and enables its GIC line, once. Must run
+	in normal thread context (it allocates and, for a PPI, fans the enable out
+	to every CPU via call_all_cpus_sync), so it is never called from KDL.
+
+	The per-CPU PMU-side gate (PMINTENSET_EL1) is armed separately, in
+	pmu_program_cpu(); this only completes the delivery path for CPUs that have
+	already armed it. A CPU that never programmed the PMU keeps its overflow
+	masked and delivers nothing even though the shared GIC line is enabled.
+*/
+static void
+pmu_install_overflow_interrupt()
+{
+	if (sOverflowInterruptInstalled || !sAvailable || !sEnabled)
+		return;
+
+	status_t status = install_io_interrupt_handler(PMU_OVERFLOW_INTID,
+		&pmu_overflow_interrupt, NULL, 0);
+	if (status != B_OK) {
+		dprintf("arm64_pmu: could not install overflow handler on INTID %d: "
+			"%s\n", PMU_OVERFLOW_INTID, strerror(status));
+		return;
+	}
+
+	sOverflowInterruptInstalled = true;
+	dprintf("arm64_pmu: sampling overflow interrupt on PPI INTID %d, counter "
+		"[%" B_PRIu32 "] cpu-cycles, period %" B_PRIu64 " cycles\n",
+		PMU_OVERFLOW_INTID, sSampleCounter, sSamplePeriod);
 }
 
 
@@ -408,6 +597,16 @@ pmu_print_sample(void (*print)(const char*, ...),
 	// describes one core only.
 	print("pmu: CPU %" B_PRId32 ", %" B_PRIu64 " cycles since reset\n",
 		sample.cpu, sample.cycles);
+
+	// The dedicated sampling counter and how many times its overflow has fired
+	// on this CPU. Under a CPU-bound load this count should climb at roughly
+	// (core clock / period) per second; a runaway would be the storm signature.
+	if (sample.sampling) {
+		print("pmu: sampling counter [%" B_PRIu32 "] cpu-cycles, period %"
+			B_PRIu64 " cycles, %" B_PRIu64 " overflow interrupt(s) since "
+			"reset\n", sample.sampleCounter, sample.samplePeriod,
+			sample.sampleOverflows);
+	}
 
 	// Find instructions retired, if it is in the set, so the *-mpki ratios can
 	// be computed. AWS's runbook expresses almost everything per kilo
@@ -502,6 +701,13 @@ arm64_pmu_enable(void)
 	pmu_program_cpu(smp_get_current_cpu());
 	restore_interrupts(state);
 
+	// Complete the sampling delivery path now that interrupts are back on and
+	// we are in normal context: install_io_interrupt_handler() allocates and,
+	// for a PPI, fans the GIC enable out to every CPU. This CPU has already
+	// armed PMINTENSET_EL1 above; other CPUs only sample if the boot setting
+	// had them program the PMU too.
+	pmu_install_overflow_interrupt();
+
 	return B_OK;
 }
 
@@ -554,10 +760,16 @@ arm64_pmu_read(arm64_pmu_sample* sample)
 	sample->cycles = READ_SPECIALREG(PMCCNTR_EL0);
 
 	// The overflow flags are sticky, so clear what we just read to make the
-	// next sample's flags mean "wrapped during the last interval".
+	// next sample's flags mean "wrapped during the last interval". The one
+	// exception is the sampling counter's bit: that flag is owned by the
+	// overflow handler, which reloads the counter off it, so clearing it here
+	// would race the handler and drop a sample.
+	uint32 sampleBit = perCPU.sampling
+		? PMU_EVENT_COUNTER_BIT(sSampleCounter) : 0;
 	uint32 overflow = (uint32)READ_SPECIALREG(PMOVSCLR_EL0);
-	if (overflow != 0)
-		WRITE_SPECIALREG(PMOVSCLR_EL0, overflow);
+	uint32 toClear = overflow & ~sampleBit;
+	if (toClear != 0)
+		WRITE_SPECIALREG(PMOVSCLR_EL0, toClear);
 
 	sample->eventCount = perCPU.counterCount;
 	for (uint32 i = 0; i < perCPU.counterCount; i++) {
@@ -585,8 +797,15 @@ arm64_pmu_read(arm64_pmu_sample* sample)
 		sample->values[i] = perCPU.total[i];
 	}
 
-	sample->wrapped = overflow & ~PMU_CYCLE_COUNTER_BIT;
+	// Neither the cycle counter nor the sampling counter is a general event
+	// counter, so keep both out of the per-event wrapped bitmap.
+	sample->wrapped = overflow & ~PMU_CYCLE_COUNTER_BIT & ~sampleBit;
 	sample->valid = true;
+
+	sample->sampling = perCPU.sampling;
+	sample->sampleCounter = sSampleCounter;
+	sample->samplePeriod = sSamplePeriod;
+	sample->sampleOverflows = perCPU.overflowCount;
 
 	restore_interrupts(state);
 }
@@ -732,6 +951,20 @@ debug_pmu(int argc, char** argv)
 					? "" : "  NOT IMPLEMENTED, will read zero");
 		}
 
+		if (state.sampling) {
+			kprintf("  [%" B_PRIu32 "] 0x%04x cpu-cycles (sampling, period %"
+				B_PRIu64 " cycles)\n", sSampleCounter,
+				(unsigned int)PMU_EVENT_CPU_CYCLES, sSamplePeriod);
+
+			// Enabling from KDL cannot install the GIC handler (it allocates
+			// and does a cross-CPU call), so overflows only get counted once
+			// the line is up. Use the arm64_pmu boot setting for the full path.
+			if (!sOverflowInterruptInstalled) {
+				kprintf("pmu: overflow interrupt not installed; overflow count "
+					"stays 0 until the boot setting installs it\n");
+			}
+		}
+
 		return 0;
 	}
 
@@ -853,7 +1086,8 @@ arm64_pmu_init_percpu(kernel_args* args, int cpu)
 	// has to be in the boot log rather than only reachable from KDL. All cores
 	// in an instance are identical, so one report covers them.
 	dprintf("arm64_pmu: %" B_PRIu32 " of %" B_PRIu32 " event counters "
-		"programmed on all CPUs\n", sPerCPU[cpu].counterCount, sCounterCount);
+		"programmed on all CPUs (1 reserved for sampling)\n",
+		sPerCPU[cpu].counterCount, sCounterCount);
 
 	for (uint32 i = 0; i < sPerCPU[cpu].counterCount; i++) {
 		uint16 event = sPerCPU[cpu].events[i];
@@ -866,6 +1100,12 @@ arm64_pmu_init_percpu(kernel_args* args, int cpu)
 			(unsigned int)event, event_name(event),
 			event_implemented(event)
 				? "" : " -- NOT IMPLEMENTED, will read zero");
+	}
+
+	if (sPerCPU[cpu].sampling) {
+		dprintf("arm64_pmu:   [%" B_PRIu32 "] 0x%04x cpu-cycles -- sampling, "
+			"period %" B_PRIu64 " cycles\n", sSampleCounter,
+			(unsigned int)PMU_EVENT_CPU_CYCLES, sSamplePeriod);
 	}
 }
 
@@ -889,6 +1129,13 @@ arm64_pmu_init_post_modules(kernel_args* args)
 		"  reset   zero the counters and start a new measurement window\n"
 		"  set     list the event presets, or select one\n"
 		"  events  program an explicit list of event numbers\n", 0);
+
+	// If the boot setting turned the facility on, every CPU has already armed
+	// its sampling counter's overflow (PMINTENSET_EL1) in arm64_pmu_init_percpu().
+	// Complete the delivery path here, in normal context and after SMP is up,
+	// by installing the PPI handler and enabling the GIC line on every CPU.
+	// Guarded internally on sEnabled, so this is a no-op when the PMU is off.
+	pmu_install_overflow_interrupt();
 
 	return B_OK;
 }
