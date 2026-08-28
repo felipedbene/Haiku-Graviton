@@ -426,6 +426,20 @@ rule ExtractBuildFeatureArchives feature : list
 
 		SetBuildFeatureAttribute $(feature) : $(package):directory
 			: $(directory:G=) ;
+
+		# Collect every extraction directory under one pseudotarget so the whole
+		# set of ExtractHPKGArchive1 actions can be forced to completion BEFORE the
+		# parallel compile phase. Build-feature *header* dirs are handed to the
+		# compiler only as -isystem path strings (BuildFeatureAttribute ... : path),
+		# with no Depends edge from the objects that consume them to this extraction
+		# -- so under -j a compile can read a header tree (e.g. gcc_syslibs_devel's
+		# develop/headers/c++, the source of <cstdlib>'s #include_next <stdlib.h>)
+		# while ExtractHPKGArchive1 is still repopulating it, giving spurious
+		# "stdlib.h: No such file" on a victim TU that varies run-to-run. Running
+		# `jam haiku-extract-build-features` first (see cross-build.yml) drains all
+		# extractions up front. Harmless otherwise: nothing is built unless this
+		# pseudotarget is requested.
+		Depends haiku-extract-build-features : $(directory) ;
 	}
 }
 

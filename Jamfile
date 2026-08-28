@@ -17,6 +17,17 @@ for architectureObject in [ MultiArchSubDirSetup ] {
 	}
 }
 
+# Pseudotarget that depends on every build-feature archive extraction directory
+# (edges added in ExtractBuildFeatureArchives). The dep of TARGET_PLATFORM above
+# only forces gcc_syslibs_devel's headers and, since ordinary objects do not
+# depend on TARGET_PLATFORM, does not actually order extraction before the
+# parallel compile storm -- under -j a compile can read a half-extracted feature
+# header tree and fail with a spurious "stdlib.h: No such file". Building
+# `jam haiku-extract-build-features` first drains ALL feature extractions up
+# front (they target distinct dirs, so this pass itself is race-free even at
+# high -j). Purely additive: normal builds never request this target.
+NotFile haiku-extract-build-features ;
+
 # Include required packages:
 # primary architecture
 AddHaikuImageSystemPackages [ FFilterByBuildFeatures

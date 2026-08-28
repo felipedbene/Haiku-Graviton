@@ -126,6 +126,17 @@ phases:
       # build-openssh-arm64.sh reads the packages_build/minimum staging dirs,
       # which only exist after jam has assembled the base packages. This first
       # pass populates them (and produces an ssh-less image we discard).
+      # ---- pre-extract build-feature archives (fixes the -isystem race) --
+      # Build-feature HEADER dirs are given to the compiler only as -isystem path
+      # strings, with no Jam dependency from the consuming objects to the
+      # ExtractHPKGArchive1 action -- so with many header-providing features on
+      # (openssl/zstd/jpeg/png/tiff/webkit + gcc_syslibs_devel) a parallel compile
+      # can read a half-extracted header tree and die with a spurious
+      # "stdlib.h: No such file" on a victim TU that changes every run. Draining
+      # every extraction first (distinct dirs, so this pass is race-free at -j)
+      # guarantees the header trees are complete before the compile storm.
+      - echo "== jam pass 0 (pre-extract all build-feature archives) =="
+      - HAIKU_REVISION="$HAIKU_REVISION" jam -q -j"$NPROC" haiku-extract-build-features
       - echo "== jam pass 1 (@minimum-mmc, stages packages) =="
       - HAIKU_REVISION="$HAIKU_REVISION" jam -q -j"$NPROC" @minimum-mmc
       # ---- cross-build OpenSSH -> hpkg + image files ---------------------
