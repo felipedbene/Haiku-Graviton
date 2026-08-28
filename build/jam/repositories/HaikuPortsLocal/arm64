@@ -44,9 +44,16 @@ LocalPackageRepository HaikuPorts
 	# openssl3 *available* so the minimum profile's by-name add lands, and gate
 	# B (IsPackageAvailable openssl3_devel) needs the devel package declared.
 	# The checksummed repositories/HaikuPorts/arm64 mirror serves none of these,
-	# so we build and stage them ourselves. zstd is openssl3's lib:libzstd>=1.5.6
-	# dependency (runtime only -- this does NOT enable the zstd build feature,
-	# which gates on zstd_devel).
+	# so we build and stage them ourselves. zstd_devel turns ON the zstd build
+	# feature (build/jam/BuildFeatures gates it on IsPackageAvailable zstd_devel),
+	# which defines ZSTD_ENABLED for BZstdCompressionAlgorithm. WITHOUT it that
+	# class is a B_NOT_SUPPORTED stub, so any ZSTD-compressed hpkg -- e.g. the
+	# upstream ca_root_certificates -- fails to decompress ("Failed to decompress
+	# chunk data: Operation not supported"); ca_root then never activates, openssl3
+	# loses its dependency, the /boot/system volume goes inconsistent (intermittent
+	# first-boot stall), and TLS cert verification has no CA store (https =
+	# "Operation not allowed"). zstd (runtime) alone only satisfies openssl3's
+	# lib:libzstd>=1.5.6; the reader needs the build feature, i.e. zstd_devel.
 	# NOTE: openssl3 and zstd must NOT also be force-added via <hg-pool> in
 	# graviton/ssh/UserBuildConfig -- the profile's by-name add installs one
 	# instance, so a second (file) instance makes the image solver report
@@ -54,6 +61,7 @@ LocalPackageRepository HaikuPorts
 	openssl3-3.5.7-1
 	openssl3_devel-3.5.7-1
 	zstd-1.5.6-2
+	zstd_devel-1.5.6-2
 
 	# HaikuWebKit: turns on the webkit build feature, which is what makes
 	# src/apps/webpositive compile at all (it exits its Jamfile early unless
