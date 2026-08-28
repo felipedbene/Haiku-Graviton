@@ -374,6 +374,49 @@ Promote; only after a human approves does the Promote stage run
 from every prior holder and sets it on the new AMI, then `haiku-canonical check`
 re-asserts the "exactly one canonical" invariant (failing the build if broken).
 
+## Resolving AMIs via SSM Parameter Store
+
+Resolve AMIs by **SSM parameter**, not by sorting `Name=haiku-graviton*` on
+`CreationDate` (fragile — a bake in flight or a variant pipeline muddies the
+newest-by-date heuristic).
+
+- **Canonical:** `/haiku-graviton/canonical-ami-id`. `haiku-canonical promote`
+  writes this alongside the `canonical=true` tag (the tag stays the source of
+  truth; the parameter is the convenient pointer):
+  `aws ssm get-parameter --name /haiku-graviton/canonical-ami-id`.
+- **Per-pipeline latest candidate:**
+  `/haiku-graviton/bake/<pipelineName>/latest-candidate-ami`
+  (e.g. `.../haiku-graviton-bake/...`, `.../haiku-graviton2-bake/...`). The
+  Register stage should write this on every bake so it never drifts.
+
+## Duplicating the pipeline for parallel / experimental bakes
+
+`bin/pipeline.ts` defines variant stacks `HaikuGravitonBakePipeline{2,3,4}`
+(same construct, distinct `amiNamePrefix`, auto-named work bucket, reusing the
+one CodeConnections ARN) so an experimental branch can bake **without touching
+the trunk `HaikuGravitonBakePipeline` or the canonical path**. Point a variant's
+Source at the branch and bake it; deploy ONLY the variant id(s) — never `--all`.
+Two out-of-band steps each new pipeline needs today (both SHOULD move into the
+stack — see the TODO):
+
+1. **`vmimport` authorization.** The `vmimport` service role must be allowed
+   `s3:GetObject`/`GetBucketLocation`/`ListBucket` on the new work bucket and its
+   `/import/*` prefix, or Register's `import-snapshot` fails `AccessDenied`. A
+   duplicated stack gets a fresh empty bucket, so this is easy to forget.
+2. **Seed the work bucket** with `hpkg-pool/` (the build-feature packages:
+   `openssl3`/`openssl3_devel`, **`zstd`/`zstd_devel`**, `ca_root_certificates`,
+   …). An empty/incomplete pool silently disables build features
+   (`IsPackageAvailable` → false, `EnableBuildFeatures` skipped) — this is exactly
+   how the openssl-TLS gap and the zstd→ca_root→boot-stall regression happened
+   (a missing `zstd_devel` left `ZstdCompressionAlgorithm` a `B_NOT_SUPPORTED`
+   stub, so zstd-compressed hpkgs like upstream `ca_root_certificates` failed to
+   decompress). **Verify the pool has every `*_devel` a build feature needs.**
+
+**IaC hygiene TODO** (this branch): move (1) into the stack
+(`workBucket.grantRead` for the imported `vmimport` role), declare the SSM
+parameters in the stack, and have the Register stage write the per-pipeline
+`latest-candidate-ami` — so a duplicated pipeline is self-provisioning.
+
 ---
 
 ## Limits / what does not cleanly automate
