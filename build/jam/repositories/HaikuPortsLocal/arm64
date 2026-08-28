@@ -62,6 +62,12 @@ LocalPackageRepository HaikuPorts
 	openssl3_devel-3.5.7-1
 	zstd-1.5.6-2
 	zstd_devel-1.5.6-2
+	# zstd_source provides the zstd .c/.h tree at develop/sources/zstd-1.5.6-2/
+	# sources, which the kernel (src/system/kernel/lib/zstd) and EFI boot loader
+	# compile into kernel_libzstd.a via [ BuildFeatureAttribute zstd : sources ].
+	# Without it the cross-build fails "don't know how to make ...zstd_common.c".
+	# Not served by the upstream arm64 mirror, so DeBeOS builds+stages it.
+	zstd_source-1.5.6-2
 
 	# HaikuWebKit: turns on the webkit build feature, which is what makes
 	# src/apps/webpositive compile at all (it exits its Jamfile early unless

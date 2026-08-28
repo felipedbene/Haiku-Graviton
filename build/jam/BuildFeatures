@@ -615,13 +615,22 @@ if [ IsPackageAvailable zstd_devel ] {
 			depends: base
 			library: $(developLibDir)/libzstd.so
 			headers: $(developHeadersDir)
-		# DeBeOS/arm64: the primary-arch `source zstd_source` archive the upstream
-		# recipe would provide is intentionally omitted -- we only consume zstd as
-		# a link library (BZstdCompressionAlgorithm / packagefs hpkg decompression),
-		# never its sources, and @minimum-mmc is not a source-shipping profile. Its
-		# absence otherwise fails the cross-build with "package zstd_source not
-		# available!". This mirrors the openssl feature above, which also declares
-		# only base+devel. (zstd is BSD-licensed; no source-shipping obligation.)
+		# The kernel (src/system/kernel/lib/zstd) and the EFI boot loader
+		# (src/system/boot/libs/efi) compile a subset of zstd FROM SOURCE into
+		# kernel_libzstd.a -- they cannot link the userland libzstd.so -- and
+		# locate those .c files via [ BuildFeatureAttribute zstd : sources : path ].
+		# So unlike openssl (which nothing in-tree builds from feature sources),
+		# zstd MUST provide the source archive or the cross-build dies with
+		# "don't know how to make ...zstd_common.c" (and the empty sources path
+		# then poisons UseHeaders, surfacing as spurious <stdlib.h> failures).
+		# zstd is not in the upstream arm64 mirror, so DeBeOS builds and stages
+		# zstd_source-1.5.6-2 itself (declared in HaikuPortsLocal/arm64, synced
+		# into the bake pool by cross-build.yml). Mirrors the zlib feature above.
+		# sources are required for the primary architecture only
+		primary @{
+			file: source zstd_source
+				sources: develop/sources/%portRevisionedName%/sources
+		}@
 		;
 
 	EnableBuildFeatures zstd ;
