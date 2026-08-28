@@ -95,7 +95,16 @@ RemoteHWInterface::RemoteHWInterface(const char* target)
 	// unbounded time -- before the first one arrives, and after one dies. A
 	// full buffer with no drain used to block whichever thread was drawing,
 	// forever; see the comment in _NewConnection().
-	fSendBuffer.SetTo(new(std::nothrow) StreamingRingBuffer(16 * 1024, true));
+	//
+	// 1 MiB, not 16 KiB: bitmaps cross the wire as raw pixels (RP_DRAW_BITMAP),
+	// so a single 256x256 RGBA32 icon is ~256 KiB. With a 16 KiB buffer any
+	// draw larger than that stalled the producing app_server thread in
+	// StreamingRingBuffer::Write() while the sender drained it 4 KiB at a time
+	// -- a per-bitmap hitch proportional to size and link speed. A megabyte
+	// covers a burst of icons plus a wallpaper tile against the drain. It is
+	// allocated up front (the ring is a fixed malloc, not growable), but 1 MiB
+	// per session is negligible next to the stalls it removes.
+	fSendBuffer.SetTo(new(std::nothrow) StreamingRingBuffer(1 * 1024 * 1024, true));
 	if (!fSendBuffer.IsSet()) {
 		fInitStatus = B_NO_MEMORY;
 		return;
