@@ -21,6 +21,7 @@
 #include <NetEndpoint.h>
 
 #include <netinet/in.h>
+#include <netinet/tcp.h>
 
 #include <new>
 #include <string.h>
@@ -375,6 +376,18 @@ RemoteHWInterface::_NewConnection(BNetEndpoint &endpoint)
 	BNetEndpoint *sendEndpoint = new(std::nothrow) BNetEndpoint(endpoint);
 	if (sendEndpoint == NULL)
 		return B_NO_MEMORY;
+
+	// Disable Nagle on the connection. The protocol is a stream of small
+	// commands, several of which (DrawString, StringWidth, ReadBitmap) block the
+	// drawing thread waiting for a client reply. With Nagle enabled each small
+	// write is held back to coalesce and then collides with the peer's delayed
+	// ACK, adding tens to ~200 ms to every one of those round-trips and to the
+	// flush of every bitmap. TCP_NODELAY is a per-socket option and this send
+	// endpoint shares the accepted connection with the receiver, so setting it
+	// here also covers the inbound input and result replies. Best effort: a
+	// failure here only leaves the previous (laggier) behaviour.
+	int noDelay = 1;
+	sendEndpoint->SetOption(TCP_NODELAY, IPPROTO_TCP, &noDelay, sizeof(noDelay));
 
 	fSender.SetTo(new(std::nothrow) NetSender(sendEndpoint, fSendBuffer.Get()));
 	if (!fSender.IsSet()) {
