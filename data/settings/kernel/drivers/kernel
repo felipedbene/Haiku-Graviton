@@ -80,3 +80,15 @@ syslog_buffer_size 262144
 
 #qemu_single_step_hack true
 	# Activates a hack that allows single-stepping under QEMU to work.
+
+arm64_pmu true
+	# arm64 only: enable the PMUv3 at boot so the kernel can measure the core
+	# clock (sysinfo shows real MHz instead of 0) and expose the on-demand
+	# hardware-counter facility (the "pmu" KDL command: cpu-cycles, inst-retired,
+	# cache/TLB-refill MPKI, branch-mispredict, frontend/backend stall). Default
+	# OFF upstream because EL2 (a hypervisor) may trap EL1 PMU access
+	# (MDCR_EL2.TPM) and fault an unconditional boot-time probe. AWS Graviton
+	# deliberately exposes the PMU to guests (Graviton4: 21 PMU events to guests),
+	# and boot-enable was hardware-verified safe on a virtualized c7g.large
+	# (booted clean, sysinfo read 2598 MHz). Ignored on x86. On other arm64
+	# targets whose EL2 traps the PMU (some SoCs), comment this out.
