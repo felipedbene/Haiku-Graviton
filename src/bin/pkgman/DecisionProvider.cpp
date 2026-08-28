@@ -54,6 +54,13 @@ DecisionProvider::YesNoDecisionNeeded(const BString& description,
 			}
 			fprintf(stderr, "*** please enter '%s' or '%s'\n", yes.String(),
 				no.String());
+		} else {
+			// stdin is at EOF or errored (a closed/non-interactive pipe, e.g.
+			// `ssh host 'pkgman add-repo ...'`). No answer will ever arrive, so
+			// re-prompting would spin forever printing the question. Fall back
+			// to the default choice, or to "no" when none was given, and stop.
+			printf("%s\n", (haveDefault ? defaultChoice : no).String());
+			return haveDefault ? (defaultChoice == yes) : false;
 		}
 	}
 }
