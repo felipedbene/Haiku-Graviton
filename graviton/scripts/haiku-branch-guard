@@ -1,0 +1,74 @@
+#!/usr/bin/env bash
+#
+# haiku-branch-guard -- refuse to bake or merge a topic branch that is not a
+# clean, current descendant of the trunk. Prevents the "stale-branch trap":
+# baking or merging a branch that has silently fallen behind `graviton` either
+# rebuilds a months-old tree (moot) or, on merge, REVERTS trunk by hundreds of
+# commits. Both happened on 2026-08-28 (a `fix/*` branch was ahead=0 / 219
+# behind — already merged; a `stage/*` PMU branch was 11 behind and its merge
+# would have deleted live files). Call this before pointing a bake pipeline at a
+# branch, and before any merge.
+#
+# Verdict (exit code):
+#   0  CLEAN     -- branch is graviton + N>=1 commits, 0 behind: safe to bake/merge (ff).
+#   3  STALE     -- branch is behind graviton: rebase/cherry-pick onto graviton first.
+#   4  MERGED    -- branch is fully contained in graviton (ahead=0): nothing to do.
+#   2  usage/error.
+#
+# Usage:
+#   haiku-branch-guard <branch> [--base <ref>] [--remote <name>] [--no-fetch]
+#     <branch>      local or remote-tracking branch name (e.g. stage/foo or origin/stage/foo)
+#     --base        trunk to compare against (default: graviton)
+#     --remote      remote to resolve/fetch (default: origin)
+#     --no-fetch    skip the network fetch (use current refs)
+#
+set -euo pipefail
+
+BASE="graviton"; REMOTE="origin"; FETCH=1; BR=""
+while [ $# -gt 0 ]; do
+	case "$1" in
+		--base)   BASE="${2:?}"; shift 2;;
+		--remote) REMOTE="${2:?}"; shift 2;;
+		--no-fetch) FETCH=0; shift;;
+		-h|--help) sed -n '2,30p' "$0"; exit 2;;
+		-*) echo "unknown flag: $1" >&2; exit 2;;
+		*) BR="$1"; shift;;
+	esac
+done
+[ -n "$BR" ] || { echo "usage: $(basename "$0") <branch> [--base graviton] [--remote origin] [--no-fetch]" >&2; exit 2; }
+
+[ "$FETCH" = 1 ] && git fetch --quiet "$REMOTE" 2>/dev/null || true
+
+# Resolve base and branch to full refs, preferring the remote-tracking copy so
+# the check reflects what a pipeline (which pulls from the remote) would build.
+resolve() {
+	local r="$1"
+	# Prefer the remote-tracking ref: a bake pipeline builds the REMOTE branch,
+	# and local copies drift. Fall back to a local ref only if no remote one.
+	case "$r" in
+		"$REMOTE"/*|refs/remotes/*) cands="$r";;
+		*) cands="refs/remotes/$REMOTE/$r $REMOTE/$r $r";;
+	esac
+	local cand
+	for cand in $cands; do
+		git rev-parse --verify --quiet "$cand^{commit}" >/dev/null 2>&1 && { echo "$cand"; return 0; }
+	done
+	return 1
+}
+BASE_REF="$(resolve "$BASE")" || { echo "cannot resolve base '$BASE'" >&2; exit 2; }
+BR_REF="$(resolve "$BR")"     || { echo "cannot resolve branch '$BR'" >&2; exit 2; }
+
+behind="$(git rev-list --count "$BR_REF..$BASE_REF")"   # commits on trunk not on branch
+ahead="$(git rev-list --count "$BASE_REF..$BR_REF")"    # commits on branch not on trunk
+echo "branch $BR_REF: ahead of $BASE by $ahead, behind by $behind"
+
+if [ "$behind" -gt 0 ]; then
+	echo "STALE: $BR is $behind commit(s) behind $BASE. Rebase or cherry-pick its $ahead commit(s) onto $BASE before baking/merging -- a direct merge would revert $BASE by $behind commits." >&2
+	exit 3
+fi
+if [ "$ahead" -eq 0 ]; then
+	echo "MERGED: $BR is fully contained in $BASE (nothing to bake/merge)." >&2
+	exit 4
+fi
+echo "CLEAN: $BR = $BASE + $ahead commit(s), 0 behind -- safe to bake and to fast-forward merge."
+exit 0
