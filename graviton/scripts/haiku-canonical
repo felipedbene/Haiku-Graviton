@@ -16,6 +16,9 @@ set -euo pipefail
 REGION="${AWS_REGION:-us-west-2}"
 TAG_KEY="canonical"
 TAG_VAL="true"
+# SSM Parameter Store mirror of the canonical AMI id, so tooling can resolve it
+# without an ec2 describe-images tag query. Kept in sync by promote (below).
+SSM_PARAM="${HAIKU_CANONICAL_SSM_PARAM:-/haiku-graviton/canonical-ami-id}"
 
 list_canonical() {
 	aws ec2 describe-images --region "$REGION" --owners self \
@@ -56,6 +59,14 @@ cmd_promote() {
 	echo "canonical: ${target}"
 	aws ec2 create-tags --region "$REGION" --resources "$target" \
 		--tags "Key=${TAG_KEY},Value=${TAG_VAL}"
+	# Mirror the id into SSM so consumers can resolve the canonical AMI without a
+	# tag query. Non-fatal: the ec2 tag remains the source of truth.
+	if aws ssm put-parameter --region "$REGION" --name "$SSM_PARAM" \
+			--type String --overwrite --value "$target" >/dev/null 2>&1; then
+		echo "ssm: ${SSM_PARAM} = ${target}"
+	else
+		echo "warning: failed to update SSM parameter ${SSM_PARAM}" >&2
+	fi
 	cmd_check
 }
 
