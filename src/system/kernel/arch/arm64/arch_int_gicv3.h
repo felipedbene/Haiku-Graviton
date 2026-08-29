@@ -22,6 +22,7 @@ public:
 			void				EnableInterrupt(int32 irq);
 			void				DisableInterrupt(int32 irq);
 			void				HandleInterrupt();
+			int32				AssignToCpu(int32 irq, int32 cpu);
 			void				SendMulticastIci(CPUSet& cpuSet);
 			void				SendBroadcastIci();
 

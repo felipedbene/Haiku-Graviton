@@ -513,6 +513,45 @@ GICv3InterruptController::HandleInterrupt()
 }
 
 
+// The single dispatch point for interrupt affinity. SPIs and MSIs travel by
+// different routing mechanisms, so which one an incoming vector needs is
+// decided here by its range.
+int32
+GICv3InterruptController::AssignToCpu(int32 irq, int32 cpu)
+{
+	const int32 cpuCount = smp_get_num_cpus();
+	if (cpu < 0 || cpu >= cpuCount)
+		return 0;
+
+	// SPIs are routed by the distributor's per-INTID affinity register. Point
+	// GICD_IROUTER at the requested CPU's affinity and let the write settle;
+	// the kernel vector equals the INTID across the SPI range.
+	if (irq >= GIC_SPI_BASE && irq < (int32)fIrqCount) {
+		_WriteGicd64(GICD_IROUTER + irq * 8,
+			gic_routing_affinity(gCPU[cpu].arch.mpidr));
+		_WaitForRwp();
+		return cpu;
+	}
+
+	// MSIs/LPIs are routed by the ITS collection -> redistributor map, not by
+	// GICD_IROUTER. The ITS fixes each vector's collection when it is allocated
+	// (round-robin across CPUs). It cannot be re-issued from here: this runs
+	// from the install path with interrupts disabled under a vector spinlock,
+	// where the ITS command queue -- which blocks on a mutex and spins for the
+	// queue to drain -- must not be touched. Report the CPU the vector already
+	// targets so the bookkeeping is honest and the rebalancer does not churn.
+	if (fITS != NULL) {
+		const int32 target = fITS->CurrentCpuForVector(irq);
+		if (target >= 0)
+			return target;
+	}
+
+	// Anything we do not route -- PPIs, SGIs, unmanaged vectors -- stays on the
+	// boot CPU, which is where the distributor left it.
+	return 0;
+}
+
+
 // GICv3 addresses SGI targets by affinity: bits [15:0] are a target list of
 // PEs sharing Aff3.Aff2.Aff1, selected by Aff0.
 void
