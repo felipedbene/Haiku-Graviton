@@ -75,6 +75,13 @@ static irq_assignment sVectorCPUAssignments[NUM_IO_VECTORS];
 static mutex sIOInterruptVectorAllocationLock
 	= MUTEX_INITIALIZER("io_interrupt_vector_allocation");
 
+// Whether the architecture is able to route IRQs to a requested CPU. It starts
+// out assumed-supported and is cleared the first time arch_int_assign_to_cpu()
+// declines an affinity request (returns a CPU other than the one asked for).
+// Once cleared, the scheduler's IRQ rebalancer stops trying, avoiding per-tick
+// irqs_lock churn that would otherwise achieve nothing.
+static bool sIRQAffinitySupported = true;
+
 
 #if DEBUG_INTERRUPTS
 static int
@@ -735,6 +742,22 @@ assign_io_interrupt_to_cpu(int32 vector, int32 newCPU)
 	if (newCPU == oldCPU)
 		return;
 
+	// Program the routing first. The return value is the CPU the interrupt
+	// will actually target: on success it matches the request; if it differs,
+	// the architecture cannot honour the request, so leave the vector on its
+	// old CPU untouched (no list surgery, no lock churn). Record that once so
+	// the scheduler's rebalancer can stop retrying.
+	int32 targetCPU = arch_int_assign_to_cpu(vector, newCPU);
+	if (targetCPU != newCPU) {
+		if (sIRQAffinitySupported) {
+			sIRQAffinitySupported = false;
+			dprintf("interrupts: architecture declined IRQ affinity request "
+				"(vector %" B_PRId32 " stays on CPU %" B_PRId32 "); disabling "
+				"the IRQ rebalancer\n", vector, oldCPU);
+		}
+		return;
+	}
+
 	ASSERT(oldCPU != -1);
 	cpu_ent* cpu = &gCPU[oldCPU];
 
@@ -744,9 +767,15 @@ assign_io_interrupt_to_cpu(int32 vector, int32 newCPU)
 	cpu->irqs.Remove(sVectors[vector].assigned_cpu);
 	locker.Unlock();
 
-	newCPU = arch_int_assign_to_cpu(vector, newCPU);
-	sVectors[vector].assigned_cpu->cpu = newCPU;
-	cpu = &gCPU[newCPU];
+	sVectors[vector].assigned_cpu->cpu = targetCPU;
+	cpu = &gCPU[targetCPU];
 	locker.SetTo(cpu->irqs_lock, false);
 	cpu->irqs.Add(sVectors[vector].assigned_cpu);
+}
+
+
+bool
+interrupt_affinity_supported(void)
+{
+	return sIRQAffinitySupported;
 }

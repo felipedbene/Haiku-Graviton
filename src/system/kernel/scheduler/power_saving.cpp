@@ -216,6 +216,12 @@ pack_irqs()
 {
 	SCHEDULER_ENTER_FUNCTION();
 
+	// If the architecture can't route IRQs, assign_io_interrupt_to_cpu() is a
+	// no-op that leaves each vector on its current CPU. The drain loop below
+	// would then never make progress, so bail out early.
+	if (!interrupt_affinity_supported())
+		return;
+
 	CoreEntry* smallTaskCore = atomic_pointer_get(&sSmallTaskCore);
 	if (smallTaskCore == NULL)
 		return;
@@ -257,6 +263,11 @@ rebalance_irqs(bool idle)
 	}
 
 	if (idle || sSmallTaskCore != NULL)
+		return;
+
+	// Architecture can't route IRQs to a chosen CPU: rebalancing is pure
+	// irqs_lock churn that re-parents nothing. Stop once that is known.
+	if (!interrupt_affinity_supported())
 		return;
 
 	cpu_ent* cpu = get_cpu_struct();

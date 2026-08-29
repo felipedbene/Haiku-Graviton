@@ -84,6 +84,7 @@ status_t allocate_io_interrupt_vectors(int32 count, int32 *startVector,
 void free_io_interrupt_vectors(int32 count, int32 startVector);
 
 void assign_io_interrupt_to_cpu(int32 vector, int32 cpu);
+bool interrupt_affinity_supported(void);
 
 
 #endif /* _KERNEL_INTERRUPTS_H */
