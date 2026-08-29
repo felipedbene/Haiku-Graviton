@@ -258,6 +258,16 @@ arch_handle_acpi()
 		uint32 pe_count = 0;
 		bool reportedTooManyCpus = false;
 
+		// The PMU counter-overflow interrupt (MADT GICC "Performance Interrupt
+		// GSIV"). Architecturally identical across every PE in a machine, so
+		// the first enabled GICC that states a non-zero value sets it and any
+		// later disagreement voids it: a value we cannot trust is worse than
+		// none, because the kernel would install the overflow handler on the
+		// wrong line. Zero means "firmware did not say", which the kernel
+		// treats as "no PMU sampling", not as INTID 0.
+		uint32 pmu_gsiv = 0;
+		bool pmu_gsiv_valid = true;
+
 		// A subtable is allowed to be the last thing in the table but not to
 		// run past its end, and a zero length would never advance: both would
 		// otherwise leave this loop reading whatever follows the MADT, or
@@ -298,6 +308,18 @@ arch_handle_acpi()
 						acpi_gicc->cpu_interface_num, acpi_gicc->flags);
 					desc = (acpi_apic*)((char*)desc + desc->length);
 					continue;
+				}
+
+				// Record the PMU overflow GSIV from this enabled GICC. The
+				// field is per-PE in the table but the same on every core of a
+				// machine; take the first non-zero value and treat any later
+				// disagreement as untrustworthy rather than guessing which core
+				// is right.
+				if (acpi_gicc->performance_gsiv != 0) {
+					if (pmu_gsiv == 0)
+						pmu_gsiv = acpi_gicc->performance_gsiv;
+					else if (pmu_gsiv != acpi_gicc->performance_gsiv)
+						pmu_gsiv_valid = false;
 				}
 
 				// A CPU we have no room for must not abort the rest of this
@@ -368,9 +390,18 @@ arch_handle_acpi()
 
 			intc.pe_count = pe_count;
 
+			// Publish the PMU overflow GSIV only if every enabled GICC agreed.
+			// The kernel installs the PMU sampling overflow handler on exactly
+			// this INTID; a zero here disables PMU sampling (the software
+			// profiling timer still runs), which is the safe default.
+			intc.pmu_gsiv = pmu_gsiv_valid ? pmu_gsiv : 0;
+
 			dprintf("discovered gic from acpi: version=%d, gicd=%lx, "
 				"gicr=%lx (size %lx), its=%lx, %u pes\n", version, gicd_base,
 				gicr_base, gicr_size, its_base, pe_count);
+			dprintf("acpi: pmu overflow gsiv (madt gicc performance interrupt) "
+				"= %u%s\n", intc.pmu_gsiv,
+				pmu_gsiv_valid ? "" : " (giccs disagreed; pmu sampling off)");
 
 			arch_acpi_set_gicr_regions(intc, gicr_bases, gicr_base_count,
 				version);

@@ -32,15 +32,16 @@
 	source. When no session is running the call is inert.
 
 	The timer stands down only once an overflow has actually been serviced, not
-	merely once the handler is installed -- see arm64_pmu_sampling_active(). On
-	AWS Graviton (Neoverse-V1/c7g, verified on 16xlarge and large) the overflow
-	interrupt was observed NOT to fire at all: the counters read correctly and
-	the handler installs cleanly on PPI INTID 23, but no overflow is ever
-	delivered, so this cycle-attributed path collects nothing there and profiling
-	falls back to the software timer. Making the interrupt fire on Graviton is an
-	open E-PMU-1b item (likely the PMU interrupt GSIV differs from the hardcoded
-	INTID 23; the authoritative value is the MADT GICC Performance Interrupt
-	GSIV, which nothing in-tree parses yet).
+	merely once the handler is installed -- see arm64_pmu_sampling_active(). An
+	earlier revision hardcoded the overflow interrupt on the architected PPI 7
+	(INTID 23) and it was observed NOT to fire on AWS Graviton (Neoverse-V1/c7g,
+	verified on 16xlarge and large): the counters read correctly, but no
+	overflow was ever delivered, because the interrupt number the firmware
+	actually assigns to the PMU differs from 23. The INTID is now taken from the
+	MADT GICC "Performance Interrupt GSIV" (parsed in the boot loader, carried
+	in intc_info::pmu_gsiv, read in arm64_pmu_init()), which is the authoritative
+	value. Where the firmware states no GSIV, sampling stays off and profiling
+	uses the software timer, as it does on every other architecture.
 
 	What this deliberately is not:
 
@@ -71,6 +72,7 @@
 #include <KernelExport.h>
 #include <arch/cpu.h>
 #include <boot/kernel_args.h>
+#include <interrupt_controller.h>
 #include <debug.h>
 #include <interrupts.h>
 #include <safemode.h>
@@ -85,19 +87,21 @@
 #define ARM64_PMU_SAFEMODE_OPTION	"arm64_pmu"
 
 
-// The PMUv3 counter-overflow interrupt is a private peripheral interrupt (PPI)
-// and its INTID is fixed by the platform, not read from any PMU register. The
-// device-tree binding for "arm,armv8-pmuv3" specifies <GIC_PPI 7 ...> -- the
-// GIC-500 TRM Table A.3 recommendation -- and the device-tree PPI space maps
-// to GIC INTIDs at PPI + 16, so PPI 7 is INTID 23. This mirrors how
-// arch_timer.cpp hardcodes INTID 27 for the virtual-timer PPI (device-tree
-// cntv = <GIC_PPI 11> = 27) rather than parsing firmware, and that value is
-// cross-checked against real hardware (the virtual-timer PPI reads back as
-// INTID 27 on Graviton). Graviton follows the same architected PPI assignment;
-// on the ACPI boot path the same number is what the MADT GICC "Performance
-// Interrupt GSIV" carries. If a future part disagrees, this is the one value
-// to revisit -- there is no in-tree facility that reads it from firmware yet.
-#define PMU_OVERFLOW_INTID			23
+// The PMUv3 counter-overflow interrupt number is NOT derivable from any PMU
+// register. The device-tree binding for "arm,armv8-pmuv3" recommends
+// <GIC_PPI 7 ...> (GIC-500 TRM Table A.3), which maps to GIC INTID 23 (PPI +
+// 16); the architected timer's PPI is handled the same way (arch_timer.cpp
+// hardcodes INTID 27). But that PPI is only a recommendation, and firmware is
+// free to place the PMU interrupt on a different line -- the authoritative
+// value on an ACPI system is the MADT GICC "Performance Interrupt GSIV". An
+// earlier revision of this facility hardcoded INTID 23 and the overflow
+// interrupt was observed NOT to fire on AWS Graviton (Neoverse-V1/c7g),
+// because the GSIV the firmware actually reports differs from 23. So the INTID
+// is taken from the MADT (parsed in the boot loader, carried in
+// intc_info::pmu_gsiv) rather than assumed here; see sOverflowIntID. When the
+// firmware states no GSIV, PMU sampling stays off and the software profiling
+// timer runs as on every other architecture.
+#define PMU_OVERFLOW_ARCHITECTED_INTID	23
 
 // Cycles between sampling-counter overflows. At ~2.6 GHz, 10^7 cycles is about
 // 260 overflows per second per CPU under a fully CPU-bound load -- plenty of
@@ -261,6 +265,13 @@ static uint32 sSampleCounter;
 	// same part. Set once, in pmu_read_implementation_info().
 static uint64 sSamplePeriod = PMU_DEFAULT_SAMPLE_PERIOD;
 	// Cycles between sampling overflows.
+static uint32 sOverflowIntID;
+	// The GIC INTID to install the overflow handler on, taken from the MADT
+	// GICC "Performance Interrupt GSIV" (via intc_info::pmu_gsiv) in
+	// arm64_pmu_init(). Zero means the firmware did not state it, in which case
+	// PMU sampling stays off and the software profiling timer runs instead --
+	// no fault, just a graceful degrade. Never assume the architected INTID 23:
+	// it does not match what Graviton's firmware reports.
 static bool sOverflowInterruptInstalled;
 	// The PMU overflow PPI handler has been installed and its GIC line enabled.
 	// Idempotent guard; the install happens once, from normal context.
@@ -581,18 +592,28 @@ pmu_install_overflow_interrupt()
 	if (sOverflowInterruptInstalled || !sAvailable || !sEnabled)
 		return;
 
-	status_t status = install_io_interrupt_handler(PMU_OVERFLOW_INTID,
+	// The INTID comes from the MADT GICC Performance Interrupt GSIV, not from a
+	// hardcoded PPI. Zero means the firmware did not state it: leave sampling
+	// off (the software profiling timer keeps running) rather than guess.
+	if (sOverflowIntID == 0) {
+		dprintf("arm64_pmu: no PMU overflow interrupt GSIV from firmware; "
+			"sampling disabled, software profiling timer used instead\n");
+		return;
+	}
+
+	status_t status = install_io_interrupt_handler(sOverflowIntID,
 		&pmu_overflow_interrupt, NULL, 0);
 	if (status != B_OK) {
-		dprintf("arm64_pmu: could not install overflow handler on INTID %d: "
-			"%s\n", PMU_OVERFLOW_INTID, strerror(status));
+		dprintf("arm64_pmu: could not install overflow handler on INTID %"
+			B_PRIu32 ": %s\n", sOverflowIntID, strerror(status));
 		return;
 	}
 
 	sOverflowInterruptInstalled = true;
-	dprintf("arm64_pmu: sampling overflow interrupt on PPI INTID %d, counter "
-		"[%" B_PRIu32 "] cpu-cycles, period %" B_PRIu64 " cycles\n",
-		PMU_OVERFLOW_INTID, sSampleCounter, sSamplePeriod);
+	dprintf("arm64_pmu: sampling overflow interrupt on INTID %" B_PRIu32
+		" (madt gicc performance gsiv), counter [%" B_PRIu32 "] cpu-cycles, "
+		"period %" B_PRIu64 " cycles\n", sOverflowIntID, sSampleCounter,
+		sSamplePeriod);
 }
 
 
@@ -710,11 +731,14 @@ arm64_pmu_sampling_active(void)
 {
 	// The PMU cycle-overflow is a usable sampling source only once its handler
 	// has actually serviced an overflow (sOverflowObserved), not merely once the
-	// handler is installed. The two differ in practice: on AWS Graviton the
-	// overflow interrupt was observed NOT to fire even though the handler
-	// installs cleanly on PPI INTID 23 and the counters read correctly, so an
-	// install-only test would wrongly suppress the software profiling timer and
-	// leave `profile` with no samples at all. Gating on a serviced overflow makes
+	// handler is installed. The two differ in practice: with the earlier
+	// hardcoded INTID 23 the overflow interrupt never fired on AWS Graviton
+	// even though the handler installed cleanly and the counters read correctly,
+	// so an install-only test would wrongly suppress the software profiling
+	// timer and leave `profile` with no samples at all. The INTID now comes from
+	// the MADT GSIV, but this gate is kept as defence in depth -- it stays
+	// correct on any part whose firmware misreports the GSIV, and on the
+	// reduced-PMU sizes where no GSIV is provided. Gating on a serviced overflow makes
 	// this self-correcting: where the interrupt never arrives the facility never
 	// claims to be the sample source and the software timer keeps profiling.
 	// sEnabled/sAvailable/sOverflowInterruptInstalled are implied once an
@@ -1013,8 +1037,14 @@ debug_pmu(int argc, char** argv)
 			// and does a cross-CPU call), so overflows only get counted once
 			// the line is up. Use the arm64_pmu boot setting for the full path.
 			if (!sOverflowInterruptInstalled) {
-				kprintf("pmu: overflow interrupt not installed; overflow count "
-					"stays 0 until the boot setting installs it\n");
+				if (sOverflowIntID == 0) {
+					kprintf("pmu: no overflow interrupt gsiv in the madt; "
+						"sampling is off and the overflow count stays 0\n");
+				} else {
+					kprintf("pmu: overflow interrupt (INTID %" B_PRIu32 ") not "
+						"installed yet; overflow count stays 0 until the boot "
+						"setting installs it\n", sOverflowIntID);
+				}
 			}
 		}
 
@@ -1102,6 +1132,22 @@ arm64_pmu_init(kernel_args* args)
 
 	sAvailable = true;
 	sLongEventCounters = sPmuVer >= ID_AA64DFR0_PMU_VER_3_5;
+
+	// The overflow interrupt is installed on the MADT GICC Performance
+	// Interrupt GSIV, parsed by the boot loader and carried here in
+	// intc_info::pmu_gsiv. Read it once, now, while kernel_args is still around.
+	// Zero means the firmware did not state it, and PMU sampling stays off.
+	sOverflowIntID = args->arch_args.interrupt_controller.pmu_gsiv;
+	if (sOverflowIntID != 0) {
+		dprintf("arm64_pmu: overflow interrupt gsiv from madt = %" B_PRIu32
+			"%s\n", sOverflowIntID,
+			sOverflowIntID == PMU_OVERFLOW_ARCHITECTED_INTID
+				? " (architected PPI 7)" : " (differs from architected INTID "
+					"23)");
+	} else {
+		dprintf("arm64_pmu: no overflow interrupt gsiv in madt; pmu sampling "
+			"will stay off (software profiling timer used)\n");
+	}
 
 	pmu_select_events(kPresets[0].events, kPresets[0].eventCount);
 

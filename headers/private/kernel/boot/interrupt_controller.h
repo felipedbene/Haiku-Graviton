@@ -55,6 +55,15 @@ typedef struct {
 	// exist, which is the only safe way to bound a walk across a region whose
 	// declared size is a generous window rather than an array. Zero if unknown.
 	uint32 pe_count;
+
+	// The PMU counter-overflow interrupt number, taken from the MADT GICC
+	// "Performance Interrupt GSIV" field (ACPI 6.x, GIC CPU Interface
+	// structure). This is the authoritative INTID for the PMUv3 overflow
+	// interrupt, and it is not derivable from any PMU register -- the
+	// architected device-tree PPI 7 (INTID 23) is only a recommendation, and
+	// firmware is free to place it elsewhere. Zero when the firmware did not
+	// state it (or the GICCs disagreed), in which case PMU sampling stays off.
+	uint32 pmu_gsiv;
 } __attribute__((packed)) intc_info;
 
 
