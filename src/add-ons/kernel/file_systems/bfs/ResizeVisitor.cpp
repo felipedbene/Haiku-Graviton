@@ -21,15 +21,26 @@ ResizeVisitor::ResizeVisitor(Volume* volume)
 
 /*!	Grows the file system so it spans \a size bytes of the underlying device.
 
-	Only growth that fits inside the block bitmap already on disk is handled
-	here; that is the common cloud case (an image baked at one size booted on a
-	larger EBS volume) and, crucially, it needs no relocation: the bitmap, the
-	log area and the file data all keep their fixed on-disk positions. Growth
-	large enough to need extra bitmap blocks -- which would push the log and any
-	data behind it -- and shrinking (which would have to evacuate inodes out of
-	the truncated tail) are deliberately left unimplemented; see the ToDo file
-	and the class comment. Both remain B_NOT_SUPPORTED so a caller never
-	silently corrupts the volume.
+	Two grow cases are classified here; neither ever relocates live data:
+
+	1. Growth that fits inside the block bitmap already on disk (item 1) is
+	   applied directly -- the common cloud case (an image baked at one size
+	   booted on a slightly larger volume): the bitmap, log and file data keep
+	   their fixed positions and the already-zeroed trailing bitmap bits are
+	   handed to the allocator.
+	2. A larger grow that needs more bitmap blocks is only eligible on a volume
+	   formatted with format-time headroom (Volume::Initialize +
+	   VOLUME_GROW_HEADROOM): the extra bitmap blocks then fall inside a
+	   pre-reserved, already-allocated gap below the high-placed log. The
+	   classify/guard for that case lives below, but the in-place fill + atomic
+	   commit + crash recovery (design Part D) are not yet implemented, so it is
+	   still refused.
+
+	Shrinking (which would have to evacuate inodes out of the truncated tail)
+	and the general relocating grow (a bitmap extension on a volume with no
+	baked gap) are deliberately unimplemented and return B_NOT_SUPPORTED, so a
+	caller can never silently corrupt the volume. See the ToDo file and
+	graviton/docs/develop/bfs-auto-grow-design.md.
 */
 status_t
 ResizeVisitor::Resize(off_t size, disk_job_id job)
@@ -58,48 +69,97 @@ ResizeVisitor::Resize(off_t size, disk_job_id job)
 	// log area and then file data, all at fixed offsets. The trailing bits of
 	// the last bitmap block past oldNumBlocks are already zero (free) on disk
 	// but are not counted as usable because the allocation group caps its bit
-	// count at the volume size. We can therefore hand those bits to the
-	// allocator without touching anything else -- but only while the new size
-	// still fits in the bitmap blocks already present. A larger grow needs new
-	// bitmap blocks (and hence log/data relocation), which is a separate change.
+	// count at the volume size.
 	off_t oldBitmapBlocks = (oldNumBlocks + bitsPerBlock - 1) / bitsPerBlock;
 	off_t newBitmapBlocks = (newNumBlocks + bitsPerBlock - 1) / bitsPerBlock;
-	if (newBitmapBlocks != oldBitmapBlocks) {
-		INFORM(("bfs: resize to %" B_PRIdOFF " blocks needs %" B_PRIdOFF
-			" bitmap blocks (have %" B_PRIdOFF "); bitmap extension is not "
-			"implemented\n", newNumBlocks, newBitmapBlocks, oldBitmapBlocks));
+
+	if (newBitmapBlocks == oldBitmapBlocks) {
+		// Item 1 (merged): the grow fits inside the block bitmap already on
+		// disk, so we can hand the already-zeroed trailing bits to the
+		// allocator without touching anything else -- no relocation.
+		//
+		// Because a single bitmap block never spans more than one allocation
+		// group, staying inside the same bitmap-block count also keeps the
+		// number of allocation groups constant; verify the invariant IsValid()
+		// enforces so a grow can never produce a superblock the mount path
+		// would reject.
+		int32 agSize = 1L << volume->AllocationGroupShift();
+		if (divide_roundup(newNumBlocks, agSize)
+				!= (int64)volume->AllocationGroups()) {
+			return B_NOT_SUPPORTED;
+		}
+
+		// Persist the new block count, then rebuild the in-memory allocator so
+		// the freshly-covered bitmap bits are picked up as free space
+		// (BlockAllocator::_Initialize derives the last group's bit count from
+		// Volume::NumBlocks()). used_blocks is unchanged -- growth only adds
+		// free blocks -- so FreeBlocks() widens automatically.
+		disk_super_block& superBlock = volume->SuperBlock();
+		superBlock.num_blocks = HOST_ENDIAN_TO_BFS_INT64(newNumBlocks);
+
+		status_t status = volume->WriteSuperBlock();
+		if (status != B_OK) {
+			// Roll the in-memory value back so the volume keeps describing what
+			// is actually on disk.
+			superBlock.num_blocks = HOST_ENDIAN_TO_BFS_INT64(oldNumBlocks);
+			return status;
+		}
+
+		status = volume->Allocator().Reinitialize();
+		if (status != B_OK)
+			return status;
+
+		return B_OK;
+	}
+
+	// Large grow: the target needs MORE bitmap blocks than are on disk. The v2
+	// design handles this without relocation, but ONLY on a volume that was
+	// formatted with format-time headroom (Part A): the extra bitmap blocks
+	// then land inside a pre-reserved, already-allocated gap that sits below the
+	// (high-placed) log, so nothing owned by the old filesystem is overwritten.
+	// This is the classify/guard skeleton -- it decides eligibility and refuses
+	// everything that is not provably safe; the in-place fill + atomic-commit
+	// steps (design Part D steps 2-8) and their crash-recovery are NOT yet
+	// implemented, so even an eligible request is refused for now.
+	//
+	// TODO(bfs-auto-grow Part D): implement the intent record, bitmap-gap fill,
+	// old-tail-bit clear, atomic superblock commit and mount-time crash
+	// recovery, then replace the final refusal below with the grow. Must remain
+	// gated behind the fault-injection acceptance in
+	// graviton/docs/develop/bfs-auto-grow-verification.md (T1.5 + T2).
+
+	// Foreign / stock-layout volume: no headroom was baked (grow_max_blocks is
+	// 0 on every legacy volume, since Initialize() zeroes the superblock). The
+	// gap does not exist, so a large grow here would require the general
+	// relocating path, which is not shipped. Refuse; the FS is untouched.
+	off_t growMaxBlocks = volume->SuperBlock().GrowMaxBlocks();
+	if (growMaxBlocks <= 0) {
+		INFORM(("bfs: large resize to %" B_PRIdOFF " blocks needs bitmap "
+			"extension, but this volume has no format-time grow headroom; "
+			"refusing (relocating grow is not supported)\n", newNumBlocks));
 		return B_NOT_SUPPORTED;
 	}
 
-	// Because a single bitmap block never spans more than one allocation group,
-	// staying inside the same bitmap-block count also keeps the number of
-	// allocation groups constant; verify the invariant IsValid() enforces so a
-	// grow can never produce a superblock the mount path would reject.
-	int32 agSize = 1L << volume->AllocationGroupShift();
-	if (divide_roundup(newNumBlocks, agSize)
-			!= (int64)volume->AllocationGroups()) {
+	// Target beyond the baked cap: the reserved gap only covers growth up to
+	// grow_max_blocks, so a larger target would run the new bitmap into the log.
+	// Refuse rather than clamp -- a partition genuinely bigger than the baked
+	// cap is an operator/format mismatch worth surfacing.
+	if (newNumBlocks > growMaxBlocks) {
+		INFORM(("bfs: resize target %" B_PRIdOFF " exceeds the baked grow cap "
+			"%" B_PRIdOFF "; refusing\n", newNumBlocks, growMaxBlocks));
 		return B_NOT_SUPPORTED;
 	}
 
-	// Persist the new block count, then rebuild the in-memory allocator so the
-	// freshly-covered bitmap bits are picked up as free space
-	// (BlockAllocator::_Initialize derives the last group's bit count from
-	// Volume::NumBlocks()). used_blocks is unchanged -- growth only adds free
-	// blocks -- so FreeBlocks() widens automatically.
-	disk_super_block& superBlock = volume->SuperBlock();
-	superBlock.num_blocks = HOST_ENDIAN_TO_BFS_INT64(newNumBlocks);
-
-	status_t status = volume->WriteSuperBlock();
-	if (status != B_OK) {
-		// Roll the in-memory value back so the volume keeps describing what is
-		// actually on disk.
-		superBlock.num_blocks = HOST_ENDIAN_TO_BFS_INT64(oldNumBlocks);
-		return status;
-	}
-
-	status = volume->Allocator().Reinitialize();
-	if (status != B_OK)
-		return status;
-
-	return B_OK;
+	// Eligible: headroom present and the target fits within the reserved gap.
+	// The new bitmap blocks [oldBitmapBlocks+1, newBitmapBlocks+1) lie below the
+	// log (placed at maxBitmapBlocks+1 >= newBitmapBlocks+1 by construction), so
+	// filling them overwrites only baked-empty, baked-reserved space. The grow
+	// still needs its gap-sanity check (the gap bits must read as
+	// allocated-reserved) and the Part D commit/recovery, none of which exist
+	// yet -- so gate it.
+	INFORM(("bfs: resize to %" B_PRIdOFF " blocks is eligible for the headroom "
+		"grow (cap %" B_PRIdOFF ", %" B_PRIdOFF " -> %" B_PRIdOFF " bitmap "
+		"blocks) but the in-place grow is not yet implemented; refusing\n",
+		newNumBlocks, growMaxBlocks, oldBitmapBlocks, newBitmapBlocks));
+	return B_NOT_SUPPORTED;
 }
