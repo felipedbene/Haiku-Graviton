@@ -12,6 +12,16 @@
 		SubDirHdrs $(HAIKU_TOP) src add-ons kernel file_systems bfs ;
 	}
 
+	# DeBeOS: compile in the mount-time large-grow engine (GrowEngine) on arm64
+	# only -- the Graviton auto-grow target. Inert on stock-layout roots (the
+	# hook returns before classifying when partition size <= FS size), and it
+	# refuses any volume without format-time grow headroom (grow_max_blocks==0).
+	# Real-Graviton verified: boots clean as a no-op on stock AMIs; fires +
+	# crash-safe + data-preserving only on a growheadroom-formatted volume.
+	if $(TARGET_KERNEL_ARCH) = arm64 {
+		defines += BFS_ENABLE_LARGE_GROW ;
+	}
+
 	if $(TARGET_KERNEL_ARCH) = x86_gcc2 {
 		# GCC2 doesn't compile BFS correctly with -O2 or more
 		OPTIM = -O1 ;
