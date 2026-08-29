@@ -58,6 +58,15 @@ void		arm64_pmu_init_percpu(struct kernel_args* args, int cpu);
 bool		arm64_pmu_available(void);
 bool		arm64_pmu_enabled(void);
 
+// True only where PMCCNTR_EL0 is SAFE to read on the CALLING CPU: the facility
+// is available AND this CPU's counters have been programmed. Stricter than
+// arm64_pmu_enabled() -- the "arm64_pmu" boot flag can be set while PMU access
+// is still trapped to EL2 (AWS sizes without full PMU) or before this CPU's
+// pmu_program_cpu() has run, and reading PMCCNTR_EL0 in either window faults.
+// Cheap; intended for the context-switch hot path. Call with interrupts off
+// (it reads the current CPU's state).
+bool		arm64_pmu_pmccntr_usable(void);
+
 // All of these act on the calling CPU only, and pin to it for their duration.
 status_t	arm64_pmu_enable(void);
 void		arm64_pmu_disable(void);

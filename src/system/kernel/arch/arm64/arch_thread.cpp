@@ -50,10 +50,12 @@ arm64_pop_iframe(struct iframe_stack *stack)
 static int
 dump_thread_cycles(int argc, char** argv)
 {
-	if (!arm64_pmu_enabled()) {
-		kprintf("arm64_pmu is not enabled: per-thread cycle accounting is off "
-			"and CPU time is the timer-based estimate. Turn it on with the "
-			"\"arm64_pmu\" boot setting or the \"pmu on\" KDL command.\n");
+	if (!arm64_pmu_pmccntr_usable()) {
+		kprintf("arm64 PMU cycle counter is not usable on this CPU: per-thread "
+			"cycle accounting is off and CPU time is the timer-based estimate. "
+			"It needs the \"arm64_pmu\" boot setting (or the \"pmu on\" KDL "
+			"command) AND hardware where PMCCNTR_EL0 is accessible -- e.g. an "
+			"AWS full-PMU instance size, not the smaller sizes that trap it.\n");
 		return 0;
 	}
 
@@ -139,7 +141,7 @@ arch_thread_context_switch(Thread *from, Thread *to)
 	// delta for `from` was measured against a snapshot taken on this same core,
 	// so a later migration of either thread never compares counters between
 	// cores.
-	if (arm64_pmu_enabled()) {
+	if (arm64_pmu_pmccntr_usable()) {
 		uint64 now = READ_SPECIALREG(PMCCNTR_EL0);
 		from->arch_info.cpu_cycles += now - from->arch_info.cycle_ref;
 		to->arch_info.cycle_ref = now;

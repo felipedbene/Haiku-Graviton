@@ -473,6 +473,24 @@ arm64_pmu_enabled(void)
 }
 
 
+bool
+arm64_pmu_pmccntr_usable(void)
+{
+	// Do NOT gate a PMCCNTR_EL0 read on sEnabled alone: the "arm64_pmu" boot
+	// flag is set very early and STAYS set on hardware where PMU access is
+	// trapped to EL2 (e.g. AWS sizes without full PMU) and in the window before
+	// pmu_program_cpu() has run for this CPU -- reading PMCCNTR_EL0 in either
+	// case faults. sPerCPU[].programmed is set only AFTER a successful
+	// pmu_program_cpu() (its register writes would themselves have trapped
+	// otherwise), so it is the true "safe to read on this core" signal -- the
+	// same guard arm64_pmu_read() uses. Callers on the context-switch path run
+	// with interrupts off, so the current-CPU index is stable here.
+	if (!sAvailable)
+		return false;
+	return sPerCPU[smp_get_current_cpu()].programmed;
+}
+
+
 status_t
 arm64_pmu_enable(void)
 {
