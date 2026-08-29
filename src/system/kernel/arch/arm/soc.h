@@ -17,6 +17,13 @@ public:
 
 	virtual void HandleInterrupt() = 0;
 
+	// Routes an interrupt vector to the requested CPU and returns the CPU it
+	// now targets: the requested one on success, or the CPU it was left on if
+	// the architecture cannot honour the request. Callers index gCPU[] with the
+	// return, so it is never negative or out of range. The default controller
+	// cannot route, so it reports the request unchanged.
+	virtual int32 AssignToCpu(int32 irq, int32 cpu) { return cpu; }
+
 	virtual void SendMulticastIci(CPUSet& cpuSet) {
 		panic("SendMulticastIci unimplemented");
 	}
