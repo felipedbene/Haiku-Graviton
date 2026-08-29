@@ -402,6 +402,17 @@ create_socket_fd(net_socket* socket, int flags, bool kernel)
 	if ((flags & SOCK_NONBLOCK) != 0 || nonBlock)
 		oflags |= O_NONBLOCK;
 
+	// SOCK_NONBLOCK only affects the fd's open mode above; the underlying
+	// net_socket does not learn about it, so recv()/send() would keep blocking
+	// on B_INFINITE. Push it down as well, mirroring the fcntl(F_SETFL,
+	// O_NONBLOCK) path in socket_set_flags(). Covers both socket() and
+	// accept4() (the other create_socket_fd() caller).
+	if ((flags & SOCK_NONBLOCK) != 0) {
+		error = sStackInterface->ioctl(socket, B_SET_NONBLOCKING_IO, NULL, 0);
+		if (error != B_OK)
+			return error;
+	}
+
 	// allocate a file descriptor
 	file_descriptor* descriptor = alloc_fd();
 	if (descriptor == NULL)
