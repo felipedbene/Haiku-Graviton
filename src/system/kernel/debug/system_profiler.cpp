@@ -28,6 +28,10 @@
 
 #include <arch/debug.h>
 
+#ifdef __HAIKU_ARCH_ARM64
+#	include <arch/arm64/arch_pmu.h>
+#endif
+
 #include "IOSchedulerRoster.h"
 
 
@@ -68,6 +72,8 @@ public:
 			status_t			Init();
 			status_t			NextBuffer(size_t bytesRead,
 									uint64* _droppedEvents);
+
+			bool				HardwareSample();
 
 private:
 	virtual	void				EventOccurred(NotificationService& service,
@@ -1388,6 +1394,23 @@ SystemProfiler::_AllocateBuffer(size_t size, int event, int cpu, int count)
 SystemProfiler::_InitTimers(void* cookie, int cpu)
 {
 	SystemProfiler* self = (SystemProfiler*)cookie;
+
+#ifdef __HAIKU_ARCH_ARM64
+	// On arm64 the PMU cycle-counter overflow interrupt drives cycle-attributed
+	// samples (E-PMU-2): when that facility is delivering overflows it calls
+	// HardwareSample() from its PPI handler, so the software profiling timer is
+	// left off to keep the PMU the single sample source -- otherwise the two
+	// would interleave and the sample count would no longer reflect the bounded
+	// overflow rate. arm64_pmu_sampling_active() is true only once an overflow
+	// has actually been serviced, never merely because the handler is installed:
+	// on hardware where the overflow interrupt does not fire (and on reduced-PMU
+	// instance sizes or with the facility off) it stays false and the software
+	// timer runs exactly as on every other architecture, so profiling is never
+	// left without a sample source.
+	if (arm64_pmu_sampling_active())
+		return;
+#endif
+
 	self->_ScheduleTimer(cpu);
 }
 
@@ -1448,6 +1471,30 @@ SystemProfiler::_DoSample()
 }
 
 
+/*!	Records one sample of the interrupted thread on behalf of an architecture
+	hardware sampling source (the arm64 PMU cycle-overflow PPI; E-PMU-2), rather
+	than the software profiling timer. Runs in the source's interrupt context.
+
+	Returns false -- take no sample -- unless this profiler is actually
+	collecting samples, so a hardware source can call it unconditionally on
+	every overflow and it is inert whenever no sampling session is in progress.
+	_DoSample() is the very same path the software timer uses, and on arm64
+	arch_debug_get_stack_trace() is explicitly interrupt-safe, so this shares its
+	guarantees.
+*/
+bool
+SystemProfiler::HardwareSample()
+{
+	if (!fProfilingActive
+		|| (fFlags & B_SYSTEM_PROFILER_SAMPLING_EVENTS) == 0) {
+		return false;
+	}
+
+	_DoSample();
+	return true;
+}
+
+
 /*static*/ int32
 SystemProfiler::_ProfilingEvent(struct timer* timer)
 {
@@ -1457,6 +1504,44 @@ SystemProfiler::_ProfilingEvent(struct timer* timer)
 	self->_ScheduleTimer(timer->cpu);
 
 	return B_HANDLED_INTERRUPT;
+}
+
+
+/*!	Kernel entry point for an architecture hardware sampling source to push one
+	profiling sample of the currently interrupted thread. Called from interrupt
+	context (e.g. the arm64 PMU cycle-overflow PPI handler). Safe to call
+	unconditionally: it is a no-op unless a sampling system profiler is active.
+	Returns true if a sample was taken, i.e. the caller is the live sample
+	source and should keep driving overflows.
+
+	The arm64 PMU overflow fires continuously once the facility is on (~hundreds
+	per second per CPU), whether or not anyone is profiling, so the common case
+	is "no session" and must be cheap. A lockless read of sProfiler gates that:
+	when it is NULL there is no session and we return without touching the global
+	lock. A pointer read is atomic on the target, and a race with a session that
+	just started only costs at most one missed sample.
+
+	Once a session is seen, sProfilerLock is held across the rest of the call.
+	The reference behind sProfiler is only released after sProfiler is cleared
+	under this lock, so re-reading it under the lock and holding it keeps the
+	profiler object alive for the duration; and the lock is always taken with
+	interrupts disabled, so an overflow interrupt can never fire on a CPU that is
+	mid-teardown holding it. Lock order is sProfilerLock -> fLock (the order the
+	start/stop paths already use); nothing takes them the other way round.
+*/
+bool
+system_profiler_hardware_sample(void)
+{
+	if (sProfiler == NULL)
+		return false;
+
+	InterruptsSpinLocker locker(sProfilerLock);
+
+	SystemProfiler* profiler = sProfiler;
+	if (profiler == NULL)
+		return false;
+
+	return profiler->HardwareSample();
 }
 
 

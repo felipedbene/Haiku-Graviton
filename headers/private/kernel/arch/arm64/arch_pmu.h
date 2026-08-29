@@ -70,6 +70,13 @@ void		arm64_pmu_init_percpu(struct kernel_args* args, int cpu);
 bool		arm64_pmu_available(void);
 bool		arm64_pmu_enabled(void);
 
+// True when the PMU cycle-overflow sampling source is armed and its overflow
+// interrupt is being delivered, so it -- not the software profiling timer --
+// drives system_profiler samples (E-PMU-2). False on reduced-PMU instance sizes
+// and whenever the facility is off, in which case the software timer profiles
+// as on every other architecture. Cheap, plain reads of global state.
+bool		arm64_pmu_sampling_active(void);
+
 // True only where PMCCNTR_EL0 is SAFE to read on the CALLING CPU: the facility
 // is available AND this CPU's counters have been programmed. Stricter than
 // arm64_pmu_enabled() -- the "arm64_pmu" boot flag can be set while PMU access

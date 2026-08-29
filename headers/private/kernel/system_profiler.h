@@ -23,6 +23,11 @@ status_t start_system_profiler(size_t areaSize, uint32 stackDepth,
 void stop_system_profiler();
 #endif
 
+// Pushes one profiling sample of the currently interrupted thread on behalf of
+// an architecture hardware sampling source (the arm64 PMU cycle-overflow PPI).
+// Interrupt-context safe and a no-op unless a sampling profiler is active.
+bool system_profiler_hardware_sample(void);
+
 status_t _user_system_profiler_start(
 			struct system_profiler_parameters* parameters);
 status_t _user_system_profiler_next_buffer(size_t bytesRead,

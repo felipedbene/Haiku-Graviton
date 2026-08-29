@@ -20,16 +20,31 @@
 	per-CPU overflow count. PMCCNTR_EL0 is left free-running and untouched by
 	sampling, because arm64_pmu_measure_core_frequency() and the per-thread
 	cycle accounting both rely on it being monotonic; reloading it would inject
-	a discontinuity every period. There is no sample buffer and no
-	system_profiler coupling yet -- that is the separate E-PMU-2 step; this
-	layer only proves the interrupt plumbing.
+	a discontinuity every period.
+
+	What this is, additionally (E-PMU-2): each overflow is a cycle-attributed
+	profiling sample. The handler calls system_profiler_hardware_sample(), which
+	walks the interrupted thread's stack -- the same path the software profiling
+	timer uses on every architecture -- into the active profiler's buffer. So
+	while a `profile`/system_profiler session runs on arm64, the samples come
+	from the PMU cycle counter rather than a wall-clock timer, and the software
+	timer stands down (arm64_pmu_sampling_active()) to keep the PMU the single
+	source. When no session is running the call is inert.
+
+	The timer stands down only once an overflow has actually been serviced, not
+	merely once the handler is installed -- see arm64_pmu_sampling_active(). On
+	AWS Graviton (Neoverse-V1/c7g, verified on 16xlarge and large) the overflow
+	interrupt was observed NOT to fire at all: the counters read correctly and
+	the handler installs cleanly on PPI INTID 23, but no overflow is ever
+	delivered, so this cycle-attributed path collects nothing there and profiling
+	falls back to the software timer. Making the interrupt fire on Graviton is an
+	open E-PMU-1b item (likely the PMU interrupt GSIV differs from the hardcoded
+	INTID 23; the authoritative value is the MADT GICC Performance Interrupt
+	GSIV, which nothing in-tree parses yet).
 
 	What this deliberately is not:
 
-	- Not yet a full sampling profiler. The overflow interrupt is enabled and
-	  bounded, but the interrupted PC is not captured or attributed to anything
-	  (E-PMU-2). Everything here is inert unless the facility is enabled.
-	- Not a userland interface. There is no syscall, no /dev node, no
+	- Not a userland interface of its own. There is no syscall, no /dev node, no
 	  per-thread accounting, and PMUSERENR_EL0 is explicitly written to zero
 	  rather than opening the counters to EL0. Three reasons: the counters are
 	  not saved or restored across a context switch, so an EL0 reader would
@@ -60,6 +75,7 @@
 #include <interrupts.h>
 #include <safemode.h>
 #include <smp.h>
+#include <system_profiler.h>
 
 #include <stdio.h>
 #include <string.h>
@@ -248,6 +264,12 @@ static uint64 sSamplePeriod = PMU_DEFAULT_SAMPLE_PERIOD;
 static bool sOverflowInterruptInstalled;
 	// The PMU overflow PPI handler has been installed and its GIC line enabled.
 	// Idempotent guard; the install happens once, from normal context.
+static bool sOverflowObserved;
+	// Set the first time the overflow handler actually services an overflow, so
+	// arm64_pmu_sampling_active() reports the PMU as a sample source only once it
+	// has proven it delivers -- being installed is not the same as firing. Racy
+	// write from interrupt context is fine: it is a monotonic false->true latch
+	// and a stale read only costs one profiling window on the software timer.
 
 static const pmu_preset* sPreset = &kPresets[0];
 static uint16 sEvents[ARM64_PMU_MAX_EVENT_COUNTERS];
@@ -496,9 +518,13 @@ pmu_stop_cpu(int32 cpu)
 	it to -period makes the next overflow exactly one period away, so the rate
 	is one interrupt per sSamplePeriod cycles and no more.
 
-	E-PMU-2 will read the interrupted PC here and hand it to system_profiler.
-	For now the handler only proves the plumbing: bounded rate, an observable
-	per-CPU count, and inert when the facility is off.
+	Each overflow is a cycle-attributed sample: E-PMU-2 hands the interrupted
+	thread to system_profiler_hardware_sample(), which walks the interrupted
+	stack (the same path the software profiling timer uses) into the active
+	profiler's buffer, so `profile`/`system_profiler` in userland attribute the
+	samples to the code that was running. That call is inert whenever no
+	sampling session is in progress, so the only cost then is bumping the
+	per-CPU overflow count.
 */
 static int32
 pmu_overflow_interrupt(void* data)
@@ -528,6 +554,13 @@ pmu_overflow_interrupt(void* data)
 	arm64_isb();
 
 	state.overflowCount++;
+	sOverflowObserved = true;
+
+	// Hand the interrupted thread to the system profiler as a cycle-attributed
+	// sample (E-PMU-2). A no-op unless a sampling session is active, so this is
+	// free on an idle profiler and the overflow count above is the only work
+	// done in the common case.
+	system_profiler_hardware_sample();
 
 	return B_HANDLED_INTERRUPT;
 }
@@ -669,6 +702,26 @@ bool
 arm64_pmu_enabled(void)
 {
 	return sEnabled;
+}
+
+
+bool
+arm64_pmu_sampling_active(void)
+{
+	// The PMU cycle-overflow is a usable sampling source only once its handler
+	// has actually serviced an overflow (sOverflowObserved), not merely once the
+	// handler is installed. The two differ in practice: on AWS Graviton the
+	// overflow interrupt was observed NOT to fire even though the handler
+	// installs cleanly on PPI INTID 23 and the counters read correctly, so an
+	// install-only test would wrongly suppress the software profiling timer and
+	// leave `profile` with no samples at all. Gating on a serviced overflow makes
+	// this self-correcting: where the interrupt never arrives the facility never
+	// claims to be the sample source and the software timer keeps profiling.
+	// sEnabled/sAvailable/sOverflowInterruptInstalled are implied once an
+	// overflow has been serviced, but are kept so a later "pmu off" cannot claim
+	// the source.
+	return sAvailable && sEnabled && sOverflowInterruptInstalled
+		&& sOverflowObserved;
 }
 
 
