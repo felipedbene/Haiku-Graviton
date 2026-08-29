@@ -99,6 +99,7 @@ GICv3ITS::Init(phys_addr_t regs, size_t size, addr_t gicdRegs,
 	// the interface is not reachable from anywhere else until the
 	// msi_set_interface() at the end publishes it.
 	mutex_init(&fLock, "gicv3 its");
+	B_INITIALIZE_SPINLOCK(&fCommandLock);
 
 	STATIC_ASSERT(GIC_ITS_MAX_COLLECTIONS >= SMP_MAX_CPUS);
 
@@ -168,8 +169,12 @@ GICv3ITS::Init(phys_addr_t regs, size_t size, addr_t gicdRegs,
 	if (status != B_OK)
 		return status;
 
+	// Independent per-vector assignment records: each LPI travels through its
+	// own ITS collection, so its target CPU is tracked and steered per vector.
+	// A shared record would collapse the whole ITS vector space onto one CPU
+	// and defeat the per-CPU collections mapped just below.
 	status = allocate_io_interrupt_vectors(GIC_ITS_MAX_VECTORS, &fVectorBase,
-		INTERRUPT_TYPE_IRQ);
+		INTERRUPT_TYPE_IRQ, true);
 	if (status != B_OK) {
 		ERROR("unable to allocate interrupt vectors for MSIs\n");
 		return status;
@@ -577,6 +582,13 @@ GICv3ITS::_InitLpis(addr_t gicdRegs, const gicr_region* gicrRegions,
 status_t
 GICv3ITS::_SubmitCommand(const uint64* command)
 {
+	// One command's worth of ring manipulation is atomic against any other
+	// submitter. The lock also lets SetVectorAffinity() re-route a vector from
+	// an interrupts-disabled context without taking fLock (which may sleep):
+	// the ring write, the CWRITER advance and the CREADR drain all happen while
+	// interrupts are off, so a concurrent submit cannot interleave the ring.
+	InterruptsSpinLocker locker(fCommandLock);
+
 	const addr_t slot = fCommandQueue + fCommandIndex * GITS_CMD_SIZE;
 	for (int i = 0; i < 4; i++)
 		gic_write64(slot + i * 8, command[i]);
@@ -656,6 +668,21 @@ GICv3ITS::_MapInterrupt(uint32 deviceID, uint32 eventID, uint32 lpi,
 	uint64 command[4];
 	command[0] = GITS_CMD_MAPTI | ((uint64)deviceID << 32);
 	command[1] = (uint64)eventID | ((uint64)lpi << 32);
+	command[2] = collection;
+	command[3] = 0;
+	return _SubmitCommand(command);
+}
+
+
+// Re-routes an already-mapped (DeviceID, EventID) to a different collection.
+// Unlike MAPTI this keeps the LPI's existing ITT entry and only changes which
+// collection -- and therefore which redistributor/CPU -- it is delivered to.
+status_t
+GICv3ITS::_MoveInterrupt(uint32 deviceID, uint32 eventID, uint32 collection)
+{
+	uint64 command[4];
+	command[0] = GITS_CMD_MOVI | ((uint64)deviceID << 32);
+	command[1] = eventID;
 	command[2] = collection;
 	command[3] = 0;
 	return _SubmitCommand(command);
@@ -907,4 +934,46 @@ GICv3ITS::CurrentCpuForVector(int32 vector) const
 	// A collection was mapped one-to-one onto each CPU, so the collection id an
 	// event was routed to is the CPU id it is delivered on.
 	return (int32)fVectorCollection[index];
+}
+
+
+int32
+GICv3ITS::SetVectorAffinity(int32 vector, int32 cpu)
+{
+	const int32 index = vector - fVectorBase;
+	if (vector < fVectorBase || index >= GIC_ITS_MAX_VECTORS)
+		return -1;
+
+	if ((fAllocated[index / 32] & (1u << (index % 32))) == 0)
+		return -1;
+
+	// Collection id == cpu id, but the ITS may hold fewer collections than
+	// there are CPUs. If the requested CPU has no collection of its own, fold
+	// it onto one that exists so the interrupt still lands somewhere sane --
+	// and report the CPU actually targeted, never the one we could not reach.
+	if (fCollectionCount == 0)
+		return (int32)fVectorCollection[index];
+	uint32 collection = (uint32)cpu;
+	if (collection >= fCollectionCount)
+		collection %= fCollectionCount;
+
+	// Already there: nothing to move, and re-issuing MOVI would be needless
+	// command-queue traffic from the (possibly hot) affinity dispatch.
+	if (fVectorCollection[index] == collection)
+		return (int32)collection;
+
+	// Re-route the mapped event to the new collection, then make the change
+	// visible by syncing against that collection's redistributor. MOVI keeps
+	// the ITT entry, so no MAPTI/DISCARD is needed. Issued under fCommandLock
+	// (inside _SubmitCommand) only, so this is safe with interrupts disabled.
+	status_t status = _MoveInterrupt(fVectorDevice[index], fVectorEvent[index],
+		collection);
+	if (status != B_OK) {
+		// The move did not take; the vector still targets its old collection.
+		return (int32)fVectorCollection[index];
+	}
+	_Sync(fCollectionTargets[collection]);
+
+	fVectorCollection[index] = collection;
+	return (int32)collection;
 }

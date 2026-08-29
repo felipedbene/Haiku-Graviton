@@ -534,14 +534,15 @@ GICv3InterruptController::AssignToCpu(int32 irq, int32 cpu)
 	}
 
 	// MSIs/LPIs are routed by the ITS collection -> redistributor map, not by
-	// GICD_IROUTER. The ITS fixes each vector's collection when it is allocated
-	// (round-robin across CPUs). It cannot be re-issued from here: this runs
-	// from the install path with interrupts disabled under a vector spinlock,
-	// where the ITS command queue -- which blocks on a mutex and spins for the
-	// queue to drain -- must not be touched. Report the CPU the vector already
-	// targets so the bookkeeping is honest and the rebalancer does not churn.
+	// GICD_IROUTER. Re-route the vector to the collection that targets the
+	// requested CPU with a MOVI. SetVectorAffinity() issues that under a
+	// command-queue spinlock only -- never the ITS's sleeping mutex -- so it is
+	// safe from here even with interrupts disabled under a vector spinlock. It
+	// returns the CPU actually targeted (the request when a matching collection
+	// exists, otherwise a folded one), so the bookkeeping stays honest and the
+	// rebalancer only stops if the ITS genuinely cannot reach that CPU.
 	if (fITS != NULL) {
-		const int32 target = fITS->CurrentCpuForVector(irq);
+		const int32 target = fITS->SetVectorAffinity(irq, cpu);
 		if (target >= 0)
 			return target;
 	}

@@ -219,6 +219,7 @@ struct gicr_region {
 #define GITS_CMD_SIZE			32
 #define GITS_CMD_QUEUE_SIZE		0x10000
 
+#define GITS_CMD_MOVI			0x01
 #define GITS_CMD_MAPD			0x08
 #define GITS_CMD_MAPC			0x09
 #define GITS_CMD_MAPTI			0x0a

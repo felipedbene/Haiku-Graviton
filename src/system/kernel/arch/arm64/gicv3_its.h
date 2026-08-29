@@ -66,6 +66,16 @@ public:
 			// state fixed at allocation, so it is safe from the interrupt path.
 			int32				CurrentCpuForVector(int32 vector) const;
 
+			// Re-routes an allocated MSI vector to the collection that targets
+			// the requested CPU (collection id == cpu id) with a MOVI, and
+			// returns the CPU it now targets. If the ITS holds fewer collections
+			// than there are CPUs the request may fold onto one it can address;
+			// the return is always the CPU actually targeted, never negative.
+			// Issues ITS commands under a spinlock only (never the fLock mutex),
+			// so it is callable with interrupts disabled from the affinity
+			// dispatch -- unlike AllocateVectors(), which may sleep.
+			int32				SetVectorAffinity(int32 vector, int32 cpu);
+
 private:
 			status_t			_InitTables();
 			status_t			_InitCommandQueue();
@@ -85,15 +95,25 @@ private:
 									uint64 target, bool valid);
 			status_t			_MapInterrupt(uint32 deviceID, uint32 eventID,
 									uint32 lpi, uint32 collection);
+			status_t			_MoveInterrupt(uint32 deviceID, uint32 eventID,
+									uint32 collection);
 			status_t			_Discard(uint32 deviceID, uint32 eventID);
 
 			void				_ReleaseVector(uint32 index);
 
-			// Guards the command queue and the vector allocator against
-			// concurrent AllocateVectors()/FreeVectors() callers. Not taken by
+			// Guards the vector allocator (fAllocated bitmap, fDevices, and the
+			// sleeping ITT/table allocations) against concurrent
+			// AllocateVectors()/FreeVectors() callers. Not taken by
 			// VectorForLpi(), which runs from the interrupt path and only reads
 			// state that Init() fixes once.
 			mutex				fLock;
+
+			// Guards a single command-ring submission (fCommandIndex, CWRITER,
+			// the CREADR drain). Held only across one _SubmitCommand(), never
+			// while sleeping, so SetVectorAffinity() can re-route a vector with
+			// interrupts disabled without taking fLock. AllocateVectors() holds
+			// fLock for its bookkeeping and this briefly per command underneath.
+			spinlock			fCommandLock;
 
 			addr_t				fRegs;
 			phys_addr_t			fTranslaterPhysical;
