@@ -115,6 +115,20 @@ AddVariableToScript $(script) : installDir : $(HAIKU_INSTALL_DIR) ;
 #AddVariableToScript $(script) : isImage : 1 ;
 AddVariableToScript $(script) : imageSize : $(HAIKU_IMAGE_SIZE) ;
 AddVariableToScript $(script) : imageLabel : $(HAIKU_IMAGE_LABEL) ;
+
+# DeBeOS/arm64: bake the root BFS with grow-headroom so a canonical AMI booted
+# on a larger root EBS can auto-grow its filesystem at mount time with no on-disk
+# relocation (see graviton/docs/develop/bfs-auto-grow-design.md, Part A). This is
+# opt-in per architecture: only the arm64/Graviton image passes "growheadroom
+# true" to the BFS initialize; every other arch/image formats a stock volume.
+# The build_haiku_image script assembles the actual init-parameter string, so
+# the value here is only a boolean flag (shell metacharacters like the driver-
+# settings ';' separator cannot travel safely through AddVariableToScript).
+local bfsGrowHeadroom = ;
+if $(HAIKU_PACKAGING_ARCH) = arm64 {
+	bfsGrowHeadroom = 1 ;
+}
+AddVariableToScript $(script) : bfsGrowHeadroom : $(bfsGrowHeadroom) ;
 AddVariableToScript $(script) : addBuildCompatibilityLibDir
 	: "export $(HOST_ADD_BUILD_COMPATIBILITY_LIB_DIR)" ;
 AddVariableToScript $(script) : dontClearImage : $(HAIKU_DONT_CLEAR_IMAGE) ;

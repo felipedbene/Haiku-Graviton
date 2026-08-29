@@ -16,6 +16,7 @@ set -o errexit
 # imagePath
 # imageSize
 # imageLabel
+# bfsGrowHeadroom - if set, initialize the image BFS with grow-headroom (arm64)
 # resolvePackageDependencies
 # noDownloads
 # updateAllPackages
@@ -290,8 +291,21 @@ if [ $isImage ]; then
 			$createImage $imageFlags "$imagePath"
 		fi
 
+		# Assemble the BFS initialize parameters. The driver-settings parser
+		# separates parameters on ';' or newline, so a second parameter must be
+		# separated from "block_size 2048" (a bare space would be parsed as
+		# extra values of block_size). arm64/Graviton images opt in to
+		# grow-headroom (see the bfsGrowHeadroom variable set in
+		# build/jam/images/definitions/common-tail and Part A of
+		# graviton/docs/develop/bfs-auto-grow-design.md); every other image
+		# keeps the stock parameters unchanged.
+		bfsInitParams="block_size 2048"
+		if [ "$bfsGrowHeadroom" ]; then
+			bfsInitParams="$bfsInitParams ; growheadroom true"
+		fi
+
 		$bfsShell --initialize $imageOffsetFlags "$imagePath" \
-			"$imageLabel" "block_size 2048"
+			"$imageLabel" "$bfsInitParams"
 		$makebootable $imageOffsetFlags "$imagePath"
 	fi
 
