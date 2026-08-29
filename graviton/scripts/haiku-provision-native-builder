@@ -1,0 +1,176 @@
+#!/bin/sh
+#
+# haiku-provision-native-builder -- turn a freshly-booted DeBeOS (Haiku) arm64
+# box into a working native package builder, using ONLY the DeBeOS package repo
+# plus a git clone of the ports tree. Run this ON the box (over SSH), not on a
+# workstation.
+#
+# Why this exists: native package builds must run on Haiku arm64 -- haikuporter
+# refuses to build ports on a Linux host ("Native building not supported on this
+# platform"). A stock canonical image is deliberately lean, so it lacks the
+# toolchain, the ports tree, and a couple of environmental things haikuporter
+# assumes are present. This script installs all of that from the repo the image
+# is already configured for, so any instance launched from the canonical AMI
+# becomes a builder with one command -- no dependence on a pre-seeded golden
+# guest.
+#
+# What it does, and why each step is load-bearing (all learned by getting a real
+# `jq` built end-to-end on a lean box):
+#
+#   1. Installs the build toolchain from the repo. gcc/binutils/make and the
+#      autotools are obvious; the less-obvious ones are:
+#        - python3.14  -- haikuporter is Python and unpacks .tar.gz via the
+#          stdlib tarfile module, which needs the zlib extension. The repo's
+#          python3.14 HAS zlib built in; an older seeded python3.10 did not, and
+#          that (not any real fetch problem) is what made tarfile reject a valid
+#          tarball as "Unrecognized archive type". We verify zlib explicitly and
+#          ABORT if it is missing rather than fail cryptically mid-build.
+#        - bison/flex/m4/patch/gawk/diffutils -- individual ports pull these in
+#          as build-requires (jq needed bison); install the common set up front.
+#        - haiku_devel -- the C-runtime glue + private headers ports link against.
+#        - git/gzip/xz_utils -- the lean base ships none of these, and the ports
+#          workflow needs all three (clone the tree, unpack tarballs).
+#
+#   2. Clones the ports tree and haikuporter itself over HTTPS. TLS works on the
+#      canonical image (openssl3 + a CA store are in the base), so a plain
+#      `git clone` of both is enough -- there is no need to relay haikuporter
+#      from anywhere. Writes a minimal haikuports.conf targeting arm64.
+#
+#   3. Creates /boot/system/settings/fonts. haikuporter's chroot setup does an
+#      unconditional `cp -r /system/settings/fonts ...` under `set -e`; the lean
+#      image does not create that directory, so the copy fails and aborts the
+#      build BEFORE the recipe even runs. An empty dir is enough.
+#
+#   4. Installs a wget shim. haikuporter fetches sources with wget, which the
+#      base lacks; more importantly, some upstreams (notably GitHub release
+#      tarball CDNs) stall or hang when fetched from a Haiku box. The shim first
+#      serves a matching file from a local seed directory (drop tarballs there,
+#      fetched on a fast host, to sidestep a flaky upstream) and otherwise falls
+#      back to curl. See also the metal-guest variant, graviton/scripts/
+#      haiku-wget-shim, which instead relays through a proxy on the host.
+#
+# After this runs, build a port with:
+#     cd "$HP_DIR" && python3.14 ./haikuporter --config="$CONF" -y \
+#         --all-dependencies <port>
+# (build a port's own build-requires first; `--all-dependencies` covers them,
+# but a bare `-G` does not.) Then publish the resulting .hpkg to the DeBeOS repo
+# from a Haiku host with graviton/scripts/haiku-repo-add.
+#
+# Everything is idempotent: re-running skips what is already present.
+#
+# Config (env only -- NO account/host names are baked into this tracked file):
+#   HP_HOME      home dir to install under      (default /boot/home)
+#   PORTS_REPO   ports tree git URL             (default the public HaikuPorts tree)
+#   HP_REPO      haikuporter git URL            (default the public HaikuPorts haikuporter)
+#   TARGET_ARCH  packaging target architecture  (default arm64)
+#   PACKAGER     PACKAGER line for haikuports.conf (default a generic DeBeOS id)
+#   SEED_DIR     wget-shim seed directory       (default $HP_HOME/seed)
+#
+set -eu
+
+HP_HOME="${HP_HOME:-/boot/home}"
+PORTS_REPO="${PORTS_REPO:-https://github.com/haikuports/haikuports.git}"
+HP_REPO="${HP_REPO:-https://github.com/haikuports/haikuporter.git}"
+TARGET_ARCH="${TARGET_ARCH:-arm64}"
+PACKAGER="${PACKAGER:-DeBeOS <debeos@example.invalid>}"
+SEED_DIR="${SEED_DIR:-$HP_HOME/seed}"
+
+PORTS_DIR="$HP_HOME/haikuports"
+HP_DIR="$HP_HOME/haikuporter"
+CONF="$HP_HOME/haikuports.conf"
+SHIM_DIR="$HP_HOME/config/non-packaged/bin"
+
+log() { echo "provision: $*"; }
+
+# --- 1. toolchain from the repo -------------------------------------------
+log "refreshing the package repo"
+pkgman refresh >/dev/null 2>&1 || true
+
+# Kept as one install so the solver resolves the set together. Anything already
+# active is a no-op. This is the set proven necessary to build real ports; add
+# more build-requires here as new ports surface them.
+TOOLS="gcc binutils make m4 patch gawk diffutils bison flex \
+	python3.14 autoconf automake libtool perl gettext_libintl \
+	haiku_devel curl git gzip xz_utils"
+log "installing toolchain: $TOOLS"
+pkgman install -y $TOOLS
+
+# python-zlib is the historically fatal gap -- fail loudly and early, not deep
+# inside a tarfile stack trace, if this python cannot inflate a .tar.gz.
+if ! python3.14 -c 'import zlib' >/dev/null 2>&1; then
+	echo "provision: FATAL: python3.14 has no zlib module -- cannot unpack" \
+		".tar.gz sources. Install a python build with zlib." >&2
+	exit 1
+fi
+log "python3.14 zlib: ok"
+
+# --- 2. ports tree + haikuporter + config ---------------------------------
+if [ ! -d "$PORTS_DIR/.git" ]; then
+	log "cloning ports tree (shallow) -> $PORTS_DIR"
+	git clone --depth 1 "$PORTS_REPO" "$PORTS_DIR"
+else
+	log "ports tree already present: $PORTS_DIR"
+fi
+
+if [ ! -d "$HP_DIR/.git" ] && [ ! -x "$HP_DIR/haikuporter" ]; then
+	log "cloning haikuporter -> $HP_DIR"
+	git clone --depth 1 "$HP_REPO" "$HP_DIR"
+else
+	log "haikuporter already present: $HP_DIR"
+fi
+
+log "writing $CONF"
+cat > "$CONF" <<EOF
+TREE_PATH="$PORTS_DIR"
+PACKAGER="$PACKAGER"
+TARGET_ARCHITECTURE="$TARGET_ARCH"
+ALLOW_UNTESTED="yes"
+ALLOW_UNSAFE_SOURCES="yes"
+EOF
+
+# --- 3. the fonts dir haikuporter's chroot copy assumes ------------------
+if [ ! -d /boot/system/settings/fonts ]; then
+	log "creating /boot/system/settings/fonts (haikuporter chroot copies it)"
+	mkdir -p /boot/system/settings/fonts
+fi
+
+# --- 4. wget shim: serve pre-seeded sources, else curl --------------------
+mkdir -p "$SHIM_DIR" "$SEED_DIR"
+log "installing wget shim -> $SHIM_DIR/wget (seed: $SEED_DIR)"
+cat > "$SHIM_DIR/wget" <<EOF
+#!/bin/sh
+# haiku-provision-native-builder wget shim: serve a matching tarball from the
+# local seed dir (for upstreams that stall from a Haiku box), else curl.
+url=""; out=""
+while [ \$# -gt 0 ]; do case "\$1" in
+  -O) out="\$2"; shift 2;; --output-document=*) out="\${1#*=}"; shift;;
+  --*=*) shift;; -*) shift;; *) url="\$1"; shift;; esac; done
+[ -n "\$out" ] || out="\$(basename "\$url")"
+f="\$(basename "\$url")"; f="\${f%%#*}"
+if [ -f "$SEED_DIR/\$f" ]; then
+  cp "$SEED_DIR/\$f" "\$out"; echo "[shim] served \$f from seed"; exit 0
+fi
+exec curl -fL --retry 3 -o "\$out" "\$url"
+EOF
+chmod 755 "$SHIM_DIR/wget"
+
+case ":$PATH:" in
+	*":$SHIM_DIR:"*) : ;;
+	*) log "NOTE: add $SHIM_DIR to PATH (login shells do; export it for non-login)";;
+esac
+
+cat <<EOF
+
+provision: done. This box is a native arm64 package builder.
+  ports tree : $PORTS_DIR
+  haikuporter: $HP_DIR
+  config     : $CONF
+  seed dir   : $SEED_DIR  (drop upstream tarballs here to bypass a flaky fetch)
+
+Build a port (build-requires are covered by --all-dependencies):
+  export PATH=$SHIM_DIR:\$PATH
+  cd $HP_DIR && python3.14 ./haikuporter --config=$CONF -y --all-dependencies <port>
+
+Publish the resulting .hpkg to the DeBeOS repo from a Haiku host:
+  graviton/scripts/haiku-repo-add   (see its header for HG_* env)
+EOF
