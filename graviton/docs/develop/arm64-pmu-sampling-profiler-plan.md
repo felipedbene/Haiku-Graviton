@@ -1,12 +1,35 @@
 # arm64 PMU sampling profiler — staged design plan
 
-**Status:** E-PMU-1a/1b/2 implemented, but BLOCKED on hardware. On real Graviton
-(Neoverse-V1/c7g, verified on 16xlarge and large) the E-PMU-1b counter-overflow
-interrupt does **not fire**: the counters read correctly and the handler installs
-cleanly on PPI INTID 23, yet no overflow is ever delivered, so E-PMU-2 collects
-no PMU-driven samples and profiling falls back to the software timer. The
-open blocker is making the overflow interrupt fire (see E-PMU-1b below). This
-file records the decomposition and the one non-obvious conflict so the
+**Status:** E-PMU-1a/1b/2 implemented; the overflow INTID is now taken from the
+MADT GICC Performance Interrupt GSIV instead of a hardcoded PPI. Still **BLOCKED
+on hardware, and the wrong-INTID hypothesis is DISPROVEN by measurement.** On
+real Graviton (Neoverse-V1/c7g, PMUVer 5, 32-bit event counters) the MADT
+reports the performance GSIV as **23 on both c7g.large and c7g.16xlarge** — i.e.
+exactly the architected PPI 7 (INTID 23) that was already hardcoded. Installing
+the handler on the MADT value therefore installs on the same 23, and the
+overflow interrupt **still does not fire**: with `arm64_pmu` on from boot and a
+CPU-bound load, `profile` samples track the software `-i` interval one-to-one
+(c7g.16xl: `-i 1000` → 7852 ticks over 7.85 s, 11 missed of 7863 expected; `-i
+4000` → 1925 ticks, 1 missed of 1926), which is the software-timer signature; a
+PMU source at the fixed ~260 samples/s/core would have shown ~2040 ticks and
+~5800 missed at `-i 1000`. `arm64_pmu_sampling_active()` stays false, so no
+overflow was ever serviced. The real blocker is PMU overflow interrupt
+*delivery* on virtualized Graviton, NOT the interrupt number.
+
+The MADT-GSIV parsing (boot loader → `intc_info::pmu_gsiv` → `arm64_pmu_init`)
+is kept as a correct, merge-safe hygiene fix (removes the hardcode, degrades
+gracefully to the software timer when firmware states no GSIV; c7g.large boots
+clean and profiles normally). It does not by itself deliver PMU sampling.
+
+Next hypothesis (unverified): on a KVM guest the counter-overflow interrupt is a
+*virtual* PPI the hypervisor must inject; the guest can read the counters
+(MDCR_EL2.TPM=0) yet never receives the overflow IRQ. The architected timer PPI
+(INTID 27) is delivered fine, so generic PPI delivery works — the gap is
+specific to the PMU overflow source. Investigate whether the vPMU injects on
+overflow for a guest that programs the PMU directly (as this kernel does), and
+whether anything more than PMINTENSET_EL1 + the GIC PPI enable is required.
+
+This file records the decomposition and the one non-obvious conflict so the
 implementation did not re-derive them.
 
 ## Goal
