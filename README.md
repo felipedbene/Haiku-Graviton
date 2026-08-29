@@ -47,11 +47,14 @@ Everything here was measured on real AWS Graviton hardware, not emulated.
 | Jumbo frames vs MTU 1500 | receive **+403%**, transmit **+184%**, at well under half the CPU per byte |
 | Clean shutdown | ACPI power button received over the PL061 GPIO; an EC2 stop completes in ~33 s instead of being force-killed |
 | Survives stop/start | verified, with the host key intact |
+| Root filesystem auto-grow | launch onto a larger EBS volume and the BFS root grows to fill the disk on first boot — a first-boot GPT partition grow, then an in-place BFS grow at mount; crash-safe (checkfs-clean across power-loss injection at every phase boundary), no rebake needed |
 | Serial console | full boot log via `get-console-output --latest` |
 | Web browser | WebPositive on HaikuWebKit renders real pages — JavaScript, CSS grid/flexbox/gradients/transforms |
 | Data translators | JPEG, PNG, TIFF, GIF, WebP and JPEG2000 decode |
 | Native Rust | `rustc` and `cargo` run on-device and build real crates fetched live from crates.io — ripgrep builds end-to-end natively |
 | Native package builds | hundreds of ports built natively — a full dev toolchain (git, cmake, ninja, python, ruby, perl, vim) alongside the Rust toolchain |
+| On-demand packages | a lean base image installs WebPositive, the Rust and dev toolchains, and hundreds more packages on demand from the DeBeOS package repository (S3 + CloudFront), so the image ships small and grows to fit the task |
+| Fleet management | an independent, unofficial SSM-compatible agent baked into the image auto-registers each instance as a managed node on first boot — remote command execution and interactive sessions, with a durable command-history record, and no reliance on an SSH keepalive |
 
 ## Roadmap
 
@@ -59,8 +62,9 @@ DeBeOS is ARM-first and, after bring-up, oriented around **self-sufficiency** �
 real software *on the machine* rather than only cross-compiling it. The full staged plan,
 with honest status and named open items, is in **[ROADMAP.md](ROADMAP.md)**. In short:
 Stage 0 (bring-up) is done; Stage 1 (self-sufficiency — native Rust and `cargo` against
-crates.io are proven; filesystem/toolchain reliability under heavy native builds is the
-current focus) is in progress; the package ecosystem, platform expansion (Raspberry Pi,
+crates.io are proven, and the root filesystem now auto-grows on first boot and stays
+crash-safe under power loss; toolchain reliability under heavy native builds remains the
+active focus) is in progress; the package ecosystem, platform expansion (Raspberry Pi,
 RISC-V) and robustness stages follow.
 
 ## Repository layout
