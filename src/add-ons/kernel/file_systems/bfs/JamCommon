@@ -35,6 +35,7 @@ local bfsSources =
 	Debug.cpp
 	DeviceOpener.cpp
 	FileSystemVisitor.cpp
+	GrowEngine.cpp
 	Index.cpp
 	Inode.cpp
 	Journal.cpp

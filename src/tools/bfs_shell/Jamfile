@@ -10,6 +10,12 @@ DEFINES += HAIKU_BUILD_COMPATIBILITY_H __STRICT_ANSI__ ;
 	local defines =
 		#BFS_BIG_ENDIAN_ONLY
 		FS_SHELL
+		# DeBeOS: exercise the mount-time large auto-grow (Part B) and its
+		# crash-injection hooks in the host shell. The kernel add-on keeps the
+		# destructive path gated (BFS_ENABLE_LARGE_GROW undefined) until the
+		# fault-injection acceptance is green.
+		BFS_ENABLE_LARGE_GROW
+		BFS_GROW_FAULT_INJECTION
 		;
 
 	if $(TARGET_PACKAGING_ARCH) = x86_gcc2 {
@@ -53,6 +59,8 @@ local bfsSource =
 	Debug.cpp
 	DeviceOpener.cpp
 	FileSystemVisitor.cpp
+	GrowEngine.cpp
+	GrowFault.cpp
 	Index.cpp
 	Inode.cpp
 	Journal.cpp

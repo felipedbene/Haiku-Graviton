@@ -11,6 +11,7 @@
 #include "CheckVisitor.h"
 #include "Debug.h"
 #include "file_systems/DeviceOpener.h"
+#include "GrowEngine.h"
 #include "Inode.h"
 #include "Journal.h"
 #include "Query.h"
@@ -214,6 +215,19 @@ Volume::Mount(const char* deviceName, uint32 flags)
 			B_PRIdOFF " bytes)!\n", diskSize, NumBlocks() << BlockShift()));
 		RETURN_ERROR(B_BAD_VALUE);
 	}
+
+#ifdef BFS_ENABLE_LARGE_GROW
+	// Part B: mount-time large auto-grow. Runs here, after the superblock is
+	// validated and the device size is known, but before the block cache and
+	// journal are brought up -- single-threaded, no transactions in flight.
+	// This recovers a crashed grow or grows a headroom-baked volume to fill a
+	// larger partition; it updates fSuperBlock to the resulting geometry and
+	// never fails the mount. See graviton/docs/develop/bfs-auto-grow-design.md.
+	// GATED: the destructive path is only compiled in once the fault-injection
+	// acceptance (bfs-auto-grow-verification.md T1.5 + T2) is green.
+	if (!IsReadOnly())
+		bfs_grow_at_mount(this, diskSize);
+#endif
 
 	// set the current log pointers, so that journaling will work correctly
 	fLogStart = fSuperBlock.LogStart();

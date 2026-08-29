@@ -117,16 +117,18 @@ ResizeVisitor::Resize(off_t size, disk_job_id job)
 	// formatted with format-time headroom (Part A): the extra bitmap blocks
 	// then land inside a pre-reserved, already-allocated gap that sits below the
 	// (high-placed) log, so nothing owned by the old filesystem is overwritten.
-	// This is the classify/guard skeleton -- it decides eligibility and refuses
-	// everything that is not provably safe; the in-place fill + atomic-commit
-	// steps (design Part D steps 2-8) and their crash-recovery are NOT yet
-	// implemented, so even an eligible request is refused for now.
 	//
-	// TODO(bfs-auto-grow Part D): implement the intent record, bitmap-gap fill,
-	// old-tail-bit clear, atomic superblock commit and mount-time crash
-	// recovery, then replace the final refusal below with the grow. Must remain
-	// gated behind the fault-injection acceptance in
-	// graviton/docs/develop/bfs-auto-grow-verification.md (T1.5 + T2).
+	// This ONLINE (mounted, via BFS_IOCTL_RESIZE) path deliberately keeps
+	// refusing the large grow: v2 executes it at MOUNT time instead
+	// (bfs_grow_at_mount in GrowEngine.cpp, wired into Volume::Mount before the
+	// block cache and journal come up), which is single-threaded with no
+	// transactions in flight and needs no block_cache_set_size. The online large
+	// grow was dropped in v2; only the in-capacity item-1 grow above is online.
+	// The mount-time fill + atomic commit + crash recovery (Part D/E) are
+	// implemented and gated behind BFS_ENABLE_LARGE_GROW, which stays undefined
+	// until the fault-injection acceptance in
+	// graviton/docs/develop/bfs-auto-grow-verification.md (T1.5 + T2) passes on
+	// real Graviton. The classify/guard below still refuses here, unchanged.
 
 	// Foreign / stock-layout volume: no headroom was baked (grow_max_blocks is
 	// 0 on every legacy volume, since Initialize() zeroes the superblock). The
@@ -150,16 +152,12 @@ ResizeVisitor::Resize(off_t size, disk_job_id job)
 		return B_NOT_SUPPORTED;
 	}
 
-	// Eligible: headroom present and the target fits within the reserved gap.
-	// The new bitmap blocks [oldBitmapBlocks+1, newBitmapBlocks+1) lie below the
-	// log (placed at maxBitmapBlocks+1 >= newBitmapBlocks+1 by construction), so
-	// filling them overwrites only baked-empty, baked-reserved space. The grow
-	// still needs its gap-sanity check (the gap bits must read as
-	// allocated-reserved) and the Part D commit/recovery, none of which exist
-	// yet -- so gate it.
+	// Eligible for the headroom large grow -- but that runs at mount time
+	// (bfs_grow_at_mount), not online through this ioctl. Refuse here and let
+	// the next mount grow the volume; the online large grow is not shipped.
 	INFORM(("bfs: resize to %" B_PRIdOFF " blocks is eligible for the headroom "
 		"grow (cap %" B_PRIdOFF ", %" B_PRIdOFF " -> %" B_PRIdOFF " bitmap "
-		"blocks) but the in-place grow is not yet implemented; refusing\n",
+		"blocks); this runs at mount time, not online -- refusing the ioctl\n",
 		newNumBlocks, growMaxBlocks, oldBitmapBlocks, newBitmapBlocks));
 	return B_NOT_SUPPORTED;
 }
