@@ -132,14 +132,15 @@ rule UserBuildConfigRulePreImage
 	# AMI cannot supply its own IAM role, so without it the agent starts but
 	# cannot register.
 	#
-	# Version- and name-agnostic on purpose: the shipping package is renamed
-	# debeos_ssm_agent (binary /boot/system/bin/debeos-ssm-agent). This glob picks
-	# up whichever agent hpkg the cross-build synced into the pool, so swapping in
-	# the renamed / newer-version hpkg needs no edit here. Guarded on HG_POOL_DIR
-	# so an SSH-only bake (no pool) is unaffected.
+	# Version-agnostic on purpose: the glob matches ONLY debeos_ssm_agent-*
+	# (binary /boot/system/bin/debeos-ssm-agent), so swapping in a newer-version
+	# hpkg needs no edit here. It deliberately does NOT match the legacy
+	# haiku_mgmt_agent-* name: Jam's Glob returns readdir order, so matching both
+	# names is non-deterministic and a bake could pick a stale/incompatible hpkg.
+	# Guarded on HG_POOL_DIR so an SSH-only bake (no pool) is unaffected.
 	if $(HG_POOL_DIR) {
 		local agentGlob = [ Glob $(HG_POOL_DIR) :
-			debeos_ssm_agent-*-arm64.hpkg haiku_mgmt_agent-*-arm64.hpkg ] ;
+			debeos_ssm_agent-*-arm64.hpkg ] ;
 		if $(agentGlob) {
 			local agentFileName = $(agentGlob[1]:G=:D=) ;
 			local agentPackage = <hg-pool>$(agentFileName) ;
