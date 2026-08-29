@@ -76,7 +76,15 @@ struct disk_super_block {
 	int32		magic3;
 	inode_addr	root_dir;
 	inode_addr	indices;
-	int32		_reserved[8];
+	int64		grow_max_blocks;
+		// DeBeOS: format-time grow-headroom cap -- the largest num_blocks a
+		// mount-time auto-grow may target on this volume (see
+		// graviton/docs/develop/bfs-auto-grow-design.md, Part A). The log and a
+		// reserved bitmap gap are baked high enough to cover it. 0 means no
+		// headroom was baked (every legacy/stock volume, since Initialize()
+		// zeroes the whole superblock) -- such a volume can never take the
+		// large-grow path. Occupies the first 8 bytes of the former _reserved[8].
+	int32		_reserved[6];
 	int32		pad_to_block[87];
 		// this also contains parts of the boot block
 
@@ -97,6 +105,8 @@ struct disk_super_block {
 	int32 Flags() const { return BFS_ENDIAN_TO_HOST_INT32(flags); }
 	off_t LogStart() const { return BFS_ENDIAN_TO_HOST_INT64(log_start); }
 	off_t LogEnd() const { return BFS_ENDIAN_TO_HOST_INT64(log_end); }
+	off_t GrowMaxBlocks() const
+		{ return BFS_ENDIAN_TO_HOST_INT64(grow_max_blocks); }
 
 	// implemented in Volume.cpp:
 	bool IsMagicValid() const;

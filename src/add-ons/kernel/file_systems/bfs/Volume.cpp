@@ -606,7 +606,46 @@ Volume::Initialize(int fd, const char* name, uint32 blockSize,
 	// cannot use BlockAllocator::BitmapSize() here
 	off_t bitmapBlocks = (numBlocks + blockSize * 8 - 1) / (blockSize * 8);
 
-	fSuperBlock.log_blocks = ToBlockRun(bitmapBlocks + 1);
+	// The log normally starts right after the block bitmap. The block bitmap,
+	// the log and the boot block form one contiguous region that
+	// InitializeAndClearBitmap() reserves in one shot (see its "reserve the
+	// boot block, the log area, and the block bitmap itself" step, which
+	// reserves everything up to ToBlock(Log()) + Log().Length()).
+	off_t logStartBlock = bitmapBlocks + 1;
+
+	// DeBeOS grow-headroom (opt-in): bake room for a later mount-time auto-grow
+	// without any on-disk relocation. Size the bitmap for a maximum future
+	// volume (the recorded grow cap), place the log *past* that oversized
+	// bitmap, and record the cap. The blocks between the actual bitmap
+	// (bitmapBlocks) and the log then sit inside the same reserved-up-to-the-log
+	// region -- so they are marked allocated by the existing reservation and
+	// nothing can ever be placed there, which is exactly the reserved bitmap
+	// gap the grow will later fill in place. Default formatting (flag unset) is
+	// untouched. See graviton/docs/develop/bfs-auto-grow-design.md, Part A.
+	if ((flags & VOLUME_GROW_HEADROOM) != 0) {
+		// Cap the headroom at a fixed maximum future volume size so the reserved
+		// gap is bounded regardless of the current device size.
+		const off_t kGrowHeadroomMaxBytes = 1LL * 1024 * 1024 * 1024 * 1024;
+			// 1 TiB
+		off_t maxNumBlocks = kGrowHeadroomMaxBytes / blockSize;
+		if (maxNumBlocks < numBlocks)
+			maxNumBlocks = numBlocks;
+		off_t maxBitmapBlocks
+			= (maxNumBlocks + blockSize * 8 - 1) / (blockSize * 8);
+
+		// The oversized bitmap + log + a margin for the root dir, indices and
+		// volume id must still fit on the current device; if the operator asked
+		// for headroom on a device too small to hold it, fail loudly rather than
+		// silently formatting without it.
+		const off_t kHeadroomTailMargin = 1024;
+		if (maxBitmapBlocks + 1 + logSize + kHeadroomTailMargin > numBlocks)
+			RETURN_ERROR(B_BAD_VALUE);
+
+		logStartBlock = maxBitmapBlocks + 1;
+		fSuperBlock.grow_max_blocks = HOST_ENDIAN_TO_BFS_INT64(maxNumBlocks);
+	}
+
+	fSuperBlock.log_blocks = ToBlockRun(logStartBlock);
 	fSuperBlock.log_blocks.length = HOST_ENDIAN_TO_BFS_INT16(logSize);
 	fSuperBlock.log_start = fSuperBlock.log_end = HOST_ENDIAN_TO_BFS_INT64(
 		ToBlock(Log()));

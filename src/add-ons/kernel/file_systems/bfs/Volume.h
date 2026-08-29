@@ -23,7 +23,13 @@ enum volume_flags {
 };
 
 enum volume_initialize_flags {
-	VOLUME_NO_INDICES	= 0x0001,
+	VOLUME_NO_INDICES		= 0x0001,
+	VOLUME_GROW_HEADROOM	= 0x0002,
+		// DeBeOS: bake format-time headroom for a later mount-time auto-grow
+		// (log placed high + a reserved, pre-allocated bitmap-growth gap; the
+		// grow-cap recorded in disk_super_block::grow_max_blocks). Opt-in only
+		// -- default formatting is unchanged. See
+		// graviton/docs/develop/bfs-auto-grow-design.md, Part A.
 };
 
 typedef DoublyLinkedList<Inode> InodeList;

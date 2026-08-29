@@ -22,6 +22,8 @@ parse_initialize_parameters(const char* parameterString,
 
 	if (get_driver_boolean_parameter(handle, "noindex", false, true))
 		parameters.flags |= VOLUME_NO_INDICES;
+	if (get_driver_boolean_parameter(handle, "growheadroom", false, true))
+		parameters.flags |= VOLUME_GROW_HEADROOM;
 	if (get_driver_boolean_parameter(handle, "verbose", false, true))
 		parameters.verbose = true;
 
