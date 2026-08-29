@@ -75,6 +75,22 @@ redistributor_has_cpu(uint32 affinity)
 }
 
 
+// The index of the CPU that sits behind this redistributor, or -1 if none. The
+// index doubles as the ITS collection id, so an MSI mapped to collection i is
+// delivered to CPU i's redistributor.
+static int32
+cpu_for_affinity(uint32 affinity)
+{
+	const int32 cpuCount = smp_get_num_cpus();
+	for (int32 i = 0; i < cpuCount; i++) {
+		if (gic_packed_affinity(gCPU[i].arch.mpidr) == affinity)
+			return i;
+	}
+
+	return -1;
+}
+
+
 status_t
 GICv3ITS::Init(phys_addr_t regs, size_t size, addr_t gicdRegs,
 	const gicr_region* gicrRegions, uint32 gicrRegionCount, size_t gicrStride)
@@ -84,8 +100,12 @@ GICv3ITS::Init(phys_addr_t regs, size_t size, addr_t gicdRegs,
 	// msi_set_interface() at the end publishes it.
 	mutex_init(&fLock, "gicv3 its");
 
+	STATIC_ASSERT(GIC_ITS_MAX_COLLECTIONS >= SMP_MAX_CPUS);
+
 	memset(fAllocated, 0, sizeof(fAllocated));
 	memset(fDevices, 0, sizeof(fDevices));
+	memset(fCollectionTargets, 0, sizeof(fCollectionTargets));
+	fCollectionCount = 0;
 	fCommandIndex = 0;
 
 	if (size == 0)
@@ -112,10 +132,20 @@ GICv3ITS::Init(phys_addr_t regs, size_t size, addr_t gicdRegs,
 	fDeviceIDBits = GITS_TYPER_DEV_BITS(typer);
 	fPhysicalTargetAddress = (typer & GITS_TYPER_PTA) != 0;
 
+	// How many collections the ITS can hold. CIL narrows the CollectionID space
+	// to CIDbits; otherwise it is the full 16 bits. HCC counts collections the
+	// implementation keeps in hardware registers, which need no memory table.
+	// We only ever need one per CPU, so this is a ceiling we stay well under.
+	fMaxCollections = (typer & GITS_TYPER_CIL) != 0
+		? (1u << GITS_TYPER_CID_BITS(typer)) : (1u << 16);
+	const uint32 hcc = GITS_TYPER_HCC(typer);
+	if (hcc > fMaxCollections)
+		fMaxCollections = hcc;
+
 	dprintf("gicv3-its: typer %#" B_PRIx64 ": itt entry size %" B_PRIu32 ", %"
-		B_PRIu32 " event id bits, %" B_PRIu32 " device id bits, pta %d\n",
-		typer, fIttEntrySize, fEventIDBits, fDeviceIDBits,
-		fPhysicalTargetAddress ? 1 : 0);
+		B_PRIu32 " event id bits, %" B_PRIu32 " device id bits, pta %d, up to %"
+		B_PRIu32 " collections\n", typer, fIttEntrySize, fEventIDBits,
+		fDeviceIDBits, fPhysicalTargetAddress ? 1 : 0, fMaxCollections);
 
 	// The ITS must be quiescent before its tables can be reprogrammed.
 	gic_write32(fRegs + GITS_CTLR, 0);
@@ -145,16 +175,21 @@ GICv3ITS::Init(phys_addr_t regs, size_t size, addr_t gicdRegs,
 		return status;
 	}
 
-	// A single collection, targeting the redistributor of the boot CPU, is
-	// enough: every LPI is delivered there.
-	status = _MapCollection(0, fCollectionTarget, true);
-	if (status != B_OK)
-		return status;
-	_Sync();
+	// One collection per CPU, each aimed at that CPU's redistributor, so an MSI
+	// can be delivered to any core. _InitLpis captured a target per CPU;
+	// collection id equals cpu id, which is what the round-robin in
+	// AllocateVectors and CurrentCpuForVector rely on.
+	for (uint32 collection = 0; collection < fCollectionCount; collection++) {
+		status = _MapCollection(collection, fCollectionTargets[collection],
+			true);
+		if (status != B_OK)
+			return status;
+		_Sync(fCollectionTargets[collection]);
+	}
 
-	dprintf("gicv3-its: ready, %d vectors from %" B_PRId32 ", translater %#"
-		B_PRIxPHYSADDR "\n", GIC_ITS_MAX_VECTORS, fVectorBase,
-		fTranslaterPhysical);
+	dprintf("gicv3-its: ready, %d vectors from %" B_PRId32 ", %" B_PRIu32
+		" collection(s), translater %#" B_PRIxPHYSADDR "\n",
+		GIC_ITS_MAX_VECTORS, fVectorBase, fCollectionCount, fTranslaterPhysical);
 
 
 	msi_set_interface(static_cast<MSIInterface*>(this));
@@ -211,7 +246,13 @@ GICv3ITS::_InitTables()
 			uint32 bits = min_c(fDeviceIDBits, (uint32)16);
 			entries = 1ull << bits;
 		} else {
-			entries = 16;
+			// One collection per CPU so MSIs can be spread across cores, but
+			// never fewer than the 16 this has always requested, and never more
+			// than the implementation can hold.
+			uint32 wanted = max_c((uint32)smp_get_num_cpus(), (uint32)16);
+			if (wanted > fMaxCollections)
+				wanted = fMaxCollections;
+			entries = wanted;
 		}
 
 		const size_t bytes = entries * entrySize;
@@ -475,12 +516,18 @@ GICv3ITS::_InitLpis(addr_t gicdRegs, const gicr_region* gicrRegions,
 
 			redistributors++;
 
+			// Collections name their target either by physical redistributor
+			// address or by the processor number the redistributor reports.
+			// Record one per CPU, indexed by the CPU id (== the collection id),
+			// so MSIs can be routed to any core -- not just the boot CPU.
+			const uint64 target = fPhysicalTargetAddress
+				? (framePhysical >> 16) : GICR_TYPER_PROC_NUM(typer);
+			const int32 cpu = cpu_for_affinity(affinity);
+			if (cpu >= 0 && cpu < (int32)GIC_ITS_MAX_COLLECTIONS)
+				fCollectionTargets[cpu] = target;
+
 			if (affinity == bootAffinity) {
-				// Collections name their target either by physical
-				// redistributor address or by the processor number the
-				// redistributor reports.
-				fCollectionTarget = fPhysicalTargetAddress
-					? (framePhysical >> 16) : GICR_TYPER_PROC_NUM(typer);
+				fCollectionTarget = target;
 				haveTarget = true;
 			}
 
@@ -497,6 +544,14 @@ GICv3ITS::_InitLpis(addr_t gicdRegs, const gicr_region* gicrRegions,
 			"; MSI will be unavailable\n", bootAffinity);
 		return B_ERROR;
 	}
+
+	// One collection per CPU, so long as the ITS can hold that many. If it
+	// holds fewer, the round-robin folds the extra CPUs back onto the ones it
+	// can address -- still spread, just not one-to-one.
+	fCollectionCount = min_c((uint32)smp_get_num_cpus(),
+		min_c(fMaxCollections, (uint32)GIC_ITS_MAX_COLLECTIONS));
+	if (fCollectionCount == 0)
+		fCollectionCount = 1;
 
 	dprintf("gicv3-its: lpis enabled on %" B_PRIu32 " redistributor(s), %"
 		B_PRIu32 " skipped as cpu-less, %" B_PRIu32 " lpi intid bits, %"
@@ -552,7 +607,17 @@ GICv3ITS::_SubmitCommand(const uint64* command)
 status_t
 GICv3ITS::_Sync()
 {
-	uint64 command[4] = { GITS_CMD_SYNC, 0, fCollectionTarget << 16, 0 };
+	return _Sync(fCollectionTarget);
+}
+
+
+// SYNC ensures earlier commands affecting a given redistributor have completed.
+// A MAPTI to a new collection has to be synced against that collection's
+// target, not always the boot CPU's.
+status_t
+GICv3ITS::_Sync(uint64 target)
+{
+	uint64 command[4] = { GITS_CMD_SYNC, 0, target << 16, 0 };
 	return _SubmitCommand(command);
 }
 
@@ -734,16 +799,29 @@ GICv3ITS::AllocateVectors(uint32 requesterID, uint32 count,
 		const uint32 index = found + i;
 		const uint32 lpi = GIC_LPI_BASE + index;
 
+		// Spread this device's events across the per-CPU collections so its
+		// interrupts do not all pile onto the boot CPU. A device's events are
+		// numbered from zero, so event 0 lands on CPU 0, event 1 on CPU 1, and
+		// so on -- for ENA that puts the io queue's interrupt on a non-boot CPU
+		// while the management interrupt stays on CPU 0.
+		const uint32 collection = i % fCollectionCount;
+
 		fAllocated[index / 32] |= 1u << (index % 32);
 		fVectorDevice[index] = requesterID;
 		fVectorEvent[index] = i;
+		fVectorCollection[index] = collection;
 
 		// Enable the LPI in the shared configuration table before it is
 		// mapped, then let the ITS pick the change up.
 		((volatile uint8*)fPropertyTable)[lpi - GIC_LPI_BASE]
 			= GIC_PRIORITY_DEFAULT | GIC_LPI_CONFIG_ENABLE;
 
-		status_t status = _MapInterrupt(requesterID, i, lpi, 0);
+		status_t status = _MapInterrupt(requesterID, i, lpi, collection);
+		if (status == B_OK) {
+			// A MAPTI to a new collection takes effect once it is synced
+			// against that collection's redistributor target.
+			_Sync(fCollectionTargets[collection]);
+		}
 		if (status != B_OK) {
 			// Returning with the earlier vectors still committed would leak
 			// them for the rest of the boot -- FreeVectors() is never called
@@ -813,4 +891,20 @@ GICv3ITS::VectorForLpi(uint32 intid) const
 		return -1;
 
 	return fVectorBase + index;
+}
+
+
+int32
+GICv3ITS::CurrentCpuForVector(int32 vector) const
+{
+	const int32 index = vector - fVectorBase;
+	if (vector < fVectorBase || index >= GIC_ITS_MAX_VECTORS)
+		return -1;
+
+	if ((fAllocated[index / 32] & (1u << (index % 32))) == 0)
+		return -1;
+
+	// A collection was mapped one-to-one onto each CPU, so the collection id an
+	// event was routed to is the CPU id it is delivered on.
+	return (int32)fVectorCollection[index];
 }

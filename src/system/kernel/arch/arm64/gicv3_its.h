@@ -22,6 +22,11 @@
 // Events per device, and therefore the size of each device's ITT.
 #define GIC_ITS_EVENTS_PER_DEVICE	32
 
+// Upper bound on the per-CPU ITS collections. One collection is mapped per CPU
+// so MSIs can be spread across cores; this caps the fixed collection-target
+// array and matches the arm64 SMP_MAX_CPUS (asserted in the implementation).
+#define GIC_ITS_MAX_COLLECTIONS		64
+
 
 struct its_device {
 	uint32		requester_id;
@@ -55,6 +60,12 @@ public:
 			// INTID does not belong to us.
 			int32				VectorForLpi(uint32 intid) const;
 
+			// Reports the CPU an allocated MSI vector currently targets, via
+			// the ITS collection it was mapped to (collection id == cpu id), or
+			// a negative value if the vector is not one of ours. Reads only
+			// state fixed at allocation, so it is safe from the interrupt path.
+			int32				CurrentCpuForVector(int32 vector) const;
+
 private:
 			status_t			_InitTables();
 			status_t			_InitCommandQueue();
@@ -67,6 +78,7 @@ private:
 
 			status_t			_SubmitCommand(const uint64* command);
 			status_t			_Sync();
+			status_t			_Sync(uint64 target);
 			status_t			_MapDevice(uint32 deviceID, phys_addr_t itt,
 									uint32 eventIDBits, bool valid);
 			status_t			_MapCollection(uint32 collection,
@@ -90,7 +102,15 @@ private:
 			uint32				fEventIDBits;
 			uint32				fDeviceIDBits;
 			bool				fPhysicalTargetAddress;
+
+			// One collection per CPU, each targeting that CPU's redistributor,
+			// so MSIs can be spread across cores. Collection id == cpu id.
+			// fCollectionTarget keeps the boot CPU's target for the plain
+			// _Sync(). fMaxCollections is what the ITS can hold.
 			uint64				fCollectionTarget;
+			uint64				fCollectionTargets[GIC_ITS_MAX_COLLECTIONS];
+			uint32				fCollectionCount;
+			uint32				fMaxCollections;
 
 			addr_t				fCommandQueue;
 			phys_addr_t			fCommandQueuePhysical;
@@ -104,6 +124,7 @@ private:
 			uint32				fAllocated[GIC_ITS_MAX_VECTORS / 32];
 			uint32				fVectorDevice[GIC_ITS_MAX_VECTORS];
 			uint32				fVectorEvent[GIC_ITS_MAX_VECTORS];
+			uint32				fVectorCollection[GIC_ITS_MAX_VECTORS];
 
 			its_device			fDevices[GIC_ITS_MAX_DEVICES];
 };

@@ -170,6 +170,12 @@ struct gicr_region {
 #define GITS_TYPER_ID_BITS(t)	((((t) >> 8) & 0x1f) + 1)
 #define GITS_TYPER_DEV_BITS(t)	((((t) >> 13) & 0x1f) + 1)
 #define GITS_TYPER_PTA			(1ull << 19)
+// How many ITS collections the implementation can hold. HCC is the count kept
+// in hardware registers (needing no memory table); CIL, when set, narrows the
+// CollectionID space to CIDbits, otherwise it is the full 16 bits.
+#define GITS_TYPER_HCC(t)		(((t) >> 24) & 0xff)
+#define GITS_TYPER_CID_BITS(t)	((((t) >> 32) & 0xf) + 1)
+#define GITS_TYPER_CIL			(1ull << 36)
 
 #define GITS_BASER_VALID		(1ull << 63)
 #define GITS_BASER_INDIRECT		(1ull << 62)
