@@ -146,22 +146,23 @@ phases:
       # Stage the desktop/cloud-init image files the UserBuildConfig also expects
       # (build-openssh only emits the ssh subset; copy the rest from the recipe).
       - |
-        for f in launch-cloud-init remote-desktop.sh launch-remote-desktop UserSetupEnvironment cargo-config.toml; do
+        for f in launch-cloud-init remote-desktop.sh launch-remote-desktop UserSetupEnvironment cargo-config.toml launch-partition-grow; do
           cp "$HAIKU_TOP/graviton/ssh/files/$f" "$HG_SSH_DIR/image/$f"
         done
       # ---- inject the UserBuildConfig hook + second jam pass -------------
-      # HAIKU_IMAGE_SIZE (MiB) is the BFS root-partition size, fixed at bake time
-      # -- the root does NOT auto-grow to a larger EBS (make-gpt-image only grows
-      # the raw volume + relocates the GPT backup header; the partition keeps this
-      # size, and BFS resize-while-mounted is unsupported, so a bigger EBS = wasted
-      # slack). It must cover the full-parity closure (WebKit + Rust + dev
-      # toolchain + base, ~1.7 GiB) AND leave real dev headroom -- several debug
-      # `target/` trees at ~2-4 GiB each. 19000 MiB (~18.6 GiB) leaves ~16 GiB
-      # free. It MUST stay under ROOT_VOLUME_BYTES (20 GiB, cdk.json) so
-      # make-gpt-image can grow the mmc into the raw (raw >= mmc). NOTE:
-      # import-snapshot time scales with image size, so this bake is slower than
-      # the 10 GiB one; don't grow it further without cause. SSH-only bakes are
-      # unaffected. Root-disk auto-grow at first boot is a Stage-4 (FS) item.
+      # HAIKU_IMAGE_SIZE (MiB) is the baked BFS root size. The root now auto-grows
+      # to a larger root disk: the arm64 image is formatted with grow-headroom
+      # (bfsGrowHeadroom), first-boot partition_grow expands the root GPT partition
+      # to fill the disk, and the BFS mount-time engine grows the filesystem into
+      # the enlarged partition on the next mount -- so a bigger EBS is used, not
+      # wasted. This baked size still needs to cover the full-parity closure
+      # (WebKit + Rust + dev toolchain + base, ~1.7 GiB) AND leave real dev
+      # headroom -- several debug `target/` trees at ~2-4 GiB each. 19000 MiB
+      # (~18.6 GiB) leaves ~16 GiB free even without growing. It MUST stay under
+      # ROOT_VOLUME_BYTES (20 GiB, cdk.json) so make-gpt-image can grow the mmc
+      # into the raw (raw >= mmc). NOTE: import-snapshot time scales with image
+      # size, so this bake is slower than the 10 GiB one; don't grow it further
+      # without cause. SSH-only bakes are unaffected.
       - echo "== inject UserBuildConfig, jam pass 2 (final image with ssh) =="
       - cp "$HAIKU_TOP/graviton/ssh/UserBuildConfig" "$GEN/UserBuildConfig"
       - HG_POOL_DIR="${HG_POOL_DIR:-}" HG_SSH_DIR="$HG_SSH_DIR" HAIKU_REVISION="$HAIKU_REVISION" jam -q -j"$NPROC" -sHAIKU_IMAGE_SIZE=19000 @minimum-mmc
