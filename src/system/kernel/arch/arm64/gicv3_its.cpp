@@ -331,6 +331,21 @@ GICv3ITS::_InitCommandQueue()
 	gic_write64(fRegs + GITS_CWRITER, 0);
 	fCommandIndex = 0;
 
+	// The ITS is allowed to ignore the requested cacheability/shareability for
+	// the command queue exactly as it may for the tables (see _InitTables). A
+	// silent downgrade means it fetches commands around our caches while we
+	// never clean them, so it can see stale command-queue contents; say so
+	// instead of failing mysteriously later.
+	const uint64 cbaserReadback = gic_read64(fRegs + GITS_CBASER);
+	if ((cbaserReadback & GITS_CBASER_CACHE_MASK) != GITS_CBASER_INNER_CACHE
+		|| (cbaserReadback & GITS_CBASER_SHARE_MASK)
+			!= GITS_CBASER_SHAREABILITY) {
+		ERROR("ITS downgraded the command queue to cache %" B_PRIu64 " share %"
+			B_PRIu64 "; command delivery may not work\n",
+			(uint64)((cbaserReadback & GITS_CBASER_CACHE_MASK) >> 59),
+			(uint64)((cbaserReadback & GITS_CBASER_SHARE_MASK) >> 10));
+	}
+
 	return B_OK;
 }
 
@@ -425,6 +440,36 @@ GICv3ITS::_InitLpis(addr_t gicdRegs, const gicr_region* gicrRegions,
 			gic_write64(frame + GICR_PENDBASER,
 				(pendingPhysical & 0x000ffffffff0000ull)
 					| GICR_BASER_INNER_CACHE | GICR_BASER_SHAREABILITY);
+
+			// A redistributor may quietly downgrade the cacheability or
+			// shareability of these registers, just like the ITS tables. A
+			// downgraded PROPBASER makes it read the LPI configuration table
+			// around our caches, so an LPI we enable there can silently never
+			// enable on this PE -- invisible without this readback. Both
+			// registers are only writable while LPIs are disabled, so check
+			// them before latching GICR_CTLR.EnableLPIs.
+			const uint64 propReadback = gic_read64(frame + GICR_PROPBASER);
+			if ((propReadback & GICR_BASER_CACHE_MASK) != GICR_BASER_INNER_CACHE
+				|| (propReadback & GICR_BASER_SHARE_MASK)
+					!= GICR_BASER_SHAREABILITY) {
+				ERROR("redistributor %" B_PRIu32 " downgraded PROPBASER to "
+					"cache %" B_PRIu64 " share %" B_PRIu64 "; LPIs may never "
+					"enable on it\n", redistributors,
+					(uint64)((propReadback & GICR_BASER_CACHE_MASK) >> 7),
+					(uint64)((propReadback & GICR_BASER_SHARE_MASK) >> 10));
+			}
+
+			const uint64 pendReadback = gic_read64(frame + GICR_PENDBASER);
+			if ((pendReadback & GICR_BASER_CACHE_MASK) != GICR_BASER_INNER_CACHE
+				|| (pendReadback & GICR_BASER_SHARE_MASK)
+					!= GICR_BASER_SHAREABILITY) {
+				ERROR("redistributor %" B_PRIu32 " downgraded PENDBASER to "
+					"cache %" B_PRIu64 " share %" B_PRIu64 "; LPI delivery may "
+					"not work\n", redistributors,
+					(uint64)((pendReadback & GICR_BASER_CACHE_MASK) >> 7),
+					(uint64)((pendReadback & GICR_BASER_SHARE_MASK) >> 10));
+			}
+
 			gic_write32(frame + GICR_CTLR,
 				gic_read32(frame + GICR_CTLR) | GICR_CTLR_ENABLE_LPIS);
 
