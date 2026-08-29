@@ -109,6 +109,50 @@ rule UserBuildConfigRulePreImage
 	SEARCH on $(authorizedKeys) = $(HG_SSH_IMAGE_DIR) ;
 	AddFilesToHaikuImage home config settings ssh : $(authorizedKeys) ;
 
+	# --- DeBeOS native SSM management agent --------------------------------
+	# Baked into system/packages as a prebuilt hpkg, exactly like the OpenSSH
+	# package above -- AddPackageFilesToHaikuImage, deliberately NOT
+	# AddHaikuImageSystemPackages. That distinction is the whole fix. The lean
+	# arm64 image has no DeBeOS repository as a HAIKU_REPOSITORIES member, so a
+	# by-name add has to be resolved out of the HaikuPortsLocal companion cache,
+	# and building that cache runs `package_repo create`, which validates every
+	# package against the HaikuPorts repo-info vendor ("Haiku Project") and
+	# rejects this DeBeOS-vendored package with "unexpected vendor 'DeBeOS'" --
+	# failing the bake. (Declaring it in repositories/HaikuPortsLocal/arm64 does
+	# not help for the same reason: that list is the HaikuPorts repo.) Dropping
+	# the hpkg as a file skips the solver and the vendor check entirely, while
+	# still keeping it a package: packagefs preserves the executable bit and
+	# activates it on first boot, and the agent's own launch_daemon job (bundled
+	# inside the hpkg) starts the service, which self-registers the instance as
+	# an SSM managed node and seeds the clock from IMDS. This retires the
+	# ssh-keepalive fragility for driving the fleet.
+	#
+	# Runtime prerequisite (not a build gate): the launch template / run-instances
+	# must attach an instance profile carrying AmazonSSMManagedInstanceCore -- the
+	# AMI cannot supply its own IAM role, so without it the agent starts but
+	# cannot register.
+	#
+	# Version- and name-agnostic on purpose: the shipping package is renamed
+	# debeos_ssm_agent (binary /boot/system/bin/debeos-ssm-agent). This glob picks
+	# up whichever agent hpkg the cross-build synced into the pool, so swapping in
+	# the renamed / newer-version hpkg needs no edit here. Guarded on HG_POOL_DIR
+	# so an SSH-only bake (no pool) is unaffected.
+	if $(HG_POOL_DIR) {
+		local agentGlob = [ Glob $(HG_POOL_DIR) :
+			debeos_ssm_agent-*-arm64.hpkg haiku_mgmt_agent-*-arm64.hpkg ] ;
+		if $(agentGlob) {
+			local agentFileName = $(agentGlob[1]:G=:D=) ;
+			local agentPackage = <hg-pool>$(agentFileName) ;
+			SEARCH on $(agentPackage) = $(HG_POOL_DIR) ;
+			Echo "haiku-graviton: baking SSM management agent" $(agentFileName)
+				"into system/packages" ;
+			AddPackageFilesToHaikuImage system packages : $(agentPackage) ;
+		} else {
+			Echo "haiku-graviton: no SSM management agent hpkg in pool"
+				"(skipping; SSH-only image)" ;
+		}
+	}
+
 	# --- exactly one thing must own port 22 --------------------------------
 	# data/settings/network/services already contains
 	#     service ssh { launch /boot/system/bin/sshd -D  stand_alone }
