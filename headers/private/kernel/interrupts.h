@@ -80,7 +80,7 @@ are_interrupts_enabled(void)
 status_t reserve_io_interrupt_vectors(int32 count, int32 startVector,
 	enum interrupt_type type);
 status_t allocate_io_interrupt_vectors(int32 count, int32 *startVector,
-	enum interrupt_type type);
+	enum interrupt_type type, bool independentVectors = false);
 void free_io_interrupt_vectors(int32 count, int32 startVector);
 
 void assign_io_interrupt_to_cpu(int32 vector, int32 cpu);

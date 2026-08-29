@@ -640,10 +640,23 @@ reserve_io_interrupt_vectors(int32 count, int32 startVector, interrupt_type type
 /*!	Allocate \a count contiguous interrupt vectors. The vectors are allocated
 	as available so that they do not overlap with any other reserved vector.
 	The first vector to be used is returned in \a startVector on success.
+
+	By default the whole run shares one irq_assignment record (keyed on the base
+	vector, with count = \a count): the run is balanced as a single unit and
+	targets one CPU. That is what x86 message-signalled interrupts need -- an MSI
+	block is one message with one address/data pair, so every vector in it is
+	delivered to the same local APIC and must move together.
+
+	When \a independentVectors is set each vector instead gets its own record, so
+	its target CPU can be tracked and steered separately. A GICv3 ITS routes each
+	LPI through its own collection, so per-MSI affinity is expressible there and
+	one shared record would collapse the whole ITS vector space onto a single
+	CPU. Only a routing layer that can honour per-vector affinity should ask for
+	this; the default keeps the shared-block semantics x86 relies on.
 */
 status_t
 allocate_io_interrupt_vectors(int32 count, int32 *startVector,
-	interrupt_type type)
+	interrupt_type type, bool independentVectors)
 {
 	MutexLocker locker(&sIOInterruptVectorAllocationLock);
 
@@ -677,12 +690,25 @@ allocate_io_interrupt_vectors(int32 count, int32 *startVector,
 
 	for (int32 i = 0; i < count; i++) {
 		sVectors[vector + i].type = type;
-		sVectors[vector + i].assigned_cpu = &sVectorCPUAssignments[vector];
+		// Independent vectors each own their assignment record (like a reserved
+		// vector) so their CPU can be tracked separately; otherwise the run
+		// shares the base vector's record and moves as one unit.
+		irq_assignment* assignment = independentVectors
+			? &sVectorCPUAssignments[vector + i]
+			: &sVectorCPUAssignments[vector];
+		sVectors[vector + i].assigned_cpu = assignment;
 		sAllocatedIOInterruptVectors[vector + i] = true;
+
+		if (independentVectors) {
+			assignment->irq = vector + i;
+			assignment->count = 1;
+		}
 	}
 
-	sVectorCPUAssignments[vector].irq = vector;
-	sVectorCPUAssignments[vector].count = count;
+	if (!independentVectors) {
+		sVectorCPUAssignments[vector].irq = vector;
+		sVectorCPUAssignments[vector].count = count;
+	}
 
 	*startVector = vector;
 	dprintf("allocate_io_interrupt_vectors: allocated %" B_PRId32 " vectors starting "
