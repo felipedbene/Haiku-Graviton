@@ -172,6 +172,11 @@ rebalance_irqs(bool idle)
 	if (idle)
 		return;
 
+	// Architecture can't route IRQs to a chosen CPU: rebalancing is pure
+	// irqs_lock churn that re-parents nothing. Stop once that is known.
+	if (!interrupt_affinity_supported())
+		return;
+
 	cpu_ent* cpu = get_cpu_struct();
 	SpinLocker locker(cpu->irqs_lock);
 
