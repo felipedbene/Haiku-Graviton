@@ -1,0 +1,25 @@
+# launch_daemon job for partition_grow. Installed as
+# /boot/system/settings/launch/partition_grow, read by the *system*
+# launch_daemon (see the note in launch-sshd about why the system context and
+# not the user one -- there is no desktop on a Nitro instance).
+#
+# "job", not "service": this is one-shot. It grows the root GPT partition to
+# fill a larger backing disk and then exits; there is nothing to keep resident.
+# The program is idempotent -- on a disk the partition already spans it is a
+# clean no-op -- so launch_daemon re-running it on a later boot costs one probe
+# and changes nothing.
+#
+# No "on <event>" condition and no dependency on the network: the disk is local
+# and present from the first instant of userland, so there is nothing to wait
+# for. It runs in its own job and therefore delays neither sshd nor the desktop.
+#
+# Ordering note: the filesystem grow is owned by the BFS mount-time engine and
+# runs in the kernel long before any launch_daemon job, so the partition this
+# job grows is consumed by the *next* boot's root mount -- convergence is two
+# boots by construction, which is the split the design intends (the hook grows
+# only the partition; the FS grow happens on the next mount automatically).
+
+job x-vnd.haiku-partition_grow {
+	launch /boot/system/bin/partition_grow
+	legacy
+}

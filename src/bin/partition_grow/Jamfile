@@ -1,0 +1,20 @@
+SubDir HAIKU_TOP src bin partition_grow ;
+
+# The disk device kit (BDiskDeviceRoster/BDiskDevice/BPartition) lives in libbe
+# and its headers are private; crc32() and the GPT on-disk structures are shared
+# verbatim with the efi_gpt partitioning add-on rather than reimplemented here.
+UsePrivateHeaders interface shared storage ;
+UsePrivateSystemHeaders ;
+UseHeaders [ FDirName $(HAIKU_TOP) src add-ons kernel partitioning_systems gpt ] ;
+
+SEARCH_SOURCE
+	+= [ FDirName $(HAIKU_TOP) src add-ons kernel partitioning_systems gpt ] ;
+
+Application partition_grow :
+	partition_grow.cpp
+
+	# shared with the efi_gpt partitioning add-on
+	crc32.cpp
+
+	: shared be [ TargetLibsupc++ ]
+;

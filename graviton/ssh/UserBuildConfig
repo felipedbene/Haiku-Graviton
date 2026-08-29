@@ -74,6 +74,20 @@ rule UserBuildConfigRulePreImage
 	AddFilesToHaikuImage system settings launch
 		: $(cloudInitLaunch) : cloud_init_lite ;
 
+	# --- partition_grow: fill a larger EBS on first boot --------------------
+	# The image is baked at a fixed size; on a larger root volume the GPT still
+	# describes the small baked partition, so the BFS mount-time grow engine
+	# (which grows the FS when its backing device is bigger than the FS) never
+	# sees partition > FS and never fires. partition_grow closes that gap on
+	# first boot by growing the root GPT partition entry to fill the disk and
+	# relocating the secondary GPT header to the new end. It is a normal Haiku
+	# command (src/bin/partition_grow) already in the Haiku package -- like
+	# cloud_init_lite above -- so only its launch_daemon job is placed here.
+	local partitionGrowLaunch = <haiku-graviton-ssh>launch-partition-grow ;
+	SEARCH on $(partitionGrowLaunch) = $(HG_SSH_IMAGE_DIR) ;
+	AddFilesToHaikuImage system settings launch
+		: $(partitionGrowLaunch) : partition_grow ;
+
 	# --- desktop in a browser -----------------------------------------------
 	# TARGET_SCREEN, for the whole user session. This is the load-bearing half:
 	# data/launch/user launches Tracker and Deskbar as services under

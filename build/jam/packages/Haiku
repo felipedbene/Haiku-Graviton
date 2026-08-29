@@ -248,6 +248,7 @@ AddFilesToPackage bin :
 	ena_fault
 	mprotect_probe
 	nettput
+	partition_grow
 	smpscale
 	consoled
 	;

@@ -255,6 +255,7 @@ SubInclude HAIKU_TOP src bin ena_fault ;
 SubInclude HAIKU_TOP src bin mprotect_probe ;
 SubInclude HAIKU_TOP src bin netprof ;
 SubInclude HAIKU_TOP src bin nettput ;
+SubInclude HAIKU_TOP src bin partition_grow ;
 SubInclude HAIKU_TOP src bin smpscale ;
 SubInclude HAIKU_TOP src bin consoled ;
 SubInclude HAIKU_TOP src bin desklink ;
