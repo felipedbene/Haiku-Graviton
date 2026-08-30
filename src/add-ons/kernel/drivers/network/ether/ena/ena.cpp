@@ -14,12 +14,16 @@
  * driver proper: PCI attach, interrupts, queue setup and the Haiku ethernet
  * device API.
  *
- * Scope of this version: one TX/RX queue pair, and a frame may span several
- * descriptors in either direction, so the MTU is whatever the device advertises
- * up to the jumbo ceiling the ethernet device layer will accept. Layer-4
- * checksums are offloaded in both directions. Frames are still copied through
- * per-descriptor bounce buffers, and multiple queues with RSS remain a separate
- * change.
+ * Scope of this version: up to ENA_MAX_IO_QUEUE_PAIRS TX/RX queue pairs, created
+ * from the device's advertised capabilities and clamped by the CPU count, the
+ * MSI-X grant and the rx_queues driver setting. Each pair has its own interrupt
+ * vector, pinned round-robin across CPUs. Receive is spread across the pairs the
+ * stack activates through RSS; a stack that does not use the multiqueue contract
+ * leaves receive on pair 0, which is behaviour-identical to the single-queue
+ * driver. A frame may span several descriptors in either direction, so the MTU
+ * is whatever the device advertises up to the jumbo ceiling the ethernet device
+ * layer will accept. Layer-4 checksums are offloaded in both directions. Frames
+ * are still copied through per-descriptor bounce buffers.
  */
 
 
@@ -33,6 +37,7 @@
 #include <netinet/in.h>
 
 #include <driver_settings.h>
+#include <interrupts.h>
 #include <kernel.h>
 #include <util/AutoLock.h>
 #include <vm/vm.h>
@@ -53,8 +58,8 @@
    handed to the device in ena_com_create_io_ctx::msix_vector, and are not the
    IRQ numbers Haiku uses. */
 #define ENA_MGMNT_VECTOR_IDX	0
-#define ENA_IO_VECTOR_IDX	1
-#define ENA_MSIX_VECTOR_COUNT	2
+/* IO pair i uses MSI-X table index 1 + i; the management vector is index 0. */
+#define ENA_IO_VECTOR_IDX(pair)	(1 + (pair))
 
 
 static device_manager_info* sDeviceManager;
@@ -210,42 +215,44 @@ ena_management_interrupt(void* arg)
 	just been created and starts masked whatever \c irqArmed happens to say.
 */
 static void
-ena_rearm_io_interrupt(ena_haiku_device* device, bool force)
+ena_rearm_io_interrupt(ena_queue_pair* pair, bool force)
 {
-	if (device->txCompletionQueue == NULL)
+	if (pair->txCompletionQueue == NULL)
 		return;
 
 	if (force)
-		atomic_set(&device->irqArmed, 0);
+		atomic_set(&pair->irqArmed, 0);
 
 	/* Whichever direction finishes draining first performs the single unmask
 	   write; the other finds the vector already armed and skips it. Both have to
 	   try, because either one can be the last to finish -- see the ownership note
 	   in ena_io_interrupt() for why this is not a two-sided handshake. */
-	if (atomic_test_and_set(&device->irqArmed, 1, 0) != 0)
+	if (atomic_test_and_set(&pair->irqArmed, 1, 0) != 0)
 		return;
 
 	/* The receive interval is read from the device rather than used as a constant
 	   so that it can be swept at runtime; see ENA_IOCTL_RX_MODERATION. Transmit
 	   stays at the compile-time value, because a sweep that moved both could not
-	   attribute a change in the interrupt rate to either. */
+	   attribute a change in the interrupt rate to either. The moderation knob is
+	   device-wide and applies to every pair identically. */
 	struct ena_eth_io_intr_reg interruptRegister;
 	ena_com_update_intr_reg(&interruptRegister,
-		(uint32)atomic_get(&device->rxIrqInterval), ENA_TX_IRQ_INTERVAL, true,
-		false);
-	ena_com_unmask_intr(device->txCompletionQueue, &interruptRegister);
+		(uint32)atomic_get(&pair->device->rxIrqInterval), ENA_TX_IRQ_INTERVAL,
+		true, false);
+	ena_com_unmask_intr(pair->txCompletionQueue, &interruptRegister);
 
-	atomic_add(&device->irqArms, 1);
+	atomic_add(&pair->irqArms, 1);
 }
 
 
 static int32
 ena_io_interrupt(void* arg)
 {
-	ena_haiku_device* device = (ena_haiku_device*)arg;
+	ena_queue_pair* pair = (ena_queue_pair*)arg;
+	ena_haiku_device* device = pair->device;
 
-	if (atomic_add(&device->ioInterrupts, 1) == 0)
-		TRACE_ALWAYS("first io interrupt delivered\n");
+	if (atomic_add(&pair->ioInterrupts, 1) == 0)
+		TRACE_ALWAYS("first io interrupt delivered on pair %u\n", pair->index);
 
 	/* The device masked this vector by raising it, and this handler deliberately
 	   does not re-arm it -- the drain does, once there is nothing left to
@@ -279,16 +286,22 @@ ena_io_interrupt(void* arg)
 		   measured against each other in one boot. Forcing the write here also
 		   leaves irqArmed set, which is what makes the re-arms at the end of both
 		   drains no-ops without needing to test the mode again. */
-		ena_rearm_io_interrupt(device, true);
+		ena_rearm_io_interrupt(pair, true);
 	} else
-		atomic_set(&device->irqArmed, 0);
+		atomic_set(&pair->irqArmed, 0);
 
-	/* Both directions share this vector, so wake both waiters and let them
-	   find out whether there was anything for them. */
-	if (device->rxReady >= 0)
-		release_sem_etc(device->rxReady, 1, B_DO_NOT_RESCHEDULE);
-	if (device->txCompleted >= 0)
-		release_sem_etc(device->txCompleted, 1, B_DO_NOT_RESCHEDULE);
+	/* Both directions share this vector, so wake both waiters and let them find
+	   out whether there was anything for them.
+
+	   Receive is gated on the pair being active. An inactive pair's vector is
+	   never armed (D23), so this should not fire for one -- but a stray or
+	   replayed interrupt must not grow a semaphore no reader will ever drain,
+	   which over time would wrap the int32 count. Transmit is always released:
+	   only active pairs transmit, so its waiters exist exactly when it matters. */
+	if (atomic_get(&pair->rxActive) != 0 && pair->rxReady >= 0)
+		release_sem_etc(pair->rxReady, 1, B_DO_NOT_RESCHEDULE);
+	if (pair->txCompleted >= 0)
+		release_sem_etc(pair->txCompleted, 1, B_DO_NOT_RESCHEDULE);
 
 	return B_INVOKE_SCHEDULER;
 }
@@ -338,18 +351,40 @@ ena_map_bar(ena_haiku_device* device, uint8 barIndex, const char* name,
 }
 
 
+/*!	Claims MSI-X vectors: one for management plus one per IO queue pair.
+
+	Asks for 1 + queuePairCount. If the bus manager offers fewer than asked,
+	fall back to a single IO pair (request 2) rather than failing outright -- a
+	one-queue NIC beats no NIC. Below two vectors there is no usable
+	configuration, so fail as before. On success queuePairCount is trimmed to
+	what was actually granted and each pair's kernel vector is recorded.
+*/
 static status_t
 ena_enable_msix(ena_haiku_device* device)
 {
-	if (device->pci->get_msix_count(device->pciDevice) < ENA_MSIX_VECTOR_COUNT) {
-		ERROR("device offers fewer than %d MSI-X vectors\n",
-			ENA_MSIX_VECTOR_COUNT);
+	uint32 available = device->pci->get_msix_count(device->pciDevice);
+	if (available < 2) {
+		ERROR("device offers fewer than 2 MSI-X vectors\n");
 		return B_NOT_SUPPORTED;
 	}
 
+	uint32 wanted = 1 + device->queuePairCount;
+	if (wanted > available)
+		wanted = available;
+
 	uint32 startVector = 0;
-	status_t status = device->pci->configure_msix(device->pciDevice,
-		ENA_MSIX_VECTOR_COUNT, &startVector);
+	status_t status = device->pci->configure_msix(device->pciDevice, wanted,
+		&startVector);
+	if (status != B_OK && device->queuePairCount > 1) {
+		/* Retry once with a single IO pair. */
+		TRACE_ALWAYS("configure_msix(%" B_PRIu32 ") failed (%s); retrying with a "
+			"single IO queue pair\n", wanted, strerror(status));
+		device->queuePairCount = 1;
+		wanted = 2;
+		startVector = 0;
+		status = device->pci->configure_msix(device->pciDevice, wanted,
+			&startVector);
+	}
 	if (status != B_OK)
 		return status;
 
@@ -366,16 +401,95 @@ ena_enable_msix(ena_haiku_device* device)
 	if (status != B_OK)
 		return status;
 
+	/* The bus manager may have granted fewer than asked; the IO pair count is
+	   whatever the grant supports beyond the one management vector. */
+	if (wanted < 1 + device->queuePairCount)
+		device->queuePairCount = wanted - 1;
+
 	/* Haiku hands back the first IRQ of a contiguous block; the device-side
 	   table indices are 0..count-1 in the same order. */
+	device->msixStartVector = startVector;
 	device->managementIrq = startVector + ENA_MGMNT_VECTOR_IDX;
-	device->ioIrq = startVector + ENA_IO_VECTOR_IDX;
+	for (uint32 i = 0; i < device->queuePairCount; i++)
+		device->queues[i].ioIrq = startVector + ENA_IO_VECTOR_IDX(i);
 	device->msixEnabled = true;
 
-	TRACE_ALWAYS("using MSI-X, management irq %" B_PRIu32 ", io irq %" B_PRIu32
-		"\n", device->managementIrq, device->ioIrq);
+	TRACE_ALWAYS("using MSI-X: %" B_PRIu32 " vectors, management irq %" B_PRIu32
+		", %" B_PRIu32 " io queue pair(s) starting at irq %" B_PRIu32 "\n",
+		wanted, device->managementIrq, device->queuePairCount,
+		device->queues[0].ioIrq);
 
 	return B_OK;
+}
+
+
+/*!	Chooses how many IO queue pairs to create, from device caps, CPU count, the
+	MSI-X grant and the rx_queues driver setting.
+
+	The device advertises its per-direction queue counts through the queue-ext
+	feature; the smallest of those is the cap. On the legacy descriptor path the
+	count is forced to one: that hardware is untestable here, and multiqueue on
+	an untested interrupt path is worse than none. The result is floored at one.
+
+	Must run after ena_calculate_ring_sizes()/frame limits and before
+	ena_enable_msix(), which sizes its request from queuePairCount.
+*/
+static void
+ena_calculate_queue_count(ena_haiku_device* device,
+	struct ena_com_dev_get_features_ctx* features)
+{
+	uint32 caps = 1;
+
+	if ((device->comDev.supported_features & BIT(ENA_ADMIN_MAX_QUEUES_EXT))
+			!= 0) {
+		struct ena_admin_queue_ext_feature_fields* q
+			= &features->max_queue_ext.max_queue_ext;
+		caps = min_c(min_c(q->max_tx_sq_num, q->max_tx_cq_num),
+			min_c(q->max_rx_sq_num, q->max_rx_cq_num));
+	}
+	if (caps < 1)
+		caps = 1;
+
+	uint32 cpus = (uint32)smp_get_num_cpus();
+	uint32 msix = device->pci->get_msix_count(device->pciDevice);
+	uint32 msixPairs = msix > 1 ? msix - 1 : 1;
+
+	uint32 count = min_c(caps, (uint32)ENA_MAX_IO_QUEUE_PAIRS);
+	count = min_c(count, cpus);
+	count = min_c(count, msixPairs);
+	if (device->settingsRxQueues > 0)
+		count = min_c(count, device->settingsRxQueues);
+	if (count < 1)
+		count = 1;
+
+	device->queuePairCount = count;
+
+	TRACE_ALWAYS("queue pairs: using %" B_PRIu32 " (device caps %" B_PRIu32
+		", cpus %" B_PRIu32 ", msix %" B_PRIu32 "%s)\n", count, caps, cpus, msix,
+		device->settingsRxQueues > 0 ? ", rx_queues setting applied" : "");
+}
+
+
+/*!	Removes every installed interrupt handler: all IO pairs then management.
+
+	Tolerates handlers that were never installed, so it is safe on every unwind
+	and teardown path.
+*/
+static void
+ena_remove_io_handlers(ena_haiku_device* device)
+{
+	for (uint16 i = 0; i < ENA_MAX_IO_QUEUE_PAIRS; i++) {
+		ena_queue_pair* pair = &device->queues[i];
+		if (pair->ioIrqInstalled) {
+			remove_io_interrupt_handler(pair->ioIrq, ena_io_interrupt, pair);
+			pair->ioIrqInstalled = false;
+		}
+	}
+	if (device->managementIrqInstalled) {
+		remove_io_interrupt_handler(device->managementIrq,
+			ena_management_interrupt, device);
+		device->managementIrqInstalled = false;
+	}
 }
 
 
@@ -670,7 +784,10 @@ ena_report_offload_capabilities(ena_haiku_device* device,
 		(int)get_ena_admin_feature_offload_desc_tso_ipv6(offload),
 		offload->rx_supported, offload->rx_enabled);
 
-	device->txBurstLeftMin = 0xffff;
+	/* Per-pair burst-left minimum starts at the maximum so the first frame lowers
+	   it; reset each bring-up (this runs on attach and on every reset). */
+	for (uint32 i = 0; i < ENA_MAX_IO_QUEUE_PAIRS; i++)
+		device->queues[i].txBurstLeftMin = 0xffff;
 	device->txChecksumOffload = 0;
 
 	/* Only the *partial* form is any use to us, and it is also the only form
@@ -706,6 +823,20 @@ ena_report_offload_capabilities(ena_haiku_device* device,
 			TRACE_ALWAYS("settings: tx_extra_doorbells %" B_PRId32 " (asked "
 				"for %s)\n", device->txExtraDoorbells, value);
 		}
+
+		/* Caps the number of IO queue pairs from above; 1 forces today's
+		   single-queue topology. This is the A/B lever for the throughput
+		   experiment (one image, two arms across boots) and the off-switch. */
+		const char* queues = get_driver_parameter(handle, "rx_queues", NULL,
+			NULL);
+		if (queues != NULL) {
+			int wanted = atoi(queues);
+			if (wanted >= 1 && wanted <= ENA_MAX_IO_QUEUE_PAIRS)
+				device->settingsRxQueues = (uint32)wanted;
+			TRACE_ALWAYS("settings: rx_queues %" B_PRIu32 " (asked for %s)\n",
+				device->settingsRxQueues, queues);
+		}
+
 		unload_driver_settings(handle);
 	}
 
@@ -1062,8 +1193,9 @@ ena_destroy_device(ena_haiku_device* device)
 	the same split: this part runs at probe, ena_flush_rss()'s part runs from
 	their ifup path after the queues are created.
 
-	We have one queue pair, so RSS buys us nothing directly; it is configured
-	because the reference does so before creating any queue.
+	The indirection table is spread over rxActiveCount receive queues; at
+	bring-up that is one, so every bucket lands on pair 0 and this is today's
+	behaviour. ena_spread_rss() re-runs the fill when the active set changes.
 */
 static status_t
 ena_prepare_rss(ena_haiku_device* device)
@@ -1076,10 +1208,10 @@ ena_prepare_rss(ena_haiku_device* device)
 		return ena_translate_error(result);
 	}
 
+	const uint32 spread = (uint32)max_c((int32)1, device->rxActiveCount);
 	for (uint16 i = 0; i < ENA_RSS_TABLE_SIZE; i++) {
-		/* One queue pair, so everything lands on our single receive queue. */
 		result = ena_com_indirect_table_fill_entry(comDev, i,
-			ENA_RX_QUEUE_ID);
+			ENA_IO_RXQ_ID(i % spread));
 		if (result != ENA_COM_OK && result != ENA_COM_UNSUPPORTED) {
 			ERROR("cannot fill indirection entry %u: %d\n", i, result);
 			goto err;
@@ -1129,6 +1261,38 @@ ena_flush_rss(ena_haiku_device* device)
 	result = ena_com_set_hash_ctrl(comDev);
 	if (result != ENA_COM_OK && result != ENA_COM_UNSUPPORTED)
 		ERROR("cannot flush the hash control: %d\n", result);
+}
+
+
+/*!	Re-points the RSS indirection table at receive queues [0, rxActiveCount) and
+	pushes it to the device.
+
+	Used when the active receive set changes at runtime -- activation
+	(ETHER_SET_RX_QUEUE_COUNT), close-to-legacy, and the reset re-apply. Callers
+	hold resetLock, so rxActiveCount is stable here; the queues it names all
+	exist because it is never asked to point past queuePairCount. Best effort,
+	as in the reference: an older device may answer ENA_COM_UNSUPPORTED.
+*/
+static void
+ena_spread_rss(ena_haiku_device* device)
+{
+	struct ena_com_dev* comDev = &device->comDev;
+	const uint32 spread = (uint32)max_c((int32)1, device->rxActiveCount);
+
+	for (uint16 i = 0; i < ENA_RSS_TABLE_SIZE; i++) {
+		int result = ena_com_indirect_table_fill_entry(comDev, i,
+			ENA_IO_RXQ_ID(i % spread));
+		if (result != ENA_COM_OK && result != ENA_COM_UNSUPPORTED) {
+			ERROR("cannot re-fill indirection entry %u: %d\n", i, result);
+			return;
+		}
+	}
+
+	int result = ena_com_indirect_table_set(comDev);
+	if (result != ENA_COM_OK && result != ENA_COM_UNSUPPORTED)
+		ERROR("cannot flush the re-spread indirection table: %d\n", result);
+
+	TRACE_ALWAYS("RSS spread across %" B_PRIu32 " receive queue(s)\n", spread);
 }
 
 
@@ -1216,19 +1380,26 @@ ena_dump_admin_command_stream(ena_haiku_device* device)
 }
 
 
-/*!	Creates one queue pair at the given depth. */
+/*!	Creates queue pair \a pairIndex: its receive then its transmit queue.
+
+	Uses the pair's own device queue ids (ENA_IO_{RX,TX}Q_ID) and its own MSI-X
+	table index (1 + pairIndex), and stores the resulting HAL handlers on the
+	pair. The rings are the device-wide depth; the device may have forced a
+	smaller one, which is why the buffer pools are sized after creation.
+*/
 static int
-ena_create_queue_pair(ena_haiku_device* device, uint16 txDepth,
-	uint16 rxDepth, uint32 msixVector)
+ena_create_queue_pair(ena_haiku_device* device, uint16 pairIndex)
 {
 	struct ena_com_dev* comDev = &device->comDev;
+	ena_queue_pair* pair = &device->queues[pairIndex];
+	const uint16 rxDepth = device->rxRingSize;
+	const uint16 txDepth = device->txRingSize;
+	const uint32 msixVector = ENA_IO_VECTOR_IDX(pairIndex);
 	struct ena_com_create_io_ctx context;
 
-	/* TODO: one pair only. Scaling out means a vector and a ring per pair,
-	   plus RSS configuration to spread receive across them. */
 	memset(&context, 0, sizeof(context));
 	context.direction = ENA_COM_IO_QUEUE_DIRECTION_RX;
-	context.qid = ENA_RX_QUEUE_ID;
+	context.qid = ENA_IO_RXQ_ID(pairIndex);
 	context.mem_queue_type = ENA_ADMIN_PLACEMENT_POLICY_HOST;
 	context.msix_vector = msixVector;
 	context.queue_size = rxDepth;
@@ -1236,54 +1407,54 @@ ena_create_queue_pair(ena_haiku_device* device, uint16 txDepth,
 
 	int result = ena_com_create_io_queue(comDev, &context);
 	if (result != ENA_COM_OK) {
-		ERROR("cannot create the receive queue at depth %u: %d\n", rxDepth,
-			result);
+		ERROR("cannot create receive queue %u at depth %u: %d\n",
+			ENA_IO_RXQ_ID(pairIndex), rxDepth, result);
 		return result;
 	}
 
-	result = ena_com_get_io_handlers(comDev, ENA_RX_QUEUE_ID,
-		&device->rxSubmissionQueue, &device->rxCompletionQueue);
+	result = ena_com_get_io_handlers(comDev, ENA_IO_RXQ_ID(pairIndex),
+		&pair->rxSubmissionQueue, &pair->rxCompletionQueue);
 	if (result != ENA_COM_OK) {
-		ERROR("cannot get receive queue handlers: %d\n", result);
-		ena_com_destroy_io_queue(comDev, ENA_RX_QUEUE_ID);
+		ERROR("cannot get receive queue handlers for pair %u: %d\n", pairIndex,
+			result);
+		ena_com_destroy_io_queue(comDev, ENA_IO_RXQ_ID(pairIndex));
 		return result;
 	}
 
 	memset(&context, 0, sizeof(context));
 	context.direction = ENA_COM_IO_QUEUE_DIRECTION_TX;
-	context.qid = ENA_TX_QUEUE_ID;
+	context.qid = ENA_IO_TXQ_ID(pairIndex);
 	context.mem_queue_type = comDev->tx_mem_queue_type;
 	context.msix_vector = msixVector;
 	context.queue_size = txDepth;
 	context.numa_node = 0;
 
-	TRACE_ALWAYS("creating queue pair: tx depth %u, rx depth %u, msix vector %"
-		B_PRIu32
-		", tx placement %s, tx max header %" B_PRIu32 "\n", txDepth, rxDepth,
-		msixVector,
+	TRACE_ALWAYS("creating queue pair %u: rx qid %u, tx qid %u, tx depth %u, "
+		"rx depth %u, msix vector %" B_PRIu32 ", tx placement %s, tx max header %"
+		B_PRIu32 "\n", pairIndex, ENA_IO_RXQ_ID(pairIndex),
+		ENA_IO_TXQ_ID(pairIndex), txDepth, rxDepth, msixVector,
 		comDev->tx_mem_queue_type == ENA_ADMIN_PLACEMENT_POLICY_HOST
 			? "host" : "device", comDev->tx_max_header_size);
-	TRACE_ALWAYS("cdesc sizes: tx %" B_PRIuSIZE " bytes (%" B_PRIuSIZE
-		" words), rx %" B_PRIuSIZE " bytes (%" B_PRIuSIZE " words)\n",
-		sizeof(struct ena_eth_io_tx_cdesc),
-		sizeof(struct ena_eth_io_tx_cdesc) / 4,
-		sizeof(struct ena_eth_io_rx_cdesc_base),
-		sizeof(struct ena_eth_io_rx_cdesc_base) / 4);
 
 	result = ena_com_create_io_queue(comDev, &context);
 	if (result != ENA_COM_OK) {
-		ERROR("cannot create the transmit queue at depth %u: %d\n", txDepth,
-			result);
-		ena_com_destroy_io_queue(comDev, ENA_RX_QUEUE_ID);
+		ERROR("cannot create transmit queue %u at depth %u: %d\n",
+			ENA_IO_TXQ_ID(pairIndex), txDepth, result);
+		ena_com_destroy_io_queue(comDev, ENA_IO_RXQ_ID(pairIndex));
+		pair->rxSubmissionQueue = NULL;
+		pair->rxCompletionQueue = NULL;
 		return result;
 	}
 
-	result = ena_com_get_io_handlers(comDev, ENA_TX_QUEUE_ID,
-		&device->txSubmissionQueue, &device->txCompletionQueue);
+	result = ena_com_get_io_handlers(comDev, ENA_IO_TXQ_ID(pairIndex),
+		&pair->txSubmissionQueue, &pair->txCompletionQueue);
 	if (result != ENA_COM_OK) {
-		ERROR("cannot get transmit queue handlers: %d\n", result);
-		ena_com_destroy_io_queue(comDev, ENA_TX_QUEUE_ID);
-		ena_com_destroy_io_queue(comDev, ENA_RX_QUEUE_ID);
+		ERROR("cannot get transmit queue handlers for pair %u: %d\n", pairIndex,
+			result);
+		ena_com_destroy_io_queue(comDev, ENA_IO_TXQ_ID(pairIndex));
+		ena_com_destroy_io_queue(comDev, ENA_IO_RXQ_ID(pairIndex));
+		pair->rxSubmissionQueue = NULL;
+		pair->rxCompletionQueue = NULL;
 		return result;
 	}
 
@@ -1291,32 +1462,37 @@ ena_create_queue_pair(ena_haiku_device* device, uint16 txDepth,
 }
 
 
-/*!	Creates the single TX/RX queue pair.
+/*!	Creates every TX/RX queue pair the device was granted.
 
-	NOTE: the device currently rejects CREATE_CQ with
-	ENA_ADMIN_UNKNOWN_ERROR (6) and no extended status, and probing has ruled
-	out the obvious suspects -- it fails identically for every ring depth from
-	256 down to 16, for both directions, and for both a dedicated MSI-X vector
-	and the management one. The command matches Amazon's byte for byte as far
-	as can be told from the sources. This is the open question; see HANDOFF.md.
+	On failure the pairs created so far are destroyed, so the caller sees either
+	all queuePairCount pairs or none.
 */
 static status_t
 ena_setup_io_queues(ena_haiku_device* device)
 {
-	int result = ena_create_queue_pair(device, device->txRingSize,
-		device->rxRingSize, ENA_IO_VECTOR_IDX);
-	if (result != ENA_COM_OK) {
-		ena_dump_admin_command_stream(device);
-		return ena_translate_error(result);
-	}
+	for (uint16 i = 0; i < device->queuePairCount; i++) {
+		int result = ena_create_queue_pair(device, i);
+		if (result != ENA_COM_OK) {
+			ena_dump_admin_command_stream(device);
 
-	device->ioVector = ENA_IO_VECTOR_IDX;
+			/* Unwind the pairs created before this one. */
+			for (uint16 j = 0; j < i; j++) {
+				ena_com_destroy_io_queue(&device->comDev, ENA_IO_RXQ_ID(j));
+				ena_com_destroy_io_queue(&device->comDev, ENA_IO_TXQ_ID(j));
+				device->queues[j].rxSubmissionQueue = NULL;
+				device->queues[j].rxCompletionQueue = NULL;
+				device->queues[j].txSubmissionQueue = NULL;
+				device->queues[j].txCompletionQueue = NULL;
+			}
+			return ena_translate_error(result);
+		}
+	}
 
 	return B_OK;
 }
 
 
-/*!	Destroys the queue pair and forgets its handlers.
+/*!	Destroys every queue pair and forgets its handlers.
 
 	Shared with the ena_init_device() unwind, so it has to tolerate a pair that
 	was never created, and it clears the handlers so that a second call is a no
@@ -1325,14 +1501,17 @@ ena_setup_io_queues(ena_haiku_device* device)
 static void
 ena_release_io_queues(ena_haiku_device* device)
 {
-	if (device->rxSubmissionQueue != NULL)
-		ena_com_destroy_io_queue(&device->comDev, ENA_RX_QUEUE_ID);
-	if (device->txSubmissionQueue != NULL)
-		ena_com_destroy_io_queue(&device->comDev, ENA_TX_QUEUE_ID);
-	device->rxSubmissionQueue = NULL;
-	device->rxCompletionQueue = NULL;
-	device->txSubmissionQueue = NULL;
-	device->txCompletionQueue = NULL;
+	for (uint16 i = 0; i < ENA_MAX_IO_QUEUE_PAIRS; i++) {
+		ena_queue_pair* pair = &device->queues[i];
+		if (pair->rxSubmissionQueue != NULL)
+			ena_com_destroy_io_queue(&device->comDev, ENA_IO_RXQ_ID(i));
+		if (pair->txSubmissionQueue != NULL)
+			ena_com_destroy_io_queue(&device->comDev, ENA_IO_TXQ_ID(i));
+		pair->rxSubmissionQueue = NULL;
+		pair->rxCompletionQueue = NULL;
+		pair->txSubmissionQueue = NULL;
+		pair->txCompletionQueue = NULL;
+	}
 }
 
 
@@ -1377,65 +1556,75 @@ ena_allocate_buffer_area(ena_haiku_device* device, const char* name,
 }
 
 
-/*!	Allocates the bounce buffers and the transmit request-id pool. */
+/*!	Allocates one pair's bounce buffers and transmit request-id pool.
+
+	Each pair gets its own contiguous DMA areas, deliberately kept at today's
+	per-ring size (~2 MiB RX + ~1 MiB TX) rather than one big block: a reset has
+	to allocate contiguous memory again, and a large request is the one that
+	fails once memory has fragmented -- see the note in ena.h. The area names
+	carry the pair index so a leak or a failure is attributable.
+*/
 static status_t
-ena_setup_buffers(ena_haiku_device* device)
+ena_setup_pair_buffers(ena_haiku_device* device, ena_queue_pair* pair)
 {
-	device->rxBuffers = (ena_packet_buffer*)calloc(device->rxRingSize,
+	pair->rxBuffers = (ena_packet_buffer*)calloc(device->rxRingSize,
 		sizeof(ena_packet_buffer));
-	device->txBuffers = (ena_tx_buffer*)calloc(device->txRingSize,
+	pair->txBuffers = (ena_tx_buffer*)calloc(device->txRingSize,
 		sizeof(ena_tx_buffer));
-	device->txFreeIds = (uint16*)calloc(device->txRingSize, sizeof(uint16));
-	if (device->rxBuffers == NULL || device->txBuffers == NULL
-			|| device->txFreeIds == NULL) {
+	pair->txFreeIds = (uint16*)calloc(device->txRingSize, sizeof(uint16));
+	if (pair->rxBuffers == NULL || pair->txBuffers == NULL
+			|| pair->txFreeIds == NULL) {
 		return B_NO_MEMORY;
 	}
 
+	char name[32];
+	snprintf(name, sizeof(name), "ena rx buffers %u", pair->index);
+
 	addr_t base;
 	phys_addr_t physicalBase;
-	status_t status = ena_allocate_buffer_area(device, "ena rx buffers",
-		device->rxRingSize, &device->rxBufferArea, &base, &physicalBase);
+	status_t status = ena_allocate_buffer_area(device, name,
+		device->rxRingSize, &pair->rxBufferArea, &base, &physicalBase);
 	if (status != B_OK)
 		return status;
 
 	for (uint16 i = 0; i < device->rxRingSize; i++) {
-		device->rxBuffers[i].data
+		pair->rxBuffers[i].data
 			= (void*)(base + (size_t)i * ENA_PACKET_BUFFER_SIZE);
-		device->rxBuffers[i].physicalAddress
+		pair->rxBuffers[i].physicalAddress
 			= physicalBase + (phys_addr_t)i * ENA_PACKET_BUFFER_SIZE;
-		device->rxBuffers[i].index = i;
+		pair->rxBuffers[i].index = i;
 	}
 
-	status = ena_allocate_buffer_area(device, "ena tx buffers",
-		device->txRingSize, &device->txBufferArea, &base, &physicalBase);
+	snprintf(name, sizeof(name), "ena tx buffers %u", pair->index);
+	status = ena_allocate_buffer_area(device, name, device->txRingSize,
+		&pair->txBufferArea, &base, &physicalBase);
 	if (status != B_OK)
 		return status;
 
 	for (uint16 i = 0; i < device->txRingSize; i++) {
-		device->txBuffers[i].slot.data
+		pair->txBuffers[i].slot.data
 			= (void*)(base + (size_t)i * ENA_PACKET_BUFFER_SIZE);
-		device->txBuffers[i].slot.physicalAddress
+		pair->txBuffers[i].slot.physicalAddress
 			= physicalBase + (phys_addr_t)i * ENA_PACKET_BUFFER_SIZE;
-		device->txBuffers[i].slot.index = i;
+		pair->txBuffers[i].slot.index = i;
 
 		/* Every transmit request id starts out available. */
-		device->txFreeIds[i] = i;
+		pair->txFreeIds[i] = i;
 	}
-	device->txFreeCount = device->txRingSize;
+	pair->txFreeCount = device->txRingSize;
 
 	return B_OK;
 }
 
 
-/*!	Releases everything ena_setup_buffers() allocated.
+/*!	Releases everything ena_setup_pair_buffers() allocated for one pair.
 
-	Shared with the ena_init_device() unwind, so it has to cope with an
-	allocation that only got part way. Every field is reset as well as released:
-	this runs once per close, not once per lifetime, and the next open starts
-	from these values.
+	Shared with the unwind paths, so it copes with an allocation that only got
+	part way. Every field is reset as well as released: the next open starts from
+	these values.
 */
 static void
-ena_release_buffers(ena_haiku_device* device)
+ena_release_pair_buffers(ena_haiku_device* device, ena_queue_pair* pair)
 {
 	/* The net_buffers of packets that were still in flight. Each one is owned by
 	   the driver from ena_send() until ena_reclaim_transmitted() sees its
@@ -1448,48 +1637,57 @@ ena_release_buffers(ena_haiku_device* device)
 	   uncompleted packet at teardown is worth knowing about.
 
 	   Runs before the areas go away, since the slot each entry bounced through
-	   lives in txBufferArea. Callers already hold txLock (the reset path) or have
-	   destroyed it along with the rest of the device (ena_uninit_device()), so
-	   this deliberately takes no lock of its own. */
-	if (device->txBuffers != NULL) {
+	   lives in txBufferArea. Callers already hold this pair's txLock (the reset
+	   path) or have destroyed it along with the rest of the device
+	   (ena_uninit_device()), so this deliberately takes no lock of its own. */
+	if (pair->txBuffers != NULL) {
 		uint16 outstanding = 0;
 		for (uint16 i = 0; i < device->txRingSize; i++) {
-			if (device->txBuffers[i].buffer == NULL)
+			if (pair->txBuffers[i].buffer == NULL)
 				continue;
 
-			sBufferModule->free(device->txBuffers[i].buffer);
-			device->txBuffers[i].buffer = NULL;
-			device->txBuffers[i].descriptors = 0;
-			device->txBuffers[i].segments = 0;
+			sBufferModule->free(pair->txBuffers[i].buffer);
+			pair->txBuffers[i].buffer = NULL;
+			pair->txBuffers[i].descriptors = 0;
+			pair->txBuffers[i].segments = 0;
 			outstanding++;
 		}
 
 		if (outstanding > 0) {
-			TRACE_ALWAYS("released %u uncompleted transmit buffer(s)\n",
-				outstanding);
+			TRACE_ALWAYS("pair %u: released %u uncompleted transmit buffer(s)\n",
+				pair->index, outstanding);
 		}
 	}
 
-	if (device->rxBufferArea >= 0) {
-		delete_area(device->rxBufferArea);
-		device->rxBufferArea = -1;
+	if (pair->rxBufferArea >= 0) {
+		delete_area(pair->rxBufferArea);
+		pair->rxBufferArea = -1;
 	}
-	if (device->txBufferArea >= 0) {
-		delete_area(device->txBufferArea);
-		device->txBufferArea = -1;
+	if (pair->txBufferArea >= 0) {
+		delete_area(pair->txBufferArea);
+		pair->txBufferArea = -1;
 	}
-	free(device->rxBuffers);
-	free(device->txBuffers);
-	free(device->txFreeIds);
-	device->rxBuffers = NULL;
-	device->txBuffers = NULL;
-	device->txFreeIds = NULL;
-	device->txFreeCount = 0;
-	device->rxNextToFill = 0;
+	free(pair->rxBuffers);
+	free(pair->txBuffers);
+	free(pair->txFreeIds);
+	pair->rxBuffers = NULL;
+	pair->txBuffers = NULL;
+	pair->txFreeIds = NULL;
+	pair->txFreeCount = 0;
+	pair->rxNextToFill = 0;
 	/* Both halves of the receive ring's position, together: a surviving
 	   rxPendingRefill would make the next refill post descriptors against a
 	   ring that no longer exists in the form it was counted for. */
-	device->rxPendingRefill = 0;
+	pair->rxPendingRefill = 0;
+}
+
+
+/*!	Releases every pair's buffers. */
+static void
+ena_release_buffers(ena_haiku_device* device)
+{
+	for (uint16 i = 0; i < ENA_MAX_IO_QUEUE_PAIRS; i++)
+		ena_release_pair_buffers(device, &device->queues[i]);
 }
 
 
@@ -1502,27 +1700,28 @@ ena_release_buffers(ena_haiku_device* device)
 	driver rings it in exactly the same place, once, at the end
 	(ena.c:1163-1164).
 
-	Must be called with rxLock held.
+	Must be called with the pair's rxLock held.
 */
 static uint16
-ena_post_receive_descriptors(ena_haiku_device* device, uint16 count)
+ena_post_receive_descriptors(ena_haiku_device* device, ena_queue_pair* pair,
+	uint16 count)
 {
 	uint16 posted = 0;
 
 	for (uint16 i = 0; i < count; i++) {
 		/* Free entries minus one: ENA treats a completely full submission
 		   queue as an error rather than as full. */
-		if (ena_com_free_q_entries(device->rxSubmissionQueue) < 1)
+		if (ena_com_free_q_entries(pair->rxSubmissionQueue) < 1)
 			break;
 
-		ena_packet_buffer* buffer = &device->rxBuffers[
-			(device->rxNextToFill + i) % device->rxRingSize];
+		ena_packet_buffer* buffer = &pair->rxBuffers[
+			(pair->rxNextToFill + i) % device->rxRingSize];
 
 		struct ena_com_buf comBuffer;
 		comBuffer.paddr = buffer->physicalAddress;
 		comBuffer.len = ENA_PACKET_BUFFER_SIZE;
 
-		int result = ena_com_add_single_rx_desc(device->rxSubmissionQueue,
+		int result = ena_com_add_single_rx_desc(pair->rxSubmissionQueue,
 			&comBuffer, buffer->index);
 		if (result != ENA_COM_OK)
 			break;
@@ -1531,9 +1730,9 @@ ena_post_receive_descriptors(ena_haiku_device* device, uint16 count)
 	}
 
 	if (posted > 0) {
-		device->rxNextToFill = (device->rxNextToFill + posted)
+		pair->rxNextToFill = (pair->rxNextToFill + posted)
 			% device->rxRingSize;
-		ena_com_write_sq_doorbell(device->rxSubmissionQueue);
+		ena_com_write_sq_doorbell(pair->rxSubmissionQueue);
 	}
 
 	return posted;
@@ -1554,13 +1753,13 @@ ena_post_receive_descriptors(ena_haiku_device* device, uint16 count)
 	only as long as the ring it describes. Every place that reallocates the
 	receive buffers resets rxPendingRefill along with rxNextToFill.
 
-	Must be called with rxLock held.
+	Must be called with the pair's rxLock held.
 */
 static void
-ena_return_receive_descriptors(ena_haiku_device* device, uint16 count,
-	bool force = false)
+ena_return_receive_descriptors(ena_haiku_device* device, ena_queue_pair* pair,
+	uint16 count, bool force = false)
 {
-	device->rxPendingRefill += count;
+	pair->rxPendingRefill += count;
 
 	/* The ring cannot owe more descriptors than it has. Both callers that can
 	   pass a device-derived count -- the descriptor-count and stranded-count
@@ -1571,21 +1770,21 @@ ena_return_receive_descriptors(ena_haiku_device* device, uint16 count,
 	   owns, because ena_com_free_q_entries() bounds that independently, but it
 	   would leave a permanent fictional debt that defeats the batching for the
 	   life of the ring. */
-	if (device->rxPendingRefill > device->rxRingSize) {
-		ERROR("receive refill debt of %u exceeds the %u entry ring; clamping\n",
-			device->rxPendingRefill, device->rxRingSize);
-		device->rxPendingRefill = device->rxRingSize;
+	if (pair->rxPendingRefill > device->rxRingSize) {
+		ERROR("pair %u: receive refill debt of %u exceeds the %u entry ring; "
+			"clamping\n", pair->index, pair->rxPendingRefill, device->rxRingSize);
+		pair->rxPendingRefill = device->rxRingSize;
 	}
 
-	if (!force && device->rxPendingRefill < device->rxRefillThreshold)
+	if (!force && pair->rxPendingRefill < device->rxRefillThreshold)
 		return;
 
 	/* Only what was actually posted is no longer owed. A partial post leaves
 	   the rest pending, and the next frame's return -- or the next forced
 	   flush -- picks it up. */
-	uint16 posted = ena_post_receive_descriptors(device,
-		device->rxPendingRefill);
-	device->rxPendingRefill -= posted;
+	uint16 posted = ena_post_receive_descriptors(device, pair,
+		pair->rxPendingRefill);
+	pair->rxPendingRefill -= posted;
 }
 
 
@@ -1595,25 +1794,71 @@ ena_return_receive_descriptors(ena_haiku_device* device, uint16 count,
 	a reset. Anything left over stays owed, exactly as during normal operation,
 	rather than being silently dropped.
 
-	Must be called with rxLock held.
+	Must be called with the pair's rxLock held.
 */
 static void
-ena_refill_receive_ring(ena_haiku_device* device)
+ena_refill_receive_ring(ena_haiku_device* device, ena_queue_pair* pair)
 {
-	device->rxNextToFill = 0;
-	device->rxPendingRefill = 0;
+	pair->rxNextToFill = 0;
+	pair->rxPendingRefill = 0;
 
 	/* One short of the ring, not the whole ring: ena_com_free_q_entries() is
 	   q_depth - 1 - outstanding, so the last entry can never be posted and
 	   asking for it would report a phantom shortfall on every open. The
 	   reference asks for ring_size - 1 for the same reason (ena.c:1483). */
 	const uint16 wanted = (uint16)(device->rxRingSize - 1);
-	ena_return_receive_descriptors(device, wanted, true);
+	ena_return_receive_descriptors(device, pair, wanted, true);
 
-	if (device->rxPendingRefill != 0) {
-		TRACE_ALWAYS("receive ring only partly filled: %u of %u descriptors "
-			"still owed\n", device->rxPendingRefill, wanted);
+	if (pair->rxPendingRefill != 0) {
+		TRACE_ALWAYS("pair %u: receive ring only partly filled: %u of %u "
+			"descriptors still owed\n", pair->index, pair->rxPendingRefill,
+			wanted);
 	}
+}
+
+
+/*!	The ETHER_SET_RX_QUEUE_COUNT backend: makes exactly \a m receive queues live.
+
+	Growth fills and arms the newly-active pairs; shrink deactivates the tail.
+	Either way the RSS indirection table is re-spread over [0, m) afterwards, so
+	the device only ever steers receive traffic to queues the stack will drain.
+
+	Serialised against reset/open/close by resetLock, which is also what keeps
+	rxActiveCount stable for the RSS re-spread. Shrink re-points RSS *after*
+	deactivating, which can drop the handful of frames already in flight to a
+	deactivated queue -- the only shrink callers are close/reset, where the stack
+	is gone anyway.
+*/
+static status_t
+ena_set_rx_queue_count(ena_haiku_device* device, uint32 m)
+{
+	MutexLocker resetLocker(device->resetLock);
+
+	if (device->resetting || device->deviceDead)
+		return B_DEV_NOT_READY;
+	if (m < 1 || m > device->queuePairCount)
+		return B_BAD_VALUE;
+
+	/* Growth: fill and arm each newly-active pair before it can be steered to. */
+	for (uint32 i = (uint32)device->rxActiveCount; i < m; i++) {
+		ena_queue_pair* pair = &device->queues[i];
+		MutexLocker rxLocker(pair->rxLock);
+		ena_refill_receive_ring(device, pair);
+		atomic_set(&pair->rxActive, 1);
+		ena_rearm_io_interrupt(pair, true);
+	}
+
+	/* Shrink: deactivate the tail. Its vectors stay armed only until the next
+	   drain finds nothing; the rxActive gate in the handler stops rxReady from
+	   growing for a queue no reader drains. */
+	for (uint32 i = m; i < (uint32)device->rxActiveCount; i++)
+		atomic_set(&device->queues[i].rxActive, 0);
+
+	device->rxActiveCount = (int32)m;
+	ena_spread_rss(device);
+
+	TRACE_ALWAYS("receive queue count set to %" B_PRIu32 "\n", m);
+	return B_OK;
 }
 
 
@@ -1690,12 +1935,16 @@ ena_watchdog_reset(ena_haiku_device* device,
 	   around -- see docs/watchdog-design.md, criterion B. */
 	device->linkUp = false;
 
-	/* Wake everyone who is blocked, with a count: release_sem() wakes exactly
-	   one waiter, and there can be several. They re-check under the locks. */
-	if (device->rxReady >= 0)
-		release_sem_etc(device->rxReady, 8, B_DO_NOT_RESCHEDULE);
-	if (device->txCompleted >= 0)
-		release_sem_etc(device->txCompleted, 8, B_DO_NOT_RESCHEDULE);
+	/* Wake everyone who is blocked, on every pair, with a count: release_sem()
+	   wakes exactly one waiter, and there can be several. They re-check under the
+	   locks. */
+	for (uint32 i = 0; i < device->queuePairCount; i++) {
+		ena_queue_pair* pair = &device->queues[i];
+		if (pair->rxReady >= 0)
+			release_sem_etc(pair->rxReady, 8, B_DO_NOT_RESCHEDULE);
+		if (pair->txCompleted >= 0)
+			release_sem_etc(pair->txCompleted, 8, B_DO_NOT_RESCHEDULE);
+	}
 
 	/* --- teardown ------------------------------------------------------- */
 
@@ -1711,23 +1960,27 @@ ena_watchdog_reset(ena_haiku_device* device,
 
 	ena_com_set_admin_running_state(&device->comDev, false);
 
-	if (device->ioIrqInstalled) {
-		remove_io_interrupt_handler(device->ioIrq, ena_io_interrupt, device);
-		device->ioIrqInstalled = false;
-	}
-	if (device->managementIrqInstalled) {
-		remove_io_interrupt_handler(device->managementIrq,
-			ena_management_interrupt, device);
-		device->managementIrqInstalled = false;
-	}
+	ena_remove_io_handlers(device);
 
-	/* The rings and the bounce buffers, with the datapath excluded. */
+	/* The rings and the bounce buffers, with the datapath excluded. Lock order
+	   (D40): every pair's txLock in ascending index order, then every pair's
+	   rxLock in ascending index order. The reset is the only holder of more than
+	   one queue lock, so this can never invert against the datapath, which takes
+	   exactly one queue lock. All ENA_MAX_IO_QUEUE_PAIRS locks are taken, not
+	   just the active ones, so a datapath call to any pair is excluded. */
 	{
-		MutexLocker txLocker(device->txLock);
-		MutexLocker rxLocker(device->rxLock);
+		for (uint32 i = 0; i < ENA_MAX_IO_QUEUE_PAIRS; i++)
+			mutex_lock(&device->queues[i].txLock);
+		for (uint32 i = 0; i < ENA_MAX_IO_QUEUE_PAIRS; i++)
+			mutex_lock(&device->queues[i].rxLock);
 
 		ena_release_io_queues(device);
 		ena_release_buffers(device);
+
+		for (int32 i = ENA_MAX_IO_QUEUE_PAIRS - 1; i >= 0; i--)
+			mutex_unlock(&device->queues[i].rxLock);
+		for (int32 i = ENA_MAX_IO_QUEUE_PAIRS - 1; i >= 0; i--)
+			mutex_unlock(&device->queues[i].txLock);
 	}
 
 #ifdef ENA_DEBUG_FAULT_INJECTION
@@ -1776,7 +2029,8 @@ ena_watchdog_reset(ena_haiku_device* device,
 	   which is the failure mode that looks exactly like success. Criterion A in
 	   docs/watchdog-design.md depends on this line. */
 	atomic_set(&device->managementInterrupts, 0);
-	atomic_set(&device->ioInterrupts, 0);
+	for (uint32 i = 0; i < ENA_MAX_IO_QUEUE_PAIRS; i++)
+		atomic_set(&device->queues[i].ioInterrupts, 0);
 
 	/* --- bring-up ------------------------------------------------------- */
 
@@ -1798,8 +2052,10 @@ ena_watchdog_reset(ena_haiku_device* device,
 	   if somebody actually has the device open -- otherwise ena_open() will do
 	   it, and posting now would race with it. */
 	if (atomic_get(&device->openCount) > 0) {
-		MutexLocker rxLocker(device->rxLock);
-		ena_refill_receive_ring(device);
+		for (int32 i = 0; i < device->rxActiveCount; i++) {
+			MutexLocker rxLocker(device->queues[i].rxLock);
+			ena_refill_receive_ring(device, &device->queues[i]);
+		}
 	}
 
 	device->resetting = false;
@@ -1808,10 +2064,15 @@ ena_watchdog_reset(ena_haiku_device* device,
 	   for a link that is already up, and on EC2 it always is. */
 	device->linkUp = true;
 
+	int32 ioInterrupts = 0;
+	for (uint32 i = 0; i < device->queuePairCount; i++)
+		ioInterrupts += atomic_get(&device->queues[i].ioInterrupts);
+
 	TRACE_ALWAYS("device reset completed in %" B_PRId64 " ms (reset #%" B_PRId32
-		"); interrupts since: %" B_PRId32 " management, %" B_PRId32 " io\n",
-		(system_time() - startedAt) / 1000, device->resetCount,
-		device->managementInterrupts, device->ioInterrupts);
+		"); interrupts since: %" B_PRId32 " management, %" B_PRId32 " io (across %"
+		B_PRIu32 " pairs)\n", (system_time() - startedAt) / 1000,
+		device->resetCount, device->managementInterrupts, ioInterrupts,
+		device->queuePairCount);
 
 	return B_OK;
 }
@@ -1852,7 +2113,18 @@ ena_watchdog(void* arg)
 		/* Did the datapath move at all since the last check? Sampled every tick,
 		   before the age test, so it describes the interval just ended whether or
 		   not a deadline was missed during it. */
-		const uint64 traffic = device->rxFrames + device->txFrames;
+		/* Sum across pairs. One cheap loop, no new blocking work, and the
+		   deadline arithmetic is untouched. The narrowing this accepts: with N
+		   pairs a single wedged pair while others move still reads as "moving",
+		   so a partial wedge now rides the 8-miss bound rather than the 2-miss
+		   one. The keep-alive path is management-per-device, so a fully dead
+		   device is still caught identically; per-queue stats (D13) make a
+		   silent pair observable from userland. */
+		uint64 traffic = 0;
+		for (uint32 i = 0; i < device->queuePairCount; i++) {
+			traffic += device->queues[i].rxFrames
+				+ device->queues[i].txFrames;
+		}
 		const bool moving = traffic != device->watchdogLastTraffic;
 		device->watchdogLastTraffic = traffic;
 
@@ -2050,6 +2322,10 @@ ena_device_bringup(ena_haiku_device* device)
 	if (status != B_OK)
 		return status;
 
+	/* From device caps, CPU count, MSI-X grant and the rx_queues setting; sizes
+	   the MSI-X request below. */
+	ena_calculate_queue_count(device, &features);
+
 	status = ena_enable_msix(device);
 	if (status != B_OK)
 		return status;
@@ -2063,14 +2339,47 @@ ena_device_bringup(ena_haiku_device* device)
 	}
 	device->managementIrqInstalled = true;
 
-	status = install_io_interrupt_handler(device->ioIrq, ena_io_interrupt,
-		device, 0);
-	if (status != B_OK) {
-		ERROR("cannot install the io interrupt handler: %s\n",
-			strerror(status));
-		return status;
+	/* One handler per IO pair, each with its own queue-pair cookie. */
+	for (uint32 i = 0; i < device->queuePairCount; i++) {
+		ena_queue_pair* pair = &device->queues[i];
+		status = install_io_interrupt_handler(pair->ioIrq, ena_io_interrupt,
+			pair, 0);
+		if (status != B_OK) {
+			ERROR("cannot install the io interrupt handler for pair %" B_PRIu32
+				": %s\n", i, strerror(status));
+			/* Remove the handlers installed so far this call. */
+			for (uint32 j = 0; j < i; j++) {
+				remove_io_interrupt_handler(device->queues[j].ioIrq,
+					ena_io_interrupt, &device->queues[j]);
+				device->queues[j].ioIrqInstalled = false;
+			}
+			remove_io_interrupt_handler(device->managementIrq,
+				ena_management_interrupt, device);
+			device->managementIrqInstalled = false;
+			return status;
+		}
+		pair->ioIrqInstalled = true;
 	}
-	device->ioIrqInstalled = true;
+
+	/* Deterministic placement: the management vector on CPU 0, IO pair i on
+	   CPU i (mod the CPU count). install_io_interrupt_handler() already spread
+	   them round-robin; this pins them where receive wants them. The vector must
+	   have a handler installed first, which it now does.
+
+	   Only ever request a CPU below the CPU count. If the ITS holds fewer
+	   collections than CPUs it folds the request and reports the folded CPU;
+	   the driver records whatever it got and moves on rather than retrying --
+	   the fold is a pre-existing interrupt-controller edge, not this driver's to
+	   correct (see the design notes). */
+	const int32 cpuCount = smp_get_num_cpus();
+	assign_io_interrupt_to_cpu(device->managementIrq, 0);
+	for (uint32 i = 0; i < device->queuePairCount; i++) {
+		ena_queue_pair* pair = &device->queues[i];
+		pair->targetCpu = assign_io_interrupt_to_cpu(pair->ioIrq,
+			(int32)(i % (uint32)cpuCount));
+		TRACE_ALWAYS("io queue %" B_PRIu32 " vector %" B_PRIu32 " -> cpu %"
+			B_PRId32 "\n", i, pair->ioIrq, pair->targetCpu);
+	}
 
 	/* The reference drivers initialise interrupt moderation here, while still
 	   polling, and the device is evidently particular about how much of its
@@ -2145,26 +2454,80 @@ ena_device_bringup(ena_haiku_device* device)
 		}
 	}
 
-	/* After the queues, because the device may have forced a smaller depth
-	   than we asked for and the buffer pools are sized from it. */
-	status = ena_setup_buffers(device);
-	if (status != B_OK) {
-		ERROR("cannot allocate packet buffers: %s\n", strerror(status));
-		return status;
+	/* Per-pair buffers. After the queues, because the device may have forced a
+	   smaller depth than we asked for and the buffer pools are sized from it.
+
+	   Degrade rather than die if a pair beyond the first cannot get its
+	   contiguous DMA area -- the classic post-fragmentation reset failure: drop
+	   that pair and the ones after it, clamp the counts, re-spread RSS off the
+	   dropped queues, and carry on with fewer. A NIC with fewer queues beats a
+	   dead one. Pair 0 failing is still fatal, because a NIC with no queues is no
+	   NIC. */
+	for (uint32 i = 0; i < device->queuePairCount; i++) {
+		ena_queue_pair* pair = &device->queues[i];
+		status = ena_setup_pair_buffers(device, pair);
+		if (status == B_OK)
+			continue;
+
+		if (i == 0) {
+			ERROR("cannot allocate packet buffers for pair 0: %s\n",
+				strerror(status));
+			return status;
+		}
+
+		ERROR("cannot allocate packet buffers for pair %" B_PRIu32 " (%s); "
+			"continuing with %" B_PRIu32 " queue pair(s)\n", i, strerror(status),
+			i);
+
+		for (uint32 j = i; j < device->queuePairCount; j++) {
+			ena_queue_pair* drop = &device->queues[j];
+			ena_release_pair_buffers(device, drop);
+			if (drop->rxSubmissionQueue != NULL)
+				ena_com_destroy_io_queue(&device->comDev, ENA_IO_RXQ_ID(j));
+			if (drop->txSubmissionQueue != NULL)
+				ena_com_destroy_io_queue(&device->comDev, ENA_IO_TXQ_ID(j));
+			drop->rxSubmissionQueue = NULL;
+			drop->rxCompletionQueue = NULL;
+			drop->txSubmissionQueue = NULL;
+			drop->txCompletionQueue = NULL;
+			if (drop->ioIrqInstalled) {
+				remove_io_interrupt_handler(drop->ioIrq, ena_io_interrupt, drop);
+				drop->ioIrqInstalled = false;
+			}
+			atomic_set(&drop->rxActive, 0);
+		}
+
+		device->queuePairCount = i;
+		if ((uint32)device->rxActiveCount > i)
+			device->rxActiveCount = (int32)i;
+		ena_spread_rss(device);
+		status = B_OK;
+		break;
 	}
 
-	/* Arm the io vector. A completion queue created by ena_com_create_io_queue()
-	   starts masked, and the re-arm now happens at the end of a drain -- which
-	   nothing will reach until an interrupt has woken a reader. Without this first
-	   unmask the first interrupt never comes and therefore neither does the
-	   re-arm. The interface would then look perfectly healthy in every log line
-	   and never receive another frame, which is the hardest possible failure to
-	   spot in a reset.
+	/* Arm the active pairs' io vectors and mark them active. A completion queue
+	   created by ena_com_create_io_queue() starts masked, and the re-arm now
+	   happens at the end of a drain -- which nothing will reach until an
+	   interrupt has woken a reader. Without this first unmask the first interrupt
+	   never comes and therefore neither does the re-arm. The interface would then
+	   look perfectly healthy in every log line and never receive another frame,
+	   which is the hardest possible failure to spot in a reset.
 
-	   Forced, because irqArmed describes the vector belonging to the queue that
-	   has just been destroyed and recreated: whatever it says, this one is
+	   Only the active set is armed (pair 0 always, plus whatever the stack had
+	   activated before a reset -- rxActiveCount is 1 on a fresh attach, or the
+	   stored value on a reset re-run, D25). Inactive pairs stay masked and unused
+	   until the stack activates them; arming one would grow a semaphore no reader
+	   drains. Forced, because irqArmed describes a vector belonging to a queue
+	   that has just been destroyed and recreated: whatever it says, this one is
 	   masked. */
-	ena_rearm_io_interrupt(device, true);
+	for (int32 i = 0; i < device->rxActiveCount; i++) {
+		atomic_set(&device->queues[i].rxActive, 1);
+		ena_rearm_io_interrupt(&device->queues[i], true);
+	}
+	for (uint32 i = (uint32)device->rxActiveCount; i < device->queuePairCount;
+			i++) {
+		atomic_set(&device->queues[i].rxActive, 0);
+	}
 
 	/* Seed the watchdog deadline: the device has not sent a keep-alive yet, and
 	   a zero (or stale) timestamp here means the watchdog would fire six seconds
@@ -2258,10 +2621,13 @@ ena_init_device(void* _info, void** _cookie)
 		goto err_device;
 
 
-	mutex_init(&device->txLock, "ena tx");
-	mutex_init(&device->rxLock, "ena rx");
-	device->rxReady = -1;
-	device->txCompleted = -1;
+	/* One lock pair per queue pair; all ENA_MAX_IO_QUEUE_PAIRS are initialised
+	   whether or not the device granted that many, so the reset teardown can take
+	   them uniformly. The sems are per-open and stay -1 until ena_open(). */
+	for (uint32 i = 0; i < ENA_MAX_IO_QUEUE_PAIRS; i++) {
+		mutex_init(&device->queues[i].txLock, "ena tx");
+		mutex_init(&device->queues[i].rxLock, "ena rx");
+	}
 
 	/* ENA reports link state only through asynchronous events, and does not
 	   send one for a link that is already up when we attach. On EC2 the link
@@ -2271,12 +2637,19 @@ ena_init_device(void* _info, void** _cookie)
 	mutex_init(&device->resetLock, "ena reset");
 	ena_watchdog_start(device);
 
-	TRACE_ALWAYS("attached [build " ENA_BUILD_STAMP "]; interrupts so far: %"
-		B_PRId32 " management, %" B_PRId32 " io%s\n",
-		device->managementInterrupts, device->ioInterrupts,
-		device->managementInterrupts == 0
-			? " (management vector never fired -- admin queue is polling)"
-			: "");
+	{
+		int32 ioInterrupts = 0;
+		for (uint32 i = 0; i < device->queuePairCount; i++)
+			ioInterrupts += atomic_get(&device->queues[i].ioInterrupts);
+
+		TRACE_ALWAYS("attached [build " ENA_BUILD_STAMP "]; %" B_PRIu32 " io "
+			"queue pair(s); interrupts so far: %" B_PRId32 " management, %"
+			B_PRId32 " io%s\n", device->queuePairCount,
+			device->managementInterrupts, ioInterrupts,
+			device->managementInterrupts == 0
+				? " (management vector never fired -- admin queue is polling)"
+				: "");
+	}
 
 	*_cookie = device;
 	return B_OK;
@@ -2290,15 +2663,7 @@ ena_init_device(void* _info, void** _cookie)
 err_device:
 	ena_release_io_queues(device);
 
-	if (device->ioIrqInstalled) {
-		remove_io_interrupt_handler(device->ioIrq, ena_io_interrupt, device);
-		device->ioIrqInstalled = false;
-	}
-	if (device->managementIrqInstalled) {
-		remove_io_interrupt_handler(device->managementIrq,
-			ena_management_interrupt, device);
-		device->managementIrqInstalled = false;
-	}
+	ena_remove_io_handlers(device);
 
 	ena_com_rss_destroy(&device->comDev);
 
@@ -2349,15 +2714,7 @@ ena_uninit_device(void* _cookie)
 
 	ena_release_io_queues(device);
 
-	if (device->ioIrqInstalled) {
-		remove_io_interrupt_handler(device->ioIrq, ena_io_interrupt, device);
-		device->ioIrqInstalled = false;
-	}
-	if (device->managementIrqInstalled) {
-		remove_io_interrupt_handler(device->managementIrq,
-			ena_management_interrupt, device);
-		device->managementIrqInstalled = false;
-	}
+	ena_remove_io_handlers(device);
 
 	ena_com_rss_destroy(&device->comDev);
 
@@ -2375,8 +2732,10 @@ ena_uninit_device(void* _cookie)
 		device->msixEnabled = false;
 	}
 
-	mutex_destroy(&device->txLock);
-	mutex_destroy(&device->rxLock);
+	for (uint32 i = 0; i < ENA_MAX_IO_QUEUE_PAIRS; i++) {
+		mutex_destroy(&device->queues[i].txLock);
+		mutex_destroy(&device->queues[i].rxLock);
+	}
 
 	ena_release_buffers(device);
 
@@ -2444,23 +2803,37 @@ ena_open(void* _info, const char* path, int openMode, void** _cookie)
 		return B_OK;
 	}
 
-	device->rxReady = create_sem(0, "ena rx ready");
-	device->txCompleted = create_sem(0, "ena tx completed");
-	if (device->rxReady < B_OK || device->txCompleted < B_OK) {
-		delete_sem(device->rxReady);
-		delete_sem(device->txCompleted);
-		device->rxReady = device->txCompleted = -1;
-		atomic_add(&device->openCount, -1);
-		return B_NO_MORE_SEMS;
+	/* Create the semaphores for every created pair, not just the active ones:
+	   it is cheap and it keeps the activation path (ena_set_rx_queue_count)
+	   free of a failure case -- a pair the stack later activates already has its
+	   sems. */
+	for (uint32 i = 0; i < device->queuePairCount; i++) {
+		ena_queue_pair* pair = &device->queues[i];
+		pair->rxReady = create_sem(0, "ena rx ready");
+		pair->txCompleted = create_sem(0, "ena tx completed");
+		if (pair->rxReady < B_OK || pair->txCompleted < B_OK) {
+			for (uint32 j = 0; j <= i; j++) {
+				delete_sem(device->queues[j].rxReady);
+				delete_sem(device->queues[j].txCompleted);
+				device->queues[j].rxReady = -1;
+				device->queues[j].txCompleted = -1;
+			}
+			atomic_add(&device->openCount, -1);
+			return B_NO_MORE_SEMS;
+		}
 	}
 
-	/* Post every receive descriptor before the first interrupt can arrive. Under
-	   rxLock, as the reset path does it: a second opener returns above without
-	   waiting for this, so it can already be inside ena_receive() touching the
-	   same submission queue. */
-	{
-		MutexLocker rxLocker(device->rxLock);
-		ena_refill_receive_ring(device);
+	/* Post every receive descriptor and arm each active pair before the first
+	   interrupt can arrive. Under each pair's rxLock, as the reset path does it:
+	   a second opener returns above without waiting for this, so it can already
+	   be inside ena_receive() touching the same submission queue. Only the active
+	   pairs are filled and armed (pair 0 on a fresh open); the stack arms the
+	   rest through ETHER_SET_RX_QUEUE_COUNT. */
+	for (int32 i = 0; i < device->rxActiveCount; i++) {
+		ena_queue_pair* pair = &device->queues[i];
+		MutexLocker rxLocker(pair->rxLock);
+		ena_refill_receive_ring(device, pair);
+		ena_rearm_io_interrupt(pair, true);
 	}
 
 	/* Third and last seeding point for the watchdog deadline (the others are
@@ -2468,11 +2841,6 @@ ena_open(void* _info, const char* path, int openMode, void** _cookie)
 	   enough for the timestamp to go stale while nothing was watching it, and a
 	   stale timestamp here is a reset six seconds after ifconfig up. */
 	atomic_set64(&device->lastKeepAlive, system_time());
-
-	/* Arm the io vector; it starts masked. Forced for the same reason as in the
-	   reset path: this queue is newly created, so irqArmed cannot be describing
-	   it. */
-	ena_rearm_io_interrupt(device, true);
 
 	*_cookie = device;
 	return B_OK;
@@ -2490,12 +2858,32 @@ ena_close(void* cookie)
 	if (atomic_add(&device->openCount, -1) != 1)
 		return B_OK;
 
-	sem_id rxReady = device->rxReady;
-	sem_id txCompleted = device->txCompleted;
-	device->rxReady = device->txCompleted = -1;
+	/* resetLock first (D40), so this cannot interleave with a reset and the RSS
+	   re-point and rxActiveCount reset stay consistent with what open/reset
+	   assume. */
+	MutexLocker resetLocker(device->resetLock);
 
-	delete_sem(rxReady);
-	delete_sem(txCompleted);
+	/* Reset the receive set to the legacy single-queue topology and re-point RSS
+	   at pair 0, so the next opener starts from the state a single-queue driver
+	   would be in -- which is why the stack needs no explicit deactivation call
+	   (D24). Skipped when the device is dead or mid-reset, where the queues the
+	   table would name do not exist. */
+	for (uint32 i = 1; i < ENA_MAX_IO_QUEUE_PAIRS; i++)
+		atomic_set(&device->queues[i].rxActive, 0);
+	device->rxActiveCount = 1;
+	if (!device->deviceDead && !device->resetting)
+		ena_spread_rss(device);
+
+	/* Delete every pair's semaphores. Deleting a -1 is harmless, so this covers
+	   pairs that were never created too. */
+	for (uint32 i = 0; i < ENA_MAX_IO_QUEUE_PAIRS; i++) {
+		ena_queue_pair* pair = &device->queues[i];
+		sem_id rxReady = pair->rxReady;
+		sem_id txCompleted = pair->txCompleted;
+		pair->rxReady = pair->txCompleted = -1;
+		delete_sem(rxReady);
+		delete_sem(txCompleted);
+	}
 
 	return B_OK;
 }
@@ -2513,11 +2901,13 @@ ena_free(void* cookie)
 
 /*!	Reclaims completed transmit descriptors and frees their net_buffers.
 
-	Must be called with txLock held.
+	Must be called with the pair's txLock held.
 */
 static void
-ena_reclaim_transmitted(ena_haiku_device* device)
+ena_reclaim_transmitted(ena_queue_pair* pair)
 {
+	ena_haiku_device* device = pair->device;
+
 	/* Descriptors completed but not yet acknowledged, and how many packets that
 	   is. Acknowledging is a plain `next_to_comp += n` inside ena-com with no
 	   register write, so batching it in ENA_TX_COMMIT-sized groups is about not
@@ -2530,7 +2920,7 @@ ena_reclaim_transmitted(ena_haiku_device* device)
 
 	while (true) {
 		uint16 requestId = 0;
-		if (ena_com_tx_comp_req_id_get(device->txCompletionQueue, &requestId)
+		if (ena_com_tx_comp_req_id_get(pair->txCompletionQueue, &requestId)
 				!= ENA_COM_OK) {
 			break;
 		}
@@ -2541,7 +2931,7 @@ ena_reclaim_transmitted(ena_haiku_device* device)
 			break;
 		}
 
-		ena_tx_buffer* entry = &device->txBuffers[requestId];
+		ena_tx_buffer* entry = &pair->txBuffers[requestId];
 		if (entry->buffer == NULL) {
 			/* Not outstanding. Pushing it back would put the same id on the
 			   free stack twice and, repeated, run txFreeCount past the end of
@@ -2577,7 +2967,7 @@ ena_reclaim_transmitted(ena_haiku_device* device)
 					requestId, slot);
 				continue;
 			}
-			device->txFreeIds[device->txFreeCount++] = slot;
+			pair->txFreeIds[pair->txFreeCount++] = slot;
 		}
 		entry->segments = 0;
 
@@ -2587,14 +2977,14 @@ ena_reclaim_transmitted(ena_haiku_device* device)
 		entry->descriptors = 0;
 
 		if (++completed >= ENA_TX_COMMIT) {
-			ena_com_comp_ack(device->txSubmissionQueue, pendingDescriptors);
+			ena_com_comp_ack(pair->txSubmissionQueue, pendingDescriptors);
 			pendingDescriptors = 0;
 			completed = 0;
 		}
 	}
 
 	if (pendingDescriptors > 0)
-		ena_com_comp_ack(device->txSubmissionQueue, pendingDescriptors);
+		ena_com_comp_ack(pair->txSubmissionQueue, pendingDescriptors);
 
 	/* The loop above leaves only when the completion queue reads empty, so this
 	   is the transmit side's end-of-drain and the mirror of the re-arm in
@@ -2606,14 +2996,25 @@ ena_reclaim_transmitted(ena_haiku_device* device)
 	   non-empty, so re-arming here can cost one spurious interrupt in a case that
 	   has already logged a device protocol violation. Not worth a second exit
 	   path to avoid. */
-	ena_rearm_io_interrupt(device, false);
+	ena_rearm_io_interrupt(pair, false);
 }
 
 
 static status_t
 ena_send(ena_haiku_device* device, net_buffer* buffer)
 {
-	MutexLocker locker(device->txLock);
+	/* Transmit uses the same active set as receive: pick the pair for the CPU
+	   this call runs on, so multiple senders spread across pairs instead of
+	   serialising on one device-wide lock, and inactive pairs stay entirely
+	   idle (their vectors can then stay masked, D23). rxActiveCount is at least
+	   1, so this always names a live pair. A racing shrink can leave a frame
+	   picking a pair that is being deactivated; the reset/close that shrinks is
+	   the only shrink caller, and it takes txLock, so the worst case is one frame
+	   returning B_DEV_NOT_READY -- not a use-after-free. */
+	ena_queue_pair* pair = &device->queues[
+		smp_get_current_cpu() % (uint32)max_c((int32)1, device->rxActiveCount)];
+
+	MutexLocker locker(pair->txLock);
 
 	/* Checked here, under the lock, and not before it. The reset holds txLock
 	   across the frees, so anything that gets this far is guaranteed that
@@ -2623,7 +3024,7 @@ ena_send(ena_haiku_device* device, net_buffer* buffer)
 	if (device->resetting || device->deviceDead)
 		return B_DEV_NOT_READY;
 
-	ena_reclaim_transmitted(device);
+	ena_reclaim_transmitted(pair);
 
 	/* Worked out before the wait loop, because it is what the loop has to wait
 	   for. A frame longer than one bounce slot is copied into a chain of them,
@@ -2658,15 +3059,15 @@ ena_send(ena_haiku_device* device, net_buffer* buffer)
 	   exactly the `num_bufs + 1` it checks for itself (ena_eth_com.c:457).
 	   Waiting on txFreeCount alone would never block, and we would drop frames
 	   instead. */
-	while (device->txFreeCount < segments
-			|| !ena_com_sq_have_enough_space(device->txSubmissionQueue,
+	while (pair->txFreeCount < segments
+			|| !ena_com_sq_have_enough_space(pair->txSubmissionQueue,
 				(uint16)(segments + 1))) {
 		locker.Unlock();
 
 		if (device->nonBlocking)
 			return B_WOULD_BLOCK;
 
-		status_t status = acquire_sem(device->txCompleted);
+		status_t status = acquire_sem(pair->txCompleted);
 		if (status != B_OK)
 			return status;
 
@@ -2679,7 +3080,7 @@ ena_send(ena_haiku_device* device, net_buffer* buffer)
 		if (device->resetting || device->deviceDead)
 			return B_DEV_NOT_READY;
 
-		ena_reclaim_transmitted(device);
+		ena_reclaim_transmitted(pair);
 	}
 
 	/* Claim one slot per segment. A slot and a request id are the same
@@ -2691,10 +3092,10 @@ ena_send(ena_haiku_device* device, net_buffer* buffer)
 	   entry and released as a whole on completion. */
 	uint16 slotIds[ENA_MAX_PACKET_DESCRIPTORS];
 	for (uint16 i = 0; i < segments; i++)
-		slotIds[i] = device->txFreeIds[--device->txFreeCount];
+		slotIds[i] = pair->txFreeIds[--pair->txFreeCount];
 
 	const uint16 requestId = slotIds[0];
-	ena_tx_buffer* entry = &device->txBuffers[requestId];
+	ena_tx_buffer* entry = &pair->txBuffers[requestId];
 
 	/* Each descriptor's buffer has to be physically contiguous, and a
 	   net_buffer's storage is neither contiguous nor addressed by physical
@@ -2704,13 +3105,13 @@ ena_send(ena_haiku_device* device, net_buffer* buffer)
 	struct ena_com_buf comBuffers[ENA_MAX_PACKET_DESCRIPTORS];
 	size_t copied = 0;
 	for (uint16 i = 0; i < segments; i++) {
-		ena_packet_buffer* slot = &device->txBuffers[slotIds[i]].slot;
+		ena_packet_buffer* slot = &pair->txBuffers[slotIds[i]].slot;
 		const size_t chunk = min_c(size - copied,
 			(size_t)ENA_PACKET_BUFFER_SIZE);
 
 		if (sBufferModule->read(buffer, copied, slot->data, chunk) != B_OK) {
 			for (uint16 j = 0; j < segments; j++)
-				device->txFreeIds[device->txFreeCount++] = slotIds[j];
+				pair->txFreeIds[pair->txFreeCount++] = slotIds[j];
 			return B_BAD_DATA;
 		}
 
@@ -2737,9 +3138,9 @@ ena_send(ena_haiku_device* device, net_buffer* buffer)
 	uint16 headerLength = 0;
 	if (device->comDev.tx_mem_queue_type == ENA_ADMIN_PLACEMENT_POLICY_DEV) {
 		headerLength = (uint16)min_c(
-			(size_t)device->txSubmissionQueue->tx_max_header_size,
+			(size_t)pair->txSubmissionQueue->tx_max_header_size,
 			(size_t)comBuffers[0].len);
-		context.push_header = device->txBuffers[requestId].slot.data;
+		context.push_header = pair->txBuffers[requestId].slot.data;
 		context.header_len = headerLength;
 	}
 
@@ -2748,9 +3149,9 @@ ena_send(ena_haiku_device* device, net_buffer* buffer)
 	   down, which moves comBuffers[0] past the pushed header. */
 	if ((buffer->buffer_flags & NET_BUFFER_L4_CHECKSUM_NEEDED) != 0) {
 		if (ena_prepare_tx_checksum(device, &context,
-				(const uint8*)device->txBuffers[requestId].slot.data, size,
+				(const uint8*)pair->txBuffers[requestId].slot.data, size,
 				headerLength)) {
-			device->txChecksumOffloaded++;
+			pair->txChecksumOffloaded++;
 		} else {
 			/* The frame's checksum was never computed and this device will not
 			   compute it either, so there is nothing to send: on the wire it
@@ -2758,14 +3159,14 @@ ena_send(ena_haiku_device* device, net_buffer* buffer)
 			   than a drop the sender can see. Only reachable if something above
 			   asked for offload on a frame the negotiation does not cover, so
 			   it is loud. */
-			device->txChecksumRejected++;
-			if (device->txChecksumRejected <= 8) {
+			pair->txChecksumRejected++;
+			if (pair->txChecksumRejected <= 8) {
 				ERROR("a %" B_PRIuSIZE " byte frame asked for transmit checksum "
 					"offload this device cannot do; dropping it (%" B_PRIu64
-					" so far)\n", size, device->txChecksumRejected);
+					" so far)\n", size, pair->txChecksumRejected);
 			}
 			for (uint16 j = 0; j < segments; j++)
-				device->txFreeIds[device->txFreeCount++] = slotIds[j];
+				pair->txFreeIds[pair->txFreeCount++] = slotIds[j];
 			return B_NOT_SUPPORTED;
 		}
 	}
@@ -2799,15 +3200,15 @@ ena_send(ena_haiku_device* device, net_buffer* buffer)
 	   is the piece that has to be in the right place for doorbell coalescing to
 	   become a one-line change once the stack can hand us more than one frame per
 	   call; see the comment after the doorbell. */
-	if (ena_com_is_doorbell_needed(device->txSubmissionQueue, &context))
-		ena_com_write_sq_doorbell(device->txSubmissionQueue);
+	if (ena_com_is_doorbell_needed(pair->txSubmissionQueue, &context))
+		ena_com_write_sq_doorbell(pair->txSubmissionQueue);
 
 	int descriptors = 0;
-	int result = ena_com_prepare_tx(device->txSubmissionQueue, &context,
+	int result = ena_com_prepare_tx(pair->txSubmissionQueue, &context,
 		&descriptors);
 	if (result != ENA_COM_OK) {
 		for (uint16 j = 0; j < segments; j++)
-			device->txFreeIds[device->txFreeCount++] = slotIds[j];
+			pair->txFreeIds[pair->txFreeCount++] = slotIds[j];
 		ERROR("cannot prepare a transmit descriptor: %d\n", result);
 		return ena_translate_error(result);
 	}
@@ -2849,34 +3250,34 @@ ena_send(ena_haiku_device* device, net_buffer* buffer)
 	   point is worth building at all: if one frame leaves zero entries, the very
 	   next frame is forced to ring anyway and there is nothing to amortise. */
 	const uint16 burstLeft
-		= device->txSubmissionQueue->entries_in_tx_burst_left;
-	if (burstLeft < device->txBurstLeftMin)
-		device->txBurstLeftMin = burstLeft;
+		= pair->txSubmissionQueue->entries_in_tx_burst_left;
+	if (burstLeft < pair->txBurstLeftMin)
+		pair->txBurstLeftMin = burstLeft;
 	if (burstLeft == 0)
-		device->txBurstExhausted++;
-	device->txFrames++;
+		pair->txBurstExhausted++;
+	pair->txFrames++;
 
-	ena_com_write_sq_doorbell(device->txSubmissionQueue);
-	device->txDoorbells++;
+	ena_com_write_sq_doorbell(pair->txSubmissionQueue);
+	pair->txDoorbells++;
 
 	/* Debug knob only; zero unless driver settings asked otherwise. Writing the
 	   same tail again tells the device nothing new, so this buys nothing and
 	   costs exactly one MMIO write each -- which is the point: it prices a
 	   doorbell without having to build the batched entry point first. */
 	for (int32 i = 0; i < device->txExtraDoorbells; i++) {
-		ena_com_write_sq_doorbell(device->txSubmissionQueue);
-		device->txDoorbells++;
+		ena_com_write_sq_doorbell(pair->txSubmissionQueue);
+		pair->txDoorbells++;
 	}
 
-	if ((device->txFrames % 100000) == 0) {
+	if ((pair->txFrames % 100000) == 0) {
 		TRACE_ALWAYS("tx: %" B_PRIu64 " frames, %" B_PRIu64 " doorbells "
 			"(+%" B_PRId32 " forced per frame), burst left min %u, exhausted %"
 			B_PRIu64 ", csum offloaded %" B_PRIu64 " rejected %" B_PRIu64
 			" (%u entries per burst, %u descs before header, %u descs per "
 			"entry; this frame %" B_PRIuSIZE " bytes in %d descriptors)\n",
-			device->txFrames, device->txDoorbells, device->txExtraDoorbells,
-			device->txBurstLeftMin, device->txBurstExhausted,
-			device->txChecksumOffloaded, device->txChecksumRejected,
+			pair->txFrames, pair->txDoorbells, device->txExtraDoorbells,
+			pair->txBurstLeftMin, pair->txBurstExhausted,
+			pair->txChecksumOffloaded, pair->txChecksumRejected,
 			device->comDev.llq_info.max_entries_in_tx_burst,
 			device->comDev.llq_info.descs_num_before_header,
 			device->comDev.llq_info.descs_per_entry,
@@ -2911,16 +3312,27 @@ ena_send(ena_haiku_device* device, net_buffer* buffer)
 	function -- see the report accompanying this work.
 */
 static status_t
-ena_receive(ena_haiku_device* device, net_buffer** _buffer)
+ena_receive(ena_haiku_device* device, uint32 queue, net_buffer** _buffer)
 {
 	struct ena_com_rx_buf_info bufferInfo[ENA_MAX_PACKET_DESCRIPTORS];
 	struct ena_com_rx_ctx context;
+
+	/* The queue index comes from the stack (queue 0 for the legacy
+	   ETHER_RECEIVE_NET_BUFFER, the passed index for the multiqueue ioctl). A
+	   queue past what was created, or one not currently active, has no ring to
+	   drain: reject it so a stale reader for a deactivated or degraded-away pair
+	   stays in its snooze loop rather than touching a NULL ring. */
+	if (queue >= device->queuePairCount)
+		return B_BAD_VALUE;
+	ena_queue_pair* pair = &device->queues[queue];
+	if (atomic_get(&pair->rxActive) == 0)
+		return B_BAD_VALUE;
 
 	/* Whether this call has already re-armed the vector for the drain it is in,
 	   and therefore whether an empty ring means "look again" or "sleep". */
 	bool rearmed = false;
 
-	MutexLocker locker(device->rxLock);
+	MutexLocker locker(pair->rxLock);
 
 	/* Same reasoning as the transmit side: under the lock, because the reset
 	   frees the completion queue's descriptor ring and ena_com_rx_pkt() reads it
@@ -2943,8 +3355,8 @@ ena_receive(ena_haiku_device* device, net_buffer** _buffer)
 		   positive ENA_COM_* code. Testing the return value for a count means
 		   never seeing a packet, and reading ena_bufs on the error path where
 		   the HAL never wrote it. */
-		int result = ena_com_rx_pkt(device->rxCompletionQueue,
-			device->rxSubmissionQueue, &context);
+		int result = ena_com_rx_pkt(pair->rxCompletionQueue,
+			pair->rxSubmissionQueue, &context);
 		if (result != ENA_COM_OK) {
 			/* Every error return leaves the completion descriptors consumed --
 			   ena_com_cdesc_rx_pkt_get() advances io_cq->head before any of the
@@ -2976,19 +3388,19 @@ ena_receive(ena_haiku_device* device, net_buffer** _buffer)
 			   keeps a recoverable link recoverable; escalating to a reset is a
 			   separate decision about which failure is worse on a console-less
 			   instance, and is not made here. */
-			const uint16 stranded = (uint16)(device->rxCompletionQueue->head
-				- device->rxSubmissionQueue->next_to_comp);
+			const uint16 stranded = (uint16)(pair->rxCompletionQueue->head
+				- pair->rxSubmissionQueue->next_to_comp);
 
 			ERROR("receive failed: %d, reclaiming %u descriptor(s)\n", result,
 				stranded);
 
 			if (stranded > 0) {
-				ena_com_comp_ack(device->rxSubmissionQueue, stranded);
+				ena_com_comp_ack(pair->rxSubmissionQueue, stranded);
 				/* Forced rather than batched: this is error recovery, and the
 				   number of descriptors involved may well be under the batch
 				   threshold, so waiting for a batch to fill would mean waiting
 				   for traffic that the missing descriptors are part of carrying. */
-				ena_return_receive_descriptors(device, stranded, true);
+				ena_return_receive_descriptors(device, pair, stranded, true);
 			}
 
 			return ena_translate_error(result);
@@ -3013,8 +3425,8 @@ ena_receive(ena_haiku_device* device, net_buffer** _buffer)
 		   raises an interrupt, and rxReady counts, so nothing is lost either
 		   side of it. */
 		if (!rearmed) {
-			device->rxDrainCycles++;
-			ena_rearm_io_interrupt(device, false);
+			pair->rxDrainCycles++;
+			ena_rearm_io_interrupt(pair, false);
 			rearmed = true;
 			continue;
 		}
@@ -3025,14 +3437,14 @@ ena_receive(ena_haiku_device* device, net_buffer** _buffer)
 		if (device->nonBlocking)
 			return B_WOULD_BLOCK;
 
-		status_t status = acquire_sem(device->rxReady);
+		status_t status = acquire_sem(pair->rxReady);
 		if (status != B_OK)
 			return status;
 
 		/* Collapse the backlog: one interrupt can cover many frames. */
 		int32 count = 0;
-		if (get_sem_count(device->rxReady, &count) == B_OK && count > 0)
-			acquire_sem_etc(device->rxReady, count, B_RELATIVE_TIMEOUT, 0);
+		if (get_sem_count(pair->rxReady, &count) == B_OK && count > 0)
+			acquire_sem_etc(pair->rxReady, count, B_RELATIVE_TIMEOUT, 0);
 
 		locker.Lock();
 
@@ -3059,7 +3471,7 @@ ena_receive(ena_haiku_device* device, net_buffer** _buffer)
 		ERROR("device reported a frame spanning %u descriptors, more than the "
 			"%d this driver can hold\n", descriptors,
 			ENA_MAX_PACKET_DESCRIPTORS);
-		ena_return_receive_descriptors(device, descriptors, true);
+		ena_return_receive_descriptors(device, pair, descriptors, true);
 		return B_IO_ERROR;
 	}
 
@@ -3084,7 +3496,7 @@ ena_receive(ena_haiku_device* device, net_buffer** _buffer)
 		if (bufferInfo[i].req_id >= device->rxRingSize) {
 			ERROR("device returned an out-of-range receive request id %u in "
 				"descriptor %u of %u\n", bufferInfo[i].req_id, i, descriptors);
-			ena_return_receive_descriptors(device, descriptors, true);
+			ena_return_receive_descriptors(device, pair, descriptors, true);
 			return B_IO_ERROR;
 		}
 
@@ -3095,7 +3507,7 @@ ena_receive(ena_haiku_device* device, net_buffer** _buffer)
 				"%u of %u, which does not fit a %d byte buffer\n",
 				bufferInfo[i].len, offset, i, descriptors,
 				ENA_PACKET_BUFFER_SIZE);
-			ena_return_receive_descriptors(device, descriptors, true);
+			ena_return_receive_descriptors(device, pair, descriptors, true);
 			return B_IO_ERROR;
 		}
 
@@ -3105,14 +3517,14 @@ ena_receive(ena_haiku_device* device, net_buffer** _buffer)
 	if (total == 0) {
 		ERROR("device reported an empty frame across %u descriptor(s)\n",
 			descriptors);
-		ena_return_receive_descriptors(device, descriptors, true);
+		ena_return_receive_descriptors(device, pair, descriptors, true);
 		return B_IO_ERROR;
 	}
 
 	net_buffer* buffer = sBufferModule->create(0);
 	if (buffer == NULL) {
 		/* Give the descriptors back rather than losing them. */
-		ena_return_receive_descriptors(device, descriptors, true);
+		ena_return_receive_descriptors(device, pair, descriptors, true);
 		return B_NO_MEMORY;
 	}
 
@@ -3124,7 +3536,7 @@ ena_receive(ena_haiku_device* device, net_buffer** _buffer)
 		if (bufferInfo[i].len == 0)
 			continue;
 
-		ena_packet_buffer* slot = &device->rxBuffers[bufferInfo[i].req_id];
+		ena_packet_buffer* slot = &pair->rxBuffers[bufferInfo[i].req_id];
 		const uint16 offset = (i == 0) ? context.pkt_offset : 0;
 
 		status = sBufferModule->append(buffer, (uint8*)slot->data + offset,
@@ -3135,7 +3547,7 @@ ena_receive(ena_haiku_device* device, net_buffer** _buffer)
 	   out, so the whole chain goes back here -- batched, because at a jumbo MTU
 	   this is up to five descriptors per frame and each immediate post would be
 	   its own doorbell write. */
-	ena_return_receive_descriptors(device, descriptors);
+	ena_return_receive_descriptors(device, pair, descriptors);
 
 	if (status != B_OK) {
 		sBufferModule->free(buffer);
@@ -3176,27 +3588,27 @@ ena_receive(ena_haiku_device* device, net_buffer** _buffer)
 	if (context.l4_csum_checked && !context.l4_csum_err)
 		buffer->buffer_flags |= NET_BUFFER_L4_CHECKSUM_VALID;
 
-	device->rxFrames++;
+	pair->rxFrames++;
 	if (context.l4_csum_checked)
-		device->rxL4CsumChecked++;
+		pair->rxL4CsumChecked++;
 	if (context.l4_csum_err)
-		device->rxL4CsumErrors++;
+		pair->rxL4CsumErrors++;
 	if (context.l3_proto == ENA_ETH_IO_L3_PROTO_IPV4)
-		device->rxL3Ipv4Frames++;
+		pair->rxL3Ipv4Frames++;
 	if (context.l3_csum_err)
-		device->rxL3CsumErrors++;
+		pair->rxL3CsumErrors++;
 
 	/* Once per power-of-four-ish milestone rather than on a timer, so a short
 	   run reports early and a long one does not flood: the question these answer
 	   is settled by the first few thousand frames. */
-	if (device->rxFrames == 1000 || device->rxFrames == 50000
-			|| device->rxFrames == 500000) {
+	if (pair->rxFrames == 1000 || pair->rxFrames == 50000
+			|| pair->rxFrames == 500000) {
 		TRACE_ALWAYS("rx offload observed after %" B_PRIu64 " frames: "
 			"l4_csum_checked %" B_PRIu64 ", l4_csum_err %" B_PRIu64 ", "
 			"l3_proto==ipv4 %" B_PRIu64 ", l3_csum_err %" B_PRIu64 " "
 			"(rx_supported %#" B_PRIx32 ", rx_enabled %#" B_PRIx32 ")\n",
-			device->rxFrames, device->rxL4CsumChecked, device->rxL4CsumErrors,
-			device->rxL3Ipv4Frames, device->rxL3CsumErrors,
+			pair->rxFrames, pair->rxL4CsumChecked, pair->rxL4CsumErrors,
+			pair->rxL3Ipv4Frames, pair->rxL3CsumErrors,
 			device->offloadRxSupported, device->offloadRxEnabled);
 	}
 
@@ -3290,9 +3702,9 @@ ena_ioctl(void* cookie, uint32 op, void* buffer, size_t length)
 			   it happens to see -- which over a multi-second run is one frame in
 			   millions. */
 			device->txExtraDoorbells = value;
-			TRACE_ALWAYS("tx_extra_doorbells now %" B_PRId32 " (at %" B_PRIu64
-				" frames, %" B_PRIu64 " doorbells)\n", value, device->txFrames,
-				device->txDoorbells);
+			TRACE_ALWAYS("tx_extra_doorbells now %" B_PRId32 " (pair 0 at %"
+				B_PRIu64 " frames, %" B_PRIu64 " doorbells)\n", value,
+				device->queues[0].txFrames, device->queues[0].txDoorbells);
 			return B_OK;
 		}
 
@@ -3321,10 +3733,10 @@ ena_ioctl(void* cookie, uint32 op, void* buffer, size_t length)
 			   Neither ordering can leave it masked with nobody due to re-arm, so
 			   no quiescing is needed. */
 			atomic_set(&device->rearmMode, value);
-			TRACE_ALWAYS("rearm mode now %" B_PRId32 " (%s) at %" B_PRId32
+			TRACE_ALWAYS("rearm mode now %" B_PRId32 " (%s) at pair 0 %" B_PRId32
 				" io interrupts, %" B_PRIu64 " rx frames\n", value,
 				value == ENA_REARM_IN_HANDLER ? "in handler" : "after drain",
-				device->ioInterrupts, device->rxFrames);
+				device->queues[0].ioInterrupts, device->queues[0].rxFrames);
 			return B_OK;
 		}
 
@@ -3350,9 +3762,9 @@ ena_ioctl(void* cookie, uint32 op, void* buffer, size_t length)
 			   such rather than being silently mis-attributed. */
 			atomic_set(&device->rxIrqInterval, value);
 			TRACE_ALWAYS("rx moderation interval now %" B_PRId32 " ticks "
-				"(resolution %u) at %" B_PRId32 " io interrupts, %" B_PRIu64
+				"(resolution %u) at pair 0 %" B_PRId32 " io interrupts, %" B_PRIu64
 				" rx frames\n", value, device->comDev.intr_delay_resolution,
-				device->ioInterrupts, device->rxFrames);
+				device->queues[0].ioInterrupts, device->queues[0].rxFrames);
 			return B_OK;
 		}
 
@@ -3367,18 +3779,56 @@ ena_ioctl(void* cookie, uint32 op, void* buffer, size_t length)
 			   snapshot straddling an update can be is one frame out over a run of
 			   millions -- whereas taking rxLock would serialise a diagnostic
 			   against the path it is measuring, which is the one thing an
-			   instrument for interrupt cadence must not do. */
-			stats.ioInterrupts = (uint64)(uint32)atomic_get(
-				&device->ioInterrupts);
-			stats.irqArms = (uint64)(uint32)atomic_get(&device->irqArms);
-			stats.rxFrames = device->rxFrames;
-			stats.rxDrainCycles = device->rxDrainCycles;
-			stats.txFrames = device->txFrames;
+			   instrument for interrupt cadence must not do.
+
+			   Summed across pairs to keep this ioctl's ABI exactly as it was --
+			   ena_fault links against it. ENA_IOCTL_GET_QUEUE_IRQ_STATS reports
+			   the same counters one pair at a time. */
+			stats.ioInterrupts = 0;
+			stats.irqArms = 0;
+			stats.rxFrames = 0;
+			stats.rxDrainCycles = 0;
+			stats.txFrames = 0;
+			for (uint32 i = 0; i < device->queuePairCount; i++) {
+				ena_queue_pair* pair = &device->queues[i];
+				stats.ioInterrupts += (uint64)(uint32)atomic_get(
+					&pair->ioInterrupts);
+				stats.irqArms += (uint64)(uint32)atomic_get(&pair->irqArms);
+				stats.rxFrames += pair->rxFrames;
+				stats.rxDrainCycles += pair->rxDrainCycles;
+				stats.txFrames += pair->txFrames;
+			}
 			stats.resetCount = (uint64)(uint32)atomic_get(&device->resetCount);
 			stats.rxIrqInterval = (uint64)(uint32)atomic_get(
 				&device->rxIrqInterval);
 			stats.intrDelayResolution = device->comDev.intr_delay_resolution;
 			stats.rearmMode = (uint64)(uint32)atomic_get(&device->rearmMode);
+
+			return user_memcpy(buffer, &stats, sizeof(stats));
+		}
+
+		case ENA_IOCTL_GET_QUEUE_IRQ_STATS:
+		{
+			struct ena_queue_irq_stats stats;
+			if (length != sizeof(stats))
+				return B_BAD_VALUE;
+			if (user_memcpy(&stats, buffer, sizeof(stats)) != B_OK)
+				return B_BAD_ADDRESS;
+			if (stats.queue >= device->queuePairCount)
+				return B_BAD_VALUE;
+
+			/* One pair, so a dead or unarmed receive queue -- one whose
+			   ioInterrupts/rxFrames never advance under spread load -- is
+			   visible from userland. Lockless, for the same reason as the summed
+			   ioctl above. */
+			ena_queue_pair* pair = &device->queues[stats.queue];
+			stats.ioInterrupts = (uint64)(uint32)atomic_get(&pair->ioInterrupts);
+			stats.irqArms = (uint64)(uint32)atomic_get(&pair->irqArms);
+			stats.rxFrames = pair->rxFrames;
+			stats.rxDrainCycles = pair->rxDrainCycles;
+			stats.txFrames = pair->txFrames;
+			stats.targetCpu = (int64)pair->targetCpu;
+			stats.rxActive = (uint64)(uint32)atomic_get(&pair->rxActive);
 
 			return user_memcpy(buffer, &stats, sizeof(stats));
 		}
@@ -3438,7 +3888,56 @@ ena_ioctl(void* cookie, uint32 op, void* buffer, size_t length)
 				return B_BAD_DATA;
 			if (!IS_KERNEL_ADDRESS(buffer))
 				return B_BAD_ADDRESS;
-			return ena_receive(device, (net_buffer**)buffer);
+			/* The unqualified receive means queue 0, the same one a single-queue
+			   stack has always drained. */
+			return ena_receive(device, 0, (net_buffer**)buffer);
+
+		case ETHER_GET_RX_QUEUE_COUNT:
+		{
+			uint32 count = device->queuePairCount;
+			if (length != sizeof(count))
+				return B_BAD_VALUE;
+			return user_memcpy(buffer, &count, sizeof(count));
+		}
+
+		case ETHER_SET_RX_QUEUE_COUNT:
+		{
+			uint32 count;
+			if (length != sizeof(count))
+				return B_BAD_VALUE;
+			if (user_memcpy(&count, buffer, sizeof(count)) != B_OK)
+				return B_BAD_ADDRESS;
+			return ena_set_rx_queue_count(device, count);
+		}
+
+		case ETHER_GET_RX_QUEUE_CPU:
+		{
+			ether_queue_cpu_args args;
+			if (length != sizeof(args))
+				return B_BAD_VALUE;
+			if (user_memcpy(&args, buffer, sizeof(args)) != B_OK)
+				return B_BAD_ADDRESS;
+			if (args.queue >= device->queuePairCount)
+				return B_BAD_VALUE;
+			/* Advisory: what assign_io_interrupt_to_cpu() reported this pair's
+			   vector targets, so the stack can pin the queue's threads there. */
+			args.cpu = device->queues[args.queue].targetCpu;
+			return user_memcpy(buffer, &args, sizeof(args));
+		}
+
+		case ETHER_RECEIVE_NET_BUFFER_QUEUE:
+		{
+			if (buffer == NULL || length != sizeof(ether_receive_queue_args))
+				return B_BAD_DATA;
+			if (!IS_KERNEL_ADDRESS(buffer))
+				return B_BAD_ADDRESS;
+			/* As ETHER_RECEIVE_NET_BUFFER but from the named queue; buffer is a
+			   kernel-side args struct carrying the queue in and the net_buffer
+			   out. */
+			ether_receive_queue_args* args = (ether_receive_queue_args*)buffer;
+			return ena_receive(device, args->queue,
+				(net_buffer**)&args->buffer);
+		}
 
 		default:
 			break;
@@ -3513,10 +4012,23 @@ ena_init_driver(device_node* node, void** cookie)
 	device->node = node;
 	device->registerArea = -1;
 	device->memoryArea = -1;
-	device->rxBufferArea = -1;
-	device->txBufferArea = -1;
-	device->rxReady = -1;
-	device->txCompleted = -1;
+
+	/* Per-pair identity and handles. Every pair carries its own back-pointer and
+	   index so the interrupt handler cookie is self-describing; the area ids and
+	   semaphores start invalid so the teardown paths can run before anything was
+	   allocated. rxActiveCount starts at 1 -- the legacy single-queue topology --
+	   until the stack asks for more. */
+	for (uint32 i = 0; i < ENA_MAX_IO_QUEUE_PAIRS; i++) {
+		ena_queue_pair* pair = &device->queues[i];
+		pair->device = device;
+		pair->index = (uint16)i;
+		pair->rxBufferArea = -1;
+		pair->txBufferArea = -1;
+		pair->rxReady = -1;
+		pair->txCompleted = -1;
+		pair->targetCpu = -1;
+	}
+	device->rxActiveCount = 1;
 
 	/* Not the calloc default: 0 is ENA_REARM_IN_HANDLER, the behaviour being
 	   replaced. Set explicitly so that forgetting to set it cannot quietly ship
