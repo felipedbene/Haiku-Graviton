@@ -24,10 +24,11 @@ should build here without the recipe cuts they seemed to need in the guests.
 ## Stand up a builder
 
 ```bash
-# 1. Launch a Graviton instance from the canonical DeBeOS AMI. Resolve the AMI by tag,
-#    never hardcode: canonical=true  (or SSM param /haiku-graviton/canonical-ami-id).
-AMI=$(aws ec2 describe-images --owners self --filters Name=tag:canonical,Values=true \
-        --query 'Images[0].ImageId' --output text)
+# 1. Launch a Graviton instance from the canonical DeBeOS AMI. ALWAYS resolve the latest
+#    canonical AMI from the SSM parameter — never hardcode an ami-id (any specific id, e.g.
+#    ami-05a424c43ddfed717, is just whatever was canonical at the time).
+AMI=$(aws ssm get-parameter --name /haiku-graviton/canonical-ami-id \
+        --query Parameter.Value --output text)   # authoritative source of the canonical AMI
 aws ec2 run-instances --image-id "$AMI" --instance-type c8g.2xlarge \
   --security-group-ids sg-008114891fd207df1 --key-name haiku-graviton \
   --iam-instance-profile Name=AWSSupportPatchwork-SSMRoleForInstances \
