@@ -1402,11 +1402,17 @@ SystemProfiler::_InitTimers(void* cookie, int cpu)
 	// left off to keep the PMU the single sample source -- otherwise the two
 	// would interleave and the sample count would no longer reflect the bounded
 	// overflow rate. arm64_pmu_sampling_active() is true only once an overflow
-	// has actually been serviced, never merely because the handler is installed:
-	// on hardware where the overflow interrupt does not fire (and on reduced-PMU
-	// instance sizes or with the facility off) it stays false and the software
-	// timer runs exactly as on every other architecture, so profiling is never
-	// left without a sample source.
+	// has actually been serviced, never merely because the handler is installed,
+	// so on reduced-PMU instance sizes or with the facility off it stays false
+	// and the software timer runs exactly as on every other architecture.
+	//
+	// If the PMU has already serviced an overflow by the time a session starts,
+	// skip the software timer entirely and let the PMU be the sole source. If it
+	// has not (the common case: the profiler is started before its workload runs,
+	// so no cycle overflow has fired yet), start the software timer -- it retires
+	// itself in _ProfilingEvent once the workload drives a real overflow. See the
+	// comment there for why the stand-down has to be re-checked rather than
+	// decided only here.
 	if (arm64_pmu_sampling_active())
 		return;
 #endif
@@ -1501,6 +1507,27 @@ SystemProfiler::_ProfilingEvent(struct timer* timer)
 	SystemProfiler* self = (SystemProfiler*)timer->user_data;
 
 	self->_DoSample();
+
+#ifdef __HAIKU_ARCH_ARM64
+	// Stand the software timer down as soon as the PMU cycle-overflow source is
+	// proven to be delivering (E-PMU-2), and keep re-checking every tick until
+	// then. The stand-down cannot be a one-shot decision in _InitTimers: the
+	// `profile` tool starts the profiler *before* it runs its workload, so on an
+	// otherwise idle instance no cycle overflow has been serviced yet and
+	// arm64_pmu_sampling_active() is still false when _InitTimers runs. The
+	// software timer therefore has to start, and then retire itself here on the
+	// first tick after the workload has driven a real overflow -- otherwise it
+	// runs for the whole session and the PMU never becomes the effective source,
+	// which is exactly the software-timer-only signature seen on hardware. Once
+	// the PMU is delivering it is the single sample source, so the sample count
+	// reflects the bounded overflow rate rather than a mix of the two. On every
+	// other architecture this is just a plain re-arm.
+	if (arm64_pmu_sampling_active()) {
+		self->fCPUData[timer->cpu].timerScheduled = false;
+		return B_HANDLED_INTERRUPT;
+	}
+#endif
+
 	self->_ScheduleTimer(timer->cpu);
 
 	return B_HANDLED_INTERRUPT;
