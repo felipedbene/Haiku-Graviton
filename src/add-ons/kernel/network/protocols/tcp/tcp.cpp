@@ -277,6 +277,10 @@ dump_tcp_header(tcp_header &header)
 #endif
 
 
+// DIAG-E2 (measurement build, do NOT merge): defined in TCPEndpoint.cpp.
+int dump_tcp_flock_contention(int argc, char** argv);
+
+
 static int
 dump_endpoints(int argc, char** argv)
 {
@@ -890,6 +894,11 @@ tcp_init()
 		"lists all open TCP endpoints");
 	add_debugger_command("tcp_endpoint", dump_endpoint,
 		"dumps a TCP endpoint internal state");
+	// DIAG-E2 (measurement build, do NOT merge)
+	add_debugger_command("tcp_flock_contention", dump_tcp_flock_contention,
+		"DIAG-E2: fLock wait/hold counters ('reset' arg zeroes them)");
+	dprintf("network/protocols/tcp: DIAG-E2 fLock wait/hold instrumentation "
+		"active\n");
 
 	return B_OK;
 }
@@ -900,6 +909,8 @@ tcp_uninit()
 {
 	remove_debugger_command("tcp_endpoint", dump_endpoint);
 	remove_debugger_command("tcp_endpoints", dump_endpoints);
+	// DIAG-E2 (measurement build, do NOT merge)
+	remove_debugger_command("tcp_flock_contention", dump_tcp_flock_contention);
 
 	rw_lock_destroy(&sEndpointManagersLock);
 

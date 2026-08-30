@@ -35,6 +35,20 @@ typedef struct net_fifo {
 	size_t		current_bytes;
 
 	struct list	buffers;
+
+	// DIAG-E2 (measurement build, do NOT merge): wait/hold accounting for the
+	// receive-path fifo. Populated only by the *_tracked() enqueue/dequeue
+	// helpers (i.e. the RX receive_queue). The mutex counters separate lock
+	// contention (reader vs consumer) from the critical section itself; the
+	// sem counters capture how long the consumer sleeps waiting for a buffer,
+	// which is "blocked waiting for work" (upstream-limited), NOT a lock the
+	// throughput fix would break. All ns, summed across CPUs.
+	int64		diag_lock_acq;
+	int64		diag_lock_contended;
+	int64		diag_lock_wait_ns;
+	int64		diag_lock_hold_ns;
+	int64		diag_sem_waits;
+	int64		diag_sem_wait_ns;
 } net_fifo;
 
 typedef void (*net_timer_func)(struct net_timer* timer, void* data);

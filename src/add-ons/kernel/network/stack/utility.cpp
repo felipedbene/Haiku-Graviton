@@ -31,6 +31,65 @@
 #endif
 
 
+// DIAG-E2 (measurement build, do NOT merge): a MutexLocker-shaped RAII wrapper
+// on net_fifo::lock that accounts wait (request->grant) and hold (grant->
+// release) into the fifo's own diag fields. Used only by the *_tracked() RX
+// helpers so the counters describe the receive_queue specifically. Unlock()/
+// Lock() are hooked so the sem wait between them is NOT charged as hold time.
+struct FifoLockProbe {
+			net_fifo*	fFifo;
+			nanotime_t	fHoldStart;
+			bool		fLocked;
+
+	FifoLockProbe(net_fifo* fifo)
+		:
+		fFifo(fifo),
+		fHoldStart(0),
+		fLocked(false)
+	{
+		Lock();
+	}
+
+	~FifoLockProbe()
+	{
+		Unlock();
+	}
+
+	void Lock()
+	{
+		if (fLocked)
+			return;
+
+		nanotime_t start = system_time_nsecs();
+		bool contended = false;
+		if (mutex_trylock(&fFifo->lock) != B_OK) {
+			contended = true;
+			mutex_lock(&fFifo->lock);
+		}
+		nanotime_t granted = system_time_nsecs();
+
+		atomic_add64(&fFifo->diag_lock_acq, 1);
+		if (contended)
+			atomic_add64(&fFifo->diag_lock_contended, 1);
+		atomic_add64(&fFifo->diag_lock_wait_ns, granted - start);
+
+		fHoldStart = granted;
+		fLocked = true;
+	}
+
+	void Unlock()
+	{
+		if (!fLocked)
+			return;
+
+		atomic_add64(&fFifo->diag_lock_hold_ns,
+			system_time_nsecs() - fHoldStart);
+		mutex_unlock(&fFifo->lock);
+		fLocked = false;
+	}
+};
+
+
 static struct list sTimers;
 static mutex sTimerLock;
 static sem_id sTimerWaitSem;
@@ -157,6 +216,15 @@ init_fifo(net_fifo* fifo, const char* name, size_t maxBytes)
 	fifo->waiting = 0;
 	list_init(&fifo->buffers);
 
+	// DIAG-E2 (measurement build, do NOT merge): the interface is default-
+	// initialized, so zero the accounting explicitly.
+	fifo->diag_lock_acq = 0;
+	fifo->diag_lock_contended = 0;
+	fifo->diag_lock_wait_ns = 0;
+	fifo->diag_lock_hold_ns = 0;
+	fifo->diag_sem_waits = 0;
+	fifo->diag_sem_wait_ns = 0;
+
 	return B_OK;
 }
 
@@ -247,7 +315,7 @@ status_t
 fifo_enqueue_buffer_tracked(net_fifo* fifo, net_buffer* buffer,
 	net_fifo_watermark* diagnostics)
 {
-	MutexLocker locker(fifo->lock);
+	FifoLockProbe locker(fifo);	// DIAG-E2 (measurement build, do NOT merge)
 
 	status_t status = base_fifo_enqueue_buffer(fifo, buffer);
 	if (status == B_OK) {
@@ -307,7 +375,7 @@ fifo_dequeue_buffer_tracked(net_fifo* fifo, uint32 flags, bigtime_t timeout,
 	if ((flags & ~(MSG_DONTWAIT | MSG_PEEK)) != 0)
 		return EOPNOTSUPP;
 
-	MutexLocker locker(fifo->lock);
+	FifoLockProbe locker(fifo);	// DIAG-E2 (measurement build, do NOT merge)
 	const bool dontWait = (flags & MSG_DONTWAIT) != 0 || timeout == 0;
 	status_t status;
 
@@ -348,8 +416,14 @@ fifo_dequeue_buffer_tracked(net_fifo* fifo, uint32 flags, bigtime_t timeout,
 			return B_WOULD_BLOCK;
 
 		// we need to wait until a new buffer becomes available
+		// DIAG-E2 (measurement build, do NOT merge): time the consumer's sleep
+		// waiting for a buffer. This is "blocked waiting for work" (upstream-
+		// limited), kept distinct from lock contention above.
+		nanotime_t semStart = system_time_nsecs();
 		status = acquire_sem_etc(fifo->notify, 1,
 			B_CAN_INTERRUPT | B_RELATIVE_TIMEOUT, timeout);
+		atomic_add64(&fifo->diag_sem_waits, 1);
+		atomic_add64(&fifo->diag_sem_wait_ns, system_time_nsecs() - semStart);
 		if (status < B_OK)
 			return status;
 

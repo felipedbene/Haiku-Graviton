@@ -317,6 +317,50 @@ dump_device_interfaces(int argc, char** argv)
 }
 
 
+// DIAG-E2 (measurement build, do NOT merge): dump the receive_queue fifo lock
+// and notify-sem wait/hold counters, one row per interface. Sample twice under
+// load and diff. The mutex row tells whether reader/consumer contend on the
+// fifo lock (they should not); the sem row is the consumer's "waiting for a
+// buffer" sleep, which is upstream-limited, not a lock to break. 'reset' arg
+// zeroes the counters to bound a window.
+static int
+dump_net_fifo_contention(int argc, char** argv)
+{
+	const bool reset = (argc > 1 && strcmp(argv[1], "reset") == 0);
+
+	if (!reset) {
+		kprintf("DIAG-E2 RX fifo contention (ns; summed over CPUs)\n");
+		kprintf("%-12s %10s %10s %14s %14s %10s %14s\n", "iface",
+			"lock_acq", "lock_cont", "lock_wait_ns", "lock_hold_ns",
+			"sem_waits", "sem_wait_ns");
+	}
+
+	DeviceInterfaceList::Iterator iterator = sInterfaces.GetIterator();
+	while (net_device_interface* interface = iterator.Next()) {
+		net_fifo* fifo = &interface->receive_queue;
+		if (reset) {
+			fifo->diag_lock_acq = 0;
+			fifo->diag_lock_contended = 0;
+			fifo->diag_lock_wait_ns = 0;
+			fifo->diag_lock_hold_ns = 0;
+			fifo->diag_sem_waits = 0;
+			fifo->diag_sem_wait_ns = 0;
+			continue;
+		}
+		kprintf("%-12s %10" B_PRId64 " %10" B_PRId64 " %14" B_PRId64 " %14"
+			B_PRId64 " %10" B_PRId64 " %14" B_PRId64 "\n",
+			interface->device->name, fifo->diag_lock_acq,
+			fifo->diag_lock_contended, fifo->diag_lock_wait_ns,
+			fifo->diag_lock_hold_ns, fifo->diag_sem_waits,
+			fifo->diag_sem_wait_ns);
+	}
+
+	if (reset)
+		kprintf("net_fifo_contention: counters reset\n");
+	return 0;
+}
+
+
 #endif	// ENABLE_DEBUGGER_COMMANDS
 
 
@@ -937,6 +981,9 @@ init_device_interfaces()
 		"Dump the given network device interface");
 	add_debugger_command("net_device_interfaces", &dump_device_interfaces,
 		"Dump network device interfaces");
+	// DIAG-E2 (measurement build, do NOT merge)
+	add_debugger_command("net_fifo_contention", &dump_net_fifo_contention,
+		"DIAG-E2: RX fifo lock/sem wait-hold counters ('reset' zeroes them)");
 #endif
 	return B_OK;
 }
@@ -948,6 +995,8 @@ uninit_device_interfaces()
 #if ENABLE_DEBUGGER_COMMANDS
 	remove_debugger_command("net_device_interface", &dump_device_interface);
 	remove_debugger_command("net_device_interfaces", &dump_device_interfaces);
+	// DIAG-E2 (measurement build, do NOT merge)
+	remove_debugger_command("net_fifo_contention", &dump_net_fifo_contention);
 #endif
 
 	mutex_destroy(&sLock);
