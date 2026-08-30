@@ -83,7 +83,10 @@ status_t allocate_io_interrupt_vectors(int32 count, int32 *startVector,
 	enum interrupt_type type, bool independentVectors = false);
 void free_io_interrupt_vectors(int32 count, int32 startVector);
 
-void assign_io_interrupt_to_cpu(int32 vector, int32 cpu);
+int32 assign_io_interrupt_to_cpu(int32 vector, int32 cpu);
+	// Returns the CPU the vector now targets: the request on success, the
+	// vector's previous CPU when the architecture declined or the request was
+	// a no-op. Callers that only want the side effect may ignore it.
 bool interrupt_affinity_supported(void);
 
 
