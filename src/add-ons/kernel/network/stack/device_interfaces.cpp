@@ -145,12 +145,18 @@ device_queue_reader_thread(void* _queue)
 */
 static status_t
 consumer_loop(net_device_interface* interface, net_fifo* fifo,
-	net_fifo_watermark* diagnostics, bool multiqueue)
+	net_fifo_watermark* diagnostics, bool multiqueue, int32* stopping)
 {
 	net_device* device = interface->device;
 	net_buffer* buffer;
 
-	while (atomic_get(&interface->ref_count) > 0) {
+	// \a stopping is the per-queue stop flag for an extra queue's consumer, or
+	// NULL for the queue-0 consumer (which exits on ref_count reaching 0 during
+	// the final put). An extra consumer must not rely on ref_count -- down()
+	// tears its fifo down without dropping ref_count -- so it exits as soon as
+	// the flag is set, before it can loop back to lock a destroyed fifo.
+	while ((stopping == NULL || atomic_get(stopping) == 0)
+			&& atomic_get(&interface->ref_count) > 0) {
 		ssize_t status = fifo_dequeue_buffer_tracked(fifo, 0,
 			B_INFINITE_TIMEOUT, &buffer, diagnostics);
 		if (status != B_OK) {
@@ -208,7 +214,7 @@ device_consumer_thread(void* _interface)
 {
 	net_device_interface* interface = (net_device_interface*)_interface;
 	return consumer_loop(interface, &interface->receive_queue,
-		&interface->receive_queue_diagnostics, false);
+		&interface->receive_queue_diagnostics, false, NULL);
 }
 
 
@@ -217,7 +223,7 @@ device_queue_consumer_thread(void* _queue)
 {
 	net_device_interface_queue* queue = (net_device_interface_queue*)_queue;
 	return consumer_loop(queue->interface, &queue->receive_queue,
-		&queue->receive_queue_diagnostics, true);
+		&queue->receive_queue_diagnostics, true, &queue->stopping);
 }
 
 
@@ -650,6 +656,15 @@ teardown_extra_receive_queues(net_device_interface* interface)
 
 	const uint32 count = interface->receive_queue_count;
 
+	// Tell every extra consumer to stop *before* destroying any fifo. down()
+	// does not drop ref_count (it is not the final put), so a consumer that is
+	// mid-dispatch would otherwise loop back and re-lock a fifo mutex we are
+	// about to destroy. With the flag set first, such a consumer exits at the
+	// top of its loop; the fifo's sem-delete below only handles the separate
+	// case of a consumer already blocked in dequeue.
+	for (uint32 i = 1; i < count; i++)
+		atomic_set(&interface->queues[i - 1].stopping, 1);
+
 	// Readers exit on their own (IFF_UP clear or fd closed); join them. We may
 	// be one of them only for queue 0, never for an extra queue, but guard
 	// anyway.
@@ -660,8 +675,13 @@ teardown_extra_receive_queues(net_device_interface* interface)
 			wait_for_thread(queue->reader_thread, NULL);
 	}
 
-	// Deleting each fifo's notify sem makes its consumer's blocked dequeue
-	// return an error, which is how the consumer knows to exit.
+	// Deleting each fifo's notify sem wakes a consumer blocked in dequeue so it
+	// returns an error and exits; a consumer that was instead mid-dispatch has
+	// already seen the stopping flag above. Joining the consumer here is only
+	// deadlock-free because no receive-dispatch path acquires receive_lock (the
+	// caller holds it): a multiqueue consumer takes receive_handlers_lock(read)
+	// for the handler walk and nothing else. A future handler that took
+	// receive_lock would deadlock here -- keep that invariant.
 	for (uint32 i = 1; i < count; i++) {
 		net_device_interface_queue* queue = &interface->queues[i - 1];
 		uninit_fifo(&queue->receive_queue);
@@ -728,6 +748,7 @@ up_device_interface(net_device_interface* interface)
 				queue->consumer_thread = -1;
 				queue->receive_deframe_dropped = 0;
 				queue->receive_enqueue_dropped = 0;
+				queue->stopping = 0;
 
 				char name[128];
 				snprintf(name, sizeof(name), "%s receive queue %" B_PRIu32,

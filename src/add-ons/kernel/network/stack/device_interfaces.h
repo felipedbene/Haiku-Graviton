@@ -48,6 +48,13 @@ struct net_device_interface_queue {
 	net_fifo_watermark	receive_queue_diagnostics;
 	uint64				receive_deframe_dropped;
 	uint64				receive_enqueue_dropped;
+
+	// Stop signal for this queue's consumer, checked in its loop guard. down()
+	// does not drop ref_count (it is not the final put), so the consumer needs
+	// its own flag to exit before it can loop back and touch a destroyed fifo;
+	// deleting the fifo's notify sem alone only wakes a currently-blocked one.
+	// Accessed with atomics (set by teardown, read by the consumer).
+	int32				stopping;
 };
 
 
