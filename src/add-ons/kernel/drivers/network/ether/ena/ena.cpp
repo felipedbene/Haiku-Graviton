@@ -291,17 +291,18 @@ ena_io_interrupt(void* arg)
 		atomic_set(&pair->irqArmed, 0);
 
 	/* Both directions share this vector, so wake both waiters and let them find
-	   out whether there was anything for them.
-
-	   Receive is gated on the pair being active. An inactive pair's vector is
-	   never armed (D23), so this should not fire for one -- but a stray or
-	   replayed interrupt must not grow a semaphore no reader will ever drain,
-	   which over time would wrap the int32 count. Transmit is always released:
-	   only active pairs transmit, so its waiters exist exactly when it matters. */
-	if (atomic_get(&pair->rxActive) != 0 && pair->rxReady >= 0)
-		release_sem_etc(pair->rxReady, 1, B_DO_NOT_RESCHEDULE);
-	if (pair->txCompleted >= 0)
-		release_sem_etc(pair->txCompleted, 1, B_DO_NOT_RESCHEDULE);
+	   out whether there was anything for them -- but only for an active pair.
+	   An inactive pair's vector is never armed (D23) and transmit uses the same
+	   active set as receive (ena_send picks a pair below rxActiveCount), so an
+	   inactive pair has no waiter on either sem; gating both releases on rxActive
+	   keeps a stray or replayed interrupt from growing a semaphore no thread will
+	   ever drain, which over time would wrap the int32 count (R9). */
+	if (atomic_get(&pair->rxActive) != 0) {
+		if (pair->rxReady >= 0)
+			release_sem_etc(pair->rxReady, 1, B_DO_NOT_RESCHEDULE);
+		if (pair->txCompleted >= 0)
+			release_sem_etc(pair->txCompleted, 1, B_DO_NOT_RESCHEDULE);
+	}
 
 	return B_INVOKE_SCHEDULER;
 }
@@ -3076,9 +3077,19 @@ ena_send(ena_haiku_device* device, net_buffer* buffer)
 		/* The lock was dropped while blocked on txCompleted, so a reset may have
 		   run and freed the TX ring -- and it is the reset that woke us. Re-check
 		   before ena_reclaim_transmitted(), which would touch the freed ring.
-		   This mirrors the equivalent guard on the receive path. */
-		if (device->resetting || device->deviceDead)
+		   This mirrors the equivalent guard on the receive path.
+
+		   Not only resetting/deviceDead: a reset whose bring-up hit a contiguous
+		   allocation failure degrades to fewer queues (D22), destroying this pair
+		   and NULLing its submission queue while resetting is already cleared. The
+		   entry checks that this pair is live were made before the wait, so they
+		   have to be re-asserted here -- otherwise a lagging sender would drive
+		   ena_reclaim_transmitted() into a NULL ring. */
+		if (device->resetting || device->deviceDead
+			|| pair->txSubmissionQueue == NULL
+			|| atomic_get(&pair->rxActive) == 0) {
 			return B_DEV_NOT_READY;
+		}
 
 		ena_reclaim_transmitted(pair);
 	}
@@ -3451,9 +3462,19 @@ ena_receive(ena_haiku_device* device, uint32 queue, net_buffer** _buffer)
 		/* The lock was dropped while blocked, so a reset may have run in the
 		   meantime -- and it is the reset that woke us. Re-check before going back
 		   round into ena_com_rx_pkt(), which is the call that would touch the
-		   freed ring. */
-		if (device->resetting || device->deviceDead)
+		   freed ring.
+
+		   Not only resetting/deviceDead: a reset whose bring-up hit a contiguous
+		   allocation failure degrades to fewer queues (D22), destroying this pair
+		   and NULLing its completion queue while resetting is already cleared. The
+		   entry checks that this pair is live (rxActive, index in range) were made
+		   before the wait, so re-assert them here -- otherwise a lagging reader
+		   would drive ena_com_rx_pkt() into a NULL ring. */
+		if (device->resetting || device->deviceDead
+			|| pair->rxCompletionQueue == NULL
+			|| atomic_get(&pair->rxActive) == 0) {
 			return B_DEV_NOT_READY;
+		}
 	}
 
 	/* How many descriptors this frame occupied, and therefore how many are owed
@@ -4004,10 +4025,17 @@ ena_init_driver(device_node* node, void** cookie)
 {
 	CALLED();
 
-	ena_haiku_device* device = (ena_haiku_device*)calloc(1,
+	/* memalign rather than calloc: the queue pairs are aligned(64) to keep each
+	   pair's hot fields on its own cache line, and that only holds if the device
+	   struct they are embedded in is itself 64-aligned -- calloc guarantees only
+	   the default malloc alignment. Zeroed by hand since memalign does not. Freed
+	   with free() in ena_uninit_driver(), which the kernel heap accepts for a
+	   memalign allocation. */
+	ena_haiku_device* device = (ena_haiku_device*)memalign(64,
 		sizeof(ena_haiku_device));
 	if (device == NULL)
 		return B_NO_MEMORY;
+	memset(device, 0, sizeof(ena_haiku_device));
 
 	device->node = node;
 	device->registerArea = -1;

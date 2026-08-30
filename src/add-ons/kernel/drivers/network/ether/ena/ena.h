@@ -745,15 +745,6 @@ struct ena_haiku_device {
 	   stack stops computing TCP checksums for this interface, so it must never
 	   claim more than ena_prepare_tx_checksum() can actually deliver. */
 	uint32				txChecksumOffload;
-
-	/* Frames handed to the device with the checksum left to it, and frames that
-	   arrived asking for that but did not survive validation. The second must
-	   stay at zero: it means something above set
-	   NET_BUFFER_L4_CHECKSUM_NEEDED on a frame this device cannot finish, and
-	   those frames are dropped rather than put on the wire with a wrong
-	   checksum. */
-	uint64				txChecksumOffloaded;
-	uint64				txChecksumRejected;
 };
 
 
