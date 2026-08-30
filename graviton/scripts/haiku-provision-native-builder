@@ -104,6 +104,13 @@ if ! python3.14 -c 'import zlib' >/dev/null 2>&1; then
 fi
 log "python3.14 zlib: ok"
 
+# haikuporter and many recipes run under `env python3` / `#!/usr/bin/env python3`
+# shebangs, but the base userland ships only `python3.14`. Provide the unversioned
+# name in the on-PATH shim dir so those invocations resolve.
+mkdir -p "$SHIM_DIR"
+ln -sf "$(command -v python3.14)" "$SHIM_DIR/python3"
+log "python3 -> python3.14 symlink: $SHIM_DIR/python3"
+
 # --- 2. ports tree + haikuporter + config ---------------------------------
 if [ ! -d "$PORTS_DIR/.git" ]; then
 	log "cloning ports tree (shallow) -> $PORTS_DIR"
