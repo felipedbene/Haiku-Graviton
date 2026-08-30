@@ -199,6 +199,13 @@ rule HaikuImageGetSystemLibs
 			libdebug.so
 			libdebugger.so@primary
 			libdevice.so
+			# The Game Kit. libgame links only libbe + libmedia (both present
+			# on arm64), so it builds fine here -- it was simply never listed
+			# outside the regular profile. Without it SDL2's native Haiku
+			# backend cannot link the relative-mouse recentre
+			# (set_mouse_position, <game/WindowScreen.h>) or GameSound, and
+			# OpenAL loses its Haiku backend, forcing per-recipe feature cuts.
+			libgame.so
 			libgnu.so
 			# The Media Kit. WebKit links libmedia unconditionally when
 			# ENABLE_VIDEO is on (Source/WebCore/PlatformHaiku.cmake), so
