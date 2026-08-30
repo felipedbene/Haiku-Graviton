@@ -36,6 +36,19 @@ enum {
 		   safe answer and the one every existing driver gives by failing the
 		   call. Append new opcodes here and nowhere else: the values are
 		   positional and shared with out-of-tree drivers. */
+
+	ETHER_GET_RX_QUEUE_COUNT,
+		/* uint32*: receive queues the driver created (out). Optional; a
+		   driver that fails the call is single-queue. */
+	ETHER_SET_RX_QUEUE_COUNT,
+		/* uint32*: how many receive queues the caller will drain (in).
+		   The driver re-spreads its receive steering (RSS) across exactly
+		   that many and confirms with B_OK. */
+	ETHER_GET_RX_QUEUE_CPU,
+		/* ether_queue_cpu_args*: CPU the queue's interrupt targets. */
+	ETHER_RECEIVE_NET_BUFFER_QUEUE,
+		/* ether_receive_queue_args*: as ETHER_RECEIVE_NET_BUFFER, from one
+		   specific queue. */
 };
 
 
@@ -50,5 +63,21 @@ typedef struct ether_link_state {
 	uint32  quality;	/* in one tenth of a percent */
 	uint64	speed;		/* in bit/s */
 } ether_link_state_t;
+
+/* ETHER_GET_RX_QUEUE_CPU */
+typedef struct ether_queue_cpu_args {
+	uint32	queue;		/* in */
+	int32	cpu;		/* out; negative = unknown */
+} ether_queue_cpu_args;
+
+/* ETHER_RECEIVE_NET_BUFFER_QUEUE. buffer is a struct net_buffer* (kernel
+   address), typed void* here because this header does not know net_buffer --
+   exactly as ETHER_RECEIVE_NET_BUFFER already passes one untyped. Explicit
+   padding keeps one layout on every architecture. */
+typedef struct ether_receive_queue_args {
+	uint32	queue;		/* in */
+	uint32	_reserved;
+	void*	buffer;		/* out */
+} ether_receive_queue_args;
 
 #endif	/* _ETHER_DRIVER_H */

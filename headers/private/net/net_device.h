@@ -52,6 +52,13 @@ typedef struct net_device {
 	// device is up; zero means "offload nothing", which is what every device
 	// that does not know about this field gets.
 	uint32	tx_checksum_offload;
+
+	// Receive queues the device module can deliver from, filled in by the
+	// module while the device is up. 0 and 1 both mean single-queue; the
+	// stack never reads it unless the module also provides
+	// receive_data_queue. Every module that does not know about this field
+	// leaves it zero, which is the safe answer.
+	uint32	rx_queue_count;
 } net_device;
 
 
@@ -78,6 +85,21 @@ struct net_device_module_info {
 					const struct sockaddr* address);
 	status_t	(*remove_multicast)(net_device* device,
 					const struct sockaddr* address);
+
+	// --- multiqueue receive (optional; all three may be NULL) -----------
+	// receive_data_queue == NULL means single-queue; the stack then treats
+	// the device exactly as it always has. queue is 0-based;
+	// receive_data_queue(device, 0, b) must be equivalent to
+	// receive_data(device, b).
+	status_t	(*receive_data_queue)(net_device* device, uint32 queue,
+					net_buffer** _buffer);
+	// The stack's declaration of how many queues it will actually drain.
+	// The module (and driver behind it) must steer receive traffic to
+	// queues [0, count) only. Returns B_OK only if that is now in force.
+	status_t	(*set_rx_queue_count)(net_device* device, uint32 count);
+	// The CPU the given queue's interrupt targets, or a negative value if
+	// unknown. Purely advisory; used to pin the queue's threads.
+	int32		(*get_rx_queue_cpu)(net_device* device, uint32 queue);
 };
 
 
