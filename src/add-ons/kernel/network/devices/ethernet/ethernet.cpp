@@ -198,6 +198,7 @@ ethernet_up(net_device *_device)
 	// read()/write() fallback below hands the driver a flat copy and there is
 	// nothing there to carry a per-buffer "finish this checksum" request.
 	device->tx_checksum_offload = 0;
+	device->rx_queue_count = 0;
 	if (device->supports_net_buffer) {
 		uint32 offload = 0;
 		if (ioctl(device->fd, ETHER_GET_TX_CHECKSUM_OFFLOAD, &offload,
@@ -205,6 +206,18 @@ ethernet_up(net_device *_device)
 			device->tx_checksum_offload = offload;
 			dprintf("%s: transmit checksum offload 0x%" B_PRIx32 "\n",
 				device->name, offload);
+		}
+
+		// How many receive queues the driver created. Optional: a driver that
+		// fails the call is single-queue, which is what every existing driver
+		// gives by leaving rx_queue_count zero. Only meaningful alongside the
+		// receive_data_queue module hook wired up below.
+		uint32 rxQueues = 0;
+		if (ioctl(device->fd, ETHER_GET_RX_QUEUE_COUNT, &rxQueues,
+				sizeof(rxQueues)) == 0) {
+			device->rx_queue_count = rxQueues;
+			dprintf("%s: %" B_PRIu32 " receive queues\n", device->name,
+				rxQueues);
 		}
 	}
 
@@ -276,6 +289,7 @@ ethernet_down(net_device *_device)
 
 	// Whatever the driver advertised applies only while it is open.
 	device->tx_checksum_offload = 0;
+	device->rx_queue_count = 0;
 
 	// if the device is still part of the list, remove it
 	if (device->GetDoublyLinkedListLink()->next != NULL
@@ -404,6 +418,56 @@ ethernet_receive_data(net_device *_device, net_buffer **_buffer)
 err:
 	gBufferModule->free(buffer);
 	return status;
+}
+
+
+status_t
+ethernet_receive_data_queue(net_device *_device, uint32 queue,
+	net_buffer **_buffer)
+{
+	ethernet_device *device = (ethernet_device *)_device;
+
+	if (device->fd == -1)
+		return B_FILE_ERROR;
+
+	// Multiqueue receive is only offered for net_buffer-capable drivers (the
+	// probe in ethernet_up() runs only then), so there is no read()/write()
+	// fallback to mirror here.
+	ether_receive_queue_args args;
+	args.queue = queue;
+	args._reserved = 0;
+	args.buffer = NULL;
+	if (ioctl(device->fd, ETHER_RECEIVE_NET_BUFFER_QUEUE, &args,
+			sizeof(args)) != 0)
+		return errno;
+
+	*_buffer = (net_buffer *)args.buffer;
+	return B_OK;
+}
+
+
+status_t
+ethernet_set_rx_queue_count(net_device *_device, uint32 count)
+{
+	ethernet_device *device = (ethernet_device *)_device;
+
+	if (ioctl(device->fd, ETHER_SET_RX_QUEUE_COUNT, &count, sizeof(count)) != 0)
+		return errno;
+	return B_OK;
+}
+
+
+int32
+ethernet_get_rx_queue_cpu(net_device *_device, uint32 queue)
+{
+	ethernet_device *device = (ethernet_device *)_device;
+
+	ether_queue_cpu_args args;
+	args.queue = queue;
+	args.cpu = -1;
+	if (ioctl(device->fd, ETHER_GET_RX_QUEUE_CPU, &args, sizeof(args)) != 0)
+		return -1;
+	return args.cpu;
 }
 
 
@@ -550,6 +614,11 @@ net_device_module_info sEthernetModule = {
 	ethernet_set_media,
 	ethernet_add_multicast,
 	ethernet_remove_multicast,
+
+	// multiqueue receive (D34)
+	ethernet_receive_data_queue,
+	ethernet_set_rx_queue_count,
+	ethernet_get_rx_queue_cpu,
 };
 
 module_info *modules[] = {
