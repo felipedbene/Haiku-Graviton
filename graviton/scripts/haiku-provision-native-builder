@@ -41,13 +41,19 @@
 #      image does not create that directory, so the copy fails and aborts the
 #      build BEFORE the recipe even runs. An empty dir is enough.
 #
-#   4. Installs a wget shim. haikuporter fetches sources with wget, which the
-#      base lacks; more importantly, some upstreams (notably GitHub release
-#      tarball CDNs) stall or hang when fetched from a Haiku box. The shim first
-#      serves a matching file from a local seed directory (drop tarballs there,
-#      fetched on a fast host, to sidestep a flaky upstream) and otherwise falls
-#      back to curl. See also the metal-guest variant, graviton/scripts/
-#      haiku-wget-shim, which instead relays through a proxy on the host.
+#   4. Installs matching wget AND curl shims. Sources are fetched two ways:
+#      haikuporter's own downloader shells out to wget, but a number of recipes
+#      (and haikuporter builds that prefer it) fetch with curl instead -- and
+#      some upstreams (notably the github/gnome/tukaani/invisible-island tarball
+#      CDNs) stall or hang when fetched from a Haiku box. A wget shim alone is
+#      not enough: the curl path sails straight past it and re-downloads even
+#      when the tarball is already seeded. So both fetchers are shimmed. Each
+#      shim first serves a matching file from a local seed directory (drop
+#      tarballs there, fetched on a fast host, to sidestep a flaky upstream) and
+#      otherwise falls through to the real downloader. The curl shim resolves
+#      the real curl by absolute path so it does not recurse into itself. See
+#      also the metal-guest variant, graviton/scripts/haiku-wget-shim, which
+#      instead relays through a proxy on the host.
 #
 # After this runs, build a port with:
 #     cd "$HP_DIR" && python3.14 ./haikuporter --config="$CONF" -y \
@@ -64,7 +70,7 @@
 #   HP_REPO      haikuporter git URL            (default the public HaikuPorts haikuporter)
 #   TARGET_ARCH  packaging target architecture  (default arm64)
 #   PACKAGER     PACKAGER line for haikuports.conf (default a generic DeBeOS id)
-#   SEED_DIR     wget-shim seed directory       (default $HP_HOME/seed)
+#   SEED_DIR     wget/curl-shim seed directory  (default $HP_HOME/seed)
 #
 set -eu
 
@@ -141,7 +147,7 @@ if [ ! -d /boot/system/settings/fonts ]; then
 	mkdir -p /boot/system/settings/fonts
 fi
 
-# --- 4. wget shim: serve pre-seeded sources, else curl --------------------
+# --- 4. wget + curl shims: serve pre-seeded sources, else the real fetcher -
 mkdir -p "$SHIM_DIR" "$SEED_DIR"
 log "installing wget shim -> $SHIM_DIR/wget (seed: $SEED_DIR)"
 cat > "$SHIM_DIR/wget" <<EOF
@@ -160,6 +166,46 @@ fi
 exec curl -fL --retry 3 -o "\$out" "\$url"
 EOF
 chmod 755 "$SHIM_DIR/wget"
+
+# Resolve the real curl NOW, before the shim below shadows it on PATH, so the
+# shim can fall through without re-executing itself. This script runs without
+# SHIM_DIR on PATH, so `command -v curl` yields the system binary; guard anyway
+# in case a prior run's shim is on PATH.
+REAL_CURL="$(command -v curl 2>/dev/null || true)"
+case "$REAL_CURL" in
+	"$SHIM_DIR"/*|"") REAL_CURL="/boot/system/bin/curl" ;;
+esac
+
+log "installing curl shim -> $SHIM_DIR/curl (real curl: $REAL_CURL)"
+cat > "$SHIM_DIR/curl" <<EOF
+#!/bin/sh
+# haiku-provision-native-builder curl shim: mirror of the wget shim for the
+# recipes that fetch with curl. Serve a matching tarball from the local seed
+# dir (for upstreams that stall from a Haiku box), else the real curl.
+#
+# curl names its output with -o/-O and takes the URL positionally, so we parse
+# enough of its grammar to find both -- and to skip the options that consume
+# the next argument (e.g. the N in --retry N) so their value is never mistaken
+# for the URL. On a seed miss we hand off to the real curl with a normalised
+# fetch (same tradeoff the wget shim makes on its curl fall-through).
+url=""; out=""
+while [ \$# -gt 0 ]; do case "\$1" in
+  -o|--output) out="\$2"; shift 2;;
+  --output=*) out="\${1#*=}"; shift;;
+  -O|--remote-name|--remote-name-all) shift;;
+  --retry|--retry-delay|--retry-max-time|--connect-timeout|--max-time|\\
+  -H|--header|-b|--cookie|-d|--data|-u|--user|-A|--user-agent|-e|--referer|\\
+  -x|--proxy|-C|--continue-at|-T|--upload-file|-K|--config) shift 2;;
+  --*=*) shift;; -*) shift;; *) url="\$1"; shift;; esac; done
+[ -n "\$url" ] || exec "$REAL_CURL" "\$@"
+f="\$(basename "\$url")"; f="\${f%%\\?*}"; f="\${f%%#*}"
+[ -n "\$out" ] || out="\$f"
+if [ -f "$SEED_DIR/\$f" ]; then
+  cp "$SEED_DIR/\$f" "\$out"; echo "[shim] served \$f from seed"; exit 0
+fi
+exec "$REAL_CURL" -fL --retry 3 -o "\$out" "\$url"
+EOF
+chmod 755 "$SHIM_DIR/curl"
 
 case ":$PATH:" in
 	*":$SHIM_DIR:"*) : ;;
