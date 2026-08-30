@@ -40,5 +40,29 @@ See `native-ec2-builds.md` for the full working provisioning + build sequence.
   (`--block-device-mappings`) + first-boot `partition_grow` + `resizefs`.
 - Root is 20 GiB (tight; a single package build fits, larger closures will not).
 
-_(Append as more surface during builds — e.g. per-recipe build tools like `bison`, `flex`,
-`bash_completion`, `setuptools_python310`, discovered building glib2.)_
+## Repo gaps found building the sdl2_ttf chain (2026-08-30)
+
+Not lean-AMI gaps but **DeBeOS repo gaps** — packages/subpackages missing from
+`packages.debene.dev`, forcing per-build workarounds. Publishing these (many already exist
+in the S3 build pool) is the high-leverage systematic fix:
+
+- **`icu74_devel` is not in the repo** — only `icu74_devel-74.1_bootstrap` exists in the
+  pool. harfbuzz (and anything needing ICU headers) can't resolve `devel:libicuuc` from the
+  repo; worked around by `debeos-ssm-agent s3 cp`-ing the bootstrap devel into the builder's
+  `packages/`. Same likely true for other `*_devel` subpackages the audit found in the pool
+  but never published.
+- **`gtk-doc` / `docbook_xml` / `docbook_xsl` are not in the repo** — so full HTML docs for
+  docs-using ports (harfbuzz, glib2, …) can't be built without building those first. Docs
+  were disabled (they are not a functional feature); gobject/introspection kept.
+
+## Hazard: installing repo packages onto a builder can break its toolchain
+
+`pkgman install <repo pkg>` on the builder triggered the bootstrap→DeBeOS **vendor change**,
+which shuffled the gcc packages and left `gcc` unable to exec `cc1` ("cannot execute 'cc1'").
+So the smoke-test dlopen (which needs gcc) failed on an otherwise-working builder. Keep the
+build toolchain and the "install from repo to test" step on **separate** instances, or bake
+a DeBeOS-vendored base so no vendor change is ever needed.
+
+_(Per-recipe build tools also surfaced and were pkgman-installed: `bison`, `flex`,
+`bash_completion`, `setuptools_python310`/`_python3.14`, `autoconf`/`automake`/`libtool` for
+sdl2_ttf, `docbook`/`itstool`/`perl`/`xsltproc` attempted for gtk-doc.)_

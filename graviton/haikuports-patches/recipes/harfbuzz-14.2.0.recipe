@@ -62,7 +62,22 @@ SUPPLEMENTS="
 	lib:libfreetype$secondaryArchSuffix
 "
 
+SUMMARY_glib="$SUMMARY (glib)"
+DESCRIPTION_glib="$DESCRIPTION (glib)"
 
+PROVIDES_glib="
+	harfbuzz${secondaryArchSuffix}_glib = $portVersion compat >= 0.9
+	lib:libharfbuzz_gobject$secondaryArchSuffix = $libVersionCompat
+	devel:libharfbuzz_gobject$secondaryArchSuffix = $libVersionCompat
+	"
+REQUIRES_glib="
+	haiku$secondaryArchSuffix
+	harfbuzz$secondaryArchSuffix == $portVersion
+	lib:libfreetype$secondaryArchSuffix
+	lib:libglib_2.0$secondaryArchSuffix
+	lib:libgobject_2.0$secondaryArchSuffix
+	lib:libgraphite2$secondaryArchSuffix
+	"
 
 PROVIDES_devel="
 	harfbuzz${secondaryArchSuffix}_devel = $portVersion compat >= 0.9
@@ -76,15 +91,19 @@ PROVIDES_devel="
 REQUIRES_devel="
 	harfbuzz$secondaryArchSuffix == $portVersion base
 	devel:libfreetype$secondaryArchSuffix
+	devel:libglib_2.0$secondaryArchSuffix
+	devel:libgobject_2.0$secondaryArchSuffix
 	devel:libgraphite2$secondaryArchSuffix
 	devel:libicuuc$secondaryArchSuffix
 	"
 
 BUILD_REQUIRES="
 	haiku${secondaryArchSuffix}_devel
-	# graviton: docs off (no pygments_python310)
 	devel:libfreetype$secondaryArchSuffix
+	devel:libgirepository_1.0$secondaryArchSuffix
+	devel:libglib_2.0$secondaryArchSuffix
 	devel:libgraphite2$secondaryArchSuffix
+	devel:libgobject_2.0$secondaryArchSuffix
 	devel:libicuuc$secondaryArchSuffix >= 74
 	"
 BUILD_PREREQUIRES="
@@ -119,9 +138,9 @@ BUILD()
 		-Dcairo=disabled \
 		-Dglib=disabled \
 		-Dicu=enabled \
-		-Dintrospection=disabled \
+		-Dintrospection=enabled \
 		-Dgraphite2=enabled \
-		-Dgobject=disabled \
+		-Dgobject=enabled \
 		-Ddocs=disabled \
 		-Dtests=disabled \
 		-Dcpp_std=c++17 \
@@ -138,11 +157,12 @@ INSTALL()
 
 	# cleanup
 	mkdir -p $docDir
-	cp -R $prefix/share/* $docDir
+	[ -d $prefix/share ] && cp -R $prefix/share/* $docDir || true
 	rm -rf $prefix/share
 
 	prepareInstalledDevelLibs \
 		libharfbuzz \
+		libharfbuzz-gobject \
 		libharfbuzz-gpu \
 		libharfbuzz-icu \
 		libharfbuzz-raster \
@@ -151,6 +171,13 @@ INSTALL()
 
 	fixPkgconfig
 
+	# glib package
+	packageEntries glib \
+		"$dataDir" \
+		"$libDir"/girepository-1.0 \
+		"$libDir"/libharfbuzz-gobject.so* \
+		"$developLibDir"/pkgconfig/harfbuzz-gobject.pc \
+		"$developLibDir"/libharfbuzz-gobject.so*
 
 	# devel package
 	packageEntries devel \
@@ -163,20 +190,3 @@ TEST()
 {
 	ninja -C haiku_build test
 }
-
-# Added by haikuporter:
-SOURCE_URI='pkg:/boot/home/haikuports/input-source-packages/harfbuzz_source_rigged-14.2.0-1-arm64.hpkg'
-for i in {2..1000}; do
-	eval currentSrcUri=\$SOURCE_URI_$i
-	if [ -z "$currentSrcUri" ]; then
-		break
-	fi
-	eval SOURCE_URI_$i="$SOURCE_URI"
-done
-for i in {001..999}; do
-	eval currentSrcUri=\$SOURCE_URI_$i
-	if [ -z "$currentSrcUri" ]; then
-		break
-	fi
-	eval SOURCE_URI_$i="$SOURCE_URI"
-done
