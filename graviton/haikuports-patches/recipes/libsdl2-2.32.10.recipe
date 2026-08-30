@@ -1,0 +1,101 @@
+SUMMARY="Simple Direct Media Layer 2.0"
+DESCRIPTION="Simple DirectMedia Layer is a cross-platform development library \
+designed to provide low level access to audio, keyboard, mouse, joystick, and \
+graphics hardware via OpenGL and Direct3D. It is used by video playback \
+software, emulators, and popular games."
+HOMEPAGE="https://www.libsdl.org/"
+COPYRIGHT="1997-2025 Sam Lantinga"
+LICENSE="Zlib"
+REVISION="3"
+SOURCE_URI="https://www.libsdl.org/release/SDL2-$portVersion.tar.gz"
+CHECKSUM_SHA256="5f5993c530f084535c65a6879e9b26ad441169b3e25d789d83287040a9ca5165"
+PATCHES="libsdl2-$portVersion.patchset"
+SOURCE_DIR="SDL2-$portVersion"
+
+ARCHITECTURES="all"
+SECONDARY_ARCHITECTURES="x86"
+
+PROVIDES="
+	libsdl2$secondaryArchSuffix = $portVersion compat >= 2.0
+	lib:libSDL2_2.0$secondaryArchSuffix = 0.3200.10 compat >= 0
+	"
+REQUIRES="
+	haiku$secondaryArchSuffix
+	lib:libGL$secondaryArchSuffix
+	lib:libglu$secondaryArchSuffix
+	"
+
+PROVIDES_devel="
+	libsdl2${secondaryArchSuffix}_devel = $portVersion compat >= 2.0
+	cmd:sdl2_config$secondaryArchSuffix = $portVersion compat >= 2.0
+	devel:libSDL2$secondaryArchSuffix = 0.3200.10 compat >= 0
+	devel:libSDL2_2.0$secondaryArchSuffix = 0.3200.10 compat >= 0
+	devel:libSDL2main$secondaryArchSuffix
+	"
+REQUIRES_devel="
+	libsdl2$secondaryArchSuffix == $portVersion base
+	"
+
+BUILD_REQUIRES="
+	haiku${secondaryArchSuffix}_devel
+	devel:libgl$secondaryArchSuffix
+	devel:libglu$secondaryArchSuffix
+	"
+BUILD_PREREQUIRES="
+	cmd:cmake
+	cmd:gcc$secondaryArchSuffix
+	cmd:ld$secondaryArchSuffix
+	cmd:ninja
+	cmd:pkg_config$secondaryArchSuffix
+	"
+
+BUILD()
+{
+	maybeDisableOptimizations=
+	if [ $targetArchitecture == x86_gcc2 ]; then
+		maybeDisableOptimizations="-DSDL_SSE3=OFF"
+	fi
+
+	# graviton/DeBeOS: no media_kit -- this image ships no libmedia.so or
+	# libgame.so, so SDL2 Haiku native audio (BSoundPlayer) and joystick
+	# (BJoystick) cannot link. Drop both libs from the Haiku link list and
+	# disable the two subsystems that need them; video/render(libGL)/events
+	# /timers/filesystem are unaffected.
+	sed -i 's/root be media game device textencoding/root be device textencoding/' CMakeLists.txt
+	# graviton/DeBeOS: set_mouse_position() lives only in the absent game kit
+	# (libgame.so, <game/WindowScreen.h>); drop the relative-mode re-center call
+	# so the video backend links. Relative mouse mode loses pointer re-centering.
+	sed -i 's#set_mouse_position((winPosX.*));#/* graviton/DeBeOS: no libgame -> set_mouse_position unavailable */#' \
+		src/video/haiku/SDL_BApp.h src/main/haiku/SDL_BApp.h
+
+	cmake . -Bbuild -GNinja $cmakeDirArgs \
+		-DSDL_STATIC=OFF -DSDL_RPATH=OFF \
+		-DSDL_AUDIO=OFF -DSDL_JOYSTICK=OFF -DSDL_HAPTIC=OFF \
+		-DCMAKE_BUILD_TYPE=Release \
+		$maybeDisableOptimizations
+	ninja -C build
+}
+
+INSTALL()
+{
+	ninja -C build install
+
+	sed -i 's,${_IMPORT_PREFIX}/lib',$developDir/lib, \
+		$libDir/cmake/SDL2/SDL2mainTargets-release.cmake
+	rm $libDir/libSDL2_test.a
+	rm $libDir/cmake/SDL2/SDL2testTargets-release.cmake
+
+	# devel package
+	prepareInstalledDevelLibs \
+		libSDL2 \
+		libSDL2-2.0 \
+		libSDL2main
+
+	fixPkgconfig
+	fixDevelopLibDirReferences $binDir/sdl2-config
+
+	packageEntries devel \
+		$developDir $binDir/sdl2-config $dataDir $libDir/cmake
+
+	rm -rf $prefix/bin
+}
