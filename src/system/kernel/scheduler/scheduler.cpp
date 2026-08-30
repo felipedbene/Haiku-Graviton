@@ -28,6 +28,7 @@
 #include <smp.h>
 #include <timer.h>
 #include <util/Random.h>
+#include <util/ThreadAutoLock.h>
 
 #include "scheduler_common.h"
 #include "scheduler_cpu.h"
@@ -527,6 +528,46 @@ scheduler_on_thread_init(Thread* thread)
 		thread->scheduler_data->Init(CoreEntry::GetCore(cpuID));
 	} else
 		thread->scheduler_data->Init();
+}
+
+
+/*!	Pins a still-suspended, never-scheduled kernel thread to \a cpu.
+
+	This is the cross-CPU counterpart to thread_pin_to_current_cpu(): a caller
+	that spawns a worker for a specific CPU (an interrupt's target CPU, say) has
+	no way to run on that CPU first, so it needs to place the thread before
+	resuming it. The mechanism is exactly the idle-thread arm of
+	scheduler_on_thread_init() above -- a positive pinned_to_cpu makes enqueue()
+	target previous_cpu's run queue, and ThreadData::Init(CoreEntry*) supplies
+	the non-NULL Core() that enqueue() asserts on for a pinned thread. Because we
+	only ever touch a thread that has never been enqueued (Core() == NULL,
+	suspended), no run queue references it yet and the reinitialization is safe.
+*/
+status_t
+scheduler_pin_thread_to_cpu(thread_id threadID, int32 cpu)
+{
+	if (cpu < 0 || cpu >= smp_get_num_cpus() || gCPU[cpu].disabled)
+		return B_BAD_VALUE;
+
+	Thread* thread = Thread::GetAndLock(threadID);
+	if (thread == NULL)
+		return B_BAD_THREAD_STATE;
+	BReference<Thread> threadReference(thread, true);
+	ThreadLocker threadLocker(thread, true);
+
+	// state is protected by the scheduler lock.
+	InterruptsSpinLocker schedulerLocker(thread->scheduler_lock);
+
+	if (thread->state != B_THREAD_SUSPENDED
+		|| thread->scheduler_data->Core() != NULL) {
+		return B_BAD_THREAD_STATE;
+	}
+
+	thread->previous_cpu = &gCPU[cpu];
+	thread->pinned_to_cpu = 1;
+	thread->scheduler_data->Init(CoreEntry::GetCore(cpu));
+
+	return B_OK;
 }
 
 
