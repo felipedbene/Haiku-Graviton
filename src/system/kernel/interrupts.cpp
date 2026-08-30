@@ -767,7 +767,7 @@ free_io_interrupt_vectors(int32 count, int32 startVector)
 }
 
 
-void
+int32
 assign_io_interrupt_to_cpu(int32 vector, int32 newCPU)
 {
 	ASSERT(sVectors[vector].type == INTERRUPT_TYPE_IRQ);
@@ -778,7 +778,7 @@ assign_io_interrupt_to_cpu(int32 vector, int32 newCPU)
 		newCPU = assign_cpu();
 
 	if (newCPU == oldCPU)
-		return;
+		return oldCPU;
 
 	// Program the routing first. The return value is the CPU the interrupt
 	// will actually target: on success it matches the request; if it differs,
@@ -793,7 +793,7 @@ assign_io_interrupt_to_cpu(int32 vector, int32 newCPU)
 				"(vector %" B_PRId32 " stays on CPU %" B_PRId32 "); disabling "
 				"the IRQ rebalancer\n", vector, oldCPU);
 		}
-		return;
+		return oldCPU;
 	}
 
 	ASSERT(oldCPU != -1);
@@ -830,6 +830,8 @@ assign_io_interrupt_to_cpu(int32 vector, int32 newCPU)
 		dprintf("interrupts: rebalanced vector %" B_PRId32 " from CPU %" B_PRId32
 			" to CPU %" B_PRId32 "\n", vector, oldCPU, targetCPU);
 	}
+
+	return targetCPU;
 }
 
 
