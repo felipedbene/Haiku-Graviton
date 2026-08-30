@@ -23,17 +23,22 @@ Build real software **on DeBeOS**, not just cross-compiled for it.
    real crates from crates.io on the machine; the BSD socket layer, TLS and DNS are
    all sufficient. (A pure-Rust TLS stack, avoiding the C crypto libraries, is a
    nice-to-have still open.)
-4. **Open:** a repeatable `crate name → native binary + hpkg` script, and — the current
-   blocker for *large* native builds — **filesystem/toolchain reliability under heavy
-   load**. Driving a big native Rust build surfaced a page-writer / BFS defect that
-   corrupts freshly written files under concurrent I/O (and a linker limit on very
-   large objects). Fixing the filesystem reliability is the active priority; it also
-   directly advances Stage 4's crash-safety work.
+4. **Filesystem reliability under heavy load — RESOLVED.** Driving a big native Rust
+   build surfaced a page-writer / BFS defect that corrupted freshly written files under
+   concurrent I/O; that fix is **merged**, and it also advanced Stage 4's crash-safety
+   work (periodic writeback now bounds what a forced stop can lose). **Still open:** a
+   repeatable `crate name → native binary + hpkg` script, and a linker limit on very
+   large objects — worked around today with `--no-gc-sections`, with a newer binutils in
+   the toolchain the proper fix.
 
 ## Stage 2 — Package ecosystem
-- **Repository:** start with a flat directory of hpkg files plus a manual index that
-  `pkgman`/HaikuDepot can point at; then automate builds on release; then decide
-  whether binaries bundle their runtime libraries or rely on a system base package.
+- **Repository — DONE.** A hosted DeBeOS package repository is live, with `pkgman` and
+  HaikuDepot pointing at it and remote install working over both HTTP and HTTPS; new
+  packages are published on release. **Known hazard, still open:** an image must ship
+  *only* the DeBeOS repository as its update source — leaving an upstream base
+  repository in place lets an update replace the DeBeOS-patched kernel and boot loader
+  with stock packages that do not boot this hardware. Still to decide: whether binaries
+  bundle their runtime libraries or rely on a system base package.
 - **Porting playbook:** a living "symptom → root cause → fix" document plus a starter
   target-spec template, so per-port flags aren't re-derived by hand each time.
 - **Critical mass of tools:** uutils/coreutils (one port, dozens of utilities), then

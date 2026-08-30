@@ -3,6 +3,14 @@
 > ## STOP. This project is CANCELLED as of 2026-08-24. This document is a design that
 > ## was never built and must not be built.
 >
+> **Confirmed again 2026-08-30.** A later Stage 3/4 attempt did build the enabling
+> infrastructure (interrupts now land on any CPU; the driver can request more io
+> queues) and measured it end to end: correct, safe, no regression — and a conclusive
+> **no-win**. Receive still caps around 10 Gbit/s with the box ~86% idle, because the
+> ceiling is a single-reader serialization in the network stack's receive path, not the
+> queue count. The fix is a receive-path rework, not more queues — exactly as the
+> analysis below concluded. Queue-count work stays cancelled.
+>
 > **The deciding control, which post-dates everything below:** **Linux, forced down to
 > ONE ENA queue, does 29826 Mbit/s — against 29823 on eight** (`c7g.16xlarge`,
 > interleaved A/B, four runs; `ena-multiqueue-headroom.md` §5). One queue already

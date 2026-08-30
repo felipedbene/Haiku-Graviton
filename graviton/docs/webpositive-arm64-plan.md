@@ -1,7 +1,12 @@
 # WebPositive on HaikuWebKit for arm64 — scoping and de-risking
 
-Status: **investigation complete, GO (staged)**. Nothing has been built.
-Date of evidence: 2026-08-25.
+Status: **BUILT AND RENDERS (2026-08-25)** — HaikuWebKit 1.10.0 compiles with GCC on
+arm64 and WebPositive renders JavaScript plus modern CSS (grid, flexbox, gradients,
+transforms), screenshot-verified. The "GO (staged) / nothing has been built" verdict
+this document was written to reach is therefore **superseded**: the build took ~55 min
+(the estimates below ran 3-5x pessimistic). Still open: `example.com`'s body does not
+paint, and no image has been baked or promoted with it yet.
+Date of original scoping evidence: 2026-08-25.
 
 The current browser on arm64 is `netsurf-3.11` (built, works, screenshot-verified).
 It has no modern JS engine and no modern CSS, which is why this exists. Firefox is
