@@ -74,6 +74,57 @@ aws ssm send-command --document-name AWS-RunShellScript --output-s3-bucket-name 
 
 Publish to the repo with `graviton/scripts/haiku-repo-publish-remote` as before.
 
+## Reproduced sequence — lean AMI → builder → glib2 (2026-08-30, RC=0)
+
+This is the exact, working sequence. glib2 is the proof case: it "blocked" in the QEMU
+guests on a half-wired python3.14/gobject-introspection; on native EC2 it builds clean
+(produces `glib2-2.88.1-8` + `gobject_introspection-1.86.0-8` + devels).
+
+**1. Launch** a Graviton instance from `$(aws ssm get-parameter --name
+/haiku-graviton/canonical-ami-id ...)` (see above). For real builds, give it a big root via
+`--block-device-mappings` (online grow is NOT seen — Haiku caches disk size at boot), then
+`partition_grow` + `resizefs` at first boot.
+
+**2. Provision the toolchain** (all from the DeBeOS repo; accept the bootstrap→DeBeOS
+vendor change — pkgman "solution 1"; non-interactive: `printf '1\n…\ny\n' | pkgman install`).
+Install **per-package** (one bad name aborts a batch):
+
+```
+gcc binutils make cmake meson ninja git diffutils patch gawk wget haiku_devel
+python3.14 pkgconf          # pkg-config is provided by 'pkgconf', NOT 'pkgconfig'
+ln -sf /boot/system/bin/python3.14 /boot/home/config/non-packaged/bin/python3   # env python3
+```
+
+**3. haikuporter** (not packaged — clone it):
+```
+cd /boot/home
+git clone --depth=1 https://github.com/haikuports/haikuporter.git
+git clone --depth=1 https://github.com/haikuports/haikuports.git
+cp haikuporter/haikuports-sample.conf config/settings/haikuports.conf   # sample is in the haikuporter repo
+#   set PACKAGER="DeBeOS <…>" and TREE_PATH="/boot/home/haikuports"
+ln -sf /boot/home/haikuporter/haikuporter config/non-packaged/bin/haikuporter
+```
+
+**4. Build a port — install its deps from the repo, then build the leaf.** pkgman accepts
+`devel:`/`cmd:` resolvables directly. Do **NOT** use `--all-dependencies` (it hits
+"Port X depends on itself" on packages whose subpackage — e.g. gobject_introspection — is
+also a build-require). Read the recipe's `BUILD_REQUIRES` + `BUILD_PREREQUIRES` and install:
+
+```
+# glib2 worked example (recipe pins python 3.10 for gobject-introspection):
+pkgman install devel:libffi devel:libiconv devel:libintl devel:libpcre2_8 devel:libxml2 devel:libz
+pkgman install bash_completion setuptools_python3.14 setuptools_python310 python3.10 \
+               cmd:bison cmd:flex cmd:xgettext cmd:pkg_config
+export PATH=/boot/home/config/non-packaged/bin:$PATH
+cd /boot/home/haikuports && haikuporter -y glib2          # sources download over real internet
+```
+
+First `haikuporter` run scans all ~7100 recipes to build dependency-infos (one-time, slow).
+Harvest with `haiku-mgmt-agent s3 cp .../packages/<pkg>.hpkg s3://…` and publish as above.
+
+> The per-package prereq chase above is what a baked builder AMI eliminates — bake the
+> toolchain + a common prereq set so builds start clean.
+
 ## Standing rule
 
 Do **not** ship feature-capped builds (a backend/loader/subpackage disabled just to go
