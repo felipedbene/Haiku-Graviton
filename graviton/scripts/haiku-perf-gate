@@ -21,6 +21,16 @@
 #   - The peer and the driver of the test are the metal builder, reached with
 #     SSM. It already holds the ssh key for the Haiku nodes, the peer script and
 #     a working jumbo-capable interface, so nothing has to be installed anywhere.
+#     Because everything the gate learns about the candidate is learned *through*
+#     that builder -- readiness is "sshd answers, asked from the builder" and the
+#     throughput peer is the builder itself -- a builder that is stopped or whose
+#     SSM agent is not answering makes the candidate unobservable. That is a fault
+#     in the apparatus, not in the image, so it is checked up front (see
+#     ensure_builder_reachable) and, if it recurs mid-run, reported as an
+#     apparatus failure rather than misread as "the candidate never booted". The
+#     original version had no such check: with the builder stopped, ssm-run
+#     returned nothing, and the gate concluded the candidate had failed to bring
+#     sshd up and failed a perfectly healthy image.
 #   - The instance is terminated by an EXIT trap, so a failure part way through
 #     cannot leak a running instance. That matters more than usual here: this is
 #     unattended, and the failure path is the likely path.
@@ -48,7 +58,16 @@
 # run -- see graviton/pipeline/lib/haiku-graviton-pipeline-stack.ts):
 #   HG_BUILDER_INSTANCE   SSM-managed builder that acts as peer and driver
 #                         (**required** -- an instance id cannot be derived, and
-#                         guessing one by tag risks driving the wrong machine)
+#                         guessing one by tag risks driving the wrong machine).
+#                         It must be running and answering SSM before the gate
+#                         can observe the candidate at all; the gate does not
+#                         start it (that power is deliberately withheld from the
+#                         Test stage's role -- see the pipeline stack), so bring
+#                         it up out of band, or point this at an always-on builder.
+#   HG_BUILDER_WAIT_SECS  budget for the builder to become reachable over SSM at
+#                         the start of a run (default 300); a run cannot proceed
+#                         until it does, but this is patient in case the builder
+#                         is mid-boot when the gate starts
 #   HG_TEST_SUBNET        subnet to launch the candidate in
 #   HG_TEST_SG            security group for the candidate (**required**)
 #   HG_TEST_TYPE          instance type (default c7g.large)
@@ -78,6 +97,7 @@ MIN_TX="${HG_MIN_TX_MBPS:-2000}"
 BYTES="${HG_TEST_BYTES:-512M}"
 KEY_NAME="${HG_TEST_KEY:-haiku-uaf-ed25519}"
 BOOT_WAIT="${HG_BOOT_WAIT_SECS:-420}"
+BUILDER_WAIT="${HG_BUILDER_WAIT_SECS:-300}"
 STOP_WAIT="${HG_STOP_WAIT_SECS:-600}"
 START_WAIT="${HG_START_WAIT_SECS:-300}"
 CLEAN_STOP="${HG_CLEAN_STOP_SECS:-180}"
@@ -115,6 +135,61 @@ cleanup() {
 	STOP
 }
 trap cleanup EXIT
+
+# ----------------------------------------------------- builder reachability
+# Everything this gate learns about the candidate travels through the builder:
+# readiness is an ssh from the builder to the candidate, and the throughput peer
+# is the builder itself. So a builder that is stopped, or whose SSM agent is not
+# answering, does not make the candidate look slow or broken -- it makes the
+# candidate *invisible*, and every downstream check reads a silence it cannot
+# distinguish from a dead node.
+#
+# That is exactly the failure that fell through before: with the builder stopped,
+# ssm-run returned no output, wait_for_sshd timed out, and the gate failed a
+# healthy image with "candidate never brought sshd up". A verdict about the image
+# was drawn from a fact about the apparatus.
+#
+# So confirm the channel before launching anything. Two conditions, because both
+# are prerequisites and they fail differently: the instance must be `running`
+# (checked with DescribeInstances, which the role already has), and an ssm-run
+# round trip must actually complete (the SSM agent can lag the EC2 state by a
+# minute or two after a start). This is patient rather than instant -- the builder
+# may be mid-boot when a bake reaches this stage -- but it is bounded, and it runs
+# *before* the candidate is launched, so a builder that never comes back cannot
+# leak an instance and cannot be mistaken for a candidate that never booted.
+#
+# The gate deliberately does not start the builder itself: the Test stage's role
+# is scoped so it cannot stop or start that machine (the whole project drives it
+# over SSM, and an unattended stage with that power could halt it out from under
+# everyone -- see graviton/pipeline/lib/haiku-graviton-pipeline-stack.ts). Bring
+# it up out of band, or point HG_BUILDER_INSTANCE at an always-on builder.
+ensure_builder_reachable() {
+	local deadline=$((SECONDS + BUILDER_WAIT)) state out
+	say "checking the builder $BUILDER is up and answering SSM (it drives and peers every check)"
+	while [ "$SECONDS" -lt "$deadline" ]; do
+		state=$(aws --region "$REGION" ec2 describe-instances --instance-ids "$BUILDER" \
+			--query 'Reservations[0].Instances[0].State.Name' --output text 2>/dev/null)
+		if [ "$state" = "running" ]; then
+			# EC2 says running; now prove the SSM channel actually round-trips,
+			# because ssm-run silently returning nothing is the precise shape of the
+			# original bug. A trivial echo is enough -- what matters is that output
+			# comes back at all.
+			out=$("$SSM_RUN" "$BUILDER" -t 60 -q 2>/dev/null <<-'PING'
+				echo GATE_BUILDER_OK
+			PING
+			)
+			printf '%s' "$out" | grep -q GATE_BUILDER_OK && { say "builder reachable over SSM"; return 0; }
+		fi
+		say "  builder not reachable yet (state ${state:-unknown}, $((deadline - SECONDS))s of budget left)"
+		sleep 15
+	done
+	die "the builder $BUILDER is not reachable over SSM (last EC2 state ${state:-unknown}).
+  This is an APPARATUS failure, NOT a verdict on $AMI: the gate reaches the
+  candidate only through this builder, so with it down nothing can be observed.
+  No candidate was launched. Start HG_BUILDER_INSTANCE (or point it at an
+  always-on builder) and re-run; do not read this as a failed image."
+}
+ensure_builder_reachable
 
 # ------------------------------------------------------------------ launch
 say "launching $TEST_TYPE from $AMI"
@@ -190,29 +265,54 @@ recycle_instance() {
 }
 
 
+# WAIT_CHANNEL_OK records whether the builder's SSM channel answered at all during
+# the most recent wait, regardless of what the candidate did. A silent channel and
+# a candidate with no sshd are indistinguishable in the raw output -- both leave
+# `out` empty -- yet they demand opposite verdicts: one is an apparatus fault, the
+# other a failed image. The remote script therefore always ends with a sentinel
+# the builder echoes even when the ssh to the candidate fails, so its presence
+# means "the builder ran this" and its absence means "the channel is dead".
+WAIT_CHANNEL_OK=0
 wait_for_sshd() {
 	local why="$1" budget="$2"
 	local deadline=$((SECONDS + budget)) attempt=0 out
+	WAIT_CHANNEL_OK=0
 	while [ "$SECONDS" -lt "$deadline" ]; do
 		attempt=$((attempt + 1))
 		out=$("$SSM_RUN" "$BUILDER" -t 120 -q 2>/dev/null <<-EOF
 			SO="-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ConnectTimeout=8 -o LogLevel=ERROR -i /home/ubuntu/.ssh/haiku-ed25519"
 			sudo -u ubuntu ssh -n \$SO baron@$IP 'uname -a' 2>/dev/null && echo GATE_READY
+			echo GATE_CHANNEL_OK
 		EOF
 		)
+		printf '%s' "$out" | grep -q GATE_CHANNEL_OK && WAIT_CHANNEL_OK=1
 		if printf '%s' "$out" | grep -q GATE_READY; then
 			say "$why: node answers -- $(printf '%s' "$out" | head -1)"
 			return 0
 		fi
-		say "  $why: not ready yet (attempt $attempt, $((deadline - SECONDS))s of budget left)"
+		if [ "$WAIT_CHANNEL_OK" = 1 ]; then
+			say "  $why: not ready yet (attempt $attempt, $((deadline - SECONDS))s of budget left)"
+		else
+			say "  $why: builder channel gave no output (attempt $attempt, $((deadline - SECONDS))s of budget left)"
+		fi
 		sleep 20
 	done
 	return 1
 }
 
 say "waiting for sshd (a node that never answers is a boot failure)"
-wait_for_sshd "first boot" "$BOOT_WAIT" \
-	|| die "candidate $AMI never brought sshd up -- treating as a failed image"
+if ! wait_for_sshd "first boot" "$BOOT_WAIT"; then
+	# Only a builder that was answering the whole time makes a silent candidate a
+	# statement about the image. If the channel itself never spoke, the builder
+	# went away after the up-front check and this run measured nothing -- an
+	# apparatus failure, not a failed image.
+	[ "$WAIT_CHANNEL_OK" = 1 ] \
+		|| die "the builder stopped answering over SSM during the first-boot wait.
+  This is an APPARATUS failure, NOT a verdict on $AMI: with the builder gone the
+  candidate cannot be reached at all. Confirm the builder is up and re-run; do not
+  read this as a failed image."
+	die "candidate $AMI never brought sshd up -- treating as a failed image"
+fi
 
 # ------------------------------------------------------ mimeset regression check
 # `mimeset` was a complete silent no-op on every headless Haiku: it constructs a
