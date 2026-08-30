@@ -474,6 +474,14 @@ install_io_interrupt_handler(int32 vector, interrupt_handler handler, void *data
 		cpuID = arch_int_assign_to_cpu(vector, cpuID);
 		sVectors[vector].assigned_cpu->cpu = cpuID;
 
+		// Diagnostic: record where each IRQ vector actually landed. On a
+		// platform that can route per-vector affinity (a GICv3 ITS steering
+		// each MSI to its own CPU) this is how the spread is observed on a
+		// headless host -- the serial console shows, e.g., the ENA io-queue
+		// vector on a non-boot CPU rather than everything piled on CPU 0.
+		dprintf("io-interrupt: vector %" B_PRId32 " assigned to CPU %" B_PRId32
+			"\n", vector, cpuID);
+
 		cpu_ent* cpu = &gCPU[cpuID];
 		SpinLocker _(cpu->irqs_lock);
 		atomic_add(&sVectors[vector].assigned_cpu->handlers_count, 1);
