@@ -74,6 +74,13 @@ aws ssm send-command --document-name AWS-RunShellScript --output-s3-bucket-name 
 
 Publish to the repo with `graviton/scripts/haiku-repo-publish-remote` as before.
 
+## Canonical driver
+
+`graviton/scripts/haiku-nativebuild <port>...` encodes the sequence below as a hands-off
+loop (build → auto-install whatever repo dep haikuporter reports missing → retry → harvest
+to the pool). Launch a builder from `aws ssm get-parameter --name /haiku-graviton/builder-ami-id`
+(tag `builder-canonical=true`) and drive it over SSM.
+
 ## Reproduced sequence — lean AMI → builder → glib2 (2026-08-30, RC=0)
 
 This is the exact, working sequence. glib2 is the proof case: it "blocked" in the QEMU
