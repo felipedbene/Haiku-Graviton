@@ -15,7 +15,9 @@
 
 #include <net_device.h>
 
+#include <kscheduler.h>
 #include <lock.h>
+#include <smp.h>
 #include <util/AutoLock.h>
 
 #include <KernelExport.h>
@@ -41,20 +43,31 @@ static DeviceInterfaceList sInterfaces;
 static uint32 sDeviceIndex;
 
 
-/*!	A service thread for each device interface. It just reads as many packets
-	as available, deframes them, and puts them into the receive queue of the
-	device interface.
+/*!	The body shared by the queue-0 reader (device_reader_thread) and the
+	per-queue readers (device_queue_reader_thread). It reads as many packets as
+	available from one receive queue, deframes them, and puts them into that
+	queue's fifo.
+
+	\a queue is the queue index: 0 uses the legacy single-queue receive_data()
+	entry (so the compiled single-queue path is unchanged), any higher index
+	uses receive_data_queue(). The fifo, its watermark, and the drop counters
+	are passed in so each queue owns its own -- the drop counters are bumped
+	without atomics, which is safe only because exactly one reader touches each.
 */
 static status_t
-device_reader_thread(void* _interface)
+reader_loop(net_device_interface* interface, uint32 queue, net_fifo* fifo,
+	net_fifo_watermark* diagnostics, uint64* deframeDropped,
+	uint64* enqueueDropped)
 {
-	net_device_interface* interface = (net_device_interface*)_interface;
 	net_device* device = interface->device;
 	status_t status = B_OK;
 
 	while ((device->flags & IFF_UP) != 0) {
 		net_buffer* buffer;
-		status = device->module->receive_data(device, &buffer);
+		if (queue == 0)
+			status = device->module->receive_data(device, &buffer);
+		else
+			status = device->module->receive_data_queue(device, queue, &buffer);
 		if (status == B_OK) {
 			// feed device monitors
 			if (atomic_get(&interface->monitor_count) > 0)
@@ -65,20 +78,19 @@ device_reader_thread(void* _interface)
 			if (interface->deframe_func(interface->device, buffer) != B_OK) {
 				gNetBufferModule.free(buffer);
 				atomic_add((int32*)&device->stats.receive.dropped, 1);
-				interface->receive_deframe_dropped++;
+				(*deframeDropped)++;
 				continue;
 			}
 
 			const size_t packetSize = buffer->size;
-			status = fifo_enqueue_buffer_tracked(&interface->receive_queue,
-				buffer, &interface->receive_queue_diagnostics);
+			status = fifo_enqueue_buffer_tracked(fifo, buffer, diagnostics);
 			if (status == B_OK) {
 				atomic_add((int32*)&device->stats.receive.packets, 1);
 				atomic_add64((int64*)&device->stats.receive.bytes, packetSize);
 			} else {
 				gNetBufferModule.free(buffer);
 				atomic_add((int32*)&device->stats.receive.dropped, 1);
-				interface->receive_enqueue_dropped++;
+				(*enqueueDropped)++;
 			}
 		} else if (status == B_DEVICE_NOT_FOUND) {
 			device_removed(device);
@@ -96,17 +108,51 @@ device_reader_thread(void* _interface)
 }
 
 
+/*!	A service thread for each device interface. It just reads as many packets
+	as available, deframes them, and puts them into the receive queue of the
+	device interface.
+*/
 static status_t
-device_consumer_thread(void* _interface)
+device_reader_thread(void* _interface)
 {
 	net_device_interface* interface = (net_device_interface*)_interface;
+	return reader_loop(interface, 0, &interface->receive_queue,
+		&interface->receive_queue_diagnostics,
+		&interface->receive_deframe_dropped,
+		&interface->receive_enqueue_dropped);
+}
+
+
+static status_t
+device_queue_reader_thread(void* _queue)
+{
+	net_device_interface_queue* queue = (net_device_interface_queue*)_queue;
+	return reader_loop(queue->interface, queue->index, &queue->receive_queue,
+		&queue->receive_queue_diagnostics, &queue->receive_deframe_dropped,
+		&queue->receive_enqueue_dropped);
+}
+
+
+/*!	The dispatch body shared by the queue-0 consumer (device_consumer_thread)
+	and the per-queue consumers (device_queue_consumer_thread). It drains one
+	fifo and hands each buffer to the first matching receive handler.
+
+	The single-queue consumer (\a multiqueue false) keeps the recursive
+	receive_lock across the handler walk exactly as it always has. A multiqueue
+	consumer instead takes only the receive_handlers_lock for read, so N
+	consumers do not serialize on receive_lock; mutators exclude both by taking
+	receive_lock and the write lock together (D30).
+*/
+static status_t
+consumer_loop(net_device_interface* interface, net_fifo* fifo,
+	net_fifo_watermark* diagnostics, bool multiqueue)
+{
 	net_device* device = interface->device;
 	net_buffer* buffer;
 
 	while (atomic_get(&interface->ref_count) > 0) {
-		ssize_t status = fifo_dequeue_buffer_tracked(&interface->receive_queue, 0,
-			B_INFINITE_TIMEOUT, &buffer,
-			&interface->receive_queue_diagnostics);
+		ssize_t status = fifo_dequeue_buffer_tracked(fifo, 0,
+			B_INFINITE_TIMEOUT, &buffer, diagnostics);
 		if (status != B_OK) {
 			if (status == B_INTERRUPTED)
 				continue;
@@ -128,8 +174,12 @@ device_consumer_thread(void* _interface)
 			buffer->index = interface->device->index;
 
 			// Find handler for this packet
-
-			RecursiveLocker locker(interface->receive_lock);
+			RecursiveLocker recursiveLocker;
+			ReadLocker readLocker;
+			if (multiqueue)
+				readLocker.SetTo(interface->receive_handlers_lock, false);
+			else
+				recursiveLocker.SetTo(interface->receive_lock, false);
 
 			DeviceHandlerList::Iterator iterator
 				= interface->receive_funcs.GetIterator();
@@ -150,6 +200,24 @@ device_consumer_thread(void* _interface)
 	}
 
 	return B_OK;
+}
+
+
+static status_t
+device_consumer_thread(void* _interface)
+{
+	net_device_interface* interface = (net_device_interface*)_interface;
+	return consumer_loop(interface, &interface->receive_queue,
+		&interface->receive_queue_diagnostics, false);
+}
+
+
+static status_t
+device_queue_consumer_thread(void* _queue)
+{
+	net_device_interface_queue* queue = (net_device_interface_queue*)_queue;
+	return consumer_loop(queue->interface, &queue->receive_queue,
+		&queue->receive_queue_diagnostics, true);
 }
 
 
@@ -189,6 +257,8 @@ allocate_device_interface(net_device* device, net_device_module_info* module)
 
 	recursive_lock_init(&interface->receive_lock, "device interface receive");
 	recursive_lock_init(&interface->monitor_lock, "device interface monitors");
+	rw_lock_init(&interface->receive_handlers_lock,
+		"device interface receive handlers");
 
 	char name[128];
 	snprintf(name, sizeof(name), "%s receive queue", device->name);
@@ -208,6 +278,8 @@ allocate_device_interface(net_device* device, net_device_module_info* module)
 	interface->monitor_count = 0;
 	interface->deframe_func = NULL;
 	interface->deframe_ref_count = 0;
+	interface->receive_queue_count = 1;
+	interface->queues = NULL;
 
 	snprintf(name, sizeof(name), "%s consumer", device->name);
 
@@ -228,6 +300,7 @@ allocate_device_interface(net_device* device, net_device_module_info* module)
 error2:
 	uninit_fifo(&interface->receive_queue);
 error1:
+	rw_lock_destroy(&interface->receive_handlers_lock);
 	recursive_lock_destroy(&interface->receive_lock);
 	recursive_lock_destroy(&interface->monitor_lock);
 	delete interface;
@@ -295,6 +368,25 @@ dump_device_interface(int argc, char** argv)
 		" other)\n", interface->receive_queue_diagnostics.fail_total,
 		interface->receive_queue_diagnostics.fail_nobufs,
 		interface->receive_queue_diagnostics.fail_other);
+
+	kprintf("receive_queue_cnt: %" B_PRIu32 "\n",
+		interface->receive_queue_count);
+	for (uint32 i = 1; i < interface->receive_queue_count; i++) {
+		net_device_interface_queue* queue = &interface->queues[i - 1];
+		kprintf("queue %" B_PRIu32 ": reader %" B_PRId32 " consumer %" B_PRId32
+			"\n", i, queue->reader_thread, queue->consumer_thread);
+		kprintf("  limit/current:   %" B_PRIuSIZE " / %" B_PRIuSIZE " bytes, %"
+			B_PRIu32 " packets\n", queue->receive_queue.max_bytes,
+			queue->receive_queue.current_bytes,
+			queue->receive_queue_diagnostics.current_packets);
+		kprintf("  peak:            %" B_PRIuSIZE " bytes, %" B_PRIu32
+			" packets\n", queue->receive_queue_diagnostics.peak_bytes,
+			queue->receive_queue_diagnostics.peak_packets);
+		kprintf("  dropped:         %" B_PRIu64 " deframe, %" B_PRIu64
+			" enqueue\n", queue->receive_deframe_dropped,
+			queue->receive_enqueue_dropped);
+	}
+
 	kprintf("receive_funcs:\n");
 	DeviceHandlerList::Iterator handlerIterator
 		= interface->receive_funcs.GetIterator();
@@ -431,6 +523,7 @@ put_device_interface(struct net_device_interface* interface)
 	device->module->uninit_device(device);
 	put_module(moduleName);
 
+	rw_lock_destroy(&interface->receive_handlers_lock);
 	recursive_lock_destroy(&interface->monitor_lock);
 	recursive_lock_destroy(&interface->receive_lock);
 	delete interface;
@@ -536,6 +629,55 @@ device_interface_monitor_receive(net_device_interface* interface,
 }
 
 
+/*!	Tears down the extra receive queues (indices 1..receive_queue_count-1) of a
+	multiqueue interface, freeing the array and restoring queue 0's fifo to the
+	single-queue budget. A no-op for a single-queue interface (queues == NULL).
+
+	Every extra queue must have a live fifo and thread ids that are either -1 or
+	a resumed thread (never a still-suspended one, which would never exit and so
+	could not be joined). Callers on the up() unwind path resume what they
+	spawned before calling here; on down() the threads are already running and
+	stop because IFF_UP is cleared / the driver fd is closed (readers) and the
+	fifo notify sem is deleted below (consumers).
+*/
+static void
+teardown_extra_receive_queues(net_device_interface* interface)
+{
+	if (interface->queues == NULL) {
+		interface->receive_queue_count = 1;
+		return;
+	}
+
+	const uint32 count = interface->receive_queue_count;
+
+	// Readers exit on their own (IFF_UP clear or fd closed); join them. We may
+	// be one of them only for queue 0, never for an extra queue, but guard
+	// anyway.
+	thread_id self = find_thread(NULL);
+	for (uint32 i = 1; i < count; i++) {
+		net_device_interface_queue* queue = &interface->queues[i - 1];
+		if (queue->reader_thread >= 0 && queue->reader_thread != self)
+			wait_for_thread(queue->reader_thread, NULL);
+	}
+
+	// Deleting each fifo's notify sem makes its consumer's blocked dequeue
+	// return an error, which is how the consumer knows to exit.
+	for (uint32 i = 1; i < count; i++) {
+		net_device_interface_queue* queue = &interface->queues[i - 1];
+		uninit_fifo(&queue->receive_queue);
+		if (queue->consumer_thread >= 0 && queue->consumer_thread != self)
+			wait_for_thread(queue->consumer_thread, NULL);
+	}
+
+	delete[] interface->queues;
+	interface->queues = NULL;
+	interface->receive_queue_count = 1;
+
+	set_fifo_max_bytes(&interface->receive_queue, 16 * 1024 * 1024);
+	interface->receive_queue_diagnostics.limit_bytes = 16 * 1024 * 1024;
+}
+
+
 status_t
 up_device_interface(net_device_interface* interface)
 {
@@ -552,6 +694,76 @@ up_device_interface(net_device_interface* interface)
 	if (status != B_OK)
 		return status;
 
+	// Decide how many receive queues to actually drain. A device that does not
+	// answer the multiqueue contract (receive_data_queue == NULL) or reports at
+	// most one queue keeps the single-queue path below, textually unchanged.
+	uint32 m = 1;
+	if (device->module->receive_data_queue != NULL
+		&& device->rx_queue_count > 1) {
+		m = device->rx_queue_count;
+		if (m > NET_STACK_MAX_RX_QUEUES)
+			m = NET_STACK_MAX_RX_QUEUES;
+		uint32 cpus = (uint32)smp_get_num_cpus();
+		if (m > cpus)
+			m = cpus;
+		if (m > 1 && device->module->set_rx_queue_count(device, m) != B_OK)
+			m = 1;
+	}
+
+	// Allocate and initialize the extra queues (1..m-1); queue 0 keeps the
+	// legacy fields. Any allocation failure here falls back to a single queue
+	// -- a working single-queue interface beats a failed "ifconfig up".
+	if (m > 1) {
+		interface->queues
+			= new(std::nothrow) net_device_interface_queue[m - 1];
+		if (interface->queues == NULL) {
+			m = 1;
+		} else {
+			uint32 built = 0;
+			for (uint32 i = 1; i < m; i++) {
+				net_device_interface_queue* queue = &interface->queues[i - 1];
+				queue->interface = interface;
+				queue->index = i;
+				queue->reader_thread = -1;
+				queue->consumer_thread = -1;
+				queue->receive_deframe_dropped = 0;
+				queue->receive_enqueue_dropped = 0;
+
+				char name[128];
+				snprintf(name, sizeof(name), "%s receive queue %" B_PRIu32,
+					device->name, i);
+				if (init_fifo(&queue->receive_queue, name,
+						NET_STACK_RX_QUEUE_FIFO_LIMIT) < B_OK)
+					break;
+				init_fifo_watermark(&queue->receive_queue_diagnostics,
+					queue->receive_queue.max_bytes);
+				built++;
+			}
+
+			if (built != m - 1) {
+				// A fifo failed to init; no threads exist yet, so just drop the
+				// ones built and fall back to one queue.
+				for (uint32 i = 0; i < built; i++)
+					uninit_fifo(&interface->queues[i].receive_queue);
+				delete[] interface->queues;
+				interface->queues = NULL;
+				device->module->set_rx_queue_count(device, 1);
+				m = 1;
+			}
+		}
+	}
+
+	interface->receive_queue_count = m;
+
+	if (m > 1) {
+		// Queue 0 now shares the buffering budget with the extra queues, so
+		// shrink its fifo to the per-queue limit (D28); teardown restores it.
+		set_fifo_max_bytes(&interface->receive_queue,
+			NET_STACK_RX_QUEUE_FIFO_LIMIT);
+		interface->receive_queue_diagnostics.limit_bytes
+			= NET_STACK_RX_QUEUE_FIFO_LIMIT;
+	}
+
 	if (device->module->receive_data != NULL) {
 		// give the thread a nice name
 		char name[B_OS_NAME_LENGTH];
@@ -559,14 +771,99 @@ up_device_interface(net_device_interface* interface)
 
 		interface->reader_thread = spawn_kernel_thread(device_reader_thread,
 			name, B_REAL_TIME_DISPLAY_PRIORITY - 10, interface);
-		if (interface->reader_thread < B_OK)
-			return interface->reader_thread;
+		if (interface->reader_thread < B_OK) {
+			status = interface->reader_thread;
+			if (m > 1) {
+				teardown_extra_receive_queues(interface);
+				device->module->set_rx_queue_count(device, 1);
+			}
+			return status;
+		}
+	}
+
+	if (m > 1) {
+		// Spawn a reader and consumer for each extra queue, suspended so they
+		// can be pinned before they run.
+		bool ok = true;
+		for (uint32 i = 1; i < m && ok; i++) {
+			net_device_interface_queue* queue = &interface->queues[i - 1];
+			char name[B_OS_NAME_LENGTH];
+
+			snprintf(name, sizeof(name), "%s reader %" B_PRIu32,
+				device->name, i);
+			queue->reader_thread = spawn_kernel_thread(
+				device_queue_reader_thread, name,
+				B_REAL_TIME_DISPLAY_PRIORITY - 10, queue);
+			if (queue->reader_thread < B_OK) {
+				queue->reader_thread = -1;
+				ok = false;
+				break;
+			}
+
+			snprintf(name, sizeof(name), "%s consumer %" B_PRIu32,
+				device->name, i);
+			queue->consumer_thread = spawn_kernel_thread(
+				device_queue_consumer_thread, name, B_DISPLAY_PRIORITY, queue);
+			if (queue->consumer_thread < B_OK) {
+				queue->consumer_thread = -1;
+				ok = false;
+				break;
+			}
+		}
+
+		if (!ok) {
+			// A per-queue thread failed to spawn. Resume whatever we spawned so
+			// it can exit -- IFF_UP is still clear, so a resumed reader returns
+			// at once, and teardown's fifo-sem delete releases each consumer --
+			// then fall back to a single queue.
+			for (uint32 i = 1; i < m; i++) {
+				net_device_interface_queue* queue = &interface->queues[i - 1];
+				if (queue->reader_thread >= 0)
+					resume_thread(queue->reader_thread);
+				if (queue->consumer_thread >= 0)
+					resume_thread(queue->consumer_thread);
+			}
+			teardown_extra_receive_queues(interface);
+			device->module->set_rx_queue_count(device, 1);
+			m = 1;
+		}
+	}
+
+	if (m > 1) {
+		// Pin each queue's threads to the CPU its interrupt targets, so the
+		// interrupt, reader and consumer for a flow all land on one CPU.
+		// Best-effort (D7b): on any error the thread simply runs unpinned.
+		int32 cpuCount = smp_get_num_cpus();
+		int32 cpu0 = device->module->get_rx_queue_cpu != NULL
+			? device->module->get_rx_queue_cpu(device, 0) : -1;
+		if (cpu0 < 0)
+			cpu0 = 0;
+		if (interface->reader_thread >= 0)
+			scheduler_pin_thread_to_cpu(interface->reader_thread, cpu0);
+
+		for (uint32 i = 1; i < m; i++) {
+			net_device_interface_queue* queue = &interface->queues[i - 1];
+			int32 cpu = device->module->get_rx_queue_cpu != NULL
+				? device->module->get_rx_queue_cpu(device, i) : -1;
+			if (cpu < 0)
+				cpu = (int32)(i % (uint32)cpuCount);
+			scheduler_pin_thread_to_cpu(queue->reader_thread, cpu);
+			scheduler_pin_thread_to_cpu(queue->consumer_thread, cpu);
+		}
 	}
 
 	device->flags |= IFF_UP;
 
 	if (device->module->receive_data != NULL)
 		resume_thread(interface->reader_thread);
+
+	if (m > 1) {
+		for (uint32 i = 1; i < m; i++) {
+			net_device_interface_queue* queue = &interface->queues[i - 1];
+			resume_thread(queue->reader_thread);
+			resume_thread(queue->consumer_thread);
+		}
+	}
 
 	interface->up_count = 1;
 	return B_OK;
@@ -607,6 +904,13 @@ down_device_interface(net_device_interface* interface)
 		status_t status;
 		wait_for_thread(readerThread, &status);
 	}
+
+	// Stop and free the extra receive queues (multiqueue only). down() above
+	// closed the driver fd, so each extra reader's in-flight receive returns an
+	// error and, with IFF_UP cleared, the reader exits; teardown then joins the
+	// readers, deletes each extra fifo (releasing its consumer), and restores
+	// queue 0's fifo to the single-queue budget. No-op for a single queue.
+	teardown_extra_receive_queues(interface);
 }
 
 
@@ -625,6 +929,7 @@ unregister_device_deframer(net_device* device)
 		return B_DEVICE_NOT_FOUND;
 
 	RecursiveLocker _(interface->receive_lock);
+	WriteLocker handlersLocker(interface->receive_handlers_lock);
 
 	if (--interface->deframe_ref_count == 0)
 		interface->deframe_func = NULL;
@@ -651,6 +956,7 @@ register_device_deframer(net_device* device, net_deframe_func deframeFunc)
 		return B_DEVICE_NOT_FOUND;
 
 	RecursiveLocker _(interface->receive_lock);
+	WriteLocker handlersLocker(interface->receive_handlers_lock);
 
 	if (interface->deframe_func != NULL
 		&& interface->deframe_func != deframeFunc)
@@ -689,6 +995,7 @@ register_device_handler(struct net_device* device, int32 type,
 		return B_DEVICE_NOT_FOUND;
 
 	RecursiveLocker _(interface->receive_lock);
+	WriteLocker handlersLocker(interface->receive_handlers_lock);
 
 	// see if such a handler already for this device
 
@@ -725,6 +1032,7 @@ unregister_device_handler(struct net_device* device, int32 type)
 		return B_DEVICE_NOT_FOUND;
 
 	RecursiveLocker _(interface->receive_lock);
+	WriteLocker handlersLocker(interface->receive_handlers_lock);
 
 	// search for the handler
 
@@ -906,6 +1214,27 @@ dump_receive_queue_diagnostics(net_device_interface* interface)
 		diagnostics.current_bytes, diagnostics.current_packets,
 		diagnostics.peak_bytes, diagnostics.peak_packets, diagnostics.enqueued,
 		diagnostics.dequeued);
+
+	// Extra receive queues of a multiqueue interface (queue 0 is the block
+	// above). Each line names the queue so it can be told apart in the log.
+	for (uint32 i = 1; i < interface->receive_queue_count; i++) {
+		net_device_interface_queue* queue = &interface->queues[i - 1];
+		net_fifo_watermark queueDiag;
+		snapshot_fifo_watermark(&queue->receive_queue,
+			&queue->receive_queue_diagnostics, &queueDiag, true);
+
+		dprintf(NET_RX_DIAG_VERSION " %s.q%" B_PRIu32 " drops total=%" B_PRIu64
+			" deframe=%" B_PRIu64 " enqueue=%" B_PRIu64 "\n", name, i,
+			queue->receive_deframe_dropped + queue->receive_enqueue_dropped,
+			queue->receive_deframe_dropped, queue->receive_enqueue_dropped);
+
+		dprintf(NET_RX_DIAG_VERSION " %s.q%" B_PRIu32 " queue limit=%" B_PRIuSIZE
+			" cur=%" B_PRIuSIZE " curpkts=%" B_PRIu32 " peak=%" B_PRIuSIZE
+			" peakpkts=%" B_PRIu32 " enq=%" B_PRIu64 " deq=%" B_PRIu64 "\n",
+			name, i, queueDiag.limit_bytes, queueDiag.current_bytes,
+			queueDiag.current_packets, queueDiag.peak_bytes,
+			queueDiag.peak_packets, queueDiag.enqueued, queueDiag.dequeued);
+	}
 
 	// receive.errors is a third and separate bucket - receive_data() failing in
 	// the driver - and is deliberately not folded into either of the above.
