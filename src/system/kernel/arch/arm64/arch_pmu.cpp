@@ -32,16 +32,32 @@
 	source. When no session is running the call is inert.
 
 	The timer stands down only once an overflow has actually been serviced, not
-	merely once the handler is installed -- see arm64_pmu_sampling_active(). An
-	earlier revision hardcoded the overflow interrupt on the architected PPI 7
-	(INTID 23) and it was observed NOT to fire on AWS Graviton (Neoverse-V1/c7g,
-	verified on 16xlarge and large): the counters read correctly, but no
-	overflow was ever delivered, because the interrupt number the firmware
-	actually assigns to the PMU differs from 23. The INTID is now taken from the
-	MADT GICC "Performance Interrupt GSIV" (parsed in the boot loader, carried
-	in intc_info::pmu_gsiv, read in arm64_pmu_init()), which is the authoritative
-	value. Where the firmware states no GSIV, sampling stays off and profiling
-	uses the software timer, as it does on every other architecture.
+	merely once the handler is installed -- see arm64_pmu_sampling_active(). The
+	overflow interrupt DOES fire on AWS Graviton (Neoverse-V1/c7g, hardware
+	verified): with the facility on and a CPU-bound load, the per-CPU overflow
+	count advances steadily and is bounded (no storm). The INTID is taken from
+	the MADT GICC "Performance Interrupt GSIV" (parsed in the boot loader,
+	carried in intc_info::pmu_gsiv, read in arm64_pmu_init()); on the Graviton
+	parts measured it reports 23 -- the architected PPI 7 -- which is correct.
+	Where the firmware states no GSIV, sampling stays off and profiling uses the
+	software timer, as it does on every other architecture.
+
+	One caveat remains, and it is a property of the virtualized platform, not of
+	this code: on a guest the serviced overflow rate runs well below the rate the
+	programmed period implies (~tens/s per core rather than the ~260/s that
+	10^7 cycles at ~2.6 GHz would give). The reload value and the re-arm here are
+	correct -- the event counter is preloaded to -period, PMOVSCLR is cleared and
+	the counter reloaded on every serviced overflow, and PMCNTENSET/PMINTENSET
+	stay set -- but the guest only counts CPU_CYCLES while its vCPU is actually
+	scheduled, and the overflow interrupt is delivered when the hypervisor injects
+	it rather than at the instant the counter wraps, so a tight guest loop that
+	rarely exits sees far fewer interrupts than it has overflows. The per-core
+	variance in the observed count is the signature of this: delivery tracks each
+	core's exit/schedule rate, not the period. Direct counter reads (the core
+	clock measurement below) are unaffected because they need no injection. The
+	fix for the low rate, if one is possible, is not in this file; it needs
+	hardware confirmation on a bare-metal instance, where the reload code should
+	yield the full ~260/s with no hypervisor in the delivery path.
 
 	What this deliberately is not:
 
@@ -93,14 +109,15 @@
 // 16); the architected timer's PPI is handled the same way (arch_timer.cpp
 // hardcodes INTID 27). But that PPI is only a recommendation, and firmware is
 // free to place the PMU interrupt on a different line -- the authoritative
-// value on an ACPI system is the MADT GICC "Performance Interrupt GSIV". An
-// earlier revision of this facility hardcoded INTID 23 and the overflow
-// interrupt was observed NOT to fire on AWS Graviton (Neoverse-V1/c7g),
-// because the GSIV the firmware actually reports differs from 23. So the INTID
-// is taken from the MADT (parsed in the boot loader, carried in
-// intc_info::pmu_gsiv) rather than assumed here; see sOverflowIntID. When the
-// firmware states no GSIV, PMU sampling stays off and the software profiling
-// timer runs as on every other architecture.
+// value on an ACPI system is the MADT GICC "Performance Interrupt GSIV". So the
+// INTID is taken from the MADT (parsed in the boot loader, carried in
+// intc_info::pmu_gsiv) rather than assumed here; see sOverflowIntID. On the
+// Graviton parts measured the firmware reports 23 -- the architected value --
+// and the overflow interrupt fires correctly on it, so keeping the number
+// authoritative rather than hardcoded costs nothing and stays correct on any
+// part whose firmware places it elsewhere. When the firmware states no GSIV,
+// PMU sampling stays off and the software profiling timer runs as on every
+// other architecture.
 #define PMU_OVERFLOW_ARCHITECTED_INTID	23
 
 // Cycles between sampling-counter overflows. At ~2.6 GHz, 10^7 cycles is about
@@ -731,16 +748,16 @@ arm64_pmu_sampling_active(void)
 {
 	// The PMU cycle-overflow is a usable sampling source only once its handler
 	// has actually serviced an overflow (sOverflowObserved), not merely once the
-	// handler is installed. The two differ in practice: with the earlier
-	// hardcoded INTID 23 the overflow interrupt never fired on AWS Graviton
-	// even though the handler installed cleanly and the counters read correctly,
-	// so an install-only test would wrongly suppress the software profiling
-	// timer and leave `profile` with no samples at all. The INTID now comes from
-	// the MADT GSIV, but this gate is kept as defence in depth -- it stays
-	// correct on any part whose firmware misreports the GSIV, and on the
-	// reduced-PMU sizes where no GSIV is provided. Gating on a serviced overflow makes
-	// this self-correcting: where the interrupt never arrives the facility never
-	// claims to be the sample source and the software timer keeps profiling.
+	// handler is installed. The two differ in practice: an overflow only fires
+	// once a CPU-bound load has burned a full period of cycles, so on an idle
+	// instance the handler can be installed and armed for a while before the
+	// first overflow arrives. Gating on a serviced overflow keeps this
+	// self-correcting: where the interrupt never arrives (reduced-PMU sizes, no
+	// GSIV, facility off) the facility never claims to be the sample source and
+	// the software timer keeps profiling. The consumer side re-checks this on
+	// every software-timer tick (SystemProfiler::_ProfilingEvent), so a session
+	// that starts before its workload runs still hands over to the PMU the moment
+	// the workload drives a real overflow, rather than being stuck on the timer.
 	// sEnabled/sAvailable/sOverflowInterruptInstalled are implied once an
 	// overflow has been serviced, but are kept so a later "pmu off" cannot claim
 	// the source.

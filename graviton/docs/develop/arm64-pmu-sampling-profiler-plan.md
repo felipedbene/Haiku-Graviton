@@ -1,33 +1,53 @@
 # arm64 PMU sampling profiler — staged design plan
 
-**Status:** E-PMU-1a/1b/2 implemented; the overflow INTID is now taken from the
-MADT GICC Performance Interrupt GSIV instead of a hardcoded PPI. Still **BLOCKED
-on hardware, and the wrong-INTID hypothesis is DISPROVEN by measurement.** On
-real Graviton (Neoverse-V1/c7g, PMUVer 5, 32-bit event counters) the MADT
-reports the performance GSIV as **23 on both c7g.large and c7g.16xlarge** — i.e.
-exactly the architected PPI 7 (INTID 23) that was already hardcoded. Installing
-the handler on the MADT value therefore installs on the same 23, and the
-overflow interrupt **still does not fire**: with `arm64_pmu` on from boot and a
-CPU-bound load, `profile` samples track the software `-i` interval one-to-one
-(c7g.16xl: `-i 1000` → 7852 ticks over 7.85 s, 11 missed of 7863 expected; `-i
-4000` → 1925 ticks, 1 missed of 1926), which is the software-timer signature; a
-PMU source at the fixed ~260 samples/s/core would have shown ~2040 ticks and
-~5800 missed at `-i 1000`. `arm64_pmu_sampling_active()` stays false, so no
-overflow was ever serviced. The real blocker is PMU overflow interrupt
-*delivery* on virtualized Graviton, NOT the interrupt number.
+**Status:** E-PMU-1a/1b/2 implemented; the overflow INTID is taken from the
+MADT GICC Performance Interrupt GSIV. The earlier "overflow never fires" claim
+is **DISPROVEN by measurement — the overflow interrupt DOES fire on real
+Graviton** (Neoverse-V1/c7g, hrev59996, PMUVer 5, 32-bit event counters). With
+`arm64_pmu` on and a CPU-bound load the per-CPU overflow count advances steadily
+and is bounded (e.g. CPU0 1717→3439, CPU1 2628→2925 over ~54 s from `pmu dump`
+over serial; no storm). The MADT reports the performance GSIV as **23** — the
+architected PPI 7 — which is correct, so the earlier wrong-INTID hypothesis is
+also dead. Two real defects remain, and neither is the interrupt number:
+
+- **Defect (a) — serviced rate ~40× too low.** 10^7 cycles at ~2.6 GHz implies
+  ~260 overflows/s/core; only ~6–32/s is observed, and the per-core spread
+  (CPU0 ~32/s vs CPU1 ~5.5/s) tracks each core's load. The reload/period/re-arm
+  code is correct (32-bit reload = `0xFF676980` = −10^7, PMOVSCLR cleared and the
+  counter reloaded each overflow, PMCNTENSET/PMINTENSET kept set, counting
+  CPU_CYCLES via the dedicated event counter). The deficit is a property of the
+  virtualized platform: the guest counts CPU_CYCLES only while its vCPU is
+  scheduled, and the overflow interrupt is delivered when the hypervisor injects
+  it rather than at the instant the counter wraps — so a tight guest loop that
+  rarely exits collapses many overflows into few serviced interrupts. Direct
+  counter reads (core-clock measurement) are unaffected because they need no
+  injection. **Needs bare-metal re-verification** (c7g.metal): with no
+  hypervisor in the delivery path the same reload code should yield ~260/s. This
+  is not fixable from guest code.
+
+- **Defect (b) — the software timer never stood down (FIXED).** `profile` sample
+  counts scaled exactly 4:1 with `-i` (1000→93671, 4000→23434; ratio 3.997) even
+  after overflows were observed — the pure software-timer signature. Root cause:
+  the stand-down was decided once, in `SystemProfiler::_InitTimers`, at session
+  start. `profile` starts the profiler *before* it runs its workload, so on an
+  idle instance no overflow has been serviced yet, `arm64_pmu_sampling_active()`
+  is still false, the software timer is scheduled — and it was never revisited,
+  so it ran the whole session while the PMU's samples were negligible against
+  1000/s. Fix: re-check `arm64_pmu_sampling_active()` on every software-timer
+  tick in `_ProfilingEvent`; the timer now retires itself for that CPU on the
+  first tick after the workload drives a real overflow, handing over to the PMU.
+  x86-neutral (guarded by `__HAIKU_ARCH_ARM64`).
 
 The MADT-GSIV parsing (boot loader → `intc_info::pmu_gsiv` → `arm64_pmu_init`)
-is kept as a correct, merge-safe hygiene fix (removes the hardcode, degrades
-gracefully to the software timer when firmware states no GSIV; c7g.large boots
-clean and profiles normally). It does not by itself deliver PMU sampling.
+remains a correct, merge-safe hygiene fix (no hardcode; degrades gracefully to
+the software timer when firmware states no GSIV; c7g.large boots clean and
+profiles normally).
 
-Next hypothesis (unverified): on a KVM guest the counter-overflow interrupt is a
-*virtual* PPI the hypervisor must inject; the guest can read the counters
-(MDCR_EL2.TPM=0) yet never receives the overflow IRQ. The architected timer PPI
-(INTID 27) is delivered fine, so generic PPI delivery works — the gap is
-specific to the PMU overflow source. Investigate whether the vPMU injects on
-overflow for a guest that programs the PMU directly (as this kernel does), and
-whether anything more than PMINTENSET_EL1 + the GIC PPI enable is required.
+Net: on the fleet (virtualized) instances the mechanism now works — the PMU
+supplants the software timer once it delivers — but the sample rate is capped by
+hypervisor injection (defect a), so the profile is low-resolution there until (a)
+is confirmed/addressed on metal. On bare metal, (b) fixed plus (a)'s expected
+~260/s should give a usable cycle-attributed profiler.
 
 This file records the decomposition and the one non-obvious conflict so the
 implementation did not re-derive them.
@@ -68,18 +88,13 @@ would be grossly wrong on every boot, not only while profiling.
    dedicated counter to `-period` each overflow (bounded, no storm), and bump a
    per-CPU overflow count reachable from the `pmu` KDL command. Inert when
    `arm64_pmu` is off. No profiler coupling yet.
-   **BLOCKED (hardware):** on Graviton the overflow interrupt never fires. With
-   all cores pegged the per-CPU overflow count never advances and E-PMU-2's
-   `profile` shows zero PMU samples (only software-timer ticks). The counters
-   themselves work (core clock is measured off `PMCCNTR_EL0`) and the handler
-   installs on INTID 23 without error, so the fault is in interrupt delivery, not
-   counting. The hardcoded INTID 23 (PPI 7) is the most likely culprit: the
-   authoritative PMU interrupt number is the **MADT GICC Performance Interrupt
-   GSIV**, which nothing in-tree parses — the comment in `arch_pmu.cpp` assumes
-   Graviton follows the architected PPI 7, unverified against the actual MADT.
-   Next step: parse the GICC Performance Interrupt GSIV from the MADT and install
-   on that INTID instead of hardcoding; cross-check that Linux `perf record`
-   (which uses exactly this GSIV) samples on the same instance.
+   **Hardware-verified: the overflow interrupt fires and is bounded.** With the
+   facility on and a CPU-bound load the per-CPU overflow count advances steadily
+   (no storm), the handler installs on INTID 23 (the MADT GSIV), and the counters
+   work (core clock is measured off `PMCCNTR_EL0`). The one open item is the
+   serviced *rate*, which runs ~40× below the programmed period on a virtualized
+   guest — see defect (a) in the Status section. The reload/re-arm code is
+   correct; the cap is hypervisor interrupt injection, confirmable only on metal.
 3. **E-PMU-2 — system_profiler consumer (implemented).** The overflow handler
    calls `system_profiler_hardware_sample()`
    (`src/system/kernel/debug/system_profiler.cpp`), which walks the interrupted
@@ -94,12 +109,14 @@ would be grossly wrong on every boot, not only while profiling.
    PMU sampling facility is unavailable (reduced-PMU sizes, facility off), so
    other arches and reduced-PMU Graviton are untouched. Depends on 1b.
    `arm64_pmu_sampling_active()` gates the stand-down on an *actually serviced*
-   overflow, not merely on the handler being installed, so that on hardware
-   where 1b's interrupt never fires the software timer keeps profiling rather
-   than being suppressed into collecting nothing. Because 1b's interrupt does
-   not fire on Graviton today, this path is code-complete but cannot be
-   hardware-proven: `profile` there runs on the software timer and the PMU
-   sample count is zero. It will light up once 1b delivers overflows.
+   overflow, not merely on the handler being installed, so reduced-PMU sizes and
+   the facility-off case keep the software timer. The stand-down is re-checked on
+   every software-timer tick in `_ProfilingEvent` (defect (b) fix): a session
+   started before its workload — the common `profile` case, where no overflow has
+   fired yet — starts on the software timer and hands over to the PMU the moment
+   the workload drives a real overflow. Before this fix the decision was made
+   once at session start and never revisited, so the timer ran the whole session
+   and the PMU never became the effective source.
 
 ## Hardware-verification gates (all on real Graviton, before any merge)
 - No interrupt storm: bounded IRQ rate under a CPU-bound load; system responsive.
