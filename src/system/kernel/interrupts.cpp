@@ -795,16 +795,27 @@ assign_io_interrupt_to_cpu(int32 vector, int32 newCPU)
 	ASSERT(oldCPU != -1);
 	cpu_ent* cpu = &gCPU[oldCPU];
 
-	SpinLocker locker(cpu->irqs_lock);
+	// cpu->irqs_lock is a plain spinlock, so interrupts must be off while it is
+	// held. The scheduler's rebalancer already runs with interrupts disabled,
+	// but a driver can legitimately request affinity from thread context with
+	// interrupts enabled (e.g. ENA binding a queue's MSI-X vector to a CPU at
+	// device bring-up), so guard the whole move here rather than trusting the
+	// caller.
+	cpu_status state = disable_interrupts();
+
+	acquire_spinlock(&cpu->irqs_lock);
 	ASSERT(sVectors[vector].assigned_cpu->cpu == oldCPU);
 	sVectors[vector].assigned_cpu->cpu = -1;
 	cpu->irqs.Remove(sVectors[vector].assigned_cpu);
-	locker.Unlock();
+	release_spinlock(&cpu->irqs_lock);
 
 	sVectors[vector].assigned_cpu->cpu = targetCPU;
 	cpu = &gCPU[targetCPU];
-	locker.SetTo(cpu->irqs_lock, false);
+	acquire_spinlock(&cpu->irqs_lock);
 	cpu->irqs.Add(sVectors[vector].assigned_cpu);
+	release_spinlock(&cpu->irqs_lock);
+
+	restore_interrupts(state);
 
 	return targetCPU;
 }
