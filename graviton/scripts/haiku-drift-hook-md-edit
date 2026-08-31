@@ -1,0 +1,67 @@
+#!/usr/bin/env bash
+#
+# haiku-drift-hook-md-edit -- PostToolUse hook for Edit/Write against *.md.
+#
+# Rule enforced (advisory): TRACKING content -- open work, "owed" items, blockers,
+# unchecked task boxes -- belongs in GitHub issues, not in Markdown. When Claude
+# edits a Markdown file and adds a tracking marker without a `#NN` issue reference
+# nearby, this hook surfaces the drift back into the transcript so it can be
+# corrected before it lands.
+#
+# Reads the tool_input JSON from stdin (the harness contract for PostToolUse),
+# extracts the target file_path, and if it's a *.md under this repo runs
+# haiku-drift-check --md-only --files <that file>. Always exits 0 and always
+# emits valid JSON (never blocks the edit); the drift text lands in
+# additionalContext so Claude sees it in the next turn.
+
+set -uo pipefail
+
+here=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
+repo_root=$(cd -- "$here/../.." && pwd)
+script="$here/haiku-drift-check"
+
+# Read the tool payload from stdin and pull file_path. Fall back to empty on any
+# parse trouble -- the hook must not fail a session over a payload quirk.
+payload=$(cat 2>/dev/null || true)
+target=$(printf '%s' "$payload" | python3 -c '
+import json, sys
+try:
+    d = json.loads(sys.stdin.read() or "{}")
+    ti = d.get("tool_input") or {}
+    p = ti.get("file_path") or ti.get("path") or ""
+    print(p)
+except Exception:
+    print("")
+' 2>/dev/null || echo "")
+
+out=""
+case "$target" in
+	*.md)
+		# Only report if the file lives under this repo (avoid noise on unrelated
+		# absolute paths a session might touch).
+		case "$target" in
+			"$repo_root"/*|graviton/*|docs/*|src/*|*/graviton/*)
+				if [ -x "$script" ] && [ -f "$target" ]; then
+					out=$(timeout 20 "$script" --md-only --files "$target" 2>&1 || true)
+				fi
+				;;
+		esac
+		;;
+esac
+
+# Only surface DRIFT lines; the OK line would just add noise on every edit.
+if [ -n "$out" ] && printf '%s' "$out" | grep -q '^DRIFT:'; then
+	MSG="$out" python3 -c '
+import json, os
+print(json.dumps({
+    "hookSpecificOutput": {
+        "hookEventName": "PostToolUse",
+        "additionalContext": "haiku-drift-check on this edit:\n" + os.environ.get("MSG",""),
+    }
+}))
+'
+else
+	# Silent success: emit empty envelope, contribute no additional context.
+	echo '{}'
+fi
+exit 0

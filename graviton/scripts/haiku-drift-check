@@ -1,0 +1,183 @@
+#!/usr/bin/env bash
+#
+# haiku-drift-check -- warn when TRACKING content ends up in Markdown instead of
+# GitHub issues, and check for staged (but never pushed) commits carrying real fixes.
+#
+# Context: the project treats GitHub issues as the source of truth for TRACKING
+# (roadmap items, open work, blockers, "owed" items), and in-repo Markdown as
+# design/measurement/reference. This scanner surfaces the two ways that boundary
+# gets crossed:
+#   1. TRACKING MARKERS in *.md that are NOT paired with an issue reference. A
+#      `- [ ]` checkbox, an "owed" note, or a TODO/FIXME with no `(#NN)` or `#NN`
+#      nearby is drift -- it names work the project cannot see from the tracker.
+#   2. LOCAL / REMOTE COMMITS with real fix/change content that are NOT reachable
+#      from origin/graviton (the trunk) -- this session had three network fixes
+#      that were reachable ONLY from origin/pipeline/iac-hygiene, invisible to
+#      GitHub PR/issue searches. We surface those out-of-trunk bearing branches.
+#
+# Read-only. Always exits 0 -- it is a report, not a gate. It runs from the
+# SessionStart hook and can be re-run by hand any time (`graviton/scripts/haiku-
+# drift-check`). Prints a compact summary; if there is no drift, prints one line.
+#
+# Modes:
+#   --md-only        just the Markdown scan (used by the Edit/Write PostToolUse
+#                    hook; scoped to changed files via --files ...)
+#   --files a b c    limit the MD scan to these paths (relative or absolute)
+#   --git-only       just the out-of-trunk-fixes scan
+#   (default)        both scans
+#
+# Exits 0 on any state so a hook never blocks the session; grep the output for
+# "DRIFT:" to decide whether to act.
+
+set -uo pipefail
+
+repo_root=$(git rev-parse --show-toplevel 2>/dev/null || pwd)
+cd "$repo_root" || exit 0
+
+mode=both
+files=()
+while [ $# -gt 0 ]; do
+	case "$1" in
+		--md-only)   mode=md;   shift ;;
+		--git-only)  mode=git;  shift ;;
+		--files)     shift; while [ $# -gt 0 ] && [ "${1:0:2}" != "--" ]; do files+=("$1"); shift; done ;;
+		-h|--help)   sed -n '2,25p' "$0"; exit 0 ;;
+		*)           shift ;;
+	esac
+done
+
+say() { printf '%s\n' "$*"; }
+
+# Paths whose CONTENT is design/measurement/postmortem (drift markers there are
+# usually citation, not new tracking). We still scan them but only flag markers
+# that appear as top-of-file tracking sections (a checklist near the start),
+# not deep inside a measurement narrative. The heuristic: flag if a tracking
+# marker appears in the first ~40 lines OR appears as an unchecked list item
+# `- [ ]`. Markers deeper into a design doc as prose are ignored.
+DESIGN_GLOBS_REGEX='(^docs/|^graviton/docs/develop/|/haiku-graphics-upstream-review|/framebuffer-guest-capture|/remote-desktop-options|/scheduler-smp-placement|/ena-tx-offload|/ena-rx-|/net-|/tcp-|/throughput-measurement|/storage-measurement|/simd-vectorization-review|/arm64-|/mimeset-headless|/metal-gicv3|/metal-pci|/ec2-stop-start|/mimeset-|/haikuports-patches/|/packages/|/audit/agent-sops/|README\.md|AGENTS\.md|CLAUDE\.md)'
+
+# A drift-hint pattern: unchecked task box, or common "work to do" markers, WITHOUT
+# a nearby GitHub-issue reference in the same line.
+# Sed's word boundary is limited; we use a broad grep and then filter with awk.
+scan_md() {
+	local flist
+	if [ ${#files[@]} -gt 0 ]; then
+		flist=$(printf '%s\n' "${files[@]}")
+	else
+		flist=$(git ls-files -- '*.md' 2>/dev/null)
+	fi
+
+	local out=""
+	local nfiles=0
+	while IFS= read -r f; do
+		[ -n "$f" ] || continue
+		[ -f "$f" ] || continue
+		# Design docs get a stricter filter (checkbox-only)
+		local pattern
+		if [[ "$f" =~ $DESIGN_GLOBS_REGEX ]]; then
+			pattern='^[[:space:]]*[-*][[:space:]]*\[ \]'
+		else
+			# Any of: unchecked checkbox, "owed:" line, "TODO:"/"FIXME:", "BLOCKER:"
+			pattern='^[[:space:]]*([-*][[:space:]]*\[ \]|Owed:|TODO:|FIXME:|BLOCKER:|OPEN:)'
+		fi
+		# collect matching lines that don't reference an issue "#NN" on the same line
+		local hits
+		hits=$(grep -nE "$pattern" -- "$f" 2>/dev/null \
+			| grep -v -E '#[0-9]+' \
+			| head -6)
+		if [ -n "$hits" ]; then
+			nfiles=$((nfiles + 1))
+			out+="  $f:"$'\n'
+			out+=$(printf '%s\n' "$hits" | sed 's/^/    /')
+			out+=$'\n'
+		fi
+	done <<<"$flist"
+
+	if [ -n "$out" ]; then
+		say "DRIFT: tracking markers in Markdown without an issue reference ($nfiles file(s)):"
+		printf '%s' "$out"
+		say "  -> Open a GitHub issue for each and either delete the marker or add \`(#NN)\`."
+	else
+		say "OK: Markdown drift scan clean ($(if [ ${#files[@]} -gt 0 ]; then echo "${#files[@]} file(s)"; else echo "$(git ls-files -- '*.md' | wc -l) file(s)"; fi))."
+	fi
+}
+
+# Branches whose tip is NOT reachable from origin/graviton and that carry code
+# changes (not just docs) -- these can hide real fixes from GitHub PR searches.
+scan_git() {
+	# --prune is load-bearing: without it the scanner reports branches that were
+	# already deleted on origin as stale remote-refs, wasting the maintainer's
+	# attention on drift that is already resolved.
+	git fetch origin --prune --quiet 2>/dev/null || true
+	local out=""
+	local nb=0
+	# Ensure origin/graviton exists locally
+	if ! git rev-parse --verify origin/graviton >/dev/null 2>&1; then
+		say "OK: git-drift scan skipped (no origin/graviton locally)."
+		return 0
+	fi
+	while IFS= read -r ref; do
+		local b="${ref#origin/}"
+		case "$b" in graviton|master|HEAD) continue ;; esac
+		# Any commits ahead of graviton?
+		local ahead
+		ahead=$(git rev-list --count "origin/graviton..$ref" 2>/dev/null || echo 0)
+		[ "$ahead" = "0" ] && continue
+		# Any code files touched (not just docs)?
+		local codefiles
+		codefiles=$(git diff --name-only "origin/graviton" "$ref" 2>/dev/null \
+			| grep -vE '\.md$|\.txt$|^docs/|^graviton/docs/' | wc -l)
+		# Correlate to a PR (open PR = tracked)
+		local prstate
+		prstate=$(gh pr list --repo felipedbene/Haiku-Graviton --state all --head "$b" \
+			--json state --jq '.[0].state' 2>/dev/null)
+		local marker=""
+		if [ -z "$prstate" ] || [ "$prstate" = "null" ]; then
+			marker="NO-PR"
+		elif [ "$prstate" = "OPEN" ]; then
+			marker="OPEN-PR"
+		else
+			marker="$prstate-PR"
+		fi
+		# Or correlated to an OPEN issue by a cross-link comment. We treat a
+		# branch as tracked-via-issue if any open issue's body or comments
+		# mention the branch name in backticks (`branch/name`) -- this is the
+		# convention used by the branch-hygiene sweep. Cached in a temp file
+		# per session so we do not re-query gh for every branch.
+		if [ -z "${_HG_ISSUE_XREF_CACHE:-}" ]; then
+			_HG_ISSUE_XREF_CACHE=$(mktemp -t drift-xref.XXXXXX)
+			gh issue list --repo felipedbene/Haiku-Graviton --state open \
+				--limit 300 --json body,comments \
+				--jq '.[] | .body + " " + (.comments|map(.body)|join(" "))' \
+				> "$_HG_ISSUE_XREF_CACHE" 2>/dev/null || true
+		fi
+		local tracked_by_issue=0
+		if [ -s "$_HG_ISSUE_XREF_CACHE" ] \
+			&& grep -qF "\`$b\`" "$_HG_ISSUE_XREF_CACHE" 2>/dev/null; then
+			tracked_by_issue=1
+			marker="$marker+ISSUE-XREF"
+		fi
+		# Report only if it carries real code AND is not linked (open PR OR issue xref)
+		if [ "$codefiles" -gt 0 ] && [ "$marker" != "OPEN-PR" ] && [ "$tracked_by_issue" = "0" ]; then
+			nb=$((nb + 1))
+			out+=$(printf '  %-40s  ahead=%s codefiles=%s (%s)\n' "$b" "$ahead" "$codefiles" "$marker")
+			out+=$'\n'
+		fi
+	done < <(git for-each-ref --format='%(refname:short)' refs/remotes/origin/ | grep -v '^origin/HEAD')
+
+	if [ -n "$out" ]; then
+		say "DRIFT: remote branches carrying code but no OPEN PR ($nb branch(es)):"
+		printf '%s' "$out"
+		say "  -> Open a PR, or link the branch from its correlated issue (cross-link comment)."
+	else
+		say "OK: no remote code-carrying branch is unlinked from a PR."
+	fi
+}
+
+case "$mode" in
+	md)   scan_md ;;
+	git)  scan_git ;;
+	*)    scan_md; say ""; scan_git ;;
+esac
+
+exit 0
