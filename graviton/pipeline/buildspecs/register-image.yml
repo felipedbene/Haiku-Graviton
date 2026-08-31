@@ -15,6 +15,22 @@ env:
     - AMI_ID
 
 phases:
+  install:
+    commands:
+      # s5cmd: parallel-multipart S3 client. The ~20 GiB raw upload dominates this
+      # stage and `aws s3 cp` drives a single stream (measured ~130 MiB/s, so
+      # ~2.5 min per GiB). graviton/scripts/haiku-s3 prefers s5cmd and falls back
+      # to the identical `aws s3 cp` when it is absent, so this install is a pure
+      # speed-up and its failure is DELIBERATELY non-fatal -- a bake must not
+      # break because a GitHub release download blipped.
+      - |
+        S5_VER=2.2.2
+        curl -sSLf "https://github.com/peak/s5cmd/releases/download/v${S5_VER}/s5cmd_${S5_VER}_Linux-arm64.tar.gz" \
+          -o /tmp/s5cmd.tgz \
+          && tar -xzf /tmp/s5cmd.tgz -C /usr/local/bin s5cmd \
+          && chmod +x /usr/local/bin/s5cmd \
+          && s5cmd version \
+          || echo "s5cmd install failed (non-fatal); haiku-s3 falls back to aws s3 cp"
   build:
     commands:
       - set -euo pipefail

@@ -126,7 +126,12 @@ PEER_PROFILE="${HG_PEER_INSTANCE_PROFILE:-AWSSupportPatchwork-SSMRoleForInstance
 PEER_AMI_PARAM="${HG_PEER_AMI_PARAM:-/aws/service/canonical/ubuntu/server/24.04/stable/current/arm64/hvm/ebs-gp3/ami-id}"
 BARON_SECRET="${HG_BARON_SECRET:-haiku-graviton/baron-ssh-key}"
 TOOLS_S3="${HG_TOOLS_S3:-}"
-SUBNET="${HG_TEST_SUBNET:-subnet-0888405da8f10d1b2}"
+# No baked-in subnet id. This used to default to a hand-made subnet that a VPC
+# consolidation later deleted, and because a dead id only fails at run-instances
+# time the whole Test stage broke AFTER CrossBuild and Register had already spent
+# ~25 minutes. Resolved from the build VPC by name when unset (see below).
+SUBNET="${HG_TEST_SUBNET:-}"
+TEST_VPC_NAME="${HG_TEST_VPC_NAME:-DebeosOpsStack/BuildVpc}"
 TEST_SG="${HG_TEST_SG:-}"
 TEST_TYPE="${HG_TEST_TYPE:-c7g.large}"
 MIN_RX="${HG_MIN_RX_MBPS:-3000}"
@@ -149,6 +154,37 @@ AMI="${1:-}"
 [ -n "$AMI" ] || die "usage: haiku-perf-gate <ami-id>"
 [ -x "$SSM_RUN" ] || die "ssm-run not found next to this script"
 [ -n "$TEST_SG" ] || die "HG_TEST_SG must be set (the test security group)"
+
+# Resolve the subnet up front, before anything is launched, so a network problem
+# is reported in the first seconds rather than as a run-instances failure minutes
+# in. Private subnets only: the peer reaches Secrets Manager / S3 / SSM through the
+# VPC's NAT and gateway endpoint, and the candidate is driven from the peer and
+# read over the EC2 console API, so neither needs a public address.
+if [ -z "$SUBNET" ]; then
+	TEST_VPC_ID=$(aws --region "$REGION" ec2 describe-vpcs \
+		--filters "Name=tag:Name,Values=$TEST_VPC_NAME" \
+		--query 'Vpcs[0].VpcId' --output text 2>/dev/null)
+	case "$TEST_VPC_ID" in
+		vpc-*) ;;
+		*) die "no VPC tagged Name='$TEST_VPC_NAME'; set HG_TEST_SUBNET or HG_TEST_VPC_NAME" ;;
+	esac
+	# One --filters with both conditions: repeating the flag makes the LAST one win
+	# and would silently match a subnet in some other VPC.
+	SUBNET=$(aws --region "$REGION" ec2 describe-subnets \
+		--filters "Name=vpc-id,Values=$TEST_VPC_ID" \
+		          "Name=tag:aws-cdk:subnet-type,Values=Private" \
+		--query 'Subnets[0].SubnetId' --output text 2>/dev/null)
+	case "$SUBNET" in
+		subnet-*) say "resolved test subnet $SUBNET in $TEST_VPC_ID ('$TEST_VPC_NAME')" ;;
+		*) die "no private subnet in VPC '$TEST_VPC_NAME' ($TEST_VPC_ID); set HG_TEST_SUBNET" ;;
+	esac
+fi
+# Fail now, not at run-instances, if the ids do not actually exist. Both were
+# silently deleted once by a VPC consolidation.
+aws --region "$REGION" ec2 describe-subnets --subnet-ids "$SUBNET" >/dev/null 2>&1 \
+	|| die "test subnet $SUBNET does not exist (deleted VPC? set HG_TEST_SUBNET)"
+aws --region "$REGION" ec2 describe-security-groups --group-ids "$TEST_SG" >/dev/null 2>&1 \
+	|| die "test security group $TEST_SG does not exist (deleted VPC? set HG_TEST_SG)"
 # No persistent builder is required any more. If HG_BUILDER_INSTANCE is empty or
 # the literal 'self', the gate launches its own ephemeral peer below (see
 # launch_peer); if a real instance id is supplied, that machine is used as-is and
