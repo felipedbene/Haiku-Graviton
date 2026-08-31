@@ -20,6 +20,9 @@
 set -uo pipefail
 
 REGION="${HAIKU_GRAVITON_REGION:-us-west-2}"
+# Directory holding this script, so sibling helpers (haiku-canonical) can be
+# invoked no matter what cwd a hook runs us from.
+HERE="$(cd -- "$(dirname -- "$0")" && pwd)"
 PROJECT_TAG="${HAIKU_GRAVITON_TAG:-haiku-graviton}"
 BUILDER_NAME="${HAIKU_GRAVITON_BUILDER:-haiku-builder}"
 # Total wall-clock budget. A hook must not hang a session start.
@@ -69,6 +72,26 @@ cand=$(aws_q ec2 describe-images --owners self \
 	--filters "Name=tag:candidate,Values=true" \
 	--query 'length(Images)' --output text)
 [ -n "$cand" ] && say "  untested candidate AMIs: ${cand:-0}"
+
+# Assert the invariant rather than just printing the tag. Two ways this has bitten:
+# the tag existing on zero or several AMIs, and -- the quiet one -- the
+# /haiku-graviton/canonical-ami-id SSM mirror disagreeing with the tag. On
+# 2026-08-31 that mirror was left pointing at an AMI a candidate prune had just
+# DEREGISTERED, so anything resolving canonical the documented way (via SSM)
+# would have launched a dead pointer while the tag looked perfectly healthy. A
+# board that prints the tag alone cannot show that; `haiku-canonical check`
+# compares both and exits non-zero on either failure, so surface its verdict
+# here. Best-effort and never fatal: this snapshot must not block a session.
+if [ -x "$HERE/haiku-canonical" ]; then
+	if canon_out=$(AWS_REGION="$REGION" "$HERE/haiku-canonical" check 2>&1); then
+		printf '%s\n' "$canon_out" | grep -q '^ssm:' \
+			&& say "  invariant: OK (tag and SSM agree)" \
+			|| say "  invariant: OK (one canonical)"
+	else
+		say "  invariant: ** VIOLATED ** -- run haiku-canonical check"
+		printf '%s\n' "$canon_out" | sed 's/^/    /' | head -4
+	fi
+fi
 
 # ------------------------------------------------------------------ dashboard
 # The native-EC2 build path (haiku-nativebuild over SSM) and the bake pipelines
