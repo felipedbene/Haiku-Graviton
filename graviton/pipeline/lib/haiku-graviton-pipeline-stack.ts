@@ -3,6 +3,7 @@ import { Construct } from 'constructs';
 import * as codebuild from 'aws-cdk-lib/aws-codebuild';
 import * as codepipeline from 'aws-cdk-lib/aws-codepipeline';
 import * as cpactions from 'aws-cdk-lib/aws-codepipeline-actions';
+import * as ec2 from 'aws-cdk-lib/aws-ec2';
 import * as iam from 'aws-cdk-lib/aws-iam';
 import * as s3 from 'aws-cdk-lib/aws-s3';
 import * as logs from 'aws-cdk-lib/aws-logs';
@@ -273,6 +274,66 @@ export class HaikuGravitonPipelineStack extends cdk.Stack {
     // out of band and I vouch for it" -- nothing in the pipeline knew whether the
     // image worked. It sits before Approve so a human is deciding with numbers.
     // ---------------------------------------------------------------------
+    // ---------------------------------------------------------------------
+    // Perf-gate test network.
+    //
+    // This used to be two hardcoded ids in config.ts pointing at a hand-made
+    // subnet and security group. The VPC consolidation onto BuildVpc deleted that
+    // VPC and both ids went stale, which broke the Test stage on EVERY pipeline --
+    // and it broke it the expensive way: `InvalidSubnetID.NotFound` surfaces after
+    // CrossBuild and Register have already spent ~25 minutes. Own the network here
+    // instead, so it cannot be deleted out from under the pipeline and a VPC change
+    // cannot leave another dangling id.
+    //
+    // The subnet is resolved from BuildVpc by NAME rather than id. Private with
+    // egress: the peer needs Secrets Manager, S3 and SSM, all of which the VPC's
+    // NAT and gateway endpoint already serve -- a public IP buys nothing and the
+    // gate reads the candidate's console over the EC2 API, not the network.
+    // ---------------------------------------------------------------------
+    const buildVpc = ec2.Vpc.fromLookup(this, 'BuildVpc', {
+      vpcName: cfg.testVpcName,
+    });
+
+    const testSg = new ec2.SecurityGroup(this, 'PerfGateTestSg', {
+      vpc: buildVpc,
+      description:
+        'Perf-gate: peer + candidate. Self-referencing so the peer can drive the ' +
+        'candidate; owned by this stack so it cannot be deleted out from under the gate.',
+      allowAllOutbound: true,
+    });
+    // Peer -> candidate. The gate's readiness check, every measurement and the
+    // stop/start verification are all `ssh baron@<candidate>` from the peer, so
+    // without an intra-SG rule the whole stage fails on a connection timeout.
+    // Note BuildVpc's BuilderSg deliberately allows :22 only from the EICE SG,
+    // which is why it cannot be reused here.
+    testSg.addIngressRule(testSg, ec2.Port.tcp(22),
+      'peer drives the candidate over ssh');
+    // nettput: 5301 is the shared default, 5302-5310 give one port per concurrent
+    // agent so parallel gates cannot collide on a listener.
+    testSg.addIngressRule(testSg, ec2.Port.tcpRange(5301, 5310),
+      'nettput throughput peer ports');
+    // Distinguishes "no ICMP at all" (NIC gone) from "ICMP fine, :22 accepts, no
+    // banner" (the page-writer starvation signature). The gate reports a cause, so
+    // it has to be able to measure the difference rather than infer it.
+    testSg.addIngressRule(testSg, ec2.Port.allIcmp(),
+      'reachability probe: separates a dead NIC from a stalled userland');
+
+    // An explicit override still wins, so a one-off run can be pointed elsewhere
+    // without editing the stack; otherwise use what we just created/looked up.
+    const testSubnetId = cfg.testSubnetId
+      || buildVpc.selectSubnets({ subnetType: ec2.SubnetType.PRIVATE_WITH_EGRESS })
+        .subnetIds[0];
+    const testSecurityGroupId = cfg.testSecurityGroupId || testSg.securityGroupId;
+
+    new cdk.CfnOutput(this, 'PerfGateTestSubnetId', {
+      value: testSubnetId,
+      description: 'Subnet the perf-gate launches the peer and candidate into.',
+    });
+    new cdk.CfnOutput(this, 'PerfGateTestSecurityGroupId', {
+      value: testSecurityGroupId,
+      description: 'Self-referencing SG for the perf-gate peer + candidate.',
+    });
+
     const perfTest = new codebuild.PipelineProject(this, 'PerfTest', {
       projectName: `${cfg.amiNamePrefix}-perf-test`,
       environment: smallArmEnvironment,
@@ -303,8 +364,8 @@ export class HaikuGravitonPipelineStack extends cdk.Stack {
         HG_PEER_INSTANCE_PROFILE: { value: peerProfileName },
         HG_PEER_AMI_PARAM: { value: cfg.peerAmiParam },
         HG_TOOLS_S3: { value: `s3://${cfg.ssmOutBucketName}/tools/nettput-peer.py` },
-        HG_TEST_SUBNET: { value: cfg.testSubnetId },
-        HG_TEST_SG: { value: cfg.testSecurityGroupId },
+        HG_TEST_SUBNET: { value: testSubnetId },
+        HG_TEST_SG: { value: testSecurityGroupId },
         HG_TEST_TYPE: { value: cfg.testInstanceType },
         HG_TEST_KEY: { value: cfg.testKeyName },
         HG_MIN_RX_MBPS: { value: cfg.minReceiveMbps },

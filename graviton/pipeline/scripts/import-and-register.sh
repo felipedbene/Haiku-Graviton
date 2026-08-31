@@ -38,8 +38,25 @@ KEY="${IMPORT_PREFIX}/haiku-ec2-${STAMP}.raw"
 NAME="${AMI_NAME_PREFIX}-${STAMP}"
 ROOT_GIB=$(( (ROOT_VOLUME_BYTES + 1073741823) / 1073741824 ))
 
+# This is the single biggest transfer in the whole bake: a ~20 GiB raw image.
+# `aws s3 cp` drives one multipart stream and measured ~130 MiB/s here, i.e. about
+# 2.5 minutes per GiB of image and the dominant cost of the Register stage. Route
+# it through graviton/scripts/haiku-s3, which prefers s5cmd (parallel multipart)
+# and falls back to the identical `aws s3 cp` when s5cmd is absent -- so this is
+# strictly faster-or-the-same and cannot break the bake if the install step is
+# skipped. Resolved relative to the source artifact, which is where the pipeline
+# checks out the tree.
+HG_S3="${CODEBUILD_SRC_DIR:-}/graviton/scripts/haiku-s3"
 echo "==> uploading $RAW_IMAGE -> s3://$WORK_BUCKET/$KEY"
-aws s3 cp "$RAW_IMAGE" "s3://$WORK_BUCKET/$KEY" --region "$AWS_DEFAULT_REGION"
+if [ -x "$HG_S3" ]; then
+	command -v s5cmd >/dev/null 2>&1 \
+		&& echo "    (haiku-s3 / s5cmd, parallel multipart)" \
+		|| echo "    (haiku-s3, but s5cmd absent -- falling back to aws s3 cp)"
+	AWS_DEFAULT_REGION="$AWS_DEFAULT_REGION" "$HG_S3" put "$RAW_IMAGE" "s3://$WORK_BUCKET/$KEY"
+else
+	echo "    (haiku-s3 not found at $HG_S3 -- using aws s3 cp)"
+	aws s3 cp "$RAW_IMAGE" "s3://$WORK_BUCKET/$KEY" --region "$AWS_DEFAULT_REGION"
+fi
 
 echo "==> ec2 import-snapshot (Format=raw)"
 TASK_ID=$(aws ec2 import-snapshot --region "$AWS_DEFAULT_REGION" \

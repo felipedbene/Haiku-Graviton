@@ -113,6 +113,15 @@ export interface HaikuPipelineConfig {
    * on ordinary variance gets switched off, and then it guards nothing.
    */
   readonly peerAmiParam: string;
+  /** VPC (by Name tag) the perf-gate launches its peer and candidate into. */
+  readonly testVpcName: string;
+  /**
+   * Optional overrides. EMPTY BY DESIGN: the stack looks the subnet up in
+   * testVpcName and creates its own self-referencing security group, so there is
+   * no id to go stale. These previously defaulted to a hardcoded subnet/SG that a
+   * VPC consolidation deleted, which broke the Test stage on every pipeline and
+   * only surfaced ~25 minutes into a bake. Set them to pin a one-off run.
+   */
   readonly testSubnetId: string;
   readonly testSecurityGroupId: string;
   readonly testInstanceType: string;
@@ -204,8 +213,10 @@ export function loadConfig(scope: Construct): HaikuPipelineConfig {
     // ssm-out write) and passes its name to the gate.
     peerAmiParam: ctx(scope, 'haiku:peerAmiParam', 'HAIKU_PEER_AMI_PARAM',
       '/aws/service/canonical/ubuntu/server/24.04/stable/current/arm64/hvm/ebs-gp3/ami-id'),
-    testSubnetId: ctx(scope, 'haiku:testSubnetId', 'HAIKU_TEST_SUBNET', 'subnet-0888405da8f10d1b2'),
-    testSecurityGroupId: ctx(scope, 'haiku:testSecurityGroupId', 'HAIKU_TEST_SG', 'sg-0b99fabc8cb8bce88'),
+    testVpcName: ctx(scope, 'haiku:testVpcName', 'HAIKU_TEST_VPC_NAME',
+      'DebeosOpsStack/BuildVpc'),
+    testSubnetId: ctx(scope, 'haiku:testSubnetId', 'HAIKU_TEST_SUBNET', ''),
+    testSecurityGroupId: ctx(scope, 'haiku:testSecurityGroupId', 'HAIKU_TEST_SG', ''),
     // Never a t-family instance: burstable CPU throttles to a baseline when
     // credits run out, which corrupts the CPU-cost-per-byte half of the result.
     testInstanceType: ctx(scope, 'haiku:testInstanceType', 'HAIKU_TEST_TYPE', 'c7g.large'),
