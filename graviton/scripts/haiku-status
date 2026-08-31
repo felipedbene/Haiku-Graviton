@@ -59,6 +59,54 @@ cand=$(aws_q ec2 describe-images --owners self \
 	--query 'length(Images)' --output text)
 [ -n "$cand" ] && say "  untested candidate AMIs: ${cand:-0}"
 
+# ------------------------------------------------------------------ dashboard
+# The native-EC2 build path (haiku-nativebuild over SSM) and the bake pipelines
+# are where the work lives now; surface them so a cold session has the whole
+# picture without hand-querying. Bucket is derived from the account id ($ident)
+# so no account-scoped name is baked into this tracked file.
+say ""
+say "--- native builders (tag role=native-builder) ---"
+aws_q ec2 describe-instances \
+	--filters "Name=tag:role,Values=native-builder" \
+	          "Name=instance-state-name,Values=running,pending" \
+	--query 'Reservations[].Instances[].InstanceType' --output text \
+	| tr '\t' '\n' | sort | uniq -c \
+	| while read -r n t; do [ -n "$t" ] && printf '  %3s x %s\n' "$n" "$t"; done
+online=$(timeout 15 aws --region "$REGION" ssm describe-instance-information \
+	--max-results 50 \
+	--query 'length(InstanceInformationList[?PingStatus==`Online`])' --output text 2>/dev/null)
+say "  SSM nodes online: ${online:-?}"
+
+say ""
+say "--- bake pipelines (in-flight stage / Approve-gate) ---"
+for pl in haiku-graviton-bake haiku-graviton2-bake haiku-graviton3-bake haiku-graviton4-bake; do
+	inflight=$(aws_q codepipeline get-pipeline-state --name "$pl" \
+		--query 'stageStates[?latestExecution.status==`InProgress`].stageName' --output text)
+	appr=$(aws_q codepipeline get-pipeline-state --name "$pl" \
+		--query 'stageStates[?stageName==`Approve`].actionStates[0].latestExecution.status' \
+		--output text)
+	printf '  %-22s inflight:%-12s approve:%s\n' "$pl" "${inflight:-idle}" "${appr:-n/a}"
+done
+
+say ""
+say "--- package repo (debeos-repo/arm64) ---"
+cnt=$(timeout 20 aws --region "$REGION" s3 ls \
+	"s3://haiku-graviton-hpkg-${ident}/debeos-repo/arm64/packages/" 2>/dev/null \
+	| awk '{print $4}' | sed -E 's/-[0-9].*//' \
+	| grep -vE '_devel$|_debuginfo$|_tools$|_doc$|_source$|_bin$' | sort -u | wc -l)
+say "  published base packages: ${cnt:-?}"
+
+say ""
+say "--- open issues (gh, newest first) ---"
+if command -v gh >/dev/null 2>&1; then
+	timeout 20 gh issue list --repo felipedbene/Haiku-Graviton --state open --limit 60 \
+		--json number,title,labels \
+		--jq '.[] | "  #\(.number) [\(.labels|map(.name)|join(","))] \(.title)"' 2>/dev/null \
+		| head -40 || say "  (gh query failed)"
+else
+	say "  (gh not installed)"
+fi
+
 # -------------------------------------------------------------- builder probe
 builder=$(aws_q ec2 describe-instances \
 	--filters "Name=tag:Name,Values=$BUILDER_NAME" "Name=instance-state-name,Values=running" \
