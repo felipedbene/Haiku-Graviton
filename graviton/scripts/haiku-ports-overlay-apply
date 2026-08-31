@@ -70,13 +70,15 @@ set -u
 #                  cmake -> libcurl -> openssl3 -> libzstd -> zstd cycle
 #   zstd-1.5.7     SAME cap as 1.5.6 -- "find_package(zstd CONFIG) will not work".
 #                  Version-scoping the denylist to 1.5.6 would have shipped this one.
-#   gettext-1.0    still carries "STAGE-1 NOTE (graviton): cmd:groff removed from
-#                  BUILD_PREREQUIRES". NOTE: README.md's table marks that patch
-#                  RETIRED 2026-08-24 with the line restored, but this recipe still
-#                  has the cut -- the overlay recipe is STALE against its own docs.
-#                  Blocked until the recipe itself is refreshed; do not "fix" this by
-#                  deleting the entry, refresh the recipe.
-STAGE1_PORTS="autoconf cmake zstd gettext"
+#
+# gettext-1.0 is NOT on this list. It used to be: the checked-in recipe still carried
+# "STAGE-1 NOTE (graviton): cmd:groff removed from BUILD_PREREQUIRES" even though
+# README.md's table marked that patch RETIRED 2026-08-24 with the line restored --
+# a guest-side fix that was proven (RC=0) but never harvested back into the recipe
+# file (issue #132). cmd:groff is restored in recipes/gettext-1.0.recipe, groff-1.23.0
+# is confirmed published in the DeBeOS repo, so applying this recipe now ships nothing
+# capped -- it is functionally the pristine recipe again.
+STAGE1_PORTS="autoconf cmake zstd"
 
 WITH_STAGE1=0
 if [ "${1:-}" = "--stage1" ]; then

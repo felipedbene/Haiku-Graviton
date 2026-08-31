@@ -44,7 +44,7 @@ fixed, but this makes the step independent of it either way.
 | `libtool-2.5.4.recipe` | yes | drop `./bootstrap`, flatten source mtimes (Blocker 1) |
 | `tar-1.35.recipe` | yes | `--with-included-regex`, the hanging gnulib run test (Blocker 4) |
 | `autoconf-2.72.recipe` | **stale — cut retired** | kept as the record of the doc cut. The shipping package is now built from the **pristine** recipe with real `makeinfo`; see Blocker 6 |
-| `gettext-1.0.recipe` | yes, **still needed** | drops `cmd:groff`. Cannot be retired until a real `groff` exists |
+| `gettext-1.0.recipe` | **stale comment, cut retired** | previously dropped `cmd:groff`; `groff-1.23.0` now builds natively and is published in the DeBeOS repo, so the line is restored and the recipe is functionally pristine again (`patches/README.md` has the RC=0 rebuild that proved it) |
 | `zstd-1.5.6.recipe` | **stale — cut retired** | kept as the record of the Makefile-instead-of-cmake cut. Now built from the **pristine** cmake-based recipe |
 | `cmake-4.1.6.recipe` | **NO — unmodified** | cmake needs no change at all once `expat`/`rhash`/`libuv`/`curl` exist. Stored to pin the exact upstream text, since the builder's tree is not a pristine reference |
 | `curl-8.21.0.recipe` | yes | `--without-libpsl` on every arch; `libpsl` → `libidn2` → `cmd:gtkdocize`, unbuildable here |
