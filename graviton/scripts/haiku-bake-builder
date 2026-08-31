@@ -1,22 +1,47 @@
 #!/usr/bin/env bash
 #
-# haiku-bake-builder -- bake the native-build DRIVER SCRIPTS into a new builder AMI.
+# haiku-bake-builder -- bake a builder-canonical AMI for the Step Functions
+# build-wave.
 #
-# The builder-canonical AMI (SSM /haiku-graviton/builder-ami-id) already carries
-# the toolchain + haikuporter + ports tree, but NOT the driver scripts the
-# Step Functions build-wave invokes on the instance:
-#     /boot/home/haiku-nativebuild      (per-port build+harvest loop)
-#     /boot/home/haiku-repo-publish     (publish the pool to the DeBeOS repo)
-# so a fresh builder failed with "/boot/home/haiku-nativebuild: No such file".
-# This bakes them in (incremental over the current builder AMI -- no toolchain
-# rebuild), tags builder-canonical=true, and repoints the SSM param.
+# TWO MODES.
+#
+# 1. INCREMENTAL (default) -- base is an existing builder-canonical AMI that
+#    already carries the toolchain + haikuporter + ports tree. This only adds the
+#    driver scripts the build-wave invokes on the instance:
+#        /boot/home/haiku-nativebuild      (per-port build+harvest loop)
+#        /boot/home/haiku-repo-publish     (publish the pool to the DeBeOS repo)
+#    (a fresh builder without them fails "/boot/home/haiku-nativebuild: No such
+#    file"). Cheap, but it does NOT rebase onto a newer canonical -- so repeated
+#    incremental bakes compound drift from the OS image, and the lineage root can
+#    even be deregistered out from under you (that is exactly what happened to
+#    ami-0276b3087acf373b8, whose source-ami no longer exists).
+#
+# 2. REBASE (`--provision`) -- base is a plain **canonical** DeBeOS AMI (the
+#    `canonical=true` tag). Runs haiku-provision-native-builder on it to install
+#    the toolchain + clone the ports tree, warms haikuporter's dependency-info
+#    cache (otherwise EVERY fresh builder pays a ~2 min repopulation over 7000+
+#    recipes), then stages the driver scripts and bakes. This is the mode that
+#    gives a REPRODUCIBLE lineage rooted in a live canonical AMI -- prefer it
+#    whenever the OS image has moved.
+#
+# Root disk: the bake box inherits the base AMI's volume size unless `--disk` is
+# given, and the resulting AMI's snapshot is that size -- which becomes the FLOOR
+# for every builder launched from it. Keep it LEAN and let the launcher size each
+# builder per wave (loader-driven BFS auto-grow makes the root fill whatever
+# volume it is given -- see graviton/docs/develop/bfs-auto-grow-design.md).
 #
 # Runs on the WORKSTATION (aws + graviton/scripts/ssm-run). Read-only until it
 # creates the image + moves the param; it never deletes the old AMI.
 #
 # Usage:
-#   haiku-bake-builder [--base ami-...] [--no-repoint]
-#     --base        base builder AMI (default: current /haiku-graviton/builder-ami-id)
+#   haiku-bake-builder [--base ami-...] [--provision] [--disk GiB] [--no-repoint]
+#     --base        base AMI. Default: current /haiku-graviton/builder-ami-id.
+#                   With --provision, pass a canonical AMI (or use --from-canonical).
+#     --from-canonical  resolve --base from the `canonical=true` tag and imply
+#                   --provision. The normal way to rebase.
+#     --provision   run haiku-provision-native-builder on the base before baking
+#                   (required when the base is a plain canonical image)
+#     --disk GiB    root volume size for the bake box, and hence the AMI floor
 #     --no-repoint  create + tag the new AMI but DON'T move the SSM param (safe
 #                   while a build fleet is mid-flight; repoint by hand later)
 set -euo pipefail
@@ -35,10 +60,13 @@ PROFILE="${HAIKU_BUILDER_PROFILE:-DebeosOpsStack-BuilderProfile-tPCqkm9pVVKR}"
 PUBIP_FLAG=""; [ "${HAIKU_BUILDER_PUBLIC_IP:-0}" = 1 ] && PUBIP_FLAG="--associate-public-ip-address"
 STAGE_TYPE="${HAIKU_BAKE_INSTANCE_TYPE:-c8g.large}"
 
-BASE=""; REPOINT=1
+BASE=""; REPOINT=1; PROVISION=0; FROM_CANONICAL=0; DISK=""
 while [ $# -gt 0 ]; do
   case "$1" in
     --base) BASE="$2"; shift 2 ;;
+    --provision) PROVISION=1; shift ;;
+    --from-canonical) FROM_CANONICAL=1; PROVISION=1; shift ;;
+    --disk) DISK="$2"; shift 2 ;;
     --no-repoint) REPOINT=0; shift ;;
     *) echo "unknown arg: $1" >&2; exit 2 ;;
   esac
@@ -50,20 +78,49 @@ say() { printf 'haiku-bake-builder: %s\n' "$*" >&2; }
 # as ssm-run / haiku-nativebuild): haiku-graviton-<account>-<region>.
 ACCT=$(aws sts get-caller-identity --query Account --output text)
 BUCKET="${HAIKU_GRAVITON_BUCKET:-haiku-graviton-${ACCT}-${REGION}}"
+# Resolve the base. --from-canonical reads the `canonical=true` tag, which is the
+# authoritative pointer (NOT newest CreationDate, NOT the canonical-ami-id SSM
+# parameter -- that one has drifted before).
+if [ "$FROM_CANONICAL" = 1 ]; then
+  [ -z "$BASE" ] || { say "--from-canonical and --base are mutually exclusive"; exit 2; }
+  BASE=$(aws ec2 describe-images --region "$REGION" --owners self \
+    --filters "Name=tag:canonical,Values=true" --query 'Images[0].ImageId' --output text)
+  case "$BASE" in
+    ami-*) ;;
+    *) say "no AMI tagged canonical=true in $REGION"; exit 1 ;;
+  esac
+  say "resolved canonical base from tag: $BASE"
+fi
 [ -n "$BASE" ] || BASE=$(aws ssm get-parameter --name "$PARAM" --region "$REGION" --query Parameter.Value --output text)
-say "base builder AMI: $BASE ; work bucket: $BUCKET"
+say "base AMI: $BASE ; provision=$PROVISION ; work bucket: $BUCKET"
 
-# 1) stage the scripts in S3 so the instance's agent can pull them.
-for s in haiku-nativebuild haiku-repo-publish; do
+# 1) stage the scripts in S3 so the instance's agent can pull them. In provision
+# mode the provisioner itself is staged too, so the box installs its own
+# toolchain instead of inheriting one from an opaque older snapshot.
+STAGE="haiku-nativebuild haiku-repo-publish"
+[ "$PROVISION" = 1 ] && STAGE="$STAGE haiku-provision-native-builder"
+for s in $STAGE; do
   [ -f "$HERE/$s" ] || { say "missing $HERE/$s"; exit 1; }
   aws s3 cp "$HERE/$s" "s3://$BUCKET/bake-scripts/$s" --region "$REGION" >/dev/null
 done
-say "staged driver scripts to s3://$BUCKET/bake-scripts/"
+say "staged to s3://$BUCKET/bake-scripts/: $STAGE"
 
-# 2) launch a temp builder from the base AMI.
+# 2) launch a temp builder from the base AMI. A --disk override sets the bake
+# box's root, which becomes the AMI snapshot size and thus the FLOOR for every
+# builder launched from it -- keep it small.
+BDM_ARG=""
+if [ -n "$DISK" ]; then
+  case "$DISK" in
+    ''|*[!0-9]*) say "--disk expects an integer GiB, got '$DISK'"; exit 2 ;;
+  esac
+  BDM_ARG='--block-device-mappings=[{"DeviceName":"/dev/xvda","Ebs":{"VolumeSize":'"$DISK"',"VolumeType":"gp3","DeleteOnTermination":true}}]'
+  say "bake box root: ${DISK} GiB gp3"
+fi
+
 IID=$(aws ec2 run-instances --image-id "$BASE" --instance-type "$STAGE_TYPE" \
   --security-group-ids "$SG" --subnet-id "$SUBNET" $PUBIP_FLAG --key-name "$KEY" \
   --iam-instance-profile "Name=$PROFILE" --region "$REGION" \
+  ${BDM_ARG:+"$BDM_ARG"} \
   --tag-specifications 'ResourceType=instance,Tags=[{Key=Name,Value=haiku-builder-bake},{Key=Project,Value=haiku-graviton},{Key=auto-stop,Value=no},{Key=auto-delete,Value=off}]' \
   --query 'Instances[0].InstanceId' --output text)
 say "launched temp builder $IID; waiting for SSM registration..."
@@ -77,6 +134,32 @@ done
 [ "$P" = "Online" ] || { say "temp builder never registered in SSM"; exit 1; }
 say "builder online; staging scripts to /boot/home"
 
+# 2b) provision mode: install the toolchain + ports tree on the fresh canonical,
+# then WARM haikuporter's dependency-info cache. The warm-up matters: on a fresh
+# ports tree haikuporter repopulates dependency infos across 7000+ recipes before
+# it will build anything, and an unbaked cache makes every builder in every wave
+# pay that again. `--no-source-packages -n` on a trivial port drives the
+# repopulation without building.
+if [ "$PROVISION" = 1 ]; then
+  say "provisioning toolchain + ports tree on $IID (several minutes)"
+  "$HERE/ssm-run" "$IID" -t 2400 <<EOF
+set -eu
+/boot/system/bin/debeos-ssm-agent s3 cp s3://$BUCKET/bake-scripts/haiku-provision-native-builder /boot/home/haiku-provision-native-builder
+chmod +x /boot/home/haiku-provision-native-builder
+/boot/home/haiku-provision-native-builder
+EOF
+  say "warming haikuporter dependency-info cache"
+  "$HERE/ssm-run" "$IID" -t 1800 <<'EOF'
+set -u
+export PATH=/boot/home/config/non-packaged/bin:$PATH
+cd /boot/home/haikuporter
+# -n = dry run: resolves + repopulates the repository, builds nothing.
+python3.14 ./haikuporter --config=/boot/home/haikuports.conf -n zlib >/boot/home/warm.log 2>&1 || true
+tail -3 /boot/home/warm.log
+df /boot | grep -iE 'Used Blocks|Free Blocks'
+EOF
+fi
+
 # 3) pull the scripts onto /boot/home and make them executable (agent s3 cp).
 "$HERE/ssm-run" "$IID" -t 300 <<EOF
 set -e
@@ -89,18 +172,30 @@ EOF
 # 4) snapshot -> new AMI. --no-reboot: Haiku arm64 EC2 reboot is unreliable, and
 # adding two files to /boot/home does not need a quiesced FS.
 TS=$(date -u +%Y%m%d%H%M%S)
+if [ "$PROVISION" = 1 ]; then
+  DESC="builder rebased on canonical $BASE: provisioned toolchain + ports tree + warmed haikuporter cache + driver scripts"
+else
+  DESC="builder-canonical + baked driver scripts (haiku-nativebuild, haiku-repo-publish)"
+fi
 NEW=$(aws ec2 create-image --instance-id "$IID" --no-reboot --region "$REGION" \
   --name "haiku-builder-canonical-$TS" \
-  --description "builder-canonical + baked driver scripts (haiku-nativebuild, haiku-repo-publish)" \
+  --description "$DESC" \
   --query ImageId --output text)
 say "creating image $NEW ; waiting for it to become available (can take a while)..."
 aws ec2 wait image-available --image-ids "$NEW" --region "$REGION"
+# Record HOW this AMI was built, not just what it came from: an incremental bake
+# and a canonical rebase have very different reproducibility, and `source-ami`
+# alone cannot tell them apart once the parent is deregistered.
 aws ec2 create-tags --resources "$NEW" --region "$REGION" \
-  --tags Key=builder-canonical,Value=true Key=Project,Value=haiku-graviton Key=source-ami,Value="$BASE"
+  --tags Key=builder-canonical,Value=true Key=Project,Value=haiku-graviton \
+         Key=source-ami,Value="$BASE" \
+         Key=bake-mode,Value="$([ "$PROVISION" = 1 ] && echo rebase-on-canonical || echo incremental)"
 say "new builder AMI available: $NEW"
 
-# 5) repoint the SSM param (unless --no-repoint). New AMI is a strict SUPERSET of
-# the base (only adds two scripts), so pointing new launches at it is safe.
+# 5) repoint the SSM param (unless --no-repoint). In incremental mode the new AMI
+# is a strict SUPERSET of the base (only adds two scripts). In rebase mode it is
+# a NEW lineage off canonical -- same contract for the build-wave, but verify a
+# wave before trusting it broadly.
 if [ "$REPOINT" = 1 ]; then
   OLD=$(aws ssm get-parameter --name "$PARAM" --region "$REGION" --query Parameter.Value --output text)
   aws ssm put-parameter --name "$PARAM" --type String --overwrite --value "$NEW" --region "$REGION" >/dev/null
