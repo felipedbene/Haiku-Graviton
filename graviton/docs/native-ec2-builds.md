@@ -72,7 +72,10 @@ haiku-mgmt-agent s3 cp /boot/home/haikuports/packages/<pkg>.hpkg s3://<bucket>/h
 aws ssm send-command --document-name AWS-RunShellScript --output-s3-bucket-name <bucket> …
 ```
 
-Publish to the repo with `graviton/scripts/haiku-repo-publish-remote` as before.
+Publish to the repo with `graviton/scripts/haiku-repo-publish-ephemeral` (the
+no-metal publisher: it self-provisions a short-lived Haiku publisher from the
+canonical AMI, runs the incremental `haiku-repo-add` over SSM, and terminates it).
+The old `haiku-repo-publish-remote` drove the now-retired persistent metal host.
 
 ## Canonical driver
 

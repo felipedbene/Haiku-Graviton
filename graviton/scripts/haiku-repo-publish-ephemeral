@@ -1,0 +1,200 @@
+#!/usr/bin/env bash
+#
+# haiku-repo-publish-ephemeral -- publish one or more locally-held .hpkg to the
+# LIVE DeBeOS package repository, from the workstation, WITHOUT any persistent
+# build host. It self-provisions a short-lived Haiku publisher from the
+# canonical AMI, runs haiku-repo-add on it over SSM, and terminates it again.
+#
+# Why this exists: this is the no-metal replacement for haiku-repo-publish-remote.
+# That script drove a PERSISTENT c9g metal build host over SSM to run
+# haiku-repo-add; that metal has been terminated, so any flow that reached it
+# (haiku-devel-publish, and thus haiku-canonical promote) now fails at the publish
+# step. This script keeps the exact same publish SEMANTICS -- an *incremental*
+# haiku-repo-add that pulls the current repo, adds only the new package(s), and
+# rebuilds the index over the full set -- and only changes the host provenance:
+# instead of an always-on metal, it launches an ephemeral publisher and tears it
+# down in an EXIT trap, mirroring how haiku-perf-gate self-provisions its peer.
+#
+# It deliberately runs haiku-repo-add and NOT `haiku-repo-publish all`: the latter
+# rebuilds the repo index from ONLY the pool it is handed and uploads that, which
+# would DROP every other package from the live repo (see the same warning in
+# graviton/pipeline/lib/ops-stack.ts). Adding a single haiku_devel must never
+# shrink the published set, so the incremental add is the correct tool.
+#
+# The publisher is a native Haiku arm64 box (the canonical AMI), because the repo
+# index is a Haiku-tool artifact: `package` and `package_repo` only exist there.
+# It reaches AWS the same way the retired metal did -- with the awscli that
+# haiku-repo-add shells out to for the S3 sync and the CloudFront invalidation.
+# See the VERIFY / prerequisites note at the bottom of this header.
+#
+# Config (env only -- NO account-scoped names live in this tracked file):
+#   HG_REPO_S3        s3://<bucket>/<prefix>/<arch>  live repo prefix (required)
+#   HG_INCOMING_S3    s3://<bucket>/<prefix>         staging prefix for new hpkg (required)
+#   HG_CF_DIST        CloudFront distribution id to invalidate (optional, recommended)
+#   HG_REPO_URL       public base URL for repo.info (optional; haiku-repo-add default)
+#   ARCH              packaging arch (default arm64)
+#   AWS_DEFAULT_REGION / AWS_REGION (default us-west-2)
+#
+#   -- ephemeral-publisher provisioning --
+#   HG_PUBLISHER_INSTANCE   reuse an ALREADY-RUNNING Haiku publisher instead of
+#                           launching one. When set, it is used as-is and is NEVER
+#                           terminated (backward-compat / repeated publishes).
+#                           Empty (the default) -> self-provision + terminate.
+#   HG_PUBLISHER_AMI_PARAM  SSM parameter the canonical Haiku AMI id is read from
+#                           (default /haiku-graviton/canonical-ami-id).
+#   HG_PUBLISHER_PROFILE    instance profile for the self-provisioned publisher; it
+#                           must carry AmazonSSMManagedInstanceCore (so it answers
+#                           SSM), read+write on the repo bucket and the incoming
+#                           prefix, and cloudfront:CreateInvalidation on HG_CF_DIST.
+#                           Required when self-provisioning.
+#   HG_PUBLISHER_SUBNET     subnet to launch the publisher in (required to self-provision)
+#   HG_PUBLISHER_SG         security group for the publisher (required to self-provision)
+#   HG_PUBLISHER_TYPE       instance type (default c7g.large; arm64)
+#   HG_PUBLISHER_KEY        optional EC2 key-name (SSM does not need it; handy for debug)
+#   HG_PUBLISHER_WAIT_SECS  budget for the publisher to answer SSM (default 420)
+#
+# Usage: haiku-repo-publish-ephemeral <pkg1.hpkg> [<pkg2.hpkg> ...]
+#
+set -euo pipefail
+
+region="${AWS_DEFAULT_REGION:-${AWS_REGION:-us-west-2}}"
+ARCH="${ARCH:-arm64}"
+HERE="$(cd "$(dirname "$0")" && pwd)"
+SSM_RUN="$HERE/ssm-run"
+
+log() { echo "haiku-repo-publish-ephemeral: $*"; }
+die() { echo "haiku-repo-publish-ephemeral: $*" >&2; exit 1; }
+
+: "${HG_REPO_S3:?set HG_REPO_S3=s3://<bucket>/<prefix>/$ARCH}"
+: "${HG_INCOMING_S3:?set HG_INCOMING_S3=s3://<bucket>/<prefix>}"
+[ $# -ge 1 ] || die "usage: $(basename "$0") <pkg.hpkg> [pkg.hpkg ...]"
+for f in "$@"; do [ -f "$f" ] || die "no such file: $f"; done
+[ -x "$SSM_RUN" ] || die "ssm-run not found next to this script"
+[ -f "$HERE/haiku-repo-add" ] || die "haiku-repo-add not found next to this script"
+
+AMI_PARAM="${HG_PUBLISHER_AMI_PARAM:-/haiku-graviton/canonical-ami-id}"
+PROFILE="${HG_PUBLISHER_PROFILE:-}"
+SUBNET="${HG_PUBLISHER_SUBNET:-}"
+SG="${HG_PUBLISHER_SG:-}"
+TYPE="${HG_PUBLISHER_TYPE:-c7g.large}"
+KEY="${HG_PUBLISHER_KEY:-}"
+WAIT="${HG_PUBLISHER_WAIT_SECS:-420}"
+
+# The instance the rest of the script drives. If the caller supplied one we use it
+# and never tear it down; otherwise launch_publisher fills it in and sets
+# PUBLISHER_LAUNCHED so cleanup terminates exactly what we created.
+PUBLISHER="${HG_PUBLISHER_INSTANCE:-}"
+PUBLISHER_LAUNCHED=0
+
+# Best-effort teardown on every exit path, so a failure part way through cannot
+# leak the instance we launched. A caller-supplied publisher is left running.
+cleanup() {
+	if [ "$PUBLISHER_LAUNCHED" = 1 ] && [ -n "$PUBLISHER" ]; then
+		log "terminating ephemeral publisher $PUBLISHER"
+		aws --region "$region" ec2 terminate-instances --instance-ids "$PUBLISHER" \
+			--query 'TerminatingInstances[].CurrentState.Name' --output text 2>&1 | sed 's/^/  /' || true
+	fi
+	return 0
+}
+trap cleanup EXIT
+
+# --------------------------------------------------------------- launch
+# Resolve the canonical Haiku AMI from SSM (never a hardcoded id) and launch a
+# short-lived publisher. BUILDER/PUBLISHER_LAUNCHED are set the instant
+# run-instances returns an id, so a failure during the SSM wait still hands the
+# instance to the EXIT trap rather than leaking it.
+launch_publisher() {
+	[ -n "$PROFILE" ] || die "self-provisioning needs HG_PUBLISHER_PROFILE (an instance profile with SSM + repo S3 + CloudFront)"
+	[ -n "$SUBNET" ]  || die "self-provisioning needs HG_PUBLISHER_SUBNET"
+	[ -n "$SG" ]      || die "self-provisioning needs HG_PUBLISHER_SG"
+
+	local ami
+	ami="$(aws --region "$region" ssm get-parameter --name "$AMI_PARAM" \
+		--query 'Parameter.Value' --output text 2>&1)"
+	case "$ami" in
+		ami-*) ;;
+		*) die "could not resolve the canonical Haiku AMI from SSM param $AMI_PARAM: $ami" ;;
+	esac
+	log "self-provisioning an ephemeral Haiku publisher from $ami ($TYPE, profile $PROFILE)"
+
+	local keyopt=""
+	[ -n "$KEY" ] && keyopt="--key-name $KEY"
+	local id
+	# shellcheck disable=SC2086
+	id="$(aws --region "$region" ec2 run-instances \
+		--image-id "$ami" --instance-type "$TYPE" \
+		--subnet-id "$SUBNET" --security-group-ids "$SG" $keyopt \
+		--iam-instance-profile "Name=$PROFILE" \
+		--tag-specifications "ResourceType=instance,Tags=[{Key=Project,Value=haiku-graviton},{Key=Name,Value=haiku-repo-publisher},{Key=ephemeral,Value=true}]" \
+		--query 'Instances[0].InstanceId' --output text 2>&1)"
+	case "$id" in
+		i-*) ;;
+		*) die "run-instances (publisher) failed: $id" ;;
+	esac
+	PUBLISHER="$id"
+	PUBLISHER_LAUNCHED=1
+	log "publisher $PUBLISHER launched; waiting for it to answer SSM"
+}
+
+# ---------------------------------------------------- SSM reachability wait
+# Haiku registers with SSM through haiku-mgmt-agent, which can lag the EC2 state
+# by a minute or two after boot. Prove the channel actually round-trips (a trivial
+# echo) before shipping the publish, so a publisher that never registers fails
+# here with a clear message instead of a confusing publish error.
+wait_for_ssm() {
+	local deadline=$((SECONDS + WAIT)) state out
+	log "waiting for publisher $PUBLISHER to answer SSM (budget ${WAIT}s)"
+	while [ "$SECONDS" -lt "$deadline" ]; do
+		state="$(aws --region "$region" ec2 describe-instances --instance-ids "$PUBLISHER" \
+			--query 'Reservations[0].Instances[0].State.Name' --output text 2>/dev/null || true)"
+		if [ "$state" = "running" ]; then
+			out="$("$SSM_RUN" "$PUBLISHER" -t 60 -q 2>/dev/null <<-'PING'
+				echo PUBLISHER_OK
+			PING
+			)"
+			printf '%s' "$out" | grep -q PUBLISHER_OK && { log "publisher reachable over SSM"; return 0; }
+		fi
+		log "  not reachable yet (state ${state:-unknown}, $((deadline - SECONDS))s left)"
+		sleep 15
+	done
+	die "publisher $PUBLISHER never answered SSM within ${WAIT}s (last state ${state:-unknown})"
+}
+
+case "$PUBLISHER" in
+	"") launch_publisher ;;
+	*)  log "using caller-supplied publisher $PUBLISHER (will not terminate it)" ;;
+esac
+wait_for_ssm
+
+# ------------------------------------------------- stage the package(s)
+# Clear any stale incoming, then upload the requested set. haiku-repo-add on the
+# publisher consumes HG_INCOMING_S3, so the upload happens here (the workstation
+# has the credentials and the local files) and the box only pulls from S3.
+log "uploading $# package(s) to $HG_INCOMING_S3"
+aws s3 rm "${HG_INCOMING_S3%/}/" --region "$region" --recursive --exclude "*" --include "*.hpkg" >/dev/null 2>&1 || true
+for f in "$@"; do
+	aws s3 cp "$f" "${HG_INCOMING_S3%/}/$(basename "$f")" --region "$region" --only-show-errors
+done
+
+# ----------------------------------------- run haiku-repo-add on the box
+# Ship the current haiku-repo-add to the publisher and run it there. PKG_TOOL /
+# PACKAGE_REPO_TOOL are pinned to the NATIVE Haiku tool names (they are on PATH in
+# /boot/system/bin), because haiku-repo-add's auto-detection globs the Linux
+# cross-build tree the metal had, which does not exist on a native Haiku host.
+log "running haiku-repo-add on the publisher over SSM"
+addb64="$(base64 -w0 "$HERE/haiku-repo-add" 2>/dev/null || base64 "$HERE/haiku-repo-add" | tr -d '\n')"
+"$SSM_RUN" "$PUBLISHER" -t 1800 <<EOF
+set -e
+export HG_REPO_S3='$HG_REPO_S3'
+export HG_INCOMING_S3='$HG_INCOMING_S3'
+export HG_CF_DIST='${HG_CF_DIST:-}'
+export HG_REPO_URL='${HG_REPO_URL:-}'
+export ARCH='$ARCH'
+export AWS_DEFAULT_REGION='$region'
+export PKG_TOOL=package
+export PACKAGE_REPO_TOOL=package_repo
+printf '%s' '$addb64' | base64 -d > /tmp/haiku-repo-add
+bash /tmp/haiku-repo-add
+EOF
+
+log "done -- repo updated with $# package(s); publisher torn down on exit"

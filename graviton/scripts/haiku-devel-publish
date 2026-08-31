@@ -17,18 +17,25 @@
 # it resolves the AMI's `haiku-revision` tag (set by import-and-register.sh),
 # checks whether the repo already serves a haiku_devel for that hrev, and if not
 # fetches the version-matched hpkg that the cross-build archived and publishes it
-# to the repo via haiku-repo-publish-remote.
+# to the repo via haiku-repo-publish-ephemeral (the no-metal publisher).
 #
 # It is IDEMPOTENT and CHEAP on the common path: when the repo already carries
 # the matching haiku_devel (the usual case -- the base hrev changes rarely) it
-# exits without starting the metal build host. It only does the heavy publish
-# when the canonical hrev actually moved. That makes it safe to call on EVERY
-# promote (haiku-canonical does).
+# exits without provisioning anything. It only does the heavy publish -- which
+# spins up (and tears down) a short-lived Haiku publisher -- when the canonical
+# hrev actually moved. That makes it safe to call on EVERY promote (haiku-canonical
+# does).
 #
 # Best-effort by contract: callers (haiku-canonical promote) must NOT let a
 # failure here break the canonical-tag invariant. A stale-but-present repo
 # haiku_devel is a degraded state (native dev needs a manual publish), not a
 # broken boot.
+#
+# NO-METAL: the publish step used to drive a persistent metal build host
+# (haiku-repo-publish-remote). That metal is retired; publishing now goes through
+# haiku-repo-publish-ephemeral, which self-provisions a short-lived Haiku
+# publisher from the canonical AMI, runs the incremental haiku-repo-add on it, and
+# terminates it. See that script for the HG_PUBLISHER_* provisioning env.
 #
 # Config (env only -- NO account-scoped names in this tracked file):
 #   HG_REPO_S3           s3://<bucket>/<prefix>/<arch>  live repo prefix (required)
@@ -39,8 +46,9 @@
 #                        the operator need not know a generated bucket name. For
 #                        the CDK pipeline the location is
 #                        s3://<workBucket>/cache/devel-closure.
-#   HG_BUILDER_ID / HG_INCOMING_S3 / HG_CF_DIST / HG_REPO_URL
-#                        forwarded to haiku-repo-publish-remote (see it)
+#   HG_INCOMING_S3 / HG_CF_DIST / HG_REPO_URL / HG_PUBLISHER_*
+#                        forwarded to haiku-repo-publish-ephemeral (see it for the
+#                        ephemeral-publisher provisioning env)
 #   ARCH                 packaging arch (default arm64)
 #   AWS_DEFAULT_REGION / AWS_REGION (default us-west-2)
 #
@@ -90,7 +98,7 @@ log "target base revision: $HREV"
 # contains the hrev, so a substring match on the S3 listing is sufficient.
 if aws s3 ls "${HG_REPO_S3%/}/packages/" --region "$region" 2>/dev/null \
 		| grep -E "haiku_devel-.*${HREV}[^0-9]" >/dev/null; then
-	log "repo already serves haiku_devel for ${HREV}; nothing to do (no metal spin-up)"
+	log "repo already serves haiku_devel for ${HREV}; nothing to do (no publisher spin-up)"
 	exit 0
 fi
 log "repo has no haiku_devel for ${HREV}; will publish the version-matched package"
@@ -128,8 +136,8 @@ else
 	[ -n "$HPKG" ] || die "no archived haiku_devel for ${HREV} in any known location -- rebake at this hrev, or publish by hand with --file <hpkg>"
 fi
 
-# ---- publish via the existing remote publisher ---------------------------
-[ -x "$HERE/haiku-repo-publish-remote" ] || die "haiku-repo-publish-remote not found next to this script"
-log "publishing $HPKG to the DeBeOS repo"
-"$HERE/haiku-repo-publish-remote" "$HPKG"
+# ---- publish via the no-metal ephemeral publisher ------------------------
+[ -x "$HERE/haiku-repo-publish-ephemeral" ] || die "haiku-repo-publish-ephemeral not found next to this script"
+log "publishing $HPKG to the DeBeOS repo (spins up a short-lived Haiku publisher)"
+"$HERE/haiku-repo-publish-ephemeral" "$HPKG"
 log "done -- repo now serves the haiku_devel matching ${HREV}"

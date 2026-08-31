@@ -71,8 +71,10 @@ cmd_promote() {
 	# canonical's base `haiku` hrev, so native dev (cargo/cc) on the lean image
 	# resolves a compatible develop package instead of being forced to change the
 	# base (the brick vector). Idempotent + cheap: haiku-devel-publish is a no-op
-	# (one S3 ls, no metal spin-up) when the repo already serves this hrev, and it
-	# only does the heavy publish when the base hrev actually moved.
+	# (one S3 ls, no publisher spin-up) when the repo already serves this hrev, and
+	# it only does the heavy publish -- which self-provisions and tears down a
+	# short-lived Haiku publisher (no persistent metal any more) -- when the base
+	# hrev actually moved.
 	#
 	# Gated on HG_REPO_S3 so it runs ONLY where the repo env is configured (the
 	# maintainer workstation). The in-pipeline Promote stage leaves it unset, so

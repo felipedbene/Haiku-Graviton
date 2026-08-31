@@ -1,5 +1,12 @@
 #!/usr/bin/env bash
 #
+# DEPRECATED / RETIRED: this script drives a PERSISTENT metal build host
+# (HG_BUILDER_ID) over SSM. That c9g metal host has been terminated, so this path
+# no longer works. Use graviton/scripts/haiku-repo-publish-ephemeral instead: it
+# self-provisions a short-lived Haiku publisher from the canonical AMI, runs the
+# same haiku-repo-add over SSM, and terminates it. Kept here only for reference /
+# for the case where an always-on builder is ever reintroduced.
+#
 # haiku-repo-publish-remote -- publish one or more locally-held .hpkg to the
 # LIVE DeBeOS package repository with a single command, from the workstation,
 # by driving the Haiku build host (the metal) over SSM. No manual metal/SSM
