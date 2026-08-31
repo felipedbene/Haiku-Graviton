@@ -179,12 +179,30 @@ if [ -z "$SUBNET" ]; then
 		*) die "no private subnet in VPC '$TEST_VPC_NAME' ($TEST_VPC_ID); set HG_TEST_SUBNET" ;;
 	esac
 fi
-# Fail now, not at run-instances, if the ids do not actually exist. Both were
+# Fail now, not at run-instances, if the ids do not actually exist -- both were
 # silently deleted once by a VPC consolidation.
-aws --region "$REGION" ec2 describe-subnets --subnet-ids "$SUBNET" >/dev/null 2>&1 \
-	|| die "test subnet $SUBNET does not exist (deleted VPC? set HG_TEST_SUBNET)"
-aws --region "$REGION" ec2 describe-security-groups --group-ids "$TEST_SG" >/dev/null 2>&1 \
-	|| die "test security group $TEST_SG does not exist (deleted VPC? set HG_TEST_SG)"
+#
+# CAREFUL: a failed describe is NOT evidence of absence. The first version of this
+# check discarded stderr and treated any non-zero exit as "does not exist", so when
+# the CodeBuild role turned out to lack ec2:DescribeSubnets it reported a perfectly
+# healthy subnet as deleted and failed the stage. Only NotFound means missing; a
+# permissions error means we cannot tell, and the right response to "cannot tell"
+# is to proceed and let run-instances give the authoritative answer.
+preflight_exists() {
+	local what="$1" out
+	shift
+	out=$(aws --region "$REGION" "$@" 2>&1) && return 0
+	case "$out" in
+		*NotFound*|*does\ not\ exist*)
+			die "$what does not exist (deleted VPC? override with the matching HG_* var)" ;;
+		*UnauthorizedOperation*|*AccessDenied*|*not\ authorized*)
+			say "cannot verify $what (no describe permission); continuing" ; return 0 ;;
+		*)
+			say "cannot verify $what ($(printf '%s' "$out" | tail -1)); continuing" ; return 0 ;;
+	esac
+}
+preflight_exists "test subnet $SUBNET" ec2 describe-subnets --subnet-ids "$SUBNET"
+preflight_exists "test security group $TEST_SG" ec2 describe-security-groups --group-ids "$TEST_SG"
 # No persistent builder is required any more. If HG_BUILDER_INSTANCE is empty or
 # the literal 'self', the gate launches its own ephemeral peer below (see
 # launch_peer); if a real instance id is supplied, that machine is used as-is and
