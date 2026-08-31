@@ -73,8 +73,24 @@ public:
 						MinMaxHeap(int initialSize);
 						~MinMaxHeap();
 
-	inline	Element*	PeekMinimum(int32 index = 0) const;
-	inline	Element*	PeekMaximum(int32 index = 0) const;
+	inline	Element*	PeekMinimum() const;
+	inline	Element*	PeekMaximum() const;
+
+	// Complete enumeration of every element, in NO particular order.
+	//
+	// This used to be spelled PeekMinimum(index)/PeekMaximum(index), which
+	// promised the index-th smallest/largest and did not deliver: the backing
+	// arrays are heaps, so slot 0 is the true extremum but slot 1 is merely a
+	// child of the root, not the runner-up. Callers that walked an index to
+	// "iterate the minima" silently got heap-array order instead.
+	//
+	// What the enumeration DOES guarantee: indices [0, CountElements()) visit
+	// every element exactly once -- forward over the min tree, then backward
+	// over the max tree -- returning NULL past the end. That is enough to scan
+	// for a predicate match, which is all any in-tree caller ever wanted; it is
+	// NOT enough to pick the best match. Select on the key yourself.
+	inline	Element*	PeekUnordered(int32 index) const;
+	inline	int32		CountElements() const;
 
 	static	const Key&	GetKey(Element* element);
 
@@ -190,13 +206,16 @@ MIN_MAX_HEAP_CLASS_NAME::~MinMaxHeap()
 
 MIN_MAX_HEAP_TEMPLATE_LIST
 Element*
-MIN_MAX_HEAP_CLASS_NAME::PeekMinimum(int32 index) const
+MIN_MAX_HEAP_CLASS_NAME::PeekMinimum() const
 {
-	if (index < fMinLastElement)
-		return fMinElements[index];
-	else if (index - fMinLastElement < fMaxLastElement) {
-		return fMaxElements[fMaxLastElement - (index - fMinLastElement) - 1];
-	}
+	if (fMinLastElement > 0)
+		return fMinElements[0];
+	// An empty min tree means the max tree holds exactly one element: Insert()
+	// keeps the two trees within one of each other, and RemoveMinimum()
+	// asserts fMaxLastElement == 1 on this path. So slot 0 is that element and
+	// is trivially also the minimum.
+	if (fMaxLastElement > 0)
+		return fMaxElements[0];
 
 	return NULL;
 }
@@ -204,13 +223,35 @@ MIN_MAX_HEAP_CLASS_NAME::PeekMinimum(int32 index) const
 
 MIN_MAX_HEAP_TEMPLATE_LIST
 Element*
-MIN_MAX_HEAP_CLASS_NAME::PeekMaximum(int32 index) const
+MIN_MAX_HEAP_CLASS_NAME::PeekMaximum() const
 {
-	if (index < fMaxLastElement)
-		return fMaxElements[index];
-	else if (index - fMaxLastElement < fMinLastElement) {
-		return fMinElements[fMinLastElement - (index - fMaxLastElement) - 1];
-	}
+	if (fMaxLastElement > 0)
+		return fMaxElements[0];
+	if (fMinLastElement > 0)
+		return fMinElements[0];
+
+	return NULL;
+}
+
+
+MIN_MAX_HEAP_TEMPLATE_LIST
+int32
+MIN_MAX_HEAP_CLASS_NAME::CountElements() const
+{
+	return fMinLastElement + fMaxLastElement;
+}
+
+
+MIN_MAX_HEAP_TEMPLATE_LIST
+Element*
+MIN_MAX_HEAP_CLASS_NAME::PeekUnordered(int32 index) const
+{
+	// Min tree forward, then max tree backward. Unordered, but every element is
+	// visited exactly once over [0, CountElements()). See the header comment.
+	if (index < fMinLastElement)
+		return fMinElements[index];
+	else if (index - fMinLastElement < fMaxLastElement)
+		return fMaxElements[fMaxLastElement - (index - fMinLastElement) - 1];
 
 	return NULL;
 }

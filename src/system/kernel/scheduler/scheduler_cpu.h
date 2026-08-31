@@ -214,6 +214,21 @@ public:
 										CoreLoadHeap(int32 coreCount);
 
 						void			Dump();
+
+	// Least/most loaded core whose CPU mask permits the caller, or NULL if the
+	// heap holds no permitted core. Pass mask == NULL for "no constraint", in
+	// which case these degenerate to PeekMinimum()/PeekMaximum().
+	//
+	// These exist because the heap cannot answer "index-th extremum" cheaply:
+	// its arrays are heaps, so only slot 0 is an extremum. Both mode
+	// implementations used to walk PeekMinimum(index++) until the mask matched,
+	// which enumerated the heap in array order and therefore returned the FIRST
+	// permitted core rather than the LEAST LOADED one. Unconstrained threads
+	// were unaffected (the walk exits on its first iteration, at the true
+	// extremum); only threads with an affinity mask were mis-placed. Doing the
+	// selection here keeps the scan O(core count) and the semantics honest.
+	inline			CoreEntry*		PeekLeastLoaded(const CPUSet* mask) const;
+	inline			CoreEntry*		PeekMostLoaded(const CPUSet* mask) const;
 };
 
 // gPackageEntries are used to decide which core should be woken up from the
@@ -632,6 +647,80 @@ PackageEntry::GetLeastClaimedIdleCore(const CPUSet* mask) const
 		if (best == NULL || count < bestCount) {
 			best = core;
 			bestCount = count;
+		}
+	}
+
+	return best;
+}
+
+
+/*!	Least loaded core in this heap that the given mask permits, or NULL.
+
+	Selects on the key rather than trusting position, because only slot 0 of a
+	heap array is an extremum -- see MinMaxHeap::PeekUnordered(). The fast path
+	is unchanged for the common unconstrained case: with mask == NULL this is
+	PeekMinimum() and touches one element.
+
+	Callers hold gCoreHeapsLock (read is enough); this neither takes nor drops it.
+*/
+inline CoreEntry*
+CoreLoadHeap::PeekLeastLoaded(const CPUSet* mask) const
+{
+	SCHEDULER_ENTER_FUNCTION();
+
+	if (mask == NULL)
+		return PeekMinimum();
+
+	CoreEntry* best = NULL;
+	int32 bestLoad = 0;
+
+	const int32 count = CountElements();
+	for (int32 i = 0; i < count; i++) {
+		CoreEntry* core = PeekUnordered(i);
+		if (core == NULL)
+			break;
+		if (!core->CPUMask().Matches(*mask))
+			continue;
+
+		const int32 load = GetKey(core);
+		if (best == NULL || load < bestLoad) {
+			best = core;
+			bestLoad = load;
+		}
+	}
+
+	return best;
+}
+
+
+/*!	Most loaded core in this heap that the given mask permits, or NULL.
+
+	The PeekLeastLoaded() counterpart; see it for why the key is compared
+	explicitly instead of indexing the heap array.
+*/
+inline CoreEntry*
+CoreLoadHeap::PeekMostLoaded(const CPUSet* mask) const
+{
+	SCHEDULER_ENTER_FUNCTION();
+
+	if (mask == NULL)
+		return PeekMaximum();
+
+	CoreEntry* best = NULL;
+	int32 bestLoad = 0;
+
+	const int32 count = CountElements();
+	for (int32 i = 0; i < count; i++) {
+		CoreEntry* core = PeekUnordered(i);
+		if (core == NULL)
+			break;
+		if (!core->CPUMask().Matches(*mask))
+			continue;
+
+		const int32 load = GetKey(core);
+		if (best == NULL || load > bestLoad) {
+			best = core;
+			bestLoad = load;
 		}
 	}
 

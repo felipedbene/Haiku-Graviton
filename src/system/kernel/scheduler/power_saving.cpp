@@ -104,10 +104,7 @@ choose_core(const ThreadData* threadData)
 		ReadSpinLocker coreLocker(gCoreHeapsLock);
 
 		// run immediately on already woken core
-		int32 index = 0;
-		do {
-			core = gCoreLoadHeap.PeekMinimum(index++);
-		} while (useMask && core != NULL && !core->CPUMask().Matches(mask));
+		core = gCoreLoadHeap.PeekLeastLoaded(useMask ? &mask : NULL);
 		if (core == NULL) {
 			coreLocker.Unlock();
 
@@ -117,10 +114,7 @@ choose_core(const ThreadData* threadData)
 
 			if (core == NULL) {
 				coreLocker.Lock();
-				index = 0;
-				do {
-					core = gCoreHighLoadHeap.PeekMinimum(index++);
-				} while (useMask && core != NULL && !core->CPUMask().Matches(mask));
+				core = gCoreHighLoadHeap.PeekLeastLoaded(useMask ? &mask : NULL);
 			}
 		}
 	}
@@ -171,17 +165,9 @@ rebalance(const ThreadData* threadData)
 			return core;
 
 		ReadSpinLocker coreLocker(gCoreHeapsLock);
-		CoreEntry* other;
-		int32 index = 0;
-		do {
-			other = gCoreLoadHeap.PeekMaximum(index++);
-		} while (useMask && other != NULL && !other->CPUMask().Matches(mask));
-		if (other == NULL) {
-			index = 0;
-			do {
-				other = gCoreHighLoadHeap.PeekMinimum(index++);
-			} while (useMask && other != NULL && !other->CPUMask().Matches(mask));
-		}
+		CoreEntry* other = gCoreLoadHeap.PeekMostLoaded(useMask ? &mask : NULL);
+		if (other == NULL)
+			other = gCoreHighLoadHeap.PeekLeastLoaded(useMask ? &mask : NULL);
 		coreLocker.Unlock();
 		ASSERT(other != NULL);
 
