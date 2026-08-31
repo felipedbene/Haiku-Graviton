@@ -42,7 +42,7 @@ subsections below, and "Two" contradicted this section's own heading one line ab
 sensitive to the code most likely to regress; everything else measured is either
 noisy, at a hardware ceiling that would mask a regression, or both.
 
-### 1. Sequential read at depth 8
+### 1. Sequential read at depth 8 (tracked: #112)
 
 ```
 disktput -f /dev/disk/nvme/1/raw -m seqread -b 256K -t 8 -T 120 -s 64G -J
@@ -74,7 +74,7 @@ latency and would pass through almost any software regression. Depth 16 is
 already clipped by the volume ceiling in both directions and so has no headroom
 to show an improvement or a mild regression.
 
-### 2. Durability across a hard power loss
+### 2. Durability across a hard power loss (tracked: #112)
 
 This is the assertion that would have caught the bug this project actually
 shipped — an sshd host key with the right size, mode and mtime and 411 bytes of

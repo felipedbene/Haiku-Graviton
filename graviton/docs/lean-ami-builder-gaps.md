@@ -1,68 +1,15 @@
 # Lean canonical AMI → builder: gaps to bake in
 
-Running record of what the lean canonical AMI (`@minimum-mmc` + OpenSSH, the runtime image)
-lacks when turned into a native `haikuporter` builder, so these can be baked into a
-dedicated builder image later and stop being rediscovered. Established 2026-08-30 while
-provisioning the first native builder and building glib2. Everything below was
-`pkgman`-installable from the DeBeOS repo unless noted — the fix is to **bake it in**.
+Running record of what the lean canonical AMI (`@minimum-mmc` + OpenSSH, the runtime
+image) lacks when turned into a native `haikuporter` builder — so a dedicated builder
+image can bake them in and stop rediscovering them. Established 2026-08-30 while
+provisioning the first native builder and building glib2.
 
 See `native-ec2-builds.md` for the full working provisioning + build sequence.
 
-## Missing entirely (had to install)
-
-- **Build toolchain:** `gcc`, `binutils`, `make`, `cmake`, `meson`, `ninja`, `git`,
-  `diffutils`, `patch`, `gawk`, `wget`, `haiku_devel`.
-- **Python:** none in base. `python3.14` installs (see vendor conflict) but there is **no
-  `python3` symlink** — `haikuporter`'s `#!/usr/bin/env python3` shebang fails
-  ("env: python3: No such file"). Bake `python3 -> python3.14`.
-- **pkg-config:** the package is **`pkgconf`**, NOT `pkgconfig`/`pkg_config` (those names do
-  not exist). A batch `pkgman install` with any wrong name aborts the WHOLE batch — install
-  per-package or use exact names.
-- **haikuporter + ports tree:** not packaged; git-cloned from
-  `github.com/haikuports/{haikuporter,haikuports}`. Bake these (or ship a `haikuporter`
-  package) plus a ready `haikuports.conf` (its sample lives in the *haikuporter* repo; set
-  `PACKAGER` + `TREE_PATH`).
-- **Basic userland:** `awk`, `which` absent from base.
-
-## Quirks
-
-- **Vendor conflict on every toolchain install:** the base ships bootstrap "Haiku Project"
-  libs (`zlib_bootstrap`, `sqlite`, …) that collide with DeBeOS repo versions, so `pkgman`
-  demands "allow vendor change" (solution 1) each time. Non-interactive:
-  `printf '1\n…\ny\n' | pkgman install …`. Fix: bake DeBeOS-vendored base libs so there is
-  no conflict.
-
-## Kernel / driver (not lean-image, tracked separately)
-
-- **NVMe driver enumerates only one controller:** a second hot-attached EBS is invisible,
-  and an online root-EBS grow is not seen (disk size cached at boot — `partition_grow` says
-  "already fills disk" at the old size). Growth path = launch with a big root
-  (`--block-device-mappings`) + first-boot `partition_grow` + `resizefs`.
-- Root is 20 GiB (tight; a single package build fits, larger closures will not).
-
-## Repo gaps found building the sdl2_ttf chain (2026-08-30)
-
-Not lean-AMI gaps but **DeBeOS repo gaps** — packages/subpackages missing from
-`packages.debene.dev`, forcing per-build workarounds. Publishing these (many already exist
-in the S3 build pool) is the high-leverage systematic fix:
-
-- **`icu74_devel` is not in the repo** — only `icu74_devel-74.1_bootstrap` exists in the
-  pool. harfbuzz (and anything needing ICU headers) can't resolve `devel:libicuuc` from the
-  repo; worked around by `debeos-ssm-agent s3 cp`-ing the bootstrap devel into the builder's
-  `packages/`. Same likely true for other `*_devel` subpackages the audit found in the pool
-  but never published.
-- **`gtk-doc` / `docbook_xml` / `docbook_xsl` are not in the repo** — so full HTML docs for
-  docs-using ports (harfbuzz, glib2, …) can't be built without building those first. Docs
-  were disabled (they are not a functional feature); gobject/introspection kept.
-
-## Hazard: installing repo packages onto a builder can break its toolchain
-
-`pkgman install <repo pkg>` on the builder triggered the bootstrap→DeBeOS **vendor change**,
-which shuffled the gcc packages and left `gcc` unable to exec `cc1` ("cannot execute 'cc1'").
-So the smoke-test dlopen (which needs gcc) failed on an otherwise-working builder. Keep the
-build toolchain and the "install from repo to test" step on **separate** instances, or bake
-a DeBeOS-vendored base so no vendor change is ever needed.
-
-_(Per-recipe build tools also surfaced and were pkgman-installed: `bison`, `flex`,
-`bash_completion`, `setuptools_python310`/`_python3.14`, `autoconf`/`automake`/`libtool` for
-sdl2_ttf, `docbook`/`itstool`/`perl`/`xsltproc` attempted for gtk-doc.)_
+These builder-AMI gaps are now tracked as GitHub issues: #33 #35 #37 #38 #39 #40 #51.
+The per-gap detail — missing build toolchain / `python3` symlink / `pkgconf` /
+`haikuporter` + ports tree / basic userland, the bootstrap→DeBeOS "allow vendor change"
+quirk on every install, the NVMe single-controller limit and 20 GiB root, the
+unpublished `*_devel` and gtk-doc/docbook repo gaps, and the hazard that installing repo
+packages onto a builder can break its own gcc toolchain — now lives in those issues.

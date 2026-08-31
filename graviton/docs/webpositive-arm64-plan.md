@@ -5,7 +5,7 @@ arm64 and WebPositive renders JavaScript plus modern CSS (grid, flexbox, gradien
 transforms), screenshot-verified. The "GO (staged) / nothing has been built" verdict
 this document was written to reach is therefore **superseded**: the build took ~55 min
 (the estimates below ran 3-5x pessimistic). Still open: `example.com`'s body does not
-paint, and no image has been baked or promoted with it yet.
+paint (tracked: #84), and no image has been baked or promoted with it yet.
 Date of original scoping evidence: 2026-08-25.
 
 The current browser on arm64 is `netsurf-3.11` (built, works, screenshot-verified).
@@ -388,7 +388,7 @@ and lists neither. So the second edit is to add both to the
 `REVISION="2"`, so the correct entries are `haikuwebkit-1.10.0-2` and
 `haikuwebkit_devel-1.10.0-2`.
 
-**Open operational question — NOT RESOLVED.** The arm64 repository file points at
+**Open operational question — NOT RESOLVED (tracked: #117).** The arm64 repository file points at
 the upstream bootstrap repository, which will not serve our locally-built arm64
 hpkgs. `netsurf-3.11` reaches our images without appearing anywhere in `build/jam`,
 so the project already has a sideload path for locally-built packages — but
