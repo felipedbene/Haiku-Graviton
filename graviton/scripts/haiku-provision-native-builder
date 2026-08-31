@@ -30,6 +30,19 @@
 #        - haiku_devel -- the C-runtime glue + private headers ports link against.
 #        - git/gzip/xz_utils -- the lean base ships none of these, and the ports
 #          workflow needs all three (clone the tree, unpack tarballs).
+#        - libxml2 -- provides `cmd:xmlcatalog`, needed via docbook_xml_dtd.
+#
+# On resolving build-prerequisites in general: haikuporter resolves a recipe's
+# BUILD_PREREQUIRES only against LOCAL pools (/boot/home/haikuports/packages and
+# /boot/system/packages), never against the remote DeBeOS repo -- so a
+# prerequisite that is published and one `pkgman install` away still fails hard
+# ("build-prerequires cmd:xmlcatalog ... could not be resolved") and takes the
+# whole chain with it. Do NOT chase these by growing the list above: that is
+# whack-a-mole, and `haiku-nativebuild` already closes the loop properly by
+# parsing every unresolved resolvable out of the build log and `pkgman install`ing
+# it (pkgman accepts `cmd:`/`devel:` expressions directly) until the set stops
+# shrinking. Build ports THROUGH haiku-nativebuild, not by calling haikuporter
+# directly. The entries above are only a warm start.
 #
 #   2. Clones the ports tree and haikuporter itself over HTTPS. TLS works on the
 #      canonical image (openssl3 + a CA store are in the base), so a plain
@@ -107,7 +120,7 @@ feed | pkgman refresh >/dev/null 2>&1 || true
 # more build-requires here as new ports surface them.
 TOOLS="gcc binutils make m4 patch gawk diffutils bison flex \
 	python3.14 autoconf automake libtool perl gettext_libintl \
-	haiku_devel curl git gzip xz_utils"
+	haiku_devel curl git gzip xz_utils libxml2"
 log "installing toolchain: $TOOLS"
 feed | pkgman install $TOOLS
 

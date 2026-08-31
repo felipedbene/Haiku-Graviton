@@ -180,6 +180,10 @@ export class OpsStack extends cdk.Stack {
       SG_ID: builderSg.securityGroupId,
       INSTANCE_PROFILE_ARN: builderProfile.attrArn,
       INSTANCE_TYPE: 'c8g.2xlarge',
+      // Builders size their root per launch (overridable per wave via
+      // `disk_gib`) instead of inheriting the AMI's baked snapshot size, so the
+      // builder AMI can stay lean. DeBeOS grows BFS to fill the volume on boot.
+      BUILDER_DISK_GIB: '200',
     });
     const waitSsmFn = mkFn('WaitSsmFn', 'wait_ssm.handler');
     const buildFn = mkFn('BuildFn', 'run_ssm.build', { WORK_BUCKET: workBucket });
@@ -195,7 +199,10 @@ export class OpsStack extends cdk.Stack {
     this.table.grantReadWriteData(claimFn);
     this.table.grantReadWriteData(recordFn);
     launchFn.addToRolePolicy(new iam.PolicyStatement({
-      actions: ['ec2:RunInstances', 'ec2:CreateTags'],
+      // DescribeImages: the launcher reads the builder AMI's RootDeviceName so its
+      // per-launch volume mapping targets the real root device (a mismatched
+      // DeviceName is ignored and the builder silently boots at the baked size).
+      actions: ['ec2:RunInstances', 'ec2:CreateTags', 'ec2:DescribeImages'],
       resources: ['*'],
     }));
     launchFn.addToRolePolicy(new iam.PolicyStatement({
