@@ -1,0 +1,80 @@
+#!/bin/sh
+# haiku-nativebuild <port> [<port> ...]
+#
+# Canonical native-EC2 package build driver. RUNS ON a native Graviton Haiku builder
+# (launched from the builder-canonical AMI: `aws ssm get-parameter --name
+# /haiku-graviton/builder-ami-id`). Drive it over SSM, e.g.:
+#     graviton/scripts/ssm-run <builder-iid> <<'EOF'
+#     /boot/home/haiku-nativebuild sdl2_ttf
+#     EOF
+#
+# For each port it: builds with haikuporter, auto-installing any missing repo dependency
+# it reports (BUILD_REQUIRES/BUILD_PREREQUIRES as devel:/cmd:/lib:/pkg-name resolvables),
+# retrying until the build succeeds or stops making progress; then harvests the produced
+# *.hpkg to the shared S3 pool. See graviton/docs/native-ec2-builds.md for the why.
+#
+# WHY THIS SHAPE (learned building glib2 -> harfbuzz -> sdl2_ttf on native EC2):
+#  - NO `--all-dependencies`: it hits "Port X depends on itself" when a subpackage (e.g.
+#    gobject_introspection) is also a build-require. Install deps from the repo instead;
+#    haikuporter compiles only the requested leaf.
+#  - pkgman accepts `devel:`/`cmd:` resolvables directly, but a wrong package name aborts a
+#    BATCH -- so install one at a time and tolerate misses.
+#  - The lean base ships bootstrap "Haiku Project" libs that collide with DeBeOS repo
+#    versions, so every install needs an "allow vendor change" (solution 1); we feed it.
+#  - Success is asserted by the .hpkg EXISTING, never by an exit code.
+set -u
+export PATH=/boot/home/config/non-packaged/bin:/boot/system/non-packaged/bin:$PATH
+HP=/boot/home/haikuports
+GP=$HP/packages
+AGENT=/boot/system/bin/debeos-ssm-agent
+BUCKET="${HAIKU_GRAVITON_BUCKET:-haiku-graviton-668984504585-us-west-2}"
+S3="s3://$BUCKET/hpkg/arm64"
+MAX_ATTEMPTS="${MAX_ATTEMPTS:-10}"
+
+# feed pkgman: accept "allow vendor change" (solution 1) then confirm the transaction.
+feed() { i=0; while [ $i -lt 60 ]; do echo 1; i=$((i+1)); done; echo yes; }
+
+install_dep() { feed | pkgman install "$1" >/dev/null 2>&1; }
+
+build_one() {
+	port="$1"
+	log="/boot/home/nb-$port.log"
+	echo "===== $port : start $(date -u +%FT%TZ) ====="
+	attempt=1
+	while [ "$attempt" -le "$MAX_ATTEMPTS" ]; do
+		( cd "$HP" && haikuporter -y "$port" ) > "$log" 2>&1
+		# success = an hpkg for this port now exists
+		if ls "$GP/${port}"-[0-9]*.hpkg >/dev/null 2>&1; then
+			echo "$port: BUILD_OK (attempt $attempt)"
+			return 0
+		fi
+		# collect every resolvable haikuporter said it could not resolve
+		miss=$(grep -oE '(build-requires|build-prerequires|requires) "[^"]+"' "$log" \
+			| sed -E 's/.*"([^"]+)".*/\1/' | sort -u)
+		if [ -z "$miss" ]; then
+			echo "$port: FAILED, no missing-dep to install -- see $log"; tail -20 "$log"; return 1
+		fi
+		echo "$port: attempt $attempt installing: $(echo $miss | tr '\n' ' ')"
+		for d in $miss; do install_dep "$d"; done
+		attempt=$((attempt + 1))
+	done
+	echo "$port: gave up after $MAX_ATTEMPTS attempts"; tail -20 "$log"; return 1
+}
+
+harvest() {
+	# push every *.hpkg newer than the marker to the pool (never the build-input haiku*.hpkg)
+	for f in "$GP"/*.hpkg; do
+		[ -e "$f" ] || continue
+		case "$(basename "$f")" in haiku.hpkg|haiku_*|haiku-*) continue ;; esac
+		"$AGENT" s3 cp "$f" "$S3/$(basename "$f")" >/dev/null 2>&1 \
+			&& echo "harvested $(basename "$f")"
+	done
+}
+
+rc=0
+for p in "$@"; do
+	build_one "$p" || rc=1
+done
+harvest
+echo "===== nativebuild done $(date -u +%FT%TZ) rc=$rc ====="
+exit $rc

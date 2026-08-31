@@ -1,0 +1,22 @@
+#!/usr/bin/env bash
+#
+# haiku-overlay-sync -- publish the version-controlled DeBeOS recipe overlay to
+# S3 so the build wave can stage it onto builders (persistence). The overlay is
+# the source of truth in git (graviton/haikuports-patches/recipes/); this pushes
+# it to s3://<work-bucket>/debeos-overlay/, which run_ssm.build lists per-port
+# and drops into the builder's ports tree before haikuporter runs.
+#
+# Flat layout (recipes + patchsets in one prefix); the build wrapper finds each
+# port's category dir by name, so no category map is needed here.
+#
+# Run at deploy time / after committing a recipe bump:
+#   haiku-overlay-sync
+set -euo pipefail
+REGION="${HAIKU_GRAVITON_REGION:-us-west-2}"
+HERE="$(cd "$(dirname "$0")" && pwd)"
+OVERLAY="$HERE/../haikuports-patches/recipes"
+ACCT=$(aws sts get-caller-identity --query Account --output text)
+BUCKET="${HAIKU_GRAVITON_BUCKET:-haiku-graviton-${ACCT}-${REGION}}"
+aws s3 sync "$OVERLAY/" "s3://$BUCKET/debeos-overlay/" \
+  --exclude '*' --include '*.recipe' --include '*.patchset' --delete --region "$REGION"
+echo "overlay-sync: pushed $(ls "$OVERLAY"/*.recipe 2>/dev/null | wc -l) recipes to s3://$BUCKET/debeos-overlay/"

@@ -121,7 +121,16 @@ Booting is verified on real AWS Graviton (arm64) EC2 instances in **us-west-2**.
   as the last step of the bake loop.
 - Test instances are **SSM-managed nodes** — inspect/drive them with
   `aws ssm` (e.g. `describe-instance-information`, `send-command`,
-  `start-session`) rather than SSH.
+  `start-session`) rather than SSH. This works because
+  [haiku-mgmt-agent](https://github.com/felipedbene/haiku-mgmt-agent) registers a
+  native Haiku arm64 instance as an SSM node (`PlatformName` reports `Haiku`).
+- **Building HaikuPorts packages for arm64** (SDL2, glib2, harfbuzz, …) is done by
+  running `haikuporter` **natively on a Graviton Haiku EC2 instance driven over SSM**,
+  provisioned from the DeBeOS repo with `pkgman`. This is the current path — **not** the
+  metal + QEMU-guest fleet, whose bootstrap-seeded images produce false "blockers" (a
+  half-wired `python3.14`, bootstrap-only `freetype`) that a real native install does not.
+  Full method and reproduction: `graviton/docs/native-ec2-builds.md`. HaikuPorts ships no
+  arm64 repo, so building is required. Never ship feature-capped builds — fix the blocker.
 - Credentials: obtain admin credentials for the test account through your
   organisation's credential tooling (the exact command is in the maintainer's
   local, unpublished notes). Keep to describe/list unless a change is intended.

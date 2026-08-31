@@ -1,6 +1,17 @@
 import { Construct } from 'constructs';
 
 /**
+ * Tags every DeBeOS-owned stack applies. `auto-stop`/`auto-delete` are the
+ * account's spring-clean/idle-reaper protection keys (honored by the cleanup);
+ * `Project` groups the fleet. Single source for both the bake and ops stacks.
+ */
+export const DEBEOS_TAGS: Record<string, string> = {
+  Project: 'haiku-graviton',
+  'auto-stop': 'no',
+  'auto-delete': 'off',
+};
+
+/**
  * All tunable inputs for the bake pipeline. Every field is sourced from CDK
  * context (see cdk.json) with an environment-variable fallback, so nothing is
  * hardcoded in the stack and no secrets live in the tree.
@@ -63,6 +74,19 @@ export interface HaikuPipelineConfig {
    */
   readonly ssmOutBucketName: string;
 
+  // ---- shared DeBeOS constants (consumed by BOTH the bake and the ops stack) --
+  /**
+   * Published hpkg pool bucket (CDN-backed via packages.debene.dev), named
+   * `haiku-graviton-hpkg-<account>` by convention. The bake archives haiku_devel
+   * here; the ops build-wave publishes rebuilt packages here. Defaulted from
+   * {@link account} so the id is never written down.
+   */
+  readonly publishBucketName: string;
+  /** SSM param holding the BUILDER AMI id (toolchain+haikuporter image). */
+  readonly builderAmiParam: string;
+  /** SSM param holding the CANONICAL (lean runtime) AMI id. */
+  readonly canonicalAmiParam: string;
+
   /**
    * Hardware performance gate (the Test stage, between Register and Approve).
    *
@@ -98,6 +122,33 @@ function ctx(scope: Construct, key: string, envKey: string, fallback?: string): 
   return String(value);
 }
 
+/**
+ * The subset of config shared by the bake pipeline AND the ops build stack:
+ * account/region, the two buckets, and the AMI SSM params. The ops stack needs
+ * only these, so it can synth/deploy WITHOUT the bake-only inputs
+ * (connectionArn, builderInstanceId, ...).
+ */
+export type SharedConfig = Pick<HaikuPipelineConfig,
+  'account' | 'region' | 'ssmOutBucketName' | 'publishBucketName'
+  | 'builderAmiParam' | 'canonicalAmiParam'>;
+
+export function loadSharedConfig(scope: Construct): SharedConfig {
+  const account = ctx(scope, 'haiku:account', 'HAIKU_ACCOUNT', process.env.CDK_DEFAULT_ACCOUNT);
+  const region = ctx(scope, 'haiku:region', 'HAIKU_REGION', 'us-west-2');
+  return {
+    account,
+    region,
+    ssmOutBucketName: ctx(scope, 'haiku:ssmOutBucketName', 'HAIKU_GRAVITON_BUCKET',
+      `haiku-graviton-${account}-${region}`),
+    publishBucketName: ctx(scope, 'haiku:publishBucketName', 'HAIKU_PUBLISH_BUCKET',
+      `haiku-graviton-hpkg-${account}`),
+    builderAmiParam: ctx(scope, 'haiku:builderAmiParam', 'HAIKU_BUILDER_AMI_PARAM',
+      '/haiku-graviton/builder-ami-id'),
+    canonicalAmiParam: ctx(scope, 'haiku:canonicalAmiParam', 'HAIKU_CANONICAL_AMI_PARAM',
+      '/haiku-graviton/canonical-ami-id'),
+  };
+}
+
 export function loadConfig(scope: Construct): HaikuPipelineConfig {
   // Deliberately NOT read from the environment. A bucket name is a
   // replacement-triggering property, so whether HAIKU_WORK_BUCKET happened to be
@@ -109,19 +160,12 @@ export function loadConfig(scope: Construct): HaikuPipelineConfig {
   // deploying the same commit.
   const workBucketName = scope.node.tryGetContext('haiku:workBucketName');
 
-  // The account id is deliberately not written down in this tree -- it is a
-  // public repository -- so it defaults to CDK_DEFAULT_ACCOUNT, which the CDK CLI
-  // sets from the credentials you are already deploying with. That is the
-  // idiomatic source, and it means `cdk synth`/`deploy` needs no extra
-  // configuration to target the usual account. `-c haiku:account=` or
-  // HAIKU_ACCOUNT still override it, and if none of the three is available ctx()
-  // throws by name rather than synthesizing a stack with an empty account.
-  const account = ctx(scope, 'haiku:account', 'HAIKU_ACCOUNT', process.env.CDK_DEFAULT_ACCOUNT);
-  const region = ctx(scope, 'haiku:region', 'HAIKU_REGION', 'us-west-2');
+  // Shared fields (account/region/buckets/AMI params) come from loadSharedConfig
+  // -- the single source the ops stack also uses.
+  const shared = loadSharedConfig(scope);
 
   return {
-    account,
-    region,
+    ...shared,
 
     repoOwner: ctx(scope, 'haiku:repoOwner', 'HAIKU_REPO_OWNER'),
     repoName: ctx(scope, 'haiku:repoName', 'HAIKU_REPO_NAME', 'haiku'),
@@ -141,15 +185,8 @@ export function loadConfig(scope: Construct): HaikuPipelineConfig {
     rootVolumeBytes: ctx(scope, 'haiku:rootVolumeBytes', 'HAIKU_ROOT_VOLUME_BYTES', '2147483648'),
 
     workBucketName: workBucketName ? String(workBucketName) : undefined,
-
-    // Not the pipeline's own work bucket: this is the bucket the builder's
-    // instance role writes ssm-run output to, and it is named
-    // haiku-graviton-<account>-<region> by convention. Derived from the account
-    // resolved above so the name matches graviton/scripts/ssm-run without either
-    // file naming the account. HAIKU_GRAVITON_BUCKET is the same override the
-    // shell scripts honour, so one export retargets the whole toolchain.
-    ssmOutBucketName: ctx(scope, 'haiku:ssmOutBucketName', 'HAIKU_GRAVITON_BUCKET',
-      `haiku-graviton-${account}-${region}`),
+    // account/region/ssmOutBucketName/publishBucketName/builderAmiParam/
+    // canonicalAmiParam are provided by ...shared above.
 
     // No default: an instance id is not derivable, and hardcoding one would put
     // it in a public tree. The Test stage passes it through as
