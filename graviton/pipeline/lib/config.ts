@@ -93,10 +93,16 @@ export interface HaikuPipelineConfig {
    * The gate boots the candidate AMI for real and measures it, so it needs to
    * know where to put the instance and who its traffic peer is. There is no
    * persistent builder any more (the shared metal one was terminated): the gate
-   * self-provisions an ephemeral peer from the canonical AMI, drives it over SSM,
-   * and terminates it on exit. peerInstanceProfile is the instance profile that
-   * peer is launched with; it must carry AmazonSSMManagedInstanceCore so the peer
-   * answers SSM.
+   * self-provisions an ephemeral peer, drives it over SSM, and terminates it on
+   * exit. That peer is a freshly bootstrapped UBUNTU arm64 host (its AMI resolved
+   * at runtime from Canonical's public SSM parameter, {@link peerAmiParam}), NOT
+   * the Haiku canonical AMI -- every peer-side command in the gate is Linux
+   * (`sudo -u ubuntu`, an ssh client at /home/ubuntu/.ssh/haiku-ed25519, `python3
+   * .../nettput-peer.py`), so the peer has to be Linux. The instance profile it is
+   * launched with is created by the stack (a dedicated least-priv role, not a
+   * shared broad one): it carries AmazonSSMManagedInstanceCore plus read on the
+   * baron ssh-key secret and the nettput tools object and write on the ssm-out
+   * prefix, so it is defined in the stack rather than configured here.
    *
    * testInstanceType must not be a t-family instance: T instances throttle CPU
    * to a baseline once credits run out, and CPU cost per byte is half of what
@@ -106,7 +112,7 @@ export interface HaikuPipelineConfig {
    * (~4900 receive, ~3850 transmit on a c7g.large) on purpose. A gate that trips
    * on ordinary variance gets switched off, and then it guards nothing.
    */
-  readonly peerInstanceProfile: string;
+  readonly peerAmiParam: string;
   readonly testSubnetId: string;
   readonly testSecurityGroupId: string;
   readonly testInstanceType: string;
@@ -128,7 +134,7 @@ function ctx(scope: Construct, key: string, envKey: string, fallback?: string): 
  * The subset of config shared by the bake pipeline AND the ops build stack:
  * account/region, the two buckets, and the AMI SSM params. The ops stack needs
  * only these, so it can synth/deploy WITHOUT the bake-only inputs
- * (connectionArn, peerInstanceProfile, ...).
+ * (connectionArn, peerAmiParam, ...).
  */
 export type SharedConfig = Pick<HaikuPipelineConfig,
   'account' | 'region' | 'ssmOutBucketName' | 'publishBucketName'
@@ -190,13 +196,14 @@ export function loadConfig(scope: Construct): HaikuPipelineConfig {
     // account/region/ssmOutBucketName/publishBucketName/builderAmiParam/
     // canonicalAmiParam are provided by ...shared above.
 
-    // Instance profile the self-provisioned perf-gate peer is launched with. It
-    // must carry AmazonSSMManagedInstanceCore so the peer answers SSM; the native
-    // builders use the same AWS-managed patchwork profile (see
-    // graviton/docs/native-ec2-builds.md). The stack derives the PassRole target
-    // from this name assuming the role inside the profile shares its name.
-    peerInstanceProfile: ctx(scope, 'haiku:peerInstanceProfile', 'HAIKU_PEER_INSTANCE_PROFILE',
-      'AWSSupportPatchwork-SSMRoleForInstances'),
+    // Public SSM parameter the self-provisioned peer's Ubuntu arm64 AMI id is
+    // resolved from at runtime (never a hardcoded ami-id). Canonical publishes and
+    // rotates this; the default is Ubuntu 24.04 LTS arm64, gp3-backed. The peer's
+    // instance profile is NOT configured here -- the stack creates a dedicated
+    // least-priv role/profile for it (SSM + baron-secret read + nettput read +
+    // ssm-out write) and passes its name to the gate.
+    peerAmiParam: ctx(scope, 'haiku:peerAmiParam', 'HAIKU_PEER_AMI_PARAM',
+      '/aws/service/canonical/ubuntu/server/24.04/stable/current/arm64/hvm/ebs-gp3/ami-id'),
     testSubnetId: ctx(scope, 'haiku:testSubnetId', 'HAIKU_TEST_SUBNET', 'subnet-0888405da8f10d1b2'),
     testSecurityGroupId: ctx(scope, 'haiku:testSecurityGroupId', 'HAIKU_TEST_SG', 'sg-0b99fabc8cb8bce88'),
     // Never a t-family instance: burstable CPU throttles to a baseline when

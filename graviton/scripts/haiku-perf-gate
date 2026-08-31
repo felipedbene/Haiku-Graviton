@@ -23,20 +23,30 @@
 #     interface, so nothing has to be installed on the candidate for a
 #     measurement to happen. There is no longer a persistent builder to lean on --
 #     the shared metal one this used to assume was terminated -- so by default the
-#     gate launches its OWN ephemeral peer from the canonical AMI, uses it, and
-#     tears it down in the same EXIT trap as the candidate (see launch_peer and
-#     cleanup). A caller may still pass HG_BUILDER_INSTANCE to point at an
-#     always-on builder, in which case the gate uses it as-is and never terminates
-#     it. Because everything the gate learns about the candidate is learned
-#     *through* that builder -- readiness is "sshd answers, asked from the builder"
-#     and the throughput peer is the builder itself -- a builder that is not
-#     answering SSM makes the candidate unobservable. That is a fault in the
-#     apparatus, not in the image, so it is checked up front (see
-#     ensure_builder_reachable) and, if it recurs mid-run, reported as an apparatus
-#     failure rather than misread as "the candidate never booted". The original
-#     version had no such check: with the builder stopped, ssm-run returned
-#     nothing, and the gate concluded the candidate had failed to bring sshd up and
-#     failed a perfectly healthy image.
+#     gate launches its OWN ephemeral peer and tears it down in the same EXIT trap
+#     as the candidate (see launch_peer and cleanup). That peer is a freshly
+#     bootstrapped Ubuntu arm64 host, NOT the Haiku canonical AMI: every peer-side
+#     command here is Linux (`sudo -u ubuntu`, an ssh client at
+#     /home/ubuntu/.ssh/haiku-ed25519, `python3 .../nettput-peer.py`), so the peer
+#     has to be a Linux box for them to find the right user, key and interpreter.
+#     Its AMI is resolved at runtime from Canonical's public SSM parameter
+#     (HG_PEER_AMI_PARAM, default the Ubuntu 24.04 arm64 param) -- never a
+#     hardcoded id -- and a base64 user-data script bootstraps it on first boot:
+#     it installs awscli + python3, fetches baron's ssh key from Secrets Manager
+#     (HG_BARON_SECRET) into /home/ubuntu/.ssh/haiku-ed25519, pulls the nettput
+#     peer script from S3 (HG_TOOLS_S3) into /opt/haiku/nettput/, and drops a
+#     /var/lib/haiku-peer-ready sentinel when it is done. A caller may still pass
+#     HG_BUILDER_INSTANCE to point at an always-on builder, in which case the gate
+#     uses it as-is and never terminates it. Because everything the gate learns
+#     about the candidate is learned *through* that builder -- readiness is "sshd
+#     answers, asked from the builder" and the throughput peer is the builder
+#     itself -- a builder that is not answering SSM makes the candidate
+#     unobservable. That is a fault in the apparatus, not in the image, so it is
+#     checked up front (see ensure_builder_reachable) and, if it recurs mid-run,
+#     reported as an apparatus failure rather than misread as "the candidate never
+#     booted". The original version had no such check: with the builder stopped,
+#     ssm-run returned nothing, and the gate concluded the candidate had failed to
+#     bring sshd up and failed a perfectly healthy image.
 #   - The instance is terminated by an EXIT trap, so a failure part way through
 #     cannot leak a running instance. That matters more than usual here: this is
 #     unattended, and the failure path is the likely path.
@@ -64,24 +74,33 @@
 # run -- see graviton/pipeline/lib/haiku-graviton-pipeline-stack.ts):
 #   HG_BUILDER_INSTANCE   SSM-managed builder that acts as peer and driver.
 #                         Empty or the literal 'self' (the default) -> the gate
-#                         self-provisions an ephemeral peer from the canonical AMI
-#                         and terminates it on exit; there is no persistent builder
+#                         self-provisions an ephemeral Ubuntu arm64 peer and
+#                         terminates it on exit; there is no persistent builder
 #                         to assume any more. Pass a real instance id to reuse an
 #                         always-on builder instead -- a caller-supplied id is used
 #                         as-is and is never terminated (backward compat).
 #   HG_PEER_INSTANCE_PROFILE  instance profile attached to the self-provisioned
 #                         peer; it must carry AmazonSSMManagedInstanceCore so the
-#                         peer answers SSM (default
-#                         AWSSupportPatchwork-SSMRoleForInstances, the same profile
-#                         the native builders use).
-#   HG_CANONICAL_AMI_PARAM  SSM parameter the peer's AMI id is read from
-#                         (default /haiku-graviton/canonical-ami-id).
+#                         peer answers SSM, plus read on the baron secret and the
+#                         nettput tools object and write on the ssm-out prefix (the
+#                         pipeline creates a dedicated least-priv profile for this
+#                         -- see haiku-graviton-pipeline-stack.ts).
+#   HG_PEER_AMI_PARAM     SSM parameter the peer's Ubuntu arm64 AMI id is read from
+#                         (default Canonical's public
+#                         /aws/service/canonical/ubuntu/server/24.04/stable/current/arm64/hvm/ebs-gp3/ami-id).
+#   HG_BARON_SECRET       Secrets Manager secret id holding baron's PRIVATE ssh key,
+#                         which the peer fetches at boot into
+#                         /home/ubuntu/.ssh/haiku-ed25519 (default
+#                         haiku-graviton/baron-ssh-key).
+#   HG_TOOLS_S3           s3:// URL of the nettput peer script the peer fetches at
+#                         boot into /opt/haiku/nettput/nettput-peer.py. Empty -> it
+#                         is derived as s3://haiku-graviton-<account>-<region>/tools/nettput-peer.py.
 #   HG_BUILDER_WAIT_SECS  budget for the builder to become reachable over SSM at
 #                         the start of a run (default 300); a run cannot proceed
 #                         until it does, but this is patient in case the peer is
-#                         mid-boot (a freshly launched peer needs to boot and
-#                         register SSM within this budget -- raise it if the
-#                         canonical image is slow to come up)
+#                         mid-boot (a freshly launched peer needs to boot, run its
+#                         bootstrap user-data and register SSM within this budget --
+#                         raise it if the Ubuntu image is slow to come up)
 #   HG_TEST_SUBNET        subnet to launch the candidate in
 #   HG_TEST_SG            security group for the candidate (**required**)
 #   HG_TEST_TYPE          instance type (default c7g.large)
@@ -104,7 +123,9 @@ set -uo pipefail
 REGION="${AWS_REGION:-${AWS_DEFAULT_REGION:-us-west-2}}"
 BUILDER="${HG_BUILDER_INSTANCE:-}"
 PEER_PROFILE="${HG_PEER_INSTANCE_PROFILE:-AWSSupportPatchwork-SSMRoleForInstances}"
-CANONICAL_AMI_PARAM="${HG_CANONICAL_AMI_PARAM:-/haiku-graviton/canonical-ami-id}"
+PEER_AMI_PARAM="${HG_PEER_AMI_PARAM:-/aws/service/canonical/ubuntu/server/24.04/stable/current/arm64/hvm/ebs-gp3/ami-id}"
+BARON_SECRET="${HG_BARON_SECRET:-haiku-graviton/baron-ssh-key}"
+TOOLS_S3="${HG_TOOLS_S3:-}"
 SUBNET="${HG_TEST_SUBNET:-subnet-0888405da8f10d1b2}"
 TEST_SG="${HG_TEST_SG:-}"
 TEST_TYPE="${HG_TEST_TYPE:-c7g.large}"
@@ -218,7 +239,7 @@ ensure_builder_reachable() {
   (last EC2 state ${state:-unknown}). This is an APPARATUS failure, NOT a verdict on
   $AMI: the gate reaches the candidate only through this peer, so with it silent
   nothing can be observed. No candidate was launched; the peer is torn down on
-  exit. Raise HG_BUILDER_WAIT_SECS if the canonical image is slow to register SSM,
+  exit. Raise HG_BUILDER_WAIT_SECS if the Ubuntu peer image is slow to register SSM,
   and re-run; do not read this as a failed image."
 	fi
 	die "the builder $BUILDER is not reachable over SSM (last EC2 state ${state:-unknown}).
@@ -230,30 +251,94 @@ ensure_builder_reachable() {
 
 # --------------------------------------------------------------- peer launch
 # There is no persistent builder to assume any more, so unless the caller points
-# HG_BUILDER_INSTANCE at an always-on machine, the gate launches its own peer the
-# same way it launches the candidate: from the canonical AMI (resolved from SSM,
-# never hardcoded), into the test subnet/SG, tagged ephemeral so the pipeline role
-# is allowed to terminate it. It carries an instance profile with SSM so ssm-run
-# can drive it. PEER_LAUNCHED marks it as ours to tear down; cleanup does that.
+# HG_BUILDER_INSTANCE at an always-on machine, the gate launches its own peer.
+#
+# The peer is a freshly bootstrapped UBUNTU arm64 host, not the Haiku canonical
+# AMI, because every peer-side command in this gate is Linux: it becomes the
+# `ubuntu` user (`sudo -u ubuntu`), uses an ssh *client* at
+# /home/ubuntu/.ssh/haiku-ed25519 to reach the candidate, and runs the nettput
+# peer with `python3 /opt/haiku/nettput/nettput-peer.py`. None of that exists on a
+# Haiku image. The AMI id is resolved at runtime from Canonical's public SSM
+# parameter (PEER_AMI_PARAM) -- never hardcoded -- and everything the peer needs
+# is installed by a base64 user-data script that runs once on first boot:
+#   - installs python3 and awscli (apt, with a snap fallback);
+#   - fetches baron's PRIVATE ssh key from Secrets Manager (BARON_SECRET) into
+#     /home/ubuntu/.ssh/haiku-ed25519 (0600, owned by ubuntu) -- this is the key
+#     whose public half is baked into the candidate's authorized_keys;
+#   - copies the nettput peer script from S3 (TOOLS_S3) into /opt/haiku/nettput/;
+#   - drops /var/lib/haiku-peer-ready last, so readiness can be confirmed.
+# The peer is launched into the test subnet/SG, tagged ephemeral so the pipeline
+# role is allowed to terminate it, and carries an instance profile that grants
+# SSM (so ssm-run can drive it) plus the secret/S3 reads its user-data needs.
+# PEER_LAUNCHED marks it as ours to tear down; cleanup does that.
 #
 # The launch and the SSM wait are deliberately split: BUILDER and PEER_LAUNCHED
 # are set the instant run-instances returns an id, so a failure during the SSM
 # wait still hands the instance to the EXIT trap rather than leaking it.
 launch_peer() {
-	local ami
-	say "no persistent builder supplied; self-provisioning an ephemeral peer"
-	ami=$(aws --region "$REGION" ssm get-parameter --name "$CANONICAL_AMI_PARAM" \
+	local ami acct
+	say "no persistent builder supplied; self-provisioning an ephemeral Ubuntu arm64 peer"
+	ami=$(aws --region "$REGION" ssm get-parameter --name "$PEER_AMI_PARAM" \
 		--query 'Parameter.Value' --output text 2>&1)
 	case "$ami" in
 		ami-*) ;;
-		*) die "could not resolve the canonical AMI from SSM param $CANONICAL_AMI_PARAM: $ami" ;;
+		*) die "could not resolve the Ubuntu arm64 peer AMI from SSM param $PEER_AMI_PARAM: $ami" ;;
 	esac
-	say "launching peer $TEST_TYPE from canonical AMI $ami (profile $PEER_PROFILE)"
+
+	# Derive the nettput tools object if the caller did not name it outright. The
+	# account id is never written down in this (public) tree, so it is resolved
+	# from the caller's own credentials, exactly as ssm-run does for its bucket.
+	if [ -z "$TOOLS_S3" ]; then
+		acct=$(aws --region "$REGION" sts get-caller-identity --query Account --output text 2>/dev/null)
+		case "$acct" in
+			""|*[!0-9]*) die "cannot resolve the AWS account id to derive HG_TOOLS_S3; set HG_TOOLS_S3 to the nettput-peer.py object" ;;
+		esac
+		TOOLS_S3="s3://haiku-graviton-$acct-$REGION/tools/nettput-peer.py"
+	fi
+
+	# First-boot bootstrap. Runtime shell metacharacters are escaped (\$) so they
+	# run ON the peer; REGION/BARON_SECRET/TOOLS_S3 are expanded HERE so the peer
+	# does not need to know them. set -e aborts the boot if any step fails, which
+	# surfaces as the sentinel never appearing rather than as a half-provisioned
+	# peer that measures nothing.
+	local userdata
+	userdata=$(base64 -w0 <<-UD
+		#!/bin/bash
+		set -e
+		export DEBIAN_FRONTEND=noninteractive
+		# cloud-init may still hold the apt/dpkg lock on a fresh boot; wait it out.
+		for _ in \$(seq 1 60); do
+			fuser /var/lib/dpkg/lock-frontend >/dev/null 2>&1 || break
+			sleep 5
+		done
+		apt-get update -y
+		# awscli lives in Ubuntu 24.04 'universe' (enabled by default on Canonical's
+		# images); fall back to the snap if the apt package is somehow unavailable.
+		if ! apt-get install -y python3 awscli; then
+			apt-get install -y python3
+			snap install aws-cli --classic
+			ln -sf /snap/bin/aws /usr/local/bin/aws
+		fi
+		install -d -m700 -o ubuntu -g ubuntu /home/ubuntu/.ssh
+		aws secretsmanager get-secret-value --region $REGION \\
+			--secret-id $BARON_SECRET --query SecretString --output text \\
+			> /home/ubuntu/.ssh/haiku-ed25519
+		chmod 600 /home/ubuntu/.ssh/haiku-ed25519
+		chown ubuntu:ubuntu /home/ubuntu/.ssh/haiku-ed25519
+		mkdir -p /opt/haiku/nettput
+		aws s3 cp $TOOLS_S3 /opt/haiku/nettput/nettput-peer.py
+		touch /var/lib/haiku-peer-ready
+	UD
+	)
+
+	say "launching Ubuntu arm64 peer $TEST_TYPE from $ami (profile $PEER_PROFILE)"
+	say "  peer will fetch baron key from Secrets Manager $BARON_SECRET and nettput from $TOOLS_S3"
 	local id
 	id=$(aws --region "$REGION" ec2 run-instances \
 		--image-id "$ami" --instance-type "$TEST_TYPE" \
 		--key-name "$KEY_NAME" --subnet-id "$SUBNET" --security-group-ids "$TEST_SG" \
 		--iam-instance-profile "Name=$PEER_PROFILE" \
+		--user-data "$userdata" \
 		--tag-specifications "ResourceType=instance,Tags=[{Key=Project,Value=haiku-graviton},{Key=Name,Value=haiku-perf-gate-peer},{Key=ephemeral,Value=true}]" \
 		--query 'Instances[0].InstanceId' --output text 2>&1)
 	case "$id" in
@@ -265,11 +350,46 @@ launch_peer() {
 	say "peer instance $BUILDER launched; waiting for it to answer SSM"
 }
 
+# --------------------------------------------------------- peer bootstrap wait
+# ensure_builder_reachable proves the SSM channel round-trips, but on a
+# self-provisioned peer that only means the SSM agent is up -- the user-data
+# bootstrap (key fetch, nettput copy, package install) may still be running. The
+# nettput measurement and the ssh-to-candidate both fail confusingly if they race
+# it, so wait for the /var/lib/haiku-peer-ready sentinel the user-data drops last.
+# Bounded by the same budget as the SSM wait; only meaningful for a peer we
+# launched (a caller-supplied builder is assumed already provisioned).
+wait_for_peer_ready() {
+	local deadline=$((SECONDS + BUILDER_WAIT)) out
+	say "waiting for the peer's first-boot bootstrap to finish (/var/lib/haiku-peer-ready)"
+	while [ "$SECONDS" -lt "$deadline" ]; do
+		out=$("$SSM_RUN" "$BUILDER" -t 60 -q 2>/dev/null <<-'READY'
+			test -f /var/lib/haiku-peer-ready \
+				&& test -s /home/ubuntu/.ssh/haiku-ed25519 \
+				&& test -s /opt/haiku/nettput/nettput-peer.py \
+				&& echo GATE_PEER_READY
+		READY
+		)
+		printf '%s' "$out" | grep -q GATE_PEER_READY && { say "peer bootstrap complete"; return 0; }
+		say "  peer still bootstrapping ($((deadline - SECONDS))s of budget left)"
+		sleep 15
+	done
+	die "the self-provisioned peer $BUILDER never finished its first-boot bootstrap
+  within ${BUILDER_WAIT}s (no /var/lib/haiku-peer-ready, or the baron key / nettput
+  script never landed). This is an APPARATUS failure, NOT a verdict on $AMI: the peer
+  drives and peers every check, so a half-provisioned peer measures nothing. Check the
+  peer's /var/log/cloud-init-output.log, confirm the peer profile can read
+  $BARON_SECRET and $TOOLS_S3, and re-run."
+}
+
 case "$BUILDER" in
 	""|self) launch_peer ;;
 	*) say "using caller-supplied builder $BUILDER (will not terminate it)" ;;
 esac
 ensure_builder_reachable
+# A peer we launched is not usable until its first-boot bootstrap has fetched the
+# baron key and the nettput script; wait for the sentinel before measuring. A
+# caller-supplied builder is assumed already provisioned, so skip the wait for it.
+[ "$PEER_LAUNCHED" = 1 ] && wait_for_peer_ready
 
 # ------------------------------------------------------------------ launch
 say "launching $TEST_TYPE from $AMI"

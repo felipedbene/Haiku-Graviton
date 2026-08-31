@@ -25,13 +25,13 @@ export interface HaikuGravitonPipelineStackProps extends cdk.StackProps {
  *   Register     CodeBuild: upload raw to S3, ec2 import-snapshot, poll,
  *                register-image (arm64/uefi/ena/hvm/xvda), tag as a candidate
  *                (canonical is NOT set here). Exports AMI_ID.
- *   Test         CodeBuild: self-provision an ephemeral peer from the canonical
- *                AMI, boot the candidate on a real c7g.large, measure throughput
- *                between them over SSM, then stop and start the candidate and
- *                require sshd to answer again. Fails unless it boots, negotiates
- *                MTU 9001, clears both throughput floors and survives the power
- *                cycle. Both ephemeral instances (candidate and peer) are always
- *                torn down.
+ *   Test         CodeBuild: self-provision an ephemeral, bootstrapped Ubuntu
+ *                arm64 peer, boot the candidate on a real c7g.large, measure
+ *                throughput between them over SSM, then stop and start the
+ *                candidate and require sshd to answer again. Fails unless it
+ *                boots, negotiates MTU 9001, clears both throughput floors and
+ *                survives the power cycle. Both ephemeral instances (candidate
+ *                and peer) are always torn down.
  *   Approve      Manual approval gate — canonical promotion happens only after
  *                a human approves, now with the Test stage's measurements in
  *                hand rather than a promise that someone checked out of band.
@@ -171,8 +171,61 @@ export class HaikuGravitonPipelineStack extends cdk.Stack {
     );
 
     // ---------------------------------------------------------------------
-    // Stage 3 project: hardware regression gate. Self-provisions an ephemeral
-    // peer from the canonical AMI, boots the candidate AMI on a real Graviton
+    // Dedicated least-privilege role + instance profile for the self-provisioned
+    // perf-gate peer. This is deliberately NOT a broad shared role: the peer is an
+    // ephemeral Ubuntu box the gate launches, so it gets exactly the four things
+    // its first-boot bootstrap and the gate need and nothing else --
+    //   - AmazonSSMManagedInstanceCore, so it registers as an SSM node and ssm-run
+    //     can drive it (it is the traffic peer and the driver of every check);
+    //   - read on the ONE Secrets Manager secret holding baron's private ssh key
+    //     (the wildcard suffix is unavoidable: Secrets Manager appends a 6-char
+    //     random suffix to the secret's ARN);
+    //   - read on the ONE nettput tools object it copies at boot;
+    //   - write on the ssm-out prefix, because ssm-run routes command output
+    //     through s3://<ssmOutBucket>/ssm-out/* using the *instance's* role -- the
+    //     inline SSM output is truncated at 24 KB, so without this the gate would
+    //     silently fall back to a truncated copy.
+    // The gate resolves the peer's Ubuntu AMI from a public SSM parameter, so no
+    // AMI read grant is needed here.
+    const peerRole = new iam.Role(this, 'PerfGatePeerRole', {
+      roleName: `${cfg.amiNamePrefix}-perf-gate-peer`,
+      assumedBy: new iam.ServicePrincipal('ec2.amazonaws.com'),
+      managedPolicies: [
+        iam.ManagedPolicy.fromAwsManagedPolicyName('AmazonSSMManagedInstanceCore'),
+      ],
+    });
+    peerRole.addToPolicy(
+      new iam.PolicyStatement({
+        sid: 'FetchBaronSshKey',
+        actions: ['secretsmanager:GetSecretValue'],
+        resources: [
+          `arn:aws:secretsmanager:${cfg.region}:${cfg.account}:secret:haiku-graviton/baron-ssh-key-*`,
+        ],
+      }),
+    );
+    peerRole.addToPolicy(
+      new iam.PolicyStatement({
+        sid: 'FetchNettputPeerScript',
+        actions: ['s3:GetObject'],
+        resources: [`arn:aws:s3:::${cfg.ssmOutBucketName}/tools/*`],
+      }),
+    );
+    peerRole.addToPolicy(
+      new iam.PolicyStatement({
+        sid: 'WriteSsmCommandOutput',
+        actions: ['s3:PutObject'],
+        resources: [`arn:aws:s3:::${cfg.ssmOutBucketName}/ssm-out/*`],
+      }),
+    );
+    const peerProfileName = `${cfg.amiNamePrefix}-perf-gate-peer`;
+    const peerProfile = new iam.CfnInstanceProfile(this, 'PerfGatePeerProfile', {
+      instanceProfileName: peerProfileName,
+      roles: [peerRole.roleName],
+    });
+
+    // ---------------------------------------------------------------------
+    // Stage 3 project: hardware regression gate. Self-provisions an ephemeral,
+    // bootstrapped Ubuntu arm64 peer, boots the candidate AMI on a real Graviton
     // instance, measures throughput between them over SSM, then stops and starts
     // the candidate and requires sshd to answer again. Fails the pipeline if the
     // image does not boot, does not negotiate jumbo, has lost a large fraction of
@@ -211,10 +264,14 @@ export class HaikuGravitonPipelineStack extends cdk.Stack {
         ...commonEnvVars,
         AWS_REGION: { value: cfg.region },
         // No persistent builder any more: leave HG_BUILDER_INSTANCE unset so the
-        // gate self-provisions an ephemeral peer from the canonical AMI, drives it
-        // over SSM, and terminates it on exit (see graviton/scripts/haiku-perf-gate).
-        HG_PEER_INSTANCE_PROFILE: { value: cfg.peerInstanceProfile },
-        HG_CANONICAL_AMI_PARAM: { value: cfg.canonicalAmiParam },
+        // gate self-provisions an ephemeral Ubuntu arm64 peer, bootstraps it, drives
+        // it over SSM, and terminates it on exit (see graviton/scripts/haiku-perf-gate).
+        // The peer is launched with the dedicated least-priv profile defined above,
+        // its AMI resolved from a public Canonical SSM param, and it fetches the
+        // baron key + nettput script from Secrets Manager and this bucket at boot.
+        HG_PEER_INSTANCE_PROFILE: { value: peerProfileName },
+        HG_PEER_AMI_PARAM: { value: cfg.peerAmiParam },
+        HG_TOOLS_S3: { value: `s3://${cfg.ssmOutBucketName}/tools/nettput-peer.py` },
         HG_TEST_SUBNET: { value: cfg.testSubnetId },
         HG_TEST_SG: { value: cfg.testSecurityGroupId },
         HG_TEST_TYPE: { value: cfg.testInstanceType },
@@ -243,8 +300,8 @@ export class HaikuGravitonPipelineStack extends cdk.Stack {
     ssmOutBucket.grantRead(perfTest, 'ssm-out/*');
 
     // Launch and describe ephemeral instances. The gate now launches TWO: the
-    // candidate (from the AMI under test) and its own peer/driver (from the
-    // canonical AMI), because the shared persistent builder was terminated and
+    // candidate (from the AMI under test) and its own peer/driver (a bootstrapped
+    // Ubuntu arm64 box), because the shared persistent builder was terminated and
     // there is no longer one to lean on. RunInstances does not usefully support
     // resource-level scoping for a freshly created instance, so constrain by
     // region and rely on the terminate policy below being narrow (tag-scoped to
@@ -262,33 +319,28 @@ export class HaikuGravitonPipelineStack extends cdk.Stack {
         conditions: regionCondition,
       }),
     );
-    // The peer is launched from the canonical AMI, whose id the gate resolves from
-    // this SSM parameter rather than hardcoding it. Scoped to that one parameter.
+    // The peer's Ubuntu arm64 AMI id is resolved at runtime from Canonical's public
+    // SSM parameter rather than hardcoded. Public parameters live under the `aws`
+    // service namespace with no account id in the ARN, so this is scoped to that
+    // one public parameter path (empty account field is intentional).
     perfTest.addToRolePolicy(
       new iam.PolicyStatement({
-        sid: 'ReadCanonicalAmiParam',
+        sid: 'ReadPeerAmiParam',
         actions: ['ssm:GetParameter'],
         resources: [
-          `arn:aws:ssm:${cfg.region}:${cfg.account}:parameter${cfg.canonicalAmiParam}`,
+          `arn:aws:ssm:${cfg.region}::parameter${cfg.peerAmiParam}`,
         ],
       }),
     );
-    // The peer carries an instance profile (AmazonSSMManagedInstanceCore) so it
-    // answers SSM, and attaching a profile at RunInstances requires iam:PassRole
-    // on the role inside that profile. Scoped to exactly that role.
-    //
-    // NOTE (human review): this assumes the role inside the instance profile
-    // shares the profile's name -- true for the AWS-managed
-    // AWSSupportPatchwork-SSMRoleForInstances profile. If a caller overrides
-    // peerInstanceProfile with a profile whose role name differs, this ARN must
-    // be adjusted (or split into a separate role-name config field).
+    // The peer carries the dedicated least-priv instance profile created above, and
+    // attaching a profile at RunInstances requires iam:PassRole on the role inside
+    // it. Scoped to exactly that role (whose ARN we hold directly, so no name-shape
+    // assumption is needed) and constrained to being passed to EC2.
     perfTest.addToRolePolicy(
       new iam.PolicyStatement({
         sid: 'PassPeerInstanceProfileRole',
         actions: ['iam:PassRole'],
-        resources: [
-          `arn:aws:iam::${cfg.account}:role/${cfg.peerInstanceProfile}`,
-        ],
+        resources: [peerRole.roleArn],
         conditions: {
           StringEquals: { 'iam:PassedToService': 'ec2.amazonaws.com' },
         },

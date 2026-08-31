@@ -29,7 +29,7 @@ const config: HaikuPipelineConfig = {
   publishBucketName: `haiku-graviton-hpkg-${ACCOUNT}`,
   builderAmiParam: '/haiku-graviton/builder-ami-id',
   canonicalAmiParam: '/haiku-graviton/canonical-ami-id',
-  peerInstanceProfile: 'AWSSupportPatchwork-SSMRoleForInstances',
+  peerAmiParam: '/aws/service/canonical/ubuntu/server/24.04/stable/current/arm64/hvm/ebs-gp3/ami-id',
   testSubnetId: 'subnet-000000000000000aa',
   testSecurityGroupId: 'sg-000000000000000aa',
   testInstanceType: 'c7g.large',
@@ -177,7 +177,9 @@ test('the perf gate may only SendCommand to its own tagged peer', () => {
 });
 
 // Attaching an instance profile at RunInstances needs iam:PassRole, which must be
-// scoped to exactly the peer's role and restricted to being passed to EC2.
+// scoped to exactly the peer's role and restricted to being passed to EC2. The
+// peer role is now created in the stack (a dedicated least-priv role), so the
+// PassRole resource is a GetAtt token to that role rather than a literal ARN.
 test('the perf gate PassRole is scoped to EC2 and the peer role', () => {
   const t = synth();
   const policies = t.findResources('AWS::IAM::Policy');
@@ -189,7 +191,33 @@ test('the perf gate PassRole is scoped to EC2 and the peer role', () => {
   );
   expect(passers).toHaveLength(1);
   expect(passers[0].Condition.StringEquals['iam:PassedToService']).toBe('ec2.amazonaws.com');
-  expect(JSON.stringify(passers[0].Resource)).toContain(`role/${config.peerInstanceProfile}`);
+  expect(JSON.stringify(passers[0].Resource)).toContain('PerfGatePeerRole');
+});
+
+// The self-provisioned peer's instance profile is a dedicated least-priv role,
+// not a shared broad one. Assert both that the role exists with the SSM managed
+// policy and that it grants exactly the three narrow inline permissions its
+// bootstrap and ssm-run need: read the ONE baron secret, read the nettput tools
+// object, and write ssm-run's output to the ssm-out prefix. This catches a future
+// edit that broadens the grants or points the profile at a wide shared role.
+test('the peer role is least-privilege: SSM + baron secret + nettput + ssm-out', () => {
+  const t = synth();
+  // The SSM managed policy is attached to the peer role.
+  t.hasResourceProperties('AWS::IAM::Role', {
+    AssumeRolePolicyDocument: {
+      Statement: [
+        { Principal: { Service: 'ec2.amazonaws.com' } },
+      ],
+    },
+    ManagedPolicyArns: [
+      { 'Fn::Join': ['', ['arn:', { Ref: 'AWS::Partition' }, ':iam::aws:policy/AmazonSSMManagedInstanceCore']] },
+    ],
+  });
+  const json = JSON.stringify(t.findResources('AWS::IAM::Policy'));
+  expect(json).toContain('secretsmanager:GetSecretValue');
+  expect(json).toContain('secret:haiku-graviton/baron-ssh-key-*');
+  expect(json).toContain(`${config.ssmOutBucketName}/tools/*`);
+  expect(json).toContain(`${config.ssmOutBucketName}/ssm-out/*`);
 });
 
 test('has a retained encrypted work bucket', () => {
