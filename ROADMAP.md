@@ -76,3 +76,13 @@ is worthwhile: **hobby-complete and self-hosted**, versus **community-distributa
   framebuffer-clone path, which a bare (display-less) Graviton instance cannot exercise, so it
   was never run on hardware. Re-verify on a virtual-framebuffer-equipped guest — this naturally
   rides the remote-desktop offscreen-framebuffer work (Phase 1) above.
+- **BFS root auto-grow — loader-driven trigger, hardware one-boot re-verify owed.** A canonical
+  AMI booted on a larger root EBS grows its BFS root to fill the disk on the first boot, with no
+  rebake and no reboot: the EFI loader extends the trailing BFS GPT partition before the kernel
+  mounts the boot volume, so the existing mount-time BFS grow fires on boot one. The in-place
+  append grow was hardware-proven earlier (checkfs clean across crash-states + a power cut); the
+  loader-time trigger is compile-verified only (`haiku_loader.efi` links against the arm64
+  cross-tools) and has not yet been booted. Owed: bake onto a larger EBS and confirm `df /boot`
+  widens on first boot, checkfs clean, second boot a no-op (verification plan T4). Design:
+  `graviton/docs/develop/bfs-auto-grow-design.md`. Detecting an *online* EBS grow, a hot-attached
+  second volume, or multiple NVMe controllers is a separate, still-open kernel item.
