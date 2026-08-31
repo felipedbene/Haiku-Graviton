@@ -139,20 +139,29 @@ launch_peer() {
 			sleep 5
 		done
 		apt-get update -y
+		# Ubuntu 24.04 has no apt 'awscli'; it ships only as a snap. Try apt (for
+		# other bases) then fall back to the snap and symlink it onto PATH.
 		if ! apt-get install -y awscli; then
 			snap install aws-cli --classic
 			ln -sf /snap/bin/aws /usr/local/bin/aws
 		fi
-		install -d -m755 /opt/haiku-tools
+		install -d -m755 /opt/haiku-tools /opt/haiku-tools/lib
 		aws s3 cp "$HOST_TOOLS_S3/package"      /opt/haiku-tools/package      --region $region
 		aws s3 cp "$HOST_TOOLS_S3/package_repo" /opt/haiku-tools/package_repo --region $region
 		chmod +x /opt/haiku-tools/package /opt/haiku-tools/package_repo
+		# The tools are dynamically linked against Haiku's build shared libs
+		# (libroot_build.so, libpackage_build.so, libbe_build.so, ...) which are NOT
+		# system libs; fetch the banked set and run the tools with LD_LIBRARY_PATH
+		# pointed at them. Without this the tool aborts "error while loading shared
+		# libraries: libroot_build.so".
+		aws s3 cp "$HOST_TOOLS_S3/lib" /opt/haiku-tools/lib --recursive --region $region
+		export LD_LIBRARY_PATH=/opt/haiku-tools/lib
+		echo 'export LD_LIBRARY_PATH=/opt/haiku-tools/lib' > /etc/profile.d/haiku-tools.sh
 		# Prove the Linux-arm64 host tools actually run on stock Ubuntu (catch a
 		# missing shared-lib dep now, not mid-publish). --help/-h exits non-zero on
 		# some builds, so accept any exit as long as the loader resolved the binary.
-		/opt/haiku-tools/package_repo 2>/dev/null || true
+		ldd /opt/haiku-tools/package_repo 2>&1 | grep -qi 'not found' && { echo 'host tools missing shared libs after LD_LIBRARY_PATH set' >&2; ldd /opt/haiku-tools/package_repo >&2; exit 1; }
 		/opt/haiku-tools/package_repo --help >/dev/null 2>&1 || /opt/haiku-tools/package_repo 2>&1 | head -1 || true
-		ldd /opt/haiku-tools/package_repo 2>&1 | grep -qi 'not found' && { echo 'host tools missing shared libs' >&2; exit 1; }
 		touch /var/lib/haiku-publisher-ready
 	UD
 	)
@@ -186,7 +195,10 @@ wait_for_ready() {
 		state=$(aws --region "$region" ec2 describe-instances --instance-ids "$PUBLISHER" \
 			--query 'Reservations[0].Instances[0].State.Name' --output text 2>/dev/null || true)
 		if [ "$state" = "running" ]; then
-			out=$("$SSM_RUN" "$PUBLISHER" -t 60 -q 2>/dev/null <<-'READY'
+			# ssm-run fails while the SSM agent is still coming up on a freshly
+			# booted peer; tolerate it (|| true inside the substitution) so set -e
+			# does not abort the wait -- we simply retry until the sentinel appears.
+			out=$("$SSM_RUN" "$PUBLISHER" -t 60 -q 2>/dev/null <<-'READY' || true
 				test -f /var/lib/haiku-publisher-ready \
 					&& test -x /opt/haiku-tools/package_repo \
 					&& echo PUBLISHER_READY
@@ -231,6 +243,7 @@ export ARCH='$ARCH'
 export AWS_DEFAULT_REGION='$region'
 export PKG_TOOL=/opt/haiku-tools/package
 export PACKAGE_REPO_TOOL=/opt/haiku-tools/package_repo
+export LD_LIBRARY_PATH=/opt/haiku-tools/lib
 printf '%s' '$addb64' | base64 -d > /tmp/haiku-repo-add
 bash /tmp/haiku-repo-add
 EOF
