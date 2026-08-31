@@ -17,13 +17,14 @@
 # it resolves the AMI's `haiku-revision` tag (set by import-and-register.sh),
 # checks whether the repo already serves a haiku_devel for that hrev, and if not
 # fetches the version-matched hpkg that the cross-build archived and publishes it
-# to the repo via haiku-repo-publish-remote.
+# to the repo via haiku-repo-publish-ephemeral.
 #
 # It is IDEMPOTENT and CHEAP on the common path: when the repo already carries
 # the matching haiku_devel (the usual case -- the base hrev changes rarely) it
-# exits without starting the metal build host. It only does the heavy publish
-# when the canonical hrev actually moved. That makes it safe to call on EVERY
-# promote (haiku-canonical does).
+# exits without launching any publisher. It only does the heavy publish (spin an
+# ephemeral Ubuntu peer, run haiku-repo-add, tear it down) when the canonical
+# hrev actually moved. That makes it safe to call on EVERY promote (haiku-canonical
+# does).
 #
 # Best-effort by contract: callers (haiku-canonical promote) must NOT let a
 # failure here break the canonical-tag invariant. A stale-but-present repo
@@ -39,8 +40,9 @@
 #                        the operator need not know a generated bucket name. For
 #                        the CDK pipeline the location is
 #                        s3://<workBucket>/cache/devel-closure.
-#   HG_BUILDER_ID / HG_INCOMING_S3 / HG_CF_DIST / HG_REPO_URL
-#                        forwarded to haiku-repo-publish-remote (see it)
+#   HG_INCOMING_S3 / HG_CF_DIST / HG_REPO_URL / HG_HOST_TOOLS_S3 and the
+#   HG_PUBLISHER_* (PROFILE/SUBNET/SG/INSTANCE/...) knobs
+#                        forwarded to haiku-repo-publish-ephemeral (see it)
 #   ARCH                 packaging arch (default arm64)
 #   AWS_DEFAULT_REGION / AWS_REGION (default us-west-2)
 #
@@ -128,8 +130,11 @@ else
 	[ -n "$HPKG" ] || die "no archived haiku_devel for ${HREV} in any known location -- rebake at this hrev, or publish by hand with --file <hpkg>"
 fi
 
-# ---- publish via the existing remote publisher ---------------------------
-[ -x "$HERE/haiku-repo-publish-remote" ] || die "haiku-repo-publish-remote not found next to this script"
-log "publishing $HPKG to the DeBeOS repo"
-"$HERE/haiku-repo-publish-remote" "$HPKG"
+# ---- publish via the no-metal ephemeral publisher ------------------------
+# Was haiku-repo-publish-remote (drove the retired c9g metal); now the ephemeral
+# Ubuntu publisher, which self-provisions a short-lived peer, fetches the banked
+# Linux host tools, runs haiku-repo-add, and tears the peer down. Same interface.
+[ -x "$HERE/haiku-repo-publish-ephemeral" ] || die "haiku-repo-publish-ephemeral not found next to this script"
+log "publishing $HPKG to the DeBeOS repo (ephemeral publisher)"
+"$HERE/haiku-repo-publish-ephemeral" "$HPKG"
 log "done -- repo now serves the haiku_devel matching ${HREV}"
