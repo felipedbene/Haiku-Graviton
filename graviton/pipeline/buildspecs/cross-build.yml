@@ -235,6 +235,19 @@ phases:
               && nlibs=$((nlibs+1)) || echo "lib $(basename "$so") upload failed (non-fatal)"
           done
           echo "== banked $nlibs host build lib(s) -> s3://$WORK_BUCKET/$HT/lib/ =="
+          # The `package` tool license-checks against a system data dir holding
+          # licenses/. Bank the source tree's data/system/data/licenses so a
+          # relocated tool can be pointed at it via the HAIKU_BUILD_SYSTEM_DATA_
+          # DIRECTORY env override (added to PackageWriterImpl). Without it,
+          # `package create` aborts "unable to find system data path".
+          if [ -d "$HAIKU_TOP/data/system/data/licenses" ]; then
+            aws s3 cp "$HAIKU_TOP/data/system/data/licenses" "s3://$WORK_BUCKET/$HT/data/licenses" \
+              --recursive --region "$AWS_DEFAULT_REGION" \
+              && echo "== banked licenses -> s3://$WORK_BUCKET/$HT/data/licenses/ ==" \
+              || echo "licenses upload failed (non-fatal)"
+          else
+            echo "WARNING: no data/system/data/licenses under $HAIKU_TOP to bank"
+          fi
         else
           echo "WARNING: host tools not found under $GEN/objects/linux (package=$PKG_BIN package_repo=$PR_BIN)"
         fi
