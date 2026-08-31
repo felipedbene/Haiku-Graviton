@@ -1,0 +1,115 @@
+#!/usr/bin/env bash
+#
+# haiku-bake-lock -- cross-machine advisory lock for the shared bake pipeline(s).
+#
+# WHY: the haiku-graviton*-bake CodePipelines and the Source-branch pin are a
+# single shared resource, and every agent/session drives them through the SAME
+# Isengard Admin role from different machines. With no coordination, one session
+# abandons another's in-flight execution, re-pins Source out from under it, or
+# promotes the wrong candidate. This gives them a mutex.
+#
+# HOW: a lock object in S3 taken with an ATOMIC create -- `put-object
+# --if-none-match '*'` fails if the key already exists, so two racers can't both
+# win. The lock carries an owner id, purpose, the Source branch the holder pinned,
+# and a TTL; an expired lock can be stolen so a crashed holder never wedges the
+# pipeline forever. Bucket is derived from the caller's account id, so no
+# account-scoped name is baked into this tracked file.
+#
+# USAGE:
+#   haiku-bake-lock acquire [-p PIPELINE] [-o OWNER] [-r PURPOSE] [-b SRC_BRANCH] [-t TTL_SEC]
+#   haiku-bake-lock release [-p PIPELINE] [-o OWNER]
+#   haiku-bake-lock status  [-p PIPELINE]
+#   haiku-bake-lock steal   [-p PIPELINE] [-o OWNER] ...   # only if expired (or -f)
+#
+# Convention: hold the lock for the WHOLE critical section -- from pinning Source
+# / start-pipeline-execution through grabbing the AMI and restoring Source. Always
+# `release` in a trap. Exit 0 = you own it; non-zero = you do not, DO NOT touch the
+# pipeline.
+set -uo pipefail
+
+REGION="${AWS_DEFAULT_REGION:-${AWS_REGION:-us-west-2}}"
+PIPELINE="haiku-graviton-bake"
+OWNER="${HAIKU_BAKE_OWNER:-$(hostname 2>/dev/null || echo unknown)-$$}"
+PURPOSE=""
+SRC_BRANCH=""
+TTL="${HAIKU_BAKE_TTL:-5400}"   # 90 min default; a bake is ~30-90 min
+FORCE=0
+
+cmd="${1:-status}"; shift 2>/dev/null || true
+while getopts "p:o:r:b:t:f" opt; do
+	case "$opt" in
+		p) PIPELINE="$OPTARG" ;;
+		o) OWNER="$OPTARG" ;;
+		r) PURPOSE="$OPTARG" ;;
+		b) SRC_BRANCH="$OPTARG" ;;
+		t) TTL="$OPTARG" ;;
+		f) FORCE=1 ;;
+		*) ;;
+	esac
+done
+
+acct=$(timeout 12 aws sts get-caller-identity --query Account --output text 2>/dev/null)
+[ -z "$acct" ] || [ "$acct" = "None" ] && { echo "bake-lock: no AWS credentials" >&2; exit 3; }
+BUCKET="haiku-graviton-${acct}-${REGION}"
+KEY="pipeline-locks/${PIPELINE}.json"
+S3URI="s3://${BUCKET}/${KEY}"
+now=$(date -u +%s)
+
+read_lock() { timeout 15 aws --region "$REGION" s3 cp "$S3URI" - 2>/dev/null; }
+lock_field() { read_lock | python3 -c "import json,sys;
+try: print(json.load(sys.stdin).get('$1',''))
+except Exception: pass" 2>/dev/null; }
+
+write_lock() {  # extra put-object flags passed as "$@" (literal, no globbing); body on stdin
+	local tmp; tmp=$(mktemp)
+	cat > "$tmp"
+	timeout 20 aws --region "$REGION" s3api put-object --bucket "$BUCKET" --key "$KEY" \
+		--body "$tmp" --content-type application/json "$@" >/dev/null 2>&1
+	local rc=$?; rm -f "$tmp"; return $rc
+}
+
+make_body() {
+	python3 -c "import json,sys,time;
+print(json.dumps({'owner':sys.argv[1],'purpose':sys.argv[2],'source_branch':sys.argv[3],
+'acquired_at':int(sys.argv[4]),'expires_at':int(sys.argv[4])+int(sys.argv[5]),'pipeline':sys.argv[6]}))" \
+	"$OWNER" "$PURPOSE" "$SRC_BRANCH" "$now" "$TTL" "$PIPELINE"
+}
+
+case "$cmd" in
+acquire)
+	# fast path: atomic create-if-absent
+	if make_body | write_lock --if-none-match '*'; then
+		echo "ACQUIRED $PIPELINE by $OWNER (ttl ${TTL}s)"; exit 0
+	fi
+	# contended: inspect the incumbent
+	h_owner=$(lock_field owner); h_exp=$(lock_field expires_at); h_purp=$(lock_field purpose)
+	if [ -z "$h_owner" ]; then echo "bake-lock: could not acquire or read lock (transient?)" >&2; exit 1; fi
+	if [ "$h_owner" = "$OWNER" ]; then echo "ALREADY HELD by you ($OWNER)"; exit 0; fi
+	if [ -n "$h_exp" ] && [ "$now" -gt "$h_exp" ]; then
+		echo "lock held by $h_owner is EXPIRED; stealing"; make_body | write_lock \
+			&& { echo "ACQUIRED (stole expired) $PIPELINE by $OWNER"; exit 0; }
+	fi
+	echo "LOCKED by $h_owner -- purpose: ${h_purp:-?} (expires $(date -u -d @${h_exp:-0} 2>/dev/null || echo ?)). DO NOT touch the pipeline." >&2
+	exit 1 ;;
+release)
+	h_owner=$(lock_field owner)
+	if [ -z "$h_owner" ]; then echo "no lock present"; exit 0; fi
+	if [ "$h_owner" != "$OWNER" ] && [ "$FORCE" != 1 ]; then
+		echo "bake-lock: lock owned by $h_owner, not $OWNER (use -f to override)" >&2; exit 1; fi
+	timeout 15 aws --region "$REGION" s3 rm "$S3URI" >/dev/null 2>&1 \
+		&& echo "RELEASED $PIPELINE" || { echo "release failed" >&2; exit 1; }
+	;;
+steal)
+	h_owner=$(lock_field owner); h_exp=$(lock_field expires_at)
+	if [ "$FORCE" != 1 ] && [ -n "$h_exp" ] && [ "$now" -le "$h_exp" ]; then
+		echo "bake-lock: incumbent $h_owner not expired; -f to force-steal" >&2; exit 1; fi
+	make_body | write_lock && echo "STOLE $PIPELINE for $OWNER" || { echo "steal failed" >&2; exit 1; } ;;
+status)
+	body=$(read_lock)
+	if [ -z "$body" ]; then echo "$PIPELINE: UNLOCKED"; exit 0; fi
+	echo "$body" | python3 -c "import json,sys,time;
+d=json.load(sys.stdin); exp=d.get('expires_at',0); st='EXPIRED' if time.time()>exp else 'HELD';
+print(f\"{d.get('pipeline')}: {st} by {d.get('owner')} -- {d.get('purpose','?')} (src={d.get('source_branch','?')}, expires {time.strftime('%H:%M:%SZ', time.gmtime(exp))})\")" 2>/dev/null \
+		|| echo "$body" ;;
+*) echo "usage: haiku-bake-lock {acquire|release|status|steal} [-p pipeline] [-o owner] [-r purpose] [-b branch] [-t ttl] [-f]" >&2; exit 2 ;;
+esac
