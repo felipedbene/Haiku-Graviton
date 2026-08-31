@@ -18,6 +18,30 @@ execution point makes it unnecessary.
 > (`B_NOT_SUPPORTED`) until the crash-injection acceptance in the verification
 > plan (v2 deltas below) passes.
 
+## Shipping status (2026-08-31)
+
+The first-boot **partition** grow that T4 depends on has moved out of userland and
+into the EFI boot loader: `EfiDevice::GrowBootGptPartition()`
+(`src/system/boot/platform/efi/devices.cpp`) extends the trailing BFS GPT partition
+to fill the disk *before* the kernel mounts the boot volume, so the existing
+mount-time BFS grow fires on **boot one** — no reboot, no `partition_grow` /
+launch-daemon ordering dependency (that userland job stays as a harmless idempotent
+fallback). arm64-gated, grow-only, trailing-BFS-only, idempotent, and a no-op on any
+GPT/geometry/CRC inconsistency so it never bricks boot.
+
+- **Build-verified** against the arm64 cross-tools: `haiku_loader.efi` links clean.
+- **In-place append grow** (19→40 GiB, mount-time engine) was previously
+  hardware-proven (checkfs clean across crash-states + power-cut).
+- **Owed:** a hardware one-boot confirmation of the *loader-driven* trigger — bake the
+  canonical image onto a larger EBS and confirm `df /boot` widens on the first boot
+  with checkfs clean and the second boot a no-op (verification plan T4). Until that
+  run lands, treat the loader trigger as compile-proven, not boot-proven.
+
+Detection of an **online** EBS grow, a **hot-attached** second volume, and
+**multi-controller** NVMe enumeration is out of scope here and tracked separately
+(the kernel reads disk geometry once at boot); the shipping path is
+launch-at-final-size + first-boot grow.
+
 ## On-disk layout (confirmed from bfs.h / Volume.cpp / BlockAllocator.cpp)
 ```
 block 0            superblock (+ boot block)
