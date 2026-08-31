@@ -1,0 +1,32 @@
+#!/usr/bin/env bash
+#
+# haiku-drift-hook-session-start -- SessionStart wrapper around haiku-drift-check.
+#
+# Wired from .claude/settings.json alongside haiku-status-hook so a cold session
+# starts with BOTH the ops snapshot (builders/pipelines/issues) AND a drift
+# report (tracking in MD without issue refs; remote branches with code but no
+# open PR). Always exits 0 and emits valid JSON in the documented hook envelope.
+
+set -uo pipefail
+
+here=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
+script="$here/haiku-drift-check"
+
+if [ ! -x "$script" ]; then
+	out="haiku-drift-check not found or not executable at $script"
+else
+	out=$(timeout 60 "$script" 2>&1) \
+		|| out="${out:-}
+(haiku-drift-check exited non-zero or timed out; drift report may be incomplete)"
+fi
+
+OUT="$out" python3 -c '
+import json, os
+print(json.dumps({
+    "hookSpecificOutput": {
+        "hookEventName": "SessionStart",
+        "additionalContext": os.environ.get("OUT", ""),
+    }
+}))
+'
+exit 0
