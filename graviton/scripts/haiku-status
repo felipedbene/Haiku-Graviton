@@ -28,6 +28,14 @@ BUDGET="${HAIKU_GRAVITON_TIMEOUT:-45}"
 say() { printf '%s\n' "$*"; }
 aws_q() { timeout 15 aws --region "$REGION" "$@" 2>/dev/null; }
 
+# The account's creds come from a self-refreshing `credential_process` profile, not
+# from ambient env vars or a `default` profile -- so a hook that calls plain `aws`
+# sees nothing and misreports "expired" while working creds sit one variable away.
+# Adopt the project profile unless the caller has already chosen one.
+if [ -z "${AWS_PROFILE:-}" ] && [ -z "${AWS_ACCESS_KEY_ID:-}" ]; then
+	export AWS_PROFILE="${HAIKU_GRAVITON_PROFILE:-haiku-graviton}"
+fi
+
 say "=== Haiku/Graviton status ($(date -u '+%Y-%m-%d %H:%M UTC')) ==="
 
 # ---------------------------------------------------------------- credentials
@@ -98,6 +106,53 @@ cnt=$(timeout 20 aws --region "$REGION" s3 ls \
 	| awk '{print $4}' | sed -E 's/-[0-9].*//' \
 	| grep -vE '_devel$|_debuginfo$|_tools$|_doc$|_source$|_bin$' | sort -u | wc -l)
 say "  published base packages: ${cnt:-?}"
+
+# ----------------------------------------------------- debeos-devops: build-wave
+# The autonomous package-maintenance path (DebeosOpsStack, see graviton/ops/SOPs.md).
+# Durable state is DynamoDB debeos-package-state (PK pkg, GSI by-build-state);
+# the state machine is debeos-build-wave. Surface the backlog histogram, the
+# builder AMI the plan will launch, and the most recent execution -- so a cold
+# session knows the queue depth and whether a wave is in flight, without hand-
+# querying. Every AWS call is best-effort; a missing stack degrades to blanks.
+say ""
+say "--- debeos-devops (build-wave + state) ---"
+b_ami=$(aws_q ssm get-parameter --name /haiku-graviton/builder-ami-id \
+	--query Parameter.Value --output text)
+say "  builder AMI: ${b_ami:-<unset>}"
+# One scan is cheaper than N Query calls, and the table is small (~hundreds).
+hist=$(timeout 20 aws --region "$REGION" dynamodb scan \
+	--table-name debeos-package-state \
+	--projection-expression "build_state" --output json 2>/dev/null \
+	| python3 -c '
+import json, sys, collections
+try:
+    d = json.load(sys.stdin)
+except Exception:
+    sys.exit(0)
+c = collections.Counter(
+    i.get("build_state", {}).get("S", "<none>") for i in d.get("Items", []))
+if not c:
+    sys.exit(0)
+parts = [f"{k}={v}" for k, v in c.most_common()]
+print("total=" + str(sum(c.values())) + "  " + "  ".join(parts))
+' 2>/dev/null)
+say "  backlog: ${hist:-<no DDB access>}"
+# Newest execution across all history -- SUCCEEDED/RUNNING/FAILED/ABORTED all
+# meaningful in a cold-session snapshot.
+sm_arn="arn:aws:states:${REGION}:${ident}:stateMachine:debeos-build-wave"
+last=$(aws_q stepfunctions list-executions --state-machine-arn "$sm_arn" \
+	--max-results 1 \
+	--query 'executions[0].[name,status,startDate]' --output text)
+if [ -n "$last" ] && [ "$last" != "None" ]; then
+	say "  last wave: $last"
+else
+	say "  last wave: (none / no state machine access)"
+fi
+# In-flight is what a maintainer actually reacts to; count RUNNING separately.
+running=$(aws_q stepfunctions list-executions --state-machine-arn "$sm_arn" \
+	--status-filter RUNNING --max-results 10 \
+	--query 'length(executions)' --output text)
+say "  waves running now: ${running:-0}"
 
 say ""
 say "--- open issues (gh, newest first) ---"
