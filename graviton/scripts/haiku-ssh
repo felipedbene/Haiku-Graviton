@@ -1,0 +1,106 @@
+#!/bin/bash
+#
+# haiku-ssh -- SSH into a canonical-AMI Haiku instance without keeping the
+# private key on disk.
+#
+# The canonical image bakes exactly one SSH login (`baron@`), and the matching
+# private key deliberately does not live on any workstation -- it is held in
+# AWS Secrets Manager as `haiku-graviton/baron-ssh-key`, with the pub in SSM
+# Parameter Store at `/haiku-graviton/baron-ssh-key-pub` (see
+# graviton/docs/native-ec2-builds.md and the memory
+# canonical-baron-ssh-credentials for the "why"). A workstation-local ed25519
+# file like `~/.ssh/haiku-graviton-ed25519` is a *different* key and will not
+# authenticate.
+#
+# This wrapper fetches the private key from Secrets Manager into a
+# 0600-mode file on /dev/shm (a tmpfs -- never hits real disk), runs ssh, and
+# unlinks the file on exit via a trap. Process substitution (`<(...)`) was
+# tried first but ssh sometimes tries to open the fd after the subshell has
+# already closed it, so a short-lived tmpfs file is the reliable path.
+#
+# Usage:
+#     haiku-ssh <host>                        # baron@<host>
+#     haiku-ssh baron@<host> uname -a
+#     haiku-ssh -p 2222 baron@127.0.0.1       # e.g. via an EICE tunnel
+#     haiku-ssh -i /path/to/key baron@<host>  # override: use a specific key
+#
+# Env:
+#     AWS_PROFILE      defaults to haiku-graviton if unset and no ambient
+#                      credentials are present
+#     AWS_REGION       defaults to us-west-2
+#     HG_BARON_SECRET  Secrets Manager id (default haiku-graviton/baron-ssh-key)
+
+set -eu
+
+REGION="${AWS_REGION:-${HAIKU_GRAVITON_REGION:-us-west-2}}"
+SECRET="${HG_BARON_SECRET:-haiku-graviton/baron-ssh-key}"
+
+# Adopt the project profile only if the caller has not already chosen creds --
+# an ambient AWS_ACCESS_KEY_ID / AWS_PROFILE means "use these", never override.
+if [ -z "${AWS_PROFILE:-}" ] && [ -z "${AWS_ACCESS_KEY_ID:-}" ]; then
+	export AWS_PROFILE="${HAIKU_GRAVITON_PROFILE:-haiku-graviton}"
+fi
+
+# If the caller passes their own -i, honour it and just exec ssh -- covers the
+# "I'm ssh'ing to a non-canonical box with a normal key" case.
+for a in "$@"; do
+	case "$a" in
+		-i) exec ssh "$@" ;;
+	esac
+done
+
+if [ $# -eq 0 ]; then
+	echo "usage: haiku-ssh [ssh-args...] [baron@]<host> [remote-cmd...]" >&2
+	exit 2
+fi
+
+# Prepend baron@ to the first arg that looks like a bare host (no user@, no
+# leading dash). Kept simple: scan positional args left-to-right, rewrite the
+# first host-shaped one.
+args=()
+prepended=0
+for arg in "$@"; do
+	if [ $prepended -eq 0 ]; then
+		case "$arg" in
+			-*|*@*) ;;
+			*)
+				arg="baron@$arg"
+				prepended=1
+				;;
+		esac
+	fi
+	args+=("$arg")
+done
+set -- "${args[@]}"
+
+# Prefer /dev/shm (tmpfs on Linux). Fall back to $TMPDIR / /tmp on hosts
+# without it. mktemp with a 600 template so the key is never world-readable.
+tmpdir=/dev/shm
+[ -w "$tmpdir" ] || tmpdir="${TMPDIR:-/tmp}"
+umask 077
+keyfile="$(mktemp "$tmpdir/haiku-baron.XXXXXXXX")"
+# shred not portable to macOS; a small key + tmpfs + unlink is enough.
+trap 'rm -f "$keyfile"' EXIT INT TERM HUP
+
+aws secretsmanager get-secret-value \
+	--region "$REGION" \
+	--secret-id "$SECRET" \
+	--query SecretString --output text > "$keyfile"
+
+# Guard: an empty file here means the fetch silently failed (e.g. denied by a
+# classifier). ssh's error in that case is misleading ("permission denied").
+if [ ! -s "$keyfile" ]; then
+	echo "haiku-ssh: failed to fetch $SECRET from Secrets Manager (empty)" >&2
+	exit 1
+fi
+
+chmod 600 "$keyfile"
+
+# IdentitiesOnly=yes stops ssh from trying agent keys first and locking us out
+# on servers with MaxAuthTries low. UserKnownHostsFile default is fine; the
+# caller can override with -o if needed.
+exec ssh \
+	-o IdentitiesOnly=yes \
+	-o PubkeyAcceptedAlgorithms=+ssh-ed25519 \
+	-i "$keyfile" \
+	"$@"
