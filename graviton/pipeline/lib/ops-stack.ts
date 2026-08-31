@@ -89,8 +89,18 @@ export class OpsStack extends cdk.Stack {
     // (~$32/mo) -- source-tarball egress for a testing fleet doesn't need the
     // managed NAT's throughput/HA. Single instance in one AZ (private subnets in
     // other AZs route to it cross-AZ; fine at this scale).
+    // Purpose-built fck-nat AMI (sets up nft masquerade on boot). CDK's default
+    // NatProvider.instanceV2 AMI shipped user-data that does `yum install
+    // iptables-services` -- a package that DOES NOT EXIST on Amazon Linux 2023 --
+    // so the MASQUERADE rule was never created and the "NAT" forwarded nothing
+    // (ip_forward=1 + source/dest-check off, but no masquerade => no egress =>
+    // private builders could not reach SSM). fck-nat gets it right. Pinned by id
+    // (region us-west-2) to avoid a synth-time AMI lookup; bump on refresh.
     const natProvider = ec2.NatProvider.instanceV2({
       instanceType: ec2.InstanceType.of(ec2.InstanceClass.T4G, ec2.InstanceSize.NANO),
+      machineImage: ec2.MachineImage.genericLinux({
+        'us-west-2': 'ami-0d1db1251d2b64626', // fck-nat-al2023-hvm-1.4.0-20260701-arm64-ebs
+      }),
     });
     const vpc = new ec2.Vpc(this, 'BuildVpc', {
       // 3 AZs so spot builders diversify across capacity pools (one instance per
@@ -259,7 +269,8 @@ export class OpsStack extends cdk.Stack {
     const reapSuccess = reap('ReapOnSuccess');
     const publishDone = new sfn.Choice(this, 'PublishDone?')
       .when(sfn.Condition.booleanEquals('$.done', false), waitPublish)  // loop
-      .otherwise(reapSuccess);
+      .when(sfn.Condition.booleanEquals('$.ok', true), reapSuccess)     // published OK
+      .otherwise(reapFail);  // publish failed -> reap + fail (don't hide it)
     startPublish.next(waitPublish);
     waitPublish.next(pollPublish);
     pollPublish.next(publishDone);
@@ -275,7 +286,17 @@ export class OpsStack extends cdk.Stack {
       .otherwise(waitSsm);
     checkSsm.next(ssmReady);
     waitSsm.next(checkSsm);
-    buildMap.next(startPublish);
+
+    // Build-only path: if the execution input sets skip_publish=true, reap after
+    // the chain WITHOUT touching the shared repo (safe to run while a separate
+    // publish/cook is in flight). Otherwise publish as normal.
+    const skipPublish = new sfn.Choice(this, 'SkipPublish?')
+      .when(sfn.Condition.and(
+              sfn.Condition.isPresent('$.skip_publish'),
+              sfn.Condition.booleanEquals('$.skip_publish', true)),
+            reapSuccess)
+      .otherwise(startPublish);
+    buildMap.next(skipPublish);
 
     const claim = li('ClaimBatch', claimFn);
     const launch = li('LaunchBuilder', launchFn);

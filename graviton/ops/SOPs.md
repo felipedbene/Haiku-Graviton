@@ -47,6 +47,41 @@ agent's job is to review, not redo:
    with reason `mega-build-approval` rather than starting them.
 5. Start one Step Functions execution per chain with the ordered pkg list.
 
+## 2b. Advancing an outdated package's recipe (bump/sync BEFORE build)
+
+The build wave rebuilds from the **current recipe tree** — it does NOT change
+versions. So an `outdated` flag is only *closed* by first advancing the recipe to
+`newest_upstream`, then building. This is the agent's judgment work.
+
+Trigger: a `queued`, non-suppressed package whose status includes `outdated` and
+whose recipe version < `newest_upstream`.
+
+Procedure (per package):
+1. **Prefer upstream sync over hand-authoring.** If upstream HaikuPorts already
+   has a recipe at (or nearer) `newest_upstream`, pull THAT recipe + its patchset
+   into the DeBeOS overlay (`graviton/haikuports-patches/recipes/`) — it carries
+   maintained patches and checksums. Only hand-bump when upstream has nothing
+   newer either.
+2. **Hand-bump** (when needed): copy `<name>-<old>.recipe` →
+   `<name>-<newest>.recipe`; the version flows from the filename via
+   `$portVersion`. Fetch the tarball at the new `SOURCE_URI`, recompute
+   `CHECKSUM_SHA256` (and any secondary source checksums), set `REVISION="1"`,
+   and carry `PATCHES` forward (rename the `<name>-$portVersion.patchset`). Update
+   `SOURCE_FILENAME` if not templated.
+3. **Reconcile patches by building, not by dropping them.** Queue a build wave
+   for the bumped recipe (`skip_publish:true` for the trial). If a patch fails to
+   apply or the build breaks, DO NOT delete patches or disable features to force
+   green (the no-feature-cap rule) — `needs_human` with `esc_reason=patch-conflict`.
+4. On a clean build, commit the bumped recipe to the overlay and let the normal
+   (publishing) wave run; next staleness run then drops the flag.
+5. **Soname/dependents:** if the bumped package is a library whose major/soname
+   changed, its dependents likely need rebuilds too — add them to the wave in
+   dependency order (depclosure), or `needs_human` if the graph is large.
+
+Escalate (don't guess) when: the source 404s / can't be fetched, a checksum can't
+be reconciled, patches don't apply, it's a **major-version** bump (X.0.0 boundary)
+or an API/soname break, or advancing would tempt a feature cut.
+
 ## 3. Interpreting build outcomes (from the state machine)
 
 - **Success** (hpkg exists → published → next staleness run drops the flag):

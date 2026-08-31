@@ -22,7 +22,11 @@ Online in ~33s):
 import boto3
 
 PENDING = {"Pending", "InProgress", "Delayed"}
-PROBE = ("command -v haikuporter >/dev/null 2>&1 && "
+# The SSM shell's default PATH has no Haiku bin dirs, so extend it exactly like
+# haiku-nativebuild does before checking for haikuporter + the ports tree.
+PROBE = ("export PATH=/boot/home/config/non-packaged/bin:"
+         "/boot/system/non-packaged/bin:/boot/system/bin:$PATH; "
+         "command -v haikuporter >/dev/null 2>&1 && "
          "test -d /boot/home/haikuports && echo BUILDER_READY")
 
 

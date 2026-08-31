@@ -1,0 +1,111 @@
+#!/usr/bin/env bash
+#
+# haiku-bake-builder -- bake the native-build DRIVER SCRIPTS into a new builder AMI.
+#
+# The builder-canonical AMI (SSM /haiku-graviton/builder-ami-id) already carries
+# the toolchain + haikuporter + ports tree, but NOT the driver scripts the
+# Step Functions build-wave invokes on the instance:
+#     /boot/home/haiku-nativebuild      (per-port build+harvest loop)
+#     /boot/home/haiku-repo-publish     (publish the pool to the DeBeOS repo)
+# so a fresh builder failed with "/boot/home/haiku-nativebuild: No such file".
+# This bakes them in (incremental over the current builder AMI -- no toolchain
+# rebuild), tags builder-canonical=true, and repoints the SSM param.
+#
+# Runs on the WORKSTATION (aws + graviton/scripts/ssm-run). Read-only until it
+# creates the image + moves the param; it never deletes the old AMI.
+#
+# Usage:
+#   haiku-bake-builder [--base ami-...] [--no-repoint]
+#     --base        base builder AMI (default: current /haiku-graviton/builder-ami-id)
+#     --no-repoint  create + tag the new AMI but DON'T move the SSM param (safe
+#                   while a build fleet is mid-flight; repoint by hand later)
+set -euo pipefail
+
+REGION="${HAIKU_GRAVITON_REGION:-us-west-2}"
+HERE="$(cd "$(dirname "$0")" && pwd)"
+PARAM=/haiku-graviton/builder-ami-id
+# Default to the HARDENED DebeosOpsStack build VPC: a PRIVATE builder subnet with
+# egress via the fck-nat instance (no public IP). SSM registers over the NAT.
+# Override via env for the old public-subnet path if ever needed.
+SG="${HAIKU_BUILDER_SG:-sg-051df96be83375dbe}"                 # DebeosOpsStack BuilderSg
+SUBNET="${HAIKU_BUILDER_SUBNET:-subnet-07dbba65d3e44695c}"     # DebeosOpsStack private builder subnet
+KEY="${HAIKU_BUILDER_KEY:-haiku-graviton}"
+PROFILE="${HAIKU_BUILDER_PROFILE:-DebeosOpsStack-BuilderProfile-tPCqkm9pVVKR}"
+# Public IP off by default (private + NAT). Set HAIKU_BUILDER_PUBLIC_IP=1 to force one.
+PUBIP_FLAG=""; [ "${HAIKU_BUILDER_PUBLIC_IP:-0}" = 1 ] && PUBIP_FLAG="--associate-public-ip-address"
+STAGE_TYPE="${HAIKU_BAKE_INSTANCE_TYPE:-c8g.large}"
+
+BASE=""; REPOINT=1
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --base) BASE="$2"; shift 2 ;;
+    --no-repoint) REPOINT=0; shift ;;
+    *) echo "unknown arg: $1" >&2; exit 2 ;;
+  esac
+done
+
+say() { printf 'haiku-bake-builder: %s\n' "$*" >&2; }
+
+# Resolve the work bucket the builder's instance role can read (same convention
+# as ssm-run / haiku-nativebuild): haiku-graviton-<account>-<region>.
+ACCT=$(aws sts get-caller-identity --query Account --output text)
+BUCKET="${HAIKU_GRAVITON_BUCKET:-haiku-graviton-${ACCT}-${REGION}}"
+[ -n "$BASE" ] || BASE=$(aws ssm get-parameter --name "$PARAM" --region "$REGION" --query Parameter.Value --output text)
+say "base builder AMI: $BASE ; work bucket: $BUCKET"
+
+# 1) stage the scripts in S3 so the instance's agent can pull them.
+for s in haiku-nativebuild haiku-repo-publish; do
+  [ -f "$HERE/$s" ] || { say "missing $HERE/$s"; exit 1; }
+  aws s3 cp "$HERE/$s" "s3://$BUCKET/bake-scripts/$s" --region "$REGION" >/dev/null
+done
+say "staged driver scripts to s3://$BUCKET/bake-scripts/"
+
+# 2) launch a temp builder from the base AMI.
+IID=$(aws ec2 run-instances --image-id "$BASE" --instance-type "$STAGE_TYPE" \
+  --security-group-ids "$SG" --subnet-id "$SUBNET" $PUBIP_FLAG --key-name "$KEY" \
+  --iam-instance-profile "Name=$PROFILE" --region "$REGION" \
+  --tag-specifications 'ResourceType=instance,Tags=[{Key=Name,Value=haiku-builder-bake},{Key=Project,Value=haiku-graviton},{Key=auto-stop,Value=no},{Key=auto-delete,Value=off}]' \
+  --query 'Instances[0].InstanceId' --output text)
+say "launched temp builder $IID; waiting for SSM registration..."
+trap 'aws ec2 terminate-instances --instance-ids "$IID" --region "$REGION" >/dev/null 2>&1 || true' EXIT
+
+for _ in $(seq 1 40); do
+  P=$(aws ssm describe-instance-information --filters "Key=InstanceIds,Values=$IID" \
+        --region "$REGION" --query 'InstanceInformationList[0].PingStatus' --output text 2>/dev/null || true)
+  [ "$P" = "Online" ] && break; sleep 15
+done
+[ "$P" = "Online" ] || { say "temp builder never registered in SSM"; exit 1; }
+say "builder online; staging scripts to /boot/home"
+
+# 3) pull the scripts onto /boot/home and make them executable (agent s3 cp).
+"$HERE/ssm-run" "$IID" -t 300 <<EOF
+set -e
+/boot/system/bin/debeos-ssm-agent s3 cp s3://$BUCKET/bake-scripts/haiku-nativebuild /boot/home/haiku-nativebuild
+/boot/system/bin/debeos-ssm-agent s3 cp s3://$BUCKET/bake-scripts/haiku-repo-publish /boot/home/haiku-repo-publish
+chmod +x /boot/home/haiku-nativebuild /boot/home/haiku-repo-publish
+ls -l /boot/home/haiku-nativebuild /boot/home/haiku-repo-publish
+EOF
+
+# 4) snapshot -> new AMI. --no-reboot: Haiku arm64 EC2 reboot is unreliable, and
+# adding two files to /boot/home does not need a quiesced FS.
+TS=$(date -u +%Y%m%d%H%M%S)
+NEW=$(aws ec2 create-image --instance-id "$IID" --no-reboot --region "$REGION" \
+  --name "haiku-builder-canonical-$TS" \
+  --description "builder-canonical + baked driver scripts (haiku-nativebuild, haiku-repo-publish)" \
+  --query ImageId --output text)
+say "creating image $NEW ; waiting for it to become available (can take a while)..."
+aws ec2 wait image-available --image-ids "$NEW" --region "$REGION"
+aws ec2 create-tags --resources "$NEW" --region "$REGION" \
+  --tags Key=builder-canonical,Value=true Key=Project,Value=haiku-graviton Key=source-ami,Value="$BASE"
+say "new builder AMI available: $NEW"
+
+# 5) repoint the SSM param (unless --no-repoint). New AMI is a strict SUPERSET of
+# the base (only adds two scripts), so pointing new launches at it is safe.
+if [ "$REPOINT" = 1 ]; then
+  OLD=$(aws ssm get-parameter --name "$PARAM" --region "$REGION" --query Parameter.Value --output text)
+  aws ssm put-parameter --name "$PARAM" --type String --overwrite --value "$NEW" --region "$REGION" >/dev/null
+  say "repointed $PARAM: $OLD -> $NEW (old AMI left intact for rollback)"
+else
+  say "NOT repointing $PARAM (per --no-repoint). New AMI: $NEW"
+fi
+say "done."
