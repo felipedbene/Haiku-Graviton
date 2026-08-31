@@ -98,12 +98,30 @@ say "base AMI: $BASE ; provision=$PROVISION ; work bucket: $BUCKET"
 # mode the provisioner itself is staged too, so the box installs its own
 # toolchain instead of inheriting one from an opaque older snapshot.
 STAGE="haiku-nativebuild haiku-repo-publish"
-[ "$PROVISION" = 1 ] && STAGE="$STAGE haiku-provision-native-builder"
+[ "$PROVISION" = 1 ] && STAGE="$STAGE haiku-provision-native-builder haiku-ports-overlay-apply"
 for s in $STAGE; do
   [ -f "$HERE/$s" ] || { say "missing $HERE/$s"; exit 1; }
   aws s3 cp "$HERE/$s" "s3://$BUCKET/bake-scripts/$s" --region "$REGION" >/dev/null
 done
 say "staged to s3://$BUCKET/bake-scripts/: $STAGE"
+
+# The DeBeOS recipe overlay has to travel with the bake. A builder clones upstream
+# HaikuPorts, which knows nothing about arm64 Haiku, so without this every arm64
+# recipe fix this project has made is absent from the baked AMI and from every
+# build-wave builder launched off it -- ports we have already fixed fail again.
+OVERLAY_DIR="$(cd "$HERE/../haikuports-patches" && pwd)"
+if [ "$PROVISION" = 1 ]; then
+  [ -d "$OVERLAY_DIR/recipes" ] || { say "no recipe overlay at $OVERLAY_DIR/recipes"; exit 1; }
+  # UNCOMPRESSED tar on purpose. The SSM shell on Haiku runs with a Linux-shaped
+  # PATH (/usr/local/bin:...:/bin:/sbin:.) that does not include /boot/system/bin,
+  # so `tar -z` fails with "gzip: Cannot exec" even though gzip is installed. The
+  # overlay is a few hundred KB of text; compression buys nothing worth that trap.
+  OVERLAY_TAR=$(mktemp -t overlay-XXXXXX.tar)
+  tar -cf "$OVERLAY_TAR" -C "$(dirname "$OVERLAY_DIR")" "$(basename "$OVERLAY_DIR")"
+  aws s3 cp "$OVERLAY_TAR" "s3://$BUCKET/bake-scripts/haikuports-patches.tar" --region "$REGION" >/dev/null
+  rm -f "$OVERLAY_TAR"
+  say "staged recipe overlay ($(ls -1 "$OVERLAY_DIR"/recipes/*.recipe | wc -l | tr -d ' ') recipes)"
+fi
 
 # 2) launch a temp builder from the base AMI. A --disk override sets the bake
 # box's root, which becomes the AMI snapshot size and thus the FLOOR for every
@@ -148,6 +166,19 @@ set -eu
 chmod +x /boot/home/haiku-provision-native-builder
 /boot/home/haiku-provision-native-builder
 EOF
+  # Overlay BEFORE the cache warm-up, so the dependency infos baked into the AMI
+  # are computed from the recipes we will actually build with.
+  say "installing the DeBeOS recipe overlay into the ports tree"
+  "$HERE/ssm-run" "$IID" -t 900 <<EOF
+set -eu
+cd /boot/home
+/boot/system/bin/debeos-ssm-agent s3 cp s3://$BUCKET/bake-scripts/haikuports-patches.tar.gz /boot/home/haikuports-patches.tar.gz
+tar -xzf /boot/home/haikuports-patches.tar.gz -C /boot/home
+/boot/system/bin/debeos-ssm-agent s3 cp s3://$BUCKET/bake-scripts/haiku-ports-overlay-apply /boot/home/haiku-ports-overlay-apply
+chmod +x /boot/home/haiku-ports-overlay-apply
+/boot/home/haiku-ports-overlay-apply /boot/home/haikuports-patches /boot/home/haikuports
+EOF
+
   say "warming haikuporter dependency-info cache"
   "$HERE/ssm-run" "$IID" -t 1800 <<'EOF'
 set -u

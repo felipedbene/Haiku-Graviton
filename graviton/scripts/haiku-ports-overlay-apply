@@ -1,0 +1,145 @@
+#!/bin/sh
+#
+# haiku-ports-overlay-apply -- install the DeBeOS recipe overlay into a ports tree.
+#
+# RUNS ON a native Haiku arm64 builder (or anywhere with the tree on local disk).
+#
+# Why this exists: a builder gets its ports tree from a plain `git clone` of
+# upstream HaikuPorts, which knows nothing about arm64 Haiku. Every arm64 recipe
+# fix this project has made lives in graviton/haikuports-patches/ and was, until
+# this script, applied BY HAND to one guest at a time -- so a freshly baked
+# builder AMI, and therefore every build-wave builder launched from it, had NONE
+# of them. Ports that this project has already fixed would fail again on a clean
+# builder, which is the difference between a pipeline that can chew through the
+# backlog and one that stalls on solved problems.
+#
+# What it installs, and what it deliberately does not:
+#
+#   * `recipes/*.recipe` -- COPIED OVER the tree's copy. These are complete recipe
+#     files and are the overlay's source of truth (see recipes/README.md).
+#   * `*.patch` at the overlay root -- NOT applied. Those files are explanatory
+#     notes, not inputs to patch(1): two of them do not parse at all, and none is
+#     verified to apply to a pristine recipe. They document WHY a recipe in
+#     recipes/ looks the way it does. Read them; apply the recipes.
+#
+# A recipe's tree location is found by BASENAME, not by port name, because the two
+# disagree: llvm21-21.1.8.recipe lives in sys-devel/llvm/, not sys-devel/llvm21/.
+# When the exact basename is absent (the overlay carries a version the tree does
+# not), fall back to the directory holding that port's other versions, so a
+# version bump lands beside its siblings rather than being silently skipped.
+#
+# Idempotent: re-running copies identical bytes over identical bytes. A recipe
+# whose port directory cannot be located at all is reported and counted, never
+# guessed at -- a misplaced recipe is invisible to haikuporter, which is exactly
+# the silent-no-op failure this script exists to end.
+#
+# THE STAGE-1 EXCLUSION IS THE POINT OF THIS SCRIPT'S CARE.
+#
+# Some overlay recipes are deliberately FEATURE-CAPPED bootstrap expedients: they
+# cut docs, use bundled libraries, or drop a build system to break a dependency
+# cycle. graviton/haikuports-patches/README.md is explicit that "Stage-1 artifacts
+# go to hpkg-out/arm64/stage1/, never to a shipping repo", and singles out cmake's
+# bundled curl as security-relevant. A build-wave builder publishes to the shipping
+# DeBeOS repo, so blanket-applying the overlay would ship capped packages -- exactly
+# what the project's no-feature-cap rule forbids ("Never ship feature-capped builds
+# -- fix the blocker", AGENTS.md; SOPs.md 2b.3).
+#
+# So stage-1 recipes are EXCLUDED by default and only installed with --stage1, which
+# is for bootstrapping a toolchain, never for a publishing wave. The exclusion list
+# is spelled out here rather than inferred: a capped recipe that leaks into a wave is
+# not a build failure, it is a silently degraded package in the repo, and that is far
+# more expensive than a skipped recipe.
+#
+# Usage:
+#   haiku-ports-overlay-apply [--stage1] [<overlay-dir>] [<ports-tree>]
+#     --stage1     ALSO install the feature-capped bootstrap recipes. Output of a
+#                  builder running these must NOT be published to the shipping repo.
+#     overlay-dir  default /boot/home/haikuports-patches
+#     ports-tree   default /boot/home/haikuports
+#
+set -u
+
+# Ports whose overlay recipe is a stage-1 expedient. Matched on the basename's port
+# component, which covers every version of these ports on purpose -- verified by
+# reading the recipes themselves rather than trusting the filenames:
+#
+#   autoconf-2.72  HTMLS emptied so install-html cannot invoke makeinfo (no docs)
+#   cmake-4.1.6    bundled cmcurl/cmexpat/cmlibrhash/cmlibuv; bundled curl is the
+#                  security-relevant one README.md says to keep out of shipping repos
+#   zstd-1.5.6     upstream Makefile instead of cmake, to break the
+#                  cmake -> libcurl -> openssl3 -> libzstd -> zstd cycle
+#   zstd-1.5.7     SAME cap as 1.5.6 -- "find_package(zstd CONFIG) will not work".
+#                  Version-scoping the denylist to 1.5.6 would have shipped this one.
+#   gettext-1.0    still carries "STAGE-1 NOTE (graviton): cmd:groff removed from
+#                  BUILD_PREREQUIRES". NOTE: README.md's table marks that patch
+#                  RETIRED 2026-08-24 with the line restored, but this recipe still
+#                  has the cut -- the overlay recipe is STALE against its own docs.
+#                  Blocked until the recipe itself is refreshed; do not "fix" this by
+#                  deleting the entry, refresh the recipe.
+STAGE1_PORTS="autoconf cmake zstd gettext"
+
+WITH_STAGE1=0
+if [ "${1:-}" = "--stage1" ]; then
+	WITH_STAGE1=1
+	shift
+fi
+
+OVERLAY="${1:-/boot/home/haikuports-patches}"
+TREE="${2:-/boot/home/haikuports}"
+
+[ -d "$OVERLAY/recipes" ] || { echo "overlay-apply: no $OVERLAY/recipes" >&2; exit 1; }
+[ -d "$TREE" ] || { echo "overlay-apply: no ports tree at $TREE" >&2; exit 1; }
+
+applied=0; placed=0; missing=0; skipped=0
+
+for src in "$OVERLAY"/recipes/*.recipe; do
+	[ -f "$src" ] || continue
+	base=$(basename "$src")
+
+	# Stage-1 gate, before anything touches the tree.
+	portname=${base%-*}
+	portname=${portname%.recipe}
+	if [ "$WITH_STAGE1" -eq 0 ]; then
+		is_stage1=0
+		for s in $STAGE1_PORTS; do
+			[ "$portname" = "$s" ] && is_stage1=1
+		done
+		if [ "$is_stage1" -eq 1 ]; then
+			echo "overlay-apply: SKIP $base (stage-1 feature-capped; --stage1 to force)"
+			skipped=$((skipped + 1))
+			continue
+		fi
+	fi
+
+	# 1) exact basename already in the tree -> overwrite in place.
+	dst=$(find "$TREE" -name "$base" -not -path "*/work-*" 2>/dev/null | head -1)
+	if [ -n "$dst" ]; then
+		cp "$src" "$dst"
+		echo "overlay-apply: updated $dst"
+		applied=$((applied + 1))
+		continue
+	fi
+
+	# 2) otherwise place it beside the port's other versions. Strip the trailing
+	# -<version> to get the port name; the tree dir is whatever holds a recipe
+	# starting with that name.
+	port=${base%-*}
+	port=${port%.recipe}
+	sibling=$(find "$TREE" -name "$port-*.recipe" -not -path "*/work-*" 2>/dev/null | head -1)
+	if [ -n "$sibling" ]; then
+		dir=$(dirname "$sibling")
+		cp "$src" "$dir/$base"
+		echo "overlay-apply: placed $dir/$base (new version)"
+		placed=$((placed + 1))
+		continue
+	fi
+
+	echo "overlay-apply: WARNING no port directory found for $base -- NOT installed" >&2
+	missing=$((missing + 1))
+done
+
+echo "overlay-apply: $applied updated, $placed placed, $skipped stage-1 skipped, $missing unplaced"
+[ "$WITH_STAGE1" -eq 1 ] && echo "overlay-apply: WARNING --stage1 used; do NOT publish this builder's output to the shipping repo" >&2
+# Unplaced recipes are a real defect (the fix silently would not be used), so fail
+# loudly rather than let a bake bake them away.
+[ "$missing" -eq 0 ] || exit 1
