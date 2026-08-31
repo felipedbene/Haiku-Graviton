@@ -975,7 +975,7 @@ an unmeasured change.
   correct (at N = 32 every core is equally loaded; declining is right), but the
   figure deserves a look. It is the instrumentation earning its place.
 - **N = 17 is not at the divisible floor** (1.51 vs 1.00). Follow-up, not a
-  regression.
+  regression. (tracked: #115)
 - **The baseline is not deterministically broken**: Run A N = 12 rep 2 was perfect
   on the *baseline*, 1 in 5. This is why every criterion was specified at 5
   repeats; a single before/after pair could have shown anything.
@@ -1094,13 +1094,13 @@ Kept deliberately; dead hypotheses get written down rather than deleted.
 - **`gTrackCPULoad == false` on arm64** means `CPUEntry::ComputeLoad()` never
   runs, so `CPUEntry::fLoad` is permanently 0 and the load-triggered
   `rebalance_irqs()` at `scheduler_cpu.cpp:211` **can never fire on Graviton**.
-  Interrupt rebalancing is silently dead on this platform.
+  Interrupt rebalancing is silently dead on this platform. (tracked: #113)
 - **`MinMaxHeap::PeekMinimum(int32 index)` is not the index-th smallest.** It
   returns `fMinElements[index]`, a raw heap slot (`MinMaxHeap.h:193`), so only
   `index == 0` is the true minimum. The `PeekMinimum(index++)` loops in
   `choose_core()` and `rebalance()` therefore iterate candidates in **arbitrary
   order** — a real hazard for any fix that touches those loops, and a reason not
-  to trust "the least loaded core" language in the existing comments.
+  to trust "the least loaded core" language in the existing comments. (tracked: #114)
 - **`smpscale` was not wired into the build** — no `SubInclude` in
   `src/bin/Jamfile` and absent from `build/jam/packages/Haiku`, so every number
   measured before this branch came from a hand-compiled binary the committed tree
