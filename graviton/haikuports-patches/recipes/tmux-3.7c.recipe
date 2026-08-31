@@ -1,0 +1,162 @@
+SUMMARY="A terminal multiplexer"
+DESCRIPTION="tmux is a \"terminal multiplexer\", it enables a number of \
+terminals (or windows) to be accessed and controlled from a single terminal. \
+tmux is intended to be a simple, modern, BSD-licensed alternative to programs \
+such as GNU screen."
+HOMEPAGE="http://tmux.github.io/"
+COPYRIGHT="2015 tmux team"
+LICENSE="ISC"
+REVISION="1"
+SOURCE_URI="https://github.com/tmux/tmux/releases/download/$portVersion/tmux-$portVersion.tar.gz"
+CHECKSUM_SHA256="7c60cae9a0e25288e2e24750aafc9e8800fc7fd4555e447e1b29ee4201cfb3bf"
+
+ARCHITECTURES="all !x86_gcc2"
+SECONDARY_ARCHITECTURES="x86"
+
+commandSuffix=$secondaryArchSuffix
+commandBinDir=$binDir
+if [ "$targetArchitecture" = x86_gcc2 ]; then
+	commandSuffix=
+	commandBinDir=$prefix/bin
+fi
+
+PROVIDES="
+	tmux$secondaryArchSuffix = $portVersion
+	cmd:tmux$commandSuffix = $portVersion
+	"
+REQUIRES="
+	haiku$secondaryArchSuffix
+	lib:libevent_2.1$secondaryArchSuffix
+	lib:libncurses$secondaryArchSuffix
+	"
+
+BUILD_REQUIRES="
+	haiku${secondaryArchSuffix}_devel
+	devel:libevent_2.1$secondaryArchSuffix
+	devel:libncurses$secondaryArchSuffix
+	"
+BUILD_PREREQUIRES="
+	cmd:aclocal
+	cmd:autoconf
+	cmd:awk
+	cmd:gcc$secondaryArchSuffix
+	cmd:make
+	cmd:pkg_config$secondaryArchSuffix
+	cmd:sed
+	cmd:yacc
+	"
+
+BUILD()
+{
+	# graviton: tmux 3.1c's original build blocker (issue #135) was a return-type
+	# conflict between tmux's own closefrom() compat shim and Haiku's declaration
+	# in bsd/unistd.h. Bumping to 3.7c (current upstream; no newer recipe exists
+	# in haikuports either, still pinned at 3.1c) does NOT clear this by itself --
+	# it turns out to be a live Haiku defect, not something upstream tmux ever
+	# "reconciled": bsd/unistd.h unconditionally declares
+	#   int closefrom(int lowFd);
+	# once _DEFAULT_SOURCE is implied (tmux's configure defines _GNU_SOURCE,
+	# which Haiku's <features.h> treats as implying _DEFAULT_SOURCE) -- but no
+	# such symbol actually links (AC_CHECK_FUNC's own probe fails with
+	# "undefined reference to `closefrom'"), so tmux correctly falls back to its
+	# own compat/closefrom.c, whose compat.h prototype is `void closefrom(int)`.
+	# Both declarations land in the same translation unit wherever a file
+	# includes <fcntl.h> (-> bsd/unistd.h) and "compat.h" (arguments.c, client.c,
+	# cmd-attach-session.c), so gcc rejects the redeclaration:
+	#   compat.h:307:18: error: conflicting types for 'closefrom'
+	# Match tmux's fallback to Haiku's declared (but unimplemented) `int`
+	# prototype instead of carrying a separate Haiku patch forever -- a
+	# portability fix, not a cut: the real fallback behavior (close every fd
+	# >= lowfd) is unchanged, it just returns int (always 0) so the two
+	# declarations agree. Verified this clears the conflict by compiling
+	# client.c standalone before wiring it into the real build.
+	sed -i 's/^void\(\s\+\)closefrom(int);/int\1closefrom(int);/' compat.h
+	grep -q '^int[[:space:]]*closefrom(int);' compat.h \
+		|| { echo "FATAL: closefrom prototype in compat.h not fixed"; exit 1; }
+
+	sed -i '/^#ifdef HAVE_FCNTL_CLOSEM$/,$d' compat/closefrom.c
+	cat >> compat/closefrom.c <<'CLOSEFROM_EOF'
+#ifdef HAVE_FCNTL_CLOSEM
+int
+closefrom(int lowfd)
+{
+    (void) fcntl(lowfd, F_CLOSEM, 0);
+    return (0);
+}
+#elif defined(HAVE_LIBPROC_H) && defined(HAVE_PROC_PIDINFO)
+int
+closefrom(int lowfd)
+{
+	int i, r, sz;
+	pid_t pid = getpid();
+	struct proc_fdinfo *fdinfo_buf = NULL;
+
+	sz = proc_pidinfo(pid, PROC_PIDLISTFDS, 0, NULL, 0);
+	if (sz == 0)
+		return (0); /* no fds, really? */
+	else if (sz == -1)
+		goto fallback;
+	if ((fdinfo_buf = malloc(sz)) == NULL)
+		goto fallback;
+	r = proc_pidinfo(pid, PROC_PIDLISTFDS, 0, fdinfo_buf, sz);
+	if (r < 0 || r > sz)
+		goto fallback;
+	for (i = 0; i < r / (int)PROC_PIDLISTFD_SIZE; i++) {
+		if (fdinfo_buf[i].proc_fd >= lowfd)
+			close(fdinfo_buf[i].proc_fd);
+	}
+	free(fdinfo_buf);
+	return (0);
+ fallback:
+	free(fdinfo_buf);
+	closefrom_fallback(lowfd);
+	return (0);
+}
+#elif defined(HAVE_DIRFD) && defined(HAVE_PROC_PID)
+int
+closefrom(int lowfd)
+{
+    long fd;
+    char fdpath[PATH_MAX], *endp;
+    struct dirent *dent;
+    DIR *dirp;
+    int len;
+
+    /* Check for a /proc/$$/fd directory. */
+    len = snprintf(fdpath, sizeof(fdpath), "/proc/%ld/fd", (long)getpid());
+    if (len > 0 && (size_t)len < sizeof(fdpath) && (dirp = opendir(fdpath))) {
+	while ((dent = readdir(dirp)) != NULL) {
+	    fd = strtol(dent->d_name, &endp, 10);
+	    if (dent->d_name != endp && *endp == '\0' &&
+		fd >= 0 && fd < INT_MAX && fd >= lowfd && fd != dirfd(dirp))
+		(void) close((int) fd);
+	}
+	(void) closedir(dirp);
+	return (0);
+    }
+    /* /proc/$$/fd strategy failed, fall back to brute force closure */
+    closefrom_fallback(lowfd);
+    return (0);
+}
+#else
+int
+closefrom(int lowfd)
+{
+	closefrom_fallback(lowfd);
+	return (0);
+}
+#endif /* !HAVE_FCNTL_CLOSEM */
+#endif /* HAVE_CLOSEFROM */
+CLOSEFROM_EOF
+	grep -q '^int$' compat/closefrom.c \
+		|| { echo "FATAL: closefrom.c definitions not fixed"; exit 1; }
+
+	autoreconf -fi
+	runConfigure --omit-dirs binDir ./configure --bindir="$commandBinDir"
+	make $jobArgs
+}
+
+INSTALL()
+{
+	make install
+}
