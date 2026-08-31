@@ -55,3 +55,24 @@ A legacy-bug audit, device watchdogs, and **filesystem crash-safety on a forced 
 ## Stage 5 — Identity & distribution
 An open question worth resolving early, because it shapes how much Stage 2/3 investment
 is worthwhile: **hobby-complete and self-hosted**, versus **community-distributable**.
+
+## Pending feature work (recorded for completeness; not the current priority)
+
+- **Remote desktop for headless Graviton — phased plan.** Graviton EC2 has no display device,
+  so `app_server` runs its `RemoteHWInterface` (a display-list stream to a remote client) rather
+  than a local framebuffer. Design of record: `graviton/docs/remote-desktop-options.md`.
+  - *Phase 0 (days):* latency fixes to the native display-list protocol — `TCP_NODELAY`, compute
+    `DrawString` pen-advance locally instead of a per-string round-trip, cache/compress bitmaps,
+    LZ4 + a larger send ring. Biggest felt-lag win, no new architecture.
+  - *Phase 1 (~1 wk):* an offscreen software HWInterface (Haiku already ships
+    `BitmapHWInterface`) rendering the display list into a real in-memory `BBitmap` — the one
+    load-bearing new piece; unlocks every pixel route.
+  - *Phase 2 (~1–2 wk):* VNC (`libvncserver`, NEON libjpeg-turbo) on that surface — broad
+    native-client reach.
+  - *Phase 3 (optional):* full-motion via `libx264` (NEON; no ffmpeg needed) over
+    WebCodecs/WebTransport. RustDesk deprioritized.
+- **mprotect device-area guard — ramfb re-verify owed.** The device-area cache-type guard
+  (merged; on the current canonical) is compile-verified only. It is reachable via the
+  framebuffer-clone path, which a bare (display-less) Graviton instance cannot exercise, so it
+  was never run on hardware. Re-verify on a virtual-framebuffer-equipped guest — this naturally
+  rides the remote-desktop offscreen-framebuffer work (Phase 1) above.
