@@ -1,0 +1,257 @@
+#!/usr/bin/env bash
+#
+# haiku-repo-publish-ephemeral -- publish one or more locally-held .hpkg to the
+# LIVE DeBeOS package repository, from the workstation, WITHOUT any persistent
+# build host. It self-provisions a short-lived UBUNTU arm64 peer, fetches the
+# banked Linux host-tools (`package`, `package_repo`), runs `haiku-repo-add` on
+# it, and terminates it again.
+#
+# Why Ubuntu, not Haiku (see #68): rebuilding the DeBeOS repo index needs BOTH
+#   (a) the `package`/`package_repo` tools, and
+#   (b) bulk S3 (the index rebuild pulls the ENTIRE published packages/ set --
+#       ~1900 objects -- via `aws s3 sync`, and CloudFront invalidation).
+# `package`/`package_repo` are HOST tools: the pipeline's CodeBuild (an arm64
+# Ubuntu container) already builds them under generated.arm64/objects/linux/...
+# as a byproduct of every cross-build, and now banks them to S3 (cross-build.yml
+# -> host-tools/). Haiku has no awscli and only single-file `debeos-ssm-agent
+# s3 cp` -- so it cannot do (b) -- whereas a stock Ubuntu arm64 box has awscli and
+# runs the Linux-arm64 host tools directly. This is exactly what the retired c9g
+# metal was (Linux + host tools + awscli), just ephemeral. `haiku-repo-add` runs
+# UNCHANGED; only the host provenance changed.
+#
+# It deliberately runs `haiku-repo-add` and NOT `haiku-repo-publish all`: the
+# latter rebuilds the index from ONLY the pool it is handed and would DROP every
+# other package from the live repo. Adding package(s) must never shrink the set,
+# so the incremental add is correct.
+#
+# Config (env only -- NO account-scoped names live in this tracked file):
+#   HG_REPO_S3        s3://<bucket>/<prefix>/<arch>  live repo prefix (required)
+#   HG_INCOMING_S3    s3://<bucket>/<prefix>         staging prefix for new hpkg (required)
+#   HG_CF_DIST        CloudFront distribution id to invalidate (optional, recommended)
+#   HG_REPO_URL       public base URL for repo.info (optional; haiku-repo-add default)
+#   ARCH              packaging arch (default arm64)
+#   AWS_DEFAULT_REGION / AWS_REGION (default us-west-2)
+#
+#   -- host tools --
+#   HG_HOST_TOOLS_S3  s3://<bucket>/<prefix> holding `package` + `package_repo`
+#                     (default: <pipeline WorkBucket>/cache/host-tools, resolved
+#                     from the HaikuGravitonBakePipeline CFN stack output so no
+#                     bucket name is baked into this tree). Banked by cross-build.yml.
+#
+#   -- ephemeral-peer provisioning --
+#   HG_PUBLISHER_INSTANCE  reuse an ALREADY-RUNNING Ubuntu publisher instead of
+#                          launching one; used as-is and NEVER terminated.
+#   HG_PEER_AMI_PARAM      SSM param for the Ubuntu arm64 AMI id (default the
+#                          Canonical Ubuntu 24.04 arm64 public parameter).
+#   HG_PUBLISHER_PROFILE   instance profile for the peer; must carry SSM core, READ
+#                          on HG_HOST_TOOLS_S3, READ+WRITE on the repo bucket + the
+#                          incoming prefix, and cloudfront:CreateInvalidation on
+#                          HG_CF_DIST. Required when self-provisioning.
+#   HG_PUBLISHER_SUBNET    subnet to launch the peer in (required to self-provision)
+#   HG_PUBLISHER_SG        security group for the peer (required to self-provision)
+#   HG_PUBLISHER_TYPE      instance type (default c7g.large; arm64)
+#   HG_PUBLISHER_KEY       optional EC2 key-name (SSM does not need it; debug aid)
+#   HG_PUBLISHER_WAIT_SECS budget for the peer to answer SSM + finish bootstrap (default 600)
+#
+# Usage: haiku-repo-publish-ephemeral <pkg1.hpkg> [<pkg2.hpkg> ...]
+#
+set -euo pipefail
+
+region="${AWS_DEFAULT_REGION:-${AWS_REGION:-us-west-2}}"
+ARCH="${ARCH:-arm64}"
+HERE="$(cd "$(dirname "$0")" && pwd)"
+SSM_RUN="$HERE/ssm-run"
+
+log() { echo "haiku-repo-publish-ephemeral: $*"; }
+die() { echo "haiku-repo-publish-ephemeral: $*" >&2; exit 1; }
+
+: "${HG_REPO_S3:?set HG_REPO_S3=s3://<bucket>/<prefix>/$ARCH}"
+: "${HG_INCOMING_S3:?set HG_INCOMING_S3=s3://<bucket>/<prefix>}"
+[ $# -ge 1 ] || die "usage: $(basename "$0") <pkg.hpkg> [pkg.hpkg ...]"
+for f in "$@"; do [ -f "$f" ] || die "no such file: $f"; done
+[ -x "$SSM_RUN" ] || die "ssm-run not found next to this script"
+[ -f "$HERE/haiku-repo-add" ] || die "haiku-repo-add not found next to this script"
+
+PEER_AMI_PARAM="${HG_PEER_AMI_PARAM:-/aws/service/canonical/ubuntu/server/24.04/stable/current/arm64/hvm/ebs-gp3/ami-id}"
+PROFILE="${HG_PUBLISHER_PROFILE:-}"
+SUBNET="${HG_PUBLISHER_SUBNET:-}"
+SG="${HG_PUBLISHER_SG:-}"
+TYPE="${HG_PUBLISHER_TYPE:-c7g.large}"
+KEY="${HG_PUBLISHER_KEY:-}"
+WAIT="${HG_PUBLISHER_WAIT_SECS:-600}"
+
+# Resolve where the banked host tools live. No bucket name is written in this
+# tree: default to the bake pipeline's WorkBucket (a CDK-generated name) read from
+# the stack output, under the cache/host-tools prefix cross-build.yml banks to.
+HOST_TOOLS_S3="${HG_HOST_TOOLS_S3:-}"
+if [ -z "$HOST_TOOLS_S3" ]; then
+	wb=$(aws --region "$region" cloudformation describe-stacks \
+		--stack-name HaikuGravitonBakePipeline \
+		--query "Stacks[0].Outputs[?OutputKey=='WorkBucketName'].OutputValue | [0]" \
+		--output text 2>/dev/null || true)
+	case "$wb" in
+		""|None) die "cannot resolve the pipeline WorkBucket; set HG_HOST_TOOLS_S3=s3://<bucket>/<prefix> (holds package + package_repo)" ;;
+		*) HOST_TOOLS_S3="s3://$wb/cache/host-tools" ;;
+	esac
+fi
+log "host tools: $HOST_TOOLS_S3"
+
+# The instance the rest of the script drives. If the caller supplied one we use it
+# and never tear it down; otherwise launch_peer fills it in and sets
+# PEER_LAUNCHED so cleanup terminates exactly what we created.
+PUBLISHER="${HG_PUBLISHER_INSTANCE:-}"
+PEER_LAUNCHED=0
+
+cleanup() {
+	if [ "$PEER_LAUNCHED" = 1 ] && [ -n "$PUBLISHER" ]; then
+		log "terminating ephemeral publisher $PUBLISHER"
+		aws --region "$region" ec2 terminate-instances --instance-ids "$PUBLISHER" \
+			--query 'TerminatingInstances[].CurrentState.Name' --output text 2>&1 | sed 's/^/  /' || true
+	fi
+	return 0
+}
+trap cleanup EXIT
+
+# --------------------------------------------------------------- launch
+launch_peer() {
+	[ -n "$PROFILE" ] || die "self-provisioning needs HG_PUBLISHER_PROFILE (SSM + host-tools S3 read + repo S3 rw + CloudFront)"
+	[ -n "$SUBNET" ]  || die "self-provisioning needs HG_PUBLISHER_SUBNET"
+	[ -n "$SG" ]      || die "self-provisioning needs HG_PUBLISHER_SG"
+
+	local ami
+	ami=$(aws --region "$region" ssm get-parameter --name "$PEER_AMI_PARAM" \
+		--query 'Parameter.Value' --output text 2>&1)
+	case "$ami" in
+		ami-*) ;;
+		*) die "could not resolve the Ubuntu arm64 AMI from SSM param $PEER_AMI_PARAM: $ami" ;;
+	esac
+
+	# First-boot bootstrap. Runtime shell metacharacters are escaped (\$) so they
+	# run ON the peer; region/HOST_TOOLS_S3 are expanded HERE. set -e aborts the
+	# boot if any step fails, surfacing as the ready sentinel never appearing.
+	local userdata
+	userdata=$(base64 -w0 <<-UD
+		#!/bin/bash
+		set -e
+		export DEBIAN_FRONTEND=noninteractive
+		for _ in \$(seq 1 60); do
+			fuser /var/lib/dpkg/lock-frontend >/dev/null 2>&1 || break
+			sleep 5
+		done
+		apt-get update -y
+		# Ubuntu 24.04 has no apt 'awscli'; it ships only as a snap. Try apt (for
+		# other bases) then fall back to the snap and symlink it onto PATH.
+		if ! apt-get install -y awscli; then
+			snap install aws-cli --classic
+			ln -sf /snap/bin/aws /usr/local/bin/aws
+		fi
+		install -d -m755 /opt/haiku-tools /opt/haiku-tools/lib
+		aws s3 cp "$HOST_TOOLS_S3/package"      /opt/haiku-tools/package      --region $region
+		aws s3 cp "$HOST_TOOLS_S3/package_repo" /opt/haiku-tools/package_repo --region $region
+		chmod +x /opt/haiku-tools/package /opt/haiku-tools/package_repo
+		# The tools are dynamically linked against Haiku's build shared libs
+		# (libroot_build.so, libpackage_build.so, libbe_build.so, ...) which are NOT
+		# system libs; fetch the banked set and run the tools with LD_LIBRARY_PATH
+		# pointed at them. Without this the tool aborts "error while loading shared
+		# libraries: libroot_build.so".
+		aws s3 cp "$HOST_TOOLS_S3/lib" /opt/haiku-tools/lib --recursive --region $region
+		# The package tool license-checks against a system data dir (licenses/);
+		# fetch the banked set and point the relocatable tool at it via the
+		# HAIKU_BUILD_SYSTEM_DATA_DIRECTORY env override.
+		aws s3 cp "$HOST_TOOLS_S3/data" /opt/haiku-tools/data --recursive --region $region
+		export LD_LIBRARY_PATH=/opt/haiku-tools/lib
+		export HAIKU_BUILD_SYSTEM_DATA_DIRECTORY=/opt/haiku-tools/data
+		printf 'export LD_LIBRARY_PATH=/opt/haiku-tools/lib\nexport HAIKU_BUILD_SYSTEM_DATA_DIRECTORY=/opt/haiku-tools/data\n' > /etc/profile.d/haiku-tools.sh
+		# Prove the Linux-arm64 host tools actually run on stock Ubuntu (catch a
+		# missing shared-lib dep now, not mid-publish). --help/-h exits non-zero on
+		# some builds, so accept any exit as long as the loader resolved the binary.
+		ldd /opt/haiku-tools/package_repo 2>&1 | grep -qi 'not found' && { echo 'host tools missing shared libs after LD_LIBRARY_PATH set' >&2; ldd /opt/haiku-tools/package_repo >&2; exit 1; }
+		/opt/haiku-tools/package_repo --help >/dev/null 2>&1 || /opt/haiku-tools/package_repo 2>&1 | head -1 || true
+		touch /var/lib/haiku-publisher-ready
+	UD
+	)
+
+	log "launching Ubuntu arm64 publisher $TYPE from $ami (profile $PROFILE)"
+	local keyopt=""
+	[ -n "$KEY" ] && keyopt="--key-name $KEY"
+	local id
+	# shellcheck disable=SC2086
+	id=$(aws --region "$region" ec2 run-instances \
+		--image-id "$ami" --instance-type "$TYPE" \
+		--subnet-id "$SUBNET" --security-group-ids "$SG" $keyopt \
+		--iam-instance-profile "Name=$PROFILE" \
+		--user-data "$userdata" \
+		--tag-specifications "ResourceType=instance,Tags=[{Key=Project,Value=haiku-graviton},{Key=Name,Value=haiku-repo-publisher},{Key=ephemeral,Value=true}]" \
+		--query 'Instances[0].InstanceId' --output text 2>&1)
+	case "$id" in
+		i-*) ;;
+		*) die "run-instances (publisher) failed: $id" ;;
+	esac
+	PUBLISHER="$id"
+	PEER_LAUNCHED=1
+	log "publisher $PUBLISHER launched; waiting for it to answer SSM + finish bootstrap"
+}
+
+# ---------------------------------------------------- SSM + bootstrap wait
+wait_for_ready() {
+	local deadline=$((SECONDS + WAIT)) state out
+	log "waiting for publisher $PUBLISHER (SSM + /var/lib/haiku-publisher-ready, budget ${WAIT}s)"
+	while [ "$SECONDS" -lt "$deadline" ]; do
+		state=$(aws --region "$region" ec2 describe-instances --instance-ids "$PUBLISHER" \
+			--query 'Reservations[0].Instances[0].State.Name' --output text 2>/dev/null || true)
+		if [ "$state" = "running" ]; then
+			# ssm-run fails while the SSM agent is still coming up on a freshly
+			# booted peer; tolerate it (|| true inside the substitution) so set -e
+			# does not abort the wait -- we simply retry until the sentinel appears.
+			out=$("$SSM_RUN" "$PUBLISHER" -t 60 -q 2>/dev/null <<-'READY' || true
+				test -f /var/lib/haiku-publisher-ready \
+					&& test -x /opt/haiku-tools/package_repo \
+					&& echo PUBLISHER_READY
+			READY
+			)
+			printf '%s' "$out" | grep -q PUBLISHER_READY && { log "publisher ready"; return 0; }
+		fi
+		log "  not ready yet (state ${state:-unknown}, $((deadline - SECONDS))s left)"
+		sleep 15
+	done
+	die "publisher $PUBLISHER never became ready within ${WAIT}s (last state ${state:-unknown}).
+  Check its /var/log/cloud-init-output.log; confirm the profile can read $HOST_TOOLS_S3
+  and that the banked host tools run on Ubuntu (ldd)."
+}
+
+case "$PUBLISHER" in
+	"") launch_peer ;;
+	*)  log "using caller-supplied publisher $PUBLISHER (will not terminate it)" ;;
+esac
+wait_for_ready
+
+# ------------------------------------------------- stage the package(s)
+log "uploading $# package(s) to $HG_INCOMING_S3"
+aws s3 rm "${HG_INCOMING_S3%/}/" --region "$region" --recursive --exclude "*" --include "*.hpkg" >/dev/null 2>&1 || true
+for f in "$@"; do
+	aws s3 cp "$f" "${HG_INCOMING_S3%/}/$(basename "$f")" --region "$region" --only-show-errors
+done
+
+# ----------------------------------------- run haiku-repo-add on the peer
+# Ship the current haiku-repo-add and run it on the Ubuntu peer. PKG_TOOL /
+# PACKAGE_REPO_TOOL point at the fetched Linux host tools (haiku-repo-add's
+# auto-detect globs the /opt/haiku cross-build tree, absent on a stock peer).
+log "running haiku-repo-add on the publisher over SSM"
+addb64=$(base64 -w0 "$HERE/haiku-repo-add" 2>/dev/null || base64 "$HERE/haiku-repo-add" | tr -d '\n')
+"$SSM_RUN" "$PUBLISHER" -t 2400 <<EOF
+set -e
+export HG_REPO_S3='$HG_REPO_S3'
+export HG_INCOMING_S3='$HG_INCOMING_S3'
+export HG_CF_DIST='${HG_CF_DIST:-}'
+export HG_REPO_URL='${HG_REPO_URL:-}'
+export ARCH='$ARCH'
+export AWS_DEFAULT_REGION='$region'
+export PKG_TOOL=/opt/haiku-tools/package
+export PACKAGE_REPO_TOOL=/opt/haiku-tools/package_repo
+export LD_LIBRARY_PATH=/opt/haiku-tools/lib
+export HAIKU_BUILD_SYSTEM_DATA_DIRECTORY=/opt/haiku-tools/data
+printf '%s' '$addb64' | base64 -d > /tmp/haiku-repo-add
+bash /tmp/haiku-repo-add
+EOF
+
+log "done -- repo updated with $# package(s); publisher torn down on exit"
