@@ -7,10 +7,12 @@
 # package(s) to vendor "DeBeOS", rebuilds the index over the full set, uploads
 # the new package(s) + index, and invalidates the CloudFront index paths.
 #
-# It runs on a *Haiku host* (a metal build guest or the dev tree on the metal
-# Linux host) because `package` and `package_repo` are Haiku-build artifacts.
-# Normally you do not run this by hand -- haiku-repo-publish-remote ships it to
-# the build host and runs it over SSM. See that script and the SOP.
+# It runs on a *Haiku host* (the dev AMI or a spun-up native Graviton builder)
+# because `package` and `package_repo` are Haiku-build artifacts. Normally you do
+# not run this by hand -- it is invoked from the publish host as part of the
+# `haiku-repo-publish` flow. See that script and the SOP. (The former
+# haiku-repo-publish-remote, which shipped this to the shared metal host over SSM,
+# is retired -- that host no longer exists.)
 #
 # Why it exists: the DeBeOS repo is single-vendor (package_repo create refuses a
 # set whose packages disagree with repo.info's vendor), so every hpkg is

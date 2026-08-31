@@ -4,8 +4,8 @@
 #
 # Wired from .claude/settings.json. Runs the snapshot and hands it back in the
 # documented hook envelope (hookSpecificOutput.additionalContext) so the state of
-# the metal builder, its KVM guests and any in-flight build is in context from
-# the first message of a cold session -- the case this exists for is a
+# the native builders, the bake pipelines and any in-flight build is in context
+# from the first message of a cold session -- the case this exists for is a
 # workstation reboot for patching, which leaves every remote build running but
 # takes all of the session's knowledge of it with it.
 #

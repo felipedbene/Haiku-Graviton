@@ -12,8 +12,10 @@ host cannot do.
 The pipeline's stages — Source → CrossBuild (in CodeBuild) → Register (`candidate=true`) → Test
 (perf-gate) → Approve (manual) → Promote (`haiku-canonical promote`) — already encode the fail-closed
 build, the candidate registration, and the gated promotion. The old "start `haiku-builder3`, run `jam`
-by hand" path is retired: a cross-compiled kernel/driver fix needs no metal. The c9g.metal builder
-remains only for **native / KVM guest** builds, which these audit fixes do not require.
+by hand" path is retired: a cross-compiled kernel/driver fix needs no builder host of its own — the
+pipeline's CrossBuild stage compiles it in CodeBuild. **Native / KVM (haikuporter) builds** now run on
+native Graviton Haiku EC2 instances over SSM (`haiku-nativebuild`), not a shared metal builder (that
+host has been retired), and these audit fixes do not require them.
 
 Unlike the static SOP, this runbook **mutates real infrastructure** (triggers a bake, launches
 disposable targets, and can promote canonical). It is therefore **gated, sequential, and
@@ -60,7 +62,7 @@ Point the `haiku-graviton-bake` pipeline at the candidate branch and let it cros
 
 **Constraints:**
 - You MUST get the pipeline's Source to the candidate branch by the project's established path — push the topic branch and set it as the pipeline source (or merge into the pipeline's designated source branch per `graviton/pipeline/README.md`). Pushing a branch is **mutating**: You MUST confirm with the user first.
-- You MUST NOT hand-start `haiku-builder3` or the c9g.metal builder to compile these fixes; the pipeline's CrossBuild stage compiles in CodeBuild. The metal is reserved for native/KVM builds, which are out of scope for cross-compiled kernel/driver fixes.
+- You MUST NOT hand-start any build host (e.g. `haiku-builder3`) to compile these fixes; the pipeline's CrossBuild stage compiles in CodeBuild. Native/KVM (haikuporter) builds run on native Graviton Haiku EC2 instances over SSM and are out of scope for cross-compiled kernel/driver fixes (there is no shared metal builder — that host has been retired).
 - You MUST watch the pipeline (`aws codepipeline get-pipeline-state` / execution) and treat a **CrossBuild failure as a rejection**: mark that fix `build-failed`, drop its commit from the branch, and MUST NOT carry it further. Report the failure with the CodeBuild log tail.
 - You MUST NOT disable any build check or `-Werror` to force a green build, because that hides the very defect class this audit exists to catch.
 - On a green CrossBuild, the Register stage tags the image `candidate=true` (NOT `canonical=true`). You MUST record the candidate AMI id and the pipeline execution id in the run report. You MUST NOT alter the current canonical AMI or its `auto-delete=off`/`auto-stop=no` protection tags.
@@ -97,7 +99,7 @@ Summarize results and stop for explicit approval before advancing the pipeline's
 Return the fleet to rest and write the run report.
 
 **Constraints:**
-- You MUST stop/terminate the disposable test target(s) you started (confirm terminate) and remove any SG rule you added, because idle instances cost money and open rules are exposure — but You MUST NOT touch the canonical AMI, the metal/cross builders, or any instance you did not start.
+- You MUST stop/terminate the disposable test target(s) you started (confirm terminate) and remove any SG rule you added, because idle instances cost money and open rules are exposure — but You MUST NOT touch the canonical AMI, any pipeline/build infrastructure, or any instance you did not start.
 - You MUST append a dated entry to `graviton/audit/AUDIT_LOG.md`: which fixes built (CrossBuild pass/fail), hw-pass vs hw-fail, what (if anything) was promoted, the pipeline execution + candidate AMI ids, and open items.
 - You MUST write the detailed run report under `graviton/audit/review/` (gitignored) and MUST NOT commit fleet/instance/account IDs to the public repo.
 

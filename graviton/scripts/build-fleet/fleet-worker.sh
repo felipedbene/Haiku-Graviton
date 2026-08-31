@@ -1,4 +1,9 @@
 #!/bin/bash
+# DEPRECATED -- part of the retired metal + QEMU-guest build fleet. Package builds
+# now run natively on Graviton Haiku EC2 instances over SSM (see
+# graviton/scripts/haiku-nativebuild and graviton/docs/native-ec2-builds.md).
+# Kept for reference only.
+#
 # fleet-worker.sh <sshport> <recipe>... -- build recipes sequentially in one guest.
 #
 # Descends from gworker.sh/cwork.sh, which are the proven path for this fork: the

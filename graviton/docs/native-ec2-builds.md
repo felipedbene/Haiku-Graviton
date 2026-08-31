@@ -40,9 +40,8 @@ aws ssm describe-instance-information --filters Key=InstanceIds,Values=<iid> \
 #    -> Online / Haiku / hrev*.   The IAM profile MUST carry AmazonSSMManagedInstanceCore.
 ```
 
-Drive it with plain `aws ssm send-command` / `graviton/scripts/ssm-run <iid>` — identical to
-how the metal is driven. `PlatformType` reports `Linux` (closed SSM enum); `PlatformName`
-is the real `Haiku`.
+Drive it with plain `aws ssm send-command` / `graviton/scripts/ssm-run <iid>`.
+`PlatformType` reports `Linux` (closed SSM enum); `PlatformName` is the real `Haiku`.
 
 ## Provision the toolchain (AMI is runtime-only)
 
@@ -72,7 +71,8 @@ haiku-mgmt-agent s3 cp /boot/home/haikuports/packages/<pkg>.hpkg s3://<bucket>/h
 aws ssm send-command --document-name AWS-RunShellScript --output-s3-bucket-name <bucket> …
 ```
 
-Publish to the repo with `graviton/scripts/haiku-repo-publish-remote` as before.
+Publish to the repo with `graviton/scripts/haiku-repo-publish` on a Haiku host (the
+dev AMI, or this native builder itself).
 
 ## Canonical driver
 

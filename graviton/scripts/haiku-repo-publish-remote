@@ -1,12 +1,18 @@
 #!/usr/bin/env bash
 #
-# haiku-repo-publish-remote -- publish one or more locally-held .hpkg to the
-# LIVE DeBeOS package repository with a single command, from the workstation,
-# by driving the Haiku build host (the metal) over SSM. No manual metal/SSM
-# steps: it starts the builder if stopped, uploads the package(s) to the
-# incoming S3 prefix, ships the current haiku-repo-add to the host, runs it,
-# and streams the result. The host re-stamps to vendor DeBeOS, rebuilds the
-# index, uploads, and invalidates the CDN (see haiku-repo-add).
+# DEPRECATED / RETIRED -- this script drove the shared metal build host over SSM,
+# and that host has been terminated. There is no longer a persistent metal
+# builder. Publish with `haiku-repo-publish` instead: it builds the repo index on
+# a Haiku host (the dev AMI or a spun-up native Graviton builder) and pushes to
+# S3/CloudFront via `haiku-s3` + awscli. This file is kept only for reference.
+#
+# haiku-repo-publish-remote -- (historical) published one or more locally-held
+# .hpkg to the DeBeOS package repository with a single command, from the
+# workstation, by driving the Haiku build host (the metal) over SSM. No manual
+# metal/SSM steps: it started the builder if stopped, uploaded the package(s) to
+# the incoming S3 prefix, shipped the current haiku-repo-add to the host, ran it,
+# and streamed the result. The host re-stamped to vendor DeBeOS, rebuilt the
+# index, uploaded, and invalidated the CDN (see haiku-repo-add).
 #
 # The build host is only started, never stopped, by this script -- stop it
 # yourself when you are done publishing (it is a large billable instance).

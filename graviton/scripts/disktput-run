@@ -2,8 +2,9 @@
 #
 # disktput-run -- drive a storage measurement matrix against a DeBeOS node.
 #
-# Runs ON the metal builder, which is the only host that can reach a test node
-# over ssh (corporate egress blocks :22 from the workstation). It drives
+# Runs on a Linux peer host with ssh reach to the test node (corporate egress
+# blocks :22 from the workstation, so this runs from an in-VPC Linux box -- e.g.
+# an ephemeral peer like the perf-gate spins up -- not the workstation). It drives
 # src/bin/disktput on the far side and prints medians.
 #
 # Three things this harness exists to get right, each of which will otherwise

@@ -220,7 +220,8 @@ executions from the CodePipeline console/CLI. When the pipeline reaches
 
 The **Register** stage tags the new AMI `candidate=true` *before* Test/Approve/
 Promote, so a candidate can be validated even when the Test stage cannot run
-(e.g. the builder that drives the perf gate is stopped):
+(e.g. the perf-gate apparatus is unavailable — it self-provisions an ephemeral
+peer per run, so an apparatus failure there does not block manual validation):
 
 1. Find it: `aws ec2 describe-images --owners self --filters Name=tag:candidate,Values=true`.
 2. Launch an instance from it on the instance type you care about, boot, and run
@@ -402,10 +403,11 @@ These are inherent to the bake, not to this pipeline — flagged honestly:
   bootstrapped from source and is currently **blocked on a haikuporter
   chroot/permission issue** and needs a **KVM** builder to run haikuporter
   natively — CodeBuild containers have no `/dev/kvm`. This pipeline bakes
-  **`@minimum-mmc` + the OpenSSH injection** (the actual shipping profile); a
-  full-userland image would need a different, KVM-capable builder (e.g. a
-  managed `c7g.metal` EC2 builder driven by SSM, which could be added as an
-  alternate CrossBuild backend).
+  **`@minimum-mmc` + the OpenSSH injection** (the actual shipping profile).
+  Native HaikuPorts package builds are handled out of band, on native Graviton
+  Haiku EC2 instances driven over SSM (`graviton/scripts/haiku-nativebuild`,
+  `graviton/docs/native-ec2-builds.md`), and their `.hpkg` output is vended from
+  the DeBeOS CDN repo rather than baked into the image here.
 - **Build image assumptions.** The buildspec `apt-get`s the Haiku build deps on
   an arm64 Ubuntu 24.04 image; a curated CodeBuild arm64 image is Amazon Linux,
   so we pin an Ubuntu image from ECR Public to match the validated environment.

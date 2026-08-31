@@ -89,8 +89,9 @@ disposes.
 (`graviton/pipeline/`, which builds from `graviton`): **Source → CrossBuild → Register
 (`candidate=true`) → perf-gate Test → manual Approve → Promote.** Register yields a candidate AMI;
 canonical is untouched. Boot a disposable target from the candidate, run the feature's hardware plan,
-and only on an explicit human "yes" does `haiku-canonical promote` move the tag. The c9g.metal builder
-is reserved for native/KVM builds; cross-compiled changes go through the pipeline.
+and only on an explicit human "yes" does `haiku-canonical promote` move the tag. Cross-compiled changes
+go through the pipeline; native/KVM (haikuporter) builds run on native Graviton Haiku EC2 instances
+over SSM (`haiku-nativebuild`), not a shared metal builder — that host has been retired.
 
 ## Worked example (this is not hypothetical)
 

@@ -2,10 +2,11 @@
 #
 # nettput-run -- drive a throughput A/B across MTUs against a Haiku node.
 #
-# Runs ON the metal builder, which is both the peer for the transfers and the
-# only host that can reach the Haiku node over ssh (corporate egress blocks :22
-# from the workstation). It starts nettput-peer.py, then drives the Haiku side
-# over ssh through the whole matrix and prints one table.
+# Runs on a Linux peer host that is both the peer for the transfers and a box with
+# ssh reach to the Haiku node (corporate egress blocks :22 from the workstation,
+# so this runs from an in-VPC Linux box -- e.g. an ephemeral peer like the
+# perf-gate spins up -- not the workstation). It starts nettput-peer.py, then
+# drives the Haiku side over ssh through the whole matrix and prints one table.
 #
 # The A/B is done by changing the MTU on a single running node rather than by
 # baking two images. Same kernel, same driver, same boot, same instance, same

@@ -1,12 +1,19 @@
 # Builder-host orchestration scripts
 
-These drive the **native package build**: they create QEMU Haiku guests on the
-`c7g.metal` builder, fan ports out across them, run `haikuporter` inside each guest,
-and harvest the resulting hpkgs to `/opt/haiku/hpkg-out/arm64/` and S3.
+> **DEPRECATED / historical.** These scripts drove the metal + QEMU-guest build
+> fleet, which has been retired along with the shared metal host. Native package
+> builds now run directly on Graviton Haiku EC2 instances over SSM — see
+> `graviton/scripts/haiku-nativebuild` and `graviton/docs/native-ec2-builds.md`.
+> This directory is kept for reference (notably the clock-step post-mortem below).
 
-They live in `/opt/haiku/` on the builder and are invoked from there. This directory
-is the version-controlled copy — **edit here, then copy out**, not the other way
-round.
+They drove the **native package build** on the retired fleet: they created QEMU
+Haiku guests on the `c7g.metal` builder, fanned ports out across them, ran
+`haikuporter` inside each guest, and harvested the resulting hpkgs to
+`/opt/haiku/hpkg-out/arm64/` and S3.
+
+They lived in `/opt/haiku/` on the builder and were invoked from there. This
+directory is the version-controlled copy — **edit here, then copy out**, not the
+other way round.
 
 ## Why they are in the repo now
 
