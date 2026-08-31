@@ -155,8 +155,13 @@ launch_peer() {
 		# pointed at them. Without this the tool aborts "error while loading shared
 		# libraries: libroot_build.so".
 		aws s3 cp "$HOST_TOOLS_S3/lib" /opt/haiku-tools/lib --recursive --region $region
+		# The package tool license-checks against a system data dir (licenses/);
+		# fetch the banked set and point the relocatable tool at it via the
+		# HAIKU_BUILD_SYSTEM_DATA_DIRECTORY env override.
+		aws s3 cp "$HOST_TOOLS_S3/data" /opt/haiku-tools/data --recursive --region $region
 		export LD_LIBRARY_PATH=/opt/haiku-tools/lib
-		echo 'export LD_LIBRARY_PATH=/opt/haiku-tools/lib' > /etc/profile.d/haiku-tools.sh
+		export HAIKU_BUILD_SYSTEM_DATA_DIRECTORY=/opt/haiku-tools/data
+		printf 'export LD_LIBRARY_PATH=/opt/haiku-tools/lib\nexport HAIKU_BUILD_SYSTEM_DATA_DIRECTORY=/opt/haiku-tools/data\n' > /etc/profile.d/haiku-tools.sh
 		# Prove the Linux-arm64 host tools actually run on stock Ubuntu (catch a
 		# missing shared-lib dep now, not mid-publish). --help/-h exits non-zero on
 		# some builds, so accept any exit as long as the loader resolved the binary.
@@ -244,6 +249,7 @@ export AWS_DEFAULT_REGION='$region'
 export PKG_TOOL=/opt/haiku-tools/package
 export PACKAGE_REPO_TOOL=/opt/haiku-tools/package_repo
 export LD_LIBRARY_PATH=/opt/haiku-tools/lib
+export HAIKU_BUILD_SYSTEM_DATA_DIRECTORY=/opt/haiku-tools/data
 printf '%s' '$addb64' | base64 -d > /tmp/haiku-repo-add
 bash /tmp/haiku-repo-add
 EOF
