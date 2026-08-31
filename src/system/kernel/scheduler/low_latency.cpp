@@ -56,7 +56,6 @@ choose_core(const ThreadData* threadData)
 		package = PackageEntry::GetMostIdlePackage();
 	}
 
-	int32 index;
 	CPUSet mask = threadData->GetCPUMask();
 	const bool useMask = !mask.IsEmpty();
 
@@ -70,17 +69,11 @@ choose_core(const ThreadData* threadData)
 	}
 	if (core == NULL) {
 		ReadSpinLocker coreLocker(gCoreHeapsLock);
-		index = 0;
 		// no idle cores, use least occupied core
-		do {
-			core = gCoreLoadHeap.PeekMinimum(index++);
-		} while (useMask && core != NULL && !core->CPUMask().Matches(mask));
+		core = gCoreLoadHeap.PeekLeastLoaded(useMask ? &mask : NULL);
 		event = PLACEMENT_LOAD_HEAP;
 		if (core == NULL) {
-			index = 0;
-			do {
-				core = gCoreHighLoadHeap.PeekMinimum(index++);
-			} while (useMask && core != NULL && !core->CPUMask().Matches(mask));
+			core = gCoreHighLoadHeap.PeekLeastLoaded(useMask ? &mask : NULL);
 			event = PLACEMENT_HIGH_LOAD_HEAP;
 		}
 	}
@@ -109,20 +102,12 @@ rebalance(const ThreadData* threadData)
 	CPUSet mask = threadData->GetCPUMask();
 	const bool useMask = !mask.IsEmpty();
 
-	int32 index = 0;
-	CoreEntry* other;
-	do {
-		other = gCoreLoadHeap.PeekMinimum(index++);
-		if (other != NULL && (useMask && other->CPUMask().IsEmpty()))
-			panic("other->CPUMask().IsEmpty()\n");
-	} while (useMask && other != NULL && !other->CPUMask().Matches(mask));
+	CoreEntry* other = gCoreLoadHeap.PeekLeastLoaded(useMask ? &mask : NULL);
+	if (other != NULL && useMask && other->CPUMask().IsEmpty())
+		panic("other->CPUMask().IsEmpty()\n");
 
-	if (other == NULL) {
-		index = 0;
-		do {
-			other = gCoreHighLoadHeap.PeekMinimum(index++);
-		} while (useMask && other != NULL && !other->CPUMask().Matches(mask));
-	}
+	if (other == NULL)
+		other = gCoreHighLoadHeap.PeekLeastLoaded(useMask ? &mask : NULL);
 	coreLocker.Unlock();
 	ASSERT(other != NULL);
 
