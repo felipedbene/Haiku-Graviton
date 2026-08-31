@@ -1,6 +1,12 @@
 # Native arm64 HaikuPorts chain — status
 
-State of the native package build running in the QEMU Haiku guests on the c7g.metal
+> **Historical campaign record.** This documents the metal + QEMU-guest build fleet,
+> which has been retired. Native package builds now run directly on Graviton Haiku EC2
+> instances over SSM — see `graviton/scripts/haiku-nativebuild` and
+> `graviton/docs/native-ec2-builds.md`. The dated status and the guest/proxy operational
+> notes below describe that retired fleet; read them as history.
+
+State of the native package build that ran in the QEMU Haiku guests on the c7g.metal
 builder. Companion to `graviton/docs/sequencing.md` (Phase 2)
 and to the recipe patches in `graviton/haikuports-patches/`.
 

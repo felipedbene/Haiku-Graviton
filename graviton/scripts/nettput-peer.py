@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 """nettput-peer -- the Linux end of a nettput throughput run.
 
-Deliberately dependency-free: the peer for these tests is the c7g.metal builder,
-and installing anything there is a change to the machine that every other
-experiment then has to trust. python3 is already present, so this is the whole
-of it.
+Deliberately dependency-free: the peer for these tests is a Linux throughput host
+(the perf-gate's ephemeral Ubuntu peer, or any Linux box driving a run), and
+installing anything there is a change to the machine that every other experiment
+then has to trust. python3 is already present, so this is the whole of it.
 
 Protocol, driven entirely by the Haiku side so this end needs no arguments
 beyond a port:

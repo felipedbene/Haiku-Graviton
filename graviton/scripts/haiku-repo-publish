@@ -9,8 +9,9 @@
 # DeBeOS -> http://packages.debene.dev/arm64), and every fatty feature (WebKit,
 # translators, toolchain, rust, ...) is vended from the repo this builds.
 #
-# It runs on a *Haiku host* (the dev AMI or a metal build guest) because the
-# repo index is a Haiku-tool artifact: `package_repo create` and `package` only
+# It runs on a *Haiku host* (the dev AMI or a spun-up native Graviton builder)
+# because the repo index is a Haiku-tool artifact: `package_repo create` and
+# `package` only
 # exist there. Everything after the index (S3 upload, CloudFront invalidation)
 # is standard AWS and is delegated to `haiku-s3` + the awscli.
 #

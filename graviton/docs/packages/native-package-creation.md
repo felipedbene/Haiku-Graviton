@@ -164,7 +164,7 @@ package list -i webpositive-1.10.0-1-arm64.hpkg     # verify metadata
   (`libstdc++`/`libgcc_s` come from the base's `gcc_syslibs`, always present.)
 - **Single-vendor repos:** to add this to the DeBeOS repo it must be vendor
   `DeBeOS` (it is, above); publishing tooling re-stamps otherwise. See
-  `graviton/scripts/haiku-repo-publish-remote`.
+  `graviton/scripts/haiku-repo-publish`.
 
 ## 5. Install and verify
 

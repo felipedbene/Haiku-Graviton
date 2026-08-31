@@ -34,8 +34,9 @@ package appears in both the image and the repo.
 
 ## Prerequisites
 
-- A running **dev AMI** or metal build guest (has `package`, `package_repo`, and a full hpkg pool).
-  Non-metal EC2 has no `/dev/kvm`, so native package builds only happen on the metal or a dev AMI.
+- A running **dev AMI** or spun-up native Graviton builder (has `package`, `package_repo`, and a
+  full hpkg pool). Native package builds run on such a Haiku host over SSM (`haiku-nativebuild`),
+  not on a shared metal builder (that host has been retired).
 - The CDN provisioned: private S3 bucket + CloudFront (OAC) serving `http://packages.debene.dev/arm64`.
 - Admin/describe creds for the test account (describe/list unless a change is intended).
 

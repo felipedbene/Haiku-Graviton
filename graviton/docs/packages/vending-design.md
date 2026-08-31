@@ -118,7 +118,7 @@ live activation. This is a fallback, not the default: §3 (HTTP CDN) is the modu
 ## 6. Building & publishing the repo — `haiku-repo-publish`
 
 The `repo` index is a Haiku-tool artifact, so the repo is built on a **Haiku host** (the dev AMI or a
-metal build guest) and published to the CDN from there. `graviton/scripts/haiku-repo-publish`
+spun-up native Graviton builder) and published to the CDN from there. `graviton/scripts/haiku-repo-publish`
 automates all of §2–§3:
 
 ```sh

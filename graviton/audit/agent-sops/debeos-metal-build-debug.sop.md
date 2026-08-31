@@ -1,5 +1,16 @@
 # DeBeOS Metal Build-Debug (fast jam iteration)
 
+> **DEPRECATED — the shared c9g.metal builder this SOP drives has been terminated.**
+> There is no longer a persistent metal builder, so the "start the metal, iterate,
+> stop the metal" loop below no longer applies as written. The fast build/solve
+> iteration loop should now run on a spun-up native Graviton Haiku builder (see
+> `graviton/scripts/haiku-provision-native-builder` and `graviton/docs/native-ec2-builds.md`),
+> and package builds run natively over SSM via `graviton/scripts/haiku-nativebuild`.
+> This file is retained for its still-useful mechanics (the `HAIKU_REVISION`
+> clone-without-tags trap, `haiku-stage-local-packages` vs raw `cp`, the bare-`sudo`
+> `PWD` trap, `HaikuPortsLocal` vs `HaikuPorts`) pending a rewrite against the native
+> path. Do not start a metal builder from these steps.
+
 ## Overview
 
 Root-cause a **CrossBuild / `jam` build or package-solve failure on the c9g.metal builder with fast

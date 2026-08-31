@@ -48,8 +48,9 @@ the code is correct; only a Graviton run does."
 **Open items carried forward:**
 - `darling` 0.24.1 `rustc` ICE — a narrow, deterministic upstream compiler bug; worth a minimal repro
   only if it ever blocks a real dependency.
-- Perf-gate Test stage needs the metal builder running for future promotions to go through the
-  pipeline rather than the manual `haiku-canonical` route.
+- Perf-gate Test stage: for promotions to go through the pipeline rather than the manual
+  `haiku-canonical` route it needs a throughput peer; it now self-provisions its own ephemeral
+  Ubuntu peer per run (no persistent/metal builder required).
 - Phase-4 deep pass on network-stack (radix.c/arp.cpp) not yet run.
 
 **Process note:** the bug-audit tooling now lives in `graviton/audit/` (`FINDINGS.md`, `PRIORITY.md`,
@@ -167,4 +168,5 @@ ENA/arp findings). But because no dismissal was disputed, the new **Adjudicate s
 exercised in practice** — its first real test is a future run that produces a genuine dispute. The
 `debeos-hardware-proof.sop.md` runbook was retargeted this round from the hand-driven metal builder
 to the `haiku-graviton-bake` CodePipeline (CrossBuild in CodeBuild → Register `candidate=true` →
-perf-gate → manual Approve → Promote); the c9g.metal is kept only for native/KVM builds.
+perf-gate → manual Approve → Promote); native/KVM builds now run on native Graviton Haiku EC2
+instances over SSM (`haiku-nativebuild`), not a shared metal builder.

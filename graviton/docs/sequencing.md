@@ -187,9 +187,9 @@ sits behind the PEP-517 Python chain (which is a **7-port ladder, not a knot**; 
 Motivation, all of which has already cost time: ~~bootstrap images have dead guest
 networking (`net_server`/`syslog_daemon`/`power_daemon` die)~~ — **that one is fixed**, see
 "headless images lose networking" below (`44b5b4a233`); the EC2 test instance's
-security group allows `:22` only from external CIDRs so the metal cannot SSH in;
-corporate egress blocks outbound `:22` from the workstation; and guests are currently
-driven by base64-through-SSM plus hand-rolled QEMU-monitor Python.
+security group allows `:22` only from external CIDRs so an out-of-VPC host cannot SSH
+in; corporate egress blocks outbound `:22` from the workstation; and guests are
+currently driven by base64-through-SSM plus hand-rolled QEMU-monitor Python.
 
 Scope honestly: it does **not** solve in-chroot command injection (a haikuporter
 limitation), clipboard/resize (spice-vdagent territory, assessed as not worth porting),

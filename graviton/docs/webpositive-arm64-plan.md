@@ -423,6 +423,14 @@ comment lines, two lines in `repositories/HaikuPorts/arm64`, zero lines in the a
 
 ## 5. Size, time, memory, and whether the current guests suffice
 
+> **Note (infra retired):** the capacity analysis in §5 and the sequencing in §8 were
+> written against the metal + QEMU-guest fleet (the "current guests" / "the host"),
+> which has since been retired. Builds now run on native Graviton Haiku EC2 instances
+> over SSM (`graviton/scripts/haiku-nativebuild`), where the box is sized per build
+> rather than shared across standing guests. Read the guest/host figures below as the
+> original estimate on that retired fleet; WebKit has since been built (see the WebKit
+> arm64 work). The size/time/memory estimates themselves still hold.
+
 ### Measured inputs
 
 | Quantity | Value | How |

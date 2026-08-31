@@ -179,10 +179,9 @@ Two reasons, both learned by losing work:
    `libtool-2.5.4-no-bootstrap.patch` for exactly this reason.
 
 So: the `.patch` files remain the explanation of *why*, and `recipes/` is what you install.
-`graviton/builder/prepguest.sh` copies them into a guest and pins each mtime against the
-matching `*_source_rigged-*.hpkg`. The metal keeps its working copies in
-`/opt/haiku/recipe-overlay/`; this directory is the version-controlled one, so edit here and
-copy out.
+`graviton/builder/prepguest.sh` copied them into a guest and pinned each mtime against the
+matching `*_source_rigged-*.hpkg`. This directory is the version-controlled one, so edit here
+and copy out (the retired metal fleet kept its working copies in `/opt/haiku/recipe-overlay/`).
 
 ## Every non-ISP port must be built with `haikuporter -G`
 
@@ -193,10 +192,11 @@ git is not buildable here yet (curl, openssl3, expat, libiconv …), so pass `-G
 (`--no-git-repo`), which makes haikuporter use `patch(1)` instead — it requires `patch`
 unconditionally, even for a port with no patches, which is why
 `haiku-haikuporter-patch` installs it. Guest-side pieces to reinstate after a guest swap,
-in order:
+in order (this is the retired metal + QEMU-guest fleet path — native EC2 builds instead use
+the seed-dir download shims in `graviton/scripts/haiku-provision-native-builder`):
 
 ```sh
-haiku-source-proxy start                     # on the metal, no init script
+haiku-source-proxy start                     # on the (retired) metal host, no init script
 haiku-source-proxy install-shim <sshport>    # wget + haiku-proxy-decompress
 haiku-haikuporter-patch <sshport>            # unpack patch + patch(1)
 ```

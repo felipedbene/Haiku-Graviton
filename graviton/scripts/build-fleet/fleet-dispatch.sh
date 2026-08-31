@@ -1,4 +1,9 @@
 #!/bin/bash
+# DEPRECATED -- this drives the metal + QEMU-guest build fleet, which has been
+# retired along with the shared metal host. Package builds now run natively on
+# Graviton Haiku EC2 instances over SSM (see graviton/scripts/haiku-nativebuild
+# and graviton/docs/native-ec2-builds.md). Kept for reference only.
+#
 # fleet-dispatch.sh -- farm the functional-desktop closure across the metal's
 # QEMU arm64 Haiku build guests.
 #

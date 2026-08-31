@@ -2,11 +2,14 @@
 #
 # haiku-status -- one-shot snapshot of the Graviton/arm64 work in flight.
 #
-# Why this exists: none of the work lives on the workstation. Builds, guests and
-# images all live on the c7g.metal builder, so a workstation reboot (they happen
-# for patching) costs no work but costs all *context* -- and reconstructing it by
-# hand from SSM history takes many round trips. This prints the whole picture in
-# one shot, cheaply, and is safe to run from a SessionStart hook.
+# Why this exists: none of the work lives on the workstation. Package builds run
+# on native Graviton Haiku EC2 instances (haiku-nativebuild over SSM), images are
+# baked by the CodePipeline bakers, and the canonical AMI is the source of truth --
+# so a workstation reboot (they happen for patching) costs no work but costs all
+# *context*, and reconstructing it by hand from SSM history takes many round trips.
+# This prints the whole picture in one shot, cheaply, and is safe to run from a
+# SessionStart hook. (There is no longer a persistent shared "metal" builder; the
+# optional builder probe at the end is kept only for an opt-in $BUILDER_NAME host.)
 #
 # Read-only by construction: describe/list calls plus one shell probe on the
 # builder. It never starts, stops, or modifies anything.
@@ -119,7 +122,7 @@ if [ -z "$builder" ] || [ "$builder" = "None" ]; then
 fi
 say "--- builder $builder: guests, builds, packages ---"
 
-# One round trip. Everything the metal knows about its own in-flight work.
+# One round trip. Everything the builder knows about its own in-flight work.
 # shellcheck disable=SC2016
 probe='
 echo "host: $(uptime | sed "s/^ *//")"
