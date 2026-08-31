@@ -599,7 +599,7 @@ does not have and which this kernel neither enables nor context-switches.
 `crypto`) and safe (present on Graviton2-5). The comment block at
 `ArchitectureRules:41-51` needs no correction.
 
-## 3. HW extensions: CRC32 / AES / SHA / PMULL — baseline MERGED; intrinsics STILL OPEN
+## 3. HW extensions: CRC32 / AES / SHA / PMULL — baseline MERGED; intrinsics STILL OPEN (tracked: #102)
 
 > **Half done, and the half that is done is the easy half.** `+crypto` is in the
 > baseline as of `20bf8f2711`, so *our* code may use AES/SHA/PMULL and the compiler
@@ -1059,7 +1059,7 @@ on Haiku**; the fallback is item 13's PMU counters plus wall-clock throughput.
 There is also a new, unrelated metal-only IO consideration — the SMMU — split out
 as item 14.
 
-## 8. Spinlock backoff with WFE/SEV — STILL OPEN (item 8a did NOT close it)
+## 8. Spinlock backoff with WFE/SEV — STILL OPEN (item 8a did NOT close it) (tracked: #100)
 
 > **Open as of 2026-08-24, and easy to mistake for closed.** `af7e48b94c` changed
 > `arch_cpu_pause()` from `yield` to `isb` — that is **item 8a**, a backoff hint.
@@ -1182,7 +1182,7 @@ anywhere), which matches `CACHE_LINE_SIZE 64` (`arch_cpu.h:10`) and ena-com's
 `____cacheline_aligned` (`ena_plat.h:123`). The repo gives no cache-line or
 false-sharing *guidance* beyond that. Item stays closed.
 
-## 10. Larger translation granules / huge pages (16K/64K) — STILL OPEN, RESEARCH (2026-08-24)
+## 10. Larger translation granules / huge pages (16K/64K) — STILL OPEN, RESEARCH (2026-08-24) (10a/10b tracked: #101)
 
 > **Open.** No code, and still correctly classified as a research spike rather than
 > a scheduled change. **The gate named below is now buildable rather than
@@ -1267,7 +1267,7 @@ Three things, in order of usefulness:
    open-ended, and we cannot read it today** — hence item 13. Sequence 13 before
    10.
 
-## 11. ENA interrupt moderation / coalescing — partly MERGED; the structural fix is STILL OPEN
+## 11. ENA interrupt moderation / coalescing — partly MERGED; the structural fix is STILL OPEN (tracked: #98)
 
 > **State on 2026-08-25: this is a correctness/structural fix, NOT the throughput
 > lever.** The receive ceiling was accounted for on 2026-08-25
@@ -1350,7 +1350,7 @@ interrupts-per-packet before and after at a fixed offered load.
 all (`ena_com_init_interrupt_moderation()` is allowed to fail and we continue);
 what interval the reference drivers actually pick. **Unverified.**
 
-## 12. Runtime CPU feature detection — absent entirely; STILL OPEN 2026-08-24
+## 12. Runtime CPU feature detection — absent entirely; STILL OPEN 2026-08-24 (tracked: #99)
 
 > **Open, re-verified 2026-08-24.** No `AT_HWCAP`/`getauxval`/`ID_AA64ISAR0_EL1`
 > reader has landed. One correction to the reasoning below: it argues from "the
@@ -1409,7 +1409,7 @@ what interval the reference drivers actually pick. **Unverified.**
 whole-userland atomics regression risk — neither of which is a kernel throughput
 win, which is why it belongs in the Phase 2/4 sequence rather than Phase 7.
 
-## 13. PMU (PMUv3) counters — facility MERGED 2026-08-24; NOTHING MEASURED WITH IT YET
+## 13. PMU (PMUv3) counters — facility MERGED 2026-08-24; NOTHING MEASURED WITH IT YET (tracked: #103)
 
 > **The facility exists. The readings do not. Keep those two apart.**
 >
@@ -1493,7 +1493,7 @@ routine unmasks interrupts, which is why AWS uses pseudo-NMI
 (`CONFIG_ARM64_PSEUDO_NMI`, `irqchip.gicv3_pseudo_nmi=1`) — sampling must arrive in
 a context we have not masked. **All unverified; no PMU code exists yet.**
 
-## 14. SMMU / IOMMU on metal — STILL OPEN, INVESTIGATE (2026-08-24)
+## 14. SMMU / IOMMU on metal — STILL OPEN, INVESTIGATE (2026-08-24) (tracked: #104)
 
 > **Open; no audit done.** One premise below has since been settled and makes this
 > item *reachable* rather than blocked: `c7g.metal` now boots to userland and

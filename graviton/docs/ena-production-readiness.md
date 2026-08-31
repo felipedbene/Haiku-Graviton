@@ -67,7 +67,7 @@ Three P0 bugs, all **[verified]** in the code before and after:
 
 ## Not yet done, in priority order
 
-### P1 — the rest of the watchdog. We implement 1 of the reference's 5 checks.
+### P1 — the rest of the watchdog. We implement 1 of the reference's 5 checks. (tracked: #105)
 
 These are ~400 lines of already-debugged logic in the reference's `ena.c`, depending only
 on a periodic timer and the shared HAL — both of which we have. This is the cheapest
@@ -85,7 +85,7 @@ production-risk reduction available. **[reported]**
 | 8 | **No queue-creation size backoff** | One attempt, then fail |
 | 9 | **`ena_uninit_device()` teardown order** frees IO queues *before* removing the interrupt handler — the inverse of both the reference and our own reset path. Latent use-after-free | |
 
-### P2 — observability. Do this early: it is what makes everything else measurable.
+### P2 — observability. Do this early: it is what makes everything else measurable. (tracked: #106)
 
 - **ENI/customer metrics** (`bw_in_allowance_exceeded`, `pps_allowance_exceeded`,
   `conntrack_allowance_exceeded`, …). The HAL already provides
@@ -105,7 +105,7 @@ production-risk reduction available. **[reported]**
   extra-doorbell ioctls exist. Still open: hooks for the remaining failure modes
   P1 adds detection for.
 - **`docs/watchdog-design.md`, `FINDINGS.md`, `HANDOFF.md` are cited from ~~six~~
-  **eight** places in the code and do not exist.** **[verified 2026-08-22; RE-VERIFIED
+  **eight** places in the code and do not exist.** (tracked: #107) **[verified 2026-08-22; RE-VERIFIED
   and still true 2026-08-24 — the count was low]** The citations are at `ena.h:173,207,352`
   and `ena.cpp:1246,1635,1685,1722,1887`; the driver directory contains only `Jamfile`,
   `ena-com/`, `ena.cpp`, `ena.h`, `ena_plat.cpp`. Every "verified, see section 8" claim in
