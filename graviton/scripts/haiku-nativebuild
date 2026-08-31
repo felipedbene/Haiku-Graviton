@@ -41,6 +41,7 @@ build_one() {
 	log="/boot/home/nb-$port.log"
 	echo "===== $port : start $(date -u +%FT%TZ) ====="
 	attempt=1
+	prev_miss=""
 	while [ "$attempt" -le "$MAX_ATTEMPTS" ]; do
 		( cd "$HP" && haikuporter -y "$port" ) > "$log" 2>&1
 		# success = an hpkg for this port now exists
@@ -54,7 +55,14 @@ build_one() {
 		if [ -z "$miss" ]; then
 			echo "$port: FAILED, no missing-dep to install -- see $log"; tail -20 "$log"; return 1
 		fi
+		# If the unresolved set is identical to last round, the previous install made no
+		# progress -- the dep is not obtainable from the repo (it must be BUILT first).
+		# Stop now instead of burning the remaining attempts on the same no-op install (#49).
+		if [ "$miss" = "$prev_miss" ]; then
+			echo "$port: UNRESOLVABLE (not in repo, build it first): $(echo $miss | tr '\n' ' ')"; return 1
+		fi
 		echo "$port: attempt $attempt installing: $(echo $miss | tr '\n' ' ')"
+		prev_miss="$miss"
 		for d in $miss; do install_dep "$d"; done
 		attempt=$((attempt + 1))
 	done
@@ -70,6 +78,14 @@ harvest() {
 			&& echo "harvested $(basename "$f")"
 	done
 }
+
+# Refresh the pkgman repo caches so deps published to the DeBeOS repo since this builder
+# booted actually resolve (otherwise pkgman installs against a stale index -- the bug that
+# made libass wall on an already-published harfbuzz). Intermediate deps built THIS wave are
+# resolved from the local packages/ dir instead, so keep each dep-chain on one builder;
+# base layers are shared across builders by publishing between waves, not by NFS -- the
+# ssm agent has only single-file `s3 cp`, and Haiku arm64's NFS client is unproven.
+feed | pkgman refresh >/dev/null 2>&1 || true
 
 rc=0
 for p in "$@"; do
