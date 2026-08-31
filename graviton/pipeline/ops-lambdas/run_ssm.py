@@ -22,17 +22,50 @@ script is passed as-is -- none of the CLI-shorthand comma-mangling that
 graviton/scripts/ssm-run works around applies here.
 """
 import os
+import re
 import boto3
 
 NATIVEBUILD = os.environ.get("NATIVEBUILD_PATH", "/boot/home/haiku-nativebuild")
-REPO_PUBLISH = os.environ.get("REPO_PUBLISH_CMD", "haiku-repo-publish all")
+REPO_PUBLISH = os.environ.get("REPO_PUBLISH_PATH", "/boot/home/haiku-repo-publish")
 AGENT = os.environ.get("SSM_AGENT_PATH", "/boot/system/bin/debeos-ssm-agent")
+HP_TREE = os.environ.get("HP_TREE", "/boot/home/haikuports")
+OVERLAY_PREFIX = os.environ.get("OVERLAY_PREFIX", "debeos-overlay")
+# Published repo pool the builder syncs into (HG_REPO_S3 for haiku-repo-publish).
+PUBLISH_S3 = os.environ.get("PUBLISH_S3", "")
 
 
-def _wrapper(cmd, bucket, run_id, name, ok_grep):
-    """POSIX-sh: run cmd, classify, gzip+upload the full log, echo the verdict."""
+def _overlay_stage(pkg, bucket):
+    """Emit shell that stages the DeBeOS overlay recipe(s)+patchset(s) for `pkg`
+    into the builder's ports tree BEFORE building -- so a committed recipe bump
+    actually reaches the build (persistence), instead of a hand-stage that dies
+    with the builder. The agent's single-file `s3 cp` can't glob, so we list the
+    overlay here (boto3) and emit an explicit cp per file; the tree's port dir is
+    found by name (category-agnostic)."""
+    s3 = boto3.client("s3")
+    pat = re.compile(rf"^{re.escape(pkg)}[-_].*\.(recipe|patchset)$")
+    files = []
+    paginator = s3.get_paginator("list_objects_v2")
+    for page in paginator.paginate(Bucket=bucket, Prefix=f"{OVERLAY_PREFIX}/"):
+        for o in page.get("Contents", []):
+            base = o["Key"].rsplit("/", 1)[-1]
+            if pat.match(base):
+                files.append((o["Key"], base))
+    if not files:
+        return ""
+    lines = [f'D=$(find {HP_TREE} -maxdepth 2 -type d -name {pkg} | head -1)',
+             'if [ -n "$D" ]; then mkdir -p "$D/patches"']
+    for key, base in files:
+        dest = '"$D/patches/"' if base.endswith(".patchset") else '"$D/"'
+        lines.append(f'{AGENT} s3 cp "s3://{bucket}/{key}" {dest}{base} || true')
+    lines.append('fi')
+    return "\n".join(lines) + "\n"
+
+
+def _wrapper(cmd, bucket, run_id, name, ok_grep, prelude=""):
+    """POSIX-sh: (optional prelude, e.g. overlay staging) then run cmd, classify,
+    gzip+upload the full log, echo the compact verdict."""
     return f"""set -u
-LOG=/tmp/{name}.$$.log
+{prelude}LOG=/tmp/{name}.$$.log
 {cmd} > "$LOG" 2>&1
 RC=$?
 if grep -q {ok_grep} "$LOG"; then V=OK
@@ -63,8 +96,9 @@ def _bucket(event):
 def build(event, context):
     pkg = event["pkg"]
     run_id = event.get("run_id", context.aws_request_id)
+    prelude = _overlay_stage(pkg, _bucket(event))   # persistence: stage overlay first
     script = _wrapper(f"{NATIVEBUILD} {pkg}", _bucket(event), run_id, pkg,
-                      ok_grep=f'"^{pkg}: BUILD_OK"')
+                      ok_grep=f'"^{pkg}: BUILD_OK"', prelude=prelude)
     event["command_id"] = _send(event["instance_id"], script,
                                 int(event.get("build_timeout", 21600)))
     return event
@@ -72,8 +106,16 @@ def build(event, context):
 
 def publish(event, context):
     run_id = event.get("run_id", context.aws_request_id)
-    script = _wrapper(REPO_PUBLISH, _bucket(event), run_id, "publish",
-                      ok_grep='-i published')
+    # Real publish: haiku-repo-publish builds the repo index from the builder's
+    # package pool and syncs it to the published prefix (HG_REPO_S3). Requires a
+    # Haiku host -> runs on the builder. PUBLISH_S3 must be set (else refuse).
+    pub_s3 = event.get("publish_s3") or PUBLISH_S3
+    if not pub_s3:
+        raise RuntimeError("PUBLISH_S3 not configured; refusing to publish blind")
+    cmd = (f'HG_REPO_S3="{pub_s3}" {REPO_PUBLISH} all '
+           f'--pool {HP_TREE}/packages --out /tmp/debeos-repo-out')
+    script = _wrapper(cmd, _bucket(event), run_id, "publish",
+                      ok_grep='-iE "published|repo.sha256|Invalidation"')
     event["publish_command_id"] = _send(event["instance_id"], script,
                                         int(event.get("publish_timeout", 3600)))
     return event

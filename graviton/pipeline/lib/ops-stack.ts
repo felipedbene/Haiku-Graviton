@@ -183,7 +183,10 @@ export class OpsStack extends cdk.Stack {
     });
     const waitSsmFn = mkFn('WaitSsmFn', 'wait_ssm.handler');
     const buildFn = mkFn('BuildFn', 'run_ssm.build', { WORK_BUCKET: workBucket });
-    const publishFn = mkFn('PublishFn', 'run_ssm.publish', { WORK_BUCKET: workBucket });
+    const publishFn = mkFn('PublishFn', 'run_ssm.publish', {
+      WORK_BUCKET: workBucket,
+      PUBLISH_S3: `s3://${publishBucket}/debeos-repo/arm64`,
+    });
     const pollFn = mkFn('PollFn', 'poll_ssm.handler');
     const recordFn = mkFn('RecordFn', 'record.handler');
     const reapFn = mkFn('ReapFn', 'reap.handler');
@@ -216,6 +219,11 @@ export class OpsStack extends cdk.Stack {
       actions: ['ec2:TerminateInstances'],
       resources: ['*'],
       conditions: { StringEquals: { 'aws:ResourceTag/Name': 'haiku-native-builder' } },
+    }));
+    // BuildFn lists the DeBeOS overlay in S3 (to stage recipe bumps onto the tree).
+    buildFn.addToRolePolicy(new iam.PolicyStatement({
+      actions: ['s3:GetObject', 's3:ListBucket'],
+      resources: [`arn:aws:s3:::${workBucket}`, `arn:aws:s3:::${workBucket}/*`],
     }));
 
     // ---- state machine ---------------------------------------------------
@@ -287,16 +295,20 @@ export class OpsStack extends cdk.Stack {
     checkSsm.next(ssmReady);
     waitSsm.next(checkSsm);
 
-    // Build-only path: if the execution input sets skip_publish=true, reap after
-    // the chain WITHOUT touching the shared repo (safe to run while a separate
-    // publish/cook is in flight). Otherwise publish as normal.
-    const skipPublish = new sfn.Choice(this, 'SkipPublish?')
+    // Publish is OPT-IN (default build-only): publish only when the input
+    // explicitly sets publish=true. Rationale: the current PublishRepo runs
+    // haiku-repo-publish over the BUILDER's local package pool, which is only the
+    // handful this wave built -- publishing that would rebuild the repo index
+    // from a subset and CLOBBER the full published set. Correct incremental
+    // publish must run over the full pool (haiku-repo-publish-remote) -- until
+    // that's wired, default off so a wave can never shrink the live repo.
+    const publishGate = new sfn.Choice(this, 'Publish?')
       .when(sfn.Condition.and(
-              sfn.Condition.isPresent('$.skip_publish'),
-              sfn.Condition.booleanEquals('$.skip_publish', true)),
-            reapSuccess)
-      .otherwise(startPublish);
-    buildMap.next(skipPublish);
+              sfn.Condition.isPresent('$.publish'),
+              sfn.Condition.booleanEquals('$.publish', true)),
+            startPublish)
+      .otherwise(reapSuccess);
+    buildMap.next(publishGate);
 
     const claim = li('ClaimBatch', claimFn);
     const launch = li('LaunchBuilder', launchFn);
@@ -319,7 +331,39 @@ export class OpsStack extends cdk.Stack {
       tracingEnabled: true,
     });
 
+    // ---- least-privilege OPERATOR role (prompt-injection blast-radius bound) --
+    // The debeos-devops agent should assume THIS, never Admin. Even a fully
+    // hijacked agent is boxed to: read/write the state table, start/stop a
+    // build-wave, read the pools + AMI param. It CANNOT publish, delete,
+    // exfiltrate, launch/terminate instances, or touch anything else. Overlay
+    // recipe commits go through git CR (human review), not this role.
+    const operatorRole = new iam.Role(this, 'OperatorRole', {
+      roleName: 'debeos-operator',
+      assumedBy: new iam.AccountPrincipal(this.account),
+      description: 'Least-priv identity for the debeos-devops agent (no Admin).',
+    });
+    this.table.grantReadWriteData(operatorRole);
+    operatorRole.addToPolicy(new iam.PolicyStatement({
+      actions: ['states:StartExecution', 'states:DescribeExecution', 'states:StopExecution'],
+      resources: [
+        this.stateMachine.stateMachineArn,
+        `arn:aws:states:${this.region}:${this.account}:execution:${this.stateMachine.stateMachineName}:*`,
+      ],
+    }));
+    operatorRole.addToPolicy(new iam.PolicyStatement({
+      actions: ['s3:GetObject', 's3:ListBucket'],
+      resources: [
+        `arn:aws:s3:::${workBucket}`, `arn:aws:s3:::${workBucket}/*`,
+        `arn:aws:s3:::${publishBucket}`, `arn:aws:s3:::${publishBucket}/*`,
+      ],
+    }));
+    operatorRole.addToPolicy(new iam.PolicyStatement({
+      actions: ['ssm:GetParameter', 'ssm:DescribeInstanceInformation'],
+      resources: ['*'],
+    }));
+
     // ---- outputs the DevOps agent needs to start an execution ------------
+    new cdk.CfnOutput(this, 'OperatorRoleArn', { value: operatorRole.roleArn });
     new cdk.CfnOutput(this, 'TableName', { value: this.table.tableName });
     new cdk.CfnOutput(this, 'StateMachineArn', { value: this.stateMachine.stateMachineArn });
     new cdk.CfnOutput(this, 'BuilderInstanceProfileArn', { value: builderProfile.attrArn });

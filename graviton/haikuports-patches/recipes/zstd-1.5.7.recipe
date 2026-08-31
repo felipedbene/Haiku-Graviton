@@ -1,0 +1,182 @@
+SUMMARY="Zstandard, a fast real-time compression algorithm"
+SUMMARY_bin="Command line tools to compress/decompress .zst files"
+DESCRIPTION="Zstd, short for Zstandard, is a fast lossless compression \
+algorithm, targeting real-time compression scenarios at zlib-level and better \
+compression ratios. The zstd compression library provides in-memory \
+compression and decompression functions. It offers a very wide range of \
+compression / speed trade-off, while being backed by a very fast decoder. It \
+also offers a special mode for small data, called dictionary compression, and \
+can create dictionaries from any sample set."
+HOMEPAGE="https://facebook.github.io/zstd/"
+COPYRIGHT="2016-2024 Facebook, Inc.
+	Meta Platforms, Inc. and affiliates"
+LICENSE="BSD (2-clause)
+	GNU GPL v2"
+REVISION="1"
+SOURCE_URI="https://github.com/facebook/zstd/archive/v$portVersion.tar.gz"
+CHECKSUM_SHA256="37d7284556b20954e56e1ca85b80226768902e2edabd3b649e9e72c0c9012ee3"
+SOURCE_FILENAME="zstd-v$portVersion.tar.gz"
+# 1.5.6's programs/util.h "#include <stdio.h>" patch is OBSOLETE in 1.5.7 —
+# upstream absorbed it (present at util.h:19), so it is dropped here. This is a
+# patch-reconciliation (upstream took the fix), NOT a feature cut. The gcc2
+# patchset is x86_gcc2-only and unneeded on arm64; re-add versioned patchsets if
+# a future rebuild shows they are still required.
+
+ARCHITECTURES="all"
+SECONDARY_ARCHITECTURES="x86"
+
+commandSuffix=$secondaryArchSuffix
+commandBinDir=$binDir
+if [ -n "$secondaryArchSuffix" ]; then
+# Comment out this block if you wish to co-install zstd_bin & e.g. zstd_x86_bin.
+	commandSuffix=
+	commandBinDir=$prefix/bin
+fi
+
+libVersion="$portVersion"
+libVersionCompat="$libVersion compat >= ${libVersion%%.*}"
+
+PROVIDES="
+	zstd$secondaryArchSuffix = $portVersion
+	lib:libzstd$secondaryArchSuffix = $libVersionCompat
+	"
+REQUIRES="
+	haiku$secondaryArchSuffix
+	"
+
+SUMMARY_bin="Command line tools to compress/decompress .zst files"
+PROVIDES_bin="
+	zstd${secondaryArchSuffix}_bin = $portVersion
+	cmd:unzstd$commandSuffix = $portVersion
+	cmd:zstd$commandSuffix = $portVersion
+	cmd:zstdcat$commandSuffix = $portVersion
+	cmd:zstdgrep$commandSuffix = $portVersion
+	cmd:zstdless$commandSuffix = $portVersion
+	cmd:zstdmt$commandSuffix = $portVersion
+	"
+if [ "$effectiveTargetArchitecture" != x86_gcc2 ]; then
+PROVIDES_bin="$PROVIDES_bin
+	cmd:pzstd$commandSuffix = $portVersion
+	"
+fi
+REQUIRES_bin="
+	haiku$secondaryArchSuffix
+	zstd$secondaryArchSuffix == $portVersion base
+	cmd:grep
+	cmd:less
+	lib:liblz4$secondaryArchSuffix
+	lib:libz$secondaryArchSuffix
+	"
+if [ "$effectiveTargetArchitecture" != x86_gcc2 ]; then
+REQUIRES_bin="$REQUIRES_bin
+	lib:liblzma$secondaryArchSuffix
+	"
+fi
+if [ -n "$secondaryArchSuffix" -a "$commandBinDir" = "$prefix"/bin ]; then
+CONFLICTS_bin="
+	zstd_bin
+	"
+fi
+
+PROVIDES_devel="
+	zstd${secondaryArchSuffix}_devel = $portVersion
+	devel:libzstd$secondaryArchSuffix = $libVersionCompat
+	"
+REQUIRES_devel="
+	zstd$secondaryArchSuffix == $portVersion base
+	"
+
+BUILD_REQUIRES="
+	haiku${secondaryArchSuffix}_devel
+	devel:liblz4$secondaryArchSuffix
+	devel:libz$secondaryArchSuffix
+	"
+if [ "$effectiveTargetArchitecture" != x86_gcc2 ]; then
+BUILD_REQUIRES="$BUILD_REQUIRES
+	devel:liblzma$secondaryArchSuffix
+	"
+fi
+BUILD_PREREQUIRES="
+	cmd:gcc$secondaryArchSuffix
+#	cmd:cmake	# graviton: built with zstd's own Makefile instead
+	cmd:make
+	cmd:sed
+	cmd:find
+	"
+
+TEST_REQUIRES="
+	cmd:python3
+	"
+
+PATCH()
+{
+	# avoid error on tests without static libs, we use LD_LIBRARY_PATH
+	sed '/build static library to build tests/d' -i build/cmake/CMakeLists.txt
+	sed 's/libzstd_static/libzstd_shared/g' -i build/cmake/tests/CMakeLists.txt
+}
+
+# STAGE-1 NOTE (graviton): built with zstd's OWN upstream Makefile instead of
+# cmake. cmd:cmake is the edge that keeps zstd inside the link cycle
+# cmake -> libcurl -> openssl3 -> libzstd -> zstd -> cmd:cmake, and no cmake
+# exists natively yet. zstd's Makefile build is a fully supported upstream path
+# (lib/Makefile + programs/Makefile) and produces the same libzstd.so.1.5.6 with
+# soname libzstd.so.1, the same headers and the same libzstd.pc.
+# What is lost relative to the cmake build: the CMake package-config files
+# (lib/cmake/zstd/zstdTargets*.cmake), so find_package(zstd CONFIG) will not
+# work for consumers -- pkg-config still does. Restore the cmake BUILD()/INSTALL()
+# once cmd:cmake exists.
+BUILD()
+{
+	make $jobArgs
+	# CXX=g++: contrib/pzstd/Makefile uses $(CXX), which haikuporter sets to the
+	# triplet name aarch64-unknown-haiku-g++ -- that binary is not on PATH in the
+	# chroot (only g++/c++ are), so pzstd died with 'No such file or directory'
+	# and Error 127 while lib/ and programs/ had already built fine.
+	make -C contrib/pzstd $jobArgs CXX=g++
+}
+
+INSTALL()
+{
+	make install \
+		PREFIX=$prefix \
+		LIBDIR=$libDir \
+		INCLUDEDIR=$includeDir \
+		BINDIR=$commandBinDir \
+		MAN1DIR=$manDir/man1
+	# MAN1DIR, not MANDIR: programs/Makefile:389 has "man1dir ?= $(mandir)/man1"
+	# and :395 "MAN1DIR ?= $(man1dir)", and only the BSD branch (:393) derives
+	# MAN1DIR from MANDIR. Haiku takes the else branch, so a MANDIR= override is
+	# silently ignored and the pages land in $prefix/share/man/man1 -- which then
+	# broke packageEntries with "mv: cannot stat .../documentation/man/man1".
+	# pkgconfig is deliberately left at its default $(libdir)/pkgconfig, which is
+	# where fixPkgconfig expects it (same as every autotools port here).
+
+	# the Makefile build installs a static lib too; the recipe ships shared only
+	rm -f $libDir/libzstd.a
+
+	install -m 755 contrib/pzstd/pzstd $commandBinDir/pzstd
+
+	mkdir -p $docDir
+	cp doc/zstd_manual.html $docDir
+
+	prepareInstalledDevelLib libzstd
+	fixPkgconfig
+
+	packageEntries bin \
+		$commandBinDir \
+		$manDir/man1
+
+	packageEntries devel \
+		$developDir \
+		$docDir/zstd_manual.html
+
+	rmdir $manDir
+
+	install -t $docDir -m 444 LICENSE
+}
+
+TEST()
+{
+	make test
+}
+
