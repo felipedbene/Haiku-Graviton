@@ -1,0 +1,46 @@
+From 2b3c4d5e6f708192a3b4c5d6e7f8091a2b3c4d5e Mon Sep 17 00:00:00 2001
+From: Haiku Graviton <graviton@localhost>
+Date: Mon, 31 Aug 2026 22:30:00 +0000
+Subject: cmake/config.guess: recognise Haiku on arm64
+
+Same defect as llvm12-12.0.1-config-guess-arm64.patch, still present three
+years later: the config.guess LLVM vendors under cmake/ is dated 2024-06-07 and
+still enumerates only the two Haiku hosts that existed when the entry was
+written, BePC and x86_64. On arm64 "uname -m" reports "arm64", so no case
+matches, the script prints its "unable to guess system type" banner and exits
+non-zero. cmake/modules/GetHostTriple.cmake (via config-ix.cmake) treats a
+non-zero exit as fatal, so configure dies with "Failed to execute
+cmake/config.guess" before a single object is compiled.
+
+Note this is LLVM's *own* trimmed copy, not the system one. The three
+config.guess copies Haiku ships (autoconf, automake, libtool build-aux) all
+carry an upstream "*:Haiku:*:*" catch-all and answer correctly, so ports that
+regenerate with autoreconf are unaffected -- only a bundled stale copy like this
+one breaks.
+
+Emit aarch64-unknown-haiku rather than the arm64-unknown-haiku that the generic
+catch-all would produce: aarch64-unknown-haiku is what the toolchain itself
+reports from "gcc -dumpmachine" (verified on hrev59996), and a host triple that
+disagrees with the compiler's own makes LLVM's later target checks inconsistent.
+A generic Haiku fallback follows it so a future architecture degrades to a
+plausible guess instead of aborting the configure outright.
+
+diff --git a/llvm/cmake/config.guess b/llvm/cmake/config.guess
+--- a/llvm/cmake/config.guess
++++ b/llvm/cmake/config.guess
+@@ -1256,6 +1256,13 @@
+     x86_64:Haiku:*:*) # Haiku running on x86_64.
+ 	echo x86_64-unknown-haiku
+ 	exit ;;
++    arm64:Haiku:*:*)	# Haiku on arm64. uname -m reports "arm64", but
++			# the toolchain triple is aarch64-unknown-haiku.
++	echo aarch64-unknown-haiku
++	exit ;;
++    *:Haiku:*:*)	# Any other Haiku architecture.
++	echo ${UNAME_MACHINE}-unknown-haiku
++	exit ;;
+     SX-4:SUPER-UX:*:*)
+ 	echo sx4-nec-superux${UNAME_RELEASE}
+ 	exit ;;
+--
+2.30.0
