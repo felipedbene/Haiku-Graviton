@@ -384,6 +384,78 @@ Promote; only after a human approves does the Promote stage run
 from every prior holder and sets it on the new AMI, then `haiku-canonical check`
 re-asserts the "exactly one canonical" invariant (failing the build if broken).
 
+## Resolving AMIs via SSM Parameter Store
+
+Resolve AMIs by **SSM parameter**, not by sorting `Name=haiku-graviton*` on
+`CreationDate` (fragile — a bake in flight or a variant pipeline muddies the
+newest-by-date heuristic).
+
+- **Canonical:** `/haiku-graviton/canonical-ami-id`. `haiku-canonical promote`
+  writes this alongside the `canonical=true` tag (the tag stays the source of
+  truth; the parameter is the convenient pointer):
+  `aws ssm get-parameter --name /haiku-graviton/canonical-ami-id`.
+  `haiku-canonical check` asserts the two AGREE — they drifted once, leaving the
+  parameter pointing at an AMI a candidate prune had already deregistered.
+- **Per-pipeline latest candidate:**
+  `/haiku-graviton/bake/<pipelineName>/latest-candidate-ami`
+  (e.g. `.../haiku-graviton-bake/...`, `.../haiku-graviton2-bake/...`). The
+  Register stage should write this on every bake so it never drifts.
+
+## Duplicating the pipeline for parallel / experimental bakes
+
+`bin/pipeline.ts` defines variant stacks `HaikuGravitonBakePipeline{2,3,4}`
+(same construct, distinct `amiNamePrefix`, auto-named work bucket, reusing the
+one CodeConnections ARN) so an experimental branch can bake **without touching
+the trunk `HaikuGravitonBakePipeline` or the canonical path**. Point a variant's
+Source at the branch and bake it; deploy ONLY the variant id(s) — never `--all`.
+
+Why they exist: the trunk pipeline and its Source branch pin are ONE shared
+resource driven by several agents/sessions from different machines.
+`graviton/scripts/haiku-bake-lock` gives them a mutex, but a mutex only
+serialises — it cannot make two bakes run at once. A variant is how concurrent
+work fans out instead of queueing.
+
+```sh
+cd graviton/pipeline
+cdk deploy HaikuGravitonBakePipeline2 -c haiku:connectionArn=<arn>   # never --all
+```
+
+**`vmimport` authorization is automatic.** The stack grants the account's
+`vmimport` role `s3:GetObject` on its own `<workBucket>/import/*` (plus bucket
+metadata) via a **bucket policy**, so `Register`'s `import-snapshot` works on a
+freshly deployed variant. This used to be a manual per-bucket IAM edit, and it was
+the standing footgun: a CDK-auto-named bucket gets a fresh random suffix on every
+re-create, so a redeployed variant pointed at an unauthorized bucket and failed
+later, inside Register, as an opaque `AccessDenied`. It is a bucket policy rather
+than a grant onto the shared role so variants can never conflict over one role's
+inline policies, and so it cannot be silently dropped the way a grant onto a
+CDK-imported (immutable) role can be.
+
+**One step is still manual — seed the work bucket** before the first bake:
+
+1. `cache/cross-tools-arm64.tar.zst` — skips the ~1h cross-tools build. Copy from
+   any existing pipeline's work bucket.
+2. The whole `hpkg-pool/` prefix — the build-feature packages
+   (`openssl3`/`openssl3_devel`, **`zstd`/`zstd_devel`**, `ca_root_certificates`, …).
+   An empty or incomplete pool **silently disables build features**
+   (`IsPackageAvailable` → false, `EnableBuildFeatures` skipped) — exactly how the
+   openssl-TLS gap and the zstd→ca_root→boot-stall regression happened (a missing
+   `zstd_devel` left `ZstdCompressionAlgorithm` a `B_NOT_SUPPORTED` stub, so
+   zstd-compressed hpkgs like upstream `ca_root_certificates` failed to
+   decompress). **Verify the pool has every `*_devel` a build feature needs** — the
+   failure mode is a quietly feature-capped image, not a build error.
+
+```sh
+SRC=s3://<existing-pipeline-work-bucket>
+DST=s3://<new-variant-work-bucket>
+aws s3 cp "$SRC/cache/cross-tools-arm64.tar.zst" "$DST/cache/cross-tools-arm64.tar.zst"
+aws s3 sync "$SRC/hpkg-pool/" "$DST/hpkg-pool/"
+```
+
+Remaining IaC TODO: declare the SSM parameters in the stack and have the Register
+stage write the per-pipeline `latest-candidate-ami`, so a duplicated pipeline is
+fully self-provisioning.
+
 ---
 
 ## Limits / what does not cleanly automate

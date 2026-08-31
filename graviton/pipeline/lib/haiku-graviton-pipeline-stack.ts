@@ -45,8 +45,9 @@ export class HaikuGravitonPipelineStack extends cdk.Stack {
 
     // ---------------------------------------------------------------------
     // Work bucket: raw disk image (import-snapshot source) + cross-tools cache.
-    // The pre-existing `vmimport` role must be able to read the import/ prefix
-    // (authorize it out of band — see README). Deterministic name optional.
+    // The pre-existing `vmimport` role is granted read on the import/ prefix by a
+    // bucket policy below, so no out-of-band authorization is needed. Deterministic
+    // name optional.
     // ---------------------------------------------------------------------
     const workBucket = new s3.Bucket(this, 'WorkBucket', {
       bucketName: cfg.workBucketName || undefined,
@@ -63,6 +64,36 @@ export class HaikuGravitonPipelineStack extends cdk.Stack {
 
     const IMPORT_PREFIX = 'import';
     const CACHE_PREFIX = 'cache';
+
+    // Let EC2's import-snapshot read the raw image out of this bucket.
+    //
+    // ec2:ImportSnapshot runs as the account's pre-existing `vmimport` service
+    // role, which needs s3:GetObject on the import/ prefix. That used to be an
+    // out-of-band step: authorize each new work bucket by hand on the vmimport
+    // role. It was the standing footgun of duplicating this pipeline, because a
+    // CDK-auto-named bucket gets a FRESH random suffix on every re-create, so a
+    // redeployed variant silently pointed at an unauthorized bucket and only
+    // failed later, inside Register, as an opaque ImportSnapshot denial.
+    //
+    // Granted here as a BUCKET policy rather than by mutating the shared role:
+    // the grant then lives and dies with the bucket, several variant stacks can
+    // never conflict over one role's inline policies, and it cannot be silently
+    // dropped the way a grant onto a CDK-imported (immutable) role can be. Same
+    // account, so a resource policy alone is sufficient authorization.
+    workBucket.addToResourcePolicy(new iam.PolicyStatement({
+      sid: 'AllowVmimportReadRawImage',
+      principals: [new iam.ArnPrincipal(
+        `arn:aws:iam::${cdk.Stack.of(this).account}:role/vmimport`)],
+      actions: ['s3:GetObject'],
+      resources: [workBucket.arnForObjects(`${IMPORT_PREFIX}/*`)],
+    }));
+    workBucket.addToResourcePolicy(new iam.PolicyStatement({
+      sid: 'AllowVmimportBucketMetadata',
+      principals: [new iam.ArnPrincipal(
+        `arn:aws:iam::${cdk.Stack.of(this).account}:role/vmimport`)],
+      actions: ['s3:GetBucketLocation', 's3:ListBucket'],
+      resources: [workBucket.bucketArn],
+    }));
 
     // ---------------------------------------------------------------------
     // Common build environment: arm64 Ubuntu 24.04 (matches the validated bake
@@ -555,11 +586,8 @@ export class HaikuGravitonPipelineStack extends cdk.Stack {
       value: workBucket.bucketName,
       description:
         'S3 bucket for the raw image (import/) and cross-tools cache (cache/). ' +
-        'Authorize the pre-existing vmimport role to read s3://<bucket>/import/* (see README).',
-    });
-    new cdk.CfnOutput(this, 'VmimportPolicyHint', {
-      value: `arn:aws:s3:::${workBucket.bucketName}/${IMPORT_PREFIX}/*`,
-      description: 'Add s3:GetObject/GetBucketLocation on this ARN to the vmimport role policy.',
+        'vmimport is granted read on import/* by a bucket policy; no manual IAM step. ' +
+        'Seed cache/cross-tools-arm64.tar.zst and hpkg-pool/ before the first bake.',
     });
   }
 }
