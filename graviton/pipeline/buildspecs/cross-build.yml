@@ -222,6 +222,19 @@ phases:
           aws s3 cp "$PKG_BIN" "s3://$WORK_BUCKET/$HT/package" --region "$AWS_DEFAULT_REGION" || echo "package upload failed (non-fatal)"
           aws s3 cp "$PR_BIN"  "s3://$WORK_BUCKET/$HT/package_repo" --region "$AWS_DEFAULT_REGION" || echo "package_repo upload failed (non-fatal)"
           aws s3 cp /tmp/host-tools.arch "s3://$WORK_BUCKET/$HT/.arch" --region "$AWS_DEFAULT_REGION" || true
+          # The tools are dynamically linked against Haiku's build shared libs
+          # (libroot_build.so, libpackage_build.so, libbe_build.so, ...), which are
+          # NOT system libraries -- `ldd package_repo` on a stock Ubuntu box shows
+          # them "not found" and the tool aborts "error while loading shared
+          # libraries: libroot_build.so". Bank every *_build.so from the host lib
+          # dir alongside the binaries; the publisher runs them with
+          # LD_LIBRARY_PATH pointed at the fetched set.
+          nlibs=0
+          for so in $(find "$GEN/objects/linux" -name '*_build.so' -type f 2>/dev/null); do
+            aws s3 cp "$so" "s3://$WORK_BUCKET/$HT/lib/$(basename "$so")" --region "$AWS_DEFAULT_REGION" \
+              && nlibs=$((nlibs+1)) || echo "lib $(basename "$so") upload failed (non-fatal)"
+          done
+          echo "== banked $nlibs host build lib(s) -> s3://$WORK_BUCKET/$HT/lib/ =="
         else
           echo "WARNING: host tools not found under $GEN/objects/linux (package=$PKG_BIN package_repo=$PR_BIN)"
         fi
