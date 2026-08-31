@@ -844,11 +844,23 @@ status_t
 PackageWriterImpl::_CheckLicenses()
 {
 	BPath systemLicensePath;
-	status_t result
+	status_t result;
 #ifdef HAIKU_TARGET_PLATFORM_HAIKU
-		= find_directory(B_SYSTEM_DATA_DIRECTORY, &systemLicensePath);
+	result = find_directory(B_SYSTEM_DATA_DIRECTORY, &systemLicensePath);
 #else
-		= systemLicensePath.SetTo(HAIKU_BUILD_SYSTEM_DATA_DIRECTORY);
+	// HAIKU_BUILD_SYSTEM_DATA_DIRECTORY is baked in at compile time as an absolute
+	// path into the build tree, which makes the host `package` tool non-relocatable:
+	// run from anywhere else (e.g. a copy banked to another host for out-of-tree
+	// publishing) that path no longer resolves and license checking aborts with
+	// "unable to find system data path". Honor a HAIKU_BUILD_SYSTEM_DATA_DIRECTORY
+	// environment override so a relocated tool can be pointed at a licenses dir;
+	// fall back to the compiled-in default when it is unset.
+	{
+		const char* envDataDir = getenv("HAIKU_BUILD_SYSTEM_DATA_DIRECTORY");
+		result = systemLicensePath.SetTo(
+			(envDataDir != NULL && envDataDir[0] != '\0')
+				? envDataDir : HAIKU_BUILD_SYSTEM_DATA_DIRECTORY);
+	}
 #endif
 	if (result != B_OK) {
 		fListener->PrintError("unable to find system data path: %s!\n",
