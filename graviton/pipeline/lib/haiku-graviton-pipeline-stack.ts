@@ -406,6 +406,15 @@ export class HaikuGravitonPipelineStack extends cdk.Stack {
           'ec2:DescribeInstances',
           'ec2:DescribeImages',
           'ec2:CreateTags',
+          // Read-only network lookups the gate needs BEFORE it launches anything:
+          // resolving the test subnet from the VPC by name when HG_TEST_SUBNET is
+          // unset, and its preflight that the subnet/SG still exist. Without these
+          // the resolution path cannot run at all, and the preflight sees
+          // AccessDenied -- which it must not mistake for "deleted" (it did once,
+          // and failed the stage on a perfectly healthy subnet).
+          'ec2:DescribeVpcs',
+          'ec2:DescribeSubnets',
+          'ec2:DescribeSecurityGroups',
         ],
         resources: ['*'],
         conditions: regionCondition,
