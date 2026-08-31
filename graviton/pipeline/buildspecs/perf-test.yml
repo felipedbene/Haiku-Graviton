@@ -1,8 +1,9 @@
 version: 0.2
 
-# Test stage: boot the freshly registered candidate AMI on real Graviton
-# hardware, measure throughput against the metal builder, then stop and start it
-# and require sshd to answer again. Fail if any of that regressed.
+# Test stage: self-provision an ephemeral peer from the canonical AMI, boot the
+# freshly registered candidate AMI on real Graviton hardware, measure throughput
+# between them, then stop and start the candidate and require sshd to answer
+# again. Fail if any of that regressed. Both instances are torn down on exit.
 #
 # This sits between Register and Approve on purpose. Before it existed, the
 # approval gate could only mean "I tested this out of band and I vouch for it" --
