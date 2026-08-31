@@ -14,6 +14,7 @@
     ]
   },
   "context": {
+    "@aws-cdk/core:bootstrapQualifier": "debeosops",
     "@aws-cdk/aws-iam:minimizePolicies": true,
     "@aws-cdk/core:checkSecretUsage": true,
 
