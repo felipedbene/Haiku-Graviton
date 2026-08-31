@@ -18,19 +18,25 @@
 #   - c7g.large, never a t-family instance: T instances throttle CPU to a
 #     baseline when credits run out, and CPU cost per byte is half of what is
 #     being measured.
-#   - The peer and the driver of the test are the metal builder, reached with
-#     SSM. It already holds the ssh key for the Haiku nodes, the peer script and
-#     a working jumbo-capable interface, so nothing has to be installed anywhere.
-#     Because everything the gate learns about the candidate is learned *through*
-#     that builder -- readiness is "sshd answers, asked from the builder" and the
-#     throughput peer is the builder itself -- a builder that is stopped or whose
-#     SSM agent is not answering makes the candidate unobservable. That is a fault
-#     in the apparatus, not in the image, so it is checked up front (see
-#     ensure_builder_reachable) and, if it recurs mid-run, reported as an
-#     apparatus failure rather than misread as "the candidate never booted". The
-#     original version had no such check: with the builder stopped, ssm-run
-#     returned nothing, and the gate concluded the candidate had failed to bring
-#     sshd up and failed a perfectly healthy image.
+#   - The peer and the driver of the test is an SSM-managed builder: it holds the
+#     ssh key for the Haiku nodes, the nettput peer script and a jumbo-capable
+#     interface, so nothing has to be installed on the candidate for a
+#     measurement to happen. There is no longer a persistent builder to lean on --
+#     the shared metal one this used to assume was terminated -- so by default the
+#     gate launches its OWN ephemeral peer from the canonical AMI, uses it, and
+#     tears it down in the same EXIT trap as the candidate (see launch_peer and
+#     cleanup). A caller may still pass HG_BUILDER_INSTANCE to point at an
+#     always-on builder, in which case the gate uses it as-is and never terminates
+#     it. Because everything the gate learns about the candidate is learned
+#     *through* that builder -- readiness is "sshd answers, asked from the builder"
+#     and the throughput peer is the builder itself -- a builder that is not
+#     answering SSM makes the candidate unobservable. That is a fault in the
+#     apparatus, not in the image, so it is checked up front (see
+#     ensure_builder_reachable) and, if it recurs mid-run, reported as an apparatus
+#     failure rather than misread as "the candidate never booted". The original
+#     version had no such check: with the builder stopped, ssm-run returned
+#     nothing, and the gate concluded the candidate had failed to bring sshd up and
+#     failed a perfectly healthy image.
 #   - The instance is terminated by an EXIT trap, so a failure part way through
 #     cannot leak a running instance. That matters more than usual here: this is
 #     unattended, and the failure path is the likely path.
@@ -56,18 +62,26 @@
 # Environment (defaults suitable for this project except where marked required;
 # the pipeline's Test stage sets all of these, so "required" only bites a manual
 # run -- see graviton/pipeline/lib/haiku-graviton-pipeline-stack.ts):
-#   HG_BUILDER_INSTANCE   SSM-managed builder that acts as peer and driver
-#                         (**required** -- an instance id cannot be derived, and
-#                         guessing one by tag risks driving the wrong machine).
-#                         It must be running and answering SSM before the gate
-#                         can observe the candidate at all; the gate does not
-#                         start it (that power is deliberately withheld from the
-#                         Test stage's role -- see the pipeline stack), so bring
-#                         it up out of band, or point this at an always-on builder.
+#   HG_BUILDER_INSTANCE   SSM-managed builder that acts as peer and driver.
+#                         Empty or the literal 'self' (the default) -> the gate
+#                         self-provisions an ephemeral peer from the canonical AMI
+#                         and terminates it on exit; there is no persistent builder
+#                         to assume any more. Pass a real instance id to reuse an
+#                         always-on builder instead -- a caller-supplied id is used
+#                         as-is and is never terminated (backward compat).
+#   HG_PEER_INSTANCE_PROFILE  instance profile attached to the self-provisioned
+#                         peer; it must carry AmazonSSMManagedInstanceCore so the
+#                         peer answers SSM (default
+#                         AWSSupportPatchwork-SSMRoleForInstances, the same profile
+#                         the native builders use).
+#   HG_CANONICAL_AMI_PARAM  SSM parameter the peer's AMI id is read from
+#                         (default /haiku-graviton/canonical-ami-id).
 #   HG_BUILDER_WAIT_SECS  budget for the builder to become reachable over SSM at
 #                         the start of a run (default 300); a run cannot proceed
-#                         until it does, but this is patient in case the builder
-#                         is mid-boot when the gate starts
+#                         until it does, but this is patient in case the peer is
+#                         mid-boot (a freshly launched peer needs to boot and
+#                         register SSM within this budget -- raise it if the
+#                         canonical image is slow to come up)
 #   HG_TEST_SUBNET        subnet to launch the candidate in
 #   HG_TEST_SG            security group for the candidate (**required**)
 #   HG_TEST_TYPE          instance type (default c7g.large)
@@ -89,6 +103,8 @@ set -uo pipefail
 
 REGION="${AWS_REGION:-${AWS_DEFAULT_REGION:-us-west-2}}"
 BUILDER="${HG_BUILDER_INSTANCE:-}"
+PEER_PROFILE="${HG_PEER_INSTANCE_PROFILE:-AWSSupportPatchwork-SSMRoleForInstances}"
+CANONICAL_AMI_PARAM="${HG_CANONICAL_AMI_PARAM:-/haiku-graviton/canonical-ami-id}"
 SUBNET="${HG_TEST_SUBNET:-subnet-0888405da8f10d1b2}"
 TEST_SG="${HG_TEST_SG:-}"
 TEST_TYPE="${HG_TEST_TYPE:-c7g.large}"
@@ -112,27 +128,43 @@ AMI="${1:-}"
 [ -n "$AMI" ] || die "usage: haiku-perf-gate <ami-id>"
 [ -x "$SSM_RUN" ] || die "ssm-run not found next to this script"
 [ -n "$TEST_SG" ] || die "HG_TEST_SG must be set (the test security group)"
-# No default builder: naming one here would write an instance id into a public
-# tree, and an instance id is not derivable the way the output bucket's name is.
-# Discovering it by tag was considered and rejected -- a near-miss would silently
-# drive the wrong machine, which is worse than not starting.
-[ -n "$BUILDER" ] || die "HG_BUILDER_INSTANCE must be set (the SSM-managed builder used as peer and driver)"
+# No persistent builder is required any more. If HG_BUILDER_INSTANCE is empty or
+# the literal 'self', the gate launches its own ephemeral peer below (see
+# launch_peer); if a real instance id is supplied, that machine is used as-is and
+# is never terminated. Either way BUILDER holds the id the rest of the gate drives.
 
 INSTANCE=""
+# The peer this run launched, if any. Tracked separately from INSTANCE (the
+# candidate) so cleanup terminates a self-provisioned peer but never a
+# caller-supplied HG_BUILDER_INSTANCE.
+PEER_LAUNCHED=0
 
 # Warnings are non-fatal but must survive to the verdict, so the counter is declared
 # here rather than beside the first check that happens to use it.
 warn=0
+# Best effort and idempotent: a terminate that 4xx's (already gone, never
+# created) must never turn a green run red, so every AWS call here swallows its
+# status. The trap runs on every exit path, so a failure part way through cannot
+# leak either the candidate or a self-provisioned peer.
 cleanup() {
 	if [ -n "$INSTANCE" ]; then
-		say "terminating $INSTANCE"
+		say "terminating candidate $INSTANCE"
 		aws --region "$REGION" ec2 terminate-instances --instance-ids "$INSTANCE" \
-			--query 'TerminatingInstances[].CurrentState.Name' --output text 2>&1 | sed 's/^/  /'
+			--query 'TerminatingInstances[].CurrentState.Name' --output text 2>&1 | sed 's/^/  /' || true
 	fi
-	# Best effort: never leave the peer running on the shared builder.
-	"$SSM_RUN" "$BUILDER" -t 90 -q >/dev/null 2>&1 <<-'STOP'
-		pkill -f nettput-peer.py 2>/dev/null || true
-	STOP
+	if [ "$PEER_LAUNCHED" = 1 ] && [ -n "$BUILDER" ]; then
+		# We launched this peer, so we own tearing it down.
+		say "terminating ephemeral peer $BUILDER"
+		aws --region "$REGION" ec2 terminate-instances --instance-ids "$BUILDER" \
+			--query 'TerminatingInstances[].CurrentState.Name' --output text 2>&1 | sed 's/^/  /' || true
+	elif [ -n "$BUILDER" ]; then
+		# Caller-supplied persistent builder: do NOT terminate it, just make sure
+		# no peer process is left running on it.
+		"$SSM_RUN" "$BUILDER" -t 90 -q >/dev/null 2>&1 <<-'STOP' || true
+			pkill -f nettput-peer.py 2>/dev/null || true
+		STOP
+	fi
+	return 0
 }
 trap cleanup EXIT
 
@@ -149,20 +181,18 @@ trap cleanup EXIT
 # healthy image with "candidate never brought sshd up". A verdict about the image
 # was drawn from a fact about the apparatus.
 #
-# So confirm the channel before launching anything. Two conditions, because both
-# are prerequisites and they fail differently: the instance must be `running`
+# So confirm the channel before launching the candidate. Two conditions, because
+# both are prerequisites and they fail differently: the instance must be `running`
 # (checked with DescribeInstances, which the role already has), and an ssm-run
 # round trip must actually complete (the SSM agent can lag the EC2 state by a
-# minute or two after a start). This is patient rather than instant -- the builder
-# may be mid-boot when a bake reaches this stage -- but it is bounded, and it runs
+# minute or two after a start). This is patient rather than instant -- a freshly
+# launched peer is still mid-boot when this runs -- but it is bounded, and it runs
 # *before* the candidate is launched, so a builder that never comes back cannot
-# leak an instance and cannot be mistaken for a candidate that never booted.
+# leak the candidate and cannot be mistaken for a candidate that never booted.
 #
-# The gate deliberately does not start the builder itself: the Test stage's role
-# is scoped so it cannot stop or start that machine (the whole project drives it
-# over SSM, and an unattended stage with that power could halt it out from under
-# everyone -- see graviton/pipeline/lib/haiku-graviton-pipeline-stack.ts). Bring
-# it up out of band, or point HG_BUILDER_INSTANCE at an always-on builder.
+# This same round-trip is what confirms a self-provisioned peer has come up: after
+# launch_peer sets BUILDER to the new instance, ensure_builder_reachable is what
+# waits for it to answer SSM before the candidate is launched.
 ensure_builder_reachable() {
 	local deadline=$((SECONDS + BUILDER_WAIT)) state out
 	say "checking the builder $BUILDER is up and answering SSM (it drives and peers every check)"
@@ -183,12 +213,62 @@ ensure_builder_reachable() {
 		say "  builder not reachable yet (state ${state:-unknown}, $((deadline - SECONDS))s of budget left)"
 		sleep 15
 	done
+	if [ "$PEER_LAUNCHED" = 1 ]; then
+		die "the self-provisioned peer $BUILDER never answered SSM within ${BUILDER_WAIT}s
+  (last EC2 state ${state:-unknown}). This is an APPARATUS failure, NOT a verdict on
+  $AMI: the gate reaches the candidate only through this peer, so with it silent
+  nothing can be observed. No candidate was launched; the peer is torn down on
+  exit. Raise HG_BUILDER_WAIT_SECS if the canonical image is slow to register SSM,
+  and re-run; do not read this as a failed image."
+	fi
 	die "the builder $BUILDER is not reachable over SSM (last EC2 state ${state:-unknown}).
   This is an APPARATUS failure, NOT a verdict on $AMI: the gate reaches the
   candidate only through this builder, so with it down nothing can be observed.
-  No candidate was launched. Start HG_BUILDER_INSTANCE (or point it at an
-  always-on builder) and re-run; do not read this as a failed image."
+  No candidate was launched. Confirm HG_BUILDER_INSTANCE is up (or leave it unset
+  to self-provision a peer) and re-run; do not read this as a failed image."
 }
+
+# --------------------------------------------------------------- peer launch
+# There is no persistent builder to assume any more, so unless the caller points
+# HG_BUILDER_INSTANCE at an always-on machine, the gate launches its own peer the
+# same way it launches the candidate: from the canonical AMI (resolved from SSM,
+# never hardcoded), into the test subnet/SG, tagged ephemeral so the pipeline role
+# is allowed to terminate it. It carries an instance profile with SSM so ssm-run
+# can drive it. PEER_LAUNCHED marks it as ours to tear down; cleanup does that.
+#
+# The launch and the SSM wait are deliberately split: BUILDER and PEER_LAUNCHED
+# are set the instant run-instances returns an id, so a failure during the SSM
+# wait still hands the instance to the EXIT trap rather than leaking it.
+launch_peer() {
+	local ami
+	say "no persistent builder supplied; self-provisioning an ephemeral peer"
+	ami=$(aws --region "$REGION" ssm get-parameter --name "$CANONICAL_AMI_PARAM" \
+		--query 'Parameter.Value' --output text 2>&1)
+	case "$ami" in
+		ami-*) ;;
+		*) die "could not resolve the canonical AMI from SSM param $CANONICAL_AMI_PARAM: $ami" ;;
+	esac
+	say "launching peer $TEST_TYPE from canonical AMI $ami (profile $PEER_PROFILE)"
+	local id
+	id=$(aws --region "$REGION" ec2 run-instances \
+		--image-id "$ami" --instance-type "$TEST_TYPE" \
+		--key-name "$KEY_NAME" --subnet-id "$SUBNET" --security-group-ids "$TEST_SG" \
+		--iam-instance-profile "Name=$PEER_PROFILE" \
+		--tag-specifications "ResourceType=instance,Tags=[{Key=Project,Value=haiku-graviton},{Key=Name,Value=haiku-perf-gate-peer},{Key=ephemeral,Value=true}]" \
+		--query 'Instances[0].InstanceId' --output text 2>&1)
+	case "$id" in
+		i-*) ;;
+		*) die "run-instances (peer) failed: $id" ;;
+	esac
+	BUILDER="$id"
+	PEER_LAUNCHED=1
+	say "peer instance $BUILDER launched; waiting for it to answer SSM"
+}
+
+case "$BUILDER" in
+	""|self) launch_peer ;;
+	*) say "using caller-supplied builder $BUILDER (will not terminate it)" ;;
+esac
 ensure_builder_reachable
 
 # ------------------------------------------------------------------ launch

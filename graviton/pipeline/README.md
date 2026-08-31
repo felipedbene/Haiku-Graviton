@@ -74,12 +74,13 @@ GitHub (fork/branch)            CodeBuild arm64 (Graviton, Ubuntu 24.04)
                                         │  exports AMI_ID
                                         ▼
                                 CodeBuild  Test  (hardware regression gate)
+                                  run-instances peer from the canonical AMI (SSM)
                                   run-instances c7g.large from $AMI_ID
-                                  wait for sshd (via the metal builder over SSM)
+                                  wait for sshd (via the peer over SSM)
                                   nettput both directions; assert MTU + floors
                                   stop-instances ; wait 'stopped'  (time it)
                                   start-instances ; assert sshd answers again
-                                  terminate from an EXIT trap, always
+                                  terminate candidate + peer from an EXIT trap, always
                                         │
                                         ▼
                                 Manual Approval  ◀── human gate for canonical
@@ -148,7 +149,7 @@ Set in `cdk.json` `context`, or override per-invocation with `-c key=value`
 > up front. There is a policy per bucket on the `vmimport` role
 > (`vmimport-haiku-work`, `vmimport-haiku-work2`, ...) for exactly this reason.
 
-| `haiku:builderInstanceId` | `HAIKU_BUILDER_INSTANCE` | — **required** | SSM-managed peer/driver for the Test stage (the `c7g.metal` builder). No default: an instance id cannot be derived the way the bucket name can, and this repo is public. |
+| `haiku:peerInstanceProfile` | `HAIKU_PEER_INSTANCE_PROFILE` | `AWSSupportPatchwork-SSMRoleForInstances` | Instance profile the Test stage launches its self-provisioned peer/driver with (from the canonical AMI). Must carry `AmazonSSMManagedInstanceCore` so the peer answers SSM. There is no persistent builder any more — the peer is created and torn down each run. |
 | `haiku:testSubnetId` / `testSecurityGroupId` | `HAIKU_TEST_SUBNET` / `HAIKU_TEST_SG` | project subnet / `haiku-graviton-test` | where the perf gate boots the candidate. |
 | `haiku:testInstanceType` | `HAIKU_TEST_TYPE` | `c7g.large` | **never a t-family type** — burstable CPU throttles once credits run out, which corrupts the CPU-cost-per-byte measurement. |
 | `haiku:minReceiveMbps` / `minTransmitMbps` | `HAIKU_MIN_RX_MBPS` / `HAIKU_MIN_TX_MBPS` | `3000` / `2000` | regression floors, well under the measured ~4950/~4490. |
@@ -191,7 +192,6 @@ npx cdk diff         # safe — compares against deployed state
 npx cdk deploy \
   -c haiku:repoOwner=<you> \
   -c haiku:repoName=<repo> \
-  -c haiku:builderInstanceId=i-<the c7g.metal builder> \
   -c haiku:connectionArn=arn:aws:codeconnections:us-west-2:<account-id>:connection/<uuid>
 ```
 
@@ -251,16 +251,25 @@ Promote, so a candidate can be validated even when the Test stage cannot run
   condition. (These EC2 actions don't support resource-level scoping, so the
   region condition is the tightest available bound.)
 - **PerfTest** role: `RunInstances`/`DescribeInstances`/`DescribeImages`/
-  `CreateTags` region-scoped, plus `ssm:SendCommand` scoped to the single builder
-  instance and the `AWS-RunShellScript` document. The three instance-lifecycle
-  actions — `TerminateInstances`, `StopInstances`, `StartInstances` — are
-  additionally conditioned on `ec2:ResourceTag/ephemeral=true` **and**
-  `ec2:ResourceTag/Name=haiku-perf-gate`, so the gate can only cycle instances it
-  launched itself. Without that condition an unattended stage would hold the
-  right to stop or terminate the metal builder, which is the one machine the whole
-  project depends on. Two unit tests assert the condition on every lifecycle
-  grant, including a negative test that fails if a future grant is added without
-  it.
+  `CreateTags` region-scoped (the gate launches two ephemeral instances — the
+  candidate and its self-provisioned peer). The peer is launched from the
+  canonical AMI, so the role also has `ssm:GetParameter` on the one canonical-AMI
+  parameter and `iam:PassRole` (conditioned `iam:PassedToService=ec2.amazonaws.com`)
+  on the peer's instance-profile role. `ssm:SendCommand` is granted in two
+  statements: one for the `AWS-RunShellScript` document (region-scoped), and one
+  for the peer instance scoped by its launch tags via `ssm:resourceTag/*`
+  (`Name=haiku-perf-gate-peer`, `ephemeral=true`, `Project=haiku-graviton`) —
+  the peer's id is not known at deploy time, so a tag condition replaces a fixed
+  instance ARN. The instance-lifecycle actions are conditioned on
+  `ec2:ResourceTag/ephemeral=true` **and** `ec2:ResourceTag/Name`: `Terminate`
+  allows both `haiku-perf-gate` and `haiku-perf-gate-peer` (it tears both down),
+  while `Stop`/`Start` stay scoped to `haiku-perf-gate` alone (only the candidate
+  is cycled). So the gate can only cycle instances it launched itself; without
+  the condition an unattended stage would hold the right to stop or terminate any
+  instance in the account. Unit tests assert the tag condition on every lifecycle
+  grant (including a negative test that fails if a future grant is added without
+  it), that `SendCommand` on any instance target is tag-scoped, and that
+  `PassRole` is scoped to EC2 and the peer role.
 - **Promote** role: only `ec2:DescribeImages` + `CreateTags` + `DeleteTags`,
   region-scoped. This is the sole role allowed to mutate the `canonical` tag.
 

@@ -29,7 +29,7 @@ const config: HaikuPipelineConfig = {
   publishBucketName: `haiku-graviton-hpkg-${ACCOUNT}`,
   builderAmiParam: '/haiku-graviton/builder-ami-id',
   canonicalAmiParam: '/haiku-graviton/canonical-ami-id',
-  builderInstanceId: 'i-000000000000000aa',
+  peerInstanceProfile: 'AWSSupportPatchwork-SSMRoleForInstances',
   testSubnetId: 'subnet-000000000000000aa',
   testSecurityGroupId: 'sg-000000000000000aa',
   testInstanceType: 'c7g.large',
@@ -67,9 +67,11 @@ test('creates four CodeBuild projects', () => {
 });
 
 // The perf gate runs unattended and holds ec2:TerminateInstances. Without a tag
-// condition it would also hold the right to terminate the metal builder, which
-// is the one machine the whole project depends on. Assert the guard explicitly
-// so it cannot be dropped by a later edit without a test going red.
+// condition it would hold the right to terminate any instance in the account.
+// It now creates two ephemeral instances -- the candidate (haiku-perf-gate) and
+// its self-provisioned peer (haiku-perf-gate-peer) -- so terminate is scoped to
+// exactly those two Names (a StringEquals list is an OR). Assert the guard
+// explicitly so it cannot be dropped or widened by a later edit unnoticed.
 test('the perf gate may only terminate its own ephemeral instances', () => {
   const t = synth();
   const policies = t.findResources('AWS::IAM::Policy');
@@ -82,15 +84,15 @@ test('the perf gate may only terminate its own ephemeral instances', () => {
   expect(terminators).toHaveLength(1);
   const condition = terminators[0].Condition.StringEquals;
   expect(condition['ec2:ResourceTag/ephemeral']).toBe('true');
-  expect(condition['ec2:ResourceTag/Name']).toBe('haiku-perf-gate');
+  expect(condition['ec2:ResourceTag/Name']).toEqual(['haiku-perf-gate', 'haiku-perf-gate-peer']);
 });
 
-// The stop/start regression check needs Stop/StartInstances, which must carry the
-// same tag condition as the terminate grant. An unattended stage able to stop any
-// instance in the account could stop the metal builder -- less final than
-// terminating it, but it would still break every other bake and every agent
-// driving it over SSM. Asserted separately from the terminate test so that
-// dropping the condition from either grant turns a test red on its own.
+// The stop/start regression check needs Stop/StartInstances, tag-conditioned so
+// the gate can only cycle the candidate it launched (Name=haiku-perf-gate). An
+// unattended stage able to stop any instance in the account could disrupt
+// anything else running -- less final than terminating it, but still harmful.
+// Asserted separately from the terminate test so that dropping the condition from
+// either grant turns a test red on its own.
 test('the perf gate may only stop and start its own ephemeral instances', () => {
   const t = synth();
   const policies = t.findResources('AWS::IAM::Policy');
@@ -120,12 +122,17 @@ test('no instance-lifecycle grant is left tag-unconditioned', () => {
     (p: any) => p.Properties.PolicyDocument.Statement as any[],
   );
   const lifecycle = ['ec2:TerminateInstances', 'ec2:StopInstances', 'ec2:StartInstances', 'ec2:RebootInstances'];
+  const allowedNames = ['haiku-perf-gate', 'haiku-perf-gate-peer'];
   for (const s of statements) {
     const actions = ([] as string[]).concat(s.Action ?? []);
     if (!actions.some((a) => lifecycle.includes(a))) continue;
     const condition = s.Condition?.StringEquals ?? {};
     expect(condition['ec2:ResourceTag/ephemeral']).toBe('true');
-    expect(condition['ec2:ResourceTag/Name']).toBe('haiku-perf-gate');
+    // Name may be a single value (stop/start: candidate only) or a list
+    // (terminate: candidate + peer), but every value must be one this gate owns.
+    const names = ([] as string[]).concat(condition['ec2:ResourceTag/Name'] ?? []);
+    expect(names.length).toBeGreaterThan(0);
+    for (const n of names) expect(allowedNames).toContain(n);
   }
 });
 
@@ -141,6 +148,48 @@ test('the perf gate reads ssm-run output from the configured bucket', () => {
   const t = synth();
   const json = JSON.stringify(t.findResources('AWS::IAM::Policy'));
   expect(json).toContain(`${config.ssmOutBucketName}/ssm-out/*`);
+});
+
+// The peer is launched fresh each run, so its instance id is unknown at deploy
+// time and SendCommand cannot be scoped to a fixed ARN. It is scoped by the peer's
+// launch tags instead. Assert that every SendCommand grant on a broad instance/*
+// resource carries the ssm:resourceTag/* condition, so a future edit cannot leave
+// the gate able to run commands on any SSM node in the account. The document-only
+// grant (arn:...:document/AWS-RunShellScript) is exempt: it targets no instance.
+test('the perf gate may only SendCommand to its own tagged peer', () => {
+  const t = synth();
+  const policies = t.findResources('AWS::IAM::Policy');
+  const statements = Object.values(policies).flatMap(
+    (p: any) => p.Properties.PolicyDocument.Statement as any[],
+  );
+  const senders = statements.filter((s) =>
+    ([] as string[]).concat(s.Action ?? []).includes('ssm:SendCommand'),
+  );
+  expect(senders.length).toBeGreaterThan(0);
+  for (const s of senders) {
+    const resources = ([] as string[]).concat(s.Resource ?? []);
+    const targetsInstance = resources.some((r) => JSON.stringify(r).includes(':instance/'));
+    if (!targetsInstance) continue; // the document-only grant
+    const condition = s.Condition?.StringEquals ?? {};
+    expect(condition['ssm:resourceTag/ephemeral']).toBe('true');
+    expect(condition['ssm:resourceTag/Name']).toBe('haiku-perf-gate-peer');
+  }
+});
+
+// Attaching an instance profile at RunInstances needs iam:PassRole, which must be
+// scoped to exactly the peer's role and restricted to being passed to EC2.
+test('the perf gate PassRole is scoped to EC2 and the peer role', () => {
+  const t = synth();
+  const policies = t.findResources('AWS::IAM::Policy');
+  const statements = Object.values(policies).flatMap(
+    (p: any) => p.Properties.PolicyDocument.Statement as any[],
+  );
+  const passers = statements.filter((s) =>
+    ([] as string[]).concat(s.Action ?? []).includes('iam:PassRole'),
+  );
+  expect(passers).toHaveLength(1);
+  expect(passers[0].Condition.StringEquals['iam:PassedToService']).toBe('ec2.amazonaws.com');
+  expect(JSON.stringify(passers[0].Resource)).toContain(`role/${config.peerInstanceProfile}`);
 });
 
 test('has a retained encrypted work bucket', () => {

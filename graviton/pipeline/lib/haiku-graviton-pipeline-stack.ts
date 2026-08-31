@@ -25,12 +25,13 @@ export interface HaikuGravitonPipelineStackProps extends cdk.StackProps {
  *   Register     CodeBuild: upload raw to S3, ec2 import-snapshot, poll,
  *                register-image (arm64/uefi/ena/hvm/xvda), tag as a candidate
  *                (canonical is NOT set here). Exports AMI_ID.
- *   Test         CodeBuild: boot the candidate on a real c7g.large, measure
- *                throughput against the metal builder over SSM, then stop and
- *                start the instance and require sshd to answer again. Fails
- *                unless it boots, negotiates MTU 9001, clears both throughput
- *                floors and survives the power cycle. The ephemeral instance is
- *                always torn down.
+ *   Test         CodeBuild: self-provision an ephemeral peer from the canonical
+ *                AMI, boot the candidate on a real c7g.large, measure throughput
+ *                between them over SSM, then stop and start the candidate and
+ *                require sshd to answer again. Fails unless it boots, negotiates
+ *                MTU 9001, clears both throughput floors and survives the power
+ *                cycle. Both ephemeral instances (candidate and peer) are always
+ *                torn down.
  *   Approve      Manual approval gate — canonical promotion happens only after
  *                a human approves, now with the Test stage's measurements in
  *                hand rather than a promise that someone checked out of band.
@@ -170,11 +171,12 @@ export class HaikuGravitonPipelineStack extends cdk.Stack {
     );
 
     // ---------------------------------------------------------------------
-    // Stage 3 project: hardware regression gate. Boots the candidate AMI on a
-    // real Graviton instance, measures throughput against the metal builder over
-    // SSM, then stops and starts it and requires sshd to answer again. Fails the
-    // pipeline if the image does not boot, does not negotiate jumbo, has lost a
-    // large fraction of its throughput, or does not survive a power cycle.
+    // Stage 3 project: hardware regression gate. Self-provisions an ephemeral
+    // peer from the canonical AMI, boots the candidate AMI on a real Graviton
+    // instance, measures throughput between them over SSM, then stops and starts
+    // the candidate and requires sshd to answer again. Fails the pipeline if the
+    // image does not boot, does not negotiate jumbo, has lost a large fraction of
+    // its throughput, or does not survive a power cycle.
     //
     // The stop/start case was added after a data-loss bug shipped straight past
     // the throughput-only version of this gate: the image measured perfectly and
@@ -208,7 +210,11 @@ export class HaikuGravitonPipelineStack extends cdk.Stack {
       environmentVariables: {
         ...commonEnvVars,
         AWS_REGION: { value: cfg.region },
-        HG_BUILDER_INSTANCE: { value: cfg.builderInstanceId },
+        // No persistent builder any more: leave HG_BUILDER_INSTANCE unset so the
+        // gate self-provisions an ephemeral peer from the canonical AMI, drives it
+        // over SSM, and terminates it on exit (see graviton/scripts/haiku-perf-gate).
+        HG_PEER_INSTANCE_PROFILE: { value: cfg.peerInstanceProfile },
+        HG_CANONICAL_AMI_PARAM: { value: cfg.canonicalAmiParam },
         HG_TEST_SUBNET: { value: cfg.testSubnetId },
         HG_TEST_SG: { value: cfg.testSecurityGroupId },
         HG_TEST_TYPE: { value: cfg.testInstanceType },
@@ -236,12 +242,16 @@ export class HaikuGravitonPipelineStack extends cdk.Stack {
       this, 'SsmOutBucket', cfg.ssmOutBucketName);
     ssmOutBucket.grantRead(perfTest, 'ssm-out/*');
 
-    // Launch and describe an ephemeral test instance. RunInstances does not
-    // usefully support resource-level scoping for a freshly created instance, so
-    // constrain by region and rely on the terminate policy below being narrow.
+    // Launch and describe ephemeral instances. The gate now launches TWO: the
+    // candidate (from the AMI under test) and its own peer/driver (from the
+    // canonical AMI), because the shared persistent builder was terminated and
+    // there is no longer one to lean on. RunInstances does not usefully support
+    // resource-level scoping for a freshly created instance, so constrain by
+    // region and rely on the terminate policy below being narrow (tag-scoped to
+    // exactly the two Names this gate uses).
     perfTest.addToRolePolicy(
       new iam.PolicyStatement({
-        sid: 'LaunchEphemeralTestInstance',
+        sid: 'LaunchEphemeralTestInstances',
         actions: [
           'ec2:RunInstances',
           'ec2:DescribeInstances',
@@ -252,9 +262,44 @@ export class HaikuGravitonPipelineStack extends cdk.Stack {
         conditions: regionCondition,
       }),
     );
-    // Termination is restricted to instances this gate created. Without the tag
-    // condition an unattended stage would hold the right to terminate the metal
-    // builder, which is the one machine the whole project depends on.
+    // The peer is launched from the canonical AMI, whose id the gate resolves from
+    // this SSM parameter rather than hardcoding it. Scoped to that one parameter.
+    perfTest.addToRolePolicy(
+      new iam.PolicyStatement({
+        sid: 'ReadCanonicalAmiParam',
+        actions: ['ssm:GetParameter'],
+        resources: [
+          `arn:aws:ssm:${cfg.region}:${cfg.account}:parameter${cfg.canonicalAmiParam}`,
+        ],
+      }),
+    );
+    // The peer carries an instance profile (AmazonSSMManagedInstanceCore) so it
+    // answers SSM, and attaching a profile at RunInstances requires iam:PassRole
+    // on the role inside that profile. Scoped to exactly that role.
+    //
+    // NOTE (human review): this assumes the role inside the instance profile
+    // shares the profile's name -- true for the AWS-managed
+    // AWSSupportPatchwork-SSMRoleForInstances profile. If a caller overrides
+    // peerInstanceProfile with a profile whose role name differs, this ARN must
+    // be adjusted (or split into a separate role-name config field).
+    perfTest.addToRolePolicy(
+      new iam.PolicyStatement({
+        sid: 'PassPeerInstanceProfileRole',
+        actions: ['iam:PassRole'],
+        resources: [
+          `arn:aws:iam::${cfg.account}:role/${cfg.peerInstanceProfile}`,
+        ],
+        conditions: {
+          StringEquals: { 'iam:PassedToService': 'ec2.amazonaws.com' },
+        },
+      }),
+    );
+    // Termination is restricted to instances this gate created: both the
+    // candidate (Name=haiku-perf-gate) and the self-provisioned peer
+    // (Name=haiku-perf-gate-peer). A StringEquals list is an OR, so this still
+    // grants terminate on nothing else. Without the ephemeral+Name condition an
+    // unattended stage would hold the right to terminate any instance in the
+    // account.
     perfTest.addToRolePolicy(
       new iam.PolicyStatement({
         sid: 'TerminateOnlyOwnEphemeralInstances',
@@ -264,7 +309,7 @@ export class HaikuGravitonPipelineStack extends cdk.Stack {
           StringEquals: {
             'aws:RequestedRegion': cfg.region,
             'ec2:ResourceTag/ephemeral': 'true',
-            'ec2:ResourceTag/Name': 'haiku-perf-gate',
+            'ec2:ResourceTag/Name': ['haiku-perf-gate', 'haiku-perf-gate-peer'],
           },
         },
       }),
@@ -275,11 +320,11 @@ export class HaikuGravitonPipelineStack extends cdk.Stack {
     // and the sshd host key returned present-but-zeroed. Throughput is measured
     // on a machine that never went down, so only a real power cycle sees it.
     //
-    // Scoped with exactly the same tag condition as TerminateInstances, and for
-    // the same reason: an unattended stage that could stop any instance in the
-    // account could stop the metal builder, which is the one machine the whole
-    // project depends on. Stopping it would be less final than terminating it but
-    // would still break every other bake and every agent driving it over SSM.
+    // Only the candidate is ever cycled (the peer is a passive traffic partner),
+    // so this stays scoped to the candidate's Name alone -- narrower than the
+    // terminate grant on purpose. An unattended stage that could stop any instance
+    // in the account is the hazard being avoided; a stop is less final than a
+    // terminate but would still disrupt anything else running.
     perfTest.addToRolePolicy(
       new iam.PolicyStatement({
         sid: 'CycleOnlyOwnEphemeralInstances',
@@ -294,16 +339,39 @@ export class HaikuGravitonPipelineStack extends cdk.Stack {
         },
       }),
     );
-    // Drive the builder over SSM: it is the traffic peer and the only host that
-    // can reach a Haiku node (Haiku runs no SSM agent of its own).
+    // Drive the peer over SSM: it is the traffic peer and the driver that reaches
+    // the candidate. The peer's instance id is not known at deploy time (it is
+    // launched fresh each run), so SendCommand is scoped by the peer's launch tags
+    // instead of a fixed instance ARN -- exactly the ephemeral+Name+Project tuple
+    // the gate stamps on it, so no other instance in the account is reachable.
+    //
+    // Split into two statements on purpose: the AWS-RunShellScript document has no
+    // resource tags, so a single statement carrying the ssm:resourceTag/* instance
+    // condition would fail to authorize the document half of the call and deny
+    // every SendCommand. The document grant therefore stands alone (region-scoped).
     perfTest.addToRolePolicy(
       new iam.PolicyStatement({
-        sid: 'DriveBuilderOverSsm',
+        sid: 'SendCommandDocument',
         actions: ['ssm:SendCommand'],
         resources: [
-          `arn:aws:ec2:${cfg.region}:${cfg.account}:instance/${cfg.builderInstanceId}`,
           `arn:aws:ssm:${cfg.region}::document/AWS-RunShellScript`,
         ],
+      }),
+    );
+    perfTest.addToRolePolicy(
+      new iam.PolicyStatement({
+        sid: 'SendCommandToEphemeralPeer',
+        actions: ['ssm:SendCommand'],
+        resources: [
+          `arn:aws:ec2:${cfg.region}:${cfg.account}:instance/*`,
+        ],
+        conditions: {
+          StringEquals: {
+            'ssm:resourceTag/Project': 'haiku-graviton',
+            'ssm:resourceTag/ephemeral': 'true',
+            'ssm:resourceTag/Name': 'haiku-perf-gate-peer',
+          },
+        },
       }),
     );
     perfTest.addToRolePolicy(
