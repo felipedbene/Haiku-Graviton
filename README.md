@@ -104,6 +104,10 @@ image, registers an AMI, **boots it on real hardware and measures it**, and only
 offers it for promotion. A candidate that will not boot, will not negotiate MTU 9001,
 loses throughput, or does not survive a power cycle fails the gate.
 
+The full idea → canonical-AMI loop — propose-only develop workflows, human review, and the
+gated bake/prove/promote runbook — is the design of record in
+[`graviton/docs/feature-cook-flow.md`](graviton/docs/feature-cook-flow.md).
+
 ## Relationship to Haiku
 
 - **Licence and copyright are unchanged.** Haiku's code remains Haiku's, under the
