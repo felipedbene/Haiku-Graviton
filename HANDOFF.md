@@ -2,7 +2,7 @@
 
 Branch: `remote-latency-phase0` (off `graviton`, 2 code commits + this doc)
 Scope: reduce interactive lag in the app_server remote drawing interface
-(`src/servers/app/drawing/interface/remote/`) — the protocol behind DeBeOS-RDP
+(`src/servers/app/drawing/interface/remote/`) — the protocol behind the remote client
 and the only way to reach a headless Graviton desktop.
 Status: **compile-reviewed, NOT built** (this workstation has no jam/cross-tools).
 Must be built and boot-tested before merge — see "Build & verify" below.
@@ -18,7 +18,7 @@ analysis. The higher-value protocol changes are deferred with reason — read
 A Graviton EC2 instance has no display device (EFI hands the kernel
 `frame_buffer.enabled = false`), so `app_server` runs `RemoteHWInterface`: it
 streams a display list to a remote client that renders, and takes input back.
-DeBeOS-RDP wraps this. It works but is laggy.
+The remote client wraps this. It works but is laggy.
 
 An audit of the interface located the lag. It is **not bandwidth** — the protocol
 is vector draw commands, which are cheap. It is:
@@ -87,7 +87,7 @@ NOT done here because it is **unsafe as a server-only change**:
   count and returns a garbage/racy value.
 
 Doing it correctly needs a **coordinated client + server change** (in the remote
-client, i.e. DeBeOS-RDP, which is not in this tree): either the client stops
+client, which is not in this tree): either the client stops
 sending the result for `DrawString`, or replies carry sequence numbers so the
 dispatcher can match them. The same coordination applies to the other two
 deferred wins, both of which need client-side decode:
@@ -119,7 +119,7 @@ us-west-2 (`graviton/scripts/haiku-canonical`; test hosts are SSM-managed — dr
 with `aws ssm`, not SSH).
 
 Verify the change actually took effect (don't infer from the diff):
-- Connect via DeBeOS-RDP over the SSH tunnel and confirm the interface chosen is
+- Connect via the remote client over the SSH tunnel and confirm the interface chosen is
   `RemoteHWInterface` (not a local framebuffer).
 - Latency: scrolling a text-heavy list / opening menus should feel materially
   snappier than the pre-`TCP_NODELAY` build on the same link. For a hard number,
