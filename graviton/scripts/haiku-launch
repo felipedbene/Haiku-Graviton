@@ -31,6 +31,10 @@
 #          throwaway boxes), Name=<--name> or a generated one.
 #   * Key: `haiku-graviton` EC2 keypair. Real login is `baron@` via the
 #          Secrets Manager private key -- use `haiku-ssh` after this returns.
+#   * Security group: `DebeosOpsStack-BuilderSg*` in the target VPC, the same
+#          group `launch_builder.py` uses via SG_ID. `--sg <id>` overrides it.
+#          See the resolution order comment below for why `haiku-graviton-ssh`
+#          is a second-choice name, not the primary lookup.
 #
 # Usage:
 #   haiku-launch                            # c9g.large in the first private
@@ -39,6 +43,7 @@
 #   haiku-launch --public                   # if you REALLY want a public IP
 #   haiku-launch --ami ami-...              # override the canonical
 #   haiku-launch --disk 500                 # 500 GiB root instead of the AMI's
+#   haiku-launch --sg sg-...                # force a security group
 #   haiku-launch --wait                     # block until sshd answers via EICE
 #
 # On completion prints the instance id and the ssh recipe on stdout, one line
@@ -61,6 +66,7 @@ KEY_NAME="${HG_LAUNCH_KEY:-haiku-graviton}"
 PUBLIC=0
 WAIT=0
 DISK="${HG_LAUNCH_DISK:-}"
+SG_OVERRIDE="${HG_LAUNCH_SG:-}"
 
 while [ $# -gt 0 ]; do
 	case "$1" in
@@ -70,6 +76,7 @@ while [ $# -gt 0 ]; do
 		--iam)     IAM_PROFILE="$2"; shift 2 ;;
 		--key)     KEY_NAME="$2"; shift 2 ;;
 		--disk)    DISK="$2"; shift 2 ;;
+		--sg)      SG_OVERRIDE="$2"; shift 2 ;;
 		--public)  PUBLIC=1; shift ;;
 		--wait)    WAIT=1; shift ;;
 		-h|--help) sed -n '2,40p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
@@ -128,18 +135,40 @@ VPC="$(aws ec2 describe-subnets --region "$REGION" --subnet-ids "$SUBNET" \
 echo "haiku-launch: subnet $SUBNET in vpc $VPC ($TYPE)" >&2
 
 # ------ pick a security group in that VPC ----------------------------------
-# The permanent `haiku-graviton-ssh` SG carries the intra-SG :22 rule the EICE
-# tunnel needs. Fall back to the VPC default if it does not exist in this VPC
-# (only true for accounts that dropped the SG; the EICE will still work as
-# long as the SG allows :22 from the EICE SG).
-SG="$(aws ec2 describe-security-groups --region "$REGION" \
-	--filters "Name=group-name,Values=haiku-graviton-ssh" \
-	          "Name=vpc-id,Values=$VPC" \
-	--query 'SecurityGroups[0].GroupId' --output text 2>/dev/null || true)"
-if [ -z "$SG" ] || [ "$SG" = "None" ]; then
+# Same class of bug as the subnet filter fixed for #128: `haiku-graviton-ssh`
+# was the SG name in a VPC that no longer exists in this account. It is kept
+# as a second-choice lookup (some accounts still have it) but the primary
+# answer is `DebeosOpsStack-BuilderSg*` -- the group the CDK stack actually
+# provisions in BuildVpc, and the same one `launch_builder.py` picks up via
+# its SG_ID env var. Resolution order: --sg override, then BuilderSg, then
+# the legacy name, then (worst case) the VPC `default` SG -- which carries no
+# intra-SG :22 rule, so the EICE tunnel that `haiku-ssh` relies on will
+# generally NOT work from it. We warn loudly rather than fail outright:
+# SSM-only use (no interactive shell) is a legitimate reason to launch here.
+if [ -n "$SG_OVERRIDE" ]; then
+	SG="$SG_OVERRIDE"
+else
 	SG="$(aws ec2 describe-security-groups --region "$REGION" \
-		--filters "Name=group-name,Values=default" "Name=vpc-id,Values=$VPC" \
-		--query 'SecurityGroups[0].GroupId' --output text)"
+		--filters "Name=group-name,Values=DebeosOpsStack-BuilderSg*" \
+		          "Name=vpc-id,Values=$VPC" \
+		--query 'SecurityGroups[0].GroupId' --output text 2>/dev/null || true)"
+	if [ -z "$SG" ] || [ "$SG" = "None" ]; then
+		SG="$(aws ec2 describe-security-groups --region "$REGION" \
+			--filters "Name=group-name,Values=haiku-graviton-ssh" \
+			          "Name=vpc-id,Values=$VPC" \
+			--query 'SecurityGroups[0].GroupId' --output text 2>/dev/null || true)"
+	fi
+	if [ -z "$SG" ] || [ "$SG" = "None" ]; then
+		SG="$(aws ec2 describe-security-groups --region "$REGION" \
+			--filters "Name=group-name,Values=default" "Name=vpc-id,Values=$VPC" \
+			--query 'SecurityGroups[0].GroupId' --output text)"
+		echo "haiku-launch: WARNING no BuilderSg/haiku-graviton-ssh SG found in $VPC" \
+			"-- falling back to the VPC 'default' SG ($SG)." \
+			"The EICE :22 tunnel that haiku-ssh relies on will most likely NOT work" \
+			"from 'default' (no intra-SG :22 rule). Proceeding anyway because" \
+			"SSM-managed-node access does not need it -- pass --sg to force a" \
+			"working group if you need interactive SSH." >&2
+	fi
 fi
 echo "haiku-launch: sg $SG" >&2
 
