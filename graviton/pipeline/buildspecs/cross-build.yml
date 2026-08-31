@@ -205,6 +205,26 @@ phases:
           aws s3 cp /tmp/ct.tar.zst "s3://$WORK_BUCKET/$CACHE_PREFIX/cross-tools-arm64.tar.zst" \
             --region "$AWS_DEFAULT_REGION" || echo "cross-tools cache upload failed (non-fatal)"
         fi
+      # Bank the LINUX host-tools `package` and `package_repo`. These are byproducts
+      # of the jam build (built for the CodeBuild host, not for Haiku) and are what
+      # haiku-repo-add / haiku-repo-publish need to (re)build the DeBeOS repo index.
+      # The retired metal ran them on Linux; the no-metal publisher (an ephemeral
+      # Ubuntu peer, see #68) fetches them from here instead of rebuilding a whole
+      # tree. Keyed under host-tools/ with a .arch marker so the publisher matches
+      # the CodeBuild host arch. Best-effort: never fail a bake over this.
+      - |
+        HT="$CACHE_PREFIX/host-tools"
+        PKG_BIN="$(find "$GEN/objects/linux" -path '*/release/tools/package/package' -type f 2>/dev/null | head -1)"
+        PR_BIN="$(find "$GEN/objects/linux" -path '*/release/tools/package_repo/package_repo' -type f 2>/dev/null | head -1)"
+        if [ -x "$PKG_BIN" ] && [ -x "$PR_BIN" ]; then
+          echo "== banking host tools ($(uname -m)) -> s3://$WORK_BUCKET/$HT/ =="
+          uname -m > /tmp/host-tools.arch
+          aws s3 cp "$PKG_BIN" "s3://$WORK_BUCKET/$HT/package" --region "$AWS_DEFAULT_REGION" || echo "package upload failed (non-fatal)"
+          aws s3 cp "$PR_BIN"  "s3://$WORK_BUCKET/$HT/package_repo" --region "$AWS_DEFAULT_REGION" || echo "package_repo upload failed (non-fatal)"
+          aws s3 cp /tmp/host-tools.arch "s3://$WORK_BUCKET/$HT/.arch" --region "$AWS_DEFAULT_REGION" || true
+        else
+          echo "WARNING: host tools not found under $GEN/objects/linux (package=$PKG_BIN package_repo=$PR_BIN)"
+        fi
       - |
         ls -l "$HAIKU_TOP/haiku-ec2.raw" || echo "WARNING: raw image missing"
 
