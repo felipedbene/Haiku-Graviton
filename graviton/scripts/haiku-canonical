@@ -9,6 +9,8 @@
 # Usage:
 #   haiku-canonical check                # report + exit 0 iff exactly one canonical
 #   haiku-canonical promote <ami-id>     # make <ami-id> the one and only canonical
+#   haiku-canonical prune [--apply]      # keep newest N candidate AMIs, retire rest
+#                        [--keep N]      #   (default N=3; dry-run unless --apply)
 #
 # Region defaults to us-west-2; override with AWS_REGION.
 set -euo pipefail
@@ -16,6 +18,13 @@ set -euo pipefail
 REGION="${AWS_REGION:-us-west-2}"
 TAG_KEY="canonical"
 TAG_VAL="true"
+# Candidate AMIs (freshly baked, tagged candidate=true) accumulate every bake.
+# Retention policy: keep the newest CANDIDATE_KEEP by CreationDate, deregister
+# the rest and delete their backing snapshots. The canonical AMI is ALWAYS
+# protected even though it also carries candidate=true.
+CAND_KEY="candidate"
+CAND_VAL="true"
+CANDIDATE_KEEP="${HG_CANDIDATE_KEEP:-3}"
 # SSM Parameter Store mirror of the canonical AMI id, so tooling can resolve it
 # without an ec2 describe-images tag query. Kept in sync by promote (below).
 SSM_PARAM="${HAIKU_CANONICAL_SSM_PARAM:-/haiku-graviton/canonical-ami-id}"
@@ -27,15 +36,90 @@ list_canonical() {
 }
 
 cmd_check() {
-	local ids count
+	local ids count rc=0 ssm_val
 	ids="$(list_canonical)"
 	count="$(printf '%s\n' $ids | grep -c . || true)"
 	echo "canonical AMIs in ${REGION} (${count}): ${ids:-<none>}"
-	if [ "$count" -eq 1 ]; then
+	if [ "$count" -ne 1 ]; then
+		echo "INVARIANT VIOLATED: expected exactly 1 canonical, found ${count}" >&2
+		rc=1
+	fi
+	# Cross-check the SSM mirror -- if promote succeeded the two must agree.
+	# A silent drift here previously misdirected consumers to the wrong AMI
+	# (issue #59). Read is best-effort: a missing parameter is a warning, not
+	# a hard fail, but a present-and-disagreeing parameter is a violation.
+	ssm_val="$(aws ssm get-parameter --region "$REGION" --name "$SSM_PARAM" \
+		--query 'Parameter.Value' --output text 2>/dev/null || true)"
+	if [ -z "$ssm_val" ] || [ "$ssm_val" = "None" ]; then
+		echo "ssm: ${SSM_PARAM} not set (warning: consumers resolving via SSM will fail)" >&2
+	elif [ "$count" -eq 1 ] && [ "$ssm_val" != "$ids" ]; then
+		echo "INVARIANT VIOLATED: tag canonical=${ids} but ssm ${SSM_PARAM}=${ssm_val}" >&2
+		rc=1
+	else
+		echo "ssm: ${SSM_PARAM} = ${ssm_val} (agrees)"
+	fi
+	return $rc
+}
+
+# prune: enforce the candidate retention policy. Lists candidate=true images
+# newest-first, keeps CANDIDATE_KEEP, and retires the rest (deregister image +
+# delete its snapshots). Dry-run by default; pass apply=1 to actually delete.
+# The current canonical is never a deletion target.
+cmd_prune() {
+	local apply="$1" keep="$2"
+	local canonical rows candidates=() protect_note
+
+	canonical="$(list_canonical)"
+
+	# newest-first list of candidate images with their creation date and snaps.
+	# One row per image: <CreationDate> <ImageId> <snap,snap,...>
+	rows="$(aws ec2 describe-images --region "$REGION" --owners self \
+		--filters "Name=tag:${CAND_KEY},Values=${CAND_VAL}" \
+		--query 'reverse(sort_by(Images,&CreationDate))[].[CreationDate,ImageId,join(`,`,BlockDeviceMappings[?Ebs].Ebs.SnapshotId)]' \
+		--output text)"
+
+	if [ -z "$rows" ]; then
+		echo "prune: no images tagged ${CAND_KEY}=${CAND_VAL}; nothing to do"
 		return 0
 	fi
-	echo "INVARIANT VIOLATED: expected exactly 1 canonical, found ${count}" >&2
-	return 1
+
+	local total kept=0 retired=0
+	total="$(printf '%s\n' "$rows" | grep -c . || true)"
+	echo "prune: ${total} candidate AMI(s); keeping newest ${keep}; canonical=${canonical:-<none>} (protected)"
+
+	# Iterate rows in order (newest first). Keep the first `keep` non-canonical
+	# images; retire the remainder. The canonical is always kept and does not
+	# consume a keep slot.
+	local line date ami snaps
+	while IFS=$'\t' read -r date ami snaps; do
+		[ -n "$ami" ] || continue
+		if [ "$ami" = "$canonical" ]; then
+			echo "  KEEP  ${ami}  ${date}  (canonical)"
+			continue
+		fi
+		if [ "$kept" -lt "$keep" ]; then
+			kept=$((kept + 1))
+			echo "  KEEP  ${ami}  ${date}"
+			continue
+		fi
+		retired=$((retired + 1))
+		if [ "$apply" = "1" ]; then
+			echo "  RETIRE ${ami}  ${date}  -> deregister + delete snaps [${snaps}]"
+			aws ec2 deregister-image --region "$REGION" --image-id "$ami" \
+				|| echo "    warning: deregister ${ami} failed" >&2
+			# snapshots can only be deleted after the image is deregistered.
+			local snap
+			for snap in ${snaps//,/ }; do
+				[ -n "$snap" ] || continue
+				aws ec2 delete-snapshot --region "$REGION" --snapshot-id "$snap" \
+					|| echo "    warning: delete-snapshot ${snap} failed (may be in use)" >&2
+			done
+		else
+			echo "  RETIRE ${ami}  ${date}  -> would deregister + delete snaps [${snaps}]"
+		fi
+	done <<< "$rows"
+
+	echo "prune: kept ${kept} candidate(s) + canonical; retired ${retired}$([ "$apply" = 1 ] || echo ' (dry-run; pass --apply to delete)')"
 }
 
 cmd_promote() {
@@ -85,6 +169,15 @@ cmd_promote() {
 			|| echo "warning: haiku_devel publish did not complete; run haiku-devel-publish ${target} by hand (canonical tag is set regardless)" >&2
 	fi
 	cmd_check
+	# Enforce candidate retention as the last step of a promote. Best-effort:
+	# a prune failure must never fail the promote (the tag move already
+	# succeeded). Skipped in the in-pipeline Promote stage, which sets
+	# HG_SKIP_PRUNE=1 so that CodeBuild role needs no deregister/delete rights.
+	if [ "${HG_SKIP_PRUNE:-0}" != "1" ]; then
+		echo "== enforcing candidate retention (keep ${CANDIDATE_KEEP}) =="
+		cmd_prune 1 "$CANDIDATE_KEEP" \
+			|| echo "warning: prune did not complete; run haiku-canonical prune --apply by hand" >&2
+	fi
 }
 
 case "${1:-}" in
@@ -96,8 +189,24 @@ case "${1:-}" in
 		[ $# -eq 1 ] || { echo "usage: $(basename "$0") promote <ami-id>" >&2; exit 2; }
 		cmd_promote "$1"
 		;;
+	prune)
+		shift
+		apply=0
+		keep="$CANDIDATE_KEEP"
+		while [ $# -gt 0 ]; do
+			case "$1" in
+				--apply) apply=1; shift ;;
+				--keep)  keep="$2"; shift 2 ;;
+				*) echo "usage: $(basename "$0") prune [--apply] [--keep N]" >&2; exit 2 ;;
+			esac
+		done
+		case "$keep" in
+			''|*[!0-9]*) echo "error: --keep must be a non-negative integer" >&2; exit 2 ;;
+		esac
+		cmd_prune "$apply" "$keep"
+		;;
 	*)
-		echo "usage: $(basename "$0") {check | promote <ami-id>}" >&2
+		echo "usage: $(basename "$0") {check | promote <ami-id> | prune [--apply] [--keep N]}" >&2
 		exit 2
 		;;
 esac
