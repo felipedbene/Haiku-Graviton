@@ -1,0 +1,187 @@
+#!/bin/bash
+#
+# haiku-launch -- launch a canonical-AMI Haiku instance the way this project
+# expects it. Codifies the standards that were previously "please remember":
+#
+#   * AMI: resolved from the `canonical=true` tag, NOT by newest CreationDate
+#          and NOT from the /haiku-graviton/canonical-ami-id SSM parameter
+#          (that parameter has drifted before -- see the
+#          canonical-ami-tag-vs-ssm-drift memory).
+#   * Subnet: PRIVATE by default (buildersSubnet* / haiku-build-*).
+#          Corp `:22` outbound is blocked, so we tunnel SSH via the EC2
+#          Instance Connect Endpoint anyway; a public IP is not useful and
+#          just widens the attack surface.
+#   * IAM profile: ssm-instance-profile (AmazonSSMManagedInstanceCore) so the
+#          baked debeos-ssm-agent can register.
+#   * Tags: Project=haiku-graviton, ephemeral=true (so cost tooling can find
+#          throwaway boxes), Name=<--name> or a generated one.
+#   * Key: `haiku-graviton` EC2 keypair. Real login is `baron@` via the
+#          Secrets Manager private key -- use `haiku-ssh` after this returns.
+#
+# Usage:
+#   haiku-launch                            # c9g.large in the first private
+#                                           # subnet with c9g availability
+#   haiku-launch --type c7g.metal --name kernel-repro
+#   haiku-launch --public                   # if you REALLY want a public IP
+#   haiku-launch --ami ami-...              # override the canonical
+#   haiku-launch --wait                     # block until sshd answers via EICE
+#
+# On completion prints the instance id and the ssh recipe on stdout, one line
+# each (id first) so callers can `read`.
+
+set -euo pipefail
+
+REGION="${AWS_REGION:-${HAIKU_GRAVITON_REGION:-us-west-2}}"
+
+# Adopt the project profile only if the caller has not already chosen creds.
+if [ -z "${AWS_PROFILE:-}" ] && [ -z "${AWS_ACCESS_KEY_ID:-}" ]; then
+	export AWS_PROFILE="${HAIKU_GRAVITON_PROFILE:-haiku-graviton}"
+fi
+
+TYPE="${HG_LAUNCH_TYPE:-c9g.large}"
+NAME=""
+AMI=""
+IAM_PROFILE="${HG_LAUNCH_IAM:-ssm-instance-profile}"
+KEY_NAME="${HG_LAUNCH_KEY:-haiku-graviton}"
+PUBLIC=0
+WAIT=0
+
+while [ $# -gt 0 ]; do
+	case "$1" in
+		--type)    TYPE="$2"; shift 2 ;;
+		--name)    NAME="$2"; shift 2 ;;
+		--ami)     AMI="$2"; shift 2 ;;
+		--iam)     IAM_PROFILE="$2"; shift 2 ;;
+		--key)     KEY_NAME="$2"; shift 2 ;;
+		--public)  PUBLIC=1; shift ;;
+		--wait)    WAIT=1; shift ;;
+		-h|--help) sed -n '2,30p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+		*) echo "haiku-launch: unknown arg $1" >&2; exit 2 ;;
+	esac
+done
+
+if [ -z "$NAME" ]; then
+	NAME="canonical-smoketest-$(date -u +%Y%m%dT%H%M%SZ)"
+fi
+
+# ------ resolve AMI from canonical=true tag ---------------------------------
+if [ -z "$AMI" ]; then
+	AMI="$(aws ec2 describe-images --region "$REGION" --owners self \
+		--filters "Name=tag:canonical,Values=true" \
+		--query 'Images[0].ImageId' --output text)"
+	case "$AMI" in
+		ami-*) ;;
+		*) echo "haiku-launch: no AMI with tag canonical=true in $REGION" >&2; exit 1 ;;
+	esac
+fi
+echo "haiku-launch: using AMI $AMI" >&2
+
+# ------ pick a subnet ------------------------------------------------------
+# Private subnet in the haiku-* VPC by default. We ask the API for a subnet in
+# an AZ where the requested instance type is actually offered, otherwise a
+# c9g.medium in a c9g-less AZ silently no-caps.
+AZ_LIST="$(aws ec2 describe-instance-type-offerings --region "$REGION" \
+	--location-type availability-zone \
+	--filters "Name=instance-type,Values=$TYPE" \
+	--query 'InstanceTypeOfferings[].Location' --output text)"
+if [ -z "$AZ_LIST" ]; then
+	echo "haiku-launch: instance type $TYPE not offered in $REGION" >&2; exit 1
+fi
+
+SUBNET_FILTER="Name=tag:Name,Values=haiku-build-*"
+[ "$PUBLIC" -eq 1 ] && SUBNET_FILTER="Name=tag:Name,Values=haiku-graviton-public"
+
+SUBNET=""
+for az in $AZ_LIST; do
+	SUBNET="$(aws ec2 describe-subnets --region "$REGION" \
+		--filters "$SUBNET_FILTER" "Name=availability-zone,Values=$az" \
+		--query 'Subnets[0].SubnetId' --output text)"
+	case "$SUBNET" in
+		subnet-*) break ;;
+		*) SUBNET="" ;;
+	esac
+done
+[ -n "$SUBNET" ] || { echo "haiku-launch: no matching subnet in any AZ offering $TYPE" >&2; exit 1; }
+VPC="$(aws ec2 describe-subnets --region "$REGION" --subnet-ids "$SUBNET" \
+	--query 'Subnets[0].VpcId' --output text)"
+echo "haiku-launch: subnet $SUBNET in vpc $VPC ($TYPE)" >&2
+
+# ------ pick a security group in that VPC ----------------------------------
+# The permanent `haiku-graviton-ssh` SG carries the intra-SG :22 rule the EICE
+# tunnel needs. Fall back to the VPC default if it does not exist in this VPC
+# (only true for accounts that dropped the SG; the EICE will still work as
+# long as the SG allows :22 from the EICE SG).
+SG="$(aws ec2 describe-security-groups --region "$REGION" \
+	--filters "Name=group-name,Values=haiku-graviton-ssh" \
+	          "Name=vpc-id,Values=$VPC" \
+	--query 'SecurityGroups[0].GroupId' --output text 2>/dev/null || true)"
+if [ -z "$SG" ] || [ "$SG" = "None" ]; then
+	SG="$(aws ec2 describe-security-groups --region "$REGION" \
+		--filters "Name=group-name,Values=default" "Name=vpc-id,Values=$VPC" \
+		--query 'SecurityGroups[0].GroupId' --output text)"
+fi
+echo "haiku-launch: sg $SG" >&2
+
+# ------ EICE in this VPC ---------------------------------------------------
+EICE="$(aws ec2 describe-instance-connect-endpoints --region "$REGION" \
+	--filters "Name=vpc-id,Values=$VPC" "Name=state,Values=create-complete" \
+	--query 'InstanceConnectEndpoints[0].InstanceConnectEndpointId' --output text 2>/dev/null || true)"
+if [ -z "$EICE" ] || [ "$EICE" = "None" ]; then
+	echo "haiku-launch: WARNING no EICE in $VPC -- SSH will not work over the tunnel" >&2
+fi
+
+# ------ launch --------------------------------------------------------------
+ASSOC_PUBLIC="--no-associate-public-ip-address"
+[ "$PUBLIC" -eq 1 ] && ASSOC_PUBLIC="--associate-public-ip-address"
+
+INSTANCE="$(aws ec2 run-instances --region "$REGION" \
+	--image-id "$AMI" \
+	--instance-type "$TYPE" \
+	--key-name "$KEY_NAME" \
+	--subnet-id "$SUBNET" \
+	--security-group-ids "$SG" \
+	$ASSOC_PUBLIC \
+	--iam-instance-profile "Name=$IAM_PROFILE" \
+	--tag-specifications "ResourceType=instance,Tags=[{Key=Project,Value=haiku-graviton},{Key=Name,Value=$NAME},{Key=ephemeral,Value=true}]" \
+	--query 'Instances[0].InstanceId' --output text)"
+case "$INSTANCE" in
+	i-*) ;;
+	*) echo "haiku-launch: run-instances failed: $INSTANCE" >&2; exit 1 ;;
+esac
+
+echo "$INSTANCE"
+
+# ------ optional readiness wait --------------------------------------------
+if [ "$WAIT" -eq 1 ] && [ -n "$EICE" ]; then
+	echo "haiku-launch: waiting for instance-running" >&2
+	aws ec2 wait instance-running --region "$REGION" --instance-ids "$INSTANCE"
+	echo "haiku-launch: probing sshd via EICE ($EICE)" >&2
+	# open a short-lived tunnel and try a banner
+	LPORT="$((11000 + RANDOM % 5000))"
+	aws ec2-instance-connect open-tunnel --region "$REGION" \
+		--instance-connect-endpoint-id "$EICE" \
+		--instance-id "$INSTANCE" \
+		--remote-port 22 --local-port "$LPORT" >/dev/null 2>&1 &
+	TPID=$!
+	trap 'kill "$TPID" 2>/dev/null || true' EXIT
+	for i in $(seq 1 60); do
+		if timeout 2 bash -c "exec 3<>/dev/tcp/127.0.0.1/$LPORT; head -c 4 <&3" 2>/dev/null | grep -q SSH; then
+			echo "haiku-launch: sshd answered on probe $i" >&2
+			break
+		fi
+		sleep 5
+	done
+	kill "$TPID" 2>/dev/null || true
+	trap - EXIT
+fi
+
+# ------ recipe for the caller ----------------------------------------------
+cat >&2 <<EOF
+haiku-launch: launched $INSTANCE ($TYPE, ami $AMI) in $SUBNET
+  ssh:      haiku-ssh -o ProxyCommand='aws ec2-instance-connect open-tunnel --instance-id $INSTANCE --instance-connect-endpoint-id $EICE' baron@$INSTANCE
+  or:       aws ec2-instance-connect open-tunnel --region $REGION \\
+              --instance-connect-endpoint-id $EICE --instance-id $INSTANCE \\
+              --remote-port 22 --local-port 2222 &
+            haiku-ssh -p 2222 baron@127.0.0.1
+  cleanup:  aws ec2 terminate-instances --region $REGION --instance-ids $INSTANCE
+EOF
