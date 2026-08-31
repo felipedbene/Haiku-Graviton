@@ -9,6 +9,24 @@ stage; each stage's status reflects what has actually been measured on real hard
 Actionable milestones are linked to GitHub issues, where the current detail lives;
 this file is the vision, not the tracker.
 
+## Ecosystem
+
+DeBeOS is one repo among several that ship the whole story on AWS. The sister
+repositories carry code that pairs with this one — link them from here so nothing
+is discoverable only by knowing where to look.
+
+| Piece | Repository | What it is |
+| ----- | ---------- | ---------- |
+| **DeBeOS core** | this repo (`felipedbene/Haiku-Graviton`) | The ARM-first OS: kernel, drivers (ENA, GICv3), userland, the bake pipeline (CodePipeline → registered AMI), and the DeBeOS package repository index tooling. |
+| **haiku-mgmt-agent** | [`felipedbene/haiku-mgmt-agent`](https://github.com/felipedbene/haiku-mgmt-agent) | Native Haiku SSM agent — registers a Haiku arm64 instance as an SSM node (`PlatformName=Haiku`); powers `aws ssm send-command` / Session Manager, plus subcommands (`s3 cp`, `patch scan/install`, `self-update`). The reason we can drive Haiku fleets like any Linux node. |
+| **Remote desktop (DeBeOS-RDP)** | [`gitlab.aws.dev/benfelip/DeBeOS-RDP`](https://gitlab.aws.dev/benfelip/DeBeOS-RDP) | Companion remote-desktop client (paired with #95 in-tree app_server changes and #118 virtual-framebuffer route). |
+| **Package repository** | index tooling in this repo, packages vended at [`packages.debene.dev/arm64`](http://packages.debene.dev/arm64) | Hosted DeBeOS repo (HTTP + HTTPS); `haiku-repo-add` / `haiku-repo-publish-ephemeral` build+publish the index. Nightly-baked hpkgs for arm64 land here. |
+| **Bake pipeline** | `graviton/pipeline/` in this repo (AWS CodePipeline) | Cross-build → register AMI → perf-gate → manual approve → promote. Banks Linux host tools + build libs + licenses for the no-metal publisher. |
+
+Native-Haiku observability agents (CloudWatch #119, awscli #120) are the two
+biggest open ecosystem gaps; once they land the ephemeral Ubuntu peer disappears
+from the publish path and Haiku instances become first-class cloud citizens.
+
 ## Stage 0 — Bring-up ✅ *(done)*
 Native boot on AWS Graviton, the ENA network driver, remote desktop (in-tree browser
 plus a remote client), clean ACPI shutdown, and serial-console boot logs. See
