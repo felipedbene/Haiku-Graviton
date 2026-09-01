@@ -17,6 +17,7 @@ UnitTestLib libkernelutilstest.so
 	  BitmapTest.cpp
 	  SinglyLinkedListTest.cpp
 	  DoublyLinkedListTest.cpp
+	  MinMaxHeapTest.cpp
 	  VectorMapTest.cpp
 	  VectorSetTest.cpp
 	  VectorTest.cpp
