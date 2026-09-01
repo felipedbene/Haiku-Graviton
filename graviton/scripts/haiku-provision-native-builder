@@ -98,6 +98,12 @@ PORTS_DIR="$HP_HOME/haikuports"
 HP_DIR="$HP_HOME/haikuporter"
 CONF="$HP_HOME/haikuports.conf"
 SHIM_DIR="$HP_HOME/config/non-packaged/bin"
+# The DeBeOS chain-planning tools (build-order graph + pool closure). Their source
+# is deployed to $HP_HOME by haiku-bake-builder, alongside haiku-nativebuild; this
+# script only installs the on-PATH launcher wrappers below. Override for a custom
+# layout.
+DEPCLOSURE_SRC="${DEPCLOSURE_SRC:-$HP_HOME/depclosure.py}"
+PKGCLOSURE_SRC="${PKGCLOSURE_SRC:-$HP_HOME/haiku-package-closure}"
 
 log() { echo "provision: $*"; }
 
@@ -179,6 +185,63 @@ exec python3.14 "$HP_DIR/haikuporter" --config="$CONF" "\$@"
 EOF
 chmod 755 "$SHIM_DIR/haikuporter"
 
+# --- 2b. chain-planning tool launchers (depclosure / haiku-package-closure) ---
+# The build-wave planner runs depclosure.py to compute the authoritative,
+# dependency-ordered build chain. Three things about a native Haiku builder break
+# a naive invocation, and each cost a wave that "could not compute chains":
+#
+#   1. env-shebang. Both tools start `#!/usr/bin/env python3`, but there is no
+#      /usr/bin/env on Haiku (/ is an in-memory rootfs with only /bin, /boot,
+#      /dev... -- no /usr, and it cannot be baked into an AMI since the snapshot
+#      is only the BFS /boot volume). `python3` itself IS on PATH (the python3.14
+#      package ships /boot/system/bin/python3), but the wave's SSM shell exports an
+#      empty PATH to children, so even `/bin/env python3` fails "python3: No such
+#      file or directory" -- which surfaced as the wave's "no python3 on PATH".
+#      The launchers sidestep all of it by exec'ing python3.14 by absolute path.
+#   2. --repo default. depclosure.py defaults --repo to /opt/haiku/haikuports,
+#      which does not exist here (the tree is $PORTS_DIR) -- so a bare run reads an
+#      empty/absent repository/ dir and reports "0 DependencyInfo". The dependency
+#      infos ARE present ($PORTS_DIR/repository, warmed at bake); the default just
+#      pointed elsewhere. The launcher pins --repo "$PORTS_DIR".
+#   3. --built base. depclosure saturates from the hpkgs it is told are built. The
+#      toolchain (gcc, binutils, make, haiku_devel, ...) is INSTALLED from the repo,
+#      not built from a recipe, so without crediting the installed package pools
+#      every port reads UNREACHABLE and the plan is useless. The launcher credits
+#      the system pool + the user pool + this wave's freshly built packages/, so the
+#      saturation reflects the builder's actual state.
+#
+# Invoke bare with $SHIM_DIR on PATH (as haiku-nativebuild already does) or by
+# absolute path, e.g. "$SHIM_DIR/depclosure" <target>...  -- no PATH/env needed.
+log "installing depclosure launcher -> $SHIM_DIR/depclosure (src: $DEPCLOSURE_SRC)"
+cat > "$SHIM_DIR/depclosure" <<EOF
+#!/bin/sh
+# haiku-provision-native-builder: launcher for the DeBeOS build-order tool.
+# Runs python3.14 directly (the tool's #!/usr/bin/env python3 shebang cannot
+# resolve on Haiku) and pins the repo + the installed/built package pools so the
+# saturation is computed against this builder's real state. Extra args pass through.
+exec python3.14 "$DEPCLOSURE_SRC" \\
+  --repo "$PORTS_DIR" \\
+  --built /boot/system/packages \\
+  --built "$HP_HOME/config/packages" \\
+  --built "$PORTS_DIR/packages" \\
+  "\$@"
+EOF
+chmod 755 "$SHIM_DIR/depclosure"
+
+log "installing haiku-package-closure launcher -> $SHIM_DIR/haiku-package-closure (src: $PKGCLOSURE_SRC)"
+cat > "$SHIM_DIR/haiku-package-closure" <<EOF
+#!/bin/sh
+# haiku-provision-native-builder: launcher for the DeBeOS pool-closure tool.
+# Runs python3.14 directly (same env-shebang reason as depclosure) and defaults
+# --package-tool to the base image's \`package\` binary. Pass --pool/--base/--want
+# (and any other args) through; an explicit --package-tool overrides the default.
+case " \$* " in
+  *" --package-tool "*) exec python3.14 "$PKGCLOSURE_SRC" "\$@" ;;
+  *) exec python3.14 "$PKGCLOSURE_SRC" --package-tool /boot/system/bin/package "\$@" ;;
+esac
+EOF
+chmod 755 "$SHIM_DIR/haiku-package-closure"
+
 # --- 3. the fonts dir haikuporter's chroot copy assumes ------------------
 if [ ! -d /boot/system/settings/fonts ]; then
 	log "creating /boot/system/settings/fonts (haikuporter chroot copies it)"
@@ -257,6 +320,11 @@ provision: done. This box is a native arm64 package builder.
   haikuporter: $HP_DIR
   config     : $CONF
   seed dir   : $SEED_DIR  (drop upstream tarballs here to bypass a flaky fetch)
+  chain plan : $SHIM_DIR/depclosure, $SHIM_DIR/haiku-package-closure
+               (launchers; source deployed to $HP_HOME by haiku-bake-builder)
+
+Compute a dependency-ordered build chain (no PATH/env setup needed):
+  $SHIM_DIR/depclosure <port>...
 
 Build a port (build-requires are covered by --all-dependencies):
   export PATH=$SHIM_DIR:\$PATH
