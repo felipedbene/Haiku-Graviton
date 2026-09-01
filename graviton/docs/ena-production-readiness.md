@@ -18,7 +18,7 @@ with, not enough to skip reading the code before acting.
 > | P3: doorbell / ack / RX-refill batching is "available today" | **DEAD** — the device forbids it |
 > | P3: TX checksum offload as future work | **MERGED**, −3.54%, p = 0.0079 |
 > | P3: bounce copies are "the prerequisite for jumbo" | **False** — jumbo shipped without touching them |
-> | Missing `docs/watchdog-design.md`, `FINDINGS.md`, `HANDOFF.md` | **STILL TRUE** — and the count is **eight** citations, not six |
+> | Missing `docs/watchdog-design.md`, `FINDINGS.md`, `HANDOFF.md` | **STILL TRUE** — and the count is **eight** citations, not six. *(Update 2026-08-31: `docs/watchdog-design.md` written, six citations resolve; the other two files still do not exist.)* |
 > | `hwRxDrops`/`hwTxDrops` unreadable, no ioctl | **STILL TRUE** |
 > | P1 watchdog gaps (`DEVICE_REQUEST_RESET`, `NOTIFICATION` unhandled) | **STILL TRUE** — only `LINK_CHANGE` and `KEEP_ALIVE` are registered |
 > | `XXX STRUCTURAL FIX STILL OWED` (unmask before drain) | **STILL OPEN** — `ena.cpp:221`. This is a **correctness/structural** fix, **not** the throughput lever: resolved 2026-08-25, the receive ceiling is bufferbloat in the receive FIFO + `TCPEndpoint::fLock` (`ena-receive-latency-account.md`) |
@@ -104,12 +104,16 @@ production-risk reduction available. **[reported]**
   -DENA_DEBUG_FAULT_INJECTION ; }`, and the suppress-keep-alive / hold-reset /
   extra-doorbell ioctls exist. Still open: hooks for the remaining failure modes
   P1 adds detection for.
-- **`docs/watchdog-design.md`, `FINDINGS.md`, `HANDOFF.md` are cited from ~~six~~
+- ~~**`docs/watchdog-design.md`, `FINDINGS.md`, `HANDOFF.md` are cited from ~~six~~
   **eight** places in the code and do not exist.** (tracked: #107) **[verified 2026-08-22; RE-VERIFIED
-  and still true 2026-08-24 — the count was low]** The citations are at `ena.h:173,207,352`
-  and `ena.cpp:1246,1635,1685,1722,1887`; the driver directory contains only `Jamfile`,
-  `ena-com/`, `ena.cpp`, `ena.h`, `ena_plat.cpp`. Every "verified, see section 8" claim in
-  the driver is unauditable.
+  and still true 2026-08-24 — the count was low]**~~ — **PARTLY FIXED 2026-08-31.**
+  `src/add-ons/kernel/drivers/network/ether/ena/docs/watchdog-design.md` now exists, at
+  the path the citations resolve to, with the numbered sections and the criteria A/B they
+  name; the six `watchdog-design.md` citations audit. **`FINDINGS.md` and `HANDOFF.md`
+  are still dangling** (one citation each, in `ena_device_bringup()` and
+  `ena_setup_io_queues()`); #107 stays open for them. Note that the line numbers
+  originally recorded here — `ena.h:173,207,352`, `ena.cpp:1246,1635,1685,1722,1887` —
+  had **all** rotted by 2026-08-31: cite these sites by symbol, not by line.
 
 ### P3 — throughput, and the part that is *not* driver work
 
