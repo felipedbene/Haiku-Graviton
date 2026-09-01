@@ -114,3 +114,10 @@ is otherwise perfectly healthy:
 3. Watch for syslog rotation: it will silently make a bracketed delta go
    negative or small, which is why the monotonic reset number is the better
    witness.
+
+## Where the rest of the watchdog is described
+
+`src/add-ons/kernel/drivers/network/ether/ena/docs/watchdog-design.md` — the check
+that exists, the reset ordering, the acceptance criteria a reset is judged by, and
+the nine checks that are **not** implemented (#105). This document is the
+measurement; that one is the design and the honest inventory of the gaps.
