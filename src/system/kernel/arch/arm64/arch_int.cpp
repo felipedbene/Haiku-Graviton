@@ -396,7 +396,17 @@ do_sync_handler(iframe * frame)
 
 		case EXCP_SVC64:
 		{
+			// The immediate is picked by EL0, so it has to be range checked
+			// before it indexes anything: a wild read cannot be recovered from
+			// here, because interrupts are still masked and no fault handler is
+			// installed, so the resulting abort ends in a panic instead of a
+			// signal. The arm and riscv64 ports check the same way.
 			uint32 syscall = (frame->esr & 0xffff);
+			if (syscall >= (uint32)kSyscallCount) {
+				frame->x[0] = B_BAD_VALUE;
+				return;
+			}
+
 			uint32 count = kExtendedSyscallInfos[syscall].parameter_count;
 
 			uint64_t args[20];
@@ -406,11 +416,12 @@ do_sync_handler(iframe * frame)
 			}
 
 			memset(args, 0, sizeof(args));
-			memcpy(args, frame->x, (count < 8 ? count : 8) * 8);
+			memcpy(args, frame->x, (count < 8 ? count : 8) * sizeof(args[0]));
 
 			if (count > 8) {
 				if (!IS_USER_ADDRESS(frame->sp)
-					|| user_memcpy(&args[8], (void*)frame->sp, (count - 8) * 8) != B_OK) {
+					|| user_memcpy(&args[8], (void*)frame->sp,
+						(count - 8) * sizeof(args[0])) != B_OK) {
 					frame->x[0] = B_BAD_ADDRESS;
 					return;
 				}
