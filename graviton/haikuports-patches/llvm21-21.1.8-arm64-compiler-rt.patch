@@ -1,0 +1,138 @@
+Give llvm21's compiler-rt sanitizer_common an arm64 Haiku port.
+
+REAL FIX, not a cut. Nothing is disabled and no declared dependency changes; the
+sanitizer runtime keeps building, it just reads the registers and includes the
+header directory that actually exist on this machine.
+
+## The failure
+
+Upstream LLVM 21's compiler-rt has Haiku support for x86_64/i386 only. Building
+on arm64 reaches sanitizer_common/sanitizer_linux.cpp, which has no
+Haiku+aarch64 branch, and fails three ways (attempt 2 died here at 5330/7093):
+
+    sanitizer_linux.cpp:2057: error: 'Aarch64GetESR' was not declared in this scope
+    sanitizer_linux.cpp:2590: error: 'mcontext_t' {aka 'struct vregs'} has no member named 'pc'
+    sanitizer_linux.cpp:2591: error: 'mcontext_t' {aka 'struct vregs'} has no member named 'regs'
+
+## Why
+
+Haiku's arm64 `mcontext_t` is `struct vregs` from
+`headers/posix/arch/arm64/signal.h`:
+
+    struct vregs {
+        ulong       x[30];
+        ulong       lr;
+        ulong       sp;
+        ulong       elr;
+        ulong       spsr;
+        __uint128_t fp_q[32];
+        u_int       fpsr;
+        u_int       fpcr;
+    };
+
+so the program counter is `elr`, the stack pointer is `sp`, and the AArch64
+frame pointer x29 is `x[29]` — `x[]` holds x0..x29, which is why `lr` (x30) is a
+separate member and `x[29]` really is the FP rather than an off-by-one (this is
+the same register mapping used by `ruby-3.2.9-arm64-mcontext.patch`). There is
+no ESR field at all.
+
+Three changes, all against tag `llvmorg-21.1.8`:
+
+(a) `Aarch64GetESR` is defined only under `SANITIZER_LINUX && __aarch64__` and
+    `SANITIZER_FREEBSD && __aarch64__`, but called unguarded in GetWriteFlag().
+    Widen the FreeBSD arm to include Haiku, returning false — GetWriteFlag()
+    then yields `Unknown`, which is conservative and correct.
+
+(b) `GetPcSpBp`'s `#else` aarch64 arm assumes the Linux sigcontext (`.pc`,
+    `.regs[]`). Add a Haiku arm reading `elr`/`x[29]`/`sp`, mirroring how that
+    same function already special-cases Haiku for x86_64 and i386.
+
+(c) `sanitizer_common/CMakeLists.txt` hardcoded
+    `-I/system/develop/headers/private/system/arch/x86_64` for every Haiku
+    build regardless of architecture. This did not cause the compile error —
+    the TU still gets the right arm64 `mcontext_t` because
+    `headers/posix/signal.h` selects the arch header via `__HAIKU_ARCH_HEADER`,
+    driven by `__aarch64__`, not by -I order — but it is a real upstream bug.
+    Derive the directory instead. The name is `__HAIKU_ARCH` from
+    `headers/config/HaikuConfig.h`, so aarch64 maps to **`arm64`, not
+    `aarch64`**. Derive it from `COMPILER_RT_DEFAULT_TARGET_ARCH` (already
+    normalised to `aarch64`), falling back to `CMAKE_SYSTEM_PROCESSOR`, mapping
+    both through the same table — never used raw, because
+    `CMAKE_SYSTEM_PROCESSOR` comes from `uname -m`, which is `BePC` on Haiku x86.
+
+The x86 and x86_64 code paths are untouched.
+
+## Proven
+
+Deployed to the native arm64 Haiku EC2 builder (i-028584d61d2d9bf05) as two
+commits appended to the existing `llvm21-21.1.8.patchset` and regenerated with
+`haikuporter -e llvm21`. On the next build the three errors were gone,
+`sanitizer_linux.cpp.o` compiled, and the build advanced through all of
+compiler-rt into a NEW wall in `openmp` (`kmp_runtime.cpp`: on AArch64 `va_list`
+is an aggregate, so `!ap` / `ap == NULL` / `ap &&` do not compile — openmp has
+no `KMP_OS_HAIKU` port at all). That openmp blocker is separate and not
+addressed here.
+
+Applies to: haikuports/sys-devel/llvm/llvm21-21.1.8.recipe via its
+`llvm21-21.1.8.patchset` (llvm21 has NO input source package on the builder, so
+the operative copy is the ports-tree one under `sys-devel/llvm/`).
+
+--- a/compiler-rt/lib/sanitizer_common/sanitizer_linux.cpp
++++ b/compiler-rt/lib/sanitizer_common/sanitizer_linux.cpp
+@@ -1969,8 +1969,8 @@ static bool Aarch64GetESR(ucontext_t *ucontext, u64 *esr) {
+   }
+   return false;
+ }
+-#  elif SANITIZER_FREEBSD && defined(__aarch64__)
+-// FreeBSD doesn't provide ESR in the ucontext.
++#  elif (SANITIZER_FREEBSD || SANITIZER_HAIKU) && defined(__aarch64__)
++// Neither FreeBSD nor Haiku provides ESR in the ucontext.
+ static bool Aarch64GetESR(ucontext_t *ucontext, u64 *esr) { return false; }
+ #  endif
+
+@@ -2585,6 +2585,11 @@ static void GetPcSpBp(void *context, uptr *pc, uptr *sp, uptr *bp) {
+   *pc = ucontext->uc_mcontext.mc_gpregs.gp_elr;
+   *bp = ucontext->uc_mcontext.mc_gpregs.gp_x[29];
+   *sp = ucontext->uc_mcontext.mc_gpregs.gp_sp;
++#    elif SANITIZER_HAIKU
++  ucontext_t *ucontext = (ucontext_t *)context;
++  *pc = ucontext->uc_mcontext.elr;
++  *bp = ucontext->uc_mcontext.x[29];
++  *sp = ucontext->uc_mcontext.sp;
+ #    else
+   ucontext_t *ucontext = (ucontext_t *)context;
+   *pc = ucontext->uc_mcontext.pc;
+
+--- a/compiler-rt/lib/sanitizer_common/CMakeLists.txt
++++ b/compiler-rt/lib/sanitizer_common/CMakeLists.txt
+@@ -230,7 +230,32 @@ append_list_if(MSVC /Zl SANITIZER_COMMON_CFLAGS)
+ if(HAIKU)
+-   list(APPEND SANITIZER_COMMON_CFLAGS -I/system/develop/headers/private -I/system/develop/headers/private/system/arch/x86_64 -I/system/develop/headers/private/system)
++   # Haiku keeps its private kernel/system headers in a per-architecture
++   # subdirectory whose name is __HAIKU_ARCH from headers/config/HaikuConfig.h,
++   # which is not always the LLVM spelling of the architecture -- notably
++   # aarch64 is "arm64" there. Hardcoding x86_64 put the wrong arch/ directory
++   # on the include path for every architecture that is not x86_64.
++   #
++   # Derive it from COMPILER_RT_DEFAULT_TARGET_ARCH (already normalised),
++   # falling back to CMAKE_SYSTEM_PROCESSOR. Both go through the same table,
++   # because CMAKE_SYSTEM_PROCESSOR comes from uname -m, which reports "BePC"
++   # on Haiku x86 and so must never be used as the directory name directly.
++   set(HAIKU_ARCH_SPELLING "${COMPILER_RT_DEFAULT_TARGET_ARCH}")
++   if(NOT HAIKU_ARCH_SPELLING)
++     set(HAIKU_ARCH_SPELLING "${CMAKE_SYSTEM_PROCESSOR}")
++   endif()
++   if(HAIKU_ARCH_SPELLING MATCHES "^(aarch64|arm64)$")
++     set(HAIKU_ARCH_DIR "arm64")
++   elseif(HAIKU_ARCH_SPELLING MATCHES "^(x86_64|amd64)$")
++     set(HAIKU_ARCH_DIR "x86_64")
++   elseif(HAIKU_ARCH_SPELLING MATCHES "^(i[3-6]86|BePC)$")
++     set(HAIKU_ARCH_DIR "x86")
++   else()
++     set(HAIKU_ARCH_DIR "${HAIKU_ARCH_SPELLING}")
++   endif()
++   message(STATUS
++     "sanitizer_common: Haiku private arch headers: ${HAIKU_ARCH_DIR}")
++   list(APPEND SANITIZER_COMMON_CFLAGS -I/system/develop/headers/private -I/system/develop/headers/private/system/arch/${HAIKU_ARCH_DIR} -I/system/develop/headers/private/system)
+ endif()
+ set(SANITIZER_CFLAGS ${SANITIZER_COMMON_CFLAGS})
