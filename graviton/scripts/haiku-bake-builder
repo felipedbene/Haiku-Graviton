@@ -105,6 +105,17 @@ for s in $STAGE; do
 done
 say "staged to s3://$BUCKET/bake-scripts/: $STAGE"
 
+# The build-wave planner's chain tools ride along too. depclosure.py lives beside
+# the other builder tools (graviton/builder/); haiku-package-closure is here in
+# scripts/. Provisioning installs on-PATH launchers for them; the sources are
+# pulled onto /boot/home in step 3 so a wave can run them (see #163).
+DEPCLOSURE_SRC="$HERE/../builder/depclosure.py"
+[ -f "$DEPCLOSURE_SRC" ] || { say "missing $DEPCLOSURE_SRC"; exit 1; }
+aws s3 cp "$DEPCLOSURE_SRC" "s3://$BUCKET/bake-scripts/depclosure.py" --region "$REGION" >/dev/null
+[ -f "$HERE/haiku-package-closure" ] || { say "missing $HERE/haiku-package-closure"; exit 1; }
+aws s3 cp "$HERE/haiku-package-closure" "s3://$BUCKET/bake-scripts/haiku-package-closure" --region "$REGION" >/dev/null
+say "staged chain tools: depclosure.py haiku-package-closure"
+
 # The DeBeOS recipe overlay has to travel with the bake. A builder clones upstream
 # HaikuPorts, which knows nothing about arm64 Haiku, so without this every arm64
 # recipe fix this project has made is absent from the baked AMI and from every
@@ -172,8 +183,10 @@ EOF
   "$HERE/ssm-run" "$IID" -t 900 <<EOF
 set -eu
 cd /boot/home
-/boot/system/bin/debeos-ssm-agent s3 cp s3://$BUCKET/bake-scripts/haikuports-patches.tar.gz /boot/home/haikuports-patches.tar.gz
-tar -xzf /boot/home/haikuports-patches.tar.gz -C /boot/home
+# UNCOMPRESSED tar to match the staging above: \`tar -z\` fails on the Haiku SSM
+# shell ("gzip: Cannot exec") because its Linux-shaped PATH omits /boot/system/bin.
+/boot/system/bin/debeos-ssm-agent s3 cp s3://$BUCKET/bake-scripts/haikuports-patches.tar /boot/home/haikuports-patches.tar
+tar -xf /boot/home/haikuports-patches.tar -C /boot/home
 /boot/system/bin/debeos-ssm-agent s3 cp s3://$BUCKET/bake-scripts/haiku-ports-overlay-apply /boot/home/haiku-ports-overlay-apply
 chmod +x /boot/home/haiku-ports-overlay-apply
 /boot/home/haiku-ports-overlay-apply /boot/home/haikuports-patches /boot/home/haikuports
@@ -196,8 +209,10 @@ fi
 set -e
 /boot/system/bin/debeos-ssm-agent s3 cp s3://$BUCKET/bake-scripts/haiku-nativebuild /boot/home/haiku-nativebuild
 /boot/system/bin/debeos-ssm-agent s3 cp s3://$BUCKET/bake-scripts/haiku-repo-publish /boot/home/haiku-repo-publish
-chmod +x /boot/home/haiku-nativebuild /boot/home/haiku-repo-publish
-ls -l /boot/home/haiku-nativebuild /boot/home/haiku-repo-publish
+/boot/system/bin/debeos-ssm-agent s3 cp s3://$BUCKET/bake-scripts/depclosure.py /boot/home/depclosure.py
+/boot/system/bin/debeos-ssm-agent s3 cp s3://$BUCKET/bake-scripts/haiku-package-closure /boot/home/haiku-package-closure
+chmod +x /boot/home/haiku-nativebuild /boot/home/haiku-repo-publish /boot/home/haiku-package-closure
+ls -l /boot/home/haiku-nativebuild /boot/home/haiku-repo-publish /boot/home/depclosure.py /boot/home/haiku-package-closure
 EOF
 
 # 4) snapshot -> new AMI. --no-reboot: Haiku arm64 EC2 reboot is unreliable, and
