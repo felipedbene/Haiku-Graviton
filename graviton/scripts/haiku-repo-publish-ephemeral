@@ -50,6 +50,10 @@
 #   HG_PUBLISHER_SUBNET    subnet to launch the peer in (required to self-provision)
 #   HG_PUBLISHER_SG        security group for the peer (required to self-provision)
 #   HG_PUBLISHER_TYPE      instance type (default c7g.large; arm64)
+#   HG_PUBLISHER_DISK_GIB  root disk GiB (default 40). MUST exceed the size of the
+#                          whole published repo: the index rebuild syncs every
+#                          package to local disk (~6.1 GB today). The AMI default of
+#                          8 GiB ENOSPC'd mid-sync and broke every publish.
 #   HG_PUBLISHER_KEY       optional EC2 key-name (SSM does not need it; debug aid)
 #   HG_PUBLISHER_WAIT_SECS budget for the peer to answer SSM + finish bootstrap (default 600)
 #
@@ -79,6 +83,11 @@ SG="${HG_PUBLISHER_SG:-}"
 TYPE="${HG_PUBLISHER_TYPE:-c7g.large}"
 KEY="${HG_PUBLISHER_KEY:-}"
 WAIT="${HG_PUBLISHER_WAIT_SECS:-600}"
+# Root GiB for the self-provisioned publisher. Sized to hold the entire published
+# repo with headroom (~6.1 GB and growing), because the index rebuild downloads
+# all of it -- see the comment at run-instances. Raise it, do not lower it: the
+# failure mode is a mid-sync ENOSPC after the instance is already running.
+DISK="${HG_PUBLISHER_DISK_GIB:-40}"
 
 # Resolve where the banked host tools live. No bucket name is written in this
 # tree: default to the bake pipeline's WorkBucket (a CDK-generated name) read from
@@ -176,10 +185,22 @@ launch_peer() {
 	[ -n "$KEY" ] && keyopt="--key-name $KEY"
 	local id
 	# shellcheck disable=SC2086
+	# The root disk has to hold the WHOLE published repo, not just the incoming
+	# package. Rebuilding the index is not incremental at the storage level:
+	# haiku-repo-add syncs every object under packages/ to local disk so
+	# package_repo can re-hash the complete set. That is 1871 objects / ~6.1 GB
+	# today and it only grows, so the AMI's default 8 GiB root ran out and EVERY
+	# publish died with
+	#     [Errno 28] No space left on device
+	# partway through the sync -- after launching an instance and pulling GBs, and
+	# with a badly disguised cause, because the symptom is a wall of per-object
+	# "download failed" lines rather than one clear message.
+	local diskopt="--block-device-mappings DeviceName=/dev/sda1,Ebs={VolumeSize=${DISK},VolumeType=gp3,DeleteOnTermination=true}"
 	id=$(aws --region "$region" ec2 run-instances \
 		--image-id "$ami" --instance-type "$TYPE" \
 		--subnet-id "$SUBNET" --security-group-ids "$SG" $keyopt \
 		--iam-instance-profile "Name=$PROFILE" \
+		$diskopt \
 		--user-data "$userdata" \
 		--tag-specifications "ResourceType=instance,Tags=[{Key=Project,Value=haiku-graviton},{Key=Name,Value=haiku-repo-publisher},{Key=ephemeral,Value=true}]" \
 		--query 'Instances[0].InstanceId' --output text 2>&1)
