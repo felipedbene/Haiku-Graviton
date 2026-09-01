@@ -225,6 +225,19 @@ public:
 			arm64_push_iframe(&fThread->arch_info.iframes, iframe);
 		else
 			arm64_push_iframe(&gBootFrameStack, iframe);
+
+		// Mirror the exit-side accounting done in ~InterruptScope. A trap
+		// taken from EL0 is a user->kernel transition, so the interval that
+		// just elapsed in userland has to be credited to user_time and the
+		// thread marked in-kernel -- exactly what the x86_64 IRQ/syscall entry
+		// path does. Interrupts are still masked here, as thread_at_kernel_entry()
+		// requires. A trap from EL1 is already in-kernel (e.g. a nested IRQ);
+		// touching the accounting there would misattribute the preceding kernel
+		// interval to user_time and double-count on exit.
+		if (fThread != NULL
+			&& (iframe->spsr & PSR_M_MASK) == PSR_M_EL0t) {
+			thread_at_kernel_entry(system_time());
+		}
 	}
 
 	virtual ~InterruptScope() {
@@ -427,7 +440,8 @@ do_sync_handler(iframe * frame)
 				}
 			}
 
-			thread_at_kernel_entry(system_time());
+			// User->kernel time accounting is handled on trap entry by the
+			// InterruptScope constructor (EL0 origin), matching the exit side.
 			thread_get_current_thread()->arch_info.old_x0 = frame->x[0];
 
 			enable_interrupts();
