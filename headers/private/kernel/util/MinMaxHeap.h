@@ -9,6 +9,8 @@
 #define KERNEL_UTIL_MIN_MAX_HEAP_H
 
 
+#include <string.h>
+
 #include <debug.h>
 
 #include <SupportDefs.h>
