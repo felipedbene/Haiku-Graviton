@@ -175,7 +175,10 @@ if [ "$PROVISION" = 1 ]; then
 set -eu
 /boot/system/bin/debeos-ssm-agent s3 cp s3://$BUCKET/bake-scripts/haiku-provision-native-builder /boot/home/haiku-provision-native-builder
 chmod +x /boot/home/haiku-provision-native-builder
-/boot/home/haiku-provision-native-builder
+# Pass the work bucket so the fetch shims cache SOURCE tarballs to the shared S3
+# tier (issue #162). The bucket is resolved here at bake time, never baked into
+# the tracked provisioner file.
+SRCCACHE_S3="s3://$BUCKET/srccache" /boot/home/haiku-provision-native-builder
 EOF
   # Overlay BEFORE the cache warm-up, so the dependency infos baked into the AMI
   # are computed from the recipes we will actually build with.
