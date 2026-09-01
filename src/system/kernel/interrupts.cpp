@@ -82,6 +82,10 @@ static mutex sIOInterruptVectorAllocationLock
 // irqs_lock churn that would otherwise achieve nothing.
 static bool sIRQAffinitySupported = true;
 
+// Budget for the "rebalanced vector" dprintf in assign_io_interrupt_to_cpu; see
+// the comment there for why this is bounded rather than unconditional.
+static int32 sRebalanceLogBudget = 8;
+
 
 #if DEBUG_INTERRUPTS
 static int
@@ -805,6 +809,27 @@ assign_io_interrupt_to_cpu(int32 vector, int32 newCPU)
 	cpu = &gCPU[targetCPU];
 	locker.SetTo(cpu->irqs_lock, false);
 	cpu->irqs.Add(sVectors[vector].assigned_cpu);
+	locker.Unlock();
+
+	// A successful rebalance used to be completely silent, which left the whole
+	// mechanism unobservable outside an interactive KDL session: the only readouts
+	// are the `int_load` / `ints` debugger commands, and a headless EC2 instance has
+	// READ-ONLY console access, so nobody can type them. That is how IRQ
+	// rebalancing on arm64 stayed unverified even after both things it depends on
+	// were fixed (per-vector affinity, then CPU load tracking) -- there was no way
+	// to tell from outside whether it had ever fired even once.
+	//
+	// Bounded to the first few moves per boot on purpose. The console is
+	// WRITE-bound on this platform (console access alone measurably costs
+	// throughput), and the rebalancer can fire on every very-high-load tick, so an
+	// unbounded dprintf would flood the log AND perturb the very workload being
+	// measured -- the observation would change the result. A small fixed budget
+	// answers the open question ("does it fire, and what moves where"); the
+	// steady-state distribution remains an `int_load` question.
+	if (atomic_add(&sRebalanceLogBudget, -1) > 0) {
+		dprintf("interrupts: rebalanced vector %" B_PRId32 " from CPU %" B_PRId32
+			" to CPU %" B_PRId32 "\n", vector, oldCPU, targetCPU);
+	}
 }
 
 
