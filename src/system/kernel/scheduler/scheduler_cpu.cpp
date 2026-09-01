@@ -281,7 +281,13 @@ CPUEntry::TrackActivity(ThreadData* oldThreadData, ThreadData* nextThreadData)
 	if (gTrackCPULoad) {
 		if (!cpuEntry->disabled)
 			ComputeLoad();
-		_RequestPerformanceLevel(nextThreadData);
+		// Only meaningful with a cpufreq module behind it. gTrackCPULoad is no
+		// longer a proxy for "frequency scaling exists" (it is also true on a
+		// multi-core machine with no cpufreq, so that ComputeLoad above can
+		// drive the IRQ rebalancer), so ask the specific question here rather
+		// than calling into a module that is not there.
+		if (gCPUPerformanceScalingAvailable)
+			_RequestPerformanceLevel(nextThreadData);
 	}
 
 	Thread* nextThread = nextThreadData->GetThread();

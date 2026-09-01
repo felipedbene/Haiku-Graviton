@@ -45,6 +45,13 @@ const int kLoadDifference = kMaxLoad * 20 / 100;
 extern bool gSingleCore;
 extern bool gTrackCoreLoad;
 extern bool gTrackCPULoad;
+// Whether a cpufreq module accepted a performance-level request, i.e. whether
+// this machine can scale CPU frequency at all. Kept separate from
+// gTrackCPULoad: measuring per-CPU load and being able to change frequency are
+// independent capabilities, and conflating them left every machine without a
+// cpufreq driver (all of arm64) with no per-CPU load and therefore no IRQ
+// rebalancing. See scheduler_update_policy().
+extern bool gCPUPerformanceScalingAvailable;
 
 
 void init_debug_commands();

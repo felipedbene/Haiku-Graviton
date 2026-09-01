@@ -53,6 +53,7 @@ scheduler_mode_operations* gCurrentMode;
 bool gSingleCore;
 bool gTrackCoreLoad;
 bool gTrackCPULoad;
+bool gCPUPerformanceScalingAvailable;
 
 }	// namespace Scheduler
 
@@ -779,12 +780,36 @@ scheduler_enable_scheduling()
 void
 scheduler_update_policy()
 {
-	gTrackCPULoad = increase_cpu_performance(0) == B_OK;
+	// Whether the machine can scale frequency at all. This is the ONLY thing
+	// increase_cpu_performance() can tell us.
+	gCPUPerformanceScalingAvailable = increase_cpu_performance(0) == B_OK;
+
+	// Per-CPU load feeds two independent consumers:
+	//
+	//   1. _RequestPerformanceLevel(), which needs a cpufreq module, and
+	//   2. CPUEntry::ComputeLoad(), which is the ONLY caller of
+	//      rebalance_irqs(false) -- the load-driven IRQ rebalancer -- and needs
+	//      nothing but more than one CPU to move interrupts between.
+	//
+	// gTrackCPULoad used to be exactly "a cpufreq module exists", which silently
+	// made (2) conditional on (1). Every machine without frequency scaling --
+	// which is all of arm64, where the boot log reads "no valid cpufreq module
+	// found" -- therefore never computed per-CPU load, so ComputeLoad() was never
+	// called, so rebalance_irqs(false) was unreachable and IRQs stayed wherever
+	// they were first assigned. (rebalance_irqs(true), the idle path from
+	// scheduler_reschedule(), still fired, but low_latency returns immediately on
+	// idle and power_saving only packs when a small-task core is already chosen,
+	// so no load-driven rebalancing happened in either mode.)
+	//
+	// Track per-CPU load if EITHER consumer can use it.
+	gTrackCPULoad = gCPUPerformanceScalingAvailable || !gSingleCore;
 	gTrackCoreLoad = !gSingleCore || gTrackCPULoad;
 	dprintf("scheduler switches: single core: %s, cpu load tracking: %s,"
-		" core load tracking: %s\n", gSingleCore ? "true" : "false",
+		" core load tracking: %s, cpu freq scaling: %s\n",
+		gSingleCore ? "true" : "false",
 		gTrackCPULoad ? "true" : "false",
-		gTrackCoreLoad ? "true" : "false");
+		gTrackCoreLoad ? "true" : "false",
+		gCPUPerformanceScalingAvailable ? "true" : "false");
 }
 
 
