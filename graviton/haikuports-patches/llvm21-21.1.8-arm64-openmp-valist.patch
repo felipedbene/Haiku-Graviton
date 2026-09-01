@@ -1,0 +1,76 @@
+Route Haiku arm64 to OpenMP's pointer-va_list branch.
+
+REAL FIX, not a cut. One OS token added to an existing conditional; no code
+disabled, no dependency changed. This is the second arm64 blocker in llvm21,
+reached only after the compiler-rt fix (llvm21-21.1.8-arm64-compiler-rt.patch)
+cleared the first.
+
+## The failure
+
+After compiler-rt built, the incremental build advanced into the OpenMP runtime
+and died in `openmp/runtime/src/kmp_runtime.cpp`:
+
+    kmp_runtime.cpp:1458: error: invalid operands of types 'kmp_va_list'
+                          {aka 'va_list'} and 'int' to binary 'operator!='
+    kmp_runtime.cpp:1466: error: ... and 'long int' to binary 'operator=='
+    kmp_runtime.cpp:1744: error: could not convert 'ap' from 'kmp_va_list'
+                          {aka 'va_list'} to 'bool'
+
+`kmp_runtime.cpp` handles `kmp_va_list` values as pointers (`!ap`, `ap == NULL`,
+`ap && ...`). That is only legal when `kmp_os.h` typedefs `kmp_va_list` to
+`va_list *`, not to plain `va_list`.
+
+## Why (and why only arm64)
+
+`KMP_OS_HAIKU` already exists in LLVM 21 (`kmp_platform.h`, keyed off
+`__HAIKU__`, already in `KMP_OS_UNIX`), and the OpenMP runtime already carries a
+partial Haiku port (`z_Linux_util.cpp`, `kmp_wrapper_getpid.h`, the affinity
+lists). That port was done and tested on Haiku x86/x86_64, where `va_list` is
+already a pointer type, so the plain-`va_list` branch happened to work.
+
+The pointer form is selected in `kmp_os.h` only for the architectures whose
+`va_list` is an aggregate AND a listed OS:
+
+    #if (KMP_ARCH_ARM || KMP_ARCH_X86_64 || KMP_ARCH_AARCH64 || KMP_ARCH_WASM) && \
+        (KMP_OS_FREEBSD || KMP_OS_NETBSD || KMP_OS_OPENBSD || KMP_OS_DRAGONFLY || \
+         KMP_OS_LINUX || KMP_OS_WASI)
+    typedef va_list *kmp_va_list;      // ap is va_list*  -> !ap / ap==NULL legal
+    ...
+    #else
+    typedef va_list kmp_va_list;       // ap is va_list   -> aggregate on AArch64
+    ...
+
+Haiku was absent from the OS list, so on Haiku arm64 (`KMP_ARCH_AARCH64` set,
+`va_list` an aggregate) it fell to the `#else` and the pointer expressions did
+not compile. Add `KMP_OS_HAIKU` to that OS list — a BSD-branch join, exactly
+what the BSDs and Linux use. The architecture guard is unchanged, so Haiku
+x86/x86_64 keep the plain-`va_list` branch they already used: no behaviour
+change on any existing arch.
+
+## Proven
+
+Deployed to the native arm64 Haiku EC2 builder (i-028584d61d2d9bf05) as a commit
+appended to `llvm21-21.1.8.patchset`, regenerated with `haikuporter -e llvm21`.
+On the incremental rebuild: `kmp_runtime.cpp.o` compiled, the three va_list
+errors were gone (0 occurrences in the log), `libomp.so` linked and installed,
+the full ninja graph completed (681/681, 0 FAILED), and `libunwind` also built
+on arm64 (`libunwind.so.1.0`/`.so.1`/`.so` + headers installed) — the runtime
+that had been unproven on this arch. The build then proceeded to package the
+llvm21 hpkgs. No `KMP_OS_FREEBSD` site beyond this one needed a Haiku join for
+the build to compile and link.
+
+Applies to: haikuports/sys-devel/llvm/llvm21-21.1.8.recipe via its
+`llvm21-21.1.8.patchset` (llvm21 has no input source package; the operative copy
+is the ports-tree one under `sys-devel/llvm/`).
+
+--- a/openmp/runtime/src/kmp_os.h
++++ b/openmp/runtime/src/kmp_os.h
+@@ -219,7 +219,7 @@
+ // stdarg handling
+ #if (KMP_ARCH_ARM || KMP_ARCH_X86_64 || KMP_ARCH_AARCH64 || KMP_ARCH_WASM) &&  \
+     (KMP_OS_FREEBSD || KMP_OS_NETBSD || KMP_OS_OPENBSD || KMP_OS_DRAGONFLY ||  \
+-     KMP_OS_LINUX || KMP_OS_WASI)
++     KMP_OS_LINUX || KMP_OS_WASI || KMP_OS_HAIKU)
+ typedef va_list *kmp_va_list;
+ #define kmp_va_deref(ap) (*(ap))
+ #define kmp_va_addr_of(ap) (&(ap))
