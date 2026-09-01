@@ -63,6 +63,15 @@ agent's job is to review, not redo:
    of-target`). If a suppression looks wrong, escalate — do not un-suppress
    silently.
 3. Leave `needs_human` items for the human; surface them in the run summary.
+4. **Intentionally-pinned packages are NOT outdated — suppress, don't bump or
+   build.** Repology name-matches, so the BeOS **gcc2 hybrid** toolchain
+   (`gcc` 2.95.3, `binutils` 2.17) is flagged "outdated" against GNU `gcc 16` /
+   `binutils 2.47`. These are deliberately frozen — bumping gcc2→gcc16 is
+   nonsensical and they don't build on arm64. Set `build_state=suppressed`,
+   `suppress_reason=repology-false-positive-pinned-gcc2` (same for any other
+   deliberately-pinned package). The genuine cross-tools toolchain bump is tracked
+   separately (issue #89), never via this wave. Do NOT route these to
+   `mega-build-approval` — they are not builds to approve.
 
 ## 2. Planning a build wave
 
@@ -127,6 +136,24 @@ or an API/soname break, or advancing would tempt a feature cut.
   bucket. Second timeout → `failed` + `error_class=timeout`, and escalate.
 - **Other build error:** `failed` + `error_class=build-error`, `attempt_count++`.
 
+**Progress & health — never trust CloudWatch CPU% or `top`'s USER/KERNEL on these
+arm64 Haiku guests.** CloudWatch `CPUUtilization` under-reports ~55x (a
+Haiku-guest-specific counter defect — issue #140; live-validated), and a busy
+pure-userspace compiler thread historically even read as KERNEL time (that half is
+fixed as of hrev59996, but the CloudWatch number is not). Judge whether a builder
+is working by **wall-clock progress** — jam/ninja target count advancing, `.hpkg`
+files appearing in the builder's `packages/` — NOT by CPU%. A "4% CPU" builder is
+almost always busy, not stalled; do not reap or re-launch on a low CPU reading.
+
+**Publishing is single-flight.** `haiku-repo-add` / `haiku-repo-publish-ephemeral`
+rebuild the index over the whole pool and have **no concurrency lock** until issue
+#164 deploys — two concurrent publishes can clobber each other. Before any publish,
+confirm no other publisher is running (`ec2 describe-instances
+Name=tag:Name,Values=haiku-repo-publisher …running,pending`) and wait if one is.
+Publish once per wave (or in serialized batches), never per-package. When the prod
+CloudFront origin points at the pool you published, also invalidate the prod dist's
+index paths so the change is served.
+
 ## 4. Backoff & quarantine
 
 - A `failed` item is **not** re-queued while its `target_version` is unchanged
@@ -151,3 +178,36 @@ Until the human flips the pipeline out of shadow: the agent may triage, plan,
 and record intended waves, but **must not start Step Functions executions**. In
 shadow it writes the plan to the run summary and stops. (This mirrors the
 detector's own shadow default.)
+
+## 7. Verification discipline (a green step is not a built package)
+
+`success = the .hpkg exists` is a hard invariant — enforce it, and apply the same
+skepticism everywhere:
+- **Verify the artifact, not the exit code.** Confirm the `.hpkg` / object / index
+  actually exists and is fresh; a zero exit — or a zero exit leaked through
+  `| tail` — is not proof. Arch objects are not flat under `system/kernel/`; look
+  in the real path before concluding something wasn't built.
+- **Use the right failure signal.** jam: `grep -cE '\.\.\.failed'` (expect 0) plus
+  the `...updated/failed N target(s)...` lines — `grep ': error:'` MISSES failures.
+  ninja: `grep -c 'FAILED:'`.
+- **A failed/denied AWS describe is NOT absence.** Classify the error:
+  `AccessDenied` / `UnauthorizedOperation` / unrecognised = *cannot tell*, so
+  continue; only `NotFound` means gone. A permissions gap must never invent an
+  outage or a "resource deleted".
+- **ENOSPC masquerades.** Odd build/publish deaths here have repeatedly been a full
+  disk — check `df` before any exotic diagnosis.
+- **Cross-check reported facts before an irreversible act.** Do not act on a claim
+  ("X is merged", "no such IAM exists", "the repo is gone", "the state-machine
+  publish clobbers") without verifying it against ground truth (git, IAM, S3, the
+  live config). Confident-but-wrong reports have already been caught this way.
+
+## 8. Operator environment
+
+- **Run tracked tooling from `origin/graviton`, never the local primary checkout.**
+  The shared checkout is often parked behind on someone else's topic branch, so its
+  `graviton/scripts/*` can be stale (e.g. a publisher missing the
+  `HG_PUBLISHER_DISK_GIB` ENOSPC fix). Work from a fresh detached worktree:
+  `git fetch origin && git worktree add <tmp> origin/graviton`.
+- **Never commit to `graviton` directly**; land changes via a topic branch + PR.
+  Verify `HEAD` before staging, and stage explicit paths (another agent may switch
+  the shared checkout's branch under you).
