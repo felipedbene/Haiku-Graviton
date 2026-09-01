@@ -457,9 +457,25 @@ case "$INSTANCE" in
 	*) INSTANCE=""; die "run-instances failed: $INSTANCE" ;;
 esac
 
-IP=$(aws --region "$REGION" ec2 describe-instances --instance-ids "$INSTANCE" \
-	--query 'Reservations[0].Instances[0].PrivateIpAddress' --output text 2>/dev/null)
-[ -n "$IP" ] && [ "$IP" != "None" ] || die "no private IP for $INSTANCE"
+# PrivateIpAddress is not necessarily populated the instant run-instances returns:
+# the instance is still 'pending' and describe-instances can legitimately answer
+# None for the first few seconds. Reading it once and dying on an empty answer
+# turned that ordinary startup latency into a bake failure ("no private IP for
+# i-...") after CrossBuild and Register had already spent ~25 minutes -- and it is
+# a RACE, so it passed on one run and failed the next with no change in between.
+# Poll briefly instead; a genuinely address-less instance still fails, just not on
+# the first tick.
+IP=""
+for _ip_try in $(seq 1 20); do
+	IP=$(aws --region "$REGION" ec2 describe-instances --instance-ids "$INSTANCE" \
+		--query 'Reservations[0].Instances[0].PrivateIpAddress' --output text 2>/dev/null)
+	[ -n "$IP" ] && [ "$IP" != "None" ] && break
+	IP=""
+	sleep 3
+done
+[ -n "$IP" ] || die "no private IP for $INSTANCE after 60s (state: $(aws --region "$REGION" \
+	ec2 describe-instances --instance-ids "$INSTANCE" \
+	--query 'Reservations[0].Instances[0].State.Name' --output text 2>/dev/null))"
 say "instance $INSTANCE at $IP"
 
 # ------------------------------------------------------- wait for the node
