@@ -88,6 +88,18 @@ export interface HaikuPipelineConfig {
   readonly canonicalAmiParam: string;
 
   /**
+   * CloudFront distribution fronting the DeBeOS package repo
+   * (packages.debene.dev). The build-wave's incremental publish invalidates the
+   * mutable index paths (`/<arch>/repo`, `repo.info`, `repo.sha256`) on it after
+   * an add, so a `pkgman refresh` sees the new package without waiting out the
+   * CDN TTL. OPTIONAL and NOT written down here (the id embeds no account but is
+   * still environment-specific): set `-c haiku:repoCloudFrontDistId=` or
+   * `HAIKU_REPO_CF_DIST`. Unset => the publish skips invalidation (index serves
+   * stale until TTL); it never blocks a publish.
+   */
+  readonly repoCloudFrontDistId?: string;
+
+  /**
    * Hardware performance gate (the Test stage, between Register and Approve).
    *
    * The gate boots the candidate AMI for real and measures it, so it needs to
@@ -147,11 +159,16 @@ function ctx(scope: Construct, key: string, envKey: string, fallback?: string): 
  */
 export type SharedConfig = Pick<HaikuPipelineConfig,
   'account' | 'region' | 'ssmOutBucketName' | 'publishBucketName'
-  | 'builderAmiParam' | 'canonicalAmiParam'>;
+  | 'builderAmiParam' | 'canonicalAmiParam' | 'repoCloudFrontDistId'>;
 
 export function loadSharedConfig(scope: Construct): SharedConfig {
   const account = ctx(scope, 'haiku:account', 'HAIKU_ACCOUNT', process.env.CDK_DEFAULT_ACCOUNT);
   const region = ctx(scope, 'haiku:region', 'HAIKU_REGION', 'us-west-2');
+  // Optional: no ctx() (which throws when absent) -- an unset CDN id is valid
+  // (the publish just skips invalidation), so read it directly and leave it
+  // undefined when neither env nor context supplies it.
+  const repoCloudFrontDistId = process.env.HAIKU_REPO_CF_DIST
+    ?? (scope.node.tryGetContext('haiku:repoCloudFrontDistId') as string | undefined);
   return {
     account,
     region,
@@ -163,6 +180,7 @@ export function loadSharedConfig(scope: Construct): SharedConfig {
       '/haiku-graviton/builder-ami-id'),
     canonicalAmiParam: ctx(scope, 'haiku:canonicalAmiParam', 'HAIKU_CANONICAL_AMI_PARAM',
       '/haiku-graviton/canonical-ami-id'),
+    repoCloudFrontDistId: repoCloudFrontDistId || undefined,
   };
 }
 

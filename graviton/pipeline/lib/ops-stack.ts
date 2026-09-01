@@ -7,7 +7,9 @@ import * as lambda from 'aws-cdk-lib/aws-lambda';
 import * as sfn from 'aws-cdk-lib/aws-stepfunctions';
 import * as tasks from 'aws-cdk-lib/aws-stepfunctions-tasks';
 import * as logs from 'aws-cdk-lib/aws-logs';
+import * as codebuild from 'aws-cdk-lib/aws-codebuild';
 import * as path from 'path';
+import * as fs from 'fs';
 import { SharedConfig, DEBEOS_TAGS } from './config';
 
 export interface OpsStackProps extends cdk.StackProps {
@@ -23,7 +25,15 @@ export interface OpsStackProps extends cdk.StackProps {
  * The DevOps agent (under SOPs.md) decides what to build and starts an execution
  * per dependency chain; this state machine executes the chain reliably:
  *   Claim -> LaunchBuilder -> WaitForSSM -> [Map: build each pkg in order] ->
- *   PublishRepo -> Reap.  Reap runs on both success and failure.
+ *   [Publish? -> AcquirePublishLock -> IncrementalPublish -> ReleasePublishLock]
+ *   -> Reap.  Reap runs on both success and failure.
+ *
+ * Publish is an INCREMENTAL add (haiku-repo-add) that folds the wave's harvested
+ * hpkgs into the live repo without dropping the ~1885 already-published packages
+ * -- see the RepoPublish CodeBuild project and the Publish? gate below for why it
+ * is a CodeBuild job (needs a Linux host with the banked `package_repo` tool +
+ * bulk S3), and how concurrent chains are serialized by a DynamoDB single-flight
+ * lock so two incremental publishes never race the shared index.
  */
 export class OpsStack extends cdk.Stack {
   public readonly table: dynamodb.Table;
@@ -187,10 +197,6 @@ export class OpsStack extends cdk.Stack {
     });
     const waitSsmFn = mkFn('WaitSsmFn', 'wait_ssm.handler');
     const buildFn = mkFn('BuildFn', 'run_ssm.build', { WORK_BUCKET: workBucket });
-    const publishFn = mkFn('PublishFn', 'run_ssm.publish', {
-      WORK_BUCKET: workBucket,
-      PUBLISH_S3: `s3://${publishBucket}/debeos-repo/arm64`,
-    });
     const pollFn = mkFn('PollFn', 'poll_ssm.handler');
     const recordFn = mkFn('RecordFn', 'record.handler');
     const reapFn = mkFn('ReapFn', 'reap.handler');
@@ -217,7 +223,7 @@ export class OpsStack extends cdk.Stack {
         resources: ['*'],
       }));
     }
-    for (const fn of [buildFn, publishFn, waitSsmFn]) {
+    for (const fn of [buildFn, waitSsmFn]) {
       fn.addToRolePolicy(new iam.PolicyStatement({
         actions: ['ssm:SendCommand'], resources: ['*'],  // waitSsmFn fires the readiness probe
       }));
@@ -275,21 +281,176 @@ export class OpsStack extends cdk.Stack {
     });
     buildMap.itemProcessor(startBuild);
 
-    // Publish once after the chain, then reap on success.
-    const startPublish = li('StartPublish', publishFn);
-    const waitPublish = new sfn.Wait(this, 'WaitPublish', {
-      time: sfn.WaitTime.duration(cdk.Duration.seconds(45)),
+    // ---- incremental repo publish (CodeBuild + haiku-repo-add) -----------
+    // The wave's built hpkgs are harvested to s3://<workBucket>/hpkg/arm64/ by
+    // haiku-nativebuild. Publishing them to the LIVE repo must be INCREMENTAL:
+    // haiku-repo-add pulls the full published pool, adds the new package(s),
+    // rebuilds the index over the UNION, and uploads it -- so the ~1885 already-
+    // published packages are never dropped. (The retired on-builder
+    // `haiku-repo-publish all` rebuilt the index from ONLY the builder's local
+    // subset and would have clobbered the pool -- see the Publish? gate.)
+    //
+    // Why CodeBuild and not the Haiku builder: haiku-repo-add needs a Linux host
+    // with (a) the `package`/`package_repo` host tools and (b) bulk S3 (it syncs
+    // the whole ~1885-object pool). Haiku has neither awscli nor those Linux
+    // binaries; the builder can only single-file `s3 cp`. So the publish runs in
+    // an arm64 Ubuntu 24.04 CodeBuild container -- the same environment the
+    // cross-build bakes the host tools on -- which fetches the banked host tools
+    // and runs haiku-repo-add UNCHANGED. This replaces the retired ephemeral
+    // Ubuntu peer (haiku-repo-publish-ephemeral) with a managed, SFN-native
+    // (.sync) job; the incremental primitive is identical.
+    const repoAddB64 = fs.readFileSync(
+      path.join(__dirname, '..', '..', 'scripts', 'haiku-repo-add')).toString('base64');
+    const publishProject = new codebuild.Project(this, 'RepoPublish', {
+      projectName: 'debeos-repo-publish',
+      description: "Incremental DeBeOS repo publish: haiku-repo-add over the wave's harvested hpkgs.",
+      timeout: cdk.Duration.hours(1),
+      // One publish at a time (defence-in-depth with the DynamoDB lock below):
+      // two concurrent index rebuilds would race the shared repo.
+      concurrentBuildLimit: 1,
+      environment: {
+        // Match the cross-build's arm64 Ubuntu 24.04 so the banked (glibc-linked)
+        // Linux host tools run here without an ABI mismatch.
+        buildImage: codebuild.LinuxArmBuildImage.fromDockerRegistry('public.ecr.aws/ubuntu/ubuntu:24.04'),
+        computeType: codebuild.ComputeType.MEDIUM,
+      },
+      environmentVariables: {
+        HG_REPO_S3: { value: `s3://${publishBucket}/debeos-repo/arm64` }, // live repo (packages.debene.dev/arm64)
+        HARVEST_S3: { value: `s3://${workBucket}/hpkg/arm64` },           // wave harvest (durable)
+        INCOMING_BASE: { value: `s3://${workBucket}/hpkg/arm64-incoming` }, // per-run disposable snapshot
+        HG_CF_DIST: { value: props.config.repoCloudFrontDistId ?? '' },   // '' => skip invalidation
+        ARCH: { value: 'arm64' },
+      },
+      buildSpec: codebuild.BuildSpec.fromObject({
+        version: '0.2',
+        phases: {
+          install: {
+            commands: [
+              'export DEBIAN_FRONTEND=noninteractive',
+              'apt-get update -qq',
+              'apt-get install -y --no-install-recommends curl unzip ca-certificates file',
+              'if ! command -v aws >/dev/null 2>&1; then curl -sSLf https://awscli.amazonaws.com/awscli-exe-linux-aarch64.zip -o /tmp/awscliv2.zip && (cd /tmp && unzip -q awscliv2.zip && ./aws/install); fi',
+            ],
+          },
+          build: {
+            commands: [
+              'set -eo pipefail',
+              // Resolve the banked Linux host tools from the bake pipeline's
+              // WorkBucket -- discovered via its CFN output so no generated bucket
+              // name is written into this tree (same as the ephemeral publisher).
+              "WB=\"$(aws cloudformation describe-stacks --stack-name HaikuGravitonBakePipeline --query \"Stacks[0].Outputs[?OutputKey=='WorkBucketName'].OutputValue | [0]\" --output text)\"",
+              'test -n "$WB" -a "$WB" != None || { echo "cannot resolve bake WorkBucket for host tools (HaikuGravitonBakePipeline)" >&2; exit 1; }',
+              'HT="s3://$WB/cache/host-tools"',
+              'install -d /opt/haiku-tools /opt/haiku-tools/lib /opt/haiku-tools/data',
+              'aws s3 cp "$HT/package" /opt/haiku-tools/package',
+              'aws s3 cp "$HT/package_repo" /opt/haiku-tools/package_repo',
+              'chmod +x /opt/haiku-tools/package /opt/haiku-tools/package_repo',
+              'aws s3 cp "$HT/lib" /opt/haiku-tools/lib --recursive --only-show-errors',
+              'aws s3 cp "$HT/data" /opt/haiku-tools/data --recursive --only-show-errors',
+              'export LD_LIBRARY_PATH=/opt/haiku-tools/lib',
+              'export HAIKU_BUILD_SYSTEM_DATA_DIRECTORY=/opt/haiku-tools/data',
+              'export PKG_TOOL=/opt/haiku-tools/package PACKAGE_REPO_TOOL=/opt/haiku-tools/package_repo',
+              'ldd /opt/haiku-tools/package_repo 2>&1 | grep -qi "not found" && { echo "banked host tools missing shared libs" >&2; ldd /opt/haiku-tools/package_repo >&2; exit 1; } || true',
+              // Snapshot the wave harvest into a per-run, DISPOSABLE incoming
+              // prefix. haiku-repo-add clears its HG_INCOMING_S3 on success, so we
+              // point it at this copy -- the durable harvest is left intact, and a
+              // concurrent builder still harvesting into it is never disturbed.
+              'RUN="${RUN:-$CODEBUILD_BUILD_NUMBER}"',
+              'INCOMING="$INCOMING_BASE/$RUN"',
+              'echo "== snapshot $HARVEST_S3 -> $INCOMING =="',
+              'aws s3 sync "$HARVEST_S3/" "$INCOMING/" --only-show-errors --exclude "*" --include "*.hpkg" --exclude "haiku.hpkg" --exclude "haiku-*" --exclude "haiku_*"',
+              'n="$(aws s3 ls "$INCOMING/" | grep -c "[.]hpkg$" || true)"',
+              'if [ "${n:-0}" -eq 0 ]; then echo "no harvested hpkg to publish; nothing to do"; exit 0; fi',
+              'echo "== incremental-add $n harvested package(s) into $HG_REPO_S3 =="',
+              `printf %s '${repoAddB64}' | base64 -d > /tmp/haiku-repo-add`,
+              'export HG_INCOMING_S3="$INCOMING"',
+              'bash /tmp/haiku-repo-add',
+            ],
+          },
+        },
+      }),
     });
-    const pollPublish = li('PollPublish', pollFn);
+    // Publish job IAM: read+write the live repo pool, read the harvest + write
+    // the per-run incoming snapshot (both in workBucket), read the banked host
+    // tools from the bake WorkBucket, and invalidate the repo's CDN index paths.
+    publishProject.addToRolePolicy(new iam.PolicyStatement({
+      actions: ['s3:GetObject', 's3:PutObject', 's3:DeleteObject', 's3:ListBucket'],
+      resources: [
+        `arn:aws:s3:::${publishBucket}`, `arn:aws:s3:::${publishBucket}/*`,
+        `arn:aws:s3:::${workBucket}`, `arn:aws:s3:::${workBucket}/*`,
+      ],
+    }));
+    publishProject.addToRolePolicy(new iam.PolicyStatement({
+      actions: ['s3:GetObject', 's3:ListBucket'],  // banked host tools live in the bake WorkBucket
+      resources: ['arn:aws:s3:::*bakepipeline*workbucket*', 'arn:aws:s3:::*bakepipeline*workbucket*/*'],
+    }));
+    publishProject.addToRolePolicy(new iam.PolicyStatement({
+      actions: ['cloudformation:DescribeStacks'], resources: ['*'],  // discover the bake WorkBucket name
+    }));
+    publishProject.addToRolePolicy(new iam.PolicyStatement({
+      actions: ['cloudfront:CreateInvalidation'],
+      resources: [props.config.repoCloudFrontDistId
+        ? `arn:aws:cloudfront::${this.account}:distribution/${props.config.repoCloudFrontDistId}`
+        : '*'],
+    }));
+
     const reapSuccess = reap('ReapOnSuccess');
-    const publishDone = new sfn.Choice(this, 'PublishDone?')
-      .when(sfn.Condition.booleanEquals('$.done', false), waitPublish)  // loop
-      .when(sfn.Condition.booleanEquals('$.ok', true), reapSuccess)     // published OK
-      .otherwise(reapFail);  // publish failed -> reap + fail (don't hide it)
-    startPublish.next(waitPublish);
-    waitPublish.next(pollPublish);
-    pollPublish.next(publishDone);
     reapSuccess.next(new sfn.Succeed(this, 'BuildWaveDone'));
+
+    // Serialize concurrent chains' publishes with a DynamoDB single-flight lock:
+    // an incremental add is read-modify-write over the shared repo index, so two
+    // running at once would lost-update (the second's --delete sync could drop
+    // the first's just-added packages). Acquire is a conditional PutItem; if the
+    // lock is held, DynamoDB.ConditionalCheckFailedException triggers a backoff
+    // retry until the holder releases. The lock is a sentinel row in the existing
+    // state table. (Release runs on BOTH the success and publish-failure paths;
+    // a whole-execution abort between acquire and release would strand the lock
+    // -- recover by deleting the row -- an accepted, rare, non-silent case.)
+    const lockPk = '__repo_publish_lock__';
+    const acquireLock = new tasks.DynamoPutItem(this, 'AcquirePublishLock', {
+      table: this.table,
+      item: {
+        pkg: tasks.DynamoAttributeValue.fromString(lockPk),
+        held_by: tasks.DynamoAttributeValue.fromString(sfn.JsonPath.stringAt('$$.Execution.Name')),
+        acquired_at: tasks.DynamoAttributeValue.fromString(sfn.JsonPath.stringAt('$$.State.EnteredTime')),
+      },
+      conditionExpression: 'attribute_not_exists(pkg)',
+      resultPath: sfn.JsonPath.DISCARD,
+    });
+    acquireLock.addRetry({
+      errors: ['DynamoDB.ConditionalCheckFailedException'],
+      interval: cdk.Duration.seconds(15),
+      backoffRate: 2,
+      maxAttempts: 30,
+      maxDelay: cdk.Duration.seconds(120),
+    });
+    const runPublish = new tasks.CodeBuildStartBuild(this, 'IncrementalPublish', {
+      project: publishProject,
+      integrationPattern: sfn.IntegrationPattern.RUN_JOB,  // .sync: SFN waits for the build
+      environmentVariablesOverride: {
+        RUN: {
+          value: sfn.JsonPath.stringAt('$$.Execution.Name'),
+          type: codebuild.BuildEnvironmentVariableType.PLAINTEXT,
+        },
+      },
+      resultPath: sfn.JsonPath.DISCARD,
+    });
+    const releaseLock = new tasks.DynamoDeleteItem(this, 'ReleasePublishLock', {
+      table: this.table,
+      key: { pkg: tasks.DynamoAttributeValue.fromString(lockPk) },
+      resultPath: sfn.JsonPath.DISCARD,
+    });
+    const releaseLockOnFailure = new tasks.DynamoDeleteItem(this, 'ReleasePublishLockOnFailure', {
+      table: this.table,
+      key: { pkg: tasks.DynamoAttributeValue.fromString(lockPk) },
+      resultPath: sfn.JsonPath.DISCARD,
+    });
+    acquireLock.next(runPublish);
+    runPublish.next(releaseLock);
+    releaseLock.next(reapSuccess);
+    // Publish failed -> free the lock (don't wedge the next wave) then reap+fail.
+    runPublish.addCatch(releaseLockOnFailure, { resultPath: '$.error' });
+    releaseLockOnFailure.next(reapFail);
 
     // WaitForSSM registration loop.
     const checkSsm = li('CheckSSM', waitSsmFn);
@@ -303,17 +464,16 @@ export class OpsStack extends cdk.Stack {
     waitSsm.next(checkSsm);
 
     // Publish is OPT-IN (default build-only): publish only when the input
-    // explicitly sets publish=true. Rationale: the current PublishRepo runs
-    // haiku-repo-publish over the BUILDER's local package pool, which is only the
-    // handful this wave built -- publishing that would rebuild the repo index
-    // from a subset and CLOBBER the full published set. Correct incremental
-    // publish must run over the full pool (haiku-repo-publish-remote) -- until
-    // that's wired, default off so a wave can never shrink the live repo.
+    // explicitly sets publish=true. When set, it runs the INCREMENTAL add above
+    // (AcquirePublishLock -> IncrementalPublish -> ReleasePublishLock), which
+    // folds the wave's harvested hpkgs into the live repo without shrinking the
+    // published pool -- safe to leave on. When unset, skip straight to reap so a
+    // build-only wave never touches the repo.
     const publishGate = new sfn.Choice(this, 'Publish?')
       .when(sfn.Condition.and(
               sfn.Condition.isPresent('$.publish'),
               sfn.Condition.booleanEquals('$.publish', true)),
-            startPublish)
+            acquireLock)
       .otherwise(reapSuccess);
     buildMap.next(publishGate);
 
@@ -326,7 +486,9 @@ export class OpsStack extends cdk.Stack {
     // top-level graph states; a failure inside the Map iterator is caught at the
     // Map itself (iterator states live in their own sub-graph and cannot target
     // a parent-graph catch).
-    for (const s of [launch, checkSsm, buildMap, startPublish, pollPublish]) {
+    // (IncrementalPublish has its own catch -> ReleasePublishLock -> reapFail, so
+    // a publish failure frees the lock before failing; it is not in this list.)
+    for (const s of [launch, checkSsm, buildMap, acquireLock]) {
       s.addCatch(reapFail, { resultPath: '$.error' });
     }
 
