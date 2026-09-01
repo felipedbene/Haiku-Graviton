@@ -25,5 +25,6 @@ UnitTestLib libkernelutilstest.so
 	  Bitmap.cpp
 	  convertutf.cpp
 	: [ TargetLibstdc++ ] be
+	: libkernelland_emu.so
 ;
 
