@@ -653,8 +653,20 @@ if [ "$ms_type" != "text/html" ]; then
 fi
 say "mimeset OK: typed a fresh file as $ms_type (app_server $ms_appserver, headless warning $ms_warning)"
 if [ "$ms_appserver" = "present" ]; then
-	say "  NOTE: app_server is running, so this pass does not prove the headless path works."
-	say "  On Graviton there is no display device at all, so that is unexpected -- look into it."
+	# app_server running on a Graviton instance with no display device is BY DESIGN
+	# -- it backs the remote-desktop work. This used to say "unexpected -- look into
+	# it", which sent readers chasing an intended configuration.
+	#
+	# What it does still mean: with app_server up, mimeset takes its normal path, so
+	# this pass says nothing about the HEADLESS one -- and headless is where mimeset
+	# was a silent no-op (BApplication exit(0) before the file loop ever ran, which
+	# is how 145 of 262 packages shipped with zero BEOS: attributes). So that defect
+	# is not what this check covers while app_server is guaranteed present; the check
+	# is still worth running (it catches a broken MIME database), it just is not the
+	# regression test for exit(0) that the old wording implied.
+	say "  NOTE: app_server is present (expected -- it backs remote desktop), so"
+	say "  mimeset took its normal path. The headless exit(0) defect is NOT covered"
+	say "  by this pass -- that needs an image with no app_server to exercise."
 fi
 
 # ------------------------------------------------ mprotect / VM regression check
