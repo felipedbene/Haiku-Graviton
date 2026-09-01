@@ -1095,12 +1095,20 @@ Kept deliberately; dead hypotheses get written down rather than deleted.
   runs, so `CPUEntry::fLoad` is permanently 0 and the load-triggered
   `rebalance_irqs()` at `scheduler_cpu.cpp:211` **can never fire on Graviton**.
   Interrupt rebalancing is silently dead on this platform. (tracked: #113)
-- **`MinMaxHeap::PeekMinimum(int32 index)` is not the index-th smallest.** It
-  returns `fMinElements[index]`, a raw heap slot (`MinMaxHeap.h:193`), so only
-  `index == 0` is the true minimum. The `PeekMinimum(index++)` loops in
-  `choose_core()` and `rebalance()` therefore iterate candidates in **arbitrary
-  order** — a real hazard for any fix that touches those loops, and a reason not
-  to trust "the least loaded core" language in the existing comments. (tracked: #114)
+- **`MinMaxHeap::PeekMinimum(int32 index)` was not the index-th smallest.** It
+  returned `fMinElements[index]`, a raw heap slot, so only `index == 0` was the
+  true minimum. The `PeekMinimum(index++)` loops in `choose_core()` and
+  `rebalance()` therefore iterated candidates in **arbitrary order**, and the
+  "least loaded core" language in the surrounding comments was not true.
+  **Fixed** (#114, PR #126): the indexed form is now `PeekUnordered()`, documented
+  as complete-but-unordered, and the callers select on the key via
+  `CoreLoadHeap::PeekLeastLoaded()`/`PeekMostLoaded()`.
+  Scope, measured on the host over the real header: threads with an **empty** CPU
+  mask were never affected — the walk exits on its first iteration at index 0, the
+  true minimum (0 of 6,400 randomized trials differ). Only threads carrying an
+  **affinity mask** were mis-placed: 1,638 of 12,400 trials (13%) chose a more
+  loaded permitted core, worst-case load penalty 654 on the 0..1000 scale.
+  Semantics are pinned by `src/tests/system/kernel/util/MinMaxHeapTest.cpp`.
 - **`smpscale` was not wired into the build** — no `SubInclude` in
   `src/bin/Jamfile` and absent from `build/jam/packages/Haiku`, so every number
   measured before this branch came from a hand-compiled binary the committed tree
