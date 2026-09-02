@@ -141,6 +141,14 @@ PORTS_DIR="$HP_HOME/haikuports"
 HP_DIR="$HP_HOME/haikuporter"
 CONF="$HP_HOME/haikuports.conf"
 SHIM_DIR="$HP_HOME/config/non-packaged/bin"
+# The GCC package ships the arm64 cross-triplet compilers
+# (aarch64-unknown-haiku-g++/-gcc/-c++) ONLY here, not under /boot/system/bin.
+# GNU make's built-in default compilers on arm64 are exactly those triplet
+# names, so raw-Makefile ports (astyle, freeimage) that don't set CC/CXX call
+# them and fail unless this dir is on the build PATH. It is part of the gcc
+# package, so it is present inside haikuporter's chroot via packagefs; the
+# haikuporter wrapper below appends it to PATH so it reaches the in-chroot build.
+CROSS_TOOLS_BIN="/boot/system/develop/tools/bin"
 # The DeBeOS chain-planning tools (build-order graph + pool closure). Their source
 # is deployed to $HP_HOME by haiku-bake-builder, alongside haiku-nativebuild; this
 # script only installs the on-PATH launcher wrappers below. Override for a custom
@@ -319,10 +327,20 @@ fi
 # also pins --config so every invocation resolves the arm64 haikuports.conf
 # regardless of CWD (haikuporter's default config search does not find $CONF when
 # the driver cd's into the ports tree).
+#
+# It also appends $CROSS_TOOLS_BIN to PATH. haikuporter copies its OWN PATH into
+# the in-chroot build shell (filteredEnvironment() -> shellEnv['PATH'] in
+# Port.py), so this is the choke point that carries the arm64 triplet compilers
+# into every BUILD() -- making make's built-in aarch64-unknown-haiku-g++/-gcc
+# defaults resolve without a per-recipe CC/CXX override (#186, #174; the
+# Makefile-Engine ports were narrowly fixed by #182, this fixes the raw-Makefile
+# class). APPENDED, not prepended, so the unprefixed native cc/gcc (in
+# /boot/system/bin, earlier on PATH) and any explicit recipe CC/CXX still win.
 log "installing haikuporter wrapper -> $SHIM_DIR/haikuporter"
 cat > "$SHIM_DIR/haikuporter" <<EOF
 #!/bin/sh
 # haiku-provision-native-builder: bare-command wrapper for the haikuporter clone.
+PATH="\$PATH:$CROSS_TOOLS_BIN"; export PATH
 exec python3.14 "$HP_DIR/haikuporter" --config="$CONF" "\$@"
 EOF
 chmod 755 "$SHIM_DIR/haikuporter"
