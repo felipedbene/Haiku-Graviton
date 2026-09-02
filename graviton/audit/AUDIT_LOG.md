@@ -125,15 +125,65 @@ drifted without the verify stage that produced all the signal.
 - **`bluetooth_address.cpp:221`** — `bluetooth_print_address()` has an **inverted NULL check** on
   line 214 (`if (addr != NULL)` returns "<invalid>"); the correct sibling
   `bluetooth_print_address_buffer` uses `if (addr == NULL)`. A valid address prints "<invalid>", and a
-  NULL `addr` falls through to dereference `addr->b[5]` → guaranteed KDL. Invert the check.
+  NULL `addr` falls through to dereference `addr->b[5]` → KDL. Invert the check. (The original
+  "guaranteed KDL" reading was too strong — the path is unreachable on arm64/Graviton; see below.)
 - **`UnixDatagramEndpoint.cpp:24`** — the `fShutdownRead:1` bitfield is used at lines 259/297/347 but
   never initialised in the ctor (only `fShutdownWrite` is). A fresh AF_UNIX SOCK_DGRAM socket can
   spuriously return EOF on recv / fail sends before any `shutdown(SHUT_RD)`. Add `fShutdownRead(false)`.
 
-**Staged, not shipped.** The three fixes above (bluetooth:221, UnixDatagram:24, and the D1 stack.cpp
-lock+init) are applied to a topic branch for the `debeos-hardware-proof` runbook — propose-only,
-never merged to `graviton`, and each still owes its Graviton hardware plan before it ships in the
-canonical AMI.
+**Merged and hardware-proven (2026-09-02).** All three fixes (bluetooth:221 → #109,
+UnixDatagram:24 → #110, and the D1 `stack.cpp` lock → #111) are **merged to `graviton`** — folded
+into squash-root `951ceebc28` and byte-identical on tip `987f33ab32` — and therefore already ship in
+the canonical AMI (`ami-0dfc6adaacebfb2cf`, `hrev59996`). Each was then verified on real Graviton
+(c7g.xlarge, us-west-2) by hot-swapping the affected kernel network add-on via
+`/boot/home/config/non-packaged/add-ons/kernel/network/protocols/`, which `kModulePaths` searches
+ahead of the packaged tree — so an A/B needs no second AMI bake, only a reboot (and on this platform
+an EC2 stop/start: `shutdown -r` halts without re-booting). Proof strength differs per bug and the
+original write-ups above overstate two of them:
+
+- **#110 (`UnixDatagramEndpoint.cpp`) — solid A/B, and the miss was real.** Disassembly pins the
+  defect to one instruction in the ctor: with the initializer the bitfield byte is masked
+  `and w1, w1, #0xfffffffc` (clears both bits); without it, `and w1, w1, #0xfffffffe` (clears
+  `fShutdownWrite` only, so `fShutdownRead` is inherited from the allocator). The bug is nonetheless
+  **latent on any DeBeOS kernel built at `KDEBUG_LEVEL 2`** (this tree's default), because
+  `PARANOID_KERNEL_MALLOC` pre-fills every kernel allocation with `0xcccccccc` and bit 1 of `0xcc` is
+  clear: instrumented builds measured `byte_or=0xcc` and `inherited_set=0` over 18,432 endpoint
+  constructions, and unpatched repro attempts (2,000 iterations plus 5,120 deliberately heap-poisoned
+  probes) were clean. Standing a recycled block in for the paranoid fill (allocate + `memset 0xff`,
+  applied identically to both arms) reproduces it outright: buggy ctor **2,000/2,000 sends fail
+  `EPIPE`** on a peer that was never shut down (`UnixDatagramEndpoint.cpp:260`), fixed ctor
+  **2,000/2,000 clean**, plus 5,120/5,120 poisoned probes clean. So the fix is load-bearing for any
+  build with `KDEBUG_LEVEL < 2`, and harmless-but-correct at the current level.
+- **#109 (`bluetooth_address.cpp`) — fix-by-inspection; "guaranteed KDL" is wrong on this platform.**
+  The bad `print_address` has exactly one live caller, `dump_domains()` in
+  `stack/domains.cpp` (a KDL command); every other `AddressString()` site sits inside a `TRACE()`
+  macro that release builds compile out (`routes.cpp` ships `//#define TRACE_ROUTES`). Reaching it
+  needs a bluetooth route, hence a bluetooth interface, hence bluetooth hardware, which Graviton has
+  not. Independently, the canonical AMI ships **no `bluetooth` add-on at all**
+  (`/boot/system/add-ons/kernel/network/protocols/` = icmp, icmp6, ipv4, ipv6, tcp, udp, unix), and
+  even after force-loading one so `register_domain(10, bluetooth)` succeeds, all 16
+  `socket(AF_BLUETOOTH, {STREAM,DGRAM,RAW,SEQPACKET}, {0..3})` combinations return
+  `EAFNOSUPPORT` — the add-on registers the domain with a NULL protocol module and no L2CAP/RFCOMM
+  chain exists. The defect is real and correctly fixed, but it is unreachable here; it matters for a
+  future port with bluetooth hardware, not for the arm64 flagship.
+- **#111 (`stack.cpp` unlocked family lookup) — inspection plus a no-regression stress.** A race
+  needs no A/B: the lookup is now inside `MutexLocker _(sChainLock)`. Exercised with 16 threads
+  churning `socket()`/`close()` across 7 family/type combinations for a 300 s wall-clock window —
+  **18,406,190 protocol-chain lookups, 0 rejected, no deadlock, no panic** — plus a shorter 3,674,035-
+  lookup run on a separate boot.
+
+A clean boot of the shipped (packaged) add-ons with no overrides was re-verified afterwards on the
+same instance: ENA up at MTU 9001, ICMP 3/3 to 1.1.1.1, AF_UNIX datagram 2,000/2,000 clean. Both
+test instances were reaped.
+
+One **unrelated one-off KDL** was observed and is *not* attributable to these three bugs:
+`PANIC: vm_page_fault ... at 0x20, ip socket_close+0x0c` during `app_server` team teardown
+(`thread_exit` → `team_delete_team` → `Team::~Team()`). `FAR=0x20` is the `close` slot of
+`net_stack_interface_module_info`, i.e. **`sStackInterface` was NULL**: `socket.cpp`'s
+`put_stack_interface_module()` nulls it under a write lock on the `#if KDEBUG` unload path, while
+every `fd_ops` entry point (`socket_close`, `socket_read`, `socket_write`, `socket_ioctl`, …) reads
+it with no lock and no reference of its own. It did not recur across five subsequent boots on two
+instances. Worth its own issue.
 
 **Meta-lesson.** The reconciliation itself found a defect neither automated side got fully right: the
 fix-agent dismissed D1, the prosecutor re-opened it but pinned the wrong root cause, and only reading
@@ -161,7 +211,8 @@ are correct:
 **Consequence:** the audit's remaining BFS/arp/ENA static leads are **retired**. Combined with the
 earlier radix.c retirement, the whole audit's confirmed real bugs are exactly three:
 `bluetooth_address.cpp:221`, `UnixDatagramEndpoint.cpp:24`, and the D1 `stack.cpp` unlocked-lookup
-race — all staged on `audit/hw-proof-2026-08-27`.
+race — all three now merged to `graviton` (squash-root `951ceebc28`) and hardware-proven on Graviton;
+see "Merged and hardware-proven" above for the per-bug evidence and its varying strength.
 
 **Tooling notes:** v2 ran clean end-to-end and the weighted prosecutor fired (3 prosecutors on the
 ENA/arp findings). But because no dismissal was disputed, the new **Adjudicate stage was still not
