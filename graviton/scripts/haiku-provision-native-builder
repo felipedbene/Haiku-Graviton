@@ -31,6 +31,19 @@
 #        - git/gzip/xz_utils -- the lean base ships none of these, and the ports
 #          workflow needs all three (clone the tree, unpack tarballs).
 #        - libxml2 -- provides `cmd:xmlcatalog`, needed via docbook_xml_dtd.
+#        - gettext -- the TOOLS package (not the gettext_libintl runtime lib):
+#          carries `cmd:autopoint` and the AM_GNU_GETTEXT*/AC_LIB_* autoconf
+#          macros. Without it, `autoreconf` on any AM_GNU_GETTEXT-using port
+#          fails; ~11 campaign-#136 ports died at bootstrap for this (issue #173).
+#
+#   1b. Overlays the C89-safe gnu/sched.h + gnu/crypt.h (`inline` -> `__inline`,
+#      graviton cc9e418fbf / #171) INTO the activated haiku_devel hpkg, so ports
+#      built in strict C89 mode (argon2, opusfile) stop failing to parse those
+#      compatibility headers. This is a STOPGAP overlay onto the sysroot the
+#      canonical AMI baked; the clean path is #171 flowing into the next canonical
+#      bake, after which it is a no-op. See the section 1b block below for why the
+#      fix must land inside the hpkg (haikuporter's chroot mounts a packagefs from
+#      the hpkg files) rather than as a loose file on the host.
 #
 # On resolving build-prerequisites in general: haikuporter resolves a recipe's
 # BUILD_PREREQUIRES only against LOCAL pools (/boot/home/haikuports/packages and
@@ -143,8 +156,16 @@ feed | pkgman refresh >/dev/null 2>&1 || true
 # Kept as one install so the solver resolves the set together. Anything already
 # active is a no-op. This is the set proven necessary to build real ports; add
 # more build-requires here as new ports surface them.
+#
+# gettext (the TOOLS package, distinct from the gettext_libintl runtime lib) is
+# what carries `cmd:autopoint` plus the autoconf/automake macros AM_GNU_GETTEXT*
+# and AC_LIB_* (installed as /boot/system/data/gettext/m4/*.m4). Without it,
+# `autoreconf` on any port that calls AM_GNU_GETTEXT fails -- ~11 ports in
+# campaign #136 (issue #173) died at bootstrap for exactly this. The lean base
+# ships only gettext_libintl; add the full gettext package so autopoint is on
+# PATH and the m4 macros resolve.
 TOOLS="gcc binutils make m4 patch gawk diffutils bison flex \
-	python3.14 autoconf automake libtool perl gettext_libintl \
+	python3.14 autoconf automake libtool perl gettext gettext_libintl \
 	haiku_devel curl git gzip xz_utils libxml2"
 log "installing toolchain: $TOOLS"
 feed | pkgman install $TOOLS
@@ -164,6 +185,84 @@ log "python3.14 zlib: ok"
 mkdir -p "$SHIM_DIR"
 ln -sf "$(command -v python3.14)" "$SHIM_DIR/python3"
 log "python3 -> python3.14 symlink: $SHIM_DIR/python3"
+
+# --- 1b. #171 stopgap: overlay the C89-safe gnu/ compat headers -------------
+# The compatibility shims gnu/sched.h and gnu/crypt.h declare their static helper
+# functions (__cpu_count, crypt_r) with the bare C99 keyword `inline`. A port
+# compiled in strict C89/-ansi mode that pulls them in under _DEFAULT_SOURCE (via
+# gnu/pthread.h -> sched.h) fails to parse:
+#     gnu/sched.h:45:14: error: expected ';' before 'unsigned'
+# -- which broke the argon2 and opusfile builds in campaign #136. The real fix
+# (graviton cc9e418fbf / #171) is a one-token change, `inline` -> `__inline` (a
+# GCC keyword accepted in every -std mode, matching the sibling bsd/ headers).
+#
+# But these are Haiku SYSTEM headers: they ship in the haiku_devel package baked
+# into the canonical AMI, NOT in a spot the graviton source tree reaches at
+# provision time. And haikuporter builds each port in a chroot whose /boot/system
+# is a FRESH packagefs mounted from the activated hpkg FILES -- so what a build
+# actually compiles against is the copy of the header INSIDE haiku_devel's hpkg,
+# not any loose file on the host. So overlay the fix where it is consumed: patch
+# the two headers inside the haiku_devel hpkg itself (package add -f), then let
+# the AMI snapshot carry the patched file. Every builder launched from the AMI
+# boots fresh, activates the patched haiku_devel, and its build chroots serve the
+# fixed headers -- argon2/opusfile then build.
+#
+# STOPGAP: the clean long-term path is #171 flowing into the next canonical AMI
+# bake, after which the headers are already __inline and this is a no-op. The
+# substitution below reproduces cc9e418fbf byte-for-byte (`static inline` is the
+# only match in either header), so it can never diverge from a bundled copy.
+# Idempotent: skipped when the headers are already C89-safe.
+overlay_gnu_compat_headers() {
+	hd=$(ls /boot/system/packages/haiku_devel-*.hpkg 2>/dev/null | head -1)
+	sh=/boot/system/develop/headers/gnu/sched.h
+	ch=/boot/system/develop/headers/gnu/crypt.h
+	if [ -z "$hd" ]; then
+		echo "provision: FATAL #171 overlay: no haiku_devel hpkg in" \
+			"/boot/system/packages" >&2
+		exit 1
+	fi
+	if ! grep -q 'static inline' "$sh" 2>/dev/null \
+			&& ! grep -q 'static inline' "$ch" 2>/dev/null; then
+		log "#171 overlay: gnu/sched.h+crypt.h already C89-safe; skipping"
+		return 0
+	fi
+	log "#171 overlay: patching gnu/sched.h+crypt.h inside $(basename "$hd")"
+	rm -rf /tmp/gnu-overlay /tmp/gnu-overlay.hpkg /tmp/gnu-overlay-verify
+	mkdir -p /tmp/gnu-overlay/develop/headers/gnu
+	sed 's/static inline/static __inline/g' "$sh" \
+		> /tmp/gnu-overlay/develop/headers/gnu/sched.h
+	sed 's/static inline/static __inline/g' "$ch" \
+		> /tmp/gnu-overlay/develop/headers/gnu/crypt.h
+	cp "$hd" /tmp/gnu-overlay.hpkg
+	# </dev/null on every `package` call: this runs under SSM with no TTY, and a
+	# `package` sub-command that hits a prompt (e.g. extract into a missing dir)
+	# otherwise loops on the inherited stdin instead of failing fast.
+	package add -f -C /tmp/gnu-overlay /tmp/gnu-overlay.hpkg \
+		develop/headers/gnu/sched.h develop/headers/gnu/crypt.h </dev/null
+	# Verify the patched entry made it into the repacked hpkg BEFORE swapping --
+	# never ship an overlay that silently no-op'd (success != artifact). Note:
+	# `package extract -C DIR` chdir's into DIR and fails outright if it does not
+	# already exist, so create it first.
+	mkdir -p /tmp/gnu-overlay-verify
+	package extract -C /tmp/gnu-overlay-verify /tmp/gnu-overlay.hpkg \
+		develop/headers/gnu/sched.h </dev/null >/dev/null 2>&1 || true
+	if ! grep -q 'static __inline' \
+			/tmp/gnu-overlay-verify/develop/headers/gnu/sched.h 2>/dev/null; then
+		echo "provision: FATAL #171 overlay: patched header absent from" \
+			"repacked haiku_devel hpkg" >&2
+		exit 1
+	fi
+	# Atomic rename over the active file (the running host packagefs keeps the old
+	# mmap'd inode; a fresh open -- including haikuporter's chroot mount -- reads
+	# the new one). sync so the on-disk file, hence the --no-reboot AMI snapshot,
+	# carries the patched package (BFS defers data flushes -- see the page-writer
+	# note in haiku-ec2-no-sshd-after-stop-start).
+	mv /tmp/gnu-overlay.hpkg "$hd"
+	sync
+	rm -rf /tmp/gnu-overlay /tmp/gnu-overlay-verify
+	log "#171 overlay: haiku_devel patched + synced ($hd)"
+}
+overlay_gnu_compat_headers
 
 # --- 2. ports tree + haikuporter + config ---------------------------------
 if [ ! -d "$PORTS_DIR/.git" ]; then
