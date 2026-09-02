@@ -44,16 +44,25 @@ HPKG_RE = re.compile(r'^(.+)-([^-]+)-(\d+)-(arm64|any|source)\.hpkg$')
 # standard (non-bootstrap, non-minimum) image and are installed in every native
 # builder chroot; the bake harvest deliberately sweeps their hpkgs OUT of the
 # built pool (rebuild.sh, prepguest.sh) as chroot inputs, so satisfied_from_disk
-# never sees them. `makefile_engine` alone is build-required by the whole family
-# of classic Haiku GUI-app ports; before this credit, ~110 such ports escalated
-# to needs_human with esc_note NOPROV:makefile_engine (issue #174).
+# never sees them. `haiku` (the OS package every classic app runtime-requires)
+# and `makefile_engine` (build-required by the whole family of classic Haiku
+# GUI-app ports) are the load-bearing entries; before crediting them ~110 such
+# ports escalated to needs_human with esc_note NOPROV:makefile_engine (#174).
+# The sibling `haiku-package-closure` likewise treats `haiku` as always-present.
 #
 # This is a floor of KNOWN base packages that have no recipe. For a builder's
 # exact installed provides (base commands like cmd:xres, libraries, etc.), pass
 # --base pointing at that host's `pkgman list-installed`/`package list` output;
 # the two combine. Version constraints are irrelevant here -- only names gate
 # reachability -- so bare names suffice.
+#
+# CAVEAT: this computes PLANNER reachability, not buildability. A port can be
+# reachable here yet still fail at build time if a base provider's own hpkg was
+# never published to the repo the builder pulls from, or its source is
+# dead-upstream (e.g. makefile_engine needs cmd:mkdepend, whose source was gone
+# -- #174). Reachable means "worth queueing", not "guaranteed to build".
 BASE_IMAGE_PROVIDES = {
+	'haiku',
 	'makefile_engine',
 	'netfs',
 	'userland_fs',
