@@ -55,7 +55,7 @@
 #                          package to local disk (~6.1 GB today). The AMI default of
 #                          8 GiB ENOSPC'd mid-sync and broke every publish.
 #   HG_PUBLISHER_KEY       optional EC2 key-name (SSM does not need it; debug aid)
-#   HG_PUBLISHER_WAIT_SECS budget for the peer to answer SSM + finish bootstrap (default 600)
+#   HG_PUBLISHER_WAIT_SECS budget for the peer to answer SSM + finish bootstrap (default 1200)
 #
 # Usage: haiku-repo-publish-ephemeral <pkg1.hpkg> [<pkg2.hpkg> ...]
 #
@@ -82,7 +82,7 @@ SUBNET="${HG_PUBLISHER_SUBNET:-}"
 SG="${HG_PUBLISHER_SG:-}"
 TYPE="${HG_PUBLISHER_TYPE:-c7g.large}"
 KEY="${HG_PUBLISHER_KEY:-}"
-WAIT="${HG_PUBLISHER_WAIT_SECS:-600}"
+WAIT="${HG_PUBLISHER_WAIT_SECS:-1200}"
 # Root GiB for the self-provisioned publisher. Sized to hold the entire published
 # repo with headroom (~6.1 GB and growing), because the index rebuild downloads
 # all of it -- see the comment at run-instances. Raise it, do not lower it: the
