@@ -241,9 +241,13 @@ say "creating image $NEW ; waiting for it to become available (can take a while)
 aws ec2 wait image-available --image-ids "$NEW" --region "$REGION"
 # Record HOW this AMI was built, not just what it came from: an incremental bake
 # and a canonical rebase have very different reproducibility, and `source-ami`
-# alone cannot tell them apart once the parent is deregistered.
+# alone cannot tell them apart once the parent is deregistered. NOTE: the
+# `builder-canonical=true` tag is NOT applied here -- it marks exactly the AMI the
+# SSM param points at, so it is moved onto the new AMI only at promotion (repoint)
+# below, mirroring the boot AMI's single `canonical=true` invariant. Tagging it at
+# bake time (regardless of --no-repoint) left every image ever baked tagged true.
 aws ec2 create-tags --resources "$NEW" --region "$REGION" \
-  --tags Key=builder-canonical,Value=true Key=Project,Value=haiku-graviton \
+  --tags Key=Project,Value=haiku-graviton \
          Key=source-ami,Value="$BASE" \
          Key=bake-mode,Value="$([ "$PROVISION" = 1 ] && echo rebase-on-canonical || echo incremental)"
 say "new builder AMI available: $NEW"
@@ -254,9 +258,21 @@ say "new builder AMI available: $NEW"
 # wave before trusting it broadly.
 if [ "$REPOINT" = 1 ]; then
   OLD=$(aws ssm get-parameter --name "$PARAM" --region "$REGION" --query Parameter.Value --output text)
+  # Move builder-canonical=true onto the promoted AMI: untag every prior holder
+  # first so exactly one image (the param target) carries it.
+  PRIOR=$(aws ec2 describe-images --owners self --region "$REGION" \
+    --filters "Name=tag:builder-canonical,Values=true" --query 'Images[].ImageId' --output text)
+  for a in $PRIOR; do
+    [ "$a" = "$NEW" ] && continue
+    aws ec2 delete-tags --resources "$a" --region "$REGION" --tags Key=builder-canonical >/dev/null 2>&1 || true
+  done
+  aws ec2 create-tags --resources "$NEW" --region "$REGION" --tags Key=builder-canonical,Value=true
   aws ssm put-parameter --name "$PARAM" --type String --overwrite --value "$NEW" --region "$REGION" >/dev/null
-  say "repointed $PARAM: $OLD -> $NEW (old AMI left intact for rollback)"
+  say "repointed $PARAM: $OLD -> $NEW (builder-canonical tag moved; old AMI intact for rollback)"
 else
-  say "NOT repointing $PARAM (per --no-repoint). New AMI: $NEW"
+  # Staged bake: findable as awaiting promotion, but it does NOT claim canonical
+  # (not the param target). Promote by hand to move builder-canonical onto it.
+  aws ec2 create-tags --resources "$NEW" --region "$REGION" --tags Key=builder-staged,Value=true
+  say "NOT repointing $PARAM (per --no-repoint). New AMI: $NEW (tagged builder-staged=true)"
 fi
 say "done."
