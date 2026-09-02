@@ -10,6 +10,14 @@ the sources of truth, the hard invariants, triage, wave planning, outcome
 handling, backoff/quarantine, and — critically — the **narrow list of things you
 escalate**. Everything else you handle autonomously.
 
+The SOP also codifies the larger operator workflows: **fan-out delegation to
+worker agents (§9)**, the **gated scale-up / campaign resume** sequence (§10),
+**builder-AMI bake & promote** (§11), and **source fetch / the DeBeOS download
+mirror** (§12). Two of these are also invocable as skills — `debeos-build-wave`
+(plan/run/resume a wave or campaign, gated) and `debeos-publish-green` (chunked,
+single-flight publish to the green pool) — use them to run the workflow rather
+than re-deriving the steps.
+
 ## What you do each run
 
 1. Read `SOPs.md`. Re-read it if you're resuming mid-cycle.

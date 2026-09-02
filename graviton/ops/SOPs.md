@@ -77,7 +77,14 @@ agent's job is to review, not redo:
 
 1. Take the queued set. Compute dependency order with
    `graviton/builder/depclosure.py` / `haiku-package-closure`. Split into
-   independent dependency chains.
+   independent dependency chains. **Always credit the base image's provides**
+   (pass a builder's real `pkgman list-installed` via `--base`; `depclosure`
+   also carries a `BASE_IMAGE_PROVIDES` floor). Skipping this manufactures
+   phantom blockers: a base-supplied provider that no recipe builds (e.g.
+   `makefile_engine`, `netfs`, `userland_fs`, `cmd:xres`) is otherwise reported
+   `NOPROV:<name>` UNREACHABLE and stalls every dependent — issue #174 stranded
+   114 ports this way. `NOPROV:` on a name the base image ships is a
+   crediting bug, not a real missing port; fix the closure input, don't escalate.
 2. **Wave = one dependency chain on one builder** (intermediate deps resolve
    from the builder's local `packages/`; base layers are shared by publishing
    between waves). Independent chains → parallel builders.
@@ -150,9 +157,26 @@ rebuild the index over the whole pool and have **no concurrency lock** until iss
 #164 deploys — two concurrent publishes can clobber each other. Before any publish,
 confirm no other publisher is running (`ec2 describe-instances
 Name=tag:Name,Values=haiku-repo-publisher …running,pending`) and wait if one is.
-Publish once per wave (or in serialized batches), never per-package. When the prod
-CloudFront origin points at the pool you published, also invalidate the prod dist's
-index paths so the change is served.
+This applies to **your own concurrent agents too** — designate exactly one
+publisher across a fan-out; two agents publishing to the same pool race and
+strand packages (seen this session).
+
+Publish once per wave (or in serialized batches), never per-package. Practical
+limits until #164/#168 land:
+- **Chunk to ≤18 packages per `haiku-repo-add` invocation.** The `package`
+  re-stamp accumulates in the publisher's `/dev/shm` tmpfs (~1.9 GB) and dies at
+  ~26 packages *regardless of EBS size* (#168) — not a disk problem. ≤18 clears it.
+- **Exclude decompression bombs (>300 MB uncompressed):** `0ad_data`,
+  `openarena_data`, `ayat_recit_ghamadi`, `another_world`, `yab_ide`,
+  `vvvvvv_data` blow `/dev/shm` on re-stamp by themselves → `needs_human` (#168).
+- **The index rebuild syncs the whole pool** — the publisher root must fit it
+  (≥40–60 GB as the pool grows; `HG_PUBLISHER_DISK_GIB`), or it ENOSPCs mid-sync.
+- **Verify the result against S3, not the publish log** — `| tail` masks the exit
+  code, and a green step is not a published package (§7). Count objects/index in
+  the pool prefix after.
+
+When the prod CloudFront origin points at the pool you published, also invalidate
+the prod dist's index paths so the change is served.
 
 ## 4. Backoff & quarantine
 
@@ -211,3 +235,97 @@ skepticism everywhere:
 - **Never commit to `graviton` directly**; land changes via a topic branch + PR.
   Verify `HEAD` before staging, and stage explicit paths (another agent may switch
   the shared checkout's branch under you).
+
+## 9. Delegating to worker agents (fan-out)
+
+Large operations (a campaign, a rebake, a multi-dimension investigation) are run
+by spawning background worker agents. Delegation is only safe if the mandate is
+tight, so every spawn carries the same contract:
+
+- **"You are the WORKER."** Say it in the first line and tell the worker to
+  execute end-to-end and *not* re-delegate or emit a plan-only recap. Fork/minion
+  agents otherwise drift into re-coordinating instead of working.
+- **Carry the guardrails into the prompt.** The worker doesn't inherit this SOP's
+  authority automatically — restate the production-safety rails it needs: what
+  writes it's authorized for (its own ephemeral builders/publishers, the specific
+  DDB/S3/pool it may touch) and everything it must NOT touch (blue pool, prod
+  OriginPath, canonical AMI, other agents' builders). Describe/list by default.
+- **State the environment facts** it can't see: `AWS_PROFILE=haiku-graviton`,
+  region, that trunk is `graviton` (never commit there — own worktree + PR), the
+  live AMI/param ids, the pool it publishes to.
+- **One publisher across the fan-out.** If several workers produce packages,
+  exactly one publishes (§3) — concurrent publishers race.
+- **Non-overlapping tracks.** Parallel workers must not edit the same files or
+  drive the same builders. A forward-looking change (e.g. a provisioning edit
+  that lands for the *next* AMI bake) safely runs alongside a campaign using the
+  *current* AMI.
+- **A report contract.** Require a crisp final report: before→after state
+  (verified against ground truth, §7), what changed, new blocker classes, and
+  confirmation every builder/publisher it launched was reaped.
+- **Never predict a pending worker's result.** Report only what its completion
+  notification actually returns.
+
+## 10. Gated scale-up & campaign resume
+
+Before scaling a run wide (a full campaign, an 8-wide wave), gate it on the fixes
+it depends on actually landing — do not build at scale on a known-broken input.
+
+1. **Gate.** Enumerate the blockers a wide run would hit (kernel/tooling fixes,
+   AMI capabilities, closure-crediting gaps, source reachability). For each: prove
+   the fix (A/B or targeted repro), merge it, and — if it changes the builder
+   image — **rebake and promote the builder AMI (§11) before scaling.** Hold the
+   scale-up until the gate is clear. This is a human go/no-go the first time; once
+   the human authorizes the gated run, clearing the gate and resuming is the
+   agent's job.
+2. **Recompute the closure** with the merged fixes (fresh `origin/graviton`
+   `depclosure.py`, `--base` from a real builder — §2). Confirm previously-blocked
+   ports now compute REACHABLE.
+3. **Re-queue only the manufactured blockers.** Items that were `needs_human`
+   solely because of a now-fixed crediting/tooling gap (e.g. `NOPROV:` on a
+   base-supplied name) go back to `queued` with `esc_reason`/`esc_note` cleared.
+   **Do NOT re-queue §4 backoff** (dead-upstream, repeated-failure) — those are
+   real blocks; re-queuing them just re-burns builders.
+4. **Drive dependency-ordered waves at the authorized budget**, publishing each
+   wave to the pool before the next (§3) so later waves resolve deps from it.
+   Success = hpkg exists (§7); health = wall-clock progress, never CloudWatch (§3).
+5. **Defer the mega-builds** (§2.4) unless separately signed off.
+6. **Stop and report** if a *new* blocker class appears (not a known
+   dead-upstream/bomb/crediting gap) affecting many ports — don't mass-park.
+
+## 11. Builder AMI: bake, provision change, promote
+
+The builder AMI (SSM `/haiku-graviton/builder-ami-id`) is baked by
+`haiku-bake-builder` running `haiku-provision-native-builder`. When you change
+what a builder needs (a toolchain package, a header overlay, a `haikuports.conf`
+setting like `DOWNLOAD_MIRROR`), the change lives in the **provisioning script**,
+lands via PR, and only takes effect on the **next bake** — never mutate a live
+builder in place expecting it to persist.
+
+- **Bake** with `haiku-bake-builder --base <ami> --provision`; smoke-prove the
+  new capability end-to-end (build a representative port, rc=0 on the tool you
+  added) before trusting it.
+- **Promote by repointing the SSM param**, recording the prior value as the
+  rollback in the param description. Promotion is a deliberate step: don't repoint
+  mid-campaign unless the running wave needs the new capability. Rollback =
+  repoint back.
+- The param, not "newest AMI", is the source of truth for what builders launch
+  from — same discipline as the canonical *boot* AMI's `canonical=true` tag.
+
+## 12. Source fetch & the DeBeOS download mirror
+
+HaikuPorts' upstream `ports-mirror.haiku-os.org` is permanently gone (NXDOMAIN);
+haikuporter still defaults `DOWNLOAD_MIRROR` to it, so any port whose primary
+upstream has also rotated fails source fetch. Two layers mitigate this:
+
+- **Per-tarball S3 srccache** (`haiku-source-proxy` / `haiku-srccache-fetch`,
+  prefix `srccache/`): builders fetch→verify→store; a later build HITs it. Seed a
+  missing source ONLY after verifying it against the recipe's pinned
+  `CHECKSUM_SHA256` — never hand-bump a checksum to force a fetch (§0 supply-chain
+  rule).
+- **DeBeOS `DOWNLOAD_MIRROR`** (mirror-layout pool, wired into
+  `haiku-provision-native-builder`'s `haikuports.conf`): the durable fix so future
+  waves never depend on haiku-os.org infra; auto-populated from verified fetches.
+- Ports whose upstream AND the dead mirror are both gone, with no reachable
+  checksum-verifiable source, stay in §4 backoff. Recovering them is
+  per-port source archaeology — do it on demand when a real dependent needs one,
+  not as a blanket sprint.
