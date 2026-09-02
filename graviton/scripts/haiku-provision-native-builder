@@ -115,6 +115,16 @@
 #                Empty (default) = S3 tier off; shims do seed -> upstream only.
 #                No account/host names are baked into this tracked file: the bake
 #                (haiku-bake-builder) resolves the work bucket and passes it here.
+#   DOWNLOAD_MIRROR  DeBeOS-owned HaikuPorts source mirror, e.g.
+#                https://sources.debene.dev (issue #172). haikuporter DEFAULTS its
+#                DOWNLOAD_MIRROR to https://ports-mirror.haiku-os.org, which is now
+#                permanently NXDOMAIN -- so any port whose primary upstream has
+#                rotated fails source fetch with no working fallback. Setting this
+#                writes a DOWNLOAD_MIRROR line into haikuports.conf so the fallback
+#                URI points at the DeBeOS mirror instead. Empty (default) = leave
+#                the line out (haikuporter keeps its dead default). The mirror is
+#                populated from verified fetches -- see haiku-mirror-sync and the
+#                mirror-promote step in haiku-nativebuild. Passed by the bake.
 #
 set -eu
 
@@ -125,6 +135,7 @@ TARGET_ARCH="${TARGET_ARCH:-arm64}"
 PACKAGER="${PACKAGER:-DeBeOS <debeos@example.invalid>}"
 SEED_DIR="${SEED_DIR:-$HP_HOME/seed}"
 SRCCACHE_S3="${SRCCACHE_S3:-}"
+DOWNLOAD_MIRROR="${DOWNLOAD_MIRROR:-}"
 
 PORTS_DIR="$HP_HOME/haikuports"
 HP_DIR="$HP_HOME/haikuporter"
@@ -287,6 +298,19 @@ TARGET_ARCHITECTURE="$TARGET_ARCH"
 ALLOW_UNTESTED="yes"
 ALLOW_UNSAFE_SOURCES="yes"
 EOF
+
+# Point haikuporter's source-mirror fallback at the DeBeOS-owned mirror (issue
+# #172). Without this line haikuporter uses its compiled-in default,
+# https://ports-mirror.haiku-os.org, which is permanently NXDOMAIN -- so for any
+# port whose primary upstream URL has rotated, the fallback resolves nothing and
+# the fetch dies. haikuporter appends the fallback as
+# "$DOWNLOAD_MIRROR/<recipeDir>/<sourceBasename>" (HaikuPorter/Source.py), which
+# is exactly the layout haiku-mirror-sync / the nativebuild mirror-promote step
+# write to. Omitted when unset so a bare provision keeps upstream-only behaviour.
+if [ -n "$DOWNLOAD_MIRROR" ]; then
+	log "haikuports.conf: DOWNLOAD_MIRROR=$DOWNLOAD_MIRROR (#172)"
+	printf 'DOWNLOAD_MIRROR="%s"\n' "$DOWNLOAD_MIRROR" >> "$CONF"
+fi
 
 # Put `haikuporter` on PATH as a bare command. It is a git clone invoked as
 # `python3.14 $HP_DIR/haikuporter`, but the build driver (haiku-nativebuild) and
@@ -530,6 +554,7 @@ provision: done. This box is a native arm64 package builder.
   config     : $CONF
   seed dir   : $SEED_DIR  (drop upstream tarballs here to bypass a flaky fetch)
   src cache  : ${SRCCACHE_S3:-off}  (shared S3 tier via $SHIM_DIR/haiku-srccache-fetch)
+  dl mirror  : ${DOWNLOAD_MIRROR:-off}  (haikuports.conf DOWNLOAD_MIRROR fallback, #172)
   chain plan : $SHIM_DIR/depclosure, $SHIM_DIR/haiku-package-closure
                (launchers; source deployed to $HP_HOME by haiku-bake-builder)
 

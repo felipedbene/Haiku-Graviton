@@ -1,0 +1,311 @@
+#!/usr/bin/env python3
+#
+# haiku-mirror-sync -- populate the DeBeOS-owned HaikuPorts source mirror from the
+# shared S3 source cache, content-addressed and checksum-verified (issue #172,
+# builds on the #162 srccache).
+#
+# WHY THIS EXISTS
+#   haikuporter falls back to DOWNLOAD_MIRROR when a recipe's primary SOURCE_URI
+#   fails, building the URL "$DOWNLOAD_MIRROR/<recipeDir>/<sourceBasename>"
+#   (HaikuPorter/Source.py). Its compiled-in default, ports-mirror.haiku-os.org,
+#   is permanently NXDOMAIN, so for any port whose upstream has rotated the
+#   fallback resolves nothing and the fetch dies. DeBeOS therefore runs its own
+#   mirror (an S3 prefix fronted by CloudFront at https://sources.debene.dev) and
+#   points DOWNLOAD_MIRROR at it (see haiku-provision-native-builder).
+#
+#   The #162 shared srccache already accumulates every source tarball the fleet
+#   has ever fetched-and-transfer-verified, but it is keyed by sha256(fetch-url) +
+#   basename -- a layout haikuporter cannot address. This tool promotes those
+#   cached tarballs into the mirror's <recipeDir>/<basename> layout.
+#
+# HOW IT STAYS SUPPLY-CHAIN SAFE (the whole point)
+#   It is CONTENT-ADDRESSED, not URL-addressed. It first indexes every pinned
+#   CHECKSUM_SHA256 in the ports tree -> the recipe dir(s) that pin it. Then, for
+#   each srccache object, it downloads the bytes, computes their sha256, and
+#   promotes the object to the mirror ONLY if that sha256 equals a checksum some
+#   recipe pins. An object whose content matches no pinned checksum (a rotated /
+#   truncated / poisoned cache entry) is never uploaded. This is stricter than
+#   trusting the srccache: even a transfer-verified-but-wrong cache entry cannot
+#   reach the mirror. The mirror key's basename is the srccache object's own
+#   basename, which is the fetch-URL basename == the URI basename haikuporter
+#   requests from the mirror (both derive from the URI, not from SOURCE_FILENAME).
+#
+# The complementary, always-on populate path is the mirror-promote step in
+# haiku-nativebuild, which ships a freshly-built port's (already checksum-
+# validated) download/ dir. This tool is the batch backfill / periodic sweep of
+# everything already in the srccache, and is safe to re-run (idempotent: an object
+# already present on the mirror with the same size is skipped).
+#
+# USAGE
+#   # Backfill the mirror from the srccache (run where AWS creds + awscli exist):
+#   haiku-mirror-sync \
+#       --tree /path/to/haikuports \
+#       --srccache s3://haiku-graviton-<acct>-<region>/srccache \
+#       --mirror   s3://haiku-graviton-<acct>-<region>/download-mirror
+#
+#   Options:
+#     --dry-run          index + match + report, upload nothing
+#     --limit N          only consider the first N srccache objects (testing)
+#     --only SUBSTR      only srccache objects whose key contains SUBSTR
+#     --workers N        parallel download/hash workers (default 12)
+#     --s3-tool aws|agent   backend for S3 ops (default aws; agent =
+#                           debeos-ssm-agent, for running on a native Haiku box)
+#     --overwrite        re-upload even if the mirror object already exists
+#
+# Exit: 0 if the run completed (even with per-object store failures, which are
+# logged and counted), non-zero only on a fatal setup error.
+
+import argparse
+import concurrent.futures
+import hashlib
+import os
+import re
+import subprocess
+import sys
+import tempfile
+
+# CHECKSUM_SHA256, CHECKSUM_SHA256_2, CHECKSUM_SHA256_SOME_SECONDARY, ... = "<hex>"
+# The value is always a literal 64-hex string in HaikuPorts recipes (never an
+# interpolated shell variable), so a line regex is exact and needs no bash eval.
+_CHECKSUM_RE = re.compile(
+	r'^\s*CHECKSUM_SHA256[A-Za-z0-9_]*\s*=\s*["\']?([0-9a-fA-F]{64})',
+	re.MULTILINE)
+
+
+def log(msg):
+	print(msg, file=sys.stderr, flush=True)
+
+
+def build_checksum_index(tree):
+	"""Map sha256 (lowercased hex) -> set of recipe dir names that pin it.
+
+	A recipe dir is <tree>/<category>/<port>/; the mirror layout key uses the
+	<port> component (basename of port.baseDir in HaikuPorter/Source.py).
+	"""
+	index = {}
+	recipe_count = 0
+	for category in sorted(os.listdir(tree)):
+		catpath = os.path.join(tree, category)
+		# HaikuPorts categories always contain a '-' (e.g. dev-libs, sys-apps).
+		if not os.path.isdir(catpath) or category.startswith('.') \
+				or '-' not in category:
+			continue
+		for port in sorted(os.listdir(catpath)):
+			portpath = os.path.join(catpath, port)
+			if not os.path.isdir(portpath) or port.startswith('.'):
+				continue
+			for name in os.listdir(portpath):
+				if not name.endswith('.recipe'):
+					continue
+				recipe_count += 1
+				try:
+					with open(os.path.join(portpath, name),
+							encoding='utf-8', errors='replace') as fh:
+						text = fh.read()
+				except OSError as exc:
+					log('warn: cannot read %s/%s: %s' % (port, name, exc))
+					continue
+				for match in _CHECKSUM_RE.finditer(text):
+					index.setdefault(match.group(1).lower(), set()).add(port)
+	log('indexed %d recipes: %d distinct pinned checksums'
+		% (recipe_count, len(index)))
+	return index
+
+
+def srccache_basename(key):
+	"""The human-readable tail of a srccache key '<64hex>-<basename>'.
+
+	Mirrors haiku-srccache-fetch's cache_path(): sha256hex + '-' + basename.
+	"""
+	tail = key.rsplit('/', 1)[-1]
+	if len(tail) > 65 and tail[64] == '-':
+		return tail[65:]
+	return tail
+
+
+class S3:
+	"""Thin S3 wrapper over either the awscli or debeos-ssm-agent."""
+
+	def __init__(self, tool):
+		self.tool = tool
+		if tool == 'aws':
+			self._base = ['aws', 's3']
+			self._api = ['aws', 's3api']
+		elif tool == 'agent':
+			self._base = ['/boot/system/bin/debeos-ssm-agent', 's3']
+			self._api = None
+		else:
+			raise ValueError('unknown s3 tool %r' % tool)
+
+	def list_keys(self, s3uri):
+		bucket, prefix = _split(s3uri)
+		if self.tool == 'aws':
+			out = subprocess.run(
+				['aws', 's3api', 'list-objects-v2', '--bucket', bucket,
+					'--prefix', prefix.rstrip('/') + '/',
+					'--query', 'Contents[].Key', '--output', 'text'],
+				capture_output=True, text=True, check=True).stdout
+			return [k for k in out.split() if k and not k.endswith('/')]
+		# agent: fall back to `s3 ls` recursive-style listing.
+		out = subprocess.run(self._base + ['ls', s3uri.rstrip('/') + '/'],
+			capture_output=True, text=True, check=True).stdout
+		keys = []
+		for line in out.splitlines():
+			parts = line.split()
+			if parts:
+				keys.append(prefix.rstrip('/') + '/' + parts[-1])
+		return keys
+
+	def get(self, bucket_uri, key, dest):
+		uri = bucket_uri.rstrip('/') + '/' + key
+		subprocess.run(self._base + ['cp', uri, dest],
+			capture_output=True, text=True, check=True)
+
+	def exists_size(self, s3uri):
+		"""Return the object size, or None if it does not exist."""
+		bucket, key = _split(s3uri)
+		if self.tool == 'aws':
+			res = subprocess.run(
+				['aws', 's3api', 'head-object', '--bucket', bucket,
+					'--key', key, '--query', 'ContentLength', '--output', 'text'],
+				capture_output=True, text=True)
+			if res.returncode != 0:
+				return None
+			try:
+				return int(res.stdout.strip())
+			except ValueError:
+				return None
+		# agent has no head; a cheap `ls` of the exact key is the best we can do.
+		res = subprocess.run(self._base + ['ls', s3uri],
+			capture_output=True, text=True)
+		if res.returncode != 0 or not res.stdout.strip():
+			return None
+		for tok in res.stdout.split():
+			if tok.isdigit():
+				return int(tok)
+		return 0
+
+	def put(self, src, s3uri):
+		subprocess.run(self._base + ['cp', src, s3uri],
+			capture_output=True, text=True, check=True)
+
+
+def _split(s3uri):
+	assert s3uri.startswith('s3://'), s3uri
+	rest = s3uri[len('s3://'):]
+	bucket, _, key = rest.partition('/')
+	return bucket, key
+
+
+def sha256_file(path):
+	h = hashlib.sha256()
+	with open(path, 'rb') as fh:
+		for chunk in iter(lambda: fh.read(1024 * 1024), b''):
+			h.update(chunk)
+	return h.hexdigest()
+
+
+def main(argv):
+	ap = argparse.ArgumentParser(description=__doc__,
+		formatter_class=argparse.RawDescriptionHelpFormatter)
+	ap.add_argument('--tree', required=True, help='haikuports tree checkout')
+	ap.add_argument('--srccache', required=True, help='s3:// srccache prefix')
+	ap.add_argument('--mirror', required=True, help='s3:// download-mirror prefix')
+	ap.add_argument('--dry-run', action='store_true')
+	ap.add_argument('--limit', type=int, default=0)
+	ap.add_argument('--only', default='')
+	ap.add_argument('--workers', type=int, default=12)
+	ap.add_argument('--s3-tool', choices=('aws', 'agent'), default='aws')
+	ap.add_argument('--overwrite', action='store_true')
+	args = ap.parse_args(argv)
+
+	if not os.path.isdir(args.tree):
+		log('fatal: --tree %s is not a directory' % args.tree)
+		return 2
+
+	index = build_checksum_index(args.tree)
+	if not index:
+		log('fatal: no CHECKSUM_SHA256 values found under %s' % args.tree)
+		return 2
+
+	s3 = S3(args.s3_tool)
+	log('listing %s ...' % args.srccache)
+	keys = s3.list_keys(args.srccache)
+	if args.only:
+		keys = [k for k in keys if args.only in k]
+	keys.sort()
+	if args.limit:
+		keys = keys[:args.limit]
+	log('%d srccache object(s) to consider' % len(keys))
+
+	src_bucket = 's3://' + _split(args.srccache)[0]
+	mirror = args.mirror.rstrip('/')
+
+	stats = {'promoted': 0, 'skipped_present': 0, 'no_match': 0,
+		'store_failed': 0, 'errors': 0}
+
+	def handle(key):
+		basename = srccache_basename(key)
+		fd, tmp = tempfile.mkstemp(prefix='mirror-sync-')
+		os.close(fd)
+		try:
+			s3.get(src_bucket, key, tmp)
+			digest = sha256_file(tmp)
+			ports = index.get(digest)
+			if not ports:
+				return ('no_match', key, basename, None)
+			results = []
+			for port in sorted(ports):
+				target = '%s/%s/%s' % (mirror, port, basename)
+				if not args.overwrite:
+					size = s3.exists_size(target)
+					if size is not None and size == os.path.getsize(tmp):
+						results.append(('skipped_present', target))
+						continue
+				if args.dry_run:
+					results.append(('would_promote', target))
+					continue
+				try:
+					s3.put(tmp, target)
+					results.append(('promoted', target))
+				except subprocess.CalledProcessError as exc:
+					results.append(('store_failed', target,
+						(exc.stderr or '').strip()))
+			return ('matched', key, basename, results)
+		except subprocess.CalledProcessError as exc:
+			return ('error', key, basename, (exc.stderr or '').strip())
+		finally:
+			try:
+				os.unlink(tmp)
+			except OSError:
+				pass
+
+	with concurrent.futures.ThreadPoolExecutor(max_workers=args.workers) as ex:
+		for outcome in ex.map(handle, keys):
+			kind = outcome[0]
+			if kind == 'no_match':
+				stats['no_match'] += 1
+			elif kind == 'error':
+				stats['errors'] += 1
+				log('ERROR %s -- %s' % (outcome[1], outcome[3]))
+			elif kind == 'matched':
+				for res in outcome[3]:
+					if res[0] == 'promoted':
+						stats['promoted'] += 1
+						log('PROMOTE %s' % res[1])
+					elif res[0] == 'would_promote':
+						log('DRY-RUN would promote %s' % res[1])
+					elif res[0] == 'skipped_present':
+						stats['skipped_present'] += 1
+					elif res[0] == 'store_failed':
+						stats['store_failed'] += 1
+						log('STORE-FAILED %s -- %s' % (res[1], res[2]))
+
+	log('done: promoted=%d skipped(present)=%d no-match=%d store-failed=%d '
+		'errors=%d' % (stats['promoted'], stats['skipped_present'],
+			stats['no_match'], stats['store_failed'], stats['errors']))
+	return 0
+
+
+if __name__ == '__main__':
+	sys.exit(main(sys.argv[1:]))

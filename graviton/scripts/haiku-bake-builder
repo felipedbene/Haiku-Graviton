@@ -59,6 +59,11 @@ PROFILE="${HAIKU_BUILDER_PROFILE:-DebeosOpsStack-BuilderProfile-tPCqkm9pVVKR}"
 # Public IP off by default (private + NAT). Set HAIKU_BUILDER_PUBLIC_IP=1 to force one.
 PUBIP_FLAG=""; [ "${HAIKU_BUILDER_PUBLIC_IP:-0}" = 1 ] && PUBIP_FLAG="--associate-public-ip-address"
 STAGE_TYPE="${HAIKU_BAKE_INSTANCE_TYPE:-c8g.large}"
+# DeBeOS-owned HaikuPorts source mirror (issue #172). haikuporter's compiled-in
+# DOWNLOAD_MIRROR default (ports-mirror.haiku-os.org) is permanently NXDOMAIN, so
+# the provisioner writes THIS as the haikuports.conf fallback instead. Stable
+# public host (CloudFront-fronted S3 download-mirror/ prefix); override via env.
+DOWNLOAD_MIRROR="${HAIKU_DOWNLOAD_MIRROR:-https://sources.debene.dev}"
 
 BASE=""; REPOINT=1; PROVISION=0; FROM_CANONICAL=0; DISK=""
 while [ $# -gt 0 ]; do
@@ -176,9 +181,11 @@ set -eu
 /boot/system/bin/debeos-ssm-agent s3 cp s3://$BUCKET/bake-scripts/haiku-provision-native-builder /boot/home/haiku-provision-native-builder
 chmod +x /boot/home/haiku-provision-native-builder
 # Pass the work bucket so the fetch shims cache SOURCE tarballs to the shared S3
-# tier (issue #162). The bucket is resolved here at bake time, never baked into
-# the tracked provisioner file.
-SRCCACHE_S3="s3://$BUCKET/srccache" /boot/home/haiku-provision-native-builder
+# tier (issue #162), and the DeBeOS source mirror so haikuporter's fallback URI
+# points at a live host instead of the dead ports-mirror.haiku-os.org default
+# (issue #172). Both are resolved here at bake time, never baked into the tracked
+# provisioner file.
+SRCCACHE_S3="s3://$BUCKET/srccache" DOWNLOAD_MIRROR="$DOWNLOAD_MIRROR" /boot/home/haiku-provision-native-builder
 EOF
   # Overlay BEFORE the cache warm-up, so the dependency infos baked into the AMI
   # are computed from the recipes we will actually build with.

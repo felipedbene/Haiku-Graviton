@@ -29,7 +29,16 @@ GP=$HP/packages
 AGENT=/boot/system/bin/debeos-ssm-agent
 BUCKET="${HAIKU_GRAVITON_BUCKET:-haiku-graviton-668984504585-us-west-2}"
 S3="s3://$BUCKET/hpkg/arm64"
+# DeBeOS-owned HaikuPorts source mirror prefix (issue #172). After a port builds
+# OK we promote its fetched source archives here, laid out as <recipeDir>/<file>
+# to match the fallback URI haikuporter builds from DOWNLOAD_MIRROR. Empty = skip.
+MIRROR_S3="${MIRROR_S3:-s3://$BUCKET/download-mirror}"
 MAX_ATTEMPTS="${MAX_ATTEMPTS:-10}"
+# Names of ports whose build produced an hpkg this run (space-separated). Only
+# these get their sources mirrored -- a successful build means haikuporter has
+# already fetched AND checksum-validated every source, so the files in the port's
+# download/ dir are verified. Never mirror sources for a port that did not build.
+BUILT_OK=""
 
 # feed pkgman: accept "allow vendor change" (solution 1) then confirm the transaction.
 feed() { i=0; while [ $i -lt 60 ]; do echo 1; i=$((i+1)); done; echo yes; }
@@ -120,6 +129,45 @@ harvest() {
 	done
 }
 
+# Promote the sources of every port that built OK to the DeBeOS download mirror
+# (issue #172), so a later wave whose primary upstream has since rotated can fall
+# back to a live host instead of the dead ports-mirror.haiku-os.org default.
+#
+# WHY gated on a successful build, not on the fetch: haikuporter validates each
+# source against the recipe's pinned CHECKSUM_SHA256 immediately after fetching;
+# a mismatch aborts the build. So a port that produced an hpkg has, by
+# construction, only checksum-verified files in its download/ dir -- we never
+# upload an unverified/mismatching source to the mirror. (haikuporter also
+# re-verifies whatever it fetches FROM the mirror, so this is belt-and-braces.)
+#
+# LAYOUT: haikuporter's fallback URI is "$DOWNLOAD_MIRROR/<recipeDir>/<basename>"
+# where recipeDir = the port's directory name (HaikuPorter/Source.py). The port
+# dir is $HP/<category>/<port>; we upload each download/ file under <port>/<file>,
+# which is exactly that path. (Recipes that rename via SOURCE_FILENAME are rare;
+# the on-disk name then differs from the URI basename haikuporter requests and
+# that one file simply won't be found on the mirror -- upstream is still tried.)
+mirror_sources() {
+	[ -n "$MIRROR_S3" ] || return 0
+	[ -n "$BUILT_OK" ] || return 0
+	for port in $BUILT_OK; do
+		# The recipe dir is $HP/<category>/<port>; find its download/ dir.
+		for dd in "$HP"/*/"$port"/download; do
+			[ -d "$dd" ] || continue
+			for f in "$dd"/*; do
+				[ -f "$f" ] || continue
+				b=$(basename "$f")
+				# Skip haikuporter's own bookkeeping files, only ship archives.
+				case "$b" in .*|*.part|*.tmp) continue ;; esac
+				if "$AGENT" s3 cp "$f" "$MIRROR_S3/$port/$b" >/dev/null 2>&1; then
+					echo "mirrored $port/$b"
+				else
+					echo "mirror-store failed $port/$b (non-fatal)" >&2
+				fi
+			done
+		done
+	done
+}
+
 # Refresh the pkgman repo caches so deps published since this builder booted resolve
 # (otherwise pkgman installs against a stale index). Intermediate deps built THIS wave
 # are resolved from the local packages/ dir, so keep each dep-chain on one builder.
@@ -133,8 +181,13 @@ for p in "$@"; do
 	if [ "$resolved" != "$p" ]; then
 		echo "resolved port name: $p -> $resolved"
 	fi
-	build_one "$resolved" || rc=1
+	if build_one "$resolved"; then
+		BUILT_OK="$BUILT_OK $resolved"
+	else
+		rc=1
+	fi
 done
 harvest
+mirror_sources
 echo "===== nativebuild done $(date -u +%FT%TZ) rc=$rc ====="
 exit $rc
