@@ -268,8 +268,21 @@ PlainTextCatalog::ReadFromFile(const char *path)
 	catalogFile.close();
 
 	uint32 checkFP = ComputeFingerprint();
-	if (fFingerprint != checkFP)
-		return B_BAD_DATA;
+	if (fFingerprint != checkFP) {
+		// The fingerprint stored in a .catkeys header is a sum of
+		// CatKey::HashFun() over the keys, and that hash depends on the
+		// signedness of `char`: signed on x86 (where the shipped .catkeys were
+		// authored) but unsigned on ARM. Any key byte >= 0x80 (e.g. the UTF-8
+		// ellipsis in a "Open..." menu label) therefore hashes to a different
+		// value here, so the recomputed fingerprint legitimately differs from
+		// the stored one on ARM even though the data is intact. Rejecting the
+		// catalog broke bindcatalogs for every classic app carrying such keys.
+		// The freshly computed fingerprint is the correct one for this
+		// architecture (it matches what libbe computes at lookup time), so we
+		// adopt it rather than failing. The host build tool already disables
+		// this same check (src/tools/locale/PlainTextCatalog.cpp). See #188/#136.
+		fFingerprint = checkFP;
+	}
 
 	// some information living in member variables needs to be copied
 	// to attributes. Although these attributes should have been written
