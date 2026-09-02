@@ -25,7 +25,8 @@ provide cmd:python3) only one is needed, and a backward walk that unions the
 providers inflates the answer.
 
 Usage:
-    depclosure.py --repo <haikuports> --built <hpkg dir> [--built <dir>...] TARGET...
+    depclosure.py --repo <haikuports> --built <hpkg dir> [--built <dir>...] \
+        [--base <provides file>...] TARGET...
 """
 
 import argparse
@@ -36,6 +37,27 @@ import sys
 from collections import defaultdict
 
 HPKG_RE = re.compile(r'^(.+)-([^-]+)-(\d+)-(arm64|any|source)\.hpkg$')
+
+# Provides that the Haiku BASE image already supplies but that no haikuports
+# recipe builds -- so saturation must credit them from the start or it will name
+# them as blockers that no wave can ever clear. These packages ship in every
+# standard (non-bootstrap, non-minimum) image and are installed in every native
+# builder chroot; the bake harvest deliberately sweeps their hpkgs OUT of the
+# built pool (rebuild.sh, prepguest.sh) as chroot inputs, so satisfied_from_disk
+# never sees them. `makefile_engine` alone is build-required by the whole family
+# of classic Haiku GUI-app ports; before this credit, ~110 such ports escalated
+# to needs_human with esc_note NOPROV:makefile_engine (issue #174).
+#
+# This is a floor of KNOWN base packages that have no recipe. For a builder's
+# exact installed provides (base commands like cmd:xres, libraries, etc.), pass
+# --base pointing at that host's `pkgman list-installed`/`package list` output;
+# the two combine. Version constraints are irrelevant here -- only names gate
+# reachability -- so bare names suffice.
+BASE_IMAGE_PROVIDES = {
+	'makefile_engine',
+	'netfs',
+	'userland_fs',
+}
 
 
 def entry_name(spec):
@@ -215,6 +237,26 @@ def satisfied_from_disk(tree, dirs):
 	return sat, ports, pkgs
 
 
+def base_provides(files):
+	"""Names the base image supplies for free: the known no-recipe floor plus any
+	provide-tokens listed in --base files (one per line; '#' comments allowed).
+
+	Only the leading name of each token is kept -- a version constraint is not a
+	missing-provider problem and must never manufacture a blocker (same rule as
+	entry_name)."""
+	names = set(BASE_IMAGE_PROVIDES)
+	for path in files:
+		try:
+			with open(path) as f:
+				for line in f:
+					s = line.strip()
+					if s and not s.startswith('#'):
+						names.add(entry_name(s))
+		except Exception as e:
+			print('warn: unreadable --base %s: %s' % (path, e), file=sys.stderr)
+	return names
+
+
 def saturate(tree, sat, already):
 	"""Promote every recipe whose build deps are satisfied, to a fixpoint.
 
@@ -369,6 +411,10 @@ def main():
 	ap = argparse.ArgumentParser()
 	ap.add_argument('--repo', default='/opt/haiku/haikuports')
 	ap.add_argument('--built', action='append', default=[])
+	ap.add_argument('--base', action='append', default=[],
+		help='file of provide-tokens the base image already supplies (one per '
+			'line); credited as satisfied before saturation. A known no-recipe '
+			'floor (makefile_engine, netfs, userland_fs) is always credited.')
 	ap.add_argument('--why', action='append', default=[],
 		help='explain which ports provide this requirement name')
 	ap.add_argument('--explain', action='append', default=[],
@@ -380,6 +426,11 @@ def main():
 
 	tree = Tree(args.repo)
 	sat, already, pkgs = satisfied_from_disk(tree, args.built or ['/opt/haiku/hpkg-out/arm64'])
+
+	# Credit what the base image supplies but no recipe builds, so a base-only
+	# provider (makefile_engine et al.) is never misreported as an unreachable
+	# blocker. See BASE_IMAGE_PROVIDES / --base (issue #174).
+	sat |= base_provides(args.base)
 
 	# A counterfactual: mark a port built and re-saturate. This is how to price a
 	# chokepoint -- "what does python3.14 actually unlock" is answerable without
