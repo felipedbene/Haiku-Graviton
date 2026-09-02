@@ -35,6 +35,22 @@ endif
 MIMESET	:= mimeset
 XRES	:= xres
 RESCOMP	:= rc
+# Haiku's arm64 build of GNU make has a compiled-in default of
+# `CXX = aarch64-unknown-haiku-g++` (from --build= at configure time), but
+# the arm64 gcc package does not ship that triplet-prefixed name on the
+# default PATH -- the prefixed executables live only in
+# /boot/system/develop/tools/bin/, which is not on PATH. `cc`/`g++`/`c++`
+# ARE on PATH and are the correct native compiler (gcc -dumpmachine ==
+# aarch64-unknown-haiku), so when the value we would use came from make's
+# built-in default, fall back to the unprefixed on-PATH name. Recipes or
+# users that set CC/CXX explicitly (environment, command line, or an
+# earlier assignment in this Makefile) are left untouched.
+ifeq ($(origin CC),default)
+	CC := cc
+endif
+ifeq ($(origin CXX),default)
+	CXX := g++
+endif
 CC		:= $(CC)
 C++		:= $(CXX)
 
