@@ -13,8 +13,9 @@ escalate**. Everything else you handle autonomously.
 The SOP also codifies the larger operator workflows: **fan-out delegation to
 worker agents (§9)**, the **gated scale-up / campaign resume** sequence (§10),
 **builder-AMI bake & promote** (§11), and **source fetch / the DeBeOS download
-mirror** (§12). Two of these are also invocable as skills — `debeos-build-wave`
-(plan/run/resume a wave or campaign, gated) and `debeos-publish-green` (chunked,
+mirror** (§12). These are also invocable as skills — `debeos-standup` (the morning routine:
+state → reconcile → prioritized next actions), `debeos-build-wave` (plan/run/
+resume a wave or campaign, gated), and `debeos-publish-green` (chunked,
 single-flight publish to the green pool) — use them to run the workflow rather
 than re-deriving the steps.
 
