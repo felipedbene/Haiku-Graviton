@@ -1,0 +1,73 @@
+# PROVENANCE (DeBeOS, issue #174) -- READ BEFORE EDITING SOURCE_URI/CHECKSUM.
+#
+# The original upstream source, http://www.bearnip.com/ftp/be/MkDepend-17.zip
+# (historically pinned CHECKSUM_SHA256
+# a5ddc9f1ed5c987ff2dd35978b0fe36e95f1f6e90e9b68cd5c35e99a60b9da88), is GONE from
+# every reachable archive and the byte-identical zip cannot be recovered, so that
+# checksum can never be satisfied again. This is NOT a hand-bump: the source below
+# is derived from the OFFICIAL HaikuPorts source package
+# `mkdepend_source-1.7-5-source.hpkg`
+# (haikuports-repository.cdn.haiku-os.org/master/x86_64/current/packages/,
+# sha256 805c3f84f55a96b5c4a060393b0356220d2f2d8146cc5d4c562196672cc48bc6),
+# whose `develop/sources/mkdepend-1.7-5/sources/` tree is the pristine, upstream
+# checksum-verified source that HaikuPorts itself shipped. That tree is repacked
+# verbatim into a deterministic `MkDepend-1.7/` tarball and re-hosted on DeBeOS
+# infra; CHECKSUM_SHA256 below is the newly-computed sha256 of THAT re-hosted
+# artifact. The HaikuPorts patchset (PATCHES, `mkdepend-1.7.patchset`) is carried
+# forward unchanged. Reproduce:
+#   package extract mkdepend_source-1.7-5-source.hpkg
+#   cp -r develop/sources/mkdepend-1.7-5/sources MkDepend-1.7
+#   tar --sort=name --owner=0 --group=0 --numeric-owner \
+#       --mtime='2017-10-25 00:00:00 UTC' -cf mkdepend-1.7.tar MkDepend-1.7
+#   gzip -n -9 mkdepend-1.7.tar        # -> sha256 9aed932c...763d63
+# Authorized in #174; mirror stood up in #172.
+SUMMARY="Makefile dependency generator"
+DESCRIPTION="MkDepend scans C-source files recursively for includes and writes the found \
+dependency trees into an existing makefile."
+HOMEPAGE="http://www.bearnip.com/lars/be/mkdepend.html"
+COPYRIGHT="1995-2001 Lars Düning"
+LICENSE="MIT"
+REVISION="6"
+SOURCE_URI="https://sources.debene.dev/mkdepend/mkdepend-1.7.tar.gz"
+CHECKSUM_SHA256="9aed932c2ba2672fc503e468345ef0bfedd95dbdd12feaa90b69fdd868763d63"
+SOURCE_DIR="MkDepend-$portVersion"
+PATCHES="mkdepend-$portVersion.patchset"
+
+ARCHITECTURES="all"
+
+PROVIDES="
+	mkdepend = $portVersion
+	cmd:mkdepend = $portVersion
+	"
+REQUIRES="
+	haiku
+	"
+
+BUILD_REQUIRES="
+	haiku_devel
+	"
+BUILD_PREREQUIRES="
+	cmd:gcc
+	cmd:ld
+	cmd:make
+	"
+
+BUILD()
+{
+	# The stock Makefile derives CPU from `uname -m`: "BePC" -> x86 (gcc),
+	# anything else -> ppc (the dead Metrowerks mwcc/mwld path). The HaikuPorts
+	# patchset adds only an x86_64 arm; on Haiku arm64 `uname -m` reports "arm64",
+	# which matches neither, so the stock build falls through to the ppc/mwcc
+	# branch and fails. CPU=x86 NATIVE=x86 selects the plain-`gcc` branch instead
+	# (its only arch-specific choice is the compiler name, and `gcc` here is the
+	# native arm64 toolchain, so it emits arm64 binaries). The vars propagate to
+	# the libglob sub-make via MAKEFLAGS, and `.dependencies` falls back to
+	# `gcc -M`, so no bootstrapped mkdepend is needed.
+	make CPU=x86 NATIVE=x86 OBJ=obj
+}
+
+INSTALL()
+{
+	mkdir -p $binDir
+	cp -a obj/mkdepend $binDir
+}
