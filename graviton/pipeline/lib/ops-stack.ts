@@ -85,40 +85,29 @@ export class OpsStack extends cdk.Stack {
     // subnets (no public IP, no inbound); a single NAT (one AZ, testing-cost)
     // carries upstream source-tarball fetches, while S3 (deps, hpkg pool, SSM
     // command output) and the SSM control plane go via endpoints -- off the NAT.
-    // NAT *instance* (t4g.nano, ~$3/mo) instead of a managed NAT gateway
-    // (~$32/mo) -- source-tarball egress for a testing fleet doesn't need the
-    // managed NAT's throughput/HA. Single instance in one AZ (private subnets in
-    // other AZs route to it cross-AZ; fine at this scale).
-    // Purpose-built fck-nat AMI (sets up nft masquerade on boot). CDK's default
-    // NatProvider.instanceV2 AMI shipped user-data that does `yum install
-    // iptables-services` -- a package that DOES NOT EXIST on Amazon Linux 2023 --
-    // so the MASQUERADE rule was never created and the "NAT" forwarded nothing
-    // (ip_forward=1 + source/dest-check off, but no masquerade => no egress =>
-    // private builders could not reach SSM). fck-nat gets it right. Pinned by id
-    // (region us-west-2) to avoid a synth-time AMI lookup; bump on refresh.
-    const natProvider = ec2.NatProvider.instanceV2({
-      instanceType: ec2.InstanceType.of(ec2.InstanceClass.T4G, ec2.InstanceSize.NANO),
-      machineImage: ec2.MachineImage.genericLinux({
-        'us-west-2': 'ami-0d1db1251d2b64626', // fck-nat-al2023-hvm-1.4.0-20260701-arm64-ebs
-      }),
-    });
+    // Managed NAT *gateway* (~$32/mo) rather than a NAT instance. We ran a
+    // t4g.nano fck-nat instance (~$3/mo) here originally -- source-tarball egress
+    // for a testing fleet doesn't need the managed NAT's throughput/HA -- but a
+    // long-lived Linux host carries an OS-patching SLA: it was flagged RED and
+    // auto-escalated by the fleet-patching program (EC2PA-144185). A managed NAT
+    // gateway has no host to patch, so it never trips that program. The ~$29/mo
+    // delta buys the elimination of that standing compliance toil. Single gateway
+    // in one AZ (private subnets in other AZs route to it cross-AZ; fine at this
+    // scale) -- CDK's default provider with natGateways:1.
     const vpc = new ec2.Vpc(this, 'BuildVpc', {
       // 3 AZs so spot builders diversify across capacity pools (one instance per
       // launch, but the launcher picks a subnet per instance -> concurrent
       // builders spread across AZs, cutting spot-interruption correlation).
       maxAzs: 3,
       natGateways: 1,
-      natGatewayProvider: natProvider,
       subnetConfiguration: [
         { name: 'public', subnetType: ec2.SubnetType.PUBLIC, cidrMask: 24 },
         { name: 'builders', subnetType: ec2.SubnetType.PRIVATE_WITH_EGRESS, cidrMask: 22 },
       ],
     });
-    // Let the private (builder) subnets route out through the NAT instance.
-    natProvider.securityGroup.addIngressRule(
-      ec2.Peer.ipv4(vpc.vpcCidrBlock), ec2.Port.allTraffic(),
-      'builder subnets to NAT instance egress',
-    );
+    // A managed NAT gateway needs no security-group rule: the private (builder)
+    // subnets route out through it via their route tables (CDK wires this from
+    // natGateways:1 + PRIVATE_WITH_EGRESS). Outbound is allowed by default.
 
     // S3 GATEWAY endpoint (free) -> hpkg pool, deps, and SSM command output stay
     // off the NAT. This is the one endpoint worth keeping: it carries the bulk
