@@ -540,14 +540,19 @@ common_accept(int fd, struct sockaddr *address, socklen_t *_addressLength, int f
 	if (error != B_OK)
 		return error;
 
+	// Acquire the consumer reference for the new FD *before* create_socket_fd()
+	// publishes it, mirroring common_socket(). Publishing first left a window in
+	// which a concurrent close() of the accepted fd would put() a reference the
+	// fd never acquired, corrupting sStackInterfaceConsumers and, under KDEBUG,
+	// unloading the net stack while the listening socket was still live.
+	get_stack_interface_module();
+
 	// allocate the FD
 	int acceptedFD = create_socket_fd(acceptedSocket, flags, kernel);
 	if (acceptedFD < 0) {
 		sStackInterface->close(acceptedSocket);
 		sStackInterface->free(acceptedSocket);
-	} else {
-		// we need a reference for the new FD
-		get_stack_interface_module();
+		put_stack_interface_module();
 	}
 
 	return acceptedFD;
@@ -706,6 +711,16 @@ common_socketpair(int family, int type, int protocol, int fds[2], bool kernel)
 
 	// allocate the FDs
 	for (int i = 0; i < 2; i++) {
+		// Acquire this fd's consumer reference before create_socket_fd()
+		// publishes it (the first reference was taken at the top of this
+		// function). Taking the second reference only after the publish loop
+		// left a window in which a concurrent close() of the second fd would
+		// put() a reference the fd never acquired, corrupting
+		// sStackInterfaceConsumers and, under KDEBUG, unloading the net stack
+		// while the first fd was still live.
+		if (i > 0)
+			get_stack_interface_module();
+
 		fds[i] = create_socket_fd(sockets[i], sflags, kernel);
 		if (fds[i] < 0) {
 			sStackInterface->close(sockets[i]);
@@ -715,8 +730,6 @@ common_socketpair(int family, int type, int protocol, int fds[2], bool kernel)
 		}
 	}
 
-	// We need another reference for the second socket
-	get_stack_interface_module();
 	return B_OK;
 }
 
