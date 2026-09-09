@@ -1,0 +1,5 @@
+SubDir HAIKU_TOP src bin nvme_rescan ;
+
+Application nvme_rescan :
+	nvme_rescan.cpp
+;
