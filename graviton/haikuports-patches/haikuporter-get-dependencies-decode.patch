@@ -1,0 +1,71 @@
+# haikuporter: don't crash --get-dependencies on non-UTF-8 pkgman output
+#
+# Not a recipe patch -- this patches haikuporter itself, the same kind of
+# build-environment expedient as haikuporter-unpack-compressed-tar.patch beside
+# it. Refs Haiku-Graviton issue #160.
+#
+# WHAT BREAKS WITHOUT IT
+#
+# `haikuporter --get-dependencies <port>` aborts before building with a
+# UnicodeDecodeError, e.g. hit during the mesa-25.3.6 build (#139):
+#
+#   Fetching package for ... ...
+#   Traceback (most recent call last):
+#     ...
+#     output = subprocess.check_output([...]).decode('utf-8')
+#   UnicodeDecodeError: 'utf-8' codec can't decode byte 0x... : invalid ...
+#
+# WHY
+#
+# DependencyResolver._addImmediate(), under getOption('getDependencies'), shells
+# out to `pkgman install -y <resolvable>` and decodes the captured stdout with a
+# strict `.decode('utf-8')`. pkgman writes a live progress bar (carriage-return
+# redraws, and on some locales/terminals raw bytes) that is not valid UTF-8, so
+# the strict decode raises and the whole dependency-resolution pass dies right
+# after a successful fetch. The two decodes in the CalledProcessError handler
+# (of e.stderr and e.output) have the same defect: a *failed* pkgman install --
+# exactly when the error text matters most -- would itself raise a
+# UnicodeDecodeError and mask the real reason.
+#
+# WHAT IT DOES
+#
+# Decodes all three with errors='replace'. The output is only scanned by a
+# regex for '://.../<pkg>.hpkg' lines and split into human-readable error
+# text; replacing an undecodable progress byte with U+FFFD loses nothing the
+# resolver relies on, and never the .hpkg URLs (plain ASCII). Behaviour is
+# unchanged for output that was already valid UTF-8.
+#
+# HOW IT IS APPLIED
+#
+# By graviton/scripts/haiku-haikuporter-patch, not by patch(1): the packaged
+# tree at /boot/system/lib/haikuporter is packagefs and read-only, so the tree
+# is copied to /boot/home/config/non-packaged/lib/haikuporter, patched there,
+# and shadowed by a wrapper first on PATH. Re-run it after every guest swap.
+#
+# RETIRE WHEN
+#
+# Never needed upstream -- this is a latent upstream haikuporter bug and the fix
+# is architecture-neutral. Carry it until (if ever) it lands upstream.
+
+--- a/HaikuPorter/DependencyResolver.py
++++ b/HaikuPorter/DependencyResolver.py
+@@ -237,7 +237,7 @@
+ 				try:
+ 					print('Fetching package for ' + str(requires) + ' ...')
+ 					output = subprocess.check_output(['pkgman', 'install', '-y',
+-						str(requires).replace(' ', '')], stderr=subprocess.PIPE).decode('utf-8')
++						str(requires).replace(' ', '')], stderr=subprocess.PIPE).decode('utf-8', 'replace')
+ 					for pkg in re.findall(r'://.*/([^/\n]+\.hpkg)', output):
+ 						pkginfo = PackageInfo('/boot/system/packages/' + pkg)
+ 						self._providesManager.addProvidesFromPackageInfo(pkginfo)
+@@ -245,8 +245,8 @@
+ 							isPrerequiresType, self._ignoreBase)
+ 				except subprocess.CalledProcessError as e:
+ 					# `pkgman install -y` failed, propagate the why.
+-					error = e.stderr.decode('utf-8')
+-					output = e.output.decode('utf-8').splitlines()
++					error = e.stderr.decode('utf-8', 'replace')
++					output = e.output.decode('utf-8', 'replace').splitlines()
+ 					for index, line in enumerate(output):
+ 						if line.startswith('Encountered problems:'):
+ 							break
