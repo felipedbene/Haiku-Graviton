@@ -6,6 +6,7 @@ import * as cpactions from 'aws-cdk-lib/aws-codepipeline-actions';
 import * as ec2 from 'aws-cdk-lib/aws-ec2';
 import * as iam from 'aws-cdk-lib/aws-iam';
 import * as s3 from 'aws-cdk-lib/aws-s3';
+import * as ssm from 'aws-cdk-lib/aws-ssm';
 import * as logs from 'aws-cdk-lib/aws-logs';
 import { HaikuPipelineConfig } from './config';
 
@@ -659,5 +660,22 @@ export class HaikuGravitonPipelineStack extends cdk.Stack {
         'vmimport is granted read on import/* by a bucket policy; no manual IAM step. ' +
         'Seed cache/cross-tools-arm64.tar.zst and hpkg-pool/ before the first bake.',
     });
+
+    // Publish this WorkBucket's ARN to SSM so the ops stack's incremental-publish
+    // CodeBuild can read the banked Linux host tools (cache/host-tools) from it
+    // WITHOUT a fragile name-substring IAM wildcard against the CDK-auto-generated
+    // bucket name. Only the TRUNK pipeline writes this well-known param: the
+    // variant pipelines (HaikuGravitonBakePipeline2/3/4) each own a separate
+    // auto-named bucket and would collide on the account-global param name, and
+    // the ops publish only ever consumes the trunk's banked tools (its buildspec
+    // hardcodes the trunk). See ops-stack.ts (bakeWorkBucketArnParam).
+    if (this.stackName === 'HaikuGravitonBakePipeline') {
+      new ssm.StringParameter(this, 'WorkBucketArnParam', {
+        parameterName: '/debeos/bake/workbucket-arn',
+        stringValue: workBucket.bucketArn,
+        description: 'ARN of the trunk bake WorkBucket; consumed by DebeosOpsStack '
+          + 'to grant the incremental-publish CodeBuild read on the banked host tools.',
+      });
+    }
   }
 }
