@@ -145,6 +145,116 @@ ena_aenq_keep_alive(void* data, struct ena_admin_aenq_entry* entry)
 }
 
 
+/*!	Records that the device should be reset, without doing it here.
+
+	The AENQ handlers run from the management interrupt, where blocking is not
+	allowed, but a reset issues admin commands and takes mutexes. So the device's
+	own reset triggers -- FATAL_ERROR and DEVICE_REQUEST_RESET -- do exactly what
+	the keep-alive handler does: record and return. ena_watchdog() drains the
+	request on its next tick, in a context that may block. Publishing the reason
+	before the request keeps the pair consistent from the reader's side even
+	without a lock: the watchdog only reads the reason once it has seen the flag.
+*/
+static void
+ena_request_reset(ena_haiku_device* device,
+	enum ena_regs_reset_reason_types reason)
+{
+	atomic_set(&device->resetRequestReason, (int32)reason);
+	atomic_set(&device->resetRequest, 1);
+}
+
+
+static void
+ena_aenq_fatal_error(void* data, struct ena_admin_aenq_entry* entry)
+{
+	ena_haiku_device* device = (ena_haiku_device*)data;
+
+	/* The device is telling us it has hit a fatal error. There is no partial
+	   recovery from this short of a full reset, and unlike the keep-alive
+	   timeout there is no false-positive question to weigh: the device asked.
+	   Defer the actual reset to the watchdog thread. */
+	ERROR("device reported a FATAL_ERROR AENQ event (syndrome %u); requesting "
+		"reset\n", entry->aenq_common_desc.syndrome);
+	ena_request_reset(device, ENA_REGS_RESET_GENERIC);
+}
+
+
+static void
+ena_aenq_warning(void* data, struct ena_admin_aenq_entry* entry)
+{
+	/* Advisory only: the device is flagging a condition it wants noted, not a
+	   reason to reset. Previously this fell to ena_aenq_unimplemented() and was
+	   logged as an unhandled error, which mislabelled a benign event. */
+	TRACE_ALWAYS("device reported a WARNING AENQ event (syndrome %u)\n",
+		entry->aenq_common_desc.syndrome);
+}
+
+
+static void
+ena_aenq_notification(void* data, struct ena_admin_aenq_entry* entry)
+{
+	ena_haiku_device* device = (ena_haiku_device*)data;
+
+	/* The NOTIFICATION group carries the device's hardware hints -- among them
+	   its own keep-alive and missing-TX-completion timeout expectations. The
+	   driver stored none of this before, so the compile-time constants were used
+	   even where the device was willing to supply the value (docs/watchdog-design.md
+	   §10). Record the hints; the watchdog reads them on its own thread. */
+	switch (entry->aenq_common_desc.syndrome) {
+		case ENA_ADMIN_UPDATE_HINTS:
+		{
+			struct ena_admin_ena_hw_hints* hints
+				= (struct ena_admin_ena_hw_hints*)&entry->inline_data_w4[0];
+
+			/* NO_TIMEOUT means "do not watchdog me for keep-alives". Honoured
+			   because it can only reduce resets. A numeric keep-alive timeout is
+			   deliberately not auto-applied to the deadline: the measured-safe
+			   value is a constant with a consecutive-miss guard and narrowing it
+			   from a hint is owed-tuning (§7). */
+			device->hwHintNoKeepAliveTimeout
+				= hints->driver_watchdog_timeout == ENA_HW_HINTS_NO_TIMEOUT;
+
+			/* The missing-TX-completion check is new and device-authoritative, so
+			   its thresholds do follow the hint when present. Zero means "use the
+			   driver default", per the hint struct. */
+			device->hwHintTxCompletionTimeoutMs
+				= hints->missing_tx_completion_timeout;
+			device->hwHintTxCompletionThreshold
+				= hints->missed_tx_completion_count_threshold_to_reset;
+
+			device->hwHintsReceived = true;
+
+			TRACE_ALWAYS("device hardware hints: watchdog_timeout %u ms%s, "
+				"missing_tx_completion %u ms, tx_completion_threshold %u\n",
+				hints->driver_watchdog_timeout,
+				device->hwHintNoKeepAliveTimeout ? " (NO_TIMEOUT)" : "",
+				hints->missing_tx_completion_timeout,
+				hints->missed_tx_completion_count_threshold_to_reset);
+			break;
+		}
+
+		default:
+			TRACE_ALWAYS("device NOTIFICATION AENQ event, unhandled syndrome %u\n",
+				entry->aenq_common_desc.syndrome);
+			break;
+	}
+}
+
+
+static void
+ena_aenq_device_request_reset(void* data, struct ena_admin_aenq_entry* entry)
+{
+	ena_haiku_device* device = (ena_haiku_device*)data;
+
+	/* The device is explicitly asking to be reset. Like FATAL_ERROR this is
+	   device-driven, so there is no false-positive question: defer it to the
+	   watchdog thread with the reason the register defines for it. */
+	ERROR("device requested a reset via AENQ (syndrome %u)\n",
+		entry->aenq_common_desc.syndrome);
+	ena_request_reset(device, ENA_REGS_RESET_DEVICE_REQUEST);
+}
+
+
 static void
 ena_aenq_unimplemented(void* data, struct ena_admin_aenq_entry* entry)
 {
@@ -161,7 +271,12 @@ ena_init_aenq_handlers()
 	/* Not a designated-initialiser table: those are a C99 feature that C++
 	   does not have. */
 	sAenqHandlers.handlers[ENA_ADMIN_LINK_CHANGE] = ena_aenq_link_change;
+	sAenqHandlers.handlers[ENA_ADMIN_FATAL_ERROR] = ena_aenq_fatal_error;
+	sAenqHandlers.handlers[ENA_ADMIN_WARNING] = ena_aenq_warning;
+	sAenqHandlers.handlers[ENA_ADMIN_NOTIFICATION] = ena_aenq_notification;
 	sAenqHandlers.handlers[ENA_ADMIN_KEEP_ALIVE] = ena_aenq_keep_alive;
+	sAenqHandlers.handlers[ENA_ADMIN_DEVICE_REQUEST_RESET]
+		= ena_aenq_device_request_reset;
 	sAenqHandlers.unimplemented_handler = ena_aenq_unimplemented;
 }
 
@@ -543,7 +658,8 @@ ena_device_init(ena_haiku_device* device,
 			| BIT(ENA_ADMIN_FATAL_ERROR)
 			| BIT(ENA_ADMIN_WARNING)
 			| BIT(ENA_ADMIN_NOTIFICATION)
-			| BIT(ENA_ADMIN_KEEP_ALIVE);
+			| BIT(ENA_ADMIN_KEEP_ALIVE)
+			| BIT(ENA_ADMIN_DEVICE_REQUEST_RESET);
 		groups &= features->aenq.supported_groups;
 
 		/* The watchdog is only legitimate if the device agreed to send
@@ -1628,6 +1744,10 @@ ena_refill_receive_ring(ena_haiku_device* device)
    performs belongs conceptually. The watchdog reset is its second caller. */
 static status_t	ena_device_bringup(ena_haiku_device* device);
 
+/* Defined with the transmit path; the missing-TX-completion check reclaims
+   completed descriptors before scanning for outstanding ones. */
+static void	ena_reclaim_transmitted(ena_haiku_device* device);
+
 
 /*!	Tears the device down and brings it back, in the one order that is safe.
 
@@ -1780,6 +1900,18 @@ ena_watchdog_reset(ena_haiku_device* device,
 
 	/* --- bring-up ------------------------------------------------------- */
 
+	/* Snapshot the identity the device advertised before this reset, so the
+	   post-reset validation below can catch a device that silently comes back
+	   describing itself differently -- a changed MAC would strand the stack's
+	   ARP/neighbour state and a shrunken max_mtu would leave frameSize describing
+	   a frame the device will now reject (docs/watchdog-design.md gap 7). This is
+	   diagnostic: it logs, it does not fail the reset, because there is nothing
+	   better to fall back to than the device the hardware now presents. */
+	uint8 previousMac[ETHER_ADDRESS_LENGTH];
+	memcpy(previousMac, device->macAddress, ETHER_ADDRESS_LENGTH);
+	const uint32 previousMaxMtu = device->maxSupportedMtu;
+	const uint32 previousFrameSize = device->frameSize;
+
 	status_t status = ena_device_bringup(device);
 	if (status != B_OK) {
 		/* Leave the device inert rather than half-built, and stop the watchdog
@@ -1804,6 +1936,26 @@ ena_watchdog_reset(ena_haiku_device* device,
 
 	device->resetting = false;
 
+	/* Post-reset parameter validation (gap 7). Loud, because a device that comes
+	   back with a different identity is a rare and consequential event and there
+	   is no other place it becomes visible. */
+	if (memcmp(previousMac, device->macAddress, ETHER_ADDRESS_LENGTH) != 0) {
+		ERROR("device MAC changed across the reset "
+			"(%02x:%02x:%02x:%02x:%02x:%02x -> %02x:%02x:%02x:%02x:%02x:%02x); "
+			"the stack's neighbour state is now stale\n",
+			previousMac[0], previousMac[1], previousMac[2], previousMac[3],
+			previousMac[4], previousMac[5], device->macAddress[0],
+			device->macAddress[1], device->macAddress[2], device->macAddress[3],
+			device->macAddress[4], device->macAddress[5]);
+	}
+	if (device->maxSupportedMtu < previousMaxMtu
+		|| device->frameSize != previousFrameSize) {
+		ERROR("device MTU changed across the reset (max %" B_PRIu32 " -> %"
+			B_PRIu32 ", frame size %" B_PRIu32 " -> %" B_PRIu32 ")\n",
+			previousMaxMtu, device->maxSupportedMtu, previousFrameSize,
+			device->frameSize);
+	}
+
 	/* Optimistic, exactly as at attach: the device does not send a link event
 	   for a link that is already up, and on EC2 it always is. */
 	device->linkUp = true;
@@ -1817,11 +1969,301 @@ ena_watchdog_reset(ena_haiku_device* device,
 }
 
 
-/*!	The watchdog. One second of sleep, one check, and a reset if it is overdue.
+/*!	Acts on a reset the device asked for, deferred here from an AENQ handler.
+
+	FATAL_ERROR and DEVICE_REQUEST_RESET are recorded in interrupt context and
+	drained here because the reset itself blocks. There is no false-positive
+	question to weigh -- the device asked -- so this runs ahead of every
+	heuristic check below. Returns true when a reset was performed, so the caller
+	skips the rest of the tick rather than re-examining a device it just rebuilt.
+*/
+static bool
+ena_watchdog_check_reset_request(ena_haiku_device* device)
+{
+	if (atomic_get(&device->resetRequest) == 0)
+		return false;
+
+	enum ena_regs_reset_reason_types reason
+		= (enum ena_regs_reset_reason_types)atomic_get(&device->resetRequestReason);
+
+	/* Cleared before acting, not after: the reset blocks for tens of
+	   milliseconds, and a fresh request arriving in that window must set the flag
+	   again and be handled on the next tick rather than being swallowed by a
+	   clear that runs after the reset returns. */
+	atomic_set(&device->resetRequest, 0);
+
+	switch (reason) {
+		case ENA_REGS_RESET_GENERIC:
+			device->fatalErrorResets++;
+			break;
+		case ENA_REGS_RESET_DEVICE_REQUEST:
+			device->deviceRequestResets++;
+			break;
+		default:
+			break;
+	}
+
+	TRACE_ALWAYS("acting on a device-requested reset, reason %d\n", (int)reason);
+	ena_watchdog_reset(device, reason);
+	return true;
+}
+
+
+/*!	Detects a wedged admin queue (docs/watchdog-design.md gap 1).
+
+	The HAL clears running_state only after an admin command has actually failed
+	or timed out (ena_com.c) -- never speculatively -- so unlike the keep-alive
+	deadline there is no marginal-threshold question here: a cleared state is a
+	command that already did not complete. This is one of the three wedges the
+	keep-alive check cannot see, because the device keeps emitting keep-alives
+	while its admin path is dead. Returns true when a reset was performed.
+*/
+static bool
+ena_watchdog_check_admin_state(ena_haiku_device* device)
+{
+	if (ena_com_get_admin_running_state(&device->comDev))
+		return false;
+
+	ERROR("admin queue wedged: the HAL cleared running_state after a command "
+		"timeout, so every later admin command would fail silently; resetting\n");
+	device->adminWedgeResets++;
+	ena_watchdog_reset(device, ENA_REGS_RESET_ADMIN_TO);
+	return true;
+}
+
+
+/*!	The original keep-alive liveness check, unchanged but now one of several.
+
+	\a moving is whether the datapath advanced in the interval just ended.
+	Returns true when a reset was performed. A device that asked (via a hardware
+	hint) not to be keep-alive-watchdogged is skipped here but still covered by
+	the admin, fatal and transmit checks -- honouring the hint can only reduce
+	resets, which is the conservative direction.
+*/
+static bool
+ena_watchdog_check_keep_alive(ena_haiku_device* device, bool moving)
+{
+	if (device->hwHintNoKeepAliveTimeout) {
+		device->keepAliveMisses = 0;
+		return false;
+	}
+
+	const bigtime_t last = atomic_get64(&device->lastKeepAlive);
+	const bigtime_t age = system_time() - last;
+	if (age <= ENA_KEEP_ALIVE_TIMEOUT_US) {
+		if (device->keepAliveMisses != 0) {
+			/* Logged, because this is the line that says a reset was
+			   correctly *not* performed. Without it the fix is invisible
+			   when it works, and a fix that is invisible when it works is
+			   indistinguishable from a broken watchdog. */
+			TRACE_ALWAYS("keep-alive recovered after %" B_PRIu32 " missed "
+				"deadline(s); no reset\n", device->keepAliveMisses);
+			device->keepAliveMisses = 0;
+		}
+		return false;
+	}
+
+	/* If a keep-alive is sitting unconsumed in the AENQ then the device is
+	   alive and it is our interrupt that went missing. Distinguishing the
+	   two costs nothing and is the difference between blaming the device and
+	   blaming ourselves. */
+	enum ena_regs_reset_reason_types reason = ENA_REGS_RESET_KEEP_ALIVE_TO;
+	if (ena_com_aenq_has_keep_alive(&device->comDev))
+		reason = ENA_REGS_RESET_MISSING_ADMIN_INTERRUPT;
+
+	device->keepAliveMisses++;
+
+	/* How many misses this device has to accumulate before it is reset. A
+	   device that is still moving frames has demonstrably not stopped, so a
+	   late keep-alive earns more patience -- but a bounded amount, because a
+	   device that moves frames while its management path is dead is exactly
+	   the partial wedge the watchdog exists to catch. See
+	   ENA_KEEP_ALIVE_MISSES_WITH_TRAFFIC. */
+	const uint32 required = moving
+		? ENA_KEEP_ALIVE_MISSES_WITH_TRAFFIC
+		: ENA_KEEP_ALIVE_MISSES_BEFORE_RESET;
+
+	/* One missed deadline is not evidence of a dead device -- measured, see
+	   ENA_KEEP_ALIVE_MISSES_BEFORE_RESET. Say so and look again next tick;
+	   the run has to continue for the device to be reset. */
+	if (device->keepAliveMisses < required) {
+		TRACE_ALWAYS("keep-alive deadline missed (%" B_PRId64 " ms since the "
+			"last event, limit %d ms, reason %s); miss %" B_PRIu32 " of %"
+			B_PRIu32 "%s, not resetting yet\n", age / 1000,
+			ENA_KEEP_ALIVE_TIMEOUT_US / 1000,
+			reason == ENA_REGS_RESET_MISSING_ADMIN_INTERRUPT
+				? "missing admin interrupt" : "keep-alive timeout",
+			device->keepAliveMisses, required,
+			moving ? " (datapath still moving)" : " (datapath idle)");
+		return false;
+	}
+
+	ERROR("keep-alive watchdog timeout: %" B_PRId64 " ms since the last "
+		"event (limit %d ms), reason %s, after %" B_PRIu32 " consecutive "
+		"missed deadlines%s\n", age / 1000,
+		ENA_KEEP_ALIVE_TIMEOUT_US / 1000,
+		reason == ENA_REGS_RESET_MISSING_ADMIN_INTERRUPT
+			? "missing admin interrupt" : "keep-alive timeout",
+		device->keepAliveMisses,
+		moving ? " (datapath still moving -- resetting anyway)" : "");
+
+	device->keepAliveMisses = 0;
+	ena_watchdog_reset(device, reason);
+	return true;
+}
+
+
+/*!	Detects a wedged transmit path (docs/watchdog-design.md gap 4).
+
+	One lost completion leaves a frame outstanding forever, and the keep-alive
+	check cannot see it: the device keeps emitting keep-alives while transmit is
+	dead. So the oldest still-outstanding descriptor is timed here instead.
+
+	Deliberately conservative on two independent axes, because the cost of a false
+	positive on a console-less instance is a reset of a healthy NIC (§7):
+
+	- The lock is a *trylock*. If the transmit path is holding txLock the datapath
+	  is active -- which is itself evidence of progress -- so the tick is skipped.
+	  A genuinely wedged transmit releases the lock (ena_send() drops it while
+	  blocked on txCompleted), so the wedge is exactly the case the trylock wins.
+	- A run of ENA_MISSING_TX_CHECKS_BEFORE_RESET consecutive ticks over the
+	  deadline is required, mirroring the keep-alive consecutive-miss guard; a
+	  transient backlog clears on the next tick and never reaches the reset.
+
+	The per-frame deadline and the count both take the device's hardware hint when
+	one has been received, and fall back to compile-time defaults that are
+	OWED-TUNING against real Graviton transmit backpressure. Returns true when a
+	reset was performed.
+*/
+static bool
+ena_watchdog_check_missing_tx(ena_haiku_device* device)
+{
+	bigtime_t timeoutUs = ENA_MISSING_TX_COMPLETION_TIMEOUT_US;
+	uint32 threshold = ENA_MISSING_TX_COMPLETION_THRESHOLD;
+	if (device->hwHintsReceived) {
+		if (device->hwHintTxCompletionTimeoutMs != 0)
+			timeoutUs = (bigtime_t)device->hwHintTxCompletionTimeoutMs * 1000;
+		if (device->hwHintTxCompletionThreshold != 0)
+			threshold = device->hwHintTxCompletionThreshold;
+	}
+
+	if (mutex_trylock(&device->txLock) != B_OK)
+		return false;
+
+	/* Reclaim first, then scan. On a receive-heavy or idle-transmit path nothing
+	   calls ena_send(), so a frame the device has *already completed* keeps its
+	   buffer set until the next transmit reclaims it (ena_reclaim_transmitted()
+	   runs only from ena_send() -- see the ownership note in ena_io_interrupt()).
+	   Without this, a completed-but-unreclaimed frame would read as outstanding
+	   and, past the deadline, reset a perfectly healthy device -- precisely the
+	   false positive §7 warns against. Doing the reclaim here also frees those
+	   net_buffers within a second on an otherwise-idle transmit path, which is a
+	   small correctness win in its own right. Safe under txLock: the only other
+	   caller of a reset is this same (single) watchdog thread, and ena_send() is
+	   excluded by the lock. */
+	ena_reclaim_transmitted(device);
+
+	uint32 overdue = 0;
+	bigtime_t oldest = 0;
+	const bigtime_t now = system_time();
+	if (device->txBuffers != NULL) {
+		for (uint16 i = 0; i < device->txRingSize; i++) {
+			ena_tx_buffer* entry = &device->txBuffers[i];
+			if (entry->buffer == NULL)
+				continue;
+			const bigtime_t outstanding = now - entry->submittedAt;
+			if (outstanding > timeoutUs) {
+				overdue++;
+				if (outstanding > oldest)
+					oldest = outstanding;
+			}
+		}
+	}
+	mutex_unlock(&device->txLock);
+
+	if (overdue < threshold) {
+		if (device->missingTxChecks != 0) {
+			TRACE_ALWAYS("transmit completions recovered after %" B_PRIu32
+				" check(s) over the deadline; no reset\n",
+				device->missingTxChecks);
+			device->missingTxChecks = 0;
+		}
+		return false;
+	}
+
+	device->missingTxChecks++;
+	if (device->missingTxChecks < ENA_MISSING_TX_CHECKS_BEFORE_RESET) {
+		TRACE_ALWAYS("missing transmit completions: %" B_PRIu32 " descriptor(s) "
+			"over %" B_PRId64 " ms (oldest %" B_PRId64 " ms); check %" B_PRIu32
+			" of %d, not resetting yet\n", overdue, timeoutUs / 1000,
+			oldest / 1000, device->missingTxChecks,
+			ENA_MISSING_TX_CHECKS_BEFORE_RESET);
+		return false;
+	}
+
+	ERROR("transmit path wedged: %" B_PRIu32 " descriptor(s) over %" B_PRId64
+		" ms (oldest %" B_PRId64 " ms) across %" B_PRIu32 " consecutive checks; "
+		"resetting\n", overdue, timeoutUs / 1000, oldest / 1000,
+		device->missingTxChecks);
+	device->missingTxChecks = 0;
+	device->missingTxResets++;
+	ena_watchdog_reset(device, ENA_REGS_RESET_MISS_TX_CMPL);
+	return true;
+}
+
+
+/*!	Flags a suspected receive stall (docs/watchdog-design.md gap 5).
+
+	DETECT-AND-LOG ONLY. A refill deadlock leaves descriptors owed to the device
+	(rxPendingRefill > 0) making no progress while receive is idle. That is a real
+	signal, but the threshold that separates it from a legitimately quiet link is
+	exactly what this project cannot set without hardware observation -- and an
+	over-eager receive reset on a console-less instance is the failure §7 exists to
+	prevent. So the reset is OWED: this counts and logs, nothing more.
+
+	rxPendingRefill is read without rxLock, on the same license as
+	watchdogLastTraffic: the question is only "did this change", and a torn read
+	costs at most one tick. \a moving covers the whole datapath, so a stall while
+	transmit is still busy is not flagged -- a known limitation of the log-only
+	heuristic, acceptable because it never triggers an action.
+*/
+static void
+ena_watchdog_check_rx_stall(ena_haiku_device* device, bool moving)
+{
+	const uint16 pending = device->rxPendingRefill;
+
+	/* Nothing owed, or the datapath advanced, or the owed count is shrinking:
+	   the refill path is doing its job. Any of these ends the run. */
+	if (pending == 0 || moving || pending < device->rxStallLastPending) {
+		device->rxStallChecks = 0;
+		device->rxStallLastPending = pending;
+		return;
+	}
+
+	device->rxStallLastPending = pending;
+	device->rxStallChecks++;
+	if (device->rxStallChecks == ENA_RX_STALL_CHECKS_BEFORE_LOG) {
+		device->rxStallDetections++;
+		ERROR("suspected receive stall: %u descriptor(s) owed to the device with "
+			"no receive progress for %" B_PRIu32 " checks -- NOT resetting "
+			"(gap 5 is detect-only; the reset threshold is owed hardware "
+			"tuning)\n", pending, device->rxStallChecks);
+	}
+}
+
+
+/*!	The watchdog. One second of sleep, the checks, and a reset if one is due.
 
 	A thread rather than add_timer(), because add_timer() fires in interrupt
 	context and a reset issues admin commands and blocks. This thread *is* the
 	deferred context FreeBSD gets from its taskqueue.
+
+	The checks run in priority order: a reset the device asked for, then a wedged
+	admin queue, then keep-alive liveness, then a wedged transmit path, then a
+	suspected receive stall. The first four can reset and short-circuit the tick;
+	the last only logs. The three that are not keep-alive exist because the
+	keep-alive check is blind to them by construction -- the device keeps sending
+	keep-alives while a specific path of it is dead (docs/watchdog-design.md §9).
 */
 static int32
 ena_watchdog(void* arg)
@@ -1843,80 +2285,39 @@ ena_watchdog(void* arg)
 		if (!device->watchdogActive || !device->running || device->resetting
 			|| device->deviceDead) {
 			/* Not being watched, so any run of misses recorded before this is
-			   over: carrying it across a down/up or a reset would let two
-			   unrelated samples add up to a reset. */
+			   over: carrying one across a down/up or a reset would let two
+			   unrelated samples add up to a reset. Every consecutive-run counter
+			   is cleared here for the same reason. */
 			device->keepAliveMisses = 0;
+			device->missingTxChecks = 0;
+			device->rxStallChecks = 0;
 			continue;
 		}
 
+		/* Device-authoritative reset triggers first: no heuristic to second-guess. */
+		if (ena_watchdog_check_reset_request(device))
+			continue;
+
+		/* A wedged admin queue the keep-alive check cannot see. */
+		if (ena_watchdog_check_admin_state(device))
+			continue;
+
 		/* Did the datapath move at all since the last check? Sampled every tick,
 		   before the age test, so it describes the interval just ended whether or
-		   not a deadline was missed during it. */
+		   not a deadline was missed during it. Shared by the keep-alive and
+		   receive-stall checks. */
 		const uint64 traffic = device->rxFrames + device->txFrames;
 		const bool moving = traffic != device->watchdogLastTraffic;
 		device->watchdogLastTraffic = traffic;
 
-		const bigtime_t last = atomic_get64(&device->lastKeepAlive);
-		const bigtime_t age = system_time() - last;
-		if (age <= ENA_KEEP_ALIVE_TIMEOUT_US) {
-			if (device->keepAliveMisses != 0) {
-				/* Logged, because this is the line that says a reset was
-				   correctly *not* performed. Without it the fix is invisible
-				   when it works, and a fix that is invisible when it works is
-				   indistinguishable from a broken watchdog. */
-				TRACE_ALWAYS("keep-alive recovered after %" B_PRIu32 " missed "
-					"deadline(s); no reset\n", device->keepAliveMisses);
-				device->keepAliveMisses = 0;
-			}
+		if (ena_watchdog_check_keep_alive(device, moving))
 			continue;
-		}
 
-		/* If a keep-alive is sitting unconsumed in the AENQ then the device is
-		   alive and it is our interrupt that went missing. Distinguishing the
-		   two costs nothing and is the difference between blaming the device and
-		   blaming ourselves. */
-		enum ena_regs_reset_reason_types reason = ENA_REGS_RESET_KEEP_ALIVE_TO;
-		if (ena_com_aenq_has_keep_alive(&device->comDev))
-			reason = ENA_REGS_RESET_MISSING_ADMIN_INTERRUPT;
-
-		device->keepAliveMisses++;
-
-		/* How many misses this device has to accumulate before it is reset. A
-		   device that is still moving frames has demonstrably not stopped, so a
-		   late keep-alive earns more patience -- but a bounded amount, because a
-		   device that moves frames while its management path is dead is exactly
-		   the partial wedge the watchdog exists to catch. See
-		   ENA_KEEP_ALIVE_MISSES_WITH_TRAFFIC. */
-		const uint32 required = moving
-			? ENA_KEEP_ALIVE_MISSES_WITH_TRAFFIC
-			: ENA_KEEP_ALIVE_MISSES_BEFORE_RESET;
-
-		/* One missed deadline is not evidence of a dead device -- measured, see
-		   ENA_KEEP_ALIVE_MISSES_BEFORE_RESET. Say so and look again next tick;
-		   the run has to continue for the device to be reset. */
-		if (device->keepAliveMisses < required) {
-			TRACE_ALWAYS("keep-alive deadline missed (%" B_PRId64 " ms since the "
-				"last event, limit %d ms, reason %s); miss %" B_PRIu32 " of %"
-				B_PRIu32 "%s, not resetting yet\n", age / 1000,
-				ENA_KEEP_ALIVE_TIMEOUT_US / 1000,
-				reason == ENA_REGS_RESET_MISSING_ADMIN_INTERRUPT
-					? "missing admin interrupt" : "keep-alive timeout",
-				device->keepAliveMisses, required,
-				moving ? " (datapath still moving)" : " (datapath idle)");
+		/* Datapath-progress checks the keep-alive liveness test is blind to. */
+		if (ena_watchdog_check_missing_tx(device))
 			continue;
-		}
 
-		ERROR("keep-alive watchdog timeout: %" B_PRId64 " ms since the last "
-			"event (limit %d ms), reason %s, after %" B_PRIu32 " consecutive "
-			"missed deadlines%s\n", age / 1000,
-			ENA_KEEP_ALIVE_TIMEOUT_US / 1000,
-			reason == ENA_REGS_RESET_MISSING_ADMIN_INTERRUPT
-				? "missing admin interrupt" : "keep-alive timeout",
-			device->keepAliveMisses,
-			moving ? " (datapath still moving -- resetting anyway)" : "");
-
-		device->keepAliveMisses = 0;
-		ena_watchdog_reset(device, reason);
+		ena_watchdog_check_rx_stall(device, moving);
 	}
 
 	return 0;
@@ -2347,8 +2748,12 @@ ena_uninit_device(void* _cookie)
 
 	device->running = false;
 
-	ena_release_io_queues(device);
-
+	/* Remove the interrupt handlers *before* freeing the queues they read, not
+	   after (docs/watchdog-design.md gap 9). An io interrupt landing between the
+	   free and the removal would run ena_io_interrupt()/ena_management_interrupt()
+	   against a torn-down queue -- a latent use-after-free. This is the order both
+	   the reference driver and ena_watchdog_reset() in this same file already use;
+	   ena_uninit_device() was the one path that had it inverted. */
 	if (device->ioIrqInstalled) {
 		remove_io_interrupt_handler(device->ioIrq, ena_io_interrupt, device);
 		device->ioIrqInstalled = false;
@@ -2358,6 +2763,8 @@ ena_uninit_device(void* _cookie)
 			ena_management_interrupt, device);
 		device->managementIrqInstalled = false;
 	}
+
+	ena_release_io_queues(device);
 
 	ena_com_rss_destroy(&device->comDev);
 
@@ -2815,6 +3222,11 @@ ena_send(ena_haiku_device* device, net_buffer* buffer)
 	entry->buffer = buffer;
 	entry->descriptors = (uint16)descriptors;
 	entry->segments = segments;
+	/* Stamp the submission time so the watchdog can time the oldest outstanding
+	   transmit. Set under txLock with buffer/segments, so a non-NULL buffer always
+	   carries a valid timestamp; ena_reclaim_transmitted() clears buffer, which is
+	   what makes this entry invisible to the missing-completion scan again. */
+	entry->submittedAt = system_time();
 	for (uint16 i = 0; i < segments; i++)
 		entry->segmentIds[i] = slotIds[i];
 
