@@ -249,6 +249,7 @@ AddFilesToPackage bin :
 	ena_fault
 	mprotect_probe
 	nettput
+	nvme_rescan
 	partition_grow
 	smpscale
 	consoled
