@@ -87,10 +87,19 @@ bool		arm64_pmu_sampling_active(void);
 bool		arm64_pmu_pmccntr_usable(void);
 
 // All of these act on the calling CPU only, and pin to it for their duration.
-status_t	arm64_pmu_enable(void);
 void		arm64_pmu_disable(void);
 void		arm64_pmu_reset(void);
 void		arm64_pmu_read(arm64_pmu_sample* sample);
+
+// Sets the cycle-overflow sampling period from a wall-clock interval in
+// microseconds (the unit `profile -i` uses) and reprograms the sampling counter
+// on EVERY CPU via call_all_cpus_sync(). Call at profiling-session start so the
+// requested rate is honored instead of the fixed 10^7-cycle default. Converts
+// through the measured core clock and clamps to a floor so a tiny interval
+// cannot storm the overflow PPI. Normal thread context only. Returns
+// B_NOT_SUPPORTED when the PMU facility is off (fall back to the software timer),
+// so it is safe to call unconditionally and ignore the result.
+status_t	arm64_pmu_set_sample_interval(bigtime_t interval);
 
 // Dumps the calling CPU's counters and the derived ratios via dprintf(), for
 // bracketing a code path under test. Cheap enough to call, not cheap enough to
