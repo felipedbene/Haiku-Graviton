@@ -1,6 +1,6 @@
 """Poll an SSM RunCommand invocation; classify from the wrapper's verdict line.
 
-Input : {instance_id, command_id | publish_command_id}
+Input : {instance_id, command_id}
 Output: adds {done: bool, ok: bool, error_class: str|None, ssm_status: str,
               log_url: str|None}. The state machine loops Wait -> this ->
               Choice(done) until done, then branches on ok.
@@ -18,14 +18,10 @@ PENDING = {"Pending", "InProgress", "Delayed"}
 _VERDICT = re.compile(r"VERDICT=(\S+)\s+RC=(-?\d+)\s+LOG=(\S+)")
 
 
-def _cid(event):
-    return event.get("command_id") or event["publish_command_id"]
-
-
 def handler(event, context):
     ssm = boto3.client("ssm")
     try:
-        inv = ssm.get_command_invocation(CommandId=_cid(event),
+        inv = ssm.get_command_invocation(CommandId=event["command_id"],
                                          InstanceId=event["instance_id"])
     except ssm.exceptions.InvocationDoesNotExist:
         event.update(done=False, ok=False, error_class=None, ssm_status="Pending")

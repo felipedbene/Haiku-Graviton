@@ -8,6 +8,7 @@ import * as sfn from 'aws-cdk-lib/aws-stepfunctions';
 import * as tasks from 'aws-cdk-lib/aws-stepfunctions-tasks';
 import * as logs from 'aws-cdk-lib/aws-logs';
 import * as codebuild from 'aws-cdk-lib/aws-codebuild';
+import * as ssm from 'aws-cdk-lib/aws-ssm';
 import * as path from 'path';
 import * as fs from 'fs';
 import { SharedConfig, DEBEOS_TAGS } from './config';
@@ -325,10 +326,13 @@ export class OpsStack extends cdk.Stack {
             commands: [
               'set -eo pipefail',
               // Resolve the banked Linux host tools from the bake pipeline's
-              // WorkBucket -- discovered via its CFN output so no generated bucket
-              // name is written into this tree (same as the ephemeral publisher).
-              "WB=\"$(aws cloudformation describe-stacks --stack-name HaikuGravitonBakePipeline --query \"Stacks[0].Outputs[?OutputKey=='WorkBucketName'].OutputValue | [0]\" --output text)\"",
-              'test -n "$WB" -a "$WB" != None || { echo "cannot resolve bake WorkBucket for host tools (HaikuGravitonBakePipeline)" >&2; exit 1; }',
+              // WorkBucket. Its physical name is CDK-auto-generated, so we read the
+              // bucket ARN the trunk bake stack publishes to SSM (no generated name
+              // is written into this tree, and the deploy-time IAM grant below is
+              // scoped to the SAME param -> the same bucket).
+              'WB_ARN="$(aws ssm get-parameter --name /debeos/bake/workbucket-arn --query Parameter.Value --output text)"',
+              'test -n "$WB_ARN" -a "$WB_ARN" != None || { echo "cannot resolve bake WorkBucket SSM param /debeos/bake/workbucket-arn (is HaikuGravitonBakePipeline deployed?)" >&2; exit 1; }',
+              'WB="${WB_ARN#arn:aws:s3:::}"',
               'HT="s3://$WB/cache/host-tools"',
               'install -d /opt/haiku-tools /opt/haiku-tools/lib /opt/haiku-tools/data',
               'aws s3 cp "$HT/package" /opt/haiku-tools/package',
@@ -350,10 +354,29 @@ export class OpsStack extends cdk.Stack {
               'aws s3 sync "$HARVEST_S3/" "$INCOMING/" --only-show-errors --exclude "*" --include "*.hpkg" --exclude "haiku.hpkg" --exclude "haiku-*" --exclude "haiku_*"',
               'n="$(aws s3 ls "$INCOMING/" | grep -c "[.]hpkg$" || true)"',
               'if [ "${n:-0}" -eq 0 ]; then echo "no harvested hpkg to publish; nothing to do"; exit 0; fi',
+              // Record the EXACT set of harvested keys we are about to publish, so
+              // that after a successful add we can prune JUST those from the durable
+              // harvest (see the prune step below). Captured now because
+              // haiku-repo-add empties $INCOMING on success.
+              'aws s3 ls "$INCOMING/" | awk "{print \\$4}" | grep -E "[.]hpkg$" > /tmp/published.list || true',
               'echo "== incremental-add $n harvested package(s) into $HG_REPO_S3 =="',
               `printf %s '${repoAddB64}' | base64 -d > /tmp/haiku-repo-add`,
               'export HG_INCOMING_S3="$INCOMING"',
               'bash /tmp/haiku-repo-add',
+              // Prune only the just-published hpkgs from the DURABLE harvest so the
+              // next wave's publish re-processes only genuinely NEW output instead
+              // of re-syncing + re-stamping the whole accumulated ~1885-pkg /~6 GB
+              // harvest on every one-package wave. We reach here only after
+              // haiku-repo-add exits 0 (set -eo pipefail above), i.e. every package
+              // in /tmp/published.list is now durable in the LIVE repo, so deleting
+              // it from the harvest cannot lose it. We delete by EXACT harvested
+              // key, so (a) a concurrent builder that harvested a NEW package into
+              // $HARVEST_S3 during this publish is never touched, and (b) a package
+              // from an acquire-skipped wave stays in the harvest until it is
+              // actually published. The live repo -- not the harvest -- is the
+              // durable pool; the harvest is a staging area for un-published output.
+              'echo "== prune $(wc -l < /tmp/published.list) published package(s) from durable harvest $HARVEST_S3 =="',
+              'while IFS= read -r name; do [ -n "$name" ] && aws s3 rm "$HARVEST_S3/$name" --only-show-errors || true; done < /tmp/published.list',
             ],
           },
         },
@@ -369,13 +392,27 @@ export class OpsStack extends cdk.Stack {
         `arn:aws:s3:::${workBucket}`, `arn:aws:s3:::${workBucket}/*`,
       ],
     }));
+    // Banked host tools live in the bake pipeline's WorkBucket, whose physical
+    // name is CDK-auto-generated. Instead of the old fragile name-substring
+    // wildcard (arn:aws:s3:::*bakepipeline*workbucket*), import the bucket ARN the
+    // trunk bake stack (HaikuGravitonBakePipeline) publishes to SSM and scope the
+    // read grant to exactly that bucket. `valueForStringParameter` resolves the
+    // param at DEPLOY time via a CloudFormation dynamic reference, so this couples
+    // the ops publish path to the trunk bake stack having been deployed -- already
+    // an implicit RUNTIME dependency (the buildspec fetches that bucket's host
+    // tools). The buildspec resolves the same param at runtime, which is why the
+    // former `cloudformation:DescribeStacks` discovery grant is gone too.
+    const bakeWorkBucketArnParam = '/debeos/bake/workbucket-arn';
+    const bakeWorkBucketArn = ssm.StringParameter.valueForStringParameter(
+      this, bakeWorkBucketArnParam);
     publishProject.addToRolePolicy(new iam.PolicyStatement({
-      actions: ['s3:GetObject', 's3:ListBucket'],  // banked host tools live in the bake WorkBucket
-      resources: ['arn:aws:s3:::*bakepipeline*workbucket*', 'arn:aws:s3:::*bakepipeline*workbucket*/*'],
+      actions: ['s3:GetObject', 's3:ListBucket'],
+      resources: [bakeWorkBucketArn, `${bakeWorkBucketArn}/*`],
     }));
-    publishProject.addToRolePolicy(new iam.PolicyStatement({
-      actions: ['cloudformation:DescribeStacks'], resources: ['*'],  // discover the bake WorkBucket name
-    }));
+    // Runtime read of that same SSM param (the buildspec derives the bucket name
+    // from it) -- scoped to the one parameter.
+    ssm.StringParameter.fromStringParameterName(
+      this, 'BakeWorkBucketArnParam', bakeWorkBucketArnParam).grantRead(publishProject);
     publishProject.addToRolePolicy(new iam.PolicyStatement({
       actions: ['cloudfront:CreateInvalidation'],
       resources: [props.config.repoCloudFrontDistId
@@ -490,10 +527,27 @@ export class OpsStack extends cdk.Stack {
     // Map itself (iterator states live in their own sub-graph and cannot target
     // a parent-graph catch).
     // (IncrementalPublish has its own catch -> ReleasePublishLock -> reapFail, so
-    // a publish failure frees the lock before failing; it is not in this list.)
-    for (const s of [launch, checkSsm, buildMap, acquireLock]) {
+    // a publish failure frees the lock before failing; it is not in this list.
+    // AcquirePublishLock is also handled separately just below, because an
+    // exhausted acquire must NOT fail an already-successful build.)
+    for (const s of [launch, checkSsm, buildMap]) {
       s.addCatch(reapFail, { resultPath: '$.error' });
     }
+    // A failed *acquire* is not a failed *wave*. If the single-flight lock stays
+    // held for the whole retry budget (~56 min), the ConditionalCheckFailedException
+    // surfaces here -- but by this point the wave's packages are already built and
+    // durably harvested in s3://<workBucket>/hpkg/arm64/. Failing the execution
+    // would discard that work. Instead, route an exhausted acquire to the SUCCESS
+    // reap path: the build succeeded, we merely skip publishing this run. The
+    // harvested output stays put and the NEXT wave's publish folds it into the repo
+    // (the incremental add is a union over the full harvest, so nothing is lost).
+    // This specific-error catch is added BEFORE the catch-all so it wins for
+    // ConditionalCheckFailedException; any OTHER acquire error still fails the wave.
+    acquireLock.addCatch(reapSuccess, {
+      errors: ['DynamoDB.ConditionalCheckFailedException'],
+      resultPath: '$.error',
+    });
+    acquireLock.addCatch(reapFail, { resultPath: '$.error' });
 
     this.stateMachine = new sfn.StateMachine(this, 'BuildWave', {
       stateMachineName: 'debeos-build-wave',
