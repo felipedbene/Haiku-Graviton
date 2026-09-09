@@ -235,6 +235,52 @@ extern "C" {
    while healthy and still far short of anything a user would call a hang. */
 #define ENA_KEEP_ALIVE_MISSES_WITH_TRAFFIC	8
 
+/* Missing-transmit-completion detection (docs/watchdog-design.md gap 4). The
+   keep-alive check cannot see a wedged transmit path: an otherwise-healthy
+   device keeps emitting keep-alives while a single lost completion leaves a
+   frame outstanding forever. So the watchdog separately times the *oldest*
+   still-outstanding transmit descriptor.
+
+   ENA_MISSING_TX_COMPLETION_TIMEOUT_US matches the reference default
+   (ena_netdev.h DEFAULT_TX_CMP_TO, 5000 ms). The device can override it through
+   the NOTIFICATION/UPDATE_HINTS hardware hint (missing_tx_completion_timeout);
+   we honour the hint when it is present because it is the device stating its
+   own expectation, and fall back to this constant otherwise.
+
+   OWED-TUNING: these values have NOT been swept on Graviton hardware. A frame
+   that legitimately waits behind a full ring under backpressure must not be read
+   as a lost completion, and the safe margin above the worst legitimate wait is
+   exactly the number this project has no measurement for yet -- so the check is
+   deliberately conservative on two independent axes (a generous per-frame
+   deadline AND a consecutive-check requirement below) rather than trusting either
+   one alone. See the false-reset history in
+   graviton/docs/ena-keepalive-watchdog-false-reset.md: a check that resets a
+   healthy NIC is worse than a check that misses a rare wedge. */
+#define ENA_MISSING_TX_COMPLETION_TIMEOUT_US	5000000
+
+/* How many descriptors must be over the deadline at once before the transmit
+   path is judged wedged. A single straggler is not evidence; the reference
+   (missing_tx_completion_threshold) uses a small count. Overridable by the
+   hardware hint (missed_tx_completion_count_threshold_to_reset). OWED-TUNING. */
+#define ENA_MISSING_TX_COMPLETION_THRESHOLD	4
+
+/* And how many consecutive watchdog ticks must find the transmit path over the
+   deadline before it is reset, mirroring ENA_KEEP_ALIVE_MISSES_BEFORE_RESET: a
+   run, never a single sample. This is the primary guard against a spurious
+   transmit-wedge reset, since a real wedge stays wedged across ticks while a
+   transient backlog clears on the next one. */
+#define ENA_MISSING_TX_CHECKS_BEFORE_RESET	3
+
+/* Receive-stall detection (docs/watchdog-design.md gap 5) is DETECT-AND-LOG
+   ONLY, not reset. A refill deadlock leaves descriptors owed to the device
+   (rxPendingRefill > 0) making no progress, but distinguishing that from a
+   legitimately quiet link needs a progress threshold this project cannot set
+   without hardware observation -- and an over-eager receive reset on a
+   console-less instance is the exact failure §7 warns against. So the plumbing
+   counts and logs a suspected stall and leaves the reset OWED until a threshold
+   can be measured. */
+#define ENA_RX_STALL_CHECKS_BEFORE_LOG	5
+
 #define ENA_ADMIN_POLL_TIMEOUT_US	500000
 #define ENA_MIN_POLL_DELAY_US		100
 
@@ -422,6 +468,13 @@ struct ena_tx_buffer {
 	   segments is 0 exactly when this entry is not in use. */
 	uint16		segments;
 	uint16		segmentIds[ENA_MAX_PACKET_DESCRIPTORS];
+
+	/* system_time() at which this frame was handed to the device, set under
+	   txLock alongside buffer/segments and cleared on completion. The watchdog
+	   reads the minimum over the outstanding entries to time the oldest
+	   un-acknowledged transmit; see the missing-TX-completion check in
+	   ena_watchdog(). Only meaningful while buffer != NULL. */
+	bigtime_t	submittedAt;
 };
 
 
@@ -559,6 +612,60 @@ struct ena_haiku_device {
 	/* Counters the device reports in the keep-alive descriptor. */
 	uint64				hwRxDrops;
 	uint64				hwTxDrops;
+
+	/* Asynchronous reset request, funnelled here from the AENQ handlers and the
+	   admin-state check so the *thread* performs the reset. The AENQ handlers run
+	   in management-interrupt context and must not block, but a reset issues admin
+	   commands and takes mutexes -- the same reason the keep-alive handler only
+	   records a timestamp. So FATAL_ERROR, DEVICE_REQUEST_RESET and a wedged admin
+	   queue set resetRequest (with resetRequestReason) here, and ena_watchdog()
+	   drains it on the next tick in a context that is allowed to block.
+	   resetRequest is a plain 0/1 published with atomic_set(); resetRequestReason
+	   is the enum ena_regs_reset_reason_types to pass through. */
+	int32				resetRequest;
+	int32				resetRequestReason;
+
+	/* Consecutive watchdog ticks that have found the oldest outstanding transmit
+	   descriptor over the deadline. A run, not a total, cleared the moment the
+	   transmit path makes progress -- see ENA_MISSING_TX_CHECKS_BEFORE_RESET.
+	   Touched only by the watchdog thread. */
+	uint32				missingTxChecks;
+
+	/* Receive-stall detection state, watchdog-thread only. rxStallLastPending is
+	   rxPendingRefill as of the previous tick; rxStallChecks counts consecutive
+	   ticks with descriptors owed to the device and no receive progress. Used for
+	   logging only (gap 5 is detect-and-log, not reset). */
+	uint16				rxStallLastPending;
+	uint32				rxStallChecks;
+
+	/* Hardware hints, from the NOTIFICATION/UPDATE_HINTS AENQ event. The device
+	   states its own timeout expectations here; we store them rather than pretend
+	   they do not exist (docs/watchdog-design.md §10). Written from the management
+	   interrupt, read by the watchdog thread; a torn read costs at most one tick's
+	   worth of the previous value. hwHintsReceived gates whether any of these are
+	   authoritative over the compile-time defaults. */
+	bool				hwHintsReceived;
+	/* True when the device asked (driver_watchdog_timeout == NO_TIMEOUT) not to be
+	   watchdogged for keep-alives at all. Honoured because it can only *reduce*
+	   resets. A numeric keep-alive-timeout hint is deliberately NOT auto-applied to
+	   the keep-alive deadline: the measured-safe value is a compile-time constant
+	   with a consecutive-miss guard, and narrowing it from a hint is owed-tuning
+	   (§7, §10). */
+	bool				hwHintNoKeepAliveTimeout;
+	/* Device-suggested missing-TX-completion timeout (ms) and threshold, applied
+	   to the transmit-wedge check when present. Zero means "use the driver
+	   default"; see the hint struct in ena_admin_defs.h. */
+	uint32				hwHintTxCompletionTimeoutMs;
+	uint32				hwHintTxCompletionThreshold;
+
+	/* Observability: how many resets each newly-implemented cause has triggered.
+	   Monotonic per device, logged in the reset lines. No ioctl reads them yet
+	   (#106), but they make the syslog self-describing. */
+	uint32				adminWedgeResets;
+	uint32				fatalErrorResets;
+	uint32				deviceRequestResets;
+	uint32				missingTxResets;
+	uint32				rxStallDetections;
 
 #ifdef ENA_DEBUG_FAULT_INJECTION
 	/* Debug only, compiled out by default: makes the keep-alive handler stop
