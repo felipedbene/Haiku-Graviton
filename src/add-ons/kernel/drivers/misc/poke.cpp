@@ -57,11 +57,18 @@ init_hardware(void)
 status_t
 init_driver(void)
 {
+	// The ISA bus manager only exists on x86; it is not built for any other
+	// architecture (see bus_managers/isa, packaged isa@x86,x86_64). Requiring it
+	// unconditionally meant the whole driver failed to load on arm64/riscv64 --
+	// and with it the PCI-config and physical-memory-map ioctls that need no ISA
+	// at all. Treat ISA as optional: without it only the POKE_PORT_* ioctls are
+	// unavailable, and those are guarded below.
 	if (get_module(B_ISA_MODULE_NAME, (module_info**)&isa) < B_OK)
-		return ENOSYS;
+		isa = NULL;
 
 	if (get_module(B_PCI_MODULE_NAME, (module_info**)&pci) < B_OK) {
-		put_module(B_ISA_MODULE_NAME);
+		if (isa != NULL)
+			put_module(B_ISA_MODULE_NAME);
 		return ENOSYS;
 	}
 
@@ -72,7 +79,8 @@ init_driver(void)
 void
 uninit_driver(void)
 {
-	put_module(B_ISA_MODULE_NAME);
+	if (isa != NULL)
+		put_module(B_ISA_MODULE_NAME);
 	put_module(B_PCI_MODULE_NAME);
 }
 
@@ -142,6 +150,18 @@ poke_control(void* cookie, uint32 op, void* arg, size_t length)
 {
 	if (!IS_USER_ADDRESS(arg))
 		return B_BAD_ADDRESS;
+
+	// The port I/O ioctls go through the ISA bus manager, which does not exist
+	// off x86. Fail them cleanly there rather than dereferencing a NULL module.
+	switch (op) {
+		case POKE_PORT_READ:
+		case POKE_PORT_WRITE:
+		case POKE_PORT_INDEXED_READ:
+		case POKE_PORT_INDEXED_WRITE:
+			if (isa == NULL)
+				return B_NOT_SUPPORTED;
+			break;
+	}
 
 	switch (op) {
 		case POKE_PORT_READ:
