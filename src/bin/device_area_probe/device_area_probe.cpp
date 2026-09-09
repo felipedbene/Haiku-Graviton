@@ -272,7 +272,14 @@ probe_poked_device_area(void)
 	args.flags = B_ANY_ADDRESS;
 	args.protection = B_READ_AREA;
 
-	if (ioctl(fd, POKE_MAP_MEMORY, &args, sizeof(args)) != 0) {
+	/* POKE_MAP_MEMORY returns the created area_id as its ioctl status (see the
+	   handler in src/add-ons/kernel/drivers/misc/poke.cpp, which returns
+	   ioctl.area). That is >= 0 on success and a negative status_t on failure,
+	   so the success test is "< 0", not "!= 0": a valid area_id is a non-zero
+	   positive value and would otherwise be misread as a failure -- printing a
+	   stale errno left over from an earlier failed open() -- while the map in
+	   fact succeeded. */
+	if (ioctl(fd, POKE_MAP_MEMORY, &args, sizeof(args)) < 0) {
 		printf(MARKER ": poke: POKE_MAP_MEMORY failed: %s\n", strerror(errno));
 		close(fd);
 		return 0;
