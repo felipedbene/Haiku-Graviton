@@ -107,7 +107,8 @@ built before that fix still shows it, so keep pinning until the guest is known g
 | `zstd-1.5.6-makefile-not-cmake-stage1.patch` | **Stage-1 expedient.** Builds zstd with its own upstream `Makefile` instead of cmake, which removes `cmd:cmake` — and with it the `cmake → libcurl → openssl3 → libzstd → zstd` cycle — from the picture entirely. Same `libzstd.so.1.5.6`, same headers, same `libzstd.pc`; what is lost is the CMake package-config files, so `find_package(zstd CONFIG)` will not work. Needs `CXX=g++` for `contrib/pzstd` and `MAN1DIR=`, not `MANDIR=`. | `cmd:cmake` exists → restore the cmake `BUILD()`/`INSTALL()` verbatim |
 
 | `vim-9.1.1618-cli-only-no-ruby.patch` | **Two real cuts — the only deliberately reduced port in the netsurf chain.** vim exists in this tree solely as the affordable provider of `cmd:xxd`, which `netsurf-3.11` build-requires (the only other provider, `qvim`, wants Qt5). **Cut 1: no ruby interpreter** — cost is *vim has no `:ruby`*. Acceptable because the reason ruby is unbuildable here is an **arm64 kernel panic in `mprotect()`**, and that defect is separately owned and being fixed rather than concealed by this cut. **Cut 2: no GUI build** — cost is *no GUI vim*, i.e. `cmd:gvim`/`gview`/`gvimdiff`/`rgvim`/`rgview`, whose `PROVIDES` entries are removed in the same edit so the declaration cannot outlive the binaries. Needed because `make install` would reach `installglinks_haiku`, which reads back a `BEOS:ICON` attribute that `mimeset` does not produce in this chroot. Verified by **running** the extracted `xxd`, not by reading its `PROVIDES` line. | Cut 1: when the `VMSAv8TranslationMap::Query()` fix lands — then retry ruby, starting from `ruby-3.2.9-arm64-mcontext.patch`. Cut 2: when `mimeset` in the chroot produces `BEOS:ICON` |
-| `json_c-0.15-cmake4-policy.patch` | **Toolchain compatibility flag, not a cut.** json-c 0.15 declares `cmake_minimum_required` below 3.5 and cmake 4 removed that compatibility outright, so configure dies at `CMakeLists.txt:3` before it looks at anything else. `-DCMAKE_POLICY_VERSION_MINIMUM=3.5` restores the pre-3.5 policy defaults — exactly what cmake 3.x did with this project. **Nothing is removed from the build and no declared dependency changes**, so the resulting package is what json-c intends; it is not in the same class as the stage-1 cuts above. Needed because `hubbub`, netsurf's HTML parser, build-requires `devel:libjson_c`, and the tree's only other recipe (`json_c4-0.13.1`) is older still. | the recipe is updated to a json-c release declaring a cmake 3.5+ minimum |
+| `json_c-0.15-cmake4-policy.patch` | **Toolchain compatibility flag, not a cut.** json-c 0.15 declares `cmake_minimum_required` below 3.5 and cmake 4 removed that compatibility outright, so configure dies at `CMakeLists.txt:3` before it looks at anything else. `-DCMAKE_POLICY_VERSION_MINIMUM=3.5` restores the pre-3.5 policy defaults — exactly what cmake 3.x did with this project. **Nothing is removed from the build and no declared dependency changes**, so the resulting package is what json-c intends; it is not in the same class as the stage-1 cuts above. Needed because `hubbub`, netsurf's HTML parser, build-requires `devel:libjson_c`, and the tree's only other recipe (`json_c4-0.13.1`) is older still. Superseded going forward by the systematic `haikuporter-cmake-policy-minimum.patch` below, which applies the same flag to *every* CMake port; kept because it also documents the class. | the recipe is updated to a json-c release declaring a cmake 3.5+ minimum |
+| `haikuporter-cmake-policy-minimum.patch` | **Patches haikuporter, not a recipe — the general form of the json_c/openal cmake-4 fix (#47).** Appends `-DCMAKE_POLICY_VERSION_MINIMUM=3.5` once to haikuporter's shared `cmakeDirArgs` shell variable (`HaikuPorter/Port.py`), so every CMake recipe that passes `$cmakeDirArgs` — and every `add_subdirectory()`'d bundled tree, since it is a cache variable — gets the floor policy without a per-recipe `-D`. A host env var cannot do this: `filteredEnvironment()` strips everything but `PATH`/`LIBRARY_PATH`/`LC_ALL`/`TERM`. Applied by `graviton/scripts/haiku-provision-native-builder` after the haikuporter clone (anchored, idempotent, verified — a moved anchor fails loudly). Only raises the floor, so projects requesting a newer minimum are unaffected; a recipe still carrying an explicit `-DCMAKE_POLICY_VERSION_MINIMUM=3.5` (openal, libjxl) keeps working (duplicate `-D` of the same value is harmless). | every in-tree CMake port declares a `>=3.5` minimum, or the builder's cmake drops the flag |
 | `llvm12-12.0.1-config-guess-arm64.patch` | **Portability fix, not a cut.** LLVM 12 bundles a `cmake/config.guess` dated **2011-08-20** that knows only `BePC` and `x86_64` Haiku hosts. On arm64 `uname -m` is `arm64`, nothing matches, the script exits non-zero and `cmake/modules/GetHostTriple.cmake` turns that into a fatal `Failed to execute .../cmake/config.guess` — configure dies before compiling anything. Adds an `arm64` case emitting `aarch64-unknown-haiku` (which is what `gcc -dumpmachine` reports) plus a generic `*:Haiku` fallback. Note there is **no `config.sub` in llvm12 at all**; `GetHostTriple.cmake` only ever runs `config.guess`. Appends to `sys-devel/llvm/patches/llvm-12.0.1.patchset`; recipe `REVISION` 8 &rarr; 9. | never — this is a straight portability fix, correct to keep |
 
 | `pe-2.5.0-metrowerks-flags.patch` | **UNFINISHED — explanation only, `pe` still does not build.** Kept because chasing it found the poisoned `bison` above and the x86-only `jam` install step, both of which mattered. Pe's own Jamfiles pass mwcc's `-prefix <header>` and `-w nounusedvar`, which gcc rejects; respelling `-prefix` as `-include` is not sufficient because `PREFIX_FILE` is empty for some targets and the flag then eats the following `-O7`. | `PREFIX_FILE` is made conditional, `-w nounusedvar` dropped, and the built Pe has been *run* |
@@ -116,6 +117,37 @@ built before that fix still shows it, so keep pinning until the guest is known g
 Any port whose build invokes `makeinfo` will fail the same way, so expect to repeat that
 cut. Stage-1 artifacts go to `hpkg-out/arm64/stage1/`, never to a shipping repo — see the
 ledger in `graviton/docs/sequencing.md`.
+
+## Native-build recipe fixes carried in `recipes/` (issues #44, #52)
+
+These are full recipes in `recipes/`, not `.patch` notes; they are what the overlay
+installs. None is a feature cut.
+
+- **`libjxl-0.6.1.recipe` (#44).** The image ships `libhwy 1.4.0`, whose NEON SIMD
+  API changed out from under libjxl 0.6.1: `InterleaveUpper(a, b)` now needs a
+  descriptor (`InterleaveUpper(d, a, b)`) and `MinOfLanes`/`MaxOfLanes(v)` were
+  replaced by descriptor-taking reductions, so `-DJPEGXL_FORCE_SYSTEM_HWY=true`
+  fails to compile the arm64 SIMD code. Fix: fetch highway pinned to libjxl 0.6.1's
+  **own** `third_party/highway` submodule commit
+  (`e2397743fe092df68b760d358253773699a16c93`), copy it in like lodepng/skcms/sjpeg,
+  and build it bundled (`-DJPEGXL_FORCE_SYSTEM_HWY=false`). That commit's API matches
+  libjxl's calls by construction. Retire when the recipe is bumped to a libjxl that
+  targets the current libhwy. Verified statically (checksum, exact submodule commit,
+  confirmed the bundled API signatures differ from 1.4.0); native compile owed.
+- **`libexif-0.6.22.recipe` (#52).** `BUILD()` runs `autoreconf -vfi` and libexif has
+  a `po/` tree, so autoreconf invokes `autopoint` (from the gettext TOOLS package).
+  haikuporter only populates the build chroot with a recipe's **declared**
+  prerequisites, so without `cmd:autopoint` in `BUILD_PREREQUIRES` autoreconf dies
+  `Can't exec "autopoint"` even though the builder host has gettext (#173). Fix: add
+  `cmd:autopoint`. Retire: never — a straight prerequisite correction.
+
+Other #52 items were already resolved and need no overlay: `x264` (`-O2` added to the
+overridden CFLAGS, commit `1bd7a62634`), `tmux` (closefrom conflict, `6741f27a63`), and
+`re2` (the raw-Makefile `aarch64-unknown-haiku-g++` failure is cleared class-wide by
+`#186`/`16fcbe5dda`, which puts the arm64 triplet compilers on the in-chroot PATH).
+`graphicsmagick` (libjpeg `process`/`JPROC_PROGRESSIVE` — a jpeg-9 SmartScale API that
+libjpeg-turbo lacks), `tk` (haikuporter subdir-fold), and `libgit2_1.8` need a live
+builder to see the failure and are tracked as owed on #52.
 
 ## Which host you are on — the `LIBRARY_PATH` retirements are host-conditional
 
