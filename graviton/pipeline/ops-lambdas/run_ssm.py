@@ -1,11 +1,15 @@
-"""Start a shell command on the builder over SSM RunCommand.
+"""Start a build command on the builder over SSM RunCommand.
 
-Two entry points share the send logic:
-  build.handler   -> runs `haiku-nativebuild <pkg>` for event["pkg"]
-  publish.handler -> runs the repo publish for the whole builder pool
+  build.handler -> runs `haiku-nativebuild <pkg>` for event["pkg"]
 
-Input : {instance_id, bucket, region?, run_id?, pkg? (build only)}
-Output: adds {command_id} (build) or {publish_command_id} (publish).
+haiku-nativebuild harvests the built hpkgs to s3://<bucket>/hpkg/arm64/; the wave
+then publishes them incrementally in a separate CodeBuild step (see the
+RepoPublish project in ops-stack.ts). Publishing is NOT done from here: the Haiku
+builder cannot run the Linux `package_repo` host tool or bulk-sync the full repo
+pool, both of which the incremental haiku-repo-add needs.
+
+Input : {instance_id, bucket, region?, run_id?, pkg}
+Output: adds {command_id}.
 
 LOG HANDLING (why a wrapper, not SSM OutputS3): SSM's native OutputS3 writes the
 full log UNCOMPRESSED, and get-command-invocation truncates the inline copy at
@@ -26,12 +30,9 @@ import re
 import boto3
 
 NATIVEBUILD = os.environ.get("NATIVEBUILD_PATH", "/boot/home/haiku-nativebuild")
-REPO_PUBLISH = os.environ.get("REPO_PUBLISH_PATH", "/boot/home/haiku-repo-publish")
 AGENT = os.environ.get("SSM_AGENT_PATH", "/boot/system/bin/debeos-ssm-agent")
 HP_TREE = os.environ.get("HP_TREE", "/boot/home/haikuports")
 OVERLAY_PREFIX = os.environ.get("OVERLAY_PREFIX", "debeos-overlay")
-# Published repo pool the builder syncs into (HG_REPO_S3 for haiku-repo-publish).
-PUBLISH_S3 = os.environ.get("PUBLISH_S3", "")
 
 
 def _overlay_stage(pkg, bucket):
@@ -101,21 +102,4 @@ def build(event, context):
                       ok_grep=f'"^{pkg}: BUILD_OK"', prelude=prelude)
     event["command_id"] = _send(event["instance_id"], script,
                                 int(event.get("build_timeout", 21600)))
-    return event
-
-
-def publish(event, context):
-    run_id = event.get("run_id", context.aws_request_id)
-    # Real publish: haiku-repo-publish builds the repo index from the builder's
-    # package pool and syncs it to the published prefix (HG_REPO_S3). Requires a
-    # Haiku host -> runs on the builder. PUBLISH_S3 must be set (else refuse).
-    pub_s3 = event.get("publish_s3") or PUBLISH_S3
-    if not pub_s3:
-        raise RuntimeError("PUBLISH_S3 not configured; refusing to publish blind")
-    cmd = (f'HG_REPO_S3="{pub_s3}" {REPO_PUBLISH} all '
-           f'--pool {HP_TREE}/packages --out /tmp/debeos-repo-out')
-    script = _wrapper(cmd, _bucket(event), run_id, "publish",
-                      ok_grep='-iE "published|repo.sha256|Invalidation"')
-    event["publish_command_id"] = _send(event["instance_id"], script,
-                                        int(event.get("publish_timeout", 3600)))
     return event
