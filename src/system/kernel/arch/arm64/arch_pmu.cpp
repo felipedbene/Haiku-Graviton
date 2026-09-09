@@ -123,8 +123,17 @@
 // Cycles between sampling-counter overflows. At ~2.6 GHz, 10^7 cycles is about
 // 260 overflows per second per CPU under a fully CPU-bound load -- plenty of
 // resolution for a profiler, and orders of magnitude below any rate that could
-// storm.
+// storm. This is the default until a profiling session requests a specific
+// interval via arm64_pmu_set_sample_interval().
 #define PMU_DEFAULT_SAMPLE_PERIOD	10000000ULL
+
+// Floor on the sampling period, in cycles. A `profile -i` request is converted
+// to a cycle count against the measured core clock and clamped up to this, so a
+// tiny interval cannot turn the overflow PPI into an interrupt storm. At the
+// ~2.6-3.3 GHz Graviton parts measured here this caps delivery near ~10-13k
+// overflows per second per CPU -- much finer than the 10^7-cycle default, and
+// still far below any rate that could storm a core.
+#define PMU_MIN_SAMPLE_PERIOD		250000ULL
 
 
 // How each event's ratio is conventionally expressed, following the names
@@ -533,6 +542,38 @@ pmu_stop_cpu(int32 cpu)
 }
 
 
+/*!	Reloads the calling CPU's sampling counter to the current sSamplePeriod, so a
+	period change takes effect on this core. Only touches the dedicated sampling
+	counter; the general event counters and every enable/interrupt gate are left
+	exactly as pmu_program_cpu() set them.
+
+	Called on every CPU via call_all_cpus_sync() from arm64_pmu_set_sample_interval().
+	That path runs this with interrupts disabled on each target CPU (an IPI on the
+	remote cores, local processing with interrupts off on the calling core), so it
+	is mutually exclusive with this same CPU's overflow handler -- the two never
+	write the per-CPU sampling counter concurrently. That is the whole reason the
+	reprogram is safe despite the handler otherwise owning the counter reload: the
+	counter is per-CPU and never touched cross-core, and on its own CPU the reload
+	and this reprogram cannot interleave.
+*/
+static void
+pmu_reprogram_sample_counter(void* /*cookie*/, int cpu)
+{
+	pmu_cpu_state& state = sPerCPU[cpu];
+	if (!state.sampling)
+		return;
+
+	// pmu_sample_reload_value() reads sSamplePeriod, which the caller published
+	// before this fan-out; on a core whose overflow handler happens to reload
+	// between that store and this write, both see the new period, so the counter
+	// still ends up holding a full new period's worth of headroom.
+	pmu_select_counter(sSampleCounter);
+	WRITE_SPECIALREG(PMXEVCNTR_EL0, pmu_sample_reload_value());
+	WRITE_SPECIALREG(PMOVSCLR_EL0, PMU_EVENT_COUNTER_BIT(sSampleCounter));
+	arm64_isb();
+}
+
+
 //	#pragma mark - sampling overflow interrupt
 
 
@@ -784,28 +825,6 @@ arm64_pmu_pmccntr_usable(void)
 }
 
 
-status_t
-arm64_pmu_enable(void)
-{
-	if (!sAvailable)
-		return B_NOT_SUPPORTED;
-
-	cpu_status state = disable_interrupts();
-	sEnabled = true;
-	pmu_program_cpu(smp_get_current_cpu());
-	restore_interrupts(state);
-
-	// Complete the sampling delivery path now that interrupts are back on and
-	// we are in normal context: install_io_interrupt_handler() allocates and,
-	// for a PPI, fans the GIC enable out to every CPU. This CPU has already
-	// armed PMINTENSET_EL1 above; other CPUs only sample if the boot setting
-	// had them program the PMU too.
-	pmu_install_overflow_interrupt();
-
-	return B_OK;
-}
-
-
 void
 arm64_pmu_disable(void)
 {
@@ -995,6 +1014,58 @@ arm64_pmu_measure_core_frequency(uint64* _frequency)
 		return B_ERROR;
 
 	*_frequency = best;
+	return B_OK;
+}
+
+
+/*!	Sets the sampling period from a wall-clock \a interval in microseconds (the
+	unit the profiler and `profile -i` use) and reprograms every CPU's sampling
+	counter to it, so a profiling session's requested rate is actually honored.
+	Before this, sSamplePeriod was only ever its 10^7-cycle initializer, so
+	`profile -i` was silently ignored and the profiler's "expected ticks" (derived
+	from the requested interval) could never match the delivered rate -- the
+	accounting mismatch #103 mistook for a virtualization shortfall.
+
+	The counter counts core cycles, so the interval is converted through the
+	measured core clock (there is no register that states it; see
+	arm64_pmu_measure_core_frequency()), and clamped up to PMU_MIN_SAMPLE_PERIOD
+	so a tiny interval cannot storm the overflow PPI. Returns B_NOT_SUPPORTED when
+	the facility is off (the caller then falls back to the software timer, which
+	uses the interval directly, as on every other architecture), so a caller may
+	invoke it unconditionally and ignore the result.
+
+	Runs in normal thread context only -- it both measures the clock (interrupts
+	off, ~ms) and fans the reprogram out with call_all_cpus_sync().
+*/
+status_t
+arm64_pmu_set_sample_interval(bigtime_t interval)
+{
+	if (!sAvailable || !sEnabled)
+		return B_NOT_SUPPORTED;
+	if (interval <= 0)
+		return B_BAD_VALUE;
+
+	uint64 frequency;
+	status_t status = arm64_pmu_measure_core_frequency(&frequency);
+	if (status != B_OK)
+		return status;
+
+	// cycles = interval_us * freq_hz / 10^6. The profiler floors the interval at
+	// B_DEBUG_MIN_PROFILE_INTERVAL (10 us) and freq is a GHz-scale count, so the
+	// product stays far inside 64 bits for any interval a profiler would request.
+	uint64 period = ((uint64)interval * frequency) / 1000000ULL;
+	if (period < PMU_MIN_SAMPLE_PERIOD)
+		period = PMU_MIN_SAMPLE_PERIOD;
+
+	// Publish the new period before the fan-out. sSamplePeriod is a single aligned
+	// 64-bit word, so an overflow handler reading it concurrently on any core sees
+	// either the old or the new value -- never a torn one -- and either reload
+	// value is self-consistent. The reprogram callback then runs with interrupts
+	// disabled on every CPU (see pmu_reprogram_sample_counter), which serializes
+	// it against that CPU's own overflow-driven reload.
+	sSamplePeriod = period;
+	call_all_cpus_sync(&pmu_reprogram_sample_counter, NULL);
+
 	return B_OK;
 }
 

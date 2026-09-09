@@ -549,8 +549,19 @@ SystemProfiler::Init()
 	}
 
 	// activate the profiling timers on all CPUs
-	if ((fFlags & B_SYSTEM_PROFILER_SAMPLING_EVENTS) != 0)
+	if ((fFlags & B_SYSTEM_PROFILER_SAMPLING_EVENTS) != 0) {
+#ifdef __HAIKU_ARCH_ARM64
+		// On arm64 the PMU cycle-overflow drives the samples (E-PMU-2), so make
+		// it honor the requested interval: convert fInterval to a cycle period
+		// and reprogram the sampling counter on every CPU. Do this before the
+		// timers are armed so the PMU is already at the right rate when it takes
+		// over. A no-op (B_NOT_SUPPORTED, ignored) when the PMU facility is off,
+		// in which case the software timer below uses fInterval directly as on
+		// every other architecture.
+		arm64_pmu_set_sample_interval(fInterval);
+#endif
 		call_all_cpus(_InitTimers, this);
+	}
 
 	return B_OK;
 }
