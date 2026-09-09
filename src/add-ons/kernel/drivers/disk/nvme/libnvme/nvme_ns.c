@@ -211,6 +211,30 @@ int nvme_ns_stat(struct nvme_ns *ns, struct nvme_ns_stat *ns_stat)
 }
 
 /*
+ * Refresh a namespace's cached IDENTIFY data (e.g. after an online resize of
+ * the backing volume). Re-runs IDENTIFY NAMESPACE and updates the cached
+ * capacity (nsze), block size and derived geometry in place; the new capacity
+ * is then reported by nvme_ns_stat(). (DeBeOS #33.)
+ */
+int nvme_ns_update(struct nvme_ns *ns)
+{
+	struct nvme_ctrlr *ctrlr;
+	int ret;
+
+	ctrlr = nvme_ns_ctrlr_lock(ns);
+	if (!ctrlr) {
+		nvme_err("Invalid name space handle\n");
+		return EINVAL;
+	}
+
+	ret = nvme_ns_identify_update(ns);
+
+	pthread_mutex_unlock(&ctrlr->lock);
+
+	return ret;
+}
+
+/*
  * Get namespace data
  */
 int nvme_ns_data(struct nvme_ns *ns, struct nvme_ns_data *nsdata)

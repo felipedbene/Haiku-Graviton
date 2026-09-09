@@ -814,6 +814,19 @@ extern int nvme_ns_stat(struct nvme_ns *ns,
 			struct nvme_ns_stat *ns_stat);
 
 /**
+ * @brief Refresh a namespace's cached identify data (e.g. after an online resize)
+ *
+ * @param ns		Namespace handle
+ *
+ * Re-runs IDENTIFY NAMESPACE and updates the cached capacity, block size and
+ * derived geometry in place. The new capacity is then reported by
+ * nvme_ns_stat(). Useful after the backing volume has been grown online.
+ *
+ * @return 0 on success and a negative error code in case of failure.
+ */
+extern int nvme_ns_update(struct nvme_ns *ns);
+
+/**
  * @brief Get namespace data
  *
  * @param ns		Namespace handle
