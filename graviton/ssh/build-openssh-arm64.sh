@@ -181,7 +181,12 @@ only Ed25519 keys and OpenSSH's internal ciphers are supported. Statically
 linked against zlib; the only shared library dependencies are libroot,
 libnetwork and libbsd, all part of the base haiku package."
 packager		"haiku-graviton port <felipe@localhost>"
-vendor			"Haiku Project"
+# vendor "DeBeOS": this DeBeOS-built package is baked straight into
+# system/packages, so it must report the same vendor as the DeBeOS repo -- else
+# a later `pkgman install`/refresh that supersedes it would force an "allow
+# vendor change" (the gcc/cc1 breakage of issue #39). Set at build time (no
+# metadata repack needed for a package we build ourselves).
+vendor			"DeBeOS"
 licenses {
 	"OpenSSH"
 }

@@ -29,16 +29,37 @@
 # 403 for the absent key and pkgman mis-reports the 4xx as EINTR).
 #
 # ---- usage ----------------------------------------------------------------
-#   haiku-repo-publish build   --pool DIR --out DIR [--package-tool P] [--no-revendor]
-#   haiku-repo-publish publish --out DIR            # needs HG_REPO_S3 (+ HG_CF_DIST)
-#   haiku-repo-publish all     --pool DIR --out DIR # build then publish
+#   haiku-repo-publish build    --pool DIR --out DIR [--package-tool P] [--no-revendor]
+#   haiku-repo-publish publish  --out DIR            # needs HG_REPO_S3 (+ HG_CF_DIST)
+#   haiku-repo-publish all      --pool DIR --out DIR # build then publish
+#   haiku-repo-publish revendor --dir DIR [--package-tool P] [--exclude NAME]...
 #
 #   --pool DIR         directory of built *.hpkg to include (the repo SET; feed
 #                      it the closure from `haiku-package-closure`, not a raw pool).
 #   --out DIR          working/output dir; the publishable tree lands in DIR/repo-out
 #                      as  repo  repo.info  repo.sha256  packages/*.hpkg
+#   --dir DIR          (revendor) re-stamp *.hpkg IN PLACE in this directory.
+#   --exclude NAME     (revendor) skip the hpkg whose base name is NAME (repeatable;
+#                      matches "NAME-<version>-<arch>.hpkg"). Source packages are
+#                      always skipped.
 #   --package-tool P   path to Haiku's `package` (default: from PATH)
 #   --no-revendor      skip the re-stamp (only safe if every hpkg is already DeBeOS)
+#
+# ---- the `revendor` subcommand -------------------------------------------
+# The base lean AMI still ships bootstrap/system packages stamped vendor
+# "Haiku Project" (gcc_syslibs, gcc_syslibs_devel, zlib_bootstrap, freetype,
+# icu, ...). Because the DeBeOS repo is single-vendor (every repo hpkg is
+# re-stamped "DeBeOS" above), `pkgman install <repo pkg>` that supersedes one of
+# those base packages hits a vendor mismatch and demands "allow vendor change",
+# which reshuffles the gcc/gcc_syslibs/gcc_syslibs_devel trio and breaks the
+# gcc-driver<->cc1 pairing ("gcc: fatal error: cannot execute 'cc1'"). See
+# issue #39. `revendor` re-stamps those baked SYSTEM packages to "DeBeOS" (the
+# same metadata-only repack as revendor_into -- no rebuild, contents/version/
+# dependencies untouched) so the running OS matches the repo and no vendor change
+# is ever required. It runs on the download/ dir in the bake, between the two jam
+# passes; the caller MUST --exclude any package that `package_repo create` later
+# re-hashes against a non-DeBeOS repo.info (the HaikuPortsLocal set), or that
+# create aborts B_BAD_DATA on the vendor it just changed.
 #
 # Publish config (env, so no account-scoped names live in this tracked file):
 #   HG_REPO_S3   s3://<bucket>/<prefix>/arm64   destination prefix for the repo
@@ -57,17 +78,19 @@ die() { echo "haiku-repo-publish: $*" >&2; exit 1; }
 
 # ---- arg parse ------------------------------------------------------------
 CMD="${1:-}"; shift || true
-POOL=""; OUT=""; PKG_TOOL="package"; REVENDOR=1
+POOL=""; OUT=""; DIR=""; PKG_TOOL="package"; REVENDOR=1; EXCLUDES=()
 while [ $# -gt 0 ]; do
 	case "$1" in
 		--pool) POOL="$2"; shift 2 ;;
 		--out) OUT="$2"; shift 2 ;;
+		--dir) DIR="$2"; shift 2 ;;
+		--exclude) EXCLUDES+=("$2"); shift 2 ;;
 		--package-tool) PKG_TOOL="$2"; shift 2 ;;
 		--no-revendor) REVENDOR=0; shift ;;
 		*) die "unknown arg: $1" ;;
 	esac
 done
-[ -n "$CMD" ] || die "usage: haiku-repo-publish build|publish|all --pool DIR --out DIR"
+[ -n "$CMD" ] || die "usage: haiku-repo-publish build|publish|all|revendor ..."
 
 # The repo tree we build and later upload verbatim.
 repo_out() { echo "${OUT%/}/repo-out"; }
@@ -103,6 +126,67 @@ revendor_into() {
 	fi
 	"$PKG_TOOL" create -C "$tmp" "$destdir/$base"
 	rm -rf "$tmp"
+}
+
+# ---- re-stamp one hpkg to vendor DeBeOS IN PLACE --------------------------
+# Same metadata-only repack as revendor_into, but rewrites the file where it
+# lies (used by `revendor` on a build's download/ dir). Recreate into a scratch
+# dir first, then move over the original, so a failed `package create` never
+# leaves a truncated hpkg behind.
+revendor_inplace() {
+	local src="$1"
+	local base; base="$(basename "$src")"
+	local cur; cur="$(hpkg_vendor "$src")"
+	if [ "$cur" = "$VENDOR" ]; then
+		echo "  = $base (already $VENDOR)"
+		return 0
+	fi
+	local tmp; tmp="$(mktemp -d)"
+	local out; out="$(mktemp -d)"
+	"$PKG_TOOL" extract -C "$tmp" "$src"
+	[ -f "$tmp/.PackageInfo" ] || { rm -rf "$tmp" "$out"; die "no .PackageInfo in $base"; }
+	if grep -qE '^[[:space:]]*vendor[[:space:]]' "$tmp/.PackageInfo"; then
+		sed -i -E "s/^([[:space:]]*vendor[[:space:]]+).*/\1\"$VENDOR\"/" "$tmp/.PackageInfo"
+	else
+		printf '\nvendor\t"%s"\n' "$VENDOR" >> "$tmp/.PackageInfo"
+	fi
+	"$PKG_TOOL" create -C "$tmp" "$out/$base"
+	mv -f "$out/$base" "$src"
+	rm -rf "$tmp" "$out"
+	echo "  ~ $base ($cur -> $VENDOR)"
+}
+
+do_revendor() {
+	[ -n "$DIR" ] || die "revendor needs --dir DIR"
+	[ -d "$DIR" ] || die "no such dir: $DIR"
+	command -v "$PKG_TOOL" >/dev/null 2>&1 || die "no '$PKG_TOOL' on PATH (run on a Haiku host or point --package-tool at the banked host tool)"
+
+	local n=0 skipped=0 f base
+	for f in "$DIR"/*.hpkg; do
+		[ -e "$f" ] || { echo "no .hpkg in $DIR -- nothing to revendor"; return 0; }
+		base="$(basename "$f")"
+		# Never touch source packages: they are not shipped in the image and are
+		# not a supersede target, so re-stamping them buys nothing.
+		case "$base" in
+			*-source-*.hpkg|*-source.hpkg) echo "  skip $base (source)"; skipped=$((skipped + 1)); continue ;;
+		esac
+		# Skip caller-excluded base names. These are the packages a later
+		# `package_repo create` re-hashes against a non-DeBeOS repo.info (the
+		# HaikuPortsLocal set) -- re-stamping them there would abort the build.
+		local excluded=0 pat
+		for pat in ${EXCLUDES[@]+"${EXCLUDES[@]}"}; do
+			[ -n "$pat" ] || continue
+			case "$base" in "$pat"-*.hpkg) excluded=1; break ;; esac
+		done
+		if [ "$excluded" = 1 ]; then
+			echo "  skip $base (excluded)"
+			skipped=$((skipped + 1))
+			continue
+		fi
+		revendor_inplace "$f"
+		n=$((n + 1))
+	done
+	echo "revendored $n package(s) in $DIR to $VENDOR ($skipped skipped)"
 }
 
 do_build() {
@@ -181,8 +265,9 @@ do_publish() {
 }
 
 case "$CMD" in
-	build)   do_build ;;
-	publish) do_publish ;;
-	all)     do_build; do_publish ;;
-	*) die "unknown command: $CMD (build|publish|all)" ;;
+	build)    do_build ;;
+	publish)  do_publish ;;
+	all)      do_build; do_publish ;;
+	revendor) do_revendor ;;
+	*) die "unknown command: $CMD (build|publish|all|revendor)" ;;
 esac
