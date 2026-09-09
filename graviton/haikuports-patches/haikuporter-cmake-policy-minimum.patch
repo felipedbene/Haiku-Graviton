@@ -1,0 +1,53 @@
+# haikuporter-cmake-policy-minimum.patch  (issue #47)
+#
+# Patches haikuporter, not a recipe. Applied on the native arm64 builder by
+# graviton/scripts/haiku-provision-native-builder (anchored, idempotent, verified)
+# right after the haikuporter clone -- the native builder clones upstream
+# haikuporter fresh, so a committed edit-in-place is how this fix reaches it (the
+# same shape as haiku-haikuporter-patch does for the retired QEMU-guest fleet).
+#
+# WHY
+# ---
+# CMake 4.x removed the compatibility shim for `cmake_minimum_required(VERSION
+# <3.5)`. Any port -- or a bundled third-party tree inside one -- that still
+# declares an old minimum fails at configure time, at CMakeLists.txt before it
+# looks at anything else. This is a recurring class, not a one-off:
+#   * openal-1.21.1        (fixed per-recipe: -DCMAKE_POLICY_VERSION_MINIMUM=3.5)
+#   * libjxl-0.6.1         (bundled third_party/sjpeg needs it; per-recipe today)
+#   * json_c-0.15          (json_c-0.15-cmake4-policy.patch, per-recipe)
+# and every future CMake port carrying an old minimum will hit it again.
+#
+# THE GENERAL FIX
+# ---------------
+# CMake 4.0 added the `CMAKE_POLICY_VERSION_MINIMUM` cache variable, which raises
+# the *floor* of the compatibility policy version to the given value while leaving
+# projects that request a newer minimum untouched -- so `=3.5` is a safe blanket
+# default. A host environment variable is NOT a usable channel here:
+# HaikuPorter/Utils.py:filteredEnvironment() passes only LC_ALL, TERM,
+# LIBRARY_PATH and PATH into the build shell, so anything exported on the box is
+# stripped before BUILD() runs.
+#
+# The channel that DOES reach every recipe is haikuporter's own `cmakeDirArgs`
+# shell variable (HaikuPorter/Port.py). It is the shared string every CMake recipe
+# already passes to `cmake` (openal and libjxl both use `$cmakeDirArgs`). Appending
+# the policy flag there applies it to every CMake port at once -- and, because it
+# is a cache variable, it propagates to add_subdirectory()'d bundled trees
+# (libjxl's sjpeg, its highway) with no per-bundle handling. Recipes that still
+# carry an explicit -DCMAKE_POLICY_VERSION_MINIMUM=3.5 keep working (a duplicate
+# -D of the same value is harmless).
+#
+# THE EDIT (HaikuPorter/Port.py, the cmakeDirArgs assignment):
+#
+#   		self.shellVariables['cmakeDirArgs'] \
+#   			= ' '.join('-DCMAKE_INSTALL_%s=%s' % (k, v)
+#   				for k, v in cmakeDirArgs.items())
+# +			# graviton/DeBeOS (#47): default every CMake port's floor policy to
+# +			# 3.5 so cmake 4.x still configures projects/bundled trees that
+# +			# declare cmake_minimum_required(<3.5). Cache var, so it reaches
+# +			# add_subdirectory() bundles too; projects asking for more are
+# +			# unaffected.
+# +			self.shellVariables['cmakeDirArgs'] += ' -DCMAKE_POLICY_VERSION_MINIMUM=3.5'
+#
+# Retire when: the builder's CMake is old enough to still honour <3.5 policies
+# (it will not be) OR every in-tree CMake port declares a >=3.5 minimum. Until
+# then this is a straight toolchain-compatibility default, not a feature cut.

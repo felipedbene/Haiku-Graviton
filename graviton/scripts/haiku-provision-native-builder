@@ -298,6 +298,56 @@ else
 	log "haikuporter already present: $HP_DIR"
 fi
 
+# --- 2a. #47: default CMAKE_POLICY_VERSION_MINIMUM for every CMake port --------
+# cmake 4.x dropped the compatibility shim for cmake_minimum_required(<3.5), so a
+# port -- or a bundled third-party tree inside one -- that declares an old minimum
+# fails at configure. Rather than add -DCMAKE_POLICY_VERSION_MINIMUM=3.5 to each
+# recipe (openal, libjxl, json_c did so one-off), append it once to haikuporter's
+# shared cmakeDirArgs shell variable, which every CMake recipe already passes to
+# `cmake`. It is a cache variable, so it reaches add_subdirectory()'d bundles
+# (libjxl's sjpeg/highway) too, and it only raises the policy floor -- projects
+# asking for a newer minimum are unaffected. A host env var cannot carry this:
+# HaikuPorter/Utils.py:filteredEnvironment() passes only LC_ALL/TERM/LIBRARY_PATH/
+# PATH into the build shell. Anchored, idempotent, and verified (a haikuporter that
+# moved the anchor fails loudly rather than installing a silent no-op). See
+# graviton/haikuports-patches/haikuporter-cmake-policy-minimum.patch (#47).
+log "#47: defaulting CMAKE_POLICY_VERSION_MINIMUM=3.5 in haikuporter cmakeDirArgs"
+python3.14 - "$HP_DIR/HaikuPorter/Port.py" <<'PY'
+import io, py_compile, sys
+path = sys.argv[1]
+with io.open(path, 'r', encoding='utf-8') as fh:
+    text = fh.read()
+if 'CMAKE_POLICY_VERSION_MINIMUM' in text:
+    print("provision: #47 cmakeDirArgs already patched; skipping")
+    sys.exit(0)
+anchor = "for k, v in cmakeDirArgs.items())\n"
+count = text.count(anchor)
+if count != 1:
+    sys.stderr.write(
+        "provision: FATAL #47: cmakeDirArgs anchor appears %d times in %s, "
+        "expected once -- haikuporter changed, re-check the patch\n"
+        % (count, path))
+    sys.exit(1)
+addition = (
+    "for k, v in cmakeDirArgs.items())\n"
+    "\t\t# graviton/DeBeOS (#47): default the floor policy so cmake 4.x still\n"
+    "\t\t# configures projects/bundled trees declaring cmake_minimum_required\n"
+    "\t\t# (<3.5). Cache var -> reaches add_subdirectory() bundles; projects\n"
+    "\t\t# asking for a newer minimum are unaffected.\n"
+    "\t\tself.shellVariables['cmakeDirArgs'] += "
+    "' -DCMAKE_POLICY_VERSION_MINIMUM=3.5'\n"
+)
+with io.open(path, 'w', encoding='utf-8') as fh:
+    fh.write(text.replace(anchor, addition, 1))
+try:
+    py_compile.compile(path, cfile='/tmp/.hp47-check.pyc', doraise=True)
+except Exception as exc:
+    sys.stderr.write("provision: FATAL #47: patched Port.py does not compile: "
+        "%s: %s\n" % (type(exc).__name__, exc))
+    sys.exit(1)
+print("provision: #47 cmakeDirArgs patched")
+PY
+
 log "writing $CONF"
 cat > "$CONF" <<EOF
 TREE_PATH="$PORTS_DIR"
