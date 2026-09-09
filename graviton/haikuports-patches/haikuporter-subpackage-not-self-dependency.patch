@@ -1,0 +1,68 @@
+# haikuporter: a port's own subpackage that is also a build-require is not a
+# self-dependency
+#
+# Not a recipe patch -- this patches haikuporter itself, the same kind of
+# build-environment expedient as haikuporter-unpack-compressed-tar.patch beside
+# it. Refs Haiku-Graviton issue #48.
+#
+# WHAT BREAKS WITHOUT IT
+#
+# `haikuporter --all-dependencies <port>` aborts with:
+#
+#   Port glib2-2.x depends on itself
+#
+# on any port one of whose *own subpackages* is also one of its build
+# requirements. Concretely: glib2 build-REQUIRES gobject_introspection, which is
+# a subpackage glib2 itself produces. Because the current path cannot use
+# --all-dependencies at all, graviton/scripts/haiku-nativebuild works around it
+# by installing build requirements from the repo and building only the leaf.
+#
+# WHY
+#
+# _buildMainPort() resolves the port's build dependencies to packages, maps each
+# package back to the port that provides it (getPortIdForPackageId), and collects
+# those into requiredPortsToBuild "to build first". A build-require satisfied by
+# one of the port's own subpackages maps straight back to the SAME port, so the
+# port lands in its own requiredPortsToBuild and the subsequent
+# `if port in requiredPortsToBuild: sysExit('... depends on itself')` fires. It
+# is a false positive: that subpackage is produced by this very build, so there
+# is nothing to build beforehand. A package maps to exactly one port, so the only
+# way a port can appear in its own requiredPortsToBuild is this subpackage case
+# -- the guard never protected against anything else.
+#
+# WHAT IT DOES
+#
+# Skips a resolved required-port that is the port being built, at collection
+# time, so it is never added to requiredPortsToBuild. Real (other-port) build
+# dependencies are still gathered and built first exactly as before; the
+# "depends on itself" sysExit becomes unreachable rather than wrong.
+#
+# HOW IT IS APPLIED
+#
+# By graviton/scripts/haiku-haikuporter-patch, not by patch(1): the packaged
+# tree at /boot/system/lib/haikuporter is packagefs and read-only, so the tree
+# is copied to /boot/home/config/non-packaged/lib/haikuporter, patched there,
+# and shadowed by a wrapper first on PATH. Re-run it after every guest swap.
+#
+# RETIRE WHEN
+#
+# Never needed upstream -- this is a latent upstream haikuporter bug and the fix
+# is architecture-neutral. Carry it until (if ever) it lands upstream.
+
+--- a/HaikuPorter/Main.py
++++ b/HaikuPorter/Main.py
+@@ -623,6 +623,14 @@
+ 				portID = self.repository.getPortIdForPackageId(packageID)
+ 				if portID not in requiredPortIDs:
+ 					requiredPort = allPorts[portID]
++					if requiredPort == port:
++						# A build requirement satisfied by one of this port's
++						# own subpackages (e.g. glib2's gobject_introspection)
++						# is not a self-dependency: that subpackage is produced
++						# by this very build, so there is nothing to build
++						# first. Skip it instead of later tripping the bogus
++						# "depends on itself" sysExit below.
++						continue
+ 					if ((getOption('createSourcePackagesForBootstrap')
+ 							or getOption('createSourcePackages'))
+ 						and (not requiredPort.sourcePackage
