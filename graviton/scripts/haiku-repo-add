@@ -37,6 +37,15 @@ ARCH="${ARCH:-arm64}"
 PKG_URL="${HG_REPO_URL:-http://packages.debene.dev/$ARCH}"
 region="${AWS_DEFAULT_REGION:-${AWS_REGION:-us-west-2}}"
 
+# Re-stamp guard (issue #168): the vendor re-stamp extracts each hpkg, and a
+# pathological package (e.g. yab_ide) can decompress to tens of GiB and ENOSPC
+# the publisher mid-`package extract`, aborting the whole batch. Pre-flight the
+# decompressed size from metadata (no extraction), and require it to fit the
+# work filesystem with headroom; a package over either bound is skipped and
+# reported for human handling rather than failing the publish of the rest.
+RESTAMP_MAX_BYTES="${RESTAMP_MAX_BYTES:-4294967296}"            # 4 GiB
+RESTAMP_HEADROOM_BYTES="${RESTAMP_HEADROOM_BYTES:-1073741824}"  # 1 GiB
+
 die() { echo "haiku-repo-add: $*" >&2; exit 1; }
 : "${HG_REPO_S3:?set HG_REPO_S3=s3://<bucket>/<prefix>/$ARCH}"
 : "${HG_INCOMING_S3:?set HG_INCOMING_S3=s3://<bucket>/<prefix> (new *.hpkg)}"
@@ -73,24 +82,74 @@ canonical_name() {
 		END { if (n && v && a) printf "%s-%s-%s.hpkg", n, v, a }'
 }
 
+# Total decompressed size of an hpkg's contents, in bytes, read from
+# `package list` WITHOUT extracting anything: each entry line prints its
+# uncompressed size in the field just before the type+permission token
+# (e.g. "-rw-r--r--"). Summing those bounds what `package extract` would write.
+uncompressed_bytes() {
+	"$PKG_TOOL" list "$1" 2>/dev/null | awk '
+		{ for (i = 2; i <= NF; i++)
+			if ($i ~ /^[-dl?][-rwxs]{9}$/) { s += $(i - 1); break } }
+		END { printf "%.0f", s + 0 }'
+}
+
+# Available bytes on the filesystem holding the given path.
+avail_bytes() {
+	df -Pk "$1" 2>/dev/null | awk 'NR==2 { printf "%.0f", $4 * 1024 }'
+}
+
 echo "== 3. re-stamp incoming to vendor $VENDOR and stage under canonical names =="
 added=0
+skipped=0
+skipped_list=""
+published_bases=""
 for f in "$WORK/incoming"/*.hpkg; do
 	base="$(basename "$f")"
 	cur="$("$PKG_TOOL" list -i "$f" 2>/dev/null | sed -nE 's/^[[:space:]]*vendor:[[:space:]]*"?([^"]*)"?[[:space:]]*$/\1/p' | head -1)"
 	staged="$WORK/staged.hpkg"; rm -f "$staged"
 	if [ "$cur" = "$VENDOR" ]; then
+		# Already stamped: a copy, no extraction, so no ENOSPC risk regardless
+		# of decompressed size.
 		cp -p "$f" "$staged"
 	else
-		tmp="$(mktemp -d)"
-		"$PKG_TOOL" extract -C "$tmp" "$f"
-		[ -f "$tmp/.PackageInfo" ] || { rm -rf "$tmp"; die "no .PackageInfo in $base"; }
+		# Decompression-bomb guard (issue #168): only the re-stamp's
+		# extract+repack can blow out the disk. Pre-flight the decompressed size
+		# and skip+report rather than ENOSPC the peer and abort the batch.
+		need="$(uncompressed_bytes "$f")"; need="${need:-0}"
+		avail="$(avail_bytes "$WORK")"; avail="${avail:-0}"
+		if [ "$need" -gt "$RESTAMP_MAX_BYTES" ]; then
+			echo "   ! SKIP $base: decompresses to ${need}B > cap ${RESTAMP_MAX_BYTES}B (restamp-enospc-decompression-bomb)" >&2
+			skipped=$((skipped + 1)); skipped_list="$skipped_list $base"
+			continue
+		fi
+		if [ "$avail" -gt 0 ] && [ "$((need + RESTAMP_HEADROOM_BYTES))" -gt "$avail" ]; then
+			echo "   ! SKIP $base: decompressed ${need}B + headroom will not fit ${avail}B free (restamp-nospace)" >&2
+			skipped=$((skipped + 1)); skipped_list="$skipped_list $base"
+			continue
+		fi
+		# Extract onto the work filesystem (the one we size-checked) so the EXIT
+		# trap cleans it and df above is authoritative.
+		tmp="$(mktemp -d -p "$WORK")"
+		# Even under the cap the extract or repack can still fail (an estimate
+		# miss, a corrupt package); under `set -e` that would abort the batch, so
+		# tolerate it and escalate this one package instead.
+		if ! "$PKG_TOOL" extract -C "$tmp" "$f" || [ ! -f "$tmp/.PackageInfo" ]; then
+			echo "   ! SKIP $base: package extract failed (restamp-extract-failed)" >&2
+			rm -rf "$tmp"
+			skipped=$((skipped + 1)); skipped_list="$skipped_list $base"
+			continue
+		fi
 		if grep -qE '^[[:space:]]*vendor[[:space:]]' "$tmp/.PackageInfo"; then
 			sed -i -E "s/^([[:space:]]*vendor[[:space:]]+).*/\1\"$VENDOR\"/" "$tmp/.PackageInfo"
 		else
 			printf '\nvendor\t"%s"\n' "$VENDOR" >> "$tmp/.PackageInfo"
 		fi
-		"$PKG_TOOL" create -C "$tmp" "$staged"
+		if ! "$PKG_TOOL" create -C "$tmp" "$staged"; then
+			echo "   ! SKIP $base: package create failed (restamp-create-failed)" >&2
+			rm -rf "$tmp"
+			skipped=$((skipped + 1)); skipped_list="$skipped_list $base"
+			continue
+		fi
 		rm -rf "$tmp"
 	fi
 	canon="$(canonical_name "$staged")"
@@ -102,7 +161,19 @@ for f in "$WORK/incoming"/*.hpkg; do
 	mv -f "$staged" "$RO/packages/$canon"
 	echo "   + $canon (from '$base', vendor '$cur' -> '$VENDOR')"
 	added=$((added + 1))
+	published_bases="$published_bases $base"
 done
+
+if [ "$skipped" -gt 0 ]; then
+	echo "   NOTE: skipped $skipped package(s), left in incoming for human handling:$skipped_list" >&2
+fi
+if [ "$added" -eq 0 ]; then
+	# Nothing new staged (everything skipped or already published). Do not
+	# rebuild/re-upload an unchanged index or invalidate the CDN for nothing;
+	# leave the skipped packages in incoming. This is a success for the batch.
+	echo "PUBLISHED 0 new package(s); skipped $skipped (see notes above). Repo unchanged."
+	exit 0
+fi
 
 echo "== 4. rebuild repo.info + index over $(ls -1 "$RO/packages" | wc -l) package(s) =="
 cat > "$RO/repo.info" <<EOF
@@ -139,7 +210,12 @@ else
 	echo "note: HG_CF_DIST unset -- skipping CloudFront invalidation (index may serve stale until TTL)" >&2
 fi
 
-echo "== 7. clear consumed incoming prefix =="
-aws s3 rm "${HG_INCOMING_S3%/}/" --region "$region" --recursive --exclude "*" --include "*.hpkg" >/dev/null 2>&1 || true
+echo "== 7. clear consumed incoming (only packages we published) =="
+# Remove only the incoming *.hpkg we actually published; a skipped package
+# (issue #168) stays in incoming so it is not silently lost before a human
+# handles it. Delete per-basename rather than the whole prefix recursively.
+for b in $published_bases; do
+	aws s3 rm "${HG_INCOMING_S3%/}/$b" --region "$region" --only-show-errors >/dev/null 2>&1 || true
+done
 
-echo "PUBLISHED $added new package(s); repo now has $(ls -1 "$RO/packages" | wc -l) (was $before)."
+echo "PUBLISHED $added new package(s); skipped $skipped; repo now has $(ls -1 "$RO/packages" | wc -l) (was $before)."
