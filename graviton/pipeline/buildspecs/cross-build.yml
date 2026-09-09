@@ -149,6 +149,64 @@ phases:
         for f in launch-cloud-init remote-desktop.sh launch-remote-desktop UserSetupEnvironment cargo-config.toml launch-partition-grow; do
           cp "$HAIKU_TOP/graviton/ssh/files/$f" "$HG_SSH_DIR/image/$f"
         done
+      # ---- re-vendor the baked SYSTEM packages to "DeBeOS" (issue #39) ---
+      # The DeBeOS repo is single-vendor: haiku-repo-publish re-stamps every repo
+      # hpkg to vendor "DeBeOS" (package_repo create refuses a mixed-vendor set).
+      # But the base image still ships bootstrap/system packages stamped vendor
+      # "Haiku Project" (gcc_syslibs, gcc_syslibs_devel, zlib_bootstrap, freetype,
+      # icu, ca_root_certificates, ...). When `pkgman install <repo pkg>` on a
+      # provisioned builder supersedes one of those (e.g. the toolchain, or curl
+      # needing a newer lib:libz), the vendor mismatch forces an "allow vendor
+      # change" that reshuffles the gcc/gcc_syslibs/gcc_syslibs_devel trio and
+      # breaks the gcc-driver<->cc1 pairing ("gcc: fatal error: cannot execute
+      # 'cc1'"). Re-stamping the baked packages to "DeBeOS" here -- a metadata-only
+      # repack (extract -> rewrite the vendor line -> recreate the identical tree;
+      # contents/version/dependencies untouched) -- makes the running OS match the
+      # repo so no vendor change is ever needed. jam pass 1 above has populated
+      # $GEN/download with every fetched/staged system package; pass 2 below copies
+      # them verbatim into system/packages (build_haiku_image reuses a present file,
+      # never re-hashing it), so re-stamping now is picked up by the final image.
+      #
+      # EXCLUSION: the HaikuPortsLocal set (openssl3/zstd/... -- see
+      # build/jam/repositories/HaikuPortsLocal) is fed to `package_repo create`
+      # during pass 2 to build the local solver cache against the HaikuPorts
+      # repo.info (vendor "Haiku Project"); create aborts B_BAD_DATA on any package
+      # whose vendor disagrees, so those must stay as-is. They remain a latent
+      # supersede path (tracked on #39) whose clean fix needs a DeBeOS-vendored
+      # local repo.info (interacts with #201) -- out of scope for this metadata
+      # re-stamp. The mirror-downloaded bootstrap packages (the named culprits) are
+      # never fed to package_repo create, so re-stamping them is bake-safe.
+      - |
+        echo "== re-vendor baked system packages -> DeBeOS (#39) =="
+        # Host `package` tool built by the jam pass (Linux, not Haiku): it is
+        # dynamically linked against the *_build.so and license-checks against a
+        # system data dir -- point LD_LIBRARY_PATH and HAIKU_BUILD_SYSTEM_DATA_
+        # DIRECTORY at the in-tree copies (same relocation the no-metal publisher
+        # uses for the banked tools).
+        PKG_BIN="$(find "$GEN/objects/linux" -path '*/release/tools/package/package' -type f 2>/dev/null | head -1)"
+        test -x "$PKG_BIN" || { echo "no host 'package' tool under $GEN/objects/linux" >&2; exit 1; }
+        LDP=""
+        for d in $(find "$GEN/objects/linux" -name '*_build.so' -type f -exec dirname {} \; 2>/dev/null | sort -u); do
+          LDP="$d:$LDP"
+        done
+        export LD_LIBRARY_PATH="${LDP}${LD_LIBRARY_PATH:-}"
+        export HAIKU_BUILD_SYSTEM_DATA_DIRECTORY="$HAIKU_TOP/data/system/data"
+        # Derive the HaikuPortsLocal exclusions from the list itself (same parse as
+        # haiku-stage-local-packages) so the two cannot drift apart; strip the
+        # -<version>-<revision> tail to the base package name revendor matches on.
+        EXCL_ARGS=""
+        LOCAL_LIST="$HAIKU_TOP/build/jam/repositories/HaikuPortsLocal/arm64"
+        if [ -f "$LOCAL_LIST" ]; then
+          for spec in $(sed -e 's/#.*//' "$LOCAL_LIST" \
+              | grep -Ev '^[[:space:]]*(LocalPackageRepository|:|;|$)' \
+              | tr -d '[:blank:]' | grep -E '^[A-Za-z0-9_]+-'); do
+            name="$(printf '%s\n' "$spec" | sed -E 's/-[0-9].*$//')"
+            [ -n "$name" ] && EXCL_ARGS="$EXCL_ARGS --exclude $name"
+          done
+        fi
+        echo "revendor excludes:$EXCL_ARGS"
+        "$HAIKU_TOP/graviton/scripts/haiku-repo-publish" revendor \
+          --dir "$GEN/download" --package-tool "$PKG_BIN" $EXCL_ARGS
       # ---- inject the UserBuildConfig hook + second jam pass -------------
       # HAIKU_IMAGE_SIZE (MiB) is the baked BFS root size. The root now auto-grows
       # to a larger root disk: the arm64 image is formatted with grow-headroom
