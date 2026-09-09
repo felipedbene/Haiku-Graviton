@@ -39,11 +39,17 @@ RemoteDrawingEngine::RemoteDrawingEngine(RemoteHWInterface* interface)
 	RemoteMessage message(NULL, fHWInterface->SendBuffer());
 	message.Start(RP_CREATE_STATE);
 	message.Add(fToken);
+
+	fHWInterface->RegisterDrawingEngine(this);
 }
 
 
 RemoteDrawingEngine::~RemoteDrawingEngine()
 {
+	// Unregister first: under the interface's engine-list lock this cannot
+	// race a ConnectionReset() on a half-destroyed engine.
+	fHWInterface->UnregisterDrawingEngine(this);
+
 	RemoteMessage message(NULL, fHWInterface->SendBuffer());
 	message.Start(RP_DELETE_STATE);
 	message.Add(fToken);
@@ -53,6 +59,45 @@ RemoteDrawingEngine::~RemoteDrawingEngine()
 		fHWInterface->RemoveCallback(fToken);
 	if (fResultNotify >= 0)
 		delete_sem(fResultNotify);
+}
+
+
+void
+RemoteDrawingEngine::ConnectionReset()
+{
+	// Hold exclusive access so this cannot interleave with a drawing thread
+	// mid-sequence; the freshly attached client is not drawing yet.
+	bool locked = LockExclusiveAccess();
+
+	// Recreate the per-token drawing state on the new client, which starts
+	// with none.
+	RemoteMessage message(NULL, fHWInterface->SendBuffer());
+	message.Start(RP_CREATE_STATE);
+	message.Add(fToken);
+	message.Flush();
+
+	// Reset our cached view of that state to the client's fresh defaults, so
+	// every SetXXX below re-transmits on the next repaint instead of
+	// short-circuiting on a comparison against what the *previous* client had.
+	DrawState defaults;
+	fState.SetHighColor(defaults.HighColor());
+	fState.SetLowColor(defaults.LowColor());
+	fState.SetPenSize(defaults.PenSize());
+	fState.SetPattern(defaults.GetPattern());
+	fState.SetDrawingMode(defaults.GetDrawingMode());
+	fState.SetBlendingMode(defaults.AlphaSrcMode(), defaults.AlphaFncMode());
+	fState.SetLineCapMode(defaults.LineCapMode());
+	fState.SetLineJoinMode(defaults.LineJoinMode());
+	fState.SetMiterLimit(defaults.MiterLimit());
+	fState.SetFont(defaults.Font());
+	fState.SetTransform(defaults.Transform());
+	fExtendWidth = -(fState.PenSize() / 2);
+
+	// Force the next ConstrainClippingRegion() to re-send as well.
+	fClippingRegion.MakeEmpty();
+
+	if (locked)
+		UnlockExclusiveAccess();
 }
 
 

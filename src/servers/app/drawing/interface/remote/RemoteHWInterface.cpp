@@ -54,7 +54,8 @@ RemoteHWInterface::RemoteHWInterface(const char* target)
 	fReceiver(NULL),
 	fEventThread(-1),
 	fEventStream(NULL),
-	fCallbackLocker("callback locker")
+	fCallbackLocker("callback locker"),
+	fEngineListLocker("engine list locker")
 {
 	memset(&fFallbackMode, 0, sizeof(fFallbackMode));
 	fFallbackMode.virtual_width = 640;
@@ -224,6 +225,22 @@ RemoteHWInterface::RemoveCallback(uint32 token)
 
 	delete fCallbacks.RemoveItemAt(index);
 	return true;
+}
+
+
+void
+RemoteHWInterface::RegisterDrawingEngine(RemoteDrawingEngine* engine)
+{
+	BAutolock lock(fEngineListLocker);
+	fDrawingEngines.AddItem(engine);
+}
+
+
+void
+RemoteHWInterface::UnregisterDrawingEngine(RemoteDrawingEngine* engine)
+{
+	BAutolock lock(fEngineListLocker);
+	fDrawingEngines.RemoveItem(engine);
 }
 
 
@@ -403,6 +420,19 @@ RemoteHWInterface::_NewConnection(BNetEndpoint &endpoint)
 		delete sendEndpoint;
 		return B_NO_MEMORY;
 	}
+
+	// The drawing engines have persisted across the disconnect, but the new
+	// client has none of the per-token drawing state they had already sent to
+	// the previous one, and each engine still believes that state is current.
+	// Re-establish it: with the new sender now draining the buffer (so these
+	// messages reach the client rather than being discarded), tell every engine
+	// to recreate its client-side state and forget its cached view of it, so
+	// the repaint that follows the client's display-mode update re-sends the
+	// full state instead of short-circuiting on stale comparisons -- which is
+	// what left the reconnected screen black.
+	BAutolock lock(fEngineListLocker);
+	for (int32 i = 0; i < fDrawingEngines.CountItems(); i++)
+		fDrawingEngines.ItemAt(i)->ConnectionReset();
 
 	return B_OK;
 }

@@ -33,6 +33,11 @@ public:
 
 	virtual	void				SetCopyToFrontEnabled(bool enabled);
 
+			// called by the RemoteHWInterface when a new client connects, to
+			// recreate the client-side drawing state and drop the now-stale
+			// cache so the next repaint re-sends the full state
+			void				ConnectionReset();
+
 	// for screen shots
 	virtual	status_t			ReadBitmap(ServerBitmap* bitmap,
 									bool drawCursor, BRect bounds);

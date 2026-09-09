@@ -18,6 +18,7 @@ class BNetEndpoint;
 class StreamingRingBuffer;
 class NetSender;
 class NetReceiver;
+class RemoteDrawingEngine;
 class RemoteEventStream;
 class RemoteMessage;
 
@@ -90,6 +91,14 @@ typedef bool (*CallbackFunction)(void* cookie, RemoteMessage& message);
 										void* cookie);
 		bool						RemoveCallback(uint32 token);
 
+		// A remote drawing engine outlives individual client connections,
+		// so it must register here to be told when a fresh client attaches
+		// and its cached, client-side drawing state has to be re-established.
+		void						RegisterDrawingEngine(
+										RemoteDrawingEngine* engine);
+		void						UnregisterDrawingEngine(
+										RemoteDrawingEngine* engine);
+
 private:
 		callback_info*				_FindCallback(uint32 token);
 static	int							_CallbackCompare(const uint32* key,
@@ -131,6 +140,10 @@ static	status_t					_NewConnectionCallback(void *cookie,
 
 		BLocker						fCallbackLocker;
 		BObjectList<callback_info>	fCallbacks;
+
+		BLocker						fEngineListLocker;
+		BObjectList<RemoteDrawingEngine>
+									fDrawingEngines;
 };
 
 #endif // REMOTE_HW_INTERFACE_H
