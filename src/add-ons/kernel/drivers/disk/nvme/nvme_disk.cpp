@@ -81,6 +81,13 @@ static const uint8 kDriveIcon[] = {
 
 #define NVME_MAX_QPAIRS					(16)
 
+// Driver-private ioctl: re-read the namespace capacity from the controller and
+// grow the published disk size if the device now reports a larger NSZE, so an
+// online EBS resize becomes visible without a reboot (#33). Placed above
+// B_DEVICE_OP_CODES_END (9999), the range reserved for Be-defined codes, so it
+// cannot collide with a standard disk ioctl. Takes no argument.
+#define B_NVME_RESCAN_CAPACITY			(B_DEVICE_OP_CODES_END + 1)
+
 
 static device_manager_info* sDeviceManager;
 
@@ -175,6 +182,60 @@ nvme_disk_set_capacity(nvme_disk_driver_info* info, uint64 capacity,
 
 	info->capacity = capacity;
 	info->block_size = blockSize;
+}
+
+
+/*!	Re-reads the namespace capacity from the controller and adopts it only if it
+	GREW. An online EBS resize enlarges the namespace's NSZE while the volume
+	stays mounted, but the size is otherwise read just once at init
+	(nvme_disk_set_capacity), so the kernel keeps reporting the boot-time size and
+	partition_grow sees a disk that "already fills" at the old size (#33).
+
+	Conservative by construction: capacity only ever moves up, and only when the
+	device authoritatively reports a larger NSZE. A smaller reported capacity is
+	never adopted -- shrinking a live device under a mounted filesystem would put
+	valid data past the end of the disk -- and a failed re-identify leaves the
+	existing capacity untouched. A block-size change is refused rather than
+	reinterpreted, since that is a reformat and not something to absorb under a
+	live mount. The new size then flows out through get_geometry()/B_GET_GEOMETRY
+	and B_GET_DEVICE_SIZE, which compute live from info->capacity, so the disk
+	device manager's rescan picks it up.
+*/
+static status_t
+nvme_disk_rescan_capacity(nvme_disk_driver_info* info)
+{
+	int err = nvme_ns_update(info->ns);
+	if (err != 0) {
+		TRACE_ERROR("namespace re-identify failed: %d\n", err);
+		return B_ERROR;
+	}
+
+	struct nvme_ns_stat nsstat;
+	err = nvme_ns_stat(info->ns, &nsstat);
+	if (err != 0) {
+		TRACE_ERROR("failed to get namespace information on rescan!\n");
+		return B_ERROR;
+	}
+
+	if (nsstat.sector_size != info->block_size) {
+		TRACE_ERROR("namespace block size changed (%" B_PRIu32 " -> %" B_PRIuSIZE
+			"); refusing to adopt under a live mount\n", info->block_size,
+			nsstat.sector_size);
+		return B_NOT_ALLOWED;
+	}
+
+	if (nsstat.sectors <= info->capacity) {
+		// Unchanged, or a (refused) shrink. Nothing to do; keep what we have.
+		TRACE("rescan: capacity unchanged at %" B_PRIu64 " sectors\n",
+			info->capacity);
+		return B_OK;
+	}
+
+	TRACE_ALWAYS("namespace grew online: %" B_PRIu64 " -> %" B_PRIu64
+		" sectors (block size %" B_PRIu32 ")\n", info->capacity, nsstat.sectors,
+		info->block_size);
+	nvme_disk_set_capacity(info, nsstat.sectors, nsstat.sector_size);
+	return B_OK;
 }
 
 
@@ -1216,6 +1277,13 @@ nvme_disk_ioctl(void* cookie, uint32 op, void* buffer, size_t length)
 		case B_TRIM_DEVICE:
 			ASSERT(IS_KERNEL_ADDRESS(buffer));
 			return nvme_disk_trim(info, (fs_trim_data*)buffer);
+
+		case B_NVME_RESCAN_CAPACITY:
+			// Explicit, low-risk trigger for online-grow detection: re-identify
+			// the namespace and grow info->capacity if it enlarged. Grow-only,
+			// so issuing it is always safe; a subsequent disk-device rescan then
+			// reads the new geometry and partition_grow sees the larger disk.
+			return nvme_disk_rescan_capacity(info);
 	}
 
 	return B_DEV_INVALID_IOCTL;
