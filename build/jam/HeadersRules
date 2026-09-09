@@ -428,6 +428,29 @@ rule UseBuildFeatureHeaders feature : attribute
 	local headers = [ BuildFeatureAttribute $(feature) : $(attribute:E=headers)
 		: path ] ;
 	UseHeaders $(headers) : true ;
+
+	# UseHeaders above only adds the extraction directory as a bare -isystem
+	# path string (BuildFeatureAttribute ... : path strips the target grist), so
+	# nothing ties an object that consumes a feature header to the
+	# ExtractHPKGArchive1 action that populates it. Under -j a compile can then
+	# read a half-extracted header tree (e.g. gcc_syslibs_devel's
+	# develop/headers/c++, the source of <cstdlib>'s #include_next <stdlib.h>)
+	# and fail with a spurious "stdlib.h: No such file". Record the *gristed*
+	# extraction directory target here so the Object rule can add the missing
+	# Depends. (The pass-0 `haiku-extract-build-features` pseudotarget is a
+	# coarser workaround for the whole tree; this closes the race per object for
+	# every build, including a plain `jam` with no pre-extract pass.)
+	local package = [ BuildFeatureAttribute $(feature)
+		: $(attribute:E=headers):package ] ;
+	if $(package) {
+		# The stored ":directory" attribute is grist-stripped (see
+		# ExtractBuildFeatureArchives), but the extraction action's target is the
+		# directory gristed with the package alias. Re-grist it the same way so we
+		# reference the actual ExtractHPKGArchive1 target, not a stray leaf.
+		local directory = [ BuildFeatureAttribute $(feature)
+			: $(package):directory ] ;
+		SUBDIRBUILDFEATUREHEADERS += $(directory:G=$(package)) ;
+	}
 }
 
 
@@ -485,3 +508,9 @@ rule FStandardHeaders architecture : language
 
 # SUBDIRSYSHDRS shall be reset automatically for each subdir
 SUBDIRRESET += SYSHDRS ;
+
+# SUBDIRBUILDFEATUREHEADERS collects the (gristed) archive extraction directory
+# targets of the build features whose headers this subdir uses; the Object rule
+# turns them into a Depends so a compile waits for ExtractHPKGArchive1. Reset it
+# per subdir like SUBDIRSYSHDRS.
+SUBDIRRESET += BUILDFEATUREHEADERS ;

@@ -71,11 +71,18 @@ rule Object
 	local headers ;
 	local sysHeaders ;
 	local defines ;
+	local buildFeatureHeaderDirs ;
 
 	on $(1) { # use on $(1) variable values
 		if ! $(PLATFORM) in $(SUPPORTED_PLATFORMS) {
 			return ;
 		}
+
+		# Gristed archive extraction dirs of the build features whose headers
+		# this subdir uses (see UseBuildFeatureHeaders). Read in the same on-scope
+		# as SUBDIRSYSHDRS so it is correct under multi-arch. Empty for subdirs
+		# that use no build-feature headers.
+		buildFeatureHeaderDirs = $(SUBDIRBUILDFEATUREHEADERS) ;
 
 		# Save HDRS for -I$(HDRS) on compile.
 		# We shouldn't need -I$(SEARCH_SOURCE) as cc can find headers
@@ -110,6 +117,13 @@ rule Object
 	# locate object and search for source
 
 	LocalClean clean : $(<) ;
+
+	# The build-feature header dirs are handed to the compiler as bare -isystem
+	# path strings (grist stripped), so without this edge nothing orders the
+	# ExtractHPKGArchive1 action that populates them before this compile. Under
+	# -j that races and yields a spurious "stdlib.h: No such file" on a victim
+	# TU that varies run to run. No-op when the list is empty.
+	Depends $(<) : $(buildFeatureHeaderDirs) ;
 
 	MakeLocateDebug $(<) ;
 	SEARCH on $(>) = $(SEARCH_SOURCE) ;
