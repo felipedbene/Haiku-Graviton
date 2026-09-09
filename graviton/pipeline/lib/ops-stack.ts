@@ -434,6 +434,20 @@ export class OpsStack extends cdk.Stack {
       key: { pkg: tasks.DynamoAttributeValue.fromString(lockPk) },
       resultPath: sfn.JsonPath.DISCARD,
     });
+    // Retry the release on any error: a DeleteItem of a fixed key is idempotent,
+    // so a transient DynamoDB throttle/5xx must not be allowed to strand the
+    // single-flight lock -- a stranded '__repo_publish_lock__' would block every
+    // later wave on AcquirePublishLock for the full acquire budget (~56 min) and
+    // then fail it, until an operator deletes the row by hand.
+    for (const t of [releaseLock, releaseLockOnFailure]) {
+      t.addRetry({
+        errors: ['States.ALL'],
+        interval: cdk.Duration.seconds(2),
+        backoffRate: 2,
+        maxAttempts: 8,
+        maxDelay: cdk.Duration.seconds(30),
+      });
+    }
     acquireLock.next(runPublish);
     runPublish.next(releaseLock);
     releaseLock.next(reapSuccess);
