@@ -232,3 +232,57 @@ haiku-source-proxy start                     # on the (retired) metal host, no i
 haiku-source-proxy install-shim <sshport>    # wget + haiku-proxy-decompress
 haiku-haikuporter-patch <sshport>            # unpack patch + patch(1)
 ```
+
+## HaikuWebKit 1.10.0 arm64 — machine-context accessors (issue #84 lineage)
+
+`haikuwebkit-1.10.0-arm64-machinecontext.patchset` is the DeBeOS fix that makes
+HaikuWebKit compile on arm64. `Source/JavaScriptCore/runtime/MachineContext.h` has six
+`OS(HAIKU)` accessor blocks that carried only a `CPU(X86_64)` branch and fell through to
+`#error Unknown Architecture` on arm64. The patch adds a `CPU(ARM64)` branch to each,
+reading Haiku's arm64 `mcontext_t` (which is `struct vregs`,
+`headers/posix/arch/arm64/signal.h`: `x[30]` general regs, `sp`, `elr`):
+
+| accessor | field |
+|---|---|
+| `stackPointerImpl` (SP) | `machineContext.sp` |
+| `framePointerImpl` (FP) | `machineContext.x[29]` |
+| `instructionPointerImpl` (PC) | `machineContext.elr` |
+| `argumentPointer<1>` (x1) | `machineContext.x[1]` |
+| `wasmInstancePointer` (x19) | `machineContext.x[19]` |
+| `llintInstructionPointer` (LLInt PC = x4) | `machineContext.x[4]` |
+
+This patchset had been created once before (the 2026-08-25 build) and was lost when the
+recipe tree was re-cloned from upstream; it is recorded here so it cannot be lost again.
+
+**Recipe deltas** (captured in `haikuwebkit-1.10.0.recipe.debeos`, apply to the ports-tree
+`haiku-libs/haikuwebkit/haikuwebkit-1.10.0.recipe`):
+
+- `PATCHES="haikuwebkit-1.10.0.patchset ..."` — haikuporter applies a patchset **only** if
+  it is named in `PATCHES` (`HaikuPorter/Port.py`: unreferenced files in `patches/` are
+  warned "will not be used"; `HaikuPorter/Source.py` applies referenced `.patchset` files
+  with `git am -3`). The stock recipe has no `PATCHES=` line, so the arm64 fix must be
+  wired in. Copy `haikuwebkit-1.10.0-arm64-machinecontext.patchset` into the port's
+  `patches/` as `haikuwebkit-1.10.0.patchset`.
+- Drop `cmd:llvm_config >= 21` from `BUILD_PREREQUIRES` — residue from a reverted Clang
+  experiment; the GCC build never invokes llvm-ar/llvm-config, and keeping it forces an
+  unnecessary llvm21 build-prereq.
+- `-DUSE_AVIF=OFF` in `--cmakeargs`, and drop `lib:libavif` / `devel:libavif >= 16` from
+  `REQUIRES`/`BUILD_REQUIRES` — `libavif >= 16` needs `librav1e` (Rust), which is not yet a
+  build dependency here. AVIF image decoding is off until that is wired.
+
+**Build deps** (all install from the DeBeOS repo, no extra ports to build):
+`woff2_devel libxslt_devel libexecinfo libexecinfo_devel icu74_devel libpsl_devel
+libunistring libgpg_error libidn2 ruby`.
+
+### `haikuwebkit-1.10.0-diag84.patchset` — TEMPORARY, do NOT ship
+
+Investigation-only instrumentation for issue #84 (a fetched http/https page body does not
+paint while a local `file://` page does). It adds `[#84]`-prefixed `fprintf(stderr, …)`
+probes on the network-doc paint path:
+
+- `Document::setVisualUpdatesAllowed` — readyState, `suppressesIncrementalRendering()`, url
+- `Document::removeVisualUpdatePreventedReasons` — wasPrevented / remaining / whether it proceeds, url
+- `ChromeClientHaiku::triggerRenderingUpdate` + `invalidateContentsAndRootView` — the rect
+- `BWebPage::paint` — entry rect + visibility, each early-return branch, and whether it reaches `view->paint`
+
+Drop this patchset (and its `PATCHES=` entry) before any shipping build.

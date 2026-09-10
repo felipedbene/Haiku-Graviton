@@ -1,0 +1,77 @@
+From dccd593d488b58d8ef6af2d4fd453516544c859a Mon Sep 17 00:00:00 2001
+From: DeBeOS <debeos@localhost>
+Date: Thu, 10 Sep 2026 12:00:00 +0000
+Subject: [PATCH] Add arm64 (AArch64) machine-context accessors for Haiku
+
+Haiku's arm64 mcontext_t is struct vregs (headers/posix/arch/arm64/signal.h):
+x[30] general regs (x[29]=FP), sp, elr (PC/exception link register).
+The six OS(HAIKU) accessor blocks only had a CPU(X86_64) branch and fell
+through to #error Unknown Architecture on arm64. Add CPU(ARM64) branches:
+SP=sp, FP=x[29], PC=elr, arg1(x1)=x[1], wasmInstance(x19)=x[19],
+LLInt PC(x4)=x[4].
+---
+ Source/JavaScriptCore/runtime/MachineContext.h | 13 +++++++++++++
+ 1 file changed, 13 insertions(+)
+
+diff --git a/Source/JavaScriptCore/runtime/MachineContext.h b/Source/JavaScriptCore/runtime/MachineContext.h
+index fd988cc..9718261 100644
+--- a/Source/JavaScriptCore/runtime/MachineContext.h
++++ b/Source/JavaScriptCore/runtime/MachineContext.h
+@@ -152,6 +152,8 @@ static inline void*& stackPointerImpl(mcontext_t& machineContext)
+ #elif OS(HAIKU)
+ #if CPU(X86_64)
+     return reinterpret_cast<void*&>(machineContext.rsp);
++#elif CPU(ARM64)
++    return reinterpret_cast<void*&>((uintptr_t&) machineContext.sp);
+ #else
+ #error Unknown Architecture
+ #endif
+@@ -281,6 +283,8 @@ static inline void*& framePointerImpl(mcontext_t& machineContext)
+ #elif OS(HAIKU)
+ #if CPU(X86_64)
+     return reinterpret_cast<void*&>(machineContext.rbp);
++#elif CPU(ARM64)
++    return reinterpret_cast<void*&>((uintptr_t&) machineContext.x[29]);
+ #else
+ #error Unknown Architecture
+ #endif
+@@ -441,6 +445,8 @@ static inline void*& instructionPointerImpl(mcontext_t& machineContext)
+ #elif OS(HAIKU)
+ #if CPU(X86_64)
+     return reinterpret_cast<void*&>((uintptr_t&) machineContext.rip);
++#elif CPU(ARM64)
++    return reinterpret_cast<void*&>((uintptr_t&) machineContext.elr);
+ #else
+ #error Unknown Architecture
+ #endif
+@@ -617,6 +623,8 @@ inline void*& argumentPointer<1>(mcontext_t& machineContext)
+ #elif OS(HAIKU)
+ #if CPU(X86_64)
+     return reinterpret_cast<void*&>((uintptr_t&) machineContext.rsi);
++#elif CPU(ARM64)
++    return reinterpret_cast<void*&>((uintptr_t&) machineContext.x[1]);
+ #else
+ #error Unknown Architecture
+ #endif
+@@ -682,6 +690,8 @@ inline void* wasmInstancePointer(const mcontext_t& machineContext)
+ #error Unsupported Architecture
+ #elif CPU(X86_64)
+     return reinterpret_cast<void*&>((uintptr_t&) machineContext.rbx);
++#elif CPU(ARM64)
++    return reinterpret_cast<void*&>((uintptr_t&) machineContext.x[19]);
+ #else
+ #error Unknown Architecture
+ #endif
+@@ -802,6 +812,9 @@ inline void*& llintInstructionPointer(mcontext_t& machineContext)
+ #elif OS(HAIKU)
+ #if CPU(X86_64)
+     return reinterpret_cast<void*&>((uintptr_t&) machineContext.r8);
++#elif CPU(ARM64)
++    static_assert(LLInt::LLIntPC == ARM64Registers::x4, "Wrong LLInt PC.");
++    return reinterpret_cast<void*&>((uintptr_t&) machineContext.x[4]);
+ #else
+ #error Unknown Architecture
+ #endif
+-- 
+2.50.1
+

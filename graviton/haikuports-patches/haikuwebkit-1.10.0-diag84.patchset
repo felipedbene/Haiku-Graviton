@@ -1,0 +1,129 @@
+From 3dd90e86839f35a67b3eeb01ad07b42801d06e7d Mon Sep 17 00:00:00 2001
+From: DeBeOS <debeos@localhost>
+Date: Thu, 10 Sep 2026 12:05:00 +0000
+Subject: [PATCH] DIAG #84: stderr probes on the network-doc paint path
+
+Temporary instrumentation for issue #84 (fetched http/https body does not
+paint while local file:// does). Probes, all prefixed [#84] to stderr:
+ (0) Document::setVisualUpdatesAllowed - readyState, suppressesIncrementalRendering(), url
+ (3) Document::removeVisualUpdatePreventedReasons - wasPrevented/remaining/proceed, url
+ (1) ChromeClientHaiku::triggerRenderingUpdate + invalidateContentsAndRootView - rect
+ (2) BWebPage::paint - entry rect+visibility, each early-return, reached view->paint
+NOT for merge; drop before shipping.
+---
+ Source/WebCore/dom/Document.cpp                | 11 +++++++++++
+ Source/WebKitLegacy/haiku/API/WebPage.cpp      | 18 +++++++++++++++---
+ .../haiku/WebCoreSupport/ChromeClientHaiku.cpp |  8 +++++++-
+ 3 files changed, 33 insertions(+), 4 deletions(-)
+
+diff --git a/Source/WebCore/dom/Document.cpp b/Source/WebCore/dom/Document.cpp
+index f80ade1..ff3bc6b 100644
+--- a/Source/WebCore/dom/Document.cpp
++++ b/Source/WebCore/dom/Document.cpp
+@@ -2067,6 +2067,9 @@ void Document::setReadyState(ReadyState readyState)
+ 
+ void Document::setVisualUpdatesAllowed(ReadyState readyState)
+ {
++    fprintf(stderr, "[#84] Document::setVisualUpdatesAllowed rs=%d suppressesIncremental=%d url=%s\n",
++        (int)readyState, settings().suppressesIncrementalRendering() ? 1 : 0,
++        url().string().utf8().data());
+     switch (readyState) {
+     case ReadyState::Loading:
+         if (settings().suppressesIncrementalRendering())
+@@ -2106,9 +2109,17 @@ void Document::removeVisualUpdatePreventedReasons(OptionSet<VisualUpdatesPrevent
+     m_visualUpdatesPreventedReasons.remove(reasons);
+     LOG_WITH_STREAM(RenderBlocking, stream << "Document " << this << " removeVisualUpdatePreventedReasons " << reasons << " m_visualUpdatesPreventedReasons: " << m_visualUpdatesPreventedReasons);
+ 
++    fprintf(stderr, "[#84] Document::removeVisualUpdatePreventedReasons wasPrevented=%d remainingEmpty=%d willProceed=%d url=%s\n",
++        wasPrevented ? 1 : 0, m_visualUpdatesPreventedReasons.isEmpty() ? 1 : 0,
++        (wasPrevented && m_visualUpdatesPreventedReasons.isEmpty()) ? 1 : 0,
++        url().string().utf8().data());
++
+     if (!wasPrevented || !m_visualUpdatesPreventedReasons.isEmpty())
+         return;
+ 
++    fprintf(stderr, "[#84] Document::removeVisualUpdatePreventedReasons PROCEEDING repaint+scheduleRenderingUpdate url=%s\n",
++        url().string().utf8().data());
++
+     m_visualUpdatesSuppressionTimer.stop();
+ 
+     if (RefPtr frame = this->frame(); frame && frame->document() == this)
+diff --git a/Source/WebKitLegacy/haiku/API/WebPage.cpp b/Source/WebKitLegacy/haiku/API/WebPage.cpp
+index 2406635..faa3675 100644
+--- a/Source/WebKitLegacy/haiku/API/WebPage.cpp
++++ b/Source/WebKitLegacy/haiku/API/WebPage.cpp
+@@ -800,27 +800,39 @@ void BWebPage::requestDownload(const WebCore::ResourceRequest& request,
+ 
+ void BWebPage::paint(BRect rect, bool immediate)
+ {
+-    if (!rect.IsValid())
++    fprintf(stderr, "[#84] BWebPage::paint enter rect=(%g,%g,%g,%g) immediate=%d visible=%d\n",
++        rect.left, rect.top, rect.right, rect.bottom, immediate, fPageVisible);
++    if (!rect.IsValid()) {
++        fprintf(stderr, "[#84] BWebPage::paint EARLY-RETURN invalid-rect\n");
+         return;
++    }
+     // Block any drawing as long as the BWebView is hidden
+     // (should be extended to when the containing BWebWindow is not
+     // currently on screen either...)
+     if (!fPageVisible) {
+         fPageDirty = true;
++        fprintf(stderr, "[#84] BWebPage::paint EARLY-RETURN !fPageVisible\n");
+         return;
+     }
+ 
+     // NOTE: fMainFrame can be 0 because init() eventually ends up calling
+     // paint()! BWebFrame seems to cause an initial page to be loaded, maybe
+     // this ought to be avoided also for start-up speed reasons!
+-    if (!fMainFrame)
++    if (!fMainFrame) {
++        fprintf(stderr, "[#84] BWebPage::paint EARLY-RETURN !fMainFrame\n");
+         return;
++    }
+     WebCore::LocalFrame* frame = fMainFrame->Frame();
+     WebCore::LocalFrameView* view = frame->view();
+ 
+-    if (!view || !frame->contentRenderer())
++    if (!view || !frame->contentRenderer()) {
++        fprintf(stderr, "[#84] BWebPage::paint EARLY-RETURN view=%p contentRenderer=%p\n",
++            view, view ? (void*)frame->contentRenderer() : (void*)0);
+         return;
++    }
+ 
++    fprintf(stderr, "[#84] BWebPage::paint reached-view->paint rect=(%g,%g,%g,%g)\n",
++        rect.left, rect.top, rect.right, rect.bottom);
+     page()->isolatedUpdateRendering();
+ 
+     view->updateLayoutAndStyleIfNeededRecursive();
+diff --git a/Source/WebKitLegacy/haiku/WebCoreSupport/ChromeClientHaiku.cpp b/Source/WebKitLegacy/haiku/WebCoreSupport/ChromeClientHaiku.cpp
+index ddd829e..629f25a 100644
+--- a/Source/WebKitLegacy/haiku/WebCoreSupport/ChromeClientHaiku.cpp
++++ b/Source/WebKitLegacy/haiku/WebCoreSupport/ChromeClientHaiku.cpp
+@@ -263,6 +263,8 @@ void ChromeClientHaiku::invalidateRootView(const IntRect& rect)
+ 
+ void ChromeClientHaiku::invalidateContentsAndRootView(const IntRect& rect)
+ {
++    fprintf(stderr, "[#84] ChromeClientHaiku::invalidateContentsAndRootView rect=(%d,%d,%d,%d)\n",
++        rect.x(), rect.y(), rect.width(), rect.height());
+     m_webPage->draw(BRect(rect));
+ }
+ 
+@@ -469,10 +471,14 @@ void ChromeClientHaiku::setNeedsOneShotDrawingSynchronization()
+ void ChromeClientHaiku::triggerRenderingUpdate()
+ {
+     // Don't do anything if the view isn't ready yet.
+-    if (!m_webView->LockLooper())
++    if (!m_webView->LockLooper()) {
++        fprintf(stderr, "[#84] ChromeClientHaiku::triggerRenderingUpdate EARLY-RETURN LockLooper-failed\n");
+         return;
++    }
+     BRect r = m_webView->Bounds();
+     m_webView->UnlockLooper();
++    fprintf(stderr, "[#84] ChromeClientHaiku::triggerRenderingUpdate draw bounds=(%g,%g,%g,%g)\n",
++        r.left, r.top, r.right, r.bottom);
+     m_webPage->draw(r);
+ }
+ 
+-- 
+2.50.1
+
