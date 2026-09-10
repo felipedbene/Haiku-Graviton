@@ -69,6 +69,12 @@ struct ena_irq_stats {
 	uint64	txFrames;
 	uint64	resetCount;
 	uint64	rearmMode;
+	/* These two trailing fields must stay in lockstep with struct ena_irq_stats
+	   in the driver's ena.h: ENA_IOCTL_GET_IRQ_STATS rejects the call when the
+	   caller's sizeof does not match the driver's, so a short struct here makes
+	   `ena_fault stats` fail with B_BAD_VALUE ("Invalid Argument"). */
+	uint64	rxIrqInterval;
+	uint64	intrDelayResolution;
 };
 
 
