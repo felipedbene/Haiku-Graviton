@@ -357,7 +357,7 @@ cpu_wait(int32* variable, int32 test)
 	if (sCPUIdleModule != NULL)
 		sCPUIdleModule->cpuidle_wait(variable, test);
 	else
-		arch_cpu_pause();
+		arch_cpu_wait(variable, test);
 }
 
 
