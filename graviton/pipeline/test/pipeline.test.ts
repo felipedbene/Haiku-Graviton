@@ -30,6 +30,7 @@ const config: HaikuPipelineConfig = {
   builderAmiParam: '/haiku-graviton/builder-ami-id',
   canonicalAmiParam: '/haiku-graviton/canonical-ami-id',
   peerAmiParam: '/aws/service/canonical/ubuntu/server/24.04/stable/current/arm64/hvm/ebs-gp3/ami-id',
+  testVpcName: 'DebeosOpsStack/BuildVpc',
   testSubnetId: 'subnet-000000000000000aa',
   testSecurityGroupId: 'sg-000000000000000aa',
   testInstanceType: 'c7g.large',

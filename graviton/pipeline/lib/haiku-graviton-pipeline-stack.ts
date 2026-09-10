@@ -319,16 +319,29 @@ export class HaikuGravitonPipelineStack extends cdk.Stack {
     testSg.addIngressRule(testSg, ec2.Port.allIcmp(),
       'reachability probe: separates a dead NIC from a stalled userland');
 
-    // An explicit override still wins, so a one-off run can be pointed elsewhere
-    // without editing the stack; otherwise use what we just created/looked up.
-    const testSubnetId = cfg.testSubnetId
-      || buildVpc.selectSubnets({ subnetType: ec2.SubnetType.PRIVATE_WITH_EGRESS })
-        .subnetIds[0];
     const testSecurityGroupId = cfg.testSecurityGroupId || testSg.securityGroupId;
 
+    // The subnet is resolved by haiku-perf-gate at RUNTIME from BuildVpc by name
+    // (the script's ~L163 block; the role below grants ec2:DescribeVpcs/Subnets for
+    // it). So HG_TEST_SUBNET is passed EMPTY unless an operator pins a one-off run
+    // via cfg.testSubnetId -- do NOT bake a synth-resolved id into it. Baking one in
+    // is exactly what broke the Test stage in #215: a concrete id is frozen into the
+    // deployed CodeBuild env until the next redeploy, and CDK's VPC-lookup context
+    // cache can carry a since-deleted subnet across synths, so a VPC consolidation
+    // left a dead id that only failed ~25 min into every bake at run-instances.
+    // Resolving at runtime cannot go stale -- each run picks a currently-live subnet.
+    //
+    // The output below is informational only (the subnet CDK would pick at synth);
+    // the gate re-resolves at runtime, so it is a hint for operators, not the value
+    // actually used.
+    const synthResolvedSubnetId = cfg.testSubnetId
+      || buildVpc.selectSubnets({ subnetType: ec2.SubnetType.PRIVATE_WITH_EGRESS })
+        .subnetIds[0];
     new cdk.CfnOutput(this, 'PerfGateTestSubnetId', {
-      value: testSubnetId,
-      description: 'Subnet the perf-gate launches the peer and candidate into.',
+      value: synthResolvedSubnetId,
+      description:
+        'Reference subnet CDK resolves at synth. Unless HG_TEST_SUBNET is pinned, '
+        + 'the perf-gate re-resolves a Private subnet in BuildVpc at runtime.',
     });
     new cdk.CfnOutput(this, 'PerfGateTestSecurityGroupId', {
       value: testSecurityGroupId,
@@ -365,7 +378,10 @@ export class HaikuGravitonPipelineStack extends cdk.Stack {
         HG_PEER_INSTANCE_PROFILE: { value: peerProfileName },
         HG_PEER_AMI_PARAM: { value: cfg.peerAmiParam },
         HG_TOOLS_S3: { value: `s3://${cfg.ssmOutBucketName}/tools/nettput-peer.py` },
-        HG_TEST_SUBNET: { value: testSubnetId },
+        // Empty by default => haiku-perf-gate resolves the subnet from BuildVpc at
+        // runtime, so a deleted subnet can never linger in the deployed env (#215).
+        // Only a deliberate cfg.testSubnetId override is passed through.
+        HG_TEST_SUBNET: { value: cfg.testSubnetId },
         HG_TEST_SG: { value: testSecurityGroupId },
         HG_TEST_TYPE: { value: cfg.testInstanceType },
         HG_TEST_KEY: { value: cfg.testKeyName },
