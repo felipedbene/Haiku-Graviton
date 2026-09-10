@@ -2215,39 +2215,60 @@ ena_watchdog_check_missing_tx(ena_haiku_device* device)
 /*!	Flags a suspected receive stall (docs/watchdog-design.md gap 5).
 
 	DETECT-AND-LOG ONLY. A refill deadlock leaves descriptors owed to the device
-	(rxPendingRefill > 0) making no progress while receive is idle. That is a real
-	signal, but the threshold that separates it from a legitimately quiet link is
-	exactly what this project cannot set without hardware observation -- and an
-	over-eager receive reset on a console-less instance is the failure §7 exists to
-	prevent. So the reset is OWED: this counts and logs, nothing more.
+	(rxPendingRefill > 0) making no progress. The trap is that "descriptors owed
+	and not shrinking, with no receive progress" is *also* what a perfectly idle
+	link looks like -- the ring is armed and simply waiting -- so counting on that
+	alone over-fires the moment a booted instance goes quiet (hardware-confirmed,
+	#211). The discriminator is the device's own rx-drop counter: a genuine
+	deadlock strands the free-buffer pool, so inbound frames are dropped and
+	hwRxDrops climbs, whereas an idle link drops nothing because nothing arrives.
+	So a tick is only counted when drops are still climbing -- evidence the device
+	has traffic it cannot place, not merely that the ring is quiet. Even then this
+	only counts and logs: the reset threshold is OWED until it can be measured on
+	hardware, and an over-eager receive reset on a console-less instance is the
+	failure §7 exists to prevent.
 
-	rxPendingRefill is read without rxLock, on the same license as
-	watchdogLastTraffic: the question is only "did this change", and a torn read
-	costs at most one tick. \a moving covers the whole datapath, so a stall while
-	transmit is still busy is not flagged -- a known limitation of the log-only
-	heuristic, acceptable because it never triggers an action.
+	hwRxDrops is refreshed once per keep-alive, and the keep-alive check runs
+	first and short-circuits the tick when the device has gone quiet, so this code
+	only sees a freshly reported drop count. rxPendingRefill and hwRxDrops are read
+	without rxLock, on the same license as watchdogLastTraffic: the question is
+	only "did this change", and a torn read costs at most one tick. \a moving
+	covers the whole datapath, so a stall while transmit is still busy is not
+	flagged -- a known limitation of the log-only heuristic, acceptable because it
+	never triggers an action.
 */
 static void
 ena_watchdog_check_rx_stall(ena_haiku_device* device, bool moving)
 {
 	const uint16 pending = device->rxPendingRefill;
+	const uint64 drops = device->hwRxDrops;
+	const uint64 dropDelta = drops > device->rxStallLastDrops
+		? drops - device->rxStallLastDrops : 0;
 
-	/* Nothing owed, or the datapath advanced, or the owed count is shrinking:
-	   the refill path is doing its job. Any of these ends the run. */
-	if (pending == 0 || moving || pending < device->rxStallLastPending) {
+	/* Any of these ends the run: nothing owed, the datapath advanced, the owed
+	   count is shrinking (refill is working), or -- the key idle guard -- the
+	   device is not dropping inbound frames, meaning either nothing is arriving
+	   (idle) or everything arriving is being placed (healthy). Only when frames
+	   are being dropped while our descriptors stay owed is this a suspected
+	   deadlock rather than a quiet link. */
+	if (pending == 0 || moving || pending < device->rxStallLastPending
+		|| dropDelta == 0) {
 		device->rxStallChecks = 0;
 		device->rxStallLastPending = pending;
+		device->rxStallLastDrops = drops;
 		return;
 	}
 
 	device->rxStallLastPending = pending;
+	device->rxStallLastDrops = drops;
 	device->rxStallChecks++;
 	if (device->rxStallChecks == ENA_RX_STALL_CHECKS_BEFORE_LOG) {
 		device->rxStallDetections++;
-		ERROR("suspected receive stall: %u descriptor(s) owed to the device with "
-			"no receive progress for %" B_PRIu32 " checks -- NOT resetting "
+		ERROR("suspected receive stall: %u descriptor(s) owed to the device, "
+			"%" B_PRIu64 " inbound frame(s) dropped this interval, and no "
+			"receive progress for %" B_PRIu32 " checks -- NOT resetting "
 			"(gap 5 is detect-only; the reset threshold is owed hardware "
-			"tuning)\n", pending, device->rxStallChecks);
+			"tuning)\n", pending, dropDelta, device->rxStallChecks);
 	}
 }
 
