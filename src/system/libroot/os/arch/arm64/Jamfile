@@ -7,6 +7,7 @@ for architectureObject in [ MultiArchSubDirSetup arm64 ] {
 	on $(architectureObject) {
 		local architecture = $(TARGET_PACKAGING_ARCH) ;
 
+		UsePrivateHeaders libroot ;
 		UsePrivateKernelHeaders ;
 		UsePrivateSystemHeaders ;
 
@@ -15,6 +16,7 @@ for architectureObject in [ MultiArchSubDirSetup arm64 ] {
 		MergeObject <$(architecture)>os_arch_$(TARGET_ARCH).o :
 			byteorder.S
 			get_stack_frame.S
+			system_info.cpp
 			system_time.c
 			thread.c
 			time.c
