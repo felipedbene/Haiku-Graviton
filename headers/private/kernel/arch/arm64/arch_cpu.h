@@ -182,6 +182,11 @@ static inline void arch_cpu_idle(void)
 
 extern addr_t arm64_get_fp(void);
 
+// Derive the Linux/glibc-compatible AT_HWCAP / AT_HWCAP2 feature words from the
+// EL1-only ID_AA64* registers. Published to userland through the commpage; see
+// arch_commpage.cpp and libroot's getauxval().
+extern void arm64_get_hwcap(uint64* hwcap, uint64* hwcap2);
+
 
 #ifdef __cplusplus
 }

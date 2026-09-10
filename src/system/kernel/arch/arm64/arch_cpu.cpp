@@ -6,6 +6,8 @@
 
 #include <KernelExport.h>
 
+#include <sys/auxv.h>
+
 #include <arch/arm64/arch_pmu.h>
 #include <arch/cpu.h>
 #include <boot/kernel_args.h>
@@ -138,6 +140,88 @@ arch_cpu_init_post_modules(kernel_args *args)
 	arm64_pmu_init_post_modules(args);
 
 	return B_OK;
+}
+
+
+void
+arm64_get_hwcap(uint64* hwcap, uint64* hwcap2)
+{
+	// The ID_AA64* feature registers are only readable at EL1, and DeBeOS does
+	// not trap-and-emulate their MRS for EL0, so this runs once in the kernel
+	// and the result is published through the commpage. The bit layout mirrors
+	// Linux's AT_HWCAP so ported crypto/atomics dispatch keeps working.
+	//
+	// A homogeneous ISA across CPUs is assumed (as Linux does with its
+	// boot-CPU-sanitised values); every core on the supported SoCs advertises
+	// the same feature set.
+	uint64 caps = 0;
+	uint64 caps2 = 0;
+
+	const uint64 isar0 = READ_SPECIALREG(ID_AA64ISAR0_EL1);
+	const uint64 isar1 = READ_SPECIALREG(ID_AA64ISAR1_EL1);
+	const uint64 pfr0 = READ_SPECIALREG(ID_AA64PFR0_EL1);
+
+	// ID_AA64PFR0_EL1: floating point and Advanced SIMD (0xf encodes "absent").
+	if (ID_AA64PFR0_FP(pfr0) != ID_AA64PFR0_FP_NONE) {
+		caps |= HWCAP_FP;
+		if (ID_AA64PFR0_FP(pfr0) == ID_AA64PFR0_FP_HP)
+			caps |= HWCAP_FPHP;
+	}
+	if (ID_AA64PFR0_ADV_SIMD(pfr0) != ID_AA64PFR0_ADV_SIMD_NONE) {
+		caps |= HWCAP_ASIMD;
+		if (ID_AA64PFR0_ADV_SIMD(pfr0) == ID_AA64PFR0_ADV_SIMD_HP)
+			caps |= HWCAP_ASIMDHP;
+	}
+	// Deliberately NOT advertising HWCAP_SVE: SVE instructions trap at EL0 until
+	// the kernel enables the SVE path (CPACR_EL1.ZEN), which it does not yet do.
+	// Setting the bit here would tell userland to run instructions that fault.
+
+	// ID_AA64ISAR0_EL1: crypto and integer extensions.
+	if (ID_AA64ISAR0_AES(isar0) >= ID_AA64ISAR0_AES_BASE) {
+		caps |= HWCAP_AES;
+		if (ID_AA64ISAR0_AES(isar0) >= ID_AA64ISAR0_AES_PMULL)
+			caps |= HWCAP_PMULL;
+	}
+	if (ID_AA64ISAR0_SHA1(isar0) >= ID_AA64ISAR0_SHA1_BASE)
+		caps |= HWCAP_SHA1;
+	if (ID_AA64ISAR0_SHA2(isar0) >= ID_AA64ISAR0_SHA2_BASE) {
+		caps |= HWCAP_SHA2;
+		if (ID_AA64ISAR0_SHA2(isar0) >= ID_AA64ISAR0_SHA2_512)
+			caps |= HWCAP_SHA512;
+	}
+	if (ID_AA64ISAR0_CRC32(isar0) >= ID_AA64ISAR0_CRC32_BASE)
+		caps |= HWCAP_CRC32;
+	if (ID_AA64ISAR0_ATOMIC(isar0) >= ID_AA64ISAR0_ATOMIC_IMPL)
+		caps |= HWCAP_ATOMICS;
+	if (ID_AA64ISAR0_RDM(isar0) >= ID_AA64ISAR0_RDM_IMPL)
+		caps |= HWCAP_ASIMDRDM;
+	if (ID_AA64ISAR0_SHA3(isar0) >= ID_AA64ISAR0_SHA3_IMPL)
+		caps |= HWCAP_SHA3;
+	if (ID_AA64ISAR0_SM3(isar0) >= ID_AA64ISAR0_SM3_IMPL)
+		caps |= HWCAP_SM3;
+	if (ID_AA64ISAR0_SM4(isar0) >= ID_AA64ISAR0_SM4_IMPL)
+		caps |= HWCAP_SM4;
+	if (ID_AA64ISAR0_DP(isar0) >= ID_AA64ISAR0_DP_IMPL)
+		caps |= HWCAP_ASIMDDP;
+
+	// ID_AA64ISAR1_EL1.
+	if (ID_AA64ISAR1_DPB(isar1) >= ID_AA64ISAR1_DPB_IMPL) {
+		caps |= HWCAP_DCPOP;
+		if (ID_AA64ISAR1_DPB(isar1) >= (0x2 << ID_AA64ISAR1_DPB_SHIFT))
+			caps2 |= HWCAP2_DCPODP;
+	}
+	if (ID_AA64ISAR1_JSCVT(isar1) >= ID_AA64ISAR1_JSCVT_IMPL)
+		caps |= HWCAP_JSCVT;
+	if (ID_AA64ISAR1_FCMA(isar1) >= ID_AA64ISAR1_FCMA_IMPL)
+		caps |= HWCAP_FCMA;
+	if (ID_AA64ISAR1_LRCPC(isar1) >= ID_AA64ISAR1_LRCPC_IMPL) {
+		caps |= HWCAP_LRCPC;
+		if (ID_AA64ISAR1_LRCPC(isar1) >= (0x2 << ID_AA64ISAR1_LRCPC_SHIFT))
+			caps |= HWCAP_ILRCPC;
+	}
+
+	*hwcap = caps;
+	*hwcap2 = caps2;
 }
 
 

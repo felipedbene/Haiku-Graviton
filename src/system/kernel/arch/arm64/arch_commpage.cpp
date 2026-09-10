@@ -8,6 +8,7 @@
 
 #include <KernelExport.h>
 
+#include <commpage_defs.h>
 #include <cpu.h>
 #include <elf.h>
 #include <smp.h>
@@ -86,6 +87,18 @@ arch_commpage_init_post_cpus(void)
 
 	register_commpage_function("arch_user_signal_handler", COMMPAGE_ENTRY_ARM64_SIGNAL_HANDLER,
 		"commpage_signal_handler", (addr_t)&arch_user_signal_handler);
+
+	// Publish the CPU feature words so libroot's getauxval() can serve
+	// AT_HWCAP / AT_HWCAP2 without a syscall or an EL0 ID-register read. The
+	// struct stores fixed-width fields (it is shared with libroot), so read
+	// into kernel uint64s first and let the assignment widen them.
+	uint64 hwcap = 0;
+	uint64 hwcap2 = 0;
+	arm64_get_hwcap(&hwcap, &hwcap2);
+	struct arm64_commpage_hwcap hwcapData;
+	hwcapData.hwcap = hwcap;
+	hwcapData.hwcap2 = hwcap2;
+	fill_commpage_entry(COMMPAGE_ENTRY_ARM64_HWCAP, &hwcapData, sizeof(hwcapData));
 
 	return B_OK;
 }
