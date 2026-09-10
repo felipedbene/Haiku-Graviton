@@ -273,12 +273,19 @@ extern "C" {
 
 /* Receive-stall detection (docs/watchdog-design.md gap 5) is DETECT-AND-LOG
    ONLY, not reset. A refill deadlock leaves descriptors owed to the device
-   (rxPendingRefill > 0) making no progress, but distinguishing that from a
-   legitimately quiet link needs a progress threshold this project cannot set
-   without hardware observation -- and an over-eager receive reset on a
-   console-less instance is the exact failure §7 warns against. So the plumbing
-   counts and logs a suspected stall and leaves the reset OWED until a threshold
-   can be measured. */
+   (rxPendingRefill > 0) making no progress, but descriptors owed is also the
+   normal armed/batching state of a quiet ring, so "owed and not shrinking" on
+   its own describes an idle link just as well as a stall (hardware-confirmed:
+   the count over-fired every tick on a freshly-booted lightly-loaded instance,
+   #211). What separates the two is whether inbound traffic is actually arriving
+   and being lost: a real refill deadlock strands the device's free-buffer pool,
+   so incoming frames are dropped and the device's own rx-drop counter climbs,
+   whereas an idle link drops nothing. So the check additionally requires
+   hwRxDrops to be climbing before it counts a tick -- proof the device has work
+   it cannot place, not merely that nothing has arrived. An over-eager receive
+   reset on a console-less instance is the exact failure §7 warns against, so
+   even with the sharper signal the reset stays OWED until a threshold can be
+   measured on hardware. */
 #define ENA_RX_STALL_CHECKS_BEFORE_LOG	5
 
 #define ENA_ADMIN_POLL_TIMEOUT_US	500000
@@ -632,10 +639,14 @@ struct ena_haiku_device {
 	uint32				missingTxChecks;
 
 	/* Receive-stall detection state, watchdog-thread only. rxStallLastPending is
-	   rxPendingRefill as of the previous tick; rxStallChecks counts consecutive
-	   ticks with descriptors owed to the device and no receive progress. Used for
-	   logging only (gap 5 is detect-and-log, not reset). */
+	   rxPendingRefill as of the previous tick; rxStallLastDrops is hwRxDrops as of
+	   the previous tick, so a tick only counts when the device's rx-drop counter
+	   is climbing (traffic arriving and being lost, i.e. not an idle link, #211);
+	   rxStallChecks counts consecutive ticks that meet all of: descriptors owed,
+	   no receive progress, and drops still climbing. Used for logging only (gap 5
+	   is detect-and-log, not reset). */
 	uint16				rxStallLastPending;
+	uint64				rxStallLastDrops;
 	uint32				rxStallChecks;
 
 	/* Hardware hints, from the NOTIFICATION/UPDATE_HINTS AENQ event. The device
