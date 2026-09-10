@@ -212,6 +212,14 @@ rule HaikuImageGetSystemLibs
 			# WebPositive cannot link without it -- and arm64 builds the library
 			# fine, it was simply never listed outside the regular profile.
 			libmedia.so
+			# The MIDI Kit. fluidsynth's Haiku audio driver links libmidi2
+			# unconditionally (-lmidi2), so fluidsynth -> sdl2_mixer cannot link
+			# without it; the library builds fine on arm64 and was simply never
+			# listed outside the regular profile. libmidi.so carries the
+			# @fluidlite grist exactly as in regular so it is filtered with that
+			# build feature.
+			libmidi.so@fluidlite
+			libmidi2.so
 			libnetwork.so
 			libpackage.so
 			libtextencoding.so
