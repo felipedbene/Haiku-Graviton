@@ -984,13 +984,17 @@ BString
 SysInfoView::_GetOSVersion()
 {
 	BString revision;
-	// add system revision to os version
+	// Add the system revision to the OS version. DeBeOS descends from Haiku but
+	// is its own distribution (it does not track upstream), so label the banner
+	// with the DeBeOS name; the revision string itself is stamped by the build
+	// (determine_haiku_revision emits a DeBeOS-native debeos-r<n>-g<sha> for
+	// this tree, or an hrev for a Haiku-tagged clone / a pinned bake).
 	const char* hrev = __get_haiku_revision();
 	if (hrev != NULL)
-		revision.SetToFormat(B_TRANSLATE_COMMENT("Version: %s",
-			"Version: R1 or hrev99999"), hrev);
+		revision.SetToFormat(B_TRANSLATE_COMMENT("DeBeOS %s",
+			"Distribution name and revision, e.g. DeBeOS hrev99999"), hrev);
 	else
-		revision = B_TRANSLATE("Version:");
+		revision = B_TRANSLATE("DeBeOS");
 
 	return revision;
 }

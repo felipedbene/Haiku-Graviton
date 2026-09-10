@@ -31,18 +31,39 @@ if [ -z "$revision" -o "$lastBuiltRevision" != "$localRev" ]; then
 	# last reachable hrev-(haiku-revision-)tag
 	revision=`git describe --dirty --tags --match=hrev* --abbrev=1`
 	if [ -z "$revision" ]; then
-		# failed to find any hrev tags, bail out
-		echo "Error: you are using a Haiku clone without tags, please set"
-		echo "       the revision tag to use (e.g. HAIKU_REVISION=hrev43210)"
-		exit 1
-	fi
-
-	revision=`echo $revision | sed 's/-g[0-9a-z]\+//' | sed 's/-/+/g'`
-	if echo "$revision" | grep -- '-' >/dev/null; then
-		# HEAD is not directly a changeset from Haiku's central repo, so we
-		# add the current branch name as additional info
-		branchName=`git branch | grep '*' | cut -b 3-`
-		revision="$revision [$branchName]"
+		# DeBeOS carries no hrev* tags -- it descends from Haiku but does not
+		# track or merge upstream, so `git describe --match=hrev*` finds nothing.
+		# Rather than bail out (which forced the bake to hardcode a stale
+		# -sHAIKU_REVISION=hrevNNNNN), derive a DeBeOS-native revision from HEAD:
+		#   debeos-r<commit-count>-g<short-sha>[-dirty]
+		# The commit count gives a monotonically increasing ordinal, the short
+		# sha pins the exact commit, and -dirty flags an uncommitted tree. This
+		# is well-formed for the r1~beta6_<revision> package version line
+		# (PackageRules rewrites -/+ to _). Published builds still pin
+		# HAIKU_REVISION explicitly in the pipeline so the package pool's
+		# version ordering is untouched; this fallback governs local/source
+		# builds and the user-visible version banner.
+		shortSha=`git rev-parse --short HEAD 2>/dev/null`
+		if [ -z "$shortSha" ]; then
+			# Not a git checkout at all -- keep the original guidance.
+			echo "Error: you are using a clone without a usable git HEAD or any"
+			echo "       hrev* tag; please set the revision to use"
+			echo "       (e.g. HAIKU_REVISION=hrev43210)"
+			exit 1
+		fi
+		commitCount=`git rev-list --count HEAD 2>/dev/null`
+		revision="debeos-r${commitCount}-g${shortSha}"
+		if [ -n "`git status --porcelain 2>/dev/null`" ]; then
+			revision="${revision}-dirty"
+		fi
+	else
+		revision=`echo $revision | sed 's/-g[0-9a-z]\+//' | sed 's/-/+/g'`
+		if echo "$revision" | grep -- '-' >/dev/null; then
+			# HEAD is not directly a changeset from a central hrev tag, so we
+			# add the current branch name as additional info
+			branchName=`git branch | grep '*' | cut -b 3-`
+			revision="$revision [$branchName]"
+		fi
 	fi
 fi
 

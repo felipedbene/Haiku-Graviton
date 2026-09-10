@@ -49,7 +49,20 @@ export interface HaikuPipelineConfig {
   readonly buildComputeType: string;
   /** arm64 Ubuntu 24.04 build image matching the validated bake environment. */
   readonly buildImage: string;
-  /** HAIKU_REVISION stamped into the build. */
+  /**
+   * HAIKU_REVISION stamped into the build.
+   *
+   * Deliberately PINNED (not derived from HEAD): this string becomes the
+   * `r1~beta6_<revision>` package version line, and every already-published
+   * hpkg in the DeBeOS pool carries the pinned value. Changing it would reorder
+   * `pkgman` version comparisons against the published pool (see issue #201 and
+   * the note at build/jam/images/definitions/minimum). The pipeline clone is
+   * also tag-shallow, so `determine_haiku_revision` cannot derive a stable
+   * value on its own. The user-visible DeBeOS identity is carried separately in
+   * AboutSystem; source builds (full clone) get a HEAD-tracking
+   * debeos-r<n>-g<sha> from determine_haiku_revision. Moving this to a
+   * DeBeOS-native version requires the repo/version-model work (#82/#92).
+   */
   readonly haikuRevision: string;
 
   /** AMI name prefix (a timestamp is appended at register time). */
