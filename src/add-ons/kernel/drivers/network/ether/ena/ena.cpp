@@ -1027,6 +1027,28 @@ ena_calculate_ring_sizes(ena_haiku_device* device,
 }
 
 
+/*!	Sets the receive refill batch from the current ring size: a fraction of the
+	ring (ena_datapath.c:696-698), but never a batch so large that a small ring
+	would never reach it.
+
+	Kept as a helper because the ring size is not final at the time
+	ena_calculate_frame_limits() first computes it -- ena_setup_io_queues() may
+	back the ring off to a smaller depth when the device refuses queue creation,
+	and a threshold left sized to the original (larger) ring would exceed the
+	backed-off ring entirely, so a non-forced refill could never trigger and the
+	receive path would stall. Recomputing it there keeps the two in step.
+*/
+static void
+ena_update_rx_refill_threshold(ena_haiku_device* device)
+{
+	device->rxRefillThreshold = (uint16)min_c(
+		(uint32)device->rxRingSize / ENA_RX_REFILL_DIVISOR,
+		(uint32)ENA_RX_REFILL_MAX_THRESHOLD);
+	if (device->rxRefillThreshold < 1)
+		device->rxRefillThreshold = 1;
+}
+
+
 /*!	Works out how many descriptors a frame may span, and hence the MTU.
 
 	Three separate limits meet here, and the MTU is the smallest of them:
@@ -1120,14 +1142,7 @@ ena_calculate_frame_limits(ena_haiku_device* device,
 	device->frameSize = mtu;
 	device->maxFrameSize = mtu + ETHER_HEADER_LENGTH;
 
-	/* Same shape as the reference (ena_datapath.c:696-698): a fraction of the
-	   ring, but never a batch so large that a small ring would never reach
-	   it. */
-	device->rxRefillThreshold = (uint16)min_c(
-		(uint32)device->rxRingSize / ENA_RX_REFILL_DIVISOR,
-		(uint32)ENA_RX_REFILL_MAX_THRESHOLD);
-	if (device->rxRefillThreshold < 1)
-		device->rxRefillThreshold = 1;
+	ena_update_rx_refill_threshold(device);
 
 	TRACE_ALWAYS("MTU %" B_PRIu32 " (device limit %" B_PRIu32 ", stack ceiling "
 		"%d, chain capacity %" B_PRIu32 "); a frame may span %u receive and %u "
@@ -1407,28 +1422,72 @@ ena_create_queue_pair(ena_haiku_device* device, uint16 txDepth,
 }
 
 
-/*!	Creates the single TX/RX queue pair.
+/*!	Creates the single TX/RX queue pair, halving the ring depth and retrying
+	when the device refuses creation.
 
-	NOTE: the device currently rejects CREATE_CQ with
-	ENA_ADMIN_UNKNOWN_ERROR (6) and no extended status, and probing has ruled
-	out the obvious suspects -- it fails identically for every ring depth from
-	256 down to 16, for both directions, and for both a dedicated MSI-X vector
-	and the management one. The command matches Amazon's byte for byte as far
-	as can be told from the sources. This is the open question; see HANDOFF.md.
+	A device may accept every earlier admin command and then reject queue
+	creation because the requested depth is too large for the negotiated
+	configuration -- LLQ entry size, instance type, or transient resource
+	pressure. The reference drivers handle this by backing the ring size off
+	rather than failing the whole attach: ena_netdev.c's
+	create_queues_with_size_backoff() halves the depth on failure and retries
+	down to ENA_MIN_RING_SIZE. This mirrors that.
+
+	The backoff is self-contained. ena_create_queue_pair() destroys whatever it
+	created on any non-OK return, so no io queue survives a failed attempt to
+	leak into the next one; the descriptor rings are owned by ena-com and freed
+	with the queue. The packet-buffer pools (ena_setup_buffers()) are sized from
+	the ring size afterwards, so they pick up whatever depth this settles on, and
+	the receive refill batch is re-derived here for the same reason.
+
+	The reduced depth is not sticky across a device reset: ena_init_device()
+	re-runs ena_calculate_ring_sizes(), which restores the requested size before
+	this is reached, so a reset always starts from the full depth and backs off
+	again only if the device still refuses.
 */
 static status_t
 ena_setup_io_queues(ena_haiku_device* device)
 {
-	int result = ena_create_queue_pair(device, device->txRingSize,
-		device->rxRingSize, ENA_IO_VECTOR_IDX);
-	if (result != ENA_COM_OK) {
+	while (true) {
+		int result = ena_create_queue_pair(device, device->txRingSize,
+			device->rxRingSize, ENA_IO_VECTOR_IDX);
+		if (result == ENA_COM_OK) {
+			device->ioVector = ENA_IO_VECTOR_IDX;
+			return B_OK;
+		}
+
 		ena_dump_admin_command_stream(device);
-		return ena_translate_error(result);
+
+		/* Give up once neither ring can shrink any further: at the minimum
+		   depth a smaller ring is not an option, so the failure is real. */
+		uint16 currentTx = device->txRingSize;
+		uint16 currentRx = device->rxRingSize;
+		if (currentTx <= ENA_MIN_RING_SIZE && currentRx <= ENA_MIN_RING_SIZE) {
+			ERROR("queue creation still failing at the minimum ring size "
+				"(%u tx, %u rx): %d\n", currentTx, currentRx, result);
+			return ena_translate_error(result);
+		}
+
+		/* Halve each ring that is still above the floor, clamped to it. */
+		uint16 newTx = currentTx > ENA_MIN_RING_SIZE
+			? (uint16)(currentTx / 2) : currentTx;
+		uint16 newRx = currentRx > ENA_MIN_RING_SIZE
+			? (uint16)(currentRx / 2) : currentRx;
+		if (newTx < ENA_MIN_RING_SIZE)
+			newTx = ENA_MIN_RING_SIZE;
+		if (newRx < ENA_MIN_RING_SIZE)
+			newRx = ENA_MIN_RING_SIZE;
+
+		TRACE_ALWAYS("queue creation failed (%d) at %u tx / %u rx; backing off "
+			"to %u tx / %u rx\n", result, currentTx, currentRx, newTx, newRx);
+
+		device->txRingSize = newTx;
+		device->rxRingSize = newRx;
+
+		/* The refill batch is a fraction of the ring; keep it in step with the
+		   depth we just chose so a small ring still refills. */
+		ena_update_rx_refill_threshold(device);
 	}
-
-	device->ioVector = ENA_IO_VECTOR_IDX;
-
-	return B_OK;
 }
 
 
