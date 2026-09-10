@@ -52,7 +52,7 @@ change accepted (pkgman prints it as "solution 1"; feed `printf '1\ny\n' | pkgma
 for non-interactive runs):
 
 ```bash
-pkgman install -y gcc make cmake meson ninja pkgconfig python3.14 ...   # build toolchain
+pkgman install -y gcc make cmake meson ninja pkgconf python3.14 ...   # build toolchain (pkg-config is provided by 'pkgconf', NOT 'pkgconfig')
 # then set up haikuporter per the wiki: clone haikuporter + haikuports (--depth=50),
 # copy haikuports-sample.conf -> /boot/home/config/settings/haikuports.conf,
 # set PACKAGER + TREE_PATH, symlink haikuporter onto PATH.
