@@ -191,9 +191,19 @@ rule DefineDefaultBuildProfiles
 			# B_NOT_ALLOWED ("Operation not allowed") -- so an https package repo (or
 			# any https BUrlRequest) can't be fetched. Both must be present in the
 			# bake pool, or AddHaikuImageSystemPackages silently skips them.
+			#
+			# gawk and which are basic userland the lean image otherwise lacks:
+			# gawk provides awk (cmd:awk), and which resolves commands on PATH.
+			# Provisioning scripts and many HaikuPorts recipe build steps assume
+			# both are present, so a fresh lean instance fails without them
+			# (#38). gawk resolves from the arm64 build-packages repo; which is
+			# built and staged for arm64 via repositories/HaikuPortsLocal/arm64
+			# (skipped with a message, not a build error, if not yet staged).
 			AddHaikuImageSystemPackages
 				ca_root_certificates
+				gawk
 				openssl3
+				which
 				;
 		}
 

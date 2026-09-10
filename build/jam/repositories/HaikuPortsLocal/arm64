@@ -76,4 +76,14 @@ LocalPackageRepository HaikuPorts
 	# Rust, and there is no Rust for arm64 Haiku.
 	haikuwebkit-1.10.0-2
 	haikuwebkit_devel-1.10.0-2
+
+	# Basic userland the lean base image otherwise lacks (#38). `which` resolves
+	# commands on PATH; provisioning scripts and recipe build steps assume it.
+	# The upstream arm64 build-packages mirror serves no `which`, so DeBeOS
+	# builds and stages it here (dev-util/which; version matches the other
+	# arches' current haikuports build). Skipped with a message -- not a build
+	# error -- until the hpkg is staged in $(HAIKU_DOWNLOAD_DIR). (awk is
+	# covered separately: `gawk` resolves straight from the arm64 mirror, so it
+	# needs no local entry and adding one would collide with that instance.)
+	which-2.21-6
 	;
