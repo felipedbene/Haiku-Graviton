@@ -27,6 +27,19 @@
 // array and matches the arm64 SMP_MAX_CPUS (asserted in the implementation).
 #define GIC_ITS_MAX_COLLECTIONS		64
 
+// Layout of the DeviceID the ITS derives from a PCI requester ID (see
+// pci_requester_id() in the PCI bus manager): the 16-bit BDF with the PCI
+// segment folded in above it. The device table has to span the segment bits as
+// well, or two devices with the same bus/device/function in different segments
+// would alias onto one DeviceID and steal each other's interrupts. 3 bits
+// covers the 8 segments the PCI bus manager allows (its MAX_PCI_DOMAINS); keep
+// the two in step. The device table is still capped at what the ITS reports it
+// can address (GITS_TYPER.Devbits), so a segment beyond that range is rejected
+// at map time rather than silently aliased.
+#define GIC_ITS_SEGMENT_ID_SHIFT	16
+#define GIC_ITS_SEGMENT_ID_BITS		3
+#define GIC_ITS_DEVICE_ID_BITS		(GIC_ITS_SEGMENT_ID_SHIFT + GIC_ITS_SEGMENT_ID_BITS)
+
 
 struct its_device {
 	uint32		requester_id;
@@ -121,6 +134,11 @@ private:
 			uint32				fIttEntrySize;
 			uint32				fEventIDBits;
 			uint32				fDeviceIDBits;
+			// DeviceID bits the device table actually covers: the requester-ID
+			// layout (GIC_ITS_DEVICE_ID_BITS) clamped to what the ITS reports it
+			// can address (fDeviceIDBits). A requester ID wider than this cannot
+			// be mapped without indexing past the table.
+			uint32				fDeviceTableBits;
 			bool				fPhysicalTargetAddress;
 
 			// One collection per CPU, each targeting that CPU's redistributor,

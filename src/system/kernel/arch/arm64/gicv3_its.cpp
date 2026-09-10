@@ -131,6 +131,10 @@ GICv3ITS::Init(phys_addr_t regs, size_t size, addr_t gicdRegs,
 	fIttEntrySize = GITS_TYPER_ITT_SIZE(typer);
 	fEventIDBits = GITS_TYPER_ID_BITS(typer);
 	fDeviceIDBits = GITS_TYPER_DEV_BITS(typer);
+	// Set to the table's real width once _InitTables() allocates the device
+	// table; a device baser is mandatory, but default it here so a requester-ID
+	// bounds check can never read a stale value.
+	fDeviceTableBits = 0;
 	fPhysicalTargetAddress = (typer & GITS_TYPER_PTA) != 0;
 
 	// How many collections the ITS can hold. CIL narrows the CollectionID space
@@ -247,8 +251,13 @@ GICv3ITS::_InitTables()
 		if (type == GITS_BASER_TYPE_DEVICE) {
 			// A flat table for the full DeviceID space would be enormous on
 			// some implementations; cap it, since PCI requester IDs on the
-			// machines we care about stay small.
-			uint32 bits = min_c(fDeviceIDBits, (uint32)16);
+			// machines we care about stay small. The cap has to leave room for
+			// the PCI segment folded above the 16-bit BDF (see the requester-ID
+			// layout in gicv3_its.h), so that same-BDF devices in different
+			// segments land on distinct DeviceIDs. Never ask for more than the
+			// ITS says it can address.
+			uint32 bits = min_c(fDeviceIDBits, (uint32)GIC_ITS_DEVICE_ID_BITS);
+			fDeviceTableBits = bits;
 			entries = 1ull << bits;
 		} else {
 			// One collection per CPU so MSIs can be spread across cores, but
@@ -729,6 +738,20 @@ GICv3ITS::_ReleaseVector(uint32 index)
 its_device*
 GICv3ITS::_DeviceFor(uint32 requesterID)
 {
+	// A requester ID wider than the device table can address (e.g. a PCI
+	// segment beyond what GITS_TYPER.Devbits allows) would index past the
+	// table's end. Refuse it here rather than let a MAPD alias onto, or run
+	// off, another device's entry -- the failure surfaces as a device that
+	// gets no MSIs, which is far easier to diagnose than silent interrupt
+	// cross-talk.
+	if (fDeviceTableBits < 32
+		&& requesterID >= (1u << fDeviceTableBits)) {
+		ERROR("requester id %#" B_PRIx32 " exceeds the %" B_PRIu32 "-bit ITS "
+			"device table; PCI segment cannot be represented\n", requesterID,
+			fDeviceTableBits);
+		return NULL;
+	}
+
 	for (int i = 0; i < GIC_ITS_MAX_DEVICES; i++) {
 		if (fDevices[i].valid && fDevices[i].requester_id == requesterID)
 			return &fDevices[i];
