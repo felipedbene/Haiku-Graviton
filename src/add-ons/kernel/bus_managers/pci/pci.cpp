@@ -2185,12 +2185,18 @@ PCI::GetMSICount(PCIDev *device)
 
 
 // PCI requester ID, as message-signalled interrupt translation hardware sees
-// it on the bus.
+// it on the bus. The low 16 bits are the requester's BDF (bus/device/function);
+// the PCI segment (Haiku's domain) is folded in above them. Platforms that
+// expose several PCI segments -- multi-region MCFG / per-bridge ECAM, as on
+// Graviton -- can host the same BDF in more than one segment, and the arm64
+// GICv3 ITS keys its device table on this value: without the segment two such
+// devices would collapse onto one DeviceID and steal each other's interrupts.
+// x86 deliberately ignores the requester id, so the extra bits are inert there.
 static inline uint32
 pci_requester_id(PCIDev *device)
 {
-	return ((uint32)device->bus << 8) | ((uint32)device->device << 3)
-		| (uint32)device->function;
+	return ((uint32)device->domain << 16) | ((uint32)device->bus << 8)
+		| ((uint32)device->device << 3) | (uint32)device->function;
 }
 
 
