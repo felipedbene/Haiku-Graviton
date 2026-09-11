@@ -67,6 +67,80 @@ uint32 calculate_crc32c(uint32 crc32c, const unsigned char *buffer,
 #endif
 
 
+#if defined(__aarch64__) && !defined(FS_SHELL)
+
+#include <string.h>
+
+#include <sys/auxv.h>		// HWCAP_CRC32
+#include <arm_acle.h>		// __crc32c[bhwd]
+
+// Feature-word producer in the arm64 kernel (arch/arm64/arch_cpu.cpp, #99). It
+// derives the AT_HWCAP bitmap from the EL1-only ID_AA64* registers; reusing it
+// keeps the CRC32 detection here consistent with what libroot advertises to
+// userland. ifunc resolvers are not usable on Haiku arm64, so dispatch is an
+// explicit runtime branch, not a resolver.
+extern "C" void arm64_get_hwcap(uint64* hwcap, uint64* hwcap2);
+
+
+// CRC32C (Castagnoli, reflected polynomial 0x1EDC6F41) via the ARMv8 CRC32
+// instructions. The +crc target attribute lets just this function emit the
+// crc32c* opcodes regardless of the translation unit's baseline -march, so the
+// file still builds if the arm64 arch flags ever drop the crypto/crc features.
+__attribute__((target("+crc")))
+static uint32
+hardware_crc32c(uint32 crc, const unsigned char* buffer, unsigned int length)
+{
+	// The instruction folds each new byte into the low bits of the running CRC
+	// in exactly the reflected form the software tables use, so the seed and
+	// return value need no extra inversion -- this is a drop-in replacement for
+	// singletable/multitable_crc32c. memcpy keeps the wide loads unaligned-safe.
+	while (length >= sizeof(uint64)) {
+		uint64 value;
+		memcpy(&value, buffer, sizeof(value));
+		crc = __crc32cd(crc, value);
+		buffer += sizeof(value);
+		length -= sizeof(value);
+	}
+	if (length >= sizeof(uint32)) {
+		uint32 value;
+		memcpy(&value, buffer, sizeof(value));
+		crc = __crc32cw(crc, value);
+		buffer += sizeof(value);
+		length -= sizeof(value);
+	}
+	if (length >= sizeof(uint16)) {
+		uint16 value;
+		memcpy(&value, buffer, sizeof(value));
+		crc = __crc32ch(crc, value);
+		buffer += sizeof(value);
+		length -= sizeof(value);
+	}
+	if (length > 0)
+		crc = __crc32cb(crc, *buffer);
+
+	return crc;
+}
+
+
+// One-time probe of HWCAP_CRC32: <0 unknown, 0 absent, >0 present. A benign
+// race between CPUs converges on the same value, so no locking is needed.
+static int sHardwareCRC32c = -1;
+
+static bool
+has_hardware_crc32c()
+{
+	if (sHardwareCRC32c < 0) {
+		uint64 hwcap = 0;
+		uint64 hwcap2 = 0;
+		arm64_get_hwcap(&hwcap, &hwcap2);
+		sHardwareCRC32c = (hwcap & HWCAP_CRC32) != 0 ? 1 : 0;
+	}
+	return sHardwareCRC32c > 0;
+}
+
+#endif	// __aarch64__ && !FS_SHELL
+
+
 const uint32 crc32_tab[] = {
 	0x00000000, 0x77073096, 0xee0e612c, 0x990951ba, 0x076dc419, 0x706af48f,
 	0xe963a535, 0x9e6495a3,	0x0edb8832, 0x79dcb8a4, 0xe0d5e91e, 0x97d2d988,
@@ -766,6 +840,13 @@ calculate_crc32c(uint32 crc32c,
     const unsigned char *buffer,
     unsigned int length)
 {
+#if defined(__aarch64__) && !defined(FS_SHELL)
+	// Every Graviton (and any ARMv8.1+ core) implements the CRC32 extension;
+	// fall through to the software tables when the CPU lacks it, so the same
+	// image still runs on the ARMv8.0 parts on the roadmap.
+	if (has_hardware_crc32c())
+		return hardware_crc32c(crc32c, buffer, length);
+#endif
 	if (length < 4) {
 		return (singletable_crc32c(crc32c, buffer, length));
 	} else {
