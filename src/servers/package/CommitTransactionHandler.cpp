@@ -716,6 +716,11 @@ CommitTransactionHandler::_PreparePackageToActivate(Package* package)
 	// add groups
 	const BStringList& groups = package->Info().Groups();
 	int32 count = groups.CountStrings();
+	// #224: breadcrumb the first-boot commit sub-steps so a wedge (observed
+	// on c7g.metal) names the exact step on the console before it hangs.
+	INFORM("[#224] prepare %s: %" B_PRId32 " group(s), %" B_PRId32 " user(s)\n",
+		package->FileName().String(), count,
+		package->Info().Users().CountItems());
 	for (int32 i = 0; i < count; i++)
 		_AddGroup(package, groups.StringAt(i));
 
@@ -725,8 +730,11 @@ CommitTransactionHandler::_PreparePackageToActivate(Package* package)
 		_AddUser(package, *user);
 
 	// handle global writable files
+	INFORM("[#224] prepare %s: global-writable files\n",
+		package->FileName().String());
 	_AddGlobalWritableFiles(package);
 
+	INFORM("[#224] prepare %s: done\n", package->FileName().String());
 	fCurrentPackage = NULL;
 }
 
@@ -735,6 +743,8 @@ void
 CommitTransactionHandler::_AddGroup(Package* package, const BString& groupName)
 {
 	// Check whether the group already exists.
+	INFORM("[#224] _AddGroup(%s): getgrnam_r(\"%s\")\n",
+		package->FileName().String(), groupName.String());
 	char buffer[256];
 	struct group groupBuffer;
 	struct group* groupFound;
@@ -749,6 +759,8 @@ CommitTransactionHandler::_AddGroup(Package* package, const BString& groupName)
 	std::string commandLine("groupadd ");
 	commandLine += FSUtils::ShellEscapeString(groupName).String();
 
+	INFORM("[#224] _AddGroup(%s): system(\"%s\")\n",
+		package->FileName().String(), commandLine.c_str());
 	if (system(commandLine.c_str()) != 0) {
 		fAddedGroups.erase(groupName.String());
 		ERROR("Failed to add group \"%s\".\n", groupName.String());
@@ -756,6 +768,8 @@ CommitTransactionHandler::_AddGroup(Package* package, const BString& groupName)
 			.SetPackageName(package->FileName())
 			.SetString1(groupName);
 	}
+	INFORM("[#224] _AddGroup(%s): groupadd returned\n",
+		package->FileName().String());
 }
 
 
@@ -763,6 +777,8 @@ void
 CommitTransactionHandler::_AddUser(Package* package, const BUser& user)
 {
 	// Check whether the user already exists.
+	INFORM("[#224] _AddUser(%s): getpwnam_r(\"%s\")\n",
+		package->FileName().String(), user.Name().String());
 	char buffer[256];
 	struct passwd passwdBuffer;
 	struct passwd* passwdFound;
@@ -799,6 +815,8 @@ CommitTransactionHandler::_AddUser(Package* package, const BUser& user)
 
 	commandLine += FSUtils::ShellEscapeString(user.Name()).String();
 
+	INFORM("[#224] _AddUser(%s): system(\"%s\")\n",
+		package->FileName().String(), commandLine.c_str());
 	if (system(commandLine.c_str()) != 0) {
 		fAddedUsers.erase(user.Name().String());
 		ERROR("Failed to add user \"%s\".\n", user.Name().String());
@@ -807,6 +825,8 @@ CommitTransactionHandler::_AddUser(Package* package, const BUser& user)
 			.SetString1(user.Name());
 
 	}
+	INFORM("[#224] _AddUser(%s): useradd returned\n",
+		package->FileName().String());
 
 	// add the supplementary groups
 	int32 groupCount = user.Groups().CountStrings();
@@ -816,6 +836,8 @@ CommitTransactionHandler::_AddUser(Package* package, const BUser& user)
 			+ " "
 			+ FSUtils::ShellEscapeString(user.Groups().StringAt(i))
 				.String();
+		INFORM("[#224] _AddUser(%s): system(\"%s\")\n",
+			package->FileName().String(), commandLine.c_str());
 		if (system(commandLine.c_str()) != 0) {
 			fAddedUsers.erase(user.Name().String());
 			ERROR("Failed to add user \"%s\" to group \"%s\".\n",
@@ -883,10 +905,14 @@ CommitTransactionHandler::_AddGlobalWritableFiles(Package* package)
 	for (int32 i = 0; const BGlobalWritableFileInfo* file = files.ItemAt(i);
 		i++) {
 		if (file->IsIncluded()) {
+			INFORM("[#224] _AddGlobalWritableFile(%s): \"%s\"\n",
+				package->FileName().String(), file->Path().String());
 			_AddGlobalWritableFile(package, *file, rootDirectory,
 				extractedFilesDirectory);
 		}
 	}
+	INFORM("[#224] _AddGlobalWritableFiles(%s): done\n",
+		package->FileName().String());
 }
 
 
@@ -1591,6 +1617,8 @@ CommitTransactionHandler::_ExtractPackageContent(Package* package,
 	BDirectory& _extractedFilesDirectory)
 {
 	// check whether the subdirectory already exists
+	INFORM("[#224] _ExtractPackageContent(%s): %" B_PRId32 " path(s)\n",
+		package->FileName().String(), contentPaths.CountStrings());
 	BString targetName(package->RevisionedNameThrows());
 
 	BEntry targetEntry;
@@ -1673,6 +1701,8 @@ CommitTransactionHandler::_ExtractPackageContent(Package* package,
 	for (int32 i = 0; i < contentPathCount; i++) {
 		const char* contentPath = contentPaths.StringAt(i);
 
+		INFORM("[#224] _ExtractPackageContent(%s): extracting \"%s\"\n",
+			package->FileName().String(), contentPath);
 		error = FSUtils::ExtractPackageContent(FSUtils::Entry(packageRef),
 			contentPath, FSUtils::Entry(subDirectory));
 		if (error != B_OK) {
@@ -1684,9 +1714,13 @@ CommitTransactionHandler::_ExtractPackageContent(Package* package,
 	}
 
 	// tag all entries with the package attribute
+	INFORM("[#224] _ExtractPackageContent(%s): tagging entries\n",
+		package->FileName().String());
 	_TagPackageEntriesRecursively(subDirectory, targetName, true);
 
 	// rename the subdirectory
+	INFORM("[#224] _ExtractPackageContent(%s): renaming to final\n",
+		package->FileName().String());
 	error = targetEntry.Rename(targetName);
 	if (error != B_OK) {
 		throw Exception(B_TRANSACTION_FAILED_TO_MOVE_FILE)
