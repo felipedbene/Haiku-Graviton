@@ -63,6 +63,8 @@ struct Debug224Snapshot {
 };
 static Debug224Snapshot sDebug224Snap[SMP_MAX_CPUS];
 
+extern int64 gDebug224TimerFires;		// #224, arch_timer.cpp
+
 
 static void
 debug224_ring_record(uint32 intid, int phase)
@@ -666,17 +668,40 @@ GICv3InterruptController::Debug224IdleProbe()
 
 	const bool abnormal = rpr != 0xff || (igrpen1 & 1) == 0
 		|| pmr <= GIC_PRIORITY_DEFAULT;
-	if (!abnormal)
-		return;
 
-	if (cpu >= 0 && cpu < SMP_MAX_CPUS) {
-		if (now - sDebug224LastIdlePrint[cpu] < 500000)
-			return;
-		sDebug224LastIdlePrint[cpu] = now;
+	// A PE about to WFI with priority still raised (or interrupts masked) is the
+	// freeze itself: shout once per PE with the ring so the offending vector is
+	// captured before it goes dark.
+	if (abnormal) {
+		if (cpu >= 0 && cpu < SMP_MAX_CPUS) {
+			if (now - sDebug224LastIdlePrint[cpu] < 500000)
+				return;
+			sDebug224LastIdlePrint[cpu] = now;
+		}
+		Debug224DumpCpuIface("idle-STUCK");
+		debug224_dump_ring("idle-STUCK");
+		return;
 	}
 
-	Debug224DumpCpuIface("idle-STUCK");
-	debug224_dump_ring("idle-STUCK");
+	// Healthy idle: a timer-INDEPENDENT liveness line, one PE per ~1s. The
+	// timer-driven heartbeat cannot report if the timer PPI never fires on this
+	// platform; this path runs from cpu_idle(), which the scheduler reaches on
+	// device-interrupt wakeups alone, so it reports regardless. timerFires==0
+	// while irqs climbs means the virtual-timer PPI is simply not being
+	// delivered here -- a different failure than a stuck running priority.
+	static int64 sNextLive = 0;
+	int64 next = atomic_get64(&sNextLive);
+	if (now < next)
+		return;
+	if (atomic_test_and_set64(&sNextLive, (int64)(now + 1000000), next) != next)
+		return;
+
+	dprintf("GIC224 idle cpu%" B_PRId32 " rpr=%#" B_PRIx32 " hppir1=%#" B_PRIx32
+		" igrpen1=%#" B_PRIx32 " pmr=%#" B_PRIx32 " gicd=%#" B_PRIx32
+		" timerFires=%" B_PRId64 " irqs=%" B_PRId32 "\n", cpu, rpr, hppir1,
+		igrpen1, pmr, gicdCtlr, atomic_get64(&gDebug224TimerFires),
+		atomic_get(&sDebug224RingHead));
+	debug224_dump_ring("idle-live");
 }
 
 
@@ -702,17 +727,27 @@ gicv3_224_heartbeat_dump()
 	if (sDebug224Instance == NULL)
 		return;
 
+	// On a 64-PE metal box a line per PE floods the 64 KB console window, so
+	// print a one-line summary and only the PEs whose running priority is stuck
+	// (rpr != 0xff) -- those are the ones that name the freeze.
 	const int32 cpus = smp_get_num_cpus();
+	int32 valid = 0;
+	int32 stuck = 0;
 	for (int32 i = 0; i < cpus && i < SMP_MAX_CPUS; i++) {
 		Debug224Snapshot s = sDebug224Snap[i];
 		if (s.time == 0)
 			continue;
+		valid++;
+		if (s.rpr == 0xff)
+			continue;
+		stuck++;
 		dprintf("GIC224 snap cpu%" B_PRId32 " t=%" B_PRIdBIGTIME " rpr=%#"
 			B_PRIx32 " hppir1=%#" B_PRIx32 " igrpen1=%#" B_PRIx32 " pmr=%#"
-			B_PRIx32 " ctlr=%#" B_PRIx32 " gicd_ctlr=%#" B_PRIx32 "%s\n", i,
-			s.time, s.rpr, s.hppir1, s.igrpen1, s.pmr, s.ctlr, s.gicdCtlr,
-			s.rpr != 0xff ? "  <-- RPR STUCK" : "");
+			B_PRIx32 " gicd_ctlr=%#" B_PRIx32 "  <-- RPR STUCK\n", i, s.time,
+			s.rpr, s.hppir1, s.igrpen1, s.pmr, s.gicdCtlr);
 	}
+	dprintf("GIC224 hbsnap valid=%" B_PRId32 " stuck=%" B_PRId32 " timerFires=%"
+		B_PRId64 "\n", valid, stuck, atomic_get64(&gDebug224TimerFires));
 	debug224_dump_ring("heartbeat");
 }
 

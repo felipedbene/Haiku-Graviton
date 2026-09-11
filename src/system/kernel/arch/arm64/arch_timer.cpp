@@ -53,11 +53,19 @@ arch_timer_clear_hardware_timer()
 // PPI keeps firing even when thread scheduling has wedged.
 extern "C" void smp_224_heartbeat();
 
+// #224: count every virtual-timer PPI (INTID 27) actually taken. Read from the
+// timer-independent idle probe (arch_int_gicv3.cpp), it distinguishes "the
+// timer stopped because a stuck running priority masks it" (fires climb then
+// freeze) from "the timer PPI never fires on this platform at all" (stays 0) --
+// the latter being the bare-metal virtual-vs-physical timer trap.
+int64 gDebug224TimerFires = 0;
+
 
 int32
 arch_timer_interrupt(void *data)
 {
 	WRITE_SPECIALREG(CNTV_CTL_EL0, TIMER_DISABLED);
+	atomic_add64(&gDebug224TimerFires, 1);
 	smp_224_heartbeat();
 	return timer_interrupt();
 }
