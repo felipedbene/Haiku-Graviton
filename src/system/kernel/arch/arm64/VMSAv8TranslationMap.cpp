@@ -366,20 +366,34 @@ VMSAv8TranslationMap::GetOrMakeTable(phys_addr_t ptPa, int level, int index,
 	uint64_t oldPte = atomic_get64((int64*) ptePtr);
 
 	int type = oldPte & kPteTypeMask;
-	ASSERT(type != kPteTypeL12Block);
 
 	if (type == kPteTypeL012Table) {
 		// This is table entry already, just return it
 		return oldPte & kPteAddrMask;
-	} else if (reservation != nullptr) {
+	}
+
+	if (type == kPteTypeL12Block) {
+		// A block descriptor covers this whole slot. To install anything finer
+		// underneath it (the caller wants to descend), we must first break the
+		// block into a next-level table describing the same output range. That
+		// needs a page for the new table, so it is only possible on the mapping
+		// path, which supplies a reservation. The read/teardown walkers pass
+		// null: they never create finer mappings, so leaving the block intact
+		// and reporting "no sub-table" is correct for them, and -- crucially --
+		// avoids the previous behaviour of overwriting a live block with an
+		// empty table *without* break-before-make, which is architecturally
+		// illegal and silently corrupts the range the block mapped.
+		if (reservation == nullptr)
+			return 0;
+
+		return SplitBlock(ptePtr, oldPte, level, reservation);
+	}
+
+	if (reservation != nullptr) {
 		// Create new table there
 		vm_page* page = vm_page_allocate_page(reservation, PAGE_STATE_WIRED | VM_PAGE_ALLOC_CLEAR);
 		phys_addr_t newTablePa = page->physical_page_number << fPageBits;
 		DEBUG_PAGE_ACCESS_END(page);
-
-		// We only create mappings at the final level so we don't need to handle
-		// splitting block mappings
-		ASSERT(type != kPteTypeL12Block);
 
 		// Ensure that writes to page being attached have completed
 		asm("dsb ishst");
@@ -401,6 +415,87 @@ VMSAv8TranslationMap::GetOrMakeTable(phys_addr_t ptPa, int level, int index,
 
 	// There's no existing table and we have no reservation
 	return 0;
+}
+
+
+// Break a block descriptor at `level` into a next-level table that maps the
+// same output range with the same attributes, and install it in place of the
+// block. Returns the physical address of the new table.
+//
+// This is the "split a block back to pages" path required whenever a mapping
+// finer than the block has to be made inside its span. At present the runtime
+// map never *creates* blocks (Map() only ever installs level-3 pages), so the
+// only blocks reachable here are the ones the EFI loader put in the shared
+// TTBR1 tables (the linear physical map and other early regions). Those live in
+// null areas the VM does not fault on, so this path is not expected to run yet
+// -- but a future bulk-map path that emits blocks will depend on it, and having
+// it correct means GetOrMakeTable() can never again silently clobber a block.
+phys_addr_t
+VMSAv8TranslationMap::SplitBlock(uint64_t* ptePtr, uint64_t blockPte, int level,
+	vm_page_reservation* reservation)
+{
+	ASSERT((blockPte & kPteTypeMask) == kPteTypeL12Block);
+	ASSERT(level < 3);
+	ASSERT(reservation != nullptr);
+
+	int tableBits = fPageBits - 3;
+	int childLevel = level + 1;
+	int childShift = tableBits * (3 - childLevel) + fPageBits;
+	uint64_t childSize = 1UL << childShift;
+	uint64_t childCount = 1UL << tableBits;
+
+	// Every fragment inherits the block's output base and attributes. The
+	// Contiguous bit is dropped: the block was a single TLB unit, its fragments
+	// form a different (finer) grouping, and once the caller edits one fragment
+	// a stale Contiguous hint spanning the run would be architecturally
+	// UNPREDICTABLE.
+	phys_addr_t basePa = blockPte & kPteAddrMask;
+	uint64_t attr = blockPte & kPteAttrMask & ~kAttrContiguous;
+
+	// A leaf that maps memory is a block at L1/L2 but a page at L3; the two
+	// encodings differ only in the type field.
+	uint64_t childType = (childLevel == 3) ? kPteTypeL3Page : kPteTypeL12Block;
+
+	vm_page* page = vm_page_allocate_page(reservation, PAGE_STATE_WIRED | VM_PAGE_ALLOC_CLEAR);
+	phys_addr_t newTablePa = page->physical_page_number << fPageBits;
+	DEBUG_PAGE_ACCESS_END(page);
+
+	uint64_t* newTable = TableFromPa(newTablePa);
+	for (uint64_t i = 0; i < childCount; i++)
+		newTable[i] = (basePa + i * childSize) | attr | childType;
+
+	// Make the child table's contents visible to the page-table walker before
+	// any descriptor can point at it.
+	asm("dsb ishst");
+
+	// Break-before-make. The block and the replacement table describe the same
+	// VA range with different structure; the architecture forbids both being
+	// live at once, so the block must be invalidated and evicted from the TLB
+	// before the table is published. A block spans many pages and may be cached
+	// as several TLB entries, so a single by-VA invalidation is insufficient --
+	// flush the whole regime it belongs to. This is a rare, slow path, so the
+	// broad flush is acceptable.
+	atomic_set64((int64_t*)ptePtr, 0);
+	asm("dsb ishst");
+
+	if ((blockPte & kAttrNG) == 0) {
+		// Global (kernel) entry: it can be cached under any ASID.
+		asm("tlbi vmalle1is");
+		asm("dsb ish");
+		asm("isb");
+	} else {
+		// Non-global (user) entry: flush just this map's ASID. If it has none,
+		// the map is not installed on any CPU and nothing can be cached.
+		InterruptsSpinLocker locker(sAsidLock);
+		if (fASID != -1)
+			flush_tlb_whole_asid(fASID);
+	}
+
+	atomic_set64((int64_t*)ptePtr, newTablePa | kPteTypeL012Table);
+	asm("dsb ishst");
+	asm("isb");
+
+	return newTablePa;
 }
 
 
@@ -893,6 +988,17 @@ VMSAv8TranslationMap::Protect(addr_t start, addr_t end, uint32 attributes, uint3
 
 				// Preserve access bit.
 				newPte |= oldPte & kAttrAF;
+
+				// Preserve the Contiguous grouping. attr is derived afresh and
+				// never sets it, so without this a Protect() would strip the
+				// bit from one member of a group and leave the rest set, which
+				// is UNPREDICTABLE. This is only safe because a whole
+				// Contiguous group always shares one VMArea and is re-protected
+				// as a unit -- every member gets the same attr. Should partial
+				// re-protection of a group ever become possible, the group must
+				// instead be dissolved (bit cleared across all members with
+				// break-before-make) before any member changes.
+				newPte |= oldPte & kAttrContiguous;
 
 				// Preserve the dirty bit.
 				if (is_pte_dirty(oldPte))
