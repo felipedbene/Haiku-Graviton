@@ -507,10 +507,17 @@ status_t
 Job::Execute()
 {
 	status_t status = B_OK;
+	// #224 boot-bringup breadcrumb: name each job on the serial console as it is
+	// executed, so a wedge during service bring-up identifies the last service
+	// started. Remove once the bare-metal first-boot wedge is root-caused.
+	debug_printf("launch_daemon: [224diag] execute job '%s' (service=%d running=%d)\n",
+		Name(), IsService(), IsRunning());
 	if (!IsRunning() || !IsService())
 		status = Launch();
 	else
 		debug_printf("Ignore launching %s\n", Name());
+	debug_printf("launch_daemon: [224diag] execute job '%s' returned %#x\n",
+		Name(), status);
 
 	fLaunching = false;
 	return status;

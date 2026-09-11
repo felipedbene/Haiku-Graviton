@@ -493,6 +493,7 @@ LaunchDaemon::TeamLaunched(Job* job, status_t status)
 void
 LaunchDaemon::ReadyToRun()
 {
+	debug_printf("launch_daemon: [224diag] ReadyToRun (userMode=%d)\n", fUserMode);
 	_RetrieveKernelOptions();
 	_SetupEnvironment();
 
@@ -2020,7 +2021,11 @@ LaunchDaemon::_StartSession(const char* login)
 
 	pid_t pid = -1;
 	const char* argv[] = {path, login, NULL};
+	debug_printf("launch_daemon: [224diag] _StartSession login='%s' spawning '%s'\n",
+		login, path);
 	status = posix_spawn(&pid, path, NULL, NULL, (char* const*)argv, environ);
+	debug_printf("launch_daemon: [224diag] _StartSession spawn returned %#x pid=%d\n",
+		status, (int)pid);
 	if (status != B_OK)
 		return status;
 
