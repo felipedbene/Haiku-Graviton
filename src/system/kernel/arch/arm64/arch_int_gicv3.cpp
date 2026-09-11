@@ -3,6 +3,8 @@
  * Distributed under the terms of the MIT License.
  */
 
+#include <stdarg.h>
+
 #include <interrupts.h>
 #include <interrupt_controller.h>
 #include <kernel.h>
@@ -11,6 +13,7 @@
 #include <KernelExport.h>
 
 #include <arch/cpu.h>
+#include <arch/debug_console.h>
 #include <cpu.h>
 
 #include "arch_int_gicv3.h"
@@ -66,6 +69,23 @@ static Debug224Snapshot sDebug224Snap[SMP_MAX_CPUS];
 extern int64 gDebug224TimerFires;		// #224, arch_timer.cpp
 
 
+// #224: emit a formatted line straight to the UART, bypassing dprintf. dprintf
+// takes a mutex, and when it is contended it blocks -- illegal from cpu_idle(),
+// where the idle thread cannot reschedule (it faults in reschedule()). This
+// path is what arch_debug_serial_puts() is built for: no lock, no allocation,
+// safe from panic()/KDL and therefore from the idle probe.
+static void
+debug224_emit(const char* fmt, ...)
+{
+	char line[512];
+	va_list args;
+	va_start(args, fmt);
+	vsnprintf(line, sizeof(line), fmt, args);
+	va_end(args);
+	arch_debug_serial_puts(line);
+}
+
+
 static void
 debug224_ring_record(uint32 intid, int phase)
 {
@@ -82,7 +102,7 @@ debug224_dump_ring(const char* why)
 {
 	bigtime_t now = system_time();
 	int32 head = atomic_get(&sDebug224RingHead);
-	dprintf("GIC224 ring (%s) INTIDs handled in the last ~1s "
+	debug224_emit("GIC224 ring (%s) INTIDs handled in the last ~1s "
 		"[cN:phaseINTID@usec]:\n", why);
 
 	char buf[1024];
@@ -97,12 +117,15 @@ debug224_dump_ring(const char* why)
 		pos += snprintf(buf + pos, sizeof(buf) - pos, " c%d:%s%" B_PRIu32 "@%"
 			B_PRIdBIGTIME, e.cpu, tag, e.intid, e.time);
 		if (pos > sizeof(buf) - 48) {
-			dprintf("%s\n", buf);
+			buf[pos] = '\0';
+			debug224_emit("%s\n", buf);
 			pos = 0;
 		}
 	}
-	if (pos > 0)
-		dprintf("%s\n", buf);
+	if (pos > 0) {
+		buf[pos] = '\0';
+		debug224_emit("%s\n", buf);
+	}
 }
 
 
@@ -622,8 +645,8 @@ GICv3InterruptController::Debug224DumpCpuIface(const char* where)
 	uint64 ctlr = READ_SPECIALREG(ICC_CTLR_EL1);
 	uint32 gicdCtlr = _ReadGicd(GICD_CTLR);
 
-	dprintf("GIC224 cpu%" B_PRId32 " %s rpr=%#" B_PRIx64 " hppir1=%#" B_PRIx64
-		" igrpen1=%#" B_PRIx64 " pmr=%#" B_PRIx64 " ctlr=%#" B_PRIx64
+	debug224_emit("GIC224 cpu%" B_PRId32 " %s rpr=%#" B_PRIx64 " hppir1=%#"
+		B_PRIx64 " igrpen1=%#" B_PRIx64 " pmr=%#" B_PRIx64 " ctlr=%#" B_PRIx64
 		" gicd_ctlr=%#" B_PRIx32 "\n", smp_get_current_cpu(), where, rpr, hppir,
 		igrpen1, pmr, ctlr, gicdCtlr);
 }
@@ -635,9 +658,11 @@ GICv3InterruptController::Debug224DumpCpuIface(const char* where)
 // goes dark even during early boot. A drained PE reads ICC_RPR_EL1 == 0xff; a
 // value below that (a stuck running priority after a missed EOI), or group-1
 // disabled, or PMR dropped to where it masks the default priority, is the
-// freeze. Once the scheduler is up (dprintf can safely block), shout the
-// abnormal state once per PE with the recent-INTID ring so the offending
-// vector reaches the console before the PE stalls in WFI.
+// freeze. Output uses arch_debug_serial_puts() (via debug224_emit), never
+// dprintf: dprintf can block on a contended mutex, and the idle thread must not
+// reschedule. Once the scheduler is up, shout the abnormal state once per PE
+// with the recent-INTID ring so the offending vector reaches the console before
+// the PE stalls in WFI.
 void
 GICv3InterruptController::Debug224IdleProbe()
 {
@@ -661,8 +686,9 @@ GICv3InterruptController::Debug224IdleProbe()
 		s.time = now;			// written last: a non-zero time means valid
 	}
 
-	// dprintf can block on a mutex, which is only legal once the scheduler
-	// runs; the snapshot above already carries the state for the heartbeat.
+	// Snapshot is recorded above regardless; only the serial emit below is
+	// deferred until the scheduler runs, so smp_get_current_cpu() and friends
+	// are valid. The emit itself is lock-free (arch_debug_serial_puts).
 	if (gKernelStartup)
 		return;
 
@@ -696,8 +722,8 @@ GICv3InterruptController::Debug224IdleProbe()
 	if (atomic_test_and_set64(&sNextLive, (int64)(now + 1000000), next) != next)
 		return;
 
-	dprintf("GIC224 idle cpu%" B_PRId32 " rpr=%#" B_PRIx32 " hppir1=%#" B_PRIx32
-		" igrpen1=%#" B_PRIx32 " pmr=%#" B_PRIx32 " gicd=%#" B_PRIx32
+	debug224_emit("GIC224 idle cpu%" B_PRId32 " rpr=%#" B_PRIx32 " hppir1=%#"
+		B_PRIx32 " igrpen1=%#" B_PRIx32 " pmr=%#" B_PRIx32 " gicd=%#" B_PRIx32
 		" timerFires=%" B_PRId64 " irqs=%" B_PRId32 "\n", cpu, rpr, hppir1,
 		igrpen1, pmr, gicdCtlr, atomic_get64(&gDebug224TimerFires),
 		atomic_get(&sDebug224RingHead));
@@ -741,13 +767,14 @@ gicv3_224_heartbeat_dump()
 		if (s.rpr == 0xff)
 			continue;
 		stuck++;
-		dprintf("GIC224 snap cpu%" B_PRId32 " t=%" B_PRIdBIGTIME " rpr=%#"
+		debug224_emit("GIC224 snap cpu%" B_PRId32 " t=%" B_PRIdBIGTIME " rpr=%#"
 			B_PRIx32 " hppir1=%#" B_PRIx32 " igrpen1=%#" B_PRIx32 " pmr=%#"
 			B_PRIx32 " gicd_ctlr=%#" B_PRIx32 "  <-- RPR STUCK\n", i, s.time,
 			s.rpr, s.hppir1, s.igrpen1, s.pmr, s.gicdCtlr);
 	}
-	dprintf("GIC224 hbsnap valid=%" B_PRId32 " stuck=%" B_PRId32 " timerFires=%"
-		B_PRId64 "\n", valid, stuck, atomic_get64(&gDebug224TimerFires));
+	debug224_emit("GIC224 hbsnap valid=%" B_PRId32 " stuck=%" B_PRId32
+		" timerFires=%" B_PRId64 "\n", valid, stuck,
+		atomic_get64(&gDebug224TimerFires));
 	debug224_dump_ring("heartbeat");
 }
 
