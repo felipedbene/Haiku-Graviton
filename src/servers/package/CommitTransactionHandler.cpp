@@ -232,6 +232,7 @@ CommitTransactionHandler::HandleRequest(
 	// processing, since it's usually an internal to package_daemon
 	// operation and there is no external client to clean it up.
 	if (fFirstBootProcessing) {
+		INFORM("[#224] HandleRequest: cleaning up first-boot transaction dir\n");
 		RelativePath directoryPath(kAdminDirectoryName,
 			transaction.TransactionDirectoryName().String());
 		BDirectory transactionDir;
@@ -244,6 +245,7 @@ CommitTransactionHandler::HandleRequest(
 				transactionDirEntry.Remove(); // Okay to fail when non-empty.
 		}
 	}
+	INFORM("[#224] HandleRequest(transaction): returning\n");
 }
 
 
@@ -435,13 +437,17 @@ CommitTransactionHandler::_ApplyChanges()
 
 		// activate/deactivate packages and create users, groups, settings files.
 		_ChangePackageActivation(fAddedPackages, fRemovedPackages);
-	} else // FirstBootProcessing, skip several steps and just do package setup.
+	} else { // FirstBootProcessing, skip several steps and just do package setup.
 		_PrepareFirstBootPackages();
+		INFORM("[#224] _ApplyChanges: first-boot prepare loop returned\n");
+	}
 
 	// run post-install scripts now that the new packages are visible in the
 	// package file system.
 	if (fVolumeStateIsActive || fFirstBootProcessing) {
+		INFORM("[#224] _ApplyChanges: running post-install scripts\n");
 		_RunPostInstallScripts();
+		INFORM("[#224] _ApplyChanges: post-install scripts returned\n");
 	} else {
 		// Do post-install scripts later after a reboot, for Haiku OS packages.
 		_QueuePostInstallScripts();
@@ -452,6 +458,7 @@ CommitTransactionHandler::_ApplyChanges()
 	fRemovedPackages.clear();
 	fPackagesToActivate.MakeEmpty(false);
 	fPackagesToDeactivate.clear();
+	INFORM("[#224] _ApplyChanges: done\n");
 }
 
 

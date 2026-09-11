@@ -602,7 +602,9 @@ Volume::HandleCommitTransactionRequest(BMessage* message)
 		return;
 	}
 
+	INFORM("[#224] HandleCommitTransactionRequest: sending reply\n");
 	message->SendReply(&reply, (BHandler*)NULL, kCommunicationTimeout);
+	INFORM("[#224] HandleCommitTransactionRequest: reply sent\n");
 }
 
 
@@ -1355,6 +1357,9 @@ Volume::_SetLatestState(VolumeState* state, bool isActive)
 
 	// Send a notification, if this is a system root volume.
 	if (sendNotification) {
+		// #224: this roster IPC only fires for the system root volume, i.e.
+		// exactly on first boot -- bracket it as a metal-wedge suspect.
+		INFORM("[#224] _SetLatestState: sending B_PACKAGE_UPDATE to roster\n");
 		BMessage message(B_PACKAGE_UPDATE);
 		if (message.AddInt32("event",
 				(int32)B_INSTALLATION_LOCATION_PACKAGES_CHANGED) == B_OK
@@ -1366,6 +1371,7 @@ Volume::_SetLatestState(VolumeState* state, bool isActive)
 			&& message.AddInt64("change count", fChangeCount) == B_OK) {
 			BRoster::Private().SendTo(&message, NULL, false);
 		}
+		INFORM("[#224] _SetLatestState: roster notification sent\n");
 	}
 }
 
@@ -1488,8 +1494,13 @@ Volume::_CommitTransaction(BMessage* message,
 		else
 			handler.HandleRequest();
 
+		// #224: breadcrumb the post-commit tail; the c7g.metal first-boot wedge
+		// occurs after the prepare loop completes, so name each remaining step.
+		INFORM("[#224] _CommitTransaction: HandleRequest returned, "
+			"setting latest state\n");
 		_SetLatestState(handler.DetachVolumeState(),
 			handler.IsActiveVolumeState());
+		INFORM("[#224] _CommitTransaction: latest state set\n");
 		error = B_TRANSACTION_OK;
 	} catch (Exception& exception) {
 		error = exception.Error();
@@ -1507,4 +1518,5 @@ Volume::_CommitTransaction(BMessage* message,
 	// revert on error
 	if (error != B_TRANSACTION_OK)
 		handler.Revert();
+	INFORM("[#224] _CommitTransaction: returning (error %d)\n", (int)error);
 }
