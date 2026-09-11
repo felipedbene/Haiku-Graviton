@@ -105,6 +105,12 @@ static int32 sBroadcastMessageCounter;
 static bool sICIEnabled = false;
 static int32 sNumCPUs = 1;
 
+// #224 boot-bringup diagnostic: count ICIs actually taken per CPU so a
+// sync-ICI stall-warn can tell "target never received the SGI" (delivery /
+// GICv3 affinity failure) apart from "target received it but never acked"
+// (message processing bug). Remove with the stall-warn once #224 is closed.
+static int64 sICIReceivedCount[SMP_MAX_CPUS];
+
 static int32 process_pending_ici(int32 currentCPU);
 
 
@@ -927,6 +933,11 @@ smp_intercpu_interrupt_handler(int32 cpu)
 {
 	TRACE("smp_intercpu_interrupt_handler: entry on cpu %" B_PRId32 "\n", cpu);
 
+	// #224 diagnostic: record that this CPU actually took an inter-processor
+	// interrupt, so a stalled sender can see whether delivery is happening.
+	if (cpu >= 0 && cpu < SMP_MAX_CPUS)
+		atomic_add64(&sICIReceivedCount[cpu], 1);
+
 	process_all_pending_ici(cpu);
 
 	TRACE("smp_intercpu_interrupt_handler: done on cpu %" B_PRId32 "\n", cpu);
@@ -978,9 +989,25 @@ smp_send_ici(int32 targetCPU, int32 message, addr_t data, addr_t data2,
 		// wait for the other cpu to finish processing it
 		// the interrupt handler will ref count it to <0
 		// if the message is sync after it has removed it from the mailbox
+		bigtime_t iciStart = system_time();
+		bigtime_t iciNextWarn = iciStart + 3000000;
 		while (msg->done == 0) {
 			process_all_pending_ici(currentCPU);
 			cpu_wait(&msg->done, 1);
+			// #224 diagnostic: a sync ICI that never completes is the
+			// suspected bare-metal wedge. After a few seconds of waiting,
+			// report the target CPU + message and whether that CPU is taking
+			// any ICIs at all (frozen count => the SGI is not being
+			// delivered). system_time() is CNTVCT-backed and stays accurate.
+			if (system_time() >= iciNextWarn) {
+				dprintf("SMPDIAG: smp_send_ici STALL cpu %" B_PRId32 " -> %"
+					B_PRId32 " msg=%" B_PRId32 " waited=%" B_PRIdBIGTIME
+					"us targetRxCount=%" B_PRId64 "\n", currentCPU, targetCPU,
+					message, system_time() - iciStart,
+					(targetCPU >= 0 && targetCPU < SMP_MAX_CPUS)
+						? atomic_get64(&sICIReceivedCount[targetCPU]) : -1);
+				iciNextWarn = system_time() + 5000000;
+			}
 		}
 		// for SYNC messages, it's our responsibility to put it
 		// back into the free list
@@ -1049,9 +1076,25 @@ smp_broadcast_ici(int32 message, addr_t data, addr_t data2, addr_t data3,
 		// if the message is sync after it has removed it from the mailbox
 		TRACE("smp_broadcast_ici: waiting for ack\n");
 
+		bigtime_t iciStart = system_time();
+		bigtime_t iciNextWarn = iciStart + 3000000;
 		while (msg->done == 0) {
 			process_all_pending_ici(currentCPU);
 			cpu_wait(&msg->done, 1);
+			// #224 diagnostic: broadcast ICI that never completes. Dump the
+			// per-CPU received-ICI counts so a CPU that is not taking the SGI
+			// stands out (frozen count while the sender spins).
+			if (system_time() >= iciNextWarn) {
+				dprintf("SMPDIAG: smp_broadcast_ici STALL cpu %" B_PRId32
+					" msg=%" B_PRId32 " numCPUs=%" B_PRId32 " waited=%"
+					B_PRIdBIGTIME "us\n", currentCPU, message, sNumCPUs,
+					system_time() - iciStart);
+				for (int32 i = 0; i < sNumCPUs && i < SMP_MAX_CPUS; i++) {
+					dprintf("SMPDIAG:   cpu %" B_PRId32 " rxICI=%" B_PRId64
+						"\n", i, atomic_get64(&sICIReceivedCount[i]));
+				}
+				iciNextWarn = system_time() + 5000000;
+			}
 		}
 
 		TRACE("smp_broadcast_ici: returning message to free list\n");

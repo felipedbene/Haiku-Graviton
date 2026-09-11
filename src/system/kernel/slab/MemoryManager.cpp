@@ -1325,6 +1325,7 @@ MemoryManager::_AddArea(Area* area)
 MemoryManager::_AllocateArea(uint32 flags, Area*& _area)
 {
 	TRACE("MemoryManager::_AllocateArea(%#" B_PRIx32 ")\n", flags);
+	dprintf("SLABDIAG: _AllocateArea enter flags=%#" B_PRIx32 "\n", flags);
 
 	ASSERT((flags & CACHE_DONT_LOCK_KERNEL_SPACE) == 0);
 
@@ -1402,11 +1403,14 @@ MemoryManager::_AllocateArea(uint32 flags, Area*& _area)
 		metaChunk->freeChunks = NULL;
 	}
 
+	dprintf("SLABDIAG: _AllocateArea meta-init done, reacquiring sLock area=%p\n",
+		area);
 	mutex_lock(&sLock);
 	_area = area;
 
 	T(AllocateArea(area, flags));
 
+	dprintf("SLABDIAG: _AllocateArea exit area=%p\n", area);
 	return B_OK;
 }
 
@@ -1488,11 +1492,15 @@ MemoryManager::_MapChunk(VMArea* vmArea, addr_t address, size_t size,
 {
 	TRACE("MemoryManager::_MapChunk(%p, %#" B_PRIxADDR ", %#" B_PRIxSIZE
 		")\n", vmArea, address, size);
+	dprintf("SLABDIAG: _MapChunk enter va=%#" B_PRIxADDR " size=%#" B_PRIxSIZE
+		"\n", address, size);
 
 	T(Map(address, size, flags));
 
 	if (vmArea == NULL) {
 		// everything is mapped anyway
+		dprintf("SLABDIAG: _MapChunk exit (vmArea==NULL) va=%#" B_PRIxADDR "\n",
+			address);
 		return B_OK;
 	}
 
@@ -1535,10 +1543,15 @@ MemoryManager::_MapChunk(VMArea* vmArea, addr_t address, size_t size,
 		page->IncrementWiredCount();
 		atomic_add(&gMappedPagesCount, 1);
 
+		dprintf("SLABDIAG: _MapChunk map va=%#" B_PRIxADDR " -> pa=%#"
+			B_PRIxPHYSADDR "\n", vmArea->Base() + offset,
+			(phys_addr_t)page->physical_page_number * B_PAGE_SIZE);
 		translationMap->Map(vmArea->Base() + offset,
 			page->physical_page_number * B_PAGE_SIZE,
 			B_KERNEL_READ_AREA | B_KERNEL_WRITE_AREA,
 			vmArea->MemoryType(), &reservation);
+		dprintf("SLABDIAG: _MapChunk mapped va=%#" B_PRIxADDR "\n",
+			vmArea->Base() + offset);
 
 		DEBUG_PAGE_ACCESS_END(page);
 	}
@@ -1548,6 +1561,7 @@ MemoryManager::_MapChunk(VMArea* vmArea, addr_t address, size_t size,
 	cache->ReleaseRefAndUnlock();
 
 	vm_page_unreserve_pages(&reservation);
+	dprintf("SLABDIAG: _MapChunk exit va=%#" B_PRIxADDR "\n", address);
 	return B_OK;
 }
 
