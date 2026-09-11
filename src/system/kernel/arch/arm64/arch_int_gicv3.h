@@ -22,6 +22,12 @@ public:
 			void				EnableInterrupt(int32 irq);
 			void				DisableInterrupt(int32 irq);
 			void				HandleInterrupt();
+
+			// #224 boot-bringup freeze diagnostic (remove with #224): read the
+			// CPU-interface state (running priority etc.) from the idle path,
+			// where a drained PE must show ICC_RPR_EL1 == 0.
+			void				Debug224IdleProbe();
+			void				Debug224DumpCpuIface(const char* where);
 			int32				AssignToCpu(int32 irq, int32 cpu);
 			void				SendMulticastIci(CPUSet& cpuSet);
 			void				SendBroadcastIci();

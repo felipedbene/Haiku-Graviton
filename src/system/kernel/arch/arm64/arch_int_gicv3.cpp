@@ -20,6 +20,72 @@
 #define ICI_IRQ 0
 
 
+// ---- #224 GIC CPU-interface freeze diagnostic (remove with #224) ----------
+// The bare-metal wedge is a system-wide loss of interrupt servicing: the
+// timer-driven heartbeat stops on every PE at once, and no PE is spinning. To
+// separate a stuck running priority (a missed/mis-ordered EOI leaves
+// ICC_RPR_EL1 non-zero, which masks every lower-or-equal-priority interrupt on
+// that PE -- the timer included) from a global disable (ICC_IGRPEN1_EL1
+// cleared, ICC_PMR_EL1 floored to zero, or GICD_CTLR group-enable dropped),
+// read the CPU interface from the idle path. cpu_idle() runs with interrupts
+// enabled and nothing in service, so a correctly-drained PE must read
+// ICC_RPR_EL1 == 0 there; a non-zero value at idle is the freeze itself.
+// Alongside, keep a ring of the INTIDs most recently acknowledged / EOI'd so
+// the vector whose EOI was mishandled can be named at the freeze.
+struct Debug224RingEntry {
+	bigtime_t	time;
+	uint32		intid;
+	int16		cpu;
+	int16		phase;		// 0 = IAR (enter), 1 = EOIR (leave), 2 = spurious
+};
+
+static const int32 kDebug224RingSize = 256;		// power of two for the mask
+static Debug224RingEntry sDebug224Ring[kDebug224RingSize];
+static int32 sDebug224RingHead;
+static GICv3InterruptController* sDebug224Instance;
+static bigtime_t sDebug224LastIdlePrint[SMP_MAX_CPUS];
+
+
+static void
+debug224_ring_record(uint32 intid, int phase)
+{
+	int32 slot = atomic_add(&sDebug224RingHead, 1) & (kDebug224RingSize - 1);
+	sDebug224Ring[slot].time = system_time();
+	sDebug224Ring[slot].intid = intid;
+	sDebug224Ring[slot].cpu = (int16)smp_get_current_cpu();
+	sDebug224Ring[slot].phase = (int16)phase;
+}
+
+
+static void
+debug224_dump_ring(const char* why)
+{
+	bigtime_t now = system_time();
+	int32 head = atomic_get(&sDebug224RingHead);
+	dprintf("GIC224 ring (%s) INTIDs handled in the last ~1s "
+		"[cN:phaseINTID@usec]:\n", why);
+
+	char buf[1024];
+	size_t pos = 0;
+	for (int32 i = kDebug224RingSize; i > 0; i--) {
+		int32 slot = (head - i) & (kDebug224RingSize - 1);
+		Debug224RingEntry e = sDebug224Ring[slot];
+		if (e.time == 0 || now - e.time > 1000000)
+			continue;
+
+		const char* tag = e.phase == 0 ? "in" : (e.phase == 1 ? "eoi" : "spur");
+		pos += snprintf(buf + pos, sizeof(buf) - pos, " c%d:%s%" B_PRIu32 "@%"
+			B_PRIdBIGTIME, e.cpu, tag, e.intid, e.time);
+		if (pos > sizeof(buf) - 48) {
+			dprintf("%s\n", buf);
+			pos = 0;
+		}
+	}
+	if (pos > 0)
+		dprintf("%s\n", buf);
+}
+
+
 // One line per redistributor is O(PEs), and at 96 PEs it is around 9 KB -- more
 // than enough to push the loader's own discovery lines out of the firmware's
 // console ring and destroy the very log it was added to serve. The summary that
@@ -86,6 +152,11 @@ GICv3InterruptController::GICv3InterruptController(const intc_info& info)
 	}, this);
 
 	EnableInterrupt(ICI_IRQ);
+
+	// #224: publish for the idle-path probe. Set last, after every PE's CPU
+	// interface has been brought up by _PerCpuInit(), so a read of the
+	// system-register interface (ICC_*) can never precede SRE being set.
+	sDebug224Instance = this;
 }
 
 
@@ -495,8 +566,11 @@ GICv3InterruptController::HandleInterrupt()
 
 	if (irqnr >= GIC_SPECIAL_BASE && irqnr < GIC_LPI_BASE) {
 		// 1020-1023 are reserved; no EOI is required for them.
+		debug224_ring_record(irqnr, 2);	// #224: spurious ack, priority not raised
 		return;
 	}
+
+	debug224_ring_record(irqnr, 0);		// #224: IAR read -> running priority raised
 
 	if (irqnr >= GIC_LPI_BASE) {
 		// A message-signalled interrupt translated by the ITS.
@@ -510,6 +584,70 @@ GICv3InterruptController::HandleInterrupt()
 	}
 
 	WRITE_SPECIALREG(ICC_EOIR1_EL1, iar);
+	debug224_ring_record(irqnr, 1);		// #224: EOIR written -> running priority dropped
+}
+
+
+// #224 diagnostic: read the whole CPU interface (plus GICD_CTLR) in one line.
+// Reads are side-effect free -- ICC_HPPIR1_EL1 and ICC_RPR_EL1, unlike
+// ICC_IAR1_EL1, do not acknowledge -- so this is safe to call from the idle
+// path and from an interrupt handler alike.
+void
+GICv3InterruptController::Debug224DumpCpuIface(const char* where)
+{
+	uint64 rpr = READ_SPECIALREG(ICC_RPR_EL1);
+	uint64 hppir = READ_SPECIALREG(ICC_HPPIR1_EL1);
+	uint64 igrpen1 = READ_SPECIALREG(ICC_IGRPEN1_EL1);
+	uint64 pmr = READ_SPECIALREG(ICC_PMR_EL1);
+	uint64 ctlr = READ_SPECIALREG(ICC_CTLR_EL1);
+	uint32 gicdCtlr = _ReadGicd(GICD_CTLR);
+
+	dprintf("GIC224 cpu%" B_PRId32 " %s rpr=%#" B_PRIx64 " hppir1=%#" B_PRIx64
+		" igrpen1=%#" B_PRIx64 " pmr=%#" B_PRIx64 " ctlr=%#" B_PRIx64
+		" gicd_ctlr=%#" B_PRIx32 "\n", smp_get_current_cpu(), where, rpr, hppir,
+		igrpen1, pmr, ctlr, gicdCtlr);
+}
+
+
+// #224 diagnostic: called from cpu_idle() (interrupts enabled, nothing in
+// service) before WFI. A drained PE reads ICC_RPR_EL1 == 0; a non-zero value,
+// or group-1 disabled, or PMR floored, is the freeze -- shout once with the
+// recent-INTID ring so the offending vector is on the console before the PE
+// goes dark in WFI. Healthy PEs print a low-rate liveness line so the control
+// proves the instrument reads sane registers.
+void
+GICv3InterruptController::Debug224IdleProbe()
+{
+	uint64 rpr = READ_SPECIALREG(ICC_RPR_EL1);
+	uint64 igrpen1 = READ_SPECIALREG(ICC_IGRPEN1_EL1);
+	uint64 pmr = READ_SPECIALREG(ICC_PMR_EL1);
+
+	const bool abnormal = rpr != 0 || (igrpen1 & 1) == 0 || pmr == 0;
+
+	int32 cpu = smp_get_current_cpu();
+	bigtime_t now = system_time();
+	if (cpu >= 0 && cpu < SMP_MAX_CPUS) {
+		bigtime_t interval = abnormal ? 500000 : 4000000;
+		if (now - sDebug224LastIdlePrint[cpu] < interval)
+			return;
+		sDebug224LastIdlePrint[cpu] = now;
+	}
+
+	Debug224DumpCpuIface(abnormal ? "idle-STUCK" : "idle");
+	if (abnormal)
+		debug224_dump_ring("idle-STUCK");
+}
+
+
+// #224 diagnostic hook for the arm64 idle path. A no-op unless a GICv3
+// controller has been constructed (guards GICv2 machines and early boot, where
+// the ICC_* system-register interface must not be read).
+extern "C" void
+gicv3_224_idle_probe()
+{
+	GICv3InterruptController* controller = sDebug224Instance;
+	if (controller != NULL)
+		controller->Debug224IdleProbe();
 }
 
 
