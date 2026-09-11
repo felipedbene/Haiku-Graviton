@@ -372,6 +372,29 @@ pmu_select_counter(uint32 counter)
 }
 
 
+/*!	The exception-level filter bits to OR into PMCCFILTR_EL0 and every
+	PMEVTYPER_EL0, so a counter counts at the exception level the kernel actually
+	runs at.
+
+	With every filter bit clear a counter counts at EL1 and EL0 but NOT at EL2:
+	unlike P (EL1) and U (EL0), which are inhibits, NSH is an *enable* for EL2
+	(Non-secure Hyp). On a virtualized instance the kernel runs at EL1, so zero
+	is correct. On bare metal it runs at EL2 as a VHE host (#224); there, with
+	NSH clear, PMCCNTR_EL0 and every event counter freeze while executing in the
+	kernel -- which zeroed arm64_pmu_measure_core_frequency() (sysinfo 0 MHz,
+	profile -i a silent no-op, #240) and would have the sampling counter never
+	overflow, delivering no profiling samples at all on metal. Set NSH exactly
+	when the kernel is at EL2 so the counters count where the code runs. Reading
+	CurrentEL never traps; the timer path picks its EL2 register set the same way
+	(arch_timer.cpp).
+*/
+static uint64
+pmu_exception_filter_bits()
+{
+	return (READ_SPECIALREG(CurrentEL) >> 2) >= 2 ? PMEVTYPER_NSH : 0;
+}
+
+
 static void
 pmu_read_implementation_info()
 {
@@ -450,8 +473,14 @@ pmu_program_cpu(int32 cpu)
 	// Deny EL0 every form of access. See the file comment for why.
 	WRITE_SPECIALREG(PMUSERENR_EL0, 0);
 
-	// Count cycles in both EL1 and EL0 (all filter bits clear = no inhibit).
-	WRITE_SPECIALREG(PMCCFILTR_EL0, 0);
+	// The exception levels a counter is allowed to count at. P and U are clear
+	// (count at EL1 and EL0); NSH is set only when the kernel is at EL2, so a
+	// VHE host on bare metal counts cycles/events while in the kernel rather
+	// than freezing every counter there. See pmu_exception_filter_bits().
+	uint64 filter = pmu_exception_filter_bits();
+
+	// Count cycles at EL1/EL0, and at EL2 when that is where the kernel runs.
+	WRITE_SPECIALREG(PMCCFILTR_EL0, filter);
 
 	// One event counter is dedicated to sampling (E-PMU-1a); the general read
 	// facility uses the counters below it. Reaching pmu_program_cpu() at all
@@ -471,7 +500,7 @@ pmu_program_cpu(int32 cpu)
 
 		pmu_select_counter(i);
 		WRITE_SPECIALREG(PMXEVTYPER_EL0,
-			(uint64)sEvents[i] & PMEVTYPER_EVTCOUNT_MASK);
+			((uint64)sEvents[i] & PMEVTYPER_EVTCOUNT_MASK) | filter);
 		WRITE_SPECIALREG(PMXEVCNTR_EL0, 0);
 
 		enableMask |= PMU_EVENT_COUNTER_BIT(i);
@@ -487,7 +516,7 @@ pmu_program_cpu(int32 cpu)
 	if (sampling) {
 		pmu_select_counter(sSampleCounter);
 		WRITE_SPECIALREG(PMXEVTYPER_EL0,
-			(uint64)PMU_EVENT_CPU_CYCLES & PMEVTYPER_EVTCOUNT_MASK);
+			((uint64)PMU_EVENT_CPU_CYCLES & PMEVTYPER_EVTCOUNT_MASK) | filter);
 		enableMask |= PMU_EVENT_COUNTER_BIT(sSampleCounter);
 	}
 
