@@ -15,6 +15,7 @@
 
 #include <smp.h>
 
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -110,6 +111,14 @@ static int32 sNumCPUs = 1;
 // GICv3 affinity failure) apart from "target received it but never acked"
 // (message processing bug). Remove with the stall-warn once #224 is closed.
 static int64 sICIReceivedCount[SMP_MAX_CPUS];
+
+// #224: async SMP_MSG_RESCHEDULE ICIs (scheduler CPU wakeups) do not wait, so
+// the sync stall-warn above cannot see one that is never delivered -- the
+// suspected bare-metal wedge, where an idle secondary CPU in WFI never takes
+// the reschedule SGI and the woken thread never runs. Count reschedule ICIs
+// sent per target CPU; a timer-driven heartbeat then contrasts sent-vs-received
+// so a CPU whose received count is frozen while sends climb stands out.
+static int64 sReschedICISent[SMP_MAX_CPUS];
 
 static int32 process_pending_ici(int32 currentCPU);
 
@@ -928,6 +937,48 @@ call_all_cpus_early(void (*function)(void*, int), void* cookie)
 //	#pragma mark -
 
 
+// #224 diagnostic heartbeat, driven from the arm64 timer interrupt so it keeps
+// ticking even if thread scheduling has wedged (the timer PPI is delivered
+// regardless of the run queue). Boot-CPU only, every 2s, two compact lines:
+// per-CPU received-ICI counts and per-CPU reschedule-ICIs-sent. If the system
+// wedges on a missing CPU-wakeup, the heartbeat keeps printing while one CPU's
+// received count stays frozen even as reschedule sends to it climb -- that is a
+// bare-metal SGI/IPI delivery failure. If the heartbeat itself stops, the boot
+// CPU is no longer taking interrupts (a deeper fault). Remove with #224.
+extern "C" void
+smp_224_heartbeat()
+{
+	if (smp_get_current_cpu() != 0)
+		return;
+
+	static bigtime_t sNextBeat = 0;
+	bigtime_t now = system_time();
+	if (now < sNextBeat)
+		return;
+	sNextBeat = now + 2000000;
+
+	const int32 cpus = sNumCPUs < SMP_MAX_CPUS ? sNumCPUs : SMP_MAX_CPUS;
+	char buf[1024];
+	size_t pos = 0;
+	pos += snprintf(buf + pos, sizeof(buf) - pos, "HB224 t=%" B_PRIdBIGTIME
+		" rxICI:", now);
+	for (int32 i = 0; i < cpus && pos < sizeof(buf) - 16; i++) {
+		pos += snprintf(buf + pos, sizeof(buf) - pos, " %" B_PRId64,
+			atomic_get64(&sICIReceivedCount[i]));
+	}
+	dprintf("%s\n", buf);
+
+	pos = 0;
+	pos += snprintf(buf + pos, sizeof(buf) - pos, "HB224 t=%" B_PRIdBIGTIME
+		" reschedSent:", now);
+	for (int32 i = 0; i < cpus && pos < sizeof(buf) - 16; i++) {
+		pos += snprintf(buf + pos, sizeof(buf) - pos, " %" B_PRId64,
+			atomic_get64(&sReschedICISent[i]));
+	}
+	dprintf("%s\n", buf);
+}
+
+
 int
 smp_intercpu_interrupt_handler(int32 cpu)
 {
@@ -982,6 +1033,12 @@ smp_send_ici(int32 targetCPU, int32 message, addr_t data, addr_t data2,
 
 	// stick it in the appropriate cpu's mailbox
 	prepend_message(gCPU[targetCPU].cpu_msg, msg);
+
+	// #224 diagnostic: track reschedule (CPU-wakeup) ICIs per target.
+	if (message == SMP_MSG_RESCHEDULE && targetCPU >= 0
+			&& targetCPU < SMP_MAX_CPUS) {
+		atomic_add64(&sReschedICISent[targetCPU], 1);
+	}
 
 	arch_smp_send_ici(targetCPU);
 

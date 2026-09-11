@@ -49,10 +49,16 @@ arch_timer_clear_hardware_timer()
 }
 
 
+// #224 diagnostic heartbeat, defined in smp.cpp; driven here because the timer
+// PPI keeps firing even when thread scheduling has wedged.
+extern "C" void smp_224_heartbeat();
+
+
 int32
 arch_timer_interrupt(void *data)
 {
 	WRITE_SPECIALREG(CNTV_CTL_EL0, TIMER_DISABLED);
+	smp_224_heartbeat();
 	return timer_interrupt();
 }
 
