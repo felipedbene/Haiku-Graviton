@@ -11,7 +11,13 @@
 
 #include <errno.h>
 #include <grp.h>
+#include <image.h>
 #include <pwd.h>
+#include <signal.h>
+#include <sys/wait.h>
+#include <unistd.h>
+
+#include <OS.h>
 
 #include <File.h>
 #include <Path.h>
@@ -1415,6 +1421,14 @@ CommitTransactionHandler::_RunPreUninstallScripts()
 }
 
 
+// Upper bound on how long a single post-install / pre-uninstall script may run
+// before we give up on it. Well-behaved scripts finish in milliseconds; this
+// limit only exists so that a single hung script can no longer silently gate
+// all of first-boot (see the c7g.metal first-boot wedge, DeBeOS #224). It is
+// deliberately generous so the normal fast path is never affected.
+static const bigtime_t kScriptTimeout = 120 * 1000000LL;
+
+
 void
 CommitTransactionHandler::_RunPostOrPreScript(Package* package,
 	const BString& script, bool postNotPre)
@@ -1438,8 +1452,70 @@ CommitTransactionHandler::_RunPostOrPreScript(Package* package,
 		return;
 	}
 
+	// Name the script *before* we run it, so that if it hangs the last console
+	// line identifies exactly which script wedged (the plain system() call used
+	// to give no such breadcrumb -- DeBeOS #224).
+	INFORM("Volume::CommitTransactionHandler::_RunPostOrPreScript(): running "
+		"%s script \"%s\" of package %s\n",
+		postOrPreInstallWording, script.String(),
+		package->FileName().String());
+
+	// Run the script the same way system() would (via /bin/sh), but supervise
+	// it ourselves with a bounded wait so a hung script cannot block first-boot
+	// forever. On timeout we kill it, log loudly, and continue.
 	errno = 0;
-	int result = system(scriptPath.Path());
+	const char* argv[] = { "/bin/sh", "-c", scriptPath.Path(), NULL };
+	thread_id thread = load_image(3, argv, (const char**)environ);
+	int result;
+	if (thread < 0) {
+		result = -1;
+	} else {
+		resume_thread(thread);
+
+		bigtime_t deadline = system_time() + kScriptTimeout;
+		bool timedOut = false;
+		int status = 0;
+		while (true) {
+			pid_t waited = waitpid(thread, &status, WNOHANG);
+			if (waited == thread)
+				break;
+			if (waited < 0 && errno != B_INTERRUPTED) {
+				status = -1;
+				break;
+			}
+			if (system_time() >= deadline) {
+				timedOut = true;
+				break;
+			}
+			snooze(100000);
+		}
+
+		if (timedOut) {
+			ERROR("Volume::CommitTransactionHandler::_RunPostOrPreScript(): "
+				"%s script \"%s\" of package %s did not finish within %"
+				B_PRIdBIGTIME "s -- killing it and continuing first-boot\n",
+				postOrPreInstallWording, script.String(),
+				package->FileName().String(), kScriptTimeout / 1000000);
+			kill(thread, SIGKILL);
+			// reap the killed team so it does not linger as a zombie
+			while (waitpid(thread, &status, 0) < 0 && errno == B_INTERRUPTED)
+				;
+			_AddIssue(TransactionIssueBuilder(postNotPre
+					? BTransactionIssue::B_POST_INSTALL_SCRIPT_FAILED
+					: BTransactionIssue::B_PRE_UNINSTALL_SCRIPT_FAILED)
+				.SetPath1(BString(scriptPath.Path()))
+				.SetSystemError(B_TIMED_OUT));
+			return;
+		}
+
+		result = status;
+	}
+
+	INFORM("Volume::CommitTransactionHandler::_RunPostOrPreScript(): "
+		"%s script \"%s\" of package %s finished (status: %d)\n",
+		postOrPreInstallWording, script.String(),
+		package->FileName().String(), result);
+
 	if (result != 0) {
 		ERROR("Volume::CommitTransactionHandler::_RunPostOrPreScript(): "
 			"running %s script \"%s\" of package %s "
