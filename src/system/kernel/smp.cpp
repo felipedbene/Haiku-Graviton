@@ -309,6 +309,14 @@ acquire_spinlock(spinlock* lock)
 		const bigtime_t start = system_time();
 #endif
 		int currentCPU = smp_get_current_cpu();
+		// #224 diagnostic: a spinlock held forever by a wedged CPU is a prime
+		// candidate for the bare-metal freeze, and this loop -- unlike the timer
+		// heartbeat -- runs with interrupts disabled but is not itself blocked,
+		// so it can report before the SPINLOCK_DEADLOCK_COUNT panic (which is
+		// WFE-throttled and can take very long to reach). Warn every 3s of spin,
+		// naming the lock and dumping per-CPU ICI counts so a starved CPU shows.
+		bigtime_t spinStart = system_time();
+		bigtime_t spinNextWarn = spinStart + 3000000;
 		while (1) {
 			uint32 count = 0;
 			while (lock->lock != 0) {
@@ -317,6 +325,21 @@ acquire_spinlock(spinlock* lock)
 						"for a long time (value: %" B_PRIx32 ")", lock,
 						lock->lock);
 					count = 0;
+				}
+
+				if (system_time() >= spinNextWarn) {
+					const int32 nc = sNumCPUs < SMP_MAX_CPUS
+						? sNumCPUs : SMP_MAX_CPUS;
+					char b[1024];
+					size_t p = snprintf(b, sizeof(b), "SPINDIAG cpu%d STUCK on "
+						"lock %p (val=%" B_PRIx32 ") %" B_PRIdBIGTIME "us rxICI:",
+						currentCPU, lock, lock->lock, system_time() - spinStart);
+					for (int32 i = 0; i < nc && p < sizeof(b) - 16; i++) {
+						p += snprintf(b + p, sizeof(b) - p, " %" B_PRId64,
+							atomic_get64(&sICIReceivedCount[i]));
+					}
+					dprintf("%s\n", b);
+					spinNextWarn = system_time() + 3000000;
 				}
 
 				process_all_pending_ici(currentCPU);
@@ -948,20 +971,22 @@ call_all_cpus_early(void (*function)(void*, int), void* cookie)
 extern "C" void
 smp_224_heartbeat()
 {
-	if (smp_get_current_cpu() != 0)
-		return;
-
-	static bigtime_t sNextBeat = 0;
+	// Any CPU may print (whichever's timer fires first in the window wins the
+	// atomic slot): if the boot CPU wedges, a surviving CPU still emits the
+	// heartbeat and its counters, and the printing CPU id shows who is alive.
+	static int64 sNextBeat = 0;
 	bigtime_t now = system_time();
-	if (now < sNextBeat)
+	int64 next = atomic_get64(&sNextBeat);
+	if (now < next)
 		return;
-	sNextBeat = now + 2000000;
+	if (atomic_test_and_set64(&sNextBeat, (int64)(now + 2000000), next) != next)
+		return;
 
 	const int32 cpus = sNumCPUs < SMP_MAX_CPUS ? sNumCPUs : SMP_MAX_CPUS;
 	char buf[1024];
 	size_t pos = 0;
-	pos += snprintf(buf + pos, sizeof(buf) - pos, "HB224 t=%" B_PRIdBIGTIME
-		" rxICI:", now);
+	pos += snprintf(buf + pos, sizeof(buf) - pos, "HB224 cpu%" B_PRId32 " t=%"
+		B_PRIdBIGTIME " rxICI:", smp_get_current_cpu(), now);
 	for (int32 i = 0; i < cpus && pos < sizeof(buf) - 16; i++) {
 		pos += snprintf(buf + pos, sizeof(buf) - pos, " %" B_PRId64,
 			atomic_get64(&sICIReceivedCount[i]));
