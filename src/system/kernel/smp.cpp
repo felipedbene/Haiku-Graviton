@@ -968,6 +968,9 @@ call_all_cpus_early(void (*function)(void*, int), void* cookie)
 // received count stays frozen even as reschedule sends to it climb -- that is a
 // bare-metal SGI/IPI delivery failure. If the heartbeat itself stops, the boot
 // CPU is no longer taking interrupts (a deeper fault). Remove with #224.
+extern "C" void gicv3_224_heartbeat_dump();		// #224, arch_int_gicv3.cpp
+
+
 extern "C" void
 smp_224_heartbeat()
 {
@@ -1001,6 +1004,11 @@ smp_224_heartbeat()
 			atomic_get64(&sReschedICISent[i]));
 	}
 	dprintf("%s\n", buf);
+
+	// #224: dump each PE's last GIC CPU-interface snapshot recorded on its way
+	// into WFI, so the last heartbeat before a global freeze names any PE whose
+	// running priority is stuck (rpr != 0xff). Defined in arch_int_gicv3.cpp.
+	gicv3_224_heartbeat_dump();
 }
 
 

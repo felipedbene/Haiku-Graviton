@@ -45,6 +45,24 @@ static int32 sDebug224RingHead;
 static GICv3InterruptController* sDebug224Instance;
 static bigtime_t sDebug224LastIdlePrint[SMP_MAX_CPUS];
 
+// Last CPU-interface snapshot each PE took on its way into WFI. Recorded
+// print-free (so it is safe from any context, including early boot before the
+// scheduler), then printed from the timer-driven heartbeat, which is proven
+// safe. A drained PE reads rpr==0xff / hppir1==0x3ff; a stuck running priority
+// after a missed EOI reads rpr==GIC_PRIORITY_DEFAULT (0xa0), equal to the timer
+// PPI's own priority, so it masks the timer too -- exactly the observed
+// system-wide silence.
+struct Debug224Snapshot {
+	bigtime_t	time;
+	uint32		rpr;
+	uint32		hppir1;
+	uint32		igrpen1;
+	uint32		pmr;
+	uint32		ctlr;
+	uint32		gicdCtlr;
+};
+static Debug224Snapshot sDebug224Snap[SMP_MAX_CPUS];
+
 
 static void
 debug224_ring_record(uint32 intid, int phase)
@@ -610,32 +628,55 @@ GICv3InterruptController::Debug224DumpCpuIface(const char* where)
 
 
 // #224 diagnostic: called from cpu_idle() (interrupts enabled, nothing in
-// service) before WFI. A drained PE reads ICC_RPR_EL1 == 0; a non-zero value,
-// or group-1 disabled, or PMR floored, is the freeze -- shout once with the
-// recent-INTID ring so the offending vector is on the console before the PE
-// goes dark in WFI. Healthy PEs print a low-rate liveness line so the control
-// proves the instrument reads sane registers.
+// service) before WFI. Record the CPU-interface state print-free into the
+// per-PE snapshot -- always safe, so it captures the last state before a PE
+// goes dark even during early boot. A drained PE reads ICC_RPR_EL1 == 0xff; a
+// value below that (a stuck running priority after a missed EOI), or group-1
+// disabled, or PMR dropped to where it masks the default priority, is the
+// freeze. Once the scheduler is up (dprintf can safely block), shout the
+// abnormal state once per PE with the recent-INTID ring so the offending
+// vector reaches the console before the PE stalls in WFI.
 void
 GICv3InterruptController::Debug224IdleProbe()
 {
-	uint64 rpr = READ_SPECIALREG(ICC_RPR_EL1);
-	uint64 igrpen1 = READ_SPECIALREG(ICC_IGRPEN1_EL1);
-	uint64 pmr = READ_SPECIALREG(ICC_PMR_EL1);
-
-	const bool abnormal = rpr != 0 || (igrpen1 & 1) == 0 || pmr == 0;
+	uint32 rpr = (uint32)READ_SPECIALREG(ICC_RPR_EL1);
+	uint32 hppir1 = (uint32)READ_SPECIALREG(ICC_HPPIR1_EL1);
+	uint32 igrpen1 = (uint32)READ_SPECIALREG(ICC_IGRPEN1_EL1);
+	uint32 pmr = (uint32)READ_SPECIALREG(ICC_PMR_EL1);
+	uint32 ctlr = (uint32)READ_SPECIALREG(ICC_CTLR_EL1);
+	uint32 gicdCtlr = _ReadGicd(GICD_CTLR);
 
 	int32 cpu = smp_get_current_cpu();
 	bigtime_t now = system_time();
 	if (cpu >= 0 && cpu < SMP_MAX_CPUS) {
-		bigtime_t interval = abnormal ? 500000 : 4000000;
-		if (now - sDebug224LastIdlePrint[cpu] < interval)
+		Debug224Snapshot& s = sDebug224Snap[cpu];
+		s.rpr = rpr;
+		s.hppir1 = hppir1;
+		s.igrpen1 = igrpen1;
+		s.pmr = pmr;
+		s.ctlr = ctlr;
+		s.gicdCtlr = gicdCtlr;
+		s.time = now;			// written last: a non-zero time means valid
+	}
+
+	// dprintf can block on a mutex, which is only legal once the scheduler
+	// runs; the snapshot above already carries the state for the heartbeat.
+	if (gKernelStartup)
+		return;
+
+	const bool abnormal = rpr != 0xff || (igrpen1 & 1) == 0
+		|| pmr <= GIC_PRIORITY_DEFAULT;
+	if (!abnormal)
+		return;
+
+	if (cpu >= 0 && cpu < SMP_MAX_CPUS) {
+		if (now - sDebug224LastIdlePrint[cpu] < 500000)
 			return;
 		sDebug224LastIdlePrint[cpu] = now;
 	}
 
-	Debug224DumpCpuIface(abnormal ? "idle-STUCK" : "idle");
-	if (abnormal)
-		debug224_dump_ring("idle-STUCK");
+	Debug224DumpCpuIface("idle-STUCK");
+	debug224_dump_ring("idle-STUCK");
 }
 
 
@@ -648,6 +689,31 @@ gicv3_224_idle_probe()
 	GICv3InterruptController* controller = sDebug224Instance;
 	if (controller != NULL)
 		controller->Debug224IdleProbe();
+}
+
+
+// #224 diagnostic: print every PE's last idle snapshot plus the recent-INTID
+// ring. Called from the timer-driven heartbeat (smp_224_heartbeat), which is a
+// proven-safe context, so the last heartbeat before a global freeze carries
+// each PE's CPU-interface state -- rpr!=0xff on any PE names the stuck one.
+extern "C" void
+gicv3_224_heartbeat_dump()
+{
+	if (sDebug224Instance == NULL)
+		return;
+
+	const int32 cpus = smp_get_num_cpus();
+	for (int32 i = 0; i < cpus && i < SMP_MAX_CPUS; i++) {
+		Debug224Snapshot s = sDebug224Snap[i];
+		if (s.time == 0)
+			continue;
+		dprintf("GIC224 snap cpu%" B_PRId32 " t=%" B_PRIdBIGTIME " rpr=%#"
+			B_PRIx32 " hppir1=%#" B_PRIx32 " igrpen1=%#" B_PRIx32 " pmr=%#"
+			B_PRIx32 " ctlr=%#" B_PRIx32 " gicd_ctlr=%#" B_PRIx32 "%s\n", i,
+			s.time, s.rpr, s.hppir1, s.igrpen1, s.pmr, s.ctlr, s.gicdCtlr,
+			s.rpr != 0xff ? "  <-- RPR STUCK" : "");
+	}
+	debug224_dump_ring("heartbeat");
 }
 
 

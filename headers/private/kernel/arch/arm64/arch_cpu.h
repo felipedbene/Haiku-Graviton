@@ -211,11 +211,11 @@ static inline void arch_cpu_wait(int32* variable, int32 test)
 #define ARCH_HAS_CPU_WAIT 1
 
 
-// #224 boot-bringup freeze diagnostic (remove with #224): read the GIC CPU
+// #224 boot-bringup freeze diagnostic (remove with #224): snapshot the GIC CPU
 // interface just before WFI. cpu_idle() runs with interrupts enabled and
-// nothing in service, so a drained PE must read ICC_RPR_EL1 == 0 here; a
-// non-zero value at idle is a stuck running priority masking every further
-// interrupt. Defined in arch_int_gicv3.cpp; a no-op on GICv2 / pre-init.
+// nothing in service, so a drained PE reads ICC_RPR_EL1 == 0xff here; a lower
+// value at idle is a stuck running priority masking every further interrupt.
+// Defined in arch_int_gicv3.cpp; a no-op on GICv2 / pre-init.
 #ifdef __cplusplus
 extern "C" {
 #endif
