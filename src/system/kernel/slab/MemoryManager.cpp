@@ -578,6 +578,25 @@ MemoryManager::Allocate(ObjectCache* cache, uint32 flags, void*& _pages)
 
 	locker.Unlock();
 	error = _MapChunk(area->vmArea, chunkAddress, chunkSize, 0, flags);
+	// #224 diagnostic: bake-1 on c7g.metal froze immediately after this chunk
+	// map completed, i.e. at the sLock re-acquire below. Probe for that without
+	// flooding the hot path: a fast, uncontended lock takes the trylock and
+	// releases it silently; a permanently-held sLock (its holder wedged) makes
+	// the timed acquire keep timing out and print every 3s forever. This turns a
+	// silent lock stall into a loud, self-identifying signal and never proceeds
+	// on a lock it did not actually get.
+	if (mutex_trylock(&sLock) == B_OK) {
+		mutex_unlock(&sLock);
+	} else {
+		bigtime_t stuckStart = system_time();
+		while (mutex_lock_with_timeout(&sLock, B_RELATIVE_TIMEOUT, 3000000)
+				!= B_OK) {
+			dprintf("SLABDIAG: Allocate STUCK reacquiring sLock after chunk "
+				"map, waited=%" B_PRIdBIGTIME "us va=%#" B_PRIxADDR "\n",
+				system_time() - stuckStart, chunkAddress);
+		}
+		mutex_unlock(&sLock);
+	}
 	locker.Lock();
 	if (error != B_OK) {
 		// something failed -- free the chunk
@@ -1015,7 +1034,12 @@ MemoryManager::_AllocateChunks(size_t chunkSize, uint32 chunkCount,
 		} else
 			break;
 
+		// #224 diagnostic: blocking here means another thread is mid-area-alloc;
+		// a permanent block would mean that other thread wedged holding the slot.
+		dprintf("SLABDIAG: _AllocateChunks waiting on concurrent area alloc "
+			"(size=%#" B_PRIxSIZE ")\n", chunkSize);
 		allocationEntry->condition.Wait(&sLock);
+		dprintf("SLABDIAG: _AllocateChunks woke from concurrent-alloc wait\n");
 
 		if (_GetChunks(metaChunkList, chunkSize, chunkCount, _metaChunk,
 				_chunk)) {
@@ -1034,7 +1058,11 @@ MemoryManager::_AllocateChunks(size_t chunkSize, uint32 chunkCount,
 	allocationEntry->thread = find_thread(NULL);
 
 	Area* area;
+	dprintf("SLABDIAG: _AllocateChunks -> _AllocateArea (size=%#" B_PRIxSIZE
+		" count=%" B_PRIu32 ")\n", chunkSize, chunkCount);
 	status_t error = _AllocateArea(flags, area);
+	dprintf("SLABDIAG: _AllocateChunks back from _AllocateArea error=%#x\n",
+		error);
 
 	allocationEntry->condition.NotifyAll();
 	allocationEntry = NULL;
@@ -1492,15 +1520,11 @@ MemoryManager::_MapChunk(VMArea* vmArea, addr_t address, size_t size,
 {
 	TRACE("MemoryManager::_MapChunk(%p, %#" B_PRIxADDR ", %#" B_PRIxSIZE
 		")\n", vmArea, address, size);
-	dprintf("SLABDIAG: _MapChunk enter va=%#" B_PRIxADDR " size=%#" B_PRIxSIZE
-		"\n", address, size);
 
 	T(Map(address, size, flags));
 
 	if (vmArea == NULL) {
 		// everything is mapped anyway
-		dprintf("SLABDIAG: _MapChunk exit (vmArea==NULL) va=%#" B_PRIxADDR "\n",
-			address);
 		return B_OK;
 	}
 
@@ -1525,8 +1549,20 @@ MemoryManager::_MapChunk(VMArea* vmArea, addr_t address, size_t size,
 			vm_unreserve_memory(reservedMemory);
 			return B_WOULD_BLOCK;
 		}
-	} else
+	} else {
+		// #224 diagnostic: the blocking page reservation is a candidate for a
+		// bare-metal wedge if physical-page accounting under-reports free pages.
+		// Zero-noise on the fast path; loud only if a reservation actually
+		// stalls (system_time() is CNTVCT-backed and stays accurate).
+		bigtime_t reserveStart = system_time();
 		vm_page_reserve_pages(&reservation, reservedPages, priority);
+		bigtime_t reserveTook = system_time() - reserveStart;
+		if (reserveTook > 1000000) {
+			dprintf("SLABDIAG: _MapChunk vm_page_reserve_pages SLOW %"
+				B_PRIdBIGTIME "us pages=%" B_PRIuSIZE " va=%#" B_PRIxADDR "\n",
+				reserveTook, reservedPages, address);
+		}
+	}
 
 	VMCache* cache = vm_area_get_locked_cache(vmArea);
 
@@ -1543,15 +1579,10 @@ MemoryManager::_MapChunk(VMArea* vmArea, addr_t address, size_t size,
 		page->IncrementWiredCount();
 		atomic_add(&gMappedPagesCount, 1);
 
-		dprintf("SLABDIAG: _MapChunk map va=%#" B_PRIxADDR " -> pa=%#"
-			B_PRIxPHYSADDR "\n", vmArea->Base() + offset,
-			(phys_addr_t)page->physical_page_number * B_PAGE_SIZE);
 		translationMap->Map(vmArea->Base() + offset,
 			page->physical_page_number * B_PAGE_SIZE,
 			B_KERNEL_READ_AREA | B_KERNEL_WRITE_AREA,
 			vmArea->MemoryType(), &reservation);
-		dprintf("SLABDIAG: _MapChunk mapped va=%#" B_PRIxADDR "\n",
-			vmArea->Base() + offset);
 
 		DEBUG_PAGE_ACCESS_END(page);
 	}
@@ -1561,7 +1592,6 @@ MemoryManager::_MapChunk(VMArea* vmArea, addr_t address, size_t size,
 	cache->ReleaseRefAndUnlock();
 
 	vm_page_unreserve_pages(&reservation);
-	dprintf("SLABDIAG: _MapChunk exit va=%#" B_PRIxADDR "\n", address);
 	return B_OK;
 }
 
