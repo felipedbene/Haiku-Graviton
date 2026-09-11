@@ -130,6 +130,20 @@ cpu_pause(void)
 }
 
 
+#ifndef ARCH_HAS_CPU_WAIT
+// Architectures without a monitored-wait primitive fall back to the plain
+// spin-loop back-off. cpu_wait() is only a contention/power optimisation over
+// the raw poll, so a busy pause is always a correct implementation.
+static inline void
+arch_cpu_wait(int32* variable, int32 test)
+{
+	(void)variable;
+	(void)test;
+	arch_cpu_pause();
+}
+#endif
+
+
 void _user_clear_caches(void *address, size_t length, uint32 flags);
 bool _user_cpu_enabled(int32 cpu);
 status_t _user_set_cpu_enabled(int32 cpu, bool enabled);

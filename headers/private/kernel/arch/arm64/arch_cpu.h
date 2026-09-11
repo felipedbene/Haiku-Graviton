@@ -174,6 +174,43 @@ static inline void arch_cpu_pause(void)
 }
 
 
+// Monitored wait used by the kernel spin loops (see cpu_wait()). Rather than
+// re-issuing a polling load as fast as the core can retire it (what
+// arch_cpu_pause() does), arm the local exclusive monitor on the polled word
+// with a load-exclusive and then WFE, which lets the core enter a low-power
+// state until an event arrives. On ARMv8 a store by another PE to the
+// monitored location clears the monitor and generates the WFE wake-up event,
+// so the store-release in release_spinlock() wakes us with no explicit SEV on
+// the unlock path. Because that clear also sets the event register, a release
+// that races ahead of our WFE leaves the event pending and the WFE falls
+// through immediately -- there is no lost-wakeup window. WFE additionally
+// wakes on a pending interrupt regardless of the PSTATE mask, so an ICI that
+// arrives while interrupts are masked still breaks us out to be processed by
+// the surrounding loop.
+//
+// The load is relaxed (LDXR, not LDAXR): this is only a poll, and the real
+// acquire ordering is supplied by the atomic RMW the caller uses to actually
+// take the lock, exactly as for arch_cpu_pause(). The "memory" clobber keeps
+// the compiler from hoisting the polled load out of the caller's loop.
+//
+// The awaited word is int32 (spinlock::lock, rw_spinlock::lock), so this uses
+// a 32-bit exclusive load. If the value already differs from the value we are
+// waiting on we skip the WFE so the caller re-checks immediately.
+static inline void arch_cpu_wait(int32* variable, int32 test)
+{
+	int32 value;
+	__asm__ __volatile__(
+		"ldxr	%w0, %1"
+		: "=&r"(value)
+		: "Q"(*variable)
+		: "memory");
+	if (value == test)
+		return;
+	arm64_wfe();
+}
+#define ARCH_HAS_CPU_WAIT 1
+
+
 static inline void arch_cpu_idle(void)
 {
 	arm64_wfi();
