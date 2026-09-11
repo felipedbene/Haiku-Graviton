@@ -331,9 +331,20 @@ SystemProfiler::~SystemProfiler()
 		remove_wait_object_listener(this);
 	}
 
-	// deactivate the profiling timers on all CPUs
+	// Deactivate the profiling timers on all CPUs. This must be synchronous:
+	// each CPU's one-shot sampling timer re-arms itself in _ProfilingEvent, so
+	// until _UninitTimers has run on a given CPU that CPU's timer node -- which
+	// lives inside this object's fCPUData[] -- stays linked in its per-CPU
+	// timer_events list. An asynchronous broadcast returns as soon as the local
+	// CPU has cancelled, letting the destructor free this object while the other
+	// CPUs still have a live list node pointing into freed memory; the next
+	// timer_interrupt (or the late _UninitTimers) then walks a list whose
+	// current->next is garbage and faults. The window is negligible at 2 vCPUs
+	// but wide open at 64, which is why this only bit on metal (#241). Waiting
+	// for every CPU to unlink and cancel before we return guarantees no per-CPU
+	// list still references a node in this object when it is freed.
 	if ((fFlags & B_SYSTEM_PROFILER_SAMPLING_EVENTS) != 0)
-		call_all_cpus(_UninitTimers, this);
+		call_all_cpus_sync(_UninitTimers, this);
 
 	// cancel notifications
 	NotificationManager& notificationManager
