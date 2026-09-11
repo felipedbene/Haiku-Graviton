@@ -1025,6 +1025,13 @@ void
 Inode::SetExtentChecksum(ext2_extent_stream* stream)
 {
 	if (fVolume->HasMetaGroupChecksumFeature()) {
+		// The ext2_extent_tail checksum belongs only at the end of an external
+		// extent-tree block. An inode-resident tree (root in i_block) has no
+		// tail: it fills the whole 60-byte i_block union, so the tail would
+		// land on the following i_generation field and clobber it. ext4 covers
+		// the in-inode extents with the inode's own checksum instead.
+		if (stream == &fNode.extent_stream)
+			return;
 		uint32 checksum = _ExtentChecksum(stream);
 		struct ext2_extent_tail *tail = (struct ext2_extent_tail *)
 			((uint8*)stream + _ExtentLength(stream));
@@ -1037,6 +1044,10 @@ bool
 Inode::VerifyExtentChecksum(ext2_extent_stream* stream)
 {
 	if (fVolume->HasMetaGroupChecksumFeature()) {
+		// No tail is written for an inode-resident tree (see SetExtentChecksum),
+		// so there is nothing to verify there.
+		if (stream == &fNode.extent_stream)
+			return true;
 		uint32 checksum = _ExtentChecksum(stream);
 		struct ext2_extent_tail *tail = (struct ext2_extent_tail *)
 			((uint8*)stream + _ExtentLength(stream));
