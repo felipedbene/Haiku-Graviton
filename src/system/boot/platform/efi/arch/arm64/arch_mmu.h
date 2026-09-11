@@ -35,6 +35,21 @@ class ARMv8TranslationTableDescriptor {
 	static constexpr uint64_t kTypeTable = 0x3u;
 	static constexpr uint64_t kTypePage = 0x3u;
 
+public:
+	/* Descriptor bit[52] is the Contiguous bit. When a naturally aligned run
+	 * of block or page descriptors all set it, the TLB may cache the run as a
+	 * single entry, cutting TLB pressure on large mappings. The run size is
+	 * fixed by the granule: at a 4KB granule it is 16 consecutive entries at
+	 * every level that maps memory (64KB at L3, 32MB at L2, 16GB at L1). The
+	 * architecture leaves behaviour UNPREDICTABLE unless every entry in the run
+	 * is present, contiguous in output address, identically attributed, and the
+	 * run is aligned to its total size -- so it must only ever be emitted as a
+	 * whole aligned group, never retro-fitted onto existing entries.
+	 */
+	static constexpr uint64_t kContiguousBit = (1UL << 52);
+
+private:
+
 	// TODO: Place TABLE PAGE BLOCK prefixes accordingly
 	struct UpperAttributes {
 		static constexpr uint64_t TABLE_PXN	= (1UL << 59);
@@ -189,6 +204,21 @@ public:
 
 	bool PagesAllowed(uint8 level) {
 		return fRegime[level].pages;
+	}
+
+	// The Contiguous bit is meaningful at any level that maps memory directly
+	// (a block level or the page level), never at a pure table level.
+	bool ContiguousAllowed(uint8 level) {
+		return fRegime[level].blocks || fRegime[level].pages;
+	}
+
+	// Number of consecutive descriptors that form a Contiguous run. The
+	// architecture fixes this per granule; only the 4KB granule this port uses
+	// has a single uniform value across levels (16). For other granules the
+	// length differs by level, so return 1 (a "run" that sets no Contiguous
+	// bit) rather than risk emitting an UNPREDICTABLE mismatched group.
+	uint32 ContiguousCount() {
+		return (Granularity() == 0x1000) ? 16 : 1;
 	}
 
 	uint64 Mask(uint8 level) {

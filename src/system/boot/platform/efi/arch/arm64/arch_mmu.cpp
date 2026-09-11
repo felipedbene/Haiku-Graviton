@@ -165,8 +165,46 @@ map_region(addr_t virt_addr, addr_t  phys_addr, size_t size,
 	TRACE("Level %x, Processing desc %lx indexing %lx\n",
 		level, reinterpret_cast<uint64>(descriptor), ttd.Location());
 
+	const uint32 contiguousCount = CurrentRegime.ContiguousCount();
+	const uint64 contiguousSize = contiguousCount * currentLevelSize;
+
 	while (remainingSizeInTable > 0 && size > 0) {
 		uint64 sizeMapped = 0;
+
+		// Coalesce a naturally aligned run into one Contiguous group so the TLB
+		// can cache it as a single entry. The whole group must fit in this
+		// table and be aligned in both address spaces to its total size; only
+		// then is the Contiguous bit well defined. We build the entire group
+		// here (advancing the descriptor cursor over all of it) and skip the
+		// per-entry tail below.
+		if (contiguousCount > 1
+			&& CurrentRegime.ContiguousAllowed(level)
+			&& size >= contiguousSize
+			&& remainingSizeInTable >= contiguousSize
+			&& (phys_addr & (contiguousSize - 1)) == 0
+			&& (virt_addr & (contiguousSize - 1)) == 0) {
+			phys_addr_t groupPhys = phys_addr;
+			for (uint32 i = 0; i < contiguousCount; i++) {
+				if (CurrentRegime.BlocksAllowed(level)) {
+					ttd.SetAsBlock(reinterpret_cast<uint64*>(groupPhys),
+						flags | ARMv8TranslationTableDescriptor::kContiguousBit);
+				} else {
+					ttd.SetAsPage(reinterpret_cast<uint64*>(groupPhys),
+						flags | ARMv8TranslationTableDescriptor::kContiguousBit);
+				}
+				ttd.Next();
+				groupPhys += currentLevelSize;
+			}
+
+			sizeMapped = contiguousSize;
+			virt_addr += sizeMapped;
+			phys_addr += sizeMapped;
+			size -= sizeMapped;
+			remainingSizeInTable -= contiguousSize;
+			// ttd already advanced past the whole group.
+			continue;
+		}
+
 		if (size >= currentLevelSize
 			&& CurrentRegime.Aligned(phys_addr, level)
 			&& CurrentRegime.Aligned(virt_addr, level)) {
