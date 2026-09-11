@@ -62,6 +62,27 @@ arm-*)
 	gdbConfigureArgs="--disable-multilib --disable-werror -enable-interwork"
 	gdbTarget="arm-unknown-elf"
 	;;
+aarch64-*)
+	# arm64 userland baseline (DeBeOS #87). Without this the cross-tools gcc
+	# defaults to generic armv8-a with no tuning, so every haikuports package
+	# built with it -- effectively all of userland -- gets untuned scheduling.
+	# Pick a conservative baseline: hold the ISA floor at armv8-a so the
+	# binaries still run on the oldest arm64 cores on the roadmap (Cortex-A53,
+	# e.g. Raspberry Pi 3) and only tune instruction scheduling for Neoverse-N1,
+	# the AWS Graviton core that is the current flagship target. -mtune never
+	# changes which instructions are emitted, so it cannot break older cores; it
+	# only reorders/selects among armv8-a-legal instructions. NEON is mandatory
+	# on AArch64, so it is enabled regardless of this line.
+	#
+	# This governs only code compiled without its own -mcpu/-march. The in-tree
+	# Jam build compiles the kernel and system with an explicit
+	# -mcpu=neoverse-n1+crypto (build/jam/ArchitectureRules), which fully
+	# overrides this default -- so the shipped kernel/system binaries are
+	# unchanged and only untuned userland ports are affected.
+	binutilsConfigureArgs="--disable-multilib"
+	gccConfigureArgs="--disable-multilib --with-arch=armv8-a --with-tune=neoverse-n1"
+	gdbConfigureArgs="--disable-multilib"
+	;;
 riscv*-*)
 	binutilsConfigureArgs=" --with-arch=rv64gc"
 	gccConfigureArgs=" --with-arch=rv64gc"
