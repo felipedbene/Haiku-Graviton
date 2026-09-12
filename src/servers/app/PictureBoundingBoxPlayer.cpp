@@ -895,7 +895,52 @@ void
 BoundingBoxCallbacks::DrawStringLocations(const char* string, size_t length,
 	const BPoint locations[], size_t locationCount)
 {
-	// TODO
+	TRACE_BB("%p string locations '%s' (%ld glyphs)\n", fState, string,
+		locationCount);
+
+	if (locationCount == 0)
+		return;
+
+	// Each entry in locations[] is the pen origin (glyph baseline-left) of a
+	// glyph, in the drawing coordinate space. Union them, then expand by the
+	// font metrics so ascenders, descenders and the advance of the final glyph
+	// are covered. Being a little generous is harmless: this bounding box only
+	// sizes the recording (e.g. the transparency-layer bitmap in Layer).
+	//
+	// Without this, positioned-glyph text -- which is how e.g. HaikuWebKit
+	// draws all text (BView::DrawString(text, locations, count)) -- contributed
+	// nothing to a picture's bounding box. A transparency layer (BeginLayer for
+	// CSS opacity) whose only content was such text therefore got an invalid
+	// bounding box, Layer::RenderToBitmap() bailed out, and the content
+	// vanished. Elements with an opaque background were unaffected because the
+	// background FillRect already produced a valid box.
+	BRect rect(locations[0].x, locations[0].y, locations[0].x, locations[0].y);
+	for (size_t i = 1; i < locationCount; i++) {
+		if (locations[i].x < rect.left)
+			rect.left = locations[i].x;
+		if (locations[i].x > rect.right)
+			rect.right = locations[i].x;
+		if (locations[i].y < rect.top)
+			rect.top = locations[i].y;
+		if (locations[i].y > rect.bottom)
+			rect.bottom = locations[i].y;
+	}
+
+	ServerFont font = fState->GetDrawState()->Font();
+	font_height height;
+	font.GetHeight(height);
+	const float size = font.Size();
+
+	rect.top -= ceilf(height.ascent) + 1.0f;
+	rect.bottom += ceilf(height.descent + height.leading) + 1.0f;
+	rect.left -= size;
+	rect.right += size;
+
+	fState->PenToLocalTransform().Apply(&rect);
+	fState->IncludeRect(rect);
+
+	// Advance the recorded pen location to the last glyph position.
+	fState->GetDrawState()->SetPenLocation(locations[locationCount - 1]);
 }
 
 
