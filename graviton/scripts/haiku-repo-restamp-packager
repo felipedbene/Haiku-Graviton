@@ -1,0 +1,184 @@
+#!/usr/bin/env bash
+#
+# haiku-repo-restamp-packager -- normalise the `packager` metadata of pooled
+# .hpkg files to the single DeBeOS packager string (issue #41), a metadata-only
+# repack with NO rebuild (contents, version, dependencies, and the `vendor`
+# field are untouched). This is the packager counterpart to
+# `haiku-repo-publish revendor`, which does the same extract/edit/create pass
+# for the `vendor` field.
+#
+# Why: packages built through the bootstrap/native path inherited assorted
+# bootstrap packager strings ("Haiku Graviton <graviton@haiku-os.org>",
+# "DeBeOS <graviton@haiku-os.org>", "DeBeOS <debeos@example.invalid>", ...), so
+# DeBeOS-vended packages misattribute their packager. The DeBeOS convention is a
+# single vendor ("DeBeOS") AND a single packager; this makes the whole pool
+# consistent.
+#
+# Two modes:
+#   --dry-run (DEFAULT)   report what WOULD change, mutate nothing. On a Haiku
+#                         host it reads via `package list -i`; otherwise it
+#                         delegates to `haiku-repo-packager-audit` (pure-Python,
+#                         no Haiku tool), which can also read an S3 pool.
+#   --apply               rewrite each *.hpkg IN PLACE whose packager != target.
+#                         Requires Haiku's `package` tool (a Haiku host or a
+#                         banked Linux host tool via --package-tool).
+#
+# Re-stamping the LIVE pool is a human-gated, single-flight publish operation
+# (SOP §3): pull the pool to a work dir, run `--apply` here, then re-publish the
+# index over the whole set with the existing publish tooling. This script only
+# touches the local --dir; it never uploads or deletes anything in S3.
+#
+# Usage:
+#   haiku-repo-restamp-packager --dir DIR [--packager STR] [--apply]
+#                               [--package-tool P] [--exclude NAME]...
+#   haiku-repo-restamp-packager --s3 s3://B/PREFIX [--packager STR]   # dry-run only
+#
+# Options:
+#   --dir DIR         directory of *.hpkg to re-stamp in place (apply) or audit.
+#   --s3 URI          audit an S3 packages/ prefix (dry-run only; no mutation).
+#   --packager STR    target packager string (default below).
+#   --apply           actually rewrite; omit for a dry run.
+#   --package-tool P  path to Haiku's `package` (default: from PATH).
+#   --exclude NAME    skip the hpkg whose base name is NAME (repeatable; matches
+#                     "NAME-<version>-<arch>.hpkg"). Source packages are always
+#                     skipped.
+#
+# The decompression-bomb guard mirrors haiku-repo-add (#168): a package whose
+# contents decompress past --max-bytes, or that would not fit the work
+# filesystem with headroom, is skipped and reported rather than ENOSPC-ing the
+# whole batch.
+#
+set -euo pipefail
+
+PACKAGER="${HG_PACKAGER:-DeBeOS <packages@debene.dev>}"
+DIR=""; S3=""; PKG_TOOL="package"; APPLY=0; EXCLUDES=()
+RESTAMP_MAX_BYTES="${RESTAMP_MAX_BYTES:-4294967296}"            # 4 GiB
+RESTAMP_HEADROOM_BYTES="${RESTAMP_HEADROOM_BYTES:-1073741824}"  # 1 GiB
+HERE="$(cd "$(dirname "$0")" && pwd)"
+
+die() { echo "haiku-repo-restamp-packager: $*" >&2; exit 1; }
+
+while [ $# -gt 0 ]; do
+	case "$1" in
+		--dir) DIR="$2"; shift 2 ;;
+		--s3) S3="$2"; shift 2 ;;
+		--packager) PACKAGER="$2"; shift 2 ;;
+		--apply) APPLY=1; shift ;;
+		--dry-run) APPLY=0; shift ;;
+		--package-tool) PKG_TOOL="$2"; shift 2 ;;
+		--exclude) EXCLUDES+=("$2"); shift 2 ;;
+		--max-bytes) RESTAMP_MAX_BYTES="$2"; shift 2 ;;
+		*) die "unknown arg: $1" ;;
+	esac
+done
+
+# ---- packager of an hpkg (via `package list -i`) --------------------------
+hpkg_packager() {
+	"$PKG_TOOL" list -i "$1" 2>/dev/null \
+		| sed -nE 's/^[[:space:]]*packager:[[:space:]]*"?(.*[^"])"?[[:space:]]*$/\1/p' \
+		| head -1
+}
+
+uncompressed_bytes() {
+	"$PKG_TOOL" list "$1" 2>/dev/null | awk '
+		{ for (i = 2; i <= NF; i++)
+			if ($i ~ /^[-dl?][-rwxs]{9}$/) { s += $(i - 1); break } }
+		END { printf "%.0f", s + 0 }'
+}
+avail_bytes() { df -Pk "$1" 2>/dev/null | awk 'NR==2 { printf "%.0f", $4 * 1024 }'; }
+
+is_excluded() {
+	local base="$1" pat
+	case "$base" in
+		*-source-*.hpkg|*-source.hpkg) return 0 ;;
+	esac
+	for pat in ${EXCLUDES[@]+"${EXCLUDES[@]}"}; do
+		[ -n "$pat" ] || continue
+		case "$base" in "$pat"-*.hpkg) return 0 ;; esac
+	done
+	return 1
+}
+
+# ---- re-stamp one hpkg's packager IN PLACE (metadata repack, no rebuild) ---
+# Extract the package tree (incl. .PackageInfo), rewrite the packager line, and
+# recreate the hpkg. `package create` reads .PackageInfo from the base dir, so
+# the recreated package is byte-for-byte identical content with only the
+# packager attribute changed. Recreate into a scratch dir first, then move over
+# the original, so a failed `package create` never leaves a truncated hpkg.
+restamp_inplace() {
+	local src="$1"
+	local base; base="$(basename "$src")"
+	local cur; cur="$(hpkg_packager "$src")"
+	if [ "$cur" = "$PACKAGER" ]; then
+		echo "  = $base (already target)"
+		return 0
+	fi
+	local tmp out; tmp="$(mktemp -d)"; out="$(mktemp -d)"
+	# shellcheck disable=SC2064
+	trap "rm -rf '$tmp' '$out'" RETURN
+	"$PKG_TOOL" extract -C "$tmp" "$src"
+	[ -f "$tmp/.PackageInfo" ] || die "no .PackageInfo in $base"
+	if grep -qE '^[[:space:]]*packager[[:space:]]' "$tmp/.PackageInfo"; then
+		# rewrite the value; PACKAGER may contain & and / so use a non-/ delim
+		sed -i -E "s|^([[:space:]]*packager[[:space:]]+).*|\1\"$PACKAGER\"|" "$tmp/.PackageInfo"
+	else
+		printf '\npackager\t"%s"\n' "$PACKAGER" >> "$tmp/.PackageInfo"
+	fi
+	"$PKG_TOOL" create -C "$tmp" "$out/$base"
+	mv -f "$out/$base" "$src"
+	echo "  ~ $base ($cur -> $PACKAGER)"
+}
+
+do_apply() {
+	[ -n "$DIR" ] || die "--apply needs --dir DIR"
+	[ -d "$DIR" ] || die "no such dir: $DIR"
+	command -v "$PKG_TOOL" >/dev/null 2>&1 || die "no '$PKG_TOOL' on PATH (run on a Haiku host or set --package-tool to a banked host tool)"
+
+	local n=0 skipped=0 f base need avail
+	for f in "$DIR"/*.hpkg; do
+		[ -e "$f" ] || { echo "no .hpkg in $DIR -- nothing to do"; return 0; }
+		base="$(basename "$f")"
+		if is_excluded "$base"; then
+			echo "  skip $base (excluded/source)"; skipped=$((skipped + 1)); continue
+		fi
+		# decompression-bomb guard (#168)
+		need="$(uncompressed_bytes "$f")"; need="${need:-0}"
+		avail="$(avail_bytes "$DIR")"; avail="${avail:-0}"
+		if [ "$need" -gt "$RESTAMP_MAX_BYTES" ] \
+			|| [ "$need" -gt $((avail - RESTAMP_HEADROOM_BYTES)) ]; then
+			echo "  skip $base (decompresses to $need bytes -- exceeds guard; needs human)"
+			skipped=$((skipped + 1)); continue
+		fi
+		restamp_inplace "$f"
+		n=$((n + 1))
+	done
+	echo "re-stamped $n package(s) in $DIR to packager \"$PACKAGER\" ($skipped skipped)"
+}
+
+do_dryrun() {
+	echo "DRY RUN -- no package will be modified. Target packager: \"$PACKAGER\""
+	if [ -n "$S3" ]; then
+		exec "$HERE/haiku-repo-packager-audit" --s3 "$S3" --packager "$PACKAGER"
+	fi
+	[ -n "$DIR" ] || die "dry-run needs --dir DIR or --s3 URI"
+	[ -d "$DIR" ] || die "no such dir: $DIR"
+	if command -v "$PKG_TOOL" >/dev/null 2>&1; then
+		local n=0 hit=0 f base cur
+		for f in "$DIR"/*.hpkg; do
+			[ -e "$f" ] || { echo "no .hpkg in $DIR"; return 0; }
+			base="$(basename "$f")"
+			is_excluded "$base" && continue
+			cur="$(hpkg_packager "$f")"; n=$((n + 1))
+			if [ "$cur" != "$PACKAGER" ]; then
+				hit=$((hit + 1))
+				[ "$hit" -le 20 ] && echo "  ~ $base ($cur -> $PACKAGER)"
+			fi
+		done
+		echo "$hit of $n package(s) would be re-stamped"
+	else
+		# no Haiku tool locally: use the pure-Python auditor on the dir
+		exec "$HERE/haiku-repo-packager-audit" --dir "$DIR" --packager "$PACKAGER"
+	fi
+}
+
+if [ "$APPLY" = 1 ]; then do_apply; else do_dryrun; fi

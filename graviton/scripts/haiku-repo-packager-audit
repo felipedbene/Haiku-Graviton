@@ -1,0 +1,156 @@
+#!/usr/bin/env python3
+# haiku-repo-packager-audit -- audit the `packager` metadata of every .hpkg in
+# the DeBeOS pool and report which carry a non-DeBeOS packager string (issue
+# #41). READ-ONLY: it never mutates a package or the pool.
+#
+# The DeBeOS convention is a single vendor ("DeBeOS") AND a single packager
+# ("DeBeOS <packages@debene.dev>", overridable with --packager). Packages built
+# through the bootstrap/native path inherited the bootstrap packager
+# ("Haiku Graviton <graviton@haiku-os.org>" and variants), which misattributes
+# DeBeOS-vended packages. This tool produces the dry-run evidence (counts +
+# before/after sample) for the gated re-stamp performed by
+# `haiku-repo-restamp-packager`.
+#
+# It reads packager straight from the HPKG (hpkg_meta.py) so it needs no Haiku
+# host tool, and it fetches only each object's header + tail over ranged S3 GETs
+# so scanning the whole ~6 GB pool moves only a few hundred MB.
+#
+# Usage:
+#   haiku-repo-packager-audit --s3 s3://BUCKET/PREFIX/arm64/packages [options]
+#   haiku-repo-packager-audit --dir /path/to/pool                    [options]
+#
+# Options:
+#   --packager STR   the desired DeBeOS packager (default below); packages whose
+#                    packager != STR are reported as re-stamp candidates.
+#   --json PATH      also write the full per-package result as JSON.
+#   --limit N        scan only the first N objects (smoke test).
+#   --jobs N         parallel workers for S3 scan (default 16).
+#
+# No account-scoped names are baked in; pass the pool via --s3/--dir.
+
+import argparse
+import concurrent.futures
+import json
+import os
+import sys
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import hpkg_meta  # noqa: E402
+
+DEFAULT_PACKAGER = "DeBeOS <packages@debene.dev>"
+
+
+def _iter_s3(bucket, prefix):
+    import boto3
+
+    s3 = boto3.client("s3")
+    paginator = s3.get_paginator("list_objects_v2")
+    for page in paginator.paginate(Bucket=bucket, Prefix=prefix):
+        for obj in page.get("Contents", []):
+            if obj["Key"].endswith(".hpkg"):
+                yield obj["Key"], obj["Size"]
+
+
+def _s3_reader(bucket, key):
+    import boto3
+
+    s3 = boto3.client("s3")
+
+    def get_bytes(start, length):
+        rng = "bytes=%d-%d" % (start, start + length - 1)
+        return s3.get_object(Bucket=bucket, Key=key, Range=rng)["Body"].read()
+
+    return get_bytes
+
+
+def scan_s3(uri, jobs, limit):
+    assert uri.startswith("s3://")
+    bucket, _, prefix = uri[5:].partition("/")
+    keys = list(_iter_s3(bucket, prefix))
+    if limit:
+        keys = keys[:limit]
+
+    def one(item):
+        key, _size = item
+        base = os.path.basename(key)
+        try:
+            meta = hpkg_meta.read_meta_via_ranges(_s3_reader(bucket, key))
+            meta["file"] = base
+            return meta
+        except Exception as exc:  # noqa: BLE001
+            return {"file": base, "error": str(exc)}
+
+    results = []
+    with concurrent.futures.ThreadPoolExecutor(max_workers=jobs) as ex:
+        for r in ex.map(one, keys):
+            results.append(r)
+    return results
+
+
+def scan_dir(path, limit):
+    files = sorted(f for f in os.listdir(path) if f.endswith(".hpkg"))
+    if limit:
+        files = files[:limit]
+    results = []
+    for f in files:
+        try:
+            meta = hpkg_meta.read_meta_file(os.path.join(path, f))
+            meta["file"] = f
+        except Exception as exc:  # noqa: BLE001
+            meta = {"file": f, "error": str(exc)}
+        results.append(meta)
+    return results
+
+
+def main():
+    ap = argparse.ArgumentParser(description="audit hpkg packager metadata (#41)")
+    src = ap.add_mutually_exclusive_group(required=True)
+    src.add_argument("--s3", help="s3://bucket/prefix of the packages/ pool")
+    src.add_argument("--dir", help="local directory of .hpkg")
+    ap.add_argument("--packager", default=DEFAULT_PACKAGER)
+    ap.add_argument("--json")
+    ap.add_argument("--limit", type=int, default=0)
+    ap.add_argument("--jobs", type=int, default=16)
+    args = ap.parse_args()
+
+    if args.s3:
+        results = scan_s3(args.s3, args.jobs, args.limit)
+    else:
+        results = scan_dir(args.dir, args.limit)
+
+    errors = [r for r in results if "error" in r]
+    ok = [r for r in results if "error" not in r]
+    # group by current packager
+    by_packager = {}
+    for r in ok:
+        by_packager.setdefault(r.get("packager"), []).append(r)
+    wrong = [r for r in ok if r.get("packager") != args.packager]
+
+    print("=== packager audit ===")
+    print("scanned:            %d" % len(results))
+    print("parsed ok:          %d" % len(ok))
+    print("read errors:        %d" % len(errors))
+    print("target packager:    %r" % args.packager)
+    print("re-stamp candidates:%d  (packager != target)" % len(wrong))
+    print()
+    print("--- distribution of current packager strings ---")
+    for pk, rs in sorted(by_packager.items(), key=lambda kv: -len(kv[1])):
+        print("  %5d  %r" % (len(rs), pk))
+    print()
+    print("--- sample re-stamp candidates (before -> after) ---")
+    for r in wrong[:10]:
+        print("  %-42s %r -> %r" % (r["file"], r.get("packager"), args.packager))
+    if errors:
+        print()
+        print("--- read errors ---")
+        for r in errors[:10]:
+            print("  %-42s %s" % (r["file"], r["error"]))
+
+    if args.json:
+        with open(args.json, "w") as f:
+            json.dump(results, f, indent=2)
+        print("\nwrote %s" % args.json)
+
+
+if __name__ == "__main__":
+    main()
