@@ -34,6 +34,7 @@
 
 #include <driver_settings.h>
 #include <kernel.h>
+#include <ksystem_info.h>
 #include <util/AutoLock.h>
 #include <vm/vm.h>
 
@@ -2662,9 +2663,13 @@ ena_init_device(void* _info, void** _cookie)
 	ena_haiku_device* device = (ena_haiku_device*)_info;
 
 	/* First thing in the log, so every boot is attributable to a build. See the
-	   comment on ENA_BUILD_TAG in ena.h for why this is not decoration. */
-	TRACE_ALWAYS("driver build %s, compiled %s (hrev%d)\n", ENA_BUILD_TAG,
-		ENA_BUILD_STAMP, ENA_HAIKU_REVISION);
+	   comment on ENA_BUILD_TAG in ena.h for why this is not decoration. The
+	   revision comes from get_haiku_revision() -- the live value stamped into
+	   the running system (a DeBeOS-native debeos-r<n>-g<sha> for source builds,
+	   or the pinned hrev of a bake), not the frozen ENA_HAIKU_REVISION constant,
+	   which is now used only for the numeric device telemetry field (#201). */
+	TRACE_ALWAYS("driver build %s, compiled %s (%s)\n", ENA_BUILD_TAG,
+		ENA_BUILD_STAMP, get_haiku_revision());
 
 	device_node* parent = sDeviceManager->get_parent_node(device->node);
 	sDeviceManager->get_driver(parent, (driver_module_info**)&device->pci,

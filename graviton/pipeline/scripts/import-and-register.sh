@@ -119,7 +119,32 @@ if [ -z "$SRC_BRANCH" ] || [ "$SRC_BRANCH" = "HEAD" ]; then
   SRC_BRANCH="unknown"
 fi
 
+# DeBeOS-native revision (issue #201). `haiku-revision` below stays pinned to
+# HAIKU_REVISION on purpose: it is the r1~beta6_<revision> package version line
+# that pkgman compares against the published DeBeOS pool, and haiku-devel-publish
+# resolves the devel hpkg by this exact tag (#82). So the DeBeOS revision that
+# actually tracks HEAD is recorded in a SEPARATE, additive tag rather than by
+# mutating haiku-revision -- nothing that reads haiku-revision changes. The
+# scheme mirrors build/scripts/determine_haiku_revision: debeos-r<count>-g<sha>,
+# a monotonic ordinal plus the exact commit. Derived defensively (set -euo
+# pipefail): the CodeBuild clone can be shallow, so a missing count degrades to
+# debeos-g<sha>, and every branch ends in a value.
+DEBEOS_REVISION=""
+if [ "$SRC_COMMIT" != "unknown" ]; then
+  SHORT_SHA="$(git -C "${CODEBUILD_SRC_DIR:-.}" rev-parse --short HEAD 2>/dev/null || true)"
+  [ -n "$SHORT_SHA" ] || SHORT_SHA="${SRC_COMMIT:0:9}"
+  COMMIT_COUNT="$(git -C "${CODEBUILD_SRC_DIR:-.}" rev-list --count HEAD 2>/dev/null || true)"
+  if [ -n "$COMMIT_COUNT" ]; then
+    DEBEOS_REVISION="debeos-r${COMMIT_COUNT}-g${SHORT_SHA}"
+  else
+    DEBEOS_REVISION="debeos-g${SHORT_SHA}"
+  fi
+fi
+[ -n "$DEBEOS_REVISION" ] || DEBEOS_REVISION="unknown"
+
 echo "==> tagging as candidate (canonical NOT set here)"
+echo "    haiku-revision:  ${HAIKU_REVISION:-unknown} (pinned; package-version line)"
+echo "    debeos-revision: $DEBEOS_REVISION (HEAD-tracking)"
 echo "    source-commit: $SRC_COMMIT"
 echo "    source-branch: $SRC_BRANCH"
 aws ec2 create-tags --region "$AWS_DEFAULT_REGION" --resources "$AMI_ID" "$SNAP_ID" \
@@ -129,6 +154,7 @@ aws ec2 create-tags --region "$AWS_DEFAULT_REGION" --resources "$AMI_ID" "$SNAP_
     "Key=baked-by,Value=cdk-pipeline" \
     "Key=candidate,Value=true" \
     "Key=haiku-revision,Value=${HAIKU_REVISION:-unknown}" \
+    "Key=debeos-revision,Value=${DEBEOS_REVISION}" \
     "Key=source-commit,Value=${SRC_COMMIT}" \
     "Key=source-branch,Value=${SRC_BRANCH}"
 

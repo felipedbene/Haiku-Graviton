@@ -38,6 +38,11 @@ extern "C" {
 #define ENA_DRIVER_VERSION_MAJOR	1
 #define ENA_DRIVER_VERSION_MINOR	0
 #define ENA_DRIVER_VERSION_SUBMINOR	0
+/* Numeric kernel-version reported to the device in the host attributes
+   (info->kernel_ver / kernel_ver_str). This is device-facing telemetry with a
+   fixed numeric shape, so it stays a constant rather than the DeBeOS-native
+   revision string. The human-readable boot banner uses the live
+   get_haiku_revision() instead (see ena_init_device, #201). */
 #define ENA_HAIKU_REVISION		59996
 
 /* Printed at attach, before anything else the driver says, so that a boot log
