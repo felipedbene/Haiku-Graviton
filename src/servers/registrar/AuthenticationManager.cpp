@@ -10,6 +10,7 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <sys/param.h>
+#include <sys/stat.h>
 
 #include <map>
 #include <new>
@@ -475,6 +476,16 @@ private:
 
 class AuthenticationManager::UserDB {
 public:
+	~UserDB()
+	{
+		// The by-ID map owns the User objects; free them so a DB reload
+		// doesn't leak the previous generation of entries.
+		for (map<uid_t, User*>::iterator it = fUsersByID.begin();
+			it != fUsersByID.end(); ++it) {
+			delete it->second;
+		}
+	}
+
 	status_t AddUser(User* user)
 	{
 		try {
@@ -593,6 +604,16 @@ private:
 
 class AuthenticationManager::GroupDB {
 public:
+	~GroupDB()
+	{
+		// The by-ID map owns the Group objects; free them so a DB reload
+		// doesn't leak the previous generation of entries.
+		for (map<gid_t, Group*>::iterator it = fGroupsByID.begin();
+			it != fGroupsByID.end(); ++it) {
+			delete it->second;
+		}
+	}
+
 	status_t AddGroup(Group* group)
 	{
 		try {
@@ -779,6 +800,7 @@ AuthenticationManager::_RequestThread()
 	_InitPasswdDB();
 	_InitGroupDB();
 	_InitShadowPwdDB();
+	_RecordDBFileState();
 
     // get our team ID
 	team_id registrarTeam = -1;
@@ -795,6 +817,12 @@ AuthenticationManager::_RequestThread()
 		status_t error = message.ReceiveFrom(fRequestPort, -1, &messageInfo);
 		if (error != B_OK)
 			return B_OK;
+
+		// Reload the DBs if the backing files changed since we last looked
+		// (e.g. a user was appended to passwd at runtime). This is safe
+		// without locking: the request thread is the only accessor of the
+		// DBs and cached replies, so the reload is serialized with lookups.
+		_UpdateDBs();
 
 		bool isRoot = (messageInfo.sender == 0);
 
@@ -1230,6 +1258,11 @@ AuthenticationManager::_RequestThread()
 				debug_printf("REG: invalid message: %" B_PRIu32 "\n",
 					message.What());
 		}
+
+		// A handler may have rewritten the DB files (e.g. add/delete
+		// user/group). Record their new state so our own writes don't look
+		// like an external change and force a needless reload next time.
+		_RecordDBFileState();
 	}
 }
 
@@ -1379,6 +1412,96 @@ AuthenticationManager::_InitShadowPwdDB()
 	}
 
 	return B_OK;
+}
+
+
+/*!	Reloads the user/group databases from disk if any of the backing files
+	(passwd, group, shadow) changed since they were last read.
+
+	Called at the top of the request loop, so runtime edits to the files
+	become visible to subsequent lookups without a reboot. Runs on the
+	request thread only, so it needs no locking against lookups.
+*/
+void
+AuthenticationManager::_UpdateDBs()
+{
+	if (!_DBFilesChanged())
+		return;
+
+	// Build fresh DBs and only swap them in once fully constructed, so a
+	// transient allocation failure leaves the current DBs intact.
+	UserDB* newUserDB = new(std::nothrow) UserDB;
+	GroupDB* newGroupDB = new(std::nothrow) GroupDB;
+	if (newUserDB == NULL || newGroupDB == NULL) {
+		delete newUserDB;
+		delete newGroupDB;
+		debug_printf("REG: Out of memory reloading user/group DB\n");
+		return;
+	}
+
+	UserDB* oldUserDB = fUserDB;
+	GroupDB* oldGroupDB = fGroupDB;
+	fUserDB = newUserDB;
+	fGroupDB = newGroupDB;
+
+	_InitPasswdDB();
+	_InitGroupDB();
+	_InitShadowPwdDB();
+
+	delete oldUserDB;
+	delete oldGroupDB;
+
+	// The cached flat replies are now stale.
+	_InvalidatePasswdDBReply();
+	_InvalidateGroupDBReply();
+	_InvalidateShadowPwdDBReply();
+}
+
+
+/*!	Stats the three DB files and compares mtime and size against the last
+	recorded state, updating the stored state. Returns whether any of them
+	changed (including a file appearing or disappearing).
+*/
+bool
+AuthenticationManager::_DBFilesChanged()
+{
+	struct {
+		const char*		path;
+		DBFileState*	state;
+	} files[] = {
+		{ kPasswdFile, &fPasswdFileState },
+		{ kGroupFile, &fGroupFileState },
+		{ kShadowPwdFile, &fShadowPwdFileState },
+	};
+
+	bool changed = false;
+	for (size_t i = 0; i < sizeof(files) / sizeof(files[0]); i++) {
+		struct stat st;
+		time_t mtime = 0;
+		off_t size = 0;
+		if (stat(files[i].path, &st) == 0) {
+			mtime = st.st_mtime;
+			size = st.st_size;
+		}
+
+		DBFileState* state = files[i].state;
+		if (mtime != state->mtime || size != state->size) {
+			state->mtime = mtime;
+			state->size = size;
+			changed = true;
+		}
+	}
+
+	return changed;
+}
+
+
+void
+AuthenticationManager::_RecordDBFileState()
+{
+	// Sync the stored file state to disk without acting on it, so a change
+	// we caused ourselves (or the initial load) isn't seen as external.
+	_DBFilesChanged();
 }
 
 

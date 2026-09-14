@@ -35,9 +35,26 @@ private:
 			status_t			_InitGroupDB();
 			status_t			_InitShadowPwdDB();
 
+			void				_UpdateDBs();
+			bool				_DBFilesChanged();
+			void				_RecordDBFileState();
+
 			void				_InvalidatePasswdDBReply();
 			void				_InvalidateGroupDBReply();
 			void				_InvalidateShadowPwdDBReply();
+
+private:
+			struct DBFileState {
+				time_t			mtime;
+				off_t			size;
+
+				DBFileState()
+					:
+					mtime(0),
+					size(0)
+				{
+				}
+			};
 
 private:
 			port_id				fRequestPort;
@@ -47,6 +64,9 @@ private:
 			BPrivate::KMessage*	fPasswdDBReply;
 			BPrivate::KMessage*	fGroupDBReply;
 			BPrivate::KMessage*	fShadowPwdDBReply;
+			DBFileState			fPasswdFileState;
+			DBFileState			fGroupFileState;
+			DBFileState			fShadowPwdFileState;
 };
 
 
