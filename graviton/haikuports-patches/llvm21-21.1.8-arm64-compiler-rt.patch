@@ -105,7 +105,7 @@ the operative copy is the ports-tree one under `sys-devel/llvm/`).
 
 --- a/compiler-rt/lib/sanitizer_common/CMakeLists.txt
 +++ b/compiler-rt/lib/sanitizer_common/CMakeLists.txt
-@@ -230,7 +230,32 @@ append_list_if(MSVC /Zl SANITIZER_COMMON_CFLAGS)
+@@ -230,4 +230,29 @@ append_list_if(MSVC /Zl SANITIZER_COMMON_CFLAGS)
  if(HAIKU)
 -   list(APPEND SANITIZER_COMMON_CFLAGS -I/system/develop/headers/private -I/system/develop/headers/private/system/arch/x86_64 -I/system/develop/headers/private/system)
 +   # Haiku keeps its private kernel/system headers in a per-architecture
