@@ -2185,18 +2185,21 @@ PCI::GetMSICount(PCIDev *device)
 
 
 // PCI requester ID, as message-signalled interrupt translation hardware sees
-// it on the bus. The low 16 bits are the requester's BDF (bus/device/function);
-// the PCI segment (Haiku's domain) is folded in above them. Platforms that
-// expose several PCI segments -- multi-region MCFG / per-bridge ECAM, as on
-// Graviton -- can host the same BDF in more than one segment, and the arm64
-// GICv3 ITS keys its device table on this value: without the segment two such
-// devices would collapse onto one DeviceID and steal each other's interrupts.
-// x86 deliberately ignores the requester id, so the extra bits are inert there.
+// it on the bus: the 16-bit BDF (bus/device/function). The arm64 GICv3 ITS
+// derives its DeviceID from this to key its device table. The DeviceID the ITS
+// actually decodes is bounded by GITS_TYPER.Devbits -- 16 on Graviton -- so it
+// cannot be wider than the BDF; folding the PCI segment (Haiku's domain) in
+// above the BDF produced a value the ITS could neither decode nor index, which
+// left multi-segment devices (e.g. the ENA on a second segment on c9g) with no
+// working MSIs. If a platform's fabric ever really did encode the segment in
+// the DeviceID it would advertise a wider Devbits and describe the exact
+// RID->DeviceID mapping in its IORT; that would need an IORT-driven lookup
+// here, not a fixed shift. x86 ignores the requester id entirely.
 static inline uint32
 pci_requester_id(PCIDev *device)
 {
-	return ((uint32)device->domain << 16) | ((uint32)device->bus << 8)
-		| ((uint32)device->device << 3) | (uint32)device->function;
+	return ((uint32)device->bus << 8) | ((uint32)device->device << 3)
+		| (uint32)device->function;
 }
 
 
