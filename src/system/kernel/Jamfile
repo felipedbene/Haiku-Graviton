@@ -29,6 +29,7 @@ KernelMergeObject kernel_core.o :
 	commpage.cpp
 	condition_variable.cpp
 	cpu.cpp
+	device_watchdog.cpp
 	DPC.cpp
 	elf.cpp
 	heap.cpp
