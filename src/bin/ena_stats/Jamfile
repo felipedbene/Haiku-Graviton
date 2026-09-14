@@ -1,0 +1,5 @@
+SubDir HAIKU_TOP src bin ena_stats ;
+
+Application ena_stats :
+	ena_stats.cpp
+;
