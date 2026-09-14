@@ -250,14 +250,12 @@ GICv3ITS::_InitTables()
 		uint64 entries;
 		if (type == GITS_BASER_TYPE_DEVICE) {
 			// A flat table for the full DeviceID space would be enormous on
-			// some implementations; cap it, since PCI requester IDs on the
-			// machines we care about stay small. The cap has to leave room for
-			// the PCI segment folded above the 16-bit BDF (see the requester-ID
-			// layout in gicv3_its.h), so that same-BDF devices in different
-			// segments land on distinct DeviceIDs. Never ask for more than the
-			// ITS says it can address.
+			// some implementations; cap it. The DeviceID the ITS keys this
+			// table on is the PCI requester's 16-bit BDF as the fabric presents
+			// it (see gicv3_its.h), so a 16-bit table covers every DeviceID that
+			// can reach us -- and asking for more than GITS_TYPER.Devbits, which
+			// on the Graviton ITS is exactly 16, is pointless anyway.
 			uint32 bits = min_c(fDeviceIDBits, (uint32)GIC_ITS_DEVICE_ID_BITS);
-			fDeviceTableBits = bits;
 			entries = 1ull << bits;
 		} else {
 			// One collection per CPU so MSIs can be spread across cores, but
@@ -356,6 +354,19 @@ GICv3ITS::_InitTables()
 				B_PRIu64 " share %" B_PRIu64 "; LPI delivery may not work\n",
 				type, (uint64)((readback & GITS_BASER_CACHE_MASK) >> 59),
 				(uint64)((readback & GITS_BASER_SHARE_MASK) >> 10));
+		}
+
+		// Record how many DeviceID bits the device table the ITS accepted can
+		// actually index. The 256-page flat-table clamp above can leave the
+		// table narrower than requested, so derive the width from the geometry
+		// that stuck rather than from what we asked for -- the requester-ID
+		// bounds check in _DeviceFor() relies on this being exact.
+		if (type == GITS_BASER_TYPE_DEVICE) {
+			uint64 tableEntries = tableSize / entrySize;
+			uint32 bits = 0;
+			while (((uint64)1 << (bits + 1)) <= tableEntries)
+				bits++;
+			fDeviceTableBits = bits;
 		}
 
 		TRACE("table type %" B_PRIu32 ": %" B_PRIuSIZE " bytes at %#"
@@ -738,17 +749,17 @@ GICv3ITS::_ReleaseVector(uint32 index)
 its_device*
 GICv3ITS::_DeviceFor(uint32 requesterID)
 {
-	// A requester ID wider than the device table can address (e.g. a PCI
-	// segment beyond what GITS_TYPER.Devbits allows) would index past the
-	// table's end. Refuse it here rather than let a MAPD alias onto, or run
-	// off, another device's entry -- the failure surfaces as a device that
-	// gets no MSIs, which is far easier to diagnose than silent interrupt
-	// cross-talk.
+	// A requester ID wider than the device table can address would index past
+	// the table's end. This should not happen: the DeviceID is the fabric's
+	// 16-bit PCI BDF and the table is sized to at least that, but a broken
+	// GITS_TYPER.Devbits or an unexpectedly wide requester ID could still land
+	// here. Refuse it rather than let a MAPD alias onto, or run off, another
+	// device's entry -- the failure surfaces as a device that gets no MSIs,
+	// which is far easier to diagnose than silent interrupt cross-talk.
 	if (fDeviceTableBits < 32
 		&& requesterID >= (1u << fDeviceTableBits)) {
 		ERROR("requester id %#" B_PRIx32 " exceeds the %" B_PRIu32 "-bit ITS "
-			"device table; PCI segment cannot be represented\n", requesterID,
-			fDeviceTableBits);
+			"device table\n", requesterID, fDeviceTableBits);
 		return NULL;
 	}
 

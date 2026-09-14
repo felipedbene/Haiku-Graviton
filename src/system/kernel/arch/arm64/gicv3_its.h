@@ -27,18 +27,20 @@
 // array and matches the arm64 SMP_MAX_CPUS (asserted in the implementation).
 #define GIC_ITS_MAX_COLLECTIONS		64
 
-// Layout of the DeviceID the ITS derives from a PCI requester ID (see
-// pci_requester_id() in the PCI bus manager): the 16-bit BDF with the PCI
-// segment folded in above it. The device table has to span the segment bits as
-// well, or two devices with the same bus/device/function in different segments
-// would alias onto one DeviceID and steal each other's interrupts. 3 bits
-// covers the 8 segments the PCI bus manager allows (its MAX_PCI_DOMAINS); keep
-// the two in step. The device table is still capped at what the ITS reports it
-// can address (GITS_TYPER.Devbits), so a segment beyond that range is rejected
-// at map time rather than silently aliased.
-#define GIC_ITS_SEGMENT_ID_SHIFT	16
-#define GIC_ITS_SEGMENT_ID_BITS		3
-#define GIC_ITS_DEVICE_ID_BITS		(GIC_ITS_SEGMENT_ID_SHIFT + GIC_ITS_SEGMENT_ID_BITS)
+// The DeviceID the ITS keys its device table on is the value the requester
+// (via the SMMU/root-complex RID->DeviceID translation described by the
+// platform IORT) presents at GITS_TRANSLATER -- it is NOT something software
+// chooses. The MAPD DeviceID we program therefore has to equal whatever the
+// fabric will present, and that value is bounded by GITS_TYPER.Devbits: the ITS
+// cannot decode a DeviceID wider than the bits it implements. On the Graviton
+// ITS that width is 16, so the presented DeviceID is the 16-bit PCI BDF and
+// nothing wider can be represented. We must not synthesise a DeviceID above
+// that width (e.g. by folding the PCI segment in above the BDF): such an ID
+// would neither match what the fabric presents nor index inside the device
+// table. A platform whose fabric really does fold a segment into the DeviceID
+// would advertise a wider Devbits and describe the exact fold in its IORT --
+// that case needs an IORT-driven mapping, not a hard-coded shift.
+#define GIC_ITS_DEVICE_ID_BITS		16
 
 
 struct its_device {
@@ -134,10 +136,11 @@ private:
 			uint32				fIttEntrySize;
 			uint32				fEventIDBits;
 			uint32				fDeviceIDBits;
-			// DeviceID bits the device table actually covers: the requester-ID
-			// layout (GIC_ITS_DEVICE_ID_BITS) clamped to what the ITS reports it
-			// can address (fDeviceIDBits). A requester ID wider than this cannot
-			// be mapped without indexing past the table.
+			// DeviceID bits the device table actually spans, taken from the
+			// table geometry the ITS finally accepted (a 256-page flat table can
+			// hold fewer entries than the requested width). A requester ID wider
+			// than this cannot be mapped without indexing past the table, so it
+			// is rejected in _DeviceFor().
 			uint32				fDeviceTableBits;
 			bool				fPhysicalTargetAddress;
 
