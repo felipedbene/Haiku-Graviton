@@ -35,17 +35,6 @@ else
 	fi
 fi
 
-# STAGE-1 CUT (graviton): force the Python binding OFF.
-# For arm64 the block above sets pythonModuleEnabled=true, which pulls in
-# cmd:python3.14 and setuptools_python314. The guests have python3.10, and
-# python3.14 is a large port with its own PEP-517 packaging knot -- it is not a
-# cheap leaf. What is lost is ONLY the libxml2_python3.14 subpackage; the
-# lib:libxml2 / devel:libxml2 that netpbm, groff's chain and everything else in
-# this tree actually need are unaffected, and the C library is built identically
-# (--without-python changes no library code path).
-# RETIRE: delete the single assignment below once cmd:python3.14 exists.
-pythonModuleEnabled=false
-
 pythonVersion=3.14
 pythonPackage=python${pythonVersion//.}
 
