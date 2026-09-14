@@ -27,6 +27,7 @@
 #include <condition_variable.h>
 #include <cpu.h>
 #include <debug.h>
+#include <device_watchdog.h>
 #include <DPC.h>
 #include <elf.h>
 #include <find_directory_private.h>
@@ -184,6 +185,7 @@ _start(kernel_args *bootKernelArgs, int currentCPU)
 		boot_item_init();
 		debug_init_post_vm(&sKernelArgs);
 		low_resource_manager_init();
+		device_watchdog_init();
 
 		// now we can use the heap and create areas
 		arch_platform_init_post_vm(&sKernelArgs);
@@ -246,6 +248,7 @@ _start(kernel_args *bootKernelArgs, int currentCPU)
 		TRACE("init VM threads\n");
 		vm_init_post_thread(&sKernelArgs);
 		low_resource_manager_init_post_thread();
+		device_watchdog_init_post_thread();
 		TRACE("init DPC\n");
 		dpc_init();
 		TRACE("init VFS\n");
