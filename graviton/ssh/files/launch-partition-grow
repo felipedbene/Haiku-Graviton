@@ -9,17 +9,21 @@
 # clean no-op -- so launch_daemon re-running it on a later boot costs one probe
 # and changes nothing.
 #
-# No "on <event>" condition and no dependency on the network: the disk is local
-# and present from the first instant of userland, so there is nothing to wait
-# for. It runs in its own job and therefore delays neither sshd nor the desktop.
+# It launches a wrapper (partition-grow.sh), NOT partition_grow directly. The
+# wrapper defers the grow off the first-boot critical path: partition_grow's raw
+# GPT rewrite makes the kernel rescan the boot device's partition table, and when
+# that rescan lands in the first-boot service storm on a larger-than-baked root
+# it races the network-gated launch jobs (sshd/EICE and the SSM agent), so on a
+# big root neither ever came up (issue #254). The wrapper waits for the control
+# plane to settle before doing the surgery. That is free: the partition grown
+# here is only consumed by the *next* boot's root mount (the FS grow is owned by
+# the BFS mount-time engine), so running it a little later changes nothing but
+# the timing of the rescan. See partition-grow.sh for the full rationale.
 #
-# Ordering note: the filesystem grow is owned by the BFS mount-time engine and
-# runs in the kernel long before any launch_daemon job, so the partition this
-# job grows is consumed by the *next* boot's root mount -- convergence is two
-# boots by construction, which is the split the design intends (the hook grows
-# only the partition; the FS grow happens on the next mount automatically).
+# It still runs in its own job and therefore delays neither sshd nor the desktop;
+# the wrapper's settle wait happens in this job alone.
 
 job x-vnd.haiku-partition_grow {
-	launch /boot/system/bin/partition_grow
+	launch /bin/sh /boot/system/non-packaged/bin/partition-grow.sh
 	legacy
 }
