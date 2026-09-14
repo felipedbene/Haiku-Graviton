@@ -3347,6 +3347,7 @@ ena_send(ena_haiku_device* device, net_buffer* buffer)
 	if (burstLeft == 0)
 		device->txBurstExhausted++;
 	device->txFrames++;
+	device->txBytes += size;
 
 	ena_com_write_sq_doorbell(device->txSubmissionQueue);
 	device->txDoorbells++;
@@ -3669,6 +3670,7 @@ ena_receive(ena_haiku_device* device, net_buffer** _buffer)
 		buffer->buffer_flags |= NET_BUFFER_L4_CHECKSUM_VALID;
 
 	device->rxFrames++;
+	device->rxBytes += buffer->size;
 	if (context.l4_csum_checked)
 		device->rxL4CsumChecked++;
 	if (context.l4_csum_err)
@@ -3871,6 +3873,44 @@ ena_ioctl(void* cookie, uint32 op, void* buffer, size_t length)
 				&device->rxIrqInterval);
 			stats.intrDelayResolution = device->comDev.intr_delay_resolution;
 			stats.rearmMode = (uint64)(uint32)atomic_get(&device->rearmMode);
+
+			return user_memcpy(buffer, &stats, sizeof(stats));
+		}
+
+		case ENA_IOCTL_GET_ENI_STATS:
+		{
+			struct ena_eni_stats stats;
+			if (length != sizeof(stats))
+				return B_BAD_VALUE;
+
+			/* Read without either datapath lock, same as ENA_IOCTL_GET_IRQ_STATS:
+			   each field is written by one side only and none of them gates
+			   anything, so the worst a snapshot straddling an update can be is one
+			   frame stale -- and taking rxLock or txLock here would serialise a
+			   diagnostic against the very path it is meant to observe. */
+			stats.hwRxDrops = device->hwRxDrops;
+			stats.hwTxDrops = device->hwTxDrops;
+			stats.rxPackets = device->rxFrames;
+			stats.rxBytes = device->rxBytes;
+			stats.txPackets = device->txFrames;
+			stats.txBytes = device->txBytes;
+			stats.rxDrainCycles = device->rxDrainCycles;
+			stats.rxL4CsumChecked = device->rxL4CsumChecked;
+			stats.rxL4CsumErrors = device->rxL4CsumErrors;
+			stats.rxL3Ipv4Frames = device->rxL3Ipv4Frames;
+			stats.rxL3CsumErrors = device->rxL3CsumErrors;
+			stats.txChecksumOffloaded = device->txChecksumOffloaded;
+			stats.txChecksumRejected = device->txChecksumRejected;
+			stats.txDoorbells = device->txDoorbells;
+			stats.txBurstExhausted = device->txBurstExhausted;
+			stats.resetCount = (uint64)(uint32)atomic_get(&device->resetCount);
+			stats.adminWedgeResets = device->adminWedgeResets;
+			stats.fatalErrorResets = device->fatalErrorResets;
+			stats.deviceRequestResets = device->deviceRequestResets;
+			stats.missingTxResets = device->missingTxResets;
+			stats.rxStallDetections = device->rxStallDetections;
+			stats.linkUp = device->linkUp ? 1 : 0;
+			stats.mtu = device->frameSize;
 
 			return user_memcpy(buffer, &stats, sizeof(stats));
 		}
