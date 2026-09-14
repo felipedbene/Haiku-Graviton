@@ -1,7 +1,7 @@
 import * as cdk from 'aws-cdk-lib';
 import { Match, Template } from 'aws-cdk-lib/assertions';
 import { HaikuGravitonPipelineStack } from '../lib/haiku-graviton-pipeline-stack';
-import { HaikuPipelineConfig } from '../lib/config';
+import { HaikuPipelineConfig, loadConfig } from '../lib/config';
 
 // Obviously-synthetic values throughout -- all-zero ids in the same style as the
 // subnet/SG/instance placeholders below. The real account id is not in this tree
@@ -264,6 +264,47 @@ test('promote project skips the best-effort candidate prune it has no rights for
     Environment: Match.objectLike({
       EnvironmentVariables: Match.arrayWith([
         Match.objectLike({ Name: 'HG_SKIP_PRUNE', Value: '1' }),
+      ]),
+    }),
+  });
+});
+
+// The cross-build stage consumes the DeBeOS buildtools fork (binutils 2.46.1,
+// issue #89), not upstream haiku/buildtools. The default lives in loadConfig, so
+// assert the default itself -- a synth-fixture value would pass even if the
+// default silently regressed to upstream. Provide only the three no-fallback
+// context keys loadConfig requires; buildtoolsRepo must fall through to its
+// default. Clear the env override so the process env cannot mask the default.
+test('the buildtools repo default is the DeBeOS fork (issue #89)', () => {
+  const saved = process.env.HAIKU_BUILDTOOLS_REPO;
+  delete process.env.HAIKU_BUILDTOOLS_REPO;
+  try {
+    const app = new cdk.App({
+      context: {
+        'haiku:account': ACCOUNT,
+        'haiku:repoOwner': 'test-owner',
+        'haiku:connectionArn': config.connectionArn,
+      },
+    });
+    const loaded = loadConfig(app);
+    expect(loaded.buildtoolsRepo).toBe('https://github.com/felipedbene/buildtools.git');
+    // The branch stays master: the fork's master carries 2.46.1 once its PR merges.
+    expect(loaded.buildtoolsBranch).toBe('master');
+  } finally {
+    if (saved === undefined) delete process.env.HAIKU_BUILDTOOLS_REPO;
+    else process.env.HAIKU_BUILDTOOLS_REPO = saved;
+  }
+});
+
+// Whatever buildtoolsRepo resolves to must actually reach the CrossBuild worker as
+// the BUILDTOOLS_REPO env var -- the buildspec clones from it. Assert the wiring so
+// a repoint of the default cannot be silently dropped between config and project.
+test('the cross-build project receives buildtoolsRepo as BUILDTOOLS_REPO', () => {
+  const t = synth();
+  t.hasResourceProperties('AWS::CodeBuild::Project', {
+    Environment: Match.objectLike({
+      EnvironmentVariables: Match.arrayWith([
+        Match.objectLike({ Name: 'BUILDTOOLS_REPO', Value: config.buildtoolsRepo }),
       ]),
     }),
   });
