@@ -83,8 +83,18 @@ rule UserBuildConfigRulePreImage
 	# relocating the secondary GPT header to the new end. It is a normal Haiku
 	# command (src/bin/partition_grow) already in the Haiku package -- like
 	# cloud_init_lite above -- so only its launch_daemon job is placed here.
+	#
+	# The launch_daemon job runs a wrapper (partition-grow.sh), not the binary
+	# directly: the wrapper defers the grow off the first-boot critical path, so
+	# partition_grow's device rescan cannot race the network-gated launch jobs
+	# (sshd/EICE and the SSM agent) on a larger-than-baked root (issue #254). The
+	# script goes to system/non-packaged/bin -- like remote-desktop.sh, and for
+	# the same reason: system/bin is packagefs and cannot take image files. It is
+	# invoked as "/bin/sh <path>", so the executable bit does not matter.
 	local partitionGrowLaunch = <haiku-graviton-ssh>launch-partition-grow ;
-	SEARCH on $(partitionGrowLaunch) = $(HG_SSH_IMAGE_DIR) ;
+	local partitionGrowScript = <haiku-graviton-ssh>partition-grow.sh ;
+	SEARCH on $(partitionGrowLaunch) $(partitionGrowScript) = $(HG_SSH_IMAGE_DIR) ;
+	AddFilesToHaikuImage system non-packaged bin : $(partitionGrowScript) ;
 	AddFilesToHaikuImage system settings launch
 		: $(partitionGrowLaunch) : partition_grow ;
 
