@@ -37,8 +37,9 @@
 #          is a second-choice name, not the primary lookup.
 #
 # Usage:
-#   haiku-launch                            # c9g.large in the first private
-#                                           # subnet with c9g availability
+#   haiku-launch                            # c7g.large in the first private
+#                                           # subnet with c7g availability
+#   haiku-launch --type c9g.large           # opt into c9g (impaired NIC, #260)
 #   haiku-launch --type c7g.metal --name kernel-repro
 #   haiku-launch --public                   # if you REALLY want a public IP
 #   haiku-launch --ami ami-...              # override the canonical
@@ -58,7 +59,11 @@ if [ -z "${AWS_PROFILE:-}" ] && [ -z "${AWS_ACCESS_KEY_ID:-}" ]; then
 	export AWS_PROFILE="${HAIKU_GRAVITON_PROFILE:-haiku-graviton}"
 fi
 
-TYPE="${HG_LAUNCH_TYPE:-c9g.large}"
+# Default to c7g.large: on the current canonical image c9g.large boots with a
+# dead NIC (GICv3 ITS requester-id overflow, #260), while c7g.large is clean.
+# Pass `--type c9g.large` (or set HG_LAUNCH_TYPE) to opt into c9g anyway, e.g.
+# to reproduce #260. Kernel fix tracked in PR #264.
+TYPE="${HG_LAUNCH_TYPE:-c7g.large}"
 NAME=""
 AMI=""
 IAM_PROFILE="${HG_LAUNCH_IAM:-ssm-instance-profile}"
