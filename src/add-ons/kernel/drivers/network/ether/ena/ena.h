@@ -399,6 +399,20 @@ extern "C" {
    the sampling windows here are seconds. */
 #define ENA_IOCTL_RX_MODERATION		9805
 
+/* Read-only ENI/device statistics snapshot, always compiled in (#106). Where
+   ENA_IOCTL_GET_IRQ_STATS is scoped to the interrupt-cadence question,
+   this is the general observability surface: the device's own drop counters,
+   the driver's packet and byte totals per direction, the receive/transmit
+   checksum-offload observations, and the reset accounting -- everything the
+   syslog already narrates, gathered into one struct a tool can poll.
+
+   Deliberately outside any debug ifdef: an operator diagnosing a live instance
+   has neither a compiler nor a debug build, and drop counters that only exist in
+   a special build cannot explain a production packet loss. Raw monotonic totals,
+   not rates, for the same reason ENA_IOCTL_GET_IRQ_STATS is -- the caller owns
+   the interval and the driver keeps no timers. Read lockless, see the handler. */
+#define ENA_IOCTL_GET_ENI_STATS		9806
+
 struct ena_irq_stats {
 	uint64	ioInterrupts;
 	/* Unmask writes. Fewer than ioInterrupts means a vector was re-armed by one
@@ -429,6 +443,62 @@ struct ena_irq_stats {
 	   that the conversion is a measurement taken alongside the numbers it
 	   applies to, rather than an assumption made later. */
 	uint64	intrDelayResolution;
+};
+
+/* Snapshot returned by ENA_IOCTL_GET_ENI_STATS. Every field is uint64 on
+   purpose: it keeps the layout the same whatever the field's native width in the
+   device struct, so the userland tool can duplicate this declaration without
+   dragging in the driver's headers -- exactly as ena_fault does for
+   ena_irq_stats. The handler checks the caller's sizeof against this, so keep
+   any addition at the end and keep the two declarations in lockstep. */
+struct ena_eni_stats {
+	/* The device's own view, refreshed once per keep-alive from the descriptor
+	   it sends: frames the hardware dropped, which the driver never sees on the
+	   datapath and so cannot count itself. These are the counters #106 exists to
+	   surface. */
+	uint64	hwRxDrops;
+	uint64	hwTxDrops;
+
+	/* Driver-side datapath totals, monotonic per device. Packets are frames
+	   passed to/from the stack; bytes are the summed L2 frame lengths. */
+	uint64	rxPackets;
+	uint64	rxBytes;
+	uint64	txPackets;
+	uint64	txBytes;
+
+	/* Completed receive drains; rxPackets / rxDrainCycles is frames per wakeup. */
+	uint64	rxDrainCycles;
+
+	/* Receive checksum observations: frames the device validated L4 on, frames
+	   that failed that validation, frames it parsed as IPv4, and frames whose L3
+	   header checksum it flagged. See the offload discussion in ena_receive(). */
+	uint64	rxL4CsumChecked;
+	uint64	rxL4CsumErrors;
+	uint64	rxL3Ipv4Frames;
+	uint64	rxL3CsumErrors;
+
+	/* Transmit checksum offload: frames handed to the device with the checksum
+	   left to it, and frames dropped because the offload was requested on a frame
+	   the device cannot finish. The second must stay zero. */
+	uint64	txChecksumOffloaded;
+	uint64	txChecksumRejected;
+
+	/* Transmit doorbell accounting; see the txDoorbells/txBurstExhausted fields. */
+	uint64	txDoorbells;
+	uint64	txBurstExhausted;
+
+	/* Resets, total and attributed by cause. resetCount counts every reset;
+	   the rest break out the watchdog causes the driver now distinguishes. */
+	uint64	resetCount;
+	uint64	adminWedgeResets;
+	uint64	fatalErrorResets;
+	uint64	deviceRequestResets;
+	uint64	missingTxResets;
+	uint64	rxStallDetections;
+
+	/* Context for the snapshot: link state (0/1) and the negotiated L3 MTU. */
+	uint64	linkUp;
+	uint64	mtu;
 };
 
 /* Refuse to attach below this, rather than dividing by a zero ring size if a
@@ -670,8 +740,9 @@ struct ena_haiku_device {
 	uint32				hwHintTxCompletionThreshold;
 
 	/* Observability: how many resets each newly-implemented cause has triggered.
-	   Monotonic per device, logged in the reset lines. No ioctl reads them yet
-	   (#106), but they make the syslog self-describing. */
+	   Monotonic per device, logged in the reset lines and surfaced by
+	   ENA_IOCTL_GET_ENI_STATS (#106), which is also what makes the syslog
+	   self-describing. */
 	uint32				adminWedgeResets;
 	uint32				fatalErrorResets;
 	uint32				deviceRequestResets;
@@ -728,6 +799,10 @@ struct ena_haiku_device {
 	   build; they are two increments on a path that already does a memcpy per
 	   frame. Read under rxLock, like everything else here. */
 	uint64				rxFrames;
+	/* Bytes handed to the stack, summed from each reassembled net_buffer's size,
+	   so it is the L2 frame length the way an ENI byte counter reports it. Under
+	   rxLock with rxFrames; surfaced by ENA_IOCTL_GET_ENI_STATS (#106). */
+	uint64				rxBytes;
 	/* Completed receive drains: incremented where ena_com_rx_pkt() reads the ring
 	   empty, which is the point the vector is re-armed. rxFrames / rxDrainCycles
 	   is the average number of frames one wakeup was worth, and is the number the
@@ -756,6 +831,10 @@ struct ena_haiku_device {
 	   clever the caller is. txBurstExhausted counts frames that left the
 	   allowance at zero. See graviton/docs/ena-tx-offload.md. */
 	uint64				txFrames;
+	/* Bytes accepted for transmit, summed from each net_buffer's size under
+	   txLock alongside txFrames; the transmit counterpart of rxBytes and likewise
+	   surfaced by ENA_IOCTL_GET_ENI_STATS (#106). */
+	uint64				txBytes;
 	uint64				txDoorbells;
 	uint64				txBurstExhausted;
 	uint16				txBurstLeftMin;
