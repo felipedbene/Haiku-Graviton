@@ -49,19 +49,30 @@ phases:
           (cd "$BUILDTOOLS/jam" && make && ./jam0 install)
           command -v jam || { echo "jam still not on PATH after install" >&2; exit 1; }
         fi
-      # Try to restore a cross-tools cache to skip the ~1h build.
-      - CT_CACHE="s3://$WORK_BUCKET/$CACHE_PREFIX/cross-tools-arm64.tar.zst"
+      # Try to restore a cross-tools cache to skip the ~1h build. The cache key is
+      # KEYED BY THE BUILDTOOLS REVISION (short HEAD of the clone above): a repoint
+      # or toolchain bump (e.g. binutils 2.41 -> 2.46.1, issue #89) moves buildtools
+      # to a new commit, which yields a different cache object, misses the restore,
+      # and forces the ~1h rebuild against the new sources. A fixed key would
+      # silently restore the STALE cross-tools and skip the rebuild, defeating the
+      # bump. This makes every toolchain bump self-invalidating -- no manual bust.
+      - BT_SHA="$(git -C "$HAIKU_TOP/../buildtools" rev-parse --short HEAD)"
+      - echo "buildtools HEAD=$BT_SHA"
+      - CT_CACHE="s3://$WORK_BUCKET/$CACHE_PREFIX/cross-tools-arm64-${BT_SHA}.tar.zst"
       - mkdir -p "$GEN"
       - |
         if aws s3 cp "$CT_CACHE" /tmp/ct.tar.zst --region "$AWS_DEFAULT_REGION" 2>/dev/null; then
-          echo "== restoring cross-tools cache =="
+          echo "== restoring cross-tools cache ($CT_CACHE) =="
           tar --zstd -xf /tmp/ct.tar.zst -C "$GEN"
           export HAVE_CROSS_TOOLS=1
         else
-          echo "== no cross-tools cache; will build from source (~1h) =="
+          echo "== no cross-tools cache for buildtools $BT_SHA; will build from source (~1h) =="
           export HAVE_CROSS_TOOLS=0
         fi
-      - echo "HAVE_CROSS_TOOLS=$HAVE_CROSS_TOOLS" > /tmp/ct.env
+      # Persist both HAVE_CROSS_TOOLS and the keyed CT_CACHE for later phases (env
+      # exports do not survive across CodeBuild phases -- post_build sources this to
+      # refresh the SAME keyed object).
+      - printf 'HAVE_CROSS_TOOLS=%s\nCT_CACHE=%s\n' "$HAVE_CROSS_TOOLS" "$CT_CACHE" > /tmp/ct.env
   build:
     commands:
       - set -euo pipefail
@@ -114,7 +125,7 @@ phases:
       # -- a skew that leaves ca_root_certificates present-but-not-activated
       # (no CARootCertificates.pem, so TLS verify fails B_NOT_ALLOWED). Let the
       # single index version be the one resolved and activated.
-      - aws s3 sync "s3://$WORK_BUCKET/hpkg-pool/" "$HG_POOL_DIR/" --region "$AWS_DEFAULT_REGION" --exclude "*" --include "openssl3-*" --include "openssl3_devel-*" --include "zstd-*" --include "zstd_devel-*" --include "zstd_source-*" --include "debeos_ssm_agent-*" || echo "no lean hpkg pool"
+      - aws s3 sync "s3://$WORK_BUCKET/hpkg-pool/" "$HG_POOL_DIR/" --region "$AWS_DEFAULT_REGION" --exclude "*" --include "openssl3-*" --include "openssl3_devel-*" --include "zstd-*" --include "zstd_devel-*" --include "zstd_source-*" --include "debeos_ssm_agent-*" --include "fluidlite-*" --include "fluidlite_devel-*" --include "libvorbis-*" --include "libvorbis_devel-*" || echo "no lean hpkg pool"
       - |
         if [ -z "$(ls -A "$HG_POOL_DIR" 2>/dev/null)" ]; then
           echo "empty hpkg pool; SSH-only image"; unset HG_POOL_DIR
@@ -256,11 +267,15 @@ phases:
           echo "WARNING: no haiku_devel hpkg found under $GEN to archive (or HAIKU_REVISION unset)"
         fi
       # Refresh the cross-tools cache (cheap insurance; overwrites on every run).
+      # Uses the SAME buildtools-revision-keyed name written to /tmp/ct.env in
+      # pre_build, so a given buildtools commit always maps to exactly one cache
+      # object (restore and refresh cannot drift).
       - |
         if [ -x "$GEN/cross-tools-arm64/bin/aarch64-unknown-haiku-gcc" ]; then
-          echo "== caching cross-tools =="
+          . /tmp/ct.env
+          echo "== caching cross-tools ($CT_CACHE) =="
           tar --zstd -cf /tmp/ct.tar.zst -C "$GEN" cross-tools-arm64
-          aws s3 cp /tmp/ct.tar.zst "s3://$WORK_BUCKET/$CACHE_PREFIX/cross-tools-arm64.tar.zst" \
+          aws s3 cp /tmp/ct.tar.zst "$CT_CACHE" \
             --region "$AWS_DEFAULT_REGION" || echo "cross-tools cache upload failed (non-fatal)"
         fi
       # Bank the LINUX host-tools `package` and `package_repo`. These are byproducts

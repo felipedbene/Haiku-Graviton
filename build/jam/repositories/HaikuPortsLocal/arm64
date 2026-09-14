@@ -86,4 +86,22 @@ LocalPackageRepository HaikuPorts
 	# covered separately: `gawk` resolves straight from the arm64 mirror, so it
 	# needs no local entry and adding one would collide with that instance.)
 	which-2.21-6
+
+	# Native MIDI backend for the MIDI Kit (#50). build/jam/BuildFeatures gates
+	# the `fluidlite` build feature on BOTH fluidlite_devel AND libvorbis_devel
+	# being available; only then does src/kits/midi build libmidi.so (it links
+	# [ BuildFeatureAttribute libvorbis : library ] and fluidlite's static lib,
+	# and returns early otherwise). With the feature enabled, libmidi.so@fluidlite
+	# survives FFilterByBuildFeatures and is baked into @minimum, so ports that
+	# link the MIDI Kit 1 shared lib -- e.g. sdl2_mixer's native_midi_haiku
+	# backend, which links -lmidi -- resolve libmidi.so. The upstream arm64
+	# build-packages mirror serves none of these, so DeBeOS builds and stages
+	# them natively (media-sound/fluidlite, media-libs/libvorbis; versions match
+	# the x86_64/riscv64 HaikuPorts entries). fluidlite-1.0.9-3 needed
+	# -DCMAKE_POLICY_VERSION_MINIMUM=3.5 to configure under CMake 4.x. Skipped
+	# with a message -- not a build error -- until staged in $(HAIKU_DOWNLOAD_DIR).
+	fluidlite-1.0.9-3
+	fluidlite_devel-1.0.9-3
+	libvorbis-1.3.7-1
+	libvorbis_devel-1.3.7-1
 	;

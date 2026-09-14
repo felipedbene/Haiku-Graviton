@@ -39,7 +39,7 @@ Build real software **on DeBeOS**, not just cross-compiled for it.
 2. **ripgrep built natively on-device** — done; exercises networking, TLS, DNS.
 3. **cargo ↔ crates.io works natively** — done for HTTP/HTTPS install; pure-Rust TLS is a nice-to-have.
 4. **Filesystem reliability under heavy load** — page-writer/BFS defect fixed and merged.
-5. **Linker limit on very large objects** — worked around today with `--no-gc-sections`; proper fix is a newer binutils in the toolchain (#89).
+5. **Linker limit on very large objects** — the cross-tools binutils was bumped 2.41 → 2.46.1 (#89), the newer linker that resolves the aarch64 bad-reloc on large objects previously worked around with `--no-gc-sections`.
 6. **Repeatable `crate name → native binary + hpkg` script** (#116).
 
 ## Stage 2 — Package ecosystem

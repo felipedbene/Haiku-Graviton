@@ -30,8 +30,8 @@
     "//peer": "The Test stage self-provisions its own ephemeral peer/driver -- a freshly bootstrapped Ubuntu arm64 host (NOT the Haiku canonical AMI, because every peer-side command in the gate is Linux) -- driven over SSM and torn down on exit. Its instance profile is created by the stack as a dedicated least-priv role (SSM + baron-secret read + nettput read + ssm-out write), so it is not configured here. haiku:peerAmiParam is the public Canonical SSM parameter the peer's Ubuntu arm64 AMI id is resolved from at runtime (never a hardcoded ami-id); override with -c haiku:peerAmiParam=<param> or HAIKU_PEER_AMI_PARAM.",
     "haiku:peerAmiParam": "/aws/service/canonical/ubuntu/server/24.04/stable/current/arm64/hvm/ebs-gp3/ami-id",
 
-    "//aux-repos": "Auxiliary git repos the cross-build clones. buildtools provides the arm64 cross-tools sources; haiku-on-ec2 provides scripts/make-gpt-image.sh.",
-    "haiku:buildtoolsRepo": "https://github.com/haiku/buildtools.git",
+    "//aux-repos": "Auxiliary git repos the cross-build clones. buildtools provides the arm64 cross-tools sources; haiku-on-ec2 provides scripts/make-gpt-image.sh. buildtools points at the DeBeOS fork whose master carries binutils 2.46.1 (issue #89); the cross-tools cache is keyed by the buildtools HEAD sha so a bump self-invalidates.",
+    "haiku:buildtoolsRepo": "https://github.com/felipedbene/buildtools.git",
     "haiku:buildtoolsBranch": "master",
     "haiku:haikuOnEc2Repo": "https://github.com/felipedbene/haiku-on-ec2.git",
     "haiku:haikuOnEc2Branch": "main",

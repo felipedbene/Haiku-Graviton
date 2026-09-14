@@ -1,0 +1,239 @@
+#!/usr/bin/env python3
+# haiku-pool-gc -- identify superseded (older-revision, same-name) .hpkg in the
+# DeBeOS package pool that are safe to garbage-collect, keeping only the current
+# revision of each package (issue #42). DRY-RUN by default: it only LISTS
+# candidates. Deleting from the live pool is a human-gated operation and is NOT
+# done here.
+#
+# What "superseded" means: within a single package identity -- the SAME package
+# `name` AND the SAME `architecture` -- keep the highest (version, revision) and
+# flag every strictly-older one. Package name is taken as the field before the
+# first hyphen (Haiku package names never contain '-'; they use '_'), so
+# versioned library slots that are DIFFERENT packages -- e.g. `libvpx1.15` vs
+# `libvpx1.16`, `python3.10` vs `python3.12` -- are correctly kept side by side.
+# A `_devel`/`_bin`/`_source` sub-package is likewise its own name and is only
+# compared against other revisions of the same sub-package.
+#
+# Version ordering follows Haiku's BPackageVersion rules closely enough to be
+# safe: dotted release segments compared numerically when both numeric (else
+# lexically); a release with NO prerelease (`~...`) outranks the same release
+# WITH one; then the integer revision breaks ties. When two entries cannot be
+# strictly ordered, NEITHER is flagged (we never GC on an ambiguous compare).
+#
+# Usage:
+#   haiku-pool-gc --s3 s3://BUCKET/PREFIX/arm64/packages   # live pool (sizes too)
+#   haiku-pool-gc --dir /path/to/pool
+#   haiku-pool-gc --list-file names.txt                    # one filename per line
+#   [--apply]   # PRINT the delete plan only; refuses unless --i-am-a-human given
+#
+# --apply is intentionally inert: it prints the exact `aws s3 rm` commands for a
+# human to run and exits non-zero, so no automated caller can delete the pool.
+# No account-scoped names are baked in.
+
+import argparse
+import os
+import sys
+
+
+def parse_name(fname):
+    """(name, version, revision, arch) from <name>-<version>-<revision>-<arch>.hpkg.
+    Returns None if the filename doesn't fit the canonical shape."""
+    if not fname.endswith(".hpkg"):
+        return None
+    base = fname[:-5]
+    dash = base.find("-")
+    if dash < 0:
+        return None
+    name = base[:dash]
+    rest = base[dash + 1:]
+    parts = rest.rsplit("-", 2)
+    if len(parts) != 3:
+        return None
+    version, revision, arch = parts
+    return name, version, revision, arch
+
+
+def _seg_key(seg):
+    # numeric segments sort as numbers, before/after alpha handled by tuple tag
+    if seg.isdigit():
+        return (1, int(seg), "")
+    return (0, 0, seg)
+
+
+def cmp_release(a, b):
+    import re
+    sa = re.split(r"[._]", a)
+    sb = re.split(r"[._]", b)
+    for i in range(max(len(sa), len(sb))):
+        ka = _seg_key(sa[i]) if i < len(sa) else (1, -1, "")
+        kb = _seg_key(sb[i]) if i < len(sb) else (1, -1, "")
+        if ka != kb:
+            return -1 if ka < kb else 1
+    return 0
+
+
+def cmp_version(va, vb):
+    """Return -1/0/1, or None if incomparable (treat as 'do not GC')."""
+    ra, _, pa = va.partition("~")
+    rb, _, pb = vb.partition("~")
+    c = cmp_release(ra, rb)
+    if c != 0:
+        return c
+    # same release: no-prerelease outranks a prerelease
+    if (not pa) != (not pb):
+        return 1 if not pa else -1
+    if pa != pb:
+        return -1 if pa < pb else 1
+    return 0
+
+
+def cmp_entry(a, b):
+    """a,b = (version, revision). Compare version then integer revision."""
+    c = cmp_version(a[0], b[0])
+    if c is None:
+        return None
+    if c != 0:
+        return c
+    try:
+        ra, rb = int(a[1]), int(b[1])
+    except ValueError:
+        return None
+    if ra != rb:
+        return -1 if ra < rb else 1
+    return 0
+
+
+def collect_s3(uri):
+    import boto3
+    assert uri.startswith("s3://")
+    bucket, _, prefix = uri[5:].partition("/")
+    s3 = boto3.client("s3")
+    out = {}
+    for page in s3.get_paginator("list_objects_v2").paginate(Bucket=bucket, Prefix=prefix):
+        for obj in page.get("Contents", []):
+            key = obj["Key"]
+            if key.endswith(".hpkg"):
+                out[os.path.basename(key)] = obj["Size"]
+    return out, ("s3://%s/%s" % (bucket, prefix.rstrip("/")))
+
+
+def collect_dir(path):
+    out = {}
+    for f in os.listdir(path):
+        if f.endswith(".hpkg"):
+            out[f] = os.path.getsize(os.path.join(path, f))
+    return out, path
+
+
+def collect_listfile(path):
+    out = {}
+    with open(path) as fh:
+        for line in fh:
+            f = os.path.basename(line.strip())
+            if f.endswith(".hpkg"):
+                out[f] = None
+    return out, path
+
+
+def main():
+    ap = argparse.ArgumentParser(description="identify superseded pooled hpkgs (#42)")
+    src = ap.add_mutually_exclusive_group(required=True)
+    src.add_argument("--s3")
+    src.add_argument("--dir")
+    src.add_argument("--list-file")
+    ap.add_argument("--apply", action="store_true",
+                    help="print the delete plan (inert; never deletes)")
+    ap.add_argument("--i-am-a-human", action="store_true")
+    args = ap.parse_args()
+
+    if args.s3:
+        files, origin = collect_s3(args.s3)
+    elif args.dir:
+        files, origin = collect_dir(args.dir)
+    else:
+        files, origin = collect_listfile(args.list_file)
+
+    groups = {}
+    unparsed = []
+    for fname, size in files.items():
+        p = parse_name(fname)
+        if p is None:
+            unparsed.append(fname)
+            continue
+        name, version, revision, arch = p
+        groups.setdefault((name, arch), []).append((version, revision, fname, size))
+
+    supersede = []   # (fname, size, kept_fname)
+    ambiguous = []   # groups we could not fully order
+    multi = 0
+    for (name, arch), entries in groups.items():
+        if len(entries) < 2:
+            continue
+        multi += 1
+        # find the max by pairwise strict comparison; bail to ambiguous if any
+        # pair is incomparable.
+        best = entries[0]
+        ok = True
+        for e in entries[1:]:
+            c = cmp_entry((e[0], e[1]), (best[0], best[1]))
+            if c is None:
+                ok = False
+                break
+            if c > 0:
+                best = e
+        if not ok:
+            ambiguous.append((name, arch, [e[2] for e in entries]))
+            continue
+        for e in entries:
+            if e is best:
+                continue
+            c = cmp_entry((e[0], e[1]), (best[0], best[1]))
+            if c is None:
+                ambiguous.append((name, arch, [x[2] for x in entries]))
+                break
+            if c < 0:
+                supersede.append((e[2], e[3], best[2]))
+
+    supersede.sort(key=lambda x: x[0])
+    total_bytes = sum(s for _, s, _ in supersede if s)
+
+    print("=== pool GC (superseded revisions) ===")
+    print("origin:                %s" % origin)
+    print("total packages:        %d" % len(files))
+    print("unparsable filenames:  %d" % len(unparsed))
+    print("names with >1 revision:%d" % multi)
+    print("GC candidates:         %d" % len(supersede))
+    if total_bytes:
+        print("reclaimable:           %d bytes (%.1f MiB)"
+              % (total_bytes, total_bytes / 1048576.0))
+    print()
+    print("--- superseded (DELETE candidate -> superseded by) ---")
+    for fname, size, kept in supersede:
+        sz = ("%d" % size) if size else "?"
+        print("  %-46s %12s  <=  %s" % (fname, sz, kept))
+    if ambiguous:
+        print()
+        print("--- ambiguous groups (NOT flagged; needs human) ---")
+        for name, arch, fs in ambiguous:
+            print("  %s/%s: %s" % (name, arch, ", ".join(fs)))
+    if unparsed:
+        print()
+        print("--- unparsable (NOT flagged) ---")
+        for f in unparsed[:20]:
+            print("  %s" % f)
+
+    if args.apply:
+        print()
+        if not (args.s3 and args.i_am_a_human):
+            print("--apply is inert: this tool never deletes. To GC the LIVE pool,")
+            print("a human reviews the list above and runs the printed commands.")
+        print("# delete plan (run by a human, single-flight, after re-review):")
+        base = args.s3.rstrip("/") if args.s3 else "s3://<bucket>/<prefix>"
+        for fname, _size, _kept in supersede:
+            print("aws s3 rm %s/%s" % (base, fname))
+        # non-zero so an automated caller can't treat --apply as 'done'
+        sys.exit(3)
+
+
+if __name__ == "__main__":
+    main()

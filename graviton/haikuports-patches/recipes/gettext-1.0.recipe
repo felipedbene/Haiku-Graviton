@@ -121,26 +121,32 @@ BUILD_REQUIRES="
 	devel:libiconv$secondaryArchSuffix
 	devel:libncurses$secondaryArchSuffix
 	"
-# STAGE-1 NOTE (graviton), RETIRED 2026-08-24: cmd:groff was dropped from
-# BUILD_PREREQUIRES because groff appears in this tarball only as MAN2HTML in
-# gettext-{runtime,tools}/man/Makefile.in (:2299 / :3957) -- "all-am: Makefile
-# $(MANS) all-local" depends on the .1 pages, never on $(man_HTML), and the
-# prebuilt $(srcdir) HTML copies shipped in the tarball are what INSTALL()'s
-# plain "make install" actually uses. groff-1.23.0 is now built natively and
-# published in the DeBeOS repo, so the line below is restored; see
-# graviton/haikuports-patches/README.md for the RC=0 rebuild that proved it.
+# PREREQ STRIP (graviton, issue #26): cmd:groff and cmd:makeinfo are dropped from
+# BUILD_PREREQUIRES. Neither is needed to build gettext here, and both drag in a
+# heavy texinfo/netpbm doc chain for output the build never installs:
+#   - groff appears in this tarball only as MAN2HTML in gettext-{runtime,tools}/
+#     man/Makefile.in (:2299 / :3957); "all-am: Makefile $(MANS) all-local"
+#     depends on the .1 man pages, never on $(man_HTML), and the prebuilt
+#     $(srcdir) man pages shipped in the release tarball are what INSTALL()'s
+#     plain "make install" copies. The HTML man conversion is never triggered.
+#   - makeinfo (texinfo) only regenerates the .info manuals, and that lives in
+#     automake's maintainer rules -- which --disable-maintainer-mode below turns
+#     off -- while the prebuilt .info files shipped in the tarball are installed
+#     as-is. The make invocations also force AUTOCONF/AUTOMAKE/AUTOHEADER/ACLOCAL
+#     to ":" so nothing re-derives the generated doc inputs.
+# gettext/libintl is a keystone (grep/findutils/nano/gawk/diffutils/tar require
+# devel:libintl), so this keeps it buildable without first standing up the doc
+# toolchain. Restore both lines only if a future doc-generating change needs them.
 BUILD_PREREQUIRES="
 	cmd:aclocal
 	cmd:autoconf
 	cmd:automake
 	cmd:autoheader
 	cmd:gcc$secondaryArchSuffix
-	cmd:groff
 	cmd:gzip
 	cmd:ld$secondaryArchSuffix
 	cmd:libtoolize$secondaryArchSuffix
 	cmd:make
-	cmd:makeinfo
 	"
 
 BUILD()
@@ -211,20 +217,3 @@ TEST()
 
 	make check
 }
-
-# Added by haikuporter:
-SOURCE_URI='pkg:/boot/home/haikuports/input-source-packages/gettext_source_rigged-1.0-1-arm64.hpkg'
-for i in {2..1000}; do
-	eval currentSrcUri=\$SOURCE_URI_$i
-	if [ -z "$currentSrcUri" ]; then
-		break
-	fi
-	eval SOURCE_URI_$i="$SOURCE_URI"
-done
-for i in {001..999}; do
-	eval currentSrcUri=\$SOURCE_URI_$i
-	if [ -z "$currentSrcUri" ]; then
-		break
-	fi
-	eval SOURCE_URI_$i="$SOURCE_URI"
-done

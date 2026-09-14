@@ -34,6 +34,7 @@
 
 #include <driver_settings.h>
 #include <kernel.h>
+#include <ksystem_info.h>
 #include <util/AutoLock.h>
 #include <vm/vm.h>
 
@@ -2662,9 +2663,13 @@ ena_init_device(void* _info, void** _cookie)
 	ena_haiku_device* device = (ena_haiku_device*)_info;
 
 	/* First thing in the log, so every boot is attributable to a build. See the
-	   comment on ENA_BUILD_TAG in ena.h for why this is not decoration. */
-	TRACE_ALWAYS("driver build %s, compiled %s (hrev%d)\n", ENA_BUILD_TAG,
-		ENA_BUILD_STAMP, ENA_HAIKU_REVISION);
+	   comment on ENA_BUILD_TAG in ena.h for why this is not decoration. The
+	   revision comes from get_haiku_revision() -- the live value stamped into
+	   the running system (a DeBeOS-native debeos-r<n>-g<sha> for source builds,
+	   or the pinned hrev of a bake), not the frozen ENA_HAIKU_REVISION constant,
+	   which is now used only for the numeric device telemetry field (#201). */
+	TRACE_ALWAYS("driver build %s, compiled %s (%s)\n", ENA_BUILD_TAG,
+		ENA_BUILD_STAMP, get_haiku_revision());
 
 	device_node* parent = sDeviceManager->get_parent_node(device->node);
 	sDeviceManager->get_driver(parent, (driver_module_info**)&device->pci,
@@ -3347,6 +3352,7 @@ ena_send(ena_haiku_device* device, net_buffer* buffer)
 	if (burstLeft == 0)
 		device->txBurstExhausted++;
 	device->txFrames++;
+	device->txBytes += size;
 
 	ena_com_write_sq_doorbell(device->txSubmissionQueue);
 	device->txDoorbells++;
@@ -3669,6 +3675,7 @@ ena_receive(ena_haiku_device* device, net_buffer** _buffer)
 		buffer->buffer_flags |= NET_BUFFER_L4_CHECKSUM_VALID;
 
 	device->rxFrames++;
+	device->rxBytes += buffer->size;
 	if (context.l4_csum_checked)
 		device->rxL4CsumChecked++;
 	if (context.l4_csum_err)
@@ -3871,6 +3878,44 @@ ena_ioctl(void* cookie, uint32 op, void* buffer, size_t length)
 				&device->rxIrqInterval);
 			stats.intrDelayResolution = device->comDev.intr_delay_resolution;
 			stats.rearmMode = (uint64)(uint32)atomic_get(&device->rearmMode);
+
+			return user_memcpy(buffer, &stats, sizeof(stats));
+		}
+
+		case ENA_IOCTL_GET_ENI_STATS:
+		{
+			struct ena_eni_stats stats;
+			if (length != sizeof(stats))
+				return B_BAD_VALUE;
+
+			/* Read without either datapath lock, same as ENA_IOCTL_GET_IRQ_STATS:
+			   each field is written by one side only and none of them gates
+			   anything, so the worst a snapshot straddling an update can be is one
+			   frame stale -- and taking rxLock or txLock here would serialise a
+			   diagnostic against the very path it is meant to observe. */
+			stats.hwRxDrops = device->hwRxDrops;
+			stats.hwTxDrops = device->hwTxDrops;
+			stats.rxPackets = device->rxFrames;
+			stats.rxBytes = device->rxBytes;
+			stats.txPackets = device->txFrames;
+			stats.txBytes = device->txBytes;
+			stats.rxDrainCycles = device->rxDrainCycles;
+			stats.rxL4CsumChecked = device->rxL4CsumChecked;
+			stats.rxL4CsumErrors = device->rxL4CsumErrors;
+			stats.rxL3Ipv4Frames = device->rxL3Ipv4Frames;
+			stats.rxL3CsumErrors = device->rxL3CsumErrors;
+			stats.txChecksumOffloaded = device->txChecksumOffloaded;
+			stats.txChecksumRejected = device->txChecksumRejected;
+			stats.txDoorbells = device->txDoorbells;
+			stats.txBurstExhausted = device->txBurstExhausted;
+			stats.resetCount = (uint64)(uint32)atomic_get(&device->resetCount);
+			stats.adminWedgeResets = device->adminWedgeResets;
+			stats.fatalErrorResets = device->fatalErrorResets;
+			stats.deviceRequestResets = device->deviceRequestResets;
+			stats.missingTxResets = device->missingTxResets;
+			stats.rxStallDetections = device->rxStallDetections;
+			stats.linkUp = device->linkUp ? 1 : 0;
+			stats.mtu = device->frameSize;
 
 			return user_memcpy(buffer, &stats, sizeof(stats));
 		}

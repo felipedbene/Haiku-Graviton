@@ -561,7 +561,20 @@ export class HaikuGravitonPipelineStack extends cdk.Stack {
       projectName: `${cfg.amiNamePrefix}-promote`,
       environment: smallArmEnvironment,
       timeout: cdk.Duration.minutes(15),
-      environmentVariables: { ...commonEnvVars, AWS_REGION: { value: cfg.region } },
+      environmentVariables: {
+        ...commonEnvVars,
+        AWS_REGION: { value: cfg.region },
+        // haiku-canonical's promote runs a best-effort candidate prune after the
+        // tag move (deregister-image + delete-snapshot on all but the newest N
+        // candidates). This role is scoped to tag mutation ONLY -- it holds no
+        // deregister/delete-snapshot rights on purpose (a promote must never be
+        // able to destroy AMIs). Without this the prune logged a stream of
+        // UnauthorizedOperation errors on every promote; the tag move and SSM
+        // mirror both succeeded, but the noise looked like a failure. Skip the
+        // prune here and run `haiku-canonical prune --apply` deliberately out of
+        // band when retention actually needs enforcing.
+        HG_SKIP_PRUNE: { value: '1' },
+      },
       buildSpec: codebuild.BuildSpec.fromSourceFilename('graviton/pipeline/buildspecs/promote.yml'),
       logging: {
         cloudWatch: {
@@ -578,6 +591,26 @@ export class HaikuGravitonPipelineStack extends cdk.Stack {
         actions: ['ec2:DescribeImages', 'ec2:CreateTags', 'ec2:DeleteTags'],
         resources: ['*'],
         conditions: regionCondition,
+      }),
+    );
+    // haiku-canonical's promote mirrors the canonical AMI id into an SSM
+    // parameter so consumers (the perf-gate peer, the ops build wave, operators)
+    // can resolve it without an ec2:DescribeImages tag scan, and its check step
+    // then enforces that the tag and the mirror agree. That mirror update MUST
+    // move atomically with the tag or the invariant is briefly violated, so the
+    // in-pipeline promote -- not a post-hoc hand correction -- owns it. Scoped to
+    // exactly the one canonical-ami-id parameter (cfg.canonicalAmiParam already
+    // carries its leading slash, e.g. /haiku-graviton/canonical-ami-id). This
+    // grant previously lived as a hand-applied inline policy on the CDK-managed
+    // role, which a future deploy would have silently wiped; owning it here makes
+    // the unattended promote self-sufficient.
+    promote.addToRolePolicy(
+      new iam.PolicyStatement({
+        sid: 'MirrorCanonicalAmiIdToSsm',
+        actions: ['ssm:PutParameter'],
+        resources: [
+          `arn:aws:ssm:${cfg.region}:${cfg.account}:parameter${cfg.canonicalAmiParam}`,
+        ],
       }),
     );
 
