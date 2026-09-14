@@ -1,5 +1,5 @@
 import * as cdk from 'aws-cdk-lib';
-import { Template } from 'aws-cdk-lib/assertions';
+import { Match, Template } from 'aws-cdk-lib/assertions';
 import { HaikuGravitonPipelineStack } from '../lib/haiku-graviton-pipeline-stack';
 import { HaikuPipelineConfig } from '../lib/config';
 
@@ -233,4 +233,38 @@ test('promote role can mutate tags but not register images', () => {
   const json = JSON.stringify(policies);
   expect(json).toContain('ec2:DeleteTags');
   expect(json).toContain('ec2:RegisterImage');
+});
+
+test('promote role owns the canonical-ami-id SSM mirror in-stack (not a hand-applied inline policy)', () => {
+  const t = synth();
+  // The promote role must carry ssm:PutParameter scoped to exactly the one
+  // canonical-ami-id parameter, so the unattended promote can move the SSM
+  // mirror atomically with the canonical tag. Owning it here is the point of the
+  // fix: an inline policy applied by hand would be wiped by a future deploy.
+  t.hasResourceProperties('AWS::IAM::Policy', {
+    PolicyDocument: {
+      Statement: Match.arrayWith([
+        Match.objectLike({
+          Sid: 'MirrorCanonicalAmiIdToSsm',
+          Action: 'ssm:PutParameter',
+          Resource: `arn:aws:ssm:${config.region}:${config.account}:parameter${config.canonicalAmiParam}`,
+        }),
+      ]),
+    },
+  });
+});
+
+test('promote project skips the best-effort candidate prune it has no rights for', () => {
+  const t = synth();
+  // HG_SKIP_PRUNE=1 keeps haiku-canonical from attempting a deregister/
+  // delete-snapshot sweep the tag-only promote role is deliberately not granted,
+  // so the prune stops logging UnauthorizedOperation on every promote.
+  t.hasResourceProperties('AWS::CodeBuild::Project', {
+    Name: 'haiku-graviton-promote',
+    Environment: Match.objectLike({
+      EnvironmentVariables: Match.arrayWith([
+        Match.objectLike({ Name: 'HG_SKIP_PRUNE', Value: '1' }),
+      ]),
+    }),
+  });
 });
