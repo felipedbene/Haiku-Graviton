@@ -35,6 +35,26 @@ class ARMv8TranslationTableDescriptor {
 	static constexpr uint64_t kTypeTable = 0x3u;
 	static constexpr uint64_t kTypePage = 0x3u;
 
+public:
+	/* Descriptor bit[52] is the Contiguous bit. When a naturally aligned run
+	 * of block or page descriptors all set it, the TLB may cache the run as a
+	 * single entry, cutting TLB pressure on large mappings. At the 4KB granule
+	 * this port uses the run is 16 consecutive entries at every level that maps
+	 * memory (64KB at L3, 32MB at L2, 16GB at L1). The architecture leaves the
+	 * behaviour UNPREDICTABLE unless every entry in the run is present, has a
+	 * contiguous output address, carries identical attributes, and the run is
+	 * aligned to its total size. Critically, that uniformity has to hold for
+	 * the whole life of the mapping: if any single member is later given
+	 * different attributes (a sub-range re-protect) or replaced by a finer
+	 * table (a split), the group is silently corrupt. The loader therefore only
+	 * sets it on the linear physical map -- a permanent, uniformly attributed,
+	 * kernel-global mapping the runtime never re-protects or sub-maps -- and
+	 * never on the kernel image, whose sections are re-protected per-range.
+	 */
+	static constexpr uint64_t kContiguousBit = (1UL << 52);
+
+private:
+
 	// TODO: Place TABLE PAGE BLOCK prefixes accordingly
 	struct UpperAttributes {
 		static constexpr uint64_t TABLE_PXN	= (1UL << 59);
@@ -189,6 +209,21 @@ public:
 
 	bool PagesAllowed(uint8 level) {
 		return fRegime[level].pages;
+	}
+
+	// The Contiguous bit is meaningful at any level that maps memory directly
+	// (a block level or the page level), never at a pure table level.
+	bool ContiguousAllowed(uint8 level) {
+		return fRegime[level].blocks || fRegime[level].pages;
+	}
+
+	// Number of consecutive descriptors that form a Contiguous run. The
+	// architecture fixes this per granule; only the 4KB granule this port uses
+	// has a single uniform value across levels (16). For other granules the
+	// length differs by level, so return 1 (a "run" that sets no Contiguous
+	// bit) rather than risk emitting an UNPREDICTABLE mismatched group.
+	uint32 ContiguousCount() {
+		return (Granularity() == 0x1000) ? 16 : 1;
 	}
 
 	uint64 Mask(uint8 level) {
