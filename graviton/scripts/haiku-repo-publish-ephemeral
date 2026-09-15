@@ -148,12 +148,13 @@ launch_peer() {
 			sleep 5
 		done
 		apt-get update -y
-		# Ubuntu 24.04 has no apt 'awscli'; it ships only as a snap. Try apt (for
-		# other bases) then fall back to the snap and symlink it onto PATH.
-		if ! apt-get install -y awscli; then
-			snap install aws-cli --classic
-			ln -sf /snap/bin/aws /usr/local/bin/aws
-		fi
+		# Ubuntu 24.04 has no apt 'awscli' and the snap store is unreachable from
+		# this build VPC (egress-only SG + NAT; snapd cannot contact snapcraft.io),
+		# so the old apt-then-snap path dead-ended at "unable to contact snap store".
+		# Install AWS CLI v2 from the official zip over HTTPS (reachable via NAT).
+		apt-get install -y unzip curl
+		curl -sSL "https://awscli.amazonaws.com/awscli-exe-linux-aarch64.zip" -o /tmp/awscliv2.zip
+		( cd /tmp && unzip -q awscliv2.zip && ./aws/install )
 		install -d -m755 /opt/haiku-tools /opt/haiku-tools/lib
 		aws s3 cp "$HOST_TOOLS_S3/package"      /opt/haiku-tools/package      --region $region
 		aws s3 cp "$HOST_TOOLS_S3/package_repo" /opt/haiku-tools/package_repo --region $region
