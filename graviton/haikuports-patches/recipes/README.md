@@ -106,3 +106,39 @@ and the *only* thing between here and a ruby package is a guest running a kernel
 They stay because the reasoning is worth keeping and because a future chroot change
 could make either cut necessary again. **Do not install them onto a guest** expecting
 current behaviour.
+
+## Campaign #136 quick-win port fixes (names a–e)
+
+Ten failed `#136` ports whose failure was a single missing `BUILD_PREREQUIRES`
+`cmd:` (the build chroot only mounts declared prerequisites, so a recipe that
+shells out to an undeclared tool dies with `command not found` — the same class
+as the `#27` `coreutils` `cmd:perl` fix), a CMake build-type/policy mismatch, a
+missing autotools `--install`, a `config.guess` that could not name the host, or
+a toolchain that lacks the LTO plugin. Each fix is a portability/build-system
+correction, **not** a feature cut; all were proven native `RC=0` on an arm64
+builder (hpkg exists) and harvested to the pool.
+
+| Recipe | Fix | Failure signature |
+|---|---|---|
+| `convmv-2.05.recipe` | `+cmd:gzip` in `BUILD_PREREQUIRES` | `Makefile` manpage target pipes `pod2man` to `gzip`: `gzip: command not found` (Error 127) |
+| `atari++-1.81.recipe` | `+cmd:gzip` | `make install` gzips the man page: `gzip: command not found` (Error 127) |
+| `digiclock-1.0.recipe` | `+cmd:unzip` | `INSTALL()` runs `unzip fatelk`: `unzip: command not found` |
+| `autotrace-0.40.0_20230301.recipe` | `+cmd:which` | `autogen.sh` uses `which pkg-config`; `which: command not found` → `*** No pkg-config found ***` |
+| `blobwars-2.00.recipe` | `+cmd:msgfmt +cmd:pkg_config` | `msgfmt -o locale/ca.mo`: `msgfmt: No such file or directory` (Error 127) |
+| `epoll_shim-0.0.20230411.recipe` | `-DCMAKE_BUILD_TYPE=RelWithDebInfo` → `Release` | haikuporter's cmake wrapper: `invoking cmake with -DCMAKE_BUILD_TYPE=RelWithDebInfo without debug info packages specified` |
+| `cmake_haiku-git.recipe` | `+-DCMAKE_BUILD_TYPE=Release +-DCMAKE_POLICY_VERSION_MINIMUM=3.5` | bare `cmake .` → `invoking cmake without CMAKE_BUILD_TYPE specified`; then `Compatibility with CMake < 3.5 has been removed` (same class as the openal/libjxl policy floor) |
+| `draco-1.5.6.recipe` | `-DCMAKE_INTERPROCEDURAL_OPTIMIZATION=ON` → `OFF` | native gcc has no LTO plugin: `cc1plus: error: LTO support has not been enabled in this configuration` / `'-fno-fat-lto-objects' are supported only with linker plugin` |
+| `bonnie++-2.00a.recipe` | `autoreconf` → `autoreconf -fi` | `configure.in: error: required file 'install-sh' not found; try running autoreconf --install` |
+| `autoconf2.71-2.71.recipe` | bare `./configure $configureDirArgs` → `runConfigure ./configure` | `configure: error: cannot guess build type; you must specify one` — the sibling `autoconf-2.72.recipe` already uses `runConfigure` (which passes the host triple), so this mirrors the working pattern |
+
+`devil-1.8.0` (media-libs) was also requeued failed→built in this pass with **no
+recipe change**: its `#136` failure was a transient dep-resolution oscillation in
+the batch tooling, not a recipe defect — all of its `devel:` prerequisites
+(`jasper`, `libmng`, `tiff>=6`, `lcms2`, …) are in the pool, so it builds clean
+once they are installed. No overlay recipe is needed for it.
+
+`betterspades-0.1.6~git` was NOT fixed: its two shallow blockers (`cmd:unzip`,
+`RelWithDebInfo`) were cleared, but it then fails at configure because its
+`src/CMakeLists.txt` `FetchContent_MakeAvailable(cglm)` tries to build a vendored
+`cglm` at configure time and that step fails — real porting work (package `cglm`
+or de-vendor it), out of scope for a quick win.
