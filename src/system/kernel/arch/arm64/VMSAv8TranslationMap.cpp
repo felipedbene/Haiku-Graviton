@@ -366,20 +366,34 @@ VMSAv8TranslationMap::GetOrMakeTable(phys_addr_t ptPa, int level, int index,
 	uint64_t oldPte = atomic_get64((int64*) ptePtr);
 
 	int type = oldPte & kPteTypeMask;
-	ASSERT(type != kPteTypeL12Block);
 
 	if (type == kPteTypeL012Table) {
 		// This is table entry already, just return it
 		return oldPte & kPteAddrMask;
-	} else if (reservation != nullptr) {
+	}
+
+	if (type == kPteTypeL12Block) {
+		// A block descriptor covers this whole slot. To install anything finer
+		// underneath it (the caller wants to descend), we must first break the
+		// block into a next-level table describing the same output range. That
+		// needs a page for the new table, so it is only possible on the mapping
+		// path, which supplies a reservation. The read/teardown walkers pass
+		// null: they never create finer mappings, so leaving the block intact
+		// and reporting "no sub-table" is correct for them, and -- crucially --
+		// avoids the previous behaviour of overwriting a live block with an
+		// empty table *without* break-before-make, which is architecturally
+		// illegal and silently corrupts the range the block mapped.
+		if (reservation == nullptr)
+			return 0;
+
+		return SplitBlock(ptePtr, oldPte, level, reservation);
+	}
+
+	if (reservation != nullptr) {
 		// Create new table there
 		vm_page* page = vm_page_allocate_page(reservation, PAGE_STATE_WIRED | VM_PAGE_ALLOC_CLEAR);
 		phys_addr_t newTablePa = page->physical_page_number << fPageBits;
 		DEBUG_PAGE_ACCESS_END(page);
-
-		// We only create mappings at the final level so we don't need to handle
-		// splitting block mappings
-		ASSERT(type != kPteTypeL12Block);
 
 		// Ensure that writes to page being attached have completed
 		asm("dsb ishst");
@@ -401,6 +415,94 @@ VMSAv8TranslationMap::GetOrMakeTable(phys_addr_t ptPa, int level, int index,
 
 	// There's no existing table and we have no reservation
 	return 0;
+}
+
+
+// Break a block descriptor at `level` into a next-level table that maps the
+// same output range with the same attributes, and install it in place of the
+// block with a correct break-before-make. Returns the physical address of the
+// new table.
+//
+// This is the "split a block back to finer entries" path required whenever a
+// mapping finer than the block has to be made inside its span. The blocks that
+// reach it are the ones the EFI loader installed in the shared TTBR1 tables for
+// the kernel image and other early regions (the runtime Map() still only
+// installs L3 pages, so it never creates blocks itself). It replaces an older
+// release-mode path that overwrote a live block with an empty table with no
+// break-before-make -- architecturally illegal and silently corrupting.
+//
+// Invariant: a Contiguous group is never split. The loader only sets the
+// Contiguous bit on the linear physical map, which the runtime never sub-maps,
+// so a block that carries it must never arrive here; splitting one member in
+// isolation would leave the other members of the group claiming a run that no
+// longer exists (UNPREDICTABLE). We fail loud rather than corrupt silently.
+phys_addr_t
+VMSAv8TranslationMap::SplitBlock(uint64_t* ptePtr, uint64_t blockPte, int level,
+	vm_page_reservation* reservation)
+{
+	ASSERT((blockPte & kPteTypeMask) == kPteTypeL12Block);
+	ASSERT(level < 3);
+	ASSERT(reservation != nullptr);
+
+	if ((blockPte & kAttrContiguous) != 0) {
+		panic("VMSAv8: refusing to split a Contiguous block (pte %#" B_PRIx64
+			" level %d) -- would corrupt the rest of the group", blockPte, level);
+		return 0;
+	}
+
+	int tableBits = fPageBits - 3;
+	int childLevel = level + 1;
+	int childShift = tableBits * (3 - childLevel) + fPageBits;
+	uint64_t childSize = 1UL << childShift;
+	uint64_t childCount = 1UL << tableBits;
+
+	// Every fragment inherits the block's output base and attributes. A leaf
+	// that maps memory is a block at L1/L2 but a page at L3; the two encodings
+	// differ only in the type field.
+	phys_addr_t basePa = blockPte & kPteAddrMask;
+	uint64_t attr = blockPte & kPteAttrMask;
+	uint64_t childType = (childLevel == 3) ? kPteTypeL3Page : kPteTypeL12Block;
+
+	vm_page* page = vm_page_allocate_page(reservation, PAGE_STATE_WIRED | VM_PAGE_ALLOC_CLEAR);
+	phys_addr_t newTablePa = page->physical_page_number << fPageBits;
+	DEBUG_PAGE_ACCESS_END(page);
+
+	uint64_t* newTable = TableFromPa(newTablePa);
+	for (uint64_t i = 0; i < childCount; i++)
+		newTable[i] = (basePa + i * childSize) | attr | childType;
+
+	// Make the child table's contents visible to the page-table walker before
+	// any descriptor can point at it.
+	asm("dsb ishst");
+
+	// Break-before-make. The block and the replacement table describe the same
+	// VA range with different structure; the architecture forbids both being
+	// live at once, so the block must be invalidated and evicted from the TLB
+	// before the table is published. A block spans many pages and may be cached
+	// as several TLB entries, so a single by-VA invalidation is insufficient --
+	// flush the whole regime it belongs to. This is a rare, slow path, so the
+	// broad flush is acceptable.
+	atomic_set64((int64_t*)ptePtr, 0);
+	asm("dsb ishst");
+
+	if ((blockPte & kAttrNG) == 0) {
+		// Global (kernel) entry: it can be cached under any ASID.
+		asm("tlbi vmalle1is");
+		asm("dsb ish");
+		asm("isb");
+	} else {
+		// Non-global (user) entry: flush just this map's ASID. If it has none,
+		// the map is not installed on any CPU and nothing can be cached.
+		InterruptsSpinLocker locker(sAsidLock);
+		if (fASID != -1)
+			flush_tlb_whole_asid(fASID);
+	}
+
+	atomic_set64((int64_t*)ptePtr, newTablePa | kPteTypeL012Table);
+	asm("dsb ishst");
+	asm("isb");
+
+	return newTablePa;
 }
 
 
@@ -883,6 +985,19 @@ VMSAv8TranslationMap::Protect(addr_t start, addr_t end, uint32 attributes, uint3
 				return;
 
 			phys_addr_t pa = pte & kPteAddrMask;
+
+			// A Contiguous leaf must never be re-protected on its own: it is
+			// one member of an aligned group the TLB may cache as a single
+			// entry, and giving one member different attributes leaves the
+			// group UNPREDICTABLE. The loader only sets the bit on the linear
+			// physical map, which is never re-protected, so this cannot happen;
+			// fail loud rather than corrupt the group silently.
+			if ((pte & kAttrContiguous) != 0) {
+				panic("VMSAv8: Protect() on a Contiguous mapping (pte %#" B_PRIx64
+					" va %#" B_PRIxADDR ") -- would corrupt the group", pte,
+					effectiveVa);
+				return;
+			}
 
 			// We need to use an atomic compare-swap loop because we must
 			// need to clear somes bits while setting others.

@@ -24,6 +24,14 @@ static constexpr uint64_t kAttrSWDIRTY = (1UL << 56);
 static constexpr uint64_t kAttrSWDBM = (1UL << 55);
 static constexpr uint64_t kAttrUXN = (1UL << 54);
 static constexpr uint64_t kAttrPXN = (1UL << 53);
+// Bit[52]: the architectural Contiguous bit. A naturally aligned run of leaf
+// entries that all set it may be cached as a single TLB entry. It is only well
+// defined for a whole aligned group with identical attributes and a contiguous
+// output address, so the invariant is that every member is created together and
+// no single member is ever re-protected or split in isolation. The boot loader
+// sets it only on the linear physical map, which the runtime never re-protects
+// or sub-maps; SplitBlock() refuses to shatter a member (see there).
+static constexpr uint64_t kAttrContiguous = (1UL << 52);
 static constexpr uint64_t kAttrDBM = (1UL << 51);
 static constexpr uint64_t kAttrNG = (1UL << 11);
 static constexpr uint64_t kAttrAF = (1UL << 10);
@@ -116,6 +124,8 @@ private:
 	uint64_t* TableFromPa(phys_addr_t pa);
 	void FreeTable(phys_addr_t ptPa, uint64_t va, int level, vm_page_reservation* reservation);
 	phys_addr_t GetOrMakeTable(phys_addr_t ptPa, int level, int index, vm_page_reservation* reservation);
+	phys_addr_t SplitBlock(uint64_t* ptePtr, uint64_t blockPte, int level,
+		vm_page_reservation* reservation);
 	template<typename UpdatePte>
 	void ProcessRange(phys_addr_t ptPa, int level, addr_t va, size_t size,
 		vm_page_reservation* reservation, UpdatePte &&updatePte);
