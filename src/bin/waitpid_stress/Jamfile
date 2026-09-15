@@ -1,0 +1,5 @@
+SubDir HAIKU_TOP src bin waitpid_stress ;
+
+Application waitpid_stress :
+	waitpid_stress.c
+;
