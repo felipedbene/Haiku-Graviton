@@ -193,10 +193,15 @@ echo "== 5. upload packages (new, immutable) then index (last) =="
 # --delete mirrors the local set, which is authoritative: step 1 pulled the
 # ENTIRE published packages/ set, and step 3 only added the new canonical name(s)
 # and dropped superseded versions of the same package. Without --delete a version
-# bump (e.g. rust_bin -2 -> -3) leaves the old hpkg orphaned in S3 -- harmless
-# (the rebuilt index references only the surviving files, so pkgman never fetches
-# it) but wasteful and confusing. With it, S3 ends up exactly matching the index.
-aws s3 sync "$RO/packages/" "${HG_REPO_S3%/}/packages/" --region "$region" --only-show-errors
+# bump (e.g. rust_bin -2 -> -3) leaves the old hpkg orphaned in S3. That orphan
+# is NOT harmless: `package_repo create packages/*.hpkg` refuses a pool holding two
+# versions of the same package, so a later full-pool index rebuild FAILS on the
+# duplicate (this bricked the #268 haiku_devel republish: libsdl3 3.2.28-2 + 3.4.16-1
+# both present -> "package libsdl3 has already been added!"). --delete keeps S3 ==
+# the local (pruned) set so full rebuilds never see duplicates. Requires
+# s3:DeleteObject on the repo bucket, granted to the publisher role in the CDK
+# (DebeosOpsStack BuilderRole, PR #273).
+aws s3 sync "$RO/packages/" "${HG_REPO_S3%/}/packages/" --region "$region" --only-show-errors --delete
 for k in repo repo.info repo.sha256; do
 	aws s3 cp "$RO/$k" "${HG_REPO_S3%/}/$k" --region "$region" --only-show-errors
 done
