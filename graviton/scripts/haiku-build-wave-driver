@@ -1,0 +1,409 @@
+#!/usr/bin/env python3
+"""haiku-build-wave-driver -- drive the DeBeOS missing-ports backlog to completion.
+
+WHY THIS EXISTS (issue #136). The `debeos-build-wave` Step Functions machine is a
+*single-chain executor*: one execution == one builder == one dependency chain built
+serially (Claim -> Launch -> WaitForSSM -> Map[maxConcurrency 1] -> optional
+incremental Publish -> Reap). Scaling to the ~2600 missing ports therefore means
+"start many executions, deps-first, publishing between waves, and keep going until
+the queue drains." Until now that fan-out loop lived only in ephemeral operator
+sessions -- an agent hand-launched a burst of 7-8 executions with a shell `for`
+loop, and the campaign stalled the moment the session ended (it did: the pool grew
+921 -> 2420 across several manual bursts, then went idle on 2026-09-02 with 838
+planned ports still `queued`). There was no committed, resumable artifact that
+encodes the drive loop. This is that artifact.
+
+WHAT IT IS. Deterministic orchestration glue, nothing more. It does NOT reimplement
+build, closure, or publish -- it reads the plan the campaign already computed and
+persisted (the deps-first `wave` attribute on each `debeos-package-state` item, or
+`depclosure.py` output), partitions each wave into chains, and drives
+`states:StartExecution` at the SOP-sanctioned budget, polling to completion before
+advancing to the next (deeper) wave. The state machine still owns build, publish,
+and builder reaping.
+
+SAFETY / SOP ALIGNMENT (graviton/ops/SOPs.md):
+  * DRY-RUN BY DEFAULT (SOP Sec 6 shadow gate). With no --execute it prints the wave
+    plan and the exact StartExecution payloads it *would* send, and launches
+    nothing. Flipping the pipeline out of shadow and authorizing a wide run is a
+    human go/no-go -- so is passing --execute.
+  * Budget default 4 concurrent (SOP Sec 2.3). Raising it is a human decision; the
+    driver refuses --budget > 4 unless --ack-budget is also given, and logs it.
+  * Never drives mega-builds (SOP Sec 2.4): gcc/binutils/llvm*/rust*/mesa/webkit/
+    qt*/boost/openjdk are skipped with a warning (they belong in needs_human).
+  * publish=true per execution by default so each wave folds into the pool before
+    the next resolves its deps from it (SOP Sec 3, incremental single-flight add).
+    --chain-size is capped at 18 so a chain's per-execution publish stays inside
+    the /dev/shm re-stamp limit (#168).
+  * Resumable: reads live `queued` state each run. Ports already `built` have left
+    the queue; ClaimBatch leases queued->building conditionally, so re-running the
+    driver (or two overlapping drivers) never double-builds a package. A stall is
+    now recoverable by simply re-invoking this script.
+  * The state machine reaps its own builder on every path; this driver launches no
+    instances and touches no pool directly. Its blast radius is StartExecution +
+    read-only DDB, matching the `debeos-operator` least-priv role.
+
+USAGE
+  # plan only (safe, read-only) -- print waves + payloads, launch nothing:
+  AWS_PROFILE=haiku-graviton graviton/scripts/haiku-build-wave-driver --plan-out /tmp/plan.json
+
+  # drive for real at the sanctioned budget (requires the shadow gate be open):
+  AWS_PROFILE=haiku-graviton graviton/scripts/haiku-build-wave-driver --execute
+
+  # only the first wave, build-only (no publish), for a smoke run:
+  ... --execute --only-wave 1 --no-publish --max-chains 2
+
+Exit status: 0 on a clean drive (or a clean dry-run); non-zero if a wave had a
+failed execution while --execute, or on a usage/credentials error.
+"""
+import argparse
+import json
+import os
+import sys
+import time
+from collections import defaultdict
+
+TABLE_DEFAULT = os.environ.get("TABLE", "debeos-package-state")
+SM_NAME = "debeos-build-wave"
+
+# SOP Sec 2.4 -- never drive these without separate human sign-off. Prefix match on
+# a leading token catches versioned recipe names (llvm21, rust_bin, qt6, ...).
+MEGA_PREFIXES = ("gcc", "binutils", "llvm", "rust", "mesa", "webkit", "qt5", "qt6",
+                 "boost", "openjdk", "m68k_elf_gcc")
+
+SANCTIONED_BUDGET = 4          # SOP Sec 2.3
+PUBLISH_CHUNK_CAP = 18         # #168 /dev/shm re-stamp limit per haiku-repo-add
+TERMINAL_OK = {"SUCCEEDED"}
+TERMINAL_BAD = {"FAILED", "TIMED_OUT", "ABORTED"}
+
+
+def is_mega(pkg):
+    base = pkg.split("-")[0]
+    return any(base == p or base.startswith(p) for p in MEGA_PREFIXES)
+
+
+def log(*a):
+    print(*a, file=sys.stderr, flush=True)
+
+
+# ---------------------------------------------------------------- plan sources
+def load_queued(table, region):
+    """Read every build_state=queued item off the GSI. Returns list of dicts with
+    pkg, wave (int or None), target (str). Deterministic: no free-text judgement,
+    just field extraction (SOP Sec 0)."""
+    import boto3
+    ddb = boto3.client("dynamodb", region_name=region)
+    paginator = ddb.get_paginator("query")
+    out = []
+    for page in paginator.paginate(
+            TableName=table, IndexName="by-build-state",
+            KeyConditionExpression="build_state = :s",
+            ExpressionAttributeValues={":s": {"S": "queued"}},
+            ProjectionExpression="pkg, wave, target_version, newest_upstream, "
+                                 "attempt_count, suppressed"):
+        for it in page.get("Items", []):
+            if it.get("suppressed", {}).get("BOOL") is True or \
+               it.get("suppressed", {}).get("S") == "true":
+                continue
+            pkg = it["pkg"]["S"]
+            wv = it.get("wave", {})
+            wave = None
+            if "N" in wv:
+                wave = int(wv["N"])
+            elif "S" in wv and wv["S"].isdigit():
+                wave = int(wv["S"])
+            target = (it.get("target_version", {}).get("S")
+                      or it.get("newest_upstream", {}).get("S") or "0")
+            out.append({"pkg": pkg, "wave": wave, "target": target})
+    return out
+
+
+def load_plan_file(path):
+    """Alternative plan source: a JSON artifact {"waves": {"1": [{"pkg","target"}...]}}
+    or the campaign's build-plan-*.json (a {"wavemap": {pkg: wave}} shape). Only used
+    when --plan-file is given; DDB is the default source of truth."""
+    with open(path) as f:
+        doc = json.load(f)
+    items = []
+    if "waves" in doc:
+        for w, lst in doc["waves"].items():
+            for e in lst:
+                # Accept both the compact {pkg,target} shape and this driver's own
+                # --plan-out audit shape ({chain:[...], target:{pkg:ver}}), so a
+                # written plan round-trips back in as an input.
+                if "chain" in e:
+                    tmap = e.get("target", {})
+                    for p in e["chain"]:
+                        items.append({"pkg": p, "wave": int(w),
+                                      "target": tmap.get(p, "0")})
+                else:
+                    items.append({"pkg": e["pkg"], "wave": int(w),
+                                  "target": e.get("target", "0")})
+    elif "wavemap" in doc:
+        for pkg, w in doc["wavemap"].items():
+            items.append({"pkg": pkg, "wave": int(w), "target": "0"})
+    else:
+        raise SystemExit("--plan-file: unrecognised shape (want 'waves' or 'wavemap')")
+    return items
+
+
+# ---------------------------------------------------------------- wave planning
+def build_waves(items, chain_size, include_unwaved):
+    """Group items into ordered waves, each wave split into chains of <=chain_size
+    mutually-independent ports. Returns [(wave_label, [chain, chain, ...]), ...] in
+    ascending build depth. Mega-builds are dropped (returned separately)."""
+    dropped_mega = sorted({i["pkg"] for i in items if is_mega(i["pkg"])})
+    items = [i for i in items if not is_mega(i["pkg"])]
+
+    by_wave = defaultdict(list)
+    unwaved = []
+    for i in items:
+        if i["wave"] is None:
+            unwaved.append(i)
+        else:
+            by_wave[i["wave"]].append(i)
+
+    ordered = []
+    for w in sorted(by_wave):
+        ordered.append((w, by_wave[w]))
+    if include_unwaved and unwaved:
+        # Unwaved items (Sec 4 re-queues without a computed depth) go LAST so any
+        # real deps built by the numbered waves are already published.
+        ordered.append(("unwaved", unwaved))
+
+    plan = []
+    for label, group in ordered:
+        pkgs = sorted(i["pkg"] for i in group)
+        tmap = {i["pkg"]: i["target"] for i in group}
+        chains = []
+        for k in range(0, len(pkgs), chain_size):
+            chunk = pkgs[k:k + chain_size]
+            chains.append([{"pkg": p, "target": tmap[p]} for p in chunk])
+        plan.append((label, chains))
+    return plan, dropped_mega, [i["pkg"] for i in unwaved] if not include_unwaved else []
+
+
+def exec_input(chain, publish, disk_gib, lease_secs):
+    """The minimal StartExecution payload the state machine consumes: {chain, target,
+    publish?}. chain is the ordered pkg list; target is {pkg: version}."""
+    ev = {
+        "chain": [c["pkg"] for c in chain],
+        "target": {c["pkg"]: c["target"] for c in chain},
+        "publish": bool(publish),
+    }
+    if disk_gib:
+        ev["disk_gib"] = int(disk_gib)
+    if lease_secs:
+        ev["lease_secs"] = int(lease_secs)
+    return ev
+
+
+# ---------------------------------------------------------------- SFN driving
+def resolve_sm_arn(region, override):
+    if override:
+        return override
+    import boto3
+    sfn = boto3.client("stepfunctions", region_name=region)
+    for page in sfn.get_paginator("list_state_machines").paginate():
+        for m in page["stateMachines"]:
+            if m["name"] == SM_NAME:
+                return m["stateMachineArn"]
+    raise SystemExit("could not resolve state machine %r in %s" % (SM_NAME, region))
+
+
+def drive_wave(sfn, sm_arn, label, chains, run_id, budget, publish, disk_gib,
+               lease_secs, poll_secs):
+    """Run a wave's chains through a concurrency-<=budget pool: keep <=budget
+    executions in flight, launch the next as one finishes, until all chains are
+    done. Returns (ok_count, bad_count, [failed_arns])."""
+    pending = list(enumerate(chains))
+    inflight = {}          # arn -> chain index
+    ok = bad = 0
+    failed = []
+    launched = 0
+
+    def launch(idx, chain):
+        nonlocal launched
+        name = "wd-%s-w%s-c%02d-%s" % (run_id, label, idx + 1, int(time.time()))
+        name = name.replace("_", "-")[:80]
+        ev = exec_input(chain, publish, disk_gib, lease_secs)
+        r = sfn.start_execution(stateMachineArn=sm_arn, name=name,
+                                input=json.dumps(ev))
+        launched += 1
+        log("    launched %s  (%d pkg: %s%s)" % (
+            name, len(chain), ", ".join(c["pkg"] for c in chain[:4]),
+            " ..." if len(chain) > 4 else ""))
+        return r["executionArn"]
+
+    while pending or inflight:
+        while pending and len(inflight) < budget:
+            idx, chain = pending.pop(0)
+            inflight[launch(idx, chain)] = idx
+        time.sleep(poll_secs)
+        for arn in list(inflight):
+            st = sfn.describe_execution(executionArn=arn)["status"]
+            if st in TERMINAL_OK:
+                ok += 1
+                del inflight[arn]
+            elif st in TERMINAL_BAD:
+                bad += 1
+                failed.append(arn)
+                log("    FAILED execution (%s): %s" % (st, arn))
+                del inflight[arn]
+    return ok, bad, failed
+
+
+# ---------------------------------------------------------------- main
+def main():
+    ap = argparse.ArgumentParser(description="Drive the DeBeOS missing-ports build wave (issue #136).")
+    ap.add_argument("--table", default=TABLE_DEFAULT)
+    ap.add_argument("--region", default=os.environ.get("AWS_DEFAULT_REGION", "us-west-2"))
+    ap.add_argument("--plan-file", help="read waves from a JSON artifact instead of DDB")
+    ap.add_argument("--plan-out", help="write the computed wave plan to this JSON path")
+    ap.add_argument("--chain-size", type=int, default=12,
+                    help="ports per execution/builder (<=18 keeps per-wave publish "
+                         "inside the /dev/shm re-stamp limit, #168). Default 12.")
+    ap.add_argument("--budget", type=int, default=SANCTIONED_BUDGET,
+                    help="max concurrent executions (SOP Sec 2.3 sanctions 4).")
+    ap.add_argument("--ack-budget", action="store_true",
+                    help="acknowledge a human decision to exceed the sanctioned budget of 4.")
+    ap.add_argument("--only-wave", help="drive only this wave label (e.g. 1), then stop.")
+    ap.add_argument("--max-chains", type=int, default=0,
+                    help="cap total chains driven this run (0 = no cap). For a small smoke wave.")
+    ap.add_argument("--include-unwaved", action="store_true",
+                    help="also drive queued items with no computed wave (Sec 4 re-queues); "
+                         "default skips them.")
+    ap.add_argument("--no-publish", action="store_true",
+                    help="build-only: do not publish (for a trial wave). Default publishes each wave.")
+    ap.add_argument("--disk-gib", type=int, default=0, help="override builder root disk per chain.")
+    ap.add_argument("--lease-secs", type=int, default=0, help="override the ClaimBatch lease.")
+    ap.add_argument("--poll-secs", type=int, default=30, help="DescribeExecution poll interval.")
+    ap.add_argument("--sm-arn", help="state machine ARN (else resolved by name).")
+    ap.add_argument("--run-id", default=time.strftime("%m%d%H%M"),
+                    help="tag baked into execution names for traceability.")
+    ap.add_argument("--execute", action="store_true",
+                    help="ACTUALLY start executions. Default is DRY-RUN (SOP Sec 6 shadow gate): "
+                         "print the plan + payloads and launch nothing.")
+    args = ap.parse_args()
+
+    if args.chain_size > PUBLISH_CHUNK_CAP:
+        log("WARNING: --chain-size %d exceeds the %d-package publish cap (#168); "
+            "clamping to %d." % (args.chain_size, PUBLISH_CHUNK_CAP, PUBLISH_CHUNK_CAP))
+        args.chain_size = PUBLISH_CHUNK_CAP
+    if args.budget > SANCTIONED_BUDGET and not args.ack_budget:
+        raise SystemExit(
+            "REFUSING: --budget %d exceeds the SOP Sec 2.3 sanctioned cap of %d. "
+            "Raising it is a human decision -- pass --ack-budget to proceed on the "
+            "record." % (args.budget, SANCTIONED_BUDGET))
+    if args.budget < 1:
+        raise SystemExit("--budget must be >= 1")
+
+    # --- gather the plan --------------------------------------------------
+    if args.plan_file:
+        items = load_plan_file(args.plan_file)
+        src = "plan-file %s" % args.plan_file
+    else:
+        items = load_queued(args.table, args.region)
+        src = "DDB %s (build_state=queued)" % args.table
+
+    plan, dropped_mega, skipped_unwaved = build_waves(
+        items, args.chain_size, args.include_unwaved)
+
+    if args.only_wave:
+        plan = [(lbl, ch) for (lbl, ch) in plan if str(lbl) == args.only_wave]
+
+    # --- report the plan --------------------------------------------------
+    total_ports = sum(len(c) for _, chains in plan for c in chains)
+    total_chains = sum(len(chains) for _, chains in plan)
+    log("=== DeBeOS build-wave driver ===")
+    log("source            : %s" % src)
+    log("mode              : %s" % ("EXECUTE" if args.execute else "DRY-RUN (shadow, launches nothing)"))
+    log("budget            : %d concurrent%s" % (args.budget,
+        "  [ACK: exceeds sanctioned 4]" if args.budget > SANCTIONED_BUDGET else ""))
+    log("chain size        : %d ports/execution   publish=%s" %
+        (args.chain_size, not args.no_publish))
+    log("ports to drive    : %d across %d chains, %d wave(s)" %
+        (total_ports, total_chains, len(plan)))
+    if dropped_mega:
+        log("mega-builds SKIPPED (SOP Sec 2.4, need human sign-off): %s" % ", ".join(dropped_mega))
+    if skipped_unwaved:
+        log("unwaved queued SKIPPED (%d; pass --include-unwaved to drive): %s%s" % (
+            len(skipped_unwaved), ", ".join(sorted(skipped_unwaved)[:8]),
+            " ..." if len(skipped_unwaved) > 8 else ""))
+    for label, chains in plan:
+        log("  wave %-7s: %3d ports  -> %d chain(s)" %
+            (label, sum(len(c) for c in chains), len(chains)))
+
+    if args.plan_out:
+        doc = {"source": src, "generated_at": int(time.time()),
+               "budget": args.budget, "chain_size": args.chain_size,
+               "publish": not args.no_publish,
+               "skipped_mega": dropped_mega, "skipped_unwaved": skipped_unwaved,
+               "waves": {str(lbl): [exec_input(c, not args.no_publish,
+                                                args.disk_gib, args.lease_secs)
+                                     for c in chains]
+                         for lbl, chains in plan}}
+        with open(args.plan_out, "w") as f:
+            json.dump(doc, f, indent=2)
+        log("plan written      : %s" % args.plan_out)
+
+    if not plan:
+        log("nothing to drive -- queue is empty (or --only-wave matched no wave).")
+        return 0
+
+    # --- dry run: print payloads, launch nothing --------------------------
+    if not args.execute:
+        log("\n--- DRY-RUN: StartExecution payloads that WOULD be sent ---")
+        shown = 0
+        for label, chains in plan:
+            for i, chain in enumerate(chains):
+                if args.max_chains and shown >= args.max_chains:
+                    break
+                ev = exec_input(chain, not args.no_publish, args.disk_gib, args.lease_secs)
+                print("wave %s chain %d: %s" % (label, i + 1, json.dumps(ev)))
+                shown += 1
+        log("\n(dry-run) to drive for real: re-run with --execute "
+            "(requires the pipeline be out of shadow mode -- a human go/no-go).")
+        return 0
+
+    # --- execute ----------------------------------------------------------
+    sm_arn = resolve_sm_arn(args.region, args.sm_arn)
+    import boto3
+    sfn = boto3.client("stepfunctions", region_name=args.region)
+    log("\nstate machine     : %s" % sm_arn)
+
+    driven = grand_ok = grand_bad = 0
+    all_failed = []
+    for label, chains in plan:
+        if args.max_chains and driven >= args.max_chains:
+            log("reached --max-chains %d; stopping before wave %s." % (args.max_chains, label))
+            break
+        if args.max_chains:
+            chains = chains[:max(0, args.max_chains - driven)]
+        log("\n>>> WAVE %s : %d chain(s), %d ports (budget %d) <<<" %
+            (label, len(chains), sum(len(c) for c in chains), args.budget))
+        ok, bad, failed = drive_wave(
+            sfn, sm_arn, label, chains, args.run_id, args.budget,
+            not args.no_publish, args.disk_gib, args.lease_secs, args.poll_secs)
+        driven += len(chains)
+        grand_ok += ok
+        grand_bad += bad
+        all_failed += failed
+        log("<<< wave %s done: %d ok, %d failed >>>" % (label, ok, bad))
+        if bad:
+            # A failed chain-execution is not fatal to the campaign (individual
+            # port failures are recorded by record.py into Sec 4 backoff), but a
+            # whole-execution failure (infra/timeout) is worth surfacing loudly.
+            log("    NOTE: %d execution(s) failed this wave; later waves may miss deps. "
+                "Inspect before relying on this wave's pool output." % bad)
+
+    log("\n=== driver summary ===")
+    log("chains driven     : %d  (%d ok, %d failed executions)" % (driven, grand_ok, grand_bad))
+    if all_failed:
+        log("failed executions : %s" % ", ".join(all_failed))
+    log("Re-run this driver any time to resume: it re-reads live queued state, and "
+        "ClaimBatch prevents double-building. Builders are reaped by the state machine.")
+    return 1 if grand_bad else 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

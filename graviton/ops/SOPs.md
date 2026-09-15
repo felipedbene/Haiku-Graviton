@@ -285,10 +285,23 @@ it depends on actually landing — do not build at scale on a known-broken input
    base-supplied name) go back to `queued` with `esc_reason`/`esc_note` cleared.
    **Do NOT re-queue §4 backoff** (dead-upstream, repeated-failure) — those are
    real blocks; re-queuing them just re-burns builders.
-4. **Drive dependency-ordered waves at the authorized budget**, publishing each
-   wave to the pool before the next (§3) so later waves resolve deps from it.
-   Success = hpkg exists (§7); health = wall-clock progress, never CloudWatch (§3).
-5. **Defer the mega-builds** (§2.4) unless separately signed off.
+4. **Drive dependency-ordered waves at the authorized budget** with
+   `graviton/scripts/haiku-build-wave-driver`, publishing each wave to the pool
+   before the next (§3) so later waves resolve deps from it. The driver is the
+   committed, resumable fan-out loop: it reads the deps-first `wave` attribute off
+   the `queued` items (or a `depclosure` plan file), splits each wave into chains,
+   and drives `StartExecution` at `--budget` (default 4; >4 needs `--ack-budget`,
+   a §2.3 human decision), keeping ≤budget executions in flight and advancing wave
+   by wave. It is **dry-run by default** (prints the plan + the exact
+   StartExecution payloads and launches nothing — the §6 shadow gate); `--execute`
+   drives for real and is itself a human go/no-go. It is resumable: re-running
+   re-reads live `queued` state and `ClaimBatch` leasing prevents double-building,
+   so a stalled campaign is resumed by simply re-invoking it (this is the gap that
+   left 838 planned ports idle for #136 — the drive loop used to live only in an
+   operator session). Success = hpkg exists (§7); health = wall-clock progress,
+   never CloudWatch (§3).
+5. **Defer the mega-builds** (§2.4) unless separately signed off — the driver skips
+   them automatically.
 6. **Stop and report** if a *new* blocker class appears (not a known
    dead-upstream/bomb/crediting gap) affecting many ports — don't mass-park.
 
