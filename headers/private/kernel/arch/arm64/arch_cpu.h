@@ -224,6 +224,13 @@ extern addr_t arm64_get_fp(void);
 // arch_commpage.cpp and libroot's getauxval().
 extern void arm64_get_hwcap(uint64* hwcap, uint64* hwcap2);
 
+// Effective SVE vector length in bytes, or 0 when SVE is disabled/absent. Set
+// once per CPU by arch_sve_init_percpu(); read by the EL0 exception FP save/
+// restore path (arch_asm.S) and by arch_restore_signal_frame(). Hidden
+// visibility keeps the symbol non-preemptible for the adrp/add reference in the
+// -shared kernel image.
+extern uint32 gArm64SVEVectorBytes __attribute__((visibility("hidden")));
+
 
 #ifdef __cplusplus
 }

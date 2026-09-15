@@ -57,7 +57,20 @@
 #define	 CPACR_FPEN_TRAP_EL0	(0x1 << 20) /* Traps from EL0 */
 #define	 CPACR_FPEN_TRAP_ALL2	(0x2 << 20) /* Traps from EL0 and EL1 */
 #define	 CPACR_FPEN_TRAP_NONE	(0x3 << 20) /* No traps */
+#define	CPACR_ZEN_MASK		(0x3 << 16)
+#define	 CPACR_ZEN_TRAP_ALL1	(0x0 << 16) /* SVE traps from EL0 and EL1 */
+#define	 CPACR_ZEN_TRAP_EL0	(0x1 << 16) /* SVE traps from EL0 */
+#define	 CPACR_ZEN_TRAP_ALL2	(0x2 << 16) /* SVE traps from EL0 and EL1 */
+#define	 CPACR_ZEN_TRAP_NONE	(0x3 << 16) /* No SVE traps */
 #define	CPACR_TTA		(0x1 << 28)
+
+/* ZCR_EL1 - SVE Control Register (EL1). LEN selects the effective vector
+ * length: VL = (LEN + 1) * 128 bits. A LEN larger than the hardware maximum is
+ * clamped by the CPU to that maximum, so writing the cap is always safe. Under
+ * a VHE host (E2H) at EL2 this register name resolves to ZCR_EL2, which is
+ * exactly what governs the current EL there, so the same code is correct on
+ * c7g (EL1) and c7g.metal (EL2). */
+#define	ZCR_EL1_LEN_MASK	0xf
 
 /* CTR_EL0 - Cache Type Register */
 #define	CTR_DLINE_SHIFT		16
@@ -130,6 +143,7 @@
 #define	 EXCP_UNKNOWN		0x00	/* Unkwn exception */
 #define	 EXCP_FP_SIMD		0x07	/* VFP/SIMD trap */
 #define	 EXCP_ILL_STATE		0x0e	/* Illegal execution state */
+#define	 EXCP_SVE		0x19	/* SVE access trapped (CPACR_EL1.ZEN) */
 #define	 EXCP_SVC32		0x11	/* SVC trap for AArch32 */
 #define	 EXCP_SVC64		0x15	/* SVC trap for AArch64 */
 #define	 EXCP_MSR		0x18	/* MSR/MRS trap */

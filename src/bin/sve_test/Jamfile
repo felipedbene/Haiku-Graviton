@@ -1,0 +1,9 @@
+SubDir HAIKU_TOP src bin sve_test ;
+
+# EL0 SVE save/restore exercise for #88. Verification instrument, not shipped.
+# The SVE instructions live in inline asm gated by ".arch_extension sve", so no
+# special -march is needed here.
+Application sve_test :
+	sve_test.c
+	: libroot.so
+;

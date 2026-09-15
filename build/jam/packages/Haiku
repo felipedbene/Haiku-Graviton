@@ -252,6 +252,7 @@ AddFilesToPackage bin :
 	nvme_rescan
 	partition_grow
 	smpscale
+	sve_test
 	consoled
 	;
 AddFilesToPackage apps
