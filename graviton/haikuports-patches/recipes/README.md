@@ -113,6 +113,41 @@ which panicked the guest kernel with the `mprotect` defect. So the compile block
 and the *only* thing between here and a ruby package is a guest running a kernel with the
 `Query()` fix — see `graviton/docs/arm64-mprotect-query-present.md`.
 
+## `#136` s-z port-fix batch (CMake 4.x policy floor + a few small guards)
+
+Seventeen previously-`failed` `missing-ports-136` recipes whose names start s-z were
+converted to native RC=0 arm64 `.hpkg` and re-queued. Each is stored here **complete, as
+actually built** on a native c7g builder (canonical `ami-04c29891a8fae17b5`, provisioned by
+`haiku-provision-native-builder`, `haikuporter -j16`). All builds are proven by the harvested
+`.hpkg` in `s3://haiku-graviton-<acct>-<region>/hpkg/arm64/`, not by an exit code.
+
+The dominant blocker was uniform: **CMake 4.x removed the compatibility shim for
+`cmake_minimum_required(<3.5)`**, so these ports failed at configure with *"add
+`-DCMAKE_POLICY_VERSION_MINIMUM=3.5` to try configuring anyway."* The tooling-wide `#47`
+default (in `haiku-provision-native-builder`, which appends the flag to haikuporter's shared
+`cmakeDirArgs`) does **not** reach a recipe whose `BUILD()` calls `cmake` with its own
+explicit argument list and never interpolates `$cmakeDirArgs` — which is the majority. So the
+fix is per-recipe: the flag is added directly to the `cmake` invocation (all three subdir
+calls, in `serious_sam`). This is the same one-liner `openal`/`libjxl` already carry; **not a
+feature cut.**
+
+Ports fixed by the policy flag alone: `squirrel`, `tidy`, `uchardet`, `zopfli`, `slack++`
+(also uses `$cmakeDirArgs`, but its explicit list needed the flag too), `surgescript`,
+`teeworlds`, `toluapp`, `unshield`, `sdl2_sound`, `serious_sam`, `vvvvvv`, `vc`.
+
+Ports needing one additional small guard on top of the policy flag:
+
+| Recipe | Extra fix | Why |
+|---|---|---|
+| `yaml_cpp0.7-0.7.0.recipe`, `yaml_cpp0.8-0.8.0.recipe` | `-DYAML_CPP_BUILD_TESTS=OFF` (0.7 also makes `rm test/gtest-*` tolerant) | the bundled test suite pulls an absent gtest submodule and its `binary_test.cpp` fails `-Wnarrowing`; the library itself is unaffected. Not a feature cut — tests are not shipped |
+| `sais-1.6.3~git.recipe`, `sawteeth`* , `superfreecell-0.1.0.recipe` | `-DCMAKE_BUILD_TYPE=Release` | haikuporter's cmake wrapper aborts with *"invoking cmake without CMAKE_BUILD_TYPE specified!"* when the recipe passes none |
+
+*`sawteeth` reached compile but then hit genuine `-Werror` source errors (narrowing + a
+mismatched new/delete) that a flag alone did not clear — it is **not** in this batch; left as
+a source-porting item.
+
+Cross-links issue **#136**. Not merged pending human CR.
+
 ## Two recipes here are kept only as history
 
 `autoconf-2.72.recipe` and `zstd-1.5.6.recipe` describe cuts that have been
