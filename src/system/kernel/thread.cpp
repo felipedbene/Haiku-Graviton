@@ -2227,10 +2227,25 @@ thread_exit(void)
 			if (death != NULL) {
 				death->InitDeadState();
 
-				// team_set_job_control_state() already moved our entry
-				// into the parent's list. We just check the soft limit of
-				// death entries.
-				if (parent->dead_children.count > MAX_DEAD_CHILDREN) {
+				// team_set_job_control_state() already moved our entry into
+				// the parent's dead-children list. A death entry must survive
+				// there until the parent reaps it with wait*(); dropping a
+				// reapable entry makes a later waitpid() for that child return
+				// a spurious ECHILD, which breaks well-behaved reapers under
+				// high fan-out (e.g. ninja -jN with more than MAX_DEAD_CHILDREN
+				// short-lived children outstanding -- see #262). So only
+				// enforce the soft limit when the parent has opted out of
+				// reaping (SIGCHLD ignored or SA_NOCLDWAIT): those entries would
+				// never be collected, so bounding them is both safe and the
+				// closest we get to the POSIX auto-reap those dispositions ask
+				// for. The parent team is locked here, which protects its
+				// signal actions.
+				struct sigaction& childAction = parent->SignalActionFor(SIGCHLD);
+				bool parentReaps = childAction.sa_handler != SIG_IGN
+					&& (childAction.sa_flags & SA_NOCLDWAIT) == 0;
+
+				if (!parentReaps
+					&& parent->dead_children.count > MAX_DEAD_CHILDREN) {
 					death = parent->dead_children.entries.RemoveHead();
 					parent->dead_children.count--;
 				} else
