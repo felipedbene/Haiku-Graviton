@@ -1,0 +1,61 @@
+SUMMARY="A tool to launch applications"
+DESCRIPTION="LnLauncher is yet another launcher app. This one docks to the \
+screen edge, and has a neat drag'n'drop interface.
+When minimized, the app shouldn't get in your way, the only thing you see is \
+the tiny handle.
+
+The latest version, 1.1.2, was adapted for Haiku by Daniel Weber - thank you!"
+HOMEPAGE="http://eiman.tv/LnLauncher"
+COPYRIGHT="2000-2015 Mikael Eiman"
+LICENSE="MIT"
+REVISION="7"
+srcGitRev="ddd60a641c31"
+SOURCE_URI="https://bitbucket.org/m_eiman/lnlauncher/get/$srcGitRev.zip"
+CHECKSUM_SHA256="15d878f773248d5c01372457d3c547a16503f948e88ed462bda30d306d09fb52"
+SOURCE_DIR="m_eiman-lnlauncher-$srcGitRev"
+
+ARCHITECTURES="all"
+
+PROVIDES="
+	lnlauncher = $portVersion
+	app:LnLauncher
+	"
+REQUIRES="
+	haiku
+	"
+
+BUILD_REQUIRES="
+	haiku_devel
+	"
+BUILD_PREREQUIRES="
+	makefile_engine
+	cmd:gcc
+	cmd:make
+	"
+
+BUILD()
+{
+	make $jobArgs OBJ_DIR=objects
+	make OBJ_DIR=objects bindcatalogs
+}
+
+INSTALL()
+{
+	mkdir -p $appsDir $dataDir/user_launch
+	cp objects/LnLauncher $appsDir
+
+	addAppDeskbarSymlink $appsDir/LnLauncher LnLauncher
+
+	echo "target desktop {
+	service x-vnd.LnLauncher {
+		launch /system/apps/LnLauncher
+		if setting ~/config/settings/LnLauncher/Settings autostart
+		no_safemode
+		legacy
+		on {
+			initial_volumes_mounted
+		}
+	}
+}
+" > $dataDir/user_launch/LnLauncher
+}
