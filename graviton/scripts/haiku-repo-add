@@ -196,7 +196,7 @@ echo "== 5. upload packages (new, immutable) then index (last) =="
 # bump (e.g. rust_bin -2 -> -3) leaves the old hpkg orphaned in S3 -- harmless
 # (the rebuilt index references only the surviving files, so pkgman never fetches
 # it) but wasteful and confusing. With it, S3 ends up exactly matching the index.
-aws s3 sync "$RO/packages/" "${HG_REPO_S3%/}/packages/" --region "$region" --only-show-errors --delete
+aws s3 sync "$RO/packages/" "${HG_REPO_S3%/}/packages/" --region "$region" --only-show-errors
 for k in repo repo.info repo.sha256; do
 	aws s3 cp "$RO/$k" "${HG_REPO_S3%/}/$k" --region "$region" --only-show-errors
 done
