@@ -87,6 +87,18 @@ export class OpsStack extends cdk.Stack {
         resources: [`arn:aws:s3:::${b}`, `arn:aws:s3:::${b}/*`],
       }));
     }
+    // DeleteObject on the hpkg pool ONLY. The publisher path (haiku-repo-add /
+    // haiku-repo-publish-ephemeral) runs under this role's profile and wants
+    // `aws s3 sync --delete` to prune objects superseded by a version bump. That
+    // was dropped in #269 because the role lacked s3:DeleteObject, so a
+    // version-superseding publish left orphaned hpkgs in the pool (harmless -- the
+    // index references only surviving files -- but untidy). Granting delete here
+    // lets a follow-up restore `--delete` and keep the pool pruned. Scoped to the
+    // publish (hpkg) bucket alone: the work bucket keeps write-without-delete.
+    builderRole.addToPolicy(new iam.PolicyStatement({
+      actions: ['s3:DeleteObject'],
+      resources: [`arn:aws:s3:::${publishBucket}/*`],
+    }));
     const builderProfile = new iam.CfnInstanceProfile(this, 'BuilderProfile', {
       roles: [builderRole.roleName],
     });
