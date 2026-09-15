@@ -31,10 +31,17 @@ the deterministic scripts (`state-sync.py`, `depclosure.py`,
    crediting bug (#174), not a missing port — fix the input, don't escalate.
 3. **Re-queue only manufactured blockers** (now-fixed crediting/tooling gaps);
    never re-queue §4 backoff (dead-upstream / repeated-failure).
-4. **Drive dependency-ordered waves** at the authorized builder budget (default 4,
-   `c8g.2xlarge` spot; 8 only with sign-off). Defer mega-builds (§2.4) unless
-   separately approved. Success = the `.hpkg` exists (§7); health = wall-clock
-   progress, NEVER CloudWatch CPU% / `top` (under-reports ~55x, #140).
+4. **Drive dependency-ordered waves** with `graviton/scripts/haiku-build-wave-driver`
+   at the authorized builder budget (default 4, `c8g.2xlarge` spot; >4 only with
+   `--ack-budget` sign-off). The driver is the committed, resumable fan-out loop:
+   it reads the deps-first `wave` attribute off the `queued` items (or a
+   `depclosure` plan file), chains each wave, and drives `StartExecution`
+   ≤budget-at-a-time, advancing wave by wave. It is **dry-run by default** — run it
+   with no flags first to see the plan + the exact payloads; `--execute` launches
+   for real (a human go/no-go, honoring the §6 shadow gate). Re-run to resume a
+   stalled campaign; `ClaimBatch` leasing prevents double-building. Defer
+   mega-builds (§2.4) — the driver skips them. Success = the `.hpkg` exists (§7);
+   health = wall-clock progress, NEVER CloudWatch CPU% / `top` (under-reports ~55x, #140).
 5. **Publish each wave to the pool before the next** — use the
    `debeos-publish-green` skill (chunked, single-flight).
 6. **Fan out with the delegation contract (SOP §9)** for parallelism; exactly one
