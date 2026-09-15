@@ -387,6 +387,15 @@ export class HaikuGravitonPipelineStack extends cdk.Stack {
         HG_TEST_KEY: { value: cfg.testKeyName },
         HG_MIN_RX_MBPS: { value: cfg.minReceiveMbps },
         HG_MIN_TX_MBPS: { value: cfg.minTransmitMbps },
+        // Budget the gate waits for the self-provisioned Ubuntu peer to finish its
+        // first-boot bootstrap and answer over SSM. The gate's default of 300s is
+        // too tight: a clean peer bootstraps in ~35s, but some boots run long on
+        // dpkg-lock / apt-daily contention and blew past 300s, flaking the Test
+        // stage twice (#270). 900s absorbs that variance and still sits well under
+        // the project timeout. Declared here so it survives a redeploy -- it was
+        // being hand-set on the CodeBuild project via update-project, which a
+        // `cdk deploy` would silently revert to 300s (the drift #270 codifies).
+        HG_BUILDER_WAIT_SECS: { value: '900' },
       },
       buildSpec: codebuild.BuildSpec.fromSourceFilename('graviton/pipeline/buildspecs/perf-test.yml'),
       logging: {
