@@ -11,6 +11,7 @@
 
 #include "tcp.h"
 
+#include <lock.h>
 #include <util/DoublyLinkedList.h>
 
 
@@ -49,8 +50,7 @@ public:
 
 			tcp_sequence		FirstSequence() const { return fFirstSequence; }
 			tcp_sequence		LastSequence() const { return fLastSequence; }
-			tcp_sequence		NextSequence() const
-									{ return fFirstSequence + fContiguousBytes; }
+			tcp_sequence		NextSequence() const;
 
 #if DEBUG_TCP_BUFFER_QUEUE
 			void				Verify() const;
@@ -58,6 +58,17 @@ public:
 #endif
 
 private:
+	// Protects the segment list and the derived counters against the one
+	// access that no longer holds the endpoint's fLock: the application
+	// reader's dequeue in TCPEndpoint::ReadData() runs with fLock released so
+	// it cannot serialize the RX consumer's protocol processing (see #61).
+	// All list-walking or multi-field methods take this; single-scalar getters
+	// stay lock-free (a stale read only costs a spurious ACK or a hair of
+	// window jitter, never corruption). Recursive so Add(buffer) can forward to
+	// Add(buffer, sequence). Declared first so it is constructed before, and
+	// destroyed after, the list it guards.
+	mutable recursive_lock	fLock;
+
 			SegmentList			fList;
 			size_t				fMaxBytes;
 			size_t				fNumBytes;

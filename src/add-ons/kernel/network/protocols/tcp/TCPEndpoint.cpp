@@ -1084,7 +1084,18 @@ TCPEndpoint::ReadData(size_t numBytes, uint32 flags, net_buffer** _buffer)
 
 	bool clone = (flags & MSG_PEEK) != 0;
 
+	// Dequeue with fLock released (#61). Coalescing the read into one buffer is
+	// O(segments) of node clone/free and is the longest thing done under fLock
+	// on the receive side; holding fLock across it serializes the app reader
+	// against the RX consumer's SegmentReceived() on the same endpoint, which
+	// is the measured ~10 Gbit/s ceiling. fReceiveQueue is self-synchronizing,
+	// so Get() is safe on its own; the endpoint cannot be torn down under us
+	// because the read syscall holds a reference to the socket. State that the
+	// tail of this function inspects (fState, window) is re-read under fLock
+	// after we re-acquire it.
+	locker.Unlock();
 	ssize_t receivedBytes = fReceiveQueue.Get(numBytes, !clone, _buffer);
+	locker.Lock();
 
 	TRACE("  ReadData(): %" B_PRIuSIZE " bytes kept.",
 		fReceiveQueue.Available());
