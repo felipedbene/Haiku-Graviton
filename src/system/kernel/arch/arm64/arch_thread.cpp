@@ -102,6 +102,11 @@ arch_thread_init_thread_struct(Thread *thread)
 	thread->arch_info.cpu_cycles = 0;
 	thread->arch_info.cycle_ref = 0;
 
+	// Start every thread with a clean SVE register file. The first EL0 return
+	// (_fp_restore_el0) loads Z0-31 from here, so uninitialised memory would put
+	// garbage into the thread's vector registers on SVE hardware.
+	memset(&thread->arch_info.sve, 0, sizeof(thread->arch_info.sve));
+
 	return B_OK;
 }
 
@@ -288,6 +293,20 @@ arch_restore_signal_frame(struct signal_frame_data* signalFrameData)
 		sizeof(signalFrameData->context.uc_mcontext.fp_q));
 	frame->fpu.fpsr = signalFrameData->context.uc_mcontext.fpsr;
 	frame->fpu.fpcr = signalFrameData->context.uc_mcontext.fpcr;
+
+	// On SVE hardware _fp_restore_el0 reloads V0-31 from the thread's Z buffer,
+	// not from frame->fpu.regs. Fold the (possibly handler-modified) 128-bit
+	// fp_q view into the low lanes of each Z register so the edits take effect,
+	// leaving the SVE upper lanes as they were at signal entry (the ucontext
+	// carries no SVE record to update them with). The slot stride is the
+	// effective VL, matching the "MUL VL" layout used by the save/restore asm.
+	if (gArm64SVEVectorBytes != 0) {
+		arm64_sve_state* sve = &thread_get_current_thread()->arch_info.sve;
+		for (int i = 0; i < 32; i++) {
+			memcpy(sve->z + i * gArm64SVEVectorBytes,
+				&frame->fpu.regs[i * 2], 16);
+		}
+	}
 
 	return frame->x[0];
 }

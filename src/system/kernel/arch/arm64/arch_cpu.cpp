@@ -36,6 +36,73 @@ extern "C" void _exception_vectors(void);
 static uint32 sPsciConduit = PSCI_CONDUIT_NONE;
 
 
+// Effective SVE vector length in bytes, or 0 when SVE is absent or disabled.
+// Set once per CPU by arch_sve_init_percpu(); read by the EL0 exception FP
+// save/restore path (_fp_save_el0/_fp_restore_el0 in arch_asm.S) to decide
+// whether to also save/restore the SVE Z/P/FFR state, and by
+// arch_restore_signal_frame(). C linkage and a plain scalar so the assembly can
+// load it directly. All CPUs on the supported homogeneous SoCs converge on the
+// same value, so the repeated writes are benign. Hidden visibility keeps the
+// symbol non-preemptible for the adrp/add reference in the -shared kernel image.
+extern "C" { uint32 gArm64SVEVectorBytes __attribute__((visibility("hidden"))) = 0; }
+
+
+// Enable SVE for EL0/EL1 on this CPU and program the effective vector length.
+// Runs from arch_cpu_init_percpu() on every core, with interrupts masked and
+// before the CPU takes any EL0 exception, so by the time an SVE instruction can
+// execute (only ever on the EL0 save/restore path) this CPU's CPACR_EL1.ZEN is
+// already set -- that ordering is what the first attempt got wrong. SVE stays
+// fully disabled (and gArm64SVEVectorBytes stays 0, keeping the NEON-only save
+// path) on hardware that does not implement it.
+//
+// On a VHE host (c7g.metal runs the kernel at EL2 with HCR_EL2.E2H set), the
+// CPACR_EL1 and ZCR_EL1 names below resolve to CPTR_EL2/ZCR_EL2, which govern
+// the current EL there; the ZEN field layout is identical, so the same code is
+// correct at EL1 (c7g) and EL2 (c7g.metal). The kernel only ever runs at EL1 or
+// at EL2-with-E2H (arch_start.cpp drops plain EL2 to EL1), so no CurrentEL gate
+// is needed for these accesses to hit the register that controls this EL.
+static void
+arch_sve_init_percpu(int curr_cpu)
+{
+	const uint64 pfr0 = READ_SPECIALREG(ID_AA64PFR0_EL1);
+	if (ID_AA64PFR0_SVE(pfr0) == ID_AA64PFR0_SVE_NONE) {
+		if (curr_cpu == 0)
+			dprintf("arm64: SVE not implemented; NEON-only FP save path\n");
+		return;
+	}
+
+	// Let EL0 and EL1 execute SVE instructions (ZEN = 0b11, no trap). EL1 access
+	// is required because the save/restore spill runs at EL1.
+	uint64 cpacr = READ_SPECIALREG(CPACR_EL1);
+	cpacr = (cpacr & ~(uint64)CPACR_ZEN_MASK) | CPACR_ZEN_TRAP_NONE;
+	WRITE_SPECIALREG(CPACR_EL1, cpacr);
+	arm64_isb();
+
+	// Clamp the effective VL to the first-cut cap so the fixed per-thread SVE
+	// save area can never overflow. A hardware VL below the cap is left as-is; a
+	// larger one is clamped down by ZCR_EL1.LEN. RDVL then reports the resulting
+	// effective VL in bytes. This whole block is one asm statement so
+	// ".arch_extension sve" covers ZCR_EL1 and RDVL: the TU is built with
+	// -mcpu=neoverse-n1, whose assembler otherwise rejects both.
+	uint64 vectorBytes;
+	__asm__ volatile(
+		".arch_extension sve\n\t"
+		"msr ZCR_EL1, %1\n\t"
+		"isb\n\t"
+		"rdvl %0, #1"
+		: "=r"(vectorBytes)
+		: "r"((uint64)((SVE_MAX_VL_BYTES / 16) - 1)));
+	gArm64SVEVectorBytes = (uint32)vectorBytes;
+
+	// One concise line per CPU (mirrors the GIC per-CPU logging): on a 2-vCPU
+	// c7g.large this is two lines, and it is the evidence that the hardware
+	// exposes SVE, at what VL, and that ZEN actually took on this core.
+	dprintf("arm64: cpu %d SVE enabled, VL %" B_PRIu32 " bytes (%" B_PRIu32
+		" bits), CPACR %#" B_PRIx64 "\n", curr_cpu, gArm64SVEVectorBytes,
+		gArm64SVEVectorBytes * 8, READ_SPECIALREG(CPACR_EL1));
+}
+
+
 static uint64
 psci_call_smc(uint32 function)
 {
@@ -91,6 +158,10 @@ arch_cpu_init_percpu(kernel_args *args, int curr_cpu)
 	WRITE_SPECIALREG(TCR_EL1, tcr);
 
 	gCPU[curr_cpu].arch.mpidr = READ_SPECIALREG(MPIDR_EL1);
+
+	// Turn on SVE access and fix the vector length before this CPU can take any
+	// EL0 exception, so the EL0 FP save/restore path can rely on ZEN being set.
+	arch_sve_init_percpu(curr_cpu);
 
 	// Every CPU has to program its own performance monitors; this is the only
 	// hook that runs on all of them. It is a no-op unless the facility was
@@ -172,9 +243,13 @@ arm64_get_hwcap(uint64* hwcap, uint64* hwcap2)
 		if (ID_AA64PFR0_ADV_SIMD(pfr0) == ID_AA64PFR0_ADV_SIMD_HP)
 			caps |= HWCAP_ASIMDHP;
 	}
-	// Deliberately NOT advertising HWCAP_SVE: SVE instructions trap at EL0 until
-	// the kernel enables the SVE path (CPACR_EL1.ZEN), which it does not yet do.
-	// Setting the bit here would tell userland to run instructions that fault.
+	// Deliberately still NOT advertising HWCAP_SVE. The kernel now enables SVE
+	// access (CPACR_EL1.ZEN) and saves/restores Z/P/FFR across EL0<->EL1 and
+	// therefore across context switches (arch_sve_init_percpu(),
+	// _fp_save_el0/_fp_restore_el0). Flipping this bit on -- so getauxval()
+	// tells userland SVE is usable -- is the explicit follow-up (#99) once an
+	// SVE workload is validated on hardware to compute correctly across
+	// preemption with no NEON/FP regression.
 
 	// ID_AA64ISAR0_EL1: crypto and integer extensions.
 	if (ID_AA64ISAR0_AES(isar0) >= ID_AA64ISAR0_AES_BASE) {

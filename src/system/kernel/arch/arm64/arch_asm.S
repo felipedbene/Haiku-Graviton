@@ -7,6 +7,11 @@
 #include "asm_offsets.h"
 #include "syscall_numbers.h"
 
+// The EL0 FP save/restore helpers use SVE stores/loads (STR/LDR Zn/Pn, RDFFR/
+// WRFFR). Enabling the extension does not change the encoding of any base or
+// NEON instruction elsewhere in this file.
+.arch_extension sve
+
 .text
 
 FUNCTION(_thread_exit_syscall):
@@ -48,7 +53,13 @@ sub	sp, sp, \xt
 	str	   x30,      [x19, #(IFRAME_lr)]
 
 	add x0, x19, #(IFRAME_fpu)
+.if \el == 0
+	// EL0 entry: also spill the wide SVE state to this thread's off-stack buffer.
+	bl	_fp_save_el0
+.else
+	// EL1 entry: the kernel never runs SVE, so only the NEON view is saved.
 	bl	_fp_save
+.endif
 
 .if \el == 0
 	mrs x0, SP_EL0
@@ -77,7 +88,12 @@ sub	sp, sp, \xt
 	// x0, x1, x18, x19 will be restored at the very end
 
 	add x0, x19, #(IFRAME_fpu)
+.if \el == 0
+	// EL0 return: reload the wide SVE state from this thread's off-stack buffer.
+	bl	_fp_restore_el0
+.else
 	bl	_fp_restore
+.endif
 
 	ldr x0,  [x19, #(IFRAME_elr)]
 	ldr x1,  [x19, #(IFRAME_spsr)]
@@ -255,6 +271,192 @@ FUNCTION(_fp_restore):
 1:
 	ret
 FUNCTION_END(_fp_restore)
+
+
+// void _fp_save_el0(aarch64_fpu_state* fpu /* x0 = &iframe.fpu */)
+//
+// EL0 exception entry. Saves the NEON view (V0-31 + FPSR/FPCR, and scrubs
+// FPSR/FPCR) into the iframe exactly as the EL1 path does, then -- on SVE
+// hardware -- also spills the full Z0-31/P0-15/FFR into the current thread's
+// off-stack buffer (TPIDR_EL1 + THREAD_sve). Called with GP registers already
+// spilled to the iframe, so x1-x15 are free scratch. Keeping the wide state off
+// the kernel stack is what makes this safe against the stack overflow that held
+// the first attempt.
+FUNCTION(_fp_save_el0):
+	mov x14, lr			// _fp_save is reached via bl; preserve our return addr
+	bl	_fp_save		// V0-31 + FPSR/FPCR -> iframe; FPSR/FPCR scrubbed
+	mov lr, x14
+
+	adrp x9, gArm64SVEVectorBytes
+	ldr w9, [x9, #:lo12:gArm64SVEVectorBytes]
+	cbz w9, 1f
+
+	// Current thread's off-stack SVE buffer. THREAD_sve can exceed the 12-bit
+	// add immediate, so materialise it in a register first.
+	mrs x8, TPIDR_EL1
+	mov x9, #(THREAD_sve & 0xffff)
+	movk x9, #((THREAD_sve >> 16) & 0xffff), lsl #16
+	add x8, x8, x9
+
+	// The "MUL VL" stride is the effective VL, which ZCR_EL1 clamped to at most
+	// SVE_MAX_VL_BYTES, so it fits the fixed buffer. stp q above did not disturb
+	// the SVE upper bits, so these Zn reads still hold the interrupted state.
+	add x10, x8, #SVE_z
+	str z0,  [x10, #0, MUL VL]
+	str z1,  [x10, #1, MUL VL]
+	str z2,  [x10, #2, MUL VL]
+	str z3,  [x10, #3, MUL VL]
+	str z4,  [x10, #4, MUL VL]
+	str z5,  [x10, #5, MUL VL]
+	str z6,  [x10, #6, MUL VL]
+	str z7,  [x10, #7, MUL VL]
+	str z8,  [x10, #8, MUL VL]
+	str z9,  [x10, #9, MUL VL]
+	str z10, [x10, #10, MUL VL]
+	str z11, [x10, #11, MUL VL]
+	str z12, [x10, #12, MUL VL]
+	str z13, [x10, #13, MUL VL]
+	str z14, [x10, #14, MUL VL]
+	str z15, [x10, #15, MUL VL]
+	str z16, [x10, #16, MUL VL]
+	str z17, [x10, #17, MUL VL]
+	str z18, [x10, #18, MUL VL]
+	str z19, [x10, #19, MUL VL]
+	str z20, [x10, #20, MUL VL]
+	str z21, [x10, #21, MUL VL]
+	str z22, [x10, #22, MUL VL]
+	str z23, [x10, #23, MUL VL]
+	str z24, [x10, #24, MUL VL]
+	str z25, [x10, #25, MUL VL]
+	str z26, [x10, #26, MUL VL]
+	str z27, [x10, #27, MUL VL]
+	str z28, [x10, #28, MUL VL]
+	str z29, [x10, #29, MUL VL]
+	str z30, [x10, #30, MUL VL]
+	str z31, [x10, #31, MUL VL]
+
+	add x11, x8, #SVE_p
+	str p0,  [x11, #0, MUL VL]
+	str p1,  [x11, #1, MUL VL]
+	str p2,  [x11, #2, MUL VL]
+	str p3,  [x11, #3, MUL VL]
+	str p4,  [x11, #4, MUL VL]
+	str p5,  [x11, #5, MUL VL]
+	str p6,  [x11, #6, MUL VL]
+	str p7,  [x11, #7, MUL VL]
+	str p8,  [x11, #8, MUL VL]
+	str p9,  [x11, #9, MUL VL]
+	str p10, [x11, #10, MUL VL]
+	str p11, [x11, #11, MUL VL]
+	str p12, [x11, #12, MUL VL]
+	str p13, [x11, #13, MUL VL]
+	str p14, [x11, #14, MUL VL]
+	str p15, [x11, #15, MUL VL]
+
+	// FFR is read through a predicate. p0 has already been stored, so it is free
+	// to reuse as scratch here.
+	add x12, x8, #SVE_ffr
+	rdffr p0.b
+	str p0, [x12, #0, MUL VL]
+1:
+	ret
+FUNCTION_END(_fp_save_el0)
+
+
+// void _fp_restore_el0(aarch64_fpu_state* fpu /* x0 = &iframe.fpu */)
+//
+// EL0 exception return. On SVE hardware Z0-31 are restored from this thread's
+// off-stack buffer and are the single source of truth for V0-31 (a trailing
+// ldr q would zero the SVE upper bits, so the iframe V view is deliberately NOT
+// reloaded here); FPSR/FPCR come from the iframe. Any fp_q edits a signal
+// handler made are folded into the Z low lanes by arch_restore_signal_frame()
+// before we get here. On non-SVE hardware this tail-calls the plain V restore.
+FUNCTION(_fp_restore_el0):
+	adrp x9, gArm64SVEVectorBytes
+	ldr w9, [x9, #:lo12:gArm64SVEVectorBytes]
+	cbz w9, 2f
+
+	mov x13, x0			// keep &iframe.fpu for the FPSR/FPCR reload below
+
+	mrs x8, TPIDR_EL1
+	mov x9, #(THREAD_sve & 0xffff)
+	movk x9, #((THREAD_sve >> 16) & 0xffff), lsl #16
+	add x8, x8, x9
+
+	// FFR first, using p0 as scratch, before the real predicates load.
+	add x12, x8, #SVE_ffr
+	ldr p0, [x12, #0, MUL VL]
+	wrffr p0.b
+
+	add x11, x8, #SVE_p
+	ldr p0,  [x11, #0, MUL VL]
+	ldr p1,  [x11, #1, MUL VL]
+	ldr p2,  [x11, #2, MUL VL]
+	ldr p3,  [x11, #3, MUL VL]
+	ldr p4,  [x11, #4, MUL VL]
+	ldr p5,  [x11, #5, MUL VL]
+	ldr p6,  [x11, #6, MUL VL]
+	ldr p7,  [x11, #7, MUL VL]
+	ldr p8,  [x11, #8, MUL VL]
+	ldr p9,  [x11, #9, MUL VL]
+	ldr p10, [x11, #10, MUL VL]
+	ldr p11, [x11, #11, MUL VL]
+	ldr p12, [x11, #12, MUL VL]
+	ldr p13, [x11, #13, MUL VL]
+	ldr p14, [x11, #14, MUL VL]
+	ldr p15, [x11, #15, MUL VL]
+
+	add x10, x8, #SVE_z
+	ldr z0,  [x10, #0, MUL VL]
+	ldr z1,  [x10, #1, MUL VL]
+	ldr z2,  [x10, #2, MUL VL]
+	ldr z3,  [x10, #3, MUL VL]
+	ldr z4,  [x10, #4, MUL VL]
+	ldr z5,  [x10, #5, MUL VL]
+	ldr z6,  [x10, #6, MUL VL]
+	ldr z7,  [x10, #7, MUL VL]
+	ldr z8,  [x10, #8, MUL VL]
+	ldr z9,  [x10, #9, MUL VL]
+	ldr z10, [x10, #10, MUL VL]
+	ldr z11, [x10, #11, MUL VL]
+	ldr z12, [x10, #12, MUL VL]
+	ldr z13, [x10, #13, MUL VL]
+	ldr z14, [x10, #14, MUL VL]
+	ldr z15, [x10, #15, MUL VL]
+	ldr z16, [x10, #16, MUL VL]
+	ldr z17, [x10, #17, MUL VL]
+	ldr z18, [x10, #18, MUL VL]
+	ldr z19, [x10, #19, MUL VL]
+	ldr z20, [x10, #20, MUL VL]
+	ldr z21, [x10, #21, MUL VL]
+	ldr z22, [x10, #22, MUL VL]
+	ldr z23, [x10, #23, MUL VL]
+	ldr z24, [x10, #24, MUL VL]
+	ldr z25, [x10, #25, MUL VL]
+	ldr z26, [x10, #26, MUL VL]
+	ldr z27, [x10, #27, MUL VL]
+	ldr z28, [x10, #28, MUL VL]
+	ldr z29, [x10, #29, MUL VL]
+	ldr z30, [x10, #30, MUL VL]
+	ldr z31, [x10, #31, MUL VL]
+
+	// FPSR/FPCR from the iframe (the SVE buffer does not carry them).
+	ldr x1, [x13, #FPU_fpsr]
+	msr FPSR, x1
+	ldr x2, [x13, #FPU_fpcr]
+	mrs x3, FPCR
+	cmp x3, x2
+	beq 1f
+	msr FPCR, x2
+1:
+	ret
+
+2:
+	// Non-SVE hardware: V0-31 + FPSR/FPCR from the iframe. x0 is untouched on
+	// this path, so tail-call the shared NEON restore.
+	b _fp_restore
+FUNCTION_END(_fp_restore_el0)
+
 
 FUNCTION(_arch_context_swap):
 	// save
