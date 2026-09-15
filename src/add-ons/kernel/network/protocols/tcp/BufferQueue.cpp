@@ -12,6 +12,8 @@
 #include <KernelExport.h>
 #include <arpa/inet.h>
 
+#include <util/AutoLock.h>
+
 
 //#define TRACE_BUFFER_QUEUE
 #ifdef TRACE_BUFFER_QUEUE
@@ -36,6 +38,7 @@ BufferQueue::BufferQueue(size_t maxBytes)
 	fLastSequence(0),
 	fPushPointer(0)
 {
+	recursive_lock_init(&fLock, "tcp buffer queue");
 }
 
 
@@ -47,12 +50,15 @@ BufferQueue::~BufferQueue()
 	while ((buffer = fList.RemoveHead()) != NULL) {
 		gBufferModule->free(buffer);
 	}
+
+	recursive_lock_destroy(&fLock);
 }
 
 
 void
 BufferQueue::SetMaxBytes(size_t maxBytes)
 {
+	RecursiveLocker _(fLock);
 	fMaxBytes = maxBytes;
 }
 
@@ -60,6 +66,7 @@ BufferQueue::SetMaxBytes(size_t maxBytes)
 void
 BufferQueue::SetInitialSequence(tcp_sequence sequence)
 {
+	RecursiveLocker _(fLock);
 	TRACE(("BufferQueue@%p::SetInitialSequence(%" B_PRIu32 ")\n", this,
 		sequence.Number()));
 
@@ -71,6 +78,7 @@ BufferQueue::SetInitialSequence(tcp_sequence sequence)
 void
 BufferQueue::Add(net_buffer *buffer)
 {
+	RecursiveLocker _(fLock);
 	Add(buffer, fLastSequence);
 }
 
@@ -78,6 +86,7 @@ BufferQueue::Add(net_buffer *buffer)
 void
 BufferQueue::Add(net_buffer *buffer, tcp_sequence sequence)
 {
+	RecursiveLocker _(fLock);
 	TRACE(("BufferQueue@%p::Add(buffer %p, size %" B_PRIu32 ", sequence %"
 		B_PRIu32 ")\n", this, buffer, buffer->size, sequence.Number()));
 	TRACE(("  in: first: %" B_PRIu32 ", last: %" B_PRIu32 ", num: %lu, cont: "
@@ -233,6 +242,7 @@ BufferQueue::Add(net_buffer *buffer, tcp_sequence sequence)
 status_t
 BufferQueue::RemoveUntil(tcp_sequence sequence)
 {
+	RecursiveLocker _(fLock);
 	TRACE(("BufferQueue@%p::RemoveUntil(sequence %" B_PRIu32 ")\n", this,
 		sequence.Number()));
 	VERIFY();
@@ -283,6 +293,7 @@ BufferQueue::RemoveUntil(tcp_sequence sequence)
 status_t
 BufferQueue::Get(net_buffer *buffer, tcp_sequence sequence, size_t bytes)
 {
+	RecursiveLocker _(fLock);
 	TRACE(("BufferQueue@%p::Get(sequence %" B_PRIu32 ", bytes %lu)\n", this,
 		sequence.Number(), bytes));
 	VERIFY();
@@ -343,6 +354,8 @@ BufferQueue::Get(net_buffer *buffer, tcp_sequence sequence, size_t bytes)
 status_t
 BufferQueue::Get(size_t bytes, bool remove, net_buffer **_buffer)
 {
+	RecursiveLocker _(fLock);
+
 	if (bytes > Available())
 		bytes = Available();
 
@@ -421,6 +434,7 @@ BufferQueue::Get(size_t bytes, bool remove, net_buffer **_buffer)
 size_t
 BufferQueue::Available(tcp_sequence sequence) const
 {
+	RecursiveLocker _(fLock);
 	if (sequence > (fFirstSequence + fContiguousBytes).Number())
 		return 0;
 
@@ -428,9 +442,22 @@ BufferQueue::Available(tcp_sequence sequence) const
 }
 
 
+tcp_sequence
+BufferQueue::NextSequence() const
+{
+	// fFirstSequence and fContiguousBytes are moved in lockstep by a concurrent
+	// reader's Get() (front removal advances one and shrinks the other by the
+	// same amount), so their sum is invariant -- but only if read together, so
+	// take the lock to avoid a torn read that would corrupt fReceiveNext.
+	RecursiveLocker _(fLock);
+	return fFirstSequence + fContiguousBytes;
+}
+
+
 void
 BufferQueue::SetPushPointer()
 {
+	RecursiveLocker _(fLock);
 	if (fList.IsEmpty())
 		fPushPointer = 0;
 	else
@@ -442,6 +469,7 @@ int
 BufferQueue::PopulateSackInfo(tcp_sequence sequence, int maxSackCount,
 	tcp_sack* sacks)
 {
+	RecursiveLocker _(fLock);
 	SegmentList::ReverseIterator iterator = fList.GetReverseIterator();
 	net_buffer* buffer = iterator.Next();
 
