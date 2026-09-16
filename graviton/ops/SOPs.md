@@ -342,3 +342,176 @@ upstream has also rotated fails source fetch. Two layers mitigate this:
   checksum-verifiable source, stay in §4 backoff. Recovering them is
   per-port source archaeology — do it on demand when a real dependent needs one,
   not as a blanket sprint.
+
+## 13. Running a campaign at scale — operational SOP (#136/#169)
+
+Lessons the missing-ports campaign paid for. Each entry is **symptom → rule →
+check**. These harden the scale-up loop (§10), the AMI promote step (§11), the
+publish step (§3), and the operator environment (§8) — the section they extend is
+named per entry.
+
+### 13.1 Rebake must complete and the param must move BEFORE the wave launches (extends §10, §11)
+
+- **Symptom.** A build-wave `--execute` was launched while an async builder-AMI
+  rebake was still repointing `/haiku-graviton/builder-ami-id`; the launcher
+  (`launch_builder`) resolves the AMI from that SSM param **per execution, at
+  launch time**, so the first chains booted the *stale, pre-fix* AMI while chains
+  launched after the repoint booted the new one — a split-brain wave that silently
+  builds part of the backlog on the input the gate was supposed to have retired.
+- **Rule.** Rebake is a **barrier**, not a background task: when a gate (§10.1)
+  requires a new builder capability, the rebake must **finish and the SSM param
+  must be repointed (§11 promote) BEFORE any StartExecution in the dependent wave**.
+  Never overlap a rebake-in-progress with a wave that needs its output. If the
+  running wave does *not* need the new capability, do not repoint mid-campaign
+  (§11) — let it finish on the current AMI, then promote.
+- **Check.** Resolve the param yourself immediately before launching and confirm it
+  equals the freshly-baked AMI id (and that the rebake job has exited, not merely
+  started): `aws ssm get-parameter --name /haiku-graviton/builder-ami-id
+  --query Parameter.Value`. Pre-launch guard for the driver: **log the
+  builder-ami-id it resolved at run start**, so the wave's provenance is on the
+  record and a stale-AMI launch is visible in the run summary rather than inferred
+  hours later.
+
+### 13.2 Driver liveness check must be path-qualified (extends §8, §10.4)
+
+- **Symptom.** `pgrep -f haiku-build-wave-driver` used to test "is the campaign
+  driver still running?" **false-positives on the check command's own shell** (the
+  pattern matches the `pgrep` invocation's argv), so a driver that had already died
+  reads as "alive" — the campaign silently stalls with builders idle and nobody
+  re-invokes it.
+- **Rule.** Any "is the driver alive?" probe MUST match the **real long-running
+  process**, not the shell running the probe. Qualify by the actual interpreter and
+  the `--execute` argv, e.g. `pgrep -af 'haiku-build-wave-driver --execute' | grep
+  python3`, or bracket-escape the pattern (`pgrep -af '[h]aiku-build-wave-driver'`,
+  the trick §-`haiku-status` already uses for jam/haikuporter). Same trap applies to
+  any `pgrep -f` liveness/gate check the operator writes.
+- **Check.** Run the probe once when you *know* no driver is running; it MUST print
+  nothing. If it prints its own shell, it is wrong — re-qualify it.
+
+### 13.3 Credential / session horizon — the keep-alive and its limits (extends §10)
+
+- **Symptom.** Admin creds for the test account expire ~hourly, and a bare
+  `nohup`'d driver dies with the operator box/process. A multi-hour campaign
+  launched and walked away from silently stops the moment creds lapse or the
+  session ends — builders drain and the backlog sits.
+- **Rule.** For an attended campaign, run a **durable keep-alive loop in the
+  operator session** (~every 30 min: refresh creds → verify the *real* driver is
+  alive by the §13.2 probe → re-invoke it if dead → checkpoint state → apply the
+  wind-down rule). Know its limit: **this only fires while the operator session is
+  open.** Truly-unattended multi-day operation needs **cloud-side credentials (an
+  instance role) plus a cloud-resident driver** — that does not exist yet, so do
+  NOT promise unattended overnight runs on session creds; either babysit, or scope
+  the wave to what completes within the credential/session horizon.
+- **Check.** Before leaving a wave running, confirm (a) the keep-alive loop is
+  itself running, and (b) creds have been refreshed within the window. A requeue
+  mid-run needs a **fresh driver invocation** to re-plan — the running driver's
+  wave plan is fixed at start.
+
+### 13.4 "built ≠ published" — read the real backlog from the pool's actual provides (extends §3, §7)
+
+- **Symptom.** `build_state=built` in `debeos-package-state` is **not** the same as
+  "in the green pool." The triage census (`haiku-triage-failures`, #282) found a
+  large block of items reported `failed` were actually just **dependency-unpublished**
+  — their deps built but were never published, so a dependent that could build had
+  no resolvable input. Separately, wave-layering that **over-credited the green
+  baseline's `provides`** (assumed the baseline shipped dep-libs it did not actually
+  contain) never queued those deps, and their dependents UNRESOLVABLE-failed with no
+  recovery path.
+- **Rule.** The **published pool is the source of truth for what is available**, not
+  the DDB `built` flag and not a nominal/assumed baseline. Derive the buildable
+  closure and the baseline `provides` from the **actual published hpkgs** (read each
+  hpkg's `provides` via the `package` tool / the pool index), then build-and-publish
+  deps FIRST. When censusing the backlog, distinguish *genuine* build failures from
+  *dep-unpublished* items before calling anything a real failure (§7: a failing
+  state is not proof of a broken port).
+- **Check.** For any "failed" tail, run the classifier (`haiku-triage-failures`) and
+  confirm each item's deps are actually in the pool index before treating it as a
+  port defect. `depclosure --base` MUST be fed a **real** builder's
+  `pkgman list-installed` / the pool's real provides (§2.1), never an assumed
+  baseline — a `NOPROV:` on a name the pool actually ships is a crediting bug, not a
+  missing port.
+
+### 13.5 Decouple builds from publishing; publish incrementally, single-flight, foreground (extends §3)
+
+- **Symptom.** Publishing was gated on a *layer* completing, so one long-pole build
+  (`m68k_elf_gcc`, multi-hour) held ~392 already-built packages unpublished for
+  hours; then, when layer-2 launch was gated on that publish landing, a publish that
+  thrashed on decompression-bomb game-data packages (#168) **drained the 8-builder
+  fleet to 1 idle box with ~495 ports queued** while it whack-a-mole'd the bombs.
+- **Rule.** (1) **Never gate a build wave on a publish, and never gate a publish on
+  a whole layer completing.** Build waves advance continuously; publishing runs
+  **asynchronously, single-flight (§3), incrementally** — after each batch of
+  completions or on a time interval — never blocking the next wave. (2) **One bad
+  package must not block a batch:** pre-flight the uncompressed size of **all**
+  candidates in ONE pass up front and park oversized bombs (>300 MB uncompressed,
+  §3 list) to `needs_human` (#168) — do not discover-at-extract-time one at a time.
+  (3) Run publishes in the **foreground** — the permission classifier blocks
+  `haiku-repo-publish-ephemeral` when backgrounded (it runs fine foreground). (4)
+  **Size the publisher root dynamically** to ~(pool size × 2 + headroom)
+  (`HG_PUBLISHER_DISK_GIB`), not a fixed default — the pool grows every publish, so
+  a fixed 8 GB root eventually ENOSPCs the whole-pool index sync (distinct from the
+  `/dev/shm` tmpfs wall in #168).
+- **Check.** After each publish, verify against S3, not the log tail (§3/§7): count
+  objects/index in the pool prefix. Confirm exactly one publisher is running (§3)
+  and that the next build wave launched **without** waiting for it.
+
+### 13.6 Native-builder launch constraints: default disk, cap parallelism, absolute interpreters (extends §8)
+
+- **Symptom (disk, #254).** A builder launched from canonical with a large
+  `--disk` / block-device size override boots a healthy box that is **unreachable by
+  any channel** — SSM (outbound) and sshd/EICE (inbound :22) are late-boot,
+  network-gated launch jobs, and the first-boot `partition_grow` races/blocks them.
+  This was the real cause of the "#50 builder stalled across two boots" mystery.
+- **Symptom (parallelism, #262).** Large builds at high `-j` die with
+  `ninja: fatal: waitpid(...): No child process` — an ECHILD child-reaping race on
+  Haiku arm64 under many short-lived children, with **zero** compile errors (not a
+  build defect).
+- **Symptom (interpreter, #163).** Native Haiku has no `/usr/bin/env` (the rootfs is
+  in-memory / un-bakeable) and the SSM shell hands children an **empty PATH**, so a
+  `#!/usr/bin/env python3` builder-side script fails as "no python3" even though it
+  is installed.
+- **Rule.** Launch native builders with the **DEFAULT root size** and rely on the
+  AMI's own auto-grow (or bake a bigger baked root) — **never** pass a `--disk`
+  override to a builder you must reach over SSM (`haiku-bake-builder` does not, so
+  bakes are fine; only wave/build launches with an override stall). Cap native build
+  parallelism at **~`-j16`**, or wrap large `ninja`/`jam` builds in a resume loop.
+  Every builder-side tool MUST exec its interpreter by **absolute path**
+  (`#!/boot/system/bin/python3`, not `env`).
+- **Check.** After launch, a healthy default-disk builder registers as an SSM Online
+  node in ~1 min — if a builder never appears, suspect a disk override before an
+  IAM/egress/clock theory. For a build that died mid-run, `grep` for
+  `waitpid`/`No child process` before blaming the port, and re-run at `-j16`.
+
+### 13.7 The publisher's instance profile must be able to read the host-tools (extends §3, #41)
+
+- **Symptom.** `haiku-repo-publish-ephemeral` runs the Linux host-tools (`package`,
+  `package_repo`) on an Ubuntu peer, fetched from the bake pipeline's WorkBucket
+  under `cache/host-tools` (resolved from the CFN stack output). If the publisher's
+  instance profile (`HG_PUBLISHER_PROFILE`) lacks **S3 read on that WorkBucket
+  prefix**, the `aws s3 cp` of the tools 403s and the peer can't stamp/publish —
+  surfaced by the #41 packager re-stamp work, which needs `package`.
+- **Rule.** The publisher profile MUST carry SSM core + **S3 read on
+  `HG_HOST_TOOLS_S3`** (the WorkBucket `cache/host-tools` prefix) + S3 read/write on
+  the repo bucket + CloudFront invalidate. **Workaround** when the profile can't be
+  changed in the moment: point `HG_HOST_TOOLS_S3` at a bucket/prefix the profile
+  *can* read (e.g. bank a copy of `package`/`package_repo` in the repo bucket the
+  publisher already reads). **Real fix:** grant the profile `s3:GetObject` on the
+  WorkBucket host-tools prefix (or make the pipeline bank host-tools into the repo
+  bucket so no cross-bucket grant is needed).
+- **Check.** Before a publish run on a fresh peer, confirm the profile can read the
+  tools: `aws s3 ls "$HG_HOST_TOOLS_S3/"` from the peer must succeed (not 403). A
+  403 here is a permissions gap, **not** a missing artifact (§7).
+
+### 13.8 Expect a high failure rate on missing-ports waves — it is NOT a mechanism break
+
+- **Symptom.** A missing-ports wave shows a high `failed:built` ratio (probe: 26
+  built / 188 failed). On an *outdated-rebuild* wave that would signal a broken
+  mechanism; on a *missing-ports* wave it is expected.
+- **Rule.** Missing ports are missing precisely because many do not build cleanly on
+  arm64 yet. A high failure ratio on a missing-ports wave is **normal** — classify
+  and back off per §4 (census, don't guess), do **not** halt the campaign on ratio
+  alone. **Do** halt on a genuine mechanism break — SSM/spot/publisher failing
+  across ports, or a *new* blocker class affecting many ports at once (§10.6).
+- **Check.** Distinguish the two: per-port compile errors spread across unrelated
+  ports = normal long tail; the *same* infrastructure error (launch, lease,
+  publish, source-fetch) across many ports = mechanism break → stop and report.
