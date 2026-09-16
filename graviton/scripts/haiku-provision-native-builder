@@ -306,11 +306,21 @@ fi
 # shared cmakeDirArgs shell variable, which every CMake recipe already passes to
 # `cmake`. It is a cache variable, so it reaches add_subdirectory()'d bundles
 # (libjxl's sjpeg/highway) too, and it only raises the policy floor -- projects
-# asking for a newer minimum are unaffected. A host env var cannot carry this:
-# HaikuPorter/Utils.py:filteredEnvironment() passes only LC_ALL/TERM/LIBRARY_PATH/
-# PATH into the build shell. Anchored, idempotent, and verified (a haikuporter that
-# moved the anchor fails loudly rather than installing a silent no-op). See
-# graviton/haikuports-patches/haikuporter-cmake-policy-minimum.patch (#47).
+# asking for a newer minimum are unaffected.
+#
+# LIMIT of the cmakeDirArgs channel (why 2a-2 below also exists, #136): it only
+# reaches recipes that actually PASS $cmakeDirArgs to cmake. Most CMake recipes
+# hand-write an explicit `cmake -D... <src>` argument list and never reference
+# $cmakeDirArgs, so the flag never gets to them -- which is why dozens of #136
+# ports still had to be fixed one recipe at a time. The channel that reaches
+# EVERY cmake invocation regardless of how the recipe spells it is the build
+# environment: cmake >= 3.31 reads CMAKE_POLICY_VERSION_MINIMUM from os.environ.
+# Section 2a-2 injects it there. Both are kept: 2a-2 is the systemic reach, 2a
+# stays as belt-and-braces for a builder whose cmake predates 3.31 (the env var
+# is then ignored and the -D on $cmakeDirArgs-using recipes still helps).
+# Anchored, idempotent, and verified (a haikuporter that moved the anchor fails
+# loudly rather than installing a silent no-op). See
+# graviton/haikuports-patches/haikuporter-cmake-policy-minimum.patch (#47/#136).
 log "#47: defaulting CMAKE_POLICY_VERSION_MINIMUM=3.5 in haikuporter cmakeDirArgs"
 python3.14 - "$HP_DIR/HaikuPorter/Port.py" <<'PY'
 import io, py_compile, sys
@@ -346,6 +356,79 @@ except Exception as exc:
         "%s: %s\n" % (type(exc).__name__, exc))
     sys.exit(1)
 print("provision: #47 cmakeDirArgs patched")
+PY
+
+# --- 2a-2. #136: make CMAKE_POLICY_VERSION_MINIMUM reach EVERY cmake, via env --
+# The 2a cmakeDirArgs edit only helps recipes that pass $cmakeDirArgs to cmake.
+# Most CMake recipes write an explicit `cmake -D... <src>` arg list and never
+# reference it, so 2a misses them -- that is why the #136 waves still fixed the
+# cmake_minimum_required(<3.5) failure one recipe at a time (json_c, openal,
+# libjxl, tweeny, and dozens more). cmake >= 3.31 reads the cache variable
+# CMAKE_POLICY_VERSION_MINIMUM from the ENVIRONMENT, applied before it parses any
+# CMakeLists.txt, so a value in the build shell's environment reaches every cmake
+# invocation regardless of how the recipe calls it. haikuporter builds each port
+# in a shell whose environment is exactly what HaikuPorter/Utils.py:
+# filteredEnvironment() returns -- it deliberately drops the host environment
+# (LC_ALL/TERM defaults + LIBRARY_PATH/PATH passed through) so one port's exports
+# cannot leak into another. So the durable place to set this default is inside
+# filteredEnvironment() itself: seed CMAKE_POLICY_VERSION_MINIMUM=3.5 into the
+# returned dict (next to the LC_ALL/TERM defaults) and pass any explicit
+# os.environ override through, so a recipe/operator that sets a different value
+# still wins. Only raises the policy floor; projects requesting a newer minimum
+# are unaffected. Anchored on the passthrough loop, idempotent, byte-compiled to
+# verify -- a moved anchor fails loudly. See
+# graviton/haikuports-patches/haikuporter-cmake-policy-minimum.patch (#136).
+log "#136: seeding CMAKE_POLICY_VERSION_MINIMUM=3.5 in haikuporter filteredEnvironment"
+python3.14 - "$HP_DIR/HaikuPorter/Utils.py" <<'PY'
+import io, py_compile, sys
+path = sys.argv[1]
+with io.open(path, 'r', encoding='utf-8') as fh:
+    text = fh.read()
+if 'CMAKE_POLICY_VERSION_MINIMUM' in text:
+    print("provision: #136 filteredEnvironment already patched; skipping")
+    sys.exit(0)
+# Anchor on the exact env-dict default block and the passthrough loop that
+# follow it in filteredEnvironment(). Both are matched so a haikuporter refactor
+# of either one fails loudly instead of silently no-op'ing.
+env_anchor = (
+    "\tenv = {\n"
+    "\t\t'LC_ALL': 'POSIX',\n"
+    "\t\t'TERM': 'xterm',\n"
+    "\t}\n"
+)
+loop_anchor = "\tfor key in ['LIBRARY_PATH', 'PATH']:\n"
+for name, anchor in (('env-dict', env_anchor), ('passthrough-loop', loop_anchor)):
+    c = text.count(anchor)
+    if c != 1:
+        sys.stderr.write(
+            "provision: FATAL #136: filteredEnvironment %s anchor appears %d "
+            "times in %s, expected once -- haikuporter changed, re-check the "
+            "patch\n" % (name, c, path))
+        sys.exit(1)
+new_env = (
+    "\tenv = {\n"
+    "\t\t'LC_ALL': 'POSIX',\n"
+    "\t\t'TERM': 'xterm',\n"
+    "\t\t# graviton/DeBeOS (#136): default cmake's policy floor to 3.5 for EVERY\n"
+    "\t\t# cmake invocation in a port BUILD(), independent of how the recipe\n"
+    "\t\t# calls cmake. cmake >= 3.31 reads CMAKE_POLICY_VERSION_MINIMUM from the\n"
+    "\t\t# environment, so this reaches recipes that pass an explicit arg list\n"
+    "\t\t# and never reference $cmakeDirArgs. Only raises the floor; an explicit\n"
+    "\t\t# override in os.environ still wins (passthrough loop below).\n"
+    "\t\t'CMAKE_POLICY_VERSION_MINIMUM': '3.5',\n"
+    "\t}\n"
+)
+new_loop = "\tfor key in ['LIBRARY_PATH', 'PATH', 'CMAKE_POLICY_VERSION_MINIMUM']:\n"
+text = text.replace(env_anchor, new_env, 1).replace(loop_anchor, new_loop, 1)
+with io.open(path, 'w', encoding='utf-8') as fh:
+    fh.write(text)
+try:
+    py_compile.compile(path, cfile='/tmp/.hp136-check.pyc', doraise=True)
+except Exception as exc:
+    sys.stderr.write("provision: FATAL #136: patched Utils.py does not compile: "
+        "%s: %s\n" % (type(exc).__name__, exc))
+    sys.exit(1)
+print("provision: #136 filteredEnvironment patched")
 PY
 
 log "writing $CONF"

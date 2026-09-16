@@ -1,10 +1,14 @@
-# haikuporter-cmake-policy-minimum.patch  (issue #47)
+# haikuporter-cmake-policy-minimum.patch  (issues #47 and #136)
 #
 # Patches haikuporter, not a recipe. Applied on the native arm64 builder by
 # graviton/scripts/haiku-provision-native-builder (anchored, idempotent, verified)
 # right after the haikuporter clone -- the native builder clones upstream
 # haikuporter fresh, so a committed edit-in-place is how this fix reaches it (the
 # same shape as haiku-haikuporter-patch does for the retired QEMU-guest fleet).
+#
+# TWO edits, two layers -- see "THE GENERAL FIX" (#47, cmakeDirArgs) and "THE
+# SYSTEMIC FIX" (#136, filteredEnvironment) below. The second is the one that
+# reaches every cmake invocation; the first is kept as belt-and-braces.
 #
 # WHY
 # ---
@@ -47,6 +51,59 @@
 # +			# add_subdirectory() bundles too; projects asking for more are
 # +			# unaffected.
 # +			self.shellVariables['cmakeDirArgs'] += ' -DCMAKE_POLICY_VERSION_MINIMUM=3.5'
+#
+# THE LIMIT OF THE cmakeDirArgs CHANNEL (why #136 exists)
+# -------------------------------------------------------
+# The cmakeDirArgs edit above only helps recipes that actually PASS $cmakeDirArgs
+# to cmake. Most CMake recipes hand-write an explicit `cmake -D... <src>` argument
+# list and never reference $cmakeDirArgs -- so the flag never reaches them. That
+# is exactly why the #136 build waves still had to fix this failure one recipe at
+# a time (json_c, openal, libjxl, tweeny, and dozens more), despite #47 being in
+# place. Measured on the #136 backlog: 79 of the 508 ports whose last outcome was
+# a build-error carry the cmake-policy signature ("Compatibility with CMake < 3.5
+# has been removed" / "add -DCMAKE_POLICY_VERSION_MINIMUM=3.5"), and several of
+# them (gflags, polyclipping, qhull, zopfli, uchardet) use an explicit arg list --
+# so #47 could never have cleared them.
+#
+# THE SYSTEMIC FIX (#136, HaikuPorter/Utils.py:filteredEnvironment)
+# ----------------------------------------------------------------
+# The header-environment claim above ("NOT a usable channel") was only half true:
+# an export on the box is stripped, yes -- but the *reason* is filteredEnvironment(),
+# and that is precisely where to set the default so it is NOT stripped. cmake >= 3.31
+# reads CMAKE_POLICY_VERSION_MINIMUM from the environment (applied before it parses
+# any CMakeLists.txt), so a value present in the BUILD() shell's environment reaches
+# EVERY cmake invocation regardless of how the recipe spells the command. haikuporter
+# builds each port in a shell whose environment is exactly filteredEnvironment()'s
+# return value. So seed the default there, alongside the LC_ALL/TERM defaults, and
+# also pass an explicit os.environ override through so a recipe/operator can still win:
+#
+#   THE EDIT (HaikuPorter/Utils.py, filteredEnvironment):
+#
+#     	env = {
+#     		'LC_ALL': 'POSIX',
+#     		'TERM': 'xterm',
+#   +		# graviton/DeBeOS (#136): default cmake's policy floor to 3.5 for
+#   +		# EVERY cmake invocation in a port BUILD(), independent of how the
+#   +		# recipe calls cmake. cmake >= 3.31 reads this from the environment,
+#   +		# so it reaches recipes that pass an explicit arg list and never use
+#   +		# $cmakeDirArgs. Only raises the floor; an explicit os.environ
+#   +		# override still wins (passthrough loop below).
+#   +		'CMAKE_POLICY_VERSION_MINIMUM': '3.5',
+#     	}
+#
+#   - 	for key in ['LIBRARY_PATH', 'PATH']:
+#   + 	for key in ['LIBRARY_PATH', 'PATH', 'CMAKE_POLICY_VERSION_MINIMUM']:
+#     		if key in os.environ:
+#     			env[key] = os.environ[key]
+#
+# VERIFIED on a real Graviton (c7g) builder, cmake 4.1.6:
+#   * minimal reproducer, cmake_minimum_required(VERSION 2.8): WITHOUT the env var
+#     configure fails RC=1 with the removal signature; WITH CMAKE_POLICY_VERSION_
+#     MINIMUM=3.5 exported it configures RC=0. So cmake honours the env var.
+#   * a sample of the #136 signature ports built RC=0 with NO per-recipe change,
+#     including explicit-arg-list ports (#47's channel does not reach them).
+#   * known-good CMake ports (re2, jsoncpp, pugixml) still build RC=0 -- the flag
+#     only raises the floor, so projects declaring >= 3.5 are unaffected.
 #
 # Retire when: the builder's CMake is old enough to still honour <3.5 policies
 # (it will not be) OR every in-tree CMake port declares a >=3.5 minimum. Until
