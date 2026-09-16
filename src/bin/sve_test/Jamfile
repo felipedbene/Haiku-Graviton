@@ -7,3 +7,10 @@ Application sve_test :
 	sve_test.c
 	: libroot.so
 ;
+
+# fork() FP/SIMD preservation regression test (SVE d8-d15 across fork).
+# Verification instrument, not shipped.
+Application sve_fork_test :
+	sve_fork_test.c
+	: libroot.so
+;
