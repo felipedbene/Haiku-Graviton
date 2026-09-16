@@ -878,6 +878,22 @@ Journal::_WriteTransactionToLog()
 	logEntry->SetTransactionID(fTransactionID);
 #endif
 
+	// Barrier between the log body and the commit record. The run arrays and
+	// their block data were just written to the log area; the superblock write
+	// below advances log_end, which is the commit that makes replay treat this
+	// entry as valid. Both writes go straight to the device and, on a volatile
+	// write-back cache, may reach the platter in any order. Without a barrier
+	// here a power loss can persist the advanced log_end while the entry it
+	// points at is still stale in the cache -- replay then walks a log entry
+	// whose body never landed. _CheckRunArray() only sanity-checks the run-array
+	// header and block geometry; there is no CRC or sequence number over the
+	// body, so a plausible-looking stale run array replays into live blocks
+	// (silent corruption). Flushing before the commit guarantees the body is
+	// durable first; the flush after the commit (below) then orders the log
+	// ahead of the in-place writeback. This is standard write-ahead-log commit
+	// ordering. See graviton/docs/device-watchdog-and-bfs-crashsafety.md.
+	ioctl(fVolume->Device(), B_FLUSH_DRIVE_CACHE);
+
 	// Update the log end pointer in the superblock
 
 	fVolume->SuperBlock().flags = SUPER_BLOCK_DISK_DIRTY;
