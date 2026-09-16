@@ -43,10 +43,11 @@
 #                     "NAME-<version>-<arch>.hpkg"). Source packages are always
 #                     skipped.
 #
-# The decompression-bomb guard mirrors haiku-repo-add (#168): a package whose
-# contents decompress past --max-bytes, or that would not fit the work
-# filesystem with headroom, is skipped and reported rather than ENOSPC-ing the
-# whole batch.
+# --apply is metadata-only: it edits just the .PackageInfo and splices it back
+# with `package add -f -i`, never unpacking a package's contents. So there is no
+# decompression-bomb exposure (the #168 guard that haiku-repo-add needs for its
+# full-extract re-stamp does not apply here) and a single bad package is reported
+# and skipped, not fatal to the batch.
 #
 set -euo pipefail
 
@@ -99,12 +100,25 @@ is_excluded() {
 	return 1
 }
 
-# ---- re-stamp one hpkg's packager IN PLACE (metadata repack, no rebuild) ---
-# Extract the package tree (incl. .PackageInfo), rewrite the packager line, and
-# recreate the hpkg. `package create` reads .PackageInfo from the base dir, so
-# the recreated package is byte-for-byte identical content with only the
-# packager attribute changed. Recreate into a scratch dir first, then move over
-# the original, so a failed `package create` never leaves a truncated hpkg.
+# ---- re-stamp one hpkg's packager IN PLACE (metadata-only, no rebuild) -----
+# Edit ONLY the .PackageInfo and splice it back with `package add -f -i`, which
+# rewrites the package's attribute section in place WITHOUT round-tripping the
+# file contents.
+#
+# Why not `package extract` + `package create` (the old approach): a full
+# extract writes every entry's BeOS attributes onto the host filesystem, and on
+# a Linux publisher's ext4 that FAILS -- setting a user xattr on a symlink is
+# EPERM ("Operation not permitted", e.g. bin/bzcat -> bzip2 with a BEOS:ICON),
+# and a large icon attribute overflows ext4's xattr block ("No space left on
+# device"). Under `set -e` that aborts, and even tolerated it is lossy, because
+# `package create` then drops the attributes the extract could not write -- so
+# it is not the "metadata-only, no content change" guarantee this tool promises.
+# Measured on the arm64 pool this broke 2488 of 2929 packages; `package add -i`
+# handled all of them (issue #41).
+#
+# `package extract ... .PackageInfo` may still exit non-zero after writing
+# .PackageInfo (it also touches a later entry's attribute), so gate on the file
+# existing, not on the exit code.
 restamp_inplace() {
 	local src="$1"
 	local base; base="$(basename "$src")"
@@ -113,19 +127,24 @@ restamp_inplace() {
 		echo "  = $base (already target)"
 		return 0
 	fi
-	local tmp out; tmp="$(mktemp -d)"; out="$(mktemp -d)"
+	local tmp; tmp="$(mktemp -d)"
 	# shellcheck disable=SC2064
-	trap "rm -rf '$tmp' '$out'" RETURN
-	"$PKG_TOOL" extract -C "$tmp" "$src"
-	[ -f "$tmp/.PackageInfo" ] || die "no .PackageInfo in $base"
+	trap "rm -rf '$tmp'" RETURN
+	"$PKG_TOOL" extract -C "$tmp" "$src" .PackageInfo >/dev/null 2>&1 || true
+	# Per-package failures return non-zero (do_apply tolerates them) rather than
+	# `die`, so one bad package never aborts the batch.
+	[ -f "$tmp/.PackageInfo" ] || { echo "  ! $base: could not extract .PackageInfo" >&2; return 1; }
 	if grep -qE '^[[:space:]]*packager[[:space:]]' "$tmp/.PackageInfo"; then
 		# rewrite the value; PACKAGER may contain & and / so use a non-/ delim
 		sed -i -E "s|^([[:space:]]*packager[[:space:]]+).*|\1\"$PACKAGER\"|" "$tmp/.PackageInfo"
 	else
 		printf '\npackager\t"%s"\n' "$PACKAGER" >> "$tmp/.PackageInfo"
 	fi
-	"$PKG_TOOL" create -C "$tmp" "$out/$base"
-	mv -f "$out/$base" "$src"
+	if ! "$PKG_TOOL" add -f -q -i "$tmp/.PackageInfo" -C "$tmp" "$src" .PackageInfo >/dev/null 2>&1; then
+		echo "  ! $base: package add failed" >&2; return 1
+	fi
+	local now; now="$(hpkg_packager "$src")"
+	[ "$now" = "$PACKAGER" ] || { echo "  ! $base: packager not updated (got '$now')" >&2; return 1; }
 	echo "  ~ $base ($cur -> $PACKAGER)"
 }
 
@@ -134,25 +153,26 @@ do_apply() {
 	[ -d "$DIR" ] || die "no such dir: $DIR"
 	command -v "$PKG_TOOL" >/dev/null 2>&1 || die "no '$PKG_TOOL' on PATH (run on a Haiku host or set --package-tool to a banked host tool)"
 
-	local n=0 skipped=0 f base need avail
+	# One failing package must not abort the whole batch: report it and move on,
+	# mirroring haiku-repo-add. The re-stamp is metadata-only via `package add -i`
+	# (no full extract), so the #168 decompression-bomb guard no longer applies --
+	# a package's uncompressed size is irrelevant when its contents are never
+	# unpacked. Only real source packages are still skipped (is_excluded).
+	local n=0 skipped=0 failed=0 f base
 	for f in "$DIR"/*.hpkg; do
 		[ -e "$f" ] || { echo "no .hpkg in $DIR -- nothing to do"; return 0; }
 		base="$(basename "$f")"
 		if is_excluded "$base"; then
 			echo "  skip $base (excluded/source)"; skipped=$((skipped + 1)); continue
 		fi
-		# decompression-bomb guard (#168)
-		need="$(uncompressed_bytes "$f")"; need="${need:-0}"
-		avail="$(avail_bytes "$DIR")"; avail="${avail:-0}"
-		if [ "$need" -gt "$RESTAMP_MAX_BYTES" ] \
-			|| [ "$need" -gt $((avail - RESTAMP_HEADROOM_BYTES)) ]; then
-			echo "  skip $base (decompresses to $need bytes -- exceeds guard; needs human)"
-			skipped=$((skipped + 1)); continue
+		if restamp_inplace "$f"; then
+			n=$((n + 1))
+		else
+			echo "  ! FAIL $base (left unchanged)" >&2; failed=$((failed + 1))
 		fi
-		restamp_inplace "$f"
-		n=$((n + 1))
 	done
-	echo "re-stamped $n package(s) in $DIR to packager \"$PACKAGER\" ($skipped skipped)"
+	echo "re-stamped $n package(s) in $DIR to packager \"$PACKAGER\" ($skipped skipped, $failed failed)"
+	[ "$failed" -eq 0 ]
 }
 
 do_dryrun() {
