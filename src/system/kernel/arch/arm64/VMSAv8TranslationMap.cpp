@@ -518,6 +518,13 @@ flush_va_if_accessed(uint64_t pte, addr_t va, int asid)
 		asm("tlbi vaae1is, %0" ::"r"(((va >> 12) & kTLBIMask)));
 		asm("dsb ish");
 		asm("isb");
+		// The entry was accessed (checked above) -- report that to the caller,
+		// symmetric with the non-global branch. ClearAccessedAndModified()
+		// relies on this: returning false here for an accessed global (kernel)
+		// entry makes it treat the page as unaccessed and hand it to
+		// UnaccessedPageUnmapped(), tearing down the page-area mapping while the
+		// PTE still maps the page in TTBR1 -- a stale kernel mapping / UAF.
+		return true;
 	} else if (asid != -1) {
 		asm("dsb ishst"); // Ensure PTE write completed
         asm("tlbi vae1is, %0" ::"r"(((va >> 12) & kTLBIMask) | (uint64_t(asid) << 48)));
