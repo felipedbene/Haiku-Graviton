@@ -1,0 +1,509 @@
+#!/usr/bin/env python3
+"""haiku-triage-failures -- sort the DeBeOS build-wave failure backlog against the
+arm64 porting playbook (graviton/docs/porting-playbook.md, issue #90 / #58).
+
+WHY THIS EXISTS (issue #136 + #90). The campaign accumulates a large, opaque
+backlog -- as of this writing 572 `failed` + ~180 `needs_human` items in the
+`debeos-package-state` DDB table. "572 failed" is not an honest status: the
+playbook's 14 failure classes say most of that number is *known* quick-win recipe
+work (CMake policy floor, config.guess arm64, gettext autopoint, x86 SIMD guards,
+static-lib install, undeclared build tools), while a genuinely-hard residue needs
+real source porting, a *published* dependency, or a browser-solved fetch. This
+script is the committed, re-runnable classifier that replaces the flat count with
+a sorted census: N auto-recoverable across which classes, M genuinely-hard, K
+unmatched/no-log.
+
+WHAT IT IS. Deterministic triage glue, nothing more. It does NOT rebuild, re-wave,
+or re-queue anything -- classification only. It:
+  1. enumerates every item with build_state in {failed, needs_human} off the
+     `by-build-state` GSI (same index the wave driver reads);
+  2. fetches that port's most-recent build log from S3 -- the `log_url` attribute
+     RecordOutcome persisted (s3://<work-bucket>/logs/<run>/<pkg>.log.gz, gzipped);
+  3. classifies the log against the playbook's 14 class signatures using an
+     ORDERED, first-match-wins ruleset (most-specific signature first) -- the
+     Quick-index phrase->class table from the playbook, encoded as RULES below;
+  4. emits per port: triage_class (1-14 | NO_LOG | UNMATCHED), triage_auto_recoverable
+     (bool), triage_fix_ref (playbook section anchor), triage_ts;
+  5. (only with --execute) writes those four NEW attributes back to the item --
+     ADDITIVE ONLY, it never touches build_state or any existing attribute;
+  6. prints a census summary: count per class, auto-recoverable vs genuinely-hard
+     vs UNMATCHED/NO_LOG.
+
+auto_recoverable HONESTY (the point of the exercise -- see the playbook's #47
+caveat). A class is auto_recoverable=True only when the playbook says a systemic
+env/recipe change with a known template clears it (classes 1-11, 13, 14 below).
+It is False where "recoverable in principle" hides a per-port judgement call:
+  * Class 12 (source drift) -- a checksum bump is only safe *after* the integrity
+    gate (fetch, sha256, extract, verify version), and the egress-blocked subset
+    (Cloudflare challenge / unreachable port) is "Not fixable by recipe" at all.
+    So class 12 is False with a note: it needs per-port work, not a blind re-wave.
+Never silently bucket an UNMATCHED log as recoverable: UNMATCHED and NO_LOG are
+always counted as not-auto-recoverable, and UNMATCHED logs are dumped (with
+--dump-unmatched) so the ruleset can be extended rather than guessed at.
+
+SAFETY / SOP ALIGNMENT (graviton/ops/SOPs.md):
+  * DRY-RUN BY DEFAULT. With no --execute it reads DDB + S3 (describe/get only),
+    classifies, prints the census, and writes NOTHING back. The DDB writes are the
+    only mutation, are gated behind --execute, and are additive attributes only
+    (triage_*). Its blast radius matches a read-only role plus a scoped UpdateItem.
+  * Re-runnable: it re-reads live state each run and overwrites only its own
+    triage_* attributes, so re-running after more ports fail (or after a ruleset
+    tweak) just refreshes the classification. It is idempotent for a fixed backlog
+    + ruleset.
+
+USAGE
+  # classify the whole backlog, print the census, write nothing (safe):
+  AWS_PROFILE=haiku-graviton graviton/scripts/haiku-triage-failures
+
+  # same, but also persist triage_* back to each item:
+  AWS_PROFILE=haiku-graviton graviton/scripts/haiku-triage-failures --execute
+
+  # smoke a small sample and see which phrase matched each:
+  ... --limit 20 --show-matches
+
+  # write the full per-port classification to a JSON/CSV artifact:
+  ... --out /tmp/triage.json --csv /tmp/triage.csv
+
+  # inspect what did NOT match any class (to extend the ruleset):
+  ... --dump-unmatched /tmp/unmatched
+
+Exit status: 0 on a clean classification (dry-run or --execute); non-zero on a
+usage/credentials error or if the DDB scan / S3 access could not be performed.
+"""
+import argparse
+import concurrent.futures as cf
+import csv
+import gzip
+import io
+import json
+import os
+import re
+import sys
+import time
+from collections import Counter, defaultdict
+
+TABLE_DEFAULT = os.environ.get("TABLE", "debeos-package-state")
+GSI = "by-build-state"
+STATES = ("failed", "needs_human")
+PLAYBOOK = "graviton/docs/porting-playbook.md"
+
+
+def log(*a):
+    print(*a, file=sys.stderr, flush=True)
+
+
+def anchor(slug):
+    return "%s#%s" % (PLAYBOOK, slug)
+
+
+# ----------------------------------------------------------------- the ruleset
+# ORDERED, first-match-wins. Most-specific / least-ambiguous signatures first so a
+# generic phrase (Class 2's "command not found", Class 11's "cannot stat") never
+# shadows a specific one (Class 13's cross-prefix 127, Class 3's autopoint 127).
+# Each rule: (class_no, slug, auto_recoverable, [compiled regexes], note).
+# `patterns` are matched case-sensitively against the full decompressed log.
+def _rx(*pats):
+    return [re.compile(p) for p in pats]
+
+
+RULES = [
+    # 14 -- poisoned build-tool package. Unmistakable magic constant.
+    (14, "class-14-poisoned-build-tool-package", True,
+     _rx(r"Unhandled pheader type in parse 0x6474e553"),
+     "Quarantine the poisoned bison_bootstrap hpkg out of the pool (one-time "
+     "operator/pool action, not a recipe edit); then the class clears pool-wide."),
+
+    # 6 -- config.guess cannot name arm64. Specific autotools/CMake host-triple abort.
+    (6, "class-6-configguess-cannot-name-the-arm64-host", True,
+     _rx(r"cannot guess build type",
+         r"GetHostTriple\.cmake",
+         r"Failed to execute.*config\.guess"),
+     "Route autotools through runConfigure, or replace the raw-read config.guess "
+     "(LLVM-style) with an arm64->aarch64 stub. #71."),
+
+    # 3 -- gettext autoreconf / autopoint. Must precede Class 10 (autoreconf) and
+    # Class 2 (missing tool), both of which a po/-tree failure also trips.
+    (3, "class-3-gettext-autoreconf--autopoint", True,
+     _rx(r"AM_GNU_GETTEXT_VERSION",
+         r"AM_GNU_GETTEXT\b",
+         r'Can\'t exec "autopoint"',
+         r"autopoint failed",
+         r"Internationalization tools missing",
+         # gettext/NLS m4 macros not on the aclocal path surface as "possibly
+         # undefined macro: AM_NLS / AM_GNU_GETTEXT / AM_ICONV ..." + AC_LIB_*.
+         r"possibly undefined macro: (?:AM_NLS|AM_GNU_GETTEXT|AM_ICONV|AM_GLIB_GNU_GETTEXT)",
+         r"possibly undefined macro: AC_LIB_"),
+     "Declare cmd:autopoint and put gettext's m4 dir on ACLOCAL_PATH; "
+     "autopoint --force before autoreconf -fi."),
+
+    # 10 -- missing autotools aux files. Specific configure phrase.
+    (10, "class-10-missing-autotools-aux-files", True,
+     _rx(r"required file '?install-sh'? not found",
+         r"try running autoreconf --install",
+         r"run autoreconf --install"),
+     "Use autoreconf -fi (force + install aux files)."),
+
+    # 1 -- CMake 4.x pre-3.5 policy removal. The largest class.
+    (1, "class-1-cmake-4x-pre-35-policy-removal", True,
+     _rx(r"Compatibility with CMake < 3\.5 has been removed",
+         r"CMAKE_POLICY_VERSION_MINIMUM"),
+     "Add -DCMAKE_POLICY_VERSION_MINIMUM=3.5. #47 caveat: the systemic haikuporter "
+     "patch only reaches recipes that interpolate $cmakeDirArgs; recipes with an "
+     "explicit cmake arg list (most #280 ports) still need the per-recipe -D."),
+
+    # 8 -- missing / bad CMAKE_BUILD_TYPE.
+    (8, "class-8-missing-cmake_build_type", True,
+     _rx(r"invoking cmake without CMAKE_BUILD_TYPE specified",
+         r"without debug info packages specified"),
+     "Set -DCMAKE_BUILD_TYPE=Release (usually alongside the Class 1 policy flag)."),
+
+    # 5 -- x86-only compiler flags on arm64.
+    (5, "class-5-x86-only-compiler-flags-on-arm64", True,
+     _rx(r"unrecognized command-line option '-msse\d?'",
+         r"unrecognized command-line option .-msse",
+         r"-mfpmath=sse",
+         r"error:.*'-msse"),
+     "Gate -msse*/-mfpmath=sse on x86/x86_64 via $effectiveTargetArchitecture "
+     "(CMake) or $targetArchitecture (Makefile sed)."),
+
+    # 7 -- LTO without a linker plugin.
+    (7, "class-7-lto-without-a-linker-plugin", True,
+     _rx(r"LTO support has not been enabled",
+         r"only with linker plugin",
+         r"-fno-fat-lto-objects"),
+     "Drop LTO: turn off CMAKE_INTERPROCEDURAL_OPTIMIZATION or sed -flto/"
+     "-fuse-linker-plugin out of the Makefile."),
+
+    # 13 -- hardcoded cross-compiler prefix. A specific 127; must precede Class 2.
+    (13, "class-13-hardcoded-cross-compiler-prefix", True,
+     _rx(r"aarch64-unknown-haiku-(?:g\+\+|gcc|c\+\+|cc|ld|ar)\b.*"
+         r"(?:No such file or directory|command not found|Error 127)",
+         r"aarch64-unknown-haiku-.*No such file or directory"),
+     "Pass native CXX=g++/CC=gcc. Class-wide cleared by #186 (arm64 triplet "
+     "compilers on the in-chroot PATH)."),
+
+    # 4 -- static/shared lib install conflict.
+    (4, "class-4-staticshared-lib-install-conflict", True,
+     _rx(r"rm: cannot remove '[^']*\.(?:a|la)'",
+         r"prepareInstalledDevelLibs"),
+     "rm -f (tolerant) the static lib, and drop it before prepareInstalledDevelLibs."),
+
+    # 11 -- install target references optional/arch-named outputs. Fairly specific.
+    (11, "class-11-install-target-references-optional-outputs", True,
+     _rx(r"mv: cannot stat ",
+         r"sed: can'?t read .*x86_64",
+         r"lvp_icd\.x86_64\.json"),
+     "Guard the optional move ([ -d ... ] && mv), or glob arch-named files "
+     "(lvp_icd.*.json) instead of hardcoding the x86 spelling."),
+
+    # 2 -- undeclared build tool in the chroot. Generic 127s: keep LATE so the
+    # specific 127 classes (13) and tool-specific classes (3) win first.
+    (2, "class-2-undeclared-build-tool-in-the-haikuporter-chroot", True,
+     _rx(r"^\S+: command not found",
+         r": command not found",
+         r"\bError 127\b",
+         r"msgfmt: No such file or directory",
+         r"msgfmt: command not found",
+         r"tar utility not found",
+         r"gzip: command not found",
+         r"unzip: command not found",
+         r"which: command not found",
+         r"msgattrib: (?:command not found|No such file)"),
+     "Declare the tool as a cmd: BUILD_PREREQUIRES (see the tool->provider map). "
+     "Mechanical per-recipe edit with a known template."),
+
+    # 12 -- source availability / checksum drift. NOT auto-recoverable: a bump is
+    # only safe after the integrity gate, and the egress-blocked subset is not
+    # recipe-fixable at all.
+    (12, "class-12-source-availability--checksum-drift", False,
+     _rx(r"CHECKSUM_SHA256",
+         r"checksum mismatch",
+         r"Expected:\s*CHECKSUM",
+         r"Expected SHA-256:",          # haikuporter's own checksum-mismatch phrasing
+         r"Found SHA-256:",
+         r"Just a moment",              # Cloudflare challenge
+         r"HTTP (?:300|403|404)\b",
+         r"Multiple Choices",
+         r"Download of .* failed",
+         r"error downloading",
+         r"Checksum error",
+         # source proxy / wget-shim fetch failures (mirror down, truncated, egress):
+         r"Failed to fetch source",
+         r"Unable to fetch source",
+         r"upstream fetch failed",
+         r"\[srccache\] FAIL"),
+     "MIXED / needs per-port judgement: benign recompression or a removed version "
+     "is recoverable ONLY after fetch+sha256+extract+version-verify (the integrity "
+     "rule); the egress-blocked subset (Cloudflare/unreachable) is not recipe-fixable."),
+
+    # 9 -- the empty-package trap. Largely undetectable from a *failure* log (the
+    # build exits 0, so such items are build_state=built, not failed). Kept as a
+    # weak last-resort heuristic; expected near-zero hits in this backlog.
+    (9, "class-9-the-empty-package-trap", True,
+     _rx(r"Nothing to be done for 'install'",
+         r"No rule to make target 'install'"),
+     "Add an explicit INSTALL() that installs the built artifact. NOTE: a true "
+     "empty-package build exits 0 and is build_state=built, so it rarely appears "
+     "in this (failed/needs_human) backlog."),
+]
+
+
+def classify(text):
+    """Return (class_no|None, slug|None, auto_recoverable, fix_ref, note, matched_pat).
+    None class_no means UNMATCHED. First matching rule wins."""
+    for cls, slug, auto, pats, note in RULES:
+        for p in pats:
+            if p.search(text):
+                return cls, slug, auto, anchor(slug), note, p.pattern
+    return None, None, False, "", "", None
+
+
+# ----------------------------------------------------------------- DDB reading
+def load_items(table, region):
+    """Read every failed + needs_human item off the by-build-state GSI. Returns a
+    list of dicts: {pkg, build_state, log_url, error_class, target}. Deterministic
+    field extraction only (no free-text judgement)."""
+    import boto3
+    ddb = boto3.client("dynamodb", region_name=region)
+    paginator = ddb.get_paginator("query")
+    out = []
+    for state in STATES:
+        for page in paginator.paginate(
+                TableName=table, IndexName=GSI,
+                KeyConditionExpression="build_state = :s",
+                ExpressionAttributeValues={":s": {"S": state}},
+                ProjectionExpression="pkg, build_state, log_url, last_error_class, "
+                                     "target_version"):
+            for it in page.get("Items", []):
+                out.append({
+                    "pkg": it["pkg"]["S"],
+                    "build_state": it["build_state"]["S"],
+                    "log_url": it.get("log_url", {}).get("S") or "",
+                    "error_class": it.get("last_error_class", {}).get("S") or "",
+                    "target": it.get("target_version", {}).get("S") or "",
+                })
+    return out
+
+
+# ----------------------------------------------------------------- S3 fetching
+_S3_URI = re.compile(r"^s3://([^/]+)/(.+)$")
+
+
+def fetch_log(s3, log_url):
+    """Fetch + gunzip a build log. Returns (text|None, reason). None text means the
+    log is missing/empty/unreadable -> NO_LOG, with a short reason string."""
+    if not log_url or log_url == "n/a":
+        return None, "no log_url"
+    m = _S3_URI.match(log_url)
+    if not m:
+        return None, "bad log_url: %s" % log_url
+    bucket, key = m.group(1), m.group(2)
+    try:
+        obj = s3.get_object(Bucket=bucket, Key=key)
+        raw = obj["Body"].read()
+    except Exception as e:  # NoSuchKey, AccessDenied, etc. -- treat as NO_LOG
+        return None, "%s" % type(e).__name__
+    if not raw:
+        return None, "empty object"
+    # Logs are gzip (run_ssm._wrapper: `gzip -9 -c`), but the wrapper falls back to
+    # `cp` (plain) if gzip is unavailable -- so tolerate both.
+    if raw[:2] == b"\x1f\x8b":
+        try:
+            data = gzip.GzipFile(fileobj=io.BytesIO(raw)).read()
+        except OSError:
+            data = raw
+    else:
+        data = raw
+    text = data.decode("utf-8", errors="replace")
+    if not text.strip():
+        return None, "empty after decode"
+    return text, "ok"
+
+
+# ----------------------------------------------------------------- DDB writing
+def write_triage(table, region, pkg, cls, auto, fix_ref, ts):
+    import boto3
+    ddb = boto3.resource("dynamodb", region_name=region).Table(table)
+    triage_class = str(cls) if isinstance(cls, int) else cls  # 1-14 | NO_LOG | UNMATCHED
+    ddb.update_item(
+        Key={"pkg": pkg},
+        UpdateExpression=("SET triage_class=:c, triage_auto_recoverable=:a, "
+                          "triage_fix_ref=:f, triage_ts=:t"),
+        ExpressionAttributeValues={":c": triage_class, ":a": bool(auto),
+                                   ":f": fix_ref or "n/a", ":t": ts},
+    )
+
+
+# ----------------------------------------------------------------- main
+def main():
+    ap = argparse.ArgumentParser(
+        description="Triage the DeBeOS build-wave failure backlog against the arm64 "
+                    "porting playbook (#90/#136). Dry-run by default.")
+    ap.add_argument("--table", default=TABLE_DEFAULT)
+    ap.add_argument("--region", default=os.environ.get("AWS_DEFAULT_REGION", "us-west-2"))
+    ap.add_argument("--limit", type=int, default=0,
+                    help="classify only the first N items (smoke test). 0 = all.")
+    ap.add_argument("--workers", type=int, default=16,
+                    help="parallel S3 log fetches (read-only). Default 16.")
+    ap.add_argument("--out", help="write the full per-port classification to this JSON path.")
+    ap.add_argument("--csv", help="write the per-port classification to this CSV path.")
+    ap.add_argument("--dump-unmatched", help="write each UNMATCHED port's log tail to "
+                    "this dir (for extending the ruleset).")
+    ap.add_argument("--show-matches", action="store_true",
+                    help="print, per port, the class and the regex that matched.")
+    ap.add_argument("--execute", action="store_true",
+                    help="ACTUALLY write triage_* back to DDB (additive attributes only). "
+                         "Default is DRY-RUN: classify + census, write nothing.")
+    args = ap.parse_args()
+
+    try:
+        import boto3  # noqa: F401
+    except ImportError:
+        raise SystemExit("boto3 is required (pip install boto3).")
+
+    log("=== DeBeOS failure-backlog triage ===")
+    log("mode              : %s" % ("EXECUTE (writes triage_* to DDB)" if args.execute
+                                    else "DRY-RUN (classify + census, writes nothing)"))
+    log("table / index     : %s / %s  (states: %s)" % (args.table, GSI, ", ".join(STATES)))
+
+    try:
+        items = load_items(args.table, args.region)
+    except Exception as e:
+        raise SystemExit("FATAL: could not scan DDB %s.%s: %s -- refusing to invent a "
+                         "census." % (args.table, GSI, e))
+    if not items:
+        raise SystemExit("FATAL: 0 items with build_state in %s -- the GSI/table name "
+                         "may be wrong. Refusing to invent a census." % (STATES,))
+
+    if args.limit:
+        items = items[:args.limit]
+    log("backlog to triage : %d items" % len(items))
+
+    import boto3
+    s3 = boto3.client("s3", region_name=args.region)
+
+    # ---- fetch + classify (parallel S3 reads) --------------------------------
+    results = {}  # pkg -> record
+
+    def work(it):
+        text, reason = fetch_log(s3, it["log_url"])
+        if text is None:
+            rec = dict(it, triage_class="NO_LOG", auto=False, fix_ref="",
+                       note="log missing/empty (%s)" % reason, matched=None,
+                       has_unresolvable=False)
+        else:
+            cls, slug, auto, fix_ref, note, matched = classify(text)
+            rec = dict(it,
+                       triage_class=(cls if cls is not None else "UNMATCHED"),
+                       auto=auto, fix_ref=fix_ref, note=note, matched=matched,
+                       has_unresolvable=("UNRESOLVABLE" in text),
+                       _text_tail=text[-4000:] if cls is None else None)
+        return it["pkg"], rec
+
+    with cf.ThreadPoolExecutor(max_workers=max(1, args.workers)) as ex:
+        for pkg, rec in ex.map(work, items):
+            results[pkg] = rec
+            if args.show_matches:
+                log("  %-28s state=%-11s class=%-9s auto=%-5s %s" % (
+                    pkg, rec["build_state"], rec["triage_class"], rec["auto"],
+                    ("/%s/" % rec["matched"]) if rec["matched"] else ""))
+
+    # ---- dump unmatched for ruleset extension --------------------------------
+    if args.dump_unmatched:
+        os.makedirs(args.dump_unmatched, exist_ok=True)
+        n = 0
+        for pkg, rec in results.items():
+            if rec["triage_class"] == "UNMATCHED" and rec.get("_text_tail"):
+                with open(os.path.join(args.dump_unmatched, "%s.tail.log" % pkg), "w") as f:
+                    f.write(rec["_text_tail"])
+                n += 1
+        log("dumped %d UNMATCHED log tails to %s" % (n, args.dump_unmatched))
+
+    # ---- write-back ----------------------------------------------------------
+    ts = int(time.time())
+    if args.execute:
+        wrote = 0
+        for pkg, rec in results.items():
+            write_triage(args.table, args.region, pkg, rec["triage_class"],
+                         rec["auto"], rec["fix_ref"], ts)
+            wrote += 1
+        log("wrote triage_* to %d items (additive attrs only; build_state untouched)." % wrote)
+    else:
+        log("(dry-run) would write triage_* to %d items; re-run with --execute." % len(results))
+
+    # ---- artifacts -----------------------------------------------------------
+    rows = []
+    for pkg, rec in sorted(results.items()):
+        rows.append({"pkg": pkg, "build_state": rec["build_state"],
+                     "triage_class": rec["triage_class"],
+                     "auto_recoverable": rec["auto"],
+                     "fix_ref": rec["fix_ref"],
+                     "error_class": rec["error_class"],
+                     "has_unresolvable": rec["has_unresolvable"],
+                     "note": rec["note"]})
+    if args.out:
+        with open(args.out, "w") as f:
+            json.dump({"generated_at": ts, "table": args.table, "count": len(rows),
+                       "ports": rows}, f, indent=2)
+        log("wrote JSON classification: %s" % args.out)
+    if args.csv:
+        with open(args.csv, "w", newline="") as f:
+            w = csv.DictWriter(f, fieldnames=list(rows[0].keys()))
+            w.writeheader()
+            w.writerows(rows)
+        log("wrote CSV classification: %s" % args.csv)
+
+    # ---- census (the payoff) -------------------------------------------------
+    by_class = Counter(str(rec["triage_class"]) for rec in results.values())
+    auto_ct = sum(1 for rec in results.values() if rec["auto"])
+    matched_hard = sum(1 for rec in results.values()
+                       if isinstance(rec["triage_class"], int) and not rec["auto"])
+    unmatched = by_class.get("UNMATCHED", 0)
+    no_log = by_class.get("NO_LOG", 0)
+    unmatched_unres = sum(1 for rec in results.values()
+                          if rec["triage_class"] == "UNMATCHED" and rec["has_unresolvable"])
+
+    # class metadata for the report
+    meta = {c: (slug, auto) for c, slug, auto, _, _ in RULES}
+
+    print("\n" + "=" * 66)
+    print("DeBeOS failure-backlog census  (%d items: %s)" %
+          (len(results), " + ".join("%d %s" % (
+              sum(1 for r in results.values() if r["build_state"] == s), s)
+              for s in STATES)))
+    print("=" * 66)
+    print("%-6s %-46s %5s %s" % ("class", "playbook section", "count", "auto"))
+    print("-" * 66)
+    for c in range(1, 15):
+        cnt = by_class.get(str(c), 0)
+        if not cnt:
+            continue
+        slug, auto = meta[c]
+        print("%-6d %-46s %5d %s" % (c, slug, cnt, "yes" if auto else "NO"))
+    for special in ("UNMATCHED", "NO_LOG"):
+        if by_class.get(special):
+            print("%-6s %-46s %5d %s" % (special, "-", by_class[special], "NO"))
+    print("-" * 66)
+    print("AUTO-RECOVERABLE (known playbook template) : %4d" % auto_ct)
+    print("GENUINELY-HARD  (matched a class, auto=NO) : %4d" % matched_hard)
+    print("UNMATCHED (no class signature)             : %4d  (of which %d mention "
+          "UNRESOLVABLE = dep unbuilt/unpublished)" % (unmatched, unmatched_unres))
+    print("NO_LOG (log missing/empty)                 : %4d" % no_log)
+    print("=" * 66)
+
+    # top auto-recoverable classes by port count -> next re-wave targets
+    auto_classes = sorted(
+        ((by_class.get(str(c), 0), c, meta[c][0]) for c in range(1, 15) if meta[c][1]),
+        reverse=True)
+    top = [(c, slug, n) for (n, c, slug) in auto_classes if n][:3]
+    if top:
+        print("Top auto-recoverable classes (next re-wave targets):")
+        for c, slug, n in top:
+            print("   class %-2d  %-46s %4d ports" % (c, slug, n))
+        print("=" * 66)
+
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
