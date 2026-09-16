@@ -109,7 +109,11 @@ choose_core(const ThreadData* threadData)
 			coreLocker.Unlock();
 
 			core = choose_idle_core();
-			if (useMask && !core->CPUMask().Matches(mask))
+			// choose_idle_core() returns NULL when no idle package/core is
+			// available (all cores loaded). Guard the deref like the
+			// choose_small_task_core() path above (line 100); the ASSERT below
+			// is after this point and is compiled out in release.
+			if (core != NULL && (useMask && !core->CPUMask().Matches(mask)))
 				core = NULL;
 
 			if (core == NULL) {
