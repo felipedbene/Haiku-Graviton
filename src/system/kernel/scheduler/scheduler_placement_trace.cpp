@@ -37,7 +37,7 @@ struct placement_entry {
 static placement_entry sEntries[kPlacementTraceEntries];
 static int32 sNextEntry;
 static int32 sDeclines;
-static int32 sDeclinesWithIdlerCore;
+static int32 sDeclinesPeakReducible;
 static int32 sMigrations;
 
 
@@ -82,11 +82,16 @@ trace_placement(placement_event event, int32 threadID, int32 coreID,
 
 
 void
-trace_placement_decline(bool sawIdlerCore)
+trace_placement_decline(bool peakReducible)
 {
 	atomic_add(&sDeclines, 1);
-	if (sawIdlerCore)
-		atomic_add(&sDeclinesWithIdlerCore, 1);
+	// peakReducible is true only when migrating the thread would have moved the
+	// destination core strictly below the source's current load -- an actual
+	// reduction of the pair's peak, not merely "a less loaded core existed". The
+	// latter is true of every busy core under oversubscription; see #115 and the
+	// argument in low_latency.cpp's rebalance().
+	if (peakReducible)
+		atomic_add(&sDeclinesPeakReducible, 1);
 }
 
 
@@ -95,7 +100,7 @@ trace_placement_dump()
 {
 	int32 total = atomic_get_and_set(&sNextEntry, 0);
 	int32 declines = atomic_get_and_set(&sDeclines, 0);
-	int32 idlerDeclines = atomic_get_and_set(&sDeclinesWithIdlerCore, 0);
+	int32 peakReducible = atomic_get_and_set(&sDeclinesPeakReducible, 0);
 	int32 migrations = atomic_get_and_set(&sMigrations, 0);
 
 	static const char* const kEventNames[] = {
@@ -103,9 +108,9 @@ trace_placement_dump()
 	};
 
 	dprintf("sched_placement: %" B_PRId32 " events, %" B_PRId32 " migrations, "
-		"%" B_PRId32 " rebalance declines (%" B_PRId32 " of them with a "
-		"less-loaded core available)\n", total, migrations, declines,
-		idlerDeclines);
+		"%" B_PRId32 " rebalance declines (%" B_PRId32 " of them where migrating "
+		"would have lowered the pair's peak load)\n", total, migrations, declines,
+		peakReducible);
 
 	if (total == 0)
 		return;
