@@ -324,5 +324,26 @@ arch_store_fork_frame(struct arch_fork_arg *arg)
 void
 arch_restore_fork_frame(struct arch_fork_arg *arg)
 {
+	// On SVE hardware the EL0 return path (_fp_restore_el0) reloads V0-31 from
+	// this thread's off-stack SVE Z buffer, not from the iframe's NEON view. A
+	// freshly created fork child has a zeroed SVE buffer (see
+	// arch_thread_init_thread_struct), and nothing else propagates the parent's
+	// FP/SIMD state into it, so without this the child would return to userspace
+	// with V0-31 == 0 -- losing the parent's FP/SIMD registers, including the
+	// AAPCS callee-saved d8-d15 that must survive the fork() call. Fold the
+	// parent's 128-bit register view (captured in the iframe by
+	// arch_store_fork_frame) into the low lanes of each Z, exactly as
+	// arch_restore_signal_frame does. The SVE upper lanes are caller-saved
+	// across the fork() call boundary, so leaving them zero is architecturally
+	// fine. On non-SVE hardware _fp_restore_el0 restores V0-31 straight from the
+	// iframe, which already carries the parent's state, so there is nothing to do.
+	if (gArm64SVEVectorBytes != 0) {
+		arm64_sve_state* sve = &thread_get_current_thread()->arch_info.sve;
+		for (int i = 0; i < 32; i++) {
+			memcpy(sve->z + i * gArm64SVEVectorBytes,
+				&arg->frame.fpu.regs[i * 2], 16);
+		}
+	}
+
 	_eret_with_iframe(&arg->frame, thread_get_current_thread()->kernel_stack_top - 1);
 }
