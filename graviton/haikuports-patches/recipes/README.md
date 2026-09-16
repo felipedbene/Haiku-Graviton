@@ -191,3 +191,48 @@ once they are installed. No overlay recipe is needed for it.
 `src/CMakeLists.txt` `FetchContent_MakeAvailable(cglm)` tries to build a vendored
 `cglm` at configure time and that step fails — real porting work (package `cglm`
 or de-vendor it), out of scope for a quick win.
+
+## Campaign #136 Class 3: gettext autoreconf / autopoint
+
+The eleven `triage_class==3` ports of the #136 backlog. Each regenerates its
+build system with `autoreconf` (or `./autogen.sh`) and uses gettext's macros in
+`configure.ac`, but fails because the per-port chroot has neither `autopoint` nor
+gettext's m4 macros on `ACLOCAL_PATH` — the macros install under
+`/boot/system/data/gettext/m4`, not the default aclocal dir. See
+`graviton/docs/porting-playbook.md#class-3-gettext-autoreconf--autopoint` for the
+full analysis, including **why this class is per-recipe and not systemic** (both
+halves of the fix — the `ACLOCAL_PATH` export and the `autopoint --force` before
+`autoreconf` — are `BUILD()`-body actions that `scriptletPrerequirements` cannot
+supply, and mounting the 16 MB gettext package into every chroot is the exact
+thing #293 scoped out).
+
+The systemic enabler is already in place: **#293 installs the full `gettext`
+package on the builder host**, which is what makes a `cmd:autopoint` /
+`cmd:gettext` prerequisite *resolvable* into the chroot. On the pre-#293
+2026-09-15 AMI it was not, which is why the wave failed even for ports whose
+overlay already declared it (libexif). These overlays therefore clear only on a
+**rebake (#293 + these overlays) + re-wave** — build-proof is **OWED** (no builder
+launched: an in-flight wave is running and native autoreconf builds are not a
+quick check).
+
+Ten follow the ACLOCAL_PATH + `autopoint --force` pattern; `rpcsvc_proto` is a
+deeper variant fixed with a `PATCH()`.
+
+| Recipe | Fix | Failure signature (from the wave log) |
+|---|---|---|
+| `aiksaurus-1.2.2~git.recipe` | `+cmd:autopoint +cmd:gettext`; ACLOCAL_PATH + `autopoint --force` before `./autogen.sh` | `possibly undefined macro: AM_NLS` |
+| `axel-2.17.11.recipe` | `+cmd:autopoint`; ACLOCAL_PATH + `autopoint --force` before `autoreconf -fi` | `possibly undefined macro: AM_GNU_GETTEXT_VERSION` (m4/gettext.m4) |
+| `dovecot-2.3.21.recipe` | `+cmd:autopoint`; ACLOCAL_PATH + `autopoint --force` | `possibly undefined macro: AC_LIB_PREPARE_PREFIX` (+ `AC_LIB_RPATH`/…) |
+| `enca-1.19.recipe` | `+cmd:autopoint`; ACLOCAL_PATH + `autopoint --force` | `possibly undefined macro: AC_LIB_PREPARE_PREFIX` (m4/librecode.m4) |
+| `libexif-0.6.22.recipe` | **strengthened** the #52 overlay: added ACLOCAL_PATH + `autopoint --force` | `Can't exec "autopoint": No such file` |
+| `libmtp-1.1.22.recipe` | `+cmd:autopoint`; ACLOCAL_PATH + `autopoint --force` | `possibly undefined macro: AC_LIB_PREPARE_PREFIX` |
+| `xcftools-1.0.7.recipe` | `+cmd:autopoint +cmd:gettext`; ACLOCAL_PATH + `autopoint --force` | `possibly undefined macro: AM_GNU_GETTEXT` + `AC_LIB_*` |
+| `rpcsvc_proto-1.4.3.recipe` | `PATCH()` deletes configure.ac's dead `m4_ifndef` gettext-compat shim + redundant `AM_GNU_GETTEXT_VERSION`; `+cmd:gettext` | `autopoint: *** found more than one invocation of AM_GNU_GETTEXT_REQUIRE_VERSION` |
+
+`libcddb-1.3.2`, `libggz-0.99.5`, `libhangul-0.1.0` already carry the full
+pattern (committed 2026-09-15) and are unchanged here — they failed the wave only
+because that AMI predated #293, and clear on the same rebake. `libggz`'s
+`configure`-time `checking for msgmerge... no` is covered too: `cmd:autopoint`
+resolves to the gettext package, which also provides `msgmerge`.
+
+Cross-links issue **#136**. Not merged pending human CR; build-proof owed.

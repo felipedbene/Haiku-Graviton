@@ -191,33 +191,99 @@ autoreconf: Can't exec "autopoint" … autopoint failed
 configure: error: Internationalization tools missing
 ```
 
-**Root cause (two parts).** A port with a `po/` tree runs `autopoint` during
-`autoreconf`, and (a) `cmd:autopoint` was never declared (Class 2), **and** (b)
-gettext's `gettext.m4`/`lib-*.m4` live under `/boot/system/data/gettext/m4`, not
-the default aclocal dir, so even with autopoint present the macros aren't found.
+**Root cause (two parts).** A port that regenerates its build system with
+`autoreconf` and whose `configure.ac` uses the gettext macros fails because
+(a) `cmd:autopoint` is not in the chroot — the recipe never declared it, so even
+though `gettext` is installed on the builder **host** (#293) it is not mounted
+into the per-port chroot — **and** (b) even with autopoint present, gettext's m4
+macros (`gettext.m4`, `nls.m4`, `lib-prefix.m4`, `lib-link.m4`, …) install under
+`/boot/system/data/gettext/m4`, **not** the default aclocal dir, so `aclocal`
+cannot expand `AM_GNU_GETTEXT` / `AM_GNU_GETTEXT_VERSION` / `AM_NLS` / the
+`AC_LIB_*` helpers unless that dir is on `ACLOCAL_PATH`.
+
+**Why the fix is per-recipe, not systemic (contrast with Class 2).** Class 2 put
+`gzip`/`tar`/`unzip`/`which` into every chroot by appending to
+`scriptletPrerequirements`. That lever **cannot** solve Class 3: both halves of
+the fix are `BUILD()`-body actions — an `export ACLOCAL_PATH=…` and running
+`autopoint --force` **before** `autoreconf` — and `scriptletPrerequirements` only
+*mounts packages*; it can neither set an env var inside a recipe's `BUILD()` nor
+reorder that recipe's own `autoreconf` call. Mounting `gettext` into every chroot
+(the only systemic option) would still leave part (b) unfixed — `aclocal` would
+not look in `/boot/system/data/gettext/m4` — while re-broadening the exact 16 MB
+gettext package #293 deliberately kept per-recipe (and, because `autopoint` ships
+in the *same* package as `msgfmt`/`msgmerge`, a systemic `cmd:autopoint` is a
+systemic `cmd:msgfmt` — the thing #293 scoped out). `autopoint` is also
+consistent with its sibling autotools (`autoconf`/`automake`/`libtool`), which
+are themselves declared **per-recipe**, not in the base set. So Class 3 is fixed
+with a per-recipe overlay per port.
+
+**Systemic enabler that IS required (already landed).** The overlays only resolve
+because #293 installs the full `gettext` package on the builder **host**: a
+`cmd:autopoint` prerequisite is mounted into the chroot only if it is resolvable
+against the host pool. On a pre-#293 AMI `cmd:autopoint` was unresolvable, which
+is why the 2026-09-15 wave failed even for ports whose overlay already declared
+it (e.g. libexif). **Class 3 overlays therefore clear only on a rebake that
+includes #293 + these overlays, then a re-wave.**
 
 **Fix** (from `recipes/libcddb-1.3.2.recipe`):
 ```sh
 BUILD_PREREQUIRES="
 	…
-	cmd:autopoint
+	cmd:autopoint       # provided by the gettext package (host-installed by #293)
+	cmd:gettext         # same package; declare where the recipe had neither
 	"
 
 BUILD()
 {
 	export ACLOCAL_PATH="/boot/system/data/gettext/m4${ACLOCAL_PATH:+:$ACLOCAL_PATH}"
-	autopoint --force
+	autopoint --force        # MUST precede autoreconf; refreshes the m4 macros
 	libtoolize --force --copy --install
 	autoreconf -fi
 	runConfigure ./configure --disable-static
 	make $jobArgs
 }
 ```
-`autopoint --force` must run **before** `autoreconf -fi`.
+`autopoint --force` must run **before** `autoreconf -fi`. For a port driven by
+`./autogen.sh`, export `ACLOCAL_PATH` before the script (it runs `aclocal`
+itself); autopoint is invoked inside.
 
-**Example ports:** libcddb, libhangul, libggz, libexif (#52). Deeper variant
-**not** covered by this pattern: `libmetalink`/`libspectrum` need `AM_PATH_XML2`
-(libxml2's m4 macro) on the aclocal path — same mechanism, different macro dir.
+**Tool → provider map.** One package covers the whole class:
+
+| Needed in chroot | Provider (arm64 pool) | Reaches chroot via |
+|---|---|---|
+| `cmd:autopoint`, the `gettext.m4`/`nls.m4`/`lib-*.m4` macros | `gettext` | per-recipe `BUILD_PREREQUIRES` (host-installed by #293 → resolvable) |
+| `cmd:msgfmt` / `cmd:msgmerge` (configure-time i18n probes) | `gettext` (same package) | same declaration — no extra line needed |
+
+**The 11 Class-3 ports (measured against the wave logs).** All get a per-recipe
+overlay in `haikuports-patches/recipes/`; 10 use the ACLOCAL_PATH+autopoint
+pattern, 1 (rpcsvc_proto) is a deeper variant. All 11 are expected to clear on
+**rebake (#293 + overlays) + re-wave**.
+
+| Port | Exact log signature | Fix |
+|---|---|---|
+| aiksaurus | `undefined macro: AM_NLS` | declare `cmd:autopoint`+`cmd:gettext`; ACLOCAL_PATH + `autopoint --force` before `./autogen.sh` |
+| axel | `undefined macro: AM_GNU_GETTEXT_VERSION` (m4/gettext.m4) | had `cmd:gettext`; add ACLOCAL_PATH + `autopoint --force` before `autoreconf -fi` |
+| dovecot | `undefined macro: AC_LIB_PREPARE_PREFIX` (+`AC_LIB_RPATH/…`) | had `cmd:gettext`; add ACLOCAL_PATH + `autopoint --force` |
+| enca | `undefined macro: AC_LIB_PREPARE_PREFIX` (m4/librecode.m4) | had `cmd:gettext`; add ACLOCAL_PATH + `autopoint --force` |
+| libcddb | `AM_GNU_GETTEXT_VERSION` + `AC_LIB_*` undefined | existing overlay (full pattern) — clears on rebake |
+| libexif | `Can't exec "autopoint": No such file` | #52 overlay declared `cmd:autopoint`; **strengthened** here with ACLOCAL_PATH + `autopoint --force` |
+| libggz | `checking for msgmerge... no` → `Internationalization tools missing` | existing overlay: `cmd:autopoint`→gettext also supplies msgmerge; clears once resolvable (#293) |
+| libhangul | `AM_GNU_GETTEXT` + `AM_GNU_GETTEXT_VERSION` + `AC_LIB_*` undefined | existing overlay (full pattern) — clears on rebake |
+| libmtp | `undefined macro: AC_LIB_PREPARE_PREFIX` | had `cmd:gettext`; add ACLOCAL_PATH + `autopoint --force` |
+| xcftools | `AM_GNU_GETTEXT` + `AC_LIB_*` undefined | declare `cmd:autopoint`+`cmd:gettext`; add ACLOCAL_PATH + `autopoint --force` |
+| rpcsvc_proto | `autopoint: *** found more than one invocation of AM_GNU_GETTEXT_REQUIRE_VERSION` | **deeper variant** — see below |
+
+**Deeper variant — rpcsvc_proto.** Here autopoint *is* present but aborts: the
+port's `configure.ac` carries an old-gettext compat shim
+(`m4_ifndef([AM_GNU_GETTEXT_REQUIRE_VERSION], …)`) *plus* the real
+`AM_GNU_GETTEXT_REQUIRE_VERSION([0.19.2])` *plus* a redundant
+`AM_GNU_GETTEXT_VERSION([0.20.2])`, so the string appears more than once and
+autopoint's textual scan rejects it. DeBeOS ships a modern gettext where the
+macro is always defined, so the overlay's `PATCH()` deletes the dead `m4_ifndef`
+block and the redundant `AM_GNU_GETTEXT_VERSION`, leaving a single invocation.
+The `libmetalink`/`libspectrum` case (needing `AM_PATH_XML2`, libxml2's macro, on
+the aclocal path) is the same *mechanism* (macro dir off the default path) with a
+different provider.
 
 ---
 

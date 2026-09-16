@@ -64,8 +64,17 @@ BUILD_PREREQUIRES="
 defineDebugInfoPackage libexif$secondaryArchSuffix \
 	"$libDir"/libexif.so.$libVersion
 
+# graviton/DeBeOS (#136, porting-playbook Class 3): the #52 fix above declared
+# cmd:autopoint so autoreconf can find the tool, but that only addresses half the
+# class -- gettext's m4 macros (AM_GNU_GETTEXT etc.) install under
+# /boot/system/data/gettext/m4, not the default aclocal dir, so a chroot with
+# autopoint present can still fail `possibly undefined macro`. Put that dir on
+# ACLOCAL_PATH and run `autopoint --force` before autoreconf, matching the
+# libcddb / libhangul / libggz overlays.
 BUILD()
 {
+	export ACLOCAL_PATH="/boot/system/data/gettext/m4${ACLOCAL_PATH:+:$ACLOCAL_PATH}"
+	autopoint --force
 	autoreconf -vfi
 	runConfigure ./configure
 	make $jobArgs
