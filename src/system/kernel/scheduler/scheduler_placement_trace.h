@@ -43,10 +43,14 @@
 // nearly free and is the obvious refinement -- but that is an unmeasured change to
 // a hot path, and the whole point of this branch is not to make those.
 //
-// Worth turning on for: the fixed kernel still reports 21 888 rebalance declines
-// with a less-loaded core available, out of 163 412 declines. Some of those are
-// correct -- at N == 2 * ncpus every core really is equally loaded -- but the
-// number has not been explained and it is the obvious next thread to pull.
+// History: the fixed kernel reported 21 888 rebalance declines "with a less-loaded
+// core available" out of 163 412 (#115). That figure was explained and the counter
+// corrected: "a less-loaded core existed" is true of every busy core under
+// oversubscription, so it inflated the number without any decline being wrong. At
+// N == ncpus + 1 CPU-bound threads the surplus is itself kMaxLoad and moving it only
+// relocates the doubled core (pigeonhole), so declining is correct. The counter now
+// records only the peak-reducible subset -- declines the kLoadDifference hysteresis
+// genuinely suppressed -- which is the signal worth turning this on to watch.
 //#define SCHEDULER_TRACE_PLACEMENT
 
 
@@ -78,8 +82,14 @@ void trace_placement(placement_event event, int32 threadID, int32 coreID,
 /*!	rebalance() was consulted and declined to move the thread. Counted rather
 	than recorded: this happens thousands of times a second and would swamp the
 	ring buffer, while the count alone answers "was rebalance() even live?".
+
+	peakReducible flags the subset of declines where migrating would actually have
+	lowered the pair's peak load (destination-load-after < source-load-now), the
+	only ones that represent a missed rebalance. It is deliberately NOT "a less
+	loaded core existed", which is true of every busy core under oversubscription
+	and inflated #115's figure without any of those declines being wrong.
 */
-void trace_placement_decline(bool sawIdlerCore);
+void trace_placement_decline(bool peakReducible);
 
 /*!	Format and dprintf everything recorded so far, then reset. Must be called
 	from ordinary thread context -- never from the scheduler -- because it does

@@ -123,12 +123,26 @@ rebalance(const ThreadData* threadData)
 	// makes CPUCount() 2 and halves threadLoad below.
 	int32 coreLoad = core->GetUnclampedLoad();
 	int32 otherLoad = other->GetUnclampedLoad();
+
+	// threadLoad is what migrating THIS thread would shift from core to other, so
+	// otherLoad + threadLoad is the destination's load afterwards. A decline is a
+	// genuinely MISSED reduction only when that lands strictly below coreLoad --
+	// i.e. moving would lower the peak of the pair. This is the test the decline
+	// counter records, not the coarser "a less loaded core existed" (otherLoad <
+	// coreLoad): #115 saw 21,888 of the coarse kind, but that condition is true of
+	// every busy core under oversubscription and so cries wolf. At the case that
+	// produced the figure -- N = ncpus + 1 CPU-bound threads, one core doubled at
+	// 2 * kMaxLoad, the rest at kMaxLoad -- the surplus thread is itself kMaxLoad,
+	// so otherLoad + threadLoad == kMaxLoad + kMaxLoad == coreLoad exactly: moving
+	// it RELOCATES the collision instead of lowering the peak, and declining is
+	// correct (pigeonhole: 17 threads cannot avoid a doubled core on 16 cores).
+	// Counting only the peak-reducible case makes the figure read ~0 there and
+	// non-zero only where the kLoadDifference hysteresis genuinely suppressed a
+	// helpful move -- the signal #115 actually wanted.
+	int32 threadLoad = threadData->GetLoad() / core->CPUCount();
+
 	if (other == core || otherLoad + kLoadDifference >= coreLoad) {
-		// Record whether a genuinely less loaded core existed at this moment.
-		// If declines happen in their thousands while such a core exists, the
-		// migration predicate is the problem; if they happen while every core
-		// looks identically loaded, the load metric is.
-		trace_placement_decline(other != core && otherLoad < coreLoad);
+		trace_placement_decline(other != core && otherLoad + threadLoad < coreLoad);
 		return core;
 	}
 
@@ -137,9 +151,11 @@ rebalance(const ThreadData* threadData)
 	int32 difference = coreLoad - otherLoad - kLoadDifference;
 	ASSERT(difference > 0);
 
-	int32 threadLoad = threadData->GetLoad() / core->CPUCount();
 	if (difference < threadLoad) {
-		trace_placement_decline(true);
+		// Below the hysteresis band this is a pigeonhole relocation (no peak
+		// drop); within it, a small but real reduction the band suppressed. Only
+		// the latter is a missed opportunity worth flagging -- see #115 above.
+		trace_placement_decline(otherLoad + threadLoad < coreLoad);
 		return core;
 	}
 
