@@ -279,6 +279,15 @@ esac
 **Example ports:** libsquish (`-DBUILD_SQUISH_WITH_SSE2=OFF`), nesalizer (sed the
 Makefile — also Class 7 and Class 9).
 
+**Not every `-msse2` port is a flag gate — know when the signature lies.** The
+Class-5 fix only works when there is a **non-SIMD (or NEON) code path to fall back
+to.** `embree` 3.12.2 fails with the same `unrecognized command-line option
+'-msse2'` line, but embree ≤ 3.12 has **no ARM/NEON ISA at all** — SSE2 is baked
+into its only backend, and `-DEMBREE_MAX_ISA=DEFAULT` has nothing to select on
+aarch64. Gating the flag would just yield a library with no working kernel. NEON
+support only arrived in embree 3.13, so embree is a **version-bump / real port,
+not a Class-5 one-liner — deferred-hard** (see the deferred list at the end).
+
 ---
 
 ## Class 6: config.guess cannot name the arm64 host
@@ -321,6 +330,13 @@ exits non-zero, and the caller aborts.
    ```
    *Example:* llvm21 (and via it, mesa). `llvm12-12.0.1-config-guess-arm64.patch`
    is the same fix applied as a `config.guess` `PATCHES` hunk for the older tree.
+   **Any LLVM-derived tree hits this**, at whatever path it vendors the script —
+   confirm it from the log line (`Failed to execute …/config.guess`) and replace
+   that exact path: `haiku_format` reads `llvm/cmake/config.guess` (it builds
+   clang-format from a full llvm-project tree via `-S llvm`), and `keystone` reads
+   `llvm/cmake/config.guess` from its bundled LLVM MC subset. Both took the
+   identical arm64-scoped `printf … config.guess` block in `BUILD()` before the
+   `cmake` call.
 
 ---
 
@@ -342,7 +358,13 @@ out of the Makefile (same sed block as Class 5):
 -DCMAKE_INTERPROCEDURAL_OPTIMIZATION=OFF        # draco
 sed -i 's/-flto//g; s/-fuse-linker-plugin//g' Makefile   # nesalizer
 ```
-**Example ports:** draco, nesalizer.
+The CMake toggle catches the common case where a project's own `CMakeLists.txt`
+runs `check_ipo_supported()` and turns interprocedural optimisation on by default:
+`unarr` failed with `cc1: error: LTO support has not been enabled in this
+configuration` on every object until `-DCMAKE_INTERPROCEDURAL_OPTIMIZATION=OFF`
+was added to its `cmake` line, exactly as for draco.
+
+**Example ports:** draco, unarr (CMake `IPO=OFF`); nesalizer (Makefile sed).
 
 ---
 
@@ -409,7 +431,13 @@ lacking the aux scripts), so `install-sh`/`missing`/`depcomp` are never copied i
 ```sh
 autoreconf -fi        # was: autoreconf
 ```
-**Example port:** bonnie++.
+This also covers ports whose `BUILD()` calls a vendored **`./autogen.sh`** that
+regenerates `configure` without installing the aux scripts: `screen` (which does
+`cd src; ./autogen.sh`) aborted with `required file 'install-sh' not found — try
+running autoreconf --install`; replacing `./autogen.sh` with `autoreconf -fi` (and
+declaring `cmd:autoreconf`) fixed it.
+
+**Example ports:** bonnie++ (was `autoreconf`), screen (was `./autogen.sh`).
 
 ---
 
@@ -478,8 +506,22 @@ make: aarch64-unknown-haiku-g++: No such file or directory (Error 127)
 cross prefix. On a **native** builder only unprefixed `gcc`/`g++` exist.
 
 **Fix.** Pass native `CXX=g++`/`CC=gcc`. Class-wide this is cleared by #186
-(`16fcbe5dda`), which puts the arm64 triplet compilers on the in-chroot PATH.
-**Example port:** re2 (#52).
+(`16fcbe5dda`), which puts the arm64 triplet compilers on the in-chroot PATH — so
+a recipe that goes through `runConfigure`/`$cmakeDirArgs` inherits the working
+compiler and needs nothing. **A raw Makefile that picks `CC`/`CXX` out of the
+environment does not**: `freeimage` builds with `make -f Makefile.gnu`, the env
+`CXX` resolves to `aarch64-unknown-haiku-g++`, and it dies `No such file or
+directory (Error 127)`. Force the native compiler on the make command line —
+command-line assignment overrides both the environment and the Makefile — gated to
+the primary arch so an x86 secondary build keeps haikuporter's compiler:
+```sh
+case "$targetArchitecture" in
+	x86_gcc2|x86) ;;
+	*) nativeCC="CC=gcc CXX=g++" ;;
+esac
+make -f Makefile.gnu $nativeCC …
+```
+**Example ports:** re2 (#52), freeimage (raw-Makefile variant).
 
 ---
 
@@ -634,3 +676,28 @@ doesn't re-triage it. These need more than a recipe one-liner:
   `libgcrypt-config` (libotr/gsasl → needs configure-macro porting).
 - **Egress-blocked source** (Class 12 tail): Cloudflare challenge (speed_dreams),
   unreachable port (retro).
+- **Arch has no code path (masquerades as a flag gate):** embree 3.12.2 — the
+  `-msse2` Class-5 signature is real, but the only backend is x86 SIMD; NEON
+  landed in embree 3.13, so this is a version bump + real port, not a one-liner.
+
+---
+
+## Small-class frontier status (#136)
+
+The low-count auto-recoverable classes, and what clears on a **rebake +
+re-wave** (recipe committed to the overlay, native `RC=0` still OWED — it needs
+the builder AMI rebaked with these recipes and the ports re-waved):
+
+| Class | Ports (count) | Recipe status | Clears on re-wave |
+|---|---|---|---|
+| 4 static/shared install | libtomcrypt, libtommath, libvterm (3) | committed (#277) | 3 |
+| 5 x86 flags | nesalizer (committed #276); **embree deferred-hard** | 1 committed | 1 (embree deferred) |
+| 6 config.guess arm64 | autoconf2.71 (committed #275); **haiku_format, keystone (this PR)** | 3 committed | 3 |
+| 7 LTO no plugin | draco (committed #275); **unarr (this PR)** | 2 committed | 2 |
+| 10 autotools aux | bonnie++ (committed #275); **screen (this PR)** | 2 committed | 2 |
+| 11 optional install target | musicpc (committed #276) | committed | 1 |
+| 13 hardcoded cross prefix | **freeimage (this PR)** | committed | 1 |
+
+**13 of the 14 small-class ports clear on the next rebake+re-wave; embree (1) is
+deferred-hard.** This PR adds the five new overlay recipes (classes 6, 7, 10, 13);
+the rest were committed in the earlier wave PRs #275–#280.
