@@ -108,32 +108,70 @@ msgfmt: No such file or directory  (Error 127)
 configure: tar utility not found
 ```
 
-**Root cause.** haikuporter mounts **only the recipe's declared
-`BUILD_PREREQUIRES`** into the build chroot. A recipe that shells out to a tool it
-never declared dies with `command not found`, regardless of whether the tool is
+**Root cause.** For its in-chroot phases (`BUILD()`, `INSTALL()`, `TEST()`)
+haikuporter mounts **only the recipe's declared `BUILD_PREREQUIRES`** plus a fixed
+base set into the build chroot. A recipe that shells out to a tool it never
+declared dies with `command not found`, regardless of whether the tool is
 installed on the builder host.
 
-**Fix.** Declare the tool as a `cmd:` prerequisite:
-```
-BUILD_PREREQUIRES="
-	haiku_devel
-	cmd:gzip
-	cmd:pkg_config
-	"
-```
+**A phase nuance that decides the fix.** `PATCH()` (and `downloadSource`/
+`unpackSource`) run on the builder **HOST**, *before* the build chroot exists —
+`Main.py` calls `port.patchSource()` ahead of `port.build()`, and only `build()`
+enters `ChrootSetup`. So a tool used in `PATCH()` must be on the **host**, and a
+`cmd:` in `BUILD_PREREQUIRES` will not help it (that reaches only the chroot).
+`hexcompare` is the trap: its recipe already declares `cmd:dos2unix`, yet its
+`PATCH()` (`dos2unix general.h …`) still failed `command not found` because the
+lean builder host had no dos2unix. Its host provisioning was the fix, not the
+recipe.
 
-**Tool → provider map (proven this session):**
+**Fix — two shapes; pick by whether the tool is universal or feature-specific.**
 
-| Missing tool | Declare | Example ports |
-|---|---|---|
-| `gzip` (manpage compress, `installman`) | `cmd:gzip` | convmv, atari++, mdate, mm_common |
-| `unzip` | `cmd:unzip` | digiclock |
-| `which` (autogen.sh / pkg-config probe) | `cmd:which` | autotrace |
-| `msgfmt` | `cmd:msgfmt` + `cmd:pkg_config` | blobwars |
-| `tar` (generates a `.tar.gz` skeleton) | `cmd:tar` (+ `cmd:gzip`) | mm_common |
-| `perl` (dcgen / generated headers) | `cmd:perl` | coreutils (#27) |
-| `yacc` / bison-generated parser | `cmd:yacc` (bison provides it) | tmux |
-| `msgattrib` | `cmd:msgattrib` | neverball (past this step) |
+1. **Systemic (universal build utilities).** `gzip`, `tar`, `unzip`, `which` are
+   the coreutils-tier tools any `make install` / configure / autogen.sh assumes.
+   They are seeded into **every** chroot via haikuporter's own base set,
+   `HaikuPorter/ShellScriptlets.py:scriptletPrerequirements` (which already carries
+   coreutils/bash/sed/grep/…), patched idempotently by
+   `graviton/scripts/haiku-provision-native-builder` — see
+   `haikuports-patches/haikuporter-scriptlet-build-tools.patch` (#136). No
+   per-recipe edit is needed for these, and it reaches ports never touched. The
+   same four (plus dos2unix) are also added to the provisioner's host install list
+   so host-side `PATCH()` has them too. This is the analogue of the CMake-policy
+   systemic fix (#47/#136) and clears the whole recurring class on a rebake.
+2. **Per-recipe (feature-specific tools).** A tool only some ports use stays a
+   declared `cmd:` prerequisite in the overlay recipe — putting it in every chroot
+   would over-broaden (gettext is a 16 MB package):
+   ```
+   BUILD_PREREQUIRES="
+   	haiku_devel
+   	cmd:msgfmt
+   	cmd:pkg_config
+   	"
+   ```
+
+**Tool → provider map (measured against the #136 Class-2 wave logs).** All
+providers confirmed present in the DeBeOS arm64 pool.
+
+| Missing tool | Fix shape | Declare / provider | Example ports |
+|---|---|---|---|
+| `gzip` (manpage compress on `make install`) | **systemic** | scriptletPrereq → `gzip` | atari++, convmv, djvu, kakoune, libtermkey, mdate, unibilium |
+| `tar` (install step / `configure` "tar utility not found") | **systemic** | scriptletPrereq → `tar` | instead, mm_common |
+| `unzip` (unpack a bundled archive) | **systemic** | scriptletPrereq → `unzip` | betterspades |
+| `which` (autogen.sh / pkg-config probe) | **systemic** | scriptletPrereq → `which` | autotrace |
+| `dos2unix` (used in host-side `PATCH()`) | **host provision** | provisioner TOOLS → `dos2unix` | hexcompare (recipe already declared it) |
+| `msgfmt` | per-recipe | `cmd:msgfmt` (+`cmd:pkg_config`) → gettext | blobwars |
+| `msgattrib` | per-recipe | `cmd:msgattrib` → gettext | neverball |
+| `perl` (dcgen / generated headers) | per-recipe | `cmd:perl` | coreutils (#27) |
+| `yacc` / bison-generated parser | per-recipe | `cmd:yacc` (bison provides it) | tmux |
+
+**Not this class — do not mis-tag as auto-recoverable.** A bare `Error 127` also
+appears when: a `configure` conftest binary fails to build then "runs" (`cdrtools`:
+`OBJ/.../align_test: No such file or directory`); an empty cross-prefix expands to
+`-gcc` (`gdb`, really a Class-13/toolchain issue); a `*-config` probe returns `no`
+and the shell tries to run it (`libassuan`, whose real error is `libgpg-error was
+not found` — a missing dependency); a Makefile hardcodes a secondary-arch compiler
+that does not exist on arm64 (`protrekkr`: `g++-x86`); or an `autogen.sh` demands a
+version-pinned tool the pool does not carry (`libmypaint`: `automake-1.16`, a
+Class-3 autoreconf fix). These need per-port judgement, not a `cmd:` add.
 
 **Note on coreutils' second symptom.** `ln: failed to create hard link …:
 Operation not allowed` is a **non-fatal** gnulib configure probe ("whether rename

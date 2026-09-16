@@ -1,0 +1,88 @@
+# haikuporter-scriptlet-build-tools.patch  (issue #136, porting-playbook Class 2)
+#
+# Patches haikuporter, not a recipe. Applied on the native arm64 builder by
+# graviton/scripts/haiku-provision-native-builder (anchored, idempotent, verified)
+# right after the haikuporter clone -- the native builder clones upstream
+# haikuporter fresh, so a committed edit-in-place is how this fix reaches it (the
+# same shape as haikuporter-cmake-policy-minimum.patch).
+#
+# WHY
+# ---
+# The #27 / Class-2 failure: a port shells out to a common build utility during
+# BUILD()/INSTALL() but never declares it in BUILD_PREREQUIRES. haikuporter mounts
+# ONLY a recipe's declared prerequisites -- plus a fixed base set -- into the
+# build chroot, so the tool is absent even though the builder HOST has it
+# installed, and the build dies `command not found` / `Error 127`. It was the
+# largest auto-recoverable non-CMake class in the #136 backlog. Measured on the
+# 20 Class-2 ports in the 2026-09-15/16 wave, the missing tool was one of these
+# four universal utilities in 11 of them:
+#
+#     cmd:gzip   atari++, convmv, djvu, kakoune, libtermkey, mdate, unibilium
+#                (7 -- almost always `gzip` compressing a man page on install)
+#     cmd:tar    instead, mm_common   (2 -- install-time tar / configure probe)
+#     cmd:unzip  betterspades         (1 -- unpacking a bundled archive)
+#     cmd:which  autotrace            (1 -- autogen.sh pkg-config probe)
+#
+# Fixing this one recipe at a time (a `cmd:gzip` per-recipe overlay) is
+# whack-a-mole, only reaches ports already touched, AND -- because a recipe
+# overlay is baked into the AMI's ports tree -- needs a full rebake to take
+# effect anyway. Proof it does not scale: atari++/autotrace/convmv/mdate/mm_common
+# all had committed overlay recipes DECLARING the right cmd: tool, yet all failed
+# again in the wave that ran after those overlays landed, because that wave's
+# builder AMI predated them.
+#
+# THE SYSTEMIC FIX
+# ----------------
+# haikuporter has its own base prerequisite set:
+# HaikuPorter/ShellScriptlets.py:scriptletPrerequirements is the list of commands
+# it activates into EVERY chroot regardless of the recipe -- it already carries
+# coreutils, cmd:bash, cmd:find, cmd:grep, cmd:sed, the objcopy/readelf/strip
+# triplet, and cmd:xres. Appending the four universal build utilities there puts
+# them in every build's chroot at once, via exactly the mechanism that already
+# supplies sed/grep/coreutils. Those existing entries are themselves ports, so
+# this introduces no new self-dependency class. scriptlet prerequisites are
+# build-time only: they never become the built package's runtime REQUIRES.
+#
+# Scope is deliberately the four utilities any build/install step reasonably
+# assumes are present -- the same "universal tool" bar the existing entries meet.
+# Feature-specific tools stay per-recipe: gettext's msgfmt/msgattrib (an i18n port
+# only -- blobwars, neverball) and dos2unix (a patch-time fixup -- hexcompare).
+# Putting the 16 MB gettext package in every chroot would over-broaden.
+#
+# THE EDIT (HaikuPorter/ShellScriptlets.py, the scriptletPrerequirements literal):
+#
+#     scriptletPrerequirements = r'''
+#     	coreutils
+#     	cmd:bash
+#     	cmd:find
+#     	cmd:grep
+#     	cmd:${targetMachinePrefix}objcopy
+#     	cmd:${targetMachinePrefix}readelf
+#     	cmd:sed
+#     	cmd:${targetMachinePrefix}strip
+#     	cmd:xres
+#   + 	# graviton/DeBeOS (#136, Class 2): universal build utilities every recipe
+#   + 	# reasonably assumes are present -- man-page gzip on `make install`, a
+#   + 	# bundled-archive tar/unzip, a which-based configure probe -- but that
+#   + 	# recipes routinely forget to declare. Same 'universal tool' bar as the
+#   + 	# entries above (all of which are themselves ports), so no new
+#   + 	# self-dependency class. Build-time only. Feature-specific tools
+#   + 	# (gettext msgfmt/msgattrib, dos2unix) stay per-recipe.
+#   + 	cmd:gzip
+#   + 	cmd:tar
+#   + 	cmd:unzip
+#   + 	cmd:which
+#     '''
+#
+# PROVIDER MAPPING (all confirmed present in the DeBeOS arm64 pool):
+#   cmd:gzip   -> gzip     (app-arch/gzip;     gzip-1.14-1-arm64.hpkg)
+#   cmd:tar    -> tar      (app-arch/tar;      tar-1.35-2-arm64.hpkg)
+#   cmd:unzip  -> unzip    (app-arch/unzip;    unzip-6.10c23-6-arm64.hpkg)
+#   cmd:which  -> which    (sys-apps/which;    which-2.21-6-arm64.hpkg)
+# cmd:which resolvability is additionally confirmed by the wave logs: the
+# nativebuild driver successfully `pkgman install`ed cmd:which for atari++ before
+# it hit the (undeclared) gzip.
+#
+# Retire when: never as a class -- these are the coreutils-tier utilities a build
+# is entitled to assume. An individual entry can be dropped only if it is added to
+# Haiku's base image such that it is already present in a fresh chroot.

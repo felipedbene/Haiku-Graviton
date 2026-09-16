@@ -183,9 +183,22 @@ feed | pkgman refresh >/dev/null 2>&1 || true
 # campaign #136 (issue #173) died at bootstrap for exactly this. The lean base
 # ships only gettext_libintl; add the full gettext package so autopoint is on
 # PATH and the m4 macros resolve.
+#
+# tar/unzip/which/dos2unix are on the HOST for a different reason than the chroot
+# tools above: haikuporter runs a recipe's PATCH() (and downloadSource/unpackSource)
+# on the builder HOST, before it sets up the per-port build chroot -- Main.py calls
+# port.patchSource() ahead of port.build() (which is what enters ChrootSetup). So a
+# PATCH() that shells out to one of these dies "command not found" on the host even
+# when the recipe correctly declares it in BUILD_PREREQUIRES (that only reaches the
+# chroot BUILD/INSTALL phases). hexcompare is the case: its recipe already declares
+# cmd:dos2unix, yet its PATCH() (dos2unix general.h ...) failed host-side because the
+# lean base has no dos2unix. Install them here so the host PATCH/prep phase has the
+# same universal utilities the chroot gets from scriptletPrerequirements (gzip is
+# already present above). The in-chroot BUILD/INSTALL coverage for gzip/tar/unzip/
+# which is the ShellScriptlets.py patch in section 2a-3.
 TOOLS="gcc binutils make m4 patch gawk diffutils bison flex \
 	python3.14 autoconf automake libtool perl gettext gettext_libintl \
-	haiku_devel curl git gzip xz_utils libxml2"
+	haiku_devel curl git gzip tar unzip which dos2unix xz_utils libxml2"
 log "installing toolchain: $TOOLS"
 feed | pkgman install $TOOLS
 
@@ -429,6 +442,95 @@ except Exception as exc:
         "%s: %s\n" % (type(exc).__name__, exc))
     sys.exit(1)
 print("provision: #136 filteredEnvironment patched")
+PY
+
+# --- 2a-3. #136 Class 2: seed universal build tools into EVERY chroot ----------
+# The #27/Class-2 failure: a port shells out to a common utility (gzip, tar,
+# unzip, which) during BUILD()/INSTALL() -- almost always compressing a man page
+# on `make install`, unpacking a bundled archive, or a configure/autogen.sh probe
+# -- but never declares it in BUILD_PREREQUIRES. haikuporter mounts ONLY a
+# recipe's declared prerequisites (plus a fixed base set) into the build chroot,
+# so the tool is absent even though the builder HOST has it installed, and the
+# build dies `command not found` / `Error 127`. It was the single largest
+# auto-recoverable non-CMake class in the #136 backlog (gzip alone recurred
+# across atari++, convmv, djvu, kakoune, libtermkey, mdate, unibilium).
+#
+# Fixing this one recipe at a time (a `cmd:gzip` per recipe overlay) is
+# whack-a-mole AND only reaches ports we have already touched -- and, because a
+# recipe overlay is baked into the AMI's ports tree, it needs a full rebake to
+# take effect anyway. The systemic lever is haikuporter's OWN base prerequisite
+# set: HaikuPorter/ShellScriptlets.py:scriptletPrerequirements is the list of
+# commands haikuporter activates into every chroot regardless of the recipe (it
+# already carries coreutils, cmd:bash, cmd:find, cmd:grep, cmd:sed, the
+# objcopy/readelf/strip triplet, cmd:xres). Appending the four universal build
+# utilities there puts them in EVERY build's chroot at once -- exactly the
+# mechanism that already supplies sed/grep/coreutils, all of which are themselves
+# ports, so this adds no new self-dependency class. Build-time only: scriptlet
+# prerequisites never become the built package's runtime REQUIRES.
+#
+# Scope is deliberately the four utilities any build/install step reasonably
+# assumes are present, the same "universal" bar the existing entries meet:
+#   cmd:gzip  cmd:tar  cmd:unzip  cmd:which
+# Feature-specific tools stay per-recipe: gettext's msgfmt/msgattrib (an i18n
+# port only), dos2unix (a patch-time fixup) -- putting the 16 MB gettext package
+# in every chroot would over-broaden.
+#
+# LOAD-BEARING COUPLING with the TOOLS install in section 1: haikuporter resolves
+# build prerequisites against the builder's LOCAL package pool only, never the
+# remote repo -- so a scriptlet prerequisite that is not INSTALLED would be
+# unresolvable and would break EVERY build. gzip/tar/unzip/which are therefore in
+# the section-1 TOOLS `pkgman install` set; that is what makes these four entries
+# resolvable in the chroot, not merely their presence in the remote pool (all four
+# do exist there for arm64: app-arch/gzip, app-arch/tar, app-arch/unzip,
+# sys-apps/which). Do not add a tool here without also installing it there.
+# Anchored, idempotent, byte-compiled to verify -- a moved
+# anchor fails loudly rather than installing a silent no-op. See
+# graviton/haikuports-patches/haikuporter-scriptlet-build-tools.patch (#136).
+log "#136 Class 2: adding cmd:gzip/tar/unzip/which to haikuporter scriptletPrerequirements"
+python3.14 - "$HP_DIR/HaikuPorter/ShellScriptlets.py" <<'PY'
+import io, py_compile, sys
+path = sys.argv[1]
+with io.open(path, 'r', encoding='utf-8') as fh:
+    text = fh.read()
+tools = ['cmd:gzip', 'cmd:tar', 'cmd:unzip', 'cmd:which']
+if all(('\t' + t + '\n') in text for t in tools):
+    print("provision: #136 scriptletPrerequirements already patched; skipping")
+    sys.exit(0)
+# Anchor on the tail of the base prerequisite block (the cmd:xres line that ends
+# the list, followed by the closing triple-quote). Matched exactly once so a
+# haikuporter change to the base set fails loudly instead of silently no-op'ing.
+anchor = "\tcmd:xres\n'''\n"
+count = text.count(anchor)
+if count != 1:
+    sys.stderr.write(
+        "provision: FATAL #136 Class 2: scriptletPrerequirements anchor appears "
+        "%d times in %s, expected once -- haikuporter changed, re-check the "
+        "patch\n" % (count, path))
+    sys.exit(1)
+addition = (
+    "\tcmd:xres\n"
+    "\t# graviton/DeBeOS (#136, Class 2): universal build utilities every recipe\n"
+    "\t# reasonably assumes are present -- man-page gzip on `make install`, a\n"
+    "\t# bundled-archive tar/unzip, a which-based configure probe -- but that\n"
+    "\t# recipes routinely forget to declare. Same 'universal tool' bar as the\n"
+    "\t# entries above (all of which are themselves ports), so no new\n"
+    "\t# self-dependency class. Build-time only. Feature-specific tools\n"
+    "\t# (gettext msgfmt/msgattrib, dos2unix) stay per-recipe.\n"
+    "\tcmd:gzip\n"
+    "\tcmd:tar\n"
+    "\tcmd:unzip\n"
+    "\tcmd:which\n"
+    "'''\n"
+)
+with io.open(path, 'w', encoding='utf-8') as fh:
+    fh.write(text.replace(anchor, addition, 1))
+try:
+    py_compile.compile(path, cfile='/tmp/.hp136c2-check.pyc', doraise=True)
+except Exception as exc:
+    sys.stderr.write("provision: FATAL #136 Class 2: patched ShellScriptlets.py "
+        "does not compile: %s: %s\n" % (type(exc).__name__, exc))
+    sys.exit(1)
+print("provision: #136 scriptletPrerequirements patched")
 PY
 
 log "writing $CONF"
