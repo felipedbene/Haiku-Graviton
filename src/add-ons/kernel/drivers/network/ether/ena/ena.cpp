@@ -355,6 +355,94 @@ ena_rearm_io_interrupt(ena_haiku_device* device, bool force)
 }
 
 
+/*!	Receive moderation intervals as a function of the observed packet rate (#108).
+
+	Coarse and static on purpose: it is the lowest-risk shape of adaptive
+	moderation, meant to be justified and then refined by a hardware A/B, not a
+	port of the reference driver's DIM controller. Each entry gives the exclusive
+	upper bound of a packet-per-second band and the receive interval (in device
+	ticks) to use within it. The bands only ever widen the interval as the rate
+	rises: at low rates per-frame delivery latency is what matters, at high rates
+	per-interrupt CPU is, and the table trades one for the other in that
+	direction only. The first band is the ENA_MOD_LOW_PPS floor at interval zero
+	-- an interface this quiet takes an interrupt per completion so nothing
+	latency-sensitive is ever held for a timer. The last band's bound is set so it
+	always matches, so the lookup below cannot fall through. */
+static const struct ena_moderation_bucket {
+	uint32	maxPps;
+	int32	interval;
+} kRxModerationBuckets[] = {
+	{ ENA_MOD_LOW_PPS,		0 },
+	{ 50000,				16 },
+	{ 150000,				48 },
+	{ 0xffffffffU,			ENA_MOD_INTERVAL_MAX },
+};
+
+
+/*!	Adaptive receive moderation control loop, first step (#108).
+
+	Called from the end of a receive drain, under rxLock, on the receive thread --
+	the same point ena_rearm_io_interrupt() runs, so the interval chosen here is
+	the one the immediately following re-arm programs into the device. Samples the
+	receive packet rate over ENA_MOD_WINDOW_US of wall clock and moves
+	rxIrqInterval to the matching bucket; system_time() comes from CNTVCT_EL0 and
+	is trustworthy for a wall-clock span on this platform even where CPU-percentage
+	accounting is not.
+
+	A no-op unless adaptive moderation was turned on (ENA_IOCTL_RX_ADAPTIVE_
+	MODERATION), so with it off the manual knob and the compile-time default are
+	left untouched. rxFrames and the window anchors are written only on this
+	thread; moderationWindowStart may additionally be cleared to zero by the
+	enabling ioctl to reopen the window, which is a benign single-word write --
+	the worst a straddling read can do is reopen the window a second time. */
+static void
+ena_adaptive_moderation_sample(ena_haiku_device* device)
+{
+	if (atomic_get(&device->rxAdaptive) == 0)
+		return;
+
+	const bigtime_t now = system_time();
+
+	/* Fresh window: anchor it and wait for it to fill before deciding. */
+	if (device->moderationWindowStart == 0) {
+		device->moderationWindowStart = now;
+		device->moderationWindowFrames = device->rxFrames;
+		return;
+	}
+
+	const bigtime_t elapsed = now - device->moderationWindowStart;
+	if (elapsed < ENA_MOD_WINDOW_US)
+		return;
+
+	const uint64 frames = device->rxFrames - device->moderationWindowFrames;
+	const uint64 pps = frames * 1000000ULL / (uint64)elapsed;
+
+	int32 interval = ENA_MOD_INTERVAL_MAX;
+	for (size_t i = 0; i < sizeof(kRxModerationBuckets)
+			/ sizeof(kRxModerationBuckets[0]); i++) {
+		if (pps < kRxModerationBuckets[i].maxPps) {
+			interval = kRxModerationBuckets[i].interval;
+			break;
+		}
+	}
+
+	if (interval != atomic_get(&device->rxIrqInterval)) {
+		atomic_set(&device->rxIrqInterval, interval);
+		/* Logged only on a band change, which tracks load transitions rather than
+		   the sampling cadence, so this cannot flood the console under steady
+		   traffic. */
+		TRACE_ALWAYS("adaptive rx moderation: %" B_PRIu64 " pps -> interval %"
+			B_PRId32 " ticks (resolution %u)\n", pps, interval,
+			device->comDev.intr_delay_resolution);
+	}
+
+	/* Open the next window from here rather than from the nominal deadline: a
+	   drain that ran long only reports the rate it actually observed. */
+	device->moderationWindowStart = now;
+	device->moderationWindowFrames = device->rxFrames;
+}
+
+
 static int32
 ena_io_interrupt(void* arg)
 {
@@ -2560,6 +2648,16 @@ ena_device_bringup(ena_haiku_device* device)
 	if (ena_com_init_interrupt_moderation(&device->comDev) != ENA_COM_OK)
 		TRACE_ALWAYS("interrupt moderation unavailable; continuing\n");
 
+	/* Probe the moderation feature the same way the offload and header-length
+	   caps are probed -- from what the device advertises, not from an assumption.
+	   Adaptive moderation (#108) is gated on this: the interval it programs is in
+	   device ticks, and the tick length is only known when the device reported the
+	   moderation feature and hence a delay resolution. */
+	device->moderationSupported
+		= ena_com_interrupt_moderation_supported(&device->comDev);
+	TRACE_ALWAYS("interrupt moderation feature %s\n",
+		device->moderationSupported ? "advertised" : "not advertised");
+
 	/* Logged because the moderation intervals are written into the register as
 	   raw ticks and this is the only thing that says what a tick is worth. It had
 	   been inferred from an interrupt-rate ceiling and never read; an inference
@@ -3512,6 +3610,9 @@ ena_receive(ena_haiku_device* device, net_buffer** _buffer)
 		   side of it. */
 		if (!rearmed) {
 			device->rxDrainCycles++;
+			/* Choose the interval before the re-arm, so an interval the packet
+			   rate has just moved is the one this same unmask programs. */
+			ena_adaptive_moderation_sample(device);
 			ena_rearm_io_interrupt(device, false);
 			rearmed = true;
 			continue;
@@ -3852,6 +3953,40 @@ ena_ioctl(void* cookie, uint32 op, void* buffer, size_t length)
 				"(resolution %u) at %" B_PRId32 " io interrupts, %" B_PRIu64
 				" rx frames\n", value, device->comDev.intr_delay_resolution,
 				device->ioInterrupts, device->rxFrames);
+			return B_OK;
+		}
+
+		case ENA_IOCTL_RX_ADAPTIVE_MODERATION:
+		{
+			int32 value;
+			if (length != sizeof(value))
+				return B_BAD_VALUE;
+			if (user_memcpy(&value, buffer, sizeof(value)) != B_OK)
+				return B_BAD_ADDRESS;
+			if (value != 0 && value != 1)
+				return B_BAD_VALUE;
+			/* Refused rather than silently accepted when the device never
+			   advertised the feature: the interval is in ticks of the device's
+			   delay resolution, and without the feature that resolution is
+			   unknown, so a control loop would be programming an interval of
+			   unknown length. */
+			if (value == 1 && !device->moderationSupported)
+				return B_NOT_SUPPORTED;
+
+			/* No quiescing needed, same as the manual knob above: the sample path
+			   reads these words without a shared lock and any straddling read is
+			   benign. Clear the window before enabling so the first decision is
+			   taken over traffic seen after the switch, not across it; restore the
+			   compile-time default on disable so the manual instrument resumes
+			   from a known point rather than the last window's leftover. */
+			device->moderationWindowStart = 0;
+			if (value == 0)
+				atomic_set(&device->rxIrqInterval, ENA_RX_IRQ_INTERVAL);
+			atomic_set(&device->rxAdaptive, value);
+			TRACE_ALWAYS("adaptive rx moderation %s at %" B_PRId32
+				" io interrupts, %" B_PRIu64 " rx frames\n",
+				value ? "enabled" : "disabled", device->ioInterrupts,
+				device->rxFrames);
 			return B_OK;
 		}
 

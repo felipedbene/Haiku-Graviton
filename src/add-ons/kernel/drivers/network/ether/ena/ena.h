@@ -191,6 +191,30 @@ extern "C" {
    rejected. */
 #define ENA_MAX_IRQ_INTERVAL	32767
 
+/* Adaptive receive moderation, first step (#108). The control loop samples the
+   receive packet rate over a fixed wall-clock window and picks the moderation
+   interval from a coarse static table; see ena_adaptive_moderation_sample() and
+   graviton/docs/ena-interrupt-moderation.md.
+
+   The window is a wall-clock span, not a frame count: it has to bound how long a
+   rate spike can go unnoticed regardless of how few or many frames arrive, and
+   system_time() (from CNTVCT_EL0) is the one clock trustworthy on this platform.
+   100 ms is long enough that even the lowest non-idle bucket carries thousands
+   of frames -- statistical mass, not a handful -- and short enough that the
+   interval tracks a load change within a tenth of a second.
+
+   ENA_MOD_LOW_PPS is the floor below which the interval is forced to zero: an
+   interface this quiet is either idle or carrying latency-sensitive request/reply
+   traffic, and neither must have a completion held back for a timer. Coalescing
+   is only ever widened above this rate, where per-interrupt cost -- not delivery
+   latency -- is what dominates. ENA_MOD_INTERVAL_MAX caps how far it is widened;
+   it is deliberately far below ENA_MAX_IRQ_INTERVAL, because this first step is
+   sized to be justified by a hardware A/B before it is widened, not to chase the
+   largest interval the register can hold. */
+#define ENA_MOD_WINDOW_US		100000
+#define ENA_MOD_LOW_PPS			20000
+#define ENA_MOD_INTERVAL_MAX	96
+
 /* Watchdog cadence and timeout, both matching Linux and FreeBSD exactly: a
    one-second timer against a six-second keep-alive deadline
    (ena_netdev.h:130 ENA_DEVICE_KALIVE_TIMEOUT, ena.h:173
@@ -418,6 +442,29 @@ extern "C" {
    the interval and the driver keeps no timers. Read lockless, see the handler. */
 #define ENA_IOCTL_GET_ENI_STATS		9806
 
+/* Turns adaptive receive moderation on (1) or off (0); #108. When on, the driver
+   samples the receive packet rate over ENA_MOD_WINDOW_US and chooses the interval
+   ENA_IOCTL_RX_MODERATION would otherwise be set to by hand -- so the two are
+   mutually exclusive by construction: with adaptive on, the control loop owns
+   rxIrqInterval and a manual sweep is immediately overwritten; with it off, the
+   manual knob (and the compile-time default) hold.
+
+   Runtime rather than a build switch, and a switch rather than a fixed policy,
+   for the reason the whole cadence apparatus is: the honest comparison is
+   adaptive against non-adaptive on one boot of one instance, because this
+   hardware's boot-to-boot throughput drift is large enough to swamp the effect.
+   Toggling it opens a fresh sampling window, so the first decision after the
+   switch is taken over traffic seen after it, not across it. Turning it off
+   restores the compile-time default interval, so the manual instrument always
+   resumes from a known point rather than wherever the last window happened to
+   leave it.
+
+   Rejected with B_NOT_SUPPORTED if the device did not advertise the interrupt
+   moderation feature at attach: without it the delay-resolution conversion the
+   interval depends on is unknown, and a control loop programming ticks of an
+   unknown length is worse than none. */
+#define ENA_IOCTL_RX_ADAPTIVE_MODERATION	9807
+
 struct ena_irq_stats {
 	uint64	ioInterrupts;
 	/* Unmask writes. Fewer than ioInterrupts means a vector was re-armed by one
@@ -603,8 +650,24 @@ struct ena_haiku_device {
 	int32				rearmMode;
 	/* The receive moderation interval the next re-arm will program, in device
 	   ticks; see ENA_IOCTL_RX_MODERATION. Read on the re-arm path, which can run
-	   from the interrupt handler, so again a plain atomic load. */
+	   from the interrupt handler, so again a plain atomic load. Written by the
+	   manual knob and, when adaptive moderation is on, by the control loop. */
 	int32				rxIrqInterval;
+	/* Adaptive receive moderation on/off; see ENA_IOCTL_RX_ADAPTIVE_MODERATION and
+	   ena_adaptive_moderation_sample(). Atomic because the enabling ioctl and the
+	   sampling receive thread read it without a shared lock. */
+	int32				rxAdaptive;
+	/* Whether the device advertised the interrupt-moderation feature at attach,
+	   which is what makes the delay-resolution conversion -- and therefore an
+	   interval in ticks -- meaningful. Latched once; adaptive moderation is
+	   refused if it is false. */
+	bool				moderationSupported;
+	/* Sampling-window state for adaptive moderation, touched only from the receive
+	   drain (under rxLock) except that the enabling ioctl clears moderationWindowStart
+	   to reopen the window. Zero start means "open a fresh window on the next
+	   sample". These are wall-clock and frame-count anchors, not cadence figures. */
+	bigtime_t			moderationWindowStart;
+	uint64				moderationWindowFrames;
 	bool				managementIrqInstalled;
 	bool				ioIrqInstalled;
 	/* Two states, not one: configure_msix() claims the vectors and is undone by
