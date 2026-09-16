@@ -69,6 +69,10 @@
 set -euo pipefail
 
 VENDOR="DeBeOS"
+# Canonical DeBeOS packager (issue #41). The repo is single-packager as well as
+# single-vendor; the revendor pass normalises both in one metadata edit so
+# freshly published/re-stamped packages stay canonical and #41 does not regrow.
+PACKAGER="${HG_PACKAGER:-DeBeOS <packages@debene.dev>}"
 PKG_URL="http://packages.debene.dev/arm64"
 REPO_NAME="DeBeOS"
 ARCH="${ARCH:-arm64}"
@@ -102,6 +106,24 @@ hpkg_vendor() {
 		| head -1
 }
 
+# ---- current packager of an hpkg (via `package list -i`) ------------------
+hpkg_packager() {
+	"$PKG_TOOL" list -i "$1" 2>/dev/null \
+		| sed -nE 's/^[[:space:]]*packager:[[:space:]]*"?(.*[^"])"?[[:space:]]*$/\1/p' \
+		| head -1
+}
+
+# ---- normalise the packager line of an extracted .PackageInfo (#41) --------
+# PACKAGER may contain & and / so use a non-/ sed delimiter.
+stamp_packager() {
+	local info="$1"
+	if grep -qE '^[[:space:]]*packager[[:space:]]' "$info"; then
+		sed -i -E "s|^([[:space:]]*packager[[:space:]]+).*|\1\"$PACKAGER\"|" "$info"
+	else
+		printf '\npackager\t"%s"\n' "$PACKAGER" >> "$info"
+	fi
+}
+
 # ---- re-stamp one hpkg to vendor DeBeOS (metadata repackage, no rebuild) --
 # Extract the package tree (incl. .PackageInfo), rewrite the vendor line, and
 # recreate the hpkg from the same tree. `package create` reads .PackageInfo from
@@ -111,7 +133,8 @@ revendor_into() {
 	local src="$1" destdir="$2"
 	local base; base="$(basename "$src")"
 	local cur; cur="$(hpkg_vendor "$src")"
-	if [ "$cur" = "$VENDOR" ]; then
+	local curp; curp="$(hpkg_packager "$src")"
+	if [ "$cur" = "$VENDOR" ] && [ "$curp" = "$PACKAGER" ]; then
 		cp -p "$src" "$destdir/$base"
 		return 0
 	fi
@@ -124,6 +147,7 @@ revendor_into() {
 	else
 		printf '\nvendor\t"%s"\n' "$VENDOR" >> "$tmp/.PackageInfo"
 	fi
+	stamp_packager "$tmp/.PackageInfo"
 	"$PKG_TOOL" create -C "$tmp" "$destdir/$base"
 	rm -rf "$tmp"
 }
@@ -137,8 +161,9 @@ revendor_inplace() {
 	local src="$1"
 	local base; base="$(basename "$src")"
 	local cur; cur="$(hpkg_vendor "$src")"
-	if [ "$cur" = "$VENDOR" ]; then
-		echo "  = $base (already $VENDOR)"
+	local curp; curp="$(hpkg_packager "$src")"
+	if [ "$cur" = "$VENDOR" ] && [ "$curp" = "$PACKAGER" ]; then
+		echo "  = $base (already $VENDOR / canonical packager)"
 		return 0
 	fi
 	local tmp; tmp="$(mktemp -d)"
@@ -150,10 +175,11 @@ revendor_inplace() {
 	else
 		printf '\nvendor\t"%s"\n' "$VENDOR" >> "$tmp/.PackageInfo"
 	fi
+	stamp_packager "$tmp/.PackageInfo"
 	"$PKG_TOOL" create -C "$tmp" "$out/$base"
 	mv -f "$out/$base" "$src"
 	rm -rf "$tmp" "$out"
-	echo "  ~ $base ($cur -> $VENDOR)"
+	echo "  ~ $base (vendor '$cur' -> '$VENDOR', packager '$curp' -> '$PACKAGER')"
 }
 
 do_revendor() {

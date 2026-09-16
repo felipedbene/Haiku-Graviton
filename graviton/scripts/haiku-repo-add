@@ -32,6 +32,13 @@
 set -euo pipefail
 
 VENDOR="DeBeOS"
+# Canonical DeBeOS packager. The pool must be single-packager as well as
+# single-vendor (issue #41): packages built through the bootstrap/native path
+# inherited assorted packager strings ("Haiku Graviton <graviton@haiku-os.org>",
+# "DeBeOS <debeos@example.invalid>", ...), which misattribute DeBeOS-vended
+# packages. Re-stamping the packager here, in the same metadata pass as the
+# vendor, keeps every freshly-added package canonical so #41 does not regrow.
+PACKAGER="${HG_PACKAGER:-DeBeOS <packages@debene.dev>}"
 REPO_NAME="DeBeOS"
 ARCH="${ARCH:-arm64}"
 PKG_URL="${HG_REPO_URL:-http://packages.debene.dev/$ARCH}"
@@ -98,7 +105,7 @@ avail_bytes() {
 	df -Pk "$1" 2>/dev/null | awk 'NR==2 { printf "%.0f", $4 * 1024 }'
 }
 
-echo "== 3. re-stamp incoming to vendor $VENDOR and stage under canonical names =="
+echo "== 3. re-stamp incoming to vendor $VENDOR + packager $PACKAGER and stage under canonical names =="
 added=0
 skipped=0
 skipped_list=""
@@ -106,10 +113,11 @@ published_bases=""
 for f in "$WORK/incoming"/*.hpkg; do
 	base="$(basename "$f")"
 	cur="$("$PKG_TOOL" list -i "$f" 2>/dev/null | sed -nE 's/^[[:space:]]*vendor:[[:space:]]*"?([^"]*)"?[[:space:]]*$/\1/p' | head -1)"
+	cur_packager="$("$PKG_TOOL" list -i "$f" 2>/dev/null | sed -nE 's/^[[:space:]]*packager:[[:space:]]*"?(.*[^"])"?[[:space:]]*$/\1/p' | head -1)"
 	staged="$WORK/staged.hpkg"; rm -f "$staged"
-	if [ "$cur" = "$VENDOR" ]; then
-		# Already stamped: a copy, no extraction, so no ENOSPC risk regardless
-		# of decompressed size.
+	if [ "$cur" = "$VENDOR" ] && [ "$cur_packager" = "$PACKAGER" ]; then
+		# Already canonical (vendor AND packager): a copy, no extraction, so no
+		# ENOSPC risk regardless of decompressed size.
 		cp -p "$f" "$staged"
 	else
 		# Decompression-bomb guard (issue #168): only the re-stamp's
@@ -144,6 +152,13 @@ for f in "$WORK/incoming"/*.hpkg; do
 		else
 			printf '\nvendor\t"%s"\n' "$VENDOR" >> "$tmp/.PackageInfo"
 		fi
+		# Normalise the packager in the same pass (#41). PACKAGER may contain & and
+		# / so use a non-/ sed delimiter.
+		if grep -qE '^[[:space:]]*packager[[:space:]]' "$tmp/.PackageInfo"; then
+			sed -i -E "s|^([[:space:]]*packager[[:space:]]+).*|\1\"$PACKAGER\"|" "$tmp/.PackageInfo"
+		else
+			printf '\npackager\t"%s"\n' "$PACKAGER" >> "$tmp/.PackageInfo"
+		fi
 		if ! "$PKG_TOOL" create -C "$tmp" "$staged"; then
 			echo "   ! SKIP $base: package create failed (restamp-create-failed)" >&2
 			rm -rf "$tmp"
@@ -159,7 +174,7 @@ for f in "$WORK/incoming"/*.hpkg; do
 	pkgname="${canon%%-*}"
 	find "$RO/packages" -maxdepth 1 -name "$pkgname-*.hpkg" ! -name "$canon" -delete 2>/dev/null || true
 	mv -f "$staged" "$RO/packages/$canon"
-	echo "   + $canon (from '$base', vendor '$cur' -> '$VENDOR')"
+	echo "   + $canon (from '$base', vendor '$cur' -> '$VENDOR', packager '$cur_packager' -> '$PACKAGER')"
 	added=$((added + 1))
 	published_bases="$published_bases $base"
 done
