@@ -533,6 +533,118 @@ except Exception as exc:
 print("provision: #136 scriptletPrerequirements patched")
 PY
 
+# --- 2a-4. #136 Class 8: default CMAKE_BUILD_TYPE in haikuporter's cmake wrapper -
+# The Class-8 failure: a recipe calls `cmake` for its configure step without any
+# -DCMAKE_BUILD_TYPE (8 of the 10 #136 Class-8 ports), or with RelWithDebInfo but
+# no _debuginfo subpackage (2 of them). haikuporter shadows `cmake` in the BUILD()
+# shell with a wrapper (HaikuPorter/ShellScriptlets.py:cmake()) that *aborts* in
+# both cases -- "invoking cmake without CMAKE_BUILD_TYPE specified!" and "with
+# -DCMAKE_BUILD_TYPE=RelWithDebInfo without debug info packages specified".
+#
+# WHY NOT the #47/#136 CMAKE_POLICY_VERSION_MINIMUM channels. Neither reaches this:
+#   * The wrapper inspects the cmake COMMAND LINE ("$*") only, never the env, so a
+#     value seeded in filteredEnvironment() (the #136 policy-floor channel) does
+#     not satisfy it -- and cmake reads CMAKE_BUILD_TYPE only from -D/cache, never
+#     the environment, so there is no env channel to use in the first place.
+#   * Appending -DCMAKE_BUILD_TYPE=Release to cmakeDirArgs (the #47 channel) would
+#     be actively HARMFUL: a known-good library recipe that passes both
+#     $cmakeDirArgs and its own -DCMAKE_BUILD_TYPE=RelWithDebInfo *with* a
+#     _debuginfo subpackage would then match the wrapper's "Release WITH debug info
+#     packages specified" guard and start aborting. It also only reaches recipes
+#     that interpolate $cmakeDirArgs (most hand-write an explicit arg list).
+#
+# So the systemic lever is the wrapper itself. We change ONLY its two branches
+# that already ended in `exit 1` -- i.e. the always-fail paths, which no
+# known-good port ever traversed, so the no-regression surface is zero:
+#   (A) no CMAKE_BUILD_TYPE at all      -> inject -DCMAKE_BUILD_TYPE=Release
+#   (B) RelWithDebInfo, no _debuginfo   -> rewrite that token to Release
+# Both are exactly the wrapper's own printed advice ("you probably want Release").
+# The "Release WITH debug info packages" guard (elif #2) is left byte-for-byte
+# intact, so a real Release/debuginfo mismatch still fails loudly. This reaches
+# EVERY cmake port regardless of how it spells the invocation, and -- unlike a
+# per-recipe overlay -- does not depend on the ISP-source-package overlay landing
+# on the tree with a correctly-pinned mtime (the fragile path that let 4 already-
+# overlaid Class-8 recipes regress in the wave). Anchored, idempotent, byte-
+# compiled to verify. See
+# graviton/haikuports-patches/haikuporter-cmake-build-type-default.patch (#136).
+log "#136 Class 8: defaulting CMAKE_BUILD_TYPE=Release in haikuporter cmake wrapper"
+python3.14 - "$HP_DIR/HaikuPorter/ShellScriptlets.py" <<'PY'
+import io, py_compile, sys
+path = sys.argv[1]
+with io.open(path, 'r', encoding='utf-8') as fh:
+    text = fh.read()
+marker = "graviton/DeBeOS (#136, Class 8)"
+if marker in text:
+    print("provision: #136 Class 8 cmake wrapper already patched; skipping")
+    sys.exit(0)
+
+# (A) absent CMAKE_BUILD_TYPE: default to Release instead of aborting.
+anchorA = (
+    "\t\tif [[ \"$*\" != *CMAKE_BUILD_TYPE* ]]; then\n"
+    "\t\t\techo \"error: invoking cmake without CMAKE_BUILD_TYPE specified!\"\n"
+    "\t\t\techo \"note: you probably want -DCMAKE_BUILD_TYPE=Release or "
+    "-DCMAKE_BUILD_TYPE=RelWithDebInfo\"\n"
+    "\t\t\texit 1\n"
+)
+cA = text.count(anchorA)
+if cA != 1:
+    sys.stderr.write(
+        "provision: FATAL #136 Class 8: cmake-wrapper anchor A appears %d times "
+        "in %s, expected once -- haikuporter changed, re-check the patch\n"
+        % (cA, path))
+    sys.exit(1)
+replA = (
+    "\t\tif [[ \"$*\" != *CMAKE_BUILD_TYPE* ]]; then\n"
+    "\t\t\t# graviton/DeBeOS (#136, Class 8): a recipe that calls cmake with no\n"
+    "\t\t\t# CMAKE_BUILD_TYPE previously aborted here. Supply the wrapper's own\n"
+    "\t\t\t# recommended default (Release) instead, so every such port configures\n"
+    "\t\t\t# regardless of whether it uses $cmakeDirArgs or an explicit arg list.\n"
+    "\t\t\t# cmake reads CMAKE_BUILD_TYPE only from -D/cache (not the env), so this\n"
+    "\t\t\t# cannot be an env default; only this always-failed branch changes --\n"
+    "\t\t\t# recipes that already pass a type are untouched.\n"
+    "\t\t\tset -- -DCMAKE_BUILD_TYPE=Release \"$@\"\n"
+)
+text = text.replace(anchorA, replA, 1)
+
+# (B) RelWithDebInfo without a _debuginfo subpackage: rewrite to Release.
+anchorB = (
+    "\t\telif [[ \"$*\" = *CMAKE_BUILD_TYPE=RelWithDebInfo* ]] && "
+    "[ -z \"$DEBUG_INFO_PACKAGES\" ]; then\n"
+    "\t\t\techo -n \"error: invoking cmake with -DCMAKE_BUILD_TYPE=RelWithDebInfo "
+    "without debug info \"\n"
+    "\t\t\techo \"packages specified\"\n"
+    "\t\t\techo \"note: you probably want -DCMAKE_BUILD_TYPE=Release\"\n"
+    "\t\t\texit 1\n"
+)
+cB = text.count(anchorB)
+if cB != 1:
+    sys.stderr.write(
+        "provision: FATAL #136 Class 8: cmake-wrapper anchor B appears %d times "
+        "in %s, expected once -- haikuporter changed, re-check the patch\n"
+        % (cB, path))
+    sys.exit(1)
+replB = (
+    "\t\telif [[ \"$*\" = *CMAKE_BUILD_TYPE=RelWithDebInfo* ]] && "
+    "[ -z \"$DEBUG_INFO_PACKAGES\" ]; then\n"
+    "\t\t\t# graviton/DeBeOS (#136, Class 8): the recipe asked for RelWithDebInfo\n"
+    "\t\t\t# but declared no _debuginfo subpackage, which previously aborted.\n"
+    "\t\t\t# Rewrite the requested type to Release (the wrapper's own advice) so\n"
+    "\t\t\t# the port builds; only this always-failed branch changes.\n"
+    "\t\t\tset -- \"${@/CMAKE_BUILD_TYPE=RelWithDebInfo/CMAKE_BUILD_TYPE=Release}\"\n"
+)
+text = text.replace(anchorB, replB, 1)
+
+with io.open(path, 'w', encoding='utf-8') as fh:
+    fh.write(text)
+try:
+    py_compile.compile(path, cfile='/tmp/.hp136c8-check.pyc', doraise=True)
+except Exception as exc:
+    sys.stderr.write("provision: FATAL #136 Class 8: patched ShellScriptlets.py "
+        "does not compile: %s: %s\n" % (type(exc).__name__, exc))
+    sys.exit(1)
+print("provision: #136 Class 8 cmake wrapper patched")
+PY
+
 log "writing $CONF"
 cat > "$CONF" <<EOF
 TREE_PATH="$PORTS_DIR"

@@ -1,0 +1,111 @@
+# haikuporter-cmake-build-type-default.patch  (issue #136, playbook Class 8)
+#
+# Patches haikuporter, not a recipe. Applied on the native arm64 builder by
+# graviton/scripts/haiku-provision-native-builder (section 2a-4: anchored,
+# idempotent, byte-compiled to verify) right after the haikuporter clone -- the
+# same shape as the #47/#136 cmake-policy and Class-2 scriptlet patches. This
+# file is the explanatory note; the operative edit is the provisioner's.
+#
+# WHY
+# ---
+# haikuporter shadows `cmake` in every port's BUILD() shell with a wrapper
+# (HaikuPorter/ShellScriptlets.py:cmake()) that enforces CMAKE_BUILD_TYPE. It
+# ABORTS the build in two cases the #136 Class-8 ports hit:
+#   (A) no -DCMAKE_BUILD_TYPE on the cmake command line
+#         "error: invoking cmake without CMAKE_BUILD_TYPE specified!"
+#       -- cmake_haiku, freegish, lensfun, libmirage, nogravity, sais, sawteeth,
+#          superfreecell  (8 ports)
+#   (B) -DCMAKE_BUILD_TYPE=RelWithDebInfo but no _debuginfo subpackage declared
+#         "error: invoking cmake with -DCMAKE_BUILD_TYPE=RelWithDebInfo without
+#          debug info packages specified"
+#       -- epoll_shim, flac13  (2 ports)
+# In both cases the wrapper prints "note: you probably want ...Release" and then
+# `exit 1`.
+#
+# WHY NOT the #47 / #136 CMAKE_POLICY_VERSION_MINIMUM channels
+# -----------------------------------------------------------
+# Class 1's systemic fix seeds CMAKE_POLICY_VERSION_MINIMUM two ways: on
+# haikuporter's shared cmakeDirArgs (Port.py, #47) and in the build shell's
+# environment (Utils.py:filteredEnvironment, #136, because cmake >= 3.31 reads
+# that cache variable from the env). NEITHER works for the build type:
+#
+#   * The wrapper inspects the cmake COMMAND LINE ("$*") only, never the
+#     environment -- and cmake itself reads CMAKE_BUILD_TYPE only from -D/cache,
+#     never from the environment. So there is no env channel to use, and a value
+#     placed in filteredEnvironment() would neither satisfy the wrapper nor reach
+#     cmake. The Class-1 env trick is inapplicable here.
+#
+#   * Appending -DCMAKE_BUILD_TYPE=Release to cmakeDirArgs would be actively
+#     HARMFUL, not merely incomplete. cmakeDirArgs is interpolated *before* a
+#     recipe's own args, so for cmake the recipe still wins -- but the WRAPPER
+#     sees the whole line. A known-good library recipe that passes both
+#     $cmakeDirArgs and its own -DCMAKE_BUILD_TYPE=RelWithDebInfo *with* a
+#     _debuginfo subpackage would then match the wrapper's second guard --
+#     "invoking cmake with -DCMAKE_BUILD_TYPE=Release WITH debug info packages
+#     specified" -- and start aborting. That guard is exactly the RelWithDebInfo/
+#     debuginfo pairing many in-pool libraries rely on. A blanket cmakeDirArgs
+#     default therefore REGRESSES known-good ports. (It also reaches only recipes
+#     that interpolate $cmakeDirArgs; most hand-write an explicit arg list.)
+#
+# THE FIX (HaikuPorter/ShellScriptlets.py, the cmake() wrapper)
+# ------------------------------------------------------------
+# Change ONLY the two branches that already ended in `exit 1` -- the always-fail
+# paths. No known-good port has ever traversed an exit-1 branch, so the
+# no-regression surface is exactly zero. Each rewrite is the wrapper's own printed
+# advice, applied instead of aborting:
+#
+#     	if [[ "$*" != *CMAKE_BUILD_TYPE* ]]; then
+#   -		echo "error: invoking cmake without CMAKE_BUILD_TYPE specified!"
+#   -		echo "note: you probably want -DCMAKE_BUILD_TYPE=Release or -DCMAKE_BUILD_TYPE=RelWithDebInfo"
+#   -		exit 1
+#   +		# graviton/DeBeOS (#136, Class 8): default the absent type to Release
+#   +		# (the wrapper's own advice) instead of aborting. Reaches every cmake
+#   +		# port regardless of how it spells the invocation.
+#   +		set -- -DCMAKE_BUILD_TYPE=Release "$@"
+#     	elif [[ "$*" = *CMAKE_BUILD_TYPE=Release* ]] && [ -n "$DEBUG_INFO_PACKAGES" ]; then
+#     		echo "error: invoking cmake with -DCMAKE_BUILD_TYPE=Release with debug info packages specified"
+#     		echo "note: you probably want -DCMAKE_BUILD_TYPE=RelWithDebInfo"
+#     		exit 1                                        # <-- UNCHANGED: real mismatch still fails loudly
+#     	elif [[ "$*" = *CMAKE_BUILD_TYPE=RelWithDebInfo* ]] && [ -z "$DEBUG_INFO_PACKAGES" ]; then
+#   -		echo -n "error: invoking cmake with -DCMAKE_BUILD_TYPE=RelWithDebInfo without debug info "
+#   -		echo "packages specified"
+#   -		echo "note: you probably want -DCMAKE_BUILD_TYPE=Release"
+#   -		exit 1
+#   +		# graviton/DeBeOS (#136, Class 8): rewrite RelWithDebInfo -> Release
+#   +		# (the wrapper's own advice) since no _debuginfo subpackage exists.
+#   +		set -- "${@/CMAKE_BUILD_TYPE=RelWithDebInfo/CMAKE_BUILD_TYPE=Release}"
+#     	fi
+#
+# The middle guard (Release WITH debug info) is left byte-for-byte intact, so a
+# genuine Release/debuginfo mismatch still fails loudly.
+#
+# WHY SYSTEMIC BEATS PER-RECIPE HERE (beyond the count)
+# -----------------------------------------------------
+# 4 of the 10 Class-8 ports already carried a per-recipe overlay with the
+# -DCMAKE_BUILD_TYPE=Release fix (cmake_haiku, epoll_shim, sais, superfreecell)
+# and STILL failed with the Class-8 signature in the wave whose logs seeded this
+# fix. A per-recipe overlay reaches the builder only through the input-source-
+# package path (input-source-packages/develop/sources/<port>-.../<port>.recipe),
+# which silently overrules the ports tree and which haikuporter re-extracts --
+# reverting the edit -- whenever mtime(recipe) <= mtime(sourcePackage) (see
+# recipes/README.md). The wrapper fix removes that dependency entirely: it lives
+# in haikuporter itself, is reapplied by the provisioner on every bake, and is
+# indifferent to whether any recipe/overlay is present. The existing overlays
+# remain valid and harmless (an explicit -DCMAKE_BUILD_TYPE=Release still flows
+# through the wrapper unchanged); they are no longer load-bearing for this class.
+#
+# VERIFIED (locally, no builder needed for the logic)
+# ---------------------------------------------------
+#   * The patched cmake() function, run standalone under bash with a stub cmake,
+#     over six cases: absent-type injects Release; RelWithDebInfo-without-debuginfo
+#     rewrites to Release; Release-WITH-debuginfo STILL aborts (guard intact);
+#     RelWithDebInfo-WITH-debuginfo and plain-Release pass through byte-unchanged;
+#     `cmake --build` is never rewritten. 6/6.
+#   * The anchored provisioner patcher applies to a pristine upstream
+#     ShellScriptlets.py (anchors A and B each match exactly once), the result
+#     byte-compiles as Python, and a second run is a no-op (idempotent).
+# OWED: a native arm64 rebake + re-wave of the 10 ports to confirm RC=0 hpkgs.
+#
+# Retire when: upstream haikuporter's cmake wrapper stops treating a missing or
+# debuginfo-mismatched build type as fatal. Until then this is a straight
+# build-system default, not a feature cut.
