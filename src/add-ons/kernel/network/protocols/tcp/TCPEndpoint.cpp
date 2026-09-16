@@ -1504,7 +1504,16 @@ TCPEndpoint::_UpdateReceiveBuffer()
 	// Round to the window shift and max segment size.
 	uint32 newWindowShifted = newWindowSize >> fReceiveWindowShift;
 	const uint32 maxSegmentShifted = fReceiveMaxSegmentSize >> fReceiveWindowShift;
-	newWindowShifted = (newWindowShifted / maxSegmentShifted) * maxSegmentShifted;
+	// A large SO_RCVBUF pushes fReceiveWindowShift up towards TCP_MAX_WINDOW_SHIFT
+	// (via _PrepareSendPath()), so one shift unit (2^fReceiveWindowShift bytes)
+	// can exceed the segment size and maxSegmentShifted rounds to zero. The
+	// advertised window is then already quantised more coarsely than a segment,
+	// leaving nothing to round to -- and dividing by it would fault on x86 and
+	// silently yield zero on arm64 (UDIV by zero), pinning the window at zero and
+	// defeating auto-sizing. Skip the segment rounding in that case; the shift
+	// quantisation above already applies.
+	if (maxSegmentShifted != 0)
+		newWindowShifted = (newWindowShifted / maxSegmentShifted) * maxSegmentShifted;
 	newWindowSize = newWindowShifted << fReceiveWindowShift;
 
 	if (newWindowSize > maxWindowSize)
