@@ -111,6 +111,9 @@ static	status_t					_NewConnectionCallback(void *cookie,
 										BNetEndpoint &endpoint);
 		status_t					_NewConnection(BNetEndpoint &endpoint);
 
+static	void						_ConnectionClosedCallback(void *cookie);
+		void						_ConnectionClosed();
+
 		void						_Disconnect();
 
 		void						_FillDisplayModeTiming(display_mode &mode);

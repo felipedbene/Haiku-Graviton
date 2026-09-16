@@ -16,6 +16,7 @@ class BNetEndpoint;
 class StreamingRingBuffer;
 
 typedef status_t (*NewConnectionCallback)(void *cookie, BNetEndpoint &endpoint);
+typedef void (*ConnectionClosedCallback)(void *cookie);
 
 
 class NetReceiver {
@@ -23,7 +24,8 @@ public:
 								NetReceiver(BNetEndpoint *endpoint,
 									StreamingRingBuffer *target,
 									NewConnectionCallback callback = NULL,
-									void *newConnectionCookie = NULL);
+									void *newConnectionCookie = NULL,
+									ConnectionClosedCallback closedCallback = NULL);
 								~NetReceiver();
 
 		BNetEndpoint *			Endpoint() { return fEndpoint.Get(); }
@@ -41,6 +43,8 @@ static	int32					_NetworkReceiverEntry(void *data);
 
 		NewConnectionCallback	fNewConnectionCallback;
 		void *					fNewConnectionCookie;
+		ConnectionClosedCallback
+								fConnectionClosedCallback;
 
 		ObjectDeleter<BNetEndpoint>
 								fEndpoint;

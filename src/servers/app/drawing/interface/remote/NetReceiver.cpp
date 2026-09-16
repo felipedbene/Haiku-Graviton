@@ -22,7 +22,8 @@
 
 
 NetReceiver::NetReceiver(BNetEndpoint *listener, StreamingRingBuffer *target,
-	NewConnectionCallback newConnectionCallback, void *newConnectionCookie)
+	NewConnectionCallback newConnectionCallback, void *newConnectionCookie,
+	ConnectionClosedCallback connectionClosedCallback)
 	:
 	fListener(listener),
 	fTarget(target),
@@ -30,6 +31,7 @@ NetReceiver::NetReceiver(BNetEndpoint *listener, StreamingRingBuffer *target,
 	fStopThread(false),
 	fNewConnectionCallback(newConnectionCallback),
 	fNewConnectionCookie(newConnectionCookie),
+	fConnectionClosedCallback(connectionClosedCallback),
 	fEndpoint(newConnectionCallback == NULL ? listener : NULL)
 {
 	fReceiverThread = spawn_thread(_NetworkReceiverEntry, "network receiver",
@@ -86,6 +88,17 @@ NetReceiver::_Listen()
 		}
 
 		_Transfer();
+
+		// _Transfer() only returns when the peer went away (EOF or error).
+		// Release the accepted connection right here instead of leaving it for
+		// the next Accept()/_NewConnection() to replace: close our accepted
+		// socket immediately, and let the owner drop the sender that holds a
+		// dup of the same connection. Until both sides are closed the socket
+		// lingers in CLOSE_WAIT; deferring that to the next client is what let
+		// them accumulate.
+		fEndpoint.Unset();
+		if (fConnectionClosedCallback != NULL)
+			fConnectionClosedCallback(fNewConnectionCookie);
 	}
 
 	return B_OK;
