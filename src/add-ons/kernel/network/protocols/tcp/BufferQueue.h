@@ -58,6 +58,12 @@ public:
 #endif
 
 private:
+			status_t			_GetCloned(size_t bytes,
+									net_buffer** _buffer);
+			void				_PrependContiguous(SegmentList& pieces,
+									size_t bytes);
+
+private:
 	// Protects the segment list and the derived counters against the one
 	// access that no longer holds the endpoint's fLock: the application
 	// reader's dequeue in TCPEndpoint::ReadData() runs with fLock released so

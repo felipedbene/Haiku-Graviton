@@ -347,86 +347,183 @@ BufferQueue::Get(net_buffer *buffer, tcp_sequence sequence, size_t bytes)
 }
 
 
-/*!	Creates a new buffer containing \a bytes bytes from the start of the
-	buffer queue. If \a remove is \c true, the data is removed from the
-	queue, if not, the data is cloned from the queue.
+/*!	Clones \a bytes bytes from the start of the queue into a new buffer without
+	removing them. Runs entirely under the lock; used for MSG_PEEK, which is
+	rare and must not disturb the queue.
 */
 status_t
-BufferQueue::Get(size_t bytes, bool remove, net_buffer **_buffer)
+BufferQueue::_GetCloned(size_t bytes, net_buffer** _buffer)
 {
 	RecursiveLocker _(fLock);
 
 	if (bytes > Available())
 		bytes = Available();
-
 	if (bytes == 0) {
-		// we don't need to create a buffer when there is no data
 		*_buffer = NULL;
 		return B_OK;
 	}
 
-	net_buffer *buffer = fList.First();
+	net_buffer* buffer = gBufferModule->create(256);
+	if (buffer == NULL)
+		return B_NO_MEMORY;
+
 	size_t bytesLeft = bytes;
-	ASSERT(buffer != NULL);
-
-	if (!remove || buffer->size > bytes) {
-		// we need a new buffer
-		buffer = gBufferModule->create(256);
-		if (buffer == NULL)
-			return B_NO_MEMORY;
-	} else {
-		// we can reuse this buffer
-		bytesLeft -= buffer->size;
-		fFirstSequence += buffer->size;
-
-		fList.Remove(buffer);
-	}
-
-	// clone/copy the remaining data
-
 	SegmentList::Iterator iterator = fList.GetIterator();
-	net_buffer *source = NULL;
+	net_buffer* source = NULL;
 	status_t status = B_OK;
 	while (bytesLeft > 0 && (source = iterator.Next()) != NULL) {
 		size_t size = min_c(source->size, bytesLeft);
 		status = gBufferModule->append_cloned(buffer, source, 0, size);
 		if (status < B_OK)
 			break;
-
 		bytesLeft -= size;
-
-		if (!remove)
-			continue;
-
-		// remove either the whole buffer or only the part we cloned
-
-		fFirstSequence += size;
-
-		if (size == source->size) {
-			iterator.Remove();
-			gBufferModule->free(source);
-		} else {
-			gBufferModule->remove_header(source, size);
-			source->sequence += size;
-		}
 	}
 
-	if (remove && buffer->size) {
-		fNumBytes -= buffer->size;
-		fContiguousBytes -= buffer->size;
-	}
-
-	// We always return what we got, or else we would lose data
 	if (status < B_OK && buffer->size == 0) {
-		// We could not remove any bytes from the buffer, so
-		// let this call fail.
 		gBufferModule->free(buffer);
-		VERIFY();
 		return status;
 	}
 
 	*_buffer = buffer;
-	VERIFY();
+	return B_OK;
+}
+
+
+/*!	Re-inserts \a pieces (a contiguous run that was detached from the head of
+	the queue) back at the front, restoring the byte counters. Used only to
+	avoid losing already-acknowledged data when the lock-free coalesce below
+	hits an allocation failure -- a rare path, but it must not drop data.
+*/
+void
+BufferQueue::_PrependContiguous(SegmentList& pieces, size_t bytes)
+{
+	RecursiveLocker _(fLock);
+
+	// Insert in reverse so the run ends up in its original order at the head.
+	net_buffer* piece;
+	while ((piece = pieces.Tail()) != NULL) {
+		pieces.Remove(piece);
+		if (fList.IsEmpty())
+			fList.Add(piece);
+		else
+			fList.InsertBefore(fList.First(), piece);
+		fFirstSequence = piece->sequence;
+	}
+
+	fNumBytes += bytes;
+	fContiguousBytes += bytes;
+}
+
+
+/*!	Creates a new buffer containing \a bytes bytes from the start of the
+	buffer queue. If \a remove is \c true, the data is removed from the
+	queue, if not, the data is cloned from the queue.
+
+	For the common removing case the head buffers are detached from the queue
+	while holding the lock, but the O(segments) coalesce (clone the data-node
+	references into a single buffer, free the sources) is done with the lock
+	RELEASED. This is what keeps the RX consumer's Add() from waiting on the
+	whole dequeue: it only ever contends for the brief detach, not the clone
+	(#61 -- Option B left the clone under the lock, which relocated the
+	contention into HOLD).
+*/
+status_t
+BufferQueue::Get(size_t bytes, bool remove, net_buffer **_buffer)
+{
+	if (!remove)
+		return _GetCloned(bytes, _buffer);
+
+	// Phase 1 -- detach the head run under the lock. splitClone carries the
+	// single partial buffer (head fragment) when the request does not fall on
+	// a buffer boundary; at most one clone happens under the lock.
+	SegmentList detached;
+	net_buffer* splitClone = NULL;
+	{
+		RecursiveLocker locker(fLock);
+
+		if (bytes > Available())
+			bytes = Available();
+		if (bytes == 0) {
+			*_buffer = NULL;
+			return B_OK;
+		}
+
+		size_t remaining = bytes;
+		net_buffer* buf;
+		while (remaining > 0 && (buf = fList.First()) != NULL) {
+			if (buf->size <= remaining) {
+				fList.Remove(buf);
+				fFirstSequence += buf->size;
+				fNumBytes -= buf->size;
+				fContiguousBytes -= buf->size;
+				remaining -= buf->size;
+				detached.Add(buf);
+			} else {
+				// Partial head fragment: clone the wanted prefix (one bounded
+				// clone under the lock), trim the source, leave it queued.
+				net_buffer* clone = gBufferModule->create(256);
+				if (clone != NULL && gBufferModule->append_cloned(clone, buf, 0,
+						remaining) == B_OK) {
+					gBufferModule->remove_header(buf, remaining);
+					buf->sequence += remaining;
+					fFirstSequence += remaining;
+					fNumBytes -= remaining;
+					fContiguousBytes -= remaining;
+					splitClone = clone;
+				} else if (clone != NULL)
+					gBufferModule->free(clone);
+				break;
+			}
+		}
+	}
+
+	// Phase 2 -- coalesce with the lock released. Reuse the first detached
+	// buffer as the base and clone the rest of the run into it.
+	if (detached.IsEmpty()) {
+		// Only a partial first buffer (or nothing on allocation failure).
+		*_buffer = splitClone;
+		return splitClone != NULL ? B_OK : B_NO_MEMORY;
+	}
+
+	net_buffer* buffer = detached.RemoveHead();
+	net_buffer* source;
+	while ((source = detached.RemoveHead()) != NULL) {
+		if (gBufferModule->append_cloned(buffer, source, 0, source->size)
+				!= B_OK) {
+			// Out of memory mid-coalesce: put the still-owned run (this source
+			// + the remainder + the split fragment) back so no data is lost,
+			// and return what we have already coalesced.
+			size_t requeued = source->size;
+			SegmentList back;
+			back.Add(source);
+			net_buffer* rest;
+			while ((rest = detached.RemoveHead()) != NULL) {
+				requeued += rest->size;
+				back.Add(rest);
+			}
+			if (splitClone != NULL) {
+				requeued += splitClone->size;
+				back.Add(splitClone);
+			}
+			_PrependContiguous(back, requeued);
+			*_buffer = buffer;
+			return B_OK;
+		}
+		gBufferModule->free(source);
+	}
+
+	if (splitClone != NULL) {
+		if (gBufferModule->append_cloned(buffer, splitClone, 0, splitClone->size)
+				== B_OK) {
+			gBufferModule->free(splitClone);
+		} else {
+			SegmentList back;
+			back.Add(splitClone);
+			_PrependContiguous(back, splitClone->size);
+		}
+	}
+
+	*_buffer = buffer;
 	return B_OK;
 }
 
