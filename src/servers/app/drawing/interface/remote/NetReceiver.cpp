@@ -13,9 +13,11 @@
 
 #include <NetEndpoint.h>
 
+#include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/select.h>
 
 #define TRACE(x...)			/*debug_printf("NetReceiver: " x)*/
 #define TRACE_ERROR(x...)	debug_printf("NetReceiver: " x)
@@ -110,7 +112,55 @@ NetReceiver::_Transfer()
 {
 	int32 errorCount = 0;
 
+	// In server (listening) mode a single thread both accepts connections and
+	// pumps the accepted one, serving one client at a time. If that client's
+	// peer vanishes without a clean close -- a half-open connection, which
+	// BNetEndpoint::Receive() waits on forever because the accepted socket has
+	// no receive timeout and this TCP stack sends no keepalive probes -- the
+	// accept loop can never come back around. A fresh client then completes its
+	// TCP handshake into the listen backlog but is never accepted and never gets
+	// its RP_INIT_CONNECTION reply (black screen), while the abandoned sockets
+	// pile up in CLOSE_WAIT. Watch the listener alongside the live connection so
+	// a new client preempts a stale one: returning here lets _Listen() tear this
+	// connection down and accept the waiting one. In client mode (no callback)
+	// fEndpoint is the sole socket and there is nothing to preempt with.
+	const bool watchListener = fNewConnectionCallback != NULL
+		&& fListener != NULL && fListener != fEndpoint.Get();
+
 	while (!fStopThread) {
+		if (watchListener) {
+			int connSocket = fEndpoint->Socket();
+			int listenSocket = fListener->Socket();
+			if (connSocket < 0)
+				return B_ERROR;
+
+			fd_set readSet;
+			FD_ZERO(&readSet);
+			FD_SET(connSocket, &readSet);
+			if (listenSocket >= 0)
+				FD_SET(listenSocket, &readSet);
+
+			int maxSocket = connSocket > listenSocket ? connSocket : listenSocket;
+			int ready = select(maxSocket + 1, &readSet, NULL, NULL, NULL);
+			if (ready < 0) {
+				if (errno == EINTR)
+					continue;
+				TRACE_ERROR("select failed, closing connection: %s\n",
+					strerror(errno));
+				return B_ERROR;
+			}
+
+			// A connection is waiting on the listener: give this one up so the
+			// accept loop can replace it. Done even when the current connection
+			// also has data -- the protocol drives a single client and the newest
+			// one wins, matching _NewConnection()'s replace-on-connect model.
+			if (listenSocket >= 0 && FD_ISSET(listenSocket, &readSet))
+				return B_OK;
+
+			if (!FD_ISSET(connSocket, &readSet))
+				continue;
+		}
+
 		uint8 buffer[4096];
 		int32 readSize = fEndpoint->Receive(buffer, sizeof(buffer));
 		if (readSize < 0) {
