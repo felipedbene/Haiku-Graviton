@@ -126,7 +126,7 @@ RemoteHWInterface::RemoteHWInterface(const char* target)
 		return;
 
 	fReceiver.SetTo(new(std::nothrow) NetReceiver(fListenEndpoint.Get(), fReceiveBuffer.Get(),
-		_NewConnectionCallback, this));
+		_NewConnectionCallback, this, _ConnectionClosedCallback));
 	if (!fReceiver.IsSet()) {
 		fInitStatus = B_NO_MEMORY;
 		return;
@@ -281,9 +281,20 @@ RemoteHWInterface::_EventThread()
 		uint16 code;
 		status_t result = message.NextMessage(code);
 		if (result != B_OK) {
-			TRACE_ERROR("failed to read message from receiver: %s\n",
+			// This thread is the only consumer of fReceiveBuffer. If it exits,
+			// nothing drains the buffer; the NetReceiver then blocks forever in
+			// StreamingRingBuffer::Write() once the 16 KiB fills, which wedges
+			// the accept loop -- accepted sockets pile up in CLOSE_WAIT and new
+			// clients never get their RP_INIT_CONNECTION acknowledged (see
+			// issue #294). A NextMessage() failure here is a framing error or a
+			// deliberate buffer reset on (dis)connect (B_CANCELED), not a reason
+			// to tear the whole service down: resynchronise to the next
+			// connection's stream and keep going.
+			TRACE_ERROR("failed to read message from receiver, resyncing: %s\n",
 				strerror(result));
-			return result;
+			fReceiveBuffer->MakeEmpty();
+			message.Reset();
+			continue;
 		}
 
 		TRACE("got message code %" B_PRIu16 " with %" B_PRIu32 " bytes\n", code,
@@ -399,6 +410,14 @@ RemoteHWInterface::_NewConnection(BNetEndpoint &endpoint)
 
 	fSendBuffer->MakeEmpty();
 
+	// Drop anything still buffered from a previous client. The receive stream
+	// is a single byte stream with no per-connection framing, so a partial
+	// message left behind by a client that vanished mid-message would otherwise
+	// be read as the head of this new client's stream and desynchronise it --
+	// eventually producing a framing error. Emptying here, at the connection
+	// boundary, aligns the event thread to this client's first message.
+	fReceiveBuffer->MakeEmpty();
+
 	BNetEndpoint *sendEndpoint = new(std::nothrow) BNetEndpoint(endpoint);
 	if (sendEndpoint == NULL)
 		return B_NO_MEMORY;
@@ -435,6 +454,31 @@ RemoteHWInterface::_NewConnection(BNetEndpoint &endpoint)
 		fDrawingEngines.ItemAt(i)->ConnectionReset();
 
 	return B_OK;
+}
+
+
+void
+RemoteHWInterface::_ConnectionClosedCallback(void *cookie)
+{
+	((RemoteHWInterface *)cookie)->_ConnectionClosed();
+}
+
+
+void
+RemoteHWInterface::_ConnectionClosed()
+{
+	// Called from the receiver thread the moment a client's connection ends.
+	// The receiver has already closed its accepted socket; drop the sender that
+	// holds a dup of the same connection so the socket can leave CLOSE_WAIT
+	// instead of lingering until the next client happens to connect. Give up
+	// both ring buffers too: with no client there is nothing to send, and any
+	// half-received inbound message must not carry into the next connection.
+	fIsConnected = false;
+
+	fSender.Unset();
+
+	fSendBuffer->MakeEmpty();
+	fReceiveBuffer->MakeEmpty();
 }
 
 

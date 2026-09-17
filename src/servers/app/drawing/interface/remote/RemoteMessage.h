@@ -150,6 +150,7 @@ public:
 		void					Cancel();
 
 		status_t				NextMessage(uint16& code);
+		void					Reset();
 		uint16					Code() { return fCode; }
 		uint32					DataLeft() { return fDataLeft; }
 

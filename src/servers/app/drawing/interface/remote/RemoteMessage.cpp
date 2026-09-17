@@ -86,6 +86,18 @@ RemoteMessage::Cancel()
 }
 
 
+void
+RemoteMessage::Reset()
+{
+	// Drop any in-progress inbound framing so the next NextMessage() starts
+	// from a clean message boundary. Used after the receive stream is emptied
+	// on (dis)connect, so a partial message left behind by a departed client
+	// cannot desynchronise the next client's stream.
+	fDataLeft = 0;
+	fCode = 0;
+}
+
+
 #ifndef CLIENT_COMPILE
 void
 RemoteMessage::AddBitmap(const ServerBitmap& bitmap, bool minimal)
