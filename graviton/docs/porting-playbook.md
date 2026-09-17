@@ -712,6 +712,28 @@ by dropping the `-l` — that silently cuts the feature.
 midikeyboard, rtmidi, symetrie, textsaver, wolle (wolle is also a
 [Class 22](#class-22-removedrenamed-haiku-api-or-moved-header) narrowing case).
 
+**PASS 2 sub-routing (measured — the fix differs by which library is missing).** The 10
+link failures split cleanly by the `-l<name>` in the log:
+
+- **`-lmidi`/`-lmidi2` (allegro, drumcircle, internalmidi, midikeyboard, rtmidi) and
+  `-lscreensaver` (symetrie, wolle).** These are Haiku's own MIDI/screensaver kits. **The
+  evidence says the runtime library itself is ABSENT from the lean image, not merely
+  missing its devel symlink**: the sibling port `edgar` fails at *runtime* with
+  `runtime_loader: Cannot open file libmidi.so (needed by libSDL2_mixer)`. If the `.so`
+  is genuinely absent, a provisioner "create the devel symlink" overlay (the shape used
+  for the #171 gnu-header fix) would point at a **nonexistent target** and still fail — so
+  **no such overlay is shipped in PASS 2**. The correct fix must be decided on a booted
+  builder: `find /system/lib /system/develop/lib -name 'libmidi*.so' -o -name
+  'libscreensaver.so'` → **present-but-unlinked** ⇒ a devel-symlink overlay clears it;
+  **absent** ⇒ the MIDI/screensaver kits are dropped by the image build profile (an
+  image-composition fix in the bake, analogous to the minimum-build translator-library
+  drop) or must be built+published (Class 20). Deferred to the hardware pass.
+- **`-lGL` (fbneo, lite_xl) and `-lglut` (billardgl).** Third-party OpenGL/GLUT devel not
+  in the arm64 pool ⇒ **[Class 20](#class-20-prerequisite-packagetool-not-published)**:
+  build+publish the `mesa`/`libglvnd` and `glut` devel packages, then re-wave.
+- **textsaver** clustered here by a different salient line (no `-l` captured in the tail);
+  re-triage after the PASS 2 log-capture fix lands.
+
 ---
 
 ## Class 19: Build system does not recognise aarch64/arm64
@@ -794,20 +816,33 @@ Traceback (most recent call last):
 ModuleNotFoundError: No module named 'pkg_resources'
 ```
 
-**Root cause.** The port’s `setup.py` imports `pkg_resources` (or `setuptools`) at
-build time, but the python `setuptools` package is not in the build chroot — the recipe
-declared a bare python but not setuptools.
+**Root cause — CORRECTED IN PASS 2 (measured against the real logs, do not trust the
+original one-liner).** The obvious reading — "the recipe forgot to declare setuptools" —
+is **wrong for our builder**. The upstream `html5lib`/`pbr` recipes *already* declare
+`setuptools_python310` in `BUILD_REQUIRES` and `cmd:python3.10` in `BUILD_PREREQUIRES`,
+and `haiku-nativebuild` even logs `attempt 1 installing: setuptools_python310`. The build
+still dies in `setup.py` with `ModuleNotFoundError: No module named 'pkg_resources'`. The
+real cause is a **python-version mismatch**: these recipes pin `PYTHON_VERSIONS=(3.10)`,
+but the DeBeOS native builder ships **python3.14** (see `haiku-provision-native-builder`
+section 1). `setuptools_python310` installs `pkg_resources` onto **3.10's**
+vendor-packages path, which is not on the **3.14** interpreter's `sys.path` — so the
+import fails. The two remaining "Class 21" ports are not even setuptools: **librnp**
+needs `distutils` (removed from stdlib in 3.12, now a setuptools shim) and **libplacebo**
+needs `jinja2` (a real codegen dependency), so the classifier regex was broadened in PASS
+2 to `No module named '[^']+'`.
 
-**Fix.** Declare setuptools in `BUILD_PREREQUIRES` (the python `setuptools` package,
-which provides `pkg_resources`), matching the recipe’s python version:
-```
-BUILD_PREREQUIRES="
-	…
-	setuptools_python310    # provides pkg_resources
-	"
-```
+**Fix (per-recipe overlay + a Class-20 publish, verify on hardware — NOT a one-liner).**
+Bump the recipe's `PYTHON_VERSIONS` to `3.14` (and the `setuptools_python314` /
+`jinja2_python314` build-requires to match), which requires those `_python314` packages
+to be **built and published** to the arm64 green pool first (a Class-20 dependency, not a
+recipe edit). Whether modern setuptools still ships `pkg_resources` importably must be
+confirmed on a builder — several ports' `setup.py` use the deprecated
+`from pkg_resources import parse_version` and may additionally need a source patch. This
+class therefore straddles per-recipe (version bump) **and** Class 20 (publish the
+`_python314` deps) and is left for the hardware pass rather than shipped as a fabricated
+overlay.
 
-**Example ports:** html5lib, libplacebo, librnp, pbr.
+**Example ports:** html5lib, pbr (pkg_resources), librnp (distutils), libplacebo (jinja2).
 
 ---
 
@@ -900,22 +935,30 @@ warns `UNSAFE SOURCES … SHOULD NOT BE USED`).
 
 ---
 
-## Triage-tool signature gaps (found while mining)
+## Triage-tool signature gaps (found while mining) — CLOSED in PASS 2
 
 The mining run turned up ports that **belong to an existing class but the
-`haiku-triage-failures` ruleset misses**, because the live log wording differs from the
+`haiku-triage-failures` ruleset missed**, because the live log wording differed from the
 encoded regex. These are ruleset bugs, not new classes — fixing them shrinks UNMATCHED
-without any porting work. `haiku-playbook-parity` does not check these (they need a
-regex, not a section), but they are recorded here so the next ruleset edit closes them:
+without any porting work. **All six were closed in the PASS 2 ruleset edit (#136/#90)**
+and each was verified against the real cached log for the named port(s):
 
-| Existing class | Live signature the regex misses | Ports |
-|---|---|---|
-| **has_unresolvable** (dep filter) | `unable to resolve (pre)required packages …` (no literal `UNRESOLVABLE` token) | ~21 (see Class 20) — **the biggest gap** |
-| **Class 4** static/shared | `prepareInstalledDevelLib error: there is both a shared and a static library` (singular, not `prepareInstalledDevelLibs`) | linenoise, libspectrum, sdl_net |
-| **Class 10** autotools aux | `configure.in/.ac: … required file 'X' not found` (regex keys on literal `install-sh`) | libmcrypt, libsrtp |
-| **Class 3** gettext macro | `possibly undefined macro: AM_PATH_XML2` (libxml2’s macro off the aclocal path) | libmetalink |
-| **Class 5** x86 flags | `-mmmx` / other x86 `-m*` flags (regex keys on `-msse`) | opendune |
-| **Class 2** missing tool | CMake `FindUnixCommands … (missing: GZIP)` (tool absence surfaced through CMake) | zziplib |
+| Existing class | Live signature the regex missed | Ports | Fix (PASS 2) |
+|---|---|---|---|
+| **has_unresolvable** (dep filter) | `unable to resolve (pre)required packages …` (no literal `UNRESOLVABLE` token) | ~21 (see Class 20) — **the biggest gap** | new **Class 20** rule (+ the literal token) routes them; `_UNRESOLVABLE` regex broadened |
+| **Class 4** static/shared | `prepareInstalledDevelLib error: …` (singular, not `prepareInstalledDevelLibs`) | linenoise, libspectrum, sdl_net | regex → `prepareInstalledDevelLibs?` |
+| **Class 10** autotools aux | `configure.in/.ac: … required file 'X' not found` (regex keyed on literal `install-sh`) | libmcrypt (`ltmain.sh`), libsrtp (`ar-lib`) | added `required file '[^']+' not found` |
+| **Class 3** gettext macro | `possibly undefined macro: AM_PATH_XML2` (libxml2’s macro off the aclocal path) | libmetalink | added `AM_PATH_XML2` to the macro alternation |
+| **Class 5** x86 flags | `-mmmx` / other x86 `-m*` flags (regex keyed on `-msse`) | opendune | added `-mmmx`/`-m3dnow`/`-mavx` |
+| **Class 2** missing tool | `Could NOT find UnixCommands (missing: GZIP)` (tool absence via CMake) | zziplib | added `Could NOT find UnixCommands` (NARROW — `Could NOT find <Lib>` for a real dep, e.g. partio's GLUT, is Class 20, not this) |
+
+`haiku-playbook-parity`’s hard gate now passes with **21** classifier classes (1–14 +
+18–24) all resolving to a playbook section; the previous “documented-but-not-detected”
+INFO for 18–24 is gone. Re-running the classifier + miner (the operator’s rebake→re-wave
+step) will re-tag these out of UNMATCHED — measured locally against the 563 cached
+UNMATCHED logs, this pass reclassifies **384** of them — 37 into actionable
+code/recipe/tool classes and 347 into Class 20 (dep-unpublished) — leaving 179 (see the
+PASS 2 census below).
 
 ---
 
@@ -961,8 +1004,15 @@ instead of archaeology. The method, and the numbers from the 2026-09-17 run
   *tail* of the native build, so the root compiler error scrolled off the top and the
   log exposes only the generic `make: *** Error N` cascade. These are **not
   characterisable** and were left as one honest bucket, not invented into classes.
-  *(Operational fix: have the wave logger capture more of `nb-<pkg>.log`, not just the
-  tail, to make this third minable.)*
+  *(Operational fix — DONE in PASS 2: `haiku-nativebuild` used to echo only
+  `tail -20 "$log"` on failure, and `run_ssm._wrapper` gzips exactly that stdout as the
+  S3 `log_url` — so the root error, which is at the TOP of a large build, was thrown away
+  before it ever left the scratch builder. PASS 2 replaces both failure emissions with an
+  `emit_log_capture` that prints the log HEAD + every diagnostic line (grep) + the TAIL,
+  bounded so a huge ninja build doesn't balloon the upload. Verified: on a synthetic
+  6051-line log with the root error at line 50, the miner's own `salient_line` recovers
+  it from the new capture. This makes the 87 truncated-tail ports minable on the next
+  re-wave.)*
 - **The remaining ~159 clustered into the classes above.** Net new fixable classes
   yielded by the frontier: **7** (classes 18–24), covering **≈67 ports** — plus ~30 more
   routed to the dep-unpublished root cause (Class 20 / the `has_unresolvable` gap) and
@@ -972,6 +1022,60 @@ instead of archaeology. The method, and the numbers from the 2026-09-17 run
   ```
   and let `graviton/scripts/haiku-playbook-parity` nag when a new cluster crosses the
   threshold with no matching class.
+
+---
+
+## PASS 2 — systemic fixes, log capture, and the honest per-class ledger (#136/#90)
+
+PASS 2 acts on the mining above. It is **code-first**: every change here is committed and
+verified as far as it can be **without** a builder (regex parity, shell syntax, and the
+classifier replayed against the 563 cached UNMATCHED logs); the native `RC=0` and the
+re-tag of DDB are **OWED** to the operator's rebake→re-wave, which is a separate step.
+
+**What shipped (and how it was verified):**
+
+1. **Classifier now detects classes 18–24** (`haiku-triage-failures` RULES) **and the six
+   signature gaps above are closed.** Replayed locally against the 563 cached UNMATCHED
+   logs, PASS 2 reclassifies **384** (563 → **179** still UNMATCHED): class 2 ×1
+   (zziplib), 3 ×1 (libmetalink), 4 ×3, 5 ×1 (opendune), 10 ×2, 18 ×10, 19 ×7, 20 ×347,
+   21 ×4, 22 ×1 (album), 23 ×3, 24 ×4. Of the 384, **37 are actionable
+   code/recipe/tool classes** and **347 are Class 20** (317 with the literal
+   `UNRESOLVABLE` marker + ~30 under haikuporter's native resolve wording / pkg-config /
+   libgcrypt — all auto=NO, *publish the dep*, not a recipe edit). The 179 residual
+   UNMATCHED are the 87 truncated-tail (minable after fix #2) plus ~92 genuine one-off
+   source ports. `haiku-playbook-parity` hard gate passes (21 classes resolve).
+2. **Wave-logger capture depth** (`haiku-nativebuild` `emit_log_capture`) — reclassifies
+   the 87 truncated-tail ports on the next re-wave (see the mining note above).
+3. **Class 24 host source-acq clients** — systemic provisioner add
+   (`haiku-provision-native-builder` §1a: tolerant install of mercurial/subversion/breezy/
+   lha/cvs on the HOST). Clears cube2tesseract, ira, previous, xemacs (**4**) on rebake.
+
+**Per-class clearable ledger (measured this pass) — systemic vs per-recipe vs deferred:**
+
+| Class | Ports (count) | Nature | PASS 2 disposition |
+|---|---|---|---|
+| 24 source-acq tool | cube2tesseract, ira, previous, xemacs (4) | **systemic** | provisioner §1a shipped; clears on rebake |
+| 20 dep-not-published | ~347 (incl. GL/glut from Class 18, the gtk+/libdvdcss/libgcrypt configure/pkg-config cases) | **not code** | classifier routes them (auto=NO); fix = build+**publish** the dep to green, then re-wave |
+| 18 `-lmidi/-lmidi2/-lscreensaver` | allegro, drumcircle, internalmidi, midikeyboard, rtmidi, symetrie, wolle (7) | **image-profile / hardware-gated** | evidence says the kit `.so` is absent (edgar runtime_loader); needs a booted-builder check → symlink overlay **or** image-profile/Class-20. Deferred |
+| 19 own-arch switch | glew, glew2.1, imagetoicon, tbb2018.5 (mechanical) ; julia, ocaml, jamvm, vncserver (hard) | **per-recipe source** | per-port arch-branch patch; several deferred-hard (codegen). Needs upstream build system + hardware verify |
+| 21 python-module | html5lib, pbr, librnp, libplacebo (4) | **per-recipe + Class 20** | recipe already declares setuptools; real cause = builder python 3.14 vs recipe-pinned 3.10 → bump `PYTHON_VERSIONS`=3.14 **and** publish the `_python314` deps. Deferred to hardware |
+| 22 removed/renamed API | album (`BSplitView`) + moved-header/`does not name a type` residue | **per-recipe source** | mostly deferred-hard real porting; classifier narrowly detects `does not name a type` only |
+| 23 read-only `/packages` | libu2f_server, pystring0, wrapt (3) | **per-recipe** | per-port subpackage-identifier fix (strip stray whitespace in PROVIDES/version); needs the recipe + a harvest re-run to verify. Deferred |
+
+**Honest headline.** The ≈67 ports the miner attributed to classes 18–24 are **dominated
+by Class-20 dep-publish work and genuinely-hard per-port source ports** — the clean,
+verifiable, ship-now fix is the **Class 24 provisioner add (4 ports)** plus the two
+tooling changes (classifier detection of all 7 classes; the log-capture that unblocks the
+87 truncated). The per-recipe overlays for 19/21/22/23 were **deliberately not fabricated
+here**: measured against the real logs their "obvious" one-liner fixes are wrong or
+incomplete (Class 21 is a python-version/pool problem, not a missing `BUILD_PREREQUIRES`;
+Class 18's midi libs appear absent, not unlinked), so they are enumerated precisely above
+for the hardware pass rather than shipped as unverifiable recipe files.
+
+**Deferred-hard (needs more than a recipe one-liner, confirmed this pass):**
+julia/ocaml/jamvm (Class 19 codegen ports), the moved-header/removed-API Class-22 residue,
+the libgcrypt-config configure-macro ports (gsasl/libotr/libaacs/libbdplus, routed to
+Class 20), and the Class-18 midi/screensaver image-profile question.
 
 ---
 
