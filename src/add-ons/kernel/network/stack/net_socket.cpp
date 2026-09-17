@@ -80,6 +80,66 @@ ssize_t socket_read_avail(net_socket* socket);
 static SocketList sSocketList;
 static mutex sSocketLock;
 
+// Upper bound on a single socket's send or receive buffer request. Throughput
+// already reverses above roughly 1 MiB (see the tuning notes in
+// net_socket_private()), so a generous ceiling here changes nothing for real
+// workloads and only fences off pathological SO_SNDBUF/SO_RCVBUF requests that
+// would otherwise let one socket pin unbounded kernel memory.
+static const uint32 kMaxSocketBufferSize = 32 * 1024 * 1024;
+
+// Running sum of every live socket's configured send + receive buffer sizes.
+// buffer_size is a cap on queued data rather than an eager allocation, so this
+// bounds the worst-case data the stack will admit across all sockets. It is
+// balanced exactly by the constructor (adds the defaults), the destructor
+// (subtracts), and set_socket_buffer_size() (adjusts the delta) -- the only
+// three sites that ever write buffer_size.
+static int64 sTotalSocketBufferMemory = 0;
+
+
+// Soft aggregate ceiling for sTotalSocketBufferMemory, derived from physical
+// memory so it self-scales across instance sizes. Requests that would push the
+// aggregate past it are refused gracefully (B_NO_MEMORY) instead of being
+// allowed to exhaust the kernel heap -- the memory-exhaustion flavor of #305.
+static uint64
+socket_buffer_memory_ceiling()
+{
+	static uint64 sCeiling = 0;
+	if (sCeiling == 0) {
+		// Benign init race: concurrent callers compute the same value.
+		system_info info;
+		if (get_system_info(&info) == B_OK)
+			sCeiling = (uint64)info.max_pages * B_PAGE_SIZE / 8;
+		else
+			sCeiling = 64 * 1024 * 1024;
+	}
+	return sCeiling;
+}
+
+
+// Apply an SO_SNDBUF/SO_RCVBUF request against a socket's buffer_size field,
+// clamping to the per-socket maximum and enforcing the aggregate ceiling. Only
+// growth is admission-controlled; shrinking always succeeds and returns memory
+// to the pool.
+static status_t
+set_socket_buffer_size(uint32& field, uint32 requested)
+{
+	if (requested > kMaxSocketBufferSize)
+		requested = kMaxSocketBufferSize;
+
+	int64 delta = (int64)requested - (int64)field;
+	if (delta > 0) {
+		int64 total = atomic_add64(&sTotalSocketBufferMemory, delta) + delta;
+		if ((uint64)total > socket_buffer_memory_ceiling()) {
+			atomic_add64(&sTotalSocketBufferMemory, -delta);
+			return B_NO_MEMORY;
+		}
+	} else if (delta < 0)
+		atomic_add64(&sTotalSocketBufferMemory, delta);
+
+	field = requested;
+	return B_OK;
+}
+
 
 net_socket_private::net_socket_private()
 	:
@@ -140,12 +200,23 @@ net_socket_private::net_socket_private()
 	receive.buffer_size = 65535;
 	receive.low_water_mark = 1;
 	receive.timeout = B_INFINITE_TIMEOUT;
+
+	// Account the default allowance so the aggregate reflects every live socket.
+	// Balanced by ~net_socket_private(); the defaults are always well under the
+	// ceiling, so creation itself is never refused here.
+	atomic_add64(&sTotalSocketBufferMemory,
+		(int64)send.buffer_size + (int64)receive.buffer_size);
 }
 
 
 net_socket_private::~net_socket_private()
 {
 	TRACE("delete net_socket %p\n", this);
+
+	// Return this socket's allowance to the aggregate (balances the constructor
+	// and any SO_SNDBUF/SO_RCVBUF growth applied via set_socket_buffer_size()).
+	atomic_add64(&sTotalSocketBufferMemory,
+		-((int64)send.buffer_size + (int64)receive.buffer_size));
 
 	if (parent != NULL)
 		panic("socket still has a parent!");
@@ -587,28 +658,55 @@ socket_receive_data(net_socket* socket, size_t length, uint32 flags,
 status_t
 socket_get_next_stat(uint32* _cookie, int family, struct net_stat* stat)
 {
-	MutexLocker locker(sSocketLock);
+	// The list walk and cookie bookkeeping run under sSocketLock, but the
+	// protocol control() call below must not: it reaches TCPEndpoint::FillStat(),
+	// which locks the per-endpoint fLock. The teardown path takes fLock first and
+	// then sSocketLock (Connect/Listen -> set_max_backlog -> RemoveFromParent),
+	// so holding sSocketLock across control() closes an AB-BA deadlock that
+	// freezes the whole net stack (#305). Instead, pin a hard reference to the
+	// target socket while sSocketLock is held, drop the lock, then fill the stat
+	// with no global lock held -- removing the "sSocketLock held while waiting for
+	// fLock" edge so the wait-for cycle can no longer form.
+	BReference<net_socket_private> socket;
 
-	net_socket_private* socket = NULL;
-	SocketList::Iterator iterator = sSocketList.GetIterator();
-	uint32 cookie = *_cookie;
-	uint32 count = 0;
+	{
+		MutexLocker locker(sSocketLock);
 
-	while (true) {
-		socket = iterator.Next();
-		if (socket == NULL)
-			return B_ENTRY_NOT_FOUND;
+		SocketList::Iterator iterator = sSocketList.GetIterator();
+		uint32 cookie = *_cookie;
+		uint32 count = 0;
 
-		// TODO: also traverse the pending connections
-		if (count == cookie)
-			break;
+		while (true) {
+			net_socket_private* candidate = iterator.Next();
+			if (candidate == NULL)
+				return B_ENTRY_NOT_FOUND;
 
-		if (family == -1 || family == socket->family)
-			count++;
+			// TODO: also traverse the pending connections
+			if (count == cookie) {
+				// Acquire a hard reference while sSocketLock is still held. A
+				// socket whose destructor already started is parked in
+				// ~net_socket_private() waiting for this very lock, so it cannot
+				// vanish under us; GetReference() is an atomic increment-if-nonzero
+				// that fails cleanly for an object whose use count already reached
+				// zero (the same primitive socket_acquire() relies on). An entry
+				// that cannot be acquired is mid-teardown -- treat it as absent
+				// and let the next entry fill this slot.
+				socket = BWeakReference<net_socket_private>(candidate).GetReference();
+				if (!socket.IsSet())
+					continue;
+				break;
+			}
+
+			if (family == -1 || family == candidate->family)
+				count++;
+		}
+
+		*_cookie = count + 1;
 	}
 
-	*_cookie = count + 1;
-
+	// sSocketLock has been released. The hard reference keeps the socket -- and
+	// therefore first_protocol/first_info and the TCP endpoint -- alive for the
+	// duration of the unlocked stat fill.
 	stat->family = socket->family;
 	stat->type = socket->type;
 	stat->protocol = socket->protocol;
@@ -1531,15 +1629,15 @@ socket_set_option(net_socket* socket, int level, int option, const void* value,
 			if (length != sizeof(uint32))
 				return B_BAD_VALUE;
 
-			socket->send.buffer_size = *(const uint32*)value;
-			return B_OK;
+			return set_socket_buffer_size(socket->send.buffer_size,
+				*(const uint32*)value);
 
 		case SO_RCVBUF:
 			if (length != sizeof(uint32))
 				return B_BAD_VALUE;
 
-			socket->receive.buffer_size = *(const uint32*)value;
-			return B_OK;
+			return set_socket_buffer_size(socket->receive.buffer_size,
+				*(const uint32*)value);
 
 		case SO_SNDLOWAT:
 			if (length != sizeof(uint32))
