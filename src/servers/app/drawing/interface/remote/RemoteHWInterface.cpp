@@ -286,13 +286,27 @@ RemoteHWInterface::_EventThread()
 			// StreamingRingBuffer::Write() once the 16 KiB fills, which wedges
 			// the accept loop -- accepted sockets pile up in CLOSE_WAIT and new
 			// clients never get their RP_INIT_CONNECTION acknowledged (see
-			// issue #294). A NextMessage() failure here is a framing error or a
-			// deliberate buffer reset on (dis)connect (B_CANCELED), not a reason
-			// to tear the whole service down: resynchronise to the next
-			// connection's stream and keep going.
-			TRACE_ERROR("failed to read message from receiver, resyncing: %s\n",
-				strerror(result));
-			fReceiveBuffer->MakeEmpty();
+			// issue #294). So never return here: resynchronise and keep going.
+			//
+			// B_CANCELED is not a framing error. It is StreamingRingBuffer::
+			// MakeEmpty() waking this parked reader when the receive buffer is
+			// flushed at a connection boundary (_ConnectionClosed()). The buffer
+			// is already empty and our framing must restart -- but we must NOT
+			// flush it again here: the receiver may already be writing the next
+			// client's one and only RP_INIT_CONNECTION into the ring, and a
+			// second MakeEmpty() races that write and discards it, leaving the
+			// remote desktop black for every client. Just drop our partial
+			// framing and re-block on the next read, which then returns that
+			// RP_INIT_CONNECTION.
+			//
+			// Any other error is a genuine framing desync (a truncated or
+			// malformed message); the stream is already unusable, so empty the
+			// buffer to realign to the next message boundary before continuing.
+			if (result != B_CANCELED) {
+				TRACE_ERROR("failed to read message from receiver, resyncing: "
+					"%s\n", strerror(result));
+				fReceiveBuffer->MakeEmpty();
+			}
 			message.Reset();
 			continue;
 		}
@@ -410,13 +424,15 @@ RemoteHWInterface::_NewConnection(BNetEndpoint &endpoint)
 
 	fSendBuffer->MakeEmpty();
 
-	// Drop anything still buffered from a previous client. The receive stream
-	// is a single byte stream with no per-connection framing, so a partial
-	// message left behind by a client that vanished mid-message would otherwise
-	// be read as the head of this new client's stream and desynchronise it --
-	// eventually producing a framing error. Emptying here, at the connection
-	// boundary, aligns the event thread to this client's first message.
-	fReceiveBuffer->MakeEmpty();
+	// Deliberately do NOT flush fReceiveBuffer here. A departed client's partial
+	// message is already dropped at disconnect by _ConnectionClosed(), which runs
+	// before the next client is accepted, so the receive stream is clean by the
+	// time we get here. Flushing again at this point would race the receiver
+	// thread writing this new client's RP_INIT_CONNECTION into the ring: the
+	// flush cancels the parked event-thread read (B_CANCELED) and empties the
+	// buffer out from under that write, discarding the one message every client
+	// sends to bring up its display -- a black screen for every connection.
+	// Keep the receive-side flush confined to the disconnect path.
 
 	BNetEndpoint *sendEndpoint = new(std::nothrow) BNetEndpoint(endpoint);
 	if (sendEndpoint == NULL)
