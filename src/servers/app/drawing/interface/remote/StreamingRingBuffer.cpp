@@ -96,6 +96,17 @@ StreamingRingBuffer::Read(void *buffer, size_t length, bool onlyBlockOnNoData)
 			if (onlyBlockOnNoData && readSize > 0)
 				return readSize;
 
+			// Honour a cancel requested (under fDataLocker) since the
+			// caller's last stop check, before committing to park. Without
+			// this a ClearReader()/MakeEmpty() that ran while this thread
+			// was between that check and here would not find fReaderWaiting
+			// set, so its wake would be lost and this Read() would block
+			// forever.
+			if (fCancelRead) {
+				fCancelRead = false;
+				return B_CANCELED;
+			}
+
 			fReaderWaiting = true;
 			dataLock.Unlock();
 
@@ -244,6 +255,11 @@ StreamingRingBuffer::SetReader(void *reader)
 	if (!dataLock.IsLocked())
 		return;
 
+	// A prior ClearReader() may have left the read armed for cancel on behalf of
+	// the departed reader (see below). Clear it so this fresh reader's first
+	// Read() is serviced normally instead of returning a spurious B_CANCELED,
+	// which would kill the new sender's drain thread and blank the display.
+	fCancelRead = false;
 	fReader = reader;
 }
 
@@ -268,5 +284,19 @@ StreamingRingBuffer::ClearReader(void *reader)
 	if (fWriterWaiting) {
 		release_sem_etc(fWriterNotifier, 1, 0);
 		fWriterWaiting = false;
+	}
+
+	// Cancel the reader too. The only reader is the sender thread being torn
+	// down; without this its owner cannot join it (it would block forever on an
+	// empty buffer) and so cannot close the socket -- which is what leaked a
+	// CLOSE_WAIT per reconnect (issue #308). fCancelRead is armed even when no
+	// reader is currently parked to close the lost-wakeup window where the thread
+	// is between its stop check and parking in Read(): Read() re-checks
+	// fCancelRead under fDataLocker before parking and exits instead of blocking.
+	// SetReader() disarms it for the successor.
+	fCancelRead = true;
+	if (fReaderWaiting) {
+		release_sem_etc(fReaderNotifier, 1, 0);
+		fReaderWaiting = false;
 	}
 }
