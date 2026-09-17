@@ -157,7 +157,7 @@ phases:
       # Stage the desktop/cloud-init image files the UserBuildConfig also expects
       # (build-openssh only emits the ssh subset; copy the rest from the recipe).
       - |
-        for f in launch-cloud-init remote-desktop.sh launch-remote-desktop UserSetupEnvironment cargo-config.toml launch-partition-grow; do
+        for f in launch-cloud-init remote-desktop.sh launch-remote-desktop UserSetupEnvironment cargo-config.toml launch-partition-grow partition-grow.sh; do
           cp "$HAIKU_TOP/graviton/ssh/files/$f" "$HG_SSH_DIR/image/$f"
         done
       # ---- re-vendor the baked SYSTEM packages to "DeBeOS" (issue #39) ---
