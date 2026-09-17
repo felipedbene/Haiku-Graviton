@@ -1,0 +1,187 @@
+#!/usr/bin/env python3
+"""haiku-playbook-parity -- keep the porting playbook, the triage classifier, and the
+mined failure frontier in lockstep (#90/#136).
+
+It answers two questions and is meant to run as a git pre-commit / CI gate:
+
+  (a) HARD GATE -- does every failure class the *classifier* recognises have a matching
+      *playbook* section? `haiku-triage-failures` stamps ports with a triage_class and a
+      fix_ref anchor into `porting-playbook.md`. If someone adds a class to the RULES
+      ruleset but forgets the playbook section (or renames a heading and breaks the
+      anchor), the classifier points ports at a dead link. This check FAILS (exit 3) and
+      names the offending class(es). It also checks the reverse-ish direction: a playbook
+      "## Class N:" section whose number the ruleset does NOT yet recognise is reported
+      as an INFO note (documented-but-not-detected -- e.g. classes 18-24 until the
+      ruleset regex is extended), not a failure.
+
+  (b) SOFT NUDGE -- has `haiku-pattern-miner` found an UNMATCHED cluster big enough to be
+      a missing class? Everything the miner clusters is by definition unclassified
+      (triage_class=UNMATCHED). So any cluster of >= --threshold ports (default 5), other
+      than the truncated-tail bucket, is a "you're probably missing a pattern" signal.
+      This WARNS (exit 0 by default; exit 4 with --strict) and lists the clusters. The
+      miner needs AWS read access, so this half is opt-in: pass --mine to run it live, or
+      --miner-json <report.json> to consume a report produced elsewhere (e.g. a nightly
+      CI job). With neither, (b) is skipped and only the offline gate (a) runs -- which is
+      what a fast pre-commit hook wants.
+
+Exit codes: 0 ok (gate passed; warnings are non-fatal) | 3 gate (a) failed |
+4 (b) tripped under --strict | 2 usage/IO error.
+
+USAGE
+  # fast offline gate -- the pre-commit default (no AWS):
+  graviton/scripts/haiku-playbook-parity
+
+  # also nag about mined clusters, consuming a pre-built miner report:
+  graviton/scripts/haiku-playbook-parity --miner-json /tmp/miner.json --threshold 5
+
+  # CI: run the miner live and fail the build if a big cluster has no class:
+  AWS_PROFILE=haiku-graviton graviton/scripts/haiku-playbook-parity --mine --strict
+"""
+import argparse
+import importlib.machinery
+import importlib.util
+import json
+import os
+import re
+import subprocess
+import sys
+
+HERE = os.path.dirname(os.path.abspath(__file__))
+REPO = os.path.abspath(os.path.join(HERE, "..", ".."))
+PLAYBOOK = os.path.join(REPO, "graviton", "docs", "porting-playbook.md")
+TRIAGE = os.path.join(HERE, "haiku-triage-failures")
+MINER = os.path.join(HERE, "haiku-pattern-miner")
+TRUNCATED_SIG = "(no salient line -- truncated tail)"
+
+
+def gh_anchor(heading):
+    """GitHub heading -> fragment anchor: lowercase, drop chars that are not
+    word/space/hyphen, spaces -> hyphens (NOT collapsed, so 'a / b' -> 'a--b')."""
+    a = heading.strip().lower()
+    a = re.sub(r"[^\w\s-]", "", a)
+    return a.replace(" ", "-")
+
+
+def load_ruleset_classes():
+    """Import RULES from haiku-triage-failures and return {class_no: slug}."""
+    loader = importlib.machinery.SourceFileLoader("htf", TRIAGE)
+    spec = importlib.util.spec_from_loader("htf", loader)
+    mod = importlib.util.module_from_spec(spec)
+    loader.exec_module(mod)
+    return {cls: slug for cls, slug, _auto, _pats, _note in mod.RULES}
+
+
+def load_playbook_sections():
+    """Return (anchors:set, class_numbers:set) from the playbook's '## ' headings."""
+    anchors, classes = set(), set()
+    with open(PLAYBOOK, encoding="utf-8") as f:
+        for ln in f:
+            m = re.match(r"^##\s+(.*)", ln)
+            if not m:
+                continue
+            heading = m.group(1)
+            anchors.add(gh_anchor(heading))
+            cm = re.match(r"class\s+(\d+):", heading.strip(), re.I)
+            if cm:
+                classes.add(int(cm.group(1)))
+    return anchors, classes
+
+
+def run_miner_json(threshold):
+    """Run haiku-pattern-miner --out to a temp file and return its parsed report."""
+    import tempfile
+    tmp = tempfile.NamedTemporaryFile(suffix=".json", delete=False).name
+    cmd = [sys.executable, MINER, "--out", tmp, "--min-cluster", str(threshold), "--top", "50"]
+    subprocess.run(cmd, check=True)
+    with open(tmp) as f:
+        return json.load(f)
+
+
+def main():
+    ap = argparse.ArgumentParser(description="Playbook <-> classifier <-> miner parity gate.")
+    ap.add_argument("--threshold", type=int, default=5,
+                    help="miner cluster size that triggers the (b) nudge (default 5).")
+    g = ap.add_mutually_exclusive_group()
+    g.add_argument("--mine", action="store_true",
+                   help="run haiku-pattern-miner live for check (b) (needs AWS read).")
+    g.add_argument("--miner-json", help="consume an existing haiku-pattern-miner --out report.")
+    ap.add_argument("--strict", action="store_true",
+                    help="make check (b) fatal (exit 4) instead of a warning.")
+    args = ap.parse_args()
+
+    if not os.path.exists(PLAYBOOK):
+        print("FATAL: playbook not found at %s" % PLAYBOOK, file=sys.stderr)
+        return 2
+    if not os.path.exists(TRIAGE):
+        print("FATAL: classifier not found at %s" % TRIAGE, file=sys.stderr)
+        return 2
+
+    rc = 0
+
+    # ---- (a) HARD GATE: every ruleset class has a playbook section ----------
+    ruleset = load_ruleset_classes()
+    anchors, pb_classes = load_playbook_sections()
+    missing = [(cls, slug) for cls, slug in sorted(ruleset.items()) if slug not in anchors]
+
+    print("=" * 70)
+    print("haiku-playbook-parity")
+    print("=" * 70)
+    print("(a) classifier ruleset classes : %d" % len(ruleset))
+    print("    playbook '## Class N' sects : %s" % ", ".join(str(c) for c in sorted(pb_classes)))
+    if missing:
+        rc = 3
+        print("\nFAIL: ruleset class(es) with NO matching playbook section/anchor:")
+        for cls, slug in missing:
+            print("   class %s -> #%s  (add a '## Class %s: …' section, or fix its heading)"
+                  % (cls, slug, cls))
+    else:
+        print("    OK: every classifier class resolves to a playbook section.")
+
+    # INFO: playbook classes the ruleset does not yet detect (documented-but-not-detected)
+    undetected = sorted(pb_classes - set(ruleset.keys()))
+    # 15-17 are reserved for PR #309; note but don't editorialise beyond that.
+    if undetected:
+        print("\n    INFO: playbook classes not yet in the classifier ruleset: %s"
+              % ", ".join(str(c) for c in undetected))
+        print("          (documented, but haiku-triage-failures has no regex for them "
+              "yet -> their ports stay UNMATCHED until the ruleset is extended.)")
+
+    # ---- (b) SOFT NUDGE: big UNMATCHED clusters with no class ---------------
+    report = None
+    if args.miner_json:
+        try:
+            with open(args.miner_json) as f:
+                report = json.load(f)
+        except OSError as e:
+            print("\nWARN: could not read --miner-json %s: %s" % (args.miner_json, e),
+                  file=sys.stderr)
+    elif args.mine:
+        try:
+            report = run_miner_json(args.threshold)
+        except Exception as e:
+            print("\nWARN: --mine failed (%s); skipping check (b)." % e, file=sys.stderr)
+
+    print("\n(b) mined-cluster nudge : ", end="")
+    if report is None:
+        print("skipped (pass --mine or --miner-json to enable).")
+    else:
+        clusters = [c for c in report.get("clusters", [])
+                    if c["signature"] != TRUNCATED_SIG and c["count"] >= args.threshold]
+        if not clusters:
+            print("OK: no UNMATCHED cluster >= %d ports without a class." % args.threshold)
+        else:
+            print("%d UNMATCHED cluster(s) >= %d ports have NO playbook class:"
+                  % (len(clusters), args.threshold))
+            for c in sorted(clusters, key=lambda x: -x["count"]):
+                print("   %4d ports | %s" % (c["count"], c["signature"][:60]))
+                print("             e.g. %s" % (c.get("representative", "")[:66]))
+            print("   -> mine these with haiku-pattern-miner and add classes to the playbook.")
+            if args.strict:
+                rc = rc or 4
+
+    print("=" * 70)
+    return rc
+
+
+if __name__ == "__main__":
+    sys.exit(main())
