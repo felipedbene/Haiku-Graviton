@@ -44,14 +44,13 @@ ARCH="${ARCH:-arm64}"
 PKG_URL="${HG_REPO_URL:-http://packages.debene.dev/$ARCH}"
 region="${AWS_DEFAULT_REGION:-${AWS_REGION:-us-west-2}}"
 
-# Re-stamp guard (issue #168): the vendor re-stamp extracts each hpkg, and a
-# pathological package (e.g. yab_ide) can decompress to tens of GiB and ENOSPC
-# the publisher mid-`package extract`, aborting the whole batch. Pre-flight the
-# decompressed size from metadata (no extraction), and require it to fit the
-# work filesystem with headroom; a package over either bound is skipped and
-# reported for human handling rather than failing the publish of the rest.
-RESTAMP_MAX_BYTES="${RESTAMP_MAX_BYTES:-4294967296}"            # 4 GiB
-RESTAMP_HEADROOM_BYTES="${RESTAMP_HEADROOM_BYTES:-1073741824}"  # 1 GiB
+# The vendor+packager re-stamp (step 3) is METADATA-ONLY (issue #41/#164): it
+# edits only the .PackageInfo and splices it back with `package add -f -i`, never
+# unpacking a package's contents. So there is no decompression-bomb / ENOSPC
+# exposure and the former #168 size guard -- which pre-flighted the whole-tree
+# `package extract` -- is gone: a package's uncompressed size is irrelevant when
+# its contents are never written out. See step 3 for why the old extract+create
+# approach failed on the publisher's ext4.
 
 die() { echo "haiku-repo-add: $*" >&2; exit 1; }
 : "${HG_REPO_S3:?set HG_REPO_S3=s3://<bucket>/<prefix>/$ARCH}"
@@ -89,22 +88,6 @@ canonical_name() {
 		END { if (n && v && a) printf "%s-%s-%s.hpkg", n, v, a }'
 }
 
-# Total decompressed size of an hpkg's contents, in bytes, read from
-# `package list` WITHOUT extracting anything: each entry line prints its
-# uncompressed size in the field just before the type+permission token
-# (e.g. "-rw-r--r--"). Summing those bounds what `package extract` would write.
-uncompressed_bytes() {
-	"$PKG_TOOL" list "$1" 2>/dev/null | awk '
-		{ for (i = 2; i <= NF; i++)
-			if ($i ~ /^[-dl?][-rwxs]{9}$/) { s += $(i - 1); break } }
-		END { printf "%.0f", s + 0 }'
-}
-
-# Available bytes on the filesystem holding the given path.
-avail_bytes() {
-	df -Pk "$1" 2>/dev/null | awk 'NR==2 { printf "%.0f", $4 * 1024 }'
-}
-
 echo "== 3. re-stamp incoming to vendor $VENDOR + packager $PACKAGER and stage under canonical names =="
 added=0
 skipped=0
@@ -114,35 +97,36 @@ for f in "$WORK/incoming"/*.hpkg; do
 	base="$(basename "$f")"
 	cur="$("$PKG_TOOL" list -i "$f" 2>/dev/null | sed -nE 's/^[[:space:]]*vendor:[[:space:]]*"?([^"]*)"?[[:space:]]*$/\1/p' | head -1)"
 	cur_packager="$("$PKG_TOOL" list -i "$f" 2>/dev/null | sed -nE 's/^[[:space:]]*packager:[[:space:]]*"?(.*[^"])"?[[:space:]]*$/\1/p' | head -1)"
+	# Always stage a plain copy first; any re-stamp then edits the copy IN PLACE.
+	# A copy is cheap and carries NO ENOSPC risk regardless of the package's
+	# uncompressed size, so there is no size guard to trip.
 	staged="$WORK/staged.hpkg"; rm -f "$staged"
+	cp -p "$f" "$staged"
 	if [ "$cur" = "$VENDOR" ] && [ "$cur_packager" = "$PACKAGER" ]; then
-		# Already canonical (vendor AND packager): a copy, no extraction, so no
-		# ENOSPC risk regardless of decompressed size.
-		cp -p "$f" "$staged"
+		# Already canonical (vendor AND packager): the staged copy is final.
+		:
 	else
-		# Decompression-bomb guard (issue #168): only the re-stamp's
-		# extract+repack can blow out the disk. Pre-flight the decompressed size
-		# and skip+report rather than ENOSPC the peer and abort the batch.
-		need="$(uncompressed_bytes "$f")"; need="${need:-0}"
-		avail="$(avail_bytes "$WORK")"; avail="${avail:-0}"
-		if [ "$need" -gt "$RESTAMP_MAX_BYTES" ]; then
-			echo "   ! SKIP $base: decompresses to ${need}B > cap ${RESTAMP_MAX_BYTES}B (restamp-enospc-decompression-bomb)" >&2
-			skipped=$((skipped + 1)); skipped_list="$skipped_list $base"
-			continue
-		fi
-		if [ "$avail" -gt 0 ] && [ "$((need + RESTAMP_HEADROOM_BYTES))" -gt "$avail" ]; then
-			echo "   ! SKIP $base: decompressed ${need}B + headroom will not fit ${avail}B free (restamp-nospace)" >&2
-			skipped=$((skipped + 1)); skipped_list="$skipped_list $base"
-			continue
-		fi
-		# Extract onto the work filesystem (the one we size-checked) so the EXIT
-		# trap cleans it and df above is authoritative.
+		# METADATA-ONLY re-stamp (issue #41/#164): extract ONLY the .PackageInfo,
+		# edit the vendor + packager fields, and splice it back with
+		# `package add -f -i`, which rewrites just the package's info attribute
+		# WITHOUT round-tripping any file contents. This mirrors
+		# haiku-repo-restamp-packager (#285).
+		#
+		# The former approach -- `package extract` (whole tree) + `package create`
+		# -- wrote every entry's BeOS attributes onto the publisher's ext4 and
+		# FAILED there: setting a user xattr on a symlink is EPERM, and a large
+		# icon attribute overflows ext4's xattr block ("No space left on device").
+		# instead-3.5.0-1-arm64 failed exactly this way (restamp-extract-failed)
+		# even at a 100 GiB root -- it is the extract, not the disk size. Extracting
+		# only the .PackageInfo touches none of those attributed entries.
 		tmp="$(mktemp -d -p "$WORK")"
-		# Even under the cap the extract or repack can still fail (an estimate
-		# miss, a corrupt package); under `set -e` that would abort the batch, so
-		# tolerate it and escalate this one package instead.
-		if ! "$PKG_TOOL" extract -C "$tmp" "$f" || [ ! -f "$tmp/.PackageInfo" ]; then
-			echo "   ! SKIP $base: package extract failed (restamp-extract-failed)" >&2
+		# `package extract ... .PackageInfo` may exit non-zero after writing the
+		# file (it also touches a later entry's attribute), so gate on the file
+		# existing, not on the exit code. A genuine failure is escalated for this
+		# one package (skip+report) rather than aborting the batch under `set -e`.
+		"$PKG_TOOL" extract -C "$tmp" "$staged" .PackageInfo >/dev/null 2>&1 || true
+		if [ ! -f "$tmp/.PackageInfo" ]; then
+			echo "   ! SKIP $base: could not extract .PackageInfo (restamp-extract-failed)" >&2
 			rm -rf "$tmp"
 			skipped=$((skipped + 1)); skipped_list="$skipped_list $base"
 			continue
@@ -159,8 +143,9 @@ for f in "$WORK/incoming"/*.hpkg; do
 		else
 			printf '\npackager\t"%s"\n' "$PACKAGER" >> "$tmp/.PackageInfo"
 		fi
-		if ! "$PKG_TOOL" create -C "$tmp" "$staged"; then
-			echo "   ! SKIP $base: package create failed (restamp-create-failed)" >&2
+		# Splice the edited .PackageInfo back into the staged copy in place.
+		if ! "$PKG_TOOL" add -f -q -i "$tmp/.PackageInfo" -C "$tmp" "$staged" .PackageInfo >/dev/null 2>&1; then
+			echo "   ! SKIP $base: package add (metadata re-stamp) failed (restamp-add-failed)" >&2
 			rm -rf "$tmp"
 			skipped=$((skipped + 1)); skipped_list="$skipped_list $base"
 			continue
@@ -231,9 +216,10 @@ else
 fi
 
 echo "== 7. clear consumed incoming (only packages we published) =="
-# Remove only the incoming *.hpkg we actually published; a skipped package
-# (issue #168) stays in incoming so it is not silently lost before a human
-# handles it. Delete per-basename rather than the whole prefix recursively.
+# Remove only the incoming *.hpkg we actually published; a skipped package (one
+# whose .PackageInfo could not be read/rewritten) stays in incoming so it is not
+# silently lost before a human handles it. Delete per-basename rather than the
+# whole prefix recursively.
 for b in $published_bases; do
 	aws s3 rm "${HG_INCOMING_S3%/}/$b" --region "$region" --only-show-errors >/dev/null 2>&1 || true
 done

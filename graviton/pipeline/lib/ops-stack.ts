@@ -99,6 +99,22 @@ export class OpsStack extends cdk.Stack {
       actions: ['s3:DeleteObject'],
       resources: [`arn:aws:s3:::${publishBucket}/*`],
     }));
+    // CloudFront invalidation on the repo CDN. The publisher path
+    // (haiku-repo-add / haiku-repo-publish-ephemeral) runs under this role's
+    // instance profile and, when HG_CF_DIST is set, invalidates the mutable
+    // index paths (/<arch>/repo, repo.info, repo.sha256) after an add so a
+    // `pkgman refresh` sees the new package without waiting out the CDN TTL. The
+    // role previously lacked cloudfront:CreateInvalidation, so that step failed
+    // AccessDenied and the invalidation had to be done out-of-band with admin
+    // creds (#164). Granting it here makes the publish self-invalidate. Scoped to
+    // the configured repo distribution when known; otherwise to this account's
+    // distributions (never a bare `*`). Least-privilege: CreateInvalidation only.
+    builderRole.addToPolicy(new iam.PolicyStatement({
+      actions: ['cloudfront:CreateInvalidation'],
+      resources: [props.config.repoCloudFrontDistId
+        ? `arn:aws:cloudfront::${this.account}:distribution/${props.config.repoCloudFrontDistId}`
+        : `arn:aws:cloudfront::${this.account}:distribution/*`],
+    }));
     const builderProfile = new iam.CfnInstanceProfile(this, 'BuilderProfile', {
       roles: [builderRole.roleName],
     });
