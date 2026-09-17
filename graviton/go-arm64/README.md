@@ -1,10 +1,11 @@
-# Go toolchain for DeBeOS (haiku/arm64) — M0
+# Go toolchain for DeBeOS (haiku/arm64) — M0 + M1
 
 This directory holds the DeBeOS-side artifacts for bringing the Go toolchain to
 haiku/arm64 (AWS Graviton). The design and milestone ladder live in
-[`../docs/go-arm64-bringup-scope.md`](../docs/go-arm64-bringup-scope.md); this
-is the **M0** deliverable: *a `GOOS=haiku GOARCH=arm64` gc Go toolchain that
-cross-builds from a Linux host.*
+[`../docs/go-arm64-bringup-scope.md`](../docs/go-arm64-bringup-scope.md). **M0**
+is *a `GOOS=haiku GOARCH=arm64` gc Go toolchain that cross-builds from a Linux
+host*; **M1** is *a cross-compiled binary that runs on real Graviton Haiku
+hardware, prints, and exits 0* — and validates the M0 runtime simplifications.
 
 ## Status: M0 DONE (cross-build proven)
 
@@ -25,7 +26,22 @@ x86_64-only Haiku fork) plus the arm64 patchset in [`patches/`](patches/):
 See [`logs/M0-proof.txt`](logs/M0-proof.txt) and
 [`logs/make.bash-haiku-arm64.log`](logs/make.bash-haiku-arm64.log).
 
-Running a binary on real Graviton hardware is **M1** and is not claimed here.
+## Status: M1 DONE (runs on real Graviton hardware)
+
+Five cross-compiled `haiku/arm64` binaries (sources in [`tests/`](tests/)) were
+pushed to a Graviton `c7g.large` running DeBeOS/Haiku arm64 (hrev59996) over SSM
+and executed. All exit 0 — full transcript in [`logs/M1-proof.txt`](logs/M1-proof.txt):
+
+| Test | Result | What it exercises |
+|---|---|---|
+| `hello.go` — `println("hi")` | **`hi`, exit 0** — the M1 must-pass gate | program entry, runtime init |
+| `fmthello.go` — `fmt.Println` | `hello from haiku/arm64`, exit 0 | fmt + buffered stdout via libroot |
+| `chans.go` — 8 goroutines + channel + `WaitGroup` | `goroutine-sum 140` (correct), exit 0 | scheduler, goroutines, channels |
+| `syscalls.go` — `time.Sleep`+`getpid`+`write(2)` | `syscall-write-ok` / `pid=950 slept=200ms`, exit 0 | timer, getpid, write via the libroot dispatcher |
+| `sigtest.go` — nil-deref → SIGSEGV → recover | `recovered-from-signal: … nil pointer dereference`, exit 0 | **sigtramp → sigtrampgo → sigpanic + mcontext decode** |
+
+The bootstrap tarball is hosted (see `SOURCE_URI_3` in the recipe): a `GET` of
+that URL returns the exact `sha256=2fe368b4…d667` tarball.
 
 ## How to reproduce (from a Linux host)
 
@@ -92,22 +108,25 @@ Wiring changes to existing files:
   decode, defs, syscall tables, and all linker wiring are complete and the
   emitted arm64 assembly disassembles correctly (LR auto-saved, correct
   `libcall` struct offsets, args in R0–R5, `g` in R28).
-- **Simplifications, correct for M0, to re-verify on hardware (M1):**
-  - `sigtramp` uses the modern `sigtrampgo` path (as OpenBSD/Darwin arm64 do)
-    rather than the amd64 port's Solaris-era manual `m.libcall` save/restore.
-  - `usleep1` calls libroot directly (its only caller, `usleep_no_g`, runs
-    without a g); the g-bearing path goes through `sysvicall1`.
-  - `zsysnum_haiku_arm64.go` was copied from the amd64 table. Haiku reaches the
-    kernel through libroot, not raw syscall numbers, so these constants are
-    largely cosmetic — but they should be regenerated from the arm64 libroot
-    `syscalls.S.inc` before relying on any raw-syscall value.
-  - The arm64 `mcontext`/`ucontext` offsets are hand-derived from the Haiku
-    arm64 `struct vregs`; register decode in a signal handler is exercised only
-    on hardware (M1).
+- **M0 simplifications — re-verified on hardware in M1 (see `logs/M1-proof.txt`):**
+  - `sigtramp` (modern `sigtrampgo` path, as OpenBSD/Darwin arm64 do) —
+    **VALIDATED.** `sigtest.go` forced a real SIGSEGV; the runtime caught it,
+    ran `sigtramp → sigtrampgo → sigpanic`, and recovered cleanly.
+  - The arm64 `mcontext`/`ucontext` offsets, hand-derived from Haiku's arm64
+    `struct vregs` — **VALIDATED** by the same test: the handler decoded the
+    correct fault and synthesised the exact nil-pointer panic. A wrong offset
+    would have mis-decoded the fault (double-fault / hang / garbage panic).
+  - `usleep1` / the g-bearing sleep through `sysvicall1` — **VALIDATED**
+    (`syscalls.go`: `time.Sleep(200ms)` measured `slept=200ms`).
+  - `zsysnum_haiku_arm64.go` copied from the amd64 table — **not exercised as
+    raw syscall numbers, by design.** Haiku reaches the kernel through libroot,
+    so `getpid`/`write` went through the dispatcher, not raw SVC. The table
+    stays cosmetic; regenerating it from the arm64 libroot `syscalls.S.inc`
+    remains a correctness-hygiene follow-up, not a blocker.
 
-## Next step (M1)
+## Next step (M2)
 
-Boot a Graviton Haiku instance and run the cross-compiled hello-world: it must
-print and exit 0. Then M2 (net/http + goroutines + netpoller under load). The
-arm64 bootstrap tarball must be hosted in the DeBeOS artifact store and its URL
-filled into `golang-1.26.1.recipe` (`SOURCE_URI_3`).
+M0 (cross-build) and M1 (runs on hardware) are done. Next is **M2**: an HTTPS
+`net/http` GET returning 200 plus N concurrent goroutines/connections under load
+with no netpoller hang — the first real exercise of the poll-based
+`netpoll_haiku.go` on arm64.

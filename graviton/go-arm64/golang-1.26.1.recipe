@@ -31,10 +31,11 @@ CHECKSUM_SHA256_2="b739784c8301a050c6aad7865b883ad06de5a6363fe0f2170cc9b502c7280
 SOURCE_DIR_2="go-haiku-amd64-bootstrap"
 
 # arm64 bootstrap, produced by cross-building this same tree (plus the patchset)
-# from a Linux host with `GOOS=haiku GOARCH=arm64 ./bootstrap.bash`. Host it in
-# the DeBeOS package/artifact store and set the URI here. Checksum/size below
-# are for the tarball produced by the M0 bring-up (see ./README.md).
-SOURCE_URI_3="https://REPLACE-WITH-DEBEOS-ARTIFACT-HOST/go-1.26.1-haiku-arm64-bootstrap.tbz"
+# from a Linux host with `GOOS=haiku GOARCH=arm64 ./bootstrap.bash`. Hosted in
+# the DeBeOS download mirror (CloudFront-fronted, same store as every other
+# source mirror). Checksum/size below are for the tarball produced by the M0
+# bring-up (see ./README.md); the same toolchain ran on real Graviton in M1.
+SOURCE_URI_3="https://sources.debene.dev/go-arm64/go-1.26.1-haiku-arm64-bootstrap.tbz"
 CHECKSUM_SHA256_3="2fe368b44cdb4789016499ccf5d5308ad4d6cdd1aa176001e9617baff5e8d667"
 SOURCE_DIR_3="go-haiku-arm64-bootstrap"
 

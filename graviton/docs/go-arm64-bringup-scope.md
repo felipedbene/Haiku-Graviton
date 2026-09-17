@@ -1,11 +1,13 @@
 # Go toolchain bring-up on DeBeOS (Haiku arm64) — scoping
 
-**Status:** **M0 DONE** (cross-build proven, 2026-09-17) — the rest is still
-scoping. A `GOOS=haiku GOARCH=arm64` gc Go toolchain now cross-builds from a
-Linux host from the `korli/go` fork plus a small arm64 patchset; a trivial
-program cross-compiles to a AArch64 Haiku ELF and an arm64 bootstrap tarball
-was produced. Artifacts, patchset, overlay recipe and proof logs:
-[`../go-arm64/`](../go-arm64/). Running on hardware is M1 and not yet done. This
+**Status:** **M0 + M1 DONE** (2026-09-17) — the rest is still scoping. A
+`GOOS=haiku GOARCH=arm64` gc Go toolchain now cross-builds from a Linux host
+from the `korli/go` fork plus a small arm64 patchset (M0), and cross-compiled
+binaries **run on real Graviton Haiku hardware** (M1): hello-world prints and
+exits 0, and goroutine, syscall, and signal (nil-deref → recover) programs all
+run clean, validating the M0 runtime simplifications on hardware. Artifacts,
+patchset, overlay recipe and proof logs: [`../go-arm64/`](../go-arm64/) (see
+`logs/M1-proof.txt`). This
 document decides *whether and how* to bring the Go toolchain to DeBeOS on
 Graviton (arm64), with the concrete end goal of compiling the upstream
 **`amazon-ssm-agent`** (github.com/aws/amazon-ssm-agent, Apache-2.0, written in
@@ -205,7 +207,7 @@ Each milestone has a binary pass/fail check. Milestones are cumulative.
 | # | Milestone | Pass/fail check |
 |---|---|---|
 | **M0** ✅ | Cross-build a haiku/arm64 gc Go toolchain: add arm64 arch files to the fork; produce a `go-<ver>-haiku-arm64-bootstrap`; `GOOS=haiku GOARCH=arm64` `make.bash` succeeds from a Linux host | **DONE** — `make.bash` builds "packages and commands for target, haiku/arm64"; `std` + `cmd` cross-build; a program cross-compiles to a AArch64 Haiku ELF; `go-1.26.1-haiku-arm64-bootstrap.tbz` produced. See [`../go-arm64/`](../go-arm64/) |
-| **M1** | Hello world | a cross-compiled `haiku/arm64` binary runs on a Graviton Haiku instance, prints, exits 0 |
+| **M1** ✅ | Hello world | **DONE** — cross-compiled `haiku/arm64` binaries ran on a Graviton `c7g.large` (Haiku hrev59996) over SSM: `println("hi")` → `hi`, exit 0 (the gate); plus `fmt.Println`, 8 goroutines+channel (`goroutine-sum 140`), `time.Sleep`+`getpid`+`write(2)` (`slept=200ms`), and a nil-deref→SIGSEGV→recover test — all exit 0. The modern-`sigtramp` and hand-derived-`mcontext` M0 simplifications are hardware-validated by the signal test. See [`../go-arm64/logs/M1-proof.txt`](../go-arm64/logs/M1-proof.txt) |
 | **M2** | `net/http` + goroutines + netpoller | an HTTPS GET returns 200; N concurrent goroutines + connections complete under load with no netpoller hang |
 | **M3** | cgo (only if needed) | a cgo "hello" calling a `libroot` function links and runs — **skip if the agent builds `CGO_ENABLED=0`** |
 | **M4** | `amazon-ssm-agent` compiles for haiku/arm64 | binary is produced (expect a few `//go:build` GOOS arms + a service-integration shim) |
