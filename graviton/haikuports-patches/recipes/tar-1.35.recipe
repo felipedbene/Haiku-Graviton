@@ -87,7 +87,7 @@ BUILD()
 		--disable-nls \
 		--disable-gcc-warnings \
 		--with-included-regex \
-		LDFLAGS="-lnetwork" CFLAGS="-D_BSD_SOURCE" \
+		LDFLAGS="-lnetwork" CFLAGS="-O2 -D_BSD_SOURCE" \
 		FORCE_UNSAFE_CONFIGURE=1 \
 		$yearArg
 	make $jobArgs YACC=:

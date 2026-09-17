@@ -1,0 +1,165 @@
+#!/usr/bin/env python3
+"""haiku-correct-false-failure -- flip a build-wave item from a FALSE `failed`
+back to `built`, so it drops out of the failure census and its already-harvested
+hpkg can be published, WITHOUT rebuilding it.
+
+WHY THIS EXISTS (issue #136 / #309). A chunk in the wave state machine can exit
+rc=1 for a benign reason *after* haikuporter has already produced and harvested a
+real package -- most commonly a headless `mimeset` that exits non-zero once the
+`.hpkg` is written (there is no app_server on the builder). RecordOutcome then
+records `build_state=failed` even though a valid package exists in the harvest
+pool. `cmake_haiku` is the worked example: haikuporter built a real 14 465 B
+`cmake_haiku-git-4-arm64.hpkg` (harvested to the pool's `hpkg/arm64/` prefix), yet
+the item reads `failed`. The wave driver only ever builds `queued` items, so a
+`failed` item is never re-touched and its good hpkg is never published -- it just
+inflates the "N failed" number. Re-queueing it would rebuild a package that is
+already correct; the honest correction is to mark it `built` and publish what is
+already on disk.
+
+WHAT IT IS. Deterministic, guarded, idempotent state glue -- nothing more. It does
+NOT build, harvest, or publish. For each named package it:
+
+  1. reads the item from `debeos-package-state`;
+  2. REFUSES unless its current build_state is `failed` (a genuine failure or an
+     already-corrected item is left untouched -> safe to re-run);
+  3. CONFIRMS a real hpkg exists in the harvest pool prefix ($HG_HARVEST_S3) and
+     is larger than --min-bytes (default 2048), so the class-9 empty-package trap
+     -- an ~800 B hpkg that shipped nothing -- can never be mislabelled `built`;
+  4. only with --execute, conditionally (build_state = failed) rewrites
+     build_state=built plus bookkeeping (last_outcome, built_version parsed from
+     the hpkg name, corrected_by/at, correction_note). ADDITIVE otherwise; it does
+     not clear the triage_* attributes or the log_url.
+
+Publishing the confirmed hpkg is a SEPARATE, existing step -- run
+`haiku-repo-publish-ephemeral` (or the debeos-publish-green SOP) against the hpkg
+this tool prints. This tool intentionally does not publish.
+
+No account-scoped names live in this tracked file: the harvest prefix comes from
+the environment, exactly as haiku-repo-publish-ephemeral takes HG_REPO_S3.
+
+Usage:
+  HG_HARVEST_S3=s3://<bucket>/<prefix>/arm64 \\
+    AWS_PROFILE=haiku-graviton graviton/scripts/haiku-correct-false-failure \\
+      cmake_haiku                 # dry-run: confirm hpkg + report the transition
+  ... --execute cmake_haiku       # perform the failed->built correction
+
+Exit status: 0 if every named package was corrected or already correct; non-zero
+if any could not be confirmed (no item, not `failed`, or no/undersized hpkg).
+"""
+import argparse
+import os
+import re
+import subprocess
+import sys
+import time
+
+TABLE_DEFAULT = os.environ.get("TABLE", "debeos-package-state")
+REGION_DEFAULT = os.environ.get("AWS_REGION", "us-west-2")
+
+
+def log(*a):
+    print(*a, file=sys.stderr, flush=True)
+
+
+def find_hpkg(harvest_s3, pkg):
+    """Return (key_uri, size) of the largest hpkg under harvest_s3 whose basename
+    begins with '<pkg>-', or (None, 0). Matches on the leading name component so
+    'cmake_haiku' does not also match a hypothetical 'cmake_haiku_tools'."""
+    proc = subprocess.run(
+        ["aws", "s3", "ls", harvest_s3.rstrip("/") + "/", "--recursive"],
+        capture_output=True, text=True)
+    if proc.returncode != 0:
+        log(f"  s3 ls failed for {harvest_s3}: {proc.stderr.strip()}")
+        return None, 0
+    # s3://bucket/... -> bucket for reassembling a full URI from the key column.
+    bucket = harvest_s3.split("/", 3)[2]
+    best_uri, best_size = None, 0
+    pat = re.compile(rf"^{re.escape(pkg)}-[^/]*\.hpkg$")
+    for line in proc.stdout.splitlines():
+        cols = line.split()
+        if len(cols) < 4:
+            continue
+        size, key = int(cols[2]), cols[3]
+        if pat.match(key.rsplit("/", 1)[-1]) and size > best_size:
+            best_uri, best_size = f"s3://{bucket}/{key}", size
+    return best_uri, best_size
+
+
+def parse_version(hpkg_uri):
+    """cmake_haiku-git-4-arm64.hpkg -> 'git-4' (version + revision, sans arch)."""
+    base = hpkg_uri.rsplit("/", 1)[-1][:-len(".hpkg")]
+    m = re.match(r".+?-(.+)-[^-]+$", base)  # drop leading name and trailing arch
+    return m.group(1) if m else None
+
+
+def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument("pkgs", nargs="+", help="package names to correct")
+    ap.add_argument("--table", default=TABLE_DEFAULT)
+    ap.add_argument("--region", default=REGION_DEFAULT)
+    ap.add_argument("--harvest-s3", default=os.environ.get("HG_HARVEST_S3"),
+                    help="s3://<bucket>/<prefix>/<arch> holding harvested hpkgs")
+    ap.add_argument("--min-bytes", type=int, default=2048,
+                    help="reject hpkgs at/under this size (class-9 empty-package trap)")
+    ap.add_argument("--execute", action="store_true",
+                    help="perform the write; default is a dry run")
+    args = ap.parse_args()
+
+    if not args.harvest_s3:
+        log("set HG_HARVEST_S3=s3://<bucket>/<prefix>/<arch> (harvested hpkg pool)")
+        return 2
+
+    import boto3
+    from botocore.exceptions import ClientError
+    table = boto3.resource("dynamodb", region_name=args.region).Table(args.table)
+    now = int(time.time())
+    who = os.environ.get("USER", "operator")
+
+    bad = 0
+    for pkg in args.pkgs:
+        item = table.get_item(Key={"pkg": pkg}).get("Item")
+        if not item:
+            log(f"  {pkg}: no item in {args.table} -> skip"); bad += 1; continue
+        state = item.get("build_state", "none")
+        if state == "built":
+            log(f"  {pkg}: already built -> nothing to do"); continue
+        if state != "failed":
+            log(f"  {pkg}: build_state={state} (not 'failed') -> refuse"); bad += 1; continue
+
+        uri, size = find_hpkg(args.harvest_s3, pkg)
+        if not uri or size <= args.min_bytes:
+            log(f"  {pkg}: no hpkg > {args.min_bytes} B under {args.harvest_s3} "
+                f"-> refuse (size={size})"); bad += 1; continue
+        version = parse_version(uri)
+        log(f"  {pkg}: failed -> built   hpkg={uri} ({size} B, version={version})")
+        log(f"        publish with: haiku-repo-publish-ephemeral {uri.rsplit('/', 1)[-1]}")
+
+        if not args.execute:
+            continue
+        try:
+            table.update_item(
+                Key={"pkg": pkg},
+                UpdateExpression=(
+                    "SET build_state=:built, last_outcome=:built, "
+                    "built_version=:ver, corrected_by=:who, corrected_at=:now, "
+                    "correction_note=:note"),
+                ConditionExpression="build_state = :failed",
+                ExpressionAttributeValues={
+                    ":built": "built", ":failed": "failed", ":ver": version or "unknown",
+                    ":who": who, ":now": now,
+                    ":note": "false-failure (chunk rc=1 + benign headless mimeset); "
+                             "hpkg confirmed in harvest pool; #136/#309"},
+            )
+        except ClientError as e:
+            if e.response["Error"]["Code"] == "ConditionalCheckFailedException":
+                log(f"  {pkg}: state changed under us (no longer 'failed') -> skip")
+                continue
+            raise
+
+    if not args.execute:
+        log("\n(dry run -- re-run with --execute to write; then publish the hpkgs above)")
+    return 1 if bad else 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

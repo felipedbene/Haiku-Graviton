@@ -1,0 +1,112 @@
+SUMMARY="Library to access a database of photographic lenses"
+DESCRIPTION="
+The lensfun library not only provides a way to read the database \
+and search for specific things in it, but also provides a set of \
+algorithms for correcting images based on detailed knowledge of \
+lens properties. Right now lensfun is designed to correct \
+distortion, transversal (also known as lateral) chromatic aberrations, \
+vignetting and colour contribution of the lens (e.g. when sometimes \
+people says one lens gives "yellowish" images and another, say, "bluish").
+"
+HOMEPAGE="http://lensfun.sourceforge.net"
+COPYRIGHT="
+	2007-2008 Andrew Zabolotny
+	"
+LICENSE="GNU LGPL v3"
+REVISION="3"
+SOURCE_URI="http://sourceforge.net/projects/lensfun/files/$portVersion/lensfun-$portVersion.tar.gz"
+CHECKSUM_SHA256="ae8bcad46614ca47f5bda65b00af4a257a9564a61725df9c74cb260da544d331"
+
+ARCHITECTURES="all !x86_gcc2"
+SECONDARY_ARCHITECTURES="!x86_gcc2 x86"
+
+PROVIDES="
+	lensfun$secondaryArchSuffix = $portVersion compat >= 0.2
+	lib:liblensfun$secondaryArchSuffix = $portVersion compat >= 0
+	"
+REQUIRES="
+	haiku$secondaryArchSuffix
+	lib:libglib_2.0${secondaryArchSuffix}
+	lib:libintl$secondaryArchSuffix
+	lib:libpng16$secondaryArchSuffix
+	lib:libz$secondaryArchSuffix
+	"
+
+PROVIDES_devel="
+	lensfun${secondaryArchSuffix}_devel = $portVersion compat >= 0.2
+	cmd:g_lensfun_update_data$secondaryArchSuffix
+	cmd:lensfun_add_adapter$secondaryArchSuffix
+	cmd:lensfun_update_data$secondaryArchSuffix
+	devel:liblensfun$secondaryArchSuffix = $portVersion compat >= 0
+	"
+REQUIRES_devel="
+	haiku$secondaryArchSuffix
+	lensfun$secondaryArchSuffix == $portVersion base
+	lib:libglib_2.0${secondaryArchSuffix}
+	lib:libintl$secondaryArchSuffix
+	lib:libpng16$secondaryArchSuffix
+	lib:libz$secondaryArchSuffix
+	"
+
+BUILD_REQUIRES="
+	haiku${secondaryArchSuffix}_devel
+	devel:libglib_2.0${secondaryArchSuffix} >= 0.4000
+	devel:libintl$secondaryArchSuffix
+	devel:libpng16$secondaryArchSuffix
+	devel:libz$secondaryArchSuffix
+	"
+BUILD_PREREQUIRES="
+	cmd:cmake
+	cmd:gcc$secondaryArchSuffix
+	cmd:ld$secondaryArchSuffix
+	cmd:make
+	cmd:pkg_config$secondaryArchSuffix
+	"
+
+BUILD()
+{
+	mkdir -p cmake_build
+	cd cmake_build
+	# x86-only compiler flags (playbook class 5): lensfun's CMakeLists defaults
+	# BUILD_FOR_SSE / BUILD_FOR_SSE2 ON and, for GCC, appends -msse / -msse2 to
+	# CMAKE_CXX_FLAGS unconditionally -- flags aarch64 gcc rejects ("unrecognized
+	# command-line option '-msse'"). lensfun 0.3.2 has a scalar fallback selected
+	# by these same options, so gate them off on non-x86 (there is no NEON path to
+	# lose). Same shape as libsquish's BUILD_SQUISH_WITH_SSE2 gate.
+	case "$effectiveTargetArchitecture" in
+		x86|x86_64) sseArgs="" ;;
+		*)          sseArgs="-DBUILD_FOR_SSE=OFF -DBUILD_FOR_SSE2=OFF" ;;
+	esac
+	cmake -DCMAKE_INSTALL_PREFIX=$prefix -DDOCDIR=$docDir \
+		-DINCLUDEDIR=$includeDir -DDATADIR=$dataDir/lensfun \
+		-DCMAKE_INSTALL_DATAROOTDIR=$dataRootDir $sseArgs ..
+	make $jobArgs
+}
+
+INSTALL()
+{
+	cd cmake_build
+	make install
+
+	mkdir -p $includeDir
+	mv $prefix/include/* $includeDir
+	rmdir $prefix/include
+	if [ -n "$secondaryArchSuffix" ]; then
+		mv $prefix/bin $prefix/bin2
+		mv $prefix/lib $prefix/lib2
+		mkdir -p $binDir $libDir
+		mv $prefix/bin2/* $binDir
+		mv $prefix/lib2/* $libDir
+		rmdir $prefix/bin2 $prefix/lib2
+	fi
+
+	rm -f $binDir/example
+
+	prepareInstalledDevelLibs liblensfun
+	fixPkgconfig
+
+	# devel package
+	packageEntries devel \
+		$binDir \
+		$developDir
+}

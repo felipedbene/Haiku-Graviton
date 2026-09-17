@@ -60,6 +60,18 @@ case "$targetArchitecture" in
 	*) nativeCC="CC=gcc CXX=g++" ;;
 esac
 
+PATCH()
+{
+	# Bundled OpenEXR (Source/OpenEXR) still uses the C++ `register` storage
+	# keyword, which is *removed* in C++17. FreeImage's Makefiles set no -std, so
+	# the compiler default (gnu++17 on our gcc) rejects it. Pin the whole build to
+	# gnu++14, where `register` is merely deprecated, by appending to the CXXFLAGS
+	# default (kept as ?= so it still yields to an explicit override, which we
+	# don't pass). Both makefiles share the identical CXXFLAGS line.
+	sed -i 's/^\(CXXFLAGS ?= .*-Wno-ctor-dtor-privacy\)$/\1 -std=gnu++14/' \
+		Makefile.gnu Makefile.fip
+}
+
 BUILD()
 {
 	make -f Makefile.gnu $nativeCC \
