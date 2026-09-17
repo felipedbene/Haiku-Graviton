@@ -1,0 +1,25 @@
+### go version (toolchain binary)
+go version go1.26.1 linux/amd64
+### haiku targets in dist list
+haiku/amd64
+haiku/arm64
+### build std for haiku/arm64
+STD_OK
+### build cmd (go tool: compile/link/asm/etc) for haiku/arm64
+# cmd/vendor/golang.org/x/sys/unix
+src/cmd/vendor/golang.org/x/sys/unix/sockcmsg_unix.go:33:9: undefined: Cmsghdr
+src/cmd/vendor/golang.org/x/sys/unix/syscall_unix.go:220:38: undefined: _Socklen
+src/cmd/vendor/golang.org/x/sys/unix/syscall_unix.go:227:7: undefined: RawSockaddrInet4
+src/cmd/vendor/golang.org/x/sys/unix/syscall_unix.go:235:9: undefined: RawSockaddrInet6
+src/cmd/vendor/golang.org/x/sys/unix/syscall_unix.go:241:7: undefined: RawSockaddrUnix
+src/cmd/vendor/golang.org/x/sys/unix/fdset.go:10:12: undefined: FdSet
+src/cmd/vendor/golang.org/x/sys/unix/fdset.go:15:12: undefined: FdSet
+src/cmd/vendor/golang.org/x/sys/unix/fdset.go:20:12: undefined: FdSet
+src/cmd/vendor/golang.org/x/sys/unix/fdset.go:25:12: undefined: FdSet
+src/cmd/vendor/golang.org/x/sys/unix/ioctl_unsigned.go:34:47: undefined: Winsize
+src/cmd/vendor/golang.org/x/sys/unix/ioctl_unsigned.go:34:47: too many errors
+### vet the runtime for haiku/arm64
+# runtime_test
+# [runtime_test]
+vet: src/runtime/crash_unix_test.go:44:28: constant 2147508224 overflows int32
+vet done

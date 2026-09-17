@@ -1,6 +1,11 @@
 # Go toolchain bring-up on DeBeOS (Haiku arm64) — scoping
 
-**Status:** scoping / research only. Nothing here has been built or run. This
+**Status:** **M0 DONE** (cross-build proven, 2026-09-17) — the rest is still
+scoping. A `GOOS=haiku GOARCH=arm64` gc Go toolchain now cross-builds from a
+Linux host from the `korli/go` fork plus a small arm64 patchset; a trivial
+program cross-compiles to a AArch64 Haiku ELF and an arm64 bootstrap tarball
+was produced. Artifacts, patchset, overlay recipe and proof logs:
+[`../go-arm64/`](../go-arm64/). Running on hardware is M1 and not yet done. This
 document decides *whether and how* to bring the Go toolchain to DeBeOS on
 Graviton (arm64), with the concrete end goal of compiling the upstream
 **`amazon-ssm-agent`** (github.com/aws/amazon-ssm-agent, Apache-2.0, written in
@@ -199,7 +204,7 @@ Each milestone has a binary pass/fail check. Milestones are cumulative.
 
 | # | Milestone | Pass/fail check |
 |---|---|---|
-| **M0** | Cross-build a haiku/arm64 gc Go toolchain: add arm64 arch files to the fork; produce a `go-<ver>-haiku-arm64-bootstrap`; `GOOS=haiku GOARCH=arm64` `make.bash` succeeds from a Linux host | a `go` + `gofmt` binary is produced and `go version` prints `haiku/arm64` |
+| **M0** ✅ | Cross-build a haiku/arm64 gc Go toolchain: add arm64 arch files to the fork; produce a `go-<ver>-haiku-arm64-bootstrap`; `GOOS=haiku GOARCH=arm64` `make.bash` succeeds from a Linux host | **DONE** — `make.bash` builds "packages and commands for target, haiku/arm64"; `std` + `cmd` cross-build; a program cross-compiles to a AArch64 Haiku ELF; `go-1.26.1-haiku-arm64-bootstrap.tbz` produced. See [`../go-arm64/`](../go-arm64/) |
 | **M1** | Hello world | a cross-compiled `haiku/arm64` binary runs on a Graviton Haiku instance, prints, exits 0 |
 | **M2** | `net/http` + goroutines + netpoller | an HTTPS GET returns 200; N concurrent goroutines + connections complete under load with no netpoller hang |
 | **M3** | cgo (only if needed) | a cgo "hello" calling a `libroot` function links and runs — **skip if the agent builds `CGO_ENABLED=0`** |
