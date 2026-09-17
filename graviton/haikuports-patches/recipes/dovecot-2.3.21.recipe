@@ -76,7 +76,9 @@ BUILD()
 	export ACLOCAL_PATH="/boot/system/data/gettext/m4${ACLOCAL_PATH:+:$ACLOCAL_PATH}"
 	autopoint --force
 	autoreconf -fi
-	CFLAGS=-D_BSD_SOURCE runConfigure ./configure \
+	# Overriding CFLAGS drops autotools' default -O2, which runConfigure then
+	# rejects ("Must specify optimization flags when overriding CFLAGS"); keep it.
+	CFLAGS="-O2 -D_BSD_SOURCE" runConfigure ./configure \
 		--libexecdir=$libDir/libexec \
 		--with-ssl=openssl \
 		--disable-hardening \

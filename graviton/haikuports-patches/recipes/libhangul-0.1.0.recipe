@@ -51,6 +51,11 @@ BUILD_PREREQUIRES="
 BUILD()
 {
 	export ACLOCAL_PATH="/boot/system/data/gettext/m4${ACLOCAL_PATH:+:$ACLOCAL_PATH}"
+	# GNU-strictness aux file (sibling of playbook class 10): automake runs in its
+	# default `gnu` strictness and aborts `required file './ChangeLog' not found`,
+	# because the GitHub zip archive omits the git-generated ChangeLog. autoreconf
+	# -fi installs install-sh/missing/depcomp but never ChangeLog; provide it.
+	touch ChangeLog
 	autopoint --force
 	autoreconf -fi
 	runConfigure ./configure --disable-static

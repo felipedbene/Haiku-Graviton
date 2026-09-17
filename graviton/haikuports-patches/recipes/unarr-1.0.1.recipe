@@ -62,6 +62,13 @@ PATCH()
 	# fix a small typo in pkg-config.pc.cmake, fixed since in master branch,  but not in latest release yet
 	# to remove at next release bump
 	sed -i 's/@CMAKE_INSTALL_INCLUDEDIR_LIBDIR@/@CMAKE_INSTALL_LIBDIR@/g' pkg-config.pc.cmake
+
+	# LTO hardening (playbook class 7): -DCMAKE_INTERPROCEDURAL_OPTIMIZATION=OFF
+	# alone is insufficient here -- unarr's CMakeLists.txt hardcodes -flto directly
+	# in target_compile_options()/LINK_FLAGS, which the cache variable never
+	# touches, so every object still died "LTO support has not been enabled in this
+	# configuration". Strip -flto from the build so LTO is actually disabled.
+	sed -i 's/-flto//g' CMakeLists.txt
 }
 
 BUILD()

@@ -74,7 +74,9 @@ BUILD()
 	export ACLOCAL_PATH="/boot/system/data/gettext/m4${ACLOCAL_PATH:+:$ACLOCAL_PATH}"
 	autopoint --force
 	autoreconf -fi
-	CFLAGS=-Wno-error runConfigure --omit-dirs binDir \
+	# Overriding CFLAGS drops autotools' default -O2, which runConfigure then
+	# rejects ("Must specify optimization flags when overriding CFLAGS"); keep it.
+	CFLAGS="-O2 -Wno-error" runConfigure --omit-dirs binDir \
 		./configure --bindir="$commandBinDir"
 	make $jobArgs
 }

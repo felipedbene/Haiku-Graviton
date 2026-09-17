@@ -1,0 +1,61 @@
+SUMMARY="A Soft-synthesizer with tracker"
+DESCRIPTION="Sawteeth is a soft-synth (with tracker) for Haiku, meant \
+to either create cool synth sounds to use in Cubase and such, or cute \
+chip-tunes. It uses no samples but only generated waveforms."
+HOMEPAGE="https://github.com/pulkomandy/Sawteeth/"
+COPYRIGHT="2001 Arvid and Jonas Norberg, 2010-2020 Adrien Destugues"
+LICENSE="MIT"
+REVISION="1"
+SOURCE_URI="https://github.com/pulkomandy/Sawteeth/archive/v$portVersion.tar.gz"
+CHECKSUM_SHA256="43784f8e5b6768e7effc671d964f82cccfc97d704b190d6d65e928397bcf0f3f"
+SOURCE_DIR="Sawteeth-$portVersion"
+
+ARCHITECTURES="all ?x86"
+
+PROVIDES="
+	sawteeth = $portVersion
+	app:sawteeth = $portVersion
+	"
+REQUIRES="
+	haiku
+	"
+
+BUILD_REQUIRES="
+	haiku_devel
+	"
+BUILD_PREREQUIRES="
+	cmd:cmake
+	cmd:gcc
+	cmd:make
+	"
+
+PATCH()
+{
+	# Drop -Werror (per-recipe): Sawteeth's CMakeLists pins
+	# CMAKE_CXX_FLAGS="-Wall -Werror ..." with a plain set(), so newer-gcc
+	# diagnostics that upstream never saw become hard errors ("all warnings being
+	# treated as errors"). The set() clobbers any -DCMAKE_CXX_FLAGS override, so
+	# strip the flag at the source rather than trying to out-argue it on the
+	# command line. Warnings stay visible; they just no longer fail the build.
+	sed -i 's/ -Werror//g' CMakeLists.txt
+}
+
+BUILD()
+{
+	cmake .
+	make $jobArgs
+}
+
+INSTALL()
+{
+	SAWTEETH_DIR=${appsDir}/Sawteeth
+	mkdir -p ${SAWTEETH_DIR}/sounds
+	mkdir -p ${SAWTEETH_DIR}/songs
+	mkdir -p ${SAWTEETH_DIR}/lib
+	cp Sawteeth ${SAWTEETH_DIR}/Sawteeth
+	cp ReadMe.html ${SAWTEETH_DIR}/Userguide.html
+	cp -r sounds ${SAWTEETH_DIR}
+	cp -r songs ${SAWTEETH_DIR}
+	cp -r lib/headers lib/libST.so ${SAWTEETH_DIR}/lib/
+	addAppDeskbarSymlink ${SAWTEETH_DIR}/Sawteeth
+}
