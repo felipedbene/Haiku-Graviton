@@ -87,12 +87,26 @@ static mutex sSocketLock;
 // would otherwise let one socket pin unbounded kernel memory.
 static const uint32 kMaxSocketBufferSize = 32 * 1024 * 1024;
 
-// Running sum of every live socket's configured send + receive buffer sizes.
+// Running sum of every live socket's *configured* send + receive buffer_size.
 // buffer_size is a cap on queued data rather than an eager allocation, so this
-// bounds the worst-case data the stack will admit across all sockets. It is
-// balanced exactly by the constructor (adds the defaults), the destructor
-// (subtracts), and set_socket_buffer_size() (adjusts the delta) -- the only
-// three sites that ever write buffer_size.
+// bounds the worst-case *pinned* data the stack will admit: the defaults plus
+// whatever SO_SNDBUF/SO_RCVBUF was explicitly requested. It is balanced exactly
+// by the four sites that write buffer_size -- the constructor (adds the
+// defaults), the destructor (subtracts), set_socket_buffer_size() (adjusts the
+// delta on an explicit request), and socket_spawn_pending() (adjusts the delta
+// when an accepted child inherits the listener's sizes).
+//
+// Scope note (see also TCPEndpoint::_UpdateSendBuffer/_UpdateReceiveBuffer):
+// this does NOT include TCP's auto-grown queues. TCP treats buffer_size as a
+// floor and grows fSendQueue/fReceiveQueue past it towards the bandwidth-delay
+// product, without touching buffer_size or this counter. That auto-grown memory
+// is instead bounded per-endpoint (kMaxAutoSendBufferSize for send, the receive
+// max-window for receive) and, on the send side, handed back under memory
+// pressure via low_resource_state(). So the aggregate ceiling here bounds the
+// pinned buffers; the elastic per-endpoint growth is bounded separately.
+// Folding auto-grown memory into this aggregate would need endpoint-lifetime
+// accounting across the tcp<->stack module boundary and is deferred to a
+// separate, soak-tested change (tracked as a follow-up to #307).
 static int64 sTotalSocketBufferMemory = 0;
 
 
@@ -791,8 +805,27 @@ socket_spawn_pending(net_socket* _parent, net_socket** _socket)
 		return status;
 
 	// inherit parent's properties
+	//
+	// This overwrites the child's buffer_size fields, which create_socket()
+	// (via the constructor) already added to sTotalSocketBufferMemory at the
+	// default sizes. Copying the parent's (possibly large, SO_SNDBUF/SO_RCVBUF
+	// grown) sizes silently replaces those accounted defaults, so the aggregate
+	// counter must be corrected by the delta -- otherwise ~net_socket_private()
+	// later subtracts the inherited sizes it never added, the counter drifts
+	// negative one accepted-and-closed connection at a time, and once it wraps
+	// below zero the unsigned compare in set_socket_buffer_size() refuses every
+	// subsequent buffer growth stack-wide. This is the fourth site that writes
+	// buffer_size; keep it balanced like the other three.
+	int64 bufferDelta = ((int64)parent->send.buffer_size
+			+ (int64)parent->receive.buffer_size)
+		- ((int64)socket->send.buffer_size
+			+ (int64)socket->receive.buffer_size);
+
 	socket->send = parent->send;
 	socket->receive = parent->receive;
+
+	if (bufferDelta != 0)
+		atomic_add64(&sTotalSocketBufferMemory, bufferDelta);
 	socket->options = parent->options & (SO_KEEPALIVE | SO_DONTROUTE | SO_LINGER | SO_OOBINLINE);
 	socket->linger = parent->linger;
 	socket->owner = parent->owner;
