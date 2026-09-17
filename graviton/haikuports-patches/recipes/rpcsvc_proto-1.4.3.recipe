@@ -1,0 +1,81 @@
+SUMMARY="Protocol definitions from glibc"
+DESCRIPTION="This package contains rpcsvc proto.x files from glibc, which are \
+missing in libtirpc. Additionaly, it contains rpcgen, which is needed to create \
+header files and sources from protocol files."
+HOMEPAGE="https://github.com/thkukuk/rpcsvc-proto"
+COPYRIGHT="2022 Thorsten Kukuk"
+LICENSE="GNU LGPL v2"
+REVISION="1"
+SOURCE_URI="https://github.com/thkukuk/rpcsvc-proto/archive/refs/tags/v$portVersion.tar.gz"
+CHECKSUM_SHA256="6906e0f81bb016bd0216460fc879d3d9f2f6d743be7dfb0d8b32d140226d5ef8"
+SOURCE_DIR="rpcsvc-proto-$portVersion"
+PATCHES="rpcsvc_proto-$portVersion.patchset"
+
+ARCHITECTURES="all"
+SECONDARY_ARCHITECTURES="x86_gcc2 x86"
+
+PROVIDES="
+	rpcsvc_proto$secondaryArchSuffix= $portVersion
+	cmd:rpcgen$secondaryArchSuffix = $portVersion
+	"
+REQUIRES="
+	haiku
+	lib:libintl$secondaryArchSuffix
+	"
+
+PROVIDES_devel="
+	rpcsvc_proto${secondaryArchSuffix}_devel = $portVersion
+	devel:rpcsvc_proto = $portVersion
+	"
+REQUIRES_devel="
+	rpcsvc_proto == $portVersion base
+	"
+
+BUILD_REQUIRES="
+	haiku${secondaryArchSuffix}_devel
+	"
+BUILD_PREREQUIRES="
+	cmd:aclocal
+	cmd:automake
+	cmd:autopoint
+	cmd:autoreconf
+	cmd:find
+	cmd:gcc$secondaryArchSuffix
+	cmd:gettext
+	cmd:make
+	"
+
+# graviton/DeBeOS (#136, porting-playbook Class 3, deeper variant): NOT the
+# usual autopoint/ACLOCAL_PATH case -- here autopoint IS present but aborts with
+#   autopoint: *** found more than one invocation of AM_GNU_GETTEXT_REQUIRE_VERSION
+# rpcsvc-proto's configure.ac carries an old-gettext compatibility shim,
+#   m4_ifndef([AM_GNU_GETTEXT_REQUIRE_VERSION],
+#     [m4_define([AM_GNU_GETTEXT_REQUIRE_VERSION], [])])
+#   AM_GNU_GETTEXT_REQUIRE_VERSION([0.19.2])
+#   AM_GNU_GETTEXT_VERSION([0.20.2])
+# so the string AM_GNU_GETTEXT_REQUIRE_VERSION appears more than once and
+# autopoint's textual scan rejects it. DeBeOS ships a modern gettext where the
+# macro is always defined, so the shim is dead weight: drop the m4_ifndef block
+# (and the redundant AM_GNU_GETTEXT_VERSION -- REQUIRE_VERSION supersedes it),
+# leaving a single invocation. sed is a no-op if the lines are already gone.
+PATCH()
+{
+	sed -i '/m4_ifndef(\[AM_GNU_GETTEXT_REQUIRE_VERSION\]/,+1d' configure.ac
+	sed -i '/^AM_GNU_GETTEXT_VERSION(/d' configure.ac
+}
+
+BUILD()
+{
+	export ACLOCAL_PATH="/boot/system/data/gettext/m4${ACLOCAL_PATH:+:$ACLOCAL_PATH}"
+	./autogen.sh
+	runConfigure configure
+	make $jobArgs
+}
+
+INSTALL()
+{
+	make install
+
+	packageEntries devel \
+		$developDir
+}

@@ -1,0 +1,105 @@
+SUMMARY="Command-line tools for extracting data for XCF files"
+DESCRIPTION="Xcftools is a set of fast command-line tools for extracting information from the \
+Gimp's native file format XCF. The tools are designed to allow efficient use of layered XCF files \
+as sources in a build system that use 'make' and similar tools to manage automatic processing of \
+the graphics. These tools work independently of the Gimp engine and do not require the Gimp to \
+even be installed.
+* xcf2pnm  converts XCF files to ppm, pgm or pbm format, flattening layers if necessary. If the \
+image contains transparency, an alpha map can be written to a separate file, or a background \
+color can be specified on the command line.
+* xcf2png  converts XCF files to PNG format, flattening layers if necessary. Transparency \
+information can be kept in the image, or a background color can be specified on the command line.
+* xcfinfo  lists information about layers in an XCF file.
+The tools can either flatten an XCF file as given, or extract specific layers named on the \
+command line."
+HOMEPAGE="http://henning.makholm.net/software"
+COPYRIGHT="2013-2019 Henning Makholm"
+LICENSE="Public Domain"
+REVISION="2"
+srcGitRev="be488bd2e35a0c6794141411cb5d290950ba4345"
+SOURCE_URI="https://github.com/j-jorge/xcftools/archive/$srcGitRev.tar.gz"
+CHECKSUM_SHA256="54c8acbca56d4c23e947b09da0489a792b2a69434311729a336fd095670d6eae"
+SOURCE_DIR="xcftools-$srcGitRev"
+PATCHES="xcftools-$portVersion.patchset"
+
+ARCHITECTURES="all !x86_gcc2"
+SECONDARY_ARCHITECTURES="x86"
+
+commandBinDir=$binDir
+commandSuffix=$secondaryArchSuffix
+if [ "$targetArchitecture" = x86_gcc2 ]; then
+	commandSuffix=
+	commandBinDir=$prefix/bin
+fi
+
+PROVIDES="
+	xcftools$secondaryArchSuffix = $portVersion
+	cmd:xcf2png$commandSuffix = $portVersion
+	cmd:xcf2pnm$commandSuffix = $portVersion
+	cmd:xcfinfo$commandSuffix = $portVersion
+	cmd:xcfview$commandSuffix = $portVersion
+	"
+REQUIRES="
+	haiku$secondaryArchSuffix
+	lib:libiconv$secondaryArchSuffix
+	lib:libintl$secondaryArchSuffix
+	lib:libpng16$secondaryArchSuffix
+	lib:libz$secondaryArchSuffix
+	"
+
+BUILD_REQUIRES="
+	haiku${secondaryArchSuffix}_devel
+	devel:libiconv$secondaryArchSuffix
+	devel:libintl$secondaryArchSuffix
+	devel:libpng16$secondaryArchSuffix
+	devel:libz$secondaryArchSuffix
+	"
+BUILD_PREREQUIRES="
+	cmd:aclocal
+	cmd:autopoint
+	cmd:autoreconf
+	cmd:gcc$secondaryArchSuffix
+	cmd:gettext
+	cmd:make
+	cmd:perl
+	cmd:pkg_config$secondaryArchSuffix
+	"
+
+TEST_REQUIRES="
+	cmd:pngtopnm
+	"
+
+defineDebugInfoPackage xcftools$secondaryArchSuffix \
+	$commandBinDir/xcf2png \
+	$commandBinDir/xcf2pnm \
+	$commandBinDir/xcfinfo
+
+# graviton/DeBeOS (#136, porting-playbook Class 3): xcftools' configure.ac uses
+# AM_GNU_GETTEXT plus gettext's AC_LIB_* helper macros, and the recipe never
+# declared any gettext tool. autoreconf runs autopoint, but the macros install
+# under /boot/system/data/gettext/m4, not the default aclocal dir -- the failure
+# was `possibly undefined macro: AM_GNU_GETTEXT`. Declare cmd:autopoint +
+# cmd:gettext (one gettext package) so they reach the chroot, put the macro dir
+# on ACLOCAL_PATH, and run `autopoint --force` before autoreconf.
+BUILD()
+{
+	export LIBS=-lintl
+	export ACLOCAL_PATH="/boot/system/data/gettext/m4${ACLOCAL_PATH:+:$ACLOCAL_PATH}"
+	autopoint --force
+	autoreconf -vfi
+	runConfigure --omit-dirs binDir ./configure \
+		--bindir=$commandBinDir
+	make $jobArgs
+}
+
+INSTALL()
+{
+	make install
+}
+
+TEST()
+{
+	# 13 of 141 tests FAILED
+	export RGBDEF=/system/data/netpbm/rgb.txt
+	make check
+}
