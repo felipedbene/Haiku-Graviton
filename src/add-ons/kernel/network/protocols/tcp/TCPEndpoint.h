@@ -26,6 +26,13 @@
 #include <stddef.h>
 
 
+// DIAG-E2 (measurement build, do NOT merge): a drop-in replacement for
+// MutexLocker on TCPEndpoint::fLock that also accounts wait (request->grant)
+// and hold (grant->release) time. Defined in TCPEndpoint.cpp. Forward-declared
+// here because two private methods take the locker by reference.
+struct TCPFlockProbe;
+
+
 class TCPEndpoint : public net_protocol, public ProtocolSocket {
 public:
 						TCPEndpoint(net_socket* socket);
@@ -111,7 +118,7 @@ private:
 			void		_SampleMinRoundTripTime(
 								const tcp_segment_header& segment);
 			void		_MarkEstablished();
-			status_t	_WaitForEstablished(MutexLocker& lock,
+			status_t	_WaitForEstablished(TCPFlockProbe& lock,
 							bigtime_t timeout);
 			bool		_AddData(tcp_segment_header& segment,
 							net_buffer* buffer);
@@ -133,7 +140,7 @@ private:
 							void* _endpoint);
 
 	static	status_t	_WaitForCondition(ConditionVariable& condition,
-							MutexLocker& locker, bigtime_t timeout);
+							TCPFlockProbe& locker, bigtime_t timeout);
 
 private:
 	TCPEndpoint*	fConnectionHashLink;

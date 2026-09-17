@@ -280,6 +280,21 @@ dump_tcp_header(tcp_header &header)
 #endif
 
 
+// DIAG-E2 (measurement build, do NOT merge): defined in TCPEndpoint.cpp.
+int dump_tcp_flock_contention(int argc, char** argv);
+void snapshot_tcp_flock_contention();
+
+// DIAG-E2: periodic non-KDL readout of the fLock counters to the serial log.
+static timer sFlockSnapshotTimer;
+
+static int32
+tcp_flock_snapshot_timer(timer* /*t*/)
+{
+	snapshot_tcp_flock_contention();
+	return B_HANDLED_INTERRUPT;
+}
+
+
 static int
 dump_endpoints(int argc, char** argv)
 {
@@ -904,6 +919,14 @@ tcp_init()
 		"lists all open TCP endpoints");
 	add_debugger_command("tcp_endpoint", dump_endpoint,
 		"dumps a TCP endpoint internal state");
+	// DIAG-E2 (measurement build, do NOT merge)
+	add_debugger_command("tcp_flock_contention", dump_tcp_flock_contention,
+		"DIAG-E2: fLock wait/hold counters ('reset' arg zeroes them)");
+	dprintf("network/protocols/tcp: DIAG-E2 fLock wait/hold instrumentation "
+		"active\n");
+	// Emit a counter snapshot to the serial log every 2s (non-KDL readout).
+	add_timer(&sFlockSnapshotTimer, tcp_flock_snapshot_timer, 2000000LL,
+		B_PERIODIC_TIMER);
 
 	return B_OK;
 }
@@ -914,6 +937,9 @@ tcp_uninit()
 {
 	remove_debugger_command("tcp_endpoint", dump_endpoint);
 	remove_debugger_command("tcp_endpoints", dump_endpoints);
+	// DIAG-E2 (measurement build, do NOT merge)
+	cancel_timer(&sFlockSnapshotTimer);
+	remove_debugger_command("tcp_flock_contention", dump_tcp_flock_contention);
 
 	rw_lock_destroy(&sEndpointManagersLock);
 
