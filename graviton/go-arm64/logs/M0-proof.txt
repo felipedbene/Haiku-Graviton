@@ -1,0 +1,27 @@
+# M0 proof — 2026-09-17T17:48:41Z
+## host toolchain built from korli/go @ go1.26.1-haiku1 + arm64 patchset
+go version go1.26.1 linux/amd64
+## haiku targets recognised:
+haiku/amd64
+haiku/arm64
+## cross-build std for haiku/arm64:
+STD: OK
+## cross-build cmd (compile/link/asm/go) for haiku/arm64:
+CMD: OK
+## hello.go -> haiku/arm64 ELF:
+/local/home/benfelip/go-m0/hello/hello_final: ELF 64-bit LSB executable,
+   ARM aarch64,
+   version 1 (SYSV),
+   dynamically linked,
+   interpreter /system/runtime_loader,
+   Go BuildID=z3nJoTjpicyS0NiTT_ds/uhkKHv9e4rqDKyXTrI_c/c_heyHTRwpscaXGTxcmv/filB-OXb6azrubAEFuNR,
+   BuildID[sha1]=cc89f43c528dc30b530a633de71cfbcb964abbe9,
+   with debug_info,
+   not stripped
+  Type:                              EXEC (Executable file)
+  Machine:                           AArch64
+  [     0]  /system/runtime_loader
+ 0x0000000000000001 (NEEDED)             Shared library: [libroot.so]
+ 0x0000000000000001 (NEEDED)             Shared library: [libbsd.so]
+## arm64 bootstrap tarball:
+  go-1.26.1-haiku-arm64-bootstrap.tbz  sha256=2fe368b44cdb4789016499ccf5d5308ad4d6cdd1aa176001e9617baff5e8d667  size=55475292
