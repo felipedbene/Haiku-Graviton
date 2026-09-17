@@ -121,6 +121,21 @@ RULES = [
      "Route autotools through runConfigure, or replace the raw-read config.guess "
      "(LLVM-style) with an arm64->aarch64 stub. #71."),
 
+    # 19 -- build system does not recognise aarch64/arm64. The PROJECT'S OWN arch
+    # switch (not GNU config.guess -- that is Class 6, matched just above). "Cannot
+    # guess HOST type" (vs Class 6's "guess BUILD type"), an empty/unknown $(ARCH)
+    # aborting a Makefile/Make.inc, or a bespoke "unsupported platform" bail.
+    # auto=False: the fix is a per-port source patch to the project's arch switch
+    # and several are deferred-hard (julia/ocaml/jamvm codegen) -- not a template.
+    (19, "class-19-build-system-does-not-recognise-aarch64arm64", False,
+     _rx(r"Cannot guess host type",
+         r'Platform \'\' not supported',
+         r"unknown word-size for arch",
+         r"Your platform is unsupported",
+         r"Architecture not detected"),
+     "Patch the project's own arch/platform switch to add an arm64/aarch64 branch "
+     "(map to the 64-bit LE codegen path); per-port, some deferred-hard."),
+
     # 3 -- gettext autoreconf / autopoint. Must precede Class 10 (autoreconf) and
     # Class 2 (missing tool), both of which a po/-tree failure also trips.
     (3, "class-3-gettext-autoreconf--autopoint", True,
@@ -132,13 +147,21 @@ RULES = [
          # gettext/NLS m4 macros not on the aclocal path surface as "possibly
          # undefined macro: AM_NLS / AM_GNU_GETTEXT / AM_ICONV ..." + AC_LIB_*.
          r"possibly undefined macro: (?:AM_NLS|AM_GNU_GETTEXT|AM_ICONV|AM_GLIB_GNU_GETTEXT)",
-         r"possibly undefined macro: AC_LIB_"),
+         r"possibly undefined macro: AC_LIB_",
+         # same mechanism (a provider's m4 macro off the aclocal path), different
+         # provider: libxml2's AM_PATH_XML2 (libmetalink/libspectrum). Fix is the
+         # same ACLOCAL_PATH + autoreconf refresh.
+         r"possibly undefined macro: AM_PATH_XML2"),
      "Declare cmd:autopoint and put gettext's m4 dir on ACLOCAL_PATH; "
      "autopoint --force before autoreconf -fi."),
 
-    # 10 -- missing autotools aux files. Specific configure phrase.
+    # 10 -- missing autotools aux files. Specific configure phrase. The aux file is
+    # NOT always install-sh: libmcrypt aborts on 'ltmain.sh', libsrtp on 'ar-lib'
+    # (both `configure.in/.ac: … required file 'X' not found`), so key on the
+    # generic "required file 'X' not found" shape, not the install-sh literal.
     (10, "class-10-missing-autotools-aux-files", True,
      _rx(r"required file '?install-sh'? not found",
+         r"required file '[^']+' not found",
          r"try running autoreconf --install",
          r"run autoreconf --install"),
      "Use autoreconf -fi (force + install aux files)."),
@@ -161,10 +184,56 @@ RULES = [
     (5, "class-5-x86-only-compiler-flags-on-arm64", True,
      _rx(r"unrecognized command-line option '-msse\d?'",
          r"unrecognized command-line option .-msse",
+         # other x86-only -m flags aarch64 gcc rejects the same way: -mmmx
+         # (opendune), -m3dnow, -mavx*. Same gate on x86/x86_64 as -msse.
+         r"unrecognized command-line option '-m(?:mmx|3dnow|avx\w*|fpmath=sse)'",
          r"-mfpmath=sse",
-         r"error:.*'-msse"),
-     "Gate -msse*/-mfpmath=sse on x86/x86_64 via $effectiveTargetArchitecture "
-     "(CMake) or $targetArchitecture (Makefile sed)."),
+         r"error:.*'-m(?:sse|mmx|3dnow|avx)"),
+     "Gate -msse*/-mmmx/-m3dnow/-mavx/-mfpmath=sse on x86/x86_64 via "
+     "$effectiveTargetArchitecture (CMake) or $targetArchitecture (Makefile sed)."),
+
+    # 21 -- python build-time module missing from the chroot. The playbook titled
+    # this setuptools/pkg_resources, but the real backlog is broader and the same
+    # shape: a build/setup.py imports a python module not in the chroot --
+    # pkg_resources/setuptools (html5lib, pbr), distutils (librnp; removed in 3.12,
+    # provided by setuptools), or jinja2 (libplacebo; a real codegen dep). Fix is
+    # always "declare the providing python package in BUILD_PREREQUIRES".
+    (21, "class-21-python-setuppy-needs-setuptools--pkg_resources", True,
+     _rx(r"ModuleNotFoundError: No module named '[^']+'",
+         r"import pkg_resources\b.*ModuleNotFoundError"),
+     "Declare the providing python package in BUILD_PREREQUIRES (setuptools "
+     "supplies pkg_resources/distutils; jinja2 etc. are their own package), "
+     "matching the recipe's python version."),
+
+    # 23 -- install writes to read-only /packages. Specific packagefs write failure
+    # in the harvest step (binary already built). auto=False: needs a per-port look
+    # at the subpackage identifier (often a stray-whitespace PROVIDES/version bug).
+    (23, "class-23-install-writes-to-read-only-packages", False,
+     _rx(r"cannot create directory '/packages/[^']*': Read-only file system",
+         r"/packages/[^ ]*: Read-only file system"),
+     "Correct the subpackage identifier (strip stray whitespace in PROVIDES/"
+     "version); ensure the split INSTALL() writes under $developInstallDir/$prefix, "
+     "not an absolute /packages path."),
+
+    # 24 -- source-acquisition tool missing on the builder HOST (hg/svn/bzr/lha).
+    # Fetch/unpack runs on the host before the chroot exists, so a cmd: prereq can't
+    # help. auto=True: systemic provisioner host-tool add clears it on a rebake.
+    (24, "class-24-source-acquisition-tool-missing-on-the-builder-host", True,
+     _rx(r"'(?:hg|svn|bzr|cvs|lha|git)' is not available, please install it",
+         r"is not available, please install it"),
+     "Add the VCS/archive client (hg/svn/bzr/lha) to the host install list in "
+     "haiku-provision-native-builder -- NOT a recipe cmd: prereq."),
+
+    # 18 -- missing link-time library (ld: cannot find -l<lib>). A Haiku system
+    # library whose unversioned devel symlink is absent (libmidi/libmidi2/
+    # libscreensaver) or a third-party lib not in the pool (that subset is really
+    # Class 20). auto=True: the Haiku-lib majority clears via a systemic
+    # devel-symlink overlay + per-recipe devel: declaration.
+    (18, "class-18-missing-link-time-library-ld-cannot-find--llib", True,
+     _rx(r"ld: cannot find -l\S+: No such file or directory",
+         r"cannot find -l\S+: No such file or directory"),
+     "Declare the providing devel:/lib: build requirement, or add the missing "
+     "Haiku devel symlink (systemic overlay). Never drop the -l (cuts the feature)."),
 
     # 7 -- LTO without a linker plugin.
     (7, "class-7-lto-without-a-linker-plugin", True,
@@ -182,10 +251,22 @@ RULES = [
      "Pass native CXX=g++/CC=gcc. Class-wide cleared by #186 (arm64 triplet "
      "compilers on the in-chroot PATH)."),
 
+    # 22 -- removed/renamed Haiku API or moved header. NARROW on purpose: only the
+    # unambiguous API-rename signature "does not name a type"; broad forms (a moved
+    # header, "was not declared") over-match ordinary compile errors, so they stay
+    # per-port. auto=False: real source porting, several deferred-hard.
+    (22, "class-22-removedrenamed-haiku-api-or-moved-header", False,
+     _rx(r"does not name a type"),
+     "Update the source to the current Haiku API (a PATCH() hunk) or add the moved "
+     "header's include path; where the delta is large, mark deferred-hard."),
+
     # 4 -- static/shared lib install conflict.
     (4, "class-4-staticshared-lib-install-conflict", True,
      _rx(r"rm: cannot remove '[^']*\.(?:a|la)'",
-         r"prepareInstalledDevelLibs"),
+         # the live wording is SINGULAR ("prepareInstalledDevelLib error: there is
+         # both a shared and a static library"): linenoise, sdl_net, libspectrum.
+         # Match both spellings with an optional trailing 's'.
+         r"prepareInstalledDevelLibs?"),
      "rm -f (tolerant) the static lib, and drop it before prepareInstalledDevelLibs."),
 
     # 11 -- install target references optional/arch-named outputs. Fairly specific.
@@ -208,9 +289,39 @@ RULES = [
          r"gzip: command not found",
          r"unzip: command not found",
          r"which: command not found",
-         r"msgattrib: (?:command not found|No such file)"),
+         r"msgattrib: (?:command not found|No such file)",
+         # tool absence surfaced through CMake, not a bare 127: zziplib fails
+         # `Could NOT find UnixCommands (missing: GZIP)`. Note this is NARROW to
+         # UnixCommands -- `Could NOT find <Pkg>` for a real library (partio's
+         # GLUT) is a missing dependency (Class 20), not a missing base tool.
+         r"Could NOT find UnixCommands"),
      "Declare the tool as a cmd: BUILD_PREREQUIRES (see the tool->provider map). "
      "Mechanical per-recipe edit with a known template."),
+
+    # 20 -- prerequisite package/tool not published. The dependency-not-published
+    # root cause under haikuporter's NATIVE wording ("unable to resolve
+    # (pre)required packages ... could not be resolved") rather than the literal
+    # UNRESOLVABLE token -- which is exactly why these evaded has_unresolvable and
+    # landed in UNMATCHED (the single biggest UNMATCHED leak, ~21 ports). Also the
+    # pkg-config "Package 'X', required by 'Y', not found" and libgcrypt-config
+    # sub-signatures. Placed LATE (after every compile/link class) so a real build
+    # error always wins first-match; only a log whose SOLE error is the resolve/
+    # pkg-config/libgcrypt line lands here. auto=False: NOT a recipe edit -- build
+    # and PUBLISH the dependency (see build_state=built != published).
+    (20, "class-20-prerequisite-packagetool-not-published", False,
+     _rx(r"unable to resolve (?:pre)?required packages",
+         # the literal marker haiku-nativebuild echoes when a build-req is not in
+         # the repo pool (definitively dep-unpublished) -- placed here (late) so any
+         # real earlier-class build error still wins first-match.
+         r"UNRESOLVABLE",
+         r'build-(?:pre)?requires "[^"]+" of package .* could not be resolved',
+         r"Package '[^']+', required by '[^']+', not found",
+         r"libgcrypt (?:not found|is too old)",
+         r"libgcrypt [0-9].* or newer is required",
+         r"checking for libgcrypt-config\.\.\. no"),
+     "NOT a recipe fix: build AND PUBLISH the missing dependency to green, then "
+     "re-wave the consumer (or provision a missing host tool). See Class 24 for a "
+     "host-only fetch tool, and the deferred-hard list for dropped libgcrypt-config."),
 
     # 12 -- source availability / checksum drift. NOT auto-recoverable: a bump is
     # only safe after the integrity gate, and the egress-blocked subset is not
@@ -246,6 +357,15 @@ RULES = [
      "empty-package build exits 0 and is build_state=built, so it rarely appears "
      "in this (failed/needs_human) backlog."),
 ]
+
+
+# The dep-not-published marker, in BOTH forms: the literal UNRESOLVABLE token the
+# wave tooling writes, AND haikuporter's own native wording (which carries no such
+# token). Used for the census "of which N mention UNRESOLVABLE" and for the miner's
+# exclusion parity -- the native wording is the biggest UNMATCHED leak (Class 20).
+_UNRESOLVABLE = re.compile(
+    r"UNRESOLVABLE|unable to resolve (?:pre)?required packages|"
+    r'build-(?:pre)?requires "[^"]+" of package .* could not be resolved')
 
 
 def classify(text):
@@ -396,7 +516,7 @@ def main():
             rec = dict(it,
                        triage_class=(cls if cls is not None else "UNMATCHED"),
                        auto=auto, fix_ref=fix_ref, note=note, matched=matched,
-                       has_unresolvable=("UNRESOLVABLE" in text),
+                       has_unresolvable=bool(_UNRESOLVABLE.search(text)),
                        _text_tail=text[-4000:] if cls is None else None)
         return it["pkg"], rec
 
@@ -465,6 +585,7 @@ def main():
 
     # class metadata for the report
     meta = {c: (slug, auto) for c, slug, auto, _, _ in RULES}
+    class_nums = sorted(meta)  # all classes the ruleset knows (1-14 + 18-24)
 
     print("\n" + "=" * 66)
     print("DeBeOS failure-backlog census  (%d items: %s)" %
@@ -474,7 +595,7 @@ def main():
     print("=" * 66)
     print("%-6s %-46s %5s %s" % ("class", "playbook section", "count", "auto"))
     print("-" * 66)
-    for c in range(1, 15):
+    for c in class_nums:
         cnt = by_class.get(str(c), 0)
         if not cnt:
             continue
@@ -493,7 +614,7 @@ def main():
 
     # top auto-recoverable classes by port count -> next re-wave targets
     auto_classes = sorted(
-        ((by_class.get(str(c), 0), c, meta[c][0]) for c in range(1, 15) if meta[c][1]),
+        ((by_class.get(str(c), 0), c, meta[c][0]) for c in class_nums if meta[c][1]),
         reverse=True)
     top = [(c, slug, n) for (n, c, slug) in auto_classes if n][:3]
     if top:
