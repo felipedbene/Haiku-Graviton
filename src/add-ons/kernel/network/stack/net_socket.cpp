@@ -587,28 +587,55 @@ socket_receive_data(net_socket* socket, size_t length, uint32 flags,
 status_t
 socket_get_next_stat(uint32* _cookie, int family, struct net_stat* stat)
 {
-	MutexLocker locker(sSocketLock);
+	// The list walk and cookie bookkeeping run under sSocketLock, but the
+	// protocol control() call below must not: it reaches TCPEndpoint::FillStat(),
+	// which locks the per-endpoint fLock. The teardown path takes fLock first and
+	// then sSocketLock (Connect/Listen -> set_max_backlog -> RemoveFromParent),
+	// so holding sSocketLock across control() closes an AB-BA deadlock that
+	// freezes the whole net stack (#305). Instead, pin a hard reference to the
+	// target socket while sSocketLock is held, drop the lock, then fill the stat
+	// with no global lock held -- removing the "sSocketLock held while waiting for
+	// fLock" edge so the wait-for cycle can no longer form.
+	BReference<net_socket_private> socket;
 
-	net_socket_private* socket = NULL;
-	SocketList::Iterator iterator = sSocketList.GetIterator();
-	uint32 cookie = *_cookie;
-	uint32 count = 0;
+	{
+		MutexLocker locker(sSocketLock);
 
-	while (true) {
-		socket = iterator.Next();
-		if (socket == NULL)
-			return B_ENTRY_NOT_FOUND;
+		SocketList::Iterator iterator = sSocketList.GetIterator();
+		uint32 cookie = *_cookie;
+		uint32 count = 0;
 
-		// TODO: also traverse the pending connections
-		if (count == cookie)
-			break;
+		while (true) {
+			net_socket_private* candidate = iterator.Next();
+			if (candidate == NULL)
+				return B_ENTRY_NOT_FOUND;
 
-		if (family == -1 || family == socket->family)
-			count++;
+			// TODO: also traverse the pending connections
+			if (count == cookie) {
+				// Acquire a hard reference while sSocketLock is still held. A
+				// socket whose destructor already started is parked in
+				// ~net_socket_private() waiting for this very lock, so it cannot
+				// vanish under us; GetReference() is an atomic increment-if-nonzero
+				// that fails cleanly for an object whose use count already reached
+				// zero (the same primitive socket_acquire() relies on). An entry
+				// that cannot be acquired is mid-teardown -- treat it as absent
+				// and let the next entry fill this slot.
+				socket = BWeakReference<net_socket_private>(candidate).GetReference();
+				if (!socket.IsSet())
+					continue;
+				break;
+			}
+
+			if (family == -1 || family == candidate->family)
+				count++;
+		}
+
+		*_cookie = count + 1;
 	}
 
-	*_cookie = count + 1;
-
+	// sSocketLock has been released. The hard reference keeps the socket -- and
+	// therefore first_protocol/first_info and the TCP endpoint -- alive for the
+	// duration of the unlocked stat fill.
 	stat->family = socket->family;
 	stat->type = socket->type;
 	stat->protocol = socket->protocol;
