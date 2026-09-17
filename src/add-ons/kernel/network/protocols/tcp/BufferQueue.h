@@ -27,6 +27,7 @@ public:
 
 			void				Add(net_buffer* buffer);
 			void				Add(net_buffer* buffer, tcp_sequence sequence);
+			net_buffer*			DetachFirst();
 			status_t			RemoveUntil(tcp_sequence sequence);
 			status_t			Get(net_buffer* buffer, tcp_sequence sequence,
 									size_t bytes);
