@@ -89,6 +89,145 @@
 #	define PROBE(buffer, window)	do { } while (0)
 #endif
 
+
+
+// #pragma mark - DIAG-E2 fLock wait/hold accounting (measurement build)
+
+// DIAG-E2 (measurement build, do NOT merge): the receive-throughput ceiling
+// study needs to know whether TCPEndpoint::fLock is a *sleeping* serialization
+// (a thread parked waiting to acquire it) as opposed to a cheap uncontended
+// lock. Cycle profilers under-sample off-CPU time, so we instrument the lock
+// directly: for every acquisition we record whether it was contended and the
+// wall-time from request to grant (WAIT) and from grant to release (HOLD).
+// fLock is per-endpoint, so these counters are summed across ALL endpoints;
+// a separate "consumer" bucket isolates the RX consumer path (SegmentReceived),
+// whose WAIT competes with the consumer thread's wall-time at the cap.
+struct tcp_flock_diag {
+	int64	acquisitions;
+	int64	contended;
+	int64	wait_ns;	// request -> grant (contention / sleep on the lock)
+	int64	hold_ns;	// grant -> release (the critical section itself)
+};
+
+static tcp_flock_diag sFlockAll;		// every fLock acquisition
+static tcp_flock_diag sFlockConsumer;	// SegmentReceived (RX consumer) only
+
+
+struct TCPFlockProbe {
+			mutex*			fLock;
+			tcp_flock_diag*	fExtra;
+			nanotime_t		fHoldStart;
+			bool			fLocked;
+
+	TCPFlockProbe(mutex& lock, tcp_flock_diag* extra = NULL)
+		:
+		fLock(&lock),
+		fExtra(extra),
+		fHoldStart(0),
+		fLocked(false)
+	{
+		Lock();
+	}
+
+	~TCPFlockProbe()
+	{
+		Unlock();
+	}
+
+	void Lock()
+	{
+		if (fLocked)
+			return;
+
+		nanotime_t start = system_time_nsecs();
+		bool contended = false;
+		if (mutex_trylock(fLock) != B_OK) {
+			contended = true;
+			mutex_lock(fLock);
+		}
+		nanotime_t granted = system_time_nsecs();
+
+		_Account(sFlockAll, contended, granted - start);
+		if (fExtra != NULL)
+			_Account(*fExtra, contended, granted - start);
+
+		fHoldStart = granted;
+		fLocked = true;
+	}
+
+	void Unlock()
+	{
+		if (!fLocked)
+			return;
+
+		nanotime_t held = system_time_nsecs() - fHoldStart;
+		atomic_add64(&sFlockAll.hold_ns, held);
+		if (fExtra != NULL)
+			atomic_add64(&fExtra->hold_ns, held);
+
+		mutex_unlock(fLock);
+		fLocked = false;
+	}
+
+	bool IsLocked() const
+	{
+		return fLocked;
+	}
+
+	static void _Account(tcp_flock_diag& d, bool contended, nanotime_t wait)
+	{
+		atomic_add64(&d.acquisitions, 1);
+		if (contended)
+			atomic_add64(&d.contended, 1);
+		atomic_add64(&d.wait_ns, wait);
+	}
+};
+
+
+// DIAG-E2: KDL readout. Registered as "tcp_flock_contention" by tcp_init().
+// Sample twice under load and diff; "reset" zeroes the counters to bound a
+// window. The verdict metric is (wait_ns delta) / (window wall-ns * nCPUs):
+// a large WAIT fraction with short HOLD means contention on a short critical
+// section; a large HOLD means the critical section itself is the cost.
+int
+dump_tcp_flock_contention(int argc, char** argv)
+{
+	if (argc > 1 && strcmp(argv[1], "reset") == 0) {
+		memset(&sFlockAll, 0, sizeof(sFlockAll));
+		memset(&sFlockConsumer, 0, sizeof(sFlockConsumer));
+		kprintf("tcp_flock_contention: counters reset\n");
+		return 0;
+	}
+
+	kprintf("DIAG-E2 tcp fLock contention (ns; summed over all endpoints/CPUs)\n");
+	kprintf("%-16s %14s %14s %16s %16s\n",
+		"bucket", "acquisitions", "contended", "wait_ns", "hold_ns");
+	kprintf("%-16s %14" B_PRId64 " %14" B_PRId64 " %16" B_PRId64 " %16" B_PRId64
+		"\n", "all", sFlockAll.acquisitions, sFlockAll.contended,
+		sFlockAll.wait_ns, sFlockAll.hold_ns);
+	kprintf("%-16s %14" B_PRId64 " %14" B_PRId64 " %16" B_PRId64 " %16" B_PRId64
+		"\n", "consumer", sFlockConsumer.acquisitions, sFlockConsumer.contended,
+		sFlockConsumer.wait_ns, sFlockConsumer.hold_ns);
+	return 0;
+}
+
+
+// DIAG-E2: non-KDL readout. Emits the same counters to dprintf() so they land
+// on the serial console (readable via `aws ec2 get-console-output`) without an
+// interactive KDL session -- the counters are cumulative, so bracket the load
+// window with two SNAP lines and diff. Driven by a periodic timer in tcp_init().
+void
+snapshot_tcp_flock_contention()
+{
+	bigtime_t now = system_time();
+	dprintf("DIAG-E2-SNAP %" B_PRId64 " all %" B_PRId64 " %" B_PRId64 " %"
+		B_PRId64 " %" B_PRId64 "\n", now, sFlockAll.acquisitions,
+		sFlockAll.contended, sFlockAll.wait_ns, sFlockAll.hold_ns);
+	dprintf("DIAG-E2-SNAP %" B_PRId64 " consumer %" B_PRId64 " %" B_PRId64 " %"
+		B_PRId64 " %" B_PRId64 "\n", now, sFlockConsumer.acquisitions,
+		sFlockConsumer.contended, sFlockConsumer.wait_ns, sFlockConsumer.hold_ns);
+}
+
 #if TCP_TRACING
 namespace TCPTracing {
 
@@ -615,7 +754,7 @@ TCPEndpoint::Open()
 status_t
 TCPEndpoint::Close()
 {
-	MutexLocker locker(fLock);
+	TCPFlockProbe locker(fLock);
 
 	TRACE("Close()");
 	T(APICall(this, "close"));
@@ -664,7 +803,7 @@ TCPEndpoint::Close()
 void
 TCPEndpoint::Free()
 {
-	MutexLocker _(fLock);
+	TCPFlockProbe _(fLock);
 
 	TRACE("Free()");
 	T(APICall(this, "free"));
@@ -692,7 +831,7 @@ TCPEndpoint::Connect(const sockaddr* address)
 	if (!AddressModule()->is_same_family(address))
 		return EAFNOSUPPORT;
 
-	MutexLocker locker(fLock);
+	TCPFlockProbe locker(fLock);
 
 	TRACE("Connect() on address %s", PrintAddress(address));
 	T(APICall(this, "connect"));
@@ -772,7 +911,7 @@ TCPEndpoint::Connect(const sockaddr* address)
 status_t
 TCPEndpoint::Accept(struct net_socket** _acceptedSocket)
 {
-	MutexLocker locker(fLock);
+	TCPFlockProbe locker(fLock);
 
 	TRACE("Accept()");
 	T(APICall(this, "accept"));
@@ -814,7 +953,7 @@ TCPEndpoint::Bind(const sockaddr *address)
 	if (address == NULL)
 		return B_BAD_VALUE;
 
-	MutexLocker lock(fLock);
+	TCPFlockProbe lock(fLock);
 
 	TRACE("Bind() on address %s", PrintAddress(address));
 	T(APICall(this, "bind"));
@@ -829,7 +968,7 @@ TCPEndpoint::Bind(const sockaddr *address)
 status_t
 TCPEndpoint::Unbind(struct sockaddr *address)
 {
-	MutexLocker _(fLock);
+	TCPFlockProbe _(fLock);
 
 	TRACE("Unbind()");
 	T(APICall(this, "unbind"));
@@ -841,7 +980,7 @@ TCPEndpoint::Unbind(struct sockaddr *address)
 status_t
 TCPEndpoint::Listen(int count)
 {
-	MutexLocker _(fLock);
+	TCPFlockProbe _(fLock);
 
 	TRACE("Listen()");
 	T(APICall(this, "listen"));
@@ -874,7 +1013,7 @@ TCPEndpoint::Listen(int count)
 status_t
 TCPEndpoint::Shutdown(int direction)
 {
-	MutexLocker lock(fLock);
+	TCPFlockProbe lock(fLock);
 
 	TRACE("Shutdown(%i)", direction);
 	T(APICall(this, "shutdown"));
@@ -896,7 +1035,7 @@ TCPEndpoint::Shutdown(int direction)
 status_t
 TCPEndpoint::SendData(net_buffer *buffer)
 {
-	MutexLocker lock(fLock);
+	TCPFlockProbe lock(fLock);
 
 	TRACE("SendData(buffer %p, size %" B_PRIu32 ", flags %#" B_PRIx32
 		") [total %" B_PRIuSIZE " bytes, has %" B_PRIuSIZE "]", buffer,
@@ -988,7 +1127,7 @@ TCPEndpoint::SendData(net_buffer *buffer)
 ssize_t
 TCPEndpoint::SendAvailable()
 {
-	MutexLocker locker(fLock);
+	TCPFlockProbe locker(fLock);
 
 	ssize_t available = 0;
 
@@ -1008,7 +1147,7 @@ TCPEndpoint::SendAvailable()
 status_t
 TCPEndpoint::FillStat(net_stat *stat)
 {
-	MutexLocker _(fLock);
+	TCPFlockProbe _(fLock);
 
 	strlcpy(stat->state, name_for_state(fState), sizeof(stat->state));
 	stat->receive_queue_size = _ReceiveAvailable();
@@ -1029,7 +1168,10 @@ TCPEndpoint::ReadData(size_t numBytes, uint32 flags, net_buffer** _buffer)
 	// it never blocks the RX consumer -- concurrent recv() on one socket is
 	// rare, but the ring's SPSC invariant depends on exactly one consumer.
 	MutexLocker readLocker(fReadLock);
-	MutexLocker locker(fLock);
+	// DIAG-E2: instrument fLock (not fReadLock) so the wait/hold occupancy is
+	// measured on the SAME lock as the stock arm -- the SPSC win shows up as a
+	// shorter fLock HOLD (the coalesce + copy moved out via locker.Unlock()).
+	TCPFlockProbe locker(fLock);
 
 	TRACE("ReadData(%" B_PRIuSIZE " bytes, flags %#" B_PRIx32 ")", numBytes,
 		flags);
@@ -1175,7 +1317,7 @@ TCPEndpoint::ReadData(size_t numBytes, uint32 flags, net_buffer** _buffer)
 ssize_t
 TCPEndpoint::ReadAvailable()
 {
-	MutexLocker locker(fLock);
+	TCPFlockProbe locker(fLock);
 
 	TRACE("ReadAvailable(): %" B_PRIdSSIZE, _AvailableData());
 	T(APICall(this, "readavailable"));
@@ -1187,7 +1329,7 @@ TCPEndpoint::ReadAvailable()
 status_t
 TCPEndpoint::SetSendBufferSize(size_t length)
 {
-	MutexLocker _(fLock);
+	TCPFlockProbe _(fLock);
 
 	// Same rule as SetReceiveBufferSize(): only a request for less than the
 	// queue already holds may switch auto-sizing off, because that is a request
@@ -1206,7 +1348,7 @@ TCPEndpoint::SetSendBufferSize(size_t length)
 status_t
 TCPEndpoint::SetReceiveBufferSize(size_t length)
 {
-	MutexLocker _(fLock);
+	TCPFlockProbe _(fLock);
 
 	// Only a request for a smaller buffer than we already have may switch
 	// auto-sizing off: that is a request to bound memory use, which growing the
@@ -1227,7 +1369,7 @@ TCPEndpoint::SetReceiveBufferSize(size_t length)
 size_t
 TCPEndpoint::SendBufferSize()
 {
-	MutexLocker _(fLock);
+	TCPFlockProbe _(fLock);
 	return fSendQueue.Size();
 }
 
@@ -1235,7 +1377,7 @@ TCPEndpoint::SendBufferSize()
 size_t
 TCPEndpoint::ReceiveBufferSize()
 {
-	MutexLocker _(fLock);
+	TCPFlockProbe _(fLock);
 	return fReceiveQueue.Size();
 }
 
@@ -1277,7 +1419,7 @@ TCPEndpoint::SetOption(int option, const void* _value, int length)
 
 	const int* value = (const int*)_value;
 
-	MutexLocker _(fLock);
+	TCPFlockProbe _(fLock);
 	if (*value)
 		fOptions |= TCP_NODELAY;
 	else
@@ -1417,7 +1559,7 @@ TCPEndpoint::_MarkEstablished()
 
 
 status_t
-TCPEndpoint::_WaitForEstablished(MutexLocker &locker, bigtime_t timeout)
+TCPEndpoint::_WaitForEstablished(TCPFlockProbe& locker, bigtime_t timeout)
 {
 	// TODO: Checking for CLOSED seems correct, but breaks several neon tests.
 	// When investigating this, also have a look at _Close() and _HandleReset().
@@ -2001,7 +2143,7 @@ int32
 TCPEndpoint::_Spawn(TCPEndpoint* parent, tcp_segment_header& segment,
 	net_buffer* buffer)
 {
-	MutexLocker _(fLock);
+	TCPFlockProbe _(fLock);
 
 	TRACE("Spawn()");
 
@@ -2482,7 +2624,9 @@ TCPEndpoint::_Receive(tcp_segment_header& segment, net_buffer* buffer)
 int32
 TCPEndpoint::SegmentReceived(tcp_segment_header& segment, net_buffer* buffer)
 {
-	MutexLocker locker(fLock);
+	// DIAG-E2: this is the RX consumer's acquisition of fLock; account it into
+	// the consumer bucket as well so its wait can be compared to wall-time.
+	TCPFlockProbe locker(fLock, &sFlockConsumer);
 
 	TRACE("SegmentReceived(): buffer %p (%" B_PRIu32 " bytes) address %s "
 		"to %s flags %#" B_PRIx8 ", seq %" B_PRIu32 ", ack %" B_PRIu32
@@ -2548,7 +2692,7 @@ status_t
 TCPEndpoint::ErrorReceived(net_error error, net_error_data* errorData,
 	net_buffer* data)
 {
-	MutexLocker locker(fLock);
+	TCPFlockProbe locker(fLock);
 
 	if (error == B_NET_ERROR_MESSAGE_SIZE && errorData != NULL) {
 		uint32 newMaxSegmentSize = errorData->mtu - sizeof(tcp_header);
@@ -3305,7 +3449,7 @@ TCPEndpoint::_RetransmitTimer(net_timer* timer, void* _endpoint)
 	TCPEndpoint* endpoint = (TCPEndpoint*)_endpoint;
 	T(TimerTriggered(endpoint, "retransmit"));
 
-	MutexLocker locker(endpoint->fLock);
+	TCPFlockProbe locker(endpoint->fLock);
 	if (!locker.IsLocked() || gStackModule->is_timer_active(timer))
 		return;
 
@@ -3319,7 +3463,7 @@ TCPEndpoint::_PersistTimer(net_timer* timer, void* _endpoint)
 	TCPEndpoint* endpoint = (TCPEndpoint*)_endpoint;
 	T(TimerTriggered(endpoint, "persist"));
 
-	MutexLocker locker(endpoint->fLock);
+	TCPFlockProbe locker(endpoint->fLock);
 	if (!locker.IsLocked())
 		return;
 
@@ -3337,7 +3481,7 @@ TCPEndpoint::_DelayedAcknowledgeTimer(net_timer* timer, void* _endpoint)
 	TCPEndpoint* endpoint = (TCPEndpoint*)_endpoint;
 	T(TimerTriggered(endpoint, "delayed ack"));
 
-	MutexLocker locker(endpoint->fLock);
+	TCPFlockProbe locker(endpoint->fLock);
 	if (!locker.IsLocked())
 		return;
 
@@ -3355,7 +3499,7 @@ TCPEndpoint::_TimeWaitTimer(net_timer* timer, void* _endpoint)
 	TCPEndpoint* endpoint = (TCPEndpoint*)_endpoint;
 	T(TimerTriggered(endpoint, "time-wait"));
 
-	MutexLocker locker(endpoint->fLock);
+	TCPFlockProbe locker(endpoint->fLock);
 	if (!locker.IsLocked())
 		return;
 
@@ -3372,7 +3516,7 @@ TCPEndpoint::_TimeWaitTimer(net_timer* timer, void* _endpoint)
 
 /*static*/ status_t
 TCPEndpoint::_WaitForCondition(ConditionVariable& condition,
-	MutexLocker& locker, bigtime_t timeout)
+	TCPFlockProbe& locker, bigtime_t timeout)
 {
 	ConditionVariableEntry entry;
 	condition.Add(&entry);
