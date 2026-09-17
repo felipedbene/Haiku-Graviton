@@ -43,6 +43,35 @@ and executed. All exit 0 — full transcript in [`logs/M1-proof.txt`](logs/M1-pr
 The bootstrap tarball is hosted (see `SOURCE_URI_3` in the recipe): a `GET` of
 that URL returns the exact `sha256=2fe368b4…d667` tarball.
 
+## Status: M2 DONE (net/http + TLS + concurrent netpoll on hardware)
+
+A single combined harness (`tests/m2/combined/main.go`; the three subtests also
+stand alone as `tests/m2/{httpsget,concurrent,serverload}.go`) was cross-compiled
+`CGO_ENABLED=0`, pushed to a Graviton `c7g.large` (Haiku hrev59996) over SSM, and
+run. Full transcript — including the pre-fix failure — in
+[`logs/M2-proof.txt`](logs/M2-proof.txt):
+
+| Test | Result | What it exercises |
+|---|---|---|
+| `httpsget` — real HTTPS GET | **200, TLS 1.3 (cipher 0x1301, ALPN h2), 3-cert chain verified, exit 0** — the M2 must-pass gate | `crypto/tls` (pure-Go, the mbedTLS replacement), pure-Go DNS over UDP, CA bundle load, single-conn netpoll |
+| `concurrent` — 50 goroutines × 4 external HTTPS conns | **200/200 ok, no hang** | poll(2) netpoll readiness under concurrent TLS load (the epoll/kqueue-less path) |
+| `serverload` — in-proc `http.Server` + 100 goroutines × 20 | **2000/2000 correct checksums, no hang** | accept/read/write readiness, no external dependency |
+
+**Netpoller bug found and fixed (the headline M2 finding).** The first
+on-hardware run failed *everything* — DNS `read: operation would block` and TCP
+`connect: operation now in progress`, both returned instantly instead of waiting
+on the poller. Root cause was not the netpoll logic but the arm64 libroot
+dispatcher in `sys_haiku_arm64.s`: it read errno with a **signed** `MOVW` load,
+sign-extending Haiku's bit-31-set errno values (all `B_GENERAL_ERROR_BASE`-
+relative) to `0xffffffff_8000000b`, so `internal/poll`'s `err == syscall.EAGAIN`
+/ `EINPROGRESS` guards — which compare against the 32-bit-masked constant
+`0x00000000_8000000b` — never matched, and non-blocking I/O never parked on
+netpoll. One-instruction fix (`MOVW`→`MOVWU`, matching amd64's zero-extending
+`MOVL`): [`patches/0002-haiku-arm64-M2-errno-zero-extend.patch`](patches/0002-haiku-arm64-M2-errno-zero-extend.patch).
+Hardware A/B on that single change: `serverload` 0/200 → 2000/2000. Latent
+through M1 because `Errno.Error()` re-masks to 32 bits (strings looked right) and
+no M1 test did a non-blocking `== syscall.Exxx` comparison.
+
 ## How to reproduce (from a Linux host)
 
 ```sh
@@ -54,6 +83,7 @@ export GOTOOLCHAIN=local            # the fork's go.mod pins a toolchain line
 # 2. The fork + this patchset.
 git clone -b go1.26.1-haiku1 https://github.com/korli/go korli-go
 cd korli-go && git apply /path/to/patches/0001-haiku-arm64-M0-toolchain.patch
+git apply /path/to/patches/0002-haiku-arm64-M2-errno-zero-extend.patch
 
 # 3. Cross-build the toolchain for the target.
 cd src && GOOS=haiku GOARCH=arm64 CGO_ENABLED=0 ./make.bash

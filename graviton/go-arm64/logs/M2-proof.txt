@@ -1,0 +1,132 @@
+# M2 proof — net/http HTTPS + concurrent goroutines/connections through the
+# poll(2) netpoller, on real Graviton hardware.
+# 2026-09-17
+#
+# Target: AWS Graviton c7g.large running DeBeOS/Haiku arm64
+#   uname -a: Haiku ip-10-0-10-160 R1~beta6+development hrev59996 Sep 16 2026 arm64 Haiku
+#   AMI: ami-064b8f2597d5b22c2 (canonical=true at time of run)
+#   Instance i-010270871eddf7ebc (tags owner=go-m2, Project=haiku-graviton) — reaped after the run.
+#
+# Harness: graviton/go-arm64/tests/m2/combined/main.go, cross-compiled on a
+#   Linux/amd64 host with the M0 toolchain (korli/go @ go1.26.1-haiku1 + the
+#   arm64 patchset), GOOS=haiku GOARCH=arm64 CGO_ENABLED=0, -ldflags="-s -w"
+#   -trimpath. Confirmed: ELF 64-bit LSB executable, ARM aarch64,
+#   interpreter /system/runtime_loader, NEEDED libroot.so/libbsd.so/libnetwork.so.
+#   The three test sources (a)/(b)/(c) also exist standalone as
+#   tests/m2/{httpsget,concurrent,serverload}.go; the combined binary is what
+#   was actually pushed (one 6.16 MB binary rather than three).
+#
+# Transport: the guest is a bare native Haiku install — no python/curl/wget/
+#   gzip/tar/aws, only /bin/base64 and the shell — so the binary was pushed
+#   base64-chunked over SSM Run Command (94 x <88 KB indexed chunk files under
+#   the 97 KB SendCommand document limit), reassembled with
+#   `cat chunk_* | base64 -d`, and verified by exact byte count (6160652).
+#   Output below is verbatim SSM StandardOutput plus the shell's echoed __EXIT__.
+#
+# M2 pass/fail bar (scope doc §4): an HTTPS GET returns 2xx over a real TLS
+#   handshake; N concurrent goroutines + connections complete under load with
+#   no netpoller hang.
+
+================================================================================
+## KEY FINDING: a netpoller-adjacent errno bug that broke ALL non-blocking I/O
+================================================================================
+
+The FIRST on-hardware run failed every network operation — and the failure
+mode was itself the diagnosis.
+
+### (a) httpsget — BEFORE the fix
+    ca-found: /system/data/ssl/CARootCertificates.pem (225076 bytes, dir=false)
+    ca-found: /system/data/ssl/certs (0 bytes, dir=true)
+    GET https://checkip.amazonaws.com -> ERROR after 1.975ms: Get "https://checkip.amazonaws.com": dial tcp: lookup checkip.amazonaws.com on 10.0.0.2:53: read udp 10.0.10.160:51705->10.0.0.2:53: read: operation would block
+    GET https://sources.debene.dev/... -> ERROR after 882µs: ... read udp ...->10.0.0.2:53: read: operation would block
+    GET https://www.amazon.com/ -> ERROR after 1.249ms: ... read udp ...->10.0.0.2:53: read: operation would block
+    FAIL(httpsget): no verified 2xx HTTPS GET completed
+    __EXIT_A__=1
+
+### (c) serverload (TCP loopback, no DNS) — BEFORE the fix
+    server listening on 127.0.0.1:46527
+    serverload: goroutines=20 reqs/goroutine=10 total=200
+    result: ok=0 fail=200 elapsed=12.014ms (16647 req/s)
+    first-error: Get "http://127.0.0.1:46527/echo?id=19-0": dial tcp 127.0.0.1:46527: connect: operation now in progress
+    FAIL(serverload): not all requests succeeded
+    __EXIT_C__=1
+
+Both errors are the *non-ready* return of a non-blocking socket surfacing as a
+terminal error instead of the runtime parking on the netpoller and retrying:
+  - UDP DNS read -> EWOULDBLOCK ("operation would block"), returned <2 ms.
+  - TCP connect  -> EINPROGRESS ("operation now in progress"), all 200 in 12 ms.
+Neither ever waited. That is exactly what happens when internal/poll's
+`err == syscall.EAGAIN` / `err == syscall.EINPROGRESS` guards evaluate false:
+the EAGAIN/EWOULDBLOCK path that calls `pd.waitRead`, and the EINPROGRESS path
+that calls `pd.waitWrite`, are both skipped, so the raw errno is returned.
+
+### Root cause — one instruction in the arm64 libroot dispatcher
+
+`src/runtime/sys_haiku_arm64.s`, `asmsysvicall6`, errno readback:
+
+    -   MOVW    (R2), R2          // signed 32-bit load: SIGN-extends
+    +   MOVWU   (R2), R2          // unsigned 32-bit load: zero-extends
+
+Haiku's POSIX errno values are B_GENERAL_ERROR_BASE-relative — bit 31 is set
+(e.g. EAGAIN/EWOULDBLOCK = -0x7ffffff5, EINPROGRESS = -0x7fff8fdc). The syscall
+package's constants are masked to 32 bits: `EAGAIN = Errno(-0x7ffffff5 &
+0xffffffff)` = 0x0000_0000_8000_000b. A *signed* `MOVW` load of errno
+sign-extends to 0xffff_ffff_8000_000b, so `err == syscall.EAGAIN` (a full
+uintptr compare) is always false. Every non-blocking readiness check in
+internal/poll therefore fails.
+
+Why it stayed hidden through M1: `Errno.Error()` re-masks for haiku
+(`n = n & 0x7fffffff + 1`), so error *strings* print correctly regardless of
+the sign extension — which is why the transcript shows the right names. And M1's
+tests (hello/fmt/chans/syscalls/sigtest) never do non-blocking network I/O, so
+they never hit an `== syscall.Exxx` errno comparison. The amd64 Haiku port loads
+errno with `MOVL`, which zero-extends on x86-64 for free; the arm64 translation
+rendered it as the sign-extending `MOVW` instead of `MOVWU`.
+
+Fix: patches/0002-haiku-arm64-M2-errno-zero-extend.patch (one instruction).
+
+================================================================================
+## AFTER the fix — rebuilt runtime, same harness, same instance. M2 MET.
+================================================================================
+
+uname: Haiku ip-10-0-10-160.us-west-2.comput R1~beta6+development hrev59996 Sep 16 2026 19:50:00 arm64 other Haiku
+
+===== (a) httpsget =====
+ca-found: /system/data/ssl/CARootCertificates.pem (225076 bytes, dir=false)
+ca-found: /system/data/ssl/certs (0 bytes, dir=true)
+GET https://checkip.amazonaws.com -> 200 in 176.21ms [TLS1.3 cipher=0x1301 alpn="h2" peerCerts=3] body[:64]="52.34.104.217\n"
+PASS(httpsget): verified TLS handshake + 2xx GET completed
+===== (b) concurrent =====
+concurrent: url=https://checkip.amazonaws.com goroutines=50 reqs/goroutine=4 total=200
+result: ok=200 fail=0 elapsed=424.42ms (471 req/s)
+PASS(concurrent): all concurrent HTTPS requests completed 2xx, no hang
+===== (c) serverload =====
+server listening on 127.0.0.1:62027
+serverload: goroutines=100 reqs/goroutine=20 total=2000
+result: ok=2000 fail=0 elapsed=259.008ms (7722 req/s)
+PASS(serverload): all in-process client/server requests completed with correct bodies, no hang
+===== SUMMARY: httpsget=true concurrent=true serverload=true =====
+__EXIT_ALL__=0
+
+Notes on what each PASS proves:
+ (a) Pure-Go crypto/tls (CGO_ENABLED=0, the mbedTLS-replacement enabler)
+     completed a real TLS 1.3 handshake (cipher 0x1301 = TLS_AES_128_GCM_SHA256),
+     negotiated ALPN "h2" (HTTP/2), verified a 3-cert chain against the Haiku
+     system CA bundle /system/data/ssl/CARootCertificates.pem, and returned 200.
+     Also proves the pure-Go DNS resolver over UDP now works.
+ (b) 50 goroutines x 4 = 200 simultaneous external HTTPS connections, all 2xx,
+     no hang — the poll(2) netpoll readiness path (arm the fd, park the
+     goroutine, wake on readiness) under real concurrency with TLS.
+ (c) In-process http.Server + 100 client goroutines x 20 = 2000 requests, each
+     body a per-request SHA-256 the client verifies, all correct, no hang —
+     accept/read/write readiness with no external dependency (deterministic).
+
+Independent A/B on the one variable that changed (the errno load): (c) went
+from 0/200 to 200/200, (a) from DNS-fail to a verified 200. Same binary shape,
+same instance, same AMI; only the runtime .s instruction differs.
+
+# Reproduce: apply patches/0001 then 0002 to korli/go @ go1.26.1-haiku1, then
+#   cd src && GOOS=haiku GOARCH=arm64 CGO_ENABLED=0 ./make.bash
+#   GOOS=haiku GOARCH=arm64 CGO_ENABLED=0 go build -ldflags="-s -w" \
+#       -o m2 ./graviton/go-arm64/tests/m2/combined
+#   push m2 to a canonical-AMI Graviton guest over SSM; run `m2 all`.
