@@ -146,6 +146,17 @@ Ports needing one additional small guard on top of the policy flag:
 mismatched new/delete) that a flag alone did not clear — it is **not** in this batch; left as
 a source-porting item.
 
+> **Superseded for the CMAKE_BUILD_TYPE class (#136, playbook Class 8).** These
+> per-recipe `-DCMAKE_BUILD_TYPE=Release` overlays are no longer the primary fix.
+> The build type is now defaulted systemically in haikuporter's `cmake` wrapper by
+> the provisioner (section 2a-4;
+> `../haikuporter-cmake-build-type-default.patch`), which reaches every CMake port
+> and does not depend on the input-source-package overlay landing with a pinned
+> mtime. Four Class-8 ports (cmake_haiku, epoll_shim, sais, superfreecell) carried
+> a correct overlay yet still failed the wave because that fragile path reverted
+> the edit. The overlays remain valid and harmless — an explicit `Release` flows
+> through the patched wrapper unchanged — but are no longer load-bearing.
+
 Cross-links issue **#136**. Not merged pending human CR.
 
 ## Two recipes here are kept only as history

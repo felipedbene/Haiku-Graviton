@@ -421,16 +421,51 @@ invoking cmake without CMAKE_BUILD_TYPE specified!
 cmake … -DCMAKE_BUILD_TYPE=RelWithDebInfo without debug info packages specified
 ```
 
-**Root cause.** The recipe's explicit `cmake` call omits `CMAKE_BUILD_TYPE`, or
-sets `RelWithDebInfo` without a matching `_debuginfo` subpackage.
+**Root cause.** The message is **not** CMake's own — it comes from haikuporter's
+`cmake` wrapper (`HaikuPorter/ShellScriptlets.py:cmake()`), which shadows `cmake`
+in every `BUILD()` shell and `exit 1`s when the configure invocation either omits
+`CMAKE_BUILD_TYPE` entirely, or passes `RelWithDebInfo` without a matching
+`_debuginfo` subpackage. Two sub-signatures:
 
-**Fix.** Set `-DCMAKE_BUILD_TYPE=Release` (usually alongside the Class 1 policy
-flag):
+- `invoking cmake without CMAKE_BUILD_TYPE specified!` — no type at all.
+- `-DCMAKE_BUILD_TYPE=RelWithDebInfo without debug info packages specified` — a
+  type, but the wrong one for a recipe with no debug-info subpackage.
+
+**Fix (systemic — preferred, #136).** Default the build type in the wrapper
+itself, on the native builder, via
+`graviton/scripts/haiku-provision-native-builder` (section 2a-4; see
+`graviton/haikuports-patches/haikuporter-cmake-build-type-default.patch`). It
+rewrites only the wrapper's two `exit 1` branches: a missing type becomes
+`-DCMAKE_BUILD_TYPE=Release`, and `RelWithDebInfo`-without-`_debuginfo` is
+rewritten to `Release` — both are exactly the wrapper's own printed advice. This
+clears the whole class on a rebake, reaching every CMake port regardless of how it
+spells the `cmake` call.
+
+**Why not the Class-1 channels.** Unlike `CMAKE_POLICY_VERSION_MINIMUM`, this
+cannot ride an environment default: the wrapper inspects the command line only,
+and CMake reads `CMAKE_BUILD_TYPE` from `-D`/cache, never the env. And a blanket
+`-DCMAKE_BUILD_TYPE=Release` on `cmakeDirArgs` would *regress* known-good ports —
+a library passing its own `RelWithDebInfo` **with** a `_debuginfo` subpackage would
+then trip the wrapper's "`Release` **with** debug info packages specified" guard
+and start aborting. Patching only the two always-fail (`exit 1`) branches has a
+**zero** no-regression surface — no port that built successfully ever traversed
+them — and leaves the `Release`/`_debuginfo`-mismatch guard byte-for-byte intact.
+
+**Fix (per-recipe — fallback).** Set the type on the recipe's own `cmake` call
+(usually alongside the Class 1 policy flag):
 ```sh
 cmake . … -DCMAKE_BUILD_TYPE=Release -DCMAKE_POLICY_VERSION_MINIMUM=3.5
 ```
-**Example ports:** sais, superfreecell, cmake_haiku (add build type); epoll_shim
-(`RelWithDebInfo`→`Release`).
+Note this path is *fragile* for this class: a per-recipe overlay reaches the
+builder only through the input-source-package path, which haikuporter silently
+re-extracts (reverting the edit) unless the recipe mtime is pinned forward of the
+source package (see `recipes/README.md`). Four Class-8 ports carried a correct
+per-recipe overlay yet still failed the wave for exactly this reason — which is
+why the systemic wrapper fix is preferred.
+
+**Example ports (all 10 #136 Class-8):** `invoking cmake without
+CMAKE_BUILD_TYPE`: cmake_haiku, freegish, lensfun, libmirage, nogravity, sais,
+sawteeth, superfreecell. `RelWithDebInfo` without debug info: epoll_shim, flac13.
 
 ---
 
