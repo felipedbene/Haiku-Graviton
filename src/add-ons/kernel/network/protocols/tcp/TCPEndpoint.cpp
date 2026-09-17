@@ -496,6 +496,8 @@ TCPEndpoint::TCPEndpoint(net_socket* socket)
 	fReceiveWindow(socket->receive.buffer_size),
 	fReceiveMaxSegmentSize(TCP_DEFAULT_MAX_SEGMENT_SIZE),
 	fReceiveQueue(socket->receive.buffer_size),
+	fReceiveRing(),
+	fPushSequence(0),
 	fSmoothedRoundTripTime(-1),
 	fRoundTripVariation(0),
 	fSendTime(0),
@@ -512,6 +514,9 @@ TCPEndpoint::TCPEndpoint(net_socket* socket)
 {
 	// TODO: to be replaced with a real read/write locking strategy!
 	mutex_init(&fLock, "tcp lock");
+	mutex_init(&fReadLock, "tcp read lock");
+
+	_InitReceiveRing();
 
 	fReceiveCondition.Init(this, "tcp receive");
 	fSendCondition.Init(this, "tcp send");
@@ -530,6 +535,16 @@ TCPEndpoint::TCPEndpoint(net_socket* socket)
 
 TCPEndpoint::~TCPEndpoint()
 {
+	// The read syscall holds a socket reference for its whole duration, so no
+	// reader is draining the ring by the time the endpoint is torn down. Fence
+	// against a reader caught between releasing its reference and returning by
+	// taking fReadLock once here -- BEFORE fLock, matching ReadData's
+	// fReadLock->fLock order so no inversion can form. The ring's own
+	// destructor then frees any buffers still queued.
+	mutex_lock(&fReadLock);
+	mutex_unlock(&fReadLock);
+	mutex_destroy(&fReadLock);
+
 	mutex_lock(&fLock);
 
 	T(APICall(this, "destructor"));
@@ -982,7 +997,7 @@ TCPEndpoint::FillStat(net_stat *stat)
 	MutexLocker _(fLock);
 
 	strlcpy(stat->state, name_for_state(fState), sizeof(stat->state));
-	stat->receive_queue_size = fReceiveQueue.Available();
+	stat->receive_queue_size = _ReceiveAvailable();
 	stat->send_queue_size = fSendQueue.Used();
 
 	return B_OK;
@@ -995,6 +1010,11 @@ TCPEndpoint::ReadData(size_t numBytes, uint32 flags, net_buffer** _buffer)
 	if ((flags & ~(MSG_DONTWAIT | MSG_WAITALL | MSG_PEEK)) != 0)
 		return EOPNOTSUPP;
 
+	// #61: serialise application readers on the lockless delivery ring so it
+	// stays strictly single-consumer. This is a per-reader lock, NOT fLock, so
+	// it never blocks the RX consumer -- concurrent recv() on one socket is
+	// rare, but the ring's SPSC invariant depends on exactly one consumer.
+	MutexLocker readLocker(fReadLock);
 	MutexLocker locker(fLock);
 
 	TRACE("ReadData(%" B_PRIuSIZE " bytes, flags %#" B_PRIx32 ")", numBytes,
@@ -1037,18 +1057,37 @@ TCPEndpoint::ReadData(size_t numBytes, uint32 flags, net_buffer** _buffer)
 	// TODO: add support for urgent data (MSG_OOB)
 
 	while (true) {
+		// Flush any contiguous prefix that back-pressure left staged in the
+		// reorder buffer into the ring, so the availability checks below (and
+		// the lock-free drain that follows) see everything deliverable. In the
+		// steady state the reorder buffer is empty and this is a no-op.
+		_DrainToRing();
+
+		size_t available = _ReceiveAvailable();
+
 		if (fState == CLOSING || fState == WAIT_FOR_FINISH_ACKNOWLEDGE
 			|| fState == TIME_WAIT) {
 			// ``Connection closing''.
-			if (fReceiveQueue.Available() > 0)
+			if (available > 0)
 				break;
 			return B_OK;
 		}
 
-		if (fReceiveQueue.Available() > 0) {
-			if (fReceiveQueue.Available() >= dataNeeded
-				|| (fReceiveQueue.PushedData() > 0
-					&& fReceiveQueue.PushedData() >= fReceiveQueue.Available()))
+		if (available > 0) {
+			// Honour a PUSH boundary: deliver early even below the low-water
+			// mark once everything up to the last pushed byte is available.
+			size_t pushedAvailable = 0;
+			if (fPushSequence != 0) {
+				tcp_sequence readerSequence = (fInitialReceiveSequence + 1)
+					+ fReceiveRing.Consumed();
+				tcp_sequence pushEnd = fPushSequence > fReceiveNext
+					? fReceiveNext : fPushSequence;
+				if (pushEnd > readerSequence)
+					pushedAvailable = (pushEnd - readerSequence).Number();
+			}
+
+			if (available >= dataNeeded
+				|| (pushedAvailable > 0 && pushedAvailable >= available))
 				break;
 		} else if (fState == FINISH_RECEIVED) {
 			// ``If no text is awaiting delivery, the RECEIVE will
@@ -1069,27 +1108,38 @@ TCPEndpoint::ReadData(size_t numBytes, uint32 flags, net_buffer** _buffer)
 			// available. So we actually check if there is data, and if so,
 			// push it to the user.
 			if ((status == B_TIMED_OUT || status == B_INTERRUPTED)
-				&& fReceiveQueue.Available() > 0)
+				&& _ReceiveAvailable() > 0)
 				break;
 
 			return posix_error(status);
 		}
 	}
 
-	TRACE("  ReadData(): %" B_PRIuSIZE " are available.",
-		fReceiveQueue.Available());
+	// Make sure everything deliverable is in the ring, then drain it with fLock
+	// RELEASED. The reader still holds fReadLock (single consumer) and a socket
+	// reference (the endpoint cannot be torn down under it), so the O(segments)
+	// coalesce no longer serialises the RX consumer on fLock -- this is the #61
+	// win. fReceiveNext / window state is re-read under fLock afterwards.
+	_DrainToRing();
 
-	if (numBytes < fReceiveQueue.Available())
+	if (numBytes < fReceiveRing.Available())
 		fReceiveCondition.NotifyAll();
 
 	bool clone = (flags & MSG_PEEK) != 0;
 
-	ssize_t receivedBytes = fReceiveQueue.Get(numBytes, !clone, _buffer);
+	locker.Unlock();
+	ssize_t receivedBytes = fReceiveRing.Read(numBytes, clone, _buffer);
+	locker.Lock();
 
-	TRACE("  ReadData(): %" B_PRIuSIZE " bytes kept.",
-		fReceiveQueue.Available());
+	// read_data() has status_t semantics: the caller (socket_receive_data)
+	// takes the byte count from (*_buffer)->size and treats any non-B_OK return
+	// as an error, so a negative value from the ring is the only thing to
+	// propagate -- a successful read returns B_OK, exactly as the old
+	// BufferQueue::Get() path did.
+	if (receivedBytes < 0)
+		return receivedBytes;
 
-	if (fReceiveQueue.Available() == 0 && fState == FINISH_RECEIVED)
+	if (_ReceiveAvailable() == 0 && fState == FINISH_RECEIVED)
 		socket->receive.low_water_mark = 0;
 
 	// if we opened the window, check if we should send a window update
@@ -1104,7 +1154,7 @@ TCPEndpoint::ReadData(size_t numBytes, uint32 flags, net_buffer** _buffer)
 			_SendAcknowledge();
 	}
 
-	return receivedBytes;
+	return B_OK;
 }
 
 
@@ -1313,7 +1363,7 @@ TCPEndpoint::_Disconnect(bool closing)
 		// We "should send a RST if there is any unread received data,
 		// or if any new data is received" (RFC 2525 § 2.17). This
 		// isn't a TCP state, so use a flag.
-		if (closing && fReceiveQueue.Available() > 0)
+		if (closing && _ReceiveAvailable() > 0)
 			fFlags |= FLAG_USER_CLOSED;
 		fState = FINISH_SENT;
 	} else if (fState == FINISH_RECEIVED)
@@ -1673,6 +1723,104 @@ TCPEndpoint::_SampleMinRoundTripTime(const tcp_segment_header& segment)
 }
 
 
+/*!	Sizes and (re)allocates the lockless receive ring. Called from the
+	constructor and again from _PrepareReceivePath() once the negotiated MSS and
+	window shift are known -- always while the ring is empty and no reader is
+	active, which Init() requires.
+
+	The ring needs one slot per in-order segment the window can hold, so it is
+	sized from the largest window the connection could advertise divided by the
+	segment size, clamped to a sane range. If the ring ever runs out of slots
+	(pathologically small segments), the producer simply keeps that segment in
+	the fReceiveQueue reorder buffer and the advertised window is bounded by the
+	free slot count -- correctness is preserved, only throughput degrades.
+*/
+void
+TCPEndpoint::_InitReceiveRing()
+{
+	uint32 segmentSize = fReceiveMaxSegmentSize;
+	if (segmentSize == 0)
+		segmentSize = TCP_DEFAULT_MAX_SEGMENT_SIZE;
+
+	uint64 maxWindow = (uint64)UINT16_MAX << fReceiveWindowShift;
+	uint64 slots = maxWindow / segmentSize + 2;
+
+	if (slots < 256)
+		slots = 256;
+	if (slots > 8192)
+		slots = 8192;
+
+	fReceiveRing.Init((uint32)slots);
+}
+
+
+/*!	Bytes available to the application reader: the in-order delivery ring plus
+	any contiguous prefix still staged in the reorder buffer (only non-zero in
+	the rare back-pressure case where the ring filled and the reader has not yet
+	flushed it). Callers on the reader side hold fReadLock; producer-side callers
+	hold fLock -- either is sufficient for a consistent read of these counters.
+*/
+ssize_t
+TCPEndpoint::_ReceiveAvailable() const
+{
+	return (ssize_t)(fReceiveRing.Available() + fReceiveQueue.Available());
+}
+
+
+/*!	Total bytes buffered on the receive side: unread in-order data (ring) plus
+	out-of-order and not-yet-flushed data (reorder buffer). This is what the
+	advertised window is deducted from.
+*/
+size_t
+TCPEndpoint::_ReceiveBuffered() const
+{
+	return fReceiveRing.Available() + fReceiveQueue.Used();
+}
+
+
+/*!	Free receive space to advertise. Bounded both by the byte budget (max buffer
+	minus what is already buffered) and by the ring's free slot count so the
+	peer cannot send more in-order segments than the ring can hold.
+*/
+size_t
+TCPEndpoint::_ReceiveFree() const
+{
+	size_t max = fReceiveQueue.Size();
+	size_t buffered = _ReceiveBuffered();
+	size_t byteFree = max > buffered ? max - buffered : 0;
+
+	uint32 segmentSize = fReceiveMaxSegmentSize;
+	if (segmentSize == 0)
+		segmentSize = TCP_DEFAULT_MAX_SEGMENT_SIZE;
+	uint64 slotFree = (uint64)fReceiveRing.FreeSlots() * segmentSize;
+
+	return byteFree < slotFree ? byteFree : (size_t)slotFree;
+}
+
+
+/*!	Moves the contiguous, in-order prefix currently staged in the reorder buffer
+	into the delivery ring as cheap pointer moves (no coalesce). Runs under
+	fLock: either the RX consumer path or the reader's start-of-ReadData flush.
+	Stops if the ring runs out of slots, leaving the remainder staged (counted
+	toward _ReceiveBuffered so the window still reflects it).
+*/
+void
+TCPEndpoint::_DrainToRing()
+{
+	while (fReceiveQueue.Available() > 0 && fReceiveRing.HasFreeSlot()) {
+		net_buffer* head = fReceiveQueue.DetachFirst();
+		if (head == NULL)
+			break;
+		if (!fReceiveRing.Push(head)) {
+			// No free slot after all (should not happen -- checked above).
+			// Do not lose the data: hand it back to the reorder buffer.
+			fReceiveQueue.Add(head, tcp_sequence(head->sequence));
+			break;
+		}
+	}
+}
+
+
 ssize_t
 TCPEndpoint::_AvailableData() const
 {
@@ -1684,7 +1832,7 @@ TCPEndpoint::_AvailableData() const
 	if (fState == SYNCHRONIZE_SENT)
 		return 0;
 
-	ssize_t availableData = fReceiveQueue.Available();
+	ssize_t availableData = _ReceiveAvailable();
 
 	if (availableData == 0 && !_ShouldReceive() && (fFlags & FLAG_CAN_NOTIFY) != 0)
 		return ENOTCONN;
@@ -1705,14 +1853,39 @@ TCPEndpoint::_NotifyReader()
 bool
 TCPEndpoint::_AddData(tcp_segment_header& segment, net_buffer* buffer)
 {
+	// The buffer is handed to the ring (or reorder buffer) below and may be
+	// freed there, so cache its size first.
+	const uint32 dataSize = buffer->size;
+
 	if ((segment.flags & TCP_FLAG_FINISH) != 0) {
 		// Remember the position of the finish received flag
 		fFinishReceived = true;
-		fFinishReceivedAt = segment.sequence + buffer->size;
+		fFinishReceivedAt = segment.sequence + dataSize;
 	}
 
-	fReceiveQueue.Add(buffer, segment.sequence);
-	fReceiveNext = fReceiveQueue.NextSequence();
+	if (fReceiveNext == segment.sequence && fReceiveQueue.Used() == 0
+		&& fReceiveRing.HasFreeSlot()) {
+		// #61 fast path: the segment is exactly in order and there is no
+		// out-of-order data staged, so hand it straight to the lockless
+		// delivery ring without touching the reorder buffer or any lock the
+		// application reader also takes. This is what removes the RX consumer's
+		// per-segment enqueue from the shared-lock critical section.
+		buffer->sequence = segment.sequence;
+		fReceiveRing.Push(buffer);
+		fReceiveNext += dataSize;
+
+		// Keep the (empty) reorder buffer's base sequence in step with the
+		// in-order edge so a later out-of-order Add() accounts contiguity from
+		// the right place.
+		fReceiveQueue.SetInitialSequence(fReceiveNext);
+	} else {
+		// Out-of-order, back-pressured, or reorder-pending: stage in the
+		// reorder buffer as before, then move whatever contiguous prefix that
+		// created into the ring.
+		fReceiveQueue.Add(buffer, segment.sequence);
+		fReceiveNext = fReceiveQueue.NextSequence();
+		_DrainToRing();
+	}
 
 	if (fFinishReceived) {
 		// Set or reset the finish flag on the current segment
@@ -1723,14 +1896,17 @@ TCPEndpoint::_AddData(tcp_segment_header& segment, net_buffer* buffer)
 	}
 
 	TRACE("  _AddData(): adding data, receive next = %" B_PRIu32 ". Now have %"
-		B_PRIuSIZE " bytes.", fReceiveNext.Number(), fReceiveQueue.Available());
+		B_PRIdSSIZE " bytes.", fReceiveNext.Number(), _ReceiveAvailable());
 
 	_UpdateReceiveBuffer();
 
-	if ((segment.flags & TCP_FLAG_PUSH) != 0)
-		fReceiveQueue.SetPushPointer();
+	if ((segment.flags & TCP_FLAG_PUSH) != 0) {
+		tcp_sequence pushEnd = segment.sequence + dataSize;
+		if (fPushSequence == 0 || pushEnd > fPushSequence)
+			fPushSequence = pushEnd;
+	}
 
-	return fReceiveQueue.Available() > 0;
+	return _ReceiveAvailable() > 0;
 }
 
 
@@ -1740,12 +1916,17 @@ TCPEndpoint::_PrepareReceivePath(tcp_segment_header& segment)
 	fInitialReceiveSequence = segment.sequence;
 	fFinishReceived = false;
 	fReceiveSizingTimestamp = 0;
+	fPushSequence = 0;
 
 	// count the received SYN
 	segment.sequence++;
 
 	fReceiveNext = segment.sequence;
 	fReceiveQueue.SetInitialSequence(segment.sequence);
+
+	// The window shift and MSS are settled (_PrepareSendPath() ran first), and
+	// no data has flowed yet, so this is the point to size the delivery ring.
+	_InitReceiveRing();
 
 	if ((fOptions & TCP_NOOPT) == 0) {
 		if (segment.max_segment_size > 0) {
@@ -1945,7 +2126,7 @@ TCPEndpoint::_Receive(tcp_segment_header& segment, net_buffer* buffer)
 			}
 		} else if (segment.acknowledge == fSendUnacknowledged
 			&& fReceiveQueue.IsContiguous()
-			&& fReceiveQueue.Free() >= segmentLength
+			&& _ReceiveFree() >= segmentLength
 			&& (fFlags & FLAG_NO_RECEIVE) == 0) {
 			if (_AddData(segment, buffer))
 				_NotifyReader();
@@ -2018,7 +2199,7 @@ TCPEndpoint::_Receive(tcp_segment_header& segment, net_buffer* buffer)
 
 	// TODO: Check this! Why do we advertize a window outside of what we should
 	// buffer?
-	fReceiveWindow = max_c(fReceiveQueue.Free(), fReceiveWindow);
+	fReceiveWindow = max_c(_ReceiveFree(), fReceiveWindow);
 		// the window must not shrink
 
 	// trim buffer to be within the receive window
@@ -2187,8 +2368,9 @@ TCPEndpoint::_Receive(tcp_segment_header& segment, net_buffer* buffer)
 			fReceiveNext++;
 			notify = true;
 
-			// FIN implies PUSH
-			fReceiveQueue.SetPushPointer();
+			// FIN implies PUSH: mark everything delivered as pushed so a reader
+			// waiting below its low-water mark is released.
+			fPushSequence = fReceiveNext;
 
 			// we'll reply immediately to the FIN if we are not
 			// transitioning to TIME WAIT so we immediatly ACK it.
@@ -2388,7 +2570,7 @@ TCPEndpoint::_PrepareSendSegment()
 		}
 	}
 
-	size_t availableBytes = fReceiveQueue.Free();
+	size_t availableBytes = _ReceiveFree();
 	// window size must remain same for duplicate acknowledgements
 	if (!fReceiveQueue.IsContiguous())
 		availableBytes = (fReceiveMaxAdvertised - fReceiveNext).Number();
@@ -3098,8 +3280,10 @@ TCPEndpoint::Dump() const
 		fReceiveMaxAdvertised.Number());
 	kprintf("    window: %" B_PRIu32 "\n", fReceiveWindow);
 	kprintf("    max segment size: %" B_PRIu32 "\n", fReceiveMaxSegmentSize);
-	kprintf("    queue: %" B_PRIuSIZE " / %" B_PRIuSIZE "\n",
-		fReceiveQueue.Available(), fReceiveQueue.Size());
+	kprintf("    available: %" B_PRIdSSIZE " (ring %" B_PRIuSIZE " + reorder %"
+		B_PRIuSIZE ") / max %" B_PRIuSIZE ", ring slots %" B_PRIu32 "\n",
+		_ReceiveAvailable(), fReceiveRing.Available(), fReceiveQueue.Used(),
+		fReceiveQueue.Size(), fReceiveRing.Capacity());
 #if DEBUG_TCP_BUFFER_QUEUE
 	fReceiveQueue.Dump();
 #endif
