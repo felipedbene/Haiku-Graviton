@@ -1,0 +1,11 @@
+Building Go cmd/dist using /local/home/benfelip/go-m0/go-bootstrap. (go1.25.1 linux/amd64)
+Building Go toolchain1 using /local/home/benfelip/go-m0/go-bootstrap.
+Building Go bootstrap cmd/go (go_bootstrap) using Go toolchain1.
+Building Go toolchain2 using go_bootstrap and Go toolchain1.
+Building Go toolchain3 using go_bootstrap and Go toolchain2.
+Building commands for host, linux/amd64.
+Building packages and commands for target, haiku/arm64.
+---
+Installed Go for haiku/arm64 in /local/home/benfelip/go-m0/korli-go
+Installed commands in /local/home/benfelip/go-m0/korli-go/bin
+*** You need to add /local/home/benfelip/go-m0/korli-go/bin to your PATH.

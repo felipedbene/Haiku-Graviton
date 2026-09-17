@@ -1,0 +1,79 @@
+# M1 proof — on-hardware run of cross-compiled haiku/arm64 Go binaries
+# 2026-09-17
+#
+# Target: AWS Graviton (c7g.large) running DeBeOS/Haiku arm64
+#   uname -a: Haiku ... R1~beta6+development hrev59996 Sep 16 2026 arm64 Haiku
+#   AMI: ami-064b8f2597d5b22c2 (canonical=true at time of run)
+#   Instance i-0ef08967a8e24d710 (tag owner=go-m1, Project=haiku-graviton) — reaped after run.
+#
+# Binaries cross-compiled on a Linux/amd64 host with the M0 toolchain
+#   (korli/go @ go1.26.1-haiku1 + the arm64 patchset), GOOS=haiku GOARCH=arm64
+#   CGO_ENABLED=0, built with -ldflags="-s -w". Each confirmed:
+#     ELF 64-bit LSB executable, ARM aarch64, interpreter /system/runtime_loader.
+# Sources: ./tests/{hello,fmthello,chans,syscalls,sigtest}.go
+# Pushed to the guest base64-chunked over SSM Run Command (guests have no
+#   scp/curl/wget); decoded with /bin/base64 -d, chmod +x, executed via SSM.
+# Output below is verbatim SSM StandardOutput/StandardError + the shell's
+#   echoed "__EXIT__=$?".
+
+## (a) MUST-PASS gate — println("hi")   [tests/hello.go]
+# SSM Status: Success  ResponseCode: 0
+STDERR: hi                 # Go's println builtin writes to fd 2 (stderr) — expected
+STDOUT: __EXIT__=0
+=> PASS: prints "hi", exits 0.  <<< M1 definition of done met.
+
+## (b) fmt.Println   [tests/fmthello.go]
+# SSM Status: Success  ResponseCode: 0
+STDOUT: hello from haiku/arm64
+        __EXIT__=0
+=> PASS. Exercises fmt formatting + buffered stdout write through libroot.
+
+## (c) goroutines + buffered channel + sync.WaitGroup   [tests/chans.go]
+# 8 goroutines each send id*id into a buffered channel; main sums them.
+# Expected sum of squares 0..7 = 140.
+# SSM Status: Success  ResponseCode: 0
+STDOUT: goroutine-sum 140
+        __EXIT__=0
+=> PASS. Scheduler, goroutine creation/teardown, channels, WaitGroup all correct on arm64.
+
+## (d) time.Sleep + getpid + direct write(2)   [tests/syscalls.go]
+# time.Sleep(200ms); os.Getpid(); os.Stdout.Write([]byte("syscall-write-ok\n")).
+# SSM Status: Success  ResponseCode: 0
+STDOUT: syscall-write-ok
+        pid=950 slept=200ms
+        __EXIT__=0
+=> PASS. Timer subsystem (slept=200ms, accurate — no 1970/clock-step issue),
+   getpid and write(2) through the libroot syscall dispatcher all correct.
+
+## (e) signal path — nil-deref -> SIGSEGV -> sigtramp -> sigpanic -> recover   [tests/sigtest.go]
+# Deliberately dereferences a nil *int to force a hardware SIGSEGV, then
+# recover()s. This is the ONE test that deterministically drives the two
+# riskiest M0 simplifications: the modern sigtramp/sigtrampgo path and the
+# hand-derived arm64 mcontext/ucontext register offsets (the signal handler
+# must read the correct fault PC/address to synthesise the panic).
+# SSM Status: Success  ResponseCode: 0
+STDOUT: before-deref
+        recovered-from-signal: runtime error: invalid memory address or nil pointer dereference
+        __EXIT__=0
+=> PASS. The runtime caught the hardware SIGSEGV, decoded the signal context
+   correctly, synthesised the exact nil-pointer panic, and recover() unwound
+   cleanly (exit 0). A wrong mcontext offset would have mis-decoded the fault
+   (double-fault / hang / garbage panic) instead. Both flagged simplifications
+   are hardware-validated.
+
+## M0 simplifications — status after M1
+- modern sigtramp -> sigtrampgo:      VALIDATED on hardware (test e).
+- hand-derived arm64 mcontext offsets: VALIDATED on hardware (test e).
+- usleep1 / g-bearing sleep via sysvicall1: VALIDATED (test d, 200ms accurate).
+- zsysnum copied from amd64:           NOT exercised as raw syscall numbers, and
+  by design never will be — Haiku reaches the kernel through libroot, so getpid
+  and write went through the dispatcher, not raw SVC. The zsysnum table stays
+  cosmetic; regenerating it from the arm64 libroot syscalls.S.inc remains a
+  correctness-hygiene follow-up, not an M1 blocker.
+
+## Verdict
+M1 PASS. A cross-compiled haiku/arm64 Go binary runs on real Graviton hardware,
+prints, and exits 0 — and the goroutine, syscall, and signal paths all run
+clean, validating the M0 runtime bring-up (scheduler, timers, libroot syscall
+dispatch, signal handling) on hardware. Next: M2 (net/http HTTPS + N concurrent
+goroutines/conns under load through the poll-based netpoller).
