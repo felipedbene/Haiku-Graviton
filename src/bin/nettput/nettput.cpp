@@ -435,6 +435,12 @@ usage(int status)
 		"  -W            recv() with MSG_WAITALL, so every read moves exactly\n"
 		"                the chunk size. Needed to make -A mean anything; see\n"
 		"                the note in the source.\n"
+		"  -V            verify a stream-offset byte ramp (offset & 0xff). The\n"
+		"                sender emits it and the receiver checks every byte, so\n"
+		"                any reorder/drop/dup in the receive path is caught.\n"
+		"  -K            like -V, but each chunk is first read with MSG_PEEK and\n"
+		"                then normally, checking the peek matches -- exercises\n"
+		"                the receive path's read-without-advance.\n"
 		"  -A <offset>   shift the data buffer this many bytes past its\n"
 		"                natural alignment (0..63, default 0). Only useful for\n"
 		"                probing whether a copy in the kernel is paying an\n"
@@ -465,12 +471,21 @@ main(int argc, char** argv)
 	int bufferAlignment = 0;
 	int receiveFlags = 0;
 	char mode = MODE_TRANSMIT;
+	bool verify = false;
+	bool peekVerify = false;
 
 	int option;
-	while ((option = getopt(argc, argv, "c:p:n:b:w:P:A:WrL:h")) != -1) {
+	while ((option = getopt(argc, argv, "c:p:n:b:w:P:A:WrVKL:h")) != -1) {
 		switch (option) {
 			case 'c':
 				host = optarg;
+				break;
+			case 'V':
+				verify = true;
+				break;
+			case 'K':
+				peekVerify = true;
+				verify = true;
 				break;
 			case 'p':
 				port = atoi(optarg);
@@ -595,6 +610,14 @@ main(int argc, char** argv)
 		while (moved < bytes) {
 			size_t chunk = (size_t)((bytes - moved) < bufferSize
 				? (bytes - moved) : bufferSize);
+			if (verify) {
+				// Emit a true stream-offset ramp so the receiver's -V check
+				// (byte at stream offset O == O & 0xff) holds regardless of the
+				// chunk size -- any reorder/drop/dup in the receive path breaks
+				// it. Integrity guard for the #61 lockless handoff.
+				for (size_t k = 0; k < chunk; k++)
+					buffer[k] = (uint8)((moved + (off_t)k) & 0xff);
+			}
 			if (write_fully(socketFD, buffer, chunk) < 0) {
 				fprintf(stderr, "nettput: send failed after %" B_PRIdOFF
 					" bytes: %s\n", moved, strerror(errno));
@@ -618,9 +641,35 @@ main(int argc, char** argv)
 			}
 		}
 	} else {
+		uint8* peekBuffer = peekVerify ? (uint8*)malloc(bufferSize) : NULL;
 		while (moved < bytes) {
 			size_t chunk = (size_t)((bytes - moved) < bufferSize
 				? (bytes - moved) : bufferSize);
+			if (peekVerify) {
+				// MSG_PEEK must return the same bytes a following non-peek read
+				// returns, without consuming them. Peek a chunk, then read it,
+				// and check the overlap agrees and matches the ramp -- exercises
+				// the ring's read-without-advance path (#61).
+				ssize_t peeked = recv(socketFD, peekBuffer, chunk, MSG_PEEK);
+				if (peeked > 0) {
+					ssize_t got = recv(socketFD, buffer, chunk, 0);
+					ssize_t overlap = peeked < got ? peeked : got;
+					for (ssize_t j = 0; got > 0 && j < overlap; j++) {
+						uint8 expected = (uint8)((moved + j) & 0xff);
+						if (peekBuffer[j] != buffer[j] || buffer[j] != expected) {
+							fprintf(stderr, "nettput: PEEK MISMATCH at offset %"
+								B_PRIdOFF ": peek %u read %u expected %u\n",
+								moved + j, peekBuffer[j], buffer[j], expected);
+							failed = true;
+							break;
+						}
+					}
+					if (failed)
+						break;
+					moved += got;
+					continue;
+				}
+			}
 			ssize_t bytesRead = read_fully(socketFD, buffer, chunk, receiveFlags);
 			if (bytesRead < 0) {
 				fprintf(stderr, "nettput: receive failed after %" B_PRIdOFF
@@ -634,8 +683,29 @@ main(int argc, char** argv)
 				failed = true;
 				break;
 			}
+			if (verify) {
+				// The peer sends a byte ramp (stream offset & 0xff), so every
+				// received byte must equal its stream offset mod 256. Any
+				// reorder, drop or duplication in the receive-path coalesce
+				// breaks this -- integrity guard for the #61 lockless handoff.
+				for (ssize_t j = 0; j < bytesRead; j++) {
+					uint8 expected = (uint8)((moved + j) & 0xff);
+					if (((uint8*)buffer)[j] != expected) {
+						fprintf(stderr, "nettput: VERIFY MISMATCH at offset %"
+							B_PRIdOFF ": got %u expected %u\n", moved + j,
+							((uint8*)buffer)[j], expected);
+						failed = true;
+						break;
+					}
+				}
+				if (failed)
+					break;
+			}
 			moved += bytesRead;
 		}
+		if (verify && !failed)
+			printf("  verify          : OK (%" B_PRIdOFF " bytes, ramp intact)\n",
+				moved);
 	}
 
 	take_cpu_snapshot(after);

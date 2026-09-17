@@ -225,6 +225,40 @@ BufferQueue::Add(net_buffer *buffer, tcp_sequence sequence)
 }
 
 
+/*!	Detaches and returns the first buffer in the queue, which must be part of
+	the contiguous prefix (the caller checks Available() > 0). Updates the byte
+	counters and advances the first sequence, but does NOT clone or coalesce --
+	it is a cheap pointer move used by the #61 receive fast path to hand the
+	in-order prefix to the lockless delivery ring one buffer at a time.
+
+	Returns NULL when the queue is empty.
+*/
+net_buffer*
+BufferQueue::DetachFirst()
+{
+	net_buffer* buffer = fList.First();
+	if (buffer == NULL)
+		return NULL;
+
+	ASSERT(fFirstSequence.Number() == buffer->sequence);
+		// Only the contiguous head may be detached this way.
+
+	fList.Remove(buffer);
+	fFirstSequence += buffer->size;
+	fNumBytes -= buffer->size;
+	if (fContiguousBytes >= buffer->size)
+		fContiguousBytes -= buffer->size;
+	else
+		fContiguousBytes = 0;
+
+	if (fList.IsEmpty())
+		fLastSequence = fFirstSequence;
+
+	VERIFY();
+	return buffer;
+}
+
+
 /*!	Removes all data in the queue up to the \a sequence number as specified.
 
 	NOTE: If there are missing segments in the buffers to be removed,

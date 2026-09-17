@@ -13,6 +13,7 @@
 
 #include "BufferQueue.h"
 #include "EndpointManager.h"
+#include "ReceiveRing.h"
 #include "tcp.h"
 
 #include <ProtocolUtilities.h>
@@ -91,6 +92,11 @@ private:
 
 			status_t	_Disconnect(bool closing);
 			ssize_t		_AvailableData() const;
+			ssize_t		_ReceiveAvailable() const;
+			size_t		_ReceiveBuffered() const;
+			size_t		_ReceiveFree() const;
+			void		_DrainToRing();
+			void		_InitReceiveRing();
 			void		_NotifyReader();
 			bool		_ShouldReceive() const;
 			void		_HandleReset(status_t error);
@@ -141,6 +147,10 @@ private:
 	friend class	EndpointHashDefinition;
 
 	mutex			fLock;
+	mutex			fReadLock;
+		// Serialises application readers on the lockless receive ring so it
+		// stays single-consumer, WITHOUT contending the RX consumer's fLock
+		// (that decoupling is the point of #61).
 	EndpointManager* fManager;
 	ConditionVariable
 					fReceiveCondition;
@@ -182,6 +192,12 @@ private:
 	uint32			fReceiveWindow;
 	uint32			fReceiveMaxSegmentSize;
 	BufferQueue		fReceiveQueue;
+		// #61: now only the out-of-order reorder buffer plus the receive-window
+		// max-bytes scalar. The in-order delivery prefix lives in fReceiveRing.
+	ReceiveRing		fReceiveRing;
+	tcp_sequence	fPushSequence;
+		// Highest sequence carrying PUSH (or FIN); drives early wakeup of a
+		// reader waiting below its low-water mark.
 	bool			fFinishReceived;
 	tcp_sequence	fFinishReceivedAt;
 	tcp_sequence	fInitialReceiveSequence;
