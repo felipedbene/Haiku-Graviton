@@ -39,7 +39,14 @@ static constexpr uint64_t kAttrShareability = (3UL << 8);
 static constexpr uint64_t kAttrSHInnerShareable = (3UL << 8);
 static constexpr uint64_t kAttrAPReadOnly = (1UL << 7);
 static constexpr uint64_t kAttrAPUserAccess = (1UL << 6);
-static constexpr uint64_t kAttrMemoryAttrIdx = (3UL << 2);
+// AttrIndx occupies PTE bits [4:2] -- three bits selecting one of eight MAIR
+// entries. The mask must cover all three: a two-bit mask (3 << 2) folds
+// AttrIndx 0 (Device nGnRnE, B_UNCACHED) and AttrIndx 4 (Normal WB,
+// B_WRITE_BACK) onto the same value, so Protect()'s memory-type comparison
+// would judge a Device<->WriteBack change as "unchanged" and skip
+// break-before-make -- writing a cacheable PTE in place while the TLB may
+// still hold the old Device mapping (TLB conflict / loss of coherency).
+static constexpr uint64_t kAttrMemoryAttrIdx = (7UL << 2);
 
 static constexpr uint64_t kTLBIMask = ((1UL << 44) - 1);
 static constexpr uint64_t kASIDMask = 0xFF00000000000000UL;
