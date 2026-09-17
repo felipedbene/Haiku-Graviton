@@ -1,0 +1,23 @@
+diff --git a/src/runtime/sys_haiku_arm64.s b/src/runtime/sys_haiku_arm64.s
+index dba83c6..e5e623c 100644
+--- a/src/runtime/sys_haiku_arm64.s
++++ b/src/runtime/sys_haiku_arm64.s
+@@ -76,7 +76,17 @@ skipargs:
+ 	MOVD	g_m(g), R1
+ 	MOVD	(m_mOS+mOS_perrno)(R1), R2
+ 	CBZ	R2, skiperrno2
+-	MOVW	(R2), R2
++	// Zero-extend the 32-bit errno, do NOT sign-extend it. Haiku's POSIX
++	// errno values are B_GENERAL_ERROR_BASE-relative (0x8000_00xx: bit 31
++	// set), and the syscall package's errno constants are masked to 32 bits
++	// (Errno(-0x7ffffff5 & 0xffffffff)). A signed MOVW load sign-extends to
++	// 0xffffffff_8000000b, which no longer == the 0x0000_0000_8000000b
++	// constant, so every internal/poll comparison (err == EAGAIN,
++	// EWOULDBLOCK, EINPROGRESS, ...) silently fails and non-blocking network
++	// I/O readiness breaks — while Errno.Error() still prints the right text
++	// because it re-masks with & 0x7fffffff. The amd64 port's MOVL already
++	// zero-extends; MOVWU is its arm64 equivalent.
++	MOVWU	(R2), R2
+ 	MOVD	R2, libcall_err(R19)
+ 
+ skiperrno2:

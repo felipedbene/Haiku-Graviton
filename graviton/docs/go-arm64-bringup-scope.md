@@ -1,13 +1,16 @@
 # Go toolchain bring-up on DeBeOS (Haiku arm64) — scoping
 
-**Status:** **M0 + M1 DONE** (2026-09-17) — the rest is still scoping. A
-`GOOS=haiku GOARCH=arm64` gc Go toolchain now cross-builds from a Linux host
-from the `korli/go` fork plus a small arm64 patchset (M0), and cross-compiled
-binaries **run on real Graviton Haiku hardware** (M1): hello-world prints and
-exits 0, and goroutine, syscall, and signal (nil-deref → recover) programs all
-run clean, validating the M0 runtime simplifications on hardware. Artifacts,
-patchset, overlay recipe and proof logs: [`../go-arm64/`](../go-arm64/) (see
-`logs/M1-proof.txt`). This
+**Status:** **M0 + M1 + M2 DONE** (2026-09-17) — the real-agent port is still
+scoping (see §4.1). A `GOOS=haiku GOARCH=arm64` gc Go toolchain now cross-builds
+from a Linux host from the `korli/go` fork plus a small arm64 patchset (M0), and
+cross-compiled binaries **run on real Graviton Haiku hardware**: hello-world,
+goroutine, syscall, and signal (nil-deref → recover) programs all run clean
+(M1), and **`net/http` + `crypto/tls` HTTPS and thousands of concurrent
+goroutines/connections run through the poll(2) netpoller with no hang** (M2) —
+which also caught and fixed a real arm64 errno-sign-extension bug that had
+silently disabled non-blocking I/O readiness. Artifacts, patchset, overlay
+recipe and proof logs: [`../go-arm64/`](../go-arm64/) (see `logs/M1-proof.txt`,
+`logs/M2-proof.txt`). This
 document decides *whether and how* to bring the Go toolchain to DeBeOS on
 Graviton (arm64), with the concrete end goal of compiling the upstream
 **`amazon-ssm-agent`** (github.com/aws/amazon-ssm-agent, Apache-2.0, written in
@@ -208,8 +211,8 @@ Each milestone has a binary pass/fail check. Milestones are cumulative.
 |---|---|---|
 | **M0** ✅ | Cross-build a haiku/arm64 gc Go toolchain: add arm64 arch files to the fork; produce a `go-<ver>-haiku-arm64-bootstrap`; `GOOS=haiku GOARCH=arm64` `make.bash` succeeds from a Linux host | **DONE** — `make.bash` builds "packages and commands for target, haiku/arm64"; `std` + `cmd` cross-build; a program cross-compiles to a AArch64 Haiku ELF; `go-1.26.1-haiku-arm64-bootstrap.tbz` produced. See [`../go-arm64/`](../go-arm64/) |
 | **M1** ✅ | Hello world | **DONE** — cross-compiled `haiku/arm64` binaries ran on a Graviton `c7g.large` (Haiku hrev59996) over SSM: `println("hi")` → `hi`, exit 0 (the gate); plus `fmt.Println`, 8 goroutines+channel (`goroutine-sum 140`), `time.Sleep`+`getpid`+`write(2)` (`slept=200ms`), and a nil-deref→SIGSEGV→recover test — all exit 0. The modern-`sigtramp` and hand-derived-`mcontext` M0 simplifications are hardware-validated by the signal test. See [`../go-arm64/logs/M1-proof.txt`](../go-arm64/logs/M1-proof.txt) |
-| **M2** | `net/http` + goroutines + netpoller | an HTTPS GET returns 200; N concurrent goroutines + connections complete under load with no netpoller hang |
-| **M3** | cgo (only if needed) | a cgo "hello" calling a `libroot` function links and runs — **skip if the agent builds `CGO_ENABLED=0`** |
+| **M2** ✅ | `net/http` + goroutines + netpoller | **DONE** — on a Graviton `c7g.large` (Haiku hrev59996) over SSM: a `crypto/tls` HTTPS GET to `checkip.amazonaws.com` returned **200** over a real **TLS 1.3** handshake (cipher `0x1301`, ALPN `h2`, 3-cert chain verified against the Haiku CA bundle); **50 goroutines × 4 = 200** simultaneous external HTTPS connections all 2xx with no hang; an in-process `http.Server` + **100 goroutines × 20 = 2000** requests all returned correct per-request checksums with no hang. **Uncovered and fixed a netpoller-blocking bug:** the arm64 libroot dispatcher sign-extended Haiku's bit-31-set errno values, so every `internal/poll` `err == syscall.EAGAIN`/`EINPROGRESS` guard failed and non-blocking I/O never parked on netpoll — one-instruction fix (`MOVW`→`MOVWU`), `patches/0002`. A/B on hardware: serverload 0/200 → 2000/2000. See [`../go-arm64/logs/M2-proof.txt`](../go-arm64/logs/M2-proof.txt) |
+| **M3** | cgo (only if needed) | a cgo "hello" calling a `libroot` function links and runs — **skip if the agent builds `CGO_ENABLED=0`** (confirmed skippable, see §4.1) |
 | **M4** | `amazon-ssm-agent` compiles for haiku/arm64 | binary is produced (expect a few `//go:build` GOOS arms + a service-integration shim) |
 | **M5** | It runs | agent starts, reads config, does not crash on init |
 | **M6** | Registers + Run Command | `describe-instance-information` shows Online; `send-command AWS-RunShellScript` succeeds — the bar `debeos-ssm-agent` already meets |
@@ -229,7 +232,18 @@ Each milestone has a binary pass/fail check. Milestones are cumulative.
    gcc bridge with the right calling convention), but **likely avoidable** if the
    agent and its deps build `CGO_ENABLED=0`. Confirm early.
 4. **Netpoller correctness under load (M2)** — poll-based, arch-neutral, already
-   written; risk is integration bugs surfacing on arm64, not design.
+   written; risk is integration bugs surfacing on arm64, not design. **This is
+   exactly what happened, and M2 caught it:** the netpoll *logic* was fine, but
+   the arm64 libroot syscall dispatcher sign-extended Haiku's errno values
+   (all B_GENERAL_ERROR_BASE-relative, bit 31 set), so `internal/poll`'s
+   `err == syscall.EAGAIN`/`EINPROGRESS` readiness guards silently evaluated
+   false and non-blocking I/O never waited on the poller — every socket
+   read/connect returned its raw errno instantly. One-instruction fix
+   (`MOVW`→`MOVWU`, zero- instead of sign-extend; `patches/0002`), then all of
+   net/http/TLS worked under concurrency. It was invisible through M1 because
+   `Errno.Error()` re-masks to 32 bits (so strings looked right) and no M1 test
+   did a non-blocking `== syscall.Exxx` comparison. Lesson banked: the arm64
+   syscall shim needs an errno-comparison test, not just an errno-string one.
 5. **ssm-agent Linux gatherers / service integration (M4–M6)** — ordinary
    porting; gatherers degrade to empty, service integration reuses the existing
    launch job. Low technical risk, non-trivial volume.
@@ -247,6 +261,52 @@ Each milestone has a binary pass/fail check. Milestones are cumulative.
 Do not undersell it: a *working amazon-ssm-agent that registers* is a
 **multi-week-to-multi-month** effort in total. The *toolchain alone* is the
 cheaper, sooner, and independently valuable milestone.
+
+### 4.1 Next milestone — `go build` the real `amazon-ssm-agent` (M3/M4)
+
+With M0–M2 done and hardware-proven, the toolchain is no longer the risk. The
+next concrete step is to get the upstream agent to *compile* for haiku/arm64.
+Scope, in the order the work actually blocks:
+
+1. **cgo (doc-ladder M3) is skippable — confirmed.** M0/M1/M2 all built and ran
+   `CGO_ENABLED=0`, and `crypto/tls` + the pure-Go DNS resolver + `net/http`
+   work with cgo off (M2 proved it). `amazon-ssm-agent`'s core builds
+   `CGO_ENABLED=0` on Linux; the only common cgo pull-ins are the (Linux-only)
+   `os/user` via nss and some vendored SQLite. On haiku/arm64 with cgo off,
+   `os/user` uses the pure-Go path and any SQLite-backed component must be
+   confirmed built-tag-gated or vendored out. **Action: build the agent
+   `CGO_ENABLED=0` and treat any cgo requirement as a per-package exception, not
+   a blanket M3.**
+2. **Module fetch without a network toolchain.** The build host is Linux (where
+   `go`/`git`/module proxy all work), so `GOOS=haiku GOARCH=arm64` is a pure
+   cross-compile and module download happens on the *host*, not the guest — no
+   Haiku-side `git`/proxy needed. Two viable inputs: (a) `git clone` the agent at
+   a pinned tag and `go mod download` on the host (needs egress to
+   proxy.golang.org or `GOFLAGS=-mod=mod` + `GOPROXY`); or (b) vendor it
+   (`go mod vendor`) and build `-mod=vendor` fully offline — **preferred here**,
+   matching how the Rust bring-up vendored crates and avoiding any proxy
+   dependency in the bake pipeline. Its `go.mod` floor is `go 1.25`; the fork is
+   `1.26.1`, so **no version gap.**
+3. **GOOS build-tag arms.** The agent has `_linux.go` / `_windows.go` /
+   `_darwin.go` files for platform, service integration (systemd/Windows SCM),
+   filesystem paths, and reboot. haiku/arm64 will fall through to whatever the
+   `!linux,!windows,!darwin` default is, or fail to build where no default
+   exists. Expect to add a handful of `_haiku.go` (or `//go:build haiku`) files:
+   service start/stop (Haiku `launch_daemon`, which `debeos-ssm-agent` already
+   drives), on-instance paths, and platform-info gatherers (degrade to empty).
+   This is the bulk of doc-ladder **M4** and is ordinary porting, not runtime
+   work.
+4. **First check = it links.** M4's pass/fail is "a binary is produced." Concrete
+   next test program: `GOOS=haiku GOARCH=arm64 CGO_ENABLED=0 go build
+   ./core/agent` (or the smallest main package that pulls the config +
+   messaging + HTTP stack) against a vendored checkout, iterating on missing
+   `_haiku.go` arms until the linker produces an AArch64 Haiku ELF. Then run it
+   on hardware (M5) and check registration (M6) — the bar `debeos-ssm-agent`
+   already meets.
+
+Bottom line unchanged: the toolchain (M0–M2) is now proven and independently
+valuable; the real-agent port (M3-skip / M4–M6) remains ordinary-but-voluminous
+porting to re-evaluate against continuing to ship `debeos-ssm-agent`.
 
 ---
 
