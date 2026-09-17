@@ -891,11 +891,22 @@ ena_report_offload_capabilities(ena_haiku_device* device,
 	   stack would have to be told which convention to write, and computing a
 	   pseudo-header sum costs a handful of adds either way. One code path.
 
-	   IPv6 is claimed only if the device claims it; this one does not. */
+	   IPv6 is deliberately never claimed, regardless of what the device
+	   advertises. ena_prepare_tx_checksum() below finishes IPv4 frames only
+	   (it rejects any ethertype other than 0x0800), and the IPv6 protocol
+	   module has no software fallback for a frame left with
+	   NET_BUFFER_L4_CHECKSUM_NEEDED the way ipv4.cpp does -- so claiming the
+	   IPv6 bit would make TCPEndpoint hand the device every IPv6 segment with
+	   the checksum unfinished, and each one would be dropped B_NOT_SUPPORTED
+	   here rather than put on the wire. Claiming a family the datapath cannot
+	   finish is exactly the invariant the txChecksumOffload comment in ena.h
+	   forbids. The device's own reading is unreliable anyway: an out-of-tree
+	   probe on this hardware reported IPv6 transmit checksum both on and off on
+	   sibling instance types. Until the datapath finishes IPv6 (and can be
+	   proven on hardware that advertises it), the bit stays off and IPv6
+	   transmit takes the software-checksum path, which is correct. */
 	bool partialIPv4
 		= get_ena_admin_feature_offload_desc_TX_L4_ipv4_csum_part(offload) != 0;
-	bool partialIPv6
-		= get_ena_admin_feature_offload_desc_TX_L4_ipv6_csum_part(offload) != 0;
 
 	bool enabled = true;
 	void* handle = load_driver_settings("ena");
@@ -931,8 +942,6 @@ ena_report_offload_capabilities(ena_haiku_device* device,
 
 	if (partialIPv4)
 		device->txChecksumOffload |= NET_DEVICE_TX_CHECKSUM_IPV4_L4;
-	if (partialIPv6)
-		device->txChecksumOffload |= NET_DEVICE_TX_CHECKSUM_IPV6_L4;
 
 	TRACE_ALWAYS("transmit checksum offload: advertising %#" B_PRIx32 "\n",
 		device->txChecksumOffload);
