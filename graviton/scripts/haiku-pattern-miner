@@ -1,0 +1,345 @@
+#!/usr/bin/env python3
+"""haiku-pattern-miner -- discover NEW arm64 porting-failure classes from real build
+logs, so the porting playbook (graviton/docs/porting-playbook.md, #90/#136) grows from
+data instead of manual archaeology.
+
+WHY THIS EXISTS. `haiku-triage-failures` sorts the backlog against the playbook's known
+failure classes with an ordered regex ruleset. Everything it can't match lands in
+`triage_class=UNMATCHED`. That UNMATCHED pile is exactly where the *next* playbook
+classes are hiding -- but a flat list of a few hundred opaque failures is unminable by
+hand. This tool turns that pile into ranked, evidence-backed clusters: it fetches each
+UNMATCHED port's build log, extracts the salient failure line, NORMALISES it (strips
+paths, versions, hex, line numbers, the port's own name, `-l<lib>` names) into a
+canonical signature, clusters by signature, ranks by port count, and prints the top-N
+with a representative raw excerpt and example ports. Each cluster above the threshold is
+a candidate new class; each one you can characterise becomes a playbook entry.
+
+WHAT IT IS -- and IS NOT. Read-only discovery glue. It does NOT rebuild, re-wave,
+re-queue, or write anything back to DDB or S3 -- it reads DDB (query) + S3 (get) and
+prints/writes a local JSON report. There is no --execute; there is nothing to execute.
+
+WHAT IT MINES. By default: items with `triage_class=UNMATCHED` (the classifier found no
+class) whose log does NOT contain the dependency-not-published marker. Dep-unpublished
+ports are excluded because they are not code/recipe *patterns* -- the fix is to build and
+publish the dependency, not to edit a recipe (see the playbook's
+`build_state=built != published`). The exclusion marker defaults to the literal token
+`UNRESOLVABLE` (matching `haiku-triage-failures`' `has_unresolvable`); note that
+haikuporter *also* emits `unable to resolve (pre)required packages ...` for the same
+root cause with different wording -- those logs do NOT carry the literal token, so they
+survive the filter and surface as their own cluster. That is deliberate: it makes the
+dep-unpublished-by-other-signature backlog visible (and is why the playbook's Class 20
+documents those signatures).
+
+SALIENT-LINE EXTRACTION. Build logs are captured as the *tail* of the native build (the
+full log stays in `nb-<pkg>.log` on the builder), so a large port's root compiler error
+can be scrolled off the top -- such logs expose only the generic `make: *** Error N`
+cascade. The extractor scans up to haikuporter's `returned non-zero exit status` marker,
+collects lines matching a broad failure vocabulary, and prefers a *specific* line
+(compiler/linker/configure error) over a *generic* cascade line. Logs with no salient
+line at all are reported honestly as a single `(no salient line -- truncated tail)`
+bucket, never invented into a class.
+
+USAGE
+  # mine the UNMATCHED backlog, print the top clusters (read-only):
+  AWS_PROFILE=haiku-graviton graviton/scripts/haiku-pattern-miner
+
+  # full machine-readable report of every cluster:
+  ... --out /tmp/miner.json
+
+  # only show clusters of >=5 ports (the "you're missing a pattern" threshold):
+  ... --min-cluster 5
+
+  # mine a specific triage_class, or ALL failed/needs_human logs:
+  ... --triage-class UNMATCHED        (default)
+  ... --all                           (ignore triage_class; cluster everything)
+
+Exit status: 0 on a clean mining run; non-zero on a usage/credentials error or if the
+DDB query / S3 access could not be performed (it refuses to invent an empty report).
+"""
+import argparse
+import concurrent.futures as cf
+import gzip
+import io
+import json
+import os
+import re
+import sys
+import time
+from collections import Counter, defaultdict
+
+TABLE_DEFAULT = os.environ.get("TABLE", "debeos-package-state")
+GSI = "by-build-state"
+STATES = ("failed", "needs_human")
+# The dependency-not-published marker written into logs by the wave tooling; a port whose
+# log carries it is excluded from mining (not a recipe pattern -- publish the dep).
+UNRESOLVABLE_MARKER = "UNRESOLVABLE"
+
+
+def log(*a):
+    print(*a, file=sys.stderr, flush=True)
+
+
+# ----------------------------------------------------------------- salient extraction
+# Broad failure vocabulary -- a line worth clustering on. Case-insensitive.
+_CANDIDATE = re.compile(
+    r"(?:"
+    r"\berror:|CMake Error|fatal error:|undefined reference to|multiple definition of|"
+    r"ld: cannot find|command not found|No such file or directory|"
+    r"was not declared|does not name a type|has no member|is not a member of|"
+    r"Must specify optimization flags|ModuleNotFoundError|No module named|ImportError|"
+    r"Read-only file system|not supported|unsupported|not detected|unknown word-size|"
+    r"guess host type|guess build type|not found in the pkg-config|"
+    r"working library archiver|patch file .* not found|"
+    r"unable to resolve (?:required|prerequired) packages|is not available, please install|"
+    r"No rule to make target|No targets specified|OpenMP|narrowing conversion|"
+    r"conflicting declaration|redefinition of|Package '[^']+', required by|"
+    r"invalid conversion|-fpermissive|#error|invoking meson without|"
+    r"prepareInstalledDevelLib"
+    r")", re.I)
+
+# Generic cascade / continuation lines: real, but they only echo that *something* below
+# them failed. Deprioritised so a specific error above them wins.
+_GENERIC = re.compile(
+    r"^(?:make(?:\[\d+\])?:|collect2:|ninja: build stopped|-- Configuring incomplete|"
+    r"Error: Build has failed|Warning: Command|Call Stack|\||\s*\^|\d+ \|)")
+
+_NONZERO = "returned non-zero exit status"
+
+
+def salient_line(text):
+    """Return the single most-informative failure line, or None if the captured tail
+    exposes no root error (a truncated log). Prefers a specific error over a generic
+    make/link cascade line."""
+    cands = []
+    for ln in text.splitlines():
+        if _NONZERO in ln:
+            break
+        s = ln.strip()
+        if s and _CANDIDATE.search(s):
+            cands.append(s)
+    if not cands:
+        return None
+    specific = [c for c in cands if not _GENERIC.match(c)]
+    return (specific or cands)[0]
+
+
+# ----------------------------------------------------------------- normalisation
+def normalize(line, pkg):
+    """Collapse a raw failure line to a canonical signature: strip the port's own name,
+    absolute paths, source locations, `-l<lib>` names, versions, hex addresses, bare
+    numbers, and quoted/backticked tokens. Order matters (pkg + paths before numbers)."""
+    s = line
+    if pkg:
+        s = re.sub(re.escape(pkg), "PKG", s, flags=re.I)
+    s = re.sub(r"/[^\s:()]+/", "/P/", s)                                   # abs paths
+    s = re.sub(r"\b[\w.+-]+\.(?:c|cc|cpp|cxx|h|hpp|C):\d+(?::\d+)?", "FILE:N", s)  # src loc
+    s = re.sub(r"-l[\w.+-]+", "-lLIB", s)                                  # link libs
+    s = re.sub(r"0x[0-9a-fA-F]+", "0xADDR", s)                            # hex addrs
+    s = re.sub(r"\b\d+(?:\.\d+)+[\w~.+-]*", "V", s)                        # versions
+    s = re.sub(r"\b\d+\b", "N", s)                                        # bare numbers
+    s = re.sub(r"'[^']*'", "'X'", s)                                      # quoted
+    s = re.sub(r'"[^"]*"', '"X"', s)
+    s = re.sub(r"`[^`]*`", "`X`", s)
+    s = re.sub(r"PKG[\w.+~-]*", "PKG", s)                                  # PKG-<ver> tails
+    s = re.sub(r"\s+", " ", s).strip()
+    return s
+
+
+# ----------------------------------------------------------------- DDB reading
+def load_items(table, region, triage_class, want_all):
+    """Read failed + needs_human items off the by-build-state GSI. Returns dicts of
+    {pkg, build_state, log_url, triage_class}. Filters to triage_class unless --all."""
+    import boto3
+    ddb = boto3.client("dynamodb", region_name=region)
+    paginator = ddb.get_paginator("query")
+    out = []
+    for state in STATES:
+        for page in paginator.paginate(
+                TableName=table, IndexName=GSI,
+                KeyConditionExpression="build_state = :s",
+                ExpressionAttributeValues={":s": {"S": state}},
+                ProjectionExpression="pkg, build_state, log_url, triage_class"):
+            for it in page.get("Items", []):
+                tc = it.get("triage_class", {}).get("S") or ""
+                if not want_all and tc != triage_class:
+                    continue
+                out.append({
+                    "pkg": it["pkg"]["S"],
+                    "build_state": it["build_state"]["S"],
+                    "log_url": it.get("log_url", {}).get("S") or "",
+                    "triage_class": tc,
+                })
+    return out
+
+
+# ----------------------------------------------------------------- S3 fetching
+_S3_URI = re.compile(r"^s3://([^/]+)/(.+)$")
+
+
+def fetch_log(s3, log_url):
+    """Fetch + gunzip a build log. Returns text|None (None => missing/empty/unreadable)."""
+    if not log_url or log_url == "n/a":
+        return None
+    m = _S3_URI.match(log_url)
+    if not m:
+        return None
+    try:
+        raw = s3.get_object(Bucket=m.group(1), Key=m.group(2))["Body"].read()
+    except Exception:
+        return None
+    if not raw:
+        return None
+    if raw[:2] == b"\x1f\x8b":
+        try:
+            raw = gzip.GzipFile(fileobj=io.BytesIO(raw)).read()
+        except OSError:
+            pass
+    text = raw.decode("utf-8", errors="replace")
+    return text if text.strip() else None
+
+
+# ----------------------------------------------------------------- main
+def main():
+    ap = argparse.ArgumentParser(
+        description="Mine UNMATCHED build-failure logs for new porting-playbook classes "
+                    "(#90/#136). Read-only: reads DDB + S3, writes a local report only.")
+    ap.add_argument("--table", default=TABLE_DEFAULT)
+    ap.add_argument("--region", default=os.environ.get("AWS_DEFAULT_REGION", "us-west-2"))
+    ap.add_argument("--triage-class", default="UNMATCHED",
+                    help="mine only this triage_class (default UNMATCHED).")
+    ap.add_argument("--all", action="store_true",
+                    help="ignore triage_class; cluster every failed/needs_human log.")
+    ap.add_argument("--include-unresolvable", action="store_true",
+                    help="do NOT exclude dep-unpublished logs (default excludes logs "
+                         "containing the %r marker)." % UNRESOLVABLE_MARKER)
+    ap.add_argument("--top", type=int, default=25, help="how many clusters to print.")
+    ap.add_argument("--min-cluster", type=int, default=1,
+                    help="only report clusters with >= this many ports.")
+    ap.add_argument("--examples", type=int, default=6,
+                    help="example ports to show per cluster.")
+    ap.add_argument("--workers", type=int, default=16, help="parallel S3 fetches.")
+    ap.add_argument("--out", help="write the full cluster report to this JSON path.")
+    ap.add_argument("--cache-dir", help="if set, cache fetched logs here (read-through), "
+                    "so re-runs don't re-fetch from S3.")
+    args = ap.parse_args()
+
+    try:
+        import boto3  # noqa: F401
+    except ImportError:
+        raise SystemExit("boto3 is required (pip install boto3).")
+
+    log("=== DeBeOS pattern-miner (read-only) ===")
+    log("table / index : %s / %s  (states: %s)" % (args.table, GSI, ", ".join(STATES)))
+    log("mining        : %s" % ("ALL failed/needs_human"
+                                if args.all else "triage_class=%s" % args.triage_class))
+    log("dep-unpublished: %s" % ("INCLUDED"
+                                 if args.include_unresolvable else "excluded"))
+
+    try:
+        items = load_items(args.table, args.region, args.triage_class, args.all)
+    except Exception as e:
+        raise SystemExit("FATAL: could not query DDB %s.%s: %s -- refusing to invent a "
+                         "report." % (args.table, GSI, e))
+    if not items:
+        raise SystemExit("FATAL: 0 items to mine (triage_class=%s). Has the triage run? "
+                         "Refusing to invent a report." % args.triage_class)
+    log("candidate logs: %d" % len(items))
+
+    import boto3
+    s3 = boto3.client("s3", region_name=args.region)
+    if args.cache_dir:
+        os.makedirs(args.cache_dir, exist_ok=True)
+
+    def work(it):
+        pk = it["pkg"]
+        cached = os.path.join(args.cache_dir, pk + ".log") if args.cache_dir else None
+        text = None
+        if cached and os.path.exists(cached):
+            text = open(cached, encoding="utf-8", errors="replace").read()
+        if text is None:
+            text = fetch_log(s3, it["log_url"])
+            if text is not None and cached:
+                open(cached, "w").write(text)
+        return pk, text
+
+    # ---- fetch + extract + normalise ----------------------------------------
+    clusters = defaultdict(list)            # signature -> [pkg,...]
+    raw_example = {}                        # signature -> raw salient line
+    no_log = 0
+    excluded_dep = 0
+    truncated = 0
+
+    with cf.ThreadPoolExecutor(max_workers=max(1, args.workers)) as ex:
+        for pk, text in ex.map(work, items):
+            if text is None:
+                no_log += 1
+                continue
+            if (not args.include_unresolvable) and (UNRESOLVABLE_MARKER in text):
+                excluded_dep += 1
+                continue
+            bl = salient_line(text)
+            if bl is None:
+                truncated += 1
+                clusters["(no salient line -- truncated tail)"].append(pk)
+                continue
+            sig = normalize(bl, pk)
+            clusters[sig].append(pk)
+            raw_example.setdefault(sig, bl)
+
+    mined = sum(len(v) for v in clusters.values())
+    real_clusters = {s: p for s, p in clusters.items()
+                     if s != "(no salient line -- truncated tail)"}
+
+    # ---- report -------------------------------------------------------------
+    ranked = sorted(clusters.items(), key=lambda kv: -len(kv[1]))
+    ts = int(time.time())
+
+    print("\n" + "=" * 74)
+    print("DeBeOS pattern-miner: %d logs mined  (%d no-log, %d dep-unpublished excluded)"
+          % (mined, no_log, excluded_dep))
+    print("distinct signatures: %d   truncated-tail (no root error captured): %d"
+          % (len(real_clusters), truncated))
+    print("=" * 74)
+    print("%5s  %s" % ("ports", "normalised signature"))
+    print("-" * 74)
+    shown = 0
+    for sig, pks in ranked:
+        if len(pks) < args.min_cluster:
+            continue
+        if shown >= args.top:
+            break
+        shown += 1
+        print("%5d  %s" % (len(pks), sig[:66]))
+        if sig in raw_example:
+            print("       e.g.  %s" % raw_example[sig][:80])
+        print("       ports: %s%s" % (
+            ", ".join(sorted(pks)[:args.examples]),
+            (" ... (+%d)" % (len(pks) - args.examples)) if len(pks) > args.examples else ""))
+    print("=" * 74)
+    multi = sum(1 for s, p in real_clusters.items() if len(p) >= 5)
+    print("clusters >= 5 ports (candidate playbook classes): %d" % multi)
+    print("singletons: %d   (one-off failures, not yet a class)"
+          % sum(1 for s, p in real_clusters.items() if len(p) == 1))
+    print("=" * 74)
+
+    if args.out:
+        report = {
+            "generated_at": ts, "table": args.table,
+            "mined": mined, "no_log": no_log,
+            "dep_unpublished_excluded": excluded_dep, "truncated_tail": truncated,
+            "clusters": [
+                {"signature": sig, "count": len(pks),
+                 "representative": raw_example.get(sig, ""),
+                 "ports": sorted(pks)}
+                for sig, pks in ranked
+            ],
+        }
+        with open(args.out, "w") as f:
+            json.dump(report, f, indent=2)
+        log("wrote cluster report: %s" % args.out)
+
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

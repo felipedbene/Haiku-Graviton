@@ -50,10 +50,19 @@ memory that keeps per-port flags from being re-derived.
 | 15 | [runConfigure CFLAGS needs -O](#secondary-blocker-tail-136-re-wave-of-classes-3846710113) | `runConfigure: Must specify optimization flags when overriding CFLAGS` |
 | 16 | [multiple definition (GCC10 -fno-common)](#secondary-blocker-tail-136-re-wave-of-classes-3846710113) | `ld: multiple definition of '<sym>'` |
 | 17 | [CMake FetchContent offline fetch](#secondary-blocker-tail-136-re-wave-of-classes-3846710113) | `FetchContent_MakeAvailable` / `__FetchContent_populateSubbuild` |
+| 18 | [Missing link-time library](#class-18-missing-link-time-library-ld-cannot-find--llib) | `ld: cannot find -l<lib>: No such file or directory` |
+| 19 | [Build system does not recognise aarch64](#class-19-build-system-does-not-recognise-aarch64arm64) | `"Platform '' not supported"` / `unknown word-size for arch: aarch64` |
+| 20 | [Prerequisite package/tool not published](#class-20-prerequisite-packagetool-not-published) | `unable to resolve (pre)required packages` / `Package 'X' … not found` |
+| 21 | [Python setup.py needs setuptools](#class-21-python-setuppy-needs-setuptools--pkg_resources) | `ModuleNotFoundError: No module named 'pkg_resources'` |
+| 22 | [Removed/renamed Haiku API or moved header](#class-22-removedrenamed-haiku-api-or-moved-header) | `'BSplitView' does not name a type` / `fatal error: <X.h>: No such file` |
+| 23 | [Install writes to read-only /packages](#class-23-install-writes-to-read-only-packages) | `mkdir: cannot create directory '/packages/…_devel-…': Read-only file system` |
+| 24 | [Source-acquisition tool missing on host](#class-24-source-acquisition-tool-missing-on-the-builder-host) | `Error: '<hg\|svn\|lha>' is not available, please install it` |
 
 Classes 15–17 were surfaced by the #136 re-wave secondary-blocker triage; see
 [that section](#secondary-blocker-tail-136-re-wave-of-classes-3846710113) at the
-end of this document.
+end of this document. **Classes 18–24 were mined from the real UNMATCHED backlog by
+`graviton/scripts/haiku-pattern-miner`** (see
+[How classes 18–24 were mined](#how-classes-1824-were-mined--the-unmatched-frontier)).
 
 ---
 
@@ -651,6 +660,318 @@ ELF** as `bin/bison` inside an `-arm64` hpkg. It can never run. Worse,
 present is not enough). Diagnose with `readelf -l <bin> | grep interpreter`: a
 genuine Haiku binary has **no `INTERP` segment**. Any port whose build runs
 `bison` fails until the bad packages are gone (`sys-devel/jam` exposed this).
+
+---
+
+## Classes 15–17 (reserved, PR #309)
+
+Classes **15** (CFLAGS override drops default optimization —
+`runConfigure: Must specify optimization flags when overriding CFLAGS`, fix: add
+`-O2`), **16** (duplicate symbol / `multiple definition of` — fix: `-fcommon` or a
+real dedup), and **17** (CMake `FetchContent` offline fetch — pre-seed the dep) are
+owned by **PR #309** (the re-triage-tail work). They are only reserved here so the
+numbering stays stable across the two PRs. **The mining below deliberately does NOT
+re-add them**, even though the miner sees their signatures in the UNMATCHED pile
+(class 15 = 18 ports, class 16 = 13 ports as of the 2026-09-17 mining run) — see #309
+for the class bodies.
+
+---
+
+## Class 18: Missing link-time library (`ld: cannot find -l<lib>`)
+
+**Mined class (11 ports).**
+
+**Symptom (link step):**
+```
+… /bin/ld: cannot find -lmidi: No such file or directory
+… /bin/ld: cannot find -lscreensaver: No such file or directory
+collect2: error: ld returned 1 exit status
+```
+
+**Root cause.** The recipe or upstream Makefile links a library whose **developer
+symlink** (`lib<name>.so`, unversioned, under `/system/develop/lib`) is not in the
+build chroot. Two sub-cases, distinguished by whether the library is a **Haiku
+system** library or a **third-party** one:
+
+- **Haiku's own libraries** — `libmidi`/`libmidi2` (MIDI kit), `libscreensaver`
+  (screensaver kit), `libgame`, etc. Their runtime `.so` is in the base image, but the
+  **unversioned devel symlink** ships in a *devel* package the recipe never declared.
+  `-lGL` is the same shape (provided by a `libgl`/`mesa` devel package).
+- **Third-party libraries** that genuinely are not in the arm64 pool — that is
+  really [Class 20](#class-20-prerequisite-packagetool-not-published) (dep unpublished),
+  not this class. Tell them apart by whether `find /system/develop/lib -name 'lib<x>.so'`
+  exists on a booted image: present-but-unlinked ⇒ Class 18; absent ⇒ Class 20.
+
+**Fix.** Declare the providing **`devel:` / `lib:` build requirement** so the devel
+symlink is mounted into the chroot (e.g. the midi-kit devel package for `-lmidi`), or,
+for a Haiku library whose devel symlink is simply missing from the pool, add the
+symlink in the recipe’s `INSTALL()`/`BUILD()` before the link step. Do **not** “fix” it
+by dropping the `-l` — that silently cuts the feature.
+
+**Example ports:** allegro, billardgl, drumcircle, fbneo, internalmidi, lite_xl,
+midikeyboard, rtmidi, symetrie, textsaver, wolle (wolle is also a
+[Class 22](#class-22-removedrenamed-haiku-api-or-moved-header) narrowing case).
+
+---
+
+## Class 19: Build system does not recognise aarch64/arm64
+
+**Mined class (8 ports).** Distinct from [Class 6](#class-6-configguess-cannot-name-the-arm64-host):
+Class 6 is GNU `config.guess`/`config.sub`; **this** is the project’s *own* hand-rolled
+architecture switch.
+
+**Symptom (before or early in the build, from the project’s own logic):**
+```
+Makefile:40: *** "Platform '' not supported".  Stop.
+Make.inc:448: *** "unknown word-size for arch: aarch64".  Stop.
+[ERROR!] Cannot guess host type. You must specify one with the -host option.
+Your platform is unsupported
+```
+(often preceded by the project echoing `UNAME_MACHINE = arm64`.)
+
+**Root cause.** The project ships its own `uname -m`/`$(ARCH)` switch that enumerates
+`i386`/`x86_64`/`ppc`/… and has **no `aarch64` (or `arm64`) case**, so an empty/unknown
+arch variable aborts a `Makefile`, a `Make.inc`, or a bespoke `configure`. Haiku
+reporting `arm64` (not `aarch64`) from `uname -m` compounds it. `-DLLVM_HOST_TRIPLE=`
+and `runConfigure` do **not** help — the switch is inside the project, not autotools.
+
+**Fix.** Patch the project’s arch/platform detection to add an `arm64`/`aarch64` branch
+(map it to the closest existing 64-bit little-endian target, usually the `x86_64`
+codegen path plus `-DHAVE_*` word-size defines the project keys off), gated to the
+primary arch. For a bespoke `configure` that only accepts `--host`, pass
+`--host=aarch64-unknown-haiku` via `runConfigure`.
+
+**Example ports:** glew, glew2.1, imagetoicon, jamvm, julia, ocaml, tbb2018.5,
+vncserver.
+
+---
+
+## Class 20: Prerequisite package/tool not published
+
+**Mined class (~30 ports).** This is the **dependency-not-published** root cause
+([build_state=built ≠ published](#build_statebuilt--published)) surfacing under
+haikuporter’s *native* wording rather than the literal `UNRESOLVABLE` marker — which is
+exactly why these evaded the `haiku-triage-failures` `has_unresolvable` filter and
+landed in UNMATCHED. **They are NOT recipe/code defects.** The fix is to build **and
+publish** the dependency, or provision the host tool — never a source edit.
+
+**Three signatures, one root cause:**
+```
+Error: unable to resolve required packages for build for <port>
+    Reason: build-requires "devel:libsdl3" of package "<port>" could not be resolved
+Error: unable to resolve prerequired packages for build for <port>
+    Reason: build-prerequires "cmd:dot" of package "<port>" could not be resolved
+Package 'python3', required by 'virtual:world', not found     (pkg-config, no .pc)
+configure: error: libgcrypt not found on system / libgcrypt is too old
+```
+
+**Root cause & fix by sub-signature:**
+
+| Sub-signature | What is missing | Fix |
+|---|---|---|
+| `unable to resolve … "devel:X"` | a library dep not built+published in the arm64 pool | build & **publish** `X` to green, then re-wave the consumer |
+| `unable to resolve … "cmd:Y"` | a build **tool** not in the pool (`cmd:dot`/graphviz, `cmd:makeinfo`) | build & publish the tool package (or, for a host-only fetch tool, [Class 24](#class-24-source-acquisition-tool-missing-on-the-builder-host)) |
+| pkg-config `Package 'X' … not found` | dep present but no `.pc`, or dep truly absent | publish the dep’s devel package (ships the `.pc`); `python3.pc` ⇒ publish python devel |
+| `libgcrypt not found` / dropped `libgcrypt-config` | configure macro removed upstream | **deferred-hard** — needs configure-macro porting (see deferred list; libotr/gsasl) |
+
+**Example ports:** crawl, devilutionx, ecwolf, endless_sky, eternal_lands, exiv2
+(`cmd:dot`), ffmpeg6, grafx2, gst_plugins_bad, hikounomizu, libjxl, lighttpd, lugaru,
+minetest, ocp (`devel:libsdl3`), python3.13, qemu, radare2, spice, vice, warzone2100
+(resolve-step); bezilla, libdvdnav, lsdvd, mailnews, poezio (pkg-config); gsasl,
+libaacs, libbdplus, libsigrokdecode (configure).
+
+---
+
+## Class 21: Python setup.py needs setuptools / `pkg_resources`
+
+**Mined class (4 ports).**
+
+**Symptom (packaging step, after the source is staged):**
+```
+Traceback (most recent call last):
+  File "…/setup.py", line 18, in <module>
+    import pkg_resources
+ModuleNotFoundError: No module named 'pkg_resources'
+```
+
+**Root cause.** The port’s `setup.py` imports `pkg_resources` (or `setuptools`) at
+build time, but the python `setuptools` package is not in the build chroot — the recipe
+declared a bare python but not setuptools.
+
+**Fix.** Declare setuptools in `BUILD_PREREQUIRES` (the python `setuptools` package,
+which provides `pkg_resources`), matching the recipe’s python version:
+```
+BUILD_PREREQUIRES="
+	…
+	setuptools_python310    # provides pkg_resources
+	"
+```
+
+**Example ports:** html5lib, libplacebo, librnp, pbr.
+
+---
+
+## Class 22: Removed/renamed Haiku API or moved header
+
+**Mined class (7 ports).** Real source porting (some genuinely
+[deferred-hard](#ports-deferred-as-hard-not-this-playbooks-quick-win-classes)), grouped
+because the root cause is one thing: **the port targets a Haiku/BeOS API that current
+Haiku renamed, removed, or moved.**
+
+**Two symptoms:**
+```
+… /interface/SplitLayoutBuilder.h:30: error: 'BSplitView' does not name a type; did you mean 'SplitView'?
+src/ip.cpp:165: error: 'host' was not declared in this scope
+   -- or a header that moved / needs an include path --
+src/MapsData.h:12: fatal error: UrlRequest.h: No such file or directory
+/boot/system/develop/headers/bsd/stdlib.h:9: fatal error: stdlib.h: No such file or directory  (#include_next)
+```
+
+**Root cause.** A removed/renamed symbol (`BSplitView` → `BSplitLayoutBuilder`
+semantics changed), or a header that moved into a **private** subtree
+(`<UrlRequest.h>` now under `headers/private/netservices`) or needs the standard-C
+include path repaired (a `makefile_engine` app that clears the default `-I` so a
+`bsd/stdlib.h` `#include_next <stdlib.h>` can’t find the next header).
+
+**Fix.** Update the source to the current API (a `PATCH()` hunk), or add the missing
+include path (`CPPFLAGS+=-I/system/develop/headers/private/netservices`, or restore the
+default C include dir for a makefile_engine app). Where the API delta is large, mark it
+**deferred-hard** rather than half-porting it.
+
+**Example ports:** album (`BSplitView`), mda_vst, workspacenumber, zeromq (removed
+symbol); ducksaver, maps, sdl_gfx (moved/missing header). Many of the truncated-tail
+`makefile_engine` legacy BeOS apps (batchrename, bemines, bescreencapture, dockbert, …)
+are very likely this class — their root error scrolled off the captured log tail.
+
+---
+
+## Class 23: Install writes to read-only /packages
+
+**Mined class (3 ports).**
+
+**Symptom (packaging/harvest step, after the build succeeded):**
+```
+/packages/pystring0_devel-1.1.3_git-3/.self
+mkdir: cannot create directory '/packages/pystring0_devel-1.1.3_git-3': Read-only file system
+```
+
+**Root cause.** The `_devel` (or another split) subpackage harvest tries to `mkdir`
+directly under the **read-only packagefs mount** `/packages` instead of the recipe’s
+work/install dir. Several cases carry a **malformed subpackage identifier** — note the
+stray trailing space in `libu2f_server_devel-1.1.0-6 ` — which throws the harvest off
+its expected path. The binary is already built; only packaging fails.
+
+**Fix (per-port — needs a look at the recipe).** Correct the subpackage identifier
+(strip stray whitespace in `PROVIDES`/version), and ensure the split/`INSTALL()` writes
+under `$developInstallDir`/`$prefix`, not an absolute `/packages/...` path. Verify by
+re-running the harvest, not just the compile.
+
+**Example ports:** libu2f_server, pystring0, wrapt.
+
+---
+
+## Class 24: Source-acquisition tool missing on the builder host
+
+**Mined class (4 ports).** The HOST-side analogue of
+[Class 2](#class-2-undeclared-build-tool-in-the-haikuporter-chroot) (which is the
+*chroot* nuance): the tool is needed to **fetch/unpack the source**, which runs on the
+builder host *before* the chroot exists, so a `cmd:` prerequisite cannot help.
+
+**Symptom (during download/unpack, before any compile):**
+```
+Downloading: hg+https://bitbucket.org/…
+Error: 'hg' is not available, please install it
+   -- or --
+Downloading: https://aminet.net/dev/asm/ira.lha …
+Error: 'lha' is not available, please install it
+```
+
+**Root cause.** The recipe’s `SOURCE_URI` uses a VCS or archive format (`hg+`, `svn+`,
+`bzr+`, `.lha`) whose client (`hg`, `svn`, `bzr`, `lha`) is not installed on the
+builder host.
+
+**Fix.** Add the tool to the host install list in
+`graviton/scripts/haiku-provision-native-builder` (exactly as `dos2unix` was added for
+the Class 2 host case), **not** as a recipe `cmd:` prereq. Prefer, where possible,
+moving the recipe to a static archive download with a checksum (the wave tooling already
+warns `UNSAFE SOURCES … SHOULD NOT BE USED`).
+
+**Example ports:** cube2tesseract, ira (`lha`), previous, xemacs (`hg`).
+
+---
+
+## Triage-tool signature gaps (found while mining)
+
+The mining run turned up ports that **belong to an existing class but the
+`haiku-triage-failures` ruleset misses**, because the live log wording differs from the
+encoded regex. These are ruleset bugs, not new classes — fixing them shrinks UNMATCHED
+without any porting work. `haiku-playbook-parity` does not check these (they need a
+regex, not a section), but they are recorded here so the next ruleset edit closes them:
+
+| Existing class | Live signature the regex misses | Ports |
+|---|---|---|
+| **has_unresolvable** (dep filter) | `unable to resolve (pre)required packages …` (no literal `UNRESOLVABLE` token) | ~21 (see Class 20) — **the biggest gap** |
+| **Class 4** static/shared | `prepareInstalledDevelLib error: there is both a shared and a static library` (singular, not `prepareInstalledDevelLibs`) | linenoise, libspectrum, sdl_net |
+| **Class 10** autotools aux | `configure.in/.ac: … required file 'X' not found` (regex keys on literal `install-sh`) | libmcrypt, libsrtp |
+| **Class 3** gettext macro | `possibly undefined macro: AM_PATH_XML2` (libxml2’s macro off the aclocal path) | libmetalink |
+| **Class 5** x86 flags | `-mmmx` / other x86 `-m*` flags (regex keys on `-msse`) | opendune |
+| **Class 2** missing tool | CMake `FindUnixCommands … (missing: GZIP)` (tool absence surfaced through CMake) | zziplib |
+
+---
+
+## Small/emerging clusters (mined, below class threshold)
+
+Real but too small (or too opaque) to codify as a class yet — recorded so they are not
+re-derived. Add a class if a future wave grows one past ~4 ports:
+
+- **autotools modernization (2):** `configure.ac: AC_CONFIG_MACRO_DIR can only be used
+  once` / `AM_INIT_AUTOMAKE expanded multiple times` — the port’s `configure.ac` is
+  written for an older autotools and the builder’s `autoconf-2.72`/`automake-1.18`
+  reject the double expansion. Fix: patch out the redundant macro invocation
+  (mechanically similar to Class 3’s rpcsvc_proto variant). *fswatch, irrxml.*
+- **catkeys/locale link (2):** `couldn't load source-catalog ….catkeys — error: Bad
+  data` from `linkcatkeys`, *after* the binary built (exit 255). A Haiku locale-tool
+  parse failure on a specific `.catkeys`. *unreal_speccy_portable, wpa_supplicant.*
+- **recipe patch file missing (2):** `Error: patch file "…" not found` — the recipe’s
+  `PATCHES=` references a file absent from the port’s `patches/` dir. *criticalmass,
+  veesem.*
+- **meson without `--buildtype` (1):** `error: invoking meson without --buildtype
+  argument` — the meson analogue of Class 8; a systemic fix would default it in
+  haikuporter’s meson wrapper. *vmaf.*
+- **library archiver / OpenMP / endian (1 each):** `working library archiver is
+  required` (blis), `OpenMP … not supported` (libimagequant), `#error Neither
+  LITTLE_ENDIAN nor BIG_ENDIAN` (unrar — real endian source porting).
+
+---
+
+## How classes 18–24 were mined — the UNMATCHED frontier
+
+Classes 18–24 above were **not** hand-derived; they were mined from the real failure
+backlog by `graviton/scripts/haiku-pattern-miner`, so the playbook grows from data
+instead of archaeology. The method, and the numbers from the 2026-09-17 run
+(#90/#136):
+
+- **Input.** `haiku-triage-failures` left **563** ports at `triage_class=UNMATCHED`. Of
+  those, **317** carry the dependency-not-published marker (`UNRESOLVABLE`) and are
+  excluded — not code patterns. That leaves **246** real un-captured failure signatures.
+- **Method.** For each of the 246 the miner fetches the S3 build log, extracts the most
+  specific failure line, normalises it (strips paths, versions, hex, line numbers, the
+  port’s own name, `-l<lib>` names), clusters by signature, and ranks by port count.
+- **Result.** **87 of the 246 (35%) are truncated-tail** — the captured log is only the
+  *tail* of the native build, so the root compiler error scrolled off the top and the
+  log exposes only the generic `make: *** Error N` cascade. These are **not
+  characterisable** and were left as one honest bucket, not invented into classes.
+  *(Operational fix: have the wave logger capture more of `nb-<pkg>.log`, not just the
+  tail, to make this third minable.)*
+- **The remaining ~159 clustered into the classes above.** Net new fixable classes
+  yielded by the frontier: **7** (classes 18–24), covering **≈67 ports** — plus ~30 more
+  routed to the dep-unpublished root cause (Class 20 / the `has_unresolvable` gap) and
+  ~11 folded into real source porting (deferred-hard). Re-run any time:
+  ```sh
+  AWS_PROFILE=haiku-graviton graviton/scripts/haiku-pattern-miner --out /tmp/miner.json
+  ```
+  and let `graviton/scripts/haiku-playbook-parity` nag when a new cluster crosses the
+  threshold with no matching class.
 
 ---
 
