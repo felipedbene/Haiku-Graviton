@@ -47,6 +47,13 @@ memory that keeps per-port flags from being re-derived.
 | 12 | [Source availability / checksum drift](#class-12-source-availability--checksum-drift) | `checksum` mismatch / 403 / dead DNS / HTML error page |
 | 13 | [Hardcoded cross-compiler prefix](#class-13-hardcoded-cross-compiler-prefix) | `aarch64-unknown-haiku-g++: No such file or directory` |
 | 14 | [Poisoned build-tool package](#class-14-poisoned-build-tool-package) | `Unhandled pheader type in parse 0x6474e553` |
+| 15 | [runConfigure CFLAGS needs -O](#secondary-blocker-tail-136-re-wave-of-classes-3846710113) | `runConfigure: Must specify optimization flags when overriding CFLAGS` |
+| 16 | [multiple definition (GCC10 -fno-common)](#secondary-blocker-tail-136-re-wave-of-classes-3846710113) | `ld: multiple definition of '<sym>'` |
+| 17 | [CMake FetchContent offline fetch](#secondary-blocker-tail-136-re-wave-of-classes-3846710113) | `FetchContent_MakeAvailable` / `__FetchContent_populateSubbuild` |
+
+Classes 15–17 were surfaced by the #136 re-wave secondary-blocker triage; see
+[that section](#secondary-blocker-tail-136-re-wave-of-classes-3846710113) at the
+end of this document.
 
 ---
 
@@ -802,3 +809,94 @@ the builder AMI rebaked with these recipes and the ports re-waved):
 **13 of the 14 small-class ports clear on the next rebake+re-wave; embree (1) is
 deferred-hard.** This PR adds the five new overlay recipes (classes 6, 7, 10, 13);
 the rest were committed in the earlier wave PRs #275–#280.
+
+---
+
+## Secondary-blocker tail (#136 re-wave of classes [3,8,4,6,7,10,11,13])
+
+The 2026-09-17 re-wave (`wd-triage-r1-*`) rebuilt the auto-recoverable backlog
+with the class fixes applied. This section re-triages the **14 ports whose
+recorded class fix took but that then failed on a *different*, secondary
+blocker** — the whole point being to scope whether one more
+systemic-fix→rebake→re-wave pass is worth it for the tail. Every row below is
+measured against that port's own re-wave log (`s3://haiku-graviton-<acct>-<region>/logs/wd-triage-r1-*/<port>.log.gz`),
+not inferred.
+
+**Headline: the tail is mostly still cheap.** Of 14, one is a *false failure*
+(already built), ~7 collapse into two new systemic-ish classes plus re-application
+of existing classes 2/5 and a class-7 hardening, three are genuine per-recipe
+source ports (two of them one-liners), one is a captured-log gap, and one CMake
+FetchContent case needs a dep pre-seed. Only `nogravity` is genuinely hard. **One
+more pass is worth it.**
+
+### Port → prior class (fixed) → current blocker → proposed fix
+
+| Port | Prior class (took) | Current blocker signature | Proposed fix | New class? |
+|---|---|---|---|---|
+| axel | 3 gettext | `runConfigure: Must specify optimization flags when overriding CFLAGS` — overlay's own `CFLAGS=-Wno-error runConfigure …` lacks `-O` | add `-O2`: `CFLAGS="-O2 -Wno-error"` | **NEW class 15** |
+| dovecot | 3 gettext | same — overlay's `CFLAGS=-D_BSD_SOURCE runConfigure …` lacks `-O` | `CFLAGS="-O2 -D_BSD_SOURCE"` | **NEW class 15** |
+| freegish | 8 build-type | `ld: multiple definition of 'fwrite2'/'fread2'` across TUs | build with `-fcommon` (GCC10 `-fno-common` default) | **NEW class 16** |
+| libmirage | 8 build-type | `ld: multiple definition of 'crc32_d8018001_lut'/'crc16_1021_lut'/'ecma_130_scrambler_lut'` | `-fcommon` | **NEW class 16** |
+| lensfun | 8 build-type | `c++: error: unrecognized command-line option '-msse'/'-msse2'` | **existing Class 5** — gate SSE flags to x86 (`cpuid.cpp` path) | no (class 5) |
+| keystone | 6 config.guess | `CMake Error … Unable to find Python interpreter` (llvm/CMakeLists.txt:340) | **existing Class 2** — the overlay's `cmd:python` is commented out; declare it (or `-DPYTHON_EXECUTABLE`) | no (class 2) |
+| unarr | 7 LTO (IPO=OFF) | **identical** `cc1: error: LTO support has not been enabled`, no hpkg | class-7 fix **insufficient**: `-DCMAKE_INTERPROCEDURAL_OPTIMIZATION=OFF` (a *cache default*) is overridden by an explicit per-target IPO property; harden by sed-ing `-flto` out / `-fno-lto` in `CMAKE_C_FLAGS`, then rebake-verify | no (class 7, harden) |
+| libhangul | 3 gettext | `Makefile.am: error: required file './ChangeLog' not found` → automake fails | automake strict mode wants GNU boilerplate; `touch ChangeLog` (+NEWS/AUTHORS/README if demanded) or add `foreign` to `AM_INIT_AUTOMAKE` | sibling of class 10 |
+| betterspades | 8 build-type | CMake `FetchContent_MakeAvailable` (src/CMakeLists.txt:11) tries a network fetch in the offline chroot | pre-seed the sub-dep as a package / `-DFETCHCONTENT_SOURCE_DIR_*=…` | **NEW class 17** |
+| sawteeth | 8 build-type | `cc1plus: all warnings being treated as errors` (`-Wwrite-strings` on `new char[]`) | drop `-Werror` (`-Wno-error`/`-fpermissive`) — matches the deferred-hard note already in this playbook | per-recipe (known) |
+| freeimage | 13 cross-prefix | bundled OpenEXR `Half/half.h`: `register` storage class → C++17 `-Wregister`, hard `Error 1` (old IlmImf also uses removed dynamic-exception specs) | build the bundled tree with `-std=gnu++14` (or `-Wno-register`) on the `make -f Makefile.gnu` line | per-recipe (C++17-on-old-code; theme-shares class 16) |
+| nogravity | 8 build-type | compile error in `rlx32/src/_stub.cpp` (BSD integer types; `-Wwrite-strings`) | **deferred-hard** real source porting (BSD `u_int32_t`), already on the deferred list | no (deferred-hard) |
+| cmake_haiku | 8 build-type | **none — already built.** Log shows `harvested cmake_haiku-git-4-arm64.hpkg` (14 465 B, real) and the hpkg is in `hpkg/arm64/`; DDB `build_state=failed` is a **false failure** (chunk-level `rc=1` from sibling ports, plus the benign headless `mimeset: application init failed` no-op) | fix the state record / publish; **no build needed** | no (false failure) |
+| autoconf2.71 | 6 config.guess | reaches INSTALL (`make install-data-hook` / `install-info standards.info`), then `rc=2`; **the fatal line is truncated out of the captured snippet** | needs the full `nb-autoconf2.71.log` (builder-local, scratch VM — gone); re-run with full-log capture to classify | indeterminate |
+
+### Proposed new classes (candidates for the class table)
+
+- **Class 15 — `runConfigure` requires an optimization flag when CFLAGS is
+  overridden.** Haiku's `runConfigure` wrapper aborts with *"Must specify
+  optimization flags when overriding CFLAGS"* whenever a recipe passes
+  `CFLAGS=<non-empty>` without an `-O` level, because autotools' own default `-g
+  -O2` is dropped once CFLAGS is set. **This is self-inflicted by the earlier
+  fix waves:** the class-3/BSD overlays that add `CFLAGS=-Wno-error` or
+  `CFLAGS=-D_BSD_SOURCE` before `runConfigure` regressed exactly here. Blast
+  radius is larger than the two ports that surfaced it — `tar-1.35.recipe`
+  (`CFLAGS="-D_BSD_SOURCE" … runConfigure`) is a **latent** third victim.
+  *Rule:* any `CFLAGS=` passed to `runConfigure` must include `-O2` (cmake ports
+  that `export CFLAGS` are unaffected — the wrapper guards `runConfigure` only,
+  which is why `epoll_shim`'s bare `export CFLAGS=…` built fine). Grep the
+  overlays for `CFLAGS=.*runConfigure` lacking `-O` before the next bake.
+- **Class 16 — multiple definition (GCC ≥10 `-fno-common` default).** Old C that
+  defines a global in a header without `extern` (tentative definitions) now
+  collides at link: `ld: multiple definition of '<sym>'`. Fix: compile with
+  `-fcommon`. freegish and libmirage both hit it; freeimage's bundled OpenEXR is
+  the C++ cousin (C++17 removed `register`/dynamic-exception-specs) — same
+  "modern default toolchain vs. old bundled source" theme, different flag
+  (`-std=gnu++14`).
+- **Class 17 — CMake `FetchContent`/`ExternalProject` network fetch in the
+  offline chroot.** Distinct from Class 12 (that is the recipe's own
+  `SOURCE_URI`); this is a *build-time sub-dependency* the upstream `CMakeLists`
+  pulls at configure time, which the sandboxed chroot cannot reach. Fix by
+  supplying the sub-dep as a real package dependency and pointing
+  `FETCHCONTENT_SOURCE_DIR_<name>` at it, or vendoring it into the recipe.
+
+### Campaign verdict (does another systemic pass pay off?)
+
+| Bucket | Ports | Count |
+|---|---|---|
+| Already built (false failure) | cmake_haiku | 1 |
+| New systemic class 15 (CFLAGS `-O2`) | axel, dovecot (+tar latent) | 2 |
+| New class 16 (`-fcommon`) | freegish, libmirage | 2 |
+| Existing class re-applied (5, 2) | lensfun, keystone | 2 |
+| Class 7 hardening | unarr | 1 |
+| Per-recipe, cheap | sawteeth (`-Werror`), freeimage (`-std=gnu++14`), libhangul (ChangeLog/`foreign`) | 3 |
+| New class 17 (FetchContent), medium | betterspades | 1 |
+| Deferred-hard real source | nogravity (BSD types) | 1 |
+| Indeterminate (log truncated) | autoconf2.71 | 1 |
+
+**≈11 of 14 are a cheap recipe edit or free (cmake_haiku is already built).** Two
+clean new near-systemic classes (15, 16) plus re-applying classes 5/2 and a
+class-7 hardening cover the bulk; three more are per-recipe one-liners.
+`betterspades` needs a dep pre-seed (medium). Only `nogravity` is genuinely hard,
+and `autoconf2.71` just needs a full-log re-capture to classify. **A second
+systemic-fix → rebake → re-wave pass is worth running** — with the important
+caveat that class 15 is a *regression the last wave introduced*, so the first
+action is to grep every overlay for a `CFLAGS=`-to-`runConfigure` without `-O`
+and fix them in bulk before rebaking.
