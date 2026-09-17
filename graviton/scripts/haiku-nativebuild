@@ -86,6 +86,37 @@ resolve_port_name() {
 	echo "$arg"
 }
 
+# Emit a capture of the haikuporter log to STDOUT on failure. This is load-bearing
+# for triage: run_ssm._wrapper gzips this process's stdout and uploads it as the
+# S3 build log (log_url), so whatever we DON'T print here is lost when the scratch
+# builder dies. An earlier `tail -20 "$log"` kept only the make/haikuporter
+# cascade at the very end and threw away the TOP of the log, where the first
+# compiler/configure/link error actually is -- which is why the pattern-miner
+# found 35% of UNMATCHED logs were "truncated tail" with no root cause captured
+# (#136/#90). We now keep enough to always carry the root error: the HEAD (early
+# configure/arch errors), every diagnostic line anywhere in the log (grep -- the
+# root error wherever it scrolled to), and the TAIL (the cascade + verdict).
+# Bounded so a huge ninja build (llvm) doesn't balloon the uploaded log: the whole
+# log when small, else head+grep+tail. All caps are env-overridable.
+emit_log_capture() {
+	f="$1"
+	[ -f "$f" ] || { echo "(no log file $f)"; return 0; }
+	lines=$(wc -l < "$f" 2>/dev/null | tr -d ' '); : "${lines:=0}"
+	if [ "$lines" -le "${NB_LOG_FULL_LINES:-4000}" ]; then
+		echo "---- full build log ($lines lines): $f ----"
+		cat "$f"
+		echo "---- end build log ----"
+		return 0
+	fi
+	echo "---- build log HEAD (first ${NB_LOG_HEAD:-1200} of $lines lines): $f ----"
+	head -n "${NB_LOG_HEAD:-1200}" "$f"
+	echo "---- diagnostic lines (grep; root cause wherever it scrolled to) ----"
+	grep -nE 'error:|Error [0-9]+|CMake Error|fatal error:|cannot find -l|command not found|No such file or directory|undefined reference|multiple definition of|does not name a type|ModuleNotFoundError|No module named|Read-only file system|not supported|unsupported|unknown word-size|guess (build|host) type|required file .* not found|unable to resolve|could not be resolved|is not available, please install|prepareInstalledDevelLib|possibly undefined macro|narrowing conversion|CHECKSUM|checksum' "$f" 2>/dev/null | head -n "${NB_LOG_GREP:-400}"
+	echo "---- build log TAIL (last ${NB_LOG_TAIL:-200} lines) ----"
+	tail -n "${NB_LOG_TAIL:-200}" "$f"
+	echo "---- end build log ($lines lines total; head+grep+tail capture) ----"
+}
+
 build_one() {
 	port="$1"
 	log="/boot/home/nb-$port.log"
@@ -103,7 +134,7 @@ build_one() {
 		miss=$(grep -oE '(build-requires|build-prerequires|requires) "[^"]+"' "$log" \
 			| sed -E 's/.*"([^"]+)".*/\1/' | sort -u)
 		if [ -z "$miss" ]; then
-			echo "$port: FAILED, no missing-dep to install -- see $log"; tail -20 "$log"; return 1
+			echo "$port: FAILED, no missing-dep to install -- see $log"; emit_log_capture "$log"; return 1
 		fi
 		# If the unresolved set is identical to last round, the previous install made no
 		# progress -- the dep is not in the repo and must be BUILT first. Stop now instead
@@ -116,7 +147,7 @@ build_one() {
 		for d in $miss; do install_dep "$d"; done
 		attempt=$((attempt + 1))
 	done
-	echo "$port: gave up after $MAX_ATTEMPTS attempts"; tail -20 "$log"; return 1
+	echo "$port: gave up after $MAX_ATTEMPTS attempts"; emit_log_capture "$log"; return 1
 }
 
 harvest() {
