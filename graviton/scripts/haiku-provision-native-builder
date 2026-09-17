@@ -211,6 +211,33 @@ if ! python3.14 -c 'import zlib' >/dev/null 2>&1; then
 fi
 log "python3.14 zlib: ok"
 
+# --- 1a. #136 Class 24: source-acquisition clients on the HOST ----------------
+# A recipe whose SOURCE_URI uses a VCS or archive format (hg+/svn+/bzr+/.lha)
+# needs that client to FETCH/UNPACK the source. Like the Class-2 host case
+# (dos2unix), this runs on the builder HOST before the per-port chroot exists --
+# haikuporter calls downloadSource/unpackSource (and patchSource) ahead of
+# build()/ChrootSetup -- so a `cmd:` BUILD_PREREQUIRES cannot help; the client
+# must be installed on the host. Without it the fetch dies before any compile
+# with `Error: '<hg|svn|bzr|lha>' is not available, please install it`
+# (cube2tesseract, ira/lha, previous, xemacs/hg -- issue #136 Class 24).
+#
+# Installed TOLERANTLY, one at a time: unlike the section-1 batch (which must
+# resolve as a set or the whole install aborts), a source-acq client the arm64
+# pool has not published yet must NOT break provisioning of an otherwise-working
+# builder -- that port simply stays blocked on the unpublished client (a Class-20
+# publish task), exactly as before this section existed. Idempotent: an
+# already-active package is a no-op. Package names: hg=mercurial, svn=subversion,
+# bzr=breezy, plus lha and cvs.
+log "#136 Class 24: installing source-acquisition clients (tolerant): mercurial subversion breezy lha cvs"
+for acq in mercurial subversion breezy lha cvs; do
+	if feed | pkgman install "$acq" >/dev/null 2>&1; then
+		log "#136 Class 24: $acq installed (or already present)"
+	else
+		log "#136 Class 24: $acq NOT available in the pool (skipped; a port needing"\
+			"it stays a Class-20 publish task -- not fatal to provisioning)"
+	fi
+done
+
 # haikuporter and many recipes run under `env python3` / `#!/usr/bin/env python3`
 # shebangs, but the base userland ships only `python3.14`. Provide the unversioned
 # name in the on-PATH shim dir so those invocations resolve.
