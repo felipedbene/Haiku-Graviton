@@ -28,6 +28,10 @@ SimpleTest get_cpu_num_test :
 	get_cpu_num_test.cpp
 ;
 
+SimpleTest getauxval_test :
+	getauxval_test.cpp
+;
+
 
 CCFLAGS += -fstack-protector ;
 local architectureObject ;
