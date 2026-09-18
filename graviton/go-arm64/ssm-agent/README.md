@@ -16,6 +16,20 @@ and the "M5 — runtime" section at the end of this file. The single combined
 `amazon-ssm-agent-haiku-arm64.patch` now also carries the M5 agent-side arms
 (platform-type enum, exec-free platform/hostname/fingerprint, UDP-dial IP).
 
+**M6 update (2026-09-18): B1 is FIXED — Run Command executes.** The fork+exec
+fault was a latent arm64 bug in the *fork's* `runtime.pipe1` (the return address
+is spilled at `0(RSP)`, which `pipe()` then overwrote with a file descriptor;
+the `RET` jumped to it and faulted). Fixed in the toolchain by routing
+`syscall.Pipe` through the generic libroot dispatcher instead of the `pipe1`
+shim (`../patches/0004-haiku-arm64-M6-pipe-forkexec.patch`). With that toolchain,
+the same agent binaries reach Online *and* the core spawns `ssm-agent-worker`
+(fork+exec), and an `AWS-RunShellScript` to the `mi-` node returns
+**Status Success, RC 0** with real stdout — the functional milestone M5 could not
+reach. Proof: [`../logs/M6-proof.txt`](../logs/M6-proof.txt). Deployment note:
+launch the agent with a PATH that includes `/boot/system/bin` (Haiku's `sh`),
+else the now-healthy fork+exec of `ssm-document-worker` reaches `execve` and
+returns a clean "sh not found in $PATH".
+
 **M4 update (2026-09-18):** the three genuine toolchain gaps M3 surfaced
 (`syscall.Flock`, `syscall.Statfs`, and an `Uname` for the detailed-info
 gatherer) are now wired into the Haiku Go port (fork patch

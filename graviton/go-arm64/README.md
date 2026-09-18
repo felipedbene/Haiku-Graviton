@@ -174,3 +174,39 @@ absent (`flock`→`FcntlFlock`; `statfs`→sentinel; fsnotify→stub;
 shared file. No new toolchain change was needed — the fork already carries the
 OS layer and the M2 errno fix. M3 is compile + link; on-hardware start /
 registration (M5/M6) are next.
+
+## Status: M6 DONE (fork+exec fixed — Run Command executes on hardware)
+
+M5 got the real `amazon-ssm-agent` to **Online** but every child-spawn
+(Run Command, Session Manager, core→worker) crashed with SIGSEGV/SIGBUS — the
+one blocker (B1) between an Online node and a *functional* agent. **M6 fixes it,
+and a Run Command now executes on real Graviton and returns real stdout.**
+
+**Root cause (arm64-specific, in the fork, latent since M0).** `fork`+`exec`
+routes through `syscall.Pipe` → `runtime.pipe1` (arm64 asm) — a path M1/M2 never
+exercised. `pipe1` uses `0(RSP)`/`4(RSP)` as the `pipe(int fds[2])` output
+buffer, but the Go arm64 prologue for that non-leaf frame has already spilled the
+return address (LR) at `0(RSP)` (`MOVD.W R30, -32(RSP)`). `pipe()` overwrites the
+saved LR with `fds[0]`; the epilogue reloads that clobbered word into LR and
+`RET`s to it — a jump to a small integer file-descriptor value — which faults.
+amd64's shim is safe only because there the return address sits above SP; the
+arm64 translation didn't account for LR living in the frame. No Go traceback
+printed because it is a corrupted return, not a panic.
+
+**Fix** ([`patches/0004-haiku-arm64-M6-pipe-forkexec.patch`](patches/0004-haiku-arm64-M6-pipe-forkexec.patch)):
+rewrite `runtime.syscall_pipe` to call libroot `pipe(2)` through the generic
+`asmsysvicall6` dispatcher with a Go-managed buffer — the same arch-neutral form
+`syscall_dup2`/`syscall_close` already use — bypassing the fragile `pipe1` shim.
+One file; `go build std` still exits 0.
+
+| Proof | Result |
+|---|---|
+| `tests/m6/rawforkexec.go` — `syscall.ForkExec("/bin/true")` + `Wait4` | before: **SIGSEGV**; after: **pid ok, exit 0** |
+| `tests/m6/exectest.go` — `exec.Command("/bin/echo")` capture | before: **SIGBUS**; after: **out=`"hello-from-child\n"`, exit 0** |
+| Core `amazon-ssm-agent` spawns worker (fork+exec) | `Worker ssm-agent-worker (pid:1601) started` |
+| **`AWS-RunShellScript`** to the `mi-` node | **Status Success, RC 0**, real stdout (`Haiku arm64`, `arith=42`, …); reproduced n=2 |
+
+Full transcript, disassembly, and the deployment note (launch the agent with a
+PATH that includes `/boot/system/bin` so the shell resolves) in
+[`logs/M6-proof.txt`](logs/M6-proof.txt). This closes the ssm-agent runtime
+blocker B1 and delivers a fully functional agent (issue #302 North Star).

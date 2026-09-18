@@ -1,0 +1,46 @@
+diff --git a/src/runtime/syscall_haiku.go b/src/runtime/syscall_haiku.go
+index 9da393b..89d5de8 100644
+--- a/src/runtime/syscall_haiku.go
++++ b/src/runtime/syscall_haiku.go
+@@ -208,15 +208,37 @@ func syscall_ioctl(fd, req, arg uintptr) (err uintptr) {
+ 
+ //go:linkname syscall_pipe
+ func syscall_pipe() (r, w, err uintptr) {
++	// Call libroot's pipe(int fds[2]) directly through the generic
++	// asmsysvicall6 dispatcher and read the two descriptors back out of a
++	// Go-managed buffer, rather than going through the runtime·pipe1
++	// assembly shim.
++	//
++	// pipe1 is a straight translation of the amd64 shim, but it is broken on
++	// arm64: it uses 0(RSP)/4(RSP) as the pipe() output buffer, while the Go
++	// arm64 prologue for that frame has already spilled the return address
++	// there (MOVD.W R30, -32(RSP) stores LR at 0(RSP)). pipe() overwrites the
++	// saved LR with fds[0]; the epilogue reloads that clobbered word into LR
++	// and RETs to it — i.e. jumps to a small integer file-descriptor value —
++	// which faults (SIGSEGV via ForkExec, SIGBUS via os/exec). On amd64 the
++	// return address lives above SP, so the amd64 shim's scratch never
++	// collides with it. This path is the first arm64 user of pipe() and so was
++	// never exercised until fork+exec. The dispatcher form (fn = &libc_pipe,
++	// exactly as syscall_dup2/syscall_close use) sidesteps the fragile shim and
++	// is the proven, arch-neutral pattern.
++	var fds [2]int32
++	fdsp := uintptr(unsafe.Pointer(&fds[0]))
+ 	call := libcall{
+-		fn:   uintptr(unsafe.Pointer(&pipe1x)),
+-		n:    0,
+-		args: uintptr(unsafe.Pointer(&pipe1x)), // it's unused but must be non-nil, otherwise crashes
++		fn:   uintptr(unsafe.Pointer(&libc_pipe)),
++		n:    1,
++		args: uintptr(unsafe.Pointer(&fdsp)),
+ 	}
+ 	entersyscallblock()
+ 	asmcgocall(unsafe.Pointer(&asmsysvicall6x), unsafe.Pointer(&call))
+ 	exitsyscall()
+-	return call.r1, call.r2, call.err
++	if int(call.r1) == -1 {
++		return 0, 0, call.err
++	}
++	return uintptr(fds[0]), uintptr(fds[1]), 0
+ }
+ 
+ // This is syscall.RawSyscall, it exists to satisfy some build dependency,

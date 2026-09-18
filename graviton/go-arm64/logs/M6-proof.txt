@@ -1,0 +1,159 @@
+M6 proof — fix the fork+exec fault on DeBeOS (Haiku arm64) in the Go runtime and
+prove a FULLY FUNCTIONAL upstream amazon-ssm-agent: Run Command executes.
+Generated: 2026-09-18. Issue #302, milestone M6 (doc go-arm64-bringup-scope.md).
+
+HEADLINE RESULT
+===============
+The single blocker M6 existed to fix — B1, "fork+exec faults on haiku/arm64" —
+is FIXED at the toolchain level, and the real upstream amazon-ssm-agent
+(v3.3.3270.0, cross-compiled GOOS=haiku GOARCH=arm64 with the korli/go fork +
+our M0/M2/M4 + the M6 patch) now EXECUTES Run Command on real AWS Graviton
+(c7g.large, Haiku hrev59996, arm64), returning real stdout.
+
+    aws ssm send-command --document-name AWS-RunShellScript  (target mi- node)
+      -> Status: Success, ResponseCode: 0
+      -> StandardOutputContent:
+           M6-RUNCOMMAND-PROOF
+           Haiku arm64
+           shell=/var/lib/amazon/ssm/mi-00091604b5933b9a7/document/orchestration/
+                 e46976c4-.../awsrunShellScript/0.awsrunShellScript/_script.sh
+           baron
+           arith=42
+    Second, distinct command (reproducibility, n=2): Success, RC 0,
+      -> "run2-distinct-56 / ip-10-0-7-42... / 7 / 2026"
+
+The full spawn chain that B1 used to crash now works end to end:
+  amazon-ssm-agent (core)  --fork+exec-->  ssm-agent-worker  (pid 1601)
+  ssm-agent-worker         --fork+exec-->  ssm-document-worker
+  ssm-document-worker      --fork+exec-->  sh -c <script>     -> real stdout
+
+ROOT CAUSE (precise)
+====================
+NOT the shared exec_libc.go child path, and NOT the forkx/asmcgocall/asmsysvicall6
+trampolines (those are faithful to amd64 and were already exercised by M1/M2).
+
+The fault is in runtime.pipe1 (src/runtime/sys_haiku_arm64.s), reached only via
+syscall.forkExec -> forkExecPipe -> syscall.Pipe -> runtime.syscall_pipe. This
+path was never exercised until fork+exec (M1/M2 never called pipe()), so the bug
+was latent.
+
+pipe1 is a straight translation of the amd64 shim. It uses 0(RSP)/4(RSP) as the
+pipe(int fds[2]) output buffer:
+
+    TEXT runtime·pipe1(SB),NOSPLIT,$16
+        MOVD  RSP, R0        // &fds[0]  ==  0(RSP)
+        MOVD  $libc_pipe(SB), R1
+        BL    (R1)           // pipe() writes fds[0],fds[1] to 0(RSP),4(RSP)
+        MOVW  0(RSP), R0      // fds[0]
+        MOVW  4(RSP), R1      // fds[1]
+        RET
+
+But on arm64 the Go assembler prologue for a stack-frame'd non-leaf spills the
+return address into the frame at 0(RSP):
+
+        MOVD.W R30, -32(RSP)  // SP -= 32; store LR at 0(RSP)   <-- saved LR
+        ...
+        MOVD.P 32(RSP), R30   // reload LR from 0(RSP); RET to it
+
+So pipe() overwrites the saved LR with fds[0] (a small integer, e.g. 3). The
+epilogue reloads that clobbered word into LR and RETs to it — a jump to ~0x3 —
+which faults: SIGSEGV via syscall.ForkExec, SIGBUS via os/exec (different low
+address / alignment, same defect). This is why NO Go traceback printed: the
+fault is a corrupted return, not a normal panic, and it recurs while the runtime
+tries to unwind.
+
+On amd64 the same shim is safe: there the return address sits ABOVE SP (pushed by
+CALL), and the shim explicitly `SUBQ $16, SP` to reserve scratch below it, so its
+0(SP)/4(SP) never collide with the return address. The arm64 translation did not
+account for LR being spilled into the frame — arm64-specific by construction.
+
+Localisation method: breadcrumb bisection. Raw byte-writes to fd 2 inserted in
+syscall.forkExec and syscall.forkAndExecInChild showed 'a' (forkExec entry) and
+'b' (after acquireForkLock) print, but 'c' (after forkExecPipe) never does — the
+process dies inside pipe(). Disassembly of runtime.pipe1.abi0 then showed the
+0(RSP) LR/buffer aliasing above.
+
+THE FIX (patches/0004-haiku-arm64-M6-pipe-forkexec.patch)
+=========================================================
+Rewrite runtime.syscall_pipe (src/runtime/syscall_haiku.go) to call libroot
+pipe(2) through the generic asmsysvicall6 dispatcher with a Go-managed buffer,
+exactly as syscall_dup2 / syscall_close already do — instead of going through
+the fragile runtime.pipe1 assembly shim:
+
+    var fds [2]int32
+    fdsp := uintptr(unsafe.Pointer(&fds[0]))
+    call := libcall{fn: uintptr(unsafe.Pointer(&libc_pipe)), n: 1,
+                    args: uintptr(unsafe.Pointer(&fdsp))}
+    entersyscallblock(); asmcgocall(&asmsysvicall6x, &call); exitsyscall()
+    if int(call.r1) == -1 { return 0, 0, call.err }
+    return uintptr(fds[0]), uintptr(fds[1]), 0
+
+asmsysvicall6 manages its own frame correctly (proven by every other libroot
+call in M1/M2), so there is no LR/buffer aliasing. This is the arch-neutral form
+(cf. os2_aix.go's pipe via syscall1(&libc_pipe,...)). runtime.pipe1/pipe1x are
+left in place but become dead; a follow-up may remove them or fix the shim's
+frame directly. One-file change; no toolchain-wide rebuild needed (gc rebuilds
+the target runtime package on demand).
+
+TOOLCHAIN-LEVEL PROOF (the oracle)
+==================================
+Two minimal repros, cross-compiled GOOS=haiku GOARCH=arm64 CGO_ENABLED=0, run on
+the Graviton box over SSM:
+
+  exectest.go   exec.Command("/bin/true").CombinedOutput()   and
+                exec.Command("/bin/echo","hello-from-child")
+  rawforkexec.go  syscall.ForkExec("/bin/true",...) + syscall.Wait4
+
+BEFORE the fix (unmodified korli/go + M0/M2/M4):
+    exectest      -> "SIGBUS: bus error", rc 2 (no traceback)
+    rawforkexec   -> "SIGSEGV: segmentation violation", rc 2 (no traceback)
+
+AFTER the fix:
+    rawforkexec   -> ForkExec pid=1202 err=<nil>; Wait4 wpid=1202 ws=0; OK; rc 0
+    exectest      -> /bin/true err=<nil> out=""; /bin/echo out="hello-from-child\n";
+                     OK; rc 0
+`GOOS=haiku GOARCH=arm64 CGO_ENABLED=0 go build std` still exits 0.
+
+AGENT-LEVEL PROOF (the payoff)
+==============================
+Build: pristine amazon-ssm-agent v3.3.3270.0 + ssm-agent/amazon-ssm-agent-haiku-
+arm64.patch + the fixed toolchain -> `go build ./...` exit 0; the release
+binaries link as AArch64 Haiku ELF. Deployed to /boot/home/ssm-real/bin on the
+box; registered as a hybrid activation (mi-00091604b5933b9a7) under a temporary
+IAM role trusted by ssm.amazonaws.com. Standard activation tier (advanced not
+needed for Run Command).
+
+- amazon-ssm-agent (core) STARTED the worker via fork+exec — the exact spawn that
+  crashed in M5:
+    [WorkerProvider] Worker ssm-agent-worker (pid:1601) started
+- Node reached PingStatus=Online (AgentVersion 3.3.0.0, PlatformName=Haiku,
+  PlatformVersion=R1~beta6+development, IP 10.0.7.42).
+- Two AWS-RunShellScript invocations returned Success / RC 0 with the real stdout
+  quoted above.
+
+DEPLOYMENT NOTE (not a toolchain bug)
+=====================================
+The agent must be launched with a PATH that includes Haiku's shell directory
+(/boot/system/bin; /bin/sh is a symlink to bash there). The runShellScript plugin
+runs `sh` via exec.LookPath against the process environment; launched with a PATH
+that omits the shell dir, the (now-working) fork+exec of ssm-document-worker
+reaches execve and returns a clean `exec: "sh": executable file not found in
+$PATH` — a diagnostic that itself confirms fork+exec is healthy, not crashing.
+Launching the core with PATH=/boot/system/bin:/bin:... resolves it; Run Command
+then returns Success. A launch job / appconfig that pins PATH is the durable fix.
+
+RESOURCE HYGIENE
+================
+EC2 instance i-0a0e868496c21828c: terminated (verified state=terminated).
+Hybrid mi-node mi-00091604b5933b9a7: deregistered (verified absent).
+Activation 7334e950-...: deleted (verified absent).
+IAM role go-m6-ssm-hybrid: policy detached + role deleted (verified NoSuchEntity).
+
+STILL DEFERRED (unchanged from M3/M4/M5; not on the Run Command path)
+=====================================================================
+- net.Interfaces()/Addrs() for haiku/arm64 (worked around in agent, B3).
+- fsnotify Watcher (idle stub); CPU-topology detailed-info gatherer.
+- WorkerProvider's process-tree check logs "open /proc: no such file or
+  directory" every 60s (Haiku has no /proc); harmless — the worker is tracked by
+  pid and the health loop runs regardless.
+- runtime.pipe1/pipe1x are now dead code; remove or fix-in-place as hygiene.
