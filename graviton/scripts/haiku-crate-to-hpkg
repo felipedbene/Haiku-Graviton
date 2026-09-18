@@ -1,0 +1,305 @@
+#!/bin/sh
+# haiku-crate-to-hpkg -- turn a crates.io crate into a native arm64 DeBeOS .hpkg.
+#
+# Stage-1 self-sufficiency tool (DeBeOS #116): given a crate NAME and VERSION,
+# build the native arm64 binary with the on-box Rust toolchain and package it as
+# an installable Haiku `.hpkg` with correct metadata (name, version, provides,
+# requires, arch). The produced hpkg installs with `pkgman install <file>` and
+# the binary runs.
+#
+# WHERE IT RUNS: on a native Graviton Haiku builder that already carries the Rust
+# closure -- `pkgman install rust_bin haiku_devel` (see
+# graviton/docs/native-ec2-builds.md and the native-dev-closure memory). rust_bin
+# ships /boot/system/data/profile.d/rust-devel.sh, which a LOGIN shell sources to
+# set CARGO_BUILD_RUSTFLAGS=-C link-arg=-Wl,--no-gc-sections + RUST_MIN_STACK; so
+# drive this over SSM with `bash -lc`, or it re-exports those itself (below).
+# Launch such a box with graviton/scripts/haiku-launch and drive it with
+# graviton/scripts/ssm-run.
+#
+# USAGE:
+#   haiku-crate-to-hpkg [options] <crate> <version>
+#
+#     -b, --bin NAME          binary the crate installs (repeatable). Default:
+#                             every executable cargo drops in <root>/bin.
+#     -n, --pkgname NAME      hpkg package name. Default: crate name, '-' -> '_'.
+#     -o, --outdir DIR        where to write the .hpkg. Default: ~/crate-hpkg.
+#     -r, --revision N        hpkg revision (the -N suffix). Default: 1.
+#         --features LIST     passed to cargo as --features LIST.
+#         --no-default-features   passed through to cargo.
+#         --serial            build with `cargo --jobs 1`. On a small builder
+#                             (2 vCPU / 4 GB) parallel rustc intermittently fails
+#                             to spawn a child (Haiku B_BAD_VALUE, "never
+#                             executed") or corrupts a parallel .rmeta; serial
+#                             dodges both. This script ALSO retries serial once
+#                             automatically when it detects that signature.
+#         --locked            passed through to cargo (honour Cargo.lock).
+#         --license NAME      hpkg license name. Default: MIT. (The `package`
+#                             tool rejects license names it does not recognise
+#                             unless a matching file is bundled -- e.g.
+#                             "Apache-2.0" fails, "MIT" is accepted.)
+#         --cargo-arg ARG     extra verbatim arg to `cargo install` (repeatable).
+#         --install           after building, `pkgman install` the hpkg and run
+#                             each binary's `--version` to prove it activates.
+#     -h, --help
+#
+# FAILURE MODES HANDLED (all seen on real builds, see the native-dev memories):
+#   * GNU ld 2.41 aarch64 stub bug ("can not size stub section" /
+#     unresolvable ADR_GOT_PAGE): rustc defaults to --gc-sections which trips it.
+#     We force -Wl,--no-gc-sections (belt-and-braces with rust_bin's profile.d).
+#   * GNU ld 2.41 "bad reloc symbol index ... .debug_info" on larger crates:
+#     avoided by building release with debuginfo OFF (CARGO_PROFILE_RELEASE_DEBUG=0);
+#     `cargo install` is release by default.
+#   * macro/const-heavy crates overflowing rustc's worker stack (SIGKILLTHR):
+#     RUST_MIN_STACK is raised (kernel MAX_USER_STACK_SIZE is 512 MB in this tree).
+#   * a crate that needs a C library at link time: reported as a clear blocker
+#     with the cargo/cc error, plus the readelf NEEDED list of whatever DID link,
+#     so the missing `lib:`/`devel:` dep is named rather than guessed.
+#   * a crate that is not portable to Haiku (compile_error! "target OS ..."):
+#     use --no-default-features / --features to drop the offending optional dep,
+#     the same escape hatch cargo gives everywhere.
+#   * network: `cargo install` fetches from crates.io over the box's working
+#     online cargo (recipe libcurl via the DeBeOS CDN closure). No vendoring.
+#
+# The requires{} block is derived from the actual ELF: every NEEDED shared
+# library that is NOT part of the base `haiku` package becomes a `lib:` require
+# (e.g. libgcc_s -> lib:libgcc_s from gcc_syslibs, libssl -> lib:libssl). This
+# keeps the hpkg self-describing without hand-maintaining a dependency table.
+#
+# This script PRODUCES an artifact. Publishing it to the green package pool is a
+# separate, gated step (graviton/scripts/haiku-repo-publish*, SOP §3) and is NOT
+# done here.
+
+set -u
+
+progname=haiku-crate-to-hpkg
+die() { printf '%s: %s\n' "$progname" "$*" >&2; exit 1; }
+say() { printf '%s: %s\n' "$progname" "$*" >&2; }
+
+# ---- defaults --------------------------------------------------------------
+BINS=""
+PKGNAME=""
+OUTDIR="$HOME/crate-hpkg"
+REVISION=1
+FEATURES=""
+NO_DEFAULT_FEATURES=0
+SERIAL=0
+LOCKED=0
+LICENSE="MIT"
+CARGO_EXTRA=""
+DO_INSTALL=0
+
+# ---- args ------------------------------------------------------------------
+POSARGS=""
+while [ $# -gt 0 ]; do
+	case "$1" in
+		-b|--bin)          BINS="$BINS $2"; shift 2 ;;
+		-n|--pkgname)      PKGNAME="$2"; shift 2 ;;
+		-o|--outdir)       OUTDIR="$2"; shift 2 ;;
+		-r|--revision)     REVISION="$2"; shift 2 ;;
+		--features)        FEATURES="$2"; shift 2 ;;
+		--no-default-features) NO_DEFAULT_FEATURES=1; shift ;;
+		--serial)          SERIAL=1; shift ;;
+		--locked)          LOCKED=1; shift ;;
+		--license)         LICENSE="$2"; shift 2 ;;
+		--cargo-arg)       CARGO_EXTRA="$CARGO_EXTRA $2"; shift 2 ;;
+		--install)         DO_INSTALL=1; shift ;;
+		-h|--help)         sed -n '2,60p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+		--)                shift; while [ $# -gt 0 ]; do POSARGS="$POSARGS $1"; shift; done ;;
+		-*)                die "unknown option $1" ;;
+		*)                 POSARGS="$POSARGS $1"; shift ;;
+	esac
+done
+# shellcheck disable=SC2086
+set -- $POSARGS
+[ $# -eq 2 ] || die "usage: $progname [options] <crate> <version>   (see --help)"
+CRATE="$1"
+VERSION="$2"
+
+case "$REVISION" in ''|*[!0-9]*) die "--revision must be an integer, got '$REVISION'";; esac
+
+[ -z "$PKGNAME" ] && PKGNAME=$(printf '%s' "$CRATE" | tr '-' '_')
+# hpkg names are lowercase [a-z0-9_]; sanitise anything else to '_'.
+PKGNAME=$(printf '%s' "$PKGNAME" | tr 'A-Z' 'a-z' | sed 's/[^a-z0-9_]/_/g')
+PKGVER="$VERSION-$REVISION"
+
+# ---- environment safety net (in case not a login shell) --------------------
+# rust_bin's profile.d sets these for login shells; re-assert them for
+# `ssm-run <box> <<EOF ...` (non-login /bin/sh) so the ld-2.41 stub bug and the
+# macro-expansion stack overflow do not surface as spurious "blockers".
+case "${CARGO_BUILD_RUSTFLAGS:-}" in
+	*--no-gc-sections*) : ;;
+	*) export CARGO_BUILD_RUSTFLAGS="${CARGO_BUILD_RUSTFLAGS:-} -C link-arg=-Wl,--no-gc-sections" ;;
+esac
+: "${RUST_MIN_STACK:=268435456}"; export RUST_MIN_STACK
+export CARGO_PROFILE_RELEASE_DEBUG=0        # dodge ld-2.41 .debug_info reloc bug
+export CARGO_NET_RETRY="${CARGO_NET_RETRY:-5}"
+
+# ---- preflight -------------------------------------------------------------
+PKG_TOOL=$(command -v package 2>/dev/null || echo /boot/system/bin/package)
+READELF=$(command -v readelf 2>/dev/null || echo /boot/system/bin/readelf)
+command -v cargo >/dev/null 2>&1 || die "cargo not found -- run 'pkgman install rust_bin haiku_devel' first"
+[ -x "$PKG_TOOL" ] || die "the 'package' tool not found (base Haiku); cannot build an hpkg"
+[ -x "$READELF" ] || say "readelf not found -- requires{} will be minimal (haiku only)"
+[ -f /boot/system/develop/lib/crti.o ] || \
+	die "haiku_devel not installed (no crti.o) -- run 'pkgman install haiku_devel'; links will fail"
+
+say "crate=$CRATE version=$VERSION  ->  package $PKGNAME-$PKGVER (arm64)"
+
+STAGE=$(mktemp -d /tmp/crate2hpkg.XXXXXX) || die "cannot make a work dir"
+trap 'rm -rf "$STAGE"' EXIT
+ROOT="$STAGE/root"           # cargo install --root target
+TREE="$STAGE/tree"           # the hpkg content tree (.PackageInfo + bin/)
+mkdir -p "$ROOT" "$TREE/bin" "$OUTDIR"
+
+# ---- build with cargo ------------------------------------------------------
+# Assemble the argv once; run_cargo optionally forces serial (--jobs 1).
+BUILD_LOG="$STAGE/cargo.log"
+run_cargo() {
+	set -- install --root "$ROOT" --version "$VERSION"
+	{ [ "$SERIAL" -eq 1 ] || [ "$FORCE_SERIAL" = 1 ]; } && set -- "$@" --jobs 1
+	[ "$LOCKED" -eq 1 ] && set -- "$@" --locked
+	[ "$NO_DEFAULT_FEATURES" -eq 1 ] && set -- "$@" --no-default-features
+	[ -n "$FEATURES" ] && set -- "$@" --features "$FEATURES"
+	# shellcheck disable=SC2086
+	[ -n "$CARGO_EXTRA" ] && set -- "$@" $CARGO_EXTRA
+	set -- "$@" "$CRATE"
+	say "cargo $*"
+	cargo "$@" > "$BUILD_LOG" 2>&1
+}
+
+FORCE_SERIAL=0
+run_cargo
+crc=$?
+# Parallel rustc on a small builder can fail to spawn a child (B_BAD_VALUE,
+# "never executed") or corrupt a parallel .rmeta (rustc ICE in rmeta/decoder).
+# Retry once, serial, when we see that signature -- it is a builder-size flake,
+# not a real defect in the crate.
+if [ "$crc" -ne 0 ] && [ "$SERIAL" -eq 0 ] \
+	&& grep -qE 'never executed|error -2147483643|rmeta/decoder|get_module_children|item_ident' "$BUILD_LOG" 2>/dev/null; then
+	say "parallel-build flake detected -- retrying once with --jobs 1"
+	FORCE_SERIAL=1
+	run_cargo
+	crc=$?
+fi
+tail -n 25 "$BUILD_LOG" >&2
+if [ "$crc" -ne 0 ]; then
+	say "cargo install FAILED (rc=$crc). Root-cause lines:"
+	grep -nE 'error(\[|:)|cannot find -l|could not find|compile_error|not implemented|linking with|undefined reference|No such file|OPENSSL|pkg-config' \
+		"$BUILD_LOG" 2>/dev/null | head -n 40 >&2
+	die "build of $CRATE $VERSION failed -- see the log lines above (likely a missing C dep or an unportable crate; try --no-default-features / --features, or install the devel: lib)"
+fi
+
+# ---- collect the binaries --------------------------------------------------
+if [ -z "$BINS" ]; then
+	for f in "$ROOT"/bin/*; do
+		[ -f "$f" ] && BINS="$BINS $(basename "$f")"
+	done
+fi
+[ -n "$BINS" ] || die "cargo installed no binaries into $ROOT/bin (a library-only crate?)"
+
+# ---- provides / requires from the actual ELF -------------------------------
+# base `haiku` package already provides these system libraries; do NOT emit a
+# lib: require for them (it would be redundant and, for the split-libc set,
+# unsatisfiable as a separate resolvable).
+is_base_lib() {
+	case "$1" in
+		libroot|libnetwork|libbsd|libgnu|libbe|libtextencoding|\
+		libstorage|libtracker|libruntimeloader|runtime_loader|ld) return 0 ;;
+	esac
+	return 1
+}
+
+PROVIDES="	$PKGNAME = $VERSION"
+REQ_LIBS=""
+BIN_LIST=""
+for b in $BINS; do
+	src="$ROOT/bin/$b"
+	[ -f "$src" ] || die "expected binary $b not found in $ROOT/bin"
+	cp "$src" "$TREE/bin/$b"
+	chmod +x "$TREE/bin/$b"
+	BIN_LIST="$BIN_LIST $b"
+	PROVIDES="$PROVIDES
+	cmd:$b = $VERSION"
+	if [ -x "$READELF" ]; then
+		for so in $("$READELF" -d "$src" 2>/dev/null \
+				| sed -n 's/.*(NEEDED).*\[\(.*\)\].*/\1/p'); do
+			base=$(printf '%s' "$so" | sed 's/\.so.*$//')
+			is_base_lib "$base" && continue
+			REQ_LIBS="$REQ_LIBS
+$base"
+		done
+	fi
+done
+REQ_UNIQ=$(printf '%s' "$REQ_LIBS" | sed '/^$/d' | sort -u)
+
+REQUIRES="	haiku"
+for base in $REQ_UNIQ; do
+	REQUIRES="$REQUIRES
+	lib:$base"
+done
+
+# ---- write .PackageInfo ----------------------------------------------------
+SUMMARY="${HG_PKG_SUMMARY:-$CRATE (Rust crate, native arm64 build)}"
+DESCRIPTION="${HG_PKG_DESC:-Native arm64 build of the crates.io crate \"$CRATE\" $VERSION, packaged for DeBeOS by $progname (DeBeOS #116).}"
+PACKAGER="${HG_PKG_PACKAGER:-DeBeOS <debeos@example.invalid>}"
+VENDOR="${HG_PKG_VENDOR:-DeBeOS}"
+
+cat > "$TREE/.PackageInfo" <<EOF
+name			$PKGNAME
+version			$PKGVER
+architecture		arm64
+summary			"$SUMMARY"
+description		"$DESCRIPTION"
+packager		"$PACKAGER"
+vendor			"$VENDOR"
+licenses {
+	"$LICENSE"
+}
+copyrights {
+	"crates.io: $CRATE authors"
+}
+provides {
+$PROVIDES
+}
+requires {
+$REQUIRES
+}
+urls {
+	"https://crates.io/crates/$CRATE"
+}
+EOF
+
+say "PackageInfo:"; sed 's/^/    /' "$TREE/.PackageInfo" >&2
+
+# ---- create the hpkg -------------------------------------------------------
+HPKG="$OUTDIR/$PKGNAME-$PKGVER-arm64.hpkg"
+rm -f "$HPKG"
+# output must live outside the input tree (package create enforces this)
+"$PKG_TOOL" create -C "$TREE" "$HPKG" || die "package create failed"
+[ -f "$HPKG" ] || die "package create reported success but $HPKG is missing"
+SIZE=$(ls -l "$HPKG" | awk '{print $5}')
+say "built $HPKG ($SIZE bytes)"
+say "binaries:$BIN_LIST"
+
+# ---- optional: install + prove ---------------------------------------------
+if [ "$DO_INSTALL" -eq 1 ]; then
+	say "installing $HPKG ..."
+	# accept an "allow vendor change" prompt if the name collides, then confirm
+	{ i=0; while [ "$i" -lt 40 ]; do echo 1; i=$((i+1)); done; echo yes; } \
+		| pkgman install -y "$HPKG" 2>&1 | tail -n 15 >&2 \
+		|| die "pkgman install failed"
+	# packagefs activates the install live; the binaries appear in
+	# /boot/system/bin. Prove each one runs.
+	for b in $BIN_LIST; do
+		say "running: $b --version"
+		if "/boot/system/bin/$b" --version >&2 2>&1; then
+			say "OK: $b runs"
+		else
+			say "WARN: $b --version returned nonzero (some tools use -V/--help)"
+			"/boot/system/bin/$b" --help >&2 2>&1 | head -n 3 || true
+		fi
+	done
+fi
+
+# stdout: the artifact path, one line, for callers to capture.
+printf '%s\n' "$HPKG"
