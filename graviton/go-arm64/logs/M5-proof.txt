@@ -1,0 +1,147 @@
+M5 proof — run the real upstream amazon-ssm-agent (tag v3.3.3270.0) on DeBeOS
+(Haiku arm64) and register it as an SSM managed node that reaches Online.
+Generated: 2026-09-18. Issue #302, milestone M5 (doc go-arm64-bringup-scope.md).
+
+HEADLINE RESULT
+===============
+The real amazon-ssm-agent, cross-compiled GOOS=haiku GOARCH=arm64 with the
+korli/go fork + our M0/M2/M4 patchset, REGISTERED and reached PingStatus=Online
+on real AWS Graviton (c7g.large, Haiku hrev59996, arm64), reporting its OWN
+version. Observed via `aws ssm describe-instance-information`:
+
+    Id:              mi-002a9d236b153c89f     (hybrid activation, a distinct
+                                               identity from the instance's baked
+                                               debeos-ssm-agent i- node)
+    PingStatus:      Online
+    AgentVersion:    3.3.0.0                  (the real agent's version)
+    PlatformType:    Linux                    (closed-enum trick; see B2)
+    PlatformName:    Haiku
+    PlatformVersion: R1~beta6+development      (from syscall.Uname, real libroot)
+    IPAddress:       10.0.5.29                 (from the UDP-dial fix; see B3)
+    ComputerName:    ip-10-0-5-29.us-west-2.compute.internal
+
+This is a *runtime* milestone: agent binary runs, generates its RSA identity
+key, writes the on-prem Vault, computes a fingerprint, calls the SSM
+RegisterManagedInstance API over pure-Go TLS, obtains OnPrem credentials, opens
+the MGS control-channel websocket, and sends UpdateInstanceInformation health
+pings that SSM accepts -> Online.
+
+BUILD
+=====
+Toolchain: korli/go @ go1.26.1-haiku1 + patches 0001 (M0) + 0002 (M2 errno) +
+0003 (M4 flock/statfs/uname), at /local/home/benfelip/go-m0/korli-go.
+  GOOS=haiku GOARCH=arm64 CGO_ENABLED=0 GOTOOLCHAIN=local GOFLAGS=-mod=vendor \
+      go build ./...                                        -> exit 0
+All 8 release binaries link as AArch64 Haiku ELF (amazon-ssm-agent,
+ssm-agent-worker, updater, ssm-cli, ssm-document-worker, ssm-session-logger,
+ssm-session-worker, ssm-setup-cli). Patch round-trips on a pristine v3.3.3270.0
+clone (git apply --check OK; go build ./... exit 0).
+
+HOW IT WAS RUN (isolation from the baked debeos-ssm-agent)
+==========================================================
+- The instance's baked debeos-ssm-agent kept the box reachable over its own
+  EC2-native (i-) SSM channel; the real agent used a HYBRID ACTIVATION (mi-
+  node) so the two never share an identity.
+- On-disk isolation is free: debeos-ssm-agent uses neither /etc/amazon nor
+  /var/lib/amazon (both absent). The real agent's binaries live in
+  /boot/home/ssm-real/bin, which the agent's own path logic auto-adopts as its
+  program folder; its Vault/state live under /var/lib/amazon/ssm (untouched by
+  debeos-ssm-agent).
+- Registration:
+    amazon-ssm-agent -register -id <ActivationId> -code <ActivationCode> \
+        -region us-west-2 -y
+  -> "Successfully registered ... Managed instance-id: mi-002a9d236b153c89f"
+- Because the core->worker spawn is fork/exec (see B1), the worker was launched
+  directly (./ssm-agent-worker) to reach Online. Standalone, it assumes the
+  OnPrem identity, opens the MGS control channel, and health-pings.
+
+RUNTIME-BLOCKER LEDGER
+======================
+B1  fork/exec crashes on haiku/arm64  [TOOLCHAIN — the central blocker, DEFERRED]
+    Symptom:   Any os/exec / syscall.ForkExec faults the process
+               (SIGSEGV/SIGBUS, nondeterministic) BEFORE the child execs — even
+               for a real binary like /bin/ls. No Go traceback prints (the
+               fault recurs inside the traceback, i.e. it happens on the g0
+               stack during the libc fork call).
+    Evidence:  Standalone probes: exec.Command("/bin/ls").Output(),
+               exec.Command with inherited stdio, and raw syscall.ForkExec all
+               crash with no child output. In the agent it first hit during
+               `-register` (fingerprint gatherer shelling to dmidecode/ls), and
+               again when an association auto-triggered a document run
+               (spawning ssm-document-worker) right after the node went Online.
+    Root cause: syscall.forkAndExecInChild (src/syscall/exec_libc.go, shared
+               aix||haiku||solaris) calls forkx(0x1) -> runtime.syscall_forkx,
+               which forks via asmcgocall(&asmsysvicall6x, &libc_fork). The
+               post-fork child state is not valid for the runtime's libc-call
+               mechanism on haiku/arm64, so the child (or the fork itself)
+               faults before/at execve. Baseline sanity: hello, 2048-bit RSA
+               keygen, TLS, and syscall.Uname all run fine on the same box —
+               the fault is specific to fork+exec.
+    Impact:    Blocks core->worker spawn, Run Command document execution,
+               association documents, and Session Manager pty — everything that
+               spawns a child. Does NOT block registration or the Online health
+               loop (both made exec-free below).
+    Proposed fix (fork, medium-large): give Haiku its own forkAndExecInChild —
+               either raw nosplit libc trampolines that don't route through
+               asmcgocall in the child (the illumos/AIX rawSyscall pattern), or
+               a posix_spawn(2)-based implementation (Haiku's preferred spawn
+               primitive). Then add an exec smoke test to the fork's CI. Effort:
+               days, runtime-asm heavy; this is the make-or-break for a fully
+               functional agent (Run Command / Session Manager).
+
+B2  PlatformType enum rejects "haiku"  [AGENT — FIXED]
+    Symptom:   HealthCheck: "error when calling AWS APIs ... Cannot report
+               platform type of unrecognized OS. haiku" -> no heartbeat.
+    Root cause: agent/ssm/service.go maps runtime.GOOS to SSM's closed
+               PlatformType enum; haiku fell through to an error.
+    Fix:       add "haiku" to the Linux case (PlatformType=Linux). The true OS
+               is still reported via PlatformName=Haiku / PlatformVersion. Same
+               trick the interim debeos-ssm-agent uses. Effort: trivial.
+
+B3  net.Interfaces() returns 0 on Haiku  [TOOLCHAIN gap, WORKED AROUND in agent]
+    Symptom:   After B2, health ping failed "InvalidParameter ... minimum field
+               size of 1, UpdateInstanceInformationInput.IPAddress" — the agent
+               reported no IP.
+    Root cause: the Go fork's net.Interfaces() is not implemented for Haiku and
+               returns an empty list (no error). The agent's originalIP()
+               enumerates interfaces, so it found no address. Invisible through
+               M2 (outbound HTTP needs no interface enumeration).
+    Fix (agent): agent/platform/platformIp_others.go — on haiku, resolve the
+               primary egress IP via a UDP connect + LocalAddr (getsockname; no
+               packets sent, no interface enumeration). Verified to return
+               10.0.5.29 on hardware.
+    Proper fix (fork, deferred): implement net.Interfaces()/Addrs() for
+               haiku/arm64 (getifaddrs or Haiku socket ioctls). Effort: medium.
+
+B4  platform name/version + hostname shell out  [AGENT — FIXED]
+    Symptom:   getPlatformDetails() falls through to exec(lsb_release) and
+               Hostname() execs `hostname --fqdn` on Haiku (no os-release,
+               no lsb_release) — repeating fork/exec landmines (B1) on the
+               health path.
+    Fix:       agent/platform/platform_unix.go + platform_haiku_details.go —
+               resolve name="Haiku" / version from syscall.Uname (M4, now
+               hardware-verified: Release=R1~beta6+development), and skip the
+               `hostname --fqdn` exec (os.Hostname() suffices). Effort: small.
+
+B5  fingerprint gatherer shells out  [AGENT — FIXED]
+    Symptom:   `-register` SIGBUS in registration.Fingerprint() ->
+               currentHwHash() -> exec(dmidecode/ls) (B1).
+    Fix:       agent/managedInstances/fingerprint/hardwareInfo_haiku.go — build
+               the hardware hash from in-process sources only (machine-id file,
+               hostname, net addrs/MACs). dmidecode is absent on Haiku anyway.
+               isValidHardwareHash only requires valid UTF-8. Effort: small.
+
+STILL DEFERRED (unchanged from M3/M4, not on the Online path)
+=============================================================
+- fsnotify Watcher: idle stub (needs Haiku watch_node).
+- CPU-topology in the detailed-info gatherer (needs get_system_info()).
+- full golang.org/x/sys/unix haiku/arm64 table port.
+
+NOTES
+=====
+- Advanced-instances activation tier was NOT enabled: MDS accepted the Run
+  Command on the standard tier (it reached "Pending"); the wall was B1
+  (spawning ssm-document-worker), not the tier. So no account-level tier change
+  was made.
+- syscall.Uname (wired compile-only in M4) is now HARDWARE-VERIFIED here (5/5):
+  Sysname=Haiku, Release=R1~beta6+development, Machine=arm64, sizeof==160.

@@ -1,8 +1,20 @@
-# amazon-ssm-agent — haiku/arm64 port (M3 + M4)
+# amazon-ssm-agent — haiku/arm64 port (M3 + M4 + M5)
 
-M3/M4 of the "Go on DeBeOS/arm64" arc (see `../../docs/go-arm64-bringup-scope.md`,
-milestone **M4** in that doc's ladder: *the real upstream `amazon-ssm-agent`
-compiles for haiku/arm64*).
+M3/M4/M5 of the "Go on DeBeOS/arm64" arc (see `../../docs/go-arm64-bringup-scope.md`).
+M3/M4 got the real upstream `amazon-ssm-agent` to *compile + link* for
+haiku/arm64; **M5 got it to RUN and reach `Online` as an SSM managed node.**
+
+**M5 update (2026-09-18): the real agent registered and reached
+`PingStatus=Online` on real Graviton (Haiku arm64), reporting its own version
+`3.3.0.0`, `PlatformName=Haiku`.** It ran as a hybrid-activation `mi-` node
+(distinct identity from the box's baked `debeos-ssm-agent`). Everything up to
+and including the SSM control channel and health heartbeat works; **command
+execution (Run Command / Session Manager / association documents) is blocked by
+one toolchain bug — `fork`+`exec` faults on haiku/arm64** (blocker **B1**). Full
+runtime-blocker ledger and evidence: [`../logs/M5-proof.txt`](../logs/M5-proof.txt)
+and the "M5 — runtime" section at the end of this file. The single combined
+`amazon-ssm-agent-haiku-arm64.patch` now also carries the M5 agent-side arms
+(platform-type enum, exec-free platform/hostname/fingerprint, UDP-dial IP).
 
 **M4 update (2026-09-18):** the three genuine toolchain gaps M3 surfaced
 (`syscall.Flock`, `syscall.Statfs`, and an `Uname` for the detailed-info
@@ -141,3 +153,61 @@ Still stubbed / deferred after M4:
 
 Verified entirely by cross-build on Linux (compile + link + static struct
 layout). On-hardware start / registration (M5/M6) is unchanged and not claimed.
+
+## M5 — runtime: registered + Online on real Graviton
+
+On a real Graviton `c7g.large` (Haiku hrev59996, arm64), the real agent
+registered and reached **`PingStatus=Online`** as a hybrid-activation `mi-` node
+reporting its own version. Observed via `aws ssm describe-instance-information`:
+
+| field | value |
+|---|---|
+| PingStatus | **Online** |
+| AgentVersion | **3.3.0.0** (the real agent) |
+| PlatformType | Linux (closed-enum trick, B2) |
+| PlatformName | Haiku |
+| PlatformVersion | R1~beta6+development (`syscall.Uname`) |
+| IPAddress | the instance's private IP (UDP-dial, B3) |
+
+What works: binary runs; RSA identity keygen; on-prem Vault write; fingerprint;
+`RegisterManagedInstance` over pure-Go TLS; OnPrem credential refresh; MGS
+control-channel websocket; `UpdateInstanceInformation` health pings → Online.
+
+What's blocked: **command execution** (Run Command documents, association
+documents, Session Manager pty) and the normal **core→worker spawn** — all need
+`fork`+`exec`, which faults on haiku/arm64 (blocker **B1**). To reach Online the
+worker was launched directly (`./ssm-agent-worker`), which assumes the OnPrem
+identity and heartbeats without spawning a child.
+
+### M5 runtime-blocker ledger (summary; full detail in `../logs/M5-proof.txt`)
+
+| # | What | Layer | Status |
+|---|---|---|---|
+| **B1** | `fork`+`exec` faults (SIGSEGV/SIGBUS) before the child execs — even for a real binary. Root: `syscall.forkAndExecInChild`→`forkx`→`runtime.syscall_forkx` (`exec_libc.go`, the shared aix/haiku/solaris path) forks via `asmcgocall`; the post-fork child state is invalid for the runtime's libc-call path on haiku/arm64. | **toolchain** | **DEFERRED** — needs a Haiku `forkAndExecInChild` (raw nosplit trampolines, or `posix_spawn`). The make-or-break for Run Command / Session Manager. Days of runtime-asm work. |
+| **B2** | `UpdateInstanceInformation` rejects `PlatformType=haiku` (closed enum) → no heartbeat. | agent | **FIXED** — `haiku`→`PlatformType=Linux` in `agent/ssm/service.go`; name/version still report Haiku. |
+| **B3** | `net.Interfaces()` returns 0 on Haiku → empty `IPAddress` → ping rejected. | toolchain (worked around in agent) | **WORKED AROUND** — `platformIp_others.go` resolves the egress IP by UDP `connect`+`LocalAddr` (no interface enumeration). Proper fix (implement `net.Interfaces` for Haiku) deferred. |
+| **B4** | `getPlatformDetails`/`Hostname` shell out (`lsb_release`, `hostname --fqdn`) → repeating B1 landmines on the health path. | agent | **FIXED** — exec-free via `syscall.Uname` + `os.Hostname()` (`platform_haiku_details.go`, `platform_unix.go`). |
+| **B5** | `-register` fingerprint gatherer shells out (`dmidecode`, `ls`) → B1. | agent | **FIXED** — in-process hardware hash (`hardwareInfo_haiku.go`; hostname + net addrs/MACs). |
+
+Notes: the advanced-instances activation tier was **not** needed (MDS accepted
+the command on the standard tier; the wall was B1, not the tier). `syscall.Uname`
+(compile-only in M4) is now hardware-verified here.
+
+### How to reproduce the runtime (on a Haiku arm64 instance)
+
+```sh
+# 0. Build the 8 binaries as in "How to reproduce" above; copy them into a
+#    dedicated dir on the instance, e.g. /boot/home/ssm-real/bin (the agent's
+#    path logic then uses that dir as its program folder — isolated from any
+#    other agent). Create a hybrid activation with an ssm.amazonaws.com-trusted
+#    role carrying AmazonSSMManagedInstanceCore:
+#      aws ssm create-activation --iam-role <role> --registration-limit 1 ...
+# 1. Register (writes the on-prem Vault under /var/lib/amazon/ssm):
+./amazon-ssm-agent -register -id <ActivationId> -code <ActivationCode> \
+    -region <region> -y
+# 2. Run the worker directly to reach Online (core→worker spawn hits B1):
+./ssm-agent-worker
+# 3. Confirm:
+aws ssm describe-instance-information --filters \
+    Key=InstanceIds,Values=<mi-...>
+```
