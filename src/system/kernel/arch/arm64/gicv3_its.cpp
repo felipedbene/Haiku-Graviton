@@ -503,8 +503,10 @@ GICv3ITS::_InitLpis(addr_t gicdRegs, const gicr_region* gicrRegions,
 			}
 
 			gic_write64(frame + GICR_PROPBASER, propbaser);
+			// PENDBASER Physical_Address is bits [51:16]; keep the full
+			// architected width (was truncated to [47:16], dropping [51:48]).
 			gic_write64(frame + GICR_PENDBASER,
-				(pendingPhysical & 0x000ffffffff0000ull)
+				(pendingPhysical & 0x000fffffffff0000ull)
 					| GICR_BASER_INNER_CACHE | GICR_BASER_SHAREABILITY);
 
 			// A redistributor may quietly downgrade the cacheability or
@@ -661,7 +663,9 @@ GICv3ITS::_MapDevice(uint32 deviceID, phys_addr_t itt, uint32 eventIDBits,
 	uint64 command[4];
 	command[0] = GITS_CMD_MAPD | ((uint64)deviceID << 32);
 	command[1] = eventIDBits - 1;
-	command[2] = (itt & 0x000ffffffffff00ull)
+	// MAPD ITT_addr is bits [51:8]; keep the full architected width (was
+	// truncated to [47:8], dropping [51:48]).
+	command[2] = (itt & 0x000fffffffffff00ull)
 		| (valid ? (1ull << 63) : 0);
 	command[3] = 0;
 	return _SubmitCommand(command);
