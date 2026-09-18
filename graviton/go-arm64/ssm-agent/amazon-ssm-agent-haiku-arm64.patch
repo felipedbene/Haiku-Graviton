@@ -130,84 +130,27 @@ index 4aa2b53..00c0ec1 100644
  
  package executers
  
-diff --git a/agent/fileutil/advisorylock/advisorylock_haiku.go b/agent/fileutil/advisorylock/advisorylock_haiku.go
-new file mode 100644
-index 0000000..138c031
---- /dev/null
-+++ b/agent/fileutil/advisorylock/advisorylock_haiku.go
-@@ -0,0 +1,66 @@
-+// Copyright 2025 Amazon.com, Inc. or its affiliates. All Rights Reserved.
-+//
-+// Licensed under the Apache License, Version 2.0 (the "License"). You may not
-+// use this file except in compliance with the License. A copy of the
-+// License is located at
-+//
-+// http://aws.amazon.com/apache2.0/
-+//
-+// or in the "license" file accompanying this file. This file is distributed
-+// on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND,
-+// either express or implied. See the License for the specific language governing
-+// permissions and limitations under the License.
-+//go:build haiku
-+// +build haiku
-+
-+// Haiku has no flock(2) in libroot; advisory whole-file locking is done with
-+// fcntl(F_SETLK) via syscall.FcntlFlock, which the Haiku Go port exposes.
-+package advisorylock
-+
-+import (
-+	"errors"
-+	"os"
-+	"syscall"
-+	"time"
-+)
-+
-+type lockType int16
-+
-+const (
-+	readLock  lockType = syscall.F_RDLCK
-+	writeLock lockType = syscall.F_WRLCK
-+)
-+
-+func lock(f *os.File, lt lockType, timeout time.Duration) (err error) {
-+	fl := &syscall.Flock_t{
-+		Type:   int16(lt),
-+		Whence: 0, // SEEK_SET
-+		Start:  0,
-+		Len:    0, // whole file
-+	}
-+	startTime := time.Now()
-+	for {
-+		// F_SETLK is non-blocking: EAGAIN/EACCES means another holder.
-+		err = syscall.FcntlFlock(f.Fd(), syscall.F_SETLK, fl)
-+		if err != syscall.EINTR && err != syscall.EAGAIN && err != syscall.EACCES {
-+			break
-+		}
-+
-+		if time.Since(startTime) > timeout {
-+			return wrapErr(lt.String(), f, errors.New("timed out"))
-+		}
-+
-+		time.Sleep(10 * time.Millisecond)
-+	}
-+	return wrapErr(lt.String(), f, err)
-+}
-+
-+func unlock(f *os.File) error {
-+	fl := &syscall.Flock_t{
-+		Type:   syscall.F_UNLCK,
-+		Whence: 0,
-+		Start:  0,
-+		Len:    0,
-+	}
-+	return wrapErr("Unlock", f, syscall.FcntlFlock(f.Fd(), syscall.F_SETLK, fl))
-+}
+diff --git a/agent/fileutil/advisorylock/advisorylock_unix.go b/agent/fileutil/advisorylock/advisorylock_unix.go
+index 79c003a..eeeb842 100644
+--- a/agent/fileutil/advisorylock/advisorylock_unix.go
++++ b/agent/fileutil/advisorylock/advisorylock_unix.go
+@@ -10,8 +10,8 @@
+ // on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND,
+ // either express or implied. See the License for the specific language governing
+ // permissions and limitations under the License.
+-//go:build freebsd || linux || netbsd || openbsd || darwin
+-// +build freebsd linux netbsd openbsd darwin
++//go:build freebsd || linux || netbsd || openbsd || darwin || haiku
++// +build freebsd linux netbsd openbsd darwin haiku
+ 
+ package advisorylock
+ 
 diff --git a/agent/fileutil/fileutil_diskspace_haiku.go b/agent/fileutil/fileutil_diskspace_haiku.go
 new file mode 100644
-index 0000000..f7ddb48
+index 0000000..934c691
 --- /dev/null
 +++ b/agent/fileutil/fileutil_diskspace_haiku.go
-@@ -0,0 +1,33 @@
+@@ -0,0 +1,52 @@
 +// Copyright 2025 Amazon.com, Inc. or its affiliates. All Rights Reserved.
 +//
 +// Licensed under the Apache License, Version 2.0 (the "License"). You may not
@@ -225,20 +168,39 @@ index 0000000..f7ddb48
 +
 +package fileutil
 +
-+// The Haiku Go port's syscall package does not expose Statfs/Statfs_t (Haiku
-+// libroot reports filesystem statistics through statvfs(3)/fs_stat_dev, which
-+// the fork has not wrapped yet). Until a statvfs wrapper is added to the
-+// toolchain, report an ample amount of free space so that the agent's
-+// pre-download disk-space guards do not spuriously block. This degrades
-+// gracefully: it only affects the accuracy of the space check, not correctness
-+// of any transfer. TODO(go-arm64): back this with a real statvfs call once the
-+// Haiku syscall package grows one.
++import (
++	"os"
++	"syscall"
++)
++
++// GetDiskSpaceInfo returns available, free, and total bytes for the filesystem
++// backing the working directory. Haiku's libroot reports filesystem statistics
++// through statvfs(3), which the Haiku Go port now wraps as syscall.Statfs /
++// syscall.Statfs_t. The block counts (Blocks/Bfree/Bavail) are in units of the
++// fundamental block size (statvfs f_frsize / Statfs_t.Frsize), so bytes are
++// counts * Frsize.
 +func GetDiskSpaceInfo() (diskSpaceInfo DiskSpaceInfo, err error) {
-+	const ample = int64(1) << 40 // 1 TiB sentinel
++	var stat syscall.Statfs_t
++	var wd string
++
++	// get a rooted path name
++	if wd, err = os.Getwd(); err != nil {
++		return
++	}
++
++	// get filesystem statistics
++	if err = syscall.Statfs(wd, &stat); err != nil {
++		return
++	}
++
++	// on Haiku, block counts are expressed in units of the fundamental block
++	// size (f_frsize), not f_bsize
++	unit := uint64(stat.Frsize)
++
 +	return DiskSpaceInfo{
-+		AvailBytes: ample,
-+		FreeBytes:  ample,
-+		TotalBytes: ample,
++		AvailBytes: int64(uint64(stat.Bavail) * unit), // available to unprivileged processes
++		FreeBytes:  int64(uint64(stat.Bfree) * unit),  // total free
++		TotalBytes: int64(uint64(stat.Blocks) * unit), // total capacity
 +	}, nil
 +}
 diff --git a/agent/fileutil/fileutil_diskspace_statfs.go b/agent/fileutil/fileutil_diskspace_statfs.go
@@ -674,10 +636,10 @@ index 56d58ef..521eee6 100644
  package file
 diff --git a/agent/plugins/inventory/gatherers/instancedetailedinformation/dataProvider_haiku.go b/agent/plugins/inventory/gatherers/instancedetailedinformation/dataProvider_haiku.go
 new file mode 100644
-index 0000000..77c4640
+index 0000000..fc33c89
 --- /dev/null
 +++ b/agent/plugins/inventory/gatherers/instancedetailedinformation/dataProvider_haiku.go
-@@ -0,0 +1,32 @@
+@@ -0,0 +1,61 @@
 +// Copyright 2025 Amazon.com, Inc. or its affiliates. All Rights Reserved.
 +//
 +// Licensed under the Apache License, Version 2.0 (the "License"). You may not
@@ -693,22 +655,51 @@ index 0000000..77c4640
 +//go:build haiku
 +// +build haiku
 +
-+// The Linux/BSD detailed-instance gatherer parses lscpu(1) and reads the kernel
-+// version via unix.Uname (golang.org/x/sys/unix). Neither lscpu nor an x/sys
-+// Uname wrapper is available on the Haiku Go port, so this gatherer degrades to
-+// reporting no detailed CPU information (the core control path does not depend
-+// on it). TODO(go-arm64): populate from Haiku's get_system_info / sysinfo once
-+// a native source is wired up.
++// The Linux/BSD detailed-instance gatherer parses lscpu(1) for CPU topology and
++// reads the kernel version via unix.Uname. Haiku has no lscpu, so the CPU
++// topology fields are left empty; the kernel/release string is populated from
++// the Haiku Go port's syscall.Uname (a real libroot uname(2) wrapper). This
++// gatherer is not on the core control path.
++// TODO(go-arm64): populate CPU topology (model/count/cores/sockets) from
++// Haiku's get_system_info() once a native source is wired up.
 +package instancedetailedinformation
 +
 +import (
++	"syscall"
++
 +	"github.com/aws/amazon-ssm-agent/agent/context"
 +	"github.com/aws/amazon-ssm-agent/agent/plugins/inventory/model"
 +)
 +
++// int8ToString converts a NUL-terminated C char array (as Go [N]int8) to a Go
++// string, stopping at the first NUL.
++func int8ToString(b []int8) string {
++	buf := make([]byte, 0, len(b))
++	for _, c := range b {
++		if c == 0 {
++			break
++		}
++		buf = append(buf, byte(c))
++	}
++	return string(buf)
++}
++
 +func collectPlatformDependentInstanceData(context context.T) (appData []model.InstanceDetailedInformation) {
-+	context.Log().Infof("Detailed instance information gatherer is not supported on this platform")
-+	return []model.InstanceDetailedInformation{}
++	log := context.Log()
++
++	var info model.InstanceDetailedInformation
++
++	var uname syscall.Utsname
++	if err := syscall.Uname(&uname); err == nil {
++		info.KernelVersion = int8ToString(uname.Release[:])
++	} else {
++		log.Errorf("Failed to gather kernel version: %v", err)
++	}
++
++	// CPU topology (model, count, cores, sockets, speed) is not available
++	// without lscpu on Haiku; leave those fields empty.
++	appData = append(appData, info)
++	return
 +}
 diff --git a/agent/plugins/inventory/gatherers/models_unix.go b/agent/plugins/inventory/gatherers/models_unix.go
 index 4924d91..3a3f4f2 100644
@@ -1557,16 +1548,18 @@ index 0000000..7d1c190
 +}
 diff --git a/vendor/github.com/go-git/go-billy/v5/osfs/os_haiku.go b/vendor/github.com/go-git/go-billy/v5/osfs/os_haiku.go
 new file mode 100644
-index 0000000..866d7da
+index 0000000..6d18839
 --- /dev/null
 +++ b/vendor/github.com/go-git/go-billy/v5/osfs/os_haiku.go
 @@ -0,0 +1,41 @@
 +//go:build haiku
 +// +build haiku
 +
-+// Haiku file-locking arm for go-billy's osfs. Haiku's Go port does not expose
-+// flock(2)/x/sys/unix; advisory whole-file locking uses fcntl(F_SETLKW) via
-+// syscall.FcntlFlock instead. rename/umask are identical to the POSIX arm.
++// Haiku file-locking arm for go-billy's osfs. os_posix.go reaches flock(2)
++// through golang.org/x/sys/unix, which the agent's vendored x/sys/unix has no
++// haiku port for; the Haiku Go port exposes the same call as syscall.Flock
++// (a real libroot flock(2) wrapper), so this arm mirrors os_posix.go exactly
++// with syscall in place of x/sys/unix. rename/umask are identical to POSIX.
 +package osfs
 +
 +import (
@@ -1578,16 +1571,14 @@ index 0000000..866d7da
 +	f.m.Lock()
 +	defer f.m.Unlock()
 +
-+	fl := &syscall.Flock_t{Type: syscall.F_WRLCK, Whence: 0, Start: 0, Len: 0}
-+	return syscall.FcntlFlock(f.File.Fd(), syscall.F_SETLKW, fl)
++	return syscall.Flock(int(f.File.Fd()), syscall.LOCK_EX)
 +}
 +
 +func (f *file) Unlock() error {
 +	f.m.Lock()
 +	defer f.m.Unlock()
 +
-+	fl := &syscall.Flock_t{Type: syscall.F_UNLCK, Whence: 0, Start: 0, Len: 0}
-+	return syscall.FcntlFlock(f.File.Fd(), syscall.F_SETLK, fl)
++	return syscall.Flock(int(f.File.Fd()), syscall.LOCK_UN)
 +}
 +
 +func rename(from, to string) error {

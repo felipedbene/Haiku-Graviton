@@ -308,6 +308,25 @@ Bottom line unchanged: the toolchain (M0–M2) is now proven and independently
 valuable; the real-agent port (M3-skip / M4–M6) remains ordinary-but-voluminous
 porting to re-evaluate against continuing to ship `debeos-ssm-agent`.
 
+**Update (2026-09-18) — doc-ladder M4 (compile + link) done, then hardened.**
+The whole `amazon-ssm-agent` module (`v3.3.3270.0`, `CGO_ENABLED=0`, vendored)
+cross-builds `GOOS=haiku GOARCH=arm64` to exit 0 and all eight release binaries
+link as AArch64 Haiku ELF. The first pass reached that with a few degraded
+GOOS-arms; a follow-up then wired the three genuine `syscall` gaps it exposed
+into the Haiku Go port and replaced the stubs with real calls:
+`syscall.Flock` (wraps libroot `flock(2)` — which does exist; an earlier "no
+flock(2)" reading was wrong), `syscall.Statfs`/`Fstatfs` + `Statfs_t` (wrap
+`statvfs(3)`), and `syscall.Uname` + `Utsname` (wrap `uname(2)`), so advisory
+locking, disk-space reporting, and the detailed-info gatherer's kernel version
+now use real syscalls. The full `golang.org/x/sys/unix` haiku/arm64 port is
+deferred (a whole new-GOOS generated-table effort, out of proportion to the one
+`unix.Uname` call that needed it). Artifacts, fork patch, and proof:
+[`../go-arm64/ssm-agent/`](../go-arm64/ssm-agent/),
+`../go-arm64/patches/0003-haiku-arm64-M4-flock-statfs-uname.patch`, and
+[`../go-arm64/logs/M4-proof.txt`](../go-arm64/logs/M4-proof.txt). Still on the
+control path but not started: M5 (runs on hardware) and M6 (registers + Run
+Command).
+
 ---
 
 ## 5. Verdict — is this worth it?

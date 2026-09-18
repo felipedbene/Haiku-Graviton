@@ -1,0 +1,262 @@
+diff --git a/src/syscall/syscall_haiku.go b/src/syscall/syscall_haiku.go
+index b0be1a4..7cdb32d 100644
+--- a/src/syscall/syscall_haiku.go
++++ b/src/syscall/syscall_haiku.go
+@@ -482,6 +482,10 @@ func sendmsgN(fd int, p, oob []byte, ptr unsafe.Pointer, salen _Socklen, flags i
+ //sys	Truncate(path string, length int64) (err error)
+ //sys	Fsync(fd int) (err error)
+ //sys	Ftruncate(fd int, length int64) (err error)
++//sys	Flock(fd int, how int) (err error)
++//sys	Statfs(path string, buf *Statfs_t) (err error) = libroot.statvfs
++//sys	Fstatfs(fd int, buf *Statfs_t) (err error) = libroot.fstatvfs
++//sysnb	Uname(buf *Utsname) (err error)
+ //sys	Umask(newmask int) (oldmask int)
+ //sys	Unlink(path string) (err error)
+ //sys	Utimes(path string, times *[2]Timeval) (err error)
+diff --git a/src/syscall/types_haiku.go b/src/syscall/types_haiku.go
+index c85904d..7096a1c 100644
+--- a/src/syscall/types_haiku.go
++++ b/src/syscall/types_haiku.go
+@@ -27,7 +27,9 @@ package syscall
+ #include <sys/select.h>
+ #include <sys/socket.h>
+ #include <sys/stat.h>
++#include <sys/statvfs.h>
+ #include <sys/time.h>
++#include <sys/utsname.h>
+ #include <sys/types.h>
+ #include <sys/un.h>
+ #include <sys/wait.h>
+@@ -100,6 +102,10 @@ type Stat_t C.struct_stat
+ 
+ type Flock_t C.struct_flock
+ 
++type Statfs_t C.struct_statvfs
++
++type Utsname C.struct_utsname
++
+ // FIXME: haiku: Manual declaration because Dirent needs the padding
+ type Dirent struct {
+ 	Dev       int32
+diff --git a/src/syscall/zsyscall_haiku_amd64.go b/src/syscall/zsyscall_haiku_amd64.go
+index eece66e..1ebc850 100644
+--- a/src/syscall/zsyscall_haiku_amd64.go
++++ b/src/syscall/zsyscall_haiku_amd64.go
+@@ -75,6 +75,10 @@ import "unsafe"
+ //go:cgo_import_dynamic libc_Truncate truncate "libroot.so"
+ //go:cgo_import_dynamic libc_Fsync fsync "libroot.so"
+ //go:cgo_import_dynamic libc_Ftruncate ftruncate "libroot.so"
++//go:cgo_import_dynamic libc_Flock flock "libroot.so"
++//go:cgo_import_dynamic libc_Statfs statvfs "libroot.so"
++//go:cgo_import_dynamic libc_Fstatfs fstatvfs "libroot.so"
++//go:cgo_import_dynamic libc_Uname uname "libroot.so"
+ //go:cgo_import_dynamic libc_Umask umask "libroot.so"
+ //go:cgo_import_dynamic libc_Unlink unlink "libroot.so"
+ //go:cgo_import_dynamic libc_Utimes utimes "libroot.so"
+@@ -163,6 +167,10 @@ import "unsafe"
+ //go:linkname libc_Truncate libc_Truncate
+ //go:linkname libc_Fsync libc_Fsync
+ //go:linkname libc_Ftruncate libc_Ftruncate
++//go:linkname libc_Flock libc_Flock
++//go:linkname libc_Statfs libc_Statfs
++//go:linkname libc_Fstatfs libc_Fstatfs
++//go:linkname libc_Uname libc_Uname
+ //go:linkname libc_Umask libc_Umask
+ //go:linkname libc_Unlink libc_Unlink
+ //go:linkname libc_Utimes libc_Utimes
+@@ -254,6 +262,10 @@ var (
+ 	libc_Truncate,
+ 	libc_Fsync,
+ 	libc_Ftruncate,
++	libc_Flock,
++	libc_Statfs,
++	libc_Fstatfs,
++	libc_Uname,
+ 	libc_Umask,
+ 	libc_Unlink,
+ 	libc_Utimes,
+@@ -1141,3 +1153,40 @@ func utimensat(dirfd int, path string, times *[2]Timespec, flag int) (err error)
+ 	}
+ 	return
+ }
++
++func Flock(fd int, how int) (err error) {
++	_, _, e1 := sysvicall6(uintptr(unsafe.Pointer(&libc_Flock)), 2, uintptr(fd), uintptr(how), 0, 0, 0, 0)
++	if e1 != 0 {
++		err = errnoErr(e1)
++	}
++	return
++}
++
++func Statfs(path string, buf *Statfs_t) (err error) {
++	var _p0 *byte
++	_p0, err = BytePtrFromString(path)
++	if err != nil {
++		return
++	}
++	_, _, e1 := sysvicall6(uintptr(unsafe.Pointer(&libc_Statfs)), 2, uintptr(unsafe.Pointer(_p0)), uintptr(unsafe.Pointer(buf)), 0, 0, 0, 0)
++	if e1 != 0 {
++		err = errnoErr(e1)
++	}
++	return
++}
++
++func Fstatfs(fd int, buf *Statfs_t) (err error) {
++	_, _, e1 := sysvicall6(uintptr(unsafe.Pointer(&libc_Fstatfs)), 2, uintptr(fd), uintptr(unsafe.Pointer(buf)), 0, 0, 0, 0)
++	if e1 != 0 {
++		err = errnoErr(e1)
++	}
++	return
++}
++
++func Uname(buf *Utsname) (err error) {
++	_, _, e1 := rawSysvicall6(uintptr(unsafe.Pointer(&libc_Uname)), 1, uintptr(unsafe.Pointer(buf)), 0, 0, 0, 0, 0)
++	if e1 != 0 {
++		err = errnoErr(e1)
++	}
++	return
++}
+diff --git a/src/syscall/zsyscall_haiku_arm64.go b/src/syscall/zsyscall_haiku_arm64.go
+index 2fdedc8..910b0ec 100644
+--- a/src/syscall/zsyscall_haiku_arm64.go
++++ b/src/syscall/zsyscall_haiku_arm64.go
+@@ -75,6 +75,10 @@ import "unsafe"
+ //go:cgo_import_dynamic libc_Truncate truncate "libroot.so"
+ //go:cgo_import_dynamic libc_Fsync fsync "libroot.so"
+ //go:cgo_import_dynamic libc_Ftruncate ftruncate "libroot.so"
++//go:cgo_import_dynamic libc_Flock flock "libroot.so"
++//go:cgo_import_dynamic libc_Statfs statvfs "libroot.so"
++//go:cgo_import_dynamic libc_Fstatfs fstatvfs "libroot.so"
++//go:cgo_import_dynamic libc_Uname uname "libroot.so"
+ //go:cgo_import_dynamic libc_Umask umask "libroot.so"
+ //go:cgo_import_dynamic libc_Unlink unlink "libroot.so"
+ //go:cgo_import_dynamic libc_Utimes utimes "libroot.so"
+@@ -163,6 +167,10 @@ import "unsafe"
+ //go:linkname libc_Truncate libc_Truncate
+ //go:linkname libc_Fsync libc_Fsync
+ //go:linkname libc_Ftruncate libc_Ftruncate
++//go:linkname libc_Flock libc_Flock
++//go:linkname libc_Statfs libc_Statfs
++//go:linkname libc_Fstatfs libc_Fstatfs
++//go:linkname libc_Uname libc_Uname
+ //go:linkname libc_Umask libc_Umask
+ //go:linkname libc_Unlink libc_Unlink
+ //go:linkname libc_Utimes libc_Utimes
+@@ -254,6 +262,10 @@ var (
+ 	libc_Truncate,
+ 	libc_Fsync,
+ 	libc_Ftruncate,
++	libc_Flock,
++	libc_Statfs,
++	libc_Fstatfs,
++	libc_Uname,
+ 	libc_Umask,
+ 	libc_Unlink,
+ 	libc_Utimes,
+@@ -1141,3 +1153,40 @@ func utimensat(dirfd int, path string, times *[2]Timespec, flag int) (err error)
+ 	}
+ 	return
+ }
++
++func Flock(fd int, how int) (err error) {
++	_, _, e1 := sysvicall6(uintptr(unsafe.Pointer(&libc_Flock)), 2, uintptr(fd), uintptr(how), 0, 0, 0, 0)
++	if e1 != 0 {
++		err = errnoErr(e1)
++	}
++	return
++}
++
++func Statfs(path string, buf *Statfs_t) (err error) {
++	var _p0 *byte
++	_p0, err = BytePtrFromString(path)
++	if err != nil {
++		return
++	}
++	_, _, e1 := sysvicall6(uintptr(unsafe.Pointer(&libc_Statfs)), 2, uintptr(unsafe.Pointer(_p0)), uintptr(unsafe.Pointer(buf)), 0, 0, 0, 0)
++	if e1 != 0 {
++		err = errnoErr(e1)
++	}
++	return
++}
++
++func Fstatfs(fd int, buf *Statfs_t) (err error) {
++	_, _, e1 := sysvicall6(uintptr(unsafe.Pointer(&libc_Fstatfs)), 2, uintptr(fd), uintptr(unsafe.Pointer(buf)), 0, 0, 0, 0)
++	if e1 != 0 {
++		err = errnoErr(e1)
++	}
++	return
++}
++
++func Uname(buf *Utsname) (err error) {
++	_, _, e1 := rawSysvicall6(uintptr(unsafe.Pointer(&libc_Uname)), 1, uintptr(unsafe.Pointer(buf)), 0, 0, 0, 0, 0)
++	if e1 != 0 {
++		err = errnoErr(e1)
++	}
++	return
++}
+diff --git a/src/syscall/ztypes_haiku_amd64.go b/src/syscall/ztypes_haiku_amd64.go
+index d6fef2e..6c7b4d4 100644
+--- a/src/syscall/ztypes_haiku_amd64.go
++++ b/src/syscall/ztypes_haiku_amd64.go
+@@ -85,6 +85,28 @@ type Flock_t struct {
+ 	Pad_cgo_0	[4]byte
+ }
+ 
++type Statfs_t struct {
++	Bsize		uint64
++	Frsize		uint64
++	Blocks		int64
++	Bfree		int64
++	Bavail		int64
++	Files		int64
++	Ffree		int64
++	Favail		int64
++	Fsid		uint64
++	Flag		uint64
++	Namemax		uint64
++}
++
++type Utsname struct {
++	Sysname		[32]int8
++	Nodename	[32]int8
++	Release		[32]int8
++	Version		[32]int8
++	Machine		[32]int8
++}
++
+ type Dirent struct {
+ 	Dev		int32
+ 	Pdev		int32
+diff --git a/src/syscall/ztypes_haiku_arm64.go b/src/syscall/ztypes_haiku_arm64.go
+index d6fef2e..6c7b4d4 100644
+--- a/src/syscall/ztypes_haiku_arm64.go
++++ b/src/syscall/ztypes_haiku_arm64.go
+@@ -85,6 +85,28 @@ type Flock_t struct {
+ 	Pad_cgo_0	[4]byte
+ }
+ 
++type Statfs_t struct {
++	Bsize		uint64
++	Frsize		uint64
++	Blocks		int64
++	Bfree		int64
++	Bavail		int64
++	Files		int64
++	Ffree		int64
++	Favail		int64
++	Fsid		uint64
++	Flag		uint64
++	Namemax		uint64
++}
++
++type Utsname struct {
++	Sysname		[32]int8
++	Nodename	[32]int8
++	Release		[32]int8
++	Version		[32]int8
++	Machine		[32]int8
++}
++
+ type Dirent struct {
+ 	Dev		int32
+ 	Pdev		int32

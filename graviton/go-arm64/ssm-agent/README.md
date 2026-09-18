@@ -1,8 +1,16 @@
-# amazon-ssm-agent — haiku/arm64 port (M3)
+# amazon-ssm-agent — haiku/arm64 port (M3 + M4)
 
-M3 of the "Go on DeBeOS/arm64" arc (see `../../docs/go-arm64-bringup-scope.md`,
+M3/M4 of the "Go on DeBeOS/arm64" arc (see `../../docs/go-arm64-bringup-scope.md`,
 milestone **M4** in that doc's ladder: *the real upstream `amazon-ssm-agent`
 compiles for haiku/arm64*).
+
+**M4 update (2026-09-18):** the three genuine toolchain gaps M3 surfaced
+(`syscall.Flock`, `syscall.Statfs`, and an `Uname` for the detailed-info
+gatherer) are now wired into the Haiku Go port (fork patch
+`../patches/0003-haiku-arm64-M4-flock-statfs-uname.patch`), and the agent's
+degraded stubs are replaced with the real syscalls. `go build ./...` still exits
+0. Full M4 ledger and proof: [`../logs/M4-proof.txt`](../logs/M4-proof.txt) and
+the "M4 — gaps closed" section at the end of this file.
 
 ## Result
 
@@ -98,3 +106,38 @@ not the agent:
    generated; only 1 agent file + 1 vendored dep hit it, both worked around.
 
 None of these block the compile+link milestone.
+
+## M4 — gaps closed
+
+Gaps 1 and 2 are now **real syscalls in the fork** (patch
+`../patches/0003-haiku-arm64-M4-flock-statfs-uname.patch`); gap 3's single
+caller is de-stubbed via `syscall.Uname`, and the full `x/sys/unix` port is
+deferred with reason. `GOOS=haiku GOARCH=arm64 CGO_ENABLED=0 go build ./...`
+still exits 0; all eight binaries still link (proof:
+[`../logs/M4-proof.txt`](../logs/M4-proof.txt)).
+
+| Gap | M3 state | M4 state |
+|---|---|---|
+| `syscall.Flock` + `LOCK_*` | worked around with `FcntlFlock`; `LOCK_*` actually already present | **REAL.** `Flock` wraps libroot `flock(2)` (which *does* exist — the M3 "no flock(2)" note was wrong: see `headers/posix/sys/file.h`, `src/system/libroot/posix/sys/flock.c`). |
+| `syscall.Statfs` / `Statfs_t` | 1 TiB sentinel | **REAL.** `Statfs`/`Fstatfs` wrap `statvfs(3)`/`fstatvfs(3)`; `Statfs_t` mirrors `struct statvfs` (88 bytes, compile-time asserted). |
+| `x/sys/unix` `Uname` (gatherer) | empty stub | **REAL for the one caller.** `syscall.Uname` wraps `uname(2)`; the gatherer fills `KernelVersion`. Full `x/sys/unix` haiku/arm64 port **deferred** (a whole new-GOOS generated-table effort — `mkall.sh`/`mksyscall`/`cgo -godefs` against Haiku headers — disproportionate to the single `unix.Uname` call it was needed for). |
+
+Agent changes made by M4 (folded into `amazon-ssm-agent-haiku-arm64.patch`):
+
+| File | M3 | M4 |
+|---|---|---|
+| `agent/fileutil/advisorylock/advisorylock_haiku.go` | new `FcntlFlock` file | **deleted** — upstream `advisorylock_unix.go` now covers haiku (its build tag gains `haiku`; it uses `syscall.Flock` + `LOCK_*`) |
+| `vendor/.../go-billy/v5/osfs/os_haiku.go` | `FcntlFlock(F_SETLKW)` | `syscall.Flock(LOCK_EX/UN)` — mirrors `os_posix.go` exactly |
+| `agent/fileutil/fileutil_diskspace_haiku.go` | 1 TiB sentinel | real `syscall.Statfs`; bytes = count × `Frsize` |
+| `agent/plugins/inventory/gatherers/instancedetailedinformation/dataProvider_haiku.go` | empty stub | `KernelVersion` from `syscall.Uname`; CPU topology still empty (no `lscpu`; deferred to `get_system_info()`) |
+
+Still stubbed / deferred after M4:
+
+- `vendor/.../fsnotify/fsnotify/haiku.go` — idle `Watcher` stub. Not one of the
+  three toolchain gaps; needs a Haiku `watch_node` backend. Deferred.
+- CPU topology in the detailed-info gatherer — needs Haiku `get_system_info()`
+  (no `lscpu`). Deferred.
+- Full `golang.org/x/sys/unix` haiku/arm64 port — deferred (see gap 3 above).
+
+Verified entirely by cross-build on Linux (compile + link + static struct
+layout). On-hardware start / registration (M5/M6) is unchanged and not claimed.
