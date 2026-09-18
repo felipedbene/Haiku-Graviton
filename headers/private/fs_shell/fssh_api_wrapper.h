@@ -857,6 +857,7 @@
 /* block cache */
 #define block_cache_delete				fssh_block_cache_delete
 #define block_cache_create				fssh_block_cache_create
+#define block_cache_set_size			fssh_block_cache_set_size
 #define block_cache_sync				fssh_block_cache_sync
 #define block_cache_sync_etc			fssh_block_cache_sync_etc
 #define block_cache_discard				fssh_block_cache_discard
