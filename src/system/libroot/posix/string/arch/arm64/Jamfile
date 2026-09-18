@@ -1,24 +1,21 @@
 SubDir HAIKU_TOP src system libroot posix string arch arm64 ;
 
-# Optimizations create infinite recursion otherwise -- and that is not a
-# theoretical worry, it is verified on the generated object code. generic_memset.c
-# contains a byte loop that *is* memset, so the compiler may recognise it and
-# replace it with a call to memset, from inside memset. With this tree's GCC
-# 13.3 and no guard, generic_memset.o carries an R_AARCH64_CALL26 relocation
-# against memset itself at both -O2 and -O3: unbounded recursion in every
-# process that clears a buffer. (-Os happens not to, and the kernel build of the
-# same file is saved incidentally by -fno-tree-vectorize. Neither is a guarantee
-# of anything.) The new arm64 memcpy.c, by contrast, stays clean in all eighteen
-# combinations of the three flag sets, three optimisation levels and both
-# guards -- see graviton/docs/arm64-memcpy.md.
+# memcpy.c and memset.c each contain a loop that *is* the function they define,
+# so GCC's loop-idiom pass (-ftree-loop-distribute-patterns, on at -O2) is free
+# to rewrite that loop into a call to memcpy/memset -- i.e. a call to the
+# function from inside itself, an unbounded recursion in every process. This is
+# verified on the generated object code, not trusted: without a guard
+# generic_memset.o carried an R_AARCH64_CALL26 against memset itself at -O2/-O3.
+# See graviton/docs/arm64-memcpy.md.
 #
 # -fno-builtin is the historical guard and suffices today.
 # -fno-tree-loop-distribute-patterns names the pass that actually performs the
-# substitution, and is *not* implied by -fno-builtin -- glibc and the Linux
-# kernel both pass it explicitly for exactly this. Measured here, either flag
-# alone suppresses the call; both are set so the guard does not depend on which
-# of the two a future compiler keeps honouring. It is a GCC spelling, so it is
-# only passed to GCC.
+# substitution and is *not* implied by -fno-builtin -- glibc and the Linux
+# kernel both pass it explicitly for exactly this. Both are set so the guard
+# does not depend on which one a future compiler keeps honouring. They are GCC
+# spellings, so they are only passed to GCC. (These reach the C files via the Cc
+# rule; the vendored .S glue disables its own BTI/PAC note with a #define, since
+# the As rule does not see CCFLAGS.)
 SubDirCcFlags -fno-builtin ;
 if $(HAIKU_CC_IS_CLANG_arm64) != 1 {
 	SubDirCcFlags -fno-tree-loop-distribute-patterns ;
@@ -31,11 +28,25 @@ for architectureObject in [ MultiArchSubDirSetup arm64 ] {
 
 		UsePrivateSystemHeaders ;
 
-		SEARCH_SOURCE += [ FDirName $(SUBDIR) $(DOTDOT) generic ] ;
-
+		# memcpy.c and memset.c are DeBeOS's own arm64 routines, in this
+		# directory. The arm_*.S units each #include a pristine vendored Arm
+		# optimized-routines source (arm-optimized-routines/) and alias the
+		# public C name to its __<name>_aarch64 entry. They are wired here ahead
+		# of the generic musl/posix sources, which string/Jamfile and
+		# musl/string/Jamfile drop for arm64 so the merge sees one definition.
 		MergeObject <$(architecture)>posix_string_arch_$(TARGET_ARCH).o :
 			memcpy.c
-			generic_memset.c
+			memset.c
+
+			arm_memcmp.S
+			arm_memchr.S
+			arm_strlen.S
+			arm_strchr.S
+			arm_strchrnul.S
+			arm_strcmp.S
+			arm_strncmp.S
+			arm_strcpy.S
+			arm_memmove.S
 			;
 	}
 }

@@ -16,7 +16,7 @@ for architectureObject in [ MultiArchSubDirSetup ] {
 	on $(architectureObject) {
 		local architecture = $(TARGET_PACKAGING_ARCH) ;
 
-		MergeObject <$(architecture)>posix_string.o :
+		local sources =
 			bcmp.c
 			bcopy.c
 			bzero.c
@@ -36,6 +36,15 @@ for architectureObject in [ MultiArchSubDirSetup ] {
 			strupr.c
 			strxfrm.cpp
 			;
+
+		if $(TARGET_PACKAGING_ARCH) = arm64 {
+			# arm64 gets these from posix_string_arch_arm64.o (vendored Arm
+			# optimized-routines); drop the generic C versions to avoid a
+			# duplicate definition in the merge.
+			sources = [ FFilter $(sources) : memcmp.c strcmp.c strncmp.c ] ;
+		}
+
+		MergeObject <$(architecture)>posix_string.o : $(sources) ;
 	}
 }
 

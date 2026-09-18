@@ -62,6 +62,47 @@ SourceHdrs $(muslSources) :
 	[ FDirName $(posixSources) musl internal ]
 	[ FDirName $(posixSources) musl arch $(TARGET_KERNEL_ARCH_DIR) ] ;
 
+# string
+local stringSources =
+	memchr.c
+	memcmp.c
+	memmem.c
+	memmove.c
+	stpcpy.c
+	strcasecmp.c
+	strcasestr.c
+	strcat.c
+	strchr.c
+	strchrnul.c
+	strcmp.c
+	strcpy.c
+	strcspn.c
+	strdup.cpp
+	strerror.c
+	strlcat.c
+	strlcpy.c
+	strlen.c
+	strncat.c
+	strncmp.c
+	strncpy.cpp
+	strndup.cpp
+	strnlen.c
+	strpbrk.c
+	strrchr.c
+	strspn.c
+	strstr.c
+	strtok.c
+	strupr.c
+	;
+
+if $(TARGET_KERNEL_ARCH) = arm64 {
+	# arm64 gets these from kernel_lib_posix_arch_arm64.o (vendored Arm
+	# optimized-routines + memmove/memset); drop the generic C versions so the
+	# kernel link does not see two definitions.
+	stringSources = [ FFilter $(stringSources) : memchr.c memcmp.c memmove.c
+		strchr.c strchrnul.c strcmp.c strcpy.c strlen.c strncmp.c ] ;
+}
+
 KernelMergeObject kernel_lib_posix.o :
 	kernel_errno.cpp
 	kernel_vsprintf.cpp
@@ -120,36 +161,8 @@ KernelMergeObject kernel_lib_posix.o :
 	usergroup.cpp
 	write.c
 
-	# string
-	memchr.c
-	memcmp.c
-	memmem.c
-	memmove.c
-	stpcpy.c
-	strcasecmp.c
-	strcasestr.c
-	strcat.c
-	strchr.c
-	strchrnul.c
-	strcmp.c
-	strcpy.c
-	strcspn.c
-	strdup.cpp
-	strerror.c
-	strlcat.c
-	strlcpy.c
-	strlen.c
-	strncat.c
-	strncmp.c
-	strncpy.cpp
-	strndup.cpp
-	strnlen.c
-	strpbrk.c
-	strrchr.c
-	strspn.c
-	strstr.c
-	strtok.c
-	strupr.c
+	# string (arm64 overrides pulled in via kernel_lib_posix_arch_arm64.o)
+	$(stringSources)
 
 	$(muslSources)
 	: $(TARGET_KERNEL_PIC_CCFLAGS)
