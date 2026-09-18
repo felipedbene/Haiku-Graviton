@@ -281,3 +281,37 @@ because that AMI predated #293, and clear on the same rebake. `libggz`'s
 resolves to the gettext package, which also provides `msgmerge`.
 
 Cross-links issue **#136**. Not merged pending human CR; build-proof owed.
+
+## `#337` video-encoding stack (x264 + minimal ffmpeg + x265; opus pristine)
+
+The H.264/HEVC encode tier for native Graviton arm64, built and proven on a
+native builder (`ssm-run` → `haiku-nativebuild`), harvested to the STAGING pool
+(`s3://haiku-graviton-<acct>-<region>/hpkg/arm64/`, i.e. `build_state=built`,
+**not** published to green). x264 is the hard prerequisite for the #95
+remote-desktop x264 encode phase.
+
+| Recipe | Change | Proof |
+|---|---|---|
+| `x264-20220222.recipe` | REVISION 4→5. Gate `cmd:nasm >= 2.13` in `BUILD_PREREQUIRES` to the x86 secondary arch only. x264's x86 SIMD is assembled with **nasm**; the **aarch64 SIMD path is assembled by the toolchain assembler (GAS, from binutils)**, so nasm is neither used nor needed on arm64 — and there is **no nasm package in the DeBeOS arm64 repo**, so the unconditional prereq made the port unresolvable. Not a feature cut. | Native RC=0: `x264-20220222-5-arm64.hpkg` (+ `_bin`/`_devel`/`_debuginfo`). `config.log`: `platform: AARCH64`, `asm: yes`; `config.h`: `HAVE_NEON 1`, `ARCH_AARCH64 1`. `x264 --version` → `0.164.x`, gcc 13.3.0. |
+| `ffmpeg_x264-8.1.2.recipe` (+ `.patchset`) | **New minimal port.** FFmpeg 8.1.2 with `--enable-gpl --enable-libx264` and the native codecs; the large optional external-library closure the full `ffmpeg8` port pulls in (libass, dav1d, fdk-aac, vpx, webp, opus, vorbis, theora, …) is **not** enabled — none of it is published for arm64 yet. `--disable-avdevice` because its Haiku backend links the media_kit (`libmedia.so`), which the `@minimum` image does not ship. aarch64 SIMD is GAS-assembled, so no nasm prereq. Reuses the ffmpeg 8.1.2 source + Haiku patchset. Deliberately scoped as the x264 end-to-end proof, **not** a replacement for the full `ffmpeg8` port (that is a follow-up once its media-lib closure exists for arm64); it does not advertise the generic `lib:`/`devel:` av* resolvables. | Native RC=0: `ffmpeg_x264-8.1.2-1-arm64.hpkg` (11.6 MB). `ffmpeg -version` shows `--enable-libx264`; `objdump -p libavcodec.so` → `NEEDED libx264.so.164`; a `rawvideo → H.264 (libx264)` transcode of 30 frames exits 0 and `ffprobe` reports `h264 (Constrained Baseline)`. |
+| `x265-3.5.recipe` | REVISION 9→10. Same nasm gating as x264 (x86-only). The recipe's pre-existing arm64 fixes (10/12-bit libs built without assembly; `dynamicHDR10` `ARM_ARGS` flattened to `-fPIC`) are unchanged. | Native RC=0: `x265-3.5-10-arm64.hpkg` (+ `_bin`/`_devel`/`_debuginfo`). `x265 --version` → `[HAIKU][GCC 13.3.0] 8bit+10bit+12bit`, `using cpu capabilities: NEON`; `CMakeCache`: `ENABLE_ASSEMBLY=ON`; a raw → HEVC encode of 30 frames exits 0. |
+
+**opus** built native RC=0 from the **pristine** tree recipe (`opus-1.3.1`, no
+DeBeOS change needed): `opus-1.3.1-2-arm64.hpkg` (+ `_devel`), `libopus.so.0.8.0`.
+No overlay recipe is added for it (same rationale as `devil-1.8.0` above — a port
+that needs no recipe change gets no overlay copy).
+
+**Per-generation flavour status.** All four are the **baseline NEON, fleet-portable**
+flavour (runs on every Graviton generation, G2/Neoverse-N1 and up). The per-gen
+tuned `_g3`/`_g4` flavours (`-mcpu=neoverse-v1/-v2 +crypto`, SVE/SVE2) are a
+follow-up via the #330 per-recipe ISA opt-in, and — per the playbook — owe a
+disassembly + on-Graviton3/4-hardware check before publishing; not done here.
+
+**Remaining (deferred).** `aom` (libaom / AV1) has **no port in the ports tree**,
+so it needs a new recipe authored from scratch + source — out of scope for this
+pass. The full-codec `ffmpeg8` port is blocked on its media-library closure
+(dav1d, fdk-aac, vpx, webp, vorbis, theora, soxr, openmpt, gme, …) being built and
+published for arm64.
+
+Cross-links issue **#337**. Not merged pending human CR; STAGING-harvested, not
+published to green.
