@@ -1,0 +1,1636 @@
+diff --git a/agent/agent_unix.go b/agent/agent_unix.go
+index e9be47e..6b2ad66 100644
+--- a/agent/agent_unix.go
++++ b/agent/agent_unix.go
+@@ -1,5 +1,5 @@
+-//go:build darwin || freebsd || linux || netbsd || openbsd
+-// +build darwin freebsd linux netbsd openbsd
++//go:build darwin || freebsd || linux || netbsd || openbsd || haiku
++// +build darwin freebsd linux netbsd openbsd haiku
+ 
+ package main
+ 
+diff --git a/agent/appconfig/constants_unix.go b/agent/appconfig/constants_unix.go
+index 6c9c1ce..14d53e0 100644
+--- a/agent/appconfig/constants_unix.go
++++ b/agent/appconfig/constants_unix.go
+@@ -11,8 +11,8 @@
+ // either express or implied. See the License for the specific language governing
+ // permissions and limitations under the License.
+ 
+-//go:build freebsd || linux || netbsd || openbsd
+-// +build freebsd linux netbsd openbsd
++//go:build freebsd || linux || netbsd || openbsd || haiku
++// +build freebsd linux netbsd openbsd haiku
+ 
+ // Package appconfig manages the configuration of the agent.
+ package appconfig
+diff --git a/agent/cli/diagnostics/connectivity_check.go b/agent/cli/diagnostics/connectivity_check.go
+index 866829a..0f3ad2b 100644
+--- a/agent/cli/diagnostics/connectivity_check.go
++++ b/agent/cli/diagnostics/connectivity_check.go
+@@ -11,8 +11,8 @@
+ // either express or implied. See the License for the specific language governing
+ // permissions and limitations under the License.
+ 
+-//go:build freebsd || linux || netbsd || openbsd || darwin || windows
+-// +build freebsd linux netbsd openbsd darwin windows
++//go:build freebsd || linux || netbsd || openbsd || darwin || windows || haiku
++// +build freebsd linux netbsd openbsd darwin windows haiku
+ 
+ package diagnostics
+ 
+diff --git a/agent/cli/diagnostics/metadata_check.go b/agent/cli/diagnostics/metadata_check.go
+index ba7d15f..5324f1a 100644
+--- a/agent/cli/diagnostics/metadata_check.go
++++ b/agent/cli/diagnostics/metadata_check.go
+@@ -11,8 +11,8 @@
+ // either express or implied. See the License for the specific language governing
+ // permissions and limitations under the License.
+ 
+-//go:build freebsd || linux || netbsd || openbsd || darwin || windows
+-// +build freebsd linux netbsd openbsd darwin windows
++//go:build freebsd || linux || netbsd || openbsd || darwin || windows || haiku
++// +build freebsd linux netbsd openbsd darwin windows haiku
+ 
+ package diagnostics
+ 
+diff --git a/agent/cli/diagnostics/onprem_check.go b/agent/cli/diagnostics/onprem_check.go
+index e9b09f2..de5b805 100644
+--- a/agent/cli/diagnostics/onprem_check.go
++++ b/agent/cli/diagnostics/onprem_check.go
+@@ -11,8 +11,8 @@
+ // either express or implied. See the License for the specific language governing
+ // permissions and limitations under the License.
+ 
+-//go:build freebsd || linux || netbsd || openbsd || darwin || windows
+-// +build freebsd linux netbsd openbsd darwin windows
++//go:build freebsd || linux || netbsd || openbsd || darwin || windows || haiku
++// +build freebsd linux netbsd openbsd darwin windows haiku
+ 
+ package diagnostics
+ 
+diff --git a/agent/cli/diagnostics/service_check.go b/agent/cli/diagnostics/service_check.go
+index 05facca..df11229 100644
+--- a/agent/cli/diagnostics/service_check.go
++++ b/agent/cli/diagnostics/service_check.go
+@@ -11,8 +11,8 @@
+ // either express or implied. See the License for the specific language governing
+ // permissions and limitations under the License.
+ 
+-//go:build freebsd || linux || netbsd || openbsd || darwin || windows
+-// +build freebsd linux netbsd openbsd darwin windows
++//go:build freebsd || linux || netbsd || openbsd || darwin || windows || haiku
++// +build freebsd linux netbsd openbsd darwin windows haiku
+ 
+ package diagnostics
+ 
+diff --git a/agent/cli/diagnostics/service_check_unix.go b/agent/cli/diagnostics/service_check_unix.go
+index 5328d0d..9276ac2 100644
+--- a/agent/cli/diagnostics/service_check_unix.go
++++ b/agent/cli/diagnostics/service_check_unix.go
+@@ -11,8 +11,8 @@
+ // either express or implied. See the License for the specific language governing
+ // permissions and limitations under the License.
+ 
+-//go:build freebsd || linux || netbsd || openbsd
+-// +build freebsd linux netbsd openbsd
++//go:build freebsd || linux || netbsd || openbsd || haiku
++// +build freebsd linux netbsd openbsd haiku
+ 
+ package diagnostics
+ 
+diff --git a/agent/cli/diagnosticsutil/diagnosticsutil_unix.go b/agent/cli/diagnosticsutil/diagnosticsutil_unix.go
+index 391cb6c..d882dfd 100644
+--- a/agent/cli/diagnosticsutil/diagnosticsutil_unix.go
++++ b/agent/cli/diagnosticsutil/diagnosticsutil_unix.go
+@@ -11,8 +11,8 @@
+ // either express or implied. See the License for the specific language governing
+ // permissions and limitations under the License.
+ 
+-//go:build freebsd || linux || netbsd || openbsd
+-// +build freebsd linux netbsd openbsd
++//go:build freebsd || linux || netbsd || openbsd || haiku
++// +build freebsd linux netbsd openbsd haiku
+ 
+ package diagnosticsutil
+ 
+diff --git a/agent/executers/executers_unix.go b/agent/executers/executers_unix.go
+index 4aa2b53..00c0ec1 100644
+--- a/agent/executers/executers_unix.go
++++ b/agent/executers/executers_unix.go
+@@ -11,8 +11,8 @@
+ // either express or implied. See the License for the specific language governing
+ // permissions and limitations under the License.
+ 
+-//go:build darwin || freebsd || linux || netbsd || openbsd
+-// +build darwin freebsd linux netbsd openbsd
++//go:build darwin || freebsd || linux || netbsd || openbsd || haiku
++// +build darwin freebsd linux netbsd openbsd haiku
+ 
+ package executers
+ 
+diff --git a/agent/fileutil/advisorylock/advisorylock_haiku.go b/agent/fileutil/advisorylock/advisorylock_haiku.go
+new file mode 100644
+index 0000000..138c031
+--- /dev/null
++++ b/agent/fileutil/advisorylock/advisorylock_haiku.go
+@@ -0,0 +1,66 @@
++// Copyright 2025 Amazon.com, Inc. or its affiliates. All Rights Reserved.
++//
++// Licensed under the Apache License, Version 2.0 (the "License"). You may not
++// use this file except in compliance with the License. A copy of the
++// License is located at
++//
++// http://aws.amazon.com/apache2.0/
++//
++// or in the "license" file accompanying this file. This file is distributed
++// on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND,
++// either express or implied. See the License for the specific language governing
++// permissions and limitations under the License.
++//go:build haiku
++// +build haiku
++
++// Haiku has no flock(2) in libroot; advisory whole-file locking is done with
++// fcntl(F_SETLK) via syscall.FcntlFlock, which the Haiku Go port exposes.
++package advisorylock
++
++import (
++	"errors"
++	"os"
++	"syscall"
++	"time"
++)
++
++type lockType int16
++
++const (
++	readLock  lockType = syscall.F_RDLCK
++	writeLock lockType = syscall.F_WRLCK
++)
++
++func lock(f *os.File, lt lockType, timeout time.Duration) (err error) {
++	fl := &syscall.Flock_t{
++		Type:   int16(lt),
++		Whence: 0, // SEEK_SET
++		Start:  0,
++		Len:    0, // whole file
++	}
++	startTime := time.Now()
++	for {
++		// F_SETLK is non-blocking: EAGAIN/EACCES means another holder.
++		err = syscall.FcntlFlock(f.Fd(), syscall.F_SETLK, fl)
++		if err != syscall.EINTR && err != syscall.EAGAIN && err != syscall.EACCES {
++			break
++		}
++
++		if time.Since(startTime) > timeout {
++			return wrapErr(lt.String(), f, errors.New("timed out"))
++		}
++
++		time.Sleep(10 * time.Millisecond)
++	}
++	return wrapErr(lt.String(), f, err)
++}
++
++func unlock(f *os.File) error {
++	fl := &syscall.Flock_t{
++		Type:   syscall.F_UNLCK,
++		Whence: 0,
++		Start:  0,
++		Len:    0,
++	}
++	return wrapErr("Unlock", f, syscall.FcntlFlock(f.Fd(), syscall.F_SETLK, fl))
++}
+diff --git a/agent/fileutil/fileutil_diskspace_haiku.go b/agent/fileutil/fileutil_diskspace_haiku.go
+new file mode 100644
+index 0000000..f7ddb48
+--- /dev/null
++++ b/agent/fileutil/fileutil_diskspace_haiku.go
+@@ -0,0 +1,33 @@
++// Copyright 2025 Amazon.com, Inc. or its affiliates. All Rights Reserved.
++//
++// Licensed under the Apache License, Version 2.0 (the "License"). You may not
++// use this file except in compliance with the License. A copy of the
++// License is located at
++//
++// http://aws.amazon.com/apache2.0/
++//
++// or in the "license" file accompanying this file. This file is distributed
++// on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND,
++// either express or implied. See the License for the specific language governing
++// permissions and limitations under the License.
++//go:build haiku
++// +build haiku
++
++package fileutil
++
++// The Haiku Go port's syscall package does not expose Statfs/Statfs_t (Haiku
++// libroot reports filesystem statistics through statvfs(3)/fs_stat_dev, which
++// the fork has not wrapped yet). Until a statvfs wrapper is added to the
++// toolchain, report an ample amount of free space so that the agent's
++// pre-download disk-space guards do not spuriously block. This degrades
++// gracefully: it only affects the accuracy of the space check, not correctness
++// of any transfer. TODO(go-arm64): back this with a real statvfs call once the
++// Haiku syscall package grows one.
++func GetDiskSpaceInfo() (diskSpaceInfo DiskSpaceInfo, err error) {
++	const ample = int64(1) << 40 // 1 TiB sentinel
++	return DiskSpaceInfo{
++		AvailBytes: ample,
++		FreeBytes:  ample,
++		TotalBytes: ample,
++	}, nil
++}
+diff --git a/agent/fileutil/fileutil_diskspace_statfs.go b/agent/fileutil/fileutil_diskspace_statfs.go
+new file mode 100644
+index 0000000..d8b1da9
+--- /dev/null
++++ b/agent/fileutil/fileutil_diskspace_statfs.go
+@@ -0,0 +1,46 @@
++// Copyright 2016 Amazon.com, Inc. or its affiliates. All Rights Reserved.
++//
++// Licensed under the Apache License, Version 2.0 (the "License"). You may not
++// use this file except in compliance with the License. A copy of the
++// License is located at
++//
++// http://aws.amazon.com/apache2.0/
++//
++// or in the "license" file accompanying this file. This file is distributed
++// on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND,
++// either express or implied. See the License for the specific language governing
++// permissions and limitations under the License.
++//go:build darwin || freebsd || linux || netbsd || openbsd
++// +build darwin freebsd linux netbsd openbsd
++
++package fileutil
++
++import (
++	"os"
++	"syscall"
++)
++
++// GetDiskSpaceInfo returns DiskSpaceInfo with available, free, and total bytes from system disk space
++func GetDiskSpaceInfo() (diskSpaceInfo DiskSpaceInfo, err error) {
++	var stat syscall.Statfs_t
++	var wd string
++
++	// get a rooted path name
++	if wd, err = os.Getwd(); err != nil {
++		return
++	}
++
++	// get filesystem statistics
++	syscall.Statfs(wd, &stat)
++
++	// get block size
++	bSize := uint64(stat.Bsize)
++
++	// return DiskSpaceInfo with calculated bytes
++	return DiskSpaceInfo{
++		// On Linux the struct statfs.f_bavail field is unsigned, but on FreeBSD the field is an int64
++		AvailBytes: (int64)((uint64)(stat.Bavail) * bSize), // available space = # of available blocks * block size
++		FreeBytes:  (int64)(stat.Bfree * bSize),            // free space = # of free blocks * block size
++		TotalBytes: (int64)(stat.Blocks * bSize),           // total space = # of total blocks * block size
++	}, nil
++}
+diff --git a/agent/fileutil/fileutil_unix.go b/agent/fileutil/fileutil_unix.go
+index c4786ed..1e0589c 100644
+--- a/agent/fileutil/fileutil_unix.go
++++ b/agent/fileutil/fileutil_unix.go
+@@ -11,8 +11,8 @@
+ // either express or implied. See the License for the specific language governing
+ // permissions and limitations under the License.
+ 
+-//go:build darwin || freebsd || linux || netbsd || openbsd
+-// +build darwin freebsd linux netbsd openbsd
++//go:build darwin || freebsd || linux || netbsd || openbsd || haiku
++// +build darwin freebsd linux netbsd openbsd haiku
+ 
+ // Package fileutil contains utilities for working with the file system.
+ package fileutil
+@@ -23,7 +23,6 @@ import (
+ 	"fmt"
+ 	"io"
+ 	"os"
+-	"syscall"
+ 
+ 	"github.com/aws/amazon-ssm-agent/agent/appconfig"
+ 	"github.com/aws/amazon-ssm-agent/agent/log"
+@@ -86,31 +85,6 @@ func Uncompress(log log.T, src, dest string) error {
+ 	return nil
+ }
+ 
+-// GetDiskSpaceInfo returns DiskSpaceInfo with available, free, and total bytes from system disk space
+-func GetDiskSpaceInfo() (diskSpaceInfo DiskSpaceInfo, err error) {
+-	var stat syscall.Statfs_t
+-	var wd string
+-
+-	// get a rooted path name
+-	if wd, err = os.Getwd(); err != nil {
+-		return
+-	}
+-
+-	// get filesystem statistics
+-	syscall.Statfs(wd, &stat)
+-
+-	// get block size
+-	bSize := uint64(stat.Bsize)
+-
+-	// return DiskSpaceInfo with calculated bytes
+-	return DiskSpaceInfo{
+-		// On Linux the struct statfs.f_bavail field is unsigned, but on FreeBSD the field is an int64
+-		AvailBytes: (int64)((uint64)(stat.Bavail) * bSize), // available space = # of available blocks * block size
+-		FreeBytes:  (int64)(stat.Bfree * bSize),            // free space = # of free blocks * block size
+-		TotalBytes: (int64)(stat.Blocks * bSize),           // total space = # of total blocks * block size
+-	}, nil
+-}
+-
+ // IsPrivilegedAccessOnly checks if a file or directory has permissions that restrict access to root/sudo only
+ // It verifies that the file has permission 0700 or 0600 (or similar) that prevents access from other users
+ func IsPrivilegedAccessOnly(path string) (bool, error) {
+diff --git a/agent/fileutil/harden_unix.go b/agent/fileutil/harden_unix.go
+index feeae37..4622b7d 100644
+--- a/agent/fileutil/harden_unix.go
++++ b/agent/fileutil/harden_unix.go
+@@ -11,8 +11,8 @@
+ // either express or implied. See the License for the specific language governing
+ // permissions and limitations under the License.
+ 
+-//go:build darwin || freebsd || linux || netbsd || openbsd
+-// +build darwin freebsd linux netbsd openbsd
++//go:build darwin || freebsd || linux || netbsd || openbsd || haiku
++// +build darwin freebsd linux netbsd openbsd haiku
+ 
+ package fileutil
+ 
+diff --git a/agent/framework/processor/executer/outofproc/proc/process_unix.go b/agent/framework/processor/executer/outofproc/proc/process_unix.go
+index c8be1bc..aac9fee 100644
+--- a/agent/framework/processor/executer/outofproc/proc/process_unix.go
++++ b/agent/framework/processor/executer/outofproc/proc/process_unix.go
+@@ -11,8 +11,8 @@
+ // either express or implied. See the License for the specific language governing
+ // permissions and limitations under the License.
+ 
+-//go:build darwin || freebsd || linux || netbsd || openbsd
+-// +build darwin freebsd linux netbsd openbsd
++//go:build darwin || freebsd || linux || netbsd || openbsd || haiku
++// +build darwin freebsd linux netbsd openbsd haiku
+ 
+ // Package process wraps up the os.Process interface and also provides os-specific process lookup functions
+ package proc
+diff --git a/agent/framework/processor/executer/plugin/plugin_unix.go b/agent/framework/processor/executer/plugin/plugin_unix.go
+index 19c49d0..a9885db 100644
+--- a/agent/framework/processor/executer/plugin/plugin_unix.go
++++ b/agent/framework/processor/executer/plugin/plugin_unix.go
+@@ -11,8 +11,8 @@
+ // either express or implied. See the License for the specific language governing
+ // permissions and limitations under the License.
+ //
+-//go:build darwin || freebsd || linux || netbsd || openbsd
+-// +build darwin freebsd linux netbsd openbsd
++//go:build darwin || freebsd || linux || netbsd || openbsd || haiku
++// +build darwin freebsd linux netbsd openbsd haiku
+ 
+ package plugin
+ 
+diff --git a/agent/framework/runpluginutil/runpluginutil_unix.go b/agent/framework/runpluginutil/runpluginutil_unix.go
+index 1122de5..51e4e72 100644
+--- a/agent/framework/runpluginutil/runpluginutil_unix.go
++++ b/agent/framework/runpluginutil/runpluginutil_unix.go
+@@ -11,8 +11,8 @@
+ // either express or implied. See the License for the specific language governing
+ // permissions and limitations under the License.
+ //
+-//go:build freebsd || linux || netbsd || openbsd
+-// +build freebsd linux netbsd openbsd
++//go:build freebsd || linux || netbsd || openbsd || haiku
++// +build freebsd linux netbsd openbsd haiku
+ 
+ // Package runpluginutil run plugin utility functions without referencing the actually plugin impl packages
+ package runpluginutil
+diff --git a/agent/hibernation/hibernatelogger_unix.go b/agent/hibernation/hibernatelogger_unix.go
+index 1484b7f..0e0d9d3 100644
+--- a/agent/hibernation/hibernatelogger_unix.go
++++ b/agent/hibernation/hibernatelogger_unix.go
+@@ -11,8 +11,8 @@
+ // either express or implied. See the License for the specific language governing
+ // permissions and limitations under the License.
+ 
+-//go:build darwin || freebsd || linux || netbsd || openbsd
+-// +build darwin freebsd linux netbsd openbsd
++//go:build darwin || freebsd || linux || netbsd || openbsd || haiku
++// +build darwin freebsd linux netbsd openbsd haiku
+ 
+ // Package hibernation is responsible for the agent in hibernate mode.
+ package hibernation
+diff --git a/agent/log/logger/log_unix.go b/agent/log/logger/log_unix.go
+index 4e99ec1..2f55035 100644
+--- a/agent/log/logger/log_unix.go
++++ b/agent/log/logger/log_unix.go
+@@ -11,8 +11,8 @@
+ // either express or implied. See the License for the specific language governing
+ // permissions and limitations under the License.
+ 
+-//go:build freebsd || linux || netbsd || openbsd
+-// +build freebsd linux netbsd openbsd
++//go:build freebsd || linux || netbsd || openbsd || haiku
++// +build freebsd linux netbsd openbsd haiku
+ 
+ package logger
+ 
+diff --git a/agent/longrunning/plugin/pluginutils_unix.go b/agent/longrunning/plugin/pluginutils_unix.go
+index 3c34957..5070c2a 100644
+--- a/agent/longrunning/plugin/pluginutils_unix.go
++++ b/agent/longrunning/plugin/pluginutils_unix.go
+@@ -11,8 +11,8 @@
+ // either express or implied. See the License for the specific language governing
+ // permissions and limitations under the License.
+ //
+-//go:build darwin || freebsd || linux || netbsd || openbsd
+-// +build darwin freebsd linux netbsd openbsd
++//go:build darwin || freebsd || linux || netbsd || openbsd || haiku
++// +build darwin freebsd linux netbsd openbsd haiku
+ 
+ package plugin
+ 
+diff --git a/agent/longrunning/plugin/rundaemon/rundaemon_unix.go b/agent/longrunning/plugin/rundaemon/rundaemon_unix.go
+index 57f6e33..8213062 100644
+--- a/agent/longrunning/plugin/rundaemon/rundaemon_unix.go
++++ b/agent/longrunning/plugin/rundaemon/rundaemon_unix.go
+@@ -1,5 +1,5 @@
+-//go:build darwin || freebsd || linux || netbsd || openbsd
+-// +build darwin freebsd linux netbsd openbsd
++//go:build darwin || freebsd || linux || netbsd || openbsd || haiku
++// +build darwin freebsd linux netbsd openbsd haiku
+ 
+ // Copyright 2016 Amazon.com, Inc. or its affiliates. All Rights Reserved.
+ //
+diff --git a/agent/managedInstances/fingerprint/hardwareInfo_unix.go b/agent/managedInstances/fingerprint/hardwareInfo_unix.go
+index b61b171..7ff0366 100644
+--- a/agent/managedInstances/fingerprint/hardwareInfo_unix.go
++++ b/agent/managedInstances/fingerprint/hardwareInfo_unix.go
+@@ -11,8 +11,8 @@
+ // either express or implied. See the License for the specific language governing
+ // permissions and limitations under the License.
+ 
+-//go:build freebsd || linux || netbsd || openbsd || darwin
+-// +build freebsd linux netbsd openbsd darwin
++//go:build freebsd || linux || netbsd || openbsd || darwin || haiku
++// +build freebsd linux netbsd openbsd darwin haiku
+ 
+ // Package fingerprint contains functions that helps identify an instance
+ // hardwareInfo contains platform specific way of fetching the hardware hash
+diff --git a/agent/managedInstances/sharedCredentials/shared_Credentials_unix.go b/agent/managedInstances/sharedCredentials/shared_Credentials_unix.go
+index e5c773d..52cb473 100644
+--- a/agent/managedInstances/sharedCredentials/shared_Credentials_unix.go
++++ b/agent/managedInstances/sharedCredentials/shared_Credentials_unix.go
+@@ -11,8 +11,8 @@
+ // either express or implied. See the License for the specific language governing
+ // permissions and limitations under the License.
+ 
+-//go:build darwin || freebsd || linux || netbsd || openbsd
+-// +build darwin freebsd linux netbsd openbsd
++//go:build darwin || freebsd || linux || netbsd || openbsd || haiku
++// +build darwin freebsd linux netbsd openbsd haiku
+ 
+ // package sharedCredentials provides access to the aws shared credentials file.
+ package sharedCredentials
+diff --git a/agent/managedInstances/user/user_unix.go b/agent/managedInstances/user/user_unix.go
+index bbd27c5..949d347 100644
+--- a/agent/managedInstances/user/user_unix.go
++++ b/agent/managedInstances/user/user_unix.go
+@@ -11,8 +11,8 @@
+ // either express or implied. See the License for the specific language governing
+ // permissions and limitations under the License.
+ 
+-//go:build darwin || dragonfly || freebsd || (!android && linux) || netbsd || openbsd || solaris
+-// +build darwin dragonfly freebsd !android,linux netbsd openbsd solaris
++//go:build darwin || dragonfly || freebsd || (!android && linux) || netbsd || openbsd || solaris || haiku
++// +build darwin dragonfly freebsd !android,linux netbsd openbsd solaris haiku
+ 
+ // package user re-implements os/user functions without the use of cgo for unix
+ package user
+diff --git a/agent/network/certreader/certreader_unix.go b/agent/network/certreader/certreader_unix.go
+index 2ccea54..ab253ea 100644
+--- a/agent/network/certreader/certreader_unix.go
++++ b/agent/network/certreader/certreader_unix.go
+@@ -11,8 +11,8 @@
+ // either express or implied. See the License for the specific language governing
+ // permissions and limitations under the License.
+ 
+-//go:build freebsd || linux || netbsd || openbsd
+-// +build freebsd linux netbsd openbsd
++//go:build freebsd || linux || netbsd || openbsd || haiku
++// +build freebsd linux netbsd openbsd haiku
+ 
+ package certreader
+ 
+diff --git a/agent/network/tlsconfig_unix.go b/agent/network/tlsconfig_unix.go
+index df6d5eb..c78b77d 100644
+--- a/agent/network/tlsconfig_unix.go
++++ b/agent/network/tlsconfig_unix.go
+@@ -11,8 +11,8 @@
+ // either express or implied. See the License for the specific language governing
+ // permissions and limitations under the License.
+ 
+-//go:build freebsd || linux || netbsd || openbsd
+-// +build freebsd linux netbsd openbsd
++//go:build freebsd || linux || netbsd || openbsd || haiku
++// +build freebsd linux netbsd openbsd haiku
+ 
+ package network
+ 
+diff --git a/agent/platform/platform_other.go b/agent/platform/platform_other.go
+index 58cb045..d47dfd1 100644
+--- a/agent/platform/platform_other.go
++++ b/agent/platform/platform_other.go
+@@ -11,8 +11,8 @@
+ // either express or implied. See the License for the specific language governing
+ // permissions and limitations under the License.
+ 
+-//go:build freebsd || linux || netbsd || openbsd || windows
+-// +build freebsd linux netbsd openbsd windows
++//go:build freebsd || linux || netbsd || openbsd || windows || haiku
++// +build freebsd linux netbsd openbsd windows haiku
+ 
+ package platform
+ 
+diff --git a/agent/platform/platform_unix.go b/agent/platform/platform_unix.go
+index 69c3c24..00e1399 100644
+--- a/agent/platform/platform_unix.go
++++ b/agent/platform/platform_unix.go
+@@ -11,8 +11,8 @@
+ // either express or implied. See the License for the specific language governing
+ // permissions and limitations under the License.
+ 
+-//go:build freebsd || linux || netbsd || openbsd
+-// +build freebsd linux netbsd openbsd
++//go:build freebsd || linux || netbsd || openbsd || haiku
++// +build freebsd linux netbsd openbsd haiku
+ 
+ // Package platform contains platform specific utilities.
+ package platform
+diff --git a/agent/plugins/configurecontainers/configurecontainers_unix.go b/agent/plugins/configurecontainers/configurecontainers_unix.go
+index 0cdca47..fe31884 100644
+--- a/agent/plugins/configurecontainers/configurecontainers_unix.go
++++ b/agent/plugins/configurecontainers/configurecontainers_unix.go
+@@ -11,8 +11,8 @@
+ // either express or implied. See the License for the specific language governing
+ // permissions and limitations under the License.
+ //
+-//go:build darwin || freebsd || linux || netbsd || openbsd
+-// +build darwin freebsd linux netbsd openbsd
++//go:build darwin || freebsd || linux || netbsd || openbsd || haiku
++// +build darwin freebsd linux netbsd openbsd haiku
+ 
+ package configurecontainers
+ 
+diff --git a/agent/plugins/configurecontainers/linuxcontainerutil/dep_unix.go b/agent/plugins/configurecontainers/linuxcontainerutil/dep_unix.go
+index ac793e9..3e7e35a 100644
+--- a/agent/plugins/configurecontainers/linuxcontainerutil/dep_unix.go
++++ b/agent/plugins/configurecontainers/linuxcontainerutil/dep_unix.go
+@@ -11,8 +11,8 @@
+ // either express or implied. See the License for the specific language governing
+ // permissions and limitations under the License.
+ //
+-//go:build darwin || freebsd || linux || netbsd || openbsd
+-// +build darwin freebsd linux netbsd openbsd
++//go:build darwin || freebsd || linux || netbsd || openbsd || haiku
++// +build darwin freebsd linux netbsd openbsd haiku
+ 
+ package linuxcontainerutil
+ 
+diff --git a/agent/plugins/configurepackage/envdetect/osdetect/osdetect_unix.go b/agent/plugins/configurepackage/envdetect/osdetect/osdetect_unix.go
+index 6dcf5a9..35cb2f0 100644
+--- a/agent/plugins/configurepackage/envdetect/osdetect/osdetect_unix.go
++++ b/agent/plugins/configurepackage/envdetect/osdetect/osdetect_unix.go
+@@ -1,5 +1,5 @@
+-//go:build freebsd || linux || netbsd || openbsd
+-// +build freebsd linux netbsd openbsd
++//go:build freebsd || linux || netbsd || openbsd || haiku
++// +build freebsd linux netbsd openbsd haiku
+ 
+ package osdetect
+ 
+diff --git a/agent/plugins/domainjoin/domainjoin_unix.go b/agent/plugins/domainjoin/domainjoin_unix.go
+index e78f708..043542d 100644
+--- a/agent/plugins/domainjoin/domainjoin_unix.go
++++ b/agent/plugins/domainjoin/domainjoin_unix.go
+@@ -11,8 +11,8 @@
+ // either express or implied. See the License for the specific language governing
+ // permissions and limitations under the License.
+ //
+-//go:build freebsd || linux || netbsd || openbsd || darwin
+-// +build freebsd linux netbsd openbsd darwin
++//go:build freebsd || linux || netbsd || openbsd || darwin || haiku
++// +build freebsd linux netbsd openbsd darwin haiku
+ 
+ // Package domainjoin implements the domainjoin plugin.
+ package domainjoin
+diff --git a/agent/plugins/domainjoin/domainjoin_unix_script.go b/agent/plugins/domainjoin/domainjoin_unix_script.go
+index b96085e..85221dd 100755
+--- a/agent/plugins/domainjoin/domainjoin_unix_script.go
++++ b/agent/plugins/domainjoin/domainjoin_unix_script.go
+@@ -11,8 +11,8 @@
+ // either express or implied. See the License for the specific language governing
+ // permissions and limitations under the License.
+ //
+-//go:build freebsd || linux || netbsd || openbsd || darwin
+-// +build freebsd linux netbsd openbsd darwin
++//go:build freebsd || linux || netbsd || openbsd || darwin || haiku
++// +build freebsd linux netbsd openbsd darwin haiku
+ 
+ // Package domainjoin implements the domainjoin plugin.
+ package domainjoin
+diff --git a/agent/plugins/inventory/gatherers/application/dataProvider_unix.go b/agent/plugins/inventory/gatherers/application/dataProvider_unix.go
+index 96d7b0a..698acff 100644
+--- a/agent/plugins/inventory/gatherers/application/dataProvider_unix.go
++++ b/agent/plugins/inventory/gatherers/application/dataProvider_unix.go
+@@ -11,8 +11,8 @@
+ // either express or implied. See the License for the specific language governing
+ // permissions and limitations under the License.
+ 
+-//go:build freebsd || linux || netbsd || openbsd
+-// +build freebsd linux netbsd openbsd
++//go:build freebsd || linux || netbsd || openbsd || haiku
++// +build freebsd linux netbsd openbsd haiku
+ 
+ // Package application contains application gatherer.
+ package application
+diff --git a/agent/plugins/inventory/gatherers/file/dataProvider_unix.go b/agent/plugins/inventory/gatherers/file/dataProvider_unix.go
+index 56d58ef..521eee6 100644
+--- a/agent/plugins/inventory/gatherers/file/dataProvider_unix.go
++++ b/agent/plugins/inventory/gatherers/file/dataProvider_unix.go
+@@ -11,8 +11,8 @@
+ // either express or implied. See the License for the specific language governing
+ // permissions and limitations under the License.
+ 
+-//go:build darwin || freebsd || linux || netbsd || openbsd
+-// +build darwin freebsd linux netbsd openbsd
++//go:build darwin || freebsd || linux || netbsd || openbsd || haiku
++// +build darwin freebsd linux netbsd openbsd haiku
+ 
+ // Package file contains file gatherer.
+ package file
+diff --git a/agent/plugins/inventory/gatherers/instancedetailedinformation/dataProvider_haiku.go b/agent/plugins/inventory/gatherers/instancedetailedinformation/dataProvider_haiku.go
+new file mode 100644
+index 0000000..77c4640
+--- /dev/null
++++ b/agent/plugins/inventory/gatherers/instancedetailedinformation/dataProvider_haiku.go
+@@ -0,0 +1,32 @@
++// Copyright 2025 Amazon.com, Inc. or its affiliates. All Rights Reserved.
++//
++// Licensed under the Apache License, Version 2.0 (the "License"). You may not
++// use this file except in compliance with the License. A copy of the
++// License is located at
++//
++// http://aws.amazon.com/apache2.0/
++//
++// or in the "license" file accompanying this file. This file is distributed
++// on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND,
++// either express or implied. See the License for the specific language governing
++// permissions and limitations under the License.
++//go:build haiku
++// +build haiku
++
++// The Linux/BSD detailed-instance gatherer parses lscpu(1) and reads the kernel
++// version via unix.Uname (golang.org/x/sys/unix). Neither lscpu nor an x/sys
++// Uname wrapper is available on the Haiku Go port, so this gatherer degrades to
++// reporting no detailed CPU information (the core control path does not depend
++// on it). TODO(go-arm64): populate from Haiku's get_system_info / sysinfo once
++// a native source is wired up.
++package instancedetailedinformation
++
++import (
++	"github.com/aws/amazon-ssm-agent/agent/context"
++	"github.com/aws/amazon-ssm-agent/agent/plugins/inventory/model"
++)
++
++func collectPlatformDependentInstanceData(context context.T) (appData []model.InstanceDetailedInformation) {
++	context.Log().Infof("Detailed instance information gatherer is not supported on this platform")
++	return []model.InstanceDetailedInformation{}
++}
+diff --git a/agent/plugins/inventory/gatherers/models_unix.go b/agent/plugins/inventory/gatherers/models_unix.go
+index 4924d91..3a3f4f2 100644
+--- a/agent/plugins/inventory/gatherers/models_unix.go
++++ b/agent/plugins/inventory/gatherers/models_unix.go
+@@ -11,8 +11,8 @@
+ // either express or implied. See the License for the specific language governing
+ // permissions and limitations under the License.
+ 
+-//go:build darwin || freebsd || linux || netbsd || openbsd
+-// +build darwin freebsd linux netbsd openbsd
++//go:build darwin || freebsd || linux || netbsd || openbsd || haiku
++// +build darwin freebsd linux netbsd openbsd haiku
+ 
+ // Package gatherers contains routines for different types of inventory gatherers
+ package gatherers
+diff --git a/agent/plugins/inventory/gatherers/network/dataProvider_unix.go b/agent/plugins/inventory/gatherers/network/dataProvider_unix.go
+index c0fa319..7005909 100644
+--- a/agent/plugins/inventory/gatherers/network/dataProvider_unix.go
++++ b/agent/plugins/inventory/gatherers/network/dataProvider_unix.go
+@@ -11,8 +11,8 @@
+ // either express or implied. See the License for the specific language governing
+ // permissions and limitations under the License.
+ 
+-//go:build darwin || freebsd || linux || netbsd || openbsd
+-// +build darwin freebsd linux netbsd openbsd
++//go:build darwin || freebsd || linux || netbsd || openbsd || haiku
++// +build darwin freebsd linux netbsd openbsd haiku
+ 
+ // Package network contains a network gatherer.
+ package network
+diff --git a/agent/plugins/pluginutil/pluginutil_unix.go b/agent/plugins/pluginutil/pluginutil_unix.go
+index f1492df..86578e6 100644
+--- a/agent/plugins/pluginutil/pluginutil_unix.go
++++ b/agent/plugins/pluginutil/pluginutil_unix.go
+@@ -14,8 +14,8 @@
+ // Package pluginutil implements some common functions shared by multiple plugins.
+ // pluginutil_unix contains a function for returning the ResultStatus based on the exitCode
+ //
+-//go:build darwin || freebsd || linux || netbsd || openbsd
+-// +build darwin freebsd linux netbsd openbsd
++//go:build darwin || freebsd || linux || netbsd || openbsd || haiku
++// +build darwin freebsd linux netbsd openbsd haiku
+ 
+ package pluginutil
+ 
+diff --git a/agent/proxyconfig/proxy_unix.go b/agent/proxyconfig/proxy_unix.go
+index d88cd4d..a23f938 100644
+--- a/agent/proxyconfig/proxy_unix.go
++++ b/agent/proxyconfig/proxy_unix.go
+@@ -1,5 +1,5 @@
+-//go:build freebsd || linux || netbsd || openbsd
+-// +build freebsd linux netbsd openbsd
++//go:build freebsd || linux || netbsd || openbsd || haiku
++// +build freebsd linux netbsd openbsd haiku
+ 
+ // Copyright 2021 Amazon.com, Inc. or its affiliates. All Rights Reserved.
+ //
+diff --git a/agent/rebooter/rebooter_unix.go b/agent/rebooter/rebooter_unix.go
+index e80edb8..99cdb49 100644
+--- a/agent/rebooter/rebooter_unix.go
++++ b/agent/rebooter/rebooter_unix.go
+@@ -11,8 +11,8 @@
+ // either express or implied. See the License for the specific language governing
+ // permissions and limitations under the License.
+ 
+-//go:build darwin || freebsd || linux || netbsd || openbsd
+-// +build darwin freebsd linux netbsd openbsd
++//go:build darwin || freebsd || linux || netbsd || openbsd || haiku
++// +build darwin freebsd linux netbsd openbsd haiku
+ 
+ // Package rebooter provides utilities used to reboot a machine.
+ package rebooter
+diff --git a/agent/session/logging/console/console_unix.go b/agent/session/logging/console/console_unix.go
+index cf1f8ac..64a8371 100644
+--- a/agent/session/logging/console/console_unix.go
++++ b/agent/session/logging/console/console_unix.go
+@@ -11,8 +11,8 @@
+ // either express or implied. See the License for the specific language governing
+ // permissions and limitations under the License.
+ //
+-//go:build darwin || freebsd || linux || netbsd || openbsd
+-// +build darwin freebsd linux netbsd openbsd
++//go:build darwin || freebsd || linux || netbsd || openbsd || haiku
++// +build darwin freebsd linux netbsd openbsd haiku
+ 
+ // Package console contains platform specific configurations to enable logging.
+ package console
+diff --git a/agent/session/plugins/singlecommand/singlecommand_unix.go b/agent/session/plugins/singlecommand/singlecommand_unix.go
+index 29b031f..26efcee 100644
+--- a/agent/session/plugins/singlecommand/singlecommand_unix.go
++++ b/agent/session/plugins/singlecommand/singlecommand_unix.go
+@@ -11,8 +11,8 @@
+ // either express or implied. See the License for the specific language governing
+ // permissions and limitations under the License.
+ //
+-//go:build freebsd || linux || netbsd || openbsd
+-// +build freebsd linux netbsd openbsd
++//go:build freebsd || linux || netbsd || openbsd || haiku
++// +build freebsd linux netbsd openbsd haiku
+ 
+ // Package singlecommand implements session shell plugin with interactive or non-interactive single command.
+ package singlecommand
+diff --git a/agent/session/shell/constants/constants_unix.go b/agent/session/shell/constants/constants_unix.go
+index 58ddf45..d56da8e 100644
+--- a/agent/session/shell/constants/constants_unix.go
++++ b/agent/session/shell/constants/constants_unix.go
+@@ -11,8 +11,8 @@
+ // either express or implied. See the License for the specific language governing
+ // permissions and limitations under the License.
+ 
+-//go:build freebsd || linux || netbsd || openbsd
+-// +build freebsd linux netbsd openbsd
++//go:build freebsd || linux || netbsd || openbsd || haiku
++// +build freebsd linux netbsd openbsd haiku
+ 
+ // Package constants manages the configuration of the session shell.
+ package constants
+diff --git a/agent/session/shell/shell_unix.go b/agent/session/shell/shell_unix.go
+index 50c3905..274d019 100644
+--- a/agent/session/shell/shell_unix.go
++++ b/agent/session/shell/shell_unix.go
+@@ -11,8 +11,8 @@
+ // either express or implied. See the License for the specific language governing
+ // permissions and limitations under the License.
+ //
+-//go:build darwin || freebsd || linux || netbsd || openbsd
+-// +build darwin freebsd linux netbsd openbsd
++//go:build darwin || freebsd || linux || netbsd || openbsd || haiku
++// +build darwin freebsd linux netbsd openbsd haiku
+ 
+ // Package shell implements session shell plugin.
+ package shell
+diff --git a/agent/session/utility/model/model_unix.go b/agent/session/utility/model/model_unix.go
+index a0d0961..e97dd26 100644
+--- a/agent/session/utility/model/model_unix.go
++++ b/agent/session/utility/model/model_unix.go
+@@ -11,8 +11,8 @@
+ // either express or implied. See the License for the specific language governing
+ // permissions and limitations under the License.
+ 
+-//go:build freebsd || linux || netbsd || openbsd
+-// +build freebsd linux netbsd openbsd
++//go:build freebsd || linux || netbsd || openbsd || haiku
++// +build freebsd linux netbsd openbsd haiku
+ 
+ // Package model contains data objects for session utility
+ package model
+diff --git a/agent/session/utility/utility_unix.go b/agent/session/utility/utility_unix.go
+index 64b7055..598e37a 100644
+--- a/agent/session/utility/utility_unix.go
++++ b/agent/session/utility/utility_unix.go
+@@ -11,8 +11,8 @@
+ // either express or implied. See the License for the specific language governing
+ // permissions and limitations under the License.
+ //
+-//go:build darwin || freebsd || linux || netbsd || openbsd
+-// +build darwin freebsd linux netbsd openbsd
++//go:build darwin || freebsd || linux || netbsd || openbsd || haiku
++// +build darwin freebsd linux netbsd openbsd haiku
+ 
+ // utility package implements all the shared methods between clients.
+ package utility
+diff --git a/agent/setupcli/managers/common/exechelper_unix.go b/agent/setupcli/managers/common/exechelper_unix.go
+index c1dbc90..8e6fabf 100644
+--- a/agent/setupcli/managers/common/exechelper_unix.go
++++ b/agent/setupcli/managers/common/exechelper_unix.go
+@@ -11,8 +11,8 @@
+ // either express or implied. See the License for the specific language governing
+ // permissions and limitations under the License.
+ 
+-//go:build freebsd || linux || netbsd || openbsd || darwin
+-// +build freebsd linux netbsd openbsd darwin
++//go:build freebsd || linux || netbsd || openbsd || darwin || haiku
++// +build freebsd linux netbsd openbsd darwin haiku
+ 
+ // Package common contains common constants and functions needed to be accessed across ssm-setup-cli
+ package common
+diff --git a/agent/setupcli/managers/configurationmanager/configurationmanager_unix.go b/agent/setupcli/managers/configurationmanager/configurationmanager_unix.go
+index 4e106dc..b4e874f 100644
+--- a/agent/setupcli/managers/configurationmanager/configurationmanager_unix.go
++++ b/agent/setupcli/managers/configurationmanager/configurationmanager_unix.go
+@@ -11,8 +11,8 @@
+ // either express or implied. See the License for the specific language governing
+ // permissions and limitations under the License.
+ 
+-//go:build freebsd || linux || netbsd || openbsd
+-// +build freebsd linux netbsd openbsd
++//go:build freebsd || linux || netbsd || openbsd || haiku
++// +build freebsd linux netbsd openbsd haiku
+ 
+ // Package configurationmanager helps us to handle agent config in ssm-setup-cli
+ package configurationmanager
+diff --git a/agent/setupcli/managers/downloadmanager/downloadmanager_unix.go b/agent/setupcli/managers/downloadmanager/downloadmanager_unix.go
+index 078b115..df6badd 100644
+--- a/agent/setupcli/managers/downloadmanager/downloadmanager_unix.go
++++ b/agent/setupcli/managers/downloadmanager/downloadmanager_unix.go
+@@ -11,8 +11,8 @@
+ // either express or implied. See the License for the specific language governing
+ // permissions and limitations under the License.
+ 
+-//go:build freebsd || linux || netbsd || openbsd || darwin
+-// +build freebsd linux netbsd openbsd darwin
++//go:build freebsd || linux || netbsd || openbsd || darwin || haiku
++// +build freebsd linux netbsd openbsd darwin haiku
+ 
+ // Package downloadmanager helps us with file download related functions in ssm-setup-cli
+ package downloadmanager
+diff --git a/agent/setupcli/managers/helpers/helper_unix.go b/agent/setupcli/managers/helpers/helper_unix.go
+index ca83133..2a686e0 100644
+--- a/agent/setupcli/managers/helpers/helper_unix.go
++++ b/agent/setupcli/managers/helpers/helper_unix.go
+@@ -11,8 +11,8 @@
+ // either express or implied. See the License for the specific language governing
+ // permissions and limitations under the License.
+ 
+-//go:build freebsd || linux || netbsd || openbsd || darwin
+-// +build freebsd linux netbsd openbsd darwin
++//go:build freebsd || linux || netbsd || openbsd || darwin || haiku
++// +build freebsd linux netbsd openbsd darwin haiku
+ 
+ // Package helpers contains helper functions for SSM-Setup-CLI
+ package helpers
+diff --git a/agent/setupcli/managers/packagemanagers/dpkgmanager.go b/agent/setupcli/managers/packagemanagers/dpkgmanager.go
+index 8e9639b..91ec2c9 100644
+--- a/agent/setupcli/managers/packagemanagers/dpkgmanager.go
++++ b/agent/setupcli/managers/packagemanagers/dpkgmanager.go
+@@ -11,8 +11,8 @@
+ // either express or implied. See the License for the specific language governing
+ // permissions and limitations under the License.
+ 
+-//go:build freebsd || linux || netbsd || openbsd
+-// +build freebsd linux netbsd openbsd
++//go:build freebsd || linux || netbsd || openbsd || haiku
++// +build freebsd linux netbsd openbsd haiku
+ 
+ // Package packagemanagers holds functions querying using local package manager
+ package packagemanagers
+diff --git a/agent/setupcli/managers/packagemanagers/dpkgmanager_unix.go b/agent/setupcli/managers/packagemanagers/dpkgmanager_unix.go
+index e36c565..ca90038 100644
+--- a/agent/setupcli/managers/packagemanagers/dpkgmanager_unix.go
++++ b/agent/setupcli/managers/packagemanagers/dpkgmanager_unix.go
+@@ -11,8 +11,8 @@
+ // either express or implied. See the License for the specific language governing
+ // permissions and limitations under the License.
+ 
+-//go:build freebsd || linux || netbsd || openbsd
+-// +build freebsd linux netbsd openbsd
++//go:build freebsd || linux || netbsd || openbsd || haiku
++// +build freebsd linux netbsd openbsd haiku
+ 
+ package packagemanagers
+ 
+diff --git a/agent/setupcli/managers/packagemanagers/rpmmanager.go b/agent/setupcli/managers/packagemanagers/rpmmanager.go
+index d3c8366..5c9b455 100644
+--- a/agent/setupcli/managers/packagemanagers/rpmmanager.go
++++ b/agent/setupcli/managers/packagemanagers/rpmmanager.go
+@@ -11,8 +11,8 @@
+ // either express or implied. See the License for the specific language governing
+ // permissions and limitations under the License.
+ 
+-//go:build freebsd || linux || netbsd || openbsd
+-// +build freebsd linux netbsd openbsd
++//go:build freebsd || linux || netbsd || openbsd || haiku
++// +build freebsd linux netbsd openbsd haiku
+ 
+ package packagemanagers
+ 
+diff --git a/agent/setupcli/managers/packagemanagers/rpmmanager_unix.go b/agent/setupcli/managers/packagemanagers/rpmmanager_unix.go
+index 123aab7..3d44570 100644
+--- a/agent/setupcli/managers/packagemanagers/rpmmanager_unix.go
++++ b/agent/setupcli/managers/packagemanagers/rpmmanager_unix.go
+@@ -11,8 +11,8 @@
+ // either express or implied. See the License for the specific language governing
+ // permissions and limitations under the License.
+ 
+-//go:build freebsd || linux || netbsd || openbsd
+-// +build freebsd linux netbsd openbsd
++//go:build freebsd || linux || netbsd || openbsd || haiku
++// +build freebsd linux netbsd openbsd haiku
+ 
+ package packagemanagers
+ 
+diff --git a/agent/setupcli/managers/packagemanagers/snapmanager_unix.go b/agent/setupcli/managers/packagemanagers/snapmanager_unix.go
+index 562aaf6..401ae1f 100644
+--- a/agent/setupcli/managers/packagemanagers/snapmanager_unix.go
++++ b/agent/setupcli/managers/packagemanagers/snapmanager_unix.go
+@@ -11,8 +11,8 @@
+ // either express or implied. See the License for the specific language governing
+ // permissions and limitations under the License.
+ 
+-//go:build freebsd || linux || netbsd || openbsd
+-// +build freebsd linux netbsd openbsd
++//go:build freebsd || linux || netbsd || openbsd || haiku
++// +build freebsd linux netbsd openbsd haiku
+ 
+ package packagemanagers
+ 
+diff --git a/agent/setupcli/managers/registermanager/registerManager_unix.go b/agent/setupcli/managers/registermanager/registerManager_unix.go
+index 2d537ab..9a869ee 100644
+--- a/agent/setupcli/managers/registermanager/registerManager_unix.go
++++ b/agent/setupcli/managers/registermanager/registerManager_unix.go
+@@ -11,8 +11,8 @@
+ // either express or implied. See the License for the specific language governing
+ // permissions and limitations under the License.
+ 
+-//go:build freebsd || linux || netbsd || openbsd
+-// +build freebsd linux netbsd openbsd
++//go:build freebsd || linux || netbsd || openbsd || haiku
++// +build freebsd linux netbsd openbsd haiku
+ 
+ // Package registermanager contains functions related to register
+ package registermanager
+diff --git a/agent/setupcli/managers/servicemanagers/systemctlmanager.go b/agent/setupcli/managers/servicemanagers/systemctlmanager.go
+index f31d593..1bfa20f 100644
+--- a/agent/setupcli/managers/servicemanagers/systemctlmanager.go
++++ b/agent/setupcli/managers/servicemanagers/systemctlmanager.go
+@@ -11,8 +11,8 @@
+ // either express or implied. See the License for the specific language governing
+ // permissions and limitations under the License.
+ 
+-//go:build freebsd || linux || netbsd || openbsd
+-// +build freebsd linux netbsd openbsd
++//go:build freebsd || linux || netbsd || openbsd || haiku
++// +build freebsd linux netbsd openbsd haiku
+ 
+ // Package servicemanagers contains functions related to service manager
+ package servicemanagers
+diff --git a/agent/setupcli/managers/servicemanagers/systemctlmanager_unix.go b/agent/setupcli/managers/servicemanagers/systemctlmanager_unix.go
+index 52be0e5..a324640 100644
+--- a/agent/setupcli/managers/servicemanagers/systemctlmanager_unix.go
++++ b/agent/setupcli/managers/servicemanagers/systemctlmanager_unix.go
+@@ -11,8 +11,8 @@
+ // either express or implied. See the License for the specific language governing
+ // permissions and limitations under the License.
+ 
+-//go:build freebsd || linux || netbsd || openbsd
+-// +build freebsd linux netbsd openbsd
++//go:build freebsd || linux || netbsd || openbsd || haiku
++// +build freebsd linux netbsd openbsd haiku
+ 
+ // Package servicemanagers contains functions related to service manager
+ package servicemanagers
+diff --git a/agent/setupcli/managers/servicemanagers/upstartmanager.go b/agent/setupcli/managers/servicemanagers/upstartmanager.go
+index a5c09c9..624c7fb 100644
+--- a/agent/setupcli/managers/servicemanagers/upstartmanager.go
++++ b/agent/setupcli/managers/servicemanagers/upstartmanager.go
+@@ -11,8 +11,8 @@
+ // either express or implied. See the License for the specific language governing
+ // permissions and limitations under the License.
+ 
+-//go:build freebsd || linux || netbsd || openbsd
+-// +build freebsd linux netbsd openbsd
++//go:build freebsd || linux || netbsd || openbsd || haiku
++// +build freebsd linux netbsd openbsd haiku
+ 
+ // Package servicemanagers contains functions related to service manager
+ package servicemanagers
+diff --git a/agent/setupcli/managers/servicemanagers/upstartmanager_unix.go b/agent/setupcli/managers/servicemanagers/upstartmanager_unix.go
+index ac85835..5629e05 100644
+--- a/agent/setupcli/managers/servicemanagers/upstartmanager_unix.go
++++ b/agent/setupcli/managers/servicemanagers/upstartmanager_unix.go
+@@ -11,8 +11,8 @@
+ // either express or implied. See the License for the specific language governing
+ // permissions and limitations under the License.
+ 
+-//go:build freebsd || linux || netbsd || openbsd
+-// +build freebsd linux netbsd openbsd
++//go:build freebsd || linux || netbsd || openbsd || haiku
++// +build freebsd linux netbsd openbsd haiku
+ 
+ // Package servicemanagers contains functions related to service manager
+ package servicemanagers
+diff --git a/agent/setupcli/managers/verificationmanagers/linux_public_key_helper.go b/agent/setupcli/managers/verificationmanagers/linux_public_key_helper.go
+index 8834d39..b0ff128 100644
+--- a/agent/setupcli/managers/verificationmanagers/linux_public_key_helper.go
++++ b/agent/setupcli/managers/verificationmanagers/linux_public_key_helper.go
+@@ -11,8 +11,8 @@
+ // either express or implied. See the License for the specific language governing
+ // permissions and limitations under the License.
+ 
+-//go:build freebsd || linux || netbsd || openbsd
+-// +build freebsd linux netbsd openbsd
++//go:build freebsd || linux || netbsd || openbsd || haiku
++// +build freebsd linux netbsd openbsd haiku
+ 
+ // Package verificationmanagers is used to verify the agent packages
+ package verificationmanagers
+diff --git a/agent/setupcli/managers/verificationmanagers/linuxmanager.go b/agent/setupcli/managers/verificationmanagers/linuxmanager.go
+index b83c503..a33dbca 100644
+--- a/agent/setupcli/managers/verificationmanagers/linuxmanager.go
++++ b/agent/setupcli/managers/verificationmanagers/linuxmanager.go
+@@ -11,8 +11,8 @@
+ // either express or implied. See the License for the specific language governing
+ // permissions and limitations under the License.
+ 
+-//go:build freebsd || linux || netbsd || openbsd
+-// +build freebsd linux netbsd openbsd
++//go:build freebsd || linux || netbsd || openbsd || haiku
++// +build freebsd linux netbsd openbsd haiku
+ 
+ // Package verificationmanagers is used to verify the agent packages
+ package verificationmanagers
+diff --git a/agent/setupcli/managers/verificationmanagers/linuxmanager_unix.go b/agent/setupcli/managers/verificationmanagers/linuxmanager_unix.go
+index 3a5d7bc..8d72335 100644
+--- a/agent/setupcli/managers/verificationmanagers/linuxmanager_unix.go
++++ b/agent/setupcli/managers/verificationmanagers/linuxmanager_unix.go
+@@ -11,8 +11,8 @@
+ // either express or implied. See the License for the specific language governing
+ // permissions and limitations under the License.
+ 
+-//go:build freebsd || linux || netbsd || openbsd
+-// +build freebsd linux netbsd openbsd
++//go:build freebsd || linux || netbsd || openbsd || haiku
++// +build freebsd linux netbsd openbsd haiku
+ 
+ // Package verificationmanagers is used to verify the agent packages
+ package verificationmanagers
+diff --git a/agent/setupcli/utility/ssm_setup_cli_util_unix.go b/agent/setupcli/utility/ssm_setup_cli_util_unix.go
+index 06db2d9..e10999d 100644
+--- a/agent/setupcli/utility/ssm_setup_cli_util_unix.go
++++ b/agent/setupcli/utility/ssm_setup_cli_util_unix.go
+@@ -1,5 +1,5 @@
+-//go:build freebsd || linux || netbsd || openbsd || darwin
+-// +build freebsd linux netbsd openbsd darwin
++//go:build freebsd || linux || netbsd || openbsd || darwin || haiku
++// +build freebsd linux netbsd openbsd darwin haiku
+ 
+ package utility
+ 
+diff --git a/agent/startup/serialport/serialport_skip_unix.go b/agent/startup/serialport/serialport_skip_unix.go
+index a2775cf..24170d5 100644
+--- a/agent/startup/serialport/serialport_skip_unix.go
++++ b/agent/startup/serialport/serialport_skip_unix.go
+@@ -11,8 +11,8 @@
+ // either express or implied. See the License for the specific language governing
+ // permissions and limitations under the License.
+ //
+-//go:build freebsd || netbsd || openbsd || darwin
+-// +build freebsd netbsd openbsd darwin
++//go:build freebsd || netbsd || openbsd || darwin || haiku
++// +build freebsd netbsd openbsd darwin haiku
+ 
+ // Package serialport implements serial port capabilities for unsupported platforms
+ package serialport
+diff --git a/agent/startup/startup_skip_unix.go b/agent/startup/startup_skip_unix.go
+index d27194b..7e37e9e 100644
+--- a/agent/startup/startup_skip_unix.go
++++ b/agent/startup/startup_skip_unix.go
+@@ -11,8 +11,8 @@
+ // either express or implied. See the License for the specific language governing
+ // permissions and limitations under the License.
+ //
+-//go:build freebsd || netbsd || openbsd || darwin
+-// +build freebsd netbsd openbsd darwin
++//go:build freebsd || netbsd || openbsd || darwin || haiku
++// +build freebsd netbsd openbsd darwin haiku
+ 
+ package startup
+ 
+diff --git a/agent/update/processor/processor_unix.go b/agent/update/processor/processor_unix.go
+index 2aad174..b91300f 100644
+--- a/agent/update/processor/processor_unix.go
++++ b/agent/update/processor/processor_unix.go
+@@ -14,8 +14,8 @@
+ // Package processor contains the methods for update ssm agent.
+ // It also provides methods for sendReply and updateInstanceInfo
+ 
+-//go:build darwin || freebsd || linux || netbsd || openbsd
+-// +build darwin freebsd linux netbsd openbsd
++//go:build darwin || freebsd || linux || netbsd || openbsd || haiku
++// +build darwin freebsd linux netbsd openbsd haiku
+ 
+ package processor
+ 
+diff --git a/agent/update/tester/testcases/ec2detector_deps_other.go b/agent/update/tester/testcases/ec2detector_deps_other.go
+index e980c4e..34f4817 100644
+--- a/agent/update/tester/testcases/ec2detector_deps_other.go
++++ b/agent/update/tester/testcases/ec2detector_deps_other.go
+@@ -11,8 +11,8 @@
+ // either express or implied. See the License for the specific language governing
+ // permissions and limitations under the License.
+ 
+-//go:build freebsd || linux || netbsd || openbsd || windows
+-// +build freebsd linux netbsd openbsd windows
++//go:build freebsd || linux || netbsd || openbsd || windows || haiku
++// +build freebsd linux netbsd openbsd windows haiku
+ 
+ package testcases
+ 
+diff --git a/agent/update/tester/testcases/ec2detector_other.go b/agent/update/tester/testcases/ec2detector_other.go
+index 9127782..7ef77f5 100644
+--- a/agent/update/tester/testcases/ec2detector_other.go
++++ b/agent/update/tester/testcases/ec2detector_other.go
+@@ -11,8 +11,8 @@
+ // either express or implied. See the License for the specific language governing
+ // permissions and limitations under the License.
+ 
+-//go:build freebsd || linux || netbsd || openbsd || windows
+-// +build freebsd linux netbsd openbsd windows
++//go:build freebsd || linux || netbsd || openbsd || windows || haiku
++// +build freebsd linux netbsd openbsd windows haiku
+ 
+ package testcases
+ 
+diff --git a/agent/update/tester/testcases/ec2detector_unix.go b/agent/update/tester/testcases/ec2detector_unix.go
+index d364f28..f133c62 100644
+--- a/agent/update/tester/testcases/ec2detector_unix.go
++++ b/agent/update/tester/testcases/ec2detector_unix.go
+@@ -11,8 +11,8 @@
+ // either express or implied. See the License for the specific language governing
+ // permissions and limitations under the License
+ 
+-//go:build freebsd || linux || netbsd || openbsd
+-// +build freebsd linux netbsd openbsd
++//go:build freebsd || linux || netbsd || openbsd || haiku
++// +build freebsd linux netbsd openbsd haiku
+ 
+ package testcases
+ 
+diff --git a/agent/update/updater/updater_unix.go b/agent/update/updater/updater_unix.go
+index ddc1ae3..c19e490 100644
+--- a/agent/update/updater/updater_unix.go
++++ b/agent/update/updater/updater_unix.go
+@@ -11,8 +11,8 @@
+ // either express or implied. See the License for the specific language governing
+ // permissions and limitations under the License.
+ 
+-//go:build darwin || freebsd || linux || netbsd || openbsd
+-// +build darwin freebsd linux netbsd openbsd
++//go:build darwin || freebsd || linux || netbsd || openbsd || haiku
++// +build darwin freebsd linux netbsd openbsd haiku
+ 
+ // Package main represents the entry point of the ssm agent updater.
+ package main
+diff --git a/agent/updateutil/updateconstants/constants_unix.go b/agent/updateutil/updateconstants/constants_unix.go
+index 69a4600..cceabd5 100644
+--- a/agent/updateutil/updateconstants/constants_unix.go
++++ b/agent/updateutil/updateconstants/constants_unix.go
+@@ -11,8 +11,8 @@
+ // either express or implied. See the License for the specific language governing
+ // permissions and limitations under the License.
+ 
+-//go:build darwin || freebsd || linux || netbsd || openbsd
+-// +build darwin freebsd linux netbsd openbsd
++//go:build darwin || freebsd || linux || netbsd || openbsd || haiku
++// +build darwin freebsd linux netbsd openbsd haiku
+ 
+ // Package updateconstants contains constants related to update
+ package updateconstants
+diff --git a/agent/updateutil/updateprecondition/bottlerocket/bottlerocket_precondition_unix.go b/agent/updateutil/updateprecondition/bottlerocket/bottlerocket_precondition_unix.go
+index c905c19..f93b377 100644
+--- a/agent/updateutil/updateprecondition/bottlerocket/bottlerocket_precondition_unix.go
++++ b/agent/updateutil/updateprecondition/bottlerocket/bottlerocket_precondition_unix.go
+@@ -11,8 +11,8 @@
+ // either express or implied. See the License for the specific language governing
+ // permissions and limitations under the License.
+ 
+-//go:build freebsd || linux || netbsd || openbsd
+-// +build freebsd linux netbsd openbsd
++//go:build freebsd || linux || netbsd || openbsd || haiku
++// +build freebsd linux netbsd openbsd haiku
+ 
+ package bottlerocketprecondition
+ 
+diff --git a/agent/updateutil/updateprecondition/staticpie/staticpie_precondition_unix.go b/agent/updateutil/updateprecondition/staticpie/staticpie_precondition_unix.go
+index e186d01..8eb6fd4 100644
+--- a/agent/updateutil/updateprecondition/staticpie/staticpie_precondition_unix.go
++++ b/agent/updateutil/updateprecondition/staticpie/staticpie_precondition_unix.go
+@@ -11,8 +11,8 @@
+ // either express or implied. See the License for the specific language governing
+ // permissions and limitations under the License.
+ 
+-//go:build freebsd || linux || netbsd || openbsd
+-// +build freebsd linux netbsd openbsd
++//go:build freebsd || linux || netbsd || openbsd || haiku
++// +build freebsd linux netbsd openbsd haiku
+ 
+ package staticpieprecondition
+ 
+diff --git a/agent/updateutil/updateutil_unix.go b/agent/updateutil/updateutil_unix.go
+index 64ac54e..a98e0a7 100644
+--- a/agent/updateutil/updateutil_unix.go
++++ b/agent/updateutil/updateutil_unix.go
+@@ -11,8 +11,8 @@
+ // either express or implied. See the License for the specific language governing
+ // permissions and limitations under the License.
+ 
+-//go:build darwin || freebsd || linux || netbsd || openbsd
+-// +build darwin freebsd linux netbsd openbsd
++//go:build darwin || freebsd || linux || netbsd || openbsd || haiku
++// +build darwin freebsd linux netbsd openbsd haiku
+ 
+ // Package updateutil contains updater specific utilities.
+ package updateutil
+diff --git a/common/filewatcherbasedipc/filewatcherchannel_unix.go b/common/filewatcherbasedipc/filewatcherchannel_unix.go
+index 92fed0a..5355168 100644
+--- a/common/filewatcherbasedipc/filewatcherchannel_unix.go
++++ b/common/filewatcherbasedipc/filewatcherchannel_unix.go
+@@ -13,8 +13,8 @@
+ 
+ // package filewatcherbasedipc is used to establish IPC between master and workers using files.
+ //
+-//go:build darwin || freebsd || linux || netbsd || openbsd
+-// +build darwin freebsd linux netbsd openbsd
++//go:build darwin || freebsd || linux || netbsd || openbsd || haiku
++// +build darwin freebsd linux netbsd openbsd haiku
+ 
+ package filewatcherbasedipc
+ 
+diff --git a/common/identity/availableidentities/ec2/ec2detector/ec2detector_unix.go b/common/identity/availableidentities/ec2/ec2detector/ec2detector_unix.go
+index dda8fd2..d27aa6c 100644
+--- a/common/identity/availableidentities/ec2/ec2detector/ec2detector_unix.go
++++ b/common/identity/availableidentities/ec2/ec2detector/ec2detector_unix.go
+@@ -11,8 +11,8 @@
+ // either express or implied. See the License for the specific language governing
+ // permissions and limitations under the License.
+ 
+-//go:build freebsd || linux || netbsd || openbsd
+-// +build freebsd linux netbsd openbsd
++//go:build freebsd || linux || netbsd || openbsd || haiku
++// +build freebsd linux netbsd openbsd haiku
+ 
+ package ec2detector
+ 
+diff --git a/common/identity/availableidentities/ec2/ec2detector/helper/helper_unix.go b/common/identity/availableidentities/ec2/ec2detector/helper/helper_unix.go
+index 10dd7cc..2f0d1c2 100644
+--- a/common/identity/availableidentities/ec2/ec2detector/helper/helper_unix.go
++++ b/common/identity/availableidentities/ec2/ec2detector/helper/helper_unix.go
+@@ -11,8 +11,8 @@
+ // either express or implied. See the License for the specific language governing
+ // permissions and limitations under the License.
+ 
+-//go:build freebsd || linux || netbsd || openbsd
+-// +build freebsd linux netbsd openbsd
++//go:build freebsd || linux || netbsd || openbsd || haiku
++// +build freebsd linux netbsd openbsd haiku
+ 
+ package helper
+ 
+diff --git a/common/message/model_unix.go b/common/message/model_unix.go
+index cefc528..6c59aaf 100644
+--- a/common/message/model_unix.go
++++ b/common/message/model_unix.go
+@@ -11,8 +11,8 @@
+ // either express or implied. See the License for the specific language governing
+ // permissions and limitations under the License.
+ 
+-//go:build freebsd || linux || netbsd || openbsd
+-// +build freebsd linux netbsd openbsd
++//go:build freebsd || linux || netbsd || openbsd || haiku
++// +build freebsd linux netbsd openbsd haiku
+ 
+ // Package message contains information for the IPC messages
+ package message
+diff --git a/common/utility/utilty_unix.go b/common/utility/utilty_unix.go
+index 67cd119..ef2abbc 100644
+--- a/common/utility/utilty_unix.go
++++ b/common/utility/utilty_unix.go
+@@ -11,7 +11,7 @@
+ // either express or implied. See the License for the specific language governing
+ // permissions and limitations under the License.
+ 
+-//go:build freebsd || linux || netbsd || openbsd
++//go:build freebsd || linux || netbsd || openbsd || haiku
+ 
+ package utility
+ 
+diff --git a/core/agent_unix.go b/core/agent_unix.go
+index ca1329e..0d35493 100644
+--- a/core/agent_unix.go
++++ b/core/agent_unix.go
+@@ -1,5 +1,5 @@
+-//go:build freebsd || linux || netbsd || openbsd || darwin
+-// +build freebsd linux netbsd openbsd darwin
++//go:build freebsd || linux || netbsd || openbsd || darwin || haiku
++// +build freebsd linux netbsd openbsd darwin haiku
+ 
+ package main
+ 
+diff --git a/core/app/bootstrap/bootstrap_unix.go b/core/app/bootstrap/bootstrap_unix.go
+index 3aae406..cbc8a6f 100644
+--- a/core/app/bootstrap/bootstrap_unix.go
++++ b/core/app/bootstrap/bootstrap_unix.go
+@@ -11,8 +11,8 @@
+ // either express or implied. See the License for the specific language governing
+ // permissions and limitations under the License.
+ 
+-//go:build freebsd || linux || netbsd || openbsd
+-// +build freebsd linux netbsd openbsd
++//go:build freebsd || linux || netbsd || openbsd || haiku
++// +build freebsd linux netbsd openbsd haiku
+ 
+ package bootstrap
+ 
+diff --git a/core/app/selfupdate/fileutil/fileutil_unix.go b/core/app/selfupdate/fileutil/fileutil_unix.go
+index b8971e7..7b26320 100644
+--- a/core/app/selfupdate/fileutil/fileutil_unix.go
++++ b/core/app/selfupdate/fileutil/fileutil_unix.go
+@@ -11,8 +11,8 @@
+ // either express or implied. See the License for the specific language governing
+ // permissions and limitations under the License.
+ 
+-//go:build darwin || freebsd || linux || netbsd || openbsd
+-// +build darwin freebsd linux netbsd openbsd
++//go:build darwin || freebsd || linux || netbsd || openbsd || haiku
++// +build darwin freebsd linux netbsd openbsd haiku
+ 
+ // Package fileutil contains utilities for working with the file system.
+ package fileutil
+diff --git a/core/app/selfupdate/selfupdate_unix.go b/core/app/selfupdate/selfupdate_unix.go
+index 0d3f2df..de7b91d 100644
+--- a/core/app/selfupdate/selfupdate_unix.go
++++ b/core/app/selfupdate/selfupdate_unix.go
+@@ -11,8 +11,8 @@
+ // either express or implied. See the License for the specific language governing
+ // permissions and limitations under the License.
+ 
+-//go:build darwin || freebsd || linux || netbsd || openbsd
+-// +build darwin freebsd linux netbsd openbsd
++//go:build darwin || freebsd || linux || netbsd || openbsd || haiku
++// +build darwin freebsd linux netbsd openbsd haiku
+ 
+ // Package selfupdate provides an interface to force update with Message Gateway Service and S3
+ // This file contains the constant for generating command for linux os
+diff --git a/core/executor/executor_unix.go b/core/executor/executor_unix.go
+index 88375a3..bf59969 100644
+--- a/core/executor/executor_unix.go
++++ b/core/executor/executor_unix.go
+@@ -11,8 +11,8 @@
+ // either express or implied. See the License for the specific language governing
+ // permissions and limitations under the License.
+ 
+-//go:build freebsd || linux || netbsd || openbsd
+-// +build freebsd linux netbsd openbsd
++//go:build freebsd || linux || netbsd || openbsd || haiku
++// +build freebsd linux netbsd openbsd haiku
+ 
+ package executor
+ 
+diff --git a/core/tools/preparedatadir_unix.go b/core/tools/preparedatadir_unix.go
+index e804b1a..7ab3788 100644
+--- a/core/tools/preparedatadir_unix.go
++++ b/core/tools/preparedatadir_unix.go
+@@ -11,8 +11,8 @@
+ // either express or implied. See the License for the specific language governing
+ // permissions and limitations under the License.
+ 
+-//go:build freebsd || linux || netbsd || openbsd || darwin
+-// +build freebsd linux netbsd openbsd darwin
++//go:build freebsd || linux || netbsd || openbsd || darwin || haiku
++// +build freebsd linux netbsd openbsd darwin haiku
+ 
+ package tools
+ 
+diff --git a/core/workerprovider/longrunningprovider/model/model_unix.go b/core/workerprovider/longrunningprovider/model/model_unix.go
+index 5f2254d..18b835b 100644
+--- a/core/workerprovider/longrunningprovider/model/model_unix.go
++++ b/core/workerprovider/longrunningprovider/model/model_unix.go
+@@ -11,8 +11,8 @@
+ // either express or implied. See the License for the specific language governing
+ // permissions and limitations under the License.
+ 
+-//go:build freebsd || linux || netbsd || openbsd
+-// +build freebsd linux netbsd openbsd
++//go:build freebsd || linux || netbsd || openbsd || haiku
++// +build freebsd linux netbsd openbsd haiku
+ 
+ // Package model contains data objects for long running container
+ package model
+diff --git a/extra/lockfile/lockfile_unix.go b/extra/lockfile/lockfile_unix.go
+index 3e0ef6c..47931af 100644
+--- a/extra/lockfile/lockfile_unix.go
++++ b/extra/lockfile/lockfile_unix.go
+@@ -1,4 +1,4 @@
+-// +build darwin dragonfly freebsd linux nacl netbsd openbsd solaris aix
++// +build darwin dragonfly freebsd linux nacl netbsd openbsd solaris aix haiku
+ 
+ package lockfile
+ 
+diff --git a/vendor/github.com/fsnotify/fsnotify/haiku.go b/vendor/github.com/fsnotify/fsnotify/haiku.go
+new file mode 100644
+index 0000000..7d1c190
+--- /dev/null
++++ b/vendor/github.com/fsnotify/fsnotify/haiku.go
+@@ -0,0 +1,60 @@
++//go:build haiku
++// +build haiku
++
++// Package fsnotify: Haiku stub backend.
++//
++// fsnotify v1.5.1 ships backends for inotify (Linux), kqueue (BSD/macOS), FEN
++// (Solaris) and ReadDirectoryChangesW (Windows); Haiku has none of these.
++// Haiku's native mechanism is node monitoring (watch_node(3) / B_NODE_MONITOR),
++// which is a separate, larger port. This stub provides the exported Watcher API
++// so that packages depending on fsnotify compile and run on haiku/arm64; it
++// simply never delivers filesystem events (the Events/Errors channels stay
++// open and idle). TODO(go-arm64): replace with a watch_node-backed watcher.
++package fsnotify
++
++import "errors"
++
++// Watcher watches a set of paths, delivering events on a channel.
++type Watcher struct {
++	Events chan Event
++	Errors chan error
++
++	done chan struct{}
++}
++
++// NewWatcher creates a new stub watcher.
++func NewWatcher() (*Watcher, error) {
++	return &Watcher{
++		Events: make(chan Event),
++		Errors: make(chan error),
++		done:   make(chan struct{}),
++	}, nil
++}
++
++// Close removes all watches and closes the events channel.
++func (w *Watcher) Close() error {
++	select {
++	case <-w.done:
++		return nil
++	default:
++	}
++	close(w.done)
++	close(w.Events)
++	close(w.Errors)
++	return nil
++}
++
++// Add starts watching the named file or directory (no-op on Haiku).
++func (w *Watcher) Add(name string) error {
++	select {
++	case <-w.done:
++		return errors.New("fsnotify: watcher already closed")
++	default:
++		return nil
++	}
++}
++
++// Remove stops watching the named file or directory (no-op on Haiku).
++func (w *Watcher) Remove(name string) error {
++	return nil
++}
+diff --git a/vendor/github.com/go-git/go-billy/v5/osfs/os_haiku.go b/vendor/github.com/go-git/go-billy/v5/osfs/os_haiku.go
+new file mode 100644
+index 0000000..866d7da
+--- /dev/null
++++ b/vendor/github.com/go-git/go-billy/v5/osfs/os_haiku.go
+@@ -0,0 +1,41 @@
++//go:build haiku
++// +build haiku
++
++// Haiku file-locking arm for go-billy's osfs. Haiku's Go port does not expose
++// flock(2)/x/sys/unix; advisory whole-file locking uses fcntl(F_SETLKW) via
++// syscall.FcntlFlock instead. rename/umask are identical to the POSIX arm.
++package osfs
++
++import (
++	"os"
++	"syscall"
++)
++
++func (f *file) Lock() error {
++	f.m.Lock()
++	defer f.m.Unlock()
++
++	fl := &syscall.Flock_t{Type: syscall.F_WRLCK, Whence: 0, Start: 0, Len: 0}
++	return syscall.FcntlFlock(f.File.Fd(), syscall.F_SETLKW, fl)
++}
++
++func (f *file) Unlock() error {
++	f.m.Lock()
++	defer f.m.Unlock()
++
++	fl := &syscall.Flock_t{Type: syscall.F_UNLCK, Whence: 0, Start: 0, Len: 0}
++	return syscall.FcntlFlock(f.File.Fd(), syscall.F_SETLK, fl)
++}
++
++func rename(from, to string) error {
++	return os.Rename(from, to)
++}
++
++// umask sets umask to a new value, and returns a func which allows the
++// caller to reset it back to what it was originally.
++func umask(new int) func() {
++	old := syscall.Umask(new)
++	return func() {
++		syscall.Umask(old)
++	}
++}
+diff --git a/vendor/github.com/go-git/go-billy/v5/osfs/os_posix.go b/vendor/github.com/go-git/go-billy/v5/osfs/os_posix.go
+index 6fb8273..4b1e73b 100644
+--- a/vendor/github.com/go-git/go-billy/v5/osfs/os_posix.go
++++ b/vendor/github.com/go-git/go-billy/v5/osfs/os_posix.go
+@@ -1,5 +1,5 @@
+-//go:build !plan9 && !windows && !wasm
+-// +build !plan9,!windows,!wasm
++//go:build !plan9 && !windows && !wasm && !haiku
++// +build !plan9,!windows,!wasm,!haiku
+ 
+ package osfs
+ 
+diff --git a/vendor/github.com/go-git/go-git/v5/worktree_unix_other.go b/vendor/github.com/go-git/go-git/v5/worktree_unix_other.go
+index 5b16e70..a69d371 100644
+--- a/vendor/github.com/go-git/go-git/v5/worktree_unix_other.go
++++ b/vendor/github.com/go-git/go-git/v5/worktree_unix_other.go
+@@ -1,4 +1,4 @@
+-// +build openbsd dragonfly solaris
++// +build openbsd dragonfly solaris haiku
+ 
+ package git
+ 
+diff --git a/vendor/github.com/nightlyone/lockfile/lockfile_unix.go b/vendor/github.com/nightlyone/lockfile/lockfile_unix.go
+index 3e0ef6c..47931af 100644
+--- a/vendor/github.com/nightlyone/lockfile/lockfile_unix.go
++++ b/vendor/github.com/nightlyone/lockfile/lockfile_unix.go
+@@ -1,4 +1,4 @@
+-// +build darwin dragonfly freebsd linux nacl netbsd openbsd solaris aix
++// +build darwin dragonfly freebsd linux nacl netbsd openbsd solaris aix haiku
+ 
+ package lockfile
+ 
