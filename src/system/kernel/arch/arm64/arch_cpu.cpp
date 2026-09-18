@@ -278,6 +278,13 @@ arm64_get_hwcap(uint64* hwcap, uint64* hwcap2)
 		caps |= HWCAP_SM4;
 	if (ID_AA64ISAR0_DP(isar0) >= ID_AA64ISAR0_DP_IMPL)
 		caps |= HWCAP_ASIMDDP;
+	if (ID_AA64ISAR0_FHM(isar0) >= ID_AA64ISAR0_FHM_IMPL)
+		caps |= HWCAP_ASIMDFHM;
+	if (ID_AA64ISAR0_TS(isar0) >= ID_AA64ISAR0_TS_FLAGM) {
+		caps |= HWCAP_FLAGM;
+		if (ID_AA64ISAR0_TS(isar0) >= ID_AA64ISAR0_TS_FLAGM2)
+			caps2 |= HWCAP2_FLAGM2;
+	}
 
 	// ID_AA64ISAR1_EL1.
 	if (ID_AA64ISAR1_DPB(isar1) >= ID_AA64ISAR1_DPB_IMPL) {
@@ -294,6 +301,18 @@ arm64_get_hwcap(uint64* hwcap, uint64* hwcap2)
 		if (ID_AA64ISAR1_LRCPC(isar1) >= (0x2 << ID_AA64ISAR1_LRCPC_SHIFT))
 			caps |= HWCAP_ILRCPC;
 	}
+	if (ID_AA64ISAR1_FRINTTS(isar1) >= ID_AA64ISAR1_FRINTTS_IMPL)
+		caps2 |= HWCAP2_FRINT;
+	if (ID_AA64ISAR1_SB(isar1) >= ID_AA64ISAR1_SB_IMPL)
+		caps |= HWCAP_SB;
+	// The int8 matrix-multiply (I8MM) and BFloat16 (BF16) extensions are the
+	// NEON data paths that ported ML/GEMM code (ggml/llama.cpp, libhwy) selects
+	// at runtime via AT_HWCAP2; unlike SVE they add no EL0-visible register
+	// state, so advertising them needs no context-switch support.
+	if (ID_AA64ISAR1_BF16(isar1) >= ID_AA64ISAR1_BF16_IMPL)
+		caps2 |= HWCAP2_BF16;
+	if (ID_AA64ISAR1_I8MM(isar1) >= ID_AA64ISAR1_I8MM_IMPL)
+		caps2 |= HWCAP2_I8MM;
 
 	*hwcap = caps;
 	*hwcap2 = caps2;

@@ -82,11 +82,22 @@
 #define HWCAP_PACA		(1UL << 30)
 #define HWCAP_PACG		(1UL << 31)
 
-/* AT_HWCAP2 bits (arm64). */
-#define HWCAP2_DCPODP	(1UL << 0)
-#define HWCAP2_SVE2		(1UL << 1)
-#define HWCAP2_FLAGM2	(1UL << 3)
-#define HWCAP2_FRINT	(1UL << 4)
+/* AT_HWCAP2 bits (arm64), matching the Linux/glibc layout. */
+#define HWCAP2_DCPODP		(1UL << 0)
+#define HWCAP2_SVE2			(1UL << 1)
+#define HWCAP2_SVEAES		(1UL << 2)
+#define HWCAP2_SVEPMULL		(1UL << 3)
+#define HWCAP2_SVEBITPERM	(1UL << 4)
+#define HWCAP2_SVESHA3		(1UL << 5)
+#define HWCAP2_SVESM4		(1UL << 6)
+#define HWCAP2_FLAGM2		(1UL << 7)
+#define HWCAP2_FRINT		(1UL << 8)
+#define HWCAP2_SVEI8MM		(1UL << 9)
+#define HWCAP2_SVEF32MM		(1UL << 10)
+#define HWCAP2_SVEF64MM		(1UL << 11)
+#define HWCAP2_SVEBF16		(1UL << 12)
+#define HWCAP2_I8MM			(1UL << 13)
+#define HWCAP2_BF16			(1UL << 14)
 
 #endif	/* __aarch64__ */
 
