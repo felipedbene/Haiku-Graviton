@@ -1,0 +1,11 @@
+SubDir HAIKU_TOP src bin pmustat ;
+
+# pmustat reaches the PMUv3 counters through the "arm64_pmu" generic syscall
+# (_kern_generic_syscall) and pins itself with _kern_set_thread_affinity; both
+# are declared in the private <syscalls.h> and exported by libroot, which is
+# linked implicitly. <arm64_pmu_syscalls.h> is the shared kernel/userland ABI.
+UsePrivateSystemHeaders ;
+
+Application pmustat :
+	pmustat.cpp
+;
