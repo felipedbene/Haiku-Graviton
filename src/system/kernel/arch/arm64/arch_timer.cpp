@@ -107,6 +107,11 @@ arch_init_timer(kernel_args *args)
 {
 	sTimerFrequency = READ_SPECIALREG(CNTFRQ_EL0);
 
+	// Derive system_time()'s tick->microsecond multiply/shift factors now, while
+	// boot is still single-threaded, so its hot path never has to. (It also has
+	// a lazy fallback for any system_time() call that beats us here.)
+	__arch_init_system_time();
+
 	// The TVAL registers are signed 32 bit down counters, so no more than
 	// INT32_MAX ticks can be programmed at a time.
 	sTimerMaxInterval = ((uint64)INT32_MAX * 1000000) / sTimerFrequency;
