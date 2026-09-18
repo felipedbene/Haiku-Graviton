@@ -128,6 +128,8 @@ private:
 			void		_Retransmit();
 			void		_UpdateRoundTripTime(int32 roundTripTime, int32 expectedSamples);
 			void		_ResetSlowStart();
+			void		_ReceivedCongestionNotification(
+							tcp_segment_header& segment);
 			void		_DuplicateAcknowledge(tcp_segment_header& segment);
 
 	static	void		_TimeWaitTimer(net_timer* timer, void* _endpoint);
@@ -182,6 +184,9 @@ private:
 	uint32			fDuplicateAcknowledgeCount;
 	uint32			fPreviousFlightSize;
 	uint32			fRecover;
+	tcp_sequence	fECNReactSequence;
+		// send sequence up to which an ECE has already been reacted to; used
+		// to enforce the RFC 3168 "react at most once per RTT" rule
 
 	net_route		*fRoute;
 		// TODO: don't use a net_route, but a net_route_info!!!
