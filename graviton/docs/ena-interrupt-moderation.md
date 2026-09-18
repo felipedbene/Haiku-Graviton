@@ -123,9 +123,9 @@ Default is **off**. The change is behaviour-neutral until explicitly enabled,
 which is what makes it the lowest-risk first step and gives the A/B a clean
 switch inside one boot.
 
-## Hardware A/B — owed
+## Hardware validation — step 1 done on c8g (2026-09-18)
 
-Not yet measured. The experiment, in order:
+The experiment, in order:
 
 1. On the target instance, read the attach log / `ENA_IOCTL_GET_IRQ_STATS` for
    `intrDelayResolution`. **If it is 0 the device does not honour moderation and
@@ -141,5 +141,40 @@ Not yet measured. The experiment, in order:
    latency on a separate low-rate flow to confirm the low-pps floor protects it.
 3. A perf claim requires the measurement banked as evidence, not this design.
 
-The driver can hotswap outside the boot path (proven), so this A/B needs no bake.
-The PR is held regardless.
+**Step 1 result on `c8g.large` (2026-09-18, canonical AMI, hrev59996, driver
+attached and datapath live over SSM):** the device **does not advertise
+moderation either.** Read back from the attach log:
+
+```
+KERN: ena: interrupt moderation feature not advertised
+KERN: ena: interrupt delay resolution 0; rx interval 20, tx interval 50
+```
+
+So the generation the design flagged as "may differ" does not differ: `c8g`
+behaves like `c7g`. Two independent Graviton generations now agree that the guest
+is not offered the `ENA_ADMIN_INTERRUPT_MODERATION` feature, which means the
+delay fields are decoration (proven directly on c7g: sweeping 0 → 200 ticks moved
+the interrupt rate by nothing) and `ENA_IOCTL_RX_ADAPTIVE_MODERATION` correctly
+refuses with `B_NOT_SUPPORTED`. **Adaptive moderation is inert by construction on
+this hardware — step 1 says stop; there is nothing to A/B and no reason to move
+the default off.**
+
+The controller stays merged and default-off on purpose: it is a *probed*
+capability path (like `max_tx_header` and the offload caps, which do differ across
+generations), so it activates itself with no code change on any future device that
+does advertise the feature. Step 2 remains the experiment to run *if and when* an
+instance ever reads back a non-zero `intrDelayResolution`.
+
+The driver can hotswap outside the boot path (proven), so a future step-2 A/B
+needs no bake.
+
+### Instrument gap noticed during this validation (optional follow-up)
+
+`ena_fault stats` reads `intrDelayResolution` and `rxIrqInterval` from
+`ENA_IOCTL_GET_IRQ_STATS` but does not print them, so the resolution readback
+above had to come from `grep`-ing syslog rather than from the test tool. A small,
+driver-neutral follow-up would have `ena_fault stats` print those two fields and
+add a subcommand for `ENA_IOCTL_RX_ADAPTIVE_MODERATION` (9807) /
+`ENA_IOCTL_RX_MODERATION` (9805), so the whole step-1 check is one command on a
+new generation. Not done here because there was no reason to change behaviour and
+this session made no perf claim.
