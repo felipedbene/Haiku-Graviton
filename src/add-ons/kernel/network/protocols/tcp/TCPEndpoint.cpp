@@ -328,7 +328,12 @@ enum {
 	FLAG_AUTO_RECEIVE_BUFFER_SIZE = 0x100,
 	FLAG_CAN_NOTIFY 			= 0x200,
 	FLAG_USER_CLOSED			= 0x400,
-	FLAG_AUTO_SEND_BUFFER_SIZE	= 0x800
+	FLAG_AUTO_SEND_BUFFER_SIZE	= 0x800,
+	// ECN (RFC 3168) stage A: negotiation state only.
+	FLAG_ECN_SETUP_SENT			= 0x1000,
+		// initiator sent an ECN-setup SYN (ECE|CWR) and awaits confirmation
+	FLAG_ECN_NEGOTIATED			= 0x2000
+		// both ends agreed to ECN on this connection; latched on the handshake
 };
 
 
@@ -2013,6 +2018,18 @@ TCPEndpoint::_Spawn(TCPEndpoint* parent, tcp_segment_header& segment,
 
 	_PrepareReceivePath(segment);
 
+	// ECN (RFC 3168) stage A: if the peer's SYN is an ECN-setup SYN (ECE and
+	// CWR both set) and ECN is enabled, mark this connection ECN-capable so the
+	// SYN-ACK prepared below answers with an ECN-setup SYN-ACK (ECE only).
+	// Otherwise the connection stays non-ECN — a clean fallback.
+	if (gTCPExplicitCongestionNotification
+		&& (segment.flags & (TCP_FLAG_CONGESTION_NOTIFICATION_ECHO
+				| TCP_FLAG_CONGESTION_WINDOW_REDUCED))
+			== (TCP_FLAG_CONGESTION_NOTIFICATION_ECHO
+				| TCP_FLAG_CONGESTION_WINDOW_REDUCED)) {
+		fFlags |= FLAG_ECN_NEGOTIATED;
+	}
+
 	// send SYN+ACK
 	if (_SendAcknowledge() != B_OK) {
 		T(Error(this, "sending failed", __LINE__));
@@ -2072,6 +2089,19 @@ TCPEndpoint::_SynchronizeSentReceive(tcp_segment_header &segment,
 
 	if ((segment.flags & TCP_FLAG_SYNCHRONIZE) == 0)
 		return DROP;
+
+	// ECN (RFC 3168) stage A: confirm negotiation as the initiator. We
+	// requested ECN (FLAG_ECN_SETUP_SENT); the peer accepts by returning an
+	// ECN-setup SYN-ACK (ECE set, CWR clear). Any other response — including a
+	// SYN-ACK with ECE clear or a middlebox that stripped the bits — leaves the
+	// connection non-ECN (FLAG_ECN_NEGOTIATED stays clear), a graceful
+	// fallback. A simultaneous open (SYN carrying ECE|CWR, no ACK) also falls
+	// back to non-ECN here; that is safe and refined in a later stage.
+	if ((fFlags & FLAG_ECN_SETUP_SENT) != 0
+		&& (segment.flags & TCP_FLAG_CONGESTION_NOTIFICATION_ECHO) != 0
+		&& (segment.flags & TCP_FLAG_CONGESTION_WINDOW_REDUCED) == 0) {
+		fFlags |= FLAG_ECN_NEGOTIATED;
+	}
 
 	fSendUnacknowledged = segment.acknowledge;
 	_PrepareReceivePath(segment);
@@ -2539,6 +2569,25 @@ TCPEndpoint::_PrepareSendSegment()
 	}
 
 	tcp_segment_header segment(flags);
+
+	// ECN (RFC 3168) stage A negotiation. The ECN-setup SYN carries ECE|CWR;
+	// the ECN-setup SYN-ACK carries ECE only. These bits ride the SYN/SYN-ACK
+	// as negotiation signals; the SYN/SYN-ACK segments themselves stay Not-ECT
+	// and no data-phase ECT marking or CE echo happens in this stage.
+	if (gTCPExplicitCongestionNotification) {
+		if (fState == SYNCHRONIZE_SENT) {
+			// Initiator: request ECN on every (re)transmitted SYN so the
+			// request stays consistent if the first SYN is lost.
+			segment.flags |= TCP_FLAG_CONGESTION_NOTIFICATION_ECHO
+				| TCP_FLAG_CONGESTION_WINDOW_REDUCED;
+			fFlags |= FLAG_ECN_SETUP_SENT;
+		} else if (fState == SYNCHRONIZE_RECEIVED
+				&& (fFlags & FLAG_ECN_NEGOTIATED) != 0) {
+			// Responder: the peer offered ECN (latched in _Spawn), so answer
+			// with an ECN-setup SYN-ACK (ECE set, CWR clear).
+			segment.flags |= TCP_FLAG_CONGESTION_NOTIFICATION_ECHO;
+		}
+	}
 
 	if ((fOptions & TCP_NOOPT) == 0) {
 		if ((fFlags & FLAG_OPTION_TIMESTAMP) != 0) {
@@ -3296,5 +3345,8 @@ TCPEndpoint::Dump() const
 	kprintf("  retransmit timeout: %" B_PRId64 "\n", fRetransmitTimeout);
 	kprintf("  congestion window: %" B_PRIu32 "\n", fCongestionWindow);
 	kprintf("  slow start threshold: %" B_PRIu32 "\n", fSlowStartThreshold);
+	kprintf("  ecn: %s%s\n",
+		(fFlags & FLAG_ECN_NEGOTIATED) != 0 ? "negotiated" : "off",
+		(fFlags & FLAG_ECN_SETUP_SENT) != 0 ? " (setup-sent)" : "");
 }
 
