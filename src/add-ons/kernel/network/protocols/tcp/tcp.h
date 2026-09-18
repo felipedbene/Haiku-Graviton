@@ -177,8 +177,11 @@ operator==(tcp_sequence a, tcp_sequence b)
 #define TCP_FLAG_PUSH					0x08
 #define TCP_FLAG_ACKNOWLEDGE			0x10
 #define TCP_FLAG_URGENT					0x20
-#define TCP_FLAG_CONGESTION_NOTIFICATION_ECHO	0x40
-#define TCP_FLAG_CONGESTION_WINDOW_REDUCED		0x80
+#define TCP_FLAG_CONGESTION_NOTIFICATION_ECHO	0x40	// ECE (RFC 3168)
+#define TCP_FLAG_CONGESTION_WINDOW_REDUCED		0x80	// CWR (RFC 3168)
+// ECN handshake (RFC 3168 section 6.1.1): an ECN-setup SYN carries ECE|CWR;
+// an ECN-setup SYN-ACK carries ECE only (CWR clear). On the SYN/SYN-ACK these
+// two bits are negotiation flags, distinct from their data-phase meaning.
 
 #define TCP_CONNECTION_TIMEOUT			75000000	// 75 secs
 #define TCP_DELAYED_ACKNOWLEDGE_TIMEOUT	100000		// 100 msecs
@@ -291,6 +294,11 @@ extern net_buffer_module_info* gBufferModule;
 extern net_datalink_module_info* gDatalinkModule;
 extern net_socket_module_info* gSocketModule;
 extern net_stack_module_info* gStackModule;
+
+// ECN (RFC 3168) master switch, read once from driver settings at module init.
+// Default OFF: stage A implements handshake negotiation only, so gating it off
+// keeps the wire behaviour identical until the later ECN stages land.
+extern bool gTCPExplicitCongestionNotification;
 
 
 EndpointManager* get_endpoint_manager(net_domain* domain);

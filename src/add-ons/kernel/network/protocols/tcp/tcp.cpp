@@ -16,6 +16,7 @@
 #include <net_protocol.h>
 #include <net_stat.h>
 
+#include <driver_settings.h>
 #include <KernelExport.h>
 #include <util/list.h>
 
@@ -47,6 +48,8 @@ net_buffer_module_info *gBufferModule;
 net_datalink_module_info *gDatalinkModule;
 net_socket_module_info *gSocketModule;
 net_stack_module_info *gStackModule;
+
+bool gTCPExplicitCongestionNotification = false;
 
 
 static EndpointManager* sEndpointManagers[AF_MAX];
@@ -846,6 +849,17 @@ static status_t
 tcp_init()
 {
 	rw_lock_init(&sEndpointManagersLock, "endpoint managers");
+
+	// ECN (RFC 3168) is gated behind the "ecn" boolean in the "tcp" driver
+	// settings and defaults OFF. Stage A only negotiates ECN on the handshake
+	// (no ECT marking on egress, no CE echo yet), so keeping it off by default
+	// means merging this change is a no-op on the wire until the later stages.
+	void* settings = load_driver_settings("tcp");
+	if (settings != NULL) {
+		gTCPExplicitCongestionNotification = get_driver_boolean_parameter(
+			settings, "ecn", false, true);
+		unload_driver_settings(settings);
+	}
 
 	status_t status = gStackModule->register_domain_protocols(AF_INET,
 		SOCK_STREAM, 0,

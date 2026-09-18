@@ -972,15 +972,21 @@ ServerWindow::_DispatchMessage(int32 code, BPrivate::LinkReceiver& link)
 			DTRACE(("ServerWindow %s: Message AS_SET_DECORATOR_SETTINGS\n",
 				Title()));
 
+			// size is client-controlled: reject non-positive values and
+			// allocate on the heap so an oversized request fails with a NULL
+			// pointer instead of displacing the stack pointer by an arbitrary
+			// amount (a stack-clash / DoS otherwise). Mirrors the drag handlers.
 			int32 size;
-			if (fWindow.IsSet() && link.Read<int32>(&size) == B_OK) {
-				char buffer[size];
-				if (link.Read(buffer, size) == B_OK) {
+			if (fWindow.IsSet() && link.Read<int32>(&size) == B_OK
+				&& size > 0) {
+				char* buffer = new (nothrow) char[size];
+				if (buffer != NULL && link.Read(buffer, size) == B_OK) {
 					BMessage settings;
 					if (settings.Unflatten(buffer) == B_OK)
 						fDesktop->SetWindowDecoratorSettings(
 							fWindow.Get(), settings);
 				}
+				delete[] buffer;
 			}
 			break;
 		}

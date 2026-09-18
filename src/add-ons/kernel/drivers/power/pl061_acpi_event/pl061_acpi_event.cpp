@@ -283,7 +283,13 @@ pl061_dispatch_events(void* data)
 		if ((pending & (1 << event.pin)) == 0)
 			continue;
 
-		TRACE("running %s for pin %u\n", event.method, event.pin);
+		// Log this at INFO, not TRACE. A GPIO event here is rare -- on a Nitro
+		// guest it is the hypervisor's stop/reboot request arriving as the
+		// platform power button -- so it costs nothing to record, and it is the
+		// only externally visible sign that the inbound reset path fired at all.
+		// Without it the whole chain is silent, which is exactly what made this
+		// path impossible to tell apart from a no-op when verifying it.
+		INFO("pin %u signalled; running %s\n", event.pin, event.method);
 		status_t status = sAcpi->evaluate_method(bus->handle, event.method,
 			NULL, NULL);
 		if (status != B_OK) {

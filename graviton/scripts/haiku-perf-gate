@@ -66,6 +66,23 @@
 #     never went down, so it says nothing about whether the image's writes
 #     actually reached the disk; a stop/start is the only thing that does. See
 #     the long comment on that section for the bug this exists to catch.
+#   - Two storage assertions (issue #112), described in
+#     graviton/docs/storage-perf-gate-proposal.md. (1) A depth-8 sequential-read
+#     floor on a provisioned scratch volume -- the NVMe/devfs/DMA read path that a
+#     driver regression would show up in. It is OPT-IN (HG_SEQREAD_ASSERT=1) and
+#     OFF by default because it needs a scratch volume gp3 provisioned to
+#     ~1000 MiB/s AND an instance with the EBS bandwidth to reach the floor:
+#     measured depth-8 seqread is ~1006 MiB/s sustained on c7g.4xlarge but the
+#     root volume caps at the gp3 default 125 MiB/s (measured 128.8), and
+#     c7g.large's EBS baseline is only 78.75 MB/s, so a 900 MiB/s floor would fail
+#     every image on those by construction rather than on a regression. (2) A
+#     durability check -- a stamped payload written to the root filesystem and
+#     fsync'd, its checksum recorded ON THE HARNESS, then re-checked after the
+#     stop/start above. This is the assertion that would have caught the bug this
+#     project actually shipped (an sshd host key that came back present-but-zeroed
+#     after a stop/start). It is ON by default: it adds no AWS permissions, needs
+#     no scratch volume, reuses the stop/start the gate already performs, and
+#     works on any instance type.
 #
 # Usage: haiku-perf-gate <ami-id>
 #
@@ -113,6 +130,34 @@
 #   HG_CLEAN_STOP_SECS    a stop at or past this looks like a hard power-off
 #                         rather than a handled ACPI power button (default 180)
 #
+# Storage assertions (issue #112 -- see graviton/docs/storage-perf-gate-proposal.md):
+#   HG_DURABILITY_ASSERT  1 (default) runs the durability check; 0 disables it.
+#                         Safe on any instance type; adds no AWS permissions.
+#   HG_SEQREAD_ASSERT     1 attaches a scratch volume and asserts the depth-8
+#                         sequential-read floor; 0 (default) skips it. OFF by
+#                         default because it needs a c7g.4xlarge-class instance
+#                         (EBS bandwidth) and the run-instances role must be
+#                         allowed to create the attached volume -- see the proposal
+#                         doc. On the pipeline's default c7g.large it would fail on
+#                         a bandwidth limit, not a regression.
+#   HG_MIN_SEQREAD_MIBPS  depth-8 seqread floor in MiB/s (default 900). Measured
+#                         ~1006 MiB/s sustained on c7g.4xlarge with a 1000 MiB/s
+#                         scratch volume on 2026-09-18; 900 is a ~10% margin.
+#   HG_SEQREAD_DEPTH      concurrent readers = queue depth (default 8). Depth 1 is
+#                         device latency and passes through most regressions;
+#                         depth 16 is already clipped by the volume ceiling.
+#   HG_SEQREAD_SECS       seconds per seqread cell (default 120; 15 s overstates a
+#                         saturated row by ~6% on this class of volume).
+#   HG_STORAGE_SPAN       scratch span written-then-read (default 64G). The span is
+#                         written in full before the read -- an unwritten gp3 block
+#                         reads back as zeros without the backend being touched.
+#   HG_SCRATCH_DEV        raw scratch device on the node (default
+#                         /dev/disk/nvme/1/raw; the root is nvme/0).
+#   HG_SCRATCH_SIZE_GIB / HG_SCRATCH_IOPS / HG_SCRATCH_MIBPS
+#                         scratch provisioning (default 100 GiB / 16000 IOPS /
+#                         1000 MiB/s -- gp3's throughput ceiling).
+#   HG_DUR_BYTES          durability payload size (default 64M).
+#
 # Every wait is bounded by a wall-clock budget rather than an attempt count, so
 # the script has a knowable ceiling and the CodeBuild timeout can be set from it
 # instead of guessed at. Worst case is roughly boot + measure + stop + start +
@@ -143,6 +188,21 @@ BUILDER_WAIT="${HG_BUILDER_WAIT_SECS:-300}"
 STOP_WAIT="${HG_STOP_WAIT_SECS:-600}"
 START_WAIT="${HG_START_WAIT_SECS:-300}"
 CLEAN_STOP="${HG_CLEAN_STOP_SECS:-180}"
+
+# ---- storage assertions (issue #112) -- see the header and the proposal doc ---
+# Durability defaults ON (safe anywhere, no new permissions); the seqread floor is
+# opt-in because it needs a scratch volume and the EBS bandwidth to reach the floor.
+DURABILITY_ASSERT="${HG_DURABILITY_ASSERT:-1}"
+SEQREAD_ASSERT="${HG_SEQREAD_ASSERT:-0}"
+MIN_SEQREAD="${HG_MIN_SEQREAD_MIBPS:-900}"
+SEQREAD_DEPTH="${HG_SEQREAD_DEPTH:-8}"
+SEQREAD_SECS="${HG_SEQREAD_SECS:-120}"
+STORAGE_SPAN="${HG_STORAGE_SPAN:-64G}"
+SCRATCH_DEV="${HG_SCRATCH_DEV:-/dev/disk/nvme/1/raw}"
+SCRATCH_GIB="${HG_SCRATCH_SIZE_GIB:-100}"
+SCRATCH_IOPS="${HG_SCRATCH_IOPS:-16000}"
+SCRATCH_MIBPS="${HG_SCRATCH_MIBPS:-1000}"
+DUR_BYTES="${HG_DUR_BYTES:-64M}"
 
 here=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
 SSM_RUN="$here/ssm-run"
@@ -446,10 +506,25 @@ ensure_builder_reachable
 [ "$PEER_LAUNCHED" = 1 ] && wait_for_peer_ready
 
 # ------------------------------------------------------------------ launch
+# When the seqread assertion is on, the candidate gets a dedicated scratch volume
+# at LAUNCH (not hot-attached): the arm64 NVMe driver reads its disk topology once
+# at boot, so a volume attached to a running node is never enumerated. The volume
+# is DeleteOnTermination, so the existing EXIT-trap terminate reaps it -- no extra
+# cleanup and no create/attach/detach dance. It appears as $SCRATCH_DEV (nvme/1).
+# The pipeline's run-instances grant must allow creating this attached volume; the
+# live role runs on c7g.large with the assertion off, so nothing changes for it.
+STORAGE_BDM=()
+if [ "$SEQREAD_ASSERT" != 0 ]; then
+	STORAGE_BDM=(--block-device-mappings \
+		"DeviceName=/dev/sdf,Ebs={VolumeSize=$SCRATCH_GIB,VolumeType=gp3,Iops=$SCRATCH_IOPS,Throughput=$SCRATCH_MIBPS,DeleteOnTermination=true}")
+	say "seqread assertion ON: attaching a ${SCRATCH_GIB} GiB gp3 scratch at /dev/sdf ($SCRATCH_IOPS IOPS / $SCRATCH_MIBPS MiB/s)"
+fi
+
 say "launching $TEST_TYPE from $AMI"
 INSTANCE=$(aws --region "$REGION" ec2 run-instances \
 	--image-id "$AMI" --instance-type "$TEST_TYPE" \
 	--key-name "$KEY_NAME" --subnet-id "$SUBNET" --security-group-ids "$TEST_SG" \
+	${STORAGE_BDM[@]+"${STORAGE_BDM[@]}"} \
 	--tag-specifications "ResourceType=instance,Tags=[{Key=Project,Value=haiku-graviton},{Key=Name,Value=haiku-perf-gate},{Key=ephemeral,Value=true}]" \
 	--query 'Instances[0].InstanceId' --output text 2>&1)
 case "$INSTANCE" in
@@ -828,6 +903,171 @@ fi
 [ "$fail" = 0 ] || die "performance gate failed for $AMI"
 say "throughput OK: boots, negotiates jumbo, and meets both floors"
 
+# ------------------------------------------------ storage: depth-8 seqread floor
+# Issue #112, assertion 1. The NVMe submission/completion path, the DMA
+# restrictions and devfs are exactly what a driver regression touches, and a
+# depth-8 sequential read is where such a regression shows: depth 1 is pure device
+# latency (it passes through almost anything), depth 16 is already clipped by the
+# volume ceiling in both directions. Measured on 2026-09-18 on c7g.4xlarge from the
+# then-canonical AMI with a 1000 MiB/s scratch: 1006.2 / 1006.4 MiB/s sustained
+# over two 120 s cells (173 / 687 / 1006 / 1007 at depth 1/4/8/16), at the volume
+# ceiling. The same read on the ROOT device measured 128.8 MiB/s -- the gp3 default
+# 125 MiB/s cap -- which is why this runs on a provisioned scratch volume and never
+# on the root. Floor 900 MiB/s is a ~10% margin under the sustained figure.
+#
+# OFF by default (see the header): it needs the scratch volume attached above AND
+# an instance with the EBS bandwidth to reach the floor. When the instance cannot
+# physically reach the floor, a below-floor result is a WARNING, not a FAIL -- a
+# gate that fails a healthy image on a bandwidth limit gets switched off.
+if [ "$SEQREAD_ASSERT" != 0 ]; then
+	say "----------------------------------------"
+	say "storage seqread check (depth $SEQREAD_DEPTH, floor $MIN_SEQREAD MiB/s on $SCRATCH_DEV)"
+
+	# Can this instance type physically reach the floor at all? EBS max throughput
+	# is a hard ceiling you cannot exceed on burst or otherwise. If it is below the
+	# floor, a below-floor read is the apparatus, not the image.
+	ebs_max_mbps=$(aws --region "$REGION" ec2 describe-instance-types \
+		--instance-types "$TEST_TYPE" \
+		--query 'InstanceTypes[0].EbsInfo.EbsOptimizedInfo.MaximumThroughputInMBps' \
+		--output text 2>/dev/null)
+	cap_ok=1
+	case "$ebs_max_mbps" in
+		''|None|*[!0-9.]*) say "  (could not read $TEST_TYPE EBS max throughput; treating floor as advisory)"; cap_ok=0 ;;
+		*)
+			# MB/s -> MiB/s, integer, and compare with the floor.
+			ebs_max_mib=$(awk -v m="$ebs_max_mbps" 'BEGIN{printf "%d", m*1000000/1048576}')
+			say "  $TEST_TYPE EBS max throughput ~${ebs_max_mib} MiB/s"
+			awk -v a="$ebs_max_mib" -v b="$MIN_SEQREAD" 'BEGIN{exit !(a>=b)}' || cap_ok=0
+			;;
+	esac
+
+	# Re-read the scratch provisioning rather than trusting the launch request: a
+	# floor whose volume silently drifted below spec is worse than no floor.
+	scratch_vol=$(aws --region "$REGION" ec2 describe-instances --instance-ids "$INSTANCE" \
+		--query "Reservations[0].Instances[0].BlockDeviceMappings[?DeviceName=='/dev/sdf'].Ebs.VolumeId | [0]" \
+		--output text 2>/dev/null)
+	case "$scratch_vol" in
+		vol-*)
+			read -r got_iops got_tput < <(aws --region "$REGION" ec2 describe-volumes \
+				--volume-ids "$scratch_vol" \
+				--query 'Volumes[0].[Iops,Throughput]' --output text 2>/dev/null)
+			say "  scratch $scratch_vol: ${got_iops:-?} IOPS / ${got_tput:-?} MiB/s provisioned"
+			if [ "${got_tput:-0}" != "$SCRATCH_MIBPS" ] || [ "${got_iops:-0}" != "$SCRATCH_IOPS" ]; then
+				say "  WARNING: scratch provisioning is not $SCRATCH_IOPS IOPS / $SCRATCH_MIBPS MiB/s;"
+				say "  the floor was calibrated against that spec, so treat the number as advisory"
+				warn=1; cap_ok=0
+			fi
+			;;
+		*) say "  WARNING: no /dev/sdf scratch volume on the candidate -- the seqread will report absent" ;;
+	esac
+
+	sr=$("$SSM_RUN" "$BUILDER" -t 700 -q 2>&1 <<-EOF
+		SO="-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ConnectTimeout=8 -o LogLevel=ERROR -i /home/ubuntu/.ssh/haiku-ed25519"
+		sudo -u ubuntu ssh -n \$SO baron@$IP '
+			set -u
+			DEV="$SCRATCH_DEV"
+			if [ ! -e "\$DEV" ]; then echo "GATE_SR_DEV absent"; exit 0; fi
+			echo "GATE_SR_DEV present"
+			if [ ! -x /bin/disktput ]; then echo "GATE_SR_TOOL absent"; exit 0; fi
+			echo "GATE_SR_TOOL present"
+			# Write the whole span before reading it: an unwritten gp3 block reads
+			# back as zeros WITHOUT the backend being touched, which would pass the
+			# floor while measuring nothing. Not optional.
+			/bin/disktput -f "\$DEV" -m seqwrite -b 1M -t 16 -n $STORAGE_SPAN -s $STORAGE_SPAN -y >/dev/null 2>&1 \
+				&& echo "GATE_SR_INIT ok" || echo "GATE_SR_INIT fail"
+			/bin/disktput -f "\$DEV" -m seqread -b 256K -t $SEQREAD_DEPTH -T $SEQREAD_SECS -s $STORAGE_SPAN -J 2>&1 | grep "^DISKTPUT"
+		' 2>/dev/null
+		EOF
+	)
+	printf '%s\n' "$sr" | grep -E '^GATE_SR|^DISKTPUT' | sed 's/^/  /'
+	sr_rate=$(printf '%s' "$sr" | awk -F'\t' '$1=="DISKTPUT"{print $6; exit}')
+
+	if printf '%s' "$sr" | grep -q 'GATE_SR_DEV absent'; then
+		say "WARNING: $SCRATCH_DEV is not present on the candidate -- the scratch volume"
+		say "  was not attached or not enumerated at boot. The seqread floor did not run."
+		warn=1
+	elif printf '%s' "$sr" | grep -q 'GATE_SR_TOOL absent'; then
+		say "WARNING: /bin/disktput is not in this image, so the seqread floor did not run."
+		say "  It is wired into build/jam/packages/Haiku next to ena_fault/mprotect_probe;"
+		say "  an image without it predates that and is unverified here."
+		warn=1
+	elif [ -z "$sr_rate" ]; then
+		say "FAIL: the seqread produced no DISKTPUT result line at all"
+		die "storage seqread gate failed for $AMI"
+	else
+		say "  depth-$SEQREAD_DEPTH seqread: $sr_rate MiB/s (floor $MIN_SEQREAD)"
+		if awk -v a="$sr_rate" -v b="$MIN_SEQREAD" 'BEGIN{exit !(a>=b)}'; then
+			say "seqread OK: $sr_rate MiB/s meets the $MIN_SEQREAD MiB/s floor"
+		elif [ "$cap_ok" != 1 ]; then
+			say "WARNING: $sr_rate MiB/s is below the $MIN_SEQREAD MiB/s floor, but this"
+			say "  instance/volume cannot be shown to reach it (EBS bandwidth or scratch"
+			say "  provisioning), so this is NOT read as a regression. Run the seqread"
+			say "  assertion on c7g.4xlarge with a 1000 MiB/s scratch to make the floor bite."
+			warn=1
+		else
+			say "FAIL: depth-$SEQREAD_DEPTH seqread $sr_rate MiB/s is below the $MIN_SEQREAD MiB/s floor"
+			say "  This instance can reach the floor (EBS max above it) and the scratch is"
+			say "  provisioned to spec, so this is a storage regression. Suspect the NVMe"
+			say "  submission/completion path (nvme_disk.cpp), the DMA restrictions, or devfs."
+			die "storage seqread gate failed for $AMI"
+		fi
+	fi
+fi
+
+# ------------------------------------------------ storage: durability write phase
+# Issue #112, assertion 2. This is the assertion that would have caught the bug
+# this project actually shipped: an sshd host key that came back after a stop/start
+# with the right size, mode and mtime and 411 bytes of zeros in it, because the
+# page writer never flushed a short modified-page queue. A length check would have
+# missed it; -P stamps every block with its own offset so a later verify tells
+# "never written" (zero) from "some other block" (stale) from "damaged" (corrupt).
+#
+# Written to the ROOT filesystem on purpose -- that is the volume the historical
+# failure was on, and it needs no scratch. fsync'd (-S) and sync'd here because the
+# task is to prove the SYNCED path is durable across a power cut; the UNSYNCED
+# periodic-flush path is already exercised by the sshd-host-key half of the
+# stop/start check below. The checksum is captured HERE, on the harness, so the
+# post-boot verdict never depends on a file the node writes and then reads.
+DUR_TOOL=absent
+DUR_SHA=""
+DUR_SIZE=""
+if [ "$DURABILITY_ASSERT" != 0 ]; then
+	say "----------------------------------------"
+	say "durability write phase (stamped payload on the root FS, fsync'd -- issue #112)"
+	dur=$("$SSM_RUN" "$BUILDER" -t 300 -q 2>&1 <<-EOF
+		SO="-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ConnectTimeout=8 -o LogLevel=ERROR -i /home/ubuntu/.ssh/haiku-ed25519"
+		sudo -u ubuntu ssh -n \$SO baron@$IP '
+			set -u
+			d=/boot/home/.gate-durability
+			rm -rf "\$d" && mkdir -p "\$d"
+			if [ ! -x /bin/disktput ]; then echo "GATE_DUR_TOOL absent"; exit 0; fi
+			echo "GATE_DUR_TOOL present"
+			/bin/disktput -f "\$d/probe" -m seqwrite -b 256K -n $DUR_BYTES -s $DUR_BYTES -P -S >/dev/null 2>&1 \
+				&& echo "GATE_DUR_WRITE ok" || echo "GATE_DUR_WRITE fail"
+			sync
+			echo "GATE_DUR_SHA \$(sha256sum "\$d/probe" 2>/dev/null | cut -d\" \" -f1)"
+			echo "GATE_DUR_SIZE \$(stat -c %s "\$d/probe" 2>/dev/null)"
+		' 2>/dev/null
+		EOF
+	)
+	printf '%s\n' "$dur" | grep '^GATE_DUR' | sed 's/^/  /'
+	dur_field() { printf '%s' "$dur" | sed -n "s/^GATE_DUR_$1 //p" | tail -1; }
+	DUR_TOOL=$(dur_field TOOL)
+	DUR_SHA=$(dur_field SHA)
+	DUR_SIZE=$(dur_field SIZE)
+	if [ "$DUR_TOOL" != present ]; then
+		say "WARNING: /bin/disktput is not in this image, so the durability check cannot run."
+		say "  The stop/start below still catches a wholesale unflushed root FS (no sshd),"
+		say "  but the stamped-payload verify that distinguishes zero/stale/corrupt is skipped."
+		warn=1
+	elif [ -z "$DUR_SHA" ] || [ "${DUR_SIZE:-0}" = 0 ]; then
+		say "FAIL: the durability payload was not written before the stop/start"
+		die "storage durability gate failed for $AMI (write phase)"
+	else
+		say "durability payload written: $DUR_SIZE bytes, sha256 ${DUR_SHA:0:12}... recorded on the harness"
+	fi
+fi
+
 # ------------------------------------------------- stop/start regression check
 # Haiku could not survive an EC2 stop/start, and nothing above would ever have
 # noticed. The instance came back answering ping in 0.17 ms with nothing
@@ -1050,6 +1290,61 @@ if [ "$attempt" -gt 1 ]; then
 	say "WARNING: above and the console log; do not assume a hardware intermittent."
 fi
 
+# ------------------------------------------------ storage: durability verify phase
+# Issue #112, assertion 2, the half that renders the verdict. The payload was
+# written and its checksum recorded on the harness BEFORE the stop/start; the node
+# has now been through a genuine power cut (DeBeOS does not act on the inbound ACPI
+# request, so an EC2 stop cuts power rather than unmounting cleanly). Re-read it and
+# require it back byte-for-byte: same size, same sha256 as recorded here, and zero
+# bad blocks from -m verify (which distinguishes zero / stale / corrupt). Only runs
+# when the write phase actually stamped a payload.
+if [ "$DURABILITY_ASSERT" != 0 ] && [ "$DUR_TOOL" = present ] && [ -n "$DUR_SHA" ]; then
+	say "----------------------------------------"
+	say "durability verify phase (did the synced payload survive the power cut? -- #112)"
+	durv=$("$SSM_RUN" "$BUILDER" -t 300 -q 2>&1 <<-EOF
+		SO="-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ConnectTimeout=8 -o LogLevel=ERROR -i /home/ubuntu/.ssh/haiku-ed25519"
+		sudo -u ubuntu ssh -n \$SO baron@$IP '
+			set -u
+			d=/boot/home/.gate-durability
+			echo "GATE_DURV_SIZE \$(stat -c %s "\$d/probe" 2>/dev/null)"
+			echo "GATE_DURV_SHA \$(sha256sum "\$d/probe" 2>/dev/null | cut -d\" \" -f1)"
+			/bin/disktput -f "\$d/probe" -m verify -b 256K -n $DUR_BYTES -s $DUR_BYTES -P 2>&1 \
+				| grep -E "^[[:space:]]*(verify|VERDICT)"
+			rm -rf "\$d"
+		' 2>/dev/null
+		EOF
+	)
+	printf '%s\n' "$durv" | grep -E '^GATE_DURV|verify|VERDICT' | sed 's/^/  /'
+	durv_sha=$(printf '%s' "$durv" | sed -n 's/^GATE_DURV_SHA //p' | tail -1)
+	durv_size=$(printf '%s' "$durv" | sed -n 's/^GATE_DURV_SIZE //p' | tail -1)
+	durv_bad=$(printf '%s' "$durv" | sed -n 's/^[[:space:]]*verify[[:space:]]*:[[:space:]]*\([0-9]*\) of .*/\1/p' | tail -1)
+
+	dfail=0
+	if [ "${durv_size:-none}" != "$DUR_SIZE" ]; then
+		say "FAIL: payload size changed across the stop/start ($DUR_SIZE -> ${durv_size:-none})"
+		dfail=1
+	fi
+	if [ -z "$durv_sha" ] || [ "$durv_sha" != "$DUR_SHA" ]; then
+		say "FAIL: payload sha256 changed across the stop/start (recorded ${DUR_SHA:0:12}..., read ${durv_sha:-none})"
+		dfail=1
+	fi
+	case "$durv_bad" in
+		0) ;;
+		'') say "FAIL: the verify produced no block-classification line"; dfail=1 ;;
+		*) say "FAIL: $durv_bad blocks did not survive the stop/start (see zero/stale/corrupt above)"; dfail=1 ;;
+	esac
+
+	if [ "$dfail" = 0 ]; then
+		say "durability OK: the synced payload came back byte-for-byte across a stop/start"
+		say "  ($DUR_SIZE bytes, sha256 matches, 0 bad blocks)"
+	else
+		say "  This is the present-but-zeroed data-loss signature this assertion exists for:"
+		say "  data acknowledged before a power cut was not on the device after it. See the"
+		say "  page-writer periodic-flush fix (vm_page_writer.cpp / file_cache.cpp)."
+		die "storage durability gate failed for $AMI (verify phase)"
+	fi
+fi
+
 # ------------------------------------------------------------------- verdict
 say "----------------------------------------"
 if [ "$warn" = 1 ]; then
@@ -1063,4 +1358,8 @@ fi
 say "PASS: $AMI boots, negotiates jumbo, meets both floors, types files with"
 say "  mimeset, survives the mprotect probe, shuts down cleanly in ${stop_secs}s, and comes back from a"
 say "  stop/start with sshd answering"
+[ "$DURABILITY_ASSERT" != 0 ] && [ "$DUR_TOOL" = present ] \
+	&& say "  -- and a synced payload survived the stop/start byte-for-byte (durability, #112)"
+[ "$SEQREAD_ASSERT" != 0 ] \
+	&& say "  -- and depth-$SEQREAD_DEPTH sequential read met the $MIN_SEQREAD MiB/s floor (#112)"
 exit 0
