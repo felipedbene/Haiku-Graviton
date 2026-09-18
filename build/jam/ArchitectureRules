@@ -50,6 +50,20 @@ rule ArchitectureSetup architecture
 		# present on every Graviton, and is what lets accelerated checksum and
 		# crypto code be built without touching this line again.
 		case arm64 : archFlags += -mcpu=neoverse-n1+crypto ;
+			# N1 is deliberate and stays the fleet-portable baseline: the
+			# OS and base packages are built once and must boot on every
+			# Graviton, including Graviton2 and t4g (both Neoverse-N1). Do
+			# NOT raise this to neoverse-v1 (Graviton3) or neoverse-v2
+			# (Graviton4): those cores are ARMv8.4-A and add SVE/SVE2 plus
+			# NEON BF16 and I8MM, none of which Neoverse-N1 implements, so a
+			# raised baseline would emit instructions that fault on Graviton2
+			# and t4g. (The kernel itself runs NEON-only at EL1 and never
+			# executes SVE; SVE is enabled for userland/EL0 with per-thread
+			# save/restore -- arch_sve_init_percpu(), commit 50f6a9be53, #88.)
+			# Individual ML/codec ports that want the Graviton3/4 ISA opt in
+			# per-recipe as non-portable _g3/_g4 variants, per the convention
+			# in graviton/docs/porting-playbook.md ("Graviton3/4 ISA opt-in"),
+			# never by editing this line.
 		case x86 : archFlags += -march=pentium ;
 		case riscv64 : archFlags += -march=rv64gc ;
 	}

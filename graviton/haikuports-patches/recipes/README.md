@@ -159,6 +159,40 @@ a source-porting item.
 
 Cross-links issue **#136**. Not merged pending human CR.
 
+## Graviton3/4 ISA opt-in for ML/codec recipes (`_g3` / `_g4`)
+
+A recipe that wants the Graviton3 (Neoverse-V1) or Graviton4 (Neoverse-V2)
+instruction set — BF16, I8MM and SVE/SVE2, the paths ggml/llama.cpp and OpenBLAS
+microkernels use — opts in **per-recipe**. The system baseline is not touched: it
+stays `-mcpu=neoverse-n1+crypto` (`build/jam/ArchitectureRules`) so the OS and base
+packages keep booting on Graviton2 and t4g.
+
+The idiom, gated on arm64 in `BUILD()`:
+
+```sh
+case "$targetArchitecture" in
+	arm64)
+		debeosMcpu="-mcpu=neoverse-v1+crypto"   # neoverse-v2 for a _g4 variant
+		export CFLAGS="$CFLAGS -O2 $debeosMcpu"
+		export CXXFLAGS="$CXXFLAGS -O2 $debeosMcpu"
+		;;
+esac
+```
+
+`+crypto` is **re-carried** — a second `-mcpu` fully replaces the baseline's, and
+crypto is never a compiler default. SVE is **not** suppressed: it is now enabled for
+userland/EL0 with per-thread save/restore (commit `50f6a9be53`, #88), so a userland
+ML port may emit it. (The older "SVE traps" note in
+[`../codec-tier-arm64.md`](../codec-tier-arm64.md) predates that and is superseded.)
+Such a build uses SVE + ARMv8.4 NEON that **faults on Neoverse-N1**, so it is a
+non-default variant: give it a `_g3` / `_g4` name suffix and only ship it to
+Graviton3+/Graviton4 targets — never as the plain fleet-portable package. Ports
+needing only V1/V2 *scheduling* while staying fleet-portable use `-mtune=neoverse-v1`
+(no ISA change, no suffix). Full rationale, the worked idiom, and the disassembly +
+on-hardware proof owed before publishing a `_g3`/`_g4` package are in
+[`../../docs/porting-playbook.md`](../../docs/porting-playbook.md) →
+"Graviton3/4 ISA opt-in".
+
 ## Two recipes here are kept only as history
 
 `autoconf-2.72.recipe` and `zstd-1.5.6.recipe` describe cuts that have been

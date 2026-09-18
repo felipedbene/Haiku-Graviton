@@ -1111,6 +1111,112 @@ Class 20), and the Class-18 midi/screensaver image-profile question.
 
 ---
 
+## Graviton3/4 ISA opt-in (per-recipe, NOT the baseline)
+
+This is the **opt-in path for ML and codec ports** — llama.cpp / ggml, OpenBLAS,
+libjpeg-turbo, x264, and the like — to build with the Graviton3 (Neoverse-V1) or
+Graviton4 (Neoverse-V2) instruction set. It is deliberately **per-recipe**. The
+system `-mcpu` baseline (`build/jam/ArchitectureRules`, `-mcpu=neoverse-n1+crypto`)
+and the userland `armv8.2-a` floor **do not change** — the OS and base packages stay
+bootable on Graviton2 and t4g (Neoverse-N1). Only a port that explicitly asks for it
+gets the newer ISA.
+
+### What the newer cores add
+
+Neoverse-V1 (G3) and Neoverse-V2 (G4) are ARMv8.4-A supersets of N1's ARMv8.2-A.
+Over the baseline they add, among others:
+
+- **BF16** (`FEAT_BF16`) — NEON `BFMMLA`/`BFDOT`/`BFCVT`.
+- **I8MM** (`FEAT_I8MM`) — NEON integer matrix-multiply `SMMLA`/`UMMLA`/`USMMLA`.
+- **SVE** (V1) / **SVE2** (V2) — scalable vectors.
+
+All three are wins for ML kernels: ggml/llama.cpp and OpenBLAS have hand-written
+aarch64 microkernels for both the NEON MMLA/BF16 path and the SVE path.
+
+**SVE is supported here — that changed.** Older notes in this tree
+(`graviton/docs/graviton-optimization-plan.md` "The `-mcpu` question, settled" and
+`haikuports-patches/codec-tier-arm64.md` "No SVE") say SVE traps because the kernel
+never cleared `CPACR_EL1.ZEN` and had no SVE save/restore. **That is stale.** Commit
+`50f6a9be53` ("arm64: enable SVE with EL0-only, off-stack context save/restore",
+#88) enables SVE for userland: `arch_sve_init_percpu()` (`arch_cpu.cpp`) clears the
+`CPACR_EL1.ZEN` trap on every SVE-capable core, the EL0 exception path in
+`arch_asm.S` saves/restores each thread's Z/P/FFR, and fork + signal frames carry the
+SVE state (`arch_thread.cpp`). The effective vector length is clamped to
+`SVE_MAX_VL_BYTES` = 32 (256-bit), which covers Graviton3 (256-bit SVE) and Graviton4
+(128-bit SVE2); SVE code is vector-length-agnostic, so a clamp only caps width, it
+does not miscompile. Userland SVE is exercised by `src/bin/sve_test/` (incl.
+`sve_fork_test.c`). The kernel itself still runs **NEON-only at EL1** and never
+executes SVE, so none of this touches the N1 baseline above. So a userland ML port
+**may** emit SVE now — you do not suppress it.
+
+### The idiom
+
+Add this to the port's `BUILD()` (or its CMake/configure flag list), gated on
+arm64, **before** the upstream build reads `CFLAGS`/`CXXFLAGS`:
+
+```sh
+# DeBeOS Graviton3/4 ISA opt-in (see graviton/docs/porting-playbook.md).
+# Neoverse-V1 = Graviton3; use neoverse-v2 for a Graviton4-only (_g4) variant.
+# Enables ARMv8.4-A + BF16 + I8MM + SVE/SVE2; NOT portable to Graviton2/t4g.
+case "$targetArchitecture" in
+	arm64)
+		debeosMcpu="-mcpu=neoverse-v1+crypto"
+		export CFLAGS="$CFLAGS -O2 $debeosMcpu"
+		export CXXFLAGS="$CXXFLAGS -O2 $debeosMcpu"
+		;;
+esac
+```
+
+Two things the flag string is doing, each load-bearing:
+
+1. **`neoverse-v1`** (or `neoverse-v2` for G4) selects the ARMv8.4-A core, which is
+   what turns on BF16, I8MM and SVE/SVE2.
+2. **`+crypto` is re-carried, not inherited.** A second `-mcpu` on the command line
+   **fully replaces** the baseline `-mcpu=neoverse-n1+crypto` (last `-mcpu` wins),
+   and `crypto` is never a compiler default — omit it and the port silently loses
+   AES/SHA/PMULL. Always spell `+crypto`.
+
+Keep the `-O2` — haikuporter's `runConfigure` rejects an overridden `CFLAGS` that
+carries no optimization level (playbook Class 15), and appending rather than
+replacing preserves any flags the recipe already set.
+
+### These are NOT fleet-portable packages — name them `_g3` / `_g4`
+
+A binary built this way uses SVE and ARMv8.4 NEON instructions (i8mm, bf16) that
+**Neoverse-N1 does not implement**, so it will **fault on Graviton2 and t4g**. That
+is expected and is the whole reason this is opt-in rather than the baseline. Such a
+package is a distinct, non-default variant: give it a `_g3` (Neoverse-V1) or `_g4`
+(Neoverse-V2) suffix in its package name / revision so it is never confused with the
+fleet-portable default, and only install/publish it where the target is known to be
+Graviton3+ (respectively Graviton4). Do not promote a `_g3`/`_g4` build into the
+default green pool as the plain package.
+
+### Portable middle tier: `-mtune` only (no ISA change)
+
+If a port wants Neoverse-V1/V2 **instruction scheduling** but must still run on the
+whole fleet, change tuning without changing the ISA:
+
+```sh
+export CFLAGS="$CFLAGS -O2 -mtune=neoverse-v1"    # runs on G2/t4g too; no new ISA
+```
+
+`-mtune` never raises the required instruction set (codec-tier-arm64.md: "`-mtune`
+is the safe knob"), so the result stays a normal fleet-portable package with no
+`_g3`/`_g4` suffix. Expected payoff on non-vector code is small; measure before
+shipping.
+
+### Verification owed
+
+The flag string is derived from the GCC 13.3 AArch64 manual; a live native
+compile-check on a Graviton builder — build an opting port, then `objdump -d` the
+shipped `.so` and confirm the intended extension is present (`smmla`/`ummla` for
+I8MM, `bfmmla`/`bfdot` for BF16, `ptrue`/`whilelo`/`z<n>.` operands for SVE) — plus a
+runtime smoke test of the `_g3`/`_g4` package **on Graviton3/4 hardware** is **owed**
+before publishing, per the "success is a disassembled `.so` (and a run), not an exit
+code" rule that `codec-tier-arm64.md` established for this exact class.
+
+---
+
 ## build_state=built ≠ published
 
 Two distinct states, and conflating them is a recurring error:
