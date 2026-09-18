@@ -6,6 +6,14 @@
 # banked Linux host-tools (`package`, `package_repo`), runs `haiku-repo-add` on
 # it, and terminates it again.
 #
+# LEGACY (#68 resolved): the Ubuntu peer is no longer required. `haiku-repo-add`
+# now runs natively on a Haiku arm64 box -- its bulk S3 + CloudFront calls route
+# through `haiku-aws`, which prefers the native `debeos-aws` client, and
+# `package`/`package_repo` are already Haiku host tools. Prefer
+# `haiku-repo-publish-native` (drive any running Haiku Graviton box, no Linux
+# peer). This script is kept as the Linux fallback for a host that has awscli but
+# not a Haiku box.
+#
 # Why Ubuntu, not Haiku (see #68): rebuilding the DeBeOS repo index needs BOTH
 #   (a) the `package`/`package_repo` tools, and
 #   (b) bulk S3 (the index rebuild pulls the ENTIRE published packages/ set --

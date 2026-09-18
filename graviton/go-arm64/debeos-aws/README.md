@@ -105,8 +105,20 @@ single-file GET: `debeos-ssm-agent s3 cp s3://.../debeos-aws /boot/home/debeos-a
 - **`s3<->s3` sync** and multi-source globbing beyond the publish path are not
   implemented (unneeded).
 
-## Next step to actually retire the peer
+## Peer retired (#68)
 
-Wire `haiku-repo-add` to prefer `debeos-aws` when it is on `PATH` and running on
-Haiku (falling back to `aws`), then run the whole publish natively on a Haiku
-box (which already has `package_repo`). This tool is the missing bulk-S3 half.
+`haiku-repo-add` now routes its `aws s3`/`aws cloudfront` calls through
+`graviton/scripts/haiku-aws`, which prefers `debeos-aws` on a Haiku box (and
+falls back to the stock `aws` on a Linux builder). The whole publish therefore
+runs natively on a Haiku Graviton box -- `package`/`package_repo` (native host
+tools) build the index, `debeos-aws` (via the EC2 instance role over IMDS) does
+the bulk S3 + CloudFront -- driven by `graviton/scripts/haiku-repo-publish-native`.
+No Ubuntu peer.
+
+Proven natively (Graviton c7g.large, Haiku hrev59996, instance role only): a
+from-empty publish of two hpkgs to a scratch prefix -- index rebuilt with
+`package_repo create`, packages + `repo`/`repo.info`/`repo.sha256` uploaded via
+`debeos-aws s3 sync`/`cp`, incoming pruned with `s3 rm`, and a
+`cloudfront create-invalidation` -- all on the Haiku box, then verified against
+S3. The legacy `haiku-repo-publish-ephemeral` (Ubuntu peer) is kept only as the
+Linux fallback.

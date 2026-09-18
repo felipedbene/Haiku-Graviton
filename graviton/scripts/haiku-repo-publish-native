@@ -1,0 +1,149 @@
+#!/usr/bin/env bash
+#
+# haiku-repo-publish-native -- publish one or more locally-held .hpkg to a DeBeOS
+# package repository by running the index rebuild + bulk S3 + CloudFront
+# invalidation ENTIRELY on a native Haiku arm64 (Graviton) box. This is the
+# no-Linux-peer replacement for haiku-repo-publish-ephemeral (#68 / finishing
+# #120): that script existed only because rebuilding the repo index needs bulk
+# S3 and a CloudFront invalidation, which Haiku could not do (no awscli, only a
+# single-file `debeos-ssm-agent s3 cp`). It therefore spun up a throwaway Ubuntu
+# peer with awscli. Both halves are now native on Haiku:
+#
+#   * the repo index -- `package` / `package_repo` are Haiku host tools that are
+#     already on the box, and
+#   * bulk S3 + CloudFront -- `debeos-aws` (graviton/go-arm64/debeos-aws), a
+#     native CGO-free Go client, driven through the `haiku-aws` front end that
+#     `haiku-repo-add` now routes its `aws` calls through.
+#
+# So the whole publish runs on a Haiku Graviton box authenticating via its EC2
+# instance role over IMDS -- no static keys, no Ubuntu peer. The box runs
+# `haiku-repo-add` UNCHANGED (only its S3/CF client provenance changed): the
+# incremental add is correct because it never shrinks the live set (it pulls the
+# whole published pool, adds/re-stamps the new package(s), and mirrors back with
+# --delete only superseded versions of the same name).
+#
+# Config (env only -- NO account-scoped names live in this tracked file):
+#   HG_REPO_S3        s3://<bucket>/<prefix>/<arch>  target repo prefix (required)
+#   HG_INCOMING_S3    s3://<bucket>/<prefix>         staging prefix for new hpkg (required)
+#   HG_CF_DIST        CloudFront distribution id to invalidate (optional, recommended)
+#   HG_REPO_URL       public base URL for repo.info (optional; haiku-repo-add default)
+#   ARCH              packaging arch (default arm64)
+#   AWS_DEFAULT_REGION / AWS_REGION (default us-west-2)
+#
+#   -- the native Haiku publish host --
+#   HG_PUBLISHER_INSTANCE  instance id of a RUNNING Haiku arm64 (Graviton) box that
+#                          is an SSM managed node and whose instance role can
+#                          read+write the repo bucket + incoming prefix and call
+#                          cloudfront:CreateInvalidation. Reused as-is and NEVER
+#                          terminated. This is the primary mode: point it at any
+#                          native builder that is already up.
+#   HG_DEBEOS_AWS_S3       s3:// uri of the native debeos-aws Haiku arm64 binary to
+#                          seed onto the box if it is not already on PATH (fetched
+#                          with the baked `debeos-ssm-agent s3 cp`). Optional if the
+#                          box already has debeos-aws.
+#   HG_PKG_TOOL / HG_PACKAGE_REPO_TOOL  override the Haiku tool paths on the box
+#                          (default: `package` / `package_repo` on PATH).
+#   HG_SSM_TIMEOUT         per-SSM-step wall-clock budget in seconds (default 2400).
+#
+# Usage: haiku-repo-publish-native <pkg1.hpkg> [<pkg2.hpkg> ...]
+#
+set -euo pipefail
+
+region="${AWS_DEFAULT_REGION:-${AWS_REGION:-us-west-2}}"
+ARCH="${ARCH:-arm64}"
+HERE="$(cd "$(dirname "$0")" && pwd)"
+SSM_RUN="$HERE/ssm-run"
+SSM_TIMEOUT="${HG_SSM_TIMEOUT:-2400}"
+
+log() { echo "haiku-repo-publish-native: $*"; }
+die() { echo "haiku-repo-publish-native: $*" >&2; exit 1; }
+
+: "${HG_REPO_S3:?set HG_REPO_S3=s3://<bucket>/<prefix>/$ARCH}"
+: "${HG_INCOMING_S3:?set HG_INCOMING_S3=s3://<bucket>/<prefix>}"
+: "${HG_PUBLISHER_INSTANCE:?set HG_PUBLISHER_INSTANCE=i-... (a running Haiku arm64 SSM node)}"
+[ $# -ge 1 ] || die "usage: $(basename "$0") <pkg.hpkg> [pkg.hpkg ...]"
+for f in "$@"; do [ -f "$f" ] || die "no such file: $f"; done
+[ -x "$SSM_RUN" ] || die "ssm-run not found next to this script"
+[ -f "$HERE/haiku-repo-add" ] || die "haiku-repo-add not found next to this script"
+[ -f "$HERE/haiku-aws" ] || die "haiku-aws not found next to this script"
+
+PUBLISHER="$HG_PUBLISHER_INSTANCE"
+PKG_TOOL="${HG_PKG_TOOL:-package}"
+PACKAGE_REPO_TOOL="${HG_PACKAGE_REPO_TOOL:-package_repo}"
+
+# ------------------------------------------------- confirm the box is Haiku + ready
+# The whole point is that this runs on Haiku, not a Linux peer; assert it, and
+# assert the native tools are present, before staging anything.
+log "checking publisher $PUBLISHER is a native Haiku box with the repo tools"
+ready=$("$SSM_RUN" "$PUBLISHER" -t 120 -q <<'PRECHK' || true
+uname -s
+command -v package        >/dev/null 2>&1 && echo HAVE_package        || echo NO_package
+command -v package_repo    >/dev/null 2>&1 && echo HAVE_package_repo    || echo NO_package_repo
+command -v debeos-aws      >/dev/null 2>&1 && echo HAVE_debeos_aws      || echo NO_debeos_aws
+command -v debeos-ssm-agent >/dev/null 2>&1 && echo HAVE_ssm_agent      || echo NO_ssm_agent
+PRECHK
+)
+printf '%s\n' "$ready" | sed 's/^/  /'
+case "$ready" in
+	*Haiku*) ;;
+	*) die "publisher $PUBLISHER does not report uname -s = Haiku -- refusing (this is the native path)" ;;
+esac
+printf '%s' "$ready" | grep -q HAVE_package       || die "no 'package' tool on $PUBLISHER"
+printf '%s' "$ready" | grep -q HAVE_package_repo   || die "no 'package_repo' tool on $PUBLISHER"
+
+# ------------------------------------------------- seed debeos-aws if missing
+if printf '%s' "$ready" | grep -q NO_debeos_aws; then
+	[ -n "${HG_DEBEOS_AWS_S3:-}" ] || die "debeos-aws is not on PATH on $PUBLISHER and HG_DEBEOS_AWS_S3 is unset"
+	printf '%s' "$ready" | grep -q HAVE_ssm_agent || die "cannot seed debeos-aws: neither debeos-aws nor debeos-ssm-agent is present on $PUBLISHER"
+	log "seeding debeos-aws from $HG_DEBEOS_AWS_S3 via the baked native S3 getter"
+	"$SSM_RUN" "$PUBLISHER" -t 300 <<SEED
+set -e
+/boot/system/bin/debeos-ssm-agent s3 cp '$HG_DEBEOS_AWS_S3' /boot/home/debeos-aws
+chmod +x /boot/home/debeos-aws
+mkdir -p /boot/home/config/non-packaged/bin
+cp -f /boot/home/debeos-aws /boot/home/config/non-packaged/bin/debeos-aws
+/boot/home/config/non-packaged/bin/debeos-aws version
+SEED
+fi
+
+# ------------------------------------------------- stage the package(s) to incoming
+# Uploaded from where this wrapper runs -- the operator workstation, which has
+# the stock awscli. (This is the one leg that is NOT on the Haiku box; the box
+# then PULLS these, so it needs only read on incoming.) Clear any stale hpkgs
+# from a prior run first so haiku-repo-add re-adds exactly this batch.
+log "staging $# package(s) to $HG_INCOMING_S3"
+aws s3 rm "${HG_INCOMING_S3%/}/" --region "$region" --recursive --exclude "*" --include "*.hpkg" >/dev/null 2>&1 || true
+for f in "$@"; do
+	aws s3 cp "$f" "${HG_INCOMING_S3%/}/$(basename "$f")" --region "$region" --only-show-errors
+done
+
+# ------------------------------------------------- run the native publish on the box
+# Ship the current haiku-repo-add + haiku-aws to the box and run haiku-repo-add
+# there. It resolves haiku-aws beside itself; haiku-aws resolves debeos-aws on
+# PATH; debeos-aws authenticates via the instance role over IMDS. PKG_TOOL /
+# PACKAGE_REPO_TOOL point at the native Haiku host tools.
+log "running haiku-repo-add natively on $PUBLISHER over SSM"
+addb64=$(base64 -w0 "$HERE/haiku-repo-add" 2>/dev/null || base64 "$HERE/haiku-repo-add" | tr -d '\n')
+awsb64=$(base64 -w0 "$HERE/haiku-aws"      2>/dev/null || base64 "$HERE/haiku-aws"      | tr -d '\n')
+"$SSM_RUN" "$PUBLISHER" -t "$SSM_TIMEOUT" <<EOF
+set -e
+export HG_REPO_S3='$HG_REPO_S3'
+export HG_INCOMING_S3='$HG_INCOMING_S3'
+export HG_CF_DIST='${HG_CF_DIST:-}'
+export HG_REPO_URL='${HG_REPO_URL:-}'
+export ARCH='$ARCH'
+export AWS_DEFAULT_REGION='$region'
+export PKG_TOOL='$PKG_TOOL'
+export PACKAGE_REPO_TOOL='$PACKAGE_REPO_TOOL'
+export PATH="/boot/home/config/non-packaged/bin:\$PATH"
+workdir=\$(mktemp -d)
+printf '%s' '$addb64' | base64 -d > "\$workdir/haiku-repo-add"
+printf '%s' '$awsb64' | base64 -d > "\$workdir/haiku-aws"
+chmod +x "\$workdir/haiku-repo-add" "\$workdir/haiku-aws"
+bash "\$workdir/haiku-repo-add"
+rc=\$?
+rm -rf "\$workdir"
+exit \$rc
+EOF
+
+log "done -- repo updated with $# package(s) from a native Haiku publish (no Linux peer)"

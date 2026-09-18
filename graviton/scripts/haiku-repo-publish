@@ -80,6 +80,19 @@ HERE="$(cd "$(dirname "$0")" && pwd)"
 
 die() { echo "haiku-repo-publish: $*" >&2; exit 1; }
 
+# ---- resolve the S3 / CloudFront client (#68) -----------------------------
+# The publish step needs bulk S3 + a CloudFront invalidation. Route it through
+# `haiku-aws`, which prefers the native `debeos-aws` client (so this runs on a
+# Haiku host with no Linux peer) and falls back to the stock `aws` on a Linux
+# builder. Beside-script first, then PATH, then raw `aws`.
+if [ -x "$HERE/haiku-aws" ]; then
+	AWS=("$HERE/haiku-aws")
+elif command -v haiku-aws >/dev/null 2>&1; then
+	AWS=(haiku-aws)
+else
+	AWS=(aws)
+fi
+
 # ---- arg parse ------------------------------------------------------------
 CMD="${1:-}"; shift || true
 POOL=""; OUT=""; DIR=""; PKG_TOOL="package"; REVENDOR=1; EXCLUDES=()
@@ -268,20 +281,20 @@ do_publish() {
 
 	# Upload packages first (immutable), then the index files last, so a client
 	# refreshing mid-publish never sees an index that points at absent packages.
-	echo "==> uploading packages/ -> $HG_REPO_S3/packages/"
-	"$HERE/haiku-s3" sync-up "$ro/packages" "${HG_REPO_S3%/}/packages/"
-	echo "==> uploading index (repo, repo.info, repo.sha256)"
 	local region="${AWS_DEFAULT_REGION:-${AWS_REGION:-us-west-2}}"
+	echo "==> uploading packages/ -> $HG_REPO_S3/packages/"
+	"${AWS[@]}" s3 sync "$ro/packages/" "${HG_REPO_S3%/}/packages/" --region "$region" --only-show-errors
+	echo "==> uploading index (repo, repo.info, repo.sha256)"
 	local k
 	for k in repo repo.info repo.sha256; do
-		aws s3 cp "$ro/$k" "${HG_REPO_S3%/}/$k" --region "$region"
+		"${AWS[@]}" s3 cp "$ro/$k" "${HG_REPO_S3%/}/$k" --region "$region"
 	done
 
 	# CloudFront caches; the index files are mutable, so invalidate them (the
 	# packages are versioned filenames and cache forever).
 	if [ -n "${HG_CF_DIST:-}" ]; then
 		echo "==> invalidating CloudFront /$ARCH/repo* on $HG_CF_DIST"
-		aws cloudfront create-invalidation --distribution-id "$HG_CF_DIST" \
+		"${AWS[@]}" cloudfront create-invalidation --distribution-id "$HG_CF_DIST" \
 			--paths "/$ARCH/repo" "/$ARCH/repo.info" "/$ARCH/repo.sha256" \
 			--query 'Invalidation.Id' --output text
 	else

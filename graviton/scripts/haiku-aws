@@ -1,0 +1,133 @@
+#!/usr/bin/env bash
+#
+# haiku-aws -- an `aws`-compatible front end for the exact S3 + CloudFront verbs
+# the DeBeOS repo-publish path calls, that prefers the NATIVE Haiku arm64 client
+# `debeos-aws` and falls back to the real `aws` CLI when it is not present.
+#
+# Why it exists (DeBeOS #68 / #120): the publish flow needs bulk S3 (mirror the
+# whole published pool down, rebuild the index, mirror it back up with --delete)
+# plus a CloudFront invalidation. Haiku has no `aws` CLI and only the single-file
+# `debeos-ssm-agent s3 cp`, so historically the index rebuild had to run on an
+# ephemeral Ubuntu peer that DID have awscli. `debeos-aws` (graviton/go-arm64/)
+# is a native, CGO-free Go client that covers precisely those verbs on Haiku
+# arm64, so once the publish scripts route their `aws` calls through here they
+# run natively on a Haiku box and the Linux peer is no longer required. On a
+# Linux builder (where `debeos-aws` is absent) this transparently becomes the
+# stock `aws`, so the same scripts keep working there unchanged.
+#
+# Backend selection (first match wins):
+#   HG_AWS=<path>        explicit backend binary (debeos-aws OR aws); used as-is
+#   debeos-aws on PATH   -> native backend (the Haiku publish case)
+#   aws on PATH          -> stock awscli fallback (the Linux builder case)
+#
+# `debeos-aws` implements a deliberate subset and does not accept awscli-only
+# output/progress flags. When the native backend is used, those flags
+# (--only-show-errors, --quiet, --no-progress, --page-size N, --query Q,
+# --output F, and a redundant --recursive on an already-recursive sync) are
+# stripped; every meaningful flag the publish path uses (--region, --delete,
+# --exclude, --include, --distribution-id, --paths) is understood by debeos-aws
+# and passed through untouched. Against the stock `aws` fallback nothing is
+# stripped -- the arguments are forwarded verbatim.
+#
+# Usage mirrors the publish path's calls (see haiku-repo-add / haiku-repo-publish):
+#   haiku-aws s3 ls   [s3://bucket[/prefix]] [--region R]
+#   haiku-aws s3 cp   <src> <dst>            [--region R] [--only-show-errors]
+#   haiku-aws s3 sync <src> <dst>            [--delete] [--exclude G] [--include G] ...
+#   haiku-aws s3 rm   <s3://bucket/key>      [--region R]
+#   haiku-aws cloudfront create-invalidation --distribution-id ID --paths /a /b ...
+#   haiku-aws which                          # print the resolved backend + kind
+#
+set -euo pipefail
+
+die() { echo "haiku-aws: $*" >&2; exit 2; }
+
+# ---- resolve the backend once --------------------------------------------
+# BACKEND is the binary to invoke; KIND is "native" (debeos-aws) or "aws".
+if [ -n "${HG_AWS:-}" ]; then
+	BACKEND="$HG_AWS"
+	command -v "$BACKEND" >/dev/null 2>&1 || [ -x "$BACKEND" ] || die "HG_AWS=$BACKEND is not executable"
+	case "$(basename "$BACKEND")" in
+		debeos-aws) KIND=native ;;
+		*)          KIND=aws ;;
+	esac
+elif command -v debeos-aws >/dev/null 2>&1; then
+	BACKEND="debeos-aws"; KIND=native
+elif command -v aws >/dev/null 2>&1; then
+	BACKEND="aws"; KIND=aws
+else
+	die "no S3 client found (need 'debeos-aws' on a Haiku host, or 'aws' on a Linux host; or set HG_AWS)"
+fi
+
+# ---- flag filtering for the native backend -------------------------------
+# Drop awscli-only flags debeos-aws does not accept; forward everything else.
+# awscli-only two-token flags whose VALUE must also be dropped.
+_is_valued_awscli_flag() {
+	case "$1" in
+		--query|--output|--page-size|--cli-read-timeout|--cli-connect-timeout) return 0 ;;
+		*) return 1 ;;
+	esac
+}
+# awscli-only boolean flags (no value).
+_is_bool_awscli_flag() {
+	case "$1" in
+		--only-show-errors|--quiet|--no-progress|--no-guess-mime-type) return 0 ;;
+		*) return 1 ;;
+	esac
+}
+
+# filter_for_native <subcommand> <args...>  -> populates the global array FARGS
+# with the kept arguments. Deliberately avoids a `mapfile < <(...)` process
+# substitution: Haiku's shell has no working /dev/fd for that, so the filtering
+# is done in-process and the result handed back through a global array.
+FARGS=()
+filter_for_native() {
+	local sub="$1"; shift
+	FARGS=()
+	local a
+	while [ $# -gt 0 ]; do
+		a="$1"
+		if _is_bool_awscli_flag "$a"; then shift; continue; fi
+		if _is_valued_awscli_flag "$a"; then shift; [ $# -gt 0 ] && shift; continue; fi
+		if [ "$a" = "--recursive" ]; then
+			# `sync` is inherently recursive in debeos-aws, so drop it there. On
+			# any other subcommand debeos-aws has no recursive mode -- fail loudly
+			# rather than silently acting on a single key.
+			if [ "$sub" = "sync" ]; then shift; continue; fi
+			die "native backend (debeos-aws) has no --recursive for 's3 $sub'"
+		fi
+		FARGS+=("$a")
+		shift
+	done
+}
+
+[ $# -ge 1 ] || die "usage: haiku-aws s3 <ls|cp|sync|rm> ... | cloudfront create-invalidation ... | which"
+
+case "$1" in
+	which)
+		echo "$KIND $BACKEND"
+		exit 0
+		;;
+	s3)
+		[ $# -ge 2 ] || die "s3: need a subcommand (ls|cp|sync|rm)"
+		sub="$2"; shift 2
+		if [ "$KIND" = native ]; then
+			filter_for_native "$sub" "$@"
+			exec "$BACKEND" s3 "$sub" ${FARGS[@]+"${FARGS[@]}"}
+		else
+			exec "$BACKEND" s3 "$sub" "$@"
+		fi
+		;;
+	cloudfront)
+		[ $# -ge 2 ] && [ "$2" = "create-invalidation" ] || die "cloudfront: only 'create-invalidation' is supported"
+		shift 2
+		if [ "$KIND" = native ]; then
+			filter_for_native create-invalidation "$@"
+			exec "$BACKEND" cloudfront create-invalidation ${FARGS[@]+"${FARGS[@]}"}
+		else
+			exec "$BACKEND" cloudfront create-invalidation "$@"
+		fi
+		;;
+	*)
+		die "unsupported command '$1' (this front end covers only 's3' and 'cloudfront' for the publish path)"
+		;;
+esac
