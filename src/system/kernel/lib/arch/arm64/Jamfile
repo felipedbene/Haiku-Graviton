@@ -21,11 +21,11 @@ SEARCH_SOURCE += [ FDirName $(posixSources) arch $(TARGET_ARCH) ] ;
 SEARCH_SOURCE += [ FDirName $(posixSources) string arch generic ] ;
 SEARCH_SOURCE += [ FDirName $(posixSources) string arch $(TARGET_ARCH) ] ;
 
-# memcpy.c and generic_memset.c each define a function whose body contains a
-# loop that *is* that function, so the compiler is free to recognise the loop
-# and replace it with a call to the function it is inside. The guards below are
-# checked on the generated object code rather than trusted: see
-# graviton/docs/arm64-memcpy.md. Without them, generic_memset.o carries an
+# memcpy.c and memset.c each define a function whose body contains a loop that
+# *is* that function, so the compiler is free to recognise the loop and replace
+# it with a call to the function it is inside. The guards below are checked on
+# the generated object code rather than trusted: see
+# graviton/docs/arm64-memcpy.md. Without them, generic_memset.o carried an
 # R_AARCH64_CALL26 against memset itself at -O2 and -O3 under libroot's flags.
 # The kernel's own flags happen to avoid it via -fno-tree-vectorize, which is
 # incidental and is not something a memset should depend on -- note that the
@@ -35,20 +35,37 @@ SEARCH_SOURCE += [ FDirName $(posixSources) string arch $(TARGET_ARCH) ] ;
 # -fno-tree-loop-distribute-patterns names the pass that actually performs the
 # substitution and is not implied by -fno-builtin; glibc and the Linux kernel
 # both pass it explicitly for this. It is a GCC spelling, so it is only passed
-# to GCC.
+# to GCC. (These guard the C files, memset.c/memcpy.c; the vendored .S glue
+# disables its own BTI/PAC note with a #define, since these flags reach the
+# compiler via CCFLAGS and the As rule that assembles .S does not see them.)
 local stringGuardFlags = -fno-builtin ;
 if $(HAIKU_CC_IS_CLANG_arm64) != 1 {
 	stringGuardFlags += -fno-tree-loop-distribute-patterns ;
 }
 
+# memset.c and memcpy.c are DeBeOS's own arm64 routines; the arm_*.S units each
+# #include a pristine vendored Arm optimized-routines source and alias the
+# public C name. src/system/kernel/lib/Jamfile drops the matching generic C
+# string sources for arm64 so kernel_lib_posix.o and this object do not both
+# define them.
 KernelMergeObject kernel_lib_posix_arch_$(TARGET_ARCH).o :
 	siglongjmp.S
 	sigsetjmp.S
 	kernel_longjmp_return.c
 	kernel_setjmp_save_sigs.c
 
-	generic_memset.c
+	memset.c
 	memcpy.c
+
+	arm_memcmp.S
+	arm_memchr.S
+	arm_strlen.S
+	arm_strchr.S
+	arm_strchrnul.S
+	arm_strcmp.S
+	arm_strncmp.S
+	arm_strcpy.S
+	arm_memmove.S
 
 	: $(TARGET_KERNEL_PIC_CCFLAGS) $(stringGuardFlags)
 ;
