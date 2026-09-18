@@ -57,22 +57,44 @@ die() { echo "haiku-repo-add: $*" >&2; exit 1; }
 : "${HG_INCOMING_S3:?set HG_INCOMING_S3=s3://<bucket>/<prefix> (new *.hpkg)}"
 
 # ---- locate the Haiku host tools -----------------------------------------
-PKG_TOOL="${PKG_TOOL:-$(ls /opt/haiku/haiku/generated.$ARCH/objects/linux/*/release/tools/package/package 2>/dev/null | head -1)}"
-PACKAGE_REPO_TOOL="${PACKAGE_REPO_TOOL:-$(ls /opt/haiku/haiku/generated.$ARCH/objects/linux/*/release/tools/package_repo/package_repo 2>/dev/null | head -1)}"
-[ -x "${PKG_TOOL:-}" ] || die "no 'package' tool (set PKG_TOOL; run on a Haiku host)"
-[ -x "${PACKAGE_REPO_TOOL:-}" ] || die "no 'package_repo' tool (set PACKAGE_REPO_TOOL; run on a Haiku host)"
+# On a native Haiku host `package`/`package_repo` are on PATH (/bin/...); on a
+# Linux cross-build host they live under generated.$ARCH/objects/linux. Default
+# to the PATH command, fall back to the Linux cross-build path, and accept
+# either a bare command (resolved on PATH) or an absolute executable.
+PKG_TOOL="${PKG_TOOL:-$(command -v package 2>/dev/null || ls /opt/haiku/haiku/generated.$ARCH/objects/linux/*/release/tools/package/package 2>/dev/null | head -1)}"
+PACKAGE_REPO_TOOL="${PACKAGE_REPO_TOOL:-$(command -v package_repo 2>/dev/null || ls /opt/haiku/haiku/generated.$ARCH/objects/linux/*/release/tools/package_repo/package_repo 2>/dev/null | head -1)}"
+have_tool() { command -v "$1" >/dev/null 2>&1 || [ -x "${1:-}" ]; }
+have_tool "${PKG_TOOL:-}" || die "no 'package' tool (set PKG_TOOL; run on a Haiku host)"
+have_tool "${PACKAGE_REPO_TOOL:-}" || die "no 'package_repo' tool (set PACKAGE_REPO_TOOL; run on a Haiku host)"
+
+# ---- resolve the S3 / CloudFront client (#68) -----------------------------
+# Bulk S3 + CloudFront used to force this whole script onto an Ubuntu peer with
+# awscli. It now runs natively on Haiku by routing every `aws s3`/`aws cloudfront`
+# call through `haiku-aws`, which prefers the native `debeos-aws` client and
+# falls back to the stock `aws` when debeos-aws is absent (a Linux builder). The
+# publish host ships haiku-aws beside this script; a Linux builder without it
+# falls straight through to the stock `aws`. (Pin the debeos-aws-vs-aws backend
+# via HG_AWS, which haiku-aws itself honours.)
+HERE_RA="$(cd "$(dirname "$0")" 2>/dev/null && pwd || echo .)"
+if [ -x "$HERE_RA/haiku-aws" ]; then
+	AWS=("$HERE_RA/haiku-aws")
+elif command -v haiku-aws >/dev/null 2>&1; then
+	AWS=(haiku-aws)
+else
+	AWS=(aws)
+fi
 
 WORK="$(mktemp -d)"; RO="$WORK/repo-out"
 trap 'rm -rf "$WORK"' EXIT
 mkdir -p "$RO/packages" "$WORK/incoming"
 
 echo "== 1. pull current repo packages from $HG_REPO_S3/packages/ =="
-aws s3 sync "${HG_REPO_S3%/}/packages/" "$RO/packages/" --region "$region" --only-show-errors
+"${AWS[@]}" s3 sync "${HG_REPO_S3%/}/packages/" "$RO/packages/" --region "$region" --only-show-errors
 before="$(ls -1 "$RO/packages" 2>/dev/null | wc -l)"
 echo "   $before package(s) currently published"
 
 echo "== 2. pull incoming new packages from $HG_INCOMING_S3 =="
-aws s3 sync "${HG_INCOMING_S3%/}/" "$WORK/incoming/" --region "$region" --only-show-errors --exclude "*" --include "*.hpkg"
+"${AWS[@]}" s3 sync "${HG_INCOMING_S3%/}/" "$WORK/incoming/" --region "$region" --only-show-errors --exclude "*" --include "*.hpkg"
 ls "$WORK/incoming"/*.hpkg >/dev/null 2>&1 || die "no incoming *.hpkg at $HG_INCOMING_S3"
 
 # canonical repo filename for an hpkg: <name>-<version>-<architecture>.hpkg,
@@ -201,14 +223,14 @@ echo "== 5. upload packages (new, immutable) then index (last) =="
 # the local (pruned) set so full rebuilds never see duplicates. Requires
 # s3:DeleteObject on the repo bucket, granted to the publisher role in the CDK
 # (DebeosOpsStack BuilderRole, PR #273).
-aws s3 sync "$RO/packages/" "${HG_REPO_S3%/}/packages/" --region "$region" --only-show-errors --delete
+"${AWS[@]}" s3 sync "$RO/packages/" "${HG_REPO_S3%/}/packages/" --region "$region" --only-show-errors --delete
 for k in repo repo.info repo.sha256; do
-	aws s3 cp "$RO/$k" "${HG_REPO_S3%/}/$k" --region "$region" --only-show-errors
+	"${AWS[@]}" s3 cp "$RO/$k" "${HG_REPO_S3%/}/$k" --region "$region" --only-show-errors
 done
 
 if [ -n "${HG_CF_DIST:-}" ]; then
 	echo "== 6. invalidate CloudFront /$ARCH/repo* on $HG_CF_DIST =="
-	aws cloudfront create-invalidation --distribution-id "$HG_CF_DIST" \
+	"${AWS[@]}" cloudfront create-invalidation --distribution-id "$HG_CF_DIST" \
 		--paths "/$ARCH/repo" "/$ARCH/repo.info" "/$ARCH/repo.sha256" \
 		--query 'Invalidation.Id' --output text
 else
@@ -221,7 +243,7 @@ echo "== 7. clear consumed incoming (only packages we published) =="
 # silently lost before a human handles it. Delete per-basename rather than the
 # whole prefix recursively.
 for b in $published_bases; do
-	aws s3 rm "${HG_INCOMING_S3%/}/$b" --region "$region" --only-show-errors >/dev/null 2>&1 || true
+	"${AWS[@]}" s3 rm "${HG_INCOMING_S3%/}/$b" --region "$region" --only-show-errors >/dev/null 2>&1 || true
 done
 
 echo "PUBLISHED $added new package(s); skipped $skipped; repo now has $(ls -1 "$RO/packages" | wc -l) (was $before)."
