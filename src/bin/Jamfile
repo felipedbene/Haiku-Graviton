@@ -259,6 +259,7 @@ SubInclude HAIKU_TOP src bin netprof ;
 SubInclude HAIKU_TOP src bin nettput ;
 SubInclude HAIKU_TOP src bin nvme_rescan ;
 SubInclude HAIKU_TOP src bin partition_grow ;
+SubInclude HAIKU_TOP src bin pmustat ;
 SubInclude HAIKU_TOP src bin smpscale ;
 SubInclude HAIKU_TOP src bin sve_test ;
 SubInclude HAIKU_TOP src bin waitpid_stress ;
