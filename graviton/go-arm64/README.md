@@ -154,9 +154,23 @@ Wiring changes to existing files:
     stays cosmetic; regenerating it from the arm64 libroot `syscalls.S.inc`
     remains a correctness-hygiene follow-up, not a blocker.
 
-## Next step (M2)
+## Status: M3 DONE (real amazon-ssm-agent compiles + links for haiku/arm64)
 
-M0 (cross-build) and M1 (runs on hardware) are done. Next is **M2**: an HTTPS
-`net/http` GET returning 200 plus N concurrent goroutines/connections under load
-with no netpoller hang — the first real exercise of the poll-based
-`netpoll_haiku.go` on arm64.
+The upstream **`amazon-ssm-agent`** (`github.com/aws/amazon-ssm-agent`, tag
+`v3.3.3270.0`, Apache-2.0) cross-compiles and links for `GOOS=haiku
+GOARCH=arm64`: **`go build ./...` exits 0** for the whole module and all **eight**
+release binaries (`amazon-ssm-agent`, `ssm-agent-worker`, `updater`, `ssm-cli`,
+`ssm-document-worker`, `ssm-session-logger`, `ssm-session-worker`,
+`ssm-setup-cli`) link as AArch64 Haiku ELF. Built `CGO_ENABLED=0` against the
+agent's own vendored modules — no proxy, no cgo bridge.
+
+The GOOS-arm patch, the reproduce recipe, and a full ledger of every change are
+in [`ssm-agent/`](ssm-agent/) (`amazon-ssm-agent-haiku-arm64.patch` +
+`README.md`); proof in [`logs/M3-proof.txt`](logs/M3-proof.txt). 94 files: 87
+are pure build-tag reuse of the existing unix path (Haiku is in Go's `unix`
+tag set), 5 are new/adapted Haiku arms where a libroot syscall is genuinely
+absent (`flock`→`FcntlFlock`; `statfs`→sentinel; fsnotify→stub;
+`x/sys/unix.Uname`→degraded gatherer), and 1 splits `GetDiskSpaceInfo` out of a
+shared file. No new toolchain change was needed — the fork already carries the
+OS layer and the M2 errno fix. M3 is compile + link; on-hardware start /
+registration (M5/M6) are next.

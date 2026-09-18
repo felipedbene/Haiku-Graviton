@@ -1,0 +1,27 @@
+M3 proof — amazon-ssm-agent cross-compiles + links for GOOS=haiku GOARCH=arm64
+Generated: 2026-09-18T15:46:41Z
+
+## Toolchain
+go version go1.26.1 linux/amd64
+GOROOT=/local/home/benfelip/go-m0/korli-go
+errno fix (M2) present:
+89:	MOVWU	(R2), R2
+
+## Agent
+tag: v3.3.3270.0   go.mod floor: go 1.24
+
+## Full-module cross-build (haiku/arm64, CGO disabled, vendored)
+$ GOOS=haiku GOARCH=arm64 CGO_ENABLED=0 GOFLAGS=-mod=vendor go build ./...
+exit=0
+
+## The eight release binaries (all AArch64 Haiku ELF)
+  amazon-ssm-agent: ELF 64-bit LSB executable, ARM aarch64, version 1 (SYSV)
+  ssm-agent-worker: ELF 64-bit LSB executable, ARM aarch64, version 1 (SYSV)
+  updater: ELF 64-bit LSB executable, ARM aarch64, version 1 (SYSV)
+  ssm-cli: ELF 64-bit LSB executable, ARM aarch64, version 1 (SYSV)
+  ssm-document-worker: ELF 64-bit LSB executable, ARM aarch64, version 1 (SYSV)
+  ssm-session-logger: ELF 64-bit LSB executable, ARM aarch64, version 1 (SYSV)
+  ssm-session-worker: ELF 64-bit LSB executable, ARM aarch64, version 1 (SYSV)
+  ssm-setup-cli: ELF 64-bit LSB executable, ARM aarch64, version 1 (SYSV)
+## Fresh-clone reproducibility
+clone v3.3.3270.0 + git apply amazon-ssm-agent-haiku-arm64.patch + go build ./... => exit 0, AArch64 Haiku ELF
