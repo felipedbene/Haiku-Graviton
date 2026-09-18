@@ -33,12 +33,7 @@ for architectureObject in [ MultiArchSubDirSetup ] {
 			: runtime_loader.rdef ;
 
 		# needed for "runtime_loader" only
-		StaticLibrary <$(architecture)>libruntime_loader.a :
-			kernel_vsprintf.cpp
-			kernel_cpp.cpp
-			KMessage.cpp
-			find_directory.cpp
-			:
+		local runtimeLoaderObjects =
 			<src!system!libroot!os!$(architecture)>mutex.o
 			<src!system!libroot!os!$(architecture)>recursive_lock.o
 			<src!system!libroot!os!$(architecture)>syscalls.o
@@ -75,6 +70,37 @@ for architectureObject in [ MultiArchSubDirSetup ] {
 			<src!system!libroot!posix!string!$(architecture)>strerror.o
 			<src!system!libroot!posix!string!$(architecture)>strncmp.o
 			<src!system!libroot!posix!string!$(architecture)>strrchr.o
+			;
+
+		if $(TARGET_PACKAGING_ARCH) = arm64 {
+			# On arm64 these nine string routines come from
+			# posix_string_arch_arm64.o (DeBeOS's memset/memcpy plus the vendored
+			# Arm optimized-routines), which is already linked into the loader via
+			# libruntime_loader_arm64.a. libroot drops the generic C sources for
+			# them on arm64 (see posix/string/Jamfile and posix/musl/string/Jamfile)
+			# so the individual objects below are no longer built -- filter out the
+			# now-stale references so the loader link resolves them from the arch
+			# merge object instead.
+			runtimeLoaderObjects = [ FFilter $(runtimeLoaderObjects) :
+				<src!system!libroot!posix!musl!string!$(architecture)>memchr.o
+				<src!system!libroot!posix!musl!string!$(architecture)>memmove.o
+				<src!system!libroot!posix!musl!string!$(architecture)>strchr.o
+				<src!system!libroot!posix!musl!string!$(architecture)>strchrnul.o
+				<src!system!libroot!posix!musl!string!$(architecture)>strcpy.o
+				<src!system!libroot!posix!musl!string!$(architecture)>strlen.o
+				<src!system!libroot!posix!string!$(architecture)>memcmp.o
+				<src!system!libroot!posix!string!$(architecture)>strcmp.o
+				<src!system!libroot!posix!string!$(architecture)>strncmp.o
+				] ;
+		}
+
+		StaticLibrary <$(architecture)>libruntime_loader.a :
+			kernel_vsprintf.cpp
+			kernel_cpp.cpp
+			KMessage.cpp
+			find_directory.cpp
+			:
+			$(runtimeLoaderObjects)
 		;
 
 		SEARCH on [ FGristFiles kernel_cpp.cpp ]
