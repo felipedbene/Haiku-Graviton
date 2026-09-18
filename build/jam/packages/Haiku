@@ -251,6 +251,7 @@ AddFilesToPackage bin :
 	nettput
 	nvme_rescan
 	partition_grow
+	pmustat
 	smpscale
 	sve_test
 	consoled
