@@ -1087,7 +1087,20 @@ VMSAv8TranslationMap::ClearFlags(addr_t va, uint32 flags)
 					}
 				}
 			} else if (clearAF) {
-				atomic_and64((int64_t*)ptePtr, ~kAttrAF);
+				// Clearing AF 1->0 in memory must invalidate any live TLB
+				// entry, otherwise the AF==0 => not-in-TLB invariant that the
+				// no-flush teardown in ClearAccessedAndModified() relies on is
+				// violated and a later unmap-if-unaccessed can free a page that
+				// a stale TLB entry still maps (UAF). Use a CAS + flush like the
+				// other two branches.
+				while (true) {
+					uint64_t oldPte = atomic_get64((int64_t*)ptePtr);
+					uint64_t newPte = oldPte & ~kAttrAF;
+                    if ((uint64_t)atomic_test_and_set64((int64_t*)ptePtr, newPte, oldPte) == oldPte) {
+						FlushVAIfAccessed(oldPte, va);
+						break;
+					}
+				}
 			} else {
 				while (true) {
 					uint64_t oldPte = atomic_get64((int64_t*)ptePtr);
