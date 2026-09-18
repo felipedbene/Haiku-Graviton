@@ -1,19 +1,32 @@
 # Proposal: a storage assertion in haiku-perf-gate
 
-**Status as of 2026-08-24: PARTLY IMPLEMENTED — one of the three assertions has
-landed. This is no longer purely a proposal.**
+**Status as of 2026-09-18: ALL THREE ASSERTIONS IMPLEMENTED in
+`graviton/scripts/haiku-perf-gate`. This is no longer a proposal.**
 
-> ~~**Status: PROPOSAL. Not implemented, not deployed.**~~ Verified against the tree
-> on 2026-08-24:
+> Verified against the tree on 2026-09-18 (branch `feat/112-perfgate-storage`):
 >
 > | Assertion | State |
 > |---|---|
-> | **1. Sequential read at depth 8** (`disktput -m seqread`, 900 MiB/s floor) | **NOT landed.** `graviton/scripts/haiku-perf-gate` contains no `disktput`, no `seqread`, no 900 MiB/s floor and no scratch-volume attachment. |
-> | **2. Durability across a hard power loss** | **NOT landed.** |
-> | **3. Write liveness / the three-outcome ICMP ladder** | **LANDED.** `haiku-perf-gate` implements it (`db509e9c9f`, `e290a17561`) — see its "Retries only the case that deserves it" block: an ICMP-answering node is a real verdict either way and is decided immediately; a node with no ICMP at all is retried. A fuller prototype exists as `graviton/scripts/haiku-quota-verify`. |
+> | **1. Sequential read at depth 8** (`disktput -m seqread`, 900 MiB/s floor) | **LANDED (opt-in).** `haiku-perf-gate` attaches a provisioned scratch volume at launch and asserts the depth-8 floor when `HG_SEQREAD_ASSERT=1`. OFF by default because it needs a c7g.4xlarge-class instance and a run-instances grant that can create the attached volume — on the pipeline's default c7g.large it would fail on a bandwidth limit, not a regression (see "The volume is part of the assertion"). |
+> | **2. Durability across a hard power loss** | **LANDED (default on).** A stamped payload (`disktput -P -S`) is written to the root FS and fsync'd, its checksum recorded on the harness, and re-verified after the stop/start the gate already performs (`disktput -m verify`, 0 bad blocks). Adds no AWS permissions and needs no scratch volume. |
+> | **3. Write liveness / the three-outcome ICMP ladder** | **LANDED.** `haiku-perf-gate` implements it (`db509e9c9f`, `e290a17561`) — see its "Retries only the case that deserves it" block. A fuller prototype exists as `graviton/scripts/haiku-quota-verify`. |
 >
-> The framing reason still applies to what is left: **a gate which flakes gets
-> disabled and then protects nothing.** Assertions 1 and 2 still want review.
+> **Calibration, measured for #112 on 2026-09-18** (own hardware, publishable):
+> c7g.4xlarge, then-canonical AMI `ami-04493ac7c3fe0d304`, dedicated 100 GiB gp3
+> scratch at 16,000 IOPS / 1,000 MiB/s. Depth-8 seqread **1006.2 and 1006.4 MiB/s**
+> across two 120 s cells (scaling 173.3 / 687.3 / 1006.2 / 1006.8 at depth
+> 1/4/8/16) — at the volume ceiling, matching the 2026-08-24 figure. The **same
+> read on the root device measured 128.8 MiB/s** (the gp3 default 125 MiB/s cap),
+> which is why the seqread runs on a scratch volume and never on the root, and why
+> the 900 MiB/s floor (~10% under the sustained figure) is unreachable on the root
+> by construction. Durability was proven end-to-end: a 64 MiB fsync'd payload came
+> back **byte-for-byte** (identical sha256, `0 of 256 blocks bad`) across a real EC2
+> stop/start.
+>
+> The framing reason still applies: **a gate which flakes gets disabled and then
+> protects nothing** — which is why the seqread floor downgrades to a warning when
+> the instance/volume cannot be shown to reach it, rather than failing a healthy
+> image on a bandwidth limit.
 
 > **Correction 2026-08-24 — the "NIC intermittent" rate this document was built
 > around is retired.** Several passages below were premised on a NIC-attach failure
