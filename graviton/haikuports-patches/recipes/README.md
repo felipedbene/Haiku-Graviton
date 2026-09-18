@@ -193,6 +193,28 @@ on-hardware proof owed before publishing a `_g3`/`_g4` package are in
 [`../../docs/porting-playbook.md`](../../docs/porting-playbook.md) →
 "Graviton3/4 ISA opt-in".
 
+## `simde-0.8.2.recipe` — SSE/AVX→NEON translation for ports with no NEON path (#341)
+
+A new (not upstream-derived) overlay recipe packaging **SIMDe** (SIMD Everywhere), the
+header-only library that implements x86 SSE/AVX/AVX-512 intrinsics on top of NEON. It is
+the drop-in for ports whose hot paths are written in x86 intrinsics and have no
+hand-written NEON equivalent: build-depend on `devel:simde` and include `<simde/x86/…>`
+instead of `<emmintrin.h>` etc. Header-only, so `ARCHITECTURES="any"` (cf. `robin_map`)
+and no runtime dependency. The meson build installs 469 headers under
+`develop/headers/simde/` and generates `simde.pc`; `-Dtests=false` keeps meson off the
+large test/benchmark dependency graph (nothing is compiled for the install).
+
+`v0.8.2`, sha256 `ed2a3268658f2f2a9b5367628a85ccd4cf9516460ed8604eed369653d49b25fb`
+(tarball fetched, extracted, `SIMDE_VERSION_* = 0.8.2` in `simde/simde-common.h`
+confirmed — the integrity rule). **Build status: review-verified + build-logic proven
+locally** — the recipe's exact `meson setup … -Dtests=false` + `ninja install` was run
+against the upstream `meson.build` and staged all 469 headers + a correct `simde.pc`
+(`Version: 0.8.2`). All chroot prereqs (`cmd:meson`/`ninja`/`pkg_config`/`gcc`) are
+already in the arm64 pool. A **native arm64 haikuporter `.hpkg` build is OWED** — for a
+header-only package that compiles nothing, standing up a builder was judged
+disproportionate. Cross-links `graviton/docs/port-hygiene.md` (the lint that recommends
+it).
+
 ## Two recipes here are kept only as history
 
 `autoconf-2.72.recipe` and `zstd-1.5.6.recipe` describe cuts that have been
