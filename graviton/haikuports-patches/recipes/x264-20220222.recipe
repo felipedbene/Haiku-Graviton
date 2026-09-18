@@ -3,7 +3,7 @@ DESCRIPTION="x264 is a h.264/AVC encoder library."
 HOMEPAGE="https://www.videolan.org/developers/x264.html"
 COPYRIGHT="2003-2022 VideoLan.org"
 LICENSE="GNU GPL v2"
-REVISION="4"
+REVISION="5"
 srcGitRev="bfc87b7a330f75f5c9a21e56081e4b20344f139e"
 SOURCE_URI="https://github.com/mirror/x264/archive/$srcGitRev.tar.gz"
 SOURCE_FILENAME="x264-$portVersion-$srcGitRev.tar.gz"
@@ -52,8 +52,16 @@ BUILD_PREREQUIRES="
 	cmd:ld$secondaryArchSuffix
 	cmd:libtoolize$secondaryArchSuffix
 	cmd:make
-	cmd:nasm >= 2.13
 	"
+# x264's x86/x86_64 SIMD is assembled with nasm; the aarch64/arm64 SIMD path is
+# assembled by the toolchain assembler (GAS, from binutils), so nasm is neither
+# used nor needed on arm64 -- and there is no nasm package in the DeBeOS arm64
+# repo for it to resolve against. Require nasm only for the x86 secondary arch.
+# (DeBeOS #337)
+if [ "${targetArchitecture:-arm64}" != arm64 ]; then
+	BUILD_PREREQUIRES="$BUILD_PREREQUIRES
+	cmd:nasm >= 2.13"
+fi
 
 defineDebugInfoPackage x264$secondaryArchSuffix \
 	"$libDir"/libx264.so.$libVersion \
