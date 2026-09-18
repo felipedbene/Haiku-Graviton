@@ -500,108 +500,78 @@ codel_sojourn(net_buffer* buffer, bigtime_t now)
 
 /*!	Blocking dequeue with the sojourn-time queue discipline applied.
 
-	Returns exactly one buffer to dispatch (in \a _buffer, status B_OK), having
-	first shed any buffers the discipline decided were part of a standing queue.
-	Semantics for the caller are identical to fifo_dequeue_buffer_tracked() with
-	an infinite timeout: it blocks until there is something to hand back, and a
-	dropped buffer is freed here and never seen by the caller.
+	Returns exactly one buffer to dispatch (in \a _buffer, status B_OK). When the
+	discipline decides a buffer is part of a standing queue, it does not free it
+	here; instead it flags it NET_BUFFER_ECN_CE_MARK and hands it onward. The
+	single ECN translate point in the L3 receive path then either promotes an
+	ECN-capable (ECT) packet to CE -- a mark, not a drop, so the flow's sender
+	backs off without a loss (RFC 3168) -- or, for a non-ECN packet, drops it
+	there. Either way the buffer leaves the queue, so the shed relieves the
+	standing queue exactly as an in-place free would have; only ECN-capable
+	flows are spared the loss.
 
-	This is the textbook CoDel dequeue (Nichols & Jacobson), with the outer
-	"there is a packet" step being a blocking wait and the inner re-fetches
-	during a drop episode being non-blocking -- an empty queue mid-episode ends
-	the episode rather than blocking inside it.
+	This is the CoDel control law (Nichols & Jacobson) evaluated one buffer per
+	call: because a shed buffer is delivered rather than freed, each call drains
+	one buffer regardless, so unlike the free-and-refetch form there is no need
+	to shed several within a single call to keep up.
 */
 ssize_t
 fifo_dequeue_buffer_codel(net_fifo* fifo, net_fifo_codel* codel,
 	net_fifo_watermark* diagnostics, net_buffer** _buffer)
 {
-	while (true) {
-		net_buffer* buffer;
-		ssize_t status = fifo_dequeue_buffer_tracked(fifo, 0,
-			B_INFINITE_TIMEOUT, &buffer, diagnostics);
-		if (status != B_OK)
-			return status;
+	net_buffer* buffer;
+	ssize_t status = fifo_dequeue_buffer_tracked(fifo, 0, B_INFINITE_TIMEOUT,
+		&buffer, diagnostics);
+	if (status != B_OK)
+		return status;
 
-		bigtime_t now = system_time();
-		bigtime_t sojourn = codel_sojourn(buffer, now);
-		size_t queueBytes = (diagnostics != NULL)
-			? diagnostics->current_bytes : fifo->current_bytes;
+	bigtime_t now = system_time();
+	bigtime_t sojourn = codel_sojourn(buffer, now);
+	size_t queueBytes = (diagnostics != NULL)
+		? diagnostics->current_bytes : fifo->current_bytes;
 
-		codel->evaluated++;
-		codel->last_sojourn = sojourn;
-		if (sojourn > codel->max_sojourn)
-			codel->max_sojourn = sojourn;
+	codel->evaluated++;
+	codel->last_sojourn = sojourn;
+	if (sojourn > codel->max_sojourn)
+		codel->max_sojourn = sojourn;
 
-		bool okToDrop = codel_update(codel, now, sojourn, queueBytes);
+	bool okToDrop = codel_update(codel, now, sojourn, queueBytes);
+	bool shed = false;
 
-		if (codel->dropping) {
-			if (!okToDrop) {
-				// Sojourn fell back under target: end the episode.
-				codel->dropping = false;
-			} else {
-				// Shed buffers as long as we are past the next scheduled drop
-				// time and the queue is still over target.
-				while (codel->dropping && now >= codel->drop_next) {
-					gNetBufferModule.free(buffer);
-					codel->dropped++;
-					codel->count++;
-
-					status = fifo_dequeue_buffer_tracked(fifo, MSG_DONTWAIT, 0,
-						&buffer, diagnostics);
-					if (status != B_OK) {
-						// Queue drained mid-episode: nothing left to hand back
-						// or to drop. Leave the episode and block afresh.
-						codel->dropping = false;
-						buffer = NULL;
-						break;
-					}
-
-					now = system_time();
-					sojourn = codel_sojourn(buffer, now);
-					queueBytes = (diagnostics != NULL)
-						? diagnostics->current_bytes : fifo->current_bytes;
-					codel->evaluated++;
-					codel->last_sojourn = sojourn;
-					if (sojourn > codel->max_sojourn)
-						codel->max_sojourn = sojourn;
-
-					okToDrop = codel_update(codel, now, sojourn, queueBytes);
-					if (!okToDrop)
-						codel->dropping = false;
-					else {
-						codel->drop_next = codel_control_law(codel->drop_next,
-							codel->interval, codel->count);
-					}
-				}
-
-				if (buffer == NULL)
-					continue;
-			}
-		} else if (okToDrop) {
-			// Enter a dropping episode: shed this buffer, then hand back the
-			// next one. Resuming an episode that ended recently keeps most of
-			// its drop rate; a fresh one starts from a single drop.
-			gNetBufferModule.free(buffer);
-			codel->dropped++;
-
-			if (codel->count > 2 && (now - codel->drop_next) < codel->interval)
-				codel->count -= 2;
-			else
-				codel->count = 1;
-
-			codel->dropping = true;
-			codel->drop_next = codel_control_law(now, codel->interval,
-				codel->count);
-
-			status = fifo_dequeue_buffer_tracked(fifo, MSG_DONTWAIT, 0,
-				&buffer, diagnostics);
-			if (status != B_OK)
-				continue;
+	if (codel->dropping) {
+		if (!okToDrop) {
+			// Sojourn fell back under target: end the episode.
+			codel->dropping = false;
+		} else if (now >= codel->drop_next) {
+			// Still over target and past the next scheduled shed.
+			shed = true;
+			codel->count++;
+			codel->drop_next = codel_control_law(codel->drop_next,
+				codel->interval, codel->count);
 		}
+	} else if (okToDrop) {
+		// Enter a shedding episode. Resuming one that ended recently keeps most
+		// of its rate; a fresh one starts from a single shed.
+		shed = true;
+		if (codel->count > 2 && (now - codel->drop_next) < codel->interval)
+			codel->count -= 2;
+		else
+			codel->count = 1;
 
-		*_buffer = buffer;
-		return B_OK;
+		codel->dropping = true;
+		codel->drop_next = codel_control_law(now, codel->interval,
+			codel->count);
 	}
+
+	if (shed) {
+		// Ask the L3 ECN translate point to mark this buffer CE (if its flow is
+		// ECN-capable) or drop it (if not). Not freed here.
+		buffer->buffer_flags |= NET_BUFFER_ECN_CE_MARK;
+		codel->dropped++;
+	}
+
+	*_buffer = buffer;
+	return B_OK;
 }
 
 
