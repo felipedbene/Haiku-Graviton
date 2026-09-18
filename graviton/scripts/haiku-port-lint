@@ -1,0 +1,485 @@
+#!/usr/bin/env python3
+"""haiku-port-lint -- mechanical port-hygiene audit for DeBeOS arm64 (AWS Graviton).
+
+WHY THIS EXISTS. Porting HaikuPorts recipes to native Graviton keeps tripping over the
+same small set of architecture assumptions that are invisible on x86/PPC and only surface
+as an arm64 build failure -- or, worse, as a *silent* miscompile or a stub. This tool
+catches those mechanically, up front, from the source tree and the recipe, instead of one
+build failure at a time. It is the greppable companion to the porting playbook
+(graviton/docs/porting-playbook.md) and the port-hygiene checklist
+(graviton/docs/port-hygiene.md); the `debeos-arm64-port` skill references it by name.
+
+WHAT IT CHECKS (each links to the fact that motivates it):
+
+  1. char signedness. On x86/PPC `char` is signed by default; on arm64 it is UNSIGNED.
+     Code that treats a bare `char` as a small signed integer -- comparing it `< 0`, or
+     storing getchar()/getc() into a `char` and testing against `EOF` (-1) -- breaks
+     SILENTLY on arm64 (`c < 0` is always false; the `EOF` test never fires -> infinite
+     loop / truncated read). Fix: build the recipe with `-fsigned-char`, or correct the
+     type. (AWS aws-graviton-getting-started SIMD_and_vectorization.md; playbook.)
+
+  2. x86-only preprocessor arms. `#if defined(__i386__|__x86_64__|__SSE*__|__AVX*__|
+     __MMX__)` guarding a SIMD/fast path with NO arm64/NEON counterpart in the same file
+     leaves arm64 on a scalar stub -- or, if the arm is the only definition of a symbol,
+     an outright build break. This is the file-scoped, mechanical form of the app_server
+     `#ifdef __i386__` bilinear-scaler gap (simd-vectorization-review.md Sec 5.1).
+
+  3. x86 SIMD intrinsics with no portable/NEON path. `#include <xmmintrin.h>` /
+     <emmintrin.h> / <immintrin.h> / ... and `_mm_`/`_mm256_`/`_mm512_` intrinsics do not
+     exist on arm64. Where there is no NEON equivalent, build-depend on SIMDe (the
+     header-only SSE/AVX->NEON translator packaged as `devel:simde`) rather than dropping
+     the feature. (simd-vectorization-review.md Sec 1.4.)
+
+  4. x86-only compiler flags. `-msse2`, `-mavx`, `-mfpmath=sse`, `-mmmx`, ... in a recipe
+     body or a build file are rejected by aarch64 gcc (`unrecognized command-line
+     option`). Gate them on x86/x86_64. (playbook Class 5.)
+
+  5. IFUNC / target_clones. `--enable-ifunc`, `HAVE_IFUNC`, `__attribute__((ifunc))`,
+     `target_clones` produce a shared object that FAILS TO LOAD SILENTLY on Haiku arm64:
+     `R_AARCH64_IRELATIVE` returns B_BAD_DATA with the diagnostic compiled out. There is
+     no runtime SIMD dispatch on this port -- decide at compile time.
+     (simd-vectorization-review.md Sec 2.1.)
+
+  6. CPU-string / config.guess arm64 blind spots. A CMake project that selects its SIMD
+     backend by matching `CMAKE_SYSTEM_PROCESSOR` against `x86|aarch64|arm` can fall
+     through to a "CPU not recognised" branch on Haiku (whose value matches none), which
+     silently disables NEON -- the exact libjpeg-turbo defect (fix:
+     `-DCMAKE_SYSTEM_PROCESSOR=aarch64`). And Haiku's `uname -m` reports `arm64`, not
+     `aarch64`, which GNU config.guess/config.sub and hand-rolled arch switches choke on
+     (playbook Class 6 / Class 19).
+
+WHAT IT IS -- and IS NOT. Read-only static analysis: it reads files and prints findings.
+It never edits a recipe, a source file, or anything else. It is a heuristic linter, not a
+compiler -- findings are ranked ERROR / WARN / INFO by how mechanically certain the arm64
+breakage is, and INFO items in particular need a human look. A clean run is not a promise
+the port builds; a dirty run is a prioritised list of the arm64 assumptions to check
+first.
+
+USAGE
+  haiku-port-lint [options] [PATH ...]      # scan source tree(s); default: cwd
+  haiku-port-lint --recipe foo-1.2.recipe SRCDIR
+  haiku-port-lint --checklist               # print the manual review checklist
+  haiku-port-lint --format json .
+
+EXIT STATUS
+  0  no ERROR or WARN findings (INFO may be present)
+  1  at least one ERROR or WARN finding  (usable as a CI / pre-bake gate)
+  2  bad invocation
+"""
+
+import argparse
+import json
+import os
+import re
+import sys
+
+# --------------------------------------------------------------------------- #
+# File selection
+# --------------------------------------------------------------------------- #
+
+SOURCE_EXTS = {
+    ".c", ".cc", ".cpp", ".cxx", ".c++",
+    ".h", ".hh", ".hpp", ".hxx", ".h++", ".inl", ".ipp", ".tcc",
+    ".m", ".mm",
+}
+# Build-system files that carry compiler flags / CPU detection.
+BUILD_FILE_NAMES = {
+    "makefile", "makefile.gnu", "gnumakefile",
+    "cmakelists.txt", "meson.build", "meson_options.txt",
+    "configure.ac", "configure.in", "configure",
+}
+BUILD_FILE_EXTS = {".mk", ".cmake", ".pro", ".pri"}
+RECIPE_EXTS = {".recipe"}
+
+MAX_BYTES = 4 * 1024 * 1024  # skip files larger than this (generated/vendored blobs)
+SKIP_DIRS = {".git", ".hg", ".svn", "node_modules", "build", ".build"}
+
+
+def _iter_files(paths):
+    """Yield (path, kind) for every file of interest under the given paths.
+
+    kind is one of: 'source', 'build', 'recipe'.
+    """
+    for base in paths:
+        if os.path.isfile(base):
+            yield base, _classify(base)
+            continue
+        for root, dirs, files in os.walk(base):
+            dirs[:] = [d for d in dirs if d not in SKIP_DIRS]
+            for name in files:
+                p = os.path.join(root, name)
+                kind = _classify(p)
+                if kind:
+                    yield p, kind
+
+
+def _classify(path):
+    name = os.path.basename(path).lower()
+    _, ext = os.path.splitext(name)
+    if ext in RECIPE_EXTS:
+        return "recipe"
+    if name in BUILD_FILE_NAMES or ext in BUILD_FILE_EXTS:
+        return "build"
+    if ext in SOURCE_EXTS:
+        return "source"
+    return None
+
+
+def _read_lines(path):
+    try:
+        if os.path.getsize(path) > MAX_BYTES:
+            return None
+        with open(path, "r", encoding="utf-8", errors="replace") as fh:
+            return fh.read().splitlines()
+    except (OSError, ValueError):
+        return None
+
+
+# --------------------------------------------------------------------------- #
+# Findings
+# --------------------------------------------------------------------------- #
+
+class Finding:
+    __slots__ = ("severity", "check", "path", "line", "text", "advice")
+
+    def __init__(self, severity, check, path, line, text, advice):
+        self.severity = severity
+        self.check = check
+        self.path = path
+        self.line = line
+        self.text = text.strip()[:200]
+        self.advice = advice
+
+    def as_dict(self):
+        return {
+            "severity": self.severity, "check": self.check,
+            "path": self.path, "line": self.line,
+            "text": self.text, "advice": self.advice,
+        }
+
+
+SEV_ORDER = {"ERROR": 0, "WARN": 1, "INFO": 2}
+
+# --------------------------------------------------------------------------- #
+# Regexes
+# --------------------------------------------------------------------------- #
+
+# Comment stripping is best-effort (line-oriented); enough to cut false hits.
+_LINE_COMMENT = re.compile(r"//.*$")
+
+X86_MACROS = r"__i386__|__i486__|__i586__|__i686__|__x86_64__|__amd64__|__amd64|" \
+             r"_M_IX86|_M_X64|__SSE__|__SSE2__|__SSE3__|__SSSE3__|__SSE4_1__|" \
+             r"__SSE4_2__|__AVX__|__AVX2__|__AVX512F__|__MMX__|__FMA__"
+RE_PP_ARM = re.compile(r"^\s*#\s*(if|ifdef|elif)\b.*\b(" + X86_MACROS + r")\b")
+RE_X86_MACRO_ANY = re.compile(r"\b(__x86_64__|__amd64__|__i386__|__SSE\d*__|"
+                              r"__AVX\d*__|__AVX512\w*__|__MMX__)\b")
+RE_ARM_TOKEN = re.compile(
+    # macros / headers that mark an arm64/NEON path ...
+    r"(\b(?:__aarch64__|__arm__|__ARM_NEON|__ARM_NEON__|_M_ARM64|SIMDE_ARM_NEON)\b"
+    r"|arm_neon\.h"
+    # ... or the presence of NEON intrinsics / vector types (a hand-written NEON path
+    # that never spells the macro, e.g. SIMDe's own headers).
+    r"|\b(?:u?int(?:8|16|32|64)|float(?:16|32|64)|poly(?:8|16|64))x\d+(?:x\d+)?_t\b"
+    r"|\bv(?:ld|st|add|sub|mul|dup|get|set|combine|mov|and|orr|eor|shl|shr|cvt|"
+    r"reinterpret)q?_)")
+
+RE_X86_INTRIN_HDR = re.compile(
+    r'#\s*include\s*[<"]('
+    r'x?mmintrin|emmintrin|pmmintrin|tmmintrin|smmintrin|nmmintrin|'
+    r'immintrin|avxintrin|avx2intrin|avx512\w*intrin|x86intrin|ammintrin|'
+    r'wmmintrin|xopintrin|fmaintrin|intrin'
+    r')\.h[>"]')
+RE_MM_INTRIN = re.compile(r"\b_mm(?:256|512)?_[a-z0-9_]+\s*\(")
+
+# Compiler flags rejected by aarch64 gcc.
+RE_X86_FLAG = re.compile(
+    r"(?<![\w-])-m(?:sse[0-9.]*|ssse3|sse4\.?[12]?|avx[0-9]*|avx512\w*|mmx|"
+    r"3dnow|fpmath=sse|f16c|fma|pclmul|aes|bmi[12]?|popcnt|xop|abm)\b")
+
+RE_IFUNC = re.compile(
+    r"(--enable-ifunc|\bHAVE_IFUNC\b|__attribute__\s*\(\s*\(\s*ifunc|"
+    r"\btarget_clones\b|\b__builtin_cpu_supports\b|\b__builtin_cpu_init\b)")
+
+# CMake CPU-string matching that can silently miss Haiku's arm64.
+RE_CMAKE_PROC = re.compile(r"CMAKE_SYSTEM_PROCESSOR", re.IGNORECASE)
+
+# char-signedness: declarations of a bare `char` (not signed/unsigned, not pointer/array).
+RE_CHAR_DECL = re.compile(
+    r"(?<![\w])(?<!unsigned )(?<!signed )char\s+"
+    r"(?!\*)([A-Za-z_]\w*)\s*[=;,)]")
+
+
+def _strip(line):
+    return _LINE_COMMENT.sub("", line)
+
+
+# --------------------------------------------------------------------------- #
+# Per-file linters
+# --------------------------------------------------------------------------- #
+
+def lint_source(path, lines, out):
+    file_has_x86_macro = any(RE_X86_MACRO_ANY.search(l) for l in lines)
+    file_has_arm_token = any(RE_ARM_TOKEN.search(l) for l in lines)
+
+    # Pass 1: names declared as a bare `char` in this file (for the signedness pass).
+    char_names = set()
+    for l in lines:
+        s = _strip(l)
+        for m in RE_CHAR_DECL.finditer(s):
+            char_names.add(m.group(1))
+    # Comparison patterns that are wrong for an unsigned char.
+    cmp_res = []
+    if char_names:
+        alt = "|".join(re.escape(n) for n in char_names)
+        cmp_res = [
+            (re.compile(r"\b(" + alt + r")\s*(<|<=)\s*0\b"),
+             "signed comparison of a `char` (always false when char is unsigned/arm64)"),
+            (re.compile(r"\b(" + alt + r")\s*(>=)\s*0\b"),
+             "`char >= 0` is always true when char is unsigned (arm64)"),
+            (re.compile(r"\b(" + alt + r")\s*(==|!=)\s*EOF\b"),
+             "`char` compared to EOF: unsigned char (arm64) never equals -1 -> EOF never detected"),
+            (re.compile(r"\bEOF\s*(==|!=)\s*(" + alt + r")\b"),
+             "`char` compared to EOF: unsigned char (arm64) never equals -1 -> EOF never detected"),
+        ]
+
+    for i, raw in enumerate(lines, 1):
+        s = _strip(raw)
+
+        # 2. x86-only preprocessor arm.
+        if RE_PP_ARM.search(s):
+            if file_has_arm_token:
+                out.append(Finding(
+                    "INFO", "x86-pp-arm", path, i, raw,
+                    "x86 preprocessor arm; file also references arm64/NEON -- confirm the "
+                    "arm64 arm is equivalent, not a stub."))
+            else:
+                out.append(Finding(
+                    "WARN", "x86-pp-arm", path, i, raw,
+                    "x86-only preprocessor arm with NO arm64/NEON counterpart in this file "
+                    "-- arm64 likely falls through to a scalar stub or fails to define a "
+                    "symbol. Add an arm64/NEON arm or a SIMDe path."))
+
+        # 3a. x86 SIMD intrinsic header.
+        if RE_X86_INTRIN_HDR.search(s):
+            sev = "WARN" if not file_has_arm_token else "INFO"
+            out.append(Finding(
+                sev, "x86-intrin-header", path, i, raw,
+                "x86 SIMD intrinsic header does not exist on arm64. Build-depend on SIMDe "
+                "(devel:simde) and include <simde/x86/...> or provide a NEON path."))
+        # 3b. _mm_* intrinsic call.
+        elif RE_MM_INTRIN.search(s):
+            sev = "WARN" if not file_has_arm_token else "INFO"
+            out.append(Finding(
+                sev, "x86-mm-intrinsic", path, i, raw,
+                "x86 _mm_* intrinsic. On arm64 use SIMDe (devel:simde) which maps SSE/AVX "
+                "to NEON, or hand-write a NEON path."))
+
+        # 5. IFUNC / target_clones.
+        if RE_IFUNC.search(s):
+            out.append(Finding(
+                "ERROR", "ifunc", path, i, raw,
+                "IFUNC / runtime CPU dispatch: produces a shared object that FAILS TO LOAD "
+                "SILENTLY on Haiku arm64 (R_AARCH64_IRELATIVE -> B_BAD_DATA). Disable it; "
+                "decide SIMD at compile time."))
+
+        # 1. char signedness.
+        for rx, msg in cmp_res:
+            if rx.search(s):
+                out.append(Finding(
+                    "WARN", "char-signedness", path, i, raw,
+                    msg + ". Build with -fsigned-char or fix the type."))
+                break
+
+    return file_has_x86_macro
+
+
+def lint_build(path, lines, out):
+    for i, raw in enumerate(lines, 1):
+        s = _strip(raw)
+        m = RE_X86_FLAG.search(s)
+        if m:
+            out.append(Finding(
+                "WARN", "x86-flag", path, i, raw,
+                "x86-only compiler flag '%s' is rejected by aarch64 gcc. Gate it on "
+                "x86/x86_64 (playbook Class 5)." % m.group(0)))
+        if RE_IFUNC.search(s):
+            out.append(Finding(
+                "ERROR", "ifunc", path, i, raw,
+                "IFUNC / runtime dispatch enabled in the build: the resulting .so fails to "
+                "load silently on Haiku arm64. Disable it."))
+        if RE_CMAKE_PROC.search(s):
+            out.append(Finding(
+                "INFO", "cmake-cpu-string", path, i, raw,
+                "Build selects behaviour by CMAKE_SYSTEM_PROCESSOR. Haiku/arm64 may match "
+                "no known branch (value is 'arm64', not 'aarch64'), silently disabling "
+                "NEON -- the libjpeg-turbo defect. If so, pass "
+                "-DCMAKE_SYSTEM_PROCESSOR=aarch64."))
+        if re.search(r"\buname\b.*-m\b|UNAME_MACHINE|CMAKE_HOST_SYSTEM_PROCESSOR", s):
+            out.append(Finding(
+                "INFO", "arch-detect", path, i, raw,
+                "Hand-rolled host-arch detection. Haiku's `uname -m` reports 'arm64' (not "
+                "'aarch64'); ensure an arm64/aarch64 branch exists (playbook Class 6/19)."))
+
+
+def lint_recipe(path, lines, out):
+    text = "\n".join(lines)
+    has_signed_char = "-fsigned-char" in text
+    has_arch_gate = bool(re.search(r"targetArchitecture|effectiveTargetArchitecture", text))
+    for i, raw in enumerate(lines, 1):
+        s = raw
+        m = RE_X86_FLAG.search(s)
+        if m and "signed-char" not in s:
+            sev = "INFO" if has_arch_gate else "WARN"
+            out.append(Finding(
+                sev, "x86-flag", path, i, raw,
+                "x86-only flag '%s' in the recipe. Gate on x86/x86_64 with a "
+                "$targetArchitecture case (playbook Class 5)." % m.group(0)))
+        if RE_IFUNC.search(s):
+            out.append(Finding(
+                "ERROR", "ifunc", path, i, raw,
+                "Recipe enables IFUNC/runtime dispatch -- the .so fails to load silently on "
+                "arm64. Drop it."))
+    return {"has_signed_char": has_signed_char, "has_arch_gate": has_arch_gate}
+
+
+# --------------------------------------------------------------------------- #
+# Checklist
+# --------------------------------------------------------------------------- #
+
+CHECKLIST = """\
+DeBeOS arm64 port-hygiene checklist (manual companion to `haiku-port-lint`)
+
+[ ] char signedness. arm64 `char` is UNSIGNED. Grep the source for `char` compared
+    `< 0` / `>= 0`, or getchar()/getc() stored into a `char` then tested against `EOF`.
+    Fix mechanically by adding `-fsigned-char` to the recipe's CFLAGS/CXXFLAGS (with an
+    `-O2`, per playbook Class 15), or correct the declared type.
+
+[ ] x86 preprocessor arms. Find `#if(def) __i386__ / __x86_64__ / __SSE*__ / __AVX*__ /
+    __MMX__`. For each, confirm arm64 has an equivalent arm (`__aarch64__` / `__ARM_NEON`)
+    and is NOT left on a scalar stub or an undefined symbol.
+
+[ ] x86 SIMD intrinsics with no NEON path. `<xmmintrin.h>`, `<immintrin.h>`, `_mm_*`,
+    `_mm256_*`, `_mm512_*`. Where there is no native NEON equivalent, build-depend on
+    SIMDe (`devel:simde`) and include `<simde/x86/...>` -- do NOT drop the feature.
+
+[ ] x86-only compiler flags. `-msse2`, `-mavx`, `-mfpmath=sse`, `-mmmx`, ... in the recipe
+    or a Makefile/CMakeLists are rejected by aarch64 gcc. Gate them on x86/x86_64
+    (playbook Class 5).
+
+[ ] IFUNC / runtime dispatch. `--enable-ifunc`, `HAVE_IFUNC`, `__attribute__((ifunc))`,
+    `target_clones`, `__builtin_cpu_supports`. These make a .so that FAILS TO LOAD
+    SILENTLY on Haiku arm64. Disable; decide SIMD at compile time.
+
+[ ] CPU string / config.guess. CMake CPU detection via `CMAKE_SYSTEM_PROCESSOR` can miss
+    Haiku/arm64 and silently disable NEON (libjpeg-turbo): pass
+    `-DCMAKE_SYSTEM_PROCESSOR=aarch64`. Haiku `uname -m` is `arm64`, not `aarch64` -- GNU
+    config.guess/config.sub and hand-rolled arch switches need an arm64 case
+    (playbook Class 6/19).
+"""
+
+
+# --------------------------------------------------------------------------- #
+# Main
+# --------------------------------------------------------------------------- #
+
+def main(argv):
+    ap = argparse.ArgumentParser(
+        prog="haiku-port-lint",
+        description="Mechanical port-hygiene audit for DeBeOS arm64 (Graviton).")
+    ap.add_argument("paths", nargs="*", default=None,
+                    help="source tree(s) or file(s) to scan (default: current dir)")
+    ap.add_argument("--recipe", action="append", default=[],
+                    help="a .recipe file to audit (may be repeated)")
+    ap.add_argument("--format", choices=["text", "json"], default="text")
+    ap.add_argument("--checklist", action="store_true",
+                    help="print the manual review checklist and exit")
+    ap.add_argument("--severity", choices=["ERROR", "WARN", "INFO"], default="INFO",
+                    help="minimum severity to report (default: INFO)")
+    args = ap.parse_args(argv)
+
+    if args.checklist:
+        sys.stdout.write(CHECKLIST)
+        return 0
+
+    paths = args.paths if args.paths else ["."]
+    findings = []
+    recipe_meta = []
+    any_source_x86 = False
+    scanned = 0
+
+    targets = list(_iter_files(paths))
+    for rp in args.recipe:
+        targets.append((rp, "recipe"))
+
+    # De-duplicate: a recipe passed with --recipe may also be inside a scanned tree.
+    seen = set()
+    deduped = []
+    for path, kind in targets:
+        key = os.path.realpath(path)
+        if key in seen:
+            continue
+        seen.add(key)
+        deduped.append((path, kind))
+    targets = deduped
+
+    for path, kind in targets:
+        lines = _read_lines(path)
+        if lines is None:
+            continue
+        scanned += 1
+        if kind == "source":
+            if lint_source(path, lines, findings):
+                any_source_x86 = True
+        elif kind == "build":
+            lint_build(path, lines, findings)
+        elif kind == "recipe":
+            recipe_meta.append((path, lint_recipe(path, lines, findings)))
+
+    # Cross-cutting: source uses x86 SIMD but no recipe carries -fsigned-char / the port
+    # has no arm64 story. Advisory only.
+    for rp, meta in recipe_meta:
+        if not meta["has_signed_char"]:
+            findings.append(Finding(
+                "INFO", "recipe-advice", rp, 0, "(recipe)",
+                "Recipe does not set -fsigned-char. If the source relies on signed `char` "
+                "(see char-signedness findings), add `-fsigned-char` (with -O2)."))
+
+    min_sev = SEV_ORDER[args.severity]
+    findings = [f for f in findings if SEV_ORDER[f.severity] <= min_sev]
+    findings.sort(key=lambda f: (SEV_ORDER[f.severity], f.check, f.path, f.line))
+
+    n_err = sum(1 for f in findings if f.severity == "ERROR")
+    n_warn = sum(1 for f in findings if f.severity == "WARN")
+    n_info = sum(1 for f in findings if f.severity == "INFO")
+
+    if args.format == "json":
+        json.dump({
+            "scanned": scanned,
+            "summary": {"ERROR": n_err, "WARN": n_warn, "INFO": n_info},
+            "findings": [f.as_dict() for f in findings],
+        }, sys.stdout, indent=2)
+        sys.stdout.write("\n")
+    else:
+        for f in findings:
+            loc = "%s:%d" % (f.path, f.line) if f.line else f.path
+            print("%-5s [%s] %s" % (f.severity, f.check, loc))
+            if f.text and f.line:
+                print("      | %s" % f.text)
+            print("      -> %s" % f.advice)
+        print()
+        print("scanned %d file(s); %d ERROR, %d WARN, %d INFO"
+              % (scanned, n_err, n_warn, n_info))
+        if n_err or n_warn:
+            print("port-hygiene: FAIL (see graviton/docs/port-hygiene.md and the "
+                  "porting-playbook)")
+        else:
+            print("port-hygiene: clean at severity>=%s" % args.severity)
+
+    return 1 if (n_err or n_warn) else 0
+
+
+if __name__ == "__main__":
+    try:
+        sys.exit(main(sys.argv[1:]))
+    except BrokenPipeError:
+        sys.exit(0)

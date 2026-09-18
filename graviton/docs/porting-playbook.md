@@ -370,6 +370,14 @@ aarch64. Gating the flag would just yield a library with no working kernel. NEON
 support only arrived in embree 3.13, so embree is a **version-bump / real port,
 not a Class-5 one-liner — deferred-hard** (see the deferred list at the end).
 
+**Catch this (and the related x86 assumptions) up front.**
+`graviton/scripts/haiku-port-lint` (see [port-hygiene.md](port-hygiene.md), #341) greps a
+source tree / recipe for x86-only flags and preprocessor arms, x86 SIMD intrinsics with
+no NEON path, IFUNC, `char`-signedness, and CPU-string blind spots — the mechanical,
+before-the-build companion to this reactive playbook. When SSE/AVX intrinsics have no
+NEON equivalent, build-depend on **SIMDe** (`devel:simde`,
+`haikuports-patches/recipes/simde-0.8.2.recipe`) rather than cutting the feature.
+
 ---
 
 ## Class 6: config.guess cannot name the arm64 host

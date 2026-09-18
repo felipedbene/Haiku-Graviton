@@ -1,0 +1,63 @@
+SUMMARY="Portable SIMD: implementations of SSE/AVX/NEON/... intrinsics for other platforms"
+DESCRIPTION="SIMD Everywhere (SIMDe) provides fast, portable implementations of \
+SIMD intrinsics for platforms that do not natively support them. For example, you can \
+use SSE/SSE2/AVX/AVX-512 (and more) intrinsics on ARM/AArch64 (NEON), where SIMDe maps \
+them onto the target's native SIMD as far as possible and falls back to portable scalar \
+code otherwise.
+
+On DeBeOS arm64 (AWS Graviton) this is the drop-in translation layer for ports whose hot \
+paths are written in x86 SSE/AVX intrinsics and have no hand-written NEON equivalent: \
+build-depend on 'devel:simde' and include <simde/x86/sse2.h> (etc.) instead of the x86 \
+<emmintrin.h>. It is header-only, so it adds no runtime dependency. See \
+graviton/docs/port-hygiene.md and graviton/docs/simd-vectorization-review.md."
+HOMEPAGE="https://github.com/simd-everywhere/simde"
+COPYRIGHT="2017-2024 Evan Nemerson and the SIMDe contributors"
+LICENSE="MIT"
+REVISION="1"
+SOURCE_URI="https://github.com/simd-everywhere/simde/archive/refs/tags/v$portVersion.tar.gz"
+CHECKSUM_SHA256="ed2a3268658f2f2a9b5367628a85ccd4cf9516460ed8604eed369653d49b25fb"
+SOURCE_DIR="simde-$portVersion"
+
+# Header-only: the installed artifact is architecture-independent headers plus a
+# pkg-config file, so the package is 'any' (cf. robin_map in this overlay).
+ARCHITECTURES="any"
+
+PROVIDES="
+	simde = $portVersion
+	devel:simde = $portVersion
+	"
+REQUIRES="
+	haiku
+	"
+
+BUILD_REQUIRES="
+	haiku_devel
+	"
+BUILD_PREREQUIRES="
+	cmd:gcc
+	cmd:meson
+	cmd:ninja
+	cmd:pkg_config
+	"
+
+BUILD()
+{
+	# SIMDe is header-only. Its meson build installs the header tree under
+	# develop/headers/simde and generates simde.pc; -Dtests=false keeps meson from
+	# pulling in the (large) test/benchmark dependency graph -- nothing is compiled
+	# for the install, only the headers are staged.
+	rm -rf build_haiku
+	meson setup build_haiku \
+		--prefix=$prefix \
+		--buildtype=release \
+		--includedir=$includeDir \
+		--libdir=$libDir \
+		-Dtests=false
+
+	ninja -C build_haiku $jobArgs
+}
+
+INSTALL()
+{
+	ninja -C build_haiku install
+}
