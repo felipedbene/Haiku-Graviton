@@ -3744,6 +3744,30 @@ block_cache_create(int fd, off_t numBlocks, size_t blockSize, bool readOnly)
 
 
 status_t
+block_cache_set_size(void* _cache, off_t numBlocks)
+{
+	// The block cache never pre-allocates a per-block array: max_blocks is only
+	// the upper bound the get/put/sync paths bounds-check against, and cached
+	// blocks live in a hash grown on demand. Widening it therefore just admits
+	// the higher block numbers a freshly-grown filesystem exposes -- which is
+	// exactly what an ONLINE (mounted) resize needs, since the cache was created
+	// at the old size and cannot be recreated while transactions are live.
+	//
+	// Only growing is supported. Shrinking would have to evict any cached block
+	// past the new bound (and abort transactions touching it); no caller needs
+	// it, so refuse rather than silently leave stale blocks reachable.
+	block_cache* cache = (block_cache*)_cache;
+	WriteLocker locker(&cache->lock);
+
+	if (numBlocks < cache->max_blocks)
+		return B_NOT_SUPPORTED;
+
+	cache->max_blocks = numBlocks;
+	return B_OK;
+}
+
+
+status_t
 block_cache_sync(void* _cache)
 {
 	block_cache* cache = (block_cache*)_cache;

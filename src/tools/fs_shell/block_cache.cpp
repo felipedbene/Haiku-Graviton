@@ -1534,6 +1534,23 @@ fssh_block_cache_create(int fd, fssh_off_t numBlocks, fssh_size_t blockSize, boo
 
 
 fssh_status_t
+fssh_block_cache_set_size(void* _cache, fssh_off_t numBlocks)
+{
+	// max_blocks is only the bounds-check limit; blocks live in a hash grown on
+	// demand. Growing it admits the higher block numbers an online resize
+	// exposes. Only growing is supported (mirrors the kernel primitive).
+	block_cache* cache = (block_cache*)_cache;
+	MutexLocker locker(&cache->lock);
+
+	if (numBlocks < cache->max_blocks)
+		return FSSH_B_NOT_SUPPORTED;
+
+	cache->max_blocks = numBlocks;
+	return FSSH_B_OK;
+}
+
+
+fssh_status_t
 fssh_block_cache_sync(void* _cache)
 {
 	block_cache* cache = (block_cache*)_cache;

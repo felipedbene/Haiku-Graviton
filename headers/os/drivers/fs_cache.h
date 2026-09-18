@@ -59,6 +59,7 @@ extern bool cache_has_block_in_transaction(void* cache, int32 id, off_t blockNum
 extern void block_cache_delete(void *cache, bool allowWrites);
 extern void *block_cache_create(int fd, off_t numBlocks, size_t blockSize,
 					bool readOnly);
+extern status_t block_cache_set_size(void *cache, off_t numBlocks);
 extern status_t block_cache_sync(void *cache);
 extern status_t block_cache_sync_etc(void *cache, off_t blockNumber,
 					size_t numBlocks);
