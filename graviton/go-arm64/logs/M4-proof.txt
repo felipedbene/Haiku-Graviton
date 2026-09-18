@@ -1,0 +1,91 @@
+M4 proof — wire three real libroot syscalls into the Haiku Go port and
+de-stub amazon-ssm-agent's degraded paths, then re-verify the compile + link.
+Generated: 2026-09-18T16:57:35Z
+
+## Toolchain
+go version go1.26.1 linux/amd64
+GOROOT=<korli/go @ go1.26.1-haiku1 + patches 0001 (M0) + 0002 (M2) + 0003 (M4)>
+
+## Fork patch 0003 (patches/0003-haiku-arm64-M4-flock-statfs-uname.patch)
+Adds three libroot calls to the syscall package (source-of-truth //sys lines in
+syscall_haiku.go + godefs typedefs in types_haiku.go; hand-applied to the
+generated z* tables for BOTH arm64 and amd64, matching mksyscall_haiku.pl /
+cgo -godefs output):
+
+ src/syscall/syscall_haiku.go        |  4 +++    (//sys Flock/Statfs/Fstatfs, //sysnb Uname)
+ src/syscall/types_haiku.go          |  6 +++++  (Statfs_t=C.struct_statvfs, Utsname=C.struct_utsname, +2 includes)
+ src/syscall/zsyscall_haiku_amd64.go | 49 +++    (dyn-import + linkname + var + func x4)
+ src/syscall/zsyscall_haiku_arm64.go | 49 +++
+ src/syscall/ztypes_haiku_amd64.go   | 22 +++    (Statfs_t, Utsname structs)
+ src/syscall/ztypes_haiku_arm64.go   | 22 +++
+ 6 files changed, 152 insertions(+)
+
+Correctness note: Haiku libroot DOES export flock(2) (headers/posix/sys/file.h,
+src/system/libroot/posix/sys/flock.c -> _kern_flock) and the LOCK_* constants;
+the M3 note that "Haiku libroot has no flock(2)" was wrong. So Flock wraps the
+real flock() rather than emulating over fcntl. Statfs/Fstatfs wrap
+statvfs(3)/fstatvfs(3); Uname wraps uname(2) — all real libroot symbols.
+
+## Patch applies cleanly on the M0+M2 base
+$ git apply --reverse 0003...patch   -> OK   (tree back to M0+M2)
+$ git apply --check  0003...patch    -> OK   (forward-applies on M0+M2 base)
+$ git apply          0003...patch    -> OK   (reapplied)
+
+## New symbols compile + link for haiku/arm64 (and haiku/amd64)
+A probe referencing syscall.Flock, LOCK_SH/EX/UN/NB, Statfs, Fstatfs,
+Statfs_t{Bsize,Frsize,Blocks,Bfree,Bavail}, Uname, Utsname{Release}:
+  GOOS=haiku GOARCH=arm64 CGO_ENABLED=0 go build  -> exit 0, AArch64 Haiku ELF
+  GOOS=haiku GOARCH=amd64 CGO_ENABLED=0 go build  -> exit 0, x86-64 Haiku ELF
+
+## Struct layout verified at compile time (array-index static assertions)
+  [1]int{}[unsafe.Sizeof(syscall.Statfs_t{})-88]   -> compiles (Statfs_t == 88 bytes == struct statvfs)
+  [1]int{}[unsafe.Sizeof(syscall.Utsname{})-160]   -> compiles (Utsname  == 160 bytes == struct utsname)
+  negative control (claim 96 for Statfs_t)         -> "constant -8 ... overflows uintptr", exit 1
+
+## amazon-ssm-agent de-stub (tag v3.3.3270.0)
+Degraded M3 arms replaced with the real syscalls now available:
+  - advisorylock: DELETED agent/fileutil/advisorylock/advisorylock_haiku.go
+    (the FcntlFlock workaround); added `haiku` to advisorylock_unix.go's build
+    tag so the upstream syscall.Flock + LOCK_* path is used unchanged.
+  - go-billy osfs/os_haiku.go: FcntlFlock(F_SETLKW) -> syscall.Flock(LOCK_EX/UN),
+    mirroring os_posix.go exactly (x/sys/unix.Flock -> syscall.Flock).
+  - fileutil_diskspace_haiku.go: 1 TiB sentinel -> real syscall.Statfs(getwd),
+    bytes = count * Frsize (statvfs f_frsize is the unit of the block counts).
+  - instancedetailedinformation/dataProvider_haiku.go: empty stub -> populates
+    KernelVersion from syscall.Uname (Utsname.Release). CPU topology stays empty
+    (Haiku has no lscpu; deferred to get_system_info()).
+Still stubbed/deferred (out of M4 scope):
+  - fsnotify/haiku.go: idle Watcher stub (needs Haiku watch_node; not one of the
+    three toolchain gaps).
+  - x/sys/unix haiku/arm64 tables: NOT ported (a full new-GOOS generated-table
+    effort); the one caller that needed unix.Uname now uses syscall.Uname.
+
+## Re-verify: full-module cross-build (fresh v3.3.3270.0 + regenerated patch)
+$ git archive HEAD | tar -x -C /tmp/agent-fresh          # pristine tag
+$ git apply amazon-ssm-agent-haiku-arm64.patch           -> exit 0
+$ GOOS=haiku GOARCH=arm64 CGO_ENABLED=0 GOFLAGS=-mod=vendor go build ./...   -> exit 0
+
+## The eight release binaries (all AArch64 Haiku ELF, from the fresh tree)
+  amazon-ssm-agent     ELF 64-bit LSB executable, ARM aarch64, version 1 (SYSV)
+  ssm-agent-worker     ELF 64-bit LSB executable, ARM aarch64, version 1 (SYSV)
+  updater              ELF 64-bit LSB executable, ARM aarch64, version 1 (SYSV)
+  ssm-cli              ELF 64-bit LSB executable, ARM aarch64, version 1 (SYSV)
+  ssm-document-worker  ELF 64-bit LSB executable, ARM aarch64, version 1 (SYSV)
+  ssm-session-logger   ELF 64-bit LSB executable, ARM aarch64, version 1 (SYSV)
+  ssm-session-worker   ELF 64-bit LSB executable, ARM aarch64, version 1 (SYSV)
+  ssm-setup-cli        ELF 64-bit LSB executable, ARM aarch64, version 1 (SYSV)
+
+## De-stub is genuinely wired (not just compiled): dynamic imports in the worker
+The thin `amazon-ssm-agent` launcher dead-strips them; ssm-agent-worker (which
+does downloads, inventory gathering, advisory locking) imports them from
+libroot.so as undefined dynamic symbols:
+  $ readelf --dyn-syms ssm-agent-worker | grep ' UND '
+     87: ... UND flock
+     88: ... UND statvfs
+     89: ... UND uname
+
+## Not claimed
+On-hardware start / registration / Run Command (M5/M6). This is a compile +
+link + static-layout milestone, verified entirely by cross-build on Linux; the
+libroot symbol semantics are matched against the Haiku source headers, not yet
+exercised on a Graviton instance.
