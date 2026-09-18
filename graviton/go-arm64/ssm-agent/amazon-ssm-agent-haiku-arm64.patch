@@ -427,21 +427,74 @@ index 57f6e33..8213062 100644
  
  // Copyright 2016 Amazon.com, Inc. or its affiliates. All Rights Reserved.
  //
-diff --git a/agent/managedInstances/fingerprint/hardwareInfo_unix.go b/agent/managedInstances/fingerprint/hardwareInfo_unix.go
-index b61b171..7ff0366 100644
---- a/agent/managedInstances/fingerprint/hardwareInfo_unix.go
-+++ b/agent/managedInstances/fingerprint/hardwareInfo_unix.go
-@@ -11,8 +11,8 @@
- // either express or implied. See the License for the specific language governing
- // permissions and limitations under the License.
- 
--//go:build freebsd || linux || netbsd || openbsd || darwin
--// +build freebsd linux netbsd openbsd darwin
-+//go:build freebsd || linux || netbsd || openbsd || darwin || haiku
-+// +build freebsd linux netbsd openbsd darwin haiku
- 
- // Package fingerprint contains functions that helps identify an instance
- // hardwareInfo contains platform specific way of fetching the hardware hash
+diff --git a/agent/managedInstances/fingerprint/hardwareInfo_haiku.go b/agent/managedInstances/fingerprint/hardwareInfo_haiku.go
+new file mode 100644
+index 0000000..26b7c1c
+--- /dev/null
++++ b/agent/managedInstances/fingerprint/hardwareInfo_haiku.go
+@@ -0,0 +1,62 @@
++// Copyright 2016 Amazon.com, Inc. or its affiliates. All Rights Reserved.
++//
++// Licensed under the Apache License, Version 2.0 (the "License"). You may not
++// use this file except in compliance with the License. A copy of the
++// License is located at
++//
++// http://aws.amazon.com/apache2.0/
++//
++// or in the "license" file accompanying this file. This file is distributed
++// on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND,
++// either express or implied. See the License for the specific language governing
++// permissions and limitations under the License.
++
++//go:build haiku
++// +build haiku
++
++// Package fingerprint contains functions that helps identify an instance
++// hardwareInfo contains a Haiku-specific way of fetching the hardware hash.
++//
++// M5 note (Go-on-DeBeOS/arm64): the generic *_unix.go gatherer shells out to
++// dmidecode / ls / etc. via os/exec. On Haiku arm64 the Go fork's libc-based
++// fork+exec path (syscall.forkAndExecInChild -> forkx) crashes (see
++// graviton/go-arm64/ssm-agent/README.md, M5 blocker B1), so ANY os/exec call
++// faults the process. This Haiku arm computes the fingerprint purely from
++// in-process sources (hostname + network interfaces / MACs) with no
++// subprocess, which is all isValidHardwareHash() requires. dmidecode is absent
++// on Haiku anyway, so the *_unix path would only have produced empty values
++// for the processor/memory/bios/system hashes even if exec worked.
++package fingerprint
++
++import (
++	"fmt"
++
++	"github.com/aws/amazon-ssm-agent/agent/fileutil"
++)
++
++const (
++	systemDMachineIDPath = "/etc/machine-id"
++	upstartMachineIDPath = "/var/lib/dbus/machine-id"
++	hardwareID           = "machine-id"
++)
++
++// currentHwHash gathers a hardware fingerprint without spawning any
++// subprocess. hostnameInfo, primaryIpInfo and macAddrInfo (defined in
++// fingerprint.go) use net/os in-process and are exec-free.
++var currentHwHash = func() (map[string]string, error) {
++	hardwareHash := make(map[string]string)
++	hardwareHash[hardwareID], _ = machineID()
++	hardwareHash["hostname-info"], _ = hostnameInfo()
++	hardwareHash[ipAddressID], _ = primaryIpInfo()
++	hardwareHash["macaddr-info"], _ = macAddrInfo()
++	return hardwareHash, nil
++}
++
++func machineID() (string, error) {
++	if fileutil.Exists(systemDMachineIDPath) {
++		return fileutil.ReadAllText(systemDMachineIDPath)
++	} else if fileutil.Exists(upstartMachineIDPath) {
++		return fileutil.ReadAllText(upstartMachineIDPath)
++	}
++	return "", fmt.Errorf("unable to fetch machine-id")
++}
 diff --git a/agent/managedInstances/sharedCredentials/shared_Credentials_unix.go b/agent/managedInstances/sharedCredentials/shared_Credentials_unix.go
 index e5c773d..52cb473 100644
 --- a/agent/managedInstances/sharedCredentials/shared_Credentials_unix.go
@@ -502,6 +555,134 @@ index df6d5eb..c78b77d 100644
  
  package network
  
+diff --git a/agent/platform/platformIp_others.go b/agent/platform/platformIp_others.go
+index 103cc4f..83da9e5 100644
+--- a/agent/platform/platformIp_others.go
++++ b/agent/platform/platformIp_others.go
+@@ -15,8 +15,37 @@
+ 
+ package platform
+ 
+-import "github.com/aws/amazon-ssm-agent/agent/log"
++import (
++	"net"
++	"runtime"
++
++	"github.com/aws/amazon-ssm-agent/agent/log"
++)
+ 
+ func getDefaultRouteIP(log log.T) (string, error) {
++	// On Haiku (DeBeOS/arm64) net.Interfaces() is not yet implemented in the Go
++	// port and returns an empty list (M5 blocker B3), so originalIP() yields no
++	// address and UpdateInstanceInformation is rejected (IPAddress min size 1).
++	// Determine the primary egress IP with a connect(2) on a UDP socket
++	// (getsockname), which needs no interface enumeration and sends no packets.
++	if runtime.GOOS == "haiku" {
++		if ip, err := haikuEgressIP(); err == nil && ip != "" {
++			return ip, nil
++		}
++	}
+ 	return originalIP()
+ }
++
++// haikuEgressIP returns the local IP the kernel would use to reach an external
++// address, via a UDP connect + LocalAddr (no packets sent).
++func haikuEgressIP() (string, error) {
++	conn, err := net.Dial("udp", "169.254.169.254:80")
++	if err != nil {
++		return "", err
++	}
++	defer conn.Close()
++	if ua, ok := conn.LocalAddr().(*net.UDPAddr); ok && ua.IP != nil && !ua.IP.IsUnspecified() {
++		return ua.IP.String(), nil
++	}
++	return "", nil
++}
+diff --git a/agent/platform/platform_haiku_details.go b/agent/platform/platform_haiku_details.go
+new file mode 100644
+index 0000000..1b9fa46
+--- /dev/null
++++ b/agent/platform/platform_haiku_details.go
+@@ -0,0 +1,49 @@
++// Copyright 2016 Amazon.com, Inc. or its affiliates. All Rights Reserved.
++//
++// Licensed under the Apache License, Version 2.0 (the "License"). You may not
++// use this file except in compliance with the License. A copy of the
++// License is located at
++//
++// http://aws.amazon.com/apache2.0/
++//
++// or in the "license" file accompanying this file. This file is distributed
++// on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND,
++// either express or implied. See the License for the specific language governing
++// permissions and limitations under the License.
++
++//go:build haiku
++// +build haiku
++
++package platform
++
++import "syscall"
++
++// getHaikuPlatformDetails resolves the OS name and version on Haiku without
++// spawning a subprocess. The generic unix path shells out to lsb_release /
++// uname via os/exec, which is unstable on haiku/arm64 (M5 blocker B1: the Go
++// fork's libc fork+exec path faults nondeterministically). uname(2) is a real
++// libroot wrapper (wired in M4), so read the release string directly.
++func getHaikuPlatformDetails() (name string, version string, ok bool) {
++	name = "Haiku"
++	version = notAvailableMessage
++	var u syscall.Utsname
++	if err := syscall.Uname(&u); err == nil {
++		if r := haikuInt8ToString(u.Release[:]); r != "" {
++			version = r
++		}
++	}
++	return name, version, true
++}
++
++// haikuInt8ToString converts a NUL-terminated C char array (Go [N]int8, e.g.
++// syscall.Utsname.Release) to a Go string, stopping at the first NUL.
++func haikuInt8ToString(b []int8) string {
++	buf := make([]byte, 0, len(b))
++	for _, c := range b {
++		if c == 0 {
++			break
++		}
++		buf = append(buf, byte(c))
++	}
++	return string(buf)
++}
+diff --git a/agent/platform/platform_nothaiku_details.go b/agent/platform/platform_nothaiku_details.go
+new file mode 100644
+index 0000000..884cb7c
+--- /dev/null
++++ b/agent/platform/platform_nothaiku_details.go
+@@ -0,0 +1,24 @@
++// Copyright 2016 Amazon.com, Inc. or its affiliates. All Rights Reserved.
++//
++// Licensed under the Apache License, Version 2.0 (the "License"). You may not
++// use this file except in compliance with the License. A copy of the
++// License is located at
++//
++// http://aws.amazon.com/apache2.0/
++//
++// or in the "license" file accompanying this file. This file is distributed
++// on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND,
++// either express or implied. See the License for the specific language governing
++// permissions and limitations under the License.
++
++//go:build !haiku
++// +build !haiku
++
++package platform
++
++// getHaikuPlatformDetails is a no-op on non-Haiku platforms; getPlatformDetails
++// uses its normal os-release / lsb_release path there. See the haiku build of
++// this file for why Haiku needs an exec-free path.
++func getHaikuPlatformDetails() (name string, version string, ok bool) {
++	return "", "", false
++}
 diff --git a/agent/platform/platform_other.go b/agent/platform/platform_other.go
 index 58cb045..d47dfd1 100644
 --- a/agent/platform/platform_other.go
@@ -518,7 +699,7 @@ index 58cb045..d47dfd1 100644
  package platform
  
 diff --git a/agent/platform/platform_unix.go b/agent/platform/platform_unix.go
-index 69c3c24..00e1399 100644
+index 69c3c24..ac7ddcf 100644
 --- a/agent/platform/platform_unix.go
 +++ b/agent/platform/platform_unix.go
 @@ -11,8 +11,8 @@
@@ -532,6 +713,36 @@ index 69c3c24..00e1399 100644
  
  // Package platform contains platform specific utilities.
  package platform
+@@ -89,6 +89,15 @@ func getPlatformDetails(log log.T) (name string, version string, err error) {
+ 	name = notAvailableMessage
+ 	version = notAvailableMessage
+ 
++	// On Haiku (DeBeOS/arm64) there is no /etc/os-release nor lsb_release, and
++	// the generic paths below fall through to os/exec (lsb_release), which is
++	// unsafe on haiku/arm64 (the Go fork's fork+exec path crashes — M5 blocker
++	// B1). Resolve the platform name/version in-process instead (uname(2) via
++	// syscall.Uname, no subprocess).
++	if hn, hv, ok := getHaikuPlatformDetails(); ok {
++		return hn, hv, nil
++	}
++
+ 	if fileExists(centosReleaseFile) {
+ 		// CentOS has incomplete information in the osReleaseFile
+ 		// and there fore needs to be before osReleaseFile exist check
+@@ -289,6 +298,13 @@ func fullyQualifiedDomainName(log log.T) string {
+ 		return ""
+ 	}
+ 
++	// On Haiku (DeBeOS/arm64) avoid the `hostname --fqdn` subprocess: os/exec
++	// is unstable on haiku/arm64 (M5 blocker B1) and this runs on every health
++	// ping. os.Hostname() (a syscall) is sufficient.
++	if runtime.GOOS == "haiku" {
++		return strings.TrimSpace(hostName)
++	}
++
+ 	var contentBytes []byte
+ 	if contentBytes, err = exec.Command(hostNameCommand, "--fqdn").Output(); err == nil {
+ 		fqdn = string(contentBytes)
 diff --git a/agent/plugins/configurecontainers/configurecontainers_unix.go b/agent/plugins/configurecontainers/configurecontainers_unix.go
 index 0cdca47..fe31884 100644
 --- a/agent/plugins/configurecontainers/configurecontainers_unix.go
@@ -1130,6 +1341,24 @@ index 06db2d9..e10999d 100644
  
  package utility
  
+diff --git a/agent/ssm/service.go b/agent/ssm/service.go
+index 4e8d9e7..7484d99 100644
+--- a/agent/ssm/service.go
++++ b/agent/ssm/service.go
+@@ -261,7 +261,12 @@ func (svc *sdkService) UpdateInstanceInformation(
+ 	switch goOS {
+ 	case "windows":
+ 		params.PlatformType = aws.String(ssm.PlatformTypeWindows)
+-	case "linux", "freebsd":
++	case "linux", "freebsd", "haiku":
++		// SSM's PlatformType is a closed enum with no Haiku value. DeBeOS
++		// (Haiku arm64) reports PlatformType=Linux so UpdateInstanceInformation
++		// is accepted; the true OS name/version are still reported via the
++		// platform name/version fields. This mirrors the interim native
++		// debeos-ssm-agent, which reports Linux/Haiku for the same reason.
+ 		params.PlatformType = aws.String(ssm.PlatformTypeLinux)
+ 	case "darwin":
+ 		params.PlatformType = aws.String(ssm.PlatformTypeMacOs)
 diff --git a/agent/startup/serialport/serialport_skip_unix.go b/agent/startup/serialport/serialport_skip_unix.go
 index a2775cf..24170d5 100644
 --- a/agent/startup/serialport/serialport_skip_unix.go
