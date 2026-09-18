@@ -1,0 +1,111 @@
+SUMMARY="Minimal FFmpeg build linking libx264 (DeBeOS arm64 codec proof)"
+DESCRIPTION="A deliberately minimal FFmpeg 8.1.2 build for DeBeOS/Graviton arm64. \
+It enables the native FFmpeg codecs plus the H.264/AVC encoder via libx264 \
+(--enable-gpl --enable-libx264) and disables the large optional external-library \
+closure that the full 'ffmpeg8' port pulls in (libass, dav1d, fdk-aac, vpx, webp, \
+opus, vorbis, theora, ...), none of which is published for arm64 yet. It is the \
+end-to-end proof that libx264 links and encodes through FFmpeg on Graviton \
+(DeBeOS #337, prerequisite for the #95 remote-desktop x264 encode path). The full \
+ffmpeg8 codec matrix is a follow-up once its media-library closure is built for \
+arm64 -- this recipe is NOT a replacement for it and does not advertise the \
+generic devel: resolvables."
+HOMEPAGE="https://ffmpeg.org/"
+COPYRIGHT="2000-2003 Fabrice Bellard
+	2003-2026 the FFmpeg developers"
+LICENSE="GNU GPL v2"
+REVISION="1"
+SOURCE_URI="https://ffmpeg.org/releases/ffmpeg-$portVersion.tar.xz"
+CHECKSUM_SHA256="464beb5e7bf0c311e68b45ae2f04e9cc2af88851abb4082231742a74d97b524c"
+PATCHES="ffmpeg_x264-$portVersion.patchset"
+SOURCE_DIR="ffmpeg-$portVersion"
+
+# arm64-first minimal proof build; not built for the legacy x86_gcc2 ABI.
+ARCHITECTURES="all !x86_gcc2"
+
+# FFmpeg 8.1.2 shared-library sonames (kept identical to the ffmpeg8 port so the
+# libraries are ABI-labelled correctly), but this package does NOT provide the
+# generic lib:/devel: resolvables -- it must not masquerade as the full ffmpeg8.
+libavutilVersion="60.26.102"
+libavcodecVersion="62.28.102"
+libavformatVersion="62.12.102"
+libavfilterVersion="11.14.102"
+libswscaleVersion="9.5.102"
+libswresampleVersion="6.3.102"
+
+PROVIDES="
+	ffmpeg_x264 = $portVersion
+	cmd:ffmpeg
+	cmd:ffprobe
+	"
+REQUIRES="
+	haiku
+	lib:libx264
+	"
+
+BUILD_REQUIRES="
+	haiku_devel
+	devel:libx264
+	"
+BUILD_PREREQUIRES="
+	cmd:awk
+	cmd:cmp
+	cmd:gcc >= 7
+	cmd:g++
+	cmd:ld
+	cmd:grep
+	cmd:make
+	cmd:perl
+	cmd:pkg_config
+	cmd:sed
+	"
+
+PATCH()
+{
+	# patch hard-coded paths to perl (mirrors the ffmpeg8 port)
+	sed -i "s,/usr/bin/perl,$portPackageLinksDir/cmd~perl/bin/perl," \
+		doc/Doxyfile \
+		doc/texi2pod.pl
+}
+
+BUILD()
+{
+	# FFmpeg's aarch64 SIMD is assembled by the C toolchain (GAS), not nasm --
+	# so unlike the x86 build there is no nasm/yasm prerequisite. --enable-asm
+	# (the default) therefore yields the baseline NEON code path, which runs on
+	# every Graviton generation (G2/N1 and up). A Graviton3/4 (-mcpu=neoverse-v1
+	# / -v2, SVE) tuned flavour is a follow-up via the #330 per-recipe ISA opt-in.
+	#
+	# Minimal external-library surface: only libx264 (H.264 encode) is enabled.
+	# libavdevice is disabled because its Haiku backend links the media_kit
+	# (libmedia.so), which the DeBeOS @minimum image does not ship.
+	./configure \
+		--prefix=$prefix \
+		--bindir=$binDir \
+		--datadir=$dataDir/$portName \
+		--incdir=$includeDir \
+		--libdir=$libDir \
+		--shlibdir=$libDir \
+		--mandir=$manDir \
+		--disable-debug \
+		--disable-stripping \
+		--disable-static \
+		--enable-shared \
+		--enable-pic \
+		--enable-gpl \
+		--enable-version3 \
+		--enable-libx264 \
+		--disable-avdevice \
+		--disable-ffplay \
+		--disable-doc
+
+	make $jobArgs
+}
+
+INSTALL()
+{
+	make install
+
+	# This minimal build ships the runtime libraries + the ffmpeg/ffprobe
+	# binaries only; no _devel/_tools split and no docs (built --disable-doc).
+	rm -rf $prefix/share
+}
