@@ -219,6 +219,12 @@ static inline void arch_cpu_idle(void)
 
 extern addr_t arm64_get_fp(void);
 
+// Derive the CNTVCT_EL0 -> microseconds multiply/shift factors system_time()
+// uses, from CNTFRQ_EL0. Defined in the shared arm64 system_time.c (compiled
+// into both libroot and the kernel); called once at boot by arch_init_timer()
+// and at process startup by libroot's __arch_init_time().
+extern void __arch_init_system_time(void);
+
 // Derive the Linux/glibc-compatible AT_HWCAP / AT_HWCAP2 feature words from the
 // EL1-only ID_AA64* registers. Published to userland through the commpage; see
 // arch_commpage.cpp and libroot's getauxval().
