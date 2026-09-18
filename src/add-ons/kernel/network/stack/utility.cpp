@@ -171,6 +171,21 @@ uninit_fifo(net_fifo* fifo)
 }
 
 
+/*!	Changes the byte limit of an existing fifo.
+
+	max_bytes is only ever read under fifo->lock (base_fifo_enqueue_buffer),
+	so it must only be written under it too. Used when a device interface
+	activates multiple receive queues and rebalances queue 0's share of the
+	total buffering (see D28).
+*/
+void
+set_fifo_max_bytes(net_fifo* fifo, size_t maxBytes)
+{
+	MutexLocker locker(fifo->lock);
+	fifo->max_bytes = maxBytes;
+}
+
+
 static inline status_t
 base_fifo_enqueue_buffer(net_fifo* fifo, net_buffer* buffer)
 {

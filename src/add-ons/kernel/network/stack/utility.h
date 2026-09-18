@@ -99,6 +99,7 @@ struct net_fifo_watermark {
 // fifos
 status_t	init_fifo(net_fifo* fifo, const char *name, size_t maxBytes);
 void		uninit_fifo(net_fifo* fifo);
+void		set_fifo_max_bytes(net_fifo* fifo, size_t maxBytes);
 status_t	fifo_enqueue_buffer(net_fifo* fifo, struct net_buffer* buffer);
 ssize_t		fifo_dequeue_buffer(net_fifo* fifo, uint32 flags, bigtime_t timeout,
 				struct net_buffer** _buffer);
