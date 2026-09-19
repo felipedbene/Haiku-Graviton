@@ -1,0 +1,109 @@
+M8 -- NATIVE Go toolchain distribution for DeBeOS (Haiku) arm64 (issue #378)
+============================================================================
+Goal: a Go toolchain whose binaries (go, compile, asm, link, cover, vet, cgo,
+...) are haiku/arm64-native, so `go build` runs ON the box, not just
+GOOS=haiku cross-compiles from Linux. Self-hosting acceptance = a native
+`go build` of a hello program (spawning compile+link via the M6 fork+exec
+path) that produces a runnable AArch64 Haiku ELF, PLUS a real dependency graph.
+
+All merged M0-M6 fork work reused; NO new fork patch needed for the
+distribution. Native tools rebuilt from the patched tree so the native `go`
+carries patch 0004 (M6 pipe/fork+exec fix) -- the exact path `go build` uses.
+
+== 1. Cross-build the native toolchain (Linux host) ==============================
+From /local/home/benfelip/go-m0/korli-go (korli/go @ go1.26.1-haiku1 + patches
+0001-0004 applied), host bin/go = go1.26.1 linux/amd64:
+
+  GOROOT=$PWD GOCACHE=/tmp/... GOOS=haiku GOARCH=arm64 CGO_ENABLED=0 \
+    GOTOOLCHAIN=local GOFLAGS=-mod=mod  ./bin/go install std cmd    -> exit 0
+
+Produced (all AArch64 Haiku ELF, interp /system/runtime_loader, NEEDED libroot.so):
+  bin/haiku_arm64/{go,gofmt}
+  pkg/tool/haiku_arm64/{addr2line asm buildid cgo compile covdata cover dist
+    distpack fix link nm objdump pack pprof preprofile test2json trace vet}  (19)
+  $ file bin/haiku_arm64/go
+    ELF 64-bit LSB executable, ARM aarch64, ... interpreter /system/runtime_loader
+  $ file pkg/tool/haiku_arm64/*  ->  19/19 "ARM aarch64"
+
+== 2. Assemble a self-contained GOROOT + hpkg ===================================
+stage-goroot.sh assembled a packagefs layout (root -> /boot/system;
+GOROOT=/boot/system/develop/lib/go): native go+gofmt at GOROOT/bin, native
+tools at pkg/tool/haiku_arm64, pkg/include, std src, lib, go.env, VERSION,
+LICENSE; relative symlinks bin/go -> ../develop/lib/go/bin/go; a
+data/profile.d/go.sh; .PackageInfo. GOROOT is 328 MiB. (pkg/haiku_arm64 is
+intentionally empty -- modern Go compiles std on demand into GOCACHE, so
+`go build` on the box exercises the native compile+link, not prebuilt .a.)
+
+On the Graviton Haiku box (c7g.large, canonical ami-04493ac7c3fe0d304,
+hrev59996), build-hpkg-golang.sh:
+
+  $ package create -z zlib -C root -i root/.PackageInfo golang-1.26.1-1-arm64.hpkg
+  -rw-r--r-- 1 baron root 121872113 golang-1.26.1-1-arm64.hpkg   (~116 MiB, zlib)
+  sha256: 9858b9611d47d9c25b35173d696354edd9962707d69f40c8cb7284c9820dfdce
+  PackageInfo: name golang, version 1.26.1-1, arch arm64, license "BSD (3-clause)"
+    provides golang/cmd:go/cmd:gofmt = 1.26.1, requires haiku   (validated, no bundling)
+
+== 3. Verify NATIVELY on Haiku arm64 ============================================
+Install:
+  $ pkgman install -y golang-1.26.1-1-arm64.hpkg
+    install package golang-1.26.1-1 from local file
+    [system] Changes applied.
+  $ type -p go        -> /boot/system/bin/go
+
+go version:
+  $ go version        -> go version go1.26.1 haiku/arm64
+
+go env:
+  GOROOT=/boot/system/develop/lib/go   (auto-detected from the bin/go symlink)
+  GOOS=haiku  GOARCH=arm64  GOVERSION=go1.26.1  CGO_ENABLED=0
+  GOPATH=/boot/home/go  GOCACHE=/boot/home/.cache/go-build
+
+go build hello (native compile+link via fork+exec = the M6 path):
+  $ go -C tests/hello build -x -o hello ./hello.go
+    /boot/system/develop/lib/go/pkg/tool/haiku_arm64/compile -o $WORK/... internal/unsafeheader ...
+    /boot/system/develop/lib/go/pkg/tool/haiku_arm64/asm     -p internal/cpu ... -D GOOS_haiku -D GOARCH_arm64 ...
+    (native tools spawned; std compiled from src on the box)
+  $ go -C tests/hello build -o hello ./hello.go   -> build-exit=0   (2869964-byte hello)
+  $ od -An -tx1 -N20 hello  -> 7f 45 4c 46 02 01 01 00 ... 02 00 b7 00
+                               ELF64 LSB, e_machine 0x00b7 = EM_AARCH64
+  $ ./hello   -> hello from native go build on haiku/arm64     hello-exit=0
+
+go build multi-package module (main + mathx + std graph: crypto/sha256,
+encoding/json, encoding/hex, sort, strings):
+  $ go -C tests/native/greetmod build -o greetmod .   -> greet-build-exit=0
+  $ ./greetmod -> GREETMOD OK: {"sha":"fa7eb2e3fc0785e5","sorted":[1,2,3,5,8,9],"sum":28}
+                   greet-run-exit=0
+
+== 4. BONUS -- real external dependency graph (debeos-aws) ======================
+Native `go build` of graviton/go-arm64/debeos-aws (aws-sdk-go-v2: config,
+feature/s3/manager, service/s3, service/cloudfront) ON the box. The box's NAT
+egress reaches proxy.golang.org, so native `go mod` fetched the whole graph
+over pure-Go TLS -- no vendoring, no Linux peer:
+
+  $ go -C debeos-aws mod tidy
+    go: downloading github.com/aws/aws-sdk-go-v2/config v1.28.6
+    go: downloading github.com/aws/aws-sdk-go-v2/feature/s3/manager v1.17.41
+    go: downloading github.com/aws/aws-sdk-go-v2/service/s3 v1.71.0
+    go: downloading github.com/aws/aws-sdk-go-v2/service/cloudfront v1.44.1
+    ... (transitive deps) ...                          tidy-exit=0
+  $ go -C debeos-aws build -trimpath -ldflags=-s -o debeos-aws .   -> build-exit=0
+  $ od -An -tx1 -N20 debeos-aws  -> ... 02 00 b7 00   (AArch64 Haiku ELF)
+  $ ./debeos-aws s3 ls s3://haiku-graviton-hpkg-668984504585/staging/go-arm64/
+    2026-09-19 01:40:14  121872113 staging/go-arm64/golang-1.26.1-1-arm64.hpkg
+  (the natively-built AWS client hit S3 via the instance role over IMDS +
+   pure-Go TLS -- a functioning real program built entirely by the native go.)
+
+Note: the committed debeos-aws go.sum was incomplete (missing SDK entries);
+`go mod tidy` completed it on the box. That is repo hygiene, not a toolchain
+gap -- the fix is to commit the tidied go.sum.
+
+== cgo status ==================================================================
+CGO_ENABLED=0 throughout (the distribution's default; go env reports 0).
+Native cgo (a working arm64 gcc bridge to libroot) is a follow-up, unneeded
+for pure-Go builds -- which covers the SSM agent, debeos-aws, and the tests here.
+
+== Deliverables ================================================================
+hpkg (STAGING only, not green):
+  s3://haiku-graviton-hpkg-668984504585/staging/go-arm64/golang-1.26.1-1-arm64.hpkg
+  sha256 9858b9611d47d9c25b35173d696354edd9962707d69f40c8cb7284c9820dfdce
+EC2: i-03a7ef1555b2e1af2 (c7g.large, owner=nativego378) TERMINATED.

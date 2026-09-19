@@ -1,0 +1,24 @@
+name			golang
+version			@VER@-1
+architecture		arm64
+summary			"Go programming language toolchain (native, haiku/arm64)"
+description			"The gc Go toolchain (go, gofmt, compile, asm, link, cover, vet, cgo, ...) built to RUN NATIVELY on DeBeOS (Haiku) arm64 / AWS Graviton. Extends the x86_64-only korli/go Haiku fork (github.com/korli/go @ go1.26.1-haiku1) to haiku/arm64 with the DeBeOS arm64 arch patchset (runtime/syscall/linker) and the M2 errno + M6 fork+exec fixes, then cross-builds the full distribution from a Linux host. GOROOT is /boot/system/develop/lib/go. Pure-Go builds (CGO_ENABLED=0); native cgo is a follow-up."
+packager		"DeBeOS <debeos@debene.dev>"
+vendor			"DeBeOS"
+licenses {
+	"BSD (3-clause)"
+}
+copyrights {
+	"2009-2026 The Go Authors"
+}
+provides {
+	golang = @VER@
+	cmd:go = @VER@
+	cmd:gofmt = @VER@
+}
+requires {
+	haiku
+}
+urls {
+	"https://github.com/korli/go"
+}

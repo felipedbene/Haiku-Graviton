@@ -210,3 +210,37 @@ Full transcript, disassembly, and the deployment note (launch the agent with a
 PATH that includes `/boot/system/bin` so the shell resolves) in
 [`logs/M6-proof.txt`](logs/M6-proof.txt). This closes the ssm-agent runtime
 blocker B1 and delivers a fully functional agent (issue #302 North Star).
+
+## Status: M8 DONE (native, self-hosting Go distribution — `go build` runs ON Haiku, #378)
+
+The whole point of #378: not just `GOOS=haiku` cross-compiling from Linux, but
+a Go distribution whose **toolchain binaries are haiku/arm64-native**, so
+`go build` runs *on* a Graviton DeBeOS box and spawns its own
+`compile`/`asm`/`link` (the M6 `fork`+`exec` path). Go is self-hosting; this
+packages that.
+
+- **Cross-built the native toolchain** from the patched korli/go tree
+  (`0001`–`0004`) on a Linux host: `GOOS=haiku GOARCH=arm64 CGO_ENABLED=0
+  GOTOOLCHAIN=local ./bin/go install std cmd` → `bin/haiku_arm64/{go,gofmt}` and
+  all **19** `pkg/tool/haiku_arm64/*` as AArch64 Haiku ELF. **No new fork patch**
+  — the native `go` just has to carry patch `0004` (rebuilt from the patched
+  tree so it does).
+- **Packaged a self-contained GOROOT** (`/boot/system/develop/lib/go`) as
+  **`golang-1.26.1-1-arm64.hpkg`** (~116 MiB, **zlib**, sha256
+  `9858b9611d47d9c25b35173d696354edd9962707d69f40c8cb7284c9820dfdce`). Recipe,
+  staging/build scripts, `.PackageInfo`, profile.d, and the reproduce steps are
+  in [`package/`](package/).
+- **Verified NATIVELY** on a Graviton `c7g.large` (canonical
+  `ami-04493ac7c3fe0d304`, hrev59996): after `pkgman install`,
+  `go version` → **`go1.26.1 haiku/arm64`**; `go env` right (GOROOT auto-detected);
+  `go build` of a hello program spawned the native tools and produced a runnable
+  AArch64 ELF (`hello from native go build on haiku/arm64`); a multi-package
+  module and the real **`debeos-aws`** (aws-sdk-go-v2 — native `go mod tidy`
+  fetched the whole graph over the box's egress + pure-Go TLS) both built and
+  ran natively. Full transcript:
+  [`logs/M8-native-distribution-proof.txt`](logs/M8-native-distribution-proof.txt).
+
+CGO stays off (`CGO_ENABLED=0`, the distribution default); native cgo is a
+follow-up and is not needed for pure-Go builds. The hpkg is harvested to
+**STAGING only** (`s3://…/staging/go-arm64/`), not the green pool; baking is a
+separate gated step.
