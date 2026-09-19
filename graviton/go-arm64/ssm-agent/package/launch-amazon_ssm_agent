@@ -11,11 +11,17 @@
 # instance role. It registers as the instance's i- managed node (ResourceType
 # EC2Instance) and executes Run Command / Session Manager.
 #
-# The env block sources agent-env.sh, which puts the shell directory
-# (/boot/system/bin) on PATH. Without it the (healthy) fork+exec of
-# ssm-document-worker reaches execve and returns "sh not found in $PATH", so
-# Run Command fails to find the shell (M6 deploy note). launch_daemon services
-# otherwise start with a minimal environment.
+# The env block puts the shell directory (/boot/system/bin) on PATH. Without it
+# the (healthy) fork+exec of ssm-document-worker reaches execve and returns "sh
+# not found in $PATH", so Run Command fails to find the shell (M6 deploy note).
+# launch_daemon services otherwise start with a minimal environment.
+#
+# PATH is set STATICALLY rather than via `env { from_script ... }`. launch_daemon
+# evaluates a from_script env source by spawning `sh -c '. <script>; export -p'`
+# and reading its stdout with an unbounded read early in boot (#376); that read
+# hangs before the network/desktop are up, so the job stays enabled=true but
+# launched=false and never starts the agent. The inlined value is exactly what
+# the former agent-env.sh exported, so behaviour is unchanged once running.
 #
 # No network condition: the agent retries IMDSv2 for ~2 min internally and must
 # run early to seed the clock from IMDS (a 1970 clock breaks TLS otherwise) --
@@ -23,7 +29,7 @@
 service x-vnd.debeos-amazon-ssm-agent {
 	launch /boot/system/bin/amazon-ssm-agent
 	env {
-		from_script /boot/system/data/amazon_ssm_agent/agent-env.sh
+		PATH /boot/system/bin:/bin:/boot/system/non-packaged/bin
 	}
 	legacy
 }
