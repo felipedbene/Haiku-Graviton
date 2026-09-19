@@ -1164,8 +1164,18 @@ TCPEndpoint::ReadData(size_t numBytes, uint32 flags, net_buffer** _buffer)
 		uint32 windowSizeRemaining = (fReceiveMaxAdvertised - fReceiveNext).Number();
 		if (fReceiveNext == (fReceiveMaxAdvertised + 1))
 			windowSizeRemaining = 0;
-		if (windowSizeRemaining <= (fReceiveQueue.Size() / 2))
-			_SendAcknowledge();
+		if (windowSizeRemaining <= (fReceiveQueue.Size() / 2)) {
+			// #414: transmit the window update with fLock released -- this
+			// per-recv() hold was RX consumer WAIT. The endpoint stays pinned
+			// by the read syscall's socket reference (and fReadLock is still
+			// held, which is fine: the RX consumer never takes it).
+			PendingAcknowledge pending;
+			if (!_PrepareAcknowledge(false, pending))
+				_SendAcknowledge();
+			locker.Unlock();
+			if (pending.valid && _EmitAcknowledge(pending) < B_OK)
+				_AcknowledgeEmissionFailed(pending);
+		}
 	}
 
 	return B_OK;
@@ -1307,19 +1317,16 @@ TCPEndpoint::IsLocal() const
 status_t
 TCPEndpoint::DelayedAcknowledge()
 {
-	// ACKs "MUST" be generated within 500ms of the first unACKed packet, and
-	// "SHOULD" be for at least every second full-size segment. (RFC 5681 § 4.2)
-
-	bigtime_t delay = TCP_DELAYED_ACKNOWLEDGE_TIMEOUT;
-	if ((fReceiveNext - fLastAcknowledgeSent) >= (fReceiveMaxSegmentSize * 2)) {
-		// Trigger an immediate timeout rather than invoking Send directly,
-		// allowing multiple invocations to be coalesced.
-		delay = 0;
-	} else if (gStackModule->is_timer_active(&fDelayedAcknowledgeTimer)) {
+	// ACKs "MUST" be generated within 500ms of the first unACKed packet
+	// (RFC 5681 section 4.2). The companion at-least-every-second-full-size-
+	// segment rule is applied by SegmentReceived(), which prepares that
+	// acknowledgement under fLock and transmits it lock-free (#414) instead
+	// of bouncing it through set_timer(0) to the stack timer thread.
+	if (gStackModule->is_timer_active(&fDelayedAcknowledgeTimer))
 		return B_OK;
-	}
 
-	gStackModule->set_timer(&fDelayedAcknowledgeTimer, delay);
+	gStackModule->set_timer(&fDelayedAcknowledgeTimer,
+		TCP_DELAYED_ACKNOWLEDGE_TIMEOUT);
 	T(TimerSet(this, "delayed ack", TCP_DELAYED_ACKNOWLEDGE_TIMEOUT));
 	return B_OK;
 }
@@ -2529,11 +2536,25 @@ TCPEndpoint::SegmentReceived(tcp_segment_header& segment, net_buffer* buffer)
 			break;
 	}
 
-	// process acknowledge action as asked for by the *Receive() method
-	if (segmentAction & IMMEDIATE_ACKNOWLEDGE)
-		_SendAcknowledge(true);
-	else if (segmentAction & ACKNOWLEDGE)
-		DelayedAcknowledge();
+	// Process the acknowledge action as asked for by the *Receive() method.
+	// A plain ACK is only DECIDED and committed here, under fLock; building
+	// and transmitting it happens after the lock is dropped below (#414).
+	// The at-least-every-second-full-size-segment rule (RFC 5681 section 4.2)
+	// is applied inline for the same reason: the old set_timer(0) bounce made
+	// the stack timer thread hold fLock for the whole tx pipeline, which the
+	// RX consumer paid for as WAIT.
+	PendingAcknowledge pendingAcknowledge;
+	if (segmentAction & IMMEDIATE_ACKNOWLEDGE) {
+		if (!_PrepareAcknowledge(true, pendingAcknowledge))
+			_SendAcknowledge(true);
+	} else if (segmentAction & ACKNOWLEDGE) {
+		if ((fReceiveNext - fLastAcknowledgeSent)
+				>= (fReceiveMaxSegmentSize * 2)) {
+			if (!_PrepareAcknowledge(false, pendingAcknowledge))
+				_SendAcknowledge();
+		} else
+			DelayedAcknowledge();
+	}
 
 	if (segmentAction & SEND_QUEUED)
 		_SendQueued();
@@ -2558,6 +2579,10 @@ TCPEndpoint::SegmentReceived(tcp_segment_header& segment, net_buffer* buffer)
 		== (FLAG_CLOSED | FLAG_DELETE_ON_CLOSE);
 
 	locker.Unlock();
+
+	if (pendingAcknowledge.valid
+			&& _EmitAcknowledge(pendingAcknowledge) < B_OK)
+		_AcknowledgeEmissionFailed(pendingAcknowledge);
 
 	if (notifyReader) {
 		fReceiveCondition.NotifyAll();
@@ -2926,6 +2951,126 @@ TCPEndpoint::_SendAcknowledge(bool force)
 		return B_NO_MEMORY;
 
 	return _PrepareAndSend(segment, buffer, false);
+}
+
+
+/*!	Decides whether an acknowledgement is due and, for a plain ACK, commits
+	under fLock exactly the endpoint state _PrepareAndSend() would commit for a
+	zero-length ACK-only segment -- WITHOUT building or transmitting anything.
+	The caller passes \a pending to _EmitAcknowledge() with fLock RELEASED
+	(#414): the buffer allocation, header build and the whole downstream send
+	pipeline thereby leave the RX consumer's critical section. Committing
+	before emission keeps concurrent deciders (the delayed-ack timer, the
+	reader's window update) from preparing duplicates; the resulting window
+	where another thread's transmit overtakes this one on the wire is benign --
+	the network can reorder anyway, a stale ACK carries a lower acknowledge
+	number (discarded against SND.UNA) and cannot regress the peer's send
+	window (the SND.WL1/WL2 update rule exists for exactly this).
+
+	Returns false when the acknowledgement cannot be deferred because the
+	prepared segment is not a plain ACK (SYN/RST/FIN riders commit send-side
+	sequence state in _PrepareAndSend()); the caller must fall back to the
+	locked _SendAcknowledge() path. Returns true otherwise, with pending.valid
+	saying whether there is anything to emit.
+*/
+bool
+TCPEndpoint::_PrepareAcknowledge(bool force, PendingAcknowledge& pending)
+{
+	pending.valid = false;
+
+	if (fRoute == NULL || fState == LISTEN)
+		return true;
+			// same silent no-op as _SendAcknowledge() (its B_ERROR is ignored
+			// by every converted caller)
+
+	pending.segment = _PrepareSendSegment();
+
+	if ((pending.segment.flags & (TCP_FLAG_SYNCHRONIZE | TCP_FLAG_RESET
+			| TCP_FLAG_FINISH)) != 0)
+		return false;
+
+	// Is there actually anything to do? (mirrors _SendAcknowledge())
+	if (!force && fState == ESTABLISHED
+			&& fLastAcknowledgeSent == fReceiveNext
+			&& fReceiveQueue.IsContiguous()
+			&& !_ShouldSendSegment(pending.segment, 0, 0, 0))
+		return true;
+
+	pending.segment.sequence = fSendNext.Number();
+	pending.previousLastAcknowledgeSent = fLastAcknowledgeSent;
+	pending.previousReceiveMaxAdvertised = fReceiveMaxAdvertised;
+
+	fReceiveMaxAdvertised = fReceiveNext
+		+ pending.segment.AdvertisedWindow(fReceiveWindowShift);
+	pending.committedReceiveMaxAdvertised = fReceiveMaxAdvertised;
+	fLastAcknowledgeSent = pending.segment.acknowledge;
+	gStackModule->cancel_timer(&fDelayedAcknowledgeTimer);
+
+	pending.checksumOffload = _CanOffloadChecksum();
+		// decided under fLock: reads fRoute's interface address
+	pending.valid = true;
+	return true;
+}
+
+
+/*!	Builds and transmits an acknowledgement prepared by _PrepareAcknowledge().
+	MUST be called with fLock released, and only while the endpoint is pinned:
+	by the caller's socket reference (receive path, reader), or -- for the
+	delayed-ack timer handler -- by the destructor's wait_for_timer(). fRoute
+	is stable without the lock: it is set once in _PrepareSendPath() and put
+	only at the very end of the destructor, after all timers have drained.
+*/
+status_t
+TCPEndpoint::_EmitAcknowledge(PendingAcknowledge& pending)
+{
+	net_buffer* buffer = gBufferModule->create(256);
+	if (buffer == NULL)
+		return B_NO_MEMORY;
+
+	LocalAddress().CopyTo(buffer->source);
+	PeerAddress().CopyTo(buffer->destination);
+
+	status_t status = add_tcp_header(AddressModule(), pending.segment, buffer,
+		pending.checksumOffload);
+	if (status == B_OK)
+		status = next->module->send_routed_data(next, fRoute, buffer);
+	if (status < B_OK) {
+		gBufferModule->free(buffer);
+		return status;
+	}
+
+	return B_OK;
+}
+
+
+/*!	Rolls back the state committed by _PrepareAcknowledge() after the emission
+	failed (allocation or send error), so the acknowledgement is retried via
+	the delayed-ack timer instead of silently skipped -- the peer would
+	otherwise sit out its retransmit timeout. Each field is restored only if no
+	newer acknowledgement has been committed meanwhile. Tolerates racing the
+	destructor (only reachable from the timer handler, which the destructor's
+	wait_for_timer() covers): once fLock is destroyed the locker fails and the
+	endpoint is torn down anyway, and bailing here also guarantees a timer
+	cancelled by teardown is never re-armed.
+*/
+void
+TCPEndpoint::_AcknowledgeEmissionFailed(PendingAcknowledge& pending)
+{
+	MutexLocker locker(fLock);
+	if (!locker.IsLocked())
+		return;
+
+	if (fLastAcknowledgeSent == tcp_sequence(pending.segment.acknowledge))
+		fLastAcknowledgeSent = pending.previousLastAcknowledgeSent;
+	if (fReceiveMaxAdvertised == pending.committedReceiveMaxAdvertised)
+		fReceiveMaxAdvertised = pending.previousReceiveMaxAdvertised;
+
+	if (fState != CLOSED
+			&& !gStackModule->is_timer_active(&fDelayedAcknowledgeTimer)) {
+		gStackModule->set_timer(&fDelayedAcknowledgeTimer,
+			TCP_DELAYED_ACKNOWLEDGE_TIMEOUT);
+		T(TimerSet(this, "delayed ack", TCP_DELAYED_ACKNOWLEDGE_TIMEOUT));
+	}
 }
 
 
@@ -3374,7 +3519,21 @@ TCPEndpoint::_DelayedAcknowledgeTimer(net_timer* timer, void* _endpoint)
 	if (endpoint->State() == CLOSED)
 		return;
 
-	endpoint->_SendAcknowledge();
+	// #414: prepare under fLock, transmit with it released. During bulk
+	// receive this handler used to hold fLock for the entire tx pipeline,
+	// which the RX consumer paid for as WAIT. The endpoint stays pinned for
+	// the whole handler by the destructor's wait_for_timer().
+	TCPEndpoint::PendingAcknowledge pending;
+	if (!endpoint->_PrepareAcknowledge(false, pending)) {
+		endpoint->_SendAcknowledge();
+		return;
+	}
+	if (!pending.valid)
+		return;
+
+	locker.Unlock();
+	if (endpoint->_EmitAcknowledge(pending) < B_OK)
+		endpoint->_AcknowledgeEmissionFailed(pending);
 }
 
 
