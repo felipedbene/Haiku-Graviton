@@ -1825,12 +1825,15 @@ TCPEndpoint::_DrainToRing()
 		net_buffer* head = fReceiveQueue.DetachFirst();
 		if (head == NULL)
 			break;
-		if (!fReceiveRing.Push(head)) {
-			// No free slot after all (should not happen -- checked above).
-			// Do not lose the data: hand it back to the reorder buffer.
-			fReceiveQueue.Add(head, tcp_sequence(head->sequence));
-			break;
-		}
+		// The loop guard confirmed a free slot, this is the single producer
+		// stream (fLock held), and the consumer only ever frees slots -- so Push
+		// cannot fail here. The old fallback re-Add()ed at head->sequence, but
+		// DetachFirst() has already advanced fFirstSequence past it, so Add()
+		// would treat it as already-consumed and silently drop it. Assert the
+		// invariant instead of hiding a data loss behind an unreachable branch.
+		bool pushed = fReceiveRing.Push(head);
+		ASSERT(pushed);
+		(void)pushed;
 	}
 }
 
