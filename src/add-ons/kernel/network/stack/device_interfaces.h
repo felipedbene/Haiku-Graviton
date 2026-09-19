@@ -28,6 +28,41 @@ typedef DoublyLinkedList<net_device_handler> DeviceHandlerList;
 typedef DoublyLinkedList<net_device_monitor,
 	DoublyLinkedListCLink<net_device_monitor> > DeviceMonitorList;
 
+#define NET_STACK_MAX_RX_QUEUES		8	// D9
+#define NET_STACK_RX_QUEUE_FIFO_LIMIT	(256 * 1024)	// D28
+
+
+struct net_device_interface;
+
+
+// Per-queue receive context for a multiqueue interface. Queue 0 does *not* use
+// one of these -- it keeps the legacy fields in net_device_interface below, so
+// that a single-queue interface runs literally the same code it always has.
+// These describe queues 1..receive_queue_count-1 only.
+struct net_device_interface_queue {
+	net_device_interface*	interface;
+	uint32				index;			// 1..receive_queue_count-1
+	thread_id			reader_thread;
+	thread_id			consumer_thread;
+	net_fifo			receive_queue;
+	net_fifo_watermark	receive_queue_diagnostics;
+	uint64				receive_deframe_dropped;
+	uint64				receive_enqueue_dropped;
+
+	// Stop signal for this queue's consumer, checked in its loop guard. down()
+	// does not drop ref_count (it is not the final put), so the consumer needs
+	// its own flag to exit before it can loop back and touch a destroyed fifo;
+	// deleting the fifo's notify sem alone only wakes a currently-blocked one.
+	// Accessed with atomics (set by teardown, read by the consumer).
+	int32				stopping;
+};
+
+
+// Lock order (see D40):
+//   sLock (module list)  ->  receive_lock  ->  receive_handlers_lock(write)
+//   consumer (multiqueue): receive_handlers_lock(read) -> [datalink/domain/TCP]
+//   consumer (single-queue): receive_lock -> [datalink/domain/TCP]
+//   reader: monitor_lock | fifo->lock  (leaf locks, never nested with the above)
 struct net_device_interface : DoublyLinkedListLinkImpl<net_device_interface> {
 	struct net_device*	device;
 	thread_id			reader_thread;
@@ -60,6 +95,25 @@ struct net_device_interface : DoublyLinkedListLinkImpl<net_device_interface> {
 	// lets the fifo limit being reached be shown rather than inferred from a
 	// drop count.
 	net_fifo_watermark	receive_queue_diagnostics;
+
+	// Multiqueue receive (all zero/NULL for a single-queue device).
+	// receive_queue_count is the number of queues being drained (m); queues[]
+	// holds queues 1..m-1 -- queue 0 lives in the legacy fields above so that
+	// the single-queue path is not merely equivalent but the same code.
+	uint32				receive_queue_count;
+	net_device_interface_queue*	queues;		// array of count-1, or NULL
+
+	// Serializes handler-list mutation against multiqueue dispatch; see D30.
+	// Mutators take receive_lock then this (write); multiqueue consumers take
+	// only this (read). The single-queue consumer never touches it and keeps
+	// its receive_lock exclusion unchanged.
+	rw_lock				receive_handlers_lock;
+
+	// Sojourn-time queue discipline for receive_queue. Bounds the queue by the
+	// time a frame spends in it rather than only by bytes, so a fast link fed
+	// past the consumer's drain rate does not build the standing multi-millisecond
+	// queue a pure byte cap allows. See utility.h.
+	net_fifo_codel		receive_queue_codel;
 };
 
 typedef DoublyLinkedList<net_device_interface> DeviceInterfaceList;

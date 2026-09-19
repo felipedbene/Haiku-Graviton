@@ -88,15 +88,25 @@
 #include <KernelExport.h>
 #include <arch/cpu.h>
 #include <boot/kernel_args.h>
+#include <generic_syscall.h>
 #include <interrupt_controller.h>
+#include <kernel.h>
 #include <debug.h>
 #include <interrupts.h>
 #include <safemode.h>
 #include <smp.h>
 #include <system_profiler.h>
+#include <vm/vm.h>
+
+#include <arm64_pmu_syscalls.h>
 
 #include <stdio.h>
 #include <string.h>
+
+
+static_assert(ARM64_PMU_USER_MAX_EVENTS == ARM64_PMU_MAX_EVENT_COUNTERS,
+	"the userland PMU sample ABI must carry as many event slots as the "
+	"kernel has event counters");
 
 
 // The boot setting that turns the facility on for every CPU from early boot.
@@ -1099,6 +1109,157 @@ arm64_pmu_set_sample_interval(bigtime_t interval)
 }
 
 
+//	#pragma mark - userland conduit (generic syscall)
+
+
+/*!	The one narrow path from userland to the PMU counters, routed through the
+	generic-syscall mechanism rather than a dedicated syscall. It exists so the
+	`pmustat` diagnostic (src/bin/pmustat) can read the aggregate counter set
+	the arm64/Graviton performance work is expressed in; see the file comment
+	for why EL0 is otherwise kept away from the counters entirely.
+
+	Runs synchronously in the calling thread's context on whatever CPU that
+	thread is on, so SET_PRESET and READ act on that CPU's per-core counters. A
+	caller that wants a coherent reading pins itself (sched_setaffinity) first;
+	nothing here can make a reading coherent across a migration, because the
+	counters do not migrate.
+*/
+static status_t
+pmu_generic_syscall(const char* subsystem, uint32 function, void* buffer,
+	size_t bufferSize)
+{
+	// INFO touches no PMU register, so it is answered even when the facility is
+	// unavailable or disabled -- that state is exactly what the caller asks
+	// about, and reporting it must never itself risk an EL2 trap.
+	if (function == ARM64_PMU_SYSCALL_INFO) {
+		if (buffer == NULL || bufferSize < sizeof(arm64_pmu_user_info)
+			|| !IS_USER_ADDRESS(buffer)) {
+			return B_BAD_VALUE;
+		}
+
+		arm64_pmu_user_info info;
+		memset(&info, 0, sizeof(info));
+		info.version = ARM64_PMU_SYSCALL_VERSION;
+		info.available = sAvailable ? 1 : 0;
+		info.enabled = sEnabled ? 1 : 0;
+		info.longCounters = sLongEventCounters ? 1 : 0;
+		info.pmuVersion = sPmuVer >> ID_AA64DFR0_PMU_VER_SHIFT;
+		info.presetCount = B_COUNT_OF(kPresets);
+		// One counter is reserved for the sampling profiler (E-PMU-1a); the
+		// rest are what a preset may program. sCounterCount is read the first
+		// time any CPU is programmed, which the "arm64_pmu" boot setting has
+		// already done on every CPU by the time userland can call this.
+		info.generalCounters = sCounterCount > 0 ? sCounterCount - 1 : 0;
+
+		if (user_memcpy(buffer, &info, sizeof(info)) != B_OK)
+			return B_BAD_ADDRESS;
+		return B_OK;
+	}
+
+	// Everything past here reads or programs a PMU register. Require the
+	// facility to be on: touching one while EL2 traps PMU access (AWS sizes
+	// without full PMU) would fault with no handler, and the boot setting is
+	// the gate that proves it is safe on this instance.
+	if (!sAvailable || !sEnabled)
+		return B_NOT_SUPPORTED;
+
+	switch (function) {
+		case ARM64_PMU_SYSCALL_SET_PRESET:
+		{
+			if (buffer == NULL || bufferSize < sizeof(uint32)
+				|| !IS_USER_ADDRESS(buffer)) {
+				return B_BAD_VALUE;
+			}
+
+			uint32 index;
+			if (user_memcpy(&index, buffer, sizeof(index)) != B_OK)
+				return B_BAD_ADDRESS;
+			if (index >= B_COUNT_OF(kPresets))
+				return B_BAD_VALUE;
+
+			// Program and zero the calling CPU's counters, starting a new
+			// window. pmu_program_cpu() requires interrupts off and to run on
+			// the CPU whose per-CPU block it edits; disabling interrupts and
+			// taking smp_get_current_cpu() under them satisfies both. The
+			// preset globals are shared, so two concurrent callers would race
+			// -- acceptable for a single-operator diagnostic.
+			cpu_status state = disable_interrupts();
+			int32 cpu = smp_get_current_cpu();
+			sPreset = &kPresets[index];
+			pmu_select_events(kPresets[index].events,
+				kPresets[index].eventCount);
+			pmu_program_cpu(cpu);
+			restore_interrupts(state);
+			return B_OK;
+		}
+
+		case ARM64_PMU_SYSCALL_SET_EVENTS:
+		{
+			if (buffer == NULL || bufferSize < sizeof(arm64_pmu_user_events)
+				|| !IS_USER_ADDRESS(buffer)) {
+				return B_BAD_VALUE;
+			}
+
+			arm64_pmu_user_events request;
+			if (user_memcpy(&request, buffer, sizeof(request)) != B_OK)
+				return B_BAD_ADDRESS;
+			if (request.count == 0
+				|| request.count > ARM64_PMU_MAX_EVENT_COUNTERS) {
+				return B_BAD_VALUE;
+			}
+
+			// pmu_select_events()/pmu_program_cpu() clamp the count to the room
+			// left after the sampling counter is reserved, dropping any tail;
+			// this is the same behaviour the "pmu events" KDL command has. See
+			// SET_PRESET for the interrupts-off / current-CPU requirement.
+			cpu_status state = disable_interrupts();
+			int32 cpu = smp_get_current_cpu();
+			sPreset = NULL;
+			pmu_select_events(request.events, request.count);
+			pmu_program_cpu(cpu);
+			restore_interrupts(state);
+			return B_OK;
+		}
+
+		case ARM64_PMU_SYSCALL_READ:
+		{
+			if (buffer == NULL || bufferSize < sizeof(arm64_pmu_user_sample)
+				|| !IS_USER_ADDRESS(buffer)) {
+				return B_BAD_VALUE;
+			}
+
+			// arm64_pmu_read() pins to the current CPU with interrupts off for
+			// the reading and software-extends the 32-bit counters across the
+			// interval since the previous read on this CPU.
+			arm64_pmu_sample sample;
+			arm64_pmu_read(&sample);
+			if (!sample.valid)
+				return B_NOT_SUPPORTED;
+
+			arm64_pmu_user_sample out;
+			memset(&out, 0, sizeof(out));
+			out.cpu = sample.cpu;
+			out.valid = 1;
+			out.sampling = sample.sampling ? 1 : 0;
+			out.eventCount = sample.eventCount;
+			out.wrapped = sample.wrapped;
+			out.cycles = sample.cycles;
+			for (uint32 i = 0; i < sample.eventCount
+					&& i < ARM64_PMU_USER_MAX_EVENTS; i++) {
+				out.events[i] = sample.events[i];
+				out.values[i] = sample.values[i];
+			}
+
+			if (user_memcpy(buffer, &out, sizeof(out)) != B_OK)
+				return B_BAD_ADDRESS;
+			return B_OK;
+		}
+	}
+
+	return B_BAD_VALUE;
+}
+
+
 //	#pragma mark - KDL command
 
 
@@ -1345,6 +1506,12 @@ arm64_pmu_init_post_modules(kernel_args* args)
 		"  reset   zero the counters and start a new measurement window\n"
 		"  set     list the event presets, or select one\n"
 		"  events  program an explicit list of event numbers\n", 0);
+
+	// The userland conduit for `pmustat`. Registered whenever PMUv3 is present,
+	// regardless of whether the facility is enabled: the INFO op reports that
+	// state, and the ops that touch a register gate on sEnabled themselves.
+	register_generic_syscall(ARM64_PMU_SYSCALLS, &pmu_generic_syscall,
+		ARM64_PMU_SYSCALL_VERSION, 0);
 
 	// If the boot setting turned the facility on, every CPU has already armed
 	// its sampling counter's overflow (PMINTENSET_EL1) in arm64_pmu_init_percpu().

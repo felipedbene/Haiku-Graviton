@@ -105,6 +105,24 @@ ResizeVisitor::Resize(off_t size, disk_job_id job)
 			return status;
 		}
 
+		// Widen the block cache's valid-block bound. The cache was created at
+		// the OLD NumBlocks() when the volume was mounted, and its max_blocks is
+		// fixed for the life of that cache -- so without this, the first time
+		// metadata or file data lands in the freshly-usable tail (block numbers
+		// in [oldNumBlocks, newNumBlocks)) the cache's bounds check would panic.
+		// The mount-time grow path (GrowEngine) avoids this by growing before
+		// InitCache runs; the online path has no such luxury, so it must resize
+		// the live cache. Growing only ever admits higher block numbers, so it
+		// cannot disturb anything already cached.
+		status = block_cache_set_size(volume->BlockCache(), newNumBlocks);
+		if (status != B_OK) {
+			// The on-disk superblock already advertises the larger size, but the
+			// cache can't serve the tail; undo the grow so nothing writes there.
+			superBlock.num_blocks = HOST_ENDIAN_TO_BFS_INT64(oldNumBlocks);
+			volume->WriteSuperBlock();
+			return status;
+		}
+
 		status = volume->Allocator().Reinitialize();
 		if (status != B_OK)
 			return status;

@@ -1,4 +1,16 @@
-# amazon-ssm-agent — haiku/arm64 port (M3 + M4 + M5)
+# amazon-ssm-agent — haiku/arm64 port (M3 + M4 + M5 + M6 + M7)
+
+> **M7 (2026-09-18): EC2-native registration gate CLEARED + packaged as an hpkg.**
+> The real agent registered **EC2-native** (an `i-` node via IMDS + instance
+> role, *no* hybrid activation) on a real Graviton `c7g.large`, reported
+> AgentVersion `3.3.0.0` / ResourceType `EC2Instance`, and served
+> `AWS-RunShellScript` (Status Success, RC 0, real stdout, n=2). It is packaged as
+> a zlib `amazon_ssm_agent-3.3.3270.0-1-arm64.hpkg` whose bundled `launch_daemon`
+> job starts it EC2-native on cold boot (proven). Full detail, the build script,
+> and the bake-wiring + `debeos-ssm-agent` fallback plan are in
+> [`package/`](package/). This is the productionization step toward baking the
+> real agent as the fleet SSM agent (issue #302).
+
 
 M3/M4/M5 of the "Go on DeBeOS/arm64" arc (see `../../docs/go-arm64-bringup-scope.md`).
 M3/M4 got the real upstream `amazon-ssm-agent` to *compile + link* for

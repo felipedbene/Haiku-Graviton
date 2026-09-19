@@ -195,6 +195,13 @@ static const int kDefaultTTL = 254;
 static const int kDefaultMulticastTTL = 1;
 static const bool kDefaultMulticastLoopback = true;
 
+// Explicit Congestion Notification codepoints in the low 2 bits of the
+// ToS/service_type byte (RFC 3168).
+static const uint8 kIPECNMask = 0x03;
+static const uint8 kIPECNNotECT = 0x00;
+static const uint8 kIPECNECT0 = 0x02;
+static const uint8 kIPECNCE = 0x03;
+
 
 extern net_protocol_module_info gIPv4Module;
 	// we need this in ipv4_std_ops() for registering the AF_INET domain
@@ -1608,6 +1615,14 @@ ipv4_send_routed_data(net_protocol* _protocol, struct net_route* route,
 		header->version = IPV4_VERSION;
 		header->header_length = sizeof(ipv4_header) / 4;
 		header->service_type = protocol ? protocol->service_type : 0;
+		// Stage C: TCP marks individual data segments ECT(0) via a per-buffer
+		// flag; OR it into the low 2 ECN bits so the path/peer can mark CE.
+		// Retransmits, pure ACKs and SYNs leave the flag clear and stay Not-ECT
+		// (RFC 3168). The IP checksum is computed below, after this.
+		if ((buffer->buffer_flags & NET_BUFFER_ECN_ECT0) != 0) {
+			header->service_type
+				= (header->service_type & ~kIPECNMask) | kIPECNECT0;
+		}
 		header->total_length = htons(buffer->size);
 		header->id = htons(atomic_add(&sPacketID, 1));
 		header->fragment_offset = 0;
@@ -1821,6 +1836,7 @@ ipv4_receive_data(net_buffer* buffer)
 	TRACE("ipv4_receive_data(%p [%" B_PRIu32 " bytes])", buffer, buffer->size);
 
 	uint16 headerLength = 0;
+	uint8 ecnCodepoint = kIPECNNotECT;
 	{
 	NetBufferHeaderReader<ipv4_header> bufferHeader(buffer);
 	if (bufferHeader.Status() != B_OK)
@@ -1887,6 +1903,10 @@ ipv4_receive_data(net_buffer* buffer)
 
 	buffer->protocol = header.protocol;
 
+	// Capture the inbound ECN codepoint before the IP header is stripped; it
+	// is realised onto the L4 side-channel below (the single translate point).
+	ecnCodepoint = header.service_type & kIPECNMask;
+
 	if (notForUs) {
 		TRACE("  ipv4_receive_data(): packet was not for us %x -> %x",
 			ntohl(header.source), ntohl(header.destination));
@@ -1926,6 +1946,26 @@ ipv4_receive_data(net_buffer* buffer)
 	// Since the buffer might have been changed (reassembled fragment)
 	// we must no longer access bufferHeader or header anymore after
 	// this point
+	}
+
+	// Single ECN translate point (RFC 3168). Two inputs converge here:
+	//   * A CE the path or peer already set in the IP header -> echo it (mark).
+	//   * A NET_BUFFER_ECN_CE_MARK request from the ingress AQM (the receive
+	//     FIFO's CoDel discipline, which cannot see L3 and so defers the
+	//     mark-vs-drop choice to here): if the packet is ECN-capable (ECT),
+	//     promote it to CE -- a mark, not a loss; if it is not ECN-capable
+	//     (Not-ECT), the AQM's decision stands as an actual drop, taken here
+	//     rather than in the FIFO. Marking an ECN flow instead of dropping it
+	//     is the whole point of the stage.
+	if ((buffer->buffer_flags & NET_BUFFER_ECN_CE_MARK) != 0
+		&& ecnCodepoint == kIPECNNotECT) {
+		// Non-ECN flow the AQM chose to shed: drop it (as the FIFO would have).
+		gBufferModule->free(buffer);
+		return B_OK;
+	}
+	if (ecnCodepoint == kIPECNCE
+		|| (buffer->buffer_flags & NET_BUFFER_ECN_CE_MARK) != 0) {
+		buffer->buffer_flags |= NET_BUFFER_ECN_CE;
 	}
 
 	bool rawDelivered = raw_receive_data(buffer);

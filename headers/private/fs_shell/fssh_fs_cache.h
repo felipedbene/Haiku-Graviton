@@ -69,6 +69,8 @@ extern bool				fssh_cache_has_block_in_transaction(void *_cache,
 extern void				fssh_block_cache_delete(void *_cache, bool allowWrites);
 extern void *			fssh_block_cache_create(int fd, fssh_off_t numBlocks,
 							fssh_size_t blockSize, bool readOnly);
+extern fssh_status_t	fssh_block_cache_set_size(void *_cache,
+							fssh_off_t numBlocks);
 extern fssh_status_t	fssh_block_cache_sync(void *_cache);
 extern fssh_status_t	fssh_block_cache_sync_etc(void *_cache,
 							fssh_off_t blockNumber, fssh_size_t numBlocks);

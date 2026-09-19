@@ -56,6 +56,13 @@ status_t scheduler_on_thread_create(Thread* thread, bool idleThread);
 */
 void scheduler_on_thread_init(Thread* thread);
 
+/*!	Pins a kernel thread that was spawned but never resumed to the given CPU.
+	Must be called between spawn_kernel_thread() and resume_thread(); returns
+	B_BAD_VALUE for an out-of-range or disabled CPU, B_BAD_THREAD_STATE if the
+	thread has already run.
+*/
+status_t scheduler_pin_thread_to_cpu(thread_id thread, int32 cpu);
+
 /*!	Called when a Thread structure is freed.
 	Frees up any per-thread resources allocated on the scheduler's part. The
 	function may be called even if on_thread_create() failed.

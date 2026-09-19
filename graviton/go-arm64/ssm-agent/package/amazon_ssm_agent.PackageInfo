@@ -1,0 +1,24 @@
+name			amazon_ssm_agent
+version			3.3.3270.0-1
+architecture		arm64
+summary			"AWS Systems Manager Agent (amazon-ssm-agent) for DeBeOS on Graviton"
+description		"The real upstream AWS Systems Manager agent (github.com/aws/amazon-ssm-agent, tag v3.3.3270.0, Apache-2.0), cross-compiled for DeBeOS (Haiku) arm64 with the korli/go gc-Go fork plus the DeBeOS haiku/arm64 toolchain patchset. Registers the instance as an EC2-native SSM managed node (i- node) using the instance role over IMDS -- no hybrid activation code -- and executes Run Command and Session Manager. The bundled launch_daemon job starts the agent EC2-native on every boot with a PATH that lets ssm-document-worker resolve the shell. Replaces the interim debeos-ssm-agent as the fleet SSM agent."
+packager		"DeBeOS <debeos@debene.dev>"
+vendor			"DeBeOS"
+licenses {
+	"Apache-2.0"
+}
+copyrights {
+	"Amazon.com, Inc. or its affiliates"
+}
+provides {
+	amazon_ssm_agent = 3.3.3270.0
+	cmd:amazon_ssm_agent = 3.3.3270.0
+	cmd:ssm_cli = 3.3.3270.0
+}
+requires {
+	haiku
+}
+urls {
+	"https://github.com/aws/amazon-ssm-agent"
+}

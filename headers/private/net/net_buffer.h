@@ -36,6 +36,29 @@ enum net_buffer_flags {
 	// and swap the flag for the _VALID one above.
 	NET_BUFFER_L3_CHECKSUM_NEEDED	= (1 << 2),
 	NET_BUFFER_L4_CHECKSUM_NEEDED	= (1 << 3),
+
+	// Explicit Congestion Notification (RFC 3168). The 2-bit IP ECN codepoint
+	// lives in the ToS/Traffic-Class byte, which L3 strips before L4 sees the
+	// buffer; these flags are the side-channel that carries it across that
+	// boundary (buffer metadata, not packet bytes, so it survives header
+	// removal). CE is all TCP needs to echo.
+
+	// Receive: L3 delivered a congestion-experienced (CE) packet -- either a
+	// path/peer-marked CE, or an ECT packet the local ingress AQM asked to
+	// promote (see NET_BUFFER_ECN_CE_MARK). TCP echoes this as ECE.
+	NET_BUFFER_ECN_CE				= (1 << 4),
+
+	// Receive: an ingress AQM (the receive-FIFO CoDel path) requests that L3
+	// promote a markable (ECT) packet to CE instead of dropping it. Consumed
+	// at the single ECN translate point in ipv4_receive_data(); a Not-ECT
+	// packet cannot be marked and is dropped as before.
+	NET_BUFFER_ECN_CE_MARK			= (1 << 5),
+
+	// Transmit: mark this individual segment ECT(0). Set per-buffer by TCP on
+	// data-bearing, non-retransmit, non-SYN segments of an ECN connection;
+	// OR'd into the IP ECN field at header fill. Pure ACKs, SYN/SYN-ACK and
+	// retransmissions leave it clear and stay Not-ECT (RFC 3168).
+	NET_BUFFER_ECN_ECT0				= (1 << 6),
 };
 
 
@@ -59,6 +82,19 @@ typedef struct net_buffer {
 	uint32					size;
 	uint8					protocol;
 	uint16					buffer_flags;
+
+	// Wall-clock time (system_time(), microseconds) at which the device reader
+	// thread put this buffer onto a device interface's receive FIFO. The
+	// consumer thread reads it back to compute how long the buffer sat in that
+	// queue -- its sojourn -- which is the quantity the receive FIFO's queue
+	// discipline bounds (see net_fifo_codel in the stack add-on). Zero means the
+	// buffer was never enqueued on such a FIFO and carries no sojourn.
+	//
+	// Appended at the end of the structure on purpose: every field above keeps
+	// its offset, so a module built against an older copy of this header still
+	// reads all of them correctly, and only the allocating module (the stack
+	// add-on's net_buffer.cpp) needs to know that the object grew.
+	bigtime_t				receive_enqueue_time;
 } net_buffer;
 
 struct ancillary_data_container;

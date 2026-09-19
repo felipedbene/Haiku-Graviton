@@ -8,13 +8,17 @@
 #include "BaseJob.h"
 
 #include <errno.h>
+#include <poll.h>
+#include <signal.h>
 #include <spawn.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/wait.h>
 #include <unistd.h>
 
 #include <AutoDeleter.h>
 #include <Message.h>
+#include <OS.h>
 
 #include "Conditions.h"
 #include "Events.h"
@@ -200,14 +204,18 @@ BaseJob::_GetSourceFileEnvironment(const char* script, BStringList& environment)
 {
 	int pipes[2];
 	if (pipe(&pipes[0]) != 0) {
-		// TODO: log error
+		debug_printf("launch_daemon: env script \"%s\": could not create pipe: "
+			"%s\n", script, strerror(errno));
 		return;
 	}
 
 	posix_spawn_file_actions_t fileActions;
 	int status = posix_spawn_file_actions_init(&fileActions);
 	if (status != 0) {
-		// TODO: log error
+		debug_printf("launch_daemon: env script \"%s\": could not init file "
+			"actions: %s\n", script, strerror(status));
+		close(pipes[0]);
+		close(pipes[1]);
 		return;
 	}
 	CObjectDeleter<posix_spawn_file_actions_t, int, posix_spawn_file_actions_destroy>
@@ -231,8 +239,10 @@ BaseJob::_GetSourceFileEnvironment(const char* script, BStringList& environment)
 	status = posix_spawn(&child, argv[0], &fileActions, NULL, (char**)argv, NULL);
 
 	if (status != 0) {
-		// TODO: log error
-		debug_printf("could not fork: %s\n", strerror(errno));
+		debug_printf("launch_daemon: env script \"%s\": could not spawn "
+			"helper shell: %s\n", script, strerror(status));
+		close(pipes[0]);
+		close(pipes[1]);
 		return;
 	}
 
@@ -240,12 +250,74 @@ BaseJob::_GetSourceFileEnvironment(const char* script, BStringList& environment)
 
 	close(pipes[1]);
 
+	// A from_script helper is untrusted from launch_daemon's point of view: it
+	// may hang (a slow/blocking script early in boot) or produce unbounded
+	// output. An unbounded, blocking read here would wedge the job forever,
+	// leaving it enabled but never launched and with no diagnostic. Bound both
+	// the total wait and the total output; on either limit -- or any read
+	// failure -- kill the helper, warn, and degrade to launching the job
+	// without the script's environment rather than blocking indefinitely.
+	const bigtime_t kReadTimeout = 15 * 1000000LL;
+	const size_t kMaxOutputSize = 256 * 1024;
+
+	// Parse into a scratch list so a partial/failed read never contributes a
+	// half-populated environment: it is applied only on clean completion.
+	BStringList scriptEnvironment;
 	BString line;
 	char buffer[4096];
+	size_t totalRead = 0;
+	bool failed = false;
+	const bigtime_t deadline = system_time() + kReadTimeout;
+
 	while (true) {
-		ssize_t bytesRead = read(pipes[0], buffer, sizeof(buffer) - 1);
-		if (bytesRead <= 0)
+		bigtime_t remaining = deadline - system_time();
+		if (remaining <= 0) {
+			debug_printf("launch_daemon: env script \"%s\": timed out after "
+				"%" B_PRIdBIGTIME " us; launching without its environment\n",
+				script, kReadTimeout);
+			failed = true;
 			break;
+		}
+
+		struct pollfd pollData;
+		pollData.fd = pipes[0];
+		pollData.events = POLLIN;
+		pollData.revents = 0;
+
+		int ready = poll(&pollData, 1, remaining / 1000 + 1);
+		if (ready < 0) {
+			if (errno == EINTR)
+				continue;
+			debug_printf("launch_daemon: env script \"%s\": poll failed: %s; "
+				"launching without its environment\n", script, strerror(errno));
+			failed = true;
+			break;
+		}
+		if (ready == 0) {
+			// poll timed out; the outer loop re-checks the deadline
+			continue;
+		}
+
+		ssize_t bytesRead = read(pipes[0], buffer, sizeof(buffer) - 1);
+		if (bytesRead < 0) {
+			if (errno == EINTR)
+				continue;
+			debug_printf("launch_daemon: env script \"%s\": read failed: %s; "
+				"launching without its environment\n", script, strerror(errno));
+			failed = true;
+			break;
+		}
+		if (bytesRead == 0)
+			break;
+
+		totalRead += bytesRead;
+		if (totalRead > kMaxOutputSize) {
+			debug_printf("launch_daemon: env script \"%s\": output exceeded "
+				"%zu bytes; launching without its environment\n", script,
+				kMaxOutputSize);
+			failed = true;
+			break;
+		}
 
 		// Make sure the buffer is null terminated
 		buffer[bytesRead] = 0;
@@ -255,7 +327,7 @@ BaseJob::_GetSourceFileEnvironment(const char* script, BStringList& environment)
 			const char* separator = strchrnul(chunk, '\n');
 			line.Append(chunk, separator - chunk);
 
-			_ParseExportVariable(environment, line);
+			_ParseExportVariable(scriptEnvironment, line);
 			line.Truncate(0);
 
 			if (*separator == '\0')
@@ -265,6 +337,18 @@ BaseJob::_GetSourceFileEnvironment(const char* script, BStringList& environment)
 	}
 
 	close(pipes[0]);
+
+	// Reap the helper. On the failure paths it may still be running (a hanging
+	// script), so terminate it first; even on the success path we must reap to
+	// avoid leaking a zombie. EOF on the pipe implies the shell has closed its
+	// output and is exiting, so the blocking waitpid() below returns promptly.
+	if (failed)
+		kill(child, SIGKILL);
+	while (waitpid(child, NULL, 0) < 0 && errno == EINTR)
+		;
+
+	if (!failed)
+		environment.Add(scriptEnvironment);
 }
 
 
