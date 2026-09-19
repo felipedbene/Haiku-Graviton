@@ -126,6 +126,45 @@ If a leaner launch profile carries only `AmazonSSMManagedInstanceCore`, add
 Without the grant the daemon still runs; each cycle logs a `PutMetricData
 failed: status=403` warning and no data appears in `DeBeOS/Host`.
 
+## CloudWatch Logs (opt-in)
+
+The same daemon can also tail a log file into **CloudWatch Logs** — the second
+half of #119. It is **opt-in and off by default**, so the baked image behaves
+exactly as before unless a launch line turns it on (enabling it fleet-wide would
+create a log group and incur per-instance log-ingest cost). When enabled it
+tails `/var/log/syslog` by default, batches complete lines under the
+PutLogEvents limits (10000 events / 1 MiB), and ships them to log group
+`DeBeOS/syslog`, stream = instance id — creating group and stream on first use,
+seeding the upload sequence token from `DescribeLogStreams`, and carrying
+`nextSequenceToken` across cycles. It runs on the **same single thread** as the
+metrics loop (its own `--logs-interval`, default 30s), so it never races
+PutMetricData, and it makes **no SSM calls**, so it never contends with the SSM
+agent.
+
+Enable it by appending `--logs` to the daemon's launch line in the packaged
+`data/launch/debeos_cloudwatch` job (optionally
+`--logs-source /var/log/syslog --logs-group DeBeOS/syslog --logs-interval 30`).
+The metrics path is unaffected when `--logs` is absent.
+
+**IAM:** needs `logs:CreateLogGroup`, `logs:CreateLogStream`,
+`logs:PutLogEvents` and `logs:DescribeLogStreams` — all four are in
+`CloudWatchAgentServerPolicy`, which `ssm-instance-profile` already attaches, so
+no IAM change is needed on the standard launch profile.
+
+*Verified on real Graviton (c7g.large, us-west-2):* built natively on a Graviton
+DeBeOS builder, `debeos-cloudwatch --logs --once` created `DeBeOS/syslog`,
+shipped ~2050 syslog lines, and a unique marker line appeared via
+`aws logs filter-log-events` (`Logs_20140328.PutLogEvents`, signing name `logs`);
+a second cycle exercised the `DescribeLogStreams` token seed + PutLogEvents with
+a live sequence token. Metrics kept publishing in the same run. Query it with:
+
+```bash
+aws logs describe-log-streams --log-group-name DeBeOS/syslog \
+  --log-stream-name-prefix <i-...> --region us-west-2
+aws logs get-log-events --log-group-name DeBeOS/syslog \
+  --log-stream-name <i-...> --start-from-head --limit 20 --region us-west-2
+```
+
 ## Verifying after a bake
 
 ```bash
