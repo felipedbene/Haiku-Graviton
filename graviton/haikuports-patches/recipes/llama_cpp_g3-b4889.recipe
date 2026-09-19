@@ -1,0 +1,206 @@
+SUMMARY="Inference of Meta's LLaMA model (Graviton3/Neoverse-V1 ISA opt-in, _g3)"
+DESCRIPTION="The main goal of llama.cpp is to enable LLM inference with minimal setup and state-of-the-art \
+performance on a wide variety of hardware - locally and in the cloud.
+
+* Plain C/C++ implementation without any dependencies
+* AVX and AVX2 support for x86 architectures; NEON on ARM/aarch64
+* 1.5-bit, 2-bit, 3-bit, 4-bit, 5-bit, 6-bit, and 8-bit integer quantization for faster inference and reduced memory use
+
+Since its inception, the project has improved significantly thanks to many contributions. It is the main playground \
+for developing new features for the ggml library.
+
+This is the DeBeOS Graviton3 (Neoverse-V1) ISA opt-in variant (_g3): it is compiled with \
+-mcpu=neoverse-v1+crypto (ARMv8.4-A + BF16 + I8MM + SVE), so ggml compiles in its NEON MMLA (SMMLA/UMMLA) \
+and SVE GEMM microkernels. It is NOT fleet-portable: it FAULTS on Graviton2 and t4g (Neoverse-N1). \
+Install it only on Graviton3+ targets; the plain llama_cpp package stays the fleet-portable baseline (NEON only). \
+See graviton/docs/porting-playbook.md -> 'Graviton3/4 ISA opt-in'."
+HOMEPAGE="https://github.com/ggerganov/llama.cpp/"
+COPYRIGHT="Georgi Gerganov
+	2018-2024 Microsoft Corporation (bundled mimalloc)"
+LICENSE="MIT"
+REVISION="1"
+SOURCE_URI="https://github.com/ggerganov/llama.cpp/archive/refs/tags/$portVersion.tar.gz"
+CHECKSUM_SHA256="ab1cf3d8f913534bf8d35bf1bd93db45d1692654ee8c14799d415661d15f9848"
+SOURCE_DIR="llama.cpp-$portVersion"
+SOURCE_URI_2="https://github.com/microsoft/mimalloc/archive/refs/tags/v2.1.7.tar.gz"
+CHECKSUM_SHA256_2="0eed39319f139afde8515010ff59baf24de9e47ea316a315398e8027d198202d"
+SOURCE_DIR_2="mimalloc-2.1.7"
+
+PATCHES="llama_cpp_g3-$portVersion.patchset"
+
+# _g3 is a Graviton3-only variant: -mcpu=neoverse-v1 emits SVE + ARMv8.4 NEON
+# (i8mm/bf16) instructions that Neoverse-N1 (Graviton2/t4g) does not implement.
+# It therefore only makes sense on arm64, and never as the fleet-portable default.
+ARCHITECTURES="arm64"
+
+PROVIDES="
+	llama_cpp_g3 = $portVersion
+	lib:libggml = $portVersion
+	lib:libggml_base = $portVersion
+	lib:libggml_cpu = $portVersion
+	lib:libggml_rpc = $portVersion
+	lib:libllama = $portVersion
+	lib:libllava_shared = $portVersion
+	cmd:convert_hf_to_gguf.py
+	cmd:llama_baby_llama
+	cmd:llama_batched
+	cmd:llama_batched_bench
+	cmd:llama_bench
+	cmd:llama_cli
+	cmd:llama_convert_llama2c_to_ggml
+	cmd:llama_cvector_generator
+	cmd:llama_embedding
+	cmd:llama_eval_callback
+	cmd:llama_export_lora
+	cmd:llama_gbnf_validator
+	cmd:llama_gguf
+	cmd:llama_gguf_hash
+	cmd:llama_gguf_split
+	cmd:llama_gen_docs
+	cmd:llama_gritlm
+	cmd:llama_imatrix
+	cmd:llama_infill
+	cmd:llama_llava_cli
+	cmd:llama_llava_clip_quantize_cli
+	cmd:llama_lookahead
+	cmd:llama_lookup
+	cmd:llama_lookup_create
+	cmd:llama_lookup_merge
+	cmd:llama_lookup_stats
+	cmd:llama_minicpmv_cli
+	cmd:llama_parallel
+	cmd:llama_passkey
+	cmd:llama_perplexity
+	cmd:llama_quantize
+	cmd:llama_quantize_stats
+	cmd:llama_qwen2vl_cli
+	cmd:llama_retrieval
+	cmd:llama_run
+	cmd:llama_save_load_state
+	cmd:llama_server
+	cmd:llama_simple
+	cmd:llama_simple_chat
+	cmd:llama_speculative
+	cmd:llama_speculative_simple
+	cmd:llama_tokenize
+	cmd:llama_tts
+	cmd:rpc_server
+	"
+REQUIRES="
+	haiku
+	lib:libgomp
+	"
+# The _g3 variant delivers the same libggml/llama/llava commands as the baseline
+# llama_cpp package but compiled with the Graviton3 ISA, so the two packages
+# CONFLICT by design -- you install one OR the other, never both. A Graviton3+
+# target chooses _g3; every other target keeps the fleet-portable llama_cpp.
+CONFLICTS="
+	llama_cpp
+	"
+
+PROVIDES_devel="
+	llama_cpp_g3_devel = $portVersion
+	devel:libggml = $portVersion
+	devel:libggml_base = $portVersion
+	devel:libggml_cpu = $portVersion
+	devel:libggml_rpc = $portVersion
+	devel:libllama = $portVersion
+	devel:libllava_shared = $portVersion
+	"
+REQUIRES_devel="
+	llama_cpp_g3 == $portVersion base
+	"
+CONFLICTS_devel="
+	llama_cpp_devel
+	"
+
+BUILD_REQUIRES="
+	haiku_devel
+	devel:libgomp
+	"
+BUILD_PREREQUIRES="
+	cmd:cmake
+	cmd:make
+	cmd:gcc
+	cmd:git
+	"
+
+BUILD()
+{
+	# DeBeOS Graviton3/4 ISA opt-in (see graviton/docs/porting-playbook.md ->
+	# "Graviton3/4 ISA opt-in"). Neoverse-V1 = Graviton3: ARMv8.4-A + BF16 +
+	# I8MM + SVE. Exporting this BEFORE the cmake configure below makes CMake
+	# initialise CMAKE_C_FLAGS/CMAKE_CXX_FLAGS from it, so every ggml TU is
+	# compiled with the neoverse-v1 feature macros defined
+	# (__ARM_FEATURE_MATMUL_INT8, __ARM_FEATURE_BF16, __ARM_FEATURE_SVE) --
+	# which is exactly what gates ggml's aarch64 MMLA (SMMLA/UMMLA) and SVE
+	# GEMM microkernels into the build. +crypto is re-carried, not inherited:
+	# a second -mcpu fully replaces the baseline -mcpu=neoverse-n1+crypto and
+	# crypto is never a compiler default. -O2 is kept so haikuporter's
+	# runConfigure does not reject a level-less CFLAGS override (playbook
+	# Class 15). NOT portable to Graviton2/t4g -- this is the _g3 variant.
+	case "$targetArchitecture" in
+		arm64)
+			debeosMcpu="-mcpu=neoverse-v1+crypto"
+			export CFLAGS="$CFLAGS -O2 $debeosMcpu"
+			export CXXFLAGS="$CXXFLAGS -O2 $debeosMcpu"
+			;;
+	esac
+
+	# mimalloc-2.1.7 declares cmake_minimum_required(VERSION < 3.5); CMake 4.x
+	# (the builder's cmake) removed that compatibility shim, so its configure
+	# hard-errors before it reads anything. This cmake call does NOT interpolate
+	# $cmakeDirArgs, so the systemic policy floor (#47) does not reach it -- raise
+	# the floor here (playbook Class 1). Only raises the floor; harmless otherwise.
+	cmake -Bbuild_mimalloc -S$sourceDir2 -DCMAKE_BUILD_TYPE=Release \
+		-DCMAKE_POLICY_VERSION_MINIMUM=3.5 \
+		-DMI_BUILD_SHARED=OFF \
+		-DMI_BUILD_STATIC=OFF \
+		-DMI_BUILD_TESTS=OFF \
+		-DMI_BUILD_OBJECT=ON
+
+	make -C build_mimalloc $jobArgs
+
+	# GGML_NATIVE=OFF keeps ggml off -march=native (which on this cross-capable
+	# toolchain would try to emit x86 SIMD flag probes); with GGML_CPU_ARM_ARCH
+	# left unset, ggml adds no -march of its own, so the ONLY architecture flag
+	# in effect is the -mcpu=neoverse-v1+crypto exported above. That leaves the
+	# feature macros defined and compiles in the MMLA/SVE GEMM kernels, while
+	# avoiding a -march that would come after (and override) our -mcpu.
+	cmake -Bbuild -S. -DCMAKE_BUILD_TYPE=Release \
+		$cmakeDirArgs \
+		-DBUILD_SHARED_LIBS_DEFAULT=ON \
+		-DLLAMA_BUILD_SERVER=ON \
+		-DLLAMA_BUILD_TESTS=OFF \
+		-DLLAMA_BUILD_EXAMPLES=ON \
+		-DGGML_NATIVE=OFF \
+		-DGGML_RPC=ON \
+		-DCMAKE_EXE_LINKER_FLAGS="$sourceDir/build_mimalloc/mimalloc.o"
+
+	make -C build $jobArgs
+}
+
+INSTALL()
+{
+	make -C build install
+	cp build/bin/rpc-server $binDir
+
+	prepareInstalledDevelLibs \
+		libggml \
+		libggml-base \
+		libggml-cpu \
+		libggml-rpc \
+		libllama \
+		libllava_shared
+
+	fixPkgconfig
+
+	packageEntries devel \
+		$developDir \
+		$libDir/cmake
+}
+
+# No TEST() phase: the build sets -DLLAMA_BUILD_TESTS=OFF, so no CTest tests are
+# registered and `make -C build test` would fail spuriously ("No tests were
+# found"). The upstream recipe's TEST() is dropped here rather than run against a
+# test-less build.

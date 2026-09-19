@@ -193,6 +193,27 @@ on-hardware proof owed before publishing a `_g3`/`_g4` package are in
 [`../../docs/porting-playbook.md`](../../docs/porting-playbook.md) →
 "Graviton3/4 ISA opt-in".
 
+### `llama_cpp_g3-b4889.recipe` — the first `_g3` flavour (#331)
+
+The concrete `_g3` variant of the baseline-NEON `llama_cpp-b4889` port, and the
+worked example the convention above was written for. It is the same source and
+patchset as the baseline plus (a) the `-mcpu=neoverse-v1+crypto` opt-in idiom in
+`BUILD()` and (b) one extra patch that makes ggml's SVE paths build and run on
+Haiku (guard `<sys/prctl.h>` off; read the SVE vector length with the `svcntb()`
+intrinsic instead of `prctl(PR_SVE_GET_VL)`). `ARCHITECTURES="arm64"`, and it
+`CONFLICTS` with the plain `llama_cpp` package — the two are the same commands
+compiled for different ISAs, so a host installs one **or** the other.
+
+Built and proven on a native Graviton3 (c7g): the shipped `libggml-cpu.so`
+carries the I8MM/SVE kernels (172 `smmla`, 2782 SVE `z<n>` ops; the baseline has
+none), `system_info` reports `MATMUL_INT8 = 1 | SVE = 1 | SVE_CNT = 32`, and
+`llama-bench` on TinyLlama-1.1B Q4_0 shows **6.37x** prompt-eval throughput
+(73.4 → 467.7 tok/s) over the baseline. Full numbers and the two portability
+findings are in `../../docs/porting-playbook.md` → "First worked proof". **Ship
+only to Graviton3+ images whose kernel enables EL0 SVE (#88)** — the `_g3` binary
+SIGILLs where userland SVE is off. Built `.hpkg`s were staged, **not** published
+to the green pool (held for human CR).
+
 ## `simde-0.8.2.recipe` — SSE/AVX→NEON translation for ports with no NEON path (#341)
 
 A new (not upstream-derived) overlay recipe packaging **SIMDe** (SIMD Everywhere), the

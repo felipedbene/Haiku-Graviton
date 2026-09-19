@@ -1223,6 +1223,44 @@ runtime smoke test of the `_g3`/`_g4` package **on Graviton3/4 hardware** is **o
 before publishing, per the "success is a disassembled `.so` (and a run), not an exit
 code" rule that `codec-tier-arm64.md` established for this exact class.
 
+### First worked proof: `llama_cpp_g3` (#331)
+
+The convention above was exercised end to end on a native Graviton3 (c7g,
+Neoverse-V1) with the `llama_cpp_g3-b4889` recipe (the `_g3` flavour of the
+baseline-NEON `llama_cpp` port). Both halves of the "owed" check passed:
+
+- **Disassembly.** `objdump -d libggml-cpu.so` of the shipped `_g3` package
+  contains the ISA the opt-in is supposed to emit — 172 `smmla` (I8MM NEON
+  matrix-multiply), 2782 SVE `z<n>` register ops, 82 `ptrue`, 225 `whilelo`.
+  The baseline (fleet-portable, NEON-only) build of the same source has **zero**
+  of each (only `sdot`), confirming the flag — not chance — turns the kernels on.
+- **Runtime.** `llama.cpp`'s own `system_info` on the `_g3` build reports
+  `MATMUL_INT8 = 1 | SVE = 1 | SVE_CNT = 32 | DOTPROD = 1`; the baseline reports
+  none of these. `SVE_CNT = 32` (256-bit) is the true Graviton3 vector length,
+  which is what lets ggml select its `sve_cnt == QK8_0` SVE GEMM path.
+- **Speedup.** `llama-bench` on TinyLlama-1.1B Q4_0 (same model, 8 threads):
+  prompt eval **73.4 → 467.7 tok/s (6.37x)**; token generation 8.35 → 8.76 tok/s
+  (+5%). The large win is on the compute-bound GEMM (prompt eval); token
+  generation is memory-bandwidth bound, so a near-flat result there is expected.
+
+Two things this proved beyond the recipe itself:
+
+1. **ggml needed a Haiku SVE port fix.** Compiling with `-mcpu=neoverse-v1`
+   defines `__ARM_FEATURE_SVE`, which turns on ggml paths that assume Linux:
+   `ggml-cpu-impl.h` includes `<sys/prctl.h>` (absent on Haiku) and
+   `ggml_init_arm_arch_features()` reads the vector length via
+   `prctl(PR_SVE_GET_VL)`. The recipe's patchset guards the include off on Haiku
+   and reads the length with the `svcntb()` intrinsic instead (no syscall). A
+   baseline-NEON build never hits this because SVE is off.
+2. **Userland SVE (#88) is real but build-dependent — and this was its first
+   under-load test.** The `_g3` binary SIGILLs on a kernel where EL0 SVE is not
+   enabled and runs cleanly where it is, so a `_g3` package must only be shipped
+   to images whose kernel carries the #88 EL0-SVE enablement. Verified directly
+   with a `svcntb()` probe: it faulted on one image and returned 32 on the
+   image used for the numbers above, which then ran the full SVE GEMM to correct
+   output. **A `_g3` package therefore additionally requires an SVE-enabled
+   kernel at run time, not just Graviton3 hardware.**
+
 ---
 
 ## build_state=built ≠ published
