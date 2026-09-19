@@ -82,7 +82,7 @@ the datapath as the evidence:
 - deadline missed, datapath **idle**: reset after
   `ENA_KEEP_ALIVE_MISSES_BEFORE_RESET` (2) misses, ~7 s;
 - deadline missed, frames **still moving**: up to
-  `ENA_KEEP_ALIVE_MISSES_WITH_TRAFFIC` (8) misses, ~13 s, then reset anyway.
+  `ENA_KEEP_ALIVE_MISSES_WITH_TRAFFIC` (20) misses, ~25 s, then reset anyway.
 
 The second is a **bound, not a disable**, and that distinction is the design. A
 device still moving frames whose management path has died is a partial wedge and
@@ -90,6 +90,19 @@ is exactly what a watchdog exists to catch, so traffic buys patience and never
 immunity. Non-final misses and recoveries are both logged, so the fix is visible
 on the occasions when it works — a fix that is silent when it works cannot be told
 apart from a broken watchdog.
+
+**Update: the with-traffic bound started at 8 (~13 s) and was raised to 20
+(~25 s).** An 8×8 GiB load test on this hardware later saw a healthy NIC's
+keep-alive gap reach ~13 s — all eight queue pairs then rebuilt in 66 ms, no panic,
+but the NIC was healthy, just busy. That is the same marginal-deadline shape as the
+original finding, one bound out: 8 misses put the reset at ~13 s and the observed
+worst case had grown to ~13 s, so the margin was gone again. 20 misses restore it
+(~1.9× over 13 s). Raising the count is safe here in a way it was not at the very
+start, because the required count is re-evaluated every tick against traffic
+advancing *this* tick: a NIC that has actually stopped stops moving frames and
+immediately falls to the idle bound (2 misses, ~7 s), so a larger with-traffic
+bound does not slow dead-NIC detection — it only delays resetting a still-working
+NIC in the non-urgent partial-wedge case.
 
 ## Verification
 
@@ -102,7 +115,7 @@ is otherwise perfectly healthy:
 | control | expectation |
 |---|---|
 | stall while idle | reset still fires, after **2** misses (~7 s) |
-| stall under load | reset still fires, after **8** misses (~13 s) — the partial-wedge case |
+| stall under load | reset still fires, after **20** misses (~25 s) — the partial-wedge case |
 | load, no stall | **0** resets in 150 s, against 2 on shipped code |
 
 ## Protocol
