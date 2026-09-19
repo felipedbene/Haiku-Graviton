@@ -178,6 +178,48 @@ rule UserBuildConfigRulePreImage
 		}
 	}
 
+	# --- DeBeOS CloudWatch host-metrics daemon -----------------------------
+	# Baked as a prebuilt hpkg the same way as the SSM agent above (straight
+	# into system/packages, bypassing the solver + DeBeOS-vendor check). This is
+	# the standalone debeos-cloudwatch daemon (F7/#119): it publishes host
+	# metrics (CPU/memory/disk/network/threads) to CloudWatch namespace
+	# DeBeOS/Host every 60s from Haiku's own kernel counters -- a true CPU busy%,
+	# not the hypervisor number that under-reports a Haiku/arm64 guest by ~55x
+	# (#140). Its launch_daemon job (bundled in the hpkg) starts it on every
+	# boot, so the metrics are default-on with no configuration.
+	#
+	# It is a SEPARATE binary from the SSM agent and makes NO SSM calls (no node
+	# registration, no heartbeat, no command channel). That separation is
+	# deliberate: two processes heartbeating the same instance wedge Run Command,
+	# so the metrics feature must not live inside a second SSM-registering
+	# daemon. It therefore coexists safely with whatever owns SSM -- the
+	# amazon-ssm-agent, or the DeBeOS agent above.
+	#
+	# Runtime prerequisite (not a build gate): the metrics need
+	# cloudwatch:PutMetricData on the instance role; the fleet's
+	# ssm-instance-profile already grants it via CloudWatchAgentServerPolicy (see
+	# graviton/docs/cloudwatch-metrics-bake.md for a leaner-profile note).
+	#
+	# Version-agnostic glob, exactly like the agent: match ONLY
+	# debeos_cloudwatch-* (binary /boot/system/bin/debeos-cloudwatch); the pool
+	# must hold exactly one (readdir-order Glob), so staging REPLACES the old
+	# one. Guarded on HG_POOL_DIR so an SSH-only bake (no pool) is unaffected.
+	if $(HG_POOL_DIR) {
+		local cwGlob = [ Glob $(HG_POOL_DIR) :
+			debeos_cloudwatch-*-arm64.hpkg ] ;
+		if $(cwGlob) {
+			local cwFileName = $(cwGlob[1]:G=:D=) ;
+			local cwPackage = <hg-pool>$(cwFileName) ;
+			SEARCH on $(cwPackage) = $(HG_POOL_DIR) ;
+			Echo "haiku-graviton: baking CloudWatch metrics daemon" $(cwFileName)
+				"into system/packages" ;
+			AddPackageFilesToHaikuImage system packages : $(cwPackage) ;
+		} else {
+			Echo "haiku-graviton: no CloudWatch metrics daemon hpkg in pool"
+				"(skipping)" ;
+		}
+	}
+
 	# --- exactly one thing must own port 22 --------------------------------
 	# data/settings/network/services already contains
 	#     service ssh { launch /boot/system/bin/sshd -D  stand_alone }
