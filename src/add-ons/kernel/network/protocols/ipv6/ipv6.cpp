@@ -208,6 +208,16 @@ struct ipv6_protocol : net_protocol {
 static const int kDefaultTTL = IPV6_DEFHLIM;
 static const int kDefaultMulticastTTL = 1;
 
+// Explicit Congestion Notification codepoints (RFC 3168). In IPv6 the ECN bits
+// are the low 2 bits of the 8-bit traffic class, which occupies bits 20..27 of
+// the host-order flow word (ip6_flow); ECN therefore sits at host-order bits
+// 20..21. The mirror of the IPv4 ToS translate point lives in this file.
+static const uint8 kIPECNMask = 0x03;
+static const uint8 kIPECNNotECT = 0x00;
+static const uint8 kIPECNECT0 = 0x02;
+static const uint8 kIPECNCE = 0x03;
+static const int kIPv6ECNFlowShift = 20;
+
 
 extern net_protocol_module_info gIPv6Module;
 	// we need this in ipv6_std_ops() for registering the AF_INET6 domain
@@ -1313,6 +1323,16 @@ ipv6_send_routed_data(net_protocol* _protocol, struct net_route* route,
 	}
 	// set lower 28 bits
 	header->ip6_flow = htonl(flowinfo) & IPV6_FLOWINFO_MASK;
+	// Stage C (RFC 3168): TCP marks individual data segments ECT(0) via a
+	// per-buffer flag; OR it into the low 2 ECN bits of the traffic class so the
+	// path/peer can mark CE. Retransmits, pure ACKs and SYNs leave the flag clear
+	// and stay Not-ECT. Operate directly on the network-order flow word so this
+	// is correct regardless of how the traffic class above was assembled.
+	if ((buffer->buffer_flags & NET_BUFFER_ECN_ECT0) != 0) {
+		header->ip6_flow = (header->ip6_flow
+				& ~htonl((uint32)kIPECNMask << kIPv6ECNFlowShift))
+			| htonl((uint32)kIPECNECT0 << kIPv6ECNFlowShift);
+	}
 	// set upper 4 bits
 	header->ip6_vfc |= IPV6_VERSION;
 	header->ip6_plen = htons(dataLength);
@@ -1467,6 +1487,11 @@ ipv6_receive_data(net_buffer* buffer)
 	if (header.ProtocolVersion() != IPV6_VERSION)
 		return B_BAD_TYPE;
 
+	// Capture the inbound ECN codepoint (low 2 bits of the traffic class) before
+	// the IPv6 header is stripped; it is realised onto the L4 side-channel at the
+	// single translate point below.
+	uint8 ecnCodepoint = header.ServiceType() & kIPECNMask;
+
 	uint16 packetLength = header.PayloadLength() + sizeof(ip6_hdr);
 	if (packetLength > buffer->size)
 		return B_BAD_DATA;
@@ -1533,6 +1558,26 @@ ipv6_receive_data(net_buffer* buffer)
 			TRACE("  ipv6_receive_data(): Not yet assembled.");
 			return B_OK;
 		}
+	}
+
+	// Single ECN translate point (RFC 3168), mirroring the IPv4 receive path.
+	// Two inputs converge here:
+	//   * A CE the path or peer already set in the traffic class -> echo it as a
+	//     mark for TCP.
+	//   * A NET_BUFFER_ECN_CE_MARK request from the ingress AQM (the receive
+	//     FIFO's CoDel discipline, which cannot see L3 and so defers the
+	//     mark-vs-drop choice to here): if the packet is ECN-capable (ECT),
+	//     promote it to CE -- a mark, not a loss; if it is Not-ECT, the AQM's
+	//     decision stands as an actual drop, taken here rather than in the FIFO.
+	if ((buffer->buffer_flags & NET_BUFFER_ECN_CE_MARK) != 0
+		&& ecnCodepoint == kIPECNNotECT) {
+		// Non-ECN flow the AQM chose to shed: drop it (as the FIFO would have).
+		gBufferModule->free(buffer);
+		return B_OK;
+	}
+	if (ecnCodepoint == kIPECNCE
+		|| (buffer->buffer_flags & NET_BUFFER_ECN_CE_MARK) != 0) {
+		buffer->buffer_flags |= NET_BUFFER_ECN_CE;
 	}
 
 	// tell the buffer to preserve removed ipv6 header - may need it later
