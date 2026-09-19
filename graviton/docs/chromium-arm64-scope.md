@@ -29,12 +29,15 @@ confirm, and said so.
 - **GPU compensation is architecturally sound but its SIMD ceiling is lower than the
   issue assumed.** SwiftShader (via ANGLE) is a CPU Vulkan rasterizer that supports
   aarch64 and vectorizes through its **Reactor JIT** (LLVM backend) to **128-bit NEON**.
-  **SVE is not in the picture on two counts:** SwiftShader/Reactor has no SVE path
-  (fixed-width `Float4`), *and* — decisively — **this project's kernel traps every SVE
-  instruction to `SIGILL` today** (measured on Graviton 5). So the "NEON/SVE, the SVE
-  path that gave llama.cpp 6.37x" premise in #379 must be corrected to **NEON only**;
-  the SVE figure is uncorroborated here and, regardless, unusable on this OS until the
-  kernel SVE project (separate, ~300-500 lines, public-ABI blocker) lands.
+  **SVE is not in the picture for SwiftShader** because SwiftShader/Reactor has no SVE
+  path (fixed-width `Float4`) — the rasterizer emits NEON regardless of kernel SVE. So
+  the "NEON/SVE" premise in #379 is **NEON only** *for SwiftShader specifically*, on
+  those grounds alone. (Correction: an earlier draft claimed "this kernel traps every SVE
+  instruction to SIGILL on Graviton 5" — that is WRONG. A c9g/Graviton5 probe on the
+  current canonical shows EL0 SVE **executes cleanly, VL=128-bit**; Graviton3 is VL=256-bit;
+  #331's 6.37x llama.cpp SVE speedup on G3 is hardware-proven. SVE is enabled fleet-wide;
+  the only caveat is that vector length varies by generation, so an artifact must read VL
+  at runtime and not hardcode it.)
 - **A real hazard the JIT introduces:** Reactor JIT-compiles shader code at runtime
   (W^X-managed, i-cache-maintained generated code). That is **the same class of problem
   #93's V8/Node bring-up hits** — and Haiku already solved it in-tree for V8 — but it is
@@ -148,20 +151,21 @@ recording, though for a trusted headless render farm it is an acceptable risk.
   NEON**, emitted by the LLVM/Subzero aarch64 backend. **No `+sve` anywhere; SVE is not a
   SwiftShader path.** (VERIFIED absent in SwiftShader; INFERRED that codegen uses NEON.)
 
-**This is where #379's premise must be corrected.** The issue proposes NEON *and* SVE,
-citing "the SVE path that gave llama.cpp 6.37x." Two independent facts kill the SVE half:
+**#379's premise is half-right, for ONE reason only:**
 
-1. **SwiftShader has no SVE codegen** (fixed 4-wide `Float4`).
-2. **DeBeOS's kernel traps every SVE instruction to `SIGILL` today** — measured on a real
-   Graviton 5 (`c9g`) with a SIGILL-guarded probe, against a Linux control on the same
-   silicon proving SVE/SVE2 present; the blocker is the kernel leaving `CPACR_EL1.ZEN=0`,
-   not the hardware (`simd-vectorization-review.md` §4). Enabling SVE is a separate
-   ~300-500-line bootloader+kernel project with a public signal-ABI blocker, and AWS's own
-   FLOP ceilings put SVE at **rough parity with NEON** anyway.
+1. **SwiftShader has no SVE codegen** (fixed 4-wide `Float4`) — so SwiftShader emits **NEON
+   only**, regardless of what the kernel supports. This alone settles SwiftShader = NEON.
+2. **SVE is NOT blocked on this kernel** (correction of an earlier draft): #88 enabled EL0/EL1
+   SVE (`arch_cpu.cpp` sets `CPACR_EL1.ZEN=0b11`, with per-thread save/restore), and a
+   Graviton5 (`c9g`) probe on the current canonical shows EL0 SVE **executes cleanly, VL=128-bit**
+   (Graviton3 = VL=256-bit). #331's **6.37x** llama.cpp SVE speedup on Graviton3 is
+   hardware-proven (SVE_CNT=32, real SMMLA GEMM). So the `simd-vectorization-review.md` "SVE
+   traps to SIGILL / ZEN=0" statements are STALE (pre-#88) and are being reconciled tree-wide.
+   The only real SVE caveat is that **vector length varies by generation** (256-bit G3 →
+   128-bit G4/G5), so SVE code must read `RDVL`/`svcntb()` at runtime and not hardcode a width.
 
-The llama.cpp 6.37x SVE figure is **NOT corroborated** in this tree (a `llama.cpp` recipe
-exists, #335/#331; no SVE speedup measurement was found), and it is moot here regardless.
-**Plan for NEON only.** The many-vCPU angle *does* hold: SwiftShader spreads raster/
+**For SwiftShader specifically, plan for NEON only** — not because SVE is unavailable, but
+because SwiftShader doesn't emit it. The many-vCPU angle *does* hold: SwiftShader spreads raster/
 compositor work across cores, and Graviton's high core counts are the real lever — plus
 this project's NEON `memcpy` and 64-bit-widened checksum wins (`arm64-memcpy.md`,
 `net-checksum`) help the byte-shovelling around the rasterizer.
