@@ -999,14 +999,18 @@ RemoteDrawingEngine::DrawString(const char* string, int32 length,
 	if (!fHWInterface->IsConnected())
 		return point;
 
+	// Discard any late reply from a previously timed-out call before sending
+	// this request, so a stale release cannot satisfy our wait. Draining before
+	// the request (rather than after the flush) drops any dependence on the
+	// reply not having completed a fast/loopback round trip yet.
+	_DrainResultSem();
+
 	status_t result = _AddCallback();
 	if (message.Flush() != B_OK)
 		return point;
 
 	if (result != B_OK)
 		return point;
-
-	_DrainResultSem();
 
 	do {
 		result = acquire_sem_etc(fResultNotify, 1, B_RELATIVE_TIMEOUT,
@@ -1037,14 +1041,16 @@ RemoteDrawingEngine::DrawString(const char* string, int32 length,
 	if (!fHWInterface->IsConnected())
 		return offsets[0];
 
+	// Drain a prior timed-out call's late reply before issuing this request
+	// (see the DrawString above).
+	_DrainResultSem();
+
 	status_t result = _AddCallback();
 	if (message.Flush() != B_OK)
 		return offsets[0];
 
 	if (result != B_OK)
 		return offsets[0];
-
-	_DrainResultSem();
 
 	do {
 		result = acquire_sem_etc(fResultNotify, 1, B_RELATIVE_TIMEOUT,
@@ -1072,6 +1078,10 @@ RemoteDrawingEngine::StringWidth(const char* string, int32 length,
 		&& (fHWInterface->ClientCapabilities() & RP_CAP_STRING_WIDTH_REPLY)
 			!= 0) {
 		while (true) {
+			// Drain a prior timed-out call's late reply before issuing this
+			// request (see DrawString).
+			_DrainResultSem();
+
 			if (_AddCallback() != B_OK)
 				break;
 
@@ -1084,8 +1094,6 @@ RemoteDrawingEngine::StringWidth(const char* string, int32 length,
 
 			if (message.Flush() != B_OK)
 				break;
-
-			_DrainResultSem();
 
 			status_t result;
 			do {
@@ -1118,6 +1126,10 @@ RemoteDrawingEngine::ReadBitmap(ServerBitmap* bitmap, bool drawCursor,
 	if (!fHWInterface->IsConnected())
 		return B_UNSUPPORTED;
 
+	// Drain a prior timed-out call's late reply before issuing this request
+	// (see DrawString).
+	_DrainResultSem();
+
 	if (_AddCallback() != B_OK)
 		return B_UNSUPPORTED;
 
@@ -1129,8 +1141,6 @@ RemoteDrawingEngine::ReadBitmap(ServerBitmap* bitmap, bool drawCursor,
 	message.Add(drawCursor);
 	if (message.Flush() != B_OK)
 		return B_UNSUPPORTED;
-
-	_DrainResultSem();
 
 	status_t result;
 	do {
@@ -1181,9 +1191,12 @@ RemoteDrawingEngine::_DrainResultSem()
 	// reply arrived. When that late reply finally lands, the callback releases
 	// fResultNotify -- and without this that stale release would satisfy the
 	// *next* call's wait, handing it the previous call's result (defect D8).
-	// Call this after flushing the request and before waiting: this call's own
-	// reply is a full network round trip away and cannot be here yet, so any
-	// count pending now is necessarily that stale release. Discard it.
+	// Call this before sending the new request: any count pending now can only
+	// be a stale release from an earlier call, never this call's own reply
+	// (which has not been sent yet), so discarding it is always safe. This does
+	// not close the case of a prior reply still in flight that lands during this
+	// call's wait -- that needs per-request reply matching, which M0 leaves to a
+	// later milestone.
 	if (fResultNotify < 0)
 		return;
 
