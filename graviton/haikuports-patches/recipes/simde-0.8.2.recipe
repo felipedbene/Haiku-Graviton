@@ -1,4 +1,4 @@
-SUMMARY="Portable SIMD: implementations of SSE/AVX/NEON/... intrinsics for other platforms"
+SUMMARY="Portable SIMD: implementations of SSE/AVX/NEON intrinsics for other platforms"
 DESCRIPTION="SIMD Everywhere (SIMDe) provides fast, portable implementations of \
 SIMD intrinsics for platforms that do not natively support them. For example, you can \
 use SSE/SSE2/AVX/AVX-512 (and more) intrinsics on ARM/AArch64 (NEON), where SIMDe maps \
