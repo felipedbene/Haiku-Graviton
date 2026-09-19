@@ -147,12 +147,12 @@ console-less host nobody is watching to stop it.
 | `ENA_WATCHDOG_INTERVAL_US` | 1 000 000 | Matches Linux and FreeBSD exactly (`ena_netdev.h` `ENA_DEVICE_KALIVE_TIMEOUT`) |
 | `ENA_KEEP_ALIVE_TIMEOUT_US` | 6 000 000 | Matches the reference `ENA_DEFAULT_KEEP_ALIVE_TO`. Six device intervals, **with no slack for jitter** — see §7 |
 | `ENA_KEEP_ALIVE_MISSES_BEFORE_RESET` | 2 | Measured, not chosen. One miss was resetting healthy devices |
-| `ENA_KEEP_ALIVE_MISSES_WITH_TRAFFIC` | 8 | Measured; 2 was tried here first and found insufficient |
+| `ENA_KEEP_ALIVE_MISSES_WITH_TRAFFIC` | 20 | Measured; 2 then 8 were tried first and found insufficient — an 8×8 GiB load reached ~13 s, back at zero margin against the 8-miss (~13 s) bound (§7) |
 
 The arithmetic the constants hide, stated plainly because it is repeatedly
 misread as multiplication: checks are one interval apart, so **N misses means
 silence of `ENA_KEEP_ALIVE_TIMEOUT_US + (N-1) × ENA_WATCHDOG_INTERVAL_US`** —
-7 s at N = 2, ~13 s at N = 8. Not 12 s and not 48 s.
+7 s at N = 2, ~13 s at N = 8, ~25 s at N = 20. Not 12 s and not 48 s.
 
 Two consecutive misses is deliberately **not** the same change as raising the
 deadline. A late keep-alive is transient: the next event arrives, `lastKeepAlive`
@@ -163,12 +163,21 @@ and had to survive the fix.
 
 The traffic-conditioned bound is the more interesting of the two, and the reason
 it is phrased as a bound is the design: frames still moving is direct evidence the
-device has not stopped, so a merely-late keep-alive costs nothing; but at eight
-misses the device is reset **even with traffic flowing**, because a device that
+device has not stopped, so a merely-late keep-alive costs nothing; but at the bound
+the device is reset **even with traffic flowing**, because a device that
 moves frames while its management path is dead is a partial wedge and is precisely
 what a watchdog exists to catch. Traffic buys patience, never immunity.
-`ENA_KEEP_ALIVE_MISSES_BEFORE_RESET` is the single constant to raise if a heavier
-load than anything measured so far overruns it; because non-final misses are
+
+`ENA_KEEP_ALIVE_MISSES_WITH_TRAFFIC` is the single constant to raise if a heavier
+load than anything measured so far overruns it — and one did: an 8×8 GiB load test
+saw the gap reach ~13 s on a healthy NIC, which the old 8-miss (~13 s) bound reset,
+so it is now 20 (~25 s, ~1.9× over that worst case). Raising it does **not** slow
+detection of a dead NIC, because the required count is re-evaluated every tick
+against traffic advancing *this* tick: a device that has actually stopped stops
+moving frames and immediately falls to `ENA_KEEP_ALIVE_MISSES_BEFORE_RESET`
+(2, ~7 s). The larger bound only ever delays the reset of a still-fully-working
+NIC in the rare management-dead/datapath-alive partial wedge, where traffic still
+flows and there is no urgency. Because non-final misses are
 logged, a cadence that starts creeping becomes visible before it becomes a reset.
 
 ## 5. The reset, and the ordering that is not stylistic
@@ -296,7 +305,8 @@ observed. Hence the traffic-conditioned bound of §4.
 
 **What is honestly known, and what is not:**
 
-- The mitigation (`2` idle / `8` with traffic) is **in the tree**. The three
+- The mitigation (`2` idle / `20` with traffic, raised from `8` after an 8×8 GiB
+  load reached ~13 s against the 8-miss (~13 s) bound) is **in the tree**. The three
   fault-injection controls that would prove it removed spurious resets *without*
   breaking detection are specified in that document's Verification table; this
   file does not claim they have all been run on hardware. Treat the mitigation as

@@ -259,10 +259,27 @@ extern "C" {
    so a keep-alive that is merely late costs nothing. It is a *bound*, not a
    disable: once this many deadlines have been missed the device is reset even
    with traffic flowing, which is what keeps a partial wedge -- a device still
-   moving frames but whose management path has genuinely died -- catchable. At
-   eight misses that is ~13 s of silence, comfortably past the 7290 ms observed
-   while healthy and still far short of anything a user would call a hang. */
-#define ENA_KEEP_ALIVE_MISSES_WITH_TRAFFIC	8
+   moving frames but whose management path has genuinely died -- catchable.
+
+   Why the bound can be generous without blinding the watchdog: it is re-evaluated
+   every tick against traffic advancing *this* tick (see ena_watchdog_check_keep_
+   alive), so it only ever applies to a device that is still moving frames right
+   now. A device that has actually stopped stops moving frames, and the required
+   count immediately drops to ENA_KEEP_ALIVE_MISSES_BEFORE_RESET (2, ~7 s) -- so
+   raising this constant does not slow detection of a dead NIC at all. Its only
+   cost is delaying the reset of a still-fully-working NIC in the rare
+   management-dead/datapath-alive partial wedge, where traffic still flows and
+   there is no urgency.
+
+   Eight (~13 s) was set against a 7290 ms observed worst case, but a later 8x8 GiB
+   load test on this hardware saw the keep-alive gap reach ~13 s on a healthy NIC
+   (all eight queue pairs then rebuilt in 66 ms, no panic -- a reset of a NIC that
+   was merely busy). That put the eight-miss bound back at zero margin, the same
+   marginal-deadline shape §7 warns against. Twenty misses give ~25 s of silence,
+   ~1.9x over that 13 s worst case -- margin the eight-miss bound had lost -- while
+   the paragraph above keeps a genuinely dead device caught in ~7 s.
+   See graviton/docs/ena-keepalive-watchdog-false-reset.md. */
+#define ENA_KEEP_ALIVE_MISSES_WITH_TRAFFIC	20
 
 /* Missing-transmit-completion detection (docs/watchdog-design.md gap 4). The
    keep-alive check cannot see a wedged transmit path: an otherwise-healthy
