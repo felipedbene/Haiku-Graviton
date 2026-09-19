@@ -157,6 +157,7 @@ public:
 
 private:
 			status_t			_AddCallback();
+			void				_DrainResultSem();
 
 	static	bool				_DrawingEngineResult(void* cookie,
 									RemoteMessage& message);

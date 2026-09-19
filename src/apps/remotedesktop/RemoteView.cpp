@@ -323,7 +323,11 @@ RemoteView::_SendMouseMessage(uint16 code, BPoint where)
 	event->FindInt32("buttons", &buttons);
 	message.Add(buttons);
 
-	if (code == RP_MOUSE_DOWN)
+	// "clicks" belongs on the mouse-down event (BeOS semantics), and the server
+	// reads it only from RP_MOUSE_DOWN. It used to be sent on RP_MOUSE_UP
+	// instead, where the server never read it, so double-click detection was
+	// dead over the wire (defect D6). Send it on the down event to match.
+	if (code == RP_MOUSE_UP)
 		return;
 
 	int32 clicks;
@@ -446,6 +450,25 @@ RemoteView::_DrawThread()
 	reply.Start(RP_INIT_CONNECTION);
 	reply.Flush();
 
+	// URP/1 capability handshake, sent before any drawing. Announce our
+	// protocol version and the features we implement so the server only drives
+	// us with capabilities we actually have. This client is vector-only and has
+	// no RP_STRING_WIDTH handler, so it advertises no capabilities; the server
+	// then computes string width from its own font metrics rather than stalling
+	// on a query we would never answer. A server that predates the handshake
+	// simply ignores this message.
+	{
+		BRect bounds = fOffscreenBitmap->Bounds();
+		reply.Start(RP_HELLO);
+		reply.Add((uint32)RP_PROTOCOL_VERSION);
+		reply.Add((uint32)0);	// capabilities
+		reply.Add((uint32)0);	// max decode width (no Tier P)
+		reply.Add((uint32)0);	// max decode height
+		reply.Add((uint32)(bounds.IntegerWidth() + 1));
+		reply.Add((uint32)(bounds.IntegerHeight() + 1));
+		reply.Flush();
+	}
+
 	while (!fStopThread) {
 		uint16 code;
 		status_t status = message.NextMessage(code);
@@ -482,6 +505,19 @@ RemoteView::_DrawThread()
 			case RP_CLOSE_CONNECTION:
 			{
 				be_app->PostMessage(B_QUIT_REQUESTED);
+				continue;
+			}
+
+			case RP_HELLO_ACK:
+			{
+				// Negotiated protocol version and capability intersection. This
+				// client gates no behaviour on them yet; read them so the
+				// message is consumed at a clean boundary.
+				uint32 negotiatedVersion, negotiatedCapabilities;
+				message.Read(negotiatedVersion);
+				message.Read(negotiatedCapabilities);
+				(void)negotiatedVersion;
+				(void)negotiatedCapabilities;
 				continue;
 			}
 
@@ -1305,9 +1341,15 @@ RemoteView::_DrawThread()
 				}
 
 				if (hasDelta) {
-					escapement_delta delta[length];
-					message.ReadList(delta, length);
-					offscreen->DrawString(string, point, delta);
+					// A single escapement_delta applies to the whole string;
+					// the server now sends exactly one (defect D5). BView's
+					// DrawString applies delta[0] regardless, so nothing is lost.
+					escapement_delta delta;
+					if (message.Read(delta) != B_OK) {
+						free(string);
+						continue;
+					}
+					offscreen->DrawString(string, point, &delta);
 				} else
 					offscreen->DrawString(string, point);
 

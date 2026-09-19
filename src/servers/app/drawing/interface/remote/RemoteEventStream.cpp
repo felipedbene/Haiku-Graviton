@@ -61,7 +61,15 @@ RemoteEventStream::GetNextEvent(BMessage** _event)
 			return false;
 	}
 
-	*_event = fEventList.RemoveItemAt(0);
+	BMessage* event = fEventList.RemoveItemAt(0);
+
+	// The caller now owns this event and may delete it. If it is the one
+	// fLatestMouseMovedEvent still points at, clear that pointer so a later
+	// PeekLatestMouseMoved() does not hand out a dangling reference (defect D7).
+	if (event == fLatestMouseMovedEvent)
+		fLatestMouseMovedEvent = NULL;
+
+	*_event = event;
 	return true;
 }
 

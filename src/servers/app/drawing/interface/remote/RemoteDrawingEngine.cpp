@@ -16,6 +16,7 @@
 #include <Bitmap.h>
 #include <utf8_functions.h>
 
+#include <math.h>
 #include <new>
 
 
@@ -426,13 +427,67 @@ RemoteDrawingEngine::DrawBitmap(ServerBitmap* bitmap, const BRect& _bitmapRect,
 	}
 
 	// TODO: we may want to cache/checksum bitmaps
+
+	// The fast path historically shipped the *entire* source bitmap even when
+	// only bitmapRect was drawn -- a browser blit or a sprite pulled from a
+	// sheet sent every pixel outside the dirty strip for nothing. Crop to the
+	// integer-pixel rectangle that covers bitmapRect and rebase bitmapRect onto
+	// it: the client samples pixel-identically (any sub-pixel offset is
+	// preserved) while only the drawn region crosses the wire. This is a pure
+	// byte saving; the wire message shape is unchanged.
+	int32 cropLeft = (int32)floorf(bitmapRect.left);
+	int32 cropTop = (int32)floorf(bitmapRect.top);
+	int32 cropRight = (int32)ceilf(bitmapRect.right);
+	int32 cropBottom = (int32)ceilf(bitmapRect.bottom);
+
+	// bitmapRect was already constrained to actualBitmapRect above, but floor/
+	// ceil of a fractional edge can land just outside it.
+	cropLeft = max_c(cropLeft, (int32)actualBitmapRect.left);
+	cropTop = max_c(cropTop, (int32)actualBitmapRect.top);
+	cropRight = min_c(cropRight, (int32)actualBitmapRect.right);
+	cropBottom = min_c(cropBottom, (int32)actualBitmapRect.bottom);
+
+	bool wholeBitmap = cropLeft <= (int32)actualBitmapRect.left
+		&& cropTop <= (int32)actualBitmapRect.top
+		&& cropRight >= (int32)actualBitmapRect.right
+		&& cropBottom >= (int32)actualBitmapRect.bottom;
+
+	int32 cropWidth = cropRight - cropLeft + 1;
+	int32 cropHeight = cropBottom - cropTop + 1;
+
+	UtilityBitmap* cropped = NULL;
+	if (!wholeBitmap && cropWidth > 0 && cropHeight > 0) {
+		cropped = new(std::nothrow) UtilityBitmap(
+			BRect(0, 0, cropWidth - 1, cropHeight - 1), bitmap->ColorSpace(), 0);
+		if (cropped != NULL && cropped->ImportBits(bitmap->Bits(),
+				bitmap->BitsLength(), bitmap->BytesPerRow(), bitmap->ColorSpace(),
+				BPoint(cropLeft, cropTop), BPoint(0, 0), cropWidth, cropHeight)
+					!= B_OK) {
+			delete cropped;
+			cropped = NULL;
+		}
+	}
+
 	RemoteMessage message(NULL, fHWInterface->SendBuffer());
 	message.Start(RP_DRAW_BITMAP);
 	message.Add(fToken);
-	message.Add(bitmapRect);
-	message.Add(viewRect);
-	message.Add(options);
-	message.AddBitmap(*bitmap);
+	if (cropped != NULL) {
+		// Subtracting the crop origin keeps the source rect aligned to the
+		// cropped pixels, so scaling to viewRect is unchanged.
+		message.Add(bitmapRect.OffsetByCopy(-cropLeft, -cropTop));
+		message.Add(viewRect);
+		message.Add(options);
+		message.AddBitmap(*cropped);
+			// AddBitmap copies the pixels into the message immediately.
+		delete cropped;
+	} else {
+		// The whole bitmap is drawn, or the crop could not be built: ship it
+		// entire, exactly as before.
+		message.Add(bitmapRect);
+		message.Add(viewRect);
+		message.Add(options);
+		message.AddBitmap(*bitmap);
+	}
 }
 
 
@@ -932,7 +987,23 @@ RemoteDrawingEngine::DrawString(const char* string, int32 length,
 	message.AddString(string, length);
 	message.Add(delta != NULL);
 	if (delta != NULL)
-		message.AddList(delta, length);
+		message.Add(delta[0]);
+		// escapement_delta is a single struct applied to the whole string, not
+		// one per glyph. The old AddList(delta, length) read `length` structs
+		// from a one-element pointer -- an out-of-bounds stack read that also
+		// put 8*(length-1) junk bytes on the wire. Send exactly the one delta
+		// (defect D5).
+
+	// No client is attached, so nothing will ever answer: skip the wait rather
+	// than stall the drawing thread for the full timeout on every string.
+	if (!fHWInterface->IsConnected())
+		return point;
+
+	// Discard any late reply from a previously timed-out call before sending
+	// this request, so a stale release cannot satisfy our wait. Draining before
+	// the request (rather than after the flush) drops any dependence on the
+	// reply not having completed a fast/loopback round trip yet.
+	_DrainResultSem();
 
 	status_t result = _AddCallback();
 	if (message.Flush() != B_OK)
@@ -965,6 +1036,15 @@ RemoteDrawingEngine::DrawString(const char* string, int32 length,
 	message.AddString(string, length);
 	message.AddList(offsets, UTF8CountChars(string, length));
 
+	// No client is attached, so nothing will ever answer: skip the wait rather
+	// than stall the drawing thread for the full timeout on every string.
+	if (!fHWInterface->IsConnected())
+		return offsets[0];
+
+	// Drain a prior timed-out call's late reply before issuing this request
+	// (see the DrawString above).
+	_DrainResultSem();
+
 	status_t result = _AddCallback();
 	if (message.Flush() != B_OK)
 		return offsets[0];
@@ -988,32 +1068,44 @@ float
 RemoteDrawingEngine::StringWidth(const char* string, int32 length,
 	escapement_delta* delta)
 {
-	// TODO: Decide if really needed.
+	// Only ask the client if one is attached and it advertised that it answers
+	// string-width queries (RP_CAP_STRING_WIDTH_REPLY). Otherwise compute from
+	// the server's own, authoritative font metrics. This closes the headless
+	// stall (no client -> no 1 s wait per query) and the mirror case of a client
+	// with no string-width handler stalling on every query: the server simply
+	// never issues a query it was not promised an answer to (defects D1/D10).
+	if (fHWInterface->IsConnected()
+		&& (fHWInterface->ClientCapabilities() & RP_CAP_STRING_WIDTH_REPLY)
+			!= 0) {
+		while (true) {
+			// Drain a prior timed-out call's late reply before issuing this
+			// request (see DrawString).
+			_DrainResultSem();
 
-	while (true) {
-		if (_AddCallback() != B_OK)
-			break;
+			if (_AddCallback() != B_OK)
+				break;
 
-		RemoteMessage message(NULL, fHWInterface->SendBuffer());
+			RemoteMessage message(NULL, fHWInterface->SendBuffer());
 
-		message.Start(RP_STRING_WIDTH);
-		message.Add(fToken);
-		message.AddString(string, length);
-			// TODO: Support escapement delta.
+			message.Start(RP_STRING_WIDTH);
+			message.Add(fToken);
+			message.AddString(string, length);
+				// TODO: Support escapement delta.
 
-		if (message.Flush() != B_OK)
-			break;
+			if (message.Flush() != B_OK)
+				break;
 
-		status_t result;
-		do {
-			result = acquire_sem_etc(fResultNotify, 1, B_RELATIVE_TIMEOUT,
-				1 * 1000 * 1000);
-		} while (result == B_INTERRUPTED);
+			status_t result;
+			do {
+				result = acquire_sem_etc(fResultNotify, 1, B_RELATIVE_TIMEOUT,
+					1 * 1000 * 1000);
+			} while (result == B_INTERRUPTED);
 
-		if (result != B_OK)
-			break;
+			if (result != B_OK)
+				break;
 
-		return fStringWidthResult;
+			return fStringWidthResult;
+		}
 	}
 
 	// Fall back to local calculation.
@@ -1028,6 +1120,16 @@ status_t
 RemoteDrawingEngine::ReadBitmap(ServerBitmap* bitmap, bool drawCursor,
 	BRect bounds)
 {
+	// With no client attached there is no framebuffer to read back; do not stall
+	// the caller (a screenshot) for the full 10 s timeout waiting for a reply
+	// that cannot come (defect D1, the headless case).
+	if (!fHWInterface->IsConnected())
+		return B_UNSUPPORTED;
+
+	// Drain a prior timed-out call's late reply before issuing this request
+	// (see DrawString).
+	_DrainResultSem();
+
 	if (_AddCallback() != B_OK)
 		return B_UNSUPPORTED;
 
@@ -1079,6 +1181,27 @@ RemoteDrawingEngine::_AddCallback()
 
 	fCallbackAdded = result == B_OK;
 	return result;
+}
+
+
+void
+RemoteDrawingEngine::_DrainResultSem()
+{
+	// A previous synchronous call may have timed out and returned before its
+	// reply arrived. When that late reply finally lands, the callback releases
+	// fResultNotify -- and without this that stale release would satisfy the
+	// *next* call's wait, handing it the previous call's result (defect D8).
+	// Call this before sending the new request: any count pending now can only
+	// be a stale release from an earlier call, never this call's own reply
+	// (which has not been sent yet), so discarding it is always safe. This does
+	// not close the case of a prior reply still in flight that lands during this
+	// call's wait -- that needs per-request reply matching, which M0 leaves to a
+	// later milestone.
+	if (fResultNotify < 0)
+		return;
+
+	while (acquire_sem_etc(fResultNotify, 1, B_RELATIVE_TIMEOUT, 0) == B_OK)
+		;
 }
 
 
