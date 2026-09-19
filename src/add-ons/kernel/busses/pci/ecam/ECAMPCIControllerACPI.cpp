@@ -45,14 +45,30 @@ ECAMPCIControllerACPI::ReadResourceInfo(device_node* parent)
 	if (acpi_res != 0)
 		return B_ERROR;
 
+	// _SEG names the segment group this bridge lives in; absent means 0.
+	uint32 segment = 0;
+	bool haveSegment = false;
+	{
+		acpi_object_type object;
+		acpi_data buffer = {sizeof(object), &object};
+		if (acpiDeviceModule->evaluate_method(acpiDevice, "_SEG", NULL, &buffer) == B_OK
+			&& object.object_type == ACPI_TYPE_INTEGER) {
+			segment = (uint32)object.integer.integer;
+			haveSegment = true;
+		}
+	}
+
 	acpi_mcfg_allocation *end = (acpi_mcfg_allocation *) ((char*)mcfg + mcfg->header.length);
 	acpi_mcfg_allocation *first = (acpi_mcfg_allocation *) (mcfg + 1);
 
 	uint32 count = 0;
+	bool severalSegments = false;
 	for (acpi_mcfg_allocation *alloc = first; alloc + 1 <= end; alloc++) {
 		dprintf("PCI: ecam region: addr %" B_PRIx64 ", segment: %x, buses: %x-%x\n",
 			alloc->address, alloc->pci_segment, alloc->start_bus_number,
 			alloc->end_bus_number);
+		if (alloc->pci_segment != first->pci_segment)
+			severalSegments = true;
 		count++;
 	}
 
@@ -61,23 +77,30 @@ ECAMPCIControllerACPI::ReadResourceInfo(device_node* parent)
 		return B_ERROR;
 	}
 
+	// The segment only selects anything when the MCFG names more than one. A
+	// machine whose entries all carry the same number is completely described
+	// by them however firmware numbered it: Graviton3 metal calls its only
+	// region segment 1 and its bridge has no _SEG, and rejecting that left the
+	// machine with no PCI at all.
+	const bool matchSegment = severalSegments;
+
 	// The bridge's _CRS says which buses it decodes; the MCFG only says where
 	// config space for a segment's buses lives. So _CRS decides the root bus and
-	// the mapped range, and the MCFG supplies only the base -- the same division
-	// of labour as Linux (pci_mcfg_lookup / pci_acpi_setup_ecam_mapping). Taking
+	// the mapped range, and the MCFG supplies the base -- the same division of
+	// labour as Linux (pci_mcfg_lookup / pci_acpi_setup_ecam_mapping). Taking
 	// the range from the MCFG entry instead only works where firmware happens to
-	// emit one allocation per bridge; with one allocation per segment spanning
-	// 0-255 and several bridges, every bridge would map buses 0-255 and enumerate
-	// the same devices -- the duplicate-device fault this driver exists to avoid.
+	// emit one entry per bridge; with one entry per segment and several bridges,
+	// every bridge would map buses 0-255 and enumerate the same devices.
 	acpi_mcfg_allocation *chosen = NULL;
 	bool fromCrs = false;
 
 	if (fHaveCrsBusRange) {
-		// The tightest entry covering the whole range; failing that, the first
-		// one overlapping it (a bridge's buses may be listed in pieces sharing a
-		// base).
+		// Tightest entry covering the whole range; failing that, the first one
+		// overlapping it (its buses may be listed in pieces).
 		acpi_mcfg_allocation *overlapping = NULL;
 		for (acpi_mcfg_allocation *alloc = first; alloc + 1 <= end; alloc++) {
+			if (matchSegment && alloc->pci_segment != segment)
+				continue;
 			if (alloc->start_bus_number > fCrsBusEnd
 				|| alloc->end_bus_number < fCrsBusStart) {
 				continue;
@@ -101,19 +124,21 @@ ECAMPCIControllerACPI::ReadResourceInfo(device_node* parent)
 
 	if (chosen == NULL) {
 		// Say why, both ways: a fallback that is silent cannot be ruled out from
-		// a console log, so neither reason may share the other's message.
+		// a console log.
 		if (fHaveCrsBusRange) {
-			dprintf("PCI: no ECAM region covers buses %" B_PRIx32 "-%" B_PRIx32
-				"; falling back to MCFG entry\n", fCrsBusStart, fCrsBusEnd);
+			dprintf("PCI: no ECAM region covers segment %" B_PRIx32 " buses %"
+				B_PRIx32 "-%" B_PRIx32 "; falling back to MCFG entry\n", segment,
+				fCrsBusStart, fCrsBusEnd);
 		} else {
 			dprintf("PCI: _CRS gives no bus range; falling back to MCFG entry\n");
 		}
 
-		// What this driver did before: prefer segment 0 where there is one,
-		// otherwise the first entry.
+		// What this driver did before: the bridge's segment if known, else
+		// segment 0, else the first entry.
+		const uint32 wanted = haveSegment ? segment : 0;
 		for (acpi_mcfg_allocation *alloc = first; alloc + 1 <= end; alloc++) {
 			if (chosen == NULL
-				|| (chosen->pci_segment != 0 && alloc->pci_segment == 0))
+				|| (chosen->pci_segment != wanted && alloc->pci_segment == wanted))
 				chosen = alloc;
 		}
 	}
@@ -131,8 +156,7 @@ ECAMPCIControllerACPI::ReadResourceInfo(device_node* parent)
 	// Only buses that are both this bridge's and claimed by some piece of the
 	// same window get probed: a config access to a bus nothing decodes is not
 	// guaranteed to read as all-ones and may abort. The range is fixed before
-	// this loop, so the result does not depend on the order of the entries --
-	// which is why the earlier piece-joining pass is gone.
+	// this loop, so the result does not depend on the order of the entries.
 	uint32 decoded = 0;
 	uint32 otherWindows = 0;
 	ClearValidBuses();
@@ -162,8 +186,7 @@ ECAMPCIControllerACPI::ReadResourceInfo(device_node* parent)
 
 	// The MCFG base is the address of bus 0 of the segment (PCI Firmware spec),
 	// not of the entry's start bus, so the mapping begins at the start bus's
-	// offset and ConfigAddress() rebases absolute bus numbers onto it. For a
-	// single entry starting at bus 0 -- every guest, and metal -- this is a no-op.
+	// offset and ConfigAddress() rebases absolute bus numbers onto it.
 	fBusOffset = (uint8)startBus;
 
 	const phys_addr_t base = chosen->address + ((uint64)startBus << 20);
