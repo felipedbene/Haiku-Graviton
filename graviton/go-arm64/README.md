@@ -210,3 +210,22 @@ Full transcript, disassembly, and the deployment note (launch the agent with a
 PATH that includes `/boot/system/bin` so the shell resolves) in
 [`logs/M6-proof.txt`](logs/M6-proof.txt). This closes the ssm-agent runtime
 blocker B1 and delivers a fully functional agent (issue #302 North Star).
+
+## Status: M7 DONE (EC2-native registration + packaged as an hpkg)
+
+The real agent registered **EC2-native** — an `i-…` managed node via IMDS and the
+instance role, with **no hybrid activation code** (the gate that decides whether
+it can be baked as the fleet default). On a real Graviton `c7g.large`
+(`i-0d26a99b645b6ab8b`, canonical `ami-04493ac7c3fe0d304`), after stopping the
+baked `debeos-ssm-agent` to free the `i-` identity, the real agent's selector took
+its identity from EC2 (OnPrem vault absent), and
+`aws ssm describe-instance-information` reported the **`i-` node** Online at
+AgentVersion **3.3.0.0**, **ResourceType EC2Instance**; `AWS-RunShellScript`
+returned Status Success / RC 0 with real stdout (n=2).
+
+Packaged as **`amazon_ssm_agent-3.3.3270.0-1-arm64.hpkg`** (zlib, ~35 MB) with a
+`launch_daemon` job that starts it EC2-native on cold boot (proven: the package's
+job brought the agent up after a reboot). Recipe, build script, the bake-wiring
+plan (`AddPackageFilesToHaikuImage`, mirroring `debeos_ssm_agent`), and the
+one-active-launch-job / `debeos-ssm-agent`-fallback plan are in
+[`ssm-agent/package/`](ssm-agent/package/).

@@ -1,0 +1,29 @@
+# launch_daemon job for the real upstream amazon-ssm-agent, packaged for DeBeOS.
+#
+# Ships inside the hpkg as data/launch/amazon_ssm_agent; packagefs exposes it at
+# /boot/system/data/launch/amazon_ssm_agent and launch_daemon starts the agent
+# on every boot. "service" so a crashed agent is restarted; "legacy" because it
+# is a POSIX daemon, not a launch-aware BApplication.
+#
+# EC2-native by construction: the agent is launched with NO activation code and
+# NO OnPrem vault, so its identity selector checks OnPrem (absent), then takes
+# its identity from EC2 -- reading instance-id/region from IMDS and using the
+# instance role. It registers as the instance's i- managed node (ResourceType
+# EC2Instance) and executes Run Command / Session Manager.
+#
+# The env block sources agent-env.sh, which puts the shell directory
+# (/boot/system/bin) on PATH. Without it the (healthy) fork+exec of
+# ssm-document-worker reaches execve and returns "sh not found in $PATH", so
+# Run Command fails to find the shell (M6 deploy note). launch_daemon services
+# otherwise start with a minimal environment.
+#
+# No network condition: the agent retries IMDSv2 for ~2 min internally and must
+# run early to seed the clock from IMDS (a 1970 clock breaks TLS otherwise) --
+# the same reasoning the interim debeos-ssm-agent job used.
+service x-vnd.debeos-amazon-ssm-agent {
+	launch /boot/system/bin/amazon-ssm-agent
+	env {
+		from_script /boot/system/data/amazon_ssm_agent/agent-env.sh
+	}
+	legacy
+}
