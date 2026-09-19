@@ -80,6 +80,20 @@ set -u
 # capped -- it is functionally the pristine recipe again.
 STAGE1_PORTS="autoconf cmake zstd"
 
+# Genuinely-new ports the overlay introduces that upstream HaikuPorts does NOT
+# carry, so neither an exact-basename match nor a same-name sibling locates a
+# directory for them. Each entry is `portname:category`; the recipe is dropped into
+# a freshly created <category>/<portname>/ dir. Deliberately explicit -- recipes
+# carry no CATEGORY field, and a guessed category is an invisible mis-file, exactly
+# the silent-no-op this script exists to prevent. Keep it short: a flavor of an
+# EXISTING port (ffmpeg_x264, llama_cpp_g3) does NOT belong here -- the flavor-prefix
+# fallback below places it beside its base port, matching the tree's own
+# llvm21-in-sys-devel/llvm and gcc_syslibs-in-sys-devel/gcc convention.
+#
+#   simde  dev-libs  -- header-only SIMD-intrinsics library (ARCHITECTURES=any),
+#                       not in upstream HaikuPorts.
+NEW_PORT_DIRS="simde:dev-libs"
+
 WITH_STAGE1=0
 if [ "${1:-}" = "--stage1" ]; then
 	WITH_STAGE1=1
@@ -132,6 +146,43 @@ for src in "$OVERLAY"/recipes/*.recipe; do
 		dir=$(dirname "$sibling")
 		cp "$src" "$dir/$base"
 		echo "overlay-apply: placed $dir/$base (new version)"
+		placed=$((placed + 1))
+		continue
+	fi
+
+	# 3) FLAVOR fallback: an ISA/codec flavor package (llama_cpp_g3, ffmpeg_x264)
+	# has no directory of its own -- it lives beside its base port, the same way
+	# llvm21 lives in sys-devel/llvm/ and gcc_syslibs in sys-devel/gcc/. Strip the
+	# trailing _<component> from the port name and retry the sibling search, longest
+	# base first, so llama_cpp_g3 -> llama_cpp and ffmpeg_x264 -> ffmpeg.
+	flavor_base="$port"
+	flavor_dir=""
+	while [ "${flavor_base%_*}" != "$flavor_base" ]; do
+		flavor_base=${flavor_base%_*}
+		fsib=$(find "$TREE" -name "$flavor_base-*.recipe" -not -path "*/work-*" 2>/dev/null | head -1)
+		if [ -n "$fsib" ]; then flavor_dir=$(dirname "$fsib"); break; fi
+	done
+	if [ -n "$flavor_dir" ]; then
+		cp "$src" "$flavor_dir/$base"
+		echo "overlay-apply: placed $flavor_dir/$base (flavor of $flavor_base)"
+		placed=$((placed + 1))
+		continue
+	fi
+
+	# 4) genuinely-new port: create <category>/<portname>/ from the explicit
+	# NEW_PORT_DIRS map. Only ports named there get a directory conjured -- an
+	# unlisted unplaced recipe is still a hard failure (see below).
+	newcat=""
+	for m in $NEW_PORT_DIRS; do
+		case "$m" in
+			"$port:"*) newcat=${m#*:} ;;
+		esac
+	done
+	if [ -n "$newcat" ]; then
+		newdir="$TREE/$newcat/$port"
+		mkdir -p "$newdir"
+		cp "$src" "$newdir/$base"
+		echo "overlay-apply: created $newdir/$base (new port)"
 		placed=$((placed + 1))
 		continue
 	fi

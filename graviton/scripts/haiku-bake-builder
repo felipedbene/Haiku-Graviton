@@ -137,6 +137,18 @@ if [ "$PROVISION" = 1 ]; then
   aws s3 cp "$OVERLAY_TAR" "s3://$BUCKET/bake-scripts/haikuports-patches.tar" --region "$REGION" >/dev/null
   rm -f "$OVERLAY_TAR"
   say "staged recipe overlay ($(ls -1 "$OVERLAY_DIR"/recipes/*.recipe | wc -l | tr -d ' ') recipes)"
+
+  # #329 public-header overlay: the published haiku_devel can lag the OS binary, so
+  # its <sys/auxv.h> may still miss the HWCAP2 int8/bf16/matrix macros a port needs
+  # to compile runtime CPU-feature dispatch. Stage the CURRENT header from the
+  # DeBeOS source tree so the provisioner can repack it into haiku_devel (it skips
+  # when the installed header already has the macros -- self-retiring). Repo root is
+  # two levels up from graviton/scripts/.
+  AUXV_SRC="$(cd "$HERE/../.." && pwd)/headers/posix/sys/auxv.h"
+  [ -f "$AUXV_SRC" ] || { say "missing $AUXV_SRC"; exit 1; }
+  grep -q 'HWCAP2_I8MM' "$AUXV_SRC" || { say "$AUXV_SRC lacks HWCAP2_I8MM -- source tree predates #329?"; exit 1; }
+  aws s3 cp "$AUXV_SRC" "s3://$BUCKET/bake-scripts/auxv.h" --region "$REGION" >/dev/null
+  say "staged #329 public header sys/auxv.h"
 fi
 
 # 2) launch a temp builder from the base AMI. A --disk override sets the bake
@@ -185,7 +197,7 @@ chmod +x /boot/home/haiku-provision-native-builder
 # points at a live host instead of the dead ports-mirror.haiku-os.org default
 # (issue #172). Both are resolved here at bake time, never baked into the tracked
 # provisioner file.
-SRCCACHE_S3="s3://$BUCKET/srccache" DOWNLOAD_MIRROR="$DOWNLOAD_MIRROR" /boot/home/haiku-provision-native-builder
+SRCCACHE_S3="s3://$BUCKET/srccache" DOWNLOAD_MIRROR="$DOWNLOAD_MIRROR" AUXV_OVERLAY_S3="s3://$BUCKET/bake-scripts/auxv.h" /boot/home/haiku-provision-native-builder
 EOF
   # Overlay BEFORE the cache warm-up, so the dependency infos baked into the AMI
   # are computed from the recipes we will actually build with.
