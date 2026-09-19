@@ -125,14 +125,41 @@ phases:
       # -- a skew that leaves ca_root_certificates present-but-not-activated
       # (no CARootCertificates.pem, so TLS verify fails B_NOT_ALLOWED). Let the
       # single index version be the one resolved and activated.
-      - aws s3 sync "s3://$WORK_BUCKET/hpkg-pool/" "$HG_POOL_DIR/" --region "$AWS_DEFAULT_REGION" --exclude "*" --include "openssl3-*" --include "openssl3_devel-*" --include "zstd-*" --include "zstd_devel-*" --include "zstd_source-*" --include "amazon_ssm_agent-*" --include "debeos_cloudwatch-*" --include "fluidlite-*" --include "fluidlite_devel-*" --include "libvorbis-*" --include "libvorbis_devel-*" || echo "no lean hpkg pool"
+      # NO fallback on this sync (issue #419): it used to end in
+      # `|| echo "no lean hpkg pool"`, which swallowed BOTH a real sync error
+      # and -- worse -- a filter that matched nothing. When this pipeline's
+      # pool went stale (it predated amazon_ssm_agent in the trunk pool), the
+      # include filter matched zero objects, the fallback printed its line, and
+      # the bake "succeeded" into an AMI with no SSM agent at all. Under the
+      # phase-wide `set -euo pipefail` a sync failure now fails the build, and
+      # the must-have check below refuses to continue when a critical package
+      # did not land, whatever the reason (stale pool, filter typo, 403).
+      - aws s3 sync "s3://$WORK_BUCKET/hpkg-pool/" "$HG_POOL_DIR/" --region "$AWS_DEFAULT_REGION" --exclude "*" --include "openssl3-*" --include "openssl3_devel-*" --include "zstd-*" --include "zstd_devel-*" --include "zstd_source-*" --include "amazon_ssm_agent-*" --include "debeos_cloudwatch-*" --include "fluidlite-*" --include "fluidlite_devel-*" --include "libvorbis-*" --include "libvorbis_devel-*"
       - |
-        if [ -z "$(ls -A "$HG_POOL_DIR" 2>/dev/null)" ]; then
-          echo "empty hpkg pool; SSH-only image"; unset HG_POOL_DIR
-        else
-          ls -la "$HG_POOL_DIR"
-          ( cd "$HAIKU_TOP" && ./graviton/scripts/haiku-stage-local-packages "$GEN" "$HG_POOL_DIR" ) || echo "stage-local-packages reported issues (features for any un-staged pkg stay off)"
+        # Must-have packages: the image is WRONG without these, so their
+        # absence fails the bake loudly instead of shipping a quiet regression.
+        #   amazon_ssm_agent / debeos_cloudwatch -- the instance boots and sshd
+        #     works but it never registers as an SSM managed node and emits no
+        #     metrics (the exact #419 failure mode);
+        #   openssl3(+devel) / zstd(+devel,source) -- their build features
+        #     silently turn off and BSecureSocket ships as the B_UNSUPPORTED
+        #     stub / the kernel zstd support cannot compile.
+        # fluidlite/libvorbis are optional media features: if un-staged their
+        # features just stay off, so they are deliberately NOT in this list.
+        # This also retires the old "empty hpkg pool; SSH-only image" branch:
+        # an empty pool was only ever a mis-seeded work bucket, never a wanted
+        # image flavor.
+        missing=""
+        for pkg in amazon_ssm_agent debeos_cloudwatch openssl3 openssl3_devel zstd zstd_devel zstd_source; do
+          ls "$HG_POOL_DIR/${pkg}"-[0-9]*.hpkg >/dev/null 2>&1 || missing="$missing $pkg"
+        done
+        if [ -n "$missing" ]; then
+          echo "FATAL: hpkg pool s3://$WORK_BUCKET/hpkg-pool/ did not provide required package(s):$missing" >&2
+          echo "The pool is stale or mis-seeded. Sync it from the trunk pipeline's hpkg-pool/ prefix (additive; see issue #419), then retry the bake." >&2
+          exit 1
         fi
+        ls -la "$HG_POOL_DIR"
+        ( cd "$HAIKU_TOP" && ./graviton/scripts/haiku-stage-local-packages "$GEN" "$HG_POOL_DIR" ) || echo "stage-local-packages reported issues (features for any un-staged pkg stay off)"
       # ---- first jam pass: stage the haiku / haiku_devel packages --------
       # build-openssh-arm64.sh reads the packages_build/minimum staging dirs,
       # which only exist after jam has assembled the base packages. This first
