@@ -1,0 +1,22 @@
+SubDir HAIKU_TOP src servers remote_broker ;
+
+UsePrivateHeaders shared support ;
+
+# TLS is the whole point of this daemon; it only exists when the openssl
+# build feature is available (it is in every DeBeOS image -- the https
+# package fetch path already depends on it).
+if [ FIsBuildFeatureEnabled openssl ] {
+	UseBuildFeatureHeaders openssl ;
+
+	Includes [ FGristFiles RemoteBroker.cpp TLSStream.cpp WebSocketStream.cpp ]
+		: [ BuildFeatureAttribute openssl : headers ] ;
+
+	Application remote_broker :
+		RemoteBroker.cpp
+		TLSStream.cpp
+		WebSocketStream.cpp
+
+		: be network [ BuildFeatureAttribute openssl : libraries ]
+			[ TargetLibsupc++ ]
+	;
+}
