@@ -54,10 +54,15 @@
 #define ENA_IOCTL_TX_EXTRA_DOORBELLS	9802
 #define ENA_IOCTL_GET_IRQ_STATS		9803
 #define ENA_IOCTL_REARM_MODE		9804
+#define ENA_IOCTL_GET_QUEUE_IRQ_STATS	9808
 #define ENA_REARM_IN_HANDLER		0
 #define ENA_REARM_AFTER_DRAIN		1
 #define ENA_MAX_RESET_HOLD_MS		30000
 #define ENA_MAX_EXTRA_DOORBELLS		64
+
+/* Enough to cover ENA_MAX_IO_QUEUE_PAIRS in the driver; queue-stats stops at the
+   first queue the driver rejects, so an over-estimate is harmless. */
+#define ENA_FAULT_MAX_QUEUES		64
 
 #define ENA_DEVICE_PATH			"/dev/net/ena/0"
 
@@ -78,6 +83,22 @@ struct ena_irq_stats {
 };
 
 
+/* Must match struct ena_queue_irq_stats in the driver's ena.h. queue selects the
+   pair on the way in; everything else is that pair's own counters on the way out
+   (not sums), which is how a dead or unarmed receive queue is spotted -- an active
+   pair whose ioInterrupts never advance is blackholing the flows RSS hashes to it. */
+struct ena_queue_irq_stats {
+	uint64	queue;
+	uint64	ioInterrupts;
+	uint64	irqArms;
+	uint64	rxFrames;
+	uint64	rxDrainCycles;
+	uint64	txFrames;
+	int64	targetCpu;
+	uint64	rxActive;
+};
+
+
 static void
 usage(const char* program)
 {
@@ -85,10 +106,13 @@ usage(const char* program)
 		"       %s hold <milliseconds>\n"
 		"       %s doorbells <n>\n"
 		"       %s stats [seconds]\n"
+		"       %s queue-stats [seconds]\n"
 		"       %s rearm <0|1>\n"
 		"  stats [s]     sample the driver's counters over [s] seconds "
 		"(default 10)\n"
 		"                and report frames per io interrupt\n"
+		"  queue-stats [s]  per-queue io-interrupt and rx-frame distribution over\n"
+		"                [s] seconds (default 10) -- the multiqueue A/B instrument\n"
 		"  rearm <0|1>   where the io vector is re-armed: 0 in the interrupt\n"
 		"                handler (the old cadence), 1 after the drain (default)\n"
 		"  0             stop suppressing keep-alive\n"
@@ -98,7 +122,7 @@ usage(const char* program)
 		"                concurrent \"ifconfig down\" can be aimed at it; 0 disables\n"
 		"  doorbells <n> ring the transmit doorbell <n> extra times per frame, to\n"
 		"                price one doorbell write; 0 restores normal behaviour\n",
-		program, program, program, program, program);
+		program, program, program, program, program, program);
 }
 
 
@@ -224,9 +248,100 @@ show_stats(const char* program, int seconds)
 }
 
 
+/*!	Samples every receive queue's own counters over an interval and reports the
+	per-queue interrupt and frame distribution.
+
+	This is the multiqueue A/B instrument: with RSS spreading flows across N
+	queues each pinned to its own CPU, a working spread shows io interrupts and rx
+	frames advancing on more than one queue, on the CPUs their vectors target. A
+	queue that is active (rxActive) but whose counters never move is blackholing
+	the flows RSS hashed to it. targetCpu is what assign_io_interrupt_to_cpu()
+	reported the vector actually landed on.
+*/
+static int
+show_queue_stats(const char* program, int seconds)
+{
+	int fd = open(ENA_DEVICE_PATH, O_RDWR);
+	if (fd < 0) {
+		fprintf(stderr, "%s: cannot open %s: %s\n", program, ENA_DEVICE_PATH,
+			strerror(errno));
+		return 1;
+	}
+
+	struct ena_queue_irq_stats before[ENA_FAULT_MAX_QUEUES];
+	struct ena_queue_irq_stats after[ENA_FAULT_MAX_QUEUES];
+	int queues = 0;
+
+	for (int q = 0; q < ENA_FAULT_MAX_QUEUES; q++) {
+		before[q].queue = (uint64)q;
+		if (ioctl(fd, ENA_IOCTL_GET_QUEUE_IRQ_STATS, &before[q],
+				sizeof(before[q])) < 0) {
+			/* First rejected queue is one past the last that exists. */
+			break;
+		}
+		queues++;
+	}
+
+	if (queues == 0) {
+		fprintf(stderr, "%s: no queues reported (does this driver have "
+			"ENA_IOCTL_GET_QUEUE_IRQ_STATS? check the build stamp in the "
+			"syslog)\n", program);
+		close(fd);
+		return 1;
+	}
+
+	sleep(seconds);
+
+	for (int q = 0; q < queues; q++) {
+		after[q].queue = (uint64)q;
+		if (ioctl(fd, ENA_IOCTL_GET_QUEUE_IRQ_STATS, &after[q],
+				sizeof(after[q])) < 0) {
+			fprintf(stderr, "%s: second ioctl failed on queue %d: %s\n", program,
+				q, strerror(errno));
+			close(fd);
+			return 1;
+		}
+	}
+
+	close(fd);
+
+	printf("interval            %d s, %d queue(s)\n", seconds, queues);
+	printf("queue  cpu  active   io interrupts (/s)     rx frames (/s)\n");
+	uint64 totalInterrupts = 0;
+	uint64 totalFrames = 0;
+	for (int q = 0; q < queues; q++) {
+		const uint64 interrupts = after[q].ioInterrupts - before[q].ioInterrupts;
+		const uint64 frames = after[q].rxFrames - before[q].rxFrames;
+		totalInterrupts += interrupts;
+		totalFrames += frames;
+		printf("%5d  %3lld  %6llu   %10llu (%7.0f/s)  %12llu (%7.0f/s)\n",
+			q, (long long)after[q].targetCpu,
+			(unsigned long long)after[q].rxActive,
+			(unsigned long long)interrupts, (double)interrupts / seconds,
+			(unsigned long long)frames, (double)frames / seconds);
+	}
+	printf("total               %llu interrupts, %llu rx frames\n",
+		(unsigned long long)totalInterrupts, (unsigned long long)totalFrames);
+
+	return 0;
+}
+
+
 int
 main(int argc, char** argv)
 {
+	if (argc >= 2 && strcmp(argv[1], "queue-stats") == 0) {
+		int seconds = 10;
+		if (argc == 3)
+			seconds = (int)strtol(argv[2], NULL, 10);
+		if (argc > 3 || seconds < 1 || seconds > 3600) {
+			fprintf(stderr, "%s: queue-stats takes an interval of 1-3600 "
+				"seconds\n", argv[0]);
+			return 1;
+		}
+		return show_queue_stats(argv[0], seconds);
+	}
+
 	if (argc == 3 && strcmp(argv[1], "rearm") == 0) {
 		int32 mode = (int32)strtol(argv[2], NULL, 10);
 		if (mode != ENA_REARM_IN_HANDLER && mode != ENA_REARM_AFTER_DRAIN) {

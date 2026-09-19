@@ -80,12 +80,18 @@ extern "C" {
    forcing the read-less path through the admin queue. */
 #define ENA_MMIO_DISABLE_REG_READ	BIT(0)
 
-/* One TX/RX pair. ENA supports many, but a single pair is enough to make an
-   instance reachable and keeps the completion paths simple; scaling out is a
-   separate change (see the TODO in ena_setup_io_queues). */
-#define ENA_IO_QUEUE_PAIRS	1
-#define ENA_TX_QUEUE_ID		0
-#define ENA_RX_QUEUE_ID		1
+/* TX/RX queue pairs. The driver creates as many as the device grants, capped
+   by ENA_MAX_IO_QUEUE_PAIRS and clamped further by the CPU count, the MSI-X
+   grant and the rx_queues driver setting (see ena_calculate_queue_count()).
+
+   Pair i occupies device queue ids TX = 2i, RX = 2i+1 -- the convention the
+   reference driver uses, and the one under which the single pair 0 that this
+   driver used to create is TX id 0 / RX id 1. Defaulting the active receive set
+   to a single queue (rxActiveCount == 1) keeps a device with no multiqueue
+   stack above it behaving exactly as before this change. */
+#define ENA_MAX_IO_QUEUE_PAIRS	8	/* driver cap; device caps/CPUs/MSI-X clamp below it */
+#define ENA_IO_TXQ_ID(pair)	((uint16)(2 * (pair)))
+#define ENA_IO_RXQ_ID(pair)	((uint16)(2 * (pair) + 1))
 
 /* Descriptor ring depth. Must be a power of two and is clamped to whatever the
    device reports it can do. */
@@ -465,6 +471,20 @@ extern "C" {
    unknown length is worse than none. */
 #define ENA_IOCTL_RX_ADAPTIVE_MODERATION	9807
 
+/* Per-queue-pair version of ENA_IOCTL_GET_IRQ_STATS, always compiled in. The
+   old ioctl keeps its exact ABI and answers with sums across pairs (ena_fault
+   links against it); this one reports one pair at a time, which is how a dead
+   or unarmed receive queue is spotted from userland -- an active pair whose
+   ioInterrupts/rxFrames never advance is blackholing the flows RSS hashes to
+   it. Set the queue field on the way in; everything else is filled on the way
+   out.
+
+   Numbered 9808 rather than the integration branch's original 9806: on this
+   tree 9806/9807 were already taken by GET_ENI_STATS (#106) and
+   RX_ADAPTIVE_MODERATION (#108), so the multiqueue diagnostic moved up to the
+   next free value rather than colliding with them. */
+#define ENA_IOCTL_GET_QUEUE_IRQ_STATS	9808
+
 struct ena_irq_stats {
 	uint64	ioInterrupts;
 	/* Unmask writes. Fewer than ioInterrupts means a vector was re-armed by one
@@ -495,6 +515,19 @@ struct ena_irq_stats {
 	   that the conversion is a measurement taken alongside the numbers it
 	   applies to, rather than an assumption made later. */
 	uint64	intrDelayResolution;
+};
+
+/* ENA_IOCTL_GET_QUEUE_IRQ_STATS. queue selects the pair on the way in; the
+   rest are that pair's own counters, not sums. */
+struct ena_queue_irq_stats {
+	uint64	queue;		/* in: pair index; everything else out */
+	uint64	ioInterrupts;
+	uint64	irqArms;
+	uint64	rxFrames;
+	uint64	rxDrainCycles;
+	uint64	txFrames;
+	int64	targetCpu;	/* CPU the vector was pinned to (-1 unknown) */
+	uint64	rxActive;
 };
 
 /* Snapshot returned by ENA_IOCTL_GET_ENI_STATS. Every field is uint64 on
@@ -607,6 +640,114 @@ struct ena_tx_buffer {
 };
 
 
+struct ena_haiku_device;
+
+
+/*!	One TX/RX queue pair: its rings, bounce buffers, locks, interrupt vector and
+	per-queue datapath counters.
+
+	Cache-line aligned (the Neoverse line is 64 bytes) so that two pairs driven
+	from two CPUs do not false-share a line -- the whole point of splitting the
+	datapath state out of the device struct is that each queue's hot fields sit
+	on their own line.
+
+	Lock order across pairs, a strict superset of the historical
+	resetLock -> txLock -> rxLock:
+
+		resetLock
+		  -> queues[0].txLock -> queues[1].txLock -> ...  (ascending index)
+		    -> queues[0].rxLock -> queues[1].rxLock -> ... (ascending index)
+
+	The reset path is the only holder of more than one queue lock. Every
+	datapath call (ena_send, ena_receive, reclaim, refill) takes exactly one
+	pair's txLock or rxLock and never another pair's, so no lock cycle is
+	constructible against the datapath. */
+struct ena_queue_pair {
+	ena_haiku_device*		device;		/* back-pointer for the interrupt handler */
+	uint16				index;		/* pair index; qids are ENA_IO_{TX,RX}Q_ID(index) */
+
+	/* --- interrupt ------------------------------------------------------- */
+	uint32				ioIrq;		/* kernel vector = msixStartVector + 1 + index */
+	bool				ioIrqInstalled;
+	/* What assign_io_interrupt_to_cpu() reported this vector actually targets,
+	   or -1 until it is pinned. Diagnostics only, surfaced through
+	   ENA_IOCTL_GET_QUEUE_IRQ_STATS; the ITS may fold the request, and the
+	   driver records what it got rather than retrying (see ena_device_bringup). */
+	int32				targetCpu;
+	int32				ioInterrupts;
+	/* Whether this pair's io vector is currently armed. The device masks a
+	   vector by raising it, and the re-arm happens at the end of a drain rather
+	   than in the handler, so this is what stops the two directions from both
+	   writing the unmask register for the same interrupt. Written with
+	   atomic_test_and_set() from either datapath and cleared by the handler; see
+	   ena_rearm_io_interrupt(). */
+	int32				irqArmed;
+	/* How many unmask writes that produced, as a check that the re-arm is
+	   actually reached. */
+	int32				irqArms;
+
+	/* --- TX -------------------------------------------------------------- */
+	struct ena_com_io_sq*		txSubmissionQueue;
+	struct ena_com_io_cq*		txCompletionQueue;
+	/* txFreeIds is a stack of unused request ids; the device echoes a request id
+	   back on completion, which is how we find the net_buffer to release. */
+	ena_tx_buffer*			txBuffers;
+	area_id				txBufferArea;
+	uint16*				txFreeIds;
+	uint16				txFreeCount;
+	mutex				txLock;
+	sem_id				txCompleted;
+
+	/* --- transmit doorbell accounting ------------------------------------ */
+	uint64				txFrames;
+	uint64				txBytes;
+	uint64				txDoorbells;
+	uint64				txBurstExhausted;
+	uint16				txBurstLeftMin;
+
+	/* Frames handed to the device with the checksum left to it, and frames that
+	   arrived asking for that but did not survive validation. The second must
+	   stay at zero: it means something above set NET_BUFFER_L4_CHECKSUM_NEEDED
+	   on a frame this device cannot finish. */
+	uint64				txChecksumOffloaded;
+	uint64				txChecksumRejected;
+
+	/* --- RX -------------------------------------------------------------- */
+	/* One preallocated buffer per descriptor, indexed by request id. */
+	struct ena_com_io_sq*		rxSubmissionQueue;
+	struct ena_com_io_cq*		rxCompletionQueue;
+	ena_packet_buffer*		rxBuffers;
+	area_id				rxBufferArea;
+	uint16				rxNextToFill;
+	/* Descriptors that have been drained but not yet handed back to the device.
+	   Flushed by ena_return_receive_descriptors() once it reaches
+	   rxRefillThreshold, so that one doorbell write covers a whole batch. Reset
+	   wherever rxNextToFill is, because the two describe the same ring and a
+	   stale count would post descriptors the device already owns. */
+	uint16				rxPendingRefill;
+	mutex				rxLock;
+	sem_id				rxReady;
+
+	/* What the device actually reports per frame; see ena_receive(). Read under
+	   rxLock, like everything else here. */
+	uint64				rxFrames;
+	uint64				rxBytes;
+	/* Completed receive drains: incremented where ena_com_rx_pkt() reads the ring
+	   empty, which is the point the vector is re-armed. */
+	uint64				rxDrainCycles;
+	uint64				rxL4CsumChecked;
+	uint64				rxL4CsumErrors;
+	uint64				rxL3Ipv4Frames;
+	uint64				rxL3CsumErrors;
+
+	/* Receive steering points here and something drains it. Written only under
+	   resetLock (activation, reset, close); read by the interrupt handler, so it
+	   is an int32 accessed with atomics, not a bool. 0 and 1 mean inactive and
+	   active respectively. */
+	int32				rxActive;
+} __attribute__((aligned(64)));
+
+
 /* Named to match the forward declaration ena_plat.h hands to ena-com as
    ena_netdev. ena-com only stores the pointer. */
 struct ena_haiku_device {
@@ -625,25 +766,13 @@ struct ena_haiku_device {
 	uint32				dmaWidth;
 
 	uint32				managementIrq;
-	uint32				ioIrq;
 	/* Diagnostics: MSI-X delivery on this arm64/GICv3+ITS port is new, and a
 	   silently undelivered vector is otherwise indistinguishable from a
 	   device that never completed a command. */
-	/* Which MSI-X table index the io queues were actually created with. */
-	uint32				ioVector;
 	int32				managementInterrupts;
-	int32				ioInterrupts;
-	/* Whether the shared io vector is currently armed. The device masks a vector
-	   by raising it, and the re-arm happens at the end of a drain rather than in
-	   the handler, so this is what stops the two directions from both writing the
-	   unmask register for the same interrupt. Written with atomic_test_and_set()
-	   from either datapath and cleared by the handler; see
-	   ena_rearm_io_interrupt(). */
-	int32				irqArmed;
-	/* How many unmask writes that produced, as a check that the re-arm is
-	   actually reached: zero arms with a rising interrupt count would mean the
-	   vector is being re-armed by something other than the drain. */
-	int32				irqArms;
+	/* MSI-X vectors are allocated as one contiguous block; the management vector
+	   is the first (table index 0) and IO pair i uses table index 1 + i. */
+	uint32				msixStartVector;
 	/* ENA_REARM_IN_HANDLER or ENA_REARM_AFTER_DRAIN; see ENA_IOCTL_REARM_MODE.
 	   Read on the interrupt path, so a plain atomic load rather than anything
 	   that could block. */
@@ -669,7 +798,6 @@ struct ena_haiku_device {
 	bigtime_t			moderationWindowStart;
 	uint64				moderationWindowFrames;
 	bool				managementIrqInstalled;
-	bool				ioIrqInstalled;
 	/* Two states, not one: configure_msix() claims the vectors and is undone by
 	   unconfigure_msi(), while enable_msix() only flips the device's enable bit.
 	   The teardown paths key on msixConfigured, because a failure between the
@@ -678,40 +806,30 @@ struct ena_haiku_device {
 	bool				msixConfigured;
 	bool				msixEnabled;
 
-	struct ena_com_io_sq*		txSubmissionQueue;
-	struct ena_com_io_cq*		txCompletionQueue;
-	struct ena_com_io_sq*		rxSubmissionQueue;
-	struct ena_com_io_cq*		rxCompletionQueue;
+	/* The queue pairs. queuePairCount are created at bring-up; receive is spread
+	   over rxActiveCount of them (always at least pair 0). The stack raises
+	   rxActiveCount through set_rx_queue_count/ETHER_SET_RX_QUEUE_COUNT; a driver
+	   with no multiqueue stack above it, or reset to legacy, keeps
+	   rxActiveCount == 1 and behaves exactly as the single-pair driver did. */
+	uint32				queuePairCount;
+	int32				rxActiveCount;		/* pairs receive is spread over; 1..queuePairCount */
+	ena_queue_pair			queues[ENA_MAX_IO_QUEUE_PAIRS];
+
+	/* Driver-settings "rx_queues" cap, 0 when unset. Clamps queuePairCount from
+	   above; 1 forces the single-queue topology. This is the A/B lever for the
+	   throughput experiment and the emergency off-switch that needs no rebuild.
+	   Read once at bring-up alongside the other driver settings. */
+	uint32				settingsRxQueues;
 
 	uint16				txRingSize;
 	uint16				rxRingSize;
 
-	/* TX. txFreeIds is a stack of unused request ids; the device echoes a
-	   request id back on completion, which is how we find the net_buffer to
-	   release. */
-	ena_tx_buffer*			txBuffers;
-	area_id				txBufferArea;
-	uint16*				txFreeIds;
-	uint16				txFreeCount;
-	mutex				txLock;
-	sem_id				txCompleted;
-
-	/* RX. One preallocated buffer per descriptor, indexed by request id. */
-	ena_packet_buffer*		rxBuffers;
-	area_id				rxBufferArea;
-	uint16				rxNextToFill;
-	/* Descriptors that have been drained but not yet handed back to the
-	   device. Flushed by ena_return_receive_descriptors() once it reaches
-	   rxRefillThreshold, so that one doorbell write covers a whole batch.
-	   Reset wherever rxNextToFill is, because the two describe the same ring
-	   and a stale count would post descriptors the device already owns. */
-	uint16				rxPendingRefill;
+	/* Receive refill batch: a fraction of the ring, device-wide because every
+	   pair's ring is the same depth. */
 	uint16				rxRefillThreshold;
-	mutex				rxLock;
 	/* Guards the per-device datapath setup in ena_open()/ena_close(), which must
 	   happen once however many times the node is opened. */
 	int32				openCount;
-	sem_id				rxReady;
 
 	/* --- device watchdog ------------------------------------------------- */
 	/* The device emits ENA_ADMIN_KEEP_ALIVE events; their absence means it has
@@ -858,28 +976,11 @@ struct ena_haiku_device {
 	uint32				offloadRxSupported;
 	uint32				offloadRxEnabled;
 
-	/* What the device actually reports per frame, as opposed to what it says it
-	   supports. rx_enabled reading 0 while rx_supported reads 0x7 is ambiguous on
-	   its own -- it could mean the device is not checking, or it could mean
-	   rx_enabled is vestigial and the per-descriptor bits are the real answer --
-	   and those two cases call for opposite code. Counting the descriptor bits
-	   settles it. Deliberately outside any debug ifdef so they exist in every
-	   build; they are two increments on a path that already does a memcpy per
-	   frame. Read under rxLock, like everything else here. */
-	uint64				rxFrames;
-	/* Bytes handed to the stack, summed from each reassembled net_buffer's size,
-	   so it is the L2 frame length the way an ENI byte counter reports it. Under
-	   rxLock with rxFrames; surfaced by ENA_IOCTL_GET_ENI_STATS (#106). */
-	uint64				rxBytes;
-	/* Completed receive drains: incremented where ena_com_rx_pkt() reads the ring
-	   empty, which is the point the vector is re-armed. rxFrames / rxDrainCycles
-	   is the average number of frames one wakeup was worth, and is the number the
-	   interrupt-cadence work has to move. Under rxLock with the rest of these. */
-	uint64				rxDrainCycles;
-	uint64				rxL4CsumChecked;
-	uint64				rxL4CsumErrors;
-	uint64				rxL3Ipv4Frames;
-	uint64				rxL3CsumErrors;
+	/* The per-frame offload evidence (rxFrames, rxL4CsumChecked, ...) and the
+	   transmit doorbell accounting now live per pair in ena_queue_pair, because a
+	   receiver on one CPU must not share their cache line with another; rx_enabled
+	   reading 0 while rx_supported reads 0x7 is why they are counted at all (see
+	   ena_receive()). The diagnostics ioctls sum them across pairs. */
 
 	bool				linkUp;
 	bool				nonBlocking;
@@ -888,24 +989,6 @@ struct ena_haiku_device {
 
 	uint32				multicastCount;
 	ether_address_t			multicast[ENA_MAX_MULTICAST];
-
-	/* --- transmit doorbell accounting ------------------------------------ */
-	/* Measurement, not diagnostics: the question these answer is whether
-	   deferring the per-frame doorbell could ever amortise it on this device.
-	   In LLQ mode the device grants a burst of only
-	   llq_info.max_entries_in_tx_burst ring entries between doorbells, and a
-	   doorbell is what refills that allowance -- so if one frame consumes the
-	   whole burst, no two consecutive frames can share a doorbell however
-	   clever the caller is. txBurstExhausted counts frames that left the
-	   allowance at zero. See graviton/docs/ena-tx-offload.md. */
-	uint64				txFrames;
-	/* Bytes accepted for transmit, summed from each net_buffer's size under
-	   txLock alongside txFrames; the transmit counterpart of rxBytes and likewise
-	   surfaced by ENA_IOCTL_GET_ENI_STATS (#106). */
-	uint64				txBytes;
-	uint64				txDoorbells;
-	uint64				txBurstExhausted;
-	uint16				txBurstLeftMin;
 
 	/* Debug knob, driver settings "tx_extra_doorbells": ring the doorbell this
 	   many extra times per frame. Writing the same tail again is a no-op for
@@ -922,15 +1005,6 @@ struct ena_haiku_device {
 	   stack stops computing TCP checksums for this interface, so it must never
 	   claim more than ena_prepare_tx_checksum() can actually deliver. */
 	uint32				txChecksumOffload;
-
-	/* Frames handed to the device with the checksum left to it, and frames that
-	   arrived asking for that but did not survive validation. The second must
-	   stay at zero: it means something above set
-	   NET_BUFFER_L4_CHECKSUM_NEEDED on a frame this device cannot finish, and
-	   those frames are dropped rather than put on the wire with a wrong
-	   checksum. */
-	uint64				txChecksumOffloaded;
-	uint64				txChecksumRejected;
 };
 
 
