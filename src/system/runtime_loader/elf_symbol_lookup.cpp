@@ -90,11 +90,15 @@ match_symbol(const image_t* image, const SymbolLookupInfo& lookupInfo, uint32 sy
 	if (symbol->Bind() != STB_GLOBAL && symbol->Bind() != STB_WEAK)
 		return false;
 
-	// check if the type matches
+	// check if the type matches. An STT_GNU_IFUNC definition resolves to a
+	// function (and thus a text address) at load time, so accept it for both
+	// text and data lookups just like STT_FUNC.
 	uint32 type = symbol->Type();
-	if ((lookupInfo.type == B_SYMBOL_TYPE_TEXT && type != STT_FUNC)
+	if ((lookupInfo.type == B_SYMBOL_TYPE_TEXT && type != STT_FUNC
+			&& type != STT_GNU_IFUNC)
 		|| (lookupInfo.type == B_SYMBOL_TYPE_DATA
-			&& type != STT_OBJECT && type != STT_FUNC)) {
+			&& type != STT_OBJECT && type != STT_FUNC
+			&& type != STT_GNU_IFUNC)) {
 		return false;
 	}
 
@@ -557,9 +561,13 @@ find_undefined_symbol_add_on(image_t* rootImage, image_t* image,
 
 int
 resolve_symbol(image_t* rootImage, image_t* image, elf_sym* sym,
-	SymbolLookupCache* cache, addr_t* symAddress, image_t** symbolImage)
+	SymbolLookupCache* cache, addr_t* symAddress, image_t** symbolImage,
+	bool* _isIndirect)
 {
 	uint32 index = sym - image->syms;
+
+	if (_isIndirect != NULL)
+		*_isIndirect = false;
 
 	// check the cache first
 	if (cache->IsSymbolValueCached(index)) {
@@ -616,8 +624,11 @@ resolve_symbol(image_t* rootImage, image_t* image, elf_sym* sym,
 		}
 	} else if (sym->Type() != STT_NOTYPE
 		&& sym->Type() != sharedSym->Type()
-		&& (sym->Type() != STT_OBJECT || sharedSym->Type() != STT_FUNC)) {
-		// symbol not of the requested type, except object which can match function
+		&& (sym->Type() != STT_OBJECT || sharedSym->Type() != STT_FUNC)
+		&& !(_isIndirect != NULL && sharedSym->Type() == STT_GNU_IFUNC)) {
+		// symbol not of the requested type, except object which can match
+		// function, and an STT_GNU_IFUNC definition which resolves to a plain
+		// function/object address at load time
 		lookupError = ERROR_WRONG_TYPE;
 		sharedImage = NULL;
 	} else if (sharedSym->Bind() != STB_GLOBAL
@@ -634,6 +645,16 @@ resolve_symbol(image_t* rootImage, image_t* image, elf_sym* sym,
 		} else
 			lookupError = SUCCESS;
 	}
+
+	// An STT_GNU_IFUNC definition is not the symbol's address itself but a
+	// resolver that returns the address of the implementation to use (selected
+	// from CPU features). Report it as indirect so the caller invokes it once
+	// text is executable, and don't cache -- the cached value would be the
+	// resolver, not the implementation.
+	bool isIndirect = _isIndirect != NULL && sharedSym != NULL
+		&& sharedSym->Type() == STT_GNU_IFUNC;
+	if (isIndirect)
+		*_isIndirect = true;
 
 	if (!tlsSymbol) {
 		patch_undefined_symbol(rootImage, image, symName, &sharedImage,
@@ -666,7 +687,8 @@ resolve_symbol(image_t* rootImage, image_t* image, elf_sym* sym,
 		return B_MISSING_SYMBOL;
 	}
 
-	cache->SetSymbolValueAt(index, (addr_t)location, sharedImage);
+	if (!isIndirect)
+		cache->SetSymbolValueAt(index, (addr_t)location, sharedImage);
 
 	if (symbolImage)
 		*symbolImage = sharedImage;
