@@ -1,5 +1,30 @@
 # ARM SIMD and vectorization on Haiku arm64: what is worth doing
 
+> **CORRECTION (2026-09, supersedes the SVE thesis below).** This review was
+> written 2026-08-25, **before** SVE was enabled in the kernel. Its central SVE
+> claim — "SVE is a NO-GO; `CPACR_EL1.ZEN = 0`, so an SVE instruction traps to a
+> `SIGILL`; the blocker is our kernel" — **is now stale and wrong.** Commit
+> `50f6a9be53` (#88) **enabled SVE** for EL0/EL1: `arch_sve_init_percpu()` in
+> `src/system/kernel/arch/arm64/arch_cpu.cpp` sets `CPACR_EL1.ZEN = 0b11` (no
+> trap) on every SVE-capable core, programs the effective vector length via
+> `ZCR_EL1`/`RDVL` (clamped to `SVE_MAX_VL_BYTES`), and the EL0 exception path
+> saves/restores each thread's Z/P/FFR off-stack, with fork and signal frames
+> carrying it. **SVE executes cleanly on hardware**: on the current canonical AMI
+> (`ami-04493ac7c3fe0d304`), EL0 SVE runs at **VL = 128-bit on Graviton 5
+> (`c9g`)** and **256-bit on Graviton 3 (`c7g`)** — it does **not** SIGILL — and
+> the `_g3` llama.cpp SVE+i8mm path is hardware-proven on Graviton 3 (#331: real
+> SMMLA GEMM, correct output, 6.37x prompt-eval). The passages below that assert
+> SVE traps / SIGILLs / is blocked-on-kernel-work describe the **historical
+> pre-#88 state** and are flagged inline. What is *not* superseded is the *value*
+> judgement — SVE ≈ NEON FLOP parity on V1/V2, so NEON remains the right default
+> for most work — and, load-bearing: **the vector length is not constant across
+> the fleet.** It halves from 256-bit on Graviton 3 to 128-bit on Graviton 4/5,
+> so any SVE code must read `RDVL` / `svcntb()` **at runtime** and never hardcode
+> a 256-bit width — a fixed-256-bit assumption faults nothing but computes wrong
+> on a 128-bit part. One nuance the enablement kept deliberately: `HWCAP_SVE` is
+> **not** advertised via `getauxval` yet (a `#99` follow-up), so a HWCAP-driven
+> dispatcher will not *auto-select* SVE — but code compiled to emit SVE runs.
+
 Status as of **2026-08-25**: **review only. Nothing in this document has been
 implemented, and the central capacity question — where graphics and image time
 actually goes — has not been measured on this port.** Everything below is
@@ -45,17 +70,18 @@ If you read nothing else:
    verified from build config and upstream source; **the `objdump` check meant to
    confirm it had its positive control fail, so this is not yet measured and must
    not be cited as such.** §3, §6.1, **§7.1**.
-3. **SVE is a NO-GO, and dropping Graviton 2 does not change that.** The arm64
-   kernel leaves `CPACR_EL1.ZEN = 0`, so SVE instructions trap and userland gets
-   a clean `SIGILL`. **Confirmed by execution**: our AMI booted on a real
-   **Graviton 5 (`c9g`)** and a SIGILL-guarded probe found SVE trapping on silicon
-   a Linux control proves has SVE *and* SVE2 — so **the blocker is our kernel, not
-   the hardware.** Adding SVE state support is a 300–500 line kernel project with
-   a public-ABI blocker, and per AWS's own counter ceilings **SVE is at rough FLOP
-   parity with NEON** anyway. **Measured, and the trap for anyone who ignores
-   this: the SVE vector HALVES from 256-bit on Graviton 3 to 128-bit on
-   Graviton 5** — the newer core has the shorter vector — so vector-length-agnostic
-   SVE would be mandatory, not advisable. §2, §4.
+3. **SVE is ENABLED and executes cleanly** (updated; the pre-#88 text called it a
+   NO-GO). Commit `50f6a9be53` (#88) sets `CPACR_EL1.ZEN = 0b11` per-CPU and
+   saves/restores Z/P/FFR, so an SVE instruction at EL0 **runs**, it does not
+   `SIGILL`. **Confirmed by execution**: EL0 SVE runs at **256-bit on Graviton 3
+   (`c7g`)** and **128-bit on Graviton 5 (`c9g`)**, and the `_g3` llama.cpp SVE
+   GEMM is hardware-proven on Graviton 3 (#331, 6.37x prompt-eval). NEON is still
+   the right *default* for most work — per AWS's own counter ceilings **SVE is at
+   rough FLOP parity with NEON**, so SVE buys predication and VL-agnosticism, not
+   raw throughput. **The load-bearing trap for anyone emitting SVE: the vector
+   HALVES from 256-bit on Graviton 3 to 128-bit on Graviton 4/5** — the newer core
+   has the shorter vector — so SVE code **must** be vector-length-agnostic (read
+   `RDVL`/`svcntb()` at runtime; never hardcode 256-bit). §2, §4.
 4. **Runtime SIMD dispatch is impossible on Haiku arm64 today by any mechanism**,
    and ifunc is not merely missing but an active hazard: `R_AARCH64_IRELATIVE`
    returns `B_BAD_DATA` and the image fails to load with the diagnostic compiled
@@ -240,7 +266,10 @@ situation verbatim** — quoted in full because it is the citation behind §4:
 > configured to trap executions of SVE instructions by default and this trap must
 > be disabled, a job done by the kernel if it is configured to support SVE."*
 
-**We are that kernel, and we have not disabled that trap.** §4.
+**We are that kernel — and as of #88 (`50f6a9be53`) we now *have* disabled that
+trap and added the context-switch save/restore AWS describes, so SVE is usable.**
+(The pre-#88 text here read "we have not disabled that trap"; that is historical.)
+§4.
 
 ### 1.6 LSE / outline-atomics (documented)
 
@@ -303,8 +332,8 @@ Given a Graviton-3-and-newer fleet:
 | Tier | Contents | Verdict |
 |---|---|---|
 | **Safe everywhere, no dispatch needed** | **NEON / FPSIMD** (mandatory on ARMv8-A; kernel preserves it correctly, §4.1). ISA floor up to **ARMv8.4-A**: `+crypto`, `+fp16`, `+rcpc`, `+dotprod`. All `-mtune=` values — tuning never affects correctness. | **Use unconditionally.** This is the whole practical answer. |
-| **Would need runtime dispatch → therefore off-limits today** | SVE2 and anything above the compile-time floor; per-function `#pragma GCC target("+sve2")` kernels | **Off-limits**, not because of the ISA but because §2.1 leaves nothing to dispatch *on*. Would require the §6.5 HWCAP work first. |
-| **Off-limits regardless of dispatch** | **SVE and SVE2**, at any width; `-mcpu=neoverse-v1` / `-v2` / `-v3` / `-512tvb`; **`-march=armv9-a` and higher** (ARMv9 mandates SVE2) | **Blocked on kernel work**, §4. Emitting any SVE instruction today is an immediate `SIGILL`. |
+| **SVE — usable, but only in a fixed-ISA (`_g3`/`_g4`) build, not fleet-portable** | **SVE** (Graviton3+) and **SVE2** (Graviton4+); `-mcpu=neoverse-v1`/`-v2`; per-function `#pragma GCC target("+sve2")` | **Usable since #88** — SVE executes at EL0 and is context-switched. Not *fleet*-portable: a `-mcpu=neoverse-v1` binary faults on Graviton2/t4g, so build it as a named `_g3`/`_g4` variant (the #330/#331 pattern), never as the plain package. Must be VL-agnostic (§1.2). SVE2 is Graviton4+ only, so SVE2-gated code additionally needs the runtime dispatch §2.1 discusses. |
+| **Off-limits — implies SVE2 / an untargetable core** | **`-march=armv9-a` and higher** (ARMv9 mandates SVE2, unsafe on Graviton3); `-mcpu`/`-mtune=neoverse-v3` (needs GCC 15; we have 13.3) | **Not the SVE trap** — SVE itself is fine now (#88). `armv9-a` is unsafe only because it forces SVE2 into a Graviton3-targeted build; `neoverse-v3` simply cannot be named by GCC 13.3. |
 | **Not available in our toolchain** | `-mcpu`/`-mtune=neoverse-v3` — the name for Graviton 5's core (part `0xd84`, measured) — needs GCC 15; we have **GCC 13.3** | Cannot be named. Tune for an older core instead, which is safe because **tuning never changes the required ISA**. `-mtune=neoverse-512tvb` is the closest accepted approximation (§6.1). |
 
 **Toolchain check (documented):** the tree is on **GCC 13.3.0**
@@ -454,12 +483,16 @@ consistency between the two compilers.
 `ArchitectureRules:52` currently says `-mcpu=neoverse-n1+crypto`. That was the
 right call *when a single AMI had to boot on Graviton 2* — and `20bf8f2711`
 explicitly declined `neoverse-v1`/`-512tvb` because they raise the ISA floor to
-include SVE. **Both halves of that reasoning have now changed by exactly one
-half:** Graviton 2 is dropped, so the N1 ISA floor is no longer required; but §4
-shows the SVE objection **still stands**, unchanged.
+include SVE. **That original SVE objection is now obsolete** — #88 enabled SVE, so
+emitting an SVE instruction no longer SIGILLs. But the base flag should **still**
+avoid SVE, for two different reasons that survive #88: the kernel runs **NEON-only
+at EL1** (it never executes SVE itself — the #88 enablement is for EL0/userland),
+so SVE in the base buys it nothing; and the base image must stay fleet-portable
+down to the oldest supported core, whereas an SVE-emitting base could fault on a
+non-SVE part.
 
 So the correct move is the same shape as §6.1 — raise the ISA floor and retune,
-without admitting SVE:
+without emitting SVE in the base:
 
 ```
 case arm64 : archFlags += -march=armv8.4-a+crypto+fp16+rcpc+dotprod -mtune=neoverse-v1 ;
@@ -473,11 +506,28 @@ which flag. **Lower priority than §6.1, and it should not be bundled with it** 
 the base system rebuild and the userland rebuild are separately verifiable, and
 `20bf8f2711`'s `objdump` method applies to each independently.
 
-**Do not "simplify" this to `-mcpu=neoverse-v1`.** That is the trap
-`20bf8f2711` already avoided once: it implies SVE, and §4.2 makes that an
-immediate `SIGILL`.
+**Do not "simplify" this to `-mcpu=neoverse-v1` for the base image.** Not because
+SVE traps — it no longer does (#88) — but because `-mcpu=neoverse-v1` emits SVE
+that would fault on a non-SVE (Graviton2/t4g) core, which a fleet-portable base
+image must not do, and because the kernel gains nothing from SVE it never
+executes. SVE via `-mcpu=neoverse-v1` is the right tool for a *userland* `_g3`
+variant (§4, porting-playbook), not for the base.
 
-## 4. SVE: NO-GO, and why dropping Graviton 2 does not change the answer
+## 4. SVE: ENABLED (#88) — the "NO-GO" analysis below is historical
+
+> **UPDATE (#88, `50f6a9be53`).** This section was written before SVE was
+> enabled and its verdict ("NO-GO / NOT PRESERVED, FAULTS ON USE") is **stale**.
+> The current kernel *does* enable SVE for EL0/EL1 and *does* save/restore
+> Z/P/FFR — see the authoritative `arch_sve_init_percpu()` in
+> `src/system/kernel/arch/arm64/arch_cpu.cpp` (`CPACR_EL1.ZEN = 0b11`,
+> `ZCR_EL1`/`RDVL`, off-stack per-thread save area) and the EL0 save/restore in
+> `arch_asm.S`. The code-reading below (§4.2's "three CPACR writes, all FPEN
+> only", "`ZEN = 0b00`", "five dead SVE macros") described a real earlier state
+> of the tree and is kept **as a record of the pre-#88 baseline**, annotated. The
+> §4.3 sizing/"not worth starting" discussion is superseded by the completed work
+> and by the #331 hardware proof; what remains true and important is the
+> vector-length discipline (VL halves 256→128 across generations) and the
+> signal-ABI design that #88 had to solve.
 
 ### 4.1 NEON state: preserved correctly. Verified.
 
@@ -511,9 +561,16 @@ full state is already in the iframe from the EL0 entry. Signals carry it too —
 
 **Verdict: compile-time NEON in userland is fully supported and safe today.**
 
-### 4.2 SVE state: `NOT PRESERVED, FAULTS ON USE`
+### 4.2 SVE state: historical pre-#88 reading (SVE is now PRESERVED and usable)
 
-**Deciding evidence:**
+> The evidence below was true of the tree **before** #88. It is retained as a
+> record of what the pre-enablement code looked like. Read every present-tense
+> "traps"/"`ZEN = 0b00`"/"no `ZCR_EL1`" claim as **"was, before `50f6a9be53`"**.
+> The current state is the opposite: `arch_sve_init_percpu()` sets
+> `CPACR_EL1.ZEN = 0b11`, programs `ZCR_EL1`, and `arch_asm.S` saves/restores
+> Z/P/FFR per thread.
+
+**Deciding evidence (pre-#88):**
 
 - `CPACR_EL1` is written **exactly three times in the whole tree, all three in the
   EFI boot loader, never once in the kernel** (`git grep CPACR --
@@ -549,39 +606,45 @@ full state is already in the iframe from the EL0 entry. Signals carry it too —
 `:287`) does not decode it, so it falls to the initialised defaults at `:281-284`
 — `B_INVALID_OPCODE_EXCEPTION` / `SIGILL` / `ILL_ILLOPC`.
 
-> **`SVE CONTEXT STATE: NOT PRESERVED, FAULTS ON USE`** — decided by the three
-> `CPACR_EL1` writes above, none of which sets `ZEN`, together with
-> `headers/private/kernel/arch/arm64/arch_thread_types.h:15-20` (FPSIMD-only
-> save area).
+> **(Pre-#88 verdict, now SUPERSEDED) `SVE CONTEXT STATE: NOT PRESERVED, FAULTS
+> ON USE`.** This held only while `CPACR_EL1.ZEN` was left `0b00` and the save
+> area was FPSIMD-only. **Current verdict: `SVE CONTEXT STATE: PRESERVED
+> (per-thread Z/P/FFR), USABLE AT EL0`** — #88 set `ZEN = 0b11` and added the
+> off-stack save/restore.
 
-**This is now confirmed by execution, not only by reading code.** Our canonical
-AMI was booted on a real **Graviton 5 (`c9g.large`)** instance and a
-SIGILL-guarded userland feature probe run on it. The probe found NEON, FP16,
-DotProd, AES, SHA2, BF16, I8MM, LSE, LRCPC and more all present and usable —
-**and SVE trapping**, on silicon that a Linux control on the same instance proves
-has SVE *and* SVE2. So the blocker is unambiguously **ours, in our kernel, not a
-missing hardware capability.** That is the strongest form this finding could take:
-the ISA is there, the OS support is not.
+**~~This is now confirmed by execution: SVE traps.~~ SUPERSEDED — the opposite is
+what execution shows on the current kernel.** The pre-#88 probe (canonical AMI on
+`c9g.large`, SIGILL-guarded) *did* see SVE trap because the trap was still set.
+**On the current #88 kernel, EL0 SVE executes cleanly**: a `svcntb()` probe
+returns **16 on Graviton 5 (`c9g`, 128-bit VL)** and **32 on Graviton 3 (`c7g`,
+256-bit VL)** without faulting, and the `_g3` llama.cpp build runs a full SVE GEMM
+to correct output on Graviton 3 (#331). The hardware always had SVE; **the OS now
+supports it too.**
 
-**This is the *safe* failure mode**, and it corrects the natural prior. Userland
-SVE today is a deterministic `SIGILL` on the first SVE instruction, not silent
-corruption. An accidentally SVE-enabled binary dies loudly and immediately.
+**The latent hazard the pre-#88 text warned about was exactly what #88 had to
+solve, and did.** The V registers alias the low 128 bits of Z0–Z31, so enabling
+`CPACR_EL1.ZEN` **without** widening the save/restore would silently drop bits
+128..VL-1 of every Z register plus P0–P15 and FFR on every interrupt. #88 does not
+make that mistake: it moves SVE state to an off-stack per-thread area saved on the
+EL0 exception path (`arch_asm.S`, keyed on `gArm64SVEVectorBytes`), and the fork
+and signal frames carry it. This is why "enable ZEN" and "add the save/restore"
+landed as one change, not two.
 
-**But there is one latent corruption hazard, and it is a trap for a future
-change.** The V registers alias the low 128 bits of Z0–Z31. If anyone enables
-`CPACR_EL1.ZEN` **without** doing the rest of the work, `_fp_save`/`_fp_restore`
-would faithfully preserve bits 0–127 and **silently drop bits 128..VL-1 of every
-Z register, plus all of P0–P15 and FFR, on every interrupt including the timer
-tick.** Enabling ZEN is the one change that must never be made in isolation.
+### 4.3 Sizing the SVE kernel project — DONE in #88 (this was the pre-work estimate)
 
-### 4.3 Sizing the SVE kernel project — and why it is still not worth starting
+> **This section estimated a project that has since shipped as #88
+> (`50f6a9be53`).** It is kept because the design calls it anticipated are the
+> ones #88 actually made — useful as a record of how the enablement was reasoned
+> about. Where it says "not worth starting", read "was completed"; where it
+> flags the signal-ABI blocker, read "was solved" (below).
 
 ~300–500 lines, and — importantly — **it is bootloader *plus* kernel work, not
-kernel alone.** That scoping follows directly from §4.2: `CPACR_EL1` is only ever
-written by the EFI loader, so enabling `ZEN` means touching **all three** of those
-sites. Miss `arch_smp.cpp` and SVE would work on CPU 0 and trap on every
-secondary — a bug that would look like a scheduler or migration defect rather
-than a missing register write.
+kernel alone.** #88 landed the enable in the kernel's per-CPU init path
+(`arch_sve_init_percpu()` runs on every core from `arch_cpu_init_percpu()`, so the
+per-secondary concern below was handled there rather than in the loader); the
+pre-work estimate below assumed the enable would live next to the loader's
+existing `CPACR_EL1` writes. Miss a secondary core and SVE would work on CPU 0 and
+trap elsewhere — which is exactly why #88 does the `ZEN` write per-CPU.
 
 **A design consideration that falls out of the same fact:** because CPACR is set
 once at boot and never touched again, **there is no existing per-thread FP
@@ -609,26 +672,37 @@ Files: the three bootloader sites above; `arm_registers.h` (`CPACR_ZEN`,
    existing arm64 binary. Linux solved this with a variable-length sigcontext
    extension chain, which Haiku has no equivalent of.
 
-**And after all that, §1.3 says the payoff is parity with NEON**, on every core
-we can test. SVE's real advantages — predication (no scalar tail loop) and
-vector-length agnosticism — are genuine but are code-elegance and
-forward-portability wins, not the 2–4x that would justify a kernel project with
-a public-ABI blocker.
+**§1.3 still says the payoff is parity with NEON**, on every core we can test.
+That remains the right framing for *choosing* SVE: its real advantages —
+predication (no scalar tail loop) and vector-length agnosticism — are genuine but
+are code-elegance and forward-portability wins, not a 2–4x throughput jump over
+NEON. So NEON stays the sensible default; SVE is worth it where a workload is
+predication-bound or where an upstream project already ships tuned SVE kernels
+(ggml/llama.cpp, OpenBLAS).
 
-**Recommendation: do not start SVE work as a performance measure.** Do it if and
-when a specific workload is shown to be predication-bound, or as a
-forward-compatibility investment with its own justification. **If it is ever
-done, the vector-length-agnostic discipline is mandatory, not advisable** — write
-`MUL VL` addressing and `whilelo` loops, never a fixed-width assumption, because
-**we have measured the same binary having to run at 256-bit on Graviton 3 and
-128-bit on Graviton 5** (§1.2). The newer core has the shorter vector, so the
-intuition that "newer is wider" is actively wrong here and would produce code that
-is correct on the machine it was developed on and broken on the machine it ships
-to. Add that Graviton 3 has no SVE2 while Graviton 5 does, and **SVE2 use would
-additionally require the runtime dispatch §2.1 says we do not have.** We cannot
-and should not design against unannounced generations; VLA-SVE plus runtime
-feature detection is the correct forward-compatible posture precisely *because*
-it does not require knowing their specifics.
+**Recommendation (updated): SVE is enabled — use it deliberately, not by
+default.** The kernel work is done (#88), so the question is no longer "should we
+build the machinery" but "should this workload emit SVE". Emit it for a specific
+predication-bound or SVE-tuned workload, packaged as a fixed-ISA `_g3`/`_g4`
+variant (§4, porting-playbook); keep NEON as the fleet-portable default. **The
+vector-length-agnostic discipline is mandatory, not advisable** — write `MUL VL`
+addressing and `whilelo` loops, read `RDVL`/`svcntb()` at runtime, never a
+fixed-width assumption, because **the same binary runs at 256-bit on Graviton 3
+and 128-bit on Graviton 4/5** (§1.2). The newer core has the *shorter* vector, so
+"newer is wider" is actively wrong here: a 256-bit assumption is correct on the
+machine it was developed on and silently wrong on the machine it ships to. Add
+that Graviton 3 has no SVE2 while Graviton 4/5 do, so **SVE2-gated code paths
+need runtime length/feature checks** (`svcntb()` works today; `HWCAP_SVE`-style
+auto-dispatch waits on the #99 HWCAP follow-up). VLA-SVE plus runtime length
+detection is the correct forward-compatible posture precisely *because* it does
+not require knowing unannounced generations' specifics.
+
+**How the signal-ABI blocker was solved.** The pre-work worry (below) was that
+`struct vregs` is public POSIX ABI embedded by value in `signal_frame_data` and
+cannot grow. #88's answer was to keep SVE state **off** the signal frame's fixed
+`vregs` and in an off-stack per-thread area, restoring it around signal delivery
+via `arch_restore_signal_frame()` and `gArm64SVEVectorBytes` — so the public ABI
+struct never had to change.
 
 ---
 
@@ -841,8 +915,12 @@ for this port (§7). Each row states the capacity bound that justifies it.
 
   The `-march` half is **AWS's own graviton3 string from `setup-compiler.sh` with
   `+sve` removed** — conservative ISA floor, aggressive tuning, exactly the split
-  AWS prescribes (§1.1). `+sve` is removed because §4 says the kernel cannot
-  preserve the state. **`-march=armv8.4-a` does not imply SVE** — proven by AWS
+  AWS prescribes (§1.1). `+sve` is removed from the **fleet-portable default**
+  because that default must still run on any non-SVE core we might target and
+  because SVE ≈ NEON on FLOPs anyway (§1.3) — **not** because the kernel can't
+  preserve SVE state (since #88 it can; §4). Ports that actually want SVE build a
+  named `_g3`/`_g4` variant with `-mcpu=neoverse-v1`/`-v2` instead (§4,
+  porting-playbook). **`-march=armv8.4-a` does not imply SVE** — proven by AWS
   having to spell `+sve` explicitly in that same line.
 - **Why `-mtune=neoverse-512tvb` rather than `-mtune=neoverse-v1`.** The fleet now
   spans Neoverse V1 (`c7g`, part `0xd40`) to Neoverse V3 (`c9g`, part `0xd84`),
@@ -861,8 +939,11 @@ for this port (§7). Each row states the capacity bound that justifies it.
   have **not** measured them on `c7g` ourselves. Confirm on the older core before
   raising the floor to include them — that is precisely the kind of assumption
   that would produce a SIGILL on the generation nobody tested.
-- **Three things that must not be done instead.** `-mcpu=neoverse-v1` (implies
-  SVE → `SIGILL`). `-march=armv9-a` or higher (ARMv9 mandates SVE2 → `SIGILL`).
+- **Three things that must not be done *to the fleet-portable default*.**
+  `-mcpu=neoverse-v1` — emits SVE, which now *executes* fine (#88) but **faults
+  on a non-SVE core**, so it is unsafe as the fleet default (it is the right flag
+  for a named `_g3` variant, §4). `-march=armv9-a` or higher — mandates SVE2,
+  which faults on Graviton3, so unsafe for a Graviton3+ baseline. And
   `-mno-outline-atomics` (leaves the ISA at ARMv8.0, so still LL/SC, just
   inline — and misattributes the bug to the flag).
 - **What would refute it:** an `objdump` of a shipped arm64 hpkg library showing
@@ -1046,11 +1127,14 @@ workload we care about. Which is exactly the profile that does not exist (§7).
   (`arch_commpage_defs.h` currently has two) plus a libroot accessor.
 - **Effort: M. Self-contained**, and unlike ifunc it needs no loader work and
   does not touch the signal ABI.
-- **It would not make SVE safe** — that is §4.3, separate and larger. It would
-  only make LSE/crypto/dotprod dispatch honest, which §6.1 makes unnecessary by
-  deciding at compile time instead. **So this is only worth doing if a concrete
-  need for runtime dispatch appears.** Cheaper alternative for most cases: decide
-  at compile time.
+- **SVE itself is already usable** (#88, §4) — this is not about that. Note the
+  kernel already computes the HWCAP words (`arm64_get_hwcap()` in `arch_cpu.cpp`)
+  and deliberately leaves `HWCAP_SVE` **off** until an SVE workload is validated
+  (the #99 follow-up); flipping that bit is what lets a `getauxval`-based
+  dispatcher auto-select SVE. Publishing the word would make LSE/crypto/dotprod
+  dispatch honest, which §6.1 makes unnecessary by deciding at compile time
+  instead. **So this is only worth doing if a concrete need for runtime dispatch
+  appears.** Cheaper alternative for most cases: decide at compile time.
 - **Adjacent, and worth doing on its own:** audit haikuports recipes for ifunc
   (`--enable-ifunc`, `HAVE_IFUNC`, `target_clones`). §2.1 shows such a package
   produces a shared object that **fails to load silently**. This is a
@@ -1212,11 +1296,13 @@ checkable by a reader outside the project.
 - `libgcc/config/aarch64/lse-init.c` gates its only initialiser on
   `#ifdef __gnu_linux__`, so `__aarch64_have_lse_atomics` is permanently false on
   Haiku. (§3.1)
-- `CPACR_EL1` written **three** times, all in the EFI boot loader
-  (`arch_start.cpp`, `arch_smp.cpp`, `transition.S`) and never in the kernel; all
-  three write `3 << 20`, so `FPEN=0b11` and `ZEN=0b00`; no `CPACR_ZEN` macro
-  exists; no `ZCR_EL1`, no SVE save/restore, five dead SVE macros. → SVE traps to
-  `SIGILL`, and enabling it is bootloader-plus-kernel work. (§4.2, §4.3)
+- *(Pre-#88, now stale.)* At the time of writing, `CPACR_EL1` was written only in
+  the EFI boot loader (`arch_start.cpp`, `arch_smp.cpp`, `transition.S`), all
+  three `3 << 20` (`FPEN=0b11`, `ZEN=0b00`), with no `ZCR_EL1`/SVE save/restore →
+  SVE trapped to `SIGILL`. **#88 (`50f6a9be53`) changed this**: the kernel now
+  sets `CPACR_EL1.ZEN = 0b11` per-CPU in `arch_sve_init_percpu()` (`arch_cpu.cpp`),
+  programs `ZCR_EL1`, and saves/restores Z/P/FFR in `arch_asm.S`. SVE is enabled.
+  (§4)
 - FPSIMD state is eagerly saved on every exception and carried through signals
   and fork; 512-byte fixed save area. → NEON is safe. (§4.1)
 - No `getauxval`/HWCAP/auxv; no arm64 ID-register feature probe; no userland
@@ -1283,10 +1369,11 @@ floors per `-mcpu`; zlib-ng superseding zlib-cloudflare.
 
 ### Measured, by this project, on hardware we rent
 
-- **SVE traps on Haiku on real Graviton 5**, established by booting our canonical
-  AMI on `c9g.large` and running a SIGILL-guarded probe, with a Linux control on
-  the same silicon showing SVE and SVE2 present. The blocker is our kernel, not
-  the hardware. (§4.2)
+- **SVE executes cleanly on Haiku on real Graviton 3 and 5** (current #88
+  kernel): EL0 `svcntb()` returns 32 (256-bit) on `c7g` and 16 (128-bit) on `c9g`
+  without SIGILL, and the `_g3` llama.cpp SVE GEMM runs to correct output on
+  Graviton 3 (#331). *(The earlier "SVE traps on Graviton 5" entry described the
+  pre-#88 kernel, where the trap was still set; it is no longer true.)* (§4.2)
 - **SVE vector length: 256-bit on Graviton 3, 128-bit on Graviton 5** (`RDVL`);
   SVE2 absent on G3, present on G5; core parts `0xd40` and `0xd84`; PMU counters
   32-bit on G3 vs 64-bit on G5; `CNTFRQ_EL0` 1.05 GHz vs 1.000 GHz. (§1.2)

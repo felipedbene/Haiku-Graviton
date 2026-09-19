@@ -139,19 +139,33 @@ ASIMD is mandatory in ARMv8-A.
 | `generic-gnu` | **0** | 9,409 | 304,820 | 1,549,696 |
 | `arm64` | **436** | 47,873 | 382,304 | 1,907,448 |
 
-## No SVE, checked in every one
+## No SVE in these fleet-portable builds — but SVE itself is enabled (#88)
 
-SVE traps on Haiku — nothing clears `CPACR_EL1.ZEN` — and ifunc-based runtime
-dispatch is unavailable on Haiku arm64, so a package cannot select an SVE path at
-load time either. Every library above was disassembled for `z<n>.`, `ptrue` and
-`whilelo`: **zero in all five.**
+**Correction.** The original claim here — "SVE traps on Haiku, nothing clears
+`CPACR_EL1.ZEN`" — is **stale**. Commit `50f6a9be53` (#88) enabled SVE for EL0:
+`arch_sve_init_percpu()` sets `CPACR_EL1.ZEN = 0b11`, programs `ZCR_EL1`, and the
+EL0 exception path saves/restores Z/P/FFR per thread. SVE **executes cleanly** on
+Graviton3 (256-bit) and Graviton5 (128-bit); it does not SIGILL. It is proven end
+to end by the `llama_cpp_g3` build (#331: real SVE GEMM, 6.37x prompt-eval on
+Graviton3).
 
-This is a live hazard, not a theoretical one. On this exact compiler,
-`-mcpu=neoverse-v1` turned a plain float loop into **31 SVE instructions and zero
-NEON ones**, and `-mcpu=neoverse-v2` also emits SVE. Naming a Graviton 3/4 core
-via `-mcpu` is therefore unsafe *regardless* of dropping Graviton 1/2 support.
-`-mtune` is the safe knob — it changes scheduling without changing the required
-ISA.
+These five codec libraries still contain **zero** SVE (`z<n>.`, `ptrue`,
+`whilelo` — verified by disassembly) and that is **correct for a fleet-portable
+codec**, but for a different reason than the old note gave: SVE emitted via
+`-mcpu=neoverse-v1`/`-v2` (plus ARMv8.4 NEON) faults on **Graviton2/t4g**, so it
+must not go into the plain, fleet-wide package. The rule for these codecs is
+therefore unchanged in effect — **keep SVE out of the default build** — but the
+mechanism is portability, not a kernel trap.
+
+On this exact compiler, `-mcpu=neoverse-v1` turned a plain float loop into **31
+SVE instructions and zero NEON ones**, and `-mcpu=neoverse-v2` also emits SVE — so
+`-mcpu=neoverse-*` is the right flag only for a **named `_g3`/`_g4` variant**
+targeted at Graviton3+/Graviton4+ (see `porting-playbook.md` → "Graviton3/4 ISA
+opt-in" and the `llama_cpp_g3` worked proof). For a build that must stay
+fleet-portable, `-mtune=neoverse-*` is the safe knob — it changes scheduling
+without changing the required ISA. Any SVE that *is* emitted must be
+vector-length-agnostic (read `RDVL`/`svcntb()` at runtime), because the vector
+halves 256→128 from Graviton3 to Graviton4/5.
 
 ## Not built
 

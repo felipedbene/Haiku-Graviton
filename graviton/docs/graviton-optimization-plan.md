@@ -251,19 +251,20 @@ a total vector bandwidth of 512 bits a cycle". Two halves:
    type we deploy to. A bare `-mcpu=neoverse-512tvb` build may emit SVE and
    ARMv8.4 instructions and would fault on Graviton2 (Neoverse-N1). Our
    single-AMI requirement forbids it.
-2. *We have no SVE support to fault into.* **Our finding, verified in-tree:** the
-   arm64 port touches `CPACR_EL1` only for FP/SIMD (`CPACR_FPEN_TRAP_NONE`,
-   `src/system/boot/platform/efi/arch/arm64/arch_start.cpp:61`); there is no
-   `ZEN` bit, no `ZCR_EL1`, and no SVE register save/restore anywhere in
-   `src/system/kernel/arch/arm64/`. SVE is therefore trapped and its state is not
-   context-switched. AWS makes exactly this point from the other direction in
-   `runtime-feature-detection.md`: reading ID registers directly "obscures the
-   fact that the kernel must also be configured for SVE support", without which a
-   context switch "could result in corruption of the content of SVE registers",
-   and "SVE instructions are trapped by default until the kernel disables the
-   trap." **We are that kernel, and we have not disabled the trap.** Any flag
-   implying SVE — `neoverse-512tvb`, `neoverse-v1`, `neoverse-v2`, `neoverse-v3`
-   — is unsafe for this port today regardless of which instance it runs on.
+2. *The kernel itself does not use SVE.* **Updated (#88, `50f6a9be53`):** SVE is
+   now **enabled** — `arch_sve_init_percpu()` in
+   `src/system/kernel/arch/arm64/arch_cpu.cpp` sets `CPACR_EL1.ZEN = 0b11`,
+   programs `ZCR_EL1`, and the EL0 path saves/restores Z/P/FFR. So the old claim
+   here ("SVE is trapped, its state is not context-switched, we have not disabled
+   the trap") is **stale**: SVE executes cleanly at EL0 today. But that
+   enablement is for **userland (EL0)**; the kernel runs **NEON-only at EL1** and
+   emits no SVE, so putting SVE in the *base* build flag still buys the kernel
+   nothing — and a base image that emitted SVE could fault on a non-SVE core it
+   must remain portable to. Ports that want SVE build a named `_g3`/`_g4` variant
+   with `-mcpu=neoverse-v1`/`-v2` (see `porting-playbook.md`); it is not the base
+   flag. AWS's `runtime-feature-detection.md` framing — that a kernel must be
+   "configured for SVE support" or a context switch "could result in corruption
+   of the content of SVE registers" — is exactly the work #88 did.
 
 Separately, the tuning half buys a kernel next to nothing: the Haiku kernel's hot
 paths are scalar (locks, refcounts, page-table walks, descriptor rings), so
@@ -1623,8 +1624,10 @@ Added by the 2026-08-22 AWS cross-check:
 - `headers/private/kernel/arch/arm64/arm_registers.h:54-60` (`CPACR_EL1` FPEN
   only — no `ZEN`), `:215-216` (`ID_AA64ISAR0_EL1` masks, unread)
 - `src/system/boot/platform/efi/arch/arm64/arch_start.cpp:61`
-  (`CPACR_FPEN_TRAP_NONE` — FP/SIMD enabled, SVE not); no `ZCR_EL1` or SVE
-  save/restore anywhere in `src/system/kernel/arch/arm64/`
+  (`CPACR_FPEN_TRAP_NONE` — FP/SIMD enabled). *(Stale as of #88: SVE is no longer
+  "not enabled" — `arch_sve_init_percpu()` in
+  `src/system/kernel/arch/arm64/arch_cpu.cpp` now sets `CPACR_EL1.ZEN`, programs
+  `ZCR_EL1`, and adds the EL0 SVE save/restore.)*
 - `headers/private/kernel/arch/arm64/arch_cpu.h:26` (`arm64_isb()` already
   defined), `:140-143` (`arch_cpu_pause()` = `arm64_yield()`) — item 8a
 - `src/add-ons/kernel/drivers/network/ether/ena/ena.cpp:1498-1502` (moderation
