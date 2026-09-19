@@ -156,24 +156,28 @@ rule UserBuildConfigRulePreImage
 	# AMI cannot supply its own IAM role, so without it the agent starts but
 	# cannot register.
 	#
-	# Version-agnostic on purpose: the glob matches ONLY debeos_ssm_agent-*
-	# (binary /boot/system/bin/debeos-ssm-agent), so swapping in a newer-version
-	# hpkg needs no edit here. It deliberately does NOT match the legacy
-	# haiku_mgmt_agent-* name: Jam's Glob returns readdir order, so matching both
-	# names is non-deterministic and a bake could pick a stale/incompatible hpkg.
-	# Guarded on HG_POOL_DIR so an SSH-only bake (no pool) is unaffected.
+	# SWAP (#302/#368): the OFFICIAL upstream amazon-ssm-agent is now the sole
+	# baked SSM agent. It registers EC2-native (i- node via IMDS + instance role,
+	# no hybrid activation) and executes Run Command -- hardware-proven. The
+	# interim debeos_ssm_agent is NO LONGER baked (kept in the repo only, as a
+	# pkgman rollback); baking BOTH would put two daemons heartbeating the same
+	# i- node, which wedges Run Command -- so exactly one SSM launch job ships.
+	# Version-agnostic glob matches ONLY amazon_ssm_agent-* (binary
+	# /boot/system/bin/amazon-ssm-agent; its launch job sets PATH to include
+	# /boot/system/bin so ssm-document-worker resolves sh). Pool holds exactly one
+	# (readdir-order Glob). Guarded on HG_POOL_DIR so an SSH-only bake is unaffected.
 	if $(HG_POOL_DIR) {
 		local agentGlob = [ Glob $(HG_POOL_DIR) :
-			debeos_ssm_agent-*-arm64.hpkg ] ;
+			amazon_ssm_agent-*-arm64.hpkg ] ;
 		if $(agentGlob) {
 			local agentFileName = $(agentGlob[1]:G=:D=) ;
 			local agentPackage = <hg-pool>$(agentFileName) ;
 			SEARCH on $(agentPackage) = $(HG_POOL_DIR) ;
-			Echo "haiku-graviton: baking SSM management agent" $(agentFileName)
+			Echo "haiku-graviton: baking official amazon-ssm-agent" $(agentFileName)
 				"into system/packages" ;
 			AddPackageFilesToHaikuImage system packages : $(agentPackage) ;
 		} else {
-			Echo "haiku-graviton: no SSM management agent hpkg in pool"
+			Echo "haiku-graviton: no amazon-ssm-agent hpkg in pool"
 				"(skipping; SSH-only image)" ;
 		}
 	}
