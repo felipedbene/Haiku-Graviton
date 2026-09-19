@@ -55,6 +55,50 @@ static uint32 sPreloadedAddonCount = 0;
 static recursive_lock sLock = RECURSIVE_LOCK_INITIALIZER(kLockName);
 
 
+// STT_GNU_IFUNC resolvers must not run during relocation: map_image() maps
+// every segment read/write (no execute) so relocations can be applied, and
+// remap_images() only restores B_EXECUTE_AREA afterwards. Invoking a resolver
+// -- which lives in the text of the image being relocated -- before that point
+// faults. So during relocation the arch code records each ifunc slot (which by
+// then holds the resolver's address) here, and resolve_deferred_ifuncs() calls
+// the resolvers and overwrites the slots with the selected implementations once
+// the text is executable, before any initializer runs.
+namespace {
+	struct DeferredIFunc {
+		addr_t*		slot;
+		addr_t		(*resolver)(addr_t resolverAddress);
+	};
+}
+static utility::vector<DeferredIFunc> sDeferredIFuncs;
+
+
+void
+defer_ifunc_relocation(addr_t* slot, addr_t (*resolver)(addr_t resolverAddress))
+{
+	DeferredIFunc deferred = { slot, resolver };
+	sDeferredIFuncs.push_back(deferred);
+}
+
+
+static void
+clear_deferred_ifuncs()
+{
+	while (!sDeferredIFuncs.empty())
+		sDeferredIFuncs.pop_back();
+}
+
+
+static void
+resolve_deferred_ifuncs()
+{
+	for (size_t i = 0; i < sDeferredIFuncs.size(); i++) {
+		DeferredIFunc& deferred = sDeferredIFuncs[i];
+		*deferred.slot = deferred.resolver(*deferred.slot);
+	}
+	clear_deferred_ifuncs();
+}
+
+
 static const char *
 find_dt_string(image_t *image, int32 d_tag)
 {
@@ -300,6 +344,9 @@ relocate_image(image_t *rootImage, image_t *image)
 static status_t
 relocate_dependencies(image_t *image)
 {
+	// discard any ifunc slots recorded by a previous, failed relocation pass
+	clear_deferred_ifuncs();
+
 	// get the images that still have to be relocated
 	image_t **list;
 	ssize_t count = get_sorted_image_list(image, &list, RFLAG_RELOCATED);
@@ -421,6 +468,17 @@ inject_runtime_loader_api(image_t* rootImage)
 			&_export) == B_OK) {
 		*(void**)_export = &gRuntimeLoader;
 	}
+
+	// Pre-initialize libroot's commpage pointer as well. libroot normally sets
+	// it in its own initializer (initialize_before), but STT_GNU_IFUNC
+	// resolvers run before that -- and a resolver may consult
+	// getauxval(AT_HWCAP), which reads through this pointer. libroot re-assigns
+	// the identical value later, so this is harmless.
+	if (find_symbol_breadth_first(rootImage,
+			SymbolLookupInfo("__gCommPageAddress", B_SYMBOL_TYPE_DATA), &image,
+			&_export) == B_OK) {
+		*(void**)_export = __gCommPageAddress;
+	}
 }
 
 
@@ -477,6 +535,8 @@ preload_addon(char const* path)
 	inject_runtime_loader_api(image);
 
 	remap_images();
+	// text is executable again -- now safe to run STT_GNU_IFUNC resolvers
+	resolve_deferred_ifuncs();
 	init_dependencies(image, true);
 
 	// if the image contains an add-on, register it
@@ -574,6 +634,8 @@ load_program(char const *path, void **_entry)
 	inject_runtime_loader_api(gProgramImage);
 
 	remap_images();
+	// text is executable again -- now safe to run STT_GNU_IFUNC resolvers
+	resolve_deferred_ifuncs();
 	init_dependencies(gProgramImage, true);
 
 	// Since the images are initialized now, we no longer should use our
@@ -704,6 +766,8 @@ load_library(char const *path, uint32 flags, bool addOn, void* caller,
 		clear_image_flags_recursively(image, RFLAG_USE_FOR_RESOLVING);
 
 	remap_images();
+	// text is executable again -- now safe to run STT_GNU_IFUNC resolvers
+	resolve_deferred_ifuncs();
 	init_dependencies(image, true);
 
 	KTRACE("rld: load_library(\"%s\") done: id: %" B_PRId32, path, image->id);
