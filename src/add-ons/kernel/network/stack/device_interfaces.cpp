@@ -286,8 +286,8 @@ allocate_device_interface(net_device* device, net_device_module_info* module)
 	interface->receive_enqueue_dropped = 0;
 	init_fifo_watermark(&interface->receive_queue_diagnostics,
 		interface->receive_queue.max_bytes);
-	init_fifo_codel(&interface->receive_queue_codel, NET_FIFO_CODEL_TARGET,
-		NET_FIFO_CODEL_INTERVAL, NET_FIFO_CODEL_MIN_BYTES);
+	init_fifo_codel(&interface->receive_queue_codel, gCoDelTarget,
+		gCoDelInterval, gCoDelMinBytes);
 
 	interface->device = device;
 	interface->up_count = 0;

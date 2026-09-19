@@ -167,6 +167,14 @@ struct net_fifo_codel {
 #define NET_FIFO_CODEL_INTERVAL		10000		// us
 #define NET_FIFO_CODEL_MIN_BYTES	65536		// bytes
 
+// Live CoDel operating point: the compiled-in defaults above, overridable at
+// init from the "stack" driver settings so the sweep in the table above can be
+// re-run on a shipped image without a rebuild. Set once before any device
+// interface exists; read-only thereafter.
+extern bigtime_t gCoDelTarget;
+extern bigtime_t gCoDelInterval;
+extern size_t gCoDelMinBytes;
+
 // fifos
 status_t	init_fifo(net_fifo* fifo, const char *name, size_t maxBytes);
 void		uninit_fifo(net_fifo* fifo);
