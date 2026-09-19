@@ -191,6 +191,14 @@ main(int argc, char *argv[])
 		return 2;
 	}
 
+	// A write to a connection the peer has already dropped must be an error,
+	// not a death sentence. Without this the TLS close_notify that the
+	// broker transport sends while tearing a refused connection down kills
+	// the process outright -- losing even the diagnostic explaining why the
+	// connection was refused -- and a broker that goes away mid-session
+	// would kill the client instead of ending the session.
+	signal(SIGPIPE, SIG_IGN);
+
 #ifdef REMOTE_DESKTOP_TLS
 	WsTunnel tunnel;
 	if (useWss) {

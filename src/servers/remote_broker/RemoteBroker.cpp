@@ -861,6 +861,11 @@ main(int argc, char** argv)
 
 	signal(SIGPIPE, SIG_IGN);
 
+	// Line-buffered even when stdout is a file: this is a long-running
+	// daemon, and a block-buffered log that only appears when the buffer
+	// fills is indistinguishable from a daemon that never logged.
+	setvbuf(stdout, NULL, _IOLBF, 0);
+
 	if (prepare_settings(sConfiguration) != B_OK)
 		return 1;
 

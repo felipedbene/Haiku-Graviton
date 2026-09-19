@@ -111,29 +111,35 @@ NetReceiver::_Listen()
 	}
 
 	while (!fStopThread) {
-		// A candidate may be pending because it validated (it asked for the
-		// session) or because the live session ended while it was still
-		// being validated. Only a *validated* candidate is ever promoted:
-		// otherwise a peer that connects and says nothing would inherit the
-		// session for free whenever the real client disconnects, which is
-		// the very takeover this gate exists to prevent. An unvalidated one
-		// gets the rest of its deadline to prove itself first.
-		if (fCandidate.IsSet() && !fCandidateValidated)
-			_ValidateCandidate(fCandidateDeadline);
-
-		if (fCandidate.IsSet() && fCandidateValidated) {
-			fEndpoint.SetTo(fCandidate.Detach());
-			fCandidateValidated = false;
-		} else {
-			if (fCandidate.IsSet())
-				_DropCandidate("not validated in time");
-
-			fEndpoint.SetTo(fListener->Accept(5000));
-			if (!fEndpoint.IsSet()) {
+		// EVERY connection goes through the candidate gate, not just one
+		// arriving while a session is live. A connection accepted when no
+		// session exists used to become the session unvalidated, which
+		// handed the drawing state replay (and from then on the desktop) to
+		// anything that could open the port and stay silent. So: accept into
+		// the candidate slot, require a valid first frame within the
+		// deadline, and only then promote.
+		if (!fCandidate.IsSet()) {
+			fCandidate.SetTo(fListener->Accept(5000));
+			if (!fCandidate.IsSet()) {
 				TRACE("got NULL endpoint from accept\n");
 				continue;
 			}
+
+			fCandidateBufferUsed = 0;
+			fCandidateValidated = false;
+			fCandidateDeadline = system_time() + kCandidateTimeout;
 		}
+
+		// A candidate validated inside _Transfer() (it asked for the session
+		// while another one was live) is promoted straight away; one still
+		// unvalidated -- freshly accepted here, or left over because the live
+		// session ended mid-validation -- gets the rest of its deadline to
+		// prove itself and is dropped if it does not.
+		if (!fCandidateValidated && !_ValidateCandidate(fCandidateDeadline))
+			continue;
+
+		fEndpoint.SetTo(fCandidate.Detach());
+		fCandidateValidated = false;
 
 		TRACE("new endpoint connection: %p\n", fEndpoint);
 
@@ -147,8 +153,8 @@ NetReceiver::_Listen()
 		}
 
 		// Hand over whatever the connection already sent while it was being
-		// validated as a takeover candidate; these bytes are the head of its
-		// stream and must reach the parser before anything read below.
+		// validated; these bytes are the head of its stream and must reach
+		// the parser before anything read below.
 		if (fCandidateBufferUsed > 0) {
 			status_t result = fTarget->Write(fCandidateBuffer,
 				fCandidateBufferUsed);
@@ -339,10 +345,9 @@ NetReceiver::_AcceptCandidate()
 
 
 /*!	Waits, within \a deadline, for the pending candidate to produce a valid
-	first frame. Used when the live session ended while a candidate was still
-	unvalidated: it must still prove itself before it inherits the session.
-	Sets fCandidateValidated and returns true on success; drops the candidate
-	and returns false otherwise.
+	first frame -- the gate every connection passes before it becomes the
+	session. Sets fCandidateValidated and returns true on success; drops the
+	candidate and returns false otherwise.
 */
 bool
 NetReceiver::_ValidateCandidate(bigtime_t deadline)
@@ -360,6 +365,14 @@ NetReceiver::_ValidateCandidate(bigtime_t deadline)
 			return false;
 		}
 
+		// The listener is watched alongside the candidate so that a silent
+		// candidate cannot make a real client wait out the whole validation
+		// deadline before it is even looked at. _AcceptCandidate() replaces
+		// a candidate that has said nothing and keeps one that has started
+		// speaking, and the backlog is FIFO, so the earliest waiting client
+		// is the one that gets the slot.
+		int listenSocket = fListener != NULL ? fListener->Socket() : -1;
+
 		struct timeval timeout;
 		timeout.tv_sec = remaining / 1000000;
 		timeout.tv_usec = remaining % 1000000;
@@ -367,9 +380,12 @@ NetReceiver::_ValidateCandidate(bigtime_t deadline)
 		fd_set readSet;
 		FD_ZERO(&readSet);
 		FD_SET(candidateSocket, &readSet);
+		if (listenSocket >= 0)
+			FD_SET(listenSocket, &readSet);
 
-		int ready = select(candidateSocket + 1, &readSet, NULL, NULL,
-			&timeout);
+		int maxSocket = candidateSocket > listenSocket
+			? candidateSocket : listenSocket;
+		int ready = select(maxSocket + 1, &readSet, NULL, NULL, &timeout);
 		if (ready < 0) {
 			if (errno == EINTR)
 				continue;
@@ -382,8 +398,16 @@ NetReceiver::_ValidateCandidate(bigtime_t deadline)
 			return false;
 		}
 
-		if (_ReceiveCandidateData())
-			return true;
+		// The candidate is served first: its readable first frame decides
+		// the slot before any newly arriving connection can displace it.
+		if (FD_ISSET(candidateSocket, &readSet)) {
+			if (_ReceiveCandidateData())
+				return true;
+			continue;
+		}
+
+		if (listenSocket >= 0 && FD_ISSET(listenSocket, &readSet))
+			_AcceptCandidate();
 	}
 
 	return false;
