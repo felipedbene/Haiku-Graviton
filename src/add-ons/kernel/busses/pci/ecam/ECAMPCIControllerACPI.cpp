@@ -196,6 +196,18 @@ ECAMPCIControllerACPI::ReadResourceInfo(device_node* parent)
 		B_KERNEL_READ_AREA | B_KERNEL_WRITE_AREA, (void **)&fRegs));
 	CHECK_RET(fRegsArea.Get());
 
+	// #12 note (correcting, not replacing, the original investigation): the
+	// hypothesis there -- call it H2 -- that a bridge was silently taking the
+	// no-_CRS-range fallback could never be confirmed or refuted from a console,
+	// because that path printed nothing: its only dprintf sat inside the branch
+	// taken when _CRS *does* give a range, so its absence proved nothing either
+	// way. The fix above logs both fallback reasons distinctly, and what really
+	// shows each bridge maps its own window is the line below: one distinct
+	// "PCI: ECAM at ..." per bridge, each with a different base and bus range
+	// (measured on QEMU pxb-pcie: bus 0 base ...0000000 buses 0-1f, and bus 20
+	// base ...2000000 buses 20-21), where the bug printed the same base and
+	// buses 0-ff for every bridge. H2 is refuted by those three distinct decode
+	// lines, not by a message that was never reachable.
 	dprintf("PCI: ECAM at %" B_PRIx64 " (bus %" B_PRIx32 " base %" B_PRIx64
 		"), segment %x, buses %" B_PRIx32 "-%" B_PRIx32 " from %s, %" B_PRIu32
 		" decoded, %" B_PRIu64 " MiB; %" B_PRIu32 " of %" B_PRIu32
