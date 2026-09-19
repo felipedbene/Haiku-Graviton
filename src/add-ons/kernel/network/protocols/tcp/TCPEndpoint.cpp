@@ -2147,13 +2147,15 @@ TCPEndpoint::_Receive(tcp_segment_header& segment, net_buffer* buffer)
 	// a CE mark, a CWR, or a peer's ECE can ride a pure ACK that the fast path
 	// would otherwise consume and return from.
 	if ((fFlags & FLAG_ECN_NEGOTIATED) != 0 && fState == ESTABLISHED) {
-		// As receiver (6.1.3): a CE-marked segment arrived -- start echoing ECE
-		// on our ACKs, and keep echoing until the peer acknowledges the
-		// reduction by setting CWR.
-		if ((buffer->buffer_flags & NET_BUFFER_ECN_CE) != 0)
-			fFlags |= FLAG_ECN_SEND_ECE;
+		// As receiver (6.1.3): CWR is honoured before CE so a segment that
+		// carries both -- a data segment the sender marked CWR that the path
+		// then marked CE -- ends up re-arming the ECE echo rather than clearing
+		// it. CWR stops the echo (the peer has reacted); a CE on that same
+		// segment is a fresh congestion signal and must restart it.
 		if ((segment.flags & TCP_FLAG_CONGESTION_WINDOW_REDUCED) != 0)
 			fFlags &= ~FLAG_ECN_SEND_ECE;
+		if ((buffer->buffer_flags & NET_BUFFER_ECN_CE) != 0)
+			fFlags |= FLAG_ECN_SEND_ECE;
 		// As sender (6.1.2): the peer echoed ECE -> reduce the window once per
 		// RTT and arrange to set CWR on our next data segment.
 		if ((segment.flags & TCP_FLAG_CONGESTION_NOTIFICATION_ECHO) != 0)

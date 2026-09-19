@@ -39,6 +39,14 @@ static net_timer* sCurrentTimer;
 static thread_id sTimerThread;
 static bigtime_t sTimerTimeout;
 
+// Receive-FIFO CoDel operating point. Seeded with the compiled-in defaults and
+// optionally overridden at init from the "stack" driver settings (see
+// init_stack()), so operating points can be swept without a rebuild. Written
+// once before any device interface is created, then read-only on the hot path.
+bigtime_t gCoDelTarget = NET_FIFO_CODEL_TARGET;
+bigtime_t gCoDelInterval = NET_FIFO_CODEL_INTERVAL;
+size_t gCoDelMinBytes = NET_FIFO_CODEL_MIN_BYTES;
+
 
 // #pragma mark - UserBuffer
 
