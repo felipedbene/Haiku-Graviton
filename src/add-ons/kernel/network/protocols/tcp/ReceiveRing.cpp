@@ -112,8 +112,18 @@ ReceiveRing::Available() const
 {
 	if (fSlots == NULL)
 		return 0;
+	// Available() is read from the consumer (ReadData, under fReadLock) but also
+	// from the PRODUCER thread for receive-window accounting (_ReceiveBuffered /
+	// _ReceiveFree in SegmentReceived, under fLock but not fReadLock). Both
+	// counters are therefore cross-thread here, so both are acquire-loaded: a
+	// plain read of fBytesConsumed would race the consumer's release-store in
+	// Read(). The value only ever skews stale-low (less consumed), which shrinks
+	// the advertised window -- the safe direction -- but the read must still be
+	// atomic to be correct on any architecture, not only arm64's aligned 64-bit
+	// loads (#61).
 	int64 produced = atomic_get64(const_cast<int64*>(&fBytesProduced));
-	int64 available = produced - fBytesConsumed;
+	int64 consumed = atomic_get64(const_cast<int64*>(&fBytesConsumed));
+	int64 available = produced - consumed;
 	return available > 0 ? (size_t)available : 0;
 }
 
