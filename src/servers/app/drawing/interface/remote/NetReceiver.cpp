@@ -23,6 +23,41 @@
 #define TRACE_ERROR(x...)	debug_printf("NetReceiver: " x)
 
 
+// How long a newly accepted connection gets to send its first valid protocol
+// frame before it is dropped and the live session continues undisturbed.
+static const bigtime_t kCandidateTimeout = 10 * 1000 * 1000;
+
+
+/*!	Whether \a buffer begins with a frame a genuine client would open with.
+	Every client starts its stream with RP_INIT_CONNECTION (an empty message,
+	total length exactly the 6 byte header) optionally followed by RP_HELLO;
+	a reconnecting URP/1 client may lead with RP_HELLO directly, whose body is
+	small but allowed to grow additively by the compatibility rule. Framing is
+	little-endian by specification, so the fields are decoded explicitly
+	rather than read through a host-order struct.
+
+	Returns 1 for a valid first frame, 0 for definitely invalid, and -1 when
+	fewer than the 6 header bytes have arrived so far.
+*/
+static int
+validate_first_frame(const uint8 *buffer, size_t size)
+{
+	if (size < 6)
+		return -1;
+
+	uint16 code = (uint16)buffer[0] | ((uint16)buffer[1] << 8);
+	uint32 length = (uint32)buffer[2] | ((uint32)buffer[3] << 8)
+		| ((uint32)buffer[4] << 16) | ((uint32)buffer[5] << 24);
+
+	if (code == RP_INIT_CONNECTION)
+		return length == 6 ? 1 : 0;
+	if (code == RP_HELLO)
+		return length >= 6 && length <= 4096 ? 1 : 0;
+
+	return 0;
+}
+
+
 NetReceiver::NetReceiver(BNetEndpoint *listener, StreamingRingBuffer *target,
 	NewConnectionCallback newConnectionCallback, void *newConnectionCookie,
 	ConnectionClosedCallback connectionClosedCallback)
@@ -34,7 +69,9 @@ NetReceiver::NetReceiver(BNetEndpoint *listener, StreamingRingBuffer *target,
 	fNewConnectionCallback(newConnectionCallback),
 	fNewConnectionCookie(newConnectionCookie),
 	fConnectionClosedCallback(connectionClosedCallback),
-	fEndpoint(newConnectionCallback == NULL ? listener : NULL)
+	fEndpoint(newConnectionCallback == NULL ? listener : NULL),
+	fCandidateBufferUsed(0),
+	fCandidateDeadline(0)
 {
 	fReceiverThread = spawn_thread(_NetworkReceiverEntry, "network receiver",
 		B_NORMAL_PRIORITY, this);
@@ -73,10 +110,17 @@ NetReceiver::_Listen()
 	}
 
 	while (!fStopThread) {
-		fEndpoint.SetTo(fListener->Accept(5000));
-		if (!fEndpoint.IsSet()) {
-			TRACE("got NULL endpoint from accept\n");
-			continue;
+		if (fCandidate.IsSet()) {
+			// A validated (or, when the previous session just died on its
+			// own, at least already accepted) connection is waiting to take
+			// over; promote it instead of accepting a new one.
+			fEndpoint.SetTo(fCandidate.Detach());
+		} else {
+			fEndpoint.SetTo(fListener->Accept(5000));
+			if (!fEndpoint.IsSet()) {
+				TRACE("got NULL endpoint from accept\n");
+				continue;
+			}
 		}
 
 		TRACE("new endpoint connection: %p\n", fEndpoint);
@@ -86,7 +130,21 @@ NetReceiver::_Listen()
 				fNewConnectionCookie, *fEndpoint.Get()) != B_OK)
 		{
 			TRACE("connection callback rejected connection\n");
+			fCandidateBufferUsed = 0;
 			continue;
+		}
+
+		// Hand over whatever the connection already sent while it was being
+		// validated as a takeover candidate; these bytes are the head of its
+		// stream and must reach the parser before anything read below.
+		if (fCandidateBufferUsed > 0) {
+			status_t result = fTarget->Write(fCandidateBuffer,
+				fCandidateBufferUsed);
+			fCandidateBufferUsed = 0;
+			if (result != B_OK) {
+				TRACE_ERROR("writing candidate data to ring buffer failed: "
+					"%s\n", strerror(result));
+			}
 		}
 
 		_Transfer();
@@ -121,9 +179,20 @@ NetReceiver::_Transfer()
 	// TCP handshake into the listen backlog but is never accepted and never gets
 	// its RP_INIT_CONNECTION reply (black screen), while the abandoned sockets
 	// pile up in CLOSE_WAIT. Watch the listener alongside the live connection so
-	// a new client preempts a stale one: returning here lets _Listen() tear this
-	// connection down and accept the waiting one. In client mode (no callback)
+	// a new client can replace a stale one. In client mode (no callback)
 	// fEndpoint is the sole socket and there is nothing to preempt with.
+	//
+	// A new connection does NOT preempt the live one merely by connecting,
+	// though. This protocol carries every keystroke of the session, so letting
+	// a bare TCP connect tear down the desktop hands a trivial
+	// session-kill/session-steal to anything that can reach the port (a port
+	// scan, a health probe, a stray curl). A newly accepted connection is
+	// therefore parked as a *candidate* and must prove it is a real client by
+	// sending a valid first protocol frame (RP_INIT_CONNECTION or RP_HELLO,
+	// which every client emits immediately on connect) within
+	// kCandidateTimeout. Only then does it take the session over -- which
+	// keeps the deliberate-reconnect and the dead-peer-recovery behaviour --
+	// while junk connections are closed without the session ever noticing.
 	const bool watchListener = fNewConnectionCallback != NULL
 		&& fListener != NULL && fListener != fEndpoint.Get();
 
@@ -131,6 +200,8 @@ NetReceiver::_Transfer()
 		if (watchListener) {
 			int connSocket = fEndpoint->Socket();
 			int listenSocket = fListener->Socket();
+			int candidateSocket
+				= fCandidate.IsSet() ? fCandidate->Socket() : -1;
 			if (connSocket < 0)
 				return B_ERROR;
 
@@ -139,9 +210,20 @@ NetReceiver::_Transfer()
 			FD_SET(connSocket, &readSet);
 			if (listenSocket >= 0)
 				FD_SET(listenSocket, &readSet);
+			if (candidateSocket >= 0)
+				FD_SET(candidateSocket, &readSet);
 
-			int maxSocket = connSocket > listenSocket ? connSocket : listenSocket;
-			int ready = select(maxSocket + 1, &readSet, NULL, NULL, NULL);
+			int maxSocket = connSocket;
+			if (listenSocket > maxSocket)
+				maxSocket = listenSocket;
+			if (candidateSocket > maxSocket)
+				maxSocket = candidateSocket;
+
+			// While a candidate is pending, wake up periodically to enforce
+			// its deadline even if no socket becomes readable.
+			struct timeval candidateWait = { 1, 0 };
+			int ready = select(maxSocket + 1, &readSet, NULL, NULL,
+				fCandidate.IsSet() ? &candidateWait : NULL);
 			if (ready < 0) {
 				if (errno == EINTR)
 					continue;
@@ -150,12 +232,28 @@ NetReceiver::_Transfer()
 				return B_ERROR;
 			}
 
-			// A connection is waiting on the listener: give this one up so the
-			// accept loop can replace it. Done even when the current connection
-			// also has data -- the protocol drives a single client and the newest
-			// one wins, matching _NewConnection()'s replace-on-connect model.
-			if (listenSocket >= 0 && FD_ISSET(listenSocket, &readSet))
-				return B_OK;
+			if (fCandidate.IsSet() && system_time() > fCandidateDeadline)
+				_DropCandidate("timeout waiting for first frame");
+
+			bool candidateReplaced = false;
+			if (listenSocket >= 0 && FD_ISSET(listenSocket, &readSet)) {
+				_AcceptCandidate();
+				// The fd number of a just-closed previous candidate may have
+				// been reused by the new one, so the FD_ISSET result below
+				// would be about the wrong connection; wait for the next
+				// select() round to read from the fresh candidate.
+				candidateReplaced = true;
+			}
+
+			if (!candidateReplaced && fCandidate.IsSet()
+				&& candidateSocket >= 0
+				&& FD_ISSET(candidateSocket, &readSet)) {
+				if (_ReceiveCandidateData()) {
+					// The candidate proved itself; let _Listen() tear this
+					// connection down and promote it.
+					return B_OK;
+				}
+			}
 
 			if (!FD_ISSET(connSocket, &readSet))
 				continue;
@@ -191,4 +289,65 @@ NetReceiver::_Transfer()
 	}
 
 	return B_OK;
+}
+
+
+void
+NetReceiver::_AcceptCandidate()
+{
+	// The newest connection attempt wins the candidate slot; a stalled or
+	// half-open earlier candidate must not be able to block a real client
+	// from ever being considered.
+	if (fCandidate.IsSet())
+		_DropCandidate("replaced by newer connection");
+
+	fCandidate.SetTo(fListener->Accept(0));
+	if (!fCandidate.IsSet())
+		return;
+
+	fCandidateBufferUsed = 0;
+	fCandidateDeadline = system_time() + kCandidateTimeout;
+	TRACE("accepted takeover candidate\n");
+}
+
+
+/*!	Reads whatever the candidate connection has sent so far and validates the
+	first frame once its header is complete. Returns true when the candidate
+	has proven itself and should take over the session; on garbage or EOF the
+	candidate is dropped and false is returned.
+*/
+bool
+NetReceiver::_ReceiveCandidateData()
+{
+	int32 readSize = fCandidate->Receive(
+		fCandidateBuffer + fCandidateBufferUsed,
+		sizeof(fCandidateBuffer) - fCandidateBufferUsed);
+	if (readSize <= 0) {
+		_DropCandidate("closed or failed before first frame");
+		return false;
+	}
+
+	fCandidateBufferUsed += readSize;
+
+	int valid = validate_first_frame(fCandidateBuffer, fCandidateBufferUsed);
+	if (valid < 0) {
+		// Header not complete yet; keep waiting within the deadline.
+		return false;
+	}
+
+	if (valid == 0) {
+		_DropCandidate("invalid first frame");
+		return false;
+	}
+
+	return true;
+}
+
+
+void
+NetReceiver::_DropCandidate(const char *reason)
+{
+	TRACE_ERROR("dropping takeover candidate: %s\n", reason);
+	fCandidate.Unset();
+	fCandidateBufferUsed = 0;
 }

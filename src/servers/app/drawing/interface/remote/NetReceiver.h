@@ -35,6 +35,10 @@ static	int32					_NetworkReceiverEntry(void *data);
 		status_t				_Listen();
 		status_t				_Transfer();
 
+		void					_AcceptCandidate();
+		bool					_ReceiveCandidateData();
+		void					_DropCandidate(const char *reason);
+
 		BNetEndpoint *			fListener;
 		StreamingRingBuffer *	fTarget;
 
@@ -48,6 +52,16 @@ static	int32					_NetworkReceiverEntry(void *data);
 
 		ObjectDeleter<BNetEndpoint>
 								fEndpoint;
+
+		// A connection accepted while another one is live. It only takes the
+		// session over once it has proven it is a real client by sending a
+		// valid first protocol frame; until then the live session keeps
+		// running. See _Transfer() for the rationale.
+		ObjectDeleter<BNetEndpoint>
+								fCandidate;
+		uint8					fCandidateBuffer[4096];
+		size_t					fCandidateBufferUsed;
+		bigtime_t				fCandidateDeadline;
 };
 
 #endif // NET_RECEIVER_H

@@ -46,6 +46,33 @@ struct callback_info {
 };
 
 
+/*!	Whether the IPv4 address \a networkOrderAddress (network byte order) is a
+	loopback, RFC 1918 private, or link-local address -- the only addresses
+	the unauthenticated remote protocol may be bound to. Notably false for
+	INADDR_ANY and for every publicly routable address.
+*/
+static bool
+is_loopback_or_private_address(uint32 networkOrderAddress)
+{
+	uint32 address = ntohl(networkOrderAddress);
+	uint8 first = address >> 24;
+	uint8 second = (address >> 16) & 0xff;
+
+	if (first == 127)
+		return true;
+	if (first == 10)
+		return true;
+	if (first == 172 && second >= 16 && second <= 31)
+		return true;
+	if (first == 192 && second == 168)
+		return true;
+	if (first == 169 && second == 254)
+		return true;
+
+	return false;
+}
+
+
 RemoteHWInterface::RemoteHWInterface(const char* target)
 	:
 	HWInterface(),
@@ -74,7 +101,40 @@ RemoteHWInterface::RemoteHWInterface(const char* target)
 
 	fCurrentMode = fClientMode = fFallbackMode;
 
-	if (sscanf(fTarget, "%" B_SCNu16, &fListenPort) != 1) {
+	// The target is "<port>" or "<IPv4-address>:<port>". With just a port the
+	// listener binds loopback; an explicit address allows serving a trusted
+	// private network segment directly, but is validated below.
+	uint32 bindAddress = htonl(INADDR_LOOPBACK);
+	unsigned int a, b, c, d;
+	unsigned int scannedPort;
+	if (sscanf(fTarget, "%u.%u.%u.%u:%u", &a, &b, &c, &d, &scannedPort) == 5) {
+		if (a > 255 || b > 255 || c > 255 || d > 255 || scannedPort == 0
+			|| scannedPort > 65535) {
+			fInitStatus = B_BAD_VALUE;
+			return;
+		}
+
+		bindAddress = htonl((a << 24) | (b << 16) | (c << 8) | d);
+		fListenPort = (uint16)scannedPort;
+	} else if (sscanf(fTarget, "%" B_SCNu16, &fListenPort) != 1) {
+		fInitStatus = B_BAD_VALUE;
+		return;
+	}
+
+	// Never a publicly routable address and never INADDR_ANY. The remote
+	// protocol has no authentication and no encryption of any kind: anything
+	// that can reach this port gets full control of the session, including
+	// every keystroke. Binding the wildcard address -- which
+	// BNetEndpoint::Bind(int) does -- puts that on every interface the machine
+	// has, which on a cloud instance means the public one. The plaintext
+	// stream is therefore only reachable over loopback (through an SSH tunnel
+	// or the TLS-terminating remote_broker daemon, which provide the
+	// authentication the protocol lacks) or, when explicitly configured, on an
+	// RFC 1918 / link-local address of a trusted private segment.
+	if (!is_loopback_or_private_address(bindAddress)) {
+		TRACE_ERROR("refusing to bind the unauthenticated remote protocol to "
+			"a public or wildcard address; use the remote_broker daemon for "
+			"non-loopback access\n");
 		fInitStatus = B_BAD_VALUE;
 		return;
 	}
@@ -85,18 +145,10 @@ RemoteHWInterface::RemoteHWInterface(const char* target)
 		return;
 	}
 
-	// Loopback only, never INADDR_ANY. The remote protocol has no
-	// authentication and no encryption of any kind: anything that can reach this
-	// port gets full control of the session, including every keystroke. Binding
-	// the wildcard address -- which BNetEndpoint::Bind(int) does -- puts that on
-	// every interface the machine has, which on a cloud instance means the
-	// public one. Access is therefore deliberately only possible through an SSH
-	// tunnel, so that SSH provides the authentication the protocol lacks.
-	//
-	// INADDR_LOOPBACK is in host order and BNetAddress stores the address as it
-	// will appear in sockaddr_in, so it has to be converted.
-	BNetAddress loopback((uint32)htonl(INADDR_LOOPBACK), fListenPort);
-	fInitStatus = fListenEndpoint->Bind(loopback);
+	// BNetAddress stores the address as it will appear in sockaddr_in, i.e.
+	// in network byte order.
+	BNetAddress listenAddress(bindAddress, fListenPort);
+	fInitStatus = fListenEndpoint->Bind(listenAddress);
 	if (fInitStatus != B_OK)
 		return;
 
