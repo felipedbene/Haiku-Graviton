@@ -1,5 +1,26 @@
 # Node.js / V8 on DeBeOS arm64 — feasibility scope (#93)
 
+> **UPDATE 2026-09-19 — BUILT & VERIFIED on native Graviton.** The scope below was
+> confirmed correct: the build resources (RAM at the V8 link) were the only real gate,
+> not V8's arm64 backend or a missing Haiku V8 port. Node **20.15.1** built native
+> **RC=0** on a **c7g.8xlarge** (32 vCPU / 64 GB Graviton3) in ~39 min, producing
+> `nodejs20-20.15.1-2-arm64.hpkg` (11.5 MB) + `nodejs20_devel` (227 KB), harvested to
+> the STAGING S3 pool. After `pkgman install`: `node --version` → `v20.15.1`,
+> `node -e "console.log(2+2)"` → `4`, and an fs+http core-module script round-tripped
+> (`process.arch=arm64`, `platform=haiku`, V8 `11.3.244.8-node.23`, ICU `74.1`,
+> OpenSSL `3.5.7`). **The one deviation from the scope's prediction:** the *shipping*
+> HaikuPorts recipe (rev 2) pins `cmd:python3`, not `cmd:python3.10` — and on the DeBeOS
+> builder that resolves to python **3.14**, which Node 20's configure rejects (accepts
+> 3.6–3.12). The DeBeOS overlay
+> (`graviton/haikuports-patches/recipes/nodejs20-20.15.1.recipe`) forces python3.10
+> (`cmd:python3.10` + `python3.10 configure.py` + `make PYTHON=python3.10`) — a
+> python-version selection, not a source or feature change. ICU ≥ 74 was satisfied by
+> `icu74_devel` from the pool (`pkgman install icu74_devel` explicitly — the generic
+> `devel:libicudata` resolvable pulls an *older* icu that fails the recipe's `>= 74`
+> constraint). Known caveat: `Intl.NumberFormat` for a non-C locale throws an ICU-data
+> error (the linked bootstrap icudata lacks full locale data); the core runtime, fs,
+> http, crypto/openssl and basic ICU all work.
+
 Scoping only — no full build was attempted this pass (see the verdict for why that
 is the right call, not a punt). All sources below are public (HaikuPorts / GitHub).
 
