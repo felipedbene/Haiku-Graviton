@@ -1,0 +1,166 @@
+SUMMARY="Alliance for Open Media AV1 reference codec (libaom)"
+DESCRIPTION="libaom is the Alliance for Open Media's reference implementation of \
+the AV1 video codec -- a royalty-free, open video format. This package provides \
+the shared library plus the reference command-line encoder (aomenc) and decoder \
+(aomdec). It is the reference AV1 encoder/decoder; SVT-AV1 (svt_av13) is the \
+faster production AV1 encoder, and dav1d the fast decoder.
+
+DeBeOS arm64 note (#337): AV1 was the codec deferred from the #337 video-encoding \
+stack (x264/x265/ffmpeg/opus). This is a DeBeOS overlay recipe authored from \
+scratch -- HaikuPorts ships no aom port. It builds the baseline NEON code path, \
+which is mandatory in ARMv8-A and therefore runs on every Graviton generation \
+(and t4g). aom's aarch64 runtime CPU detection (aom_ports/aarch64_cpudetect.c) \
+implements a probe only for Apple/Windows/Android/Linux/Fuchsia -- none for \
+Haiku -- so with CONFIG_RUNTIME_CPU_DETECT on it hits a hard #error, and with it \
+off aom's rtcd statically binds each function to the HIGHEST compile-enabled \
+Neon flavour (dotprod/I8MM/SVE), which would fault on a core that lacks them. \
+The honest portable build therefore fixes CONFIG_RUNTIME_CPU_DETECT=0 and \
+disables the above-baseline extensions, so rtcd binds pure NEON. \
+FOLLOW-UP: DeBeOS serves getauxval(AT_HWCAP/AT_HWCAP2) from the arm64 commpage \
+(#329, headers/posix/sys/auxv.h) with the Linux hwcap bit layout aom's __linux__ \
+branch already reads; once that lands in the builder/fleet AMIs, reusing that \
+branch on __HAIKU__ turns this into a single fleet-portable binary that lights up \
+dotprod/I8MM/SVE at run time on Graviton3/4. A statically -mcpu=neoverse-v1 tuned \
+_g3 flavour (#330) is a further encode-throughput follow-up."
+HOMEPAGE="https://aomedia.googlesource.com/aom/"
+COPYRIGHT="2016-2025 Alliance for Open Media"
+LICENSE="BSD (2-clause)"
+REVISION="1"
+SOURCE_URI="https://storage.googleapis.com/aom-releases/libaom-$portVersion.tar.gz"
+CHECKSUM_SHA256="9e9775180dec7dfd61a79e00bda3809d43891aee6b2e331ff7f26986207ea22e"
+SOURCE_DIR="libaom-$portVersion"
+
+ARCHITECTURES="all !x86_gcc2"
+SECONDARY_ARCHITECTURES="x86"
+
+commandBinDir=$binDir
+commandSuffix=$secondaryArchSuffix
+if [ "$targetArchitecture" = x86_gcc2 ]; then
+	commandSuffix=
+	commandBinDir=$prefix/bin
+fi
+
+# libaom SO version: SO_VERSION = LT_CURRENT - LT_AGE = 15 - 12 = 3 (aom 3.12.1);
+# file version = SO_VERSION.LT_AGE.LT_REVISION = 3.12.1.
+libVersion="3.12.1"
+libVersionCompat="$libVersion compat >= ${libVersion%%.*}"
+
+PROVIDES="
+	aom$secondaryArchSuffix = $portVersion
+	lib:libaom$secondaryArchSuffix = $libVersionCompat
+	cmd:aomdec$commandSuffix = $portVersion
+	cmd:aomenc$commandSuffix = $portVersion
+	"
+REQUIRES="
+	haiku$secondaryArchSuffix
+	"
+
+PROVIDES_devel="
+	aom${secondaryArchSuffix}_devel = $portVersion
+	devel:libaom$secondaryArchSuffix = $libVersionCompat
+	"
+REQUIRES_devel="
+	aom$secondaryArchSuffix == $portVersion base
+	"
+
+BUILD_REQUIRES="
+	haiku${secondaryArchSuffix}_devel
+	"
+BUILD_PREREQUIRES="
+	cmd:cmake
+	cmd:gcc$secondaryArchSuffix
+	cmd:ld$secondaryArchSuffix
+	cmd:ninja
+	cmd:perl
+	cmd:pkg_config$secondaryArchSuffix
+	"
+# aom's x86/x86_64 SIMD is assembled with nasm/yasm; the aarch64/arm64 NEON path
+# is assembled by the toolchain assembler (GAS, from binutils), so nasm is neither
+# used nor needed on arm64 -- and there is no nasm package in the DeBeOS arm64 repo
+# for it to resolve against. aom_configure.cmake gates the nasm search behind
+# AOM_TARGET_CPU x86/x86_64, so require nasm only for the x86 secondary arch.
+# (DeBeOS #337, same shape as the x264/x265 recipes.)
+if [ "${targetArchitecture:-arm64}" != arm64 ]; then
+	BUILD_PREREQUIRES="$BUILD_PREREQUIRES
+	cmd:nasm"
+fi
+
+defineDebugInfoPackage aom$secondaryArchSuffix \
+	"$libDir"/libaom.so.$libVersion \
+	"$commandBinDir"/aomenc \
+	"$commandBinDir"/aomdec
+
+BUILD()
+{
+	if [ "$targetArchitecture" = arm64 ]; then
+		# On arm64 `char` is unsigned by default; aom's C is written and tested
+		# against x86/PPC where it is signed. Restore signed-char semantics so any
+		# `char < 0` / EOF-into-char assumption behaves as upstream intends (#341).
+		# RelWithDebInfo already sets -O2, so no separate -O is needed here.
+		export CFLAGS="${CFLAGS:-} -fsigned-char"
+		export CXXFLAGS="${CXXFLAGS:-} -fsigned-char"
+	fi
+
+	# NB: the binary dir must NOT be named "build" -- aom keeps its CMake modules
+	# in the source tree's build/cmake/, so a "build" out-dir would shadow them
+	# ("include could not find build/cmake/util.cmake").
+	rm -rf objdir
+	cmake -B objdir -G Ninja \
+		-DCMAKE_BUILD_TYPE=RelWithDebInfo \
+		-DCMAKE_SYSTEM_NAME=Haiku \
+		-DCMAKE_SYSTEM_PROCESSOR=aarch64 \
+		-DCMAKE_POLICY_VERSION_MINIMUM=3.5 \
+		-DCMAKE_INSTALL_PREFIX="$prefix" \
+		-DCMAKE_INSTALL_LIBDIR="$relativeLibDir" \
+		-DCMAKE_INSTALL_BINDIR=bin \
+		-DCMAKE_INSTALL_INCLUDEDIR="$relativeIncludeDir" \
+		-DBUILD_SHARED_LIBS=ON \
+		-DCONFIG_PIC=1 \
+		-DCONFIG_OS_SUPPORT=1 \
+		-DCONFIG_RUNTIME_CPU_DETECT=0 \
+		-DENABLE_NEON=ON \
+		-DENABLE_ARM_CRC32=OFF \
+		-DENABLE_NEON_DOTPROD=OFF \
+		-DENABLE_NEON_I8MM=OFF \
+		-DENABLE_SVE=OFF \
+		-DENABLE_SVE2=OFF \
+		-DENABLE_EXAMPLES=ON \
+		-DENABLE_TOOLS=OFF \
+		-DENABLE_TESTS=OFF \
+		-DENABLE_TESTDATA=OFF \
+		-DENABLE_DOCS=OFF \
+		-DENABLE_NASM=OFF \
+		-Wno-dev
+
+	ninja -C objdir $jobArgs
+}
+
+INSTALL()
+{
+	ninja -C objdir install
+
+	# aom installs libaom.so + libaom.a (aom_static) + headers + aom.pc +
+	# aomenc/aomdec under $prefix/bin. Move the CLI tools to the secondary-arch
+	# bin dir when building a secondary architecture.
+	if [ -n "$secondaryArchSuffix" -a "$commandBinDir" != "$prefix"/bin ]; then
+		mkdir -p "$commandBinDir"
+		mv "$prefix"/bin/aomenc "$commandBinDir"/
+		mv "$prefix"/bin/aomdec "$commandBinDir"/
+		rmdir "$prefix"/bin 2>/dev/null || true
+	fi
+
+	# aom installs both libaom.so and libaom.a (aom_static). prepareInstalledDevelLib
+	# refuses when both a shared and a static library are present, so move the
+	# static lib aside, let it process the shared lib, then drop the .a into the
+	# devel libdir (same shape as the draco recipe).
+	mv "$libDir"/libaom.a .
+
+	prepareInstalledDevelLib libaom
+
+	mv libaom.a "$developLibDir"
+
+	fixPkgconfig
+
+	packageEntries devel \
+		"$developDir"
+}
