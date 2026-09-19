@@ -16,6 +16,29 @@
 #include "utility.h"
 
 
+// STT_GNU_IFUNC (== STT_LOOS) marks a symbol whose runtime address is produced
+// by calling it as a resolver (GNU indirect functions / ifunc). Not defined in
+// <elf.h>, so keep a private copy here for the loader's ifunc handling.
+#ifndef STT_GNU_IFUNC
+#	define STT_GNU_IFUNC 10
+#endif
+
+// Arches whose runtime_loader implements STT_GNU_IFUNC (ifunc) resolution
+// define RLD_IFUNC_SUPPORTED and an arch_call_ifunc_resolver(). All ifunc
+// handling in the shared loader code is compiled only for those arches, so the
+// others build and behave exactly as before.
+#if defined(__aarch64__)
+#	define RLD_IFUNC_SUPPORTED 1
+#endif
+
+#ifdef RLD_IFUNC_SUPPORTED
+// Invoke an STT_GNU_IFUNC resolver (arch-specific ABI, defined per arch) and
+// return the implementation address it selects. Only safe to call once the
+// resolver's text segment is executable (after remap_images()).
+addr_t arch_call_ifunc_resolver(addr_t resolverAddress);
+#endif
+
+
 //#define TRACE_RLD
 #ifdef TRACE_RLD
 #	define TRACE(x) dprintf x
@@ -85,8 +108,22 @@ status_t get_library_symbol(void* handle, void* caller, const char* symbolName,
 	void** _location);
 status_t get_next_image_dependency(image_id id, uint32* cookie,
 	const char** _name);
+// If \a _isIndirect is non-NULL, ifunc handling is enabled: an STT_GNU_IFUNC
+// definition is accepted (its type no longer conflicts with a plain function
+// reference), *_isIndirect is set true and \a sym_addr is returned as the
+// resolver's address (not invoked -- the caller defers the call until text is
+// executable). Arches without an ifunc resolver ABI pass NULL and see the
+// pre-ifunc behavior.
 int resolve_symbol(image_t* rootImage, image_t* image, elf_sym* sym,
-	SymbolLookupCache* cache, addr_t* sym_addr, image_t** symbolImage = NULL);
+	SymbolLookupCache* cache, addr_t* sym_addr, image_t** symbolImage = NULL,
+	bool* _isIndirect = NULL);
+
+#ifdef RLD_IFUNC_SUPPORTED
+// Record an STT_GNU_IFUNC relocation to be completed once text is executable
+// again: the slot is set to arch_call_ifunc_resolver(resolverAddress) + addend
+// by resolve_deferred_ifuncs().
+void defer_ifunc_relocation(addr_t* slot, addr_t resolverAddress, addr_t addend);
+#endif
 
 
 status_t elf_verify_header(void* header, size_t length);

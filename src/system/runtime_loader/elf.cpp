@@ -55,6 +55,63 @@ static uint32 sPreloadedAddonCount = 0;
 static recursive_lock sLock = RECURSIVE_LOCK_INITIALIZER(kLockName);
 
 
+#ifdef RLD_IFUNC_SUPPORTED
+// STT_GNU_IFUNC resolvers must not run during relocation: map_image() maps
+// every segment read/write (no execute) so relocations can be applied, and
+// remap_images() only restores B_EXECUTE_AREA afterwards. Invoking a resolver
+// -- which lives in the text of the image being relocated -- before that point
+// faults. So during relocation the arch code records each ifunc relocation
+// here, and resolve_deferred_ifuncs() invokes the resolvers and writes the
+// selected implementation (plus the relocation addend) into the slots once the
+// text is executable, before any initializer runs.
+namespace {
+	struct DeferredIFunc {
+		addr_t*		slot;			// where the final value is written
+		addr_t		resolverAddress; // the resolver to invoke
+		addr_t		addend;			// added to the resolver's result
+	};
+}
+static utility::vector<DeferredIFunc> sDeferredIFuncs;
+
+
+void
+defer_ifunc_relocation(addr_t* slot, addr_t resolverAddress, addr_t addend)
+{
+	DeferredIFunc deferred = { slot, resolverAddress, addend };
+	sDeferredIFuncs.push_back(deferred);
+}
+
+
+static void
+clear_deferred_ifuncs()
+{
+	while (!sDeferredIFuncs.empty())
+		sDeferredIFuncs.pop_back();
+}
+
+
+// Resolvers run in the order slots were recorded, which is dependency order
+// (relocate_dependencies() relocates dependencies before dependents), so a
+// resolver calling into an already-relocated dependency's ifunc sees it
+// resolved. As with glibc, a resolver must not depend on an ifunc it is a peer
+// or dependent of being resolved first; ifunc resolvers are expected to be
+// self-contained (read CPU features and return), which our arm64 ABI supports
+// by passing HWCAP directly.
+static void
+resolve_deferred_ifuncs()
+{
+	for (size_t i = 0; i < sDeferredIFuncs.size(); i++) {
+		// Copy by value: a resolver may re-enter the loader and grow the
+		// vector, which would invalidate a reference into it.
+		DeferredIFunc deferred = sDeferredIFuncs[i];
+		*deferred.slot = arch_call_ifunc_resolver(deferred.resolverAddress)
+			+ deferred.addend;
+	}
+	clear_deferred_ifuncs();
+}
+#endif	// RLD_IFUNC_SUPPORTED
+
+
 static const char *
 find_dt_string(image_t *image, int32 d_tag)
 {
@@ -300,6 +357,11 @@ relocate_image(image_t *rootImage, image_t *image)
 static status_t
 relocate_dependencies(image_t *image)
 {
+#ifdef RLD_IFUNC_SUPPORTED
+	// discard any ifunc slots recorded by a previous, failed relocation pass
+	clear_deferred_ifuncs();
+#endif
+
 	// get the images that still have to be relocated
 	image_t **list;
 	ssize_t count = get_sorted_image_list(image, &list, RFLAG_RELOCATED);
@@ -421,6 +483,19 @@ inject_runtime_loader_api(image_t* rootImage)
 			&_export) == B_OK) {
 		*(void**)_export = &gRuntimeLoader;
 	}
+
+#ifdef RLD_IFUNC_SUPPORTED
+	// Pre-initialize libroot's commpage pointer as well. libroot normally sets
+	// it in its own initializer (initialize_before), but STT_GNU_IFUNC
+	// resolvers run before that -- and a resolver may consult
+	// getauxval(AT_HWCAP), which reads through this pointer. libroot re-assigns
+	// the identical value later, so this is harmless.
+	if (find_symbol_breadth_first(rootImage,
+			SymbolLookupInfo("__gCommPageAddress", B_SYMBOL_TYPE_DATA), &image,
+			&_export) == B_OK) {
+		*(void**)_export = __gCommPageAddress;
+	}
+#endif
 }
 
 
@@ -477,6 +552,10 @@ preload_addon(char const* path)
 	inject_runtime_loader_api(image);
 
 	remap_images();
+#ifdef RLD_IFUNC_SUPPORTED
+	// text is executable again -- now safe to run STT_GNU_IFUNC resolvers
+	resolve_deferred_ifuncs();
+#endif
 	init_dependencies(image, true);
 
 	// if the image contains an add-on, register it
@@ -494,6 +573,12 @@ preload_addon(char const* path)
 err:
 	KTRACE("rld: preload_addon(\"%s\") failed: %s", path, strerror(status));
 
+#ifdef RLD_IFUNC_SUPPORTED
+	// relocate_dependencies() may have recorded ifunc slots (this is the only
+	// load path that can fail after it, before remap). Drop them now rather
+	// than dangling into the image we are about to delete.
+	clear_deferred_ifuncs();
+#endif
 	dequeue_loaded_image(image);
 	delete_image(image);
 	return status;
@@ -574,6 +659,10 @@ load_program(char const *path, void **_entry)
 	inject_runtime_loader_api(gProgramImage);
 
 	remap_images();
+#ifdef RLD_IFUNC_SUPPORTED
+	// text is executable again -- now safe to run STT_GNU_IFUNC resolvers
+	resolve_deferred_ifuncs();
+#endif
 	init_dependencies(gProgramImage, true);
 
 	// Since the images are initialized now, we no longer should use our
@@ -704,6 +793,10 @@ load_library(char const *path, uint32 flags, bool addOn, void* caller,
 		clear_image_flags_recursively(image, RFLAG_USE_FOR_RESOLVING);
 
 	remap_images();
+#ifdef RLD_IFUNC_SUPPORTED
+	// text is executable again -- now safe to run STT_GNU_IFUNC resolvers
+	resolve_deferred_ifuncs();
+#endif
 	init_dependencies(image, true);
 
 	KTRACE("rld: load_library(\"%s\") done: id: %" B_PRId32, path, image->id);
@@ -984,6 +1077,22 @@ get_symbol(image_id imageID, char const *symbolName, int32 symbolType,
 }
 
 
+// dlsym() of an STT_GNU_IFUNC symbol must return the selected implementation,
+// not the resolver. This is safe here because dlsym runs after load, when the
+// resolver's text is executable. (The generic find_symbol paths are also used
+// during load, before remap_images(), so they must NOT invoke resolvers.)
+static void
+resolve_dlsym_ifunc(elf_sym* symbol, void** _location)
+{
+#ifdef RLD_IFUNC_SUPPORTED
+	if (symbol != NULL && *_location != NULL
+		&& symbol->Type() == STT_GNU_IFUNC) {
+		*_location = (void*)arch_call_ifunc_resolver((addr_t)*_location);
+	}
+#endif
+}
+
+
 status_t
 get_library_symbol(void* handle, void* caller, const char* symbolName,
 	void **_location)
@@ -1009,6 +1118,7 @@ get_library_symbol(void* handle, void* caller, const char* symbolName,
 			int32 symbolType = symbol->Type() == STT_FUNC
 				? B_SYMBOL_TYPE_TEXT : B_SYMBOL_TYPE_DATA;
 			patch_defined_symbol(image, symbolName, _location, &symbolType);
+			resolve_dlsym_ifunc(symbol, _location);
 			status = B_OK;
 		}
 	} else if (handle == RTLD_NEXT) {
@@ -1068,6 +1178,7 @@ get_library_symbol(void* handle, void* caller, const char* symbolName,
 				int32 symbolType = B_SYMBOL_TYPE_TEXT;
 				patch_defined_symbol(candidateImage, symbolName, _location,
 					&symbolType);
+				resolve_dlsym_ifunc(candidateSymbol, _location);
 				status = B_OK;
 			}
 
@@ -1076,10 +1187,13 @@ get_library_symbol(void* handle, void* caller, const char* symbolName,
 	} else {
 		// breadth-first search in the given image and its dependencies
 		image_t* inImage;
+		elf_sym* symbol = NULL;
 		status = find_symbol_breadth_first((image_t*)handle,
 			SymbolLookupInfo(symbolName, B_SYMBOL_TYPE_ANY, NULL,
 				LOOKUP_FLAG_DEFAULT_VERSION),
-			&inImage, _location);
+			&inImage, _location, &symbol);
+		if (status == B_OK)
+			resolve_dlsym_ifunc(symbol, _location);
 	}
 
 	return status;
