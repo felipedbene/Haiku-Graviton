@@ -323,6 +323,75 @@ overlay_gnu_compat_headers() {
 }
 overlay_gnu_compat_headers
 
+# The canonical AMI's haiku_devel hpkg can lag the OS binary it ships beside: its
+# published development headers were built before #329 (arm64: advertise NEON
+# matrix/int8/bf16 caps in AT_HWCAP2) even though the kernel that advertises those
+# AT_HWCAP2 bits at runtime is already in the image. A port that runtime-dispatches
+# on HWCAP2_I8MM / HWCAP2_BF16 then fails to COMPILE -- the macros are absent from
+# <sys/auxv.h> -- and has to fall back to baseline NEON, which is exactly the
+# capability a rebased builder is meant to unblock. Same consumption path as the
+# #171 overlay above: haikuporter builds in a chroot served from the haiku_devel
+# hpkg FILES, so the CURRENT public header (staged from the DeBeOS source tree by
+# haiku-bake-builder into AUXV_OVERLAY_S3) is repacked INTO that hpkg.
+#
+# Unlike #171 the corrected content cannot be sed-derived from the stale header, so
+# it is fetched whole; the fetched copy is asserted to carry the fix before it is
+# repacked, and the repacked entry is re-extracted and re-checked before the swap
+# (success != artifact). STOPGAP, self-retiring: skipped when the installed header
+# already defines HWCAP2_I8MM -- i.e. once a haiku_devel built from #329 source
+# ships in the repo, or AUXV_OVERLAY_S3 is unset.
+AUXV_OVERLAY_S3="${AUXV_OVERLAY_S3:-}"
+overlay_public_auxv_header() {
+	[ -n "$AUXV_OVERLAY_S3" ] || { log "#329 overlay: AUXV_OVERLAY_S3 unset; skipping"; return 0; }
+	dst=/boot/system/develop/headers/posix/sys/auxv.h
+	if grep -q 'HWCAP2_I8MM' "$dst" 2>/dev/null; then
+		log "#329 overlay: <sys/auxv.h> already defines HWCAP2_I8MM; skipping"
+		return 0
+	fi
+	hd=$(ls /boot/system/packages/haiku_devel-*.hpkg 2>/dev/null | head -1)
+	if [ -z "$hd" ]; then
+		echo "provision: FATAL #329 overlay: no haiku_devel hpkg in" \
+			"/boot/system/packages" >&2
+		exit 1
+	fi
+	log "#329 overlay: fetching current <sys/auxv.h> from $AUXV_OVERLAY_S3"
+	rm -rf /tmp/auxv-overlay /tmp/auxv-overlay.hpkg /tmp/auxv-overlay-verify
+	mkdir -p /tmp/auxv-overlay/develop/headers/posix/sys
+	if ! /boot/system/bin/debeos-ssm-agent s3 cp "$AUXV_OVERLAY_S3" \
+			/tmp/auxv-overlay/develop/headers/posix/sys/auxv.h >/dev/null 2>&1; then
+		echo "provision: FATAL #329 overlay: could not fetch $AUXV_OVERLAY_S3" >&2
+		exit 1
+	fi
+	if ! grep -q 'HWCAP2_I8MM' \
+			/tmp/auxv-overlay/develop/headers/posix/sys/auxv.h 2>/dev/null; then
+		echo "provision: FATAL #329 overlay: staged auxv.h lacks HWCAP2_I8MM --" \
+			"refusing to repack a header that would not deliver the fix" >&2
+		exit 1
+	fi
+	log "#329 overlay: repacking <sys/auxv.h> into $(basename "$hd")"
+	cp "$hd" /tmp/auxv-overlay.hpkg
+	# </dev/null on every `package` call for the same no-TTY reason as #171 above.
+	package add -f -C /tmp/auxv-overlay /tmp/auxv-overlay.hpkg \
+		develop/headers/posix/sys/auxv.h </dev/null
+	mkdir -p /tmp/auxv-overlay-verify
+	package extract -C /tmp/auxv-overlay-verify /tmp/auxv-overlay.hpkg \
+		develop/headers/posix/sys/auxv.h </dev/null >/dev/null 2>&1 || true
+	if ! grep -q 'HWCAP2_I8MM' \
+			/tmp/auxv-overlay-verify/develop/headers/posix/sys/auxv.h 2>/dev/null; then
+		echo "provision: FATAL #329 overlay: patched header absent from" \
+			"repacked haiku_devel hpkg" >&2
+		exit 1
+	fi
+	# Atomic swap + sync, same rationale as #171: the running host keeps the old
+	# mmap'd inode, but a fresh boot (and haikuporter's chroot mount) serves the new
+	# header, and the sync makes the --no-reboot AMI snapshot carry it.
+	mv /tmp/auxv-overlay.hpkg "$hd"
+	sync
+	rm -rf /tmp/auxv-overlay /tmp/auxv-overlay-verify
+	log "#329 overlay: haiku_devel patched + synced ($hd)"
+}
+overlay_public_auxv_header
+
 # --- 2. ports tree + haikuporter + config ---------------------------------
 if [ ! -d "$PORTS_DIR/.git" ]; then
 	log "cloning ports tree (shallow) -> $PORTS_DIR"
