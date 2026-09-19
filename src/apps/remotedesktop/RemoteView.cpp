@@ -323,7 +323,11 @@ RemoteView::_SendMouseMessage(uint16 code, BPoint where)
 	event->FindInt32("buttons", &buttons);
 	message.Add(buttons);
 
-	if (code == RP_MOUSE_DOWN)
+	// "clicks" belongs on the mouse-down event (BeOS semantics), and the server
+	// reads it only from RP_MOUSE_DOWN. It used to be sent on RP_MOUSE_UP
+	// instead, where the server never read it, so double-click detection was
+	// dead over the wire (defect D6). Send it on the down event to match.
+	if (code == RP_MOUSE_UP)
 		return;
 
 	int32 clicks;
@@ -1305,9 +1309,15 @@ RemoteView::_DrawThread()
 				}
 
 				if (hasDelta) {
-					escapement_delta delta[length];
-					message.ReadList(delta, length);
-					offscreen->DrawString(string, point, delta);
+					// A single escapement_delta applies to the whole string;
+					// the server now sends exactly one (defect D5). BView's
+					// DrawString applies delta[0] regardless, so nothing is lost.
+					escapement_delta delta;
+					if (message.Read(delta) != B_OK) {
+						free(string);
+						continue;
+					}
+					offscreen->DrawString(string, point, &delta);
 				} else
 					offscreen->DrawString(string, point);
 

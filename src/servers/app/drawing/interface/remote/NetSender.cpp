@@ -97,13 +97,19 @@ NetSender::_NetworkSender()
 			return readSize;
 		}
 
+		uint8* position = buffer;
 		while (readSize > 0) {
-			int32 sendSize = fEndpoint->Send(buffer, readSize);
+			int32 sendSize = fEndpoint->Send(position, readSize);
 			if (sendSize < 0) {
 				TRACE_ERROR("sending data failed: %s\n", strerror(sendSize));
 				return sendSize;
 			}
 
+			// A short send must resume from where it stopped. Without advancing
+			// position, a partial Send() re-sent the leading bytes and dropped
+			// the tail, corrupting the framed stream for the rest of the session
+			// (defect D2).
+			position += sendSize;
 			readSize -= sendSize;
 		}
 	}

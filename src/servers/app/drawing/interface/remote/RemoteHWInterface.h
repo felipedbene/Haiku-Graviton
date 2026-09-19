@@ -84,6 +84,15 @@ virtual	status_t					CopyBackToFront(const BRect& frame);
 										{ return fReceiveBuffer.Get(); }
 		StreamingRingBuffer*		SendBuffer() { return fSendBuffer.Get(); }
 
+			// True once a client has attached and announced its display mode.
+			// A synchronous drawing call (DrawString, StringWidth, ReadBitmap)
+			// must not wait on a client reply when this is false: with no client
+			// draining the send buffer there is nothing to answer, and the wait
+			// would just burn its whole timeout on every call -- the headless
+			// stall (1 s per string, 10 s per screenshot).
+			bool						IsConnected() const
+											{ return fIsConnected; }
+
 typedef bool (*CallbackFunction)(void* cookie, RemoteMessage& message);
 
 		status_t					AddCallback(uint32 token,
