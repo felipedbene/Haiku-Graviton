@@ -825,8 +825,21 @@ Journal::_WriteTransactionToLog()
 					// We need to write back the first half of the entry
 					// directly as the log wraps around
 					if (writev_pos(fVolume->Device(), logOffset
-						+ (logStart << blockShift), vecs, index) < 0)
-						FATAL(("could not write log area!\n"));
+							+ (logStart << blockShift), vecs, index) < 0) {
+						// The log body did not reach the device (e.g. the block
+						// device vanished on a forced stop). We must not fall
+						// through to advance log_end below: committing a
+						// transaction whose body was never written makes replay
+						// walk a torn entry, and the log format carries no
+						// per-entry checksum to catch it, so a plausible stale
+						// run array replays into live blocks -- silent
+						// corruption. Bailing out leaves the on-disk log_end at
+						// the last good transaction, which is consistent. (Same
+						// contract as the block_cache_get failure just below.)
+						FATAL(("could not write log area: %s\n",
+							strerror(errno)));
+						return B_IO_ERROR;
+					}
 
 					logPosition = logStart + count;
 					logStart = 0;
@@ -850,8 +863,20 @@ Journal::_WriteTransactionToLog()
 		if (count > 0) {
 			logPosition = logStart + count;
 			if (writev_pos(fVolume->Device(), logOffset
-					+ (logStart << blockShift), vecs, index) < 0)
-				FATAL(("could not write log area: %s!\n", strerror(errno)));
+					+ (logStart << blockShift), vecs, index) < 0) {
+				// See the wrap case above: a failed body write must not be
+				// committed. Unlike that mid-array case, every run of this
+				// array has already been fetched, so release them here before
+				// bailing out rather than leaking the cache references.
+				for (int32 i = 0; i < array->CountRuns(); i++) {
+					const block_run& run = array->RunAt(i);
+					off_t releaseBlock = fVolume->ToBlock(run);
+					for (int32 j = 0; j < run.Length(); j++)
+						block_cache_put(fVolume->BlockCache(), releaseBlock + j);
+				}
+				FATAL(("could not write log area: %s\n", strerror(errno)));
+				return B_IO_ERROR;
+			}
 		}
 
 		// release blocks again
@@ -900,6 +925,19 @@ Journal::_WriteTransactionToLog()
 	fVolume->SuperBlock().log_end = HOST_ENDIAN_TO_BFS_INT64(logPosition);
 
 	status = fVolume->WriteSuperBlock();
+	if (status != B_OK) {
+		// The commit record itself (the superblock's log_end) did not reach
+		// the device. Leave both the on-disk and in-memory log_end at the last
+		// good transaction and do not end the cache transaction: its blocks
+		// stay pinned in the block cache instead of being written back to their
+		// home locations with no durable log entry behind them (a write-ahead
+		// log violation that would corrupt on the next replay). The next flush
+		// retries; a device that is truly gone keeps failing here without ever
+		// leaving the on-disk state inconsistent.
+		FATAL(("writing the log commit failed: %s\n", strerror(status)));
+		delete logEntry;
+		return status;
+	}
 
 	fVolume->LogEnd() = logPosition;
 	T(LogEntry(logEntry, fVolume->LogEnd(), true));

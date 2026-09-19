@@ -238,6 +238,48 @@ not a BFS-journal issue, and is tracked separately; it is called out here becaus
 a crash-safety story that only fixes the journal will still lose data if the page
 writer sits on it.
 
+### Gap 4 — a failed log-body or commit write was ignored, then committed anyway (FIXED here)
+
+Distinct from the *ordering* problem of Gap 1, `_WriteTransactionToLog()` did not
+check whether its writes actually reached the device before committing. Both
+log-body `writev_pos()` calls only logged `FATAL(...)` on failure and then **fell
+through**, and the superblock commit write (`WriteSuperBlock()`) advanced the
+in-memory `log_end` (`fVolume->LogEnd() = logPosition`) and ended the cache
+transaction **regardless of its return value**.
+
+The consequence on an abrupt device stop (a hot-detached EBS volume, a stopped
+instance, a wedged NVMe/virtio-blk path) is a *guaranteed* torn commit rather than
+a windowed one: the body write fails, yet `log_end` is advanced to cover it, so
+replay walks an entry whose body never landed — and, per Gap 2, there is no
+checksum to notice. Worse, if only the commit (superblock) write failed while the
+body succeeded, the in-memory `log_end` still advanced and the cache transaction
+was still ended, so the block cache was then free to write those dirty blocks back
+to their home locations with **no durable log entry behind them** — a write-ahead
+log violation that corrupts on the next crash.
+
+**Fix implemented in this change** (`Journal.cpp`, all on the error path only, so
+the healthy path is byte-for-byte unchanged):
+
+- A failed log-body `writev_pos()` now returns `B_IO_ERROR` instead of falling
+  through to the commit. The on-disk `log_end` is left at the last good
+  transaction, which is consistent. (The mid-array wrap case matches the
+  pre-existing `block_cache_get`-failure return above it; the end-of-array case
+  releases the block-cache references it already took, since at that point every
+  run of the array has been fetched.)
+- A failed `WriteSuperBlock()` (the commit record) now returns the error without
+  advancing `log_end` or ending the cache transaction. The transaction's blocks
+  stay pinned in the block cache rather than being written back to their home
+  locations un-journalled; the next flush retries, and a device that is truly
+  gone keeps failing here without ever leaving the on-disk state inconsistent.
+
+This is the *write-side* complement to Gap 1's *read/ordering-side* barrier: Gap 1
+makes a body that we chose to commit durable-before-commit; Gap 4 makes sure we
+only choose to commit a body (and a commit record) that the device actually
+accepted. Both are strictly-additive on the failure path and cannot affect a
+healthy commit. Like Gap 1, the corruption they prevent is **UNVERIFIED** as
+reachable on our specific virtualised block paths and is owed a crash-injection
+A/B before merge (see below).
+
 ### What a hard power loss loses today (summary)
 
 - **Committed, replayed transactions:** safe — *once Gap 1 is closed*. Before
@@ -257,6 +299,9 @@ writer sits on it.
   `Journal::_WriteTransactionToLog()`. Builds clean:
   `jam -q bfs` → `...updated 872 target(s)...`, the `bfs` add-on links (only the
   pre-existing ld 2.41 `.comment` orphan-section warnings, unrelated).
+- **Gap 4 fix:** the two failed-body `writev_pos()` sites and the failed
+  `WriteSuperBlock()` commit in `Journal::_WriteTransactionToLog()` now abort the
+  commit instead of proceeding. Error-path only; the healthy commit is unchanged.
 
 Nothing in Part A is changed: the framework is already in-tree, and ENA adoption
 is deliberately **not** attempted here because it is a behaviour change on the
@@ -264,8 +309,9 @@ flagship NIC.
 
 ## What needs hardware/emulator proof before merge
 
-- **Gap 1 fix (crash-safety, load-bearing).** Boot the `bfs`-with-fix image on a
-  reaped test instance (or QEMU), drive a write-heavy workload, and cut power
+- **Gap 1 + Gap 4 fixes (crash-safety, load-bearing).** Boot the `bfs`-with-fix
+  image on a reaped test instance (or QEMU), drive a write-heavy workload, and cut
+  power
   abruptly (instance stop / `kill -9` QEMU / device-stop) at randomised offsets,
   repeated. Then remount + `fsck`/`bfs_shell`. **Before/after A/B on the same
   instance:** the "before" arm is the unpatched `bfs`; success = the patched arm
