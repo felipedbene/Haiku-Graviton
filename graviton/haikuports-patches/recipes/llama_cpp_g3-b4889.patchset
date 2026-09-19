@@ -1,0 +1,123 @@
+From ddf1e86dbcf6a756b215cc219e3b06fee8f59ce9 Mon Sep 17 00:00:00 2001
+From: Gerasim Troeglazov <3dEyes@gmail.com>
+Date: Wed, 5 Feb 2025 21:11:33 +1000
+Subject: Fix build for Haiku
+
+
+diff --git a/common/common.cpp b/common/common.cpp
+index 8661e16..fb9c3c1 100644
+--- a/common/common.cpp
++++ b/common/common.cpp
+@@ -67,6 +67,8 @@
+ #if defined(LLAMA_USE_CURL)
+ #ifdef __linux__
+ #include <linux/limits.h>
++#elif defined(__HAIKU__)
++#include <limits.h>
+ #elif defined(_WIN32)
+ #   if !defined(PATH_MAX)
+ #   define PATH_MAX MAX_PATH
+diff --git a/examples/server/CMakeLists.txt b/examples/server/CMakeLists.txt
+index 1b7cc8c..cdaded1 100644
+--- a/examples/server/CMakeLists.txt
++++ b/examples/server/CMakeLists.txt
+@@ -47,4 +47,8 @@ if (WIN32)
+     TARGET_LINK_LIBRARIES(${TARGET} PRIVATE ws2_32)
+ endif()
+ 
++if (HAIKU)
++    TARGET_LINK_LIBRARIES(${TARGET} PRIVATE network)
++endif()
++
+ target_compile_features(${TARGET} PRIVATE cxx_std_17)
+diff --git a/ggml/src/ggml-rpc/CMakeLists.txt b/ggml/src/ggml-rpc/CMakeLists.txt
+index f5acb8e..3bb9073 100644
+--- a/ggml/src/ggml-rpc/CMakeLists.txt
++++ b/ggml/src/ggml-rpc/CMakeLists.txt
+@@ -7,3 +7,7 @@ ggml_add_backend_library(ggml-rpc
+ if (WIN32)
+     target_link_libraries(ggml-rpc PRIVATE ws2_32)
+ endif()
++
++if (HAIKU)
++    target_link_libraries(ggml-rpc PRIVATE network)
++endif()
+diff --git a/src/llama-mmap.cpp b/src/llama-mmap.cpp
+index b716630..a1b9c7b 100644
+--- a/src/llama-mmap.cpp
++++ b/src/llama-mmap.cpp
+@@ -22,6 +22,10 @@
+     #endif
+ #endif
+ 
++#ifdef __HAIKU__
++#undef _POSIX_MEMLOCK_RANGE
++#endif
++
+ #if defined(_WIN32)
+     #define WIN32_LEAN_AND_MEAN
+     #ifndef NOMINMAX
+-- 
+2.45.2
+
+From a1b2c3d4e5f60718293a4b5c6d7e8f9012345678 Mon Sep 17 00:00:00 2001
+From: DeBeOS <felipedbene@users.noreply.github.com>
+Date: Thu, 18 Sep 2026 00:00:00 +0000
+Subject: [PATCH] ggml: get the SVE vector length on Haiku without prctl (_g3)
+
+Building llama.cpp/ggml with -mcpu=neoverse-v1 (the DeBeOS Graviton3 _g3 ISA
+opt-in) defines __ARM_FEATURE_SVE, which turns on ggml's SVE code paths. Two of
+those paths assume Linux and break on Haiku:
+
+  1. ggml-cpu-impl.h unconditionally #include <sys/prctl.h> under
+     __ARM_FEATURE_SVE. Haiku has no such header, so the build fails to compile.
+     Only the Linux run-time detection branch actually calls prctl(), so the
+     include is guarded off on Haiku.
+
+  2. ggml_init_arm_arch_features() has no Haiku branch; Haiku takes the generic
+     "fall back to compile time" path, which hardcodes sve_cnt = 16 (a 128-bit
+     vector). ggml selects its SVE integer-matmul GEMM only when
+     ggml_cpu_get_sve_cnt() == QK8_0 (32 bytes = 256-bit), so a hardcoded 16
+     would leave Graviton3's 256-bit SVE GEMM path dormant. Read the true vector
+     length at run time with the svcntb() intrinsic instead -- no syscall, and
+     safe here because userland SVE is enabled on the DeBeOS arm64 kernel
+     (per-thread save/restore, #88) and the _g3 build only targets Graviton3+.
+
+diff --git a/ggml/src/ggml-cpu/ggml-cpu-impl.h b/ggml/src/ggml-cpu/ggml-cpu-impl.h
+--- a/ggml/src/ggml-cpu/ggml-cpu-impl.h
++++ b/ggml/src/ggml-cpu/ggml-cpu-impl.h
+@@ -70,8 +70,10 @@
+ 
+ #if defined(__ARM_FEATURE_SVE)
+ #include <arm_sve.h>
++#if !defined(__HAIKU__)
+ #include <sys/prctl.h>
+ #endif
++#endif
+ 
+ // 16-bit float
+ // on Arm, we use __fp16
+diff --git a/ggml/src/ggml-cpu/ggml-cpu.c b/ggml/src/ggml-cpu/ggml-cpu.c
+--- a/ggml/src/ggml-cpu/ggml-cpu.c
++++ b/ggml/src/ggml-cpu/ggml-cpu.c
+@@ -2664,7 +2664,16 @@
+ 
+ #if defined(__ARM_FEATURE_SVE)
+     ggml_arm_arch_features.has_sve = 1;
++#if defined(__HAIKU__)
++    // DeBeOS: Haiku has no prctl(PR_SVE_GET_VL); read the SVE vector
++    // length with the svcntb() intrinsic (bytes). Userland SVE is
++    // enabled (#88) and this _g3 build targets Graviton3+, so the
++    // instruction is safe. Reporting the true VL (32 on Graviton3's
++    // 256-bit SVE) lets ggml pick its sve_cnt==QK8_0 SVE GEMM path.
++    ggml_arm_arch_features.sve_cnt = svcntb();
++#else
+     ggml_arm_arch_features.sve_cnt = 16;
++#endif
+ #else
+     ggml_arm_arch_features.has_sve = 0;
+     ggml_arm_arch_features.sve_cnt = 0;
+ #endif
+--
+2.45.2
+
