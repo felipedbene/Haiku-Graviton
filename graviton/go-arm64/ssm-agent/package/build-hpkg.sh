@@ -9,7 +9,7 @@
 #            ssm-document-worker, ssm-session-worker, ssm-session-logger,
 #            ssm-cli, updater, ssm-setup-cli
 #   PKGDIR   dir holding this script's siblings (.PackageInfo, the launch job,
-#            agent-env.sh) -- default: the directory this script lives in
+#            Apache-2.0) -- default: the directory this script lives in
 #   OUTDIR   where to write the hpkg (default /boot/home)
 #
 # CRITICAL: -z zlib. The lean image's packagefs has no zstd reader, so a
@@ -29,8 +29,7 @@ BINARIES="amazon-ssm-agent ssm-agent-worker ssm-document-worker ssm-session-work
 
 echo "== assembling packagefs layout in $STAGING =="
 rm -rf "$STAGING"
-mkdir -p "$STAGING/bin" "$STAGING/data/launch" "$STAGING/data/amazon_ssm_agent" \
-	"$STAGING/data/licenses"
+mkdir -p "$STAGING/bin" "$STAGING/data/launch" "$STAGING/data/licenses"
 
 # Apache-2.0 is not a Haiku system license, so `package create` requires it to
 # be bundled in the package (data/licenses/<name>) or it fails validation with
@@ -43,7 +42,6 @@ for b in $BINARIES; do
 done
 
 cp "$PKGDIR/launch-amazon_ssm_agent" "$STAGING/data/launch/amazon_ssm_agent"
-cp "$PKGDIR/agent-env.sh"            "$STAGING/data/amazon_ssm_agent/agent-env.sh"
 cp "$PKGDIR/amazon_ssm_agent.PackageInfo" "$STAGING/.PackageInfo"
 
 echo "== package create (-z zlib) =="
