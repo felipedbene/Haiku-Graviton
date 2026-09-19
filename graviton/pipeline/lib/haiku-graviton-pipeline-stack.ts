@@ -111,6 +111,19 @@ export class HaikuGravitonPipelineStack extends cdk.Stack {
       computeType: codebuild.ComputeType.SMALL,
       privileged: false,
     };
+    // Register uploads the ~20 GiB raw image and is bandwidth-bound on it: the
+    // upload measured ~1.1 Gbps on SMALL, which is that container's network
+    // baseline (s5cmd's parallel multipart made no difference, so it is not
+    // client serialization -- issue #152). A larger compute type raises the
+    // network baseline, so Register gets its OWN environment rather than the
+    // shared SMALL one. PerfTest and Promote keep smallArmEnvironment: they do
+    // control-plane calls only and no bulk transfer, so a bigger box would just
+    // cost more for nothing. Default LARGE; tunable via haiku:registerComputeType.
+    const registerArmEnvironment: codebuild.BuildEnvironment = {
+      buildImage: codebuild.LinuxArmBuildImage.AMAZON_LINUX_2_STANDARD_3_0,
+      computeType: cfg.registerComputeType as codebuild.ComputeType,
+      privileged: false,
+    };
 
     const commonEnvVars: Record<string, codebuild.BuildEnvironmentVariable> = {
       AWS_DEFAULT_REGION: { value: cfg.region },
@@ -160,7 +173,7 @@ export class HaikuGravitonPipelineStack extends cdk.Stack {
     // ---------------------------------------------------------------------
     const register = new codebuild.PipelineProject(this, 'RegisterImage', {
       projectName: `${cfg.amiNamePrefix}-register`,
-      environment: smallArmEnvironment,
+      environment: registerArmEnvironment,
       timeout: cdk.Duration.hours(2), // import-snapshot conversion dominates.
       environmentVariables: commonEnvVars,
       buildSpec: codebuild.BuildSpec.fromSourceFilename('graviton/pipeline/buildspecs/register-image.yml'),

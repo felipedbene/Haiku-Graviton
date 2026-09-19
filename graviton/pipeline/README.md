@@ -126,6 +126,7 @@ Set in `cdk.json` `context`, or override per-invocation with `-c key=value`
 | `haiku:branch` | `HAIKU_BRANCH` | `graviton` | |
 | `haiku:connectionArn` | `HAIKU_CONNECTION_ARN` | — **required** | CodeConnections GitHub connection ARN. |
 | `haiku:buildComputeType` | `HAIKU_BUILD_COMPUTE` | `BUILD_GENERAL1_2XLARGE` | ~72 vCPU/144 GB arm64, comparable to the `c7g` builder. This is the "instance type" knob for the cross-build. |
+| `haiku:registerComputeType` | `HAIKU_REGISTER_COMPUTE` | `BUILD_GENERAL1_LARGE` | Register's compute type. Register does no real CPU work — it uploads the ~20 GiB raw image and polls `import-snapshot` — so this buys **network baseline**, not compute: the upload was capped at ~1.1 Gbps on SMALL, its container's baseline, and s5cmd's parallel multipart did not help (issue #152). ARM has **no MEDIUM** (SMALL/LARGE/XLARGE/2XLARGE only), so LARGE is the smallest bump. Set back to `BUILD_GENERAL1_SMALL` to trade the ~1–2 min upload saving for the lower rate. |
 | `haiku:buildImage` | `HAIKU_BUILD_IMAGE` | `public.ecr.aws/ubuntu/ubuntu:24.04` | Must be arm64 Ubuntu 24.04 to match the validated bake host. |
 | `haiku:buildtoolsRepo` / `Branch` | | haiku/buildtools | arm64 cross-tools sources. |
 | `haiku:haikuOnEc2Repo` / `Branch` | | felipedbene/haiku-on-ec2 | **vestigial.** Nothing reads these any more (see below); left in place because removing them replaces all four CodeBuild projects. |
@@ -236,7 +237,7 @@ peer per run, so an apparatus failure there does not block manual validation):
 ### What deploying creates
 
 - 1 **CodePipeline** (V2) with 5 stages.
-- 3 **CodeBuild** projects (cross-build 2XLARGE arm64; register + promote SMALL arm64).
+- 4 **CodeBuild** projects (cross-build 2XLARGE arm64; register LARGE arm64 — bandwidth for the raw-image upload, #152; perf-test + promote SMALL arm64).
 - 1 **S3** work bucket (raw image + cross-tools cache; retained on stack delete).
 - 3 **CloudWatch Logs** groups (1-month retention).
 - **IAM** roles for the pipeline + each CodeBuild project (see below) and the

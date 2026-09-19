@@ -47,6 +47,21 @@ export interface HaikuPipelineConfig {
 
   /** CodeBuild compute type for the cross-build (e.g. BUILD_GENERAL1_2XLARGE). */
   readonly buildComputeType: string;
+  /**
+   * CodeBuild compute type for the Register stage (import + register).
+   *
+   * Register does almost no CPU work — it uploads the ~20 GiB raw image to S3
+   * and then polls `import-snapshot` — so this knob buys network bandwidth, not
+   * compute. The upload measured ~130 MiB/s (~1.1 Gbps) on BUILD_GENERAL1_SMALL,
+   * which is that container's network baseline, NOT client serialization:
+   * s5cmd's parallel multipart made no difference (issue #152). A larger compute
+   * type raises the network baseline, so the default is BUILD_GENERAL1_LARGE.
+   * NOTE: the ARM environment supports SMALL / LARGE / XLARGE / 2XLARGE only —
+   * there is no MEDIUM for arm_container, so LARGE is the smallest bump. Set this
+   * back to BUILD_GENERAL1_SMALL to trade the ~1–2 min upload saving for the
+   * lower per-minute rate.
+   */
+  readonly registerComputeType: string;
   /** arm64 Ubuntu 24.04 build image matching the validated bake environment. */
   readonly buildImage: string;
   /**
@@ -226,6 +241,9 @@ export function loadConfig(scope: Construct): HaikuPipelineConfig {
     haikuOnEc2Branch: ctx(scope, 'haiku:haikuOnEc2Branch', 'HAIKU_ON_EC2_BRANCH', 'main'),
 
     buildComputeType: ctx(scope, 'haiku:buildComputeType', 'HAIKU_BUILD_COMPUTE', 'BUILD_GENERAL1_2XLARGE'),
+    // LARGE, not SMALL: Register is bandwidth-bound on the raw-image upload, and
+    // ARM has no MEDIUM (see registerComputeType). #152.
+    registerComputeType: ctx(scope, 'haiku:registerComputeType', 'HAIKU_REGISTER_COMPUTE', 'BUILD_GENERAL1_LARGE'),
     buildImage: ctx(scope, 'haiku:buildImage', 'HAIKU_BUILD_IMAGE', 'public.ecr.aws/ubuntu/ubuntu:24.04'),
     haikuRevision: ctx(scope, 'haiku:haikuRevision', 'HAIKU_REVISION', 'hrev59996'),
 
