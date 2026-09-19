@@ -2202,11 +2202,12 @@ TCPEndpoint::_Receive(tcp_segment_header& segment, net_buffer* buffer)
 			&& fReceiveQueue.IsContiguous()
 			&& _ReceiveFree() >= segmentLength
 			&& (fFlags & FLAG_NO_RECEIVE) == 0) {
-			if (_AddData(segment, buffer))
-				_NotifyReader();
-
-			return KEEP | ((segment.flags & TCP_FLAG_PUSH) != 0
+			int32 action = KEEP | ((segment.flags & TCP_FLAG_PUSH) != 0
 				? IMMEDIATE_ACKNOWLEDGE : ACKNOWLEDGE);
+			if (_AddData(segment, buffer))
+				action |= NOTIFY_READER;
+
+			return action;
 		}
 	}
 
@@ -2478,7 +2479,7 @@ TCPEndpoint::_Receive(tcp_segment_header& segment, net_buffer* buffer)
 	}
 
 	if (notify)
-		_NotifyReader();
+		action |= NOTIFY_READER;
 
 	if (bufferSize > 0 || (segment.flags & TCP_FLAG_SYNCHRONIZE) != 0)
 		action |= ACKNOWLEDGE;
@@ -2544,15 +2545,31 @@ TCPEndpoint::SegmentReceived(tcp_segment_header& segment, net_buffer* buffer)
 		segmentAction &= ~RESET;
 	}
 
-	if ((fFlags & (FLAG_CLOSED | FLAG_DELETE_ON_CLOSE))
-			== (FLAG_CLOSED | FLAG_DELETE_ON_CLOSE)) {
+	// Snapshot, under fLock, everything the deferred work below needs, then
+	// release the lock: the reader wakeup (a condition-variable notify that
+	// schedules the reader thread, plus the select notification) does not
+	// belong in the RX consumer's critical section (#414). No wakeup can be
+	// lost: the reader's availability check and its condition-variable entry
+	// registration both run under fLock (_WaitForCondition), so it either
+	// already sees the data published above or is registered for this notify.
+	const bool notifyReader = (segmentAction & NOTIFY_READER) != 0;
+	const ssize_t availableData = notifyReader ? _AvailableData() : 0;
+	const bool releaseReference = (fFlags & (FLAG_CLOSED | FLAG_DELETE_ON_CLOSE))
+		== (FLAG_CLOSED | FLAG_DELETE_ON_CLOSE);
 
-		locker.Unlock();
-		if (gSocketModule->release_socket(socket))
-			segmentAction |= DELETED_ENDPOINT;
+	locker.Unlock();
+
+	if (notifyReader) {
+		fReceiveCondition.NotifyAll();
+		gSocketModule->notify(socket, B_SELECT_READ, availableData);
 	}
 
-	return segmentAction;
+	// The deferred work above must complete before this release: it may drop
+	// the last reference and free the endpoint.
+	if (releaseReference && gSocketModule->release_socket(socket))
+		segmentAction |= DELETED_ENDPOINT;
+
+	return segmentAction & ~NOTIFY_READER;
 }
 
 

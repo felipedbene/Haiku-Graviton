@@ -287,6 +287,10 @@ enum tcp_segment_action {
 	IMMEDIATE_ACKNOWLEDGE	= (1 << 3),
 	SEND_QUEUED				= (1 << 4),
 	DELETED_ENDPOINT		= (1 << 5),
+	NOTIFY_READER			= (1 << 6),
+		// internal to TCPEndpoint: the *Receive() methods request the reader
+		// wakeup here and SegmentReceived() performs it with fLock released
+		// (#414); stripped before the action is returned to tcp_receive_data()
 };
 
 
