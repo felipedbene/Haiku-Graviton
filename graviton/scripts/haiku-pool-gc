@@ -24,15 +24,35 @@
 #   haiku-pool-gc --s3 s3://BUCKET/PREFIX/arm64/packages   # live pool (sizes too)
 #   haiku-pool-gc --dir /path/to/pool
 #   haiku-pool-gc --list-file names.txt                    # one filename per line
+#   [--repo s3://.../arm64/repo | PATH]  # also do closure GC over the index
+#   [--roots FILE]                       # closure roots (names); default=leaves
 #   [--apply]   # PRINT the delete plan only; refuses unless --i-am-a-human given
 #
 # --apply is intentionally inert: it prints the exact `aws s3 rm` commands for a
 # human to run and exits non-zero, so no automated caller can delete the pool.
 # No account-scoped names are baked in.
+#
+# Closure GC (issue #42, residual): with --repo <the published `repo` index>,
+# the tool also reads every package's provides/requires (straight out of the
+# HPKR index via hpkg_meta -- no Haiku host needed) and reports:
+#   * leaf packages       -- nothing in the pool depends on them (the natural
+#                            top-level installables / roots);
+#   * unreachable orphans -- packages reachable from NO root. Roots default to
+#                            the leaf set (so a well-formed repo reports 0); pass
+#                            --roots FILE (one package name per line, e.g. a lean
+#                            image's want-set) to compute the orphans relative to
+#                            what the project actually ships;
+#   * dangling requires   -- a `requires` token nothing in the pool provides, so
+#                            the package can't resolve/install (repo-health).
+# Closure candidates are reported the same DRY-RUN way; the same inert --apply
+# gate governs any deletion.
 
 import argparse
 import os
 import sys
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import hpkg_meta  # noqa: E402  (co-located; reads HPKG/HPKR without a Haiku host)
 
 
 def parse_name(fname):
@@ -135,12 +155,113 @@ def collect_listfile(path):
     return out, path
 
 
+def _res_token(s):
+    """Bare resolvable name from a resolvable string: strip any version operator.
+    'lib:libz>=1.2' / 'lib:libz = 1.2' -> 'lib:libz'. The HPKR index stores the
+    operator as a child attribute, so values are usually already bare -- this is
+    belt-and-suspenders for the odd inline form."""
+    import re
+    return re.split(r"\s*(?:[<>=!]=?|=)\s*|\s+", s.strip(), 1)[0].strip()
+
+
+def load_repo(repo_src):
+    """Return the list of package dicts from an HPKR `repo` index (s3:// or path)."""
+    if repo_src.startswith("s3://"):
+        import boto3
+        bucket, _, key = repo_src[5:].partition("/")
+        raw = boto3.client("s3").get_object(Bucket=bucket, Key=key)["Body"].read()
+        return hpkg_meta.read_repo(raw)
+    return hpkg_meta.read_repo_file(repo_src)
+
+
+def closure_analysis(pkgs, sizes_by_name, roots):
+    """Compute leaves, unreachable orphans, and dangling requires over the graph.
+
+    pkgs            list of package dicts (name, provides[], requires[]).
+    sizes_by_name   name -> size (bytes) or None, from the actual pool listing.
+    roots           set of root package names, or None to default to the leaves.
+
+    Returns dict with: leaves, orphans (list of (name,size)), reclaimable bytes,
+    dangling (token -> sorted requiring names), and the roots actually used.
+    """
+    by_name = {p["name"]: p for p in pkgs}
+
+    # provide_index: resolvable token -> providing package names (name provides
+    # itself). required_by: token -> names that require it.
+    provide_index = {}
+    required_by = {}
+    for p in pkgs:
+        name = p["name"]
+        provide_index.setdefault(name, set()).add(name)
+        for tok in p["provides"]:
+            provide_index.setdefault(_res_token(tok), set()).add(name)
+    for p in pkgs:
+        for tok in p["requires"]:
+            t = _res_token(tok)
+            if t == "haiku" or t.startswith("haiku"):
+                continue  # the OS itself is always present
+            required_by.setdefault(t, set()).add(p["name"])
+
+    # leaf = no OTHER package requires any token this package provides.
+    leaves = []
+    for p in pkgs:
+        provided = {p["name"]} | {_res_token(t) for t in p["provides"]}
+        depended = False
+        for tok in provided:
+            if required_by.get(tok, set()) - {p["name"]}:
+                depended = True
+                break
+        if not depended:
+            leaves.append(p["name"])
+    leaves.sort()
+
+    # dangling: a required token nothing in the pool provides (can't resolve).
+    dangling = {}
+    for tok, reqs in required_by.items():
+        if tok not in provide_index:
+            dangling[tok] = sorted(reqs)
+
+    # forward closure from roots (default: the leaf set = the natural roots).
+    use_roots = set(roots) if roots else set(leaves)
+    closure = set()
+    frontier = [r for r in use_roots if r in by_name]
+    while frontier:
+        name = frontier.pop()
+        if name in closure:
+            continue
+        closure.add(name)
+        for tok in by_name[name]["requires"]:
+            t = _res_token(tok)
+            if t == "haiku" or t.startswith("haiku"):
+                continue
+            for prov in provide_index.get(t, ()):  # pull every provider in
+                if prov not in closure:
+                    frontier.append(prov)
+
+    orphans = sorted(n for n in by_name if n not in closure)
+    orphan_rows = [(n, sizes_by_name.get(n)) for n in orphans]
+    reclaimable = sum(s for _, s in orphan_rows if s)
+    return {
+        "leaves": leaves,
+        "orphans": orphan_rows,
+        "reclaimable": reclaimable,
+        "dangling": dangling,
+        "roots_used": sorted(use_roots),
+        "roots_defaulted": not roots,
+        "total": len(pkgs),
+    }
+
+
 def main():
     ap = argparse.ArgumentParser(description="identify superseded pooled hpkgs (#42)")
     src = ap.add_mutually_exclusive_group(required=True)
     src.add_argument("--s3")
     src.add_argument("--dir")
     src.add_argument("--list-file")
+    ap.add_argument("--repo",
+                    help="HPKR `repo` index (s3://... or path) for closure GC")
+    ap.add_argument("--roots",
+                    help="file of closure root package names (default: leaves)")
     ap.add_argument("--apply", action="store_true",
                     help="print the delete plan (inert; never deletes)")
     ap.add_argument("--i-am-a-human", action="store_true")
@@ -222,6 +343,56 @@ def main():
         for f in unparsed[:20]:
             print("  %s" % f)
 
+    # ---- closure GC (opt-in, needs the repo index for the dep graph) -------
+    closure_orphan_files = []   # canonical filenames of unreachable orphans
+    if args.repo:
+        # map package name -> (filename, size) from the pool listing
+        name_to_file = {}
+        sizes_by_name = {}
+        for fname, size in files.items():
+            p = parse_name(fname)
+            if p is None:
+                continue
+            name_to_file[p[0]] = fname
+            sizes_by_name[p[0]] = size
+        roots = None
+        if args.roots:
+            with open(args.roots) as fh:
+                roots = [ln.strip() for ln in fh
+                         if ln.strip() and not ln.startswith("#")]
+        pkgs = load_repo(args.repo)
+        ca = closure_analysis(pkgs, sizes_by_name, roots)
+
+        print()
+        print("=== pool GC (closure) ===")
+        print("index packages:        %d" % ca["total"])
+        print("leaf packages:         %d (nothing depends on them)"
+              % len(ca["leaves"]))
+        print("roots:                 %s"
+              % ("leaves (default)" if ca["roots_defaulted"]
+                 else "%d from --roots" % len(ca["roots_used"])))
+        print("unreachable orphans:   %d" % len(ca["orphans"]))
+        print("dangling requires:     %d (token nothing in the pool provides)"
+              % len(ca["dangling"]))
+        if ca["reclaimable"]:
+            print("orphan reclaimable:    %d bytes (%.1f MiB)"
+                  % (ca["reclaimable"], ca["reclaimable"] / 1048576.0))
+        if ca["orphans"]:
+            print()
+            print("--- unreachable orphans (DELETE candidate) ---")
+            for name, size in ca["orphans"]:
+                fn = name_to_file.get(name, name + " (no pool file)")
+                if name in name_to_file:
+                    closure_orphan_files.append(name_to_file[name])
+                sz = ("%d" % size) if size else "?"
+                print("  %-46s %12s" % (fn, sz))
+        if ca["dangling"]:
+            print()
+            print("--- dangling requires (repo-health; NOT auto-GC) ---")
+            for tok, reqs in sorted(ca["dangling"].items()):
+                shown = ", ".join(reqs[:4]) + ("  ..." if len(reqs) > 4 else "")
+                print("  %-32s needed by: %s" % (tok, shown))
+
     if args.apply:
         print()
         if not (args.s3 and args.i_am_a_human):
@@ -230,6 +401,8 @@ def main():
         print("# delete plan (run by a human, single-flight, after re-review):")
         base = args.s3.rstrip("/") if args.s3 else "s3://<bucket>/<prefix>"
         for fname, _size, _kept in supersede:
+            print("aws s3 rm %s/%s" % (base, fname))
+        for fname in closure_orphan_files:
             print("aws s3 rm %s/%s" % (base, fname))
         # non-zero so an automated caller can't treat --apply as 'done'
         sys.exit(3)

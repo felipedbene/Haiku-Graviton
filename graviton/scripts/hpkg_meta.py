@@ -24,6 +24,8 @@ import zlib
 
 HEADER_SIZE_MIN = 80
 B_HPKG_MAGIC = b"hpkg"
+B_HPKG_REPO_MAGIC = b"hpkr"
+REPO_HEADER_SIZE = 72
 
 # package-attributes section string-typed IDs we care about (PackageAttributes.h)
 _ID_NAME = 15
@@ -34,6 +36,16 @@ _ID_VERSION_MINOR = 23
 _ID_VERSION_MICRO = 24
 _ID_VERSION_REVISION = 25  # UINT
 _ID_VERSION_PRE_RELEASE = 36
+_ID_ARCHITECTURE = 21
+_ID_PROVIDES = 28       # a resolvable this package offers (name/cmd:/lib:/...)
+_ID_REQUIRES = 29       # a resolvable this package needs
+_ID_PACKAGE = 54        # HPKR top-level: one package; children are its attrs
+
+# B_PACKAGE_ARCHITECTURE_* (headers/os/package/PackageArchitecture.h)
+_ARCH_NAMES = {
+    0: "any", 1: "x86", 2: "x86_gcc2", 3: "source", 4: "x86_64",
+    5: "ppc", 6: "arm", 7: "m68k", 8: "sparc", 9: "arm64", 10: "riscv64",
+}
 
 _WANT = {
     _ID_NAME: "name",
@@ -222,6 +234,165 @@ def read_meta(raw):
 def read_meta_file(path):
     with open(path, "rb") as f:
         return read_meta(f.read())
+
+
+# --------------------------------------------------------------------------
+# Dependency-graph reader (issue #42, closure GC).
+#
+# The supersede side of #42 needs only name/version (above). Closure GC needs
+# every package's `provides`/`requires`, i.e. the whole dependency graph. The
+# authoritative source for the *whole pool at once* is the published `repo`
+# index -- a single HPKR file that carries the package-attributes of every
+# package in the repository (docs/develop/packages/FileFormat.rst, "Haiku
+# Package Repository Format"). Parsing it once (one small download) is far
+# cheaper than a ranged read of all ~2400 hpkgs, and it is exactly the set the
+# repo advertises to pkgman.
+#
+# These functions preserve nesting (unlike read_meta's flat _parse_attribute_list,
+# which is kept untouched for the proven #41 packager-audit path) so a package's
+# provides/requires resolvable lists can be collected without clobbering.
+
+def _read_value(attr, off, dtype, encoding, strings):
+    """Decode one attribute value; return (value, new_off). RAW yields None."""
+    if dtype in (1, 2):  # INT / UINT
+        length = {0: 1, 1: 2, 2: 4, 3: 8}[encoding]
+        return int.from_bytes(attr[off:off + length], "big"), off + length
+    if dtype == 3:  # STRING
+        if encoding == 0:  # inline null-terminated
+            end = attr.index(b"\x00", off)
+            return attr[off:end].decode("utf-8", "replace"), end + 1
+        idx, off = _leb128(attr, off)  # index into strings table
+        return (strings[idx] if idx < len(strings) else None), off
+    if dtype == 4:  # RAW (never needed here; skip its payload)
+        size, off = _leb128(attr, off)
+        if encoding == 0:  # inline
+            return None, off + size
+        _heap_off, off = _leb128(attr, off)  # heap ref: size + offset
+        return None, off
+    raise HpkgError("bad attribute data type %d" % dtype)
+
+
+def _walk_tree(attr, off, strings):
+    """Parse a 0-terminated attribute list, preserving structure.
+    Returns (nodes, new_off) where each node is (aid, value, child_nodes)."""
+    nodes = []
+    while True:
+        tag, off = _leb128(attr, off)
+        if tag == 0:
+            return nodes, off
+        t = tag - 1
+        aid = t & 0x7F
+        dtype = (t >> 7) & 0x7
+        has_children = (t >> 10) & 1
+        encoding = (t >> 11) & 0x3
+        value, off = _read_value(attr, off, dtype, encoding, strings)
+        children = []
+        if has_children:
+            children, off = _walk_tree(attr, off, strings)
+        nodes.append((aid, value, children))
+
+
+def _flatten(nodes):
+    for aid, value, children in nodes:
+        yield aid, value
+        yield from _flatten(children)
+
+
+def _pkg_from_nodes(nodes):
+    """Build a package dict from the attribute nodes of ONE package (the
+    top-level list of an hpkg, or the children of an HPKR PACKAGE entry)."""
+    out = {"name": None, "vendor": None, "packager": None, "arch": None,
+           "version": None, "revision": None, "provides": [], "requires": []}
+    ver = {}
+    for aid, value, children in nodes:
+        if aid == _ID_NAME and out["name"] is None:
+            out["name"] = value
+        elif aid == _ID_VENDOR:
+            out["vendor"] = value
+        elif aid == _ID_PACKAGER:
+            out["packager"] = value
+        elif aid == _ID_ARCHITECTURE:
+            out["arch"] = _ARCH_NAMES.get(value, str(value))
+        elif aid == _ID_VERSION_MAJOR:
+            # minor/micro/revision/prerelease nest under major; flatten them all.
+            ver.setdefault("major", value)
+            for caid, cval in _flatten(children):
+                if caid == _ID_VERSION_MINOR:
+                    ver.setdefault("minor", cval)
+                elif caid == _ID_VERSION_MICRO:
+                    ver.setdefault("micro", cval)
+                elif caid == _ID_VERSION_REVISION:
+                    ver.setdefault("revision", cval)
+                elif caid == _ID_VERSION_PRE_RELEASE:
+                    ver.setdefault("pre", cval)
+        elif aid == _ID_PROVIDES and value is not None:
+            out["provides"].append(value)
+        elif aid == _ID_REQUIRES and value is not None:
+            out["requires"].append(value)
+    parts = [ver.get("major")]
+    for k in ("minor", "micro"):
+        if ver.get(k):
+            parts.append(ver[k])
+    v = ".".join(p for p in parts if p)
+    if ver.get("pre"):
+        v += "~" + ver["pre"]
+    out["version"] = v or None
+    out["revision"] = ver.get("revision")
+    return out
+
+
+def parse_repo_header(raw):
+    if len(raw) < REPO_HEADER_SIZE or raw[:4] != B_HPKG_REPO_MAGIC:
+        raise HpkgError("not an hpkr repo index (bad magic)")
+    hdr = {}
+    hdr["header_size"] = struct.unpack(">H", raw[4:6])[0]
+    hdr["version"] = struct.unpack(">H", raw[6:8])[0]
+    hdr["total_size"] = struct.unpack(">Q", raw[8:16])[0]
+    hdr["minor_version"] = struct.unpack(">H", raw[16:18])[0]
+    hdr["heap_compression"] = struct.unpack(">H", raw[18:20])[0]
+    hdr["heap_chunk_size"] = struct.unpack(">I", raw[20:24])[0]
+    hdr["heap_size_compressed"] = struct.unpack(">Q", raw[24:32])[0]
+    hdr["heap_size_uncompressed"] = struct.unpack(">Q", raw[32:40])[0]
+    hdr["info_length"] = struct.unpack(">I", raw[40:44])[0]
+    # bytes 44:48 = reserved1
+    hdr["packages_length"] = struct.unpack(">Q", raw[48:56])[0]
+    hdr["packages_strings_length"] = struct.unpack(">Q", raw[56:64])[0]
+    hdr["packages_strings_count"] = struct.unpack(">Q", raw[64:72])[0]
+    return hdr
+
+
+def read_repo(raw):
+    """Parse a whole HPKR `repo` index. Returns a list of package dicts, each
+    {name, version, revision, arch, vendor, packager, provides[], requires[]}."""
+    hdr = parse_repo_header(raw)
+    heap_u = hdr["heap_size_uncompressed"]
+    plen = hdr["packages_length"]
+    pstr_len = hdr["packages_strings_length"]
+    seg, base = _decompress_uncompressed_range(raw, hdr, heap_u - plen, heap_u)
+    attr = seg[(heap_u - plen) - base: heap_u - base]
+
+    strings = []
+    o = 0
+    while o < pstr_len and attr[o] != 0:
+        end = attr.index(b"\x00", o)
+        strings.append(attr[o:end].decode("utf-8", "replace"))
+        o = end + 1
+
+    nodes, _ = _walk_tree(attr, pstr_len, strings)
+    pkgs = []
+    for aid, value, children in nodes:
+        if aid != _ID_PACKAGE:
+            continue
+        p = _pkg_from_nodes(children)
+        if not p["name"]:
+            p["name"] = value  # PACKAGE attribute value is the package name
+        pkgs.append(p)
+    return pkgs
+
+
+def read_repo_file(path):
+    with open(path, "rb") as f:
+        return read_repo(f.read())
 
 
 def read_meta_via_ranges(get_bytes):
