@@ -1,0 +1,37 @@
+# DeBeOS #93 — uucore 0.12.0 Haiku portability: fs::major/minor/makedev
+#
+# uucore/fs re-exports `pub use libc::{major, makedev, minor}` only for
+# cfg(all(unix, not(target_os = "haiku"))) — it already knew libc defines none
+# of them for Haiku (dev_t there is a 32-bit mount id, not a major/minor pair) —
+# but it provided no Haiku replacement, so uucore::fs::{major,minor} are
+# undefined on Haiku. uu_stat imports them (`use uucore::fs::{..., major, minor}`)
+# for its device-number output and fails to build. uucore itself compiles
+# because nothing on its Haiku path calls them; the break is in the consumer.
+#
+# Fix: add Haiku shims (major = whole id, minor = 0, makedev = major).
+# Applied with `patch -p1`.
+--- a/src/lib/features/fs.rs
++++ b/src/lib/features/fs.rs
+@@ -9,6 +9,22 @@
+ 
+ #[cfg(all(unix, not(target_os = "haiku")))]
+ pub use libc::{major, makedev, minor};
++// Haiku's libc binding provides no major()/minor()/makedev(): its dev_t is a
++// 32-bit mount id, not a Linux-style major/minor pair. Provide shims so callers
++// (e.g. uu_stat's device-number output) build; there is no meaningful rdev
++// split on Haiku, so major is the whole id and minor is 0.
++#[cfg(target_os = "haiku")]
++pub fn major(dev: libc::dev_t) -> libc::dev_t {
++    dev
++}
++#[cfg(target_os = "haiku")]
++pub fn minor(_dev: libc::dev_t) -> libc::dev_t {
++    0
++}
++#[cfg(target_os = "haiku")]
++pub fn makedev(major: libc::dev_t, _minor: libc::dev_t) -> libc::dev_t {
++    major
++}
+ use std::collections::HashSet;
+ use std::collections::VecDeque;
+ use std::env;

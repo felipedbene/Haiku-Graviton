@@ -1,0 +1,57 @@
+# DeBeOS #93 — uucore 0.12.0 Haiku portability: signals gate + ALL_SIGNALS
+#
+# The signals module is gated by an explicit OS list (in TWO places) that omits
+# Haiku, even though Haiku has full POSIX signals (via nix):
+#   * the module declaration `pub mod signals;`      (src/lib/features.rs)
+#   * the re-export `pub use crate::features::signals;` (src/lib/lib.rs)
+# Any applet importing uucore::signals (SIGPIPE/SIGINT handling) then fails with
+# E0432/E0433. In the target set that is dd, seq, split, tail, tee and tty.
+#
+# The signals module references a per-OS ALL_SIGNALS table unconditionally
+# (signal_by_name_or_value / is_signal / signal_name_by_value), so gating Haiku
+# into the module also requires a Haiku ALL_SIGNALS. The table is indexed by
+# signal number with index 0 = "EXIT"; Haiku's numbering is SIGHUP=1 ..
+# SIGRESERVED2=32 (see the DeBeOS headers/posix/signal.h), including the
+# Haiku-specific SIGKILLTHR=21 — 33 entries.
+#
+# Fix: add target_os = "haiku" to BOTH signals gates and add a Haiku ALL_SIGNALS
+# arm (src/lib/features/signals.rs). Applied with `patch -p1`.
+--- a/src/lib/features.rs
++++ b/src/lib/features.rs
+@@ -110,6 +110,7 @@
+         target_os = "android",
+         target_os = "cygwin",
+         target_os = "freebsd",
++        target_os = "haiku",
+         target_os = "hurd",
+         target_os = "illumos",
+         target_os = "linux",
+--- a/src/lib/lib.rs
++++ b/src/lib/lib.rs
+@@ -119,6 +119,7 @@
+         target_os = "android",
+         target_os = "cygwin",
+         target_os = "freebsd",
++        target_os = "haiku",
+         target_os = "hurd",
+         target_os = "illumos",
+         target_os = "linux",
+--- a/src/lib/features/signals.rs
++++ b/src/lib/features/signals.rs
+@@ -439,6 +439,16 @@
+     "XCPU", "XFSZ", "VTALRM", "PROF", "WINCH", "PWR", "USR1", "USR2",
+ ];
+ 
++// Haiku signal numbers (see <signal.h>): the array is indexed by signal number,
++// with index 0 reserved for "EXIT". SIGHUP=1 .. SIGRESERVED2=32, so 33 entries.
++// Note SIGKILLTHR (21) is Haiku-specific ("kill just the thread, not the team").
++#[cfg(target_os = "haiku")]
++pub static ALL_SIGNALS: [&str; 33] = [
++    "EXIT", "HUP", "INT", "QUIT", "ILL", "CHLD", "ABRT", "PIPE", "FPE", "KILL", "STOP", "SEGV",
++    "CONT", "TSTP", "ALRM", "TERM", "TTIN", "TTOU", "USR1", "USR2", "WINCH", "KILLTHR", "TRAP",
++    "POLL", "PROF", "SYS", "URG", "VTALRM", "XCPU", "XFSZ", "BUS", "RESERVED1", "RESERVED2",
++];
++
+ // Windows has no POSIX signals, but utilities that emulate signal delivery
+ // (e.g. `timeout`) accept the POSIX names/numbers so cross-platform scripts
+ // keep working. The Linux layout is used so that synthesized `128 + n` exit

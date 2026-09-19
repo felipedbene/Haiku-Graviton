@@ -1,0 +1,34 @@
+# DeBeOS #93 — uucore 0.12.0 Haiku portability: i18n/datetime ABMON gap
+#
+# The abbreviated-month-name path calls libc::nl_langinfo(ABMON_1..ABMON_12),
+# but the `libc` crate does not define the `ABMON_*` `nl_item` constants for
+# target_os = "haiku", so uucore fails to compile there. Haiku falls into the
+# `nl_langinfo` arm because it is `unix` and not android/cygwin/redox.
+#
+# Fix: exclude Haiku from the nl_langinfo arm and add it to the existing ICU
+# DateTimeFormatter fallback (pure Rust, no libc constants). Unlocks `date`
+# and `sort` (both pull uucore/i18n-datetime). Applied with `patch -p1`.
+--- a/src/lib/features/i18n/datetime.rs
++++ b/src/lib/features/i18n/datetime.rs
+@@ -169,10 +169,13 @@
+ }
+ 
+ /// Unix implementation using nl_langinfo for exact match with `locale abmon` output.
++// Haiku is excluded: its libc binding does not export the `ABMON_*` `nl_item`
++// constants, so it uses the ICU fallback below (like android/cygwin/redox).
+ #[cfg(all(
+     unix,
+     not(target_os = "android"),
+     not(target_os = "cygwin"),
++    not(target_os = "haiku"),
+     not(target_os = "redox")
+ ))]
+ fn get_locale_months_inner() -> Option<[Vec<u8>; 12]> {
+@@ -230,6 +233,7 @@
+     not(unix),
+     target_os = "android",
+     target_os = "cygwin",
++    target_os = "haiku",
+     target_os = "redox"
+ ))]
+ fn get_locale_months_inner() -> Option<[Vec<u8>; 12]> {
