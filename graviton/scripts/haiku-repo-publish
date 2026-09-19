@@ -279,6 +279,21 @@ do_publish() {
 	[ -f "$ro/repo" ] || die "no built repo at $ro (run 'build' first)"
 	[ -n "${HG_REPO_S3:-}" ] || die "set HG_REPO_S3=s3://<bucket>/<prefix>/$ARCH"
 
+	# ---- publish concurrency lock (#164) ----------------------------------
+	# The S3 upload below (mirror packages/ then overwrite the index) is a
+	# read-modify-write on the same live repo that `haiku-repo-add` also mutates.
+	# Two publishers -- a full-pool republish here racing an incremental add, or
+	# two of these -- clobber each other's index/pool. Hold the same S3-object
+	# advisory lock, keyed off HG_REPO_S3, that haiku-repo-add uses, so all
+	# publish paths mutually exclude on one key. Sourced lazily here (build /
+	# revendor do not set HG_REPO_S3, and the lib requires it at source time).
+	if [ -f "$HERE/haiku-publish-lock.sh" ]; then
+		. "$HERE/haiku-publish-lock.sh"
+		publish_lock_acquire || die "could not acquire the publish lock (rc=$?); another publisher holds $HG_REPO_S3 -- refusing to clobber it"
+	else
+		echo "haiku-repo-publish: WARNING: haiku-publish-lock.sh not found beside this script -- publishing WITHOUT the #164 concurrency lock" >&2
+	fi
+
 	# Upload packages first (immutable), then the index files last, so a client
 	# refreshing mid-publish never sees an index that points at absent packages.
 	local region="${AWS_DEFAULT_REGION:-${AWS_REGION:-us-west-2}}"

@@ -152,17 +152,38 @@ is working by **wall-clock progress** — jam/ninja target count advancing, `.hp
 files appearing in the builder's `packages/` — NOT by CPU%. A "4% CPU" builder is
 almost always busy, not stalled; do not reap or re-launch on a low CPU reading.
 
-**Publishing is single-flight.** `haiku-repo-add` / `haiku-repo-publish-ephemeral`
-rebuild the index over the whole pool and have **no concurrency lock** until issue
-#164 deploys — two concurrent publishes can clobber each other. Before any publish,
-confirm no other publisher is running (`ec2 describe-instances
-Name=tag:Name,Values=haiku-repo-publisher …running,pending`) and wait if one is.
-This applies to **your own concurrent agents too** — designate exactly one
-publisher across a fan-out; two agents publishing to the same pool race and
-strand packages (seen this session).
+**Publishing is single-flight, and now machine-enforced (#164).** `haiku-repo-add`
+and `haiku-repo-publish` rebuild the index over the whole pool — pull the pool,
+add/re-stamp, rebuild the index, mirror back with `--delete` — which is one
+read-modify-write critical section. Two publishers against the same prefix clobber
+each other: the second `s3 sync --delete` mirrors its stale pool view over the
+first's, stranding the packages the first added. As of #164 an **S3-object advisory
+lock** guards that section: `graviton/scripts/haiku-publish-lock.sh` (sourced by
+`haiku-repo-add` and `haiku-repo-publish`, and shipped to the box by the `-native`
+/ `-ephemeral` wrappers) takes a lock object at `${HG_REPO_S3%/}/.publish.lock`
+before step 1 and releases it after the index upload. A second publisher **waits**
+(default) or, with `HG_LOCK_MODE=abort`, exits non-zero — it never enters the
+section. The lock is uniform across back ends (built from `s3 cp`/`s3 rm`, which
+both the stock `aws` CLI and the native `debeos-aws` speak) and is crash-safe: a
+live holder heartbeats the lock's epoch, and a crashed holder's lock goes stale
+after `HG_LOCK_TTL` (default 300s) and is stolen by the next publisher.
 
-Publish once per wave (or in serialized batches), never per-package. Practical
-limits until #164/#168 land:
+**Publisher mid-flight check (§3).** Before any publish, still confirm no other
+publisher is running: check `ec2 describe-instances
+Name=tag:Name,Values=haiku-repo-publisher …running,pending`, **and** the lock
+object itself — `aws s3 cp ${HG_REPO_S3%/}/.publish.lock -` shows the `holder`,
+`host`, `pid`, and `iso` of the current owner (absent = free). The lock now makes
+this safe by construction — a racing publisher blocks rather than clobbers — but
+the check tells you *whether to expect a wait* and surfaces a wedged holder. This
+applies to **your own concurrent agents too**: designate one publisher across a
+fan-out; the others will now serialize on the lock instead of stranding packages
+(the failure seen before #164). Tunables: `HG_LOCK_TTL`, `HG_LOCK_WAIT` (default
+3600s), `HG_LOCK_MODE` (`wait`|`abort`), `HG_LOCK_DISABLE=1` (escape hatch — unsafe
+if another publisher runs).
+
+Publish once per wave (or in serialized batches), never per-package. Concurrency
+is now handled by the #164 lock above; the remaining practical limits (until #168
+lands) are the publisher's `/dev/shm` and disk sizing:
 - **Chunk to ≤18 packages per `haiku-repo-add` invocation.** The `package`
   re-stamp accumulates in the publisher's `/dev/shm` tmpfs (~1.9 GB) and dies at
   ~26 packages *regardless of EBS size* (#168) — not a disk problem. ≤18 clears it.
