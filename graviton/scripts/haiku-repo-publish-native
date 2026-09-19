@@ -66,6 +66,7 @@ for f in "$@"; do [ -f "$f" ] || die "no such file: $f"; done
 [ -x "$SSM_RUN" ] || die "ssm-run not found next to this script"
 [ -f "$HERE/haiku-repo-add" ] || die "haiku-repo-add not found next to this script"
 [ -f "$HERE/haiku-aws" ] || die "haiku-aws not found next to this script"
+[ -f "$HERE/haiku-publish-lock.sh" ] || die "haiku-publish-lock.sh not found next to this script (#164 concurrency lock)"
 
 PUBLISHER="$HG_PUBLISHER_INSTANCE"
 PKG_TOOL="${HG_PKG_TOOL:-package}"
@@ -123,8 +124,9 @@ done
 # PATH; debeos-aws authenticates via the instance role over IMDS. PKG_TOOL /
 # PACKAGE_REPO_TOOL point at the native Haiku host tools.
 log "running haiku-repo-add natively on $PUBLISHER over SSM"
-addb64=$(base64 -w0 "$HERE/haiku-repo-add" 2>/dev/null || base64 "$HERE/haiku-repo-add" | tr -d '\n')
-awsb64=$(base64 -w0 "$HERE/haiku-aws"      2>/dev/null || base64 "$HERE/haiku-aws"      | tr -d '\n')
+addb64=$(base64 -w0 "$HERE/haiku-repo-add"          2>/dev/null || base64 "$HERE/haiku-repo-add"          | tr -d '\n')
+awsb64=$(base64 -w0 "$HERE/haiku-aws"               2>/dev/null || base64 "$HERE/haiku-aws"               | tr -d '\n')
+lockb64=$(base64 -w0 "$HERE/haiku-publish-lock.sh"  2>/dev/null || base64 "$HERE/haiku-publish-lock.sh"   | tr -d '\n')
 "$SSM_RUN" "$PUBLISHER" -t "$SSM_TIMEOUT" <<EOF
 set -e
 export HG_REPO_S3='$HG_REPO_S3'
@@ -137,8 +139,10 @@ export PKG_TOOL='$PKG_TOOL'
 export PACKAGE_REPO_TOOL='$PACKAGE_REPO_TOOL'
 export PATH="/boot/home/config/non-packaged/bin:\$PATH"
 workdir=\$(mktemp -d)
-printf '%s' '$addb64' | base64 -d > "\$workdir/haiku-repo-add"
-printf '%s' '$awsb64' | base64 -d > "\$workdir/haiku-aws"
+printf '%s' '$addb64'  | base64 -d > "\$workdir/haiku-repo-add"
+printf '%s' '$awsb64'  | base64 -d > "\$workdir/haiku-aws"
+# The #164 concurrency lock lib MUST sit beside haiku-repo-add so its source finds it.
+printf '%s' '$lockb64' | base64 -d > "\$workdir/haiku-publish-lock.sh"
 chmod +x "\$workdir/haiku-repo-add" "\$workdir/haiku-aws"
 bash "\$workdir/haiku-repo-add"
 rc=\$?

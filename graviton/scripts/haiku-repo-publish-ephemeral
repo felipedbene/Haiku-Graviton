@@ -83,6 +83,7 @@ die() { echo "haiku-repo-publish-ephemeral: $*" >&2; exit 1; }
 for f in "$@"; do [ -f "$f" ] || die "no such file: $f"; done
 [ -x "$SSM_RUN" ] || die "ssm-run not found next to this script"
 [ -f "$HERE/haiku-repo-add" ] || die "haiku-repo-add not found next to this script"
+[ -f "$HERE/haiku-publish-lock.sh" ] || die "haiku-publish-lock.sh not found next to this script (#164 concurrency lock)"
 
 PEER_AMI_PARAM="${HG_PEER_AMI_PARAM:-/aws/service/canonical/ubuntu/server/24.04/stable/current/arm64/hvm/ebs-gp3/ami-id}"
 PROFILE="${HG_PUBLISHER_PROFILE:-}"
@@ -267,7 +268,8 @@ done
 # PACKAGE_REPO_TOOL point at the fetched Linux host tools (haiku-repo-add's
 # auto-detect globs the /opt/haiku cross-build tree, absent on a stock peer).
 log "running haiku-repo-add on the publisher over SSM"
-addb64=$(base64 -w0 "$HERE/haiku-repo-add" 2>/dev/null || base64 "$HERE/haiku-repo-add" | tr -d '\n')
+addb64=$(base64 -w0 "$HERE/haiku-repo-add"         2>/dev/null || base64 "$HERE/haiku-repo-add"        | tr -d '\n')
+lockb64=$(base64 -w0 "$HERE/haiku-publish-lock.sh" 2>/dev/null || base64 "$HERE/haiku-publish-lock.sh" | tr -d '\n')
 "$SSM_RUN" "$PUBLISHER" -t 2400 <<EOF
 set -e
 export HG_REPO_S3='$HG_REPO_S3'
@@ -280,7 +282,9 @@ export PKG_TOOL=/opt/haiku-tools/package
 export PACKAGE_REPO_TOOL=/opt/haiku-tools/package_repo
 export LD_LIBRARY_PATH=/opt/haiku-tools/lib
 export HAIKU_BUILD_SYSTEM_DATA_DIRECTORY=/opt/haiku-tools/data
-printf '%s' '$addb64' | base64 -d > /tmp/haiku-repo-add
+printf '%s' '$addb64'  | base64 -d > /tmp/haiku-repo-add
+# The #164 concurrency lock lib MUST sit beside haiku-repo-add so its source finds it.
+printf '%s' '$lockb64' | base64 -d > /tmp/haiku-publish-lock.sh
 bash /tmp/haiku-repo-add
 EOF
 

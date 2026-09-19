@@ -88,6 +88,25 @@ WORK="$(mktemp -d)"; RO="$WORK/repo-out"
 trap 'rm -rf "$WORK"' EXIT
 mkdir -p "$RO/packages" "$WORK/incoming"
 
+# ---- publish concurrency lock (#164) --------------------------------------
+# Everything from "pull the current pool" (step 1) through the index upload
+# (step 5) is one read-modify-write critical section on the live repo. Two of
+# these running against the same prefix clobber each other: the second
+# `s3 sync --delete` mirrors its stale pool view over the first's, stranding the
+# packages the first just added. Hold an S3-object advisory lock beside the repo
+# for the whole section so a second publisher waits (or aborts) instead. The lock
+# lib installs its own EXIT trap; fold the WORK cleanup back into a combined trap
+# so both run on exit. Sourced from beside this script; it uses the same ${AWS[@]}
+# client, so it works on a Haiku box (debeos-aws) and a Linux builder (aws) alike.
+HERE_LOCK="$(cd "$(dirname "$0")" 2>/dev/null && pwd || echo .)"
+if [ -f "$HERE_LOCK/haiku-publish-lock.sh" ]; then
+	. "$HERE_LOCK/haiku-publish-lock.sh"
+	publish_lock_acquire || die "could not acquire the publish lock (rc=$?); another publisher holds $HG_REPO_S3 -- refusing to clobber it"
+	trap 'publish_lock_release; rm -rf "$WORK"' EXIT
+else
+	echo "haiku-repo-add: WARNING: haiku-publish-lock.sh not found beside this script -- publishing WITHOUT the #164 concurrency lock" >&2
+fi
+
 echo "== 1. pull current repo packages from $HG_REPO_S3/packages/ =="
 "${AWS[@]}" s3 sync "${HG_REPO_S3%/}/packages/" "$RO/packages/" --region "$region" --only-show-errors
 before="$(ls -1 "$RO/packages" 2>/dev/null | wc -l)"
