@@ -209,17 +209,66 @@ cost, and whether the corruption window is reachable on the specific virtualised
 block paths we run, **needs a crash-injection A/B on hardware before this can
 merge** (see below). The change builds; it is not yet proven.
 
-### Gap 2 — replay has no integrity check over the log body
+### Gap 2 — replay has no integrity check over the log body (FIXED here)
 
-Independent of Gap 1, the log format carries no per-entry checksum or monotonic
-sequence number. This is why Gap 1 is *silent* rather than *detected*. A robust
-fix (larger, out of scope for the first step) would add a CRC and a sequence/
-generation number to the run-array header written at commit time, and have
-`_CheckRunArray()` reject an entry whose CRC or sequence does not match — turning
-a torn or stale commit into a detected "stop replay here" instead of applied
-corruption. This is an **on-disk format change** (or a use of currently-reserved
-header fields) and must be backward-compatible with existing volumes; it is
-noted here as the natural follow-up, not attempted now.
+Independent of Gap 1, the log format historically carried no per-entry checksum
+or monotonic sequence number. This is why Gap 1 was *silent* rather than
+*detected*: replay could walk a torn or stale run array, pass the geometry-only
+`_CheckRunArray()`, and apply it.
+
+**Fix implemented in this change** — a backward-compatible on-disk format
+addition:
+
+- **Superblock feature gate.** A new `disk_super_block::journal_format_flags`
+  field (carved from the former `_reserved[6]`, so the struct size is unchanged)
+  carries `BFS_JOURNAL_FORMAT_CHECKSUM`. `Initialize()` sets it on freshly
+  formatted volumes; every existing/stock volume has it zero (the superblock is
+  memset at format time) and therefore takes the **unchanged legacy replay
+  path**. That zero is the backward-compatibility gate: an old-format volume
+  mounts exactly as before, and — because the trailer lives in bytes the log
+  never otherwise uses (see below) — a new-format volume is even replayable by
+  old BFS code.
+- **Per-entry trailer.** Each `run_array` index block gets an 8-byte trailer in
+  its last 8 bytes: a 32-bit commit **sequence** and a 32-bit **CRC32** over the
+  index block (checksum field taken as zero) plus every data block of the entry.
+  Those 8 bytes are always free — BFS fills at most `MaxRuns()-1 == 126` runs,
+  while even the smallest 1024-byte block has room for 127 physical run slots, so
+  the last slot is never a run. Verified in the A/B at both 2048- and 1024-byte
+  block sizes.
+- **Per-transaction sequence.** A BFS transaction is committed atomically (one
+  `log_end` advance) but may span several run_arrays. All run_arrays of one
+  transaction share one sequence; the counter (`disk_super_block::
+  log_commit_sequence`, also from the former reserved area) advances once per
+  transaction and is persisted in the same superblock write that commits
+  `log_end`. This lets replay find transaction boundaries and discard a torn
+  tail back to one — never half-applying a transaction.
+- **Replay.** Before touching a home block, `ReplayLog()` calls
+  `_ValidateLogTail()`, which verifies every entry's geometry, checksum, and
+  per-transaction sequence continuity. All valid → replay everything (historical
+  behaviour). A torn/incomplete tail with no committed transaction after it →
+  truncate `log_end` back to the torn transaction's start, replay the good
+  prefix, mount clean. A bad entry with a strictly-later committed transaction
+  still after it → real corruption (a hole): fail the mount, exactly as today.
+  The sequence rejects a stale-but-internally-valid run array left in a log slot
+  from an earlier wrap (its sequence is old); the CRC rejects a torn/half-written
+  body.
+
+Because a checksum match is a ~2^-32 event on random data, treating a mismatch
+as "this entry did not land" and a match plus sequence continuity as "this entry
+is intact" is safe. This turns Gap 1's *silent* corruption window into a
+*detected* "stop replay here", and closes the guaranteed torn commit of Gap 4 the
+same way. The change is gated entirely behind the superblock feature bit, so it
+cannot affect any existing volume.
+
+Verified with a `bfs_shell` torn-tail A/B (host build): a dirty log is produced
+with a real commit + `_exit()` crash-injection hook, then on-disk surgery
+simulates a torn tail / a torn last transaction / mid-log corruption. Results:
+the legacy path fails the mount (or silently mis-applies a zeroed body — a
+`checkfs` error) on a torn tail; the new path discards the torn tail and mounts
+`checkfs`-clean; a two-transaction log keeps the committed transaction and drops
+only the torn one; and mid-log corruption with a valid transaction after it still
+fails the mount. An on-Graviton kernel A/B (with a bake) is still owed, as for
+Gaps 1/4.
 
 ### Gap 3 — abrupt device removal has no forced-flush hook
 

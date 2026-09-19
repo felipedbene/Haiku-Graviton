@@ -84,7 +84,24 @@ struct disk_super_block {
 		// headroom was baked (every legacy/stock volume, since Initialize()
 		// zeroes the whole superblock) -- such a volume can never take the
 		// large-grow path. Occupies the first 8 bytes of the former _reserved[8].
-	int32		_reserved[6];
+	uint32		journal_format_flags;
+		// DeBeOS: BFS journal feature bits (#91 Gap 2). Bit
+		// BFS_JOURNAL_FORMAT_CHECKSUM means every run_array in the log carries a
+		// per-entry sequence number + checksum trailer, so replay can tell a
+		// torn/incomplete tail (safe to discard, redo-log semantics) from real
+		// media corruption. Zero on every legacy/stock volume (Initialize()
+		// zeroes the whole superblock), which selects the unchanged legacy
+		// replay path -- this is the backward-compatibility gate. Occupies the
+		// next 4 bytes of the former _reserved[6].
+	uint32		_reserved_jf;
+		// padding so log_commit_sequence lands 8-byte aligned; future journal
+		// header fields go here.
+	uint64		log_commit_sequence;
+		// DeBeOS: the next monotonic sequence number to hand to a log entry.
+		// Persisted in the same superblock write that advances log_end (the
+		// commit record), so it is a durable high-water mark for the volume's
+		// lifetime. Only meaningful when BFS_JOURNAL_FORMAT_CHECKSUM is set.
+	int32		_reserved[2];
 	int32		pad_to_block[87];
 		// this also contains parts of the boot block
 
@@ -107,6 +124,10 @@ struct disk_super_block {
 	off_t LogEnd() const { return BFS_ENDIAN_TO_HOST_INT64(log_end); }
 	off_t GrowMaxBlocks() const
 		{ return BFS_ENDIAN_TO_HOST_INT64(grow_max_blocks); }
+	uint32 JournalFormatFlags() const
+		{ return BFS_ENDIAN_TO_HOST_INT32(journal_format_flags); }
+	uint64 LogCommitSequence() const
+		{ return BFS_ENDIAN_TO_HOST_INT64(log_commit_sequence); }
 
 	// implemented in Volume.cpp:
 	bool IsMagicValid() const;
@@ -122,6 +143,10 @@ struct disk_super_block {
 
 #define SUPER_BLOCK_DISK_CLEAN		'CLEN'		/* CLEN */
 #define SUPER_BLOCK_DISK_DIRTY		'DIRT'		/* DIRT */
+
+// DeBeOS: journal_format_flags feature bits (#91 Gap 2).
+#define BFS_JOURNAL_FORMAT_CHECKSUM	0x00000001
+	// each log run_array carries a per-entry sequence+checksum trailer
 
 //**************************************
 
