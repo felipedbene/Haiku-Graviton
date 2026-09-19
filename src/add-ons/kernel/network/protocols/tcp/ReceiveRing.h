@@ -23,10 +23,15 @@
 	    ever entered while holding the endpoint fLock. Every path that feeds the
 	    ring (the RX consumer, and the reader's own _DrainToRing flush of staged
 	    data) holds fLock, so there is a single serialised producer stream.
-	  - The CONSUMER side (Read / Available / Consumed) is only ever entered
-	    while holding the endpoint fReadLock (a separate mutex), so there is a
-	    single serialised consumer stream. fReadLock is NOT fLock, so the reader
-	    does not contend with the producer.
+	  - The CONSUMER side that MUTATES the ring (Read / advancing the head) is
+	    only ever entered while holding the endpoint fReadLock (a separate
+	    mutex), so there is a single serialised consumer stream. fReadLock is NOT
+	    fLock, so the reader does not contend with the producer.
+	  - The read-only byte-counter query Available() is called from BOTH sides:
+	    the consumer (ReadData) and the producer (SegmentReceived's window
+	    accounting, under fLock). It therefore acquire-loads BOTH counters so it
+	    never races on a plain cross-thread read (see Available()). Consumed() and
+	    Produced() are simple getters read only from their owning side.
 	  - Teardown (Drain / destructor) runs single-threaded once both sides are
 	    quiescent (the read syscall holds a socket reference, so the endpoint is
 	    not freed under an in-flight reader).
