@@ -51,8 +51,7 @@ for the build below). Layout (package root maps to `/boot/system`):
 bin/amazon-ssm-agent          bin/ssm-agent-worker     bin/ssm-document-worker
 bin/ssm-session-worker        bin/ssm-session-logger   bin/ssm-cli
 bin/updater                   bin/ssm-setup-cli
-data/launch/amazon_ssm_agent               # launch_daemon service
-data/amazon_ssm_agent/agent-env.sh         # PATH for the shell
+data/launch/amazon_ssm_agent               # launch_daemon service (static PATH)
 data/licenses/Apache-2.0                    # bundled (not a Haiku system license)
 .PackageInfo
 ```
@@ -73,10 +72,20 @@ are root-owned, which the agent's relative-path check requires). No
 ### Launch job (EC2-native + PATH)
 
 `data/launch/amazon_ssm_agent` is a `legacy service` that launches
-`/boot/system/bin/amazon-ssm-agent` with an `env { from_script … }` block that
-sources `agent-env.sh` to put `/boot/system/bin` on PATH. Without the shell dir
-on PATH the (healthy) fork+exec of `ssm-document-worker` reaches `execve` and
-returns "sh not found in $PATH" — the M6 deploy note, now baked into the job.
+`/boot/system/bin/amazon-ssm-agent` with a **static** `env { PATH … }` block that
+puts `/boot/system/bin` on PATH. Without the shell dir on PATH the (healthy)
+fork+exec of `ssm-document-worker` reaches `execve` and returns "sh not found in
+$PATH" — the M6 deploy note, now baked into the job.
+
+PATH is inlined statically rather than sourced from a script. An earlier revision
+used `env { from_script data/amazon_ssm_agent/agent-env.sh }`; launch_daemon
+evaluates a `from_script` source by spawning `sh -c '. <script>; export -p'` and
+reading its output with an unbounded read early in boot (#376), which hangs
+before the network/desktop come up — the job stayed `enabled=true` but
+`launched=false` and the agent never started at boot (it only ran when started by
+hand). The static block sets exactly what the removed `agent-env.sh` exported
+(`PATH=/boot/system/bin:/bin:/boot/system/non-packaged/bin`), so run-time
+behaviour is unchanged and the job now launches on every boot.
 
 ## Building the hpkg
 
@@ -138,12 +147,19 @@ and rebooting, `launch_roster disable` did **not** persist across the reboot, so
 *both* packaged launch jobs ran — `debeos_ssm_agent` (0.4.0) and
 `amazon_ssm_agent` (3.3.0.0). Both then heartbeat the **same** `i-` node
 (last-writer-wins on the reported AgentVersion) and contend for its MDS command
-stream, which **wedges Run Command** (commands sit `Pending`). The cold boot did
-prove the point that matters — the `amazon_ssm_agent` package activated and its
-launch job brought the real agent up **EC2-native** (the manual test process
-cannot survive a reboot, so the post-reboot `3.3.0.0` Online ping came from the
-package's launch job) — but a fleet image must ship only one active SSM launch
-job.
+stream, which **wedges Run Command** (commands sit `Pending`). A fleet image must
+ship only one active SSM launch job.
+
+> **Correction (#376).** An earlier draft here read the post-reboot `3.3.0.0`
+> Online ping as proof the package's *launch job* started the agent at boot. A
+> later staging-RC boot-test disproved that: with the `env { from_script … }`
+> block, `launch_roster info x-vnd.debeos-amazon-ssm-agent` showed
+> `enabled=true, launched=false, running=false` on first boot and after reboot
+> (even `launch_roster start` refused it), because launch_daemon's `from_script`
+> evaluation hangs on an unbounded read early in boot. The agent only ran when
+> started by hand, so the earlier "Online from the launch job" reading was
+> confounded. The launch job now sets PATH **statically** (this revision), which
+> is what makes it actually launch at boot.
 
 So the bake must make the switch a **replacement**, not an addition:
 
