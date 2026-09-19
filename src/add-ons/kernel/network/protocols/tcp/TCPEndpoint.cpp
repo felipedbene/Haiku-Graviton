@@ -1880,6 +1880,8 @@ TCPEndpoint::_AddData(tcp_segment_header& segment, net_buffer* buffer)
 		fFinishReceivedAt = segment.sequence + dataSize;
 	}
 
+	bool fastPathDelivered = false;
+
 	if (fReceiveNext == segment.sequence && fReceiveQueue.Used() == 0
 		&& fReceiveRing.HasFreeSlot()) {
 		// #61 fast path: the segment is exactly in order and there is no
@@ -1890,6 +1892,7 @@ TCPEndpoint::_AddData(tcp_segment_header& segment, net_buffer* buffer)
 		buffer->sequence = segment.sequence;
 		fReceiveRing.Push(buffer);
 		fReceiveNext += dataSize;
+		fastPathDelivered = true;
 
 		// Keep the (empty) reorder buffer's base sequence in step with the
 		// in-order edge so a later out-of-order Add() accounts contiguity from
@@ -1921,6 +1924,15 @@ TCPEndpoint::_AddData(tcp_segment_header& segment, net_buffer* buffer)
 		tcp_sequence pushEnd = segment.sequence + dataSize;
 		if (fPushSequence == 0 || pushEnd > fPushSequence)
 			fPushSequence = pushEnd;
+	}
+
+	if (fastPathDelivered && dataSize > 0) {
+		// The bytes just went into the delivery ring, so there is trivially
+		// data to wake the reader for -- skip _ReceiveAvailable()'s acquire
+		// load of the consumer-owned byte counter (a cross-core line transfer
+		// on every segment, inside the fLock hold; #414). Should the reader
+		// race ahead and drain it first, the notification is merely spurious.
+		return true;
 	}
 
 	return _ReceiveAvailable() > 0;
