@@ -14,6 +14,10 @@
 #include "Debug.h"
 #include "Inode.h"
 
+#ifdef BFS_GROW_FAULT_INJECTION
+#	include "GrowFault.h"
+#endif
+
 
 struct run_array {
 	int32		count;
@@ -33,6 +37,28 @@ struct run_array {
 private:
 	static int _Compare(block_run& a, block_run& b);
 	int32 _FindInsertionIndex(block_run& run);
+};
+
+
+/*!	DeBeOS (#91 Gap 2): the per-entry integrity trailer, stored in the last
+	8 bytes of each run_array index block. Those bytes are always free: BFS uses
+	at most run_array::MaxRuns()-1 == 126 runs, but the smallest block (1024
+	bytes) has room for 127 physical run_array slots, so the final slot is never
+	a run. Larger blocks leave even more slack. Only written/read when the
+	superblock's BFS_JOURNAL_FORMAT_CHECKSUM feature bit is set; a legacy volume
+	never touches these bytes, which is what keeps the format backward
+	compatible.
+
+	\a sequence is the low 32 bits of the volume's monotonic commit sequence;
+	\a checksum is the CRC32 over the whole entry (this index block with the
+	checksum field taken as zero, followed by every data block of the entry, in
+	log order). The sequence lets replay reject a stale-but-internally-valid run
+	array left in a log slot from an earlier wrap (its seq is old); the checksum
+	rejects a torn/half-written body. Together they let replay discard an
+	incomplete tail while still failing on real mid-log corruption. */
+struct run_array_trailer {
+	uint32		sequence;
+	uint32		checksum;
 };
 
 class RunArrays {
@@ -161,6 +187,77 @@ add_to_iovec(iovec* vecs, int32& index, int32 max, const void* address,
 	vecs[index].iov_base = const_cast<void*>(address);
 	vecs[index].iov_len = size;
 	index++;
+}
+
+
+//	#pragma mark - journal checksum (DeBeOS #91 Gap 2)
+
+
+/*!	Standard reflected CRC32 (polynomial 0xedb88320), table built lazily. The
+	table fill is idempotent, so the benign race between two volumes' journals
+	initializing it concurrently is harmless (both write identical values). A
+	CRC32 is strong enough that a torn or stale log body matching a recorded
+	checksum by chance is a ~2^-32 event -- which is what lets replay treat a
+	checksum match as proof an entry landed intact and a mismatch as proof it did
+	not. */
+static uint32 sCRCTable[256];
+static bool sCRCTableReady = false;
+
+
+static void
+build_crc_table()
+{
+	for (uint32 i = 0; i < 256; i++) {
+		uint32 c = i;
+		for (int k = 0; k < 8; k++)
+			c = (c & 1) ? (0xedb88320 ^ (c >> 1)) : (c >> 1);
+		sCRCTable[i] = c;
+	}
+	sCRCTableReady = true;
+}
+
+
+static uint32
+crc32_update(uint32 crc, const void* data, size_t length)
+{
+	if (!sCRCTableReady)
+		build_crc_table();
+
+	const uint8* bytes = (const uint8*)data;
+	for (size_t i = 0; i < length; i++)
+		crc = sCRCTable[(crc ^ bytes[i]) & 0xff] ^ (crc >> 8);
+
+	return crc;
+}
+
+
+/*!	Feeds the run_array index block into the running CRC with its 4-byte
+	checksum field forced to zero, so that the write side (which fills the field
+	afterwards) and the replay side (which must ignore whatever is stored there)
+	compute over identical bytes. The sequence field, which precedes it, IS
+	covered. */
+static uint32
+checksum_index_block(uint32 crc, const run_array* array, int32 blockSize)
+{
+	static const uint8 kZeroField[sizeof(uint32)] = { 0, 0, 0, 0 };
+	crc = crc32_update(crc, array, blockSize - sizeof(uint32));
+	return crc32_update(crc, kZeroField, sizeof(uint32));
+}
+
+
+static run_array_trailer*
+array_trailer(run_array* array, int32 blockSize)
+{
+	return (run_array_trailer*)((uint8*)array + blockSize
+		- sizeof(run_array_trailer));
+}
+
+
+static const run_array_trailer*
+array_trailer(const run_array* array, int32 blockSize)
+{
+	return (const run_array_trailer*)((const uint8*)array + blockSize
+		- sizeof(run_array_trailer));
 }
 
 
@@ -407,7 +504,10 @@ Journal::Journal(Volume* volume)
 	fUsed(0),
 	fUnwrittenTransactions(0),
 	fHasSubtransaction(false),
-	fSeparateSubTransactions(false)
+	fSeparateSubTransactions(false),
+	fChecksumEnabled((volume->SuperBlock().JournalFormatFlags()
+		& BFS_JOURNAL_FORMAT_CHECKSUM) != 0),
+	fNextSequence(volume->SuperBlock().LogCommitSequence())
 {
 	recursive_lock_init(&fLock, "bfs journal");
 	mutex_init(&fEntriesLock, "bfs journal entries");
@@ -466,6 +566,289 @@ Journal::_CheckRunArray(const run_array* array)
 	}
 
 	PRINT(("Log entry has %" B_PRId32 " entries\n", array->CountRuns()));
+	return B_OK;
+}
+
+
+/*!	DeBeOS (#91 Gap 2): a quiet geometry check on a run_array read from the log,
+	used by the checksum-validation walk. Unlike _CheckRunArray() it never calls
+	Volume::Panic() or FATAL(), because the integrity walk deliberately probes
+	entries it expects to be torn or stale (and, in _FindCommittedEntryAfter(),
+	arbitrary log blocks that are not entry starts at all); flipping the volume
+	read-only or logging on those would be wrong. Returns the total data-block
+	count of the array in \a _blocks when valid. */
+bool
+Journal::_ValidRunArrayGeometry(const run_array* array, int32* _blocks) const
+{
+	int32 maxRuns = run_array::MaxRuns(fVolume->BlockSize()) - 1;
+	if (array->MaxRuns() != maxRuns
+		|| array->CountRuns() > maxRuns
+		|| array->CountRuns() <= 0)
+		return false;
+
+	int32 blocks = 0;
+	for (int32 i = 0; i < array->CountRuns(); i++) {
+		const block_run& run = array->RunAt(i);
+		// quiet mirror of Volume::ValidateBlockRun()
+		if (run.AllocationGroup() < 0
+			|| run.AllocationGroup() > (int32)fVolume->AllocationGroups()
+			|| run.Start() > (1UL << fVolume->AllocationGroupShift())
+			|| run.length == 0
+			|| uint32(run.Length() + run.Start())
+					> (1UL << fVolume->AllocationGroupShift()))
+			return false;
+
+		blocks += run.Length();
+	}
+
+	if (_blocks != NULL)
+		*_blocks = blocks;
+	return true;
+}
+
+
+/*!	DeBeOS (#91 Gap 2): computes the CRC32 over a whole log entry -- the index
+	block (with its checksum field taken as zero) followed by every data block of
+	the entry read back from the log ring, in log order. \a firstDataBlock is the
+	ring position (already reduced modulo fLogSize) of the entry's first data
+	block. Mirrors the block walk in _ReplayRunArray() so the value matches what
+	the write side stored. */
+status_t
+Journal::_RunArrayChecksum(const run_array* array, off_t firstDataBlock,
+	uint32* _checksum)
+{
+	int32 blockSize = fVolume->BlockSize();
+	off_t logOffset = fVolume->ToBlock(fVolume->Log());
+
+	uint32 crc = checksum_index_block(0xffffffff, array, blockSize);
+
+	CachedBlock cached(fVolume);
+	off_t blockNumber = firstDataBlock;
+
+	for (int32 index = 0; index < array->CountRuns(); index++) {
+		const block_run& run = array->RunAt(index);
+		for (int32 i = 0; i < run.Length(); i++) {
+			status_t status = cached.SetTo(logOffset + blockNumber);
+			if (status != B_OK)
+				return status;
+
+			crc = crc32_update(crc, cached.Block(), blockSize);
+			blockNumber = (blockNumber + 1) % fLogSize;
+		}
+	}
+
+	*_checksum = crc ^ 0xffffffff;
+	return B_OK;
+}
+
+
+/*!	DeBeOS (#91 Gap 2): inspects the log entry that starts at ring offset \a
+	start without modifying anything. Reports whether the run_array header is
+	geometrically valid, whether its recorded checksum matches a recomputation
+	over the entry's body, the entry's stored sequence number, and its length in
+	log blocks (index block + data blocks) so the caller can advance to the next
+	entry. A geometrically invalid header yields \a _geometryValid == false and a
+	\a _length of 0 (the caller must not advance past it). */
+status_t
+Journal::_ScanLogEntry(int32 start, int32* _length, uint32* _sequence,
+	bool* _geometryValid, bool* _checksumValid)
+{
+	off_t logOffset = fVolume->ToBlock(fVolume->Log());
+	off_t firstBlockNumber = start % fLogSize;
+
+	*_length = 0;
+	*_sequence = 0;
+	*_geometryValid = false;
+	*_checksumValid = false;
+
+	CachedBlock cachedArray(fVolume);
+	status_t status = cachedArray.SetTo(logOffset + firstBlockNumber);
+	if (status != B_OK)
+		return status;
+
+	const run_array* array = (const run_array*)cachedArray.Block();
+	int32 blocks = 0;
+	if (!_ValidRunArrayGeometry(array, &blocks))
+		return B_OK;
+
+	*_geometryValid = true;
+	*_length = 1 + blocks;
+
+	int32 blockSize = fVolume->BlockSize();
+	const run_array_trailer* trailer = array_trailer(array, blockSize);
+	*_sequence = BFS_ENDIAN_TO_HOST_INT32(trailer->sequence);
+	uint32 stored = BFS_ENDIAN_TO_HOST_INT32(trailer->checksum);
+
+	uint32 crc;
+	status = _RunArrayChecksum(array, (firstBlockNumber + 1) % fLogSize, &crc);
+	if (status != B_OK)
+		return status;
+
+	*_checksumValid = (crc == stored);
+	return B_OK;
+}
+
+
+/*!	DeBeOS (#91 Gap 2): decides whether a bad entry found at \a afterStart is the
+	torn tail (nothing valid follows it) or a hole in the middle of the log (a
+	durably committed entry follows it). Scans every log block from just after
+	\a afterStart up to log_end and returns true as soon as it finds a block that
+	is a geometrically valid run_array whose checksum verifies and -- when a good
+	prefix established an expected sequence -- whose sequence is at least the one
+	the bad entry should have carried. A stale run array left from an earlier
+	wrap fails that sequence test; a false positive on an arbitrary block fails
+	the CRC32 with ~2^-32 probability. Scanning block-by-block (rather than by
+	entry length) is deliberate: the bad entry's own length cannot be trusted. */
+bool
+Journal::_FindCommittedEntryAfter(int32 afterStart, uint32 minSequence,
+	bool haveMinSequence)
+{
+	off_t logOffset = fVolume->ToBlock(fVolume->Log());
+	int32 blockSize = fVolume->BlockSize();
+	int32 logEnd = fVolume->LogEnd();
+
+	CachedBlock cachedArray(fVolume);
+	int32 pos = (afterStart + 1) % fLogSize;
+
+	while (pos != logEnd) {
+		if (cachedArray.SetTo(logOffset + pos) == B_OK) {
+			const run_array* array = (const run_array*)cachedArray.Block();
+			if (_ValidRunArrayGeometry(array, NULL)) {
+				const run_array_trailer* trailer
+					= array_trailer(array, blockSize);
+				uint32 seq = BFS_ENDIAN_TO_HOST_INT32(trailer->sequence);
+				uint32 stored = BFS_ENDIAN_TO_HOST_INT32(trailer->checksum);
+
+				uint32 crc;
+				if (_RunArrayChecksum(array, (pos + 1) % fLogSize, &crc) == B_OK
+					&& crc == stored
+					&& (!haveMinSequence || seq >= minSequence)) {
+					return true;
+				}
+			}
+		}
+
+		pos = (pos + 1) % fLogSize;
+	}
+
+	return false;
+}
+
+
+/*!	DeBeOS (#91 Gap 2): walks the log from log_start to log_end verifying each
+	run_array's geometry, checksum, and per-transaction sequence continuity, and
+	reports the position up to which replay is safe in \a _effectiveEnd.
+
+	Because a BFS transaction is committed atomically (one log_end advance) but
+	may span several run_arrays that share one sequence number, the truncation
+	point is always a transaction boundary -- replay never half-applies a
+	transaction.
+
+	- All entries valid: \a _effectiveEnd == log_end (replay everything, the
+	  historical behaviour).
+	- A torn/incomplete tail with no committed transaction after it: \a
+	  _effectiveEnd is set to the start of the torn transaction, so the whole
+	  transaction is discarded. This is the redo-log guarantee that an
+	  un-fully-committed transaction is simply lost, never half-applied.
+	- A bad entry with a strictly-later committed transaction still after it:
+	  returns B_BAD_DATA. That is real corruption (a hole), not a torn tail, and
+	  must fail the mount as before rather than silently masking it. */
+status_t
+Journal::_ValidateLogTail(int32* _effectiveEnd)
+{
+	int32 logEnd = fVolume->LogEnd();
+	int32 start = fVolume->LogStart();
+
+	// Per-transaction sequence bookkeeping. All run_arrays of one transaction
+	// share a sequence; the sequence increments by one at each transaction
+	// boundary. transactionStart tracks where the current transaction's first
+	// run_array sits, so a torn tail can be dropped to a transaction boundary
+	// rather than mid-transaction.
+	uint32 lastSequence = 0;
+	bool haveSequence = false;
+	int32 transactionStart = start;
+	int32 lastStart = -1;
+
+	while (start != logEnd) {
+		if (start == lastStart) {
+			// no forward progress -- a zero-length or self-referential entry;
+			// treat as corruption rather than spin.
+			return B_BAD_DATA;
+		}
+		lastStart = start;
+
+		int32 length;
+		uint32 sequence;
+		bool geometryValid;
+		bool checksumValid;
+		status_t status = _ScanLogEntry(start, &length, &sequence,
+			&geometryValid, &checksumValid);
+		if (status != B_OK)
+			return status;
+
+		// A run_array is a valid continuation only if it is intact and its
+		// sequence either repeats the current transaction's or opens the next.
+		bool sequenceOK = !haveSequence
+			|| sequence == lastSequence || sequence == lastSequence + 1;
+		if (!geometryValid || !checksumValid || !sequenceOK) {
+			// First bad run_array. Work out which transaction it belongs to and
+			// that transaction's sequence: an intact header whose sequence opens
+			// a new transaction starts its own; anything else (a continuation,
+			// or a header too corrupt to read a sequence from) belongs to the
+			// current transaction.
+			bool startsNewTransaction = geometryValid && haveSequence
+				&& sequence == lastSequence + 1;
+			int32 truncateAt;
+			uint32 tornSequence;
+			bool tornSequenceKnown;
+			if (!haveSequence) {
+				// The very first run_array is bad: nothing before it is
+				// committed, so the whole log is a torn/garbage tail.
+				truncateAt = start;
+				tornSequenceKnown = false;
+				tornSequence = 0;
+			} else if (startsNewTransaction) {
+				// Keep the completed transactions before it; drop this one on.
+				truncateAt = start;
+				tornSequenceKnown = true;
+				tornSequence = sequence;
+			} else {
+				// Continuation of, or an unreadable head of, the current
+				// transaction: discard the whole transaction. This is the
+				// conservative branch -- if a fresh transaction's very first
+				// run_array was torn into stale content whose header happens to
+				// parse but whose sequence is old, we cannot prove the prior
+				// transaction was complete, so we drop it too. That may discard
+				// one extra fully-committed transaction, but it never
+				// half-applies one (consistency over squeezing out the last
+				// committed byte on a crash).
+				truncateAt = transactionStart;
+				tornSequenceKnown = true;
+				tornSequence = lastSequence;
+			}
+
+			// If a strictly-later transaction was committed after the torn one,
+			// this is a hole in the middle of the log -- real corruption, fail
+			// as before. Siblings of the torn transaction share its sequence and
+			// are correctly ignored (they are not a later commit).
+			if (_FindCommittedEntryAfter(start,
+					tornSequenceKnown ? tornSequence + 1 : 0, tornSequenceKnown))
+				return B_BAD_DATA;
+
+			*_effectiveEnd = truncateAt;
+			return B_OK;
+		}
+
+		if (!haveSequence || sequence == lastSequence + 1) {
+			// entering a new transaction
+			transactionStart = start;
+			lastSequence = sequence;
+			haveSequence = true;
+		}
+		start = (start + length) % fLogSize;
+	}
+
+	*_effectiveEnd = logEnd;
 	return B_OK;
 }
 
@@ -581,11 +964,32 @@ Journal::ReplayLog()
 	if (fVolume->IsReadOnly())
 		return B_READ_ONLY_DEVICE;
 
+	// DeBeOS (#91 Gap 2): on a checksummed volume, verify the log's per-entry
+	// integrity before touching a single home block. This distinguishes a torn
+	// or stale tail (the redo-log guarantee: an un-fully-committed transaction
+	// is discarded, not half-applied) from real mid-log corruption (which must
+	// still fail the mount, exactly as it does today). replayEnd is where replay
+	// must stop; on a legacy volume it stays at log_end and the loop below is
+	// byte-for-byte the historical behaviour.
+	int32 replayEnd = fVolume->LogEnd();
+	if (fChecksumEnabled) {
+		status_t status = _ValidateLogTail(&replayEnd);
+		if (status != B_OK) {
+			FATAL(("log integrity check failed, data may be corrupted: %s\n",
+				strerror(status)));
+			return B_ERROR;
+		}
+		if (replayEnd != fVolume->LogEnd()) {
+			INFORM(("bfs: discarding torn journal tail (log_end %d -> %d), "
+				"mounting clean\n", (int)fVolume->LogEnd(), (int)replayEnd));
+		}
+	}
+
 	int32 start = fVolume->LogStart();
 	int32 lastStart = -1;
 	while (true) {
 		// stop if the log is completely flushed
-		if (start == fVolume->LogEnd())
+		if (start == replayEnd)
 			break;
 
 		if (start == lastStart) {
@@ -604,9 +1008,12 @@ Journal::ReplayLog()
 	}
 
 	PRINT(("replaying worked fine!\n"));
-	fVolume->SuperBlock().log_start = HOST_ENDIAN_TO_BFS_INT64(
-		fVolume->LogEnd());
-	fVolume->LogStart() = HOST_ENDIAN_TO_BFS_INT64(fVolume->LogEnd());
+	// A discarded torn tail moves log_end back to the last good entry as well,
+	// so the on-disk log is empty and consistent after this write.
+	fVolume->SuperBlock().log_end = HOST_ENDIAN_TO_BFS_INT64(replayEnd);
+	fVolume->LogEnd() = replayEnd;
+	fVolume->SuperBlock().log_start = HOST_ENDIAN_TO_BFS_INT64(replayEnd);
+	fVolume->LogStart() = replayEnd;
 	fVolume->SuperBlock().flags = HOST_ENDIAN_TO_BFS_INT32(
 		SUPER_BLOCK_DISK_CLEAN);
 
@@ -807,10 +1214,50 @@ Journal::_WriteTransactionToLog()
 		return B_NO_MEMORY;
 	}
 
+	// DeBeOS (#91 Gap 2): every run_array of this transaction is stamped with the
+	// SAME sequence number, and the counter is advanced once, per transaction.
+	// BFS commits a whole transaction with a single log_end advance, so the unit
+	// replay must be able to discard atomically is the transaction, not the
+	// individual run_array. A shared per-transaction sequence lets replay find
+	// the transaction boundary (where the sequence changes) and drop a torn tail
+	// back to it, never half-applying a transaction.
+	uint32 transactionSequence = (uint32)fNextSequence;
+
 	for (int32 k = 0; k < runArrays.CountArrays(); k++) {
 		run_array* array = runArrays.ArrayAt(k);
 		int32 index = 0, count = 1;
 		int32 wrap = fLogSize - logStart;
+
+		// Stamp this run_array's integrity trailer before it is written. The
+		// checksum covers the index block (its checksum field taken as zero)
+		// plus every data block of the entry, so replay can tell a torn or stale
+		// copy from an intact one. This is a read-only pass over the same blocks
+		// the write loop below fetches again -- cheap against the block cache,
+		// and it leaves the write path's own logic untouched.
+		if (fChecksumEnabled) {
+			run_array_trailer* trailer
+				= array_trailer(array, fVolume->BlockSize());
+			trailer->sequence = HOST_ENDIAN_TO_BFS_INT32(transactionSequence);
+			trailer->checksum = 0;
+
+			uint32 crc = checksum_index_block(0xffffffff, array,
+				fVolume->BlockSize());
+			for (int32 i = 0; i < array->CountRuns(); i++) {
+				const block_run& run = array->RunAt(i);
+				off_t dataBlock = fVolume->ToBlock(run);
+				for (int32 j = 0; j < run.Length(); j++) {
+					const void* data = block_cache_get(fVolume->BlockCache(),
+						dataBlock + j);
+					if (data == NULL)
+						return B_IO_ERROR;
+
+					crc = crc32_update(crc, data, fVolume->BlockSize());
+					block_cache_put(fVolume->BlockCache(), dataBlock + j);
+				}
+			}
+
+			trailer->checksum = HOST_ENDIAN_TO_BFS_INT32(crc ^ 0xffffffff);
+		}
 
 		add_to_iovec(vecs, index, maxVecs, (void*)array, fVolume->BlockSize());
 
@@ -917,12 +1364,28 @@ Journal::_WriteTransactionToLog()
 	// durable first; the flush after the commit (below) then orders the log
 	// ahead of the in-place writeback. This is standard write-ahead-log commit
 	// ordering. See graviton/docs/device-watchdog-and-bfs-crashsafety.md.
+	//
+	// DeBeOS (#91 Gap 2): on a checksummed volume the per-entry checksum+sequence
+	// stamped above now lets replay *detect* a body that did not land and discard
+	// it, closing the silent-corruption path this comment warned about. The
+	// barrier is still required: it keeps a committed entry actually replayable
+	// (durable-before-commit) rather than something replay would always have to
+	// throw away.
 	ioctl(fVolume->Device(), B_FLUSH_DRIVE_CACHE);
 
 	// Update the log end pointer in the superblock
 
 	fVolume->SuperBlock().flags = SUPER_BLOCK_DISK_DIRTY;
 	fVolume->SuperBlock().log_end = HOST_ENDIAN_TO_BFS_INT64(logPosition);
+	if (fChecksumEnabled) {
+		// Advance the per-volume commit counter once for this transaction and
+		// persist it in the same superblock write that commits log_end, so the
+		// sequence is durable and monotonic for the volume's lifetime (never
+		// reused, even across a discarded torn tail).
+		fNextSequence++;
+		fVolume->SuperBlock().log_commit_sequence
+			= HOST_ENDIAN_TO_BFS_INT64(fNextSequence);
+	}
 
 	status = fVolume->WriteSuperBlock();
 	if (status != B_OK) {
@@ -946,6 +1409,16 @@ Journal::_WriteTransactionToLog()
 	// disk consistency.
 	// If that call fails, we can't do anything about it anyway
 	ioctl(fVolume->Device(), B_FLUSH_DRIVE_CACHE);
+
+#ifdef BFS_GROW_FAULT_INJECTION
+	// Host-only crash injection for the #91 Gap 2 torn-tail A/B. The log body
+	// and the commit record (superblock log_end + sequence) are now durable, but
+	// the transaction's home blocks are still dirty in the block cache -- exactly
+	// the on-disk state a power loss right after commit leaves: a dirty log the
+	// next mount must replay. _exit()s on the BFS_JOURNAL_ABORT_NTH'th commit
+	// when BFS_JOURNAL_ABORT is set (see bfs_journal_fault_commit()).
+	bfs_journal_fault_commit();
+#endif
 
 	// at this point, we can finally end the transaction - we're in
 	// a guaranteed valid state

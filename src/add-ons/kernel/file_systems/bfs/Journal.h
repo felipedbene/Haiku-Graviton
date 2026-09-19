@@ -61,6 +61,18 @@ private:
 			status_t		_ReplayRunArray(int32* start);
 			status_t		_TransactionDone(bool success);
 
+			// DeBeOS (#91 Gap 2): per-entry checksum/sequence journal integrity
+			bool			_ValidRunArrayGeometry(const run_array* array,
+								int32* _blocks) const;
+			status_t		_RunArrayChecksum(const run_array* array,
+								off_t firstDataBlock, uint32* _checksum);
+			status_t		_ScanLogEntry(int32 start, int32* _length,
+								uint32* _sequence, bool* _geometryValid,
+								bool* _checksumValid);
+			bool			_FindCommittedEntryAfter(int32 afterStart,
+								uint32 minSequence, bool haveMinSequence);
+			status_t		_ValidateLogTail(int32* _effectiveEnd);
+
 	static	void			_TransactionWritten(int32 transactionID,
 								int32 event, void* _logEntry);
 	static	void			_TransactionIdle(int32 transactionID, int32 event,
@@ -81,6 +93,9 @@ private:
 			int32			fTransactionID;
 			bool			fHasSubtransaction;
 			bool			fSeparateSubTransactions;
+
+			bool			fChecksumEnabled;
+			uint64			fNextSequence;
 
 			thread_id		fLogFlusher;
 			sem_id			fLogFlusherSem;
