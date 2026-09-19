@@ -1,0 +1,51 @@
+# DeBeOS #93 — uu_sort 0.12.0 Haiku portability: rustix-gated check_readable
+#
+# uu_sort's Cargo.toml gates its rustix dependency to
+# cfg(all(unix, not(any(redox, fuchsia, haiku, solaris, illumos)))) -- rustix
+# does not support those OSes -- but the readable-input probe check_readable()
+# splits only on `not(target_os = "redox")`. Haiku (and fuchsia/solaris/illumos)
+# therefore take the rustix arm while rustix is not a dependency there, so
+# uu_sort fails with E0433 "unresolved module rustix" even though uucore is
+# fixed. This is a fifth Haiku #[cfg] gap, in the uu_sort applet crate.
+#
+# Fix: widen both check_readable arms so the rustix arm matches the dependency's
+# cfg exactly, and the open()-based fallback covers the rustix-less OSes.
+# Applied with `patch -p1`.
+--- a/src/sort.rs
++++ b/src/sort.rs
+@@ -3340,14 +3340,33 @@
+     Ok(())
+ }
+ 
+-#[cfg(all(unix, not(target_os = "redox")))]
++// The rustix arm must match the cfg that gates the rustix dependency in
++// Cargo.toml, which excludes redox/fuchsia/haiku/solaris/illumos (rustix does
++// not support them). Those OSes use the open()-based fallback below.
++#[cfg(all(
++    unix,
++    not(any(
++        target_os = "redox",
++        target_os = "fuchsia",
++        target_os = "haiku",
++        target_os = "solaris",
++        target_os = "illumos"
++    ))
++))]
+ fn check_readable(path: &Path) -> std::io::Result<()> {
+     use rustix::fs::{Access, access};
+ 
+     access(path, Access::READ_OK).map_err(|e| std::io::Error::from_raw_os_error(e.raw_os_error()))
+ }
+ 
+-#[cfg(any(not(unix), target_os = "redox"))]
++#[cfg(any(
++    not(unix),
++    target_os = "redox",
++    target_os = "fuchsia",
++    target_os = "haiku",
++    target_os = "solaris",
++    target_os = "illumos"
++))]
+ fn check_readable(path: &Path) -> std::io::Result<()> {
+     // No `rustix::fs::access` here, so open the file and close it right away.
+     File::open(path)?;

@@ -1,0 +1,34 @@
+# DeBeOS #93 — uu_date 0.12.0 Haiku portability: D_T_FMT / nl_langinfo gate
+#
+# uu_date's locale.rs gates its nl_langinfo path with a `cfg_langinfo!` macro
+# set to cfg(all(unix, not(android), not(cygwin), not(redox))). Haiku matches,
+# so the langinfo path is compiled — but it references `libc::D_T_FMT`, which the
+# libc crate does not define for Haiku, so uu_date fails to build even though
+# uucore is fixed. This is a Haiku #[cfg] gap in the uu_date applet crate.
+#
+# Fix: exclude Haiku from cfg_langinfo (so the whole nl_langinfo path is dropped)
+# and add Haiku to the default-format fallback get_locale_default_format(), the
+# same treatment android/cygwin/redox already get. `date` then uses the default
+# "%a %b %e %X %Z %Y" format. Applied with `patch -p1`.
+--- a/src/locale.rs
++++ b/src/locale.rs
+@@ -12,7 +12,10 @@
+ macro_rules! cfg_langinfo {
+     ($($item:item)*) => {
+         $(
+-            #[cfg(all(unix, not(target_os = "android"), not(target_os = "cygwin"), not(target_os = "redox")))]
++            // Haiku is excluded: its libc binding defines no `D_T_FMT` nl_item
++            // constant, so the langinfo path below fails to build there. Haiku
++            // uses the default-format fallback, like android/cygwin/redox.
++            #[cfg(all(unix, not(target_os = "android"), not(target_os = "cygwin"), not(target_os = "haiku"), not(target_os = "redox")))]
+             $item
+         )*
+     }
+@@ -109,6 +112,7 @@
+     not(unix),
+     target_os = "android",
+     target_os = "cygwin",
++    target_os = "haiku",
+     target_os = "redox"
+ ))]
+ pub fn get_locale_default_format() -> &'static str {

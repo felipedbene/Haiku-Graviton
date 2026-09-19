@@ -24,6 +24,14 @@
 #     -n, --pkgname NAME      hpkg package name. Default: crate name, '-' -> '_'.
 #     -o, --outdir DIR        where to write the .hpkg. Default: ~/crate-hpkg.
 #     -r, --revision N        hpkg revision (the -N suffix). Default: 1.
+#         --src-dir DIR       build a LOCAL source checkout with
+#                             `cargo install --path DIR` instead of fetching
+#                             <crate> <version> from crates.io. Use this to
+#                             package a patched/vendored crate (e.g. a crate with
+#                             a [patch.crates-io] override applied to a dependency
+#                             -- see graviton/uutils for the uucore Haiku fixes,
+#                             DeBeOS #93). <crate> <version> are still required and
+#                             are used only for the package name/version/metadata.
 #         --features LIST     passed to cargo as --features LIST.
 #         --no-default-features   passed through to cargo.
 #         --serial            build with `cargo --jobs 1`. On a small builder
@@ -82,6 +90,7 @@ OUTDIR="$HOME/crate-hpkg"
 REVISION=1
 FEATURES=""
 NO_DEFAULT_FEATURES=0
+SRCDIR=""
 SERIAL=0
 LOCKED=0
 LICENSE="MIT"
@@ -98,6 +107,7 @@ while [ $# -gt 0 ]; do
 		-r|--revision)     REVISION="$2"; shift 2 ;;
 		--features)        FEATURES="$2"; shift 2 ;;
 		--no-default-features) NO_DEFAULT_FEATURES=1; shift ;;
+		--src-dir)         SRCDIR="$2"; shift 2 ;;
 		--serial)          SERIAL=1; shift ;;
 		--locked)          LOCKED=1; shift ;;
 		--license)         LICENSE="$2"; shift 2 ;;
@@ -142,6 +152,8 @@ command -v cargo >/dev/null 2>&1 || die "cargo not found -- run 'pkgman install 
 [ -x "$READELF" ] || say "readelf not found -- requires{} will be minimal (haiku only)"
 [ -f /boot/system/develop/lib/crti.o ] || \
 	die "haiku_devel not installed (no crti.o) -- run 'pkgman install haiku_devel'; links will fail"
+[ -z "$SRCDIR" ] || [ -f "$SRCDIR/Cargo.toml" ] || \
+	die "--src-dir '$SRCDIR' has no Cargo.toml (expected a crate/workspace root)"
 
 say "crate=$CRATE version=$VERSION  ->  package $PKGNAME-$PKGVER (arm64)"
 
@@ -155,14 +167,20 @@ mkdir -p "$ROOT" "$TREE/bin" "$OUTDIR"
 # Assemble the argv once; run_cargo optionally forces serial (--jobs 1).
 BUILD_LOG="$STAGE/cargo.log"
 run_cargo() {
-	set -- install --root "$ROOT" --version "$VERSION"
+	# --src-dir builds a local checkout (`cargo install --path`), so it takes
+	# neither --version nor the trailing crate name; otherwise fetch from crates.io.
+	if [ -n "$SRCDIR" ]; then
+		set -- install --root "$ROOT" --path "$SRCDIR"
+	else
+		set -- install --root "$ROOT" --version "$VERSION"
+	fi
 	{ [ "$SERIAL" -eq 1 ] || [ "$FORCE_SERIAL" = 1 ]; } && set -- "$@" --jobs 1
 	[ "$LOCKED" -eq 1 ] && set -- "$@" --locked
 	[ "$NO_DEFAULT_FEATURES" -eq 1 ] && set -- "$@" --no-default-features
 	[ -n "$FEATURES" ] && set -- "$@" --features "$FEATURES"
 	# shellcheck disable=SC2086
 	[ -n "$CARGO_EXTRA" ] && set -- "$@" $CARGO_EXTRA
-	set -- "$@" "$CRATE"
+	[ -z "$SRCDIR" ] && set -- "$@" "$CRATE"
 	say "cargo $*"
 	cargo "$@" > "$BUILD_LOG" 2>&1
 }

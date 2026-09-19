@@ -1,0 +1,37 @@
+# DeBeOS #93 — uu_ls 0.12.0 Haiku portability: major()/minor()
+#
+# uu_ls imports `use uucore::libc::{dev_t, major, minor};` to print the
+# major/minor numbers of a character/block device in `ls -l`. The `libc` crate
+# defines no major()/minor() for target_os = "haiku" (Haiku's dev_t is a 32-bit
+# mount id, not a Linux-style major/minor pair), so uu_ls fails to build there
+# even though uucore itself is fixed. This is a fourth Haiku #[cfg] gap, in the
+# uu_ls applet crate rather than uucore.
+#
+# Fix: import major/minor from libc only on non-Haiku, and define Haiku
+# fallbacks (major = whole id, minor = 0). Applied with `patch -p1`.
+--- a/src/display.rs
++++ b/src/display.rs
+@@ -36,7 +36,22 @@
+ #[cfg(all(unix, not(any(target_vendor = "apple", target_os = "android"))))]
+ use uucore::fsxattr::has_acl;
+ #[cfg(unix)]
+-use uucore::libc::{dev_t, major, minor};
++use uucore::libc::dev_t;
++#[cfg(not(target_os = "haiku"))]
++use uucore::libc::{major, minor};
++
++// Haiku's libc binding exposes no major()/minor(): its dev_t is a 32-bit mount
++// id, not a Linux-style major/minor pair. Provide a fallback so `ls -l` on a
++// character/block device still prints a (major, minor) pair without failing to
++// build. Haiku has no meaningful rdev split, so report the whole id as major.
++#[cfg(target_os = "haiku")]
++fn major(dev: dev_t) -> dev_t {
++    dev
++}
++#[cfg(target_os = "haiku")]
++fn minor(_dev: dev_t) -> dev_t {
++    0
++}
+ use uucore::{
+     error::UResult,
+     format::human::human_readable,

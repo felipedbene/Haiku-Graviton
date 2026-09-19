@@ -79,10 +79,21 @@ All three are the same shape: a `#[cfg]` cascade in `uucore` that enumerates spe
 operating systems and never lists `target_os = "haiku"`, so Haiku (which *is* `unix`,
 and has the underlying POSIX facility) falls into a branch that references symbols its
 `libc` binding does not expose, or is excluded from a module it needs. They are what
-force the curated feature set; fixing them (a small `uucore` Haiku-portability patch,
-built via `[patch.crates-io]` or a repo checkout — `haiku-crate-to-hpkg` builds crates
-from crates.io unmodified) is the follow-up that unlocks the excluded applets and would
-let the *full* `feat_common_core` set build.
+force the curated feature set.
+
+**These are now fixed.** The follow-up (#93) carries them as a patchset applied to the
+crates.io crates at build time — `graviton/uutils/` (patches + a driver). Because
+`haiku-crate-to-hpkg` builds crates.io crates *unmodified*, the driver vendors the
+crates that need a fix, applies the patches, and points the `coreutils` crate at the
+patched copies with a `[patch.crates-io]` override (built through
+`haiku-crate-to-hpkg --src-dir`). Building the *full* set surfaced four more gaps of the
+same shape outside `uucore`'s three — in `uucore/fs` and in the `uu_ls`, `uu_sort` and
+`uu_date` applet crates — covered by the same patchset (see `graviton/uutils/README.md`
+for the per-crate list). The two build flags below are still required, and the release
+profile must be forced to `lto = off` + `codegen-units = 256`: the crate pins
+`lto = "fat", codegen-units = 1`, which does not build on the current on-box aarch64
+toolchain (codegen-units = 1 trips GNU ld's aarch64 stub sizer; fat LTO with many units
+then intermittently emits an empty/corrupt codegen unit).
 
 ### a. `features/i18n/datetime.rs` — `ABMON_*` (excludes `date`, `sort`)
 
@@ -142,3 +153,31 @@ gate — a 1-line change that unlocks all six.
   sha256 `04a7a7d092a533db6720804406c8df09468395b17a2ac1b09ccff3db86e73465`).
   Green-pool publication is a separate, gated step
   (`graviton/scripts/haiku-repo-publish*`) and is deliberately not done here.
+
+## #93 follow-up — the Haiku portability patchset (`graviton/uutils/`)
+
+The gaps above (and four more of the same shape found while building the full set —
+`uucore/fs::major/minor/makedev`, `uu_ls`, `uu_sort`, `uu_date`) are fixed as a patchset
+applied to the crates.io crates at build time; see `graviton/uutils/README.md`.
+
+**Compile-proven on native Graviton arm64** (`c7g.2xlarge`, canonical AMI
+`ami-04493ac7c3fe0d304`, `pkgman install rust_bin haiku_devel`): with the patchset
+applied, **every dependency crate and every `uu_*` applet crate — including the
+previously-excluded `uu_date`, `uu_sort`, `uu_ls`, `uu_df`, `uu_du`, `uu_stat`, `uu_dd`,
+`uu_seq`, `uu_split`, `uu_tail`, `uu_tee`, `uu_tty` — compiles cleanly.** The seven
+`#[cfg]` gaps are closed at the source level; nothing Haiku-specific fails to build.
+
+**Open blocker (toolchain, not portability).** Linking the applets into the single
+multi-call `coreutils` binary crate (`src/bin/coreutils.rs`) reliably crashes the
+on-box `rustc 1.100.0-nightly (aarch64-unknown-haiku)` with an internal compiler error,
+in a *different* internal query each run — `resolver_for_lowering_raw`, `rustc_serialize`,
+and `adt_def` for `rayon_core::ThreadPoolBuilder` were all seen. It reproduces with a
+reduced 20-applet feature set and is independent of the release profile
+(`lto = fat` vs `off`, `codegen-units` 1 / 16 / 256, `opt-level` 0 / 3, `RUST_MIN_STACK`
+256 MB); under `lto = "fat"` the frontend instead reaches codegen and dies with
+`failed to load bitcode … code size is 0` on a different codegen unit each run. Disk and
+stack limits were ruled out (40 GiB volume at 27 %, 256 MB stack — 1 GB exceeds Haiku's
+512 MB cap and is itself rejected). This is a defect in the large-crate path of this
+nightly on aarch64-haiku, not in the applet code, and it blocks producing the hpkg for
+the expanded applet set. The fix belongs in the toolchain (a newer `rust_bin`), after
+which the patchset here builds the full set unchanged.
