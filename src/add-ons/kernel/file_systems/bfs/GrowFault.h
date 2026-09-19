@@ -25,6 +25,13 @@ void bfs_grow_fault_checkpoint(const char* label);
 // torn-commit synthetic faults).
 int bfs_grow_fault_abort_is(const char* label);
 
+// DeBeOS (#91 Gap 2): called once per journal commit. When BFS_JOURNAL_ABORT is
+// set, _exit(42)s on the BFS_JOURNAL_ABORT_NTH'th commit (default 1) to simulate
+// a power loss right after that commit while its home blocks are still dirty --
+// the dirty-log state the torn-tail replay A/B needs. A count lets the harness
+// accumulate several committed entries before the simulated crash.
+void bfs_journal_fault_commit(void);
+
 // Appends a raw write record (offset, length, bytes) to the write log so an
 // external harness can replay arbitrary persisted subsets between barriers.
 void bfs_grow_fault_log_write(long long offset, const void* buffer,

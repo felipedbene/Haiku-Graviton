@@ -82,3 +82,27 @@ bfs_grow_fault_abort_is(const char* label)
 	ensure_init();
 	return sAbortAt != NULL && strcmp(sAbortAt, label) == 0;
 }
+
+
+extern "C" void
+bfs_journal_fault_commit(void)
+{
+	static int initialized = 0;
+	static const char* enabled = NULL;
+	static int nth = 1;
+	static int count = 0;
+
+	if (!initialized) {
+		initialized = 1;
+		enabled = getenv("BFS_JOURNAL_ABORT");
+		const char* s = getenv("BFS_JOURNAL_ABORT_NTH");
+		if (s != NULL)
+			nth = atoi(s);
+	}
+
+	if (enabled == NULL)
+		return;
+
+	if (++count >= nth)
+		_exit(42);
+}

@@ -209,17 +209,66 @@ cost, and whether the corruption window is reachable on the specific virtualised
 block paths we run, **needs a crash-injection A/B on hardware before this can
 merge** (see below). The change builds; it is not yet proven.
 
-### Gap 2 — replay has no integrity check over the log body
+### Gap 2 — replay has no integrity check over the log body (FIXED here)
 
-Independent of Gap 1, the log format carries no per-entry checksum or monotonic
-sequence number. This is why Gap 1 is *silent* rather than *detected*. A robust
-fix (larger, out of scope for the first step) would add a CRC and a sequence/
-generation number to the run-array header written at commit time, and have
-`_CheckRunArray()` reject an entry whose CRC or sequence does not match — turning
-a torn or stale commit into a detected "stop replay here" instead of applied
-corruption. This is an **on-disk format change** (or a use of currently-reserved
-header fields) and must be backward-compatible with existing volumes; it is
-noted here as the natural follow-up, not attempted now.
+Independent of Gap 1, the log format historically carried no per-entry checksum
+or monotonic sequence number. This is why Gap 1 was *silent* rather than
+*detected*: replay could walk a torn or stale run array, pass the geometry-only
+`_CheckRunArray()`, and apply it.
+
+**Fix implemented in this change** — a backward-compatible on-disk format
+addition:
+
+- **Superblock feature gate.** A new `disk_super_block::journal_format_flags`
+  field (carved from the former `_reserved[6]`, so the struct size is unchanged)
+  carries `BFS_JOURNAL_FORMAT_CHECKSUM`. `Initialize()` sets it on freshly
+  formatted volumes; every existing/stock volume has it zero (the superblock is
+  memset at format time) and therefore takes the **unchanged legacy replay
+  path**. That zero is the backward-compatibility gate: an old-format volume
+  mounts exactly as before, and — because the trailer lives in bytes the log
+  never otherwise uses (see below) — a new-format volume is even replayable by
+  old BFS code.
+- **Per-entry trailer.** Each `run_array` index block gets an 8-byte trailer in
+  its last 8 bytes: a 32-bit commit **sequence** and a 32-bit **CRC32** over the
+  index block (checksum field taken as zero) plus every data block of the entry.
+  Those 8 bytes are always free — BFS fills at most `MaxRuns()-1 == 126` runs,
+  while even the smallest 1024-byte block has room for 127 physical run slots, so
+  the last slot is never a run. Verified in the A/B at both 2048- and 1024-byte
+  block sizes.
+- **Per-transaction sequence.** A BFS transaction is committed atomically (one
+  `log_end` advance) but may span several run_arrays. All run_arrays of one
+  transaction share one sequence; the counter (`disk_super_block::
+  log_commit_sequence`, also from the former reserved area) advances once per
+  transaction and is persisted in the same superblock write that commits
+  `log_end`. This lets replay find transaction boundaries and discard a torn
+  tail back to one — never half-applying a transaction.
+- **Replay.** Before touching a home block, `ReplayLog()` calls
+  `_ValidateLogTail()`, which verifies every entry's geometry, checksum, and
+  per-transaction sequence continuity. All valid → replay everything (historical
+  behaviour). A torn/incomplete tail with no committed transaction after it →
+  truncate `log_end` back to the torn transaction's start, replay the good
+  prefix, mount clean. A bad entry with a strictly-later committed transaction
+  still after it → real corruption (a hole): fail the mount, exactly as today.
+  The sequence rejects a stale-but-internally-valid run array left in a log slot
+  from an earlier wrap (its sequence is old); the CRC rejects a torn/half-written
+  body.
+
+Because a checksum match is a ~2^-32 event on random data, treating a mismatch
+as "this entry did not land" and a match plus sequence continuity as "this entry
+is intact" is safe. This turns Gap 1's *silent* corruption window into a
+*detected* "stop replay here", and closes the guaranteed torn commit of Gap 4 the
+same way. The change is gated entirely behind the superblock feature bit, so it
+cannot affect any existing volume.
+
+Verified with a `bfs_shell` torn-tail A/B (host build): a dirty log is produced
+with a real commit + `_exit()` crash-injection hook, then on-disk surgery
+simulates a torn tail / a torn last transaction / mid-log corruption. Results:
+the legacy path fails the mount (or silently mis-applies a zeroed body — a
+`checkfs` error) on a torn tail; the new path discards the torn tail and mounts
+`checkfs`-clean; a two-transaction log keeps the committed transaction and drops
+only the torn one; and mid-log corruption with a valid transaction after it still
+fails the mount. An on-Graviton kernel A/B (with a bake) is still owed, as for
+Gaps 1/4.
 
 ### Gap 3 — abrupt device removal has no forced-flush hook
 
@@ -237,6 +286,48 @@ handed to the FS," which no journal can recover. That is a VFS/page-writer issue
 not a BFS-journal issue, and is tracked separately; it is called out here because
 a crash-safety story that only fixes the journal will still lose data if the page
 writer sits on it.
+
+### Gap 4 — a failed log-body or commit write was ignored, then committed anyway (FIXED here)
+
+Distinct from the *ordering* problem of Gap 1, `_WriteTransactionToLog()` did not
+check whether its writes actually reached the device before committing. Both
+log-body `writev_pos()` calls only logged `FATAL(...)` on failure and then **fell
+through**, and the superblock commit write (`WriteSuperBlock()`) advanced the
+in-memory `log_end` (`fVolume->LogEnd() = logPosition`) and ended the cache
+transaction **regardless of its return value**.
+
+The consequence on an abrupt device stop (a hot-detached EBS volume, a stopped
+instance, a wedged NVMe/virtio-blk path) is a *guaranteed* torn commit rather than
+a windowed one: the body write fails, yet `log_end` is advanced to cover it, so
+replay walks an entry whose body never landed — and, per Gap 2, there is no
+checksum to notice. Worse, if only the commit (superblock) write failed while the
+body succeeded, the in-memory `log_end` still advanced and the cache transaction
+was still ended, so the block cache was then free to write those dirty blocks back
+to their home locations with **no durable log entry behind them** — a write-ahead
+log violation that corrupts on the next crash.
+
+**Fix implemented in this change** (`Journal.cpp`, all on the error path only, so
+the healthy path is byte-for-byte unchanged):
+
+- A failed log-body `writev_pos()` now returns `B_IO_ERROR` instead of falling
+  through to the commit. The on-disk `log_end` is left at the last good
+  transaction, which is consistent. (The mid-array wrap case matches the
+  pre-existing `block_cache_get`-failure return above it; the end-of-array case
+  releases the block-cache references it already took, since at that point every
+  run of the array has been fetched.)
+- A failed `WriteSuperBlock()` (the commit record) now returns the error without
+  advancing `log_end` or ending the cache transaction. The transaction's blocks
+  stay pinned in the block cache rather than being written back to their home
+  locations un-journalled; the next flush retries, and a device that is truly
+  gone keeps failing here without ever leaving the on-disk state inconsistent.
+
+This is the *write-side* complement to Gap 1's *read/ordering-side* barrier: Gap 1
+makes a body that we chose to commit durable-before-commit; Gap 4 makes sure we
+only choose to commit a body (and a commit record) that the device actually
+accepted. Both are strictly-additive on the failure path and cannot affect a
+healthy commit. Like Gap 1, the corruption they prevent is **UNVERIFIED** as
+reachable on our specific virtualised block paths and is owed a crash-injection
+A/B before merge (see below).
 
 ### What a hard power loss loses today (summary)
 
@@ -257,6 +348,9 @@ writer sits on it.
   `Journal::_WriteTransactionToLog()`. Builds clean:
   `jam -q bfs` → `...updated 872 target(s)...`, the `bfs` add-on links (only the
   pre-existing ld 2.41 `.comment` orphan-section warnings, unrelated).
+- **Gap 4 fix:** the two failed-body `writev_pos()` sites and the failed
+  `WriteSuperBlock()` commit in `Journal::_WriteTransactionToLog()` now abort the
+  commit instead of proceeding. Error-path only; the healthy commit is unchanged.
 
 Nothing in Part A is changed: the framework is already in-tree, and ENA adoption
 is deliberately **not** attempted here because it is a behaviour change on the
@@ -264,8 +358,9 @@ flagship NIC.
 
 ## What needs hardware/emulator proof before merge
 
-- **Gap 1 fix (crash-safety, load-bearing).** Boot the `bfs`-with-fix image on a
-  reaped test instance (or QEMU), drive a write-heavy workload, and cut power
+- **Gap 1 + Gap 4 fixes (crash-safety, load-bearing).** Boot the `bfs`-with-fix
+  image on a reaped test instance (or QEMU), drive a write-heavy workload, and cut
+  power
   abruptly (instance stop / `kill -9` QEMU / device-stop) at randomised offsets,
   repeated. Then remount + `fsck`/`bfs_shell`. **Before/after A/B on the same
   instance:** the "before" arm is the unpatched `bfs`; success = the patched arm
