@@ -235,6 +235,17 @@ skepticism everywhere:
 - **Never commit to `graviton` directly**; land changes via a topic branch + PR.
   Verify `HEAD` before staging, and stage explicit paths (another agent may switch
   the shared checkout's branch under you).
+- **Staleness audit before you trust the tree.** The shared checkout may be parked on
+  an old topic branch far behind `graviton` (seen 209 commits behind), so the
+  auto-loaded `AGENTS.md`/`CLAUDE.md` and any `grep` of the working tree can be reading
+  a stale revision. Before trusting project instructions or concluding "the fix isn't
+  in the tree": resolve the ref (`git rev-parse --abbrev-ref HEAD`;
+  `git rev-list --count HEAD..graviton`) and **grep `graviton:<path>`, not the working
+  tree.** Beware the git argument trap: the bare word `graviton` is **both a ref and a
+  directory**, so `git log graviton --grep=x` / `git diff graviton` silently resolve
+  the *directory* and return a confident wrong answer — always add a trailing `-- ` and
+  diff against a base SHA, and sanity-check with a positive control (a pattern you know
+  must match).
 
 ## 9. Delegating to worker agents (fan-out)
 
@@ -259,6 +270,12 @@ tight, so every spawn carries the same contract:
   drive the same builders. A forward-looking change (e.g. a provisioning edit
   that lands for the *next* AMI bake) safely runs alongside a campaign using the
   *current* AMI.
+- **One isolated worktree per parallel agent.** Agents that touch the tree
+  concurrently MUST each work in their **own** git worktree, never a shared checkout —
+  a shared working tree has one branch and one index, so a second agent's `git switch`
+  or stage silently moves the first agent's `HEAD` and files out from under it (§8).
+  Give each its own `git worktree add`, and each lands its own topic branch + PR (never
+  `graviton`, §8).
 - **A report contract.** Require a crisp final report: before→after state
   (verified against ground truth, §7), what changed, new blocker classes, and
   confirmation every builder/publisher it launched was reaped.
@@ -450,10 +467,16 @@ named per entry.
   **Size the publisher root dynamically** to ~(pool size × 2 + headroom)
   (`HG_PUBLISHER_DISK_GIB`), not a fixed default — the pool grows every publish, so
   a fixed 8 GB root eventually ENOSPCs the whole-pool index sync (distinct from the
-  `/dev/shm` tmpfs wall in #168).
+  `/dev/shm` tmpfs wall in #168). (5) **Publish the wave-built DELTA, not
+  "harvest-minus-green."** The work-bucket accumulator drags in `_bootstrap` packages
+  and historical `_debuginfo` variants that green never carried, so a naive
+  harvest-minus-green diff would add junk to the pool. Publish **only the set THIS wave
+  actually built** — filter the harvest to the wave's own completions and drop
+  `_bootstrap`/`_debuginfo` unless a wave deliberately built them.
 - **Check.** After each publish, verify against S3, not the log tail (§3/§7): count
   objects/index in the pool prefix. Confirm exactly one publisher is running (§3)
-  and that the next build wave launched **without** waiting for it.
+  and that the next build wave launched **without** waiting for it. Confirm no
+  `_bootstrap`/`_debuginfo` object landed that this wave did not build.
 
 ### 13.6 Native-builder launch constraints: default disk, cap parallelism, absolute interpreters (extends §8)
 
@@ -515,3 +538,48 @@ named per entry.
 - **Check.** Distinguish the two: per-port compile errors spread across unrelated
   ports = normal long tail; the *same* infrastructure error (launch, lease,
   publish, source-fetch) across many ports = mechanism break → stop and report.
+
+### 13.9 The builder AMI's BAKED base is a capability gate, not just its tooling (extends §11, §13.1)
+
+- **Symptom.** §13.1's rebake barrier is about the provisioning script's *tooling*, but
+  the same staleness bites through the AMI's **baked base system**. The builder's
+  `libroot` and `haiku_devel` are **version-locked to the AMI's haiku hrev**
+  (`haiku_devel requires haiku == <exact hrev>`). So a port that links or
+  runtime-dispatches against a newly-merged libroot/kernel symbol — e.g.
+  `getauxval(AT_HWCAP)` (#99/#329), landed for baseline-NEON ports like `libaom`
+  (#337) — fails to build on any builder whose baked AMI predates that merge, even
+  though the recipe and tooling are current. The symbol lives in the baked base, which
+  no provisioning edit and no in-place mutation can add.
+- **Rule.** When a merged fix a wave depends on lives in the **base system**
+  (kernel/`libroot`/`haiku_devel`), the builder AMI must be **rebaked from an image
+  that carries that hrev and promoted (§11) before the dependent wave** — same barrier
+  as §13.1, but the thing that must advance is the baked base, not the provisioning
+  script. Do not try to patch a live builder's `libroot`/`haiku_devel` in place (it
+  does not persist and would break the hrev lock).
+- **Check.** Before waving ports that need a base-system capability, confirm the
+  builder AMI actually ships it: check the resolved builder-ami-id's haiku hrev covers
+  the merge, and smoke-prove the symbol on a launched builder (e.g. a one-file
+  `getauxval` compile+run, rc=0) before trusting the wave. A base-capability miss reads
+  as a per-port compile/link error, so §13.8's "long tail" classification will hide it —
+  if the *same* missing symbol fails across unrelated ports, suspect a stale baked base,
+  not the ports.
+
+### 13.10 Build-verify before merge; HELD build-clean gate, hardware/perf validated in the post-merge bake (extends §7, §10.1)
+
+- **Symptom.** §10.1 says "prove the fix (A/B or targeted repro), merge it," but some
+  changes make a **hardware or performance** claim that can't be cheaply A/B'd per
+  commit — an arm64 `memset`/string-routine change (#336) or a storage perf-gate floor
+  (#360). Blocking every such merge on a full hardware A/B stalls the queue; merging on
+  an *unmeasured* perf claim ships a number nobody verified.
+- **Rule.** Land these behind a **HELD build-clean gate**: prove the change **builds
+  clean for the target** (`jam -q kernel_arm64`, `jam -q libroot.so`, rc=0; host-fuzz
+  the pure logic where possible), title the PR **`[HELD]`** so it is not merged
+  mid-flight, and **validate the hardware/perf claim in the combined post-merge bake**
+  (the perf-gate stage, hardware A/B) rather than per-PR. The invariant from §7 holds
+  either way: **never state a perf/hardware result you have not measured** — a
+  build-clean gate proves it compiles, not that it is faster; label the perf number a
+  target until the bake measures it.
+- **Check.** Before merge: the target builds rc=0 and every touched symbol resolves
+  once (no duplicate/missing definitions); the PR is marked `[HELD]` if its hardware
+  claim is still unproven. After the bake: the perf-gate/hardware A/B recorded the
+  measured number, and it met the floor — then drop the hold.
