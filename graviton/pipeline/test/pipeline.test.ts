@@ -21,6 +21,7 @@ const config: HaikuPipelineConfig = {
   haikuOnEc2Repo: 'https://github.com/haiku/haiku-on-ec2.git',
   haikuOnEc2Branch: 'master',
   buildComputeType: 'BUILD_GENERAL1_2XLARGE',
+  registerComputeType: 'BUILD_GENERAL1_LARGE',
   buildImage: 'public.ecr.aws/ubuntu/ubuntu:24.04',
   haikuRevision: 'hrev59996',
   amiNamePrefix: 'haiku-graviton',
@@ -219,6 +220,49 @@ test('the peer role is least-privilege: SSM + baron secret + nettput + ssm-out',
   expect(json).toContain('secret:haiku-graviton/baron-ssh-key-*');
   expect(json).toContain(`${config.ssmOutBucketName}/tools/*`);
   expect(json).toContain(`${config.ssmOutBucketName}/ssm-out/*`);
+});
+
+// Register is bandwidth-bound on the ~20 GiB raw-image upload (#152): the upload
+// hit the SMALL ARM container's ~1.1 Gbps network baseline, and s5cmd's parallel
+// multipart made no difference, so the only lever is a compute type with a higher
+// network baseline. Assert the register project runs on the configured
+// (LARGE-by-default) compute type -- a regression back to SMALL would silently
+// re-cap the upload at ~1.1 Gbps. Register is the only project that moves bulk
+// bytes, so PerfTest and Promote must stay SMALL (a bigger box there is pure cost).
+test('register uses the configured compute type; perf-test and promote stay SMALL', () => {
+  const t = synth();
+  t.hasResourceProperties('AWS::CodeBuild::Project', {
+    Name: 'haiku-graviton-register',
+    Environment: Match.objectLike({ ComputeType: config.registerComputeType }),
+  });
+  for (const name of ['haiku-graviton-perf-test', 'haiku-graviton-promote']) {
+    t.hasResourceProperties('AWS::CodeBuild::Project', {
+      Name: name,
+      Environment: Match.objectLike({ ComputeType: 'BUILD_GENERAL1_SMALL' }),
+    });
+  }
+});
+
+// The register compute type default is LARGE, not SMALL: ARM has no MEDIUM, so
+// LARGE is the smallest bump above the bandwidth-capped SMALL (#152). Assert the
+// default in loadConfig so a synth-fixture value cannot mask a regression of the
+// default itself. Clear the env override so the process env cannot mask it.
+test('the register compute type default is LARGE (issue #152)', () => {
+  const saved = process.env.HAIKU_REGISTER_COMPUTE;
+  delete process.env.HAIKU_REGISTER_COMPUTE;
+  try {
+    const app = new cdk.App({
+      context: {
+        'haiku:account': ACCOUNT,
+        'haiku:repoOwner': 'test-owner',
+        'haiku:connectionArn': config.connectionArn,
+      },
+    });
+    expect(loadConfig(app).registerComputeType).toBe('BUILD_GENERAL1_LARGE');
+  } finally {
+    if (saved === undefined) delete process.env.HAIKU_REGISTER_COMPUTE;
+    else process.env.HAIKU_REGISTER_COMPUTE = saved;
+  }
 });
 
 test('has a retained encrypted work bucket', () => {
