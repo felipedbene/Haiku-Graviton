@@ -108,6 +108,12 @@ struct net_device_interface : DoublyLinkedListLinkImpl<net_device_interface> {
 	// only this (read). The single-queue consumer never touches it and keeps
 	// its receive_lock exclusion unchanged.
 	rw_lock				receive_handlers_lock;
+
+	// Sojourn-time queue discipline for receive_queue. Bounds the queue by the
+	// time a frame spends in it rather than only by bytes, so a fast link fed
+	// past the consumer's drain rate does not build the standing multi-millisecond
+	// queue a pure byte cap allows. See utility.h.
+	net_fifo_codel		receive_queue_codel;
 };
 
 typedef DoublyLinkedList<net_device_interface> DeviceInterfaceList;

@@ -329,11 +329,19 @@ enum {
 	FLAG_CAN_NOTIFY 			= 0x200,
 	FLAG_USER_CLOSED			= 0x400,
 	FLAG_AUTO_SEND_BUFFER_SIZE	= 0x800,
-	// ECN (RFC 3168) stage A: negotiation state only.
+	// ECN (RFC 3168) stage A: negotiation state.
 	FLAG_ECN_SETUP_SENT			= 0x1000,
 		// initiator sent an ECN-setup SYN (ECE|CWR) and awaits confirmation
-	FLAG_ECN_NEGOTIATED			= 0x2000
+	FLAG_ECN_NEGOTIATED			= 0x2000,
 		// both ends agreed to ECN on this connection; latched on the handshake
+	// ECN stages C/D: data-phase congestion signalling.
+	FLAG_ECN_SEND_ECE			= 0x4000,
+		// receiver saw a CE mark; echo ECE on our ACKs until the peer sets CWR
+	FLAG_ECN_SEND_CWR			= 0x8000,
+		// sender reacted to an ECE; set CWR on our next outgoing data segment
+	FLAG_ECN_CWND_REDUCED		= 0x10000
+		// sender already cut the window for this RTT; do not cut again until a
+		// full window (fECNReactSequence) has been acknowledged
 };
 
 
@@ -495,6 +503,7 @@ TCPEndpoint::TCPEndpoint(net_socket* socket)
 	fDuplicateAcknowledgeCount(0),
 	fPreviousFlightSize(0),
 	fRecover(0),
+	fECNReactSequence(0),
 	fRoute(NULL),
 	fReceiveNext(0),
 	fReceiveMaxAdvertised(0),
@@ -2133,6 +2142,24 @@ TCPEndpoint::_Receive(tcp_segment_header& segment, net_buffer* buffer)
 			return DROP | IMMEDIATE_ACKNOWLEDGE;
 	}
 
+	// ECN (RFC 3168) data-phase signalling on an established, negotiated
+	// connection. Evaluated before the header-prediction fast path below, since
+	// a CE mark, a CWR, or a peer's ECE can ride a pure ACK that the fast path
+	// would otherwise consume and return from.
+	if ((fFlags & FLAG_ECN_NEGOTIATED) != 0 && fState == ESTABLISHED) {
+		// As receiver (6.1.3): a CE-marked segment arrived -- start echoing ECE
+		// on our ACKs, and keep echoing until the peer acknowledges the
+		// reduction by setting CWR.
+		if ((buffer->buffer_flags & NET_BUFFER_ECN_CE) != 0)
+			fFlags |= FLAG_ECN_SEND_ECE;
+		if ((segment.flags & TCP_FLAG_CONGESTION_WINDOW_REDUCED) != 0)
+			fFlags &= ~FLAG_ECN_SEND_ECE;
+		// As sender (6.1.2): the peer echoed ECE -> reduce the window once per
+		// RTT and arrange to set CWR on our next data segment.
+		if ((segment.flags & TCP_FLAG_CONGESTION_NOTIFICATION_ECHO) != 0)
+			_ReceivedCongestionNotification(segment);
+	}
+
 	uint32 advertisedWindow = segment.AdvertisedWindow(fSendWindowShift);
 	size_t segmentLength = buffer->size;
 
@@ -2589,6 +2616,14 @@ TCPEndpoint::_PrepareSendSegment()
 		}
 	}
 
+	// RFC 3168 6.1.3: echo ECE on data-phase ACKs (including pure ACKs) until
+	// the peer sets CWR. Never on the SYN/SYN-ACK, whose ECE/CWR are the
+	// separate negotiation flags handled above.
+	if ((segment.flags & TCP_FLAG_SYNCHRONIZE) == 0
+		&& (fFlags & FLAG_ECN_SEND_ECE) != 0) {
+		segment.flags |= TCP_FLAG_CONGESTION_NOTIFICATION_ECHO;
+	}
+
 	if ((fOptions & TCP_NOOPT) == 0) {
 		if ((fFlags & FLAG_OPTION_TIMESTAMP) != 0) {
 			segment.options |= TCP_HAS_TIMESTAMPS;
@@ -2713,8 +2748,29 @@ TCPEndpoint::_PrepareAndSend(tcp_segment_header& segment, net_buffer* buffer,
 
 	PROBE(buffer, sendWindow);
 
+	// RFC 3168 (stage C): mark data-bearing, non-retransmit, non-SYN segments
+	// of an ECN connection ECT(0) so the path/peer can mark them CE.
+	// Retransmits, pure ACKs and SYN/SYN-ACK stay Not-ECT. On the first such
+	// segment after a congestion reaction, also set CWR to tell the receiver to
+	// stop echoing ECE. CWR is written into the packet only; segment.flags is
+	// reused for the rest of the burst, so it is cleared again once the header
+	// is built.
+	bool sentCWR = false;
+	if ((fFlags & FLAG_ECN_NEGOTIATED) != 0 && !isRetransmit
+		&& segmentLength != 0
+		&& (segment.flags & TCP_FLAG_SYNCHRONIZE) == 0) {
+		buffer->buffer_flags |= NET_BUFFER_ECN_ECT0;
+		if ((fFlags & FLAG_ECN_SEND_CWR) != 0) {
+			segment.flags |= TCP_FLAG_CONGESTION_WINDOW_REDUCED;
+			fFlags &= ~FLAG_ECN_SEND_CWR;
+			sentCWR = true;
+		}
+	}
+
 	status_t status = add_tcp_header(AddressModule(), segment, buffer,
 		_CanOffloadChecksum());
+	if (sentCWR)
+		segment.flags &= ~TCP_FLAG_CONGESTION_WINDOW_REDUCED;
 	if (status != B_OK) {
 		gBufferModule->free(buffer);
 		return status;
@@ -3054,6 +3110,14 @@ TCPEndpoint::_Acknowledged(tcp_segment_header& segment)
 		fPreviousHighestAcknowledge = fSendUnacknowledged;
 		fSendUnacknowledged = segment.acknowledge;
 		_UpdateSendBuffer();
+
+		// RFC 3168 6.1.2 once-per-RTT: re-arm the ECE reaction once a full
+		// window (the data outstanding at reaction time) has been acknowledged.
+		if ((fFlags & FLAG_ECN_CWND_REDUCED) != 0
+			&& !(fSendUnacknowledged < fECNReactSequence)) {
+			fFlags &= ~FLAG_ECN_CWND_REDUCED;
+		}
+
 		uint32 flightSize = (fSendMax - fSendUnacknowledged).Number();
 		int32 expectedSamples = flightSize / (fSendMaxSegmentSize << 1);
 
@@ -3196,6 +3260,34 @@ TCPEndpoint::_ResetSlowStart()
 	fSlowStartThreshold = max_c((fSendMax - fSendUnacknowledged).Number() / 2,
 		2 * fSendMaxSegmentSize);
 	fCongestionWindow = fSendMaxSegmentSize;
+}
+
+
+void
+TCPEndpoint::_ReceivedCongestionNotification(tcp_segment_header& segment)
+{
+	// RFC 3168 6.1.2: react to an ECE at most once per window (RTT). Perform a
+	// single-loss-magnitude reduction -- halve ssthresh and pull cwnd down to
+	// it -- but do NOT collapse cwnd to one segment (that is the timeout
+	// response in _ResetSlowStart), and do NOT enter fast recovery
+	// (FLAG_RECOVERY). A real 3-dup-ack loss still runs _DuplicateAcknowledge
+	// independently; the once-per-window guard below only prevents a second ECE
+	// cut in the same window, it never suppresses real loss recovery. This is
+	// the whole point of ECN: the window comes down without a retransmit.
+	if ((fFlags & FLAG_ECN_CWND_REDUCED) != 0)
+		return;
+
+	uint32 flightSize = (fSendMax - fSendUnacknowledged).Number();
+	fSlowStartThreshold = max_c(flightSize / 2, 2 * fSendMaxSegmentSize);
+	fCongestionWindow = fSlowStartThreshold;
+
+	// Set CWR on the next data segment we send, and remember not to react again
+	// until this much data has been acknowledged (a full window / one RTT).
+	fFlags |= FLAG_ECN_SEND_CWR | FLAG_ECN_CWND_REDUCED;
+	fECNReactSequence = fSendMax;
+
+	TRACE("_ReceivedCongestionNotification(): cwnd -> %" B_PRIu32 ", ssthresh"
+		" -> %" B_PRIu32, fCongestionWindow, fSlowStartThreshold);
 }
 
 
@@ -3345,8 +3437,11 @@ TCPEndpoint::Dump() const
 	kprintf("  retransmit timeout: %" B_PRId64 "\n", fRetransmitTimeout);
 	kprintf("  congestion window: %" B_PRIu32 "\n", fCongestionWindow);
 	kprintf("  slow start threshold: %" B_PRIu32 "\n", fSlowStartThreshold);
-	kprintf("  ecn: %s%s\n",
+	kprintf("  ecn: %s%s%s%s%s\n",
 		(fFlags & FLAG_ECN_NEGOTIATED) != 0 ? "negotiated" : "off",
-		(fFlags & FLAG_ECN_SETUP_SENT) != 0 ? " (setup-sent)" : "");
+		(fFlags & FLAG_ECN_SETUP_SENT) != 0 ? " (setup-sent)" : "",
+		(fFlags & FLAG_ECN_SEND_ECE) != 0 ? " send-ece" : "",
+		(fFlags & FLAG_ECN_SEND_CWR) != 0 ? " send-cwr" : "",
+		(fFlags & FLAG_ECN_CWND_REDUCED) != 0 ? " cwnd-reduced" : "");
 }
 

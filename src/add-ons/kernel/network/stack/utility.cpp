@@ -418,6 +418,178 @@ fifo_socket_enqueue_buffer(net_fifo* fifo, net_socket* socket, uint8 event,
 }
 
 
+//	#pragma mark - fifo sojourn-time queue discipline (CoDel)
+
+
+void
+init_fifo_codel(net_fifo_codel* codel, bigtime_t target, bigtime_t interval,
+	size_t minBytes)
+{
+	memset(codel, 0, sizeof(*codel));
+	codel->target = target;
+	codel->interval = interval;
+	codel->min_bytes = minBytes;
+}
+
+
+/*!	Integer square root, digit-by-digit. Used only on the drop path (i.e. only
+	while the queue is persistently overloaded), never on the common per-frame
+	path, so its cost does not matter; what matters is that it needs no FPU,
+	which the receive path does not have.
+*/
+static inline uint32
+codel_isqrt(uint32 n)
+{
+	uint32 result = 0;
+	uint32 bit = 1UL << 30;
+
+	while (bit > n)
+		bit >>= 2;
+
+	while (bit != 0) {
+		if (n >= result + bit) {
+			n -= result + bit;
+			result = (result >> 1) + bit;
+		} else
+			result >>= 1;
+		bit >>= 2;
+	}
+
+	return result;
+}
+
+
+/*!	CoDel's control law: the next drop is scheduled interval / sqrt(count) after
+	the reference time, so that a persisting overload is shed at an accelerating
+	rate until the sojourn falls back under target. Integer-only.
+*/
+static inline bigtime_t
+codel_control_law(bigtime_t reference, bigtime_t interval, uint32 count)
+{
+	uint32 root = codel_isqrt(count);
+	if (root == 0)
+		root = 1;
+	return reference + interval / root;
+}
+
+
+/*!	The CoDel state update for one just-dequeued buffer: does the queue look
+	persistently over target? Returns whether this buffer is a candidate to
+	drop. Cheap -- a subtraction and a couple of comparisons -- and this is the
+	only CoDel work done on the common (no-drop) per-frame path.
+*/
+static inline bool
+codel_update(net_fifo_codel* codel, bigtime_t now, bigtime_t sojourn,
+	size_t queueBytes)
+{
+	if (sojourn < codel->target || queueBytes < codel->min_bytes) {
+		// Below target, or the queue is down to about one packet: the standing
+		// queue has cleared, so restart the interval timer.
+		codel->first_above_time = 0;
+		return false;
+	}
+
+	if (codel->first_above_time == 0) {
+		// Just went above target; do not act until it has stayed above for a
+		// whole interval. This is what lets a transient burst through untouched.
+		codel->first_above_time = now + codel->interval;
+		return false;
+	}
+
+	return now >= codel->first_above_time;
+}
+
+
+static inline bigtime_t
+codel_sojourn(net_buffer* buffer, bigtime_t now)
+{
+	// A buffer that reached the FIFO by some path other than the timestamping
+	// enqueue (or one in flight when the discipline was reconfigured) carries no
+	// stamp; charge it no sojourn rather than a spurious multi-second one.
+	if (buffer->receive_enqueue_time == 0
+		|| now < buffer->receive_enqueue_time)
+		return 0;
+	return now - buffer->receive_enqueue_time;
+}
+
+
+/*!	Blocking dequeue with the sojourn-time queue discipline applied.
+
+	Returns exactly one buffer to dispatch (in \a _buffer, status B_OK). When the
+	discipline decides a buffer is part of a standing queue, it does not free it
+	here; instead it flags it NET_BUFFER_ECN_CE_MARK and hands it onward. The
+	single ECN translate point in the L3 receive path then either promotes an
+	ECN-capable (ECT) packet to CE -- a mark, not a drop, so the flow's sender
+	backs off without a loss (RFC 3168) -- or, for a non-ECN packet, drops it
+	there. Either way the buffer leaves the queue, so the shed relieves the
+	standing queue exactly as an in-place free would have; only ECN-capable
+	flows are spared the loss.
+
+	This is the CoDel control law (Nichols & Jacobson) evaluated one buffer per
+	call: because a shed buffer is delivered rather than freed, each call drains
+	one buffer regardless, so unlike the free-and-refetch form there is no need
+	to shed several within a single call to keep up.
+*/
+ssize_t
+fifo_dequeue_buffer_codel(net_fifo* fifo, net_fifo_codel* codel,
+	net_fifo_watermark* diagnostics, net_buffer** _buffer)
+{
+	net_buffer* buffer;
+	ssize_t status = fifo_dequeue_buffer_tracked(fifo, 0, B_INFINITE_TIMEOUT,
+		&buffer, diagnostics);
+	if (status != B_OK)
+		return status;
+
+	bigtime_t now = system_time();
+	bigtime_t sojourn = codel_sojourn(buffer, now);
+	size_t queueBytes = (diagnostics != NULL)
+		? diagnostics->current_bytes : fifo->current_bytes;
+
+	codel->evaluated++;
+	codel->last_sojourn = sojourn;
+	if (sojourn > codel->max_sojourn)
+		codel->max_sojourn = sojourn;
+
+	bool okToDrop = codel_update(codel, now, sojourn, queueBytes);
+	bool shed = false;
+
+	if (codel->dropping) {
+		if (!okToDrop) {
+			// Sojourn fell back under target: end the episode.
+			codel->dropping = false;
+		} else if (now >= codel->drop_next) {
+			// Still over target and past the next scheduled shed.
+			shed = true;
+			codel->count++;
+			codel->drop_next = codel_control_law(codel->drop_next,
+				codel->interval, codel->count);
+		}
+	} else if (okToDrop) {
+		// Enter a shedding episode. Resuming one that ended recently keeps most
+		// of its rate; a fresh one starts from a single shed.
+		shed = true;
+		if (codel->count > 2 && (now - codel->drop_next) < codel->interval)
+			codel->count -= 2;
+		else
+			codel->count = 1;
+
+		codel->dropping = true;
+		codel->drop_next = codel_control_law(now, codel->interval,
+			codel->count);
+	}
+
+	if (shed) {
+		// Ask the L3 ECN translate point to mark this buffer CE (if its flow is
+		// ECN-capable) or drop it (if not). Not freed here.
+		buffer->buffer_flags |= NET_BUFFER_ECN_CE_MARK;
+		codel->dropped++;
+	}
+
+	*_buffer = buffer;
+	return B_OK;
+}
+
+
 //	#pragma mark - Timer
 
 

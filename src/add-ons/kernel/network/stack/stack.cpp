@@ -777,6 +777,14 @@ scan_modules(const char* path)
 status_t
 init_stack()
 {
+	// Announce the receive-FIFO queue discipline once, at init, so a running
+	// image can be attributed to this change without decompiling it. Printed
+	// off the datapath, so the synchronous per-character UART write here costs
+	// nothing that matters.
+	dprintf("net stack: receive FIFO sojourn discipline active "
+		"(codel target %d us, interval %d us)\n",
+		NET_FIFO_CODEL_TARGET, NET_FIFO_CODEL_INTERVAL);
+
 	status_t status = init_domains();
 	if (status != B_OK)
 		return status;
