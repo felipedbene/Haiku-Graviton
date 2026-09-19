@@ -73,6 +73,13 @@ disk_super_block::Initialize(const char* diskName, off_t numBlocks,
 	fs_byte_order = HOST_ENDIAN_TO_BFS_INT32(SUPER_BLOCK_FS_LENDIAN);
 	flags = HOST_ENDIAN_TO_BFS_INT32(SUPER_BLOCK_DISK_CLEAN);
 
+	// DeBeOS (#91 Gap 2): freshly formatted volumes carry per-entry journal
+	// checksums+sequence. Existing volumes keep journal_format_flags == 0 (the
+	// memset above) and mount unchanged through the legacy replay path. The
+	// commit sequence starts at 1 so that 0 can never be a valid entry seq.
+	journal_format_flags = HOST_ENDIAN_TO_BFS_INT32(BFS_JOURNAL_FORMAT_CHECKSUM);
+	log_commit_sequence = HOST_ENDIAN_TO_BFS_INT64(1);
+
 	strlcpy(name, diskName, sizeof(name));
 
 	int32 blockShift = 9;
