@@ -2070,7 +2070,19 @@ TCPEndpoint::_Spawn(TCPEndpoint* parent, tcp_segment_header& segment,
 	segment.flags &= ~TCP_FLAG_SYNCHRONIZE;
 		// we handled this flag now, it must not be set for further processing
 
-	return _Receive(segment, buffer);
+	int32 action = _Receive(segment, buffer);
+
+	if ((action & NOTIFY_READER) != 0) {
+		// The action travels back through the PARENT listener's
+		// SegmentReceived(), whose deferred wakeup targets the parent -- but
+		// this notification belongs to the freshly spawned child. Perform it
+		// here (cold path: connection setup, e.g. data riding the SYN) and
+		// strip the bit.
+		_NotifyReader();
+		action &= ~NOTIFY_READER;
+	}
+
+	return action;
 }
 
 
