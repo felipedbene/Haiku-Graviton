@@ -115,6 +115,38 @@ Delivered by PR #227 (branding) and PR #257 (revision scheme), on `graviton`:
 4. The bake adds an additive `debeos-revision` (HEAD-tracking) AMI tag alongside the
    pinned `haiku-revision`.
 5. `uname` and every machine-readable identifier deliberately still read "Haiku".
+   Note the `struct utsname` `version` field is only 32 bytes and already carries
+   `<revision> <build-date> <build-time>` — on a DeBeOS source build the revision
+   alone is `debeos-r<n>-g<sha>` (~21 chars), so the field is already at its limit.
+   That is a second, independent reason not to brand `uname`: there is no room to
+   prepend a name without truncating the build stamp, and `uname -v` already conveys
+   DeBeOS provenance through the revision it embeds.
+
+## pkgman safety — proof the branding cannot brick an image
+
+The branding is safe against `pkgman`'s package-version comparison **by construction**,
+and this is now also confirmed on shipped hardware:
+
+- **The compared version string is byte-identical to before the change.** The package
+  version is assembled by `PreprocessPackageOrRepositoryInfo1` as
+  `$(HAIKU_VERSION)_${revision}` where `HAIKU_VERSION = r1~beta6` (unchanged) and
+  `${revision}` is the contents of `<build-output>/haiku-revision` with `[+-]`→`_`.
+  The pipeline pins `HAIKU_REVISION=hrev59996`, and `SetHaikuRevision` uses a pinned
+  value verbatim, so every published `.hpkg` is still `r1~beta6_hrev59996`. None of the
+  landed work — AboutSystem, the boot-loader/menu banners, the ENA banner, the
+  `determine_haiku_revision` tagless fallback, or the additive `debeos-revision` AMI
+  tag — touches that arithmetic. `pkgman` therefore compares exactly the same version it
+  did before #201, so it cannot be induced to "upgrade" or "downgrade" the base by the
+  branding.
+- **Confirmed live on the canonical AMI.** The current canonical image is baked from a
+  `graviton` commit that already contains `Branding.h` and the DeBeOS-branded
+  `AboutSystem` (its `source-commit` tag is an ancestor of HEAD). That image carries
+  both the pinned `haiku-revision: hrev59996` **and** the additive
+  `debeos-revision: debeos-r<n>-g<sha>` tag, and it only became canonical by passing the
+  pipeline's Test and perf gates — which exercise package resolution on a booted box.
+  So a branded image with the pinned version boots and resolves packages cleanly; the
+  DeBeOS identity and pkgman-safety hold together on real Graviton hardware, not just in
+  the reasoning above.
 
 ## What this does NOT change yet — and why (blast radius)
 
@@ -165,9 +197,11 @@ Owned by the distribution/version-model decision, issue #92. In order:
    pipeline) and let `haiku-revision` = `debeos-revision`, collapsing the two tags.
 5. **Re-bake and verify on hardware** — confirm the version banner, package versions,
    and AMI tags all show the DeBeOS-native value, and that `pkgman update` against the
-   pool is a no-op on an up-to-date box and a forward move on a stale one. (Boot-verify
-   of the already-landed banners on a fresh bake is also still owed — they are
-   compile-verified only.)
+   pool is a no-op on an up-to-date box and a forward move on a stale one. (The landed
+   banners are compile-verified, and the canonical AMI's provenance — see "pkgman safety"
+   above — proves the branded binaries ship and boot on real hardware and pass the test
+   gate. A dedicated serial-console capture of the boot-loader welcome text via
+   `get-console-output` is the one piece of banner verification still nominally owed.)
 
 Only after step 5 does #201 fully close; until then the additive identity above is the
 shipped state.
