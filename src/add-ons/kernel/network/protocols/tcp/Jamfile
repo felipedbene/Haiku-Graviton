@@ -7,7 +7,6 @@ KernelAddon tcp :
 	tcp.cpp
 	TCPEndpoint.cpp
 	BufferQueue.cpp
-	ReceiveRing.cpp
 	EndpointManager.cpp
 ;
 
