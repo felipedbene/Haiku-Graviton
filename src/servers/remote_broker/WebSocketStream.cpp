@@ -349,40 +349,63 @@ WebSocketStream::Relay(WebSocketStream& webSocket, TLSStream& stream,
 	// long is gone or hostile either way.
 	static const bigtime_t kRelayWriteTimeout = 30 * 1000 * 1000;
 
+	// A *read* of the client direction must not block for long, even with a
+	// partial frame in hand: the two directions share this thread, so a
+	// client that pauses mid-frame would otherwise stop the server→client
+	// direction dead (app_server's send ring fills and the desktop freezes).
+	// A short slice plus B_TIMED_OUT-means-try-the-other-direction keeps the
+	// relay effectively full duplex, and a mid-frame pause is a stall, never
+	// a reason to tear a healthy session down.
+	static const bigtime_t kRelayReadSlice = 200 * 1000;
+
 	uint8 buffer[16 * 1024];
 
 	while (true) {
-		if (!webSocket.HasBufferedData()) {
-			fd_set readSet;
-			FD_ZERO(&readSet);
-			FD_SET(stream.Socket(), &readSet);
-			FD_SET(plainSocket, &readSet);
-			int maxSocket = stream.Socket() > plainSocket
-				? stream.Socket() : plainSocket;
+		// Both directions are checked every round -- including when this
+		// side already holds an undecodable partial frame, which must never
+		// keep the server→client direction from being served.
+		fd_set readSet;
+		FD_ZERO(&readSet);
+		FD_SET(stream.Socket(), &readSet);
+		FD_SET(plainSocket, &readSet);
+		int maxSocket = stream.Socket() > plainSocket
+			? stream.Socket() : plainSocket;
 
-			int ready = select(maxSocket + 1, &readSet, NULL, NULL, NULL);
-			if (ready < 0) {
-				if (errno == EINTR)
-					continue;
+		// With buffered data a read may make progress without the socket
+		// becoming readable, so do not block indefinitely in that case.
+		struct timeval slice;
+		slice.tv_sec = 0;
+		slice.tv_usec = kRelayReadSlice;
+		int ready = select(maxSocket + 1, &readSet, NULL, NULL,
+			webSocket.HasBufferedData() ? &slice : NULL);
+		if (ready < 0) {
+			if (errno == EINTR)
+				continue;
+			return;
+		}
+
+		if (FD_ISSET(plainSocket, &readSet)) {
+			ssize_t read = recv(plainSocket, buffer, sizeof(buffer), 0);
+			if (read <= 0)
+				return;
+			if (webSocket.WriteAll(buffer, read,
+					system_time() + kRelayWriteTimeout) != B_OK) {
 				return;
 			}
+		}
 
-			if (FD_ISSET(plainSocket, &readSet)) {
-				ssize_t read = recv(plainSocket, buffer, sizeof(buffer), 0);
-				if (read <= 0)
-					return;
-				if (webSocket.WriteAll(buffer, read,
-						system_time() + kRelayWriteTimeout) != B_OK) {
-					return;
-				}
-			}
-
-			if (!FD_ISSET(stream.Socket(), &readSet))
-				continue;
+		if (!FD_ISSET(stream.Socket(), &readSet)
+			&& !webSocket.HasBufferedData()) {
+			continue;
 		}
 
 		ssize_t read = webSocket.ReadSome(buffer, sizeof(buffer),
-			system_time() + kRelayWriteTimeout);
+			system_time() + kRelayReadSlice);
+		if (read == B_TIMED_OUT) {
+			// Nothing decodable yet (partial frame); go serve the other
+			// direction rather than sitting on it.
+			continue;
+		}
 		if (read <= 0)
 			return;
 

@@ -2151,7 +2151,9 @@ def main(argv=None):
         epilog="Exits 0 with a summary even when nothing arrives; grep "
                "CONNECTED=, MESSAGES=, BLACK_TOPRIGHT=, BLACK_SCREEN=.")
     p.add_argument("--host", default="127.0.0.1")
-    p.add_argument("--port", type=int, default=10900)
+    p.add_argument("--port", type=int, default=None,
+                   help="default 10900 (app_server), or 10902 with --wss "
+                        "(remote_broker)")
     p.add_argument("--width", type=int, default=1200)
     p.add_argument("--height", type=int, default=760)
     p.add_argument("--seconds", type=float, default=25.0,
@@ -2177,8 +2179,8 @@ def main(argv=None):
                    help="run the parser/PNG self-test and exit")
     p.add_argument("--wss", action="store_true",
                    help="connect through the remote_broker daemon: TLS + "
-                        "WebSocket + RP_AUTHENTICATE (default --port stays "
-                        "10900; the broker listens on 10902)")
+                        "WebSocket + RP_AUTHENTICATE (implies --port 10902 "
+                        "unless --port is given)")
     p.add_argument("--token", help="authentication token for --wss")
     p.add_argument("--token-file",
                    help="file containing the authentication token for --wss")
@@ -2188,6 +2190,9 @@ def main(argv=None):
     p.add_argument("--insecure", action="store_true",
                    help="with --wss: skip certificate pinning (still TLS)")
     args = p.parse_args(argv)
+
+    if args.port is None:
+        args.port = 10902 if args.wss else 10900
 
     if args.selftest:
         print("rdcapture selftest")

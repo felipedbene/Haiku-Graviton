@@ -15,16 +15,36 @@ SSH tunnel, what runs where, and how each client authenticates.
 ```
 
 - **app_server carries no crypto at all.** Its `RemoteHWInterface` listener
-  binds loopback (or, if explicitly configured as `<address>:<port>` in the
-  target string, an RFC 1918 / link-local address) and *refuses* to bind a
-  public or wildcard address. The plaintext, unauthenticated RP stream is
-  structurally unreachable from outside the machine.
+  binds loopback and *refuses* a public or wildcard address. The plaintext,
+  unauthenticated RP stream is therefore unreachable from outside the
+  machine — note "outside the machine", not "by unauthorized peers": see
+  *Known limitation* below. A deliberately awkward opt-in
+  (`unsafe-bind:<a.b.c.d>:<port>` as the target, logged loudly) exists for a
+  genuinely isolated private segment; it is not the supported path, because
+  on a cloud instance the only NIC address is RFC 1918 with a 1:1-NAT public
+  address in front of it, so "the private address" *is* the internet-facing
+  interface.
 - **`remote_broker`** (`src/servers/remote_broker/`) is a small separate
   daemon that terminates TLS, speaks WebSocket (RFC 6455, subprotocol
   `binary`) toward every client, verifies a shared token **before proxying a
   single byte**, and then relays the RP byte stream to the loopback session
   port. It replaces the external `websockify` dependency for the browser
   client.
+
+### Known limitation: loopback is trusted
+
+The candidate gate in app_server proves "speaks the protocol", not "is
+authorized" — the first frame it requires (`RP_INIT_CONNECTION`) is six
+constant bytes. So **any local process that can reach `127.0.0.1:10900` can
+still take a broker-authenticated session over**, screen and keystrokes,
+without TLS, token or rate limiting, and the broker never learns its client
+was displaced. On the single-user test fleet this is an accepted boundary
+(anything running locally already has the user's privileges), but it is a
+real gap for a multi-user or untrusted-local-code host. The fix is a
+per-boot shared secret between the broker and app_server (a 0600 cookie
+presented as the first frame), which would also make the frame-shape
+heuristic redundant; it is deliberately **not** in this change and is
+tracked separately.
 
 Why a broker process instead of TLS inside app_server:
 

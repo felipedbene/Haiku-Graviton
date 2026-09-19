@@ -1787,7 +1787,16 @@ RemoteState.prototype.messageReceived = function(remoteMessage, reply)
 function RemoteDesktopSession(targetElement, width, height, targetAddress,
 	token, disconnectCallback)
 {
-	this.token = token;
+	// The token is only ever sent to the broker, i.e. over wss://. On the
+	// plain ws:// rescue path (websockify over an SSH tunnel) the frame
+	// would reach app_server directly, which accepts only
+	// RP_INIT_CONNECTION/RP_HELLO as a session's first frame and would drop
+	// the connection as an invalid takeover candidate. A left-over token in
+	// the form must therefore not break that path.
+	this.token = /^wss:/i.test(targetAddress) ? token : null;
+	if (token && !this.token)
+		console.log('plain ws:// target: not sending the token');
+
 	this.websocket = new WebSocket(targetAddress, 'binary');
 	this.websocket.binaryType = 'arraybuffer';
 	this.websocket.onopen = this.onOpen.bind(this);

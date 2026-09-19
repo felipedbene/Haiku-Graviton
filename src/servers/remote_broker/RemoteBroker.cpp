@@ -43,6 +43,7 @@
 #include <openssl/rand.h>
 #include <openssl/sha.h>
 #include <openssl/x509.h>
+#include <openssl/x509v3.h>
 
 #include <arpa/inet.h>
 #include <errno.h>
@@ -318,6 +319,22 @@ generate_certificate(const char* certificatePath, const char* keyPath)
 			(const unsigned char*)hostname, -1, -1, 0);
 		X509_set_issuer_name(certificate, name);
 
+		// A subjectAltName, or modern clients reject the certificate outright
+		// (CN-only has not been accepted for years). The address a client
+		// dials is not known here, so the name is the host name plus
+		// loopback; the trust decision is the fingerprint pin either way,
+		// and a browser accepting the certificate once needs the extension
+		// to exist at all.
+		char altNames[512];
+		snprintf(altNames, sizeof(altNames), "DNS:%s,IP:127.0.0.1",
+			hostname);
+		X509_EXTENSION* extension = X509V3_EXT_conf_nid(NULL, NULL,
+			NID_subject_alt_name, altNames);
+		if (extension != NULL) {
+			X509_add_ext(certificate, extension, -1);
+			X509_EXTENSION_free(extension);
+		}
+
 		if (X509_set_pubkey(certificate, key) != 1)
 			goto out;
 
@@ -426,11 +443,22 @@ ensure_token(const char* tokenPath, uint8* digest)
 			return errno;
 	}
 
-	char buffer[kMaxTokenLength + 1];
-	ssize_t length = read(fd, buffer, kMaxTokenLength);
+	// One byte more than the maximum is read so an over-long token is
+	// rejected rather than silently truncated -- a truncated token would
+	// still "work" for a client that sends the same truncation and quietly
+	// throw the rest of the operator's secret away.
+	char buffer[kMaxTokenLength + 2];
+	ssize_t length = read(fd, buffer, kMaxTokenLength + 1);
 	close(fd);
 	if (length < 0)
 		return errno;
+
+	if ((size_t)length > kMaxTokenLength) {
+		TRACE_ERROR("token in %s is longer than %zu characters\n", tokenPath,
+			kMaxTokenLength);
+		OPENSSL_cleanse(buffer, sizeof(buffer));
+		return B_BAD_DATA;
+	}
 
 	while (length > 0 && (buffer[length - 1] == '\n'
 			|| buffer[length - 1] == '\r' || buffer[length - 1] == ' ')) {
@@ -648,10 +676,15 @@ handle_connection(void* data)
 	TLSStream tls;
 	status_t result = tls.Accept(sTLSContext, context->socket, deadline);
 	if (result != B_OK) {
+		// Deliberately NOT counted as an authentication failure. The
+		// documented first-use flow produces exactly these: a browser
+		// aborting the handshake on the not-yet-trusted self-signed
+		// certificate, a plain http:// probe, a favicon fetch. Counting
+		// them would block the user's address before their first real
+		// connection, with nothing on screen to explain why. Brute force is
+		// what the limiter is for, and brute force has to reach the token
+		// check to make progress.
 		TRACE_LOG("%s: TLS handshake failed\n", context->peerName);
-		// A plaintext or otherwise broken peer costs a failure mark too, so
-		// probes back off like bad tokens do.
-		sRateLimiter.RecordFailure(context->peerAddress);
 		atomic_add(&sConcurrentHandshakes, -1);
 		delete context;
 		return result;
@@ -661,7 +694,6 @@ handle_connection(void* data)
 	result = ws.AcceptHandshake(deadline);
 	if (result != B_OK) {
 		TRACE_LOG("%s: WebSocket handshake failed\n", context->peerName);
-		sRateLimiter.RecordFailure(context->peerAddress);
 		atomic_add(&sConcurrentHandshakes, -1);
 		delete context;
 		return result;
@@ -677,10 +709,16 @@ handle_connection(void* data)
 		OPENSSL_cleanse(authBuffer, sizeof(authBuffer));
 		TRACE_LOG("%s: authentication failed\n", context->peerName);
 		sRateLimiter.RecordFailure(context->peerAddress);
+
+		// Give the handshake slot up BEFORE the tarpit delay: this thread
+		// only has a fixed 10 byte denial left to write, and holding one of
+		// the few concurrent-handshake slots through a deliberate delay
+		// would spend the broker's capacity rather than the attacker's.
+		atomic_add(&sConcurrentHandshakes, -1);
+
 		snooze(kAuthFailureDelay);
 		send_auth_result(ws, kAuthResultDenied, system_time() + 1000000);
 		ws.SendClose(1008, system_time() + 1000000);
-		atomic_add(&sConcurrentHandshakes, -1);
 		delete context;
 		return result;
 	}
@@ -857,10 +895,31 @@ main(int argc, char** argv)
 		int clientSocket = accept(listenSocket, (struct sockaddr*)&peer,
 			&peerLength);
 		if (clientSocket < 0) {
-			if (errno == EINTR)
-				continue;
-			TRACE_ERROR("accept failed: %s\n", strerror(errno));
-			return 1;
+			// Never exit the accept loop on a per-connection or transient
+			// resource error: a peer that connects and immediately resets
+			// (ECONNABORTED), or momentary fd/buffer exhaustion, would
+			// otherwise take the whole front door down -- and every live
+			// session with it -- on one unauthenticated packet. Only a
+			// broken listening socket is fatal.
+			switch (errno) {
+				case EINTR:
+					continue;
+
+				case EBADF:
+				case EINVAL:
+				case ENOTSOCK:
+					TRACE_ERROR("listening socket failed: %s\n",
+						strerror(errno));
+					return 1;
+
+				default:
+					TRACE_ERROR("accept failed, continuing: %s\n",
+						strerror(errno));
+					// Back off briefly so a persistent resource shortage
+					// does not spin this loop at full speed.
+					snooze(100 * 1000);
+					continue;
+			}
 		}
 
 		// Cheap gates before any TLS work: per-address backoff and a global

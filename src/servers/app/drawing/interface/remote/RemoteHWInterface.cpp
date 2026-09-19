@@ -101,42 +101,68 @@ RemoteHWInterface::RemoteHWInterface(const char* target)
 
 	fCurrentMode = fClientMode = fFallbackMode;
 
-	// The target is "<port>" or "<IPv4-address>:<port>". With just a port the
-	// listener binds loopback; an explicit address allows serving a trusted
-	// private network segment directly, but is validated below.
+	// The target is "<port>", which binds loopback -- the only form anything
+	// in the tree uses -- or the deliberately awkward opt-in
+	// "unsafe-bind:<IPv4-address>:<port>" for serving a trusted private
+	// segment directly.
+	//
+	// The opt-in is spelled that way on purpose. The remote protocol has no
+	// authentication and no encryption of any kind: anything that can reach
+	// the port gets full control of the session, including every keystroke.
+	// And "private address" is NOT a routability property on a cloud
+	// instance -- an EC2 instance's only NIC address is RFC 1918 with a
+	// 1:1-NAT public address in front of it, so binding "the private
+	// address" there binds the internet-facing interface. There is no
+	// address this protocol is safe to bind but loopback; non-loopback
+	// access belongs to the TLS-terminating, authenticating remote_broker
+	// daemon. The escape hatch exists only for a genuinely isolated segment
+	// and must be typed out.
 	uint32 bindAddress = htonl(INADDR_LOOPBACK);
-	unsigned int a, b, c, d;
-	unsigned int scannedPort;
-	if (sscanf(fTarget, "%u.%u.%u.%u:%u", &a, &b, &c, &d, &scannedPort) == 5) {
-		if (a > 255 || b > 255 || c > 255 || d > 255 || scannedPort == 0
+	static const char* kUnsafePrefix = "unsafe-bind:";
+	const size_t kUnsafePrefixLength = strlen(kUnsafePrefix);
+
+	if (strncmp(fTarget, kUnsafePrefix, kUnsafePrefixLength) == 0) {
+		unsigned int a, b, c, d;
+		unsigned int scannedPort;
+		char extra;
+		if (sscanf(fTarget + kUnsafePrefixLength, "%u.%u.%u.%u:%u%c", &a, &b,
+				&c, &d, &scannedPort, &extra) != 5
+			|| a > 255 || b > 255 || c > 255 || d > 255 || scannedPort == 0
 			|| scannedPort > 65535) {
+			TRACE_ERROR("malformed target '%s'; expected "
+				"unsafe-bind:<a.b.c.d>:<port>\n", fTarget);
 			fInitStatus = B_BAD_VALUE;
 			return;
 		}
 
 		bindAddress = htonl((a << 24) | (b << 16) | (c << 8) | d);
 		fListenPort = (uint16)scannedPort;
-	} else if (sscanf(fTarget, "%" B_SCNu16, &fListenPort) != 1) {
-		fInitStatus = B_BAD_VALUE;
-		return;
-	}
 
-	// Never a publicly routable address and never INADDR_ANY. The remote
-	// protocol has no authentication and no encryption of any kind: anything
-	// that can reach this port gets full control of the session, including
-	// every keystroke. Binding the wildcard address -- which
-	// BNetEndpoint::Bind(int) does -- puts that on every interface the machine
-	// has, which on a cloud instance means the public one. The plaintext
-	// stream is therefore only reachable over loopback (through an SSH tunnel
-	// or the TLS-terminating remote_broker daemon, which provide the
-	// authentication the protocol lacks) or, when explicitly configured, on an
-	// RFC 1918 / link-local address of a trusted private segment.
-	if (!is_loopback_or_private_address(bindAddress)) {
-		TRACE_ERROR("refusing to bind the unauthenticated remote protocol to "
-			"a public or wildcard address; use the remote_broker daemon for "
-			"non-loopback access\n");
-		fInitStatus = B_BAD_VALUE;
-		return;
+		// Still never INADDR_ANY or a publicly routable address: those are
+		// not "a trusted segment" under any reading.
+		if (!is_loopback_or_private_address(bindAddress)) {
+			TRACE_ERROR("refusing to bind the unauthenticated remote protocol "
+				"to a public or wildcard address\n");
+			fInitStatus = B_BAD_VALUE;
+			return;
+		}
+
+		if (ntohl(bindAddress) >> 24 != 127) {
+			TRACE_ALWAYS("WARNING: binding the UNAUTHENTICATED, UNENCRYPTED "
+				"remote protocol to %s -- every peer that can reach it owns "
+				"this session, including its keystrokes. On a cloud instance "
+				"a private NIC address may be reachable from the internet "
+				"through 1:1 NAT.\n", fTarget + kUnsafePrefixLength);
+		}
+	} else {
+		char extra;
+		if (sscanf(fTarget, "%" B_SCNu16 "%c", &fListenPort, &extra) != 1
+			|| fListenPort == 0) {
+			TRACE_ERROR("malformed target '%s'; expected a port number or "
+				"unsafe-bind:<a.b.c.d>:<port>\n", fTarget);
+			fInitStatus = B_BAD_VALUE;
+			return;
+		}
 	}
 
 	fListenEndpoint.SetTo(new(std::nothrow) BNetEndpoint());

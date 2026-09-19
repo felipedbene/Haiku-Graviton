@@ -71,7 +71,8 @@ NetReceiver::NetReceiver(BNetEndpoint *listener, StreamingRingBuffer *target,
 	fConnectionClosedCallback(connectionClosedCallback),
 	fEndpoint(newConnectionCallback == NULL ? listener : NULL),
 	fCandidateBufferUsed(0),
-	fCandidateDeadline(0)
+	fCandidateDeadline(0),
+	fCandidateValidated(false)
 {
 	fReceiverThread = spawn_thread(_NetworkReceiverEntry, "network receiver",
 		B_NORMAL_PRIORITY, this);
@@ -110,12 +111,23 @@ NetReceiver::_Listen()
 	}
 
 	while (!fStopThread) {
-		if (fCandidate.IsSet()) {
-			// A validated (or, when the previous session just died on its
-			// own, at least already accepted) connection is waiting to take
-			// over; promote it instead of accepting a new one.
+		// A candidate may be pending because it validated (it asked for the
+		// session) or because the live session ended while it was still
+		// being validated. Only a *validated* candidate is ever promoted:
+		// otherwise a peer that connects and says nothing would inherit the
+		// session for free whenever the real client disconnects, which is
+		// the very takeover this gate exists to prevent. An unvalidated one
+		// gets the rest of its deadline to prove itself first.
+		if (fCandidate.IsSet() && !fCandidateValidated)
+			_ValidateCandidate(fCandidateDeadline);
+
+		if (fCandidate.IsSet() && fCandidateValidated) {
 			fEndpoint.SetTo(fCandidate.Detach());
+			fCandidateValidated = false;
 		} else {
+			if (fCandidate.IsSet())
+				_DropCandidate("not validated in time");
+
 			fEndpoint.SetTo(fListener->Accept(5000));
 			if (!fEndpoint.IsSet()) {
 				TRACE("got NULL endpoint from accept\n");
@@ -142,8 +154,15 @@ NetReceiver::_Listen()
 				fCandidateBufferUsed);
 			fCandidateBufferUsed = 0;
 			if (result != B_OK) {
-				TRACE_ERROR("writing candidate data to ring buffer failed: "
-					"%s\n", strerror(result));
+				// The head of this client's stream is lost, so its framing
+				// can never resynchronise; drop the connection rather than
+				// feed the parser a stream missing its first message.
+				TRACE_ERROR("writing candidate data to ring buffer failed, "
+					"dropping connection: %s\n", strerror(result));
+				fEndpoint.Unset();
+				if (fConnectionClosedCallback != NULL)
+					fConnectionClosedCallback(fNewConnectionCookie);
+				continue;
 			}
 		}
 
@@ -235,18 +254,12 @@ NetReceiver::_Transfer()
 			if (fCandidate.IsSet() && system_time() > fCandidateDeadline)
 				_DropCandidate("timeout waiting for first frame");
 
-			bool candidateReplaced = false;
-			if (listenSocket >= 0 && FD_ISSET(listenSocket, &readSet)) {
-				_AcceptCandidate();
-				// The fd number of a just-closed previous candidate may have
-				// been reused by the new one, so the FD_ISSET result below
-				// would be about the wrong connection; wait for the next
-				// select() round to read from the fresh candidate.
-				candidateReplaced = true;
-			}
-
-			if (!candidateReplaced && fCandidate.IsSet()
-				&& candidateSocket >= 0
+			// The pending candidate is served BEFORE a new connection is
+			// accepted. Reversing this would let a connection arriving in
+			// the same select round evict a candidate whose valid first
+			// frame is already readable -- so a prober connecting once a
+			// second would starve every real client out of the session.
+			if (fCandidate.IsSet() && candidateSocket >= 0
 				&& FD_ISSET(candidateSocket, &readSet)) {
 				if (_ReceiveCandidateData()) {
 					// The candidate proved itself; let _Listen() tear this
@@ -254,6 +267,9 @@ NetReceiver::_Transfer()
 					return B_OK;
 				}
 			}
+
+			if (listenSocket >= 0 && FD_ISSET(listenSocket, &readSet))
+				_AcceptCandidate();
 
 			if (!FD_ISSET(connSocket, &readSet))
 				continue;
@@ -295,19 +311,82 @@ NetReceiver::_Transfer()
 void
 NetReceiver::_AcceptCandidate()
 {
-	// The newest connection attempt wins the candidate slot; a stalled or
-	// half-open earlier candidate must not be able to block a real client
-	// from ever being considered.
-	if (fCandidate.IsSet())
+	// A candidate that has already started speaking keeps the slot: it is
+	// the one most likely to be a real client, and letting every new
+	// connection displace it is how a repeatedly connecting prober would
+	// keep real clients from ever being validated. A silent candidate is
+	// replaced, so a stalled or half-open one cannot block the slot either
+	// (it also still has its own deadline).
+	if (fCandidate.IsSet()) {
+		if (fCandidateBufferUsed > 0) {
+			// Leave the pending connection in the listen backlog; it is
+			// accepted once this candidate resolves.
+			return;
+		}
+
 		_DropCandidate("replaced by newer connection");
+	}
 
 	fCandidate.SetTo(fListener->Accept(0));
 	if (!fCandidate.IsSet())
 		return;
 
 	fCandidateBufferUsed = 0;
+	fCandidateValidated = false;
 	fCandidateDeadline = system_time() + kCandidateTimeout;
 	TRACE("accepted takeover candidate\n");
+}
+
+
+/*!	Waits, within \a deadline, for the pending candidate to produce a valid
+	first frame. Used when the live session ended while a candidate was still
+	unvalidated: it must still prove itself before it inherits the session.
+	Sets fCandidateValidated and returns true on success; drops the candidate
+	and returns false otherwise.
+*/
+bool
+NetReceiver::_ValidateCandidate(bigtime_t deadline)
+{
+	while (fCandidate.IsSet() && !fStopThread) {
+		bigtime_t remaining = deadline - system_time();
+		if (remaining <= 0) {
+			_DropCandidate("timeout waiting for first frame");
+			return false;
+		}
+
+		int candidateSocket = fCandidate->Socket();
+		if (candidateSocket < 0) {
+			_DropCandidate("candidate socket gone");
+			return false;
+		}
+
+		struct timeval timeout;
+		timeout.tv_sec = remaining / 1000000;
+		timeout.tv_usec = remaining % 1000000;
+
+		fd_set readSet;
+		FD_ZERO(&readSet);
+		FD_SET(candidateSocket, &readSet);
+
+		int ready = select(candidateSocket + 1, &readSet, NULL, NULL,
+			&timeout);
+		if (ready < 0) {
+			if (errno == EINTR)
+				continue;
+			_DropCandidate("select failed while validating");
+			return false;
+		}
+
+		if (ready == 0) {
+			_DropCandidate("timeout waiting for first frame");
+			return false;
+		}
+
+		if (_ReceiveCandidateData())
+			return true;
+	}
+
+	return false;
 }
 
 
@@ -340,6 +419,7 @@ NetReceiver::_ReceiveCandidateData()
 		return false;
 	}
 
+	fCandidateValidated = true;
 	return true;
 }
 
@@ -350,4 +430,5 @@ NetReceiver::_DropCandidate(const char *reason)
 	TRACE_ERROR("dropping takeover candidate: %s\n", reason);
 	fCandidate.Unset();
 	fCandidateBufferUsed = 0;
+	fCandidateValidated = false;
 }

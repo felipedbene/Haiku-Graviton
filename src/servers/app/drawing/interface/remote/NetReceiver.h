@@ -38,6 +38,7 @@ static	int32					_NetworkReceiverEntry(void *data);
 		void					_AcceptCandidate();
 		bool					_ReceiveCandidateData();
 		void					_DropCandidate(const char *reason);
+		bool					_ValidateCandidate(bigtime_t deadline);
 
 		BNetEndpoint *			fListener;
 		StreamingRingBuffer *	fTarget;
@@ -62,6 +63,7 @@ static	int32					_NetworkReceiverEntry(void *data);
 		uint8					fCandidateBuffer[4096];
 		size_t					fCandidateBufferUsed;
 		bigtime_t				fCandidateDeadline;
+		bool					fCandidateValidated;
 };
 
 #endif // NET_RECEIVER_H
