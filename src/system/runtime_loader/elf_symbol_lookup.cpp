@@ -324,7 +324,7 @@ find_symbol(image_t* image, const SymbolLookupInfo& lookupInfo,
 
 status_t
 find_symbol_breadth_first(image_t* image, const SymbolLookupInfo& lookupInfo,
-	image_t** _foundInImage, void** _location)
+	image_t** _foundInImage, void** _location, elf_sym** _foundSymbol)
 {
 	image_t* queue[count_loaded_images()];
 	uint32 count = 0;
@@ -377,6 +377,8 @@ find_symbol_breadth_first(image_t* image, const SymbolLookupInfo& lookupInfo,
 
 	if (_foundInImage != NULL)
 		*_foundInImage = candidateImage;
+	if (_foundSymbol != NULL)
+		*_foundSymbol = candidateSymbol;
 
 	return B_OK;
 }
@@ -648,13 +650,10 @@ resolve_symbol(image_t* rootImage, image_t* image, elf_sym* sym,
 
 	// An STT_GNU_IFUNC definition is not the symbol's address itself but a
 	// resolver that returns the address of the implementation to use (selected
-	// from CPU features). Report it as indirect so the caller invokes it once
-	// text is executable, and don't cache -- the cached value would be the
-	// resolver, not the implementation.
+	// from CPU features). Note it here; the caller is told (and caching is
+	// skipped) only once the lookup is known to have succeeded, below.
 	bool isIndirect = _isIndirect != NULL && sharedSym != NULL
 		&& sharedSym->Type() == STT_GNU_IFUNC;
-	if (isIndirect)
-		*_isIndirect = true;
 
 	if (!tlsSymbol) {
 		patch_undefined_symbol(rootImage, image, symName, &sharedImage,
@@ -687,8 +686,14 @@ resolve_symbol(image_t* rootImage, image_t* image, elf_sym* sym,
 		return B_MISSING_SYMBOL;
 	}
 
-	if (!isIndirect)
+	// Lookup succeeded. For an ifunc definition, report it as indirect (so the
+	// caller defers the resolver call) and don't cache -- the cached value
+	// would be the resolver, not the selected implementation.
+	if (isIndirect) {
+		*_isIndirect = true;
+	} else {
 		cache->SetSymbolValueAt(index, (addr_t)location, sharedImage);
+	}
 
 	if (symbolImage)
 		*symbolImage = sharedImage;

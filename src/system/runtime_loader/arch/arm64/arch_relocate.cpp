@@ -37,10 +37,11 @@ typedef struct __ifunc_arg_t {
 } __ifunc_arg_t;
 
 
-// Read the CPU feature words the kernel publishes in the commpage (the same
-// source getauxval(AT_HWCAP) uses in libroot). EL0 cannot read the ID_AA64*
-// registers itself, so this is the only place the resolver can learn what the
-// hardware supports.
+// Read the CPU feature words the kernel publishes in the commpage. This mirrors
+// libroot's getauxval(AT_HWCAP) read (src/system/libroot/os/arch/arm64/
+// system_info.cpp) -- keep the two in sync if the commpage HWCAP layout ever
+// changes. EL0 cannot read the ID_AA64* registers itself, so the commpage is
+// the only place the resolver can learn what the hardware supports.
 static void
 arch_get_hwcap(uint64* hwcap, uint64* hwcap2)
 {
@@ -66,10 +67,10 @@ arch_get_hwcap(uint64* hwcap, uint64* hwcap2)
 
 // Invoke an STT_GNU_IFUNC resolver and return the implementation address it
 // selects. resolverAddress is the resolver's runtime address. Called by the
-// runtime loader (via defer_ifunc_relocation) only after remap_images() has
-// made the resolver's text executable again. The signature matches the callback
-// defer_ifunc_relocation() expects.
-static addr_t
+// runtime loader (resolve_deferred_ifuncs / dlsym) only after remap_images()
+// has made the resolver's text executable again. Declared in
+// runtime_loader_private.h.
+addr_t
 arch_call_ifunc_resolver(addr_t resolverAddress)
 {
 	uint64 hwcap;
@@ -118,9 +119,10 @@ relocate_rela(image_t* rootImage, image_t* image, Elf64_Rela* rel,
 
 		// Calculate the relocation value.
 		Elf64_Addr relocValue;
-		// Whether relocValue is an STT_GNU_IFUNC resolver address that must be
-		// replaced with the resolver's result once text is executable.
-		bool deferIfunc = false;
+		// For an STT_GNU_IFUNC relocation, the final value is the resolver's
+		// result plus the addend; ifuncResolver is the resolver address, or 0
+		// if this is not an ifunc relocation.
+		Elf64_Addr ifuncResolver = 0;
 		switch (type) {
 			case R_AARCH64_NONE:
 				continue;
@@ -128,17 +130,19 @@ relocate_rela(image_t* rootImage, image_t* image, Elf64_Rela* rel,
 			case R_AARCH64_GLOB_DAT:
 			case R_AARCH64_JUMP_SLOT:
 				relocValue = symAddr + rel[i].r_addend;
-				// symAddr is the resolver's address for an ifunc definition.
-				deferIfunc = symIsIndirect;
+				// For an ifunc definition symAddr is the resolver address; the
+				// implementation is resolver() and the addend is applied to it.
+				if (symIsIndirect)
+					ifuncResolver = symAddr;
 				break;
 			case R_AARCH64_RELATIVE:
 				relocValue = image->regions[0].delta + rel[i].r_addend;
 				break;
 			case R_AARCH64_IRELATIVE:
 				// The addend is the resolver's link-time address; the slot must
-				// end up holding the resolver's result.
+				// end up holding the resolver's result (no further addend).
 				relocValue = image->regions[0].delta + rel[i].r_addend;
-				deferIfunc = true;
+				ifuncResolver = relocValue;
 				break;
 			case R_AARCH64_TLS_DTPMOD64:
 				relocValue = symbolImage == NULL
@@ -154,13 +158,15 @@ relocate_rela(image_t* rootImage, image_t* image, Elf64_Rela* rel,
 
 		*(Elf64_Addr *)relocAddr = relocValue;
 
-		// For an ifunc relocation the slot now holds the resolver's address.
-		// Record it; the loader invokes the resolver and overwrites the slot
-		// with the selected implementation after remap_images() (see
-		// resolve_deferred_ifuncs()).
-		if (deferIfunc) {
-			defer_ifunc_relocation((addr_t*)relocAddr,
-				&arch_call_ifunc_resolver);
+		// Record ifunc relocations; the loader invokes the resolver and writes
+		// resolver() + addend into the slot after remap_images() has made text
+		// executable (see resolve_deferred_ifuncs()). For IRELATIVE the addend
+		// is already folded into the resolver address, so no addend is re-added.
+		if (ifuncResolver != 0) {
+			Elf64_Addr ifuncAddend
+				= (type == R_AARCH64_IRELATIVE) ? 0 : rel[i].r_addend;
+			defer_ifunc_relocation((addr_t*)relocAddr, ifuncResolver,
+				ifuncAddend);
 		}
 	}
 

@@ -126,7 +126,7 @@ status_t	find_symbol(image_t* image, const SymbolLookupInfo& lookupInfo,
 				void** _location);
 status_t	find_symbol_breadth_first(image_t* image,
 				const SymbolLookupInfo& lookupInfo, image_t** _foundInImage,
-				void** _location);
+				void** _location, elf_sym** _foundSymbol = NULL);
 elf_sym*	find_undefined_symbol_dependencies_only(image_t* rootImage, image_t* image,
 				const SymbolLookupInfo& lookupInfo, image_t** foundInImage);
 elf_sym*	find_undefined_symbol_global(image_t* rootImage, image_t* image,

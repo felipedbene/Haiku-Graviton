@@ -23,6 +23,21 @@
 #	define STT_GNU_IFUNC 10
 #endif
 
+// Arches whose runtime_loader implements STT_GNU_IFUNC (ifunc) resolution
+// define RLD_IFUNC_SUPPORTED and an arch_call_ifunc_resolver(). All ifunc
+// handling in the shared loader code is compiled only for those arches, so the
+// others build and behave exactly as before.
+#if defined(__aarch64__)
+#	define RLD_IFUNC_SUPPORTED 1
+#endif
+
+#ifdef RLD_IFUNC_SUPPORTED
+// Invoke an STT_GNU_IFUNC resolver (arch-specific ABI, defined per arch) and
+// return the implementation address it selects. Only safe to call once the
+// resolver's text segment is executable (after remap_images()).
+addr_t arch_call_ifunc_resolver(addr_t resolverAddress);
+#endif
+
 
 //#define TRACE_RLD
 #ifdef TRACE_RLD
@@ -103,9 +118,12 @@ int resolve_symbol(image_t* rootImage, image_t* image, elf_sym* sym,
 	SymbolLookupCache* cache, addr_t* sym_addr, image_t** symbolImage = NULL,
 	bool* _isIndirect = NULL);
 
-// Record an STT_GNU_IFUNC relocation slot (which currently holds the resolver's
-// address) to be resolved by the runtime loader once text is executable again.
-void defer_ifunc_relocation(addr_t* slot, addr_t (*resolver)(addr_t resolverAddress));
+#ifdef RLD_IFUNC_SUPPORTED
+// Record an STT_GNU_IFUNC relocation to be completed once text is executable
+// again: the slot is set to arch_call_ifunc_resolver(resolverAddress) + addend
+// by resolve_deferred_ifuncs().
+void defer_ifunc_relocation(addr_t* slot, addr_t resolverAddress, addr_t addend);
+#endif
 
 
 status_t elf_verify_header(void* header, size_t length);
