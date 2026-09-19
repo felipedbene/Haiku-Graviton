@@ -25,7 +25,7 @@ no longer a pure plan.**
 > | 9 Cacheline constants | **CLOSED — audit only, already correct** | — |
 > | 10 16K/64K granules | open (research) | — |
 > | 11 Interrupt moderation | **partly MERGED**; the structural fix is still owed — see item 11 | `aa8cbd0c8e` |
-> | 12 Runtime feature detection | open | — |
+> | 12 Runtime feature detection | **IMPLEMENTED (#329)** — `getauxval(AT_HWCAP/AT_HWCAP2)` + commpage HWCAP word; `HWCAP_SVE` advertisement still deferred (#99) | `ffd947f47b`, `ed30050b32`, `e2aead8b5a` |
 > | 13 PMUv3 counters | **facility MERGED**; *nothing measured with it yet* | `af7e48b94c` |
 > | 14 SMMU / IOMMU on metal | open (investigate) | — |
 > | 15 Default socket send buffer | **MERGED, measured** | `ed4ea6413a` |
@@ -60,8 +60,9 @@ it is marked **unverified**.
 The `graviton` branch boots Haiku on AWS Graviton2/3/4 (arm64) EC2. The build
 targets a **single, portable AMI** that must run across Graviton generations, so
 "optimization" here means: pick the best baseline the whole fleet shares
-(Neoverse-N1, ARMv8.2), ~~lean on runtime feature detection where a generation
-differs~~, and close the driver gaps that leave throughput on the floor. The two
+(Neoverse-N1, ARMv8.2), lean on runtime feature detection where a generation
+differs (now available via `getauxval(AT_HWCAP/AT_HWCAP2)`, #329), and close the
+driver gaps that leave throughput on the floor. The two
 hot spots are the arm64 kernel (`src/system/kernel/arch/arm64/`) and the ENA
 network driver (`src/add-ons/kernel/drivers/network/ether/ena/`), plus the
 userland build flags that gate both.
@@ -106,7 +107,7 @@ now `-mcpu=neoverse-n1+crypto` at `ArchitectureRules:52`.
 | 9 | Cacheline constants | kernel | **CLOSED, audit only** — `CACHE_LINE_SIZE 64` for arm64 (`arch_cpu.h:10`); runtime CTR_EL0 read is correct (`arch_cpu.cpp:87-91`) | No change — verified correct for Graviton | — | — | None (audit) |
 | 10 | Larger granules (16K/64K) | kernel/MMU | Map is parameterized by `fPageBits` but instantiated at **4K** (`arch_vm_translation_map.cpp:42`, `pageBits=12`); `B_PAGE_SIZE`/`max-page-size=0x1000` everywhere | RESEARCH only — global `B_PAGE_SIZE` change; **new 10a**: contiguous-bit/block mappings at 4K instead | L | High | Med (TLB) |
 | 11 | ENA interrupt moderation | driver | **partly MERGED** `aa8cbd0c8e`, structural fix still owed — `ena_com_init_interrupt_moderation()` is called (`ena.cpp:1501`) but **no interval is ever set and adaptive moderation is never enabled** — no other call site in `ena.cpp` | Set a non-adaptive RX/TX interval, or enable adaptive; AWS warns Graviton's faster packet processing *raises* the interrupt rate | S | Low | Med (irq load) |
-| 12 | Runtime feature detection | kernel/libroot | **Absent entirely.** No `AT_HWCAP`, no `getauxval`, no `ID_AA64ISAR0_EL1` reader, no MRS trap emulation (`grep` over `headers/`+`src/`) | Kernel-published HWCAP word + libroot accessor; and/or force `-mno-outline-atomics` into recipe CFLAGS | M | Low | Med (unblocks userland LSE + crypto) |
+| 12 | Runtime feature detection | kernel/libroot | **IMPLEMENTED (#329).** `getauxval(AT_HWCAP/AT_HWCAP2)` in libroot (`system_info.cpp`), served from a kernel-published commpage HWCAP word derived from `ID_AA64*` via `arm64_get_hwcap()` (`arch_cpu.cpp`). Remaining: no MRS trap emulation for a direct EL0 `mrs`, ifunc `IRELATIVE` still unresolved by runtime_loader, and `HWCAP_SVE` deliberately not advertised (#99) | Done via kernel-published HWCAP word + libroot accessor; use explicit `getauxval` dispatch (not ifunc). `-mno-outline-atomics` in recipe CFLAGS remains an option | M | Low | Med (unblocks userland LSE + crypto) |
 | 13 | PMU (PMUv3) counters | kernel | **facility MERGED** `af7e48b94c`, nothing measured with it yet — **No PMU code at all** for arm64 (`grep -i pmcr_el0\|pmevcntr src headers` → zero) | Read-only counter facility so AWS's runbook ratios (`ipc`, `stall_*_pkc`, `*-mpki`, `data-tlb-tw-pki`) can be measured on Haiku | M | Low | **High** (unblocks every measurement below) |
 | 14 | SMMU / IOMMU on metal | kernel/platform | Unaudited. c7g.metal exposes an SMMU; virtualized instances do not | Determine whether the SMMU is on and translating for ENA DMA; AWS reports turning it off "speed[s] up IO handling" on metal | S (investigate) | Med | Med (metal IO only) |
 
@@ -1351,16 +1352,25 @@ interrupts-per-packet before and after at a fixed offered load.
 all (`ena_com_init_interrupt_moderation()` is allowed to fail and we continue);
 what interval the reference drivers actually pick. **Unverified.**
 
-## 12. Runtime CPU feature detection — absent entirely; STILL OPEN 2026-08-24 (tracked: #99)
+## 12. Runtime CPU feature detection — IMPLEMENTED (#329); SVE-bit advertisement still deferred (#99)
 
-> **Open, re-verified 2026-08-24.** No `AT_HWCAP`/`getauxval`/`ID_AA64ISAR0_EL1`
-> reader has landed. One correction to the reasoning below: it argues from "the
-> kernel already reads ID registers at EL1" — that is now more true than when
-> written, because `arch_pmu.cpp` (`af7e48b94c`) reads `ID_AA64DFR0_EL1` and
-> `PMCEID0/1` and does exactly this kind of capability decoding. It is a working
-> in-tree pattern to copy, not just an assertion.
+> **IMPLEMENTED (#329), 2026-09-19.** `getauxval(AT_HWCAP/AT_HWCAP2)` now works
+> end-to-end: the kernel reads `ID_AA64ISAR0_EL1` and the other `ID_AA64*`
+> registers at EL1 in `arm64_get_hwcap()` (`arch_cpu.cpp`), decodes the
+> Linux-compatible HWCAP words, and publishes them through the commpage
+> (`arch_commpage.cpp`, `COMMPAGE_ENTRY_ARM64_HWCAP`); libroot serves `getauxval()`
+> from that word (`system_info.cpp`). Header + bits in `headers/posix/sys/auxv.h`;
+> test in `src/tests/system/libroot/os/getauxval_test.cpp`. Commits `ffd947f47b`,
+> `ed30050b32`, `e2aead8b5a`. So ported crypto/atomics code that dispatches via
+> `getauxval(AT_HWCAP)`/`AT_HWCAP2` now works. **Remaining, narrower gaps:** no MRS
+> trap emulation for a direct EL0 `mrs` of an ID register (EL0 reads must go
+> through `getauxval`/commpage), userland ifunc auto-dispatch (`R_AARCH64_IRELATIVE`)
+> is still unresolved by runtime_loader (use explicit function-pointer/`getauxval`
+> dispatch), and `HWCAP_SVE` is deliberately not yet advertised (#99). The
+> historical "mechanism does not exist" prose below is pre-#329 and is retained for
+> the diagnosis; trust this banner over it.
 
-**Current state — the mechanism does not exist.** Verified by grep over the tree:
+**Historical state (pre-#329) — the mechanism did not yet exist.** Verified by grep over the tree at the time:
 
 - No `AT_HWCAP` or `AT_HWCAP2` anywhere in `headers/` or `src/`; no `getauxval`
   anywhere in the repository.

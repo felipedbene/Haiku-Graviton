@@ -154,6 +154,9 @@ bare-instance case.
 
 Multi-monitor (blocked in `app_server` itself — `VirtualScreen.cpp` `RemoveScreen`
 returns `B_ERROR` — *and* virtio-gpu hardcodes scanout 0); any GPU/3D/virgl (no
-OpenGL on arm64, no DRM/KMS, `app_server` is pure-CPU AGG); anything on `g5g`
+hardware-accelerated OpenGL on arm64 — the GL/GLES/EGL ABI exists
+(`libglvnd_devel` provides `devel:libgl`/`libegl`/`libglesv2`), but there is no
+GPU or accelerated driver, so it is software GL only; no DRM/KMS, `app_server` is
+pure-CPU AGG); anything on `g5g`
 (Graviton2 cores, worse for the builder role; NVENC saves noise against the budget).
 See `remote-desktop-options.md` and `haiku-graphics-upstream-review.md`.

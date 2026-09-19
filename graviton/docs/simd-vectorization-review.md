@@ -82,12 +82,19 @@ If you read nothing else:
    HALVES from 256-bit on Graviton 3 to 128-bit on Graviton 4/5** — the newer core
    has the shorter vector — so SVE code **must** be vector-length-agnostic (read
    `RDVL`/`svcntb()` at runtime; never hardcode 256-bit). §2, §4.
-4. **Runtime SIMD dispatch is impossible on Haiku arm64 today by any mechanism**,
-   and ifunc is not merely missing but an active hazard: `R_AARCH64_IRELATIVE`
-   returns `B_BAD_DATA` and the image fails to load with the diagnostic compiled
-   out. Everything must be decided at compile time. NEON is safe to assume
-   unconditionally, because it is architecturally mandatory on ARMv8-A and the
-   kernel preserves it correctly. §2, §4.
+4. **Explicit runtime SIMD dispatch works on Haiku arm64 via `getauxval`; only
+   ifunc *auto*-dispatch does not.** `getauxval(AT_HWCAP/AT_HWCAP2)` is
+   implemented (libroot `system_info.cpp`) and served from a kernel-published
+   commpage feature word (#329), matching the Linux/glibc bit layout — so code can
+   branch on NEON/dotprod/i8mm/bf16/etc. at runtime. What is *not* supported is
+   the ifunc resolver path: `R_AARCH64_IRELATIVE` returns `B_BAD_DATA` and the
+   image fails to load with the diagnostic compiled out, so write dispatch
+   explicitly against `getauxval` rather than relying on `target_clones` /
+   `__attribute__((ifunc))`. NEON is safe to assume unconditionally, because it is
+   architecturally mandatory on ARMv8-A and the kernel preserves it correctly.
+   (The one feature `getauxval` does not yet advertise is SVE — `HWCAP_SVE` is
+   deliberately withheld pending #99 — so gate SVE on a fixed-ISA build, not on
+   HWCAP.) §2, §4.
 5. **Painter/AGG rasterization is close to irrelevant on a real EC2 instance**,
    because `app_server` there builds a `RemoteHWInterface` and the pixels are
    rasterized in the *client*, not on the Graviton. Image *decode* matters in
@@ -301,17 +308,18 @@ happens when neither exists.
 
 ## 2. Portability matrix, and whether dispatch is even possible
 
-### 2.1 Can Haiku arm64 do runtime feature dispatch? No. By any mechanism.
+### 2.1 Can Haiku arm64 do runtime feature dispatch? Yes, via `getauxval` — but not via ifunc auto-dispatch.
 
-All verified by reading `refs/heads/graviton`.
+Verified against `refs/heads/graviton`; the `getauxval`/HWCAP mechanism landed
+with #329 (commits `ffd947f47b`, `ed30050b32`, `e2aead8b5a`).
 
 | Mechanism | State | Evidence |
 |---|---|---|
-| `getauxval` / `AT_HWCAP` / `AT_HWCAP2` | **Absent mechanism**, not just unimplemented | Zero hits in `headers/` or `src/`. Haiku's userland entry passes a `user_space_program_args` struct via `src/system/glue/start_dyn.c`, not an ELF auxv — there is no place an `AT_*` tag could come from |
-| Kernel ID-register feature probe | **Absent** | Nothing reads `ID_AA64ISAR0_EL1` (so nothing reads `.Atomic`), `ID_AA64PFR0_EL1` (`.SVE`), `ID_AA64ISAR1_EL1`, or `ID_AA64ZFR0_EL1`. Decode macros exist with **zero readers** — `headers/private/kernel/arch/arm64/arm_registers.h:243-247` (Atomic), `:497-501` (SVE) |
+| `getauxval` / `AT_HWCAP` / `AT_HWCAP2` | **Implemented (#329)** | `getauxval()` lives in libroot (`src/system/libroot/os/arch/arm64/system_info.cpp`); it answers `AT_HWCAP`/`AT_HWCAP2` from a commpage feature block the kernel publishes in `arch_commpage_init_post_cpus` (`arch_commpage.cpp`), derived from the EL1-only `ID_AA64*` registers via `arm64_get_hwcap()`. `AT_PAGESZ` is also served; other tags return `0`/`ENOENT` like glibc. Not an ELF-stack auxv — a commpage-backed `getauxval` — but explicit dispatch keyed off `AT_HWCAP`/`AT_HWCAP2` works |
+| Kernel ID-register feature probe | **Implemented (#329)** | `arm64_get_hwcap()` (`src/system/kernel/arch/arm64/arch_cpu.cpp`) reads `ID_AA64ISAR0_EL1` and the other `ID_AA64*` registers at EL1 and decodes AES/PMULL/SHA/CRC32/ATOMIC/RDM/DP/etc. into the Linux-compatible HWCAP words, which the commpage then publishes to EL0 |
 | Generic per-CPU feature word | **x86-only by construction** | `x86_check_feature()` at `headers/private/kernel/arch/x86/arch_cpu.h:718` over `uint32 feature[FEATURE_NUM]` (`:583`). Generic `cpu_ent` in `headers/private/kernel/cpu.h` has **no** feature field. arm64's `arch_cpu_info` is two fields (`arch/arm64/arch_cpu.h:128-131`): `mpidr`, and `last_vfp_user` which **is never read or written anywhere** |
 | Userland query API | **Does not exist** | `cpu_info` (`headers/os/kernel/OS.h:427-431`) and `cpu_topology_node_info` (`:528-538`) have no feature field. `arch_system_info.cpp` for arm64 is 45 lines and hardcodes `model = 0`, `vendor = B_CPU_VENDOR_UNKNOWN`, `frequency = 0`. `headers/private/kernel/arch/arm64/arch_system_info.h` is an **empty header** |
-| arm64 commpage | Two entries only | `headers/private/system/arch/arm64/arch_commpage_defs.h:13-14` — `THREAD_EXIT`, `SIGNAL_HANDLER`. Not even the cheap route is taken |
+| arm64 commpage | Carries the HWCAP feature word (#329) | `headers/private/system/arch/arm64/arch_commpage_defs.h` now defines `COMMPAGE_ENTRY_ARM64_HWCAP` (`struct arm64_commpage_hwcap { hwcap; hwcap2; }`) alongside `THREAD_EXIT`/`SIGNAL_HANDLER` — the cheap route *is* taken, and it is what backs `getauxval` |
 | **IFUNC** | **Broken, and an active hazard** | `STT_GNU_IFUNC` is not defined in any Haiku ELF header (`headers/os/kernel/elf.h:416-417` stops at `STT_HIPROC`). `R_AARCH64_IRELATIVE` *is* defined (`headers/private/system/arch/arm64/arch_elf.h:27`) but has **no case** in `src/system/runtime_loader/arch/arm64/arch_relocate.cpp:54-75` → `default:` → `return B_BAD_DATA` → **the image fails to load**, and `TRACE` is compiled out (`:16`) so it is **silent**. The kernel loader rejects it explicitly at `src/system/kernel/arch/arm64/arch_elf.cpp:114-122`. x86_64 has the same gap — this is Haiku-wide |
 
 **Consequence: GCC `target_clones`, `__attribute__((ifunc))`, and glibc-style
@@ -320,10 +328,14 @@ that enables ifunc dispatch produces a shared object that fails to load with no
 message. **This is worth an audit of its own** — grep recipes for
 `--enable-ifunc` / `HAVE_IFUNC` / `target_clones`.
 
-The only sound runtime inference available to userland is *"`__aarch64__` is
-defined, therefore NEON exists"* — which is true, architecturally guaranteed on
-ARMv8-A, and sufficient. Anything finer-grained (LSE, crypto, dotprod, i8mm,
-SVE) is **unknowable at runtime on this port**.
+NEON needs no probe at all: *"`__aarch64__` is defined, therefore NEON exists"*
+is architecturally guaranteed on ARMv8-A. Finer-grained features (LSE, crypto,
+dotprod, i8mm, bf16) *are* knowable at runtime through
+`getauxval(AT_HWCAP/AT_HWCAP2)` (#329), so explicit dispatch on them is sound —
+what is precluded is only the automatic ifunc resolver path, not runtime feature
+detection itself. The one exception is **SVE**: the kernel deliberately does not
+yet advertise `HWCAP_SVE` (pending #99), so SVE presence cannot be probed via
+`getauxval` — select it through a fixed-ISA `_g3`/`_g4` build instead.
 
 ### 2.2 The matrix
 
@@ -1305,9 +1317,12 @@ checkable by a reader outside the project.
   (§4)
 - FPSIMD state is eagerly saved on every exception and carried through signals
   and fork; 512-byte fixed save area. → NEON is safe. (§4.1)
-- No `getauxval`/HWCAP/auxv; no arm64 ID-register feature probe; no userland
-  feature API; `R_AARCH64_IRELATIVE` → `B_BAD_DATA`, silently. → no runtime
-  dispatch by any mechanism. (§2.1)
+- *(Pre-#329, now stale.)* At the time of writing there was no
+  `getauxval`/HWCAP/auxv and no arm64 ID-register feature probe. **#329 changed
+  this**: `getauxval(AT_HWCAP/AT_HWCAP2)` is implemented, backed by the kernel
+  `ID_AA64*` probe (`arm64_get_hwcap()`) and the commpage HWCAP word → explicit
+  runtime dispatch works. Only ifunc *auto*-dispatch is still broken
+  (`R_AARCH64_IRELATIVE` → `B_BAD_DATA`, silently). (§2.1)
 - The `__i386__`-only bilinear SIMD path, its NASM file, its Jamfile gate, and
   `detect_simd()` returning 0 off x86 — and that the gate is `TARGET_ARCH = x86`,
   so **x86_64 takes the scalar path too**. (§5.1)
