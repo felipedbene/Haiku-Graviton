@@ -17,6 +17,7 @@ ReceiveRing::ReceiveRing()
 	fMask(0),
 	fTail(0),
 	fBytesProduced(0),
+	fCachedHead(0),
 	fHead(0),
 	fBytesConsumed(0)
 {
@@ -57,6 +58,7 @@ ReceiveRing::Init(uint32 slots)
 	fCapacity = capacity;
 	fMask = capacity - 1;
 	fTail = fHead = 0;
+	fCachedHead = 0;
 	fBytesProduced = fBytesConsumed = 0;
 	return B_OK;
 }
@@ -65,12 +67,31 @@ ReceiveRing::Init(uint32 slots)
 // #pragma mark - producer side (caller holds fLock)
 
 
+/*!	Refreshes the producer's cached view of the consumer head, but only once
+	the cached view shows the ring at least half full. The threshold keeps the
+	acquire-load of the consumer-dirtied fHead line off the per-segment fast
+	path (a stale head is safe -- it only under-counts free slots) while
+	bounding two effects of staleness: Push() keeps working long before the
+	ring is genuinely full, and the advertised window derived from FreeSlots()
+	never sags below half the ring's slot capacity merely because the cache is
+	old. At genuinely high occupancy this degenerates to one load per call --
+	exactly the pre-#414 behaviour, so it is never a regression.
+*/
+void
+ReceiveRing::_MaybeRefreshCachedHead() const
+{
+	if (fTail - fCachedHead >= (int64)(fCapacity / 2))
+		fCachedHead = atomic_get64(const_cast<int64*>(&fHead));
+}
+
+
 uint32
 ReceiveRing::FreeSlots() const
 {
 	if (fSlots == NULL)
 		return 0;
-	int64 used = fTail - atomic_get64(const_cast<int64*>(&fHead));
+	_MaybeRefreshCachedHead();
+	int64 used = fTail - fCachedHead;
 	if (used >= (int64)fCapacity)
 		return 0;
 	return fCapacity - (uint32)used;
@@ -90,8 +111,8 @@ ReceiveRing::Push(net_buffer* buffer)
 	if (fSlots == NULL)
 		return false;
 
-	int64 head = atomic_get64(&fHead);
-	if ((fTail - head) >= (int64)fCapacity)
+	_MaybeRefreshCachedHead();
+	if ((fTail - fCachedHead) >= (int64)fCapacity)
 		return false;
 
 	// Write the slot, then publish it: the size counter and the tail index are

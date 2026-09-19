@@ -46,6 +46,15 @@
 	of fTail, so the consumer never reads a slot the producer has not finished
 	writing, and the producer never reuses a slot the consumer has not finished
 	freeing. No torn indices (64-bit monotonic counters, slot = counter & mask).
+
+	fCachedHead (#414): a producer-owned copy of fHead, refreshed from the
+	atomic only when the cached view shows the ring at least half full. fHead is
+	on a cache line the consumer dirties on every read syscall, so the acquire
+	loads in Push()/FreeSlots() were a per-segment cross-core line transfer
+	inside the RX consumer's fLock hold. Staleness is safe by monotonicity: the
+	head only advances, so a stale cache only UNDER-counts free slots -- Push()
+	never overruns, and the advertised window (derived from FreeSlots()) only
+	skews smaller, never larger, bounded by the half-capacity refresh threshold.
 */
 class ReceiveRing {
 public:
@@ -71,6 +80,9 @@ public:
 			void			Drain();
 
 private:
+			void			_MaybeRefreshCachedHead() const;
+
+private:
 			net_buffer**	fSlots;
 			uint32			fCapacity;		// power of two, or 0 if uninitialised
 			uint32			fMask;
@@ -78,6 +90,9 @@ private:
 			// Producer-owned (written under fLock, read by consumer via acquire).
 			int64			fTail;
 			int64			fBytesProduced;
+			mutable int64	fCachedHead;
+				// producer's lazily refreshed view of fHead (see class comment);
+				// mutable because the const producer queries maintain it
 
 			// Consumer-owned (written under fReadLock, read by producer via acquire).
 			int64			fHead;
