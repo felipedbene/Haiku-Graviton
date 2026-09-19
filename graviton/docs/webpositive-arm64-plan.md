@@ -235,19 +235,22 @@ starting Phase A, and only build them if absent.
 asks `find_package(WebP REQUIRED COMPONENTS demux)`, and the recipe provides
 `lib:libwebpdemux`. VERIFIED from the recipes.
 
-### 2.1 AVIF: a hard blocker, with two clean ways round it
+### 2.1 AVIF: a soft blocker (a recipe-packaging gap), with two clean ways round it
 
-`libavif >= 16` cannot be satisfied as the recipes stand.
+`libavif >= 16` cannot be satisfied through the *unmodified* recipe chain as it stands.
 
 - `media-libs/libavif/libavif1.0-1.4.2.recipe` provides
   `lib:libavif = 16.4.2 compat >= 16` — the right version — but requires
   `devel:librav1e` and `lib:librav1e`.
-- **`rav1e` is Rust, and Rust does not exist on arm64 Haiku.**
+- **`rav1e` is Rust, and the stock HaikuPorts `rust`/`rust_bin` recipes are not
+  arm64-enabled** — a packaging gap, not a language gap.
   `dev-lang/rust_bin-1.94.1.recipe` declares `ARCHITECTURES="!x86_gcc2 ?x86 x86_64"`
   (no arm64; its sources are prebuilt i686/x86_64 tarballs) and
   `dev-lang/rust-1.79.0.recipe` declares `ARCHITECTURES="!x86_gcc2 ?x86 !x86_64"`
-  (also no arm64). VERIFIED. Bootstrapping Rust for arm64 Haiku is a project in its
-  own right and is out of scope here.
+  (also no arm64). VERIFIED. But native rustc/cargo *do* run and compile real
+  crates on Haiku arm64 (ripgrep built natively and offline; cta-tui via cargo),
+  so `rav1e` is buildable once the recipes are arm64-enabled — that is the work,
+  and it is out of scope for *this* plan, not an absence of the language.
 - The older `libavif-0.9.3.recipe` is not a way out either: `libVersion="13.0.0"`,
   so it provides `compat >= 13` and fails `>= 16`; and its
   `devel:libavif` provide is **commented out** (line 34), so it exposes no devel
@@ -602,15 +605,16 @@ set is **larger** — it additionally wants `libjxl`, `libtasn1`, `libidn2`,
 | Option | Price | Cheaper than haikuwebkit? |
 |---|---|---|
 | **haikuwebkit + WebPositive** | 9 small ports + 1 large build (4–10 h) + 3 jam lines; native Haiku UI; ships `cmd:jsc` as a bonus | — baseline |
-| **Otter Browser / Falkon** | Needs the whole Qt stack **plus** an engine: QtWebEngine is a bundled Chromium (~5 GiB source, wants Clang **and Rust** — and Rust does not exist on arm64 Haiku, §2.1), or the abandoned QtWebKit. Strictly a superset. | **No — far more** |
+| **Otter Browser / Falkon** | Needs the whole Qt stack **plus** an engine: QtWebEngine is a bundled Chromium (~5 GiB source, wants Clang **and Rust** — and the stock Rust recipes are not arm64-enabled, §2.1), or the abandoned QtWebKit. Strictly a superset. | **No — far more** |
 | **epiphany** | Needs **WebKitGTK** — the same WebKit engine, so the identical large build — **plus** GTK4, GLib, Pango, Cairo, GDK-Pixbuf, libsoup and their chains, none built here. Strict superset. | **No — strict superset** |
 | **stay on netsurf-3.11** | Free (already built and working) | Cheaper, but it is the status quo this document exists to replace |
 | **`jsc` shell only** | Falls out of the same haikuwebkit build (`PROVIDES: cmd:jsc`) | Not a browser, but free once we build |
 
 I checked rather than assumed, and the assumption held for a sharper reason than
 "Qt/GTK are big": **both alternatives require WebKit-or-Chromium *and* a foreign
-widget toolkit, and the Chromium route re-introduces the Rust blocker that §2.1
-already established is unsolved on arm64 Haiku.** haikuwebkit is the cheapest modern
+widget toolkit, and the Chromium route re-introduces the Rust recipe-packaging gap
+that §2.1 covers (the stock `rust`/`rust_bin` recipes are not arm64-enabled; the
+language itself runs on arm64 Haiku).** haikuwebkit is the cheapest modern
 engine on this platform by a wide margin.
 
 ---
@@ -625,8 +629,11 @@ The two things that could have made this a NO-GO both dissolved under evidence:
 - The dependency gap is **nine small packages**, not forty, and every one has a
   recipe in the tree. All fourteen build tools are already built.
 
-One genuine hard blocker turned up — **no Rust on arm64, so `rav1e` and therefore
-`libavif1.0` cannot be built as written** — and it has two clean workarounds, the
+One friction point turned up — **the stock HaikuPorts `rust`/`rust_bin` recipes
+are not arm64-enabled, so `rav1e` and therefore `libavif1.0` cannot be built via
+the unmodified recipe chain** (a packaging gap, not a language gap: native
+rustc/cargo run and compile real crates on Haiku arm64, so `rav1e` is buildable
+once the recipes are arm64-enabled) — and it has two clean workarounds, the
 cheaper of which (`-DUSE_AVIF=OFF`) costs only AVIF image decoding and can be
 reversed later.
 

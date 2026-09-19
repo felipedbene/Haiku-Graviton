@@ -156,6 +156,18 @@ log we have taken.**
 
 ## 2. Interrupt affinity: blocker #1, and it is in the kernel, not the stack
 
+> **SUPERSEDED — this blocker no longer exists (merged `17d45faf8f` et al.).**
+> arm64 interrupt affinity was subsequently implemented: `arch_int_assign_to_cpu`
+> now dispatches to the GICv3 controller's `AssignToCpu`; the ITS maps one
+> collection per CPU with round-robin MSI placement and re-targets live vectors
+> via `GITS_CMD_MOVI`; SPIs re-route via `GICD_IROUTER`; `interrupts.cpp` now
+> tracks per-vector (not per-block) affinity. Requesting N MSI-X vectors spreads
+> them across CPUs 0..N-1, not all onto CPU 0. The §2 body below is the frozen
+> pre-fix record and is kept for the diagnosis only — but, as the top banner
+> notes, removing this blocker did **not** lift throughput: the ceiling is
+> `TCPEndpoint::fLock` + receive-FIFO bufferbloat, not queue/interrupt
+> distribution.
+
 This is the one that makes "N vectors, N cores" impossible today, and it is the
 blocker that the earlier note in `graviton-optimization-plan.md` §5 flagged as an
 "open question". It is not open. It is a stub.
