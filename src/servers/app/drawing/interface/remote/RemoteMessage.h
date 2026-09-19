@@ -35,12 +35,34 @@ class ServerCursor;
 class ServerFont;
 struct ViewLineArrayInfo;
 
+// URP/1 protocol version carried on the wire in RP_HELLO / RP_HELLO_ACK. The
+// negotiated version is min(client, server); it is deliberately unrelated to the
+// legacy accelerant fProtocolVersion field.
+#define RP_PROTOCOL_VERSION 1
+
+// URP/1 capability bits. A client announces what it can do in the RP_HELLO
+// feature bitmap; the server may only use a feature the client advertised, and
+// echoes the negotiated intersection back in RP_HELLO_ACK. A pre-handshake
+// client sends no RP_HELLO, so its capability set is empty and the server falls
+// back to legacy behaviour -- which is exactly today's wire. New bits are added
+// here as later milestones land (bitmap cache, resync, frame boundary, Tier P
+// codecs); M0 defines only the one it uses.
+enum {
+	// The client answers RP_STRING_WIDTH with RP_STRING_WIDTH_RESULT. Without
+	// this bit the server never issues the query and computes string width from
+	// its own (authoritative) font metrics instead, so a client that cannot
+	// answer no longer stalls the drawing thread for a full second per query.
+	RP_CAP_STRING_WIDTH_REPLY	= 1 << 0,
+};
+
 enum {
 	RP_INIT_CONNECTION = 1,
 	RP_UPDATE_DISPLAY_MODE,
 	RP_CLOSE_CONNECTION,
 	RP_GET_SYSTEM_PALETTE,
 	RP_GET_SYSTEM_PALETTE_RESULT,
+	RP_HELLO,
+	RP_HELLO_ACK,
 
 	RP_CREATE_STATE = 20,
 	RP_DELETE_STATE,
