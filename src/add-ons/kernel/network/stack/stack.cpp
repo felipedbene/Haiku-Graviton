@@ -25,6 +25,7 @@
 #include <util/Vector.h>
 
 #include <KernelExport.h>
+#include <driver_settings.h>
 
 #include <net/if_types.h>
 #include <new>
@@ -777,13 +778,43 @@ scan_modules(const char* path)
 status_t
 init_stack()
 {
+	// The receive-FIFO CoDel operating point defaults to the compiled-in values
+	// but can be overridden from the "stack" driver settings so an operating
+	// point can be swept without a rebuild (the ECN gate itself lives in the
+	// "tcp" settings). Read here, once, before any device interface is created;
+	// the globals are then read-only on the datapath. Out-of-range values fall
+	// back to the compiled-in default rather than disabling the discipline.
+	void* settings = load_driver_settings("stack");
+	if (settings != NULL) {
+		const char* value = get_driver_parameter(settings, "codel_target",
+			NULL, NULL);
+		if (value != NULL) {
+			bigtime_t target = strtoll(value, NULL, 0);
+			if (target > 0 && target <= 1000000)
+				gCoDelTarget = target;
+		}
+		value = get_driver_parameter(settings, "codel_interval", NULL, NULL);
+		if (value != NULL) {
+			bigtime_t interval = strtoll(value, NULL, 0);
+			if (interval > 0 && interval <= 10000000)
+				gCoDelInterval = interval;
+		}
+		value = get_driver_parameter(settings, "codel_min_bytes", NULL, NULL);
+		if (value != NULL) {
+			long long minBytes = strtoll(value, NULL, 0);
+			if (minBytes >= 0 && minBytes <= 16 * 1024 * 1024)
+				gCoDelMinBytes = (size_t)minBytes;
+		}
+		unload_driver_settings(settings);
+	}
+
 	// Announce the receive-FIFO queue discipline once, at init, so a running
 	// image can be attributed to this change without decompiling it. Printed
 	// off the datapath, so the synchronous per-character UART write here costs
 	// nothing that matters.
 	dprintf("net stack: receive FIFO sojourn discipline active "
-		"(codel target %d us, interval %d us)\n",
-		NET_FIFO_CODEL_TARGET, NET_FIFO_CODEL_INTERVAL);
+		"(codel target %" B_PRIdBIGTIME " us, interval %" B_PRIdBIGTIME " us, "
+		"min %zu bytes)\n", gCoDelTarget, gCoDelInterval, gCoDelMinBytes);
 
 	status_t status = init_domains();
 	if (status != B_OK)
