@@ -3,11 +3,28 @@ SubDir HAIKU_TOP src apps remotedesktop ;
 local defines = [ FDefines CLIENT_COMPILE ] ;
 local serverDir = [ FDirName $(HAIKU_TOP) src servers app drawing interface
 	remote ] ;
+local brokerDir = [ FDirName $(HAIKU_TOP) src servers remote_broker ] ;
 
 SubDirC++Flags $(defines) ;
 
 UsePrivateHeaders interface shared ;
 UseHeaders $(serverDir) ;
+
+local tlsSources = ;
+local tlsLibraries = ;
+if [ FIsBuildFeatureEnabled openssl ] {
+	# The broker transport: TLS + WebSocket + token authentication, shared
+	# with the remote_broker daemon.
+	SubDirC++Flags [ FDefines REMOTE_DESKTOP_TLS ] ;
+	UseHeaders $(brokerDir) ;
+	UseBuildFeatureHeaders openssl ;
+
+	tlsSources = WsTunnel.cpp TLSStream.cpp WebSocketStream.cpp ;
+	tlsLibraries = network [ BuildFeatureAttribute openssl : libraries ] ;
+
+	Includes [ FGristFiles $(tlsSources) ]
+		: [ BuildFeatureAttribute openssl : headers ] ;
+}
 
 Application RemoteDesktop :
 	RemoteDesktop.cpp
@@ -18,9 +35,12 @@ Application RemoteDesktop :
 	NetSender.cpp
 	StreamingRingBuffer.cpp
 
-	: be bnetapi [ TargetLibsupc++ ]
+	$(tlsSources)
+
+	: be bnetapi $(tlsLibraries) [ TargetLibsupc++ ]
 	: RemoteDesktop.rdef
 ;
 
 SEARCH on [ FGristFiles NetReceiver.cpp NetSender.cpp RemoteMessage.cpp
 	StreamingRingBuffer.cpp ] = $(serverDir) ;
+SEARCH on [ FGristFiles TLSStream.cpp WebSocketStream.cpp ] = $(brokerDir) ;

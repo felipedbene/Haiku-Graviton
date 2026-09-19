@@ -8,6 +8,16 @@ const RP_GET_SYSTEM_PALETTE_RESULT = 5;
 const RP_HELLO = 6;
 const RP_HELLO_ACK = 7;
 
+// Transport-security preamble, spoken with the remote_broker daemon that
+// fronts the desktop with TLS + WebSocket for non-loopback access. When a
+// token is given, RP_AUTHENTICATE must be the very first message; the broker
+// answers RP_AUTH_RESULT (uint32 status, 0 = success) and forwards nothing
+// until authentication succeeded. Connecting through plain websockify (the
+// tunnel/rescue path) needs no token; app_server ignores these messages.
+const RP_AUTHENTICATE = 10;
+const RP_AUTH_RESULT = 11;
+const RP_AUTH_METHOD_SHARED_TOKEN = 1;
+
 // URP/1 handshake: protocol version and capability bits exchanged in
 // RP_HELLO / RP_HELLO_ACK. This client answers string-width queries, so it
 // advertises RP_CAP_STRING_WIDTH_REPLY; the server only queries clients that do.
@@ -1775,8 +1785,9 @@ RemoteState.prototype.messageReceived = function(remoteMessage, reply)
 
 
 function RemoteDesktopSession(targetElement, width, height, targetAddress,
-	disconnectCallback)
+	token, disconnectCallback)
 {
+	this.token = token;
 	this.websocket = new WebSocket(targetAddress, 'binary');
 	this.websocket.binaryType = 'arraybuffer';
 	this.websocket.onopen = this.onOpen.bind(this);
@@ -1837,6 +1848,17 @@ function RemoteDesktopSession(targetElement, width, height, targetAddress,
 RemoteDesktopSession.prototype.onOpen = function(open)
 {
 	console.log('open:', open);
+
+	// Through the broker the first message must authenticate; everything
+	// after it is pipelined and only forwarded once the broker accepted the
+	// token (RP_AUTH_RESULT reports the outcome).
+	if (this.token) {
+		this.sendMessage.start(RP_AUTHENTICATE);
+		this.sendMessage.dataView.writeUint32(RP_AUTH_METHOD_SHARED_TOKEN);
+		this.sendMessage.dataView.writeString(this.token);
+		this.sendMessage.flush();
+	}
+
 	this.init();
 }
 
@@ -1884,6 +1906,18 @@ RemoteDesktopSession.prototype.onMessage = function(message)
 RemoteDesktopSession.prototype.messageReceived = function(remoteMessage, reply)
 {
 	switch (remoteMessage.code()) {
+		case RP_AUTH_RESULT:
+		{
+			var status = remoteMessage.dataView.readUint32();
+			if (status != 0) {
+				console.error('broker rejected authentication, status:',
+					status);
+				this.onDisconnect('authentication rejected');
+			} else
+				console.log('broker authentication succeeded');
+			break;
+		}
+
 		case RP_INIT_CONNECTION:
 			console.log('init connection reply');
 			this.sendMessage.start(RP_UPDATE_DISPLAY_MODE);
@@ -2258,6 +2292,7 @@ RemoteDesktopSession.prototype.onWheel = function(event)
 function init()
 {
 	var targetAddressInput = document.querySelector('#targetAddress');
+	var tokenInput = document.querySelector('#token');
 	var widthInput = document.querySelector('#width');
 	var heightInput = document.querySelector('#height');
 
@@ -2279,8 +2314,10 @@ function init()
 			localStorage.width = widthInput.value;
 			localStorage.height = heightInput.value;
 			localStorage.targetAddress = targetAddressInput.value;
+			// The token is a secret and is deliberately never persisted.
 
 			gSession = new RemoteDesktopSession(document.body, widthInput.value,
-				heightInput.value, targetAddressInput.value, onDisconnect);
+				heightInput.value, targetAddressInput.value, tokenInput.value,
+				onDisconnect);
 		};
 }

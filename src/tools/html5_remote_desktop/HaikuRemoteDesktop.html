@@ -59,10 +59,23 @@
 	</head>
 	<body onload="init();">
 		<div id="connectForm">
+			<!-- The normal front door is the remote_broker daemon on the
+			     server: wss://<host>:10902 plus the authentication token
+			     from its settings directory. With the default self-signed
+			     certificate the browser must trust it once first: open
+			     https://<host>:10902/ in a tab, inspect the certificate
+			     (compare against the server's broker.fingerprint) and
+			     accept it, then connect here. A ws://localhost:<port>
+			     address still works for the loopback/SSH-tunnel rescue
+			     path (via websockify); no token is needed there. -->
 			<div>
 				<label for="targetAddress">Remote Host</label>
 				<input type="text" id="targetAddress"
-					value="ws://localhost:5000" />
+					value="wss://localhost:10902" />
+			</div>
+			<div>
+				<label for="token">Token</label>
+				<input type="password" id="token" value="" />
 			</div>
 			<div>
 				<label for="width">Width</label>
