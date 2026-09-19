@@ -32,6 +32,13 @@
 #define TRACE_ERROR(x...)		debug_printf("RemoteHWInterface: " x)
 
 
+// The URP/1 capabilities this server implements. A client's advertised feature
+// bitmap is masked to this in RP_HELLO, so an unknown or not-yet-implemented bit
+// the client offers is simply not negotiated. M0 implements only the client-side
+// string-width reply; later milestones OR in their bits here as they land.
+static const uint32 kSupportedCapabilities = RP_CAP_STRING_WIDTH_REPLY;
+
+
 struct callback_info {
 	uint32				token;
 	RemoteHWInterface::CallbackFunction	callback;
@@ -45,6 +52,8 @@ RemoteHWInterface::RemoteHWInterface(const char* target)
 	fTarget(target),
 	fIsConnected(false),
 	fProtocolVersion(100),
+	fClientProtocolVersion(0),
+	fClientCapabilities(0),
 	fConnectionSpeed(0),
 	fListenPort(10901),
 	fListenEndpoint(NULL),
@@ -345,6 +354,51 @@ RemoteHWInterface::_EventThread()
 				break;
 			}
 
+			case RP_HELLO:
+			{
+				// URP/1 session handshake. A capability- and version-aware
+				// client sends this immediately after connecting, before it
+				// draws anything; a legacy client never does and keeps working
+				// on the pre-handshake path. The reply advertises only the
+				// features this server understands and the client also offered,
+				// so neither side ever uses a capability the other lacks.
+				uint32 clientVersion = 0;
+				uint32 clientCapabilities = 0;
+				uint32 maxDecodeWidth = 0, maxDecodeHeight = 0;
+				uint32 requestedWidth = 0, requestedHeight = 0;
+				message.Read(clientVersion);
+				message.Read(clientCapabilities);
+				message.Read(maxDecodeWidth);
+				message.Read(maxDecodeHeight);
+				message.Read(requestedWidth);
+				result = message.Read(requestedHeight);
+				if (result != B_OK) {
+					TRACE_ERROR("failed to read hello\n");
+					break;
+				}
+
+				// M0 negotiates version and capabilities only; the decode
+				// dimensions and requested size are read for forward
+				// compatibility but not acted on yet (Tier P / resize land
+				// later).
+				(void)maxDecodeWidth;
+				(void)maxDecodeHeight;
+				(void)requestedWidth;
+				(void)requestedHeight;
+
+				fClientProtocolVersion = min_c(clientVersion,
+					(uint32)RP_PROTOCOL_VERSION);
+				fClientCapabilities
+					= clientCapabilities & kSupportedCapabilities;
+
+				RemoteMessage reply(NULL, fSendBuffer.Get());
+				reply.Start(RP_HELLO_ACK);
+				reply.Add(fClientProtocolVersion);
+				reply.Add(fClientCapabilities);
+				reply.Flush();
+				break;
+			}
+
 			case RP_UPDATE_DISPLAY_MODE:
 			{
 				int32 width, height;
@@ -424,6 +478,12 @@ RemoteHWInterface::_NewConnection(BNetEndpoint &endpoint)
 
 	fSendBuffer->MakeEmpty();
 
+	// A fresh client has not yet sent its RP_HELLO, so it has no negotiated
+	// capabilities until it does. Clear any left from a previous connection so
+	// the server does not act on a feature this client never advertised.
+	fClientProtocolVersion = 0;
+	fClientCapabilities = 0;
+
 	// Deliberately do NOT flush fReceiveBuffer here. A departed client's partial
 	// message is already dropped at disconnect by _ConnectionClosed(), which runs
 	// before the next client is accepted, so the receive stream is clean by the
@@ -490,6 +550,11 @@ RemoteHWInterface::_ConnectionClosed()
 	// both ring buffers too: with no client there is nothing to send, and any
 	// half-received inbound message must not carry into the next connection.
 	fIsConnected = false;
+
+	// The next client re-negotiates from scratch; do not carry a departed
+	// client's capabilities into a connection that never sent an RP_HELLO.
+	fClientProtocolVersion = 0;
+	fClientCapabilities = 0;
 
 	fSender.Unset();
 

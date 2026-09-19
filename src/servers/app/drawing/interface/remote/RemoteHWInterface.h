@@ -93,6 +93,12 @@ virtual	status_t					CopyBackToFront(const BRect& frame);
 			bool						IsConnected() const
 											{ return fIsConnected; }
 
+			// The URP/1 capability bits the connected client advertised in
+			// RP_HELLO, masked to what this server understands. Zero for a
+			// pre-handshake client. The server may only use a feature set here.
+			uint32						ClientCapabilities() const
+											{ return fClientCapabilities; }
+
 typedef bool (*CallbackFunction)(void* cookie, RemoteMessage& message);
 
 		status_t					AddCallback(uint32 token,
@@ -131,6 +137,8 @@ static	void						_ConnectionClosedCallback(void *cookie);
 		status_t					fInitStatus;
 		bool						fIsConnected;
 		uint32						fProtocolVersion;
+		uint32						fClientProtocolVersion;
+		uint32						fClientCapabilities;
 		uint32						fConnectionSpeed;
 		display_mode				fFallbackMode;
 		display_mode				fCurrentMode;

@@ -450,6 +450,25 @@ RemoteView::_DrawThread()
 	reply.Start(RP_INIT_CONNECTION);
 	reply.Flush();
 
+	// URP/1 capability handshake, sent before any drawing. Announce our
+	// protocol version and the features we implement so the server only drives
+	// us with capabilities we actually have. This client is vector-only and has
+	// no RP_STRING_WIDTH handler, so it advertises no capabilities; the server
+	// then computes string width from its own font metrics rather than stalling
+	// on a query we would never answer. A server that predates the handshake
+	// simply ignores this message.
+	{
+		BRect bounds = fOffscreenBitmap->Bounds();
+		reply.Start(RP_HELLO);
+		reply.Add((uint32)RP_PROTOCOL_VERSION);
+		reply.Add((uint32)0);	// capabilities
+		reply.Add((uint32)0);	// max decode width (no Tier P)
+		reply.Add((uint32)0);	// max decode height
+		reply.Add((uint32)(bounds.IntegerWidth() + 1));
+		reply.Add((uint32)(bounds.IntegerHeight() + 1));
+		reply.Flush();
+	}
+
 	while (!fStopThread) {
 		uint16 code;
 		status_t status = message.NextMessage(code);
@@ -486,6 +505,19 @@ RemoteView::_DrawThread()
 			case RP_CLOSE_CONNECTION:
 			{
 				be_app->PostMessage(B_QUIT_REQUESTED);
+				continue;
+			}
+
+			case RP_HELLO_ACK:
+			{
+				// Negotiated protocol version and capability intersection. This
+				// client gates no behaviour on them yet; read them so the
+				// message is consumed at a clean boundary.
+				uint32 negotiatedVersion, negotiatedCapabilities;
+				message.Read(negotiatedVersion);
+				message.Read(negotiatedCapabilities);
+				(void)negotiatedVersion;
+				(void)negotiatedCapabilities;
 				continue;
 			}
 

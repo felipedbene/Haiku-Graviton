@@ -1062,32 +1062,42 @@ float
 RemoteDrawingEngine::StringWidth(const char* string, int32 length,
 	escapement_delta* delta)
 {
-	// TODO: Decide if really needed.
+	// Only ask the client if one is attached and it advertised that it answers
+	// string-width queries (RP_CAP_STRING_WIDTH_REPLY). Otherwise compute from
+	// the server's own, authoritative font metrics. This closes the headless
+	// stall (no client -> no 1 s wait per query) and the mirror case of a client
+	// with no string-width handler stalling on every query: the server simply
+	// never issues a query it was not promised an answer to (defects D1/D10).
+	if (fHWInterface->IsConnected()
+		&& (fHWInterface->ClientCapabilities() & RP_CAP_STRING_WIDTH_REPLY)
+			!= 0) {
+		while (true) {
+			if (_AddCallback() != B_OK)
+				break;
 
-	while (true) {
-		if (_AddCallback() != B_OK)
-			break;
+			RemoteMessage message(NULL, fHWInterface->SendBuffer());
 
-		RemoteMessage message(NULL, fHWInterface->SendBuffer());
+			message.Start(RP_STRING_WIDTH);
+			message.Add(fToken);
+			message.AddString(string, length);
+				// TODO: Support escapement delta.
 
-		message.Start(RP_STRING_WIDTH);
-		message.Add(fToken);
-		message.AddString(string, length);
-			// TODO: Support escapement delta.
+			if (message.Flush() != B_OK)
+				break;
 
-		if (message.Flush() != B_OK)
-			break;
+			_DrainResultSem();
 
-		status_t result;
-		do {
-			result = acquire_sem_etc(fResultNotify, 1, B_RELATIVE_TIMEOUT,
-				1 * 1000 * 1000);
-		} while (result == B_INTERRUPTED);
+			status_t result;
+			do {
+				result = acquire_sem_etc(fResultNotify, 1, B_RELATIVE_TIMEOUT,
+					1 * 1000 * 1000);
+			} while (result == B_INTERRUPTED);
 
-		if (result != B_OK)
-			break;
+			if (result != B_OK)
+				break;
 
-		return fStringWidthResult;
+			return fStringWidthResult;
+		}
 	}
 
 	// Fall back to local calculation.

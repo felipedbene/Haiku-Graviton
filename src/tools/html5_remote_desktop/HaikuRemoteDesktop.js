@@ -5,6 +5,14 @@ const RP_UPDATE_DISPLAY_MODE = 2;
 const RP_CLOSE_CONNECTION = 3;
 const RP_GET_SYSTEM_PALETTE = 4;
 const RP_GET_SYSTEM_PALETTE_RESULT = 5;
+const RP_HELLO = 6;
+const RP_HELLO_ACK = 7;
+
+// URP/1 handshake: protocol version and capability bits exchanged in
+// RP_HELLO / RP_HELLO_ACK. This client answers string-width queries, so it
+// advertises RP_CAP_STRING_WIDTH_REPLY; the server only queries clients that do.
+const RP_PROTOCOL_VERSION = 1;
+const RP_CAP_STRING_WIDTH_REPLY = 1 << 0;
 
 const RP_CREATE_STATE = 20;
 const RP_DELETE_STATE = 21;
@@ -1384,7 +1392,11 @@ RemoteState.prototype.messageReceived = function(remoteMessage, reply)
 
 			reply.start(RP_STRING_WIDTH_RESULT);
 			reply.dataView.writeInt32(this.token);
-			where.writeFloat32(textMetric.width);
+			reply.dataView.writeFloat32(textMetric.width);
+				// was where.writeFloat32(...), which threw: `where` is not in
+				// scope here and is not a writer. The server only issues this
+				// query to a client that advertised RP_CAP_STRING_WIDTH_REPLY, so
+				// the reply has to actually be sent.
 			reply.flush();
 			break;
 
@@ -1883,6 +1895,16 @@ RemoteDesktopSession.prototype.messageReceived = function(remoteMessage, reply)
 			this.sendMessage.flush();
 			break;
 
+		case RP_HELLO_ACK:
+			// Negotiated protocol version and capability intersection. Read them
+			// so the message is consumed cleanly; no behaviour is gated on them
+			// on this side yet.
+			var negotiatedVersion = remoteMessage.dataView.readUint32();
+			var negotiatedCapabilities = remoteMessage.dataView.readUint32();
+			console.log('hello ack: version ' + negotiatedVersion
+				+ ', capabilities ' + negotiatedCapabilities);
+			break;
+
 		case RP_GET_SYSTEM_PALETTE_RESULT:
 			var count = remoteMessage.dataView.readUint32();
 			gSystemPalette = new Uint32Array(count);
@@ -2048,6 +2070,19 @@ RemoteDesktopSession.prototype.removeClipping = function()
 RemoteDesktopSession.prototype.init = function()
 {
 	this.sendMessage.start(RP_INIT_CONNECTION);
+	this.sendMessage.flush();
+
+	// URP/1 capability handshake, sent before any drawing. We measure text with
+	// the canvas 2D context, so we advertise RP_CAP_STRING_WIDTH_REPLY and the
+	// server routes RP_STRING_WIDTH to us; without it the server would compute
+	// width itself. A pre-handshake server ignores this message.
+	this.sendMessage.start(RP_HELLO);
+	this.sendMessage.dataView.writeUint32(RP_PROTOCOL_VERSION);
+	this.sendMessage.dataView.writeUint32(RP_CAP_STRING_WIDTH_REPLY);
+	this.sendMessage.dataView.writeUint32(0);	// max decode width (no Tier P)
+	this.sendMessage.dataView.writeUint32(0);	// max decode height
+	this.sendMessage.dataView.writeUint32(this.canvas.width);
+	this.sendMessage.dataView.writeUint32(this.canvas.height);
 	this.sendMessage.flush();
 }
 
