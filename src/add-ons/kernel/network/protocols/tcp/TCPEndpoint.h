@@ -73,6 +73,29 @@ public:
 			void		Dump() const;
 
 private:
+	// A plain acknowledgement decided and committed under fLock by
+	// _PrepareAcknowledge(), to be built and transmitted by _EmitAcknowledge()
+	// with fLock RELEASED (#414) -- the buffer allocation, header build and
+	// the whole downstream send pipeline are kept out of the RX consumer's
+	// critical section. The previous* fields allow _AcknowledgeEmissionFailed()
+	// to roll the commit back if the transmit never happened.
+	struct PendingAcknowledge {
+		tcp_segment_header	segment;
+		tcp_sequence		previousLastAcknowledgeSent;
+		tcp_sequence		previousReceiveMaxAdvertised;
+		tcp_sequence		committedReceiveMaxAdvertised;
+		bool				valid;
+		bool				checksumOffload;
+
+		PendingAcknowledge()
+			:
+			segment(0),
+			valid(false),
+			checksumOffload(false)
+		{
+		}
+	};
+
 			void		_StartPersistTimer();
 			void		_EnterTimeWait();
 			void		_UpdateTimeWait();
@@ -87,6 +110,11 @@ private:
 							bool isRetransmit);
 			bool		_CanOffloadChecksum() const;
 			status_t	_SendAcknowledge(bool force = false);
+			bool		_PrepareAcknowledge(bool force,
+							PendingAcknowledge& pending);
+			status_t	_EmitAcknowledge(PendingAcknowledge& pending);
+			void		_AcknowledgeEmissionFailed(
+							PendingAcknowledge& pending);
 			status_t	_SendReset(bool force = false);
 			status_t	_SendQueued(bool force = false);
 
