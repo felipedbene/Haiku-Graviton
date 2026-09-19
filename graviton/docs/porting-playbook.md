@@ -1260,6 +1260,21 @@ Two things this proved beyond the recipe itself:
    image used for the numbers above, which then ran the full SVE GEMM to correct
    output. **A `_g3` package therefore additionally requires an SVE-enabled
    kernel at run time, not just Graviton3 hardware.**
+3. **`_g3` is VL-safe on 128-bit parts (Graviton4/5) — correct, just not
+   accelerated.** The patchset reads the vector length at run time with
+   `svcntb()` rather than hardcoding it (see the patch note in
+   `haikuports-patches/recipes/llama_cpp_g3-b4889.patchset`), so it is
+   vector-length-agnostic where it matters. ggml gates its hand-written SVE
+   integer-matmul GEMM on `ggml_cpu_get_sve_cnt() == QK8_0` (32 bytes = 256-bit);
+   on a 128-bit Graviton4/5 `svcntb()` returns 16 ≠ 32, so ggml **falls back to
+   its NEON i8mm/dotprod path** — it does not run the 256-bit SVE GEMM at a wrong
+   width, so output stays correct. Net: ggml's SVE GEMM is effectively
+   **Graviton3-only by design** (the only VL it implemented), and `_g3` is *safe*
+   but *unaccelerated* on Graviton4/5. Compiler-emitted SVE elsewhere in the
+   binary (the `whilelo`/`ptrue` predicated loops seen in the disassembly) is
+   VL-agnostic and runs correctly at either width. If a Graviton4/5-optimal build
+   is ever wanted, it needs a `_g4`/`_g5` flavour whose SVE2 GEMM targets the
+   128-bit VL — not a re-run of `_g3`.
 
 ---
 

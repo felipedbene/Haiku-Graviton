@@ -102,8 +102,16 @@ symbols). Cost: **~0.3–0.7 of one Graviton core** for 1080p30 ultrafast+zerola
   rejected. Input rides WebTransport datagrams, never WebSocket. Latency budget: **~30–60 ms
   LAN, ~60–120 ms WAN** — encode is not the bottleneck.
 - **Best for:** full-motion media/animation; the true home for Graviton NEON encode.
-- **Build caveat:** do **not** pass `-mcpu=neoverse-*` — GCC then emits SVE, which traps on
-  Haiku. Use `-mtune` only.
+- **Build caveat (updated, #88):** passing `-mcpu=neoverse-*` makes GCC emit SVE, and that
+  is now **fine** — SVE executes cleanly on the current kernel (#88 enabled EL0 SVE with
+  per-thread save/restore); it no longer traps. Two conditions still apply. (1) The SVE
+  vector length differs by generation (256-bit Graviton3, 128-bit Graviton4/5), so the
+  binary must be vector-length-agnostic — read `RDVL`/`svcntb()` at runtime, never assume
+  256-bit — or it faults nothing but computes wrong on a 128-bit part. (2) A
+  `-mcpu=neoverse-v1`/`-v2` binary emits SVE + ARMv8.4 NEON that faults on Graviton2/t4g, so
+  it is a fixed-ISA `_g3`/`_g4` variant, not fleet-portable — build per-generation flavours
+  (the #330 `_g3` pattern) or use `-mtune=neoverse-*` only (scheduling, no new ISA) for a
+  portable build.
 
 ### Option E — RustDesk — v2-only
 
