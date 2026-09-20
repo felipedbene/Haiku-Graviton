@@ -249,6 +249,15 @@ or x86 build of this tree** — the most immediate blocker to even attempting a 
 architecture. `src/bin/sve_test/Jamfile` meanwhile comments "Verification instrument, not
 shipped", contradicting the package list.
 
+> **FIXED (#426).** Both `Application` rules are now gated on `$(TARGET_ARCH) = arm64` and
+> the package list entry is annotated `sve_test@arm64`, so neither file reaches a non-arm64
+> assembler. `#ifndef __aarch64__` guards were added as well, but only to turn a
+> hand-compile for another architecture into one legible error — the two Jam gates are the
+> fix. arm64 is provably untouched: a forced rebuild of both targets produces object files
+> byte-identical to the pre-fix tree. The misleading "not shipped" comments were corrected
+> at the same time. Note this clears `src/bin` of *assembly* blockers specifically; it is
+> the first entry off the riscv64 error list, not the whole list.
+
 **X3 — `build/jam/packages/Haiku:149`.** The `ena` driver is listed unfiltered, so a
 RISC-V or Pi image ships a driver for a NIC that platform cannot have.
 
@@ -752,9 +761,10 @@ Not filed from here; listed so they can be, with the file each would touch.
 1. **`arm64: replace the unconditional -mcpu=neoverse-n1+crypto with a per-target ISA baseline`** —
    `build/jam/ArchitectureRules:52`. Measured: the current flag puts FEAT_LSE atomics in
    the boot loader and faults on any ARMv8.0 core.
-2. **`sve_test: guard the aarch64 assembly so a non-arm64 build compiles`** —
+2. ~~**`sve_test: guard the aarch64 assembly so a non-arm64 build compiles`** —
    `src/bin/sve_test/*`, `src/bin/Jamfile:264`, `build/jam/packages/Haiku:256`. Currently a
-   hard compile failure for riscv64 and x86.
+   hard compile failure for riscv64 and x86.~~ **Filed and fixed as #426** — see the
+   note under X2.
 3. **`efi/arm64: the FDT SMP path can call a NULL PSCI function pointer`** —
    `src/system/boot/platform/efi/arch/arm64/arch_smp.cpp:255-258`, `arch_dtb.cpp:78`.
 4. **`efi/arm64: harden the FDT cpu/psci node parsing against missing properties`** —
