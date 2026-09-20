@@ -67,30 +67,39 @@ ReceiveRing::Init(uint32 slots)
 // #pragma mark - producer side (caller holds fLock)
 
 
-/*!	Refreshes the producer's cached view of the consumer head, but only once
-	the cached view shows the ring at least half full. The threshold keeps the
-	acquire-load of the consumer-dirtied fHead line off the per-segment fast
-	path (a stale head is safe -- it only under-counts free slots) while
-	bounding two effects of staleness: Push() keeps working long before the
-	ring is genuinely full, and the advertised window derived from FreeSlots()
-	never sags below half the ring's slot capacity merely because the cache is
-	old. At genuinely high occupancy this degenerates to one load per call --
+void
+ReceiveRing::_RefreshCachedHead() const
+{
+	fCachedHead = atomic_get64(const_cast<int64*>(&fHead));
+}
+
+
+/*!	Refreshes the producer's cached view of the consumer head, but only once the
+	cached view shows the ring at least half full -- which is all the
+	"is there room" queries need, since a stale head only under-counts free
+	slots. At genuinely high occupancy this degenerates to one load per call,
 	exactly the pre-#414 behaviour, so it is never a regression.
 */
 void
 ReceiveRing::_MaybeRefreshCachedHead() const
 {
 	if (fTail - fCachedHead >= (int64)(fCapacity / 2))
-		fCachedHead = atomic_get64(const_cast<int64*>(&fHead));
+		_RefreshCachedHead();
 }
 
 
+/*!	The exact number of free slots. Unlike the room queries below this one
+	always refreshes: _ReceiveFree() turns it into the advertised window, and a
+	cached head that merely LOOKS half consumed would advertise as little as
+	half the ring (visible when the slot term binds rather than the byte term,
+	i.e. a small negotiated MSS with a large window shift).
+*/
 uint32
 ReceiveRing::FreeSlots() const
 {
 	if (fSlots == NULL)
 		return 0;
-	_MaybeRefreshCachedHead();
+	_RefreshCachedHead();
 	int64 used = fTail - fCachedHead;
 	if (used >= (int64)fCapacity)
 		return 0;
@@ -101,7 +110,11 @@ ReceiveRing::FreeSlots() const
 bool
 ReceiveRing::HasFreeSlot() const
 {
-	return FreeSlots() > 0;
+	if (fSlots == NULL)
+		return false;
+
+	_MaybeRefreshCachedHead();
+	return (fTail - fCachedHead) < (int64)fCapacity;
 }
 
 
@@ -258,5 +271,9 @@ ReceiveRing::Drain()
 	}
 
 	fHead = head;
+	fCachedHead = head;
+		// keep the producer's cached view consistent with the reset, as Init()
+		// does -- a stale cache would only be conservative, but there is no
+		// reason to leave one behind
 	fBytesConsumed = fBytesProduced;
 }

@@ -47,14 +47,23 @@
 	writing, and the producer never reuses a slot the consumer has not finished
 	freeing. No torn indices (64-bit monotonic counters, slot = counter & mask).
 
-	fCachedHead (#414): a producer-owned copy of fHead, refreshed from the
-	atomic only when the cached view shows the ring at least half full. fHead is
-	on a cache line the consumer dirties on every read syscall, so the acquire
-	loads in Push()/FreeSlots() were a per-segment cross-core line transfer
-	inside the RX consumer's fLock hold. Staleness is safe by monotonicity: the
-	head only advances, so a stale cache only UNDER-counts free slots -- Push()
-	never overruns, and the advertised window (derived from FreeSlots()) only
-	skews smaller, never larger, bounded by the half-capacity refresh threshold.
+	fCachedHead (#414): a producer-owned copy of fHead, letting the per-segment
+	producer queries Push()/HasFreeSlot() answer "is there room" without an
+	acquire-load of the consumer-written fHead. What this saves is the loads
+	themselves (an `ldar` each, with its ordering constraint) and not a cache
+	line transfer: this structure is 56 bytes and deliberately NOT padded, so
+	the producer indices (fTail/fBytesProduced) and the consumer indices
+	(fHead/fBytesConsumed) share one line, which bounces on every read syscall
+	whether the producer loads fHead or not. Splitting the two groups onto
+	separate lines is a separate, plausibly larger win and is not done here.
+
+	Staleness is safe by monotonicity: the head only advances, so a stale cache
+	only UNDER-counts free slots. Push()/HasFreeSlot() therefore stay correct
+	(they refresh before ever declaring the ring full, so nothing is dropped
+	while slots are free and no slot is overrun). FreeSlots() is different: it
+	feeds _ReceiveFree() and hence the ADVERTISED WINDOW, where an
+	under-estimate is a real throughput cost rather than conservatism, so it
+	always refreshes and is exact.
 */
 class ReceiveRing {
 public:
@@ -80,9 +89,9 @@ public:
 			void			Drain();
 
 private:
+			void			_RefreshCachedHead() const;
 			void			_MaybeRefreshCachedHead() const;
 
-private:
 			net_buffer**	fSlots;
 			uint32			fCapacity;		// power of two, or 0 if uninitialised
 			uint32			fMask;
