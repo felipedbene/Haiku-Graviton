@@ -13,6 +13,7 @@
 #include <SupportDefs.h>
 
 class BNetEndpoint;
+class RemoteWireReader;
 class StreamingRingBuffer;
 
 typedef status_t (*NewConnectionCallback)(void *cookie, BNetEndpoint &endpoint);
@@ -25,7 +26,8 @@ public:
 									StreamingRingBuffer *target,
 									NewConnectionCallback callback = NULL,
 									void *newConnectionCookie = NULL,
-									ConnectionClosedCallback closedCallback = NULL);
+									ConnectionClosedCallback closedCallback = NULL,
+									RemoteWireReader *wireReader = NULL);
 								~NetReceiver();
 
 		BNetEndpoint *			Endpoint() { return fEndpoint.Get(); }
@@ -42,6 +44,12 @@ static	int32					_NetworkReceiverEntry(void *data);
 
 		BNetEndpoint *			fListener;
 		StreamingRingBuffer *	fTarget;
+
+		// Client side only: de-frames and decompresses the inbound stream on
+		// its way into the target buffer once the server has switched to
+		// compressed segments. NULL on the server side, where the inbound
+		// direction is always plain.
+		RemoteWireReader *		fWireReader;
 
 		thread_id				fReceiverThread;
 		bool					fStopThread;

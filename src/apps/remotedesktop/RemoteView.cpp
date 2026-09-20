@@ -10,6 +10,7 @@
 #include "NetSender.h"
 #include "RemoteMessage.h"
 #include "RemoteView.h"
+#include "RemoteWireReader.h"
 #include "StreamingRingBuffer.h"
 
 #include <Application.h>
@@ -62,6 +63,7 @@ RemoteView::RemoteView(BRect frame, const char *remoteHost, uint16 remotePort)
 	fReceiveBuffer(NULL),
 	fSendBuffer(NULL),
 	fEndpoint(NULL),
+	fWireReader(NULL),
 	fReceiver(NULL),
 	fSender(NULL),
 	fStopThread(false),
@@ -115,7 +117,17 @@ RemoteView::RemoteView(BRect frame, const char *remoteHost, uint16 remotePort)
 		return;
 	}
 
-	fReceiver = new(std::nothrow) NetReceiver(fEndpoint, fReceiveBuffer);
+	// Must exist before the receiver: the receiver spawns its socket thread in
+	// its constructor and that thread is the only user of the wire reader.
+	fWireReader = new(std::nothrow) RemoteWireReader(fReceiveBuffer);
+	if (fWireReader == NULL) {
+		fInitStatus = B_NO_MEMORY;
+		TRACE_ERROR("no memory available\n");
+		return;
+	}
+
+	fReceiver = new(std::nothrow) NetReceiver(fEndpoint, fReceiveBuffer, NULL,
+		NULL, NULL, fWireReader);
 	if (fReceiver == NULL) {
 		fInitStatus = B_NO_MEMORY;
 		TRACE_ERROR("no memory available\n");
@@ -162,6 +174,8 @@ RemoteView::~RemoteView()
 	fStopThread = true;
 
 	delete fReceiver;
+		// deleted after the receiver: its socket thread is the only user
+	delete fWireReader;
 	delete fReceiveBuffer;
 
 	delete fSendBuffer;
@@ -453,15 +467,18 @@ RemoteView::_DrawThread()
 	// URP/1 capability handshake, sent before any drawing. Announce our
 	// protocol version and the features we implement so the server only drives
 	// us with capabilities we actually have. This client is vector-only and has
-	// no RP_STRING_WIDTH handler, so it advertises no capabilities; the server
+	// no RP_STRING_WIDTH handler, so it does not advertise that bit; the server
 	// then computes string width from its own font metrics rather than stalling
-	// on a query we would never answer. A server that predates the handshake
-	// simply ignores this message.
+	// on a query we would never answer. It does advertise stream compression
+	// when this build can decode it -- RemoteWireReader is installed ahead of
+	// the socket thread above and switches itself over when the acknowledgement
+	// goes past. A server that predates the handshake simply ignores this
+	// message and keeps sending the plain stream, which the reader also handles.
 	{
 		BRect bounds = fOffscreenBitmap->Bounds();
 		reply.Start(RP_HELLO);
 		reply.Add((uint32)RP_PROTOCOL_VERSION);
-		reply.Add((uint32)0);	// capabilities
+		reply.Add(RemoteWireReader::SupportedCapabilities());
 		reply.Add((uint32)0);	// max decode width (no Tier P)
 		reply.Add((uint32)0);	// max decode height
 		reply.Add((uint32)(bounds.IntegerWidth() + 1));
@@ -510,9 +527,11 @@ RemoteView::_DrawThread()
 
 			case RP_HELLO_ACK:
 			{
-				// Negotiated protocol version and capability intersection. This
-				// client gates no behaviour on them yet; read them so the
-				// message is consumed at a clean boundary.
+				// Negotiated protocol version and capability intersection. The
+				// compression bit is acted on by RemoteWireReader, which sees
+				// this message on the socket thread well before the parser gets
+				// here; by now the stream has already switched. Read the fields
+				// so the message is consumed at a clean boundary.
 				uint32 negotiatedVersion, negotiatedCapabilities;
 				message.Read(negotiatedVersion);
 				message.Read(negotiatedCapabilities);

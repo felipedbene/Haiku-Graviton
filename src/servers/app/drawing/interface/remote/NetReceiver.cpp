@@ -8,6 +8,7 @@
 
 #include "NetReceiver.h"
 #include "RemoteMessage.h"
+#include "RemoteWireReader.h"
 
 #include "StreamingRingBuffer.h"
 
@@ -60,10 +61,12 @@ validate_first_frame(const uint8 *buffer, size_t size)
 
 NetReceiver::NetReceiver(BNetEndpoint *listener, StreamingRingBuffer *target,
 	NewConnectionCallback newConnectionCallback, void *newConnectionCookie,
-	ConnectionClosedCallback connectionClosedCallback)
+	ConnectionClosedCallback connectionClosedCallback,
+	RemoteWireReader *wireReader)
 	:
 	fListener(listener),
 	fTarget(target),
+	fWireReader(wireReader),
 	fReceiverThread(-1),
 	fStopThread(false),
 	fNewConnectionCallback(newConnectionCallback),
@@ -302,7 +305,14 @@ NetReceiver::_Transfer()
 		}
 
 		errorCount = 0;
-		status_t result = fTarget->Write(buffer, readSize);
+
+		// On the client side the stream may have switched to compressed
+		// segments; the reader turns it back into the plain message stream the
+		// parser above expects, and is a passthrough until then. The server
+		// side never has one: inbound is always plain.
+		status_t result = fWireReader != NULL
+			? fWireReader->Process(buffer, readSize)
+			: fTarget->Write(buffer, readSize);
 		if (result != B_OK) {
 			TRACE_ERROR("writing to ring buffer failed: %s\n",
 				strerror(result));

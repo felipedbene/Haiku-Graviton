@@ -17,6 +17,16 @@ Includes [ FGristFiles RemoteDrawingEngine.cpp RemoteMessage.cpp
 		RemoteHWInterface.cpp ]
 	: [ BuildFeatureAttribute freetype : headers ] ;
 
+# URP/1 wire compression. Without the zstd build feature RemoteWireWriter still
+# builds and still works -- it just reports no compression capability, so nothing
+# is ever negotiated and the wire stays exactly as it was.
+if [ FIsBuildFeatureEnabled zstd ] {
+	SubDirC++Flags -DZSTD_ENABLED ;
+	UseBuildFeatureHeaders zstd ;
+	Includes [ FGristFiles RemoteWireReader.cpp RemoteWireWriter.cpp ]
+		: [ BuildFeatureAttribute zstd : headers ] ;
+}
+
 StaticLibrary libasremote.a :
 	NetReceiver.cpp
 	NetSender.cpp
@@ -25,6 +35,12 @@ StaticLibrary libasremote.a :
 	RemoteEventStream.cpp
 	RemoteHWInterface.cpp
 	RemoteMessage.cpp
+	RemoteWireReader.cpp
+		# The reader is the client's half of the wire, but NetReceiver.cpp is
+		# shared with the clients and calls into it unconditionally, so the
+		# server links it too. On this side it is never instantiated: the
+		# inbound direction is always plain.
+	RemoteWireWriter.cpp
 
 	StreamingRingBuffer.cpp
 ;

@@ -34,9 +34,16 @@
 
 // The URP/1 capabilities this server implements. A client's advertised feature
 // bitmap is masked to this in RP_HELLO, so an unknown or not-yet-implemented bit
-// the client offers is simply not negotiated. M0 implements only the client-side
-// string-width reply; later milestones OR in their bits here as they land.
-static const uint32 kSupportedCapabilities = RP_CAP_STRING_WIDTH_REPLY;
+// the client offers is simply not negotiated. Not a constant, because wire
+// compression is only on offer when this build actually has a compressor:
+// RemoteWireWriter::SupportedCapabilities() is empty without the zstd build
+// feature, and offering a capability the server cannot honour would leave the
+// client waiting for segments that never come.
+static uint32
+supported_capabilities()
+{
+	return RP_CAP_STRING_WIDTH_REPLY | RemoteWireWriter::SupportedCapabilities();
+}
 
 
 struct callback_info {
@@ -85,6 +92,7 @@ RemoteHWInterface::RemoteHWInterface(const char* target)
 	fListenPort(10901),
 	fListenEndpoint(NULL),
 	fSendBuffer(NULL),
+	fWireWriter(NULL),
 	fReceiveBuffer(NULL),
 	fSender(NULL),
 	fReceiver(NULL),
@@ -202,6 +210,14 @@ RemoteHWInterface::RemoteHWInterface(const char* target)
 	if (fInitStatus != B_OK)
 		return;
 
+	// Every outbound message goes through the wire writer on its way into the
+	// send buffer. Until a client negotiates compression it is a passthrough.
+	fWireWriter.SetTo(new(std::nothrow) RemoteWireWriter(fSendBuffer.Get()));
+	if (!fWireWriter.IsSet()) {
+		fInitStatus = B_NO_MEMORY;
+		return;
+	}
+
 	fReceiveBuffer.SetTo(new(std::nothrow) StreamingRingBuffer(16 * 1024));
 	if (!fReceiveBuffer.IsSet()) {
 		fInitStatus = B_NO_MEMORY;
@@ -241,6 +257,9 @@ RemoteHWInterface::~RemoteHWInterface()
 	//TODO: check order
 	fReceiver.Unset();
 	fReceiveBuffer.Unset();
+
+	// Before the buffer it writes into.
+	fWireWriter.Unset();
 
 	fSendBuffer.Unset();
 	fSender.Unset();
@@ -363,7 +382,9 @@ RemoteHWInterface::_EventThreadEntry(void* data)
 status_t
 RemoteHWInterface::_EventThread()
 {
-	RemoteMessage message(fReceiveBuffer.Get(), NULL);
+	// Read-only: no target. Cast to disambiguate against the wire-writer
+	// constructor overload.
+	RemoteMessage message(fReceiveBuffer.Get(), (RemoteWireWriter*)NULL);
 	while (true) {
 		uint16 code;
 		status_t result = message.NextMessage(code);
@@ -410,7 +431,7 @@ RemoteHWInterface::_EventThread()
 		switch (code) {
 			case RP_INIT_CONNECTION:
 			{
-				RemoteMessage reply(NULL, fSendBuffer.Get());
+				RemoteMessage reply(NULL, fWireWriter.Get());
 				reply.Start(RP_INIT_CONNECTION);
 				status_t result = reply.Flush();
 				(void)result;
@@ -467,13 +488,20 @@ RemoteHWInterface::_EventThread()
 				fClientProtocolVersion = min_c(clientVersion,
 					(uint32)RP_PROTOCOL_VERSION);
 				fClientCapabilities
-					= clientCapabilities & kSupportedCapabilities;
+					= clientCapabilities & supported_capabilities();
 
-				RemoteMessage reply(NULL, fSendBuffer.Get());
+				RemoteMessage reply(NULL, fWireWriter.Get());
 				reply.Start(RP_HELLO_ACK);
 				reply.Add(fClientProtocolVersion);
 				reply.Add(fClientCapabilities);
-				reply.Flush();
+
+				// If wire compression was negotiated it starts at the byte after
+				// this acknowledgement, which is why the flush and the switch are
+				// one operation: the acknowledgement must reach a client that is
+				// still reading plain bytes, and a concurrent drawing op must not be
+				// able to land between the two and be read as a segment header.
+				reply.FlushAndEnableCompression(
+					fClientCapabilities & RP_CAP_COMPRESS_ZSTD);
 				break;
 			}
 
@@ -497,7 +525,7 @@ RemoteHWInterface::_EventThread()
 
 			case RP_GET_SYSTEM_PALETTE:
 			{
-				RemoteMessage reply(NULL, fSendBuffer.Get());
+				RemoteMessage reply(NULL, fWireWriter.Get());
 				reply.Start(RP_GET_SYSTEM_PALETTE_RESULT);
 
 				const color_map *map = SystemColorMap();
@@ -554,7 +582,13 @@ RemoteHWInterface::_NewConnection(BNetEndpoint &endpoint)
 	// stayed alive in `ps` having drawn nothing at all for the rest of the boot.
 	fSender.Unset();
 
-	fSendBuffer->MakeEmpty();
+	// Empties the send buffer and puts the stream back to plain for this client
+	// to renegotiate. Both happen under the wire writer's lock, so a drawing
+	// thread cannot be left half way through a message when the stream restarts.
+	// Safe to take that lock here because the sender is already gone: with no
+	// reader registered the send buffer discards instead of blocking, so nobody
+	// can be holding the lock across an unbounded wait.
+	fWireWriter->Reset();
 
 	// A fresh client has not yet sent its RP_HELLO, so it has no negotiated
 	// capabilities until it does. Clear any left from a previous connection so
@@ -636,7 +670,7 @@ RemoteHWInterface::_ConnectionClosed()
 
 	fSender.Unset();
 
-	fSendBuffer->MakeEmpty();
+	fWireWriter->Reset();
 	fReceiveBuffer->MakeEmpty();
 }
 
@@ -645,7 +679,7 @@ void
 RemoteHWInterface::_Disconnect()
 {
 	if (fIsConnected) {
-		RemoteMessage message(NULL, fSendBuffer.Get());
+		RemoteMessage message(NULL, fWireWriter.Get());
 		message.Start(RP_CLOSE_CONNECTION);
 		message.Flush();
 		fIsConnected = false;
@@ -804,7 +838,7 @@ void
 RemoteHWInterface::SetCursor(ServerCursor* cursor)
 {
 	HWInterface::SetCursor(cursor);
-	RemoteMessage message(NULL, fSendBuffer.Get());
+	RemoteMessage message(NULL, fWireWriter.Get());
 	message.Start(RP_SET_CURSOR);
 	message.AddCursor(CursorAndDragBitmap().Get());
 }
@@ -814,7 +848,7 @@ void
 RemoteHWInterface::SetCursorVisible(bool visible)
 {
 	HWInterface::SetCursorVisible(visible);
-	RemoteMessage message(NULL, fSendBuffer.Get());
+	RemoteMessage message(NULL, fWireWriter.Get());
 	message.Start(RP_SET_CURSOR_VISIBLE);
 	message.Add(visible);
 }
@@ -824,7 +858,7 @@ void
 RemoteHWInterface::MoveCursorTo(float x, float y)
 {
 	HWInterface::MoveCursorTo(x, y);
-	RemoteMessage message(NULL, fSendBuffer.Get());
+	RemoteMessage message(NULL, fWireWriter.Get());
 	message.Start(RP_MOVE_CURSOR_TO);
 	message.Add(x);
 	message.Add(y);
@@ -836,7 +870,7 @@ RemoteHWInterface::SetDragBitmap(const ServerBitmap* bitmap,
 	const BPoint& offsetFromCursor)
 {
 	HWInterface::SetDragBitmap(bitmap, offsetFromCursor);
-	RemoteMessage message(NULL, fSendBuffer.Get());
+	RemoteMessage message(NULL, fWireWriter.Get());
 	message.Start(RP_SET_CURSOR);
 	message.AddCursor(CursorAndDragBitmap().Get());
 }
@@ -866,7 +900,7 @@ RemoteHWInterface::IsDoubleBuffered() const
 status_t
 RemoteHWInterface::InvalidateRegion(const BRegion& region)
 {
-	RemoteMessage message(NULL, fSendBuffer.Get());
+	RemoteMessage message(NULL, fWireWriter.Get());
 	message.Start(RP_INVALIDATE_REGION);
 	message.AddRegion(region);
 	return B_OK;
@@ -876,7 +910,7 @@ RemoteHWInterface::InvalidateRegion(const BRegion& region)
 status_t
 RemoteHWInterface::Invalidate(const BRect& frame)
 {
-	RemoteMessage message(NULL, fSendBuffer.Get());
+	RemoteMessage message(NULL, fWireWriter.Get());
 	message.Start(RP_INVALIDATE_RECT);
 	message.Add(frame);
 	return B_OK;

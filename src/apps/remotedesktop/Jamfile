@@ -10,6 +10,19 @@ SubDirC++Flags $(defines) ;
 UsePrivateHeaders interface shared ;
 UseHeaders $(serverDir) ;
 
+# URP/1 wire compression. Without the zstd build feature RemoteWireReader still
+# builds; it just advertises no compression capability, so the server never
+# negotiates it and the inbound stream stays plain.
+local compressionLibraries = ;
+if [ FIsBuildFeatureEnabled zstd ] {
+	SubDirC++Flags [ FDefines ZSTD_ENABLED ] ;
+	UseBuildFeatureHeaders zstd ;
+	compressionLibraries = [ BuildFeatureAttribute zstd : library ] ;
+
+	Includes [ FGristFiles RemoteWireReader.cpp ]
+		: [ BuildFeatureAttribute zstd : headers ] ;
+}
+
 local tlsSources = ;
 local tlsLibraries = ;
 if [ FIsBuildFeatureEnabled openssl ] {
@@ -33,14 +46,15 @@ Application RemoteDesktop :
 
 	NetReceiver.cpp
 	NetSender.cpp
+	RemoteWireReader.cpp
 	StreamingRingBuffer.cpp
 
 	$(tlsSources)
 
-	: be bnetapi $(tlsLibraries) [ TargetLibsupc++ ]
+	: be bnetapi $(tlsLibraries) $(compressionLibraries) [ TargetLibsupc++ ]
 	: RemoteDesktop.rdef
 ;
 
 SEARCH on [ FGristFiles NetReceiver.cpp NetSender.cpp RemoteMessage.cpp
-	StreamingRingBuffer.cpp ] = $(serverDir) ;
+	RemoteWireReader.cpp StreamingRingBuffer.cpp ] = $(serverDir) ;
 SEARCH on [ FGristFiles TLSStream.cpp WebSocketStream.cpp ] = $(brokerDir) ;

@@ -61,6 +61,10 @@ SharedLibrary libhwinterface.so :
 	RemoteEventStream.cpp
 	RemoteHWInterface.cpp
 	RemoteMessage.cpp
+	RemoteWireReader.cpp
+	RemoteWireWriter.cpp
+		# ZSTD_ENABLED is not defined for the test build, so these are
+		# passthroughs and need no zstd library.
 	StreamingRingBuffer.cpp
 
 	: # will depend on libtestappserver.so

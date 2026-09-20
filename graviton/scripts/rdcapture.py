@@ -82,6 +82,21 @@ RP_CLOSE_CONNECTION = 3
 RP_GET_SYSTEM_PALETTE = 4
 RP_GET_SYSTEM_PALETTE_RESULT = 5
 
+# URP/1 capability handshake.  Optional in both directions: a client that never
+# sends RP_HELLO negotiates nothing and gets the legacy stream, which is what
+# this tool does unless --zstd is given.
+RP_HELLO = 6
+RP_HELLO_ACK = 7
+
+# Reserved Tier P (pixel/codec) opcodes.  Nothing emits them yet; they are
+# named here because they are the wire-compression exemption list -- their
+# payloads are already-compressed codec bytes and travel as raw segments.
+RP_TIER_BEGIN_FRAME = 280
+RP_CODEC_TILE = 281
+RP_TIER_END_FRAME = 282
+RP_AUDIO_PACKET = 283
+RP_FRAME_ACK = 284
+
 # Transport-security preamble, spoken with the remote_broker daemon (never
 # with app_server itself): RP_AUTHENTICATE must be the first message on a
 # broker connection, RP_AUTH_RESULT is its answer (uint32 status, 0 = ok).
@@ -255,6 +270,7 @@ OTHER_OPS = frozenset([RP_COPY_RECT_NO_CLIPPING, RP_STRING_WIDTH,
 NO_TOKEN = frozenset([
     RP_INIT_CONNECTION, RP_UPDATE_DISPLAY_MODE, RP_CLOSE_CONNECTION,
     RP_GET_SYSTEM_PALETTE, RP_GET_SYSTEM_PALETTE_RESULT,
+    RP_HELLO, RP_HELLO_ACK,
     RP_INVALIDATE_RECT, RP_INVALIDATE_REGION,
     RP_COPY_RECT_NO_CLIPPING, RP_FILL_REGION_COLOR_NO_CLIPPING,
     RP_SET_CURSOR, RP_SET_CURSOR_VISIBLE, RP_MOVE_CURSOR_TO,
@@ -843,6 +859,8 @@ class Capture(object):
         self.bitmap_colorspaces = {}
         self.outbox = []                # queued replies (code, payload bytes)
         self.errors = []
+        self.negotiated_version = None
+        self.negotiated_capabilities = None
 
     # -- helpers ---------------------------------------------------------
     def token_state(self, token):
@@ -980,6 +998,13 @@ class Capture(object):
             return
         if code in (RP_CLOSE_CONNECTION, RP_UPDATE_DISPLAY_MODE,
                     RP_GET_SYSTEM_PALETTE, RP_GET_SYSTEM_PALETTE_RESULT):
+            return
+        if code == RP_HELLO_ACK:
+            # uint32 negotiated version, uint32 negotiated capabilities.  The
+            # wire decoder acts on the capabilities well before this point (it
+            # sits under the framing); recorded here only for the report.
+            self.negotiated_version = r.u32()
+            self.negotiated_capabilities = r.u32()
             return
         if code == RP_SET_CURSOR:
             r.point()
@@ -1394,19 +1419,344 @@ def frame(code: int, payload: bytes = b"") -> bytes:
     return struct.pack("<HI", code, HEADER + len(payload)) + payload
 
 
+# ---------------------------------------------------------------------------
+# URP/1 stream compression (server -> client only)
+#
+# These deliberately do NOT start with "RP_": CODE_NAMES above is built by
+# scanning globals() for that prefix, so an "RP_CAP_..." constant would be
+# mistaken for an opcode and would shadow the opcode with the same value.
+# ---------------------------------------------------------------------------
+URP_PROTOCOL_VERSION = 1
+CAP_STRING_WIDTH_REPLY = 1 << 0
+CAP_COMPRESS_ZSTD = 1 << 1
+
+# Must match REMOTE_SEGMENT_MAX_PAYLOAD / REMOTE_SEGMENT_MAX_VARINT_SIZE in
+# src/servers/app/drawing/interface/remote/RemoteWireFormat.h.
+SEGMENT_MAX_PAYLOAD = 64 * 1024 * 1024
+SEGMENT_MAX_VARINT = 5
+
+
+def segment_header(payload_length: int, raw: bool) -> bytes:
+    """Encodes one segment header: LEB128 of (length << 1) | raw."""
+    value = (payload_length << 1) | (1 if raw else 0)
+    out = bytearray()
+    while value >= 0x80:
+        out.append((value & 0x7F) | 0x80)
+        value >>= 7
+    out.append(value)
+    return bytes(out)
+
+
+def read_segment_header(buf):
+    """Returns (consumed, payload_length, raw) or (0, None, None) when the
+    header is still incomplete.  Raises ValueError when it cannot be one."""
+    value = 0
+    shift = 0
+    for i, byte in enumerate(buf[:SEGMENT_MAX_VARINT]):
+        value |= (byte & 0x7F) << shift
+        if byte < 0x80:
+            length = value >> 1
+            if length > SEGMENT_MAX_PAYLOAD:
+                raise ValueError("segment claims %d bytes" % length)
+            return i + 1, length, bool(value & 1)
+        shift += 7
+    if len(buf) >= SEGMENT_MAX_VARINT:
+        raise ValueError("segment header longer than %d bytes"
+                         % SEGMENT_MAX_VARINT)
+    return 0, None, None
+
+
+class ZstdStream(object):
+    """Streaming zstd decompressor over libzstd through ctypes.
+
+    ctypes rather than a Python module on purpose: neither `compression.zstd`
+    (3.14+) nor the third-party `zstandard` is present on the images this tool
+    runs against, while libzstd.so.1 is -- the system already depends on it.
+    It also means this decoder is literally the same code the C client uses, so
+    a disagreement here is a real protocol disagreement.
+    """
+
+    def __init__(self, window_log_max=20):
+        import ctypes
+        import ctypes.util
+        name = ctypes.util.find_library("zstd") or "libzstd.so.1"
+        self._ctypes = ctypes
+        self._lib = ctypes.CDLL(name)
+
+        class InBuffer(ctypes.Structure):
+            _fields_ = [("src", ctypes.c_void_p), ("size", ctypes.c_size_t),
+                        ("pos", ctypes.c_size_t)]
+
+        class OutBuffer(ctypes.Structure):
+            _fields_ = [("dst", ctypes.c_void_p), ("size", ctypes.c_size_t),
+                        ("pos", ctypes.c_size_t)]
+
+        self._InBuffer = InBuffer
+        self._OutBuffer = OutBuffer
+
+        self._lib.ZSTD_createDCtx.restype = ctypes.c_void_p
+        self._lib.ZSTD_freeDCtx.argtypes = [ctypes.c_void_p]
+        self._lib.ZSTD_isError.restype = ctypes.c_uint
+        self._lib.ZSTD_isError.argtypes = [ctypes.c_size_t]
+        self._lib.ZSTD_getErrorName.restype = ctypes.c_char_p
+        self._lib.ZSTD_getErrorName.argtypes = [ctypes.c_size_t]
+        self._lib.ZSTD_decompressStream.restype = ctypes.c_size_t
+        self._lib.ZSTD_decompressStream.argtypes = [
+            ctypes.c_void_p, ctypes.POINTER(OutBuffer),
+            ctypes.POINTER(InBuffer)]
+        self._lib.ZSTD_DCtx_setParameter.restype = ctypes.c_size_t
+        self._lib.ZSTD_DCtx_setParameter.argtypes = [
+            ctypes.c_void_p, ctypes.c_int, ctypes.c_int]
+
+        self._ctx = self._lib.ZSTD_createDCtx()
+        if not self._ctx:
+            raise RuntimeError("ZSTD_createDCtx failed")
+        # 100 == ZSTD_d_windowLogMax
+        self._check(self._lib.ZSTD_DCtx_setParameter(self._ctx, 100,
+                                                     window_log_max))
+        self._out = ctypes.create_string_buffer(64 * 1024)
+
+    def _check(self, code):
+        if self._lib.ZSTD_isError(code):
+            raise ValueError("zstd: %s"
+                             % self._lib.ZSTD_getErrorName(code).decode())
+        return code
+
+    def decompress(self, data: bytes) -> bytes:
+        ctypes = self._ctypes
+        src = ctypes.create_string_buffer(data, len(data))
+        inbuf = self._InBuffer(ctypes.cast(src, ctypes.c_void_p), len(data), 0)
+        produced = bytearray()
+        while inbuf.pos < inbuf.size:
+            outbuf = self._OutBuffer(ctypes.cast(self._out, ctypes.c_void_p),
+                                     len(self._out), 0)
+            before = inbuf.pos
+            self._check(self._lib.ZSTD_decompressStream(
+                self._ctx, ctypes.byref(outbuf), ctypes.byref(inbuf)))
+            if outbuf.pos:
+                produced += self._out.raw[:outbuf.pos]
+            elif inbuf.pos == before:
+                raise ValueError("zstd made no progress")
+        return bytes(produced)
+
+    def close(self):
+        if getattr(self, "_ctx", None):
+            self._lib.ZSTD_freeDCtx(self._ctx)
+            self._ctx = None
+
+
+def _selftest_encoder():
+    """A compressor configured exactly as RemoteWireWriter configures its own.
+
+    Only the self-test needs this -- the tool is a client and never compresses
+    on the wire.  It exists so the decoder can be exercised against real zstd
+    output produced with the same level and window, instead of against a
+    fixture that would go stale the moment the server's settings changed.
+    """
+    import ctypes
+    import ctypes.util
+    name = ctypes.util.find_library("zstd") or "libzstd.so.1"
+    lib = ctypes.CDLL(name)
+
+    class InBuffer(ctypes.Structure):
+        _fields_ = [("src", ctypes.c_void_p), ("size", ctypes.c_size_t),
+                    ("pos", ctypes.c_size_t)]
+
+    class OutBuffer(ctypes.Structure):
+        _fields_ = [("dst", ctypes.c_void_p), ("size", ctypes.c_size_t),
+                    ("pos", ctypes.c_size_t)]
+
+    lib.ZSTD_createCCtx.restype = ctypes.c_void_p
+    lib.ZSTD_isError.restype = ctypes.c_uint
+    lib.ZSTD_isError.argtypes = [ctypes.c_size_t]
+    lib.ZSTD_getErrorName.restype = ctypes.c_char_p
+    lib.ZSTD_getErrorName.argtypes = [ctypes.c_size_t]
+    lib.ZSTD_CCtx_setParameter.restype = ctypes.c_size_t
+    lib.ZSTD_CCtx_setParameter.argtypes = [ctypes.c_void_p, ctypes.c_int,
+                                           ctypes.c_int]
+    lib.ZSTD_compressStream2.restype = ctypes.c_size_t
+    lib.ZSTD_compressStream2.argtypes = [ctypes.c_void_p,
+                                         ctypes.POINTER(OutBuffer),
+                                         ctypes.POINTER(InBuffer),
+                                         ctypes.c_int]
+
+    def guard(code):
+        if lib.ZSTD_isError(code):
+            raise ValueError("zstd: %s" % lib.ZSTD_getErrorName(code).decode())
+        return code
+
+    ctx = lib.ZSTD_createCCtx()
+    if not ctx:
+        raise RuntimeError("ZSTD_createCCtx failed")
+    guard(lib.ZSTD_CCtx_setParameter(ctx, 100, 1))     # compressionLevel = 1
+    guard(lib.ZSTD_CCtx_setParameter(ctx, 101, 20))    # windowLog = 20
+    out = ctypes.create_string_buffer(64 * 1024)
+
+    def encode(data):
+        src = ctypes.create_string_buffer(data, len(data))
+        inbuf = InBuffer(ctypes.cast(src, ctypes.c_void_p), len(data), 0)
+        produced = bytearray()
+        while True:
+            outbuf = OutBuffer(ctypes.cast(out, ctypes.c_void_p), len(out), 0)
+            # 1 == ZSTD_e_flush: emit a decodable block boundary but keep the
+            # window, which is where the cross-message ratio comes from.
+            remaining = guard(lib.ZSTD_compressStream2(
+                ctx, ctypes.byref(outbuf), ctypes.byref(inbuf), 1))
+            if outbuf.pos:
+                produced += out.raw[:outbuf.pos]
+            if remaining == 0 and inbuf.pos == inbuf.size:
+                return bytes(produced)
+
+    return encode
+
+
+class WireDecoder(object):
+    """Turns the bytes coming off the socket back into the plain RP stream.
+
+    Mirrors RemoteWireReader in the C client, including *why* it works this
+    way: the switch-over point is found by watching the framing go past rather
+    than by being told, because the negotiated capability set arrives inside
+    RP_HELLO_ACK and the very next byte after that message is already a
+    segment.  Deciding after the message had been parsed would be one message
+    too late.
+    """
+
+    def __init__(self, capabilities):
+        self.capabilities = capabilities
+        self.compressed = False
+        self.stream = None
+        self.wire_bytes = 0          # bytes read from the socket
+        self.plain_bytes = 0         # bytes handed to the RP framing layer
+        self.raw_segments = 0        # exempt (already-compressed) segments
+        self.compressed_segments = 0
+
+        self._pending = bytearray()  # not yet consumed by the segment layer
+        self._header = bytearray()   # partial RP header, plain phase only
+        self._body_left = 0
+        self._ack = bytearray()
+        self._capturing_ack = False
+        self._segment_left = 0
+        self._segment_raw = False
+        self._in_segment = False
+
+    def feed(self, chunk: bytes) -> bytes:
+        """Returns the plain RP bytes this chunk yielded."""
+        self.wire_bytes += len(chunk)
+        self._pending += chunk
+        out = bytearray()
+        while self._pending:
+            if self.compressed:
+                if not self._segments(out):
+                    break
+            else:
+                if not self._plain(out):
+                    break
+        self.plain_bytes += len(out)
+        return bytes(out)
+
+    # -- still-plain stream: watch framing, look for RP_HELLO_ACK -------
+    def _plain(self, out):
+        # _body_left > 0 is the "inside a message body" state; anything else is
+        # "accumulating the next 6-byte header".
+        if self._body_left == 0:
+            take = min(len(self._pending), HEADER - len(self._header))
+            out += self._pending[:take]
+            self._header += self._pending[:take]
+            del self._pending[:take]
+            if len(self._header) < HEADER:
+                return False
+
+            code, length = struct.unpack_from("<HI", self._header, 0)
+            del self._header[:]
+            if length < HEADER:
+                raise ValueError("message claims %d bytes, less than a header"
+                                 % length)
+            self._body_left = length - HEADER
+            self._capturing_ack = code == RP_HELLO_ACK
+            del self._ack[:]
+            if self._body_left == 0:
+                # An empty message cannot be an acknowledgement.
+                self._capturing_ack = False
+            return True
+
+        take = min(len(self._pending), self._body_left)
+        out += self._pending[:take]
+        if self._capturing_ack and len(self._ack) < 8:
+            self._ack += self._pending[:min(take, 8 - len(self._ack))]
+        del self._pending[:take]
+        self._body_left -= take
+        if self._body_left:
+            return False
+
+        if not self._capturing_ack:
+            return True
+
+        self._capturing_ack = False
+        if len(self._ack) < 8:
+            return True
+        negotiated = struct.unpack_from("<II", self._ack, 0)[1]
+        if negotiated & self.capabilities & CAP_COMPRESS_ZSTD:
+            self.stream = ZstdStream()
+            self.compressed = True
+        return True
+
+    # -- segmented stream ----------------------------------------------
+    def _segments(self, out):
+        if not self._in_segment:
+            consumed, length, raw = read_segment_header(self._pending)
+            if consumed == 0:
+                return False
+            del self._pending[:consumed]
+            self._segment_left = length
+            self._segment_raw = raw
+            self._in_segment = True
+            if raw:
+                self.raw_segments += 1
+            else:
+                self.compressed_segments += 1
+            if length == 0:
+                self._in_segment = False
+                return True
+
+        if not self._pending:
+            return False
+        take = min(len(self._pending), self._segment_left)
+        chunk = bytes(self._pending[:take])
+        del self._pending[:take]
+        self._segment_left -= take
+        if self._segment_raw:
+            out += chunk
+        else:
+            out += self.stream.decompress(chunk)
+        if self._segment_left == 0:
+            self._in_segment = False
+        return True
+
+    def close(self):
+        if self.stream is not None:
+            self.stream.close()
+            self.stream = None
+
+
 class Connection(object):
-    def __init__(self, host, port, deadline, connect_timeout=5.0):
+    def __init__(self, host, port, deadline, connect_timeout=5.0,
+                 capabilities=0):
         self.deadline = deadline
         self.sock = socket.create_connection((host, port),
                                             timeout=connect_timeout)
         self.sock.settimeout(0.5)
         self.buf = bytearray()
+        self.capabilities = capabilities
+        # Always present, so the byte counters work in both arms of an A/B.
+        # With no compression capability it is a pure passthrough.
+        self.wire = WireDecoder(capabilities)
 
     def close(self):
         try:
             self.sock.close()
         except OSError:
             pass
+        self.wire.close()
 
     def send(self, data):
         try:
@@ -1414,6 +1764,13 @@ class Connection(object):
             return True
         except OSError:
             return False
+
+    def _ingest(self, chunk):
+        """The single point where bytes off the wire become the plain RP
+        stream.  Every transport (plain TCP, WebSocket) funnels through here so
+        the compression layer is transport-independent -- and so the wire-byte
+        counters mean the same thing in both."""
+        self.buf += self.wire.feed(bytes(chunk))
 
     def _fill(self, want):
         """Read until self.buf has >= want bytes, the deadline passes, or EOF.
@@ -1431,7 +1788,7 @@ class Connection(object):
                 raise EOFError("socket error: %s" % exc)
             if not chunk:
                 raise EOFError("peer closed")
-            self.buf += chunk
+            self._ingest(chunk)
         return True
 
     def next_message(self):
@@ -1467,9 +1824,11 @@ class WssConnection(Connection):
     WS_GUID = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11"
 
     def __init__(self, host, port, deadline, connect_timeout=5.0,
-                 token=None, pin=None, insecure=False):
+                 token=None, pin=None, insecure=False, capabilities=0):
         self.deadline = deadline
         self.buf = bytearray()       # decoded RP byte stream
+        self.capabilities = capabilities
+        self.wire = WireDecoder(capabilities)
         self._wsbuf = bytearray()    # raw, still-framed WebSocket bytes
         self._frame_remaining = 0    # payload bytes left in the current frame
         self._frame_opcode = 0
@@ -1599,7 +1958,7 @@ class WssConnection(Connection):
                 del self._wsbuf[:take]
                 self._frame_remaining -= take
                 if self._frame_opcode in (0x0, 0x2):
-                    self.buf += chunk       # server frames are unmasked
+                    self._ingest(chunk)     # server frames are unmasked
                 else:
                     self._ctrl += chunk
                     if self._frame_remaining == 0:
@@ -1688,7 +2047,7 @@ def boxes_intersect(a, b):
     return not (a[2] < b[0] or b[2] < a[0] or a[3] < b[1] or b[3] < a[1])
 
 
-def report(cap, args, connected, elapsed, stop_reason):
+def report(cap, args, connected, elapsed, stop_reason, wire=None):
     fb = cap.fb
     tr = topright_box(cap.width, cap.height)
     black_all, strict_all = fb.black_counts()
@@ -1717,6 +2076,21 @@ def report(cap, args, connected, elapsed, stop_reason):
     out.append("TRUNCATED_MESSAGES=%d" % cap.truncated)
     out.append("UNKNOWN_CODES=%s"
                % (",".join(str(c) for c in sorted(cap.unknown_codes)) or "-"))
+    # Bytes on the wire vs bytes of RP protocol.  These are the A/B numbers:
+    # WIRE_BYTES is what the link carried, PLAIN_BYTES what the parser saw.
+    # Equal (bar the handshake) when nothing was negotiated.
+    if wire is not None:
+        out.append("WIRE_BYTES=%d" % wire.wire_bytes)
+        out.append("PLAIN_BYTES=%d" % wire.plain_bytes)
+        out.append("WIRE_COMPRESSED=%d" % (1 if wire.compressed else 0))
+        out.append("WIRE_SEGMENTS_COMPRESSED=%d" % wire.compressed_segments)
+        out.append("WIRE_SEGMENTS_RAW=%d" % wire.raw_segments)
+        ratio = (float(wire.plain_bytes) / wire.wire_bytes
+                 if wire.wire_bytes else 0.0)
+        out.append("WIRE_RATIO=%.3f" % ratio)
+    if cap.negotiated_capabilities is not None:
+        out.append("NEGOTIATED_CAPABILITIES=%d" % cap.negotiated_capabilities)
+        out.append("NEGOTIATED_VERSION=%d" % cap.negotiated_version)
     out.append("PIXELS_TOUCHED=%d" % sum(s.pixels_touched for _, s in tokens))
     out.append("BLACK_TOPRIGHT=%d" % black_tr)
     out.append("BLACK_SCREEN=%d" % black_all)
@@ -1743,6 +2117,14 @@ def report(cap, args, connected, elapsed, stop_reason):
                                               cap.height))
     print("connected     : %s   messages=%d   elapsed=%.2fs   stop=%s"
           % (connected, cap.messages, elapsed, stop_reason))
+    if wire is not None:
+        print("wire          : %s  on-wire=%d B  protocol=%d B  ratio=%.3fx  "
+              "segments=%d+%draw"
+              % ("zstd" if wire.compressed else "plain (nothing negotiated)",
+                 wire.wire_bytes, wire.plain_bytes,
+                 (float(wire.plain_bytes) / wire.wire_bytes
+                  if wire.wire_bytes else 0.0),
+                 wire.compressed_segments, wire.raw_segments))
     print("offsets applied as translation: %s (see OFFSETS note in source)"
           % ("YES" if cap.apply_offsets else "no"))
     print("clipping applied              : %s"
@@ -1843,6 +2225,16 @@ def report(cap, args, connected, elapsed, stop_reason):
             "topright_region": list(tr),
             "topright_tokens": [("notoken" if t == NO_TOKEN_KEY else t)
                                 for t, _ in tr_tokens],
+            "wire": (None if wire is None else {
+                "wire_bytes": wire.wire_bytes,
+                "plain_bytes": wire.plain_bytes,
+                "compressed": wire.compressed,
+                "segments_compressed": wire.compressed_segments,
+                "segments_raw": wire.raw_segments,
+                "ratio": (float(wire.plain_bytes) / wire.wire_bytes
+                          if wire.wire_bytes else 0.0),
+            }),
+            "negotiated_capabilities": cap.negotiated_capabilities,
             "undecoded_drawing_ops": cap.undecoded_drawing_ops,
             "undecoded_no_rect_ops": cap.undecoded_no_rect_ops,
             "estimated_text_ops": cap.estimated_text_ops,
@@ -2127,6 +2519,88 @@ def selftest():
     except OSError:
         pass
 
+    # ---- URP/1 wire compression -------------------------------------
+    print("  -- wire compression --")
+
+    # Segment header round trip, including the boundaries where the varint
+    # grows a byte.  This is the part a fixed-size header would get wrong.
+    hdr_ok = True
+    for length in (0, 1, 13, 63, 64, 127, 128, 8191, 8192, 1 << 20,
+                   SEGMENT_MAX_PAYLOAD):
+        for raw in (False, True):
+            enc = segment_header(length, raw)
+            consumed, got_len, got_raw = read_segment_header(enc)
+            if (consumed, got_len, got_raw) != (len(enc), length, raw):
+                hdr_ok = False
+            if len(enc) > SEGMENT_MAX_VARINT:
+                hdr_ok = False
+            # A partial header must report "incomplete", never guess.
+            if len(enc) > 1 and read_segment_header(enc[:-1])[0] != 0:
+                hdr_ok = False
+    check("segment header round trip", hdr_ok)
+    check("small messages are not made bigger",
+          len(segment_header(14, False)) == 1)
+
+    # An unnegotiated decoder is a byte-for-byte passthrough: the legacy
+    # guarantee, asserted rather than assumed.
+    legacy = WireDecoder(0)
+    plain = bytes(stream)
+    passthrough = bytearray()
+    for i in range(0, len(plain), 7):        # deliberately awkward chunking
+        passthrough += legacy.feed(plain[i:i + 7])
+    check("unnegotiated stream is byte-identical",
+          bytes(passthrough) == plain,
+          "(%d vs %d bytes)" % (len(passthrough), len(plain)))
+    check("unnegotiated wire counters agree",
+          legacy.wire_bytes == legacy.plain_bytes == len(plain))
+
+    # Now the negotiated path, driven end to end through a real libzstd
+    # compressor configured the way RemoteWireWriter configures it.
+    try:
+        enc = _selftest_encoder()
+    except Exception as exc:                 # noqa: BLE001 - reported, not raised
+        print("  skip  compressed round trip (no usable libzstd: %s)" % exc)
+        enc = None
+
+    if enc is not None:
+        ack = frame(RP_HELLO_ACK, struct.pack("<II", URP_PROTOCOL_VERSION,
+                                              CAP_COMPRESS_ZSTD))
+        # Messages after the acknowledgement: two ordinary ones, then an
+        # exempt (already-compressed) one that must travel as a raw segment.
+        tail = [frame(RP_FILL_RECT_COLOR,
+                      struct.pack("<Iffff", token, 1.0, 1.0, 9.0, 9.0)
+                      + bytes((7, 7, 7, 255))),
+                frame(RP_FILL_RECT_COLOR,
+                      struct.pack("<Iffff", token, 1.0, 1.0, 9.0, 9.0)
+                      + bytes((7, 7, 7, 255))),
+                frame(RP_CODEC_TILE, os.urandom(512))]
+
+        wire = bytearray(ack)
+        for i, msg in enumerate(tail):
+            exempt = i == len(tail) - 1
+            if exempt:
+                wire += segment_header(len(msg), True) + msg
+            else:
+                body = enc(msg)
+                wire += segment_header(len(body), False) + body
+
+        dec = WireDecoder(CAP_COMPRESS_ZSTD)
+        recovered = bytearray()
+        for i in range(0, len(wire), 5):      # split segments and headers
+            recovered += dec.feed(bytes(wire[i:i + 5]))
+        expect = ack + b"".join(tail)
+        check("compressed stream round trip", bytes(recovered) == expect,
+              "(%d vs %d bytes)" % (len(recovered), len(expect)))
+        check("decoder switched at the acknowledgement", dec.compressed)
+        check("exempt payload travelled as a raw segment",
+              dec.raw_segments == 1 and dec.compressed_segments == 2,
+              "(raw=%d compressed=%d)"
+              % (dec.raw_segments, dec.compressed_segments))
+        check("repeated messages compress",
+              dec.wire_bytes < dec.plain_bytes,
+              "(wire=%d plain=%d)" % (dec.wire_bytes, dec.plain_bytes))
+        dec.close()
+
     print("")
     if failures:
         print("SELFTEST=FAIL  (%d checks failed: %s)"
@@ -2175,6 +2649,12 @@ def main(argv=None):
                         "RP_READ_BITMAP (WARNING: makes the server block ~1s "
                         "per string, which suppresses the drawing you are "
                         "trying to measure)")
+    p.add_argument("--zstd", action="store_true",
+                   help="send RP_HELLO advertising zstd stream compression and "
+                        "decode the compressed wire.  WITHOUT this flag no "
+                        "RP_HELLO is sent at all, so the server has to serve "
+                        "the legacy uncompressed stream -- which is what makes "
+                        "the two invocations a clean A/B.")
     p.add_argument("--selftest", action="store_true",
                    help="run the parser/PNG self-test and exit")
     p.add_argument("--wss", action="store_true",
@@ -2220,15 +2700,19 @@ def main(argv=None):
             sys.stderr.write("rdcapture: cannot read token file: %s\n" % exc)
             return 2
 
+    capabilities = CAP_COMPRESS_ZSTD if args.zstd else 0
+
     try:
         if args.wss:
             conn = WssConnection(args.host, args.port, deadline,
                                  connect_timeout=args.connect_timeout,
                                  token=token, pin=args.pin,
-                                 insecure=args.insecure)
+                                 insecure=args.insecure,
+                                 capabilities=capabilities)
         else:
             conn = Connection(args.host, args.port, deadline,
-                              connect_timeout=args.connect_timeout)
+                              connect_timeout=args.connect_timeout,
+                              capabilities=capabilities)
     except AuthenticationError as exc:
         stop_reason = "auth_denied:%s" % exc
         sys.stderr.write("rdcapture: authentication failed: %s\n" % exc)
@@ -2253,7 +2737,14 @@ def main(argv=None):
         print("TLS_PEER_SHA256=%s" % conn.server_fingerprint)
 
     connected = True
-    if not conn.send(frame(RP_INIT_CONNECTION)):
+    hello = b""
+    if args.zstd:
+        # uint32 version, capabilities, max decode width/height (no Tier P),
+        # then our screen size -- the same layout RemoteView.cpp sends.
+        hello = frame(RP_HELLO, struct.pack("<IIIIII", URP_PROTOCOL_VERSION,
+                                            capabilities, 0, 0,
+                                            args.width, args.height))
+    if not conn.send(frame(RP_INIT_CONNECTION) + hello):
         stop_reason = "send_init_failed"
     else:
         try:
@@ -2283,10 +2774,12 @@ def main(argv=None):
             sys.stderr.write("rdcapture: %s -- stopping cleanly\n" % exc)
         except KeyboardInterrupt:
             stop_reason = "interrupted"
+    wire = conn.wire if conn is not None else None
     if conn is not None:
         conn.close()
 
-    report(cap, args, connected, time.monotonic() - started, stop_reason)
+    report(cap, args, connected, time.monotonic() - started, stop_reason,
+           wire=wire)
     return 0
 
 
