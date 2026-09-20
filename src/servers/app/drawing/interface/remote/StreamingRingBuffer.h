@@ -29,6 +29,14 @@ public:
 									bool onlyBlockOnNoData = false);
 		status_t				Write(const void *buffer, size_t length);
 
+		/*!	Like Write(), but waits at most \a timeout for space and reports
+			in \a written how much of \a buffer was taken, so a caller that has
+			other work to do can retry the remainder later instead of parking
+			here indefinitely. Returns B_TIMED_OUT when space ran out, in which
+			case \a written may still be non-zero. */
+		status_t				Write(const void *buffer, size_t length,
+									bigtime_t timeout, size_t &written);
+
 		void					MakeEmpty();
 
 		// Reader registration; only meaningful with discardWithoutReader.
