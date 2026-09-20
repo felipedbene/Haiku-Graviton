@@ -2754,18 +2754,18 @@ TCPEndpoint::SegmentReceived(tcp_segment_header& segment, net_buffer* buffer)
 
 	locker.Unlock();
 
-	// Wake the reader FIRST: it has no dependency on the acknowledgement, and
-	// putting the tx pipeline (buffer allocation, header build, IP, datalink,
-	// driver) in front of every recv() wakeup would be a latency regression on
-	// request/response traffic that a bulk throughput test cannot see.
+	// DIAG-S1: this arm exists ONLY to isolate the cost of the ordering. The
+	// acknowledgement goes out first here, as it did before the review, so an
+	// A/B against the branch measures what putting the reader wakeup in front
+	// of the tx pipeline costs a bulk receive.
+	if (pendingAcknowledge.valid
+			&& _EmitAcknowledge(pendingAcknowledge) < B_OK)
+		_AcknowledgeEmissionFailed(pendingAcknowledge);
+
 	if (notifyReader) {
 		fReceiveCondition.NotifyAll();
 		gSocketModule->notify(socket, B_SELECT_READ, availableData);
 	}
-
-	if (pendingAcknowledge.valid
-			&& _EmitAcknowledge(pendingAcknowledge) < B_OK)
-		_AcknowledgeEmissionFailed(pendingAcknowledge);
 
 	// The deferred work above must complete before this release: it may drop
 	// the last reference and free the endpoint.
