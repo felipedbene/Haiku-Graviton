@@ -20,6 +20,14 @@
  * visible on a headless Graviton boot via get-console-output.
  */
 
+// Bare aarch64 inline asm below, so this is an arm64-only tool. The build
+// gates it on TARGET_ARCH = arm64 (src/bin/sve_test/Jamfile); this guard only
+// turns a hand-compile for another architecture into one legible error rather
+// than a wall of assembler diagnostics.
+#ifndef __aarch64__
+#	error "sve_fork_test is arm64-only (bare aarch64 inline asm)"
+#endif
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdint.h>

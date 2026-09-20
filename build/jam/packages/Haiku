@@ -253,7 +253,7 @@ AddFilesToPackage bin :
 	partition_grow
 	pmustat
 	smpscale
-	sve_test
+	sve_test@arm64
 	consoled
 	;
 AddFilesToPackage apps
