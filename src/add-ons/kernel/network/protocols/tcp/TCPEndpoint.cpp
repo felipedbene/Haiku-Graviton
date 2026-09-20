@@ -1813,8 +1813,19 @@ TCPEndpoint::_ReceiveFree() const
 	uint32 segmentSize = fReceiveMaxSegmentSize;
 	if (segmentSize == 0)
 		segmentSize = TCP_DEFAULT_MAX_SEGMENT_SIZE;
-	uint64 slotFree = (uint64)fReceiveRing.FreeSlots() * segmentSize;
 
+	// The window is the smaller of the byte budget and what the delivery ring
+	// can still hold. Asking the ring whether it has room for the byte budget
+	// answers that exactly while keeping the consumer-written head out of this
+	// per-segment path whenever the byte term binds, which is the common case
+	// -- and each such load is a remote cache line fetch inside the fLock hold
+	// (#414).
+	uint64 slotsNeeded = ((uint64)byteFree + segmentSize - 1) / segmentSize;
+	if (slotsNeeded <= fReceiveRing.Capacity()
+			&& fReceiveRing.HasFreeSlots((uint32)slotsNeeded))
+		return byteFree;
+
+	uint64 slotFree = (uint64)fReceiveRing.FreeSlots() * segmentSize;
 	return byteFree < slotFree ? byteFree : (size_t)slotFree;
 }
 

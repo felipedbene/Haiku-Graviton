@@ -118,6 +118,26 @@ ReceiveRing::HasFreeSlot() const
 }
 
 
+/*!	Exactly whether at least \a count slots are free, loading the consumer's
+	head only when it is needed to answer: the cached head can only UNDER-count
+	free slots, so a cached yes is already definitive and only a cached no has
+	to be confirmed against the atomic. This is how _ReceiveFree() gets an exact
+	advertised window without a per-segment load of the consumer's line.
+*/
+bool
+ReceiveRing::HasFreeSlots(uint32 count) const
+{
+	if (fSlots == NULL)
+		return count == 0;
+
+	if ((int64)fCapacity - (fTail - fCachedHead) >= (int64)count)
+		return true;
+
+	_RefreshCachedHead();
+	return (int64)fCapacity - (fTail - fCachedHead) >= (int64)count;
+}
+
+
 bool
 ReceiveRing::Push(net_buffer* buffer)
 {
