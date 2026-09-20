@@ -64,6 +64,18 @@ enum {
 	RP_HELLO,
 	RP_HELLO_ACK,
 
+	// Transport-security preamble, owned by the remote_broker daemon that
+	// fronts the loopback RP listener with TLS + WebSocket for connections
+	// from the open internet. RP_AUTHENTICATE must be the first message a
+	// broker client sends (payload: uint32 method -- 1 = shared token --
+	// followed by a length-prefixed string); the broker answers with
+	// RP_AUTH_RESULT (uint32 status, 0 = success) and forwards nothing to the
+	// session port until authentication has succeeded. app_server itself
+	// never sends or processes either message; the values are reserved here
+	// so no future session opcode collides with them.
+	RP_AUTHENTICATE = 10,
+	RP_AUTH_RESULT,
+
 	RP_CREATE_STATE = 20,
 	RP_DELETE_STATE,
 	RP_ENABLE_SYNC_DRAWING,

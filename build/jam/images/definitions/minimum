@@ -253,6 +253,7 @@ SYSTEM_SERVERS = [ FFilterByBuildFeatures
 	package_daemon
 	power_daemon
 	registrar
+	remote_broker@openssl
 	syslog_daemon
 ] ;
 

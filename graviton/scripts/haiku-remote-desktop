@@ -1,5 +1,12 @@
 #!/usr/bin/env bash
 #
+# RESCUE PATH. The recommended front door is the on-instance remote_broker
+# daemon (TLS + WebSocket + token auth on :10902; see
+# graviton/docs/remote-desktop-broker.md) — the browser then connects to
+# wss://<host>:10902 directly and this script is not needed. Keep this
+# tunnel+websockify path for when the broker is not running or its settings
+# are lost; the SSH tunnel provides the authentication then.
+#
 # Open a Haiku browser remote desktop against a Graviton test instance, in one
 # command. The instance already runs app_server's RemoteHWInterface on the
 # loopback port TARGET_SCREEN (10900 in our images); this script carries that

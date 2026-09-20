@@ -58,10 +58,14 @@ OFFSETS note -- RP_SET_OFFSETS is *not* a coordinate translation.
 from __future__ import annotations
 
 import argparse
+import base64
 import errno
+import hashlib
 import json
 import math
+import os
 import socket
+import ssl
 import struct
 import sys
 import time
@@ -77,6 +81,12 @@ RP_UPDATE_DISPLAY_MODE = 2
 RP_CLOSE_CONNECTION = 3
 RP_GET_SYSTEM_PALETTE = 4
 RP_GET_SYSTEM_PALETTE_RESULT = 5
+
+# Transport-security preamble, spoken with the remote_broker daemon (never
+# with app_server itself): RP_AUTHENTICATE must be the first message on a
+# broker connection, RP_AUTH_RESULT is its answer (uint32 status, 0 = ok).
+RP_AUTHENTICATE = 10
+RP_AUTH_RESULT = 11
 
 RP_CREATE_STATE = 20
 RP_DELETE_STATE = 21
@@ -1439,6 +1449,229 @@ class Connection(object):
         return code, payload
 
 
+class AuthenticationError(Exception):
+    pass
+
+
+class PinMismatchError(Exception):
+    pass
+
+
+class WssConnection(Connection):
+    """Connection through the remote_broker daemon: TLS (trust = certificate
+    pinning), a WebSocket client handshake, then RP_AUTHENTICATE before
+    anything else.  The decapsulated WebSocket payload is the same RP byte
+    stream Connection carries, so everything above this class is unchanged.
+    """
+
+    WS_GUID = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11"
+
+    def __init__(self, host, port, deadline, connect_timeout=5.0,
+                 token=None, pin=None, insecure=False):
+        self.deadline = deadline
+        self.buf = bytearray()       # decoded RP byte stream
+        self._wsbuf = bytearray()    # raw, still-framed WebSocket bytes
+        self._frame_remaining = 0    # payload bytes left in the current frame
+        self._frame_opcode = 0
+        self._ctrl = bytearray()     # control-frame payload being assembled
+        self._closed = False
+
+        raw = socket.create_connection((host, port), timeout=connect_timeout)
+        context = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+        context.check_hostname = False
+        context.verify_mode = ssl.CERT_NONE   # trust decision is the pin
+        self.sock = context.wrap_socket(raw, server_hostname=host)
+
+        fingerprint = hashlib.sha256(
+            self.sock.getpeercert(binary_form=True)).hexdigest()
+        if pin:
+            expected = pin.lower().removeprefix("sha256:").replace(":", "")
+            if not hmac_compare(expected, fingerprint):
+                self.sock.close()
+                raise PinMismatchError(
+                    "server certificate sha256=%s does not match the pin"
+                    % fingerprint)
+        elif not insecure:
+            self.sock.close()
+            raise PinMismatchError(
+                "no --pin given (server certificate sha256=%s); verify it "
+                "out-of-band (broker.fingerprint on the server) and pass "
+                "--pin, or pass --insecure" % fingerprint)
+        self.server_fingerprint = fingerprint
+
+        self.sock.settimeout(5.0)
+        self._ws_handshake(host, port)
+        if token is None:
+            raise AuthenticationError("broker requires a token; pass "
+                                      "--token/--token-file")
+        self._authenticate(token)
+        self.sock.settimeout(0.5)
+
+    # -- WebSocket client plumbing ------------------------------------
+
+    def _ws_handshake(self, host, port):
+        key = base64.b64encode(os.urandom(16)).decode()
+        request = ("GET / HTTP/1.1\r\n"
+                   "Host: %s:%d\r\n"
+                   "Upgrade: websocket\r\n"
+                   "Connection: Upgrade\r\n"
+                   "Sec-WebSocket-Key: %s\r\n"
+                   "Sec-WebSocket-Version: 13\r\n"
+                   "Sec-WebSocket-Protocol: binary\r\n"
+                   "\r\n" % (host, port, key)).encode()
+        self.sock.sendall(request)
+
+        response = bytearray()
+        while b"\r\n\r\n" not in response:
+            if len(response) > 65536:
+                raise EOFError("oversized upgrade response")
+            chunk = self.sock.recv(4096)
+            if not chunk:
+                raise EOFError("peer closed during WebSocket handshake")
+            response += chunk
+        headers_end = response.index(b"\r\n\r\n") + 4
+        headers = response[:headers_end].decode("latin-1")
+        self._wsbuf += response[headers_end:]
+
+        if not headers.startswith("HTTP/1.1 101"):
+            raise EOFError("WebSocket upgrade refused: %s"
+                           % headers.splitlines()[0])
+        expected = base64.b64encode(hashlib.sha1(
+            (key + self.WS_GUID).encode()).digest()).decode()
+        accept = ""
+        for line in headers.split("\r\n"):
+            name, _, value = line.partition(":")
+            if name.strip().lower() == "sec-websocket-accept":
+                accept = value.strip()
+        if accept != expected:
+            raise EOFError("Sec-WebSocket-Accept mismatch")
+
+    def send(self, data):
+        """Wraps the RP byte stream in one masked binary frame."""
+        try:
+            length = len(data)
+            if length <= 125:
+                header = struct.pack("<BB", 0x82, 0x80 | length)
+            elif length <= 65535:
+                header = struct.pack(">BBH", 0x82, 0x80 | 126, length)
+            else:
+                header = struct.pack(">BBQ", 0x82, 0x80 | 127, length)
+            mask = os.urandom(4)
+            masked = bytes(b ^ mask[i % 4] for i, b in enumerate(data))
+            self.sock.sendall(header + mask + masked)
+            return True
+        except OSError:
+            return False
+
+    def _fill(self, want):
+        """Decodes WebSocket frames into self.buf until it has >= want
+        bytes, the deadline passes, or the connection ends."""
+        while len(self.buf) < want:
+            if self._decode_ws():
+                continue
+            if self._closed:
+                raise EOFError("peer sent WebSocket close")
+            if time.monotonic() >= self.deadline:
+                return False
+            try:
+                chunk = self.sock.recv(65536)
+            except socket.timeout:
+                continue
+            except OSError as exc:
+                if exc.errno in (errno.EINTR, errno.EAGAIN):
+                    continue
+                raise EOFError("socket error: %s" % exc)
+            if not chunk:
+                raise EOFError("peer closed")
+            self._wsbuf += chunk
+        return True
+
+    def _decode_ws(self):
+        """Moves payload bytes from self._wsbuf into self.buf.  Returns True
+        when any progress was made."""
+        progress = False
+        while True:
+            if self._frame_remaining > 0:
+                if not self._wsbuf:
+                    return progress
+                take = min(self._frame_remaining, len(self._wsbuf))
+                chunk = self._wsbuf[:take]
+                del self._wsbuf[:take]
+                self._frame_remaining -= take
+                if self._frame_opcode in (0x0, 0x2):
+                    self.buf += chunk       # server frames are unmasked
+                else:
+                    self._ctrl += chunk
+                    if self._frame_remaining == 0:
+                        self._control_frame(self._frame_opcode,
+                                            bytes(self._ctrl))
+                        del self._ctrl[:]
+                progress = True
+                continue
+
+            if len(self._wsbuf) < 2:
+                return progress
+            first, second = self._wsbuf[0], self._wsbuf[1]
+            if second & 0x80:
+                raise EOFError("masked frame from server")
+            length = second & 0x7F
+            header = 2
+            if length == 126:
+                if len(self._wsbuf) < 4:
+                    return progress
+                length = struct.unpack_from(">H", self._wsbuf, 2)[0]
+                header = 4
+            elif length == 127:
+                if len(self._wsbuf) < 10:
+                    return progress
+                length = struct.unpack_from(">Q", self._wsbuf, 2)[0]
+                header = 10
+            opcode = first & 0x0F
+            if opcode == 0x1:
+                raise EOFError("unexpected text frame")
+            if opcode & 0x8 and length == 0:
+                self._control_frame(opcode, b"")
+            del self._wsbuf[:header]
+            if not (opcode & 0x8 and length == 0):
+                self._frame_remaining = length
+                self._frame_opcode = opcode
+            progress = True
+
+    def _control_frame(self, opcode, payload):
+        if opcode == 0x9:                    # ping -> pong
+            mask = os.urandom(4)
+            masked = bytes(b ^ mask[i % 4] for i, b in enumerate(payload))
+            self.sock.sendall(struct.pack("<BB", 0x8A, 0x80 | len(payload))
+                              + mask + masked)
+        elif opcode == 0x8:                  # close
+            self._closed = True
+
+    # -- authentication ------------------------------------------------
+
+    def _authenticate(self, token):
+        token_bytes = token.encode() if isinstance(token, str) else token
+        payload = struct.pack("<II", 1, len(token_bytes)) + token_bytes
+        if not self.send(frame(RP_AUTHENTICATE, payload)):
+            raise AuthenticationError("failed to send RP_AUTHENTICATE")
+
+        item = self.next_message()
+        if item is None:
+            raise AuthenticationError("no RP_AUTH_RESULT before deadline")
+        code, payload = item
+        if code != RP_AUTH_RESULT or len(payload) < 4:
+            raise AuthenticationError("expected RP_AUTH_RESULT, got %s"
+                                      % code_name(code))
+        status = struct.unpack_from("<I", payload, 0)[0]
+        if status != 0:
+            raise AuthenticationError("broker denied the token (status %d)"
+                                      % status)
+
+
+def hmac_compare(a, b):
+    import hmac as _hmac
+    return _hmac.compare_digest(a.encode(), b.encode())
+
+
 # ---------------------------------------------------------------------------
 # Reporting
 # ---------------------------------------------------------------------------
@@ -1918,7 +2151,9 @@ def main(argv=None):
         epilog="Exits 0 with a summary even when nothing arrives; grep "
                "CONNECTED=, MESSAGES=, BLACK_TOPRIGHT=, BLACK_SCREEN=.")
     p.add_argument("--host", default="127.0.0.1")
-    p.add_argument("--port", type=int, default=10900)
+    p.add_argument("--port", type=int, default=None,
+                   help="default 10900 (app_server), or 10902 with --wss "
+                        "(remote_broker)")
     p.add_argument("--width", type=int, default=1200)
     p.add_argument("--height", type=int, default=760)
     p.add_argument("--seconds", type=float, default=25.0,
@@ -1942,7 +2177,22 @@ def main(argv=None):
                         "trying to measure)")
     p.add_argument("--selftest", action="store_true",
                    help="run the parser/PNG self-test and exit")
+    p.add_argument("--wss", action="store_true",
+                   help="connect through the remote_broker daemon: TLS + "
+                        "WebSocket + RP_AUTHENTICATE (implies --port 10902 "
+                        "unless --port is given)")
+    p.add_argument("--token", help="authentication token for --wss")
+    p.add_argument("--token-file",
+                   help="file containing the authentication token for --wss")
+    p.add_argument("--pin",
+                   help="pin the broker certificate to this SHA-256 hex "
+                        "fingerprint (see broker.fingerprint on the server)")
+    p.add_argument("--insecure", action="store_true",
+                   help="with --wss: skip certificate pinning (still TLS)")
     args = p.parse_args(argv)
+
+    if args.port is None:
+        args.port = 10902 if args.wss else 10900
 
     if args.selftest:
         print("rdcapture selftest")
@@ -1961,15 +2211,46 @@ def main(argv=None):
     stop_reason = "unknown"
     conn = None
 
+    token = args.token
+    if args.token_file:
+        try:
+            with open(args.token_file) as f:
+                token = f.read().strip()
+        except OSError as exc:
+            sys.stderr.write("rdcapture: cannot read token file: %s\n" % exc)
+            return 2
+
     try:
-        conn = Connection(args.host, args.port, deadline,
-                          connect_timeout=args.connect_timeout)
-    except OSError as exc:
-        stop_reason = "connect_failed:%s" % (exc.strerror or exc)
+        if args.wss:
+            conn = WssConnection(args.host, args.port, deadline,
+                                 connect_timeout=args.connect_timeout,
+                                 token=token, pin=args.pin,
+                                 insecure=args.insecure)
+        else:
+            conn = Connection(args.host, args.port, deadline,
+                              connect_timeout=args.connect_timeout)
+    except AuthenticationError as exc:
+        stop_reason = "auth_denied:%s" % exc
+        sys.stderr.write("rdcapture: authentication failed: %s\n" % exc)
+        print("AUTH=DENIED")
+        report(cap, args, False, time.monotonic() - started, stop_reason)
+        return 3
+    except PinMismatchError as exc:
+        stop_reason = "pin_mismatch"
+        sys.stderr.write("rdcapture: %s\n" % exc)
+        report(cap, args, False, time.monotonic() - started, stop_reason)
+        return 4
+    except (OSError, EOFError, ssl.SSLError) as exc:
+        stop_reason = "connect_failed:%s" % (getattr(exc, "strerror", None)
+                                             or exc)
         sys.stderr.write("rdcapture: connect to %s:%d failed: %s\n"
                          % (args.host, args.port, exc))
         report(cap, args, False, time.monotonic() - started, stop_reason)
         return 0
+
+    if args.wss:
+        print("AUTH=OK")
+        print("TLS_PEER_SHA256=%s" % conn.server_fingerprint)
 
     connected = True
     if not conn.send(frame(RP_INIT_CONNECTION)):
