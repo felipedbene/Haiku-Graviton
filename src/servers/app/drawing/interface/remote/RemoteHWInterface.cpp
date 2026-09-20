@@ -490,6 +490,24 @@ RemoteHWInterface::_EventThread()
 				fClientCapabilities
 					= clientCapabilities & supported_capabilities();
 
+				// Build the compressor before the acknowledgement claims it.
+				// SupportedCapabilities() answers "was this compiled in", which
+				// is not the same question as "can it be set up right now" --
+				// the context and its output buffer are allocations and can
+				// fail. Since the client switches its decoder on the strength of
+				// this acknowledgement, a bit we cannot honour would desynchronise
+				// the stream for the rest of the session with no way back. So
+				// decide first and announce second, and drop the bit if the codec
+				// did not come up: the session then runs uncompressed, which is
+				// exactly what a client that never asked would have got.
+				if ((fClientCapabilities & RP_CAP_COMPRESS_ZSTD) != 0
+					&& !fWireWriter->PrepareCompression(
+						RP_CAP_COMPRESS_ZSTD)) {
+					TRACE_ERROR("cannot honour zstd compression, serving the "
+						"session uncompressed\n");
+					fClientCapabilities &= ~(uint32)RP_CAP_COMPRESS_ZSTD;
+				}
+
 				RemoteMessage reply(NULL, fWireWriter.Get());
 				reply.Start(RP_HELLO_ACK);
 				reply.Add(fClientProtocolVersion);
@@ -500,8 +518,17 @@ RemoteHWInterface::_EventThread()
 				// one operation: the acknowledgement must reach a client that is
 				// still reading plain bytes, and a concurrent drawing op must not be
 				// able to land between the two and be read as a segment header.
-				reply.FlushAndEnableCompression(
+				// Only reachable if the connection was reset out from under us
+				// between the prepare above and here, in which case the
+				// acknowledgement was deliberately not written and the session
+				// being torn down is the right outcome -- but it must not pass
+				// unnoticed.
+				result = reply.FlushAndEnableCompression(
 					fClientCapabilities & RP_CAP_COMPRESS_ZSTD);
+				if (result != B_OK) {
+					TRACE_ERROR("failed to acknowledge hello: %s\n",
+						strerror(result));
+				}
 				break;
 			}
 

@@ -52,6 +52,7 @@ RemoteWireWriter::RemoteWireWriter(StreamingRingBuffer* target)
 	fTarget(target),
 	fLock("remote wire writer"),
 	fCapability(0),
+	fPreparedCapability(0),
 	fCompressionContext(NULL),
 	fOutputBuffer(NULL),
 	fOutputBufferSize(0),
@@ -93,26 +94,41 @@ RemoteWireWriter::Write(const void* buffer, size_t length)
 }
 
 
-status_t
-RemoteWireWriter::WriteAndEnable(const void* buffer, size_t length,
-	uint32 capability)
+bool
+RemoteWireWriter::PrepareCompression(uint32 capability)
 {
 	BAutolock lock(fLock);
 	if (!lock.IsLocked())
-		return B_ERROR;
-
-	status_t result = _WriteLocked(buffer, length);
-	if (result != B_OK)
-		return result;
+		return false;
 
 	if (capability == 0 || (capability & SupportedCapabilities()) == 0)
-		return B_OK;
+		return false;
+
+	// Already prepared for exactly this capability, or already compressing with
+	// it: either way the answer to "can you honour it" is yes, and re-arming it
+	// must then be allowed to succeed -- a client that sends RP_HELLO twice
+	// still has to get an acknowledgement, and the second one has to travel as
+	// segments because its decoder already switched. Note what this must NOT do:
+	// build a second compressor. That would start a fresh zstd frame in the
+	// middle of the stream the client is still decoding against the old window,
+	// and desynchronise it permanently.
+	if (fPreparedCapability == capability || fCapability == capability) {
+		fPreparedCapability = capability;
+		return true;
+	}
+
+	// Anything left over from a previous connection would be the wrong stream
+	// state to compress into, and Reset() between connections should already
+	// have cleared it. Being strict here rather than reusing is what keeps a
+	// second client from inheriting the first one's compressor history.
+	if (fCompressionContext != NULL || fOutputBuffer != NULL)
+		return false;
 
 #ifdef ZSTD_ENABLED
 	ZSTD_CCtx* context = ZSTD_createCCtx();
 	if (context == NULL) {
 		TRACE_ERROR("failed to create compression context\n");
-		return B_OK;
+		return false;
 	}
 
 	size_t error = ZSTD_CCtx_setParameter(context, ZSTD_c_compressionLevel,
@@ -130,22 +146,58 @@ RemoteWireWriter::WriteAndEnable(const void* buffer, size_t length,
 		TRACE_ERROR("failed to configure compression context: %s\n",
 			ZSTD_getErrorName(error));
 		ZSTD_freeCCtx(context);
-		return B_OK;
+		return false;
 	}
 
-	fOutputBuffer = (uint8*)malloc(kOutputBufferSize);
-	if (fOutputBuffer == NULL) {
+	uint8* outputBuffer = (uint8*)malloc(kOutputBufferSize);
+	if (outputBuffer == NULL) {
 		ZSTD_freeCCtx(context);
-		return B_OK;
+		return false;
 	}
 
 	fCompressionContext = context;
+	fOutputBuffer = outputBuffer;
 	fOutputBufferSize = kOutputBufferSize;
+	fPreparedCapability = capability;
+	return true;
+#else
+	return false;
+#endif
+}
+
+
+status_t
+RemoteWireWriter::WriteAndEnable(const void* buffer, size_t length,
+	uint32 capability)
+{
+	BAutolock lock(fLock);
+	if (!lock.IsLocked())
+		return B_ERROR;
+
+	// Refuse before the acknowledgement goes out, not after. A caller asking to
+	// arm a capability it never prepared has already composed an RP_HELLO_ACK we
+	// cannot honour, so the connection is not salvageable and the only honest
+	// answer is an error -- writing the acknowledgement first and then declining
+	// to compress is precisely the silent desynchronisation this split exists to
+	// make impossible.
+	if (capability != 0 && fPreparedCapability != capability) {
+		TRACE_ERROR("asked to enable an unprepared capability 0x%" B_PRIx32
+			"\n", capability);
+		return B_NOT_ALLOWED;
+	}
+
+	status_t result = _WriteLocked(buffer, length);
+	if (result != B_OK)
+		return result;
+
+	if (capability == 0)
+		return B_OK;
+
 	fCapability = capability;
+	fPreparedCapability = 0;
 	fLastReport = system_time();
 	TRACE_ALWAYS("compressing the outbound stream (zstd level %d)\n",
 		kCompressionLevel);
-#endif
 
 	return B_OK;
 }
@@ -302,6 +354,7 @@ RemoteWireWriter::_ResetCodec()
 	fOutputBuffer = NULL;
 	fOutputBufferSize = 0;
 	fCapability = 0;
+	fPreparedCapability = 0;
 }
 
 

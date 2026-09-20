@@ -41,13 +41,33 @@ public:
 				uint16 code, \a length is the whole framed message). */
 			status_t			Write(const void* buffer, size_t length);
 
+			/*!	Builds the codec for \a capability without switching the stream,
+				and reports whether it can be honoured.
+
+				This exists so that the decision the server announces and the
+				capability it can actually deliver are the same decision. The
+				announcement is RP_HELLO_ACK, and once those bytes are on the
+				wire the client switches its decoder; a codec that then failed to
+				build would leave the server emitting plain bytes into a decoder
+				expecting segments, which is an unrecoverable desynchronisation
+				that no error path can reach. So every way of failing to compress
+				has to happen *before* the acknowledgement is composed. Call this
+				first, and clear the bit from the acknowledgement if it returns
+				false. */
+			bool				PrepareCompression(uint32 capability);
+
 			/*!	Writes \a buffer uncompressed and, atomically with it, switches
 				the stream to compressed segments for \a capability. Used for
 				RP_HELLO_ACK: the acknowledgement itself must reach a client
 				that is still reading plain bytes, and the very next byte the
 				client reads must already be a segment. Doing this in two steps
 				would let another thread's drawing op slip in between and be
-				misparsed as a segment header. */
+				misparsed as a segment header.
+
+				\a capability must be zero or a capability for which
+				PrepareCompression() has already returned true; anything else is
+				refused with an error rather than silently downgraded, because a
+				silent downgrade here is the desynchronisation described above. */
 			status_t			WriteAndEnable(const void* buffer,
 									size_t length, uint32 capability);
 
@@ -85,6 +105,10 @@ private:
 			// Zero while the stream is plain, otherwise the single negotiated
 			// capability bit in use.
 			uint32				fCapability;
+
+			// Set by PrepareCompression() once the codec below is built and
+			// ready; WriteAndEnable() will only arm a capability that matches.
+			uint32				fPreparedCapability;
 
 			void*				fCompressionContext;
 			uint8*				fOutputBuffer;

@@ -1466,6 +1466,41 @@ def read_segment_header(buf):
     return 0, None, None
 
 
+def _load_libzstd():
+    """Open libzstd.so.1 through ctypes, tolerating a hostile find_library().
+
+    ctypes.util.find_library() is only a convenience and on Haiku it is an
+    actively unreliable one: its POSIX implementation consults LIBRARY_PATH from
+    the environment without a default, so in any process that does not happen to
+    have that variable set -- which is every non-interactive one, including every
+    command run over the management channel -- it raises KeyError before it ever
+    looks at a directory. That surfaced as "no usable libzstd", i.e. as the
+    absence of the very capability being measured, which is the most misleading
+    failure this tool could have. So the soname is what we actually rely on and
+    find_library is demoted to a hint that is allowed to fail.
+    """
+    import ctypes
+    candidates = []
+    try:
+        import ctypes.util
+        found = ctypes.util.find_library("zstd")
+        if found:
+            candidates.append(found)
+    except Exception:
+        pass
+    # The versioned soname first: that is the name the server itself links
+    # against, so if the server can compress, this name resolves.
+    candidates += ["libzstd.so.1", "libzstd.so", "libzstd.so.1.5.6"]
+
+    errors = []
+    for name in candidates:
+        try:
+            return ctypes.CDLL(name)
+        except OSError as error:
+            errors.append("%s: %s" % (name, error))
+    raise OSError("libzstd not loadable (%s)" % "; ".join(errors))
+
+
 class ZstdStream(object):
     """Streaming zstd decompressor over libzstd through ctypes.
 
@@ -1478,10 +1513,8 @@ class ZstdStream(object):
 
     def __init__(self, window_log_max=20):
         import ctypes
-        import ctypes.util
-        name = ctypes.util.find_library("zstd") or "libzstd.so.1"
         self._ctypes = ctypes
-        self._lib = ctypes.CDLL(name)
+        self._lib = _load_libzstd()
 
         class InBuffer(ctypes.Structure):
             _fields_ = [("src", ctypes.c_void_p), ("size", ctypes.c_size_t),
@@ -1554,9 +1587,7 @@ def _selftest_encoder():
     fixture that would go stale the moment the server's settings changed.
     """
     import ctypes
-    import ctypes.util
-    name = ctypes.util.find_library("zstd") or "libzstd.so.1"
-    lib = ctypes.CDLL(name)
+    lib = _load_libzstd()
 
     class InBuffer(ctypes.Structure):
         _fields_ = [("src", ctypes.c_void_p), ("size", ctypes.c_size_t),
