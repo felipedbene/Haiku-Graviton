@@ -20,7 +20,7 @@ if [ FIsBuildFeatureEnabled openssl ] {
 	UseBuildFeatureHeaders openssl ;
 
 	tlsSources = WsTunnel.cpp TLSStream.cpp WebSocketStream.cpp ;
-	tlsLibraries = network [ BuildFeatureAttribute openssl : libraries ] ;
+	tlsLibraries = [ BuildFeatureAttribute openssl : libraries ] ;
 
 	Includes [ FGristFiles $(tlsSources) ]
 		: [ BuildFeatureAttribute openssl : headers ] ;
@@ -37,7 +37,7 @@ Application RemoteDesktop :
 
 	$(tlsSources)
 
-	: be bnetapi $(tlsLibraries) [ TargetLibsupc++ ]
+	: be bnetapi network $(tlsLibraries) [ TargetLibsupc++ ]
 	: RemoteDesktop.rdef
 ;
 
