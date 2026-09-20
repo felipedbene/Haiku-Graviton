@@ -90,6 +90,9 @@ private:
 		PendingAcknowledge()
 			:
 			segment(0),
+			previousLastAcknowledgeSent(0),
+			previousReceiveMaxAdvertised(0),
+			committedReceiveMaxAdvertised(0),
 			valid(false),
 			checksumOffload(false)
 		{
@@ -112,9 +115,10 @@ private:
 			status_t	_SendAcknowledge(bool force = false);
 			bool		_PrepareAcknowledge(bool force,
 							PendingAcknowledge& pending);
-			status_t	_EmitAcknowledge(PendingAcknowledge& pending);
+			status_t	_EmitAcknowledge(
+							const PendingAcknowledge& pending);
 			void		_AcknowledgeEmissionFailed(
-							PendingAcknowledge& pending);
+							const PendingAcknowledge& pending);
 			status_t	_SendReset(bool force = false);
 			status_t	_SendQueued(bool force = false);
 

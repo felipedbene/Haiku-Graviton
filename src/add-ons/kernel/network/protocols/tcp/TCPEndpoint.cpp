@@ -2576,6 +2576,13 @@ TCPEndpoint::SegmentReceived(tcp_segment_header& segment, net_buffer* buffer)
 	if ((segmentAction & RESET) != 0 && _SendReset(true) == B_OK) {
 		fState = CLOSED;
 		segmentAction &= ~RESET;
+		pendingAcknowledge.valid = false;
+			// The connection is dead: a prepared plain ACK would go out AFTER
+			// the RST (it is emitted below, with the lock released) and only
+			// provoke another one. This is reachable -- e.g. a SYN-ACK that
+			// establishes the connection and is then rejected by the same
+			// _Receive() call, which returns DROP | RESET under
+			// IMMEDIATE_ACKNOWLEDGE.
 	}
 
 	// Snapshot, under fLock, everything the deferred work below needs, then
@@ -2592,14 +2599,18 @@ TCPEndpoint::SegmentReceived(tcp_segment_header& segment, net_buffer* buffer)
 
 	locker.Unlock();
 
-	if (pendingAcknowledge.valid
-			&& _EmitAcknowledge(pendingAcknowledge) < B_OK)
-		_AcknowledgeEmissionFailed(pendingAcknowledge);
-
+	// Wake the reader FIRST: it has no dependency on the acknowledgement, and
+	// putting the tx pipeline (buffer allocation, header build, IP, datalink,
+	// driver) in front of every recv() wakeup would be a latency regression on
+	// request/response traffic that a bulk throughput test cannot see.
 	if (notifyReader) {
 		fReceiveCondition.NotifyAll();
 		gSocketModule->notify(socket, B_SELECT_READ, availableData);
 	}
+
+	if (pendingAcknowledge.valid
+			&& _EmitAcknowledge(pendingAcknowledge) < B_OK)
+		_AcknowledgeEmissionFailed(pendingAcknowledge);
 
 	// The deferred work above must complete before this release: it may drop
 	// the last reference and free the endpoint.
@@ -2973,17 +2984,21 @@ TCPEndpoint::_SendAcknowledge(bool force)
 	(#414): the buffer allocation, header build and the whole downstream send
 	pipeline thereby leave the RX consumer's critical section. Committing
 	before emission keeps concurrent deciders (the delayed-ack timer, the
-	reader's window update) from preparing duplicates; the resulting window
-	where another thread's transmit overtakes this one on the wire is benign --
-	the network can reorder anyway, a stale ACK carries a lower acknowledge
-	number (discarded against SND.UNA) and cannot regress the peer's send
-	window (the SND.WL1/WL2 update rule exists for exactly this).
+	reader's window update) from preparing duplicates. The remaining window, in
+	which another thread's transmit overtakes this one on the wire, is benign
+	for every case a peer acts on EXCEPT a window closing to zero, which is
+	therefore not deferred (see below): the network can reorder anyway, a stale
+	ACK carrying a lower acknowledge number is discarded against SND.UNA, and a
+	stale LARGER window at an equal acknowledge number fails the SND.WL2
+	acceptance test.
 
-	Returns false when the acknowledgement cannot be deferred because the
-	prepared segment is not a plain ACK (SYN/RST/FIN riders commit send-side
-	sequence state in _PrepareAndSend()); the caller must fall back to the
-	locked _SendAcknowledge() path. Returns true otherwise, with pending.valid
-	saying whether there is anything to emit.
+	Returns false when the acknowledgement must not be deferred -- the prepared
+	segment is not a plain ACK (SYN/RST/FIN riders commit send-side sequence
+	state in _PrepareAndSend()), or it closes the receive window -- and the
+	caller must fall back to the locked _SendAcknowledge() path (which prepares
+	the segment a second time -- idempotent, and off the hot path by
+	construction). Returns true otherwise, with pending.valid saying whether
+	there is anything to emit.
 */
 bool
 TCPEndpoint::_PrepareAcknowledge(bool force, PendingAcknowledge& pending)
@@ -3000,6 +3015,18 @@ TCPEndpoint::_PrepareAcknowledge(bool force, PendingAcknowledge& pending)
 	if ((pending.segment.flags & (TCP_FLAG_SYNCHRONIZE | TCP_FLAG_RESET
 			| TCP_FLAG_FINISH)) != 0)
 		return false;
+
+	if (pending.segment.advertised_window == 0)
+		return false;
+			// A window-CLOSING acknowledgement must not be overtaken on the
+			// wire by a later window-opening one, and unlike a stale larger
+			// window a stale zero window is not filtered by the peer: RFC 793's
+			// SND.WL2 rule accepts an equal-sequence, equal-acknowledge segment
+			// when its window is zero. The peer would then close its send
+			// window and sit out its persist timer while this side believes it
+			// advertised space and has cancelled its delayed-ack timer. Keep
+			// these under fLock, serialized exactly as before -- they are never
+			// the hot path.
 
 	// Is there actually anything to do? (mirrors _SendAcknowledge())
 	if (!force && fState == ESTABLISHED
@@ -3026,14 +3053,20 @@ TCPEndpoint::_PrepareAcknowledge(bool force, PendingAcknowledge& pending)
 
 
 /*!	Builds and transmits an acknowledgement prepared by _PrepareAcknowledge().
-	MUST be called with fLock released, and only while the endpoint is pinned:
-	by the caller's socket reference (receive path, reader), or -- for the
-	delayed-ack timer handler -- by the destructor's wait_for_timer(). fRoute
-	is stable without the lock: it is set once in _PrepareSendPath() and put
-	only at the very end of the destructor, after all timers have drained.
+	MUST be called with fLock released, and only while the endpoint is pinned by
+	the caller's socket reference -- the receive path holds one across the whole
+	deferred tail of SegmentReceived(), the reader one for the read syscall. A
+	net_timer handler must NOT use this path: the destructor destroys fLock
+	before draining the timers, relying on handlers to hold fLock throughout
+	(see _DelayedAcknowledgeTimer). fRoute is stable without the lock, being set
+	once in _PrepareSendPath() and put only at the very end of the destructor.
+
+	This does not emit T(Send(...))/PROBE() as _PrepareAndSend() does, so a
+	deferred acknowledgement is invisible to a TRACE_TCP/PROBE_TCP kernel; both
+	are compiled out by default.
 */
 status_t
-TCPEndpoint::_EmitAcknowledge(PendingAcknowledge& pending)
+TCPEndpoint::_EmitAcknowledge(const PendingAcknowledge& pending)
 {
 	net_buffer* buffer = gBufferModule->create(256);
 	if (buffer == NULL)
@@ -3042,7 +3075,10 @@ TCPEndpoint::_EmitAcknowledge(PendingAcknowledge& pending)
 	LocalAddress().CopyTo(buffer->source);
 	PeerAddress().CopyTo(buffer->destination);
 
-	status_t status = add_tcp_header(AddressModule(), pending.segment, buffer,
+	tcp_segment_header segment = pending.segment;
+		// add_tcp_header() takes a mutable reference; the prepared record is
+		// input only
+	status_t status = add_tcp_header(AddressModule(), segment, buffer,
 		pending.checksumOffload);
 	if (status == B_OK)
 		status = next->module->send_routed_data(next, fRoute, buffer);
@@ -3058,19 +3094,21 @@ TCPEndpoint::_EmitAcknowledge(PendingAcknowledge& pending)
 /*!	Rolls back the state committed by _PrepareAcknowledge() after the emission
 	failed (allocation or send error), so the acknowledgement is retried via
 	the delayed-ack timer instead of silently skipped -- the peer would
-	otherwise sit out its retransmit timeout. Each field is restored only if no
-	newer acknowledgement has been committed meanwhile. Tolerates racing the
-	destructor (only reachable from the timer handler, which the destructor's
-	wait_for_timer() covers): once fLock is destroyed the locker fails and the
-	endpoint is torn down anyway, and bailing here also guarantees a timer
-	cancelled by teardown is never re-armed.
+	otherwise sit out its retransmit timeout. Each field is restored only if it
+	still holds the value this preparation committed; if another transmit has
+	moved it on there is nothing to undo. (That test can also match because
+	_SendQueued() put the same values on the wire in the same hold, in which
+	case the rollback is redundant rather than wrong: it only causes one extra
+	acknowledgement.)
+
+	Runs with the endpoint pinned by the caller's socket reference, exactly like
+	_EmitAcknowledge() -- re-taking fLock here is only safe because no path that
+	reaches it can race the destructor.
 */
 void
-TCPEndpoint::_AcknowledgeEmissionFailed(PendingAcknowledge& pending)
+TCPEndpoint::_AcknowledgeEmissionFailed(const PendingAcknowledge& pending)
 {
 	MutexLocker locker(fLock);
-	if (!locker.IsLocked())
-		return;
 
 	if (fLastAcknowledgeSent == tcp_sequence(pending.segment.acknowledge))
 		fLastAcknowledgeSent = pending.previousLastAcknowledgeSent;
@@ -3531,21 +3569,17 @@ TCPEndpoint::_DelayedAcknowledgeTimer(net_timer* timer, void* _endpoint)
 	if (endpoint->State() == CLOSED)
 		return;
 
-	// #414: prepare under fLock, transmit with it released. During bulk
-	// receive this handler used to hold fLock for the entire tx pipeline,
-	// which the RX consumer paid for as WAIT. The endpoint stays pinned for
-	// the whole handler by the destructor's wait_for_timer().
-	TCPEndpoint::PendingAcknowledge pending;
-	if (!endpoint->_PrepareAcknowledge(false, pending)) {
-		endpoint->_SendAcknowledge();
-		return;
-	}
-	if (!pending.valid)
-		return;
-
-	locker.Unlock();
-	if (endpoint->_EmitAcknowledge(pending) < B_OK)
-		endpoint->_AcknowledgeEmissionFailed(pending);
+	// This handler deliberately keeps fLock for its whole body (#414 does NOT
+	// defer here). The destructor destroys fLock BEFORE draining the timers,
+	// and that is only safe because a handler either holds fLock -- blocking
+	// the destructor's own mutex_lock() -- or is already enqueued on it, in
+	// which case mutex_destroy() releases it with B_ERROR and the IsLocked()
+	// check above catches it. Releasing fLock mid-handler forfeits both: the
+	// destructor could then run to completion and a later re-lock would hit a
+	// destroyed mutex. The ACK deferral is worth nothing here anyway, since
+	// the inline every-second-segment rule in SegmentReceived() already keeps
+	// this timer off the bulk receive path.
+	endpoint->_SendAcknowledge();
 }
 
 
