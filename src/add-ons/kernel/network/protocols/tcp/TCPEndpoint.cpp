@@ -112,6 +112,24 @@ struct tcp_flock_diag {
 static tcp_flock_diag sFlockAll;		// every fLock acquisition
 static tcp_flock_diag sFlockConsumer;	// SegmentReceived (RX consumer) only
 
+// DIAG-B2: exposure counters for the deferred-acknowledgement guard. sB2Deferred
+// counts acknowledgements actually emitted with fLock released; sB2ZeroWindow
+// counts the ones the pre-review code WOULD have deferred while advertising a
+// closed window (the defect the guard now prevents) -- i.e. it measures whether
+// the bug was reachable at all in a given workload, which a wire capture could
+// not answer; sB2SynRstFin counts the unrelated fallback, as a sanity term.
+static int64 sB2Deferred = 0;
+static int64 sB2ZeroWindow = 0;
+static int64 sB2SynRstFin = 0;
+
+// DIAG-B1: sB1TimerThread is the delayed-ack timer handler's own thread, learned
+// the first time it runs; sB1EmitsOnTimerThread counts deferred emissions made
+// from it, and must stay zero (see _EmitAcknowledge).
+static int64 sB1TimerThread = -1;
+static int64 sB1TimerFired = 0;
+static int64 sB1Emits = 0;
+static int64 sB1EmitsOnTimerThread = 0;
+
 
 struct TCPFlockProbe {
 			mutex*			fLock;
@@ -226,6 +244,11 @@ snapshot_tcp_flock_contention()
 	dprintf("DIAG-E2-SNAP %" B_PRId64 " consumer %" B_PRId64 " %" B_PRId64 " %"
 		B_PRId64 " %" B_PRId64 "\n", now, sFlockConsumer.acquisitions,
 		sFlockConsumer.contended, sFlockConsumer.wait_ns, sFlockConsumer.hold_ns);
+	dprintf("DIAG-E2-SNAP %" B_PRId64 " b2 %" B_PRId64 " %" B_PRId64 " %"
+		B_PRId64 "\n", now, sB2Deferred, sB2ZeroWindow, sB2SynRstFin);
+	dprintf("DIAG-E2-SNAP %" B_PRId64 " b1 %" B_PRId64 " %" B_PRId64 " %"
+		B_PRId64 " %" B_PRId64 "\n", now, sB1TimerFired, sB1Emits,
+		sB1EmitsOnTimerThread, sB1TimerThread);
 }
 
 #if TCP_TRACING
@@ -3168,11 +3191,22 @@ TCPEndpoint::_PrepareAcknowledge(bool force, PendingAcknowledge& pending)
 	pending.segment = _PrepareSendSegment();
 
 	if ((pending.segment.flags & (TCP_FLAG_SYNCHRONIZE | TCP_FLAG_RESET
-			| TCP_FLAG_FINISH)) != 0)
+			| TCP_FLAG_FINISH)) != 0) {
+		atomic_add64(&sB2SynRstFin, 1);
 		return false;
+	}
 
-	if (pending.segment.advertised_window == 0)
+	if (pending.segment.advertised_window == 0) {
+		// DIAG-B2: count only the ones that would really have been deferred --
+		// the "nothing to do" test below is side-effect free, so evaluating it
+		// early here classifies without changing anything.
+		if (force || !(fState == ESTABLISHED
+				&& fLastAcknowledgeSent == fReceiveNext
+				&& fReceiveQueue.IsContiguous()
+				&& !_ShouldSendSegment(pending.segment, 0, 0, 0)))
+			atomic_add64(&sB2ZeroWindow, 1);
 		return false;
+	}
 			// A window-CLOSING acknowledgement must not be overtaken on the
 			// wire by a later window-opening one, and unlike a stale larger
 			// window a stale zero window is not filtered by the peer: RFC 793's
@@ -3203,6 +3237,7 @@ TCPEndpoint::_PrepareAcknowledge(bool force, PendingAcknowledge& pending)
 	pending.checksumOffload = _CanOffloadChecksum();
 		// decided under fLock: reads fRoute's interface address
 	pending.valid = true;
+	atomic_add64(&sB2Deferred, 1);
 	return true;
 }
 
@@ -3223,6 +3258,13 @@ TCPEndpoint::_PrepareAcknowledge(bool force, PendingAcknowledge& pending)
 status_t
 TCPEndpoint::_EmitAcknowledge(const PendingAcknowledge& pending)
 {
+	// DIAG-B1: every entry, and every entry made from the stack's timer thread.
+	// The second count must stay zero: it is the runtime form of the argument
+	// that no net_timer handler can re-lock a destroyed fLock through this path.
+	atomic_add64(&sB1Emits, 1);
+	if ((int64)find_thread(NULL) == atomic_get64(&sB1TimerThread))
+		atomic_add64(&sB1EmitsOnTimerThread, 1);
+
 	net_buffer* buffer = gBufferModule->create(256);
 	if (buffer == NULL)
 		return B_NO_MEMORY;
@@ -3715,6 +3757,13 @@ TCPEndpoint::_DelayedAcknowledgeTimer(net_timer* timer, void* _endpoint)
 {
 	TCPEndpoint* endpoint = (TCPEndpoint*)_endpoint;
 	T(TimerTriggered(endpoint, "delayed ack"));
+
+	// DIAG-B1: learn the network stack's timer thread from the inside, so
+	// _EmitAcknowledge() can prove at RUNTIME that no timer handler ever reaches
+	// the deferred (fLock-released) emission path -- the condition that makes a
+	// re-lock of the destructor-destroyed fLock impossible.
+	atomic_set64(&sB1TimerThread, (int64)find_thread(NULL));
+	atomic_add64(&sB1TimerFired, 1);
 
 	TCPFlockProbe locker(endpoint->fLock);
 	if (!locker.IsLocked())
