@@ -336,7 +336,13 @@ export class OpsStack extends cdk.Stack {
         HG_REPO_S3: { value: `s3://${publishBucket}/debeos-repo/arm64` }, // live repo (packages.debene.dev/arm64)
         HARVEST_S3: { value: `s3://${workBucket}/hpkg/arm64` },           // wave harvest (durable)
         INCOMING_BASE: { value: `s3://${workBucket}/hpkg/arm64-incoming` }, // per-run disposable snapshot
-        HG_CF_DIST: { value: props.config.repoCloudFrontDistId ?? '' },   // '' => skip invalidation
+        HG_CF_DIST: { value: props.config.repoCloudFrontDistId ?? '' },   // '' => resolve from REPO_HOST at runtime
+        // The repo's PUBLIC hostname, which is also the CDN distribution's alias.
+        // A distribution id is account-scoped and must not be baked into this
+        // tree, but the hostname is already public (it is haiku-repo-add's default
+        // HG_REPO_URL), so the job can find its own distribution by alias instead
+        // of depending on a deploy-time variable that nobody passes.
+        REPO_HOST: { value: 'packages.debene.dev' },
         ARCH: { value: 'arm64' },
       },
       buildSpec: codebuild.BuildSpec.fromObject({
@@ -389,6 +395,22 @@ export class OpsStack extends cdk.Stack {
               'aws s3 ls "$INCOMING/" | awk "{print \\$4}" | grep -E "[.]hpkg$" > /tmp/published.list || true',
               'echo "== incremental-add $n harvested package(s) into $HG_REPO_S3 =="',
               `printf %s '${repoAddB64}' | base64 -d > /tmp/haiku-repo-add`,
+              // Resolve the CDN distribution from its public alias unless a
+              // deploy-time id was supplied. Without this HG_CF_DIST was always
+              // empty, so every pipeline publish skipped the invalidation and the
+              // repo index served stale until the TTL expired -- packages were in
+              // the pool but pkgman could not see them. Best-effort by design: a
+              // publish that already uploaded its packages must not be marked
+              // failed over an invalidation, so a miss WARNS and continues.
+              'if [ -z "${HG_CF_DIST:-}" ] && [ -n "${REPO_HOST:-}" ]; then',
+              '  HG_CF_DIST="$(aws cloudfront list-distributions --query "DistributionList.Items[?contains(to_string(Aliases), \'$REPO_HOST\')].Id | [0]" --output text 2>/dev/null || true)"',
+              // Spelled as an `if` rather than `[ ... ] && ...`: the latter's exit
+              // status under the buildspec's `set -e` depends on a corner case of
+              // AND-list semantics, and this runs unattended.
+              '  if [ "$HG_CF_DIST" = None ]; then HG_CF_DIST=""; fi',
+              '  if [ -n "$HG_CF_DIST" ]; then echo "resolved CDN distribution $HG_CF_DIST from alias $REPO_HOST"; else echo "WARNING: no CloudFront distribution carries the alias $REPO_HOST -- the index will serve stale until its TTL expires" >&2; fi',
+              '  export HG_CF_DIST',
+              'fi',
               'export HG_INCOMING_S3="$INCOMING"',
               'bash /tmp/haiku-repo-add',
               // Prune only the just-published hpkgs from the DURABLE harvest so the
@@ -446,6 +468,12 @@ export class OpsStack extends cdk.Stack {
     // from it) -- scoped to the one parameter.
     ssm.StringParameter.fromStringParameterName(
       this, 'BakeWorkBucketArnParam', bakeWorkBucketArnParam).grantRead(publishProject);
+    // Finding the repo's distribution by alias is a list over the account's
+    // distributions, which cannot be resource-scoped.
+    publishProject.addToRolePolicy(new iam.PolicyStatement({
+      actions: ['cloudfront:ListDistributions'],
+      resources: ['*'],
+    }));
     publishProject.addToRolePolicy(new iam.PolicyStatement({
       actions: ['cloudfront:CreateInvalidation'],
       resources: [props.config.repoCloudFrontDistId
