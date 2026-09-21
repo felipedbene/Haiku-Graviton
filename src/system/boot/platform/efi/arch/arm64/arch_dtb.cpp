@@ -44,10 +44,16 @@ const struct supported_interrupt_controllers {
 void
 arch_handle_fdt(const void* fdt, int node)
 {
+	// The device tree is input from firmware, so a string property is only a
+	// string once we have seen its terminator inside the property's own length:
+	// strcmp() and the string-list walk below both read until a NUL, and would
+	// otherwise run off the end of the property into the rest of the blob.
+	int deviceTypeLen;
 	const char* deviceType = (const char*)fdt_getprop(fdt, node,
-		"device_type", NULL);
+		"device_type", &deviceTypeLen);
 
-	if (deviceType != NULL) {
+	if (deviceType != NULL && deviceTypeLen > 0
+		&& deviceType[deviceTypeLen - 1] == '\0') {
 		if (strcmp(deviceType, "cpu") == 0) {
 			arm64_handle_fdt_cpu_node(fdt, node);
 		}
@@ -59,6 +65,12 @@ arch_handle_fdt(const void* fdt, int node)
 
 	if (compatible == NULL)
 		return;
+
+	if (compatibleLen <= 0 || compatible[compatibleLen - 1] != '\0') {
+		dprintf("fdt: node %d has a malformed compatible property, ignoring "
+			"it\n", node);
+		return;
+	}
 
 	intc_info &interrupt_controller = gKernelArgs.arch_args.interrupt_controller;
 	if (interrupt_controller.kind[0] == 0) {
@@ -75,8 +87,18 @@ arch_handle_fdt(const void* fdt, int node)
 		}
 	}
 
-	if (strcmp(compatible, "arm,psci-1.0") == 0)
+	// "compatible" is an ordered list of NUL-terminated strings, and a device
+	// tree is free to put the most specific binding first. Comparing only the
+	// first entry made PSCI discovery depend on that order, so a tree listing
+	// e.g. "arm,psci-0.2" ahead of "arm,psci-1.0" left us with no conduit at
+	// all. Walk the whole list instead, and accept every version that defines
+	// the standard 0.2+ function IDs we issue (CPU_ON, SYSTEM_OFF/RESET);
+	// "arm,psci" alone is 0.1, whose function IDs come from the node's own
+	// properties, so it is deliberately not claimed here.
+	if (dtb_has_fdt_string(compatible, compatibleLen, "arm,psci-1.0")
+		|| dtb_has_fdt_string(compatible, compatibleLen, "arm,psci-0.2")) {
 		arm64_handle_fdt_psci_node(fdt, node);
+	}
 }
 
 

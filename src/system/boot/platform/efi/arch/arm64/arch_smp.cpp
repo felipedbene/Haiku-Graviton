@@ -6,6 +6,7 @@
 
 #include "arch_smp.h"
 
+#include <stddef.h>
 #include <string.h>
 
 #include <KernelExport.h>
@@ -60,6 +61,10 @@ enum class CpuEnableMethod {
 
 static CpuEnableMethod sCpuEnableMethod = CpuEnableMethod::Unknown;
 
+// Cleared when a cpu node cannot be parsed: a topology we only half understand
+// is not one we are willing to start secondary CPUs from.
+static bool sCpuTopologyValid = true;
+
 
 void
 arch_smp_register_cpu(platform_cpu_info** cpu)
@@ -98,6 +103,23 @@ arch_smp_init_other_cpus(void)
 {
 	if (sCpuEnableMethod == CpuEnableMethod::Unknown)
 		sCpuCount = 1;
+
+	// The cpu nodes can name the PSCI enable method while the /psci node is
+	// absent, unrecognised, or carries a conduit we cannot issue. Decide that
+	// here, once, rather than discovering it as an indirect call through NULL
+	// in arch_smp_boot_other_cpus().
+	if (sCpuEnableMethod == CpuEnableMethod::Psci && sPsciCallFn == NULL) {
+		dprintf("smp: cpus ask for the PSCI enable method but no usable PSCI "
+			"conduit was found, booting single-CPU\n");
+		sCpuCount = 1;
+	}
+
+	if (!sCpuTopologyValid) {
+		dprintf("smp: incomplete cpu topology in the device tree, booting "
+			"single-CPU\n");
+		sCpuCount = 1;
+	}
+
 	gKernelArgs.num_cpus = sCpuCount;
 
 	if (get_safemode_boolean(B_SAFEMODE_DISABLE_SMP, false)) {
@@ -140,13 +162,18 @@ arm64_secondary_startup()
 		"    mov x1, #((1 << 31) | (1 << 24))\n"
 		"    bic x0, x0, x1\n"
 		"    mov x1, %0\n"
-		"    ldr x2, =24\n"
+		"    mov x2, #%2\n"
+		"    mov x4, #%3\n"
 	//       Search through sCpus to find the entry corresponding to
-	//       our MPIDR
-		"0:  ldr x3, [x1, 8]\n"
+	//       our MPIDR. The scan is bounded by the size of the array: an MPIDR
+	//       the boot loader never registered used to walk off the end of it
+	//       and fault somewhere unrelated, with no stack to report from.
+		"0:  cbz x4, 2f\n"
+		"    ldr x3, [x1, #%4]\n"
 		"    cmp x0, x3\n"
 		"    beq 1f\n"
 		"    add x1, x1, x2\n"
+		"    sub x4, x4, #1\n"
 		"    b 0b\n"
 		"1:  ldr w0, [x1]\n"
 	//       Use the id in our sCpus entry to get our stack pointer
@@ -159,10 +186,17 @@ arm64_secondary_startup()
 	//       Enable the FPU, jump to arm64_secondary_startup2
 		"    mov x1, #0x300000\n"
 		"    msr CPACR_EL1, x1\n"
-		"    b arm64_secondary_startup2"
+		"    b arm64_secondary_startup2\n"
+	//       We are a CPU the boot loader does not know about: there is no
+	//       stack to run on and no way to report it, so park rather than
+	//       reading past the end of sCpus.
+		"2:  wfi\n"
+		"    b 2b"
 		:
-		: "r" (sCpus), "r" (sSecondaryStacks)
-		: "x0", "x1", "x2", "x3"
+		: "r" (sCpus), "r" (sSecondaryStacks),
+			"i" (sizeof(platform_cpu_info)), "i" (SMP_MAX_CPUS),
+			"i" (offsetof(platform_cpu_info, mpidr))
+		: "x0", "x1", "x2", "x3", "x4"
 	);
 }
 
@@ -184,7 +218,11 @@ arch_smp_boot_other_cpus(addr_t ttbr1, uint64 kernelEntry, addr_t virtKernelArgs
 	sKernelEntry = kernelEntry;
 	sKernelArgs = (struct kernel_args*)virtKernelArgs;
 
-	for (uint32 i = 0; i < sCpuCount; i++) {
+	// Only the CPUs we counted into the kernel args have a stack: safemode's
+	// "Disable SMP" leaves num_cpus at one while sCpuCount still reflects the
+	// firmware description, and a CPU started beyond that would load sp from a
+	// never-filled sSecondaryStacks entry.
+	for (uint32 i = 0; i < gKernelArgs.num_cpus; i++) {
 		platform_cpu_info* cpu = &sCpus[i];
 
 		if (cpu->id == 0)
@@ -192,14 +230,34 @@ arch_smp_boot_other_cpus(addr_t ttbr1, uint64 kernelEntry, addr_t virtKernelArgs
 
 		switch (sCpuEnableMethod) {
 		case CpuEnableMethod::Psci:
+			// arch_smp_init_other_cpus() already refuses to claim more than one
+			// CPU without a conduit; this keeps the indirect call itself honest
+			// for any future caller that reaches here by another route.
+			if (sPsciCallFn == NULL) {
+				dprintf("smp: no PSCI conduit, cannot start cpu %" B_PRIu32
+					"\n", cpu->id);
+				continue;
+			}
 			sPsciCallFn(PSCI_CPU_ON, cpu->mpidr, (uint64)arm64_secondary_startup, 0);
 			break;
 		case CpuEnableMethod::SpinTable:
+			// The enable method is a single global while the release address is
+			// per-CPU, so a tree that names spin-table on one cpu node and
+			// something else on another leaves us here with no address for the
+			// latter. Writing the entry point to address 0 would take the boot
+			// loader down instead of reporting that.
+			if (cpu->releaseAddr == 0) {
+				dprintf("smp: no cpu-release-addr for cpu %" B_PRIu32
+					", cannot start it\n", cpu->id);
+				continue;
+			}
 			*((uint64*)cpu->releaseAddr) = (uint64)arm64_secondary_startup;
 			asm("sev");
 			break;
 		default:
-			// Unreachable, we set sCpuCount to 0 already
+			// Unreachable: without a known enable method
+			// arch_smp_init_other_cpus() clamps num_cpus to one, so this loop
+			// only ever sees the boot CPU, which is skipped above.
 			break;
 		}
 	}
@@ -228,46 +286,105 @@ arch_smp_init(void)
 }
 
 
+// Every fdt_getprop() below can return NULL — a device tree is under no
+// obligation to carry a property we happen to read — and a property that is
+// present can still be shorter than the value we want out of it. A malformed
+// or merely unexpected tree therefore has to degrade to a single-CPU boot with
+// a diagnostic; dereferencing the result faults before anything can report it.
 void
 arm64_handle_fdt_cpu_node(const void *fdt, int node)
 {
+	int parent = fdt_parent_offset(fdt, node);
+	if (parent < 0) {
+		dprintf("fdt: cpu node %d has no parent, ignoring it\n", node);
+		sCpuTopologyValid = false;
+		return;
+	}
+
+	// Per the device tree specification #address-cells defaults to 2 when the
+	// parent does not state it.
+	uint32 addressCells = 2;
+	int length;
+	const void* prop = fdt_getprop(fdt, parent, "#address-cells", &length);
+	if (prop != NULL && length >= (int)sizeof(uint32))
+		addressCells = fdt32_to_cpu(*(const uint32*)prop);
+
+	prop = fdt_getprop(fdt, node, "reg", &length);
+	if (prop == NULL) {
+		dprintf("fdt: cpu node %d has no reg property, ignoring it\n", node);
+		sCpuTopologyValid = false;
+		return;
+	}
+
+	// Follow what the parent said where the property is long enough for it,
+	// and fall back on what fits otherwise: a tree that omits #address-cells
+	// but carries a single-cell MPIDR still describes its CPUs unambiguously,
+	// and reading eight bytes out of a four-byte property never would.
+	uint64 mpidr;
+	if (addressCells != 1 && length >= (int)sizeof(uint64))
+		mpidr = fdt64_to_cpu(*(const uint64*)prop);
+	else if (length >= (int)sizeof(uint32))
+		mpidr = fdt32_to_cpu(*(const uint32*)prop);
+	else {
+		dprintf("fdt: cpu node %d has a truncated reg property (%d bytes), "
+			"ignoring it\n", node, length);
+		sCpuTopologyValid = false;
+		return;
+	}
+
+	// enable-method is optional in the cpu node: PSCI is commonly described by
+	// the /psci node alone. Only spin-table has to be named here, because only
+	// it needs the per-CPU release address that comes with it.
+	uint64 releaseAddr = 0;
+	CpuEnableMethod enableMethod = CpuEnableMethod::Unknown;
+	const char* methodName = (const char*)fdt_getprop(fdt, node,
+		"enable-method", &length);
+	if (methodName != NULL && length > 0 && methodName[length - 1] == '\0') {
+		if (strcmp(methodName, "spin-table") == 0) {
+			prop = fdt_getprop(fdt, node, "cpu-release-addr", &length);
+			if (prop == NULL || length < (int)sizeof(uint64)) {
+				dprintf("fdt: cpu node %d uses spin-table without a usable "
+					"cpu-release-addr, ignoring it\n", node);
+				sCpuTopologyValid = false;
+				return;
+			}
+			releaseAddr = fdt64_to_cpu(*(const uint64*)prop);
+			enableMethod = CpuEnableMethod::SpinTable;
+		} else if (strcmp(methodName, "psci") == 0) {
+			enableMethod = CpuEnableMethod::Psci;
+		} else {
+			dprintf("fdt: cpu node %d has unsupported enable-method \"%s\"\n",
+				node, methodName);
+		}
+	}
+
+	// Registering last keeps a CPU we could not fully describe out of the
+	// table: a half-filled entry would be handed to PSCI CPU_ON, and it would
+	// also be searched by MPIDR from the secondary startup path.
 	platform_cpu_info* info = NULL;
 	arch_smp_register_cpu(&info);
 	if (info == NULL)
 		return;
 	info->id = sCpuCount - 1;
+	info->mpidr = mpidr;
+	info->releaseAddr = releaseAddr;
 
-	int parent = fdt_parent_offset(fdt, node);
-	if (fdt32_to_cpu(*(uint32*)fdt_getprop(fdt, parent,
-		"#address-cells", NULL)) == 1) {
-		info->mpidr = fdt32_to_cpu(*(uint32*)fdt_getprop(fdt, node,
-			"reg", NULL));
-	} else {
-		info->mpidr = fdt64_to_cpu(*(uint64*)fdt_getprop(fdt, node,
-			"reg", NULL));
-	}
-
-	const char* enableMethod = (const char*)fdt_getprop(fdt, node,
-		"enable-method", NULL);
-	if (enableMethod == NULL)
-		return;
-
-	if (strcmp(enableMethod, "spin-table") == 0) {
-		sCpuEnableMethod = CpuEnableMethod::SpinTable;
-		uint64* releaseAddr = (uint64*)fdt_getprop(fdt, node,
-			"cpu-release-addr", NULL);
-		info->releaseAddr = fdt64_to_cpu(*releaseAddr);
-	} else if (strcmp(enableMethod, "psci") == 0) {
-		sCpuEnableMethod = CpuEnableMethod::Psci;
-	}
+	if (enableMethod != CpuEnableMethod::Unknown)
+		sCpuEnableMethod = enableMethod;
 }
 
 
 void
 arm64_handle_fdt_psci_node(const void *fdt, int node)
 {
-	const char* method = (const char*)fdt_getprop(fdt, node,
-		"method", NULL);
+	int length;
+	const char* method = (const char*)fdt_getprop(fdt, node, "method",
+		&length);
+	if (method == NULL || length < 2 || method[length - 1] != '\0') {
+		dprintf("fdt: psci node has no usable method property, no PSCI "
+			"conduit available\n");
+		return;
+	}
 
 	if (strcmp(method, "smc") == 0) {
 		sPsciCallFn = arm64_psci_call_smc;
@@ -275,6 +392,9 @@ arm64_handle_fdt_psci_node(const void *fdt, int node)
 	} else if (strcmp(method, "hvc") == 0) {
 		sPsciCallFn = arm64_psci_call_hvc;
 		gKernelArgs.arch_args.psci_conduit = PSCI_CONDUIT_HVC;
+	} else {
+		dprintf("fdt: unsupported psci method \"%s\", no PSCI conduit "
+			"available\n", method);
 	}
 }
 
