@@ -1,0 +1,871 @@
+#!/usr/bin/env python3
+# haiku-repo-promote-green -- the gated blue -> green promote for the DeBeOS
+# package pool (issue #443). PLAN by default; APPLY only against a named,
+# still-fresh plan.
+#
+# WHY THIS EXISTS
+# ---------------
+# The pipeline's publish leg (`debeos-repo-publish`) writes the BLUE prefix
+# (<pool>/debeos-repo/arch). Nothing serves blue: both CloudFront
+# distributions -- prod and beta -- carry OriginPath /debeos-repo-green, so GREEN
+# is the live pool. A wave therefore reached the pool but never reached users;
+# only a separate hand publish against green did that. #443 decided the shape:
+# blue stays the pipeline's staging pool, and reaching users becomes this
+# explicit, automated-but-gated promote.
+#
+# TWO MEASURED FACTS THAT CONSTRAIN THIS TOOL (#443, re-measured here)
+# -------------------------------------------------------------------
+# 1. GREEN IS NOT A SUBSET OF BLUE. Ten packages exist only in green. A mirror
+#    (`s3 sync --delete` blue -> green) would delete packages users can install
+#    right now -- `freetype` and `coreutils` among them. So the promote is a
+#    UNION ADD and has NO delete path. `haiku-repo-add` is exactly that
+#    primitive: it pulls the WHOLE target pool, adds the incoming packages,
+#    rebuilds the index over the union, and uploads packages first, index last.
+# 2. The user-visible gap is small (25 blue-only files at the time of writing,
+#    not the 1,287 a wave added to blue), because green had already been pushed
+#    ahead of blue through the manual path.
+#
+# THE COLLISION THAT FACT 1 HIDES -- and why this tool is version-aware
+# --------------------------------------------------------------------
+# Measured on the live pools while building this: every one of those ten
+# green-only FILES is a same-name, different-version collision with one of the
+# blue-only files, and for SIX of the names GREEN IS NEWER:
+#
+#     name              blue-only                    green-only        newer
+#     freetype          2.6.3_bootstrap-1            2.14.3-1          green
+#     freetype_devel    2.6.3_bootstrap-1            2.14.3-1          green
+#     coreutils         9.9_bootstrap-1              9.11-2            green
+#     binutils          2.41_..._bootstrap-1         ..._bootstrap-2   green
+#     makefile_engine   ...hrev59996_dirty-1         ..._dirty-2       green
+#     rust_bin          1.100.0~nightly_...-2        ...-4             green
+#     x264{,_bin,_devel,_debuginfo}  20220222-5      20220222-4        blue
+#
+# `haiku-repo-add` is a union add over FILES, but within one package NAME it is
+# superseding: staging a package drops every other on-disk version of that name
+# before the index rebuild. So a promote of "every blue-only file" would have
+# REPLACED green's freetype 2.14.3 with a 2.6.3 *bootstrap* build, coreutils 9.11
+# with a 9.9 bootstrap, rust_bin -4 with -2. The ten names would have survived --
+# as downgrades. That is a live-pool regression, so a filename-only delta is not
+# safe and this tool classifies per (name, architecture):
+#
+#   * green has no package of that name+arch          -> ADD        (pure union)
+#   * blue's (version, revision) is STRICTLY NEWER    -> SUPERSEDE  (name survives)
+#   * green is newer, equal, or the two cannot be
+#     strictly ordered                                -> WITHHELD   (fail closed)
+#
+# A WITHHELD file is never copied and never named in the plan's add list, so it
+# cannot reach green through this path at all. Resolve those deliberately (the
+# `debeos-publish-green` skill / `haiku-repo-publish-ephemeral`), which is also
+# what the four x264 SUPERSEDEs would have needed before this existed.
+#
+# THE GATE
+# --------
+# plan (the DEFAULT -- an unparameterised run must never mutate green):
+#   read both pools, classify, PRINT every package that would become live, and
+#   write a plan object keyed by a hash of BOTH pools' current state.
+# apply (--apply plus --plan-id):
+#   re-read both pools, recompute that hash, and REFUSE if it no longer matches
+#   the plan's. Approving a specific, inspected delta is the gate; a plan that
+#   has gone stale cannot be applied by accident. Every ambiguity fails closed.
+#
+# WHAT APPLY DOES, IN ORDER
+#   1. re-verify the state hash, and that every planned file is still where the
+#      plan says it is;
+#   2. snapshot ONLY the planned files into a per-run, disposable incoming prefix
+#      in the WORK bucket. Blue is never modified and never consumed:
+#      `haiku-repo-add` clears its own HG_INCOMING_S3 on success, so it must be
+#      pointed at the snapshot, never at blue;
+#   3. run `haiku-repo-add` with HG_REPO_S3 = the GREEN prefix. It takes the #164
+#      S3-object publish lock (`haiku-publish-lock.sh`, which must sit beside it),
+#      so a promote cannot race the `debeos-publish-green` path or a hand publish;
+#   4. POST-CONDITION: re-list green and assert its (name, arch) set is a
+#      SUPERSET of the pre-promote set. This is the "nothing was deleted" check
+#      that fact 1 demands, made against S3 rather than against a log line -- the
+#      only `--delete` in the whole path is haiku-repo-add's mirror of the UNION
+#      it just built, and this is what proves that mirror lost nothing;
+#   5. invalidate the index paths on BOTH serving distributions. A promote makes
+#      prod AND beta stale. Best-effort: a promote whose bytes have landed must
+#      not be reported as failed over an invalidation.
+#
+# NO ACCOUNT-SCOPED NAMES LIVE IN THIS FILE. Bucket names and the distribution
+# ids arrive at runtime: the buckets from the environment (the CDK project sets
+# them), the distribution ids resolved from their PUBLIC aliases, never baked in.
+#
+# WHERE IT RUNS
+#   `plan` runs anywhere with python3 + awscli (it is read-only).
+#   `apply` needs the Haiku host tools `package`/`package_repo`, which is what
+#   the `debeos-repo-promote-green` CodeBuild project exists for: it banks those
+#   tools and runs THIS script unchanged with --in-process. So a local --apply
+#   DELEGATES to that project by default (start-build + wait) and only does the
+#   work here when you pass --in-process and the tools are present.
+#
+# USAGE
+#   haiku-repo-promote-green                      # plan (default), read-only
+#   haiku-repo-promote-green --plan --no-write    # plan without storing it
+#   haiku-repo-promote-green --apply --plan-id ID # apply via CodeBuild
+#   haiku-repo-promote-green --apply --plan-id ID --in-process   # apply here
+#   haiku-repo-promote-green --self-test          # comparator + classifier checks
+#
+# CONFIG (env; MODE/PLAN_ID are the CodeBuild contract, flags win over them)
+#   MODE              plan|apply                  (default plan)
+#   PLAN_ID           the plan to apply           (required for apply)
+#   HG_BLUE_S3        s3://<pool>/debeos-repo/<arch>        (staging, READ-ONLY)
+#   HG_GREEN_S3       s3://<pool>/debeos-repo-green/<arch>  (live, the write target)
+#   HG_PLAN_S3        s3://<work>/promote-plans             (plan store)
+#   HG_INCOMING_BASE  s3://<work>/promote-incoming          (per-run snapshots)
+#   HG_POOL_BUCKET / HAIKU_PUBLISH_BUCKET   derive the two pool URIs
+#   HG_WORK_BUCKET / HAIKU_GRAVITON_BUCKET  derive the plan + incoming URIs
+#   REPO_HOSTS        comma-separated PUBLIC CDN aliases to invalidate
+#   HG_PROMOTE_PROJECT  CodeBuild project a local --apply delegates to
+#   ARCH              packaging arch (default arm64)
+#   AWS_DEFAULT_REGION / AWS_REGION (default us-west-2)
+
+import argparse
+import hashlib
+import json
+import os
+import re
+import subprocess
+import sys
+import time
+
+ARCH = os.environ.get("ARCH", "arm64")
+REGION = os.environ.get("AWS_DEFAULT_REGION") or os.environ.get("AWS_REGION") or "us-west-2"
+# The two public hostnames that front the GREEN pool. Public DNS names, not
+# account-scoped ids: the distribution ids are resolved from these at runtime.
+DEFAULT_REPO_HOSTS = "packages.debene.dev,beta.repository.debene.dev"
+# Mutable index objects. Everything else in the pool is immutable-by-version, so
+# these three are the whole cache-invalidation surface.
+INDEX_KEYS = ("repo", "repo.info", "repo.sha256")
+
+
+def die(msg):
+    sys.stderr.write("haiku-repo-promote-green: %s\n" % msg)
+    raise SystemExit(1)
+
+
+def log(msg):
+    sys.stdout.write("%s\n" % msg)
+    sys.stdout.flush()
+
+
+# ---- aws plumbing ---------------------------------------------------------
+def aws(*args, **kw):
+    """Run the aws CLI. Returns stdout; raises CalledProcessError on failure
+    unless check=False, in which case it returns None."""
+    cmd = ["aws", "--region", REGION] + [str(a) for a in args]
+    check = kw.pop("check", True)
+    try:
+        out = subprocess.run(cmd, check=True, stdout=subprocess.PIPE,
+                             stderr=subprocess.PIPE)
+    except subprocess.CalledProcessError as e:
+        if not check:
+            return None
+        sys.stderr.write(e.stderr.decode("utf-8", "replace"))
+        raise
+    return out.stdout.decode("utf-8", "replace")
+
+
+def split_uri(uri):
+    if not uri.startswith("s3://"):
+        die("not an s3 uri: %s" % uri)
+    bucket, _, prefix = uri[5:].partition("/")
+    return bucket, prefix.strip("/")
+
+
+def list_pool(pool_uri):
+    """{filename: size} for <pool>/packages/*.hpkg."""
+    out = aws("s3", "ls", "%s/packages/" % pool_uri.rstrip("/"))
+    files = {}
+    for line in out.splitlines():
+        parts = line.split()
+        # "<date> <time> <size> <key>"; a PRE (sub-prefix) line has 2 fields.
+        if len(parts) < 4 or not parts[-1].endswith(".hpkg"):
+            continue
+        try:
+            files[parts[-1]] = int(parts[-2])
+        except ValueError:
+            continue
+    return files
+
+
+def pool_fingerprint(pool_uri):
+    """(etag, last-modified) of the pool's `repo` index.
+
+    Folded into the state hash so the staleness check also catches a same-name
+    content replacement -- a package rebuilt at an identical version+revision
+    changes no filename, but it does change the index. Missing index => refuse
+    (fail closed): we cannot reason about a pool we cannot fingerprint."""
+    bucket, prefix = split_uri(pool_uri.rstrip("/"))
+    out = aws("s3api", "head-object", "--bucket", bucket,
+              "--key", "%s/repo" % prefix, "--output", "json", check=False)
+    if not out:
+        die("no `repo` index at %s/repo -- refusing to plan against a pool I "
+            "cannot fingerprint" % pool_uri.rstrip("/"))
+    meta = json.loads(out)
+    return (meta.get("ETag", ""), meta.get("LastModified", ""))
+
+
+# ---- package identity + ordering -----------------------------------------
+# Canonical repo filename: <name>-<version>-<revision>-<arch>.hpkg. Haiku
+# package names never contain '-' (they use '_'), so the first hyphen ends the
+# name and the last two hyphens carve off revision + arch. Versioned library
+# slots (libvpx1.15 vs libvpx1.16, python3.10 vs python3.12) are therefore
+# DIFFERENT names and are never compared against each other.
+def parse_pkg(fname):
+    if not fname.endswith(".hpkg"):
+        return None
+    base = fname[:-5]
+    dash = base.find("-")
+    if dash < 0:
+        return None
+    name, rest = base[:dash], base[dash + 1:]
+    parts = rest.rsplit("-", 2)
+    if len(parts) != 3:
+        return None
+    version, revision, arch = parts
+    return name, version, revision, arch
+
+
+# Ordering follows Haiku's BPackageVersion rules, and deliberately mirrors
+# `haiku-pool-gc`'s cmp_release/cmp_version/cmp_entry (the sibling pool tool,
+# which uses the same rules to decide what is superseded). The two must stay in
+# agreement; --self-test pins this copy against the real collisions measured on
+# the live pools, so a drift shows up as a red self-test rather than as a
+# downgrade in the live repo. Kept as a copy rather than an import so the promote
+# is one self-contained file to bank into the CodeBuild job -- and so a missing
+# sibling can never silently change how a live-pool decision is made.
+def _seg_key(seg):
+    if seg.isdigit():
+        return (1, int(seg), "")
+    return (0, 0, seg)
+
+
+def cmp_release(a, b):
+    sa = re.split(r"[._]", a)
+    sb = re.split(r"[._]", b)
+    for i in range(max(len(sa), len(sb))):
+        ka = _seg_key(sa[i]) if i < len(sa) else (1, -1, "")
+        kb = _seg_key(sb[i]) if i < len(sb) else (1, -1, "")
+        if ka != kb:
+            return -1 if ka < kb else 1
+    return 0
+
+
+def cmp_version(va, vb):
+    ra, _, pa = va.partition("~")
+    rb, _, pb = vb.partition("~")
+    c = cmp_release(ra, rb)
+    if c != 0:
+        return c
+    # same release: a release with NO prerelease outranks one WITH a prerelease
+    if (not pa) != (not pb):
+        return 1 if not pa else -1
+    if pa != pb:
+        return -1 if pa < pb else 1
+    return 0
+
+
+def cmp_entry(a, b):
+    """a, b = (version, revision). Returns -1/0/1, or None if not strictly
+    orderable -- and None always means WITHHOLD, never 'probably fine'."""
+    c = cmp_version(a[0], b[0])
+    if c is None:
+        return None
+    if c != 0:
+        return c
+    try:
+        ra, rb = int(a[1]), int(b[1])
+    except ValueError:
+        return None
+    if ra != rb:
+        return -1 if ra < rb else 1
+    return 0
+
+
+# ---- the delta -----------------------------------------------------------
+def classify(blue, green):
+    """Split blue's files into (adds, withheld) against green's holdings.
+
+    adds     -- [{file, name, arch, kind: new|supersede, supersedes}]
+    withheld -- [{file, name, arch, reason, green_file}]
+    Anything unparseable is withheld: an unrecognised filename is exactly the
+    ambiguity this must fail closed on."""
+    green_by_id = {}
+    for f in green:
+        p = parse_pkg(f)
+        if p:
+            green_by_id.setdefault((p[0], p[3]), []).append((f, p[1], p[2]))
+
+    adds, withheld = [], []
+    for f in sorted(set(blue) - set(green)):
+        p = parse_pkg(f)
+        if not p:
+            withheld.append({"file": f, "name": "?", "arch": "?",
+                             "reason": "unparseable-filename", "green_file": ""})
+            continue
+        name, version, revision, arch = p
+        held = green_by_id.get((name, arch), [])
+        if not held:
+            adds.append({"file": f, "name": name, "arch": arch,
+                         "kind": "new", "supersedes": ""})
+            continue
+        if len(held) > 1:
+            # Green already holds two versions of one name: the pool is not in a
+            # state we should reason about (and package_repo would refuse it).
+            withheld.append({"file": f, "name": name, "arch": arch,
+                             "reason": "green-holds-multiple-versions",
+                             "green_file": ", ".join(h[0] for h in held)})
+            continue
+        gfile, gversion, grevision = held[0]
+        c = cmp_entry((version, revision), (gversion, grevision))
+        if c is None:
+            withheld.append({"file": f, "name": name, "arch": arch,
+                             "reason": "not-strictly-orderable", "green_file": gfile})
+        elif c > 0:
+            adds.append({"file": f, "name": name, "arch": arch,
+                         "kind": "supersede", "supersedes": gfile})
+        else:
+            withheld.append({"file": f, "name": name, "arch": arch,
+                             "reason": "green-is-newer-or-equal", "green_file": gfile})
+    return adds, withheld
+
+
+def name_set(files):
+    """{(name, arch)} -- the identities a pool serves, which is what must never
+    shrink across a promote."""
+    out = set()
+    for f in files:
+        p = parse_pkg(f)
+        if p:
+            out.add((p[0], p[3]))
+    return out
+
+
+def state_hash(blue, green, blue_fp, green_fp):
+    """A hash of BOTH pools as they are now. Apply refuses unless this still
+    matches the plan's, so an approved delta cannot be applied against pools
+    that have moved underneath it."""
+    h = hashlib.sha256()
+    h.update(b"debeos-promote-state-v1\n")
+    for tag, files, fp in (("blue", blue, blue_fp), ("green", green, green_fp)):
+        h.update(("%s-index %s %s\n" % (tag, fp[0], fp[1])).encode())
+        for f in sorted(files):
+            h.update(("%s %s %d\n" % (tag, f, files[f])).encode())
+    return h.hexdigest()
+
+
+# ---- CloudFront ----------------------------------------------------------
+def resolve_distributions(hosts):
+    """[(host, dist-id, origin-path)] resolved from PUBLIC aliases.
+
+    A distribution id is account-scoped and is not written into this tree; the
+    hostnames are already public (packages.debene.dev is haiku-repo-add's default
+    HG_REPO_URL). Mechanism from the verified snippet on branch
+    fix/443-publish-cdn-invalidation (closed PR #444), extended to resolve SEVERAL
+    aliases because prod AND beta both serve green and a promote makes both stale.
+    The account has a third distribution serving a different origin
+    (the source mirror), which is why this matches aliases rather than sweeping
+    every distribution."""
+    out = aws("cloudfront", "list-distributions", "--output", "json", check=False)
+    if not out:
+        return []
+    try:
+        items = (json.loads(out).get("DistributionList") or {}).get("Items") or []
+    except ValueError:
+        return []
+    found = []
+    for host in hosts:
+        for d in items:
+            aliases = (d.get("Aliases") or {}).get("Items") or []
+            if host not in aliases:
+                continue
+            origins = (d.get("Origins") or {}).get("Items") or []
+            opath = origins[0].get("OriginPath", "") if origins else ""
+            found.append((host, d["Id"], opath))
+            break
+        else:
+            sys.stderr.write("WARNING: no CloudFront distribution carries the "
+                             "alias %s -- its cache will serve the old index "
+                             "until the TTL expires\n" % host)
+    return found
+
+
+def invalidate(dists, arch):
+    """Invalidate the index paths on every resolved distribution. BEST-EFFORT by
+    design: the promote's bytes are already durable in green by the time we get
+    here, so a failed invalidation must warn, not fail the promote."""
+    for host, dist, opath in dists:
+        try:
+            paths = ["/%s/%s" % (arch, k) for k in INDEX_KEYS]
+            inv = aws("cloudfront", "create-invalidation", "--distribution-id", dist,
+                      "--paths", *paths,
+                      "--query", "Invalidation.Id", "--output", "text")
+            log("   invalidated %s (%s, origin %s): %s"
+                % (dist, host, opath or "/", (inv or "").strip()))
+        except subprocess.CalledProcessError:
+            sys.stderr.write("WARNING: could not invalidate %s (%s) -- that "
+                             "cache serves the old index until its TTL "
+                             "expires\n" % (dist, host))
+
+
+# ---- config -------------------------------------------------------------
+def load_config():
+    pool = os.environ.get("HG_POOL_BUCKET") or os.environ.get("HAIKU_PUBLISH_BUCKET")
+    work = os.environ.get("HG_WORK_BUCKET") or os.environ.get("HAIKU_GRAVITON_BUCKET")
+
+    def derive(explicit, bucket, suffix, what):
+        v = os.environ.get(explicit)
+        if v:
+            return v.rstrip("/")
+        if bucket:
+            return "s3://%s/%s" % (bucket, suffix)
+        die("set %s (or a bucket to derive it from) -- %s" % (explicit, what))
+
+    cfg = {
+        "blue": derive("HG_BLUE_S3", pool, "debeos-repo/%s" % ARCH,
+                       "the blue staging pool this promotes FROM (read-only)"),
+        "green": derive("HG_GREEN_S3", pool, "debeos-repo-green/%s" % ARCH,
+                        "the live green pool this promotes INTO"),
+        "plans": derive("HG_PLAN_S3", work, "promote-plans", "where plans are stored"),
+        "incoming": derive("HG_INCOMING_BASE", work, "promote-incoming",
+                           "the per-run disposable snapshot base"),
+        "hosts": [h.strip() for h in
+                  os.environ.get("REPO_HOSTS", DEFAULT_REPO_HOSTS).split(",") if h.strip()],
+        "project": os.environ.get("HG_PROMOTE_PROJECT", "debeos-repo-promote-green"),
+    }
+    if cfg["blue"].rstrip("/") == cfg["green"].rstrip("/"):
+        die("HG_BLUE_S3 and HG_GREEN_S3 are the same prefix (%s) -- refusing"
+            % cfg["blue"])
+    return cfg
+
+
+# ---- plan ---------------------------------------------------------------
+def read_pools(cfg):
+    blue = list_pool(cfg["blue"])
+    green = list_pool(cfg["green"])
+    blue_fp = pool_fingerprint(cfg["blue"])
+    green_fp = pool_fingerprint(cfg["green"])
+    return blue, green, blue_fp, green_fp
+
+
+def print_report(cfg, blue, green, adds, withheld, green_only):
+    log("== pools ==")
+    log("   blue  (staging, READ-ONLY) %s: %d package(s)" % (cfg["blue"], len(blue)))
+    log("   green (LIVE, write target) %s: %d package(s)" % (cfg["green"], len(green)))
+    log("   blue-only file(s): %d      green-only file(s): %d"
+        % (len(set(blue) - set(green)), len(green_only)))
+
+    log("")
+    log("== would become live: %d package(s) ==" % len(adds))
+    for a in adds:
+        if a["kind"] == "new":
+            log("   + %s   (new: green serves no %s/%s)" % (a["file"], a["name"], a["arch"]))
+        else:
+            log("   ^ %s   (supersedes %s)" % (a["file"], a["supersedes"]))
+    if not adds:
+        log("   (nothing -- green is already at or ahead of blue everywhere)")
+
+    log("")
+    log("== withheld: %d package(s) (fail-closed; NOT promoted) ==" % len(withheld))
+    for w in withheld:
+        log("   - %s   [%s]%s" % (w["file"], w["reason"],
+                                  "  green has %s" % w["green_file"] if w["green_file"] else ""))
+    if not withheld:
+        log("   (none)")
+
+    # The assertion fact 1 demands, checked rather than asserted in prose: every
+    # identity green serves today must still be served after the promote. An ADD
+    # either introduces a new identity or supersedes one in place; nothing in
+    # this path can remove one. Proved again against S3 after apply.
+    log("")
+    before = name_set(green)
+    after = before | {(a["name"], a["arch"]) for a in adds}
+    lost = before - after
+    log("== union check ==")
+    log("   green serves %d package identit(ies) now; %d after this promote"
+        % (len(before), len(after)))
+    if lost:
+        die("PLAN IS UNSAFE: it would stop serving %s -- refusing"
+            % ", ".join("%s/%s" % x for x in sorted(lost)))
+    log("   no identity is dropped: OK")
+    green_only_names = sorted({(p[0], p[3]) for p in
+                               (parse_pkg(f) for f in green_only) if p})
+    if green_only_names:
+        log("   green-only identit(ies) that must survive (%d): %s"
+            % (len(green_only_names), ", ".join(n for n, _ in green_only_names)))
+        still = [n for n in green_only_names if n in after]
+        log("   ... all present after the promote: %s"
+            % ("yes" if len(still) == len(green_only_names) else "NO"))
+        if len(still) != len(green_only_names):
+            die("PLAN IS UNSAFE: a green-only identity would disappear")
+
+
+def cmd_plan(cfg, write):
+    blue, green, blue_fp, green_fp = read_pools(cfg)
+    adds, withheld = classify(blue, green)
+    green_only = sorted(set(green) - set(blue))
+    print_report(cfg, blue, green, adds, withheld, green_only)
+
+    sh = state_hash(blue, green, blue_fp, green_fp)
+    plan_id = "%s-%s" % (time.strftime("%Y%m%dT%H%M%SZ", time.gmtime()), sh[:12])
+    plan = {
+        "plan_version": 1,
+        "plan_id": plan_id,
+        "created_utc": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+        "arch": ARCH,
+        "blue": cfg["blue"],
+        "green": cfg["green"],
+        "state_hash": sh,
+        "blue_count": len(blue),
+        "green_count": len(green),
+        "add": adds,
+        "withheld": withheld,
+        "green_only": green_only,
+        # The identities green serves at plan time. Apply asserts, against S3,
+        # that every one of them is still served afterwards.
+        "green_identities": sorted("%s/%s" % x for x in name_set(green)),
+    }
+    log("")
+    log("== plan %s ==" % plan_id)
+    log("   state hash %s" % sh)
+    if not write:
+        log("   --no-write: plan NOT stored; apply has nothing to reference")
+        return plan
+    key = "%s/%s.json" % (cfg["plans"].rstrip("/"), plan_id)
+    p = subprocess.run(["aws", "--region", REGION, "s3", "cp", "-", key,
+                        "--content-type", "application/json", "--only-show-errors"],
+                       input=json.dumps(plan, indent=1).encode(), check=False)
+    if p.returncode != 0:
+        die("could not store the plan at %s" % key)
+    log("   stored at %s" % key)
+    log("")
+    if adds:
+        log("To promote these %d package(s) to LIVE:" % len(adds))
+        log("   haiku-repo-promote-green --apply --plan-id %s" % plan_id)
+    return plan
+
+
+# ---- apply --------------------------------------------------------------
+def fetch_plan(cfg, plan_id):
+    key = "%s/%s.json" % (cfg["plans"].rstrip("/"), plan_id)
+    out = aws("s3", "cp", key, "-", check=False)
+    if not out:
+        die("no plan %s at %s (run a plan first)" % (plan_id, key))
+    try:
+        plan = json.loads(out)
+    except ValueError:
+        die("plan %s is not valid JSON" % plan_id)
+    if plan.get("plan_id") != plan_id:
+        die("plan object at %s carries plan_id %r -- refusing"
+            % (key, plan.get("plan_id")))
+    return plan
+
+
+def have_host_tools():
+    for var, exe in (("PKG_TOOL", "package"), ("PACKAGE_REPO_TOOL", "package_repo")):
+        p = os.environ.get(var)
+        if p and os.access(p, os.X_OK):
+            continue
+        from shutil import which
+        if not which(exe):
+            return False
+    return True
+
+
+def delegate_apply(cfg, plan_id):
+    """A local --apply hands the work to the CodeBuild project, which banks the
+    Haiku host tools this needs. Not a convenience: running the index rebuild
+    from a laptop is how a half-uploaded pool happens."""
+    log("== delegating apply to CodeBuild project %s ==" % cfg["project"])
+    out = aws("codebuild", "start-build", "--project-name", cfg["project"],
+              "--environment-variables-override",
+              "name=MODE,value=apply,type=PLAINTEXT",
+              "name=PLAN_ID,value=%s,type=PLAINTEXT" % plan_id,
+              "--query", "build.id", "--output", "text")
+    build_id = (out or "").strip()
+    log("   build %s started; waiting" % build_id)
+    while True:
+        time.sleep(20)
+        st = aws("codebuild", "batch-get-builds", "--ids", build_id,
+                 "--query", "builds[0].buildStatus", "--output", "text",
+                 check=False)
+        st = (st or "").strip()
+        if st and st != "IN_PROGRESS":
+            log("   build %s finished: %s" % (build_id, st))
+            if st != "SUCCEEDED":
+                die("the promote build did not succeed (%s) -- read its log" % st)
+            return
+        log("   ... %s" % (st or "?"))
+
+
+def cmd_apply(cfg, plan_id, in_process):
+    if not plan_id:
+        die("apply requires a plan id: --plan-id <id> (or PLAN_ID=<id>). Run a "
+            "plan first and read what it says would become live.")
+    if not in_process:
+        return delegate_apply(cfg, plan_id)
+    if not have_host_tools():
+        die("no `package`/`package_repo` host tools here. Run without "
+            "--in-process to delegate to the %s CodeBuild project, or set "
+            "PKG_TOOL/PACKAGE_REPO_TOOL." % cfg["project"])
+
+    plan = fetch_plan(cfg, plan_id)
+    if plan.get("arch") != ARCH:
+        die("plan %s is for arch %r, this run is %r" % (plan_id, plan.get("arch"), ARCH))
+    for field, want in (("blue", cfg["blue"]), ("green", cfg["green"])):
+        if plan.get(field, "").rstrip("/") != want.rstrip("/"):
+            die("plan %s targets %s=%s but this run has %s -- refusing"
+                % (plan_id, field, plan.get(field), want))
+
+    log("== re-reading both pools to check the plan is still fresh ==")
+    blue, green, blue_fp, green_fp = read_pools(cfg)
+    now = state_hash(blue, green, blue_fp, green_fp)
+    if now != plan["state_hash"]:
+        die("STALE PLAN: %s was computed against state %s but the pools are now "
+            "%s. Something published since. Re-run a plan, read it, and apply "
+            "THAT one." % (plan_id, plan["state_hash"], now))
+    log("   state hash %s still matches" % now)
+
+    adds = plan.get("add") or []
+    if not adds:
+        log("plan %s promotes nothing; green is already at or ahead of blue. "
+            "Done." % plan_id)
+        return
+    # Belt and braces on top of the hash: the hash proves the pools as a whole
+    # have not moved, this proves each planned file is still exactly where the
+    # plan expects it. Cheap, and it makes a hash-collision or a hand-edited
+    # plan object fail closed too.
+    for a in adds:
+        if a["file"] not in blue:
+            die("planned package %s is no longer in blue -- refusing" % a["file"])
+        if a["kind"] == "new" and a["file"] in green:
+            die("planned NEW package %s is already in green -- refusing" % a["file"])
+    before = {tuple(i.split("/", 1)) for i in plan.get("green_identities") or []}
+    if before != name_set(green):
+        die("green's package identities no longer match the plan -- refusing")
+
+    incoming = "%s/%s" % (cfg["incoming"].rstrip("/"), plan_id)
+    log("")
+    log("== snapshot %d planned package(s) into %s ==" % (len(adds), incoming))
+    log("   (blue is neither modified nor consumed: haiku-repo-add clears its "
+        "OWN incoming prefix on success, so it is pointed at this copy)")
+    for a in adds:
+        src = "%s/packages/%s" % (cfg["blue"].rstrip("/"), a["file"])
+        aws("s3", "cp", src, "%s/%s" % (incoming, a["file"]), "--only-show-errors")
+    log("   snapshotted %d package(s)" % len(adds))
+
+    here = os.path.dirname(os.path.abspath(__file__))
+    repo_add = os.path.join(here, "haiku-repo-add")
+    if not os.path.exists(repo_add):
+        die("haiku-repo-add is not beside this script (%s)" % here)
+    if not os.path.exists(os.path.join(here, "haiku-publish-lock.sh")):
+        # haiku-repo-add only WARNS when the lock lib is missing and publishes
+        # anyway. For a promote to LIVE that is not acceptable: refuse instead,
+        # so a promote can never race the debeos-publish-green path (#164).
+        die("haiku-publish-lock.sh is not beside haiku-repo-add (%s) -- refusing "
+            "to promote to the live pool without the #164 publish lock" % here)
+
+    log("")
+    log("== union-add into %s via haiku-repo-add (under the #164 publish lock) =="
+        % cfg["green"])
+    env = dict(os.environ)
+    env["HG_REPO_S3"] = cfg["green"]
+    env["HG_INCOMING_S3"] = incoming
+    env["ARCH"] = ARCH
+    # The promote owns invalidation, because BOTH serving distributions have to
+    # be invalidated and haiku-repo-add knows about one. Unset rather than
+    # half-set: a single-distribution invalidation here would look like the job
+    # was done.
+    env.pop("HG_CF_DIST", None)
+    rc = subprocess.run(["bash", repo_add], env=env).returncode
+    if rc != 0:
+        die("haiku-repo-add failed (rc=%d) -- green is unchanged or partially "
+            "updated; read its output above before retrying" % rc)
+
+    log("")
+    log("== post-condition: green must still serve every identity it served ==")
+    after_files = list_pool(cfg["green"])
+    after = name_set(after_files)
+    lost = sorted(before - after)
+    if lost:
+        die("PROMOTE LOST PACKAGES: green no longer serves %s. This must not "
+            "happen -- the add is a union -- investigate immediately."
+            % ", ".join("%s/%s" % x for x in lost))
+    log("   %d identit(ies) before, %d after; none lost: OK" % (len(before), len(after)))
+    missing = [a["file"] for a in adds if a["file"] not in after_files]
+    if missing:
+        die("these planned packages are NOT in green after the add: %s"
+            % ", ".join(missing))
+    log("   all %d promoted package(s) present in green: OK" % len(adds))
+
+    log("")
+    log("== invalidate the index on every distribution that serves green ==")
+    invalidate(resolve_distributions(cfg["hosts"]), ARCH)
+
+    # The snapshot prefix is disposable and haiku-repo-add already removed every
+    # package it consumed; sweep whatever a skip left behind so the prefix does
+    # not accumulate. Deleted BY NAME from the plan rather than with
+    # `rm --recursive`, so the job needs no ListBucket on the work bucket and a
+    # mis-set prefix cannot turn this into a recursive delete. Bookkeeping only --
+    # it cannot fail the promote.
+    for a in adds:
+        aws("s3", "rm", "%s/%s" % (incoming, a["file"]), "--only-show-errors",
+            check=False)
+    log("")
+    log("PROMOTED %d package(s) to LIVE (%s); withheld %d."
+        % (len(adds), cfg["green"], len(plan.get("withheld") or [])))
+
+
+# ---- self-test ----------------------------------------------------------
+def cmd_self_test():
+    """Pin the ordering + classifier against the real collisions measured on the
+    live pools (#443). This is the logic that decides whether a promote replaces
+    a live package, so it gets an executable proof rather than a comment."""
+    fails = []
+
+    def check(what, got, want):
+        if got != want:
+            fails.append("%s: got %r want %r" % (what, got, want))
+
+    # Ordering, blue-side vs green-side, from the measured collisions.
+    cases = [
+        # (blue version, blue rev, green version, green rev, expect sign)
+        ("2.6.3_bootstrap", "1", "2.14.3", "1", -1),      # freetype: green newer
+        ("9.9_bootstrap", "1", "9.11", "2", -1),          # coreutils: green newer
+        ("2.41_2026_03_10_bootstrap", "1",
+         "2.41_2026_03_10_bootstrap", "2", -1),           # binutils: revision
+        ("r1~beta6_hrev59996_dirty", "1",
+         "r1~beta6_hrev59996_dirty", "2", -1),            # makefile_engine
+        ("1.100.0~nightly_787af2b8c", "2",
+         "1.100.0~nightly_787af2b8c", "4", -1),           # rust_bin
+        ("20220222", "5", "20220222", "4", 1),            # x264: blue newer
+        ("1.0", "1", "1.0", "1", 0),                      # identical
+        ("1.0", "1", "1.0~beta1", "1", 1),                # release beats prerelease
+    ]
+    for bv, br, gv, gr, want in cases:
+        check("cmp %s-%s vs %s-%s" % (bv, br, gv, gr),
+              cmp_entry((bv, br), (gv, gr)), want)
+
+    check("parse_pkg canonical", parse_pkg("freetype_devel-2.14.3-1-arm64.hpkg"),
+          ("freetype_devel", "2.14.3", "1", "arm64"))
+    check("parse_pkg non-hpkg", parse_pkg("repo.info"), None)
+    check("parse_pkg too few fields", parse_pkg("weird.hpkg"), None)
+
+    # The whole point: the measured ten green-only files must never be promoted
+    # away. Feed the real collision set through the classifier.
+    green = {
+        "freetype-2.14.3-1-arm64.hpkg": 1,
+        "freetype_devel-2.14.3-1-arm64.hpkg": 1,
+        "coreutils-9.11-2-arm64.hpkg": 1,
+        "binutils-2.41_2026_03_10_bootstrap-2-arm64.hpkg": 1,
+        "makefile_engine-r1~beta6_hrev59996_dirty-2-any.hpkg": 1,
+        "rust_bin-1.100.0~nightly_787af2b8c-4-arm64.hpkg": 1,
+        "x264-20220222-4-arm64.hpkg": 1,
+        "x264_devel-20220222-4-arm64.hpkg": 1,
+    }
+    blue = {
+        "freetype-2.6.3_bootstrap-1-arm64.hpkg": 1,
+        "freetype_devel-2.6.3_bootstrap-1-arm64.hpkg": 1,
+        "coreutils-9.9_bootstrap-1-arm64.hpkg": 1,
+        "binutils-2.41_2026_03_10_bootstrap-1-arm64.hpkg": 1,
+        "makefile_engine-r1~beta6_hrev59996_dirty-1-any.hpkg": 1,
+        "rust_bin-1.100.0~nightly_787af2b8c-2-arm64.hpkg": 1,
+        "x264-20220222-5-arm64.hpkg": 1,
+        "x264_devel-20220222-5-arm64.hpkg": 1,
+        "zziplib-0.13.80-2-arm64.hpkg": 1,        # green has no zziplib at all
+        "not-a-package.hpkg": 1,                  # unparseable
+    }
+    adds, withheld = classify(blue, green)
+    add_files = sorted(a["file"] for a in adds)
+    check("classify adds", add_files, sorted([
+        "x264-20220222-5-arm64.hpkg",
+        "x264_devel-20220222-5-arm64.hpkg",
+        "zziplib-0.13.80-2-arm64.hpkg",
+    ]))
+    check("classify withheld", sorted(w["file"] for w in withheld), sorted([
+        "freetype-2.6.3_bootstrap-1-arm64.hpkg",
+        "freetype_devel-2.6.3_bootstrap-1-arm64.hpkg",
+        "coreutils-9.9_bootstrap-1-arm64.hpkg",
+        "binutils-2.41_2026_03_10_bootstrap-1-arm64.hpkg",
+        "makefile_engine-r1~beta6_hrev59996_dirty-1-any.hpkg",
+        "rust_bin-1.100.0~nightly_787af2b8c-2-arm64.hpkg",
+        "not-a-package.hpkg",
+    ]))
+    check("zziplib is a NEW add", [a["kind"] for a in adds
+                                   if a["file"].startswith("zziplib")], ["new"])
+    check("x264 is a SUPERSEDE", [a["kind"] for a in adds
+                                  if a["file"] == "x264-20220222-5-arm64.hpkg"],
+          ["supersede"])
+    # No identity green serves may be dropped by the resulting plan.
+    before = name_set(green)
+    after = before | {(a["name"], a["arch"]) for a in adds}
+    check("no identity lost", sorted(before - after), [])
+
+    # A state hash must react to any change on either side.
+    fp = ("etag", "when")
+    base = state_hash(blue, green, fp, fp)
+    check("hash is stable", state_hash(dict(blue), dict(green), fp, fp), base)
+    moved = dict(blue); moved["newpkg-1-1-arm64.hpkg"] = 1
+    if state_hash(moved, green, fp, fp) == base:
+        fails.append("state hash ignored a new blue package")
+    if state_hash(blue, green, ("etag2", "when"), fp) == base:
+        fails.append("state hash ignored a blue index change")
+    if state_hash(blue, green, fp, ("etag2", "when")) == base:
+        fails.append("state hash ignored a green index change")
+    resized = dict(blue); resized["zziplib-0.13.80-2-arm64.hpkg"] = 2
+    if state_hash(resized, green, fp, fp) == base:
+        fails.append("state hash ignored a size change")
+
+    if fails:
+        for f in fails:
+            sys.stderr.write("SELF-TEST FAIL: %s\n" % f)
+        die("%d self-test failure(s)" % len(fails))
+    log("self-test: ordering, classifier, union check and state hash all OK")
+
+
+def main():
+    ap = argparse.ArgumentParser(
+        description="Gated blue -> green promote for the DeBeOS package pool (#443).")
+    g = ap.add_mutually_exclusive_group()
+    g.add_argument("--plan", action="store_true",
+                   help="compute and print the delta, store a plan (DEFAULT)")
+    g.add_argument("--apply", action="store_true",
+                   help="promote a previously planned delta (requires --plan-id)")
+    g.add_argument("--self-test", action="store_true",
+                   help="check the ordering/classifier logic and exit")
+    ap.add_argument("--plan-id", default=os.environ.get("PLAN_ID", ""),
+                    help="the plan to apply")
+    ap.add_argument("--no-write", action="store_true",
+                    help="plan only: do not store the plan object")
+    ap.add_argument("--in-process", action="store_true",
+                    help="do the apply here instead of delegating to CodeBuild "
+                         "(needs the Haiku host tools; this is how the CodeBuild "
+                         "job runs it)")
+    args = ap.parse_args()
+
+    if args.self_test:
+        return cmd_self_test()
+
+    # MODE is the CodeBuild contract and defaults to plan, so an unparameterised
+    # start can never mutate green. An explicit flag always wins over it.
+    mode = "plan"
+    env_mode = (os.environ.get("MODE") or "plan").strip().lower()
+    if env_mode not in ("plan", "apply"):
+        die("MODE must be plan or apply, not %r" % env_mode)
+    if args.apply:
+        mode = "apply"
+    elif args.plan:
+        mode = "plan"
+    else:
+        mode = env_mode
+
+    cfg = load_config()
+    log("haiku-repo-promote-green: MODE=%s arch=%s region=%s" % (mode, ARCH, REGION))
+    if mode == "apply":
+        return cmd_apply(cfg, args.plan_id.strip(), args.in_process)
+    return cmd_plan(cfg, write=not args.no_write)
+
+
+if __name__ == "__main__":
+    main()
