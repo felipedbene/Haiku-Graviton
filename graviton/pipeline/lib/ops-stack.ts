@@ -413,8 +413,13 @@ export class OpsStack extends cdk.Stack {
     // Publish job IAM: read+write the live repo pool, read the harvest + write
     // the per-run incoming snapshot (both in workBucket), read the banked host
     // tools from the bake WorkBucket, and invalidate the repo's CDN index paths.
+    // The tagging pair is load-bearing: the harvest snapshot is an S3->S3
+    // `aws s3 sync`, whose CopyObject path reads the source object's tags
+    // (GetObjectTagging) and writes them to the copy (PutObjectTagging) --
+    // without them the snapshot exits 1 and every publish fails.
     publishProject.addToRolePolicy(new iam.PolicyStatement({
-      actions: ['s3:GetObject', 's3:PutObject', 's3:DeleteObject', 's3:ListBucket'],
+      actions: ['s3:GetObject', 's3:PutObject', 's3:DeleteObject', 's3:ListBucket',
+        's3:GetObjectTagging', 's3:PutObjectTagging'],
       resources: [
         `arn:aws:s3:::${publishBucket}`, `arn:aws:s3:::${publishBucket}/*`,
         `arn:aws:s3:::${workBucket}`, `arn:aws:s3:::${workBucket}/*`,
