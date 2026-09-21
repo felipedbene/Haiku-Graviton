@@ -39,6 +39,12 @@ static const bigtime_t kTargetWriteTimeout = 100 * 1000;
 static const bigtime_t kPendingInputRetry = 50 * 1000;
 
 
+// Bytes of a message header -- a uint16 code and a uint32 length, little-endian
+// by specification. This is all the candidate gate ever reads, so it is also
+// the size of the candidate buffer.
+static const size_t kFrameHeaderSize = 6;
+
+
 /*!	Whether \a buffer begins with a frame a genuine client would open with.
 	Every client starts its stream with RP_INIT_CONNECTION (an empty message,
 	total length exactly the 6 byte header) optionally followed by RP_HELLO;
@@ -53,7 +59,7 @@ static const bigtime_t kPendingInputRetry = 50 * 1000;
 static int
 validate_first_frame(const uint8 *buffer, size_t size)
 {
-	if (size < 6)
+	if (size < kFrameHeaderSize)
 		return -1;
 
 	uint16 code = (uint16)buffer[0] | ((uint16)buffer[1] << 8);
@@ -177,12 +183,12 @@ NetReceiver::_Listen()
 			continue;
 		}
 
-		// Hand over whatever the connection already sent while it was being
-		// validated; these bytes are the head of its stream and must reach the
-		// parser before anything read below. They go through the same pending
-		// queue as everything else so this handover cannot block the accept
-		// loop either -- _Transfer() drains the queue before it reads from the
-		// connection again, which keeps the stream in order.
+		// Hand over the first frame's header, the only thing read while the
+		// connection was being validated; it is the head of its stream and must
+		// reach the parser before anything read below. It goes through the same
+		// pending queue as everything else so this handover cannot block the
+		// accept loop either -- _Transfer() drains the queue before it reads
+		// from the connection again, which keeps the stream in order.
 		if (fCandidateBufferUsed > 0) {
 			memcpy(fPendingBuffer, fCandidateBuffer, fCandidateBufferUsed);
 			fPendingUsed = fCandidateBufferUsed;
@@ -512,14 +518,29 @@ NetReceiver::_ValidateCandidate(bigtime_t deadline)
 }
 
 
-/*!	Reads whatever the candidate connection has sent so far and validates the
-	first frame once its header is complete. Returns true when the candidate
-	has proven itself and should take over the session; on garbage or EOF the
-	candidate is dropped and false is returned.
+/*!	Reads the candidate connection's first frame header and validates it once
+	complete. Returns true when the candidate has proven itself and should take
+	over the session; on garbage or EOF the candidate is dropped and false is
+	returned.
+
+	Never reads past the header. The gate only ever validates those six bytes,
+	so reading further would buffer -- and, on promotion, forward to the parser
+	-- bytes nothing has looked at: a connection opening with a well-formed
+	RP_INIT_CONNECTION followed by arbitrary junk in the same segment would be
+	promoted and have all of it handed over. The rest of a real client's stream
+	costs nothing to leave in the kernel receive buffer, where _Transfer() reads
+	it after promotion, in order.
 */
 bool
 NetReceiver::_ReceiveCandidateData()
 {
+	if (fCandidateBufferUsed >= sizeof(fCandidateBuffer)) {
+		// A full header is always decided by validate_first_frame(), so this
+		// cannot be reached with a candidate still pending.
+		_DropCandidate("first frame header already complete");
+		return false;
+	}
+
 	int32 readSize = fCandidate->Receive(
 		fCandidateBuffer + fCandidateBufferUsed,
 		sizeof(fCandidateBuffer) - fCandidateBufferUsed);
