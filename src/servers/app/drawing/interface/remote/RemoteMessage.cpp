@@ -38,6 +38,17 @@
 #define TRACE_ERROR(x...)		TRACE_ALWAYS(x)
 
 
+// The largest body this parser will believe a single message can declare. The
+// length field is read from the same unverified bytes as the code, so an
+// unrecognised or desynchronised stream can claim an arbitrary size -- and the
+// remainder is discarded by *waiting for it to arrive*, so a bogus length parks
+// the only consumer of the receive buffer forever, which stalls the connection
+// rather than just losing a message. Nothing legitimate comes close: the
+// largest message either side sends is a full-screen 32 bit bitmap, tens of
+// megabytes at present screen sizes.
+static const uint32 kMaxMessageDataSize = 64 * 1024 * 1024;
+
+
 status_t
 RemoteMessage::NextMessage(uint16& code)
 {
@@ -70,6 +81,16 @@ RemoteMessage::NextMessage(uint16& code)
 		TRACE_ERROR("message claims %" B_PRIu32 " bytes, needed at least %"
 			B_PRIu32 " for the header\n", dataLeft, kHeaderSize);
 		return B_ERROR;
+	}
+
+	if (dataLeft - kHeaderSize > kMaxMessageDataSize) {
+		// Refuse it at the framing layer instead of trying to skip it: the
+		// caller's resynchronisation can recover a stream, but a discard that
+		// blocks on bytes no one will send cannot be recovered from at all.
+		TRACE_ERROR("message claims %" B_PRIu32 " bytes, beyond the %" B_PRIu32
+			" byte maximum; treating as a framing desync\n", dataLeft,
+			kMaxMessageDataSize);
+		return B_BAD_DATA;
 	}
 
 	fDataLeft = dataLeft - kHeaderSize;

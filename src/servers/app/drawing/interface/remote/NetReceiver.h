@@ -73,7 +73,10 @@ static	int32					_NetworkReceiverEntry(void *data);
 		// running. See _Transfer() for the rationale.
 		ObjectDeleter<BNetEndpoint>
 								fCandidate;
-		uint8					fCandidateBuffer[4096];
+		// Exactly the first frame's header (kFrameHeaderSize), which is all the
+		// gate validates: buffering more would forward unexamined bytes to the
+		// parser on promotion.
+		uint8					fCandidateBuffer[6];
 		size_t					fCandidateBufferUsed;
 		bigtime_t				fCandidateDeadline;
 		bool					fCandidateValidated;
