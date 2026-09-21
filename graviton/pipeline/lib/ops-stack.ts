@@ -322,7 +322,14 @@ export class OpsStack extends cdk.Stack {
     const publishProject = new codebuild.Project(this, 'RepoPublish', {
       projectName: 'debeos-repo-publish',
       description: "Incremental DeBeOS repo publish: haiku-repo-add over the wave's harvested hpkgs.",
-      timeout: cdk.Duration.hours(1),
+      // The publish leg scales with the POOL, not with the wave: it pulls the whole
+      // published set, re-stamps, rebuilds the index over the union and uploads it.
+      // At 3,172 packages that took ~45 of the previous 60-minute budget, and the
+      // pool grows every wave -- so the old ceiling was a scheduled surprise, and
+      // when it hit, the build died mid-step reporting a misleading FAILED. A
+      // CodeBuild timeout is a safety net rather than a budget (unused time is not
+      // billed), so the ceiling is generous on purpose.
+      timeout: cdk.Duration.hours(3),
       // One publish at a time (defence-in-depth with the DynamoDB lock below):
       // two concurrent index rebuilds would race the shared repo.
       concurrentBuildLimit: 1,
