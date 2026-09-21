@@ -319,6 +319,51 @@ export class OpsStack extends cdk.Stack {
     // (.sync) job; the incremental primitive is identical.
     const repoAddB64 = fs.readFileSync(
       path.join(__dirname, '..', '..', 'scripts', 'haiku-repo-add')).toString('base64');
+    // The harvest prune, BATCHED. One `aws s3 rm` per object cost a full CLI
+    // start-up each -- measured at ~1.6 objects/s, so a 3,174-package publish
+    // needed ~33 min of pure teardown and was killed at the project timeout with
+    // ~1,344 objects removed. `s3api delete-objects` takes up to 1000 keys per
+    // request, so the same 3,174 keys are 4 requests. The key set is still EXACTLY
+    // /tmp/published.list (split into <=1000-line chunks; the last chunk is short
+    // whenever the count is not a multiple of 1000), so the concurrency argument
+    // below is unchanged: nothing outside that list is ever a delete candidate.
+    // Joined into ONE shell line so the whole prune is a single buildspec command
+    // and can be wrapped in the non-fatal guard at its call site.
+    //
+    // Every step carries its OWN `|| { echo...; exit 1; }` and the body ends in an
+    // explicit `exit 0`, deliberately not relying on `set -e`: this whole line runs
+    // as the condition of an inverted `if !` (see the call site), and bash suppresses
+    // errexit for the condition -- the suppression reaches INSIDE the subshell even
+    // though it re-runs `set -e`. Measured while verifying this change: with -e as
+    // the only guard, a NoSuchBucket DeleteObjects failure did not abort the loop and
+    // the subshell then returned the trailing `if`'s 0, so the prune reported success
+    // while deleting nothing. The explicit exits are what make a failure visible.
+    const pruneHarvest = [
+      // delete-objects takes bucket and keys separately, so split s3://B/P once.
+      'H="${HARVEST_S3#s3://}";',
+      'PB="${H%%/*}"; PP="${H#*/}";',
+      // No prefix would make PP == PB and aim the deletes at bucket-root keys, so
+      // refuse instead of guessing.
+      'case "$H" in */?*) ;; *) echo "prune: HARVEST_S3 ($HARVEST_S3) has no key prefix" >&2; exit 1;; esac;',
+      'if [ ! -s /tmp/published.list ]; then echo "prune: published list empty; nothing to prune"; exit 0; fi;',
+      'rm -rf /tmp/prune.d; mkdir -p /tmp/prune.d || { echo "prune: cannot create /tmp/prune.d" >&2; exit 1; };',
+      // <=1000 keys per request is the DeleteObjects limit; the final chunk is short
+      // whenever the published count is not a multiple of 1000.
+      'split -l 1000 /tmp/published.list /tmp/prune.d/chunk. || { echo "prune: could not split the published list" >&2; exit 1; };',
+      'for c in /tmp/prune.d/chunk.*; do',
+      '[ -e "$c" ] || { echo "prune: no chunk files -- split produced nothing" >&2; exit 1; };',
+      // jq -Rn reads the chunk as raw lines and emits the request, so a key never
+      // passes through shell quoting; select(length > 0) drops any blank line.
+      'jq -Rn --arg p "$PP/" \'{Quiet: true, Objects: [inputs | select(length > 0) | {Key: ($p + .)}]}\' < "$c" > /tmp/prune.d/req.json || { echo "prune: could not build the delete request for $c" >&2; exit 1; };',
+      'echo "prune: deleting $(wc -l < "$c") key(s) under s3://$PB/$PP/";',
+      'aws s3api delete-objects --bucket "$PB" --delete file:///tmp/prune.d/req.json --output json > /tmp/prune.d/resp.json || { echo "prune: delete-objects FAILED for $c (error above)" >&2; exit 1; };',
+      // Quiet:true suppresses the Deleted list, so an "Errors" key in the response
+      // is the only per-key failure report there is -- treat it as a prune failure.
+      'if grep -q \'"Errors"\' /tmp/prune.d/resp.json; then echo "prune: delete-objects reported per-key errors:" >&2; cat /tmp/prune.d/resp.json >&2; exit 1; fi;',
+      'done;',
+      'echo "prune: removed $(wc -l < /tmp/published.list) published key(s) from s3://$PB/$PP/";',
+      'exit 0',
+    ].join(' ');
     const publishProject = new codebuild.Project(this, 'RepoPublish', {
       projectName: 'debeos-repo-publish',
       description: "Incremental DeBeOS repo publish: haiku-repo-add over the wave's harvested hpkgs.",
@@ -346,7 +391,10 @@ export class OpsStack extends cdk.Stack {
             commands: [
               'export DEBIAN_FRONTEND=noninteractive',
               'apt-get update -qq',
-              'apt-get install -y --no-install-recommends curl unzip ca-certificates file',
+              // jq is load-bearing for the batched harvest prune below: it builds the
+              // delete-objects request JSON from the raw key list, so key quoting and
+              // escaping are jq's job rather than hand-rolled shell string surgery.
+              'apt-get install -y --no-install-recommends curl unzip ca-certificates file jq',
               'if ! command -v aws >/dev/null 2>&1; then curl -sSLf https://awscli.amazonaws.com/awscli-exe-linux-aarch64.zip -o /tmp/awscliv2.zip && (cd /tmp && unzip -q awscliv2.zip && ./aws/install); fi',
             ],
           },
@@ -403,8 +451,19 @@ export class OpsStack extends cdk.Stack {
               // from an acquire-skipped wave stays in the harvest until it is
               // actually published. The live repo -- not the harvest -- is the
               // durable pool; the harvest is a staging area for un-published output.
+              //
+              // The publish is COMPLETE at this point: the index is rebuilt and
+              // uploaded, so everything user-visible has landed. The prune is
+              // bookkeeping, and a bookkeeping failure must not report a completed
+              // publish as FAILED -- in the state machine that sinks the wave's
+              // publish leg. So it runs in a guarded subshell (`if ! ( ... )`):
+              // CodeBuild fails a phase on any command's non-zero exit regardless of
+              // `set -e`, and the `if` makes this command's own exit status 0. The
+              // failure is never silent -- the subshell's own stderr plus the WARNING
+              // below name it in the log. Leftovers are harmless: they are already
+              // durable in the live repo, and the next publish just re-syncs them.
               'echo "== prune $(wc -l < /tmp/published.list) published package(s) from durable harvest $HARVEST_S3 =="',
-              'while IFS= read -r name; do [ -n "$name" ] && aws s3 rm "$HARVEST_S3/$name" --only-show-errors || true; done < /tmp/published.list',
+              `if ! ( set -eo pipefail; ${pruneHarvest} ); then echo "WARNING: harvest prune did NOT complete -- the publish itself SUCCEEDED (packages + index uploaded to \$HG_REPO_S3). Already-published hpkgs are left under \$HARVEST_S3; the next publish will re-sync and re-stamp them. Investigate the prune errors above." >&2; fi`,
             ],
           },
         },
