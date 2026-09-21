@@ -317,8 +317,37 @@ export class OpsStack extends cdk.Stack {
     // and runs haiku-repo-add UNCHANGED. This replaces the retired ephemeral
     // Ubuntu peer (haiku-repo-publish-ephemeral) with a managed, SFN-native
     // (.sync) job; the incremental primitive is identical.
-    const repoAddB64 = fs.readFileSync(
-      path.join(__dirname, '..', '..', 'scripts', 'haiku-repo-add')).toString('base64');
+    const scriptsDir = path.join(__dirname, '..', '..', 'scripts');
+    const bankScript = (name: string) =>
+      fs.readFileSync(path.join(scriptsDir, name)).toString('base64');
+    const repoAddB64 = bankScript('haiku-repo-add');
+
+    // Fetching the banked Linux host tools is identical for every job that has to
+    // run `package`/`package_repo` (the incremental publish and the blue->green
+    // promote). ONE copy of it, so the two cannot drift -- a job that resolves
+    // the WorkBucket differently, or forgets the ldd sanity check, fails in a way
+    // that looks like a packaging bug.
+    const fetchHostTools = [
+      // Resolve the banked Linux host tools from the bake pipeline's
+      // WorkBucket. Its physical name is CDK-auto-generated, so we read the
+      // bucket ARN the trunk bake stack publishes to SSM (no generated name
+      // is written into this tree, and the deploy-time IAM grant below is
+      // scoped to the SAME param -> the same bucket).
+      'WB_ARN="$(aws ssm get-parameter --name /debeos/bake/workbucket-arn --query Parameter.Value --output text)"',
+      'test -n "$WB_ARN" -a "$WB_ARN" != None || { echo "cannot resolve bake WorkBucket SSM param /debeos/bake/workbucket-arn (is HaikuGravitonBakePipeline deployed?)" >&2; exit 1; }',
+      'WB="${WB_ARN#arn:aws:s3:::}"',
+      'HT="s3://$WB/cache/host-tools"',
+      'install -d /opt/haiku-tools /opt/haiku-tools/lib /opt/haiku-tools/data',
+      'aws s3 cp "$HT/package" /opt/haiku-tools/package',
+      'aws s3 cp "$HT/package_repo" /opt/haiku-tools/package_repo',
+      'chmod +x /opt/haiku-tools/package /opt/haiku-tools/package_repo',
+      'aws s3 cp "$HT/lib" /opt/haiku-tools/lib --recursive --only-show-errors',
+      'aws s3 cp "$HT/data" /opt/haiku-tools/data --recursive --only-show-errors',
+      'export LD_LIBRARY_PATH=/opt/haiku-tools/lib',
+      'export HAIKU_BUILD_SYSTEM_DATA_DIRECTORY=/opt/haiku-tools/data',
+      'export PKG_TOOL=/opt/haiku-tools/package PACKAGE_REPO_TOOL=/opt/haiku-tools/package_repo',
+      'ldd /opt/haiku-tools/package_repo 2>&1 | grep -qi "not found" && { echo "banked host tools missing shared libs" >&2; ldd /opt/haiku-tools/package_repo >&2; exit 1; } || true',
+    ];
     // The harvest prune, BATCHED. One `aws s3 rm` per object cost a full CLI
     // start-up each -- measured at ~1.6 objects/s, so a 3,174-package publish
     // needed ~33 min of pure teardown and was killed at the project timeout with
@@ -408,25 +437,7 @@ export class OpsStack extends cdk.Stack {
           build: {
             commands: [
               'set -eo pipefail',
-              // Resolve the banked Linux host tools from the bake pipeline's
-              // WorkBucket. Its physical name is CDK-auto-generated, so we read the
-              // bucket ARN the trunk bake stack publishes to SSM (no generated name
-              // is written into this tree, and the deploy-time IAM grant below is
-              // scoped to the SAME param -> the same bucket).
-              'WB_ARN="$(aws ssm get-parameter --name /debeos/bake/workbucket-arn --query Parameter.Value --output text)"',
-              'test -n "$WB_ARN" -a "$WB_ARN" != None || { echo "cannot resolve bake WorkBucket SSM param /debeos/bake/workbucket-arn (is HaikuGravitonBakePipeline deployed?)" >&2; exit 1; }',
-              'WB="${WB_ARN#arn:aws:s3:::}"',
-              'HT="s3://$WB/cache/host-tools"',
-              'install -d /opt/haiku-tools /opt/haiku-tools/lib /opt/haiku-tools/data',
-              'aws s3 cp "$HT/package" /opt/haiku-tools/package',
-              'aws s3 cp "$HT/package_repo" /opt/haiku-tools/package_repo',
-              'chmod +x /opt/haiku-tools/package /opt/haiku-tools/package_repo',
-              'aws s3 cp "$HT/lib" /opt/haiku-tools/lib --recursive --only-show-errors',
-              'aws s3 cp "$HT/data" /opt/haiku-tools/data --recursive --only-show-errors',
-              'export LD_LIBRARY_PATH=/opt/haiku-tools/lib',
-              'export HAIKU_BUILD_SYSTEM_DATA_DIRECTORY=/opt/haiku-tools/data',
-              'export PKG_TOOL=/opt/haiku-tools/package PACKAGE_REPO_TOOL=/opt/haiku-tools/package_repo',
-              'ldd /opt/haiku-tools/package_repo 2>&1 | grep -qi "not found" && { echo "banked host tools missing shared libs" >&2; ldd /opt/haiku-tools/package_repo >&2; exit 1; } || true',
+              ...fetchHostTools,
               // Snapshot the wave harvest into a per-run, DISPOSABLE incoming
               // prefix. haiku-repo-add clears its HG_INCOMING_S3 on success, so we
               // point it at this copy -- the durable harvest is left intact, and a
@@ -510,13 +521,191 @@ export class OpsStack extends cdk.Stack {
     }));
     // Runtime read of that same SSM param (the buildspec derives the bucket name
     // from it) -- scoped to the one parameter.
-    ssm.StringParameter.fromStringParameterName(
-      this, 'BakeWorkBucketArnParam', bakeWorkBucketArnParam).grantRead(publishProject);
+    const bakeWorkBucketParam = ssm.StringParameter.fromStringParameterName(
+      this, 'BakeWorkBucketArnParam', bakeWorkBucketArnParam);
+    bakeWorkBucketParam.grantRead(publishProject);
     publishProject.addToRolePolicy(new iam.PolicyStatement({
       actions: ['cloudfront:CreateInvalidation'],
       resources: [props.config.repoCloudFrontDistId
         ? `arn:aws:cloudfront::${this.account}:distribution/${props.config.repoCloudFrontDistId}`
         : '*'],
+    }));
+
+    // ---- gated blue -> green promote (issue #443) -------------------------
+    // The publish project above writes BLUE (debeos-repo/<arch>). NOTHING serves
+    // blue: both CloudFront distributions -- prod and beta -- carry OriginPath
+    // /debeos-repo-green, so GREEN is the live pool and a wave's output reached the
+    // pool without ever reaching users. #443 decided the shape: blue stays the
+    // pipeline's staging pool and this job is how a delta reaches users --
+    // automated, but GATED.
+    //
+    // It is deliberately NOT wired into the build-wave state machine. A promote
+    // goes live, so the trigger is a human starting this build (or the
+    // `haiku-repo-promote-green --apply` wrapper, which starts it for you).
+    // MODE defaults to `plan`, so even an unparameterised start-build cannot
+    // mutate green; `apply` additionally requires a PLAN_ID whose recorded hash of
+    // BOTH pools still matches the pools as they are at apply time.
+    //
+    // Union only, never a mirror: green is NOT a subset of blue (ten packages
+    // existed only in green when this was written, `freetype` and `coreutils`
+    // among them), so an `s3 sync --delete` blue -> green would delete packages
+    // users can install. `haiku-repo-add` is a union add with no delete path,
+    // and haiku-repo-promote-green checks the union post-condition against S3
+    // after the add rather than trusting it.
+    //
+    // Blue is READ-ONLY here in two independent ways: the job snapshots the
+    // planned delta into a per-run disposable prefix in the WORK bucket (which is
+    // what haiku-repo-add is pointed at, because it clears its own incoming on
+    // success), and the IAM below grants blue GetObject only.
+    const promoteScriptsDir = '/opt/debeos-promote';
+    const promoteProject = new codebuild.Project(this, 'RepoPromoteGreen', {
+      projectName: 'debeos-repo-promote-green',
+      description: 'Gated blue->green DeBeOS repo promote (plan/apply, union-add only).',
+      // Same reasoning as the publish leg: an apply rebuilds the index over the
+      // WHOLE green pool (3,000+ packages; the publish leg alone measured ~45 min
+      // at 3,172 -- see #447), and the pool grows every wave. A CodeBuild timeout
+      // is a safety net, not a budget -- unused time is not billed.
+      timeout: cdk.Duration.hours(3),
+      // One promote at a time. Two concurrent index rebuilds over green would
+      // race; the #164 S3 lock would serialize them, but there is no reason to
+      // pay for a second container sitting in the lock's wait loop.
+      concurrentBuildLimit: 1,
+      environment: {
+        // Match the cross-build's arm64 Ubuntu 24.04 so the banked (glibc-linked)
+        // Linux host tools run here without an ABI mismatch.
+        buildImage: codebuild.LinuxArmBuildImage.fromDockerRegistry('public.ecr.aws/ubuntu/ubuntu:24.04'),
+        computeType: codebuild.ComputeType.MEDIUM,
+      },
+      environmentVariables: {
+        // MODE=plan is the DEFAULT on the project itself, so the safe mode is the
+        // one you get by doing nothing. apply is reached only by overriding MODE
+        // *and* supplying a PLAN_ID.
+        MODE: { value: 'plan' },
+        PLAN_ID: { value: '' },
+        HG_BLUE_S3: { value: `s3://${publishBucket}/debeos-repo/arm64` },        // staging (READ-ONLY)
+        HG_GREEN_S3: { value: `s3://${publishBucket}/debeos-repo-green/arm64` }, // LIVE (write target)
+        HG_PLAN_S3: { value: `s3://${workBucket}/promote-plans` },
+        HG_INCOMING_BASE: { value: `s3://${workBucket}/promote-incoming` },
+        // The PUBLIC hostnames of the two distributions that serve green. Both go
+        // stale on a promote, so both are invalidated. Public DNS names, not
+        // account-scoped ids: the ids are resolved from these aliases at runtime
+        // (the mechanism verified on branch fix/443-publish-cdn-invalidation),
+        // because a distribution id must not be baked into this tree.
+        REPO_HOSTS: { value: 'packages.debene.dev,beta.repository.debene.dev' },
+        ARCH: { value: 'arm64' },
+      },
+      buildSpec: codebuild.BuildSpec.fromObject({
+        version: '0.2',
+        phases: {
+          install: {
+            commands: [
+              'export DEBIAN_FRONTEND=noninteractive',
+              'apt-get update -qq',
+              // python3 is load-bearing: haiku-repo-promote-green (the plan/apply
+              // implementation, and the same file an operator runs by hand) is
+              // Python. The minimal Ubuntu image does not ship it.
+              'apt-get install -y --no-install-recommends curl unzip ca-certificates file jq python3',
+              'if ! command -v aws >/dev/null 2>&1; then curl -sSLf https://awscli.amazonaws.com/awscli-exe-linux-aarch64.zip -o /tmp/awscliv2.zip && (cd /tmp && unzip -q awscliv2.zip && ./aws/install); fi',
+            ],
+          },
+          build: {
+            commands: [
+              'set -eo pipefail',
+              ...fetchHostTools,
+              // Bank the three tracked scripts side by side, because
+              // haiku-repo-add resolves BOTH its siblings relative to its own
+              // path: haiku-publish-lock.sh (the #164 lock -- without it beside
+              // haiku-repo-add the promote would publish UNLOCKED, and
+              // haiku-repo-promote-green refuses rather than let that happen) and
+              // haiku-aws (absent here, so it correctly falls through to the
+              // stock `aws` CLI). Running the operator's own script unchanged is
+              // the point: plan output is identical by hand and in this job.
+              `install -d ${promoteScriptsDir}`,
+              `printf %s '${bankScript('haiku-repo-promote-green')}' | base64 -d > ${promoteScriptsDir}/haiku-repo-promote-green`,
+              `printf %s '${repoAddB64}' | base64 -d > ${promoteScriptsDir}/haiku-repo-add`,
+              `printf %s '${bankScript('haiku-publish-lock.sh')}' | base64 -d > ${promoteScriptsDir}/haiku-publish-lock.sh`,
+              `chmod +x ${promoteScriptsDir}/haiku-repo-promote-green ${promoteScriptsDir}/haiku-repo-add`,
+              // The ordering + classifier logic decides whether a promote REPLACES
+              // a live package, so prove it before letting it look at the pools. It
+              // needs no credentials and takes milliseconds; a failure here aborts
+              // before anything is read, let alone written.
+              `python3 ${promoteScriptsDir}/haiku-repo-promote-green --self-test`,
+              // MODE (plan|apply) and PLAN_ID come from the environment -- the
+              // project's own default is plan. --in-process means "do the work
+              // here" rather than the local wrapper's "start this CodeBuild job".
+              `python3 ${promoteScriptsDir}/haiku-repo-promote-green --in-process`,
+            ],
+          },
+        },
+      }),
+    });
+    // Promote job IAM. This role is SEPARATE from the builder/publisher role on
+    // purpose: the write-the-green-prefix grant is the one #221 records as missing
+    // on the builder role, and granting it there would widen every wave builder's
+    // reach to the LIVE pool. Here it is the one thing this job exists to do.
+    //
+    // Blue is READ-ONLY: GetObject (+ObjectTagging, which the S3->S3 CopyObject
+    // behind `aws s3 cp` reads) and nothing else. No PutObject, no DeleteObject.
+    promoteProject.addToRolePolicy(new iam.PolicyStatement({
+      sid: 'ReadBlueStagingPoolOnly',
+      actions: ['s3:GetObject', 's3:GetObjectTagging'],
+      resources: [`arn:aws:s3:::${publishBucket}/debeos-repo/arm64/*`],
+    }));
+    // Green is the write target: the packages, the three index objects, and the
+    // #164 lock object beside them. DeleteObject is required for the union mirror
+    // (haiku-repo-add uploads the union it built and prunes the superseded version
+    // of a package it just replaced) and to release the lock.
+    promoteProject.addToRolePolicy(new iam.PolicyStatement({
+      sid: 'WriteGreenLivePool',
+      actions: ['s3:GetObject', 's3:PutObject', 's3:DeleteObject',
+        's3:GetObjectTagging', 's3:PutObjectTagging'],
+      resources: [`arn:aws:s3:::${publishBucket}/debeos-repo-green/arm64/*`],
+    }));
+    // Listing both pools is how the delta is computed. s3:ListBucket is a
+    // BUCKET-level action: scoping it to a prefix needs an `s3:prefix` condition
+    // that has to match the exact prefix the CLI's paginated ListObjectsV2 asks
+    // for, which is brittle enough to fail closed at the wrong moment. Granted
+    // bucket-wide instead -- it is a read-only enumeration, and the object-level
+    // grants above are what actually bound this role's reach.
+    promoteProject.addToRolePolicy(new iam.PolicyStatement({
+      sid: 'ListThePoolBucket',
+      actions: ['s3:ListBucket'],
+      resources: [`arn:aws:s3:::${publishBucket}`],
+    }));
+    // Plans and the per-run disposable snapshot live in the WORK bucket, not the
+    // pool bucket, so the delta that is staged for a promote is physically outside
+    // anything a distribution serves. Scoped to those two prefixes.
+    promoteProject.addToRolePolicy(new iam.PolicyStatement({
+      sid: 'PlansAndPerRunSnapshots',
+      actions: ['s3:GetObject', 's3:PutObject', 's3:DeleteObject',
+        's3:GetObjectTagging', 's3:PutObjectTagging'],
+      resources: [
+        `arn:aws:s3:::${workBucket}/promote-plans/*`,
+        `arn:aws:s3:::${workBucket}/promote-incoming/*`,
+      ],
+    }));
+    // Banked host tools (same bucket + same SSM param as the publish leg).
+    promoteProject.addToRolePolicy(new iam.PolicyStatement({
+      sid: 'ReadBankedHostTools',
+      actions: ['s3:GetObject', 's3:ListBucket'],
+      resources: [bakeWorkBucketArn, `${bakeWorkBucketArn}/*`],
+    }));
+    bakeWorkBucketParam.grantRead(promoteProject);
+    // Finding the two serving distributions by their public aliases is a LIST over
+    // the account's distributions; there is no resource to scope it to. This is the
+    // one bare `*` in this role, and it is bare because the action cannot be
+    // scoped -- not for convenience.
+    promoteProject.addToRolePolicy(new iam.PolicyStatement({
+      sid: 'ResolveServingDistributionsByAlias',
+      actions: ['cloudfront:ListDistributions'],
+      resources: ['*'],
+    }));
+    // The two ids are resolved at runtime, so they are not known at deploy time --
+    // scoped to this ACCOUNT's distributions rather than to a bare `*`.
+    promoteProject.addToRolePolicy(new iam.PolicyStatement({
+      sid: 'InvalidateServingDistributions',
+      actions: ['cloudfront:CreateInvalidation'],
+      resources: [`arn:aws:cloudfront::${this.account}:distribution/*`],
     }));
 
     const reapSuccess = reap('ReapOnSuccess');
@@ -686,6 +875,12 @@ export class OpsStack extends cdk.Stack {
       actions: ['ssm:GetParameter', 'ssm:DescribeInstanceInformation'],
       resources: ['*'],
     }));
+    // Deliberately NOT granted: codebuild:StartBuild on debeos-repo-promote-green.
+    // A promote goes LIVE, and this role is the identity a prompt-injectable agent
+    // runs as. The gate in #443 is a human reading a plan and applying THAT plan;
+    // handing the agent the trigger would make the gate decorative. An operator
+    // promotes with their own credentials (graviton/scripts/haiku-repo-promote-green).
+
 
     // ---- outputs the DevOps agent needs to start an execution ------------
     new cdk.CfnOutput(this, 'OperatorRoleArn', { value: operatorRole.roleArn });
@@ -694,6 +889,11 @@ export class OpsStack extends cdk.Stack {
     new cdk.CfnOutput(this, 'BuilderInstanceProfileArn', { value: builderProfile.attrArn });
     new cdk.CfnOutput(this, 'BuilderSecurityGroupId', { value: builderSg.securityGroupId });
     new cdk.CfnOutput(this, 'WorkBucket', { value: workBucket });
+    new cdk.CfnOutput(this, 'RepoPromoteGreenProject', {
+      value: promoteProject.projectName,
+      description: 'Gated blue->green promote (#443). MODE=plan is the default; ' +
+        'MODE=apply needs a PLAN_ID from a plan run.',
+    });
     new cdk.CfnOutput(this, 'InstanceConnectEndpointId', { value: eice.attrId });
   }
 }
