@@ -42,6 +42,11 @@ static	int32					_NetworkReceiverEntry(void *data);
 		void					_DropCandidate(const char *reason);
 		bool					_ValidateCandidate(bigtime_t deadline);
 
+		bool					_HasPendingInput() const
+									{ return fPendingOffset < fPendingUsed; }
+		status_t				_WritePendingInput(bigtime_t timeout);
+		void					_DiscardPendingInput();
+
 		BNetEndpoint *			fListener;
 		StreamingRingBuffer *	fTarget;
 
@@ -72,6 +77,13 @@ static	int32					_NetworkReceiverEntry(void *data);
 		size_t					fCandidateBufferUsed;
 		bigtime_t				fCandidateDeadline;
 		bool					fCandidateValidated;
+
+		// Input read from the live connection that the target buffer has not
+		// taken yet. Holding it here is what lets the receive loop keep
+		// accepting while the consumer is behind; see _Transfer().
+		uint8					fPendingBuffer[4096];
+		size_t					fPendingUsed;
+		size_t					fPendingOffset;
 };
 
 #endif // NET_RECEIVER_H
