@@ -136,8 +136,21 @@ skipped_list=""
 published_bases=""
 for f in "$WORK/incoming"/*.hpkg; do
 	base="$(basename "$f")"
-	cur="$("$PKG_TOOL" list -i "$f" 2>/dev/null | sed -nE 's/^[[:space:]]*vendor:[[:space:]]*"?([^"]*)"?[[:space:]]*$/\1/p' | head -1)"
-	cur_packager="$("$PKG_TOOL" list -i "$f" 2>/dev/null | sed -nE 's/^[[:space:]]*packager:[[:space:]]*"?(.*[^"])"?[[:space:]]*$/\1/p' | head -1)"
+	# Read the package's info ONCE, and treat an unreadable package the same way
+	# the re-stamp failures below do: skip it, name it, keep going. This used to
+	# be two `package list -i ... 2>/dev/null | sed` pipelines, which under
+	# `set -euo pipefail` aborted the ENTIRE batch the moment one package failed
+	# to parse -- and silently, because the tool's diagnosis went to /dev/null.
+	# One truncated hpkg in the harvest (a half-finished upload) therefore blocked
+	# every publish with no indication of which package or why. The tool's own
+	# message is now surfaced.
+	if ! info="$("$PKG_TOOL" list -i "$f" 2>"$WORK/list.err")"; then
+		echo "   ! SKIP $base: package list -i failed: $(head -1 "$WORK/list.err") (unreadable-hpkg)" >&2
+		skipped=$((skipped + 1)); skipped_list="$skipped_list $base"
+		continue
+	fi
+	cur="$(printf '%s\n' "$info" | sed -nE 's/^[[:space:]]*vendor:[[:space:]]*"?([^"]*)"?[[:space:]]*$/\1/p' | head -1)"
+	cur_packager="$(printf '%s\n' "$info" | sed -nE 's/^[[:space:]]*packager:[[:space:]]*"?(.*[^"])"?[[:space:]]*$/\1/p' | head -1)"
 	# Always stage a plain copy first; any re-stamp then edits the copy IN PLACE.
 	# A copy is cheap and carries NO ENOSPC risk regardless of the package's
 	# uncompressed size, so there is no size guard to trip.
@@ -193,7 +206,9 @@ for f in "$WORK/incoming"/*.hpkg; do
 		fi
 		rm -rf "$tmp"
 	fi
-	canon="$(canonical_name "$staged")"
+	# `|| true` so a failing `package list` inside canonical_name cannot abort the
+	# batch through `set -e` before the explicit diagnosis below can run.
+	canon="$(canonical_name "$staged" || true)"
 	[ -n "$canon" ] || die "could not derive canonical name for $base"
 	# Drop any other on-disk version of the same package name so the repo does
 	# not accumulate stale versions of a package we are (re)publishing.
