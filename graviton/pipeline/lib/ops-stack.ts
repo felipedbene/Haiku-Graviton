@@ -723,16 +723,26 @@ export class OpsStack extends cdk.Stack {
         's3:GetObjectTagging', 's3:PutObjectTagging'],
       resources: [`arn:aws:s3:::${publishBucket}/debeos-repo-green/arm64/*`],
     }));
-    // Listing both pools is how the delta is computed. s3:ListBucket is a
-    // BUCKET-level action: scoping it to a prefix needs an `s3:prefix` condition
-    // that has to match the exact prefix the CLI's paginated ListObjectsV2 asks
-    // for, which is brittle enough to fail closed at the wrong moment. Granted
-    // bucket-wide instead -- it is a read-only enumeration, and the object-level
-    // grants above are what actually bound this role's reach.
+    // Listing both pools is how the delta is computed -- and the per-run snapshot
+    // in the WORK bucket has to be listable too, because `haiku-repo-add` reads its
+    // incoming prefix back with `aws s3 sync` and a sync enumerates. Writing that
+    // snapshot needs only the object-level grant below, so the first real apply
+    // staged all 19 packages and then died on ListObjectsV2 against the work
+    // bucket (#456): an object-level grant can never satisfy a bucket-level action.
+    //
+    // s3:ListBucket is BUCKET-level: scoping it to a prefix needs an `s3:prefix`
+    // condition that has to match the exact prefix the CLI's paginated
+    // ListObjectsV2 asks for, which is brittle enough to fail closed at the wrong
+    // moment. Granted bucket-wide on both instead -- it is a read-only
+    // enumeration, and the object-level grants are what actually bound this role's
+    // reach.
     promoteProject.addToRolePolicy(new iam.PolicyStatement({
-      sid: 'ListThePoolBucket',
+      sid: 'ListThePoolAndWorkBuckets',
       actions: ['s3:ListBucket'],
-      resources: [`arn:aws:s3:::${publishBucket}`],
+      resources: [
+        `arn:aws:s3:::${publishBucket}`,
+        `arn:aws:s3:::${workBucket}`,
+      ],
     }));
     // Plans and the per-run disposable snapshot live in the WORK bucket, not the
     // pool bucket, so the delta that is staged for a promote is physically outside
