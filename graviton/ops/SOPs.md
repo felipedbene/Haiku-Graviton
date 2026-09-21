@@ -199,6 +199,39 @@ lands) are the publisher's `/dev/shm` and disk sizing:
 When the prod CloudFront origin points at the pool you published, also invalidate
 the prod dist's index paths so the change is served.
 
+**Two pools, and only one of them is live (#443).** The pipeline's publish leg
+(`debeos-repo-publish`) writes **blue**, `debeos-repo/<arch>` — a **staging** pool
+that no distribution serves. **Green**, `debeos-repo-green/<arch>`, is live: both
+prod (`packages.debene.dev`) and beta carry OriginPath `/debeos-repo-green`. So a
+wave landing in blue has **not** reached users, and an invalidation after a blue
+write changes nothing. Do not "fix" this by pointing the publish leg at green or
+flipping an OriginPath.
+
+**The path to live is the gated promote.** `graviton/scripts/haiku-repo-promote-green`
+(CodeBuild project `debeos-repo-promote-green`):
+- `haiku-repo-promote-green` — **plan**, the default and read-only. Prints every
+  package that would become live, and stores a plan keyed by a hash of **both**
+  pools' state. `MODE=plan` is also the project's default, so an unparameterised
+  start-build cannot mutate green.
+- `haiku-repo-promote-green --apply --plan-id <id>` — applies **that** plan, and
+  **refuses** if the pools have moved since it was computed. Read the plan before
+  you apply it; that reading is the gate. Not grantable to the operator role.
+- It is **union add only** (`haiku-repo-add` into green, under the #164 lock) and
+  checks against S3 afterwards that green still serves every package identity it
+  served. **Green is not a subset of blue** — ten packages existed only in green,
+  six of them *newer* than blue's copy — so a blue-only file whose name green
+  already serves at an equal-or-newer version is **withheld**, not promoted.
+  Withheld items are a deliberate decision, not a failure.
+- It invalidates **both** serving distributions, resolved from their public
+  hostnames.
+
+**Relationship to `debeos-publish-green`.** That skill (`haiku-repo-publish-ephemeral`
+straight at the green prefix) is the **manual** path and stays the tool for a
+one-off: a hotfix, or resolving something the promote withheld. It has no plan/apply
+gate and no staleness check, so it is the sharper instrument — use it deliberately,
+and expect the next plan's state hash to differ because of it. Either path takes the
+#164 lock, so they serialize rather than clobber.
+
 ## 4. Backoff & quarantine
 
 - A `failed` item is **not** re-queued while its `target_version` is unchanged
