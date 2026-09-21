@@ -10,6 +10,7 @@
 
 #ifndef CLIENT_COMPILE
 #	include "PatternHandler.h"
+#	include "RemoteWireWriter.h"
 #	include <ViewPrivate.h>
 #endif
 
@@ -53,6 +54,14 @@ enum {
 	// its own (authoritative) font metrics instead, so a client that cannot
 	// answer no longer stalls the drawing thread for a full second per query.
 	RP_CAP_STRING_WIDTH_REPLY	= 1 << 0,
+
+	// The client can decode a zstd-compressed server -> client stream. When
+	// this is negotiated, everything the server sends after the RP_HELLO_ACK
+	// message is framed in compressed segments instead of plain messages; see
+	// RemoteWireFormat.h for the framing and RemoteWireWriter for what is
+	// exempt from it. A client that does not advertise this gets the plain
+	// stream, byte for byte as before.
+	RP_CAP_COMPRESS_ZSTD		= 1 << 1,
 };
 
 enum {
@@ -170,6 +179,25 @@ enum {
 	RP_STROKE_SHAPE_GRADIENT,
 	RP_STROKE_TRIANGLE_GRADIENT,
 	RP_STROKE_LINE_GRADIENT,
+
+	// Tier P -- per-region encoded pixels and audio. Not implemented yet (a
+	// later URP/1 milestone owns them); the values are reserved here the same
+	// way M0 reserved the broker's RP_AUTHENTICATE pair before app_server used
+	// it, so nothing else claims the block.
+	//
+	// They are reserved *now*, ahead of their implementation, because
+	// RemoteWireWriter::_IsPreCompressed() has to name them: an
+	// RP_CODEC_TILE carries JPEG/H.264/AV1 bytes and an RP_AUDIO_PACKET
+	// carries Opus, all of which are entropy-coded already. The exemption has
+	// to be keyed on the opcode and decided before a byte is compressed (the
+	// compressor's window has moved on by the time its output could be
+	// judged), so the alternative to reserving them is a rule that silently
+	// fails to apply on the day Tier P lands.
+	RP_TIER_BEGIN_FRAME = 280,
+	RP_CODEC_TILE,
+	RP_TIER_END_FRAME,
+	RP_AUDIO_PACKET,
+	RP_FRAME_ACK,
 };
 
 
@@ -177,10 +205,20 @@ class RemoteMessage {
 public:
 								RemoteMessage(StreamingRingBuffer* source,
 									StreamingRingBuffer *target);
+#ifndef CLIENT_COMPILE
+								/*!	Server-side outbound messages go through
+									the wire writer, which owns the compression
+									state and the ordering guarantee. */
+								RemoteMessage(StreamingRingBuffer* source,
+									RemoteWireWriter *target);
+#endif
 								~RemoteMessage();
 
 		void					Start(uint16 code);
 		status_t				Flush();
+#ifndef CLIENT_COMPILE
+		status_t				FlushAndEnableCompression(uint32 capability);
+#endif
 		void					Cancel();
 
 		status_t				NextMessage(uint16& code);
@@ -238,6 +276,9 @@ private:
 
 		StreamingRingBuffer*	fSource;
 		StreamingRingBuffer*	fTarget;
+#ifndef CLIENT_COMPILE
+		RemoteWireWriter*		fWireTarget;
+#endif
 
 		uint8*					fBuffer;
 		size_t					fAvailable;
@@ -253,12 +294,32 @@ RemoteMessage::RemoteMessage(StreamingRingBuffer* source,
 	:
 	fSource(source),
 	fTarget(target),
+#ifndef CLIENT_COMPILE
+	fWireTarget(NULL),
+#endif
 	fBuffer(NULL),
 	fAvailable(0),
 	fWriteIndex(0),
 	fDataLeft(0)
 {
 }
+
+
+#ifndef CLIENT_COMPILE
+inline
+RemoteMessage::RemoteMessage(StreamingRingBuffer* source,
+	RemoteWireWriter* target)
+	:
+	fSource(source),
+	fTarget(NULL),
+	fWireTarget(target),
+	fBuffer(NULL),
+	fAvailable(0),
+	fWriteIndex(0),
+	fDataLeft(0)
+{
+}
+#endif
 
 
 inline
@@ -286,7 +347,38 @@ RemoteMessage::Start(uint16 code)
 inline status_t
 RemoteMessage::Flush()
 {
+#ifdef CLIENT_COMPILE
 	if (fWriteIndex == 0 || fTarget == NULL)
+		return B_NO_INIT;
+#else
+	if (fWriteIndex == 0 || (fTarget == NULL && fWireTarget == NULL))
+		return B_NO_INIT;
+#endif
+
+	uint32 length = fWriteIndex;
+	fAvailable += fWriteIndex;
+	fWriteIndex = 0;
+
+	memcpy(fBuffer + sizeof(uint16), &length, sizeof(uint32));
+
+#ifndef CLIENT_COMPILE
+	if (fWireTarget != NULL)
+		return fWireTarget->Write(fBuffer, length);
+#endif
+
+	return fTarget->Write(fBuffer, length);
+}
+
+
+#ifndef CLIENT_COMPILE
+/*!	Flushes this message and, atomically with it, switches the outbound stream
+	to compressed segments. Only meaningful for RP_HELLO_ACK: see
+	RemoteWireWriter::WriteAndEnable() for why the two steps cannot be separate.
+*/
+inline status_t
+RemoteMessage::FlushAndEnableCompression(uint32 capability)
+{
+	if (fWriteIndex == 0 || fWireTarget == NULL)
 		return B_NO_INIT;
 
 	uint32 length = fWriteIndex;
@@ -294,8 +386,9 @@ RemoteMessage::Flush()
 	fWriteIndex = 0;
 
 	memcpy(fBuffer + sizeof(uint16), &length, sizeof(uint32));
-	return fTarget->Write(fBuffer, length);
+	return fWireTarget->WriteAndEnable(fBuffer, length, capability);
 }
+#endif
 
 
 template<typename T>

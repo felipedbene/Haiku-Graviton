@@ -9,6 +9,7 @@
 #define REMOTE_HW_INTERFACE_H
 
 #include "HWInterface.h"
+#include "RemoteWireWriter.h"
 
 #include <AutoDeleter.h>
 #include <Locker.h>
@@ -82,7 +83,11 @@ virtual	status_t					CopyBackToFront(const BRect& frame);
 		// drawing engine interface
 		StreamingRingBuffer*		ReceiveBuffer()
 										{ return fReceiveBuffer.Get(); }
-		StreamingRingBuffer*		SendBuffer() { return fSendBuffer.Get(); }
+			// Outbound messages go through the wire writer, not straight into
+			// the ring buffer: it owns the negotiated compression state and the
+			// guarantee that messages reach the socket in the order they were
+			// compressed.
+		RemoteWireWriter*			SendBuffer() { return fWireWriter.Get(); }
 
 			// True once a client has attached and announced its display mode.
 			// A synchronous drawing call (DrawString, StringWidth, ReadBitmap)
@@ -148,6 +153,8 @@ static	void						_ConnectionClosedCallback(void *cookie);
 		ObjectDeleter<BNetEndpoint>	fListenEndpoint;
 		ObjectDeleter<StreamingRingBuffer>
 									fSendBuffer;
+		ObjectDeleter<RemoteWireWriter>
+									fWireWriter;
 		ObjectDeleter<StreamingRingBuffer>
 									fReceiveBuffer;
 

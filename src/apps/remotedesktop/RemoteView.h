@@ -16,6 +16,7 @@
 class BBitmap;
 class NetReceiver;
 class NetSender;
+class RemoteWireReader;
 class StreamingRingBuffer;
 
 struct engine_state;
@@ -67,6 +68,7 @@ static	int32						_DrawEntry(void *data);
 		StreamingRingBuffer *		fReceiveBuffer;
 		StreamingRingBuffer *		fSendBuffer;
 		BNetEndpoint *				fEndpoint;
+		RemoteWireReader *			fWireReader;
 		NetReceiver *				fReceiver;
 		NetSender *					fSender;
 

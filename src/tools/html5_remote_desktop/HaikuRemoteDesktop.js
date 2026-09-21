@@ -24,6 +24,24 @@ const RP_AUTH_METHOD_SHARED_TOKEN = 1;
 const RP_PROTOCOL_VERSION = 1;
 const RP_CAP_STRING_WIDTH_REPLY = 1 << 0;
 
+// Wire compression. Deliberately NOT advertised by this client: the browser has
+// no zstd decoder. DecompressionStream's CompressionFormat enum is
+// { "brotli", "deflate", "deflate-raw", "gzip" } -- zstd is absent from the
+// Compression Standard entirely (browsers accept `Content-Encoding: zstd` on
+// fetch, but that does not expose a stream decoder to script). Decoding it here
+// would mean shipping a WebAssembly zstd build alongside the page, which is a
+// second copy of the library and a page-weight cost on every load.
+//
+// Because the capability is negotiated, not assumed, saying nothing is
+// sufficient and safe: the server intersects our bits with its own, finds no
+// compression bit, and keeps sending this client the plain stream byte for byte.
+// The constant is named here so that stays a decision on the record rather than
+// an oversight, and so a future browser-side codec (raw deflate through
+// DecompressionStream("deflate-raw") is the cheap candidate, since it needs no
+// download at all) has an obvious place to hook in.
+const RP_CAP_COMPRESS_ZSTD = 1 << 1;
+const RP_CAP_ADVERTISED = RP_CAP_STRING_WIDTH_REPLY;
+
 const RP_CREATE_STATE = 20;
 const RP_DELETE_STATE = 21;
 const RP_ENABLE_SYNC_DRAWING = 22;
@@ -1946,6 +1964,16 @@ RemoteDesktopSession.prototype.messageReceived = function(remoteMessage, reply)
 			var negotiatedCapabilities = remoteMessage.dataView.readUint32();
 			console.log('hello ack: version ' + negotiatedVersion
 				+ ', capabilities ' + negotiatedCapabilities);
+
+			// The server must never negotiate something we did not offer: the
+			// byte after this message would be a compressed segment and every
+			// subsequent frame would be unparseable. Complain loudly rather
+			// than render garbage -- a silent mismatch here is the worst case.
+			if (negotiatedCapabilities & ~RP_CAP_ADVERTISED) {
+				console.error('server negotiated capabilities we never offered ('
+					+ (negotiatedCapabilities & ~RP_CAP_ADVERTISED)
+					+ '); the stream may be undecodable');
+			}
 			break;
 
 		case RP_GET_SYSTEM_PALETTE_RESULT:
@@ -2121,7 +2149,7 @@ RemoteDesktopSession.prototype.init = function()
 	// width itself. A pre-handshake server ignores this message.
 	this.sendMessage.start(RP_HELLO);
 	this.sendMessage.dataView.writeUint32(RP_PROTOCOL_VERSION);
-	this.sendMessage.dataView.writeUint32(RP_CAP_STRING_WIDTH_REPLY);
+	this.sendMessage.dataView.writeUint32(RP_CAP_ADVERTISED);
 	this.sendMessage.dataView.writeUint32(0);	// max decode width (no Tier P)
 	this.sendMessage.dataView.writeUint32(0);	// max decode height
 	this.sendMessage.dataView.writeUint32(this.canvas.width);

@@ -8,6 +8,7 @@
 
 #include "NetReceiver.h"
 #include "RemoteMessage.h"
+#include "RemoteWireReader.h"
 
 #include "StreamingRingBuffer.h"
 
@@ -71,10 +72,12 @@ validate_first_frame(const uint8 *buffer, size_t size)
 
 NetReceiver::NetReceiver(BNetEndpoint *listener, StreamingRingBuffer *target,
 	NewConnectionCallback newConnectionCallback, void *newConnectionCookie,
-	ConnectionClosedCallback connectionClosedCallback)
+	ConnectionClosedCallback connectionClosedCallback,
+	RemoteWireReader *wireReader)
 	:
 	fListener(listener),
 	fTarget(target),
+	fWireReader(wireReader),
 	fReceiverThread(-1),
 	fStopThread(false),
 	fNewConnectionCallback(newConnectionCallback),
@@ -363,6 +366,37 @@ NetReceiver::_Transfer()
 		}
 
 		errorCount = 0;
+
+		// There are two ways to hand the bytes just read to the parser, and
+		// which one applies is a property of the side this receiver runs on
+		// rather than a runtime choice. The two states are mutually exclusive by
+		// construction: a wire reader is only ever passed in by the client
+		// (which passes no connection callbacks, so fNewConnectionCallback is
+		// NULL, watchListener is false, and _Listen() -- the only producer of
+		// queued input -- never runs).
+		//
+		// Client side: the stream may have switched to compressed segments, and
+		// the reader turns it back into the plain message stream the parser
+		// above expects, being a passthrough until the switch. It writes
+		// through to the target as it decodes and so cannot report partial
+		// progress -- which is harmless precisely here, where this thread reads
+		// one socket and accepts nothing.
+		if (fWireReader != NULL) {
+			status_t result = fWireReader->Process(fPendingBuffer, readSize);
+			if (result != B_OK) {
+				TRACE_ERROR("decoding the inbound stream failed: %s\n",
+					strerror(result));
+				return result;
+			}
+
+			continue;
+		}
+
+		// Server side: this thread is also the accept loop, so the handover has
+		// to be interruptible. Queue the bytes and hand them over with a bounded
+		// wait; whatever the target would not take is retried from the select()
+		// above, which keeps the listener watched throughout. Inbound is always
+		// plain here, so there is nothing to decode.
 		fPendingUsed = readSize;
 		fPendingOffset = 0;
 
