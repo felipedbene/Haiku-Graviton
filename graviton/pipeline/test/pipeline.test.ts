@@ -1,6 +1,7 @@
 import * as cdk from 'aws-cdk-lib';
 import { Match, Template } from 'aws-cdk-lib/assertions';
 import { HaikuGravitonPipelineStack } from '../lib/haiku-graviton-pipeline-stack';
+import { OpsStack } from '../lib/ops-stack';
 import { HaikuPipelineConfig, loadConfig } from '../lib/config';
 
 // Obviously-synthetic values throughout -- all-zero ids in the same style as the
@@ -352,4 +353,55 @@ test('the cross-build project receives buildtoolsRepo as BUILDTOOLS_REPO', () =>
       ]),
     }),
   });
+});
+
+// ---- ops stack: the incremental publish's harvest prune (issue #445) --------
+// Pull the RepoPublish buildspec out of a synthesized OpsStack. It is emitted as a
+// JSON *string*, so this also round-trips the prune's shell through the exact
+// JS -> JSON path the real template takes.
+function publishBuildSpec(): { install: string[]; build: string[] } {
+  const app = new cdk.App();
+  const stack = new OpsStack(app, 'TestOpsStack', {
+    env: { account: config.account, region: config.region },
+    config,
+  });
+  const t = Template.fromStack(stack);
+  const projects = t.findResources('AWS::CodeBuild::Project');
+  const publish = Object.values(projects).find(
+    (p: any) => p.Properties.Name === 'debeos-repo-publish') as any;
+  expect(publish).toBeDefined();
+  const spec = JSON.parse(publish.Properties.Source.BuildSpec);
+  return { install: spec.phases.install.commands, build: spec.phases.build.commands };
+}
+
+// A per-object `aws s3 rm` loop ran at ~1.6 objects/s and could not prune a
+// 3,000-package publish inside the project timeout (#445). The prune must batch
+// through s3api delete-objects, at the API's 1000-keys-per-request limit, and
+// still delete only the exact keys captured in /tmp/published.list.
+test('the harvest prune batches through delete-objects instead of one CLI per object', () => {
+  const { install, build } = publishBuildSpec();
+  const prune = build.filter(c => c.includes('/tmp/published.list'));
+  const joined = prune.join('\n');
+  expect(joined).toContain('aws s3api delete-objects');
+  expect(joined).toContain('split -l 1000 /tmp/published.list');
+  // No survivor of the per-object loop.
+  expect(joined).not.toMatch(/aws s3 rm "\$HARVEST_S3/);
+  // jq builds the request JSON, so it has to be installed.
+  expect(install.join('\n')).toMatch(/apt-get install .*\bjq\b/);
+});
+
+// The publish is complete once packages + index are uploaded; the prune is
+// bookkeeping that ran last and whose timeout marked a SUCCESSFUL publish FAILED,
+// sinking the wave's publish leg in the state machine. It must not be able to fail
+// the build -- and must say so in the log when it does not complete.
+test('a harvest prune failure cannot fail the publish, but is reported loudly', () => {
+  const { build } = publishBuildSpec();
+  const prune = build[build.length - 1];
+  expect(prune).toContain('aws s3api delete-objects');
+  // Guarded subshell: this command's own exit status is 0 either way.
+  expect(prune).toMatch(/^if ! \( /);
+  expect(prune).toContain('WARNING: harvest prune did NOT complete');
+  // Errexit is suppressed inside an inverted condition, so each step needs its own
+  // explicit exit -- otherwise a failed delete-objects reports success.
+  expect(prune).toContain('delete-objects FAILED');
 });
