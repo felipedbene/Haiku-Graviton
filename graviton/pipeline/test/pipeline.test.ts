@@ -1,6 +1,6 @@
 import * as child_process from 'child_process';
+import * as crypto from 'crypto';
 import * as fs from 'fs';
-import * as os from 'os';
 import * as path from 'path';
 import * as cdk from 'aws-cdk-lib';
 import { Match, Template } from 'aws-cdk-lib/assertions';
@@ -414,15 +414,60 @@ test('a harvest prune failure cannot fail the publish, but is reported loudly', 
 // Same technique as the publish tests above: synthesize the stack and pull the
 // promote project's real generated shell out of the template, so these assert on
 // the bytes CodeBuild will run rather than on the TypeScript that produced them
-// (this repo has been bitten by the JS -> JSON quoting path before). The banked
-// scripts are decoded from the template's own base64, so a test cannot be fooled
-// by an encoding that hides what it is asserting about.
-function promoteProject(): {
+// (this repo has been bitten by the JS -> JSON quoting path before).
+//
+// The scripts used to be base64-embedded in the buildspec and these tests decoded
+// them out of the template. They are S3 assets now (#454: the inline buildspec hit
+// CodeBuild's 25,600-character ceiling), so `bankedScripts` instead RESOLVES each
+// fetch: for every `aws s3 cp "$VAR" <dir>/<name>` it checks that VAR is a project
+// variable holding an s3 URI, that the very next command pins a sha256, and that
+// the pinned sha256 is the sha256 of the TRACKED file. Only then is the tracked
+// file's content returned for the content assertions below.
+//
+// That is a stronger link than decoding base64 was, not a weaker one: the pinned
+// hash is also what the job ENFORCES at runtime before it runs the file, so
+// "the bytes asserted on here are the bytes that will run" is checked in the same
+// place it is enforced. A drifted script, a script fetched without a checksum, or a
+// checksum that does not belong to the tracked file all turn these red.
+const SCRIPTS_DIR = path.join(__dirname, '..', '..', 'scripts');
+
+function trackedScript(name: string): string {
+  return fs.readFileSync(path.join(SCRIPTS_DIR, name), 'utf8');
+}
+
+function trackedSha256(name: string): string {
+  return crypto.createHash('sha256')
+    .update(fs.readFileSync(path.join(SCRIPTS_DIR, name))).digest('hex');
+}
+
+/** {scriptName: tracked content} for every script a buildspec fetches + verifies. */
+function bankedScripts(build: string[], env: Record<string, string>, dir: string)
+    : Record<string, string> {
+  const banked: Record<string, string> = {};
+  for (let i = 0; i < build.length; i++) {
+    const cp = new RegExp(`^aws s3 cp "\\$(\\w+)" ${dir}/(\\S+) --only-show-errors$`)
+      .exec(build[i]);
+    if (!cp) continue;
+    const [, uriVar, name] = cp;
+    // The URI must arrive in a project variable holding a real s3 URI -- not be
+    // interpolated into the buildspec, which would turn BuildSpec into an Fn::Join.
+    expect(env[uriVar]).toMatch(/^s3:\/\/\S+$/);
+    // The NEXT command must verify it, so there is no window in which an
+    // unverified file could be executed.
+    const verify = build[i + 1] ?? '';
+    expect(verify).toContain('sha256sum -c -');
+    expect(verify).toContain(`${dir}/${name}`);
+    expect(verify).toContain(trackedSha256(name));
+    banked[name] = trackedScript(name);
+  }
+  return banked;
+}
+
+function opsProject(name: string): {
   props: any;
   install: string[];
   build: string[];
   env: Record<string, string>;
-  banked: Record<string, string>;
 } {
   const app = new cdk.App();
   const stack = new OpsStack(app, 'TestOpsStack', {
@@ -431,21 +476,31 @@ function promoteProject(): {
   });
   const t = Template.fromStack(stack);
   const projects = t.findResources('AWS::CodeBuild::Project');
-  const promote = Object.values(projects).find(
-    (p: any) => p.Properties.Name === 'debeos-repo-promote-green') as any;
-  expect(promote).toBeDefined();
-  const spec = JSON.parse(promote.Properties.Source.BuildSpec);
-  const build: string[] = spec.phases.build.commands;
+  const project = Object.values(projects).find(
+    (p: any) => p.Properties.Name === name) as any;
+  expect(project).toBeDefined();
+  const spec = JSON.parse(project.Properties.Source.BuildSpec);
   const env: Record<string, string> = {};
-  for (const e of promote.Properties.Environment.EnvironmentVariables ?? []) {
+  for (const e of project.Properties.Environment.EnvironmentVariables ?? []) {
     env[e.Name] = e.Value;
   }
-  const banked: Record<string, string> = {};
-  for (const c of build) {
-    const m = /^printf %s '([A-Za-z0-9+/=]+)' \| base64 -d > \/opt\/debeos-promote\/(\S+)$/.exec(c);
-    if (m) banked[m[2]] = Buffer.from(m[1], 'base64').toString('utf8');
-  }
-  return { props: promote.Properties, install: spec.phases.install.commands, build, env, banked };
+  return {
+    props: project.Properties,
+    install: spec.phases.install.commands,
+    build: spec.phases.build.commands,
+    env,
+  };
+}
+
+function promoteProject(): {
+  props: any;
+  install: string[];
+  build: string[];
+  env: Record<string, string>;
+  banked: Record<string, string>;
+} {
+  const p = opsProject('debeos-repo-promote-green');
+  return { ...p, banked: bankedScripts(p.build, p.env, '/opt/debeos-promote') };
 }
 
 function opsPolicyStatements(): any[] {
@@ -507,10 +562,12 @@ test('promote: plan is the default mode and the buildspec lets MODE govern', () 
 // decoded out of the template -- the refusal happens before any AWS call, so this
 // needs no credentials.
 test('promote: apply refuses without a plan id (executed, not just inspected)', () => {
+  // promoteProject() has already established that the job fetches this exact file
+  // and refuses anything whose sha256 differs, so running the tracked file IS
+  // running what the job runs.
   const { banked } = promoteProject();
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'debeos-promote-test-'));
-  const script = path.join(dir, 'haiku-repo-promote-green');
-  fs.writeFileSync(script, banked['haiku-repo-promote-green']);
+  expect(banked['haiku-repo-promote-green']).toBeDefined();
+  const script = path.join(SCRIPTS_DIR, 'haiku-repo-promote-green');
   const env = {
     ...process.env,
     MODE: 'apply',
@@ -533,7 +590,6 @@ test('promote: apply refuses without a plan id (executed, not just inspected)', 
   expect(stderr).toContain('apply requires a plan id');
   // The staleness refusal is the other half of the gate.
   expect(banked['haiku-repo-promote-green']).toContain('STALE PLAN');
-  fs.rmSync(dir, { recursive: true, force: true });
 });
 
 // The ordering + classifier logic decides whether a promote REPLACES a live
@@ -541,18 +597,20 @@ test('promote: apply refuses without a plan id (executed, not just inspected)', 
 // freetype and coreutils), so its self-test runs in CI as well as in the job.
 test('promote: the banked script self-test passes', () => {
   const { banked, build } = promoteProject();
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'debeos-promote-selftest-'));
-  const script = path.join(dir, 'haiku-repo-promote-green');
-  fs.writeFileSync(script, banked['haiku-repo-promote-green']);
-  const out = child_process.execFileSync('python3', [script, '--self-test'],
+  expect(banked['haiku-repo-promote-green']).toBeDefined();
+  const out = child_process.execFileSync(
+    'python3', [path.join(SCRIPTS_DIR, 'haiku-repo-promote-green'), '--self-test'],
     { encoding: 'utf8' });
   expect(out).toContain('OK');
-  // ... and the job runs it before it looks at either pool.
+  // ... and the job runs it AFTER the scripts are verified and BEFORE it looks at
+  // either pool.
+  const verified = build.findIndex(c => c.includes('haiku-repo-promote-green')
+    && c.includes('sha256sum -c -'));
   const selfTest = build.findIndex(c => c.includes('--self-test'));
   const run = build.findIndex(c => c.endsWith('haiku-repo-promote-green --in-process'));
-  expect(selfTest).toBeGreaterThan(-1);
+  expect(verified).toBeGreaterThan(-1);
+  expect(verified).toBeLessThan(selfTest);
   expect(selfTest).toBeLessThan(run);
-  fs.rmSync(dir, { recursive: true, force: true });
 });
 
 // A promote makes BOTH caches stale: prod and beta both carry OriginPath
@@ -613,13 +671,14 @@ test('promote: the green prefix is writable and the blue prefix is read-only', (
 // the promote refuses outright if it is not there.
 test('promote: the #164 publish lock is banked beside haiku-repo-add', () => {
   const { build, banked } = promoteProject();
+  // bankedScripts only yields a script that is fetched AND sha256-verified into
+  // /opt/debeos-promote, so this list is also the assertion that all three land in
+  // the SAME directory -- which is what makes haiku-repo-add's sibling lookup work.
   expect(Object.keys(banked).sort()).toEqual(
     ['haiku-publish-lock.sh', 'haiku-repo-add', 'haiku-repo-promote-green']);
-  // All three land in the SAME directory, which is what makes the lookup work.
-  const dirs = new Set(build
-    .filter((c) => c.startsWith('printf %s '))
-    .map((c) => c.replace(/^.*> /, '').replace(/\/[^/]+$/, '')));
-  expect([...dirs]).toEqual(['/opt/debeos-promote']);
+  const fetched = build.filter((c) => c.startsWith('aws s3 cp "$HG_SCRIPT'));
+  expect(fetched).toHaveLength(3);
+  for (const c of fetched) expect(c).toContain('/opt/debeos-promote/');
   expect(banked['haiku-publish-lock.sh']).toContain('publish_lock_acquire');
   expect(banked['haiku-repo-promote-green']).toContain(
     'to promote to the live pool without the #164 publish lock');
@@ -649,4 +708,62 @@ test('promote: the operator role cannot start a promote build', () => {
     const resources = JSON.stringify(s.Resource ?? []);
     expect(resources).not.toContain('debeos-repo-promote-green');
   }
+});
+
+// ---- ops stack: the inline buildspec ceiling (issue #454) --------------------
+// This is the test that should have existed before #451 merged. CodeBuild rejects an
+// inline buildspec longer than 25,600 characters, and the rejection happens at
+// DEPLOY time -- CloudFormation reported CREATE_FAILED "Max buildspec length is
+// 25600" for the promote project (90,745 characters) after the change had been
+// reviewed and merged, while the publish project sat at 25,497, i.e. 103 characters
+// from the same fate on the critical path for every wave. Nothing in synth, jest or
+// review noticed. Scripts now travel as S3 assets, so a buildspec no longer grows
+// with what it runs -- and this asserts that, rather than trusting it.
+const BUILDSPEC_MAX = 25600;
+
+test('ops: every inline buildspec stays well under CodeBuild\'s 25,600 ceiling (#454)', () => {
+  const app = new cdk.App();
+  const stack = new OpsStack(app, 'TestOpsStack', {
+    env: { account: config.account, region: config.region },
+    config,
+  });
+  const projects = Template.fromStack(stack).findResources('AWS::CodeBuild::Project');
+  const names = Object.values(projects).map((p: any) => p.Properties.Name).sort();
+  // Guard the guard: if a project is added and this test is not updated, the new
+  // project's buildspec would go unchecked.
+  expect(names).toEqual(['debeos-repo-promote-green', 'debeos-repo-publish']);
+  for (const p of Object.values(projects) as any[]) {
+    const spec = p.Properties.Source.BuildSpec;
+    // A CFN token would make this an Fn::Join whose deployed length cannot be
+    // measured here -- which would silently disable this test.
+    expect(typeof spec).toBe('string');
+    expect(spec.length).toBeLessThan(BUILDSPEC_MAX);
+    // The ceiling was reached by embedding whole scripts. A buildspec command is a
+    // shell line; a ~40 KB one is a file that belongs in an asset. Catch a
+    // re-introduction of inlining long before it reaches the hard limit.
+    for (const phase of Object.values(spec ? JSON.parse(spec).phases : {}) as any[]) {
+      for (const c of phase.commands as string[]) {
+        expect(c.length).toBeLessThan(4096);
+      }
+    }
+  }
+});
+
+// The publish project fetches its one script the same way, so the fix is not
+// promote-only: the 103 characters of headroom were the more urgent half.
+test('publish: haiku-repo-add is fetched from an asset and sha256-verified (#454)', () => {
+  const p = opsProject('debeos-repo-publish');
+  const banked = bankedScripts(p.build, p.env, '/tmp');
+  expect(Object.keys(banked)).toEqual(['haiku-repo-add']);
+  expect(p.env.HG_SCRIPT_REPO_ADD).toMatch(/^s3:\/\/\S+$/);
+  // Nothing is base64-inlined any more, in either project.
+  for (const name of ['debeos-repo-publish', 'debeos-repo-promote-green']) {
+    const cmds = opsProject(name).build;
+    expect(cmds.join('\n')).not.toContain('base64 -d');
+  }
+  // The script is verified BEFORE it is run.
+  const verify = p.build.findIndex(c => c.includes('sha256sum -c -'));
+  const run = p.build.findIndex(c => c === 'bash /tmp/haiku-repo-add');
+  expect(verify).toBeGreaterThan(-1);
+  expect(run).toBeGreaterThan(verify);
 });

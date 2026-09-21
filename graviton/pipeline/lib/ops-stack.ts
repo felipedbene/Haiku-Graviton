@@ -9,8 +9,10 @@ import * as tasks from 'aws-cdk-lib/aws-stepfunctions-tasks';
 import * as logs from 'aws-cdk-lib/aws-logs';
 import * as codebuild from 'aws-cdk-lib/aws-codebuild';
 import * as ssm from 'aws-cdk-lib/aws-ssm';
+import * as s3assets from 'aws-cdk-lib/aws-s3-assets';
 import * as path from 'path';
 import * as fs from 'fs';
+import * as crypto from 'crypto';
 import { SharedConfig, DEBEOS_TAGS } from './config';
 
 export interface OpsStackProps extends cdk.StackProps {
@@ -317,10 +319,59 @@ export class OpsStack extends cdk.Stack {
     // and runs haiku-repo-add UNCHANGED. This replaces the retired ephemeral
     // Ubuntu peer (haiku-repo-publish-ephemeral) with a managed, SFN-native
     // (.sync) job; the incremental primitive is identical.
+    // ---- how the operator scripts reach the build container (issue #454) ----
+    // These jobs run tracked scripts out of graviton/scripts/ UNCHANGED, which is
+    // the whole point: the publish/promote primitive an operator runs by hand is
+    // the primitive the pipeline runs. Getting the file into the container used to
+    // be done by base64-embedding it in the inline buildspec. That does not scale
+    // and it hit a hard wall: CodeBuild rejects an inline buildspec over 25,600
+    // characters, and base64 inflates by a third. The promote job (three scripts,
+    // ~66 KB of source) synthesized a 90,745-character buildspec and CloudFormation
+    // refused to create the project -- CREATE_FAILED, "Max buildspec length is
+    // 25600" -- while the publish job's was 25,497, i.e. 103 characters of headroom
+    // on the critical path for every wave.
+    //
+    // So the scripts are S3 ASSETS now: CDK uploads each one to the bootstrap asset
+    // bucket at deploy time and the buildspec fetches it at runtime, which is the
+    // shape these buildspecs already use for the banked Linux host tools. A
+    // buildspec no longer grows with the scripts it runs.
+    //
+    // What that must not cost us is the guarantee that the shipped bytes ARE the
+    // tracked file. Previously that was checkable by decoding the base64 out of the
+    // synthesized template. It is now checkable the same way it is ENFORCED: the
+    // sha256 of the tracked file is computed here, at synth time, and pinned into
+    // the buildspec, which verifies the fetched file against it before running
+    // anything. That also catches a truncated or partially-written download, which
+    // a bare `aws s3 cp` exit code does not reliably do.
     const scriptsDir = path.join(__dirname, '..', '..', 'scripts');
-    const bankScript = (name: string) =>
-      fs.readFileSync(path.join(scriptsDir, name)).toString('base64');
-    const repoAddB64 = bankScript('haiku-repo-add');
+    interface BankedScript {
+      readonly name: string;
+      readonly asset: s3assets.Asset;
+      /** sha256 of the TRACKED file, pinned into the buildspec. */
+      readonly sha256: string;
+    }
+    const bankScript = (id: string, name: string): BankedScript => {
+      const file = path.join(scriptsDir, name);
+      return {
+        name,
+        asset: new s3assets.Asset(this, id, { path: file }),
+        sha256: crypto.createHash('sha256').update(fs.readFileSync(file)).digest('hex'),
+      };
+    };
+    // Fetch a banked script and refuse to continue unless it is byte-for-byte the
+    // file that was tracked at synth time. The s3 URI arrives in an ENVIRONMENT
+    // VARIABLE rather than being interpolated into the buildspec: an asset's
+    // location is a deploy-time CloudFormation token, and a token inside the
+    // buildspec would turn the whole BuildSpec property into an Fn::Join, which
+    // makes the generated shell unreadable both to a human and to the tests that
+    // assert on it. The sha256 is a synth-time constant, so it is a plain literal.
+    const fetchScript = (s: BankedScript, uriVar: string, dir: string) => [
+      `aws s3 cp "$${uriVar}" ${dir}/${s.name} --only-show-errors`,
+      `echo "${s.sha256}  ${dir}/${s.name}" | sha256sum -c - >/dev/null || { echo "banked ${s.name} does not match the sha256 pinned at synth time (truncated fetch, or an asset/template mismatch) -- refusing to run it" >&2; exit 1; }`,
+    ];
+    const repoAddScript = bankScript('RepoAddScript', 'haiku-repo-add');
+    const publishLockScript = bankScript('PublishLockScript', 'haiku-publish-lock.sh');
+    const promoteScript = bankScript('PromoteGreenScript', 'haiku-repo-promote-green');
 
     // Fetching the banked Linux host tools is identical for every job that has to
     // run `package`/`package_repo` (the incremental publish and the blue->green
@@ -418,6 +469,9 @@ export class OpsStack extends cdk.Stack {
         HARVEST_S3: { value: `s3://${workBucket}/hpkg/arm64` },           // wave harvest (durable)
         INCOMING_BASE: { value: `s3://${workBucket}/hpkg/arm64-incoming` }, // per-run disposable snapshot
         HG_CF_DIST: { value: props.config.repoCloudFrontDistId ?? '' },   // '' => skip invalidation
+        // s3 uri of the banked haiku-repo-add asset (#454): a deploy-time token, so
+        // it travels as a variable and keeps the buildspec a plain literal string.
+        HG_SCRIPT_REPO_ADD: { value: repoAddScript.asset.s3ObjectUrl },
         ARCH: { value: 'arm64' },
       },
       buildSpec: codebuild.BuildSpec.fromObject({
@@ -454,7 +508,7 @@ export class OpsStack extends cdk.Stack {
               // haiku-repo-add empties $INCOMING on success.
               'aws s3 ls "$INCOMING/" | awk "{print \\$4}" | grep -E "[.]hpkg$" > /tmp/published.list || true',
               'echo "== incremental-add $n harvested package(s) into $HG_REPO_S3 =="',
-              `printf %s '${repoAddB64}' | base64 -d > /tmp/haiku-repo-add`,
+              ...fetchScript(repoAddScript, 'HG_SCRIPT_REPO_ADD', '/tmp'),
               'export HG_INCOMING_S3="$INCOMING"',
               'bash /tmp/haiku-repo-add',
               // Prune only the just-published hpkgs from the DURABLE harvest so the
@@ -502,6 +556,9 @@ export class OpsStack extends cdk.Stack {
         `arn:aws:s3:::${workBucket}`, `arn:aws:s3:::${workBucket}/*`,
       ],
     }));
+    // Read the banked haiku-repo-add asset out of the CDK bootstrap asset bucket
+    // (#454). grantRead scopes this to that bucket + the asset's own key.
+    repoAddScript.asset.grantRead(publishProject);
     // Banked host tools live in the bake pipeline's WorkBucket, whose physical
     // name is CDK-auto-generated. Instead of the old fragile name-substring
     // wildcard (arn:aws:s3:::*bakepipeline*workbucket*), import the bucket ARN the
@@ -592,6 +649,11 @@ export class OpsStack extends cdk.Stack {
         // (the mechanism verified on branch fix/443-publish-cdn-invalidation),
         // because a distribution id must not be baked into this tree.
         REPO_HOSTS: { value: 'packages.debene.dev,beta.repository.debene.dev' },
+        // s3 uris of the three banked scripts (#454). Deploy-time tokens, so they
+        // travel as variables; their sha256 is pinned in the buildspec itself.
+        HG_SCRIPT_PROMOTE: { value: promoteScript.asset.s3ObjectUrl },
+        HG_SCRIPT_REPO_ADD: { value: repoAddScript.asset.s3ObjectUrl },
+        HG_SCRIPT_LOCK: { value: publishLockScript.asset.s3ObjectUrl },
         ARCH: { value: 'arm64' },
       },
       buildSpec: codebuild.BuildSpec.fromObject({
@@ -621,9 +683,9 @@ export class OpsStack extends cdk.Stack {
               // stock `aws` CLI). Running the operator's own script unchanged is
               // the point: plan output is identical by hand and in this job.
               `install -d ${promoteScriptsDir}`,
-              `printf %s '${bankScript('haiku-repo-promote-green')}' | base64 -d > ${promoteScriptsDir}/haiku-repo-promote-green`,
-              `printf %s '${repoAddB64}' | base64 -d > ${promoteScriptsDir}/haiku-repo-add`,
-              `printf %s '${bankScript('haiku-publish-lock.sh')}' | base64 -d > ${promoteScriptsDir}/haiku-publish-lock.sh`,
+              ...fetchScript(promoteScript, 'HG_SCRIPT_PROMOTE', promoteScriptsDir),
+              ...fetchScript(repoAddScript, 'HG_SCRIPT_REPO_ADD', promoteScriptsDir),
+              ...fetchScript(publishLockScript, 'HG_SCRIPT_LOCK', promoteScriptsDir),
               `chmod +x ${promoteScriptsDir}/haiku-repo-promote-green ${promoteScriptsDir}/haiku-repo-add`,
               // The ordering + classifier logic decides whether a promote REPLACES
               // a live package, so prove it before letting it look at the pools. It
@@ -684,6 +746,10 @@ export class OpsStack extends cdk.Stack {
         `arn:aws:s3:::${workBucket}/promote-incoming/*`,
       ],
     }));
+    // The three banked scripts, read from the CDK bootstrap asset bucket (#454).
+    for (const s of [promoteScript, repoAddScript, publishLockScript]) {
+      s.asset.grantRead(promoteProject);
+    }
     // Banked host tools (same bucket + same SSM param as the publish leg).
     promoteProject.addToRolePolicy(new iam.PolicyStatement({
       sid: 'ReadBankedHostTools',
