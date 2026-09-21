@@ -17,6 +17,7 @@ ReceiveRing::ReceiveRing()
 	fMask(0),
 	fTail(0),
 	fBytesProduced(0),
+	fCachedHead(0),
 	fHead(0),
 	fBytesConsumed(0)
 {
@@ -57,6 +58,7 @@ ReceiveRing::Init(uint32 slots)
 	fCapacity = capacity;
 	fMask = capacity - 1;
 	fTail = fHead = 0;
+	fCachedHead = 0;
 	fBytesProduced = fBytesConsumed = 0;
 	return B_OK;
 }
@@ -65,12 +67,40 @@ ReceiveRing::Init(uint32 slots)
 // #pragma mark - producer side (caller holds fLock)
 
 
+void
+ReceiveRing::_RefreshCachedHead() const
+{
+	fCachedHead = atomic_get64(const_cast<int64*>(&fHead));
+}
+
+
+/*!	Refreshes the producer's cached view of the consumer head, but only once the
+	cached view shows the ring at least half full -- which is all the
+	"is there room" queries need, since a stale head only under-counts free
+	slots. At genuinely high occupancy this degenerates to one load per call,
+	exactly the pre-#414 behaviour, so it is never a regression.
+*/
+void
+ReceiveRing::_MaybeRefreshCachedHead() const
+{
+	if (fTail - fCachedHead >= (int64)(fCapacity / 2))
+		_RefreshCachedHead();
+}
+
+
+/*!	The exact number of free slots. Unlike the room queries below this one
+	always refreshes: _ReceiveFree() turns it into the advertised window, and a
+	cached head that merely LOOKS half consumed would advertise as little as
+	half the ring (visible when the slot term binds rather than the byte term,
+	i.e. a small negotiated MSS with a large window shift).
+*/
 uint32
 ReceiveRing::FreeSlots() const
 {
 	if (fSlots == NULL)
 		return 0;
-	int64 used = fTail - atomic_get64(const_cast<int64*>(&fHead));
+	_RefreshCachedHead();
+	int64 used = fTail - fCachedHead;
 	if (used >= (int64)fCapacity)
 		return 0;
 	return fCapacity - (uint32)used;
@@ -80,7 +110,31 @@ ReceiveRing::FreeSlots() const
 bool
 ReceiveRing::HasFreeSlot() const
 {
-	return FreeSlots() > 0;
+	if (fSlots == NULL)
+		return false;
+
+	_MaybeRefreshCachedHead();
+	return (fTail - fCachedHead) < (int64)fCapacity;
+}
+
+
+/*!	Exactly whether at least \a count slots are free, loading the consumer's
+	head only when it is needed to answer: the cached head can only UNDER-count
+	free slots, so a cached yes is already definitive and only a cached no has
+	to be confirmed against the atomic. This is how _ReceiveFree() gets an exact
+	advertised window without a per-segment load of the consumer's line.
+*/
+bool
+ReceiveRing::HasFreeSlots(uint32 count) const
+{
+	if (fSlots == NULL)
+		return count == 0;
+
+	if ((int64)fCapacity - (fTail - fCachedHead) >= (int64)count)
+		return true;
+
+	_RefreshCachedHead();
+	return (int64)fCapacity - (fTail - fCachedHead) >= (int64)count;
 }
 
 
@@ -90,8 +144,8 @@ ReceiveRing::Push(net_buffer* buffer)
 	if (fSlots == NULL)
 		return false;
 
-	int64 head = atomic_get64(&fHead);
-	if ((fTail - head) >= (int64)fCapacity)
+	_MaybeRefreshCachedHead();
+	if ((fTail - fCachedHead) >= (int64)fCapacity)
 		return false;
 
 	// Write the slot, then publish it: the size counter and the tail index are
@@ -237,5 +291,9 @@ ReceiveRing::Drain()
 	}
 
 	fHead = head;
+	fCachedHead = head;
+		// keep the producer's cached view consistent with the reset, as Init()
+		// does -- a stale cache would only be conservative, but there is no
+		// reason to leave one behind
 	fBytesConsumed = fBytesProduced;
 }
