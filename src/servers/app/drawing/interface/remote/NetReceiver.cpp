@@ -27,6 +27,17 @@
 // frame before it is dropped and the live session continues undisturbed.
 static const bigtime_t kCandidateTimeout = 10 * 1000 * 1000;
 
+// How long a single attempt to hand input to the target buffer may park before
+// the loop goes back to watching its sockets. Short enough that the accept path
+// stays responsive while the consumer is behind, long enough that the normal
+// case (space available at once) never pays for the timeout.
+static const bigtime_t kTargetWriteTimeout = 100 * 1000;
+
+// How long to wait in select() while input is still queued for the target
+// buffer. Only the retry cadence: the connection is not read from again until
+// the queued input has been handed over.
+static const bigtime_t kPendingInputRetry = 50 * 1000;
+
 
 /*!	Whether \a buffer begins with a frame a genuine client would open with.
 	Every client starts its stream with RP_INIT_CONNECTION (an empty message,
@@ -72,7 +83,9 @@ NetReceiver::NetReceiver(BNetEndpoint *listener, StreamingRingBuffer *target,
 	fEndpoint(newConnectionCallback == NULL ? listener : NULL),
 	fCandidateBufferUsed(0),
 	fCandidateDeadline(0),
-	fCandidateValidated(false)
+	fCandidateValidated(false),
+	fPendingUsed(0),
+	fPendingOffset(0)
 {
 	fReceiverThread = spawn_thread(_NetworkReceiverEntry, "network receiver",
 		B_NORMAL_PRIORITY, this);
@@ -121,6 +134,17 @@ NetReceiver::_Listen()
 		if (!fCandidate.IsSet()) {
 			fCandidate.SetTo(fListener->Accept(5000));
 			if (!fCandidate.IsSet()) {
+				// BNetEndpoint::Accept() closes the listening socket when
+				// accept() itself fails, so the usual "just try again" is a
+				// silent busy loop that can never accept anything once that has
+				// happened. Report it and give up instead of spinning.
+				if (fListener->Socket() < 0) {
+					TRACE_ERROR("listening socket was closed (%s), no further "
+						"connections can be accepted\n",
+						strerror(fListener->Error()));
+					return B_ERROR;
+				}
+
 				TRACE("got NULL endpoint from accept\n");
 				continue;
 			}
@@ -140,6 +164,7 @@ NetReceiver::_Listen()
 
 		fEndpoint.SetTo(fCandidate.Detach());
 		fCandidateValidated = false;
+		_DiscardPendingInput();
 
 		TRACE("new endpoint connection: %p\n", fEndpoint);
 
@@ -153,26 +178,20 @@ NetReceiver::_Listen()
 		}
 
 		// Hand over whatever the connection already sent while it was being
-		// validated; these bytes are the head of its stream and must reach
-		// the parser before anything read below.
+		// validated; these bytes are the head of its stream and must reach the
+		// parser before anything read below. They go through the same pending
+		// queue as everything else so this handover cannot block the accept
+		// loop either -- _Transfer() drains the queue before it reads from the
+		// connection again, which keeps the stream in order.
 		if (fCandidateBufferUsed > 0) {
-			status_t result = fTarget->Write(fCandidateBuffer,
-				fCandidateBufferUsed);
+			memcpy(fPendingBuffer, fCandidateBuffer, fCandidateBufferUsed);
+			fPendingUsed = fCandidateBufferUsed;
+			fPendingOffset = 0;
 			fCandidateBufferUsed = 0;
-			if (result != B_OK) {
-				// The head of this client's stream is lost, so its framing
-				// can never resynchronise; drop the connection rather than
-				// feed the parser a stream missing its first message.
-				TRACE_ERROR("writing candidate data to ring buffer failed, "
-					"dropping connection: %s\n", strerror(result));
-				fEndpoint.Unset();
-				if (fConnectionClosedCallback != NULL)
-					fConnectionClosedCallback(fNewConnectionCookie);
-				continue;
-			}
 		}
 
 		_Transfer();
+		_DiscardPendingInput();
 
 		// _Transfer() only returns when the peer went away (EOF or error).
 		// Release the accepted connection right here instead of leaving it for
@@ -230,25 +249,40 @@ NetReceiver::_Transfer()
 			if (connSocket < 0)
 				return B_ERROR;
 
+			// Input already read from the connection but not yet taken by the
+			// target buffer has to be handed over before more is read, or the
+			// stream would be reordered. Stop watching the connection until the
+			// queue drains -- the kernel receive buffer holds the rest, and
+			// leaving the connection unread is precisely the back pressure the
+			// stalled consumer calls for.
+			const bool pendingInput = _HasPendingInput();
+
 			fd_set readSet;
 			FD_ZERO(&readSet);
-			FD_SET(connSocket, &readSet);
+			if (!pendingInput)
+				FD_SET(connSocket, &readSet);
 			if (listenSocket >= 0)
 				FD_SET(listenSocket, &readSet);
 			if (candidateSocket >= 0)
 				FD_SET(candidateSocket, &readSet);
 
-			int maxSocket = connSocket;
+			int maxSocket = pendingInput ? -1 : connSocket;
 			if (listenSocket > maxSocket)
 				maxSocket = listenSocket;
 			if (candidateSocket > maxSocket)
 				maxSocket = candidateSocket;
 
 			// While a candidate is pending, wake up periodically to enforce
-			// its deadline even if no socket becomes readable.
-			struct timeval candidateWait = { 1, 0 };
+			// its deadline even if no socket becomes readable; while input is
+			// queued, wake up sooner to retry handing it over.
+			struct timeval selectTimeout = { 1, 0 };
+			if (pendingInput) {
+				selectTimeout.tv_sec = 0;
+				selectTimeout.tv_usec = (suseconds_t)kPendingInputRetry;
+			}
+
 			int ready = select(maxSocket + 1, &readSet, NULL, NULL,
-				fCandidate.IsSet() ? &candidateWait : NULL);
+				(fCandidate.IsSet() || pendingInput) ? &selectTimeout : NULL);
 			if (ready < 0) {
 				if (errno == EINTR)
 					continue;
@@ -277,12 +311,39 @@ NetReceiver::_Transfer()
 			if (listenSocket >= 0 && FD_ISSET(listenSocket, &readSet))
 				_AcceptCandidate();
 
+			if (pendingInput) {
+				// Retry the handover with a bounded wait. Parking here without
+				// a limit is what wedged the whole interface: this one thread
+				// is both the accept loop and the connection's reader, so a client
+				// that stops draining its socket (filling the send ring, which
+				// stalls the consumer of this buffer) used to stop the server
+				// accepting anything at all -- every later client connected and
+				// then read nothing for the rest of the app_server's life.
+				status_t result = _WritePendingInput(kTargetWriteTimeout);
+				if (result != B_OK && result != B_TIMED_OUT) {
+					TRACE_ERROR("writing to ring buffer failed: %s\n",
+						strerror(result));
+					return result;
+				}
+
+				continue;
+			}
+
 			if (!FD_ISSET(connSocket, &readSet))
 				continue;
+		} else if (_HasPendingInput()) {
+			// Client mode: nothing to stay responsive for, so just finish the
+			// handover before reading more.
+			status_t result = _WritePendingInput(B_INFINITE_TIMEOUT);
+			if (result != B_OK) {
+				TRACE_ERROR("writing to ring buffer failed: %s\n",
+					strerror(result));
+				return result;
+			}
 		}
 
-		uint8 buffer[4096];
-		int32 readSize = fEndpoint->Receive(buffer, sizeof(buffer));
+		int32 readSize = fEndpoint->Receive(fPendingBuffer,
+			sizeof(fPendingBuffer));
 		if (readSize < 0) {
 			TRACE_ERROR("read failed, closing connection: %s\n",
 				strerror(readSize));
@@ -302,8 +363,12 @@ NetReceiver::_Transfer()
 		}
 
 		errorCount = 0;
-		status_t result = fTarget->Write(buffer, readSize);
-		if (result != B_OK) {
+		fPendingUsed = readSize;
+		fPendingOffset = 0;
+
+		status_t result = _WritePendingInput(watchListener
+			? kTargetWriteTimeout : B_INFINITE_TIMEOUT);
+		if (result != B_OK && result != B_TIMED_OUT) {
 			TRACE_ERROR("writing to ring buffer failed: %s\n",
 				strerror(result));
 			return result;
@@ -311,6 +376,39 @@ NetReceiver::_Transfer()
 	}
 
 	return B_OK;
+}
+
+
+/*!	Hands as much of the queued input as fits to the target buffer, waiting
+	at most \a timeout for space. Returns B_TIMED_OUT with input still queued when
+	the target stayed full, which is not an error: the caller goes back to
+	watching its sockets and retries.
+*/
+status_t
+NetReceiver::_WritePendingInput(bigtime_t timeout)
+{
+	if (!_HasPendingInput())
+		return B_OK;
+
+	size_t written = 0;
+	status_t result = fTarget->Write(fPendingBuffer + fPendingOffset,
+		fPendingUsed - fPendingOffset, timeout, written);
+	fPendingOffset += written;
+
+	if (!_HasPendingInput()) {
+		fPendingUsed = 0;
+		fPendingOffset = 0;
+	}
+
+	return result;
+}
+
+
+void
+NetReceiver::_DiscardPendingInput()
+{
+	fPendingUsed = 0;
+	fPendingOffset = 0;
 }
 
 

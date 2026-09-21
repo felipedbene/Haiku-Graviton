@@ -159,6 +159,17 @@ StreamingRingBuffer::Read(void *buffer, size_t length, bool onlyBlockOnNoData)
 status_t
 StreamingRingBuffer::Write(const void *buffer, size_t length)
 {
+	size_t written;
+	return Write(buffer, length, B_INFINITE_TIMEOUT, written);
+}
+
+
+status_t
+StreamingRingBuffer::Write(const void *buffer, size_t length, bigtime_t timeout,
+	size_t &written)
+{
+	written = 0;
+
 	BAutolock writerLock(fWriterLocker);
 	if (!writerLock.IsLocked())
 		return B_ERROR;
@@ -166,6 +177,9 @@ StreamingRingBuffer::Write(const void *buffer, size_t length)
 	BAutolock dataLock(fDataLocker);
 	if (!dataLock.IsLocked())
 		return B_ERROR;
+
+	const bigtime_t deadline = timeout == B_INFINITE_TIMEOUT
+		? B_INFINITE_TIMEOUT : system_time() + timeout;
 
 	while (length > 0) {
 		// Nothing is draining this buffer, so waiting for space would wait
@@ -185,10 +199,40 @@ StreamingRingBuffer::Write(const void *buffer, size_t length)
 			status_t result;
 			do {
 				TRACE("waiting in writer\n");
-				result = acquire_sem(fWriterNotifier);
+				if (deadline == B_INFINITE_TIMEOUT)
+					result = acquire_sem(fWriterNotifier);
+				else {
+					result = acquire_sem_etc(fWriterNotifier, 1,
+						B_ABSOLUTE_TIMEOUT, deadline);
+				}
 				TRACE("done waiting in writer with status: %#" B_PRIx32 "\n",
 					result);
 			} while (result == B_INTERRUPTED);
+
+			if (result == B_TIMED_OUT || result == B_WOULD_BLOCK) {
+				if (!dataLock.Lock()) {
+					TRACE_ERROR("failed to acquire data lock\n");
+					return B_ERROR;
+				}
+
+				// Stop advertising a waiter. If a Read() or a cancel released
+				// the notifier in the same instant the wait expired, the
+				// flag is already down and the release has to be absorbed
+				// here, or the next writer to park would be woken by it
+				// spuriously.
+				if (fWriterWaiting)
+					fWriterWaiting = false;
+				else
+					acquire_sem_etc(fWriterNotifier, 1, B_RELATIVE_TIMEOUT, 0);
+
+				if (fCancelWrite) {
+					TRACE("write canceled\n");
+					fCancelWrite = false;
+					return B_CANCELED;
+				}
+
+				return B_TIMED_OUT;
+			}
 
 			if (result != B_OK)
 				return result;
@@ -213,6 +257,7 @@ StreamingRingBuffer::Write(const void *buffer, size_t length)
 
 		buffer = (uint8 *)buffer + copyLength;
 		length -= copyLength;
+		written += copyLength;
 
 		if (fReaderWaiting) {
 			release_sem_etc(fReaderNotifier, 1, B_DO_NOT_RESCHEDULE);

@@ -12,12 +12,26 @@
 
 #include <NetEndpoint.h>
 
+#include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/socket.h>
+#include <sys/time.h>
 
 #define TRACE(x...)			/*debug_printf("NetSender: " x)*/
 #define TRACE_ERROR(x...)	debug_printf("NetSender: " x)
+
+
+// How long a single Send() may block before the loop gets control back. Only
+// the polling interval: a slow but progressing client is not disturbed.
+static const bigtime_t kSendChunkTimeout = 1 * 1000 * 1000;
+
+// How long the client may accept no data at all before the connection is
+// considered dead and torn down. A peer that has stopped reading (or whose
+// window has closed for good) would otherwise hold this thread in send()
+// forever, and with it the whole remote interface -- see _NetworkSender().
+static const bigtime_t kSendStallTimeout = 15 * 1000 * 1000;
 
 
 NetSender::NetSender(BNetEndpoint *endpoint, StreamingRingBuffer *source)
@@ -27,6 +41,18 @@ NetSender::NetSender(BNetEndpoint *endpoint, StreamingRingBuffer *source)
 	fSenderThread(-1),
 	fStopThread(false)
 {
+	// Bound how long a single Send() can block. Without this the drain thread
+	// parks in send() for as long as the peer withholds window space, which is
+	// unbounded, cannot be joined by the destructor, and (once the send ring
+	// behind it fills) stalls the drawing producers too.
+	int socket = fEndpoint->Socket();
+	if (socket >= 0) {
+		struct timeval timeout;
+		timeout.tv_sec = kSendChunkTimeout / 1000000;
+		timeout.tv_usec = kSendChunkTimeout % 1000000;
+		setsockopt(socket, SOL_SOCKET, SO_SNDTIMEO, &timeout, sizeof(timeout));
+	}
+
 	// Claim the source before the thread exists, so that no drawing output is
 	// discarded between this connection being accepted and the drain starting.
 	fSource->SetReader(this);
@@ -98,11 +124,50 @@ NetSender::_NetworkSender()
 		}
 
 		uint8* position = buffer;
+		bigtime_t lastProgress = system_time();
 		while (readSize > 0) {
 			int32 sendSize = fEndpoint->Send(position, readSize);
 			if (sendSize < 0) {
-				TRACE_ERROR("sending data failed: %s\n", strerror(sendSize));
-				return sendSize;
+				// BNetEndpoint::Send() fails without calling send() at all when
+				// the endpoint has no socket, leaving errno untouched, so the
+				// socket is checked before errno is trusted. Retrying a
+				// classified-as-transient stale errno here would spin.
+				int socket = fEndpoint->Socket();
+				if (socket < 0) {
+					TRACE_ERROR("send endpoint has no socket, stopping\n");
+					return B_ERROR;
+				}
+
+				status_t error = errno;
+				if (error == EINTR)
+					continue;
+
+				// The socket send timeout expired, so the client has taken
+				// nothing for a while. That is normal for a moment (a slow
+				// link, a busy client), but a peer that never reads again must
+				// not hold this thread forever: the send ring behind it fills,
+				// the drawing producers block on it, and with them the thread
+				// that also accepts new connections -- which is how one dead
+				// client used to make the interface refuse every later one.
+				// Give up on the connection instead and shut the socket down,
+				// so the receive side sees the peer as gone and tears the
+				// session down in its normal path.
+				if (error == EWOULDBLOCK || error == ETIMEDOUT) {
+					if (fStopThread)
+						return B_INTERRUPTED;
+
+					if (system_time() - lastProgress < kSendStallTimeout)
+						continue;
+
+					TRACE_ERROR("client accepted no data for %" B_PRIdBIGTIME
+						" us, dropping connection\n",
+						system_time() - lastProgress);
+					shutdown(socket, SHUT_RDWR);
+					return B_TIMED_OUT;
+				}
+
+				TRACE_ERROR("sending data failed: %s\n", strerror(error));
+				return error;
 			}
 
 			// A short send must resume from where it stopped. Without advancing
@@ -111,6 +176,8 @@ NetSender::_NetworkSender()
 			// (defect D2).
 			position += sendSize;
 			readSize -= sendSize;
+			if (sendSize > 0)
+				lastProgress = system_time();
 		}
 	}
 
