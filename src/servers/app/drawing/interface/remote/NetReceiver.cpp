@@ -187,6 +187,10 @@ NetReceiver::_Listen()
 		// loop either -- _Transfer() drains the queue before it reads from the
 		// connection again, which keeps the stream in order.
 		if (fCandidateBufferUsed > 0) {
+			// VERIFY-438: how many bytes the gate hands to the parser on
+			// promotion. Not for merging; see the #438 hardware arms.
+			debug_printf("VERIFY438: promoting candidate, handing over %"
+				B_PRIuSIZE " byte(s) to the parser\n", fCandidateBufferUsed);
 			memcpy(fPendingBuffer, fCandidateBuffer, fCandidateBufferUsed);
 			fPendingUsed = fCandidateBufferUsed;
 			fPendingOffset = 0;
@@ -563,6 +567,12 @@ NetReceiver::_ReceiveCandidateData()
 	}
 
 	fCandidateBufferUsed += readSize;
+
+	// VERIFY-438: what a single candidate read took off the socket, and how
+	// much the gate is now holding. Not for merging; see the #438 arms.
+	debug_printf("VERIFY438: candidate read %" B_PRId32 " byte(s) in one"
+		" Receive(), %" B_PRIuSIZE " buffered, capacity %" B_PRIuSIZE "\n",
+		readSize, fCandidateBufferUsed, sizeof(fCandidateBuffer));
 
 	int valid = validate_first_frame(fCandidateBuffer, fCandidateBufferUsed);
 	if (valid < 0) {
