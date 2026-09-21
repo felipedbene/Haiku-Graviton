@@ -767,3 +767,52 @@ test('publish: haiku-repo-add is fetched from an asset and sha256-verified (#454
   expect(verify).toBeGreaterThan(-1);
   expect(run).toBeGreaterThan(verify);
 });
+
+// A bucket the promote READS from must be listable, not merely gettable. The first
+// real apply staged all 19 packages into the work bucket and then died on
+// ListObjectsV2 against it (#456): `haiku-repo-add` reads its incoming prefix back
+// with `aws s3 sync`, a sync enumerates, and s3:ListBucket is a BUCKET-level action
+// that no object-level grant can satisfy. Every local proof of the apply path ran
+// under operator credentials, so nothing exercised the role's own policy until
+// CodeBuild assumed it.
+//
+// Scoped to the PROMOTE role's own policy document, identified by a Sid only it
+// carries. A first cut of this test flattened every policy in the stack and passed
+// even with the fix reverted, because the builder role happens to list the work
+// bucket -- "somebody in this stack may enumerate it" is not the property under
+// test. Buckets come from the generated shell and the project's own environment, so
+// a prefix the job starts touching later is covered without editing this test.
+test('promote role can LIST every bucket its buildspec reads', () => {
+  const { build, env } = opsProject('debeos-repo-promote-green');
+  const text = build.join('\n') + '\n' + Object.values(env).join('\n');
+  const buckets = new Set<string>();
+  for (const m of text.matchAll(/s3:\/\/([a-z0-9.-]+)/g)) buckets.add(m[1]);
+
+  const app = new cdk.App();
+  const stack = new OpsStack(app, 'TestOpsStack', {
+    env: { account: config.account, region: config.region },
+    config,
+  });
+  const policies = Template.fromStack(stack).findResources('AWS::IAM::Policy');
+  // The promote role's document is the one carrying its blue-read-only Sid.
+  const promotePolicy = (Object.values(policies) as any[]).find((pol) =>
+    (pol.Properties.PolicyDocument.Statement as any[])
+      .some((st) => st.Sid === 'ReadBlueStagingPoolOnly'));
+  expect(promotePolicy).toBeDefined();
+
+  const listable = new Set<string>();
+  for (const st of promotePolicy.Properties.PolicyDocument.Statement as any[]) {
+    const actions = ([] as string[]).concat(st.Action);
+    if (!actions.includes('s3:ListBucket') && !actions.includes('s3:List*')) continue;
+    for (const r of ([] as any[]).concat(st.Resource)) {
+      if (typeof r !== 'string') continue;
+      const m = r.match(/^arn:aws:s3:::([a-z0-9.-]+)$/);
+      if (m) listable.add(m[1]);
+    }
+  }
+
+  // The CDK asset bucket is fetched by exact key and never enumerated.
+  const mustList = [...buckets].filter((b) => !b.startsWith('cdk-'));
+  expect(mustList.length).toBeGreaterThan(1);
+  for (const b of mustList) expect([...listable]).toContain(b);
+});
