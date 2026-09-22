@@ -23,6 +23,20 @@
 static_assert(offsetof(acpi_fadt, arm_boot_arch) == 129,
 	"acpi_fadt layout does not match the ACPI specification");
 
+// The GTDT is read field-by-field against the table's own length, so every one
+// of those offsets has to be the specified one -- a struct that drifted by a
+// word would silently pass the length tests and hand the kernel a GSIV read from
+// the wrong place.
+static_assert(offsetof(acpi_gtdt, counter_block_address) == 36
+	&& offsetof(acpi_gtdt, secure_el1_gsiv) == 48
+	&& offsetof(acpi_gtdt, non_secure_el1_gsiv) == 56
+	&& offsetof(acpi_gtdt, virtual_el1_gsiv) == 64
+	&& offsetof(acpi_gtdt, non_secure_el2_gsiv) == 72
+	&& offsetof(acpi_gtdt, counter_read_block_address) == 80
+	&& offsetof(acpi_gtdt, virtual_el2_gsiv) == 96
+	&& sizeof(acpi_gtdt) == 104,
+	"acpi_gtdt layout does not match the ACPI specification");
+
 
 static void arch_acpi_get_uart_pl011(const uart_info &uart)
 {
@@ -179,6 +193,136 @@ arch_acpi_set_gicr_regions(intc_info &intc, const uint64 *bases, uint32 count,
 	}
 
 	intc.gicr_region_count = regions;
+}
+
+
+// The GTDT's timer views, in the order ARM_TIMER_IRQ_* numbers them, for
+// diagnostics. Deliberately the same spellings the device-tree binding uses, so
+// that a boot log from an ACPI machine and one from a device-tree machine can be
+// compared line for line.
+static const char* const kGenericTimerIrqNames[ARM_TIMER_IRQ_COUNT] = {
+	"sec-phys",
+	"phys",
+	"virt",
+	"hyp-phys",
+	"hyp-virt",
+};
+
+// GIC INTIDs a generic timer interrupt can legally carry. Every view of the
+// timer is private to a PE, so on a GIC-based machine it is a PPI: INTID 16-31,
+// or the GICv3.1 extended PPI range 1056-1119 on a machine that has run out of
+// the classic sixteen. Anything else -- an SPI, an SGI, an LPI, a reserved
+// INTID -- means this table is not describing what we believe it is, and is
+// refused rather than installed.
+//
+// This matters more here than the equivalent check would for most firmware
+// values, because the architected fallback it would displace is *correct* on
+// every platform measured. A plausible-but-wrong INTID installed in its place
+// does not fail at init: the handler installs fine, the timer never fires, and
+// the kernel wedges later at the first thing that waits.
+#define GTDT_PPI_FIRST			16
+#define GTDT_PPI_LAST			31
+#define GTDT_EXT_PPI_FIRST		1056
+#define GTDT_EXT_PPI_LAST		1119
+
+
+static bool
+arch_acpi_gsiv_is_ppi(uint32 gsiv)
+{
+	return (gsiv >= GTDT_PPI_FIRST && gsiv <= GTDT_PPI_LAST)
+		|| (gsiv >= GTDT_EXT_PPI_FIRST && gsiv <= GTDT_EXT_PPI_LAST);
+}
+
+
+// Record one timer view's GSIV, if it is one.
+//
+// Zero is how firmware spells "this view is not implemented" -- the GTDT has no
+// other way to say it, since every field is mandatory once the table is long
+// enough to contain it -- so it is passed over quietly, leaving the bit clear in
+// interrupt_valid and the kernel on its architected default. A non-zero value
+// that is not a PPI is a different thing entirely and is worth saying out loud.
+static void
+arch_acpi_set_timer_gsiv(uint32 index, uint32 gsiv)
+{
+	if (gsiv == 0)
+		return;
+
+	if (!arch_acpi_gsiv_is_ppi(gsiv)) {
+		dprintf("acpi: gtdt %s timer gsiv %" B_PRIu32 " is not a ppi (%d-%d or "
+			"%d-%d); ignoring it, the kernel keeps its architected intid\n",
+			kGenericTimerIrqNames[index], gsiv, GTDT_PPI_FIRST, GTDT_PPI_LAST,
+			GTDT_EXT_PPI_FIRST, GTDT_EXT_PPI_LAST);
+		return;
+	}
+
+	arm_generic_timer_info &timer = gKernelArgs.arch_args.timer;
+	timer.interrupt[index] = gsiv;
+	timer.interrupt_valid |= 1 << index;
+}
+
+
+// Record what the GTDT says about the generic timer.
+//
+// This fills exactly the fields the device-tree path fills, so the kernel needs
+// to know nothing about where they came from. Note that this runs *before*
+// dtb_init(), and the FDT path only parses a timer node when the struct is still
+// untouched -- so on a machine that describes the timer both ways, ACPI wins,
+// which is the right way round: firmware that ships a GTDT is describing the
+// machine it actually built.
+static void
+arch_acpi_handle_gtdt(const acpi_gtdt *gtdt)
+{
+	// The four EL1/EL2 GSIVs below sit at the same offsets in every revision of
+	// this table, so their availability is a question of length alone. A table
+	// too short to hold them is not a GTDT we can use for anything.
+	if (gtdt->header.length < offsetof(acpi_gtdt, counter_read_block_address)) {
+		dprintf("acpi: gtdt is only %" B_PRIu32 " bytes (revision %u); too "
+			"short to describe the timer interrupts, ignoring it\n",
+			gtdt->header.length, gtdt->header.revision);
+		return;
+	}
+
+	arch_acpi_set_timer_gsiv(ARM_TIMER_IRQ_SEC_PHYS, gtdt->secure_el1_gsiv);
+	arch_acpi_set_timer_gsiv(ARM_TIMER_IRQ_PHYS, gtdt->non_secure_el1_gsiv);
+	arch_acpi_set_timer_gsiv(ARM_TIMER_IRQ_VIRT, gtdt->virtual_el1_gsiv);
+	arch_acpi_set_timer_gsiv(ARM_TIMER_IRQ_HYP_PHYS, gtdt->non_secure_el2_gsiv);
+
+	// The EL2 virtual timer was added in revision 3 (ACPI 6.3). Require both the
+	// revision and the length: a revision that predates the field means the
+	// bytes belong to the platform timer array that follows, and a table whose
+	// length stops short of it is malformed whatever it claims to be.
+	if (gtdt->header.revision >= 3
+		&& gtdt->header.length >= sizeof(acpi_gtdt)) {
+		arch_acpi_set_timer_gsiv(ARM_TIMER_IRQ_HYP_VIRT,
+			gtdt->virtual_el2_gsiv);
+	}
+
+	// No frequency is carried from here, and it is worth being explicit about
+	// why rather than leaving a reader to wonder: the GTDT states no counter
+	// frequency. The only frequency it leads to is CNTFID0 in the memory-mapped
+	// counter block at CntControlBase, which is a secure-only frame on most
+	// platforms -- reading it from the loader would fault or return garbage, and
+	// buy nothing, since CNTFRQ_EL0 is what the kernel prefers anyway and is
+	// programmed on every machine this has run on. Leaving frequency at zero is
+	// the struct's own way of saying "firmware stated none".
+	arm_generic_timer_info &timer = gKernelArgs.arch_args.timer;
+
+	dprintf("generic timer from acpi gtdt (revision %u, %" B_PRIu32 " bytes):\n",
+		gtdt->header.revision, gtdt->header.length);
+	dprintf("  frequency: not stated by this table; kernel uses CNTFRQ_EL0\n");
+	dprintf("  counter block: %#" B_PRIx64 "%s\n", gtdt->counter_block_address,
+		gtdt->counter_block_address == ACPI_GTDT_ADDRESS_NOT_PROVIDED
+			? " (not provided)" : "");
+	for (uint32 i = 0; i < ARM_TIMER_IRQ_COUNT; i++) {
+		if ((timer.interrupt_valid & (1 << i)) != 0) {
+			dprintf("  %s timer interrupt: %" B_PRIu32 "\n",
+				kGenericTimerIrqNames[i], timer.interrupt[i]);
+		}
+	}
+	if (timer.interrupt_valid == 0) {
+		dprintf("  no usable timer interrupt; the kernel keeps its architected "
+			"intids\n");
+	}
 }
 
 
@@ -407,6 +551,14 @@ arch_handle_acpi()
 				version);
 		}
 	}
+
+	// What firmware says about the generic timer. Nothing here is required: the
+	// kernel has architected INTIDs to fall back on, and every platform measured
+	// agrees with them -- which is exactly why a GSIV is only installed once it
+	// has been checked, rather than trusted for being present.
+	acpi_gtdt *gtdt = (acpi_gtdt*)acpi_find_table(ACPI_GTDT_SIGNATURE);
+	if (gtdt != NULL)
+		arch_acpi_handle_gtdt(gtdt);
 
 	// Without a device tree there is no "enable-method" property to consult,
 	// so the only indication that secondary CPUs can be started via PSCI --
