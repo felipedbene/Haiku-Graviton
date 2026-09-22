@@ -603,12 +603,17 @@ PCI::PCI()
 void
 PCI::InitBus(PCIBus *bus)
 {
+	// The root bus is not always 0: AddController() creates a domain's root bus
+	// at the first bus its controller decodes (see get_bus_range). Enumerating
+	// and fixing up from a hardcoded 0 skips every fixup for a domain rooted
+	// above 0 and probes buses below its window, one "failed to read config"
+	// line per device onto a write-bound console.
 	if (fBusEnumeration) {
-		_EnumerateBus(bus->domain, 0);
+		_EnumerateBus(bus->domain, bus->bus);
 	}
 
 	if (1) {
-		_FixupDevices(bus->domain, 0);
+		_FixupDevices(bus->domain, bus->bus);
 	}
 
 	_DiscoverBus(bus);
