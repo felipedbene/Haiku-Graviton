@@ -47,9 +47,9 @@ memory that keeps per-port flags from being re-derived.
 | 12 | [Source availability / checksum drift](#class-12-source-availability--checksum-drift) | `checksum` mismatch / 403 / dead DNS / HTML error page |
 | 13 | [Hardcoded cross-compiler prefix](#class-13-hardcoded-cross-compiler-prefix) | `aarch64-unknown-haiku-g++: No such file or directory` |
 | 14 | [Poisoned build-tool package](#class-14-poisoned-build-tool-package) | `Unhandled pheader type in parse 0x6474e553` |
-| 15 | [runConfigure CFLAGS needs -O](#secondary-blocker-tail-136-re-wave-of-classes-3846710113) | `runConfigure: Must specify optimization flags when overriding CFLAGS` |
-| 16 | [multiple definition (GCC10 -fno-common)](#secondary-blocker-tail-136-re-wave-of-classes-3846710113) | `ld: multiple definition of '<sym>'` |
-| 17 | [CMake FetchContent offline fetch](#secondary-blocker-tail-136-re-wave-of-classes-3846710113) | `FetchContent_MakeAvailable` / `__FetchContent_populateSubbuild` |
+| 15 | [runConfigure CFLAGS/CXXFLAGS needs -O](#class-15-runconfigure-cflags-override-without-optimization-flags) | `runConfigure: Must specify optimization flags when overriding C[XX]FLAGS` |
+| 16 | [multiple definition (GCC10 -fno-common)](#class-16--fno-common-duplicate-symbols-at-link-time) | `ld: multiple definition of '<sym>'` |
+| 17 | [CMake FetchContent offline fetch](#class-17-cmake-fetchcontent-wants-the-network-at-configure-time) | `FetchContent_MakeAvailable` / `Modules/FetchContent.cmake:<line>` |
 | 18 | [Missing link-time library](#class-18-missing-link-time-library-ld-cannot-find--llib) | `ld: cannot find -l<lib>: No such file or directory` |
 | 19 | [Build system does not recognise aarch64](#class-19-build-system-does-not-recognise-aarch64arm64) | `"Platform '' not supported"` / `unknown word-size for arch: aarch64` |
 | 20 | [Prerequisite package/tool not published](#class-20-prerequisite-packagetool-not-published) | `unable to resolve (pre)required packages` / `Package 'X' … not found` |
@@ -59,12 +59,29 @@ memory that keeps per-port flags from being re-derived.
 | 24 | [Source-acquisition tool missing on host](#class-24-source-acquisition-tool-missing-on-the-builder-host) | `Error: '<hg\|svn\|lha>' is not available, please install it` |
 | 25 | [Wave-driver round cap (not a port defect)](#class-25-wave-driver-round-cap--not-a-port-defect) | `gave up after <N> attempts` |
 | 26 | [Dependency present but unresolved (not absent)](#class-26-dependency-present-but-unresolved--not-absent) | `DEP_NO_PROGRESS [<verdict>]` |
+| 27 | [C++11 narrowing conversion is an error](#class-27-c11-narrowing-conversion-is-an-error) | `error: narrowing conversion of '-1' … [-Wnarrowing]` |
+| 28 | [configure's compile probe failed — read config.log](#class-28-configures-compile-probe-failed--cause-is-in-configlog) | `C compiler cannot create executables` / `could not compile test program either way` |
+| 29 | [The autotools re-run itself breaks](#class-29-the-autotools-re-run-itself-breaks) | `AM_INIT_AUTOMAKE expanded multiple times` / `aclocal: error: … failed with exit status` |
+| 30 | [Recipe names a patch file that is not staged](#class-30-recipe-names-a-patch-file-that-is-not-staged) | `Error: patch file "…" not found` |
+| 31 | [Port has no recipe in the tree](#class-31-port-has-no-recipe-in-the-tree) | `Error: <port> not found in repository` |
+| 32 | [Linux-only CPU-affinity / cpuset API](#class-32-linux-only-cpu-affinity--cpuset-api) | `CPU_ISSET_S` / `CPU_ALLOC` / `undefined reference to 'CPUSET_ZERO'` |
+| 33 | [undefined reference to a symbol Haiku lacks](#class-33-undefined-reference-to-a-symbol-haiku-does-not-provide) | `undefined reference to 'WCOREDUMP'` |
+| 34 | [meson invoked without `--buildtype`](#class-34-meson-invoked-without---buildtype) | `invoking meson without --buildtype` |
 
-Classes 15–17 were surfaced by the #136 re-wave secondary-blocker triage; see
-[that section](#secondary-blocker-tail-136-re-wave-of-classes-3846710113) at the
-end of this document. **Classes 18–24 were mined from the real UNMATCHED backlog by
+Classes 15–17 were surfaced by the #136 re-wave secondary-blocker triage (see
+[that section](#secondary-blocker-tail-136-re-wave-of-classes-38467101113) at the end of
+this document) and **reserved but never encoded in `haiku-triage-failures` until #488** —
+which is why 20 + 13 + 3 ports sat in UNMATCHED with a class already written for them.
+**Classes 18–24 were mined from the real UNMATCHED backlog by
 `graviton/scripts/haiku-pattern-miner`** (see
 [How classes 18–24 were mined](#how-classes-1824-were-mined--the-unmatched-frontier)).
+
+**Classes 27–34 came from reading all 639 available backlog logs (#488).** Three of them
+(30, 31 and — in its operator half — 28) are not port defects either: they route to
+whoever stages the overlay or provisions the chroot. The same pass extended classes 5, 18
+and 21 rather than minting near-duplicates, and split UNMATCHED into a *ruleset gap* and a
+*no diagnostic captured* bucket — see
+[The 99 that no regex can classify](#the-105-unmatched-logs-that-no-regex-can-classify).
 
 **Classes 25–26 are not port defects at all** — they are the *wave driver's* own
 failure modes, split out of Class 20 in #485/#486 once `haiku-nativebuild` started
@@ -679,17 +696,108 @@ genuine Haiku binary has **no `INTERP` segment**. Any port whose build runs
 
 ---
 
-## Classes 15–17 (reserved, PR #309)
+## Class 15: `runConfigure` CFLAGS override without optimization flags
 
-Classes **15** (CFLAGS override drops default optimization —
-`runConfigure: Must specify optimization flags when overriding CFLAGS`, fix: add
-`-O2`), **16** (duplicate symbol / `multiple definition of` — fix: `-fcommon` or a
-real dedup), and **17** (CMake `FetchContent` offline fetch — pre-seed the dep) are
-owned by **PR #309** (the re-triage-tail work). They are only reserved here so the
-numbering stays stable across the two PRs. **The mining below deliberately does NOT
-re-add them**, even though the miner sees their signatures in the UNMATCHED pile
-(class 15 = 18 ports, class 16 = 13 ports as of the 2026-09-17 mining run) — see #309
-for the class bodies.
+**Reserved in #309, encoded in #488 — 20 ports, the largest single unclassified class in
+the 639-log backlog census.** Haiku's `runConfigure` wrapper refuses to run when a recipe
+overrides `CFLAGS`/`CXXFLAGS` without an `-O` level, because autotools' own default `-g
+-O2` is dropped the moment the variable is set. Rather than silently build an unoptimized
+package, the wrapper aborts.
+
+**Symptom:**
+```
+runConfigure: Must specify optimization flags when overriding CFLAGS.
+	(autotools configure will not use the default ones in that case.)
+```
+
+**Note the spelling.** The guard fires for **`CXXFLAGS` too**, with the variable name
+substituted. Two of the 20 ports (`farmhash`, `libnpupnp`) only ever log the `CXXFLAGS`
+form, so a `CFLAGS`-only signature silently misses them — the classifier keys on
+`C(?:XX)?FLAGS` and the selftest has a fixture for each spelling.
+
+**This class is largely self-inflicted by the earlier fix waves.** The class-3/BSD
+overlays that prepend `CFLAGS=-Wno-error` or `CFLAGS=-D_BSD_SOURCE` to `runConfigure`
+regressed exactly here. Recipes that `export CFLAGS=...` are unaffected — the wrapper
+guards `runConfigure` only.
+
+**Fix.** Put `-O2` in the override: `CFLAGS="-O2 -Wno-error" runConfigure ...`. Before the
+next bake, grep the overlays for `CFLAGS=.*runConfigure` lacking `-O`.
+
+**Example ports:** aranym, bind_utils, calcurse, cronie, dfu_util, dmtx_utils,
+dosfstools, erlang, es, expect, farmhash, gpart, lcdproc, libnpupnp, libtorrent, libxo,
+minicom, mosh, pkcs11_helper, tnftp (plus axel and dovecot, fixed in #316).
+
+**Ordering.** First in the ruleset, with the other refusals our own tooling emits before
+any compiler runs (classes 30, 31, 34). A pre-build abort log still carries the chatter of
+the `autoreconf`/`automake` run that *succeeded* (`+ Running automake: configure.ac:358:
+installing './compile'`), one reword away from looking like a class-3 or class-10 failure —
+so the guard sits ahead of the autotools classes. Be honest that this is a **guard**: no
+cached log needs it, and the selftest pins it with a synthetic fixture for that reason.
+
+---
+
+## Class 16: `-fno-common` duplicate symbols at link time
+
+**Reserved in #309, encoded in #488 — 13 ports.** Pre-C99 sources declare a global in a
+header without `extern` (a *tentative definition*), every translation unit that includes
+it emits its own, and `-fcommon` used to merge them. GCC 10 flipped the default to
+`-fno-common`, so they now collide at link.
+
+**Symptom (link step):**
+```
+ld: windows.o:/sources/nethack-3.6.2/src/windows.c:863: multiple definition of `WIN_STATUS';
+    decl.o:/sources/nethack-3.6.2/src/decl.c:273: first defined here
+collect2: error: ld returned 1 exit status
+```
+
+**Not an arm64 bug and not a Haiku bug.** It is a compiler-default change; the same 13
+ports would fail identically on x86 with the same toolchain. Say so when filing — this
+class is *not* evidence of a porting gap.
+
+**Fix.** `-fcommon` in the recipe's `CFLAGS` clears it class-wide. Where the source is
+short, the better fix is to patch the header's tentative definitions to `extern` and put
+one real definition in a `.c` file.
+
+**Example ports:** aaaa, butterfly, gish, global, gophernicus, jumpnbump, kona, libfpx,
+nethack, rhapsody_irc, sdlscavenger, sharutils, wput (plus freegish and libmirage, fixed
+in #316).
+
+**Ordering.** Immediately **after** class 18, the other `ld` class, and **before** class 33
+(`undefined reference to`). Among link failures the one that names *which* symbol and
+*why* wins; and a link whose *inputs* are missing (`cannot find -lfoo`, class 18) has not
+got as far as comparing symbols, so fix the input first. Measured: none of the 13 logs
+also carries `cannot find -l` or `undefined reference`, so the order is a guard for future
+logs rather than a live tie — the selftest pins it with a constructed fixture.
+
+---
+
+## Class 17: CMake `FetchContent` wants the network at configure time
+
+**Reserved in #309, encoded in #488 — 3 ports.** The upstream `CMakeLists.txt` pulls a
+build-time sub-dependency itself, at configure time, and the sandboxed chroot has no
+egress. **Distinct from Class 12:** that is the *recipe's* own `SOURCE_URI`; this is a
+fetch the build system performs on its own behalf, which no checksum bump can help.
+
+**Symptom:**
+```
+Call Stack (most recent call first):
+  …/cmd~cmake/data/cmake/Modules/FetchContent.cmake:1609 (__FetchContent_populateSubbuild)
+  …/cmd~cmake/data/cmake/Modules/FetchContent.cmake:2384 (__FetchContent_Populate)
+  src/CMakeLists.txt:11 (FetchContent_MakeAvailable)
+-- Configuring incomplete, errors occurred!
+```
+`grcompiler`'s variant is the degenerate case — `URL keyword needs to be followed by at
+least one URL` from `FetchContent_Declare` — the same routing: the recipe has to supply
+the source.
+
+**Fix.** Supply the sub-dependency as a real package (`BUILD_REQUIRES`) and point
+`-DFETCHCONTENT_SOURCE_DIR_<name>` at its extracted tree, or vendor it into the recipe.
+`auto_recoverable=False`: which sub-dependency, and where its tree lands, is per-port.
+
+**Example ports:** betterspades, grcompiler, openexr3.2.
+
+**Ordering.** After Class 1. When the *fetched* subproject then trips the pre-3.5 policy
+removal, `-DCMAKE_POLICY_VERSION_MINIMUM=3.5` is the fix and Class 1 must win the tie.
 
 ---
 
@@ -1056,6 +1164,250 @@ bound**.
 
 ---
 
+## Class 27: C++11 narrowing conversion is an error
+
+**#488, 3 ports.** C++11 made a narrowing conversion inside a braced initialiser
+ill-formed, so `{ -1 }` into a `char` member — legal and idiomatic in C++03 — is now a hard
+error.
+
+**Symptom:**
+```
+Source/stTrackerEntry.cpp:20:18: error: narrowing conversion of '-1' from 'int' to 'char' [-Wnarrowing]
+```
+
+**The `error:` prefix is load-bearing.** `-Wnarrowing` is emitted as a **warning** far more
+often than as an error, and a signature that accepts the warning form files a log by a line
+that did not fail the build. Measured: two ports (`qemacs`, `colors`) show only warnings —
+and in `colors`' case in a *different* translation unit from the object that actually
+failed. They are deliberately left UNMATCHED, because their real diagnostic is off the end
+of the truncated capture window (see
+[the no-diagnostic bucket](#the-105-unmatched-logs-that-no-regex-can-classify)). The
+issue's proposed regex claimed all five; the honest count is three.
+
+**Fix.** Cast at the initialiser. As a class-wide unblock, `-Wno-narrowing` or
+`-fpermissive` in `CXXFLAGS`. Arch-independent: a C++11 conformance tightening, not an
+arm64 port bug.
+
+**Example ports:** nxengine, sawteeth, sum_it.
+
+**Ordering.** Before Class 22. `error: narrowing conversion of … [-Wnarrowing]` is strictly
+more specific than Class 22's `does not name a type`, and it carries a template fix where
+Class 22 means per-port source porting.
+
+---
+
+## Class 28: configure's compile probe failed — cause is in config.log
+
+**#488, 3 ports.** Two wordings, one routing:
+
+```
+configure: error: C compiler cannot create executables
+checking if arpa/nameser_compat.h is needed... configure: error: could not compile test program either way
+```
+
+The first means the chroot toolchain, or the default link line configure uses, cannot
+produce a binary at all (`johntheripper`, `sciteco_curses`). The second is a feature probe
+that fails **with and without** the header it is testing (`pkgconfig`, via its bundled
+glib). In both cases configure printed a **verdict, not a cause**.
+
+**Fix.** The cause is in `config.log` inside the chroot haikuporter keeps for inspection
+(`work-*/`). `auto_recoverable=False` on purpose: the action is "go read config.log", which
+no re-wave performs. This is an **environment** class, not a recipe template.
+
+**Example ports:** johntheripper, pkgconfig, sciteco_curses.
+
+**Ordering.** **After Class 2.** The commonest way for a C compiler to stop creating
+executables is that the compiler or linker is not in the chroot at all — and *that* log
+also carries `gcc: command not found`, which names the cause and has a template fix. Class
+2 must win the tie. Measured: none of the three logs here matches Class 2, so the order
+costs this class nothing; the selftest asserts the tie with a synthetic fixture.
+
+---
+
+## Class 29: The autotools re-run itself breaks
+
+**#488, 2 ports.** The recipe's own `autoreconf` aborts, usually because the project
+invokes a macro twice under a newer autoconf/automake than it was written for.
+
+**Symptom:**
+```
+configure.ac:11: error: AM_INIT_AUTOMAKE expanded multiple times
+autom4te: error: m4 failed with exit status: 1
+aclocal: error: …/autom4te failed with exit status: 1
+autoreconf: error: aclocal failed with exit status: 1
+```
+`fswatch`'s variant is `AC_CONFIG_MACRO_DIR can only be used once`.
+
+**Fix.** Patch the duplicated macro invocation out of `configure.ac`, or pin the recipe to
+the autotools version the source expects. Not arm64-specific.
+
+**Example ports:** fswatch, irrxml.
+
+**Ordering — the most important negative in the ruleset.** **After Class 10.** An
+`autoreconf` that aborts *because an aux file is missing* prints both its own
+`automake failed with exit status: 1` **and** Class 10's `required file '...' not found`.
+`libmcrypt` is exactly that log: Class 10 names the cause, this class names only the
+messenger, and putting Class 29 first would re-file `libmcrypt` under a fix (patch the
+macro) that does not apply to it. Measured: 3 logs match this signature, 1 of them
+(`libmcrypt`) is correctly kept by Class 10.
+
+---
+
+## Class 30: Recipe names a patch file that is not staged
+
+**#488, 2 ports. An OPERATOR bug, not a port bug** — which is exactly why it gets a class
+of its own rather than being folded anywhere: it routes to whoever stages the overlay.
+
+**Symptom (haikuporter aborts before the build):**
+```
+Error: patch file "/boot/home/haikuports/haiku-games/criticalmass/patches/criticalmass-2.3.patchet" not found.
+```
+Note the filenames: `criticalmass` names `…patchet` (a typo for `.patchset`) and `veesem`
+names a `.recipe`. Either the `PATCHES=` entry is wrong or the patchset never got copied
+into the overlay.
+
+**Fix.** Stage the missing file, or fix the `PATCHES=` filename. Check the overlay-sync
+step before re-waving. `auto_recoverable=False`: there is no template — the missing file
+has to be found.
+
+**Example ports:** criticalmass, veesem.
+
+**Ordering.** First block, with the other pre-build refusals our own tooling emits.
+
+---
+
+## Class 31: Port has no recipe in the tree
+
+**#488, 1 port. Also an operator / wave-list issue.** haikuporter aborts at lookup: the
+wave asked for a port that has no recipe in the overlay or the upstream tree.
+
+**Symptom:**
+```
+Error: fpc_bootstrap not found in repository
+```
+
+**Fix.** Write the recipe, or drop the name from the wave list. It is worth its own class
+(for one port) purely because it routes to the operator rather than to a recipe — filing it
+as a build failure sends someone looking for a compiler error that does not exist.
+
+**Example ports:** fpc_bootstrap.
+
+---
+
+## Class 32: Linux-only CPU-affinity / cpuset API
+
+**#488, 2 ports.** glibc's `sched_setaffinity` helper macros (`CPU_ALLOC`, `CPU_ISSET_S`,
+`CPU_*_S`) have no Haiku equivalent.
+
+**Symptom, two ways:**
+```
+./include/cpuset.h:80:21: note: in expansion of macro 'CPU_ISSET_S'   # util_linux, at compile time
+threads.c:(.text+0x70): undefined reference to `CPUSET_ZERO'          # cpuid, at LINK time
+```
+`cpuid`'s shape is worth dwelling on: its own patchset already tried a shim
+(`#define CPU_ZERO CPUSET_ZERO`) against a name Haiku does not export either, so the
+affinity gap surfaces only at link, wearing Class 33's wording.
+
+**Fix.** Real porting work: give the source an affinity-free path under `__HAIKU__`, or a
+*correct* shim. Haiku exports neither `CPU_*_S` nor `CPUSET_ZERO`. Not a template, and not
+recoverable by a re-wave.
+
+**Example ports:** cpuid, util_linux.
+
+**Ordering.** **Before Class 33.** An understood, named porting gap beats an anonymous
+missing symbol. The selftest's mutation arm proves it: disarm Class 32 and `cpuid` lands in
+Class 33, which is the misfiling the order exists to prevent.
+
+---
+
+## Class 33: `undefined reference` to a symbol Haiku does not provide
+
+**#488, 1 port.** A POSIX-adjacent symbol the source assumes exists — `kbuild` wants
+`WCOREDUMP`.
+
+**Symptom:**
+```
+src/kash/jobs.c:424:(.text+0x9f8): undefined reference to `WCOREDUMP'
+collect2: error: ld returned 1 exit status
+```
+
+**Fix.** Implement or shim the missing symbol under `__HAIKU__`, or patch the source to a
+supported equivalent. Check first that it is not really a missing `-l` (Class 18) or a
+Linux-only API with a name (Class 32).
+
+**Example ports:** kbuild.
+
+**Ordering — the most generic link signature in the ruleset, so it is pinned from both
+sides.** It sits **after** every class that names a reason (18 missing `-l`, 16 duplicate
+symbol, 32 Linux-only affinity, 7 LTO), so `undefined reference` can only claim a log that
+no more specific class explains; and **before** classes 25/26/20, so a genuine link failure
+is never re-filed as a dependency-resolution problem — the mistake #486 found one class up.
+
+---
+
+## Class 34: meson invoked without `--buildtype`
+
+**#488, 1 port.** haikuporter's meson analogue of Class 8's cmake guard: it refuses to run
+meson with no build type, because the resulting package would be unoptimized and carry no
+debug-info split.
+
+**Symptom:**
+```
+error: invoking meson without --buildtype argument
+note: you probably want --buildtype=release or --buildtype=debugoptimized
+```
+
+**Fix.** Pass `--buildtype=release` (or `debugoptimized`) in the recipe's meson invocation.
+
+**Why not just fold it into Class 8?** Same shape, different build system and different
+flag. Filing it under a class named "missing `CMAKE_BUILD_TYPE`" would send the reader to
+the wrong recipe line. Contrast Class 21, where #488 *did* fold in the
+`Cannot find Python N development headers` shape, because there the route is identical —
+add the missing python build requirement.
+
+**Example ports:** vmaf.
+
+---
+
+## The 105 UNMATCHED logs that no regex can classify
+
+**#488.** `UNMATCHED` in the census is two different things, and conflating them libels the
+ruleset. Before `3371e78289` (2026-09-17) the failure path captured only `tail -20 "$log"`,
+and **631 of the 639 backlog logs predate that fix**. Measured across the affected logs the
+window averages **21.9 lines, of which 11.0 are haikuporter's fixed epilogue** ("cleaning
+chroot", "keeping chroot folder", "Looking for stale…", the recipe box, `Error: Build has
+failed`) — leaving about 11 lines of real diagnostic, which for most ports ends *before* the
+line that says why.
+
+So the classifier was never blind; it was shown half a window. **These logs are
+unclassifiable by construction** — no regex can read a line that was never captured — and
+they need a re-wave with the current deep capture, not a new signature.
+
+`haiku-triage-failures` now reports them separately:
+
+```
+UNMATCHED (no class signature)             :  129
+  |- ruleset gap: a reason line IS captured :   24  <- extend RULES here
+  |- NO DIAGNOSTIC in the captured window   :  105  <- re-wave with the current deep capture
+```
+
+A line "states a reason" if it carries an `error:`/`fatal error:`/`configure: error:`
+token, `No such file or directory`, or `undefined reference` — **unless** it only says that
+something failed without saying why. Two such exclusions carry the whole split and are
+mutation-tested: `Error: Build has failed - stopping.` (the last line of haikuporter's
+epilogue, so it is in *every* log) and `collect2: error: ld returned 1 exit status`. The
+per-port flag is `no_diagnostic_captured` in the JSON/CSV artifacts, and
+`--dump-unmatched` now writes these into a `no-diagnostic/` subdirectory so the ~24
+actionable logs are not buried under a hundred that are not.
+
+**What is left in the 24 is a genuine per-port long tail**, each a distinct real error
+(`cabextract`: `static declaration of 'strlen' follows non-static`; `unrar`: neither
+`LITTLE_ENDIAN` nor `BIG_ENDIAN` defined; `jamvm`: `configure: error: aarch64-unknown-haiku
+not supported`; `zeromq`, `rcs`, `pjdfstest`, `mda_vst`, …). None recurs, so none earns a
+class yet; they are the per-port frontier.
+
+---
+
 ## Triage-tool signature gaps (found while mining) — CLOSED in PASS 2
 
 The mining run turned up ports that **belong to an existing class but the
@@ -1088,23 +1440,28 @@ PASS 2 census below).
 Real but too small (or too opaque) to codify as a class yet — recorded so they are not
 re-derived. Add a class if a future wave grows one past ~4 ports:
 
-- **autotools modernization (2):** `configure.ac: AC_CONFIG_MACRO_DIR can only be used
-  once` / `AM_INIT_AUTOMAKE expanded multiple times` — the port’s `configure.ac` is
-  written for an older autotools and the builder’s `autoconf-2.72`/`automake-1.18`
-  reject the double expansion. Fix: patch out the redundant macro invocation
-  (mechanically similar to Class 3’s rpcsvc_proto variant). *fswatch, irrxml.*
+- ~~**autotools modernization (2)**~~ — **PROMOTED to
+  [Class 29](#class-29-the-autotools-re-run-itself-breaks) in #488.** *fswatch, irrxml.*
 - **catkeys/locale link (2):** `couldn't load source-catalog ….catkeys — error: Bad
   data` from `linkcatkeys`, *after* the binary built (exit 255). A Haiku locale-tool
   parse failure on a specific `.catkeys`. *unreal_speccy_portable, wpa_supplicant.*
-- **recipe patch file missing (2):** `Error: patch file "…" not found` — the recipe’s
-  `PATCHES=` references a file absent from the port’s `patches/` dir. *criticalmass,
+- ~~**recipe patch file missing (2)**~~ — **PROMOTED to
+  [Class 30](#class-30-recipe-names-a-patch-file-that-is-not-staged) in #488**, because it
+  routes to the operator staging the overlay rather than to the port. *criticalmass,
   veesem.*
-- **meson without `--buildtype` (1):** `error: invoking meson without --buildtype
-  argument` — the meson analogue of Class 8; a systemic fix would default it in
-  haikuporter’s meson wrapper. *vmaf.*
+- ~~**meson without `--buildtype` (1)**~~ — **PROMOTED to
+  [Class 34](#class-34-meson-invoked-without---buildtype) in #488.** A systemic fix would
+  still be to default it in haikuporter’s meson wrapper. *vmaf.*
 - **library archiver / OpenMP / endian (1 each):** `working library archiver is
   required` (blis), `OpenMP … not supported` (libimagequant), `#error Neither
   LITTLE_ENDIAN nor BIG_ENDIAN` (unrar — real endian source porting).
+
+**Three of the bullets above were promoted to classes by #488** — reading all 639 logs
+showed the shape recurring, and two of the three route to the *operator* rather than to a
+port, which is reason enough for a class even at two ports. The
+[no-diagnostic bucket](#the-105-unmatched-logs-that-no-regex-can-classify) is why the rest
+of this list is shorter than the UNMATCHED count suggests: most of that count is a
+truncated capture, not an uncodified cluster.
 
 ---
 
@@ -1554,6 +1911,16 @@ more pass is worth it.**
 | autoconf2.71 | 6 config.guess | reaches INSTALL (`make install-data-hook` / `install-info standards.info`), then `rc=2`; **the fatal line is truncated out of the captured snippet** | needs the full `nb-autoconf2.71.log` (builder-local, scratch VM — gone); re-run with full-log capture to classify | indeterminate |
 
 ### Proposed new classes (candidates for the class table)
+
+> **Status (#488): all three landed.** Classes 15, 16 and 17 were reserved by this section
+> in #309 and their *recipe* fixes shipped in #316, but the signatures were never encoded in
+> `haiku-triage-failures` — so 20 + 13 + 3 backlog ports stayed UNMATCHED with a class
+> already written for them. #488 encoded them and gave each a full section above:
+> [15](#class-15-runconfigure-cflags-override-without-optimization-flags),
+> [16](#class-16--fno-common-duplicate-symbols-at-link-time),
+> [17](#class-17-cmake-fetchcontent-wants-the-network-at-configure-time). The three
+> descriptions below are kept as the original derivation.
+
 
 - **Class 15 — `runConfigure` requires an optimization flag when CFLAGS is
   overridden.** Haiku's `runConfigure` wrapper aborts with *"Must specify
