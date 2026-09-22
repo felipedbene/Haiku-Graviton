@@ -57,6 +57,7 @@ memory that keeps per-port flags from being re-derived.
 | 22 | [Removed/renamed Haiku API or moved header](#class-22-removedrenamed-haiku-api-or-moved-header) | `'BSplitView' does not name a type` / `fatal error: <X.h>: No such file` |
 | 23 | [Install writes to read-only /packages](#class-23-install-writes-to-read-only-packages) | `mkdir: cannot create directory '/packages/…_devel-…': Read-only file system` |
 | 24 | [Source-acquisition tool missing on host](#class-24-source-acquisition-tool-missing-on-the-builder-host) | `Error: '<hg\|svn\|lha>' is not available, please install it` |
+| 25 | [Wave-driver round cap (not a port defect)](#class-25-wave-driver-round-cap--not-a-port-defect) | `gave up after <N> attempts` |
 | 26 | [Dependency present but unresolved (not absent)](#class-26-dependency-present-but-unresolved--not-absent) | `DEP_NO_PROGRESS [<verdict>]` |
 
 Classes 15–17 were surfaced by the #136 re-wave secondary-blocker triage; see
@@ -65,11 +66,11 @@ end of this document. **Classes 18–24 were mined from the real UNMATCHED backl
 `graviton/scripts/haiku-pattern-miner`** (see
 [How classes 18–24 were mined](#how-classes-1824-were-mined--the-unmatched-frontier)).
 
-**Class 26 is not a port defect at all** — they are the *wave driver's* own
-— it is the *wave driver's* own failure mode, split out of Class 20 in #485 once
-`haiku-nativebuild` started reporting what it had measured instead of guessing. It is
-ordered **before** Class 20 in `haiku-triage-failures`, because a driver-side failure
-stops at haikuporter's resolve step and therefore carries Class 20's wording too.
+**Classes 25–26 are not port defects at all** — they are the *wave driver's* own
+failure modes, split out of Class 20 in #485/#486 once `haiku-nativebuild` started
+reporting what it had measured instead of guessing. Both are ordered **before** Class 20
+in `haiku-triage-failures`, because a driver-side failure stops at haikuporter's resolve
+step and therefore carries Class 20's wording too.
 
 ---
 
@@ -947,6 +948,45 @@ moving the recipe to a static archive download with a checksum (the wave tooling
 warns `UNSAFE SOURCES … SHOULD NOT BE USED`).
 
 **Example ports:** cube2tesseract, ira (`lha`), previous, xemacs (`hg`).
+
+---
+
+## Class 25: Wave-driver round cap — not a port defect
+
+**Split out of Class 20 in #486 (22 ports).** Not a timeout and not a flake —
+arithmetic. `haiku-nativebuild` builds a port in rounds: run `haikuporter`, install
+whatever requirements it reports as unresolved, run it again. haikuporter aborts at its
+**first** unresolved requirement, so each round clears one requirement, and
+`MAX_ATTEMPTS` — then 10 — was therefore a ceiling on **dependency count**. A port with
+eleven unresolved build-requires could never build, however healthy the pool was.
+
+**Symptom (the last line the driver prints):**
+```
+ffmpeg6: attempt 10 installing: devel:libvorbis
+ffmpeg6: gave up after 10 attempts
+```
+Note that each `attempt N installing:` line names a *different* requirement: the run was
+still making progress when it ran out of rounds. A run that had genuinely stalled would
+have stopped earlier, at the driver's no-progress check ([Class
+26](#class-26-dependency-present-but-unresolved--not-absent)).
+
+**Why it was invisible.** A capped run ends inside haikuporter's dependency resolution,
+so its log also carries Class 20's `build-requires "X" … could not be resolved`. With no
+signature of its own, all 22 capped ports were filed as "prerequisite not published" —
+measured: the 22 `gave up after 10 attempts` logs were *exactly* the 22 Class-20 items
+matched via that regex (intersection 22, symmetric difference 0), and `ffmpeg6` is one of
+them and gates 13 further ports.
+
+**Fix.** Already landed: `MAX_ATTEMPTS` now defaults to 60, and the give-up message
+states that the cap — not a stall — ended the build. Genuine non-progress is detected
+exactly and cheaply by the driver's own `prev_miss` comparison, so the round cap only
+has to bound pathological oscillation. **For an affected port there is nothing to fix:
+re-wave it.** `graviton/scripts/haiku-triage-failures-selftest` locks the signature's
+position ahead of Class 20.
+
+**Example ports:** crawl, devilutionx, ecwolf, endless_sky, eternal_lands, exiv2,
+ffmpeg6, grafx2, gst_plugins_bad, hikounomizu, libjxl, librnp, lighttpd, lugaru,
+minetest, ocp, python3.13, qemu, radare2, spice, vice, warzone2100.
 
 ---
 

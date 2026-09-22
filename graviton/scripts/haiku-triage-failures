@@ -298,6 +298,21 @@ RULES = [
      "Declare the tool as a cmd: BUILD_PREREQUIRES (see the tool->provider map). "
      "Mechanical per-recipe edit with a known template."),
 
+    # 25 -- the wave driver's own round cap, NOT a port defect. MUST be ordered before
+    # class 20: a capped run ends at haikuporter's resolve step, so its log carries
+    # class 20's "could not be resolved" wording and class 20 was stealing all 22 of
+    # these -- which is how the census came to overstate "dependency not published"
+    # (#486). Measured: the 22 ports logging `gave up after 10 attempts` were EXACTLY
+    # the 22 class-20 items matched via the build-requires regex (intersection 22,
+    # symmetric difference 0). auto=False: nothing to fix in the recipe -- the driver
+    # cap was raised in haiku-nativebuild, so these need only a re-wave.
+    (25, "class-25-wave-driver-round-cap--not-a-port-defect", False,
+     _rx(r"gave up after \d+ attempts"),
+     "NOT a port defect and NOT a missing dependency: haiku-nativebuild ran out of "
+     "dependency-install rounds while still making progress (one requirement is "
+     "cleared per round, so MAX_ATTEMPTS bounded dependency COUNT). The cap now "
+     "defaults to 60 -- just re-wave the port."),
+
     # 26 -- the wave driver observed no progress and pkgman's own transcripts say the
     # cause is NOT absence. Also ordered before class 20 for the same reason: these
     # logs carry haikuporter's "could not be resolved" wording, and filing them as
@@ -609,7 +624,7 @@ def main():
 
     # class metadata for the report
     meta = {c: (slug, auto) for c, slug, auto, _, _ in RULES}
-    class_nums = sorted(meta)  # all classes the ruleset knows (1-14 + 18-24, 26)
+    class_nums = sorted(meta)  # all classes the ruleset knows (1-14 + 18-26)
 
     print("\n" + "=" * 66)
     print("DeBeOS failure-backlog census  (%d items: %s)" %

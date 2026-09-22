@@ -1,0 +1,176 @@
+#!/usr/bin/env python3
+"""haiku-triage-failures-selftest [--mutate] [--logs DIR]
+
+Offline test for the ORDER of haiku-triage-failures' ruleset. No AWS, no network: it
+imports the classifier and runs it over synthetic logs built from verbatim lines taken
+from real build logs.
+
+WHY IT EXISTS. The signatures added for #486 are only worth anything because of where
+they sit in the list. A capped run ends at haikuporter's resolve step, so its log also
+contains class 20's "could not be resolved" wording -- and class 20 was silently
+collecting all 22 capped ports, which is how the census came to overstate "dependency
+not published" by 22. Ordering is invisible in a diff and easy to lose in a later edit,
+so it gets a test that fails when it is lost.
+
+  --mutate      narrow the class-25 regex the way the issue asks (so a capped log no
+                longer matches it) and assert the capped fixture falls THROUGH TO CLASS
+                20. This is the mutation test: it proves the pass is caused by the new
+                signature and its position, not by something incidental. Exits 0 when
+                the mutation is detected.
+  --logs DIR    additionally classify every *.log in DIR (a local cache of real backlog
+                logs) and report how the capped ones land. Skipped when absent.
+"""
+import argparse
+import glob
+import os
+import re
+import sys
+import types
+
+
+HERE = os.path.dirname(os.path.abspath(__file__))
+CLASSIFIER = os.path.join(HERE, "haiku-triage-failures")
+
+
+def load(mutate=False):
+    """Import haiku-triage-failures as a module. With mutate=True, narrow the class-25
+    regex first -- the same 'break it and confirm red' step the issue asks for, done in
+    memory so the tracked file is never touched."""
+    src = open(CLASSIFIER).read()
+    if mutate:
+        before = src
+        # Narrow `gave up after \d+ attempts` so a real capped line cannot match it.
+        src = src.replace(r'_rx(r"gave up after \d+ attempts")',
+                          r'_rx(r"gave up after NO_SUCH_COUNT attempts")')
+        if src == before:
+            sys.exit("mutation point not found -- the class-25 regex was reworded; "
+                     "update this test rather than deleting it")
+    mod = types.ModuleType("tf")
+    mod.__dict__["__name__"] = "tf"
+    exec(compile(src, CLASSIFIER, "exec"), mod.__dict__)
+    return mod
+
+
+# --- fixtures ---------------------------------------------------------------
+# Verbatim shapes. The capped fixture deliberately carries BOTH the cap line and class
+# 20's resolve wording, because that is what a real capped log looks like (checked
+# against ffmpeg6's) and it is the exact ambiguity the ordering has to settle.
+CAPPED = """===== ffmpeg6 : start 2026-09-21T14:58:03Z =====
+ffmpeg6: attempt 1 installing: devel:libbz2
+ffmpeg6: attempt 9 installing: devel:libtheora
+ffmpeg6: attempt 10 installing: devel:libvorbis
+ffmpeg6: gave up after 10 attempts (MAX_ATTEMPTS round cap, not a
+  stall: each round's unresolved set differed from the previous round's, which
+  is what the NO PROGRESS check above would otherwise have caught). Raise
+  MAX_ATTEMPTS and re-wave -- this is a driver limit, not a port defect.
+---- full build log (40 lines): /boot/home/nb-ffmpeg6.log ----
+Error: unable to resolve required packages for build for ffmpeg6-6.1.6
+Error: \tReason: build-requires "devel:libvorbis" of package "ffmpeg6-6.1.6" could not be resolved
+---- end build log ----
+"""
+
+NO_PROGRESS = """===== sdl_mixer : start 2026-09-21T14:58:03Z =====
+sdl_mixer: attempt 1 installing: devel:libmikmod
+sdl_mixer: NO PROGRESS at attempt 2 -- installing the missing set left it unchanged.
+  requirement: devel:libmikmod
+    pkgman verdict: ALREADY_PRESENT (pkgman exit 0)
+    pkgman said, verbatim:
+      libmikmod-3.3.11-2 from repository DeBeOS-green is already installed.
+      Nothing to do.
+sdl_mixer: DEP_NO_PROGRESS [ALREADY_PRESENT] -- the requirement set did not shrink, and
+  pkgman did NOT report absence for all of it; per-requirement evidence above: devel:libmikmod
+---- full build log (30 lines): /boot/home/nb-sdl_mixer.log ----
+Error: unable to resolve required packages for build for sdl_mixer-2.8.1
+Error: \tReason: build-requires "devel:libmikmod" of package "sdl_mixer-2.8.1" could not be resolved
+---- end build log ----
+"""
+
+EARNED_ABSENT = """===== xlibe : start 2026-09-21T15:05:00Z =====
+xlibe: NO PROGRESS at attempt 2 -- installing the missing set left it unchanged.
+  requirement: devel:xorgproto
+    pkgman verdict: NO_MATCH (pkgman exit 1)
+    pkgman said, verbatim:
+      *** Failed to find a match for "devel:xorgproto": No such file or directory
+    read-only candidate probe, case-insensitive (pkgman search -D devel:xorgproto):
+      No matching packages found.
+    verdict after the candidate probe: ABSENT_CONFIRMED
+xlibe: UNRESOLVABLE (measured: pkgman found no match and no repository
+  offers any candidate, case-insensitively) -- build and publish it first: devel:xorgproto
+---- full build log (30 lines): /boot/home/nb-xlibe.log ----
+Error: \tReason: build-requires "devel:xorgproto" of package "xlibe-1.0" could not be resolved
+---- end build log ----
+"""
+
+# A capped log that ALSO has a genuine compile error must still be filed by the compile
+# error: the ruleset's standing rule is that a real build failure wins first-match.
+CAPPED_WITH_REAL_ERROR = CAPPED + """
+/boot/home/haikuports/media-libs/x/src/x.c:12:5: error: 'foo' undeclared
+CMake Error at CMakeLists.txt:3 (cmake_minimum_required):
+  Compatibility with CMake < 3.5 has been removed from CMake.
+"""
+
+
+def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--mutate", action="store_true")
+    ap.add_argument("--logs", default="")
+    args = ap.parse_args()
+
+    mod = load(mutate=args.mutate)
+    fails = passes = 0
+
+    def check(label, text, want):
+        nonlocal fails, passes
+        got = mod.classify(text)[0]
+        if got == want:
+            passes += 1
+            print("  ok    %-26s -> class %s" % (label, got))
+        else:
+            fails += 1
+            print("  FAIL  %-26s -> class %s (expected %s)" % (label, got, want))
+
+    if args.mutate:
+        print("classifier ruleset test [MUTATED: class-25 regex narrowed]")
+        # With class 25 unable to match, the capped log must fall through to the class
+        # it was being misfiled as. That is the whole finding of #486.
+        check("capped falls through", CAPPED, 20)
+    else:
+        print("classifier ruleset test")
+        check("capped run", CAPPED, 25)
+        check("no-progress, not absent", NO_PROGRESS, 26)
+        check("earned absence", EARNED_ABSENT, 20)
+        check("real error still wins", CAPPED_WITH_REAL_ERROR, 1)
+
+    if args.logs and os.path.isdir(args.logs):
+        caps = {}
+        for p in sorted(glob.glob(os.path.join(args.logs, "*.log"))):
+            text = open(p, errors="replace").read()
+            if re.search(r"gave up after \d+ attempts", text):
+                caps[os.path.basename(p)[:-4]] = mod.classify(text)[0]
+        want = 20 if args.mutate else 25
+        bad = {k: v for k, v in caps.items() if v != want}
+        print("  real cached logs: %d capped, %d classified %s"
+              % (len(caps), len(caps) - len(bad), want))
+        if caps and bad:
+            fails += 1
+            print("  FAIL  capped logs not classified %s: %s" % (want, bad))
+        elif caps:
+            passes += 1
+            print("  ok    every capped log classified %s: %s"
+                  % (want, " ".join(sorted(caps))))
+
+    print("----")
+    print("pass=%d fail=%d" % (passes, fails))
+    if args.mutate:
+        if fails == 0:
+            print("MUTATION CONFIRMED: without the class-25 signature the capped logs "
+                  "fall back into class 20, which is the misfiling #486 reported.")
+            return 0
+        print("MUTATION NOT CONFIRMED -- the capped log did not land in class 20; the "
+              "ordering claim in this test needs re-deriving.")
+        return 1
+    return 1 if fails else 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

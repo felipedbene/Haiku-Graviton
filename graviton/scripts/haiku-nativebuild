@@ -33,7 +33,16 @@ S3="s3://$BUCKET/hpkg/arm64"
 # OK we promote its fetched source archives here, laid out as <recipeDir>/<file>
 # to match the fallback URI haikuporter builds from DOWNLOAD_MIRROR. Empty = skip.
 MIRROR_S3="${MIRROR_S3:-s3://$BUCKET/download-mirror}"
-MAX_ATTEMPTS="${MAX_ATTEMPTS:-10}"
+# Round cap for the dependency-install loop below. This is NOT a timeout: the loop
+# discovers the requirements haikuporter reports, and haikuporter aborts at its FIRST
+# unresolved requirement, so in practice each round clears one requirement. At the old
+# default of 10 the cap was therefore a ceiling on *dependency count* -- a port with 11
+# unresolved build-requires could never build however healthy the pool was (#486; 22
+# backlog ports logged `gave up after 10 attempts`, ffmpeg6 among them, whose ten rounds
+# each resolved a different dep and were still making progress when the cap hit).
+# Genuine non-progress is already detected exactly, and cheaply, by the prev_miss check
+# in build_one -- so the round cap only has to bound pathological oscillation.
+MAX_ATTEMPTS="${MAX_ATTEMPTS:-60}"
 # Names of ports whose build produced an hpkg this run (space-separated). Only
 # these get their sources mirrored -- a successful build means haikuporter has
 # already fetched AND checksum-validated every source, so the files in the port's
@@ -349,7 +358,14 @@ build_one() {
 		done
 		attempt=$((attempt + 1))
 	done
-	echo "$port: gave up after $MAX_ATTEMPTS attempts"; emit_log_capture "$log"; return 1
+	# The round cap, not a stall: every round reached here had an unresolved set that
+	# DIFFERED from the previous round's, because an unchanged set returns above. So
+	# this port was still making progress when it ran out of rounds (#486).
+	echo "$port: gave up after $MAX_ATTEMPTS attempts (MAX_ATTEMPTS round cap, not a"
+	echo "  stall: each round's unresolved set differed from the previous round's, which"
+	echo "  is what the NO PROGRESS check above would otherwise have caught). Raise"
+	echo "  MAX_ATTEMPTS and re-wave -- this is a driver limit, not a port defect."
+	emit_log_capture "$log"; return 1
 }
 
 harvest() {
