@@ -160,6 +160,13 @@ parts = [f"{k}={v}" for k, v in c.most_common()]
 print("total=" + str(sum(c.values())) + "  " + "  ".join(parts))
 ' 2>/dev/null)
 say "  backlog: ${hist:-<no DDB access>}"
+# The histogram above comes from a Scan, but the wave driver and the triage census
+# read the by-build-state GSI -- and DynamoDB silently omits from a GSI any row
+# missing its `queued_at` range key. That divergence hid 88 rows (incl. two `queued`
+# ports a wave could never pick up) until #487. Assert the two agree, here, because
+# this is the one thing that runs on every session start. Read-only; never fatal.
+inv=$(timeout 25 "$HERE/haiku-state-guard" check --quiet 2>/dev/null)
+say "  ${inv:-state-board invariant: NOT VERIFIED (haiku-state-guard unavailable)}"
 # Newest execution across all history -- SUCCEEDED/RUNNING/FAILED/ABORTED all
 # meaningful in a cold-session snapshot.
 sm_arn="arn:aws:states:${REGION}:${ident}:stateMachine:debeos-build-wave"

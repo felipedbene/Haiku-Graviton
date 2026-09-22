@@ -16,7 +16,10 @@ unmatched/no-log.
 WHAT IT IS. Deterministic triage glue, nothing more. It does NOT rebuild, re-wave,
 or re-queue anything -- classification only. It:
   1. enumerates every item with build_state in {failed, needs_human} off the
-     `by-build-state` GSI (same index the wave driver reads);
+     `by-build-state` GSI (same index the wave driver reads), and ASSERTS that the
+     index returned as many rows as a Scan finds -- the GSI silently omits rows
+     missing its `queued_at` range key, which hid a `needs_human` row from this
+     census for months (#487, graviton/scripts/haiku-state-guard);
   2. fetches that port's most-recent build log from S3 -- the `log_url` attribute
      RecordOutcome persisted (s3://<work-bucket>/logs/<run>/<pkg>.log.gz, gzipped);
   3. classifies the log against the playbook's class signatures using an
@@ -86,6 +89,13 @@ TABLE_DEFAULT = os.environ.get("TABLE", "debeos-package-state")
 GSI = "by-build-state"
 STATES = ("failed", "needs_human")
 PLAYBOOK = "graviton/docs/porting-playbook.md"
+
+# The one definition of the `pkg` primary-key contract (#487); see also
+# graviton/scripts/haiku-state-guard for the whole-board invariant.
+sys.path.insert(0, os.path.join(
+    os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
+    "graviton", "pipeline", "ops-lambdas"))
+from pkgkey import validate_pkg_key  # noqa: E402
 
 
 def log(*a):
@@ -418,6 +428,31 @@ def classify(text):
 
 
 # ----------------------------------------------------------------- DDB reading
+def assert_census_is_total(table, region, gsi_count):
+    """Does the GSI really show every failed + needs_human row? (#487)
+
+    The census is built off the `by-build-state` GSI, and DynamoDB omits from a GSI
+    any item missing the index RANGE key (`queued_at`) -- silently, with no error.
+    So a failure row written without `queued_at` is in the table, is a real backlog
+    item, and is absent from this census. That happened: `qt5` (needs_human) was
+    missing for months, and the census read 658 where the table held 659. A 1-row
+    under-count is not the point; the point is that nothing would ever have said so.
+
+    A Scan needs no index, so it cannot be fooled the same way. Compare the two.
+    Returns (scan_count, gsi_count, ok); the caller prints and decides -- a census
+    that is 1 short is still worth printing, but must not be printed as complete.
+    """
+    import boto3
+    ddb = boto3.client("dynamodb", region_name=region)
+    scan_count = 0
+    for page in ddb.get_paginator("scan").paginate(
+            TableName=table, Select="COUNT",
+            FilterExpression="build_state IN (:a, :b)",
+            ExpressionAttributeValues={":a": {"S": STATES[0]}, ":b": {"S": STATES[1]}}):
+        scan_count += page["Count"]
+    return scan_count, gsi_count, scan_count == gsi_count
+
+
 def load_items(table, region):
     """Read every failed + needs_human item off the by-build-state GSI. Returns a
     list of dicts: {pkg, build_state, log_url, error_class, target}. Deterministic
@@ -485,7 +520,7 @@ def write_triage(table, region, pkg, cls, auto, fix_ref, ts):
     ddb = boto3.resource("dynamodb", region_name=region).Table(table)
     triage_class = str(cls) if isinstance(cls, int) else cls  # class no | NO_LOG | UNMATCHED
     ddb.update_item(
-        Key={"pkg": pkg},
+        Key={"pkg": validate_pkg_key(pkg, where="haiku-triage-failures write_triage")},
         UpdateExpression=("SET triage_class=:c, triage_auto_recoverable=:a, "
                           "triage_fix_ref=:f, triage_ts=:t"),
         ExpressionAttributeValues={":c": triage_class, ":a": bool(auto),
@@ -533,6 +568,22 @@ def main():
     if not items:
         raise SystemExit("FATAL: 0 items with build_state in %s -- the GSI/table name "
                          "may be wrong. Refusing to invent a census." % (STATES,))
+
+    # Is the index telling us about every backlog row? (#487 -- see the function.)
+    # Not fatal: a short census is still worth printing, but never as complete.
+    try:
+        scan_n, gsi_n, total_ok = assert_census_is_total(args.table, args.region,
+                                                         len(items))
+        log("index totality    : Scan=%d  GSI=%d  -> %s"
+            % (scan_n, gsi_n, "OK" if total_ok else
+               "MISMATCH, %d row(s) MISSING from this census" % (scan_n - gsi_n)))
+        if not total_ok:
+            log("  the GSI omits rows with no `queued_at` range key. Repair with:")
+            log("    graviton/scripts/haiku-state-guard audit")
+            log("    graviton/scripts/haiku-state-guard backfill-queued-at --execute")
+    except Exception as e:
+        total_ok = None
+        log("index totality    : NOT VERIFIED (%s: %s)" % (type(e).__name__, e))
 
     if args.limit:
         items = items[:args.limit]
@@ -649,6 +700,13 @@ def main():
     print("UNMATCHED (no class signature)             : %4d  (of which %d mention "
           "UNRESOLVABLE = dep unbuilt/unpublished)" % (unmatched, unmatched_unres))
     print("NO_LOG (log missing/empty)                 : %4d" % no_log)
+    if total_ok is False:
+        print("!! INCOMPLETE: %d backlog row(s) are in the table but absent from the "
+              "by-build-state" % (scan_n - gsi_n))
+        print("!! index, so they are NOT in the numbers above. See haiku-state-guard "
+              "(#487).")
+    elif total_ok is None:
+        print("?? index totality NOT VERIFIED -- these numbers may be short.")
     print("=" * 66)
 
     # top auto-recoverable classes by port count -> next re-wave targets
