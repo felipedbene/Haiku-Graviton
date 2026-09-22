@@ -19,6 +19,18 @@ app_server is not.  --min-text-runs / --min-glyph-ink / --expect-text are the
 assertions; text ground truth is required by default and --allow-text-estimate
 opts out.
 
+TRANSFORMED TEXT (#494).  Font rotation, shear and false_bold_width are honoured
+too, copied from AGGTextRenderer::SetFont -- see the FontTransform class, which
+cites every line it took a convention from.  This is a second layer of the same
+defect as #475: that one was text not drawing at all, this one is text drawing
+horizontally when the wire said to turn it.  Both in-tree instruments and the
+out-of-tree client all dropped these three fields, so they AGREED with each
+other while disagreeing with app_server, and a comparison between them could
+not fail.  --expect-text-angle is the assertion that discriminates: it measures
+the direction the ink actually ran, which --expect-text (an origin the rotated
+and unrotated runs SHARE) and --min-glyph-ink (a pixel count they share too)
+both cannot see.
+
 Stdlib only.  No PIL: the PNG is written by hand with zlib + struct, and the
 one non-stdlib dependency is libfreetype.so.6 via ctypes -- which is also the
 library app_server renders with, and whose absence is reported as "not ground
@@ -28,7 +40,8 @@ EXIT STATUS
   0  ran (even if nothing arrived -- grep CONNECTED=/MESSAGES=)
   2  bad invocation     3  broker auth denied     4  certificate pin mismatch
   5  not text ground truth (see --allow-text-estimate)
-  6  a --min-text-runs / --min-glyph-ink / --expect-text assertion failed
+  6  a --min-text-runs / --min-glyph-ink / --expect-text /
+     --expect-text-angle assertion failed
 
 PROTOCOL PROVENANCE (all paths relative to the Haiku source tree)
 -----------------------------------------------------------------
@@ -817,6 +830,23 @@ def _ft_types():
                      "horiAdvance", "vertBearingX", "vertBearingY",
                      "vertAdvance")]
 
+    class FT_Matrix(ctypes.Structure):
+        # 16.16 fixed point, x' = xx*x + xy*y, y' = yx*x + yy*y.
+        _fields_ = [("xx", FT_Fixed), ("xy", FT_Fixed),
+                    ("yx", FT_Fixed), ("yy", FT_Fixed)]
+
+    class FT_Outline(ctypes.Structure):
+        # n_contours/n_points changed signedness in FreeType 2.13.1 but never
+        # width; everything after them is pointer-sized, so the layout this
+        # mirror computes is the one the C compiler computes.  Proved on the
+        # running library by GlyphRasteriser._selfcheck() rather than asserted.
+        _fields_ = [("n_contours", ctypes.c_ushort),
+                    ("n_points", ctypes.c_ushort),
+                    ("points", ctypes.POINTER(FT_Vector)),
+                    ("tags", ctypes.c_char_p),
+                    ("contours", ctypes.POINTER(ctypes.c_ushort)),
+                    ("flags", ctypes.c_int)]
+
     class FT_GlyphSlotRec(ctypes.Structure):
         _fields_ = [("library", ctypes.c_void_p), ("face", ctypes.c_void_p),
                     ("next", ctypes.c_void_p),
@@ -829,7 +859,8 @@ def _ft_types():
                     ("format", ctypes.c_int),
                     ("bitmap", FT_Bitmap),
                     ("bitmap_left", ctypes.c_int),
-                    ("bitmap_top", ctypes.c_int)]
+                    ("bitmap_top", ctypes.c_int),
+                    ("outline", FT_Outline)]
 
     class FT_Size_Metrics(ctypes.Structure):
         _fields_ = [("x_ppem", ctypes.c_ushort), ("y_ppem", ctypes.c_ushort),
@@ -868,7 +899,8 @@ def _ft_types():
                     ("size", ctypes.POINTER(FT_SizeRec)),
                     ("charmap", ctypes.c_void_p)]
 
-    _FT_TYPES = {"FT_FaceRec": FT_FaceRec, "FT_GlyphSlotRec": FT_GlyphSlotRec}
+    _FT_TYPES = {"FT_FaceRec": FT_FaceRec, "FT_GlyphSlotRec": FT_GlyphSlotRec,
+                 "FT_Matrix": FT_Matrix, "FT_Outline": FT_Outline}
     return _FT_TYPES
 
 
@@ -905,6 +937,137 @@ def font_selfcheck_problems(units_per_em, num_glyphs, family, pointers_ok,
     return problems
 
 
+def outline_selfcheck_problems(n_contours, n_points, pointers_ok):
+    """Known-good facts about the FT_Outline of a real 'H'; [] means plausible.
+
+    The transformed-text path reaches past bitmap_top into FT_GlyphSlotRec's
+    `outline`, which is the deepest this file reaches into a struct it does not
+    own.  A wrong offset there would not crash either: FT_Outline_Transform
+    would read a point count and a pointer out of neighbouring fields and
+    scribble.  So the offset is proved on the running library, on a glyph whose
+    shape is known -- 'H' is one or two contours of a few dozen points in every
+    real font -- and the predicate is kept pure so the self-test can feed it
+    wrong facts and require it to object."""
+    problems = []
+    if not (1 <= n_contours <= 8):
+        problems.append("H n_contours=%s" % n_contours)
+    if not (4 <= n_points <= 400):
+        problems.append("H n_points=%s" % n_points)
+    if not pointers_ok:
+        problems.append("null outline points/tags/contours pointer")
+    return problems
+
+
+FT_GLYPH_FORMAT_OUTLINE = 0x6F75746C            # 'outl'
+
+
+class FontTransform(object):
+    """The embedded font transformation: shear, then rotation, about the origin.
+
+    COPIED, not invented.  app_server's only definition of what the wire's
+    `rotation` and `shear` mean is AGGTextRenderer::SetFont
+    (AGGTextRenderer.cpp:72-85):
+
+        fEmbeddedTransformation.Reset();
+        fEmbeddedTransformation.ShearBy(B_ORIGIN,
+            (90.0 - font.Shear()) * M_PI / 180.0, 0.0);
+        fEmbeddedTransformation.RotateBy(B_ORIGIN,
+            -font.Rotation() * M_PI / 180.0);
+        fContour.width(font.FalseBoldWidth() * 2.0);
+
+    Unpacking each piece against its own source:
+
+    * ORDER.  Transformable::ShearBy/RotateBy both end in
+      trans_affine::multiply (Transformable.cpp:287-320), and multiply()
+      composes so the matrix already held is applied FIRST and the argument
+      second (agg_trans_affine.cpp:70-82).  So the composition is
+      shear-then-rotate: M = R * S, not S * R.  Getting this backwards is
+      invisible when either field is at its default and wrong whenever both
+      are set, which is exactly the kind of near-miss this file exists to
+      catch.
+    * SHEAR.  ShearBy uses agg::trans_affine_skewing, whose matrix is
+      (sx=1, shy=tan(y), shx=tan(x), sy=1) (agg_trans_affine.h:448-456), and
+      agg applies it as x' = x*sx + y*shx, y' = x*shy + y*sy
+      (agg_trans_affine.h:293-298).  With yShear fixed at 0 that is
+      x' = x + y*tan(s), y' = y, where s = (90 - shear) in radians.  shear=90
+      is therefore upright, and the field is an ANGLE in degrees, not a factor.
+    * ROTATION.  RotateBy uses agg::trans_affine_rotation
+      (agg_trans_affine.h:416-422) with the angle NEGATED, which is what makes
+      a positive `rotation` counter-clockwise on screen.
+    * SPACE.  All of the above acts on y-DOWN screen coordinates, because
+      FontEngine decomposes every glyph outline with kFlipY = true
+      (FontEngine.cpp:42, 573).  FreeType's own outlines are y-UP, so the
+      matrix handed to FreeType is this one conjugated by diag(1, -1) --
+      see ft_matrix().
+    * WHAT IT ACTS ON.  RenderString translates by the baseline AFTER the
+      embedded transformation (AGGTextRenderer.cpp:379-381), and the glyph
+      advances are accumulated untransformed in GlyphLayoutEngine.  Because the
+      transform is linear it therefore applies to the pen positions as well as
+      to the outlines: the run is laid out horizontally and the whole layout is
+      then turned about its baseline origin.  That is why pens here are kept in
+      untransformed font space and mapped through apply() at paint time.
+    * FALSE BOLD.  fContour is an agg conv_contour, and conv_contour::width(w)
+      forwards to math_stroke::width which halves it (agg_vcgen_contour.h:54,
+      agg_math_stroke.h:136-138).  width(falseBoldWidth * 2.0) therefore
+      offsets the outline OUTWARD by falseBoldWidth pixels -- the field is the
+      growth per side, in pixels.  conv_contour wraps the glyph before the
+      transform (AGGTextRenderer.cpp:388-391), so the widening happens in glyph
+      space and is itself rotated.
+    """
+
+    __slots__ = ("rotation", "shear", "m00", "m01", "m10", "m11", "identity")
+
+    def __init__(self, rotation=0.0, shear=90.0):
+        self.rotation = float(rotation or 0.0)
+        self.shear = 90.0 if shear is None else float(shear)
+        tan_s = math.tan(math.radians(90.0 - self.shear))
+        # S = ((1, tan_s), (0, 1)) in row-of-output form: x' = x + tan_s*y.
+        angle = math.radians(-self.rotation)
+        cos_a = math.cos(angle)
+        sin_a = math.sin(angle)
+        # M = R * S.
+        self.m00 = cos_a
+        self.m01 = cos_a * tan_s - sin_a
+        self.m10 = sin_a
+        self.m11 = sin_a * tan_s + cos_a
+        self.identity = (abs(self.rotation) <= 1e-6
+                         and abs(self.shear - 90.0) <= 1e-6)
+
+    def apply(self, x, y):
+        """Map a point from untransformed font space into device space."""
+        return (self.m00 * x + self.m01 * y, self.m10 * x + self.m11 * y)
+
+    def transform_box(self, left, top, right, bottom):
+        """Device-space bounds of a transformed font-space rectangle.
+
+        The four corners are mapped and re-bounded: an axis-aligned box stays
+        axis-aligned only while the matrix is, which under rotation it is not.
+        """
+        pts = [self.apply(left, top), self.apply(right, top),
+               self.apply(right, bottom), self.apply(left, bottom)]
+        xs = [p[0] for p in pts]
+        ys = [p[1] for p in pts]
+        return (min(xs), min(ys), max(xs), max(ys))
+
+    def ft_matrix(self):
+        """The same transformation in FreeType's y-UP space, 16.16 fixed.
+
+        F * M * F with F = diag(1, -1), F being its own inverse: the off-
+        diagonal terms flip sign and the diagonal ones do not.  Skipping this
+        conjugation rotates text the wrong way round, which looks plausible and
+        is wrong -- it is the reason the sign is derived here rather than
+        eyeballed from a screenshot."""
+        one = 1 << 16
+        return (int(round(self.m00 * one)), int(round(-self.m01 * one)),
+                int(round(-self.m10 * one)), int(round(self.m11 * one)))
+
+    def key(self):
+        return self.ft_matrix() if not self.identity else None
+
+    def describe(self):
+        return "rotation=%g shear=%g" % (self.rotation, self.shear)
+
+
 class Glyph(object):
     """One rendered glyph: 8-bit coverage plus its placement and advance."""
 
@@ -925,19 +1088,23 @@ class Glyph(object):
 
 
 class ShapedRun(object):
-    __slots__ = ("glyphs", "pens", "advance", "ascent", "descent", "missing",
-                 "synth_bold", "synth_italic", "path")
+    __slots__ = ("glyphs", "pens", "offsets", "advance", "ascent", "descent",
+                 "missing", "synth_bold", "synth_italic", "path", "transform",
+                 "false_bold")
 
     def __init__(self):
         self.glyphs = []
-        self.pens = []                  # pen offset from the run origin
-        self.advance = 0.0
+        self.pens = []                  # pen offset from the origin, font space
+        self.offsets = []               # the same pens mapped into device space
+        self.advance = 0.0              # untransformed, as StringWidth reports
         self.ascent = 0.0
         self.descent = 0.0
         self.missing = 0
         self.synth_bold = False
         self.synth_italic = False
         self.path = None
+        self.transform = None
+        self.false_bold = 0.0
 
 
 class GlyphRasteriser(object):
@@ -973,6 +1140,29 @@ class GlyphRasteriser(object):
         lib.FT_Render_Glyph.argtypes = [ctypes.c_void_p, ctypes.c_int]
         lib.FT_GlyphSlot_Embolden.argtypes = [ctypes.c_void_p]
         lib.FT_GlyphSlot_Oblique.argtypes = [ctypes.c_void_p]
+        # The three that make a transformed glyph possible.  They mirror the
+        # server's pipeline in the server's order: widen the outline in glyph
+        # space, then transform it, then rasterise (AGGTextRenderer.cpp:388-391
+        # wraps the contour INSIDE the transform, so contour-then-transform is
+        # the composition, not the other way round).
+        #
+        # Bound inside a try so a libfreetype without them is reported as "no
+        # rasteriser" -- which the caller already turns into "NOT text ground
+        # truth" -- rather than escaping as an AttributeError traceback that
+        # nothing catches.  A tool that dies is at least loud; a tool that dies
+        # in a way its caller does not handle stops the measurement it was there
+        # to take.
+        try:
+            lib.FT_Outline_EmboldenXY.argtypes = [ctypes.c_void_p,
+                                                  ctypes.c_long, ctypes.c_long]
+            lib.FT_Outline_Translate.argtypes = [ctypes.c_void_p, ctypes.c_long,
+                                                 ctypes.c_long]
+            lib.FT_Outline_Transform.argtypes = [ctypes.c_void_p,
+                                                 ctypes.c_void_p]
+        except AttributeError as exc:
+            raise OSError("libfreetype has no outline transform API (%s); "
+                          "rotated, sheared and false-bold text could not be "
+                          "drawn faithfully, so no text is drawn at all" % exc)
 
         self._library = ctypes.c_void_p()
         err = lib.FT_Init_FreeType(ctypes.byref(self._library))
@@ -1011,6 +1201,22 @@ class GlyphRasteriser(object):
             entry[2] = size26_6
         return entry
 
+    def _probe_outline(self, path):
+        """(n_contours, n_points, pointers_ok) for a freshly loaded 'H'."""
+        entry = self._sized(path, 16 * 64)
+        index = self._lib.FT_Get_Char_Index(entry[0], ord("H"))
+        if self._lib.FT_Load_Glyph(entry[0], index, self.FT_LOAD_DEFAULT):
+            return (0, 0, False)
+        slot_ptr = entry[1].glyph
+        if not slot_ptr:
+            return (0, 0, False)
+        live = slot_ptr.contents
+        if live.format != FT_GLYPH_FORMAT_OUTLINE:
+            return (0, 0, False)
+        o = live.outline
+        return (int(o.n_contours), int(o.n_points),
+                bool(o.points) and bool(o.tags) and bool(o.contours))
+
     def _selfcheck(self):
         """Prove the struct layout on the library that is actually loaded."""
         choice = self.fonts.select(False, False, False)
@@ -1027,6 +1233,8 @@ class GlyphRasteriser(object):
             glyph = self.glyph(path, 16 * 64, ord("H"), False, False)
         problems = font_selfcheck_problems(rec.units_per_EM, rec.num_glyphs,
                                            family, pointers_ok, glyph)
+        if pointers_ok and not problems:
+            problems = outline_selfcheck_problems(*self._probe_outline(path))
         if problems:
             raise OSError("freetype struct layout self-check failed on %s: %s"
                           % (path, ", ".join(problems)))
@@ -1036,8 +1244,18 @@ class GlyphRasteriser(object):
             rec.units_per_EM)
 
     # -- glyphs ----------------------------------------------------------
-    def glyph(self, path, size26_6, codepoint, embolden, oblique):
-        key = (path, size26_6, codepoint, embolden, oblique)
+    def glyph(self, path, size26_6, codepoint, embolden, oblique,
+              transform=None, bold26_6=0):
+        """One rendered glyph, optionally widened and transformed.
+
+        `transform` is a FontTransform and `bold26_6` the outward contour offset
+        in 26.6 pixels (2 * false_bold_width, see FontTransform).  Both are
+        applied to the OUTLINE before rasterising, in the server's own order,
+        and neither touches slot->advance -- app_server does not adjust advances
+        for either (GlyphLayoutEngine takes them from the untransformed metrics,
+        and conv_contour has no opinion about them), so neither does this."""
+        xf_key = None if transform is None else transform.key()
+        key = (path, size26_6, codepoint, embolden, oblique, xf_key, bold26_6)
         hit = self._glyphs.get(key)
         if hit is not None:
             return hit
@@ -1050,10 +1268,30 @@ class GlyphRasteriser(object):
         if not slot_ptr:
             return None
         raw = ctypes.cast(slot_ptr, ctypes.c_void_p)
+        live = slot_ptr.contents      # a view on the slot, not a copy
         if embolden:
             self._lib.FT_GlyphSlot_Embolden(raw)
         if oblique:
             self._lib.FT_GlyphSlot_Oblique(raw)
+        if bold26_6 or xf_key is not None:
+            if live.format != FT_GLYPH_FORMAT_OUTLINE:
+                # A bitmap-strike glyph cannot be widened or turned.  app_server
+                # forces vector rendering for exactly this case
+                # (FontCacheEntry.cpp:429-430); with no outline to force, refuse
+                # rather than draw the untransformed glyph and call it truth.
+                return None
+            outline = ctypes.byref(live.outline)
+            if bold26_6:
+                self._lib.FT_Outline_EmboldenXY(outline, bold26_6, bold26_6)
+                # FT_Outline_EmboldenXY grows up and to the right; conv_contour
+                # grows symmetrically, so re-centre by half the strength.  That
+                # is what makes false_bold_width the growth PER SIDE, which is
+                # what the server's contour width means.
+                self._lib.FT_Outline_Translate(outline, -(bold26_6 // 2),
+                                               -(bold26_6 // 2))
+            if xf_key is not None:
+                m = self._t["FT_Matrix"](*xf_key)
+                self._lib.FT_Outline_Transform(outline, ctypes.byref(m))
         if self._lib.FT_Render_Glyph(raw, self.FT_RENDER_MODE_NORMAL):
             return None
         slot = slot_ptr.contents
@@ -1083,8 +1321,14 @@ class GlyphRasteriser(object):
 
     # -- runs ------------------------------------------------------------
     def shape(self, text, size, face=0, spacing=B_CHAR_SPACING,
-              false_bold=0.0, delta=None):
-        """Lay a run out at the origin; the caller places it on screen."""
+              false_bold=0.0, delta=None, rotation=0.0, shear=90.0):
+        """Lay a run out at the origin; the caller places it on screen.
+
+        Rotation and shear do not change the layout: the advances come from the
+        untransformed metrics and the whole horizontal layout is turned
+        afterwards (see FontTransform).  So run.advance stays the number
+        StringWidth answers with, and run.offsets carries where the glyphs
+        actually land."""
         if size <= 0.0:
             size = 12.0
         mono = spacing == B_FIXED_SPACING
@@ -1093,13 +1337,21 @@ class GlyphRasteriser(object):
         if choice is None:
             return None
         path, synth_bold, synth_italic = choice
-        if false_bold and false_bold > 0.0:
-            synth_bold = True
         size26_6 = max(1, int(round(size * 64.0)))
+        transform = FontTransform(rotation, shear)
+        # Clamped at zero: a negative contour width would invert agg's outline
+        # orientation, and guessing what the server would then draw is not
+        # something this tool should do quietly.
+        false_bold = max(0.0, float(false_bold or 0.0))
+        # conv_contour offsets outward by falseBoldWidth (FontTransform), and
+        # FT_Outline_EmboldenXY's strength is the TOTAL growth, so double it.
+        bold26_6 = int(round(false_bold * 2.0 * 64.0))
         run = ShapedRun()
         run.path = path
         run.synth_bold = synth_bold
         run.synth_italic = synth_italic
+        run.transform = transform
+        run.false_bold = false_bold
         entry = self._sized(path, size26_6)
         metrics = entry[1].size.contents.metrics
         run.ascent = metrics.ascender / 64.0
@@ -1107,8 +1359,9 @@ class GlyphRasteriser(object):
         pen = 0.0
         for codepoint in utf8_codepoints(text):
             glyph = self.glyph(path, size26_6, codepoint, synth_bold,
-                               synth_italic)
+                               synth_italic, transform, bold26_6)
             run.pens.append(pen)
+            run.offsets.append(transform.apply(pen, 0.0))
             run.glyphs.append(glyph)
             if glyph is None or glyph.missing:
                 # GlyphLayoutEngine.h:336-340: an empty glyph advances by zero.
@@ -1129,6 +1382,34 @@ class GlyphRasteriser(object):
 # ---------------------------------------------------------------------------
 # PNG writer (zlib + struct, 8-bit RGB, filter type 0)
 # ---------------------------------------------------------------------------
+
+def run_axis_degrees(centres):
+    """The direction a run's glyphs actually marched, in BFont rotation degrees.
+
+    Measured from the INK -- the centres of the glyph boxes that reached the
+    framebuffer -- and not from the matrix, so it is a reading of the picture
+    and not a restatement of the intent.  This is the number that tells a
+    rotated run from a horizontal one; a glyph count and an ink-pixel total
+    cannot, because both are the same either way, which is precisely how #494
+    went unnoticed.
+
+    Degrees are reported the way the wire field is: counter-clockwise positive,
+    with y up, so the sign of dy is inverted from device space.  None when
+    fewer than two glyphs inked, because one glyph has no direction and saying
+    "0" for it would be the same false negative in a new place."""
+    if centres is None or len(centres) < 2:
+        return None
+    dx = centres[-1][0] - centres[0][0]
+    dy = centres[-1][1] - centres[0][1]
+    if abs(dx) < 1e-9 and abs(dy) < 1e-9:
+        return None
+    return math.degrees(math.atan2(-dy, dx))
+
+
+def angle_difference(a, b):
+    """Smallest absolute difference between two angles, in degrees."""
+    return abs((a - b + 180.0) % 360.0 - 180.0)
+
 
 def write_png(path: str, width: int, height: int, rgb: bytes) -> None:
     stride = width * 3
@@ -1603,6 +1884,7 @@ class Capture(object):
         self.text_invisible_runs = 0
         self.text_ink_bbox = None
         self.text_synth_face_runs = 0
+        self.text_transformed_runs = 0   # non-default rotation/shear/false bold
         self.text_unsupported = {}
         self.text_records = []
         self.text_records_limit = 4000
@@ -2117,7 +2399,8 @@ class Capture(object):
                 run = self._paint_text(st, offsets[0], text, offsets=offsets)
                 if self.reply:
                     self._reply_draw_string(token, offsets[-1], text, st,
-                                            run=run, last_glyph_only=True)
+                                            run=run, last_glyph_only=True,
+                                            transform_origin=True)
             return
 
         if code == RP_STRING_WIDTH:
@@ -2188,17 +2471,21 @@ class Capture(object):
         """Why a run cannot be rasterised faithfully, or None.
 
         A run we would draw *wrongly* is worse than one we refuse to draw: it
-        would be counted as glyph truth.  So the transform cases bail out to the
-        estimated box and are named in the report."""
+        would be counted as glyph truth.  So whatever is left here bails out to
+        the estimated box and is named in the report.
+
+        Rotation and shear USED to be listed here, and that was the #494 defect
+        one level up: refusing them meant a rotated label was an estimated grey
+        box in this instrument and a horizontal label in a client that decoded
+        the fields and threw them away -- and "the instrument agrees" was
+        reported for a picture nobody had checked.  They are honoured now (see
+        FontTransform), so the only thing that still forfeits a run is a font
+        state we genuinely cannot reproduce."""
         if self.glyphs is None:
             return "no rasteriser"
         font = st.font
         if font.get("encoding", B_UNICODE_UTF8) != B_UNICODE_UTF8:
             return "encoding=%d" % font["encoding"]
-        if abs(font.get("rotation", 0.0)) > 0.01:
-            return "rotation=%.1f" % font["rotation"]
-        if abs(font.get("shear", 90.0) - 90.0) > 0.01:
-            return "shear=%.1f" % font["shear"]
         return None
 
     def _shape(self, st, text, delta=None):
@@ -2212,7 +2499,9 @@ class Capture(object):
                                                       B_CHAR_SPACING),
                                      false_bold=font.get("false_bold_width",
                                                          0.0),
-                                     delta=delta)
+                                     delta=delta,
+                                     rotation=font.get("rotation", 0.0),
+                                     shear=font.get("shear", 90.0))
         except OSError as exc:
             if len(self.errors) < 20:
                 self.errors.append("rasteriser: %s" % exc)
@@ -2241,17 +2530,27 @@ class Capture(object):
 
         ox, oy = self._xy(st)
         color = st.effective_color()
+        xf = run.transform or FontTransform()
         ink = 0
         visible = 0
         ink_box = None
         drawn = 0
+        centres = []
         for index, glyph in enumerate(run.glyphs):
             if offsets is not None:
                 if index >= len(offsets):
                     break
-                px, py = offsets[index]
+                # The WITH_OFFSETS overload of RenderString does NOT translate
+                # by a baseline (AGGTextRenderer.cpp:415-416: embedded transform
+                # times the view transform, and nothing else), so the server's
+                # own glyph origins go through the embedded transform too.  That
+                # is app_server's behaviour, not a choice made here; copying it
+                # is the only way a comparison against app_server can fail for
+                # the right reason.
+                px, py = xf.apply(offsets[index][0], offsets[index][1])
             else:
-                px, py = point[0] + run.pens[index], point[1]
+                dx, dy = run.offsets[index]
+                px, py = point[0] + dx, point[1] + dy
             if glyph is None or not glyph.cov:
                 continue
             gx = int(math.floor(px + 0.5)) + glyph.left + ox
@@ -2262,6 +2561,8 @@ class Capture(object):
             if painted:
                 ink += painted
                 box = (gx, gy, gx + glyph.width - 1, gy + glyph.rows - 1)
+                centres.append(((box[0] + box[2]) / 2.0,
+                                (box[1] + box[3]) / 2.0))
                 self._note_dest(st, *box)
                 ink_box = box if ink_box is None else (
                     min(ink_box[0], box[0]), min(ink_box[1], box[1]),
@@ -2277,16 +2578,23 @@ class Capture(object):
                 run.glyphs[-1].advance if run.glyphs and run.glyphs[-1] else 0)
             top = min(p[1] for p in offsets) - run.ascent
             bottom = max(p[1] for p in offsets) + run.descent
+            left, top, right, bottom = xf.transform_box(left, top, right,
+                                                        bottom)
         else:
-            left = point[0]
-            right = point[0] + run.advance
-            top = point[1] - run.ascent
-            bottom = point[1] + run.descent
+            left, top, right, bottom = xf.transform_box(
+                0.0, -run.ascent, run.advance, run.descent)
+            left += point[0]
+            right += point[0]
+            top += point[1]
+            bottom += point[1]
         declared = rect_to_pixels((left, top, right, bottom))
         declared = (declared[0] + ox, declared[1] + oy,
                     declared[2] + ox, declared[3] + oy)
         self._note_dest(st, *declared)
 
+        axis = run_axis_degrees(centres)
+        if not xf.identity or run.false_bold > 0.0:
+            self.text_transformed_runs += 1
         self.text_runs_rasterised += 1
         self.text_chars += len(run.glyphs)
         self.text_glyphs += drawn
@@ -2304,7 +2612,7 @@ class Capture(object):
                 max(self.text_ink_bbox[2], ink_box[2]),
                 max(self.text_ink_bbox[3], ink_box[3]))
         self._record_text(st, point, text, run, ink, ink_box, declared,
-                          offsets, visible=visible)
+                          offsets, visible=visible, axis=axis)
         return run
 
     def _paint_estimated_text(self, st, point, text, offsets=None):
@@ -2340,7 +2648,7 @@ class Capture(object):
         self._record_text(st, point, text, None, 0, None, box, offsets)
 
     def _record_text(self, st, point, text, run, ink, ink_box, declared,
-                     offsets, visible=0):
+                     offsets, visible=0, axis=None):
         if len(self.text_records) >= self.text_records_limit:
             return
         self.text_records.append({
@@ -2350,6 +2658,13 @@ class Capture(object):
             "size": st.font.get("size", st.font_size),
             "face": st.font.get("face", 0),
             "spacing": st.font.get("spacing", B_CHAR_SPACING),
+            # The three fields #494 is about, recorded whether or not they were
+            # honoured, so a census can be grepped for transformed runs.
+            "rotation": st.font.get("rotation", 0.0),
+            "shear": st.font.get("shear", 90.0),
+            "false_bold_width": st.font.get("false_bold_width", 0.0),
+            # ...and what the ink did about them, which is the assertable part.
+            "ink_axis_deg": None if axis is None else round(axis, 2),
             "with_offsets": offsets is not None,
             "chars": utf8_count_chars(text),
             "glyphs": 0 if run is None else len(run.glyphs),
@@ -2366,7 +2681,7 @@ class Capture(object):
         })
 
     def _reply_draw_string(self, token, point, text, st, run=None, delta=None,
-                           last_glyph_only=False):
+                           last_glyph_only=False, transform_origin=False):
         """RP_DRAW_STRING_RESULT: uint32 token, BPoint penLocation.
 
         Consumed by RemoteDrawingEngine::_DrawingEngineResult
@@ -2381,7 +2696,14 @@ class Capture(object):
         0.55-per-character guess.  It matters beyond tidiness: the server
         *uses* this position for whatever it draws next, so a client that
         answers with a wrong pen makes the server itself mislay the rest of the
-        line."""
+        line.
+
+        Under a rotated or sheared font the pen does not stay on a horizontal
+        line, and StringRenderer::Finish puts the untransformed pen through the
+        full transform before handing it back (AGGTextRenderer.cpp:182-186).  So
+        the advance is mapped the same way here: answering point.x + advance for
+        a rotated run would send the server off along a line its own renderer
+        never drew."""
         if run is not None:
             if last_glyph_only:
                 # RP_DRAW_STRING_WITH_OFFSETS: the server placed every glyph
@@ -2392,11 +2714,25 @@ class Capture(object):
                 advance = 0.0 if last is None else last.advance
             else:
                 advance = run.advance
+            xf = run.transform or FontTransform()
         else:
             advance = self._estimate_width(st, text)
+            xf = FontTransform(st.font.get("rotation", 0.0),
+                               st.font.get("shear", 90.0))
+        if transform_origin:
+            # WITH_OFFSETS: the origin is one of the server's own offsets, and
+            # those go through the transform too (see _paint_text), so the pen
+            # after the run has to be measured in the same space the glyphs were
+            # drawn in.  Transforming only the advance would put the reported
+            # pen somewhere no glyph ever went.
+            base = xf.apply(point[0] + advance, point[1])
+            self.outbox.append((RP_DRAW_STRING_RESULT,
+                                struct.pack("<Iff", token, base[0], base[1])))
+            return
+        dx, dy = xf.apply(advance, 0.0)
         self.outbox.append((RP_DRAW_STRING_RESULT,
-                            struct.pack("<Iff", token, point[0] + advance,
-                                        point[1])))
+                            struct.pack("<Iff", token, point[0] + dx,
+                                        point[1] + dy)))
 
     def _reply_read_bitmap(self, token, rect):
         """RP_READ_BITMAP_RESULT: uint32 token, then a non-minimal bitmap.
@@ -3124,6 +3460,72 @@ def parse_text_expectation(spec):
     return spec, None, None
 
 
+def parse_angle_expectation(spec):
+    """'Rotated@90' -> ('Rotated', 90.0); None when there is no angle.
+
+    Split from the RIGHT like parse_text_expectation, so a '@' in the text
+    survives."""
+    text, sep, where = spec.rpartition("@")
+    if not sep:
+        return None
+    try:
+        return text, float(where.strip())
+    except ValueError:
+        return None
+
+
+def text_angle_failures(cap, args):
+    """--expect-text-angle: the run's INK must march in the stated direction.
+
+    This is the assertion #494 is about, and the reason it is a new one rather
+    than a tightening of --expect-text: --expect-text checks the ORIGIN, which a
+    rotated run shares exactly with a horizontal one, and --min-glyph-ink counts
+    pixels, of which a rotated run has the same number.  Both pass on a client
+    that decoded the rotation and threw it away.  An assertion that cannot go
+    red for the defect it is aimed at is not evidence, and three of the last
+    five bugs found here were exactly that shape (#475, #479, #485).
+
+    The measured angle comes from run_axis_degrees -- first inked glyph centre
+    to last -- so what is compared is a property of the picture.  The expected
+    angle comes from the command line.  A horizontal run asserted at 90 degrees
+    fails; that is the whole test."""
+    failures = []
+    for spec in getattr(args, "expect_text_angle", []) or []:
+        parsed = parse_angle_expectation(spec)
+        if parsed is None:
+            failures.append("--expect-text-angle %r: expected TEXT@DEGREES"
+                            % spec)
+            continue
+        want, want_deg = parsed
+        seen = []
+        matched = False
+        for record in cap.text_records:
+            if record["text"] != want:
+                continue
+            axis = record.get("ink_axis_deg")
+            if axis is None:
+                seen.append("drew %d glyph(s), too few to have a direction"
+                            % record.get("glyphs", 0))
+                continue
+            if angle_difference(axis, want_deg) <= args.text_angle_tolerance:
+                matched = True
+                break
+            seen.append("ink ran at %.1f deg (font said rotation=%g)"
+                        % (axis, record.get("rotation", 0.0)))
+        if matched:
+            continue
+        if not seen:
+            failures.append("--expect-text-angle %r: no run with that text "
+                            "drew any ink (%d run(s) recorded)"
+                            % (spec, len(cap.text_records)))
+        else:
+            failures.append("--expect-text-angle %r: no run ran within %.1f "
+                            "deg of %.1f -- found %s"
+                            % (spec, args.text_angle_tolerance, want_deg,
+                               "; ".join(seen[:4])))
+    return failures
+
+
 def text_expectation_failures(cap, args):
     """Check the caller's text assertions against the census.
 
@@ -3189,6 +3591,7 @@ def text_expectation_failures(cap, args):
                             "is not within %.1f px of (%.1f,%.1f) -- found %s"
                             % (spec, args.text_tolerance, wx, wy,
                                "; ".join(near[:4])))
+    failures.extend(text_angle_failures(cap, args))
     return failures
 
 
@@ -3237,6 +3640,11 @@ def report(cap, args, connected, elapsed, stop_reason, wire=None):
                % ("-" if cap.text_ink_bbox is None
                   else "%d,%d,%d,%d" % cap.text_ink_bbox))
     out.append("TEXT_SYNTHETIC_FACE_RUNS=%d" % cap.text_synth_face_runs)
+    out.append("TEXT_TRANSFORMED_RUNS=%d" % cap.text_transformed_runs)
+    out.append("TEXT_INK_AXES=%s"
+               % (",".join("%g" % a for a in sorted(
+                   set(r["ink_axis_deg"] for r in cap.text_records
+                       if r.get("ink_axis_deg") is not None))) or "-"))
     out.append("TEXT_TRAILING_BYTES=%d" % cap.text_trailing_bytes)
     out.append("STRING_WIDTH_QUERIES=%d" % cap.string_width_queries)
     out.append("BITMAPS_DECODED=%d" % cap.bitmaps_decoded)
@@ -3405,11 +3813,30 @@ def report(cap, args, connected, elapsed, stop_reason, wire=None):
     # What may and may not be concluded from the glyphs above. Stated here, at
     # the point of production, because the over-claim is the bug (#475) and an
     # over-claiming instrument is no better than a blind one.
+    if cap.text_transformed_runs:
+        axes = sorted(set((r["rotation"], r["shear"], r["false_bold_width"],
+                           r["ink_axis_deg"]) for r in cap.text_records
+                          if r["rasterised"]
+                          and (r["rotation"] or r["shear"] != 90.0
+                               or r["false_bold_width"])))
+        print("transformed   : %d run(s) with a non-default rotation, shear or "
+              "false bold" % cap.text_transformed_runs)
+        for rot, shear, fb, axis in axes[:6]:
+            print("  rotation=%-6g shear=%-6g false_bold=%-4g -> ink ran at %s"
+                  % (rot, shear, fb,
+                     "%.1f deg" % axis if axis is not None
+                     else "no direction (one glyph)"))
     if cap.text_runs_rasterised:
         print("fidelity      : ASSERTABLE -- that text drew, how many runs and "
-              "glyphs, their origins, advances and ink box.  NOT ASSERTABLE -- "
-              "pixel equality with app_server (family cannot be recovered from "
-              "the wire, and hinting/subpixel filtering differ).")
+              "glyphs, their origins, advances and ink box, and the DIRECTION "
+              "the ink ran in (so a rotation or shear that was decoded and "
+              "discarded fails, #494).  NOT ASSERTABLE -- pixel equality with "
+              "app_server (family cannot be recovered from the wire, and "
+              "hinting/subpixel filtering differ), nor sub-degree accuracy of "
+              "the rotation, nor the exact widening of a false-bold outline: "
+              "the transform and the contour offset are applied to FreeType's "
+              "outline here and to an AGG path there, so the two agree on "
+              "geometry and not on pixels.")
     for reason, count in sorted(cap.text_unsupported.items()):
         print("NOTE: %d text run(s) not rasterised: %s" % (count, reason))
     if cap.estimated_text_ops:
@@ -3418,10 +3845,13 @@ def report(cap, args, connected, elapsed, stop_reason, wire=None):
               "and this capture is NOT text ground truth."
               % (cap.estimated_text_ops, str(PLACEHOLDER)))
     for record in cap.text_records[:8]:
-        print("  %-24r origin=(%.1f,%.1f) size=%.1f glyphs=%d ink=%d/%d %s"
+        print("  %-24r origin=(%.1f,%.1f) size=%.1f glyphs=%d ink=%d/%d axis=%s "
+              "%s"
               % (record["text"][:24], record["origin"][0], record["origin"][1],
                  record["size"], record["glyphs"], record["ink_visible"],
                  record["ink_pixels"],
+                 "-" if record.get("ink_axis_deg") is None
+                 else "%.1f" % record["ink_axis_deg"],
                  "" if record["rasterised"] else "ESTIMATED"))
     if len(cap.text_records) > 8:
         print("  ... %d more run(s)" % (len(cap.text_records) - 8))
@@ -3471,6 +3901,7 @@ def report(cap, args, connected, elapsed, stop_reason, wire=None):
             "text_ink_bbox": (None if cap.text_ink_bbox is None
                               else list(cap.text_ink_bbox)),
             "text_synthetic_face_runs": cap.text_synth_face_runs,
+            "text_transformed_runs": cap.text_transformed_runs,
             "text_trailing_bytes": cap.text_trailing_bytes,
             "text_unsupported": dict(cap.text_unsupported),
             "text_runs": cap.text_records,
@@ -4323,23 +4754,434 @@ def selftest(allow_skip=False):
             globals()["font_selfcheck_problems"] = saved_guard
         check("a layout-guard problem refuses the rasteriser", wired)
 
-        # A transform we will not fake must fall back rather than draw a lie.
-        rotated = run_stream(
-            bytes(frame(RP_CREATE_STATE, struct.pack("<I", gtoken))
-                  + frame(RP_SET_FONT,
-                          font_payload(gtoken, 16.0, rotation=45.0))
-                  + frame(RP_DRAW_STRING,
-                          struct.pack("<I", gtoken)
-                          + struct.pack("<ff", 30.0, 90.0)
-                          + struct.pack("<I", 2) + b"Hi" + b"\x00")),
-            glyphs=ras)
-        check("a rotated run is refused, not drawn wrongly",
-              (rotated.text_runs_rasterised == 0
-               and rotated.estimated_text_ops == 1
-               and "rotation=45.0" in rotated.text_unsupported),
-              str(rotated.text_unsupported))
-        check("a refused run forfeits glyph truth",
-              rotated.glyph_truth()[0] is False, rotated.glyph_truth()[1])
+        check("the outline guard accepts a real 'H'",
+              outline_selfcheck_problems(1, 12, True) == [],
+              str(outline_selfcheck_problems(1, 12, True)))
+        for label, facts in [("no contours", (0, 12, True)),
+                             ("a garbage contour count", (4096, 12, True)),
+                             ("no points", (1, 0, True)),
+                             ("a garbage point count", (1, 70000, True)),
+                             ("a null points pointer", (1, 12, False))]:
+            check("the outline guard rejects %s" % label,
+                  outline_selfcheck_problems(*facts) != [])
+        check("the outline offset is proved on the running library, not assumed",
+              outline_selfcheck_problems(
+                  *ras._probe_outline(
+                      ras.fonts.select(False, False, False)[0])) == [],
+              str(ras._probe_outline(ras.fonts.select(False, False, False)[0])))
+
+        # ---- font rotation, shear and false bold (#494) --------------
+        print("  -- transformed text (#494) --")
+
+        class AngleArgs(object):
+            """The caller-facing assertion args, with nothing set by default."""
+            def __init__(self, **kw):
+                self.min_text_runs = 0
+                self.min_glyph_ink = 0
+                self.expect_text = []
+                self.text_tolerance = 2.0
+                self.expect_text_angle = []
+                self.text_angle_tolerance = 12.0
+                self.__dict__.update(kw)
+
+        # The CONVENTION, pinned against hand-computed matrices.  Deriving the
+        # expectation from FontTransform would make this a tautology; these four
+        # are worked out from AGGTextRenderer.cpp:72-85 with a pencil, in y-DOWN
+        # device space:
+        #   a = -rotation in radians;  t = tan(90 - shear in radians)
+        #   M = R * S = ((cos a, cos a * t - sin a), (sin a, sin a * t + cos a))
+        # rotation=30 alone      -> a = -30 deg: (( .866025,  .5     ),
+        #                                        (-.5     ,  .866025))
+        # shear=45 alone         -> t = 1      -> ((1, 1), (0, 1))
+        # both                   -> ((.866025, .866025+.5), (-.5, -.5+.866025))
+        # rotation=90 alone      -> ((0, 1), (-1, 0))
+        # The last one is the sign check that matters: a positive rotation must
+        # send the advance UP the screen, because BFont rotation is
+        # counter-clockwise and screen y grows downwards.
+        golden_matrices = [
+            (0.0, 90.0, (1.0, 0.0, 0.0, 1.0)),
+            (30.0, 90.0, (0.8660254, 0.5, -0.5, 0.8660254)),
+            (0.0, 45.0, (1.0, 1.0, 0.0, 1.0)),
+            (30.0, 45.0, (0.8660254, 1.3660254, -0.5, 0.3660254)),
+            (90.0, 90.0, (0.0, 1.0, -1.0, 0.0)),
+        ]
+        for rot, shear, want in golden_matrices:
+            xf = FontTransform(rot, shear)
+            got = (xf.m00, xf.m01, xf.m10, xf.m11)
+            check("rotation=%g shear=%g composes to the hand-computed matrix"
+                  % (rot, shear),
+                  all(abs(a - b) < 1e-6 for a, b in zip(got, want)),
+                  "%s vs %s" % (tuple(round(v, 7) for v in got), want))
+        check("shear and rotation compose in the server's order (R*S, not S*R)",
+              abs(FontTransform(30.0, 45.0).m01 - 1.3660254) < 1e-6
+              and abs(FontTransform(30.0, 45.0).m01 - 0.3660254) > 0.5,
+              "%.7f" % FontTransform(30.0, 45.0).m01)
+        check("a positive rotation sends the advance UP the screen",
+              FontTransform(90.0).apply(10.0, 0.0)[1] < -9.9,
+              str(FontTransform(90.0).apply(10.0, 0.0)))
+        check("shear=90 and rotation=0 is the identity, so untransformed text "
+              "takes the untransformed path",
+              FontTransform(0.0, 90.0).identity
+              and not FontTransform(0.0, 89.0).identity
+              and not FontTransform(0.1, 90.0).identity)
+        # FreeType works in y-UP, so the matrix handed to it is conjugated by
+        # diag(1,-1): the off-diagonal terms flip and the diagonal ones do not.
+        # 16.16 fixed, so 1.0 is 65536 and 0.5 is 32768 -- pinned as integers.
+        check("the FreeType matrix is the y-UP conjugate, in 16.16",
+              FontTransform(90.0, 90.0).ft_matrix() == (0, -65536, 65536, 0),
+              str(FontTransform(90.0, 90.0).ft_matrix()))
+        check("the FreeType matrix of rotation=30 flips only the off-diagonal",
+              FontTransform(30.0, 90.0).ft_matrix() == (56756, -32768, 32768,
+                                                       56756),
+              str(FontTransform(30.0, 90.0).ft_matrix()))
+
+        # The fixture: one 7-glyph run, drawn flat and then turned a quarter
+        # turn from the same origin.  7 glyphs because orientation needs a
+        # direction and a direction needs two points.  Its own square canvas,
+        # with the origin in the middle, so that a run turned ANY way stays
+        # inside it -- an ink box truncated by the framebuffer edge would make
+        # the geometry checks below depend on the canvas and not on the font.
+        TURN_ORIGIN = (120.0, 120.0)
+
+        def turned(rotation=0.0, shear=90.0, false_bold=0.0, text=b"Rotated",
+                   origin=TURN_ORIGIN):
+            data = bytes(
+                frame(RP_CREATE_STATE, struct.pack("<I", gtoken))
+                + frame(RP_SET_HIGH_COLOR, struct.pack("<I", gtoken)
+                        + bytes((255, 255, 255, 255)))
+                + frame(RP_SET_FONT,
+                        font_payload(gtoken, 16.0, rotation=rotation,
+                                     shear=shear, false_bold=false_bold))
+                + frame(RP_DRAW_STRING,
+                        struct.pack("<I", gtoken)
+                        + struct.pack("<ff", origin[0], origin[1])
+                        + struct.pack("<I", len(text)) + text + b"\x00"))
+            cap = Capture(240, 240, clip=True, apply_offsets=False,
+                          verbose=False, reply=True, glyphs=ras)
+            pos = 0
+            while pos + HEADER <= len(data):
+                code, length = struct.unpack_from("<HI", data, pos)
+                cap.handle(code, bytes(data[pos + HEADER:pos + length]))
+                pos += length
+            return cap
+
+        flat = turned()
+        quarter = turned(rotation=90.0)
+        check("a rotated run is RASTERISED now, not refused",
+              (quarter.text_runs_rasterised == 1
+               and quarter.estimated_text_ops == 0
+               and quarter.text_unsupported == {}),
+              "rast=%d est=%d %s" % (quarter.text_runs_rasterised,
+                                     quarter.estimated_text_ops,
+                                     quarter.text_unsupported))
+        check("a rotated run IS glyph truth",
+              quarter.glyph_truth()[0] is True, quarter.glyph_truth()[1])
+        check("a rotated run is counted as transformed",
+              quarter.text_transformed_runs == 1
+              and flat.text_transformed_runs == 0,
+              "%d vs %d" % (quarter.text_transformed_runs,
+                            flat.text_transformed_runs))
+
+        # THE DISCRIMINATOR.  The flat run's ink box is wide and short; the
+        # quarter-turned one's is narrow and tall.  Asserted on the boxes and
+        # not on a count, because...
+        flat_box = flat.text_ink_bbox
+        turn_box = quarter.text_ink_bbox
+        flat_w = flat_box[2] - flat_box[0]
+        flat_h = flat_box[3] - flat_box[1]
+        turn_w = turn_box[2] - turn_box[0]
+        turn_h = turn_box[3] - turn_box[1]
+        check("a flat run's ink box is wider than it is tall",
+              flat_w > 2 * flat_h, "%dx%d" % (flat_w, flat_h))
+        check("a quarter-turned run's ink box is TALLER than it is wide",
+              turn_h > 2 * turn_w, "%dx%d" % (turn_w, turn_h))
+        check("the turned ink box is not the flat one",
+              turn_box != flat_box, "%s == %s" % (turn_box, flat_box))
+        check("turning the run swaps the box's extents",
+              abs(turn_h - flat_w) <= 3 and abs(turn_w - flat_h) <= 3,
+              "flat %dx%d turned %dx%d" % (flat_w, flat_h, turn_w, turn_h))
+
+        # The DECLARED box -- what the run claims to occupy, from the origin and
+        # the face's ascent/descent -- has to turn with the ink, or the two
+        # disagree for a reason that is this tool's fault and a reader has no way
+        # to tell that from a real disagreement.
+        flat_decl = flat.text_records[0]["declared_bbox"]
+        turn_decl = quarter.text_records[0]["declared_bbox"]
+        check("a flat run's declared box is wider than it is tall",
+              (flat_decl[2] - flat_decl[0]) > 2 * (flat_decl[3] - flat_decl[1]),
+              str(flat_decl))
+        check("a quarter-turned run's declared box turns with the ink",
+              (turn_decl[3] - turn_decl[1]) > 2 * (turn_decl[2] - turn_decl[0]),
+              str(turn_decl))
+        check("the declared box still contains the ink after turning",
+              (turn_decl[0] <= turn_box[0] and turn_decl[1] <= turn_box[1]
+               and turn_decl[2] >= turn_box[2] and turn_decl[3] >= turn_box[3]),
+              "declared %s vs ink %s" % (turn_decl, turn_box))
+
+        # ...because a COUNT cannot tell them apart.  This is the check that
+        # says why the box check above has to exist: the same glyphs, the same
+        # ink, the same origin, and only the geometry differs. Every assertion
+        # this file had before #494 lived on the left-hand side of these.
+        check("glyph counts CANNOT tell a rotated run from a flat one",
+              quarter.text_glyphs == flat.text_glyphs == 7,
+              "%d vs %d" % (quarter.text_glyphs, flat.text_glyphs))
+        check("ink pixel counts CANNOT tell a rotated run from a flat one",
+              abs(quarter.text_ink_visible - flat.text_ink_visible)
+              < 0.1 * flat.text_ink_visible,
+              "%d vs %d" % (quarter.text_ink_visible, flat.text_ink_visible))
+        check("the two runs share their origin, so --expect-text CANNOT tell "
+              "them apart either",
+              quarter.text_records[0]["origin"]
+              == flat.text_records[0]["origin"] == [120.0, 120.0],
+              str(quarter.text_records[0]["origin"]))
+
+        # The measured direction, read off the ink.  0 / 90 / 45 / -90 are the
+        # angles asked for on the wire; the tolerance is the measurement's, and
+        # the values are not derived from the matrix.
+        for rot, want in [(0.0, 0.0), (90.0, 90.0), (45.0, 45.0),
+                          (-90.0, -90.0), (180.0, 180.0)]:
+            cap = turned(rotation=rot)
+            axis = cap.text_records[0]["ink_axis_deg"]
+            check("ink drawn at rotation=%g runs at %g degrees" % (rot, want),
+                  axis is not None and angle_difference(axis, want) <= 3.0,
+                  str(axis))
+        check("a one-glyph run reports NO direction rather than a made-up 0",
+              turned(text=b"X").text_records[0]["ink_axis_deg"] is None,
+              str(turned(text=b"X").text_records[0]["ink_axis_deg"]))
+
+        # SHEAR.  shear=90 is upright; away from it the tops of the glyphs slide
+        # sideways, so the ink box grows horizontally while the run axis stays
+        # flat.  Which WAY it slides is pinned: FontTransform gives
+        # x' = x + y*tan(90-shear), and glyph ink is above the baseline (y < 0
+        # in device space), so shear < 90 moves ink LEFT of the origin and
+        # shear > 90 moves it right.
+        lean_back = turned(shear=45.0)
+        lean_fwd = turned(shear=135.0)
+        check("a sheared run is rasterised and counted as transformed",
+              (lean_back.text_runs_rasterised == 1
+               and lean_back.text_transformed_runs == 1
+               and lean_back.glyph_truth()[0] is True),
+              lean_back.glyph_truth()[1])
+        check("shear widens the ink box without turning the run",
+              (lean_back.text_ink_bbox[2] - lean_back.text_ink_bbox[0]
+               > flat_w + 4
+               and angle_difference(
+                   lean_back.text_records[0]["ink_axis_deg"], 0.0) <= 3.0),
+              "%s vs flat width %d" % (lean_back.text_ink_bbox, flat_w))
+        check("shear<90 leans the ink LEFT of the origin",
+              lean_back.text_ink_bbox[0] < flat_box[0] - 4,
+              "%d vs %d" % (lean_back.text_ink_bbox[0], flat_box[0]))
+        check("shear>90 leans the ink RIGHT, past where upright text ended",
+              lean_fwd.text_ink_bbox[2] > flat_box[2] + 4,
+              "%d vs %d" % (lean_fwd.text_ink_bbox[2], flat_box[2]))
+        check("the two shears lean opposite ways, so the sign is not ignored",
+              lean_back.text_ink_bbox[0] < lean_fwd.text_ink_bbox[0]
+              and lean_back.text_ink_bbox[2] < lean_fwd.text_ink_bbox[2],
+              "%s vs %s" % (lean_back.text_ink_bbox, lean_fwd.text_ink_bbox))
+
+        # FALSE BOLD.  agg conv_contour::width(falseBoldWidth * 2) offsets the
+        # outline outward by falseBoldWidth (agg_vcgen_contour.h:54 +
+        # agg_math_stroke.h:136-138), so the ink must grow by that many pixels
+        # on EVERY side and the advance must not move at all.  2.0 in, 2 px per
+        # side out: pinned from the specification, not measured and blessed.
+        bold2 = turned(false_bold=2.0)
+        bb = bold2.text_ink_bbox
+        check("false_bold_width grows the ink by itself on every side",
+              (abs((flat_box[0] - bb[0]) - 2) <= 1
+               and abs((flat_box[1] - bb[1]) - 2) <= 1
+               and abs((bb[2] - flat_box[2]) - 2) <= 1
+               and abs((bb[3] - flat_box[3]) - 2) <= 1),
+              "%s vs %s" % (bb, flat_box))
+        check("false_bold_width puts down strictly more ink",
+              bold2.text_ink_visible > flat.text_ink_visible * 1.5,
+              "%d vs %d" % (bold2.text_ink_visible, flat.text_ink_visible))
+        check("false_bold_width does NOT move the advance (conv_contour has no "
+              "opinion about advances, and neither does app_server)",
+              abs(ras.shape(b"Rotated", 16.0, false_bold=2.0).advance
+                  - ras.shape(b"Rotated", 16.0).advance) < 1e-6,
+              "%.4f vs %.4f"
+              % (ras.shape(b"Rotated", 16.0, false_bold=2.0).advance,
+                 ras.shape(b"Rotated", 16.0).advance))
+        check("false_bold_width is counted as transformed even with no rotation",
+              bold2.text_transformed_runs == 1,
+              str(bold2.text_transformed_runs))
+
+        # The pen we hand back must follow the rotated baseline: a quarter turn
+        # from (120,120) ends straight UP at (120, 120 - advance), not to the
+        # right at (120 + advance, 120).
+        advance = ras.shape(b"Rotated", 16.0).advance
+        turn_pen = [pl for c, pl in quarter.outbox
+                    if c == RP_DRAW_STRING_RESULT]
+        check("RP_DRAW_STRING_RESULT follows the rotated baseline",
+              len(turn_pen) == 1
+              and abs(struct.unpack("<Iff", turn_pen[0])[1] - 120.0) < 0.01
+              and abs(struct.unpack("<Iff", turn_pen[0])[2]
+                      - (120.0 - advance)) < 0.01,
+              str(struct.unpack("<Iff", turn_pen[0])[1:])
+              if turn_pen else "-")
+
+        # RP_DRAW_STRING_WITH_OFFSETS under a rotated font.  The server's second
+        # RenderString overload does not translate by a baseline
+        # (AGGTextRenderer.cpp:415-416), so the offsets it sent are themselves
+        # put through the embedded transform: three origins spaced along x come
+        # out spaced along the rotated axis, AND displaced, because the rotation
+        # is about the view origin rather than about the text.  That is
+        # app_server's behaviour, surprising or not, and these are checks that we
+        # copied it rather than checks that we like it -- a rotated
+        # WITH_OFFSETS run genuinely leaves the offsets the server named.  20
+        # degrees and not 90 only so the result stays on the canvas; at 90 the
+        # whole run lands at negative y, which is worth knowing and is a
+        # statement about app_server, not about this file.
+        def offsets_run(rotation):
+            data = bytes(
+                frame(RP_CREATE_STATE, struct.pack("<I", gtoken))
+                + frame(RP_SET_HIGH_COLOR, struct.pack("<I", gtoken)
+                        + bytes((255, 255, 255, 255)))
+                + frame(RP_SET_FONT,
+                        font_payload(gtoken, 16.0, rotation=rotation))
+                + frame(RP_DRAW_STRING_WITH_OFFSETS,
+                        struct.pack("<I", gtoken) + struct.pack("<I", 3)
+                        + b"abc" + struct.pack("<ff", 60.0, 120.0)
+                        + struct.pack("<ff", 80.0, 120.0)
+                        + struct.pack("<ff", 100.0, 120.0)))
+            cap = Capture(240, 240, clip=True, apply_offsets=False,
+                          verbose=False, reply=True, glyphs=ras)
+            pos = 0
+            while pos + HEADER <= len(data):
+                code, length = struct.unpack_from("<HI", data, pos)
+                cap.handle(code, bytes(data[pos + HEADER:pos + length]))
+                pos += length
+            return cap
+
+        off_flat = offsets_run(0.0)
+        off_turned = offsets_run(20.0)
+        off_flat_axis = off_flat.text_records[0]["ink_axis_deg"]
+        off_turn_axis = off_turned.text_records[0]["ink_axis_deg"]
+        check("WITH_OFFSETS still runs flat when the font is upright",
+              (off_flat.text_glyphs == 3 and off_flat_axis is not None
+               and angle_difference(off_flat_axis, 0.0) <= 3.0),
+              str(off_flat_axis))
+        check("WITH_OFFSETS puts the SERVER's own origins through the font "
+              "transform, as the server does",
+              (off_turned.text_glyphs == 3 and off_turn_axis is not None
+               and angle_difference(off_turn_axis, 20.0) <= 4.0),
+              str(off_turn_axis))
+        check("a turned WITH_OFFSETS run does not land in the flat one's box",
+              off_turned.text_ink_bbox != off_flat.text_ink_bbox,
+              "%s == %s" % (off_turned.text_ink_bbox, off_flat.text_ink_bbox))
+        # The pen after a turned WITH_OFFSETS run has to be measured in the
+        # space the glyphs were drawn in: transform(last offset + advance), not
+        # last offset + transform(advance).  Those differ by the displacement
+        # the view-origin rotation introduces, which is tens of pixels here.
+        off_pen = [pl for c, pl in off_turned.outbox
+                   if c == RP_DRAW_STRING_RESULT]
+        off_xf = FontTransform(20.0)
+        off_last_adv = ras.shape(b"abc", 16.0).glyphs[-1].advance
+        want_pen = off_xf.apply(100.0 + off_last_adv, 120.0)
+        check("RP_DRAW_STRING_RESULT for a turned WITH_OFFSETS run is in the "
+              "space the glyphs were drawn in",
+              len(off_pen) == 1
+              and abs(struct.unpack("<Iff", off_pen[0])[1] - want_pen[0]) < 0.01
+              and abs(struct.unpack("<Iff", off_pen[0])[2] - want_pen[1]) < 0.01,
+              "%s want %s" % (struct.unpack("<Iff", off_pen[0])[1:]
+                              if off_pen else "-",
+                              tuple(round(v, 2) for v in want_pen)))
+        check("--expect-text-angle discriminates WITH_OFFSETS runs too",
+              text_expectation_failures(
+                  off_turned, AngleArgs(expect_text_angle=["abc@20"])) == []
+              and text_expectation_failures(
+                  off_flat, AngleArgs(expect_text_angle=["abc@20"])) != [])
+
+        # ---- the orientation assertion, mutation tested -------------
+        check("--expect-text-angle passes on a run drawn at the stated angle",
+              text_expectation_failures(
+                  quarter, AngleArgs(expect_text_angle=["Rotated@90"])) == [])
+        check("--expect-text-angle FAILS on a run drawn FLAT -- the #494 defect",
+              text_expectation_failures(
+                  flat, AngleArgs(expect_text_angle=["Rotated@90"])) != [])
+        check("--expect-text-angle FAILS the other way round too (a turned run "
+              "asserted flat)",
+              text_expectation_failures(
+                  quarter, AngleArgs(expect_text_angle=["Rotated@0"])) != [])
+        check("--expect-text-angle passes a flat run asserted flat",
+              text_expectation_failures(
+                  flat, AngleArgs(expect_text_angle=["Rotated@0"])) == [])
+        check("--expect-text-angle distinguishes +90 from -90",
+              text_expectation_failures(
+                  quarter, AngleArgs(expect_text_angle=["Rotated@-90"])) != []
+              and text_expectation_failures(
+                  turned(rotation=-90.0),
+                  AngleArgs(expect_text_angle=["Rotated@-90"])) == [])
+        check("--expect-text-angle FAILS on a run that drew no ink at all",
+              text_expectation_failures(
+                  blind, AngleArgs(expect_text_angle=["Hi@0"])) != [])
+        check("--expect-text-angle FAILS on a one-glyph run rather than "
+              "passing by default",
+              text_expectation_failures(
+                  turned(text=b"X"), AngleArgs(expect_text_angle=["X@90"]))
+              != [])
+        check("--expect-text-angle tolerance is honoured, not ignored",
+              text_expectation_failures(
+                  turned(rotation=80.0),
+                  AngleArgs(expect_text_angle=["Rotated@90"])) == []
+              and text_expectation_failures(
+                  turned(rotation=80.0),
+                  AngleArgs(expect_text_angle=["Rotated@90"],
+                            text_angle_tolerance=2.0)) != [])
+        check("--expect-text-angle rejects a spec with no angle in it",
+              text_expectation_failures(
+                  quarter, AngleArgs(expect_text_angle=["Rotated"])) != [])
+        check("an '@' inside the text is not mistaken for an angle",
+              parse_angle_expectation("a@b") is None,
+              str(parse_angle_expectation("a@b")))
+        check("an angle is parsed off the right of the text",
+              parse_angle_expectation("a@b@90") == ("a@b", 90.0),
+              str(parse_angle_expectation("a@b@90")))
+
+        # ...and the assertion is wired to the IMPLEMENTATION, not merely to the
+        # fixture.  Neuter FontTransform so every run comes out flat -- exactly
+        # what the three clients did with these fields before #494 -- and the
+        # orientation assertion must go red on bytes that used to pass it.  This
+        # is the arm #423 shipped without: its wire check stayed green with the
+        # opcode mutated, because nothing in it was pinned outside the code
+        # under test.
+        saved_transform = globals()["FontTransform"]
+
+        class FlatTransform(saved_transform):
+            def __init__(self, rotation=0.0, shear=90.0):
+                saved_transform.__init__(self, 0.0, 90.0)
+
+        globals()["FontTransform"] = FlatTransform
+        try:
+            ras._glyphs.clear()
+            mutated = turned(rotation=90.0)
+            mutated_fails = text_expectation_failures(
+                mutated, AngleArgs(expect_text_angle=["Rotated@90"]))
+            mutated_box = mutated.text_ink_bbox
+            mutated_ink = mutated.text_ink_visible
+            mutated_runs = mutated.text_runs_rasterised
+        finally:
+            globals()["FontTransform"] = saved_transform
+            ras._glyphs.clear()
+        check("MUTATION: with the font transform discarded, a rotated run "
+              "still rasterises and still inks",
+              mutated_runs == 1 and mutated_ink > 0,
+              "runs=%d ink=%d" % (mutated_runs, mutated_ink))
+        check("MUTATION: with the font transform discarded, --expect-text-angle "
+              "goes RED",
+              mutated_fails != [], str(mutated_fails))
+        check("MUTATION: ...and it goes red because the ink came out flat, in "
+              "the flat run's own box",
+              mutated_box == flat_box, "%s vs %s" % (mutated_box, flat_box))
+        check("MUTATION: --min-glyph-ink and --expect-text stay GREEN on that "
+              "same mutated capture, which is why they were never going to "
+              "catch this",
+              text_expectation_failures(
+                  mutated, AngleArgs(min_glyph_ink=1,
+                                     expect_text=["Rotated@120,120"])) == [])
+        check("the real transform is back after the mutation arm",
+              turned(rotation=90.0).text_ink_bbox == turn_box,
+              str(turned(rotation=90.0).text_ink_bbox))
 
     # UTF-8 decoding has to agree with the count the server sized its point
     # list by, or WITH_OFFSETS desynchronises.  Pinned, not derived.
@@ -4465,6 +5307,23 @@ def main(argv=None):
                         "one that catches mispositioned text.")
     p.add_argument("--text-tolerance", type=float, default=2.0, metavar="PX",
                    help="origin tolerance for --expect-text (default 2.0)")
+    p.add_argument("--expect-text-angle", action="append", default=[],
+                   metavar="TEXT@DEGREES",
+                   help="exit 6 unless a run with exactly this text drew ink "
+                        "running in the given direction (BFont rotation "
+                        "degrees: counter-clockwise, 0 = left to right). "
+                        "Repeatable. This is the only text assertion here that "
+                        "can tell a rotated run from a horizontal one: "
+                        "--expect-text checks an origin the two SHARE, and "
+                        "--min-glyph-ink counts pixels both have the same "
+                        "number of, so neither can fail on a client that "
+                        "decodes font rotation and discards it (#494).")
+    p.add_argument("--text-angle-tolerance", type=float, default=12.0,
+                   metavar="DEG",
+                   help="direction tolerance for --expect-text-angle "
+                        "(default 12.0). Generous on purpose: this is here to "
+                        "separate 'rotated' from 'not rotated', not to grade "
+                        "sub-degree accuracy we do not claim.")
     p.add_argument("--answer-string-width", action="store_true",
                    help="advertise RP_CAP_STRING_WIDTH_REPLY and answer "
                         "RP_STRING_WIDTH from our own metrics. OFF by default "
