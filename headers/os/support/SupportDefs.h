@@ -275,7 +275,22 @@ atomic_get_and_set(int32* value, int32 newValue)
 static __inline__ int32
 atomic_test_and_set(int32* value, int32 newValue, int32 testAgainst)
 {
-	__atomic_compare_exchange_n(value, &testAgainst, newValue, 1,
+	// STRONG (weak = 0), not weak. A weak compare-exchange may fail
+	// spuriously, and this function reports its outcome solely through
+	// testAgainst: on a genuine mismatch the compiler stores the value it
+	// actually found, so the caller sees the mismatch -- but on a SPURIOUS
+	// failure the value found equals testAgainst, so testAgainst is unchanged
+	// and the caller cannot distinguish that from success, while the store
+	// never happened. A silent lost update.
+	//
+	// It is invisible wherever weak and strong compile to the same
+	// instruction, which is every machine this project routinely tests:
+	// with LSE (ARMv8.1+, all Graviton) both are a single `casal`. Only a
+	// target using LL/SC can tell them apart, and there the weak form emits
+	// `ldaxr cmp b.ne stlxr` with the store-exclusive status never tested --
+	// no `cbnz`, so a failed store is dropped on the floor. Strong adds
+	// exactly that retry.
+	__atomic_compare_exchange_n(value, &testAgainst, newValue, 0,
 		__ATOMIC_SEQ_CST, __ATOMIC_SEQ_CST);
 	return testAgainst;
 }
@@ -326,7 +341,8 @@ atomic_get_and_set64(int64* value, int64 newValue)
 static __inline__ int64
 atomic_test_and_set64(int64* value, int64 newValue, int64 testAgainst)
 {
-	__atomic_compare_exchange_n(value, &testAgainst, newValue, 1,
+	// Strong, for the reason given on atomic_test_and_set().
+	__atomic_compare_exchange_n(value, &testAgainst, newValue, 0,
 		__ATOMIC_SEQ_CST, __ATOMIC_SEQ_CST);
 	return testAgainst;
 }
