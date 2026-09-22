@@ -6,6 +6,8 @@
  *   Alexander von Gluck IV <kallisti5@unixzen.com>
  */
 
+#include <string.h>
+
 #include <arch_cpu_defs.h>
 #include <arch_dtb.h>
 #include <arch_smp.h>
@@ -180,15 +182,29 @@ arch_handle_fdt(const void* fdt, int node)
 
 	intc_info &interrupt_controller = gKernelArgs.arch_args.interrupt_controller;
 	if (interrupt_controller.kind[0] == 0) {
-		for (uint32 i = 0; i < B_COUNT_OF(kSupportedInterruptControllers); i++) {
-			if (dtb_has_fdt_string(compatible, compatibleLen,
-				kSupportedInterruptControllers[i].dtb_compat)) {
+		// Property outer, table inner, and stop at the first hit: `compatible`
+		// is ordered most-specific-first by specification, so firmware's order
+		// decides, not ours. Table-outer with no `break` meant the LAST matching
+		// row won -- a node listing a specific controller plus a generic
+		// fallback could resolve to the fallback purely because the fallback sat
+		// later in kSupportedInterruptControllers[], and dtb_get_reg() was re-run
+		// on every match (#464).
+		for (const char* entry = dtb_next_fdt_string(compatible, compatibleLen,
+					NULL);
+				entry != NULL && interrupt_controller.kind[0] == 0;
+				entry = dtb_next_fdt_string(compatible, compatibleLen, entry)) {
+			for (uint32 i = 0; i < B_COUNT_OF(kSupportedInterruptControllers); i++) {
+				if (strcmp(entry,
+						kSupportedInterruptControllers[i].dtb_compat) != 0) {
+					continue;
+				}
 
 				memcpy(interrupt_controller.kind, kSupportedInterruptControllers[i].kind,
 					sizeof(interrupt_controller.kind));
 
 				dtb_get_reg(fdt, node, 0, interrupt_controller.regs1);
 				dtb_get_reg(fdt, node, 1, interrupt_controller.regs2);
+				break;
 			}
 		}
 	}

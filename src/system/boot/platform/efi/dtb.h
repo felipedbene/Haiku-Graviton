@@ -20,6 +20,9 @@ uint32 dtb_get_interrupt(const void* fdt, int node);
 bool dtb_get_interrupt_at(const void* fdt, int node, uint32 index,
 	uint32& interrupt);
 bool dtb_has_fdt_string(const char* prop, int size, const char* pattern);
+// Walk a "compatible" property's entries in order; see dtb.cpp for why order
+// matters. NULL `cur` yields the first entry, NULL return ends the walk.
+const char* dtb_next_fdt_string(const char* prop, int size, const char* cur);
 
 
 #endif /* !_ASSEMBLER */
