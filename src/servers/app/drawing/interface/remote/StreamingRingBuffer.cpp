@@ -285,10 +285,19 @@ StreamingRingBuffer::MakeEmpty()
 		fCancelWrite = true;
 	}
 
+	// Cancel the reader, and arm the cancel even when no reader is parked right
+	// now -- the same lost-wakeup window ClearReader() closes below. The bytes
+	// just discarded may have been the front half of a message the reader is
+	// mid-way through parsing, so its *next* Read() is for a continuation that
+	// no longer exists and that nobody will write; without arming, that read
+	// finds fReaderWaiting already false, gets no wake, and blocks forever.
+	// Read() re-checks fCancelRead under fDataLocker immediately before parking,
+	// so an armed cancel is honoured by a reader that has not arrived yet.
+	// SetReader() disarms it for a successor.
+	fCancelRead = true;
 	if (fReaderWaiting) {
 		release_sem_etc(fReaderNotifier, 1, 0);
 		fReaderWaiting = false;
-		fCancelRead = true;
 	}
 }
 

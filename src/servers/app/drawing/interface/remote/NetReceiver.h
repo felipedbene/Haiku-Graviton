@@ -36,6 +36,7 @@ private:
 static	int32					_NetworkReceiverEntry(void *data);
 		status_t				_Listen();
 		status_t				_Transfer();
+		status_t				_TransferLoop();
 
 		void					_AcceptCandidate();
 		bool					_ReceiveCandidateData();

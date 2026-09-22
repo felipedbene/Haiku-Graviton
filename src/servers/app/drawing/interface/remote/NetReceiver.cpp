@@ -221,6 +221,37 @@ NetReceiver::_Listen()
 status_t
 NetReceiver::_Transfer()
 {
+	status_t result = _TransferLoop();
+
+	// Client side only. This thread is the sole producer of the target buffer,
+	// so once it has stopped no further byte will ever be written there --
+	// including the rest of whatever message the failure interrupted. Anything
+	// still queued is at best a prefix, and the parser draining it has no way
+	// to learn that: StreamingRingBuffer has no end-of-stream, so a parser that
+	// consumes a truncated message goes on to block in Read() for a
+	// continuation nobody will send, and the client sits on a frozen window
+	// instead of reporting the session gone.
+	//
+	// Emptying the buffer both discards the truncated tail and cancels that
+	// read (MakeEmpty() arms fCancelRead), which is what turns "hang" into
+	// "B_CANCELED" at the parser. It matters most after a decode failure, where
+	// the last bytes handed over are the ones most likely to be half a message,
+	// but a socket error leaves exactly the same hazard.
+	//
+	// The server side is deliberately excluded: there this thread is also the
+	// accept loop, its target survives the connection, and _ConnectionClosed()
+	// already flushes it at the right moment -- a second flush here would race
+	// the next client's first message into the ring (see _NewConnection()).
+	if (fNewConnectionCallback == NULL)
+		fTarget->MakeEmpty();
+
+	return result;
+}
+
+
+status_t
+NetReceiver::_TransferLoop()
+{
 	int32 errorCount = 0;
 
 	// In server (listening) mode a single thread both accepts connections and
