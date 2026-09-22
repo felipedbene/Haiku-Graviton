@@ -755,7 +755,7 @@ test('ops: every inline buildspec stays well under CodeBuild\'s 25,600 ceiling (
 test('publish: haiku-repo-add is fetched from an asset and sha256-verified (#454)', () => {
   const p = opsProject('debeos-repo-publish');
   const banked = bankedScripts(p.build, p.env, '/tmp');
-  expect(Object.keys(banked)).toEqual(['haiku-repo-add']);
+  expect(Object.keys(banked).sort()).toEqual(['haiku-publish-lock.sh', 'haiku-repo-add']);
   expect(p.env.HG_SCRIPT_REPO_ADD).toMatch(/^s3:\/\/\S+$/);
   // Nothing is base64-inlined any more, in either project.
   for (const name of ['debeos-repo-publish', 'debeos-repo-promote-green']) {
@@ -902,7 +902,10 @@ interface RepoAddRun {
 function runRepoAdd(opts: {
   packages: Record<string, string>;
   withLock?: boolean;
+  requireLock?: boolean;
   env?: Record<string, string>;
+  /** pre-existing lock object content (to simulate another publisher) */
+  heldLock?: string;
 }): RepoAddRun {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'repo-add-harness-'));
   const bin = path.join(root, 'bin');
@@ -927,6 +930,7 @@ function runRepoAdd(opts: {
     fs.writeFileSync(path.join(incomingPrefix, name), body);
   }
   const lockKey = path.join(repoPrefix, '.publish.lock');
+  if (opts.heldLock) fs.writeFileSync(lockKey, opts.heldLock);
   const publishedOut = path.join(root, 'published.list');
 
   const env: NodeJS.ProcessEnv = {
@@ -949,6 +953,7 @@ function runRepoAdd(opts: {
     // (TTL/3 = 100s) each of these runs took 100 seconds. 2s keeps the harness
     // honest (the heartbeat is still armed) and quick.
     HG_LOCK_HEARTBEAT: '2',
+    ...(opts.requireLock ? { HG_REQUIRE_PUBLISH_LOCK: '1' } : {}),
     ...(opts.env ?? {}),
   };
   // spawnSync rather than execFileSync: stderr is asserted on the SUCCESS paths too
@@ -1011,11 +1016,98 @@ test('repo-add reports an EMPTY published set when everything is skipped (#452)'
   expect(r.incoming).toEqual(['wrecked-9.9-1-arm64.hpkg']);
 });
 
-// The buildspec half of #452: the publish job must take its prune list FROM the add
-// step and build it nowhere itself -- if this job derives the list from anything,
-// from any source, the bug is back.
-test('publish: prunes from the add step\'s own report of what it published', () => {
+// #453: the publish job never banked haiku-publish-lock.sh, so haiku-repo-add's
+// sibling lookup missed, it WARNED, and every pipeline publish did its
+// read-modify-write of the live pool unlocked. On an automated path that absence is
+// a packaging bug, so HG_REQUIRE_PUBLISH_LOCK turns the warning into a refusal --
+// and it must refuse before touching the repo.
+test('repo-add REFUSES to publish unlocked when the lock lib is required (#453)', () => {
+  const r = runRepoAdd({
+    packages: { 'good-one-1.0-1-arm64.hpkg': fakeHpkg('good_one', '1.0-1') },
+    withLock: false,
+    requireLock: true,
+  });
+  expect(r.status).not.toBe(0);
+  expect(r.stderr).toContain('refusing to publish WITHOUT the #164 concurrency lock');
+  expect(r.pool).toEqual([]);                             // nothing published
+  expect(r.incoming).toEqual(['good-one-1.0-1-arm64.hpkg']); // nothing consumed
+});
+
+// The by-hand case keeps the old degrade-with-a-warning behaviour: an operator
+// running a copy of this script from somewhere odd is not a packaging bug.
+test('repo-add still only WARNS about a missing lock lib when not required', () => {
+  const r = runRepoAdd({
+    packages: { 'good-one-1.0-1-arm64.hpkg': fakeHpkg('good_one', '1.0-1') },
+    withLock: false,
+  });
+  expect(r.status).toBe(0);
+  expect(r.stderr).toContain('publishing WITHOUT the #164 concurrency lock');
+  expect(r.pool).toEqual(['good_one-1.0-1-arm64.hpkg']);
+});
+
+// With the library banked beside it, the lock is genuinely engaged rather than
+// merely present: a fresh lock held by another publisher stops the publish dead.
+// This is what the pipeline publish was NOT getting (#453).
+test('repo-add under the #164 lock defers to a live holder (#453)', () => {
+  const held = [
+    'holder=someone-else-999',
+    `epoch=${Math.floor(Date.now() / 1000)}`,
+    '',
+  ].join('\n');
+  const r = runRepoAdd({
+    packages: { 'good-one-1.0-1-arm64.hpkg': fakeHpkg('good_one', '1.0-1') },
+    requireLock: true,
+    heldLock: held,
+    env: { HG_LOCK_MODE: 'abort' },
+  });
+  expect(r.status).not.toBe(0);
+  expect(r.stderr).toContain('could not acquire the publish lock');
+  expect(r.pool).toEqual([]);
+  // The other publisher's lock is left exactly where it was.
+  expect(r.lockExists).toBe(true);
+});
+
+// ... and when the lock is free it is taken and released around the publish, so the
+// happy path is locked rather than silently skipping the whole mechanism.
+test('repo-add acquires and releases the #164 lock around the publish (#453)', () => {
+  const r = runRepoAdd({
+    packages: { 'good-one-1.0-1-arm64.hpkg': fakeHpkg('good_one', '1.0-1') },
+    requireLock: true,
+  });
+  expect(r.status).toBe(0);
+  expect(r.pool).toEqual(['good_one-1.0-1-arm64.hpkg']);
+  expect(r.published).toEqual(['good-one-1.0-1-arm64.hpkg']);
+  // The warning that gave #453 away is gone, and the lock really was taken.
+  expect(r.stderr).not.toContain('WITHOUT the #164 concurrency lock');
+  expect(r.stderr).toContain('publish-lock: acquired');
+  // Released on exit, so the next publisher is not left waiting out the TTL.
+  expect(r.lockExists).toBe(false);
+});
+
+// The buildspec half of #452/#453: the publish job must bank the lock library beside
+// haiku-repo-add, require it, and take its prune list FROM the add step. The last
+// part is the one that matters most -- if this job builds the list itself, from
+// anything, the bug is back.
+test('publish: banks the lock, requires it, and prunes from the add step\'s report', () => {
   const p = opsProject('debeos-repo-publish');
+  const banked = bankedScripts(p.build, p.env, '/tmp');
+  // bankedScripts only yields a script that is fetched AND sha256-verified into
+  // /tmp, so this is also the assertion that both land in the SAME directory --
+  // which is what makes haiku-repo-add's sibling lookup work.
+  expect(Object.keys(banked).sort()).toEqual(['haiku-publish-lock.sh', 'haiku-repo-add']);
+  expect(p.env.HG_SCRIPT_LOCK).toMatch(/^s3:\/\/\S+$/);
+  expect(banked['haiku-publish-lock.sh']).toContain('publish_lock_acquire');
+  // Both the fetch and the strict flag precede the run.
+  const lockFetch = p.build.findIndex(
+    c => c.startsWith('aws s3 cp "$HG_SCRIPT_LOCK" /tmp/haiku-publish-lock.sh'));
+  const strict = p.build.indexOf('export HG_REQUIRE_PUBLISH_LOCK=1');
+  const run = p.build.indexOf('bash /tmp/haiku-repo-add');
+  expect(lockFetch).toBeGreaterThan(-1);
+  expect(strict).toBeGreaterThan(-1);
+  expect(run).toBeGreaterThan(Math.max(lockFetch, strict));
+  // #452: the prune list comes from haiku-repo-add, and NOTHING in this buildspec
+  // writes it -- the old `aws s3 ls "$INCOMING/" ... > /tmp/published.list` is the
+  // bug, so its shape is what has to stay gone.
   const text = p.build.join('\n');
   expect(text).toContain('export HG_PUBLISHED_LIST_OUT=/tmp/published.list');
   expect(text).not.toMatch(/>\s*\/tmp\/published\.list/);

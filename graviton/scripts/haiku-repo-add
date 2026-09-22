@@ -30,6 +30,9 @@
 #                   published" below -- a caller that prunes a durable staging
 #                   area after the add MUST drive it from this file, not from its
 #                   own listing of what it offered)
+#   HG_REQUIRE_PUBLISH_LOCK  1 => a missing haiku-publish-lock.sh is FATAL rather
+#                   than a warning (set it on automated paths, where the library's
+#                   absence is a packaging bug)
 #   ARCH            packaging arch (default arm64)
 #   AWS_DEFAULT_REGION / AWS_REGION (default us-west-2)
 #   PKG_TOOL / PACKAGE_REPO_TOOL   tool paths (auto-detected under /opt/haiku if unset)
@@ -108,7 +111,17 @@ if [ -f "$HERE_LOCK/haiku-publish-lock.sh" ]; then
 	. "$HERE_LOCK/haiku-publish-lock.sh"
 	publish_lock_acquire || die "could not acquire the publish lock (rc=$?); another publisher holds $HG_REPO_S3 -- refusing to clobber it"
 	trap 'publish_lock_release; rm -rf "$WORK"' EXIT
+elif [ "${HG_REQUIRE_PUBLISH_LOCK:-0}" = 1 ]; then
+	# Automated callers (the pipeline publish job, the blue->green promote) bank the
+	# lock library beside this script deliberately, so on those paths a missing
+	# library is a PACKAGING bug -- and degrading to an unlocked publish of the live
+	# pool is the one outcome the #164 lock exists to prevent. Issue #453: the
+	# pipeline publish had been printing the warning below on every run, unnoticed,
+	# because nothing failed. Fail instead, and fail where the cause is obvious.
+	die "haiku-publish-lock.sh not found beside this script ($HERE_LOCK) and HG_REQUIRE_PUBLISH_LOCK=1 -- refusing to publish WITHOUT the #164 concurrency lock"
 else
+	# Left non-fatal for the by-hand case (an operator running a copy of this file
+	# from somewhere odd); set HG_REQUIRE_PUBLISH_LOCK=1 to make it fatal.
 	echo "haiku-repo-add: WARNING: haiku-publish-lock.sh not found beside this script -- publishing WITHOUT the #164 concurrency lock" >&2
 fi
 

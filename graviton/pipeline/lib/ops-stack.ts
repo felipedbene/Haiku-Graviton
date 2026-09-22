@@ -474,9 +474,13 @@ export class OpsStack extends cdk.Stack {
         HARVEST_S3: { value: `s3://${workBucket}/hpkg/arm64` },           // wave harvest (durable)
         INCOMING_BASE: { value: `s3://${workBucket}/hpkg/arm64-incoming` }, // per-run disposable snapshot
         HG_CF_DIST: { value: props.config.repoCloudFrontDistId ?? '' },   // '' => skip invalidation
-        // s3 uri of the banked haiku-repo-add asset (#454): a deploy-time token, so
-        // it travels as a variable and keeps the buildspec a plain literal string.
+        // s3 uris of the banked assets (#454): deploy-time tokens, so they travel as
+        // variables and keep the buildspec a plain literal string.
         HG_SCRIPT_REPO_ADD: { value: repoAddScript.asset.s3ObjectUrl },
+        // The #164 lock library, which haiku-repo-add sources from BESIDE itself
+        // (#453). Without it banked here, every pipeline publish wrote the live pool
+        // with the lock silently degraded to a warning.
+        HG_SCRIPT_LOCK: { value: publishLockScript.asset.s3ObjectUrl },
         ARCH: { value: 'arm64' },
       },
       buildSpec: codebuild.BuildSpec.fromObject({
@@ -509,6 +513,18 @@ export class OpsStack extends cdk.Stack {
               'if [ "${n:-0}" -eq 0 ]; then echo "no harvested hpkg to publish; nothing to do"; exit 0; fi',
               'echo "== incremental-add $n harvested package(s) into $HG_REPO_S3 =="',
               ...fetchScript(repoAddScript, 'HG_SCRIPT_REPO_ADD', '/tmp'),
+              // The #164 lock library must land in the SAME directory as
+              // haiku-repo-add, which sources it from beside ITSELF (#453). It was
+              // simply never banked here, so every pipeline publish logged
+              // "publishing WITHOUT the #164 concurrency lock" and carried on.
+              // HG_REQUIRE_PUBLISH_LOCK makes its absence FATAL on this path: an
+              // automated job that banks the library cannot be missing it for any
+              // reason other than a packaging bug, and an unlocked read-modify-write
+              // of the live pool is exactly what #164 exists to prevent. (The
+              // promote job reaches the same conclusion from the other side --
+              // haiku-repo-promote-green refuses outright.)
+              ...fetchScript(publishLockScript, 'HG_SCRIPT_LOCK', '/tmp'),
+              'export HG_REQUIRE_PUBLISH_LOCK=1',
               'export HG_INCOMING_S3="$INCOMING"',
               // The prune below deletes from the DURABLE harvest, so its key set must
               // come from what haiku-repo-add actually PUBLISHED -- not from this
@@ -572,9 +588,13 @@ export class OpsStack extends cdk.Stack {
         `arn:aws:s3:::${workBucket}`, `arn:aws:s3:::${workBucket}/*`,
       ],
     }));
-    // Read the banked haiku-repo-add asset out of the CDK bootstrap asset bucket
-    // (#454). grantRead scopes this to that bucket + the asset's own key.
+    // Read the banked assets out of the CDK bootstrap asset bucket (#454).
+    // grantRead scopes this to that bucket + each asset's own key. Both scripts the
+    // buildspec fetches need one, including the #164 lock library added in #453 --
+    // a fetch the role cannot read fails the build rather than degrading, which is
+    // the intended direction for this one.
     repoAddScript.asset.grantRead(publishProject);
+    publishLockScript.asset.grantRead(publishProject);
     // Banked host tools live in the bake pipeline's WorkBucket, whose physical
     // name is CDK-auto-generated. Instead of the old fragile name-substring
     // wildcard (arn:aws:s3:::*bakepipeline*workbucket*), import the bucket ARN the
