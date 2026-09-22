@@ -56,6 +56,12 @@ def load():
     """Import haiku-triage-failures as a module."""
     mod = types.ModuleType("tf")
     mod.__dict__["__name__"] = "tf"
+    # `__file__` must be the classifier's real path, not this file's: the classifier
+    # locates `pkgkey` (the #487 key contract) by walking up from its own
+    # `os.path.abspath(__file__)`, and a synthesised module namespace has no
+    # `__file__` at all -- so omitting it raised NameError as soon as #487 and #488
+    # were both applied, while each passed alone.
+    mod.__dict__["__file__"] = CLASSIFIER
     exec(compile(open(CLASSIFIER).read(), CLASSIFIER, "exec"), mod.__dict__)
     return mod
 

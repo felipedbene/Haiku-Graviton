@@ -1764,6 +1764,12 @@ Two distinct states, and conflating them is a recurring error:
   blocked exactly here (`devel:libvorbis`, `devel:xproto` built-but-unpublished).
 - After a wave, ports are **requeued** (`build_state=queued`, `attempt_count=0`,
   `requeued_by=…`) so the pipeline re-runs them; that is orthogonal to publishing.
+  **One `UpdateItem` per port.** The table's partition key is a single port name, and
+  a requeue that interpolated a list produced a key of 13 space-joined names — a
+  phantom row that can never build while none of the 13 was individually tracked
+  (#487). Also make sure the write sets `queued_at`: it is the `by-build-state` GSI's
+  range key, and a `queued` row without it is invisible to the wave driver forever.
+  `graviton/scripts/haiku-state-guard check` asserts both.
 
 ---
 

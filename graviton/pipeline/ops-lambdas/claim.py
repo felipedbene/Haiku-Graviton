@@ -6,10 +6,18 @@ Output: adds {claimed:[...], skipped:[...]} to the event.
 Uses a conditional update so two concurrent executions can never build the same
 package: claim succeeds only if the item is currently `queued` (or a stale
 `building` whose lease expired) and not suppressed.
+
+Every key is validated before the write (pkgkey, #487): the chain comes in over an
+event payload, and a chain element that is a whitespace-joined *list* of ports would
+otherwise become a durable phantom row nothing can ever build. Refusing loudly here
+fails the execution, which is the correct outcome -- a malformed chain must not be
+half-claimed.
 """
 import os
 import time
 import boto3
+
+from pkgkey import BadPkgKey, validate_pkg_key  # noqa: F401  (BadPkgKey re-exported)
 
 TABLE = os.environ.get("TABLE")
 
@@ -19,6 +27,10 @@ def handler(event, context):
     now = int(time.time())
     lease = int(event.get("lease_secs", 6 * 3600))
     exec_id = event.get("exec_id", context.aws_request_id)
+    # Validate the WHOLE chain before claiming any of it, so a bad element cannot
+    # leave a partially-leased wave behind.
+    for pkg in event["chain"]:
+        validate_pkg_key(pkg, where="ClaimBatch")
     claimed, skipped = [], []
     for pkg in event["chain"]:
         try:
@@ -26,7 +38,11 @@ def handler(event, context):
                 Key={"pkg": pkg},
                 UpdateExpression=(
                     "SET build_state=:b, lease_owner=:o, lease_expires_at=:le, "
-                    "last_attempt_at=:now"
+                    "last_attempt_at=:now, "
+                    # The by-build-state GSI's range key. Any write that sets
+                    # build_state must ensure it exists, or the row drops out of the
+                    # index the wave driver and the triage census read (#487).
+                    "queued_at=if_not_exists(queued_at,:now)"
                 ),
                 ConditionExpression=(
                     "(attribute_not_exists(suppressed) OR suppressed = :false) AND "
