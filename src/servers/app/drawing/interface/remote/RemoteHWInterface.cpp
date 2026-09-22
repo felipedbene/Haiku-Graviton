@@ -196,25 +196,6 @@ RemoteHWInterface::RemoteHWInterface(const char* target)
 		}
 	}
 
-	// Mint the session cookie BEFORE the socket exists, let alone listens.
-	// Ordering is the whole point: a listener that is reachable before its
-	// secret has been written has a window in which it must either accept
-	// unauthorized connections or refuse legitimate ones, and this is the only
-	// arrangement with no such window -- app_server is both the process that
-	// creates the listener and the one that checks the cookie, so "before" is
-	// a statement about two adjacent lines rather than about two processes
-	// starting in the right order.
-	//
-	// It also fails closed: if the cookie cannot be minted there is no
-	// listener at all. The alternative -- listening while unable to require
-	// anything -- is the local-takeover gap this closes, restored silently.
-	fInitStatus = _MintSessionCookie();
-	if (fInitStatus != B_OK) {
-		TRACE_ERROR("failed to mint the session cookie (%s); the remote "
-			"session port will not be opened\n", strerror(fInitStatus));
-		return;
-	}
-
 	fListenEndpoint.SetTo(new(std::nothrow) BNetEndpoint());
 	if (!fListenEndpoint.IsSet()) {
 		fInitStatus = B_NO_MEMORY;
@@ -269,6 +250,33 @@ RemoteHWInterface::RemoteHWInterface(const char* target)
 	fInitStatus = fReceiveBuffer->InitCheck();
 	if (fInitStatus != B_OK)
 		return;
+
+	// Mint the session cookie after Bind() and before the receiver, whose thread
+	// is what calls listen(). Both halves of that are deliberate.
+	//
+	// Before listening, because that is the only arrangement with no window:
+	// nothing can be accepted until listen(), so there is never a moment where
+	// the port is reachable and the secret it requires does not exist. app_server
+	// both creates the listener and checks the cookie, which is what makes
+	// "before" a statement about two adjacent lines rather than about two
+	// processes starting in the right order.
+	//
+	// After binding, because minting publishes the cookie under a name derived
+	// from the port -- so a second interface that loses the race for that port
+	// would otherwise overwrite, and on its way out delete, the cookie file of
+	// the listener that holds it. Binding first means we only ever write the
+	// file for a port we own.
+	//
+	// And it fails closed: a cookie that cannot be minted or published leaves
+	// this interface uninitialized, so ScreenManager discards it and the port is
+	// never opened. Listening while unable to require anything is the
+	// local-takeover gap this closes, restored silently.
+	fInitStatus = _MintSessionCookie();
+	if (fInitStatus != B_OK) {
+		TRACE_ERROR("failed to mint the session cookie (%s); the remote "
+			"session port will not be opened\n", strerror(fInitStatus));
+		return;
+	}
 
 	fReceiver.SetTo(new(std::nothrow) NetReceiver(fListenEndpoint.Get(), fReceiveBuffer.Get(),
 		_NewConnectionCallback, this, _ConnectionClosedCallback, NULL,

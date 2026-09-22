@@ -777,11 +777,12 @@ write_fully(int fd, const uint8* buffer, size_t size)
 static status_t
 send_session_cookie(int backendSocket, const char* cookie, size_t cookieLength)
 {
+	if (cookieLength > kMaxCookieLength)
+		return B_BAD_VALUE;
+
 	// Explicitly little-endian, like all remote protocol framing.
 	uint8 frame[6 + 8 + kMaxCookieLength];
 	uint32 length = (uint32)(6 + 8 + cookieLength);
-	if (cookieLength > kMaxCookieLength)
-		return B_BAD_VALUE;
 
 	frame[0] = (uint8)(kRPSessionCookie & 0xff);
 	frame[1] = (uint8)(kRPSessionCookie >> 8);
