@@ -55,11 +55,13 @@ typedef struct engine_state {
 } engine_state;
 
 
-RemoteView::RemoteView(BRect frame, const char *remoteHost, uint16 remotePort)
+RemoteView::RemoteView(BRect frame, const char *remoteHost, uint16 remotePort,
+	const char *sessionCookie)
 	:
 	BView(frame, "RemoteView", B_FOLLOW_NONE, B_WILL_DRAW),
 	fInitStatus(B_NO_INIT),
 	fIsConnected(false),
+	fSessionCookieLength(0),
 	fReceiveBuffer(NULL),
 	fSendBuffer(NULL),
 	fEndpoint(NULL),
@@ -73,6 +75,19 @@ RemoteView::RemoteView(BRect frame, const char *remoteHost, uint16 remotePort)
 	fCursorBitmap(NULL),
 	fCursorVisible(false)
 {
+	memset(fSessionCookie, 0, sizeof(fSessionCookie));
+	if (sessionCookie != NULL) {
+		size_t length = strlen(sessionCookie);
+		if (length == 0 || length > sizeof(fSessionCookie) - 1) {
+			fInitStatus = B_BAD_VALUE;
+			TRACE_ERROR("session cookie is empty or too long\n");
+			return;
+		}
+
+		memcpy(fSessionCookie, sessionCookie, length);
+		fSessionCookieLength = length;
+	}
+
 	fReceiveBuffer = new(std::nothrow) StreamingRingBuffer(16 * 1024);
 	if (fReceiveBuffer == NULL) {
 		fInitStatus = B_NO_MEMORY;
@@ -460,6 +475,18 @@ RemoteView::_DrawThread()
 
 	// cursor
 	BPoint cursorHotSpot(0, 0);
+
+	// The session cookie, if we are talking to the session port directly, and
+	// before anything else: it is what app_server's candidate gate reads, and
+	// it decides on the first frame it sees. Through the broker there is no
+	// cookie here -- the broker presents its own copy, from a file it can read
+	// and this process may not be able to.
+	if (fSessionCookieLength > 0) {
+		reply.Start(RP_SESSION_COOKIE);
+		reply.Add((uint32)RP_COOKIE_METHOD_PER_BOOT);
+		reply.AddString(fSessionCookie, fSessionCookieLength);
+		reply.Flush();
+	}
 
 	reply.Start(RP_INIT_CONNECTION);
 	reply.Flush();

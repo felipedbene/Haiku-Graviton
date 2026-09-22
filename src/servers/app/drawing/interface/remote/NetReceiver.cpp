@@ -41,45 +41,35 @@ static const bigtime_t kPendingInputRetry = 50 * 1000;
 
 
 // Bytes of a message header -- a uint16 code and a uint32 length, little-endian
-// by specification. This is all the candidate gate ever reads, so it is also
-// the size of the candidate buffer.
+// by specification.
 static const size_t kFrameHeaderSize = 6;
 
+// Smallest legal RP_SESSION_COOKIE frame: the header plus the method and the
+// cookie's length prefix, with an empty cookie. An empty cookie can never
+// match, but it is decoded rather than guessed at.
+static const size_t kCookieFrameMinLength = kFrameHeaderSize + 8;
 
-/*!	Whether \a buffer begins with a frame a genuine client would open with.
-	Every client starts its stream with RP_INIT_CONNECTION (an empty message,
-	total length exactly the 6 byte header) optionally followed by RP_HELLO;
-	a reconnecting URP/1 client may lead with RP_HELLO directly, whose body is
-	small but allowed to grow additively by the compatibility rule. Framing is
-	little-endian by specification, so the fields are decoded explicitly
-	rather than read through a host-order struct.
+static_assert(kMaxSessionCookieLength == RP_SESSION_COOKIE_MAX_LENGTH,
+	"the candidate buffer must hold the longest cookie the wire allows");
 
-	Returns 1 for a valid first frame, 0 for definitely invalid, and -1 when
-	fewer than the 6 header bytes have arrived so far.
+
+/*!	Decodes a little-endian uint32 out of \a buffer. Framing is little-endian by
+	specification, so the fields are decoded explicitly rather than read through
+	a host-order struct.
 */
-static int
-validate_first_frame(const uint8 *buffer, size_t size)
+static inline uint32
+read_le32(const uint8 *buffer)
 {
-	if (size < kFrameHeaderSize)
-		return -1;
-
-	uint16 code = (uint16)buffer[0] | ((uint16)buffer[1] << 8);
-	uint32 length = (uint32)buffer[2] | ((uint32)buffer[3] << 8)
-		| ((uint32)buffer[4] << 16) | ((uint32)buffer[5] << 24);
-
-	if (code == RP_INIT_CONNECTION)
-		return length == 6 ? 1 : 0;
-	if (code == RP_HELLO)
-		return length >= 6 && length <= 4096 ? 1 : 0;
-
-	return 0;
+	return (uint32)buffer[0] | ((uint32)buffer[1] << 8)
+		| ((uint32)buffer[2] << 16) | ((uint32)buffer[3] << 24);
 }
 
 
 NetReceiver::NetReceiver(BNetEndpoint *listener, StreamingRingBuffer *target,
 	NewConnectionCallback newConnectionCallback, void *newConnectionCookie,
 	ConnectionClosedCallback connectionClosedCallback,
-	RemoteWireReader *wireReader)
+	RemoteWireReader *wireReader, const char *sessionCookie,
+	size_t sessionCookieLength)
 	:
 	fListener(listener),
 	fTarget(target),
@@ -90,12 +80,21 @@ NetReceiver::NetReceiver(BNetEndpoint *listener, StreamingRingBuffer *target,
 	fNewConnectionCookie(newConnectionCookie),
 	fConnectionClosedCallback(connectionClosedCallback),
 	fEndpoint(newConnectionCallback == NULL ? listener : NULL),
+	fSessionCookieLength(0),
 	fCandidateBufferUsed(0),
+	fCandidateFrameLength(0),
 	fCandidateDeadline(0),
 	fCandidateValidated(false),
 	fPendingUsed(0),
 	fPendingOffset(0)
 {
+	memset(fSessionCookie, 0, sizeof(fSessionCookie));
+	if (sessionCookie != NULL && sessionCookieLength > 0
+		&& sessionCookieLength <= sizeof(fSessionCookie)) {
+		memcpy(fSessionCookie, sessionCookie, sessionCookieLength);
+		fSessionCookieLength = sessionCookieLength;
+	}
+
 	fReceiverThread = spawn_thread(_NetworkReceiverEntry, "network receiver",
 		B_NORMAL_PRIORITY, this);
 	resume_thread(fReceiverThread);
@@ -109,6 +108,12 @@ NetReceiver::~NetReceiver()
 
 	suspend_thread(fReceiverThread);
 	resume_thread(fReceiverThread);
+
+	// The cookie is a live secret for as long as the listener is, and no
+	// longer. Wiping it is cheap; leaving it in freed memory is the kind of
+	// thing that turns up in a crash dump.
+	memset(fSessionCookie, 0, sizeof(fSessionCookie));
+	fSessionCookieLength = 0;
 }
 
 
@@ -126,6 +131,19 @@ NetReceiver::_NetworkReceiverEntry(void *data)
 status_t
 NetReceiver::_Listen()
 {
+	// Fail closed, and fail before the socket ever listens. A listener with no
+	// cookie to require could only either accept everything -- restoring
+	// exactly the local-takeover gap the cookie exists to close, silently --
+	// or refuse everything while still sitting on the port. Neither is worth
+	// having, so there is no such listener: the owner (RemoteHWInterface) mints
+	// the cookie before it binds, and this is the structural backstop for a
+	// caller that forgets.
+	if (fNewConnectionCallback != NULL && fSessionCookieLength == 0) {
+		TRACE_ERROR("refusing to listen without a session cookie; the remote "
+			"session port stays closed\n");
+		return B_NOT_ALLOWED;
+	}
+
 	status_t result = fListener->Listen();
 	if (result != B_OK) {
 		TRACE_ERROR("failed to listen on port: %s\n", strerror(result));
@@ -138,7 +156,7 @@ NetReceiver::_Listen()
 		// session exists used to become the session unvalidated, which
 		// handed the drawing state replay (and from then on the desktop) to
 		// anything that could open the port and stay silent. So: accept into
-		// the candidate slot, require a valid first frame within the
+		// the candidate slot, require the session cookie within the
 		// deadline, and only then promote.
 		if (!fCandidate.IsSet()) {
 			fCandidate.SetTo(fListener->Accept(5000));
@@ -159,6 +177,7 @@ NetReceiver::_Listen()
 			}
 
 			fCandidateBufferUsed = 0;
+			fCandidateFrameLength = 0;
 			fCandidateValidated = false;
 			fCandidateDeadline = system_time() + kCandidateTimeout;
 		}
@@ -186,18 +205,15 @@ NetReceiver::_Listen()
 			continue;
 		}
 
-		// Hand over the first frame's header, the only thing read while the
-		// connection was being validated; it is the head of its stream and must
-		// reach the parser before anything read below. It goes through the same
-		// pending queue as everything else so this handover cannot block the
-		// accept loop either -- _Transfer() drains the queue before it reads
-		// from the connection again, which keeps the stream in order.
-		if (fCandidateBufferUsed > 0) {
-			memcpy(fPendingBuffer, fCandidateBuffer, fCandidateBufferUsed);
-			fPendingUsed = fCandidateBufferUsed;
-			fPendingOffset = 0;
-			fCandidateBufferUsed = 0;
-		}
+		// Nothing is handed over to the parser here, and that is a property of
+		// the gate rather than an omission: the only bytes it read are the
+		// session-cookie frame, which is addressed to the gate itself and is
+		// not part of the session's message stream. The gate stops reading at
+		// that frame's last byte, so the client's RP_INIT_CONNECTION is still
+		// in the kernel receive buffer and _Transfer() reads it below, in
+		// order, like every byte after it.
+		fCandidateBufferUsed = 0;
+		fCandidateFrameLength = 0;
 
 		_Transfer();
 		_DiscardPendingInput();
@@ -271,12 +287,12 @@ NetReceiver::_TransferLoop()
 	// a bare TCP connect tear down the desktop hands a trivial
 	// session-kill/session-steal to anything that can reach the port (a port
 	// scan, a health probe, a stray curl). A newly accepted connection is
-	// therefore parked as a *candidate* and must prove it is a real client by
-	// sending a valid first protocol frame (RP_INIT_CONNECTION or RP_HELLO,
-	// which every client emits immediately on connect) within
+	// therefore parked as a *candidate* and must present the session cookie
+	// (RP_SESSION_COOKIE, the first frame every client emits on connect) within
 	// kCandidateTimeout. Only then does it take the session over -- which
 	// keeps the deliberate-reconnect and the dead-peer-recovery behaviour --
-	// while junk connections are closed without the session ever noticing.
+	// while junk connections, and connections that cannot read the cookie file,
+	// are closed without the session ever noticing.
 	const bool watchListener = fNewConnectionCallback != NULL
 		&& fListener != NULL && fListener != fEndpoint.Get();
 
@@ -332,7 +348,7 @@ NetReceiver::_TransferLoop()
 			}
 
 			if (fCandidate.IsSet() && system_time() > fCandidateDeadline)
-				_DropCandidate("timeout waiting for first frame");
+				_DropCandidate("timeout waiting for the session cookie");
 
 			// The pending candidate is served BEFORE a new connection is
 			// accepted. Reversing this would let a connection arriving in
@@ -507,16 +523,17 @@ NetReceiver::_AcceptCandidate()
 		return;
 
 	fCandidateBufferUsed = 0;
+	fCandidateFrameLength = 0;
 	fCandidateValidated = false;
 	fCandidateDeadline = system_time() + kCandidateTimeout;
 	TRACE("accepted takeover candidate\n");
 }
 
 
-/*!	Waits, within \a deadline, for the pending candidate to produce a valid
-	first frame -- the gate every connection passes before it becomes the
-	session. Sets fCandidateValidated and returns true on success; drops the
-	candidate and returns false otherwise.
+/*!	Waits, within \a deadline, for the pending candidate to present the session
+	cookie -- the gate every connection passes before it becomes the session.
+	Sets fCandidateValidated and returns true on success; drops the candidate
+	and returns false otherwise.
 */
 bool
 NetReceiver::_ValidateCandidate(bigtime_t deadline)
@@ -524,7 +541,7 @@ NetReceiver::_ValidateCandidate(bigtime_t deadline)
 	while (fCandidate.IsSet() && !fStopThread) {
 		bigtime_t remaining = deadline - system_time();
 		if (remaining <= 0) {
-			_DropCandidate("timeout waiting for first frame");
+			_DropCandidate("timeout waiting for the session cookie");
 			return false;
 		}
 
@@ -563,11 +580,11 @@ NetReceiver::_ValidateCandidate(bigtime_t deadline)
 		}
 
 		if (ready == 0) {
-			_DropCandidate("timeout waiting for first frame");
+			_DropCandidate("timeout waiting for the session cookie");
 			return false;
 		}
 
-		// The candidate is served first: its readable first frame decides
+		// The candidate is served first: its readable cookie frame decides
 		// the slot before any newly arriving connection can displace it.
 		if (FD_ISSET(candidateSocket, &readSet)) {
 			if (_ReceiveCandidateData())
@@ -583,52 +600,121 @@ NetReceiver::_ValidateCandidate(bigtime_t deadline)
 }
 
 
-/*!	Reads the candidate connection's first frame header and validates it once
-	complete. Returns true when the candidate has proven itself and should take
-	over the session; on garbage or EOF the candidate is dropped and false is
-	returned.
+/*!	Reads the candidate connection's session-cookie frame and validates it once
+	complete. Returns true when the candidate has proven it is authorized and
+	should take over the session; on a wrong cookie, a first frame that is not a
+	cookie, garbage or EOF the candidate is dropped and false is returned.
 
-	Never reads past the header. The gate only ever validates those six bytes,
-	so reading further would buffer -- and, on promotion, forward to the parser
-	-- bytes nothing has looked at: a connection opening with a well-formed
-	RP_INIT_CONNECTION followed by arbitrary junk in the same segment would be
-	promoted and have all of it handed over. The rest of a real client's stream
-	costs nothing to leave in the kernel receive buffer, where _Transfer() reads
-	it after promotion, in order.
+	Reads in two bounded steps and never past the cookie frame's last byte:
+	first exactly the six header bytes, then exactly the rest of the length the
+	header declared. Reading further would buffer -- and, on promotion, forward
+	to the parser -- bytes nothing has looked at: a connection opening with a
+	well-formed frame followed by arbitrary junk in the same segment would be
+	promoted and have all of it handed over (#436). The rest of a real client's
+	stream costs nothing to leave in the kernel receive buffer, where _Transfer()
+	reads it after promotion, in order.
 */
 bool
 NetReceiver::_ReceiveCandidateData()
 {
-	if (fCandidateBufferUsed >= sizeof(fCandidateBuffer)) {
-		// A full header is always decided by validate_first_frame(), so this
-		// cannot be reached with a candidate still pending.
-		_DropCandidate("first frame header already complete");
+	// Exactly what is still missing, and not one byte more: the header while it
+	// is incomplete, then the remainder of the frame it declared.
+	size_t want;
+	if (fCandidateBufferUsed < kFrameHeaderSize)
+		want = kFrameHeaderSize - fCandidateBufferUsed;
+	else
+		want = fCandidateFrameLength - fCandidateBufferUsed;
+
+	if (want == 0 || fCandidateBufferUsed + want > sizeof(fCandidateBuffer)) {
+		// A complete frame is always decided below, so a candidate with
+		// nothing left to read cannot still be pending.
+		_DropCandidate("cookie frame already complete");
 		return false;
 	}
 
 	int32 readSize = fCandidate->Receive(
-		fCandidateBuffer + fCandidateBufferUsed,
-		sizeof(fCandidateBuffer) - fCandidateBufferUsed);
+		fCandidateBuffer + fCandidateBufferUsed, want);
 	if (readSize <= 0) {
-		_DropCandidate("closed or failed before first frame");
+		_DropCandidate("closed or failed before the session cookie");
 		return false;
 	}
 
 	fCandidateBufferUsed += readSize;
 
-	int valid = validate_first_frame(fCandidateBuffer, fCandidateBufferUsed);
-	if (valid < 0) {
+	if (fCandidateBufferUsed < kFrameHeaderSize) {
 		// Header not complete yet; keep waiting within the deadline.
 		return false;
 	}
 
-	if (valid == 0) {
-		_DropCandidate("invalid first frame");
+	if (fCandidateFrameLength == 0) {
+		// The header just completed. Decide on the code and the declared
+		// length now: a first frame that is not a cookie is refused here,
+		// without waiting for a body that cannot help it.
+		uint16 code = (uint16)fCandidateBuffer[0]
+			| ((uint16)fCandidateBuffer[1] << 8);
+		uint32 length = read_le32(fCandidateBuffer + 2);
+
+		if (code != RP_SESSION_COOKIE || length < kCookieFrameMinLength
+			|| length > sizeof(fCandidateBuffer)) {
+			// Includes the pre-cookie client shape (a bare
+			// RP_INIT_CONNECTION): speaking the protocol is no longer
+			// enough to become the session.
+			_DropCandidate("first frame is not a session cookie");
+			return false;
+		}
+
+		fCandidateFrameLength = length;
+	}
+
+	if (fCandidateBufferUsed < fCandidateFrameLength)
+		return false;
+
+	uint32 method = read_le32(fCandidateBuffer + kFrameHeaderSize);
+	uint32 cookieLength = read_le32(fCandidateBuffer + kFrameHeaderSize + 4);
+	if (method != RP_COOKIE_METHOD_PER_BOOT
+		|| kCookieFrameMinLength + cookieLength != fCandidateFrameLength) {
+		_DropCandidate("malformed session cookie");
 		return false;
 	}
 
+	if (!_CookieMatches(fCandidateBuffer + kCookieFrameMinLength,
+			cookieLength)) {
+		_DropCandidate("wrong session cookie");
+		return false;
+	}
+
+	// Consumed in full: the cookie frame is addressed to this gate and is no
+	// part of the session's message stream, so nothing of it is forwarded.
+	memset(fCandidateBuffer, 0, fCandidateBufferUsed);
+	fCandidateBufferUsed = 0;
+	fCandidateFrameLength = 0;
 	fCandidateValidated = true;
 	return true;
+}
+
+
+/*!	Whether \a cookie of \a length is this listener's session cookie.
+
+	Compared in constant time and without a length oracle: a wrong length folds
+	into the same accumulator as a wrong byte, and the loop has no early exit,
+	so a caller learns only "no" -- not how much of its guess was right. That
+	matters even for a local caller: it is exactly the guessing game the 256 bit
+	cookie is meant to be hopeless at.
+*/
+bool
+NetReceiver::_CookieMatches(const uint8 *cookie, size_t length) const
+{
+	uint8 difference = length == fSessionCookieLength ? 0 : 1;
+	size_t compare = length < fSessionCookieLength
+		? length : fSessionCookieLength;
+
+	for (size_t i = 0; i < compare; i++)
+		difference |= (uint8)(cookie[i] ^ (uint8)fSessionCookie[i]);
+
+	// Through a volatile, so the comparison stays one verdict at the end
+	// rather than something a compiler may short-circuit.
+	volatile uint8 result = difference;
+	return result == 0;
 }
 
 
@@ -637,6 +723,8 @@ NetReceiver::_DropCandidate(const char *reason)
 {
 	TRACE_ERROR("dropping takeover candidate: %s\n", reason);
 	fCandidate.Unset();
+	memset(fCandidateBuffer, 0, sizeof(fCandidateBuffer));
 	fCandidateBufferUsed = 0;
+	fCandidateFrameLength = 0;
 	fCandidateValidated = false;
 }

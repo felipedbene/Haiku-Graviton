@@ -20,6 +20,14 @@ Framing -- src/servers/app/drawing/interface/remote/RemoteMessage.h:239-263
   (RemoteMessage.h:266-276), so payloads are packed and host-endian.
   Haiku/x86 and Haiku/arm64 are little-endian, so "<" everywhere.
 
+Session cookie -- NetReceiver.cpp (_ReceiveCandidateData).  The session port
+  requires RP_SESSION_COOKIE{uint32 method = 1, length-prefixed cookie} as the
+  FIRST frame of a direct connection, and app_server mints that cookie into
+  <system settings>/remote_desktop/session_cookie.<port> (mode 0600) before it
+  starts listening.  So a direct run needs --cookie-file; with --wss the broker
+  reads the file and presents the cookie itself, and this tool must send none.
+  The gate consumes the frame, so everything below this line is unchanged.
+
 Handshake -- src/servers/app/drawing/interface/remote/RemoteHWInterface.cpp:
   267-289 (server side) and src/apps/remotedesktop/RemoteView.cpp:446-480
   (reference client).  Client sends RP_INIT_CONNECTION (no payload); server
@@ -102,6 +110,14 @@ RP_FRAME_ACK = 284
 # broker connection, RP_AUTH_RESULT is its answer (uint32 status, 0 = ok).
 RP_AUTHENTICATE = 10
 RP_AUTH_RESULT = 11
+
+# app_server's own gate (#423): the per-boot session cookie, which must be the
+# FIRST frame of a direct connection to the session port.  Read it from the
+# server's file with --cookie-file.  Through the broker (--wss) the broker
+# presents its own copy and this tool sends none -- sending one there would put
+# a second cookie frame into the session stream.
+RP_SESSION_COOKIE = 12
+RP_COOKIE_METHOD_PER_BOOT = 1
 
 RP_CREATE_STATE = 20
 RP_DELETE_STATE = 21
@@ -1771,7 +1787,7 @@ class WireDecoder(object):
 
 class Connection(object):
     def __init__(self, host, port, deadline, connect_timeout=5.0,
-                 capabilities=0):
+                 capabilities=0, cookie=None):
         self.deadline = deadline
         self.sock = socket.create_connection((host, port),
                                             timeout=connect_timeout)
@@ -1781,6 +1797,18 @@ class Connection(object):
         # Always present, so the byte counters work in both arms of an A/B.
         # With no compression capability it is a pure passthrough.
         self.wire = WireDecoder(capabilities)
+
+        # The session cookie, before any other byte.  app_server's candidate
+        # gate reads exactly this frame and decides the connection's fate on
+        # it; RP_INIT_CONNECTION sent ahead of it is refused, and the gate
+        # consumes the cookie, so nothing above this line has to know about it.
+        if cookie:
+            cookie_bytes = (cookie.encode() if isinstance(cookie, str)
+                            else cookie)
+            payload = (struct.pack("<II", RP_COOKIE_METHOD_PER_BOOT,
+                                   len(cookie_bytes)) + cookie_bytes)
+            if not self.send(frame(RP_SESSION_COOKIE, payload)):
+                raise EOFError("failed to send RP_SESSION_COOKIE")
 
     def close(self):
         try:
@@ -2586,6 +2614,81 @@ def selftest(allow_skip=False):
     except OSError:
         pass
 
+    # ---- session cookie frame (#423) ---------------------------------
+    print("  -- session cookie --")
+
+    # The gate in app_server (NetReceiver::_ReceiveCandidateData) reads the six
+    # byte header, then exactly the rest of the length it declared, and decodes
+    # the method at +6, the cookie length at +10 and the cookie at +14.  This is
+    # that decoder, at those offsets, so the two implementations are checked
+    # against each other rather than each against its author's memory.  A
+    # disagreement here means every direct connection is refused on hardware --
+    # the expensive place to find out.
+    def gate_decode(data, expect_cookie):
+        if len(data) < HEADER:
+            return "short header"
+        code, length = struct.unpack_from("<HI", data, 0)
+        if code != RP_SESSION_COOKIE:
+            return "not a session cookie"
+        if length < HEADER + 8 or length > HEADER + 8 + 256:
+            return "implausible length"
+        if len(data) < length:
+            return "incomplete frame"
+        method, cookie_length = struct.unpack_from("<II", data, HEADER)
+        if method != RP_COOKIE_METHOD_PER_BOOT:
+            return "wrong method"
+        if HEADER + 8 + cookie_length != length:
+            return "length mismatch"
+        got = data[HEADER + 8:length]
+        return "ok" if got == expect_cookie else "wrong cookie"
+
+    secret = b"a" * 64
+    encoded = frame(RP_SESSION_COOKIE,
+                    struct.pack("<II", RP_COOKIE_METHOD_PER_BOOT, len(secret))
+                    + secret)
+    check("cookie frame is header + method + length + cookie",
+          len(encoded) == HEADER + 8 + len(secret), str(len(encoded)))
+    check("cookie frame decodes at the gate's offsets",
+          gate_decode(encoded, secret) == "ok", gate_decode(encoded, secret))
+    check("a wrong cookie of the same length is refused",
+          gate_decode(encoded, b"b" * 64) == "wrong cookie")
+    check("the gate never guesses on a partial header",
+          gate_decode(encoded[:HEADER - 1], secret) == "short header")
+    check("the gate waits for an incomplete body",
+          gate_decode(encoded[:-1], secret) == "incomplete frame")
+    check("RP_INIT_CONNECTION as the first frame is refused",
+          gate_decode(frame(RP_INIT_CONNECTION), secret)
+              == "not a session cookie")
+    # A declared length that disagrees with the embedded cookie length is the
+    # shape a hand-rolled or byte-swapped client produces; it must be refused
+    # rather than read past.
+    lying = bytearray(encoded)
+    struct.pack_into("<I", lying, HEADER + 4, len(secret) - 1)
+    check("a length that disagrees with the frame is refused",
+          gate_decode(bytes(lying), secret) == "length mismatch")
+    # And the connection this tool actually opens must produce that frame first.
+    # A Connection is not built here (no server), so the encoder is checked
+    # through the same call the constructor makes.
+    check("the cookie encoder matches what Connection sends",
+          frame(RP_SESSION_COOKIE,
+                struct.pack("<II", RP_COOKIE_METHOD_PER_BOOT, len(secret))
+                + secret) == encoded)
+
+    # A golden vector, byte for byte, because everything above is self
+    # consistent: encoder and decoder share these constants, so a run with the
+    # opcode or the method changed to a wrong value still passed every check
+    # until this one existed.  What is pinned here is the wire as the OTHER
+    # implementations spell it -- RP_SESSION_COOKIE = 12 and method 1 in
+    # RemoteMessage.h, kRPSessionCookie/kCookieMethodPerBoot in
+    # RemoteBroker.cpp -- and little-endian framing.
+    golden = (bytes((12, 0))                        # code 12
+              + bytes((78, 0, 0, 0))                # total length 6 + 8 + 64
+              + bytes((1, 0, 0, 0))                 # method 1, per-boot cookie
+              + bytes((64, 0, 0, 0))                # cookie length 64
+              + secret)
+    check("cookie frame matches the golden wire bytes", encoded == golden,
+          encoded[:14].hex())
+
     # ---- URP/1 wire compression -------------------------------------
     print("  -- wire compression --")
 
@@ -2756,6 +2859,17 @@ def main(argv=None):
     p.add_argument("--token", help="authentication token for --wss")
     p.add_argument("--token-file",
                    help="file containing the authentication token for --wss")
+    p.add_argument("--cookie",
+                   help="app_server's per-boot session cookie, required for a "
+                        "direct connection to the session port (i.e. without "
+                        "--wss).  Prefer --cookie-file: an argument is visible "
+                        "in ps and in shell history")
+    p.add_argument("--cookie-file",
+                   help="file containing the session cookie.  On the server it "
+                        "is <system settings>/remote_desktop/session_cookie."
+                        "<port>, readable only by the user app_server runs as; "
+                        "read it there (e.g. over SSM) and point this at a "
+                        "local copy")
     p.add_argument("--pin",
                    help="pin the broker certificate to this SHA-256 hex "
                         "fingerprint (see broker.fingerprint on the server)")
@@ -2792,6 +2906,32 @@ def main(argv=None):
             sys.stderr.write("rdcapture: cannot read token file: %s\n" % exc)
             return 2
 
+    cookie = args.cookie
+    if args.cookie_file:
+        try:
+            with open(args.cookie_file) as f:
+                cookie = f.read().strip()
+        except OSError as exc:
+            sys.stderr.write("rdcapture: cannot read cookie file: %s\n" % exc)
+            return 2
+
+    # The two secrets belong to two different hops; exactly one of them is ours
+    # to send.  Refused rather than ignored, because "I passed the cookie and it
+    # went nowhere" is the kind of silence that costs an afternoon.
+    if args.wss and cookie:
+        sys.stderr.write("rdcapture: --cookie/--cookie-file is for a direct "
+                         "connection to the session port; with --wss the "
+                         "broker presents the session cookie\n")
+        return 2
+
+    if not args.wss and not cookie:
+        sys.stderr.write("rdcapture: a direct connection to the session port "
+                         "requires app_server's per-boot session cookie: pass "
+                         "--cookie-file (the server's "
+                         "<system settings>/remote_desktop/session_cookie.%d), "
+                         "or --wss to go through the broker\n" % args.port)
+        return 2
+
     capabilities = CAP_COMPRESS_ZSTD if args.zstd else 0
 
     try:
@@ -2804,7 +2944,7 @@ def main(argv=None):
         else:
             conn = Connection(args.host, args.port, deadline,
                               connect_timeout=args.connect_timeout,
-                              capabilities=capabilities)
+                              capabilities=capabilities, cookie=cookie)
     except AuthenticationError as exc:
         stop_reason = "auth_denied:%s" % exc
         sys.stderr.write("rdcapture: authentication failed: %s\n" % exc)

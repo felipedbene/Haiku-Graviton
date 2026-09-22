@@ -18,6 +18,14 @@ const RP_AUTHENTICATE = 10;
 const RP_AUTH_RESULT = 11;
 const RP_AUTH_METHOD_SHARED_TOKEN = 1;
 
+// The session port's own gate: app_server requires its per-boot session cookie
+// as the first frame of every connection. Through the broker (wss://) the
+// broker presents it and this client never sees it; on the plain ws:// rescue
+// path (websockify over an SSH/SSM tunnel) there is nobody else to present it,
+// so the cookie has to be given here.
+const RP_SESSION_COOKIE = 12;
+const RP_COOKIE_METHOD_PER_BOOT = 1;
+
 // URP/1 handshake: protocol version and capability bits exchanged in
 // RP_HELLO / RP_HELLO_ACK. This client answers string-width queries, so it
 // advertises RP_CAP_STRING_WIDTH_REPLY; the server only queries clients that do.
@@ -1803,17 +1811,29 @@ RemoteState.prototype.messageReceived = function(remoteMessage, reply)
 
 
 function RemoteDesktopSession(targetElement, width, height, targetAddress,
-	token, disconnectCallback)
+	token, cookie, disconnectCallback)
 {
+	// The two secrets belong to two different hops, and exactly one of them is
+	// this client's to send.
+	//
 	// The token is only ever sent to the broker, i.e. over wss://. On the
-	// plain ws:// rescue path (websockify over an SSH tunnel) the frame
-	// would reach app_server directly, which accepts only
-	// RP_INIT_CONNECTION/RP_HELLO as a session's first frame and would drop
-	// the connection as an invalid takeover candidate. A left-over token in
-	// the form must therefore not break that path.
-	this.token = /^wss:/i.test(targetAddress) ? token : null;
+	// plain ws:// rescue path (websockify over an SSH tunnel) the frame would
+	// reach app_server directly, which accepts only RP_SESSION_COOKIE as a
+	// session's first frame and would drop the connection as an unauthorized
+	// takeover candidate. A left-over token in the form must therefore not
+	// break that path.
+	//
+	// The session cookie is the mirror image: on the direct path app_server
+	// requires it, and through the broker the broker presents its own copy --
+	// sending a second one here would put a frame into the session stream that
+	// the parser above the gate has no use for.
+	var broker = /^wss:/i.test(targetAddress);
+	this.token = broker ? token : null;
+	this.cookie = broker ? null : cookie;
 	if (token && !this.token)
 		console.log('plain ws:// target: not sending the token');
+	if (cookie && !this.cookie)
+		console.log('wss:// target: the broker presents the session cookie');
 
 	this.websocket = new WebSocket(targetAddress, 'binary');
 	this.websocket.binaryType = 'arraybuffer';
@@ -1886,6 +1906,16 @@ RemoteDesktopSession.prototype.onOpen = function(open)
 		this.sendMessage.flush();
 	}
 
+	// Straight to the session port, the session cookie is the first frame and
+	// the gate decides on it. It is consumed by the gate, so everything after
+	// it is the ordinary session stream.
+	if (this.cookie) {
+		this.sendMessage.start(RP_SESSION_COOKIE);
+		this.sendMessage.dataView.writeUint32(RP_COOKIE_METHOD_PER_BOOT);
+		this.sendMessage.dataView.writeString(this.cookie);
+		this.sendMessage.flush();
+	}
+
 	this.init();
 }
 
@@ -1937,9 +1967,14 @@ RemoteDesktopSession.prototype.messageReceived = function(remoteMessage, reply)
 		{
 			var status = remoteMessage.dataView.readUint32();
 			if (status != 0) {
+				// 1 = denied, 2 = session port unreachable, 3 = the broker
+				// cannot read app_server's session cookie (a server-side
+				// problem, not a wrong token).
 				console.error('broker rejected authentication, status:',
 					status);
-				this.onDisconnect('authentication rejected');
+				this.onDisconnect(status == 3
+					? 'server could not read its session cookie'
+					: 'authentication rejected');
 			} else
 				console.log('broker authentication succeeded');
 			break;
@@ -2330,6 +2365,7 @@ function init()
 {
 	var targetAddressInput = document.querySelector('#targetAddress');
 	var tokenInput = document.querySelector('#token');
+	var cookieInput = document.querySelector('#cookie');
 	var widthInput = document.querySelector('#width');
 	var heightInput = document.querySelector('#height');
 
@@ -2351,10 +2387,11 @@ function init()
 			localStorage.width = widthInput.value;
 			localStorage.height = heightInput.value;
 			localStorage.targetAddress = targetAddressInput.value;
-			// The token is a secret and is deliberately never persisted.
+			// The token and the session cookie are secrets and are
+			// deliberately never persisted.
 
 			gSession = new RemoteDesktopSession(document.body, widthInput.value,
 				heightInput.value, targetAddressInput.value, tokenInput.value,
-				onDisconnect);
+				cookieInput.value, onDisconnect);
 		};
 }

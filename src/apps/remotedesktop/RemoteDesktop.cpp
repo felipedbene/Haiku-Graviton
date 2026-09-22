@@ -30,12 +30,14 @@
 void
 print_usage(const char *app)
 {
-	printf("usage:\t%s <host> [-p <port>] [-w <width>] [-h <height>]\n", app);
+	printf("usage:\t%s <host> (--cookie <cookie> | --cookie-file <path>)"
+		" [-p <port>]\n\t\t[-w <width>] [-h <height>]\n", app);
 	printf("usage:\t%s <host> --wss (--token <token> | --token-file <path>)"
 		" [--pin <sha256>]\n\t\t[--insecure] [-p <port>] [-w <width>]"
 		" [-h <height>]\n", app);
-	printf("usage:\t%s <user@host> -s [<sshPort>] [-p <port>] [-w <width>]"
-		" [-h <height>] [-c <command>]\n", app);
+	printf("usage:\t%s <user@host> -s [<sshPort>] (--cookie <cookie> |"
+		" --cookie-file <path>)\n\t\t[-p <port>] [-w <width>] [-h <height>]"
+		" [-c <command>]\n", app);
 	printf("usage:\t%s --wire-selftest\n", app);
 	printf("\t%s --help\n\n", app);
 
@@ -52,6 +54,14 @@ print_usage(const char *app)
 		" non-loopback access\n");
 	printf("\t--token\t\tthe authentication token for --wss\n");
 	printf("\t--token-file\tread the authentication token from this file\n");
+	printf("\t--cookie\tthe server's per-boot session cookie, required when"
+		" connecting\n\t\tto the session port directly (without --wss)."
+		" Prefer\n\t\t--cookie-file: an argument is visible in `ps` and in"
+		" shell history\n");
+	printf("\t--cookie-file\tread the session cookie from this file. On the"
+		" server it is\n\t\t<system settings>/remote_desktop/session_cookie."
+		"<port>, readable\n\t\tonly by the user app_server runs as; copy it"
+		" over a channel you\n\t\talready trust\n");
 	printf("\t--pin\t\tpin the server certificate to this SHA-256"
 		" fingerprint\n\t\t(the server's broker.fingerprint file)\n");
 	printf("\t--insecure\twith --wss: skip certificate pinning (still"
@@ -66,6 +76,42 @@ print_usage(const char *app)
 
 // WireSelfTest.cpp
 extern int remote_wire_selftest();
+
+
+/*!	Reads a one-line secret (an authentication token, a session cookie) out of
+	\a path into \a buffer, without the trailing newline. Returns false and
+	explains itself on failure.
+
+	A file, rather than an argument, is the recommended way to pass either: an
+	argument is visible to every process on the machine through `ps` and lands
+	in shell history.
+*/
+static bool
+read_secret_file(const char *path, char *buffer, size_t bufferSize)
+{
+	FILE *file = fopen(path, "r");
+	if (file == NULL || fgets(buffer, bufferSize, file) == NULL) {
+		printf("failed to read %s\n", path);
+		if (file != NULL)
+			fclose(file);
+		return false;
+	}
+
+	fclose(file);
+
+	size_t length = strlen(buffer);
+	while (length > 0 && (buffer[length - 1] == '\n'
+			|| buffer[length - 1] == '\r' || buffer[length - 1] == ' ')) {
+		buffer[--length] = '\0';
+	}
+
+	if (length == 0) {
+		printf("%s is empty\n", path);
+		return false;
+	}
+
+	return true;
+}
 
 
 int
@@ -91,6 +137,8 @@ main(int argc, char *argv[])
 	bool insecure = false;
 	const char *token = NULL;
 	const char *tokenFile = NULL;
+	const char *cookie = NULL;
+	const char *cookieFile = NULL;
 	const char *pin = NULL;
 	const char *command = NULL;
 	const char *host = argv[1];
@@ -131,6 +179,28 @@ main(int argc, char *argv[])
 
 			i++;
 			tokenFile = argv[i];
+			continue;
+		}
+
+		if (strcmp(argv[i], "--cookie") == 0) {
+			if (argc <= i + 1) {
+				print_usage(argv[0]);
+				return 2;
+			}
+
+			i++;
+			cookie = argv[i];
+			continue;
+		}
+
+		if (strcmp(argv[i], "--cookie-file") == 0) {
+			if (argc <= i + 1) {
+				print_usage(argv[0]);
+				return 2;
+			}
+
+			i++;
+			cookieFile = argv[i];
 			continue;
 		}
 
@@ -204,6 +274,39 @@ main(int argc, char *argv[])
 		return 2;
 	}
 
+	// The two secrets belong to two different hops and are never both ours to
+	// send. Through the broker we authenticate with the token and the broker
+	// presents the session cookie it reads on the server; direct to the session
+	// port there is no broker, so the cookie is ours to present and the token
+	// means nothing. Sending a cookie through the broker would put a second
+	// cookie frame into the session stream, where the parser has no use for it.
+	if (useWss && (cookie != NULL || cookieFile != NULL)) {
+		printf("--cookie/--cookie-file is for a direct connection to the"
+			" session port; with --wss the broker presents the cookie\n");
+		return 2;
+	}
+
+	char cookieBuffer[257];
+	if (!useWss) {
+		if (cookieFile != NULL) {
+			if (!read_secret_file(cookieFile, cookieBuffer,
+					sizeof(cookieBuffer))) {
+				return 6;
+			}
+
+			cookie = cookieBuffer;
+		}
+
+		if (cookie == NULL || cookie[0] == '\0') {
+			printf("a direct connection to the session port requires the"
+				" server's per-boot session cookie: pass --cookie-file with a"
+				" copy of\n<system settings>/remote_desktop/session_cookie."
+				"%" B_PRIu16 " from the server, or use --wss to go through the"
+				" broker\n", port);
+			return 2;
+		}
+	}
+
 	// A write to a connection the peer has already dropped must be an error,
 	// not a death sentence. Without this the TLS close_notify that the
 	// broker transport sends while tearing a refused connection down kills
@@ -220,22 +323,11 @@ main(int argc, char *argv[])
 
 		char tokenBuffer[1024];
 		if (tokenFile != NULL) {
-			FILE* file = fopen(tokenFile, "r");
-			if (file == NULL || fgets(tokenBuffer, sizeof(tokenBuffer),
-					file) == NULL) {
-				printf("failed to read token file %s\n", tokenFile);
-				if (file != NULL)
-					fclose(file);
+			if (!read_secret_file(tokenFile, tokenBuffer,
+					sizeof(tokenBuffer))) {
 				return 6;
 			}
-			fclose(file);
 
-			size_t length = strlen(tokenBuffer);
-			while (length > 0 && (tokenBuffer[length - 1] == '\n'
-					|| tokenBuffer[length - 1] == '\r'
-					|| tokenBuffer[length - 1] == ' ')) {
-				tokenBuffer[--length] = '\0';
-			}
 			token = tokenBuffer;
 		}
 
@@ -353,8 +445,10 @@ main(int argc, char *argv[])
 		return 4;
 	}
 
+	// With --wss the connection now runs to the local end of the broker tunnel,
+	// which presents the cookie itself; the view must not send a second one.
 	RemoteView *view = new(std::nothrow) RemoteView(window->Bounds(), host,
-		port);
+		port, useWss ? NULL : cookie);
 	if (view == NULL) {
 		printf("no memory to allocate remote view\n");
 		return 4;

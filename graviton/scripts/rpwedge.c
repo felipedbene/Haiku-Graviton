@@ -31,6 +31,12 @@
  * USAGE (on the guest, over loopback):
  *   rpwedge [port=10900] [wedgers=1] [drops=12] [probe_timeout_s=8.0]
  *
+ * Every connection presents app_server's per-boot session cookie (#423), read
+ * from /boot/system/settings/remote_desktop/session_cookie.<port> by default,
+ * or from RD_COOKIE_FILE / RD_COOKIE. Without it the session port refuses
+ * everything, which is indistinguishable from the wedge being measured -- so
+ * a missing cookie is reported as a setup failure rather than a result.
+ *
  * BUILD (guests have no compiler; cross-compile with the DeBeOS arm64 tools and
  * push the binary). Against a configured generated.arm64 tree:
  *   CROSS=<cross-tools>/bin/aarch64-unknown-haiku-gcc
@@ -57,6 +63,67 @@
 #include <arpa/inet.h>
 
 static const unsigned char RP_INIT_FRAME[6] = {0x01,0x00,0x06,0x00,0x00,0x00};
+
+/* Session cookie (#423). Since the cookie is the session port's first frame,
+   every connection here has to present it or it is dropped as unauthorized --
+   which would look exactly like the wedge this harness hunts for. Read from
+   /boot/system/settings/remote_desktop/session_cookie.<port> (this harness runs
+   on the machine under test), or from RD_COOKIE_FILE / RD_COOKIE. */
+#define RP_SESSION_COOKIE 12
+#define RP_COOKIE_METHOD_PER_BOOT 1
+
+static char sCookie[257];
+static size_t sCookieLength = 0;
+
+static int load_cookie(int port) {
+	const char* direct = getenv("RD_COOKIE");
+	if (direct != NULL && direct[0] != '\0') {
+		size_t length = strlen(direct);
+		if (length >= sizeof(sCookie)) return 0;
+		memcpy(sCookie, direct, length);
+		sCookieLength = length;
+		return 1;
+	}
+
+	char path[512];
+	const char* fromEnvironment = getenv("RD_COOKIE_FILE");
+	if (fromEnvironment != NULL && fromEnvironment[0] != '\0')
+		snprintf(path, sizeof(path), "%s", fromEnvironment);
+	else
+		snprintf(path, sizeof(path),
+			"/boot/system/settings/remote_desktop/session_cookie.%d", port);
+
+	FILE* file = fopen(path, "r");
+	if (file == NULL) {
+		printf("cannot read the session cookie from %s: %s\n", path,
+			strerror(errno));
+		return 0;
+	}
+	if (fgets(sCookie, sizeof(sCookie), file) == NULL) { fclose(file); return 0; }
+	fclose(file);
+
+	sCookieLength = strlen(sCookie);
+	while (sCookieLength > 0 && (sCookie[sCookieLength - 1] == '\n'
+			|| sCookie[sCookieLength - 1] == '\r'
+			|| sCookie[sCookieLength - 1] == ' ')) {
+		sCookie[--sCookieLength] = '\0';
+	}
+	printf("session cookie: %zu characters from %s\n", sCookieLength, path);
+	return sCookieLength > 0;
+}
+
+/* Builds the RP_SESSION_COOKIE frame, little-endian by specification. */
+static size_t cookie_frame(unsigned char* out) {
+	unsigned length = (unsigned)(6 + 8 + sCookieLength);
+	out[0] = RP_SESSION_COOKIE; out[1] = 0;
+	for (int i = 0; i < 4; i++) {
+		out[2 + i] = (unsigned char)(length >> (8 * i));
+		out[6 + i] = (unsigned char)((unsigned)RP_COOKIE_METHOD_PER_BOOT >> (8 * i));
+		out[10 + i] = (unsigned char)((unsigned)sCookieLength >> (8 * i));
+	}
+	memcpy(out + 14, sCookie, sCookieLength);
+	return length;
+}
 
 static double now_s(void) {
 	struct timespec ts;
@@ -100,7 +167,14 @@ static int connect_to(int port, double timeout_s) {
    timeout/EOF. */
 static double init_and_wait_ack(int fd, double timeout_s) {
 	double t0 = now_s();
-	if (send(fd, RP_INIT_FRAME, sizeof(RP_INIT_FRAME), 0) != (ssize_t)sizeof(RP_INIT_FRAME))
+	/* Cookie first: it is what the gate reads, and RP_INIT ahead of it would be
+	   refused in its place. Sent in one write with RP_INIT, as a real client
+	   pipelines them. */
+	unsigned char opening[6 + 8 + sizeof(sCookie) + sizeof(RP_INIT_FRAME)];
+	size_t openingSize = cookie_frame(opening);
+	memcpy(opening + openingSize, RP_INIT_FRAME, sizeof(RP_INIT_FRAME));
+	openingSize += sizeof(RP_INIT_FRAME);
+	if (send(fd, opening, openingSize, 0) != (ssize_t)openingSize)
 		return -1.0;
 	unsigned char buf[8192];
 	size_t have = 0, off = 0;
@@ -143,6 +217,12 @@ int main(int argc, char** argv) {
 
 	printf("RPWEDGE port=%d wedgers=%d drops=%d probe_timeout=%.1fs\n",
 		port, wedgers, drops, probeT);
+
+	if (!load_cookie(port)) {
+		printf("RPWEDGE_DONE RESULT=NO_SESSION_COOKIE (every connection would"
+			" be refused, which is not a wedge)\n");
+		return 2;
+	}
 
 	/* Phase A: wedgers held open for the whole run. */
 	int held[64]; int nheld = 0; int wedge_acks = 0;

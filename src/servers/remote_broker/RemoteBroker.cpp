@@ -26,6 +26,16 @@
  * authenticated client replaces the current session (matching the
  * newest-wins reconnect model of the session port); an unauthenticated
  * connection can neither displace nor observe it.
+ *
+ * Toward the session port the broker presents app_server's per-boot session
+ * cookie (RP_SESSION_COOKIE), read from the owner-only file app_server
+ * published before it began listening. That is what makes the broker's
+ * authentication mean something on a machine where other processes can also
+ * reach loopback: reaching the port is no longer enough, reading the cookie
+ * file is required too. The cookie is read per connection rather than once at
+ * startup, because app_server mints it when its listener is created -- which
+ * may be long after this daemon started -- and replaces it if that happens
+ * again.
  */
 
 #include "TLSStream.h"
@@ -69,12 +79,20 @@
 // reserved in src/servers/app/drawing/interface/remote/RemoteMessage.h.
 static const uint16 kRPAuthenticate = 10;
 static const uint16 kRPAuthResult = 11;
+static const uint16 kRPSessionCookie = 12;
 
 static const uint32 kAuthMethodSharedToken = 1;
+static const uint32 kCookieMethodPerBoot = 1;
 
 static const uint32 kAuthResultSuccess = 0;
 static const uint32 kAuthResultDenied = 1;
 static const uint32 kAuthResultNoSession = 2;
+// The client authenticated, but this daemon cannot read the session cookie and
+// so cannot open a session on its behalf. Reported separately from
+// kAuthResultNoSession because the remedy is different and entirely
+// server-side: app_server has not created its listener yet, or is running as a
+// user whose cookie file this process may not read.
+static const uint32 kAuthResultNoCookie = 3;
 
 // The complete TLS + WebSocket + authentication handshake must finish within
 // this budget or the connection is dropped.
@@ -88,6 +106,13 @@ static const int kMaxConcurrentHandshakes = 8;
 
 static const size_t kMaxAuthMessageSize = 4096;
 static const size_t kMaxTokenLength = 1024;
+
+// Matches RP_SESSION_COOKIE_MAX_LENGTH in RemoteMessage.h: a cookie longer than
+// app_server would ever accept is rejected here rather than sent and refused.
+static const size_t kMaxCookieLength = 256;
+// A cookie this short is not one app_server minted (that is 64 hex characters),
+// so it is refused rather than presented -- the same floor the token has.
+static const size_t kMinCookieLength = 16;
 
 
 static int32 sConcurrentHandshakes = 0;
@@ -254,6 +279,10 @@ struct BrokerConfiguration {
 	uint16		targetPort;
 	BPath		settingsDirectory;
 	uint8		tokenDigest[SHA256_DIGEST_LENGTH];
+	// The file app_server publishes the session cookie for the port this
+	// daemon proxies to. Read per connection, never cached: see the header
+	// comment.
+	BPath		cookiePath;
 };
 
 static BrokerConfiguration sConfiguration;
@@ -477,6 +506,65 @@ ensure_token(const char* tokenPath, uint8* digest)
 }
 
 
+/*!	Reads the session cookie app_server published for the port this daemon
+	proxies to. Called once per connection, after the client authenticated and
+	before the session port is dialled.
+
+	Deliberately not cached: app_server mints the cookie when it creates its
+	listener, which can happen after this daemon started and again if the
+	listener is recreated, so a value read at startup would be the one value
+	guaranteed to go stale. It is a small file read on a path that already does
+	a TLS handshake.
+*/
+static status_t
+read_session_cookie(char* cookie, size_t cookieSize, size_t& cookieLength)
+{
+	if (sConfiguration.cookiePath.InitCheck() != B_OK)
+		return B_NO_INIT;
+
+	int fd = open(sConfiguration.cookiePath.Path(), O_RDONLY);
+	if (fd < 0)
+		return errno;
+
+	// One byte more than the maximum, so an over-long cookie is rejected
+	// rather than silently truncated into something that cannot match.
+	char buffer[kMaxCookieLength + 2];
+	if (cookieSize < sizeof(buffer) - 2) {
+		close(fd);
+		return B_BUFFER_OVERFLOW;
+	}
+
+	ssize_t length = read(fd, buffer, kMaxCookieLength + 1);
+	close(fd);
+	if (length < 0)
+		return errno;
+
+	if ((size_t)length > kMaxCookieLength) {
+		TRACE_ERROR("session cookie in %s is longer than %zu characters\n",
+			sConfiguration.cookiePath.Path(), kMaxCookieLength);
+		OPENSSL_cleanse(buffer, sizeof(buffer));
+		return B_BAD_DATA;
+	}
+
+	while (length > 0 && (buffer[length - 1] == '\n'
+			|| buffer[length - 1] == '\r' || buffer[length - 1] == ' ')) {
+		length--;
+	}
+
+	if ((size_t)length < kMinCookieLength) {
+		TRACE_ERROR("session cookie in %s is shorter than %zu characters\n",
+			sConfiguration.cookiePath.Path(), kMinCookieLength);
+		OPENSSL_cleanse(buffer, sizeof(buffer));
+		return B_BAD_DATA;
+	}
+
+	memcpy(cookie, buffer, length);
+	cookieLength = (size_t)length;
+	OPENSSL_cleanse(buffer, sizeof(buffer));
+	return B_OK;
+}
+
+
 static status_t
 prepare_settings(BrokerConfiguration& configuration)
 {
@@ -487,6 +575,29 @@ prepare_settings(BrokerConfiguration& configuration)
 		directory.Append("remote_desktop");
 		configuration.settingsDirectory = directory;
 	}
+
+	// Where app_server publishes the cookie for the port we proxy to, unless an
+	// explicit path was given. Keyed on the port, because each remote listener
+	// has its own cookie -- and derived from the *system* settings directory
+	// even when -s moved this daemon's own files elsewhere, because the cookie
+	// is app_server's file and app_server writes it there unconditionally.
+	if (configuration.cookiePath.InitCheck() != B_OK) {
+		BPath cookieDirectory;
+		if (find_directory(B_SYSTEM_SETTINGS_DIRECTORY, &cookieDirectory)
+				!= B_OK) {
+			return B_ERROR;
+		}
+
+		cookieDirectory.Append("remote_desktop");
+
+		char name[64];
+		snprintf(name, sizeof(name), "session_cookie.%u",
+			configuration.targetPort);
+		configuration.cookiePath.SetTo(cookieDirectory.Path(), name);
+	}
+
+	TRACE_LOG("expecting app_server's session cookie in %s\n",
+		configuration.cookiePath.Path());
 
 	mkdir(directory.Path(), 0755);
 
@@ -657,6 +768,36 @@ write_fully(int fd, const uint8* buffer, size_t size)
 }
 
 
+/*!	Presents the session cookie to the freshly connected session port. It must
+	be the first thing written to that socket: app_server's candidate gate reads
+	exactly this frame, decides on it, and reads nothing else until it has
+	promoted the connection -- so anything sent ahead of it would be refused as
+	"not a session cookie" instead.
+*/
+static status_t
+send_session_cookie(int backendSocket, const char* cookie, size_t cookieLength)
+{
+	// Explicitly little-endian, like all remote protocol framing.
+	uint8 frame[6 + 8 + kMaxCookieLength];
+	uint32 length = (uint32)(6 + 8 + cookieLength);
+	if (cookieLength > kMaxCookieLength)
+		return B_BAD_VALUE;
+
+	frame[0] = (uint8)(kRPSessionCookie & 0xff);
+	frame[1] = (uint8)(kRPSessionCookie >> 8);
+	for (int i = 0; i < 4; i++) {
+		frame[2 + i] = (uint8)(length >> (8 * i));
+		frame[6 + i] = (uint8)(kCookieMethodPerBoot >> (8 * i));
+		frame[10 + i] = (uint8)((uint32)cookieLength >> (8 * i));
+	}
+	memcpy(frame + 14, cookie, cookieLength);
+
+	status_t result = write_fully(backendSocket, frame, length);
+	OPENSSL_cleanse(frame, sizeof(frame));
+	return result;
+}
+
+
 // #pragma mark - per connection handler
 
 
@@ -725,18 +866,48 @@ handle_connection(void* data)
 
 	sRateLimiter.RecordSuccess(context->peerAddress);
 
+	// Read the cookie before dialling the session port: a broker that cannot
+	// present one has nothing to open a session with, and saying so costs the
+	// session port no connection at all.
+	char cookie[kMaxCookieLength];
+	size_t cookieLength = 0;
+	status_t cookieResult = read_session_cookie(cookie, sizeof(cookie),
+		cookieLength);
+	if (cookieResult != B_OK) {
+		TRACE_ERROR("%s: cannot read the session cookie from %s: %s\n",
+			context->peerName, sConfiguration.cookiePath.Path(),
+			strerror(cookieResult));
+		send_auth_result(ws, kAuthResultNoCookie, system_time() + 1000000);
+		ws.SendClose(1011, system_time() + 1000000);
+		atomic_add(&sConcurrentHandshakes, -1);
+		OPENSSL_cleanse(authBuffer, sizeof(authBuffer));
+		delete context;
+		return cookieResult;
+	}
+
 	int backendSocket = connect_backend();
 	if (backendSocket < 0) {
 		TRACE_ERROR("%s: session port unreachable\n", context->peerName);
 		send_auth_result(ws, kAuthResultNoSession, system_time() + 1000000);
 		ws.SendClose(1011, system_time() + 1000000);
 		atomic_add(&sConcurrentHandshakes, -1);
+		OPENSSL_cleanse(cookie, sizeof(cookie));
 		delete context;
 		return B_ERROR;
 	}
 
-	status_t forwardResult = send_auth_result(ws, kAuthResultSuccess,
-		system_time() + 1000000);
+	// The cookie frame goes first, ahead of the client's own bytes: it is what
+	// the session port's gate reads, and anything before it would be refused in
+	// its place.
+	status_t forwardResult = send_session_cookie(backendSocket, cookie,
+		cookieLength);
+	OPENSSL_cleanse(cookie, sizeof(cookie));
+
+	if (forwardResult == B_OK) {
+		forwardResult = send_auth_result(ws, kAuthResultSuccess,
+			system_time() + 1000000);
+	}
+
 	if (forwardResult == B_OK && extraLength > 0) {
 		forwardResult = write_fully(backendSocket, authBuffer + extraOffset,
 			extraLength);
@@ -776,19 +947,26 @@ static void
 print_usage(const char* program)
 {
 	printf("usage: %s [-l [<address>:]<port>] [-t <address>:<port>]"
-		" [-s <directory>]\n\n", program);
+		" [-s <directory>]\n       [-c <path>]\n\n", program);
 	printf("TLS + WebSocket + authentication front door for the remote"
 		" desktop.\n\n");
 	printf("  -l   listen address (default: all interfaces, port 10902)\n");
 	printf("  -t   session port to proxy to (default: 127.0.0.1:10900)\n");
 	printf("  -s   settings directory (default: the system settings"
-		" directory,\n       subdirectory remote_desktop)\n\n");
+		" directory,\n       subdirectory remote_desktop)\n");
+	printf("  -c   app_server's session cookie file for the session port\n"
+		"       (default: <system settings>/remote_desktop/session_cookie."
+		"<port>)\n\n");
 	printf("First run generates a self-signed certificate (broker.pem /"
 		" broker.key),\nits pinnable SHA-256 fingerprint"
 		" (broker.fingerprint) and a random\nauthentication token (token,"
 		" owner-readable only) in the settings\ndirectory. Replace"
 		" broker.pem/broker.key with a CA-issued pair to use a\nreal"
-		" certificate.\n");
+		" certificate.\n\n");
+	printf("The session cookie is NOT generated here: app_server mints it per"
+		" listener\nbefore it starts listening, and this daemon presents it to"
+		" the session port\nafter a client's token was accepted. Without it the"
+		" session port refuses\nevery connection, including this one.\n");
 }
 
 
@@ -853,6 +1031,8 @@ main(int argc, char** argv)
 			}
 		} else if (strcmp(argv[i], "-s") == 0 && i + 1 < argc) {
 			sConfiguration.settingsDirectory.SetTo(argv[++i]);
+		} else if (strcmp(argv[i], "-c") == 0 && i + 1 < argc) {
+			sConfiguration.cookiePath.SetTo(argv[++i]);
 		} else {
 			print_usage(argv[0]);
 			return strcmp(argv[i], "--help") == 0 ? 0 : 1;

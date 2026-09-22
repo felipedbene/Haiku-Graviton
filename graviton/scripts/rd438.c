@@ -17,9 +17,11 @@
  *     stock  _ReceiveCandidateData() reads up to 4096 bytes, so one Receive()
  *            takes header+junk, and promotion forwards ALL of it -- the parser
  *            sees code 0xABAB (43947) with a declared length of 0xABABABAB.
- *     fixed  the candidate buffer is exactly the 6 header bytes, so promotion
- *            forwards only the header; the rest of the stream is read after
- *            promotion, in order, by the normal session read path.
+ *     fixed  the candidate buffer is exactly the first frame, so promotion
+ *            forwards nothing the gate has not decided on; the rest of the
+ *            stream is read after promotion, in order, by the normal session
+ *            read path. Since #423 the frame is the session cookie and the gate
+ *            consumes it, so promotion forwards nothing at all.
  *
  * SAME-SEGMENT GUARANTEE
  *   The junk connection sets TCP_NODELAY *before* it writes anything, writes
@@ -30,13 +32,23 @@
  *   took off the socket.
  *
  * MODES
- *   sameseg [junkbytes]  live session, then a header+junk connection in one
- *                        segment, then a fresh client -- the wedge test.
+ *   sameseg [junkbytes]  live session, then a valid-first-frame+junk connection
+ *                        in one segment, then a fresh client -- the wedge test.
  *   hdronly              control: the same connection with NO junk after the
- *                        header (a normal client's opening), so any difference
- *                        measured in `sameseg` is attributable to the junk.
+ *                        first frame (a normal client's opening), so any
+ *                        difference measured in `sameseg` is attributable to
+ *                        the junk.
  *
- * ENV: RD_PORT (default 10900), RD_HOST (default 127.0.0.1).
+ * SESSION COOKIE (#423)
+ *   The session port's first frame is now RP_SESSION_COOKIE, so that is the
+ *   "valid first frame" this harness puts in front of its junk, and every
+ *   connection here presents it. It is read from
+ *   /boot/system/settings/remote_desktop/session_cookie.<port> by default --
+ *   this harness already runs on the machine under test -- or from
+ *   RD_COOKIE_FILE / RD_COOKIE.
+ *
+ * ENV: RD_PORT (default 10900), RD_HOST (default 127.0.0.1),
+ *      RD_COOKIE_FILE, RD_COOKIE.
  *
  * EXIT: 0 pass (the server kept serving), 3 fail (wedged), 2 setup failure.
  *
@@ -60,6 +72,8 @@
 
 #define RP_INIT_CONNECTION		1
 #define RP_UPDATE_DISPLAY_MODE	2
+#define RP_SESSION_COOKIE		12
+#define RP_COOKIE_METHOD_PER_BOOT	1
 
 static const char *sHost = "127.0.0.1";
 static int sPort = 10900;
@@ -68,6 +82,14 @@ static int sPort = 10900;
 // Little-endian by specification -- written out byte by byte so the harness
 // does not depend on the host's order.
 static const uint8_t kInitFrame[6] = {0x01, 0x00, 0x06, 0x00, 0x00, 0x00};
+
+// The session cookie (#423). Since the cookie became the session port's first
+// frame, the "valid first frame" this harness is about IS the cookie frame --
+// so that is what the same-segment probe puts in front of its junk, and what
+// every client connection here opens with. Read from the file app_server
+// published; this harness already runs on the machine under test.
+static char sCookie[257];
+static size_t sCookieLength = 0;
 
 
 static double
@@ -92,6 +114,62 @@ frame(uint8_t *out, uint16_t code, const void *payload, size_t payloadSize)
 	if (payloadSize > 0)
 		memcpy(out + 6, payload, payloadSize);
 	return length;
+}
+
+
+/*! Reads the session cookie into sCookie, from RD_COOKIE, RD_COOKIE_FILE, or
+	the file app_server publishes for this port. Returns false with an
+	explanation if there is none, because without it every connection below is
+	refused and the whole run would report a wedge that is not there. */
+static bool
+loadCookie()
+{
+	const char *direct = getenv("RD_COOKIE");
+	if (direct != NULL && direct[0] != '\0') {
+		size_t length = strlen(direct);
+		if (length >= sizeof(sCookie)) {
+			printf("RD_COOKIE is too long (%zu bytes)\n", length);
+			return false;
+		}
+
+		memcpy(sCookie, direct, length);
+		sCookieLength = length;
+		return true;
+	}
+
+	char path[512];
+	const char *fromEnvironment = getenv("RD_COOKIE_FILE");
+	if (fromEnvironment != NULL && fromEnvironment[0] != '\0')
+		snprintf(path, sizeof(path), "%s", fromEnvironment);
+	else {
+		snprintf(path, sizeof(path),
+			"/boot/system/settings/remote_desktop/session_cookie.%d", sPort);
+	}
+
+	FILE *file = fopen(path, "r");
+	if (file == NULL) {
+		printf("cannot read the session cookie from %s: %s\n", path,
+			strerror(errno));
+		return false;
+	}
+
+	if (fgets(sCookie, sizeof(sCookie), file) == NULL) {
+		printf("session cookie file %s is empty\n", path);
+		fclose(file);
+		return false;
+	}
+
+	fclose(file);
+
+	sCookieLength = strlen(sCookie);
+	while (sCookieLength > 0 && (sCookie[sCookieLength - 1] == '\n'
+			|| sCookie[sCookieLength - 1] == '\r'
+			|| sCookie[sCookieLength - 1] == ' ')) {
+		sCookie[--sCookieLength] = '\0';
+	}
+
+	printf("session cookie: %zu characters from %s\n", sCookieLength, path);
+	return sCookieLength > 0;
 }
 
 
@@ -141,7 +219,25 @@ localPort(int handle)
 }
 
 
-// A plain client: connect, send RP_INIT_CONNECTION, be served.
+/*! Builds the RP_SESSION_COOKIE frame -- uint32 method, then the cookie as a
+	length-prefixed string -- into \a out and returns its total size. */
+static size_t
+cookieFrame(uint8_t *out)
+{
+	uint8_t payload[8 + sizeof(sCookie)];
+	uint32_t method = RP_COOKIE_METHOD_PER_BOOT;
+	uint32_t length = (uint32_t)sCookieLength;
+	for (int i = 0; i < 4; i++) {
+		payload[i] = (uint8_t)(method >> (8 * i));
+		payload[4 + i] = (uint8_t)(length >> (8 * i));
+	}
+	memcpy(payload + 8, sCookie, sCookieLength);
+	return frame(out, RP_SESSION_COOKIE, payload, 8 + sCookieLength);
+}
+
+
+// A plain client: connect, present the session cookie, send
+// RP_INIT_CONNECTION, be served.
 static int
 connectClient()
 {
@@ -149,8 +245,12 @@ connectClient()
 	if (handle < 0)
 		return -1;
 
-	if (send(handle, kInitFrame, sizeof(kInitFrame), 0)
-			!= (ssize_t)sizeof(kInitFrame)) {
+	uint8_t opening[6 + 8 + sizeof(sCookie) + sizeof(kInitFrame)];
+	size_t openingSize = cookieFrame(opening);
+	memcpy(opening + openingSize, kInitFrame, sizeof(kInitFrame));
+	openingSize += sizeof(kInitFrame);
+
+	if (send(handle, opening, openingSize, 0) != (ssize_t)openingSize) {
 		printf("sending the handshake failed: %s\n", strerror(errno));
 		close(handle);
 		return -1;
@@ -260,6 +360,12 @@ main(int argc, char *argv[])
 	if (hostText != NULL)
 		sHost = hostText;
 
+	if (!loadCookie()) {
+		printf("RESULT: NO SESSION COOKIE (every connection would be"
+			" refused, which is not a wedge)\n");
+		return 2;
+	}
+
 	const char *mode = argc > 1 ? argv[1] : "sameseg";
 	bool withJunk = strcmp(mode, "hdronly") != 0;
 	size_t junkSize = 16;
@@ -287,9 +393,10 @@ main(int argc, char *argv[])
 		return 2;
 	}
 
-	// 2. The connection under test: a valid RP_INIT_CONNECTION header and
+	// 2. The connection under test: a valid first frame -- since #423 that is
+	//    the session cookie, the frame the gate reads and decides on -- and
 	//    junkSize junk bytes, in ONE send() on a TCP_NODELAY socket that has
-	//    never been written to -- therefore one segment.
+	//    never been written to, therefore one segment.
 	int probe = openSocket();
 	if (probe < 0) {
 		printf("RESULT: PROBE CONNECT FAILED\n");
@@ -298,15 +405,15 @@ main(int argc, char *argv[])
 	}
 	setReceiveTimeout(probe, 300);
 
-	uint8_t opening[6 + 1024];
-	memcpy(opening, kInitFrame, sizeof(kInitFrame));
-	memset(opening + sizeof(kInitFrame), 0xab, junkSize);
-	size_t openingSize = sizeof(kInitFrame) + junkSize;
+	uint8_t opening[6 + 8 + sizeof(sCookie) + 1024];
+	size_t cookieSize = cookieFrame(opening);
+	memset(opening + cookieSize, 0xab, junkSize);
+	size_t openingSize = cookieSize + junkSize;
 
 	ssize_t written = send(probe, opening, openingSize, 0);
-	printf("probe on local port %d: one send() of %zu bytes (6 byte valid"
-		" RP_INIT_CONNECTION header + %zu bytes of 0xab) returned %zd\n",
-		localPort(probe), openingSize, junkSize, written);
+	printf("probe on local port %d: one send() of %zu bytes (%zu byte valid"
+		" RP_SESSION_COOKIE frame + %zu bytes of 0xab) returned %zd\n",
+		localPort(probe), openingSize, cookieSize, junkSize, written);
 	if (written != (ssize_t)openingSize) {
 		// A short write would mean the bytes did NOT go out together, which
 		// invalidates the whole point of this arm.

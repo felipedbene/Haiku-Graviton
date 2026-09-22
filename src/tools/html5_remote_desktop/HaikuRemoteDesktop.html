@@ -67,7 +67,12 @@
 			     (compare against the server's broker.fingerprint) and
 			     accept it, then connect here. A ws://localhost:<port>
 			     address still works for the loopback/SSH-tunnel rescue
-			     path (via websockify); no token is needed there. -->
+			     path (via websockify); no token is needed there, but the
+			     session cookie is -- that path talks to app_server
+			     directly, and app_server requires its per-boot cookie
+			     (<system settings>/remote_desktop/session_cookie.<port>
+			     on the server) as the first frame. Through the broker the
+			     broker reads it and the field stays empty. -->
 			<div>
 				<label for="targetAddress">Remote Host</label>
 				<input type="text" id="targetAddress"
@@ -76,6 +81,11 @@
 			<div>
 				<label for="token">Token</label>
 				<input type="password" id="token" value="" />
+			</div>
+			<div>
+				<label for="cookie">Session cookie</label>
+				<input type="password" id="cookie" value=""
+					placeholder="only for a direct ws:// connection" />
 			</div>
 			<div>
 				<label for="width">Width</label>
