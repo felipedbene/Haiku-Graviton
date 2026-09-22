@@ -56,6 +56,14 @@ import time
 TABLE_DEFAULT = os.environ.get("TABLE", "debeos-package-state")
 REGION_DEFAULT = os.environ.get("AWS_REGION", "us-west-2")
 
+# The one definition of the `pkg` primary-key contract (#487). This tool takes port
+# names from argv, which is exactly the shape that produced the phantom row: a
+# quoted `"$pkgs"` or a `$(...)` that returned a list arrives as ONE argument.
+sys.path.insert(0, os.path.join(
+    os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
+    "graviton", "pipeline", "ops-lambdas"))
+from pkgkey import BadPkgKey, validate_pkg_key  # noqa: E402
+
 
 def log(*a):
     print(*a, file=sys.stderr, flush=True)
@@ -114,6 +122,16 @@ def main():
     table = boto3.resource("dynamodb", region_name=args.region).Table(args.table)
     now = int(time.time())
     who = os.environ.get("USER", "operator")
+
+    # Validate every name up front, before any AWS call: a caller who quoted a list
+    # into one argument wants to see that immediately, not after a partial run.
+    try:
+        for pkg in args.pkgs:
+            validate_pkg_key(pkg, where="haiku-correct-false-failure argv")
+    except BadPkgKey as e:
+        log("REFUSED: %s" % e)
+        log("hint: pass the names as separate arguments -- `... a b c`, not `... \"a b c\"`.")
+        return 2
 
     bad = 0
     for pkg in args.pkgs:

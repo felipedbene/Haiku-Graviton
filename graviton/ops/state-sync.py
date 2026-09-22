@@ -34,6 +34,14 @@ MATCHED_DEFAULT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "out"
 TERMINAL = {"built", "failed"}
 PROTECTED_STATES = {"building", "needs_human"}
 
+# The one definition of the `pkg` primary-key contract (#487). Imported by path
+# because it also has to sit inside the lambda bundle; a hard failure here is
+# deliberate -- a writer that cannot load its key guard must not write unguarded.
+sys.path.insert(0, os.path.join(
+    os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
+    "graviton", "pipeline", "ops-lambdas"))
+from pkgkey import validate_pkg_key  # noqa: E402
+
 
 def parse_version(v):
     """Loose version tuple for comparison. Splits on non-alnum, pads numerics.
@@ -121,7 +129,9 @@ def main():
         table = boto3.resource("dynamodb", region_name=args.region).Table(args.table)
 
     for row in rows:
-        pkg = row["name"]
+        # A report field that is not one port name is a malformed report, not a port.
+        # Refuse before the write rather than minting a phantom row (#487).
+        pkg = validate_pkg_key(row["name"], where="state-sync %s" % args.report)
         candidate, suppress_reason = triage(row)
 
         cur = {}
@@ -192,8 +202,17 @@ def main():
             vals[":bs"] = new_state
             vals[":tv"] = new_target
         elif "build_state" not in cur:
-            expr.append("build_state=if_not_exists(build_state,:none)")
+            # `queued_at` is the by-build-state GSI's RANGE key, so a row created
+            # with build_state=none and no queued_at is written to the table and is
+            # absent from the index -- invisibly. That is how 85 `none` rows dropped
+            # out of every index reader (#487). Seed it here so the index is total by
+            # construction; if_not_exists so a later real queue still wins.
+            expr += ["build_state=if_not_exists(build_state,:none)",
+                     "queued_at=if_not_exists(queued_at,:now)"]
             vals[":none"] = "none"
+        else:
+            # Row already has a build_state but may predate the guard above.
+            expr.append("queued_at=if_not_exists(queued_at,:now)")
         if set_suppress is not None:
             expr += ["suppressed=:sup", "suppress_reason=:sr"]
             vals[":sup"] = True

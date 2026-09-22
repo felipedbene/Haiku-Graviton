@@ -9,26 +9,38 @@ Output: adds {recorded_state} to the event.
               target version changes), UNLESS attempt_count reaches the quarantine
               threshold (default 3) at this target -> build_state=needs_human,
               esc_reason=repeated-failure (SOP §4/§5).
+
+Every write that sets build_state also ensures `queued_at` exists: it is the
+by-build-state GSI's range key, and DynamoDB silently omits from the index any item
+missing it -- which is how a `needs_human` row (`qt5`) went missing from the triage
+census for months (#487). `if_not_exists` so a real queue timestamp is never
+overwritten by an outcome record.
 """
 import os
 import time
 import boto3
 
+from pkgkey import validate_pkg_key
+
 TABLE = os.environ.get("TABLE")
 QUARANTINE_AT = int(os.environ.get("QUARANTINE_AT", "3"))
+
+# Appended to every build_state-setting UpdateExpression. See module docstring.
+_GSI_KEY = "queued_at=if_not_exists(queued_at,:now)"
 
 
 def handler(event, context):
     table = boto3.resource("dynamodb").Table(event.get("table") or TABLE)
     now = int(time.time())
-    pkg = event["pkg"]
+    pkg = validate_pkg_key(event["pkg"], where="RecordOutcome")
     target = event["target"]
 
     if event.get("ok"):
         table.update_item(
             Key={"pkg": pkg},
             UpdateExpression=("SET build_state=:s, target_version=:t, built_at=:now, "
-                              "last_outcome=:o REMOVE lease_owner, lease_expires_at"),
+                              "last_outcome=:o, " + _GSI_KEY +
+                              " REMOVE lease_owner, lease_expires_at"),
             ExpressionAttributeValues={":s": "built", ":t": target, ":now": now,
                                        ":o": "built"},
         )
@@ -52,16 +64,17 @@ def handler(event, context):
         state, reason = "needs_human", "repeated-failure"
         table.update_item(
             Key={"pkg": pkg},
-            UpdateExpression=("SET build_state=:s, esc_reason=:r "
-                              "REMOVE lease_owner, lease_expires_at"),
-            ExpressionAttributeValues={":s": state, ":r": reason},
+            UpdateExpression=("SET build_state=:s, esc_reason=:r, " + _GSI_KEY +
+                              " REMOVE lease_owner, lease_expires_at"),
+            ExpressionAttributeValues={":s": state, ":r": reason, ":now": now},
         )
     else:
         state = "failed"
         table.update_item(
             Key={"pkg": pkg},
-            UpdateExpression="SET build_state=:s REMOVE lease_owner, lease_expires_at",
-            ExpressionAttributeValues={":s": state},
+            UpdateExpression=("SET build_state=:s, " + _GSI_KEY +
+                              " REMOVE lease_owner, lease_expires_at"),
+            ExpressionAttributeValues={":s": state, ":now": now},
         )
     event["recorded_state"] = state
     return event
