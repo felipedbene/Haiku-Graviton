@@ -1491,7 +1491,8 @@ PCI::_GetBarInfo(PCIDev *dev, uint8 offset, uint32 &_ramAddress,
 
 	uint32 mask = PCI_address_memory_32_mask;
 	bool is64bit = false;
-	if ((pciAddress & PCI_address_space) != 0)
+	const bool isIOSpace = (pciAddress & PCI_address_space) != 0;
+	if (isIOSpace)
 		mask = PCI_address_io_mask;
 	else {
 		is64bit = (pciAddress & PCI_address_type) == PCI_address_type_64;
@@ -1516,7 +1517,16 @@ PCI::_GetBarInfo(PCIDev *dev, uint8 offset, uint32 &_ramAddress,
 	size &= ((uint64)0xffffffff << 32) | mask;
 
 	size = _BarSize(size);
-	uint64 ramAddress = pci_ram_address(pciAddress);
+
+	// An I/O BAR does not live in memory space, so it must not be translated by
+	// pci_ram_address(): outside x86 that only searches the B_IO_MEMORY ranges,
+	// finds nothing for a port address, and silently yields 0. That would
+	// collapse every I/O BAR in the domain onto port 0, making all of them
+	// alias each other -- and drivers would happily program the wrong device.
+	// pci_read_io_*()/pci_write_io_*() take a *PCI* I/O port and resolve it
+	// against the domain's B_IO_PORT ranges, so the port address is already the
+	// value drivers need here, which also matches what x86 reports.
+	uint64 ramAddress = isIOSpace ? pciAddress : pci_ram_address(pciAddress);
 
 	_ramAddress = ramAddress;
 	_pciAddress = pciAddress;
