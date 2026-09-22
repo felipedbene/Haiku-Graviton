@@ -198,7 +198,37 @@ never logs it.
   verification. Raw-TCP mode (no `--wss`) remains for loopback testing, and
   needs `--cookie-file` there — this is the path used over an SSM port-forward
   to `127.0.0.1:10900`, and the one that produced the first real desktop render
-  on Graviton, so it is the path a cookie change must not break.
+  on Graviton, so it is the path a cookie change must not break. It **draws
+  text** (#475): it rasterises `RP_DRAW_STRING` / `RP_DRAW_STRING_WITH_OFFSETS`
+  through libfreetype and reports a text census — runs received, runs
+  rasterised, glyphs, ink pixels written and ink pixels that changed the
+  picture. Before that it drew a flat guessed box per run, which on an already
+  painted background drew *nothing*, so a capture with every label and the clock
+  missing still reported two million pixels touched and still passed. Text
+  ground truth is now the default posture (exit 5 otherwise), and
+  `--min-text-runs` / `--min-glyph-ink` / `--expect-text TEXT@X,Y` are the
+  assertions (exit 6). What the census supports: that text drew, how many runs
+  and glyphs, their origins, advances and ink box. What it does **not**: pixel
+  equality with app_server — the wire carries a FontManager id, not a family
+  name, and hinting and subpixel filtering differ. Compare the census between
+  two clients; do not diff the PNGs and conclude the other client is wrong.
+  For an image baked before the cookie gate, `--no-cookie`: that gate accepts
+  only `RP_INIT_CONNECTION` or `RP_HELLO` first and drops a cookie frame.
+  The A/B on a live `c7g.large` from the canonical AMI, one SSM port-forward,
+  same 25 s budget, the only difference being `--no-glyphs`:
+
+  | | text runs rasterised | visible glyph ink | pixels touched | exit |
+  |---|---|---|---|---|
+  | rasterising | 6 | 922 | 2,792,219 | 0 |
+  | `--no-glyphs` (the old behaviour) | 0 | 0 | 2,059,398 | 6 |
+
+  ![labels and the clock, rasterised](images/rdcapture-475-text-rasterised.png)
+  ![the same desktop, text-blind](images/rdcapture-475-text-blind.png)
+
+  Note what the second picture is *not*: it is not "boxes where the labels go".
+  The estimated box only paints pixels that are still pure black, so on a
+  desktop that has already painted its background it paints nothing at all —
+  which is why two million touched pixels looked healthy.
 - **Gate harness** — `graviton/scripts/rd423.c`: native arm64, run on the
   machine under test. Asserts that the correct cookie is served, that no
   cookie / a wrong cookie / a pre-cookie `RP_INIT_CONNECTION` / a malformed
