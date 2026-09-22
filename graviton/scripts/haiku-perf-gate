@@ -1088,12 +1088,20 @@ if [ "$DURABILITY_ASSERT" != 0 ]; then
 			/bin/disktput -f "\$d/probe" -m seqwrite -b 256K -n $DUR_BYTES -s $DUR_BYTES -P -S >/dev/null 2>&1 \
 				&& echo "GATE_DUR_WRITE ok" || echo "GATE_DUR_WRITE fail"
 			sync
-			sha=""
-			for _i in 1 2 3 4 5; do
-				sha=\$(sha256sum "\$d/probe" 2>/dev/null | cut -d\" \" -f1)
-				[ -n "\$sha" ] && break
-				sleep 1
-			done
+			# Extract the hash with parameter expansion, NOT \`cut -d" " -f1\`.
+			# A quoted space is the most fragile token in this command: it has to
+			# survive a local heredoc, JSON encoding into an SSM parameter, and a
+			# single-quoted ssh argument. \${sha%% *} needs no delimiter argument,
+			# so there is nothing for those layers to mangle.
+			#
+			# This readback had NEVER once succeeded -- six consecutive trunk gate
+			# runs all reported the empty-readback warning and not one recorded a
+			# hash -- while sha256sum on the image is fine (GNU coreutils 9.9,
+			# measured on a 64 MiB file: correct hash, and cut/awk/absolute-path
+			# all extract it). So the failure was in this harness, and calling it a
+			# flake that a 5x retry might beat was wrong: it was deterministic.
+			sha=\$(sha256sum "\$d/probe" 2>/dev/null)
+			sha=\${sha%% *}
 			echo "GATE_DUR_SHA \$sha"
 			echo "GATE_DUR_SIZE \$(stat -c %s "\$d/probe" 2>/dev/null)"
 		' 2>/dev/null
@@ -1114,15 +1122,20 @@ if [ "$DURABILITY_ASSERT" != 0 ]; then
 		die "storage durability gate failed for $AMI (write phase)"
 	elif [ -z "$DUR_SHA" ]; then
 		# Write reported ok and the file is the full size, so the disk accepted and
-		# fsync'd the payload -- only the sha256sum readback came back empty (a
-		# tooling/readback flake seen on a freshly-fsync'd 64 MiB file, even after a
-		# 5x retry). That is not a durability failure, so don't fail the promote on
-		# it: degrade to the same non-fatal path as a missing tool. The stop/start
-		# below still catches a wholesale unflushed root FS (no sshd); only the
-		# byte-for-byte verify is skipped.
-		say "WARNING: durability payload written ($DUR_SIZE bytes) but the sha256 readback"
-		say "  was empty after retries; skipping the byte-for-byte verify (write+size"
-		say "  confirm the disk took and fsync'd the payload)."
+		# fsync'd the payload -- only the hash readback is missing, which is not
+		# itself a durability failure. Stay non-fatal, but do NOT describe it as a
+		# flake: it used to be attributed to "a tooling/readback flake ... even
+		# after a 5x retry" when in fact it had never succeeded on ANY image (six
+		# consecutive trunk runs, zero recorded hashes) because the harness mangled
+		# `cut -d" " -f1`. Calling a deterministic break a flake is what let it
+		# survive, so the message now says plainly that the strongest storage
+		# assertion did not run and should be investigated rather than tolerated.
+		say "WARNING: durability payload written ($DUR_SIZE bytes) but the hash readback"
+		say "  was EMPTY, so the byte-for-byte verify -- the assertion that tells"
+		say "  'never written' from 'stale' from 'corrupt' -- DID NOT RUN. write+size"
+		say "  only confirm the disk took and fsync'd the payload. This is expected to"
+		say "  be impossible now; if you are reading it, the readback is broken again"
+		say "  and the check is not protecting you."
 		warn=1
 	else
 		say "durability payload written: $DUR_SIZE bytes, sha256 ${DUR_SHA:0:12}... recorded on the harness"
