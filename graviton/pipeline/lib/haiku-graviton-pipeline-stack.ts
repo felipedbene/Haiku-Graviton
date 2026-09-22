@@ -406,6 +406,21 @@ export class HaikuGravitonPipelineStack extends cdk.Stack {
     const perfTest = new codebuild.PipelineProject(this, 'PerfTest', {
       projectName: `${cfg.amiNamePrefix}-perf-test`,
       environment: smallArmEnvironment,
+      // One gate at a time per pipeline. The gate is a MEASUREMENT: it launches a
+      // candidate and an ephemeral peer and pushes traffic between them, so a
+      // second gate running beside it doubles the instances competing for the
+      // same network and can push receive below the floor on an image that is
+      // fine. The first two oven bakes did exactly that -- 75s of overlap,
+      // receive 2662 vs 4718 Mbit/s for the same commit, one tagged
+      // perf-gate=fail. A false `fail` is worse than a slow gate: it makes a good
+      // image look unpromotable.
+      //
+      // This bounds the pipeline's OWN gates, not gates in a sibling oven. Scaling
+      // out by replicating ovens can still put two gates in the air at once, and
+      // that is deliberately not solved here -- it needs a shared lock or a
+      // pre-measurement check for sibling gate instances, and the contention
+      // mechanism is not yet proven (see the note on executionMode).
+      concurrentBuildLimit: 1,
       // Measured: a passing run is ~2.5 min (boot, two runs per direction, a
       // 32 s clean stop, then a second boot), against ~90 s before the stop/start
       // check. A run that fails the stop/start is ~14 min, because it spends the
@@ -826,25 +841,30 @@ export class HaikuGravitonPipelineStack extends cdk.Stack {
       pipelineName: `${cfg.amiNamePrefix}-bake`,
       pipelineType: codepipeline.PipelineType.V2,
       restartExecutionOnUpdate: false,
-      // The oven runs many bakes at once; the trunk keeps CodePipeline's default
-      // SUPERSEDED.
+      // One execution per oven. Scale OUT by replicating ovens, not by running
+      // one oven's pipeline against itself.
       //
-      // SUPERSEDED means a newer execution OVERTAKES and DISCARDS an older one
-      // still in flight. For the oven that is fatal to the whole idea: "bake as
-      // many candidates as we want" would in practice mean each new bake killing
-      // the previous one, after it had already spent ~25 minutes of cross-build.
-      // PARALLEL executions run simultaneously and independently -- no
-      // superseding, no queueing behind each other.
+      // This was PARALLEL, on the reading that "bake as many as we want" meant
+      // many executions of one pipeline. It does not: the maintainer's model is
+      // several oven STACKS, each taking one bake at a time. PARALLEL also had a
+      // consequence nobody wanted -- two executions each launch a perf-gate
+      // candidate AND an ephemeral peer, so four instances measure network
+      // throughput at once. The first two oven bakes overlapped by 75s and
+      // reported receive 2662 vs 4718 Mbit/s for the SAME commit (transmit
+      // stable within 0.05%, floor 3000), so one was tagged perf-gate=fail. That
+      // correlation is strong but it is NOT proven to be contention: the gate
+      // could not be reproduced in isolation here, because its ephemeral peer
+      // needs provisioning secrets only CodeBuild supplies.
       //
-      // QUEUED was the other option and is rejected: it serialises instead of
-      // discarding, which is safe but still means waiting out a full bake before
-      // the next one starts, and waiting an hour is the exact cost the oven exists
-      // to remove.
-      //
-      // Requires PipelineType.V2 (CDK throws ExecutionModeRequiresV2Pipeline
-      // otherwise). Both pipelines here are already V2, so this forces nothing.
+      // QUEUED rather than SUPERSEDED: a second request for the same oven is a
+      // retry or a mistake, and SUPERSEDED would DISCARD it silently after it had
+      // already spent cross-build time. Silent discard is the failure shape that
+      // has already cost this project once (a stale parked approval consumed a
+      // token and promoted the wrong AMI), so the oven waits instead of dropping
+      // work. If a bake is wanted *now* while one is running, that is what a
+      // second oven is for.
       executionMode: testOnly
-        ? codepipeline.ExecutionMode.PARALLEL
+        ? codepipeline.ExecutionMode.QUEUED
         : codepipeline.ExecutionMode.SUPERSEDED,
       stages,
     });

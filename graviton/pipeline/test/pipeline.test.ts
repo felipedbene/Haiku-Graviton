@@ -1308,13 +1308,34 @@ test('no oven role can write the canonical SSM parameter', () => {
 // after it had already burned ~25 minutes of cross-build. PARALLEL runs them
 // independently. A silent fallback to SUPERSEDED would look completely fine and
 // quietly throw bakes away, so assert the rendered property.
-test('the oven runs executions in PARALLEL so concurrent bakes do not supersede', () => {
+// One execution per oven; scale OUT by replicating ovens. QUEUED, not SUPERSEDED,
+// because a second request for the same oven is a retry or a mistake and
+// SUPERSEDED would DISCARD it silently after it had already burned cross-build
+// time -- and not PARALLEL, because two executions each launch a perf-gate
+// candidate AND an ephemeral peer, so four instances end up measuring network
+// throughput at once (the first two oven bakes overlapped 75s and disagreed by
+// 1.77x on receive for the same commit).
+test('the oven takes one execution at a time and queues rather than discarding', () => {
   const t = synthOven();
   t.hasResourceProperties('AWS::CodePipeline::Pipeline', {
     Name: 'haiku-oven-bake',
-    PipelineType: 'V2',          // PARALLEL is V2-only; CDK rejects it on V1.
-    ExecutionMode: 'PARALLEL',
+    PipelineType: 'V2',          // the execution-mode property is V2-only.
+    ExecutionMode: 'QUEUED',
   });
+});
+
+
+// The gate is a measurement, so it must not run beside another gate from the same
+// pipeline. This bounds one pipeline's own gates only -- two sibling ovens can
+// still gate simultaneously, which is knowingly unsolved.
+test('the perf gate never runs concurrently with itself', () => {
+  for (const t of [synthOven(), synth()]) {
+    const projects = t.findResources('AWS::CodeBuild::Project');
+    const gates = Object.values(projects).filter(
+      (p: any) => String(p.Properties.Name).includes('perf-test'));
+    expect(gates.length).toBe(1);
+    expect((gates[0] as any).Properties.ConcurrentBuildLimit).toBe(1);
+  }
 });
 
 // An oven AMI must stay PROMOTABLE. The oven cannot promote; the image it bakes is a
