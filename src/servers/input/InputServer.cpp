@@ -536,13 +536,23 @@ InputServer::MessageReceived(BMessage* message)
 		case IS_SCREEN_BOUNDS_UPDATED:
 		{
 			// This is what the R5 app_server sends us when the screen
-			// configuration changes
+			// configuration changes.
+			//
+			// It is a notification, so it returns rather than breaking out to
+			// the common SendReply() below: app_server sends it with no reply
+			// handler, which makes its own be_app_messenger the reply target
+			// (BMessage::_SendMessage()), and the common reply is a
+			// default-constructed BMessage whose `what` is 0 -- the same value
+			// as AS_GET_DESKTOP. app_server therefore mistook every reply for
+			// an application asking for a desktop and logged "Application for
+			// user 0 does not support the current server protocol (0)" once per
+			// screen-bounds update. Nothing here wants the reply.
 			BRect frame;
 			if (message->FindRect("screen_bounds", &frame) != B_OK)
 				frame = fScreen.Frame();
 
 			if (frame == fFrame)
-				break;
+				return;
 
 			BPoint pos(fMousePos.x * frame.Width() / fFrame.Width(),
 				fMousePos.y * frame.Height() / fFrame.Height());
@@ -551,7 +561,7 @@ InputServer::MessageReceived(BMessage* message)
 			BMessage set;
 			set.AddPoint("where", pos);
 			HandleSetMousePosition(&set, NULL);
-			break;
+			return;
 		}
 
 		// device looper related
