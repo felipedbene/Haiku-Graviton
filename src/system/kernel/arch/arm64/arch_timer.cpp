@@ -11,6 +11,8 @@
 #include <arch/timer.h>
 #include <arch/cpu.h>
 
+#include <string.h>
+
 
 static uint64 sTimerFrequency;
 static bigtime_t sTimerMaxInterval;
@@ -44,6 +46,12 @@ static bigtime_t sTimerMaxInterval;
 // GTDT reflects (26 EL2 physical, 27 EL1 virtual, 30 EL1 physical non-secure).
 // The two timers' control registers share the ENABLE/IMASK/ISTATUS layout, so
 // only the register encoding and the INTID differ between the two paths.
+//
+// They are a *recommendation*, not part of the architecture, and they are only
+// the fallback here: where firmware described the timer the boot loader carries
+// what it said in arch_args.timer and that is used instead. Every platform
+// measured so far happens to agree with these numbers, which is why nothing
+// noticed that they were never read from anywhere.
 #define TIMER_IRQ_EL1_PHYS 30
 #define TIMER_IRQ_EL2_PHYS 26
 
@@ -105,7 +113,23 @@ arch_timer_interrupt(void *data)
 int
 arch_init_timer(kernel_args *args)
 {
+	const arm_generic_timer_info& timerInfo = args->arch_args.timer;
+
+	// CNTFRQ_EL0 is authoritative wherever firmware programmed it, and every
+	// platform this has run on does. It is not guaranteed to, though, and the
+	// value is a *divisor* below -- so take what firmware described as the
+	// fallback, and refuse to continue with neither rather than dividing by
+	// zero inside timer init, before the kernel can say why it stopped.
+	const char* frequencySource = "CNTFRQ_EL0";
 	sTimerFrequency = READ_SPECIALREG(CNTFRQ_EL0);
+	if (sTimerFrequency == 0) {
+		sTimerFrequency = timerInfo.frequency;
+		frequencySource = "firmware";
+	}
+	if (sTimerFrequency == 0) {
+		panic("arch_timer: no counter frequency: CNTFRQ_EL0 reads 0 and "
+			"firmware described none");
+	}
 
 	// Derive system_time()'s tick->microsecond multiply/shift factors now, while
 	// boot is still single-threaded, so its hot path never has to. (It also has
@@ -118,13 +142,23 @@ arch_init_timer(kernel_args *args)
 
 	// A kernel left at EL2 by the boot loader (VHE host on bare metal) must use
 	// the EL2 physical timer; at EL1 (KVM guest) it uses the EL1 physical timer.
+	// Which of the timer's views is ours therefore also decides which of the
+	// firmware-described interrupts is ours.
 	sUseEL2Timer = (READ_SPECIALREG(CurrentEL) >> 2) >= 2;
-	int timerIrq = sUseEL2Timer ? TIMER_IRQ_EL2_PHYS : TIMER_IRQ_EL1_PHYS;
+	uint32 timerIrqIndex = sUseEL2Timer
+		? ARM_TIMER_IRQ_HYP_PHYS : ARM_TIMER_IRQ_PHYS;
 
-	dprintf("arch_timer: generic timer at %" B_PRIu64 " Hz, max interval %"
-		B_PRIdBIGTIME " us, %s timer on INTID %d\n", sTimerFrequency,
-		sTimerMaxInterval, sUseEL2Timer ? "EL2 physical" : "EL1 physical",
-		timerIrq);
+	bool irqFromFirmware
+		= (timerInfo.interrupt_valid & (1 << timerIrqIndex)) != 0;
+	int timerIrq = irqFromFirmware
+		? (int)timerInfo.interrupt[timerIrqIndex]
+		: (sUseEL2Timer ? TIMER_IRQ_EL2_PHYS : TIMER_IRQ_EL1_PHYS);
+
+	dprintf("arch_timer: generic timer at %" B_PRIu64 " Hz (%s), max interval %"
+		B_PRIdBIGTIME " us, %s timer on INTID %d (%s)\n", sTimerFrequency,
+		frequencySource, sTimerMaxInterval,
+		sUseEL2Timer ? "EL2 physical" : "EL1 physical", timerIrq,
+		irqFromFirmware ? "firmware" : "architected default");
 
 	// system_time() is implemented by reading CNTVCT_EL0 and CNTFRQ_EL0 from
 	// EL0, which is only allowed while this is set. The boot loader sets it as
@@ -145,7 +179,25 @@ arch_init_timer(kernel_args *args)
 		WRITE_SPECIALREG(CNTHP_CTL_EL2, TIMER_DISABLED);
 	else
 		WRITE_SPECIALREG(CNTP_CTL_EL0, TIMER_DISABLED);
-	install_io_interrupt_handler(timerIrq, &arch_timer_interrupt, NULL, 0);
+
+	// The return value only became worth checking once the INTID stopped being
+	// a compile-time constant: an out-of-range one is refused here, and a
+	// kernel that silently has no timer handler is tickless and wedges at the
+	// first thing that blocks, a long way from the cause.
+	status_t status = install_io_interrupt_handler(timerIrq,
+		&arch_timer_interrupt, NULL, 0);
+	if (status != B_OK && irqFromFirmware) {
+		int fallback = sUseEL2Timer ? TIMER_IRQ_EL2_PHYS : TIMER_IRQ_EL1_PHYS;
+		dprintf("arch_timer: firmware INTID %d unusable (%s); falling back to "
+			"the architected INTID %d\n", timerIrq, strerror(status), fallback);
+		timerIrq = fallback;
+		status = install_io_interrupt_handler(timerIrq, &arch_timer_interrupt,
+			NULL, 0);
+	}
+	if (status != B_OK) {
+		panic("arch_timer: could not install the timer handler on INTID %d: %s",
+			timerIrq, strerror(status));
+	}
 
 	return B_OK;
 }

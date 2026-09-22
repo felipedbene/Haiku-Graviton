@@ -41,6 +41,106 @@ const struct supported_interrupt_controllers {
 };
 
 
+// The Arm generic timer. Both bindings describe the same timer; an armv8 tree
+// commonly claims both, and the armv7 binding is what a 64-bit SoC with a
+// 32-bit-era device tree will say.
+static const char* const kGenericTimerCompatible[] = {
+	"arm,armv8-timer",
+	"arm,armv7-timer",
+};
+
+// Optional "interrupt-names" values, in the positional order the binding
+// defines for a node that does not name them. Indexed by ARM_TIMER_IRQ_*.
+static const char* const kGenericTimerIrqNames[ARM_TIMER_IRQ_COUNT] = {
+	"sec-phys",
+	"phys",
+	"virt",
+	"hyp-phys",
+	"hyp-virt",
+};
+
+
+// Position of \a pattern in a NUL-separated string-list property, or -1.
+//
+// Bounded by the property's length for the same reason dtb_has_fdt_string() is:
+// the list is input from firmware and nothing guarantees its last entry carries
+// a terminator, so a run with no NUL inside the property is malformed and ends
+// the walk rather than continuing into the rest of the blob.
+static int
+arm64_fdt_string_index(const char* prop, int size, const char* pattern)
+{
+	if (prop == NULL || size <= 0)
+		return -1;
+
+	size_t patternLen = strlen(pattern);
+	const char* propEnd = prop + size;
+	int index = 0;
+	while (prop < propEnd) {
+		const char* end = (const char*)memchr(prop, '\0', propEnd - prop);
+		if (end == NULL)
+			return -1;
+		if ((size_t)(end - prop) == patternLen
+			&& memcmp(prop, pattern, patternLen) == 0) {
+			return index;
+		}
+		prop = end + 1;
+		index++;
+	}
+
+	return -1;
+}
+
+
+// Record what the device tree says about the generic timer.
+//
+// The timer itself is reached through system registers, so there is nothing to
+// map: what firmware alone can tell us is which interrupt each view is
+// delivered on, and how fast the counter runs. Both are platform facts that the
+// kernel has been assuming architected values for.
+static void
+arm64_handle_fdt_timer_node(const void* fdt, int node)
+{
+	arm_generic_timer_info &timer = gKernelArgs.arch_args.timer;
+
+	// A node that names its lines is the node most likely to have reordered
+	// them, so "interrupt-names" wins where it is present; otherwise the
+	// binding's positional order applies, which is also what Linux's own
+	// arch_timer driver reads. A tree that lists fewer entries than that order
+	// has names for is read as the first N of it -- there is no other
+	// interpretation available without names, and inventing one would put a
+	// plausible but wrong INTID in front of the kernel.
+	int namesLen = 0;
+	const char* names = (const char*)fdt_getprop(fdt, node, "interrupt-names",
+		&namesLen);
+
+	for (uint32 i = 0; i < ARM_TIMER_IRQ_COUNT; i++) {
+		int index = (int)i;
+		if (names != NULL) {
+			index = arm64_fdt_string_index(names, namesLen,
+				kGenericTimerIrqNames[i]);
+			if (index < 0)
+				continue;
+		}
+
+		uint32 interrupt = 0;
+		if (!dtb_get_interrupt_at(fdt, node, (uint32)index, interrupt))
+			continue;
+
+		timer.interrupt[i] = interrupt;
+		timer.interrupt_valid |= 1 << i;
+	}
+
+	// "clock-frequency" is the counter frequency, and exists in the binding for
+	// exactly the platforms whose firmware does not program CNTFRQ_EL0. Carry
+	// it; the kernel still prefers the register where that is non-zero.
+	int frequencyLen = 0;
+	const uint32* frequency = (const uint32*)fdt_getprop(fdt, node,
+		"clock-frequency", &frequencyLen);
+	if (frequency != NULL && frequencyLen == (int)sizeof(uint32))
+		timer.frequency = fdt32_to_cpu(*frequency);
+}
+
+
 void
 arch_handle_fdt(const void* fdt, int node)
 {
@@ -105,6 +205,20 @@ arch_handle_fdt(const void* fdt, int node)
 		|| dtb_has_fdt_string(compatible, compatibleLen, "arm,psci-0.2")) {
 		arm64_handle_fdt_psci_node(fdt, node);
 	}
+
+	// Only the first timer node is taken: there is one generic timer per
+	// machine, and a second node claiming to be it is a tree we do not
+	// understand rather than a second timer.
+	if (gKernelArgs.arch_args.timer.interrupt_valid == 0
+		&& gKernelArgs.arch_args.timer.frequency == 0) {
+		for (uint32 i = 0; i < B_COUNT_OF(kGenericTimerCompatible); i++) {
+			if (dtb_has_fdt_string(compatible, compatibleLen,
+					kGenericTimerCompatible[i])) {
+				arm64_handle_fdt_timer_node(fdt, node);
+				break;
+			}
+		}
+	}
 }
 
 
@@ -123,5 +237,21 @@ arch_dtb_set_kernel_args(void)
 		dprintf("        %#" B_PRIx64 ", %#" B_PRIx64 "\n",
 			interrupt_controller.regs2.start,
 			interrupt_controller.regs2.size);
+	}
+
+	// Only report the timer when the device tree actually described one: on the
+	// ACPI path this is still all zeroes, and a line of zeroes would read as a
+	// parse failure rather than as "not this boot path".
+	arm_generic_timer_info &timer = gKernelArgs.arch_args.timer;
+	if (timer.interrupt_valid != 0 || timer.frequency != 0) {
+		dprintf("Generic timer from fdt:\n");
+		dprintf("  frequency: %" B_PRIu64 " Hz%s\n", timer.frequency,
+			timer.frequency == 0 ? " (not stated; kernel uses CNTFRQ_EL0)" : "");
+		for (uint32 i = 0; i < ARM_TIMER_IRQ_COUNT; i++) {
+			if ((timer.interrupt_valid & (1 << i)) != 0) {
+				dprintf("  %s: INTID %" B_PRIu32 "\n",
+					kGenericTimerIrqNames[i], timer.interrupt[i]);
+			}
+		}
 	}
 }

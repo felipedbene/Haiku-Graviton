@@ -555,6 +555,59 @@ dtb_get_interrupt(const void* fdt, int node)
 }
 
 
+// Decode one entry of a node's "interrupts" property by position.
+//
+// dtb_get_interrupt() answers for the first entry only, and reads it without
+// consulting the property's length. A device with several lines -- the Arm
+// generic timer has four, one per exception level and security state -- needs
+// both an index and a bound, because a tree is free to describe fewer lines
+// than the caller knows how to use, and the difference between "not described"
+// and "described as 0" matters.
+//
+// Returns false, without touching \a interrupt, when the node describes no
+// entry at that index or describes it in a form this cannot translate.
+//
+// "interrupts-extended" is deliberately not handled here: each of its entries
+// names its own interrupt parent, so the entries are not required to be the
+// same width and a positional index into them cannot be computed without
+// walking the phandles first. Refusing is better than guessing a width.
+bool
+dtb_get_interrupt_at(const void* fdt, int node, uint32 index, uint32& interrupt)
+{
+	int size = 0;
+	uint32* prop = (uint32*)fdt_getprop(fdt, node, "interrupts", &size);
+	if (prop == NULL || size <= 0)
+		return false;
+
+	uint32 interruptCells = dtb_get_interrupt_cells(fdt, node);
+	if (interruptCells < 1 || interruptCells > 3)
+		return false;
+
+	uint32 entrySize = interruptCells * (uint32)sizeof(uint32);
+	if (index >= (uint32)size / entrySize)
+		return false;
+
+	uint32* entry = prop + index * interruptCells;
+	if (interruptCells < 3) {
+		// A controller with its own numbering space and no type cell, e.g. the
+		// SoC-local controllers that carry the timer on some platforms.
+		interrupt = fdt32_to_cpu(entry[0]);
+		return true;
+	}
+
+	uint32 interruptType = fdt32_to_cpu(entry[GIC_INTERRUPT_CELL_TYPE]);
+	uint32 interruptNumber = fdt32_to_cpu(entry[GIC_INTERRUPT_CELL_ID]);
+	if (interruptType == GIC_INTERRUPT_TYPE_SPI)
+		interrupt = interruptNumber + GIC_INTERRUPT_BASE_SPI;
+	else if (interruptType == GIC_INTERRUPT_TYPE_PPI)
+		interrupt = interruptNumber + GIC_INTERRUPT_BASE_PPI;
+	else
+		return false;
+
+	return true;
+}
+
+
 static int64
 dtb_get_clock_frequency(const void* fdt, int node)
 {

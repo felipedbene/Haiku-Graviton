@@ -17,6 +17,8 @@ extern void dtb_set_kernel_args();
 
 bool dtb_get_reg(const void* fdt, int node, size_t idx, addr_range& range);
 uint32 dtb_get_interrupt(const void* fdt, int node);
+bool dtb_get_interrupt_at(const void* fdt, int node, uint32 index,
+	uint32& interrupt);
 bool dtb_has_fdt_string(const char* prop, int size, const char* pattern);
 
 
