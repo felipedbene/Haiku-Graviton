@@ -41,6 +41,11 @@ Echo "Starting build of type $(HAIKU_BUILD_TYPE) ..." ;
 
 rule DefineDefaultBuildProfiles
 {
+	# This rule is the first thing called after UserBuildConfig has been read,
+	# which makes it the place to catch build variables that were set too late
+	# to have any effect.
+	CheckArm64CpuBaseline ;
+
 	# release profiles
 	DefineBuildProfile release-raw : image : "haiku-release.image" ;
 	DefineBuildProfile release-vmware : vmware-image : "haiku-release.vmdk" ;

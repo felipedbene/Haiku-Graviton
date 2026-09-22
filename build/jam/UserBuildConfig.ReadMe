@@ -12,6 +12,45 @@
 Exit You must NOT copy UserBuildConfig.ReadMe directly but use parts of it! ;
 
 
+# Variables That Cannot Be Set Here
+
+# UserBuildConfig is included fairly late -- after BuildSetup has already
+# computed the per-architecture compiler and linker flags. A variable those
+# flags are derived from therefore has to be set *before* jam reads any of
+# this, i.e. on the jam command line with -s, or in the environment (jam
+# imports the environment).
+#
+# HAIKU_ARM64_CPU_BASELINE
+#	Selects the arm64 ISA/tuning baseline: the instruction set the boot
+#	loader, the kernel and every userland binary in the image are allowed to
+#	*require*, and so which cores can run the image at all. Named profiles
+#	(see Arm64CpuBaselineFlags in build/jam/ArchitectureRules for the table
+#	and the reasoning):
+#
+#	  graviton    -mcpu=neoverse-n1+crypto   DEFAULT. AWS Graviton2/3/4 and
+#	                                         t4g; ARMv8.2-A, LSE atomics.
+#	  graviton3   -mcpu=neoverse-v1+crypto   Graviton3 only -- does NOT boot
+#	  graviton4   -mcpu=neoverse-v2+crypto   Graviton4 only -- on Graviton2.
+#	  rpi5        -mcpu=cortex-a76+crypto    Raspberry Pi 5 (ARMv8.2-A).
+#	  rpi4        -mcpu=cortex-a72           Raspberry Pi 4 (ARMv8.0-A).
+#	  rpi3        -mcpu=cortex-a53           Raspberry Pi 3 (ARMv8.0-A).
+#	  armv8       -march=armv8-a             Tuning-neutral ARMv8.0-A floor;
+#	                                         runs on any ARMv8 core, incl. a
+#	                                         plain `qemu-system-aarch64 -M
+#	                                         virt`.
+#	  -m...       passed through verbatim    Escape hatch for a new board.
+#
+#	Raising the default is the one thing not to do: the ARMv8.0 profiles are
+#	there so a Pi-class target stops faulting on LSE atomics, not so the
+#	flagship gives up its ARMv8.1/8.2 codegen. Usage:
+#
+#	  jam -q -sHAIKU_ARM64_CPU_BASELINE=rpi3 @minimum-mmc
+#	  HAIKU_ARM64_CPU_BASELINE=armv8 jam -q kernel_arm64
+#
+#	Setting it in a UserBuildConfig is an error rather than a silently wrong
+#	image: the build stops and tells you to pass it with -s instead.
+
+
 # Adjusting Build Variables
 
 # The following variables can be configured per subdirectory (or subtree) or
