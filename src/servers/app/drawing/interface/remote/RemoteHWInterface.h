@@ -9,16 +9,17 @@
 #define REMOTE_HW_INTERFACE_H
 
 #include "HWInterface.h"
+#include "NetReceiver.h"
 #include "RemoteWireWriter.h"
 
 #include <AutoDeleter.h>
 #include <Locker.h>
 #include <ObjectList.h>
+#include <Path.h>
 
 class BNetEndpoint;
 class StreamingRingBuffer;
 class NetSender;
-class NetReceiver;
 class RemoteDrawingEngine;
 class RemoteEventStream;
 class RemoteMessage;
@@ -136,6 +137,9 @@ static	void						_ConnectionClosedCallback(void *cookie);
 
 		void						_Disconnect();
 
+		status_t					_MintSessionCookie();
+		void						_RemoveSessionCookie();
+
 		void						_FillDisplayModeTiming(display_mode &mode);
 
 		const char*					fTarget;
@@ -149,6 +153,15 @@ static	void						_ConnectionClosedCallback(void *cookie);
 		display_mode				fCurrentMode;
 		display_mode				fClientMode;
 		uint16						fListenPort;
+
+		// The per-listener secret a connection has to present before it may
+		// become the session, and the owner-only file it is published in for
+		// the broker and the test instruments to read. Minted before the
+		// listening socket exists, so there is never a listener without one,
+		// and removed when the listener goes away.
+		char						fSessionCookie[kMaxSessionCookieLength];
+		size_t						fSessionCookieLength;
+		BPath						fSessionCookiePath;
 
 		ObjectDeleter<BNetEndpoint>	fListenEndpoint;
 		ObjectDeleter<StreamingRingBuffer>

@@ -25,7 +25,8 @@ class RemoteView : public BView {
 public:
 									RemoteView(BRect frame,
 										const char *remoteHost,
-										uint16 remotePort);
+										uint16 remotePort,
+										const char *sessionCookie = NULL);
 virtual								~RemoteView();
 
 		status_t					InitCheck();
@@ -64,6 +65,12 @@ static	int32						_DrawEntry(void *data);
 
 		status_t					fInitStatus;
 		bool						fIsConnected;
+
+		// The session cookie presented as the first frame on a direct (raw
+		// TCP or SSH-tunnelled) connection. Empty when the connection goes
+		// through the broker, which presents its own copy on our behalf.
+		char						fSessionCookie[257];
+		size_t						fSessionCookieLength;
 
 		StreamingRingBuffer *		fReceiveBuffer;
 		StreamingRingBuffer *		fSendBuffer;

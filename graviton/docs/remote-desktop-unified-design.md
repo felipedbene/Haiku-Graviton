@@ -112,9 +112,11 @@ URP/1 fixes this by **specification, promoting the C++ client's discipline**:
 
 ## 3. Negotiation — the permission slip for everything after M0
 
-There is no version exchange, no capabilities, no auth in band, and the client
-dictates resolution blind (`RemoteHWInterface.cpp:272-311`). URP/1 adds a session
-block sent immediately after connect, before any draw op:
+There was no version exchange, no capabilities, no auth in band, and the client
+dictates resolution blind (`RemoteHWInterface.cpp:272-311`). Authorization is now
+one frame ahead of all of this — `RP_SESSION_COOKIE` (#423), consumed by the
+candidate gate and never seen by the parser — and URP/1 adds a session block sent
+immediately after connect, before any draw op:
 
 - **`RP_HELLO` (client→server):** `proto_version:u32`, a feature bitmap
   (`TIER_P`, `JPEG`/`X264`/`X265`/`AV1`/`OPUS`, `STRING_WIDTH_REPLY`,
@@ -203,8 +205,12 @@ Transport is **pluggable, spec-stable across all of them**:
 | **QUIC** | reliable bidi stream | `DATAGRAM` unreliable stream | native full-motion |
 | **WebRTC** | ordered reliable data channel | `ordered:false,maxRetransmits:0` data channel or a real video track | browser full-motion |
 
-Security stays SSH-as-the-model on the tuned-TCP path (loopback bind, no in-band
-auth) exactly as today; QUIC/WebRTC bring their own.
+Security on the tuned-TCP path is a loopback bind plus one in-band frame: the
+per-boot session cookie (`RP_SESSION_COOKIE`, #423), which app_server requires
+from every connection and publishes in an owner-only file, so that reaching
+loopback is not by itself authorization. Everything beyond the machine is still
+fronted by `remote_broker` (TLS + token) or a tunnel; QUIC/WebRTC bring their
+own transport security and would present the same cookie underneath.
 
 ---
 

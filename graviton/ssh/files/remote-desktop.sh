@@ -27,9 +27,16 @@
 # graviton/docs/remote-desktop-send-buffer-wedge.md. Do not re-derive an
 # ordering rule from the sleep below.
 #
-# Access is over an SSH tunnel only. RemoteHWInterface binds 127.0.0.1 (we
-# changed it from INADDR_ANY, deliberately), because the remote protocol has no
-# authentication: SSH is the authentication.
+# RemoteHWInterface binds 127.0.0.1 (we changed it from INADDR_ANY,
+# deliberately), so reaching it means being on this machine or coming through a
+# tunnel or the remote_broker daemon. Being on this machine is no longer enough
+# by itself: app_server requires a per-boot session cookie, which it mints into
+# /boot/system/settings/remote_desktop/session_cookie.$PORT (mode 0600) when it
+# creates the listener, as the first frame of every connection. Nothing in this
+# script has to do anything about that -- app_server publishes the cookie and
+# clients read it -- but a client that does not present it is refused, which is
+# the expected answer and not a fault of this job. See
+# graviton/docs/remote-desktop-broker.md.
 
 # TARGET_SCREEN is set for the whole user session by
 # ~/config/settings/boot/UserSetupEnvironment, which is what makes

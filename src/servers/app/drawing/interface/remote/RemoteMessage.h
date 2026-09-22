@@ -64,6 +64,18 @@ enum {
 	RP_CAP_COMPRESS_ZSTD		= 1 << 1,
 };
 
+// Session-cookie methods, carried in the RP_SESSION_COOKIE message. Only one
+// exists; the field is there so a future challenge/response scheme does not
+// need a second opcode (the same shape RP_AUTHENTICATE uses).
+enum {
+	RP_COOKIE_METHOD_PER_BOOT	= 1,
+};
+
+// Longest cookie accepted on the wire. The minted cookie is 64 hex characters
+// (256 bits); the limit is generous so an operator-supplied one has room, and
+// bounded so the candidate gate's buffer is a fixed size.
+#define RP_SESSION_COOKIE_MAX_LENGTH 256
+
 enum {
 	RP_INIT_CONNECTION = 1,
 	RP_UPDATE_DISPLAY_MODE,
@@ -84,6 +96,19 @@ enum {
 	// so no future session opcode collides with them.
 	RP_AUTHENTICATE = 10,
 	RP_AUTH_RESULT,
+
+	// The per-boot session cookie, and the first frame of every connection to
+	// the session port. Payload: uint32 method (1 = per-boot shared cookie)
+	// followed by a length-prefixed cookie string.
+	//
+	// app_server mints the cookie into an owner-only file before its listener
+	// exists and requires a matching one here before a connection may become
+	// the session; the broker presents it after its own authentication
+	// succeeded. Unlike RP_AUTHENTICATE this message IS app_server's, but it
+	// is consumed entirely by the candidate gate in NetReceiver and never
+	// reaches the message parser -- so above the gate a client's stream still
+	// begins with RP_INIT_CONNECTION, exactly as before.
+	RP_SESSION_COOKIE = 12,
 
 	RP_CREATE_STATE = 20,
 	RP_DELETE_STATE,

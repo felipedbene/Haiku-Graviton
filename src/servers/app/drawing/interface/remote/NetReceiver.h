@@ -19,6 +19,12 @@ class StreamingRingBuffer;
 typedef status_t (*NewConnectionCallback)(void *cookie, BNetEndpoint &endpoint);
 typedef void (*ConnectionClosedCallback)(void *cookie);
 
+// Mirrors RP_SESSION_COOKIE_MAX_LENGTH from RemoteMessage.h, which this header
+// deliberately does not include -- it drags in the drawing state and pattern
+// types, and this one is included by the client too. NetReceiver.cpp asserts
+// that the two agree.
+static const size_t kMaxSessionCookieLength = 256;
+
 
 class NetReceiver {
 public:
@@ -27,7 +33,9 @@ public:
 									NewConnectionCallback callback = NULL,
 									void *newConnectionCookie = NULL,
 									ConnectionClosedCallback closedCallback = NULL,
-									RemoteWireReader *wireReader = NULL);
+									RemoteWireReader *wireReader = NULL,
+									const char *sessionCookie = NULL,
+									size_t sessionCookieLength = 0);
 								~NetReceiver();
 
 		BNetEndpoint *			Endpoint() { return fEndpoint.Get(); }
@@ -42,6 +50,8 @@ static	int32					_NetworkReceiverEntry(void *data);
 		bool					_ReceiveCandidateData();
 		void					_DropCandidate(const char *reason);
 		bool					_ValidateCandidate(bigtime_t deadline);
+		bool					_CookieMatches(const uint8 *cookie,
+									size_t length) const;
 
 		bool					_HasPendingInput() const
 									{ return fPendingOffset < fPendingUsed; }
@@ -68,17 +78,29 @@ static	int32					_NetworkReceiverEntry(void *data);
 		ObjectDeleter<BNetEndpoint>
 								fEndpoint;
 
+		// The secret a connection must present, in server (listening) mode, to
+		// become the session: app_server mints it per listener into an
+		// owner-only file, so only a process that can read that file can take
+		// the session. Empty in client mode; an empty one in server mode is
+		// fatal (see _Listen()), never a reason to accept anything.
+		char					fSessionCookie[kMaxSessionCookieLength];
+		size_t					fSessionCookieLength;
+
 		// A connection accepted while another one is live. It only takes the
-		// session over once it has proven it is a real client by sending a
-		// valid first protocol frame; until then the live session keeps
-		// running. See _Transfer() for the rationale.
+		// session over once it has presented the session cookie; until then the
+		// live session keeps running. See _Transfer() for the rationale.
 		ObjectDeleter<BNetEndpoint>
 								fCandidate;
-		// Exactly the first frame's header (kFrameHeaderSize), which is all the
-		// gate validates: buffering more would forward unexamined bytes to the
-		// parser on promotion.
-		uint8					fCandidateBuffer[6];
+		// Exactly the session-cookie frame, which is all the gate ever reads:
+		// buffering more would forward unexamined bytes to the parser on
+		// promotion. Header (6) + method and length (8) + the cookie.
+		uint8					fCandidateBuffer[6 + 8
+									+ kMaxSessionCookieLength];
 		size_t					fCandidateBufferUsed;
+		// Total length the candidate's first frame declared, or 0 while its
+		// six header bytes are still incomplete. It bounds every further read
+		// from the candidate.
+		uint32					fCandidateFrameLength;
 		bigtime_t				fCandidateDeadline;
 		bool					fCandidateValidated;
 

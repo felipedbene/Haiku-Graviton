@@ -576,6 +576,72 @@ test_parser_release()
 }
 
 
+/*!	The session-cookie frame (#423), byte for byte.
+
+	Three implementations have to agree on this frame or every direct connection
+	to the session port is refused: this client and the HTML5 one encode it,
+	remote_broker encodes it by hand into a byte array, and app_server's
+	candidate gate decodes it at fixed offsets. A self-consistent check would
+	pass with the opcode or the method wrong -- both sides share the constant --
+	so what is pinned here are the literal wire bytes, on the architecture the
+	binary was built for. That also makes this the one check that would catch a
+	big-endian or padding surprise in the encoder.
+*/
+static void
+test_session_cookie_frame()
+{
+	printf("  -- session cookie frame --\n");
+
+	StreamingRingBuffer buffer(4096);
+	if (buffer.InitCheck() != B_OK) {
+		check("ring buffer allocated", false);
+		return;
+	}
+
+	// Encoded exactly the way RemoteView does it on a direct connection.
+	char cookie[64];
+	memset(cookie, 'a', sizeof(cookie));
+
+	{
+		RemoteMessage message((StreamingRingBuffer*)NULL, &buffer);
+		message.Start(RP_SESSION_COOKIE);
+		message.Add((uint32)RP_COOKIE_METHOD_PER_BOOT);
+		message.AddString(cookie, sizeof(cookie));
+		check("the cookie message flushes", message.Flush() == B_OK);
+	}
+
+	uint8 golden[6 + 8 + sizeof(cookie)];
+	golden[0] = 12;						// RP_SESSION_COOKIE
+	golden[1] = 0;
+	golden[2] = 6 + 8 + sizeof(cookie);	// 78, total length
+	golden[3] = golden[4] = golden[5] = 0;
+	golden[6] = 1;						// method: per-boot cookie
+	golden[7] = golden[8] = golden[9] = 0;
+	golden[10] = sizeof(cookie);		// 64, cookie length
+	golden[11] = golden[12] = golden[13] = 0;
+	memset(golden + 14, 'a', sizeof(cookie));
+
+	// onlyBlockOnNoData, and a buffer larger than the frame: Read() is a
+	// blocking read, so asking for more than was written would park this thread
+	// forever waiting for bytes no one is going to write -- which is how this
+	// check first "passed" on hardware by hanging after the line above.
+	uint8 encoded[sizeof(golden) + 16];
+	memset(encoded, 0, sizeof(encoded));
+	int32 read = buffer.Read(encoded, sizeof(encoded), true);
+	check("the cookie frame is 6 + 8 + cookie bytes long",
+		read == (int32)sizeof(golden), strerror(read));
+	check("the cookie frame matches the golden wire bytes",
+		read == (int32)sizeof(golden)
+			&& memcmp(encoded, golden, sizeof(golden)) == 0);
+
+	// And the gate's bound: a cookie longer than this is refused on the wire,
+	// so an encoder that could produce one would produce a frame nothing
+	// accepts.
+	check("the wire cookie limit is what the gate's buffer holds",
+		RP_SESSION_COOKIE_MAX_LENGTH == 256);
+}
+
+
 // ---------------------------------------------------------------------------
 
 int
@@ -605,6 +671,7 @@ remote_wire_selftest()
 	test_torn_segment();
 	test_dropped_segment();
 	test_parser_release();
+	test_session_cookie_frame();
 
 	free(scratch);
 	free(message);

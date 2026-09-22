@@ -18,13 +18,20 @@
 #include "SystemPalette.h"
 
 #include <Autolock.h>
+#include <FindDirectory.h>
 #include <NetEndpoint.h>
+#include <Path.h>
 
 #include <netinet/in.h>
 #include <netinet/tcp.h>
 
+#include <errno.h>
+#include <fcntl.h>
 #include <new>
+#include <stdio.h>
 #include <string.h>
+#include <sys/stat.h>
+#include <unistd.h>
 
 
 #define TRACE(x...)				/*debug_printf("RemoteHWInterface: " x)*/
@@ -51,6 +58,20 @@ struct callback_info {
 	RemoteHWInterface::CallbackFunction	callback;
 	void*				cookie;
 };
+
+
+// Where the session cookie is published, shared by convention with
+// remote_broker (which reads the same path for the port it proxies to) and with
+// the test instruments, which are pointed at it explicitly. The name carries
+// the port because a host can serve more than one remote Desktop -- a Desktop
+// is keyed on (uid, TARGET_SCREEN) -- and each listener has its own secret; one
+// shared file would have the second listener silently invalidate the first's.
+static const char* kCookieDirectoryName = "remote_desktop";
+static const char* kCookieFilePrefix = "session_cookie.";
+
+// 32 bytes of randomness, published as 64 hex characters, mirroring the shape
+// of the broker's token file.
+static const size_t kCookieRandomBytes = 32;
 
 
 /*!	Whether the IPv4 address \a networkOrderAddress (network byte order) is a
@@ -90,6 +111,7 @@ RemoteHWInterface::RemoteHWInterface(const char* target)
 	fClientCapabilities(0),
 	fConnectionSpeed(0),
 	fListenPort(10901),
+	fSessionCookieLength(0),
 	fListenEndpoint(NULL),
 	fSendBuffer(NULL),
 	fWireWriter(NULL),
@@ -101,6 +123,7 @@ RemoteHWInterface::RemoteHWInterface(const char* target)
 	fCallbackLocker("callback locker"),
 	fEngineListLocker("engine list locker")
 {
+	memset(fSessionCookie, 0, sizeof(fSessionCookie));
 	memset(&fFallbackMode, 0, sizeof(fFallbackMode));
 	fFallbackMode.virtual_width = 640;
 	fFallbackMode.virtual_height = 480;
@@ -228,8 +251,36 @@ RemoteHWInterface::RemoteHWInterface(const char* target)
 	if (fInitStatus != B_OK)
 		return;
 
+	// Mint the session cookie after Bind() and before the receiver, whose thread
+	// is what calls listen(). Both halves of that are deliberate.
+	//
+	// Before listening, because that is the only arrangement with no window:
+	// nothing can be accepted until listen(), so there is never a moment where
+	// the port is reachable and the secret it requires does not exist. app_server
+	// both creates the listener and checks the cookie, which is what makes
+	// "before" a statement about two adjacent lines rather than about two
+	// processes starting in the right order.
+	//
+	// After binding, because minting publishes the cookie under a name derived
+	// from the port -- so a second interface that loses the race for that port
+	// would otherwise overwrite, and on its way out delete, the cookie file of
+	// the listener that holds it. Binding first means we only ever write the
+	// file for a port we own.
+	//
+	// And it fails closed: a cookie that cannot be minted or published leaves
+	// this interface uninitialized, so ScreenManager discards it and the port is
+	// never opened. Listening while unable to require anything is the
+	// local-takeover gap this closes, restored silently.
+	fInitStatus = _MintSessionCookie();
+	if (fInitStatus != B_OK) {
+		TRACE_ERROR("failed to mint the session cookie (%s); the remote "
+			"session port will not be opened\n", strerror(fInitStatus));
+		return;
+	}
+
 	fReceiver.SetTo(new(std::nothrow) NetReceiver(fListenEndpoint.Get(), fReceiveBuffer.Get(),
-		_NewConnectionCallback, this, _ConnectionClosedCallback));
+		_NewConnectionCallback, this, _ConnectionClosedCallback, NULL,
+		fSessionCookie, fSessionCookieLength));
 	if (!fReceiver.IsSet()) {
 		fInitStatus = B_NO_MEMORY;
 		return;
@@ -267,6 +318,140 @@ RemoteHWInterface::~RemoteHWInterface()
 	fListenEndpoint.Unset();
 
 	fEventStream.Unset();
+
+	// The cookie is only a secret while there is a listener to present it to.
+	// Removing the file with the listener keeps a dead secret from lying around
+	// suggesting otherwise; it is replaced anyway the next time a listener is
+	// created, which is what makes it per-boot rather than persistent.
+	_RemoveSessionCookie();
+	memset(fSessionCookie, 0, sizeof(fSessionCookie));
+	fSessionCookieLength = 0;
+}
+
+
+/*!	Generates this listener's session cookie and publishes it in an owner-only
+	file for the broker (and the test instruments) to read.
+
+	Called before the listening socket is created, so the cookie always exists
+	before anything can connect. Returns an error -- which leaves the interface
+	uninitialized, and therefore the port unopened -- when the cookie cannot be
+	generated or published: on a host where the settings directory cannot be
+	written, the remote desktop is unavailable rather than unauthenticated.
+*/
+status_t
+RemoteHWInterface::_MintSessionCookie()
+{
+	BPath directory;
+	status_t result = find_directory(B_SYSTEM_SETTINGS_DIRECTORY, &directory);
+	if (result != B_OK)
+		return result;
+
+	result = directory.Append(kCookieDirectoryName);
+	if (result != B_OK)
+		return result;
+
+	if (mkdir(directory.Path(), 0755) != 0 && errno != EEXIST)
+		return errno;
+
+	char name[64];
+	snprintf(name, sizeof(name), "%s%" B_PRIu16, kCookieFilePrefix,
+		fListenPort);
+
+	BPath path;
+	result = path.SetTo(directory.Path(), name);
+	if (result != B_OK)
+		return result;
+
+	// Randomness from the kernel, not from a seeded PRNG: this is a secret, and
+	// app_server deliberately carries no crypto library of its own.
+	uint8 random[kCookieRandomBytes];
+	int randomFD = open("/dev/urandom", O_RDONLY);
+	if (randomFD < 0)
+		return errno;
+
+	size_t randomRead = 0;
+	while (randomRead < sizeof(random)) {
+		ssize_t bytes = read(randomFD, random + randomRead,
+			sizeof(random) - randomRead);
+		if (bytes <= 0) {
+			if (bytes < 0 && errno == EINTR)
+				continue;
+			close(randomFD);
+			return bytes < 0 ? errno : B_IO_ERROR;
+		}
+
+		randomRead += bytes;
+	}
+
+	close(randomFD);
+
+	// Hex, so the cookie survives every transport a human or a script might
+	// carry it over (a settings file, an SSM command's output, a JSON field).
+	for (size_t i = 0; i < sizeof(random); i++) {
+		static const char kHex[] = "0123456789abcdef";
+		fSessionCookie[2 * i] = kHex[random[i] >> 4];
+		fSessionCookie[2 * i + 1] = kHex[random[i] & 0xf];
+	}
+
+	fSessionCookieLength = 2 * sizeof(random);
+	memset(random, 0, sizeof(random));
+
+	// Written to a temporary file and renamed into place, with the restrictive
+	// mode applied at creation. Two reasons, both about a reader that is not
+	// this process: a rename is atomic, so the broker either reads the whole
+	// previous cookie or the whole new one and never a torn half; and an
+	// O_EXCL create at 0600 neither follows a symlink somebody left in the
+	// settings directory nor inherits a loose mode from a file that was
+	// already there (O_CREAT's mode is ignored when the file exists).
+	BPath temporaryPath;
+	char temporaryName[64];
+	snprintf(temporaryName, sizeof(temporaryName), "%s%" B_PRIu16 ".new",
+		kCookieFilePrefix, fListenPort);
+	result = temporaryPath.SetTo(directory.Path(), temporaryName);
+	if (result != B_OK)
+		return result;
+
+	unlink(temporaryPath.Path());
+	int fd = open(temporaryPath.Path(), O_WRONLY | O_CREAT | O_EXCL, 0600);
+	if (fd < 0)
+		return errno;
+
+	char line[kMaxSessionCookieLength + 2];
+	int lineLength = snprintf(line, sizeof(line), "%.*s\n",
+		(int)fSessionCookieLength, fSessionCookie);
+	bool written = lineLength > 0
+		&& write(fd, line, lineLength) == (ssize_t)lineLength;
+	memset(line, 0, sizeof(line));
+	if (written)
+		fsync(fd);
+	close(fd);
+
+	if (!written) {
+		unlink(temporaryPath.Path());
+		return B_IO_ERROR;
+	}
+
+	if (rename(temporaryPath.Path(), path.Path()) != 0) {
+		result = errno;
+		unlink(temporaryPath.Path());
+		return result;
+	}
+
+	fSessionCookiePath = path;
+	TRACE_ALWAYS("session cookie for port %" B_PRIu16 " published in %s\n",
+		fListenPort, path.Path());
+	return B_OK;
+}
+
+
+void
+RemoteHWInterface::_RemoveSessionCookie()
+{
+	if (fSessionCookiePath.InitCheck() != B_OK)
+		return;
+
+	unlink(fSessionCookiePath.Path());
+	fSessionCookiePath.Unset();
 }
 
 
