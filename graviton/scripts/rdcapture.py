@@ -2305,6 +2305,22 @@ def report(cap, args, connected, elapsed, stop_reason, wire=None):
     if args.png:
         write_png(args.png, cap.width, cap.height, bytes(fb.buf))
         print("wrote PNG : %s" % args.png)
+        # Label the artifact at the point of production. The summary already
+        # notes estimated text, but that note sits at the end of a long report
+        # and the PNG outlives it: this capture has been used as the known-good
+        # side of comparisons (the #416 wire measurements among them), and a
+        # reader who sees only "wrote PNG" has no way to know the glyphs are
+        # flat boxes. A comparison that is blind to text reads a text
+        # regression as "both sides agree" (#475).
+        if cap.estimated_text_ops or cap.undecoded_drawing_ops:
+            print("       !!  NOT PIXEL GROUND TRUTH: %d text run(s) painted as "
+                  "flat ESTIMATED boxes (no glyph rasteriser)%s. Do not diff "
+                  "this PNG against a real client and conclude the client is "
+                  "wrong; compare the census instead."
+                  % (cap.estimated_text_ops,
+                     (", %d drawing op(s) not rasterised"
+                      % cap.undecoded_drawing_ops)
+                     if cap.undecoded_drawing_ops else ""))
 
 
 # ---------------------------------------------------------------------------
@@ -2721,6 +2737,11 @@ def main(argv=None):
                         "RP_HELLO is sent at all, so the server has to serve "
                         "the legacy uncompressed stream -- which is what makes "
                         "the two invocations a clean A/B.")
+    p.add_argument("--require-glyph-truth", action="store_true",
+                   help="exit non-zero if any text run was painted as an "
+                        "ESTIMATED box rather than rasterised. For automated "
+                        "comparisons that must not silently treat a "
+                        "text-blind capture as ground truth (#475).")
     p.add_argument("--selftest", action="store_true",
                    help="run the parser/PNG self-test and exit")
     p.add_argument("--allow-skip", action="store_true",
@@ -2851,6 +2872,17 @@ def main(argv=None):
 
     report(cap, args, connected, time.monotonic() - started, stop_reason,
            wire=wire)
+
+    # --require-glyph-truth exists so an automated comparison can REFUSE a
+    # text-blind capture instead of quietly treating it as ground truth. The
+    # summary and the PNG line both say so, but a caller that only checks the
+    # exit status sees nothing -- and that is the caller most likely to draw a
+    # wrong conclusion from it (#475).
+    if args.require_glyph_truth and cap.estimated_text_ops:
+        sys.stderr.write("rdcapture: --require-glyph-truth: %d text run(s) were "
+                         "painted as ESTIMATED boxes, so this capture is not "
+                         "glyph ground truth\n" % cap.estimated_text_ops)
+        return 5
     return 0
 
 
