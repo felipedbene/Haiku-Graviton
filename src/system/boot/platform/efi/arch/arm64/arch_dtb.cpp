@@ -46,8 +46,8 @@ arch_handle_fdt(const void* fdt, int node)
 {
 	// The device tree is input from firmware, so a string property is only a
 	// string once we have seen its terminator inside the property's own length:
-	// strcmp() and the string-list walk below both read until a NUL, and would
-	// otherwise run off the end of the property into the rest of the blob.
+	// strcmp() reads until a NUL, and would otherwise run off the end of the
+	// property into the rest of the blob.
 	int deviceTypeLen;
 	const char* deviceType = (const char*)fdt_getprop(fdt, node,
 		"device_type", &deviceTypeLen);
@@ -66,10 +66,16 @@ arch_handle_fdt(const void* fdt, int node)
 	if (compatible == NULL)
 		return;
 
+	// A "compatible" whose last byte is not a NUL is malformed, and used to be
+	// refused outright here because the string-list walk it feeds was unbounded
+	// and would have read past the value. That walk is now bounded by the
+	// property length and rejects only the unterminated run (#432), so say so
+	// and keep going: the entries before it are well-formed, and discarding a
+	// correctly declared "arm,gic-v3" because something after it was truncated
+	// costs the machine its interrupt controller for no safety gained.
 	if (compatibleLen <= 0 || compatible[compatibleLen - 1] != '\0') {
-		dprintf("fdt: node %d has a malformed compatible property, ignoring "
-			"it\n", node);
-		return;
+		dprintf("fdt: node %d has a malformed compatible property; only its "
+			"terminated entries will be matched\n", node);
 	}
 
 	intc_info &interrupt_controller = gKernelArgs.arch_args.interrupt_controller;

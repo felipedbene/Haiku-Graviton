@@ -103,14 +103,23 @@ write_string_list(const char* prop, size_t size)
 {
 	bool first = true;
 	const char* propEnd = prop + size;
-	while (propEnd - prop > 0) {
+	while (prop < propEnd) {
 		if (first)
 			first = false;
 		else
 			dprintf(", ");
-		int curLen = strlen(prop);
+
+		// Bounded for the same reason dtb_has_fdt_string() is: an unterminated
+		// entry would otherwise print, and read, past the property value. A
+		// debugging aid that reads out of bounds while dumping a suspect blob
+		// is exactly the wrong tool to reach for.
+		const char* end = (const char*)memchr(prop, '\0', propEnd - prop);
+		if (end == NULL) {
+			dprintf("'%.*s' <unterminated>", (int)(propEnd - prop), prop);
+			return;
+		}
 		dprintf("'%s'", prop);
-		prop += curLen + 1;
+		prop = end + 1;
 	}
 }
 
@@ -332,16 +341,41 @@ dump_fdt(const void *fdt)
 #endif
 
 
+// Does a "compatible"-style property list the given string?
+//
+// The property is a list of NUL-separated strings, but it is input from
+// firmware: the only thing that bounds it is the length the FDT header states,
+// and nothing guarantees that the last entry is terminated. Walking it with
+// strlen() therefore read past the end of the value, and because FDT pads
+// property values with zeroes to a 4-byte boundary, an unterminated entry
+// whose bytes matched the pattern also compared *equal* -- the terminator the
+// comparison needed came from the padding, not from the property. A truncated
+// tree could thus make the loader claim a device it had not actually been told
+// about; that is how an unterminated "arm,psci-1.0" got a PSCI node with no
+// "method" property parsed as one (#432, #427).
+//
+// So bound every step by the bytes that remain and treat a run with no NUL
+// inside the property as malformed. Entries before such a run are still
+// compared, because they are well-formed and refusing them would throw away
+// information the property really does carry -- a trailing malformed entry must
+// not cost a node the bindings it correctly declared first.
 bool
 dtb_has_fdt_string(const char* prop, int size, const char* pattern)
 {
-	int patternLen = strlen(pattern);
+	if (prop == NULL || size <= 0)
+		return false;
+
+	size_t patternLen = strlen(pattern);
 	const char* propEnd = prop + size;
-	while (propEnd - prop > 0) {
-		int curLen = strlen(prop);
-		if (curLen == patternLen && memcmp(prop, pattern, curLen + 1) == 0)
+	while (prop < propEnd) {
+		const char* end = (const char*)memchr(prop, '\0', propEnd - prop);
+		if (end == NULL)
+			return false;
+		if ((size_t)(end - prop) == patternLen
+			&& memcmp(prop, pattern, patternLen) == 0) {
 			return true;
-		prop += curLen + 1;
+		}
+		prop = end + 1;
 	}
 	return false;
 }
