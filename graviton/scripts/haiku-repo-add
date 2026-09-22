@@ -25,6 +25,11 @@
 #   HG_INCOMING_S3  s3://<bucket>/<prefix>          new *.hpkg to add (required; consumed)
 #   HG_CF_DIST      CloudFront distribution id to invalidate /<arch>/repo* (optional)
 #   HG_REPO_URL     public base URL baked into repo.info (default packages.debene.dev)
+#   HG_PUBLISHED_LIST_OUT  path to write the incoming basenames this run ACTUALLY
+#                   published, one per line (optional; see "report what we
+#                   published" below -- a caller that prunes a durable staging
+#                   area after the add MUST drive it from this file, not from its
+#                   own listing of what it offered)
 #   ARCH            packaging arch (default arm64)
 #   AWS_DEFAULT_REGION / AWS_REGION (default us-west-2)
 #   PKG_TOOL / PACKAGE_REPO_TOOL   tool paths (auto-detected under /opt/haiku if unset)
@@ -107,6 +112,21 @@ else
 	echo "haiku-repo-add: WARNING: haiku-publish-lock.sh not found beside this script -- publishing WITHOUT the #164 concurrency lock" >&2
 fi
 
+# ---- report the set we ACTUALLY publish (issue #452) ----------------------
+# A caller that prunes a DURABLE staging area after a successful add must prune
+# the set this script published, not the set it offered: step 3 below SKIPS a
+# package whose metadata cannot be read or re-stamped (unreadable-hpkg,
+# restamp-extract-failed, restamp-add-failed), and such a package never enters
+# the repo. The pipeline publish pruned its harvest from its own listing of the
+# incoming snapshot, so a skipped package had its only copy deleted while the
+# repo never gained it -- silently losing build output. Truncate the file NOW so
+# a stale list from an earlier step can never be mistaken for this run's result,
+# including on the "everything was skipped" exit below, which publishes nothing.
+if [ -n "${HG_PUBLISHED_LIST_OUT:-}" ]; then
+	: > "$HG_PUBLISHED_LIST_OUT" \
+		|| die "cannot write HG_PUBLISHED_LIST_OUT=$HG_PUBLISHED_LIST_OUT"
+fi
+
 echo "== 1. pull current repo packages from $HG_REPO_S3/packages/ =="
 "${AWS[@]}" s3 sync "${HG_REPO_S3%/}/packages/" "$RO/packages/" --region "$region" --only-show-errors
 before="$(ls -1 "$RO/packages" 2>/dev/null | wc -l)"
@@ -133,7 +153,11 @@ echo "== 3. re-stamp incoming to vendor $VENDOR + packager $PACKAGER and stage u
 added=0
 skipped=0
 skipped_list=""
-published_bases=""
+# One published incoming basename per LINE, rather than the former space-joined
+# string: this is the set reported to HG_PUBLISHED_LIST_OUT (#452) and a delete
+# candidate list must not depend on word-splitting to be read back correctly.
+PUBLISHED_BASES="$WORK/published.bases"
+: > "$PUBLISHED_BASES"
 for f in "$WORK/incoming"/*.hpkg; do
 	base="$(basename "$f")"
 	# Read the package's info ONCE, and treat an unreadable package the same way
@@ -217,7 +241,7 @@ for f in "$WORK/incoming"/*.hpkg; do
 	mv -f "$staged" "$RO/packages/$canon"
 	echo "   + $canon (from '$base', vendor '$cur' -> '$VENDOR', packager '$cur_packager' -> '$PACKAGER')"
 	added=$((added + 1))
-	published_bases="$published_bases $base"
+	printf '%s\n' "$base" >> "$PUBLISHED_BASES"
 done
 
 if [ "$skipped" -gt 0 ]; then
@@ -262,6 +286,24 @@ for k in repo repo.info repo.sha256; do
 	"${AWS[@]}" s3 cp "$RO/$k" "${HG_REPO_S3%/}/$k" --region "$region" --only-show-errors
 done
 
+# The published set is durable in the repo only now -- packages mirrored AND the
+# index that references them uploaded -- so this is the first point at which it is
+# safe for a caller to drop its own copies (issue #452). Written here rather than
+# beside the counter in step 3 so the file can never name a package that was
+# staged locally but not uploaded.
+if [ -n "${HG_PUBLISHED_LIST_OUT:-}" ]; then
+	# Non-fatal, for the same reason the caller's prune is non-fatal: the publish is
+	# already COMPLETE here, and reporting a completed publish as FAILED sinks a
+	# wave's publish leg over bookkeeping. A short write is safe by construction --
+	# any prefix of this file is a SUBSET of what was published, so a caller can
+	# only ever prune too little, never too much.
+	if cp "$PUBLISHED_BASES" "$HG_PUBLISHED_LIST_OUT"; then
+		echo "   reported $added published package name(s) to $HG_PUBLISHED_LIST_OUT"
+	else
+		echo "haiku-repo-add: WARNING: could not write HG_PUBLISHED_LIST_OUT=$HG_PUBLISHED_LIST_OUT -- the publish itself SUCCEEDED; a caller pruning from that list will prune less than it could, which is the safe direction" >&2
+	fi
+fi
+
 if [ -n "${HG_CF_DIST:-}" ]; then
 	echo "== 6. invalidate CloudFront /$ARCH/repo* on $HG_CF_DIST =="
 	"${AWS[@]}" cloudfront create-invalidation --distribution-id "$HG_CF_DIST" \
@@ -276,8 +318,12 @@ echo "== 7. clear consumed incoming (only packages we published) =="
 # whose .PackageInfo could not be read/rewritten) stays in incoming so it is not
 # silently lost before a human handles it. Delete per-basename rather than the
 # whole prefix recursively.
-for b in $published_bases; do
-	"${AWS[@]}" s3 rm "${HG_INCOMING_S3%/}/$b" --region "$region" --only-show-errors >/dev/null 2>&1 || true
-done
+while IFS= read -r b; do
+	[ -n "$b" ] || continue
+	# </dev/null so a client that touches stdin cannot eat the rest of the list the
+	# loop is reading (the former space-joined `for` had no such exposure).
+	"${AWS[@]}" s3 rm "${HG_INCOMING_S3%/}/$b" --region "$region" --only-show-errors \
+		>/dev/null 2>&1 </dev/null || true
+done < "$PUBLISHED_BASES"
 
 echo "PUBLISHED $added new package(s); skipped $skipped; repo now has $(ls -1 "$RO/packages" | wc -l) (was $before)."

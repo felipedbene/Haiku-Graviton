@@ -425,6 +425,11 @@ export class OpsStack extends cdk.Stack {
       // No prefix would make PP == PB and aim the deletes at bucket-root keys, so
       // refuse instead of guessing.
       'case "$H" in */?*) ;; *) echo "prune: HARVEST_S3 ($HARVEST_S3) has no key prefix" >&2; exit 1;; esac;',
+      // The list is haiku-repo-add's own report of what it PUBLISHED (#452). If it is
+      // absent the add step did not report, and there is no safe substitute: the
+      // previous substitute -- this job's listing of the incoming snapshot -- is the
+      // bug, because it names skipped packages too. Refuse rather than guess.
+      'if [ ! -f /tmp/published.list ]; then echo "prune: haiku-repo-add wrote no published list (HG_PUBLISHED_LIST_OUT) -- refusing to guess which harvest keys are durable" >&2; exit 1; fi;',
       'if [ ! -s /tmp/published.list ]; then echo "prune: published list empty; nothing to prune"; exit 0; fi;',
       'rm -rf /tmp/prune.d; mkdir -p /tmp/prune.d || { echo "prune: cannot create /tmp/prune.d" >&2; exit 1; };',
       // <=1000 keys per request is the DeleteObjects limit; the final chunk is short
@@ -502,22 +507,31 @@ export class OpsStack extends cdk.Stack {
               'aws s3 sync "$HARVEST_S3/" "$INCOMING/" --only-show-errors --exclude "*" --include "*.hpkg" --exclude "haiku.hpkg" --exclude "haiku-*" --exclude "haiku_*"',
               'n="$(aws s3 ls "$INCOMING/" | grep -c "[.]hpkg$" || true)"',
               'if [ "${n:-0}" -eq 0 ]; then echo "no harvested hpkg to publish; nothing to do"; exit 0; fi',
-              // Record the EXACT set of harvested keys we are about to publish, so
-              // that after a successful add we can prune JUST those from the durable
-              // harvest (see the prune step below). Captured now because
-              // haiku-repo-add empties $INCOMING on success.
-              'aws s3 ls "$INCOMING/" | awk "{print \\$4}" | grep -E "[.]hpkg$" > /tmp/published.list || true',
               'echo "== incremental-add $n harvested package(s) into $HG_REPO_S3 =="',
               ...fetchScript(repoAddScript, 'HG_SCRIPT_REPO_ADD', '/tmp'),
               'export HG_INCOMING_S3="$INCOMING"',
+              // The prune below deletes from the DURABLE harvest, so its key set must
+              // come from what haiku-repo-add actually PUBLISHED -- not from this
+              // job's listing of what it offered (#452). haiku-repo-add writes this
+              // file after the packages and the index are uploaded, and omits every
+              // package it SKIPPED (unreadable-hpkg / restamp-*-failed), so a skipped
+              // package keeps its only copy in the harvest and the next publish can
+              // retry it. Nothing here creates the file: if the add step does not,
+              // the prune refuses rather than falling back to a wider set.
+              'export HG_PUBLISHED_LIST_OUT=/tmp/published.list',
+              'rm -f /tmp/published.list',
               'bash /tmp/haiku-repo-add',
               // Prune only the just-published hpkgs from the DURABLE harvest so the
               // next wave's publish re-processes only genuinely NEW output instead
               // of re-syncing + re-stamping the whole accumulated ~1885-pkg /~6 GB
               // harvest on every one-package wave. We reach here only after
-              // haiku-repo-add exits 0 (set -eo pipefail above), i.e. every package
-              // in /tmp/published.list is now durable in the LIVE repo, so deleting
-              // it from the harvest cannot lose it. We delete by EXACT harvested
+              // haiku-repo-add exits 0 (set -eo pipefail above), and the list is the
+              // one IT wrote after uploading, so every package named in
+              // /tmp/published.list is durable in the LIVE repo and deleting it from
+              // the harvest cannot lose it. (Before #452 the list was this job's
+              // listing of the incoming snapshot, which also named the packages the
+              // add step SKIPPED -- deleting the only copy of build output that never
+              // reached the repo.) We delete by EXACT harvested
               // key, so (a) a concurrent builder that harvested a NEW package into
               // $HARVEST_S3 during this publish is never touched, and (b) a package
               // from an acquire-skipped wave stays in the harvest until it is
@@ -534,7 +548,9 @@ export class OpsStack extends cdk.Stack {
               // failure is never silent -- the subshell's own stderr plus the WARNING
               // below name it in the log. Leftovers are harmless: they are already
               // durable in the live repo, and the next publish just re-syncs them.
-              'echo "== prune $(wc -l < /tmp/published.list) published package(s) from durable harvest $HARVEST_S3 =="',
+              // `wc -l` on a list the add step did not write would print a bare shell
+              // error here; the prune body diagnoses the missing file properly.
+              'echo "== prune $(wc -l < /tmp/published.list 2>/dev/null || echo 0) published package(s) from durable harvest $HARVEST_S3 =="',
               `if ! ( set -eo pipefail; ${pruneHarvest} ); then echo "WARNING: harvest prune did NOT complete -- the publish itself SUCCEEDED (packages + index uploaded to \$HG_REPO_S3). Already-published hpkgs are left under \$HARVEST_S3; the next publish will re-sync and re-stamp them. Investigate the prune errors above." >&2; fi`,
             ],
           },
