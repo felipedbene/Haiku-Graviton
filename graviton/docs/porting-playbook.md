@@ -57,12 +57,19 @@ memory that keeps per-port flags from being re-derived.
 | 22 | [Removed/renamed Haiku API or moved header](#class-22-removedrenamed-haiku-api-or-moved-header) | `'BSplitView' does not name a type` / `fatal error: <X.h>: No such file` |
 | 23 | [Install writes to read-only /packages](#class-23-install-writes-to-read-only-packages) | `mkdir: cannot create directory '/packages/…_devel-…': Read-only file system` |
 | 24 | [Source-acquisition tool missing on host](#class-24-source-acquisition-tool-missing-on-the-builder-host) | `Error: '<hg\|svn\|lha>' is not available, please install it` |
+| 26 | [Dependency present but unresolved (not absent)](#class-26-dependency-present-but-unresolved--not-absent) | `DEP_NO_PROGRESS [<verdict>]` |
 
 Classes 15–17 were surfaced by the #136 re-wave secondary-blocker triage; see
 [that section](#secondary-blocker-tail-136-re-wave-of-classes-3846710113) at the
 end of this document. **Classes 18–24 were mined from the real UNMATCHED backlog by
 `graviton/scripts/haiku-pattern-miner`** (see
 [How classes 18–24 were mined](#how-classes-1824-were-mined--the-unmatched-frontier)).
+
+**Class 26 is not a port defect at all** — they are the *wave driver's* own
+— it is the *wave driver's* own failure mode, split out of Class 20 in #485 once
+`haiku-nativebuild` started reporting what it had measured instead of guessing. It is
+ordered **before** Class 20 in `haiku-triage-failures`, because a driver-side failure
+stops at haikuporter's resolve step and therefore carries Class 20's wording too.
 
 ---
 
@@ -940,6 +947,72 @@ moving the recipe to a static archive download with a checksum (the wave tooling
 warns `UNSAFE SOURCES … SHOULD NOT BE USED`).
 
 **Example ports:** cube2tesseract, ira (`lha`), previous, xemacs (`hg`).
+
+---
+
+## Class 26: Dependency present but unresolved — not absent
+
+**Split out of Class 20 in #485.** This class exists because the message it replaces was
+a **guess**. The driver's `install_dep` used to be
+`feed | pkgman install "$1" >/dev/null 2>&1` — stdout, stderr and exit status all
+discarded — and the loop then printed `UNRESOLVABLE (not in repo, build it first)`
+whenever the unresolved set stopped shrinking. That is the one thing the loop had
+observed (*our installs made no difference*) reported as something it had never measured
+(*the repository does not have it*). Measured cost: **149 of the 350 ports** filed under
+that message name a dependency that is in the live pool.
+
+`install_dep` now keeps pkgman's combined output and exit status, and the failure path
+prints a per-requirement verdict with pkgman quoted verbatim. Five verdicts, four of
+which are Class 26 and one of which is Class 20:
+
+| Verdict | What was measured | What to do |
+|---|---|---|
+| `ALREADY_PRESENT` | pkgman exited 0 saying the package is already installed, yet haikuporter still cannot resolve it | a resolution/sequencing problem — see the intra-wave note below |
+| `CONSTRAINT_UNSATISFIED` | the versioned requirement matched nothing, but the **bare name** installed — so the package is there and the *relation* is unsatisfiable | publish a newer version, or relax the recipe's constraint |
+| `NO_MATCH_BUT_CANDIDATES_EXIST` | pkgman found no match, but a case-insensitive search of every repository lists candidates | a name-form / case / multi-provider ambiguity, **not** an absence |
+| `PKGMAN_ERROR` | pkgman failed for its own stated reason (solver problem, transitive absence, vendor prompt) | act on pkgman's text, which is quoted in the log |
+| `ABSENT_CONFIRMED` | pkgman found no match **and** the case-insensitive search found no candidate either | [Class 20](#class-20-prerequisite-packagetool-not-published) — build and publish it. This is the only case in which the old wording was earned |
+
+**Symptom:**
+```
+sdl_mixer: NO PROGRESS at attempt 2 -- installing the missing set left it unchanged.
+  requirement: devel:libmikmod
+    pkgman verdict: ALREADY_PRESENT (pkgman exit 0)
+    pkgman said, verbatim:
+      libmikmod-3.3.11-2 from repository DeBeOS-green is already installed.
+sdl_mixer: DEP_NO_PROGRESS [ALREADY_PRESENT] -- …
+```
+
+**Two hazards this class exists to keep straight.**
+
+* **Multi-provider names.** `devel:liblua` has eight providers in the pool and
+  `devel:libicui18n` eight `icu*_devel`; 45 backlog ports are blocked on tokens like
+  these. Several providers is an *ambiguity*, and reporting it as an absence is a
+  category error. The candidate probe is deliberately one-directional for this reason:
+  `pkgman search` matches case-insensitively across name, summary and provides, so it
+  can **refute** absence but never confirm presence, and it says so.
+* **Case.** Pool provides are lowercase; recipes write mixed case (`devel:libSDL2_2.0`,
+  `devel:libX11`), and a case-sensitive comparison of the two is what made 90 ports look
+  absent when only 7 were. `pkgman install` matches provides **case-sensitively** and
+  the probe searches **case-insensitively** — that asymmetry is the measurement. Nothing
+  in the driver folds case itself. (Measured on this backlog: 0 of the 430 requirement
+  tokens haikuporter actually emitted contain an uppercase letter, so for these logs
+  case is a hazard on the recipe side, not in the tokens.)
+
+**A wave cannot consume what it just built.** `harvest()` pushes freshly built hpkgs to
+an S3 staging prefix, not to the repo; the index is rebuilt only by the separate
+`haiku-repo-publish*` step; and `install_dep` resolves from the configured repositories.
+So every intra-wave dependency edge fails by construction — libmikmod built 14:20 and
+`sdl_mixer` was attempted at 14:58 and reported unresolvable; graphviz 14:20 → `vala`
+15:05; popt 14:37 → `distcc` 15:06, a run that lasted 5 seconds, i.e. no network
+transaction happened at all. The driver comment that claimed intra-wave deps "are
+resolved from the local packages/ dir" was false, and the false comment is how the
+misdiagnosis survived. Either order waves so dependencies publish before their
+consumers, or publish incrementally (still to be designed — #485).
+
+**A note on counting.** haikuporter reports only its **first** unresolved requirement,
+so clearing one layer can expose another and every unblock estimate here is a **lower
+bound**.
 
 ---
 

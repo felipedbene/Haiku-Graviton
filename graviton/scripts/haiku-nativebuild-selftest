@@ -1,0 +1,192 @@
+#!/bin/sh
+# haiku-nativebuild-selftest [--mutate]
+#
+# Offline self-test for haiku-nativebuild's dependency diagnostic (#485/#486). Runs
+# ANYWHERE -- Linux dev host or Haiku builder -- because it never calls the real
+# pkgman: it puts a stub pkgman on PATH that replays pkgman's own wording, taken from
+# the DeBeOS sources that print it:
+#
+#   src/kits/package/manager/PackageManager.cpp  DIE(..., "Failed to find a match for
+#                                                \"%s\"")  -> no match for a specifier
+#   src/bin/pkgman/command_install.cpp           "%s from %s is already installed."
+#   src/bin/pkgman/pkgman.cpp                    "*** %s: %s" / "Nothing to do."
+#   src/bin/pkgman/PackageManager.cpp            "Encountered problems:" / "problem N:"
+#   src/bin/pkgman/command_search.cpp            "No matching packages found."
+#
+# WHY IT EXISTS. The defect it guards is not a crash, it is a MESSAGE that named a
+# cause ("UNRESOLVABLE (not in repo, build it first)") which the code had never
+# measured -- and which was wrong for 149 of the 350 ports filed under it. A diagnostic
+# is only worth trusting if something checks that it can still tell its cause apart
+# from the alternatives, so each case below asserts BOTH the verdict that should appear
+# AND the verdict that must not.
+#
+#   --mutate   Re-run the suite against the ORIGINAL, evidence-discarding install_dep
+#              (`pkgman install ... >/dev/null 2>&1`). The suite MUST go red: if it
+#              stays green it is not testing the mechanism. Exit 0 means "mutation
+#              detected" (test is alive); exit 1 means the suite is vacuous.
+set -u
+MUTATE=0
+[ "${1:-}" = "--mutate" ] && MUTATE=1
+
+here=$(cd "$(dirname "$0")" && pwd)
+SUT="$here/haiku-nativebuild"
+[ -f "$SUT" ] || { echo "cannot find $SUT"; exit 2; }
+
+work=$(mktemp -d "${TMPDIR:-/tmp}/nbselftest.XXXXXX") || exit 2
+trap 'rm -rf "$work"' EXIT INT TERM
+mkdir -p "$work/bin" "$work/dep"
+
+# ---- the stub pkgman -------------------------------------------------------
+# One stub, keyed off the requirement, so a case cannot accidentally be answered by
+# the wrong script. Requirement -> behaviour:
+#   devel:libabsent     install: no match          search: nothing      (true absence)
+#   devel:liblua        install: no match          search: 8 providers  (ambiguity)
+#   devel:libmikmod     install: already installed                      (present)
+#   devel:libssl >= 3   install: no match; bare devel:libssl installs   (constraint)
+#   devel:libbar        install: solver problem, transitive absence     (other error)
+cat > "$work/bin/pkgman" <<'STUB'
+#!/bin/sh
+cmd="$1"; shift
+case "$cmd" in
+install)
+	req="$1"
+	case "$req" in
+	"devel:libabsent"|"devel:liblua")
+		echo "*** Failed to find a match for \"$req\": No such file or directory" >&2
+		exit 1 ;;
+	"devel:libmikmod")
+		echo "libmikmod-3.3.11-2 from repository DeBeOS-green is already installed." >&2
+		echo "Nothing to do." >&2
+		exit 0 ;;
+	"devel:libssl >= 3")
+		echo "*** Failed to find a match for \"$req\": No such file or directory" >&2
+		exit 1 ;;
+	"devel:libssl")
+		echo "The following changes will be made:"
+		echo "  in /boot/system:"
+		echo "    install package openssl_devel-1.1.1w-1 from repository DeBeOS-green"
+		exit 0 ;;
+	"devel:libbar")
+		echo "Encountered problems:"
+		echo "problem 1: nothing provides devel:libxyz needed by bar-1.0-1"
+		echo "  solution 1:"
+		echo "    - do not install bar-1.0-1"
+		exit 1 ;;
+	*)
+		echo "The following changes will be made:"
+		echo "    install package $req from repository DeBeOS-green"
+		exit 0 ;;
+	esac ;;
+search)
+	# accept -D / -a style flags, take the last argument as the search string
+	for a in "$@"; do pat="$a"; done
+	case "$pat" in
+	"devel:liblua")
+		echo "Status  Name         Description"
+		for v in 5.1 5.2 5.3 5.4 jit 5.1_devel 5.3_devel 5.4_devel; do
+			echo "        lua$v _devel  Lua devel package"
+		done
+		exit 0 ;;
+	*)
+		echo "No matching packages found."
+		exit 0 ;;
+	esac ;;
+refresh) exit 0 ;;
+*) echo "stub pkgman: unhandled command $cmd" >&2; exit 2 ;;
+esac
+STUB
+chmod +x "$work/bin/pkgman"
+
+# ---- load the functions under test ----------------------------------------
+# Source haiku-nativebuild's definitions only: everything from the repo-refresh line
+# down is its main body (it would run a build and exit).
+sed '/^# Refresh the pkgman repo caches/,$d' "$SUT" > "$work/sut.sh"
+if [ "$MUTATE" = 1 ]; then
+	# The mutation: put back the original evidence-discarding install_dep.
+	cat >> "$work/sut.sh" <<'MUT'
+install_dep() { feed | pkgman install "$1" >/dev/null 2>&1; }
+MUT
+fi
+PATH="$work/bin:$PATH"
+export PATH
+DEPDIR="$work/dep"
+# shellcheck disable=SC1090
+. "$work/sut.sh"
+attempt=2   # report_no_progress quotes the round number it was called in
+
+pass=0; fail=0
+# run_case <name> <requirement-set> <expect...> -- <forbid...>
+run_case() {
+	name="$1"; miss="$2"; shift 2
+	rm -rf "$DEPDIR"; mkdir -p "$DEPDIR"
+	printf '%s\n' "$miss" | while IFS= read -r d; do
+		[ -n "$d" ] || continue
+		install_dep "$d"
+	done
+	out=$(report_no_progress "selftest_$name" "$miss" 2>&1)
+	mode=expect
+	for pat in "$@"; do
+		if [ "$pat" = "--" ]; then mode=forbid; continue; fi
+		if printf '%s' "$out" | grep -q -- "$pat"; then hit=1; else hit=0; fi
+		if [ "$mode" = expect ] && [ "$hit" = 1 ]; then
+			pass=$((pass+1)); echo "  ok    $name: found   '$pat'"
+		elif [ "$mode" = forbid ] && [ "$hit" = 0 ]; then
+			pass=$((pass+1)); echo "  ok    $name: absent  '$pat'"
+		else
+			fail=$((fail+1))
+			[ "$mode" = expect ] \
+				&& echo "  FAIL  $name: MISSING '$pat'" \
+				|| echo "  FAIL  $name: PRESENT (must not be) '$pat'"
+		fi
+	done
+	# Set NB_SELFTEST_SHOW=1 to see each case's diagnostic verbatim -- the point of the
+	# change is what the operator reads, so make it readable.
+	[ -n "${NB_SELFTEST_SHOW:-}" ] && printf '%s\n' "$out" | sed 's/^/       | /'
+	return 0
+}
+
+echo "haiku-nativebuild dependency-diagnostic self-test$([ "$MUTATE" = 1 ] && echo ' [MUTATED]')"
+
+# 1. TRUE ABSENCE -- the only case in which the historical wording is earned.
+run_case absent "devel:libabsent" \
+	"ABSENT_CONFIRMED" "UNRESOLVABLE (measured" "No matching packages found" \
+	-- "DEP_NO_PROGRESS"
+
+# 2. PRESENT YET UNRESOLVED -- pkgman says it is already installed. This is the 149-port
+#    case: it must NOT be reported as absent.
+run_case present "devel:libmikmod" \
+	"ALREADY_PRESENT" "DEP_NO_PROGRESS" "is already installed" \
+	-- "UNRESOLVABLE" "ABSENT_CONFIRMED"
+
+# 3. VERSION CONSTRAINT -- name present, relation unsatisfiable. Also proves the
+#    requirement survived as ONE token (a word-split would have installed ">=" and "3").
+run_case constraint "devel:libssl >= 3" \
+	"CONSTRAINT_UNSATISFIED" "retried without the version relation (devel:libssl)" \
+	"requirement: devel:libssl >= 3" \
+	-- "UNRESOLVABLE" "requirement: >=" "requirement: 3"
+
+# 4. SOME OTHER PKGMAN ERROR -- quote pkgman, do not translate it.
+run_case pkgman_error "devel:libbar" \
+	"PKGMAN_ERROR" "nothing provides devel:libxyz needed by bar-1.0-1" \
+	-- "UNRESOLVABLE" "ABSENT_CONFIRMED"
+
+# 5. MULTI-PROVIDER AMBIGUITY -- install found no match, but the pool offers candidates.
+#    Reporting absence here is exactly the mistake the 45 multi-provider ports hit.
+run_case ambiguous "devel:liblua" \
+	"NO_MATCH_BUT_CANDIDATES_EXIST" "lua5.4_devel" \
+	-- "UNRESOLVABLE" "ABSENT_CONFIRMED"
+
+echo "----"
+echo "pass=$pass fail=$fail"
+if [ "$MUTATE" = 1 ]; then
+	if [ "$fail" -gt 0 ]; then
+		echo "MUTATION DETECTED: the suite goes red without the captured pkgman"
+		echo "evidence, so it is testing the mechanism and not just the wording."
+		exit 0
+	fi
+	echo "VACUOUS SUITE: the mutation did not break any assertion."
+	exit 1
+fi
+[ "$fail" -eq 0 ] || exit 1
+echo "all assertions hold"
+exit 0

@@ -43,7 +43,130 @@ BUILT_OK=""
 # feed pkgman: accept "allow vendor change" (solution 1) then confirm the transaction.
 feed() { i=0; while [ $i -lt 60 ]; do echo 1; i=$((i+1)); done; echo yes; }
 
-install_dep() { feed | pkgman install "$1" >/dev/null 2>&1; }
+# ---------------------------------------------------------------------------
+# Dependency installs, and the evidence they leave behind (#485).
+#
+# This used to be one line -- `feed | pkgman install "$1" >/dev/null 2>&1` -- which
+# threw away stdout, stderr AND the exit status. The build loop then inferred
+# "UNRESOLVABLE (not in repo, build it first)" from the only thing it had left: the
+# unresolved set not shrinking. That is a root cause it never measured, and it was
+# wrong at scale -- 149 of the 350 ports filed under that message name a dependency
+# that is in the pool right now (#485).
+#
+# So every install now keeps pkgman's own combined output and its exit status, and the
+# failure path is only allowed to name a cause it can read back out of them. The rule
+# this file is now held to: A MESSAGE THAT NAMES A CAUSE MUST BE ABLE TO DISTINGUISH
+# THAT CAUSE FROM ITS ALTERNATIVES. Where it cannot, it reports the observation
+# ("the set did not shrink; pkgman said: ...") and stops.
+DEPDIR="${DEPDIR:-/boot/home/.nb-depinstall}"
+# build_one starts each port with `rm -rf "$DEPDIR"`, and this runs as root on the
+# builder, so refuse an override that would delete something that matters.
+case "$DEPDIR" in
+	""|/|/boot|/boot/home|/boot/system|/boot/home/haikuports)
+		echo "haiku-nativebuild: refusing DEPDIR='$DEPDIR'" >&2; exit 2 ;;
+esac
+
+# Transcript filename for one requirement. Case is PRESERVED and nothing here folds
+# it: `pkgman install` matches provides case-SENSITIVELY, so `devel:libSDL2_2.0` and
+# `devel:libsdl2_2.0` are different requests and must not share one transcript.
+dep_slug() { printf '%s' "$1" | tr -c 'A-Za-z0-9._+' '_'; }
+
+# The requirement with any trailing version relation removed:
+#   "devel:libssl >= 3" -> "devel:libssl"      "cmd:cmake" -> "cmd:cmake"
+dep_base() {
+	printf '%s' "$1" \
+		| sed -E 's/[[:space:]]*(<=|>=|==|=|<|>)[[:space:]]*[^[:space:]]+[[:space:]]*$//'
+}
+
+# Install ONE requirement (a haikuporter resolvable, which may carry a version
+# relation such as `devel:libssl >= 3`) and record a one-word verdict the diagnostic
+# below reads back. Verdicts, and what each is evidence OF:
+#   INSTALLED               pkgman exited 0 having applied a transaction
+#   ALREADY_PRESENT         pkgman exited 0 saying the package is already installed
+#   CONSTRAINT_UNSATISFIED  the versioned requirement matched nothing, but the BARE
+#                           name installed -- so the package is present and it is the
+#                           version relation that is unsatisfied, not the package
+#   NO_MATCH                pkgman itself reported no match (absence is still only a
+#                           candidate explanation here -- see dep_candidates)
+#   PKGMAN_ERROR            pkgman failed for some other reason; quote it, never
+#                           translate it
+#
+# WHY the bare-name retry exists: libsolv matches the whole `name op version` string
+# (SELECTION_REL), so a requirement whose name IS in the pool at too low a version
+# fails with exactly the same "Failed to find a match" as a name that is absent. The
+# retry is what tells those two apart, and it is the distinction the old code could
+# not draw and reported as "not in repo".
+#
+# (The old loop also word-split `$miss`, turning `devel:libssl >= 3` into three
+# "dependencies" and running `pkgman install >=` and `pkgman install 3`, silently
+# failing both -- while the bare name got installed at whatever version was on offer.
+# 95 of the 639 backlog logs contain such a requirement. build_one now iterates one
+# requirement per LINE, so the relation reaches pkgman intact.)
+install_dep() {
+	_dreq="$1"
+	_df="$DEPDIR/$(dep_slug "$_dreq")"
+	# Stamp the requirement next to its transcript so the reader can prove the
+	# transcript it is quoting belongs to the requirement it is reporting on.
+	printf '%s\n' "$_dreq" > "$_df.req"
+	feed | pkgman install "$_dreq" > "$_df.out" 2>&1
+	_drc=$?
+	echo "$_drc" > "$_df.rc"
+	if [ "$_drc" -eq 0 ]; then
+		if grep -q 'is already installed\.' "$_df.out" 2>/dev/null; then
+			echo ALREADY_PRESENT > "$_df.verdict"
+		else
+			echo INSTALLED > "$_df.verdict"
+		fi
+	elif grep -q 'Failed to find a match for' "$_df.out" 2>/dev/null; then
+		_dbase=$(dep_base "$_dreq")
+		if [ "$_dbase" != "$_dreq" ]; then
+			feed | pkgman install "$_dbase" > "$_df.bare.out" 2>&1
+			if [ $? -eq 0 ]; then
+				echo CONSTRAINT_UNSATISFIED > "$_df.verdict"
+			else
+				echo NO_MATCH > "$_df.verdict"
+			fi
+		else
+			echo NO_MATCH > "$_df.verdict"
+		fi
+	else
+		echo PKGMAN_ERROR > "$_df.verdict"
+	fi
+	return "$_drc"
+}
+
+# The interesting lines of a pkgman transcript, verbatim and bounded. pkgman puts its
+# fatal line on stderr ("*** Failed to find a match for ...") and its solver problems
+# on stdout ("Encountered problems:" / "problem 1: nothing provides ..."), which is why
+# install_dep captures both streams into one file.
+dep_pkgman_said() {
+	_pf="$1"
+	[ -f "$_pf" ] || { echo "(no pkgman transcript)"; return 0; }
+	_pl=$(grep -E '^\*\*\*|^Encountered problems|^problem [0-9]+:|^ +solution [0-9]+:|nothing provides|is already installed\.|^Nothing to do\.|conflict' \
+		"$_pf" 2>/dev/null | head -n "${NB_DEP_SAID:-14}")
+	if [ -n "$_pl" ]; then
+		printf '%s\n' "$_pl"
+	else
+		tail -n "${NB_DEP_SAID_TAIL:-8}" "$_pf"
+	fi
+}
+
+# READ-ONLY cross-check for a requirement pkgman could not match: does ANY configured
+# repository carry a plausible provider at all? `pkgman search` matches
+# case-INSENSITIVELY across name, summary and provides (B_FIND_CASE_INSENSITIVE |
+# B_FIND_IN_NAME | B_FIND_IN_SUMMARY | B_FIND_IN_PROVIDES), while `pkgman install`
+# matches provides case-SENSITIVELY. That asymmetry is exactly the point:
+#   * search finds nothing either -> absence is now MEASURED, not assumed;
+#   * search lists candidates     -> the failure is a name-form/case/ambiguity/version
+#                                    problem and we must NOT call the dependency absent.
+# It deliberately stops at listing candidates: search is a case-insensitive substring
+# match over three fields, so a hit does not prove the resolvable is provided. It can
+# refute absence; it cannot confirm presence, and it does not pretend to. This also
+# keeps the multi-provider case honest -- tokens like `devel:liblua` have eight
+# providers in the pool, and eight candidates printed here can never read as "absent".
+dep_candidates() {
+	pkgman search -D "$1" 2>&1 | head -n "${NB_DEP_CANDIDATES:-12}"
+}
 
 # Resolve a caller-supplied port arg to the actual haikuporter port name -- the
 # recipe filename base -- rather than trusting the DDB/ports-tree directory name.
@@ -117,10 +240,77 @@ emit_log_capture() {
 	echo "---- end build log ($lines lines total; head+grep+tail capture) ----"
 }
 
+# Report a round that made no progress. Everything printed here is either an
+# OBSERVATION (the set did not shrink) or a quote from pkgman -- the two verdict lines
+# at the end are the only interpretation, and each one names only what the evidence
+# above it can distinguish (#485).
+report_no_progress() {
+	_port="$1"
+	_miss="$2"
+	_tally="$DEPDIR/_tally"
+	: > "$_tally"
+	echo "$_port: NO PROGRESS at attempt $attempt -- installing the missing set left it unchanged."
+	echo "  unresolved requirement set, one per line, as haikuporter reported it:"
+	printf '%s\n' "$_miss" | sed 's/^/    /'
+	printf '%s\n' "$_miss" | while IFS= read -r _dep; do
+		[ -n "$_dep" ] || continue
+		_f="$DEPDIR/$(dep_slug "$_dep")"
+		_v=NO_TRANSCRIPT
+		if [ -f "$_f.verdict" ] \
+			&& [ "$(cat "$_f.req" 2>/dev/null)" = "$_dep" ]; then
+			_v=$(cat "$_f.verdict")
+		fi
+		echo "  requirement: $_dep"
+		echo "    pkgman verdict: $_v (pkgman exit $(cat "$_f.rc" 2>/dev/null || echo '?'))"
+		echo "    pkgman said, verbatim:"
+		dep_pkgman_said "$_f.out" | sed 's/^/      /'
+		if [ -f "$_f.bare.out" ]; then
+			echo "    retried without the version relation ($(dep_base "$_dep")); pkgman said:"
+			dep_pkgman_said "$_f.bare.out" | sed 's/^/      /'
+		fi
+		if [ "$_v" = NO_MATCH ]; then
+			dep_candidates "$(dep_base "$_dep")" > "$_f.cand" 2>&1
+			echo "    read-only candidate probe, case-insensitive (pkgman search -D $(dep_base "$_dep")):"
+			sed 's/^/      /' "$_f.cand"
+			if grep -q 'No matching packages found' "$_f.cand"; then
+				_v=ABSENT_CONFIRMED
+			else
+				_v=NO_MATCH_BUT_CANDIDATES_EXIST
+			fi
+			echo "    verdict after the candidate probe: $_v"
+		fi
+		echo "$_v" >> "$_tally"
+	done
+	# Requirements can contain spaces ("devel:libssl >= 3"), so join them with "; ".
+	_flat=$(printf '%s\n' "$_miss" | sed 's/[[:space:]]*$//' | tr '\n' ';' \
+		| sed 's/;/; /g; s/; *$//')
+	_kinds=$(sort -u "$_tally" 2>/dev/null | tr '\n' ',' | sed 's/,$//')
+	# NB: `grep -c` prints its count and exits 1 when that count is zero, so it must
+	# NOT be wrapped in `|| echo 0` -- that appends a second line and the arithmetic
+	# test below then fails with "integer expression expected".
+	_n=$(grep -c . "$_tally" 2>/dev/null); : "${_n:=0}"
+	_absent=$(grep -c '^ABSENT_CONFIRMED$' "$_tally" 2>/dev/null); : "${_absent:=0}"
+	if [ "$_n" -gt 0 ] && [ "$_absent" -eq "$_n" ]; then
+		# The ONE case in which the historical wording is earned: pkgman itself
+		# reported no match, and a case-insensitive search of every configured
+		# repository offered no candidate either.
+		echo "$_port: UNRESOLVABLE (measured: pkgman found no match and no repository"
+		echo "  offers any candidate, case-insensitively) -- build and publish it first: $_flat"
+	else
+		# Deliberately NOT an absence claim, and deliberately not a new diagnosis
+		# either: the verdict names what was observed per requirement and points at
+		# the pkgman evidence above.
+		echo "$_port: DEP_NO_PROGRESS [$_kinds] -- the requirement set did not shrink, and"
+		echo "  pkgman did NOT report absence for all of it; per-requirement evidence above: $_flat"
+	fi
+}
+
 build_one() {
 	port="$1"
 	log="/boot/home/nb-$port.log"
 	echo "===== $port : start $(date -u +%FT%TZ) ====="
+	rm -rf "$DEPDIR" 2>/dev/null
+	mkdir -p "$DEPDIR" 2>/dev/null || true
 	attempt=1
 	prev_miss=""
 	while [ "$attempt" -le "$MAX_ATTEMPTS" ]; do
@@ -136,15 +326,27 @@ build_one() {
 		if [ -z "$miss" ]; then
 			echo "$port: FAILED, no missing-dep to install -- see $log"; emit_log_capture "$log"; return 1
 		fi
-		# If the unresolved set is identical to last round, the previous install made no
-		# progress -- the dep is not in the repo and must be BUILT first. Stop now instead
-		# of burning the remaining attempts on the same no-op install.
+		# If the unresolved set is identical to last round, the previous round of
+		# installs made no progress. That is ALL this comparison establishes -- it is
+		# an observation about our own loop, not a fact about the repository. What the
+		# dependency's actual state is comes from pkgman's transcripts, which
+		# report_no_progress reads back and quotes (#485). Stop now either way, rather
+		# than burn the remaining rounds on the same no-op install.
 		if [ "$miss" = "$prev_miss" ]; then
-			echo "$port: UNRESOLVABLE (not in repo, build it first): $(echo $miss | tr '\n' ' ')"; return 1
+			report_no_progress "$port" "$miss"
+			emit_log_capture "$log"
+			return 1
 		fi
 		echo "$port: attempt $attempt installing: $(echo $miss | tr '\n' ' ')"
 		prev_miss="$miss"
-		for d in $miss; do install_dep "$d"; done
+		# ONE REQUIREMENT PER LINE, never per word: `devel:libssl >= 3` is a single
+		# requirement and libsolv accepts it whole, whereas word-splitting it asks
+		# pkgman to install ">=" and "3" (#485). All per-install state lives in files
+		# under $DEPDIR, so running the loop in a pipeline subshell is fine.
+		printf '%s\n' "$miss" | while IFS= read -r d; do
+			[ -n "$d" ] || continue
+			install_dep "$d"
+		done
 		attempt=$((attempt + 1))
 	done
 	echo "$port: gave up after $MAX_ATTEMPTS attempts"; emit_log_capture "$log"; return 1
@@ -200,8 +402,19 @@ mirror_sources() {
 }
 
 # Refresh the pkgman repo caches so deps published since this builder booted resolve
-# (otherwise pkgman installs against a stale index). Intermediate deps built THIS wave
-# are resolved from the local packages/ dir, so keep each dep-chain on one builder.
+# (otherwise pkgman installs against a stale index).
+#
+# CORRECTED (#485). This comment used to claim "intermediate deps built THIS wave are
+# resolved from the local packages/ dir, so keep each dep-chain on one builder". That
+# is false for the install path used here, and the false comment is how the mistaken
+# "not in repo" diagnosis survived: `install_dep` runs `pkgman install <name>`, which
+# resolves only from the CONFIGURED REPOSITORIES. harvest() pushes freshly built hpkgs
+# to an S3 staging prefix, not to the repo, and the repo index is rebuilt only by the
+# separate haiku-repo-publish* step. A wave therefore cannot consume what it just
+# built, by construction -- keeping a dep-chain on one builder does not help, and an
+# intra-wave dependency edge fails however healthy the pool is. Either order the wave
+# so dependencies are published before their consumers, or publish incrementally
+# (still to be designed -- see #485).
 feed | pkgman refresh >/dev/null 2>&1 || true
 
 rc=0
