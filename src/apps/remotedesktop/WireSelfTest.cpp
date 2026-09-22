@@ -621,9 +621,13 @@ test_session_cookie_frame()
 	golden[11] = golden[12] = golden[13] = 0;
 	memset(golden + 14, 'a', sizeof(cookie));
 
+	// onlyBlockOnNoData, and a buffer larger than the frame: Read() is a
+	// blocking read, so asking for more than was written would park this thread
+	// forever waiting for bytes no one is going to write -- which is how this
+	// check first "passed" on hardware by hanging after the line above.
 	uint8 encoded[sizeof(golden) + 16];
 	memset(encoded, 0, sizeof(encoded));
-	int32 read = buffer.Read(encoded, sizeof(encoded));
+	int32 read = buffer.Read(encoded, sizeof(encoded), true);
 	check("the cookie frame is 6 + 8 + cookie bytes long",
 		read == (int32)sizeof(golden), strerror(read));
 	check("the cookie frame matches the golden wire bytes",
