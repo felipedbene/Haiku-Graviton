@@ -148,13 +148,39 @@ _pl_read() {
 
 # Background heartbeat: re-stamp the epoch so a live-but-slow holder never looks
 # stale. Kept intentionally simple (a sleep loop) for Haiku's shell.
+#
+# Two details are load-bearing, both learned from issue #459, where releasing the
+# lock left a caller's output pipe open for up to HG_LOCK_HEARTBEAT seconds
+# (TTL/3, i.e. 100s by default -- measured at exactly 100s, three runs):
+#
+#   1. The subshell's stdio is redirected to /dev/null, NOT inherited. A
+#      background job inherits the caller's stdout and stderr, so anything
+#      reading the caller's output -- a pipe, a command substitution, a
+#      CodeBuild log -- cannot see EOF while any process in this job still holds
+#      those descriptors. Redirecting here means the heartbeat can never hold a
+#      caller's pipe open, whatever else happens to it.
+#   2. `sleep` runs as a separate child and is killed explicitly on TERM.
+#      `kill $!` reaps only the subshell; its `sleep` survives to its timer and
+#      was the process actually holding the descriptors. Backgrounding the sleep
+#      and `wait`-ing lets the TERM trap interrupt the wait and take the sleep
+#      down with it, so release leaves nothing behind.
+#
+# Deliberately not using process groups (`set -m` plus `kill -- -PID`): job
+# control is not dependable across the shells this library runs under -- it is
+# sourced on Haiku as well as on Linux builders -- and the trap does the job with
+# only POSIX features.
 _pl_heartbeat_start() {
 	(
+		_pl_hb_sleep=""
+		trap 'if [ -n "$_pl_hb_sleep" ]; then kill "$_pl_hb_sleep" 2>/dev/null || true; fi; exit 0' TERM
 		while :; do
-			sleep "$_PL_HEARTBEAT"
+			sleep "$_PL_HEARTBEAT" &
+			_pl_hb_sleep=$!
+			wait "$_pl_hb_sleep" 2>/dev/null || true
+			_pl_hb_sleep=""
 			_pl_write "$(_pl_now)" >/dev/null 2>&1 || true
 		done
-	) &
+	) >/dev/null 2>&1 &
 	_PL_HB_PID=$!
 }
 _pl_heartbeat_stop() {
