@@ -1121,22 +1121,20 @@ if [ "$DURABILITY_ASSERT" != 0 ]; then
 		say "FAIL: the durability payload was not written before the stop/start"
 		die "storage durability gate failed for $AMI (write phase)"
 	elif [ -z "$DUR_SHA" ]; then
-		# Write reported ok and the file is the full size, so the disk accepted and
-		# fsync'd the payload -- only the hash readback is missing, which is not
-		# itself a durability failure. Stay non-fatal, but do NOT describe it as a
-		# flake: it used to be attributed to "a tooling/readback flake ... even
-		# after a 5x retry" when in fact it had never succeeded on ANY image (six
-		# consecutive trunk runs, zero recorded hashes) because the harness mangled
-		# `cut -d" " -f1`. Calling a deterministic break a flake is what let it
-		# survive, so the message now says plainly that the strongest storage
-		# assertion did not run and should be investigated rather than tolerated.
-		say "WARNING: durability payload written ($DUR_SIZE bytes) but the hash readback"
-		say "  was EMPTY, so the byte-for-byte verify -- the assertion that tells"
-		say "  'never written' from 'stale' from 'corrupt' -- DID NOT RUN. write+size"
-		say "  only confirm the disk took and fsync'd the payload. This is expected to"
-		say "  be impossible now; if you are reading it, the readback is broken again"
-		say "  and the check is not protecting you."
-		warn=1
+		# FATAL, since 2026-09-22. This was a warning while the readback had never
+		# once worked (six consecutive trunk runs, zero recorded hashes, because the
+		# harness mangled the cut delimiter). It now demonstrably works -- a gate run
+		# recorded 1f136cca4d56... and matched it byte-for-byte after a stop/start --
+		# so an empty hash no longer means "this check is not implemented yet", it
+		# means the harness broke again. A broken check must stop the line rather
+		# than wave an image through: the whole reason #112 exists is that data was
+		# acknowledged and then lost, and a gate that cannot detect that while
+		# reporting success is worse than no gate.
+		say "FAIL: durability payload written ($DUR_SIZE bytes) but the hash readback"
+		say "  was EMPTY. This readback is known to work, so this is a HARNESS defect,"
+		say "  not a finding about the image -- and it disables the byte-for-byte"
+		say "  verify that tells 'never written' from 'stale' from 'corrupt'."
+		die "durability gate failed for $AMI (hash readback broken -- fix the harness)"
 	else
 		say "durability payload written: $DUR_SIZE bytes, sha256 ${DUR_SHA:0:12}... recorded on the harness"
 	fi
@@ -1407,17 +1405,18 @@ if [ "$DURABILITY_ASSERT" != 0 ] && [ "$DUR_TOOL" = present ] && [ -n "$DUR_SHA"
 		dfail=1
 	fi
 	if [ -z "$durv_sha" ]; then
-		# An unreadable hash is NOT evidence of data loss, and conflating the two
-		# made this gate accuse the page writer of the exact bug it was written to
-		# catch. Distinguish them: a hash that reads back DIFFERENT is the
-		# data-loss signature and fails; a hash that does not read back at all is
-		# a broken check, which is a problem with the harness and must not be
-		# laundered into a verdict about the image.
-		say "WARNING: payload sha256 could not be read back after the stop/start"
+		# FATAL for the same reason as the write phase, and kept DISTINCT from a
+		# changed hash. A hash that reads back different is the data-loss signature
+		# and is a finding about the image; a hash that does not read back at all is
+		# a broken harness. Conflating them once made this gate accuse the page
+		# writer of the exact bug it was written to catch, so the two messages must
+		# never merge again.
+		say "FAIL: payload sha256 could not be read back after the stop/start"
 		say "  (size is correct at ${durv_size:-none}). This is NOT a data-loss"
-		say "  finding -- the comparison did not happen. The disktput verify below"
-		say "  is the remaining evidence; fix the readback."
-		warn=1
+		say "  finding -- the comparison did not happen. The readback is known to"
+		say "  work, so this is a HARNESS defect; fix it rather than re-reading this"
+		say "  as a kernel regression."
+		dfail=1
 	elif [ "$durv_sha" != "$DUR_SHA" ]; then
 		say "FAIL: payload sha256 changed across the stop/start (recorded ${DUR_SHA:0:12}..., read ${durv_sha:0:12}...)"
 		dfail=1
