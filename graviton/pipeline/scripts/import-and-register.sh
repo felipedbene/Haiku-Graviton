@@ -21,6 +21,7 @@
 #   ROOT_VOLUME_BYTES  root EBS size in bytes
 # Optional:
 #   HAIKU_REVISION     stamped into a tag
+#   HG_BAKE_LANE       `oven` => also tag the image `oven=true` (default `trunk`)
 #
 # Writes the registered AMI id to $AMI_ID_OUT (default /tmp/ami_id) so the
 # buildspec can export it as a pipeline variable.
@@ -33,8 +34,16 @@ IMPORT_PREFIX="${IMPORT_PREFIX:-import}"
 AMI_NAME_PREFIX="${AMI_NAME_PREFIX:-haiku-graviton}"
 ROOT_VOLUME_BYTES="${ROOT_VOLUME_BYTES:-2147483648}"
 AMI_ID_OUT="${AMI_ID_OUT:-/tmp/ami_id}"
+HG_BAKE_LANE="${HG_BAKE_LANE:-trunk}"
 STAMP="$(date -u +%s)"
-KEY="${IMPORT_PREFIX}/haiku-ec2-${STAMP}.raw"
+# The upload key carries a per-run discriminator as well as the timestamp. The
+# oven pipeline runs executions in PARALLEL, so two Register stages CAN be in
+# flight at once; a seconds-resolution timestamp alone would let two of them
+# choose the same key and overwrite each other's 20 GiB raw image -- silently,
+# because the second writer wins and the import then reads whichever bytes
+# landed last. CODEBUILD_BUILD_ID is unique per build; $$ covers a hand run.
+RUN_TAG="$(printf '%s' "${CODEBUILD_BUILD_ID:-local-$$}" | tr -c 'A-Za-z0-9._-' '-')"
+KEY="${IMPORT_PREFIX}/haiku-ec2-${STAMP}-${RUN_TAG}.raw"
 NAME="${AMI_NAME_PREFIX}-${STAMP}"
 ROOT_GIB=$(( (ROOT_VOLUME_BYTES + 1073741823) / 1073741824 ))
 
@@ -83,16 +92,33 @@ done
 echo "    snapshot: $SNAP_ID"
 
 echo "==> register-image (arm64/uefi/ena/hvm, root /dev/xvda)"
-AMI_ID=$(aws ec2 register-image --region "$AWS_DEFAULT_REGION" \
-  --name "$NAME" \
-  --description "DeBeOS (arm64) -- ARM-first OS descended from Haiku/BeOS; @minimum-mmc + OpenSSH, baked by CDK pipeline" \
-  --architecture arm64 \
-  --boot-mode uefi \
-  --ena-support \
-  --virtualization-type hvm \
-  --root-device-name /dev/xvda \
-  --block-device-mappings "DeviceName=/dev/xvda,Ebs={SnapshotId=${SNAP_ID},VolumeSize=${ROOT_GIB},VolumeType=gp3,DeleteOnTermination=true}" \
-  --query 'ImageId' --output text)
+register_image() {
+  aws ec2 register-image --region "$AWS_DEFAULT_REGION" \
+    --name "$1" \
+    --description "DeBeOS (arm64) -- ARM-first OS descended from Haiku/BeOS; @minimum-mmc + OpenSSH, baked by CDK pipeline" \
+    --architecture arm64 \
+    --boot-mode uefi \
+    --ena-support \
+    --virtualization-type hvm \
+    --root-device-name /dev/xvda \
+    --block-device-mappings "DeviceName=/dev/xvda,Ebs={SnapshotId=${SNAP_ID},VolumeSize=${ROOT_GIB},VolumeType=gp3,DeleteOnTermination=true}" \
+    --query 'ImageId' --output text
+}
+# AMI names must be unique per account+region, and the name is prefix+seconds.
+# Two PARALLEL oven Register stages landing in the same second would collide,
+# failing the second one with InvalidAMIName.Duplicate an hour into its bake. Keep
+# the familiar `<prefix>-<epoch>` name for the normal case and disambiguate only
+# when it is actually taken, so operator-visible names do not change shape.
+if ! AMI_ID=$(register_image "$NAME" 2>/tmp/register.err); then
+  if grep -q 'InvalidAMIName.Duplicate' /tmp/register.err; then
+    NAME="${NAME}-${RUN_TAG: -8}"
+    echo "    name was taken by a concurrent bake; retrying as $NAME"
+    AMI_ID=$(register_image "$NAME")
+  else
+    cat /tmp/register.err >&2
+    exit 1
+  fi
+fi
 echo "    AMI: $AMI_ID"
 
 # Provenance. Without this, "what is actually in canonical?" is answerable only
@@ -142,7 +168,24 @@ if [ "$SRC_COMMIT" != "unknown" ]; then
 fi
 [ -n "$DEBEOS_REVISION" ] || DEBEOS_REVISION="unknown"
 
+# The bake lane. `oven` means this image came out of the test-only pipeline, which
+# structurally cannot promote (no Approve/Promote stage, no Promote project, an IAM
+# Deny on canonical tag mutation). The tag is ADDITIVE and records provenance only:
+# `candidate=true` is set either way, on purpose, because an oven image is a
+# first-class promotion candidate -- picking the best already-tested oven AMI and
+# running `haiku-canonical promote <ami-id>` on it is the intended way to move
+# canonical without waiting out a fresh hour-long bake. Nothing here excludes it.
+#
+# It also gives targeted reaping: `haiku-canonical prune --tag oven=true --apply`
+# retires throwaway oven images without touching trunk candidates (and never the
+# canonical, which prune always protects).
+LANE_TAGS=()
+if [ "$HG_BAKE_LANE" = "oven" ]; then
+  LANE_TAGS+=("Key=oven,Value=true")
+fi
+
 echo "==> tagging as candidate (canonical NOT set here)"
+echo "    bake-lane:       $HG_BAKE_LANE"
 echo "    haiku-revision:  ${HAIKU_REVISION:-unknown} (pinned; package-version line)"
 echo "    debeos-revision: $DEBEOS_REVISION (HEAD-tracking)"
 echo "    source-commit: $SRC_COMMIT"
@@ -156,7 +199,8 @@ aws ec2 create-tags --region "$AWS_DEFAULT_REGION" --resources "$AMI_ID" "$SNAP_
     "Key=haiku-revision,Value=${HAIKU_REVISION:-unknown}" \
     "Key=debeos-revision,Value=${DEBEOS_REVISION}" \
     "Key=source-commit,Value=${SRC_COMMIT}" \
-    "Key=source-branch,Value=${SRC_BRANCH}"
+    "Key=source-branch,Value=${SRC_BRANCH}" \
+    ${LANE_TAGS[@]+"${LANE_TAGS[@]}"}
 
 echo "$AMI_ID" > "$AMI_ID_OUT"
 echo "==> wrote AMI id to $AMI_ID_OUT"

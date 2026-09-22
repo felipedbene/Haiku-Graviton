@@ -28,10 +28,30 @@ phases:
       - |
         test -n "${AMI_ID:-}" || { echo "AMI_ID not provided by the Register stage" >&2; exit 1; }
       - export AWS_REGION="${AWS_REGION:-$AWS_DEFAULT_REGION}"
+      # Per-run discriminator, shared by the gate (which stamps it as a `run-id` tag
+      # on both instances it launches) and by the straggler sweep below (which must
+      # only sweep THIS run's instances). Without it the sweep selects on
+      # Name+ephemeral alone and would terminate a concurrently running gate's
+      # candidate -- routine now that the oven runs executions in PARALLEL.
+      - export HG_RUN_ID="$CODEBUILD_BUILD_ID"
+      # Machine-readable sidecar the gate writes its measurements and verdict to,
+      # stamped onto the AMI as tags in post_build (pass or fail).
+      - export HG_RESULT_FILE=/tmp/haiku-perf-gate-result
       - echo "== performance gate for $AMI_ID =="
       - bash "$CODEBUILD_SRC_DIR/graviton/scripts/haiku-perf-gate" "$AMI_ID"
   post_build:
     commands:
+      # Record the gate's outcome on the AMI itself, on BOTH paths. This is what
+      # makes a candidate selectable later: `perf-gate`, `perf-rx-mbps`,
+      # `perf-tx-mbps`, `perf-mtu` and `perf-gate-at` travel with the image, so
+      # choosing which tested candidate to promote does not depend on a CodeBuild log
+      # that has aged out. Best-effort: the script always exits 0, because the
+      # verdict has already been delivered by the gate's exit status and a tagging
+      # blip must not turn a good bake red.
+      - |
+        bash "$CODEBUILD_SRC_DIR/graviton/pipeline/scripts/tag-gate-result.sh" \
+          "${AMI_ID:-}" "${CODEBUILD_BUILD_SUCCEEDING:-0}" \
+          "${HG_RESULT_FILE:-/tmp/haiku-perf-gate-result}" || true
       # haiku-perf-gate terminates its instance from an EXIT trap, so a failure
       # above has already cleaned up. This is a belt-and-braces sweep for the
       # case where the container itself was killed mid-run and the trap never
@@ -41,10 +61,24 @@ phases:
       # cycles the instance: a container killed during the stop/start check leaves
       # a gate instance parked in one of those states, where it is easy to forget
       # and still bills for its EBS volume.
+      #
+      # SCOPED TO THIS RUN by the run-id tag. Name+ephemeral alone matches every
+      # gate instance in the account, so this sweep used to be safe only because at
+      # most one gate could be in flight: under the oven's PARALLEL execution mode
+      # (and already, latently, across the trunk and variant pipelines) it would
+      # terminate a sibling run's candidate mid-measurement and the victim would
+      # report a hardware failure that never happened. The run-id is refused rather
+      # than defaulted: sweeping "everything" is the bug, so an unset discriminator
+      # must sweep nothing.
       - |
         set +e
+        if [ -z "${HG_RUN_ID:-}" ]; then
+          echo "no HG_RUN_ID; skipping the straggler sweep rather than sweeping every gate instance"
+          exit 0
+        fi
         stragglers=$(aws --region "${AWS_REGION:-$AWS_DEFAULT_REGION}" ec2 describe-instances \
           --filters "Name=tag:Name,Values=haiku-perf-gate" "Name=tag:ephemeral,Values=true" \
+                    "Name=tag:run-id,Values=$HG_RUN_ID" \
                     "Name=instance-state-name,Values=running,pending,stopping,stopped" \
           --query 'Reservations[].Instances[].InstanceId' --output text 2>/dev/null)
         if [ -n "$stragglers" ]; then

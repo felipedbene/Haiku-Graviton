@@ -91,6 +91,10 @@ GitHub (fork/branch)            CodeBuild arm64 (Graviton, Ubuntu 24.04)
                                   haiku-canonical check  (single-canonical invariant)
 ```
 
+The **oven** (`HaikuGravitonOvenPipeline`) is this same graph truncated after
+`Test` — no Approve, no Promote, no Promote project, and no role able to move the
+canonical tag. See ["The oven"](#the-oven-a-test-only-pipeline-that-cannot-promote).
+
 The buildspecs (`buildspecs/*.yml`) are intentionally thin — they invoke the
 **existing** vendored recipe rather than reimplementing it:
 `graviton/ssh/build-openssh-arm64.sh`, `graviton/ssh/UserBuildConfig`,
@@ -100,14 +104,15 @@ The buildspecs (`buildspecs/*.yml`) are intentionally thin — they invoke the
 
 | Path | Purpose |
 |---|---|
-| `bin/pipeline.ts` | CDK app entrypoint; loads config, instantiates the stack. |
+| `bin/pipeline.ts` | CDK app entrypoint; loads config, instantiates the trunk, the `{2,3,4}` variants and the test-only oven. |
 | `lib/config.ts` | All parameters (account/region/branch/compute/repos), from CDK context with env fallbacks. Nothing hardcoded, no secrets. |
-| `lib/haiku-graviton-pipeline-stack.ts` | The pipeline, three CodeBuild projects, least-privilege IAM, the S3 work bucket, and the manual approval gate. |
+| `lib/haiku-graviton-pipeline-stack.ts` | The pipeline, its CodeBuild projects, least-privilege IAM, the S3 work bucket, and the manual approval gate. `testOnly` builds the oven variant: no Approve/Promote and an explicit IAM Deny on canonical mutation. |
 | `buildspecs/cross-build.yml` | Cross-tools + OpenSSH + two-pass `jam @minimum-mmc` + `make-gpt-image.sh`. |
 | `buildspecs/register-image.yml` | Invokes the import/register helper; exports `AMI_ID`. |
-| `buildspecs/perf-test.yml` | Thin wrapper around `graviton/scripts/haiku-perf-gate`, plus a straggler sweep for a container killed mid-run. |
-| `buildspecs/promote.yml` | Runs `haiku-canonical promote` + `check`. |
-| `scripts/import-and-register.sh` | `import-snapshot` → `register-image` (arm64/uefi/ena) → candidate tags. |
+| `buildspecs/perf-test.yml` | Thin wrapper around `graviton/scripts/haiku-perf-gate`; records the verdict onto the AMI, plus a run-scoped straggler sweep for a container killed mid-run. |
+| `buildspecs/promote.yml` | Runs `haiku-canonical promote` + `check`. **Not referenced by the oven.** |
+| `scripts/import-and-register.sh` | `import-snapshot` → `register-image` (arm64/uefi/ena) → candidate tags (+ `oven=true` in the oven lane). |
+| `scripts/tag-gate-result.sh` | Stamps the perf gate's verdict and measured throughput onto the AMI, on both the pass and fail paths. |
 
 ---
 
@@ -218,6 +223,12 @@ executions from the CodePipeline console/CLI. When the pipeline reaches
 `#{reg.AMI_ID}`) — boot-test it — then approve to run **Promote**.
 
 ### Validating a candidate without the promotion gate
+
+> For *routine* PR validation, use the **oven** pipeline instead — it bakes and
+> hardware-tests a candidate and structurally cannot promote, so it needs no care
+> taken around the canonical tag. See
+> ["The oven"](#the-oven-a-test-only-pipeline-that-cannot-promote). What follows is
+> the by-hand path, still the right one when the gate apparatus itself is down.
 
 The **Register** stage tags the new AMI `candidate=true` *before* Test/Approve/
 Promote, so a candidate can be validated even when the Test stage cannot run
@@ -456,6 +467,153 @@ aws s3 sync "$SRC/hpkg-pool/" "$DST/hpkg-pool/"
 Remaining IaC TODO: declare the SSM parameters in the stack and have the Register
 stage write the per-pipeline `latest-candidate-ami`, so a duplicated pipeline is
 fully self-provisioning.
+
+---
+
+## The oven: a test-only pipeline that *cannot* promote
+
+`HaikuGravitonOvenPipeline` (`haiku-oven-bake`) is the same stack with one flag,
+`testOnly: true`. It runs **Source → CrossBuild → Register → Test and stops**.
+
+Why it exists: bake candidates freely — for PR validation, unattended, in place of
+QEMU — without any risk of the `canonical=true` tag moving. The blocker was never
+cost, it was that an agent starting bakes could end up touching canonical.
+
+The guarantee is **structural, not procedural**:
+
+| | trunk `haiku-graviton-bake` | oven `haiku-oven-bake` |
+|---|---|---|
+| Stages | Source, CrossBuild, Register, Test, **Approve, Promote** | Source, CrossBuild, Register, **Test** |
+| Approval action | `ManualApprovalAction` | none — no `Approval` category at all |
+| Promote project | `haiku-graviton-promote` | **not created** |
+| `ec2:DeleteTags` | allowed (promote role) | **no Allow anywhere** |
+| `ec2:CreateTags` | allowed | allowed, with an explicit **Deny** when `aws:TagKeys` contains `canonical` |
+| `ssm:PutParameter` | allowed on the canonical parameter | **no Allow anywhere**, plus an explicit **Deny** |
+| Execution mode | `SUPERSEDED` | **`PARALLEL`** |
+
+"The stage is never approved" is a procedure someone can get wrong. "The project
+does not exist and the role is explicitly denied" is a property of the deployed
+template. That distinction is not theoretical: an approval token read out of
+`get-pipeline-state` once belonged to a **stale parked execution** and promoted a
+three-day-old AMI instead of the intended build. A pipeline with no Approve and no
+Promote cannot have that failure mode.
+
+Check it on the synthesized template rather than trusting this table:
+
+```sh
+cd graviton/pipeline
+cdk synth HaikuGravitonOvenPipeline -c haiku:connectionArn=<arn> >/dev/null
+T=cdk.out/HaikuGravitonOvenPipeline.template.json
+grep -c 'DeleteTags\|PutParameter\|ManualApproval\|promote.yml' "$T"   # expect: only the Deny statements
+```
+
+`jest` asserts all of it, and asserts the mirror image for the trunk — a change
+that disarmed the real pipeline would be a far worse regression than the oven
+failing to be safe.
+
+### Why `PARALLEL`
+
+CodePipeline's default is `SUPERSEDED`: a newer execution **overtakes and discards**
+an in-flight older one. For a pipeline whose point is "bake as many candidates as we
+want", that means each new bake killing the previous one after it has already burned
+~25 minutes of cross-build. `QUEUED` avoids the discard but serialises, and waiting
+out a full bake is the exact cost the oven exists to remove. `PARALLEL` requires
+pipeline type V2, which both pipelines here already are.
+
+Two consequences were fixed as part of this, because concurrent runs are now routine:
+
+- The perf gate stamps a **`run-id`** tag (the CodeBuild build id) on both instances
+  it launches, and the straggler sweep in `perf-test.yml` filters on it. The sweep
+  used to match `Name=haiku-perf-gate` + `ephemeral=true` and terminate *everything*
+  — it would have killed a sibling run's candidate mid-measurement, and the victim
+  would have reported a hardware failure that never happened. With no `run-id` the
+  sweep now sweeps **nothing** (fail closed).
+- The Register upload key carries a per-run discriminator, so two Register stages
+  cannot overwrite each other's 20 GiB raw image. An AMI-name collision is recovered
+  from by retrying with a suffix rather than by changing the name shape of every bake.
+
+### The AMI is still a first-class promotion candidate
+
+The oven cannot promote. The image it bakes **can** be promoted, by a human, out of
+band — and that is the intended way to move canonical:
+
+```sh
+graviton/scripts/haiku-canonical promote ami-0123456789abcdef0
+```
+
+`promote` accepts any self-owned AMI and nothing filters on the bake lane. So you
+pick the best already-tested oven image and promote it, instead of starting a fresh
+bake and waiting an hour for it to reach an approval gate.
+
+Tags are therefore chosen for **selectability, not exclusion**:
+
+| tag | set by | why |
+|---|---|---|
+| `candidate=true` | both lanes | an oven image *is* a candidate; gating this would hide it from every tool that lists candidates |
+| `oven=true` | oven only | provenance, and a targeted reap selector |
+| `source-commit`, `source-branch`, `debeos-revision`, `haiku-revision` | both | what it was built from |
+| `perf-gate` = `pass` / `pass-with-warnings` / `fail` / `unknown` | Test stage | how it did |
+| `perf-rx-mbps`, `perf-tx-mbps`, `perf-mtu`, `perf-gate-at` | Test stage | the numbers, so the choice is data and not a guess |
+| `canonical=true` | **only** `haiku-canonical promote` | never set by any bake, in either lane |
+
+The perf tags are written from the same variables the gate's assertions use (a
+sidecar file, not scraped stdout), on **both** the pass and fail paths — CodeBuild
+logs age out, and a candidate whose test result cannot be read is no better than an
+untested one. The build status wins over the sidecar, so a below-floor image cannot
+be tagged `pass`.
+
+Pick one:
+
+```sh
+aws ec2 describe-images --owners self --region us-west-2 \
+  --filters Name=tag:oven,Values=true Name=tag:perf-gate,Values=pass \
+  --query 'reverse(sort_by(Images,&CreationDate))[].[CreationDate,ImageId,
+            Tags[?Key==`perf-rx-mbps`].Value|[0],Tags[?Key==`source-commit`].Value|[0]]' \
+  --output table
+```
+
+### Reaping
+
+Oven images carry `candidate=true`, so they share the candidate retention window
+(`HG_CANDIDATE_KEEP`, default 3). `prune` therefore takes a selector, so throwaway
+oven bakes can be retired without evicting trunk candidates:
+
+```sh
+graviton/scripts/haiku-canonical prune --tag oven=true            # dry run
+graviton/scripts/haiku-canonical prune --tag oven=true --apply --keep 5
+```
+
+The canonical AMI is protected whatever the selector is, and `--tag canonical=...`
+is refused outright (it would select only the protected image — a guaranteed no-op
+that reads like a working command).
+
+### A failing perf gate still fails an oven bake
+
+Deliberately the same as the trunk, not relaxed. The whole value of an oven image is
+that it can be promoted later *without re-testing*, and that only holds if a red gate
+means the image never becomes selectable. Relaxing it to a warning would produce a
+pile of images whose tags say `fail` and which someone promotes anyway at 2am. The
+AMI is additionally tagged `perf-gate=fail` so a failed image can never be mistaken
+for an untested one.
+
+### Deploying it
+
+```sh
+cd graviton/pipeline
+cdk deploy HaikuGravitonOvenPipeline -c haiku:connectionArn=<arn>   # never --all
+```
+
+Two gotchas, both shared with the variant pipelines above:
+
+- **`HAIKU_CONNECTION_ARN` (or `-c haiku:connectionArn=`) must be in the
+  environment.** `bin/pipeline.ts` only instantiates *any* bake pipeline when a
+  connection ARN is supplied — without it `cdk deploy HaikuGravitonOvenPipeline`
+  fails with "no such stack", which reads like a missing stack rather than a missing
+  variable. This bites on a *new* pipeline in particular, because there is no
+  previously deployed stack to fall back on.
+- **Seed its work bucket** (cross-tools cache + the whole `hpkg-pool/` prefix
+  *including every `*_devel*`) exactly as for a variant, or the bake quietly ships a
+  feature-capped image.
 
 ---
 

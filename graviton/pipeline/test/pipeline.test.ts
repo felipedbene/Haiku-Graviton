@@ -55,6 +55,21 @@ function synth(): Template {
   return Template.fromStack(stack);
 }
 
+/**
+ * The test-only "oven" variant: same stack class, `testOnly: true`. Configured the
+ * way bin/pipeline.ts configures it (its own amiNamePrefix, no fixed work bucket)
+ * so the assertions below are about the deployed shape, not a synthetic one.
+ */
+function synthOven(): Template {
+  const app = new cdk.App();
+  const stack = new HaikuGravitonPipelineStack(app, 'TestOvenStack', {
+    env: { account: config.account, region: config.region },
+    config: { ...config, amiNamePrefix: 'haiku-oven', workBucketName: undefined },
+    testOnly: true,
+  });
+  return Template.fromStack(stack);
+}
+
 test('creates a six-stage pipeline with the hardware gate before approval', () => {
   const t = synth();
   t.hasResourceProperties('AWS::CodePipeline::Pipeline', {
@@ -1164,4 +1179,485 @@ test('promote role can LIST every bucket its buildspec reads', () => {
   const mustList = [...buckets].filter((b) => !b.startsWith('cdk-'));
   expect(mustList.length).toBeGreaterThan(1);
   for (const b of mustList) expect([...listable]).toContain(b);
+});
+
+// ---- the test-only "oven" pipeline (Source -> CrossBuild -> Register -> Test) --
+//
+// The oven exists so candidate AMIs can be baked freely and unattended for PR
+// validation, in place of QEMU. Its defining property is STRUCTURAL: it must be
+// INCAPABLE of promoting, not merely un-approved. The reason is concrete -- an
+// approval token read out of `get-pipeline-state` once belonged to a stale PARKED
+// execution and promoted a three-day-old AMI instead of the intended build. A
+// pipeline with no Approve and no Promote cannot have that failure mode.
+//
+// So these tests assert absence, in the synthesized template, of every path to
+// canonical: the two stages, the Promote project, and the IAM rights. They are
+// paired with mirror tests asserting the TRUNK pipeline still HAS all of it --
+// silently disarming the real pipeline would be a worse regression than the oven
+// failing to be safe, and one shared stack class makes that possible.
+
+/** Every IAM statement in a template, grouped by the policy document it lives in. */
+function policyDocuments(t: Template): { id: string; statements: any[] }[] {
+  const out: { id: string; statements: any[] }[] = [];
+  for (const type of ['AWS::IAM::Policy', 'AWS::IAM::ManagedPolicy']) {
+    for (const [id, res] of Object.entries(t.findResources(type))) {
+      out.push({ id, statements: (res as any).Properties.PolicyDocument.Statement });
+    }
+  }
+  return out;
+}
+
+/**
+ * Does `granted` (an IAM action string, possibly a wildcard) authorize `action`?
+ * A wildcard match rather than string equality on purpose: a future `ec2:*` or
+ * `ssm:Put*` grant would authorize the thing under test while an equality check
+ * sailed straight past it.
+ */
+function authorizes(granted: string, action: string): boolean {
+  if (granted === '*') return true;
+  const escaped = granted.replace(/[.+^${}()|[\]\\]/g, '\\$&').replace(/\*/g, '.*');
+  return new RegExp(`^${escaped}$`, 'i').test(action);
+}
+
+function allowsAction(statements: any[], action: string): any[] {
+  return statements.filter((s) => (s.Effect ?? 'Allow') === 'Allow'
+    && ([] as string[]).concat(s.Action ?? []).some((a) => authorizes(a, action)));
+}
+
+test('the oven pipeline ends at Test: no Approve stage and no Promote stage', () => {
+  const t = synthOven();
+  const pipelines = Object.values(t.findResources('AWS::CodePipeline::Pipeline')) as any[];
+  expect(pipelines).toHaveLength(1);
+  expect(pipelines[0].Properties.Stages.map((s: any) => s.Name))
+    .toEqual(['Source', 'CrossBuild', 'Register', 'Test']);
+  // ... and not merely renamed: no action of the Approval category exists at all,
+  // so there is no approval token for anything -- a stale execution or a mis-aimed
+  // agent -- to consume.
+  const categories = pipelines[0].Properties.Stages.flatMap(
+    (s: any) => s.Actions.map((a: any) => a.ActionTypeId.Category));
+  expect(categories).not.toContain('Approval');
+});
+
+test('the oven builds no Promote project and references no promote buildspec', () => {
+  const t = synthOven();
+  const names = Object.values(t.findResources('AWS::CodeBuild::Project'))
+    .map((p: any) => p.Properties.Name).sort();
+  expect(names).toEqual(['haiku-oven-cross-build', 'haiku-oven-perf-test', 'haiku-oven-register']);
+  t.resourceCountIs('AWS::CodeBuild::Project', 3);
+  // The buildspec that runs `haiku-canonical promote` must not be reachable from
+  // this template at all -- an unreferenced-but-present project would still be
+  // start-build-able by anything holding codebuild:StartBuild.
+  expect(JSON.stringify(t.toJSON())).not.toContain('buildspecs/promote.yml');
+});
+
+test('no oven role can move the canonical tag', () => {
+  const t = synthOven();
+  const docs = policyDocuments(t);
+  // Nothing may DELETE a tag: only a promote needs that (to strip canonical from
+  // the prior holder), and there is no promote here.
+  for (const { id, statements } of docs) {
+    expect({ id, deleters: allowsAction(statements, 'ec2:DeleteTags') })
+      .toEqual({ id, deleters: [] });
+  }
+  // Register and PerfTest legitimately CREATE tags (the image + snapshot, and the
+  // ephemeral instances). Region-scoped CreateTags on `*` includes the tag KEY
+  // `canonical`, which would let the oven mint a SECOND canonical=true and break the
+  // "exactly one" invariant haiku-canonical enforces -- not by promoting, but by
+  // tagging. So every document that can create a tag must also carry the explicit
+  // Deny, which no Allow anywhere can override.
+  let checked = 0;
+  for (const { statements } of docs) {
+    if (allowsAction(statements, 'ec2:CreateTags').length === 0) continue;
+    checked++;
+    const deny = statements.find((s: any) => s.Effect === 'Deny'
+      && ([] as string[]).concat(s.Action ?? []).includes('ec2:CreateTags'));
+    expect(deny).toBeDefined();
+    expect(([] as string[]).concat(deny.Action).sort())
+      .toEqual(['ec2:CreateTags', 'ec2:DeleteTags']);
+    expect(deny.Resource).toBe('*');
+    expect(deny.Condition).toEqual({
+      'ForAnyValue:StringEquals': { 'aws:TagKeys': ['canonical'] },
+    });
+  }
+  // Guard the guard: if nothing in the oven could tag at all, the loop above would
+  // pass vacuously while proving nothing.
+  expect(checked).toBeGreaterThanOrEqual(2);
+});
+
+test('no oven role can write the canonical SSM parameter', () => {
+  const t = synthOven();
+  const docs = policyDocuments(t);
+  const canonicalArn =
+    `arn:aws:ssm:${config.region}:${config.account}:parameter${config.canonicalAmiParam}`;
+  // No Allow anywhere, on any resource -- not merely on the canonical parameter.
+  for (const { id, statements } of docs) {
+    expect({ id, putters: allowsAction(statements, 'ssm:PutParameter') })
+      .toEqual({ id, putters: [] });
+  }
+  expect(JSON.stringify(t.toJSON())).not.toContain(canonicalArn);
+  // Absence of an Allow is the guarantee; the Deny is what makes it survive a later
+  // edit that adds one. Every CodeBuild role carries it.
+  const denying = docs.filter(({ statements }) => statements.some((s: any) =>
+    s.Effect === 'Deny' && ([] as string[]).concat(s.Action ?? []).includes('ssm:PutParameter')));
+  expect(denying.length).toBeGreaterThanOrEqual(3);
+});
+
+// SUPERSEDED -- CodePipeline's default -- means a newer execution OVERTAKES and
+// DISCARDS an in-flight older one. For a pipeline whose point is "bake as many
+// candidates as we want", that would mean each new bake killing the previous one
+// after it had already burned ~25 minutes of cross-build. PARALLEL runs them
+// independently. A silent fallback to SUPERSEDED would look completely fine and
+// quietly throw bakes away, so assert the rendered property.
+test('the oven runs executions in PARALLEL so concurrent bakes do not supersede', () => {
+  const t = synthOven();
+  t.hasResourceProperties('AWS::CodePipeline::Pipeline', {
+    Name: 'haiku-oven-bake',
+    PipelineType: 'V2',          // PARALLEL is V2-only; CDK rejects it on V1.
+    ExecutionMode: 'PARALLEL',
+  });
+});
+
+// An oven AMI must stay PROMOTABLE. The oven cannot promote; the image it bakes is a
+// first-class candidate a human can later hand to `haiku-canonical promote`, which is
+// the whole point -- you pick the best already-tested image instead of starting a
+// fresh bake and waiting an hour for it to reach an approval gate. So the tag scheme
+// is for SELECTABILITY and must not exclude: candidate=true is set in both lanes and
+// oven=true is purely additive.
+test('the oven tags its AMI as a first-class candidate, additively', () => {
+  const cases: [Template, string, string][] = [
+    [synthOven(), 'oven', 'haiku-oven-register'],
+    [synth(), 'trunk', 'haiku-graviton-register'],
+  ];
+  for (const [t, lane, project] of cases) {
+    t.hasResourceProperties('AWS::CodeBuild::Project', {
+      Name: project,
+      Environment: Match.objectLike({
+        EnvironmentVariables: Match.arrayWith([
+          Match.objectLike({ Name: 'HG_BAKE_LANE', Value: lane }),
+        ]),
+      }),
+    });
+  }
+  // And the register script acts on it the right way round: candidate=true
+  // unconditional, oven=true only in the oven lane. A lane flag that gated
+  // `candidate` would make oven images invisible to every tool that lists
+  // candidates, i.e. unselectable -- the opposite of the intent.
+  const script = fs.readFileSync(
+    path.join(__dirname, '..', 'scripts', 'import-and-register.sh'), 'utf8');
+  const code = script.split('\n').filter((l) => !/^\s*#/.test(l)).join('\n');
+  expect(code).toContain('"Key=candidate,Value=true"');
+  expect(code).toContain('LANE_TAGS+=("Key=oven,Value=true")');
+  expect(code).not.toMatch(/BAKE_LANE[^\n]*\n[^\n]*Key=candidate/);
+  // Nothing in a bake sets canonical -- that is promote's job alone, in either lane.
+  expect(code).not.toContain('Key=canonical');
+});
+
+// The oven shares the stack class with the trunk, so every name that must be
+// distinct comes from amiNamePrefix. A collision would have the oven adopt the
+// trunk's CodeBuild projects or IAM role -- i.e. inherit exactly the promote rights
+// this design removes.
+test('no oven resource name collides with the trunk pipeline', () => {
+  const namesOf = (t: Template) => [
+    ...Object.values(t.findResources('AWS::CodeBuild::Project')).map((p: any) => p.Properties.Name),
+    ...Object.values(t.findResources('AWS::CodePipeline::Pipeline')).map((p: any) => p.Properties.Name),
+    ...Object.values(t.findResources('AWS::IAM::Role'))
+      .map((r: any) => r.Properties.RoleName).filter(Boolean),
+    ...Object.values(t.findResources('AWS::IAM::InstanceProfile'))
+      .map((r: any) => r.Properties.InstanceProfileName).filter(Boolean),
+  ];
+  const oven = synthOven();
+  const trunk = synth();
+  const ovenNames = namesOf(oven);
+  const trunkNames = namesOf(trunk);
+  expect(ovenNames.length).toBeGreaterThan(4);
+  for (const n of ovenNames) expect(trunkNames).not.toContain(n);
+  // The oven must also not write the account-global SSM parameter through which the
+  // TRUNK publishes its work-bucket ARN to the ops stack: two writers would fight
+  // over one name and the ops publish could read the wrong bucket. That guard is
+  // keyed on stackName, so it has to be checked with the REAL stack ids from
+  // bin/pipeline.ts -- the fixture ids above would make it pass vacuously.
+  const withRealId = (id: string, testOnly: boolean) => {
+    const app = new cdk.App();
+    const stack = new HaikuGravitonPipelineStack(app, id, {
+      env: { account: config.account, region: config.region },
+      config: {
+        ...config,
+        amiNamePrefix: testOnly ? 'haiku-oven' : config.amiNamePrefix,
+        workBucketName: undefined,
+      },
+      testOnly,
+    });
+    return JSON.stringify(Template.fromStack(stack).toJSON());
+  };
+  expect(withRealId('HaikuGravitonBakePipeline', false))
+    .toContain('/debeos/bake/workbucket-arn');
+  expect(withRealId('HaikuGravitonOvenPipeline', true))
+    .not.toContain('/debeos/bake/workbucket-arn');
+});
+
+// ---- mirror tests: the REAL pipeline must still be able to promote ------------
+// A shared stack class means a mistake in the testOnly branch could disarm the
+// trunk, and it would be invisible: bakes would stay green right up to the point
+// where canonical silently stopped moving.
+
+test('the trunk bake pipeline still has both Approve and Promote', () => {
+  const t = synth();
+  const p = (Object.values(t.findResources('AWS::CodePipeline::Pipeline')) as any[])[0];
+  expect(p.Properties.Stages.map((s: any) => s.Name))
+    .toEqual(['Source', 'CrossBuild', 'Register', 'Test', 'Approve', 'Promote']);
+  const categories = p.Properties.Stages.flatMap(
+    (s: any) => s.Actions.map((a: any) => a.ActionTypeId.Category));
+  expect(categories).toContain('Approval');
+  // SUPERSEDED for the trunk: the oven is where many executions run at once, and
+  // only one image can be canonical, so overlapping trunk bakes buy nothing.
+  expect(p.Properties.ExecutionMode).toBe('SUPERSEDED');
+  t.hasResourceProperties('AWS::CodeBuild::Project', {
+    Name: 'haiku-graviton-promote',
+    Source: Match.objectLike({ BuildSpec: 'graviton/pipeline/buildspecs/promote.yml' }),
+  });
+});
+
+test('the trunk promote role can still move the canonical tag and its SSM mirror', () => {
+  const t = synth();
+  const docs = policyDocuments(t);
+  expect(docs.filter(({ statements }) =>
+    allowsAction(statements, 'ec2:DeleteTags').length > 0)).toHaveLength(1);
+  expect(docs.filter(({ statements }) =>
+    allowsAction(statements, 'ssm:PutParameter').length > 0)).toHaveLength(1);
+  expect(JSON.stringify(t.toJSON())).toContain(
+    `arn:aws:ssm:${config.region}:${config.account}:parameter${config.canonicalAmiParam}`);
+  // ... and the trunk is NOT accidentally carrying the oven's disarming denies.
+  for (const { statements } of docs) {
+    for (const s of statements) {
+      expect(s.Sid).not.toBe('DenyCanonicalTagMutation');
+      expect(s.Sid).not.toBe('DenyCanonicalSsmMirror');
+    }
+  }
+});
+
+// ---- PARALLEL execution safety: runs must not tear down each other's hardware --
+//
+// Both gate instances have always carried a fixed Name (haiku-perf-gate /
+// haiku-perf-gate-peer), which is safe only while at most one gate can be in flight.
+// PARALLEL execution makes concurrent gates routine, and the belt-and-braces
+// straggler sweep in perf-test.yml terminates EVERYTHING matching Name+ephemeral --
+// so without a per-run discriminator a finishing oven bake would terminate a sibling
+// bake's candidate mid-measurement, and the victim would report a hardware failure
+// that never happened.
+const BUILDSPEC_DIR = path.join(__dirname, '..', 'buildspecs');
+const GRAVITON_SCRIPTS = path.join(__dirname, '..', '..', 'scripts');
+
+test('the perf gate stamps a per-run id on both instances it launches', () => {
+  const gate = fs.readFileSync(path.join(GRAVITON_SCRIPTS, 'haiku-perf-gate'), 'utf8');
+  const launches = gate.split('\n').filter((l) => l.includes('--tag-specifications'));
+  expect(launches).toHaveLength(2);
+  for (const l of launches) {
+    expect(l).toContain('{Key=run-id,Value=${RUN_ID}}');
+    expect(l).toContain('{Key=ephemeral,Value=true}');
+  }
+  // RUN_ID is always derived to something: an empty value would tag nothing useful
+  // and put the sweep back to matching every gate instance in the account.
+  expect(gate).toContain('RUN_ID="${HG_RUN_ID:-}"');
+  expect(gate).toMatch(/if \[ -z "\$RUN_ID" \]; then/);
+});
+
+test('the straggler sweep only sweeps this run, and sweeps nothing if it cannot tell', () => {
+  const spec = fs.readFileSync(path.join(BUILDSPEC_DIR, 'perf-test.yml'), 'utf8');
+  expect(spec).toContain('export HG_RUN_ID="$CODEBUILD_BUILD_ID"');
+  const sweep = spec.slice(spec.indexOf('stragglers=$('));
+  expect(sweep).toContain('"Name=tag:run-id,Values=$HG_RUN_ID"');
+  // Fail closed: an unset discriminator must sweep NOTHING, because sweeping
+  // everything is the bug being fixed.
+  const guard = spec.slice(spec.indexOf('set +e'), spec.indexOf('stragglers=$('));
+  expect(guard).toMatch(/if \[ -z "\$\{HG_RUN_ID:-\}" \]; then/);
+  expect(guard).toContain('skipping the straggler sweep');
+  expect(guard).toContain('exit 0');
+});
+
+test('the register upload key carries a per-run discriminator', () => {
+  const script = fs.readFileSync(
+    path.join(__dirname, '..', 'scripts', 'import-and-register.sh'), 'utf8');
+  // Two PARALLEL Register stages picking the same seconds-resolution key would
+  // overwrite each other's 20 GiB raw image, silently -- the second writer wins and
+  // the import reads whichever bytes landed last.
+  expect(script).toMatch(/^KEY=.*\$\{RUN_TAG\}/m);
+  expect(script).toContain('CODEBUILD_BUILD_ID:-local-$$');
+  // An AMI name collision is loud rather than silent, and is recovered from rather
+  // than changing the operator-visible name shape of every bake.
+  expect(script).toContain('InvalidAMIName.Duplicate');
+});
+
+// ---- the perf-gate result is recorded ON the AMI (selectability) --------------
+//
+// Choosing which already-baked candidate to promote happens days after the bake, and
+// CodeBuild logs age out. If the test result is not on the image, an oven candidate
+// is no more selectable than an untested one -- which would make "pick the best,
+// promote it" a guess.
+//
+// Executed against the tracked script with a stubbed `aws` on PATH, so these assert
+// what it does, not what it appears to do.
+const GATE_TAG_SCRIPT = path.join(__dirname, '..', 'scripts', 'tag-gate-result.sh');
+
+function stubAwsDir(exitCode = 0): { dir: string; bin: string; calls: string } {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'oven-test-'));
+  const calls = path.join(dir, 'calls.log');
+  const bin = path.join(dir, 'bin');
+  fs.mkdirSync(bin);
+  fs.writeFileSync(path.join(bin, 'aws'),
+    `#!/usr/bin/env bash\nprintf '%s\\n' "$*" >> ${calls}\nexit ${exitCode}\n`, { mode: 0o755 });
+  return { dir, bin, calls };
+}
+
+function runGateTagger(args: string[], sidecar?: string):
+    { status: number; calls: string } {
+  const { dir, bin, calls } = stubAwsDir();
+  const resolved = args.map((a) => {
+    if (a !== 'RESULT' || sidecar === undefined) return a;
+    const p = path.join(dir, 'result');
+    fs.writeFileSync(p, sidecar);
+    return p;
+  });
+  let status = 0;
+  try {
+    child_process.execFileSync('bash', [GATE_TAG_SCRIPT, ...resolved], {
+      env: { ...process.env, PATH: `${bin}:${process.env.PATH}`, AWS_REGION: 'us-west-2' },
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
+  } catch (e: any) {
+    status = e.status;
+  }
+  return { status, calls: fs.existsSync(calls) ? fs.readFileSync(calls, 'utf8') : '' };
+}
+
+test('a passing gate stamps its measured numbers onto the AMI', () => {
+  const r = runGateTagger(['ami-0123456789abcdef0', '1', 'RESULT'],
+    'mtu=9001\nrx=4912.3\ntx=3877.0\nverdict=pass\n');
+  expect(r.status).toBe(0);
+  expect(r.calls).toContain('Key=perf-gate,Value=pass');
+  expect(r.calls).toContain('Key=perf-mtu,Value=9001');
+  expect(r.calls).toContain('Key=perf-rx-mbps,Value=4912.3');
+  expect(r.calls).toContain('Key=perf-tx-mbps,Value=3877.0');
+  expect(r.calls).toContain('--resources ami-0123456789abcdef0');
+  // Never canonical. The Test stage holds ec2:CreateTags and this is the one script
+  // that uses it against an AMI, so it is where a stray canonical tag would come
+  // from -- and in the oven the IAM Deny refuses it regardless.
+  expect(r.calls).not.toContain('canonical');
+});
+
+test('a failed build is tagged fail even though the gate recorded numbers first', () => {
+  // The sidecar deliberately records measurements BEFORE the floor assertions, so a
+  // red gate keeps the numbers that failed it. The build status must still win, or a
+  // below-floor image would be tagged as a pass.
+  const r = runGateTagger(['ami-0123456789abcdef0', '0', 'RESULT'],
+    'mtu=9001\nrx=11.0\ntx=9.0\nverdict=pass\n');
+  expect(r.status).toBe(0);
+  expect(r.calls).toContain('Key=perf-gate,Value=fail');
+  expect(r.calls).toContain('Key=perf-rx-mbps,Value=11.0');
+  expect(r.calls).not.toContain('Value=pass');
+});
+
+test('a succeeding build with no sidecar is tagged unknown, not pass', () => {
+  // The gate was skipped or replaced. Claiming a pass nobody measured is exactly how
+  // an untested image gets promoted.
+  const r = runGateTagger(['ami-0123456789abcdef0', '1', '/nonexistent/result']);
+  expect(r.status).toBe(0);
+  expect(r.calls).toContain('Key=perf-gate,Value=unknown');
+});
+
+test('gate-result tagging can never fail the build', () => {
+  // Best-effort by contract: the verdict has already been delivered by the gate's
+  // exit status, so a tagging blip must not turn a good bake red.
+  expect(runGateTagger([]).status).toBe(0);
+  const { bin } = stubAwsDir(7);
+  let status = 0;
+  try {
+    child_process.execFileSync('bash', [GATE_TAG_SCRIPT, 'ami-0123456789abcdef0', '1'], {
+      env: { ...process.env, PATH: `${bin}:${process.env.PATH}` },
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
+  } catch (e: any) { status = e.status; }
+  expect(status).toBe(0);
+});
+
+// The Test stage is KEPT in the oven, and a failing gate still fails the oven bake.
+// An untested candidate is worthless: the entire value of an oven image is that it
+// can be promoted later without re-testing, and that only holds if a red gate means
+// the image never becomes selectable. The gate's exit status is what fails the stage,
+// and the AMI is additionally tagged perf-gate=fail so a failed image cannot be
+// mistaken for an untested one.
+test('the oven keeps the hardware gate, wired to the registered AMI', () => {
+  const t = synthOven();
+  const p = (Object.values(t.findResources('AWS::CodePipeline::Pipeline')) as any[])[0];
+  const test = p.Properties.Stages.find((s: any) => s.Name === 'Test');
+  expect(test.Actions.map((a: any) => a.Name)).toEqual(['Hardware_Perf_Gate']);
+  // It runs the same project/buildspec as the trunk gate -- shared on purpose, so
+  // what the oven validates stays the thing that ships.
+  t.hasResourceProperties('AWS::CodeBuild::Project', {
+    Name: 'haiku-oven-perf-test',
+    Source: Match.objectLike({ BuildSpec: 'graviton/pipeline/buildspecs/perf-test.yml' }),
+  });
+  // The gate is handed the AMI the Register stage exported, not a config default.
+  expect(JSON.stringify(test.Actions[0].Configuration)).toContain('reg.AMI_ID');
+});
+
+// ---- reaping oven images without evicting trunk candidates -------------------
+// haiku-canonical's prune selected on candidate=true only. Oven images carry
+// candidate=true too (they are first-class candidates, on purpose), so a targeted
+// selector is what keeps reaping throwaway oven bakes from consuming the retention
+// window that protects trunk candidates.
+const CANONICAL_SCRIPT = path.join(GRAVITON_SCRIPTS, 'haiku-canonical');
+
+function runCanonical(args: string[]): { status: number; out: string; calls: string } {
+  const { bin, calls } = stubAwsDir();
+  let status = 0;
+  let out = '';
+  try {
+    out = child_process.execFileSync('bash', [CANONICAL_SCRIPT, ...args], {
+      env: { ...process.env, PATH: `${bin}:${process.env.PATH}`, AWS_REGION: 'us-west-2' },
+      encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'],
+    });
+  } catch (e: any) {
+    status = e.status;
+    out = String(e.stdout ?? '') + String(e.stderr ?? '');
+  }
+  return {
+    status, out,
+    calls: fs.existsSync(calls) ? fs.readFileSync(calls, 'utf8') : '',
+  };
+}
+
+test('prune --tag selects the named tag; the default is still candidate=true', () => {
+  const oven = runCanonical(['prune', '--tag', 'oven=true']);
+  expect(oven.status).toBe(0);
+  expect(oven.calls).toContain('Name=tag:oven,Values=true');
+  expect(oven.calls).not.toContain('Name=tag:candidate,Values=true');
+  const dflt = runCanonical(['prune']);
+  expect(dflt.status).toBe(0);
+  expect(dflt.calls).toContain('Name=tag:candidate,Values=true');
+});
+
+test('prune refuses to select on the canonical tag, or a malformed selector', () => {
+  // Selecting on canonical=true makes every match the one image prune always
+  // protects: a guaranteed no-op that reads like a working command.
+  const r = runCanonical(['prune', '--tag', 'canonical=true', '--apply']);
+  expect(r.status).not.toBe(0);
+  expect(r.out).toContain("must not select on the 'canonical' tag");
+  expect(r.calls).not.toContain('deregister-image');
+  const bad = runCanonical(['prune', '--tag', 'oven']);
+  expect(bad.status).not.toBe(0);
+  expect(bad.out).toContain('--tag expects KEY=VALUE');
+});
+
+test('prune is still dry-run by default and still protects the canonical', () => {
+  const r = runCanonical(['prune', '--tag', 'oven=true']);
+  // No mutation reached the stubbed CLI at all.
+  expect(r.calls).not.toContain('deregister-image');
+  expect(r.calls).not.toContain('delete-snapshot');
+  // The canonical protection is unconditional -- it does not depend on the selector.
+  const script = fs.readFileSync(CANONICAL_SCRIPT, 'utf8');
+  expect(script).toContain('if [ "$ami" = "$canonical" ]; then');
+  // ... and promote still accepts any self-owned AMI, so an oven image is adoptable
+  // by the existing path with no change. Nothing filters on the bake lane.
+  expect(script).not.toMatch(/promote[\s\S]{0,400}tag:oven/);
+  expect(script).not.toContain('refusing oven');
 });

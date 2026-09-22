@@ -12,6 +12,37 @@ import { HaikuPipelineConfig } from './config';
 
 export interface HaikuGravitonPipelineStackProps extends cdk.StackProps {
   readonly config: HaikuPipelineConfig;
+  /**
+   * Build the TEST-ONLY "oven" variant: Source -> CrossBuild -> Register -> Test
+   * and nothing after it.
+   *
+   * This is a STRUCTURAL guarantee, not a policy or a convention. When set:
+   *   - the Promote PipelineProject is never constructed, so there is no
+   *     `<prefix>-promote` CodeBuild project to start;
+   *   - there is no Approve (ManualApproval) action, so there is no approval
+   *     token for anything to consume;
+   *   - every CodeBuild role in the stack carries an explicit DENY on
+   *     ec2:CreateTags/ec2:DeleteTags for the `canonical` tag key and on
+   *     ssm:PutParameter, so even a role that is later widened by mistake --
+   *     or a compromised build -- cannot move canonical. An explicit Deny
+   *     cannot be overridden by any Allow.
+   *
+   * Why structural rather than gated: an approval token read out of
+   * `get-pipeline-state` once belonged to a STALE PARKED execution and promoted
+   * a three-day-old AMI instead of the intended build. A pipeline with no
+   * Approve and no Promote cannot have that failure mode at all, which is what
+   * makes it safe to run unattended and repeatedly.
+   *
+   * The AMI it produces is still a FIRST-CLASS promotion candidate: it carries
+   * `candidate=true` plus full provenance and its perf-gate result, and
+   * `graviton/scripts/haiku-canonical promote <ami-id>` adopts it unchanged.
+   * The oven cannot promote; the image it bakes can be promoted, by a human,
+   * out of band. That is the point -- you pick the best already-tested image
+   * instead of starting a fresh hour-long bake to reach an Approve gate.
+   *
+   * @default false
+   */
+  readonly testOnly?: boolean;
 }
 
 /**
@@ -39,11 +70,15 @@ export interface HaikuGravitonPipelineStackProps extends cdk.StackProps {
  *                hand rather than a promise that someone checked out of band.
  *   Promote      CodeBuild: graviton/scripts/haiku-canonical promote <AMI_ID>,
  *                enforcing the single-canonical invariant.
+ *
+ * With `testOnly` (the "oven"), the last two stages do not exist and the stack
+ * builds no Promote project — see {@link HaikuGravitonPipelineStackProps.testOnly}.
  */
 export class HaikuGravitonPipelineStack extends cdk.Stack {
   constructor(scope: Construct, id: string, props: HaikuGravitonPipelineStackProps) {
     super(scope, id, props);
     const cfg = props.config;
+    const testOnly = props.testOnly ?? false;
 
     // ---------------------------------------------------------------------
     // Work bucket: raw disk image (import-snapshot source) + cross-tools cache.
@@ -138,6 +173,13 @@ export class HaikuGravitonPipelineStack extends cdk.Stack {
       HAIKU_ON_EC2_BRANCH: { value: cfg.haikuOnEc2Branch },
       ROOT_VOLUME_BYTES: { value: cfg.rootVolumeBytes },
       AMI_NAME_PREFIX: { value: cfg.amiNamePrefix },
+      // Which lane baked this image. `oven` makes the Register stage add an
+      // additive `oven=true` tag; `trunk` adds nothing. The image is tagged
+      // `candidate=true` either way -- an oven image is a first-class promotion
+      // candidate and `haiku-canonical promote` must accept it unchanged. The
+      // extra tag exists for SELECTABILITY (and targeted reaping via
+      // `haiku-canonical prune --tag oven=true`), never for exclusion.
+      HG_BAKE_LANE: { value: testOnly ? 'oven' : 'trunk' },
     };
 
     // ---------------------------------------------------------------------
@@ -578,8 +620,16 @@ export class HaikuGravitonPipelineStack extends cdk.Stack {
     // ---------------------------------------------------------------------
     // Stage 4 project: canonical promotion. The only privileged tag mutation.
     // Tightly scoped to describe/create/delete tags in the target region.
+    //
+    // NOT CONSTRUCTED AT ALL in the test-only "oven" variant. Deliberately a
+    // missing resource rather than an unreachable one: there is then no
+    // `<prefix>-promote` CodeBuild project in the account for a stray
+    // `start-build`, a stale approval token or a mis-aimed agent to invoke, and
+    // no role holding ec2:DeleteTags or ssm:PutParameter on the canonical
+    // parameter. "The stage is never approved" is a procedure; "the project does
+    // not exist" is a property of the deployed template.
     // ---------------------------------------------------------------------
-    const promote = new codebuild.PipelineProject(this, 'Promote', {
+    const promote = testOnly ? undefined : new codebuild.PipelineProject(this, 'Promote', {
       projectName: `${cfg.amiNamePrefix}-promote`,
       environment: smallArmEnvironment,
       timeout: cdk.Duration.minutes(15),
@@ -607,7 +657,7 @@ export class HaikuGravitonPipelineStack extends cdk.Stack {
         },
       },
     });
-    promote.addToRolePolicy(
+    promote?.addToRolePolicy(
       new iam.PolicyStatement({
         sid: 'CanonicalTagManagement',
         actions: ['ec2:DescribeImages', 'ec2:CreateTags', 'ec2:DeleteTags'],
@@ -626,7 +676,7 @@ export class HaikuGravitonPipelineStack extends cdk.Stack {
     // grant previously lived as a hand-applied inline policy on the CDK-managed
     // role, which a future deploy would have silently wiped; owning it here makes
     // the unattended promote self-sufficient.
-    promote.addToRolePolicy(
+    promote?.addToRolePolicy(
       new iam.PolicyStatement({
         sid: 'MirrorCanonicalAmiIdToSsm',
         actions: ['ssm:PutParameter'],
@@ -635,6 +685,56 @@ export class HaikuGravitonPipelineStack extends cdk.Stack {
         ],
       }),
     );
+
+    // ---------------------------------------------------------------------
+    // The oven's disarming: an explicit DENY on every canonical-mutating action,
+    // attached to every CodeBuild role in the stack.
+    //
+    // Absence of a Promote project is most of the guarantee, but not all of it:
+    // Register and PerfTest both legitimately hold `ec2:CreateTags` on `*`
+    // (Register tags the image and its snapshot; the gate tags the ephemeral
+    // instances it launches). Region-scoped CreateTags on `*` includes the tag
+    // KEY `canonical`, so without this the oven could set a SECOND canonical=true
+    // and break the "exactly one" invariant `haiku-canonical check` enforces --
+    // not by promoting, but by tagging. That is the same class of accident the
+    // oven exists to rule out, so it is ruled out the same way: structurally.
+    //
+    // Deny, not a narrowed Allow, on purpose. An explicit Deny cannot be
+    // overridden by any Allow in any other policy, so it survives a future edit
+    // that widens a grant, an inline policy applied by hand, and a managed policy
+    // attached later. It is also visible as its own statement in the synthesized
+    // template, which is what the jest assertions read.
+    //
+    // ssm:PutParameter is denied outright rather than only on the canonical
+    // parameter: nothing in CrossBuild/Register/Test writes any parameter, so the
+    // broader deny costs nothing and cannot be sidestepped by a parameter-name
+    // technicality (an alias path, a differing leading slash).
+    // ---------------------------------------------------------------------
+    if (testOnly) {
+      for (const project of [crossBuild, register, perfTest]) {
+        project.addToRolePolicy(
+          new iam.PolicyStatement({
+            sid: 'DenyCanonicalTagMutation',
+            effect: iam.Effect.DENY,
+            actions: ['ec2:CreateTags', 'ec2:DeleteTags'],
+            resources: ['*'],
+            conditions: {
+              // ForAnyValue: deny as soon as ONE key in the request is
+              // `canonical`, whatever else is in the same call.
+              'ForAnyValue:StringEquals': { 'aws:TagKeys': ['canonical'] },
+            },
+          }),
+        );
+        project.addToRolePolicy(
+          new iam.PolicyStatement({
+            sid: 'DenyCanonicalSsmMirror',
+            effect: iam.Effect.DENY,
+            actions: ['ssm:PutParameter', 'ssm:DeleteParameter'],
+            resources: ['*'],
+          }),
+        );
+      }
+    }
 
     // ---------------------------------------------------------------------
     // Artifacts + pipeline wiring.
@@ -684,7 +784,7 @@ export class HaikuGravitonPipelineStack extends cdk.Stack {
       },
     });
 
-    const approvalAction = new cpactions.ManualApprovalAction({
+    const approvalAction = testOnly ? undefined : new cpactions.ManualApprovalAction({
       actionName: 'Approve_Canonical_Promotion',
       additionalInformation:
         'The Test stage already booted AMI #{reg.AMI_ID} on real Graviton hardware and ' +
@@ -697,7 +797,7 @@ export class HaikuGravitonPipelineStack extends cdk.Stack {
         'from every prior holder.',
     });
 
-    const promoteAction = new cpactions.CodeBuildAction({
+    const promoteAction = promote && new cpactions.CodeBuildAction({
       actionName: 'Promote_Canonical',
       project: promote,
       input: sourceArtifact,
@@ -707,18 +807,46 @@ export class HaikuGravitonPipelineStack extends cdk.Stack {
       },
     });
 
+    // Bake stages. The oven stops at Test: the two promotion stages are absent
+    // from the array, so they are absent from the deployed pipeline. Built by
+    // appending rather than by filtering a six-entry list, so a stage cannot be
+    // reintroduced by a predicate that silently evaluates the wrong way.
+    const stages: codepipeline.StageProps[] = [
+      { stageName: 'Source', actions: [sourceAction] },
+      { stageName: 'CrossBuild', actions: [crossBuildAction] },
+      { stageName: 'Register', actions: [registerAction] },
+      { stageName: 'Test', actions: [perfTestAction] },
+    ];
+    if (approvalAction && promoteAction) {
+      stages.push({ stageName: 'Approve', actions: [approvalAction] });
+      stages.push({ stageName: 'Promote', actions: [promoteAction] });
+    }
+
     new codepipeline.Pipeline(this, 'BakePipeline', {
       pipelineName: `${cfg.amiNamePrefix}-bake`,
       pipelineType: codepipeline.PipelineType.V2,
       restartExecutionOnUpdate: false,
-      stages: [
-        { stageName: 'Source', actions: [sourceAction] },
-        { stageName: 'CrossBuild', actions: [crossBuildAction] },
-        { stageName: 'Register', actions: [registerAction] },
-        { stageName: 'Test', actions: [perfTestAction] },
-        { stageName: 'Approve', actions: [approvalAction] },
-        { stageName: 'Promote', actions: [promoteAction] },
-      ],
+      // The oven runs many bakes at once; the trunk keeps CodePipeline's default
+      // SUPERSEDED.
+      //
+      // SUPERSEDED means a newer execution OVERTAKES and DISCARDS an older one
+      // still in flight. For the oven that is fatal to the whole idea: "bake as
+      // many candidates as we want" would in practice mean each new bake killing
+      // the previous one, after it had already spent ~25 minutes of cross-build.
+      // PARALLEL executions run simultaneously and independently -- no
+      // superseding, no queueing behind each other.
+      //
+      // QUEUED was the other option and is rejected: it serialises instead of
+      // discarding, which is safe but still means waiting out a full bake before
+      // the next one starts, and waiting an hour is the exact cost the oven exists
+      // to remove.
+      //
+      // Requires PipelineType.V2 (CDK throws ExecutionModeRequiresV2Pipeline
+      // otherwise). Both pipelines here are already V2, so this forces nothing.
+      executionMode: testOnly
+        ? codepipeline.ExecutionMode.PARALLEL
+        : codepipeline.ExecutionMode.SUPERSEDED,
+      stages,
     });
 
     // ---------------------------------------------------------------------
