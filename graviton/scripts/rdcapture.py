@@ -1294,7 +1294,7 @@ class GlyphRasteriser(object):
                 self._lib.FT_Outline_Transform(outline, ctypes.byref(m))
         if self._lib.FT_Render_Glyph(raw, self.FT_RENDER_MODE_NORMAL):
             return None
-        slot = slot_ptr.contents
+        slot = live                     # the same view; rendering filled it in
         bitmap = slot.bitmap
         rows = int(bitmap.rows)
         width = int(bitmap.width)
@@ -3490,6 +3490,10 @@ def text_angle_failures(cap, args):
     angle comes from the command line.  A horizontal run asserted at 90 degrees
     fails; that is the whole test."""
     failures = []
+    # getattr, not attribute access: text_expectation_failures is called with
+    # hand-rolled args objects in places, and an assertion that raises
+    # AttributeError instead of returning a verdict is not a working assertion.
+    tolerance = getattr(args, "text_angle_tolerance", 12.0)
     for spec in getattr(args, "expect_text_angle", []) or []:
         parsed = parse_angle_expectation(spec)
         if parsed is None:
@@ -3507,7 +3511,7 @@ def text_angle_failures(cap, args):
                 seen.append("drew %d glyph(s), too few to have a direction"
                             % record.get("glyphs", 0))
                 continue
-            if angle_difference(axis, want_deg) <= args.text_angle_tolerance:
+            if angle_difference(axis, want_deg) <= tolerance:
                 matched = True
                 break
             seen.append("ink ran at %.1f deg (font said rotation=%g)"
@@ -3521,7 +3525,7 @@ def text_angle_failures(cap, args):
         else:
             failures.append("--expect-text-angle %r: no run ran within %.1f "
                             "deg of %.1f -- found %s"
-                            % (spec, args.text_angle_tolerance, want_deg,
+                            % (spec, tolerance, want_deg,
                                "; ".join(seen[:4])))
     return failures
 
