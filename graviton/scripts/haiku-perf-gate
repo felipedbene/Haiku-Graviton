@@ -1381,7 +1381,15 @@ if [ "$DURABILITY_ASSERT" != 0 ] && [ "$DUR_TOOL" = present ] && [ -n "$DUR_SHA"
 			set -u
 			d=/boot/home/.gate-durability
 			echo "GATE_DURV_SIZE \$(stat -c %s "\$d/probe" 2>/dev/null)"
-			echo "GATE_DURV_SHA \$(sha256sum "\$d/probe" 2>/dev/null | cut -d\" \" -f1)"
+			# Parameter expansion, not \`cut -d" " -f1\` -- same reason as the write
+			# phase, and this side is where getting it wrong is dangerous rather
+			# than merely useless: an empty read here is not "could not check", it
+			# is compared against the recorded hash and reported as
+			# "payload sha256 changed across the stop/start", i.e. the
+			# present-but-zeroed DATA LOSS signature, blaming the page writer for a
+			# quoting bug in this harness.
+			vsha=\$(sha256sum "\$d/probe" 2>/dev/null)
+			echo "GATE_DURV_SHA \${vsha%% *}"
 			/bin/disktput -f "\$d/probe" -m verify -b 256K -n $DUR_BYTES -s $DUR_BYTES -P 2>&1 \
 				| grep -E "^[[:space:]]*(verify|VERDICT)"
 			rm -rf "\$d"
@@ -1398,8 +1406,20 @@ if [ "$DURABILITY_ASSERT" != 0 ] && [ "$DUR_TOOL" = present ] && [ -n "$DUR_SHA"
 		say "FAIL: payload size changed across the stop/start ($DUR_SIZE -> ${durv_size:-none})"
 		dfail=1
 	fi
-	if [ -z "$durv_sha" ] || [ "$durv_sha" != "$DUR_SHA" ]; then
-		say "FAIL: payload sha256 changed across the stop/start (recorded ${DUR_SHA:0:12}..., read ${durv_sha:-none})"
+	if [ -z "$durv_sha" ]; then
+		# An unreadable hash is NOT evidence of data loss, and conflating the two
+		# made this gate accuse the page writer of the exact bug it was written to
+		# catch. Distinguish them: a hash that reads back DIFFERENT is the
+		# data-loss signature and fails; a hash that does not read back at all is
+		# a broken check, which is a problem with the harness and must not be
+		# laundered into a verdict about the image.
+		say "WARNING: payload sha256 could not be read back after the stop/start"
+		say "  (size is correct at ${durv_size:-none}). This is NOT a data-loss"
+		say "  finding -- the comparison did not happen. The disktput verify below"
+		say "  is the remaining evidence; fix the readback."
+		warn=1
+	elif [ "$durv_sha" != "$DUR_SHA" ]; then
+		say "FAIL: payload sha256 changed across the stop/start (recorded ${DUR_SHA:0:12}..., read ${durv_sha:0:12}...)"
 		dfail=1
 	fi
 	case "$durv_bad" in
