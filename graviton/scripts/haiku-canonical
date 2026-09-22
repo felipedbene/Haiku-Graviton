@@ -11,6 +11,15 @@
 #   haiku-canonical promote <ami-id>     # make <ami-id> the one and only canonical
 #   haiku-canonical prune [--apply]      # keep newest N candidate AMIs, retire rest
 #                        [--keep N]      #   (default N=3; dry-run unless --apply)
+#                        [--tag K=V]     #   select on K=V instead of candidate=true
+#
+# `promote` accepts ANY self-owned AMI id, deliberately. Images from the test-only
+# "oven" pipeline (tagged oven=true, and candidate=true like every other bake) are
+# first-class promotion targets: the oven bakes and hardware-tests candidates
+# continuously but cannot promote, so moving canonical means picking the best
+# already-tested image and naming it here, instead of starting a fresh bake and
+# waiting an hour for it to reach an approval gate. `--tag oven=true` is how those
+# throwaway images get reaped without touching trunk candidates.
 #
 # Region defaults to us-west-2; override with AWS_REGION.
 set -euo pipefail
@@ -67,6 +76,11 @@ cmd_check() {
 # The current canonical is never a deletion target.
 cmd_prune() {
 	local apply="$1" keep="$2"
+	# Selection tag. Defaults to candidate=true (the historical behaviour); pass
+	# `--tag oven=true` to reap only the test-only pipeline's throwaway images and
+	# leave trunk candidates alone. The canonical protection below is unconditional
+	# and applies whatever the selector is.
+	local sel_key="${3:-$CAND_KEY}" sel_val="${4:-$CAND_VAL}"
 	local canonical rows candidates=() protect_note
 
 	canonical="$(list_canonical)"
@@ -74,18 +88,18 @@ cmd_prune() {
 	# newest-first list of candidate images with their creation date and snaps.
 	# One row per image: <CreationDate> <ImageId> <snap,snap,...>
 	rows="$(aws ec2 describe-images --region "$REGION" --owners self \
-		--filters "Name=tag:${CAND_KEY},Values=${CAND_VAL}" \
+		--filters "Name=tag:${sel_key},Values=${sel_val}" \
 		--query 'reverse(sort_by(Images,&CreationDate))[].[CreationDate,ImageId,join(`,`,BlockDeviceMappings[?Ebs].Ebs.SnapshotId)]' \
 		--output text)"
 
 	if [ -z "$rows" ]; then
-		echo "prune: no images tagged ${CAND_KEY}=${CAND_VAL}; nothing to do"
+		echo "prune: no images tagged ${sel_key}=${sel_val}; nothing to do"
 		return 0
 	fi
 
 	local total kept=0 retired=0
 	total="$(printf '%s\n' "$rows" | grep -c . || true)"
-	echo "prune: ${total} candidate AMI(s); keeping newest ${keep}; canonical=${canonical:-<none>} (protected)"
+	echo "prune: ${total} ${sel_key}=${sel_val} AMI(s); keeping newest ${keep}; canonical=${canonical:-<none>} (protected)"
 
 	# Iterate rows in order (newest first). Keep the first `keep` non-canonical
 	# images; retire the remainder. The canonical is always kept and does not
@@ -119,7 +133,7 @@ cmd_prune() {
 		fi
 	done <<< "$rows"
 
-	echo "prune: kept ${kept} candidate(s) + canonical; retired ${retired}$([ "$apply" = 1 ] || echo ' (dry-run; pass --apply to delete)')"
+	echo "prune: kept ${kept} ${sel_key}=${sel_val} AMI(s) + canonical; retired ${retired}$([ "$apply" = 1 ] || echo ' (dry-run; pass --apply to delete)')"
 }
 
 cmd_promote() {
@@ -193,20 +207,35 @@ case "${1:-}" in
 		shift
 		apply=0
 		keep="$CANDIDATE_KEEP"
+		sel_key="$CAND_KEY"
+		sel_val="$CAND_VAL"
 		while [ $# -gt 0 ]; do
 			case "$1" in
 				--apply) apply=1; shift ;;
 				--keep)  keep="$2"; shift 2 ;;
-				*) echo "usage: $(basename "$0") prune [--apply] [--keep N]" >&2; exit 2 ;;
+				--tag)
+					case "${2:-}" in
+						*=*) sel_key="${2%%=*}"; sel_val="${2#*=}" ;;
+						*) echo "error: --tag expects KEY=VALUE" >&2; exit 2 ;;
+					esac
+					# Selecting on canonical=true would make every match the
+					# protected image, i.e. a guaranteed no-op that reads like a
+					# working command. Refuse it rather than pretend.
+					[ "$sel_key" != "$TAG_KEY" ] \
+						|| { echo "error: --tag must not select on the '${TAG_KEY}' tag" >&2; exit 2; }
+					[ -n "$sel_key" ] && [ -n "$sel_val" ] \
+						|| { echo "error: --tag expects KEY=VALUE" >&2; exit 2; }
+					shift 2 ;;
+				*) echo "usage: $(basename "$0") prune [--apply] [--keep N] [--tag K=V]" >&2; exit 2 ;;
 			esac
 		done
 		case "$keep" in
 			''|*[!0-9]*) echo "error: --keep must be a non-negative integer" >&2; exit 2 ;;
 		esac
-		cmd_prune "$apply" "$keep"
+		cmd_prune "$apply" "$keep" "$sel_key" "$sel_val"
 		;;
 	*)
-		echo "usage: $(basename "$0") {check | promote <ami-id> | prune [--apply] [--keep N]}" >&2
+		echo "usage: $(basename "$0") {check | promote <ami-id> | prune [--apply] [--keep N] [--tag K=V]}" >&2
 		exit 2
 		;;
 esac

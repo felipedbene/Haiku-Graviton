@@ -204,11 +204,47 @@ SCRATCH_IOPS="${HG_SCRATCH_IOPS:-16000}"
 SCRATCH_MIBPS="${HG_SCRATCH_MIBPS:-1000}"
 DUR_BYTES="${HG_DUR_BYTES:-64M}"
 
+# A discriminator unique to THIS gate run, stamped as a `run-id` tag on both
+# instances it launches.
+#
+# Both instances have always carried a fixed Name (haiku-perf-gate /
+# haiku-perf-gate-peer), which is fine while only one gate can be in flight at a
+# time. It stops being fine the moment two are: the belt-and-braces straggler sweep
+# in perf-test.yml selects on Name+ephemeral and terminates EVERYTHING it matches,
+# so a finishing gate would terminate a concurrent gate's candidate mid-measurement
+# and the victim would report a spurious hardware failure. The oven pipeline runs
+# executions in PARALLEL, which makes that routine; it is already latently possible
+# across the trunk and the 2/3/4 variant pipelines today.
+#
+# The gate's own EXIT trap terminates by instance id and never needed this; the
+# sweep is the part that needs to be able to tell runs apart.
+RUN_ID="${HG_RUN_ID:-}"
+if [ -z "$RUN_ID" ]; then
+	RUN_ID="$(printf '%s' "${CODEBUILD_BUILD_ID:-local-$$-$(date -u +%s)}" \
+		| tr -c 'A-Za-z0-9._:/=+@-' '-')"
+fi
+
 here=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
 SSM_RUN="$here/ssm-run"
 
 die() { printf 'perf-gate: %s\n' "$*" >&2; exit 1; }
 say() { printf 'perf-gate: %s\n' "$*"; }
+
+# Optional machine-readable sidecar: `key=value` lines for what the gate measured
+# and how it ended. Written only when HG_RESULT_FILE is set, so a hand run is
+# unchanged. The Test stage sets it and then stamps the values onto the AMI as tags
+# (see graviton/pipeline/scripts/tag-gate-result.sh), which is what makes "pick the
+# best already-tested candidate and promote it" a decision from data rather than a
+# guess -- the alternative was scraping a CodeBuild log that ages out.
+#
+# A sidecar, not parsed stdout: the values are written from the same variables the
+# assertions use, so the tag cannot disagree with the verdict.
+RESULT_FILE="${HG_RESULT_FILE:-}"
+[ -z "$RESULT_FILE" ] || : > "$RESULT_FILE"
+result_put() {
+	[ -n "$RESULT_FILE" ] || return 0
+	printf '%s=%s\n' "$1" "$2" >> "$RESULT_FILE"
+}
 
 AMI="${1:-}"
 [ -n "$AMI" ] || die "usage: haiku-perf-gate <ami-id>"
@@ -453,7 +489,7 @@ launch_peer() {
 		--key-name "$KEY_NAME" --subnet-id "$SUBNET" --security-group-ids "$TEST_SG" \
 		--iam-instance-profile "Name=$PEER_PROFILE" \
 		--user-data "$userdata" \
-		--tag-specifications "ResourceType=instance,Tags=[{Key=Project,Value=haiku-graviton},{Key=Name,Value=haiku-perf-gate-peer},{Key=ephemeral,Value=true}]" \
+		--tag-specifications "ResourceType=instance,Tags=[{Key=Project,Value=haiku-graviton},{Key=Name,Value=haiku-perf-gate-peer},{Key=ephemeral,Value=true},{Key=run-id,Value=${RUN_ID}}]" \
 		--query 'Instances[0].InstanceId' --output text 2>&1)
 	case "$id" in
 		i-*) ;;
@@ -525,7 +561,7 @@ INSTANCE=$(aws --region "$REGION" ec2 run-instances \
 	--image-id "$AMI" --instance-type "$TEST_TYPE" \
 	--key-name "$KEY_NAME" --subnet-id "$SUBNET" --security-group-ids "$TEST_SG" \
 	${STORAGE_BDM[@]+"${STORAGE_BDM[@]}"} \
-	--tag-specifications "ResourceType=instance,Tags=[{Key=Project,Value=haiku-graviton},{Key=Name,Value=haiku-perf-gate},{Key=ephemeral,Value=true}]" \
+	--tag-specifications "ResourceType=instance,Tags=[{Key=Project,Value=haiku-graviton},{Key=Name,Value=haiku-perf-gate},{Key=ephemeral,Value=true},{Key=run-id,Value=${RUN_ID}}]" \
 	--query 'Instances[0].InstanceId' --output text 2>&1)
 case "$INSTANCE" in
 	i-*) ;;
@@ -883,6 +919,13 @@ mtu=$(printf '%s' "$results" | sed -n 's/^MTU: \([0-9]*\).*/\1/p' | tail -1)
 
 say "----------------------------------------"
 say "MTU $mtu   receive ${rx:-none} Mbit/s (floor $MIN_RX)   transmit ${tx:-none} Mbit/s (floor $MIN_TX)"
+
+# Recorded BEFORE the floor assertions, so a failing run still leaves the numbers
+# that failed it -- "below the floor by how much?" is the first question asked of a
+# red gate, and it is unanswerable once the log has aged out.
+result_put mtu "${mtu:-unknown}"
+result_put rx "${rx:-0}"
+result_put tx "${tx:-0}"
 
 fail=0
 [ -n "$rx" ] || { say "FAIL: no receive result at all"; fail=1; }
@@ -1371,8 +1414,10 @@ if [ "$warn" = 1 ]; then
 	# stop/start message already made once.
 	say "PASS WITH WARNINGS: $AMI boots, negotiates jumbo, meets both floors and"
 	say "  survives a stop/start. See the WARNING lines above for what was off."
+	result_put verdict pass-with-warnings
 	exit 0
 fi
+result_put verdict pass
 say "PASS: $AMI boots, negotiates jumbo, meets both floors, types files with"
 say "  mimeset, survives the mprotect probe, shuts down cleanly in ${stop_secs}s, and comes back from a"
 say "  stop/start with sshd answering"

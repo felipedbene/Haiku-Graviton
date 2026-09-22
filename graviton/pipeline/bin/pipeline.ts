@@ -76,6 +76,47 @@ if (connectionArn) {
       tags: { project: 'haiku-graviton', component: `bake-pipeline-${variant}` },
     });
   }
+
+  // The OVEN: a test-only bake pipeline that ends at the hardware gate.
+  //
+  // Same variant seam as 2/3/4 above (its own amiNamePrefix, so its own pipeline
+  // name, CodeBuild project names, peer role and auto-named work bucket), plus the
+  // one flag that removes the promotion half of the stack: `testOnly`. Sharing the
+  // stack class is deliberate -- CrossBuild, Register and the hardware Test stage
+  // are the parts worth keeping identical, and a forked copy of the stack would
+  // drift from the trunk exactly where it matters (the thing being validated would
+  // stop being the thing that ships).
+  //
+  // What it is for: bake candidates freely, for PR validation, unattended, without
+  // QEMU. It CANNOT promote -- no Approve action, no Promote action, no Promote
+  // CodeBuild project, and an explicit IAM Deny on canonical tag mutation and
+  // ssm:PutParameter across all of its roles. So an agent may start as many oven
+  // bakes as it likes and the `canonical=true` invariant is out of reach.
+  //
+  // What it still produces: a fully tested, FIRST-CLASS promotion candidate. The
+  // image carries candidate=true, oven=true, its source commit/branch/revision and
+  // its perf-gate verdict and measured throughput as tags -- so moving canonical
+  // becomes "pick the best already-tested oven AMI and
+  // `haiku-canonical promote <ami-id>` it", instead of starting a fresh bake and
+  // waiting an hour for it to reach an approval gate.
+  //
+  // It runs in PARALLEL execution mode, so concurrent bakes run beside each other
+  // instead of superseding (i.e. silently discarding) one another.
+  //
+  // Seed its work bucket the same way as the variants above (cross-tools cache +
+  // the whole hpkg-pool/ prefix) or the bake ships a feature-capped image.
+  new HaikuGravitonPipelineStack(app, 'HaikuGravitonOvenPipeline', {
+    env: { account: config.account, region: config.region },
+    description:
+      'TEST-ONLY "oven" bake pipeline: Source -> CrossBuild -> Register -> Test and ' +
+      'nothing after it. No Approve stage, no Promote stage, no Promote project, and ' +
+      'no role able to move the canonical tag or write the canonical SSM parameter -- ' +
+      'so it is safe to run unattended for PR validation. Its AMIs are still ' +
+      'first-class promotion candidates for an out-of-band `haiku-canonical promote`.',
+    config: { ...config, amiNamePrefix: 'haiku-oven', workBucketName: undefined },
+    testOnly: true,
+    tags: { project: 'haiku-graviton', component: 'oven-pipeline' },
+  });
 }
 
 app.synth();
