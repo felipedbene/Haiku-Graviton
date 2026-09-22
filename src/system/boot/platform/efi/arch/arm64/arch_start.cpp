@@ -186,6 +186,15 @@ arch_start_kernel(addr_t kernelEntry)
 	// they only needed to know about the maximum address, not any specific
 	// entry.
 
+	// The kernel refuses a kernel_args whose size is not exactly the one it was
+	// compiled against, and it refuses it before it has a console of its own --
+	// so on this architecture a loader/kernel pair from different trees stops
+	// dead with nothing said. State the number here, where there is still a
+	// console, so that the last line before the handoff is the one that
+	// identifies the mismatch.
+	dprintf("kernel_args: version %" B_PRIu32 ", %" B_PRIu32 " bytes\n",
+		gKernelArgs.version, gKernelArgs.kernel_args_size);
+
 	dprintf("Calling ExitBootServices. So long, EFI!\n");
 	serial_disable();
 

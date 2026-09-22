@@ -12,6 +12,7 @@
 
 #include <util/FixedWidthPointer.h>
 #include <boot/interrupt_controller.h>
+#include <boot/timer.h>
 #include <boot/uart.h>
 
 
@@ -45,6 +46,15 @@ typedef struct {
 	intc_info	interrupt_controller;
 
 	uint32		psci_conduit;
+
+	// What firmware says about the generic timer. Appended, so that a loader
+	// that predates it produces a kernel_args of the old size and the version
+	// check in _start() refuses the handoff outright rather than reading this
+	// field out of a struct that does not contain it -- see the comment on
+	// CURRENT_KERNEL_ARGS_VERSION. All-zero means "firmware said nothing",
+	// which is what every path that does not parse a timer leaves behind and
+	// what makes the kernel keep its architected defaults.
+	arm_generic_timer_info	timer;
 
 } _PACKED arch_kernel_args;
 
