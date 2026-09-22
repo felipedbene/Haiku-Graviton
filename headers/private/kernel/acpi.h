@@ -14,6 +14,7 @@
 #define ACPI_FADT_SIGNATURE		"FACP"
 #define ACPI_SPCR_SIGNATURE		"SPCR"
 #define ACPI_DBG2_SIGNATURE		"DBG2"
+#define ACPI_GTDT_SIGNATURE		"GTDT"
 
 #define ACPI_LOCAL_APIC_ENABLED	0x01
 
@@ -319,6 +320,53 @@ typedef struct acpi_gic_redistributor {
 	uint64 base_address;
 	uint32 range_length;
 } _PACKED acpi_gic_redistributor;
+
+/* Generic Timer Description Table (ACPI 6.4, 5.2.24). On an ACPI-only ARM
+   machine -- Amazon's Nitro platform among them -- this is the only place that
+   says which interrupt each view of the Arm generic timer is delivered on; there
+   is no device tree "arm,armv8-timer" node to read them from. The timer itself
+   is reached through system registers, so there is nothing here to map.
+
+   Laid out across three revisions, which matters because a field must not be
+   read from a table too short to contain it:
+
+     * revision 1 (ACPI 5.0) ends at non_secure_el2_flags, 80 bytes. The four
+       GSIVs before that sit at the same offsets in every revision, so they need
+       no revision test beyond the length -- only the meaning of the word at
+       offset 44 changed (it was "Global Flags", now reserved).
+     * revision 2 (ACPI 5.1) appends CntReadBase and the platform timer array,
+       96 bytes.
+     * revision 3 (ACPI 6.3) appends the EL2 *virtual* timer, 104 bytes. This is
+       the one genuinely version-dependent field.
+
+   Note there is no counter-frequency field anywhere in this table: the only
+   frequency it leads to is CNTFID0 inside the memory-mapped counter block at
+   counter_block_address, which is a secure-only frame on most platforms and so
+   is not ours to read. CNTFRQ_EL0 remains the frequency source. */
+typedef struct acpi_gtdt {
+	acpi_descriptor_header	header;		/* "GTDT" signature */
+	uint64	counter_block_address;		/* CntControlBase */
+	uint32	reserved;					/* "Global Flags" in revision 1 */
+	uint32	secure_el1_gsiv;
+	uint32	secure_el1_flags;
+	uint32	non_secure_el1_gsiv;
+	uint32	non_secure_el1_flags;
+	uint32	virtual_el1_gsiv;
+	uint32	virtual_el1_flags;
+	uint32	non_secure_el2_gsiv;
+	uint32	non_secure_el2_flags;
+	/* revision 2 and later */
+	uint64	counter_read_block_address;	/* CntReadBase */
+	uint32	platform_timer_count;
+	uint32	platform_timer_offset;
+	/* revision 3 and later */
+	uint32	virtual_el2_gsiv;
+	uint32	virtual_el2_flags;
+} _PACKED acpi_gtdt;
+
+/* Both counter block addresses are optional, and firmware that has no such
+   block says so with an all-ones address rather than a zero one. */
+#define ACPI_GTDT_ADDRESS_NOT_PROVIDED	0xffffffffffffffffULL
 
 typedef struct acpi_gas {
 	uint8 address_space_id;
