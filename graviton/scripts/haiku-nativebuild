@@ -148,11 +148,20 @@ install_dep() {
 # fatal line on stderr ("*** Failed to find a match for ...") and its solver problems
 # on stdout ("Encountered problems:" / "problem 1: nothing provides ..."), which is why
 # install_dep captures both streams into one file.
+#
+# The `grep -v` is not cosmetic. feed() answers every prompt with "1" sixty times
+# before "yes", and "1" is not valid at a [yes/no] prompt -- so a perfectly successful
+# install emits sixty `*** please enter 'yes' or 'no'` lines, which (being `***` lines)
+# filled the whole excerpt on the first hardware run and pushed out the one line that
+# mattered: `install package openssl3_devel-3.5.7-1 from repository DeBeOS`. An excerpt
+# that crowds out the evidence is the same failure mode as discarding it.
 dep_pkgman_said() {
 	_pf="$1"
 	[ -f "$_pf" ] || { echo "(no pkgman transcript)"; return 0; }
-	_pl=$(grep -E '^\*\*\*|^Encountered problems|^problem [0-9]+:|^ +solution [0-9]+:|nothing provides|is already installed\.|^Nothing to do\.|conflict' \
-		"$_pf" 2>/dev/null | head -n "${NB_DEP_SAID:-14}")
+	_pl=$(grep -E '^\*\*\*|^Encountered problems|^problem [0-9]+:|^ +solution [0-9]+:|nothing provides|is already installed\.|^Nothing to do\.|conflict|install package |upgrade package ' \
+		"$_pf" 2>/dev/null \
+		| grep -vE "^\*\*\* please enter |^\*\*\* invalid input" \
+		| head -n "${NB_DEP_SAID:-14}")
 	if [ -n "$_pl" ]; then
 		printf '%s\n' "$_pl"
 	else
@@ -171,8 +180,9 @@ dep_pkgman_said() {
 # It deliberately stops at listing candidates: search is a case-insensitive substring
 # match over three fields, so a hit does not prove the resolvable is provided. It can
 # refute absence; it cannot confirm presence, and it does not pretend to. This also
-# keeps the multi-provider case honest -- tokens like `devel:liblua` have eight
-# providers in the pool, and eight candidates printed here can never read as "absent".
+# keeps the multi-provider case honest -- `devel:liblua` is provided by several packages
+# (five lua*_devel in the DeBeOS repo when this was measured; #485 counted eight in the
+# green pool), and a list of candidates can never read as "absent".
 dep_candidates() {
 	pkgman search -D "$1" 2>&1 | head -n "${NB_DEP_CANDIDATES:-12}"
 }
