@@ -65,6 +65,14 @@ from collections import defaultdict
 TABLE_DEFAULT = os.environ.get("TABLE", "debeos-package-state")
 SM_NAME = "debeos-build-wave"
 
+# The one definition of the `pkg` primary-key contract (#487); ClaimBatch enforces the
+# same rule lambda-side, this is the read-side filter so one phantom row cannot abort
+# an otherwise-good wave.
+sys.path.insert(0, os.path.join(
+    os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
+    "graviton", "pipeline", "ops-lambdas"))
+from pkgkey import is_valid_pkg_key  # noqa: E402
+
 # SOP Sec 2.4 -- never drive these without separate human sign-off. Prefix match on
 # a leading token catches versioned recipe names (llvm21, rust_bin, qt6, ...).
 MEGA_PREFIXES = ("gcc", "binutils", "llvm", "rust", "mesa", "webkit", "qt5", "qt6",
@@ -89,11 +97,20 @@ def log(*a):
 def load_queued(table, region):
     """Read every build_state=queued item off the GSI. Returns list of dicts with
     pkg, wave (int or None), target (str). Deterministic: no free-text judgement,
-    just field extraction (SOP Sec 0)."""
+    just field extraction (SOP Sec 0).
+
+    "Every" is load-bearing and was once false. The GSI's range key is `queued_at`,
+    and DynamoDB omits from a GSI any item missing the index key -- so a row written
+    `queued` without `queued_at` sits in the table forever, looking like work in
+    progress, and this function never returns it (#487: two ports, one of them
+    `retroarch`). The Scan cross-check below is therefore not paranoia; it is the
+    only thing that can tell the driver its queue is short.
+    """
     import boto3
     ddb = boto3.client("dynamodb", region_name=region)
     paginator = ddb.get_paginator("query")
     out = []
+    from_index = 0  # rows the index returned, BEFORE the suppressed filter
     for page in paginator.paginate(
             TableName=table, IndexName="by-build-state",
             KeyConditionExpression="build_state = :s",
@@ -101,10 +118,18 @@ def load_queued(table, region):
             ProjectionExpression="pkg, wave, target_version, newest_upstream, "
                                  "attempt_count, suppressed"):
         for it in page.get("Items", []):
+            from_index += 1
             if it.get("suppressed", {}).get("BOOL") is True or \
                it.get("suppressed", {}).get("S") == "true":
                 continue
             pkg = it["pkg"]["S"]
+            # A key that is not one port name is a phantom row (#487): no such port
+            # exists, so it can never build. Skip it loudly rather than sending it to
+            # ClaimBatch, which would (correctly) refuse and abort the whole wave.
+            if not is_valid_pkg_key(pkg):
+                log("SKIP phantom row: %r is %d whitespace-joined names, not a port. "
+                    "Repair with `haiku-state-guard split-key`." % (pkg, len(pkg.split())))
+                continue
             wv = it.get("wave", {})
             wave = None
             if "N" in wv:
@@ -114,6 +139,31 @@ def load_queued(table, region):
             target = (it.get("target_version", {}).get("S")
                       or it.get("newest_upstream", {}).get("S") or "0")
             out.append({"pkg": pkg, "wave": wave, "target": target})
+
+    # A Scan needs no index, so it cannot be fooled by a missing range key. If it
+    # finds more `queued` rows than the index returned, say so loudly: the extras are
+    # real queued work this driver is about to ignore. Compared against the PRE-filter
+    # index count, so a suppressed row is not miscounted as invisible. Non-fatal (a
+    # short wave is still a wave) and best-effort -- a Scan failure must not stop a
+    # run, but it must not read as agreement either.
+    try:
+        scanned = 0
+        for page in ddb.get_paginator("scan").paginate(
+                TableName=table, Select="COUNT",
+                FilterExpression="build_state = :s",
+                ExpressionAttributeValues={":s": {"S": "queued"}}):
+            scanned += page["Count"]
+        if scanned != from_index:
+            log("WARNING: %d `queued` rows in the table, %d visible in the "
+                "by-build-state GSI -- %d queued port(s) CANNOT be waved from this "
+                "index (missing the `queued_at` range key). Repair with "
+                "`haiku-state-guard backfill-queued-at --execute` (#487)."
+                % (scanned, from_index, scanned - from_index))
+        else:
+            log("queue cross-check : Scan=%d == GSI=%d" % (scanned, from_index))
+    except Exception as e:
+        log("WARNING: could not cross-check the queue against a Scan (%s: %s) -- the "
+            "queue depth below is UNVERIFIED." % (type(e).__name__, e))
     return out
 
 

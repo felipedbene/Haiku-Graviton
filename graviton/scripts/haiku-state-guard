@@ -1,0 +1,501 @@
+#!/usr/bin/env python3
+"""haiku-state-guard -- assert the DeBeOS build-state board agrees with itself (#487).
+
+WHY THIS EXISTS. `debeos-package-state` is read two ways: a full `Scan` (the census
+histogram in haiku-status) and per-state `Query` against the `by-build-state` GSI
+(haiku-triage-failures, haiku-pattern-miner, and the build-wave driver). The GSI's
+range key is `queued_at`, and DynamoDB **omits from a GSI any item missing the index
+key** -- silently, with no error anywhere. So a row written without `queued_at` is in
+the table, shows up in a Scan, and is invisible to every reader that uses the index.
+
+When #487 was filed the board was 1578 rows by Scan and 1490 by GSI: an 88-row, 5.6%
+shortfall that had never been noticed, including one `needs_human` failure (`qt5`,
+absent from the triage census) and two `queued` ports the wave driver could never
+pick up -- queued forever, looking like work in progress. That is the worst shape a
+drop can take: not an error, an under-count that reads as progress.
+
+The fix is twofold and this script is both halves:
+
+  * `check` -- the invariant. Scan count MUST equal the sum of the per-state GSI
+    query counts, and every `pkg` key MUST be a single port name (the second #487
+    defect: one key was 13 space-joined names). Exits non-zero when either fails, so
+    it can gate a routine run (haiku-status calls it; see also the preflight in
+    haiku-triage-failures). An index that is total is an index every reader can
+    trust without remembering to Scan.
+
+  * `backfill-queued-at` / `split-key` -- the repairs, dry-run by default. Backfill
+    makes the index total for rows written before the write-site guard existed;
+    split-key turns a whitespace-joined phantom key back into the ports it named,
+    refusing to overwrite any state those ports have since earned.
+
+WHAT IT NEVER DOES. It does not queue, requeue, build, publish, or promote anything.
+`check` and `audit` are read-only (Scan + Query). The two repair subcommands write
+only to `debeos-package-state`, only the attributes they name, and only with
+`--execute`.
+
+USAGE
+  # the invariant (read-only; exit 0 = board agrees with itself)
+  AWS_PROFILE=haiku-graviton graviton/scripts/haiku-state-guard check
+  ... check --quiet          # one summary line, for a hook
+
+  # what exactly is missing / malformed
+  ... audit
+
+  # repair: give every row a queued_at so the GSI is total (dry-run, then execute)
+  ... backfill-queued-at
+  ... backfill-queued-at --execute
+
+  # repair: split a whitespace-joined phantom key into its real ports
+  ... split-key "opencc polyclipping robin_map ..."
+  ... split-key "..." --execute
+
+  # offline: prove the key guard refuses what it must (no AWS)
+  ... selftest
+
+Exit status: 0 clean; 1 invariant violated; 2 usage/credentials/AWS failure. A
+failure to *reach* the table is never reported as a clean board -- a zero-row answer
+from a query that did not run is the bug this script exists to catch.
+"""
+import argparse
+import collections
+import json
+import os
+import sys
+import time
+
+TABLE_DEFAULT = os.environ.get("TABLE", "debeos-package-state")
+REGION_DEFAULT = os.environ.get("AWS_DEFAULT_REGION", "us-west-2")
+GSI = "by-build-state"
+
+# Timestamp attributes to source a backfilled `queued_at` from, best first. The GSI
+# range key is a state-transition clock, so prefer the most recent deliberate
+# transition this row records and fall back to when the row was first created.
+# Inventing `now` would claim every legacy row was queued today, which would reorder
+# the whole index against a fiction; a real timestamp the row already carries keeps
+# the index's ordering meaningful.
+TS_PREFERENCE = ("requeued_at", "queued_at", "pass2_at", "built_at",
+                 "last_attempt_at", "first_flagged_at", "last_seen_at")
+
+
+def log(*a):
+    print(*a, file=sys.stderr, flush=True)
+
+
+def load_pkgkey():
+    """Import the one definition of the pkg-key contract (ops-lambdas/pkgkey.py).
+
+    Hard-fails on purpose: a writer that cannot load its own key guard must not
+    proceed to write unguarded.
+    """
+    here = os.path.dirname(os.path.abspath(__file__))
+    root = os.path.dirname(os.path.dirname(here))  # graviton/scripts -> repo root
+    sys.path.insert(0, os.path.join(root, "graviton", "pipeline", "ops-lambdas"))
+    import pkgkey
+    return pkgkey
+
+
+# ------------------------------------------------------------------ measurement
+def scan_board(ddb, table):
+    """Every row's (pkg, build_state, has-queued_at), from a paginated Scan.
+
+    Scan is the ground truth for "what is in the table": it needs no index, so it
+    cannot be fooled by a missing index key. Everything else here is compared
+    against it.
+    """
+    rows = []
+    for page in ddb.get_paginator("scan").paginate(
+            TableName=table, ProjectionExpression="pkg, build_state, queued_at"):
+        for it in page["Items"]:
+            rows.append((it["pkg"]["S"],
+                         it.get("build_state", {}).get("S", "<ABSENT>"),
+                         "queued_at" in it))
+    return rows
+
+
+def gsi_keys(ddb, table, states):
+    """pkg keys the GSI returns, per state, from paginated Queries.
+
+    Note the states come from the Scan, not from a hardcoded list: a state that
+    exists ONLY on rows missing the range key would otherwise be invisible to both
+    halves of the comparison, and the shortfall would cancel out.
+    """
+    out = {}
+    for st in states:
+        if st == "<ABSENT>":
+            continue  # no partition key at all -> cannot be in the index by design
+        keys = set()
+        for page in ddb.get_paginator("query").paginate(
+                TableName=table, IndexName=GSI,
+                KeyConditionExpression="build_state = :s",
+                ExpressionAttributeValues={":s": {"S": st}},
+                ProjectionExpression="pkg"):
+            for it in page["Items"]:
+                keys.add(it["pkg"]["S"])
+        out[st] = keys
+    return out
+
+
+def measure(ddb, table):
+    """Return the full comparison. Pure measurement -- no judgement, no writes."""
+    pkgkey = load_pkgkey()
+    rows = scan_board(ddb, table)
+    scan_states = collections.Counter(st for _, st, _ in rows)
+    scan_by_state = collections.defaultdict(set)
+    for pkg, st, _ in rows:
+        scan_by_state[st].add(pkg)
+
+    gsi = gsi_keys(ddb, table, sorted(scan_states))
+    dropped = {st: sorted(scan_by_state[st] - gsi.get(st, set()))
+               for st in sorted(scan_states)}
+    dropped = {st: v for st, v in dropped.items() if v}
+
+    return {
+        "table": table,
+        "scan_total": len(rows),
+        "gsi_total": sum(len(v) for v in gsi.values()),
+        "scan_states": dict(scan_states),
+        "gsi_states": {st: len(v) for st, v in gsi.items()},
+        "dropped": dropped,
+        # Rows missing the range key. Derived independently of the set difference
+        # above so the two can be cross-checked rather than assumed equal.
+        "no_queued_at": sorted(pkg for pkg, _, has in rows if not has),
+        "bad_keys": sorted(pkg for pkg, _, _ in rows
+                           if not pkgkey.is_valid_pkg_key(pkg)),
+        "absent_state": sorted(pkg for pkg, st, _ in rows if st == "<ABSENT>"),
+    }
+
+
+def render(m, quiet=False):
+    short = m["scan_total"] - m["gsi_total"]
+    if quiet:
+        verdict = "OK" if (short == 0 and not m["bad_keys"]) else "VIOLATED"
+        print("state-board invariant: %s  scan=%d gsi=%d shortfall=%d bad-keys=%d"
+              % (verdict, m["scan_total"], m["gsi_total"], short, len(m["bad_keys"])))
+        return
+    print("=" * 70)
+    print("DeBeOS state-board invariant  (%s / %s)" % (m["table"], GSI))
+    print("=" * 70)
+    print("%-14s %7s %7s %7s" % ("build_state", "scan", "gsi", "dropped"))
+    print("-" * 70)
+    for st in sorted(m["scan_states"]):
+        s = m["scan_states"][st]
+        g = m["gsi_states"].get(st, 0)
+        print("%-14s %7d %7d %7d" % (st, s, g, s - g))
+    print("-" * 70)
+    print("%-14s %7d %7d %7d" % ("TOTAL", m["scan_total"], m["gsi_total"], short))
+    print()
+    print("INVARIANT  Scan count == sum(per-state GSI query counts) : %s"
+          % ("PASS" if short == 0 else "FAIL (%d rows invisible to every "
+             "index reader)" % short))
+    print("INVARIANT  every pkg key is a single port name           : %s"
+          % ("PASS" if not m["bad_keys"] else
+             "FAIL (%d malformed)" % len(m["bad_keys"])))
+    if m["absent_state"]:
+        print("NOTE       rows with no build_state at all              : %d %s"
+              % (len(m["absent_state"]), m["absent_state"][:5]))
+    # Cross-check the two independent derivations of the drop set. If they disagree,
+    # something other than a missing range key is hiding rows and the fix below
+    # would not be the right one.
+    dropped_flat = sorted(p for v in m["dropped"].values() for p in v)
+    if dropped_flat != m["no_queued_at"]:
+        print()
+        print("WARNING: the set of rows the GSI drops is NOT exactly the set of rows")
+        print("         missing `queued_at` -- backfilling will not make the index")
+        print("         total. dropped=%d no_queued_at=%d; investigate before repair."
+              % (len(dropped_flat), len(m["no_queued_at"])))
+    print("=" * 70)
+
+
+def cmd_check(args, ddb):
+    m = measure(ddb, args.table)
+    render(m, quiet=args.quiet)
+    if args.json:
+        with open(args.json, "w") as f:
+            json.dump(m, f, indent=2)
+        log("wrote %s" % args.json)
+    return 0 if (m["scan_total"] == m["gsi_total"] and not m["bad_keys"]) else 1
+
+
+def cmd_audit(args, ddb):
+    m = measure(ddb, args.table)
+    render(m)
+    print()
+    for st in sorted(m["dropped"]):
+        print("-- dropped by the GSI, build_state=%s (%d):" % (st, len(m["dropped"][st])))
+        for p in m["dropped"][st]:
+            print("     %r" % p)
+    if m["bad_keys"]:
+        print()
+        print("-- malformed pkg keys (%d):" % len(m["bad_keys"]))
+        pkgkey = load_pkgkey()
+        for p in m["bad_keys"]:
+            print("     %r -> %s" % (p, pkgkey.split_pkg_key(p)))
+    if args.json:
+        with open(args.json, "w") as f:
+            json.dump(m, f, indent=2)
+        log("wrote %s" % args.json)
+    return 0 if (m["scan_total"] == m["gsi_total"] and not m["bad_keys"]) else 1
+
+
+# ---------------------------------------------------------------------- repairs
+def pick_timestamp(item):
+    """(value, source-attribute) for a backfilled queued_at, or (None, None)."""
+    for attr in TS_PREFERENCE:
+        v = item.get(attr, {}).get("N")
+        if v is not None:
+            return int(float(v)), attr
+    return None, None
+
+
+def cmd_backfill(args, ddb):
+    """Give every GSI-invisible row a `queued_at` so the index becomes total.
+
+    This does NOT change any row's build_state, so it queues nothing: a
+    `build_state=none` row entering the index is still `none`, and the wave driver
+    only ever reads the `queued` partition. What it does change is that rows already
+    in `queued`/`needs_human` become *visible* -- which is the entire point.
+    """
+    m = measure(ddb, args.table)
+    targets = [p for v in m["dropped"].values() for p in v]
+    pkgkey = load_pkgkey()
+    # A malformed key must be split (or deleted), never backfilled -- backfilling a
+    # phantom row would only make the phantom visible to the wave driver.
+    skipped_bad = [p for p in targets if not pkgkey.is_valid_pkg_key(p)]
+    targets = sorted(p for p in targets if pkgkey.is_valid_pkg_key(p))
+
+    print("backfill-queued-at: %d GSI-invisible rows, %d backfillable, %d malformed "
+          "(handle with split-key)" % (len(targets) + len(skipped_bad), len(targets),
+                                       len(skipped_bad)))
+    for p in skipped_bad:
+        print("  SKIP(malformed)  %r" % p)
+    if not targets:
+        return 0
+
+    plan = []
+    for pkg in targets:
+        item = ddb.get_item(TableName=args.table, Key={"pkg": {"S": pkg}}).get("Item", {})
+        if not item:
+            print("  SKIP(vanished)   %-28s (no longer in the table)" % pkg)
+            continue
+        if "queued_at" in item:
+            print("  SKIP(has-key)    %-28s (queued_at appeared under us)" % pkg)
+            continue
+        ts, src = pick_timestamp(item)
+        if ts is None:
+            # No timestamp at all. 0 is an honest sentinel: "in the index, never
+            # queued". It sorts first and is obviously not a real time, which is
+            # better than back-dating the row to a guess.
+            ts, src = 0, "sentinel(no timestamp on row)"
+        plan.append((pkg, item.get("build_state", {}).get("S"), ts, src))
+
+    print()
+    print("%-30s %-13s %-12s %s" % ("pkg", "build_state", "queued_at", "sourced from"))
+    print("-" * 78)
+    for pkg, st, ts, src in plan:
+        print("%-30s %-13s %-12d %s" % (pkg, st, ts, src))
+    print("-" * 78)
+    print("%d rows would get SET queued_at=<above>  (nothing else is touched)"
+          % len(plan))
+
+    if not args.execute:
+        print("\n(dry run -- re-run with --execute to apply)")
+        return 0
+
+    wrote = 0
+    for pkg, _, ts, _ in plan:
+        ddb.update_item(
+            TableName=args.table, Key={"pkg": {"S": pkg}},
+            UpdateExpression="SET queued_at=:t, queued_at_backfilled_at=:now",
+            # Only ever ADD the range key. If a real writer set queued_at in the
+            # meantime, that value wins and this write does nothing.
+            ConditionExpression="attribute_not_exists(queued_at)",
+            ExpressionAttributeValues={":t": {"N": str(ts)},
+                                       ":now": {"N": str(int(time.time()))}})
+        wrote += 1
+    print("\nbackfilled queued_at on %d rows." % wrote)
+    return 0
+
+
+def cmd_split_key(args, ddb):
+    """Turn a whitespace-joined phantom key into the ports it was naming.
+
+    Order matters: every named port is inspected first, each one is either created
+    or left strictly alone, and the phantom row is deleted LAST -- so an interrupted
+    run leaves the phantom in place rather than losing the only record that those
+    ports were requeued.
+    """
+    pkgkey = load_pkgkey()
+    phantom = args.key
+    names = pkgkey.split_pkg_key(phantom)
+    if len(names) < 2:
+        log("FATAL: %r is not a whitespace-joined key (%d names)" % (phantom, len(names)))
+        return 2
+
+    row = ddb.get_item(TableName=args.table, Key={"pkg": {"S": phantom}}).get("Item")
+    if not row:
+        log("FATAL: no such row: %r -- refusing to act on a key that is not there "
+            "(a zero-row answer is not proof the repair is already done; check the "
+            "exact key with `audit`)." % phantom)
+        return 2
+
+    print("phantom row : %r" % phantom)
+    print("attributes  : %s" % json.dumps(row, sort_keys=True))
+    print("names       : %d -- %s" % (len(names), " ".join(names)))
+    print()
+
+    inherit_state = row.get("build_state", {}).get("S", "queued")
+    plan = []
+    for n in names:
+        existing = ddb.get_item(TableName=args.table, Key={"pkg": {"S": n}}).get("Item")
+        if existing:
+            st = existing.get("build_state", {}).get("S")
+            # NEVER clobber. A port that has since built must not be reset to
+            # `queued` by a repair -- that would re-do real work and lose the
+            # built marker, which is a worse bug than the one being fixed.
+            plan.append((n, "KEEP", st, "already tracked; state left untouched"))
+        else:
+            plan.append((n, "CREATE", inherit_state,
+                         "inherits build_state=%s from the phantom row" % inherit_state))
+
+    print("%-22s %-7s %-13s %s" % ("port", "action", "state", "why"))
+    print("-" * 88)
+    for n, act, st, why in plan:
+        print("%-22s %-7s %-13s %s" % (n, act, st, why))
+    print("-" * 88)
+    creates = [p for p in plan if p[1] == "CREATE"]
+    keeps = [p for p in plan if p[1] == "KEEP"]
+    print("%d CREATE, %d KEEP, then DELETE the phantom row %r"
+          % (len(creates), len(keeps), phantom))
+
+    if not args.execute:
+        print("\n(dry run -- re-run with --execute to apply)")
+        return 0
+
+    now = int(time.time())
+    for n, act, st, _ in plan:
+        if act != "CREATE":
+            continue
+        pkgkey.validate_pkg_key(n, where="haiku-state-guard split-key")
+        ddb.update_item(
+            TableName=args.table, Key={"pkg": {"S": n}},
+            UpdateExpression=("SET build_state=:s, queued_at=:now, "
+                              "attempt_count=if_not_exists(attempt_count,:z), "
+                              "split_from_phantom_key=:src, split_at=:now"),
+            # Create-only. If the row appeared since the plan was printed, its own
+            # state is newer than this repair's information and must win.
+            ConditionExpression="attribute_not_exists(pkg)",
+            ExpressionAttributeValues={":s": {"S": st}, ":now": {"N": str(now)},
+                                       ":z": {"N": "0"}, ":src": {"S": phantom}})
+        print("  created %s (build_state=%s)" % (n, st))
+
+    # Only now is it safe to drop the phantom: every name it carried is represented.
+    ddb.delete_item(TableName=args.table, Key={"pkg": {"S": phantom}})
+    print("  deleted phantom row %r" % phantom)
+    return 0
+
+
+# --------------------------------------------------------------------- selftest
+def cmd_selftest(args, _ddb=None):
+    """Offline mutation test of the key guard. No AWS, no table.
+
+    A guard that has never refused anything is not known to refuse anything, so the
+    space-joined key from #487 is asserted to raise, by value.
+    """
+    pkgkey = load_pkgkey()
+    phantom = ("opencc polyclipping robin_map recastnavigation portsmf mdate "
+               "musicpc mm_common primesieve qhull pystring minisign nesalizer")
+    must_reject = [
+        (phantom, "the actual #487 phantom key"),
+        ("a b", "two names"),
+        ("zlib ", "trailing space"),
+        (" zlib", "leading space"),
+        ("a\tb", "tab"),
+        ("a\nb", "newline"),
+        ("", "empty"),
+        (None, "None"),
+        (["zlib"], "a list, not a string"),
+    ]
+    must_accept = ["zlib", "python3.14", "libgpg_error", "rust_bin", "qt5",
+                   "sdl2_image", "mm_common", "gcc+", "a-b.c_d"]
+    fails = 0
+    for val, why in must_reject:
+        try:
+            pkgkey.validate_pkg_key(val, where="selftest")
+        except pkgkey.BadPkgKey:
+            print("  REFUSED ok   %-24r (%s)" % (val, why))
+        else:
+            print("  ACCEPTED BAD %-24r (%s)  <-- GUARD IS BROKEN" % (val, why))
+            fails += 1
+    for val in must_accept:
+        try:
+            pkgkey.validate_pkg_key(val, where="selftest")
+            print("  accepted ok  %-24r (real port name)" % val)
+        except pkgkey.BadPkgKey as e:
+            print("  REFUSED BAD  %-24r <-- would block a real port: %s" % (val, e))
+            fails += 1
+    assert pkgkey.split_pkg_key(phantom) == [
+        "opencc", "polyclipping", "robin_map", "recastnavigation", "portsmf",
+        "mdate", "musicpc", "mm_common", "primesieve", "qhull", "pystring",
+        "minisign", "nesalizer"], "split_pkg_key lost or invented a name"
+    print("  split_pkg_key recovers all 13 names from the phantom key: ok")
+    print("\nselftest: %s" % ("PASS" if not fails else "FAIL (%d)" % fails))
+    return 0 if not fails else 1
+
+
+# ------------------------------------------------------------------------- main
+def main():
+    ap = argparse.ArgumentParser(
+        description="Assert (and repair) the debeos-package-state board's "
+                    "self-consistency: Scan count == sum of by-build-state GSI "
+                    "query counts, and one port name per pkg key. (#487)")
+    ap.add_argument("--table", default=TABLE_DEFAULT)
+    ap.add_argument("--region", default=REGION_DEFAULT)
+    sub = ap.add_subparsers(dest="cmd")
+
+    c = sub.add_parser("check", help="assert the invariant; exit 1 if violated")
+    c.add_argument("--quiet", action="store_true", help="one summary line")
+    c.add_argument("--json", help="also write the measurement to this path")
+    c.set_defaults(fn=cmd_check)
+
+    a = sub.add_parser("audit", help="check, plus name every dropped/malformed row")
+    a.add_argument("--json")
+    a.set_defaults(fn=cmd_audit, quiet=False)
+
+    b = sub.add_parser("backfill-queued-at",
+                       help="add queued_at to GSI-invisible rows (dry-run default)")
+    b.add_argument("--execute", action="store_true")
+    b.set_defaults(fn=cmd_backfill)
+
+    s = sub.add_parser("split-key",
+                       help="split a whitespace-joined phantom key into real ports")
+    s.add_argument("key")
+    s.add_argument("--execute", action="store_true")
+    s.set_defaults(fn=cmd_split_key)
+
+    t = sub.add_parser("selftest", help="offline mutation test of the key guard")
+    t.set_defaults(fn=cmd_selftest)
+
+    args = ap.parse_args()
+    if not getattr(args, "fn", None):
+        ap.print_help()
+        return 2
+
+    if args.fn is cmd_selftest:
+        return cmd_selftest(args)
+
+    try:
+        import boto3
+    except ImportError:
+        log("boto3 is required (pip install boto3).")
+        return 2
+    ddb = boto3.client("dynamodb", region_name=args.region)
+    try:
+        return args.fn(args, ddb)
+    except Exception as e:
+        # Never let an AWS failure read as a clean board.
+        log("FATAL: %s: %s -- the board was NOT verified." % (type(e).__name__, e))
+        return 2
+
+
+if __name__ == "__main__":
+    sys.exit(main())

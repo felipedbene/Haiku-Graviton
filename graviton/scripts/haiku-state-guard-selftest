@@ -1,0 +1,172 @@
+#!/usr/bin/env python3
+"""haiku-state-guard-selftest [--mutate]
+
+Offline test for the #487 write-site guard and the index-totality invariant. No AWS,
+no network: it imports every writer that touches `debeos-package-state` and proves
+each one refuses a whitespace-joined `pkg` key, and it runs the totality comparison
+over synthetic counts.
+
+WHY IT EXISTS. Both halves of #487 are the same failure of *checking*, not of doing:
+nothing rejected a bad key at the write site, and nothing ever compared the Scan
+count to the GSI count, so an 88-row shortfall and a 13-name phantom key both sat
+there unnoticed. A guard nobody has ever seen refuse anything is not known to refuse
+anything -- see #479, where a durability assertion had never once run. So the guard
+gets a test that names the actual phantom key from the incident, per writer.
+
+  --mutate   weaken the guard in memory (accept whitespace) and assert every writer
+             then ACCEPTS the phantom key. This is what proves the refusals above are
+             caused by the guard rather than by something incidental in the callers.
+             Exits 0 when the mutation is detected (i.e. the test goes red without
+             the guard).
+
+Exit status: 0 pass; 1 a guard did not behave as asserted.
+"""
+import argparse
+import importlib
+import os
+import sys
+import types
+
+HERE = os.path.dirname(os.path.abspath(__file__))
+ROOT = os.path.dirname(os.path.dirname(HERE))
+LAMBDAS = os.path.join(ROOT, "graviton", "pipeline", "ops-lambdas")
+
+# The key from the incident, verbatim. Testing with "a b" would pass just as well and
+# would not tie the test to the thing that happened.
+PHANTOM = ("opencc polyclipping robin_map recastnavigation portsmf mdate musicpc "
+           "mm_common primesieve qhull pystring minisign nesalizer")
+PHANTOM_NAMES = ["opencc", "polyclipping", "robin_map", "recastnavigation", "portsmf",
+                 "mdate", "musicpc", "mm_common", "primesieve", "qhull", "pystring",
+                 "minisign", "nesalizer"]
+
+
+def load_pkgkey(mutate=False):
+    """Import ops-lambdas/pkgkey.py. With mutate=True, neuter the whitespace check in
+    memory so the writers are exercised WITHOUT a working guard. The tracked file is
+    never touched."""
+    sys.path.insert(0, LAMBDAS)
+    src = open(os.path.join(LAMBDAS, "pkgkey.py")).read()
+    if mutate:
+        before = src
+        src = src.replace('_WS = frozenset(" \\t\\n\\r\\v\\f")', "_WS = frozenset()")
+        if src == before:
+            raise SystemExit("--mutate: could not find the whitespace set to neuter; "
+                             "pkgkey.py changed shape -- fix this selftest.")
+    mod = types.ModuleType("pkgkey")
+    mod.__file__ = os.path.join(LAMBDAS, "pkgkey.py")
+    exec(compile(src, mod.__file__, "exec"), mod.__dict__)
+    sys.modules["pkgkey"] = mod          # so the writers import the same object
+    return mod
+
+
+def load_script(name):
+    """Import a graviton/scripts/<name> extensionless script as a module."""
+    path = os.path.join(HERE, name)
+    mod = types.ModuleType(name.replace("-", "_"))
+    mod.__file__ = path
+    exec(compile(open(path).read(), path, "exec"), mod.__dict__)
+    return mod
+
+
+def check(label, fn, want_refused, pkgkey, results):
+    """Call fn(); record whether it raised BadPkgKey, against what we wanted."""
+    try:
+        fn()
+    except pkgkey.BadPkgKey:
+        refused = True
+    except Exception:
+        # Reached a later failure (no table / no creds). That means the guard let it
+        # through -- which is exactly what "not refused" means here.
+        refused = False
+    else:
+        refused = False
+    ok = refused == want_refused
+    results.append(ok)
+    print("  %-46s %-12s %s" % (label, "REFUSED" if refused else "passed",
+                                "ok" if ok else "<-- UNEXPECTED"))
+
+
+def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--mutate", action="store_true",
+                    help="neuter the guard in memory and assert the writers go red")
+    args = ap.parse_args()
+
+    os.environ.setdefault("AWS_DEFAULT_REGION", "us-west-2")
+    # A table name that cannot exist, so if a guard ever fails to fire the write
+    # attempt still cannot touch the real board.
+    os.environ["TABLE"] = "debeos-package-state-SELFTEST-NONEXISTENT"
+
+    pkgkey = load_pkgkey(mutate=args.mutate)
+    want = not args.mutate  # with the guard: refuse. Mutated: must NOT refuse.
+    print("guard: %s -- every writer below must %s the 13-name phantom key\n"
+          % ("MUTATED (whitespace check removed)" if args.mutate else "intact",
+             "REFUSE" if want else "ACCEPT (proving the guard was what refused)"))
+
+    results = []
+    ctx = types.SimpleNamespace(aws_request_id="selftest")
+
+    claim = importlib.import_module("claim")
+    record = importlib.import_module("record")
+    importlib.reload(claim)
+    importlib.reload(record)
+    check("ClaimBatch (ops-lambdas/claim.py)",
+          lambda: claim.handler({"chain": ["zlib", PHANTOM],
+                                 "target": {"zlib": "1.3", PHANTOM: "1.0"}}, ctx),
+          want, pkgkey, results)
+    check("RecordOutcome (ops-lambdas/record.py)",
+          lambda: record.handler({"pkg": PHANTOM, "target": "1.0", "ok": True}, ctx),
+          want, pkgkey, results)
+
+    triage = load_script("haiku-triage-failures")
+    check("haiku-triage-failures write_triage()",
+          lambda: triage.write_triage(os.environ["TABLE"], "us-west-2", PHANTOM,
+                                      "1", True, "ref", 0),
+          want, pkgkey, results)
+
+    cff = load_script("haiku-correct-false-failure")
+    check("haiku-correct-false-failure (argv)",
+          lambda: cff.validate_pkg_key(PHANTOM, where="selftest"), want, pkgkey, results)
+
+    # state-sync.py lives outside graviton/scripts; import it by path.
+    ss_path = os.path.join(ROOT, "graviton", "ops", "state-sync.py")
+    ss = types.ModuleType("state_sync")
+    ss.__file__ = ss_path
+    exec(compile(open(ss_path).read(), ss_path, "exec"), ss.__dict__)
+    check("state-sync.py (report row)",
+          lambda: ss.validate_pkg_key(PHANTOM, where="selftest"), want, pkgkey, results)
+
+    # ---- the totality comparison, on synthetic counts (no AWS) ----------------
+    print()
+    guard = load_script("haiku-state-guard")
+    cases = [
+        # (scan_total, gsi_total, bad_keys, expected verdict)
+        (1578, 1490, ["a b"], False),   # the #487 board as filed
+        (1577, 1577, [], True),         # repaired
+        (1577, 1577, ["a b"], False),   # index total but a key still malformed
+        (10, 11, [], False),            # GSI somehow LARGER: also a violation
+    ]
+    for scan, gsi, bad, expect in cases:
+        m = {"table": "synthetic", "scan_total": scan, "gsi_total": gsi,
+             "scan_states": {}, "gsi_states": {}, "dropped": {},
+             "no_queued_at": [], "bad_keys": bad, "absent_state": []}
+        got = (m["scan_total"] == m["gsi_total"] and not m["bad_keys"])
+        ok = got == expect
+        results.append(ok)
+        print("  totality scan=%-5d gsi=%-5d bad=%d -> %-9s %s"
+              % (scan, gsi, len(bad), "PASS" if got else "VIOLATED",
+                 "ok" if ok else "<-- UNEXPECTED"))
+        guard.render(m, quiet=True)
+
+    assert pkgkey.split_pkg_key(PHANTOM) == PHANTOM_NAMES, \
+        "split_pkg_key lost or invented a name"
+    print("  split_pkg_key recovers all 13 phantom names: ok")
+
+    bad = results.count(False)
+    print("\nhaiku-state-guard-selftest%s: %s"
+          % (" --mutate" if args.mutate else "", "PASS" if not bad else "FAIL (%d)" % bad))
+    return 1 if bad else 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
