@@ -19,10 +19,10 @@ or re-queue anything -- classification only. It:
      `by-build-state` GSI (same index the wave driver reads);
   2. fetches that port's most-recent build log from S3 -- the `log_url` attribute
      RecordOutcome persisted (s3://<work-bucket>/logs/<run>/<pkg>.log.gz, gzipped);
-  3. classifies the log against the playbook's 14 class signatures using an
+  3. classifies the log against the playbook's class signatures using an
      ORDERED, first-match-wins ruleset (most-specific signature first) -- the
      Quick-index phrase->class table from the playbook, encoded as RULES below;
-  4. emits per port: triage_class (1-14 | NO_LOG | UNMATCHED), triage_auto_recoverable
+  4. emits per port: triage_class (a class number | NO_LOG | UNMATCHED), triage_auto_recoverable
      (bool), triage_fix_ref (playbook section anchor), triage_ts;
   5. (only with --execute) writes those four NEW attributes back to the item --
      ADDITIVE ONLY, it never touches build_state or any existing attribute;
@@ -298,6 +298,37 @@ RULES = [
      "Declare the tool as a cmd: BUILD_PREREQUIRES (see the tool->provider map). "
      "Mechanical per-recipe edit with a known template."),
 
+    # 25 -- the wave driver's own round cap, NOT a port defect. MUST be ordered before
+    # class 20: a capped run ends at haikuporter's resolve step, so its log carries
+    # class 20's "could not be resolved" wording and class 20 was stealing all 22 of
+    # these -- which is how the census came to overstate "dependency not published"
+    # (#486). Measured: the 22 ports logging `gave up after 10 attempts` were EXACTLY
+    # the 22 class-20 items matched via the build-requires regex (intersection 22,
+    # symmetric difference 0). auto=False: nothing to fix in the recipe -- the driver
+    # cap was raised in haiku-nativebuild, so these need only a re-wave.
+    (25, "class-25-wave-driver-round-cap--not-a-port-defect", False,
+     _rx(r"gave up after \d+ attempts"),
+     "NOT a port defect and NOT a missing dependency: haiku-nativebuild ran out of "
+     "dependency-install rounds while still making progress (one requirement is "
+     "cleared per round, so MAX_ATTEMPTS bounded dependency COUNT). The cap now "
+     "defaults to 60 -- just re-wave the port."),
+
+    # 26 -- the wave driver observed no progress and pkgman's own transcripts say the
+    # cause is NOT absence. Also ordered before class 20 for the same reason: these
+    # logs carry haikuporter's "could not be resolved" wording, and filing them as
+    # "dependency not published" is precisely the guess #485 removed. The four
+    # sub-verdicts (ALREADY_PRESENT / CONSTRAINT_UNSATISFIED / PKGMAN_ERROR /
+    # NO_MATCH_BUT_CANDIDATES_EXIST) are printed per requirement in the log, with
+    # pkgman quoted verbatim -- read them rather than re-deriving a cause here.
+    # auto=False: each sub-verdict needs a different action (re-order the wave, bump a
+    # version constraint, disambiguate a multi-provider name).
+    (26, "class-26-dependency-present-but-unresolved--not-absent", False,
+     _rx(r"DEP_NO_PROGRESS"),
+     "NOT absence: pkgman reported the dependency as already installed, or "
+     "version-constrained, or ambiguous, or failed for its own stated reason. The "
+     "per-requirement pkgman evidence is in the log -- act on that verdict "
+     "(sequencing / constraint / ambiguity), do not re-publish blindly."),
+
     # 20 -- prerequisite package/tool not published. The dependency-not-published
     # root cause under haikuporter's NATIVE wording ("unable to resolve
     # (pre)required packages ... could not be resolved") rather than the literal
@@ -311,8 +342,16 @@ RULES = [
     (20, "class-20-prerequisite-packagetool-not-published", False,
      _rx(r"unable to resolve (?:pre)?required packages",
          # the literal marker haiku-nativebuild echoes when a build-req is not in
-         # the repo pool (definitively dep-unpublished) -- placed here (late) so any
-         # real earlier-class build error still wins first-match.
+         # the repo pool -- placed here (late) so any real earlier-class build error
+         # still wins first-match. NOTE (#485): before that fix this marker was a
+         # GUESS -- the driver printed it whenever the unresolved set stopped
+         # shrinking, without ever reading pkgman's exit status or stderr, and 149 of
+         # the 350 ports filed here named a dependency that was in the pool. The
+         # driver now only prints UNRESOLVABLE when pkgman itself reported no match
+         # AND a case-insensitive search of every configured repository offered no
+         # candidate; every other no-progress outcome prints DEP_NO_PROGRESS and lands
+         # in class 26 above. So this signature is trustworthy for logs produced AFTER
+         # that fix, and still over-collects for logs produced before it.
          r"UNRESOLVABLE",
          r'build-(?:pre)?requires "[^"]+" of package .* could not be resolved',
          r"Package '[^']+', required by '[^']+', not found",
@@ -444,7 +483,7 @@ def fetch_log(s3, log_url):
 def write_triage(table, region, pkg, cls, auto, fix_ref, ts):
     import boto3
     ddb = boto3.resource("dynamodb", region_name=region).Table(table)
-    triage_class = str(cls) if isinstance(cls, int) else cls  # 1-14 | NO_LOG | UNMATCHED
+    triage_class = str(cls) if isinstance(cls, int) else cls  # class no | NO_LOG | UNMATCHED
     ddb.update_item(
         Key={"pkg": pkg},
         UpdateExpression=("SET triage_class=:c, triage_auto_recoverable=:a, "
@@ -585,7 +624,7 @@ def main():
 
     # class metadata for the report
     meta = {c: (slug, auto) for c, slug, auto, _, _ in RULES}
-    class_nums = sorted(meta)  # all classes the ruleset knows (1-14 + 18-24)
+    class_nums = sorted(meta)  # all classes the ruleset knows (1-14 + 18-26)
 
     print("\n" + "=" * 66)
     print("DeBeOS failure-backlog census  (%d items: %s)" %
