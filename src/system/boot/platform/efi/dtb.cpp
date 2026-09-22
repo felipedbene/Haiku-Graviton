@@ -381,6 +381,45 @@ dtb_has_fdt_string(const char* prop, int size, const char* pattern)
 }
 
 
+// Iterate a "compatible" property's entries IN ORDER.
+//
+// `dtb_has_fdt_string()` answers membership, which is the wrong question when a
+// node claims several bindings we know: the Devicetree Specification orders
+// `compatible` most-specific-first, so the property itself states which binding
+// to prefer. A caller that loops its own support table and tests membership
+// discards that and lets the table's row order decide -- see the callers of this
+// function for what that cost (#464).
+//
+// Pass NULL for `cur` to get the first entry, or the previous return value to
+// advance. Returns NULL at the end, and also on an unterminated run, matching
+// dtb_has_fdt_string(): a malformed tail stops the walk without invalidating the
+// well-formed entries before it.
+const char*
+dtb_next_fdt_string(const char* prop, int size, const char* cur)
+{
+	if (prop == NULL || size <= 0)
+		return NULL;
+
+	const char* propEnd = prop + size;
+	const char* p = prop;
+	if (cur != NULL) {
+		if (cur < prop || cur >= propEnd)
+			return NULL;
+		const char* end = (const char*)memchr(cur, '\0', propEnd - cur);
+		if (end == NULL)
+			return NULL;
+		p = end + 1;
+	}
+	if (p >= propEnd)
+		return NULL;
+	// Only hand back an entry we know is terminated inside the property, so the
+	// caller may treat it as a C string.
+	if (memchr(p, '\0', propEnd - p) == NULL)
+		return NULL;
+	return p;
+}
+
+
 uint32
 dtb_get_address_cells(const void* fdt, int node)
 {
@@ -663,9 +702,19 @@ dtb_handle_fdt(const void* fdt, int node)
 	// check for a uart if we don't have one
 	uart_info &uart = gKernelArgs.arch_args.uart;
 	if (uart.kind[0] == 0) {
-		for (uint32 i = 0; i < B_COUNT_OF(kSupportedUarts); i++) {
-			if (dtb_has_fdt_string(compatible, compatibleLen,
-					kSupportedUarts[i].dtb_compat)) {
+		// Walk the PROPERTY in order and take the first entry the table knows.
+		// The loops used to be the other way round -- table outer, membership
+		// test inner, and no `break` -- so the last matching table row won and
+		// which driver a machine got depended on where we happened to put a row
+		// rather than on what firmware declared (#464). `compatible` is ordered
+		// most-specific-first by specification, so the property is the authority.
+		for (const char* entry = dtb_next_fdt_string(compatible, compatibleLen,
+					NULL);
+				entry != NULL && uart.kind[0] == 0;
+				entry = dtb_next_fdt_string(compatible, compatibleLen, entry)) {
+			for (uint32 i = 0; i < B_COUNT_OF(kSupportedUarts); i++) {
+				if (strcmp(entry, kSupportedUarts[i].dtb_compat) != 0)
+					continue;
 
 				memcpy(uart.kind, kSupportedUarts[i].kind,
 					sizeof(uart.kind));
@@ -678,6 +727,7 @@ dtb_handle_fdt(const void* fdt, int node)
 				gUART = kSupportedUarts[i].uart_driver_init(uart.regs.start,
 					uart.clock, uart.reg_shift);
 				gUARTSkipInit = fdt_getprop(fdt, node, "skip-init", NULL) != NULL;
+				break;
 			}
 		}
 	}
