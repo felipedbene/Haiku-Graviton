@@ -111,6 +111,7 @@ scan_git() {
 	git fetch origin --prune --quiet 2>/dev/null || true
 	local out=""
 	local nb=0
+	local nfresh=0
 	# Ensure origin/graviton exists locally
 	if ! git rev-parse --verify origin/graviton >/dev/null 2>&1; then
 		say "OK: git-drift scan skipped (no origin/graviton locally)."
@@ -123,6 +124,23 @@ scan_git() {
 		local ahead
 		ahead=$(git rev-list --count "origin/graviton..$ref" 2>/dev/null || echo 0)
 		[ "$ahead" = "0" ] && continue
+		# Skip branches that are still being worked on. A branch pushed minutes
+		# ago is in flight, not drift: an agent pushes its topic branch before it
+		# opens the PR, so during a fan-out the report fills with work that is
+		# about to be linked anyway, and chasing those entries is noise that
+		# crowds out the genuinely abandoned branches this scan exists to find.
+		# Tip-commit age is the signal. HG_DRIFT_GRACE_SECS=0 disables it.
+		local grace="${HG_DRIFT_GRACE_SECS:-14400}"   # 4h
+		if [ "$grace" -gt 0 ]; then
+			local tip_age now tip
+			tip=$(git log -1 --format=%ct "$ref" 2>/dev/null || echo 0)
+			now=$(date +%s)
+			tip_age=$(( now - tip ))
+			if [ "$tip" -gt 0 ] && [ "$tip_age" -lt "$grace" ]; then
+				nfresh=$((nfresh + 1))
+				continue
+			fi
+		fi
 		# Any code files touched (not just docs)?
 		local codefiles
 		codefiles=$(git diff --name-only "origin/graviton" "$ref" 2>/dev/null \
@@ -139,15 +157,24 @@ scan_git() {
 		else
 			marker="$prstate-PR"
 		fi
-		# Or correlated to an OPEN issue by a cross-link comment. We treat a
-		# branch as tracked-via-issue if any open issue's body or comments
-		# mention the branch name in backticks (`branch/name`) -- this is the
-		# convention used by the branch-hygiene sweep. Cached in a temp file
-		# per session so we do not re-query gh for every branch.
+		# Or correlated to an issue by a cross-link comment: a branch counts as
+		# tracked-via-issue if any issue's body or comments name it in backticks
+		# (`branch/name`), the convention the branch-hygiene sweep uses. Cached
+		# in a temp file per session so we do not re-query gh for every branch.
+		#
+		# `--state all`, NOT `--state open`: a cross-link documents a branch, and
+		# closing the issue does not undocument it. Scanning open issues only
+		# meant a link silently stopped counting the moment its issue closed, so
+		# deliberately-filed branches resurfaced as "drift" later the same day --
+		# three times in one session (the #414 measurement arms when #414 closed
+		# on merge, `verify/438-hw-arms` when #436 closed, and
+		# `fix/443-publish-cdn-invalidation` when #443 closed). The remedy was
+		# always to re-file the identical link on a longer-lived issue, which is
+		# pure toil and teaches the next person nothing.
 		if [ -z "${_HG_ISSUE_XREF_CACHE:-}" ]; then
 			_HG_ISSUE_XREF_CACHE=$(mktemp -t drift-xref.XXXXXX)
-			gh issue list --repo felipedbene/Haiku-Graviton --state open \
-				--limit 300 --json body,comments \
+			gh issue list --repo felipedbene/Haiku-Graviton --state all \
+				--limit 500 --json body,comments \
 				--jq '.[] | .body + " " + (.comments|map(.body)|join(" "))' \
 				> "$_HG_ISSUE_XREF_CACHE" 2>/dev/null || true
 		fi
@@ -165,12 +192,18 @@ scan_git() {
 		fi
 	done < <(git for-each-ref --format='%(refname:short)' refs/remotes/origin/ | grep -v '^origin/HEAD')
 
+	# Never hide the grace-period skips: a count the reader cannot see reads as
+	# "nothing there", which is the failure this scan is supposed to prevent.
+	local freshnote=""
+	if [ "$nfresh" -gt 0 ]; then
+		freshnote=" ($nfresh in-flight branch(es) younger than $(( ${HG_DRIFT_GRACE_SECS:-14400} / 3600 ))h not counted; HG_DRIFT_GRACE_SECS=0 to include them)"
+	fi
 	if [ -n "$out" ]; then
-		say "DRIFT: remote branches carrying code but no OPEN PR ($nb branch(es)):"
+		say "DRIFT: remote branches carrying code but no OPEN PR ($nb branch(es))$freshnote:"
 		printf '%s' "$out"
 		say "  -> Open a PR, or link the branch from its correlated issue (cross-link comment)."
 	else
-		say "OK: no remote code-carrying branch is unlinked from a PR."
+		say "OK: no remote code-carrying branch is unlinked from a PR.$freshnote"
 	fi
 }
 
