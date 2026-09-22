@@ -1316,8 +1316,9 @@ debug_pmu(int argc, char** argv)
 			// the line is up. Use the arm64_pmu boot setting for the full path.
 			if (!sOverflowInterruptInstalled) {
 				if (sOverflowIntID == 0) {
-					kprintf("pmu: no overflow interrupt gsiv in the madt; "
-						"sampling is off and the overflow count stays 0\n");
+					kprintf("pmu: firmware stated no overflow interrupt "
+						"(there need not be a madt); sampling is off and the "
+						"overflow count stays 0\n");
 				} else {
 					kprintf("pmu: overflow interrupt (INTID %" B_PRIu32 ") not "
 						"installed yet; overflow count stays 0 until the boot "
@@ -1423,8 +1424,15 @@ arm64_pmu_init(kernel_args* args)
 				? " (architected PPI 7)" : " (differs from architected INTID "
 					"23)");
 	} else {
-		dprintf("arm64_pmu: no overflow interrupt gsiv in madt; pmu sampling "
-			"will stay off (software profiling timer used)\n");
+		// Do not name the MADT here: this branch is also what an FDT-only
+		// machine reaches, and one of them told us so by printing "madt" in a
+		// run whose own log said "AcpiInitializeTables failed AE_NOT_FOUND".
+		// The reader of this line is trying to find out why sampling is off,
+		// and "look in a table you do not have" sends them the wrong way.
+		dprintf("arm64_pmu: firmware stated no pmu overflow interrupt (madt "
+			"gicc performance gsiv, or the fdt pmu node, which is not parsed "
+			"yet); pmu sampling will stay off (software profiling timer "
+			"used)\n");
 	}
 
 	pmu_select_events(kPresets[0].events, kPresets[0].eventCount);
