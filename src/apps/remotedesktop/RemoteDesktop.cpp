@@ -36,6 +36,7 @@ print_usage(const char *app)
 		" [-h <height>]\n", app);
 	printf("usage:\t%s <user@host> -s [<sshPort>] [-p <port>] [-w <width>]"
 		" [-h <height>] [-c <command>]\n", app);
+	printf("usage:\t%s --wire-selftest\n", app);
 	printf("\t%s --help\n\n", app);
 
 	printf("Connect to & run applications from a different computer\n\n");
@@ -55,9 +56,16 @@ print_usage(const char *app)
 		" fingerprint\n\t\t(the server's broker.fingerprint file)\n");
 	printf("\t--insecure\twith --wss: skip certificate pinning (still"
 		" TLS)\n");
+	printf("\t--wire-selftest\tcheck the URP/1 wire layer (framing,"
+		" compression, the\n\t\traw/passthrough segment path and the error"
+		" paths) and exit;\n\t\tno network and no display needed\n");
 	printf("\nIf no width and height are specified, the window is opened with"
 		" the size of the the local screen.\n");
 }
+
+
+// WireSelfTest.cpp
+extern int remote_wire_selftest();
 
 
 int
@@ -67,6 +75,11 @@ main(int argc, char *argv[])
 		print_usage(argv[0]);
 		return 1;
 	}
+
+	// Before anything else: no host, no BApplication, no BScreen, so this runs
+	// on a headless instance over a remote shell.
+	if (strcmp(argv[1], "--wire-selftest") == 0)
+		return remote_wire_selftest();
 
 	uint16 port = 10900;
 	bool portGiven = false;

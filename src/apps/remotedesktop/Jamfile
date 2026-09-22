@@ -19,7 +19,7 @@ if [ FIsBuildFeatureEnabled zstd ] {
 	UseBuildFeatureHeaders zstd ;
 	compressionLibraries = [ BuildFeatureAttribute zstd : library ] ;
 
-	Includes [ FGristFiles RemoteWireReader.cpp ]
+	Includes [ FGristFiles RemoteWireReader.cpp RemoteWireWriter.cpp ]
 		: [ BuildFeatureAttribute zstd : headers ] ;
 }
 
@@ -44,6 +44,15 @@ Application RemoteDesktop :
 	RemoteMessage.cpp
 	RemoteView.cpp
 
+	# --wire-selftest. The encoder is built in alongside the decoder purely so
+	# the client can round-trip the wire against the real server-side
+	# implementation: RemoteWireWriter has one branch -- the raw/passthrough
+	# segment for already-compressed payloads -- that no session can reach,
+	# because the opcodes it exempts belong to a tier nothing emits yet. See
+	# WireSelfTest.cpp.
+	WireSelfTest.cpp
+	RemoteWireWriter.cpp
+
 	NetReceiver.cpp
 	NetSender.cpp
 	RemoteWireReader.cpp
@@ -57,5 +66,6 @@ Application RemoteDesktop :
 ;
 
 SEARCH on [ FGristFiles NetReceiver.cpp NetSender.cpp RemoteMessage.cpp
-	RemoteWireReader.cpp StreamingRingBuffer.cpp ] = $(serverDir) ;
+	RemoteWireReader.cpp RemoteWireWriter.cpp StreamingRingBuffer.cpp ]
+	= $(serverDir) ;
 SEARCH on [ FGristFiles TLSStream.cpp WebSocketStream.cpp ] = $(brokerDir) ;

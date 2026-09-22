@@ -12,6 +12,7 @@
 #include <Autolock.h>
 
 #include <new>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -20,8 +21,15 @@
 #endif
 
 
-#define TRACE(x...)				/*debug_printf("RemoteWireWriter: " x)*/
-#define TRACE_ALWAYS(x...)		debug_printf("RemoteWireWriter: " x)
+// Matches the other files in this directory: the same sources are compiled into
+// the client, which has no debug_printf().
+#ifdef CLIENT_COMPILE
+#	define TRACE_ALWAYS(x...)	printf("RemoteWireWriter: " x)
+#else
+#	define TRACE_ALWAYS(x...)	debug_printf("RemoteWireWriter: " x)
+#endif
+
+#define TRACE(x...)				/*TRACE_ALWAYS(x)*/
 #define TRACE_ERROR(x...)		TRACE_ALWAYS(x)
 
 
@@ -40,7 +48,15 @@ static const int kWindowLog = 20;
 // Output staging buffer. The encoder loop writes one segment per filled buffer,
 // so this only has to be large enough to make the per-segment header
 // negligible; it does not have to bound a message's compressed size.
-static const size_t kOutputBufferSize = 64 * 1024;
+//
+// The first kSegmentHeaderReserve bytes are not offered to the compressor: they
+// are where the segment header is laid down, immediately in front of the
+// payload it describes, so that the pair can leave as a single
+// StreamingRingBuffer::Write(). A varint header is 1..5 bytes, so the header
+// starts somewhere inside the reserve and ends exactly where the payload
+// begins.
+static const size_t kSegmentHeaderReserve = REMOTE_SEGMENT_MAX_VARINT_SIZE;
+static const size_t kOutputBufferSize = 64 * 1024 + kSegmentHeaderReserve;
 
 // At most one statistics line per this interval. The serial console on the
 // target is write-bound, so the instrumentation has to cost bytes it can afford.
@@ -53,6 +69,7 @@ RemoteWireWriter::RemoteWireWriter(StreamingRingBuffer* target)
 	fLock("remote wire writer"),
 	fCapability(0),
 	fPreparedCapability(0),
+	fStreamBroken(false),
 	fCompressionContext(NULL),
 	fOutputBuffer(NULL),
 	fOutputBufferSize(0),
@@ -258,10 +275,18 @@ RemoteWireWriter::_WriteLocked(const void* buffer, size_t length)
 	if (length >= sizeof(uint16))
 		memcpy(&code, buffer, sizeof(uint16));
 
+	// A broken segment stream cannot be repaired by sending more segments, so
+	// stop here rather than spending the compressor's CPU on output the peer
+	// can no longer decode. Reported as an error so the round-trip callers
+	// (RP_STRING_WIDTH, RP_READ_BITMAP) skip the reply wait instead of stalling
+	// on an answer that is not coming.
+	if (fStreamBroken)
+		return B_IO_ERROR;
+
 	status_t result;
 	if (_IsPreCompressed(code)) {
 		fExemptMessages++;
-		result = _WriteSegment(buffer, length, true);
+		result = _WriteRawSegment(buffer, length);
 	} else
 		result = _WriteCompressed(buffer, length);
 
@@ -281,7 +306,8 @@ RemoteWireWriter::_WriteCompressed(const void* buffer, size_t length)
 	// ring-buffer writes in between can block on a slow client and would
 	// otherwise be charged to the encoder.
 	while (true) {
-		ZSTD_outBuffer output = { fOutputBuffer, fOutputBufferSize, 0 };
+		ZSTD_outBuffer output = { fOutputBuffer + kSegmentHeaderReserve,
+			fOutputBufferSize - kSegmentHeaderReserve, 0 };
 
 		// ZSTD_e_flush at every message boundary: the client must be able to
 		// decode a whole message as soon as its segments have arrived, never
@@ -299,7 +325,7 @@ RemoteWireWriter::_WriteCompressed(const void* buffer, size_t length)
 		}
 
 		if (output.pos > 0) {
-			status_t result = _WriteSegment(fOutputBuffer, output.pos, false);
+			status_t result = _WriteStagedSegment(output.pos);
 			if (result != B_OK)
 				return result;
 		}
@@ -316,27 +342,110 @@ RemoteWireWriter::_WriteCompressed(const void* buffer, size_t length)
 
 	return B_OK;
 #else
-	return _WriteSegment(buffer, length, true);
+	// Without a codec there is nothing to compress into, so a capability can
+	// never have been armed (SupportedCapabilities() is empty) and this is
+	// unreachable. Pass the message through as a raw segment rather than
+	// inventing a framing, so that even a mis-built server stays parsable.
+	return _WriteRawSegment(buffer, length);
 #endif
 }
 
 
+/*!	Frames and writes the compressor's staged output as one compressed segment.
+	\a length bytes of payload are expected at fOutputBuffer +
+	kSegmentHeaderReserve; the header is laid down in front of them so that the
+	whole segment leaves in a single ring-buffer write.
+
+	One write, not two, is what makes a segment all-or-nothing. Two writes leave
+	a window in which the header is on the wire and the payload is not, and the
+	peer then reads the next segment's header as this segment's payload --
+	silent desynchronisation. The window is narrow but it is not theoretical:
+	the send ring is constructed with discardWithoutReader, so
+	StreamingRingBuffer::Write() returns B_OK having written *nothing* the
+	moment its reader goes away, and a second write between the two halves of a
+	segment can take that branch while the first one did not. Coalescing also
+	halves the ring-buffer lock traffic on the hot path, since the compressed
+	case is 1..N segments per message.
+*/
 status_t
-RemoteWireWriter::_WriteSegment(const void* payload, size_t length, bool raw)
+RemoteWireWriter::_WriteStagedSegment(size_t length)
 {
 	uint8 header[REMOTE_SEGMENT_MAX_VARINT_SIZE];
-	size_t headerSize = remote_segment_header_write(header, length, raw);
+	size_t headerSize = remote_segment_header_write(header, length, false);
 
-	status_t result = fTarget->Write(header, headerSize);
-	if (result != B_OK)
-		return result;
+	// Ends exactly where the payload begins.
+	uint8* segment = fOutputBuffer + kSegmentHeaderReserve - headerSize;
+	memcpy(segment, header, headerSize);
 
-	result = fTarget->Write(payload, length);
-	if (result != B_OK)
-		return result;
+	size_t total = headerSize + length;
+	size_t written = 0;
+	status_t result = fTarget->Write(segment, total, B_INFINITE_TIMEOUT,
+		written);
+	if (result == B_OK && written == total) {
+		fWireBytes += total;
+		return B_OK;
+	}
 
-	fWireBytes += headerSize + length;
-	return B_OK;
+	return _BreakStream(written == 0 ? "dropped" : "torn",
+		result != B_OK ? result : B_IO_ERROR);
+}
+
+
+/*!	Writes an already-compressed message through as a raw segment.
+
+	Unlike the compressed case the payload is the caller's buffer, so there is
+	nowhere in front of it to put the header and the segment costs two writes.
+	That is the same exposure the legacy one-write-per-message path always had
+	(a raw segment is one per message, not one per 64 KiB), but it is checked
+	rather than assumed: a header that reached the ring without its payload
+	behind it breaks the stream, and saying so is the difference between a
+	dropped frame and a session that silently paints garbage.
+*/
+status_t
+RemoteWireWriter::_WriteRawSegment(const void* payload, size_t length)
+{
+	uint8 header[REMOTE_SEGMENT_MAX_VARINT_SIZE];
+	size_t headerSize = remote_segment_header_write(header, length, true);
+
+	size_t headerWritten = 0;
+	status_t result = fTarget->Write(header, headerSize, B_INFINITE_TIMEOUT,
+		headerWritten);
+	if (result != B_OK || headerWritten != headerSize) {
+		// Nothing of the header landed: the segment simply never happened, so
+		// the framing is still whole -- but the stream is no longer being
+		// delivered either, which is what "dropped" latches.
+		return _BreakStream(headerWritten == 0 ? "dropped" : "torn header",
+			result != B_OK ? result : B_IO_ERROR);
+	}
+
+	size_t payloadWritten = 0;
+	result = fTarget->Write(payload, length, B_INFINITE_TIMEOUT,
+		payloadWritten);
+	if (result == B_OK && payloadWritten == length) {
+		fWireBytes += headerSize + length;
+		return B_OK;
+	}
+
+	// The header is already queued, promising bytes that will not follow it.
+	return _BreakStream("torn", result != B_OK ? result : B_IO_ERROR);
+}
+
+
+/*!	Records that the compressed stream can no longer be delivered in step with
+	the peer's decoder and stops emitting segments until the next connection.
+	Always returns an error, so that callers which wait for a reply skip the
+	wait.
+*/
+status_t
+RemoteWireWriter::_BreakStream(const char* what, status_t reason)
+{
+	if (!fStreamBroken) {
+		fStreamBroken = true;
+		TRACE_ALWAYS("segment %s (%s); no further segments this connection\n",
+			what, strerror(reason));
+	}
+
+	return reason;
 }
 
 
@@ -355,6 +464,10 @@ RemoteWireWriter::_ResetCodec()
 	fOutputBufferSize = 0;
 	fCapability = 0;
 	fPreparedCapability = 0;
+
+	// A broken stream is a property of the connection, not of the process: the
+	// next one renegotiates from a fresh compressor and a fresh ring buffer.
+	fStreamBroken = false;
 }
 
 

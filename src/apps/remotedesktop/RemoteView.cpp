@@ -1459,6 +1459,17 @@ RemoteView::_DrawThread()
 			Invalidate(&invalidRegion);
 		}
 	}
+
+	// The loop above only leaves on a read failure or on a stop request. A stop
+	// request means the application is already going away; a read failure means
+	// the session is over and nothing will ever repaint this window again, so
+	// say so instead of leaving the last frame on screen looking live. This is
+	// the same exit RP_CLOSE_CONNECTION takes -- the difference is only whether
+	// the server got to announce it.
+	if (!fStopThread) {
+		TRACE_ERROR("remote session ended, quitting\n");
+		be_app->PostMessage(B_QUIT_REQUESTED);
+	}
 }
 
 

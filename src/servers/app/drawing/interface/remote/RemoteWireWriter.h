@@ -93,8 +93,11 @@ private:
 			status_t			_WriteLocked(const void* buffer, size_t length);
 			status_t			_WriteCompressed(const void* buffer,
 									size_t length);
-			status_t			_WriteSegment(const void* payload,
-									size_t length, bool raw);
+			status_t			_WriteStagedSegment(size_t length);
+			status_t			_WriteRawSegment(const void* payload,
+									size_t length);
+			status_t			_BreakStream(const char* what,
+									status_t reason);
 			void				_ResetCodec();
 	static	bool				_IsPreCompressed(uint16 code);
 			void				_MaybeReportStatistics();
@@ -110,7 +113,20 @@ private:
 			// ready; WriteAndEnable() will only arm a capability that matches.
 			uint32				fPreparedCapability;
 
+			// Latched the moment a segment reaches the ring buffer only in
+			// part, or not at all once the stream is compressed. Either way the
+			// peer's decoder can no longer be in step with this compressor's
+			// window, and no later segment can put it back -- so stop emitting
+			// them instead of compressing into a stream nobody can decode.
+			// Cleared only by Reset(), i.e. at the next connection boundary.
+			bool				fStreamBroken;
+
 			void*				fCompressionContext;
+
+			// Staging buffer for the compressor's output. The first
+			// REMOTE_SEGMENT_MAX_VARINT_SIZE bytes are reserved for the segment
+			// header so that header and payload leave as a single ring-buffer
+			// write; the compressor writes at fOutputBuffer + that reserve.
 			uint8*				fOutputBuffer;
 			size_t				fOutputBufferSize;
 
