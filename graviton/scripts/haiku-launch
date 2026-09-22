@@ -29,6 +29,19 @@
 #          baked debeos-ssm-agent can register.
 #   * Tags: Project=haiku-graviton, ephemeral=true (so cost tooling can find
 #          throwaway boxes), Name=<--name> or a generated one.
+#   * Spot: `--spot` (or HG_LAUNCH_SPOT=1) requests a one-time spot instance that
+#          TERMINATES on interruption, and tags it market=spot. Validation here is
+#          ad-hoc and throwaway by preference -- no long-lived validation box -- so
+#          spot fits: a run costs minutes, and losing one to an interruption costs
+#          the same minutes again.
+#          DO NOT use it for anything that MEASURES performance. An interruption
+#          mid-measurement surfaces as a failed gate rather than as "the instance
+#          went away", and throughput numbers here have already been confounded
+#          more than once by things that had nothing to do with the code (burst
+#          credits, per-flow caps, a serialized peer). Spot adds one more such
+#          cause, so keep the perf gate and any throughput A/B on-demand.
+#          Metal is allowed but warned about: metal spot pools are thin, so a
+#          request can simply sit unfulfilled.
 #   * Key: `haiku-graviton` EC2 keypair. Real login is `baron@` via the
 #          Secrets Manager private key -- use `haiku-ssh` after this returns.
 #   * Security group: `DebeosOpsStack-BuilderSg*` in the target VPC, the same
@@ -72,6 +85,9 @@ PUBLIC=0
 WAIT=0
 DISK="${HG_LAUNCH_DISK:-}"
 SG_OVERRIDE="${HG_LAUNCH_SG:-}"
+SPOT="${HG_LAUNCH_SPOT:-0}"
+SPOT_ARG=""
+MARKET_TAG=""   # must be set: `set -u` is on and the tag string expands it unconditionally
 
 while [ $# -gt 0 ]; do
 	case "$1" in
@@ -82,9 +98,10 @@ while [ $# -gt 0 ]; do
 		--key)     KEY_NAME="$2"; shift 2 ;;
 		--disk)    DISK="$2"; shift 2 ;;
 		--sg)      SG_OVERRIDE="$2"; shift 2 ;;
+		--spot)    SPOT=1; shift ;;
 		--public)  PUBLIC=1; shift ;;
 		--wait)    WAIT=1; shift ;;
-		-h|--help) sed -n '2,40p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+		-h|--help) sed -n '2,64p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
 		*) echo "haiku-launch: unknown arg $1" >&2; exit 2 ;;
 	esac
 done
@@ -201,6 +218,18 @@ if [ -n "$DISK" ]; then
 	echo "haiku-launch: overriding root to ${DISK} GiB gp3" >&2
 fi
 
+# One-time spot that terminates on interruption: these boxes are throwaway, so
+# there is nothing to stop or hibernate for. Not the default -- see the header note
+# about never measuring performance on spot.
+if [ "$SPOT" -eq 1 ]; then
+	SPOT_ARG='--instance-market-options=MarketType=spot,SpotOptions={SpotInstanceType=one-time,InstanceInterruptionBehavior=terminate}'
+	MARKET_TAG=",{Key=market,Value=spot}"
+	case "$TYPE" in
+		*.metal) echo "haiku-launch: WARNING --spot on $TYPE; metal spot pools are thin and the request may sit unfulfilled" >&2 ;;
+	esac
+	echo "haiku-launch: requesting SPOT ($TYPE); do not measure performance on this" >&2
+fi
+
 INSTANCE="$(aws ec2 run-instances --region "$REGION" \
 	--image-id "$AMI" \
 	--instance-type "$TYPE" \
@@ -210,7 +239,8 @@ INSTANCE="$(aws ec2 run-instances --region "$REGION" \
 	$ASSOC_PUBLIC \
 	--iam-instance-profile "Name=$IAM_PROFILE" \
 	${BDM_ARG:+"$BDM_ARG"} \
-	--tag-specifications "ResourceType=instance,Tags=[{Key=Project,Value=haiku-graviton},{Key=Name,Value=$NAME},{Key=ephemeral,Value=true}]" \
+	${SPOT_ARG:+"$SPOT_ARG"} \
+	--tag-specifications "ResourceType=instance,Tags=[{Key=Project,Value=haiku-graviton},{Key=Name,Value=$NAME},{Key=ephemeral,Value=true}${MARKET_TAG}]" \
 	--query 'Instances[0].InstanceId' --output text)"
 case "$INSTANCE" in
 	i-*) ;;
