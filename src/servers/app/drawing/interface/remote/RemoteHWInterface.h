@@ -105,6 +105,27 @@ virtual	status_t					CopyBackToFront(const BRect& frame);
 			uint32						ClientCapabilities() const
 											{ return fClientCapabilities; }
 
+				// Monotonic identity of the current client connection. It is
+				// bumped at both ends of every connection, so a thread that
+				// framed something against one connection can tell that its
+				// work belongs to a connection that is gone -- which is how the
+				// event thread knows to drop a half-read message rather than
+				// finish reading it out of the next client's stream.
+				//
+				// It is also what lets a client distinguish "same session, new
+				// connection" (SessionId() unchanged, generation higher) from
+				// "new session" (SessionId() differs), announced in
+				// RP_HELLO_ACK when RP_CAP_RESYNC is negotiated.
+				uint32						ConnectionGeneration()
+												{ return (uint32)atomic_get(
+													&fConnectionGeneration); }
+
+				// Identifies this listener for the life of the app_server
+				// process. Nonzero, and unrelated to the session cookie -- this
+				// is published to the client and is not a secret.
+				uint32						SessionId() const
+												{ return fSessionId; }
+
 typedef bool (*CallbackFunction)(void* cookie, RemoteMessage& message);
 
 		status_t					AddCallback(uint32 token,
@@ -137,6 +158,9 @@ static	void						_ConnectionClosedCallback(void *cookie);
 
 		void						_Disconnect();
 
+		void						_ReplayState();
+		void						_SendResyncBarrier();
+
 		status_t					_MintSessionCookie();
 		void						_RemoveSessionCookie();
 
@@ -148,6 +172,13 @@ static	void						_ConnectionClosedCallback(void *cookie);
 		uint32						fProtocolVersion;
 		uint32						fClientProtocolVersion;
 		uint32						fClientCapabilities;
+
+		// Written by the receiver thread at every connection boundary and read
+		// by the event and drawing threads, hence int32 and the atomic
+		// accessors rather than a plain counter.
+		int32						fConnectionGeneration;
+		uint32						fSessionId;
+
 		uint32						fConnectionSpeed;
 		display_mode				fFallbackMode;
 		display_mode				fCurrentMode;
