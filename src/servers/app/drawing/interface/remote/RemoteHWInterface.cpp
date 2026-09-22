@@ -861,13 +861,36 @@ RemoteHWInterface::WaitForRetrace(bigtime_t timeout)
 }
 
 
+// AddCursor() takes a `const ServerCursor&`, so passing the reference's raw
+// pointer dereferences it. CursorAndDragBitmap() is nullable by design and in
+// three ways: fCursorAndDragBitmap starts NULL, the accessor returns
+// ServerCursorReference(NULL) when it cannot take fFloatingOverlaysLock, and
+// _UpdateCursorAndDragBitmap() leaves it NULL if its allocation fails. The rest
+// of HWInterface treats it as nullable -- _CursorFrame() guards it explicitly --
+// so these two call sites were the ones that did not.
+//
+// There is nothing useful to send without a cursor, so say nothing: emitting a
+// half-built RP_SET_CURSOR would leave the client decoding a cursor that is not
+// there, which is worse than the state being momentarily unreported. The next
+// real cursor change sends a complete message.
+static bool
+send_cursor(RemoteMessage& message, const ServerCursorReference& cursor)
+{
+	if (cursor.Get() == NULL)
+		return false;
+
+	message.Start(RP_SET_CURSOR);
+	message.AddCursor(*cursor.Get());
+	return true;
+}
+
+
 void
 RemoteHWInterface::SetCursor(ServerCursor* cursor)
 {
 	HWInterface::SetCursor(cursor);
 	RemoteMessage message(NULL, fWireWriter.Get());
-	message.Start(RP_SET_CURSOR);
-	message.AddCursor(CursorAndDragBitmap().Get());
+	send_cursor(message, CursorAndDragBitmap());
 }
 
 
@@ -898,8 +921,9 @@ RemoteHWInterface::SetDragBitmap(const ServerBitmap* bitmap,
 {
 	HWInterface::SetDragBitmap(bitmap, offsetFromCursor);
 	RemoteMessage message(NULL, fWireWriter.Get());
-	message.Start(RP_SET_CURSOR);
-	message.AddCursor(CursorAndDragBitmap().Get());
+	// Clearing a drag bitmap passes NULL here, which is the likeliest way to
+	// reach the nullable accessor -- see send_cursor().
+	send_cursor(message, CursorAndDragBitmap());
 }
 
 
