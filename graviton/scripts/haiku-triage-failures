@@ -41,6 +41,19 @@ Never silently bucket an UNMATCHED log as recoverable: UNMATCHED and NO_LOG are
 always counted as not-auto-recoverable, and UNMATCHED logs are dumped (with
 --dump-unmatched) so the ruleset can be extended rather than guessed at.
 
+UNMATCHED IS TWO THINGS, AND THE CENSUS SAYS WHICH (#488). A log can go unclassified
+because the ruleset has no signature for it, or because the captured window contains no
+diagnostic line at all -- the failure path used `tail -20 "$log"` before 3371e78289
+(2026-09-17), and ~11 of those ~22 lines are haikuporter's fixed epilogue, so for most
+of the pre-fix backlog the window ends before the line that says WHY. The second kind is
+unclassifiable by construction: no regex can read a line that was never captured. Those
+are reported on their own census line (NO_DIAGNOSTIC), carried per port as
+`no_diagnostic_captured` in the JSON/CSV, and dumped into --dump-unmatched's
+`no-diagnostic/` subdirectory. They need a re-wave with the current deep capture, NOT a
+new signature -- and they must not be counted against classifier coverage. Measured over
+the 639-log backlog cache: 129 UNMATCHED, of which 105 have no diagnostic and only 24
+are a genuine ruleset gap (each a distinct per-port error).
+
 SAFETY / SOP ALIGNMENT (graviton/ops/SOPs.md):
   * DRY-RUN BY DEFAULT. With no --execute it reads DDB + S3 (describe/get only),
     classifies, prints the census, and writes NOTHING back. The DDB writes are the
@@ -107,6 +120,60 @@ def _rx(*pats):
 
 
 RULES = [
+    # ---------------------------------------------------------------- FIRST BLOCK
+    # Classes 15, 30, 31, 34 (#488): OUR OWN TOOLING'S REFUSALS. haikuporter (or the
+    # wave driver) declined *before* or *instead of* running a compiler, so the window
+    # holds no build output that could be a better cause -- and every signature here is
+    # an exact literal from our own tooling, not from a third-party build system. They
+    # go first for a second, less obvious reason: a log that aborts in the *pre*-build
+    # steps still carries the chatter of the autoreconf/automake run that SUCCEEDED
+    # ("+ Running automake: configure.ac:358: installing './compile'"), and that chatter
+    # is one reword away from tripping class 3 or class 10. Ordering them ahead of the
+    # autotools classes makes that impossible instead of merely unlikely.
+    # BE HONEST ABOUT THAT SECOND REASON: it is a GUARD, not a fix for an observed
+    # misfiling. Measured -- moving class 15 to after classes 3 and 10 reclassifies
+    # nothing in the 639-log cache, because no runConfigure log there matches either. The
+    # selftest therefore pins it with a synthetic fixture (the guard line plus a class-10
+    # line in one window); without that fixture the position would be an untested claim.
+
+    # 15 -- runConfigure refuses a CFLAGS/CXXFLAGS override with no -O flag. The single
+    # largest unclassified shape in the #488 census (20 ports). NOTE the spelling: the
+    # guard fires for BOTH CFLAGS and CXXFLAGS, and two of the 20 (farmhash, libnpupnp)
+    # only ever log the CXXFLAGS wording -- a CFLAGS-only regex silently misses them,
+    # which is why the character class is there.
+    (15, "class-15-runconfigure-cflags-override-without-optimization-flags", True,
+     _rx(r"runConfigure: Must specify optimization flags when overriding C(?:XX)?FLAGS"),
+     "Add -O2 (or -O3) to the recipe's CFLAGS/CXXFLAGS override -- runConfigure "
+     "deliberately refuses to fall back to the default optimization flags when a recipe "
+     "overrides the variable, so the override must carry its own -O."),
+
+    # 34 -- haikuporter's meson analogue of class 8's cmake guard. NOT folded into class
+    # 8: the fix is a different flag in a different build system, and filing it under a
+    # class named "missing CMAKE_BUILD_TYPE" would send the reader to the wrong recipe
+    # line. Same shape, different route -> its own class.
+    (34, "class-34-meson-invoked-without---buildtype", True,
+     _rx(r"invoking meson without --buildtype"),
+     "Pass --buildtype=release (or debugoptimized) in the recipe's meson invocation, "
+     "the meson analogue of class 8's -DCMAKE_BUILD_TYPE=Release."),
+
+    # 30 -- the recipe names a patch file that is not staged in the overlay. NOT a port
+    # defect and NOT arm64-specific: an OPERATOR/overlay-staging bug (a patchset that
+    # never got copied in, or a PATCHES= entry with a typo'd name -- criticalmass names
+    # `...patchet`, veesem names a `.recipe`). Its own class precisely because it routes
+    # somewhere different from every other class: to whoever stages the overlay, not to
+    # the port. auto=False -- there is no template, the missing file has to be found.
+    (30, "class-30-recipe-names-a-patch-file-that-is-not-staged", False,
+     _rx(r'Error: patch file "[^"]+" not found'),
+     "OPERATOR, not the port: stage the missing patch file into the overlay (or fix the "
+     "PATCHES= entry's filename). Check the overlay-sync step before re-waving."),
+
+    # 31 -- the wave asked for a port that has no recipe anywhere in the tree. Also an
+    # operator/wave-list issue rather than a build failure: haikuporter aborts at lookup.
+    (31, "class-31-port-has-no-recipe-in-the-tree", False,
+     _rx(r"Error: \S+ not found in repository"),
+     "OPERATOR, not the port: the wave list names a port with no recipe in the overlay "
+     "or upstream tree. Write the recipe, or drop the name from the wave list."),
+
     # 14 -- poisoned build-tool package. Unmistakable magic constant.
     (14, "class-14-poisoned-build-tool-package", True,
      _rx(r"Unhandled pheader type in parse 0x6474e553"),
@@ -166,6 +233,25 @@ RULES = [
          r"run autoreconf --install"),
      "Use autoreconf -fi (force + install aux files)."),
 
+    # 29 -- the autotools re-run itself breaks (#488): aclocal/autom4te/autoreconf/
+    # automake abort, typically because the recipe's own autoreconf hits a macro the
+    # project invokes twice (fswatch: AC_CONFIG_MACRO_DIR used once only; irrxml:
+    # AM_INIT_AUTOMAKE expanded multiple times) under a newer autoconf/automake than the
+    # source was written for. ORDERED AFTER CLASS 10 ON PURPOSE: an autoreconf that
+    # aborts *because an aux file is missing* prints BOTH its own "automake failed with
+    # exit status: 1" and class 10's "required file '...' not found" -- libmcrypt is
+    # exactly that log, and class 10 names the cause while this class names only the
+    # messenger. Putting 29 first would re-file libmcrypt under a class whose fix
+    # (patch the macro) does not apply to it. Measured: 3 logs match this signature,
+    # 1 of them (libmcrypt) is correctly kept by class 10.
+    (29, "class-29-the-autotools-re-run-itself-breaks", True,
+     _rx(r"AC_CONFIG_MACRO_DIR can only be used once",
+         r"AM_INIT_AUTOMAKE expanded multiple times",
+         r"(?:aclocal|autom4te|autoreconf|automake): error: .* failed with exit status"),
+     "Patch the duplicated autoconf/automake macro invocation out of configure.ac "
+     "(AC_CONFIG_MACRO_DIR / AM_INIT_AUTOMAKE once only), or pin the recipe to the "
+     "autotools version the source expects. Not arm64-specific."),
+
     # 1 -- CMake 4.x pre-3.5 policy removal. The largest class.
     (1, "class-1-cmake-4x-pre-35-policy-removal", True,
      _rx(r"Compatibility with CMake < 3\.5 has been removed",
@@ -180,6 +266,24 @@ RULES = [
          r"without debug info packages specified"),
      "Set -DCMAKE_BUILD_TYPE=Release (usually alongside the Class 1 policy flag)."),
 
+    # 17 -- CMake FetchContent/ExternalProject wants the network at configure time. The
+    # third class the playbook reserved in #309 and never encoded (betterspades,
+    # grcompiler, openexr3.2). Distinct from class 12: that is the recipe's own
+    # SOURCE_URI, this is a build-time sub-dependency the upstream CMakeLists pulls
+    # itself, which the sandboxed chroot cannot reach. auto=False -- pre-seeding a
+    # sub-dependency is per-port work, not a flag.
+    # ORDERED AFTER CLASS 1: when the *fetched* subproject then trips the pre-3.5 policy
+    # removal, class 1's -DCMAKE_POLICY_VERSION_MINIMUM is the fix and must win. The
+    # `Modules/FetchContent.cmake:<line>` anchor is what all three logs share -- cmake
+    # prints that frame only when it is unwinding an error through FetchContent.
+    (17, "class-17-cmake-fetchcontent-wants-the-network-at-configure-time", False,
+     _rx(r"Modules/FetchContent\.cmake:\d+",
+         r"FetchContent_MakeAvailable",
+         r"__FetchContent_populateSubbuild"),
+     "Supply the sub-dependency as a real package and point "
+     "-DFETCHCONTENT_SOURCE_DIR_<name> at it (or vendor it into the recipe). NOT class "
+     "12: the failing fetch is the upstream CMakeLists', not the recipe's SOURCE_URI."),
+
     # 5 -- x86-only compiler flags on arm64.
     (5, "class-5-x86-only-compiler-flags-on-arm64", True,
      _rx(r"unrecognized command-line option '-msse\d?'",
@@ -187,10 +291,30 @@ RULES = [
          # other x86-only -m flags aarch64 gcc rejects the same way: -mmmx
          # (opendune), -m3dnow, -mavx*. Same gate on x86/x86_64 as -msse.
          r"unrecognized command-line option '-m(?:mmx|3dnow|avx\w*|fpmath=sse)'",
+         # an x86 MICROARCHITECTURE passed to -march/-mtune/-mcpu (waveedit:
+         # `-march=nocona`). Deliberately spelled as an explicit list of x86 core names
+         # rather than the generic `unknown value '.*' for '-march'` -- the generic form
+         # would also claim a bad *arm* value (a mistyped Graviton3/4 -mcpu=neoverse-*,
+         # see the playbook's ISA opt-in section), which is a different bug with a
+         # different fix. Found while verifying #488; not in that issue's table.
+         r"unknown value '(?:nocona|core2|corei7\w*|k8|athlon\w*|opteron\w*|barcelona|"
+         r"pentium\w*|prescott|i[3-6]86|x86-64\w*|atom|nehalem|westmere|sandybridge|"
+         r"ivybridge|haswell|broadwell|skylake\w*|znver\d)' for '-m(?:arch|tune|cpu)'",
          r"-mfpmath=sse",
-         r"error:.*'-m(?:sse|mmx|3dnow|avx)"),
+         r"error:.*'-m(?:sse|mmx|3dnow|avx)",
+         # #488: the same bug arriving through the x86 intrinsic HEADER rather than the
+         # -m flag. aarch64 gcc accepts -DUSE_MMX happily and then the source does
+         # `#include <mmintrin.h>`, which only exists on x86. Note `[a-z]*mmintrin`
+         # (star, not a single letter): the bare spelling `mmintrin.h` is the one
+         # sdl_gfx hits, and a `[a-z]mmintrin` character class silently misses it --
+         # measured, that typo scored this signature 0 hits. Best leverage on the #488
+         # list: one port, but sdl_gfx gates 9 downstream ports.
+         r"(?:[a-z]*mmintrin|x86intrin|cpuid)\.h: No such file or directory"),
      "Gate -msse*/-mmmx/-m3dnow/-mavx/-mfpmath=sse on x86/x86_64 via "
-     "$effectiveTargetArchitecture (CMake) or $targetArchitecture (Makefile sed)."),
+     "$effectiveTargetArchitecture (CMake) or $targetArchitecture (Makefile sed). Same "
+     "gate for an x86 -march/-mtune/-mcpu value (-march=nocona) and for the x86 "
+     "intrinsic HEADERS (<mmintrin.h>/<*mmintrin.h>/<x86intrin.h>/<cpuid.h>): drop "
+     "the -DUSE_MMX-style define on arm64 rather than the feature."),
 
     # 21 -- python build-time module missing from the chroot. The playbook titled
     # this setuptools/pkg_resources, but the real backlog is broader and the same
@@ -198,12 +322,20 @@ RULES = [
     # pkg_resources/setuptools (html5lib, pbr), distutils (librnp; removed in 3.12,
     # provided by setuptools), or jinja2 (libplacebo; a real codegen dep). Fix is
     # always "declare the providing python package in BUILD_PREREQUIRES".
+    # #488 folds the "Cannot find Python 3 development headers" shape in here rather
+    # than giving it its own class: one port (libsigrokdecode), and the route is the
+    # same -- add the missing python build requirement to the recipe. Only the spelling
+    # of the requirement differs (a devel:/_devel headers subpackage instead of a
+    # python module), which the note below states.
     (21, "class-21-python-setuppy-needs-setuptools--pkg_resources", True,
      _rx(r"ModuleNotFoundError: No module named '[^']+'",
-         r"import pkg_resources\b.*ModuleNotFoundError"),
+         r"import pkg_resources\b.*ModuleNotFoundError",
+         r"Cannot find Python \d[^ ]* development headers"),
      "Declare the providing python package in BUILD_PREREQUIRES (setuptools "
      "supplies pkg_resources/distutils; jinja2 etc. are their own package), "
-     "matching the recipe's python version."),
+     "matching the recipe's python version. For 'Cannot find Python N development "
+     "headers' the missing requirement is the python _devel/headers subpackage in "
+     "BUILD_REQUIRES, not a module -- same route, different spelling."),
 
     # 23 -- install writes to read-only /packages. Specific packagefs write failure
     # in the harvest step (binary already built). auto=False: needs a per-port look
@@ -231,9 +363,36 @@ RULES = [
     # devel-symlink overlay + per-recipe devel: declaration.
     (18, "class-18-missing-link-time-library-ld-cannot-find--llib", True,
      _rx(r"ld: cannot find -l\S+: No such file or directory",
-         r"cannot find -l\S+: No such file or directory"),
+         r"cannot find -l\S+: No such file or directory",
+         # same failure, spelled as an absolute path because the link line names the
+         # .so directly instead of passing -l (textsaver:
+         # `ld: cannot find /boot/system/lib/libscreensaver.so`). libscreensaver is one
+         # of the very devel symlinks this class's note is about, so missing it here was
+         # a pure spelling gap. Anchored on /boot/system/lib|/packages so an arbitrary
+         # relative object file cannot claim it. Found while verifying #488.
+         r"ld: cannot find (?:/boot/system/lib|/packages)/\S+\.so[^:]*: "
+         r"No such file or directory"),
      "Declare the providing devel:/lib: build requirement, or add the missing "
      "Haiku devel symlink (systemic overlay). Never drop the -l (cuts the feature)."),
+
+    # 16 -- duplicate symbols at link time because gcc >= 10 defaults to -fno-common
+    # (#488, 13 ports). NOT an arm64 bug and NOT a Haiku bug: pre-C99 sources declare a
+    # tentative definition in a header, every TU that includes it emits its own, and
+    # -fcommon used to merge them. The fix is arch-independent and the class would look
+    # identical on x86.
+    # ORDERED IMMEDIATELY AFTER CLASS 18, the other ld class, and deliberately BEFORE
+    # class 33 (the generic `undefined reference to`): among link failures the one that
+    # names *which* symbol and *why* wins, and a -fno-common link can emit undefined
+    # references as collateral. It sits after 18 because a link whose *inputs* are
+    # missing (`cannot find -lfoo`) has not got as far as comparing symbols -- fix the
+    # input first. Measured: none of the 13 logs also carries `cannot find -l` or
+    # `undefined reference`, so the order is a guard for future logs, not a live tie.
+    (16, "class-16--fno-common-duplicate-symbols-at-link-time", True,
+     _rx(r"multiple definition of `[^']+'"),
+     "Add -fcommon to the recipe's CFLAGS (gcc >= 10 flipped the default to "
+     "-fno-common), or -- better where the source is short -- patch the tentative "
+     "definitions in the header to `extern` plus one real definition in a .c file. "
+     "Arch-independent: this is a compiler-default change, not an arm64 port bug."),
 
     # 7 -- LTO without a linker plugin.
     (7, "class-7-lto-without-a-linker-plugin", True,
@@ -250,6 +409,37 @@ RULES = [
          r"aarch64-unknown-haiku-.*No such file or directory"),
      "Pass native CXX=g++/CC=gcc. Class-wide cleared by #186 (arm64 triplet "
      "compilers on the in-chroot PATH)."),
+
+    # 27 -- C++11 made a narrowing conversion in a braced initialiser ill-formed (#488).
+    # NOTE THE `error:` PREFIX, which the issue's proposed regex left out and which
+    # costs this class 2 of its 5 claimed ports. -Wnarrowing is emitted as a WARNING far
+    # more often than as an error (qemacs and colors each show only warnings, and in
+    # colors' case in a different translation unit from the object that actually failed),
+    # so a regex that accepts the warning form files logs by a line that did not fail the
+    # build. Those two stay UNMATCHED, which is the honest answer: their real diagnostic
+    # is off the end of the truncated window (see the NO_DIAGNOSTIC bucket).
+    # Placed BEFORE class 22: `error: narrowing conversion of ... [-Wnarrowing]` is
+    # strictly more specific than class 22's `does not name a type`, and it carries a
+    # template fix where class 22 means per-port source porting.
+    (27, "class-27-c11-narrowing-conversion-is-an-error", True,
+     _rx(r"error: narrowing conversion of .* \[-Wnarrowing\]"),
+     "Cast at the initialiser (the correct fix), or -- as a class-wide unblock -- add "
+     "-Wno-narrowing / -fpermissive to the recipe's CXXFLAGS. Arch-independent: a C++11 "
+     "conformance tightening, not an arm64 port bug."),
+
+    # 32 -- Linux-only CPU-affinity / cpuset API (#488). glibc's sched_setaffinity
+    # helpers (CPU_ALLOC, CPU_ISSET_S, CPU_*_S) have no Haiku equivalent, so the port
+    # needs real work: either an affinity-free code path or a shim. Note cpuid, whose
+    # own patchset already tried a shim (`#define CPU_ZERO CPUSET_ZERO`) against a name
+    # Haiku does not export -- so it surfaces at LINK time as
+    # `undefined reference to `CPUSET_ZERO''. That is why this class must precede class
+    # 33: 33 would otherwise claim cpuid and file a named, understood porting gap as an
+    # anonymous missing symbol. The selftest asserts exactly that ordering.
+    (32, "class-32-linux-only-cpu-affinity--cpuset-api", False,
+     _rx(r"CPU_ISSET_S", r"CPU_ALLOC", r"CPU_ZERO_S", r"CPU_SET_S", r"CPUSET_ZERO"),
+     "Real porting work: give the source an affinity-free path under __HAIKU__ (or a "
+     "correct shim -- Haiku exports neither CPU_*_S nor CPUSET_ZERO). Not a template; "
+     "not recoverable by a re-wave."),
 
     # 22 -- removed/renamed Haiku API or moved header. NARROW on purpose: only the
     # unambiguous API-rename signature "does not name a type"; broad forms (a moved
@@ -297,6 +487,47 @@ RULES = [
          r"Could NOT find UnixCommands"),
      "Declare the tool as a cmd: BUILD_PREREQUIRES (see the tool->provider map). "
      "Mechanical per-recipe edit with a known template."),
+
+    # 28 -- configure's own compile/link probe failed and the window does not say why
+    # (#488). Two wordings, one routing: `C compiler cannot create executables` (the
+    # chroot toolchain or its default link line is broken -- johntheripper,
+    # sciteco_curses) and `could not compile test program either way` (a feature probe
+    # that fails with AND without the header it is testing -- pkgconfig's bundled glib
+    # on arpa/nameser_compat.h). In both cases configure prints a verdict, not a cause:
+    # the cause is in config.log inside the chroot haikuporter kept for inspection. So
+    # auto=False -- the action is "go read config.log", which no re-wave performs.
+    # ORDERED AFTER CLASS 2, not before it: the commonest way for a C compiler to stop
+    # creating executables is that the compiler or linker is not in the chroot at all, and
+    # that log also carries `gcc: command not found` -- which names the cause and has a
+    # template fix, where this class only says "go read config.log". Class 2 must
+    # therefore win the tie. Measured: none of the three logs in this class matches class
+    # 2 at all, so the order costs this class nothing; the selftest asserts the tie with a
+    # synthetic fixture because no cached log exhibits it.
+    (28, "class-28-configures-compile-probe-failed--cause-is-in-configlog", False,
+     _rx(r"C compiler cannot create executables",
+         r"could not compile test program either way"),
+     "Read config.log in the retained chroot (haikuporter keeps work-*/ for inspection) "
+     "-- configure printed a verdict, not a cause. 'C compiler cannot create "
+     "executables' points at the chroot toolchain/default link line; 'could not compile "
+     "test program either way' is a feature probe failing both ways. Environment, not "
+     "a recipe template."),
+
+    # 33 -- a symbol Haiku's libroot does not provide, discovered at link time (#488).
+    # kbuild's `WCOREDUMP` is the shape: a POSIX-adjacent macro/symbol the source assumes
+    # exists. THE MOST GENERIC LINK SIGNATURE IN THE RULESET, so it is placed nearly last
+    # of the build classes, on purpose and in both directions:
+    #   * after every class that names a reason -- class 18 (missing -l), class 16
+    #     (duplicate symbol), class 32 (Linux-only affinity API, which surfaces through
+    #     this very wording for cpuid), class 7 (LTO) -- so `undefined reference` can only
+    #     claim a log that no more specific class explains;
+    #   * still BEFORE classes 25/26/20, so a genuine link failure is never re-filed as a
+    #     dependency-resolution problem. That mistake is exactly what #486 found.
+    # auto=False: providing or patching around a missing platform symbol is porting work.
+    (33, "class-33-undefined-reference-to-a-symbol-haiku-does-not-provide", False,
+     _rx(r"undefined reference to "),
+     "Porting work: implement/shim the missing symbol under __HAIKU__, or patch the "
+     "source to a supported equivalent (kbuild's WCOREDUMP). Check first that it is not "
+     "really a missing -l (class 18) or a Linux-only API with a name (class 32)."),
 
     # 25 -- the wave driver's own round cap, NOT a port defect. MUST be ordered before
     # class 20: a capped run ends at haikuporter's resolve step, so its log carries
@@ -415,6 +646,49 @@ def classify(text):
             if p.search(text):
                 return cls, slug, auto, anchor(slug), note, p.pattern
     return None, None, False, "", "", None
+
+
+# --------------------------------------------- was a diagnostic captured at all? (#488)
+# NOT every UNMATCHED log is a ruleset gap. Before 3371e78289 (2026-09-17) the failure
+# path captured only `tail -20 "$log"`, and ~11 of those ~22 lines are haikuporter's
+# fixed epilogue -- so for most of the pre-fix backlog the window ends before the line
+# that says WHY. Those logs are unclassifiable by construction: no regex can ever read a
+# line that was never captured, and counting them as "no class signature" both inflates
+# UNMATCHED and libels the ruleset. They need a re-wave with the current deep capture.
+#
+# A line STATES A REASON if it carries a compiler/configure/linker diagnostic ...
+_REASON_LINE = re.compile(r"\b(?:error|fatal error):|\bError:\s|No such file or directory|"
+                          r"undefined reference|Permission denied|No space left")
+# ... unless it only says that something FAILED, never why. Two of these arms carry the
+# whole split and are mutation-tested in the selftest:
+#   * `Error: Build has failed - stopping.` is the last line of haikuporter's epilogue, so
+#     it is in EVERY log -- without this arm nothing is ever no-diagnostic;
+#   * `collect2: error: ld returned 1 exit status` is the usual last line of a truncated
+#     link failure and says only that ld gave up.
+# The make/gmake arm is different: measured over the 639-log backlog cache it changes
+# nothing, because no _REASON_LINE token matches make's `*** [target] Error N` recursion
+# in the first place. It is kept, and labelled inert, because those lines are the
+# canonical contentless ending of a truncated window and the first _REASON_LINE token
+# that reaches them would otherwise silently un-split the census.
+_CONTENTLESS_LINE = re.compile(
+    r"^(?:make|gmake)(?:\[\d+\])?: \*\*\*|"          # inert today, see above
+    r"^collect2: error: ld returned|"                 # load-bearing
+    r"^Error: Build has failed|"                      # load-bearing (epilogue, every log)
+    r"^\S+: FAILED, no missing-dep|"
+    r"^Warning: Command ")
+
+
+def has_captured_diagnostic(text):
+    """True when at least one line in the captured window states a REASON for the
+    failure. False means the window holds only boilerplate, warnings and exit-status
+    recursion -- an evidence-capture artifact, not a missing class signature."""
+    for line in text.splitlines():
+        s = line.strip()
+        if _CONTENTLESS_LINE.match(s):
+            continue
+        if _REASON_LINE.search(s):
+            return True
+    return False
 
 
 # ----------------------------------------------------------------- DDB reading
@@ -549,13 +823,20 @@ def main():
         if text is None:
             rec = dict(it, triage_class="NO_LOG", auto=False, fix_ref="",
                        note="log missing/empty (%s)" % reason, matched=None,
-                       has_unresolvable=False)
+                       has_unresolvable=False, no_diagnostic=False)
         else:
             cls, slug, auto, fix_ref, note, matched = classify(text)
+            # only meaningful for UNMATCHED: a classified log obviously had a diagnostic.
+            nodiag = cls is None and not has_captured_diagnostic(text)
+            if nodiag:
+                note = ("no diagnostic line in the captured window (pre-3371e78289 "
+                        "tail -20 artifact) -- NOT a ruleset gap; re-wave with the "
+                        "current deep capture. #488")
             rec = dict(it,
                        triage_class=(cls if cls is not None else "UNMATCHED"),
                        auto=auto, fix_ref=fix_ref, note=note, matched=matched,
                        has_unresolvable=bool(_UNRESOLVABLE.search(text)),
+                       no_diagnostic=nodiag,
                        _text_tail=text[-4000:] if cls is None else None)
         return it["pkg"], rec
 
@@ -569,14 +850,25 @@ def main():
 
     # ---- dump unmatched for ruleset extension --------------------------------
     if args.dump_unmatched:
+        # Split the dump the same way the census does (#488): the top level holds the
+        # logs that DO state a reason -- the real ruleset-extension frontier -- and
+        # no-diagnostic/ holds the truncated-window logs, which no regex can help.
+        # Mixing them buries the 20-odd actionable ones under a hundred that are not.
+        nodiag_dir = os.path.join(args.dump_unmatched, "no-diagnostic")
         os.makedirs(args.dump_unmatched, exist_ok=True)
-        n = 0
+        os.makedirs(nodiag_dir, exist_ok=True)
+        n = nd = 0
         for pkg, rec in results.items():
             if rec["triage_class"] == "UNMATCHED" and rec.get("_text_tail"):
-                with open(os.path.join(args.dump_unmatched, "%s.tail.log" % pkg), "w") as f:
+                d = nodiag_dir if rec["no_diagnostic"] else args.dump_unmatched
+                with open(os.path.join(d, "%s.tail.log" % pkg), "w") as f:
                     f.write(rec["_text_tail"])
-                n += 1
-        log("dumped %d UNMATCHED log tails to %s" % (n, args.dump_unmatched))
+                if rec["no_diagnostic"]:
+                    nd += 1
+                else:
+                    n += 1
+        log("dumped %d UNMATCHED log tails WITH a diagnostic to %s, and %d with none to "
+            "%s" % (n, args.dump_unmatched, nd, nodiag_dir))
 
     # ---- write-back ----------------------------------------------------------
     ts = int(time.time())
@@ -599,6 +891,7 @@ def main():
                      "fix_ref": rec["fix_ref"],
                      "error_class": rec["error_class"],
                      "has_unresolvable": rec["has_unresolvable"],
+                     "no_diagnostic_captured": rec["no_diagnostic"],
                      "note": rec["note"]})
     if args.out:
         with open(args.out, "w") as f:
@@ -621,35 +914,51 @@ def main():
     no_log = by_class.get("NO_LOG", 0)
     unmatched_unres = sum(1 for rec in results.values()
                           if rec["triage_class"] == "UNMATCHED" and rec["has_unresolvable"])
+    # #488: split UNMATCHED into the part the ruleset could still claim and the part no
+    # ruleset can ever claim, so classifier coverage is not judged on truncated logs.
+    nodiag = sum(1 for rec in results.values() if rec["no_diagnostic"])
+    ruleset_gap = unmatched - nodiag
 
     # class metadata for the report
     meta = {c: (slug, auto) for c, slug, auto, _, _ in RULES}
     class_nums = sorted(meta)  # all classes the ruleset knows (1-14 + 18-26)
 
-    print("\n" + "=" * 66)
+    print("\n" + "=" * 82)
     print("DeBeOS failure-backlog census  (%d items: %s)" %
           (len(results), " + ".join("%d %s" % (
               sum(1 for r in results.values() if r["build_state"] == s), s)
               for s in STATES)))
-    print("=" * 66)
-    print("%-6s %-46s %5s %s" % ("class", "playbook section", "count", "auto"))
-    print("-" * 66)
+    print("=" * 82)
+    print("%-6s %-62s %5s %s" % ("class", "playbook section", "count", "auto"))
+    print("-" * 82)
     for c in class_nums:
         cnt = by_class.get(str(c), 0)
         if not cnt:
             continue
         slug, auto = meta[c]
-        print("%-6d %-46s %5d %s" % (c, slug, cnt, "yes" if auto else "NO"))
-    for special in ("UNMATCHED", "NO_LOG"):
-        if by_class.get(special):
-            print("%-6s %-46s %5d %s" % (special, "-", by_class[special], "NO"))
-    print("-" * 66)
+        print("%-6d %-62s %5d %s" % (c, slug, cnt, "yes" if auto else "NO"))
+    if unmatched:
+        print("%-6s %-62s %5d %s" % ("UNMATCH", "  ruleset gap (a diagnostic IS captured)",
+                                     ruleset_gap, "NO"))
+        print("%-6s %-62s %5d %s" % ("", "  NO_DIAGNOSTIC captured (truncated window)",
+                                     nodiag, "NO"))
+    if by_class.get("NO_LOG"):
+        print("%-6s %-62s %5d %s" % ("NO_LOG", "-", by_class["NO_LOG"], "NO"))
+    print("-" * 82)
     print("AUTO-RECOVERABLE (known playbook template) : %4d" % auto_ct)
     print("GENUINELY-HARD  (matched a class, auto=NO) : %4d" % matched_hard)
     print("UNMATCHED (no class signature)             : %4d  (of which %d mention "
           "UNRESOLVABLE = dep unbuilt/unpublished)" % (unmatched, unmatched_unres))
+    # The split that keeps the coverage number honest (#488). A no-diagnostic log is an
+    # evidence-capture artifact from the pre-3371e78289 `tail -20`: the window ends
+    # before the line that says why, so it is unclassifiable by construction and must
+    # not be read as a missing class signature.
+    print("  |- ruleset gap: a reason line IS captured : %4d  <- extend RULES here"
+          % ruleset_gap)
+    print("  |- NO DIAGNOSTIC in the captured window   : %4d  <- no regex can ever "
+          "classify these; re-wave with the current deep capture (#488)" % nodiag)
     print("NO_LOG (log missing/empty)                 : %4d" % no_log)
-    print("=" * 66)
+    print("=" * 82)
 
     # top auto-recoverable classes by port count -> next re-wave targets
     auto_classes = sorted(
@@ -659,8 +968,8 @@ def main():
     if top:
         print("Top auto-recoverable classes (next re-wave targets):")
         for c, slug, n in top:
-            print("   class %-2d  %-46s %4d ports" % (c, slug, n))
-        print("=" * 66)
+            print("   class %-2d  %-62s %4d ports" % (c, slug, n))
+        print("=" * 82)
 
     return 0
 

@@ -1,24 +1,43 @@
 #!/usr/bin/env python3
-"""haiku-triage-failures-selftest [--mutate] [--logs DIR]
+"""haiku-triage-failures-selftest [--mutate [ARM ...]] [--logs DIR] [--list-arms]
 
-Offline test for the ORDER of haiku-triage-failures' ruleset. No AWS, no network: it
-imports the classifier and runs it over synthetic logs built from verbatim lines taken
-from real build logs.
+Offline test for haiku-triage-failures' ruleset -- above all for its ORDER. No AWS, no
+network: it imports the classifier and runs it over synthetic logs assembled from
+verbatim lines taken from real build logs.
 
-WHY IT EXISTS. The signatures added for #486 are only worth anything because of where
-they sit in the list. A capped run ends at haikuporter's resolve step, so its log also
-contains class 20's "could not be resolved" wording -- and class 20 was silently
-collecting all 22 capped ports, which is how the census came to overstate "dependency
-not published" by 22. Ordering is invisible in a diff and easy to lose in a later edit,
-so it gets a test that fails when it is lost.
+WHY IT EXISTS. A signature's worth here is mostly a function of where it sits. A capped
+run ends at haikuporter's resolve step, so its log also contains class 20's "could not be
+resolved" wording -- and class 20 was silently collecting all 22 capped ports, which is
+how the census came to overstate "dependency not published" by 22 (#486). Ordering is
+invisible in a diff and easy to lose in a later edit, so it gets a test that fails when
+it is lost. #488 added ten more classes and three extensions to existing ones, each with
+its own ordering claim, so each gets an arm here.
 
-  --mutate      narrow the class-25 regex the way the issue asks (so a capped log no
-                longer matches it) and assert the capped fixture falls THROUGH TO CLASS
-                20. This is the mutation test: it proves the pass is caused by the new
-                signature and its position, not by something incidental. Exits 0 when
-                the mutation is detected.
-  --logs DIR    additionally classify every *.log in DIR (a local cache of real backlog
-                logs) and report how the capped ones land. Skipped when absent.
+THREE KINDS OF ASSERTION, and the second and third are the ones that catch real bugs:
+
+  1. POSITIVE -- a verbatim fixture lands in the class it should.
+  2. NEGATIVE -- a fixture that must NOT land in a given class doesn't. Ordering bugs
+     show up here and nowhere else: `libmcrypt` has to stay in class 10 even though it
+     also matches class 29, `cpuid` has to be class 32 and not class 33, a `-mcpu`
+     typo must not be read as an x86 flag.
+  3. MUTATION -- neutralize exactly one rule (or one pattern of one rule) in the loaded
+     ruleset, leaving the ORDER intact, and assert the fixture falls through to the
+     stated class. A signature that cannot be made to fail is not known to work: if a
+     fixture still lands in class N after class N has been disarmed, the pass was
+     coming from somewhere else and the test proved nothing.
+
+The mutation works on the loaded RULES list rather than on the file's text, so a reword
+of a regex does not silently make an arm vacuous -- neutralize() raises when it finds
+nothing to disarm, which is the loud failure a text-anchor gave us before.
+
+  --mutate [ARM ...]  run the mutation arms (all of them with no argument). Exits 0 when
+                      every mutation is DETECTED, i.e. every fixture fell through as
+                      predicted.
+  --logs DIR          additionally classify every *.log in DIR (a local cache of real
+                      backlog logs) and assert the measured per-class membership -- the
+                      counts from the #488 census. Skipped when the directory is absent,
+                      so the test still runs on a machine with no cache.
+  --list-arms         print the mutation arms and exit.
 """
 import argparse
 import glob
@@ -30,31 +49,75 @@ import types
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 CLASSIFIER = os.path.join(HERE, "haiku-triage-failures")
+NEVER = re.compile(r"(?!x)x")  # a compiled regex that cannot match anything
 
 
-def load(mutate=False):
-    """Import haiku-triage-failures as a module. With mutate=True, narrow the class-25
-    regex first -- the same 'break it and confirm red' step the issue asks for, done in
-    memory so the tracked file is never touched."""
-    src = open(CLASSIFIER).read()
-    if mutate:
-        before = src
-        # Narrow `gave up after \d+ attempts` so a real capped line cannot match it.
-        src = src.replace(r'_rx(r"gave up after \d+ attempts")',
-                          r'_rx(r"gave up after NO_SUCH_COUNT attempts")')
-        if src == before:
-            sys.exit("mutation point not found -- the class-25 regex was reworded; "
-                     "update this test rather than deleting it")
+def load():
+    """Import haiku-triage-failures as a module."""
     mod = types.ModuleType("tf")
     mod.__dict__["__name__"] = "tf"
-    exec(compile(src, CLASSIFIER, "exec"), mod.__dict__)
+    exec(compile(open(CLASSIFIER).read(), CLASSIFIER, "exec"), mod.__dict__)
     return mod
 
 
-# --- fixtures ---------------------------------------------------------------
-# Verbatim shapes. The capped fixture deliberately carries BOTH the cap line and class
-# 20's resolve wording, because that is what a real capped log looks like (checked
-# against ffmpeg6's) and it is the exact ambiguity the ordering has to settle.
+def neutralize(mod, cls, substr=None):
+    """Disarm one rule in the loaded ruleset WITHOUT moving it: replace its patterns
+    (or only those whose source contains `substr`) with a regex that never matches. The
+    rule keeps its position, so what the mutation measures is purely "what claims this
+    log once class `cls` cannot". Raises when nothing was disarmed -- that means the
+    regex was reworded and the arm would otherwise pass vacuously."""
+    n = 0
+    rules = []
+    for c, slug, auto, pats, note in mod.RULES:
+        if c == cls:
+            new = []
+            for p in pats:
+                if substr is None or substr in p.pattern:
+                    new.append(NEVER)
+                    n += 1
+                else:
+                    new.append(p)
+            pats = new
+        rules.append((c, slug, auto, pats, note))
+    mod.RULES = rules
+    if not n:
+        sys.exit("mutation point not found: class %s%s -- the regex was reworded or the "
+                 "class removed; update this test rather than deleting it"
+                 % (cls, (" / %r" % substr) if substr else ""))
+    return n
+
+
+# --- fixtures ---------------------------------------------------------------------
+# Verbatim shapes from real logs, wrapped in the driver preamble and haikuporter's fixed
+# epilogue so that a fixture looks like what the classifier is actually handed -- which
+# matters for the NO_DIAGNOSTIC tests at the bottom, whose whole subject is how much of a
+# real window is boilerplate.
+EPILOGUE = """Warning: Command '['bash', '-c', '. /wrapper-script']' returned non-zero exit status 1.
+cleaning 'chroot/boot' folder
+keeping chroot folder /boot/home/haikuports/%(cat)s/%(pkg)s/work-1.0 intact for inspection
+Checking if any dependency-infos need to be updated ...
+Looking for stale dependency-infos ...
+Looking for stale cached recipes ...
+----------------------------------------------------------------------
+%(cat)s::%(pkg)s-1.0
+\t/boot/home/haikuports/%(cat)s/%(pkg)s/%(pkg)s-1.0.recipe
+----------------------------------------------------------------------
+Error: Build has failed - stopping.
+===== nativebuild done 2026-09-15T14:42:56Z rc=1 =====
+"""
+
+
+def fx(pkg, body, cat="app-misc", preamble=None):
+    """Assemble a realistic log: driver preamble + body + haikuporter epilogue."""
+    head = "===== %s : start 2026-09-15T14:42:30Z =====\n" % pkg
+    head += preamble if preamble is not None else (
+        "%s: FAILED, no missing-dep to install -- see /boot/home/nb-%s.log\n" % (pkg, pkg))
+    return head + body.rstrip("\n") + "\n" + EPILOGUE % {"cat": cat, "pkg": pkg}
+
+
+# The capped fixture deliberately carries BOTH the cap line and class 20's resolve
+# wording, because that is what a real capped log looks like (checked against ffmpeg6's)
+# and it is the exact ambiguity the ordering has to settle.
 CAPPED = """===== ffmpeg6 : start 2026-09-21T14:58:03Z =====
 ffmpeg6: attempt 1 installing: devel:libbz2
 ffmpeg6: attempt 9 installing: devel:libtheora
@@ -109,65 +172,456 @@ CMake Error at CMakeLists.txt:3 (cmake_minimum_required):
   Compatibility with CMake < 3.5 has been removed from CMake.
 """
 
+# --- #488 fixtures ---------------------------------------------------------------
+# 27. The aranym shape, INCLUDING the chatter of the autoreconf/automake run that
+# SUCCEEDED. That chatter is the reason class 15 is ordered ahead of the autotools
+# classes: "installing './compile'" / "installing './missing'" is one reword away from
+# looking like class 10's missing-aux-file diagnosis, and here it means the opposite.
+CFLAGS_GUARD = fx("aranym", """done.
+ + Running autoheader: done.
+ + Running automake: configure.ac:358: installing './compile'
+configure.ac:23: installing './missing'
+src/Makefile.am: installing './depcomp'
+done.
+all done
+runConfigure: Must specify optimization flags when overriding CFLAGS.
+\t(autotools configure will not use the default ones in that case.)""",
+                  cat="app-emulation",
+                  preamble="aranym: attempt 1 installing: devel:libsdl_1.2 \n"
+                           "aranym: FAILED, no missing-dep to install -- see /boot/home/nb-aranym.log\n")
+
+# The SAME guard, CXXFLAGS spelling. farmhash and libnpupnp only ever log this form; a
+# CFLAGS-only regex misses them, which is exactly what the issue's proposed signature did.
+CXXFLAGS_GUARD = fx("farmhash", """configure.ac:13: installing './missing'
+src/Makefile.am: installing './depcomp'
+runConfigure: Must specify optimization flags when overriding CXXFLAGS.
+\t(autotools configure will not use the default ones in that case.)""", cat="dev-libs")
+
+MULTIDEF = fx("nethack", """/boot/system/develop/tools/bin/../lib/gcc/aarch64-unknown-haiku/13.3.0/../../../../aarch64-unknown-haiku/bin/ld: windows.o:/sources/nethack-3.6.2/src/windows.c:863: multiple definition of `WIN_STATUS'; decl.o:/sources/nethack-3.6.2/src/decl.c:273: first defined here
+collect2: error: ld returned 1 exit status
+make: *** [Makefile:118: nethack] Error 1""", cat="games-roguelike")
+
+# A missing -l must beat a duplicate symbol: the link never resolved its INPUTS, so
+# there is nothing to say about duplicate symbols yet.
+MULTIDEF_PLUS_MISSING_LIB = MULTIDEF.replace(
+    "collect2: error: ld returned 1 exit status",
+    "ld: cannot find -lmidi: No such file or directory\n"
+    "collect2: error: ld returned 1 exit status")
+
+MISSING_LIB_BY_PATH = fx("textsaver", """/boot/system/develop/tools/bin/../lib/gcc/aarch64-unknown-haiku/13.3.0/../../../../aarch64-unknown-haiku/bin/ld: cannot find /boot/system/lib/libscreensaver.so: No such file or directory
+collect2: error: ld returned 1 exit status""", cat="haiku-apps")
+
+X86_INTRIN_HEADER = fx("sdl_gfx", """libtool: compile:  gcc -DPACKAGE=\\"SDL_gfx\\" -g -O2 -O -DUSE_MMX -I/packages/libsdl-1.2.15-19/.self/develop/headers/SDL -c SDL_imageFilter.c
+SDL_imageFilter.c:49:14: fatal error: mmintrin.h: No such file or directory
+   49 | #    include <mmintrin.h>
+      |              ^~~~~~~~~~~~
+compilation terminated.""", cat="media-libs")
+
+X86_MARCH = fx("waveedit", """cc1: error: unknown value 'nocona' for '-march'
+cc1: note: valid arguments are: armv8-a armv8.1-a armv8.2-a native
+make: *** [Makefile:22: WaveEdit.o] Error 1""", cat="media-sound")
+
+# The same diagnostic shape with an ARM value must NOT be class 5: a mistyped
+# -mcpu=neoverse-* is a Graviton ISA opt-in bug with a different fix.
+ARM_MCPU_TYPO = fx("llama_cpp_g3", """cc1: error: unknown value 'neoverse-v9' for '-mcpu'
+cc1: note: valid arguments are: neoverse-v1 neoverse-v2 neoverse-n1
+make: *** [Makefile:22: ggml.o] Error 1""", cat="dev-ml")
+
+NARROWING_ERROR = fx("sawteeth", """/sources/Sawteeth-1.4.1/Source/stTrackerEntry.cpp:20:18: error: narrowing conversion of '-1' from 'int' to 'char' [-Wnarrowing]
+   20 | char noteBuf[] = { -1 };
+make[2]: *** [Source/CMakeFiles/Sawteeth.dir/build.make:289: stTrackerEntry.cpp.o] Error 1""",
+                     cat="media-sound")
+
+# Only WARNINGS, and (as in colors) in a different translation unit from the object that
+# actually failed. This MUST stay unclassified: filing it as class 27 would name a line
+# that did not fail the build. It is a truncated window, i.e. NO_DIAGNOSTIC.
+NARROWING_WARNING_ONLY = fx("colors", """      |                            ^~~~~~~~~~~~~~~~~
+ColorPickerView.cpp:629:47: warning: narrowing conversion of '(int)(fGreen * 255)' from 'int' to 'uint8' {aka 'unsigned char'} [-Wnarrowing]
+  629 |         rgb_color base = { (int)(fRed * 255), (int)(fGreen * 255),
+make: *** [/boot/system/develop/etc/makefile-engine:314: objects/BackgroundView.o] Error 1
+make: *** Waiting for unfinished jobs....""", cat="haiku-apps")
+
+CPUSET_AT_COMPILE = fx("util_linux", """      |                                                ^~~~~~~~
+./include/cpuset.h:80:21: note: in expansion of macro 'CPU_ISSET_S'
+   80 |                 if (CPU_ISSET_S(cpu, setsize, ary[i])) {
+make[2]: *** [Makefile:8605: libblkid/src/la-devname.lo] Error 1""", cat="sys-apps")
+
+# cpuid's own patchset tried `#define CPU_ZERO CPUSET_ZERO` against a name Haiku does not
+# export, so the Linux-affinity gap surfaces at LINK time through class 33's wording.
+# Class 32 must win: an understood, named porting gap beats an anonymous missing symbol.
+CPUSET_AT_LINK = fx("cpuid", """threads.c:(.text+0x70): undefined reference to `CPUSET_ZERO'
+collect2: error: ld returned 1 exit status
+make: *** [Makefile:70: cpuid] Error 1""", cat="sys-apps")
+
+UNDEF_REF = fx("kbuild", """/sources/kbuild-upstream-0.1.9998svn3572+dfsg/src/kash/jobs.c:424:(.text+0x9f8): undefined reference to `WCOREDUMP'
+collect2: error: ld returned 1 exit status
+make: *** [Makefile.kmk:120: kash] Error 1""", cat="dev-util")
+
+CONFIGURE_NO_EXE = fx("johntheripper", """checking whether the C compiler works... no
+configure: error: in `/sources/john-1.9.0-jumbo-1/src':
+configure: error: C compiler cannot create executables
+See `config.log' for more details""", cat="app-crypt")
+
+CONFIGURE_PROBE_BOTH_WAYS = fx("pkgconfig", """checking for if_indextoname... no
+checking if arpa/nameser_compat.h is needed... configure: error: could not compile test program either way
+configure: error: ./configure failed for glib""", cat="dev-util")
+
+AUTOTOOLS_RERUN = fx("irrxml", """autoreconf: running: aclocal --force -I m4
+configure.ac:11: error: AM_INIT_AUTOMAKE expanded multiple times
+/packages/automake-1.18.1-1/.self/data/aclocal-1.18/init.m4:29: AM_INIT_AUTOMAKE is expanded from...
+autom4te: error: m4 failed with exit status: 1
+aclocal: error: /packages/autoconf-2.72-1/.self/bin/autom4te failed with exit status: 1
+autoreconf: error: aclocal failed with exit status: 1""", cat="dev-libs")
+
+# libmcrypt matches class 29 TOO -- autoreconf aborts and says so. But class 10 names the
+# CAUSE (the aux file autoreconf could not find) where class 29 names only the messenger,
+# so class 10 must keep it. This is the single most important negative in the file: get
+# the order wrong and 31 re-files libmcrypt under a fix that does not apply to it.
+AUTOTOOLS_AUX_FILE = fx("libmcrypt", """configure.in:28: installing '$with_auxdir/compile'
+automake: warning: autoconf input should be named 'configure.ac', not 'configure.in'
+configure.in:33: error: required file '$with_auxdir/ltmain.sh' not found
+autoreconf: error: automake failed with exit status: 1""", cat="dev-libs")
+
+PATCH_NOT_STAGED = fx("criticalmass", """Error: patch file "/boot/home/haikuports/haiku-games/criticalmass/patches/criticalmass-2.3.patchet" not found.""",
+                      cat="haiku-games",
+                      preamble="")
+
+NO_RECIPE_IN_TREE = fx("fpc_bootstrap", """Error: fpc_bootstrap not found in repository""",
+                       cat="dev-lang", preamble="")
+
+MESON_NO_BUILDTYPE = fx("vmaf", """error: invoking meson without --buildtype argument
+note: you probably want --buildtype=release or --buildtype=debugoptimized""",
+                        cat="media-libs")
+
+PY_DEV_HEADERS = fx("libsigrokdecode", """checking for python3... /bin/python3
+configure: error: Cannot find Python 3 development headers.""", cat="dev-libs")
+
+# 17. betterspades: cmake unwinds a configure-time network fetch through FetchContent.
+FETCHCONTENT = fx("betterspades", """Call Stack (most recent call first):
+  /packages/betterspades-0.1.6~git-2/cmd~cmake/data/cmake/Modules/FetchContent.cmake:1609 (__FetchContent_populateSubbuild)
+  /packages/betterspades-0.1.6~git-2/cmd~cmake/data/cmake/Modules/FetchContent.cmake:2384 (__FetchContent_Populate)
+  src/CMakeLists.txt:11 (FetchContent_MakeAvailable)
+
+
+-- Configuring incomplete, errors occurred!""", cat="haiku-games")
+
+# The same fetch failing inside a subproject that ALSO trips the pre-3.5 policy removal:
+# class 1's flag is the fix and must win. Synthetic -- no cached log shows both.
+FETCHCONTENT_PLUS_POLICY = FETCHCONTENT.replace(
+    "-- Configuring incomplete, errors occurred!",
+    "CMake Error at _deps/enet-src/CMakeLists.txt:1 (cmake_minimum_required):\n"
+    "  Compatibility with CMake < 3.5 has been removed from CMake.\n"
+    "-- Configuring incomplete, errors occurred!")
+
+
+# --- synthetic ties -------------------------------------------------------------------
+# Three ordering claims in the ruleset are GUARDS rather than fixes for an observed
+# misfiling: no cached log exhibits the tie, so moving the rule reclassifies nothing and
+# the claim would be an untested assertion. Each therefore gets a constructed fixture, and
+# each is labelled synthetic so nobody reads it as measured evidence.
+#
+# 27 vs 3/10: the guard line in a window that ALSO carries a class-10 aux-file line.
+CFLAGS_GUARD_PLUS_AUX = CFLAGS_GUARD.replace(
+    "all done\n", "configure.ac:33: error: required file 'ltmain.sh' not found\nall done\n")
+# 2 vs 30: a compiler that is absent says so, and that names the cause where class 28 only
+# says "read config.log". Class 2 must take the tie.
+CONFIGURE_NO_EXE_BECAUSE_NO_GCC = CONFIGURE_NO_EXE.replace(
+    "checking whether the C compiler works... no\n",
+    "checking whether the C compiler works... no\n./configure: line 2: gcc: command not found\n")
+# 35 vs 20: a genuine link failure in a window that also carries haikuporter's resolve
+# wording must never be re-filed as a dependency problem -- the #486 mistake, one class up.
+UNDEF_REF_PLUS_RESOLVE = UNDEF_REF.replace(
+    "collect2: error: ld returned 1 exit status\n",
+    "collect2: error: ld returned 1 exit status\n"
+    'Error: \tReason: build-requires "devel:libfoo" of package "kbuild-1.0" could not be resolved\n')
+
+
+# --- the expectation tables ------------------------------------------------------
+# (label, fixture, expected class). `None` means UNMATCHED on purpose.
+POSITIVE = [
+    ("capped run", CAPPED, 25),
+    ("no-progress, not absent", NO_PROGRESS, 26),
+    ("earned absence", EARNED_ABSENT, 20),
+    ("real error still wins", CAPPED_WITH_REAL_ERROR, 1),
+    ("runConfigure CFLAGS", CFLAGS_GUARD, 15),
+    ("runConfigure CXXFLAGS", CXXFLAGS_GUARD, 15),
+    ("-fno-common multidef", MULTIDEF, 16),
+    ("cmake FetchContent", FETCHCONTENT, 17),
+    ("x86 intrinsic header", X86_INTRIN_HEADER, 5),
+    ("x86 -march value", X86_MARCH, 5),
+    ("narrowing IS an error", NARROWING_ERROR, 27),
+    ("cpuset at compile time", CPUSET_AT_COMPILE, 32),
+    ("cpuset at link time", CPUSET_AT_LINK, 32),
+    ("undefined platform symbol", UNDEF_REF, 33),
+    ("configure: no executables", CONFIGURE_NO_EXE, 28),
+    ("configure: both ways", CONFIGURE_PROBE_BOTH_WAYS, 28),
+    ("autotools re-run breaks", AUTOTOOLS_RERUN, 29),
+    ("autotools aux file (cls 10)", AUTOTOOLS_AUX_FILE, 10),
+    ("patch file not staged", PATCH_NOT_STAGED, 30),
+    ("no recipe in the tree", NO_RECIPE_IN_TREE, 31),
+    ("meson without --buildtype", MESON_NO_BUILDTYPE, 34),
+    ("python devel headers", PY_DEV_HEADERS, 21),
+    ("missing lib by abs path", MISSING_LIB_BY_PATH, 18),
+    ("missing -l beats multidef", MULTIDEF_PLUS_MISSING_LIB, 18),
+    ("narrowing WARNING only", NARROWING_WARNING_ONLY, None),
+    ("arm -mcpu typo is not x86", ARM_MCPU_TYPO, None),
+    # synthetic ties (see above)
+    ("15 beats 10 [synthetic]", CFLAGS_GUARD_PLUS_AUX, 15),
+    ("2 beats 28 [synthetic]", CONFIGURE_NO_EXE_BECAUSE_NO_GCC, 2),
+    ("33 beats 20 [synthetic]", UNDEF_REF_PLUS_RESOLVE, 33),
+    ("1 beats 17 [synthetic]", FETCHCONTENT_PLUS_POLICY, 1),
+]
+
+# (label, fixture, class it must NOT be). Stated separately from POSITIVE because the
+# reason it must not be that class is an ORDERING claim, and ordering is what regresses.
+NEGATIVE = [
+    ("libmcrypt is not 29", AUTOTOOLS_AUX_FILE, 29),
+    ("cpuid is not 33", CPUSET_AT_LINK, 33),
+    ("multidef+missing-l is not 16", MULTIDEF_PLUS_MISSING_LIB, 16),
+    ("abs-path lib is not 33", MISSING_LIB_BY_PATH, 33),
+    ("narrowing warning is not 27", NARROWING_WARNING_ONLY, 27),
+    ("arm -mcpu typo is not 5", ARM_MCPU_TYPO, 5),
+    ("runConfigure log is not 10", CFLAGS_GUARD, 10),
+    ("runConfigure log is not 3", CFLAGS_GUARD, 3),
+    ("capped log is not 20", CAPPED, 20),
+    ("no-progress log is not 20", NO_PROGRESS, 20),
+    ("27+aux is not 10 [synth]", CFLAGS_GUARD_PLUS_AUX, 10),
+    ("no-gcc probe is not 28 [synth]", CONFIGURE_NO_EXE_BECAUSE_NO_GCC, 28),
+    ("undef+resolve is not 20 [synth]", UNDEF_REF_PLUS_RESOLVE, 20),
+    ("fetch+policy is not 17 [synth]", FETCHCONTENT_PLUS_POLICY, 17),
+]
+
+# Mutation arms: (arm name, class to disarm, pattern substring or None,
+#                 [(fixture label, fixture, class it must fall through to)]).
+ARMS = [
+    ("25", 25, None, [("capped falls through", CAPPED, 20)]),
+    ("15", 15, None, [("CFLAGS guard falls through", CFLAGS_GUARD, None),
+                      ("CXXFLAGS guard falls through", CXXFLAGS_GUARD, None)]),
+    ("16", 16, None, [("multidef falls through", MULTIDEF, None)]),
+    ("27", 27, None, [("narrowing falls through", NARROWING_ERROR, None)]),
+    ("28", 28, None, [("no-executables falls through", CONFIGURE_NO_EXE, None),
+                      ("both-ways falls through", CONFIGURE_PROBE_BOTH_WAYS, None)]),
+    ("29", 29, None, [("autotools re-run falls through", AUTOTOOLS_RERUN, None),
+                      # and libmcrypt does not move: it was never class 29's.
+                      ("libmcrypt stays 10", AUTOTOOLS_AUX_FILE, 10)]),
+    ("30", 30, None, [("patch-not-staged falls through", PATCH_NOT_STAGED, None)]),
+    ("31", 31, None, [("no-recipe falls through", NO_RECIPE_IN_TREE, None)]),
+    # THE ordering arm: with class 32 disarmed, cpuid lands in class 33 -- proving that
+    # class 32's position ahead of 35, and nothing else, is what files it correctly.
+    ("32", 32, None, [("cpuset at link -> class 33", CPUSET_AT_LINK, 33),
+                      ("cpuset at compile falls through", CPUSET_AT_COMPILE, None)]),
+    ("33", 33, None, [("undef symbol falls through", UNDEF_REF, None),
+                      ("cpuid still 32 without 33", CPUSET_AT_LINK, 32)]),
+    ("34", 34, None, [("meson falls through", MESON_NO_BUILDTYPE, None)]),
+    ("5-header", 5, "mmintrin", [("intrinsic header falls through", X86_INTRIN_HEADER, None)]),
+    ("5-march", 5, "nocona", [("x86 -march falls through", X86_MARCH, None)]),
+    ("21-pyheaders", 21, "development headers",
+     [("python headers fall through", PY_DEV_HEADERS, None)]),
+    # Note the expected fall-through: UNMATCHED, not class 33. textsaver's window carries
+    # `collect2: error: ld returned 1 exit status` but never the words "undefined
+    # reference", so with class 18's path pattern disarmed nothing claims it -- which is
+    # precisely how it sat in UNMATCHED before #488.
+    ("17", 17, None, [("FetchContent falls through", FETCHCONTENT, None)]),
+    ("18-abspath", 18, "boot/system/lib",
+     [("abs-path lib falls through", MISSING_LIB_BY_PATH, None)]),
+]
+
+# A pseudo-arm: the NO_DIAGNOSTIC machinery is not a RULES entry, so it is mutated by
+# disarming its two line classifiers directly.
+NODIAG_ARM = "nodiag"
+
+# Measured per-class membership over the cached 639-log backlog (#488 census). Asserted
+# as EXACT SETS, not counts: a count can stay right while two ports swap classes.
+CACHED_EXPECT = {
+    15: "aranym bind_utils calcurse cronie dfu_util dmtx_utils dosfstools erlang es "
+        "expect farmhash gpart lcdproc libnpupnp libtorrent libxo minicom mosh "
+        "pkcs11_helper tnftp",
+    16: "aaaa butterfly gish global gophernicus jumpnbump kona libfpx nethack "
+        "rhapsody_irc sdlscavenger sharutils wput",
+    27: "nxengine sawteeth sum_it",
+    28: "johntheripper pkgconfig sciteco_curses",
+    29: "fswatch irrxml",
+    30: "criticalmass veesem",
+    31: "fpc_bootstrap",
+    32: "cpuid util_linux",
+    33: "kbuild",
+    34: "vmaf",
+    5: "embree opendune sdl_gfx waveedit",
+    21: "html5lib libplacebo libsigrokdecode pbr",
+    17: "betterspades grcompiler openexr3.2",
+    18: "allegro billardgl fbneo lite_xl rtmidi symetrie textsaver",
+    10: "libmcrypt libsrtp",
+    25: "crawl devilutionx ecwolf endless_sky eternal_lands exiv2 ffmpeg6 grafx2 "
+        "gst_plugins_bad hikounomizu libjxl librnp lighttpd lugaru minetest ocp "
+        "python3.13 qemu radare2 spice vice warzone2100",
+}
+# UNMATCHED residue after #488, and its split. 105 of the 129 carry no diagnostic at all
+# -- a pre-3371e78289 `tail -20` artifact, not a ruleset gap.
+CACHED_UNMATCHED = 129
+CACHED_NODIAG = 105
+
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--mutate", action="store_true")
+    ap.add_argument("--mutate", nargs="*", metavar="ARM", default=None,
+                    help="run the mutation arms (all of them with no argument)")
     ap.add_argument("--logs", default="")
+    ap.add_argument("--list-arms", action="store_true")
     args = ap.parse_args()
 
-    mod = load(mutate=args.mutate)
+    if args.list_arms:
+        for name, cls, substr, checks in ARMS:
+            print("%-14s disarm class %-3s %-24s -> %s"
+                  % (name, cls, substr or "(all patterns)",
+                     ", ".join(lbl for lbl, _, _ in checks)))
+        print("%-14s disarm _CONTENTLESS_LINE / _REASON_LINE -> the NO_DIAGNOSTIC split"
+              % NODIAG_ARM)
+        return 0
+
     fails = passes = 0
 
-    def check(label, text, want):
+    def check(label, got, want):
         nonlocal fails, passes
-        got = mod.classify(text)[0]
         if got == want:
             passes += 1
-            print("  ok    %-26s -> class %s" % (label, got))
+            print("  ok    %-30s -> class %s" % (label, got))
         else:
             fails += 1
-            print("  FAIL  %-26s -> class %s (expected %s)" % (label, got, want))
+            print("  FAIL  %-30s -> class %s (expected %s)" % (label, got, want))
 
-    if args.mutate:
-        print("classifier ruleset test [MUTATED: class-25 regex narrowed]")
-        # With class 25 unable to match, the capped log must fall through to the class
-        # it was being misfiled as. That is the whole finding of #486.
-        check("capped falls through", CAPPED, 20)
+    def check_not(label, got, unwanted):
+        nonlocal fails, passes
+        if got != unwanted:
+            passes += 1
+            print("  ok    %-30s -> class %s (not %s)" % (label, got, unwanted))
+        else:
+            fails += 1
+            print("  FAIL  %-30s -> class %s, which it must NOT be" % (label, got))
+
+    if args.mutate is None:
+        # ---------------- base run: positives, negatives, NO_DIAGNOSTIC -----------
+        mod = load()
+        print("classifier ruleset test -- positive")
+        for label, text, want in POSITIVE:
+            check(label, mod.classify(text)[0], want)
+        print("classifier ruleset test -- negative (ordering)")
+        for label, text, unwanted in NEGATIVE:
+            check_not(label, mod.classify(text)[0], unwanted)
+
+        # The NO_DIAGNOSTIC split (#488). A window whose only error-shaped lines are
+        # make's exit-status recursion states no reason, and must be reported as an
+        # evidence-capture artifact rather than as a ruleset gap.
+        print("captured-diagnostic split")
+        for label, text, want in (
+                ("narrowing-warning window", NARROWING_WARNING_ONLY, False),
+                ("real compile error", NARROWING_ERROR, True),
+                ("configure abort", CONFIGURE_NO_EXE, True),
+                ("missing lib", MISSING_LIB_BY_PATH, True),
+                # a window that is ONLY driver preamble + epilogue: the extreme form of
+                # the truncated capture. This one also covers the load-bearing
+                # `Error: Build has failed` arm of _CONTENTLESS_LINE -- that line is in
+                # EVERY log, so without it nothing would ever be no-diagnostic.
+                ("boilerplate only", fx("someport", "make: *** [Makefile:1: all] Error 2"),
+                 False),
+                # covers the other load-bearing arm: collect2 says ld gave up, never why.
+                ("collect2 exit status only",
+                 fx("someport", "collect2: error: ld returned 1 exit status\n"
+                                "make: *** [Makefile:1: all] Error 2"), False),
+                # the two non-compiler REASON tokens, each the only reason line in its
+                # window so the arm is tested rather than masked by `error:`.
+                ("ENOSPC",
+                 fx("someport", "cp: error writing 'x.o': No space left on device"), True),
+                ("EACCES",
+                 fx("someport", "/bin/sh: ./configure: Permission denied"), True)):
+            got = mod.has_captured_diagnostic(text)
+            check("diagnostic? %s" % label, got, want)
     else:
-        print("classifier ruleset test")
-        check("capped run", CAPPED, 25)
-        check("no-progress, not absent", NO_PROGRESS, 26)
-        check("earned absence", EARNED_ABSENT, 20)
-        check("real error still wins", CAPPED_WITH_REAL_ERROR, 1)
+        # ---------------- mutation runs -------------------------------------------
+        want_arms = set(args.mutate) or ({n for n, _, _, _ in ARMS} | {NODIAG_ARM})
+        unknown = want_arms - ({n for n, _, _, _ in ARMS} | {NODIAG_ARM})
+        if unknown:
+            sys.exit("unknown mutation arm(s): %s (see --list-arms)" % ", ".join(sorted(unknown)))
+        for name, cls, substr, checks in ARMS:
+            if name not in want_arms:
+                continue
+            print("MUTATED [%s]: class %s%s disarmed in place"
+                  % (name, cls, (" pattern ~ %r" % substr) if substr else ""))
+            mod = load()
+            n = neutralize(mod, cls, substr)
+            # Guard against a vacuous arm: the fixtures must have depended on this rule.
+            for label, text, want in checks:
+                check("%s/%s" % (name, label), mod.classify(text)[0], want)
+            print("        (%d pattern(s) disarmed)" % n)
 
+        # A mutation of the NO_DIAGNOSTIC machinery too: if make's exit-status recursion
+        # stops being treated as contentless, the truncated windows all look diagnosed
+        # and the split silently stops splitting.
+        if NODIAG_ARM in want_arms:
+            mod = load()
+            mod._CONTENTLESS_LINE = NEVER
+            check("nodiag/contentless disarmed",
+                  mod.has_captured_diagnostic(NARROWING_WARNING_ONLY), True)
+            mod = load()
+            mod._REASON_LINE = NEVER
+            check("nodiag/reason disarmed",
+                  mod.has_captured_diagnostic(NARROWING_ERROR), False)
+
+    # ---------------- real cached logs (optional) --------------------------------
     if args.logs and os.path.isdir(args.logs):
-        caps = {}
+        mod = load()
+        got = {}
         for p in sorted(glob.glob(os.path.join(args.logs, "*.log"))):
             text = open(p, errors="replace").read()
-            if re.search(r"gave up after \d+ attempts", text):
-                caps[os.path.basename(p)[:-4]] = mod.classify(text)[0]
-        want = 20 if args.mutate else 25
-        bad = {k: v for k, v in caps.items() if v != want}
-        print("  real cached logs: %d capped, %d classified %s"
-              % (len(caps), len(caps) - len(bad), want))
-        if caps and bad:
-            fails += 1
-            print("  FAIL  capped logs not classified %s: %s" % (want, bad))
-        elif caps:
-            passes += 1
-            print("  ok    every capped log classified %s: %s"
-                  % (want, " ".join(sorted(caps))))
+            c = mod.classify(text)[0]
+            got.setdefault(c, set()).add(os.path.basename(p)[:-4])
+        print("real cached logs: %d" % sum(len(v) for v in got.values()))
+        if args.mutate is None:
+            for cls, names in sorted(CACHED_EXPECT.items()):
+                want = set(names.split())
+                have = got.get(cls, set())
+                if have == want:
+                    passes += 1
+                    print("  ok    class %-3s %3d ports, exact set" % (cls, len(have)))
+                else:
+                    fails += 1
+                    print("  FAIL  class %-3s want-not-got=%s got-not-want=%s"
+                          % (cls, sorted(want - have) or "-", sorted(have - want) or "-"))
+            un = got.get(None, set())
+            check("cached UNMATCHED total", len(un), CACHED_UNMATCHED)
+            nd = sum(1 for n in un
+                     if not mod.has_captured_diagnostic(
+                         open(os.path.join(args.logs, n + ".log"), errors="replace").read()))
+            check("cached NO_DIAGNOSTIC", nd, CACHED_NODIAG)
+            check("cached ruleset gap", len(un) - nd, CACHED_UNMATCHED - CACHED_NODIAG)
+        else:
+            # under mutation the capped logs must land in class 20 -- the #486 finding,
+            # asserted over real logs and not only the fixture.
+            if "25" in want_arms:
+                m = load()
+                neutralize(m, 25)
+                caps = {}
+                for p in sorted(glob.glob(os.path.join(args.logs, "*.log"))):
+                    text = open(p, errors="replace").read()
+                    if re.search(r"gave up after \d+ attempts", text):
+                        caps[os.path.basename(p)[:-4]] = m.classify(text)[0]
+                bad = {k: v for k, v in caps.items() if v != 20}
+                if caps and not bad:
+                    passes += 1
+                    print("  ok    all %d capped logs fall to class 20" % len(caps))
+                elif caps:
+                    fails += 1
+                    print("  FAIL  capped logs not falling to 20: %s" % bad)
 
     print("----")
     print("pass=%d fail=%d" % (passes, fails))
-    if args.mutate:
+    if args.mutate is not None:
         if fails == 0:
-            print("MUTATION CONFIRMED: without the class-25 signature the capped logs "
-                  "fall back into class 20, which is the misfiling #486 reported.")
+            print("MUTATIONS CONFIRMED: every disarmed signature changed the verdict in "
+                  "the predicted way, so each pass in the base run is caused by that "
+                  "signature and its position -- not by something incidental.")
             return 0
-        print("MUTATION NOT CONFIRMED -- the capped log did not land in class 20; the "
-              "ordering claim in this test needs re-deriving.")
+        print("MUTATION NOT CONFIRMED -- a fixture did not fall through as predicted; "
+              "the ordering claim for that arm needs re-deriving.")
         return 1
     return 1 if fails else 0
 
