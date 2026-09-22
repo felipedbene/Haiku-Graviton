@@ -2311,23 +2311,43 @@ def report(cap, args, connected, elapsed, stop_reason, wire=None):
 # Self-test
 # ---------------------------------------------------------------------------
 
-def selftest():
+def selftest(allow_skip=False):
     """Synthesise a byte stream and push it through the real parser.
 
     This is the "does the instrument work" control: without it a zero result
-    is indistinguishable from a broken decoder."""
+    is indistinguishable from a broken decoder.
+
+    With \a allow_skip the run still passes when a check group could not run
+    (no libzstd, say).  By default it does not: see skip() below."""
     import os
     import tempfile
 
     width, height = 200, 120
     failures = []
+    checks = []
+    skipped = []
 
     def check(label, cond, detail=""):
+        checks.append(label)
         if cond:
             print("  ok    %s" % label)
         else:
             print("  FAIL  %s %s" % (label, detail))
             failures.append(label)
+
+    def skip(label, why):
+        """Record a check that did not run.
+
+        This exists because it once did not.  When ctypes.util.find_library()
+        raised on a missing LIBRARY_PATH, the four compressed-wire checks below
+        were skipped and the run still printed SELFTEST=PASS -- a green result
+        that covered nothing of the feature it was run to cover.  A skip is now
+        a *failure* of the run unless the caller passed --allow-skip, and the
+        check count is printed either way, so a silently shrinking self-test
+        cannot look like a passing one.
+        """
+        print("  skip  %s (%s)" % (label, why))
+        skipped.append("%s: %s" % (label, why))
 
     stream = bytearray()
 
@@ -2590,26 +2610,28 @@ def selftest():
     try:
         enc = _selftest_encoder()
     except Exception as exc:                 # noqa: BLE001 - reported, not raised
-        print("  skip  compressed round trip (no usable libzstd: %s)" % exc)
+        skip("the whole compressed wire block", "no usable libzstd: %s" % exc)
         enc = None
 
     if enc is not None:
         ack = frame(RP_HELLO_ACK, struct.pack("<II", URP_PROTOCOL_VERSION,
                                               CAP_COMPRESS_ZSTD))
-        # Messages after the acknowledgement: two ordinary ones, then an
-        # exempt (already-compressed) one that must travel as a raw segment.
-        tail = [frame(RP_FILL_RECT_COLOR,
-                      struct.pack("<Iffff", token, 1.0, 1.0, 9.0, 9.0)
-                      + bytes((7, 7, 7, 255))),
-                frame(RP_FILL_RECT_COLOR,
-                      struct.pack("<Iffff", token, 1.0, 1.0, 9.0, 9.0)
-                      + bytes((7, 7, 7, 255))),
-                frame(RP_CODEC_TILE, os.urandom(512))]
+        fill = frame(RP_FILL_RECT_COLOR,
+                     struct.pack("<Iffff", token, 1.0, 1.0, 9.0, 9.0)
+                     + bytes((7, 7, 7, 255)))
+        # Messages after the acknowledgement: two ordinary ones, then an exempt
+        # (already-compressed) one that must travel as a raw segment, then two
+        # more ordinary ones.  The last two are the point: the raw segment is
+        # interleaved *inside* the compressed stream, so if the passthrough had
+        # been fed to the compressor -- or if the per-message flush did not land
+        # on the message boundary -- the messages after it would not decode.
+        # The tail is what RemoteWireFormat.h claims and nothing else asserts.
+        exempt_index = 2
+        tail = [fill, fill, frame(RP_CODEC_TILE, os.urandom(512)), fill, fill]
 
         wire = bytearray(ack)
         for i, msg in enumerate(tail):
-            exempt = i == len(tail) - 1
-            if exempt:
+            if i == exempt_index:
                 wire += segment_header(len(msg), True) + msg
             else:
                 body = enc(msg)
@@ -2624,18 +2646,31 @@ def selftest():
               "(%d vs %d bytes)" % (len(recovered), len(expect)))
         check("decoder switched at the acknowledgement", dec.compressed)
         check("exempt payload travelled as a raw segment",
-              dec.raw_segments == 1 and dec.compressed_segments == 2,
+              dec.raw_segments == 1 and dec.compressed_segments == 4,
               "(raw=%d compressed=%d)"
               % (dec.raw_segments, dec.compressed_segments))
+        check("the compressed stream survives an interleaved raw segment",
+              bytes(recovered).endswith(fill + fill))
         check("repeated messages compress",
               dec.wire_bytes < dec.plain_bytes,
               "(wire=%d plain=%d)" % (dec.wire_bytes, dec.plain_bytes))
         dec.close()
 
     print("")
+    # Coverage first, verdict second.  A green line that covered four checks
+    # fewer than the last run is the failure mode this reports out of.
+    print("SELFTEST_CHECKS=%d" % len(checks))
+    print("SELFTEST_SKIPPED=%d" % len(skipped))
+    for entry in skipped:
+        print("  skipped: %s" % entry)
+
     if failures:
-        print("SELFTEST=FAIL  (%d checks failed: %s)"
-              % (len(failures), ", ".join(failures)))
+        print("SELFTEST=FAIL  (%d/%d checks failed: %s)"
+              % (len(failures), len(checks), ", ".join(failures)))
+        return 1
+    if skipped and not allow_skip:
+        print("SELFTEST=FAIL  (%d check group(s) did not run; pass "
+              "--allow-skip to accept reduced coverage)" % len(skipped))
         return 1
     print("SELFTEST=PASS")
     print("BLACK_BEFORE=%d" % black0)
@@ -2688,6 +2723,11 @@ def main(argv=None):
                         "the two invocations a clean A/B.")
     p.add_argument("--selftest", action="store_true",
                    help="run the parser/PNG self-test and exit")
+    p.add_argument("--allow-skip", action="store_true",
+                   help="with --selftest: pass even if a check group could "
+                        "not run (e.g. no libzstd). Off by default, so a "
+                        "self-test that silently stops covering the wire "
+                        "compression fails instead of printing PASS.")
     p.add_argument("--wss", action="store_true",
                    help="connect through the remote_broker daemon: TLS + "
                         "WebSocket + RP_AUTHENTICATE (implies --port 10902 "
@@ -2707,7 +2747,7 @@ def main(argv=None):
 
     if args.selftest:
         print("rdcapture selftest")
-        return selftest()
+        return selftest(allow_skip=args.allow_skip)
 
     if args.width <= 0 or args.height <= 0:
         p.error("--width/--height must be positive")
