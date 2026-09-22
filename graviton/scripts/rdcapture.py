@@ -6,7 +6,29 @@ handshake, decodes the drawing op stream, rasterises what it can into a
 software framebuffer and reports per-token op counts plus a pure-black pixel
 census (so "is the Deskbar actually drawing?" gets a numeric answer).
 
-Stdlib only.  No PIL: the PNG is written by hand with zlib + struct.
+TEXT (#475).  It rasterises text too, through libfreetype, and reports a text
+census next to the pixel one: runs received, runs rasterised, glyphs, ink
+pixels written and ink pixels that actually changed the picture.  That census
+exists because the pixel total cannot answer "did text draw?" -- this tool once
+reported two million pixels touched for a desktop whose every label and the
+clock were missing, and anything compared against it inherited that blindness.
+What the census supports and what it does not is spelled out at the "Glyph
+rasterisation" section below; the short form is that runs, glyph counts,
+origins, advances and ink boxes are assertable and pixel equality with
+app_server is not.  --min-text-runs / --min-glyph-ink / --expect-text are the
+assertions; text ground truth is required by default and --allow-text-estimate
+opts out.
+
+Stdlib only.  No PIL: the PNG is written by hand with zlib + struct, and the
+one non-stdlib dependency is libfreetype.so.6 via ctypes -- which is also the
+library app_server renders with, and whose absence is reported as "not ground
+truth" rather than quietly producing blank text.
+
+EXIT STATUS
+  0  ran (even if nothing arrived -- grep CONNECTED=/MESSAGES=)
+  2  bad invocation     3  broker auth denied     4  certificate pin mismatch
+  5  not text ground truth (see --allow-text-estimate)
+  6  a --min-text-runs / --min-glyph-ink / --expect-text assertion failed
 
 PROTOCOL PROVENANCE (all paths relative to the Haiku source tree)
 -----------------------------------------------------------------
@@ -471,6 +493,639 @@ def utf8_count_chars(data: bytes) -> int:
     return sum(1 for b in data if (b & 0xC0) != 0x80)
 
 
+def utf8_codepoints(data: bytes):
+    """Decode to codepoints the way UTF8CountChars counts them.
+
+    One entry per non-continuation byte, so the list length always matches the
+    count the server used to size the RP_DRAW_STRING_WITH_OFFSETS point list.
+    Undecodable bytes become U+FFFD rather than disappearing: a decoder that
+    silently dropped one would desynchronise from that point list."""
+    out = []
+    i = 0
+    n = len(data)
+    while i < n:
+        b = data[i]
+        if b < 0x80:
+            out.append(b)
+            i += 1
+            continue
+        if (b & 0xE0) == 0xC0:
+            need = 1
+            cp = b & 0x1F
+        elif (b & 0xF0) == 0xE0:
+            need = 2
+            cp = b & 0x0F
+        elif (b & 0xF8) == 0xF0:
+            need = 3
+            cp = b & 0x07
+        else:
+            out.append(0xFFFD)
+            i += 1
+            continue
+        if i + need >= n:
+            out.append(0xFFFD)
+            i += 1
+            continue
+        ok = True
+        for k in range(1, need + 1):
+            if (data[i + k] & 0xC0) != 0x80:
+                ok = False
+                break
+            cp = (cp << 6) | (data[i + k] & 0x3F)
+        if not ok:
+            out.append(0xFFFD)
+            i += 1
+            continue
+        out.append(cp)
+        i += need + 1
+    return out
+
+
+# ---------------------------------------------------------------------------
+# Glyph rasterisation (#475)
+#
+# The protocol never sends glyph bitmaps: RP_DRAW_STRING carries text plus a
+# font *specification* (RemoteMessage.cpp:147-161, AddFont), so a client that
+# wants text pixels has to own a rasteriser.  Without one this tool painted a
+# flat guessed box per run, which made it blind to exactly the regressions it
+# is trusted to catch -- a dropped or mispositioned string read as "both sides
+# agree" (#475).  This binds libfreetype.so.6 through ctypes, in the same
+# spirit as the libzstd binding further down: no third-party Python package,
+# and the same library app_server renders with.
+#
+# WHAT FIDELITY IS CLAIMED, AND WHAT IS NOT
+#   CLAIMED, and therefore assertable: that text was drawn; how many runs and
+#     glyphs; the origin (baseline-left) of each run as it came off the wire;
+#     the advance width and resulting pen position; the ink bounding box and
+#     ink pixel count.  A run that is dropped, blanked, truncated or moved
+#     fails those.
+#   NOT CLAIMED: pixel equality with app_server.  Three reasons it cannot be:
+#     1. the wire's familyAndStyle is an app_server FontManager id
+#        (family index << 16 | style index) and means nothing in another
+#        process, so the family cannot be recovered from the stream.  We pick a
+#        file from the *face bits* plus Haiku's own documented default family
+#        (ServerConfig.h: DEFAULT_PLAIN_FONT_FAMILY "Noto Sans") and report
+#        which file we used.
+#     2. hinting, gamma and app_server's optional subpixel (LCD) filtering are
+#        not reproduced: 8-bit grey coverage, integer pen positions.
+#     3. synthetic bold/oblique is used when no real styled file is installed,
+#        which is not the outline the server has.
+#   So: compare the CENSUS (runs, glyphs, origins, advances, ink box) between
+#   two clients, not the bytes of the PNG.
+# ---------------------------------------------------------------------------
+
+# font face flags -- headers/os/interface/Font.h:79-91
+B_ITALIC_FACE = 0x0001
+B_UNDERSCORE_FACE = 0x0002
+B_NEGATIVE_FACE = 0x0004
+B_OUTLINED_FACE = 0x0008
+B_STRIKEOUT_FACE = 0x0010
+B_BOLD_FACE = 0x0020
+B_REGULAR_FACE = 0x0040
+B_CONDENSED_FACE = 0x0080
+B_LIGHT_FACE = 0x0100
+B_HEAVY_FACE = 0x0200
+
+# font_spacing -- headers/os/interface/Font.h:23-28
+B_CHAR_SPACING = 0
+B_STRING_SPACING = 1
+B_BITMAP_SPACING = 2
+B_FIXED_SPACING = 3
+
+# font_encoding -- headers/os/interface/Font.h:55
+B_UNICODE_UTF8 = 0
+
+# GlyphLayoutEngine::IsWhiteSpace (GlyphLayoutEngine.h:225-242) -- which half
+# of an escapement_delta a character gets.
+WHITESPACE_CODEPOINTS = frozenset([0x0009, 0x000A, 0x000B, 0x000C, 0x000D,
+                                   0x0020, 0x00A0, 0x2028, 0x2029])
+
+# Where to look for outline fonts.  Haiku's own path first so a run on the
+# target renders with the target's files.
+FONT_ROOTS = (
+    "/boot/system/data/fonts/ttfonts",
+    "/boot/system/non-packaged/data/fonts/ttfonts",
+    "/boot/home/config/non-packaged/data/fonts/ttfonts",
+    "/usr/share/fonts",
+    "/usr/local/share/fonts",
+    "/usr/share/X11/fonts",
+    "~/.fonts",
+    "~/.local/share/fonts",
+)
+
+# Preferred family stems, best first.  "Noto Sans" leads because it is what
+# app_server itself defaults to (ServerConfig.h), so the metrics are as close
+# as a second rasteriser gets; the rest are the usual metric-compatible
+# stand-ins found on build hosts.
+SANS_FAMILY_STEMS = ("notosans", "dejavusans", "liberationsans", "arimo",
+                     "freesans", "opensans", "roboto", "carlito", "arial",
+                     "helvetica")
+MONO_FAMILY_STEMS = ("notosansmono", "dejavusansmono", "liberationmono",
+                     "cousine", "freemono", "robotomono", "couriernew",
+                     "courier")
+
+_STYLE_NOISE = ("bolditalic", "boldoblique", "bold", "italic", "oblique",
+                "regular", "book", "roman", "medium", "variable", "wght", "vf")
+
+
+def _font_stem(basename):
+    """Normalise a font file name to (family stem, bold, italic).
+
+    "NotoSans[wght].ttf" -> ("notosans", False, False)
+    "DejaVuSansMono-BoldOblique.ttf" -> ("dejavusansmono", True, True)
+    Everything that is not alphanumeric is dropped, so bracketed variable-font
+    axis names and hyphens do not create a family of their own."""
+    stem = basename.rsplit(".", 1)[0]
+    name = "".join(c for c in stem.lower() if c.isalnum())
+    bold = ("bold" in name) or ("heavy" in name) or ("black" in name)
+    italic = ("italic" in name) or ("oblique" in name)
+    core = name
+    for noise in _STYLE_NOISE:
+        core = core.replace(noise, "")
+    return core, bold, italic
+
+
+class FontSet(object):
+    """The font files a rasteriser will use, and how they were chosen.
+
+    Chosen by *name*, deliberately: the wire cannot tell us the family (see the
+    section comment), so the selection is a documented substitution rather than
+    a decode, and `describe()` puts it in the report where a reader comparing
+    two clients will see it."""
+
+    def __init__(self):
+        # (mono, bold, italic) -> path
+        self.files = {}
+        self.sans_family = None
+        self.mono_family = None
+        self.roots_scanned = []
+        self.files_seen = 0
+
+    # -- discovery -------------------------------------------------------
+    def scan(self, roots=FONT_ROOTS, limit=60000):
+        best = {}           # (mono, bold, italic) -> (rank, path)
+        for root in roots:
+            root = os.path.expanduser(root)
+            if not os.path.isdir(root):
+                continue
+            self.roots_scanned.append(root)
+            for dirpath, _dirs, names in os.walk(root):
+                for name in names:
+                    lower = name.lower()
+                    if not (lower.endswith(".ttf") or lower.endswith(".otf")):
+                        continue
+                    self.files_seen += 1
+                    if self.files_seen > limit:
+                        break
+                    core, bold, italic = _font_stem(name)
+                    if core in SANS_FAMILY_STEMS:
+                        mono = False
+                        rank = SANS_FAMILY_STEMS.index(core)
+                    elif core in MONO_FAMILY_STEMS:
+                        mono = True
+                        rank = MONO_FAMILY_STEMS.index(core)
+                    else:
+                        continue
+                    key = (mono, bold, italic)
+                    path = os.path.join(dirpath, name)
+                    if key not in best or rank < best[key][0]:
+                        best[key] = (rank, path, core)
+
+        # Keep one family per slot class: mixing DejaVu bold with Noto regular
+        # would put two different metric sets in one capture.
+        for mono in (False, True):
+            plain = best.get((mono, False, False))
+            if plain is None:
+                continue
+            family = plain[2]
+            if mono:
+                self.mono_family = family
+            else:
+                self.sans_family = family
+            for bold in (False, True):
+                for italic in (False, True):
+                    entry = best.get((mono, bold, italic))
+                    if entry is not None and entry[2] == family:
+                        self.files[(mono, bold, italic)] = entry[1]
+        return self
+
+    def override(self, regular=None, bold=None, fixed=None):
+        if regular:
+            self.files[(False, False, False)] = regular
+            self.sans_family = "override"
+        if bold:
+            self.files[(False, True, False)] = bold
+        if fixed:
+            self.files[(True, False, False)] = fixed
+            self.mono_family = "override"
+        return self
+
+    # -- selection -------------------------------------------------------
+    def select(self, mono, bold, italic):
+        """-> (path, synth_bold, synth_italic) or None.
+
+        Falls back towards the family's regular file and says so, so a missing
+        Bold shows up in the report as synthesis instead of as plain text that
+        silently is not bold."""
+        for want_bold, want_italic, sb, si in (
+                (bold, italic, False, False),
+                (bold, False, False, italic),
+                (False, italic, bold, False),
+                (False, False, bold, italic)):
+            path = self.files.get((mono, want_bold, want_italic))
+            if path is not None:
+                return path, sb, si
+        if mono:
+            return self.select(False, bold, italic)
+        return None
+
+    def describe(self):
+        plain = self.files.get((False, False, False))
+        if plain is None:
+            return "none"
+        return "%s:%s (%d file(s) from %s)" % (
+            self.sans_family or "?", plain, len(self.files),
+            ",".join(self.roots_scanned) or "-")
+
+
+def _load_libfreetype():
+    """Open libfreetype.so.6 through ctypes.
+
+    Same reasoning as _load_libzstd(): the versioned soname is what we rely on
+    and ctypes.util.find_library() is demoted to a hint that is allowed to
+    fail, because its POSIX implementation reads LIBRARY_PATH out of the
+    environment and raises when it is unset -- which is every non-interactive
+    run."""
+    import ctypes
+    candidates = []
+    try:
+        import ctypes.util
+        found = ctypes.util.find_library("freetype")
+        if found:
+            candidates.append(found)
+    except Exception:
+        pass
+    candidates += ["libfreetype.so.6", "libfreetype.so", "libfreetype.6.dylib"]
+    errors = []
+    for name in candidates:
+        try:
+            return ctypes.CDLL(name)
+        except OSError as error:
+            errors.append("%s: %s" % (name, error))
+    raise OSError("libfreetype not loadable (%s)" % "; ".join(errors))
+
+
+_FT_TYPES = None
+
+
+def _ft_types():
+    """ctypes mirrors of the FreeType structs this tool reads.
+
+    Only the prefix up to the last field we touch is declared; FreeType's
+    public struct layout has been stable across the whole 2.x series, and
+    GlyphRasteriser.selfcheck() proves the layout on the running library
+    rather than trusting that sentence."""
+    global _FT_TYPES
+    if _FT_TYPES is not None:
+        return _FT_TYPES
+    import ctypes
+    FT_Pos = ctypes.c_long
+    FT_Fixed = ctypes.c_long
+
+    class FT_Vector(ctypes.Structure):
+        _fields_ = [("x", FT_Pos), ("y", FT_Pos)]
+
+    class FT_BBox(ctypes.Structure):
+        _fields_ = [("xMin", FT_Pos), ("yMin", FT_Pos),
+                    ("xMax", FT_Pos), ("yMax", FT_Pos)]
+
+    class FT_Generic(ctypes.Structure):
+        _fields_ = [("data", ctypes.c_void_p), ("finalizer", ctypes.c_void_p)]
+
+    class FT_Bitmap(ctypes.Structure):
+        _fields_ = [("rows", ctypes.c_uint), ("width", ctypes.c_uint),
+                    ("pitch", ctypes.c_int),
+                    ("buffer", ctypes.POINTER(ctypes.c_ubyte)),
+                    ("num_grays", ctypes.c_ushort),
+                    ("pixel_mode", ctypes.c_ubyte),
+                    ("palette_mode", ctypes.c_ubyte),
+                    ("palette", ctypes.c_void_p)]
+
+    class FT_Glyph_Metrics(ctypes.Structure):
+        _fields_ = [(n, FT_Pos) for n in
+                    ("width", "height", "horiBearingX", "horiBearingY",
+                     "horiAdvance", "vertBearingX", "vertBearingY",
+                     "vertAdvance")]
+
+    class FT_GlyphSlotRec(ctypes.Structure):
+        _fields_ = [("library", ctypes.c_void_p), ("face", ctypes.c_void_p),
+                    ("next", ctypes.c_void_p),
+                    ("glyph_index", ctypes.c_uint),
+                    ("generic", FT_Generic),
+                    ("metrics", FT_Glyph_Metrics),
+                    ("linearHoriAdvance", FT_Fixed),
+                    ("linearVertAdvance", FT_Fixed),
+                    ("advance", FT_Vector),
+                    ("format", ctypes.c_int),
+                    ("bitmap", FT_Bitmap),
+                    ("bitmap_left", ctypes.c_int),
+                    ("bitmap_top", ctypes.c_int)]
+
+    class FT_Size_Metrics(ctypes.Structure):
+        _fields_ = [("x_ppem", ctypes.c_ushort), ("y_ppem", ctypes.c_ushort),
+                    ("x_scale", FT_Fixed), ("y_scale", FT_Fixed),
+                    ("ascender", FT_Pos), ("descender", FT_Pos),
+                    ("height", FT_Pos), ("max_advance", FT_Pos)]
+
+    class FT_SizeRec(ctypes.Structure):
+        _fields_ = [("face", ctypes.c_void_p), ("generic", FT_Generic),
+                    ("metrics", FT_Size_Metrics),
+                    ("internal", ctypes.c_void_p)]
+
+    class FT_FaceRec(ctypes.Structure):
+        _fields_ = [("num_faces", ctypes.c_long),
+                    ("face_index", ctypes.c_long),
+                    ("face_flags", ctypes.c_long),
+                    ("style_flags", ctypes.c_long),
+                    ("num_glyphs", ctypes.c_long),
+                    ("family_name", ctypes.c_char_p),
+                    ("style_name", ctypes.c_char_p),
+                    ("num_fixed_sizes", ctypes.c_int),
+                    ("available_sizes", ctypes.c_void_p),
+                    ("num_charmaps", ctypes.c_int),
+                    ("charmaps", ctypes.c_void_p),
+                    ("generic", FT_Generic),
+                    ("bbox", FT_BBox),
+                    ("units_per_EM", ctypes.c_ushort),
+                    ("ascender", ctypes.c_short),
+                    ("descender", ctypes.c_short),
+                    ("height", ctypes.c_short),
+                    ("max_advance_width", ctypes.c_short),
+                    ("max_advance_height", ctypes.c_short),
+                    ("underline_position", ctypes.c_short),
+                    ("underline_thickness", ctypes.c_short),
+                    ("glyph", ctypes.POINTER(FT_GlyphSlotRec)),
+                    ("size", ctypes.POINTER(FT_SizeRec)),
+                    ("charmap", ctypes.c_void_p)]
+
+    _FT_TYPES = {"FT_FaceRec": FT_FaceRec, "FT_GlyphSlotRec": FT_GlyphSlotRec}
+    return _FT_TYPES
+
+
+def font_selfcheck_problems(units_per_em, num_glyphs, family, pointers_ok,
+                            glyph):
+    """Known-good facts about a real face and a real 'H'; [] means plausible.
+
+    Pure on purpose.  A wrong struct offset would not crash -- it would hand
+    back plausible garbage and this tool would report confident nonsense, which
+    is the failure mode the whole change exists to remove.  Keeping the
+    predicate separate from the ctypes calls means it can be fed deliberately
+    wrong facts in the self-test, so the guard is something that demonstrably
+    fails rather than decoration."""
+    problems = []
+    if not (16 <= units_per_em <= 16384):
+        problems.append("units_per_EM=%s" % units_per_em)
+    if not (1 <= num_glyphs <= 1 << 22):
+        problems.append("num_glyphs=%s" % num_glyphs)
+    if not family or not all(32 <= b < 127 for b in family):
+        problems.append("family_name=%r" % family)
+    if not pointers_ok:
+        problems.append("null glyph/size pointer")
+    if glyph is None or glyph.missing:
+        problems.append("no glyph for 'H'")
+        return problems
+    if not (4 <= glyph.rows <= 64 and 2 <= glyph.width <= 64):
+        problems.append("H bitmap %dx%d" % (glyph.width, glyph.rows))
+    if not (2 <= glyph.top <= 32):
+        problems.append("H bitmap_top=%d" % glyph.top)
+    if not (2.0 <= glyph.advance <= 64.0):
+        problems.append("H advance=%.2f" % glyph.advance)
+    if not any(glyph.cov):
+        problems.append("H rendered with no coverage")
+    return problems
+
+
+class Glyph(object):
+    """One rendered glyph: 8-bit coverage plus its placement and advance."""
+
+    __slots__ = ("left", "top", "width", "rows", "pitch", "cov",
+                 "advance", "linear_advance", "missing")
+
+    def __init__(self, left, top, width, rows, pitch, cov, advance,
+                 linear_advance, missing):
+        self.left = left                # pixels right of the pen
+        self.top = top                  # pixels above the baseline
+        self.width = width
+        self.rows = rows
+        self.pitch = pitch
+        self.cov = cov
+        self.advance = advance          # hinted, in pixels
+        self.linear_advance = linear_advance
+        self.missing = missing          # no glyph for this codepoint
+
+
+class ShapedRun(object):
+    __slots__ = ("glyphs", "pens", "advance", "ascent", "descent", "missing",
+                 "synth_bold", "synth_italic", "path")
+
+    def __init__(self):
+        self.glyphs = []
+        self.pens = []                  # pen offset from the run origin
+        self.advance = 0.0
+        self.ascent = 0.0
+        self.descent = 0.0
+        self.missing = 0
+        self.synth_bold = False
+        self.synth_italic = False
+        self.path = None
+
+
+class GlyphRasteriser(object):
+    """FreeType through ctypes, sized and shaped the way app_server does it.
+
+    Layout follows GlyphLayoutEngine.h:340-352 exactly: B_CHAR_SPACING takes
+    the precise (linear, unhinted) advance scaled by the size, every other
+    spacing takes the hinted integer advance, an escapement_delta is added to
+    each character's advance in *pixels* (space vs nonspace by whitespace), and
+    a codepoint with no glyph advances by nothing at all.  Those are the rules
+    that decide where the next character lands, so they are the rules a
+    mispositioning regression has to be measured against."""
+
+    FT_LOAD_DEFAULT = 0
+    FT_RENDER_MODE_NORMAL = 0
+
+    def __init__(self, fontset):
+        import ctypes
+        self._ctypes = ctypes
+        self._lib = _load_libfreetype()
+        self._t = _ft_types()
+        lib = self._lib
+        lib.FT_Init_FreeType.argtypes = [ctypes.c_void_p]
+        lib.FT_New_Face.argtypes = [ctypes.c_void_p, ctypes.c_char_p,
+                                    ctypes.c_long, ctypes.c_void_p]
+        lib.FT_Set_Char_Size.argtypes = [ctypes.c_void_p, ctypes.c_long,
+                                         ctypes.c_long, ctypes.c_uint,
+                                         ctypes.c_uint]
+        lib.FT_Get_Char_Index.argtypes = [ctypes.c_void_p, ctypes.c_ulong]
+        lib.FT_Get_Char_Index.restype = ctypes.c_uint
+        lib.FT_Load_Glyph.argtypes = [ctypes.c_void_p, ctypes.c_uint,
+                                      ctypes.c_int]
+        lib.FT_Render_Glyph.argtypes = [ctypes.c_void_p, ctypes.c_int]
+        lib.FT_GlyphSlot_Embolden.argtypes = [ctypes.c_void_p]
+        lib.FT_GlyphSlot_Oblique.argtypes = [ctypes.c_void_p]
+
+        self._library = ctypes.c_void_p()
+        err = lib.FT_Init_FreeType(ctypes.byref(self._library))
+        if err or not self._library:
+            raise OSError("FT_Init_FreeType = %d" % err)
+
+        self.fonts = fontset
+        self._faces = {}
+        self._glyphs = {}
+        self.glyph_cache_limit = 20000
+        self.selfcheck = self._selfcheck()
+
+    # -- faces -----------------------------------------------------------
+    def _face(self, path):
+        entry = self._faces.get(path)
+        if entry is None:
+            ctypes = self._ctypes
+            handle = ctypes.c_void_p()
+            err = self._lib.FT_New_Face(self._library, path.encode("utf-8"), 0,
+                                        ctypes.byref(handle))
+            if err or not handle:
+                raise OSError("FT_New_Face(%s) = %d" % (path, err))
+            rec = ctypes.cast(handle,
+                              ctypes.POINTER(self._t["FT_FaceRec"])).contents
+            entry = [handle, rec, None]
+            self._faces[path] = entry
+        return entry
+
+    def _sized(self, path, size26_6):
+        entry = self._face(path)
+        if entry[2] != size26_6:
+            err = self._lib.FT_Set_Char_Size(entry[0], 0, size26_6, 72, 72)
+            if err:
+                raise OSError("FT_Set_Char_Size(%s, %d) = %d"
+                              % (path, size26_6, err))
+            entry[2] = size26_6
+        return entry
+
+    def _selfcheck(self):
+        """Prove the struct layout on the library that is actually loaded."""
+        choice = self.fonts.select(False, False, False)
+        if choice is None:
+            raise OSError("no usable font file found (looked in %s)"
+                          % (",".join(self.fonts.roots_scanned) or "nothing"))
+        path = choice[0]
+        entry = self._sized(path, 16 * 64)
+        rec = entry[1]
+        family = rec.family_name or b""
+        pointers_ok = bool(rec.glyph) and bool(rec.size)
+        glyph = None
+        if pointers_ok:
+            glyph = self.glyph(path, 16 * 64, ord("H"), False, False)
+        problems = font_selfcheck_problems(rec.units_per_EM, rec.num_glyphs,
+                                           family, pointers_ok, glyph)
+        if problems:
+            raise OSError("freetype struct layout self-check failed on %s: %s"
+                          % (path, ", ".join(problems)))
+        return "%s (%s), units_per_EM=%d" % (
+            family.decode("ascii", "replace"),
+            (rec.style_name or b"?").decode("ascii", "replace"),
+            rec.units_per_EM)
+
+    # -- glyphs ----------------------------------------------------------
+    def glyph(self, path, size26_6, codepoint, embolden, oblique):
+        key = (path, size26_6, codepoint, embolden, oblique)
+        hit = self._glyphs.get(key)
+        if hit is not None:
+            return hit
+        ctypes = self._ctypes
+        entry = self._sized(path, size26_6)
+        index = self._lib.FT_Get_Char_Index(entry[0], codepoint)
+        if self._lib.FT_Load_Glyph(entry[0], index, self.FT_LOAD_DEFAULT):
+            return None
+        slot_ptr = entry[1].glyph
+        if not slot_ptr:
+            return None
+        raw = ctypes.cast(slot_ptr, ctypes.c_void_p)
+        if embolden:
+            self._lib.FT_GlyphSlot_Embolden(raw)
+        if oblique:
+            self._lib.FT_GlyphSlot_Oblique(raw)
+        if self._lib.FT_Render_Glyph(raw, self.FT_RENDER_MODE_NORMAL):
+            return None
+        slot = slot_ptr.contents
+        bitmap = slot.bitmap
+        rows = int(bitmap.rows)
+        width = int(bitmap.width)
+        pitch = int(bitmap.pitch)
+        cov = b""
+        if rows and width and bitmap.buffer:
+            span = abs(pitch) * rows
+            data = ctypes.string_at(bitmap.buffer, span)
+            if pitch < 0:
+                # Bottom-up bitmap: re-order so row 0 is the top row.
+                step = -pitch
+                rowsdata = [data[i * step:i * step + step]
+                            for i in range(rows)]
+                rowsdata.reverse()
+                data = b"".join(rowsdata)
+                pitch = step
+            cov = data
+        glyph = Glyph(int(slot.bitmap_left), int(slot.bitmap_top), width, rows,
+                      pitch, cov, slot.advance.x / 64.0,
+                      slot.linearHoriAdvance / 65536.0, index == 0)
+        if len(self._glyphs) < self.glyph_cache_limit:
+            self._glyphs[key] = glyph
+        return glyph
+
+    # -- runs ------------------------------------------------------------
+    def shape(self, text, size, face=0, spacing=B_CHAR_SPACING,
+              false_bold=0.0, delta=None):
+        """Lay a run out at the origin; the caller places it on screen."""
+        if size <= 0.0:
+            size = 12.0
+        mono = spacing == B_FIXED_SPACING
+        choice = self.fonts.select(mono, bool(face & B_BOLD_FACE),
+                                   bool(face & B_ITALIC_FACE))
+        if choice is None:
+            return None
+        path, synth_bold, synth_italic = choice
+        if false_bold and false_bold > 0.0:
+            synth_bold = True
+        size26_6 = max(1, int(round(size * 64.0)))
+        run = ShapedRun()
+        run.path = path
+        run.synth_bold = synth_bold
+        run.synth_italic = synth_italic
+        entry = self._sized(path, size26_6)
+        metrics = entry[1].size.contents.metrics
+        run.ascent = metrics.ascender / 64.0
+        run.descent = -metrics.descender / 64.0
+        pen = 0.0
+        for codepoint in utf8_codepoints(text):
+            glyph = self.glyph(path, size26_6, codepoint, synth_bold,
+                               synth_italic)
+            run.pens.append(pen)
+            run.glyphs.append(glyph)
+            if glyph is None or glyph.missing:
+                # GlyphLayoutEngine.h:336-340: an empty glyph advances by zero.
+                run.missing += 1
+                continue
+            if spacing == B_CHAR_SPACING:
+                advance = glyph.linear_advance
+            else:
+                advance = float(int(round(glyph.advance)))
+            if delta is not None:
+                advance += (delta[1] if codepoint in WHITESPACE_CODEPOINTS
+                            else delta[0])
+            pen += advance
+        run.advance = pen
+        return run
+
+
 # ---------------------------------------------------------------------------
 # PNG writer (zlib + struct, 8-bit RGB, filter type 0)
 # ---------------------------------------------------------------------------
@@ -586,6 +1241,62 @@ class Framebuffer(object):
         self.buf[off + 1] = color[1]
         self.buf[off + 2] = color[2]
         return 1
+
+    def blend_coverage(self, x, y, width, rows, pitch, cov, color, box=None):
+        """Alpha-blend an 8-bit coverage bitmap (a rendered glyph).
+
+        Returns the number of pixels that received ink.  Coverage pixels are
+        *not* marked estimated: they come from a real outline, so they belong in
+        the strict census -- which is the whole difference between this and the
+        flat box that used to stand in for text.  \a box optionally limits the
+        blit to an inclusive clip rectangle.
+
+        Returns (written, changed).  The two differ when text is painted in the
+        colour it is painted over: ink that is there on the wire and invisible in
+        the picture, which is the exact symptom of #84's blank body.  A count of
+        written pixels alone would call that healthy, so both are reported."""
+        if not cov or width <= 0 or rows <= 0:
+            return 0, 0
+        x0, y0 = x, y
+        x1, y1 = x + width - 1, y + rows - 1
+        if box is not None:
+            x0 = max(x0, box[0])
+            y0 = max(y0, box[1])
+            x1 = min(x1, box[2])
+            y1 = min(y1, box[3])
+        clipped = self._clip_box(x0, y0, x1, y1)
+        if clipped is None:
+            return 0, 0
+        x0, y0, x1, y1 = clipped
+        cr, cg, cb = color[0], color[1], color[2]
+        buf = self.buf
+        written = 0
+        changed = 0
+        for py in range(y0, y1 + 1):
+            crow = (py - y) * pitch
+            base = py * self.width
+            for px in range(x0, x1 + 1):
+                alpha = cov[crow + (px - x)]
+                if not alpha:
+                    continue
+                off = (base + px) * 3
+                was = (buf[off], buf[off + 1], buf[off + 2])
+                if alpha == 255:
+                    buf[off] = cr
+                    buf[off + 1] = cg
+                    buf[off + 2] = cb
+                else:
+                    inv = 255 - alpha
+                    buf[off] = (buf[off] * inv + cr * alpha + 127) // 255
+                    buf[off + 1] = (buf[off + 1] * inv + cg * alpha
+                                    + 127) // 255
+                    buf[off + 2] = (buf[off + 2] * inv + cb * alpha
+                                    + 127) // 255
+                self.est[base + px] = 0
+                written += 1
+                if was != (buf[off], buf[off + 1], buf[off + 2]):
+                    changed += 1
+        return written, changed
 
     def stroke_box(self, x0, y0, x1, y1, color, estimated=False):
         box = self._clip_box(x0, y0, x1, y1)
@@ -766,6 +1477,13 @@ class TokenState(object):
         self.pattern = b"\xff" * 8      # RemoteView.cpp:397 -- B_SOLID_HIGH
         self.pen_size = 1.0
         self.font_size = 12.0           # be_plain_font default
+        # The whole font spec, not just the size: the face bits pick the file,
+        # the spacing picks the advance rule, and a rotation or a shear means we
+        # cannot claim to have rasterised the run at all.
+        self.font = {"size": 12.0, "face": 0, "spacing": B_CHAR_SPACING,
+                     "encoding": B_UNICODE_UTF8, "rotation": 0.0,
+                     "shear": 90.0, "false_bold_width": 0.0,
+                     "family_and_style": 0, "flags": 0, "direction": 0}
         self.clip = None                # None = no clipping constraint yet
         self.bbox = None                # union of everything it drew into
         self.drawing_ops = 0
@@ -853,7 +1571,8 @@ class Capture(object):
     ])
 
     def __init__(self, width, height, clip=True, apply_offsets=False,
-                 verbose=False, reply=True):
+                 verbose=False, reply=True, glyphs=None,
+                 answer_string_width=False):
         self.fb = Framebuffer(width, height)
         self.width = width
         self.height = height
@@ -869,6 +1588,26 @@ class Capture(object):
         self.undecoded_drawing_ops = 0
         self.undecoded_no_rect_ops = 0
         self.estimated_text_ops = 0
+        # Text census (#475).  Counting these separately from the pixel total is
+        # the point: "2,056,420 pixels touched" was true of a capture with no
+        # text in it at all, so the pixel count cannot answer "did text draw?".
+        self.glyphs = glyphs
+        self.answer_string_width = answer_string_width
+        self.text_ops = 0
+        self.text_runs_rasterised = 0
+        self.text_chars = 0
+        self.text_glyphs = 0
+        self.text_glyphs_missing = 0
+        self.text_ink_pixels = 0
+        self.text_ink_visible = 0
+        self.text_invisible_runs = 0
+        self.text_ink_bbox = None
+        self.text_synth_face_runs = 0
+        self.text_unsupported = {}
+        self.text_records = []
+        self.text_records_limit = 4000
+        self.text_trailing_bytes = 0
+        self.string_width_queries = 0
         self.clipped_out_ops = 0
         self.bitmaps_decoded = 0
         self.bitmaps_placeholder = 0
@@ -877,6 +1616,35 @@ class Capture(object):
         self.errors = []
         self.negotiated_version = None
         self.negotiated_capabilities = None
+
+    # -- verdicts --------------------------------------------------------
+    def glyph_truth(self, allow_missing_glyphs=False):
+        """(ok, reason): may this capture be treated as text ground truth?
+
+        "No text arrived" is NOT ground truth when there is no rasteriser: that
+        combination is exactly the trap this flag exists to close, because a
+        text-blind run produces zero estimated runs as readily as a clean one.
+        The capability is part of the verdict, not just the outcome."""
+        if self.glyphs is None:
+            return False, "no glyph rasteriser is loaded"
+        if self.estimated_text_ops:
+            return False, ("%d text run(s) painted as ESTIMATED boxes (%s)"
+                           % (self.estimated_text_ops,
+                              ", ".join("%s x%d" % (k, v) for k, v
+                                        in sorted(
+                                            self.text_unsupported.items()))
+                              or "no reason recorded"))
+        if self.text_trailing_bytes:
+            return False, ("%d unread byte(s) after a text op: the run may have "
+                           "been decoded against the wrong wire shape"
+                           % self.text_trailing_bytes)
+        if self.text_glyphs_missing and not allow_missing_glyphs:
+            return False, ("%d glyph(s) have no outline in %s, so those "
+                           "characters are holes here and are not in the "
+                           "server's render"
+                           % (self.text_glyphs_missing,
+                              self.glyphs.fonts.describe()))
+        return True, "ok"
 
     # -- helpers ---------------------------------------------------------
     def token_state(self, token):
@@ -960,6 +1728,32 @@ class Capture(object):
         if st is not None and touched:
             st.pixels_touched += touched
         return touched
+
+    def _paint_glyph(self, st, glyph, gx, gy, color):
+        """Blit one rendered glyph, clipped the same way a fill would be.
+
+        Separate from _paint() because it reports two numbers: pixels written
+        and pixels actually changed (see Framebuffer.blend_coverage)."""
+        clips = self._clip_boxes(st)
+        if clips is not None and len(clips) == 0:
+            self.clipped_out_ops += 1
+            return 0, 0
+        written = changed = 0
+        if clips is None:
+            written, changed = self.fb.blend_coverage(
+                gx, gy, glyph.width, glyph.rows, glyph.pitch, glyph.cov, color)
+        else:
+            ox, oy = self._xy(st)
+            for clip in clips:
+                cx0, cy0, cx1, cy1 = rect_to_pixels(clip)
+                part = self.fb.blend_coverage(
+                    gx, gy, glyph.width, glyph.rows, glyph.pitch, glyph.cov,
+                    color, (cx0 + ox, cy0 + oy, cx1 + ox, cy1 + oy))
+                written += part[0]
+                changed += part[1]
+        if written:
+            st.pixels_touched += written
+        return written, changed
 
     def _rect_px(self, st, rect):
         ox, oy = self._xy(st) if st is not None else (0, 0)
@@ -1075,7 +1869,8 @@ class Capture(object):
             r.u32()
             return
         if code == RP_SET_FONT:
-            st.font_size = r.font()["size"]
+            st.font = r.font()
+            st.font_size = st.font["size"]
             return
         if code == RP_SET_TRANSFORM:
             r.transform()
@@ -1271,24 +2066,38 @@ class Capture(object):
 
         # ---- text ----------------------------------------------------
         if code == RP_DRAW_STRING:
-            # RemoteDrawingEngine.cpp:882-891 -- token, BPoint point,
-            # AddString(string,length), bool hasDelta, [length escapement_delta]
+            # RemoteDrawingEngine.cpp:984-995 -- token, BPoint point,
+            # AddString(string,length), bool hasDelta, [one escapement_delta].
+            # EXACTLY ONE delta: escapement_delta is a single struct applied to
+            # the whole string, and the server sends message.Add(delta[0]).
+            # This used to read UTF8-byte-length deltas (the pre-D5 shape the
+            # server no longer sends), so every delta-bearing string over one
+            # byte long over-ran its payload, raised Truncated, and was dropped
+            # whole -- no pixels, no run recorded, and --require-glyph-truth
+            # still passed because a dropped run is not an *estimated* run. The
+            # consumed-exactly check below is what makes a repeat of that shape
+            # visible instead of silent.
             point = r.point()
             text = r.string()
             has_delta = r.bool8()
+            delta = None
             if has_delta:
-                # AddList(delta, length) where length is the *byte* length
-                # (RemoteDrawingEngine.cpp:890); RemoteView.cpp:1308-1309 reads
-                # the same count.  escapement_delta is 2 floats.
-                for _ in range(len(text)):
-                    r.f32(); r.f32()
-            self._paint_text(st, point, text)
+                delta = (r.f32(), r.f32())      # nonspace, space
+            if r.left():
+                self.text_trailing_bytes += r.left()
+                if len(self.errors) < 20:
+                    self.errors.append(
+                        "RP_DRAW_STRING: %d byte(s) left unread after one "
+                        "escapement_delta -- wire shape disagreement"
+                        % r.left())
+            run = self._paint_text(st, point, text, delta=delta)
             if self.reply:
-                self._reply_draw_string(token, point, text, st)
+                self._reply_draw_string(token, point, text, st, run=run,
+                                        delta=delta)
             return
 
         if code == RP_DRAW_STRING_WITH_OFFSETS:
-            # RemoteDrawingEngine.cpp:916-921 -- token, AddString, then
+            # RemoteDrawingEngine.cpp:1034-1037 -- token, AddString, then
             # UTF8CountChars(string) BPoints.
             text = r.string()
             count = utf8_count_chars(text)
@@ -1298,18 +2107,26 @@ class Capture(object):
                     offsets.append(r.point())
                 except Truncated:
                     break
+            if len(offsets) != count and len(self.errors) < 20:
+                self.errors.append(
+                    "RP_DRAW_STRING_WITH_OFFSETS: %d of %d offsets present"
+                    % (len(offsets), count))
+            if r.left():
+                self.text_trailing_bytes += r.left()
             if offsets:
-                self._paint_text(st, offsets[0], text, offsets=offsets)
+                run = self._paint_text(st, offsets[0], text, offsets=offsets)
                 if self.reply:
-                    self._reply_draw_string(token, offsets[-1], b"", st)
+                    self._reply_draw_string(token, offsets[-1], text, st,
+                                            run=run, last_glyph_only=True)
             return
 
         if code == RP_STRING_WIDTH:
             text = r.string()
-            if self.reply:
-                width = self._estimate_width(st, text)
+            self.string_width_queries += 1
+            if self.reply and self.answer_string_width:
                 self.outbox.append((RP_STRING_WIDTH_RESULT,
-                                    struct.pack("<If", token, width)))
+                                    struct.pack("<If", token,
+                                                self._measure_width(st, text))))
             return
 
         if code == RP_READ_BITMAP:
@@ -1353,15 +2170,151 @@ class Capture(object):
 
     # -- text helpers ----------------------------------------------------
     def _estimate_width(self, st, text):
-        """Crude proportional-font advance estimate.  NOT a measurement."""
+        """Crude proportional-font advance estimate.  NOT a measurement.
+
+        Only reached when there is no rasteriser; every caller that uses it
+        also marks the run estimated, so it can never be mistaken for one."""
         size = st.font_size if st.font_size and st.font_size > 0 else 12.0
         return 0.55 * size * max(0, utf8_count_chars(text))
 
-    def _paint_text(self, st, point, text, offsets=None):
-        """Paint the ESTIMATED bounding box of a text run.
+    def _measure_width(self, st, text, delta=None):
+        """Advance width of a run: measured when we can, estimated when not."""
+        run = self._shape(st, text, delta=delta)
+        if run is not None:
+            return run.advance
+        return self._estimate_width(st, text)
 
-        We have no font rasteriser, so this box is a guess: its pixels are
-        marked "estimated" and excluded from the strict black census."""
+    def _text_unsupported_reason(self, st):
+        """Why a run cannot be rasterised faithfully, or None.
+
+        A run we would draw *wrongly* is worse than one we refuse to draw: it
+        would be counted as glyph truth.  So the transform cases bail out to the
+        estimated box and are named in the report."""
+        if self.glyphs is None:
+            return "no rasteriser"
+        font = st.font
+        if font.get("encoding", B_UNICODE_UTF8) != B_UNICODE_UTF8:
+            return "encoding=%d" % font["encoding"]
+        if abs(font.get("rotation", 0.0)) > 0.01:
+            return "rotation=%.1f" % font["rotation"]
+        if abs(font.get("shear", 90.0) - 90.0) > 0.01:
+            return "shear=%.1f" % font["shear"]
+        return None
+
+    def _shape(self, st, text, delta=None):
+        if self._text_unsupported_reason(st) is not None:
+            return None
+        font = st.font
+        try:
+            return self.glyphs.shape(text, font.get("size", st.font_size),
+                                     face=font.get("face", 0),
+                                     spacing=font.get("spacing",
+                                                      B_CHAR_SPACING),
+                                     false_bold=font.get("false_bold_width",
+                                                         0.0),
+                                     delta=delta)
+        except OSError as exc:
+            if len(self.errors) < 20:
+                self.errors.append("rasteriser: %s" % exc)
+            return None
+
+    def _paint_text(self, st, point, text, offsets=None, delta=None):
+        """Rasterise a text run into the framebuffer.
+
+        The origin of a run is its BASELINE-LEFT: BView::DrawString draws with
+        the pen on the baseline, which is why both in-tree clients place text
+        with no vertical adjustment (RemoteView.cpp:1400 draws at `point`;
+        HaikuRemoteDesktop.js:1383 uses fillText with the default "alphabetic"
+        textBaseline).  So a glyph goes at x = pen + bitmap_left and
+        y = baseline - bitmap_top, and ink that lands *below* the origin is the
+        signature of a flipped placement."""
+        self.text_ops += 1
+        reason = self._text_unsupported_reason(st)
+        run = None if reason is not None else self._shape(st, text, delta=delta)
+        if run is None:
+            if reason is None:
+                reason = "shaping failed"
+            self.text_unsupported[reason] = \
+                self.text_unsupported.get(reason, 0) + 1
+            self._paint_estimated_text(st, point, text, offsets)
+            return None
+
+        ox, oy = self._xy(st)
+        color = st.effective_color()
+        ink = 0
+        visible = 0
+        ink_box = None
+        drawn = 0
+        for index, glyph in enumerate(run.glyphs):
+            if offsets is not None:
+                if index >= len(offsets):
+                    break
+                px, py = offsets[index]
+            else:
+                px, py = point[0] + run.pens[index], point[1]
+            if glyph is None or not glyph.cov:
+                continue
+            gx = int(math.floor(px + 0.5)) + glyph.left + ox
+            gy = int(math.floor(py + 0.5)) - glyph.top + oy
+            painted, altered = self._paint_glyph(st, glyph, gx, gy, color)
+            drawn += 1
+            visible += altered
+            if painted:
+                ink += painted
+                box = (gx, gy, gx + glyph.width - 1, gy + glyph.rows - 1)
+                self._note_dest(st, *box)
+                ink_box = box if ink_box is None else (
+                    min(ink_box[0], box[0]), min(ink_box[1], box[1]),
+                    max(ink_box[2], box[2]), max(ink_box[3], box[3]))
+
+        # The declared box is what the run *claims* to occupy, from the wire's
+        # own origin and the face's ascent/descent. Reported next to the ink box
+        # so "the glyphs went somewhere else" is a visible disagreement rather
+        # than something only a human eye on the PNG would catch.
+        if offsets is not None:
+            left = min(p[0] for p in offsets)
+            right = max(p[0] for p in offsets) + (
+                run.glyphs[-1].advance if run.glyphs and run.glyphs[-1] else 0)
+            top = min(p[1] for p in offsets) - run.ascent
+            bottom = max(p[1] for p in offsets) + run.descent
+        else:
+            left = point[0]
+            right = point[0] + run.advance
+            top = point[1] - run.ascent
+            bottom = point[1] + run.descent
+        declared = rect_to_pixels((left, top, right, bottom))
+        declared = (declared[0] + ox, declared[1] + oy,
+                    declared[2] + ox, declared[3] + oy)
+        self._note_dest(st, *declared)
+
+        self.text_runs_rasterised += 1
+        self.text_chars += len(run.glyphs)
+        self.text_glyphs += drawn
+        self.text_glyphs_missing += run.missing
+        self.text_ink_pixels += ink
+        self.text_ink_visible += visible
+        if ink and not visible:
+            self.text_invisible_runs += 1
+        if run.synth_bold or run.synth_italic:
+            self.text_synth_face_runs += 1
+        if ink_box is not None:
+            self.text_ink_bbox = ink_box if self.text_ink_bbox is None else (
+                min(self.text_ink_bbox[0], ink_box[0]),
+                min(self.text_ink_bbox[1], ink_box[1]),
+                max(self.text_ink_bbox[2], ink_box[2]),
+                max(self.text_ink_bbox[3], ink_box[3]))
+        self._record_text(st, point, text, run, ink, ink_box, declared,
+                          offsets, visible=visible)
+        return run
+
+    def _paint_estimated_text(self, st, point, text, offsets=None):
+        """Fall back to the ESTIMATED bounding box of a text run.
+
+        Reached only when there is no rasteriser or the run's transform is one
+        we will not fake.  These pixels are marked "estimated" so they stay out
+        of the strict census, ESTIMATED_TEXT_OPS counts them, and
+        --require-glyph-truth refuses the capture: a missing rasteriser must
+        mean "not ground truth", never silently blank text."""
         size = st.font_size if st.font_size and st.font_size > 0 else 12.0
         ascent = 0.8 * size
         descent = 0.25 * size
@@ -1384,18 +2337,66 @@ class Capture(object):
         self._paint(st, "fill", box, PLACEHOLDER, estimated=True)
         self.estimated_text_ops += 1
         st.estimated_ops += 1
+        self._record_text(st, point, text, None, 0, None, box, offsets)
 
-    def _reply_draw_string(self, token, point, text, st):
+    def _record_text(self, st, point, text, run, ink, ink_box, declared,
+                     offsets, visible=0):
+        if len(self.text_records) >= self.text_records_limit:
+            return
+        self.text_records.append({
+            "token": st.token,
+            "text": text.decode("utf-8", "replace"),
+            "origin": [round(point[0], 3), round(point[1], 3)],
+            "size": st.font.get("size", st.font_size),
+            "face": st.font.get("face", 0),
+            "spacing": st.font.get("spacing", B_CHAR_SPACING),
+            "with_offsets": offsets is not None,
+            "chars": utf8_count_chars(text),
+            "glyphs": 0 if run is None else len(run.glyphs),
+            "missing_glyphs": 0 if run is None else run.missing,
+            "advance": None if run is None else round(run.advance, 3),
+            "ink_pixels": ink,
+            "ink_visible": visible,
+            "ink_bbox": None if ink_box is None else list(ink_box),
+            "declared_bbox": list(declared),
+            "rasterised": run is not None,
+            "font_file": None if run is None else run.path,
+            "synthetic_face": bool(run is not None
+                                   and (run.synth_bold or run.synth_italic)),
+        })
+
+    def _reply_draw_string(self, token, point, text, st, run=None, delta=None,
+                           last_glyph_only=False):
         """RP_DRAW_STRING_RESULT: uint32 token, BPoint penLocation.
 
         Consumed by RemoteDrawingEngine::_DrawingEngineResult
-        (RemoteDrawingEngine.cpp:1046-1056).  MUST be sent: DrawString blocks
+        (RemoteDrawingEngine.cpp:1214-1224).  MUST be sent: DrawString blocks
         the app_server for up to 1 s waiting for it
-        (RemoteDrawingEngine.cpp:899-905), so a silent client would itself
-        suppress the drawing we are trying to measure."""
-        pen_x = point[0] + self._estimate_width(st, text)
+        (RemoteDrawingEngine.cpp:1015-1018), so a silent client would itself
+        suppress the drawing we are trying to measure.
+
+        The pen lands at origin + the sum of the advances
+        (GlyphLayoutEngine.h:368-370 adds the last advance after the loop), so
+        with a rasteriser this is now a measurement and not the old
+        0.55-per-character guess.  It matters beyond tidiness: the server
+        *uses* this position for whatever it draws next, so a client that
+        answers with a wrong pen makes the server itself mislay the rest of the
+        line."""
+        if run is not None:
+            if last_glyph_only:
+                # RP_DRAW_STRING_WITH_OFFSETS: the server placed every glyph
+                # itself, so the pen after it is the last offset plus that one
+                # glyph's advance -- which is what BView::PenLocation() returns
+                # in the native client (RemoteView.cpp:1435).
+                last = run.glyphs[-1] if run.glyphs else None
+                advance = 0.0 if last is None else last.advance
+            else:
+                advance = run.advance
+        else:
+            advance = self._estimate_width(st, text)
         self.outbox.append((RP_DRAW_STRING_RESULT,
-                            struct.pack("<Iff", token, pen_x, point[1])))
+                            struct.pack("<Iff", token, point[0] + advance,
+                                        point[1])))
 
     def _reply_read_bitmap(self, token, rect):
         """RP_READ_BITMAP_RESULT: uint32 token, then a non-minimal bitmap.
@@ -2106,6 +3107,91 @@ def boxes_intersect(a, b):
     return not (a[2] < b[0] or b[2] < a[0] or a[3] < b[1] or b[3] < a[1])
 
 
+def parse_text_expectation(spec):
+    """'Tracker@120,404' -> ('Tracker', 120.0, 404.0); 'Tracker' -> (t, None, None).
+
+    The '@' is split from the RIGHT so a string containing one still works."""
+    if "@" in spec:
+        text, _, where = spec.rpartition("@")
+        parts = where.split(",")
+        if len(parts) == 2:
+            try:
+                return text, float(parts[0]), float(parts[1])
+            except ValueError:
+                pass
+        # Not a coordinate after all: it was part of the text.
+        return spec, None, None
+    return spec, None, None
+
+
+def text_expectation_failures(cap, args):
+    """Check the caller's text assertions against the census.
+
+    The expected values come from the CALLER, never from the decoder. That is
+    deliberate: #423's wire checks were self-consistent -- encoder and decoder
+    shared their constants, so mutating the opcode still passed -- and the cure
+    was to pin a value the code could not derive. A threshold or an origin typed
+    on the command line is the same cure: if the decoder stops drawing text, or
+    draws it somewhere else, there is nothing for it to agree with."""
+    failures = []
+    if args.min_text_runs and cap.text_runs_rasterised < args.min_text_runs:
+        failures.append("--min-text-runs %d: only %d run(s) were rasterised "
+                        "(TEXT_OPS=%d received)"
+                        % (args.min_text_runs, cap.text_runs_rasterised,
+                           cap.text_ops))
+    if args.min_glyph_ink and cap.text_ink_visible < args.min_glyph_ink:
+        # Visible, not merely written: text painted in the colour it was painted
+        # over is on the wire and absent from the picture (#84's symptom), and
+        # asserting on written pixels alone would pass it.
+        failures.append("--min-glyph-ink %d: only %d glyph ink pixel(s) changed "
+                        "the framebuffer (%d written)"
+                        % (args.min_glyph_ink, cap.text_ink_visible,
+                           cap.text_ink_pixels))
+    for spec in args.expect_text:
+        want, wx, wy = parse_text_expectation(spec)
+        seen_text = False
+        matched = False
+        near = []
+        for record in cap.text_records:
+            if record["text"] != want:
+                continue
+            seen_text = True
+            if not record["rasterised"] or not record["ink_visible"]:
+                near.append("drawn no ink at (%.1f,%.1f)"
+                            % tuple(record["origin"]))
+                continue
+            if wx is None:
+                matched = True
+                break
+            if (abs(record["origin"][0] - wx) <= args.text_tolerance
+                    and abs(record["origin"][1] - wy) <= args.text_tolerance):
+                matched = True
+                break
+            near.append("at (%.1f,%.1f)" % tuple(record["origin"]))
+        if matched:
+            continue
+        if not seen_text:
+            # Say when the search was over a truncated list, so "not received"
+            # cannot quietly mean "past the record limit".
+            failures.append("--expect-text %r: no run with that text was "
+                            "received at all (%d run(s) recorded%s)"
+                            % (spec, len(cap.text_records),
+                               " -- AT the %d record limit, so later runs were "
+                               "not kept" % cap.text_records_limit
+                               if len(cap.text_records)
+                               >= cap.text_records_limit else ""))
+        elif wx is None:
+            failures.append("--expect-text %r: the run arrived but was not "
+                            "rasterised with ink (%s)"
+                            % (spec, "; ".join(near[:4])))
+        else:
+            failures.append("--expect-text %r: the run arrived but its origin "
+                            "is not within %.1f px of (%.1f,%.1f) -- found %s"
+                            % (spec, args.text_tolerance, wx, wy,
+                               "; ".join(near[:4])))
+    return failures
+
+
 def report(cap, args, connected, elapsed, stop_reason, wire=None):
     fb = cap.fb
     tr = topright_box(cap.width, cap.height)
@@ -2129,6 +3215,30 @@ def report(cap, args, connected, elapsed, stop_reason, wire=None):
     out.append("UNDECODED_DRAWING_OPS=%d" % cap.undecoded_drawing_ops)
     out.append("UNDECODED_NO_RECT_OPS=%d" % cap.undecoded_no_rect_ops)
     out.append("ESTIMATED_TEXT_OPS=%d" % cap.estimated_text_ops)
+    # Text census (#475).  TEXT_INK_PIXELS is the one to assert on: it is zero
+    # for a capture that received text and drew none, which is precisely the
+    # state a pixel total cannot distinguish from a healthy one.
+    truth_ok, truth_why = cap.glyph_truth(
+        allow_missing_glyphs=getattr(args, "allow_missing_glyphs", False))
+    out.append("GLYPH_RASTERISER=%s"
+               % ("none" if cap.glyphs is None
+                  else cap.glyphs.fonts.describe()))
+    out.append("GLYPH_TRUTH=%d" % (1 if truth_ok else 0))
+    out.append("GLYPH_TRUTH_WHY=%s" % truth_why)
+    out.append("TEXT_OPS=%d" % cap.text_ops)
+    out.append("TEXT_RUNS_RASTERISED=%d" % cap.text_runs_rasterised)
+    out.append("TEXT_CHARS=%d" % cap.text_chars)
+    out.append("TEXT_GLYPHS=%d" % cap.text_glyphs)
+    out.append("TEXT_GLYPHS_MISSING=%d" % cap.text_glyphs_missing)
+    out.append("TEXT_INK_PIXELS=%d" % cap.text_ink_pixels)
+    out.append("TEXT_INK_VISIBLE=%d" % cap.text_ink_visible)
+    out.append("TEXT_INVISIBLE_RUNS=%d" % cap.text_invisible_runs)
+    out.append("TEXT_INK_BBOX=%s"
+               % ("-" if cap.text_ink_bbox is None
+                  else "%d,%d,%d,%d" % cap.text_ink_bbox))
+    out.append("TEXT_SYNTHETIC_FACE_RUNS=%d" % cap.text_synth_face_runs)
+    out.append("TEXT_TRAILING_BYTES=%d" % cap.text_trailing_bytes)
+    out.append("STRING_WIDTH_QUERIES=%d" % cap.string_width_queries)
     out.append("BITMAPS_DECODED=%d" % cap.bitmaps_decoded)
     out.append("BITMAPS_PLACEHOLDER=%d" % cap.bitmaps_placeholder)
     out.append("CLIPPED_OUT_OPS=%d" % cap.clipped_out_ops)
@@ -2255,17 +3365,66 @@ def report(cap, args, connected, elapsed, stop_reason, wire=None):
                  ",".join("0x%04x" % cs for cs in
                           sorted(cap.bitmap_colorspaces)),
                  str(PLACEHOLDER)))
-    if cap.estimated_text_ops:
-        print("NOTE: %d text run(s) have no glyph rasteriser here; an "
-              "ESTIMATED bounding box was painted flat %s.  Those pixels are "
-              "excluded from the *_STRICT counts."
-              % (cap.estimated_text_ops, str(PLACEHOLDER)))
     if cap.undecoded_drawing_ops:
         print("NOTE: %d drawing op(s) were not rasterised properly; where a "
               "destination rect was decodable it was painted flat %s "
               "(%d had no decodable rect at all)."
               % (cap.undecoded_drawing_ops, str(PLACEHOLDER),
                  cap.undecoded_no_rect_ops))
+    print("")
+    print("--- TEXT --------------------------------------------------")
+    print("rasteriser    : %s"
+          % ("NONE -- text is not ground truth" if cap.glyphs is None
+             else cap.glyphs.selfcheck))
+    if cap.glyphs is not None:
+        print("font files    : %s" % cap.glyphs.fonts.describe())
+    print("runs          : %d received, %d rasterised, %d estimated"
+          % (cap.text_ops, cap.text_runs_rasterised, cap.estimated_text_ops))
+    print("glyphs        : %d drawn, %d with no outline, %d ink pixels "
+          "(%d changed the picture)"
+          % (cap.text_glyphs, cap.text_glyphs_missing, cap.text_ink_pixels,
+             cap.text_ink_visible))
+    if cap.text_invisible_runs:
+        print("NOTE: %d run(s) drew ink that changed NOTHING -- text painted in "
+              "the colour it was painted over. That is text present on the wire "
+              "and absent from the picture, which is what #84 looked like."
+              % cap.text_invisible_runs)
+    print("ink bbox      : %s"
+          % ("none" if cap.text_ink_bbox is None
+             else "(%d,%d)-(%d,%d)" % cap.text_ink_bbox))
+    print("GLYPH_TRUTH   : %s (%s)" % ("YES" if truth_ok else "NO", truth_why))
+    if cap.text_synth_face_runs:
+        print("NOTE: %d run(s) used a SYNTHETIC bold/oblique because no real "
+              "styled file was installed; their outlines are not the server's."
+              % cap.text_synth_face_runs)
+    if cap.string_width_queries:
+        print("RP_STRING_WIDTH: %d query/queries%s"
+              % (cap.string_width_queries,
+                 " -- answered from our own metrics"
+                 if cap.answer_string_width else " -- NOT answered"))
+    # What may and may not be concluded from the glyphs above. Stated here, at
+    # the point of production, because the over-claim is the bug (#475) and an
+    # over-claiming instrument is no better than a blind one.
+    if cap.text_runs_rasterised:
+        print("fidelity      : ASSERTABLE -- that text drew, how many runs and "
+              "glyphs, their origins, advances and ink box.  NOT ASSERTABLE -- "
+              "pixel equality with app_server (family cannot be recovered from "
+              "the wire, and hinting/subpixel filtering differ).")
+    for reason, count in sorted(cap.text_unsupported.items()):
+        print("NOTE: %d text run(s) not rasterised: %s" % (count, reason))
+    if cap.estimated_text_ops:
+        print("NOTE: %d text run(s) were painted as an ESTIMATED bounding box "
+              "flat %s.  Those pixels are excluded from the *_STRICT counts, "
+              "and this capture is NOT text ground truth."
+              % (cap.estimated_text_ops, str(PLACEHOLDER)))
+    for record in cap.text_records[:8]:
+        print("  %-24r origin=(%.1f,%.1f) size=%.1f glyphs=%d ink=%d/%d %s"
+              % (record["text"][:24], record["origin"][0], record["origin"][1],
+                 record["size"], record["glyphs"], record["ink_visible"],
+                 record["ink_pixels"],
+                 "" if record["rasterised"] else "ESTIMATED"))
+    if len(cap.text_records) > 8:
+        print("  ... %d more run(s)" % (len(cap.text_records) - 8))
     print("=========================================================")
 
     if args.json:
@@ -2297,6 +3456,25 @@ def report(cap, args, connected, elapsed, stop_reason, wire=None):
             "undecoded_drawing_ops": cap.undecoded_drawing_ops,
             "undecoded_no_rect_ops": cap.undecoded_no_rect_ops,
             "estimated_text_ops": cap.estimated_text_ops,
+            "glyph_truth": truth_ok,
+            "glyph_truth_why": truth_why,
+            "glyph_rasteriser": (None if cap.glyphs is None
+                                 else cap.glyphs.fonts.describe()),
+            "text_ops": cap.text_ops,
+            "text_runs_rasterised": cap.text_runs_rasterised,
+            "text_chars": cap.text_chars,
+            "text_glyphs": cap.text_glyphs,
+            "text_glyphs_missing": cap.text_glyphs_missing,
+            "text_ink_pixels": cap.text_ink_pixels,
+            "text_ink_visible": cap.text_ink_visible,
+            "text_invisible_runs": cap.text_invisible_runs,
+            "text_ink_bbox": (None if cap.text_ink_bbox is None
+                              else list(cap.text_ink_bbox)),
+            "text_synthetic_face_runs": cap.text_synth_face_runs,
+            "text_trailing_bytes": cap.text_trailing_bytes,
+            "text_unsupported": dict(cap.text_unsupported),
+            "text_runs": cap.text_records,
+            "string_width_queries": cap.string_width_queries,
             "bitmaps_decoded": cap.bitmaps_decoded,
             "bitmaps_placeholder": cap.bitmaps_placeholder,
             "bitmap_colorspaces": {"0x%04x" % k: v for k, v
@@ -2340,15 +3518,25 @@ def report(cap, args, connected, elapsed, stop_reason, wire=None):
         # reader who sees only "wrote PNG" has no way to know the glyphs are
         # flat boxes. A comparison that is blind to text reads a text
         # regression as "both sides agree" (#475).
-        if cap.estimated_text_ops or cap.undecoded_drawing_ops:
-            print("       !!  NOT PIXEL GROUND TRUTH: %d text run(s) painted as "
-                  "flat ESTIMATED boxes (no glyph rasteriser)%s. Do not diff "
-                  "this PNG against a real client and conclude the client is "
-                  "wrong; compare the census instead."
-                  % (cap.estimated_text_ops,
-                     (", %d drawing op(s) not rasterised"
-                      % cap.undecoded_drawing_ops)
-                     if cap.undecoded_drawing_ops else ""))
+        if not truth_ok:
+            print("       !!  NOT TEXT GROUND TRUTH: %s. Do not diff this PNG "
+                  "against a real client and conclude the client is wrong; "
+                  "compare the census instead." % truth_why)
+        else:
+            print("       text is ground truth: %d run(s), %d glyph(s), %d "
+                  "visible ink pixels, from %s. Assert on the census "
+                  "(runs/glyphs/origins/advances/ink box), NOT on pixel "
+                  "equality with app_server: the wire does not carry the font "
+                  "family, and hinting and subpixel filtering differ."
+                  % (cap.text_runs_rasterised, cap.text_glyphs,
+                     cap.text_ink_visible, cap.glyphs.fonts.describe()))
+        if cap.undecoded_drawing_ops:
+            # Separate sentence, separate subject: these are NON-text ops, and
+            # folding them into the text verdict is how "ok" ended up printed
+            # inside a line that began "NOT TEXT GROUND TRUTH".
+            print("       !!  %d NON-text drawing op(s) were painted as flat "
+                  "placeholders; those areas are not ground truth either."
+                  % cap.undecoded_drawing_ops)
 
 
 # ---------------------------------------------------------------------------
@@ -2465,8 +3653,14 @@ def selftest(allow_skip=False):
         + struct.pack("<I", len(text)) + text + b"\x00")
 
     # ---- run it through the framing + parser -----------------------
+    # glyphs=None on purpose: this arm covers the DEGRADED path, the one a host
+    # with no libfreetype falls back to. It has to keep behaving exactly as it
+    # did -- flat estimated box, counted, excluded from the strict census -- so
+    # that "no rasteriser" can never look like "text matched". The rasterised
+    # path is a second arm further down, and the difference between the two arms
+    # is the discrimination this tool was missing (#475).
     cap = Capture(width, height, clip=True, apply_offsets=False, verbose=False,
-                  reply=True)
+                  reply=True, glyphs=None)
     total_px = width * height
     black0, _ = cap.fb.black_counts()
     check("framebuffer starts all black", black0 == total_px,
@@ -2775,6 +3969,392 @@ def selftest(allow_skip=False):
               "(wire=%d plain=%d)" % (dec.wire_bytes, dec.plain_bytes))
         dec.close()
 
+    # ---- text: the wire shape, the decode, and the census (#475) ------
+    print("  -- text ops --")
+
+    # A golden wire vector for RP_DRAW_STRING, spelled the way the SERVER
+    # spells it (RemoteDrawingEngine.cpp:984-995) rather than the way this file
+    # spells it: opcode 180 and total length pinned as raw bytes, one
+    # escapement_delta and not one per character.  The old decoder read
+    # UTF8-byte-length deltas, so this exact frame over-ran its payload and the
+    # run was dropped whole -- no pixels, no run recorded, and no estimated run
+    # either, which is why --require-glyph-truth used to pass on a stream whose
+    # every delta-bearing string had vanished.
+    gtoken = 11
+    gtext = b"Hi"
+    delta_bytes = struct.pack("<ff", 1.5, 2.5)
+    golden_string = (bytes((180, 0))                    # RP_DRAW_STRING
+                     + bytes((33, 0, 0, 0))             # 6+4+8+4+2+1+8
+                     + bytes((11, 0, 0, 0))             # token 11
+                     + struct.pack("<ff", 30.0, 90.0)   # baseline-left origin
+                     + bytes((2, 0, 0, 0))              # string length 2
+                     + gtext
+                     + bytes((1,))                      # hasDelta
+                     + delta_bytes)
+    built = frame(RP_DRAW_STRING,
+                  struct.pack("<I", gtoken) + struct.pack("<ff", 30.0, 90.0)
+                  + struct.pack("<I", len(gtext)) + gtext + b"\x01"
+                  + delta_bytes)
+    check("RP_DRAW_STRING frame matches the golden wire bytes",
+          built == golden_string, built.hex())
+    check("a delta-bearing RP_DRAW_STRING carries exactly one delta",
+          len(golden_string) == HEADER + 4 + 8 + 4 + len(gtext) + 1 + 8,
+          str(len(golden_string)))
+
+    def font_payload(token, size, face=0, spacing=B_CHAR_SPACING,
+                     rotation=0.0, shear=90.0, false_bold=0.0, encoding=0):
+        # RemoteMessage.cpp:147-161 (AddFont), packed, 29 bytes.
+        return struct.pack("<IBBIBffffHI", token, 0, encoding, 0, spacing,
+                           shear, rotation, false_bold, size, face, 0)
+
+    def text_stream(origin=(30.0, 90.0), text=b"Hi", delta=delta_bytes,
+                    size=16.0, extra=b"", deltas=1):
+        out = bytearray()
+        out += frame(RP_CREATE_STATE, struct.pack("<I", gtoken))
+        out += frame(RP_SET_HIGH_COLOR,
+                     struct.pack("<I", gtoken) + bytes((255, 255, 255, 255)))
+        out += frame(RP_SET_FONT, font_payload(gtoken, size))
+        payload = (struct.pack("<I", gtoken)
+                   + struct.pack("<ff", origin[0], origin[1])
+                   + struct.pack("<I", len(text)) + text)
+        if delta is None:
+            payload += b"\x00"
+        else:
+            payload += b"\x01" + delta * deltas
+        out += frame(RP_DRAW_STRING, payload)
+        out += extra
+        return bytes(out)
+
+    def run_stream(data, **kwargs):
+        c = Capture(width, height, clip=True, apply_offsets=False,
+                    verbose=False, reply=True, **kwargs)
+        pos = 0
+        while pos + HEADER <= len(data):
+            code, length = struct.unpack_from("<HI", data, pos)
+            c.handle(code, bytes(data[pos + HEADER:pos + length]))
+            pos += length
+        return c
+
+    # The degraded arm first, so the two are comparable: same bytes, no
+    # rasteriser.  This is what every capture before #475 looked like.
+    blind = run_stream(text_stream(), glyphs=None)
+    check("without a rasteriser a text run is estimated, not drawn",
+          (blind.text_ops == 1 and blind.text_runs_rasterised == 0
+           and blind.text_ink_pixels == 0 and blind.estimated_text_ops == 1),
+          "ops=%d rast=%d ink=%d est=%d"
+          % (blind.text_ops, blind.text_runs_rasterised,
+             blind.text_ink_pixels, blind.estimated_text_ops))
+    check("a delta-bearing run is no longer dropped as truncated",
+          blind.truncated == 0 and blind.text_trailing_bytes == 0,
+          "truncated=%d trailing=%d"
+          % (blind.truncated, blind.text_trailing_bytes))
+    check("a capture with no rasteriser is NOT glyph truth",
+          blind.glyph_truth()[0] is False, blind.glyph_truth()[1])
+
+    try:
+        fonts = FontSet().scan()
+        ras = GlyphRasteriser(fonts)
+    except (OSError, RuntimeError) as exc:
+        skip("the whole glyph rasterisation block",
+             "no usable freetype/font: %s" % exc)
+        ras = None
+
+    if ras is not None:
+        print("  (rasteriser: %s)" % ras.selfcheck)
+        lit = run_stream(text_stream(), glyphs=ras)
+        check("with a rasteriser the run is rasterised",
+              (lit.text_ops == 1 and lit.text_runs_rasterised == 1
+               and lit.estimated_text_ops == 0),
+              "ops=%d rast=%d est=%d" % (lit.text_ops,
+                                         lit.text_runs_rasterised,
+                                         lit.estimated_text_ops))
+        check("both glyphs of a two-character run were drawn",
+              lit.text_glyphs == 2 and lit.text_chars == 2,
+              "glyphs=%d chars=%d" % (lit.text_glyphs, lit.text_chars))
+        check("no codepoint was missing an outline",
+              lit.text_glyphs_missing == 0, str(lit.text_glyphs_missing))
+        check("glyph ink reached the framebuffer",
+              lit.text_ink_pixels > 0, str(lit.text_ink_pixels))
+        check("a rasterised capture IS glyph truth",
+              lit.glyph_truth()[0] is True, lit.glyph_truth()[1])
+        check("glyph pixels are not marked estimated (they are in the strict "
+              "census)",
+              lit.fb.black_counts()[0] == lit.fb.black_counts()[1],
+              "%d vs %d" % lit.fb.black_counts())
+
+        # The baseline convention, which is protocol and not preference:
+        # BView::DrawString puts the pen ON the baseline, so 'Hi' -- no
+        # descenders -- must sit entirely above y=90 and within one ascent of
+        # it.  A flipped or offset blit fails this without needing an eye on the
+        # PNG.
+        box = lit.text_ink_bbox
+        ascent = ras.shape(gtext, 16.0).ascent
+        check("ink sits above the baseline it was given",
+              box is not None and box[3] <= 90, str(box))
+        check("ink starts within one ascent above the baseline",
+              box is not None and box[1] >= 90 - int(math.ceil(ascent)) - 1,
+              "%s ascent=%.2f" % (box, ascent))
+        check("ink starts at the origin x, not before it",
+              box is not None and box[0] >= 29, str(box))
+
+        # Advance arithmetic.  The +4.0 is pinned by hand from the delta in the
+        # golden frame (nonspace 1.5 on each of two characters, plus space 2.5
+        # applied to nothing here... so 3.0), and the whitespace branch is
+        # pinned separately below; neither number is derived from the code under
+        # test.
+        plain_run = ras.shape(gtext, 16.0)
+        delta_run = ras.shape(gtext, 16.0, delta=(1.5, 2.5))
+        check("an escapement_delta adds nonspace once per character",
+              abs((delta_run.advance - plain_run.advance) - 3.0) < 1e-3,
+              "%.4f vs %.4f" % (delta_run.advance, plain_run.advance))
+        spaced = ras.shape(b"A B", 16.0)
+        spaced_delta = ras.shape(b"A B", 16.0, delta=(1.0, 10.0))
+        check("an escapement_delta uses the space half for whitespace",
+              abs((spaced_delta.advance - spaced.advance) - 12.0) < 1e-3,
+              "%.4f vs %.4f" % (spaced_delta.advance, spaced.advance))
+        one = ras.shape(b"H", 16.0)
+        two = ras.shape(b"HH", 16.0)
+        check("advances accumulate linearly",
+              abs(two.advance - 2 * one.advance) < 1e-3,
+              "%.4f vs %.4f" % (two.advance, one.advance))
+        check("B_BITMAP_SPACING advances by whole pixels",
+              float(ras.shape(b"Hi", 16.0,
+                              spacing=B_BITMAP_SPACING).advance).is_integer(),
+              str(ras.shape(b"Hi", 16.0, spacing=B_BITMAP_SPACING).advance))
+
+        # The pen position we hand back is what the server uses for whatever it
+        # draws next, so it is measured, not guessed.
+        pen = [pl for c, pl in lit.outbox if c == RP_DRAW_STRING_RESULT]
+        check("RP_DRAW_STRING_RESULT carries the measured pen",
+              len(pen) == 1
+              and abs(struct.unpack("<Iff", pen[0])[1]
+                      - (30.0 + delta_run.advance)) < 1e-3,
+              pen[0].hex() if pen else "-")
+
+        # RP_STRING_WIDTH: the server only asks a client that advertised
+        # RP_CAP_STRING_WIDTH_REPLY, so the default is to count the query and
+        # not answer it.
+        query = frame(RP_STRING_WIDTH,
+                      struct.pack("<I", gtoken)
+                      + struct.pack("<I", len(gtext)) + gtext)
+        quiet = run_stream(text_stream(extra=query), glyphs=ras)
+        loud = run_stream(text_stream(extra=query), glyphs=ras,
+                          answer_string_width=True)
+        check("RP_STRING_WIDTH is counted either way",
+              quiet.string_width_queries == 1 == loud.string_width_queries,
+              "%d/%d" % (quiet.string_width_queries,
+                         loud.string_width_queries))
+        check("RP_STRING_WIDTH is not answered unless the capability was "
+              "advertised",
+              RP_STRING_WIDTH_RESULT not in [c for c, _ in quiet.outbox])
+        widths = [pl for c, pl in loud.outbox if c == RP_STRING_WIDTH_RESULT]
+        check("with --answer-string-width the reply is the measured width",
+              len(widths) == 1
+              and abs(struct.unpack("<If", widths[0])[1]
+                      - plain_run.advance) < 1e-3,
+              widths[0].hex() if widths else "-")
+
+        # The pre-D5 wire shape (one delta per character) must be *visible*,
+        # not silently tolerated: an extra delta on the wire means the sender
+        # and this decoder disagree about the message, and a run decoded against
+        # the wrong shape is not ground truth even if it produced ink.
+        stale = run_stream(text_stream(deltas=2), glyphs=ras)
+        check("a second escapement_delta is reported as trailing bytes",
+              stale.text_trailing_bytes == 8, str(stale.text_trailing_bytes))
+        check("trailing bytes after a text op forfeit glyph truth",
+              stale.glyph_truth()[0] is False, stale.glyph_truth()[1])
+
+        # RP_DRAW_STRING_WITH_OFFSETS: one origin per character, placed by the
+        # server; the reply is the last origin plus that glyph's advance.
+        offs = frame(RP_DRAW_STRING_WITH_OFFSETS,
+                     struct.pack("<I", gtoken)
+                     + struct.pack("<I", 3) + b"abc"
+                     + struct.pack("<ff", 40.0, 60.0)
+                     + struct.pack("<ff", 60.0, 60.0)
+                     + struct.pack("<ff", 80.0, 60.0))
+        with_offsets = run_stream(
+            bytes(frame(RP_CREATE_STATE, struct.pack("<I", gtoken))
+                  + frame(RP_SET_HIGH_COLOR, struct.pack("<I", gtoken)
+                          + bytes((255, 255, 255, 255)))
+                  + frame(RP_SET_FONT, font_payload(gtoken, 16.0)) + offs),
+            glyphs=ras)
+        check("WITH_OFFSETS rasterises one glyph per offset",
+              with_offsets.text_glyphs == 3
+              and with_offsets.text_runs_rasterised == 1,
+              "glyphs=%d" % with_offsets.text_glyphs)
+        wide = with_offsets.text_ink_bbox
+        check("WITH_OFFSETS honours the server's own glyph origins",
+              wide is not None and wide[0] >= 39 and wide[2] >= 80,
+              str(wide))
+
+        # Text painted in the colour it is painted over: present on the wire,
+        # absent from the picture.  That is what #84's blank body looked like,
+        # and a count of *written* ink pixels calls it healthy -- so the visible
+        # count is what the assertion uses.
+        onto_white = run_stream(
+            bytes(frame(RP_CREATE_STATE, struct.pack("<I", gtoken))
+                  + frame(RP_FILL_RECT_COLOR,
+                          struct.pack("<Iffff", gtoken, 0.0, 0.0, 199.0, 119.0)
+                          + bytes((255, 255, 255, 255)))
+                  + frame(RP_SET_HIGH_COLOR, struct.pack("<I", gtoken)
+                          + bytes((255, 255, 255, 255)))
+                  + frame(RP_SET_FONT, font_payload(gtoken, 16.0))
+                  + frame(RP_DRAW_STRING,
+                          struct.pack("<I", gtoken)
+                          + struct.pack("<ff", 30.0, 90.0)
+                          + struct.pack("<I", 2) + b"Hi" + b"\x00")),
+            glyphs=ras)
+        check("invisible text is written ink with nothing changed",
+              (onto_white.text_ink_pixels > 0
+               and onto_white.text_ink_visible == 0
+               and onto_white.text_invisible_runs == 1),
+              "written=%d visible=%d runs=%d"
+              % (onto_white.text_ink_pixels, onto_white.text_ink_visible,
+                 onto_white.text_invisible_runs))
+
+        # ---- the assertions, mutation tested ------------------------
+        # Every check above this line lives in the same file as the code it
+        # checks. These do not: they run the caller-facing assertions with
+        # deliberately wrong expectations and require them to FAIL. An
+        # assertion that cannot go red is the defect being fixed, not a test of
+        # it (#423 shipped exactly that shape).
+        class FakeArgs(object):
+            def __init__(self, **kw):
+                self.min_text_runs = 0
+                self.min_glyph_ink = 0
+                self.expect_text = []
+                self.text_tolerance = 2.0
+                self.__dict__.update(kw)
+
+        check("--min-text-runs passes on a capture that drew text",
+              text_expectation_failures(lit, FakeArgs(min_text_runs=1)) == [])
+        check("--min-text-runs FAILS when text is missing (the #84 shape)",
+              text_expectation_failures(blind, FakeArgs(min_text_runs=1)) != [])
+        check("--min-glyph-ink FAILS on a text-blind capture",
+              text_expectation_failures(blind, FakeArgs(min_glyph_ink=1)) != [])
+        check("--min-glyph-ink passes on real ink",
+              text_expectation_failures(lit, FakeArgs(min_glyph_ink=1)) == [])
+        check("--min-glyph-ink FAILS on invisible text (written but unchanged)",
+              text_expectation_failures(onto_white,
+                                        FakeArgs(min_glyph_ink=1)) != [])
+        check("--expect-text FAILS on invisible text",
+              text_expectation_failures(
+                  onto_white, FakeArgs(expect_text=["Hi@30,90"])) != [])
+        check("--expect-text matches the run that was drawn",
+              text_expectation_failures(
+                  lit, FakeArgs(expect_text=["Hi@30,90"])) == [])
+        check("--expect-text FAILS on a mispositioned run",
+              text_expectation_failures(
+                  lit, FakeArgs(expect_text=["Hi@50,90"])) != [])
+        check("--expect-text FAILS on a dropped run",
+              text_expectation_failures(
+                  lit, FakeArgs(expect_text=["Tracker"])) != [])
+        check("--expect-text FAILS when the run drew no glyphs",
+              text_expectation_failures(
+                  blind, FakeArgs(expect_text=["Hi@30,90"])) != [])
+        check("--expect-text tolerance is honoured, not ignored",
+              text_expectation_failures(
+                  lit, FakeArgs(expect_text=["Hi@31,90"])) == []
+              and text_expectation_failures(
+                  lit, FakeArgs(expect_text=["Hi@31,90"],
+                                text_tolerance=0.1)) != [])
+        check("an '@' inside the text is not mistaken for a position",
+              parse_text_expectation("a@b") == ("a@b", None, None),
+              str(parse_text_expectation("a@b")))
+        check("a position is parsed off the right of the text",
+              parse_text_expectation("a@b@1,2") == ("a@b", 1.0, 2.0),
+              str(parse_text_expectation("a@b@1,2")))
+
+        # The layout guard, fed deliberately wrong facts.  Without this the
+        # guard is untested code: deleting its 'H' assertions left the whole
+        # self-test green.
+        good_h = ras.glyph(ras.fonts.select(False, False, False)[0], 16 * 64,
+                           ord("H"), False, False)
+        check("the layout guard accepts a real face",
+              font_selfcheck_problems(1000, 3000, b"Noto Sans", True,
+                                      good_h) == [],
+              str(font_selfcheck_problems(1000, 3000, b"Noto Sans", True,
+                                          good_h)))
+        bad_facts = [
+            ("units_per_EM of 0", (0, 3000, b"Noto Sans", True, good_h)),
+            ("units_per_EM of 2**31", (1 << 31, 3000, b"S", True, good_h)),
+            ("no glyphs", (1000, 0, b"Noto Sans", True, good_h)),
+            ("a family name of binary noise",
+             (1000, 3000, b"\x01\xff", True, good_h)),
+            ("an empty family name", (1000, 3000, b"", True, good_h)),
+            ("a null glyph pointer", (1000, 3000, b"Noto Sans", False,
+                                      good_h)),
+            ("no 'H' at all", (1000, 3000, b"Noto Sans", True, None)),
+            ("an 'H' with no coverage",
+             (1000, 3000, b"Noto Sans", True,
+              Glyph(0, 12, 10, 12, 10, b"\x00" * 120, 10.0, 10.0, False))),
+            ("an 'H' rendered below the baseline",
+             (1000, 3000, b"Noto Sans", True,
+              Glyph(0, -4, 10, 12, 10, b"\xff" * 120, 10.0, 10.0, False))),
+            ("an 'H' with an absurd advance",
+             (1000, 3000, b"Noto Sans", True,
+              Glyph(0, 12, 10, 12, 10, b"\xff" * 120, 4096.0, 10.0, False))),
+            ("an 'H' with no outline in the font",
+             (1000, 3000, b"Noto Sans", True,
+              Glyph(0, 12, 10, 12, 10, b"\xff" * 120, 10.0, 10.0, True))),
+        ]
+        for label, facts in bad_facts:
+            check("the layout guard rejects %s" % label,
+                  font_selfcheck_problems(*facts) != [])
+        broken = FontSet()
+        broken.files[(False, False, False)] = os.path.abspath(__file__)
+        refused = False
+        try:
+            GlyphRasteriser(broken)
+        except OSError:
+            refused = True
+        check("a file that is not a font is refused, not half-used", refused)
+        # ...and the guard is actually wired to the refusal: a predicate nobody
+        # acts on is the same bug one level up.
+        saved_guard = globals()["font_selfcheck_problems"]
+        globals()["font_selfcheck_problems"] = lambda *a, **k: ["forced"]
+        try:
+            wired = False
+            try:
+                GlyphRasteriser(FontSet().scan())
+            except OSError as exc:
+                wired = "forced" in str(exc)
+        finally:
+            globals()["font_selfcheck_problems"] = saved_guard
+        check("a layout-guard problem refuses the rasteriser", wired)
+
+        # A transform we will not fake must fall back rather than draw a lie.
+        rotated = run_stream(
+            bytes(frame(RP_CREATE_STATE, struct.pack("<I", gtoken))
+                  + frame(RP_SET_FONT,
+                          font_payload(gtoken, 16.0, rotation=45.0))
+                  + frame(RP_DRAW_STRING,
+                          struct.pack("<I", gtoken)
+                          + struct.pack("<ff", 30.0, 90.0)
+                          + struct.pack("<I", 2) + b"Hi" + b"\x00")),
+            glyphs=ras)
+        check("a rotated run is refused, not drawn wrongly",
+              (rotated.text_runs_rasterised == 0
+               and rotated.estimated_text_ops == 1
+               and "rotation=45.0" in rotated.text_unsupported),
+              str(rotated.text_unsupported))
+        check("a refused run forfeits glyph truth",
+              rotated.glyph_truth()[0] is False, rotated.glyph_truth()[1])
+
+    # UTF-8 decoding has to agree with the count the server sized its point
+    # list by, or WITH_OFFSETS desynchronises.  Pinned, not derived.
+    check("utf8_codepoints agrees with UTF8CountChars on multibyte text",
+          len(utf8_codepoints("aé€".encode("utf-8")))
+          == utf8_count_chars("aé€".encode("utf-8")) == 3,
+          str(utf8_codepoints("aé€".encode("utf-8"))))
+    check("utf8_codepoints decodes the expected codepoints",
+          utf8_codepoints("aé€".encode("utf-8")) == [0x61, 0xE9, 0x20AC],
+          str(utf8_codepoints("aé€".encode("utf-8"))))
+    check("a truncated multibyte sequence still yields one entry per "
+          "non-continuation byte",
+          len(utf8_codepoints(b"a\xc3")) == utf8_count_chars(b"a\xc3") == 2,
+          str(utf8_codepoints(b"a\xc3")))
+
     print("")
     # Coverage first, verdict second.  A green line that covered four checks
     # fewer than the last run is the failure mode this reports out of.
@@ -2841,10 +4421,59 @@ def main(argv=None):
                         "the legacy uncompressed stream -- which is what makes "
                         "the two invocations a clean A/B.")
     p.add_argument("--require-glyph-truth", action="store_true",
-                   help="exit non-zero if any text run was painted as an "
-                        "ESTIMATED box rather than rasterised. For automated "
-                        "comparisons that must not silently treat a "
+                   help="DEFAULT since #475 and kept only for existing "
+                        "callers: exit 5 unless every text run was rasterised "
+                        "from real outlines. Use --allow-text-estimate to opt "
+                        "out.")
+    p.add_argument("--allow-text-estimate", action="store_true",
+                   help="accept a capture whose text is estimated boxes (or "
+                        "that has no rasteriser at all). Off by default: an "
+                        "automated comparison must not silently treat a "
                         "text-blind capture as ground truth (#475).")
+    p.add_argument("--allow-missing-glyphs", action="store_true",
+                   help="accept codepoints the chosen font file has no outline "
+                        "for. They are holes here and are not holes in the "
+                        "server's render, so by default they forfeit ground "
+                        "truth.")
+    p.add_argument("--no-glyphs", dest="glyphs", action="store_false",
+                   help="do not rasterise text; paint the old flat ESTIMATED "
+                        "box instead. Exists to reproduce the pre-#475 "
+                        "text-blind behaviour as the control arm of an A/B, "
+                        "and it implies --allow-text-estimate is needed.")
+    p.add_argument("--font", metavar="TTF",
+                   help="use this file for the plain face instead of the "
+                        "discovered one (app_server's default family is "
+                        "\"Noto Sans\"; the wire cannot tell us the family)")
+    p.add_argument("--font-bold", metavar="TTF",
+                   help="file for the bold face (else synthesised)")
+    p.add_argument("--font-fixed", metavar="TTF",
+                   help="file for B_FIXED_SPACING runs")
+    p.add_argument("--min-text-runs", type=int, default=0, metavar="N",
+                   help="exit 6 unless at least N text runs were rasterised. "
+                        "This is the assertion that catches text going missing "
+                        "entirely -- the #84 shape, which no pixel count can "
+                        "see. The threshold comes from you, not from the "
+                        "decoder, so it can actually fail.")
+    p.add_argument("--min-glyph-ink", type=int, default=0, metavar="N",
+                   help="exit 6 unless at least N glyph ink pixels were "
+                        "painted (text present but blank fails this)")
+    p.add_argument("--expect-text", action="append", default=[],
+                   metavar="TEXT[@X,Y]",
+                   help="exit 6 unless a run with exactly this text was "
+                        "rasterised, optionally within --text-tolerance of "
+                        "origin X,Y. Repeatable. The positional form is the "
+                        "one that catches mispositioned text.")
+    p.add_argument("--text-tolerance", type=float, default=2.0, metavar="PX",
+                   help="origin tolerance for --expect-text (default 2.0)")
+    p.add_argument("--answer-string-width", action="store_true",
+                   help="advertise RP_CAP_STRING_WIDTH_REPLY and answer "
+                        "RP_STRING_WIDTH from our own metrics. OFF by default "
+                        "and deliberately: since the D1/D10 fix the server only "
+                        "asks a client that advertised the bit and otherwise "
+                        "uses its own authoritative metrics with no stall, so "
+                        "answering would replace the server's layout metrics "
+                        "with ours -- an instrument perturbing what it "
+                        "measures. Use it only to exercise the query path.")
     p.add_argument("--selftest", action="store_true",
                    help="run the parser/PNG self-test and exit")
     p.add_argument("--allow-skip", action="store_true",
@@ -2870,6 +4499,14 @@ def main(argv=None):
                         "<port>, readable only by the user app_server runs as; "
                         "read it there (e.g. over SSM) and point this at a "
                         "local copy")
+    p.add_argument("--no-cookie", action="store_true",
+                   help="connect to a server that predates the session-cookie "
+                        "gate. Its candidate gate accepts only "
+                        "RP_INIT_CONNECTION or RP_HELLO as the first frame "
+                        "(validate_first_frame before commit 26123a5521), so a "
+                        "cookie frame is not merely unnecessary there -- it is "
+                        "DROPPED, and the connection with it. Needed for any "
+                        "image baked before that commit.")
     p.add_argument("--pin",
                    help="pin the broker certificate to this SHA-256 hex "
                         "fingerprint (see broker.fingerprint on the server)")
@@ -2887,9 +4524,26 @@ def main(argv=None):
     if args.width <= 0 or args.height <= 0:
         p.error("--width/--height must be positive")
 
+    glyphs = None
+    if args.glyphs:
+        try:
+            fonts = FontSet().scan().override(regular=args.font,
+                                              bold=args.font_bold,
+                                              fixed=args.font_fixed)
+            glyphs = GlyphRasteriser(fonts)
+            print("GLYPH_RASTERISER_OK=%s" % glyphs.selfcheck)
+        except (OSError, RuntimeError) as exc:
+            # Loud, and it forfeits ground truth: the one outcome that must
+            # never happen is silently blank text (#475).
+            sys.stderr.write("rdcapture: no glyph rasteriser (%s); text will "
+                             "be painted as ESTIMATED boxes and this capture "
+                             "is NOT text ground truth\n" % exc)
+            print("GLYPH_RASTERISER_ERROR=%s" % exc)
+
     cap = Capture(args.width, args.height, clip=args.clip,
                   apply_offsets=args.apply_offsets, verbose=args.verbose,
-                  reply=args.reply)
+                  reply=args.reply, glyphs=glyphs,
+                  answer_string_width=args.answer_string_width)
 
     started = time.monotonic()
     deadline = started + max(0.1, args.seconds)
@@ -2924,15 +4578,24 @@ def main(argv=None):
                          "broker presents the session cookie\n")
         return 2
 
-    if not args.wss and not cookie:
+    if args.no_cookie and (cookie or args.wss):
+        sys.stderr.write("rdcapture: --no-cookie is for a direct connection to "
+                         "a server that predates the cookie gate; it cannot be "
+                         "combined with a cookie or with --wss\n")
+        return 2
+
+    if not args.wss and not cookie and not args.no_cookie:
         sys.stderr.write("rdcapture: a direct connection to the session port "
                          "requires app_server's per-boot session cookie: pass "
                          "--cookie-file (the server's "
                          "<system settings>/remote_desktop/session_cookie.%d), "
-                         "or --wss to go through the broker\n" % args.port)
+                         "or --wss to go through the broker, or --no-cookie "
+                         "for an image that predates the gate\n" % args.port)
         return 2
 
     capabilities = CAP_COMPRESS_ZSTD if args.zstd else 0
+    if args.answer_string_width:
+        capabilities |= CAP_STRING_WIDTH_REPLY
 
     try:
         if args.wss:
@@ -2970,7 +4633,7 @@ def main(argv=None):
 
     connected = True
     hello = b""
-    if args.zstd:
+    if capabilities:
         # uint32 version, capabilities, max decode width/height (no Tier P),
         # then our screen size -- the same layout RemoteView.cpp sends.
         hello = frame(RP_HELLO, struct.pack("<IIIIII", URP_PROTOCOL_VERSION,
@@ -3013,16 +4676,22 @@ def main(argv=None):
     report(cap, args, connected, time.monotonic() - started, stop_reason,
            wire=wire)
 
-    # --require-glyph-truth exists so an automated comparison can REFUSE a
-    # text-blind capture instead of quietly treating it as ground truth. The
-    # summary and the PNG line both say so, but a caller that only checks the
-    # exit status sees nothing -- and that is the caller most likely to draw a
-    # wrong conclusion from it (#475).
-    if args.require_glyph_truth and cap.estimated_text_ops:
-        sys.stderr.write("rdcapture: --require-glyph-truth: %d text run(s) were "
-                         "painted as ESTIMATED boxes, so this capture is not "
-                         "glyph ground truth\n" % cap.estimated_text_ops)
+    # Text ground truth is now the DEFAULT posture, not an opt-in: a caller that
+    # only checks the exit status is the one most likely to draw a wrong
+    # conclusion from a text-blind capture, so it has to opt *out* (#475).
+    truth_ok, truth_why = cap.glyph_truth(
+        allow_missing_glyphs=args.allow_missing_glyphs)
+    if not truth_ok and not args.allow_text_estimate:
+        sys.stderr.write("rdcapture: not text ground truth: %s. Pass "
+                         "--allow-text-estimate to accept a text-blind "
+                         "capture\n" % truth_why)
         return 5
+
+    failures = text_expectation_failures(cap, args)
+    if failures:
+        for line in failures:
+            sys.stderr.write("rdcapture: %s\n" % line)
+        return 6
     return 0
 
 
