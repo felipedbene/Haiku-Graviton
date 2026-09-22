@@ -1,3 +1,141 @@
+# The arm64 ISA/tuning baseline is a deliberate per-target choice, not a
+# constant. It selects the instruction set the boot loader, the kernel and every
+# userland binary in the image are *allowed to require*, so it is the one flag
+# that decides which cores can run the image at all. Pick a profile by name:
+#
+#	jam -q -sHAIKU_ARM64_CPU_BASELINE=rpi3 @minimum-mmc
+#	HAIKU_ARM64_CPU_BASELINE=armv8 jam -q kernel_arm64
+#
+# The default, `graviton`, is unchanged from the single hard-coded flag this
+# replaced, so a default build's codegen is byte-identical to before.
+#
+# This variable is read while the architecture flags are computed, which happens
+# in BuildSetup -- *before* UserBuildConfig is included. Setting it in a
+# UserBuildConfig would therefore be silently too late, so don't: pass it with
+# -s or in the environment. CheckArm64CpuBaseline (below, called after
+# UserBuildConfig has been read) turns that mistake into an error rather than a
+# wrong image.
+HAIKU_ARM64_CPU_BASELINE ?= graviton ;
+
+rule Arm64CpuBaselineFlags
+{
+	# Arm64CpuBaselineFlags ;
+	#
+	# Returns the -march/-mcpu (and atomics) flags for the arm64 CPU baseline
+	# named by HAIKU_ARM64_CPU_BASELINE. Unknown names are an error: a
+	# misspelled baseline must not fall back to something that merely happens
+	# to build.
+	#
+	# Two things every entry below has to get right:
+	#
+	# 1. Anything at ARMv8.1 or later has FEAT_LSE, and GCC then compiles each
+	#    __atomic builtin to a single cas/ldadd/swp. Anything at ARMv8.0 must
+	#    NOT emit those -- they are undefined instructions there (ESR EC 0x00),
+	#    which is exactly the fault #425 was filed for.
+	# 2. At ARMv8.0, GCC's default -moutline-atomics is a trap on this OS, not
+	#    a win: the atomic becomes a call to a libgcc helper that branches on
+	#    __aarch64_have_lse_atomics, and libgcc's only initialiser for that flag
+	#    is inside `#ifdef __gnu_linux__`. Nothing here sets it, so the helper
+	#    always falls through to its LL/SC path and the code pays an indirect
+	#    call for a dispatch that can never come out the other way (measured in
+	#    commit 315ebbc6e0). So every sub-ARMv8.1 profile spells
+	#    -mno-outline-atomics and gets inline LL/SC instead. If the flag is ever
+	#    initialised at startup, revisit this -- not before.
+	#
+	# +crypto (AES/SHA/PMULL) is never implied by a core definition, so it is
+	# spelled out on the cores that have it and omitted on the ones that do not
+	# (BCM2837/BCM2711, i.e. Raspberry Pi 3 and 4, do not implement it).
+	local flags ;
+	switch $(HAIKU_ARM64_CPU_BASELINE) {
+		# --- AWS Graviton (the flagship; `graviton` is the default) ---------
+		# Neoverse-N1 is Graviton2 and t4g, and the oldest core the arm64 port
+		# targets. Graviton3 (Neoverse-V1) and Graviton4 (Neoverse-V2) are
+		# feature supersets, so one image stays portable across the whole
+		# fleet. Over plain armv8-a this buys LSE atomics (ARMv8.1), RCpc loads
+		# (ARMv8.2), dot product, and Neoverse scheduling. CRC32 is mandatory
+		# from ARMv8.1 on, so +crc need not be spelled out.
+		case graviton	: flags = -mcpu=neoverse-n1+crypto ;
+		case graviton2	: flags = -mcpu=neoverse-n1+crypto ;
+
+		# Graviton3/4-only images. These emit ARMv8.4-A, SVE/SVE2, BF16 and
+		# I8MM, none of which Neoverse-N1 implements, so an image built this way
+		# does NOT boot on Graviton2 or t4g. This is why the *default* stays N1;
+		# do not raise it. Individual ML/codec ports that want the newer ISA opt
+		# in per recipe instead, as non-portable _g3/_g4 package variants -- see
+		# graviton/docs/porting-playbook.md ("Graviton3/4 ISA opt-in", #330).
+		# (The kernel runs NEON-only at EL1 and never executes SVE; SVE is
+		# enabled for userland/EL0 with per-thread save/restore --
+		# arch_sve_init_percpu(), commit 50f6a9be53, #88.)
+		case graviton3	: flags = -mcpu=neoverse-v1+crypto ;
+		case graviton4	: flags = -mcpu=neoverse-v2+crypto ;
+
+		# --- Raspberry Pi (roadmap targets, not yet booted on real hardware) -
+		# Pi 5 / BCM2712 is Cortex-A76: ARMv8.2-A, so LSE and LRCPC are fine
+		# here; only the Neoverse tuning assumptions go away.
+		case rpi5		: flags = -mcpu=cortex-a76+crypto ;
+		case cortex-a76	: flags = -mcpu=cortex-a76+crypto ;
+
+		# Pi 4 / BCM2711 is Cortex-A72 and Pi 3 / BCM2837 is Cortex-A53: both
+		# ARMv8.0-A, no LSE, no LRCPC, no crypto extensions.
+		case rpi4		: flags = -mcpu=cortex-a72 -mno-outline-atomics ;
+		case cortex-a72	: flags = -mcpu=cortex-a72 -mno-outline-atomics ;
+		case rpi3		: flags = -mcpu=cortex-a53 -mno-outline-atomics ;
+		case cortex-a53	: flags = -mcpu=cortex-a53 -mno-outline-atomics ;
+
+		# --- Tuning-neutral ARMv8.0-A floor --------------------------------
+		# Runs on every ARMv8 core, including a plain `qemu-system-aarch64 -M
+		# virt` (whose default CPU is ARMv8.0). Use this to check portability;
+		# use a core-specific profile above to also get that core's scheduling.
+		case armv8		: flags = -march=armv8-a -mno-outline-atomics ;
+		case armv8-a	: flags = -march=armv8-a -mno-outline-atomics ;
+		case generic	: flags = -march=armv8-a -mno-outline-atomics ;
+
+		# --- Escape hatch --------------------------------------------------
+		# Anything that starts with -m is passed to the compiler verbatim, so a
+		# new board can be tried without editing this table first. If it turns
+		# out to be a target we build for, give it a name above.
+		case -m*		: flags = $(HAIKU_ARM64_CPU_BASELINE) ;
+
+		case *			: Exit "Unknown HAIKU_ARM64_CPU_BASELINE"
+			"\"$(HAIKU_ARM64_CPU_BASELINE)\". Known baselines: graviton"
+			"(default), graviton2, graviton3, graviton4, rpi5, cortex-a76,"
+			"rpi4, cortex-a72, rpi3, cortex-a53, armv8, armv8-a, generic; or"
+			"an explicit -m... flag. See build/jam/ArchitectureRules." ;
+	}
+
+	# Remember what was actually consumed, so a later change can be caught.
+	HAIKU_ARM64_CPU_BASELINE_APPLIED = $(HAIKU_ARM64_CPU_BASELINE) ;
+
+	if $(HAIKU_ARM64_CPU_BASELINE) != graviton {
+		# Separate arguments, not one interpolated string: either variable can
+		# be a list, and jam expands a string containing two lists into their
+		# cross product.
+		ECHO "arm64 CPU baseline:" $(HAIKU_ARM64_CPU_BASELINE) "->"
+			$(flags) ;
+	}
+
+	return $(flags) ;
+}
+
+rule CheckArm64CpuBaseline
+{
+	# CheckArm64CpuBaseline ;
+	#
+	# Called after UserBuildConfig has been included. The baseline is consumed
+	# much earlier than that, so a UserBuildConfig that sets it would otherwise
+	# be ignored without a word and produce an image for the wrong cores.
+	if $(HAIKU_ARM64_CPU_BASELINE_APPLIED)
+			&& $(HAIKU_ARM64_CPU_BASELINE)
+				!= $(HAIKU_ARM64_CPU_BASELINE_APPLIED) {
+		Exit "HAIKU_ARM64_CPU_BASELINE was set to"
+			"\"$(HAIKU_ARM64_CPU_BASELINE)\" too late: the architecture flags"
+			"were already computed with"
+			"\"$(HAIKU_ARM64_CPU_BASELINE_APPLIED)\". It cannot be set from a"
+			"UserBuildConfig -- pass it as -sHAIKU_ARM64_CPU_BASELINE=... on"
+			"the jam command line, or set it in the environment." ;
+	}
+}
+
 rule ArchitectureSetup architecture
 {
 	# ArchitectureSetup <architecture> ;
@@ -38,32 +176,11 @@ rule ArchitectureSetup architecture
 	switch $(cpu) {
 		case ppc : archFlags += -mcpu=440fp ;
 		case arm : archFlags += -march=armv7-a -mfloat-abi=hard ;
-		# Neoverse-N1 is the AWS Graviton2 core and the oldest core the arm64
-		# port targets; Graviton3 (Neoverse-V1) and Graviton4 (Neoverse-V2) are
-		# feature supersets of it, so a single image stays portable across the
-		# fleet. Over plain armv8-a this buys LSE atomics (ARMv8.1) -- every
-		# __atomic builtin in the kernel and libroot becomes a single
-		# cas/ldadd/swp instead of an out-of-line __aarch64_* helper call --
-		# plus RCpc loads, dot product, and Neoverse instruction scheduling.
-		# CRC32 is mandatory from ARMv8.1 on, so +crc need not be spelled out;
-		# +crypto (AES/SHA/PMULL) is not implied by the core definition but is
-		# present on every Graviton, and is what lets accelerated checksum and
-		# crypto code be built without touching this line again.
-		case arm64 : archFlags += -mcpu=neoverse-n1+crypto ;
-			# N1 is deliberate and stays the fleet-portable baseline: the
-			# OS and base packages are built once and must boot on every
-			# Graviton, including Graviton2 and t4g (both Neoverse-N1). Do
-			# NOT raise this to neoverse-v1 (Graviton3) or neoverse-v2
-			# (Graviton4): those cores are ARMv8.4-A and add SVE/SVE2 plus
-			# NEON BF16 and I8MM, none of which Neoverse-N1 implements, so a
-			# raised baseline would emit instructions that fault on Graviton2
-			# and t4g. (The kernel itself runs NEON-only at EL1 and never
-			# executes SVE; SVE is enabled for userland/EL0 with per-thread
-			# save/restore -- arch_sve_init_percpu(), commit 50f6a9be53, #88.)
-			# Individual ML/codec ports that want the Graviton3/4 ISA opt in
-			# per-recipe as non-portable _g3/_g4 variants, per the convention
-			# in graviton/docs/porting-playbook.md ("Graviton3/4 ISA opt-in"),
-			# never by editing this line.
+		# The arm64 baseline is selected by name from HAIKU_ARM64_CPU_BASELINE
+		# (default `graviton`), not hard-coded here: an image has to be able to
+		# target an ARMv8.0 core without the flagship giving up its ARMv8.1/8.2
+		# codegen. See Arm64CpuBaselineFlags at the top of this file (#425).
+		case arm64 : archFlags += [ Arm64CpuBaselineFlags ] ;
 		case x86 : archFlags += -march=pentium ;
 		case riscv64 : archFlags += -march=rv64gc ;
 	}
