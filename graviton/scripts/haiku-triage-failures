@@ -57,6 +57,18 @@ new signature -- and they must not be counted against classifier coverage. Measu
 the 639-log backlog cache: 129 UNMATCHED, of which 105 have no diagnostic and only 24
 are a genuine ruleset gap (each a distinct per-port error).
 
+AND THEN THE DETECTOR ITSELF WAS THE BUG (#505). The #492 re-wave gave all 105 the deep
+capture and 32 STILL read NO_DIAGNOSTIC -- with the capture demonstrably present (mean
+window 27.6 -> 260.4 lines, every log carrying the `---- full build log` marker). So the
+mislabelling was in `has_captured_diagnostic()`, not in the capture: `_REASON_LINE`
+demanded a colon immediately after `error`, and `_CONTENTLESS_LINE`'s make arm -- measured
+inert against the OLD corpus -- ate the entire diagnostic on the NEW one. Both are fixed
+below and both are mutation-tested. Measured over the same corpus, NO_DIAGNOSTIC fell 32
+-> 5, and 20 of the 32 turned out to have carried a reason line even in the old `tail -20`
+window: a good part of what was blamed on the capture was never a capture problem.
+The 5 that remain are NOT truncation: 3 are genuinely silent builds (the build tool
+swallowed its own child's output) and 1 is a false failure whose hpkg exists.
+
 SAFETY / SOP ALIGNMENT (graviton/ops/SOPs.md):
   * DRY-RUN BY DEFAULT. With no --execute it reads DDB + S3 (describe/get only),
     classifies, prints the census, and writes NOTHING back. The DDB writes are the
@@ -184,6 +196,25 @@ RULES = [
      "OPERATOR, not the port: the wave list names a port with no recipe in the overlay "
      "or upstream tree. Write the recipe, or drop the name from the wave list."),
 
+    # 38 -- haikuporter's OWN extract/copy step fails with a negative Haiku status (#505).
+    # `-2147483643` is B_BAD_VALUE. Measured: all three ports are sys-firmware/* extracting
+    # a freebsd-src tree and all three die on the same `sys/contrib/dev/` directory, inside
+    # haikuporter rather than in any compiler. So it belongs in this first block with the
+    # other tooling refusals and routes to the operator, like class 30 -- not to a porter.
+    # The regex keys on the errno FRAME, not on the path, because the errno is what says
+    # "our tooling, not the build": a positive `[Errno N]` from a python traceback is a
+    # different animal (openboardview's DNS failure) and is left to the per-port frontier.
+    # AND IT IS NOT DETERMINISTIC PER PORT -- measured, `tk` failed with this exact error on
+    # a `subdir-to-be-folded-by-haikuporter` copy and then BUILT on the #492 re-wave with
+    # no recipe change, while the three sys-firmware ports did not. So the first action is
+    # a re-wave, and only then a root cause; a per-port fix would have been wasted on tk.
+    (38, "class-38-haikuporter-invalid-argument-on-a-source-path", False,
+     _rx(r"\[Errno -2147483643\] Invalid Argument"),
+     "OPERATOR, not the port: haikuporter's own extract/copy step failed with B_BAD_VALUE "
+     "(-2147483643) on a source path. RE-WAVE IT FIRST -- tk carried this exact error and "
+     "then built unchanged. If it recurs, root-cause it in the chroot (path length? a name "
+     "BFS rejects? a symlink?) rather than editing the recipe."),
+
     # 14 -- poisoned build-tool package. Unmistakable magic constant.
     (14, "class-14-poisoned-build-tool-package", True,
      _rx(r"Unhandled pheader type in parse 0x6474e553"),
@@ -270,6 +301,30 @@ RULES = [
      "patch only reaches recipes that interpolate $cmakeDirArgs; recipes with an "
      "explicit cmake arg list (most #280 ports) still need the per-recipe -D."),
 
+    # 40 -- CMake 4.x also removed the OLD behaviour of the old policies themselves (#505).
+    # Class 1's sibling and ordered IMMEDIATELY AFTER IT, because class 1's
+    # -DCMAKE_POLICY_VERSION_MINIMUM=3.5 is the cheap flag to try first and does NOT fix
+    # this one: a source that explicitly asks for `cmake_policy(SET CMP0018 OLD)` has to
+    # stop asking. Measured: 3 ports (doxygen2docset fish libmysqlclient), none of which
+    # matches class 1, so the order costs this class nothing today and the tie is pinned
+    # with a synthetic fixture in the selftest.
+    #
+    # WHY THIS AND NOT A CLASS ON `CMake Error at` (#505 proposed one, 9 ports). Because
+    # `CMake Error at` is cmake's generic error FRAME, not a cause. Measured, those 9 logs
+    # carry at least four unrelated causes behind that one frame: this policy removal (3),
+    # a broken FindBISON probe (csound freerct), GET_TARGET_PROPERTY on a target that does
+    # not exist (efte libyajl), and -- partio -- `Could NOT find GLUT (missing: ...)`,
+    # which is class 20's material. A class keyed on the frame would file all nine under
+    # one fix note that fits none of them AND would steal partio from a more specific
+    # class. The frame is still worth recognising as EVIDENCE, which is why it is in
+    # _REASON_LINE below; it is just not a class.
+    (40, "class-40-cmake-4x-removed-a-policys-old-behaviour", False,
+     _rx(r"Policy CMP\d+ may not be set to OLD behavior"),
+     "Patch out the source's `cmake_policy(SET CMPnnnn OLD)` / CMAKE_POLICY(SET ... OLD) "
+     "call and make the source work under the NEW behaviour -- CMake 4.x removed the OLD "
+     "behaviour itself, so class 1's -DCMAKE_POLICY_VERSION_MINIMUM=3.5 does NOT help. "
+     "Per-port source work; not a flag."),
+
     # 8 -- missing / bad CMAKE_BUILD_TYPE.
     (8, "class-8-missing-cmake_build_type", True,
      _rx(r"invoking cmake without CMAKE_BUILD_TYPE specified",
@@ -325,6 +380,29 @@ RULES = [
      "gate for an x86 -march/-mtune/-mcpu value (-march=nocona) and for the x86 "
      "intrinsic HEADERS (<mmintrin.h>/<*mmintrin.h>/<x86intrin.h>/<cpuid.h>): drop "
      "the -DUSE_MMX-style define on arm64 rather than the feature."),
+
+    # 37 -- the SOURCE'S OWN preprocessor refuses the target: it cannot name the CPU, the
+    # word size or the endianness, and says so with `#error` (#505). The preprocess-time
+    # sibling of class 19 (which is the same refusal from a configure script or Makefile),
+    # and ordered here -- right after class 5, inside the compile-error block -- so that
+    # "the flags/headers assume x86" (class 5) is still tried first when both appear.
+    #
+    # NOT a bare `error: #error`: the message has to be ABOUT the target. Measured, that
+    # distinction is load-bearing in an unexpected direction -- it moves `chmlib` OUT of
+    # class 12, which is a CORRECTION, not a steal. chmlib's window carries
+    # `Warning: Unable to fetch source from http://www.jedrea.com/...`, which class 12
+    # matches; but the very next lines show the fetch SUCCEEDING from the DeBeOS source
+    # cache (`Validating checksum of chmlib-0.40.tar.gz`) and the build then failing at
+    # `chm_lib.c:179: error: #error "Please define the sized types for your platform"`.
+    # Class 12 was filing it by a warning it recovered from. The selftest pins that with a
+    # fixture, because it is the kind of correction a later edit could silently undo.
+    (37, "class-37-the-sources-own-arch--word-size--endianness-error", False,
+     _rx(r"error: #error [^\n]*(?:CPU|[Aa]rchitecture|platform|BYTE_ORDER|ENDIAN|"
+         r"memory model|SIZEOF|sizeof)"),
+     "Teach the source's own preprocessor switch about aarch64: define the word size / "
+     "endianness / CPU macro it is looking for (accanna.h's SIZEOF_VOID_P, nspr's "
+     "prcpucfg.h, redis' BYTE_ORDER, unrar's os.hpp, chmlib's sized types). Per-port "
+     "source work; the compile-time sibling of class 19."),
 
     # 21 -- python build-time module missing from the chroot. The playbook titled
     # this setuptools/pkg_resources, but the real backlog is broader and the same
@@ -404,6 +482,24 @@ RULES = [
      "definitions in the header to `extern` plus one real definition in a .c file. "
      "Arch-independent: this is a compiler-default change, not an arm64 port bug."),
 
+    # 36 -- an x86 object file handed to the arm64 linker (#505). `EM: 3` is EM_386, so ld
+    # is refusing an input it can read the header of and nothing else. Class 5's LINK-TIME
+    # twin: class 5 is the arm64 compiler rejecting an x86 flag or header, this is the
+    # arm64 linker rejecting a whole x86 object -- a prebuilt .o shipped in the tarball, or
+    # an .S assembled by an x86 assembler. 3 ports (becasso fasm sdljoytest).
+    # ORDERED INSIDE THE ld CLUSTER, after 18 (missing input) and 16 (duplicate symbol) and
+    # deliberately BEFORE class 33 (the generic `undefined reference`): among link failures
+    # the one that names WHICH INPUT is unusable and WHY wins. Measured: none of the three
+    # logs also matches 18, 16 or 33, so the position is a guard for future logs rather
+    # than a live tie, and the selftest pins it with a synthetic fixture.
+    (36, "class-36-x86-object-linked-into-an-arm64-binary", False,
+     _rx(r"relocations in generic ELF \(EM: \d+\)",
+         r"error adding symbols: file in wrong format"),
+     "Drop the x86 assembly / MMX / prebuilt-object path on arm64 (gate it on "
+     "$effectiveTargetArchitecture and build the portable C fallback) -- ld is being "
+     "handed an EM_386 object. Class 5's link-time twin; never 'fix' it by removing the "
+     "-l or the feature."),
+
     # 7 -- LTO without a linker plugin.
     (7, "class-7-lto-without-a-linker-plugin", True,
      _rx(r"LTO support has not been enabled",
@@ -436,6 +532,34 @@ RULES = [
      "Cast at the initialiser (the correct fix), or -- as a class-wide unblock -- add "
      "-Wno-narrowing / -fpermissive to the recipe's CXXFLAGS. Arch-independent: a C++11 "
      "conformance tightening, not an arm64 port bug."),
+
+    # 35 -- the other C++ conformance tightening gcc reports with `[-fpermissive]`: an
+    # implicit conversion that pre-standard C++ allowed (#505). Class 27's sibling and
+    # ordered immediately after it, because `narrowing conversion ... [-Wnarrowing]` names
+    # its own flag and is the more specific of the two. 5 ports: bebuilder ftgl gri qemacs
+    # rssavers.
+    #
+    # THE REGEX IS NARROW FOR TWO MEASURED REASONS, and a bare `\[-fpermissive\]` -- the
+    # signature #505 proposed -- fails both:
+    #   * deeperpeople's log matches `[-fpermissive]` 14 times and every one of them is a
+    #     g++ COMMAND LINE that already passes -fpermissive. Filing it under "add
+    #     -fpermissive" would prescribe the flag that is already there.
+    #   * nogravity is class 22 today and its `[-fpermissive]` lines are a THIRD diagnostic
+    #     ("expression list treated as compound expression in initializer"), so the bare
+    #     form steals it.
+    # AND THE `loses precision` HALF IS DELIBERATELY EXCLUDED, which is the one that
+    # matters. #505 grouped it in here as "the same shape". It is not: muscle's 256 such
+    # errors are `cast from 'const muscle::Socket*' to 'uintptr' {aka 'unsigned int'} loses
+    # precision` -- a 32-bit uintptr typedef, i.e. a real LP64 porting bug. -fpermissive
+    # would COMPILE it and silently truncate every pointer. An auto_recoverable=True class
+    # whose template corrupts the package is worse than no class, so muscle stays on the
+    # per-port frontier (and at 1 port it earns no class anyway).
+    (35, "class-35-invalid-conversion--fpermissive", True,
+     _rx(r"error: invalid conversion from [^\n]*\[-fpermissive\]"),
+     "Fix the conversion at the call site (the correct fix), or -- as a class-wide unblock "
+     "-- add -fpermissive to the recipe's CXXFLAGS. Arch-independent. DO NOT extend this "
+     "to gcc's `loses precision [-fpermissive]`: that is a 64-bit pointer truncation and "
+     "-fpermissive would hide it (see muscle)."),
 
     # 32 -- Linux-only CPU-affinity / cpuset API (#488). glibc's sched_setaffinity
     # helpers (CPU_ALLOC, CPU_ISSET_S, CPU_*_S) have no Haiku equivalent, so the port
@@ -636,6 +760,37 @@ RULES = [
      "Add an explicit INSTALL() that installs the built artifact. NOTE: a true "
      "empty-package build exits 0 and is build_state=built, so it rarely appears "
      "in this (failed/needs_human) backlog."),
+
+    # 39 -- make has nothing to build: no makefile at all, or no rule for the phony target
+    # it was asked for (#505). 3 ports: libavlduptree, slunkcrypt (`No targets specified and
+    # no makefile found`) and opensound (`No rule to make target 'dep'` /
+    # `'all', needed by 'build'`).
+    #
+    # DELIBERATELY NARROW TO MAKE'S OWN ENTRY POINTS (all/dep/build/check/default), not to
+    # `No rule to make target` in general, and that narrowing is the whole design of this
+    # class. The generic form also claims ffcall (`No rule to make target
+    # 'avcall/avcall.lo'`) and pnet (`'cg_ainit.c'`) -- and those are a DIFFERENT failure:
+    # make found its makefile and its entry point, then could not build one intermediate
+    # FILE, which means the generator or the configure step that was supposed to produce
+    # that file failed earlier. Same wording, different cause, different place to look, so
+    # they stay on the per-port frontier rather than being swept in here. `'install'` is
+    # excluded too -- that is class 9's empty-package trap, immediately above.
+    #
+    # ORDERED LAST, after class 9, for the same reason: every class that names a compiler,
+    # linker, configure or resolve failure gets first refusal, because make saying "I have
+    # nothing to do" is usually the LAST thing printed after something else went wrong.
+    # opensound is exactly that -- its real root cause is four lines higher
+    # (`Panic: No platform` from the project's own configure), which is why the fix note
+    # below tells the reader to look up, not just at the recipe's working directory.
+    (39, "class-39-make-has-no-makefile-or-no-rule-for-its-entry-point", False,
+     _rx(r"No targets specified and no makefile found",
+         r"No rule to make target '(?:all|dep|build|check|default)'"),
+     "Read the lines ABOVE this one before touching the recipe. Either BUILD() runs make "
+     "in the wrong directory (no makefile there at all), or a configure step that looked "
+     "like it succeeded never generated one -- opensound's configure prints "
+     "`Panic: No platform` and then make has no 'dep'/'all' rule. Not the same as make "
+     "failing on one intermediate FILE (ffcall, pnet): that is a broken generator, not a "
+     "missing makefile."),
 ]
 
 
@@ -666,26 +821,105 @@ def classify(text):
 # line that was never captured, and counting them as "no class signature" both inflates
 # UNMATCHED and libels the ruleset. They need a re-wave with the current deep capture.
 #
-# A line STATES A REASON if it carries a compiler/configure/linker diagnostic ...
-_REASON_LINE = re.compile(r"\b(?:error|fatal error):|\bError:\s|No such file or directory|"
-                          r"undefined reference|Permission denied|No space left")
-# ... unless it only says that something FAILED, never why. Two of these arms carry the
-# whole split and are mutation-tested in the selftest:
+# WIDENED IN #505, AND WHY THE OLD SPELLING UNDER-READ. The #492 re-wave gave all 105
+# `no_diagnostic_captured` ports the deep capture, and 32 of them STILL read
+# NO_DIAGNOSTIC even though all 32 carried it (mean window 27.6 -> 260.4 lines). The
+# defect was here, not in the capture: `\b(?:error|fatal error):` demands the colon
+# IMMEDIATELY after the word, so every diagnostic that spells its reason another way was
+# invisible. Each arm below was added because a measured log's only reason line needed it;
+# the port that earned it is named, and each is mutation-tested in the selftest.
+#
+# WHY THE ARMS ARE A NAMED TABLE RATHER THAN ONE LITERAL ALTERNATION. Each arm below is
+# here because a specific measured log needed it, and the selftest mutation-tests each one
+# INDIVIDUALLY (disarm it; assert the port that earned it falls back to NO_DIAGNOSTIC;
+# restore; assert it re-matches). Splitting a single joined pattern on `|` cannot do that
+# safely -- `\b(?:error|fatal error):` contains a nested alternation and naive splitting
+# produces fragments that do not compile. Naming the arms makes the mutation exact and
+# makes a reworded arm fail LOUDLY (the test looks arms up by name) instead of vacuously.
+#
+# A line STATES A REASON if it matches any of these ...
+_REASON_ARMS = (
+    # the original arms: a compiler/configure diagnostic, and haikuporter's own `Error: `.
+    ("compiler-colon", r"\b(?:error|fatal error):"),
+    ("haikuporter-error", r"\bError:\s"),
+    # cmake's own error frame. NOTE there is no colon after `Error`, which is the whole
+    # reason the arm above cannot see it -- 8 of the 32 (csound doxygen2docset efte fish
+    # freerct libmysqlclient libyajl partio) state their reason only under this frame.
+    ("cmake-frame", r"CMake Error at "),
+    # ld refusing an input object outright: the wrong ELF machine, or a format it will not
+    # read. `error adding symbols` is `error` + SPACE, so the colon arm misses it.
+    # becasso, fasm, sdljoytest.
+    ("ld-wrong-format", r"relocations in generic ELF|error adding symbols"),
+    # a python/haikuporter exception carrying an errno -- positive (openboardview's
+    # `[Errno 7] No address associated with hostname`) or a negative Haiku status
+    # (`[Errno -2147483643] Invalid Argument`, B_BAD_VALUE, the three wifi firmwares).
+    ("errno-frame", r"\[Errno -?\d+\]"),
+    # make's own statements ABOUT THE BUILD GRAPH. These are reasons, and they are NOT
+    # make's exit-status recursion -- see the _CONTENTLESS_ARMS comment below, which is
+    # where this used to be thrown away. libavlduptree, slunkcrypt, opensound (and, on
+    # the deep capture, ffcall and pnet).
+    ("make-build-graph",
+     r"No targets specified and no makefile found|No rule to make target"),
+    # a shell/configure syntax abort (libeditline) and perl's missing-module abort (ne).
+    ("syntax-error", r"syntax error near"),
+    ("perl-inc", r"Can't locate \S+ in @INC"),
+    # archive tools that name what they could not open (helpviewer, yoshi).
+    ("archive-open", r"cannot find/open"),
+    # errno / strerror strings. `No such file` is DELIBERATELY not anchored on
+    # `or directory`: objcopy prints the short form (hwloc2). Widening a suffix-anchored
+    # token to its prefix can only gain matches, never lose one.
+    ("enoent", r"No such file"),
+    ("no-such-user", r"[Nn]o such user"),
+    ("undefined-reference", r"undefined reference"),
+    ("eacces", r"Permission denied"),
+    ("enospc", r"No space left"),
+    # Haiku's strerror for B_NOT_ALLOWED: timezone_data's zic cannot hardlink into
+    # packagefs (`./zic: Can't link A to B: Operation not allowed 8000000f`).
+    ("enotallowed", r"Operation not allowed"),
+)
+
+# ... unless the line only says that something FAILED, never why. Three of these arms carry
+# the whole split and are mutation-tested in the selftest:
 #   * `Error: Build has failed - stopping.` is the last line of haikuporter's epilogue, so
 #     it is in EVERY log -- without this arm nothing is ever no-diagnostic;
 #   * `collect2: error: ld returned 1 exit status` is the usual last line of a truncated
-#     link failure and says only that ld gave up.
-# The make/gmake arm is different: measured over the 639-log backlog cache it changes
-# nothing, because no _REASON_LINE token matches make's `*** [target] Error N` recursion
-# in the first place. It is kept, and labelled inert, because those lines are the
-# canonical contentless ending of a truncated window and the first _REASON_LINE token
-# that reaches them would otherwise silently un-split the census.
-_CONTENTLESS_LINE = re.compile(
-    r"^(?:make|gmake)(?:\[\d+\])?: \*\*\*|"          # inert today, see above
-    r"^collect2: error: ld returned|"                 # load-bearing
-    r"^Error: Build has failed|"                      # load-bearing (epilogue, every log)
-    r"^\S+: FAILED, no missing-dep|"
-    r"^Warning: Command ")
+#     link failure and says only that ld gave up;
+#   * make's exit-status recursion, for which see the next paragraph.
+#
+# THE MAKE ARM, AND THE LESSON IT TAUGHT (#505). Until #505 this arm was the whole of
+# `^(?:make|gmake)(?:\[\d+\])?: \*\*\*` and was documented as "inert today: measured over
+# the 639-log backlog cache it changes nothing". That measurement was true, and it was
+# taken against the `tail -20` corpus. Against the deep capture the arm is not inert -- it
+# ate the ENTIRE diagnostic for libavlduptree, slunkcrypt and opensound, whose only reason
+# line is one make prints itself:
+#     make: *** No targets specified and no makefile found.  Stop.
+#     make: *** No rule to make target 'all', needed by 'build'.  Stop.
+# AN EXCLUSION JUSTIFIED BY A MEASUREMENT ON ONE CORPUS BECAME A DEFECT ON ANOTHER.
+# Re-measure exclusions when the corpus changes: "inert" is a property of the corpus, not
+# of the regex, and the comment that recorded the measurement is exactly what made the
+# defect invisible -- it read as a property of the pattern. So the arm now suppresses only
+# make's exit-status RECURSION, which really does say nothing but "a sub-make gave up", and
+# lets make's statements about the build graph through to _REASON_ARMS.
+_CONTENTLESS_ARMS = (
+    ("make-recursion", r"^(?:make|gmake)(?:\[\d+\])?: \*\*\* (?:\[[^]]*\] )?Error \d+"),
+    ("make-jobserver",
+     r"^(?:make|gmake)(?:\[\d+\])?: \*\*\* Waiting for unfinished jobs"),
+    ("collect2", r"^collect2: error: ld returned"),          # load-bearing
+    ("epilogue", r"^Error: Build has failed"),               # load-bearing (every log)
+    ("driver-failed", r"^\S+: FAILED, no missing-dep"),
+    ("driver-warning", r"^Warning: Command "),
+)
+
+
+def _join(arms):
+    """Compile a named-arm table into one alternation. The selftest rebuilds the regex
+    from a filtered table to disarm exactly one arm, so this must stay the only place the
+    joining happens."""
+    return re.compile("|".join(p for _name, p in arms))
+
+
+_REASON_LINE = _join(_REASON_ARMS)
+_CONTENTLESS_LINE = _join(_CONTENTLESS_ARMS)
 
 
 def has_captured_diagnostic(text):
@@ -880,9 +1114,11 @@ def main():
             # only meaningful for UNMATCHED: a classified log obviously had a diagnostic.
             nodiag = cls is None and not has_captured_diagnostic(text)
             if nodiag:
-                note = ("no diagnostic line in the captured window (pre-3371e78289 "
-                        "tail -20 artifact) -- NOT a ruleset gap; re-wave with the "
-                        "current deep capture. #488")
+                note = ("no line in the captured window states a REASON -- NOT a ruleset "
+                        "gap. Either the window is still truncated (a pre-3371e78289 "
+                        "tail -20 log: re-wave it) or the build really was silent, e.g. a "
+                        "wrapper that swallowed its child compiler's output, or a false "
+                        "failure whose hpkg exists. #488/#505")
             rec = dict(it,
                        triage_class=(cls if cls is not None else "UNMATCHED"),
                        auto=auto, fix_ref=fix_ref, note=note, matched=matched,
@@ -991,7 +1227,7 @@ def main():
     if unmatched:
         print("%-6s %-62s %5d %s" % ("UNMATCH", "  ruleset gap (a diagnostic IS captured)",
                                      ruleset_gap, "NO"))
-        print("%-6s %-62s %5d %s" % ("", "  NO_DIAGNOSTIC captured (truncated window)",
+        print("%-6s %-62s %5d %s" % ("", "  NO_DIAGNOSTIC: no line states a reason",
                                      nodiag, "NO"))
     if by_class.get("NO_LOG"):
         print("%-6s %-62s %5d %s" % ("NO_LOG", "-", by_class["NO_LOG"], "NO"))
@@ -1000,14 +1236,17 @@ def main():
     print("GENUINELY-HARD  (matched a class, auto=NO) : %4d" % matched_hard)
     print("UNMATCHED (no class signature)             : %4d  (of which %d mention "
           "UNRESOLVABLE = dep unbuilt/unpublished)" % (unmatched, unmatched_unres))
-    # The split that keeps the coverage number honest (#488). A no-diagnostic log is an
-    # evidence-capture artifact from the pre-3371e78289 `tail -20`: the window ends
-    # before the line that says why, so it is unclassifiable by construction and must
-    # not be read as a missing class signature.
+    # The split that keeps the coverage number honest (#488), with #505's correction: a
+    # no-diagnostic log is NOT automatically a truncation artifact. It is a log in which no
+    # line states a reason -- which can mean the window is still truncated, or that the
+    # build genuinely printed none. Either way it is not a missing class signature, so it
+    # must not be counted against the ruleset. #505 is the standing warning that this
+    # bucket also inflates when the DETECTOR's lexicon is too narrow for the corpus.
     print("  |- ruleset gap: a reason line IS captured : %4d  <- extend RULES here"
           % ruleset_gap)
-    print("  |- NO DIAGNOSTIC in the captured window   : %4d  <- no regex can ever "
-          "classify these; re-wave with the current deep capture (#488)" % nodiag)
+    print("  |- NO DIAGNOSTIC: no line states a reason : %4d  <- no regex can classify "
+          "these. Re-wave if the window is short; if it is long, the build really was "
+          "silent (#488/#505)" % nodiag)
     print("NO_LOG (log missing/empty)                 : %4d" % no_log)
     if total_ok is False:
         print("!! INCOMPLETE: %d backlog row(s) are in the table but absent from the "
