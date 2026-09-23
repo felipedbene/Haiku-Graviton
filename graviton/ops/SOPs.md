@@ -239,6 +239,29 @@ stderr discarded and a reason code of its own invention in its place — which i
 synthetic hpkgs, no live pool), including a mutation arm that neuters the reporting
 and asserts the test goes red.
 
+**`haiku-repo-restamp-packager` relays the packaging tool's words too (#509).** The
+packager re-stamp (`--apply`) ran `package add` with `>/dev/null 2>&1` and printed its
+own generic `package add failed` — the fourth instance of the swallow-and-substitute
+pattern. It now replays the tool's stderr verbatim (`package add: <message>`) with the
+tool's exit status; its **batch exit was already honest** (`[ failed -eq 0 ]`) and is
+deliberately unchanged. Off a Haiku host it also resolves/validates
+`HAIKU_BUILD_SYSTEM_DATA_DIRECTORY` for the license check (it only warns, not `die`s,
+because it takes no lock and syncs no pool). `haiku-repo-restamp-packager-selftest`
+covers it offline, with a mutation arm that swallows the stderr again and an arbitrary-
+message arm proving the relay is not special-cased.
+
+**`haiku-repo-add` counts a canonical name once, not per incoming file (#509).** It
+used to increment `added` per incoming `*.hpkg`, so two incoming files resolving to the
+same canonical name printed `PUBLISHED 2 new package(s) … repo now has 1` and reported
+both as published though the second overwrote the first. It now dedupes by canonical
+name (first copy wins deterministically), counts once, and **warns on the collision**
+(`duplicate-canonical`) — a duplicate usually means an upstream build emitted the
+package twice, worth surfacing. Both incoming copies are still reported to
+`HG_PUBLISHED_LIST_OUT` so the caller's prune clears both from incoming. The extended
+`haiku-repo-add-selftest` adds an arm that asserts the count matches the repo and the
+collision warns, plus a mutation arm that undoes the dedupe and watches the count go
+back to 2.
+
 When the prod CloudFront origin points at the pool you published, also invalidate
 the prod dist's index paths so the change is served.
 
