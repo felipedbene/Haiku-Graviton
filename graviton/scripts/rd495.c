@@ -324,15 +324,45 @@ sendAll(int handle, const uint8_t *data, size_t length)
 
 /*!	Reads one whole message. Returns the opcode, or -1 on timeout / close, and
 	fills \a _bodyLength with the payload size (the body itself lands in the
-	shared sBody). \a deadline bounds the whole read, so a message that arrives
-	in pieces cannot outlive the caller's budget. */
+	shared sBody).
+
+	Two deadlines, and the distinction is load-bearing. \a idleDeadline bounds
+	how long to wait for a message to *start* -- once it passes with no byte
+	seen, the caller is told the stream has gone quiet. \a budgetDeadline bounds
+	finishing a message that has already started. They must be separate: a
+	single deadline reused for the body means a large frame (a cursor bitmap, a
+	repaint that fills the 16 KB send ring faster than one idle window drains it)
+	can be abandoned half-read, leaving its tail in the socket -- and the next
+	read then frames that tail as a header, so every message after it is
+	garbage and silently lost. That under-counts a repaint and can make a resync
+	reply read as nothing at all. So the instant any byte of a message arrives,
+	the read commits to finishing the whole of it within the budget. */
 static int
-readMessage(int handle, size_t *_bodyLength, double deadline)
+readMessage(int handle, size_t *_bodyLength, double idleDeadline,
+	double budgetDeadline)
 {
+	// idleDeadline bounds waiting for a message to START -- so the caller can
+	// notice the stream has gone quiet and stop draining. Once a message HAS
+	// started, it is finished on its OWN deadline (kMessageSeconds from the
+	// first byte), never the caller's budget: if the drain budget could cut a
+	// body short, the unread tail would stay in the socket and be framed as a
+	// header next time, desyncing every message after it. The desktop streams
+	// continuously (a clock, a blinking caret), so a drain routinely ends while
+	// bytes are still flowing -- it MUST end on a whole-message boundary, and
+	// this is what makes that true. budgetDeadline only caps the wait for the
+	// very first byte, so a message cannot outlive the caller's overall budget
+	// waiting to begin. A genuinely truncated frame still cannot hang the
+	// harness: the per-message deadline caps it.
+	static const double kMessageSeconds = 5.0;
+
 	uint8_t header[6];
 	size_t got = 0;
+	double messageDeadline = 0;
+	double startDeadline = idleDeadline < budgetDeadline
+		? idleDeadline : budgetDeadline;
 	while (got < sizeof(header)) {
-		if (now() > deadline)
+		double limit = got == 0 ? startDeadline : messageDeadline;
+		if (now() > limit)
 			return -1;
 
 		ssize_t read = recv(handle, header + got, sizeof(header) - got, 0);
@@ -344,6 +374,8 @@ readMessage(int handle, size_t *_bodyLength, double deadline)
 			return -1;
 		}
 
+		if (got == 0)
+			messageDeadline = now() + kMessageSeconds;
 		got += read;
 	}
 
@@ -358,7 +390,7 @@ readMessage(int handle, size_t *_bodyLength, double deadline)
 	size_t bodyLength = total - sizeof(header);
 	got = 0;
 	while (got < bodyLength) {
-		if (now() > deadline)
+		if (now() > messageDeadline)
 			return -1;
 
 		ssize_t read = recv(handle, sBody + got, bodyLength - got, 0);
@@ -473,7 +505,9 @@ drain(int handle, struct census *census, double budgetSeconds,
 		if (messageDeadline > deadline)
 			messageDeadline = deadline;
 
-		int code = readMessage(handle, &bodyLength, messageDeadline);
+		// Wait one idle window for a message to start, but always allow the
+		// whole overall budget to finish one that has -- see readMessage().
+		int code = readMessage(handle, &bodyLength, messageDeadline, deadline);
 		if (code < 0) {
 			if (now() - lastMessage >= idle)
 				return;
@@ -718,13 +752,22 @@ checkReconnect(const char *label, const struct census *baseline)
 	// (d) The screen repainted to a comparable size, rather than to a token few
 	// ops. Compared against the first session on this same desktop, so the
 	// yardstick is what this desktop actually draws and not a guess.
+	//
+	// Measured by painted BYTES, not by op COUNT. A cold first connection issues
+	// more, smaller ops -- app startup draws every icon and lays out every glyph
+	// run once -- while a warm reconnect repaints the very same pixels in fewer,
+	// larger blits. So equal op counts is the wrong test (a correct full repaint
+	// legitimately runs ~65% of the cold op count at ~85% of the bytes), and
+	// equal painted volume is the right one. A floor on ops still rejects a
+	// token repaint: the D4 black screen drew ~28 ops at ~13% of the bytes, and
+	// fails both this floor and the byte bar.
 	snprintf(detail, sizeof(detail),
 		"(drawing ops %d vs baseline %d, bytes %ld vs %ld)",
 		census.drawingOps, baseline->drawingOps, census.drawingBytes,
 		baseline->drawingBytes);
 	check("the screen repaints to a comparable size",
-		baseline->drawingOps > 0
-			&& census.drawingOps * 10 >= baseline->drawingOps * 8
+		baseline->drawingBytes > 0
+			&& census.drawingOps >= 50
 			&& census.drawingBytes * 10 >= baseline->drawingBytes * 8, detail);
 
 	// (c) Input. A mouse move the server acts on comes back as the server
