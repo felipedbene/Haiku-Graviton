@@ -100,6 +100,87 @@ is_excluded() {
 	return 1
 }
 
+LICENSE_DIR_NOTE=""
+
+# ---- surface what the packaging TOOL said, verbatim (issues #502/#509) -----
+# The re-stamp runs `package extract` and `package add`; both used to be run with
+# `>/dev/null 2>&1`, so when `package add` refused a package -- e.g. "License
+# 'BSD (3-clause)' isn't contained in package!" when the declared license is not
+# bundled and no licenses directory resolves -- all the operator saw was this
+# script's own generic "package add failed". That is the swallow-and-substitute
+# pattern #502 fixed in the sibling haiku-repo-add; it is the same defect here,
+# the fourth confirmed instance (#509). Keep the tool's stderr (and stdout) and
+# replay it, unedited and attributed. This script's exit status is already honest
+# (do_apply returns [ failed -eq 0 ]), so ONLY the swallow is fixed here -- the
+# batch semantics are deliberately left unchanged.
+tool_said() {
+	local what="$1"; shift
+	local any=0 f
+	for f in "$@"; do
+		[ -s "$f" ] || continue
+		any=1
+		sed -e "s|^|      $what: |" "$f" >&2
+	done
+	[ "$any" = 1 ] || echo "      $what: (said nothing)" >&2
+}
+
+# The one add failure that is a HOST configuration problem rather than a bad
+# package gets a line the operator can act on directly (#502/#509).
+license_hint() {
+	grep -q "isn't contained in package" "$1" 2>/dev/null || return 0
+	echo "      HINT: that license is neither bundled in the package nor present in the licenses directory in use (${LICENSE_DIR_NOTE:-<none resolved>}). Point HAIKU_BUILD_SYSTEM_DATA_DIRECTORY at a directory containing licenses/ -- the DeBeOS tree ships data/system/data -- and re-run (#502)." >&2
+}
+
+# ---- licenses directory for the metadata re-stamp (#502/#509) --------------
+# `package add -f -i` validates every name in the package's `licenses { ... }`
+# list (PackageWriterImpl::_CheckLicenses): each must resolve under
+# <system data dir>/licenses or be bundled in the package, else the WHOLE add
+# fails with "License 'X' isn't contained in package!". Declaring a standard
+# license without bundling a copy is normal and correct, so off a Haiku host --
+# where the tool honours HAIKU_BUILD_SYSTEM_DATA_DIRECTORY rather than
+# find_directory(B_SYSTEM_DATA_DIRECTORY) -- a perfectly good package is rejected
+# when that directory does not resolve. SET it when unset and resolvable (the
+# tree ships data/system/data/licenses); on a host where it still cannot resolve
+# we only WARN and let the per-package add fail-and-relay. Unlike the sibling
+# haiku-repo-add this script takes no lock and syncs no pool, and its exit status
+# is already honest -- a per-package skip here is neither invisible nor expensive
+# (it is reported at once and the package is left unchanged), so it needs no
+# up-front die/escape-hatch machinery.
+resolve_license_dir() {
+	if [ "$(uname -s 2>/dev/null || echo unknown)" = Haiku ]; then
+		if [ -d /boot/system/data/licenses ]; then
+			LICENSE_DIR_NOTE="/boot/system/data/licenses (native; find_directory, env ignored)"
+		else
+			echo "haiku-repo-restamp-packager: WARNING: /boot/system/data/licenses is missing on this Haiku host -- the re-stamp will REJECT any package that declares a license it does not bundle (#502/#509). HAIKU_BUILD_SYSTEM_DATA_DIRECTORY cannot help: the native tool ignores it." >&2
+			LICENSE_DIR_NOTE="<missing: /boot/system/data/licenses>"
+		fi
+		return 0
+	fi
+	if [ -z "${HAIKU_BUILD_SYSTEM_DATA_DIRECTORY:-}" ]; then
+		local _pkg_dir cand
+		_pkg_dir="$(dirname "$(command -v "$PKG_TOOL" 2>/dev/null || echo "$PKG_TOOL")")"
+		for cand in \
+			"$HERE/../../data/system/data" \
+			"$_pkg_dir/data" \
+			/opt/haiku-tools/data \
+			/opt/haiku/haiku/data/system/data
+		do
+			[ -d "$cand/licenses" ] || continue
+			HAIKU_BUILD_SYSTEM_DATA_DIRECTORY="$(cd "$cand" && pwd)"
+			export HAIKU_BUILD_SYSTEM_DATA_DIRECTORY
+			echo "haiku-repo-restamp-packager: resolved HAIKU_BUILD_SYSTEM_DATA_DIRECTORY=$HAIKU_BUILD_SYSTEM_DATA_DIRECTORY (#502/#509)"
+			break
+		done
+	fi
+	if [ -n "${HAIKU_BUILD_SYSTEM_DATA_DIRECTORY:-}" ] \
+		&& [ -d "${HAIKU_BUILD_SYSTEM_DATA_DIRECTORY}/licenses" ]; then
+		LICENSE_DIR_NOTE="$HAIKU_BUILD_SYSTEM_DATA_DIRECTORY/licenses"
+	else
+		echo "haiku-repo-restamp-packager: WARNING: no usable licenses directory (HAIKU_BUILD_SYSTEM_DATA_DIRECTORY=${HAIKU_BUILD_SYSTEM_DATA_DIRECTORY:-<unset>}) -- any package that declares a license it does not bundle WILL be reported and skipped (#502/#509). Point HAIKU_BUILD_SYSTEM_DATA_DIRECTORY at a directory containing licenses/; the DeBeOS tree ships data/system/data." >&2
+		LICENSE_DIR_NOTE="<none resolved>"
+	fi
+}
+
 # ---- re-stamp one hpkg's packager IN PLACE (metadata-only, no rebuild) -----
 # Edit ONLY the .PackageInfo and splice it back with `package add -f -i`, which
 # rewrites the package's attribute section in place WITHOUT round-tripping the
@@ -130,18 +211,35 @@ restamp_inplace() {
 	local tmp; tmp="$(mktemp -d)"
 	# shellcheck disable=SC2064
 	trap "rm -rf '$tmp'" RETURN
-	"$PKG_TOOL" extract -C "$tmp" "$src" .PackageInfo >/dev/null 2>&1 || true
+	"$PKG_TOOL" extract -C "$tmp" "$src" .PackageInfo \
+		>"$tmp/extract.out" 2>"$tmp/extract.err" || true
 	# Per-package failures return non-zero (do_apply tolerates them) rather than
-	# `die`, so one bad package never aborts the batch.
-	[ -f "$tmp/.PackageInfo" ] || { echo "  ! $base: could not extract .PackageInfo" >&2; return 1; }
+	# `die`, so one bad package never aborts the batch. Replay the tool's own
+	# words instead of substituting a generic line (#502/#509).
+	if [ ! -f "$tmp/.PackageInfo" ]; then
+		echo "  ! $base: could not extract .PackageInfo; the tool said:" >&2
+		tool_said "package extract" "$tmp/extract.err" "$tmp/extract.out"
+		return 1
+	fi
 	if grep -qE '^[[:space:]]*packager[[:space:]]' "$tmp/.PackageInfo"; then
 		# rewrite the value; PACKAGER may contain & and / so use a non-/ delim
 		sed -i -E "s|^([[:space:]]*packager[[:space:]]+).*|\1\"$PACKAGER\"|" "$tmp/.PackageInfo"
 	else
 		printf '\npackager\t"%s"\n' "$PACKAGER" >> "$tmp/.PackageInfo"
 	fi
-	if ! "$PKG_TOOL" add -f -q -i "$tmp/.PackageInfo" -C "$tmp" "$src" .PackageInfo >/dev/null 2>&1; then
-		echo "  ! $base: package add failed" >&2; return 1
+	# `|| rc=$?` rather than `if ! ...`: inside an `if !` branch $? is the NEGATED
+	# status (always 0), so the tool's real exit code has to be captured here.
+	# Reporting the status the tool actually returned, and its stderr verbatim, is
+	# the whole of the #509 fix -- the swallow, not the batch exit (do_apply keeps
+	# its honest [ failed -eq 0 ]).
+	local rc=0
+	"$PKG_TOOL" add -f -q -i "$tmp/.PackageInfo" -C "$tmp" "$src" .PackageInfo \
+		>"$tmp/add.out" 2>"$tmp/add.err" || rc=$?
+	if [ "$rc" -ne 0 ]; then
+		echo "  ! $base: package add failed rc=$rc; the tool said:" >&2
+		tool_said "package add" "$tmp/add.err" "$tmp/add.out"
+		license_hint "$tmp/add.err"
+		return 1
 	fi
 	local now; now="$(hpkg_packager "$src")"
 	[ "$now" = "$PACKAGER" ] || { echo "  ! $base: packager not updated (got '$now')" >&2; return 1; }
@@ -152,6 +250,9 @@ do_apply() {
 	[ -n "$DIR" ] || die "--apply needs --dir DIR"
 	[ -d "$DIR" ] || die "no such dir: $DIR"
 	command -v "$PKG_TOOL" >/dev/null 2>&1 || die "no '$PKG_TOOL' on PATH (run on a Haiku host or set --package-tool to a banked host tool)"
+
+	resolve_license_dir
+	echo "license check against ${LICENSE_DIR_NOTE:-<none resolved>}"
 
 	# One failing package must not abort the whole batch: report it and move on,
 	# mirroring haiku-repo-add. The re-stamp is metadata-only via `package add -i`

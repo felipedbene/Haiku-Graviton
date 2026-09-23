@@ -1,0 +1,229 @@
+#!/usr/bin/env bash
+#
+# haiku-repo-restamp-packager-selftest -- offline test for the FAILURE REPORTING
+# of haiku-repo-restamp-packager (issue #509). No AWS, no network, no live pool:
+# this script only ever touches a local --dir, so the arms build synthetic hpkgs
+# with the host `package` tool and run `--apply` against a scratch directory.
+#
+# WHY IT EXISTS
+# -------------
+# #509 is the FOURTH instance of one shape (#452/#453/#485/#502): run a tool with
+# `>/dev/null 2>&1`, then print a conclusion of our own in place of the diagnosis
+# the tool already produced. Here the re-stamp's `package add` said
+#
+#     License 'BSD (3-clause)' isn't contained in package!
+#
+# and the script reported a bare "package add failed", discarding the tool's exact,
+# actionable sentence -- the same archaeology #502 was. Unlike #502 the script's
+# EXIT STATUS was already honest (do_apply returns [ failed -eq 0 ]), so #509 is
+# the swallow half only: the fix relays the tool's stderr verbatim and leaves the
+# batch exit semantics untouched.
+#
+# An error path nobody has ever seen fire is not known to fire. So these arms fire
+# it, and arm B proves the assertions are caused by the fix: it NEUTERS a COPY of
+# the script back to the old `>/dev/null 2>&1` and asserts the message is swallowed
+# again. The tracked script is never modified.
+#
+# ARMS
+#   A report        the real `package add` license failure reaches the operator
+#                   VERBATIM, attributed `package add:`, rc reported, and the batch
+#                   exit stays honest (non-zero: one package failed)
+#   B swallow (mut) the same input against a copy neutered to the pre-#509 shape:
+#                   the tool's message is absent -- i.e. arm A is caused by the fix
+#   C any message   an UNANTICIPATED tool failure is relayed verbatim too, with the
+#                   tool's own exit status -- the relay is not special-cased to the
+#                   one message we happen to know about
+#   D honest exit   with a usable licenses dir a real re-stamp succeeds and exits 0,
+#                   and it actually rewrites the packager (the batch semantics the
+#                   fix must NOT have changed)
+#
+# USAGE
+#   graviton/scripts/haiku-repo-restamp-packager-selftest [--keep]
+#     --keep   leave the work directory in place for inspection
+#   PKG_TOOL   host `package` path (auto-detected when unset)
+#   TMPDIR     where the work dir goes
+#
+# Exit status: 0 all arms pass; 1 an arm failed; 2 the host tool is missing.
+
+set -uo pipefail
+
+HERE="$(cd "$(dirname "$0")" && pwd)"
+TREE="$(cd "$HERE/../.." && pwd)"
+SCRIPT="$HERE/haiku-repo-restamp-packager"
+KEEP=0
+[ "${1:-}" = --keep ] && KEEP=1
+
+[ -f "$SCRIPT" ] || { echo "selftest: no haiku-repo-restamp-packager beside $HERE" >&2; exit 2; }
+
+# ---- host tool ------------------------------------------------------------
+find_tool() {
+	local name="$1" p
+	p="$(command -v "$name" 2>/dev/null)" && { echo "$p"; return 0; }
+	for p in "$TREE"/generated*/objects/linux/*/release/tools/"$name"/"$name" \
+		/opt/haiku-tools/"$name"; do
+		[ -x "$p" ] && { echo "$p"; return 0; }
+	done
+	return 1
+}
+PKG_TOOL="${PKG_TOOL:-$(find_tool package || true)}"
+if [ -z "${PKG_TOOL:-}" ]; then
+	echo "selftest: need the host 'package' tool (build it, or set PKG_TOOL)" >&2
+	exit 2
+fi
+# The fixture declares a standard license without bundling it, exactly as the
+# packages #509 lost do, so CREATING it needs a licenses dir even though the arms
+# then take it away again.
+TREE_DATA="$TREE/data/system/data"
+[ -d "$TREE_DATA/licenses" ] || { echo "selftest: no $TREE_DATA/licenses in this tree" >&2; exit 2; }
+
+W="$(mktemp -d "${TMPDIR:-/tmp}/haiku-repo-restamp-selftest.XXXXXX")"
+cleanup() { [ "$KEEP" = 1 ] && { echo "selftest: work dir kept at $W" >&2; return 0; }; rm -rf "$W"; }
+trap cleanup EXIT
+echo "selftest: work dir $W"
+echo "selftest: package tool $PKG_TOOL"
+
+PASS=0; FAIL=0
+ok()  { PASS=$((PASS + 1)); echo "  PASS $*"; }
+bad() { FAIL=$((FAIL + 1)); echo "  FAIL $*"; }
+check_exit() {
+	local want="$1" got="$2" desc="$3"
+	[ "$got" = "$want" ] && ok "$desc (exit $got)" || bad "$desc: expected exit $want, got $got"
+}
+check_nonzero() {
+	local got="$1" desc="$2"
+	[ "$got" != 0 ] && ok "$desc (exit $got)" || bad "$desc: expected non-zero, got $got"
+}
+check_has() {
+	local f="$1" needle="$2" desc="$3"
+	grep -qF -- "$needle" "$f" && ok "$desc" \
+		|| { bad "$desc -- output does not contain: $needle"; sed -e 's/^/      | /' "$f"; }
+}
+check_hasnt() {
+	local f="$1" needle="$2" desc="$3"
+	grep -qF -- "$needle" "$f" && bad "$desc -- output DOES contain: $needle" || ok "$desc"
+}
+
+# ---- the `package` shim for the arbitrary-message arm ---------------------
+# Delegates to the real tool, except it can fail `add` with a chosen message on
+# stderr and a chosen exit code. Everything else passes straight through.
+mkdir -p "$W/bin"
+{
+	echo '#!/usr/bin/env bash'
+	echo 'set -u'
+	echo "REAL=\"$PKG_TOOL\""
+} > "$W/bin/package-shim"
+cat >> "$W/bin/package-shim" <<'SHIM'
+verb="${1:-}"
+if [ "$verb" = add ] && [ -n "${SELFTEST_FAIL_ADD_MSG:-}" ]; then
+	echo "$SELFTEST_FAIL_ADD_MSG" >&2
+	exit "${SELFTEST_FAIL_ADD_RC:-7}"
+fi
+exec "$REAL" "$@"
+SHIM
+chmod +x "$W/bin/package-shim"
+
+# ---- fixture --------------------------------------------------------------
+# A package with a NON-target packager (so a re-stamp actually runs) that declares
+# the standard license `BSD (3-clause)` and does NOT bundle a copy -- normal,
+# correct, and the exact shape #509 lost.
+FIXROOT="$W/fixture"
+mkdir -p "$FIXROOT/data/settings"
+cat > "$FIXROOT/.PackageInfo" <<'EOF'
+name			debeos_restamp_fixture
+version			1.0.0-1
+architecture		arm64
+summary			"restamp selftest fixture"
+description		"Synthetic package built by haiku-repo-restamp-packager-selftest."
+packager		"Bootstrap Packager <bootstrap@example.invalid>"
+vendor			"DeBeOS"
+copyrights {
+	"2026 DeBeOS"
+}
+licenses {
+	"BSD (3-clause)"
+}
+provides {
+	debeos_restamp_fixture = 1.0.0
+}
+requires {
+}
+EOF
+echo "selftest fixture" > "$FIXROOT/data/settings/debeos_restamp_fixture.txt"
+BUILT="$W/debeos_restamp_fixture-1.0.0-1-arm64.hpkg"
+( cd "$FIXROOT" && HAIKU_BUILD_SYSTEM_DATA_DIRECTORY="$TREE_DATA" \
+	"$PKG_TOOL" create -q -i .PackageInfo "$BUILT" ) \
+	|| { echo "selftest: could not build the fixture package" >&2; exit 2; }
+[ -s "$BUILT" ] || { echo "selftest: fixture is empty" >&2; exit 2; }
+
+TARGET_PACKAGER="DeBeOS <packages@debene.dev>"
+mkdir -p "$W/emptydata"
+
+# One arm = a fresh --dir holding a copy of the fixture, then one run of the
+# script under test with its output captured.
+OUT="$W/out"
+run_arm() {
+	local script="$1" pkgtool="$2" datadir="$3"; shift 3
+	local dir="$W/dir"; rm -rf "$dir"; mkdir -p "$dir"
+	cp -p "$BUILT" "$dir/"
+	local -a env=(HG_PACKAGER="$TARGET_PACKAGER")
+	[ -n "$datadir" ] && env+=(HAIKU_BUILD_SYSTEM_DATA_DIRECTORY="$datadir")
+	env "${env[@]}" "$@" \
+		bash "$script" --apply --dir "$dir" --package-tool "$pkgtool" > "$OUT" 2>&1
+	ARM_RC=$?
+	ARM_DIR="$dir"
+	return 0
+}
+pkg_packager() {
+	"$PKG_TOOL" list -i "$1" 2>/dev/null \
+		| sed -nE 's/^[[:space:]]*packager:[[:space:]]*"?(.*[^"])"?[[:space:]]*$/\1/p' | head -1
+}
+
+echo
+echo "A. the tool's license failure reaches the operator VERBATIM (honest exit kept)"
+run_arm "$SCRIPT" "$PKG_TOOL" "$W/emptydata"
+check_nonzero "$ARM_RC" "one failed package keeps the batch exit non-zero"
+check_has "$OUT" "License 'BSD (3-clause)' isn't contained in package!" "the tool's own words, verbatim"
+check_has "$OUT" "package add:" "attributed to the tool"
+check_has "$OUT" "package add failed rc=" "and the tool's real exit status"
+check_has "$OUT" "HAIKU_BUILD_SYSTEM_DATA_DIRECTORY" "hints at the actual fix"
+# Fails CLOSED: the package is left unchanged in the dir.
+[ "$(pkg_packager "$ARM_DIR/debeos_restamp_fixture-1.0.0-1-arm64.hpkg")" != "$TARGET_PACKAGER" ] \
+	&& ok "package left unchanged (not re-stamped)" || bad "package was modified despite the failure"
+
+echo
+echo "B. MUTATION: swallow the add stderr again and arm A's message must vanish"
+MUT="$W/mutant"
+cp "$SCRIPT" "$MUT"
+# Discard the add stderr/stdout again -- the pre-#509 shape. `|| rc=$?` is kept so
+# the exit path is identical; ONLY the relay is neutered.
+sed -i -e 's#>"$tmp/add.out" 2>"$tmp/add.err" || rc=\$?#>/dev/null 2>\&1 || rc=$?#' "$MUT"
+if ! grep -q '>/dev/null 2>&1 || rc=$?' "$MUT"; then
+	echo "selftest: mutation sed did not match; haiku-repo-restamp-packager changed shape -- fix this selftest" >&2
+	exit 1
+fi
+run_arm "$MUT" "$PKG_TOOL" "$W/emptydata"
+check_nonzero "$ARM_RC" "neutered: the batch exit is still honest"
+check_hasnt "$OUT" "License 'BSD (3-clause)' isn't contained in package!" "neutered: the tool's message is swallowed again"
+echo "  (arm A's message assertion therefore comes from the fix, not from something incidental)"
+
+echo
+echo "C. an arbitrary tool failure is reported verbatim, whatever it says"
+SENTINEL="restamp tool exploded in a way nobody predicted (selftest sentinel 7c1e)"
+SELFTEST_FAIL_ADD_MSG="$SENTINEL" SELFTEST_FAIL_ADD_RC=9 \
+	run_arm "$SCRIPT" "$W/bin/package-shim" "$TREE_DATA"
+check_nonzero "$ARM_RC" "non-zero"
+check_has "$OUT" "$SENTINEL" "an unanticipated message reaches the operator unedited"
+check_has "$OUT" "package add failed rc=9" "and so does the tool's exit status"
+
+echo
+echo "D. with a usable licenses dir a real re-stamp succeeds and exits 0"
+run_arm "$SCRIPT" "$PKG_TOOL" "$TREE_DATA"
+check_exit 0 "$ARM_RC" "re-stamps and exits 0"
+check_has "$OUT" "re-stamped 1 package(s)" "reports the one re-stamp"
+[ "$(pkg_packager "$ARM_DIR/debeos_restamp_fixture-1.0.0-1-arm64.hpkg")" = "$TARGET_PACKAGER" ] \
+	&& ok "packager actually rewritten to the target" || bad "packager not updated"
+
+echo
+echo "selftest: $PASS passed, $FAIL failed"
+[ "$FAIL" = 0 ] || exit 1
+exit 0
