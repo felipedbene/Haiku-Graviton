@@ -30,6 +30,16 @@
 
 
 using BPrivate::gDefaultTokens;
+using BPrivate::MenuInputWaiter;
+
+
+// Ceiling on how long tracking waits for the next input event before it
+// samples the pointer anyway; MenuInputWaiter returns as soon as the window
+// dispatches one. The two values are the poll intervals this wait replaced,
+// kept as the fallback so that a window which delivers no input events paces
+// tracking exactly as it did before.
+const static bigtime_t kTrackingWaitInterval = 40000;
+const static bigtime_t kTrackingWaitIntervalFromSubmenu = 30000;
 
 
 struct menubar_data {
@@ -564,8 +574,13 @@ BMenuBar::_Track(int32* action, int32 startIndex, bool showMenu)
 		UnlockLooper();
 	}
 
+	// Wake on the input events the window dispatches rather than polling for
+	// them; the intervals below are only the ceiling on that wait. The window
+	// cannot go away while we track: its destructor waits on fMenuSem.
+	MenuInputWaiter inputWaiter(Window());
+
 	while (fState != MENU_STATE_CLOSED) {
-		bigtime_t snoozeAmount = 40000;
+		bigtime_t waitInterval = kTrackingWaitInterval;
 		if (!LockLooper())
 			break;
 
@@ -578,7 +593,7 @@ BMenuBar::_Track(int32* action, int32 startIndex, bool showMenu)
 			// is over its window
 			BMenu* submenu = fSelected->Submenu();
 			UnlockLooper();
-			snoozeAmount = 30000;
+			waitInterval = kTrackingWaitIntervalFromSubmenu;
 			submenu->_SetStickyMode(_IsStickyMode());
 			int localAction;
 			fChosenItem = submenu->_Track(&localAction);
@@ -641,7 +656,7 @@ BMenuBar::_Track(int32* action, int32 startIndex, bool showMenu)
 				// If user doesn't move the mouse or change buttons loop
 				// here so that we don't interfere with keyboard menu
 				// navigation
-				snooze(snoozeAmount);
+				inputWaiter.Wait(waitInterval);
 				if (!LockLooper())
 					break;
 

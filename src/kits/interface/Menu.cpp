@@ -64,6 +64,7 @@ using BPrivate::gSystemCatalog;
 
 using std::nothrow;
 using BPrivate::BMenuWindow;
+using BPrivate::MenuInputWaiter;
 
 namespace BPrivate {
 
@@ -2041,7 +2042,21 @@ status_t BMenu::_InsertItemAtSpecifier(const BMessage& specifier, int32 what,
 // #pragma mark - mouse tracking
 
 
-const static bigtime_t kOpenSubmenuDelay = 0;
+// Ceiling on how long tracking waits for the next input event before it
+// samples the pointer anyway. This is a fallback, not a frame rate:
+// MenuInputWaiter returns as soon as the menu's window dispatches an input
+// event, and only windows that deliver none (the pointer is elsewhere) pace
+// tracking at this interval.
+const static bigtime_t kTrackingWaitInterval = 50000;
+
+// How long the pointer has to rest on an item before its submenu opens.
+// This was zero for as long as tracking polled, because the poll interval
+// supplied the delay for free: a submenu could not open before the sample
+// after the one that selected its item, one interval later. Waiting on
+// events removes that implicit delay, so it is stated here instead -- the
+// input wait and the hover-to-open delay are two different things, and only
+// the first one should shrink.
+const static bigtime_t kOpenSubmenuDelay = 50000;
 const static bigtime_t kNavigationAreaTimeout = 1000000;
 
 
@@ -2065,6 +2080,13 @@ BMenu::_Track(int* action, long start)
 		GetMouse(&location, &buttons);
 		UnlockLooper();
 	}
+
+	// Wake on the input events our window dispatches rather than polling for
+	// them. The window outlives the waiter: for a submenu it belongs to the
+	// super menu, which is still tracking, and a root menu's window is only
+	// hidden once Track() returns -- _DeleteMenuWindow() below deletes the
+	// window this menu shows its own submenus in, not the one it is drawn in.
+	MenuInputWaiter inputWaiter(Window());
 
 	bool releasedOnce = buttons == 0;
 	while (fState != MENU_STATE_CLOSED) {
@@ -2175,15 +2197,13 @@ BMenu::_Track(int* action, long start)
 			_UpdateStateClose(item, location, buttons);
 
 		if (fState != MENU_STATE_CLOSED) {
-			bigtime_t snoozeAmount = 50000;
-
 			BPoint newLocation = location;
 			uint32 newButtons = buttons;
 
 			// If user doesn't move the mouse, loop here,
 			// so we don't interfere with keyboard menu navigation
 			do {
-				snooze(snoozeAmount);
+				inputWaiter.Wait(kTrackingWaitInterval);
 				if (!LockLooper())
 					break;
 				GetMouse(&newLocation, &newButtons, true);

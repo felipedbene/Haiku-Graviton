@@ -8,8 +8,12 @@
 
 #include <MenuPrivate.h>
 
+#include <new>
+
 #include <Bitmap.h>
 #include <Menu.h>
+#include <MessageFilter.h>
+#include <Window.h>
 
 
 const unsigned char kShiftBits[] = {
@@ -328,6 +332,142 @@ const BBitmap*
 MenuPrivate::MenuItemMenu()
 {
 	return sMenuItemMenu;
+}
+
+
+//	#pragma mark - MenuInputWaiter
+
+
+namespace {
+
+/*!	Releases a semaphore for every input event its looper dispatches, so that
+	a menu tracking thread can block on that semaphore instead of polling.
+	The filter owns the semaphore: if the window outlives the waiter it also
+	deletes the filter, and the semaphore goes with it rather than being
+	deleted while the filter can still reach it.
+*/
+class InputEventFilter : public BMessageFilter {
+public:
+	InputEventFilter(sem_id eventSem)
+		:
+		BMessageFilter(B_ANY_DELIVERY, B_ANY_SOURCE),
+		fEventSem(eventSem)
+	{
+	}
+
+	virtual ~InputEventFilter()
+	{
+		delete_sem(fEventSem);
+	}
+
+	virtual filter_result Filter(BMessage* message, BHandler** _target)
+	{
+		switch (message->what) {
+			case B_MOUSE_MOVED:
+			case B_MOUSE_DOWN:
+			case B_MOUSE_UP:
+			case B_MOUSE_WHEEL_CHANGED:
+			case B_KEY_DOWN:
+			case B_UNMAPPED_KEY_DOWN:
+			case B_MODIFIERS_CHANGED:
+				release_sem(fEventSem);
+				break;
+
+			default:
+				break;
+		}
+
+		return B_DISPATCH_MESSAGE;
+	}
+
+private:
+	sem_id	fEventSem;
+};
+
+}	// unnamed namespace
+
+
+MenuInputWaiter::MenuInputWaiter(BWindow* window)
+	:
+	fWindow(NULL),
+	fFilter(NULL),
+	fEventSem(-1)
+{
+	if (window == NULL)
+		return;
+
+	// Only a thread other than the window's own can be woken this way: it is
+	// the window thread which dispatches the events, and which would be the
+	// one blocked waiting for them.
+	if (find_thread(NULL) == window->Thread())
+		return;
+
+	sem_id eventSem = create_sem(0, "menu input");
+	if (eventSem < 0)
+		return;
+
+	InputEventFilter* filter = new(std::nothrow) InputEventFilter(eventSem);
+	if (filter == NULL) {
+		delete_sem(eventSem);
+		return;
+	}
+
+	if (!window->Lock()) {
+		delete filter;
+		return;
+	}
+
+	window->AddCommonFilter(filter);
+	window->Unlock();
+
+	fWindow = window;
+	fFilter = filter;
+	fEventSem = eventSem;
+}
+
+
+MenuInputWaiter::~MenuInputWaiter()
+{
+	if (fFilter == NULL)
+		return;
+
+	if (fWindow->Lock()) {
+		fWindow->RemoveCommonFilter(fFilter);
+		fWindow->Unlock();
+		delete fFilter;
+	}
+		// If the window can no longer be locked it is on its way out, and it
+		// still owns the filter -- leave it to delete it.
+}
+
+
+/*!	Returns as soon as an input event reaches the menu's window, and after
+	\a timeout at the latest.
+*/
+void
+MenuInputWaiter::Wait(bigtime_t timeout)
+{
+	if (fEventSem < 0) {
+		snooze(timeout);
+		return;
+	}
+
+	status_t status = acquire_sem_etc(fEventSem, 1, B_RELATIVE_TIMEOUT,
+		timeout);
+	if (status == B_OK) {
+		// Coalesce whatever else piled up behind the event we woke for. The
+		// caller samples the pointer's current position, so one pass through
+		// the tracking loop covers all of them, and draining here keeps that
+		// pass from being repeated once per queued event.
+		while (acquire_sem_etc(fEventSem, 1, B_RELATIVE_TIMEOUT, 0) == B_OK)
+			;
+	} else if (status != B_TIMED_OUT && status != B_INTERRUPTED) {
+		// The semaphore is gone, which means the window took the filter with
+		// it. Fall back to snoozing so that tracking cannot spin.
+		fEventSem = -1;
+		fFilter = NULL;
+		snooze(timeout);
+	}
 }
 
 

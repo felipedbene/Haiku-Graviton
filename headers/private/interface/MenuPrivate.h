@@ -11,6 +11,7 @@
 
 
 #include <Menu.h>
+#include <OS.h>
 
 
 enum menu_states {
@@ -24,6 +25,7 @@ enum menu_states {
 
 class BBitmap;
 class BMenu;
+class BMessageFilter;
 class BWindow;
 
 
@@ -76,6 +78,33 @@ private:
 	static	BBitmap*			sMenuItemAlt;
 	static	BBitmap*			sMenuItemMenu;
 
+};
+
+
+/*!	Lets a menu tracking thread wait for the next input event instead of
+	polling the pointer on a fixed interval.
+
+	Menu tracking runs in its own thread while the menu's window keeps
+	dispatching messages, so the tracking thread has no message loop of its
+	own to block on. This installs a common message filter on that window
+	which releases a semaphore for every input event the window dispatches,
+	and Wait() blocks on the semaphore. The caller's interval is only an
+	upper bound: if the window delivers no input events at all -- the pointer
+	is somewhere else, or the filter could not be installed -- Wait()
+	degrades to exactly the snooze it replaces, so tracking keeps making
+	progress and its timeouts still fire.
+*/
+class MenuInputWaiter {
+public:
+								MenuInputWaiter(BWindow* window);
+								~MenuInputWaiter();
+
+			void				Wait(bigtime_t timeout);
+
+private:
+			BWindow*			fWindow;
+			BMessageFilter*		fFilter;
+			sem_id				fEventSem;
 };
 
 };	// namespace BPrivate
