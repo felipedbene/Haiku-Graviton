@@ -1,3 +1,15 @@
+// HaikuRemoteDesktop.js -- browser client for app_server's remote drawing
+// protocol, and the client the launcher actually drives.
+//
+// There is a test: `node selftest.js` beside this file drives these drawing
+// handlers over real wire bytes against a model canvas and measures what they
+// draw. It exists because this client decoded font rotation, shear and
+// false_bold_width and then discarded all three, so rotated labels rendered
+// horizontal -- and so did every other client and instrument, which meant they
+// AGREED with each other and no comparison between them could fail (#494). Add
+// a check there for anything you change here, and make sure it goes red when
+// you delete the change.
+
 'use strict';
 
 const RP_INIT_CONNECTION = 1;
@@ -590,13 +602,99 @@ function RemoteFont(remoteMessage)
 	this.encoding = 0;
 	this.flags = 0;
 	this.spacing = 0;
-	this.shear = 0;
+	this.shear = 90;
+		// 90 degrees is UPRIGHT, not 0: the field is an angle and
+		// AGGTextRenderer::SetFont shears by (90 - shear)
+		// (AGGTextRenderer.cpp:79-80). A default of 0 meant a state that had
+		// never seen RP_SET_FONT claimed a 90-degree shear, which is a
+		// degenerate matrix -- harmless only for as long as nobody honoured the
+		// field, which is the bug this is part of fixing (#494).
 	this.rotation = 0;
 	this.falseBoldWidth = 0;
 	this.size = 12;
 	this.face = 0;
 	this.family = 0;
 	this.style = 0;
+}
+
+
+RemoteFont.prototype.textTransform = function()
+{
+	// The embedded font transformation, COPIED from app_server rather than
+	// invented: AGGTextRenderer::SetFont (AGGTextRenderer.cpp:72-85) builds it
+	// as shear-then-rotation about the origin,
+	//
+	//     ShearBy(B_ORIGIN, (90 - shear) * PI / 180, 0);
+	//     RotateBy(B_ORIGIN, -rotation * PI / 180);
+	//
+	// and Transformable::multiply applies the matrix already held FIRST
+	// (agg_trans_affine.cpp:70-82), so the composition is M = R * S. The shear
+	// matrix is agg's trans_affine_skewing, (1, tan(y), tan(x), 1), applied as
+	// x' = x * sx + y * shx (agg_trans_affine.h:448-456, 293-298), so an
+	// x-shear of s means x' = x + y * tan(s). The rotation angle is NEGATED,
+	// which is what makes a positive rotation counter-clockwise on a y-down
+	// screen -- and canvas is y-down, exactly like app_server's glyph space
+	// (FontEngine decomposes outlines with kFlipY = true, FontEngine.cpp:42).
+	// So this matrix goes to context.transform() unchanged, no conjugation.
+	//
+	// Returns null when there is nothing to do, so upright text keeps taking
+	// the plain fillText path it always took.
+	var rotation = this.rotation || 0;
+	var shear = (this.shear === undefined || this.shear === null)
+		? 90 : this.shear;
+	if (Math.abs(rotation) < 1e-6 && Math.abs(shear - 90) < 1e-6)
+		return null;
+
+	var tanShear = Math.tan((90 - shear) * Math.PI / 180);
+	var angle = -rotation * Math.PI / 180;
+	var cos = Math.cos(angle);
+	var sin = Math.sin(angle);
+
+	// context.transform(a, b, c, d, e, f) maps x' = a*x + c*y + e,
+	// y' = b*x + d*y + f, so (a, c; b, d) is the matrix and a = m00, b = m10,
+	// c = m01, d = m11.
+	return {
+		a: cos,
+		b: sin,
+		c: cos * tanShear - sin,
+		d: sin * tanShear + cos
+	};
+}
+
+
+RemoteFont.prototype.applyTextTransform = function(context, x, y)
+{
+	// Turn the run about its baseline origin. RenderString translates by the
+	// baseline AFTER the embedded transformation (AGGTextRenderer.cpp:379-381),
+	// so the origin is the fixed point and the advances -- being linear in the
+	// pen position -- are turned with the glyphs. Callers draw at (0, 0)
+	// afterwards. Returns the matrix, or null if there was nothing to apply.
+	var matrix = this.textTransform();
+	if (matrix === null)
+		return null;
+	context.translate(x, y);
+	context.transform(matrix.a, matrix.b, matrix.c, matrix.d, 0, 0);
+	return matrix;
+}
+
+
+RemoteFont.prototype.applyFalseBold = function(context)
+{
+	// false_bold_width is the outward growth in PIXELS PER SIDE: app_server
+	// sets fContour.width(FalseBoldWidth() * 2) (AGGTextRenderer.cpp:84) and
+	// agg's conv_contour halves whatever it is given
+	// (agg_vcgen_contour.h:54 -> agg_math_stroke.h:136-138), so the outline is
+	// offset outward by exactly FalseBoldWidth(). A centred stroke of width 2w
+	// grows the glyph by w on each side, so lineWidth is twice the field. The
+	// caller fills AND strokes; agg widens the outline and we widen the
+	// rendered shape, which is the same geometry and not the same pixels.
+	var width = this.falseBoldWidth || 0;
+	if (width <= 0)
+		return 0;
+	context.lineWidth = 2 * width;
+	context.lineJoin = 'round';
+	context.lineCap = 'round';
+	return width;
 }
 
 
@@ -1082,6 +1180,16 @@ function RemoteState(session, token)
 	this.pattern = new RemotePattern();
 	this.font = new RemoteFont();
 	this.transform = new RemoteTransform();
+
+	// The view offset (RP_SET_OFFSETS) defaults to zero.  applyContext conjugates
+	// the view transform by this offset (context.translate(this.xOffset, ...),
+	// mirroring Painter::SetTransform, Painter.cpp:372-383), so leaving it
+	// undefined turns the whole CTM into NaN the moment a non-identity transform
+	// arrives before the first RP_SET_OFFSETS -- which blanks every subsequent
+	// draw.  In practice offsets precede draws, but the view transform must not
+	// depend on that ordering to avoid painting nothing.
+	this.xOffset = 0;
+	this.yOffset = 0;
 }
 
 
@@ -1380,10 +1488,43 @@ RemoteState.prototype.messageReceived = function(remoteMessage, reply)
 
 			context.save();
 			context.fillStyle = this.highColor.toColor(this.unsetAlpha);
-			context.fillText(string, where.x, where.y);
 
+			// measureText is unaffected by the canvas transform, and this is
+			// the UNTRANSFORMED advance on purpose: app_server accumulates
+			// advances in untransformed font space and turns the layout
+			// afterwards, so the advance is the same number whatever the
+			// rotation is -- it is only the DIRECTION it points in that
+			// changes (AGGTextRenderer.cpp:379-381, 182-186).
 			var textMetric = context.measureText(string);
-			where.x += textMetric.width;
+			var matrix = this.font.applyTextTransform(context, where.x,
+				where.y);
+
+			if (matrix === null) {
+				var bold = this.font.applyFalseBold(context);
+				context.fillText(string, where.x, where.y);
+				if (bold > 0) {
+					context.strokeStyle
+						= this.highColor.toColor(this.unsetAlpha);
+					context.strokeText(string, where.x, where.y);
+				}
+				where.x += textMetric.width;
+			} else {
+				// The transform put the baseline origin at (0, 0).
+				var bold = this.font.applyFalseBold(context);
+				context.fillText(string, 0, 0);
+				if (bold > 0) {
+					context.strokeStyle
+						= this.highColor.toColor(this.unsetAlpha);
+					context.strokeText(string, 0, 0);
+				}
+				// The pen follows the turned baseline. Answering
+				// where.x + width for a rotated run would send the server off
+				// along a line its own renderer never drew, and it USES this
+				// position for whatever it draws next
+				// (RemoteDrawingEngine.cpp:1214-1224).
+				where.x += matrix.a * textMetric.width;
+				where.y += matrix.b * textMetric.width;
+			}
 
 			context.restore();
 
@@ -1402,14 +1543,42 @@ RemoteState.prototype.messageReceived = function(remoteMessage, reply)
 			context.save();
 			context.fillStyle = this.highColor.toColor(this.unsetAlpha);
 
+			// The WITH_OFFSETS overload of RenderString does NOT translate by a
+			// baseline (AGGTextRenderer.cpp:415-416 -- embedded transform times
+			// the view transform, and nothing else), so the server's own glyph
+			// origins go through the embedded transform as well, about the view
+			// origin. That displaces the whole run and not just its direction.
+			// It is surprising, it is what app_server does, and a client that
+			// "helpfully" drew at the offsets instead would disagree with the
+			// server's own render.
+			var matrix = this.font.textTransform();
+			if (matrix !== null)
+				context.transform(matrix.a, matrix.b, matrix.c, matrix.d, 0, 0);
+			var bold = this.font.applyFalseBold(context);
+			if (bold > 0)
+				context.strokeStyle = this.highColor.toColor(this.unsetAlpha);
+
 			var where;
 			for (var i = 0; i < string.length; i++) {
 				where = new RemotePoint(remoteMessage);
 				context.fillText(string[i], where.x, where.y);
+				if (bold > 0)
+					context.strokeText(string[i], where.x, where.y);
 			}
 
 			var textMetric = context.measureText(string[string.length - 1]);
-			where.x += textMetric.width;
+			if (matrix === null) {
+				where.x += textMetric.width;
+			} else {
+				// Measured in the space the glyphs were drawn in: transform the
+				// last offset plus the advance, not the offset plus a
+				// transformed advance -- those differ by the displacement the
+				// view-origin rotation introduces.
+				var px = where.x + textMetric.width;
+				var py = where.y;
+				where.x = matrix.a * px + matrix.c * py;
+				where.y = matrix.b * px + matrix.d * py;
+			}
 
 			context.restore();
 
@@ -1425,6 +1594,13 @@ RemoteState.prototype.messageReceived = function(remoteMessage, reply)
 			var length = remoteMessage.dataView.readUint32();
 			var string = remoteMessage.dataView.readString(length);
 			var textMetric = context.measureText(string);
+				// Deliberately UNAFFECTED by rotation and shear. StringWidth is
+				// the sum of the untransformed advances (GlyphLayoutEngine has
+				// no notion of the embedded transform, which lives one level up
+				// in AGGTextRenderer), so a rotated font has the same string
+				// width as an upright one. false_bold_width does not change it
+				// either: conv_contour widens an outline and leaves advances
+				// alone.
 
 			reply.start(RP_STRING_WIDTH_RESULT);
 			reply.dataView.writeInt32(this.token);
