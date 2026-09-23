@@ -1,0 +1,380 @@
+#!/usr/bin/env bash
+#
+# haiku-repo-add-selftest -- offline test for haiku-repo-add's FAILURE REPORTING
+# (issue #502). No AWS, no network, no live pool: every `aws s3` call the script
+# makes is served by a shim that maps s3:// onto a temporary directory, and the
+# packages are synthetic hpkgs built here with the host `package` tool.
+#
+# WHY IT EXISTS
+# -------------
+# #502 is not a packaging bug, it is a REPORTING bug, and the third of its kind in
+# one night (#452/#453 publish legs that published nothing and said nothing; #485
+# printing a root cause it never checked after discarding pkgman's stderr). The
+# shape is always the same: run a tool with `>/dev/null 2>&1`, then print a
+# conclusion of our own in place of the diagnosis the tool already produced. In
+# #502 `package add` said
+#
+#     License 'BSD (3-clause)' isn't contained in package!
+#
+# and haiku-repo-add reported `restamp-add-failed`, "Repo unchanged", exit 0 -- so
+# an operator (and any automated caller) read a green publish over an empty one,
+# and the real cause took a by-hand re-run to recover.
+#
+# An error path nobody has ever seen fire is not known to fire. So these arms fire
+# them, and arm C proves the assertions are caused by the fix: it NEUTERS a COPY of
+# the script back to the old `>/dev/null 2>&1` + `exit 0` and asserts the test goes
+# red. The tracked script is never modified.
+#
+# ARMS
+#   A precondition   an unusable licenses dir fails UP FRONT, before the lock and
+#                    the pool sync, naming HAIKU_BUILD_SYSTEM_DATA_DIRECTORY
+#   B report         the real `package add` license failure reaches the operator
+#                    VERBATIM, exit is non-zero, and nothing is published
+#   C swallow (mut.) the same inputs against a copy neutered to the pre-#502 shape:
+#                    message absent, exit 0 -- i.e. B's assertions are the fix
+#   D publish        with the licenses dir resolved, a real publish still exits 0,
+#                    builds an index, and reports what it published
+#   E partial        one good + one corrupt package: the good one publishes, exit 0
+#                    with a PARTIAL line, and HG_STRICT_PARTIAL=1 makes it exit 2
+#   F compression    a re-stamp that flips the heap to zstd is REFUSED (a zstd heap
+#                    installs on a full image and fails on the lean base)
+#   G any message    an UNANTICIPATED tool failure is relayed verbatim too, with the
+#                    tool's own exit status -- the point is not to special-case the
+#                    one message we happen to know about
+#
+# USAGE
+#   graviton/scripts/haiku-repo-add-selftest [--keep]
+#     --keep   leave the work directory in place for inspection
+#   PKG_TOOL / PACKAGE_REPO_TOOL   host tool paths (auto-detected when unset)
+#   TMPDIR                         where the work dir goes
+#
+# Exit status: 0 all arms pass; 1 an arm failed; 2 the host tools are missing.
+
+set -uo pipefail
+
+HERE="$(cd "$(dirname "$0")" && pwd)"
+TREE="$(cd "$HERE/../.." && pwd)"
+SCRIPT="$HERE/haiku-repo-add"
+LOCKLIB="$HERE/haiku-publish-lock.sh"
+KEEP=0
+[ "${1:-}" = --keep ] && KEEP=1
+
+[ -f "$SCRIPT" ] || { echo "selftest: no haiku-repo-add beside $HERE" >&2; exit 2; }
+
+# ---- host tools -----------------------------------------------------------
+find_tool() {
+	local name="$1" p
+	p="$(command -v "$name" 2>/dev/null)" && { echo "$p"; return 0; }
+	for p in "$TREE"/generated*/objects/linux/*/release/tools/"$name"/"$name" \
+		/opt/haiku-tools/"$name"; do
+		[ -x "$p" ] && { echo "$p"; return 0; }
+	done
+	return 1
+}
+PKG_TOOL="${PKG_TOOL:-$(find_tool package || true)}"
+PACKAGE_REPO_TOOL="${PACKAGE_REPO_TOOL:-$(find_tool package_repo || true)}"
+if [ -z "${PKG_TOOL:-}" ] || [ -z "${PACKAGE_REPO_TOOL:-}" ]; then
+	echo "selftest: need the host 'package' and 'package_repo' tools (build them, or set PKG_TOOL/PACKAGE_REPO_TOOL)" >&2
+	exit 2
+fi
+# The tree's licenses dir: the fixtures declare a standard license without bundling
+# it, exactly as golang-1.26.1 does, so CREATING them needs a licenses dir even
+# though the arms then take it away again.
+TREE_DATA="$TREE/data/system/data"
+[ -d "$TREE_DATA/licenses" ] || { echo "selftest: no $TREE_DATA/licenses in this tree" >&2; exit 2; }
+
+W="$(mktemp -d "${TMPDIR:-/tmp}/haiku-repo-add-selftest.XXXXXX")"
+cleanup() { [ "$KEEP" = 1 ] && { echo "selftest: work dir kept at $W" >&2; return 0; }; rm -rf "$W"; }
+trap cleanup EXIT
+echo "selftest: work dir $W"
+echo "selftest: package tool $PKG_TOOL"
+
+PASS=0; FAIL=0
+ok()   { PASS=$((PASS + 1)); echo "  PASS $*"; }
+bad()  { FAIL=$((FAIL + 1)); echo "  FAIL $*"; }
+check_exit() {
+	local want="$1" got="$2" desc="$3"
+	[ "$got" = "$want" ] && ok "$desc (exit $got)" || bad "$desc: expected exit $want, got $got"
+}
+check_has() {
+	local f="$1" needle="$2" desc="$3"
+	grep -qF -- "$needle" "$f" && ok "$desc" \
+		|| { bad "$desc -- output does not contain: $needle"; sed -e 's/^/      | /' "$f"; }
+}
+check_hasnt() {
+	local f="$1" needle="$2" desc="$3"
+	grep -qF -- "$needle" "$f" && bad "$desc -- output DOES contain: $needle" || ok "$desc"
+}
+check_file() { [ -f "$1" ] && ok "$2" || bad "$2 -- missing: $1"; }
+check_nofile() { [ -f "$1" ] && bad "$2 -- present but should not be: $1" || ok "$2"; }
+
+# ---- the `aws` shim -------------------------------------------------------
+# Serves exactly the verbs haiku-repo-add and haiku-publish-lock.sh use, against
+# $FAKE_S3_ROOT. The filter handling is deliberately minimal (the only real call is
+# `--exclude "*" --include "*.hpkg"`, so an --include list means "only these"), and
+# any verb or service not implemented exits 64 so a NEW call site cannot be
+# silently faked into looking like it worked -- which is the bug class under test.
+mkdir -p "$W/bin"
+cat > "$W/bin/aws" <<'SHIM'
+#!/usr/bin/env bash
+set -u
+root="$FAKE_S3_ROOT"
+loc() { case "$1" in s3://*) printf '%s\n' "$root/${1#s3://}";; *) printf '%s\n' "$1";; esac; }
+[ "${1:-}" = s3 ] || { echo "fake aws: unsupported service ${1:-}" >&2; exit 64; }
+shift
+verb="${1:-}"; shift || true
+pos=(); delete=0; only=""
+while [ $# -gt 0 ]; do
+	case "$1" in
+		--region|--exclude) shift 2; continue;;
+		--include) only="$2"; shift 2; continue;;
+		--delete) delete=1;;
+		--*) ;;
+		*) pos+=("$1");;
+	esac
+	shift
+done
+case "$verb" in
+	sync)
+		src="$(loc "${pos[0]}")"; dst="$(loc "${pos[1]}")"
+		mkdir -p "$dst"
+		if [ -d "$src" ]; then
+			while IFS= read -r rel; do
+				rel="${rel#./}"
+				if [ -n "$only" ]; then case "$rel" in $only) ;; *) continue;; esac; fi
+				mkdir -p "$dst/$(dirname "$rel")"
+				cp -p "$src/$rel" "$dst/$rel"
+			done < <(cd "$src" && find . -type f)
+		fi
+		if [ "$delete" = 1 ]; then
+			while IFS= read -r rel; do
+				rel="${rel#./}"
+				[ -f "$src/$rel" ] || rm -f "$dst/$rel"
+			done < <(cd "$dst" && find . -type f)
+		fi
+		;;
+	cp)
+		src="$(loc "${pos[0]}")"; dst="$(loc "${pos[1]}")"
+		[ -f "$src" ] || { echo "fatal error: An error occurred (404) when calling the HeadObject operation: Key does not exist" >&2; exit 1; }
+		mkdir -p "$(dirname "$dst")"; cp -p "$src" "$dst"
+		;;
+	rm)
+		rm -f "$(loc "${pos[0]}")"
+		;;
+	*) echo "fake aws: unsupported verb $verb" >&2; exit 64;;
+esac
+exit 0
+SHIM
+chmod +x "$W/bin/aws"
+
+# ---- the `package` shim for the mutation arms -----------------------------
+# Delegates to the real tool, except that it can (a) fail `add` with a chosen
+# message, or (b) succeed and then flip the package's heap_compression to zstd.
+# Everything else passes straight through, so the arms differ from a real run in
+# exactly one respect.
+cat > "$W/bin/package-shim" <<SHIM
+#!/usr/bin/env bash
+set -u
+REAL="$PKG_TOOL"
+SHIM
+cat >> "$W/bin/package-shim" <<'SHIM'
+verb="${1:-}"
+if [ "$verb" = add ] && [ -n "${SELFTEST_FAIL_ADD_MSG:-}" ]; then
+	echo "$SELFTEST_FAIL_ADD_MSG" >&2
+	exit 7
+fi
+"$REAL" "$@"
+rc=$?
+if [ "$verb" = add ] && [ "$rc" = 0 ] && [ "${SELFTEST_FLIP_COMPRESSION:-0}" = 1 ]; then
+	# Find the package argument: the first positional after `add`, skipping the
+	# values of -i and -C.
+	shift
+	pkg=""
+	while [ $# -gt 0 ]; do
+		case "$1" in
+			-i|-C) shift 2; continue;;
+			-*) shift; continue;;
+			*) pkg="$1"; break;;
+		esac
+	done
+	# heap_compression is a big-endian uint16 at offset 18; 2 == zstd.
+	[ -n "$pkg" ] && printf '\002' | dd of="$pkg" bs=1 seek=19 count=1 conv=notrunc 2>/dev/null
+fi
+exit $rc
+SHIM
+chmod +x "$W/bin/package-shim"
+
+# ---- fixtures -------------------------------------------------------------
+# A package that declares the standard license `BSD (3-clause)` and does NOT
+# bundle a copy -- normal, correct, and the exact shape that #502 lost.
+mk_fixture() {
+	local dir="$W/fixture" out="$1" name="$2"
+	rm -rf "$dir"; mkdir -p "$dir/data/settings"
+	cat > "$dir/.PackageInfo" <<EOF
+name			$name
+version			1.0.0-1
+architecture		arm64
+summary			"haiku-repo-add selftest fixture"
+description		"Synthetic package built by graviton/scripts/haiku-repo-add-selftest."
+packager		"Selftest Packager <selftest@example.invalid>"
+vendor			"NotDeBeOS"
+copyrights {
+	"2026 DeBeOS"
+}
+licenses {
+	"BSD (3-clause)"
+}
+provides {
+	$name = 1.0.0
+}
+requires {
+}
+EOF
+	echo "selftest fixture" > "$dir/data/settings/$name.txt"
+	( cd "$dir" && HAIKU_BUILD_SYSTEM_DATA_DIRECTORY="$TREE_DATA" \
+		"$PKG_TOOL" create -q -i .PackageInfo "$out" ) || return 1
+	[ -s "$out" ]
+}
+GOOD="$W/good.hpkg"
+mk_fixture "$GOOD" debeos_selftest_pkg \
+	|| { echo "selftest: could not build the fixture package" >&2; exit 2; }
+# A corrupt package, for the `unreadable-hpkg` skip path: a valid package with its
+# magic clobbered. (Truncation is NOT a reliable corruption here -- these fixtures
+# are only a couple of KiB, so a "first 4 KiB" copy is the whole file, and it then
+# resolves to the SAME canonical name as the good one. Worth knowing: the script
+# happily counts both as published.)
+CORRUPT="$W/corrupt.hpkg"
+cp -p "$GOOD" "$CORRUPT"
+printf 'XXXX' | dd of="$CORRUPT" bs=1 seek=0 count=4 conv=notrunc 2>/dev/null
+"$PKG_TOOL" list -i "$CORRUPT" >/dev/null 2>&1 \
+	&& { echo "selftest: the corrupt fixture is still readable -- fix this selftest" >&2; exit 2; }
+
+# ---- runner ---------------------------------------------------------------
+# One arm = a fresh fake S3 (empty repo + an incoming holding the named fixtures),
+# then one run of the script under test with its output captured.
+OUT="$W/out"
+run_arm() {
+	local script="$1"; shift
+	local root="$W/s3"; rm -rf "$root"
+	mkdir -p "$root/bkt/repo/arm64/packages" "$root/bkt/incoming"
+	local f
+	for f in "$@"; do cp -p "$f" "$root/bkt/incoming/"; done
+	rm -f "$W/published.list"
+	FAKE_S3_ROOT="$root" \
+	PATH="$W/bin:$PATH" \
+	PKG_TOOL="${ARM_PKG_TOOL:-$PKG_TOOL}" \
+	PACKAGE_REPO_TOOL="$PACKAGE_REPO_TOOL" \
+	HG_REPO_S3=s3://bkt/repo/arm64 \
+	HG_INCOMING_S3=s3://bkt/incoming \
+	HG_PUBLISHED_LIST_OUT="$W/published.list" \
+	HG_LOCK_SETTLE=0 HG_LOCK_HEARTBEAT=3600 \
+	bash "$script" > "$OUT" 2>&1
+	ARM_RC=$?
+	return 0
+}
+REPO="$W/s3/bkt/repo/arm64"
+
+echo
+echo "A. an unusable licenses directory fails UP FRONT"
+mkdir -p "$W/emptydata"
+HAIKU_BUILD_SYSTEM_DATA_DIRECTORY="$W/emptydata" run_arm "$SCRIPT" "$GOOD"
+check_exit 1 "$ARM_RC" "refuses to start"
+check_has "$OUT" "HAIKU_BUILD_SYSTEM_DATA_DIRECTORY" "names the variable to set"
+check_nofile "$REPO/repo" "no index was built"
+check_has "$OUT" "before the lock and the pool sync" "says it failed before doing anything"
+
+echo
+echo "B. the tool's license failure reaches the operator VERBATIM"
+# HG_ALLOW_NO_LICENSE_DIR=1 gets us past arm A's precondition so the REAL
+# `package add` runs and fails the way it failed on golang-1.26.1.
+HAIKU_BUILD_SYSTEM_DATA_DIRECTORY="$W/emptydata" HG_ALLOW_NO_LICENSE_DIR=1 \
+	run_arm "$SCRIPT" "$GOOD"
+check_exit 1 "$ARM_RC" "publishing nothing is a FAILURE, not exit 0"
+check_has "$OUT" "License 'BSD (3-clause)' isn't contained in package!" \
+	"the tool's own words, verbatim"
+check_has "$OUT" "restamp-add-failed" "keeps the machine-readable reason code too"
+check_has "$OUT" "PUBLISH FAILED: 0 of 1" "says how many of how many published"
+check_has "$OUT" "HAIKU_BUILD_SYSTEM_DATA_DIRECTORY" "hints at the actual fix"
+check_hasnt "$OUT" "Repo unchanged" "does not describe an empty publish as expected"
+# ... and it still fails CLOSED, which is the part that was already right.
+check_nofile "$REPO/repo" "no index uploaded"
+check_file "$W/s3/bkt/incoming/$(basename "$GOOD")" "package left in incoming"
+[ -s "$W/published.list" ] && bad "published list must be empty" \
+	|| ok "published nothing, and reported publishing nothing"
+
+echo
+echo "C. MUTATION: neuter the reporting and the arm above must go RED"
+# Two seds, one per half of #502: discard the tool's stderr again, and report
+# "published nothing" as success again. Each must match, or this test has drifted
+# away from the code it claims to guard.
+MUT="$W/mutant"; mkdir -p "$MUT"
+cp "$SCRIPT" "$MUT/haiku-repo-add"
+[ -f "$LOCKLIB" ] && cp "$LOCKLIB" "$MUT/"
+sed -i -e 's|>"$WORK/add.out" 2>"$WORK/add.err" \|\| rc=$?|>/dev/null 2>\&1 \|\| rc=$?|' \
+	"$MUT/haiku-repo-add"
+grep -q '>/dev/null 2>&1 || rc=$?' "$MUT/haiku-repo-add" \
+	|| { echo "selftest: --mutate sed 1 did not match; haiku-repo-add changed shape -- fix this selftest" >&2; exit 1; }
+awk '/PUBLISH FAILED/ {seen=1} seen && /^\texit 1$/ {sub(/exit 1/, "exit 0"); seen=0} {print}' \
+	"$MUT/haiku-repo-add" > "$MUT/tmp" && mv "$MUT/tmp" "$MUT/haiku-repo-add"
+grep -q 'PUBLISH FAILED' "$MUT/haiku-repo-add" \
+	|| { echo "selftest: --mutate sed 2 lost the failure message -- fix this selftest" >&2; exit 1; }
+# The mutant lives outside the tree, so the in-tree licenses fallback cannot
+# resolve; hand it the same (empty) dir arm B used so the ONLY differences are the
+# two neutered lines.
+HAIKU_BUILD_SYSTEM_DATA_DIRECTORY="$W/emptydata" HG_ALLOW_NO_LICENSE_DIR=1 \
+	run_arm "$MUT/haiku-repo-add" "$GOOD"
+check_exit 0 "$ARM_RC" "neutered: publishing nothing exits 0 again (the #502 bug)"
+check_hasnt "$OUT" "License 'BSD (3-clause)' isn't contained in package!" \
+	"neutered: the tool's message is swallowed again"
+echo "  (arm B's assertions therefore come from the fix, not from something incidental)"
+
+echo
+echo "D. with the licenses dir resolved, a real publish still exits 0"
+run_arm "$SCRIPT" "$GOOD"
+check_exit 0 "$ARM_RC" "publishes"
+check_has "$OUT" "resolved HAIKU_BUILD_SYSTEM_DATA_DIRECTORY" "resolved the dir itself"
+check_has "$OUT" "PUBLISHED 1 new package(s); skipped 0" "reports one publish"
+check_file "$REPO/repo" "index uploaded"
+check_file "$REPO/packages/debeos_selftest_pkg-1.0.0-1-arm64.hpkg" "package uploaded under its canonical name"
+grep -qx "$(basename "$GOOD")" "$W/published.list" \
+	&& ok "reported what it published" || bad "published list does not name the package"
+# The re-stamp must leave the heap encoding alone (a zlib -> zstd conversion would
+# install on a full image and fail on the lean base).
+comp_in="$(od -An -tx1 -j18 -N2 "$GOOD" | tr -d ' \n')"
+comp_out="$(od -An -tx1 -j18 -N2 "$REPO/packages/debeos_selftest_pkg-1.0.0-1-arm64.hpkg" | tr -d ' \n')"
+[ "$comp_in" = "$comp_out" ] && ok "heap_compression preserved by the re-stamp ($comp_in)" \
+	|| bad "heap_compression changed: $comp_in -> $comp_out"
+
+echo
+echo "E. a PARTIAL publish is labelled, and can be made fatal"
+run_arm "$SCRIPT" "$GOOD" "$CORRUPT"
+check_exit 0 "$ARM_RC" "the packages that landed keep the publish successful"
+check_has "$OUT" "PARTIAL: 1 of 2" "labels the partial result"
+check_has "$OUT" "unreadable-hpkg" "names the reason for the one that failed"
+check_file "$REPO/packages/debeos_selftest_pkg-1.0.0-1-arm64.hpkg" "good package published"
+check_file "$W/s3/bkt/incoming/$(basename "$CORRUPT")" "bad package left in incoming"
+HG_STRICT_PARTIAL=1 run_arm "$SCRIPT" "$GOOD" "$CORRUPT"
+check_exit 2 "$ARM_RC" "HG_STRICT_PARTIAL=1 makes a partial publish non-zero"
+check_has "$OUT" "The publish itself COMPLETED" "and still says the publish landed"
+
+echo
+echo "F. a re-stamp that changes the heap encoding is REFUSED"
+ARM_PKG_TOOL="$W/bin/package-shim" SELFTEST_FLIP_COMPRESSION=1 run_arm "$SCRIPT" "$GOOD"
+check_exit 1 "$ARM_RC" "refuses the converted package"
+check_has "$OUT" "restamp-compression-changed" "names the compression guard"
+check_has "$OUT" "lean base" "says why it matters"
+check_nofile "$REPO/packages/debeos_selftest_pkg-1.0.0-1-arm64.hpkg" "nothing published"
+
+echo
+echo "G. an arbitrary tool failure is reported verbatim, whatever it says"
+SENTINEL="tool exploded in a way nobody predicted (selftest sentinel 4f2a)"
+ARM_PKG_TOOL="$W/bin/package-shim" SELFTEST_FAIL_ADD_MSG="$SENTINEL" \
+	run_arm "$SCRIPT" "$GOOD"
+check_exit 1 "$ARM_RC" "non-zero"
+check_has "$OUT" "$SENTINEL" "an unanticipated message reaches the operator unedited"
+check_has "$OUT" "failed rc=7" "and so does the tool's exit status"
+
+echo
+echo "selftest: $PASS passed, $FAIL failed"
+[ "$FAIL" = 0 ] || exit 1
+exit 0

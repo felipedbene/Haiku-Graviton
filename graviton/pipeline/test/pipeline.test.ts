@@ -813,6 +813,16 @@ function fakeHpkg(name: string, version: string): string {
 /** An hpkg `package list -i` cannot parse -- the unreadable-hpkg skip of #442. */
 const UNREADABLE_HPKG = 'CORRUPT\n';
 
+/** The message the real `package add` produced in #502, thrown away by the old
+ * `>/dev/null 2>&1`. */
+const ADD_FAILURE_MESSAGE = "License 'BSD (3-clause)' isn't contained in package!";
+
+/** An hpkg whose metadata re-stamp fails IN THE TOOL, with the tool writing its own
+ * diagnosis to stderr -- the #502 shape. */
+function addFailsHpkg(name: string, version: string): string {
+  return fakeHpkg(name, version) + 'ADDFAIL\n';
+}
+
 const FAKE_AWS = `#!/usr/bin/env bash
 # Local stand-in for \`aws s3\`. s3://bucket/key <-> $FAKE_S3/bucket/key.
 set -u
@@ -885,6 +895,13 @@ case "$op" in
         *) [ -n "$pkg" ] || pkg="$1"; shift;;
       esac
     done
+    # A package marked ADDFAIL makes the re-stamp fail the way the real tool failed
+    # on golang-1.26.1 (#502): non-zero, with the diagnosis on STDERR. The real
+    # tool's exact sentence is used so the assertion pins the incident's wording.
+    if grep -q '^ADDFAIL' "$pkg" 2>/dev/null; then
+      echo "License 'BSD (3-clause)' isn't contained in package!" >&2
+      exit 1
+    fi
     # The real tool splices the edited .PackageInfo back into the package; here the
     # package IS its .PackageInfo.
     cp "$info" "$pkg"
@@ -957,6 +974,13 @@ function runRepoAdd(opts: {
     HG_CF_DIST: '',
     PKG_TOOL: path.join(bin, 'package'),
     PACKAGE_REPO_TOOL: path.join(bin, 'package_repo'),
+    // The script validates a licenses directory before it does anything (#502) and
+    // cannot resolve the tree's own from this sandbox (it is reached through a
+    // symlink, so `dirname $0` is the sandbox). Point it at the real in-tree
+    // directory: the stand-in `package` has no license check, but the harness must
+    // satisfy the same precondition a real publisher does rather than switch it off.
+    HAIKU_BUILD_SYSTEM_DATA_DIRECTORY:
+      path.join(SCRIPTS_DIR, '..', '..', 'data', 'system', 'data'),
     HG_PUBLISHED_LIST_OUT: publishedOut,
     // Keep the lock's read-back verify instant; the mechanism under test is the
     // acquire/refuse decision, not S3's consistency window.
@@ -1016,19 +1040,100 @@ test('repo-add reports only the packages it PUBLISHED, never a skipped one (#452
   expect(r.incoming).toEqual(['wrecked-9.9-1-arm64.hpkg']);
 });
 
-// The worst case of #452: EVERY package fails the re-stamp. The script exits 0 with
-// the repo untouched, and the old prune -- driven by the snapshot listing -- would
-// then have deleted the whole batch from the harvest. The reported set must be
-// EMPTY, and present, so the prune has something unambiguous to read.
-test('repo-add reports an EMPTY published set when everything is skipped (#452)', () => {
+// The worst case of #452: EVERY package fails the re-stamp. The repo is untouched,
+// and the old prune -- driven by the snapshot listing -- would then have deleted the
+// whole batch from the harvest. The reported set must be EMPTY, and present, so the
+// prune has something unambiguous to read.
+//
+// It must also be a FAILURE. This test used to assert exit 0 and "PUBLISHED 0 new
+// package(s)", which is precisely the hole #502 fell through: a run that published
+// nothing it was asked to publish looked, to an operator and to `set -e`, exactly
+// like a run with nothing to do. There is no "nothing to do" case here -- the script
+// dies earlier when incoming holds no *.hpkg -- so 0-published-of-N is a failure.
+test('repo-add FAILS, with an empty published set, when everything is skipped (#452/#502)', () => {
   const r = runRepoAdd({
     packages: { 'wrecked-9.9-1-arm64.hpkg': UNREADABLE_HPKG },
   });
-  expect(r.status).toBe(0);
-  expect(r.stdout).toContain('PUBLISHED 0 new package(s)');
+  expect(r.status).toBe(1);
+  expect(r.stderr).toContain('PUBLISH FAILED: 0 of 1');
+  expect(r.stdout).not.toContain('Repo unchanged');
   expect(r.published).toEqual([]);      // written, and empty -- not missing
   expect(r.pool).toEqual([]);           // repo untouched
   expect(r.incoming).toEqual(['wrecked-9.9-1-arm64.hpkg']);
+});
+
+// #502 itself: the re-stamp ran `package add` with `>/dev/null 2>&1`, so when the
+// tool refused a package whose declared license it could not find, all the operator
+// saw was the reason code this script invented -- `restamp-add-failed`, which reads
+// like a corrupt hpkg -- followed by exit 0 and "Repo unchanged". The tool's own
+// sentence named the exact problem and was discarded. It must now be relayed
+// verbatim, with the tool's exit status, and the run must fail.
+test('repo-add relays the packaging tool\'s own words when a re-stamp fails (#502)', () => {
+  const r = runRepoAdd({
+    packages: { 'golang-1.26.1-1-arm64.hpkg': addFailsHpkg('golang', '1.26.1-1') },
+  });
+  expect(r.status).toBe(1);
+  expect(r.stderr).toContain(ADD_FAILURE_MESSAGE);      // THE assertion
+  expect(r.stderr).toContain('restamp-add-failed');     // reason code kept as a label
+  expect(r.stderr).toContain('failed rc=1');            // and the tool's real status
+  expect(r.stderr).toContain('PUBLISH FAILED: 0 of 1');
+  // The actionable one-liner for the one cause that is host configuration.
+  expect(r.stderr).toContain('HAIKU_BUILD_SYSTEM_DATA_DIRECTORY');
+  // Still fails CLOSED, which was already right: nothing published, nothing consumed.
+  expect(r.published).toEqual([]);
+  expect(r.pool).toEqual([]);
+  expect(r.incoming).toEqual(['golang-1.26.1-1-arm64.hpkg']);
+});
+
+// A publish that lands some packages and drops others is neither a clean success nor
+// a total failure, and it used to be indistinguishable from the first. The packages
+// that landed keep the status 0 (the caller's prune must still run), but the result
+// is LABELLED, each failure is named, and HG_STRICT_PARTIAL makes it non-zero for a
+// caller that wants all-or-nothing.
+test('repo-add labels a PARTIAL publish, and HG_STRICT_PARTIAL makes it fatal (#502)', () => {
+  const packages = {
+    'good-one-1.0-1-arm64.hpkg': fakeHpkg('good_one', '1.0-1'),
+    'golang-1.26.1-1-arm64.hpkg': addFailsHpkg('golang', '1.26.1-1'),
+  };
+  const r = runRepoAdd({ packages });
+  expect(r.status).toBe(0);
+  expect(r.stderr).toContain('PARTIAL: 1 of 2');
+  expect(r.stderr).toContain(ADD_FAILURE_MESSAGE);
+  expect(r.pool).toEqual(['good_one-1.0-1-arm64.hpkg']);
+  expect(r.published).toEqual(['good-one-1.0-1-arm64.hpkg']);
+  expect(r.incoming).toEqual(['golang-1.26.1-1-arm64.hpkg']);
+
+  const strict = runRepoAdd({ packages, env: { HG_STRICT_PARTIAL: '1' } });
+  expect(strict.status).toBe(2);
+  // ... and it still says the publish itself landed, so nobody re-publishes in a panic.
+  expect(strict.stderr).toContain('The publish itself COMPLETED');
+  expect(strict.pool).toEqual(['good_one-1.0-1-arm64.hpkg']);
+});
+
+// The other half of #502: the license check needs a licenses directory, and a run
+// that cannot have one must say so UP FRONT -- before the lock, before syncing the
+// pool -- instead of rediscovering it per package, several GB later, as a reason code
+// that names the wrong thing.
+test('repo-add refuses to start without a usable licenses directory (#502)', () => {
+  const empty = fs.mkdtempSync(path.join(os.tmpdir(), 'no-licenses-'));
+  const r = runRepoAdd({
+    packages: { 'good-one-1.0-1-arm64.hpkg': fakeHpkg('good_one', '1.0-1') },
+    env: { HAIKU_BUILD_SYSTEM_DATA_DIRECTORY: empty },
+  });
+  expect(r.status).not.toBe(0);
+  expect(r.stderr).toContain('no licenses directory for the metadata re-stamp');
+  expect(r.stderr).toContain('HG_ALLOW_NO_LICENSE_DIR=1');   // names the escape hatch
+  // Up front means up front: it never took the lock and never touched the repo.
+  expect(r.stderr).not.toContain('publish-lock: acquired');
+  expect(r.pool).toEqual([]);
+  expect(r.incoming).toEqual(['good-one-1.0-1-arm64.hpkg']);
+  // The escape hatch does let it proceed (the stand-in tool has no license check).
+  const forced = runRepoAdd({
+    packages: { 'good-one-1.0-1-arm64.hpkg': fakeHpkg('good_one', '1.0-1') },
+    env: { HAIKU_BUILD_SYSTEM_DATA_DIRECTORY: empty, HG_ALLOW_NO_LICENSE_DIR: '1' },
+  });
+  expect(forced.status).toBe(0);
+  expect(forced.pool).toEqual(['good_one-1.0-1-arm64.hpkg']);
 });
 
 // #453: the publish job never banked haiku-publish-lock.sh, so haiku-repo-add's

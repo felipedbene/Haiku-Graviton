@@ -33,9 +33,21 @@
 #   HG_REQUIRE_PUBLISH_LOCK  1 => a missing haiku-publish-lock.sh is FATAL rather
 #                   than a warning (set it on automated paths, where the library's
 #                   absence is a packaging bug)
+#   HAIKU_BUILD_SYSTEM_DATA_DIRECTORY  dir containing licenses/, for the re-stamp's
+#                   license check off a Haiku host. RESOLVED AND SET HERE when unset
+#                   (see "licenses directory" below, #502); validated either way
+#   HG_ALLOW_NO_LICENSE_DIR  1 => proceed with NO usable licenses dir (only sane for
+#                   a batch whose every package bundles its own licenses)
+#   HG_STRICT_PARTIAL  1 => exit 2 when SOME packages published and some failed
+#                   (default: exit 0 -- the publish did complete -- with a PARTIAL line)
 #   ARCH            packaging arch (default arm64)
 #   AWS_DEFAULT_REGION / AWS_REGION (default us-west-2)
 #   PKG_TOOL / PACKAGE_REPO_TOOL   tool paths (auto-detected under /opt/haiku if unset)
+#
+# Exit status:
+#   0  every offered package published (or some did and HG_STRICT_PARTIAL is unset)
+#   1  a precondition failed, OR NOTHING published while packages were offered (#502)
+#   2  partial publish and HG_STRICT_PARTIAL=1
 #
 set -euo pipefail
 
@@ -91,6 +103,73 @@ elif command -v haiku-aws >/dev/null 2>&1; then
 else
 	AWS=(aws)
 fi
+
+# ---- licenses directory for the metadata re-stamp (issue #502) -------------
+# `package add` validates every name in the package's `licenses { ... }` list
+# (src/kits/package/hpkg/PackageWriterImpl.cpp::_CheckLicenses): the name must
+# either resolve under <system data dir>/licenses or be bundled in the package as
+# data/licenses/<name>, else the whole add fails B_BAD_DATA with
+# "License 'X' isn't contained in package!". Declaring a standard license without
+# bundling a copy of it is normal and correct, so on a host where the system
+# licenses directory does not resolve, perfectly good packages are rejected.
+#
+# On a Haiku host the tool calls find_directory(B_SYSTEM_DATA_DIRECTORY) and
+# IGNORES the environment. Off Haiku (a Linux cross-build host, the CodeBuild
+# publisher) the path is compiled in at build time, and the tool honours a
+# HAIKU_BUILD_SYSTEM_DATA_DIRECTORY override. This script used to neither set nor
+# check it, and golang-1.26.1-1-arm64 was lost to a bare `restamp-add-failed`
+# whose real cause was discarded (#502).
+#
+# We SET it when it is unset and resolvable rather than merely demanding it: the
+# tree ships data/system/data/licenses, the banked-tools layout ships data/licenses
+# beside the tool, so on every host that can publish at all the answer is already
+# to hand and making the operator type it buys nothing. What we do NOT do is run a
+# license check that cannot work: whatever directory ends up in effect -- ours or
+# the caller's -- is validated HERE, before the lock and before the pool is pulled,
+# so an unusable one fails loudly up front instead of reappearing as a per-package
+# skip after several GB of sync. HG_ALLOW_NO_LICENSE_DIR=1 is the escape hatch.
+LICENSE_DIR_NOTE=""
+if [ "$(uname -s 2>/dev/null || echo unknown)" = Haiku ]; then
+	if [ -d /boot/system/data/licenses ]; then
+		LICENSE_DIR_NOTE="/boot/system/data/licenses (native; find_directory, env ignored)"
+	else
+		echo "haiku-repo-add: WARNING: /boot/system/data/licenses is missing on this Haiku host -- the re-stamp will REJECT any package that declares a license it does not bundle (#502). HAIKU_BUILD_SYSTEM_DATA_DIRECTORY cannot help: the native tool ignores it." >&2
+		LICENSE_DIR_NOTE="<missing: /boot/system/data/licenses>"
+	fi
+else
+	_probed=""
+	if [ -z "${HAIKU_BUILD_SYSTEM_DATA_DIRECTORY:-}" ]; then
+		_pkg_dir="$(dirname "$(command -v "$PKG_TOOL" 2>/dev/null || echo "$PKG_TOOL")")"
+		for cand in \
+			"$HERE_RA/../../data/system/data" \
+			"$_pkg_dir/data" \
+			/opt/haiku-tools/data \
+			/opt/haiku/haiku/data/system/data
+		do
+			_probed="$_probed $cand"
+			[ -d "$cand/licenses" ] || continue
+			HAIKU_BUILD_SYSTEM_DATA_DIRECTORY="$(cd "$cand" && pwd)"
+			export HAIKU_BUILD_SYSTEM_DATA_DIRECTORY
+			echo "haiku-repo-add: resolved HAIKU_BUILD_SYSTEM_DATA_DIRECTORY=$HAIKU_BUILD_SYSTEM_DATA_DIRECTORY (#502)"
+			break
+		done
+	fi
+	if [ -n "${HAIKU_BUILD_SYSTEM_DATA_DIRECTORY:-}" ] \
+		&& [ -d "${HAIKU_BUILD_SYSTEM_DATA_DIRECTORY}/licenses" ]; then
+		LICENSE_DIR_NOTE="$HAIKU_BUILD_SYSTEM_DATA_DIRECTORY/licenses"
+	elif [ "${HG_ALLOW_NO_LICENSE_DIR:-0}" = 1 ]; then
+		echo "haiku-repo-add: WARNING: no usable licenses directory (HAIKU_BUILD_SYSTEM_DATA_DIRECTORY=${HAIKU_BUILD_SYSTEM_DATA_DIRECTORY:-<unset>}) and HG_ALLOW_NO_LICENSE_DIR=1 -- every package that declares a license it does not bundle WILL be skipped (#502)" >&2
+		LICENSE_DIR_NOTE="<none; HG_ALLOW_NO_LICENSE_DIR=1>"
+	else
+		if [ -n "${HAIKU_BUILD_SYSTEM_DATA_DIRECTORY:-}" ]; then
+			_why="HAIKU_BUILD_SYSTEM_DATA_DIRECTORY=$HAIKU_BUILD_SYSTEM_DATA_DIRECTORY has no licenses/ subdirectory (set by the caller, so it was used as given and NOT second-guessed)"
+		else
+			_why="HAIKU_BUILD_SYSTEM_DATA_DIRECTORY is unset and no fallback has a licenses/ subdirectory (probed:$_probed)"
+		fi
+		die "no licenses directory for the metadata re-stamp (#502): $_why. Point HAIKU_BUILD_SYSTEM_DATA_DIRECTORY at a directory containing licenses/ -- the DeBeOS tree ships data/system/data -- or set HG_ALLOW_NO_LICENSE_DIR=1 if every package in this batch bundles its own licenses. Failing here, before the lock and the pool sync, rather than skipping packages one by one later."
+	fi
+fi
+echo "haiku-repo-add: license check against $LICENSE_DIR_NOTE"
 
 WORK="$(mktemp -d)"; RO="$WORK/repo-out"
 trap 'rm -rf "$WORK"' EXIT
@@ -166,6 +245,67 @@ echo "== 3. re-stamp incoming to vendor $VENDOR + packager $PACKAGER and stage u
 added=0
 skipped=0
 skipped_list=""
+# How many packages this run was ASKED to publish. The final accounting checks
+# added + skipped == offered, so a package can never fall out of the report
+# unnoticed, and "published nothing" cannot be reported as success (#502).
+offered="$(ls -1 "$WORK/incoming"/*.hpkg 2>/dev/null | wc -l | tr -d ' ')"
+SKIPS="$WORK/skips"; : > "$SKIPS"
+
+# ---- surface what the TOOL said, verbatim (issue #502) --------------------
+# The defect #502 records is not a missing environment variable: it is that this
+# script ran a tool with `>/dev/null 2>&1`, then printed a reason code of its own
+# invention ("restamp-add-failed") in place of the diagnosis the tool had already
+# written. `package add` said "License 'BSD (3-clause)' isn't contained in
+# package!" -- an exact, actionable sentence -- and it was thrown away, so the
+# cause took a by-hand re-run to recover. Every tool invocation in this loop now
+# keeps its stderr (and stdout) and replays it, unedited and attributed, beside
+# the skip. Our reason codes stay, because callers grep them, but they are now a
+# LABEL on the tool's message rather than a substitute for it.
+tool_said() {
+	local what="$1"; shift
+	local any=0 f
+	for f in "$@"; do
+		[ -s "$f" ] || continue
+		any=1
+		sed -e "s|^|       $what: |" "$f" >&2
+	done
+	[ "$any" = 1 ] || echo "       $what: (said nothing)" >&2
+}
+
+# The one skip cause that is a HOST configuration problem rather than a bad
+# package gets a line the operator can act on directly.
+license_hint() {
+	grep -q "isn't contained in package" "$1" 2>/dev/null || return 0
+	echo "       HINT: that license is neither bundled in the package nor present in the licenses directory in use ($LICENSE_DIR_NOTE). Point HAIKU_BUILD_SYSTEM_DATA_DIRECTORY at a directory containing licenses/ -- the DeBeOS tree ships data/system/data -- and re-run (#502)." >&2
+}
+
+# Record a skip once, in one place: the counter, the human list, and the machine
+# readable reason+message replayed in the final summary.
+note_skip() {
+	skipped=$((skipped + 1))
+	skipped_list="$skipped_list $1"
+	printf '%s\t%s\t%s\n' "$1" "$2" "${3:-}" >> "$SKIPS"
+}
+
+first_line() { [ -s "$1" ] && head -1 "$1" || echo ""; }
+
+# heap_compression is a big-endian uint16 at offset 18 of the hpkg header
+# (headers/os/package/hpkg/HPKGDefs.h; 0 = none, 1 = zlib, 2 = zstd). The
+# re-stamp is supposed to leave the heap alone -- measured on golang-1.26.1,
+# where original and re-stamped headers both read heap_compression=1 -- and it
+# MATTERS that it does: a package silently converted to zstd installs fine on a
+# full image and fails on the lean base, which has no zstd reader. So the one
+# configuration we actually ship is the one such a regression would break, and it
+# would not show up on the machine doing the re-stamp. Reading two bytes with od
+# costs nothing, so compare them.
+hpkg_heap_compression() {
+	local hex
+	hex="$(od -An -tx1 -j18 -N2 "$1" 2>/dev/null | tr -d ' \n')" || return 1
+	case "$hex" in
+		[0-9a-fA-F][0-9a-fA-F][0-9a-fA-F][0-9a-fA-F]) printf '%d\n' "$((0x$hex))" ;;
+		*) return 1 ;;
+	esac
+}
 # One published incoming basename per LINE, rather than the former space-joined
 # string: this is the set reported to HG_PUBLISHED_LIST_OUT (#452) and a delete
 # candidate list must not depend on word-splitting to be read back correctly.
@@ -182,8 +322,9 @@ for f in "$WORK/incoming"/*.hpkg; do
 	# every publish with no indication of which package or why. The tool's own
 	# message is now surfaced.
 	if ! info="$("$PKG_TOOL" list -i "$f" 2>"$WORK/list.err")"; then
-		echo "   ! SKIP $base: package list -i failed: $(head -1 "$WORK/list.err") (unreadable-hpkg)" >&2
-		skipped=$((skipped + 1)); skipped_list="$skipped_list $base"
+		echo "   ! SKIP $base: package list -i failed (unreadable-hpkg); the tool said:" >&2
+		tool_said "package list" "$WORK/list.err"
+		note_skip "$base" unreadable-hpkg "$(first_line "$WORK/list.err")"
 		continue
 	fi
 	cur="$(printf '%s\n' "$info" | sed -nE 's/^[[:space:]]*vendor:[[:space:]]*"?([^"]*)"?[[:space:]]*$/\1/p' | head -1)"
@@ -215,11 +356,13 @@ for f in "$WORK/incoming"/*.hpkg; do
 		# file (it also touches a later entry's attribute), so gate on the file
 		# existing, not on the exit code. A genuine failure is escalated for this
 		# one package (skip+report) rather than aborting the batch under `set -e`.
-		"$PKG_TOOL" extract -C "$tmp" "$staged" .PackageInfo >/dev/null 2>&1 || true
+		"$PKG_TOOL" extract -C "$tmp" "$staged" .PackageInfo \
+			>"$WORK/extract.out" 2>"$WORK/extract.err" || true
 		if [ ! -f "$tmp/.PackageInfo" ]; then
-			echo "   ! SKIP $base: could not extract .PackageInfo (restamp-extract-failed)" >&2
+			echo "   ! SKIP $base: could not extract .PackageInfo (restamp-extract-failed); the tool said:" >&2
+			tool_said "package extract" "$WORK/extract.err" "$WORK/extract.out"
 			rm -rf "$tmp"
-			skipped=$((skipped + 1)); skipped_list="$skipped_list $base"
+			note_skip "$base" restamp-extract-failed "$(first_line "$WORK/extract.err")"
 			continue
 		fi
 		if grep -qE '^[[:space:]]*vendor[[:space:]]' "$tmp/.PackageInfo"; then
@@ -235,13 +378,37 @@ for f in "$WORK/incoming"/*.hpkg; do
 			printf '\npackager\t"%s"\n' "$PACKAGER" >> "$tmp/.PackageInfo"
 		fi
 		# Splice the edited .PackageInfo back into the staged copy in place.
-		if ! "$PKG_TOOL" add -f -q -i "$tmp/.PackageInfo" -C "$tmp" "$staged" .PackageInfo >/dev/null 2>&1; then
-			echo "   ! SKIP $base: package add (metadata re-stamp) failed (restamp-add-failed)" >&2
+		comp_before="$(hpkg_heap_compression "$staged" || echo "")"
+		# `|| rc=$?` rather than `if ! ...`: inside an `if !` branch $? is the
+		# NEGATED status (always 0), so the tool's real exit code has to be taken
+		# here. Reporting the status a tool actually returned is the other half of
+		# not discarding what it said.
+		rc=0
+		"$PKG_TOOL" add -f -q -i "$tmp/.PackageInfo" -C "$tmp" "$staged" .PackageInfo \
+			>"$WORK/add.out" 2>"$WORK/add.err" || rc=$?
+		if [ "$rc" -ne 0 ]; then
+			echo "   ! SKIP $base: package add (metadata re-stamp) failed rc=$rc (restamp-add-failed); the tool said:" >&2
+			tool_said "package add" "$WORK/add.err" "$WORK/add.out"
+			license_hint "$WORK/add.err"
 			rm -rf "$tmp"
-			skipped=$((skipped + 1)); skipped_list="$skipped_list $base"
+			note_skip "$base" restamp-add-failed "$(first_line "$WORK/add.err")"
 			continue
 		fi
 		rm -rf "$tmp"
+		# Heap compression must survive a METADATA-only re-stamp; see
+		# hpkg_heap_compression above for why a silent zstd conversion would only
+		# break the configuration we ship. Refuse to publish a package whose heap
+		# encoding changed under us.
+		comp_after="$(hpkg_heap_compression "$staged" || echo "")"
+		if [ -n "$comp_before" ] && [ -n "$comp_after" ] && [ "$comp_before" != "$comp_after" ]; then
+			echo "   ! SKIP $base: re-stamp CHANGED heap_compression $comp_before -> $comp_after (restamp-compression-changed); 1=zlib, 2=zstd -- a zstd heap installs on a full image and FAILS on the lean base, so this package is not published" >&2
+			note_skip "$base" restamp-compression-changed "heap_compression $comp_before -> $comp_after"
+			rm -f "$staged"
+			continue
+		fi
+		if [ -z "$comp_before" ] || [ -z "$comp_after" ]; then
+			echo "   note: could not read heap_compression for $base (od unavailable?) -- compression-preservation UNCHECKED for this package" >&2
+		fi
 	fi
 	# `|| true` so a failing `package list` inside canonical_name cannot abort the
 	# batch through `set -e` before the explicit diagnosis below can run.
@@ -260,12 +427,39 @@ done
 if [ "$skipped" -gt 0 ]; then
 	echo "   NOTE: skipped $skipped package(s), left in incoming for human handling:$skipped_list" >&2
 fi
+
+# Replay every skip with the tool's own first line, compactly, at the end of the
+# run: the per-package output above is thousands of lines back in a wave log.
+print_skip_summary() {
+	local b reason msg
+	while IFS="$(printf '\t')" read -r b reason msg; do
+		[ -n "$b" ] || continue
+		echo "   FAILED $b [$reason]${msg:+: $msg}" >&2
+	done < "$SKIPS"
+}
+
+# ---- account for every package we were asked to publish (issue #502) -------
+# Totality first: a package is either staged (added) or skipped WITH a recorded
+# reason. If those do not sum to what was offered, the report is wrong in a way we
+# cannot characterise, which is the whole family of bug this guard exists for --
+# so say so and fail rather than print a number nobody can trust.
+if [ $((added + skipped)) -ne "$offered" ]; then
+	die "internal accounting error: offered $offered package(s), counted $added added + $skipped skipped -- refusing to report a result that does not add up"
+fi
 if [ "$added" -eq 0 ]; then
-	# Nothing new staged (everything skipped or already published). Do not
-	# rebuild/re-upload an unchanged index or invalidate the CDN for nothing;
-	# leave the skipped packages in incoming. This is a success for the batch.
-	echo "PUBLISHED 0 new package(s); skipped $skipped (see notes above). Repo unchanged."
-	exit 0
+	# EVERY package this run was asked to publish failed. There is no "nothing to
+	# do" case to confuse this with: step 2 dies when incoming holds no *.hpkg, and
+	# the totality check above proves each offered package was either added or
+	# skipped -- so added == 0 with offered > 0 means the batch published NOTHING it
+	# was asked to. That used to exit 0 and print "Repo unchanged", which is how
+	# #502 stayed invisible for 30 minutes: an operator (and an automated caller)
+	# read a green publish over an empty one. Nothing about the repo changes here --
+	# no index rebuild, no upload, no invalidation, and the packages stay in
+	# incoming, so this still fails CLOSED. Only the report changes, and it is now
+	# a failure, because that is what it is.
+	echo "PUBLISH FAILED: 0 of $offered offered package(s) published; all $skipped failed. The repo is UNCHANGED and every package is still in $HG_INCOMING_S3." >&2
+	print_skip_summary
+	exit 1
 fi
 
 echo "== 4. rebuild repo.info + index over $(ls -1 "$RO/packages" | wc -l) package(s) =="
@@ -340,3 +534,19 @@ while IFS= read -r b; do
 done < "$PUBLISHED_BASES"
 
 echo "PUBLISHED $added new package(s); skipped $skipped; repo now has $(ls -1 "$RO/packages" | wc -l) (was $before)."
+if [ "$skipped" -gt 0 ]; then
+	# A PARTIAL publish: the packages that made it are durable in the live repo and
+	# the index references them, so the publish itself COMPLETED -- which is why the
+	# default status stays 0. A caller's post-publish bookkeeping (the harvest prune,
+	# driven by HG_PUBLISHED_LIST_OUT) must still run, and it prunes only the set we
+	# actually published, so a skipped package keeps its only copy. What must not
+	# happen is a partial publish reading as a clean one, so it gets its own labelled
+	# line and its own reason list; HG_STRICT_PARTIAL=1 turns it into exit 2 for a
+	# caller that wants all-or-nothing.
+	echo "PARTIAL: $added of $offered offered package(s) published; $skipped FAILED and remain in $HG_INCOMING_S3." >&2
+	print_skip_summary
+	if [ "${HG_STRICT_PARTIAL:-0}" = 1 ]; then
+		echo "haiku-repo-add: HG_STRICT_PARTIAL=1 -- exiting 2. The publish itself COMPLETED (packages + index uploaded); this status reports the $skipped package(s) that did not make it." >&2
+		exit 2
+	fi
+fi
