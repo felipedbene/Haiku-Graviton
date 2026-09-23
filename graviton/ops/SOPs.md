@@ -214,6 +214,31 @@ lands) are the publisher's `/dev/shm` and disk sizing:
   code, and a green step is not a published package (§7). Count objects/index in
   the pool prefix after.
 
+**`haiku-repo-add` exit codes, and what a skip now tells you (#502).** The add used
+to exit **0** after publishing nothing ("Repo unchanged"), with the packaging tool's
+stderr discarded and a reason code of its own invention in its place — which is how
+`golang-1.26.1` was lost to a bare `restamp-add-failed` whose real cause (`License
+'BSD (3-clause)' isn't contained in package!`) took a by-hand re-run to recover. Now:
+
+- **0** every offered package published — or some did, with a labelled `PARTIAL:`
+  line naming each failure (`HG_STRICT_PARTIAL=1` makes that exit **2** instead).
+- **1** a precondition failed, **or** `PUBLISH FAILED: 0 of N` — nothing published
+  while packages were offered. Never read that as success again.
+- Every skip now replays **the tool's own stderr, verbatim**, plus its exit status,
+  and a final `FAILED <pkg> [reason]: <message>` summary per package.
+- The **license check needs a licenses directory**. Off a Haiku host the add
+  resolves and exports `HAIKU_BUILD_SYSTEM_DATA_DIRECTORY` itself (the tree's
+  `data/system/data`, `data/` beside a banked tool, `/opt/haiku-tools/data`) and
+  **fails up front** — before the lock and the pool sync — when it cannot. On a
+  Haiku host the tool uses `find_directory` and ignores that variable entirely.
+- The re-stamp must **preserve `heap_compression`**; a package that comes out zstd
+  is refused (`restamp-compression-changed`), because a zstd heap installs on a full
+  image and fails on the lean base — the configuration we actually ship.
+
+`graviton/scripts/haiku-repo-add-selftest` exercises all of that offline (fake `aws`,
+synthetic hpkgs, no live pool), including a mutation arm that neuters the reporting
+and asserts the test goes red.
+
 When the prod CloudFront origin points at the pool you published, also invalidate
 the prod dist's index paths so the change is served.
 
