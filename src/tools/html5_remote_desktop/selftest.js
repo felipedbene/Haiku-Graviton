@@ -265,6 +265,16 @@ Writer.prototype.f32 = function(v) {
 	this.bytes.push(b[0], b[1], b[2], b[3]);
 	return this;
 };
+Writer.prototype.f64 = function(v) {
+	// The view transform's members are doubles on the wire (BAffineTransform
+	// stores them as double; RemoteTransform.readFrom reads readFloat64), so a
+	// float32 write would desynchronise the reader by 24 bytes.
+	const b = new Uint8Array(8);
+	new DataView(b.buffer).setFloat64(0, v, true);
+	for (let i = 0; i < 8; i++)
+		this.bytes.push(b[i]);
+	return this;
+};
 Writer.prototype.str = function(s) {
 	this.u32(s.length);
 	for (let i = 0; i < s.length; i++)
@@ -392,6 +402,17 @@ function drawRun(opts) {
 	const reply = new FakeReply();
 	state.invalidated = true;
 	deliver(state, canvas, reply, client.RP_SET_FONT, fontPayload(o));
+	if (o.view) {
+		// RP_SET_TRANSFORM: bool isIdentity, then the six BAffineTransform
+		// members as DOUBLES, agg order sx shy shx sy tx ty
+		// (RemoteMessage.cpp:313-327).
+		const v = o.view;
+		deliver(state, canvas, reply, client.RP_SET_TRANSFORM,
+			new Writer().u8(0).f64(v.sx === undefined ? 1 : v.sx)
+				.f64(v.shy || 0).f64(v.shx || 0)
+				.f64(v.sy === undefined ? 1 : v.sy)
+				.f64(v.tx || 0).f64(v.ty || 0).done());
+	}
 	const text = o.text === undefined ? 'Rotated' : o.text;
 	const origin = o.origin || [150, 150];
 	if (o.offsets) {
@@ -731,6 +752,93 @@ check('MUTATION: ignoring shear goes RED',
 check('the real behaviour is back after the mutation arms',
 	JSON.stringify(boxOf(drawRun({ rotation: 90 }))) === JSON.stringify(turnBox)
 	&& JSON.stringify(boxOf(drawRun({}))) === JSON.stringify(flatBox));
+
+console.log('  -- the view transform: RP_SET_TRANSFORM, opcode 49 (#501) --');
+// A SEPARATE mechanism from the font's rotation/shear: it scales/turns the whole
+// view the text lands in, and in this client it reaches text through the canvas
+// CTM applyContext sets (HaikuRemoteDesktop.js:1229-1233), offset-conjugated
+// exactly as Painter::SetTransform (Painter.cpp:372-383).  So a scaled view
+// enlarges the glyph RASTER via fillText under the CTM, not merely the spacing
+// -- the difference between a filled letter and the dot lattice #27 fixed in the
+// C++ client.  A 600x600 canvas with the origin at (150,150) keeps a 2x-scaled
+// run (origin -> (300,300)) on the canvas whichever way it also turns.
+const BIG = { width: 600, height: 600 };
+const vFlat = drawRun(Object.assign({}, BIG));
+const vFlatBox = boxOf(vFlat);
+const vfW = vFlatBox[2] - vFlatBox[0], vfH = vFlatBox[3] - vFlatBox[1];
+const vScaled = drawRun(Object.assign({ view: { sx: 2, sy: 2 } }, BIG));
+const vScaledBox = boxOf(vScaled);
+const vsW = vScaledBox[2] - vScaledBox[0], vsH = vScaledBox[3] - vScaledBox[1];
+check('a view-scaled run is drawn, not discarded',
+	realBox(vScaledBox) && vScaled.canvas.inkPixels() > 0,
+	JSON.stringify(vScaledBox));
+check("a view-scaled run's ink box is about twice the identity box on each axis",
+	Math.abs(vsW - 2 * vfW) <= 2 && Math.abs(vsH - 2 * vfH) <= 2,
+	vfW + 'x' + vfH + ' -> ' + vsW + 'x' + vsH);
+// THE DISCRIMINATOR, against an INDEPENDENT oracle: the area scale factor of an
+// affine is |determinant| = sx*sy = 4, worked out here from the matrix
+// definition and NOT from the client's transform code.  A dot lattice -- spacing
+// scaled, each glyph raster left alone -- would ink ~1x, which is exactly why a
+// count-vs-zero or "did text draw?" check passes on the bug.
+const det = 2 * 2;
+check('a view-scaled run inks about |det| = 4x the identity run (independent '
+	+ 'area-scale oracle; a lattice would ink ~1x)',
+	Math.abs(vScaled.canvas.inkPixels() / vFlat.canvas.inkPixels() - det)
+		< 0.15 * det,
+	vScaled.canvas.inkPixels() + ' vs ' + vFlat.canvas.inkPixels() + ' x' + det);
+check('character counts CANNOT tell a view-scaled run from the identity one',
+	vScaled.canvas.charBoxes.length === vFlat.canvas.charBoxes.length,
+	vScaled.canvas.charBoxes.length + ' vs ' + vFlat.canvas.charBoxes.length);
+
+// Translation-only view: the fast path all real traffic takes.  Area is
+// preserved (det 1), so the ink count is unchanged and the box only shifts.
+const vShift = drawRun(Object.assign({ view: { tx: 40, ty: 25 } }, BIG));
+const shBox = boxOf(vShift);
+check('a translation-only view leaves the ink count unchanged',
+	vShift.canvas.inkPixels() === vFlat.canvas.inkPixels(),
+	vShift.canvas.inkPixels() + ' vs ' + vFlat.canvas.inkPixels());
+check('a translation-only view shifts the box by the translation, unscaled',
+	Math.abs((shBox[0] - vFlatBox[0]) - 40) <= 1
+	&& Math.abs((shBox[1] - vFlatBox[1]) - 25) <= 1
+	&& (shBox[2] - shBox[0]) === vfW,
+	JSON.stringify(shBox) + ' vs ' + JSON.stringify(vFlatBox) + '+(40,25)');
+
+// Composition with the FONT transform: font-rotated 90 AND view-scaled 2x comes
+// out both turned and enlarged.
+const vBoth = drawRun(Object.assign({ view: { sx: 2, sy: 2 }, rotation: 90 },
+	BIG));
+const bBox = boxOf(vBoth);
+check('a view-scaled, font-rotated run is BOTH turned and enlarged',
+	realBox(bBox) && (bBox[3] - bBox[1]) > (bBox[2] - bBox[0])
+	&& vBoth.canvas.inkPixels() > 2.5 * vFlat.canvas.inkPixels(),
+	JSON.stringify(bBox) + ' ink ' + vBoth.canvas.inkPixels());
+
+// MUTATION: the pre-#501 client -- decode RP_SET_TRANSFORM, apply none of it.
+// applyContext gates the view transform on !transform.isIdentity()
+// (HaikuRemoteDesktop.js:1229), so forcing isIdentity true is exactly
+// "decoded and discarded".
+const savedIsIdentity = client.RemoteTransform.prototype.isIdentity;
+let mutBox, mutInk;
+try {
+	client.RemoteTransform.prototype.isIdentity = function() { return true; };
+	const m = drawRun(Object.assign({ view: { sx: 2, sy: 2 } }, BIG));
+	mutBox = boxOf(m);
+	mutInk = m.canvas.inkPixels();
+} finally {
+	client.RemoteTransform.prototype.isIdentity = savedIsIdentity;
+}
+check('MUTATION: with the view transform discarded a scaled run still inks',
+	mutInk > 0, String(mutInk));
+check('MUTATION: ...and it comes out in the IDENTITY box, so a count-vs-zero '
+	+ 'check stays GREEN -- the #501 defect reproduced',
+	JSON.stringify(mutBox) === JSON.stringify(vFlatBox),
+	JSON.stringify(mutBox) + ' vs ' + JSON.stringify(vFlatBox));
+check('MUTATION: ...so the |det| area-scale discriminator goes RED',
+	!(Math.abs(mutInk / vFlat.canvas.inkPixels() - det) < 0.15 * det),
+	mutInk + ' vs ' + vFlat.canvas.inkPixels());
+check('the real view-transform behaviour is back after the mutation arm',
+	JSON.stringify(boxOf(drawRun(Object.assign({ view: { sx: 2, sy: 2 } },
+		BIG)))) === JSON.stringify(vScaledBox));
 
 console.log('');
 console.log('SELFTEST_CHECKS=' + checks.length);

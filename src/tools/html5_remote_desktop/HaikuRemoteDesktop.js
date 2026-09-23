@@ -1180,6 +1180,16 @@ function RemoteState(session, token)
 	this.pattern = new RemotePattern();
 	this.font = new RemoteFont();
 	this.transform = new RemoteTransform();
+
+	// The view offset (RP_SET_OFFSETS) defaults to zero.  applyContext conjugates
+	// the view transform by this offset (context.translate(this.xOffset, ...),
+	// mirroring Painter::SetTransform, Painter.cpp:372-383), so leaving it
+	// undefined turns the whole CTM into NaN the moment a non-identity transform
+	// arrives before the first RP_SET_OFFSETS -- which blanks every subsequent
+	// draw.  In practice offsets precede draws, but the view transform must not
+	// depend on that ordering to avoid painting nothing.
+	this.xOffset = 0;
+	this.yOffset = 0;
 }
 
 
