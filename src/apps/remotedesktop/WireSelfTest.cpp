@@ -30,12 +30,15 @@
 */
 
 #include "RemoteMessage.h"
+#include "RemoteView.h"
 #include "RemoteWireFormat.h"
 #include "RemoteWireReader.h"
 #include "RemoteWireWriter.h"
 #include "StreamingRingBuffer.h"
 
 #include <DataIO.h>
+#include <Gradient.h>
+#include <GradientLinear.h>
 #include <OS.h>
 
 #include <stdio.h>
@@ -830,6 +833,304 @@ test_session_cookie_frame()
 
 
 // ---------------------------------------------------------------------------
+// The gradient opcodes (issue #533)
+// ---------------------------------------------------------------------------
+
+/*!	Why this asserts on consumed bytes and not on pixels.
+
+	The decoder read the gradient twice at all nine of its gradient blocks, and
+	two of those blocks guarded on the neighbouring *_ARC_GRADIENT opcodes while
+	sitting inside the rect and round-rect arms. Neither fault can be seen from
+	the outside:
+
+	- the double read fails its second attempt and the block takes its
+	  \c continue, so the op is simply never drawn -- nothing is logged, and a
+	  surface check sees only that something did not appear;
+	- the wrong guard skips the read entirely, which in the *old* code happened
+	  to leave the byte count correct (the unconditional first read had already
+	  taken the gradient) and merely leaked it, so it painted the right pixels.
+
+	So neither a log nor a pixel discriminates, which is exactly how both
+	survived. What does discriminate is how many bytes the read consumed, and
+	that is what is asserted here, against the real encoder and the real decoder
+	over a real ring buffer.
+
+	Three messages per opcode, because the first two properties need different
+	shapes and the third is worth pinning as a non-property:
+
+	1. the wire's real shape -- the gradient is the payload's last field -- so a
+	   correct read ends with the payload exactly empty and has consumed exactly
+	   the encoder's gradient;
+	2. the same payload with one more field behind the gradient. This is an
+	   instrument, not a wire shape. It is needed because "the payload is empty"
+	   cannot witness a read that was too *short* once the gradient is last
+	   (there is nothing left to be short of). A field after it comes back wrong
+	   both ways: eaten into if the gradient was read twice, and holding the
+	   gradient's own leading bytes if it was not read at all;
+	3. a known message behind the gradient message, asserting that the stream
+	   stays framed across a gradient op. It stays framed whichever way the read
+	   goes wrong -- Read() will not cross fDataLeft and NextMessage() discards
+	   whatever a handler left behind -- so this is pinned as the reason a
+	   following-message check is *not* sufficient on its own. The issue
+	   described the double read as a stream desync; it is not one, and this is
+	   where that is recorded.
+*/
+
+//! The engine token every drawing message opens with.
+static const uint32 kGradientToken = 0xfeedface;
+
+//! Distinct from any BGradient::Type, so a stray read of it cannot look valid.
+static const uint32 kGradientSentinel = 0x5e7a1000;
+
+static const float kFollowingPenSize = 7.5f;
+
+/*!	Known geometry, known stops: 4 (type) + 8 + 8 (start, end) + 4 (stop count)
+	+ 2 * (4 + 4) = 40 bytes through AddGradient().
+*/
+static const uint32 kEncodedGradientSize = 40;
+
+
+static BGradientLinear
+probe_gradient()
+{
+	BGradientLinear gradient(BPoint(1, 2), BPoint(63, 64));
+	rgb_color first = { 10, 20, 30, 255 };
+	rgb_color second = { 40, 50, 60, 255 };
+	gradient.AddColor(first, 0);
+	gradient.AddColor(second, 255);
+	return gradient;
+}
+
+
+struct gradient_probe {
+	bool		framed;				// all three messages were read back
+	status_t	result;				// what remote_read_gradient() returned
+	bool		gotGradient;
+	bool		contentsMatch;		// type and both stops survived the trip
+	uint32		consumed;			// bytes the read took from the payload
+	uint32		leftOver;			// payload bytes after it, gradient last
+	status_t	sentinelResult;
+	uint32		sentinel;
+	uint16		followingCode;
+	float		followingPenSize;
+};
+
+
+static void
+run_gradient_probe(uint16 code, bool carriesGradient, gradient_probe& out)
+{
+	memset(&out, 0, sizeof(out));
+
+	StreamingRingBuffer buffer(64 * 1024);
+	if (buffer.InitCheck() != B_OK)
+		return;
+
+	BGradientLinear gradient = probe_gradient();
+
+	RemoteMessage writer(NULL, &buffer);
+
+	// 1. Gradient last, as the server really sends it.
+	writer.Start(code);
+	writer.Add(kGradientToken);
+	if (carriesGradient)
+		writer.AddGradient(gradient);
+	writer.Flush();
+
+	// 2. Gradient followed by the sentinel.
+	writer.Start(code);
+	writer.Add(kGradientToken);
+	if (carriesGradient)
+		writer.AddGradient(gradient);
+	writer.Add(kGradientSentinel);
+	writer.Flush();
+
+	// 3. A known message behind both.
+	writer.Start(RP_SET_PEN_SIZE);
+	writer.Add(kGradientToken);
+	writer.Add(kFollowingPenSize);
+	writer.Flush();
+
+	RemoteMessage reader(&buffer, NULL);
+	uint16 readCode = 0;
+	uint32 token = 0;
+
+	// Pass 1: exact consumption, with nothing behind the gradient.
+	if (reader.NextMessage(readCode) != B_OK || readCode != code)
+		return;
+	if (reader.Read(token) != B_OK || token != kGradientToken)
+		return;
+
+	uint32 before = reader.DataLeft();
+	BGradient* decoded = NULL;
+	out.result = remote_read_gradient(reader, code, &decoded);
+	out.consumed = before - reader.DataLeft();
+	out.leftOver = reader.DataLeft();
+	out.gotGradient = decoded != NULL;
+
+	if (decoded != NULL) {
+		BGradient::ColorStop* first = decoded->ColorStopAt(0);
+		BGradient::ColorStop* second = decoded->ColorStopAt(1);
+		out.contentsMatch = decoded->GetType() == BGradient::TYPE_LINEAR
+			&& decoded->CountColorStops() == 2
+			&& first != NULL && second != NULL
+			&& first->color.red == 10 && first->color.green == 20
+			&& first->color.blue == 30 && first->offset == 0
+			&& second->color.red == 40 && second->color.green == 50
+			&& second->color.blue == 60 && second->offset == 255;
+	}
+
+	delete decoded;
+
+	// Pass 2: the field behind the gradient has to survive untouched.
+	if (reader.NextMessage(readCode) != B_OK || readCode != code)
+		return;
+	if (reader.Read(token) != B_OK || token != kGradientToken)
+		return;
+
+	BGradient* second = NULL;
+	remote_read_gradient(reader, code, &second);
+	delete second;
+	out.sentinelResult = reader.Read(out.sentinel);
+
+	// Pass 3: the stream is still framed.
+	if (reader.NextMessage(out.followingCode) != B_OK)
+		return;
+	if (reader.Read(token) != B_OK || token != kGradientToken)
+		return;
+	if (reader.Read(out.followingPenSize) != B_OK)
+		return;
+
+	out.framed = true;
+}
+
+
+static void
+test_gradient_opcode_decode()
+{
+	printf("  -- gradient opcode decode (#533) --\n");
+
+	struct {
+		uint16		code;
+		const char*	name;
+		bool		carriesGradient;
+	} opcodes[] = {
+		{ RP_STROKE_ARC_GRADIENT, "RP_STROKE_ARC_GRADIENT", true },
+		{ RP_FILL_ARC_GRADIENT, "RP_FILL_ARC_GRADIENT", true },
+		{ RP_STROKE_BEZIER_GRADIENT, "RP_STROKE_BEZIER_GRADIENT", true },
+		{ RP_FILL_BEZIER_GRADIENT, "RP_FILL_BEZIER_GRADIENT", true },
+		{ RP_STROKE_ELLIPSE_GRADIENT, "RP_STROKE_ELLIPSE_GRADIENT", true },
+		{ RP_FILL_ELLIPSE_GRADIENT, "RP_FILL_ELLIPSE_GRADIENT", true },
+		{ RP_STROKE_POLYGON_GRADIENT, "RP_STROKE_POLYGON_GRADIENT", true },
+		{ RP_FILL_POLYGON_GRADIENT, "RP_FILL_POLYGON_GRADIENT", true },
+		{ RP_STROKE_RECT_GRADIENT, "RP_STROKE_RECT_GRADIENT", true },
+		{ RP_FILL_RECT_GRADIENT, "RP_FILL_RECT_GRADIENT", true },
+		{ RP_STROKE_ROUND_RECT_GRADIENT, "RP_STROKE_ROUND_RECT_GRADIENT",
+			true },
+		{ RP_FILL_ROUND_RECT_GRADIENT, "RP_FILL_ROUND_RECT_GRADIENT", true },
+		{ RP_STROKE_SHAPE_GRADIENT, "RP_STROKE_SHAPE_GRADIENT", true },
+		{ RP_FILL_SHAPE_GRADIENT, "RP_FILL_SHAPE_GRADIENT", true },
+		{ RP_STROKE_TRIANGLE_GRADIENT, "RP_STROKE_TRIANGLE_GRADIENT", true },
+		{ RP_FILL_TRIANGLE_GRADIENT, "RP_FILL_TRIANGLE_GRADIENT", true },
+		{ RP_STROKE_LINE_GRADIENT, "RP_STROKE_LINE_GRADIENT", true },
+		{ RP_FILL_REGION_GRADIENT, "RP_FILL_REGION_GRADIENT", true },
+
+		// The pattern-drawing twin of every one of them, sharing the same case
+		// label in the decoder. These must consume *no* gradient: the arm that
+		// draws them dereferences no gradient, and a read here would eat the
+		// next field of a payload that has one.
+		{ RP_STROKE_ARC, "RP_STROKE_ARC", false },
+		{ RP_FILL_ARC, "RP_FILL_ARC", false },
+		{ RP_STROKE_BEZIER, "RP_STROKE_BEZIER", false },
+		{ RP_FILL_BEZIER, "RP_FILL_BEZIER", false },
+		{ RP_STROKE_ELLIPSE, "RP_STROKE_ELLIPSE", false },
+		{ RP_FILL_ELLIPSE, "RP_FILL_ELLIPSE", false },
+		{ RP_STROKE_POLYGON, "RP_STROKE_POLYGON", false },
+		{ RP_FILL_POLYGON, "RP_FILL_POLYGON", false },
+		{ RP_STROKE_RECT, "RP_STROKE_RECT", false },
+		{ RP_FILL_RECT, "RP_FILL_RECT", false },
+		{ RP_STROKE_ROUND_RECT, "RP_STROKE_ROUND_RECT", false },
+		{ RP_FILL_ROUND_RECT, "RP_FILL_ROUND_RECT", false },
+		{ RP_STROKE_SHAPE, "RP_STROKE_SHAPE", false },
+		{ RP_FILL_SHAPE, "RP_FILL_SHAPE", false },
+		{ RP_STROKE_TRIANGLE, "RP_STROKE_TRIANGLE", false },
+		{ RP_FILL_TRIANGLE, "RP_FILL_TRIANGLE", false },
+		{ RP_STROKE_LINE, "RP_STROKE_LINE", false },
+		{ RP_FILL_REGION, "RP_FILL_REGION", false },
+	};
+
+	const size_t count = sizeof(opcodes) / sizeof(opcodes[0]);
+
+	int32 gradientOpcodes = 0;
+	for (size_t i = 0; i < count; i++) {
+		if (opcodes[i].carriesGradient)
+			gradientOpcodes++;
+	}
+
+	// The table is the assertion for the guard half of #533: an opcode missing
+	// from remote_opcode_has_gradient() is precisely what the two arc-guarded
+	// blocks amounted to, and a count pinned here is what makes dropping one
+	// visible.
+	check("all 18 gradient opcodes are covered, not 17",
+		gradientOpcodes == 18);
+
+	char label[160];
+	for (size_t i = 0; i < count; i++) {
+		const uint16 code = opcodes[i].code;
+		const char* name = opcodes[i].name;
+		const bool carries = opcodes[i].carriesGradient;
+
+		snprintf(label, sizeof(label),
+			"%s is%s listed as carrying a gradient", name,
+			carries ? "" : " not");
+		check(label, remote_opcode_has_gradient(code) == carries);
+
+		gradient_probe probe;
+		run_gradient_probe(code, carries, probe);
+
+		snprintf(label, sizeof(label), "%s: the gradient read succeeds", name);
+		check(label, probe.result == B_OK, strerror(probe.result));
+
+		snprintf(label, sizeof(label),
+			"%s: a gradient came back%s", name, carries ? "" : " -- none");
+		check(label, probe.gotGradient == carries);
+
+		if (carries) {
+			snprintf(label, sizeof(label),
+				"%s: the decoded gradient is the one that was encoded", name);
+			check(label, probe.contentsMatch);
+		}
+
+		// The two byte-consumption assertions. Together they are the only thing
+		// in this file that can tell a single read from a double one or from
+		// none at all.
+		const uint32 expected = carries ? kEncodedGradientSize : (uint32)0;
+		char detail[64];
+		snprintf(label, sizeof(label),
+			"%s: the read consumed exactly %" B_PRIu32 " payload bytes", name,
+			expected);
+		snprintf(detail, sizeof(detail), "(consumed %" B_PRIu32 ")",
+			probe.consumed);
+		check(label, probe.consumed == expected, detail);
+
+		snprintf(label, sizeof(label),
+			"%s: the payload is empty afterwards, gradient last", name);
+		check(label, probe.leftOver == 0);
+
+		snprintf(label, sizeof(label),
+			"%s: the field behind the gradient is untouched", name);
+		check(label, probe.sentinelResult == B_OK
+			&& probe.sentinel == kGradientSentinel);
+
+		snprintf(label, sizeof(label),
+			"%s: the following message is still framed behind it", name);
+		check(label, probe.framed
+			&& probe.followingCode == RP_SET_PEN_SIZE
+			&& probe.followingPenSize == kFollowingPenSize);
+	}
+}
+
+
+// ---------------------------------------------------------------------------
 
 int
 remote_wire_selftest()
@@ -861,6 +1162,7 @@ remote_wire_selftest()
 	test_session_cookie_frame();
 	test_reconnect_framing();
 	test_resync_wire_constants();
+	test_gradient_opcode_decode();
 
 	free(scratch);
 	free(message);
