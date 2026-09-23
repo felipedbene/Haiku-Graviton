@@ -433,11 +433,16 @@ class Reader(object):
         return bytes(self._take(length))
 
     def transform(self):
-        # RemoteMessage.cpp:280-294 (AddTransform): bool isIdentity, then
-        # 6 floats sx shy shx sy tx ty when not identity.
+        # RemoteMessage.cpp:313-327 (AddTransform): bool isIdentity, then, when
+        # not identity, the six BAffineTransform members sx shy shx sy tx ty.
+        # They are DOUBLES: BAffineTransform stores them as double
+        # (AffineTransform.h:44-46, 105-116) and Add<double> writes sizeof(double)
+        # = 8 bytes each, so the payload is 48 bytes, not 24.  Reading them as
+        # float32 was harmless only while the value was decoded and thrown away;
+        # applying it (#501) needs the real width.
         if self.bool8():
             return None
-        return struct.unpack_from("<ffffff", self._take(24))
+        return struct.unpack_from("<dddddd", self._take(48))
 
     def font(self):
         """RemoteMessage.cpp:115-127 (AddFont), packed, 29 bytes:
@@ -1067,6 +1072,99 @@ class FontTransform(object):
     def describe(self):
         return "rotation=%g shear=%g" % (self.rotation, self.shear)
 
+    @classmethod
+    def from_matrix(cls, m00, m01, m10, m11):
+        """A FontTransform carrying an arbitrary linear map, y-down device space.
+
+        Used to bake the VIEW transform's linear part into the glyph outline
+        alongside the embedded font transform (#501): once composed, the two are
+        a single 2x2 matrix that FreeType renders in one pass, which is what
+        makes a view-scaled glyph a filled shape rather than the dot lattice a
+        client gets when it scales the SPACING but leaves each glyph raster at
+        its original size."""
+        self = cls.__new__(cls)
+        self.rotation = 0.0
+        self.shear = 90.0
+        self.m00, self.m01, self.m10, self.m11 = m00, m01, m10, m11
+        self.identity = (abs(m00 - 1.0) <= 1e-6 and abs(m11 - 1.0) <= 1e-6
+                         and abs(m01) <= 1e-6 and abs(m10) <= 1e-6)
+        return self
+
+    def compose_view(self, view):
+        """This embedded transform with the view's linear part applied AFTER it.
+
+        The server pushes the glyph outline through fEmbeddedTransformation and
+        then multiplies by fViewTransformation (AGGTextRenderer.cpp:379-381 for
+        RP_DRAW_STRING, 415-416 for the offsets overload), and agg's multiply
+        applies the matrix already held FIRST (agg_trans_affine.cpp:70-82).  So
+        a glyph outline point sees E then V, i.e. the combined linear map is
+        C = L * E with L the view's linear part -- returned here so the raster is
+        baked once through C."""
+        c00 = view.m00 * self.m00 + view.m01 * self.m10
+        c01 = view.m00 * self.m01 + view.m01 * self.m11
+        c10 = view.m10 * self.m00 + view.m11 * self.m10
+        c11 = view.m10 * self.m01 + view.m11 * self.m11
+        return FontTransform.from_matrix(c00, c01, c10, c11)
+
+
+class ViewTransform(object):
+    """The view transform carried by RP_SET_TRANSFORM (opcode 49).
+
+    A SEPARATE mechanism from the font's rotation/shear (#501): the font
+    attributes turn each run about its own baseline, while this turns/scales the
+    whole view the drawing lands in.  The server sends state->Transform() -- the
+    view's BAffineTransform, without the RP_SET_OFFSETS view offset folded in
+    (RemoteDrawingEngine.cpp:317-331, "TODO: take offset into account") -- so the
+    offset stays the separate post-translation this tool already applies.
+
+    The six wire members are agg trans_affine order sx shy shx sy tx ty
+    (RemoteMessage.cpp:321-326), applied as x' = sx*x + shx*y + tx,
+    y' = shy*x + sy*y + ty (agg_trans_affine.h:293-298).  That is the SAME y-down
+    device space the embedded font transform works in (FontTransform), so the two
+    compose by plain matrix multiplication with no y-flip conjugation between
+    them; only the final FreeType hand-off is conjugated, once, in ft_matrix().
+
+    A pure translation (or identity) leaves the linear part alone, so the raster
+    is untouched and only the origin shifts -- the fast path essentially all real
+    traffic takes."""
+
+    __slots__ = ("m00", "m01", "m10", "m11", "tx", "ty",
+                 "identity", "linear_identity")
+
+    def __init__(self, sx=1.0, shy=0.0, shx=0.0, sy=1.0, tx=0.0, ty=0.0):
+        self.m00 = float(sx)
+        self.m01 = float(shx)
+        self.m10 = float(shy)
+        self.m11 = float(sy)
+        self.tx = float(tx)
+        self.ty = float(ty)
+        self.linear_identity = (abs(self.m00 - 1.0) <= 1e-9
+                                and abs(self.m11 - 1.0) <= 1e-9
+                                and abs(self.m01) <= 1e-9
+                                and abs(self.m10) <= 1e-9)
+        self.identity = (self.linear_identity and abs(self.tx) <= 1e-9
+                         and abs(self.ty) <= 1e-9)
+
+    @classmethod
+    def from_wire(cls, six):
+        """Build from Reader.transform()'s tuple, or identity when it was None."""
+        if six is None:
+            return cls()
+        return cls(*six)
+
+    def apply_full(self, x, y):
+        """Map a point through the full affine, linear part AND translation."""
+        return (self.m00 * x + self.m01 * y + self.tx,
+                self.m10 * x + self.m11 * y + self.ty)
+
+    def linear(self):
+        """The 2x2 part as a FontTransform, for composing with the embedded one."""
+        return FontTransform.from_matrix(self.m00, self.m01, self.m10, self.m11)
+
+    def describe(self):
+        return ("view[%g %g; %g %g]+(%g,%g)"
+                % (self.m00, self.m01, self.m10, self.m11, self.tx, self.ty))
+
 
 class Glyph(object):
     """One rendered glyph: 8-bit coverage plus its placement and advance."""
@@ -1090,7 +1188,7 @@ class Glyph(object):
 class ShapedRun(object):
     __slots__ = ("glyphs", "pens", "offsets", "advance", "ascent", "descent",
                  "missing", "synth_bold", "synth_italic", "path", "transform",
-                 "false_bold")
+                 "combined", "false_bold")
 
     def __init__(self):
         self.glyphs = []
@@ -1103,7 +1201,8 @@ class ShapedRun(object):
         self.synth_bold = False
         self.synth_italic = False
         self.path = None
-        self.transform = None
+        self.transform = None           # embedded font transform E (reply, axis)
+        self.combined = None            # E with the view's linear part (raster)
         self.false_bold = 0.0
 
 
@@ -1321,14 +1420,21 @@ class GlyphRasteriser(object):
 
     # -- runs ------------------------------------------------------------
     def shape(self, text, size, face=0, spacing=B_CHAR_SPACING,
-              false_bold=0.0, delta=None, rotation=0.0, shear=90.0):
+              false_bold=0.0, delta=None, rotation=0.0, shear=90.0, view=None):
         """Lay a run out at the origin; the caller places it on screen.
 
         Rotation and shear do not change the layout: the advances come from the
         untransformed metrics and the whole horizontal layout is turned
         afterwards (see FontTransform).  So run.advance stays the number
         StringWidth answers with, and run.offsets carries where the glyphs
-        actually land."""
+        actually land.
+
+        A non-identity VIEW transform (#501) is baked into the SAME outline pass
+        as the embedded font transform, so the raster is a filled, scaled shape
+        rather than a lattice.  run.transform keeps the embedded transform alone
+        (the reported pen and the run's own axis are font-space facts); run.offsets
+        and the glyph rasters carry the combined map, and the caller adds the
+        view's translation and maps the run origin through the full affine."""
         if size <= 0.0:
             size = 12.0
         mono = spacing == B_FIXED_SPACING
@@ -1339,6 +1445,14 @@ class GlyphRasteriser(object):
         path, synth_bold, synth_italic = choice
         size26_6 = max(1, int(round(size * 64.0)))
         transform = FontTransform(rotation, shear)
+        # The linear part of the view transform, composed after the embedded one.
+        # A translation-only or identity view leaves this exactly the embedded
+        # transform, so the glyph rasters and offsets are byte-for-byte what they
+        # were before -- the fast path essentially all real traffic takes.
+        if view is not None and not view.linear_identity:
+            combined = transform.compose_view(view.linear())
+        else:
+            combined = transform
         # Clamped at zero: a negative contour width would invert agg's outline
         # orientation, and guessing what the server would then draw is not
         # something this tool should do quietly.
@@ -1351,6 +1465,7 @@ class GlyphRasteriser(object):
         run.synth_bold = synth_bold
         run.synth_italic = synth_italic
         run.transform = transform
+        run.combined = combined
         run.false_bold = false_bold
         entry = self._sized(path, size26_6)
         metrics = entry[1].size.contents.metrics
@@ -1359,9 +1474,9 @@ class GlyphRasteriser(object):
         pen = 0.0
         for codepoint in utf8_codepoints(text):
             glyph = self.glyph(path, size26_6, codepoint, synth_bold,
-                               synth_italic, transform, bold26_6)
+                               synth_italic, combined, bold26_6)
             run.pens.append(pen)
-            run.offsets.append(transform.apply(pen, 0.0))
+            run.offsets.append(combined.apply(pen, 0.0))
             run.glyphs.append(glyph)
             if glyph is None or glyph.missing:
                 # GlyphLayoutEngine.h:336-340: an empty glyph advances by zero.
@@ -1538,6 +1653,28 @@ class Framebuffer(object):
         written pixels alone would call that healthy, so both are reported."""
         if not cov or width <= 0 or rows <= 0:
             return 0, 0
+        # The coverage buffer's OWN geometry decides what is readable here, not
+        # the caller's (x, width).  A transformed or oddly-metricked glyph hands
+        # back a pitch/row count that need not match what the caller believed
+        # when it computed the box, so the read is bounded by pitch and len(cov)
+        # and the source offset is clamped independently of the destination clip
+        # (#500).  The assert pins the invariant the fast path relies on -- the
+        # buffer is exactly rows x pitch with pitch >= width -- so a future glyph
+        # that breaks it is a loud, located failure and not an IndexError buried
+        # in the blend loop mid-capture.
+        avail_rows = len(cov) // pitch
+        cols = min(width, pitch)            # bytes past `width` are row padding
+        assert len(cov) >= rows * pitch and pitch >= width, (
+            "coverage geometry %dx%d pitch %d does not fit %d bytes"
+            % (width, rows, pitch, len(cov)))
+        # Intersect the glyph's extent with the optional clip box AS AN
+        # INTERSECTION -- deliberately NOT through _clip_box, which normalises
+        # unordered corners by swapping them.  That normalisation is right for a
+        # fill handed arbitrary corners and WRONG here: a clip band that misses
+        # the glyph entirely produces y0 > y1 (or x0 > x1), and swapping it into
+        # an in-range rectangle indexes rows the coverage buffer never had.  That
+        # is the exact shape that aborted a real capture in #500 -- a text clip
+        # rect sitting below the glyph, intersected to empty and then un-emptied.
         x0, y0 = x, y
         x1, y1 = x + width - 1, y + rows - 1
         if box is not None:
@@ -1545,19 +1682,28 @@ class Framebuffer(object):
             y0 = max(y0, box[1])
             x1 = min(x1, box[2])
             y1 = min(y1, box[3])
-        clipped = self._clip_box(x0, y0, x1, y1)
-        if clipped is None:
+        # Clamp to the canvas WITHOUT reordering, then bail on an empty span.
+        x0 = max(0, x0)
+        y0 = max(0, y0)
+        x1 = min(self.width - 1, x1)
+        y1 = min(self.height - 1, y1)
+        if x0 > x1 or y0 > y1:
             return 0, 0
-        x0, y0, x1, y1 = clipped
         cr, cg, cb = color[0], color[1], color[2]
         buf = self.buf
         written = 0
         changed = 0
         for py in range(y0, y1 + 1):
-            crow = (py - y) * pitch
+            srow = py - y
+            if srow < 0 or srow >= avail_rows:
+                continue
+            crow = srow * pitch
             base = py * self.width
             for px in range(x0, x1 + 1):
-                alpha = cov[crow + (px - x)]
+                scol = px - x
+                if scol < 0 or scol >= cols:
+                    continue
+                alpha = cov[crow + scol]
                 if not alpha:
                     continue
                 off = (base + px) * 3
@@ -1766,6 +1912,7 @@ class TokenState(object):
                      "shear": 90.0, "false_bold_width": 0.0,
                      "family_and_style": 0, "flags": 0, "direction": 0}
         self.clip = None                # None = no clipping constraint yet
+        self.transform = None           # None = identity view transform (#501)
         self.bbox = None                # union of everything it drew into
         self.drawing_ops = 0
         self.state_ops = 0
@@ -2155,7 +2302,12 @@ class Capture(object):
             st.font_size = st.font["size"]
             return
         if code == RP_SET_TRANSFORM:
-            r.transform()
+            # Was decoded and discarded, which left a view-transformed render
+            # unverifiable -- the #494 gap, one layer up (#501).  Store it: the
+            # text path composes its linear part into the glyph outline and maps
+            # the run origin through the full affine.  None means identity, which
+            # is what all upright, untransformed traffic sends.
+            st.transform = ViewTransform.from_wire(r.transform())
             return
         if code == RP_CONSTRAIN_CLIPPING_REGION:
             st.clip = r.region()
@@ -2488,7 +2640,7 @@ class Capture(object):
             return "encoding=%d" % font["encoding"]
         return None
 
-    def _shape(self, st, text, delta=None):
+    def _shape(self, st, text, delta=None, view=None):
         if self._text_unsupported_reason(st) is not None:
             return None
         font = st.font
@@ -2501,7 +2653,8 @@ class Capture(object):
                                                          0.0),
                                      delta=delta,
                                      rotation=font.get("rotation", 0.0),
-                                     shear=font.get("shear", 90.0))
+                                     shear=font.get("shear", 90.0),
+                                     view=view)
         except OSError as exc:
             if len(self.errors) < 20:
                 self.errors.append("rasteriser: %s" % exc)
@@ -2519,7 +2672,9 @@ class Capture(object):
         signature of a flipped placement."""
         self.text_ops += 1
         reason = self._text_unsupported_reason(st)
-        run = None if reason is not None else self._shape(st, text, delta=delta)
+        view = st.transform or ViewTransform()
+        run = None if reason is not None else self._shape(
+            st, text, delta=delta, view=view)
         if run is None:
             if reason is None:
                 reason = "shaping failed"
@@ -2530,7 +2685,14 @@ class Capture(object):
 
         ox, oy = self._xy(st)
         color = st.effective_color()
-        xf = run.transform or FontTransform()
+        xf = run.transform or FontTransform()          # embedded only
+        cf = run.combined or xf                         # embedded * view-linear
+        # The run origin goes through the FULL view affine; the glyph rasters and
+        # run.offsets already carry the view's linear part (baked into the
+        # outline), so only the translation is left to add per glyph (#501).  A
+        # translation-only / identity view makes cf == xf and origin == point, so
+        # this is the unchanged path for all real traffic.
+        origin_x, origin_y = view.apply_full(point[0], point[1])
         ink = 0
         visible = 0
         ink_box = None
@@ -2543,14 +2705,18 @@ class Capture(object):
                 # The WITH_OFFSETS overload of RenderString does NOT translate
                 # by a baseline (AGGTextRenderer.cpp:415-416: embedded transform
                 # times the view transform, and nothing else), so the server's
-                # own glyph origins go through the embedded transform too.  That
-                # is app_server's behaviour, not a choice made here; copying it
-                # is the only way a comparison against app_server can fail for
-                # the right reason.
-                px, py = xf.apply(offsets[index][0], offsets[index][1])
+                # own glyph origins go through the embedded transform too, about
+                # the view origin.  Copying it is the only way a comparison
+                # against app_server can fail for the right reason.  The combined
+                # map (cf) carries embedded * view-linear, so the offset needs
+                # only the view's translation added -- cf.apply already applied
+                # the linear part.
+                px, py = cf.apply(offsets[index][0], offsets[index][1])
+                px += view.tx
+                py += view.ty
             else:
                 dx, dy = run.offsets[index]
-                px, py = point[0] + dx, point[1] + dy
+                px, py = origin_x + dx, origin_y + dy
             if glyph is None or not glyph.cov:
                 continue
             gx = int(math.floor(px + 0.5)) + glyph.left + ox
@@ -2578,15 +2744,21 @@ class Capture(object):
                 run.glyphs[-1].advance if run.glyphs and run.glyphs[-1] else 0)
             top = min(p[1] for p in offsets) - run.ascent
             bottom = max(p[1] for p in offsets) + run.descent
-            left, top, right, bottom = xf.transform_box(left, top, right,
+            # Combined map for the shape, view translation for the offset, to
+            # match the per-glyph placement above (device = cf(box) + view.t).
+            left, top, right, bottom = cf.transform_box(left, top, right,
                                                         bottom)
+            left += view.tx
+            right += view.tx
+            top += view.ty
+            bottom += view.ty
         else:
-            left, top, right, bottom = xf.transform_box(
+            left, top, right, bottom = cf.transform_box(
                 0.0, -run.ascent, run.advance, run.descent)
-            left += point[0]
-            right += point[0]
-            top += point[1]
-            bottom += point[1]
+            left += origin_x
+            right += origin_x
+            top += origin_y
+            bottom += origin_y
         declared = rect_to_pixels((left, top, right, bottom))
         declared = (declared[0] + ox, declared[1] + oy,
                     declared[2] + ox, declared[3] + oy)
@@ -5186,6 +5358,265 @@ def selftest(allow_skip=False):
         check("the real transform is back after the mutation arm",
               turned(rotation=90.0).text_ink_bbox == turn_box,
               str(turned(rotation=90.0).text_ink_bbox))
+
+        # ---- view transform: RP_SET_TRANSFORM, opcode 49 (#501) ------
+        print("  -- view transform (#501) --")
+
+        # A bigger canvas with the origin in the middle: a 2x-scaled run about
+        # (120,120) lands its origin at (240,240) and grows outward from there,
+        # so it stays inside 480x480 whichever way the view turns it.
+        VIEW_ORIGIN = (120.0, 120.0)
+
+        def transform_payload(token, sx, shy, shx, sy, tx, ty):
+            # RemoteMessage.cpp:313-327: bool isIdentity, then the six
+            # BAffineTransform members as DOUBLES, agg order sx shy shx sy tx ty.
+            return (struct.pack("<I", token) + b"\x00"
+                    + struct.pack("<dddddd", sx, shy, shx, sy, tx, ty))
+
+        def viewed(view=None, size=16.0, text=b"Rotated", origin=VIEW_ORIGIN,
+                   rotation=0.0, shear=90.0):
+            parts = [frame(RP_CREATE_STATE, struct.pack("<I", gtoken)),
+                     frame(RP_SET_HIGH_COLOR, struct.pack("<I", gtoken)
+                           + bytes((255, 255, 255, 255))),
+                     frame(RP_SET_FONT, font_payload(gtoken, size,
+                                                     rotation=rotation,
+                                                     shear=shear))]
+            if view is not None:
+                parts.append(frame(RP_SET_TRANSFORM,
+                                   transform_payload(gtoken, *view)))
+            parts.append(frame(RP_DRAW_STRING, struct.pack("<I", gtoken)
+                               + struct.pack("<ff", origin[0], origin[1])
+                               + struct.pack("<I", len(text)) + text + b"\x00"))
+            data = b"".join(parts)
+            cap = Capture(480, 480, clip=True, apply_offsets=False,
+                          verbose=False, reply=True, glyphs=ras)
+            pos = 0
+            while pos + HEADER <= len(data):
+                code, length = struct.unpack_from("<HI", data, pos)
+                cap.handle(code, bytes(data[pos + HEADER:pos + length]))
+                pos += length
+            return cap
+
+        def ink_density(cap):
+            b = cap.text_ink_bbox
+            if b is None:
+                return 0.0
+            area = (b[2] - b[0] + 1) * (b[3] - b[1] + 1)
+            return cap.text_ink_pixels / area if area else 0.0
+
+        SCALE2 = (2.0, 0.0, 0.0, 2.0, 0.0, 0.0)
+        v_ident = viewed(view=None)
+        v_scaled = viewed(view=SCALE2)
+        # THE INDEPENDENT ORACLE.  The same string at 2x the FONT size reaches
+        # the rasteriser by FT_Set_Char_Size with NO matrix -- a different code
+        # path from the view transform under test -- so the expected ink count is
+        # not derived from the code it is checking.  #27 got 0.11% agreement
+        # between 2x-view and 2x-size; a few percent is the pixel grid's slack.
+        v_oracle = viewed(size=32.0)
+        ident_ink = v_ident.text_ink_pixels
+        scaled_ink = v_scaled.text_ink_pixels
+        oracle_ink = v_oracle.text_ink_pixels
+
+        check("a view-scaled run is rasterised, not refused or estimated",
+              (v_scaled.text_runs_rasterised == 1
+               and v_scaled.estimated_text_ops == 0
+               and v_scaled.glyph_truth()[0] is True),
+              v_scaled.glyph_truth()[1])
+        # THE DISCRIMINATOR.  A dot lattice -- view SPACING scaled but each glyph
+        # raster left at its original size -- inks ROUGHLY THE SAME count as the
+        # unscaled run, which is why "did text draw?" and a count-vs-zero check
+        # both pass on the bug.  A genuinely scaled run inks several times more.
+        check("a view-scaled run inks MUCH more than the identity run, NOT the "
+              "same (a lattice would match the identity count)",
+              scaled_ink > 2.5 * ident_ink,
+              "%d vs identity %d" % (scaled_ink, ident_ink))
+        check("...and it AGREES with the independent 2x-font-size oracle to "
+              "within a few percent (value not derived from the code under test)",
+              oracle_ink > 0 and abs(scaled_ink / oracle_ink - 1.0) < 0.06,
+              "%d vs oracle %d (%.4f)"
+              % (scaled_ink, oracle_ink, scaled_ink / max(1, oracle_ink)))
+        # DENSITY is the lattice's true signature: the same ink spread over ~4x
+        # the area drops it by ~4x, while a filled scaled glyph keeps it.
+        check("a view-scaled run stays about as ink-DENSE as the identity run "
+              "(a lattice would be far sparser)",
+              ink_density(v_scaled) > 0.65 * ink_density(v_ident),
+              "%.4f vs identity %.4f"
+              % (ink_density(v_scaled), ink_density(v_ident)))
+        ib = v_ident.text_ink_bbox
+        sb = v_scaled.text_ink_bbox
+        check("a view-scaled run's ink box is about twice the identity box on "
+              "each axis",
+              abs((sb[2] - sb[0]) - 2 * (ib[2] - ib[0])) <= 4
+              and abs((sb[3] - sb[1]) - 2 * (ib[3] - ib[1])) <= 4,
+              "%s vs %s" % (sb, ib))
+        check("glyph counts CANNOT tell a view-scaled run from the identity one",
+              v_scaled.text_glyphs == v_ident.text_glyphs,
+              "%d vs %d" % (v_scaled.text_glyphs, v_ident.text_glyphs))
+
+        # Translation-only view: the fast path essentially all real traffic
+        # takes.  The linear part is identity, so the raster is untouched -- the
+        # ink COUNT is identical and the box is the identity box moved by the
+        # translation.  Scaling or blurring upright text here would be the
+        # regression this pins against.
+        v_shift = viewed(view=(1.0, 0.0, 0.0, 1.0, 40.0, 25.0))
+        check("a translation-only view leaves the ink COUNT unchanged",
+              v_shift.text_ink_pixels == ident_ink,
+              "%d vs %d" % (v_shift.text_ink_pixels, ident_ink))
+        check("a translation-only view SHIFTS the ink box by the translation, "
+              "unscaled",
+              (abs((v_shift.text_ink_bbox[0] - ib[0]) - 40) <= 1
+               and abs((v_shift.text_ink_bbox[1] - ib[1]) - 25) <= 1
+               and (v_shift.text_ink_bbox[2] - v_shift.text_ink_bbox[0])
+               == (ib[2] - ib[0])),
+              "%s vs %s+(40,25)" % (v_shift.text_ink_bbox, ib))
+
+        # Composition with the FONT transform, in the server's order: a run that
+        # is BOTH font-rotated 90 and view-scaled 2x comes out turned AND
+        # enlarged.  Getting the order wrong (V*E vs E*V) is invisible on a pure
+        # scale and wrong the moment the font is also turned.
+        v_both = viewed(view=SCALE2, rotation=90.0)
+        vb = v_both.text_ink_bbox
+        check("a view-scaled, font-rotated run is BOTH turned and enlarged",
+              (v_both.text_runs_rasterised == 1
+               and (vb[3] - vb[1]) > (vb[2] - vb[0])
+               and v_both.text_ink_pixels > 2.5 * ident_ink),
+              "box %s ink %d" % (vb, v_both.text_ink_pixels))
+
+        # ...and the discriminators are wired to the IMPLEMENTATION, not the
+        # fixture.  Two mutations, each a real way to get a view transform wrong.
+        saved_from_wire = ViewTransform.from_wire
+        saved_key = FontTransform.key
+
+        # 1. The pre-#501 instrument exactly: decode RP_SET_TRANSFORM, apply none
+        #    of it.  The scaled run comes out at identity size and identity count.
+        ViewTransform.from_wire = classmethod(lambda cls, six: cls())
+        try:
+            ras._glyphs.clear()
+            m_discard = viewed(view=SCALE2)
+        finally:
+            ViewTransform.from_wire = saved_from_wire
+            ras._glyphs.clear()
+        check("MUTATION: with the view transform discarded, a scaled run still "
+              "rasterises and still inks",
+              m_discard.text_runs_rasterised == 1
+              and m_discard.text_ink_pixels > 0,
+              "runs=%d ink=%d" % (m_discard.text_runs_rasterised,
+                                  m_discard.text_ink_pixels))
+        check("MUTATION: ...and it comes out at the IDENTITY ink count, so a "
+              "count-vs-zero check stays GREEN -- the #501 defect reproduced",
+              m_discard.text_ink_pixels == ident_ink,
+              "%d vs %d" % (m_discard.text_ink_pixels, ident_ink))
+        check("MUTATION: ...so the oracle-agreement discriminator goes RED",
+              not (abs(m_discard.text_ink_pixels / max(1, oracle_ink) - 1.0)
+                   < 0.06),
+              "%d vs oracle %d" % (m_discard.text_ink_pixels, oracle_ink))
+
+        # 2. The dot lattice: scale the view SPACING but leave each glyph raster
+        #    at its original size -- the exact class of mistake #27 fixed in the
+        #    C++ client (forward-mapping an already-rasterised glyph fills
+        #    nothing).  Neutering the outline-matrix key drops the per-glyph
+        #    transform while run.offsets stay scaled, which IS a lattice.
+        FontTransform.key = lambda self: None
+        try:
+            ras._glyphs.clear()
+            m_lattice = viewed(view=SCALE2)
+        finally:
+            FontTransform.key = saved_key
+            ras._glyphs.clear()
+        check("MUTATION: a lattice (scaled spacing, unscaled raster) inks about "
+              "the IDENTITY count -- which is why a count check cannot catch it",
+              m_lattice.text_ink_pixels < 1.5 * ident_ink,
+              "%d vs identity %d" % (m_lattice.text_ink_pixels, ident_ink))
+        check("MUTATION: ...but its ink DENSITY collapses, so the density check "
+              "goes RED",
+              not (ink_density(m_lattice) > 0.65 * ink_density(v_ident)),
+              "%.4f vs identity %.4f"
+              % (ink_density(m_lattice), ink_density(v_ident)))
+        check("MUTATION: ...and the oracle-agreement discriminator goes RED on "
+              "the lattice too",
+              not (abs(m_lattice.text_ink_pixels / max(1, oracle_ink) - 1.0)
+                   < 0.06),
+              "%d vs oracle %d" % (m_lattice.text_ink_pixels, oracle_ink))
+        check("the real view-transform behaviour is back after the mutation arms",
+              viewed(view=SCALE2).text_ink_pixels == scaled_ink,
+              str(viewed(view=SCALE2).text_ink_pixels))
+
+    # ---- #500: the coverage-blit crash on a clip that misses the glyph ------
+    # No rasteriser needed -- this is a pure Framebuffer.blend_coverage test, so
+    # it runs even on a host with no libfreetype.
+    print("  -- glyph blit clip safety (#500) --")
+    # The EXACT shape a real capture (scratch/zstd-23/cap.1.bin) aborted on: a
+    # 10x9 glyph with pitch 10 (so cov is exactly 90 bytes) placed at (42,6), and
+    # a text clip band at rows 21..25 that sits ENTIRELY BELOW the glyph.  The
+    # intersection is empty; the pre-fix code fed it to _clip_box, which
+    # normalises the inverted y-range (21..14) by swapping it into an in-range
+    # rectangle over rows the 90-byte buffer never had -- and indexed off the end
+    # mid-capture.  Note pitch == width here: the firing shape is the missed
+    # clip, not a padded buffer, which is why a suite that only drew ordinary
+    # text never hit it.
+    cov9 = bytes([255]) * 90
+    below = Framebuffer(560, 64).blend_coverage(
+        42, 6, 10, 9, 10, cov9, (255, 255, 255), (2, 21, 512, 25))
+    check("a clip band below the glyph blits nothing and does NOT crash",
+          below == (0, 0), str(below))
+    # A clip that DOES overlap still paints, so the fix bounded the blit rather
+    # than muting it.
+    over = Framebuffer(560, 64).blend_coverage(
+        42, 6, 10, 9, 10, cov9, (255, 255, 255), (2, 6, 512, 14))
+    check("a clip band ON the glyph still blits its ink",
+          over[0] > 0, str(over))
+    # pitch != width: a padded coverage buffer (pitch 12 for a 10-wide glyph)
+    # must read only the 10 real-ink columns per row and never the 2 padding
+    # bytes.  The padding is inked here, so a column overrun would show up as
+    # extra written pixels; the read is bounded by the buffer's own geometry.
+    padded = bytearray()
+    for _ in range(9):
+        padded += bytes([255]) * 10 + bytes([255, 255])
+    res = Framebuffer(560, 64).blend_coverage(
+        42, 6, 10, 9, 12, bytes(padded), (255, 255, 255))
+    check("pitch != width reads only the width columns, not the row padding",
+          res[0] == 10 * 9, str(res))
+
+    # MUTATION: restore the pre-#500 clip+index (through _clip_box, unclamped)
+    # and confirm the below-glyph band goes back to an IndexError.  A regression
+    # test whose mutation does not crash is not testing the crash.
+    def _buggy_blend(self, x, y, width, rows, pitch, cov, color, box=None):
+        if not cov or width <= 0 or rows <= 0:
+            return 0, 0
+        x0, y0 = x, y
+        x1, y1 = x + width - 1, y + rows - 1
+        if box is not None:
+            x0 = max(x0, box[0]); y0 = max(y0, box[1])
+            x1 = min(x1, box[2]); y1 = min(y1, box[3])
+        clipped = self._clip_box(x0, y0, x1, y1)
+        if clipped is None:
+            return 0, 0
+        x0, y0, x1, y1 = clipped
+        n = 0
+        for py in range(y0, y1 + 1):
+            crow = (py - y) * pitch
+            for px in range(x0, x1 + 1):
+                if cov[crow + (px - x)]:
+                    n += 1
+        return n, n
+
+    saved_blend = Framebuffer.blend_coverage
+    Framebuffer.blend_coverage = _buggy_blend
+    raised = False
+    try:
+        Framebuffer(560, 64).blend_coverage(
+            42, 6, 10, 9, 10, cov9, (255, 255, 255), (2, 21, 512, 25))
+    except IndexError:
+        raised = True
+    finally:
+        Framebuffer.blend_coverage = saved_blend
+    check("MUTATION: the pre-#500 unclamped index DOES crash on that clip, so "
+          "the regression is real and the fix is load-bearing",
+          raised, "no IndexError raised by the reverted index")
+    check("the real, bounded blit is back after the mutation arm",
+          Framebuffer(560, 64).blend_coverage(
+              42, 6, 10, 9, 10, cov9, (255, 255, 255),
+              (2, 21, 512, 25)) == (0, 0))
 
     # UTF-8 decoding has to agree with the count the server sized its point
     # list by, or WITH_OFFSETS desynchronises.  Pinned, not derived.
