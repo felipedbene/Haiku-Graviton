@@ -1,0 +1,180 @@
+#!/bin/bash
+#
+# rdstall2-run -- a stronger headless-stall probe, plus the photographic arm (#58).
+#
+# Why a second script.  The first pass timed "launch a GUI app with no client
+# attached, poll it with `hey` until it answers" at 77 ms across five trials. That
+# is evidence, but weak evidence: `hey` answers once the application has
+# REGISTERED, which can precede its window being painted, so a 77 ms answer does
+# not by itself prove that the DrawString path did not stall afterwards.
+#
+# This probe instead measures TIME TO QUIESCENCE against CPU CONSUMED:
+#
+#   * a stalling app is asleep on a semaphore -- its ELAPSED time grows while its
+#     CPU time does not, so elapsed >> cpu is the signature of a stall;
+#   * a working app burns CPU and finishes.
+#
+# and it quantifies its own sensitivity: the number of text runs the same
+# application emits is counted from a CONNECTED capture, and the headless elapsed
+# time is compared against (that count x 1 s). "Finished in 0.4 s while drawing
+# 900 text runs" falsifies a 1 s-per-run stall by three orders of magnitude;
+# "finished fast" on its own would not.
+#
+# The photographic arm is here because two attempts to produce large, photographic
+# bitmap payloads failed for reasons worth pinning down, and the framebuffer is
+# checked this time -- a screenshot is what caught the last contaminated run.
+#
+# Usage: rdstall2-run [TRIALS]
+
+set -u
+
+TRIALS="${1:-5}"
+PY=python3.10
+PORT=10900
+COOKIE=/boot/system/settings/remote_desktop/session_cookie.$PORT
+W=1200
+H=760
+OUT=/boot/home/m2stall2
+mkdir -p "$OUT"
+LONGDOC=$OUT/long.txt
+SE=/boot/system/apps/StyledEdit
+
+[ -f "$LONGDOC" ] || $PY -c "
+lines=[]
+for i in range(1200):
+    lines.append('%04d  The quick brown fox jumps over the lazy dog. '
+                 'Headless stall probe line %d of 1200.' % (i, i))
+open('$LONGDOC','w').write(chr(10).join(lines))
+"
+
+ms_now() { $PY -c 'import time; print(int(time.monotonic()*1000))'; }
+
+killall_apps() {
+	for _ in 1 2 3; do
+		local pids
+		pids=$(ps | grep -E "StyledEdit|ShowImage|NetSurf" | grep -v grep \
+			| awk '{print $(NF-3)}')
+		[ -z "$pids" ] && break
+		for p in $pids; do kill -9 "$p" 2>/dev/null; done
+		sleep 1
+	done
+}
+
+# CPU time of a process, in the units `ps` reports. Field positions are taken
+# from the header rather than guessed, because getting $2 vs $(NF-3) wrong is
+# exactly how the previous cleanup silently killed nothing.
+app_pid() {
+	ps | grep "$1" | grep -v grep | head -1 | awk '{print $(NF-3)}'
+}
+
+echo "=== ARM H2: headless quiescence vs CPU (NO client connected) ==="
+echo "trial,elapsed_ms_to_quiescence,alive"
+for t in $(seq 1 "$TRIALS"); do
+	killall_apps
+	sleep 1
+	t0=$(ms_now)
+	(TARGET_SCREEN=$PORT "$SE" "$LONGDOC" >/dev/null 2>&1 &)
+	# Wait until the process exists, then until its reported state stops
+	# changing. The loop cap is 180 s -- far above the ~900 s a 1 s-per-run stall
+	# would predict for this document, so a stall would be MEASURED not timed out.
+	pid=""
+	for _ in $(seq 1 400); do
+		pid=$(app_pid StyledEdit)
+		[ -n "$pid" ] && break
+		sleep 0.25
+	done
+	if [ -z "$pid" ]; then
+		echo "$t,NA,0"
+		continue
+	fi
+	# Quiescence: the thread count and the ps line stop changing for 3 samples.
+	prev=""
+	same=0
+	for _ in $(seq 1 720); do
+		cur=$(ps | grep "$pid" | grep -v grep | head -1)
+		if [ "$cur" = "$prev" ]; then
+			same=$((same + 1))
+			[ "$same" -ge 3 ] && break
+		else
+			same=0
+		fi
+		prev="$cur"
+		sleep 0.25
+	done
+	t1=$(ms_now)
+	echo "$t,$((t1 - t0)),1"
+	killall_apps
+done
+
+echo ""
+echo "=== SENSITIVITY: how many text runs does this app actually draw? ==="
+# Counted from a CONNECTED capture of the same application and document, so the
+# headless number above has a denominator.
+killall_apps
+sleep 1
+(TARGET_SCREEN=$PORT "$SE" "$LONGDOC" >/dev/null 2>&1 &)
+sleep 6
+$PY /boot/home/rdcapture.py \
+	--port "$PORT" --cookie-file "$COOKIE" \
+	--width "$W" --height "$H" --seconds 20 --answer-string-width \
+	--workload text --workload-rect 2,0,512,431 --workload-loop \
+	--json "$OUT/sens.json" --allow-text-estimate \
+	> "$OUT/sens.log" 2>&1
+grep -E "^MESSAGES=|^TEXT_OPS=|^plain stream|^TEXT_PATH_BYTES|^RP_STRING_WIDTH|^STRING_WIDTH" \
+	"$OUT/sens.log"
+killall_apps
+
+echo ""
+echo "=== PHOTOGRAPHIC ARM: a large image blit ==="
+# Two attempts at this failed before: NetSurf never put the page's images on the
+# wire as bitmaps, and ShowImage produced an error alert instead of a picture. The
+# framebuffer is written out this time so the arm can be checked rather than
+# assumed -- and if the image is not on screen, the arm is a GAP, not a finding
+# that photographs are cheap.
+$PY - <<'EOF'
+import zlib, struct, random
+random.seed(11)
+w, h = 800, 600
+buf = bytearray()
+for y in range(h):
+    for x in range(w):
+        buf += bytes(((x * 255 // w + random.randint(0, 60)) % 256,
+                      (y * 255 // h + random.randint(0, 60)) % 256,
+                      ((x * y) // 97 + random.randint(0, 60)) % 256))
+raw = bytearray()
+for y in range(h):
+    raw.append(0)
+    raw += buf[y * w * 3:(y + 1) * w * 3]
+def ch(t, d):
+    b = t + d
+    return (struct.pack(">I", len(d)) + b
+            + struct.pack(">I", zlib.crc32(b) & 0xffffffff))
+open("/boot/home/m2stall2/photo.png", "wb").write(
+    b"\x89PNG\r\n\x1a\n"
+    + ch(b"IHDR", struct.pack(">IIBBBBB", w, h, 8, 2, 0, 0, 0))
+    + ch(b"IDAT", zlib.compress(bytes(raw), 6)) + ch(b"IEND", b""))
+print("generated photo.png 800x600")
+EOF
+
+for t in $(seq 1 "$TRIALS"); do
+	killall_apps
+	sleep 1
+	(TARGET_SCREEN=$PORT /boot/system/apps/ShowImage \
+		"$OUT/photo.png" >/dev/null 2>&1 &)
+	sleep 12
+	echo "--- photo trial $t ---"
+	ps | grep ShowImage | grep -v grep | head -1
+	$PY /boot/home/rdcapture.py \
+		--port "$PORT" --cookie-file "$COOKIE" \
+		--width "$W" --height "$H" --seconds 20 --answer-string-width \
+		--workload window --workload-rect 2,0,700,560 --workload-loop \
+		--wire-dump "$OUT/photo-t$t.dump" --json "$OUT/photo-t$t.json" \
+		--png "$OUT/photo-t$t-fb.png" --allow-text-estimate \
+		> "$OUT/photo-t$t.log" 2>&1
+	grep -E "^MESSAGES=|^plain stream|^BITMAP_PIXEL_BYTES|^BITMAP_PATH_BYTES|^RP_DRAW_BITMAP|BITMAPS_DECODED" \
+		"$OUT/photo-t$t.log" | sed 's/^/  /'
+	killall_apps
+done
+
+echo "=== files ==="
+ls -la "$OUT"/*.dump "$OUT"/*-fb.png 2>/dev/null

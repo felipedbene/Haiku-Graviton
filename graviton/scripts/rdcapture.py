@@ -307,6 +307,27 @@ STATE_OPS = frozenset(
 OTHER_OPS = frozenset([RP_COPY_RECT_NO_CLIPPING, RP_STRING_WIDTH,
                        RP_READ_BITMAP])
 
+# -- the M2 byte census (#58) ------------------------------------------------
+#
+# URP/1 bets that a codec on the *bitmap path* alone captures most of the
+# compression win, so a full-frame video pipeline is not needed.  The census has
+# to be able to *falsify* that bet, which makes the membership of these sets a
+# load-bearing claim rather than a convenience.
+#
+# BITMAP_PIXEL_OPS are the ops that actually put pixels on the wire (a
+# serialised BBitmap payload).  RP_COPY_RECT_NO_CLIPPING carries no pixels -- it
+# is a server-side blit instruction -- but it is the op a Tier P region would
+# subsume, so it is reported in BITMAP_PATH but broken out separately so a
+# reader can subtract it instead of having to trust our grouping.
+BITMAP_PIXEL_OPS = frozenset([RP_DRAW_BITMAP, RP_DRAW_BITMAP_RECTS])
+BITMAP_PATH_OPS = BITMAP_PIXEL_OPS | frozenset([RP_COPY_RECT_NO_CLIPPING])
+
+# Text-carrying ops, for the "vector/text vs pixels" split.  RP_STRING_WIDTH and
+# RP_DRAW_STRING_RESULT are server->client queries/replies about text, counted
+# here so the text column is the whole cost of text, not just its ink.
+TEXT_PATH_OPS = frozenset([RP_DRAW_STRING, RP_DRAW_STRING_WITH_OFFSETS,
+                           RP_DRAW_STRING_RESULT, RP_STRING_WIDTH])
+
 # Ops whose payload does NOT begin with uint32 token.
 #
 # Everything RemoteView::_DrawThread() handles *before* its unconditional
@@ -2010,7 +2031,13 @@ class Capture(object):
         self.reply = reply
         self.tokens = {}
         self.global_counts = {}
+        # Per-opcode wire bytes, including the 6-byte RP header (#58 M2 byte
+        # census).  global_counts answers "how many ops"; this answers "how many
+        # bytes", and those two rank the opcodes in a very different order --
+        # which is the entire point of pricing a codec on the bitmap path.
+        self.global_bytes = {}
         self.messages = 0
+        self.message_bytes = 0
         self.truncated = 0
         self.unknown_codes = {}
         self.undecoded_drawing_ops = 0
@@ -2037,6 +2064,7 @@ class Capture(object):
         self.text_records_limit = 4000
         self.text_trailing_bytes = 0
         self.string_width_queries = 0
+        self.string_width_times = []
         self.clipped_out_ops = 0
         self.bitmaps_decoded = 0
         self.bitmaps_placeholder = 0
@@ -2197,6 +2225,13 @@ class Capture(object):
     def handle(self, code, payload):
         self.messages += 1
         self.global_counts[code] = self.global_counts.get(code, 0) + 1
+        # HEADER is included so the census sums to the plain-stream byte total
+        # the framing layer actually saw; a census that omitted it would
+        # understate the cheap-and-numerous ops (a 14-byte cursor move is 6
+        # bytes of header) and so overstate the bitmap path's share.
+        nbytes = len(payload) + HEADER
+        self.message_bytes += nbytes
+        self.global_bytes[code] = self.global_bytes.get(code, 0) + nbytes
         if code not in CODE_NAMES:
             self.unknown_codes[code] = self.unknown_codes.get(code, 0) + 1
 
@@ -2558,6 +2593,12 @@ class Capture(object):
         if code == RP_STRING_WIDTH:
             text = r.string()
             self.string_width_queries += 1
+            # Arrival times, so the gap BETWEEN queries is measurable.  That gap
+            # is the headless-stall measurement (#58 M2): a server waiting out a
+            # 1 s timeout per query cannot issue the next one sooner than 1 s,
+            # so ~1000 ms inter-query gaps ARE the stall and sub-ms gaps are its
+            # absence.  Counting queries alone cannot tell those apart.
+            self.string_width_times.append(time.monotonic())
             if self.reply and self.answer_string_width:
                 self.outbox.append((RP_STRING_WIDTH_RESULT,
                                     struct.pack("<If", token,
@@ -3771,6 +3812,320 @@ def text_expectation_failures(cap, args):
     return failures
 
 
+# --------------------------------------------------------------------------
+# Workload driver (#58 M2).
+#
+# The byte census needs REALISTIC interactive workloads, which means something
+# has to move the mouse and press keys.  Input frames are sent on the same
+# connection the capture reads, because app_server's RemoteEventStream takes its
+# input from the client connection -- there is no second channel and no second
+# client.
+#
+# Byte layouts are the ones rdlatency.py already verified against
+# src/tools/html5_remote_desktop/HaikuRemoteDesktop.js and the server's
+# RemoteEventStream::EventReceived.
+# --------------------------------------------------------------------------
+
+def f_move(x, y):
+    return frame(RP_MOUSE_MOVED, struct.pack("<ff", x, y))
+
+
+def f_down(x, y, buttons=1, clicks=1):
+    return frame(RP_MOUSE_DOWN, struct.pack("<ffII", x, y, buttons, clicks))
+
+
+def f_up(x, y, buttons=0):
+    return frame(RP_MOUSE_UP, struct.pack("<ffI", x, y, buttons))
+
+
+def f_wheel(dx, dy):
+    return frame(RP_MOUSE_WHEEL_CHANGED, struct.pack("<ff", dx, dy))
+
+
+def f_key(down, ch, raw=0, keycode=0):
+    b = ch.encode() if isinstance(ch, str) else ch
+    return frame(RP_KEY_DOWN if down else RP_KEY_UP,
+                 struct.pack("<I", len(b)) + b + struct.pack("<II", raw,
+                                                             keycode))
+
+
+def off_screen_points(named_points, width, height):
+    """Which of (name, (x, y)) fall outside a width x height screen.
+
+    Copied in spirit from rdlatency.py's off_screen() because the bug it guards
+    is worth guarding twice: an earlier campaign aimed every wheel event at
+    (640,400) on a 640x480 screen, got no response, and reported "feature dead"
+    instead of "measured nothing".  Valid coordinates are 0 .. width-1, so
+    x == width is ALREADY off -- that off-by-one is the whole bug.
+    """
+    return ["%s=(%g,%g)" % (name, p[0], p[1]) for name, p in named_points
+            if not (0 <= p[0] < width and 0 <= p[1] < height)]
+
+
+def build_workload(name, width, height, rect=None, fill_seconds=0.0):
+    """Return (steps, named_points) for a workload.
+
+    \a fill_seconds, if > 0, REPEATS the action sequence until it spans at least
+    that many seconds.  This exists because it was needed: the first
+    window-targeted pass ran 2.4 s to 9 s of activity inside a 30 s capture, so a
+    "steady state" window taken at >= 10 s measured the desktop sitting idle
+    again, and all four arms converged on ~1.1 kB/s -- the idle rate -- for the
+    second time in this campaign, for a completely different reason.  A workload
+    that does not last as long as the capture does not have a steady state to
+    measure.
+
+    steps is a list of (delay_seconds_from_start, frame_bytes).  named_points is
+    every coordinate the workload will aim at, so the caller can refuse to run a
+    workload whose points are not on the screen.
+
+    Geometry is expressed as fractions of the screen (or of \a rect), never as
+    constants, so a workload cannot silently aim off a smaller screen.
+
+    \a rect, if given, is (x0, y0, x1, y1) of a WINDOW that was DISCOVERED to be
+    on screen -- see --workload-rect.  This matters more than it looks: on a bare
+    Haiku desktop with no windows open, typing has no focused text view, wheel
+    events are over nothing scrollable, and a click lands on the root view.  A
+    first run of these workloads without a rect produced three arms whose op
+    profiles were within a few percent of each other, i.e. it measured "the mouse
+    moved" three times under three different names.  Aiming into a real window is
+    what makes the arms mean what they are called.
+    """
+    w, h = float(width), float(height)
+    if rect is not None:
+        rx0, ry0, rx1, ry1 = [float(v) for v in rect]
+        rw, rh = rx1 - rx0, ry1 - ry0
+        centre = (rx0 + rw * 0.5, ry0 + rh * 0.55)
+        # StyledEdit-style menu bar sits just inside the window's top edge.
+        menubar = (rx0 + 24.0, ry0 + 10.0)
+        lower = (rx0 + rw * 0.5, ry0 + rh * 0.7)
+        # The window tab is ABOVE the content rect in Haiku's decorator.
+        titlebar = (rx0 + rw * 0.35, max(0.0, ry0 - 8.0))
+    else:
+        # Deskbar lives top-right in Haiku's default layout; the desktop centre
+        # is empty; the bottom-left is Tracker's usual disk icon area.
+        centre = (w * 0.5, h * 0.5)
+        menubar = (w - 40.0, 12.0)
+        lower = (w * 0.35, h * 0.72)
+        titlebar = (w * 0.5, h * 0.5)
+    deskbar = menubar
+    steps = []
+    points = []
+
+    def at(t, *frames):
+        steps.append((t, b"".join(frames)))
+
+    if name == "idle":
+        # Deliberately empty: the control arm.  An idle desktop must be priced
+        # too, because "a codec pays a refresh forever and the display list pays
+        # nothing" is a claim about exactly this workload.
+        pass
+
+    elif name == "menu":
+        # Open the Deskbar menu, walk it, dismiss.  Menus are the classic
+        # vector-heavy case: lots of small fills, strokes and text.
+        points += [("menubar", deskbar), ("centre", centre)]
+        t = 0.5
+        at(t, f_move(*deskbar))
+        t += 0.4
+        at(t, f_down(*deskbar), f_up(*deskbar))
+        for i in range(8):
+            t += 0.35
+            # Walk DOWN from the menu bar: an open menu drops below its label.
+            y = min(h - 1.0, deskbar[1] + 18.0 + i * 16.0)
+            p = (max(0.0, deskbar[0] + 4.0), y)
+            points.append(("menu%d" % i, p))
+            at(t, f_move(*p))
+        t += 0.5
+        at(t, f_move(*centre))
+        t += 0.3
+        at(t, f_down(*centre), f_up(*centre))
+
+    elif name == "text":
+        # Typing into a window.  Every keystroke is a caret erase + redraw +
+        # one short text run: the workload the 81-byte claim is about.
+        points += [("centre", centre)]
+        t = 0.5
+        at(t, f_move(*centre))
+        t += 0.3
+        at(t, f_down(*centre), f_up(*centre))
+        t += 0.5
+        for ch in ("the quick brown fox jumps over the lazy dog "
+                   "0123456789 and then some more text to type"):
+            t += 0.09
+            at(t, f_key(True, ch), f_key(False, ch))
+
+    elif name == "scroll":
+        # Wheel events over a scrollable view.  This is the workload most likely
+        # to produce RP_COPY_RECT_NO_CLIPPING (a scroll blit) and repainted
+        # strips -- the case the design says a codec should take.
+        points += [("lower", lower)]
+        t = 0.5
+        at(t, f_move(*lower))
+        for i in range(30):
+            t += 0.12
+            at(t, f_wheel(0.0, 1.0 if i < 20 else -1.0))
+
+    elif name == "window":
+        # Drag a window across the desktop: large moving damage, the closest
+        # thing to "video" a plain desktop produces.  With a rect, the grab point
+        # is the window's TAB (above the content rect in Haiku's decorator);
+        # without one it is the screen centre and the drag grabs whatever is
+        # there, which on a bare desktop is nothing -- so the rect matters.
+        start = titlebar
+        points += [("titlebar", start)]
+        t = 0.5
+        at(t, f_move(*start))
+        t += 0.3
+        at(t, f_down(*start))
+        for i in range(24):
+            t += 0.06
+            p = (min(w - 1.0, max(0.0, start[0] + (i - 12) * (w * 0.02))),
+                 min(h - 1.0, max(0.0, start[1] + (i % 6) * (h * 0.01))))
+            points.append(("drag%d" % i, p))
+            at(t, f_move(*p))
+        t += 0.2
+        at(t, f_up(*start))
+
+    else:
+        raise ValueError("unknown workload %r" % name)
+
+    # Repeat the sequence to fill the capture.  The cycle is padded by 0.4 s so
+    # each repetition starts from a settled state rather than on top of the
+    # previous one's last event.
+    if fill_seconds > 0.0 and steps:
+        cycle = steps[-1][0] + 0.4
+        if cycle > 0.0:
+            reps = int(fill_seconds / cycle)
+            base = list(steps)
+            for k in range(1, max(0, reps) + 1):
+                if k * cycle >= fill_seconds:
+                    break
+                for delay, blob in base:
+                    steps.append((delay + k * cycle, blob))
+
+    return steps, points
+
+
+class WorkloadDriver(object):
+    """Sends a workload's input frames on their own thread.
+
+    A thread rather than the read loop, because the read loop's socket timeout
+    is 0.5 s and a keystroke cadence of 90 ms cannot be scheduled on it.  Sends
+    and receives on one socket from two threads is safe here: nothing else
+    writes except the reply outbox, and both go through Connection.send().
+    """
+
+    def __init__(self, conn, steps):
+        self.conn = conn
+        self.steps = sorted(steps)
+        self.sent = 0
+        self.send_bytes = 0
+        self.failed = False
+        self._thread = None
+
+    def duration(self):
+        return self.steps[-1][0] if self.steps else 0.0
+
+    def start(self):
+        import threading
+        self._thread = threading.Thread(target=self._run, daemon=True)
+        self._thread.start()
+
+    def _run(self):
+        t0 = time.monotonic()
+        for delay, blob in self.steps:
+            wait = t0 + delay - time.monotonic()
+            if wait > 0:
+                time.sleep(wait)
+            if not self.conn.send(blob):
+                self.failed = True
+                return
+            self.sent += 1
+            self.send_bytes += len(blob)
+
+
+def byte_census(cap):
+    """Per-opcode wire-byte census, plus the bitmap-path share (#58 M2).
+
+    Returns a dict, so the caller can print it, serialise it, or assert on it.
+    The three shares are computed from the SAME total so they are comparable and
+    sum to <= 1.0; 'other' is whatever is in neither the bitmap path nor the
+    text path, which is the vector/state/input remainder.
+    """
+    total = cap.message_bytes
+    rows = []
+    for code, nbytes in cap.global_bytes.items():
+        count = cap.global_counts.get(code, 0)
+        rows.append({
+            "op": code_name(code),
+            "code": code,
+            "count": count,
+            "bytes": nbytes,
+            "mean_bytes": (float(nbytes) / count) if count else 0.0,
+            "share": (float(nbytes) / total) if total else 0.0,
+        })
+    rows.sort(key=lambda r: (-r["bytes"], r["code"]))
+
+    def summed(codes):
+        return sum(cap.global_bytes.get(c, 0) for c in codes)
+
+    pixel_bytes = summed(BITMAP_PIXEL_OPS)
+    path_bytes = summed(BITMAP_PATH_OPS)
+    text_bytes = summed(TEXT_PATH_OPS)
+    return {
+        "total_bytes": total,
+        "total_messages": cap.messages,
+        "rows": rows,
+        "bitmap_pixel_bytes": pixel_bytes,
+        "bitmap_pixel_share": (float(pixel_bytes) / total) if total else 0.0,
+        "bitmap_path_bytes": path_bytes,
+        "bitmap_path_share": (float(path_bytes) / total) if total else 0.0,
+        "copy_rect_bytes": cap.global_bytes.get(RP_COPY_RECT_NO_CLIPPING, 0),
+        "text_path_bytes": text_bytes,
+        "text_path_share": (float(text_bytes) / total) if total else 0.0,
+        "other_bytes": total - path_bytes - text_bytes,
+        "other_share": (float(total - path_bytes - text_bytes) / total
+                        if total else 0.0),
+    }
+
+
+def print_byte_census(cap, limit=14):
+    c = byte_census(cap)
+    print("")
+    print("--- BYTE CENSUS (#58 M2) ----------------------------------")
+    if not c["total_bytes"]:
+        # An empty census is a real outcome (nothing was drawn), and saying so
+        # is the difference between "the bitmap path is 0%" and "we measured
+        # nothing".  The former is a finding; the latter is a broken arm.
+        print("NO messages arrived -- there is no census, not a census of zero.")
+        return c
+    print("plain stream  : %d bytes in %d messages (%.1f B/msg mean)"
+          % (c["total_bytes"], c["total_messages"],
+             float(c["total_bytes"]) / c["total_messages"]))
+    print("%-34s %8s %12s %10s %8s" % ("op", "count", "bytes", "mean", "share"))
+    for row in c["rows"][:limit]:
+        print("%-34s %8d %12d %10.1f %7.2f%%"
+              % (row["op"], row["count"], row["bytes"], row["mean_bytes"],
+                 100.0 * row["share"]))
+    if len(c["rows"]) > limit:
+        rest = sum(r["bytes"] for r in c["rows"][limit:])
+        print("%-34s %8s %12d %10s %7.2f%%"
+              % ("(%d more opcodes)" % (len(c["rows"]) - limit), "-", rest, "-",
+                 100.0 * rest / c["total_bytes"]))
+    print("")
+    print("BITMAP_PIXEL_BYTES=%d (%.2f%%)  -- DRAW_BITMAP + DRAW_BITMAP_RECTS"
+          % (c["bitmap_pixel_bytes"], 100.0 * c["bitmap_pixel_share"]))
+    print("COPY_RECT_BYTES=%d              -- blit instruction, no pixels"
+          % c["copy_rect_bytes"])
+    print("BITMAP_PATH_BYTES=%d (%.2f%%)   -- the two above combined"
+          % (c["bitmap_path_bytes"], 100.0 * c["bitmap_path_share"]))
+    print("TEXT_PATH_BYTES=%d (%.2f%%)"
+          % (c["text_path_bytes"], 100.0 * c["text_path_share"]))
+    print("OTHER_BYTES=%d (%.2f%%)         -- vector geometry, state, input"
+          % (c["other_bytes"], 100.0 * c["other_share"]))
+    return c
+
+
 def report(cap, args, connected, elapsed, stop_reason, wire=None):
     fb = cap.fb
     tr = topright_box(cap.width, cap.height)
@@ -3955,6 +4310,7 @@ def report(cap, args, connected, elapsed, stop_reason, wire=None):
               "(%d had no decodable rect at all)."
               % (cap.undecoded_drawing_ops, str(PLACEHOLDER),
                  cap.undecoded_no_rect_ops))
+    census = print_byte_census(cap)
     print("")
     print("--- TEXT --------------------------------------------------")
     print("rasteriser    : %s"
@@ -3986,6 +4342,27 @@ def report(cap, args, connected, elapsed, stop_reason, wire=None):
               % (cap.string_width_queries,
                  " -- answered from our own metrics"
                  if cap.answer_string_width else " -- NOT answered"))
+        gaps = [1000.0 * (cap.string_width_times[i + 1]
+                          - cap.string_width_times[i])
+                for i in range(len(cap.string_width_times) - 1)]
+        if gaps:
+            gaps_sorted = sorted(gaps)
+            def _p(q):
+                if not gaps_sorted:
+                    return 0.0
+                idx = min(len(gaps_sorted) - 1,
+                          max(0, int(round(q * (len(gaps_sorted) - 1)))))
+                return gaps_sorted[idx]
+            print("STRING_WIDTH_GAP_MS: n=%d p50=%.1f p95=%.1f min=%.1f "
+                  "max=%.1f" % (len(gaps), _p(0.5), _p(0.95), gaps_sorted[0],
+                                gaps_sorted[-1]))
+            # The verdict, stated where the number is produced.  ~1000 ms is the
+            # 1 s sync-wait timeout; sub-100 ms means no wait was taken.
+            stalled = sum(1 for g in gaps if g > 900.0)
+            print("STRING_WIDTH_STALLS: %d of %d gaps exceed 900 ms (%s)"
+                  % (stalled, len(gaps),
+                     "THE 1 s SYNC WAIT IS BEING TAKEN" if stalled
+                     else "no 1 s wait observed"))
     # What may and may not be concluded from the glyphs above. Stated here, at
     # the point of production, because the over-claim is the bug (#475) and an
     # over-claiming instrument is no better than a blind one.
@@ -4091,6 +4468,9 @@ def report(cap, args, connected, elapsed, stop_reason, wire=None):
             "unknown_codes": sorted(cap.unknown_codes),
             "global_op_counts": {code_name(c): n for c, n
                                  in sorted(cap.global_counts.items())},
+            "global_op_bytes": {code_name(c): n for c, n
+                                in sorted(cap.global_bytes.items())},
+            "byte_census": census,
             "tokens": [],
             "errors": cap.errors,
         }
@@ -4173,6 +4553,13 @@ def selftest(allow_skip=False):
         else:
             print("  FAIL  %s %s" % (label, detail))
             failures.append(label)
+
+    def _raises(fn, exc):
+        try:
+            fn()
+        except exc:
+            return True
+        return False
 
     def skip(label, why):
         """Record a check that did not run.
@@ -5632,6 +6019,284 @@ def selftest(allow_skip=False):
           len(utf8_codepoints(b"a\xc3")) == utf8_count_chars(b"a\xc3") == 2,
           str(utf8_codepoints(b"a\xc3")))
 
+    # -- the headless-stall gap metric (#58 M2, D1/D10) ------------------
+    #
+    # INSTRUMENT control, and labelled as such: this proves the gap metric can
+    # SEE a one-second wait.  It does NOT prove the server can be made to take
+    # one -- on this image app_server issues no RP_STRING_WIDTH query at all, so
+    # the mechanism control is unavailable and that is reported as a gap rather
+    # than papered over with this check.
+    def _gaps_ms(times):
+        return [1000.0 * (times[i + 1] - times[i])
+                for i in range(len(times) - 1)]
+
+    cs = Capture(64, 64, glyphs=None)
+    cs.string_width_times = [0.0, 1.0, 2.0, 2.0005]
+    g = _gaps_ms(cs.string_width_times)
+    check("INSTRUMENT CONTROL: the gap metric reports a 1 s wait as ~1000 ms",
+          abs(g[0] - 1000.0) < 1.0 and abs(g[1] - 1000.0) < 1.0, str(g))
+    check("...and a sub-millisecond gap as sub-millisecond, so the two are "
+          "distinguishable", g[2] < 1.0, str(g[2]))
+    stalled = sum(1 for x in g if x > 900.0)
+    check("the >900 ms stall rule counts exactly the two 1 s waits",
+          stalled == 2, str(stalled))
+    # MUTATION: a threshold of 2000 ms would call the same data unstalled, so the
+    # 900 ms rule is load-bearing rather than decorative.
+    check("MUTATION: a 2000 ms threshold would report NO stall on that same "
+          "data, so the 900 ms rule is load-bearing",
+          sum(1 for x in g if x > 2000.0) == 0)
+    # A capture with ONE query has no gaps at all -- which must not read as
+    # "no stall", because it is "not enough data to say".
+    cs2 = Capture(64, 64, glyphs=None)
+    cs2.string_width_times = [5.0]
+    check("a single query yields NO gaps, so the harness cannot claim 'no stall' "
+          "from one sample", _gaps_ms(cs2.string_width_times) == [])
+
+    # -- the M2 byte census (#58) ---------------------------------------
+    #
+    # The census is the instrument that decides codec-on-bitmap vs full-frame
+    # video, so it gets the same treatment as the pixel counters: a positive
+    # control that it CAN see the bitmap path, a negative control that it does
+    # not see it when it is absent, and a mutation arm proving the share
+    # arithmetic would notice being wrong.
+    cc = Capture(64, 64, glyphs=None)
+    # One 16x16 BGRA bitmap: token + 2 rects + colorspace/flags/bpr + pixels.
+    bmp_px = bytes(16 * 16 * 4)
+    bmp_payload = (struct.pack("<I", 3)
+                   + struct.pack("<ffff", 0.0, 0.0, 15.0, 15.0)
+                   + struct.pack("<ffff", 0.0, 0.0, 15.0, 15.0)
+                   + struct.pack("<IIi", 0x0008, 0, 64) + bmp_px)
+    cc.handle(RP_DRAW_BITMAP, bmp_payload)
+    # One cheap vector op, so the denominator is not the bitmap alone.
+    cc.handle(RP_FILL_RECT_COLOR,
+              struct.pack("<Iffff", 3, 1.0, 1.0, 2.0, 2.0)
+              + bytes((1, 2, 3, 255)))
+    cen = byte_census(cc)
+    check("census total equals the sum of its per-op bytes",
+          cen["total_bytes"] == sum(r["bytes"] for r in cen["rows"])
+          == cc.message_bytes,
+          "%d vs %d vs %d" % (cen["total_bytes"],
+                              sum(r["bytes"] for r in cen["rows"]),
+                              cc.message_bytes))
+    # RP_FILL_RECT_COLOR payload is 24 B (u32 token + 4 f32 rect + 4 B colour),
+    # so 30 B on the wire; the bitmap is len(bmp_payload) + 6.  Pinned as
+    # arithmetic on the wire layout, not copied from a previous run's output.
+    fill_wire = 4 + 16 + 4 + HEADER
+    check("census counts the 6-byte RP header, not the payload alone",
+          fill_wire == 30
+          and cen["total_bytes"] == len(bmp_payload) + HEADER + fill_wire,
+          str(cen["total_bytes"]))
+    check("POSITIVE CONTROL: the census SEES a DRAW_BITMAP on the bitmap path",
+          cen["bitmap_pixel_bytes"] == len(bmp_payload) + 6
+          and cen["bitmap_pixel_share"] > 0.9,
+          "%d bytes, share %.4f" % (cen["bitmap_pixel_bytes"],
+                                    cen["bitmap_pixel_share"]))
+    check("a vector op is NOT counted on the bitmap path",
+          cen["other_bytes"] == fill_wire, str(cen["other_bytes"]))
+    check("the three shares sum to 1.0",
+          abs(cen["bitmap_path_share"] + cen["text_path_share"]
+              + cen["other_share"] - 1.0) < 1e-9,
+          "%.9f" % (cen["bitmap_path_share"] + cen["text_path_share"]
+                    + cen["other_share"]))
+
+    # NEGATIVE CONTROL: a capture with no bitmap op must report 0%, and the
+    # instrument above proves that 0% means absence and not blindness.
+    cv = Capture(64, 64, glyphs=None)
+    cv.handle(RP_FILL_RECT_COLOR,
+              struct.pack("<Iffff", 3, 1.0, 1.0, 2.0, 2.0)
+              + bytes((1, 2, 3, 255)))
+    cen_v = byte_census(cv)
+    check("NEGATIVE CONTROL: no bitmap op -> bitmap path is exactly 0 bytes",
+          cen_v["bitmap_path_bytes"] == 0
+          and cen_v["bitmap_path_share"] == 0.0
+          and cen_v["other_share"] == 1.0,
+          str(cen_v["bitmap_path_bytes"]))
+
+    # An EMPTY capture must be distinguishable from "0% bitmap path": a census
+    # of nothing is not a measurement, and this is exactly the confusion that
+    # produced two false defect filings.
+    ce = Capture(64, 64, glyphs=None)
+    cen_e = byte_census(ce)
+    check("an empty census reports zero TOTAL, so it cannot be read as a 0% "
+          "bitmap-path finding",
+          cen_e["total_bytes"] == 0 and cen_e["total_messages"] == 0
+          and cen_e["rows"] == [])
+
+    # RP_COPY_RECT_NO_CLIPPING carries no pixels; it must be separable.
+    cr = Capture(64, 64, glyphs=None)
+    cr.handle(RP_COPY_RECT_NO_CLIPPING,
+              struct.pack("<ffffff", 0.0, 0.0, 9.0, 9.0, 20.0, 20.0))
+    cen_r = byte_census(cr)
+    check("COPY_RECT is on the bitmap PATH but not in its PIXEL bytes",
+          cen_r["bitmap_path_bytes"] > 0
+          and cen_r["bitmap_pixel_bytes"] == 0
+          and cen_r["copy_rect_bytes"] == cen_r["bitmap_path_bytes"],
+          "path=%d pixel=%d copy=%d" % (cen_r["bitmap_path_bytes"],
+                                        cen_r["bitmap_pixel_bytes"],
+                                        cen_r["copy_rect_bytes"]))
+
+    # MUTATION: if the bitmap-path set had wrongly included the cheap colour
+    # fill, the share would jump -- so the set membership is load-bearing and
+    # this assertion would catch a mis-grouping.
+    mutated = sum(cc.global_bytes.get(c, 0)
+                  for c in (BITMAP_PATH_OPS | {RP_FILL_RECT_COLOR}))
+    check("MUTATION: adding a vector op to the bitmap-path set CHANGES the "
+          "answer, so the grouping is load-bearing",
+          mutated != cen["bitmap_path_bytes"],
+          "%d vs %d" % (mutated, cen["bitmap_path_bytes"]))
+
+    # A text op must land in the text column, not in 'other'.
+    ct = Capture(64, 64, glyphs=None)
+    ct.handle(RP_DRAW_STRING,
+              struct.pack("<I", 3) + struct.pack("<ff", 1.0, 20.0)
+              + struct.pack("<I", 2) + b"hi")
+    cen_t = byte_census(ct)
+    check("a DRAW_STRING is counted on the TEXT path, not in 'other'",
+          cen_t["text_path_share"] == 1.0 and cen_t["other_bytes"] == 0,
+          "text=%d other=%d" % (cen_t["text_path_bytes"],
+                                cen_t["other_bytes"]))
+
+    # -- workload driver and its off-screen guard (#58 M2, #525) ---------
+    for name in ("idle", "menu", "text", "scroll", "window"):
+        steps, points = build_workload(name, 1200, 760)
+        if name == "idle":
+            check("the idle workload sends NOTHING (it is the control arm)",
+                  steps == [] and points == [])
+            continue
+        check("workload %r produces steps and stays on a 1200x760 screen" % name,
+              len(steps) > 0
+              and off_screen_points(points, 1200, 760) == [],
+              "%d steps, off=%s" % (len(steps),
+                                    off_screen_points(points, 1200, 760)))
+        check("workload %r steps are monotonically scheduled" % name,
+              all(steps[i][0] <= steps[i + 1][0]
+                  for i in range(len(steps) - 1)))
+        # The real guard: the SAME workload's geometry on a smaller screen must
+        # be caught.  320x240 and not 640x480, because the centre of a 1200x760
+        # screen (600,380) is COINCIDENTALLY inside 640x480 -- so a 640x480 arm
+        # would assert a catch that the single-point 'text' workload cannot
+        # produce, and the assertion would be false rather than the guard being
+        # weak.  Saying which screen makes the trap visible is part of the
+        # claim; the exact (640,400)-on-640x480 case is checked separately below.
+        _s, small_points = build_workload(name, 320, 240)
+        big_on_small = off_screen_points(points, 320, 240)
+        check("POSITIVE CONTROL: workload %r's 1200x760 points ARE caught as "
+              "off a 320x240 screen (the #525 trap shape)" % name,
+              big_on_small != [], str(big_on_small[:3]))
+        check("...and the workload REBUILT for 320x240 is on-screen, so the "
+              "guard rejects bad geometry without rejecting the workload (%s)"
+              % name,
+              off_screen_points(small_points, 320, 240) == [],
+              str(off_screen_points(small_points, 320, 240)))
+
+    # -- rect-targeted workloads (the fix for the non-discriminating arms) --
+    #
+    # The first census pass ran these against a BARE desktop and all three
+    # interactive arms came out within a few percent of each other: it measured
+    # "the mouse moved" three times.  The rect is what makes each arm aim into a
+    # real window, so the rect has to actually MOVE the coordinates -- otherwise
+    # the fix is cosmetic and the arms still do not discriminate.
+    rect = (17.0, 12.0, 527.0, 446.0)
+    for name in ("menu", "text", "scroll", "window"):
+        _sr, pr = build_workload(name, 1200, 760, rect=rect)
+        _sn, pn = build_workload(name, 1200, 760, rect=None)
+        if name == "window":
+            # A drag is SUPPOSED to leave the rect -- that is what dragging a
+            # window is.  What must be inside (just above) the rect is the GRAB
+            # point, i.e. the tab; asserting containment for the whole drag would
+            # assert that the drag does not move the window.
+            grab = [p for n, p in pr if n == "titlebar"]
+            check("the window arm GRABS the tab just above the rect's top edge",
+                  len(grab) == 1
+                  and rect[0] <= grab[0][0] <= rect[2]
+                  and 0.0 <= grab[0][1] < rect[1],
+                  str(grab))
+        else:
+            check("workload %r AIMED AT A RECT puts every point inside that "
+                  "rect" % name,
+                  all(rect[0] - 12.0 <= x <= rect[2] + 2.0
+                      and rect[1] - 12.0 <= y <= rect[3] + 2.0
+                      for _n, (x, y) in pr),
+                  str([p for p in pr
+                       if not (rect[0] - 12.0 <= p[1][0] <= rect[2] + 2.0)][:3]))
+        check("workload %r's rect-aimed points DIFFER from its screen-relative "
+              "ones, so --workload-rect is load-bearing and not cosmetic" % name,
+              [p[1] for p in pr] != [p[1] for p in pn],
+              "rect=%s screen=%s" % (pr[:2], pn[:2]))
+        check("workload %r stays on screen when aimed at a rect" % name,
+              off_screen_points(pr, 1200, 760) == [],
+              str(off_screen_points(pr, 1200, 760)))
+
+    # -- workload looping (the fix for "the window landed in the idle part") --
+    for name in ("menu", "text", "scroll", "window"):
+        short, _p = build_workload(name, 1200, 760, rect=rect)
+        long_, _p2 = build_workload(name, 1200, 760, rect=rect,
+                                    fill_seconds=28.0)
+        span_s = short[-1][0]
+        span_l = long_[-1][0]
+        check("workload %r LOOPS to fill a 28 s capture (was %.1f s, now "
+              "%.1f s)" % (name, span_s, span_l),
+              span_l >= min(28.0, span_s * 2.0) and len(long_) > len(short),
+              "%d steps -> %d steps" % (len(short), len(long_)))
+        check("looping workload %r stays monotonic" % name,
+              all(long_[i][0] <= long_[i + 1][0]
+                  for i in range(len(long_) - 1)))
+        check("looping workload %r sends every original step at least twice"
+              % name, len(long_) >= 2 * len(short),
+              "%d vs %d" % (len(long_), len(short)))
+    # MUTATION: fill_seconds=0 must leave the workload UNCHANGED, or the flag is
+    # doing something even when it was not asked for.
+    for name in ("menu", "text", "scroll", "window"):
+        a, _ = build_workload(name, 1200, 760, rect=rect, fill_seconds=0.0)
+        b, _ = build_workload(name, 1200, 760, rect=rect)
+        check("MUTATION: fill_seconds=0 leaves workload %r identical to the "
+              "unlooped build" % name, a == b)
+
+    # A rect near the top edge must not push the window-drag grab point negative:
+    # the tab sits ABOVE the content rect, and y = -8 would be refused.
+    _s, pe = build_workload("window", 1200, 760, rect=(0.0, 0.0, 300.0, 200.0))
+    check("a window rect flush against the top edge still yields on-screen "
+          "points (the tab is above the content rect)",
+          off_screen_points(pe, 1200, 760) == [],
+          str(off_screen_points(pe, 1200, 760)))
+
+    # MUTATION: a rect entirely off the screen must be CAUGHT, not clamped.  A
+    # silently clamped rect would aim at the screen edge and measure nothing,
+    # which is the original failure wearing a new hat.
+    _s, po = build_workload("text", 1200, 760, rect=(2000.0, 2000.0, 2400.0,
+                                                     2400.0))
+    check("MUTATION: a rect entirely OFF the screen produces off-screen points "
+          "that the guard catches, rather than being silently clamped",
+          off_screen_points(po, 1200, 760) != [],
+          str(off_screen_points(po, 1200, 760)[:2]))
+
+    check("the exact #525 point (640,400) is rejected on a 640x480 screen",
+          off_screen_points([("wheel", (640, 400))], 640, 480) != [])
+    check("the last valid pixel (639,479) is ACCEPTED, so the guard is not "
+          "merely conservative",
+          off_screen_points([("edge", (639, 479))], 640, 480) == [])
+    # MUTATION: a `<=` bound would accept x == width, which is the off-by-one
+    # that produced the false "feature dead" verdict.
+    check("MUTATION: a <= bound would ACCEPT (640,400), so the strict < is "
+          "load-bearing",
+          (0 <= 640 <= 640 and 0 <= 400 <= 480)
+          and off_screen_points([("w", (640, 400))], 640, 480) != [])
+    check("an unknown workload name raises rather than sending nothing",
+          _raises(lambda: build_workload("nope", 800, 600), ValueError))
+
+    # The input frame layouts must match what rdlatency.py sends, byte for byte,
+    # or the two instruments are not driving the same server.
+    check("f_move is a 6-byte header plus two float32s",
+          len(f_move(1.0, 2.0)) == HEADER + 8
+          and struct.unpack_from("<HI", f_move(1.0, 2.0), 0)
+          == (RP_MOUSE_MOVED, HEADER + 8))
+    check("f_down carries x, y, buttons, clicks",
+          len(f_down(1.0, 2.0)) == HEADER + 16)
+    check("f_wheel carries two float32 deltas",
+          len(f_wheel(0.0, 1.0)) == HEADER + 8)
+    check("f_key is length-prefixed bytes plus raw and keycode",
+          len(f_key(True, "a")) == HEADER + 4 + 1 + 8)
+
     print("")
     # Coverage first, verdict second.  A green line that covered four checks
     # fewer than the last run is the failure mode this reports out of.
@@ -5677,6 +6342,36 @@ def main(argv=None):
     p.add_argument("--connect-timeout", type=float, default=5.0)
     p.add_argument("--png", help="write the framebuffer here as 8-bit RGB PNG")
     p.add_argument("--json", help="write the full summary here as JSON")
+    p.add_argument("--workload", metavar="NAME",
+                   choices=["idle", "menu", "text", "scroll", "window"],
+                   help="drive an interactive workload on this connection while "
+                        "capturing, for the M2 byte census (#58): idle (control, "
+                        "sends nothing), menu, text, scroll, window. Every "
+                        "coordinate is checked against --width/--height first "
+                        "and the run is REFUSED if any is off the screen -- see "
+                        "off_screen_points()")
+    p.add_argument("--workload-loop", action="store_true",
+                   help="repeat the workload until it fills the capture. "
+                        "Without this a 4 s workload inside a 30 s capture "
+                        "leaves 26 s of idle desktop, and any 'steady state' "
+                        "window lands in the idle part -- which is how a "
+                        "previous pass got four different workloads all "
+                        "reporting the idle byte rate.")
+    p.add_argument("--workload-rect", metavar="X0,Y0,X1,Y1",
+                   help="aim the workload inside this window rect instead of at "
+                        "screen-relative defaults. Pass a rect that was "
+                        "DISCOVERED (e.g. from a probe capture's token bboxes), "
+                        "not one that was assumed: on a bare desktop with no "
+                        "window open, the text/scroll/menu arms all degenerate "
+                        "into 'the mouse moved' and their op profiles come out "
+                        "within a few percent of each other.")
+    p.add_argument("--wire-dump", metavar="PATH",
+                   help="append every decoded RP message to PATH as a "
+                        "timestamped record: float64 seconds-since-connect, "
+                        "then the whole RP frame (6-byte header + payload). "
+                        "This is the real captured frame sequence the M2 "
+                        "encoder pricing (#58) runs against offline -- pricing "
+                        "on synthetic data would be pricing a guess.")
     p.add_argument("--verbose", action="store_true",
                    help="log every message to stderr")
     p.add_argument("--no-clip", dest="clip", action="store_false",
@@ -5768,6 +6463,16 @@ def main(argv=None):
                         "answering would replace the server's layout metrics "
                         "with ours -- an instrument perturbing what it "
                         "measures. Use it only to exercise the query path.")
+    p.add_argument("--advertise-string-width-no-answer", action="store_true",
+                   help="advertise RP_CAP_STRING_WIDTH_REPLY and then NEVER "
+                        "answer the query. This is a deliberately bad client, "
+                        "and it exists as the POSITIVE CONTROL for the M2 "
+                        "headless-stall experiment (#58): the server may only "
+                        "issue a string-width query to a client that promised to "
+                        "answer, so this is the one remaining way to make it "
+                        "wait the full 1 s timeout. If a run with this flag does "
+                        "NOT stall, the instrument cannot detect a stall and any "
+                        "'no stall' verdict from it is worthless.")
     p.add_argument("--selftest", action="store_true",
                    help="run the parser/PNG self-test and exit")
     p.add_argument("--allow-skip", action="store_true",
@@ -5888,7 +6593,7 @@ def main(argv=None):
         return 2
 
     capabilities = CAP_COMPRESS_ZSTD if args.zstd else 0
-    if args.answer_string_width:
+    if args.answer_string_width or args.advertise_string_width_no_answer:
         capabilities |= CAP_STRING_WIDTH_REPLY
 
     try:
@@ -5933,9 +6638,53 @@ def main(argv=None):
         hello = frame(RP_HELLO, struct.pack("<IIIIII", URP_PROTOCOL_VERSION,
                                             capabilities, 0, 0,
                                             args.width, args.height))
+    driver = None
+    if args.workload:
+        wrect = None
+        if args.workload_rect:
+            try:
+                wrect = tuple(float(v) for v
+                              in args.workload_rect.split(","))
+                if len(wrect) != 4:
+                    raise ValueError
+            except ValueError:
+                sys.stderr.write("rdcapture: --workload-rect wants "
+                                 "X0,Y0,X1,Y1\n")
+                return 7
+        steps, points = build_workload(args.workload, args.width, args.height,
+                                       rect=wrect,
+                                       fill_seconds=(args.seconds - 2.0
+                                                     if args.workload_loop
+                                                     else 0.0))
+        # Refuse rather than measure nothing.  This guard is the whole reason
+        # the previous campaign's "feature dead" verdict was wrong (#525): an
+        # event aimed one pixel off the screen is correctly ignored, and the
+        # silence that follows is indistinguishable from a broken input path.
+        bad = off_screen_points(points, args.width, args.height)
+        if bad:
+            sys.stderr.write("rdcapture: workload %r aims %d point(s) OFF a "
+                             "%dx%d screen: %s -- refusing to run, because the "
+                             "silence that follows would read as a dead "
+                             "feature rather than as a bad harness\n"
+                             % (args.workload, len(bad), args.width,
+                                args.height, ", ".join(bad[:6])))
+            return 7
+        print("WORKLOAD=%s steps=%d span=%.1fs points_checked=%d "
+              "screen=%dx%d"
+              % (args.workload, len(steps), steps[-1][0] if steps else 0.0,
+                 len(points), args.width, args.height))
+        driver = WorkloadDriver(conn, steps)
+
+    dump = None
+    if args.wire_dump:
+        dump = open(args.wire_dump, "wb")
+    dump_t0 = time.monotonic()
+
     if not conn.send(frame(RP_INIT_CONNECTION) + hello):
         stop_reason = "send_init_failed"
     else:
+        if driver is not None:
+            driver.start()
         try:
             while time.monotonic() < deadline:
                 item = conn.next_message()
@@ -5943,6 +6692,9 @@ def main(argv=None):
                     stop_reason = "deadline"
                     break
                 code, payload = item
+                if dump is not None:
+                    dump.write(struct.pack("<d", time.monotonic() - dump_t0))
+                    dump.write(frame(code, payload))
                 cap.handle(code, payload)
                 if cap.outbox:
                     pending = cap.outbox
@@ -5963,6 +6715,17 @@ def main(argv=None):
             sys.stderr.write("rdcapture: %s -- stopping cleanly\n" % exc)
         except KeyboardInterrupt:
             stop_reason = "interrupted"
+    if driver is not None:
+        # Report what the driver actually managed to send.  A workload that
+        # failed to send is a workload that measured the idle desktop under
+        # another name, and that has to be visible in the output.
+        print("WORKLOAD_SENT=%d steps, %d bytes%s"
+              % (driver.sent, driver.send_bytes,
+                 "  *** SEND FAILED PART-WAY ***" if driver.failed else ""))
+    if dump is not None:
+        dump.close()
+        print("wrote wire dump: %s (%d bytes)"
+              % (args.wire_dump, os.path.getsize(args.wire_dump)))
     wire = conn.wire if conn is not None else None
     if conn is not None:
         conn.close()

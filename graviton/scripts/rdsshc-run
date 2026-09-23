@@ -1,0 +1,97 @@
+#!/bin/bash
+#
+# rdsshc-run -- measure what `ssh -C` actually buys on a captured RP stream (#58
+# M2, experiment E5 of remote-desktop-unified-design.md §6).
+#
+# `ssh -C` is the zero-work baseline: the remote-desktop stream already travels
+# through an SSH tunnel, so one character on the command line is the cheapest
+# compression this project can possibly ship.  Anything designed in-protocol has
+# to beat it, and if it does not, that finding SHRINKS M2 rather than growing it.
+#
+# The measurement is OpenSSH's own accounting, not a model of it: `ssh -v` prints
+#
+#   debug1: compress outgoing: raw data N, compressed M, factor F
+#
+# at session end, which is the real deflate result on the real bytes.  It also
+# prints "Enabling compression at level 6", which is how the zlib level used in
+# the offline pricing arms was established rather than assumed.
+#
+# Two shapes, because they answer different questions and only one of them is
+# honest about an interactive desktop:
+#
+#   BULK      -- cat the whole stream in.  ssh gets large packets it would never
+#                see live, so this is an UPPER BOUND on the ratio.
+#   CADENCE   -- replay the stream at its recorded timing with a flush at every
+#                message boundary (rdprice.py --replay).  This is the shape ssh
+#                actually sees, and its ratio is the one to quote.
+#
+# Direction matters too: the desktop stream flows server -> client, so the
+# interesting number is the one measured on data moving OUT of the Haiku box.
+# Here the stream file is pushed from this host into the instance, so the
+# "outgoing" figure is the compression of the desktop bytes -- same bytes, same
+# deflate, and it does not require running ssh on Haiku.
+#
+# Usage: rdsshc-run <ssh-port> <stream-dir> [dump-dir]
+#   e.g. rdsshc-run 2242 /local/home/benfelip/m2-data
+
+set -u
+
+PORT="${1:?usage: rdsshc-run <ssh-port> <stream-dir> [dump-dir]}"
+DIR="${2:?usage: rdsshc-run <ssh-port> <stream-dir> [dump-dir]}"
+DUMPDIR="${3:-$DIR}"
+HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SSH=("$HERE/haiku-ssh" "-p$PORT" "-oStrictHostKeyChecking=no"
+     "-oUserKnownHostsFile=/dev/null")
+
+stats() {
+	# Pull OpenSSH's own outgoing-compression accounting out of -v output.
+	grep -oE "compress outgoing: raw data [0-9]+, compressed [0-9]+, factor [0-9.]+" \
+		| tail -1
+}
+
+echo "workload,shape,raw_bytes,compressed_bytes,factor,ratio"
+
+# NEGATIVE CONTROL first.  If ssh -C compressed random bytes, every number below
+# would be suspect; measuring it proves a reported win is a property of the
+# desktop stream and not of the harness.
+ctl=$(mktemp -p "$DIR" ctl-XXXX.bin)
+head -c 400000 /dev/urandom > "$ctl"
+line=$("${SSH[@]}" -C -v 127.0.0.1 'cat > /dev/null' < "$ctl" 2>&1 | stats)
+raw=$(echo "$line" | grep -oE "raw data [0-9]+" | grep -oE "[0-9]+")
+cmp=$(echo "$line" | grep -oE "compressed [0-9]+" | grep -oE "[0-9]+")
+if [ -n "${raw:-}" ] && [ -n "${cmp:-}" ]; then
+	echo "NEGATIVE-CONTROL-random,bulk,$raw,$cmp,$(echo "$cmp $raw" | awk '{printf "%.2f", $1/$2}'),$(echo "$raw $cmp" | awk '{printf "%.2fx", $1/$2}')"
+fi
+rm -f "$ctl"
+
+for stream in "$DIR"/*.rp; do
+	[ -f "$stream" ] || continue
+	name=$(basename "$stream" .rp)
+
+	# --- BULK -------------------------------------------------------
+	line=$("${SSH[@]}" -C -v 127.0.0.1 'cat > /dev/null' < "$stream" 2>&1 | stats)
+	raw=$(echo "$line" | grep -oE "raw data [0-9]+" | grep -oE "[0-9]+")
+	cmp=$(echo "$line" | grep -oE "compressed [0-9]+" | grep -oE "[0-9]+")
+	if [ -n "${raw:-}" ] && [ -n "${cmp:-}" ]; then
+		echo "$name,bulk,$raw,$cmp,$(echo "$cmp $raw" | awk '{printf "%.3f", $1/$2}'),$(echo "$raw $cmp" | awk '{printf "%.2fx", $1/$2}')"
+	else
+		echo "$name,bulk,NA,NA,NA,NA"
+	fi
+
+	# --- CADENCE ----------------------------------------------------
+	dump="$DUMPDIR/$name.dump"
+	if [ -f "$dump" ]; then
+		# Replayed at 4x so a 30 s capture costs ~8 s of wall clock; the
+		# message boundaries and therefore the flush pattern are unchanged,
+		# which is the property this arm depends on.
+		line=$(python3 "$HERE/rdprice.py" "$dump" --replay --replay-speed 4.0 2>/dev/null \
+			| "${SSH[@]}" -C -v 127.0.0.1 'cat > /dev/null' 2>&1 | stats)
+		raw=$(echo "$line" | grep -oE "raw data [0-9]+" | grep -oE "[0-9]+")
+		cmp=$(echo "$line" | grep -oE "compressed [0-9]+" | grep -oE "[0-9]+")
+		if [ -n "${raw:-}" ] && [ -n "${cmp:-}" ]; then
+			echo "$name,cadence,$raw,$cmp,$(echo "$cmp $raw" | awk '{printf "%.3f", $1/$2}'),$(echo "$raw $cmp" | awk '{printf "%.2fx", $1/$2}')"
+		else
+			echo "$name,cadence,NA,NA,NA,NA"
+		fi
+	fi
+done
