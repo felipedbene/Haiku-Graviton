@@ -151,6 +151,23 @@ cmd_promote() {
 			echo "un-canonical: ${id}"
 			aws ec2 delete-tags --region "$REGION" --resources "$id" \
 				--tags "Key=${TAG_KEY},Value=${TAG_VAL}"
+			# ...and RELEASE its SpringClean protection, symmetrically with the
+			# auto-delete=no we set on the incoming canonical below. Without this,
+			# protection accumulates on every promotion and no superseded canonical
+			# is ever reapable -- the account fills with images nothing will clean.
+			# Safe to release: retention is cmd_prune's job (keep CANDIDATE_KEEP
+			# newest, canonical always excluded), and that runs as part of promote,
+			# so a superseded canonical is retired on our own schedule rather than
+			# being pinned forever.
+			local old_snaps
+			old_snaps="$(aws ec2 describe-images --region "$REGION" \
+				--image-ids "$id" \
+				--query 'Images[0].BlockDeviceMappings[?Ebs].Ebs.SnapshotId' \
+				--output text 2>/dev/null)"
+			aws ec2 delete-tags --region "$REGION" \
+				--resources "$id" ${old_snaps} \
+				--tags Key=auto-delete >/dev/null 2>&1 \
+				&& echo "unprotected (auto-delete released): ${id} ${old_snaps}"
 		fi
 	done
 	# Set canonical on the target (idempotent).
