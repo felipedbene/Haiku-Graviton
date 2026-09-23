@@ -250,6 +250,18 @@ because it takes no lock and syncs no pool). `haiku-repo-restamp-packager-selfte
 covers it offline, with a mutation arm that swallows the stderr again and an arbitrary-
 message arm proving the relay is not special-cased.
 
+**`haiku-repo-add` counts a canonical name once, not per incoming file (#509).** It
+used to increment `added` per incoming `*.hpkg`, so two incoming files resolving to the
+same canonical name printed `PUBLISHED 2 new package(s) … repo now has 1` and reported
+both as published though the second overwrote the first. It now dedupes by canonical
+name (first copy wins deterministically), counts once, and **warns on the collision**
+(`duplicate-canonical`) — a duplicate usually means an upstream build emitted the
+package twice, worth surfacing. Both incoming copies are still reported to
+`HG_PUBLISHED_LIST_OUT` so the caller's prune clears both from incoming. The extended
+`haiku-repo-add-selftest` adds an arm that asserts the count matches the repo and the
+collision warns, plus a mutation arm that undoes the dedupe and watches the count go
+back to 2.
+
 When the prod CloudFront origin points at the pool you published, also invalidate
 the prod dist's index paths so the change is served.
 

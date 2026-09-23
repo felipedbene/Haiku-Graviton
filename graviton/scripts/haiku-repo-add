@@ -244,12 +244,20 @@ canonical_name() {
 echo "== 3. re-stamp incoming to vendor $VENDOR + packager $PACKAGER and stage under canonical names =="
 added=0
 skipped=0
+dup=0
 skipped_list=""
 # How many packages this run was ASKED to publish. The final accounting checks
-# added + skipped == offered, so a package can never fall out of the report
+# added + skipped + dup == offered, so a package can never fall out of the report
 # unnoticed, and "published nothing" cannot be reported as success (#502).
 offered="$(ls -1 "$WORK/incoming"/*.hpkg 2>/dev/null | wc -l | tr -d ' ')"
 SKIPS="$WORK/skips"; : > "$SKIPS"
+# Canonical names staged SO FAR this run, one per line. `added` must count
+# canonical names, not incoming files: two incoming files can resolve to the same
+# canonical name (an upstream build that emitted the package twice), and the
+# second `mv` below would silently OVERWRITE the first while both were counted --
+# "PUBLISHED 2 ... repo now has 1", a number that contradicts the repo, and a
+# duplicate input passing in silence (#509). Dedupe here and WARN on a collision.
+SEEN_CANON="$WORK/seen.canon"; : > "$SEEN_CANON"
 
 # ---- surface what the TOOL said, verbatim (issue #502) --------------------
 # The defect #502 records is not a missing environment variable: it is that this
@@ -414,6 +422,23 @@ for f in "$WORK/incoming"/*.hpkg; do
 	# batch through `set -e` before the explicit diagnosis below can run.
 	canon="$(canonical_name "$staged" || true)"
 	[ -n "$canon" ] || die "could not derive canonical name for $base"
+	# Dedupe by CANONICAL NAME, not by incoming filename (#509). If an earlier
+	# incoming file in THIS run already staged this canonical name, the two files
+	# are the same published package: counting both as `added` prints a total that
+	# contradicts the repo, and a duplicate input -- usually an upstream build that
+	# emitted the package twice -- would pass in silence. Keep the copy already
+	# staged (first wins, deterministically), count the canonical name once, and
+	# WARN so the duplicate is surfaced. The base is still reported as published so
+	# the caller's prune removes BOTH harvest copies from incoming; either copy is
+	# a legitimate delete candidate, being the same published package.
+	if grep -qxF "$canon" "$SEEN_CANON"; then
+		echo "   ! DUPLICATE $base: canonical name '$canon' was already published this run by an earlier incoming file -- the copies collapse to one repo entry (duplicate-canonical). Two incoming files for one canonical name usually mean an upstream build produced the package twice; check the harvest. Counting it once, keeping the copy already staged." >&2
+		dup=$((dup + 1))
+		printf '%s\n' "$base" >> "$PUBLISHED_BASES"
+		rm -f "$staged"
+		continue
+	fi
+	printf '%s\n' "$canon" >> "$SEEN_CANON"
 	# Drop any other on-disk version of the same package name so the repo does
 	# not accumulate stale versions of a package we are (re)publishing.
 	pkgname="${canon%%-*}"
@@ -438,13 +463,14 @@ print_skip_summary() {
 	done < "$SKIPS"
 }
 
-# ---- account for every package we were asked to publish (issue #502) -------
-# Totality first: a package is either staged (added) or skipped WITH a recorded
-# reason. If those do not sum to what was offered, the report is wrong in a way we
-# cannot characterise, which is the whole family of bug this guard exists for --
-# so say so and fail rather than print a number nobody can trust.
-if [ $((added + skipped)) -ne "$offered" ]; then
-	die "internal accounting error: offered $offered package(s), counted $added added + $skipped skipped -- refusing to report a result that does not add up"
+# ---- account for every package we were asked to publish (issue #502/#509) --
+# Totality first: a package is either staged (added), collapsed onto a canonical
+# name already staged this run (dup, #509), or skipped WITH a recorded reason. If
+# those do not sum to what was offered, the report is wrong in a way we cannot
+# characterise, which is the whole family of bug this guard exists for -- so say
+# so and fail rather than print a number nobody can trust.
+if [ $((added + skipped + dup)) -ne "$offered" ]; then
+	die "internal accounting error: offered $offered package(s), counted $added added + $skipped skipped + $dup duplicate -- refusing to report a result that does not add up"
 fi
 if [ "$added" -eq 0 ]; then
 	# EVERY package this run was asked to publish failed. There is no "nothing to
@@ -533,7 +559,9 @@ while IFS= read -r b; do
 		>/dev/null 2>&1 </dev/null || true
 done < "$PUBLISHED_BASES"
 
-echo "PUBLISHED $added new package(s); skipped $skipped; repo now has $(ls -1 "$RO/packages" | wc -l) (was $before)."
+dupnote=""
+[ "$dup" -gt 0 ] && dupnote="; folded $dup duplicate canonical name(s)"
+echo "PUBLISHED $added new package(s); skipped $skipped$dupnote; repo now has $(ls -1 "$RO/packages" | wc -l) (was $before)."
 if [ "$skipped" -gt 0 ]; then
 	# A PARTIAL publish: the packages that made it are durable in the live repo and
 	# the index references them, so the publish itself COMPLETED -- which is why the
