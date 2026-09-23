@@ -1,0 +1,461 @@
+#!/usr/bin/env python3
+# haiku-staging-reconcile -- reconcile packages sitting in a staging prefix
+# against the published pool indexes, and flag any that never made it into a
+# pool (issue #503). READ-ONLY: it lists, ranged-reads and parses; it publishes
+# nothing, promotes nothing, and deletes nothing.
+#
+# WHY THIS EXISTS. Every other step of the DeBeOS publish path is guarded -- the
+# #164 publish lock, the MODE=plan promote gate with a PLAN_ID staleness check,
+# per-name green-newer withhold, CDN invalidation verified by content hash. The
+# ONE check that never existed is "does anything staged fail to reach a pool?".
+# A finished, installable `golang-1.26.1-1-arm64.hpkg` sat in
+# `s3://<pool>/staging/` for three days -- in neither the blue
+# (`debeos-repo/arm64`) nor green (`debeos-repo-green/arm64`) pool -- while every
+# guard reported healthy, because none of them was looking for "built but never
+# published". An empty publish and a never-attempted publish look identical from
+# outside; this is the missing "zero rows" alarm for that gap.
+#
+# WHAT IT DOES. For each `.hpkg` under the staging prefix(es):
+#   1. resolves its canonical (name, version, revision) with the in-tree
+#      hpkg_meta reader -- the SAME reader the pools are parsed with, via a
+#      ranged GET so a 116 MiB package costs a header + tail fetch, not a
+#      download;
+#   2. looks that identity up in the blue and green pool `repo` indexes;
+#   3. classifies it:
+#        PUBLISHED  -- exact (name, version, revision) present in a pool;
+#        SUPERSEDED -- not present, but a pool holds a strictly-NEWER
+#                      (version, revision) of the same name;
+#        ORPHANED   -- absent from both pools and nothing newer is pooled. This
+#                      is the actionable class -- staged but never published.
+#
+# MATCH ON (name, version, revision), NOT ON BYTES. The published copy differs
+# from the staged original by the canonical packager re-stamp (the golang
+# incident: 121872113 -> 121872120 bytes, packager `debeos@` -> `packages@`), so
+# a byte comparison would report a permanent false difference. The identity is
+# what pkgman resolves, so the identity is what we reconcile.
+#
+# EXIT STATUS. 0 when every staged file is PUBLISHED or SUPERSEDED (nothing is
+# stranded). Non-zero when any ORPHANED (or UNREADABLE) file is found, with a
+# clear per-file report, so this can later be wired into the SessionStart drift/
+# status checks. It is intentionally NOT wired in here -- a new failing check in
+# the session hook would be disruptive; wiring is a deliberate follow-up.
+#
+# No account-scoped name is baked into this tracked file: the account id is read
+# at runtime from `aws sts get-caller-identity` (like haiku-status), and every
+# bucket/prefix can be overridden by flag or env.
+
+import argparse
+import datetime
+import json
+import os
+import sys
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import hpkg_meta  # noqa: E402  (co-located; reads HPKG/HPKR without a Haiku host)
+
+ARCH_DEFAULT = "arm64"
+# Blue is the publish-leg staging pool; green is what the CDN actually serves.
+# A staged artifact counts as PUBLISHED if it reached EITHER.
+BLUE_PREFIX = "debeos-repo/%s"
+GREEN_PREFIX = "debeos-repo-green/%s"
+INDEX_NAME = "repo"
+
+# Candidate staging-like prefixes probed by --candidates. `staging/` in the pool
+# bucket is the #503 gap and the default. The build-wave output area
+# (`hpkg/arm64-incoming/...`, ~140k objects) is DELIBERATELY not in this list: it
+# is a build census, a different lifecycle -- most of it is legitimately
+# unpublished at any moment, so reconciling it against the pool would flag the
+# entire backlog ORPHANED and mean nothing. Point --prefix at it explicitly (and
+# raise --max-objects) if you ever want to.
+CANDIDATE_PREFIXES = [
+    ("pool", "staging/"),
+    ("pool", "drain-seeds/"),
+    ("work", "incoming/"),
+    ("work", "incoming-green-publish/"),
+    ("work", "hpkg-pool/"),
+]
+
+
+# --- ordering (shared shape with haiku-pool-gc / BPackageVersion) -----------
+def _seg_key(seg):
+    if seg.isdigit():
+        return (1, int(seg), "")
+    return (0, 0, seg)
+
+
+def cmp_release(a, b):
+    import re
+    sa = re.split(r"[._]", a or "")
+    sb = re.split(r"[._]", b or "")
+    for i in range(max(len(sa), len(sb))):
+        ka = _seg_key(sa[i]) if i < len(sa) else (1, -1, "")
+        kb = _seg_key(sb[i]) if i < len(sb) else (1, -1, "")
+        if ka != kb:
+            return -1 if ka < kb else 1
+    return 0
+
+
+def cmp_version(va, vb):
+    """-1/0/1, or None if incomparable."""
+    ra, _, pa = (va or "").partition("~")
+    rb, _, pb = (vb or "").partition("~")
+    c = cmp_release(ra, rb)
+    if c != 0:
+        return c
+    if (not pa) != (not pb):
+        return 1 if not pa else -1
+    if pa != pb:
+        return -1 if pa < pb else 1
+    return 0
+
+
+def cmp_entry(a, b):
+    """a,b = (version, revision). Compare version then integer revision.
+    Returns -1/0/1, or None if incomparable."""
+    c = cmp_version(a[0], b[0])
+    if c is None:
+        return None
+    if c != 0:
+        return c
+    try:
+        ra, rb = int(a[1]), int(b[1])
+    except (ValueError, TypeError):
+        return None
+    if ra != rb:
+        return -1 if ra < rb else 1
+    return 0
+
+
+# --- filename parse (fallback identity, and revision backfill) --------------
+def parse_name(fname):
+    """(name, version, revision, arch) from <name>-<version>-<revision>-<arch>.hpkg,
+    or None if it doesn't fit the canonical shape."""
+    base = os.path.basename(fname)
+    if not base.endswith(".hpkg"):
+        return None
+    base = base[:-5]
+    dash = base.find("-")
+    if dash < 0:
+        return None
+    name = base[:dash]
+    parts = base[dash + 1:].rsplit("-", 2)
+    if len(parts) != 3:
+        return None
+    version, revision, arch = parts
+    return name, version, revision, arch
+
+
+# --- pool index model -------------------------------------------------------
+class PoolIndex:
+    """The union of the blue and green pool indexes, keyed for reconcile."""
+
+    def __init__(self):
+        # (name, version, str(revision)) -> set of pool labels it is present in
+        self.exact = {}
+        # name -> list of (version, str(revision), pool_label)
+        self.by_name = {}
+
+    def add_pool(self, label, pkgs):
+        for p in pkgs:
+            name = p.get("name")
+            if not name:
+                continue
+            ver = p.get("version")
+            rev = p.get("revision")
+            rev = "0" if rev is None else str(rev)
+            self.exact.setdefault((name, ver, rev), set()).add(label)
+            self.by_name.setdefault(name, []).append((ver, rev, label))
+
+    def classify(self, name, version, revision):
+        """Return (verdict, detail) for a staged (name, version, revision)."""
+        rev = "0" if revision is None else str(revision)
+        pools = self.exact.get((name, version, rev))
+        if pools:
+            return "PUBLISHED", {"pools": sorted(pools)}
+        newer = []
+        for pver, prev, label in self.by_name.get(name, []):
+            c = cmp_entry((version, rev), (pver, prev))
+            if c == -1:  # staged strictly older than this pooled entry
+                newer.append({"version": pver, "revision": prev, "pool": label})
+        if newer:
+            return "SUPERSEDED", {"newer": newer}
+        return "ORPHANED", {"pooled_same_name": self.by_name.get(name, [])}
+
+
+# --- S3 access (a thin wrapper; the selftest injects a fake client) ---------
+class S3:
+    def __init__(self, client):
+        self.client = client
+
+    def list_hpkgs(self, bucket, prefix):
+        """Yield {key, size, last_modified} for every *.hpkg under prefix."""
+        token = None
+        while True:
+            kw = {"Bucket": bucket, "Prefix": prefix}
+            if token:
+                kw["ContinuationToken"] = token
+            resp = self.client.list_objects_v2(**kw)
+            for obj in resp.get("Contents", []) or []:
+                if obj["Key"].endswith(".hpkg"):
+                    yield {"key": obj["Key"], "size": obj.get("Size"),
+                           "last_modified": obj.get("LastModified")}
+            if resp.get("IsTruncated"):
+                token = resp.get("NextContinuationToken")
+            else:
+                return
+
+    def count_prefix(self, bucket, prefix, cap):
+        """Count *.hpkg under prefix, stopping once cap is exceeded."""
+        n = 0
+        for _ in self.list_hpkgs(bucket, prefix):
+            n += 1
+            if n > cap:
+                return n
+        return n
+
+    def read_meta_ranged(self, bucket, key):
+        def get_bytes(start, length):
+            r = self.client.get_object(
+                Bucket=bucket, Key=key,
+                Range="bytes=%d-%d" % (start, start + length - 1))
+            return r["Body"].read()
+        return hpkg_meta.read_meta_via_ranges(get_bytes)
+
+    def read_index(self, bucket, key):
+        raw = self.client.get_object(Bucket=bucket, Key=key)["Body"].read()
+        return hpkg_meta.read_repo(raw)
+
+
+# --- core reconcile (S3 injected; unit-testable) ----------------------------
+def reconcile_prefix(s3, bucket, prefix, pool, now, max_objects, log):
+    """Classify every staged *.hpkg under one prefix. Returns a list of result
+    dicts. `pool` is a PoolIndex; `now` is a naive UTC datetime."""
+    count = s3.count_prefix(bucket, prefix, max_objects)
+    loc = "s3://%s/%s" % (bucket, prefix)
+    if count > max_objects:
+        log("SKIP %s -- %d+ objects exceeds --max-objects=%d; this looks like a "
+            "build census, not a publish-staging area (point --prefix at it and "
+            "raise --max-objects to force)" % (loc, count, max_objects))
+        return [{"verdict": "SKIPPED", "location": loc, "count": count}]
+    if count == 0:
+        log("ok   %s -- empty" % loc)
+        return []
+    log("scan %s -- %d staged .hpkg" % (loc, count))
+    results = []
+    for obj in s3.list_hpkgs(bucket, prefix):
+        key = obj["key"]
+        uri = "s3://%s/%s" % (bucket, key)
+        fn = parse_name(key)
+        try:
+            meta = s3.read_meta_ranged(bucket, key)
+        except Exception as exc:  # noqa: BLE001 -- an unparseable staged artifact
+            results.append({
+                "verdict": "UNREADABLE", "uri": uri, "file": os.path.basename(key),
+                "error": str(exc), "size": obj.get("size"),
+                "age_hours": _age_hours(obj.get("last_modified"), now)})
+            continue
+        name = meta.get("name") or (fn[0] if fn else None)
+        version = meta.get("version") or (fn[1] if fn else None)
+        revision = meta.get("revision")
+        if revision is None and fn:
+            revision = fn[2]
+        verdict, detail = pool.classify(name, version, revision)
+        results.append({
+            "verdict": verdict, "uri": uri, "file": os.path.basename(key),
+            "name": name, "version": version,
+            "revision": "0" if revision is None else str(revision),
+            "size": obj.get("size"),
+            "age_hours": _age_hours(obj.get("last_modified"), now),
+            "detail": detail})
+    return results
+
+
+def _age_hours(last_modified, now):
+    if not last_modified:
+        return None
+    lm = last_modified
+    if lm.tzinfo is not None:
+        lm = lm.replace(tzinfo=None)
+    return round((now - lm).total_seconds() / 3600.0, 1)
+
+
+# --- config -----------------------------------------------------------------
+def die(msg):
+    sys.stderr.write("haiku-staging-reconcile: %s\n" % msg)
+    sys.exit(2)
+
+
+def account_id(client_factory):
+    v = os.environ.get("HAIKU_GRAVITON_ACCOUNT")
+    if v:
+        return v
+    try:
+        sts = client_factory("sts")
+        return sts.get_caller_identity()["Account"]
+    except Exception as exc:  # noqa: BLE001
+        die("could not determine account id (%s); set HAIKU_GRAVITON_ACCOUNT "
+            "or a working AWS identity" % exc)
+
+
+def load_config(args, client_factory):
+    region = (args.region or os.environ.get("HAIKU_GRAVITON_REGION")
+              or os.environ.get("AWS_REGION") or "us-west-2")
+    acct = args.account or account_id(client_factory)
+    pool_bucket = (args.pool_bucket or os.environ.get("HG_POOL_BUCKET")
+                   or os.environ.get("HAIKU_PUBLISH_BUCKET")
+                   or "haiku-graviton-hpkg-%s" % acct)
+    work_bucket = (args.work_bucket or os.environ.get("HG_WORK_BUCKET")
+                   or os.environ.get("HAIKU_GRAVITON_BUCKET")
+                   or "haiku-graviton-%s-%s" % (acct, region))
+    arch = args.arch
+    return {"region": region, "account": acct, "pool_bucket": pool_bucket,
+            "work_bucket": work_bucket, "arch": arch,
+            "blue": (pool_bucket, "%s/%s" % (BLUE_PREFIX % arch, INDEX_NAME)),
+            "green": (pool_bucket, "%s/%s" % (GREEN_PREFIX % arch, INDEX_NAME))}
+
+
+def resolve_prefixes(args, cfg):
+    """Return a list of (bucket, prefix) to reconcile."""
+    out = []
+    if args.prefix:
+        for uri in args.prefix:
+            if not uri.startswith("s3://"):
+                die("--prefix must be an s3:// URI: %s" % uri)
+            bucket, _, prefix = uri[5:].partition("/")
+            out.append((bucket, prefix if prefix.endswith("/") or not prefix
+                        else prefix + "/"))
+    if args.candidates:
+        buckets = {"pool": cfg["pool_bucket"], "work": cfg["work_bucket"]}
+        for which, pref in CANDIDATE_PREFIXES:
+            out.append((buckets[which], pref))
+    if not out:  # default: the #503 gap, the pool staging/ prefix
+        out.append((cfg["pool_bucket"], "staging/"))
+    # de-dup preserving order
+    seen, uniq = set(), []
+    for bp in out:
+        if bp not in seen:
+            seen.add(bp)
+            uniq.append(bp)
+    return uniq
+
+
+# --- reporting --------------------------------------------------------------
+VERDICT_ORDER = ["ORPHANED", "UNREADABLE", "SUPERSEDED", "PUBLISHED", "SKIPPED"]
+
+
+def print_report(results, age_hours, out):
+    by = {}
+    for r in results:
+        by.setdefault(r["verdict"], []).append(r)
+    out("")
+    out("=== staging reconcile ===")
+    for v in VERDICT_ORDER:
+        rs = by.get(v, [])
+        if not rs:
+            continue
+        out("--- %s (%d) ---" % (v, len(rs)))
+        for r in rs:
+            if v == "SKIPPED":
+                out("  %s  (%d objects)" % (r["location"], r["count"]))
+                continue
+            age = r.get("age_hours")
+            loud = ""
+            if v == "ORPHANED" and age is not None and age >= age_hours:
+                loud = "  [>%dh: stranded]" % age_hours
+            line = "  %-40s %s-%s-%s  age=%s%s" % (
+                r["file"], r.get("name"), r.get("version"), r.get("revision"),
+                ("%.1fh" % age) if age is not None else "?", loud)
+            out(line)
+            if v == "SUPERSEDED":
+                for n in r["detail"]["newer"]:
+                    out("        pool has newer: %s-%s (%s)"
+                        % (n["version"], n["revision"], n["pool"]))
+            elif v == "PUBLISHED":
+                out("        in pool(s): %s" % ", ".join(r["detail"]["pools"]))
+            elif v == "UNREADABLE":
+                out("        %s" % r.get("error"))
+    n_orphan = len(by.get("ORPHANED", []))
+    n_unread = len(by.get("UNREADABLE", []))
+    out("")
+    out("summary: %d ORPHANED, %d UNREADABLE, %d SUPERSEDED, %d PUBLISHED"
+        % (n_orphan, n_unread, len(by.get("SUPERSEDED", [])),
+           len(by.get("PUBLISHED", []))))
+    return n_orphan, n_unread
+
+
+def run(args, client_factory):
+    cfg = load_config(args, client_factory)
+    s3 = S3(client_factory("s3", cfg["region"]))
+    now = datetime.datetime.utcnow()
+
+    def log(m):
+        if not args.json:
+            sys.stderr.write(m + "\n")
+
+    # Build the union pool index once.
+    pool = PoolIndex()
+    for label, (bucket, key) in (("blue", cfg["blue"]), ("green", cfg["green"])):
+        try:
+            pkgs = s3.read_index(bucket, key)
+        except Exception as exc:  # noqa: BLE001
+            die("could not read %s pool index s3://%s/%s (%s) -- refusing to "
+                "reconcile against an unknown pool" % (label, bucket, key, exc))
+        log("pool %-5s s3://%s/%s -- %d packages" % (label, bucket, key, len(pkgs)))
+        pool.add_pool(label, pkgs)
+
+    prefixes = resolve_prefixes(args, cfg)
+    results = []
+    for bucket, prefix in prefixes:
+        results += reconcile_prefix(s3, bucket, prefix, pool, now,
+                                    args.max_objects, log)
+
+    if args.json:
+        json.dump({"account": cfg["account"], "region": cfg["region"],
+                   "results": results}, sys.stdout, indent=2, default=str)
+        sys.stdout.write("\n")
+        n_orphan = sum(1 for r in results if r["verdict"] == "ORPHANED")
+        n_unread = sum(1 for r in results if r["verdict"] == "UNREADABLE")
+    else:
+        n_orphan, n_unread = print_report(results, args.age_hours, print)
+
+    if n_orphan or n_unread:
+        return 1
+    return 0
+
+
+def build_parser():
+    p = argparse.ArgumentParser(
+        description="Reconcile staging-prefix .hpkgs against the blue/green "
+                    "pool indexes; flag any staged but never published (#503). "
+                    "Read-only.")
+    p.add_argument("--prefix", action="append", metavar="s3://BUCKET/PREFIX/",
+                   help="staging prefix to reconcile (repeatable). Default: the "
+                        "pool bucket's staging/ prefix.")
+    p.add_argument("--candidates", action="store_true",
+                   help="also probe the known candidate staging prefixes in both "
+                        "buckets (skips any over --max-objects).")
+    p.add_argument("--arch", default=ARCH_DEFAULT, help="pool architecture (default arm64)")
+    p.add_argument("--account", help="account id (default: from sts get-caller-identity)")
+    p.add_argument("--region", help="AWS region (default: us-west-2)")
+    p.add_argument("--pool-bucket", help="override the pool bucket")
+    p.add_argument("--work-bucket", help="override the work bucket")
+    p.add_argument("--max-objects", type=int, default=2000,
+                   help="skip a prefix with more .hpkg than this (default 2000)")
+    p.add_argument("--age-hours", type=int, default=24,
+                   help="mark an orphan 'stranded' past this age (default 24)")
+    p.add_argument("--json", action="store_true", help="emit JSON to stdout")
+    return p
+
+
+def main(argv=None):
+    args = build_parser().parse_args(argv)
+
+    def client_factory(service, region=None):
+        import boto3
+        return boto3.client(service, region_name=region)
+
+    return run(args, client_factory)
+
+
+if __name__ == "__main__":
+    sys.exit(main())
