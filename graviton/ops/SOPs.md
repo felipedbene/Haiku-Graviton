@@ -239,6 +239,17 @@ stderr discarded and a reason code of its own invention in its place — which i
 synthetic hpkgs, no live pool), including a mutation arm that neuters the reporting
 and asserts the test goes red.
 
+**`haiku-repo-restamp-packager` relays the packaging tool's words too (#509).** The
+packager re-stamp (`--apply`) ran `package add` with `>/dev/null 2>&1` and printed its
+own generic `package add failed` — the fourth instance of the swallow-and-substitute
+pattern. It now replays the tool's stderr verbatim (`package add: <message>`) with the
+tool's exit status; its **batch exit was already honest** (`[ failed -eq 0 ]`) and is
+deliberately unchanged. Off a Haiku host it also resolves/validates
+`HAIKU_BUILD_SYSTEM_DATA_DIRECTORY` for the license check (it only warns, not `die`s,
+because it takes no lock and syncs no pool). `haiku-repo-restamp-packager-selftest`
+covers it offline, with a mutation arm that swallows the stderr again and an arbitrary-
+message arm proving the relay is not special-cased.
+
 When the prod CloudFront origin points at the pool you published, also invalidate
 the prod dist's index paths so the change is served.
 
