@@ -33,10 +33,12 @@ public:
 
 	virtual	void				SetCopyToFrontEnabled(bool enabled);
 
-			// called by the RemoteHWInterface when a new client connects, to
-			// recreate the client-side drawing state and drop the now-stale
-			// cache so the next repaint re-sends the full state
-			void				ConnectionReset();
+			// Called by the RemoteHWInterface when a client attaches, or asks
+			// for a resync, to re-state this engine's whole shadow drawing
+			// state on the wire -- bypassing the per-setter dedup guards,
+			// which at a connection boundary are comparing against what a
+			// client that is no longer here was told.
+			void				ReplayState();
 
 	// for screen shots
 	virtual	status_t			ReadBitmap(ServerBitmap* bitmap,

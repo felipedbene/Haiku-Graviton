@@ -49,8 +49,21 @@
 static uint32
 supported_capabilities()
 {
-	return RP_CAP_STRING_WIDTH_REPLY | RemoteWireWriter::SupportedCapabilities();
+	// RP_CAP_RESYNC is unconditional: the resync conversation (session id +
+	// generation in RP_HELLO_ACK, the RP_RESYNC barrier) costs nothing to
+	// support and needs no build feature, unlike wire compression below. It
+	// MUST be advertised here or the mask on the next line strips the bit a
+	// resync-capable client offered, and the server then treats every client as
+	// legacy: no session identity in the acknowledgement and no barrier ahead
+	// of a replay.
+	return RP_CAP_STRING_WIDTH_REPLY | RP_CAP_RESYNC
+		| RemoteWireWriter::SupportedCapabilities();
 }
+
+
+// Defined with the other cursor handling, below; used by the event thread.
+static bool send_cursor(RemoteMessage& message,
+	const ServerCursorReference& cursor);
 
 
 struct callback_info {
@@ -109,6 +122,7 @@ RemoteHWInterface::RemoteHWInterface(const char* target)
 	fProtocolVersion(100),
 	fClientProtocolVersion(0),
 	fClientCapabilities(0),
+	fConnectionGeneration(0),
 	fConnectionSpeed(0),
 	fListenPort(10901),
 	fSessionCookieLength(0),
@@ -124,6 +138,16 @@ RemoteHWInterface::RemoteHWInterface(const char* target)
 	fEngineListLocker("engine list locker")
 {
 	memset(fSessionCookie, 0, sizeof(fSessionCookie));
+
+	// Identifies this listener to its clients for the life of the process. Not
+	// a secret and not a cookie: it only has to change when the *session*
+	// changes, so that a reconnecting client can tell a session that survived
+	// from one that was replaced. Derived from the clock and the pid, and forced
+	// nonzero so zero stays available on the wire as "unknown".
+	fSessionId = (uint32)(system_time() ^ ((bigtime_t)getpid() << 20));
+	if (fSessionId == 0)
+		fSessionId = 1;
+
 	memset(&fFallbackMode, 0, sizeof(fFallbackMode));
 	fFallbackMode.virtual_width = 640;
 	fFallbackMode.virtual_height = 480;
@@ -571,6 +595,19 @@ RemoteHWInterface::_EventThread()
 	// constructor overload.
 	RemoteMessage message(fReceiveBuffer.Get(), (RemoteWireWriter*)NULL);
 	while (true) {
+		// D3. If the connection changed under us, forget how far into a message
+		// we had read. A body read that failed because the client went away left
+		// fDataLeft pointing at bytes that will never arrive, and NextMessage()
+		// opens by discarding that many -- which, with the ring already emptied
+		// at the boundary, means discarding the *next* client's first bytes.
+		// Ten of them is the whole of its one and only RP_INIT_CONNECTION.
+		//
+		// Checked here, at the top of the loop, because this is the one point
+		// where no message is half-parsed by the code below: the generation may
+		// change at any instant and a reset in the middle of reading a body
+		// would lose fields the handler is about to use.
+		message.ResetIfGenerationChanged(ConnectionGeneration());
+
 		uint16 code;
 		status_t result = message.NextMessage(code);
 		if (result != B_OK) {
@@ -708,12 +745,72 @@ RemoteHWInterface::_EventThread()
 				// acknowledgement was deliberately not written and the session
 				// being torn down is the right outcome -- but it must not pass
 				// unnoticed.
+				// Session identity, appended only for a client that negotiated
+				// RP_CAP_RESYNC. Gated rather than always appended because
+				// "appending is harmless" is an assumption about every client
+				// that exists, and the negotiated bit is a promise from the one
+				// in front of us. A client that did not ask gets an
+				// acknowledgement byte for byte identical to before.
+				if ((fClientCapabilities & RP_CAP_RESYNC) != 0) {
+					reply.Add(fSessionId);
+					reply.Add(ConnectionGeneration());
+				}
+
 				result = reply.FlushAndEnableCompression(
 					fClientCapabilities & RP_CAP_COMPRESS_ZSTD);
 				if (result != B_OK) {
 					TRACE_ERROR("failed to acknowledge hello: %s\n",
 						strerror(result));
 				}
+				break;
+			}
+
+			case RP_RESYNC:
+			{
+				// The client says it cannot draw correctly and wants the server
+				// to say everything again. The server cannot see every way a
+				// client loses its place, so this is the recovery that does not
+				// depend on the server noticing.
+				uint32 clientGeneration = 0;
+				if (message.Read(clientGeneration) != B_OK) {
+					TRACE_ERROR("failed to read resync request\n");
+					break;
+				}
+
+				if ((fClientCapabilities & RP_CAP_RESYNC) == 0) {
+					// It cannot have negotiated the reply, so answering would
+					// put an opcode on the wire it has no handler for. Replay
+					// anyway -- that is all existing opcodes and can only help
+					// -- but say nothing new.
+					TRACE_ERROR("resync from a client that did not negotiate "
+						"RP_CAP_RESYNC; replaying without the barrier\n");
+					_ReplayState();
+					break;
+				}
+
+				TRACE_ALWAYS("resync requested (client at generation %" B_PRIu32
+					", server at %" B_PRIu32 ")\n", clientGeneration,
+					ConnectionGeneration());
+
+				// Barrier first, replay second. The barrier is what makes the
+				// replay interpretable: it tells the client which generation
+				// the bytes behind it belong to, so a client that has been
+				// caching content across connections knows what to throw away.
+				_SendResyncBarrier();
+				_ReplayState();
+
+				// And make a full repaint follow. Replaying state re-establishes
+				// how to draw, not what was drawn; without this the client holds
+				// a correct state and an empty screen until something happens to
+				// invalidate it.
+				RemoteMessage reply(NULL, fWireWriter.Get());
+				if (send_cursor(reply, CursorAndDragBitmap()))
+					reply.Flush();
+				reply.Start(RP_SET_CURSOR_VISIBLE);
+				reply.Add(fCursorVisible);
+				reply.Flush();
+
+				_NotifyScreenChanged();
 				break;
 			}
 
@@ -808,6 +905,10 @@ RemoteHWInterface::_NewConnection(BNetEndpoint &endpoint)
 	fClientProtocolVersion = 0;
 	fClientCapabilities = 0;
 
+	// A new connection is a new generation. Published before the sender exists,
+	// so nothing can be written for this client until the event thread can
+	// already see that its predecessor is gone.
+	//
 	// Deliberately do NOT flush fReceiveBuffer here. A departed client's partial
 	// message is already dropped at disconnect by _ConnectionClosed(), which runs
 	// before the next client is accepted, so the receive stream is clean by the
@@ -817,6 +918,12 @@ RemoteHWInterface::_NewConnection(BNetEndpoint &endpoint)
 	// buffer out from under that write, discarding the one message every client
 	// sends to bring up its display -- a black screen for every connection.
 	// Keep the receive-side flush confined to the disconnect path.
+	//
+	// What D3 actually needed was never the second flush: the bytes were already
+	// gone, it was the event thread's *count* of the bytes still owing that
+	// carried across. The generation bumped here is what retires that count --
+	// see RemoteMessage::ResetIfGenerationChanged().
+	atomic_add(&fConnectionGeneration, 1);
 
 	BNetEndpoint *sendEndpoint = new(std::nothrow) BNetEndpoint(endpoint);
 	if (sendEndpoint == NULL)
@@ -843,17 +950,60 @@ RemoteHWInterface::_NewConnection(BNetEndpoint &endpoint)
 	// The drawing engines have persisted across the disconnect, but the new
 	// client has none of the per-token drawing state they had already sent to
 	// the previous one, and each engine still believes that state is current.
-	// Re-establish it: with the new sender now draining the buffer (so these
-	// messages reach the client rather than being discarded), tell every engine
-	// to recreate its client-side state and forget its cached view of it, so
-	// the repaint that follows the client's display-mode update re-sends the
-	// full state instead of short-circuiting on stale comparisons -- which is
-	// what left the reconnected screen black.
-	BAutolock lock(fEngineListLocker);
-	for (int32 i = 0; i < fDrawingEngines.CountItems(); i++)
-		fDrawingEngines.ItemAt(i)->ConnectionReset();
+	// Re-establish it now that the new sender is draining the buffer, so these
+	// messages reach the client rather than being discarded.
+	//
+	// Note this uses no capability and no new opcode: the replay is RP_CREATE_STATE
+	// and the ordinary RP_SET_* ops, so the reconnect repair applies to every
+	// client, including one that has never heard of URP/1.
+	_ReplayState();
 
 	return B_OK;
+}
+
+
+/*!	Re-states every live drawing engine's shadow drawing state to the client,
+	unconditionally.
+
+	D4, and the reason a symptom fix was not enough. Each setter on
+	RemoteDrawingEngine compares against the shadow and returns early when they
+	match, which is right within a connection and exactly wrong across one: the
+	shadow records what the *previous* client was told, so after a reconnect the
+	server is certain the client already has state that client has never seen.
+	Nothing retries, because nothing believes anything is missing.
+
+	The previous repair reset the shadow to the client's defaults and waited for
+	a repaint to re-send it. That is lazy invalidation, and it is correct only if
+	three things hold: a full repaint really does follow, the client's defaults
+	really do match the ones assumed here, and every guarded field really is in
+	the list of fields reset. Each is an assumption a future edit can break
+	silently -- add a fourth guarded setter and forget the reset list and the
+	black screen comes back, with nothing to fail until somebody reconnects.
+
+	An eager, unconditional replay removes all three assumptions: after it, what
+	the client has is what the server says it has, whether or not a repaint
+	follows, whatever the client's idea of a default is, for exactly the fields
+	the engine actually tracks.
+*/
+void
+RemoteHWInterface::_ReplayState()
+{
+	BAutolock lock(fEngineListLocker);
+	for (int32 i = 0; i < fDrawingEngines.CountItems(); i++)
+		fDrawingEngines.ItemAt(i)->ReplayState();
+}
+
+
+/*!	Tells a resync-capable client which generation the bytes after this message
+	belong to. A barrier, not a request: the replay follows it immediately.
+*/
+void
+RemoteHWInterface::_SendResyncBarrier()
+{
+	RemoteMessage message(NULL, fWireWriter.Get());
+	message.Start(RP_RESYNC);
+	message.Add(ConnectionGeneration());
+	message.Flush();
 }
 
 
@@ -883,6 +1033,15 @@ RemoteHWInterface::_ConnectionClosed()
 	fSender.Unset();
 
 	fWireWriter->Reset();
+
+	// Retire this connection's generation before emptying the ring, so that any
+	// reader woken by the cancel MakeEmpty() arms already sees the new value and
+	// drops its half-read message instead of finishing it out of whatever
+	// arrives next. Bumped at both ends of a connection on purpose: it is an
+	// opaque monotonic counter, and being early is free while being late is the
+	// bug.
+	atomic_add(&fConnectionGeneration, 1);
+
 	fReceiveBuffer->MakeEmpty();
 }
 

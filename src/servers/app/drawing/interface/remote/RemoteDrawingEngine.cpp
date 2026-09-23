@@ -64,38 +64,91 @@ RemoteDrawingEngine::~RemoteDrawingEngine()
 
 
 void
-RemoteDrawingEngine::ConnectionReset()
+RemoteDrawingEngine::ReplayState()
 {
 	// Hold exclusive access so this cannot interleave with a drawing thread
 	// mid-sequence; the freshly attached client is not drawing yet.
 	bool locked = LockExclusiveAccess();
 
-	// Recreate the per-token drawing state on the new client, which starts
-	// with none.
 	RemoteMessage message(NULL, fHWInterface->SendBuffer());
+
+	// Recreate the per-token drawing state on the client, which has none: either
+	// because it just connected, or because it asked for a resync having lost
+	// track of what it had.
 	message.Start(RP_CREATE_STATE);
 	message.Add(fToken);
+
+	// And then say all of it, without asking whether it needs saying. Every
+	// public setter below the line compares the new value against fState and
+	// returns early when they match -- which is the whole of D4 at a reconnect,
+	// because fState holds what the *previous* client was told. Going through
+	// those setters here would therefore replay nothing at all: the guard that
+	// makes a steady-state session cheap is the same guard that makes a
+	// reconnect wrong, so a replay has to go around it, not through it.
+	//
+	// fState is deliberately left alone. It is still an accurate record of what
+	// the client has -- that is precisely what this restores -- so the guards
+	// remain meaningful for every op after this one.
+	message.Start(RP_SET_HIGH_COLOR);
+	message.Add(fToken);
+	message.Add(fState.HighColor());
+
+	message.Start(RP_SET_LOW_COLOR);
+	message.Add(fToken);
+	message.Add(fState.LowColor());
+
+	message.Start(RP_SET_PEN_SIZE);
+	message.Add(fToken);
+	message.Add(fState.PenSize());
+
+	message.Start(RP_SET_STROKE_MODE);
+	message.Add(fToken);
+	message.Add(fState.LineCapMode());
+	message.Add(fState.LineJoinMode());
+	message.Add(fState.MiterLimit());
+
+	message.Start(RP_SET_BLENDING_MODE);
+	message.Add(fToken);
+	message.Add(fState.AlphaSrcMode());
+	message.Add(fState.AlphaFncMode());
+
+	message.Start(RP_SET_PATTERN);
+	message.Add(fToken);
+	message.AddPattern(fState.GetPattern());
+
+	message.Start(RP_SET_DRAWING_MODE);
+	message.Add(fToken);
+	message.Add(fState.GetDrawingMode());
+
+	message.Start(RP_SET_FONT);
+	message.Add(fToken);
+	message.AddFont(fState.Font());
+
+	message.Start(RP_SET_TRANSFORM);
+	message.Add(fToken);
+	message.AddTransform(fState.Transform());
+
+	// The clipping region too, for the same reason: ConstrainClippingRegion()
+	// short-circuits on an equal region, so the client would be left clipping
+	// to its own default -- and several ops here (InvertRect, DrawBitmap) test
+	// the region locally and would silently draw nothing.
+	message.Start(RP_CONSTRAIN_CLIPPING_REGION);
+	message.Add(fToken);
+	message.AddRegion(fClippingRegion);
+
+	// Not part of DrawState, and not sent by any repaint: the client's flag for
+	// this token is whatever it initialises to, and if that ever disagrees with
+	// the server the reconnected session draws into a back buffer nothing
+	// copies forward. Cheap to state rather than to assume.
+	message.Start(CopyToFrontEnabled()
+		? RP_ENABLE_SYNC_DRAWING : RP_DISABLE_SYNC_DRAWING);
+	message.Add(fToken);
+
 	message.Flush();
 
-	// Reset our cached view of that state to the client's fresh defaults, so
-	// every SetXXX below re-transmits on the next repaint instead of
-	// short-circuiting on a comparison against what the *previous* client had.
-	DrawState defaults;
-	fState.SetHighColor(defaults.HighColor());
-	fState.SetLowColor(defaults.LowColor());
-	fState.SetPenSize(defaults.PenSize());
-	fState.SetPattern(defaults.GetPattern());
-	fState.SetDrawingMode(defaults.GetDrawingMode());
-	fState.SetBlendingMode(defaults.AlphaSrcMode(), defaults.AlphaFncMode());
-	fState.SetLineCapMode(defaults.LineCapMode());
-	fState.SetLineJoinMode(defaults.LineJoinMode());
-	fState.SetMiterLimit(defaults.MiterLimit());
-	fState.SetFont(defaults.Font());
-	fState.SetTransform(defaults.Transform());
-	fExtendWidth = -(fState.PenSize() / 2);
-
-	// Force the next ConstrainClippingRegion() to re-send as well.
-	fClippingRegion.MakeEmpty();
+	// Deliberately not replayed: RP_SET_OFFSETS. The offsets are arguments to
+	// SetDrawState() and are not retained anywhere, so there is nothing to
+	// replay; every drawing sequence sends them again ahead of its own ops.
 
 	if (locked)
 		UnlockExclusiveAccess();
