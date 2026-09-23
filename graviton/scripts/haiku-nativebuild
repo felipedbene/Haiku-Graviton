@@ -24,6 +24,16 @@
 #  - Success is asserted by the .hpkg EXISTING, never by an exit code.
 set -u
 export PATH=/boot/home/config/non-packaged/bin:/boot/system/non-packaged/bin:$PATH
+# Driver version marker (#506). This string is the single source of truth for "which
+# haiku-nativebuild is this": the ops stack reads it at synth and hands it to the
+# build Lambda, which refuses to build unless the copy staged onto the builder carries
+# the SAME version (run_ssm._refresh_and_assert). It is also echoed as the first line
+# of every per-port log so a wave's output records exactly which driver produced it --
+# a stale copy can no longer masquerade as the current one (memory checks-that-stopped-
+# checking). BUMP THIS whenever a driver change must reach a wave; then republish the
+# script to s3://<bucket>/bake-scripts/haiku-nativebuild (graviton/scripts/haiku-publish-driver)
+# and redeploy the ops stack. Format: YYYY-MM-DD.<serial>.
+NATIVEBUILD_VERSION="2026-09-22.1"
 HP=/boot/home/haikuports
 GP=$HP/packages
 AGENT=/boot/system/bin/debeos-ssm-agent
@@ -442,6 +452,10 @@ mirror_sources() {
 # so dependencies are published before their consumers, or publish incrementally
 # (still to be designed -- see #485).
 feed | pkgman refresh >/dev/null 2>&1 || true
+
+# Provenance stamp (#506): first meaningful line of every per-port log names the driver
+# that produced it, so a wrong run is detectable retroactively from the log alone.
+echo "===== haiku-nativebuild NATIVEBUILD_VERSION=$NATIVEBUILD_VERSION $(date -u +%FT%TZ) ====="
 
 rc=0
 for p in "$@"; do

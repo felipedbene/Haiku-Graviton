@@ -33,6 +33,59 @@ NATIVEBUILD = os.environ.get("NATIVEBUILD_PATH", "/boot/home/haiku-nativebuild")
 AGENT = os.environ.get("SSM_AGENT_PATH", "/boot/system/bin/debeos-ssm-agent")
 HP_TREE = os.environ.get("HP_TREE", "/boot/home/haikuports")
 OVERLAY_PREFIX = os.environ.get("OVERLAY_PREFIX", "debeos-overlay")
+# Version of graviton/scripts/haiku-nativebuild this deployment was built against.
+# The ops stack reads NATIVEBUILD_VERSION out of the tree's driver at synth time and
+# sets it here (see ops-stack.ts). Empty only in a stale/local deploy that predates
+# #506 -- in which case _refresh_and_assert degrades to a no-op refresh (see there).
+NATIVEBUILD_VERSION = os.environ.get("NATIVEBUILD_VERSION", "")
+DRIVER_KEY = os.environ.get("NATIVEBUILD_S3_KEY", "bake-scripts/haiku-nativebuild")
+
+
+def _refresh_and_assert(bucket, version):
+    """#506: stage the CURRENT driver onto the builder and REFUSE to build a stale one.
+
+    `run_ssm.build` sends a command that runs /boot/home/haiku-nativebuild -- but that
+    file is whatever the (possibly months-old) builder AMI baked. A driver fix could not
+    reach a wave without a full rebake, and NOTHING said so: the wave would silently
+    re-run the old driver and report a confident, wrong answer (this is exactly the
+    checks-that-stopped-checking failure class). So before every build we:
+
+      1. `s3 cp` the driver from s3://<bucket>/<DRIVER_KEY> over NATIVEBUILD, and
+      2. assert the staged copy carries NATIVEBUILD_VERSION="<version>" -- the version
+         the deployed Lambda was built against. On mismatch we set STALE=1 (the wrapper
+         turns that into VERDICT=FAIL RC=3 with a diagnostic log) instead of building,
+         so the wave fails LOUDLY rather than testing stale code.
+
+    Emits shell that writes into "$LOG" (set by _wrapper) and sets STALE. If `version`
+    is empty (pre-#506 env), it still refreshes from S3 but cannot assert -- it says so
+    in the log rather than silently trusting whatever is on the box."""
+    src = f"s3://{bucket}/{DRIVER_KEY}"
+    lines = [
+        f'echo "#506 staging driver from {src}" >> "$LOG"',
+        f'{AGENT} s3 cp "{src}" {NATIVEBUILD} >> "$LOG" 2>&1 || '
+        f'echo "#506 WARNING: could not refresh driver from {src}" >> "$LOG"',
+        f'chmod +x {NATIVEBUILD} 2>/dev/null || true',
+    ]
+    if version:
+        lines += [
+            f'if grep -q \'NATIVEBUILD_VERSION="{version}"\' {NATIVEBUILD} 2>/dev/null; then',
+            f'  echo "#506 driver OK: {NATIVEBUILD} is NATIVEBUILD_VERSION={version}" >> "$LOG"',
+            'else',
+            '  STALE=1',
+            f'  GOT=$(grep -m1 "NATIVEBUILD_VERSION=" {NATIVEBUILD} 2>/dev/null || true)',
+            f'  echo "#506 STALE DRIVER: {NATIVEBUILD} is not NATIVEBUILD_VERSION={version}" >> "$LOG"',
+            '  echo "  found instead: ${GOT:-<no NATIVEBUILD_VERSION marker>}" >> "$LOG"',
+            '  echo "  REFUSING TO BUILD -- a wave must not silently test a stale driver." >> "$LOG"',
+            f'  echo "  Republish the current driver to {src} (graviton/scripts/haiku-publish-driver)" >> "$LOG"',
+            '  echo "  and redeploy the ops stack so this Lambda carries the new version." >> "$LOG"',
+            'fi',
+        ]
+    else:
+        lines += [
+            f'echo "#506 WARNING: NATIVEBUILD_VERSION not set in this deployment -- '
+            f'refreshed the driver but CANNOT assert it is current." >> "$LOG"',
+        ]
+    return "\n".join(lines) + "\n"
 
 
 def _overlay_stage(pkg, bucket):
@@ -62,14 +115,25 @@ def _overlay_stage(pkg, bucket):
     return "\n".join(lines) + "\n"
 
 
-def _wrapper(cmd, bucket, run_id, name, ok_grep, prelude=""):
-    """POSIX-sh: (optional prelude, e.g. overlay staging) then run cmd, classify,
-    gzip+upload the full log, echo the compact verdict."""
+def _wrapper(cmd, bucket, run_id, name, ok_grep, refresh="", prelude=""):
+    """POSIX-sh: refresh+assert the driver (#506), optional prelude (overlay staging),
+    then run cmd, classify, gzip+upload the full log, echo the compact verdict.
+
+    The driver refresh runs FIRST and writes into "$LOG"; if it finds a stale driver it
+    sets STALE=1 and we skip the build, emitting VERDICT=FAIL RC=3 -- poll_ssm records
+    that as a build-error with the diagnostic log, so a stale run can never pass silently."""
     return f"""set -u
-{prelude}LOG=/tmp/{name}.$$.log
-{cmd} > "$LOG" 2>&1
+LOG=/tmp/{name}.$$.log
+: > "$LOG"
+STALE=0
+{refresh}{prelude}if [ "$STALE" = 1 ]; then
+RC=3
+else
+{cmd} >> "$LOG" 2>&1
 RC=$?
-if grep -q {ok_grep} "$LOG"; then V=OK
+fi
+if [ "$STALE" = 1 ]; then V=FAIL
+elif grep -q {ok_grep} "$LOG"; then V=OK
 elif grep -q UNRESOLVABLE "$LOG"; then V=UNRESOLVABLE
 else V=FAIL; fi
 KEY=logs/{run_id}/{name}.log.gz
@@ -97,9 +161,14 @@ def _bucket(event):
 def build(event, context):
     pkg = event["pkg"]
     run_id = event.get("run_id", context.aws_request_id)
-    prelude = _overlay_stage(pkg, _bucket(event))   # persistence: stage overlay first
-    script = _wrapper(f"{NATIVEBUILD} {pkg}", _bucket(event), run_id, pkg,
-                      ok_grep=f'"^{pkg}: BUILD_OK"', prelude=prelude)
+    bucket = _bucket(event)
+    # #506: refresh+assert the driver FIRST (cannot be skipped -- it lives in the only
+    # path that runs the build), then stage the overlay for persistence.
+    version = event.get("nativebuild_version", NATIVEBUILD_VERSION)
+    refresh = _refresh_and_assert(bucket, version)
+    prelude = _overlay_stage(pkg, bucket)   # persistence: stage overlay first
+    script = _wrapper(f"{NATIVEBUILD} {pkg}", bucket, run_id, pkg,
+                      ok_grep=f'"^{pkg}: BUILD_OK"', refresh=refresh, prelude=prelude)
     event["command_id"] = _send(event["instance_id"], script,
                                 int(event.get("build_timeout", 21600)))
     return event

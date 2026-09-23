@@ -1,0 +1,63 @@
+#!/bin/sh
+# haiku-publish-driver [--region <r>] [--dry-run]
+#
+# Publish the CURRENT build driver (graviton/scripts/haiku-nativebuild) to the S3 key
+# the build-wave stages from -- WITHOUT a full 25-minute builder-AMI rebake (#506).
+#
+# Why this exists. A wave's builders run /boot/home/haiku-nativebuild, which the build
+# Lambda (run_ssm.build) refreshes from s3://<bucket>/bake-scripts/haiku-nativebuild and
+# then asserts against NATIVEBUILD_VERSION. Only `haiku-bake-builder` used to update that
+# S3 copy, so a driver fix could not reach a wave until the AMI was rebaked -- and nothing
+# said so, so a wave silently re-ran the stale driver (see the issue). This decouples
+# "ship a driver fix" from "rebake": republish here, redeploy the ops stack (so the
+# Lambda carries the new NATIVEBUILD_VERSION), and the very next wave picks it up.
+#
+# The two halves must agree: this uploads version X to S3; `cdk deploy` teaches the Lambda
+# to expect version X. Until BOTH are done the wave fails LOUDLY (VERDICT=FAIL RC=3) rather
+# than silently building stale -- that loud failure is the whole point of #506.
+set -eu
+
+REGION="${AWS_REGION:-${AWS_DEFAULT_REGION:-us-west-2}}"
+DRYRUN=0
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --region) REGION="$2"; shift 2 ;;
+    --dry-run) DRYRUN=1; shift ;;
+    -h|--help) sed -n '2,20p' "$0"; exit 0 ;;
+    *) echo "unknown arg: $1" >&2; exit 2 ;;
+  esac
+done
+
+say() { printf 'haiku-publish-driver: %s\n' "$*" >&2; }
+
+HERE=$(cd "$(dirname "$0")" && pwd)
+DRIVER="$HERE/haiku-nativebuild"
+[ -f "$DRIVER" ] || { say "missing $DRIVER"; exit 1; }
+
+# The version marker is mandatory: it is what the wave asserts against. Refuse to publish
+# a driver that has none -- that would ship the guard unenforceable.
+VER=$(sed -n 's/^NATIVEBUILD_VERSION="\([^"]*\)".*/\1/p' "$DRIVER" | head -1)
+[ -n "$VER" ] || { say "no NATIVEBUILD_VERSION marker in $DRIVER -- refusing to publish"; exit 1; }
+
+ACCT=$(aws sts get-caller-identity --query Account --output text)
+BUCKET="${HAIKU_GRAVITON_BUCKET:-haiku-graviton-${ACCT}-${REGION}}"
+KEY="bake-scripts/haiku-nativebuild"
+DST="s3://$BUCKET/$KEY"
+
+say "driver NATIVEBUILD_VERSION=$VER ($(wc -c < "$DRIVER" | tr -d ' ') bytes) -> $DST"
+if [ "$DRYRUN" = 1 ]; then say "dry-run: not uploading"; exit 0; fi
+
+aws s3 cp "$DRIVER" "$DST" --region "$REGION" >/dev/null
+say "uploaded; verifying the published copy carries NATIVEBUILD_VERSION=$VER ..."
+
+TMP=$(mktemp -t haiku-driver-verify-XXXXXX)
+trap 'rm -f "$TMP"' EXIT
+aws s3 cp "$DST" "$TMP" --region "$REGION" >/dev/null
+GOT=$(sed -n 's/^NATIVEBUILD_VERSION="\([^"]*\)".*/\1/p' "$TMP" | head -1)
+if [ "$GOT" != "$VER" ]; then
+  say "VERIFY FAILED: published copy is NATIVEBUILD_VERSION=${GOT:-<absent>}, expected $VER"
+  exit 1
+fi
+say "OK: $DST is NATIVEBUILD_VERSION=$VER"
+say "NEXT: redeploy the ops stack so BuildFn expects $VER (cdk deploy DebeosOpsStack),"
+say "      otherwise the next wave will refuse to build (loud, by design)."
