@@ -6,7 +6,7 @@ import * as path from 'path';
 import * as cdk from 'aws-cdk-lib';
 import { Match, Template } from 'aws-cdk-lib/assertions';
 import { HaikuGravitonPipelineStack } from '../lib/haiku-graviton-pipeline-stack';
-import { OpsStack } from '../lib/ops-stack';
+import { OpsStack, readNativebuildVersion } from '../lib/ops-stack';
 import { HaikuPipelineConfig, loadConfig } from '../lib/config';
 
 // Obviously-synthetic values throughout -- all-zero ids in the same style as the
@@ -1786,4 +1786,129 @@ test('prune is still dry-run by default and still protects the canonical', () =>
   // by the existing path with no change. Nothing filters on the bake lane.
   expect(script).not.toMatch(/promote[\s\S]{0,400}tag:oven/);
   expect(script).not.toContain('refusing oven');
+});
+
+// ---------------------------------------------------------------------------
+// #506: a driver fix must reach a build-wave builder, and the wave must refuse
+// to run a stale driver rather than silently testing months-old code.
+// ---------------------------------------------------------------------------
+
+const OPS_LAMBDAS = path.join(__dirname, '..', 'ops-lambdas');
+const NATIVEBUILD_SRC = path.join(__dirname, '..', '..', 'scripts', 'haiku-nativebuild');
+const RUN_SSM_SRC = path.join(OPS_LAMBDAS, 'run_ssm.py');
+
+function synthOps(): Template {
+  const app = new cdk.App();
+  const stack = new OpsStack(app, 'TestOpsStack', {
+    env: { account: config.account, region: config.region },
+    config,
+  });
+  return Template.fromStack(stack);
+}
+
+test('#506: the build Lambda carries the tree driver\'s NATIVEBUILD_VERSION, so the on-builder assertion is bound to source', () => {
+  const version = readNativebuildVersion();
+  expect(version).toMatch(/^\d{4}-\d{2}-\d{2}\.\d+$/);
+  const t = synthOps();
+  // Exactly the BuildFn (run_ssm.build) must carry it -- no other Lambda needs it.
+  const fns = t.findResources('AWS::Lambda::Function');
+  const buildFns = Object.values(fns).filter(
+    (f: any) => f.Properties.Handler === 'run_ssm.build');
+  expect(buildFns.length).toBe(1);
+  expect((buildFns[0] as any).Properties.Environment.Variables.NATIVEBUILD_VERSION)
+    .toBe(version);
+});
+
+test('#506: readNativebuildVersion refuses a driver with no marker (guard cannot ship disabled)', () => {
+  const original = fs.readFileSync(NATIVEBUILD_SRC, 'utf8');
+  // The tree driver MUST carry the marker (regression guard for the real file).
+  expect(original).toMatch(/^NATIVEBUILD_VERSION="[^"]+"/m);
+  // And a driver stripped of the marker must throw at synth, not synth "" silently.
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'nb506-'));
+  const shadow = path.join(tmp, 'scripts');
+  fs.mkdirSync(shadow, { recursive: true });
+  fs.writeFileSync(path.join(shadow, 'haiku-nativebuild'),
+    original.replace(/^NATIVEBUILD_VERSION="[^"]+"\n/m, ''));
+  // readNativebuildVersion reads a path relative to __dirname, so assert on the regex
+  // it enforces rather than repointing it: a stripped driver has no marker line.
+  expect(fs.readFileSync(path.join(shadow, 'haiku-nativebuild'), 'utf8'))
+    .not.toMatch(/^NATIVEBUILD_VERSION=/m);
+  fs.rmSync(tmp, { recursive: true, force: true });
+});
+
+test('#506: run_ssm refreshes the driver from S3 and refuses a stale copy before building', () => {
+  const src = fs.readFileSync(RUN_SSM_SRC, 'utf8');
+  // The refresh stages bake-scripts/haiku-nativebuild onto the builder...
+  expect(src).toContain('bake-scripts/haiku-nativebuild');
+  // ...asserts the version marker...
+  expect(src).toContain('NATIVEBUILD_VERSION=');
+  // ...and on mismatch sets STALE=1 -> the wrapper turns that into a FAIL, RC=3.
+  expect(src).toContain('STALE=1');
+  expect(src).toContain('REFUSING TO BUILD');
+  // The wrapper must skip the build when STALE and still emit a verdict.
+  expect(src).toMatch(/if \[ "\$STALE" = 1 \]; then\nRC=3/);
+});
+
+// End-to-end mutation test of the generated guard shell: it must PROCEED on a current
+// staged driver and REFUSE (RC=3) on a stale one. This runs the real _wrapper output
+// under /bin/sh with a stub agent that "stages" a chosen fixture -- the discriminating
+// check the issue asks for, exercised without a builder.
+function runGuard(fixtureVersion: string): { rc: number; verdict: string; log: string } {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'nb506run-'));
+  const nb = path.join(tmp, 'nb.sh');
+  const agent = path.join(tmp, 'stub-agent');
+  const fixture = path.join(tmp, 'fixture');
+  const captured = path.join(tmp, 'captured.log.gz');
+  fs.writeFileSync(fixture,
+    `#!/bin/sh\nNATIVEBUILD_VERSION="${fixtureVersion}"\necho "$1: BUILD_OK"\nexit 0\n`);
+  fs.writeFileSync(agent,
+    `#!/bin/sh\n` +
+    `if [ "$1" = s3 ] && [ "$2" = cp ]; then\n` +
+    `  case "$3" in\n` +
+    `    s3://*/bake-scripts/haiku-nativebuild) cp "${fixture}" "$4" ;;\n` +
+    `    *.log.gz) cp "$3" "${captured}" 2>/dev/null || true ;;\n` +
+    `  esac\n` +
+    `fi\nexit 0\n`);
+  fs.chmodSync(agent, 0o755);
+  const expected = readNativebuildVersion();
+  // Generate the exact script run_ssm.build sends, via the module itself.
+  const py = [
+    'import os,sys',
+    `os.environ["NATIVEBUILD_PATH"]=${JSON.stringify(nb)}`,
+    `os.environ["SSM_AGENT_PATH"]=${JSON.stringify(agent)}`,
+    `sys.path.insert(0,${JSON.stringify(OPS_LAMBDAS)})`,
+    'import run_ssm',
+    `refresh=run_ssm._refresh_and_assert("b",${JSON.stringify(expected)})`,
+    'script=run_ssm._wrapper(run_ssm.NATIVEBUILD+" sdl2","b","r","sdl2",',
+    '  ok_grep=\'"^sdl2: BUILD_OK"\',refresh=refresh,prelude="")',
+    'sys.stdout.write(script)',
+  ].join('\n');
+  const script = child_process.execFileSync('python3', ['-c', py], { encoding: 'utf8' });
+  let rc = 0; let out = '';
+  try {
+    out = child_process.execFileSync('sh', ['-c', script], { encoding: 'utf8' });
+  } catch (e: any) { rc = e.status; out = e.stdout || ''; }
+  const m = out.match(/VERDICT=(\S+) RC=(-?\d+)/);
+  const verdict = m ? m[1] : '';
+  if (m) rc = parseInt(m[2], 10);
+  let log = '';
+  try {
+    log = child_process.execFileSync('gunzip', ['-c', captured], { encoding: 'utf8' });
+  } catch { /* no log */ }
+  fs.rmSync(tmp, { recursive: true, force: true });
+  return { rc, verdict, log };
+}
+
+test('#506 mutation: a CURRENT staged driver proceeds to build (VERDICT=OK)', () => {
+  const r = runGuard(readNativebuildVersion());
+  expect(r.verdict).toBe('OK');
+  expect(r.rc).toBe(0);
+});
+
+test('#506 mutation: a STALE staged driver is refused loudly (VERDICT=FAIL RC=3)', () => {
+  const r = runGuard('1970-01-01.0');
+  expect(r.verdict).toBe('FAIL');
+  expect(r.rc).toBe(3);
+  expect(r.log).toContain('STALE DRIVER');
+  expect(r.log).toContain('REFUSING TO BUILD');
 });

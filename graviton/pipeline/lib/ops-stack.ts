@@ -15,6 +15,25 @@ import * as fs from 'fs';
 import * as crypto from 'crypto';
 import { SharedConfig, DEBEOS_TAGS } from './config';
 
+/**
+ * #506: extract the NATIVEBUILD_VERSION marker from the tree's build driver at synth
+ * time. This binds the build Lambda's staleness assertion to the single source of truth
+ * (graviton/scripts/haiku-nativebuild) instead of a duplicated constant that could drift.
+ * A missing marker is a hard synth error, not a silent "": shipping the guard disabled is
+ * exactly the failure #506 exists to prevent.
+ */
+export function readNativebuildVersion(): string {
+  const driver = path.join(__dirname, '..', '..', 'scripts', 'haiku-nativebuild');
+  const text = fs.readFileSync(driver, 'utf8');
+  const m = text.match(/^NATIVEBUILD_VERSION="([^"]+)"/m);
+  if (!m) {
+    throw new Error(
+      `#506: no NATIVEBUILD_VERSION="..." marker in ${driver}; the build Lambda's ` +
+      `staleness guard cannot be bound to the driver. Add the marker before synth.`);
+  }
+  return m[1];
+}
+
 export interface OpsStackProps extends cdk.StackProps {
   /** Shared DeBeOS config (buckets, SSM params) -- single source with the bake. */
   readonly config: SharedConfig;
@@ -216,7 +235,17 @@ export class OpsStack extends cdk.Stack {
       BUILDER_DISK_GIB: '200',
     });
     const waitSsmFn = mkFn('WaitSsmFn', 'wait_ssm.handler');
-    const buildFn = mkFn('BuildFn', 'run_ssm.build', { WORK_BUCKET: workBucket });
+    // #506: the build Lambda stages the driver from S3 onto each builder and refuses to
+    // build unless the staged copy matches the driver in THIS tree. Read that driver's
+    // NATIVEBUILD_VERSION marker at synth so the assertion is bound to the source of
+    // truth (graviton/scripts/haiku-nativebuild) with no hand-copied duplicate. A driver
+    // bump therefore only takes effect once the script is republished to S3 AND the
+    // stack is redeployed with the new version -- until both happen a wave fails loudly
+    // rather than silently running a stale driver.
+    const buildFn = mkFn('BuildFn', 'run_ssm.build', {
+      WORK_BUCKET: workBucket,
+      NATIVEBUILD_VERSION: readNativebuildVersion(),
+    });
     const pollFn = mkFn('PollFn', 'poll_ssm.handler');
     const recordFn = mkFn('RecordFn', 'record.handler');
     const reapFn = mkFn('ReapFn', 'reap.handler');
