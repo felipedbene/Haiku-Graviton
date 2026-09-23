@@ -662,6 +662,32 @@ def selftest():
     check("a truncated payload does not raise",
           c.observe(RP_FILL_RECT_COLOR, b"\x01\x02") is not None)
 
+    # 5. Aiming on-screen (#525). The instrument reported "the wheel does
+    # nothing" 40 times while aiming one pixel past the right edge of the
+    # screen, because --width is what we ASK for and the screen is what the
+    # server HAS. The guard has to reject exactly that point.
+    SCREEN = (640, 480)
+    check("the #525 default point (width/2 of 1280) is rejected on a 640x480 "
+          "screen",
+          off_screen([("--window", [1280 / 2.0, 800 / 2.0])], *SCREEN)
+          == ["--window=(640,400)"])
+    check("the #523 default hover point is rejected too",
+          len(off_screen([("--hover", [1280 - 60.0, 10.0])], *SCREEN)) == 1)
+    check("a point inside the screen is accepted",
+          off_screen([("--window", [250.0, 230.0]),
+                      ("--scroll-down", [500.0, 405.0])], *SCREEN) == [])
+    check("the last valid column and row are accepted, not treated as off",
+          off_screen([("--window", [639.0, 479.0])], *SCREEN) == [])
+    check("a negative coordinate is rejected",
+          len(off_screen([("--window", [-1.0, 10.0])], *SCREEN)) == 1)
+    # MUTATION: a guard written with <= instead of < accepts x == width, which is
+    # the off-by-one that let (640, 400) through. Assert the loose test does NOT
+    # discriminate, so the strict one cannot be quietly relaxed.
+    check("MUTATION: a <= guard would ACCEPT (640,400) -- so the strict test is "
+          "load-bearing",
+          (0 <= 640 <= SCREEN[0] and 0 <= 400 <= SCREEN[1])
+          and len(off_screen([("--window", [640.0, 400.0])], *SCREEN)) == 1)
+
     # Counted, not hardcoded: a hardcoded total is a check that stops checking
     # the moment someone adds or removes one above it.
     print("%d check(s), %d failure(s)" % (len(ran), len(fails)))
@@ -717,6 +743,19 @@ def run_map(sess, seconds):
         print("  token %-6d n=%-5d bbox=(%d,%d,%d,%d)"
               % (tok, len(bs), min(b[0] for b in bs), min(b[1] for b in bs),
                  max(b[2] for b in bs), max(b[3] for b in bs)))
+
+
+def off_screen(named_points, width, height):
+    """Which of (name, [x, y]) fall outside a width x height screen.
+
+    A point one pixel past the edge is over no window, so an event sent there is
+    correctly ignored and the run reports "no response" -- which reads exactly
+    like a dead input path (#525). Valid coordinates are 0 .. width-1, so
+    x == width is already off: that off-by-one IS the bug this catches, because
+    --width 1280 with a 640-wide screen puts the default window point at x=640.
+    """
+    return ["%s=(%g,%g)" % (name, p[0], p[1]) for name, p in named_points
+            if not (0 <= p[0] < width and 0 <= p[1] < height)]
 
 
 def quiesce(sess, quiet, budget):
@@ -941,6 +980,26 @@ def main(argv=None):
     sess = Session(args.host, args.port, cookie)
     sess.send(frame(RP_INIT_CONNECTION))
 
+    # Tell the server the screen size, the way both in-tree clients do. This is
+    # not optional politeness, and leaving it out is what made #525 a false
+    # report: RP_UPDATE_DISPLAY_MODE is the ONLY message that sets the server's
+    # screen size (RemoteHWInterface.cpp, case RP_UPDATE_DISPLAY_MODE writes
+    # fClientMode.virtual_width/height) and the ONLY thing that sets
+    # fIsConnected. RP_HELLO carries a requested size too, but the server reads
+    # it and explicitly discards it -- `(void)requestedWidth;` -- so a run that
+    # only said hello was measuring a 640x480 desktop while believing its own
+    # --width/--height, and every default interaction point derived from those
+    # landed off-screen. Sending it makes --width/--height true instead of
+    # aspirational, and makes the server treat this as a client that is really
+    # there: with fIsConnected false, RemoteDrawingEngine::DrawString returns
+    # early instead of waiting for RP_DRAW_STRING_RESULT, so the session being
+    # measured was not the session a client gets. (StringWidth is separately
+    # gated on the client advertising RP_CAP_STRING_WIDTH_REPLY in RP_HELLO,
+    # which this instrument deliberately does not do -- answering queries is a
+    # non-goal for it, and the server only asks clients that offered.)
+    sess.send(frame(RP_UPDATE_DISPLAY_MODE,
+                    struct.pack("<ii", args.width, args.height)))
+
     if args.timeline:
         run_timeline(sess, args.timeline)
         sess.close()
@@ -960,6 +1019,14 @@ def main(argv=None):
         specs = ([(s, "click") for s in args.probe.split(";") if s]
                  + [(s, "wheel") for s in args.probe_wheel.split(";") if s]
                  + [(s, "wheelx") for s in args.probe_wheel_x.split(";") if s])
+        bad = off_screen([("--probe/--probe-wheel " + s, [float(v) for v in
+                                                         s.split(",")])
+                          for s, _ in specs], args.width, args.height)
+        if bad:
+            print("FATAL: probe point(s) outside the %dx%d screen: %s"
+                  % (args.width, args.height, ", ".join(bad)))
+            sess.close()
+            return 4
         for spec, mode in specs:
             x, y = [float(v) for v in spec.split(",")]
             sess.send(f_move(x, y))
@@ -1033,6 +1100,29 @@ def main(argv=None):
              if args.scroll_down else [500.0, 405.0])
     sup = ([float(v) for v in args.scroll_up.split(",")]
            if args.scroll_up else [500.0, 60.0])
+
+    # Refuse to aim off the screen. An off-screen point is over no window, so
+    # every event sent there is correctly ignored and the run reports "no
+    # response" -- which reads exactly like a dead input path. That is how #525
+    # was filed: the default window point is (width/2, height/2), and with the
+    # default --width 1280 that is x=640, one pixel past the right edge of the
+    # 640x480 desktop the fleet actually boots. The wheel arm therefore aimed at
+    # nothing for 40 trials while the scroll-bar control used explicit on-screen
+    # coordinates and worked, and the asymmetry looked like a defect in the
+    # wheel. Dying here costs one run; believing the output cost an issue.
+    bad = off_screen((("--window", win), ("--hover", hover),
+                      ("--drag-title", title), ("--menu", menu),
+                      ("--scroll-down", sdown), ("--scroll-up", sup)),
+                     args.width, args.height)
+    if bad:
+        print("FATAL: interaction point(s) outside the %dx%d screen: %s"
+              % (args.width, args.height, ", ".join(bad)))
+        print("       An event sent there hits no window and draws nothing, "
+              "which is indistinguishable from a broken input path.")
+        print("       Run with --map to find the windows, then pass explicit "
+              "coordinates.")
+        sess.close()
+        return 4
 
     if args.prime:
         # Put text in the focused editor so "scroll" has something to scroll
@@ -1191,6 +1281,18 @@ def main(argv=None):
             print("   novel sites: %s"
                   % ", ".join("%s x%d" % (k, n) for k, n in
                               sorted(nk.items(), key=lambda kv: -kv[1])[:4]))
+        # An arm where EVERY trial was background-only measured nothing, and the
+        # cheapest explanation is that it was aimed at nothing -- not that the
+        # feature is broken. Say so here, in the arm's own output, because #525
+        # was filed on exactly this row being read the other way round. It is a
+        # warning and not a failure: "this arm never responded" is a legitimate
+        # result for an arm whose whole point is that nothing should happen.
+        if label != "z_null_no_input" and len(trs) > 0 \
+                and all(t.t_novel is None for t in trs):
+            print("   !! NO attributable response in %d/%d trials. Before"
+                  " reporting this as a defect, check the aim: was the pointer"
+                  " over a window that can respond? Use --map, and use --probe"
+                  " to see what one event repaints." % (len(trs), len(trs)))
 
     print("")
     print("string_width_queries=%d read_bitmap_queries=%d replies=%d"
