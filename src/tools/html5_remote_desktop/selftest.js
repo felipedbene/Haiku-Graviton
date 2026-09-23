@@ -1016,10 +1016,16 @@ check('space sends 0x20 with the space bar\'s hardware code',
 	space.bytes[0] === 0x20 && space.rawChar === 0x20 && space.key === 0x5e,
 	JSON.stringify(space));
 
-// An unknown physical key must degrade to key = 0, never to a DOM number.
-const unknown = keyFrame('x', 'SomeKeyChromeInvented');
+// An unknown physical key must degrade to key = 0, never to a DOM number. The
+// event carries a NONZERO keyCode on purpose: with keyCode 0 this check passes
+// whether the fallback is `0` or `event.keyCode`, which is no check at all
+// (found by mutating the fallback to event.keyCode and watching this stay
+// green).
+const unknown = sendKey(Object.assign(keyEvent('x', 'SomeKeyChromeInvented'),
+	{ keyCode: 88 }))[0];
 check('an unrecognised event.code yields key = 0, not a DOM key code',
-	unknown.key === 0 && unknown.bytes[0] === 0x78, JSON.stringify(unknown));
+	unknown.key === 0 && unknown.key !== 88 && unknown.bytes[0] === 0x78,
+	JSON.stringify(unknown));
 
 // keyup carries the same triple, under the RP_KEY_UP opcode.
 const upFrames = sendKey(keyEvent('Enter', 'Enter', 'keyup'));
