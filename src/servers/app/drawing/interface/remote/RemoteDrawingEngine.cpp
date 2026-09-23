@@ -416,6 +416,39 @@ void
 RemoteDrawingEngine::DrawBitmap(ServerBitmap* bitmap, const BRect& _bitmapRect,
 	const BRect& _viewRect, uint32 options)
 {
+	// A tiled draw (B_TILE_BITMAP) has a phase: the tile grid origin is the
+	// view rect's top-left and the source phase is carried in bitmapRect's
+	// offset (see BView::DrawTiledBitmapAsync, which passes
+	// bitmap->Bounds().OffsetToCopy(phase)). None of the machinery below
+	// preserves that phase -- the constrain-to-bounds fixups and the crop/
+	// rebase optimisation both assume a scaled blit and rewrite bitmapRect,
+	// and the RECTS path splits the draw into independent sub-blits, each
+	// re-extracted from its own clipped rect origin. A client handed several
+	// such rects cannot know where the tile grid starts, so the pattern shifts
+	// at every rect boundary and the clipped tiled draw is unreconstructable
+	// (#507). Ship it instead as a single whole-bitmap RP_DRAW_BITMAP with
+	// bitmapRect (phase), viewRect and the options word intact, and let the
+	// client clip it against the clipping region it already tracks
+	// (RP_CONSTRAIN_CLIPPING_REGION). This needs no wire change and no
+	// capability gate: the unclipped tiled path already uses exactly this
+	// message and every existing client renders it correctly. A tiled source
+	// bitmap is small by construction, so shipping it whole -- once, not once
+	// per rect -- costs little, which is where the RECTS bandwidth argument is
+	// weakest anyway.
+	if ((options & B_TILE_BITMAP) != 0) {
+		if (!fClippingRegion.Intersects(_viewRect))
+			return;
+
+		RemoteMessage message(NULL, fHWInterface->SendBuffer());
+		message.Start(RP_DRAW_BITMAP);
+		message.Add(fToken);
+		message.Add(_bitmapRect);
+		message.Add(_viewRect);
+		message.Add(options);
+		message.AddBitmap(*bitmap);
+		return;
+	}
+
 	BRect bitmapRect = _bitmapRect;
 	BRect viewRect = _viewRect;
 	double xScale = (bitmapRect.Width() + 1) / (viewRect.Width() + 1);
