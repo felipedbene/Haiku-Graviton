@@ -863,6 +863,32 @@ function SendCapture() {
 	this.message = message;
 }
 
+// --- the wheel, in DETENTS (#525 follow-up) -------------------------------
+//
+// RP_MOUSE_WHEEL_CHANGED carries wheel detents, because the receiving view
+// multiplies the value by (scroll bar small step * 3) in
+// BView::ScrollWithMouseWheelDelta(). The client used to forward event.deltaY
+// verbatim, and a DOM WheelEvent is not in that unit: for one physical detent a
+// browser reports ~100 (deltaMode 0, pixels) or 3 (deltaMode 1, lines).
+//
+// Measured on a Graviton test instance against a StyledEdit view, reading the
+// scroll distance straight off the RP_COPY_RECT_NO_CLIPPING blit offset the
+// server sends back: delta 1 scrolls 36 px and delta 3 scrolls 108 px, so the
+// response is linear at 36 px per detent -- which puts the 100 a browser
+// reports for that one detent at 3600 px, ten view-heights. At 100 the server
+// sends no blit at all in 10 of 10 trials: the jump leaves nothing to copy and
+// it repaints the whole view instead. The numbers below are therefore what a
+// detent costs on the wire, not a guess at what feels right.
+//
+// These checks read the bytes off the WIRE, through the real onWheel, and
+// decode them the way RemoteEventStream::EventReceived does: two float32s.
+// Going through the send site rather than asserting on the table is deliberate
+// -- the defect lived at the send site.
+// Same capture as SendCapture above; named for the section that uses it.
+function WheelCapture() {
+	SendCapture.call(this);
+}
+
 // One DOM keyboard event. `code` defaults to the name, which is right for the
 // named keys (Enter/ArrowLeft/F1/...) and wrong for nothing we pass here
 // without saying so.
@@ -1087,6 +1113,85 @@ check('MUTATION: with ArrowLeft reverted to DOM 37 it types \'%\', so the '
 check('the real Enter mapping is back after the mutation arm',
 	keyFrame('Enter').bytes[0] === 0x0a
 	&& keyFrame('ArrowLeft').bytes[0] === 0x1c);
+function decodeWheelFrame(frame) {
+	const view = new DataView(frame.buffer, frame.byteOffset, frame.byteLength);
+	return {
+		code: view.getUint16(0, true),
+		size: view.getUint32(2, true),
+		deltaX: view.getFloat32(6, true),
+		deltaY: view.getFloat32(10, true),
+		wellFormed: view.getUint32(2, true) === frame.byteLength
+			&& frame.byteLength === 14
+	};
+}
+
+// Drive the real handler. `this` only needs sendMessage. deltaMode is left
+// undefined by some browsers, so it is a parameter here rather than a default.
+function sendWheel(deltaX, deltaY, deltaMode) {
+	const capture = new WheelCapture();
+	const session = { sendMessage: capture.message };
+	const event = {
+		deltaX, deltaY, deltaMode,
+		preventDefault() { this.defaultPrevented = true; },
+		defaultPrevented: false
+	};
+	client.RemoteDesktopSession.prototype.onWheel.call(session, event);
+	return { frames: capture.frames.map(decodeWheelFrame), event };
+}
+
+const wheelPixel = sendWheel(0, 100, 0);
+check('a wheel event sends one well-formed RP_MOUSE_WHEEL_CHANGED and nothing '
+	+ 'else',
+	wheelPixel.frames.length === 1
+	&& wheelPixel.frames[0].code === client.RP_MOUSE_WHEEL_CHANGED
+	&& wheelPixel.frames[0].wellFormed,
+	JSON.stringify(wheelPixel.frames));
+check('one detent in PIXEL mode (deltaY 100) goes on the wire as 1 detent, '
+	+ 'not as 100',
+	Math.abs(wheelPixel.frames[0].deltaY - 1.0) < 1e-6,
+	String(wheelPixel.frames[0].deltaY));
+check('one detent in LINE mode (deltaY 3) goes on the wire as 1 detent',
+	Math.abs(sendWheel(0, 3, 1).frames[0].deltaY - 1.0) < 1e-6,
+	String(sendWheel(0, 3, 1).frames[0].deltaY));
+check('a PAGE-mode wheel is scaled too, not passed through unchanged',
+	Math.abs(sendWheel(0, 1, 2).frames[0].deltaY - 4.0) < 1e-6,
+	String(sendWheel(0, 1, 2).frames[0].deltaY));
+check('a horizontal wheel is scaled by the same rule, and does not leak into '
+	+ 'the vertical axis',
+	Math.abs(sendWheel(100, 0, 0).frames[0].deltaX - 1.0) < 1e-6
+	&& sendWheel(100, 0, 0).frames[0].deltaY === 0,
+	JSON.stringify(sendWheel(100, 0, 0).frames[0]));
+check('the sign survives: scrolling up stays negative',
+	sendWheel(0, -100, 0).frames[0].deltaY < 0,
+	String(sendWheel(0, -100, 0).frames[0].deltaY));
+check('a browser with no event.deltaMode is treated as PIXEL mode, not '
+	+ 'divided by undefined',
+	Math.abs(sendWheel(0, 100, undefined).frames[0].deltaY - 1.0) < 1e-6,
+	String(sendWheel(0, 100, undefined).frames[0].deltaY));
+check('a trackpad\'s sub-detent delta is kept as a FRACTION, not rounded away '
+	+ 'to no scroll at all',
+	sendWheel(0, 4, 0).frames[0].deltaY > 0
+	&& sendWheel(0, 4, 0).frames[0].deltaY < 0.1,
+	String(sendWheel(0, 4, 0).frames[0].deltaY));
+check('the wheel handler consumes the event so the page does not also scroll',
+	wheelPixel.event.defaultPrevented === true);
+
+// MUTATION. Put the pixel-mode divisor back to 1 -- which is what forwarding
+// event.deltaY verbatim amounted to -- and require the checks above to go RED.
+let mutWheel;
+try {
+	client.WHEEL_DELTA_PER_DETENT[0] = 1.0;
+	mutWheel = sendWheel(0, 100, 0).frames[0];
+} finally {
+	client.WHEEL_DELTA_PER_DETENT[0] = 100.0;
+}
+check('MUTATION: with the pixel divisor reverted to 1 the wire carries 100 '
+	+ 'detents -- 3600 px of scroll, the defect reproduced',
+	Math.abs(mutWheel.deltaY - 100.0) < 1e-6, String(mutWheel.deltaY));
+check('MUTATION: ...so the "1 detent" assertion goes RED',
+	!(Math.abs(mutWheel.deltaY - 1.0) < 1e-6), String(mutWheel.deltaY));
+check('the real detent scaling is back after the mutation arm',
+	Math.abs(sendWheel(0, 100, 0).frames[0].deltaY - 1.0) < 1e-6);
 
 console.log('');
 console.log('SELFTEST_CHECKS=' + checks.length);

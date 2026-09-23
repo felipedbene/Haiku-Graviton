@@ -2737,11 +2737,39 @@ RemoteDesktopSession.prototype.onKeyDownUp = function(event)
 // text, event.code for the physical key), so there is nothing left for it to do.
 
 
+// How much a DOM WheelEvent reports for ONE wheel detent, indexed by
+// event.deltaMode: DOM_DELTA_PIXEL, DOM_DELTA_LINE, DOM_DELTA_PAGE. Pixel mode
+// is what current browsers use for a mouse wheel (~100 in Chromium, ~114 in
+// Firefox); Firefox still uses line mode in some configurations, where one
+// detent is 3 lines. Page mode is rare, and a page is taken as four detents.
+const WHEEL_DELTA_PER_DETENT = [100.0, 3.0, 0.25];
+
 RemoteDesktopSession.prototype.onWheel = function(event)
 {
+	// RP_MOUSE_WHEEL_CHANGED carries wheel DETENTS ("notches") -- the same unit
+	// input_server writes into be:wheel_delta_x/y for a local mouse -- because
+	// the view that receives it multiplies by (scroll bar small step * 3) in
+	// BView::ScrollWithMouseWheelDelta(). A DOM delta is not in that unit, so
+	// forwarding event.deltaY verbatim over-scrolled by two orders of
+	// magnitude. Measured on a Graviton test instance against a StyledEdit
+	// view, reading the scroll distance off the blit offset the server sends
+	// back: 1 detent moves 36 px and 3 detents move 108 px, so the response is
+	// linear at 36 px per detent -- which puts the 100 a browser reports for
+	// that same single detent at 3600 px, ten view-heights. At 100 the server
+	// sends no blit at all in 10 of 10 trials, because a jump that far leaves
+	// nothing to copy and it repaints the whole view instead.
+	//
+	// Dividing keeps the fractional part on purpose. A trackpad emits a stream
+	// of small pixel deltas; rounding those to whole detents would round most
+	// of them to zero and drop the gesture, whereas a fractional detent simply
+	// scrolls a fraction of 36 px and reads as smooth scrolling.
+	var perDetent = WHEEL_DELTA_PER_DETENT[event.deltaMode];
+	if (!perDetent)
+		perDetent = WHEEL_DELTA_PER_DETENT[0];
+
 	this.sendMessage.start(RP_MOUSE_WHEEL_CHANGED);
-	this.sendMessage.dataView.writeFloat32(event.deltaX);
-	this.sendMessage.dataView.writeFloat32(event.deltaY);
+	this.sendMessage.dataView.writeFloat32(event.deltaX / perDetent);
+	this.sendMessage.dataView.writeFloat32(event.deltaY / perDetent);
 	this.sendMessage.flush();
 	event.preventDefault();
 }
