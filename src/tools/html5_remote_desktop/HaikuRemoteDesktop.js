@@ -260,6 +260,40 @@ const B_LEFT_OPTION_KEY = 0x00004000;
 const B_RIGHT_OPTION_KEY = 0x00008000;
 
 
+// The control bytes the Interface Kit switches on -- headers/os/interface/
+// InterfaceDefs.h. A B_KEY_DOWN carries THESE in "bytes"/"raw_char", not DOM
+// key codes (see haikuKeyForEvent below for why that distinction was a bug).
+const B_HOME = 0x01;
+const B_END = 0x04;
+const B_INSERT = 0x05;
+const B_BACKSPACE = 0x08;
+const B_TAB = 0x09;
+const B_RETURN = 0x0a;			// == B_ENTER
+const B_ENTER = 0x0a;
+const B_PAGE_UP = 0x0b;
+const B_PAGE_DOWN = 0x0c;
+const B_FUNCTION_KEY = 0x10;
+const B_ESCAPE = 0x1b;
+const B_LEFT_ARROW = 0x1c;
+const B_RIGHT_ARROW = 0x1d;
+const B_UP_ARROW = 0x1e;
+const B_DOWN_ARROW = 0x1f;
+const B_DELETE = 0x7f;
+
+// The "key" field of a B_KEY_DOWN is a HARDWARE key code, not a character and
+// not a DOM keyCode. The values below are Haiku's, read off the default layout
+// in src/preferences/keymap/KeyboardLayout.cpp (kDefaultLayout105) and
+// cross-checked against the named codes in InterfaceDefs.h (B_F1_KEY = 0x02 ...
+// B_PAUSE_KEY = 0x10, B_NUM_LOCK_KEY = 0x22, B_CAPS_LOCK_KEY = 0x3b,
+// B_SPACE_BAR_KEY = 0x5e). They matter: app_server's KeyboardFilter switches
+// workspaces on key in [B_F1_KEY, B_F12_KEY], takes a screenshot on
+// key == B_PRINT_KEY, and falls back to safe video mode on key == 0x01
+// (Escape) -- all of which a DOM keyCode either misses or triggers by accident.
+const B_F1_KEY = 0x02;
+const B_PRINT_KEY = 0x0e;
+const B_SCROLL_KEY = 0x0f;
+const B_PAUSE_KEY = 0x10;
+
 
 var gSession;
 var gSystemPalette;
@@ -2054,9 +2088,9 @@ function RemoteDesktopSession(targetElement, width, height, targetAddress,
 	this.canvas.onmouseup = this.onMouseUp.bind(this);
 	this.canvas.onwheel = this.onWheel.bind(this);
 
+	// keydown/keyup only -- see the note where onKeyPress used to be.
 	this.canvas.onkeydown = this.onKeyDownUp.bind(this);
 	this.canvas.onkeyup = this.onKeyDownUp.bind(this);
-	this.canvas.onkeypress = this.onKeyPress.bind(this);
 
 	this.canvas.oncontextmenu = function(event) {
 			event.preventDefault();
@@ -2415,6 +2449,182 @@ RemoteDesktopSession.prototype.onMouseUp = function(event)
 }
 
 
+// --- DOM key events -> Haiku key events -----------------------------------
+//
+// A B_KEY_DOWN carries three separate things, and this client used to send a
+// DOM key code for all three (#526):
+//
+//   "bytes"     the UTF-8 the key produced, as MODIFIED -- and for a key that
+//               produces no text, the Interface Kit's control byte from
+//               headers/os/interface/InterfaceDefs.h. BTextView::KeyDown
+//               switches on bytes[0] and nothing else
+//               (src/kits/interface/TextView.cpp), so this byte is what decides
+//               whether Return breaks a line or gets inserted as a character.
+//   "raw_char"  the same character UNMODIFIED. BWindow::_DetermineTarget only
+//               routes a key to DefaultButton() when raw_char == B_ENTER, so a
+//               hardcoded 0 here means Return never activates a dialog's
+//               default button.
+//   "key"       the HARDWARE key code. app_server's KeyboardFilter switches
+//               workspace on key in [B_F1_KEY, B_F12_KEY].
+//
+// DOM key codes are none of those, and they collide with Haiku's control bytes
+// for nearly every navigation key, so sending them was not merely imprecise --
+// it typed punctuation. Enter's DOM code 13 is '\r', not B_RETURN (0x0a), so it
+// missed `case B_RETURN` in BTextView::KeyDown and landed in `default:`, which
+// inserts the byte: the line got wider and only the horizontal scrollbar moved
+// (#526). The arrow keys are worse: DOM 37/38/39/40 are the ASCII bytes
+// '%', '&', '\'' and '(', so arrowing around a text view typed punctuation into
+// it.
+//
+// Backspace (8), Tab (9) and Escape (27) have DOM codes that happen to equal
+// B_BACKSPACE, B_TAB and B_ESCAPE. That is a coincidence of the ASCII control
+// range, not a rule -- they are in the table below like everything else, so DO
+// NOT "simplify" them back to event.keyCode. (Their `key` field was still
+// wrong: Escape's hardware code is 0x01, not 27.)
+//
+// Keyed on event.key, the standardised name, with event.keyCode consulted only
+// when a browser gives us no event.key at all -- and then only to recover a
+// name, so the legacy path goes through this same table rather than putting a
+// DOM number on the wire.
+const kHaikuByteByKeyName = {
+	'Enter': B_RETURN,				// also NumpadEnter: event.key is 'Enter'
+	'Backspace': B_BACKSPACE,
+	'Tab': B_TAB,
+	'Escape': B_ESCAPE,
+	'Insert': B_INSERT,
+	'Delete': B_DELETE,
+	'Home': B_HOME,
+	'End': B_END,
+	'PageUp': B_PAGE_UP,
+	'PageDown': B_PAGE_DOWN,
+	'ArrowLeft': B_LEFT_ARROW,
+	'ArrowRight': B_RIGHT_ARROW,
+	'ArrowUp': B_UP_ARROW,
+	'ArrowDown': B_DOWN_ARROW,
+	// Function keys all send the same byte; "key" is what distinguishes them.
+	'F1': B_FUNCTION_KEY, 'F2': B_FUNCTION_KEY, 'F3': B_FUNCTION_KEY,
+	'F4': B_FUNCTION_KEY, 'F5': B_FUNCTION_KEY, 'F6': B_FUNCTION_KEY,
+	'F7': B_FUNCTION_KEY, 'F8': B_FUNCTION_KEY, 'F9': B_FUNCTION_KEY,
+	'F10': B_FUNCTION_KEY, 'F11': B_FUNCTION_KEY, 'F12': B_FUNCTION_KEY,
+	'PrintScreen': B_FUNCTION_KEY,
+	'Pause': B_FUNCTION_KEY
+};
+
+
+// event.code (the PHYSICAL key, layout independent) -> Haiku hardware key code,
+// read off the default 105-key layout in
+// src/preferences/keymap/KeyboardLayout.cpp (kDefaultLayout105) and
+// cross-checked against the named codes in InterfaceDefs.h. Modifier keys are
+// deliberately absent: onKeyDownUp intercepts them above and sends
+// RP_MODIFIERS_CHANGED instead, so they never reach this table.
+const kHaikuKeyCodeByCode = {
+	'Escape': 0x01,
+	'F1': 0x02, 'F2': 0x03, 'F3': 0x04, 'F4': 0x05, 'F5': 0x06, 'F6': 0x07,
+	'F7': 0x08, 'F8': 0x09, 'F9': 0x0a, 'F10': 0x0b, 'F11': 0x0c, 'F12': 0x0d,
+	'PrintScreen': B_PRINT_KEY, 'ScrollLock': B_SCROLL_KEY,
+	'Pause': B_PAUSE_KEY,
+
+	'Backquote': 0x11,
+	'Digit1': 0x12, 'Digit2': 0x13, 'Digit3': 0x14, 'Digit4': 0x15,
+	'Digit5': 0x16, 'Digit6': 0x17, 'Digit7': 0x18, 'Digit8': 0x19,
+	'Digit9': 0x1a, 'Digit0': 0x1b, 'Minus': 0x1c, 'Equal': 0x1d,
+	'Backspace': 0x1e, 'Insert': 0x1f, 'Home': 0x20, 'PageUp': 0x21,
+	'NumpadDivide': 0x23, 'NumpadMultiply': 0x24, 'NumpadSubtract': 0x25,
+
+	'Tab': 0x26,
+	'KeyQ': 0x27, 'KeyW': 0x28, 'KeyE': 0x29, 'KeyR': 0x2a, 'KeyT': 0x2b,
+	'KeyY': 0x2c, 'KeyU': 0x2d, 'KeyI': 0x2e, 'KeyO': 0x2f, 'KeyP': 0x30,
+	'BracketLeft': 0x31, 'BracketRight': 0x32, 'Backslash': 0x33,
+	'Delete': 0x34, 'End': 0x35, 'PageDown': 0x36,
+	'Numpad7': 0x37, 'Numpad8': 0x38, 'Numpad9': 0x39, 'NumpadAdd': 0x3a,
+
+	'KeyA': 0x3c, 'KeyS': 0x3d, 'KeyD': 0x3e, 'KeyF': 0x3f, 'KeyG': 0x40,
+	'KeyH': 0x41, 'KeyJ': 0x42, 'KeyK': 0x43, 'KeyL': 0x44,
+	'Semicolon': 0x45, 'Quote': 0x46, 'Enter': 0x47,
+	'Numpad4': 0x48, 'Numpad5': 0x49, 'Numpad6': 0x4a,
+
+	'IntlBackslash': 0x69,
+	'KeyZ': 0x4c, 'KeyX': 0x4d, 'KeyC': 0x4e, 'KeyV': 0x4f, 'KeyB': 0x50,
+	'KeyN': 0x51, 'KeyM': 0x52, 'Comma': 0x53, 'Period': 0x54, 'Slash': 0x55,
+	'ArrowUp': 0x57,
+	'Numpad1': 0x58, 'Numpad2': 0x59, 'Numpad3': 0x5a, 'NumpadEnter': 0x5b,
+
+	'Space': 0x5e,
+	'ArrowLeft': 0x61, 'ArrowDown': 0x62, 'ArrowRight': 0x63,
+	'Numpad0': 0x64, 'NumpadDecimal': 0x65
+};
+
+
+// Legacy-only: recover a standard event.key NAME from the deprecated
+// event.keyCode, for a browser that reports no event.key. Everything then goes
+// through the tables above, so no DOM number ever reaches the wire.
+const kKeyNameByLegacyKeyCode = {
+	8: 'Backspace', 9: 'Tab', 13: 'Enter', 27: 'Escape',
+	33: 'PageUp', 34: 'PageDown', 35: 'End', 36: 'Home',
+	37: 'ArrowLeft', 38: 'ArrowUp', 39: 'ArrowRight', 40: 'ArrowDown',
+	45: 'Insert', 46: 'Delete',
+	112: 'F1', 113: 'F2', 114: 'F3', 115: 'F4', 116: 'F5', 117: 'F6',
+	118: 'F7', 119: 'F8', 120: 'F9', 121: 'F10', 122: 'F11', 123: 'F12'
+};
+
+
+// The character a printable key produces with NO modifiers, which is what
+// raw_char is. event.key already carries the modified character; event.code
+// names the physical key, and for letters and digits that is enough to recover
+// the unmodified one (shift+A -> 'a', shift+1 -> '1'). For anything else --
+// punctuation on a non-US layout, an IME, a dead key -- there is no way to know
+// it from a DOM event, so the modified character is used: better than 0, and
+// raw_char is only consulted for B_ENTER and shortcut matching.
+function haikuRawCharFor(text, code)
+{
+	if (typeof code === 'string') {
+		var letter = /^Key([A-Z])$/.exec(code);
+		if (letter)
+			return letter[1].toLowerCase().charCodeAt(0);
+		var digit = /^Digit([0-9])$/.exec(code);
+		if (digit)
+			return digit[1].charCodeAt(0);
+	}
+
+	return text.codePointAt(0);
+}
+
+
+// Translate one DOM keyboard event into the Haiku triple. Returns
+// { bytes, rawChar, key } with bytes a Uint8Array -- never null, so the caller
+// has nothing to decide. Exported for selftest.js.
+function haikuKeyForEvent(event)
+{
+	var name = event.key;
+	if (typeof name !== 'string' || name === 'Unidentified')
+		name = kKeyNameByLegacyKeyCode[event.keyCode] || '';
+
+	var key = kHaikuKeyCodeByCode[event.code];
+	if (key === undefined)
+		key = kHaikuKeyCodeByCode[name];
+	if (key === undefined)
+		key = 0;	// unknown physical key: 0, NEVER a DOM key code
+
+	var byte = kHaikuByteByKeyName[name];
+	if (byte !== undefined) {
+		return { bytes: new Uint8Array([byte]), rawChar: byte, key: key };
+	}
+
+	// A character-producing key. event.key is the text it produced, which may
+	// be more than one UTF-16 unit (an astral plane character) but is a single
+	// grapheme; anything longer is a name we do not know, and sending it as
+	// text would be nonsense, so it produces no key event at all.
+	if (name.length === 0 || (name.length > 1 && name.codePointAt(0) < 0x10000))
+		return null;
+
+	return {
+		bytes: new TextEncoder().encode(name),
+		rawChar: haikuRawCharFor(name, event.code),
+		key: key
+	};
+}
+
+
 RemoteDesktopSession.prototype.onKeyDownUp = function(event)
 {
 	var keyDown = event.type === 'keydown';
@@ -2495,36 +2705,36 @@ RemoteDesktopSession.prototype.onKeyDownUp = function(event)
 		return;
 	}
 
+	var haiku = haikuKeyForEvent(event);
+	if (haiku === null) {
+		// A key we cannot express (an unknown DOM name). Still swallow it, so
+		// the browser does not act on it behind the desktop's back.
+		event.preventDefault();
+		return;
+	}
+
+	// RemoteEventStream::EventReceived reads exactly this, in this order:
+	// uint32 numBytes, numBytes bytes, int32 raw_char, int32 key.
 	this.sendMessage.start(keyDown ? RP_KEY_DOWN : RP_KEY_UP);
-	if (event.key.length == 1)
-		this.sendMessage.dataView.writeString(event.key);
-	else {
-		this.sendMessage.dataView.writeUint32(1);
-		this.sendMessage.dataView.writeUint8(event.keyCode);
-	}
-
-	if (event.keyCode) {
-		this.sendMessage.dataView.writeUint32(0);
-		this.sendMessage.dataView.writeUint32(event.keyCode);
-	}
+	this.sendMessage.dataView.writeUint32(haiku.bytes.length);
+	for (var i = 0; i < haiku.bytes.length; i++)
+		this.sendMessage.dataView.writeUint8(haiku.bytes[i]);
+	this.sendMessage.dataView.writeUint32(haiku.rawChar);
+	this.sendMessage.dataView.writeUint32(haiku.key);
 
 	this.sendMessage.flush();
 	event.preventDefault();
 }
 
 
-RemoteDesktopSession.prototype.onKeyPress = function(event)
-{
-	this.sendMessage.start(RP_KEY_DOWN);
-	this.sendMessage.dataView.writeUint32(1);
-	this.sendMessage.dataView.writeUint8(event.which);
-	this.sendMessage.flush();
-	this.sendMessage.start(RP_KEY_UP);
-	this.sendMessage.dataView.writeUint32(1);
-	this.sendMessage.dataView.writeUint8(event.which);
-	this.sendMessage.flush();
-	event.preventDefault();
-}
+// There is deliberately no onKeyPress. `keypress` is deprecated, and here it was
+// also unreachable and wrong: onKeyDownUp calls preventDefault() on every
+// keydown, which by specification suppresses the keypress that would have
+// followed, so the handler that used to live here never ran. Had it run it would
+// have sent a SECOND, duplicate RP_KEY_DOWN/RP_KEY_UP pair carrying
+// event.which -- the same DOM-code-as-Haiku-byte defect as #526, with Enter
+// arriving as '\r'. keydown/keyup carry everything needed (event.key for the
+// text, event.code for the physical key), so there is nothing left for it to do.
 
 
 RemoteDesktopSession.prototype.onWheel = function(event)
