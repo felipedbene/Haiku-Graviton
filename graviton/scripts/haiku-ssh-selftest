@@ -1,0 +1,127 @@
+#!/usr/bin/env bash
+#
+# Offline checks for haiku-ssh: argument rewriting, and that the fetched private
+# key is actually unlinked. No AWS, no network, no real ssh -- both are stubbed
+# on PATH, so this runs anywhere and in under a second.
+#
+# Two defects motivate it (issue #536):
+#
+#  1. The host-rewrite loop took "first argument with no leading dash and no @"
+#     as the host, which is the shape of an OPTION VALUE too: `-p 2222 host`
+#     became `-p baron@2222`. It also kept scanning after a user-qualified host,
+#     so `baron@host uname -a` ran `baron@uname`.
+#  2. The script installs an EXIT trap to unlink the key and then `exec ssh`,
+#     which replaces the process image -- so the trap could never fire. 572
+#     copies of the private key had accumulated in /dev/shm.
+#
+# Defect 2 is why this file asserts on the FILESYSTEM and not only on argv: a
+# test that checked the rewriting alone would have passed throughout the leak.
+#
+# Usage: haiku-ssh-selftest [path-to-haiku-ssh]
+set -uo pipefail
+
+SCRIPT="${1:-$(dirname "$0")/haiku-ssh}"
+[ -x "$SCRIPT" ] || { echo "not executable: $SCRIPT" >&2; exit 2; }
+
+work="$(mktemp -d "${TMPDIR:-/var/tmp}/hssh-selftest.XXXXXXXX")"
+trap 'rm -rf "$work"' EXIT
+bin="$work/bin"; mkdir -p "$bin"
+
+# Stub aws: emit a key-shaped secret so the "empty fetch" guard passes.
+cat > "$bin/aws" <<'STUB'
+#!/usr/bin/env bash
+echo "-----BEGIN OPENSSH PRIVATE KEY-----"
+echo "selftest-not-a-real-key"
+echo "-----END OPENSSH PRIVATE KEY-----"
+STUB
+
+# Stub ssh: record argv one-per-line, and record the -i keyfile path so the
+# caller can check afterwards whether it still exists.
+cat > "$bin/ssh" <<'STUB'
+#!/usr/bin/env bash
+: > "$HSSH_ARGV"
+prev=""
+for a in "$@"; do
+	printf '%s\n' "$a" >> "$HSSH_ARGV"
+	[ "$prev" = "-i" ] && printf '%s' "$a" > "$HSSH_KEYPATH"
+	prev="$a"
+done
+exit 0
+STUB
+chmod +x "$bin/aws" "$bin/ssh"
+
+checks=0; fails=0
+run() {  # run <args...>; sets ARGV (newline-joined) and KEYFILE
+	export HSSH_ARGV="$work/argv" HSSH_KEYPATH="$work/keypath"
+	: > "$HSSH_KEYPATH"
+	PATH="$bin:$PATH" TMPDIR="$work" "$SCRIPT" "$@" >/dev/null 2>&1
+	ARGV="$(cat "$work/argv" 2>/dev/null)"
+	KEYFILE="$(cat "$work/keypath" 2>/dev/null)"
+}
+check() {  # check <name> <condition-string...>
+	local name="$1"; shift
+	checks=$((checks + 1))
+	if "$@"; then
+		printf '  %-64s PASS\n' "$name"
+	else
+		printf '  %-64s FAIL\n' "$name"
+		printf '       argv was: %s\n' "$(printf '%s' "$ARGV" | tr '\n' ' ')"
+		fails=$((fails + 1))
+	fi
+}
+has()  { printf '%s\n' "$ARGV" | grep -qxF "$1"; }
+nohas() { ! has "$1"; }
+
+echo "=== haiku-ssh self-test ($SCRIPT)"
+
+# --- the host gets the user, and nothing else does ------------------------
+run myhost
+check "a bare host gets baron@ prepended" has "baron@myhost"
+
+run baron@myhost
+check "a user-qualified host is left alone" has "baron@myhost"
+
+# The four spellings that the old parser corrupted. Each asserts BOTH that the
+# value survived and that it did not become a host -- the second half is the one
+# that fails on the bug.
+run -p 2222 myhost
+check "-p with a separated value keeps the value" has "2222"
+check "...and does not turn the port into a host" nohas "baron@2222"
+
+run -o ServerAliveInterval=30 myhost
+check "-o with a separated value keeps the value" has "ServerAliveInterval=30"
+check "...and does not turn the option into a host" nohas "baron@ServerAliveInterval=30"
+
+run -L 9000:localhost:80 myhost
+check "-L forward spec survives" has "9000:localhost:80"
+check "...and is not rewritten as a host" nohas "baron@9000:localhost:80"
+
+run -J jumphost myhost
+check "-J jump host survives" has "jumphost"
+check "...and the real host is still the one rewritten" has "baron@myhost"
+
+# The remote command must never be touched. This is the `baron@uname` bug.
+run baron@myhost uname -a
+check "a remote command after a qualified host is untouched" has "uname"
+check "...and the command word is not made into a user@host" nohas "baron@uname"
+
+run myhost uname -a
+check "a remote command after a BARE host is untouched" has "uname"
+check "...while the host itself was still rewritten" has "baron@myhost"
+
+# Attached-value forms have no separate value to skip.
+run -p2222 myhost
+check "an attached-form option still finds the host" has "baron@myhost"
+
+# --- the key is fetched, used, and unlinked -------------------------------
+run myhost
+check "ssh was given an -i keyfile" test -n "$KEYFILE"
+check "the private key is UNLINKED after ssh exits (#536)" test ! -e "$KEYFILE"
+
+# --- the caller's own -i wins ---------------------------------------------
+run -i /dev/null otherhost
+check "an explicit -i is honoured and the host is NOT rewritten" nohas "baron@otherhost"
+
+echo "$checks check(s), $fails failure(s)"
+[ "$fails" -eq 0 ] || echo "FAILED"
+exit $([ "$fails" -eq 0 ] && echo 0 || echo 1)
