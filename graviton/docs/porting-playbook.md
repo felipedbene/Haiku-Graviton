@@ -1369,6 +1369,207 @@ add the missing python build requirement.
 
 ---
 
+## Class 35: invalid conversion (-fpermissive)
+
+**#505, 5 ports.** Class 27's sibling: the other C++ conformance tightening gcc reports
+with `[-fpermissive]`. Pre-standard C++ allowed an implicit conversion the current standard
+does not, and gcc reports it as an error while naming the flag that restores the old
+behaviour. Arch-independent — this class would look identical on x86.
+
+**Symptom:**
+```
+haiku.cpp:332:13: error: invalid conversion from 'void**' to 'int**' [-fpermissive]
+```
+
+**Fix.** Fix the conversion at the call site (correct), or add `-fpermissive` to the
+recipe's `CXXFLAGS` as a class-wide unblock.
+
+**Two things this class deliberately does NOT claim, and they are the interesting part.**
+
+1. **`loses precision [-fpermissive]` is excluded.** #505 grouped it in here as "the same
+   shape". It is not. `muscle` emits 256 of them and every one reads
+   `cast from 'const muscle::Socket*' to 'uintptr' {aka 'unsigned int'} loses precision` —
+   a 32-bit `uintptr` typedef, i.e. a real LP64 bug. `-fpermissive` would **compile it and
+   silently truncate every pointer.** An `auto_recoverable=True` class whose template
+   corrupts the package is worse than no class, so `muscle` stays per-port work.
+2. **A bare `[-fpermissive]` signature is wrong.** `deeperpeople` matches it 14 times and
+   every match is a g++ **command line that already passes the flag** — the signature would
+   prescribe the fix that is already applied. `nogravity` (Class 22) matches it too, with a
+   third diagnostic ("expression list treated as compound expression in initializer").
+
+**Example ports:** bebuilder, ftgl, gri, qemacs, rssavers.
+
+---
+
+## Class 36: x86 object linked into an arm64 binary
+
+**#505, 3 ports.** Class 5's **link-time twin**. Class 5 is the arm64 *compiler* rejecting
+an x86 flag or an x86 intrinsic header; this is the arm64 *linker* rejecting a whole x86
+object — a prebuilt `.o` shipped in the tarball, or a `.S` that was assembled for i386.
+`EM: 3` is `EM_386`.
+
+**Symptom:**
+```
+ld: source/mmx_gcc.o: relocations in generic ELF (EM: 3)
+ld: source/mmx_gcc.o: error adding symbols: file in wrong format
+collect2: error: ld returned 1 exit status
+```
+
+**Fix.** Drop the x86 assembly / MMX / prebuilt-object path on arm64 — gate it on
+`$effectiveTargetArchitecture` and build the portable C fallback. Never "fix" it by
+removing the `-l` or the feature (the non-cut rule).
+
+**Ordering.** Inside the `ld` cluster, after Class 18 (missing input) and Class 16
+(duplicate symbol) and **before Class 33** (the generic `undefined reference`): among link
+failures, the class that names *which input is unusable and why* wins. A wrong-format object
+also leaves every symbol in it undefined, so Class 33 would otherwise re-file a fully
+understood failure as an anonymous missing symbol.
+
+**Example ports:** becasso, fasm, sdljoytest.
+
+---
+
+## Class 37: The source's own arch / word-size / endianness #error
+
+**#505, 5 ports.** The **preprocess-time sibling of Class 19**. Class 19 is a configure
+script or Makefile refusing the host; this is the source's own `#include` chain refusing it,
+with an `#error` that says which macro it wanted.
+
+**Symptom:**
+```
+prcpucfg.h:161:2: error: #error "Unknown CPU architecture"
+accanna.h:235:10: error: #error You need to add SIZEOF_VOID_P
+config.h:196:2:  error: #error "Undefined or invalid BYTE_ORDER"
+os.hpp:258:6:    error: #error "Neither LITTLE_ENDIAN nor BIG_ENDIAN are defined."
+chm_lib.c:179:2: error: #error "Please define the sized types for your platform"
+```
+
+**Fix.** Teach the source's own preprocessor switch about aarch64: define the word size,
+endianness or CPU macro it is looking for. Per-port source work, `auto=False`.
+
+**The signature is NOT a bare `error: #error`, and that narrowing corrects a misfiling.**
+The message has to be *about the target*. Measured, that requirement moves `chmlib` **out of
+Class 12**, which is a correction rather than a steal: `chmlib`'s window carries
+`Warning: Unable to fetch source from http://www.jedrea.com/...`, which Class 12 matches —
+but the next lines show the fetch **succeeding** from the DeBeOS source cache
+(`Validating checksum of chmlib-0.40.tar.gz`) and the build then failing at the `#error`.
+Class 12 was filing it by a warning it had recovered from. *A signature that matches a line
+which did not fail the build is the same defect #505 found in the detector, one layer up.*
+
+**Example ports:** canna, chmlib, nspr, redis, unrar.
+
+---
+
+## Class 38: haikuporter Invalid Argument on a source path
+
+**#505, 3 ports (4 counting `tk`).** Not a port defect and not arm64-specific:
+**haikuporter's own** extract/copy step fails with a negative Haiku status. `-2147483643` is
+`B_BAD_VALUE`. Routes to the operator, like Class 30.
+
+**Symptom:**
+```
+[Errno -2147483643] Invalid Argument:
+  '.../sources/freebsd-src-<sha>/sys/contrib/dev/' -> '.../subdir-to-be-folded-by-haikuporter'
+```
+
+**Fix — and re-wave BEFORE investigating.** This failure is **not deterministic per port**.
+`tk` failed with exactly this error on a `subdir-to-be-folded-by-haikuporter` copy and then
+**built unchanged** in the #492 re-wave, while the three `sys-firmware/*` ports did not. A
+per-port investigation would have been wasted on `tk`. If it recurs after a re-wave,
+root-cause it in the retained chroot (path length? a name BFS rejects? a symlink?).
+
+**Why the signature keys on the errno and not the path.** The *negative* errno is what says
+"our tooling, not the build". A *positive* `[Errno N]` is a different animal —
+`openboardview`'s `[Errno 7] No address associated with hostname` is a build that wants the
+network from inside the chroot (Class 17's family) — and is left to the per-port frontier.
+
+**Example ports:** intel_wifi_firmwares, ralink_wifi_firmwares, realtek_wifi_firmwares (and
+`tk`, since built).
+
+---
+
+## Class 39: make has no makefile, or no rule for its entry point
+
+**#505, 3 ports.** make was asked to build and has nothing to build it with.
+
+**Symptom:**
+```
+make: *** No targets specified and no makefile found.  Stop.
+make: *** No rule to make target 'dep'.  Stop.
+make: *** No rule to make target 'all', needed by 'build'.  Stop.
+```
+
+**Fix. Read the lines ABOVE this one before touching the recipe.** There are two causes and
+the fix differs: either `BUILD()` runs make in the wrong directory (no makefile there at
+all), or a configure step that *looked* like it succeeded never generated one. `opensound`
+is the second kind — its own configure prints `Panic: No platform` four lines earlier and
+make's complaint is the consequence, so "fix the working directory" would be the wrong
+route.
+
+**The signature is narrowed to make's own entry points (`all`/`dep`/`build`/`check`/
+`default`) on purpose.** The generic `No rule to make target` also claims `ffcall`
+(`'avcall/avcall.lo'`) and `pnet` (`'cg_ainit.c'`), and those are a **different failure**:
+make found its makefile *and* its entry point and then could not build one intermediate
+**file**, which means a generator or configure step failed earlier. Same wording, different
+cause, different place to look — so they stay on the per-port frontier. `'install'` is
+excluded too: that is Class 9's empty-package trap.
+
+**Ordering: last.** Every class that names a compiler, linker, configure or resolve failure
+gets first refusal, because make saying "I have nothing to do" is usually the *last* thing
+printed after something else went wrong.
+
+**Example ports:** libavlduptree, opensound, slunkcrypt.
+
+---
+
+## Class 40: CMake 4.x removed a policy's OLD behaviour
+
+**#505, 3 ports.** Class 1's sibling. Class 1 is CMake 4.x removing compatibility with
+`cmake_minimum_required` below 3.5; this is CMake 4.x removing the **OLD behaviour of the
+old policies themselves**, so a source that explicitly asks for it cannot be satisfied.
+
+**Symptom:**
+```
+CMake Error at CMakeLists.txt:26 (CMAKE_POLICY):
+  Policy CMP0018 may not be set to OLD behavior because this version of CMake
+  no longer supports it.
+```
+
+**Fix.** Patch the source's `cmake_policy(SET CMPnnnn OLD)` / `CMAKE_POLICY(SET ... OLD)`
+call out and make the source work under the NEW behaviour. **Class 1's
+`-DCMAKE_POLICY_VERSION_MINIMUM=3.5` does not help here** — which is why this is a separate
+class and not a note on Class 1. Per-port source work, `auto=False`. Ordered immediately
+after Class 1 so that Class 1's cheap flag is still tried first when a window carries both.
+
+### Why there is NO class on `CMake Error at`
+
+#505 proposed one, at 9 ports — the largest single new shape in that run — and the ruleset
+deliberately does not add it. `CMake Error at` is cmake's generic error **frame**, not a
+cause. Measured, those 9 logs carry at least four unrelated causes behind that one frame:
+
+| cause | ports |
+|---|---|
+| this policy removal (Class 40) | doxygen2docset, fish, libmysqlclient |
+| a broken `FindBISON` probe (`Command "/bin/bison --version" failed`) | csound, freerct |
+| `GET_TARGET_PROPERTY` on a target that does not exist | efte, libyajl |
+| `Could NOT find GLUT (missing: GLUT_glut_LIBRARY)` — **Class 20's material** | partio |
+
+A class keyed on the frame would file all nine under one fix note that fits none of them,
+**and would take `partio` off the dependency route.** A rule that steals from a more
+specific class is worse than no rule. The frame is still worth recognising as *evidence*,
+which is why it is a `_REASON_ARMS` token in `has_captured_diagnostic()` — it is just not a
+class. The three sub-shapes below 3 ports stay on the per-port frontier.
+
+**And `Could NOT find <Pkg> (missing: …)` was NOT added to Class 20 either**, tempting as
+`partio` makes it: measured, that phrase appears in `csound`'s log three times
+(`CURL`, `Java`, `JNI`) as **non-fatal** optional-dependency chatter, so as a signature it
+would file healthy configure output as a missing dependency. `partio` stays in the ruleset
+gap with its cause named here.
+
+**Example ports:** doxygen2docset, fish, libmysqlclient.
+
+---
+
 ## The 105 UNMATCHED logs that no regex can classify
 
 **#488.** `UNMATCHED` in the census is two different things, and conflating them libels the
@@ -1399,6 +1600,83 @@ epilogue, so it is in *every* log) and `collect2: error: ld returned 1 exit stat
 per-port flag is `no_diagnostic_captured` in the JSON/CSV artifacts, and
 `--dump-unmatched` now writes these into a `no-diagnostic/` subdirectory so the ~24
 actionable logs are not buried under a hundred that are not.
+
+### #505 correction: the DETECTOR was most of it, not the capture
+
+The #492 re-wave gave all 105 the deep capture. Seven built; **32 still read
+`NO_DIAGNOSTIC`** — with the capture demonstrably present (mean window **27.6 → 260.4
+lines**, every log carrying the `---- full build log` marker). So the residual was
+`has_captured_diagnostic()`, not the window. Three-arm test, same 32 logs:
+
+| arm | detector | corpus | reads "no diagnostic" |
+|---|---|---|---:|
+| 1 | as shipped before #505 | new deep capture | **32 / 32** — reproduces the census |
+| 2 | after #505 | new deep capture | **5 / 32** |
+| 3 | after #505 | OLD `tail -20` logs | **12 / 32** — the control |
+
+Arm 3 is the arm that matters, and it was audited line by line rather than by count: **20 of
+the 32 truncated windows contained a real reason line all along** (`unzip: cannot find/open`,
+`objcopy: … No such file`, `id: 'user': no such user`, `zic: … Operation not allowed`,
+`[Errno -2147483643]`, `make: *** No targets specified…`), and the remaining 12 contain
+nothing, so the widened lexicon is matching reasons and not epilogue. **A good part of what
+was blamed on the `tail -20` capture was never a capture problem.**
+
+Two defects, and the second is the one worth remembering:
+
+1. **`\b(?:error|fatal error):` demanded the colon**, so `CMake Error at`,
+   `error adding symbols:`, `relocations in generic ELF`, `[Errno …]`,
+   `unzip: cannot find/open`, `objcopy: … No such file` (no `or directory`),
+   `syntax error near`, `Can't locate … in @INC` and `Operation not allowed` were all
+   invisible. Each is now a **named arm** in `_REASON_ARMS` with its own mutation test.
+2. **The `^make: \*\*\*` exclusion was documented "inert today" — measured against the OLD
+   corpus — and on the new one it ate the ENTIRE diagnostic** for `libavlduptree`,
+   `slunkcrypt` and `opensound`, whose only reason line is one make prints itself. It now
+   suppresses only make's exit-status *recursion* (`*** [target] Error N`,
+   `*** Waiting for unfinished jobs`), not make's statements about the build graph.
+
+> **An exclusion justified by a measurement on one corpus became a defect on another.
+> Re-measure exclusions when the corpus changes.** "Inert" is a property of the *corpus*,
+> not of the regex — and writing it in a comment is what made the defect invisible, because
+> a reader takes it for a property of the pattern. The two make arms are redundant *again*
+> after the narrowing (no reason token matches `*** [t] Error N`), and that fact is now
+> asserted by the `nodiag-make` mutation arm instead of claimed in a comment: when it fails,
+> a reason arm has started matching make's recursion and someone has to choose a side.
+
+**Census over the cached backlog, before → after:** `NO_DIAGNOSTIC` **32 → 5**; the six new
+classes 35–40 claim 22 ports; one existing filing corrected (`chmlib`, Class 12 → 37); no
+other class moved. The 5 that remain are **not** truncation:
+
+* `stockfish` and `di` — **genuinely silent, and the capture is whole.** stockfish's
+  `config-sanity` target exits non-zero without printing why. `di`'s `mkconfig` prints
+  `COMPILE digetentries.c ... fail` and nothing else — measured over its **complete 372-line
+  log**, the compiler's own message never reaches stdout at all. These two need the *build
+  tool's* private log, not a bigger tail; that is the next honest capture improvement, and it
+  is a different job from raising the line cap.
+* `camlp5` and `libimagequant` — **state a reason, in prose no lexicon arm recognises**:
+  `You need the command ocamlc accessible in the path!` (Class 2's shape, in words) and
+  `OpenMP: error ... not supported by compiler (please install a compiler that supports
+  OpenMP …)` — note `error` followed by a *space*, again. Deliberately left alone: each is one
+  port, and an arm fitted to one port's sentence is how a lexicon stops discriminating. Worth
+  an arm if either wording recurs.
+* `cmake_haiku` — **not a failure at all**: the known headless-`mimeset` false failure, whose
+  `.hpkg` exists. There is no reason line because there was no reason. That is #505 §C, the
+  false-failure record path, not a detector gap.
+
+**Still owed on the capture side:** `pnet`'s log is **416,720 lines**, so it took the
+`head+grep+tail` path and the root cause is in the discarded middle. The widened detector now
+sees a reason line in it (`make[1]: *** No rule to make target 'cg_ainit.c'`), but that is a
+*symptom*: the generator that should have produced `cg_ainit.c` failed somewhere in the
+middle 400k lines. **A capture gap, not a detector one** — fix it by uploading the whole
+gzipped log past the line cap, and do not read the recovered symptom as a diagnosis.
+
+**And one correction to #505's own text:** `ffcall` was reported as "the one honest silent
+build — no diagnostic anywhere in a complete 768-line log". It is not silent. Line **340 of
+768** reads `make: *** No rule to make target 'avcall/avcall.lo', needed by 'libffcall.la'.
+Stop.`, with a second at line 702. The reason it read as silent is that it is in the
+*middle*: the tail shows only `make: *** [Makefile:68: all-subdirs] Error 2`. No signature
+was invented for it — it is claimed by no class (Class 39 is narrowed to exclude exactly this
+shape) and sits in the ruleset gap, which is the honest place for "we can see why, and we
+have no class yet".
 
 **What is left in the 24 is a genuine per-port long tail**, each a distinct real error
 (`cabextract`: `static declaration of 'strlen' follows non-static`; `unrar`: neither

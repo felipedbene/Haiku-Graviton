@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""haiku-triage-failures-selftest [--mutate [ARM ...]] [--logs DIR] [--list-arms]
+"""haiku-triage-failures-selftest [--mutate [ARM ...]] [--logs DIR] [--deep-logs DIR]
+                                 [--list-arms]
 
 Offline test for haiku-triage-failures' ruleset -- above all for its ORDER. No AWS, no
 network: it imports the classifier and runs it over synthetic logs assembled from
@@ -30,17 +31,31 @@ The mutation works on the loaded RULES list rather than on the file's text, so a
 of a regex does not silently make an arm vacuous -- neutralize() raises when it finds
 nothing to disarm, which is the loud failure a text-anchor gave us before.
 
+#488 covered the RULES ruleset. #505 added a third subject: the NO_DIAGNOSTIC detector's own
+lexicon. That lexicon was widened from 5 tokens to 15 named arms, and a widened detector is
+only known to work if EACH arm can be shown to be the thing that recovered its port -- so
+each gets its own `line-*` mutation arm (disarm one arm, all others intact, assert the port
+it was added for falls back to reading no-diagnostic). One arm, `nodiag-make`, exists to
+assert that a mutation changes NOTHING: see its comment, which is the #505 lesson in
+executable form.
+
   --mutate [ARM ...]  run the mutation arms (all of them with no argument). Exits 0 when
                       every mutation is DETECTED, i.e. every fixture fell through as
-                      predicted.
+                      predicted. A bogus arm name exits 1 rather than passing vacuously.
   --logs DIR          additionally classify every *.log in DIR (a local cache of real
                       backlog logs) and assert the measured per-class membership -- the
                       counts from the #488 census. Skipped when the directory is absent,
                       so the test still runs on a machine with no cache.
+  --deep-logs DIR     the same, over a cache of DEEP-capture logs (*.log.gz) from the #492
+                      re-wave: #505's arm 2. Pass BOTH --logs and --deep-logs to get the
+                      control in one run -- the widened lexicon must see MORE on the deep
+                      corpus than on the truncated one, or it is matching boilerplate that
+                      is in every log instead of reasons that are only in some.
   --list-arms         print the mutation arms and exit.
 """
 import argparse
 import glob
+import gzip
 import os
 import re
 import sys
@@ -64,6 +79,28 @@ def load():
     mod.__dict__["__file__"] = CLASSIFIER
     exec(compile(open(CLASSIFIER).read(), CLASSIFIER, "exec"), mod.__dict__)
     return mod
+
+
+def neutralize_line_arm(mod, table, name):
+    """Disarm exactly ONE named arm of the NO_DIAGNOSTIC line classifiers (#505), leaving
+    every other arm in place, and rebuild the compiled regex from what is left.
+
+    `table` is "reason" or "contentless". This is the mutation the #505 fix needs and the
+    old whole-regex mutation could not express: a widened lexicon is only known to work if
+    each token can be shown to be the thing that recovered its port. Raises when the name
+    is unknown -- a renamed arm must break this test loudly, not pass it vacuously."""
+    attr = "_REASON_ARMS" if table == "reason" else "_CONTENTLESS_ARMS"
+    arms = getattr(mod, attr)
+    if name not in {n for n, _ in arms}:
+        sys.exit("line-arm mutation point not found: %s/%s -- the arm was renamed or "
+                 "removed; update this test rather than deleting it" % (table, name))
+    kept = tuple((n, p) for n, p in arms if n != name)
+    setattr(mod, attr, kept)
+    rebuilt = mod._join(kept) if kept else NEVER
+    if table == "reason":
+        mod._REASON_LINE = rebuilt
+    else:
+        mod._CONTENTLESS_LINE = rebuilt
 
 
 def neutralize(mod, cls, substr=None):
@@ -320,6 +357,132 @@ FETCHCONTENT_PLUS_POLICY = FETCHCONTENT.replace(
     "-- Configuring incomplete, errors occurred!")
 
 
+# --- #505 fixtures ---------------------------------------------------------------
+# Every fixture below is verbatim from one of the 32 logs that the #492 re-wave gave a deep
+# capture and that the OLD detector still read as NO_DIAGNOSTIC. They therefore do double
+# duty: they pin the six new classes, AND they are the ports whose recovery the widened
+# _REASON_ARMS has to be shown to cause.
+
+# 36. becasso/fasm/sdljoytest: ld handed an EM_386 object. Note this window's ONLY
+# reason-shaped lines are ld's two -- `collect2: error: ld returned 1 exit status` is
+# suppressed as contentless, so without the `ld-wrong-format` arm the log looks empty.
+WRONG_FORMAT_OBJECT = fx("becasso", """/boot/system/develop/tools/bin/../lib/gcc/aarch64-unknown-haiku/13.3.0/../../../../aarch64-unknown-haiku/bin/ld: source/mmx_gcc.o: relocations in generic ELF (EM: 3)
+/boot/system/develop/tools/bin/../lib/gcc/aarch64-unknown-haiku/13.3.0/../../../../aarch64-unknown-haiku/bin/ld: source/mmx_gcc.o: error adding symbols: file in wrong format
+collect2: error: ld returned 1 exit status
+...failed Link source/Becasso ...""", cat="media-gfx")
+
+# 40. libmysqlclient: CMake 4.x removed the OLD behaviour of the policy the source asks for.
+CMAKE_POLICY_OLD = fx("libmysqlclient", """CMake Error at CMakeLists.txt:26 (CMAKE_POLICY):
+  Policy CMP0018 may not be set to OLD behavior because this version of CMake
+  no longer supports it.  The OLD behavior for policy CMP0018 will be removed
+  from a future version of CMake.
+  behavior.  Run cmake --help-policy CMP0018 for more information.
+-- Configuring incomplete, errors occurred!""", cat="dev-db")
+
+# The same window ALSO carrying class 1's pre-3.5 removal: class 1's flag is the cheap thing
+# to try and must win. Synthetic -- no cached log shows both.
+CMAKE_POLICY_OLD_PLUS_PRE35 = CMAKE_POLICY_OLD.replace(
+    "-- Configuring incomplete, errors occurred!",
+    "CMake Error at _deps/x/CMakeLists.txt:1 (cmake_minimum_required):\n"
+    "  Compatibility with CMake < 3.5 has been removed from CMake.\n"
+    "-- Configuring incomplete, errors occurred!")
+
+# 37. nspr: the source's own preprocessor cannot name the CPU.
+ARCH_HASH_ERROR = fx("nspr", """../../../dist/include/nspr/prcpucfg.h:161:2: error: #error "Unknown CPU architecture"
+  161 | #error "Unknown CPU architecture"
+../../../dist/include/nspr/prtypes.h:221:2: error: #error No suitable type for PRInt8/PRUint8
+make[1]: *** [Makefile:198: prlink.o] Error 1""", cat="dev-libs")
+
+# chmlib is the measured CORRECTION, not a synthetic tie: class 12 was filing it by a fetch
+# WARNING it then recovered from (the mirror failed, the DeBeOS source cache served it, the
+# checksum validated) and the build went on to fail at a real compile error. Class 37 must
+# take it, and class 12 must not.
+ARCH_HASH_ERROR_AFTER_RECOVERED_FETCH = fx("chmlib", """Downloading: http://www.jedrea.com/chmlib/chmlib-0.40.tar.gz ...
+[srccache] FAIL http://www.jedrea.com/chmlib/chmlib-0.40.tar.gz (upstream fetch failed or truncated; cached nothing)
+Warning: Unable to fetch source from http://www.jedrea.com/chmlib/chmlib-0.40.tar.gz
+Downloading: https://sources.debene.dev/chmlib/chmlib-0.40.tar.gz ...
+Validating checksum of chmlib-0.40.tar.gz
+chm_lib.c:179:2: error: #error "Please define the sized types for your platform in chm_lib.c"
+make: *** [Makefile:40: chm_lib.o] Error 1""", cat="dev-libs")
+
+# 35. qemacs: an implicit conversion pre-standard C++ allowed.
+FPERMISSIVE_CONVERSION = fx("qemacs", """haiku.cpp:332:13: error: invalid conversion from 'void**' to 'int**' [-fpermissive]
+  332 |   get_clipboard(&data, &len);
+make: *** [Makefile:222: haiku.o] Error 1""", cat="app-editors")
+
+# deeperpeople matches a BARE `[-fpermissive]` fourteen times, and every one is a g++
+# command line that ALREADY passes the flag. It must not be class 35: prescribing
+# -fpermissive to a build that already has it is worse than leaving it unclassified.
+FPERMISSIVE_ALREADY_ON_THE_COMMAND_LINE = fx("deeperpeople", """g++ -c main.cpp -iquote./  -iquoteobjects/  -O0   -fpermissive -Wshadow -Wconversion -Winline -o "objects/main.o"
+g++ -c PeopleApp.cpp -iquote./  -iquoteobjects/  -O0   -fpermissive -Wshadow -o "objects/PeopleApp.o"
+make: *** [makefile-engine:314: objects/main.o] Error 1""", cat="haiku-apps")
+
+# muscle: `loses precision [-fpermissive]` is a 32-bit uintptr typedef, i.e. an LP64 bug.
+# -fpermissive would compile it and truncate every pointer, so class 35 must NOT claim it.
+FPERMISSIVE_LOSES_PRECISION = fx("muscle", """../util/PointerAndBool.h:111:67: error: cast from 'const muscle::Socket*' to 'uintptr' {aka 'unsigned int'} loses precision [-fpermissive]
+  111 |    return (uintptr)_pointer;
+make: *** [Makefile:88: PointerAndBool.o] Error 1""", cat="dev-libs")
+
+# 38. the sys-firmware ports: haikuporter's own copy step, B_BAD_VALUE.
+HAIKUPORTER_BAD_VALUE = fx("intel_wifi_firmwares", """[Errno -2147483643] Invalid Argument: '/boot/home/haikuports/sys-firmware/intel-wifi-firmwares/work-2025_02_11/sources/freebsd-src-50b5a6cc0ad284c55ad95d0b8a2b3190d045b7a3/sys/contrib/dev/' -> '/boot/home/haikuports/sys-firmware/intel-wifi-firmwares/work-2025_02_11/sources/subdir-to-be-folded-by-haikuporter'""",
+                          cat="sys-firmware", preamble="")
+
+# 39. libavlduptree/slunkcrypt: make has no makefile at all. The ONLY reason line in the
+# window is one that _CONTENTLESS_ARMS used to eat -- this fixture is the whole of #505's
+# second defect.
+NO_MAKEFILE = fx("libavlduptree", """make: *** No targets specified and no makefile found.  Stop.""",
+                 cat="dev-libs")
+
+# opensound: make found a makefile but has no rule for its entry point, and the REAL cause
+# is four lines higher. Kept verbatim so the class note's "read the lines above" is testable.
+NO_RULE_FOR_ENTRY_POINT = fx("opensound", """Build tree created OK
+Panic: No platform
+System: BeOS
+Machine: arm64
+Source configuration failed
+make: *** No rule to make target 'dep'.  Stop.
+make: *** No rule to make target 'all', needed by 'build'.  Stop.""", cat="media-sound")
+
+# ffcall and pnet carry the SAME wording for a different cause: make could not build one
+# intermediate FILE, which means an earlier generator or configure step failed. Class 39 is
+# narrowed to make's entry points precisely so these two stay out of it.
+NO_RULE_FOR_ONE_FILE = fx("ffcall", """make: *** No rule to make target 'avcall/avcall.lo', needed by 'libffcall.la'.  Stop.
+make[1]: *** No rule to make target 'vacall_r/libvacall.la', needed by 'libcallback.la'.  Stop.
+make: *** [Makefile:68: all-subdirs] Error 2""", cat="dev-libs")
+
+# Windows whose ONE reason line exercises a single widened _REASON_ARMS arm. Each is the
+# verbatim line from the named port, and each is the per-arm mutation target below.
+CMAKE_FRAME_ONLY = fx("efte", """CMake Error at src/CMakeLists.txt:148 (GET_TARGET_PROPERTY):
+  get_target_property() called with non-existent target "efte".
+-- Configuring incomplete, errors occurred!""", cat="app-editors")
+ARCHIVE_OPEN_ONLY = fx("helpviewer", """unzip:  cannot find/open "arm64/HelpViewer.zip", "arm64/HelpViewer.zip.zip", or "arm64/HelpViewer.zip.ZIP".""",
+                       cat="haiku-apps")
+SHORT_ENOENT_ONLY = fx("hwloc2", """objcopy: '/packages/hwloc2_tools-2.10.0-2/.self/bin/hwloc-gather-cpuid': No such file""",
+                       cat="sys-apps")
+SYNTAX_ERROR_ONLY = fx("libeditline", """./configure: line 14785: syntax error near unexpected token `;;'""",
+                       cat="dev-libs")
+PERL_INC_ONLY = fx("ne", """Can't locate Texinfo/ModulePath.pm in @INC (you may need to install the Texinfo::ModulePath module)
+BEGIN failed--compilation aborted at /bin/makeinfo line 120.
+make: *** [makefile:148: enums.h] Error 3""", cat="app-editors")
+NO_SUCH_USER_ONLY = fx("privoxy", """id: 'user': no such user
+make: *** [GNUmakefile:832: install] Error 1""", cat="net-proxy")
+NOT_ALLOWED_ONLY = fx("timezone_data", """./zic: Can't link /packages/timezone_data-2026b-1/.self/data/zoneinfo/Africa/Abidjan to /packages/timezone_data-2026b-1/.self/data/zoneinfo/Africa/Accra: Operation not allowed 8000000f
+make: *** [Makefile:830: posix_only] Error 1""", cat="sys-libs")
+ERRNO_FRAME_ONLY = fx("openboardview", """socket.gaierror: [Errno 7] No address associated with hostname
+make[2]: *** [build.make:74: src/glad/src/glad.c] Error 1""", cat="sci-electronics")
+
+# THE GENUINELY SILENT WINDOW, and the reason this file still has a False expectation after
+# #505. stockfish's Makefile runs a config-sanity test that exits non-zero without printing
+# why; the capture is whole (112 lines) and there is simply no reason in it. A detector that
+# calls this diagnosed has stopped discriminating.
+SILENT_BUILD = fx("stockfish", """neon: 'no'
+arm_version: '0'
+
+Testing config sanity. If this fails, try 'make help' ...
+
+make: *** [Makefile:1045: config-sanity] Error 1""", cat="games-board")
+
+
 # --- synthetic ties -------------------------------------------------------------------
 # Three ordering claims in the ruleset are GUARDS rather than fixes for an observed
 # misfiling: no cached log exhibits the tie, so moving the rule reclassifies nothing and
@@ -340,6 +503,13 @@ UNDEF_REF_PLUS_RESOLVE = UNDEF_REF.replace(
     "collect2: error: ld returned 1 exit status\n",
     "collect2: error: ld returned 1 exit status\n"
     'Error: \tReason: build-requires "devel:libfoo" of package "kbuild-1.0" could not be resolved\n')
+# 36 vs 33: a wrong-format input object also leaves every symbol in it undefined. The class
+# that names WHICH INPUT is unusable must win over the generic missing-symbol class.
+# Synthetic -- none of becasso/fasm/sdljoytest also says "undefined reference".
+WRONG_FORMAT_PLUS_UNDEF_REF = WRONG_FORMAT_OBJECT.replace(
+    "collect2: error: ld returned 1 exit status\n",
+    "main.o:(.text+0x40): undefined reference to `mmx_blit'\n"
+    "collect2: error: ld returned 1 exit status\n")
 
 
 # --- the expectation tables ------------------------------------------------------
@@ -371,11 +541,27 @@ POSITIVE = [
     ("missing -l beats multidef", MULTIDEF_PLUS_MISSING_LIB, 18),
     ("narrowing WARNING only", NARROWING_WARNING_ONLY, None),
     ("arm -mcpu typo is not x86", ARM_MCPU_TYPO, None),
+    # #505 -- the six new classes
+    ("fpermissive conversion", FPERMISSIVE_CONVERSION, 35),
+    ("x86 object at link time", WRONG_FORMAT_OBJECT, 36),
+    ("source's own arch #error", ARCH_HASH_ERROR, 37),
+    # the measured correction: class 12 was filing this by a fetch warning it recovered from
+    ("#error after recovered fetch", ARCH_HASH_ERROR_AFTER_RECOVERED_FETCH, 37),
+    ("haikuporter B_BAD_VALUE", HAIKUPORTER_BAD_VALUE, 38),
+    ("no makefile at all", NO_MAKEFILE, 39),
+    ("no rule for make's entry point", NO_RULE_FOR_ENTRY_POINT, 39),
+    ("cmake policy OLD removed", CMAKE_POLICY_OLD, 40),
+    # ... and the three things that must stay OUT of them
+    ("-fpermissive already passed", FPERMISSIVE_ALREADY_ON_THE_COMMAND_LINE, None),
+    ("loses precision is an LP64 bug", FPERMISSIVE_LOSES_PRECISION, None),
+    ("no rule for one FILE", NO_RULE_FOR_ONE_FILE, None),
     # synthetic ties (see above)
     ("15 beats 10 [synthetic]", CFLAGS_GUARD_PLUS_AUX, 15),
     ("2 beats 28 [synthetic]", CONFIGURE_NO_EXE_BECAUSE_NO_GCC, 2),
     ("33 beats 20 [synthetic]", UNDEF_REF_PLUS_RESOLVE, 33),
     ("1 beats 17 [synthetic]", FETCHCONTENT_PLUS_POLICY, 1),
+    ("36 beats 33 [synthetic]", WRONG_FORMAT_PLUS_UNDEF_REF, 36),
+    ("1 beats 40 [synthetic]", CMAKE_POLICY_OLD_PLUS_PRE35, 1),
 ]
 
 # (label, fixture, class it must NOT be). Stated separately from POSITIVE because the
@@ -395,6 +581,20 @@ NEGATIVE = [
     ("no-gcc probe is not 28 [synth]", CONFIGURE_NO_EXE_BECAUSE_NO_GCC, 28),
     ("undef+resolve is not 20 [synth]", UNDEF_REF_PLUS_RESOLVE, 20),
     ("fetch+policy is not 17 [synth]", FETCHCONTENT_PLUS_POLICY, 17),
+    # #505. THE NEGATIVES ARE THE POINT OF THIS HALF: five of the six new classes were
+    # deliberately narrowed, and the narrowing is invisible unless something is asserted NOT
+    # to match. Each of these is a port a broader spelling of the signature DID claim when
+    # measured over the 639-log cache.
+    ("deeperpeople is not 35", FPERMISSIVE_ALREADY_ON_THE_COMMAND_LINE, 35),
+    ("muscle is not 35", FPERMISSIVE_LOSES_PRECISION, 35),
+    ("ffcall is not 39", NO_RULE_FOR_ONE_FILE, 39),
+    ("chmlib is not 12", ARCH_HASH_ERROR_AFTER_RECOVERED_FETCH, 12),
+    ("wrong-format is not 33 [synth]", WRONG_FORMAT_PLUS_UNDEF_REF, 33),
+    ("policy+pre3.5 is not 40 [synth]", CMAKE_POLICY_OLD_PLUS_PRE35, 40),
+    # partio is the reason there is no `CMake Error at` CLASS: its cause is a missing
+    # dependency, and a frame-level class would have taken it off that route. The frame is
+    # recognised as evidence (see the captured-diagnostic arms) and nothing more.
+    ("cmake frame alone claims no class", CMAKE_FRAME_ONLY, 40),
 ]
 
 # Mutation arms: (arm name, class to disarm, pattern substring or None,
@@ -430,11 +630,64 @@ ARMS = [
     ("17", 17, None, [("FetchContent falls through", FETCHCONTENT, None)]),
     ("18-abspath", 18, "boot/system/lib",
      [("abs-path lib falls through", MISSING_LIB_BY_PATH, None)]),
+    # --- #505's six classes ------------------------------------------------------------
+    ("35", 35, None, [("fpermissive falls through", FPERMISSIVE_CONVERSION, None)]),
+    # with 36 disarmed the wrong-format log lands in 33 -- proving that 36's position ahead
+    # of 33, and nothing else, is what files it by the input rather than by the symbol.
+    ("36", 36, None, [("wrong-format -> class 33", WRONG_FORMAT_PLUS_UNDEF_REF, 33),
+                      ("plain wrong-format falls through", WRONG_FORMAT_OBJECT, None)]),
+    # and with 37 disarmed chmlib goes BACK to class 12 -- which is the measurement that
+    # proves 37's position, not class 12's regex, is what corrected it.
+    ("37", 37, None, [("arch #error falls through", ARCH_HASH_ERROR, None),
+                      ("chmlib regresses to 12",
+                       ARCH_HASH_ERROR_AFTER_RECOVERED_FETCH, 12)]),
+    ("38", 38, None, [("B_BAD_VALUE falls through", HAIKUPORTER_BAD_VALUE, None)]),
+    ("39", 39, None, [("no makefile falls through", NO_MAKEFILE, None),
+                      ("no rule for 'dep' falls through", NO_RULE_FOR_ENTRY_POINT, None)]),
+    ("40", 40, None, [("policy OLD falls through", CMAKE_POLICY_OLD, None),
+                      # and the pre-3.5 log does not move: it was never class 40's.
+                      ("pre-3.5 stays class 1", CMAKE_POLICY_OLD_PLUS_PRE35, 1)]),
 ]
 
 # A pseudo-arm: the NO_DIAGNOSTIC machinery is not a RULES entry, so it is mutated by
 # disarming its two line classifiers directly.
 NODIAG_ARM = "nodiag"
+
+# #505: and each WIDENED lexicon arm gets its own mutation, because a widened detector is
+# only known to work if every token can be shown to be the thing that recovered its port.
+# (arm name, table, arm name in that table, [(label, fixture, expected has_diagnostic)]).
+# Every expectation here is False: disarm the token and the window that token rescued must
+# go back to looking empty. An arm that cannot be made to fail was never doing the work.
+LINE_ARMS = [
+    ("line-cmake-frame", "reason", "cmake-frame", [("efte", CMAKE_FRAME_ONLY)]),
+    ("line-ld-wrong-format", "reason", "ld-wrong-format", [("becasso", WRONG_FORMAT_OBJECT)]),
+    ("line-errno-frame", "reason", "errno-frame",
+     [("wifi firmwares", HAIKUPORTER_BAD_VALUE), ("openboardview", ERRNO_FRAME_ONLY)]),
+    ("line-make-build-graph", "reason", "make-build-graph",
+     [("libavlduptree", NO_MAKEFILE), ("ffcall", NO_RULE_FOR_ONE_FILE)]),
+    ("line-syntax-error", "reason", "syntax-error", [("libeditline", SYNTAX_ERROR_ONLY)]),
+    ("line-perl-inc", "reason", "perl-inc", [("ne", PERL_INC_ONLY)]),
+    ("line-archive-open", "reason", "archive-open", [("helpviewer", ARCHIVE_OPEN_ONLY)]),
+    ("line-enoent", "reason", "enoent", [("hwloc2 objcopy", SHORT_ENOENT_ONLY)]),
+    ("line-no-such-user", "reason", "no-such-user", [("privoxy", NO_SUCH_USER_ONLY)]),
+    ("line-enotallowed", "reason", "enotallowed", [("timezone_data", NOT_ALLOWED_ONLY)]),
+]
+
+# The one contentless arm whose mutation is EXPECTED TO CHANGE NOTHING, stated as a test
+# rather than as a comment -- which is the whole lesson of #505. Before #505 the make arm
+# swallowed every `make: *** ...` line and carried a comment saying "inert today, measured
+# over the 639-log cache"; that measurement was true of the OLD corpus and became a defect
+# on the new one, and the comment is what made it invisible, because a reader takes
+# "inert" for a property of the regex.
+#
+# After the narrowing the two make arms are redundant AGAIN, for a different and much
+# narrower reason: no _REASON_ARMS token matches `make: *** [<target>] Error N`, so
+# suppressing it changes no verdict. They are kept as insurance -- if a future reason arm
+# ever does match that line, every truncated window would silently read as diagnosed -- and
+# THIS ARM IS THE MEASUREMENT, in executable form. When it fails, a reason arm has started
+# matching make's exit-status recursion: go and decide which side is right. Do NOT "fix" it
+# by deleting the assertion.
+NODIAG_MAKE_ARM = "nodiag-make"
 
 # Measured per-class membership over the cached 639-log backlog (#488 census). Asserted
 # as EXACT SETS, not counts: a count can stay right while two ports swap classes.
@@ -460,11 +713,59 @@ CACHED_EXPECT = {
     25: "crawl devilutionx ecwolf endless_sky eternal_lands exiv2 ffmpeg6 grafx2 "
         "gst_plugins_bad hikounomizu libjxl librnp lighttpd lugaru minetest ocp "
         "python3.13 qemu radare2 spice vice warzone2100",
+    # #505's six classes, as they land on THIS corpus -- which is the pre-re-wave
+    # `tail -20` cache, so most of their ports are still truncated here and only the few
+    # whose reason line happened to survive the window appear. The same six classes claim
+    # 22 ports on the deep capture; the gap between these numbers is the cost of the old
+    # capture, measured.
+    35: "rssavers",
+    36: "fasm sdljoytest",
+    37: "unrar",
+    # `tk` is real and is the reason class 38's note says "re-wave it first": it carried the
+    # same B_BAD_VALUE on a fold-subdir copy in this cache and then BUILT unchanged in the
+    # #492 re-wave.
+    38: "intel_wifi_firmwares ralink_wifi_firmwares realtek_wifi_firmwares tk",
+    39: "libavlduptree opensound slunkcrypt",
+    # class 40 claims NOTHING here: all three of its ports state their reason too far up the
+    # log for a `tail -20` window. Asserted as an empty set on purpose -- it is the cleanest
+    # single demonstration in this file that the old capture, not the ruleset, was the limit.
+    40: "",
 }
-# UNMATCHED residue after #488, and its split. 105 of the 129 carry no diagnostic at all
-# -- a pre-3371e78289 `tail -20` artifact, not a ruleset gap.
-CACHED_UNMATCHED = 129
-CACHED_NODIAG = 105
+# UNMATCHED residue over this cache, and its split, AFTER #505. Was 129 / 105 / 24 before:
+# the six new classes take 11 (all of them previously no-diagnostic or gap), and the widened
+# detector moves 22 more out of NO_DIAGNOSTIC into the ruleset gap without reclassifying
+# anything. The gap GROWING is the honest direction: those logs always stated a reason and
+# the detector could not read it.
+CACHED_UNMATCHED = 118
+CACHED_NODIAG = 83
+
+# --- the #492 DEEP-capture corpus (--deep-logs) -----------------------------------------
+# The 105 re-waved ports as they came back with the current deep capture. This is the corpus
+# on which #505's headline was measured, and asserting the EXACT no-diagnostic set here is
+# what turns "NO_DIAGNOSTIC fell 32 -> 5" from a claim in a PR body into a test.
+#
+# Arm 1 of the three-arm test (the detector AS SHIPPED BEFORE #505 reading 32/32 on this same
+# corpus) is deliberately NOT asserted here: that detector no longer exists in the tree, so
+# the assertion would have to carry a copy of it. It is re-derivable instead --
+#   git show <pre-505>:graviton/scripts/haiku-triage-failures
+# -- and its only job was to prove the harness reproduced the census, which arm 2 inherits.
+DEEP_EXPECT = {
+    35: "bebuilder ftgl gri qemacs",       # rssavers is in the older cache, not this one
+    36: "becasso fasm sdljoytest",
+    37: "canna chmlib nspr redis",         # unrar likewise
+    38: "intel_wifi_firmwares ralink_wifi_firmwares realtek_wifi_firmwares",
+    39: "libavlduptree opensound slunkcrypt",
+    40: "doxygen2docset fish libmysqlclient",
+}
+# The whole point, as an exact set. Two groups, and the distinction is the finding:
+#   * blis graphicsmagick lbreakouthd squashfs_tools tk -- these BUILT in the re-wave, so
+#     their logs are SUCCESS logs and carry no failure reason. Reading them as
+#     "no diagnostic" is correct, and their presence here is a consistency check on the
+#     detector rather than a residue.
+#   * camlp5 cmake_haiku di libimagequant stockfish -- the five genuine residue. None is a
+#     truncation artifact; see the playbook's #505 section for what each one actually is.
+DEEP_NODIAG = ("blis camlp5 cmake_haiku di graphicsmagick lbreakouthd libimagequant "
+               "squashfs_tools stockfish tk")
 
 
 def main():
@@ -472,6 +773,9 @@ def main():
     ap.add_argument("--mutate", nargs="*", metavar="ARM", default=None,
                     help="run the mutation arms (all of them with no argument)")
     ap.add_argument("--logs", default="")
+    ap.add_argument("--deep-logs", default="",
+                    help="a cache of DEEP-capture logs (*.log.gz) from the #492 re-wave; "
+                         "asserts #505's arm 2. Skipped when absent.")
     ap.add_argument("--list-arms", action="store_true")
     args = ap.parse_args()
 
@@ -480,8 +784,13 @@ def main():
             print("%-14s disarm class %-3s %-24s -> %s"
                   % (name, cls, substr or "(all patterns)",
                      ", ".join(lbl for lbl, _, _ in checks)))
-        print("%-14s disarm _CONTENTLESS_LINE / _REASON_LINE -> the NO_DIAGNOSTIC split"
+        for name, table, arm, checks in LINE_ARMS:
+            print("%-22s disarm %s arm %-20s -> %s falls back to NO_DIAGNOSTIC"
+                  % (name, table, arm, ", ".join(lbl for lbl, _ in checks)))
+        print("%-22s disarm _CONTENTLESS_LINE / _REASON_LINE -> the NO_DIAGNOSTIC split"
               % NODIAG_ARM)
+        print("%-22s disarm both make suppressors -> asserts they are REDUNDANT today"
+              % NODIAG_MAKE_ARM)
         return 0
 
     fails = passes = 0
@@ -538,13 +847,37 @@ def main():
                 ("ENOSPC",
                  fx("someport", "cp: error writing 'x.o': No space left on device"), True),
                 ("EACCES",
-                 fx("someport", "/bin/sh: ./configure: Permission denied"), True)):
+                 fx("someport", "/bin/sh: ./configure: Permission denied"), True),
+                # --- #505: one positive per widened arm, each window carrying that arm's
+                # token as its ONLY reason line, so the arm is tested and not masked.
+                ("cmake frame", CMAKE_FRAME_ONLY, True),
+                ("wrong-format object", WRONG_FORMAT_OBJECT, True),
+                ("haikuporter B_BAD_VALUE", HAIKUPORTER_BAD_VALUE, True),
+                ("python errno", ERRNO_FRAME_ONLY, True),
+                ("no makefile", NO_MAKEFILE, True),
+                ("no rule for one file", NO_RULE_FOR_ONE_FILE, True),
+                ("configure syntax error", SYNTAX_ERROR_ONLY, True),
+                ("perl module missing", PERL_INC_ONLY, True),
+                ("unzip cannot find/open", ARCHIVE_OPEN_ONLY, True),
+                ("objcopy short ENOENT", SHORT_ENOENT_ONLY, True),
+                ("id: no such user", NO_SUCH_USER_ONLY, True),
+                ("zic: Operation not allowed", NOT_ALLOWED_ONLY, True),
+                # --- and the negative that keeps the widening honest. stockfish's window is
+                # WHOLE (112 lines) and still states no reason: its Makefile's config-sanity
+                # test exits non-zero silently. A lexicon wide enough to call this diagnosed
+                # has stopped discriminating, and the bucket stops meaning anything.
+                ("genuinely silent build", SILENT_BUILD, False)):
             got = mod.has_captured_diagnostic(text)
             check("diagnostic? %s" % label, got, want)
     else:
         # ---------------- mutation runs -------------------------------------------
-        want_arms = set(args.mutate) or ({n for n, _, _, _ in ARMS} | {NODIAG_ARM})
-        unknown = want_arms - ({n for n, _, _, _ in ARMS} | {NODIAG_ARM})
+        all_arms = ({n for n, _, _, _ in ARMS} | {n for n, _, _, _ in LINE_ARMS}
+                    | {NODIAG_ARM, NODIAG_MAKE_ARM})
+        want_arms = set(args.mutate) or all_arms
+        # A bogus arm name must exit 1, never pass vacuously: `--mutate nonsense` running
+        # zero checks and printing "MUTATIONS CONFIRMED" is exactly the false green this
+        # whole file exists to prevent.
+        unknown = want_arms - all_arms
         if unknown:
             sys.exit("unknown mutation arm(s): %s (see --list-arms)" % ", ".join(sorted(unknown)))
         for name, cls, substr, checks in ARMS:
@@ -571,6 +904,31 @@ def main():
             mod._REASON_LINE = NEVER
             check("nodiag/reason disarmed",
                   mod.has_captured_diagnostic(NARROWING_ERROR), False)
+
+        # #505: the per-token mutations. Each disarms ONE widened _REASON_ARMS arm, leaving
+        # every other arm and the whole ruleset intact, and asserts that the port that arm
+        # was added for goes back to reading NO_DIAGNOSTIC. This is what makes the
+        # "32 -> 5" recovery attributable arm by arm instead of collectively.
+        for name, table, arm, checks in LINE_ARMS:
+            if name not in want_arms:
+                continue
+            print("MUTATED [%s]: %s arm %r disarmed, all others intact" % (name, table, arm))
+            mod = load()
+            neutralize_line_arm(mod, table, arm)
+            for label, text in checks:
+                check("%s/%s" % (name, label), mod.has_captured_diagnostic(text), False)
+
+        # ... and the one whose mutation must change NOTHING -- see NODIAG_MAKE_ARM.
+        if NODIAG_MAKE_ARM in want_arms:
+            print("MUTATED [%s]: both make suppressors disarmed" % NODIAG_MAKE_ARM)
+            mod = load()
+            neutralize_line_arm(mod, "contentless", "make-recursion")
+            neutralize_line_arm(mod, "contentless", "make-jobserver")
+            check("%s/boilerplate stays silent" % NODIAG_MAKE_ARM,
+                  mod.has_captured_diagnostic(
+                      fx("someport", "make: *** [Makefile:1: all] Error 2")), False)
+            check("%s/narrowing warning stays silent" % NODIAG_MAKE_ARM,
+                  mod.has_captured_diagnostic(NARROWING_WARNING_ONLY), False)
 
     # ---------------- real cached logs (optional) --------------------------------
     if args.logs and os.path.isdir(args.logs):
@@ -617,6 +975,44 @@ def main():
                 elif caps:
                     fails += 1
                     print("  FAIL  capped logs not falling to 20: %s" % bad)
+
+    # ---------------- the #492 deep-capture corpus (optional) --------------------
+    # Arms 2 and 3 of #505's three-arm test, as assertions: arm 3 is the block above (the
+    # `tail -20` cache), arm 2 is this one (the same ports re-waved with the deep capture).
+    # Running both in one invocation is the control -- the widened lexicon has to see MORE on
+    # the deep corpus than on the truncated one, or it is matching boilerplate that is in
+    # every log rather than reasons that are only in some.
+    if args.deep_logs and os.path.isdir(args.deep_logs) and args.mutate is None:
+        mod = load()
+        texts, got = {}, {}
+        for p in sorted(glob.glob(os.path.join(args.deep_logs, "*.log.gz"))
+                        + glob.glob(os.path.join(args.deep_logs, "*.log"))):
+            name = os.path.basename(p)
+            name = name[:-7] if name.endswith(".log.gz") else name[:-4]
+            if p.endswith(".gz"):
+                texts[name] = gzip.open(p, "rt", errors="replace").read()
+            else:
+                texts[name] = open(p, errors="replace").read()
+            got.setdefault(mod.classify(texts[name])[0], set()).add(name)
+        print("deep-capture logs: %d" % len(texts))
+        for cls, names in sorted(DEEP_EXPECT.items()):
+            want, have = set(names.split()), got.get(cls, set())
+            if have == want:
+                passes += 1
+                print("  ok    class %-3s %3d ports, exact set" % (cls, len(have)))
+            else:
+                fails += 1
+                print("  FAIL  class %-3s want-not-got=%s got-not-want=%s"
+                      % (cls, sorted(want - have) or "-", sorted(have - want) or "-"))
+        nd = {n for n in got.get(None, set()) if not mod.has_captured_diagnostic(texts[n])}
+        want_nd = set(DEEP_NODIAG.split())
+        if nd == want_nd:
+            passes += 1
+            print("  ok    deep NO_DIAGNOSTIC %d ports, exact set" % len(nd))
+        else:
+            fails += 1
+            print("  FAIL  deep NO_DIAGNOSTIC want-not-got=%s got-not-want=%s"
+                  % (sorted(want_nd - nd) or "-", sorted(nd - want_nd) or "-"))
 
     print("----")
     print("pass=%d fail=%d" % (passes, fails))
