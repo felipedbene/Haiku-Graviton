@@ -149,8 +149,14 @@ public:
 	virtual	BPoint				DrawString(const char* string, int32 length,
 									const BPoint* offsets);
 
-	virtual	float				StringWidth(const char* string, int32 length,
-									escapement_delta* delta = NULL);
+	// No StringWidth() here on purpose. DrawingEngine::StringWidth() is NOT
+	// virtual, so a same-named member declared here would have *shadowed* it
+	// rather than overridden it: every caller holds a DrawingEngine* (or calls
+	// it unqualified from inside the base class), so the base implementation is
+	// what ran and the one here never did. Text is measured with the server's
+	// ServerFont, which is also what answers an application's
+	// BFont::StringWidth() -- one metric source, so layout and pen advance
+	// cannot disagree. See DrawingEngine::StringWidth() before re-adding this.
 
 	// software rendering backend invoked by CopyRegion() for the sorted
 	// individual rects
@@ -181,7 +187,6 @@ private:
 			bool				fCallbackAdded;
 			sem_id				fResultNotify;
 			BPoint				fDrawStringResult;
-			float				fStringWidthResult;
 			BBitmap*			fReadBitmapResult;
 
 			ObjectDeleter<BitmapDrawingEngine>

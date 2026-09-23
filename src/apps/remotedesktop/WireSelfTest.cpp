@@ -757,9 +757,14 @@ test_resync_wire_constants()
 		RP_RESYNC < RP_CREATE_STATE);
 
 	check("RP_CAP_RESYNC is the third capability bit", RP_CAP_RESYNC == 1 << 2);
+	// Bit 0 is spelled as a literal because its name is gone: it was the
+	// string-width reply capability, retired along with the query it negotiated.
+	// The bit is still *taken* -- a client built before the removal may still
+	// offer it, so reusing the number would read that client as having promised
+	// something else -- and a collision check that quietly stopped counting a
+	// reserved bit would have stopped checking.
 	check("RP_CAP_RESYNC does not collide with the bits already taken",
-		(RP_CAP_RESYNC
-			& (RP_CAP_STRING_WIDTH_REPLY | RP_CAP_COMPRESS_ZSTD)) == 0);
+		(RP_CAP_RESYNC & ((1 << 0) | RP_CAP_COMPRESS_ZSTD)) == 0);
 }
 
 

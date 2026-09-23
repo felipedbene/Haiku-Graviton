@@ -494,9 +494,9 @@ RemoteView::_DrawThread()
 	// URP/1 capability handshake, sent before any drawing. Announce our
 	// protocol version and the features we implement so the server only drives
 	// us with capabilities we actually have. This client is vector-only and has
-	// no RP_STRING_WIDTH handler, so it does not advertise that bit; the server
-	// then computes string width from its own font metrics rather than stalling
-	// on a query we would never answer. It does advertise stream compression
+	// no RP_STRING_WIDTH handler, which no longer costs it anything at all: the
+	// server has retired that query and measures text with its own font metrics
+	// for every client, advertised bit or not. It does advertise stream compression
 	// when this build can decode it -- RemoteWireReader is installed ahead of
 	// the socket thread above and switches itself over when the acknowledgement
 	// goes past. A server that predates the handshake simply ignores this

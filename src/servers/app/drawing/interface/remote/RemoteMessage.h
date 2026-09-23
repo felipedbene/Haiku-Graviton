@@ -49,11 +49,16 @@ struct ViewLineArrayInfo;
 // here as later milestones land (bitmap cache, resync, frame boundary, Tier P
 // codecs); M0 defines only the one it uses.
 enum {
-	// The client answers RP_STRING_WIDTH with RP_STRING_WIDTH_RESULT. Without
-	// this bit the server never issues the query and computes string width from
-	// its own (authoritative) font metrics instead, so a client that cannot
-	// answer no longer stalls the drawing thread for a full second per query.
-	RP_CAP_STRING_WIDTH_REPLY	= 1 << 0,
+	// Bit 0 is RETIRED and reserved: it used to mean "the client answers
+	// RP_STRING_WIDTH with RP_STRING_WIDTH_RESULT". The server no longer asks
+	// any client for text metrics (see the note on RP_STRING_WIDTH below), so it
+	// no longer advertises the bit and never negotiates it. A client that still
+	// offers bit 0 is not harmed -- the server masks an unsupported bit out of
+	// the intersection it acknowledges -- but the bit MUST NOT be reused for a
+	// different feature, because such a client would then be taken to have
+	// promised something else entirely.
+	//
+	// RP_CAP_RESERVED_BIT0		= 1 << 0,
 
 	// The client can decode a zstd-compressed server -> client stream. When
 	// this is negotiated, everything the server sends after the RP_HELLO_ACK
@@ -210,8 +215,18 @@ enum {
 	RP_DRAW_STRING = 180,
 	RP_DRAW_STRING_WITH_OFFSETS,
 	RP_DRAW_STRING_RESULT,
+
+	// RETIRED and reserved (183, 184). The server never sends RP_STRING_WIDTH
+	// and no longer handles RP_STRING_WIDTH_RESULT; it measures text with its
+	// own ServerFont, which is the same metric source that answers an
+	// application's BFont::StringWidth(), so the two cannot disagree. The names
+	// stay so the numbering of everything after them does not shift, and so a
+	// future implementor reuses neither number for a different message. See the
+	// retired capability bit 0 above, and the comment on
+	// DrawingEngine::StringWidth() for why the query could never be issued.
 	RP_STRING_WIDTH,
 	RP_STRING_WIDTH_RESULT,
+
 	RP_READ_BITMAP,
 	RP_READ_BITMAP_RESULT,
 

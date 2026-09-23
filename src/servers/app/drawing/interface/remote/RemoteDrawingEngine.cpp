@@ -33,7 +33,6 @@ RemoteDrawingEngine::RemoteDrawingEngine(RemoteHWInterface* interface)
 	fExtendWidth(0),
 	fCallbackAdded(false),
 	fResultNotify(-1),
-	fStringWidthResult(0.0f),
 	fReadBitmapResult(NULL),
 	fBitmapDrawingEngine(NULL)
 {
@@ -1150,55 +1149,6 @@ RemoteDrawingEngine::DrawString(const char* string, int32 length,
 }
 
 
-float
-RemoteDrawingEngine::StringWidth(const char* string, int32 length,
-	escapement_delta* delta)
-{
-	// Only ask the client if one is attached and it advertised that it answers
-	// string-width queries (RP_CAP_STRING_WIDTH_REPLY). Otherwise compute from
-	// the server's own, authoritative font metrics. This closes the headless
-	// stall (no client -> no 1 s wait per query) and the mirror case of a client
-	// with no string-width handler stalling on every query: the server simply
-	// never issues a query it was not promised an answer to (defects D1/D10).
-	if (fHWInterface->IsConnected()
-		&& (fHWInterface->ClientCapabilities() & RP_CAP_STRING_WIDTH_REPLY)
-			!= 0) {
-		while (true) {
-			// Drain a prior timed-out call's late reply before issuing this
-			// request (see DrawString).
-			_DrainResultSem();
-
-			if (_AddCallback() != B_OK)
-				break;
-
-			RemoteMessage message(NULL, fHWInterface->SendBuffer());
-
-			message.Start(RP_STRING_WIDTH);
-			message.Add(fToken);
-			message.AddString(string, length);
-				// TODO: Support escapement delta.
-
-			if (message.Flush() != B_OK)
-				break;
-
-			status_t result;
-			do {
-				result = acquire_sem_etc(fResultNotify, 1, B_RELATIVE_TIMEOUT,
-					1 * 1000 * 1000);
-			} while (result == B_INTERRUPTED);
-
-			if (result != B_OK)
-				break;
-
-			return fStringWidthResult;
-		}
-	}
-
-	// Fall back to local calculation.
-	return fState.Font().StringWidth(string, length, delta);
-}
-
-
 // #pragma mark -
 
 
@@ -1309,17 +1259,11 @@ RemoteDrawingEngine::_DrawingEngineResult(void* cookie, RemoteMessage& message)
 			break;
 		}
 
-		case RP_STRING_WIDTH_RESULT:
-		{
-			status_t result = message.Read(engine->fStringWidthResult);
-			if (result != B_OK) {
-				TRACE_ERROR("failed to read string width result: %s\n",
-					strerror(result));
-				return false;
-			}
-
-			break;
-		}
+		// No RP_STRING_WIDTH_RESULT case any more: the server never sends the
+		// query that would be answered, so such a reply can only be unsolicited.
+		// Letting it fall through to `default` is the right handling for that --
+		// it declines the message instead of releasing fResultNotify, which some
+		// other pending query (a DrawString or a ReadBitmap) may be waiting on.
 
 		case RP_READ_BITMAP_RESULT:
 		{
