@@ -49,7 +49,15 @@
 static uint32
 supported_capabilities()
 {
-	return RP_CAP_STRING_WIDTH_REPLY | RemoteWireWriter::SupportedCapabilities();
+	// RP_CAP_RESYNC is unconditional: the resync conversation (session id +
+	// generation in RP_HELLO_ACK, the RP_RESYNC barrier) costs nothing to
+	// support and needs no build feature, unlike wire compression below. It
+	// MUST be advertised here or the mask on the next line strips the bit a
+	// resync-capable client offered, and the server then treats every client as
+	// legacy: no session identity in the acknowledgement and no barrier ahead
+	// of a replay.
+	return RP_CAP_STRING_WIDTH_REPLY | RP_CAP_RESYNC
+		| RemoteWireWriter::SupportedCapabilities();
 }
 
 
@@ -114,6 +122,7 @@ RemoteHWInterface::RemoteHWInterface(const char* target)
 	fProtocolVersion(100),
 	fClientProtocolVersion(0),
 	fClientCapabilities(0),
+	fConnectionGeneration(0),
 	fConnectionSpeed(0),
 	fListenPort(10901),
 	fSessionCookieLength(0),

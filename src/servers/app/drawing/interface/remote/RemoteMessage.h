@@ -362,7 +362,9 @@ RemoteMessage::RemoteMessage(StreamingRingBuffer* source,
 	fBuffer(NULL),
 	fAvailable(0),
 	fWriteIndex(0),
-	fDataLeft(0)
+	fDataLeft(0),
+	fCode(0),
+	fGeneration(0)
 {
 }
 
@@ -378,7 +380,9 @@ RemoteMessage::RemoteMessage(StreamingRingBuffer* source,
 	fBuffer(NULL),
 	fAvailable(0),
 	fWriteIndex(0),
-	fDataLeft(0)
+	fDataLeft(0),
+	fCode(0),
+	fGeneration(0)
 {
 }
 #endif
