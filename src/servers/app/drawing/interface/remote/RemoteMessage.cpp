@@ -119,6 +119,51 @@ RemoteMessage::Reset()
 }
 
 
+/*!	Drops in-progress inbound framing when \a generation differs from the one
+	this reader last framed against, and returns whether it did.
+
+	This is the whole of D3, and it is a bookkeeping bug rather than a buffer
+	bug. Emptying the receive ring at a connection boundary -- which the server
+	already does -- discards the departed client's bytes, but it does not
+	discard the *reader's* memory of them: a message whose header was consumed
+	leaves fDataLeft set to the body that never arrived. Read() does not
+	decrement fDataLeft on failure (it cannot; it does not know how much of the
+	value it got), so a body read that fails because the connection went away
+	leaves the count intact, and the next NextMessage() opens by discarding
+	exactly that many bytes -- from the *next* client's stream.
+
+	The consequence is specific and permanent. Every client sends exactly one
+	RP_INIT_CONNECTION, and it is ten bytes. A mid-message disconnect that
+	leaves ten or more bytes owing eats it, so the client is never acknowledged
+	and never told the cursor or the display mode: a black screen for the rest
+	of the session, and no amount of redrawing fixes it because the server is
+	waiting for a message the client already sent.
+
+	Resetting on the generation rather than on every read failure is deliberate.
+	A short read *within* one connection is legitimate -- a message may declare
+	more fields than this build knows how to read, and skipping the remainder is
+	how the protocol stays forward compatible -- so the remainder must be
+	discarded then. Only a connection boundary makes the remainder meaningless,
+	and the generation is exactly the thing that identifies one.
+
+	Note what this deliberately does NOT do: it does not empty the receive ring.
+	Doing that at accept time races the receiver thread writing the new client's
+	first message into the ring and throws it away, which is the same black
+	screen by a different route (see _NewConnection()). The stale bytes are
+	already gone; only the count has to go.
+*/
+bool
+RemoteMessage::ResetIfGenerationChanged(uint32 generation)
+{
+	if (generation == fGeneration)
+		return false;
+
+	fGeneration = generation;
+	Reset();
+	return true;
+}
+
+
 #ifndef CLIENT_COMPILE
 void
 RemoteMessage::AddBitmap(const ServerBitmap& bitmap, bool minimal)

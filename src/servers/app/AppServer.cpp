@@ -113,8 +113,22 @@ AppServer::MessageReceived(BMessage* message)
 		{
 			Desktop* desktop = NULL;
 
+			// AS_GET_DESKTOP is enum value 0, which is also the `what` of
+			// a default-constructed BMessage -- so anything reaching this
+			// looper without a `what` of its own arrives here, replies
+			// included. A real request always carries "version" (see
+			// create_desktop_connection(), AppMisc.cpp), so a message
+			// without it is not one: reporting it as an application that
+			// cannot speak the protocol names a culprit that does not
+			// exist, and the version it reports is the 0 of this default,
+			// never anything a sender chose.
+			int32 version;
+			if (message->IsReply()
+				|| message->FindInt32("version", &version) != B_OK) {
+				break;
+			}
+
 			int32 userID = message->GetInt32("user", 0);
-			int32 version = message->GetInt32("version", 0);
 			const char* targetScreen = message->GetString("target");
 
 			if (version != AS_PROTOCOL_VERSION) {

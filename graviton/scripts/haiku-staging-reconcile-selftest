@@ -1,0 +1,309 @@
+#!/usr/bin/env python3
+"""haiku-staging-reconcile-selftest [--mutate]
+
+Offline test for the #503 staging reconcile. No AWS, no network: it synthesises
+real HPKG packages and real HPKR pool indexes (byte-for-byte parseable by the
+in-tree hpkg_meta reader the tool itself uses), serves them through a fake S3
+client that honours ranged GETs, and drives haiku-staging-reconcile end to end.
+
+WHY IT EXISTS. A reconcile that has never been shown to find an orphan is not
+known to find one -- "zero orphans" then means nothing. So the discriminating
+assertion is a KNOWN orphan on known inputs, alongside a published and a
+superseded case, exercised through the same HPKG/HPKR parse and the same
+classifier the live run uses.
+
+The four staged fixtures, and what each proves:
+  * published-pkg 1.0.0-1  -- present in a pool at the SAME name+version+revision
+    but with DIFFERENT bytes (a different packager string, i.e. the canonical
+    re-stamp). Must be PUBLISHED. This is the name+version-not-bytes proof: a
+    byte compare would call it a permanent difference.
+  * superseded-pkg 1.0.0-1 -- pool holds 2.0.0-1 of the name. Must be SUPERSEDED.
+  * orphan-pkg 3.0.0-1      -- absent from both pools. Must be ORPHANED.
+  * downgrade-pkg 2.0.0-1   -- pool holds only an OLDER 1.0.0-1. Nothing newer,
+    so must be ORPHANED, not SUPERSEDED (pool having *something* is not enough).
+
+  --mutate   break the name+version match in memory (key the pooled identities
+             under a tag the lookup never uses) and assert published-pkg is then
+             MIS-reported as not-PUBLISHED -- the exact false alarm a byte or
+             broken-key match would raise. Exits 0 when the mutation is detected
+             (the test goes red without a working identity match). The tracked
+             file is never touched.
+
+Exit status: 0 pass; 1 an assertion failed.
+"""
+import argparse
+import datetime
+import io
+import os
+import struct
+import sys
+import types
+
+HERE = os.path.dirname(os.path.abspath(__file__))
+TOOL = os.path.join(HERE, "haiku-staging-reconcile")
+
+POOL_BUCKET = "pool-bucket"
+WORK_BUCKET = "work-bucket"
+
+
+# --- HPKG / HPKR fixture builders (inverse of hpkg_meta's readers) ----------
+def _leb128(n):
+    out = bytearray()
+    while True:
+        b = n & 0x7f
+        n >>= 7
+        if n:
+            out.append(b | 0x80)
+        else:
+            out.append(b)
+            return bytes(out)
+
+
+def _tag(aid, dtype, children, encoding):
+    t = (aid & 0x7f) | (dtype << 7) | ((1 if children else 0) << 10) | (encoding << 11)
+    return _leb128(t + 1)
+
+
+def _s(aid, val, children=0):
+    return _tag(aid, 3, children, 0) + val.encode() + b"\x00"
+
+
+def _u32(aid, val, children=0):
+    return _tag(aid, 2, children, 2) + struct.pack(">I", val)
+
+
+def build_hpkg(name, major, minor, micro, rev, vendor=None, packager=None):
+    """A minimal but real HPKG (uncompressed heap) that hpkg_meta.read_meta and
+    read_meta_via_ranges parse. `vendor`/`packager` let a fixture carry the same
+    name+version as another while differing in BYTES."""
+    attrs = _s(15, name)
+    if vendor:
+        attrs += _s(18, vendor)
+    if packager:
+        attrs += _s(19, packager)
+    attrs += _s(22, major) + _s(23, minor) + _s(24, micro) + _u32(25, rev)
+    attrs += _leb128(0)
+    strings = b"\x00"
+    section = strings + attrs
+    heap = section
+    hs = 80
+    hdr = bytearray(hs)
+    hdr[0:4] = b"hpkg"
+    struct.pack_into(">H", hdr, 4, hs)
+    struct.pack_into(">H", hdr, 6, 2)
+    struct.pack_into(">Q", hdr, 8, hs + len(heap))
+    struct.pack_into(">H", hdr, 18, 0)       # heap_compression = NONE
+    struct.pack_into(">I", hdr, 20, 65536)
+    struct.pack_into(">Q", hdr, 24, len(heap))
+    struct.pack_into(">Q", hdr, 32, len(heap))
+    struct.pack_into(">I", hdr, 40, len(section))
+    struct.pack_into(">I", hdr, 44, len(strings))
+    struct.pack_into(">I", hdr, 48, 0)
+    return bytes(hdr) + heap
+
+
+def build_repo(pkgs):
+    """A minimal but real HPKR `repo` index (uncompressed heap) that
+    hpkg_meta.read_repo parses. `pkgs` = list of (name, major, minor, micro, rev,
+    arch_uint)."""
+    body = bytearray()
+    for (name, major, minor, micro, rev, arch) in pkgs:
+        children = _s(15, name) + _u32(21, arch)
+        children += _tag(22, 3, 1, 0) + major.encode() + b"\x00"   # major w/ children
+        children += _s(23, minor) + _s(24, micro) + _u32(25, rev) + _leb128(0)
+        children += _leb128(0)                                     # end pkg children
+        body += _tag(54, 3, 1, 0) + name.encode() + b"\x00" + children
+    body += _leb128(0)
+    strings = b"\x00"
+    section = strings + bytes(body)
+    heap = section
+    hs = 72
+    hdr = bytearray(hs)
+    hdr[0:4] = b"hpkr"
+    struct.pack_into(">H", hdr, 4, hs)
+    struct.pack_into(">H", hdr, 6, 2)
+    struct.pack_into(">Q", hdr, 8, hs + len(heap))
+    struct.pack_into(">H", hdr, 16, 0)
+    struct.pack_into(">H", hdr, 18, 0)
+    struct.pack_into(">I", hdr, 20, 65536)
+    struct.pack_into(">Q", hdr, 24, len(heap))
+    struct.pack_into(">Q", hdr, 32, len(heap))
+    struct.pack_into(">I", hdr, 40, 0)               # info_length
+    struct.pack_into(">Q", hdr, 48, len(section))    # packages_length
+    struct.pack_into(">Q", hdr, 56, len(strings))    # packages_strings_length
+    struct.pack_into(">Q", hdr, 64, 0)
+    return bytes(hdr) + heap
+
+
+# --- fake S3 (ranged GET aware) + fake STS ----------------------------------
+class _Body:
+    def __init__(self, data):
+        self._data = data
+
+    def read(self):
+        return self._data
+
+
+class FakeS3:
+    def __init__(self, store):
+        # store: {(bucket, key): (bytes, last_modified)}
+        self.store = store
+
+    def get_caller_identity(self):
+        return {"Account": "000000000000"}
+
+    def list_objects_v2(self, Bucket=None, Prefix="", ContinuationToken=None):
+        contents = []
+        for (b, k), (data, lm) in sorted(self.store.items()):
+            if b == Bucket and k.startswith(Prefix):
+                contents.append({"Key": k, "Size": len(data), "LastModified": lm})
+        return {"Contents": contents, "IsTruncated": False}
+
+    def get_object(self, Bucket=None, Key=None, Range=None):
+        data, _ = self.store[(Bucket, Key)]
+        if Range:
+            assert Range.startswith("bytes=")
+            a, b = Range[len("bytes="):].split("-")
+            data = data[int(a):int(b) + 1]
+        return {"Body": _Body(data)}
+
+
+def load_tool(mutate=False):
+    src = open(TOOL).read()
+    if mutate:
+        before = src
+        src = src.replace(
+            "self.exact.setdefault((name, ver, rev), set()).add(label)",
+            'self.exact.setdefault((name, ver, rev, "MUT"), set()).add(label)')
+        if src == before:
+            raise SystemExit("--mutate: could not find the exact-key insertion to "
+                             "break; haiku-staging-reconcile changed shape -- fix "
+                             "this selftest.")
+    mod = types.ModuleType("haiku_staging_reconcile")
+    mod.__file__ = TOOL
+    exec(compile(src, TOOL, "exec"), mod.__dict__)
+    return mod
+
+
+def make_store():
+    now = datetime.datetime.utcnow()
+    old = now - datetime.timedelta(hours=72)   # 3 days, like the golang incident
+
+    green = build_repo([
+        ("published-pkg", "1", "0", "0", 1, 9),   # exact identity, other bytes
+        ("superseded-pkg", "2", "0", "0", 1, 9),  # newer than staged 1.0.0
+        ("unrelated", "5", "5", "5", 1, 9),
+    ])
+    blue = build_repo([
+        ("published-pkg", "1", "0", "0", 1, 9),   # present in blue too
+        ("downgrade-pkg", "1", "0", "0", 1, 9),   # OLDER than staged 2.0.0
+    ])
+
+    store = {
+        (POOL_BUCKET, "debeos-repo-green/arm64/repo"): (green, now),
+        (POOL_BUCKET, "debeos-repo/arm64/repo"): (blue, now),
+        # PUBLISHED: same name+ver+rev as pool, but a different packager -> the
+        # bytes differ, exactly the re-stamp case.
+        (POOL_BUCKET, "staging/a/published-pkg-1.0.0-1-arm64.hpkg"):
+            (build_hpkg("published-pkg", "1", "0", "0", 1,
+                        vendor="DeBeOS", packager="staged <debeos@debene.dev>"), old),
+        # SUPERSEDED: pool has 2.0.0-1
+        (POOL_BUCKET, "staging/b/superseded-pkg-1.0.0-1-arm64.hpkg"):
+            (build_hpkg("superseded-pkg", "1", "0", "0", 1), old),
+        # ORPHANED: absent from both pools
+        (POOL_BUCKET, "staging/c/orphan-pkg-3.0.0-1-arm64.hpkg"):
+            (build_hpkg("orphan-pkg", "3", "0", "0", 1), old),
+        # ORPHANED: pool has only an OLDER 1.0.0-1 (nothing newer)
+        (POOL_BUCKET, "staging/d/downgrade-pkg-2.0.0-1-arm64.hpkg"):
+            (build_hpkg("downgrade-pkg", "2", "0", "0", 1), old),
+    }
+    return store
+
+
+def run_tool(mod, store, argv):
+    fake = FakeS3(store)
+
+    def client_factory(service, region=None):
+        return fake
+
+    args = mod.build_parser().parse_args(argv)
+    import json as _json
+    buf = io.StringIO()
+    old_stdout = sys.stdout
+    sys.stdout = buf
+    try:
+        rc = mod.run(args, client_factory)
+    finally:
+        sys.stdout = old_stdout
+    data = _json.loads(buf.getvalue())
+    verdicts = {r["file"]: r["verdict"] for r in data["results"]}
+    return rc, verdicts, data
+
+
+def check(cond, msg):
+    if not cond:
+        print("FAIL:", msg)
+        return False
+    print("ok:", msg)
+    return True
+
+
+def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--mutate", action="store_true")
+    a = ap.parse_args()
+
+    store = make_store()
+    argv = ["--account", "000000000000", "--pool-bucket", POOL_BUCKET,
+            "--work-bucket", WORK_BUCKET,
+            "--prefix", "s3://%s/staging/" % POOL_BUCKET, "--json"]
+
+    ok = True
+
+    if a.mutate:
+        mod = load_tool(mutate=True)
+        rc, v, _ = run_tool(mod, store, argv)
+        # With the identity match broken, the re-stamped PUBLISHED file must NOT
+        # be recognised as published -- that is the false alarm the real matcher
+        # prevents. If it is still PUBLISHED, the assertion below isn't testing
+        # what it claims.
+        ok &= check(v.get("published-pkg-1.0.0-1-arm64.hpkg") != "PUBLISHED",
+                    "mutation breaks name+version match: published-pkg is "
+                    "mis-reported (now %s)"
+                    % v.get("published-pkg-1.0.0-1-arm64.hpkg"))
+        if ok:
+            print("PASS (mutation detected: the identity match is load-bearing)")
+            return 0
+        print("FAIL (mutation NOT detected: the assertions do not depend on the "
+              "identity match)")
+        return 1
+
+    mod = load_tool(mutate=False)
+    rc, v, data = run_tool(mod, store, argv)
+
+    ok &= check(v.get("published-pkg-1.0.0-1-arm64.hpkg") == "PUBLISHED",
+                "PUBLISHED: same name+version+revision, DIFFERENT bytes "
+                "(re-stamp) -> PUBLISHED, not a false orphan")
+    ok &= check(v.get("superseded-pkg-1.0.0-1-arm64.hpkg") == "SUPERSEDED",
+                "SUPERSEDED: pool has a newer 2.0.0-1 of the name")
+    ok &= check(v.get("orphan-pkg-3.0.0-1-arm64.hpkg") == "ORPHANED",
+                "ORPHANED: absent from both pools -- the known orphan")
+    ok &= check(v.get("downgrade-pkg-2.0.0-1-arm64.hpkg") == "ORPHANED",
+                "ORPHANED: pool has only an OLDER 1.0.0-1 (nothing newer)")
+    ok &= check(rc == 1, "exit code is non-zero when an orphan exists")
+
+    # age is surfaced and the incident age (72h) exceeds the default threshold
+    orph = next(r for r in data["results"]
+                if r["file"] == "orphan-pkg-3.0.0-1-arm64.hpkg")
+    ok &= check(orph.get("age_hours") is not None and orph["age_hours"] >= 24,
+                "orphan age is reported and past the stranded threshold")
+
+    if ok:
+        print("PASS")
+        return 0
+    print("FAIL")
+    return 1
+
+
+if __name__ == "__main__":
+    sys.exit(main())

@@ -62,6 +62,24 @@ enum {
 	// exempt from it. A client that does not advertise this gets the plain
 	// stream, byte for byte as before.
 	RP_CAP_COMPRESS_ZSTD		= 1 << 1,
+
+	// The client understands RP_RESYNC and the session identity that
+	// RP_HELLO_ACK carries when this bit is negotiated (session id +
+	// connection generation). Two things become possible with it:
+	//
+	//   - the client can tell "same session, new connection" (same session id,
+	//     higher generation) from "new session" (different session id), which
+	//     is the difference between content it may still trust and content it
+	//     must throw away;
+	//   - the client can *ask* for a state replay instead of only ever being
+	//     told, which is the only recovery available to a client that detects
+	//     it has desynchronised for a reason the server cannot see.
+	//
+	// The server replays drawing state on every accept whether or not this is
+	// negotiated -- that replay uses existing opcodes only and is what fixes
+	// the reconnect black screen for every client, including one that has
+	// never heard of URP/1. This bit gates the *conversation*, not the repair.
+	RP_CAP_RESYNC				= 1 << 2,
 };
 
 // Session-cookie methods, carried in the RP_SESSION_COOKIE message. Only one
@@ -84,6 +102,23 @@ enum {
 	RP_GET_SYSTEM_PALETTE_RESULT,
 	RP_HELLO,
 	RP_HELLO_ACK,
+
+	// Resynchronisation, in both directions, gated on RP_CAP_RESYNC. Payload:
+	// uint32 generation.
+	//
+	// server -> client: "everything after this message belongs to connection
+	// generation N; discard anything you cached or inferred from an earlier
+	// one, a full state replay follows." It is a barrier, not a request: the
+	// replay is already on its way behind it.
+	//
+	// client -> server: "I believe I am at generation N (0 = I do not know) and
+	// I cannot draw correctly; replay." The server answers with the barrier
+	// above, replays every live drawing engine's state, and re-announces the
+	// screen so a full repaint follows. This exists because the server cannot
+	// see every way a client can lose its place -- a decoder that gave up on a
+	// message, a canvas the browser threw away -- so the client has to be able
+	// to say so rather than wait to be told.
+	RP_RESYNC = 8,
 
 	// Transport-security preamble, owned by the remote_broker daemon that
 	// fronts the loopback RP listener with TLS + WebSocket for connections
@@ -248,6 +283,7 @@ public:
 
 		status_t				NextMessage(uint16& code);
 		void					Reset();
+		bool					ResetIfGenerationChanged(uint32 generation);
 		uint16					Code() { return fCode; }
 		uint32					DataLeft() { return fDataLeft; }
 
@@ -310,6 +346,7 @@ private:
 		size_t					fWriteIndex;
 		uint32					fDataLeft;
 		uint16					fCode;
+		uint32					fGeneration;
 };
 
 
@@ -325,7 +362,9 @@ RemoteMessage::RemoteMessage(StreamingRingBuffer* source,
 	fBuffer(NULL),
 	fAvailable(0),
 	fWriteIndex(0),
-	fDataLeft(0)
+	fDataLeft(0),
+	fCode(0),
+	fGeneration(0)
 {
 }
 
@@ -341,7 +380,9 @@ RemoteMessage::RemoteMessage(StreamingRingBuffer* source,
 	fBuffer(NULL),
 	fAvailable(0),
 	fWriteIndex(0),
-	fDataLeft(0)
+	fDataLeft(0),
+	fCode(0),
+	fGeneration(0)
 {
 }
 #endif

@@ -576,6 +576,193 @@ test_parser_release()
 }
 
 
+/*!	D3: a mid-message disconnect must not eat the next connection's first
+	message -- and a short read *within* one connection must still skip the
+	declared remainder.
+
+	Both halves are here because they pull in opposite directions, and getting
+	one by sacrificing the other is the likeliest wrong fix. The parser cannot
+	simply forget the remainder whenever a read fails: a message may legally
+	declare more fields than this build reads, and skipping the tail is how the
+	protocol stays forward compatible. It also cannot keep the remainder across a
+	connection boundary, because those bytes will never arrive and the count is
+	then spent on whatever the *next* client sends. The connection generation is
+	what tells the two cases apart.
+
+	The scenario below is the real one, at byte resolution. Every client sends
+	exactly one RP_INIT_CONNECTION and it is six bytes on the wire (header only).
+	A disconnect that leaves six or more bytes owing consumes it, the client is
+	never acknowledged, and the screen stays black for the rest of the session
+	with nothing retrying -- because the server is not waiting for anything, it
+	has already read a message it believes was that one.
+
+	The first arm deliberately reproduces the *unfixed* behaviour and asserts
+	that it swallows the message. That arm is what keeps the second one honest: a
+	check that only ever asserts the good outcome would pass just as happily
+	against a scenario that never reproduced the bug in the first place.
+*/
+static void
+test_reconnect_framing()
+{
+	printf("  -- D3: framing across a connection boundary --\n");
+
+	// The frame the departed client half-sent. Ten declared body bytes of which
+	// four arrive, so that after one field is read exactly six are still owing:
+	// the size of the RP_INIT_CONNECTION the next client sends.
+	static const size_t kDeclaredBody = 10;
+	static const size_t kDeliveredBody = 4;
+	static const size_t kHeaderSize = sizeof(uint16) + sizeof(uint32);
+
+	uint8 partial[64];
+	uint8 body[kDeclaredBody];
+	memset(body, 0x5a, sizeof(body));
+	frame(partial, RP_MOUSE_MOVED, body, sizeof(body));
+
+	// What the next client sends, in order: its one and only
+	// RP_INIT_CONNECTION, then its display-mode update.
+	uint8 nextClient[64];
+	size_t initLength = frame(nextClient, RP_INIT_CONNECTION, NULL, 0);
+	uint32 mode[2] = { 1200, 760 };
+	size_t modeLength = frame(nextClient + initLength, RP_UPDATE_DISPLAY_MODE,
+		mode, sizeof(mode));
+
+	check("RP_INIT_CONNECTION is a bare six-byte frame",
+		initLength == kHeaderSize);
+
+	// Both arms run the identical sequence and differ only in whether the parser
+	// is told the connection changed.
+	for (int arm = 0; arm < 2; arm++) {
+		const bool fixed = arm == 1;
+		printf("      %s\n", fixed
+			? "with the generation check (the fix)"
+			: "without the generation check (the old behaviour)");
+
+		StreamingRingBuffer buffer(4096);
+		if (buffer.InitCheck() != B_OK) {
+			check("ring buffer allocated", false);
+			return;
+		}
+
+		RemoteMessage parser(&buffer, (StreamingRingBuffer*)NULL);
+		uint32 generation = 1;
+		parser.ResetIfGenerationChanged(generation);
+
+		check("the half-sent message is queued",
+			buffer.Write(partial, kHeaderSize + kDeliveredBody) == B_OK);
+
+		uint16 code = 0;
+		check("its header parses",
+			parser.NextMessage(code) == B_OK && code == RP_MOUSE_MOVED
+				&& parser.DataLeft() == kDeclaredBody);
+
+		uint32 field = 0;
+		check("the body bytes that did arrive are read",
+			parser.Read(field) == B_OK
+				&& parser.DataLeft() == kDeclaredBody - sizeof(field));
+
+		// The disconnect. The receiver empties the ring and retires the
+		// generation; the parser's next read finds nothing and is cancelled.
+		buffer.MakeEmpty();
+		generation++;
+
+		status_t result = parser.Read(field);
+		check("the read for the body that never arrives is cancelled",
+			result == B_CANCELED, strerror(result));
+		check("six body bytes are still on the books",
+			parser.DataLeft() == kDeclaredBody - sizeof(field));
+
+		if (fixed)
+			parser.ResetIfGenerationChanged(generation);
+
+		check("the next client's first two messages are queued",
+			buffer.Write(nextClient, initLength + modeLength) == B_OK);
+
+		code = 0;
+		result = parser.NextMessage(code);
+		if (fixed) {
+			check("the fix delivers RP_INIT_CONNECTION",
+				result == B_OK && code == RP_INIT_CONNECTION,
+				code == RP_UPDATE_DISPLAY_MODE
+					? "(got RP_UPDATE_DISPLAY_MODE -- the init was eaten)"
+					: strerror(result));
+		} else {
+			// The mutation arm: assert the bug, so that this scenario is known
+			// to be one that can still expose it.
+			check("without it RP_INIT_CONNECTION is swallowed by the stale "
+				"remainder", result == B_OK && code == RP_UPDATE_DISPLAY_MODE,
+				code == RP_INIT_CONNECTION
+					? "(got RP_INIT_CONNECTION -- this arm no longer reproduces "
+						"D3, so the arm above proves nothing)"
+					: strerror(result));
+		}
+	}
+
+	// The other direction: within one connection a short read must still skip
+	// the declared remainder, or every message a future client extends becomes a
+	// framing desync. This is what a reset-on-every-error "fix" would break, and
+	// it is why the reset is keyed on the generation and not on the failure.
+	printf("      an unread remainder is still skipped within one connection\n");
+
+	StreamingRingBuffer buffer(4096);
+	if (buffer.InitCheck() != B_OK) {
+		check("ring buffer allocated", false);
+		return;
+	}
+
+	uint8 stream[128];
+	size_t length = frame(stream, RP_MOUSE_MOVED, body, sizeof(body));
+	length += frame(stream + length, RP_INIT_CONNECTION, NULL, 0);
+	check("a complete message with unread fields, then another, are queued",
+		buffer.Write(stream, length) == B_OK);
+
+	RemoteMessage parser(&buffer, (StreamingRingBuffer*)NULL);
+	parser.ResetIfGenerationChanged(7);
+
+	uint16 code = 0;
+	check("the first message parses",
+		parser.NextMessage(code) == B_OK && code == RP_MOUSE_MOVED);
+
+	uint32 field = 0;
+	check("only part of its body is read", parser.Read(field) == B_OK);
+
+	check("an unchanged generation does not drop the framing",
+		!parser.ResetIfGenerationChanged(7)
+			&& parser.DataLeft() == kDeclaredBody - sizeof(field));
+
+	code = 0;
+	check("so the unread tail is skipped and the next message parses",
+		parser.NextMessage(code) == B_OK && code == RP_INIT_CONNECTION);
+}
+
+
+/*!	The resync opcode and capability bit do not collide with anything already
+	claimed, and mean what the server and the clients both assume.
+
+	Cheap, but not free of content: RP_RESYNC sits in the session block between
+	RP_HELLO_ACK and the broker's reserved RP_AUTHENTICATE, which is exactly the
+	kind of gap a later addition lands in twice.
+*/
+static void
+test_resync_wire_constants()
+{
+	printf("  -- resync opcode and capability --\n");
+
+	check("RP_RESYNC is 8", RP_RESYNC == 8);
+	check("RP_RESYNC does not collide with the session block",
+		RP_RESYNC != RP_HELLO && RP_RESYNC != RP_HELLO_ACK
+			&& RP_RESYNC != RP_AUTHENTICATE && RP_RESYNC != RP_AUTH_RESULT
+			&& RP_RESYNC != RP_SESSION_COOKIE
+			&& RP_RESYNC != RP_GET_SYSTEM_PALETTE_RESULT);
+	check("RP_RESYNC is below the state block, so it is a session message",
+		RP_RESYNC < RP_CREATE_STATE);
+
+	check("RP_CAP_RESYNC is the third capability bit", RP_CAP_RESYNC == 1 << 2);
+	check("RP_CAP_RESYNC does not collide with the bits already taken",
+		(RP_CAP_RESYNC
+			& (RP_CAP_STRING_WIDTH_REPLY | RP_CAP_COMPRESS_ZSTD)) == 0);
+}
+
+
 /*!	The session-cookie frame (#423), byte for byte.
 
 	Three implementations have to agree on this frame or every direct connection
@@ -672,6 +859,8 @@ remote_wire_selftest()
 	test_dropped_segment();
 	test_parser_release();
 	test_session_cookie_frame();
+	test_reconnect_framing();
+	test_resync_wire_constants();
 
 	free(scratch);
 	free(message);
