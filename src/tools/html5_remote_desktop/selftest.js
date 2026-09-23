@@ -840,6 +840,254 @@ check('the real view-transform behaviour is back after the mutation arm',
 	JSON.stringify(boxOf(drawRun(Object.assign({ view: { sx: 2, sy: 2 } },
 		BIG)))) === JSON.stringify(vScaledBox));
 
+// --- keyboard: DOM key events -> Haiku key events (#526) -------------------
+//
+// The client sent DOM key codes as if they were Haiku character bytes, so Enter
+// arrived as '\r' (13) instead of B_RETURN (0x0a) and missed `case B_RETURN` in
+// BTextView::KeyDown -- Return inserted a character instead of breaking the
+// line. raw_char was hardcoded 0, which also kept Return from reaching a
+// dialog's DefaultButton(). The arrow keys were sending '%', '&', '\'' and '('.
+//
+// These checks read the bytes off the WIRE, through the real onKeyDownUp, and
+// decode them the way RemoteEventStream::EventReceived does: uint32 numBytes,
+// numBytes bytes, int32 raw_char, int32 key. Going through the send site (not
+// just the table) is deliberate -- the hardcoded raw_char lived there, so a
+// table-only test would have passed over half the bug.
+function SendCapture() {
+	this.frames = [];
+	const self = this;
+	const message = new client.RemoteMessage({
+		send(bytes) { self.frames.push(new Uint8Array(bytes)); }
+	});
+	message.allocate(4096);
+	this.message = message;
+}
+
+// One DOM keyboard event. `code` defaults to the name, which is right for the
+// named keys (Enter/ArrowLeft/F1/...) and wrong for nothing we pass here
+// without saying so.
+function keyEvent(name, code, type) {
+	return {
+		type: type || 'keydown',
+		key: name,
+		code: code === undefined ? name : code,
+		keyCode: 0,
+		shiftKey: false, ctrlKey: false, altKey: false,
+		preventDefault() { this.defaultPrevented = true; },
+		defaultPrevented: false
+	};
+}
+
+// Decode one RP_KEY_DOWN/RP_KEY_UP frame the way the server reads it.
+function decodeKeyFrame(frame) {
+	const view = new DataView(frame.buffer, frame.byteOffset, frame.byteLength);
+	const code = view.getUint16(0, true);
+	const size = view.getUint32(2, true);
+	if (code !== client.RP_KEY_DOWN && code !== client.RP_KEY_UP)
+		return { code, size, bytes: [], rawChar: null, key: null };
+	const numBytes = view.getUint32(6, true);
+	const bytes = [];
+	for (let i = 0; i < numBytes; i++)
+		bytes.push(view.getUint8(10 + i));
+	return {
+		code, size, bytes,
+		rawChar: view.getUint32(10 + numBytes, true),
+		key: view.getUint32(14 + numBytes, true),
+		wellFormed: size === frame.byteLength && size === 18 + numBytes
+	};
+}
+
+// Drive the real handler. `this` only needs sendMessage and modifiers.
+function sendKey(event) {
+	const capture = new SendCapture();
+	const session = { sendMessage: capture.message, modifiers: 0 };
+	client.RemoteDesktopSession.prototype.onKeyDownUp.call(session, event);
+	return capture.frames.map(decodeKeyFrame);
+}
+
+function keyFrame(name, code) {
+	const frames = sendKey(keyEvent(name, code));
+	return frames.length === 1 ? frames[0] : null;
+}
+
+const B = client;	// the Haiku constants, as the client defines them
+
+// numeric literals here instead of the client's own constants on purpose: a
+// check that says `=== B.B_RETURN` on both sides cannot fail if B_RETURN is
+// wrong. These are read off headers/os/interface/InterfaceDefs.h.
+check('the client\'s Haiku key-byte constants match InterfaceDefs.h',
+	B.B_HOME === 0x01 && B.B_END === 0x04 && B.B_INSERT === 0x05
+	&& B.B_BACKSPACE === 0x08 && B.B_TAB === 0x09 && B.B_RETURN === 0x0a
+	&& B.B_ENTER === 0x0a && B.B_PAGE_UP === 0x0b && B.B_PAGE_DOWN === 0x0c
+	&& B.B_FUNCTION_KEY === 0x10 && B.B_ESCAPE === 0x1b
+	&& B.B_LEFT_ARROW === 0x1c && B.B_RIGHT_ARROW === 0x1d
+	&& B.B_UP_ARROW === 0x1e && B.B_DOWN_ARROW === 0x1f
+	&& B.B_DELETE === 0x7f && B.B_F1_KEY === 0x02 && B.B_PRINT_KEY === 0x0e
+	&& B.B_PAUSE_KEY === 0x10,
+	'B_RETURN=' + B.B_RETURN + ' B_DELETE=' + B.B_DELETE);
+
+// name -> [byte, rawChar, hardware key]. Bytes from InterfaceDefs.h; hardware
+// key codes from kDefaultLayout105 in
+// src/preferences/keymap/KeyboardLayout.cpp. The DOM code each key USED to send
+// is in the comment, because that is the number this table exists to stop.
+const KEY_TABLE = [
+	['Enter',      0x0a, 0x0a, 0x47],	// was DOM 13 = '\r'  -- #526
+	['Delete',     0x7f, 0x7f, 0x34],	// was DOM 46 = '.'
+	['Insert',     0x05, 0x05, 0x1f],	// was DOM 45 = '-'
+	['ArrowLeft',  0x1c, 0x1c, 0x61],	// was DOM 37 = '%'
+	['ArrowUp',    0x1e, 0x1e, 0x57],	// was DOM 38 = '&'
+	['ArrowRight', 0x1d, 0x1d, 0x63],	// was DOM 39 = '\''
+	['ArrowDown',  0x1f, 0x1f, 0x62],	// was DOM 40 = '('
+	['Home',       0x01, 0x01, 0x20],	// was DOM 36 = '$'
+	['End',        0x04, 0x04, 0x35],	// was DOM 35 = '#'
+	['PageUp',     0x0b, 0x0b, 0x21],	// was DOM 33 = '!'
+	['PageDown',   0x0c, 0x0c, 0x36],	// was DOM 34 = '"'
+	// Accidentally-correct BYTES, wrong `key`. Listed so nobody "simplifies"
+	// them back to event.keyCode.
+	['Backspace',  0x08, 0x08, 0x1e],	// DOM 8 happened to equal B_BACKSPACE
+	['Tab',        0x09, 0x09, 0x26],	// DOM 9 happened to equal B_TAB
+	['Escape',     0x1b, 0x1b, 0x01],	// DOM 27 == B_ESCAPE; key was 27, not 1
+	// Function keys: one byte, distinguished by `key`.
+	['F1',  0x10, 0x10, 0x02], ['F2',  0x10, 0x10, 0x03],
+	['F3',  0x10, 0x10, 0x04], ['F4',  0x10, 0x10, 0x05],
+	['F5',  0x10, 0x10, 0x06], ['F6',  0x10, 0x10, 0x07],
+	['F7',  0x10, 0x10, 0x08], ['F8',  0x10, 0x10, 0x09],
+	['F9',  0x10, 0x10, 0x0a], ['F10', 0x10, 0x10, 0x0b],
+	['F11', 0x10, 0x10, 0x0c], ['F12', 0x10, 0x10, 0x0d]
+];
+
+let tableBad = [];
+for (const [name, byte, rawChar, key] of KEY_TABLE) {
+	const f = keyFrame(name);
+	if (f === null) {
+		tableBad.push(name + ':no-frame');
+		continue;
+	}
+	if (f.bytes.length !== 1 || f.bytes[0] !== byte)
+		tableBad.push(name + ':byte=' + f.bytes + '!=' + byte);
+	if (f.rawChar !== rawChar)
+		tableBad.push(name + ':raw=' + f.rawChar + '!=' + rawChar);
+	if (f.key !== key)
+		tableBad.push(name + ':key=' + f.key + '!=' + key);
+	if (!f.wellFormed)
+		tableBad.push(name + ':malformed-frame');
+}
+check('every navigation/function key goes on the wire as its Haiku byte, '
+	+ 'raw_char and hardware key code (' + KEY_TABLE.length + ' keys)',
+	tableBad.length === 0, tableBad.join(' '));
+
+// The whole point of #526: Enter is 0x0a, and 13 is what it must NOT be.
+const enter = keyFrame('Enter');
+check('Enter sends B_RETURN 0x0a and NOT the DOM code 13',
+	enter.bytes.length === 1 && enter.bytes[0] === 0x0a && enter.bytes[0] !== 13,
+	JSON.stringify(enter));
+check('Enter\'s raw_char is B_ENTER, so BWindow::_DetermineTarget can route it '
+	+ 'to DefaultButton() (it was hardcoded 0)',
+	enter.rawChar === 0x0a, String(enter.rawChar));
+check('numpad Enter is also B_RETURN, with the numpad\'s own hardware code',
+	(() => { const f = keyFrame('Enter', 'NumpadEnter');
+		return f.bytes[0] === 0x0a && f.key === 0x5b; })(),
+	JSON.stringify(keyFrame('Enter', 'NumpadEnter')));
+
+// No arrow key may send a printable ASCII byte -- that was the visible defect.
+const arrowInk = ['ArrowLeft', 'ArrowUp', 'ArrowRight', 'ArrowDown']
+	.map(n => keyFrame(n).bytes[0]).filter(b => b >= 0x20 && b < 0x7f);
+check('no arrow key puts a PRINTABLE byte on the wire (they sent %&\'( )',
+	arrowInk.length === 0, JSON.stringify(arrowInk));
+
+// Printable keys: text in bytes, unmodified character in raw_char, physical key
+// in `key`.
+const shiftA = keyFrame('A', 'KeyA');
+check('a shifted letter sends "A" with raw_char \'a\' and the KeyA code',
+	shiftA.bytes.length === 1 && shiftA.bytes[0] === 0x41
+	&& shiftA.rawChar === 0x61 && shiftA.key === 0x3c,
+	JSON.stringify(shiftA));
+const bang = keyFrame('!', 'Digit1');
+check('a shifted digit sends "!" with raw_char \'1\' and the Digit1 code',
+	bang.bytes[0] === 0x21 && bang.rawChar === 0x31 && bang.key === 0x12,
+	JSON.stringify(bang));
+const euro = keyFrame('\u20ac', 'KeyE');
+check('a multi-byte character is sent as UTF-8, not truncated to one byte',
+	euro.bytes.length === 3 && euro.bytes[0] === 0xe2 && euro.bytes[1] === 0x82
+	&& euro.bytes[2] === 0xac && euro.wellFormed,
+	JSON.stringify(euro));
+const space = keyFrame(' ', 'Space');
+check('space sends 0x20 with the space bar\'s hardware code',
+	space.bytes[0] === 0x20 && space.rawChar === 0x20 && space.key === 0x5e,
+	JSON.stringify(space));
+
+// An unknown physical key must degrade to key = 0, never to a DOM number. The
+// event carries a NONZERO keyCode on purpose: with keyCode 0 this check passes
+// whether the fallback is `0` or `event.keyCode`, which is no check at all
+// (found by mutating the fallback to event.keyCode and watching this stay
+// green).
+const unknown = sendKey(Object.assign(keyEvent('x', 'SomeKeyChromeInvented'),
+	{ keyCode: 88 }))[0];
+check('an unrecognised event.code yields key = 0, not a DOM key code',
+	unknown.key === 0 && unknown.key !== 88 && unknown.bytes[0] === 0x78,
+	JSON.stringify(unknown));
+
+// keyup carries the same triple, under the RP_KEY_UP opcode.
+const upFrames = sendKey(keyEvent('Enter', 'Enter', 'keyup'));
+check('keyup sends RP_KEY_UP with the same Haiku triple',
+	upFrames.length === 1 && upFrames[0].code === client.RP_KEY_UP
+	&& upFrames[0].bytes[0] === 0x0a && upFrames[0].key === 0x47,
+	JSON.stringify(upFrames));
+check('keydown sends RP_KEY_DOWN',
+	sendKey(keyEvent('Enter'))[0].code === client.RP_KEY_DOWN);
+
+// Modifier keys must NOT come out as key events -- they take the
+// RP_MODIFIERS_CHANGED path, which is why they are absent from the tables.
+const shiftFrames = sendKey(keyEvent('Shift', 'ShiftLeft'));
+check('a modifier key sends RP_MODIFIERS_CHANGED, not a key event',
+	shiftFrames.length === 1
+	&& shiftFrames[0].code === client.RP_MODIFIERS_CHANGED,
+	JSON.stringify(shiftFrames.map(f => f.code)));
+
+// The legacy path: no event.key at all, only the deprecated keyCode.
+const legacy = sendKey({
+	type: 'keydown', key: undefined, code: undefined, keyCode: 13,
+	preventDefault() {}
+})[0];
+check('a browser with no event.key still sends B_RETURN, via the legacy '
+	+ 'keyCode NAME lookup -- never the number itself',
+	legacy.bytes[0] === 0x0a && legacy.rawChar === 0x0a, JSON.stringify(legacy));
+
+check('onKeyPress is gone -- `keypress` is suppressed by keydown\'s '
+	+ 'preventDefault(), and it carried the same defect',
+	client.RemoteDesktopSession.prototype.onKeyPress === undefined);
+
+// MUTATION. Put Enter back to the DOM code 13 -- the #526 defect exactly -- and
+// require the checks above to go RED. A test that passes both ways is not a
+// test.
+const savedEnterByte = client.kHaikuByteByKeyName['Enter'];
+let mutEnter, mutArrows;
+try {
+	client.kHaikuByteByKeyName['Enter'] = 13;
+	client.kHaikuByteByKeyName['ArrowLeft'] = 37;
+	mutEnter = keyFrame('Enter');
+	mutArrows = keyFrame('ArrowLeft');
+} finally {
+	client.kHaikuByteByKeyName['Enter'] = savedEnterByte;
+	client.kHaikuByteByKeyName['ArrowLeft'] = 0x1c;
+}
+check('MUTATION: with Enter reverted to DOM 13 the wire carries \'\\r\' -- '
+	+ 'the #526 defect reproduced',
+	mutEnter.bytes[0] === 13 && mutEnter.bytes[0] !== 0x0a,
+	JSON.stringify(mutEnter));
+check('MUTATION: ...so the B_RETURN assertion goes RED',
+	!(mutEnter.bytes[0] === 0x0a), String(mutEnter.bytes[0]));
+check('MUTATION: ...and raw_char goes with it, so Enter stops reaching '
+	+ 'DefaultButton()',
+	mutEnter.rawChar !== 0x0a, String(mutEnter.rawChar));
+check('MUTATION: with ArrowLeft reverted to DOM 37 it types \'%\', so the '
+	+ '"no printable byte" assertion goes RED',
+	mutArrows.bytes[0] === 0x25 && mutArrows.bytes[0] >= 0x20,
+	JSON.stringify(mutArrows));
+check('the real Enter mapping is back after the mutation arm',
+	keyFrame('Enter').bytes[0] === 0x0a
+	&& keyFrame('ArrowLeft').bytes[0] === 0x1c);
+
 console.log('');
 console.log('SELFTEST_CHECKS=' + checks.length);
 if (failures.length) {
