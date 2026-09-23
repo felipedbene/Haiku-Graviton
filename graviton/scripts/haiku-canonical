@@ -151,12 +151,48 @@ cmd_promote() {
 			echo "un-canonical: ${id}"
 			aws ec2 delete-tags --region "$REGION" --resources "$id" \
 				--tags "Key=${TAG_KEY},Value=${TAG_VAL}"
+			# ...and RELEASE its SpringClean protection, symmetrically with the
+			# auto-delete=no we set on the incoming canonical below. Without this,
+			# protection accumulates on every promotion and no superseded canonical
+			# is ever reapable -- the account fills with images nothing will clean.
+			# Safe to release: retention is cmd_prune's job (keep CANDIDATE_KEEP
+			# newest, canonical always excluded), and that runs as part of promote,
+			# so a superseded canonical is retired on our own schedule rather than
+			# being pinned forever.
+			local old_snaps
+			old_snaps="$(aws ec2 describe-images --region "$REGION" \
+				--image-ids "$id" \
+				--query 'Images[0].BlockDeviceMappings[?Ebs].Ebs.SnapshotId' \
+				--output text 2>/dev/null)"
+			aws ec2 delete-tags --region "$REGION" \
+				--resources "$id" ${old_snaps} \
+				--tags Key=auto-delete >/dev/null 2>&1 \
+				&& echo "unprotected (auto-delete released): ${id} ${old_snaps}"
 		fi
 	done
 	# Set canonical on the target (idempotent).
 	echo "canonical: ${target}"
 	aws ec2 create-tags --region "$REGION" --resources "$target" \
 		--tags "Key=${TAG_KEY},Value=${TAG_VAL}"
+	# Protect the new canonical from SpringClean, which reaps AMIs/snapshots in
+	# this account and reads the retain tag "auto-delete=no" (NOT "off"). Without
+	# this, every promotion births an unprotected canonical that SpringClean
+	# eventually deletes -- exactly how ami-05cf86c1c19e3ca58 ended up untagged.
+	# Tag the AMI AND its backing snapshot(s): SpringClean deletes a snapshot
+	# separately, and losing it corrupts the AMI even if the image record lives.
+	local protect_snaps
+	protect_snaps="$(aws ec2 describe-images --region "$REGION" \
+		--image-ids "$target" \
+		--query 'Images[0].BlockDeviceMappings[?Ebs].Ebs.SnapshotId' \
+		--output text 2>/dev/null)"
+	if aws ec2 create-tags --region "$REGION" \
+			--resources "$target" ${protect_snaps} \
+			--tags Key=auto-delete,Value=no >/dev/null 2>&1; then
+		echo "protected (auto-delete=no): ${target} ${protect_snaps}"
+	else
+		echo "warning: failed to tag ${target} auto-delete=no; protect it by hand" \
+			"or SpringClean may reap the canonical" >&2
+	fi
 	# Mirror the id into SSM so consumers can resolve the canonical AMI without a
 	# tag query. Non-fatal: the ec2 tag remains the source of truth.
 	if aws ssm put-parameter --region "$REGION" --name "$SSM_PARAM" \
