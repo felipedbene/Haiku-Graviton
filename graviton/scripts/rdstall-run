@@ -1,0 +1,129 @@
+#!/bin/bash
+#
+# rdstall-run -- the M2 headless-stall experiment (#58, defects D1 and D10).
+#
+# D1 said: with no client attached, `discardWithoutReader` makes Flush() succeed
+# after discarding, so every DrawString stalls 1 s and every screenshot 10 s.
+# D10 said: a native client with no RP_STRING_WIDTH handler burns the full 1 s
+# timeout on every StringWidth.
+#
+# Most of the machinery that closed those has landed, so the expected answer is
+# "already closed".  A measurement that can only produce the expected answer is
+# worthless, so this script is built around being able to FAIL:
+#
+#   Arm H  (headless)          -- no RP client at all.  Launch a text-drawing GUI
+#                                 app and time it to responsive.  This is the D1
+#                                 claim's exact condition.
+#   Arm N  (no capability)      -- a client that advertises nothing.  The server
+#                                 must not issue a string-width query at all.
+#   Arm A  (advertise + answer) -- a client that promised and delivers.
+#   Arm X  (advertise, NEVER answer) -- POSITIVE CONTROL.  The server may only
+#                                 query a client that promised, so this is the one
+#                                 remaining way to make it take the 1 s wait.  If
+#                                 arm X shows no stall, this harness cannot see a
+#                                 stall and arms H/N/A prove nothing.
+#
+# Arm H's sensitivity is quantified rather than asserted: the number of text ops
+# the app actually draws is counted in arm A, and the headless launch is then
+# compared against (that count x 1 s).  "Finished in 4 s while drawing 60 text
+# runs" falsifies a 1 s-per-run stall by a factor of 15; "finished fast" on its
+# own would not.
+#
+# Usage: rdstall-run [TRIALS]
+
+set -u
+
+TRIALS="${1:-5}"
+PY=python3.10
+PORT=10900
+COOKIE=/boot/system/settings/remote_desktop/session_cookie.$PORT
+W=1200
+H=760
+OUT=/boot/home/m2stall
+APP=/boot/system/apps/AboutSystem
+APPNAME=AboutSystem
+mkdir -p "$OUT"
+
+ms_now() { $PY -c 'import time; print(int(time.monotonic()*1000))'; }
+
+echo "TRIALS=$TRIALS SCREEN=${W}x${H}"
+
+# ---------------------------------------------------------------- Arm H
+# No client is connected for this arm.  The app is launched with TARGET_SCREEN
+# (without it BApplication exits 0 silently and the arm would time an app that
+# never ran), then polled with `hey` until it answers -- which it can only do
+# after its window has been created and drawn.
+echo ""
+echo "=== ARM H: headless (NO client connected) ==="
+for t in $(seq 1 "$TRIALS"); do
+	# Make sure nothing is left over from a previous trial.
+	hey "$APPNAME" quit >/dev/null 2>&1
+	sleep 2
+	t0=$(ms_now)
+	TARGET_SCREEN=$PORT "$APP/$APPNAME" >/dev/null 2>&1 &
+	pid=$!
+	alive=0
+	# Poll for up to 120 s.  The cap is deliberately far above the 1 s-per-op
+	# stall's predicted cost so a stall would be MEASURED, not timed out.
+	for _ in $(seq 1 240); do
+		if hey "$APPNAME" get Title >/dev/null 2>&1; then alive=1; break; fi
+		sleep 0.5
+	done
+	t1=$(ms_now)
+	echo "H trial $t: responsive=$alive elapsed_ms=$((t1 - t0))"
+	hey "$APPNAME" quit >/dev/null 2>&1
+	kill $pid 2>/dev/null
+	sleep 1
+done
+
+# ------------------------------------------------------- Arms N, A, X
+# Each runs a client with a different capability posture while the same app
+# paints, and reports the string-width query count and the gaps between queries.
+# The gap is the measurement: a server waiting out a 1 s timeout cannot issue the
+# next query sooner than 1 s.
+run_client_arm() {
+	local label="$1" flag="$2" trial="$3"
+	local tag="$label-t$trial"
+	hey "$APPNAME" quit >/dev/null 2>&1
+	sleep 1
+	TARGET_SCREEN=$PORT "$APP/$APPNAME" >/dev/null 2>&1 &
+	local pid=$!
+	sleep 3
+	local t0=$(ms_now)
+	# shellcheck disable=SC2086
+	$PY /boot/home/rdcapture.py \
+		--port "$PORT" --cookie-file "$COOKIE" \
+		--width "$W" --height "$H" --seconds 20 \
+		$flag \
+		--workload text \
+		--json "$OUT/$tag.json" \
+		--allow-text-estimate \
+		> "$OUT/$tag.log" 2>&1
+	local rc=$?
+	local t1=$(ms_now)
+	echo "--- $tag (rc=$rc, wall=$((t1 - t0))ms) ---"
+	grep -E "^MESSAGES=|^RP_STRING_WIDTH|^STRING_WIDTH_GAP_MS|^STRING_WIDTH_STALLS|^TEXT_OPS|^plain stream|runs  " \
+		"$OUT/$tag.log" 2>/dev/null
+	hey "$APPNAME" quit >/dev/null 2>&1
+	kill $pid 2>/dev/null
+	sleep 2
+}
+
+echo ""
+echo "=== ARM N: client advertises NO capability ==="
+for t in $(seq 1 "$TRIALS"); do run_client_arm N "" "$t"; done
+
+echo ""
+echo "=== ARM A: client advertises AND answers ==="
+for t in $(seq 1 "$TRIALS"); do
+	run_client_arm A "--answer-string-width" "$t"
+done
+
+echo ""
+echo "=== ARM X: POSITIVE CONTROL -- advertises, never answers ==="
+for t in $(seq 1 "$TRIALS"); do
+	run_client_arm X "--advertise-string-width-no-answer" "$t"
+done
+
+echo ""
+echo "=== done ==="

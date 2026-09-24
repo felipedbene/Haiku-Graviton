@@ -1,0 +1,201 @@
+#!/bin/bash
+#
+# rdcensus-run3 -- the definitive M2 byte-census capture matrix (#58).
+#
+# Supersedes rdcensus-run for the interactive arms.  That pass
+# ran the text / menu / scroll / window workloads against a BARE desktop with no
+# window open, and its three interactive arms came out with op profiles within a
+# few percent of one another: typing had no focused text view, wheel events were
+# over nothing scrollable, and the click landed on the root view.  It measured
+# "the mouse moved" three times under three different names.  The bare-desktop
+# numbers are kept and reported, but as an IDLE/BARE baseline, which is what they
+# actually are.
+#
+# This pass, per workload:
+#   1. launches the application the workload needs,
+#   2. DISCOVERS where its window landed, by capturing the wire for a few seconds
+#      and reading the drawn bounding box out of the capture's own per-token
+#      census -- a measurement, not an assumption, and not `hey` (which returns
+#      success and prints nothing on this image),
+#   3. drives the workload into that rect (rdcapture refuses coordinates off the
+#      screen, so a bad discovery fails loudly instead of quietly),
+#   4. captures the wire with a byte census and a wire dump.
+#
+# Why it exists: an earlier window-targeted pass used workloads that lasted 2.4 s to
+# 9 s inside a 30 s capture, so the desktop was idle for most of every arm and a "steady state"
+# window taken past the cold paint landed in the idle tail.  All four arms then
+# reported ~1.1 kB/s -- the idle rate -- which is the SECOND time in this campaign
+# that four differently-named arms converged on one number for a reason that had
+# nothing to do with the protocol.  --workload-loop repeats the action sequence
+# until it fills the capture, so there is a steady state to measure.
+#
+# Usage: rdcensus-run3 [TRIALS] [SECONDS]
+
+set -u
+
+TRIALS="${1:-3}"
+SECS="${2:-30}"
+PY=python3.10
+PORT=10900
+COOKIE=/boot/system/settings/remote_desktop/session_cookie.$PORT
+W=1200
+H=760
+OUT=/boot/home/m2c
+mkdir -p "$OUT"
+
+STYLEDEDIT=/boot/system/apps/StyledEdit
+NETSURF=/boot/system/apps/NetSurf
+
+# A long document, so the scroll arm has something to scroll.  Without it the
+# wheel events land in a one-screen document and scrolling is a no-op -- which
+# would look like "scrolling is cheap" rather than "nothing scrolled".
+LONGDOC=/boot/home/m2c/long.txt
+if [ ! -f "$LONGDOC" ]; then
+	$PY -c "
+lines=[]
+for i in range(1200):
+    lines.append('%04d  The quick brown fox jumps over the lazy dog. '
+                 'DeBeOS remote desktop byte census, line %d of 1200.' % (i, i))
+open('$LONGDOC','w').write('\n'.join(lines))
+"
+fi
+
+echo "SCREEN=${W}x${H} TRIALS=$TRIALS SECONDS=$SECS"
+
+# Kill the applications for real.
+#
+# `hey <app> quit` RETURNS SUCCESS AND DOES NOT QUIT on this image, which is not a
+# cosmetic problem: the first window-targeted run leaked one process per arm and by
+# the heavy trials there were THREE NetSurf instances painting at once, plus a
+# litter of crash alerts, all of them contributing bytes to a census that was
+# supposed to be measuring one application.  A screenshot of the framebuffer is
+# what caught it -- the op counts alone looked plausible throughout.
+#
+# The pid is $(NF-3), not $2: `ps` puts the command (which contains spaces when the
+# app was given an argument) in the first column, so $2 is the argument. Getting
+# that wrong is how the first cleanup attempt silently killed nothing.
+kill_apps() {
+	for _ in 1 2 3; do
+		local pids
+		pids=$(ps | grep -E "StyledEdit|ShowImage|NetSurf" | grep -v grep \
+			| awk '{print $(NF-3)}')
+		[ -z "$pids" ] && break
+		for p in $pids; do kill -9 "$p" 2>/dev/null; done
+		sleep 1
+	done
+	# Report any survivor: a contaminated desktop must be visible in the log, not
+	# inferred later from a screenshot.
+	local left
+	left=$(ps | grep -E "StyledEdit|ShowImage|NetSurf" | grep -vc grep)
+	[ "$left" -gt 0 ] && echo "  WARNING: $left app(s) survived cleanup"
+	return 0
+}
+
+# Capture briefly and print the largest drawn bbox that is neither the whole
+# screen nor the Deskbar.  That is the application window.
+discover_rect() {
+	local tag="$1"
+	$PY /boot/home/rdcapture.py \
+		--port "$PORT" --cookie-file "$COOKIE" \
+		--width "$W" --height "$H" --seconds 8 \
+		--answer-string-width \
+		--json "$OUT/$tag-probe.json" --allow-text-estimate \
+		> "$OUT/$tag-probe.log" 2>&1
+	$PY - "$OUT/$tag-probe.json" "$W" "$H" <<'EOF'
+import json, sys
+path, W, H = sys.argv[1], int(sys.argv[2]), int(sys.argv[3])
+try:
+    d = json.load(open(path))
+except Exception:
+    print("NONE"); raise SystemExit
+best = None
+for t in d.get("tokens", []):
+    bb = t.get("bbox")
+    if not bb or t.get("drawing_ops", 0) < 5:
+        continue
+    x0, y0, x1, y1 = bb
+    w, h = x1 - x0, y1 - y0
+    if w < 120 or h < 120:
+        continue
+    # Exclude the root view (the whole screen) and anything hugging the
+    # top-right, which is the Deskbar.
+    if w >= W - 8 and h >= H - 8:
+        continue
+    if x0 > W * 0.75:
+        continue
+    area = w * h
+    if best is None or area > best[0]:
+        best = (area, max(0, x0), max(0, y0), min(W - 1, x1), min(H - 1, y1))
+print("NONE" if best is None
+      else "%d,%d,%d,%d" % (best[1], best[2], best[3], best[4]))
+EOF
+}
+
+run_arm() {
+	local name="$1" launch="$2" trial="$3"
+	local tag="$name-t$trial"
+	kill_apps
+	# POSITIVE CONTROL on cleanliness: with the apps gone, exactly one window
+	# should be discoverable (none). If a rect is still found here, the desktop is
+	# dirty and the arm's bytes are not this application's.
+	local stale
+	stale=$(discover_rect "$tag-clean" | tail -1)
+	if [ "$stale" != "NONE" ]; then
+		echo "  WARNING: desktop NOT clean before $tag -- stale window at $stale"
+	fi
+	eval "$launch"
+	# NetSurf needs far longer than StyledEdit to open a window (it parses and
+	# lays out a page first).  Five seconds was enough for StyledEdit and not for
+	# NetSurf, which is why the heavy arm's discovery returned NONE three times
+	# in a row while the StyledEdit arms all succeeded.
+	case "$launch" in
+		*NetSurf*) sleep 25 ;;
+		*) sleep 5 ;;
+	esac
+	local rect
+	rect=$(discover_rect "$tag" | tail -1)
+	echo "=== $tag  discovered_rect=$rect ==="
+	if [ "$rect" = "NONE" ] || [ -z "$rect" ]; then
+		# Refuse rather than fall back to screen-relative geometry: a silent
+		# fallback is how the first pass ended up measuring the bare desktop.
+		echo "  DISCOVERY FAILED -- arm SKIPPED (not run against the bare desktop)"
+		kill_apps
+		return
+	fi
+	$PY /boot/home/rdcapture.py \
+		--port "$PORT" --cookie-file "$COOKIE" \
+		--width "$W" --height "$H" --seconds "$SECS" \
+		--answer-string-width \
+		--workload "$name" --workload-rect "$rect" --workload-loop \
+		--wire-dump "$OUT/$tag.dump" --json "$OUT/$tag.json" \
+		--allow-text-estimate \
+		> "$OUT/$tag.log" 2>&1
+	echo "  rc=$?"
+	grep -E "^WORKLOAD|^plain stream|^BITMAP_|^COPY_RECT_|^TEXT_PATH_|^OTHER_BYTES|^MESSAGES" \
+		"$OUT/$tag.log" 2>/dev/null | sed 's/^/  /'
+	kill_apps
+}
+
+SE_LAUNCH="(TARGET_SCREEN=$PORT $STYLEDEDIT $LONGDOC >/dev/null 2>&1 &)"
+NS_LAUNCH="(TARGET_SCREEN=$PORT $NETSURF file:///boot/home/m2/heavy.html >/dev/null 2>&1 &)"
+
+for t in $(seq 1 "$TRIALS"); do
+	run_arm text   "$SE_LAUNCH" "$t"
+	run_arm menu   "$SE_LAUNCH" "$t"
+	run_arm scroll "$SE_LAUNCH" "$t"
+	run_arm window "$SE_LAUNCH" "$t"
+done
+
+if [ -x "$NETSURF" ]; then
+	for t in $(seq 1 "$TRIALS"); do
+		# The heavy arm scrolls a page with real text and real photographs --
+		# the closest thing on this image to the content Tier P exists for.
+		run_arm scroll "$NS_LAUNCH" "heavy$t"
+	done
+else
+	echo "HEAVY_ARM=UNAVAILABLE (no $NETSURF)"
+fi
+
+kill_apps
+echo "=== dumps ==="
+ls -la "$OUT"/*.dump 2>/dev/null
