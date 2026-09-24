@@ -195,10 +195,27 @@ Two incidental findings worth more than they cost:
   is why the text path is ~0.3 % of a bare idle capture while a clock is visibly
   updating. **CONFIRMED.**
 * **35 % of all steady-state idle bytes are colour-setter ops** — 28 × 14 B of
-  `RP_SET_HIGH_COLOR` per second. The design credits `RemoteDrawingEngine` with
-  setter dedup; on this path it is not collapsing them. Measurement **CONFIRMED**;
-  that a dedup fix would remove them is **PLAUSIBLE** (not attempted here). It would
-  be a larger win on the idle desktop than any codec, with no protocol change.
+  `RP_SET_HIGH_COLOR` per second. Measurement **CONFIRMED**.
+
+  > **SUPERSEDED — the measurement stands, the inference from it was wrong.** This
+  > bullet originally added "the design credits `RemoteDrawingEngine` with setter
+  > dedup; on this path it is not collapsing them", and called a dedup fix a larger
+  > idle win than any codec. A follow-up audit (`graviton/scripts/rdsetters.py`,
+  > 32 checks) **falsified that**: of 884 `RP_SET_HIGH_COLOR` ops, **zero** repeat the
+  > colour already in effect for their token — in all four captures, whole-capture and
+  > steady-state. The guard at `RemoteDrawingEngine.cpp:227` is already correct. The
+  > Deskbar clock alone emits 870 setters in **48 distinct colours**, because it is
+  > drawn as antialiased vector segments. **The 35 % is irreducible cost, not waste.**
+  >
+  > Worth recording *why* this document could not have caught it: a byte census counts
+  > setters, and a count looks identical whether or not the setters are redundant. Only
+  > comparing each setter against the state already in effect answers it — which is a
+  > different instrument, not a longer run of this one.
+  >
+  > The genuinely unguarded setter is `RP_SET_OFFSETS` (30 of 48 redundant), worth
+  > **0.8 %** and almost all cold paint — filed as **#544** and deliberately not fixed,
+  > because a guard breaks the stated reason it is safe to omit from `ReplayState()`
+  > ("every drawing sequence sends them again"), which is D4's mechanism.
 
 ### 3.2 The definitive interactive matrix
 
@@ -413,9 +430,26 @@ reasoned.
   A ratio measured honestly with a cost labelled honestly beats a ratio with no cost,
   which the charter forbids. **The recommendation does not rest on PNG's CPU** — it
   rests on PNG's *ratio*, which is real, and PNG loses on ratio.
-* `zstd_stream()` is concatenate-then-compress, an **upper bound** on streaming zstd:
-  real streaming with per-frame flushes does slightly worse. The bound is generous to
-  zstd, not to the argument.
+* `zstd_stream()` is concatenate-then-compress, an **upper bound** on streaming zstd.
+
+  > **SUPERSEDED — "slightly worse" was wrong by 3.1×.** This bullet said real streaming
+  > with per-frame flushes does *slightly* worse than the concatenate bound. Measured
+  > afterwards on the same captured bytes with the shipped parameters: concatenate
+  > **10 935 B / 6.02×**, flush-per-message (**what actually ships**) **33 695 B /
+  > 1.95×**. On hardware the negotiated path delivers **1.850×** (67.9 kB → 34.7 kB,
+  > n=3, same instance and boot) — and the 1.95× model against 1.85× measured means the
+  > model reproduces the implementation, so the mechanism is established, not inferred.
+  >
+  > Cause: `ZSTD_e_flush` at **every message boundary** — ~1900 flushes over ~1955
+  > messages. **Consequence for this document's own recommendation:** as shipped,
+  > in-protocol zstd at **1.85×** is roughly **3× worse than the `ssh -C` baseline of
+  > 5.59×** measured in §5 — so recommendation item 1 currently *loses* to the baseline
+  > it was meant to beat, and the ordering in §7.2 should be read with that in mind.
+  >
+  > Flushing per drain window instead recovers it: **4 ms → 5.16×**, **16 ms → 5.28×**,
+  > at 16× fewer flushes, with `RemoteWireFormat.h`'s whole-messages-per-window property
+  > intact. Filed as **#543** and under implementation; it is the largest single win
+  > this gate found, larger than anything in M2's original list.
 
 ---
 
@@ -615,6 +649,28 @@ for has already been taken** by M0's crop/rebase and the clipped `RP_DRAW_BITMAP
 path (§3.4). The largest bitmap anywhere in these captures is 63×20.
 
 ### 7.2 What to do instead, in measured order of payoff
+
+> **Items 1 and 2 have both been superseded by follow-up measurement. Read this first.**
+>
+> **Item 1 is not "turn it on" — it is already on.** The capability negotiates on the
+> canonical image today (build feature enabled, `app_server` links `libzstd`,
+> `zstd_source` in the arm64 pool, native client advertises at `RemoteView.cpp:508`).
+> Hardware, 30 s idle, n=3: **67.9 kB → 34.7 kB = 1.850×**, not the 6.05× priced below,
+> because `ZSTD_e_flush` fires at every message boundary. At 1.85× it is ~3× *worse*
+> than the `ssh -C` baseline in §5. The fix is per-drain-window flushing (**4 ms →
+> 5.16×**, **16 ms → 5.28×**) — issue **#543**, and the largest single win this gate
+> found. The one thing correctly off is the **HTML5 client's** advertisement: browsers
+> have no script zstd stream decoder (probed, not assumed — node 24 offers deflate,
+> deflate-raw, gzip, brotli; `zstd` raises). Advertising it there would desync the
+> session, so PR #541 replaces the hand-maintained constant with a decoder probe.
+>
+> **Item 2 is falsified.** Zero of 884 `RP_SET_HIGH_COLOR` ops are redundant; the 35 %
+> is irreducible antialiased-vector cost, not waste. See the superseded note in §3.1.
+> The real unguarded setter is `RP_SET_OFFSETS` at 0.8 % — issue **#544**, deliberately
+> unfixed because guarding it re-opens D4.
+>
+> Items 3 and 4 stand. The ordering below is left as written so the reasoning is
+> auditable against what was actually measured.
 
 1. **Turn on the zstd capability that already exists** (`RP_CAP_COMPRESS_ZSTD`).
    Whole-stream zstd-3 is 20.97–41.98× on interactive workloads, 21.47× on the
