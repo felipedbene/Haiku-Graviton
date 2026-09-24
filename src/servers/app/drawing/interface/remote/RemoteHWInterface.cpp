@@ -56,8 +56,12 @@ supported_capabilities()
 	// resync-capable client offered, and the server then treats every client as
 	// legacy: no session identity in the acknowledgement and no barrier ahead
 	// of a replay.
-	return RP_CAP_STRING_WIDTH_REPLY | RP_CAP_RESYNC
-		| RemoteWireWriter::SupportedCapabilities();
+	//
+	// Bit 0 (the retired string-width reply) is deliberately absent: this server
+	// never asks a client for text metrics, so advertising the bit would promise
+	// a query that is never sent. A client that still offers it simply sees it
+	// masked out of the acknowledged intersection.
+	return RP_CAP_RESYNC | RemoteWireWriter::SupportedCapabilities();
 }
 
 

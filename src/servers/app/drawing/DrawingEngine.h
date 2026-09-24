@@ -177,6 +177,19 @@ public:
 	virtual	BPoint			DrawString(const char* string, int32 length,
 								const BPoint* offsets);
 
+	// Text measurement is NOT virtual, and that is deliberate. A backend must
+	// not substitute its own metrics here: DrawString() below advances the pen
+	// by calling this unqualified from inside the base class, and an application
+	// lays out the same text with BFont::StringWidth(), which app_server answers
+	// from its own ServerFont and cannot delegate to anyone. One measurer keeps
+	// those two agreeing; two would guarantee they disagree.
+	//
+	// Declaring a same-named member in a subclass therefore does not override
+	// this -- it shadows it, and the subclass copy is simply never called,
+	// because every caller holds a DrawingEngine*. RemoteDrawingEngine carried
+	// such a shadow for the whole life of its remote string-width query; the
+	// query could never be sent (measured, issue #534) and both it and the
+	// protocol capability that negotiated it have been removed.
 			float			StringWidth(const char* string, int32 length,
 								escapement_delta* delta = NULL);
 

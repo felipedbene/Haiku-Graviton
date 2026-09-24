@@ -39,8 +39,17 @@ const RP_SESSION_COOKIE = 12;
 const RP_COOKIE_METHOD_PER_BOOT = 1;
 
 // URP/1 handshake: protocol version and capability bits exchanged in
-// RP_HELLO / RP_HELLO_ACK. This client answers string-width queries, so it
-// advertises RP_CAP_STRING_WIDTH_REPLY; the server only queries clients that do.
+// RP_HELLO / RP_HELLO_ACK.
+//
+// Bit 0 was the string-width reply capability. This client does answer
+// RP_STRING_WIDTH (see the handler below, and the self-test that pins it), but it
+// no longer *advertises* the bit, because app_server has retired the query: it
+// measures text with the ServerFont that also answers an application's
+// BFont::StringWidth(), so there is one metric source and no round trip on the
+// text path. Offering a capability the server has removed would negotiate to
+// nothing anyway; saying it plainly here is better than leaving a claim that
+// reads as a live feature. The handler stays -- answering a query is correct if
+// anything ever asks, and costs nothing while nothing does.
 const RP_PROTOCOL_VERSION = 1;
 const RP_CAP_STRING_WIDTH_REPLY = 1 << 0;
 
@@ -60,7 +69,11 @@ const RP_CAP_STRING_WIDTH_REPLY = 1 << 0;
 // DecompressionStream("deflate-raw") is the cheap candidate, since it needs no
 // download at all) has an obvious place to hook in.
 const RP_CAP_COMPRESS_ZSTD = 1 << 1;
-const RP_CAP_ADVERTISED = RP_CAP_STRING_WIDTH_REPLY;
+
+// Nothing to offer yet, so the handshake carries an empty feature set. It is
+// still sent: RP_HELLO is also how the protocol version and the decode limits are
+// stated, and the acknowledgement is where the session identity arrives.
+const RP_CAP_ADVERTISED = 0;
 
 const RP_CREATE_STATE = 20;
 const RP_DELETE_STATE = 21;
@@ -1640,9 +1653,9 @@ RemoteState.prototype.messageReceived = function(remoteMessage, reply)
 			reply.dataView.writeInt32(this.token);
 			reply.dataView.writeFloat32(textMetric.width);
 				// was where.writeFloat32(...), which threw: `where` is not in
-				// scope here and is not a writer. The server only issues this
-				// query to a client that advertised RP_CAP_STRING_WIDTH_REPLY, so
-				// the reply has to actually be sent.
+				// scope here and is not a writer. Kept correct although app_server
+				// no longer sends the query (it measures text itself), because a
+				// handler that is wrong is worse than one that is idle.
 			reply.flush();
 			break;
 
@@ -2388,10 +2401,10 @@ RemoteDesktopSession.prototype.init = function()
 	this.sendMessage.start(RP_INIT_CONNECTION);
 	this.sendMessage.flush();
 
-	// URP/1 capability handshake, sent before any drawing. We measure text with
-	// the canvas 2D context, so we advertise RP_CAP_STRING_WIDTH_REPLY and the
-	// server routes RP_STRING_WIDTH to us; without it the server would compute
-	// width itself. A pre-handshake server ignores this message.
+	// URP/1 capability handshake, sent before any drawing. The feature set is
+	// empty (see RP_CAP_ADVERTISED); this message still carries the protocol
+	// version and the decode limits, and its acknowledgement carries the session
+	// identity. A pre-handshake server ignores it.
 	this.sendMessage.start(RP_HELLO);
 	this.sendMessage.dataView.writeUint32(RP_PROTOCOL_VERSION);
 	this.sendMessage.dataView.writeUint32(RP_CAP_ADVERTISED);
