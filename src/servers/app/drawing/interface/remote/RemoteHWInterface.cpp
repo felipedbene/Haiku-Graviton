@@ -57,11 +57,18 @@ supported_capabilities()
 	// legacy: no session identity in the acknowledgement and no barrier ahead
 	// of a replay.
 	//
+	// RP_CAP_FRAME_BOUNDARY is unconditional for the same reason: emitting
+	// RP_TIER_END_FRAME is a handful of bytes per composed frame and needs no
+	// build feature. Flow control itself is NOT gated on it -- the queue infers
+	// the boundary from RP_INVALIDATE_* for a client that did not ask -- so the
+	// bit only decides whether the boundary is also stated on the wire.
+	//
 	// Bit 0 (the retired string-width reply) is deliberately absent: this server
 	// never asks a client for text metrics, so advertising the bit would promise
 	// a query that is never sent. A client that still offers it simply sees it
 	// masked out of the acknowledged intersection.
-	return RP_CAP_RESYNC | RemoteWireWriter::SupportedCapabilities();
+	return RP_CAP_RESYNC | RP_CAP_FRAME_BOUNDARY
+		| RemoteWireWriter::SupportedCapabilities();
 }
 
 
@@ -127,6 +134,8 @@ RemoteHWInterface::RemoteHWInterface(const char* target)
 	fClientProtocolVersion(0),
 	fClientCapabilities(0),
 	fConnectionGeneration(0),
+	fFrameSequence(0),
+	fRepaintOwed(0),
 	fConnectionSpeed(0),
 	fListenPort(10901),
 	fSessionCookieLength(0),
@@ -648,6 +657,30 @@ RemoteHWInterface::_EventThread()
 		TRACE("got message code %" B_PRIu16 " with %" B_PRIu32 " bytes\n", code,
 			message.DataLeft());
 
+		// A flow-control collapse owes a full repaint, and this is the thread
+		// that can safely ask for one: re-dirtying the desktop goes through the
+		// screen-changed listeners, which want locks a drawing thread is already
+		// holding when it discovers the debt. Consumed here rather than on a
+		// timer because any session with a client attached is a session sending
+		// input, so this runs within a frame of the collapse in practice --
+		// unmeasured, and stated as such in the flow-control document.
+		if (atomic_and(&fRepaintOwed, 0) != 0) {
+			TRACE_ERROR("repairing after a flow-control collapse\n");
+
+			// The same three steps, in the same order, as the
+			// client-requested RP_RESYNC below: the barrier says which
+			// generation the bytes behind it belong to, the replay restores
+			// how to draw, and the screen-changed notification is what
+			// restores *what* was drawn. Only the last one needs this thread,
+			// but splitting them across threads would put the replay ahead of
+			// its own barrier.
+			if ((fClientCapabilities & RP_CAP_RESYNC) != 0)
+				_SendResyncBarrier();
+
+			_ReplayState();
+			_NotifyScreenChanged();
+		}
+
 		if (code >= RP_MOUSE_MOVED && code <= RP_MODIFIERS_CHANGED) {
 			// an input event, dispatch to the event stream
 			if (fEventStream->EventReceived(message))
@@ -733,6 +766,15 @@ RemoteHWInterface::_EventThread()
 						"session uncompressed\n");
 					fClientCapabilities &= ~(uint32)RP_CAP_COMPRESS_ZSTD;
 				}
+
+				// The flow-control queue keys its frame model on whichever
+				// boundary this client will actually see. Set before the
+				// acknowledgement, so there is no window in which the server is
+				// emitting RP_TIER_END_FRAME while the queue is still treating
+				// an invalidate as the close (which would make every frame look
+				// unclosed and pin the whole queue).
+				fWireWriter->SetFrameBoundariesExplicit(
+					(fClientCapabilities & RP_CAP_FRAME_BOUNDARY) != 0);
 
 				RemoteMessage reply(NULL, fWireWriter.Get());
 				reply.Start(RP_HELLO_ACK);
@@ -960,6 +1002,11 @@ RemoteHWInterface::_NewConnection(BNetEndpoint &endpoint)
 	// Note this uses no capability and no new opcode: the replay is RP_CREATE_STATE
 	// and the ordinary RP_SET_* ops, so the reconnect repair applies to every
 	// client, including one that has never heard of URP/1.
+	// Reset() above already dropped anything the flow-control queue was holding
+	// and the resync it may have owed; the repaint that would have paid it is
+	// unnecessary too, because this client is about to ask for the whole screen.
+	atomic_and(&fRepaintOwed, 0);
+
 	_ReplayState();
 
 	return B_OK;
@@ -1296,12 +1343,31 @@ RemoteHWInterface::IsDoubleBuffered() const
 }
 
 
+/*!	The end of a composed frame, and the only place the server has one.
+
+	app_server has no "composition finished" event; what it has is this call,
+	which every DrawTransaction makes on its way out (and Window::EndUpdate makes
+	for a whole update session). It is the instant the client is told to copy
+	back to front, so it is by construction the instant at which everything
+	needed to make the display correct has been emitted -- which is exactly what
+	a frame boundary has to mean. RP_TIER_END_FRAME is that instant, stated.
+
+	The damage region is deliberately NOT repeated in RP_TIER_END_FRAME: it is in
+	the message immediately in front of it, from the same thread, and duplicating
+	it would put a second copy of the only expensive field on the wire for
+	nothing.
+*/
 status_t
 RemoteHWInterface::InvalidateRegion(const BRegion& region)
 {
-	RemoteMessage message(NULL, fWireWriter.Get());
-	message.Start(RP_INVALIDATE_REGION);
-	message.AddRegion(region);
+	{
+		RemoteMessage message(NULL, fWireWriter.Get());
+		message.Start(RP_INVALIDATE_REGION);
+		message.AddRegion(region);
+		_EndFrame(message);
+	}
+
+	_CheckResyncOwed();
 	return B_OK;
 }
 
@@ -1309,10 +1375,63 @@ RemoteHWInterface::InvalidateRegion(const BRegion& region)
 status_t
 RemoteHWInterface::Invalidate(const BRect& frame)
 {
-	RemoteMessage message(NULL, fWireWriter.Get());
-	message.Start(RP_INVALIDATE_RECT);
-	message.Add(frame);
+	{
+		RemoteMessage message(NULL, fWireWriter.Get());
+		message.Start(RP_INVALIDATE_RECT);
+		message.Add(frame);
+		_EndFrame(message);
+	}
+
+	_CheckResyncOwed();
 	return B_OK;
+}
+
+
+/*!	Appends RP_TIER_END_FRAME to \a message, for a client that asked for it.
+
+	Start() flushes whatever was being composed, so the invalidate leaves first
+	and the boundary follows it in the same thread's stream -- which is what the
+	flow-control queue's frame model depends on.
+*/
+void
+RemoteHWInterface::_EndFrame(RemoteMessage& message)
+{
+	if ((fClientCapabilities & RP_CAP_FRAME_BOUNDARY) == 0)
+		return;
+
+	message.Start(RP_TIER_END_FRAME);
+	message.Add((uint32)atomic_add(&fFrameSequence, 1));
+}
+
+
+/*!	Records that the flow-control policy had to discard content it could not
+	prove would be redrawn, so that the event thread repairs it.
+
+	Latching only, and that restriction is load-bearing -- it was found on
+	hardware, not reasoned about. The first version of this did the repair here:
+	RP_RESYNC barrier, then _ReplayState(). This runs on a drawing thread, inside
+	a DrawTransaction destructor, with that engine's exclusive lock already held;
+	_ReplayState() then walks *every* registered engine and takes each one's
+	exclusive lock in turn. Two drawing threads doing that concurrently take the
+	same two locks in opposite orders. The result on a real desktop was not a
+	dropped frame, it was app_server's drawing threads deadlocked: the collapse
+	was logged exactly once and the connected client then received zero messages
+	for 180 s.
+
+	So the repair belongs on the event thread, which is where the
+	client-requested RP_RESYNC path already does the identical three steps and is
+	the only thread that may safely re-dirty the desktop. The cost is that the
+	repair waits for the event thread's next inbound message; see the flow-control
+	document for what that does and does not guarantee.
+*/
+void
+RemoteHWInterface::_CheckResyncOwed()
+{
+	if (!fWireWriter->TakeResyncOwed())
+		return;
+
+	TRACE_ERROR("flow control had to discard; a resync is owed\n");
+	atomic_or(&fRepaintOwed, 1);
 }
 
 

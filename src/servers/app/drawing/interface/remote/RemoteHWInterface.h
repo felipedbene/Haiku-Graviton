@@ -161,6 +161,9 @@ static	void						_ConnectionClosedCallback(void *cookie);
 		void						_ReplayState();
 		void						_SendResyncBarrier();
 
+		void						_EndFrame(RemoteMessage& message);
+		void						_CheckResyncOwed();
+
 		status_t					_MintSessionCookie();
 		void						_RemoveSessionCookie();
 
@@ -178,6 +181,19 @@ static	void						_ConnectionClosedCallback(void *cookie);
 		// accessors rather than a plain counter.
 		int32						fConnectionGeneration;
 		uint32						fSessionId;
+
+		// Frame sequence carried in RP_TIER_END_FRAME. Monotonic for the life of
+		// the interface, not per connection: it is an identity a client can quote
+		// back (Tier P's RP_FRAME_ACK), and reusing numbers across a reconnect
+		// would make two different frames answer to the same name.
+		int32						fFrameSequence;
+
+		// Set when the flow-control queue had to discard content it could not
+		// prove would be redrawn. The drawing thread that notices only sets
+		// this; the event thread does the repair, because replaying every
+		// engine's state from a drawing thread deadlocks them against each
+		// other (see _CheckResyncOwed()).
+		int32						fRepaintOwed;
 
 		uint32						fConnectionSpeed;
 		display_mode				fFallbackMode;
