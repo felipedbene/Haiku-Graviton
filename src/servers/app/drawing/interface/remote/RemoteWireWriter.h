@@ -6,6 +6,7 @@
 #define REMOTE_WIRE_WRITER_H
 
 #include <Locker.h>
+#include <OS.h>
 #include <SupportDefs.h>
 
 class StreamingRingBuffer;
@@ -28,6 +29,14 @@ class StreamingRingBuffer;
 	serialisation that was not already there -- StreamingRingBuffer::Write()
 	already holds its writer lock across a whole message, including the wait
 	for space.
+
+	Messages are flushed out of the compressor once per *drain window*, not once
+	per message (issue #543). Flushing per message costs 3.1x the bytes, because
+	every flush ends a zstd block and pays its own entropy tables for as little
+	as 25 bytes of drawing op. The window is closed by the flusher thread below;
+	what it never does is flush in the middle of a message, so the property
+	RemoteWireFormat.h states -- a decoder is never left holding a *partial*
+	message -- is exactly preserved: whole messages simply share a flush.
 */
 class RemoteWireWriter {
 public:
@@ -78,21 +87,36 @@ public:
 				of the fresh stream and cannot be left torn in the middle. */
 			void				Reset();
 
+			/*!	Ends the open drain window now: everything written so far
+					leaves as segments the peer can decode.
+
+				Called by the flusher thread when the window is up or the
+				drawing threads have gone quiet, and directly by anything that
+				must not wait for either -- a query the server then blocks on,
+				and the wire self-test, which has to see the bytes it just
+				asked for. Idempotent: with no window open it does nothing. */
+			status_t			Flush();
+
 			bool				IsCompressing() const { return fCapability != 0; }
 
 			/*!	Cumulative counters for the connection, for the A/B
 				measurement: bytes offered by the drawing engines, bytes
 				actually written to the ring buffer, messages, exempt (raw)
-				messages, and total time spent inside the compressor. */
+				messages, flushes of the compressed stream, and total time spent
+				inside the compressor. */
 			void				GetStatistics(uint64& _plainBytes,
 									uint64& _wireBytes, uint64& _messages,
-									uint64& _exemptMessages,
+									uint64& _exemptMessages, uint64& _flushes,
 									bigtime_t& _encodeTime) const;
+
+			//! The drain window in use, for tests and for the statistics line.
+			bigtime_t			FlushWindow() const { return fFlushWindow; }
 
 private:
 			status_t			_WriteLocked(const void* buffer, size_t length);
 			status_t			_WriteCompressed(const void* buffer,
-									size_t length);
+									size_t length, bool flushNow);
+			status_t			_FlushLocked();
 			status_t			_WriteStagedSegment(size_t length);
 			status_t			_WriteRawSegment(const void* payload,
 									size_t length);
@@ -100,6 +124,12 @@ private:
 									status_t reason);
 			void				_ResetCodec();
 	static	bool				_IsPreCompressed(uint16 code);
+	static	bool				_MustFlushNow(uint16 code);
+			void				_OpenWindow();
+			void				_StartFlusher();
+			void				_StopFlusher();
+	static	int32				_FlusherEntry(void* data);
+			void				_Flusher();
 			void				_MaybeReportStatistics();
 
 			StreamingRingBuffer* fTarget;
@@ -130,10 +160,31 @@ private:
 			uint8*				fOutputBuffer;
 			size_t				fOutputBufferSize;
 
+			// How long messages may accumulate in the compressor before the
+			// window is closed. Zero restores the pre-#543 policy -- one flush
+			// per message -- which is what the A/B's control arm runs.
+			bigtime_t			fFlushWindow;
+
+			// system_time() when the open window's first message was
+			// compressed, or 0 when no window is open, i.e. when everything
+			// written so far has been flushed. Guarded by fLock, like
+			// everything else here; the flusher thread takes the same lock.
+			bigtime_t			fWindowOpened;
+
+			// Messages compressed into the open window. The flusher watches it
+			// for a change: an unchanged count means the drawing threads have
+			// stopped feeding the window, so it can be closed early.
+			uint64				fWindowMessages;
+
+			thread_id			fFlusher;
+			sem_id				fFlushSignal;
+			bool				fFlusherQuitting;
+
 			uint64				fPlainBytes;
 			uint64				fWireBytes;
 			uint64				fMessages;
 			uint64				fExemptMessages;
+			uint64				fFlushes;
 			bigtime_t			fEncodeTime;
 			bigtime_t			fLastReport;
 };

@@ -25,20 +25,32 @@
 	rawFlag 0 -- the payload is a fragment of a single session-long zstd
 		stream. Feeding every compressed segment's payload, in order, to one
 		ZSTD_DStream reproduces the plain RP message stream. The server calls
-		ZSTD_e_flush at each message boundary, so a decoder is never left
-		holding a partial message once the segments for that message have
-		arrived; the retained window across messages is where the ratio comes
-		from, since consecutive drawing ops repeat opcodes, state and
-		coordinates.
+		ZSTD_e_flush only on a message boundary -- never inside a message -- so
+		a decoder is never left holding a partial message once the segments for
+		that message have arrived; the retained window across messages is where
+		the ratio comes from, since consecutive drawing ops repeat opcodes,
+		state and coordinates.
+
+		A flush lands on *some* message boundaries, not all of them: the server
+		batches the messages written within one drain window and flushes once
+		for the batch, because a flush ends a zstd block and a block header is
+		worth more than the mean 25 to 37 byte drawing op it would be spent on
+		(issue #543 -- per-message flushing measured 1.95x where per-window
+		measured 5.16x on the same bytes). A decoder cannot tell, and must not
+		try to: it decodes whatever complete messages the bytes it has produce,
+		and waits for more. What it may not assume is that the segments for the
+		message it wants have already been sent.
 
 	rawFlag 1 -- the payload is that many bytes of plain RP message stream,
 		passed through untouched and NOT entered into the compressor's
 		history. This is the exemption path for payloads that are already
 		compressed (see RemoteWireWriter::_IsPreCompressed): running an
 		entropy coder over JPEG/H.264/Opus bytes spends CPU for approximately
-		nothing. Because the compressed stream is flushed at every message
-		boundary, a raw segment can be interleaved at any message boundary
-		without disturbing the zstd stream that surrounds it.
+		nothing. A raw segment can be interleaved at any message boundary
+		without disturbing the zstd stream that surrounds it -- the server
+		closes any open drain window first, so that the messages before a raw
+		one are on the wire before it and the peer decodes them in the order
+		they were written.
 
 	Segment lengths are varints rather than fixed 32-bit fields so that the
 	framing cannot make the small, latency-critical messages bigger: a cursor
