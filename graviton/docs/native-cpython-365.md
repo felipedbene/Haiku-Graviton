@@ -1,8 +1,9 @@
 # Native CPython 3 on DeBeOS arm64 — verified (#365)
 
 **Result: DeBeOS ships a fully working native CPython 3.14 on Graviton (arm64).**
-All nine target C-extension modules import, `pip` is available out of the box,
-`pip install` works for both pure-Python and compiled-from-sdist C-extension
+All nine target C-extension modules import, `pip` is packaged (DeBeOS #552 — see
+the pip/setuptools section below), `pip install` works for both pure-Python and
+compiled-from-sdist C-extension
 packages, and a real `boto3` client makes signed calls against live AWS. This is
 the substrate #120 (native aws-cli / boto3 / meson) builds on.
 
@@ -59,20 +60,37 @@ decimal` → `ALL-IMPORTS-OK`. `lib-dynload/` carries the full set (`_ssl`,
 > under a non-TTY SSM shell — cosmetic (no `TERM`/termcap), the import still
 > succeeds. Set `TERM=dumb` to silence it.
 
-## pip is available out of the box
+## pip and setuptools (DeBeOS #552)
 
 The `python3.14` package does **not** put `pip` on the base interpreter's path
-(`python3.14 -m pip` → *No module named pip*), but the **bundled `ensurepip`
-(26.2.1) is present and functional**, so pip is one standard step away with no repo
-package and no network:
+(`python3.14 -m pip` → *No module named pip*), and `setuptools` is absent too, so
+a fresh `pkgman install python3.14` box hits "No module named pip". The **bundled
+`ensurepip` (26.2.1) is present and functional**, so pip is one standard step away
+with no network:
 
-- `python3.14 -m venv <dir>` seeds a working `pip 26.2.1` into the venv **offline**
-  (venv → ensurepip). `<venv>/bin/pip --version` → `pip 26.2.1`.
-- `python3.14 -m ensurepip` / `get-pip.py` also work.
+- `python3.14 -m ensurepip` installs pip **offline** from the vendored wheel
+  (`ensurepip/_bundled/pip-26.2.1-py3-none-any.whl`) into the writable
+  non-packaged site (`/boot/system/non-packaged/lib/python3.14/site-packages`).
+- `python3.14 -m venv <dir>` seeds a working `pip 26.2.1` into the venv (venv →
+  ensurepip). `<venv>/bin/pip --version` → `pip 26.2.1`.
 
-There is no standalone `pip` hpkg in the pool; it is not needed because ensurepip
-is bundled. A `pip_python3.14` package would only be polish (OOTB `pkgman install
-pip`).
+That one-step bootstrap is why the earlier note here called a pip package "only
+polish". #552 corrects that: ensurepip alone does **not** give setuptools, and
+"one manual step" is not "out of the box". The resolution:
+
+- **pip is now a real repo package.** `graviton/scripts/haiku-build-pip-hpkg`
+  re-lays the ensurepip-vendored wheel as `pip_python3.14-26.2.1-1-any.hpkg`
+  (vendor DeBeOS, arch any, provides `cmd:pip`/`cmd:pip3`/`cmd:pip3.14`, requires
+  `cmd:python3.14`) — reproducible and offline, no PyPI fetch and no HaikuPorts
+  recipe (upstream ships none). Installed, pip resolves from the **packaged** path
+  `/boot/system/lib/python3.14/site-packages/pip`, so it is present the instant
+  the package activates.
+- **setuptools** already ships as `setuptools_python3.14` in the repo.
+- The **full image bakes both** alongside `python3.14` (see
+  `graviton/ssh/UserBuildConfig`), so `python3 -m pip --version` and
+  `import setuptools` both succeed on first boot. On the lean image the pair is a
+  `pkgman install pip_python3.14 setuptools_python3.14` away, like every other
+  repo package — python itself is not baked into the lean image either.
 
 ## Proof — pip install + a real package against live AWS
 
