@@ -329,6 +329,26 @@ function loadClient() {
 		parseInt, parseFloat, setTimeout, clearTimeout,
 		TextDecoder, TextEncoder
 	};
+
+	// A DecompressionStream whose accepted formats the test controls. Modelled
+	// rather than borrowed from node so the compression checks can move the
+	// boundary in both directions -- they need a browser that LACKS a format and
+	// one that HAS it, and node gives only the former.
+	//
+	// The default list is the Compression Standard's CompressionFormat enum as
+	// measured against node 24 on 2026-09-24:
+	//   deflate SUPPORTED, deflate-raw SUPPORTED, gzip SUPPORTED,
+	//   brotli SUPPORTED, zstd -> TypeError.
+	// If a browser ever ships zstd, this list is the one line to change, and the
+	// checks below state what becomes true when it does.
+	sandbox.__compressionFormats = ['brotli', 'deflate', 'deflate-raw', 'gzip'];
+	sandbox.DecompressionStream = function(format) {
+		if (sandbox.__compressionFormats.indexOf(format) < 0) {
+			throw new TypeError("Failed to construct 'DecompressionStream': "
+				+ "1st argument '" + format + "' is not a valid enum value");
+		}
+	};
+
 	sandbox.globalThis = sandbox;
 	vm.createContext(sandbox);
 	// `function` declarations land on the sandbox object by themselves; `const`
@@ -1192,6 +1212,139 @@ check('MUTATION: ...so the "1 detent" assertion goes RED',
 	!(Math.abs(mutWheel.deltaY - 1.0) < 1e-6), String(mutWheel.deltaY));
 check('the real detent scaling is back after the mutation arm',
 	Math.abs(sendWheel(0, 100, 0).frames[0].deltaY - 1.0) < 1e-6);
+
+// --- wire-compression capability advertisement ----------------------------
+//
+// WHY THIS EXISTS.  The server compresses the server -> client direction from
+// the byte after RP_HELLO_ACK onward, on the strength of our RP_HELLO bitmap
+// alone.  So advertising a compression bit we cannot decode is not a degraded
+// mode, it is a permanent desynchronisation: every later frame is unparseable
+// and a resync replays into the same codec we do not have.  Measured on
+// Graviton, the server-side zstd path is live and negotiating today -- it turned
+// 67.9 kB of idle desktop into 34.7 kB for an instrument client that advertised
+// the bit -- so this is not a dormant feature that would fail safe.  That makes
+// "never advertise compression without a decoder" a correctness invariant, and
+// the checks below are what stop it being a comment.
+console.log('  -- wire-compression capability advertisement --');
+
+check('the client knows zstd is a compression capability',
+	client.RP_CAP_COMPRESS_ZSTD === 2, String(client.RP_CAP_COMPRESS_ZSTD));
+check('...and lists it in the decoder table with NO decoder',
+	client.RP_COMPRESSION_DECODERS.length === 1
+	&& client.RP_COMPRESSION_DECODERS[0].bit === client.RP_CAP_COMPRESS_ZSTD
+	&& client.RP_COMPRESSION_DECODERS[0].format === null,
+	JSON.stringify(client.RP_COMPRESSION_DECODERS));
+check('the compression mask covers exactly the known compression bits',
+	client.RP_CAP_COMPRESSION_MASK === client.RP_CAP_COMPRESS_ZSTD,
+	String(client.RP_CAP_COMPRESSION_MASK));
+
+// The probe itself, both ways, on the modelled browser enum.
+check('the format probe says deflate-raw IS available (a format browsers have)',
+	client.rpDecompressionFormatAvailable('deflate-raw') === true);
+check('the format probe says zstd is NOT available -- the measured browser state',
+	client.rpDecompressionFormatAvailable('zstd') === false);
+check('the format probe treats a null format as unavailable',
+	client.rpDecompressionFormatAvailable(null) === false);
+
+// The advertisement that results.
+const advertised = client.rpAdvertisedCapabilities();
+check('we do NOT advertise RP_CAP_STRING_WIDTH_REPLY -- retired in #538: the '
+	+ 'server no longer issues RP_STRING_WIDTH, so offering to answer it would '
+	+ 'be a lie',
+	(advertised & client.RP_CAP_STRING_WIDTH_REPLY) === 0, String(advertised));
+check('we advertise NO compression bit, because we have no decoder',
+	(advertised & client.RP_CAP_COMPRESSION_MASK) === 0, String(advertised));
+check('...so the bitmap is 0 -- the retired-empty set that follows from #538 '
+	+ 'plus no decoder probe firing',
+	advertised === 0, String(advertised));
+
+// POSITIVE CONTROL for that absence.  "We advertise no compression bit" is only
+// meaningful if the code CAN advertise one -- otherwise the loop could be dead
+// and every check above would pass just as well.  So give zstd a format the
+// modelled browser does have, and require the bit to appear.
+(function () {
+	const entry = client.RP_COMPRESSION_DECODERS[0];
+	const saved = entry.format;
+	try {
+		entry.format = 'deflate-raw';	// pretend a decoder exists
+		const withDecoder = client.rpAdvertisedCapabilities();
+		check('POSITIVE CONTROL: given a decoder whose format IS available, the '
+			+ 'zstd bit IS advertised -- so the absence above is a decision, '
+			+ 'not dead code',
+			(withDecoder & client.RP_CAP_COMPRESS_ZSTD) !== 0,
+			String(withDecoder));
+	} finally {
+		entry.format = saved;
+	}
+})();
+
+// MUTATION 1.  The tempting wrong fix: name the format zstd and advertise it,
+// on a browser that does not have zstd.  The guard must be the PROBE, not the
+// table, so this must still advertise nothing.
+(function () {
+	const entry = client.RP_COMPRESSION_DECODERS[0];
+	const saved = entry.format;
+	try {
+		entry.format = 'zstd';
+		const claimed = client.rpAdvertisedCapabilities();
+		check('MUTATION: naming the format \'zstd\' on a browser that lacks it '
+			+ 'still advertises nothing -- the probe is the guard',
+			(claimed & client.RP_CAP_COMPRESS_ZSTD) === 0, String(claimed));
+	} finally {
+		entry.format = saved;
+	}
+})();
+
+// MUTATION 2.  Now grant the browser zstd as well.  This is the "a future
+// browser ships it" arm, and it must flip the advertisement on -- which is also
+// the check that goes RED if someone deletes the probe's loop.
+(function () {
+	const entry = client.RP_COMPRESSION_DECODERS[0];
+	const saved = entry.format;
+	const savedFormats = client.__compressionFormats.slice();
+	try {
+		entry.format = 'zstd';
+		client.__compressionFormats.push('zstd');
+		const claimed = client.rpAdvertisedCapabilities();
+		check('MUTATION: a browser that DOES have zstd, with the format named, '
+			+ 'advertises the bit',
+			(claimed & client.RP_CAP_COMPRESS_ZSTD) !== 0, String(claimed));
+	} finally {
+		entry.format = saved;
+		client.__compressionFormats.length = 0;
+		savedFormats.forEach(f => client.__compressionFormats.push(f));
+	}
+})();
+
+check('the real advertisement is back after the mutation arms',
+	client.rpAdvertisedCapabilities() === 0,
+	String(client.rpAdvertisedCapabilities()));
+
+// MUTATION 3.  The regression this whole block defends against: a hand-written
+// bitmap that includes a compression bit with no decoder behind it.  That is
+// what the previous `RP_CAP_ADVERTISED` constant made a one-token edit away.
+// Model the old constant form and require the invariant to detect it.
+(function () {
+	function advertisesUndecodableCompression(bitmap) {
+		var undecodable = bitmap & client.RP_CAP_COMPRESSION_MASK;
+		for (var i = 0; i < client.RP_COMPRESSION_DECODERS.length; i++) {
+			var e = client.RP_COMPRESSION_DECODERS[i];
+			if (client.rpDecompressionFormatAvailable(e.format))
+				undecodable &= ~e.bit;
+		}
+		return undecodable !== 0;
+	}
+
+	const handWritten = client.RP_CAP_STRING_WIDTH_REPLY
+		| client.RP_CAP_COMPRESS_ZSTD;
+	check('MUTATION: a hand-written bitmap that offers zstd with no decoder is '
+		+ 'detected as undecodable -- the #540 desync trap',
+		advertisesUndecodableCompression(handWritten) === true);
+	check('MUTATION: ...so the same predicate on the computed bitmap goes GREEN, '
+		+ 'which is what makes it a discriminator',
+		advertisesUndecodableCompression(client.rpAdvertisedCapabilities())
+			=== false);
+})();
 
 console.log('');
 console.log('SELFTEST_CHECKS=' + checks.length);
