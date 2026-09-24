@@ -1,5 +1,26 @@
 # amazon-ssm-agent — haiku/arm64 port (M3 + M4 + M5 + M6 + M7)
 
+> **Interactive Session Manager fix (issue #553): shell sessions now run as the
+> current user.** `aws ssm start-session --target <id>` with no document (the
+> default `Standard_Stream` shell) failed with `Unable to start command: exit
+> status 1`, while Run Command and port forwarding worked. Root cause: the
+> `session/shell` layer was reused from the Linux path build-tag-only, so on a
+> root session it tried to create and drop privileges to `ssm-user`
+> (`CreateLocalAdminUser` → `useradd -m ssm-user`, then `getUserCredentials` →
+> `id -u ssm-user`). On Haiku both exit 1 — `useradd` has no `-m` flag, there is
+> no `ssm-user`, the agent already runs as the sole (root) user, and
+> `getUserCredentials` rejects uid 0 anyway. The fix (in
+> `agent/session/shell/shell_unix.go`, carried in the combined patch) short-circuits
+> the ssm-user model on `runtime.GOOS == "haiku"` and runs the interactive shell as
+> the current user with no privilege switch — Haiku is single-user, so RunAs is not
+> meaningful and is ignored rather than failing the session. Verified: pristine
+> `v3.3.3270.0` + `git apply` of the updated patch + `GOOS=haiku GOARCH=arm64
+> CGO_ENABLED=0 go build ./...` exits 0 and `ssm-session-worker` links as an
+> AArch64 Haiku ELF. On-hardware start-session (does `creack/pty.Start` bring up a
+> working pty on Haiku) is the one step not yet exercised end-to-end: the deployed
+> binary lives on the read-only system partition, so a live A/B needs a fresh
+> agent hpkg bake.
+
 > **M7 (2026-09-18): EC2-native registration gate CLEARED + packaged as an hpkg.**
 > The real agent registered **EC2-native** (an `i-` node via IMDS + instance
 > role, *no* hybrid activation) on a real Graviton `c7g.large`, reported

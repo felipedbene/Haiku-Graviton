@@ -1030,7 +1030,7 @@ index 58ddf45..d56da8e 100644
  // Package constants manages the configuration of the session shell.
  package constants
 diff --git a/agent/session/shell/shell_unix.go b/agent/session/shell/shell_unix.go
-index 50c3905..274d019 100644
+index 50c3905..def6ec2 100644
 --- a/agent/session/shell/shell_unix.go
 +++ b/agent/session/shell/shell_unix.go
 @@ -11,8 +11,8 @@
@@ -1044,6 +1044,122 @@ index 50c3905..274d019 100644
  
  // Package shell implements session shell plugin.
  package shell
+@@ -27,6 +27,7 @@ import (
+ 	"os/exec"
+ 	"os/user"
+ 	"path/filepath"
++	"runtime"
+ 	"strconv"
+ 	"strings"
+ 	"syscall"
+@@ -113,50 +114,73 @@ func StartCommandExecutor(
+ 	if !constants.GetRunAsElevated(shellProps) && !isSessionLogger && !appConfig.Agent.ContainerMode {
+ 		// We get here only when its a customer shell that needs to be started in a specific user mode.
+ 
+-		u := &utility.SessionUtil{}
+-		if config.RunAsEnabled {
+-			if strings.TrimSpace(config.RunAsUser) == "" {
+-				return errors.New("please set the RunAs default user")
++		if runtime.GOOS == "haiku" {
++			// Haiku is a single-user system: there is no "ssm-user", its useradd
++			// does not accept the "-m" flag the Linux path uses (model.AddUserCommand),
++			// and the agent already runs as the sole (root) user. The Linux flow
++			// (create ssm-user -> resolve its uid/gid -> drop privileges to it) can
++			// therefore never succeed: `useradd -m ssm-user` and the subsequent
++			// `id -u ssm-user` both exit 1, which surfaced as the session failing
++			// with "Unable to start command: exit status 1" (issue #553).
++			//
++			// Run the interactive shell as the current user without any privilege
++			// switch. RunAs is not meaningful on a single-user OS, so it is ignored
++			// here rather than failing the session.
++			currentUser, err := user.Current()
++			if err != nil {
++				log.Errorf("Failed to determine current user for shell session: %v", err)
++				return err
+ 			}
+-
+-			if os.Geteuid() != 0 {
+-				return errors.New("the agent must run as root to use RunAs")
++			sessionUser = currentUser.Username
++			if currentUser.HomeDir != "" {
++				cmd.Env = append(cmd.Env, "HOME="+currentUser.HomeDir)
+ 			}
++		} else {
++			u := &utility.SessionUtil{}
++			if config.RunAsEnabled {
++				if strings.TrimSpace(config.RunAsUser) == "" {
++					return errors.New("please set the RunAs default user")
++				}
+ 
+-			// Check if user exists
+-			if userExists, _ := u.DoesUserExist(config.RunAsUser); !userExists {
+-				// if user does not exist, fail the session
+-				return fmt.Errorf("failed to start pty since RunAs user %s does not exist", config.RunAsUser)
+-			}
++				if os.Geteuid() != 0 {
++					return errors.New("the agent must run as root to use RunAs")
++				}
+ 
+-			sessionUser = config.RunAsUser
+-		} else {
+-			if os.Geteuid() == 0 {
+-				// Start as ssm-user
+-				// Create ssm-user before starting a session.
+-				u.CreateLocalAdminUser(log)
++				// Check if user exists
++				if userExists, _ := u.DoesUserExist(config.RunAsUser); !userExists {
++					// if user does not exist, fail the session
++					return fmt.Errorf("failed to start pty since RunAs user %s does not exist", config.RunAsUser)
++				}
+ 
+-				sessionUser = appconfig.DefaultRunAsUserName
++				sessionUser = config.RunAsUser
+ 			} else {
+-				user, _ := user.Current()
+-				sessionUser = user.Username
++				if os.Geteuid() == 0 {
++					// Start as ssm-user
++					// Create ssm-user before starting a session.
++					u.CreateLocalAdminUser(log)
++
++					sessionUser = appconfig.DefaultRunAsUserName
++				} else {
++					user, _ := user.Current()
++					sessionUser = user.Username
++				}
+ 			}
+-		}
+ 
+-		// Get the uid and gid of the runas user.
+-		uid, gid, groups, err := getUserCredentials(log, sessionUser)
+-		if err != nil {
+-			return err
+-		}
++			// Get the uid and gid of the runas user.
++			uid, gid, groups, err := getUserCredentials(log, sessionUser)
++			if err != nil {
++				return err
++			}
+ 
+-		if os.Geteuid() == 0 {
+-			cmd.SysProcAttr = &syscall.SysProcAttr{}
+-			cmd.SysProcAttr.Credential = &syscall.Credential{Uid: uid, Gid: gid, Groups: groups, NoSetGroups: false}
+-		}
++			if os.Geteuid() == 0 {
++				cmd.SysProcAttr = &syscall.SysProcAttr{}
++				cmd.SysProcAttr.Credential = &syscall.Credential{Uid: uid, Gid: gid, Groups: groups, NoSetGroups: false}
++			}
+ 
+-		// Setting home environment variable for RunAs user
+-		runAsUserHomeEnvVariable := constants.HomeEnvVariable + sessionUser
+-		cmd.Env = append(cmd.Env, runAsUserHomeEnvVariable)
++			// Setting home environment variable for RunAs user
++			runAsUserHomeEnvVariable := constants.HomeEnvVariable + sessionUser
++			cmd.Env = append(cmd.Env, runAsUserHomeEnvVariable)
++		}
+ 	}
+ 
+ 	if constants.GetRunAsElevated(shellProps) {
 diff --git a/agent/session/utility/model/model_unix.go b/agent/session/utility/model/model_unix.go
 index a0d0961..e97dd26 100644
 --- a/agent/session/utility/model/model_unix.go
