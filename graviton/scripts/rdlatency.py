@@ -74,6 +74,14 @@ RP_HELLO_ACK = 7
 RP_SESSION_COOKIE = 12
 RP_COOKIE_METHOD_PER_BOOT = 1
 
+# URP/1 stream compression, server -> client only. Deliberately not "RP_"
+# prefixed: these are capability bits, not opcodes.
+URP_PROTOCOL_VERSION = 1
+CAP_STRING_WIDTH_REPLY = 1 << 0
+CAP_COMPRESS_ZSTD = 1 << 1
+SEGMENT_MAX_PAYLOAD = 64 * 1024 * 1024
+SEGMENT_MAX_VARINT = 5
+
 RP_CREATE_STATE = 20
 RP_DELETE_STATE = 21
 RP_ENABLE_SYNC_DRAWING = 22
@@ -239,12 +247,237 @@ def utf8_chars(data):
     return sum(1 for b in data if (b & 0xC0) != 0x80)
 
 
+# ---------------------------------------------------------------------------
+# The negotiated (compressed) wire
+#
+# Why this is here at all. Without it this tool advertises no capability bits,
+# so the server serves it the legacy plain stream -- which means it CANNOT see
+# any latency that the compressed path adds, and a run that reported "no
+# change" would be reporting that it never measured the thing.  The drain window
+# of issue #543 is exactly such a cost: it exists only on the compressed
+# stream.  Self-contained rather than imported from rdcapture.py so that the two
+# instruments cannot fail in the same way at the same time.
+# ---------------------------------------------------------------------------
+
+def segment_header_bytes(payload_length, raw):
+    """LEB128 of (length << 1) | raw -- the encoder side, for the self-test."""
+    value = (payload_length << 1) | (1 if raw else 0)
+    out = bytearray()
+    while value >= 0x80:
+        out.append((value & 0x7F) | 0x80)
+        value >>= 7
+    out.append(value)
+    return bytes(out)
+
+
+def read_segment_header(buf):
+    """(consumed, payload_length, raw), or (0, None, None) if incomplete."""
+    value = 0
+    shift = 0
+    for i, byte in enumerate(buf[:SEGMENT_MAX_VARINT]):
+        value |= (byte & 0x7F) << shift
+        if byte < 0x80:
+            length = value >> 1
+            if length > SEGMENT_MAX_PAYLOAD:
+                raise ValueError("segment claims %d bytes" % length)
+            return i + 1, length, bool(value & 1)
+        shift += 7
+    if len(buf) >= SEGMENT_MAX_VARINT:
+        raise ValueError("segment header longer than %d bytes"
+                         % SEGMENT_MAX_VARINT)
+    return 0, None, None
+
+
+class ZstdStream(object):
+    """Streaming zstd decompressor over libzstd through ctypes."""
+
+    def __init__(self, window_log_max=20):
+        import ctypes
+        self._ctypes = ctypes
+        self._lib = None
+        errors = []
+        for name in ("libzstd.so.1", "libzstd.so", "libzstd.so.1.5.6"):
+            try:
+                self._lib = ctypes.CDLL(name)
+                break
+            except OSError as error:
+                errors.append("%s: %s" % (name, error))
+        if self._lib is None:
+            raise OSError("libzstd not loadable (%s)" % "; ".join(errors))
+
+        class InBuffer(ctypes.Structure):
+            _fields_ = [("src", ctypes.c_void_p), ("size", ctypes.c_size_t),
+                        ("pos", ctypes.c_size_t)]
+
+        class OutBuffer(ctypes.Structure):
+            _fields_ = [("dst", ctypes.c_void_p), ("size", ctypes.c_size_t),
+                        ("pos", ctypes.c_size_t)]
+
+        self._InBuffer = InBuffer
+        self._OutBuffer = OutBuffer
+        self._lib.ZSTD_createDCtx.restype = ctypes.c_void_p
+        self._lib.ZSTD_freeDCtx.argtypes = [ctypes.c_void_p]
+        self._lib.ZSTD_isError.restype = ctypes.c_uint
+        self._lib.ZSTD_isError.argtypes = [ctypes.c_size_t]
+        self._lib.ZSTD_getErrorName.restype = ctypes.c_char_p
+        self._lib.ZSTD_getErrorName.argtypes = [ctypes.c_size_t]
+        self._lib.ZSTD_decompressStream.restype = ctypes.c_size_t
+        self._lib.ZSTD_decompressStream.argtypes = [
+            ctypes.c_void_p, ctypes.POINTER(OutBuffer),
+            ctypes.POINTER(InBuffer)]
+        self._lib.ZSTD_DCtx_setParameter.restype = ctypes.c_size_t
+        self._lib.ZSTD_DCtx_setParameter.argtypes = [
+            ctypes.c_void_p, ctypes.c_int, ctypes.c_int]
+
+        self._ctx = self._lib.ZSTD_createDCtx()
+        if not self._ctx:
+            raise RuntimeError("ZSTD_createDCtx failed")
+        # 100 == ZSTD_d_windowLogMax
+        self._check(self._lib.ZSTD_DCtx_setParameter(self._ctx, 100,
+                                                     window_log_max))
+        self._out = self._ctypes.create_string_buffer(64 * 1024)
+
+    def _check(self, code):
+        if self._lib.ZSTD_isError(code):
+            raise ValueError("zstd: %s"
+                             % self._lib.ZSTD_getErrorName(code).decode())
+        return code
+
+    def decompress(self, data):
+        ctypes = self._ctypes
+        src = ctypes.create_string_buffer(bytes(data), len(data))
+        inbuf = self._InBuffer(ctypes.cast(src, ctypes.c_void_p), len(data), 0)
+        produced = bytearray()
+        # "Input consumed" is not "output delivered": zstd fills the staging
+        # buffer, stops, and keeps the rest -- and it can reach that state with
+        # the input already consumed.  Stopping there leaves decoded bytes inside
+        # the decoder, and they then surface AFTER any raw (passthrough) segment
+        # that arrived in between, i.e. out of order.  Keep going until a call
+        # leaves the buffer short.
+        while True:
+            outbuf = self._OutBuffer(ctypes.cast(self._out, ctypes.c_void_p),
+                                     len(self._out), 0)
+            before = inbuf.pos
+            self._check(self._lib.ZSTD_decompressStream(
+                self._ctx, ctypes.byref(outbuf), ctypes.byref(inbuf)))
+            if outbuf.pos:
+                produced += self._out.raw[:outbuf.pos]
+            if inbuf.pos == inbuf.size and outbuf.pos < len(self._out):
+                break
+            if inbuf.pos == before and not outbuf.pos:
+                raise ValueError("zstd made no progress")
+        return bytes(produced)
+
+
+class WireDecoder(object):
+    """Turns socket bytes back into the plain RP stream.
+
+    The switch to segments is found by watching the framing go past, not by
+    being told: the negotiated capabilities arrive inside RP_HELLO_ACK and the
+    byte right after that message is already a segment.
+    """
+
+    def __init__(self, capabilities):
+        self.capabilities = capabilities
+        self.compressed = False
+        self.stream = None
+        self.wire_bytes = 0
+        self.plain_bytes = 0
+        self.compressed_segments = 0
+        self.raw_segments = 0
+        self._pending = bytearray()
+        self._header = bytearray()
+        self._body_left = 0
+        self._ack = bytearray()
+        self._capturing_ack = False
+        self._segment_left = 0
+        self._segment_raw = False
+        self._in_segment = False
+
+    def feed(self, chunk):
+        self.wire_bytes += len(chunk)
+        self._pending += chunk
+        out = bytearray()
+        while self._pending:
+            if self.compressed:
+                if not self._segments(out):
+                    break
+            elif not self._plain(out):
+                break
+        self.plain_bytes += len(out)
+        return bytes(out)
+
+    def _plain(self, out):
+        if self._body_left == 0:
+            take = min(len(self._pending), HEADER - len(self._header))
+            out += self._pending[:take]
+            self._header += self._pending[:take]
+            del self._pending[:take]
+            if len(self._header) < HEADER:
+                return False
+            code, length = struct.unpack_from("<HI", self._header, 0)
+            del self._header[:]
+            if length < HEADER:
+                raise ValueError("message claims %d bytes" % length)
+            self._body_left = length - HEADER
+            self._capturing_ack = code == RP_HELLO_ACK and self._body_left > 0
+            del self._ack[:]
+            return True
+
+        take = min(len(self._pending), self._body_left)
+        out += self._pending[:take]
+        if self._capturing_ack and len(self._ack) < 8:
+            self._ack += self._pending[:take][:8 - len(self._ack)]
+        del self._pending[:take]
+        self._body_left -= take
+        if self._body_left > 0:
+            return False
+
+        if self._capturing_ack:
+            self._capturing_ack = False
+            if len(self._ack) >= 8:
+                _, caps = struct.unpack_from("<II", self._ack, 0)
+                if caps & self.capabilities & CAP_COMPRESS_ZSTD:
+                    self.stream = ZstdStream()
+                    self.compressed = True
+        return True
+
+    def _segments(self, out):
+        if not self._in_segment:
+            consumed, length, raw = read_segment_header(self._pending)
+            if not consumed:
+                return False
+            del self._pending[:consumed]
+            self._segment_left = length
+            self._segment_raw = raw
+            self._in_segment = True
+            if raw:
+                self.raw_segments += 1
+            else:
+                self.compressed_segments += 1
+            if length == 0:
+                self._in_segment = False
+                return True
+
+        if not self._pending:
+            return False
+
+        take = min(len(self._pending), self._segment_left)
+        payload = bytes(self._pending[:take])
+        del self._pending[:take]
+        self._segment_left -= take
+        if self._segment_left == 0:
+            self._in_segment = False
+        out += payload if self._segment_raw else self.stream.decompress(payload)
+        return True
+
+
 class Session(object):
     """The RP connection, plus the bookkeeping needed to keep the server from
     blocking on a synchronous query (which would contaminate every later
     trial)."""
 
-    def __init__(self, host, port, cookie, timeout=10.0):
+    def __init__(self, host, port, cookie, timeout=10.0, capabilities=0):
         self.sock = socket.create_connection((host, port), timeout=timeout)
         self.sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
         self.sock.setblocking(False)
@@ -255,6 +488,9 @@ class Session(object):
         self.read_bitmap_queries = 0
         self.bytes_in = 0
         self.chunks = 0
+        # Zero capabilities means the legacy plain stream, and then this is a
+        # passthrough that costs one function call per chunk.
+        self.wire = WireDecoder(capabilities) if capabilities else None
         if cookie:
             cb = cookie.encode() if isinstance(cookie, str) else cookie
             payload = struct.pack("<II", RP_COOKIE_METHOD_PER_BOOT,
@@ -291,7 +527,10 @@ class Session(object):
             raise EOFError("peer closed")
         self.bytes_in += len(chunk)
         self.chunks += 1
-        self.buf += chunk
+        # t was taken before this: decode time is client-side work, and charging
+        # it to the server's latency would make the compressed arm look worse
+        # than it is.
+        self.buf += self.wire.feed(chunk) if self.wire is not None else chunk
         out = []
         while len(self.buf) >= HEADER:
             code, length = struct.unpack_from("<HI", self.buf, 0)
@@ -688,6 +927,97 @@ def selftest():
           (0 <= 640 <= SCREEN[0] and 0 <= 400 <= SCREEN[1])
           and len(off_screen([("--window", [640.0, 400.0])], *SCREEN)) == 1)
 
+    # The negotiated-wire decoder (#543). Offline: a compressor built here with
+    # the server's own settings, fed to the decoder through the segment framing.
+    check("a multi-byte segment header round-trips",
+          read_segment_header(segment_header_bytes(300, False))
+          == (2, 300, False))
+    check("the raw flag survives the round trip",
+          read_segment_header(segment_header_bytes(7, True)) == (1, 7, True))
+    check("an incomplete header asks for more bytes rather than guessing",
+          read_segment_header(bytes(bytearray([0x81]))) == (0, None, None))
+
+    try:
+        import ctypes
+        lib = None
+        for name in ("libzstd.so.1", "libzstd.so"):
+            try:
+                lib = ctypes.CDLL(name)
+                break
+            except OSError:
+                continue
+        if lib is None:
+            raise OSError("libzstd not loadable")
+
+        lib.ZSTD_compressBound.restype = ctypes.c_size_t
+        lib.ZSTD_compressBound.argtypes = [ctypes.c_size_t]
+        lib.ZSTD_compress.restype = ctypes.c_size_t
+        lib.ZSTD_compress.argtypes = [ctypes.c_void_p, ctypes.c_size_t,
+                                      ctypes.c_void_p, ctypes.c_size_t,
+                                      ctypes.c_int]
+        # Several whole messages in ONE compressed blob: exactly what a drain
+        # window produces.
+        #
+        # The size is chosen, not arbitrary. 128-byte messages to exactly
+        # 3 x 128 kB is three full zstd blocks, so the LAST block decodes to
+        # 128 kB into a 64 kB staging buffer with all of its compressed input
+        # already consumed -- the one state in which zstd holds output back with
+        # nothing left to feed it. A decoder that stops at "input consumed"
+        # returns 64 kB short here; at 160 kB (last block 32 kB, which fits) it
+        # would return everything and this check would pass against the bug.
+        body = (struct.pack("<I", 7) + struct.pack("<ffff", 1.0, 2.0, 3.0, 4.0)
+                + bytes(bytearray(128 - HEADER - 20)))
+        message = frame(RP_FILL_RECT, body)
+        assert len(message) == 128
+        plain = message * (3 * 131072 // 128)
+        bound = lib.ZSTD_compressBound(len(plain))
+        dst = ctypes.create_string_buffer(bound)
+        src = ctypes.create_string_buffer(plain, len(plain))
+        size = lib.ZSTD_compress(ctypes.cast(dst, ctypes.c_void_p), bound,
+                                 ctypes.cast(src, ctypes.c_void_p),
+                                 len(plain), 1)
+        blob = dst.raw[:size]
+
+        decoder = WireDecoder(CAP_COMPRESS_ZSTD)
+        ack = frame(RP_HELLO_ACK, struct.pack("<II", URP_PROTOCOL_VERSION,
+                                              CAP_COMPRESS_ZSTD))
+        out = bytearray(decoder.feed(ack))
+        check("RP_HELLO_ACK switches the decoder to segments",
+              decoder.compressed and bytes(out) == ack)
+
+        # A compressed segment, then a RAW (passthrough) one. The pair is the
+        # point: decoded bytes held back inside zstd are not lost, they surface
+        # on the next call -- so a decoder that stops at "input consumed" is
+        # only *detectably* wrong when something bypasses the decoder and
+        # overtakes them. A raw segment is exactly that, and it is why the
+        # in-tree C reader's version of this bug showed up as equal-length,
+        # wrong-order output rather than as missing bytes.
+        marker = frame(RP_SET_CURSOR_VISIBLE, b"\x01")
+        wire = (segment_header_bytes(len(blob), False) + blob
+                + segment_header_bytes(len(marker), True) + marker)
+
+        # In small pieces, so the segment header, its varint continuation and the
+        # payload are each split across feeds.
+        #
+        # Honest about its strength: this asserts the property, it does not
+        # prove the check can fail. Whether the buggy loop is *caught* depends on
+        # a feed boundary falling exactly where zstd is holding output back, and
+        # with fixed 7-byte pieces it does not -- the pre-#543 loop passes this.
+        # The deterministic mutation proof for the same defect is in the C
+        # self-test (`RemoteDesktop --wire-selftest`), where the segment
+        # boundaries do land there and reverting the drain loop fails it 3/3 at a
+        # 128 kB block boundary.
+        pieces = bytearray()
+        for i in range(0, len(wire), 7):
+            pieces += decoder.feed(wire[i:i + 7])
+        check("a multi-message segment decodes whole and in order, "
+              "ahead of a following raw segment",
+              bytes(pieces) == plain + marker,
+              "(%d of %d bytes)" % (len(pieces), len(plain) + len(marker)))
+    except OSError as error:
+        check("libzstd is available for the negotiated-wire checks", False,
+              str(error))
+
     # Counted, not hardcoded: a hardcoded total is a check that stops checking
     # the moment someone adds or removes one above it.
     print("%d check(s), %d failure(s)" % (len(ran), len(fails)))
@@ -899,6 +1229,13 @@ def main(argv=None):
     p.add_argument("--port", type=int, default=10900)
     p.add_argument("--cookie-file",
                    help="required unless --selftest")
+    p.add_argument("--zstd", action="store_true",
+                   help="advertise RP_CAP_COMPRESS_ZSTD and decode the "
+                        "compressed wire, so the figures include whatever "
+                        "latency the compressed path adds (issue #543's drain "
+                        "window is only on that path). Without this the server "
+                        "serves the legacy plain stream and no amount of "
+                        "encoder policy can show up in the numbers.")
     p.add_argument("--selftest", action="store_true",
                    help="run offline checks on the attribution key and exit; needs no instance and no network")
     p.add_argument("--json", help="write every raw sample here")
@@ -977,7 +1314,18 @@ def main(argv=None):
     if floor_err:
         print("floor errors: %s" % floor_err)
 
-    sess = Session(args.host, args.port, cookie)
+    capabilities = CAP_COMPRESS_ZSTD if args.zstd else 0
+    sess = Session(args.host, args.port, cookie, capabilities=capabilities)
+
+    # RP_HELLO before anything else that draws, or the server would still be
+    # writing plain bytes when the first response came back. Only the
+    # compression bit: answering string-width queries stays a non-goal (see the
+    # note below), so the server must not be told this client answers them.
+    if capabilities:
+        sess.send(frame(RP_HELLO, struct.pack("<IIIIII", URP_PROTOCOL_VERSION,
+                                              capabilities, 0, 0,
+                                              args.width, args.height)))
+
     sess.send(frame(RP_INIT_CONNECTION))
 
     # Tell the server the screen size, the way both in-tree clients do. This is

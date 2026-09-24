@@ -62,6 +62,71 @@ static const size_t kOutputBufferSize = 64 * 1024 + kSegmentHeaderReserve;
 // target is write-bound, so the instrumentation has to cost bytes it can afford.
 static const bigtime_t kStatisticsInterval = 5 * 1000 * 1000;
 
+/*!	The drain window: the longest a message may sit in the compressor before the
+	stream is flushed and it can be decoded.
+
+	Why there is a window at all. A flush ends a zstd block, so it pays that
+	block's entropy tables -- and the census says the mean message on this wire
+	is 25.6 to 36.9 bytes, which is far less than a block header is worth.
+	Priced on a captured 30 s idle stream with the shipped parameters: one flush
+	per message 1.95x, one per 4 ms 5.16x, one per 16 ms 5.28x, and a single
+	flush over the whole capture 6.02x. The ratio is nearly all recovered by
+	4 ms.
+
+	Why 4 ms and not 16. A window is a deliberate delay, and this server's
+	interactive budget is measured in fractions of a millisecond: keystroke to
+	first draw op is 0.58 ms p50, a menu highlight 0.42 ms. 16 ms buys 2 % more
+	ratio (5.28x against 5.16x) for 4x the worst-case delay -- and it is also
+	most of a 60 Hz frame, which is the scale at which an added delay stops
+	being invisible. 4 ms is the smaller risk for all but the last 2 %.
+
+	The window is a *bound*, not a wait: kQuiescenceInterval below closes it as
+	soon as the drawing threads stop producing, which on an interactive stream is
+	almost immediately, and _MustFlushNow() skips it entirely for the messages
+	that cannot afford even that.
+*/
+static const bigtime_t kFlushWindow = 4000;
+
+/*!	How often the flusher looks at an open window to see whether the drawing
+	threads have gone quiet.
+
+	This is what keeps the window from costing its full length on an interactive
+	stream. Drawing ops arrive in tight bursts -- a burst of a dozen and then
+	silence -- so almost every window is closed by the burst ending rather than
+	by kFlushWindow expiring, and the delay a keystroke actually pays is this
+	interval, not the window. It runs only while a window is open (at most
+	kFlushWindow / this many wakeups per window, and none at all on an idle
+	stream), so it is bounded polling inside an event, not a polling loop.
+*/
+static const bigtime_t kQuiescenceInterval = 500;
+
+/*!	Environment override for the window, in microseconds, read once per writer.
+
+	It exists for the A/B that justified the window: with
+	REMOTE_WIRE_FLUSH_WINDOW=0 this build flushes once per message -- the exact
+	pre-#543 policy -- so both arms of the measurement are the same binary on the
+	same boot and differ in nothing but this. A measurement whose two arms are
+	two builds cannot tell the policy apart from the build.
+*/
+static const char* const kFlushWindowEnvironmentVariable
+	= "REMOTE_WIRE_FLUSH_WINDOW";
+
+
+static bigtime_t
+configured_flush_window()
+{
+	const char* value = getenv(kFlushWindowEnvironmentVariable);
+	if (value == NULL || value[0] == '\0')
+		return kFlushWindow;
+
+	char* end = NULL;
+	long long window = strtoll(value, &end, 10);
+	if (end == value || window < 0)
+		return kFlushWindow;
+
+	return (bigtime_t)window;
+}
+
 
 RemoteWireWriter::RemoteWireWriter(StreamingRingBuffer* target)
 	:
@@ -73,10 +138,17 @@ RemoteWireWriter::RemoteWireWriter(StreamingRingBuffer* target)
 	fCompressionContext(NULL),
 	fOutputBuffer(NULL),
 	fOutputBufferSize(0),
+	fFlushWindow(configured_flush_window()),
+	fWindowOpened(0),
+	fWindowMessages(0),
+	fFlusher(-1),
+	fFlushSignal(-1),
+	fFlusherQuitting(false),
 	fPlainBytes(0),
 	fWireBytes(0),
 	fMessages(0),
 	fExemptMessages(0),
+	fFlushes(0),
 	fEncodeTime(0),
 	fLastReport(0)
 {
@@ -85,6 +157,9 @@ RemoteWireWriter::RemoteWireWriter(StreamingRingBuffer* target)
 
 RemoteWireWriter::~RemoteWireWriter()
 {
+	// Before the lock, and before the codec the thread compresses into: see
+	// _StopFlusher().
+	_StopFlusher();
 	_ResetCodec();
 }
 
@@ -213,25 +288,47 @@ RemoteWireWriter::WriteAndEnable(const void* buffer, size_t length,
 	fCapability = capability;
 	fPreparedCapability = 0;
 	fLastReport = system_time();
-	TRACE_ALWAYS("compressing the outbound stream (zstd level %d)\n",
-		kCompressionLevel);
+	TRACE_ALWAYS("compressing the outbound stream (zstd level %d, flush window %"
+		B_PRId64 "us)\n", kCompressionLevel, (int64)fFlushWindow);
+
+	// Only now: with no capability armed there is no window to close, so the
+	// thread would have nothing to do, and a plain stream (every client
+	// connection starts as one, and stays one if it negotiates nothing) must not
+	// pay for a thread it never uses.
+	_StartFlusher();
 
 	return B_OK;
+}
+
+
+status_t
+RemoteWireWriter::Flush()
+{
+	BAutolock lock(fLock);
+	if (!lock.IsLocked())
+		return B_ERROR;
+
+	return _FlushLocked();
 }
 
 
 void
 RemoteWireWriter::Reset()
 {
+	// Outside the lock, because the flusher thread takes it: joining the thread
+	// while holding the lock it is waiting for is a deadlock. Stopping it first
+	// also means the codec below is freed with nobody left to compress into it.
+	_StopFlusher();
+
 	BAutolock lock(fLock);
 	if (!lock.IsLocked())
 		return;
 
 	if (fMessages > 0 && fWireBytes > 0) {
 		TRACE_ALWAYS("connection wire summary: msgs %" B_PRIu64 " exempt %"
-			B_PRIu64 " plain %" B_PRIu64 " wire %" B_PRIu64 " encode %" B_PRId64
-			"us\n", fMessages, fExemptMessages, fPlainBytes, fWireBytes,
-			(int64)fEncodeTime);
+			B_PRIu64 " flushes %" B_PRIu64 " plain %" B_PRIu64 " wire %" B_PRIu64
+			" encode %" B_PRId64 "us\n", fMessages, fExemptMessages, fFlushes,
+			fPlainBytes, fWireBytes, (int64)fEncodeTime);
 	}
 
 	// Emptied under fLock so a drawing thread cannot be left half way through
@@ -240,7 +337,7 @@ RemoteWireWriter::Reset()
 
 	_ResetCodec();
 
-	fPlainBytes = fWireBytes = fMessages = fExemptMessages = 0;
+	fPlainBytes = fWireBytes = fMessages = fExemptMessages = fFlushes = 0;
 	fEncodeTime = 0;
 	fLastReport = 0;
 }
@@ -248,13 +345,15 @@ RemoteWireWriter::Reset()
 
 void
 RemoteWireWriter::GetStatistics(uint64& _plainBytes, uint64& _wireBytes,
-	uint64& _messages, uint64& _exemptMessages, bigtime_t& _encodeTime) const
+	uint64& _messages, uint64& _exemptMessages, uint64& _flushes,
+	bigtime_t& _encodeTime) const
 {
 	BAutolock lock(fLock);
 	_plainBytes = fPlainBytes;
 	_wireBytes = fWireBytes;
 	_messages = fMessages;
 	_exemptMessages = fExemptMessages;
+	_flushes = fFlushes;
 	_encodeTime = fEncodeTime;
 }
 
@@ -286,21 +385,49 @@ RemoteWireWriter::_WriteLocked(const void* buffer, size_t length)
 	status_t result;
 	if (_IsPreCompressed(code)) {
 		fExemptMessages++;
-		result = _WriteRawSegment(buffer, length);
+
+		// Order, not framing, is what forces this flush. A raw segment carries
+		// its message past the compressor, so if an open window still held
+		// earlier messages the peer would decode this one *before* them. The
+		// interleaving RemoteWireFormat.h describes is only safe at a boundary
+		// where nothing is outstanding, so close the window to make one.
+		result = _FlushLocked();
+		if (result == B_OK)
+			result = _WriteRawSegment(buffer, length);
 	} else
-		result = _WriteCompressed(buffer, length);
+		result = _WriteCompressed(buffer, length, _MustFlushNow(code));
 
 	_MaybeReportStatistics();
 	return result;
 }
 
 
+/*!	Compresses one whole message, and closes the drain window if \a flushNow or
+	if this message is the one that runs the window out.
+
+	The window only ever opens and closes on a message boundary: this is called
+	with one complete framed message, and the flush is asked for in the same call
+	that feeds it (so it lands after that message's last byte) or not at all. A
+	flush therefore never splits a message -- what changes against the pre-#543
+	encoder is that several whole messages can share one flush, not that a
+	decoder can be handed half of one.
+*/
 status_t
-RemoteWireWriter::_WriteCompressed(const void* buffer, size_t length)
+RemoteWireWriter::_WriteCompressed(const void* buffer, size_t length,
+	bool flushNow)
 {
 #ifdef ZSTD_ENABLED
 	ZSTD_CCtx* context = (ZSTD_CCtx*)fCompressionContext;
 	ZSTD_inBuffer input = { buffer, length, 0 };
+
+	// The window is a bound on how long a message may wait, so it is measured
+	// from the *first* message in the window, not from the last flush.
+	if (fFlushWindow == 0 || (fWindowOpened != 0
+			&& system_time() - fWindowOpened >= fFlushWindow)) {
+		flushNow = true;
+	}
+
+	ZSTD_EndDirective mode = flushNow ? ZSTD_e_flush : ZSTD_e_continue;
 
 	// Only the time actually spent inside the compressor is accumulated; the
 	// ring-buffer writes in between can block on a slow client and would
@@ -309,13 +436,8 @@ RemoteWireWriter::_WriteCompressed(const void* buffer, size_t length)
 		ZSTD_outBuffer output = { fOutputBuffer + kSegmentHeaderReserve,
 			fOutputBufferSize - kSegmentHeaderReserve, 0 };
 
-		// ZSTD_e_flush at every message boundary: the client must be able to
-		// decode a whole message as soon as its segments have arrived, never
-		// after "some later message also went out". The window is kept, so the
-		// next message still compresses against this one.
 		bigtime_t start = system_time();
-		size_t remaining = ZSTD_compressStream2(context, &output, &input,
-			ZSTD_e_flush);
+		size_t remaining = ZSTD_compressStream2(context, &output, &input, mode);
 		fEncodeTime += system_time() - start;
 
 		if (ZSTD_isError(remaining)) {
@@ -330,7 +452,13 @@ RemoteWireWriter::_WriteCompressed(const void* buffer, size_t length)
 				return result;
 		}
 
-		if (input.pos == input.size && remaining == 0)
+		// Under ZSTD_e_continue the return value is only a hint about the
+		// compressor's internal buffers, and is routinely non-zero with the
+		// input fully consumed -- that is precisely the state this policy wants
+		// the encoder left in. Waiting for it to reach zero would be waiting for
+		// a flush nobody asked for.
+		bool drained = mode == ZSTD_e_continue || remaining == 0;
+		if (input.pos == input.size && drained)
 			break;
 
 		// Neither input consumed nor output produced would spin forever.
@@ -340,6 +468,13 @@ RemoteWireWriter::_WriteCompressed(const void* buffer, size_t length)
 		}
 	}
 
+	if (flushNow) {
+		fWindowOpened = 0;
+		fWindowMessages = 0;
+		fFlushes++;
+	} else
+		_OpenWindow();
+
 	return B_OK;
 #else
 	// Without a codec there is nothing to compress into, so a capability can
@@ -348,6 +483,220 @@ RemoteWireWriter::_WriteCompressed(const void* buffer, size_t length)
 	// inventing a framing, so that even a mis-built server stays parsable.
 	return _WriteRawSegment(buffer, length);
 #endif
+}
+
+
+/*!	Closes the open drain window, with fLock held.
+
+	Every byte the compressor is holding belongs to a message it was handed
+	whole, and the last of them ended on a message boundary -- nothing else can
+	open a window -- so this is a flush at a message boundary regardless of which
+	thread asks for it. Does nothing at all when no window is open, which makes
+	it safe to call on any path that merely *might* need one closed.
+*/
+status_t
+RemoteWireWriter::_FlushLocked()
+{
+	if (fWindowOpened == 0)
+		return B_OK;
+
+	// Nothing more may be emitted on a broken stream, but the window must still
+	// be let go of: leaving it open would have the flusher thread coming back
+	// for it every quiescence interval for the rest of the connection.
+	if (fStreamBroken) {
+		fWindowOpened = 0;
+		fWindowMessages = 0;
+		return B_IO_ERROR;
+	}
+
+#ifdef ZSTD_ENABLED
+	ZSTD_CCtx* context = (ZSTD_CCtx*)fCompressionContext;
+	if (context == NULL) {
+		fWindowOpened = 0;
+		fWindowMessages = 0;
+		return B_NO_INIT;
+	}
+
+	// Empty input: this adds nothing to the stream, it only ends the block. A
+	// valid non-NULL pointer rather than NULL, because a zero-length buffer is
+	// the one case where zstd's own assertions disagree about NULL.
+	ZSTD_inBuffer input = { fOutputBuffer, 0, 0 };
+	status_t result = B_OK;
+
+	while (true) {
+		ZSTD_outBuffer output = { fOutputBuffer + kSegmentHeaderReserve,
+			fOutputBufferSize - kSegmentHeaderReserve, 0 };
+
+		bigtime_t start = system_time();
+		size_t remaining = ZSTD_compressStream2(context, &output, &input,
+			ZSTD_e_flush);
+		fEncodeTime += system_time() - start;
+
+		if (ZSTD_isError(remaining)) {
+			TRACE_ERROR("flush failed: %s\n", ZSTD_getErrorName(remaining));
+			result = B_ERROR;
+			break;
+		}
+
+		if (output.pos > 0) {
+			result = _WriteStagedSegment(output.pos);
+			if (result != B_OK)
+				break;
+		}
+
+		if (remaining == 0)
+			break;
+
+		if (output.pos == 0) {
+			TRACE_ERROR("compressor made no progress flushing\n");
+			result = B_ERROR;
+			break;
+		}
+	}
+
+	fWindowOpened = 0;
+	fWindowMessages = 0;
+	fFlushes++;
+	return result;
+#else
+	fWindowOpened = 0;
+	fWindowMessages = 0;
+	return B_OK;
+#endif
+}
+
+
+/*!	Records that a message is sitting unflushed in the compressor, waking the
+	flusher for the first one. With fLock held.
+*/
+void
+RemoteWireWriter::_OpenWindow()
+{
+	fWindowMessages++;
+	if (fWindowOpened != 0)
+		return;
+
+	fWindowOpened = system_time();
+
+	// One wakeup per window, not per message: the flusher is released only as
+	// the window opens, and watches fWindowMessages for the rest of it.
+	if (fFlushSignal >= 0)
+		release_sem(fFlushSignal);
+}
+
+
+void
+RemoteWireWriter::_StartFlusher()
+{
+	if (fFlusher >= 0)
+		return;
+
+	fFlusherQuitting = false;
+	fFlushSignal = create_sem(0, "remote wire flush");
+	if (fFlushSignal < 0) {
+		TRACE_ERROR("no flush semaphore (%s); flushing every message\n",
+			strerror(fFlushSignal));
+		fFlushWindow = 0;
+		return;
+	}
+
+	// Above B_NORMAL_PRIORITY because this thread is on the latency path: the
+	// bytes a client is waiting for do not leave until it runs. Below the
+	// drawing threads' own urgency, so it cannot preempt the work it exists to
+	// batch.
+	fFlusher = spawn_thread(_FlusherEntry, "remote wire flusher",
+		B_DISPLAY_PRIORITY, this);
+	if (fFlusher < 0) {
+		TRACE_ERROR("no flusher thread (%s); flushing every message\n",
+			strerror(fFlusher));
+		delete_sem(fFlushSignal);
+		fFlushSignal = -1;
+
+		// Without the thread nothing would ever close a window, and a message
+		// could sit in the compressor until the next one happened along. Fall
+		// back to the policy that needs no help.
+		fFlushWindow = 0;
+		return;
+	}
+
+	resume_thread(fFlusher);
+}
+
+
+/*!	Stops the flusher thread. Must be called with fLock *not* held: the thread
+	takes that lock, so joining it while holding the lock would deadlock.
+*/
+void
+RemoteWireWriter::_StopFlusher()
+{
+	if (fFlusher < 0) {
+		if (fFlushSignal >= 0) {
+			delete_sem(fFlushSignal);
+			fFlushSignal = -1;
+		}
+		return;
+	}
+
+	fFlusherQuitting = true;
+	release_sem(fFlushSignal);
+
+	status_t unused;
+	wait_for_thread(fFlusher, &unused);
+	fFlusher = -1;
+
+	delete_sem(fFlushSignal);
+	fFlushSignal = -1;
+}
+
+
+/*static*/ int32
+RemoteWireWriter::_FlusherEntry(void* data)
+{
+	((RemoteWireWriter*)data)->_Flusher();
+	return 0;
+}
+
+
+/*!	Closes each drain window: as soon as the drawing threads stop feeding it, or
+	when it has been open for fFlushWindow, whichever comes first.
+
+	Closing early is the whole reason the window is affordable. A burst of
+	drawing ops is over in well under a millisecond, and once it is over there is
+	nothing left to batch with, so holding the bytes for the rest of the window
+	would be latency bought for no bytes at all.
+*/
+void
+RemoteWireWriter::_Flusher()
+{
+	while (!fFlusherQuitting) {
+		// An idle stream has no open window, so this thread costs nothing until
+		// a message is actually held back.
+		if (acquire_sem(fFlushSignal) != B_OK)
+			break;
+
+		uint64 seen = 0;
+		while (!fFlusherQuitting) {
+			snooze(kQuiescenceInterval);
+
+			BAutolock lock(fLock);
+			if (!lock.IsLocked())
+				break;
+
+			// Already closed -- by a message that could not wait, by a raw
+			// segment, or by a Reset(). Nothing to do for this wakeup.
+			if (fWindowOpened == 0)
+				break;
+
+			bool quiet = fWindowMessages == seen;
+			bool expired = system_time() - fWindowOpened >= fFlushWindow;
+			if (quiet || expired) {
+				_FlushLocked();
+				break;
+			}
+
+			seen = fWindowMessages;
+		}
+	}
 }
 
 
@@ -465,6 +814,11 @@ RemoteWireWriter::_ResetCodec()
 	fCapability = 0;
 	fPreparedCapability = 0;
 
+	// Whatever the departed compressor was holding went with it. The next
+	// connection starts from an empty window, not from this one's clock.
+	fWindowOpened = 0;
+	fWindowMessages = 0;
+
 	// A broken stream is a property of the connection, not of the process: the
 	// next one renegotiates from a fresh compressor and a fresh ring buffer.
 	fStreamBroken = false;
@@ -501,6 +855,46 @@ RemoteWireWriter::_IsPreCompressed(uint16 code)
 }
 
 
+/*!	Whether this message's flush cannot wait for the drain window.
+
+	Two kinds cannot. A message the server then *blocks on a reply to* --
+	RP_DRAW_STRING and RP_DRAW_STRING_WITH_OFFSETS return the client's measured
+	end point, RP_STRING_WIDTH its metrics, RP_READ_BITMAP the framebuffer -- and
+	a message the client is blocked waiting for, which on this side is the
+	RP_INIT_CONNECTION echo and RP_GET_SYSTEM_PALETTE_RESULT. Batching those does
+	not trade latency for bytes; it trades latency for *nothing*, because the
+	thread that would have produced the next message is parked until the answer
+	comes back, so there is no next message to batch with. The window would just
+	be added round-trip time.
+
+	Then the two session-control messages, RP_RESYNC and RP_CLOSE_CONNECTION. The
+	first says "everything you have is stale, repaint", the second is the last
+	thing this connection ever sends -- and both are rare enough that flushing
+	them costs no measurable bytes.
+
+	Everything else is a drawing op nobody is waiting on individually, which is
+	what the window is for.
+*/
+/*static*/ bool
+RemoteWireWriter::_MustFlushNow(uint16 code)
+{
+	switch (code) {
+		case RP_DRAW_STRING:
+		case RP_DRAW_STRING_WITH_OFFSETS:
+		case RP_STRING_WIDTH:
+		case RP_READ_BITMAP:
+		case RP_INIT_CONNECTION:
+		case RP_GET_SYSTEM_PALETTE_RESULT:
+		case RP_RESYNC:
+		case RP_CLOSE_CONNECTION:
+			return true;
+
+		default:
+			return false;
+	}
+}
+
+
 void
 RemoteWireWriter::_MaybeReportStatistics()
 {
@@ -514,8 +908,11 @@ RemoteWireWriter::_MaybeReportStatistics()
 	uint64 ratio = fWireBytes > 0 ? fPlainBytes * 100 / fWireBytes : 0;
 	uint64 encodePerMessage = fMessages > 0
 		? (uint64)fEncodeTime * 1000 / fMessages : 0;
+	uint64 messagesPerFlush = fFlushes > 0 ? fMessages * 100 / fFlushes : 0;
 	TRACE_ALWAYS("zstd msgs %" B_PRIu64 " exempt %" B_PRIu64 " plain %" B_PRIu64
-		" wire %" B_PRIu64 " ratio %" B_PRIu64 ".%02" B_PRIu64 "x encode %"
-		B_PRIu64 "ns/msg\n", fMessages, fExemptMessages, fPlainBytes,
-		fWireBytes, ratio / 100, ratio % 100, encodePerMessage);
+		" wire %" B_PRIu64 " ratio %" B_PRIu64 ".%02" B_PRIu64 "x flushes %"
+		B_PRIu64 " (%" B_PRIu64 ".%02" B_PRIu64 " msgs each) encode %" B_PRIu64
+		"ns/msg\n", fMessages, fExemptMessages, fPlainBytes, fWireBytes,
+		ratio / 100, ratio % 100, fFlushes, messagesPerFlush / 100,
+		messagesPerFlush % 100, encodePerMessage);
 }

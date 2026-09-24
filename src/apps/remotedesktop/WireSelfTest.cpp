@@ -150,6 +150,40 @@ drain(StreamingRingBuffer& buffer, uint8* scratch, BMallocIO& out)
 }
 
 
+/*!	Whether \a length bytes of decoded plain stream are a whole number of RP
+	messages -- no header cut in half, no body that has not all arrived.
+
+	This is the instrument for the property RemoteWireFormat.h states and issue
+	#543 had to preserve while moving the flush off every message boundary: a
+	decoder is never left holding a *partial* message once the segments for that
+	message have arrived. Walking the framing from the first byte is the only way
+	to see it, because a truncated body is indistinguishable from a short one
+	unless the declared lengths are followed.
+*/
+static bool
+ends_on_message_boundary(const uint8* plain, size_t length)
+{
+	static const size_t kHeaderSize = sizeof(uint16) + sizeof(uint32);
+
+	size_t offset = 0;
+	while (offset < length) {
+		if (length - offset < kHeaderSize)
+			return false;
+
+		uint32 total = 0;
+		memcpy(&total, plain + offset + sizeof(uint16), sizeof(total));
+		if (total < kHeaderSize)
+			return false;
+		if (offset + total > length)
+			return false;
+
+		offset += total;
+	}
+
+	return offset == length;
+}
+
+
 // ---------------------------------------------------------------------------
 // The mixed compressed/raw round trip
 // ---------------------------------------------------------------------------
@@ -263,6 +297,11 @@ test_mixed_round_trip(uint8* scratch, uint8* message)
 		== B_OK);
 	expected.Write(message, length);
 
+	// Nothing is owed to the drain window here: end it explicitly so what the
+	// wire holds is everything that was written, rather than whatever the
+	// flusher thread happened to have closed by the time this line runs.
+	check("the drain window closes on request", writer.Flush() == B_OK);
+
 	// ---- what actually went on the wire ----
 	BMallocIO wireBytes;
 	if (!drain(wire, scratch, wireBytes)) {
@@ -284,22 +323,26 @@ test_mixed_round_trip(uint8* scratch, uint8* message)
 	check("exactly one raw segment, among many compressed ones",
 		rawSegments == 1 && compressedSegments > 1, detail);
 
-	// One flush per compressed message, so anything beyond the message count is
-	// a message that had to be split.
-	const int32 compressedMessages = kFillsBefore + kFillsAfter + 1;
-	check("a single message spans several compressed segments",
-		compressedSegments > compressedMessages, detail);
-
 	// The exemption is a *passthrough*: the raw payload has to be the message
 	// itself, untouched, not a re-encoding of it.
 	check("the raw segment carries the exempt message verbatim",
 		rawPayloads.BufferLength() == exemptLength
 			&& memcmp(rawPayloads.Buffer(), exempt, exemptLength) == 0);
 
-	uint64 plainBytes, wireCount, messages, exemptMessages;
+	uint64 plainBytes, wireCount, messages, exemptMessages, flushes;
 	bigtime_t encodeTime;
 	writer.GetStatistics(plainBytes, wireCount, messages, exemptMessages,
-		encodeTime);
+		flushes, encodeTime);
+
+	// A flush produces at least one segment, so segments beyond the flush count
+	// are segments some *message* had to be split into -- the case #416 widened
+	// the encoder for, and the one thing the drain window must not have made
+	// unreachable. (Before #543 this was "segments beyond the message count",
+	// which no longer means anything: messages now share flushes.)
+	snprintf(detail, sizeof(detail), "(compressed=%" B_PRId32 " flushes=%"
+		B_PRIu64 ")", compressedSegments, flushes);
+	check("a single message spans several compressed segments",
+		compressedSegments > (int32)flushes, detail);
 	check("the writer counted exactly one exempt message", exemptMessages == 1);
 	snprintf(detail, sizeof(detail), "(counted %" B_PRIu64 ", produced %zu)",
 		wireCount, wireBytes.BufferLength());
@@ -340,12 +383,321 @@ test_mixed_round_trip(uint8* scratch, uint8* message)
 		return;
 	}
 
-	snprintf(detail, sizeof(detail), "(%zu vs %zu bytes)",
-		recovered.BufferLength(), expected.BufferLength());
+	// The first differing offset, not just "they differ": equal lengths with
+	// different bytes is the signature of a *reordering* rather than a loss, and
+	// telling those apart from the summary alone is impossible. That is not
+	// hypothetical -- it is how the reader holding decoded bytes back behind a
+	// raw segment showed up (RemoteWireReader::_Decompress).
+	size_t common = min_c(recovered.BufferLength(), expected.BufferLength());
+	const uint8* recoveredBytes = (const uint8*)recovered.Buffer();
+	const uint8* expectedBytes = (const uint8*)expected.Buffer();
+	size_t differsAt = common;
+	for (size_t i = 0; i < common; i++) {
+		if (recoveredBytes[i] != expectedBytes[i]) {
+			differsAt = i;
+			break;
+		}
+	}
+
+	snprintf(detail, sizeof(detail), "(%zu vs %zu bytes, first difference at %zu)",
+		recovered.BufferLength(), expected.BufferLength(), differsAt);
 	check("the plain message stream is reproduced byte for byte",
 		recovered.BufferLength() == expected.BufferLength()
-			&& memcmp(recovered.Buffer(), expected.Buffer(),
-				expected.BufferLength()) == 0, detail);
+			&& differsAt == common, detail);
+}
+
+
+// ---------------------------------------------------------------------------
+// The drain window (#543)
+// ---------------------------------------------------------------------------
+
+static const int32 kWindowFills = 200;
+static const size_t kWindowBodySize = 64;
+
+
+struct GranularityArm {
+	size_t	wireBytes;
+	int32	segments;
+	uint64	flushes;
+	bool	framed;			// the segment stream is exactly framed
+	bool	reproduced;		// the plain stream comes back byte for byte
+	bool	boundaries;		// every segment prefix is whole messages
+	bool	boundariesTested;
+};
+
+
+/*!	Writes kWindowFills identical small messages with the flush policy \a window
+	(in microseconds, "0" meaning the pre-#543 one-flush-per-message policy) and
+	reports what reached the wire and what the real reader got back out.
+
+	The policy comes from the environment rather than from two builds on purpose:
+	the hardware A/B for #543 is one binary run twice, and an arm that is a
+	different build cannot distinguish the policy from the build. This test runs
+	the same two arms the measurement does, on the same code path.
+*/
+static bool
+run_granularity_arm(const char* window, uint8* scratch, uint8* message,
+	uint32 capability, GranularityArm& arm)
+{
+	setenv("REMOTE_WIRE_FLUSH_WINDOW", window, 1);
+
+	StreamingRingBuffer wire(2 * 1024 * 1024);
+	StreamingRingBuffer plain(2 * 1024 * 1024);
+	if (wire.InitCheck() != B_OK || plain.InitCheck() != B_OK)
+		return false;
+
+	RemoteWireWriter writer(&wire);
+	RemoteWireReader reader(&plain);
+
+	BMallocIO expected;
+	size_t length = frame(message, RP_INIT_CONNECTION, NULL, 0);
+	if (writer.Write(message, length) != B_OK)
+		return false;
+
+	expected.Write(message, length);
+	size_t plainPrefix = length;
+
+	if (!writer.PrepareCompression(capability))
+		return false;
+
+	uint32 ack[2] = { RP_PROTOCOL_VERSION, capability };
+	length = frame(message, RP_HELLO_ACK, ack, sizeof(ack));
+	if (writer.WriteAndEnable(message, length, capability) != B_OK)
+		return false;
+
+	expected.Write(message, length);
+	plainPrefix += length;
+
+	// Repetitive drawing traffic, small enough that no message can overflow the
+	// encoder's staging buffer -- so every segment below is one a flush produced,
+	// which is what makes the per-segment walk safe to drain.
+	uint8 body[kWindowBodySize];
+	memset(body, 0x5a, sizeof(body));
+	for (int32 i = 0; i < kWindowFills; i++) {
+		length = frame(message, RP_FILL_RECT, body, sizeof(body));
+		if (writer.Write(message, length) != B_OK)
+			return false;
+
+		expected.Write(message, length);
+	}
+
+	if (writer.Flush() != B_OK)
+		return false;
+
+	uint64 plainBytes, wireCount, messages, exemptMessages;
+	bigtime_t encodeTime;
+	writer.GetStatistics(plainBytes, wireCount, messages, exemptMessages,
+		arm.flushes, encodeTime);
+
+	BMallocIO wireBytes;
+	if (!drain(wire, scratch, wireBytes))
+		return false;
+
+	arm.wireBytes = wireBytes.BufferLength();
+
+	int32 rawSegments = 0;
+	BMallocIO rawPayloads;
+	arm.framed = survey_segments((const uint8*)wireBytes.Buffer(),
+		arm.wireBytes, plainPrefix, arm.segments, rawSegments, rawPayloads);
+	if (!arm.framed || rawSegments != 0)
+		return false;
+
+	// The plain prefix first: the reader has to find the end of the
+	// acknowledgement for itself before any of this is segments to it.
+	const uint8* wireCursor = (const uint8*)wireBytes.Buffer();
+	if (reader.Process(wireCursor, plainPrefix) != B_OK)
+		return false;
+
+	BMallocIO recovered;
+	if (!drain(plain, scratch, recovered))
+		return false;
+
+	// Then one segment at a time, checking after each that what the decoder has
+	// produced is a whole number of messages. A flush that landed inside a
+	// message would show up here as a prefix that ends mid-body.
+	arm.boundaries = true;
+	arm.boundariesTested = arm.segments == (int32)arm.flushes;
+
+	size_t offset = plainPrefix;
+	while (offset < arm.wireBytes) {
+		size_t payloadLength = 0;
+		bool raw = false;
+		int consumed = remote_segment_header_read(wireCursor + offset,
+			arm.wireBytes - offset, payloadLength, raw);
+		if (consumed <= 0)
+			return false;
+
+		size_t segmentSize = consumed + payloadLength;
+		if (reader.Process(wireCursor + offset, segmentSize) != B_OK)
+			return false;
+
+		offset += segmentSize;
+
+		if (!arm.boundariesTested)
+			continue;
+
+		if (!drain(plain, scratch, recovered))
+			return false;
+
+		if (!ends_on_message_boundary((const uint8*)recovered.Buffer(),
+				recovered.BufferLength())) {
+			arm.boundaries = false;
+		}
+	}
+
+	if (!arm.boundariesTested && !drain(plain, scratch, recovered))
+		return false;
+
+	arm.reproduced = recovered.BufferLength() == expected.BufferLength()
+		&& memcmp(recovered.Buffer(), expected.Buffer(),
+			expected.BufferLength()) == 0;
+
+	unsetenv("REMOTE_WIRE_FLUSH_WINDOW");
+	return true;
+}
+
+
+/*!	The #543 fix: one flush per drain window instead of one per message.
+
+	Both arms are here for the reason the D3 test keeps its unfixed arm. The
+	per-message arm is the mutation: it is the encoder this tree shipped, and the
+	byte assertion below has to go red against it, or a passing run would prove
+	only that some encoder produced some bytes. It also has to keep *decoding* --
+	the window is an encoder-side policy and neither direction of the change may
+	need a new decoder.
+*/
+static void
+test_flush_granularity(uint8* scratch, uint8* message)
+{
+	printf("  -- #543: flush per drain window, not per message --\n");
+
+	uint32 capability = RemoteWireWriter::SupportedCapabilities()
+		& RemoteWireReader::SupportedCapabilities();
+	if (capability == 0) {
+		printf("  skip  (no compression capability in this build)\n");
+		return;
+	}
+
+	GranularityArm perMessage = {};
+	GranularityArm perWindow = {};
+	if (!run_granularity_arm("0", scratch, message, capability, perMessage)) {
+		check("the per-message arm ran", false);
+		return;
+	}
+	if (!run_granularity_arm("", scratch, message, capability, perWindow)) {
+		check("the per-window arm ran", false);
+		return;
+	}
+
+	char detail[200];
+
+	// Printed whether or not the checks pass: the numbers ARE the result, and a
+	// run that only says "ok" cannot be compared against the next one.
+	printf("      %" B_PRId32 " messages: per-message %zu B / %" B_PRId32
+		" segments / %" B_PRIu64 " flushes, per-window %zu B / %" B_PRId32
+		" segments / %" B_PRIu64 " flushes\n", kWindowFills,
+		perMessage.wireBytes, perMessage.segments, perMessage.flushes,
+		perWindow.wireBytes, perWindow.segments, perWindow.flushes);
+
+	// The mutation arm reproduces what shipped: a flush, and therefore a
+	// segment, for every single message.
+	snprintf(detail, sizeof(detail), "(flushes %" B_PRIu64 " segments %" B_PRId32
+		" for %" B_PRId32 " messages)", perMessage.flushes, perMessage.segments,
+		kWindowFills);
+	check("with the window off, every message is flushed",
+		perMessage.flushes >= (uint64)kWindowFills
+			&& perMessage.segments >= kWindowFills, detail);
+
+	snprintf(detail, sizeof(detail), "(flushes %" B_PRIu64 " segments %" B_PRId32
+		" for %" B_PRId32 " messages)", perWindow.flushes, perWindow.segments,
+		kWindowFills);
+	check("with the window on, messages share flushes",
+		perWindow.flushes * 4 < (uint64)kWindowFills, detail);
+
+	// The point of the change, asserted as bytes. A factor of two is far inside
+	// the 2.6x the captured idle stream moved by, and far outside anything the
+	// flusher thread's timing can account for.
+	snprintf(detail, sizeof(detail), "(per-message %zu B, per-window %zu B)",
+		perMessage.wireBytes, perWindow.wireBytes);
+	check("the drain window at least halves the bytes on the wire",
+		perWindow.wireBytes * 2 < perMessage.wireBytes, detail);
+
+	check("both arms are exactly framed",
+		perMessage.framed && perWindow.framed);
+	check("the per-message stream still decodes byte for byte",
+		perMessage.reproduced);
+	check("the per-window stream decodes byte for byte",
+		perWindow.reproduced);
+
+	// The invariant the window had to preserve, checked segment by segment
+	// rather than only on the completed stream.
+	check("every segment prefix is a whole number of messages",
+		perWindow.boundariesTested && perWindow.boundaries,
+		perWindow.boundariesTested ? "" : "(NOT TESTED: a segment was not a "
+			"flush, so the per-segment walk was skipped)");
+
+	// POSITIVE CONTROL for that absence. The check above reports "no partial
+	// message"; on its own that is equally consistent with an instrument that
+	// cannot see one. So hand the encoder half a message -- which is exactly
+	// what it must never be handed -- flush, and require the instrument to
+	// notice.
+	StreamingRingBuffer wire(64 * 1024);
+	StreamingRingBuffer plain(64 * 1024);
+	if (wire.InitCheck() != B_OK || plain.InitCheck() != B_OK) {
+		check("ring buffers allocated", false);
+		return;
+	}
+
+	RemoteWireWriter writer(&wire);
+	RemoteWireReader reader(&plain);
+
+	size_t length = frame(message, RP_INIT_CONNECTION, NULL, 0);
+	writer.Write(message, length);
+	size_t plainPrefix = length;
+
+	if (!writer.PrepareCompression(capability)) {
+		check("codec prepared for the positive control", false);
+		return;
+	}
+
+	uint32 ack[2] = { RP_PROTOCOL_VERSION, capability };
+	length = frame(message, RP_HELLO_ACK, ack, sizeof(ack));
+	writer.WriteAndEnable(message, length, capability);
+	plainPrefix += length;
+
+	uint8 body[kWindowBodySize];
+	memset(body, 0x5a, sizeof(body));
+	length = frame(message, RP_FILL_RECT, body, sizeof(body));
+
+	// Half of it, then end the window: the peer now holds a message body that
+	// stops in the middle with nothing outstanding to complete it.
+	check("the truncated message is accepted by the encoder",
+		writer.Write(message, length / 2) == B_OK);
+	check("and the window closes over it", writer.Flush() == B_OK);
+
+	BMallocIO wireBytes;
+	if (!drain(wire, scratch, wireBytes)) {
+		check("the wire buffer drained", false);
+		return;
+	}
+
+	if (reader.Process((const uint8*)wireBytes.Buffer(),
+			wireBytes.BufferLength()) != B_OK) {
+		check("the reader accepted the control stream", false);
+		return;
+	}
+
+	BMallocIO recovered;
+	if (!drain(plain, scratch, recovered)) {
+		check("the plain buffer drained", false);
+		return;
+	}
+
+	snprintf(detail, sizeof(detail), "(decoded %zu bytes, prefix %zu, message %zu)",
+		recovered.BufferLength(), plainPrefix, length);
+	check("the boundary check catches an injected partial message",
+		!ends_on_message_boundary((const uint8*)recovered.Buffer(),
+			recovered.BufferLength()), detail);
 }
 
 
@@ -528,8 +880,15 @@ test_dropped_segment()
 	memset(body, 0x5a, sizeof(body));
 	size_t length = frame(message, RP_FILL_RECT, body, sizeof(body));
 
+	// The message is small, so the drain window holds it: the segment it will be
+	// dropped as is the one the flush produces. Either call may be the one that
+	// reports -- what must not happen is that both say B_OK.
+	status_t reported = writer.Write(message, length);
+	if (reported == B_OK)
+		reported = writer.Flush();
+
 	check("a dropped segment is reported, not passed off as success",
-		writer.Write(message, length) != B_OK);
+		reported != B_OK, strerror(reported));
 	check("and the stream stays refused",
 		writer.Write(message, length) != B_OK);
 }
@@ -1161,6 +1520,7 @@ remote_wire_selftest()
 	}
 
 	test_mixed_round_trip(scratch, message);
+	test_flush_granularity(scratch, message);
 	test_torn_segment();
 	test_dropped_segment();
 	test_parser_release();
