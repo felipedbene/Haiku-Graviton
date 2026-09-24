@@ -56,9 +56,16 @@ On the dev AMI, compute what the base already provides, then close the `--want` 
 pkgman list-installed | ... > base-provides.txt      # provide-tokens, one per line
 haiku-package-closure --pool <hpkg-pool> --package-tool "$(command -v package)" \
     --base base-provides.txt \
-    --want webkit,rust_bin,git,cmake,ninja,python,ruby,perl,vim,openssh,<...> \
+    --want webkit,rust_bin,git,cmake,ninja,python,pip_python3.14,setuptools_python3.14,ruby,perl,vim,openssh,<...> \
     > closure.json
 ```
+
+> Include `pip_python3.14` and `setuptools_python3.14` in `--want` whenever `python` is wanted
+> (DeBeOS #552): the `python3.14` package ships neither on the import path, so `python3 -m pip`
+> and `import setuptools` fail without them. `setuptools_python3.14` is already in the pool;
+> `pip_python3.14` is built from the ensurepip-vendored wheel by
+> `graviton/scripts/haiku-build-pip-hpkg` (HaikuPorts has no standalone pip recipe) and must be in
+> the pool before this closure resolves it.
 
 - Exit 0 → the selection is fully satisfiable from the pool; `closure_files` is the **repo set**.
 - Exit 2 → `missing` lists providers nothing supplies. Those are **Phase 2**.

@@ -341,6 +341,17 @@ rule UserBuildConfigRulePreImage
 			<hg-pool>libtool-2.5.4-1-arm64.hpkg
 			<hg-pool>libtool_libltdl-2.5.4-1-arm64.hpkg
 			<hg-pool>python3.14-3.14.7-1-arm64.hpkg
+			# pip + setuptools alongside the interpreter (DeBeOS #552). The
+			# python3.14 package puts neither on the import path -- pip is only
+			# reachable via `python3.14 -m ensurepip`, and setuptools is absent
+			# entirely -- so a fresh box hits "No module named pip". Baking both
+			# here makes `python3 -m pip` and `import setuptools` work out of the
+			# box, offline, via packagefs. setuptools_python3.14 is an existing
+			# repo package; pip_python3.14 is built from the wheel CPython vendors
+			# in ensurepip by graviton/scripts/haiku-build-pip-hpkg (HaikuPorts
+			# ships no standalone pip recipe). Both are architecture=any.
+			<hg-pool>pip_python3.14-26.2.1-1-any.hpkg
+			<hg-pool>setuptools_python3.14-82.0.1-1-any.hpkg
 			<hg-pool>perl-5.42.2-1-arm64.hpkg
 			<hg-pool>ruby-3.2.9-1-arm64.hpkg
 			<hg-pool>vim-9.1.1618-1-arm64.hpkg

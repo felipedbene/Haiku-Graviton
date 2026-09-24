@@ -1,0 +1,145 @@
+#!/bin/sh
+#
+# haiku-build-pip-hpkg -- build a `pip_python3.14` hpkg for the DeBeOS arm64
+# repository from the pip wheel that CPython already ships inside ensurepip.
+#
+# Why this exists (DeBeOS #552)
+# -----------------------------
+# `python3.14` installs cleanly from the DeBeOS repo, but pip is NOT on the
+# interpreter's import path -- `python3.14 -c "import pip"` raises
+# ModuleNotFoundError and `pkgman search pip` finds no pip package. setuptools
+# is a proper repo package already (`setuptools_python3.14`), but pip never was:
+# HaikuPorts ships no standalone pip recipe because upstream expects you to
+# bootstrap it with `python3.14 -m ensurepip`. That leaves pip absent out of the
+# box and only one manual step away, which is exactly what #552 asks us to fix.
+#
+# The trick is that the pip wheel is not something we have to fetch or compile:
+# CPython vendors it for ensurepip at
+#   /boot/system/lib/python3.14/ensurepip/_bundled/pip-<ver>-py3-none-any.whl
+# so the reproducible, offline "build" is simply to re-lay that wheel out as a
+# packagefs tree and seal it with `package create`. The result is a normal,
+# vendor=DeBeOS, architecture=any hpkg -- the same shape as
+# setuptools_python3.14 -- that installs pip into the *packaged* site-packages
+# (`/boot/system/lib/python3.14/site-packages/pip`), so pip is present the
+# instant the package is activated, with no first-boot script and no network.
+#
+# Run this natively on a Graviton Haiku box that has python3.14 installed
+# (`pkgman install python3.14`). It prints the path of the hpkg it built; feed
+# that to `haiku-repo-publish` / `haiku-repo-publish-ephemeral` to add it to the
+# DeBeOS repo, and/or drop it into the bake pool so UserBuildConfig can bake it
+# into the full image alongside python3.14 (see graviton/ssh/UserBuildConfig).
+#
+# Usage:
+#   haiku-build-pip-hpkg [-o OUTDIR]
+#
+# Env:
+#   HG_PY   python interpreter to read the bundled wheel from (default python3.14)
+
+set -eu
+
+progname=$(basename "$0")
+say() { echo "$progname: $*" >&2; }
+die() { echo "$progname: error: $*" >&2; exit 1; }
+
+OUTDIR=$(pwd)
+while [ $# -gt 0 ]; do
+	case "$1" in
+		-o) OUTDIR="$2"; shift 2 ;;
+		-h|--help) sed -n '2,45p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+		*) die "unknown arg $1 (see --help)" ;;
+	esac
+done
+
+PY="${HG_PY:-python3.14}"
+command -v "$PY" >/dev/null 2>&1 || die "$PY not found -- run 'pkgman install python3.14' first"
+PKG_TOOL=$(command -v package 2>/dev/null || echo /boot/system/bin/package)
+[ -x "$PKG_TOOL" ] || die "the 'package' tool not found (base Haiku); cannot build an hpkg"
+
+# Locate the wheel ensurepip vendors and read its version from the filename.
+WHL=$("$PY" - <<'EOF'
+import glob, os, sysconfig
+d = os.path.join(sysconfig.get_path('stdlib'), 'ensurepip', '_bundled')
+hits = sorted(glob.glob(os.path.join(d, 'pip-*-py3-none-any.whl')))
+print(hits[-1] if hits else '')
+EOF
+)
+[ -n "$WHL" ] && [ -f "$WHL" ] || die "no bundled pip wheel under ensurepip/_bundled -- is this really python3.14?"
+VERSION=$(basename "$WHL" | sed -n 's/^pip-\([0-9][^-]*\)-py3-none-any\.whl$/\1/p')
+[ -n "$VERSION" ] || die "could not parse pip version from $(basename "$WHL")"
+# Match the interpreter's own X.Y so the package name/site-packages line up.
+PYXY=$("$PY" -c 'import sys;print("%d.%d"%sys.version_info[:2])')
+PKGNAME="pip_python${PYXY}"
+PKGNAME_ALT="pip_python$(echo "$PYXY" | tr -d '.')"   # e.g. pip_python314
+PKGVER="$VERSION-1"
+
+say "wheel=$WHL"
+say "building $PKGNAME-$PKGVER (any) for python $PYXY"
+
+STAGE=$(mktemp -d /tmp/pip2hpkg.XXXXXX) || die "cannot make a work dir"
+trap 'rm -rf "$STAGE"' EXIT
+TREE="$STAGE/tree"
+SP="$TREE/lib/python${PYXY}/site-packages"
+mkdir -p "$SP" "$TREE/bin"
+
+# Lay the wheel out as a package tree. A wheel is a plain zip; use the
+# interpreter's own zipfile so this works on the lean image (which has no
+# `unzip`). The wheel's data lands directly under site-packages as
+# `pip/` + `pip-<ver>.dist-info/`.
+"$PY" - "$WHL" "$SP" <<'EOF'
+import sys, zipfile
+zipfile.ZipFile(sys.argv[1]).extractall(sys.argv[2])
+EOF
+[ -d "$SP/pip" ] || die "wheel extraction produced no pip/ directory"
+
+# Console entry points. pip's is pip._internal.cli.main:main; ship pip, pip3
+# and pipX.Y like a normal pip install does.
+cat > "$TREE/bin/pip${PYXY}" <<EOF
+#!/boot/system/bin/${PY}
+import sys
+from pip._internal.cli.main import main
+if __name__ == "__main__":
+    sys.exit(main())
+EOF
+cp "$TREE/bin/pip${PYXY}" "$TREE/bin/pip3"
+cp "$TREE/bin/pip${PYXY}" "$TREE/bin/pip"
+chmod +x "$TREE/bin/pip${PYXY}" "$TREE/bin/pip3" "$TREE/bin/pip"
+
+cat > "$TREE/.PackageInfo" <<EOF
+name			$PKGNAME
+version			$PKGVER
+architecture		any
+summary			"The PyPA recommended tool for installing Python packages"
+description		"pip is the package installer for Python. Packaged for DeBeOS from the wheel CPython ${PYXY} vendors in ensurepip -- reproducible and offline, no PyPI fetch. Resolves DeBeOS #552 (no pip package in the arm64 repo)."
+packager		"DeBeOS <packages@debene.dev>"
+vendor			"DeBeOS"
+licenses {
+	"MIT"
+}
+copyrights {
+	"2008-2025 The pip developers"
+}
+provides {
+	$PKGNAME = $VERSION
+	$PKGNAME_ALT = $VERSION
+	cmd:pip = $VERSION
+	cmd:pip3 = $VERSION
+	cmd:pip${PYXY} = $VERSION
+}
+requires {
+	haiku>=r1~beta6_hrev59996-1
+	cmd:${PY}>=$("$PY" -c 'import sys;print("%d.%d.%d"%sys.version_info[:3])')
+}
+urls {
+	"https://pip.pypa.io/"
+}
+EOF
+
+say "PackageInfo:"; sed 's/^/    /' "$TREE/.PackageInfo" >&2
+
+HPKG="$OUTDIR/$PKGNAME-$PKGVER-any.hpkg"
+rm -f "$HPKG"
+# `package create` requires the output to live outside the input tree.
+"$PKG_TOOL" create -C "$TREE" "$HPKG" || die "package create failed"
+[ -f "$HPKG" ] || die "package create reported success but $HPKG is missing"
+say "built $HPKG ($(ls -l "$HPKG" | awk '{print $5}') bytes)"
+echo "$HPKG"
