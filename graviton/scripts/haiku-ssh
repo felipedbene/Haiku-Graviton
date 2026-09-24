@@ -42,10 +42,11 @@ if [ -z "${AWS_PROFILE:-}" ] && [ -z "${AWS_ACCESS_KEY_ID:-}" ]; then
 fi
 
 # If the caller passes their own -i, honour it and just exec ssh -- covers the
-# "I'm ssh'ing to a non-canonical box with a normal key" case.
+# "I'm ssh'ing to a non-canonical box with a normal key" case. Accept both the
+# separated (-i key) and attached (-ikey) spellings.
 for a in "$@"; do
 	case "$a" in
-		-i) exec ssh "$@" ;;
+		-i|-i?*) exec ssh "$@" ;;
 	esac
 done
 
@@ -54,22 +55,38 @@ if [ $# -eq 0 ]; then
 	exit 2
 fi
 
-# Prepend baron@ to the first arg that looks like a bare host (no user@, no
-# leading dash). Kept simple: scan positional args left-to-right, rewrite the
-# first host-shaped one.
+# Prepend baron@ to the HOST -- which means finding the host, and that requires
+# knowing which ssh options take a SEPARATE value, because such a value is
+# indistinguishable from a hostname by shape alone. The previous version took
+# "first argument with no leading dash and no @" and so rewrote option values:
+# `-p 2222 host` became `-p baron@2222`, and `-o Foo=bar`, `-L a:b:c` and
+# `-J jump` broke the same way. It also never stopped scanning once the host
+# already carried a user, so `baron@host uname -a` ran `baron@uname`.
+#
+# Everything from the host onward is ssh's remote command and passes through
+# untouched -- rewriting there is exactly how the `uname` case happened.
 args=()
-prepended=0
-for arg in "$@"; do
-	if [ $prepended -eq 0 ]; then
-		case "$arg" in
-			-*|*@*) ;;
-			*)
-				arg="baron@$arg"
-				prepended=1
-				;;
-		esac
+host_found=0
+while [ $# -gt 0 ]; do
+	if [ "$host_found" -eq 1 ]; then
+		args+=("$1"); shift; continue
 	fi
-	args+=("$arg")
+	case "$1" in
+		# Options taking a separate value: take both, neither is the host. From
+		# ssh(1); attached forms (-p2222) fall through to the -* case below.
+		-B|-b|-c|-D|-E|-e|-F|-I|-J|-L|-l|-m|-O|-o|-p|-Q|-R|-S|-W|-w)
+			args+=("$1"); shift
+			[ $# -gt 0 ] || break
+			args+=("$1"); shift ;;
+		# Any other dash argument is a flag, or an option with its value attached.
+		-*)
+			args+=("$1"); shift ;;
+		# First non-option argument is the host.
+		*@*)
+			args+=("$1"); host_found=1; shift ;;
+		*)
+			args+=("baron@$1"); host_found=1; shift ;;
+	esac
 done
 set -- "${args[@]}"
 
@@ -99,8 +116,18 @@ chmod 600 "$keyfile"
 # IdentitiesOnly=yes stops ssh from trying agent keys first and locking us out
 # on servers with MaxAuthTries low. UserKnownHostsFile default is fine; the
 # caller can override with -o if needed.
-exec ssh \
+#
+# Run ssh as a CHILD, not via exec. `exec` replaces this process image, so the
+# EXIT trap installed above could never run and the private key was never
+# unlinked: 572 copies of it had accumulated in /dev/shm, one per invocation,
+# defeating this script's stated guarantee. Waiting for the child costs nothing
+# here (ssh still has the tty) and lets the trap do what it promises.
+ssh \
 	-o IdentitiesOnly=yes \
 	-o PubkeyAcceptedAlgorithms=+ssh-ed25519 \
 	-i "$keyfile" \
 	"$@"
+status=$?
+rm -f "$keyfile"
+trap - EXIT INT TERM HUP
+exit $status
