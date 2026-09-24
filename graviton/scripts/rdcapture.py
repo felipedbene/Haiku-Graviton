@@ -346,6 +346,7 @@ NO_TOKEN = frozenset([
     RP_INVALIDATE_RECT, RP_INVALIDATE_REGION,
     RP_COPY_RECT_NO_CLIPPING, RP_FILL_REGION_COLOR_NO_CLIPPING,
     RP_SET_CURSOR, RP_SET_CURSOR_VISIBLE, RP_MOVE_CURSOR_TO,
+    RP_TIER_BEGIN_FRAME, RP_TIER_END_FRAME,
 ])
 
 # Ops whose payload is: uint32 token, BRect bounds, <more>.  We only need the
@@ -2073,6 +2074,17 @@ class Capture(object):
         self.errors = []
         self.negotiated_version = None
         self.negotiated_capabilities = None
+        # RP_TIER_END_FRAME accounting.  Counted and *checked*: a boundary whose
+        # sequence number does not follow its predecessor means frames were
+        # reordered or lost on the wire, which is the one thing a frame boundary
+        # exists to make visible.
+        self.frame_boundaries = 0
+        self.frame_boundary_gaps = 0
+        self.frame_boundary_last = None
+        # Draw ops seen since the last boundary, so "did anything arrive inside
+        # a frame" is an observation and not an assumption.
+        self.frame_ops = 0
+        self.frame_ops_max = 0
 
     # -- verdicts --------------------------------------------------------
     def glyph_truth(self, allow_missing_glyphs=False):
@@ -2249,6 +2261,8 @@ class Capture(object):
             st = self.token_state(NO_TOKEN_KEY)
 
         st.note_op(code)
+        if code in DRAWING_OPS:
+            self.frame_ops += 1
 
         if self.verbose:
             tok = "-" if token == NO_TOKEN_KEY else str(token)
@@ -2289,6 +2303,18 @@ class Capture(object):
             return
         if code == RP_MOVE_CURSOR_TO:
             r.point()
+            return
+        if code == RP_TIER_BEGIN_FRAME:
+            return
+        if code == RP_TIER_END_FRAME:
+            sequence = r.u32()
+            self.frame_boundaries += 1
+            if (self.frame_boundary_last is not None
+                    and sequence != self.frame_boundary_last + 1):
+                self.frame_boundary_gaps += 1
+            self.frame_boundary_last = sequence
+            self.frame_ops_max = max(self.frame_ops_max, self.frame_ops)
+            self.frame_ops = 0
             return
         if code == RP_INVALIDATE_RECT:
             r.rect()
@@ -2995,6 +3021,8 @@ def frame(code: int, payload: bytes = b"") -> bytes:
 URP_PROTOCOL_VERSION = 1
 CAP_STRING_WIDTH_REPLY = 1 << 0
 CAP_COMPRESS_ZSTD = 1 << 1
+CAP_RESYNC = 1 << 2
+CAP_FRAME_BOUNDARY = 1 << 3
 
 # Must match REMOTE_SEGMENT_MAX_PAYLOAD / REMOTE_SEGMENT_MAX_VARINT_SIZE in
 # src/servers/app/drawing/interface/remote/RemoteWireFormat.h.
@@ -4218,6 +4246,9 @@ def report(cap, args, connected, elapsed, stop_reason, wire=None):
     if cap.negotiated_capabilities is not None:
         out.append("NEGOTIATED_CAPABILITIES=%d" % cap.negotiated_capabilities)
         out.append("NEGOTIATED_VERSION=%d" % cap.negotiated_version)
+    out.append("FRAME_BOUNDARIES=%d" % cap.frame_boundaries)
+    out.append("FRAME_BOUNDARY_SEQ_GAPS=%d" % cap.frame_boundary_gaps)
+    out.append("FRAME_OPS_MAX=%d" % cap.frame_ops_max)
     out.append("PIXELS_TOUCHED=%d" % sum(s.pixels_touched for _, s in tokens))
     out.append("BLACK_TOPRIGHT=%d" % black_tr)
     out.append("BLACK_SCREEN=%d" % black_all)
@@ -4455,6 +4486,9 @@ def report(cap, args, connected, elapsed, stop_reason, wire=None):
                           if wire.wire_bytes else 0.0),
             }),
             "negotiated_capabilities": cap.negotiated_capabilities,
+            "frame_boundaries": cap.frame_boundaries,
+            "frame_boundary_seq_gaps": cap.frame_boundary_gaps,
+            "frame_ops_max": cap.frame_ops_max,
             "undecoded_drawing_ops": cap.undecoded_drawing_ops,
             "undecoded_no_rect_ops": cap.undecoded_no_rect_ops,
             "estimated_text_ops": cap.estimated_text_ops,
@@ -4930,6 +4964,66 @@ def selftest(allow_skip=False):
           "(%d vs %d bytes)" % (len(passthrough), len(plain)))
     check("unnegotiated wire counters agree",
           legacy.wire_bytes == legacy.plain_bytes == len(plain))
+
+    # ---- RP_TIER_END_FRAME, the M2 frame boundary ------------------
+    #
+    # Three arms, because "FRAME_BOUNDARIES=0" has to mean something. The
+    # negative control is a stream with no boundary in it; the positive control
+    # is the same stream with two, in sequence; the mutation arm renumbers the
+    # second one so the gap detector has to fire. Without the third arm
+    # FRAME_BOUNDARY_SEQ_GAPS=0 would be unfalsifiable.
+    def frame_stream(sequences):
+        out = bytearray()
+        out += frame(RP_HELLO_ACK, struct.pack("<II", URP_PROTOCOL_VERSION,
+                                               CAP_FRAME_BOUNDARY))
+        for i, sequence in enumerate(sequences):
+            out += frame(RP_FILL_RECT_COLOR,
+                         struct.pack("<Iffff", token, 1.0, 1.0, 5.0, 5.0)
+                         + bytes((1, 2, 3, 255)))
+            out += frame(RP_INVALIDATE_REGION,
+                         struct.pack("<i", 1) + struct.pack("<ffff",
+                                                            0.0, 0.0, 9.0, 9.0))
+            if sequence is not None:
+                out += frame(RP_TIER_END_FRAME, struct.pack("<I", sequence))
+        return bytes(out)
+
+    def feed_frames(stream_bytes):
+        c = Capture(width, height, clip=True, apply_offsets=False,
+                    verbose=False, reply=True, glyphs=None)
+        at = 0
+        while at + HEADER <= len(stream_bytes):
+            code, length = struct.unpack_from("<HI", stream_bytes, at)
+            c.handle(code, bytes(stream_bytes[at + HEADER:at + length]))
+            at += length
+        return c
+
+    none_arm = feed_frames(frame_stream([None, None]))
+    check("NEGATIVE CONTROL: no RP_TIER_END_FRAME counts no boundary",
+          none_arm.frame_boundaries == 0 and none_arm.frame_boundary_gaps == 0,
+          "(%d boundaries, %d gaps)" % (none_arm.frame_boundaries,
+                                        none_arm.frame_boundary_gaps))
+
+    good_arm = feed_frames(frame_stream([0, 1, 2]))
+    check("three in-sequence boundaries are counted",
+          good_arm.frame_boundaries == 3,
+          "(%d)" % good_arm.frame_boundaries)
+    check("and report no sequence gap",
+          good_arm.frame_boundary_gaps == 0,
+          "(%d)" % good_arm.frame_boundary_gaps)
+    check("drawing ops are attributed to the frame they arrived in",
+          good_arm.frame_ops_max == 1, "(%d)" % good_arm.frame_ops_max)
+
+    gap_arm = feed_frames(frame_stream([0, 2]))
+    check("MUTATION: a renumbered boundary IS detected as a gap -- so "
+          "FRAME_BOUNDARY_SEQ_GAPS=0 is a measurement",
+          gap_arm.frame_boundary_gaps == 1,
+          "(%d)" % gap_arm.frame_boundary_gaps)
+
+    check("RP_TIER_END_FRAME does not invent a drawing token from its "
+          "sequence number", 2 not in good_arm.tokens,
+          "(tokens %s)" % sorted(good_arm.tokens))
+    check("nor is it counted as an unknown opcode",
+          RP_TIER_END_FRAME not in good_arm.unknown_codes)
 
     # Now the negotiated path, driven end to end through a real libzstd
     # compressor configured the way RemoteWireWriter configures it.
@@ -6454,6 +6548,21 @@ def main(argv=None):
                         "RP_HELLO is sent at all, so the server has to serve "
                         "the legacy uncompressed stream -- which is what makes "
                         "the two invocations a clean A/B.")
+    p.add_argument("--frame-boundary", action="store_true",
+                   help="advertise RP_CAP_FRAME_BOUNDARY in RP_HELLO, so the "
+                        "server states its composition boundaries as "
+                        "RP_TIER_END_FRAME.  Reported as FRAME_BOUNDARIES and "
+                        "FRAME_BOUNDARY_SEQ_GAPS; without the flag no RP_HELLO "
+                        "capability is sent and the count must be 0, which is "
+                        "the negative control for the positive one.")
+    p.add_argument("--starve-after", type=float, default=None, metavar="SECONDS",
+                   help="stop reading from the socket after this many seconds "
+                        "while holding the connection open, then keep holding "
+                        "it until --seconds expires.  This is a reader that is "
+                        "registered but not draining -- the case the server's "
+                        "flow-control queue exists for, and the one that used "
+                        "to wedge a drawing thread.  The socket is NOT closed, "
+                        "because closing it is what releases the condition.")
     p.add_argument("--require-glyph-truth", action="store_true",
                    help="DEFAULT since #475 and kept only for existing "
                         "callers: exit 5 unless every text run was rasterised "
@@ -6657,6 +6766,8 @@ def main(argv=None):
     capabilities = CAP_COMPRESS_ZSTD if args.zstd else 0
     if args.answer_string_width or args.advertise_string_width_no_answer:
         capabilities |= CAP_STRING_WIDTH_REPLY
+    if args.frame_boundary:
+        capabilities |= CAP_FRAME_BOUNDARY
 
     try:
         if args.wss:
@@ -6748,7 +6859,17 @@ def main(argv=None):
         if driver is not None:
             driver.start()
         try:
+            starve_at = (None if args.starve_after is None
+                         else time.monotonic() + args.starve_after)
             while time.monotonic() < deadline:
+                if starve_at is not None and time.monotonic() >= starve_at:
+                    # Registered but not draining.  Sleep in short steps rather
+                    # than one long one so --seconds still bounds the run.
+                    print("STARVED_AT=%.2f" % args.starve_after)
+                    while time.monotonic() < deadline:
+                        time.sleep(0.25)
+                    stop_reason = "starved"
+                    break
                 item = conn.next_message()
                 if item is None:
                     stop_reason = "deadline"
