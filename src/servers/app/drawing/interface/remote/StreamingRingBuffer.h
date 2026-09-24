@@ -39,6 +39,21 @@ public:
 
 		void					MakeEmpty();
 
+		/*!	How many bytes Write() can take right now without waiting, and the
+			total size of the ring.
+
+			These exist so a caller can ask "will this whole message fit"
+			*before* starting to write it. Write() itself cannot answer that: it
+			copies what fits and then parks, so a message that turns out not to
+			fit is already half in the buffer -- and half a message is what the
+			framer has no way back from. A caller that must not tear checks
+			FreeSpace() first and queues the message instead. */
+		size_t					FreeSpace();
+		size_t					BufferSize() const { return fBufferSize; }
+
+		//! Whether a reader is registered (see discardWithoutReader).
+		bool					HasReader();
+
 		// Reader registration; only meaningful with discardWithoutReader.
 		// ClearReader() is a no-op unless \a reader is the current one, so a
 		// reader being torn down cannot clear its successor.

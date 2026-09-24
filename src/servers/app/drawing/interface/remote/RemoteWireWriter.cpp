@@ -10,6 +10,7 @@
 #include "StreamingRingBuffer.h"
 
 #include <Autolock.h>
+#include <OS.h>
 
 #include <new>
 #include <stdio.h>
@@ -144,6 +145,7 @@ RemoteWireWriter::RemoteWireWriter(StreamingRingBuffer* target)
 	fFlusher(-1),
 	fFlushSignal(-1),
 	fFlusherQuitting(false),
+	fQueue(),
 	fPlainBytes(0),
 	fWireBytes(0),
 	fMessages(0),
@@ -325,15 +327,26 @@ RemoteWireWriter::Reset()
 		return;
 
 	if (fMessages > 0 && fWireBytes > 0) {
+		uint64 enqueued, drained, coalesced, superseded, collapses;
+		fQueue.GetStatistics(enqueued, drained, coalesced, superseded,
+			collapses);
 		TRACE_ALWAYS("connection wire summary: msgs %" B_PRIu64 " exempt %"
 			B_PRIu64 " flushes %" B_PRIu64 " plain %" B_PRIu64 " wire %" B_PRIu64
-			" encode %" B_PRId64 "us\n", fMessages, fExemptMessages, fFlushes,
-			fPlainBytes, fWireBytes, (int64)fEncodeTime);
+			" encode %" B_PRId64 "us queued %" B_PRIu64 " drained %" B_PRIu64
+			" coalesced %" B_PRIu64 " superseded %" B_PRIu64 " collapses %"
+			B_PRIu64 "\n", fMessages, fExemptMessages, fFlushes, fPlainBytes,
+			fWireBytes, (int64)fEncodeTime, enqueued, drained, coalesced,
+			superseded, collapses);
 	}
 
 	// Emptied under fLock so a drawing thread cannot be left half way through
-	// a message (or a segment) when the stream restarts.
+	// a message (or a segment) when the stream restarts. The flow-control queue
+	// goes with it: its contents were framed for a client that is gone, and the
+	// next connection replays state and repaints unconditionally -- which is
+	// also why the owed resync it may be holding is dropped rather than carried
+	// across.
 	fTarget->MakeEmpty();
+	fQueue.Reset();
 
 	_ResetCodec();
 
@@ -358,12 +371,155 @@ RemoteWireWriter::GetStatistics(uint64& _plainBytes, uint64& _wireBytes,
 }
 
 
+void
+RemoteWireWriter::SetFrameBoundariesExplicit(bool explicitly)
+{
+	BAutolock lock(fLock);
+	if (!lock.IsLocked())
+		return;
+
+	fQueue.SetExplicitBoundaries(explicitly);
+}
+
+
+bool
+RemoteWireWriter::TakeResyncOwed()
+{
+	BAutolock lock(fLock);
+	if (!lock.IsLocked())
+		return false;
+
+	if (!fQueue.ResyncOwed())
+		return false;
+
+	fQueue.ClearResyncOwed();
+	return true;
+}
+
+
+void
+RemoteWireWriter::GetFlowStatistics(uint64& _enqueued, uint64& _drained,
+	uint64& _coalesced, uint64& _superseded, uint64& _collapses) const
+{
+	BAutolock lock(fLock);
+	fQueue.GetStatistics(_enqueued, _drained, _coalesced, _superseded,
+		_collapses);
+}
+
+
+void
+RemoteWireWriter::GetFlowDepth(size_t& _messages, size_t& _bytes) const
+{
+	BAutolock lock(fLock);
+	_messages = fQueue.CountMessages();
+	_bytes = fQueue.CountBytes();
+}
+
+
+/*!	One message in, on its way to the socket, under fLock.
+
+	The order here is the flow-control contract:
+
+	  1. the queue sees every message, whether or not it stores it -- it has to
+	     track the per-token drawing mode to know which pixel ops read the
+	     surface, and a mode setter that went straight through would otherwise be
+	     invisible to it;
+	  2. anything already queued is drained first, because the stream's order is
+	     the order the drawing engines produced it and nothing may overtake;
+	  3. a message is only handed to the compressor when the ring can take the
+	     whole of it. Otherwise it goes into the queue.
+
+	Step 3 is what replaces "discard when nobody listens". The send ring is
+	constructed with discardWithoutReader, so before this a Write() with no
+	client attached returned B_OK having written nothing: the message was gone,
+	the caller believed it sent, and the client that connected later was never
+	told. Now there is nowhere for a message to vanish that is not a counted,
+	bounded, resync-forcing policy decision.
+*/
 status_t
 RemoteWireWriter::_WriteLocked(const void* buffer, size_t length)
 {
 	fPlainBytes += length;
 	fMessages++;
 
+	fQueue.Observe(buffer, length);
+
+	if (!fQueue.IsEmpty()) {
+		_DrainQueue();
+		if (!fQueue.IsEmpty())
+			return fQueue.Enqueue(buffer, length, find_thread(NULL));
+	}
+
+	if (!_CanDeliver(length) && !_LargerThanTheRing(length))
+		return fQueue.Enqueue(buffer, length, find_thread(NULL));
+
+	return _Deliver(buffer, length);
+}
+
+
+/*!	Whether the ring can take \a length bytes of message right now, whole.
+
+	A reader has to exist (without one the ring discards and the message would
+	be lost), and there has to be room for the message plus one staging buffer:
+	the compressed form of a message is at worst marginally larger than the
+	plain form and is emitted in segments of at most kOutputBufferSize, so that
+	headroom bounds the expansion for any message the ring could hold at all.
+*/
+bool
+RemoteWireWriter::_CanDeliver(size_t length) const
+{
+	if (!fTarget->HasReader())
+		return false;
+
+	return fTarget->FreeSpace() >= length + kOutputBufferSize;
+}
+
+
+/*!	A message the ring could never hold whole, even empty.
+
+	Those cannot be gated on free space or they would sit in the queue forever,
+	so they take the old path: a blocking write that the sender drains
+	underneath. That is exactly the behaviour every message had before this
+	queue existed, and it is only reachable for a message approaching a megabyte
+	-- which, since RP_DRAW_BITMAP is cropped to the rect actually drawn, no
+	longer happens on the paths that used to produce it.
+*/
+bool
+RemoteWireWriter::_LargerThanTheRing(size_t length) const
+{
+	if (!fTarget->HasReader())
+		return false;
+
+	return length + kOutputBufferSize > fTarget->BufferSize();
+}
+
+
+void
+RemoteWireWriter::_DrainQueue()
+{
+	while (true) {
+		size_t length = 0;
+		const uint8* data = fQueue.PeekFront(length);
+		if (data == NULL)
+			return;
+
+		if (!_CanDeliver(length) && !_LargerThanTheRing(length))
+			return;
+
+		// Only pop once the whole message has reached the ring. A failure
+		// leaves it queued rather than half-gone; the stream is broken by then
+		// and Reset() at the next connection is what clears it.
+		if (_Deliver(data, length) != B_OK)
+			return;
+
+		fQueue.PopFront();
+	}
+}
+
+
+status_t
+RemoteWireWriter::_Deliver(const void* buffer, size_t length)
+{
 	if (fCapability == 0) {
 		fWireBytes += length;
 		return fTarget->Write(buffer, length);
