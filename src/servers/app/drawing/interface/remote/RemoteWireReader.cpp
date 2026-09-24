@@ -260,7 +260,20 @@ RemoteWireReader::_Decompress(const uint8* buffer, size_t length)
 	ZSTD_DCtx* context = (ZSTD_DCtx*)fDecompressionContext;
 	ZSTD_inBuffer input = { buffer, length, 0 };
 
-	while (input.pos < input.size) {
+	// "Input consumed" is not "output delivered". When a segment's plain bytes do
+	// not fit the staging buffer below, zstd fills it, stops, and keeps the rest
+	// *inside the decoder* -- and it can reach that state with the input already
+	// consumed, so a loop that only watches the input returns with decoded bytes
+	// still held back. They are not lost: the next ZSTD_decompressStream() call
+	// drains them first. What is lost is their *place in the stream*, because a
+	// raw segment (written straight through, not decoded) can arrive in between
+	// and reach the target ahead of plain bytes that were written before it.
+	//
+	// A full staging buffer is the only signal that the decoder may be holding
+	// something, so keep going until a call leaves it short. Reachable before
+	// #543 only for a single message larger than the buffer; once messages share
+	// a flush it is the normal case for any busy window.
+	while (true) {
 		ZSTD_outBuffer output = { fOutputBuffer, fOutputBufferSize, 0 };
 		size_t consumedBefore = input.pos;
 
@@ -277,6 +290,9 @@ RemoteWireReader::_Decompress(const uint8* buffer, size_t length)
 				return writeResult;
 		}
 
+		if (input.pos == input.size && output.pos < output.size)
+			return B_OK;
+
 		if (input.pos == consumedBefore && output.pos == 0) {
 			// The server never ends the frame, so this means the decoder can
 			// make no progress at all: the stream is corrupt.
@@ -284,8 +300,6 @@ RemoteWireReader::_Decompress(const uint8* buffer, size_t length)
 			return B_ERROR;
 		}
 	}
-
-	return B_OK;
 #else
 	(void)buffer;
 	(void)length;
