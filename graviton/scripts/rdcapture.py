@@ -3122,11 +3122,27 @@ class ZstdStream(object):
         return code
 
     def decompress(self, data: bytes) -> bytes:
+        """Decode one compressed segment, draining every decoded byte.
+
+        "Input consumed" is NOT "output delivered": zstd can hold decoded bytes
+        internally with `inbuf.pos == inbuf.size`, and the way to tell is that it
+        filled the output buffer completely. Stopping at input exhaustion leaves
+        those bytes inside the context until the next call, so a RAW segment that
+        follows overtakes them -- same total length, wrong order, and no error
+        anywhere. The server had the identical defect in
+        `RemoteWireReader::_Decompress()`; it was reachable there only for a
+        single >64 KiB message until per-window flushing (#543) made batched
+        segments the normal case, at which point it became routine. Fixed there
+        in #546 -- keep the two loops the same shape.
+
+        So: keep calling while the output buffer came back full, and stop only
+        when the input is exhausted AND the last call did not fill the output.
+        """
         ctypes = self._ctypes
         src = ctypes.create_string_buffer(data, len(data))
         inbuf = self._InBuffer(ctypes.cast(src, ctypes.c_void_p), len(data), 0)
         produced = bytearray()
-        while inbuf.pos < inbuf.size:
+        while True:
             outbuf = self._OutBuffer(ctypes.cast(self._out, ctypes.c_void_p),
                                      len(self._out), 0)
             before = inbuf.pos
@@ -3134,7 +3150,10 @@ class ZstdStream(object):
                 self._ctx, ctypes.byref(outbuf), ctypes.byref(inbuf)))
             if outbuf.pos:
                 produced += self._out.raw[:outbuf.pos]
-            elif inbuf.pos == before:
+            filled = outbuf.pos == len(self._out)
+            if inbuf.pos >= inbuf.size and not filled:
+                break
+            if inbuf.pos == before and outbuf.pos == 0:
                 raise ValueError("zstd made no progress")
         return bytes(produced)
 
@@ -4952,6 +4971,49 @@ def selftest(allow_skip=False):
         check("compressed stream round trip", bytes(recovered) == expect,
               "(%d vs %d bytes)" % (len(recovered), len(expect)))
         check("decoder switched at the acknowledgement", dec.compressed)
+
+        # A compressed segment whose DECODED size exceeds the decoder's 64 KiB
+        # output buffer, immediately followed by a raw segment. This is the case
+        # that separates "input consumed" from "output delivered": zstd returns
+        # with the input exhausted while still holding decoded bytes, and a loop
+        # that stops there leaves them inside the context -- so the raw segment
+        # that follows is emitted FIRST. The recovered stream then has the right
+        # total length and the wrong order, with no error raised anywhere.
+        #
+        # The earlier round-trip above cannot catch this: its messages are small,
+        # so the output buffer never fills and the premature exit never happens.
+        # Compressible payload on purpose -- it must be one segment on the wire
+        # and several buffers' worth coming out.
+        big = frame(RP_FILL_RECT_COLOR,
+                    struct.pack("<Iffff", token, 0.0, 0.0, 4.0, 4.0)
+                    + bytes((1, 2, 3, 255)) + (b"\xa5" * (192 * 1024)))
+        after = frame(RP_CODEC_TILE, os.urandom(64))
+        # A FRESH encoder: `enc` is a streaming compressor whose frame is
+        # continuous across calls, so reusing it here would hand `dec2` a stream
+        # starting mid-frame ("unknown frame descriptor") and the check would
+        # fail for a reason that has nothing to do with draining.
+        enc2 = _selftest_encoder()
+        wire2 = bytearray(ack)
+        body = enc2(big)
+        wire2 += segment_header(len(body), False) + body
+        wire2 += segment_header(len(after), True) + after
+
+        dec2 = WireDecoder(CAP_COMPRESS_ZSTD)
+        rec2 = bytearray()
+        for i in range(0, len(wire2), 4096):
+            rec2 += dec2.feed(bytes(wire2[i:i + 4096]))
+        expect2 = ack + big + after
+        check("a multi-buffer compressed segment is fully drained before the "
+              "raw segment that follows it",
+              bytes(rec2) == expect2,
+              "(%d vs %d bytes%s)"
+              % (len(rec2), len(expect2),
+                 "" if len(rec2) != len(expect2) else
+                 "; SAME LENGTH, WRONG ORDER -- the decoder exited on input "
+                 "exhaustion while still holding decoded bytes"))
+        check("...and the big message decoded larger than the output buffer, "
+              "so that check is load-bearing", len(big) > 64 * 1024,
+              "(%d bytes)" % len(big))
         check("exempt payload travelled as a raw segment",
               dec.raw_segments == 1 and dec.compressed_segments == 4,
               "(raw=%d compressed=%d)"
