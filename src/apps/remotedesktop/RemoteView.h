@@ -14,12 +14,22 @@
 #include <View.h>
 
 class BBitmap;
+class BGradient;
 class NetReceiver;
 class NetSender;
+class RemoteMessage;
 class RemoteWireReader;
 class StreamingRingBuffer;
 
 struct engine_state;
+
+// The gradient half of the RP decoder, lifted out of the drawing loop so the
+// wire self-test can drive it headlessly, and so "does this opcode carry a
+// gradient" has one answer instead of nine hand-written ones. See
+// RemoteView.cpp.
+bool			remote_opcode_has_gradient(uint16 code);
+status_t		remote_read_gradient(RemoteMessage& message, uint16 code,
+					BGradient** _gradient);
 
 class RemoteView : public BView {
 public:

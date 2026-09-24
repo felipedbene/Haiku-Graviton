@@ -55,6 +55,82 @@ typedef struct engine_state {
 } engine_state;
 
 
+/*!	Answers whether \a code carries a BGradient at the end of its payload.
+
+	The decoder used to ask this inline, once per drawing block, by naming that
+	block's two gradient opcodes in an \c if. Two of the nine copies named the
+	*arc* family while sitting inside the rect and the round-rect block, so for
+	RP_STROKE_RECT_GRADIENT, RP_FILL_RECT_GRADIENT and the round-rect pair the
+	test was never true. A guard that names a wrong-but-neighbouring opcode
+	reads as correct at a glance, compiles without a murmur and logs nothing
+	when it misfires, which is why it survived: there was no single place where
+	the list could be checked against itself. Now there is one, and the callers
+	name no opcodes at all.
+*/
+bool
+remote_opcode_has_gradient(uint16 code)
+{
+	switch (code) {
+		case RP_STROKE_ARC_GRADIENT:
+		case RP_FILL_ARC_GRADIENT:
+		case RP_STROKE_BEZIER_GRADIENT:
+		case RP_FILL_BEZIER_GRADIENT:
+		case RP_STROKE_ELLIPSE_GRADIENT:
+		case RP_FILL_ELLIPSE_GRADIENT:
+		case RP_STROKE_POLYGON_GRADIENT:
+		case RP_FILL_POLYGON_GRADIENT:
+		case RP_STROKE_RECT_GRADIENT:
+		case RP_FILL_RECT_GRADIENT:
+		case RP_STROKE_ROUND_RECT_GRADIENT:
+		case RP_FILL_ROUND_RECT_GRADIENT:
+		case RP_STROKE_SHAPE_GRADIENT:
+		case RP_FILL_SHAPE_GRADIENT:
+		case RP_STROKE_TRIANGLE_GRADIENT:
+		case RP_FILL_TRIANGLE_GRADIENT:
+		case RP_STROKE_LINE_GRADIENT:
+		case RP_FILL_REGION_GRADIENT:
+			return true;
+
+		default:
+			return false;
+	}
+}
+
+
+/*!	Reads the gradient \a code carries into \a *_gradient -- exactly once, and
+	only for the opcodes that carry one; \a *_gradient is left NULL otherwise,
+	which the non-gradient arm of every caller expects.
+
+	Reading it twice is what the decoder did at all nine of its gradient blocks
+	(issue #533): the unconditional first read consumed the gradient and leaked
+	it, because only the second one was handed to the caller's ObjectDeleter,
+	and the second then ran on a payload with nothing left in it. Note what that
+	costs and what it does not. RemoteMessage::Read() refuses to read past
+	fDataLeft and NextMessage() discards whatever a handler left behind, so the
+	over-read could not reach into the following message and the stream stayed
+	framed. What it did instead was fail -- so the block took its \c continue
+	and the drawing op was dropped, silently, every time, with a gradient
+	leaked per op. Verified in the wire self-test rather than reasoned about;
+	see test_gradient_opcode_decode() in WireSelfTest.cpp.
+
+	The table above and the drawing arms below have to agree: an opcode the arms
+	draw with a gradient but the table omits would leave \a *_gradient NULL and
+	be dereferenced, which is loud rather than silently wrong, and is the
+	trade deliberately taken over the old behaviour. What keeps them in step is
+	that the self-test pins the table to all eighteen opcodes and to their count.
+*/
+status_t
+remote_read_gradient(RemoteMessage& message, uint16 code,
+	BGradient** _gradient)
+{
+	*_gradient = NULL;
+	if (!remote_opcode_has_gradient(code))
+		return B_OK;
+
+	return message.ReadGradient(_gradient);
+}
+
+
 RemoteView::RemoteView(BRect frame, const char *remoteHost, uint16 remotePort,
 	const char *sessionCookie)
 	:
@@ -901,13 +977,10 @@ RemoteView::_DrawThread()
 				if (message.Read(span) != B_OK)
 					continue;
 
-				message.ReadGradient(&gradient);
-				if (code == RP_STROKE_ARC_GRADIENT || code == RP_FILL_ARC_GRADIENT) {
-					if (message.ReadGradient(&gradient) != B_OK)
-						continue;
+				if (remote_read_gradient(message, code, &gradient) != B_OK)
+					continue;
 
-					gradientDeleter.SetTo(gradient);
-				}
+				gradientDeleter.SetTo(gradient);
 
 				if (code == RP_STROKE_ARC) {
 					offscreen->StrokeArc(rect, angle, span, pattern);
@@ -937,13 +1010,10 @@ RemoteView::_DrawThread()
 				if (message.ReadList(points, 4) != B_OK)
 					continue;
 
-				message.ReadGradient(&gradient);
-				if (code == RP_STROKE_BEZIER_GRADIENT || code == RP_FILL_BEZIER_GRADIENT) {
-					if (message.ReadGradient(&gradient) != B_OK)
-						continue;
+				if (remote_read_gradient(message, code, &gradient) != B_OK)
+					continue;
 
-					gradientDeleter.SetTo(gradient);
-				}
+				gradientDeleter.SetTo(gradient);
 
 				BRect bounds = _BuildInvalidateRect(points, 4);
 				if (code == RP_STROKE_BEZIER) {
@@ -973,13 +1043,10 @@ RemoteView::_DrawThread()
 				if (message.Read(rect) != B_OK)
 					continue;
 
-				message.ReadGradient(&gradient);
-				if (code == RP_STROKE_ELLIPSE_GRADIENT || code == RP_FILL_ELLIPSE_GRADIENT) {
-					if (message.ReadGradient(&gradient) != B_OK)
-						continue;
+				if (remote_read_gradient(message, code, &gradient) != B_OK)
+					continue;
 
-					gradientDeleter.SetTo(gradient);
-				}
+				gradientDeleter.SetTo(gradient);
 
 				if (code == RP_STROKE_ELLIPSE) {
 					offscreen->StrokeEllipse(rect, pattern);
@@ -1017,13 +1084,10 @@ RemoteView::_DrawThread()
 				for (int32 i = 0; i < numPoints; i++)
 					message.Read(points[i]);
 
-				message.ReadGradient(&gradient);
-				if (code == RP_STROKE_POLYGON_GRADIENT || code == RP_FILL_POLYGON_GRADIENT) {
-					if (message.ReadGradient(&gradient) != B_OK)
-						continue;
+				if (remote_read_gradient(message, code, &gradient) != B_OK)
+					continue;
 
-					gradientDeleter.SetTo(gradient);
-				}
+				gradientDeleter.SetTo(gradient);
 
 				if (code == RP_STROKE_POLYGON) {
 					offscreen->StrokePolygon(points, numPoints, bounds, closed, pattern);
@@ -1053,13 +1117,10 @@ RemoteView::_DrawThread()
 				if (message.Read(rect) != B_OK)
 					continue;
 
-				message.ReadGradient(&gradient);
-				if (code == RP_STROKE_ARC_GRADIENT || code == RP_FILL_ARC_GRADIENT) {
-					if (message.ReadGradient(&gradient) != B_OK)
-						continue;
+				if (remote_read_gradient(message, code, &gradient) != B_OK)
+					continue;
 
-					gradientDeleter.SetTo(gradient);
-				}
+				gradientDeleter.SetTo(gradient);
 
 				if (code == RP_STROKE_RECT) {
 					offscreen->StrokeRect(rect, pattern);
@@ -1092,13 +1153,10 @@ RemoteView::_DrawThread()
 				if (message.Read(yRadius) != B_OK)
 					continue;
 
-				message.ReadGradient(&gradient);
-				if (code == RP_STROKE_ARC_GRADIENT || code == RP_FILL_ARC_GRADIENT) {
-					if (message.ReadGradient(&gradient) != B_OK)
-						continue;
+				if (remote_read_gradient(message, code, &gradient) != B_OK)
+					continue;
 
-					gradientDeleter.SetTo(gradient);
-				}
+				gradientDeleter.SetTo(gradient);
 
 				if (code == RP_STROKE_ROUND_RECT) {
 					offscreen->StrokeRoundRect(rect, xRadius, yRadius, pattern);
@@ -1154,13 +1212,10 @@ RemoteView::_DrawThread()
 				BGradient *gradient = NULL;
 				ObjectDeleter<BGradient> gradientDeleter;
 
-				message.ReadGradient(&gradient);
-				if (code == RP_STROKE_SHAPE_GRADIENT || code == RP_FILL_SHAPE_GRADIENT) {
-					if (message.ReadGradient(&gradient) != B_OK)
-						continue;
+				if (remote_read_gradient(message, code, &gradient) != B_OK)
+					continue;
 
-					gradientDeleter.SetTo(gradient);
-				}
+				gradientDeleter.SetTo(gradient);
 
 				offscreen->PushState();
 				offscreen->MovePenTo(offset);
@@ -1198,13 +1253,10 @@ RemoteView::_DrawThread()
 				if (message.Read(bounds) != B_OK)
 					continue;
 
-				message.ReadGradient(&gradient);
-				if (code == RP_STROKE_TRIANGLE_GRADIENT || code == RP_FILL_TRIANGLE_GRADIENT) {
-					if (message.ReadGradient(&gradient) != B_OK)
-						continue;
+				if (remote_read_gradient(message, code, &gradient) != B_OK)
+					continue;
 
-					gradientDeleter.SetTo(gradient);
-				}
+				gradientDeleter.SetTo(gradient);
 
 				if (code == RP_STROKE_TRIANGLE) {
 					offscreen->StrokeTriangle(points[0], points[1], points[2],
@@ -1236,13 +1288,10 @@ RemoteView::_DrawThread()
 				if (message.ReadList(points, 2) != B_OK)
 					continue;
 
-				message.ReadGradient(&gradient);
-				if (code == RP_STROKE_LINE_GRADIENT) {
-					if (message.ReadGradient(&gradient) != B_OK)
-						continue;
+				if (remote_read_gradient(message, code, &gradient) != B_OK)
+					continue;
 
-					gradientDeleter.SetTo(gradient);
-				}
+				gradientDeleter.SetTo(gradient);
 
 				if (code == RP_STROKE_LINE)
 					offscreen->StrokeLine(points[0], points[1], pattern);
@@ -1283,19 +1332,21 @@ RemoteView::_DrawThread()
 			case RP_FILL_REGION_GRADIENT:
 			{
 				BRegion region;
+				BGradient *gradient = NULL;
+				ObjectDeleter<BGradient> gradientDeleter;
+
 				if (message.ReadRegion(region) != B_OK)
 					continue;
 
+				if (remote_read_gradient(message, code, &gradient) != B_OK)
+					continue;
+
+				gradientDeleter.SetTo(gradient);
+
 				if (code == RP_FILL_REGION)
 					offscreen->FillRegion(&region, pattern);
-				else {
-					BGradient *gradient;
-					if (message.ReadGradient(&gradient) != B_OK)
-						continue;
-
+				else
 					offscreen->FillRegion(&region, *gradient);
-					delete gradient;
-				}
 
 				invalidRegion.Include(&region);
 				break;
