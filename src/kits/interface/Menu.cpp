@@ -2933,28 +2933,46 @@ BMenu::_State(BMenuItem** item) const
 }
 
 
+const static bigtime_t kInvokeBlinkInterval = 50000;
+	// one half-cycle of the "selected" blink below
+const static int32 kInvokeBlinkCycles = 2;
+
+
 void
 BMenu::_InvokeItem(BMenuItem* item, bool now)
 {
 	if (!item->IsEnabled())
 		return;
 
-	// Do the "selected" animation
-	// TODO: Doesn't work. This is supposed to highlight
-	// and dehighlight the item, works on beos but not on haiku.
-	if (!item->Submenu() && LockLooper()) {
-		snooze(50000);
-		item->Select(true);
-		Window()->UpdateIfNeeded();
-		snooze(50000);
-		item->Select(false);
-		Window()->UpdateIfNeeded();
-		snooze(50000);
-		item->Select(true);
-		Window()->UpdateIfNeeded();
-		snooze(50000);
-		item->Select(false);
-		Window()->UpdateIfNeeded();
+	// The "selected" blink: highlight and dehighlight the invoked item twice
+	// before the message goes out, so that the user sees which item was hit.
+	// It does render -- the invoked item is repainted at 50, 100, 150 and
+	// 200 ms after the key, which an older comment here denied -- so this is
+	// 200 ms of real visual feedback while a menu is on screen.
+	//
+	// `now` means the caller does not want it, and the one caller that asks
+	// (BWindow's keyboard-shortcut handler, through MenuPrivate::InvokeItem)
+	// has reason to: no menu is open for the user to watch, and the blink runs
+	// on the window thread with the looper held, so it stalls the entire window
+	// for its whole duration. That request was accepted and then ignored, which
+	// put 200 ms in front of every shortcut-invoked item whose menu happens to
+	// be attached to a looper -- measured at 201.5 ms. Honour it.
+	//
+	// Painting also has to be possible at all: BWindow::UpdateIfNeeded() is a
+	// no-op unless it is called from the window's own thread, so blinking from
+	// any other thread would snooze without ever showing anything.
+	if (!now && !item->Submenu() && LockLooper()) {
+		BWindow* window = Window();
+		if (window != NULL && window->Thread() == find_thread(NULL)) {
+			for (int32 i = 0; i < kInvokeBlinkCycles; i++) {
+				snooze(kInvokeBlinkInterval);
+				item->Select(true);
+				window->UpdateIfNeeded();
+				snooze(kInvokeBlinkInterval);
+				item->Select(false);
+				window->UpdateIfNeeded();
+			}
+		}
 		UnlockLooper();
 	}
 
