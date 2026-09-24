@@ -5,6 +5,8 @@
 #ifndef REMOTE_WIRE_WRITER_H
 #define REMOTE_WIRE_WRITER_H
 
+#include "RemoteFlowQueue.h"
+
 #include <Locker.h>
 #include <OS.h>
 #include <SupportDefs.h>
@@ -99,6 +101,34 @@ public:
 
 			bool				IsCompressing() const { return fCapability != 0; }
 
+			/*!	Whether RP_TIER_END_FRAME is the frame boundary for this
+				connection, i.e. whether the client negotiated
+				RP_CAP_FRAME_BOUNDARY. Must be set before the first draw op of
+				the connection; Reset() clears it, so a client that does not ask
+				gets the inferred boundary. */
+			void				SetFrameBoundariesExplicit(bool explicitly);
+
+			/*!	Reports, and clears, "the flow-control policy had to discard
+				content it could not prove would be redrawn".
+
+				Test-and-clear rather than a callback, because the repair
+				(RP_RESYNC plus a state replay) has to be emitted *through* this
+				object and so cannot run while its lock is held. The owner polls
+				this from a place where it is safe to write. */
+			bool				TakeResyncOwed();
+
+			/*!	Flow-control counters for the connection: messages queued,
+				drained, coalesced away, superseded with their frame, and the
+				number of times the bound degraded to RP_RESYNC. */
+			void				GetFlowStatistics(uint64& _enqueued,
+									uint64& _drained, uint64& _coalesced,
+									uint64& _superseded,
+									uint64& _collapses) const;
+
+			//! Current queue occupancy, for the instrumented A/B.
+			void				GetFlowDepth(size_t& _messages,
+									size_t& _bytes) const;
+
 			/*!	Cumulative counters for the connection, for the A/B
 				measurement: bytes offered by the drawing engines, bytes
 				actually written to the ring buffer, messages, exempt (raw)
@@ -114,6 +144,10 @@ public:
 
 private:
 			status_t			_WriteLocked(const void* buffer, size_t length);
+			status_t			_Deliver(const void* buffer, size_t length);
+			bool				_CanDeliver(size_t length) const;
+			bool				_LargerThanTheRing(size_t length) const;
+			void				_DrainQueue();
 			status_t			_WriteCompressed(const void* buffer,
 									size_t length, bool flushNow);
 			status_t			_FlushLocked();
@@ -179,6 +213,17 @@ private:
 			thread_id			fFlusher;
 			sem_id				fFlushSignal;
 			bool				fFlusherQuitting;
+
+			/*!	The M2 flow-control policy. Sits here, upstream of the
+				compressor, and that placement is the whole reason the frame
+				boundary does not cost the compression ratio: a message dropped
+				from this queue never entered the zstd stream, so the window
+				carries on across the drop and the stream keeps the shared-stream
+				compression measured for a per-message-flushed stream instead of
+				falling to the ratio measured for independently compressed
+				frames. A queue behind the compressor would have to reset it to
+				drop anything. */
+			mutable RemoteFlowQueue	fQueue;
 
 			uint64				fPlainBytes;
 			uint64				fWireBytes;

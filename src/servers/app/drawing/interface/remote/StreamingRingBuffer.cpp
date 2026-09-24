@@ -269,6 +269,31 @@ StreamingRingBuffer::Write(const void *buffer, size_t length, bigtime_t timeout,
 }
 
 
+size_t
+StreamingRingBuffer::FreeSpace()
+{
+	BAutolock dataLock(fDataLocker);
+	if (!dataLock.IsLocked())
+		return 0;
+
+	return fBufferSize - fReadable;
+}
+
+
+bool
+StreamingRingBuffer::HasReader()
+{
+	BAutolock dataLock(fDataLocker);
+	if (!dataLock.IsLocked())
+		return false;
+
+	// Without discardWithoutReader nobody registers, and Write() blocks for
+	// space rather than discarding -- so "there is a reader" is the only honest
+	// answer for a buffer that never asked the question.
+	return !fDiscardWithoutReader || fReader != NULL;
+}
+
+
 void
 StreamingRingBuffer::MakeEmpty()
 {

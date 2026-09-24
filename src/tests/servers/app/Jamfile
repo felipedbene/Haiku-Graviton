@@ -59,6 +59,7 @@ SharedLibrary libhwinterface.so :
 	NetSender.cpp
 	RemoteDrawingEngine.cpp
 	RemoteEventStream.cpp
+	RemoteFlowQueue.cpp
 	RemoteHWInterface.cpp
 	RemoteMessage.cpp
 	RemoteWireReader.cpp

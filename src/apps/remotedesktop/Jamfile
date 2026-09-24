@@ -52,6 +52,10 @@ Application RemoteDesktop :
 	# WireSelfTest.cpp.
 	WireSelfTest.cpp
 	RemoteWireWriter.cpp
+	RemoteFlowQueue.cpp
+		# The wire writer owns the M2 flow-control queue, so the encoder the
+		# self-test links brings it along. Nothing in the client engages it: the
+		# client's ring buffer has a reader by construction.
 
 	NetReceiver.cpp
 	NetSender.cpp
@@ -66,6 +70,6 @@ Application RemoteDesktop :
 ;
 
 SEARCH on [ FGristFiles NetReceiver.cpp NetSender.cpp RemoteMessage.cpp
-	RemoteWireReader.cpp RemoteWireWriter.cpp StreamingRingBuffer.cpp ]
-	= $(serverDir) ;
+	RemoteFlowQueue.cpp RemoteWireReader.cpp RemoteWireWriter.cpp
+	StreamingRingBuffer.cpp ] = $(serverDir) ;
 SEARCH on [ FGristFiles TLSStream.cpp WebSocketStream.cpp ] = $(brokerDir) ;

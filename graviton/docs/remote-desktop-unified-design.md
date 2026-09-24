@@ -411,7 +411,9 @@ capability-gated).
   `RP_TIER_END_FRAME` as a real frame boundary and a bounded, **op-aware** queue
   (queue messages not bytes; on overflow coalesce within a frame and drop
   *superseded* whole-frame content, never partial messages; worst case degrades to
-  `RP_RESYNC`). Replaces "discard when nobody listens" with a policy.
+  `RP_RESYNC`). Replaces "discard when nobody listens" with a policy. Both halves
+  are delivered: the measurement gate in `remote-desktop-m2-pricing.md`, the flow
+  control in `remote-desktop-m2-flow-control.md`.
 - **M3 — first full-motion, via Route 2.** Host-side NEON `libx264` on the metal
   feeds Tier P over the media channel; the fastest path to moving pixels because
   it needs no in-guest encoder and is already proven to paint. Target ~45–60 ms
