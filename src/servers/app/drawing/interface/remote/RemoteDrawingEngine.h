@@ -185,8 +185,12 @@ private:
 			float				fExtendWidth;
 
 			bool				fCallbackAdded;
-			sem_id				fResultNotify;
-			BPoint				fDrawStringResult;
+			// ReadBitmap is now the only synchronous wire request that waits:
+			// DrawString is fire-and-forget (issue #548) and StringWidth is
+			// answered from the server's own metrics. This dedicated semaphore is
+			// released only for RP_READ_BITMAP_RESULT, so an unwaited
+			// RP_DRAW_STRING_RESULT can never satisfy the ReadBitmap wait.
+			sem_id				fReadBitmapNotify;
 			BBitmap*			fReadBitmapResult;
 
 			ObjectDeleter<BitmapDrawingEngine>
