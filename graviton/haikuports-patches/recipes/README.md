@@ -79,6 +79,8 @@ fixed, but this makes the step independent of it either way.
 | `mm_common-1.0.6.recipe` | yes (issue #136), **FULL — built native RC=0** | two undeclared build tools: `configure` aborts "tar utility not found", and the `skeletonmm.tar.gz` generation step runs `gzip` (127). Add `cmd:tar` **and** `cmd:gzip` to `BUILD_PREREQUIRES`. GNOME C++-binding infra (unblocks the `*mm` tier). Proven: `mm_common-1.0.6-1-arm64.hpkg` (463 KB). |
 | `musicpc-0.34.recipe` | yes (issue #136), **FULL — built native RC=0** | the ninja build succeeds; INSTALL then unconditionally `mv`s `share/doc/mpc`, which meson only emits when the optional docs are built, so INSTALL fails on `mv: cannot stat`. Guard the move (`[ -d ] && mv`). Program is complete; only the absent optional doc dir is skipped. Proven: `musicpc-0.34-2-arm64.hpkg` (`bin/mpc`). |
 | `nesalizer-1.0~git.recipe` | yes (issue #136), **FULL — built native RC=0** | two defects: (1) the upstream Makefile hardcodes x86-only `-mfpmath=sse`/`-msse3` and `-flto`/`-fuse-linker-plugin` (Haiku's gcc has no LTO), which aarch64 gcc rejects — `BUILD()` strips all four on non-x86 arches (portability fix, no cut); (2) upstream has **no `install` make target**, so the stock recipe's `make ... INSTALL_DIR=` no-ops and shipped an empty 804-byte hpkg — INSTALL now copies `build/nesalizer` into `$binDir` explicitly. Proven: `nesalizer-1.0~git-1-arm64.hpkg` (59 KB, `bin/nesalizer` — was 804 B empty before the INSTALL fix). |
+| `sdl_gfx-2.0.26.recipe` | yes (issue #560), class-5 | REVISION 4→5. configure.in's `--enable-mmx` defaults to "yes" unconditionally (its own `--help` text says "disable this on non-x86 platforms" but nothing did), so every target got `-DUSE_MMX`, and `SDL_imageFilter.c` gates `#include <mmintrin.h>` on that same define — an x86-only header aarch64 gcc does not have (`mmintrin.h: No such file or directory`). `BUILD()` now passes `--disable-mmx` whenever `$targetArchitecture` is not `x86`/`x86_64` (previously only `x86_gcc2` was excluded). Portability fix, not a cut — MMX stays on for the x86/x86_64 build. |
+| `waveedit-1.1.recipe` | yes (issue #560), class-5 | REVISION 1→2. Upstream's top-level `Makefile` hardcodes `-march=nocona` (an x86 microarchitecture name) for every platform; aarch64 gcc rejects it (`unknown value 'nocona' for '-march'`). `BUILD()` now `sed`s the flag out of `Makefile` when `$targetArchitecture` is not `x86`/`x86_64`. No SIMD path is lost — the same Makefile line already builds the vendored `pffft` with `-DPFFFT_SIMD_DISABLE` (scalar). |
 
 ## `ruby-3.2.9.recipe` does NOT go through the ISP path — read this before delivering it
 
@@ -236,6 +238,29 @@ already in the arm64 pool. A **native arm64 haikuporter `.hpkg` build is OWED** 
 header-only package that compiles nothing, standing up a builder was judged
 disproportionate. Cross-links `graviton/docs/port-hygiene.md` (the lint that recommends
 it).
+
+## `embree` (#560) — NOT a class-5 mechanical fix, no overlay added
+
+`embree-3.12.2` was triaged as a class-5 candidate (`c++: error: unrecognized
+command-line option '-msse2'` on `common/sys/{filename,thread,string,library}.cpp`)
+but is deliberately **not** fixed here. Traced upstream: `common/cmake/gnu.cmake`
+hardcodes `FLAGS_SSE2="-msse2"` (etc.) for any GCC compiler regardless of target
+arch, and with the recipe's `-DEMBREE_MAX_ISA=DEFAULT`, `check_isa.cpp` has no
+non-x86 branch and falls through to `#else // defined(__SSE2__)` → `"ISA:SSE2"`
+unconditionally, so `EMBREE_ISA_SSE2` ends up ON and `FLAGS_LOWEST=-msse2` gets
+applied to the `sys` target — that much *is* class-5-shaped.
+
+But turning every `EMBREE_ISA_*` OFF (the only way to stop `-msse2` from being
+selected) does not just drop a redundant flag the way lensfun's `BUILD_FOR_SSE`
+gate does: `kernels/CMakeLists.txt`'s *always-compiled* `EMBREE_LIBRARY_FILES`
+(`bvh_intersector1_bvh4.cpp`, `builders/primrefgen.cpp`, …) is written against
+SSE-width vector types with no scalar fallback — embree 3.x has no NEON path
+(that arrives in embree 4.x via SSE2NEON). Gating the flag would just trade
+today's `-msse2` rejection for cascading intrinsic-not-found errors deeper in
+`kernels/`. That is real SIMD equivalence work (NEON via SIMDe, the `simde-0.8.2`
+overlay above, or an embree major-version bump), not a mechanical arch gate — so
+it is left untouched here and should be scoped as its own SIMD-equivalence
+follow-up rather than folded into #560.
 
 ## Two recipes here are kept only as history
 
