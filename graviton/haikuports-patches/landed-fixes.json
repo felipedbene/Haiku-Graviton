@@ -1,0 +1,22 @@
+{
+  "_help": [
+    "Manifest of per-class recipe fixes that have LANDED in this tree.",
+    "The classifier reads this to distinguish 'this failure matches a playbook",
+    "class' (auto_recoverable) from 'a fix is in-tree AND is expected to build",
+    "on the next wave' (auto_recoverable AND fix_landed). See issue #560.",
+    "",
+    "Shape of an entry under 'classes':",
+    "  \"<class-number>\": {",
+    "    \"pr\":       \"<repo PR URL, or 'pending' before the PR is opened>\",",
+    "    \"commit\":   \"<merge SHA on graviton, or null while parked>\",",
+    "    \"coverage\": [\"<port>\", ...]",
+    "  }",
+    "",
+    "The classifier sets triage_fix_landed=True for a port iff its triage_class",
+    "matches an entry AND the port is in that entry's coverage list. `commit`",
+    "may be null while the class PR is still open (parked, unmerged) --",
+    "fix_landed is a claim that the fix is *authored* in-tree, not yet a merge",
+    "marker. Once the PR merges, populate `commit` so an audit can cite it."
+  ],
+  "classes": {}
+}
