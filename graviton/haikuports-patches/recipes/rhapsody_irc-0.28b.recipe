@@ -1,0 +1,54 @@
+SUMMARY="A text console IRC client"
+DESCRIPTION="Rhapsody is a text console IRC client for Unix operating \
+systems. It is small, fast, portable, easy to use and full featured. \
+An intuitive menu-driven user interface makes rhapsody ideal for \
+beginner to intermediate users."
+HOMEPAGE="http://rhapsody.sourceforge.net/"
+COPYRIGHT="2006 Adrian Gonera"
+LICENSE="GNU GPL v2"
+REVISION="5"
+SOURCE_URI="https://sourceforge.net/projects/rhapsody/files/rhapsody/Rhapsody%20IRC%200.28b/rhapsody_0.28b.tgz"
+CHECKSUM_SHA256="606d767f9bd4c810343b1ce94492f4aaf993552edee090ec881627b29294b4dd"
+SOURCE_DIR="rhapsody-0.28b"
+PATCHES="rhapsody_irc-$portVersion.patchset"
+
+ARCHITECTURES="?all"
+
+PROVIDES="
+	rhapsody_irc = $portVersion
+	cmd:rhapsody
+	"
+REQUIRES="
+	haiku
+	lib:libncurses
+	"
+
+BUILD_REQUIRES="
+	haiku_devel
+	devel:libncurses
+	"
+BUILD_PREREQUIRES="
+	cmd:gcc
+	cmd:make
+	"
+
+BUILD()
+{
+	# graviton/DeBeOS (#560, porting-playbook class 16): gcc >= 10 defaults to
+	# -fno-common, and rhapsody's source carries tentative global definitions
+	# in a shared header that pre-10 gcc merged as common symbols -- ld now
+	# reports "multiple definition of ...". -fcommon restores the historical
+	# merging; exported before the port's own ./configure script so its
+	# generated Makefile picks it up. -O2 added alongside for consistency with
+	# the runConfigure -O gate, even though this port's configure is not
+	# autotools-based.
+	export CFLAGS="-fcommon -O2 $CFLAGS"
+	./configure -i $binDir -d $docDir
+	make clean
+	make $jobArgs
+}
+
+INSTALL()
+{
+	make install
+}
