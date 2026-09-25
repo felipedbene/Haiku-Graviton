@@ -1,0 +1,87 @@
+SUMMARY="A library to read Metalink files"
+DESCRIPTION="Libmetalink is a library to read Metalink XML download \
+description format. It supports Metalink version 3 and Metalink version 4 \
+(RFC 5854)."
+HOMEPAGE="https://launchpad.net/libmetalink"
+COPYRIGHT="2008 Tatsuhiro Tsujikawa"
+LICENSE="MIT"
+REVISION="5"
+SOURCE_URI="https://launchpad.net/libmetalink/trunk/libmetalink-$portVersion/+download/libmetalink-$portVersion.tar.xz"
+CHECKSUM_SHA256="86312620c5b64c694b91f9cc355eabbd358fa92195b3e99517504076bf9fe33a"
+
+ARCHITECTURES="all"
+SECONDARY_ARCHITECTURES="x86_gcc2 x86"
+
+libVersion="3.1.0"
+libVersionCompat="$libVersion compat >= ${libVersion%%.*}"
+
+PROVIDES="
+	libmetalink$secondaryArchSuffix = $portVersion compat >= 0
+	lib:libmetalink$secondaryArchSuffix = $libVersionCompat
+	"
+REQUIRES="
+	haiku$secondaryArchSuffix
+	lib:libexpat$secondaryArchSuffix
+	"
+
+PROVIDES_devel="
+	libmetalink${secondaryArchSuffix}_devel = $portVersion compat >= 0
+	devel:libmetalink$secondaryArchSuffix = $libVersionCompat
+	"
+REQUIRES_devel="
+	libmetalink$secondaryArchSuffix == $portVersion base
+	"
+
+BUILD_REQUIRES="
+	haiku${secondaryArchSuffix}_devel
+	devel:libexpat$secondaryArchSuffix
+	devel:libxml2$secondaryArchSuffix
+	"
+BUILD_PREREQUIRES="
+	cmd:aclocal
+	cmd:autoconf
+	cmd:automake
+	cmd:autopoint
+	cmd:find
+	cmd:gcc$secondaryArchSuffix
+	cmd:ld$secondaryArchSuffix
+	cmd:libtoolize$secondaryArchSuffix
+	cmd:make
+	cmd:pkg_config$secondaryArchSuffix
+	"
+
+BUILD()
+{
+	# graviton/DeBeOS (#560, Class 3): aclocal/autoconf can't see gettext's
+	# (or libxml2's) installed .m4 macros unless the system aclocal dir is on
+	# ACLOCAL_PATH, which surfaces as "possibly undefined macro: AM_PATH_XML2"
+	# from automake. autopoint --force seeds the local po/build-aux gettext
+	# infrastructure the same way autoreconf would; `|| true` because this
+	# port has no po/ directory for it to act on, and that is not an error.
+	export ACLOCAL_PATH="$(finddir B_SYSTEM_DATA_DIRECTORY)/aclocal"
+	autopoint --force || true
+
+	libtoolize --force --copy --install
+	aclocal
+	autoconf
+	automake --add-missing
+	runConfigure ./configure --disable-dependency-tracking \
+		--without-libxml2 \
+		--disable-static
+	make $jobArgs
+}
+
+INSTALL()
+{
+	make install
+
+	rm $libDir/libmetalink.la
+
+	prepareInstalledDevelLib libmetalink
+	fixPkgconfig
+
+	# devel package
+	packageEntries devel \
+		$developDir \
+		$manDir
+}
