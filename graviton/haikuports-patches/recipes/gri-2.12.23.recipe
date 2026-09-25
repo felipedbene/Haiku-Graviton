@@ -1,0 +1,51 @@
+SUMMARY="A graphics programming language"
+DESCRIPTION="Gri is a language for scientific graphics programming. The word \
+'language' is important: Gri is command-driven, not point/click. Gri can make \
+x-y graphs, contour graphs, and image graphs, in PostScript and (someday) SVG \
+formats. Control is provided over all aspects of drawing, e.g. line widths, \
+colors, and fonts. A TeX-like syntax provides common mathematical symbols."
+HOMEPAGE="http://gri.sourceforge.net/"
+COPYRIGHT="2002-2011 Dan Kelley and Peter Galbraith"
+LICENSE="GNU GPL v1"
+REVISION="2"
+SOURCE_URI="http://downloads.sourceforge.net/project/gri/gri/2.12.23/gri-2.12.23.tar.gz?r=http%3A%2F%2Fsourceforge.net%2Fprojects%2Fgri%2Ffiles%2F&ts=1356118794&use_mirror=ignum"
+CHECKSUM_SHA256="a24e703f30250ed705c0a242aa59a24748259ea7355fca52152f367f45bfd2e7"
+
+ARCHITECTURES="?all x86_gcc2"
+
+PROVIDES="
+	gri = $portVersion
+	"
+REQUIRES="
+	haiku
+	"
+
+BUILD_REQUIRES="
+	haiku_devel
+	"
+BUILD_PREREQUIRES="
+	cmd:gcc
+	cmd:ld
+	cmd:make
+	cmd:perl
+	devel:libreadline
+	"
+
+BUILD()
+{
+	# Class 35 (#560): an implicit conversion pre-standard C++ allowed is now an
+	# error (`error: invalid conversion from ... [-fpermissive]`). Unblock
+	# class-wide with -fpermissive rather than fix every call site. runConfigure
+	# refuses an overridden CXXFLAGS with no -O flag (it cannot tell autotools'
+	# default optimization apart from "no optimization was wanted"), so -O2 has
+	# to come along with it.
+	export CXXFLAGS="-fpermissive -O2"
+	runConfigure ./configure --enable-shared
+	make $jobArgs
+}
+
+INSTALL()
+{
+	make install
+	addAppsDeskbarSymlink $appsDir/Gri
+}
