@@ -14,6 +14,7 @@
 #include "ServerTokenSpace.h"
 
 #include <Bitmap.h>
+#include <StackOrHeapArray.h>
 #include <utf8_functions.h>
 
 #include <math.h>
@@ -32,7 +33,7 @@ RemoteDrawingEngine::RemoteDrawingEngine(RemoteHWInterface* interface)
 	fToken(gTokenSpace.NewToken(kRemoteDrawingEngineToken, this)),
 	fExtendWidth(0),
 	fCallbackAdded(false),
-	fResultNotify(-1),
+	fReadBitmapNotify(-1),
 	fReadBitmapResult(NULL),
 	fBitmapDrawingEngine(NULL)
 {
@@ -57,8 +58,8 @@ RemoteDrawingEngine::~RemoteDrawingEngine()
 
 	if (fCallbackAdded)
 		fHWInterface->RemoveCallback(fToken);
-	if (fResultNotify >= 0)
-		delete_sem(fResultNotify);
+	if (fReadBitmapNotify >= 0)
+		delete_sem(fReadBitmapNotify);
 }
 
 
@@ -1079,33 +1080,24 @@ RemoteDrawingEngine::DrawString(const char* string, int32 length,
 		// put 8*(length-1) junk bytes on the wire. Send exactly the one delta
 		// (defect D5).
 
-	// No client is attached, so nothing will ever answer: skip the wait rather
-	// than stall the drawing thread for the full timeout on every string.
-	if (!fHWInterface->IsConnected())
-		return point;
+	// Fire-and-forget (issue #548). This used to block waiting for the client's
+	// RP_DRAW_STRING_RESULT once per string, which serialised a whole
+	// window repaint into one network round trip per string -- paint wall-time
+	// scaled with link RTT (a Tracker window took ~19 s over a 70 ms link). The
+	// pen advance is instead computed locally from the server's own font metrics,
+	// the same authoritative source StringWidth() now uses everywhere (the remote
+	// string-width query was retired). The client still rasterises the glyphs; we
+	// just no longer stall for its echo. The now-unwaited RP_DRAW_STRING_RESULT is
+	// consumed by the callback but releases no semaphore -- see _DrawingEngineResult.
+	if (fHWInterface->IsConnected()) {
+		_AddCallback();
+		message.Flush();
+	}
 
-	// Discard any late reply from a previously timed-out call before sending
-	// this request, so a stale release cannot satisfy our wait. Draining before
-	// the request (rather than after the flush) drops any dependence on the
-	// reply not having completed a fast/loopback round trip yet.
-	_DrainResultSem();
-
-	status_t result = _AddCallback();
-	if (message.Flush() != B_OK)
-		return point;
-
-	if (result != B_OK)
-		return point;
-
-	do {
-		result = acquire_sem_etc(fResultNotify, 1, B_RELATIVE_TIMEOUT,
-			1 * 1000 * 1000);
-	} while (result == B_INTERRUPTED);
-
-	if (result != B_OK)
-		return point;
-
-	return fDrawStringResult;
+	// Never return the bare start point (it would stack every glyph at the same
+	// x). This also fixes the former headless zero-advance path, which returned
+	// `point` unchanged.
+	return point + BPoint(fState.Font().StringWidth(string, length, delta), 0);
 }
 
 
@@ -1116,36 +1108,43 @@ RemoteDrawingEngine::DrawString(const char* string, int32 length,
 	// Guaranteed to have at least one point.
 	RemoteMessage message(NULL, fHWInterface->SendBuffer());
 
+	int32 glyphCount = UTF8CountChars(string, length);
+
 	message.Start(RP_DRAW_STRING_WITH_OFFSETS);
 	message.Add(fToken);
 	message.AddString(string, length);
-	message.AddList(offsets, UTF8CountChars(string, length));
+	message.AddList(offsets, glyphCount);
 
-	// No client is attached, so nothing will ever answer: skip the wait rather
-	// than stall the drawing thread for the full timeout on every string.
-	if (!fHWInterface->IsConnected())
+	// Fire-and-forget, like the point/delta overload above (issue #548): send the
+	// glyphs and return the pen advance computed locally, never blocking on the
+	// client's RP_DRAW_STRING_RESULT.
+	if (fHWInterface->IsConnected()) {
+		_AddCallback();
+		message.Flush();
+	}
+
+	if (glyphCount <= 0)
 		return offsets[0];
 
-	// Drain a prior timed-out call's late reply before issuing this request
-	// (see the DrawString above).
-	_DrainResultSem();
+	// Pen position after an offsets string is the last glyph's caller-supplied
+	// offset plus that glyph's own advance -- offsets-aware, NOT
+	// point + StringWidth, which would discard the per-glyph positions (justified
+	// or kerned text). Mirrors the local engine's offsets BoundingBox
+	// (DrawingEngine.cpp:1297-1299). GetEscapements returns advances normalised
+	// by the font size, so scale back up to pixels.
+	BPoint pen = offsets[glyphCount - 1];
+	BStackOrHeapArray<BPoint, 64> escapements(glyphCount);
+	if (escapements.IsValid()) {
+		escapement_delta noDelta = { 0.0f, 0.0f };
+		if (fState.Font().GetEscapements(string, length, glyphCount, noDelta,
+				escapements, NULL) == B_OK) {
+			float size = fState.Font().Size();
+			pen.x += escapements[glyphCount - 1].x * size;
+			pen.y += escapements[glyphCount - 1].y * size;
+		}
+	}
 
-	status_t result = _AddCallback();
-	if (message.Flush() != B_OK)
-		return offsets[0];
-
-	if (result != B_OK)
-		return offsets[0];
-
-	do {
-		result = acquire_sem_etc(fResultNotify, 1, B_RELATIVE_TIMEOUT,
-			1 * 1000 * 1000);
-	} while (result == B_INTERRUPTED);
-
-	if (result != B_OK)
-		return offsets[0];
-
-	return fDrawStringResult;
+	return pen;
 }
 
 
@@ -1180,7 +1179,7 @@ RemoteDrawingEngine::ReadBitmap(ServerBitmap* bitmap, bool drawCursor,
 
 	status_t result;
 	do {
-		result = acquire_sem_etc(fResultNotify, 1, B_RELATIVE_TIMEOUT,
+		result = acquire_sem_etc(fReadBitmapNotify, 1, B_RELATIVE_TIMEOUT,
 			10 * 1000 * 1000);
 	} while (result == B_INTERRUPTED);
 
@@ -1207,10 +1206,10 @@ RemoteDrawingEngine::_AddCallback()
 	if (fCallbackAdded)
 		return B_OK;
 
-	if (fResultNotify < 0)
-		fResultNotify = create_sem(0, "drawing engine result");
-	if (fResultNotify < 0)
-		return fResultNotify;
+	if (fReadBitmapNotify < 0)
+		fReadBitmapNotify = create_sem(0, "drawing engine read bitmap");
+	if (fReadBitmapNotify < 0)
+		return fReadBitmapNotify;
 
 	status_t result = fHWInterface->AddCallback(fToken, &_DrawingEngineResult,
 		this);
@@ -1223,20 +1222,20 @@ RemoteDrawingEngine::_AddCallback()
 void
 RemoteDrawingEngine::_DrainResultSem()
 {
-	// A previous synchronous call may have timed out and returned before its
-	// reply arrived. When that late reply finally lands, the callback releases
-	// fResultNotify -- and without this that stale release would satisfy the
-	// *next* call's wait, handing it the previous call's result (defect D8).
-	// Call this before sending the new request: any count pending now can only
-	// be a stale release from an earlier call, never this call's own reply
-	// (which has not been sent yet), so discarding it is always safe. This does
-	// not close the case of a prior reply still in flight that lands during this
-	// call's wait -- that needs per-request reply matching, which M0 leaves to a
-	// later milestone.
-	if (fResultNotify < 0)
+	// A previous ReadBitmap may have timed out and returned before its reply
+	// arrived. When that late reply finally lands, the callback releases
+	// fReadBitmapNotify -- and without this that stale release would satisfy the
+	// *next* ReadBitmap's wait, handing it the previous call's bitmap (defect
+	// D8). Call this before sending the new request: any count pending now can
+	// only be a stale release from an earlier ReadBitmap, never this call's own
+	// reply (which has not been sent yet), so discarding it is always safe.
+	// Since DrawString is fire-and-forget (issue #548) and releases nothing, and
+	// the remote string-width query is retired, ReadBitmap is the sole user of
+	// this semaphore -- a draw-string reply can never leak a release into it.
+	if (fReadBitmapNotify < 0)
 		return;
 
-	while (acquire_sem_etc(fResultNotify, 1, B_RELATIVE_TIMEOUT, 0) == B_OK)
+	while (acquire_sem_etc(fReadBitmapNotify, 1, B_RELATIVE_TIMEOUT, 0) == B_OK)
 		;
 }
 
@@ -1249,21 +1248,24 @@ RemoteDrawingEngine::_DrawingEngineResult(void* cookie, RemoteMessage& message)
 	switch (message.Code()) {
 		case RP_DRAW_STRING_RESULT:
 		{
-			status_t result = message.Read(engine->fDrawStringResult);
-			if (result != B_OK) {
-				TRACE_ERROR("failed to read draw string result: %s\n",
-					strerror(result));
-				return false;
-			}
-
-			break;
+			// DrawString is fire-and-forget (issue #548): its pen advance is
+			// computed locally, so nothing waits on this reply. Read it to keep
+			// the stream consumed, but release NO semaphore. Releasing here --
+			// as the old shared-semaphore design did -- would let a late
+			// draw-string echo satisfy the pending ReadBitmap wait and hand it a
+			// stale/NULL bitmap (the D8 family, promoted from rare to routine
+			// once DrawString stops waiting). fReadBitmapNotify is released only
+			// by RP_READ_BITMAP_RESULT below, so an unmatched draw-string reply
+			// can never wake a waiter it does not belong to.
+			BPoint unused;
+			message.Read(unused);
+			return true;
 		}
 
-		// No RP_STRING_WIDTH_RESULT case any more: the server never sends the
-		// query that would be answered, so such a reply can only be unsolicited.
-		// Letting it fall through to `default` is the right handling for that --
-		// it declines the message instead of releasing fResultNotify, which some
-		// other pending query (a DrawString or a ReadBitmap) may be waiting on.
+		// No RP_STRING_WIDTH_RESULT case: the remote string-width query is
+		// retired (StringWidth is answered from the server's own metrics), so
+		// such a reply can only be unsolicited. Declining it via `default` is the
+		// right handling -- it never touches fReadBitmapNotify.
 
 		case RP_READ_BITMAP_RESULT:
 		{
@@ -1274,15 +1276,13 @@ RemoteDrawingEngine::_DrawingEngineResult(void* cookie, RemoteMessage& message)
 				return false;
 			}
 
-			break;
+			release_sem(engine->fReadBitmapNotify);
+			return true;
 		}
 
 		default:
 			return false;
 	}
-
-	release_sem(engine->fResultNotify);
-	return true;
 }
 
 
