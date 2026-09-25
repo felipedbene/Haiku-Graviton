@@ -42,6 +42,23 @@
         "pkcs11_helper",
         "tnftp"
       ]
+    },
+    "16": {
+      "pr": "https://github.com/felipedbene/Haiku-Graviton/pull/565",
+      "commit": "815b1d6f18",
+      "coverage": [
+        "global",
+        "gnugo",
+        "gophernicus",
+        "kona",
+        "libfpx",
+        "nethack",
+        "netperf",
+        "rhapsody_irc",
+        "sdlscavenger",
+        "sharutils",
+        "wput"
+      ]
     }
   }
 }
