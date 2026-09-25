@@ -1,0 +1,62 @@
+SUMMARY="A native spreadsheet application"
+DESCRIPTION="This is the open source version of Maarten Hekkelman's Sum-It \
+application. Sum-It has basic features, including a plug-in architecture for \
+formulas and graphs and im/export of comma or tab separated files."
+HOMEPAGE="https://github.com/beos-zealot/OpenSumIt"
+COPYRIGHT="1996-1998, 2000 Hekkelman Programmatuur B.V.
+	1999-2000 Tim Vernum"
+LICENSE="BSD (4-clause)"
+REVISION="9"
+srcGitRev="765dc7077bf03c7448fcdd708e7ce43b5f1f0f71"
+SOURCE_URI="https://github.com/X547/OpenSumIt/archive/$srcGitRev.tar.gz"
+CHECKSUM_SHA256="897c0455a63aae78e509bc79783ad7bac310a47ca080b8d3dddcd9f7e2493413"
+SOURCE_DIR="OpenSumIt-$srcGitRev"
+PATCHES="sum_it-$portVersion.patchset"
+
+ARCHITECTURES="all"
+
+PROVIDES="
+	sum_it = $portVersion
+	app:Sum_It = $portVersion
+	"
+REQUIRES="
+	haiku
+	"
+
+BUILD_REQUIRES="
+	haiku_devel
+	"
+BUILD_PREREQUIRES="
+	cmd:gcc
+	cmd:make
+	cmd:rez
+	"
+
+BUILD()
+{
+	# Class 27 (#560): C++11 made a narrowing conversion inside a braced
+	# initialiser ill-formed (`error: narrowing conversion of ... [-Wnarrowing]`).
+	# Unblock class-wide with -Wno-narrowing rather than chase every initialiser.
+	# There is no runConfigure/autotools default here (this is a raw make build),
+	# but keep -O2 alongside it anyway so overriding CXXFLAGS does not silently
+	# drop optimization the upstream Makefiles would otherwise have applied.
+	export CXXFLAGS="-Wno-narrowing -O2"
+
+	pushd bsl
+	make
+	PATH=`pwd`:$PATH
+	popd
+
+	pushd sum-it/Resources
+	rc sum-it-types.rdef
+	popd
+
+	make -C sum-it
+}
+
+INSTALL()
+{
+	mkdir -p $appsDir
+	cp sum-it/OpenSum-It $appsDir/Sum-It
+	addAppDeskbarSymlink $appsDir/Sum-It
+}
