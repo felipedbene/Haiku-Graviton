@@ -26,7 +26,7 @@ or re-queue anything -- classification only. It:
      ORDERED, first-match-wins ruleset (most-specific signature first) -- the
      Quick-index phrase->class table from the playbook, encoded as RULES below;
   4. emits per port: triage_class (a class number | NO_LOG | UNMATCHED), triage_auto_recoverable
-     (bool), triage_fix_ref (playbook section anchor), triage_ts;
+     (bool), triage_fix_landed (bool, #560), triage_fix_ref (playbook section anchor), triage_ts;
   5. (only with --execute) writes those four NEW attributes back to the item --
      ADDITIVE ONLY, it never touches build_state or any existing attribute;
   6. prints a census summary: count per class, auto-recoverable vs genuinely-hard
@@ -43,6 +43,17 @@ It is False where "recoverable in principle" hides a per-port judgement call:
 Never silently bucket an UNMATCHED log as recoverable: UNMATCHED and NO_LOG are
 always counted as not-auto-recoverable, and UNMATCHED logs are dumped (with
 --dump-unmatched) so the ruleset can be extended rather than guessed at.
+
+fix_landed (#560): auto_recoverable=True alone still overpromised -- it says
+"a playbook class matches", not "a fix has been landed and this port is expected
+to build on the next wave". A wave requeueing on auto_recoverable alone burned
+49 attempt slots to produce 0 builds (issue #560). fix_landed=True is the second
+claim, carried in the manifest at graviton/haikuports-patches/landed-fixes.json
+per class + per port. The safe requeue predicate is the CONJUNCTION
+`auto_recoverable && fix_landed`. auto_recoverable is preserved for compatibility;
+downstream tooling that keys off only that field keeps working, but a wave that
+wants to move the frontier without another zero-yield attempt must now require
+fix_landed too.
 
 UNMATCHED IS TWO THINGS, AND THE CENSUS SAYS WHICH (#488). A log can go unclassified
 because the ruleset has no signature for it, or because the captured window contains no
@@ -115,6 +126,19 @@ GSI = "by-build-state"
 STATES = ("failed", "needs_human")
 PLAYBOOK = "graviton/docs/porting-playbook.md"
 
+# The landed-fixes manifest (issue #560). `auto_recoverable=True` means only
+# "this failure matches a playbook class"; it does NOT mean a fix is in-tree
+# and the port is expected to build on the next wave. `fix_landed=True` is
+# that second claim -- authored explicitly, per class + per port, in a
+# manifest file rather than derived from the class rule (a class-fix PR may
+# cover only a subset of the class's ports, and one-off exceptions must not
+# silently promote everyone). The classifier reads this manifest and writes
+# both bits back to DDB; consumers that want to requeue safely filter on the
+# CONJUNCTION `auto_recoverable && fix_landed`.
+LANDED_FIXES_DEFAULT = os.path.join(
+    os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+    "haikuports-patches", "landed-fixes.json")
+
 # The one definition of the `pkg` primary-key contract (#487); see also
 # graviton/scripts/haiku-state-guard for the whole-board invariant.
 sys.path.insert(0, os.path.join(
@@ -125,6 +149,37 @@ from pkgkey import validate_pkg_key  # noqa: E402
 
 def log(*a):
     print(*a, file=sys.stderr, flush=True)
+
+
+def load_landed_fixes(path):
+    """Read the landed-fixes manifest and return {class_no_str: set(ports)}.
+
+    Missing / empty manifest is a no-op ({} return); a malformed file is a
+    hard error (the point of the manifest is to be a positive claim, so a
+    file that cannot be trusted must never silently promote items). See
+    graviton/haikuports-patches/landed-fixes.json for the schema.
+    """
+    if not path or not os.path.isfile(path):
+        return {}
+    try:
+        with open(path) as f:
+            doc = json.load(f)
+    except (OSError, ValueError) as e:
+        raise SystemExit("FATAL: landed-fixes manifest %s is unreadable: %s -- "
+                         "refusing to fall through to 'nothing is fix_landed'."
+                         % (path, e))
+    classes = doc.get("classes") or {}
+    out = {}
+    for cls, entry in classes.items():
+        if not isinstance(entry, dict):
+            raise SystemExit("FATAL: landed-fixes manifest %s: class %r entry "
+                             "is not an object" % (path, cls))
+        coverage = entry.get("coverage") or []
+        if not isinstance(coverage, list):
+            raise SystemExit("FATAL: landed-fixes manifest %s: class %r "
+                             "coverage is not a list" % (path, cls))
+        out[str(cls)] = set(coverage)
+    return out
 
 
 def anchor(slug):
@@ -1023,15 +1078,17 @@ def fetch_log(s3, log_url):
 
 
 # ----------------------------------------------------------------- DDB writing
-def write_triage(table, region, pkg, cls, auto, fix_ref, ts):
+def write_triage(table, region, pkg, cls, auto, fix_landed, fix_ref, ts):
     import boto3
     ddb = boto3.resource("dynamodb", region_name=region).Table(table)
     triage_class = str(cls) if isinstance(cls, int) else cls  # class no | NO_LOG | UNMATCHED
     ddb.update_item(
         Key={"pkg": validate_pkg_key(pkg, where="haiku-triage-failures write_triage")},
         UpdateExpression=("SET triage_class=:c, triage_auto_recoverable=:a, "
+                          "triage_fix_landed=:l, "
                           "triage_fix_ref=:f, triage_ts=:t"),
         ExpressionAttributeValues={":c": triage_class, ":a": bool(auto),
+                                   ":l": bool(fix_landed),
                                    ":f": fix_ref or "n/a", ":t": ts},
     )
 
@@ -1053,6 +1110,10 @@ def main():
                     "this dir (for extending the ruleset).")
     ap.add_argument("--show-matches", action="store_true",
                     help="print, per port, the class and the regex that matched.")
+    ap.add_argument("--landed-fixes", default=LANDED_FIXES_DEFAULT,
+                    help="path to the landed-fixes manifest (JSON). Default: %(default)s. "
+                         "Sets triage_fix_landed=True for a port iff its triage_class matches "
+                         "an entry AND the port is in that entry's coverage list (issue #560).")
     ap.add_argument("--execute", action="store_true",
                     help="ACTUALLY write triage_* back to DDB (additive attributes only). "
                          "Default is DRY-RUN: classify + census, write nothing.")
@@ -1067,6 +1128,16 @@ def main():
     log("mode              : %s" % ("EXECUTE (writes triage_* to DDB)" if args.execute
                                     else "DRY-RUN (classify + census, writes nothing)"))
     log("table / index     : %s / %s  (states: %s)" % (args.table, GSI, ", ".join(STATES)))
+
+    # #560: the fix_landed manifest. `auto_recoverable` alone overpromised.
+    landed = load_landed_fixes(args.landed_fixes)
+    if landed:
+        total_covered = sum(len(v) for v in landed.values())
+        log("landed-fixes      : %s (%d class(es), %d port(s) covered)"
+            % (args.landed_fixes, len(landed), total_covered))
+    else:
+        log("landed-fixes      : NONE (no manifest at %s, or empty). Every port will "
+            "read fix_landed=false -- the honest default." % args.landed_fixes)
 
     try:
         items = load_items(args.table, args.region)
@@ -1108,7 +1179,8 @@ def main():
         if text is None:
             rec = dict(it, triage_class="NO_LOG", auto=False, fix_ref="",
                        note="log missing/empty (%s)" % reason, matched=None,
-                       has_unresolvable=False, no_diagnostic=False)
+                       has_unresolvable=False, no_diagnostic=False,
+                       fix_landed=False)
         else:
             cls, slug, auto, fix_ref, note, matched = classify(text)
             # only meaningful for UNMATCHED: a classified log obviously had a diagnostic.
@@ -1119,9 +1191,16 @@ def main():
                         "tail -20 log: re-wave it) or the build really was silent, e.g. a "
                         "wrapper that swallowed its child compiler's output, or a false "
                         "failure whose hpkg exists. #488/#505")
+            # #560: fix_landed is a POSITIVE claim from the manifest, not a property
+            # of the class. auto_recoverable=True + fix_landed=True is the safe
+            # requeue predicate; auto_recoverable=True alone is not (a class-fix PR
+            # may not have covered this specific port yet, or may not exist yet).
+            fix_landed = (cls is not None and auto
+                          and it["pkg"] in landed.get(str(cls), set()))
             rec = dict(it,
                        triage_class=(cls if cls is not None else "UNMATCHED"),
-                       auto=auto, fix_ref=fix_ref, note=note, matched=matched,
+                       auto=auto, fix_landed=fix_landed,
+                       fix_ref=fix_ref, note=note, matched=matched,
                        has_unresolvable=bool(_UNRESOLVABLE.search(text)),
                        no_diagnostic=nodiag,
                        _text_tail=text[-4000:] if cls is None else None)
@@ -1131,8 +1210,9 @@ def main():
         for pkg, rec in ex.map(work, items):
             results[pkg] = rec
             if args.show_matches:
-                log("  %-28s state=%-11s class=%-9s auto=%-5s %s" % (
+                log("  %-28s state=%-11s class=%-9s auto=%-5s landed=%-5s %s" % (
                     pkg, rec["build_state"], rec["triage_class"], rec["auto"],
+                    rec.get("fix_landed", False),
                     ("/%s/" % rec["matched"]) if rec["matched"] else ""))
 
     # ---- dump unmatched for ruleset extension --------------------------------
@@ -1163,7 +1243,8 @@ def main():
         wrote = 0
         for pkg, rec in results.items():
             write_triage(args.table, args.region, pkg, rec["triage_class"],
-                         rec["auto"], rec["fix_ref"], ts)
+                         rec["auto"], rec.get("fix_landed", False),
+                         rec["fix_ref"], ts)
             wrote += 1
         log("wrote triage_* to %d items (additive attrs only; build_state untouched)." % wrote)
     else:
@@ -1175,6 +1256,7 @@ def main():
         rows.append({"pkg": pkg, "build_state": rec["build_state"],
                      "triage_class": rec["triage_class"],
                      "auto_recoverable": rec["auto"],
+                     "fix_landed": rec.get("fix_landed", False),
                      "fix_ref": rec["fix_ref"],
                      "error_class": rec["error_class"],
                      "has_unresolvable": rec["has_unresolvable"],
@@ -1195,6 +1277,9 @@ def main():
     # ---- census (the payoff) -------------------------------------------------
     by_class = Counter(str(rec["triage_class"]) for rec in results.values())
     auto_ct = sum(1 for rec in results.values() if rec["auto"])
+    landed_ct = sum(1 for rec in results.values() if rec.get("fix_landed", False))
+    auto_and_landed = sum(1 for rec in results.values()
+                          if rec["auto"] and rec.get("fix_landed", False))
     matched_hard = sum(1 for rec in results.values()
                        if isinstance(rec["triage_class"], int) and not rec["auto"])
     unmatched = by_class.get("UNMATCHED", 0)
@@ -1232,7 +1317,11 @@ def main():
     if by_class.get("NO_LOG"):
         print("%-6s %-62s %5d %s" % ("NO_LOG", "-", by_class["NO_LOG"], "NO"))
     print("-" * 82)
-    print("AUTO-RECOVERABLE (known playbook template) : %4d" % auto_ct)
+    print("AUTO-RECOVERABLE (matches a playbook class): %4d" % auto_ct)
+    print("  of which FIX_LANDED (safe requeue set)   : %4d  <- #560: auto AND landed"
+          % auto_and_landed)
+    print("  of which NOT landed yet                  : %4d  <- needs recipe patch first"
+          % (auto_ct - auto_and_landed))
     print("GENUINELY-HARD  (matched a class, auto=NO) : %4d" % matched_hard)
     print("UNMATCHED (no class signature)             : %4d  (of which %d mention "
           "UNRESOLVABLE = dep unbuilt/unpublished)" % (unmatched, unmatched_unres))

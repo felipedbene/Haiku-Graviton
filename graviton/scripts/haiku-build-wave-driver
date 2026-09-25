@@ -38,6 +38,14 @@ SAFETY / SOP ALIGNMENT (graviton/ops/SOPs.md):
     the queue; ClaimBatch leases queued->building conditionally, so re-running the
     driver (or two overlapping drivers) never double-builds a package. A stall is
     now recoverable by simply re-invoking this script.
+  * REQUEUE PREDICATE (#560): the classifier writes triage_auto_recoverable AND
+    triage_fix_landed. `auto_recoverable` alone is a class match, not a promise a
+    fix is in-tree -- a wave that requeues on auto_recoverable alone burns attempts
+    (49-item wave, 0 built). Operator scripts that move rows from failed/needs_human
+    back to queued MUST filter on the CONJUNCTION `auto_recoverable AND fix_landed`.
+    This driver only reads `queued`, so the predicate lives in whichever tool did
+    the failed->queued transition; the classifier now emits both bits so that tool
+    can choose correctly. See graviton/haikuports-patches/landed-fixes.json.
   * The state machine reaps its own builder on every path; this driver launches no
     instances and touches no pool directly. Its blast radius is StartExecution +
     read-only DDB, matching the `debeos-operator` least-priv role.
