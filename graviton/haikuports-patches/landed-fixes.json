@@ -19,9 +19,55 @@
     "marker. Once the PR merges, populate `commit` so an audit can cite it."
   ],
   "classes": {
+    "2": {
+      "pr": "https://github.com/felipedbene/Haiku-Graviton/pull/570",
+      "commit": "4bea70e0c8",
+      "coverage": [
+        "sane_backends"
+      ]
+    },
+    "3": {
+      "pr": "https://github.com/felipedbene/Haiku-Graviton/pull/568",
+      "commit": "da946aaae5",
+      "coverage": [
+        "libmetalink"
+      ]
+    },
+    "4": {
+      "pr": "https://github.com/felipedbene/Haiku-Graviton/pull/567",
+      "commit": "3184642ff9",
+      "coverage": [
+        "freeimage",
+        "libspectrum",
+        "sdl_net"
+      ]
+    },
+    "5": {
+      "pr": "https://github.com/felipedbene/Haiku-Graviton/pull/569",
+      "commit": "4b35e3e330",
+      "coverage": [
+        "sdl_gfx",
+        "waveedit"
+      ]
+    },
+    "7": {
+      "pr": "https://github.com/felipedbene/Haiku-Graviton/pull/567",
+      "commit": "3184642ff9",
+      "coverage": [
+        "x16_emulator"
+      ]
+    },
+    "10": {
+      "pr": "https://github.com/felipedbene/Haiku-Graviton/pull/567",
+      "commit": "3184642ff9",
+      "coverage": [
+        "libmcrypt",
+        "libsrtp"
+      ]
+    },
     "15": {
-      "pr": "pending",
-      "commit": null,
+      "pr": "https://github.com/felipedbene/Haiku-Graviton/pull/564",
+      "commit": "30f99b77d7",
       "coverage": [
         "bind_utils",
         "calcurse",
@@ -58,6 +104,50 @@
         "sdlscavenger",
         "sharutils",
         "wput"
+      ]
+    },
+    "21": {
+      "pr": "https://github.com/felipedbene/Haiku-Graviton/pull/571",
+      "commit": "85bcaecf75",
+      "coverage": [
+        "html5lib",
+        "libplacebo",
+        "libsigrokdecode",
+        "pbr"
+      ]
+    },
+    "27": {
+      "pr": "https://github.com/felipedbene/Haiku-Graviton/pull/566",
+      "commit": "528ed63c0a",
+      "coverage": [
+        "hteditor",
+        "mimetic",
+        "sum_it"
+      ]
+    },
+    "29": {
+      "pr": "https://github.com/felipedbene/Haiku-Graviton/pull/568",
+      "commit": "da946aaae5",
+      "coverage": [
+        "fswatch",
+        "irrxml"
+      ]
+    },
+    "34": {
+      "pr": "https://github.com/felipedbene/Haiku-Graviton/pull/568",
+      "commit": "da946aaae5",
+      "coverage": [
+        "vmaf"
+      ]
+    },
+    "35": {
+      "pr": "https://github.com/felipedbene/Haiku-Graviton/pull/566",
+      "commit": "528ed63c0a",
+      "coverage": [
+        "ftgl",
+        "gri",
+        "qemacs",
+        "rssavers"
       ]
     }
   }
