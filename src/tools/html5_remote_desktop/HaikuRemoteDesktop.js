@@ -53,8 +53,8 @@ const RP_COOKIE_METHOD_PER_BOOT = 1;
 const RP_PROTOCOL_VERSION = 1;
 const RP_CAP_STRING_WIDTH_REPLY = 1 << 0;
 
-// Wire compression. Deliberately NOT advertised by this client: the browser has
-// no zstd decoder. DecompressionStream's CompressionFormat enum is
+// Wire compression. Not advertised by this client, because the browser has no
+// zstd decoder: DecompressionStream's CompressionFormat enum is
 // { "brotli", "deflate", "deflate-raw", "gzip" } -- zstd is absent from the
 // Compression Standard entirely (browsers accept `Content-Encoding: zstd` on
 // fetch, but that does not expose a stream decoder to script). Decoding it here
@@ -64,16 +64,79 @@ const RP_CAP_STRING_WIDTH_REPLY = 1 << 0;
 // Because the capability is negotiated, not assumed, saying nothing is
 // sufficient and safe: the server intersects our bits with its own, finds no
 // compression bit, and keeps sending this client the plain stream byte for byte.
-// The constant is named here so that stays a decision on the record rather than
-// an oversight, and so a future browser-side codec (raw deflate through
-// DecompressionStream("deflate-raw") is the cheap candidate, since it needs no
-// download at all) has an obvious place to hook in.
 const RP_CAP_COMPRESS_ZSTD = 1 << 1;
 
-// Nothing to offer yet, so the handshake carries an empty feature set. It is
-// still sent: RP_HELLO is also how the protocol version and the decode limits are
-// stated, and the acknowledgement is where the session identity arrives.
-const RP_CAP_ADVERTISED = 0;
+// Every compression capability this client knows the NAME of, mapped to the
+// DecompressionStream format that would decode it -- null meaning "no decoder
+// exists in a browser".
+//
+// The reason this is a table and not a comment: the server compresses the
+// server -> client direction from the byte after RP_HELLO_ACK onward, on the
+// strength of our advertisement alone. Advertising a bit we cannot decode is
+// therefore not a degraded mode, it is a total and permanent desynchronisation
+// of the session -- a blank window with no way back. That makes
+// "do not advertise compression without a decoder" a correctness invariant, and
+// an invariant that only a comment defends is one edit away from being gone.
+// So the advertised bitmap below is COMPUTED from this table by probing for a
+// working decoder, rather than written out by hand.
+//
+// A future browser-side codec hooks in here by naming its format: raw deflate
+// through DecompressionStream("deflate-raw") is the cheap candidate, since it
+// needs no download at all, but it needs a matching server-side encoder and a
+// capability bit of its own first -- the server speaks only zstd today.
+const RP_COMPRESSION_DECODERS = [
+	{ bit: RP_CAP_COMPRESS_ZSTD, name: 'RP_CAP_COMPRESS_ZSTD', format: null }
+];
+
+
+// Probe, rather than assume, that a DecompressionStream format is usable. A
+// browser that does not know the format throws a TypeError from the
+// constructor, which is the only honest test available: the enum is not
+// introspectable from script.
+function rpDecompressionFormatAvailable(format)
+{
+	if (!format)
+		return false;
+	if (typeof DecompressionStream === 'undefined')
+		return false;
+
+	try {
+		new DecompressionStream(format);
+		return true;
+	} catch (e) {
+		return false;
+	}
+}
+
+
+// The capability bitmap this client puts in RP_HELLO: the features it can
+// actually honour, not the features it has heard of.
+//
+// The base is 0. RP_CAP_STRING_WIDTH_REPLY was retired in #538: the server no
+// longer issues RP_STRING_WIDTH, so advertising the bit would offer to answer a
+// query that never arrives. The constant is kept for the desync-trap detector
+// below (see MUTATION 3 in the selftest) but is not advertised. The bitmap this
+// function returns is therefore driven entirely by which decoder probes fire.
+function rpAdvertisedCapabilities()
+{
+	var capabilities = 0;
+
+	for (var i = 0; i < RP_COMPRESSION_DECODERS.length; i++) {
+		var entry = RP_COMPRESSION_DECODERS[i];
+		if (rpDecompressionFormatAvailable(entry.format))
+			capabilities |= entry.bit;
+	}
+
+	return capabilities;
+}
+
+
+// Mask of every compression bit this client knows about, decoder or not. Used to
+// tell "the server negotiated compression we cannot decode" (fatal, and the one
+// failure worth shouting about) apart from "the server negotiated some other
+// unoffered bit" (wrong, but not necessarily unparseable).
+const RP_CAP_COMPRESSION_MASK = RP_COMPRESSION_DECODERS.reduce(
+	function (mask, entry) { return mask | entry.bit; }, 0);
 
 const RP_CREATE_STATE = 20;
 const RP_DELETE_STATE = 21;
@@ -2223,14 +2286,24 @@ RemoteDesktopSession.prototype.messageReceived = function(remoteMessage, reply)
 			console.log('hello ack: version ' + negotiatedVersion
 				+ ', capabilities ' + negotiatedCapabilities);
 
-			// The server must never negotiate something we did not offer: the
-			// byte after this message would be a compressed segment and every
-			// subsequent frame would be unparseable. Complain loudly rather
-			// than render garbage -- a silent mismatch here is the worst case.
-			if (negotiatedCapabilities & ~RP_CAP_ADVERTISED) {
-				console.error('server negotiated capabilities we never offered ('
-					+ (negotiatedCapabilities & ~RP_CAP_ADVERTISED)
-					+ '); the stream may be undecodable');
+			// The server must never negotiate something we did not offer. Report
+			// it rather than render garbage -- a silent mismatch here is the
+			// worst case -- and separate the two severities, because they are
+			// genuinely different failures.
+			var unoffered = negotiatedCapabilities & ~this.capabilities;
+			if (unoffered != 0) {
+				if ((unoffered & RP_CAP_COMPRESSION_MASK) != 0) {
+					// Unrecoverable: the next byte is the first byte of a
+					// compressed segment, so every frame from here on is
+					// unparseable and no amount of resync helps -- the server
+					// would replay into the same codec we do not have.
+					console.error('server negotiated wire compression we did not'
+						+ ' offer and cannot decode (' + unoffered + '); the'
+						+ ' session is desynchronised from here on');
+				} else {
+					console.error('server negotiated capabilities we never'
+						+ ' offered (' + unoffered + ')');
+				}
 			}
 			break;
 
@@ -2402,12 +2475,23 @@ RemoteDesktopSession.prototype.init = function()
 	this.sendMessage.flush();
 
 	// URP/1 capability handshake, sent before any drawing. The feature set is
-	// empty (see RP_CAP_ADVERTISED); this message still carries the protocol
-	// version and the decode limits, and its acknowledgement carries the session
-	// identity. A pre-handshake server ignores it.
+	// computed at connect time by rpAdvertisedCapabilities(): today that means
+	// zero (RP_CAP_STRING_WIDTH_REPLY was retired in #538, and no browser here
+	// has a zstd DecompressionStream), and it turns on automatically the moment
+	// a decoder appears. This message still carries the protocol version and the
+	// decode limits, and its acknowledgement carries the session identity. A
+	// pre-handshake server ignores it.
+	//
+	// Computed once and remembered, so the RP_HELLO_ACK check below compares the
+	// negotiated set against what this session actually offered rather than
+	// re-deriving it -- a probe that answered differently the second time would
+	// otherwise turn into a spurious "capability we never offered".
+	this.capabilities = rpAdvertisedCapabilities();
+
+
 	this.sendMessage.start(RP_HELLO);
 	this.sendMessage.dataView.writeUint32(RP_PROTOCOL_VERSION);
-	this.sendMessage.dataView.writeUint32(RP_CAP_ADVERTISED);
+	this.sendMessage.dataView.writeUint32(this.capabilities);
 	this.sendMessage.dataView.writeUint32(0);	// max decode width (no Tier P)
 	this.sendMessage.dataView.writeUint32(0);	// max decode height
 	this.sendMessage.dataView.writeUint32(this.canvas.width);
