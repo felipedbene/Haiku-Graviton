@@ -1,0 +1,67 @@
+SUMMARY="Open-source implementation of the K programming language"
+DESCRIPTION="Kona is the open-source implementation of the k3 programming \
+language. k is a synthesis of APL and LISP. Although many of the capabilities \
+come from APL, the fundamental data construct is quite different. In APL the \
+construct is a multi-dimensional matrix-like array, where the dimension of \
+the array can range from 0 to some maximum (often 9). In k, like LISP, the \
+fundamental data construct is a list.  Also, like LISP, the k language is \
+ASCII-based, so you don't need a special keyboard."
+HOMEPAGE="https://kona.github.io/"
+COPYRIGHT="2009-2015 Kevin Lawler"
+LICENSE="ISC"
+REVISION="2"
+SOURCE_URI="https://github.com/kevinlawler/kona/archive/Win64-$portVersion.tar.gz"
+CHECKSUM_SHA256="26cfebd47a3ae60753fc8a910132f45cad58381155255fbac2129e4507fef403"
+SOURCE_DIR="kona-Win64-$portVersion"
+SOURCE_FILENAME="kona-$portVersion.tar.gz"
+PATCHES="kona-$portVersion.patch"
+
+ARCHITECTURES="all !x86_gcc2"
+commandBinDir=$binDir
+if [ "$targetArchitecture" = x86_gcc2 ]; then
+SECONDARY_ARCHITECTURES="x86"
+commandBinDir=$prefix/bin
+fi
+
+PROVIDES="
+	kona$secondaryArchSuffix = $portVersion
+	cmd:k
+	"
+REQUIRES="
+	haiku$secondaryArchSuffix
+	"
+
+BUILD_REQUIRES="
+	haiku${secondaryArchSuffix}_devel
+	"
+BUILD_PREREQUIRES="
+	cmd:gcc$secondaryArchSuffix
+	cmd:make
+	"
+
+defineDebugInfoPackage kona$secondaryArchSuffix \
+	$commandBinDir/k
+
+BUILD()
+{
+	# graviton/DeBeOS (#560, porting-playbook class 16): gcc >= 10 defaults to
+	# -fno-common, and kona's source carries tentative global definitions in a
+	# shared header that pre-10 gcc merged as common symbols -- ld now reports
+	# "multiple definition of ...". -fcommon restores the historical merging.
+	# -O2 added alongside for consistency with the runConfigure -O gate, even
+	# though this port builds via a raw Makefile.
+	export CFLAGS="-fcommon -O2 $CFLAGS"
+	make $jobArgs
+}
+
+INSTALL()
+{
+	install -m 755 -d "$commandBinDir" "$docDir"
+	install -m 755 k "$commandBinDir"
+	install -m 644 README.md "$docDir"
+}
+
+TEST()
+{
+	./k_test bench/sum.k
+}

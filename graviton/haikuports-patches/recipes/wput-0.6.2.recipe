@@ -1,0 +1,63 @@
+SUMMARY="A command-line ftp-client"
+DESCRIPTION="Wput is a command-line ftp-client that looks like wget but \
+instead of downloading, uploads files or whole directories to remote \
+ftp-servers."
+HOMEPAGE="http://wput.sourceforge.net/"
+COPYRIGHT="2002-2008 Hagen Fritsch"
+LICENSE="GNU GPL v2"
+REVISION="2"
+SOURCE_URI="https://sourceforge.net/projects/wput/files/wput/0.6.2/wput-0.6.2.tgz"
+CHECKSUM_SHA256="229d8bb7d045ca1f54d68de23f1bc8016690dc0027a16586712594fbc7fad8c7"
+PATCHES="wput-$portVersion.patchset"
+
+ARCHITECTURES="all !x86_gcc2"
+SECONDARY_ARCHITECTURES="x86"
+
+PROVIDES="
+	wput$secondaryArchSuffix = $portVersion
+	cmd:wdel$secondaryArchSuffix
+	cmd:wput$secondaryArchSuffix
+	"
+REQUIRES="
+	haiku$secondaryArchSuffix
+	lib:libgnutls_openssl$secondaryArchSuffix
+	lib:libiconv$secondaryArchSuffix
+	lib:libintl$secondaryArchSuffix
+	"
+
+BUILD_REQUIRES="
+	haiku${secondaryArchSuffix}_devel
+	devel:libgnutls_openssl$secondaryArchSuffix
+	devel:libiconv$secondaryArchSuffix
+	devel:libintl$secondaryArchSuffix
+	"
+BUILD_PREREQUIRES="
+	cmd:aclocal
+	cmd:autoconf
+	cmd:awk
+	cmd:gcc$secondaryArchSuffix
+	cmd:gzip
+	cmd:libtoolize$secondaryArchSuffix
+	cmd:make
+	cmd:pkg_config$secondaryArchSuffix
+	"
+
+BUILD()
+{
+	libtoolize -fci
+	autoconf
+	# graviton/DeBeOS (#560, porting-playbook class 16): gcc >= 10 defaults to
+	# -fno-common, and wput's source carries tentative global definitions in
+	# a shared header that pre-10 gcc merged as common symbols -- ld now
+	# reports "multiple definition of ...". -fcommon restores the historical
+	# merging. Overriding CFLAGS drops autotools' default -O2, which
+	# runConfigure then rejects ("Must specify optimization flags when
+	# overriding CFLAGS"), so -O2 goes along with it.
+	CFLAGS="-fcommon -O2" runConfigure ./configure
+	make $jobArgs
+}
+
+INSTALL()
+{
+	make install
+}
