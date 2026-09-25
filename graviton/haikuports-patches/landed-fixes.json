@@ -18,5 +18,30 @@
     "fix_landed is a claim that the fix is *authored* in-tree, not yet a merge",
     "marker. Once the PR merges, populate `commit` so an audit can cite it."
   ],
-  "classes": {}
+  "classes": {
+    "15": {
+      "pr": "pending",
+      "commit": null,
+      "coverage": [
+        "bind_utils",
+        "calcurse",
+        "dfu_util",
+        "dmtx_utils",
+        "dosfstools",
+        "erlang",
+        "es",
+        "expect",
+        "farmhash",
+        "gpart",
+        "lcdproc",
+        "libnpupnp",
+        "libtorrent",
+        "libxo",
+        "minicom",
+        "mosh",
+        "pkcs11_helper",
+        "tnftp"
+      ]
+    }
+  }
 }

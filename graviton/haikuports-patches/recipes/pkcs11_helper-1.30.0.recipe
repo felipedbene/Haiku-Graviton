@@ -1,0 +1,80 @@
+SUMMARY="Library that simplifies the interaction with PKCS#11 providers"
+DESCRIPTION="pkcs11-helper is a library that simplifies the interaction with \
+PKCS#11 providers for end-user applications.
+
+pkcs11-helper allows using multiple PKCS#11 providers simultaneously, \
+enumerating avaiable token certificates, or selecting a certificate \
+directly by serialized id, handling card removal and card insert events, \
+handling card re-insert to a different slot, supporting session expiration and \
+much more.
+
+pkcs11-helper is not designed to manage card content, since object attributes \
+are usually vendor specific, and the vast majority of applications need to access \
+existing objects in order to perform signature and decryption operations."
+HOMEPAGE="https://github.com/OpenSC/pkcs11-helper"
+COPYRIGHT="2005-2018 Alon Bar-Lev"
+LICENSE="GNU GPL v2"
+REVISION="2"
+SOURCE_URI="https://github.com/OpenSC/pkcs11-helper/releases/download/pkcs11-helper-$portVersion/pkcs11-helper-$portVersion.tar.bz2"
+CHECKSUM_SHA256="4c5815ba910cabf26df08d449ca2909daf4538c9899aa7f7fadc61229d3488a9"
+SOURCE_DIR="pkcs11-helper-$portVersion"
+
+ARCHITECTURES="all ?x86_gcc2"
+SECONDARY_ARCHITECTURES="x86"
+
+libVersion="1.0.0"
+libVersionCompat="$libVersion compat >= ${libVersion%%.*}"
+
+PROVIDES="
+	pkcs11_helper$secondaryArchSuffix = $libVersion
+	lib:libpkcs11_helper$secondaryArchSuffix = $libVersionCompat
+	"
+REQUIRES="
+	haiku$secondaryArchSuffix
+	lib:libssl$secondaryArchSuffix
+	"
+
+PROVIDES_devel="
+	pkcs11_helper${secondaryArchSuffix}_devel = $libVersion
+	devel:libpkcs11_helper$secondaryArchSuffix = $libVersionCompat
+	"
+REQUIRES_devel="
+	haiku$secondaryArchSuffix
+	devel:libssl$secondaryArchSuffix >= 3
+	"
+
+BUILD_REQUIRES="
+	haiku${secondaryArchSuffix}_devel
+	devel:libssl$secondaryArchSuffix >= 3
+	"
+BUILD_PREREQUIRES="
+	cmd:aclocal
+	cmd:automake
+	cmd:autoreconf
+	cmd:gcc$secondaryArchSuffix
+	cmd:ld$secondaryArchSuffix
+	cmd:libtoolize$secondaryArchSuffix
+	cmd:make
+	cmd:pkg_config$secondaryArchSuffix
+	"
+
+BUILD()
+{
+	export CFLAGS="-O2 -Wno-deprecated-declarations"
+	autoreconf -vfi
+	runConfigure ./configure
+	make $jobArgs
+}
+
+INSTALL()
+{
+	make install
+
+	rm $libDir/*.la $libDir/*.a
+
+	prepareInstalledDevelLib libpkcs11-helper
+	fixPkgconfig
+
+	packageEntries devel \
+		$developDir
+}

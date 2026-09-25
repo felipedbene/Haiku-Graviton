@@ -1,0 +1,60 @@
+SUMMARY="Device Firmware Upgrade Utilities"
+DESCRIPTION="dfu-util is a host side implementation of the DFU 1.0 and DFU 1.1 \
+specifications of the USB forum. DFU is intended to download and upload \
+firmware to/from devices connected over USB. It ranges from small devices like \
+micro-controller boards to mobile phones. Using dfu-util you can download \
+firmware to your DFU-enabled device or upload firmware from it. dfu-util has \
+been tested with the Openmoko Neo1973 and Freerunner and many other devices."
+HOMEPAGE="http://dfu-util.sourceforge.net"
+COPYRIGHT="2010-2016 Stefan Schmidt & Tormod Volden"
+LICENSE="GNU GPL v2"
+REVISION="3"
+SOURCE_URI="${HOMEPAGE}/releases/dfu-util-$portVersion.tar.gz"
+CHECKSUM_SHA256="36428c6a6cb3088cad5a3592933385253da5f29f2effa61518ee5991ea38f833"
+SOURCE_DIR="dfu-util-$portVersion"
+PATCHES="dfu_util-$portVersion.patchset"
+
+ARCHITECTURES="all !x86_gcc2"
+SECONDARY_ARCHITECTURES="x86"
+
+commandSuffix=$secondaryArchSuffix
+commandBinDir=$binDir
+if [ "$targetArchitecture" = x86_gcc2 ]; then
+	commandSuffix=
+	commandBinDir=$prefix/bin
+fi
+
+PROVIDES="
+	dfu_util$secondaryArchSuffix = $portVersion
+	cmd:dfu_prefix$commandSuffix
+	cmd:dfu_suffix$commandSuffix
+	cmd:dfu_util$commandSuffix
+	"
+REQUIRES="
+	haiku$secondaryArchSuffix
+	lib:libusb_1.0$secondaryArchSuffix
+	"
+
+BUILD_REQUIRES="
+	devel:libusb_1.0$secondaryArchSuffix
+	"
+BUILD_PREREQUIRES="
+	haiku${secondaryArchSuffix}_devel
+	cmd:awk
+	cmd:gcc$secondaryArchSuffix
+	cmd:make
+	cmd:pkg_config$secondaryArchSuffix
+	"
+
+BUILD()
+{
+	export CFLAGS="-O2 -D_BSD_SOURCE"
+	runConfigure --omit-dirs binDir ./configure \
+		--bindir=$commandBinDir
+	make $jobArgs
+}
+
+INSTALL()
+{
+	make install
+}
