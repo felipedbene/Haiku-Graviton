@@ -6,7 +6,7 @@ HOMEPAGE="http://freeimage.sourceforge.net"
 COPYRIGHT="2003-2018 FreeImage Project"
 LICENSE="GNU GPL v2
 	GNU GPL v3"
-REVISION="2"
+REVISION="3"
 SOURCE_URI="https://downloads.sourceforge.net/freeimage/FreeImage${portVersion//.}.zip"
 CHECKSUM_SHA256="f41379682f9ada94ea7b34fe86bf9ee00935a3147be41b6569c9605a53e438fd"
 SOURCE_DIR="FreeImage"
@@ -92,6 +92,15 @@ INSTALL()
 	make -f Makefile.fip install \
 		INCDIR=$includeDir \
 		INSTALLDIR=$libDir
+
+	# Static/shared install conflict (playbook class 4): Makefile.gnu/Makefile.fip's
+	# own `install` targets drop libfreeimage.a/libfreeimageplus.a into $libDir
+	# alongside the .so this recipe wants, so prepareInstalledDevelLibs dies with
+	# "there is both a shared and a static library" (or, on a re-run, `rm: cannot
+	# remove '...la'` if a stale .la is already gone). Drop the static archives --
+	# tolerantly, since their presence is a build-to-build artifact, not a
+	# guarantee -- before prepareInstalledDevelLibs ever looks at $libDir.
+	rm -f $libDir/lib*.a $libDir/*.la || true
 
 	prepareInstalledDevelLibs libfreeimage libfreeimage-$portVersion \
 		libfreeimageplus libfreeimageplus-$portVersion

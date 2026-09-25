@@ -1,0 +1,81 @@
+SUMMARY="Simple Direct Media Layer net library"
+DESCRIPTION="With sdl_net users are able to use the same networking code on \
+multiple platforms including Linux, Windows, and Haiku. The library makes \
+handling data transfer and network connections easy. It features a sample \
+chat client and server application; the chat client uses the GUIlib GUI \
+framework library."
+HOMEPAGE="http://www.libsdl.org/projects/SDL_net"
+COPYRIGHT="1997-2012 Sam Lantinga"
+LICENSE="Zlib"
+REVISION="10"
+SOURCE_URI="http://www.libsdl.org/projects/SDL_net/release/SDL_net-1.2.8.tar.gz"
+CHECKSUM_SHA256="5f4a7a8bb884f793c278ac3f3713be41980c5eedccecff0260411347714facb4"
+SOURCE_DIR="SDL_net-$portVersion"
+PATCHES="sdl_net-1.2.8.patch"
+
+ARCHITECTURES="all"
+SECONDARY_ARCHITECTURES="x86"
+
+PROVIDES="
+	sdl_net$secondaryArchSuffix = $portVersion
+	lib:libSDL_net_1.2$secondaryArchSuffix = 0.8.0 compat >= 0
+	"
+REQUIRES="
+	haiku$secondaryArchSuffix
+	lib:libGL$secondaryArchSuffix
+	lib:libSDL_1.2$secondaryArchSuffix
+	"
+
+PROVIDES_devel="
+	sdl_net${secondaryArchSuffix}_devel = $portVersion compat >= 1.2
+	devel:libSDL_net$secondaryArchSuffix = $portVersion compat >= 1.2
+	devel:libSDL_net_1.2$secondaryArchSuffix = 0.8.0 compat >= 0
+	"
+REQUIRES_devel="
+	sdl_net$secondaryArchSuffix == $portVersion base
+	"
+
+BUILD_REQUIRES="
+	haiku${secondaryArchSuffix}_devel
+	devel:libSDL_1.2$secondaryArchSuffix
+	"
+BUILD_PREREQUIRES="
+	cmd:aclocal
+	cmd:autoconf
+	cmd:gcc$secondaryArchSuffix
+	cmd:ld$secondaryArchSuffix
+	cmd:libtool
+	cmd:make
+	cmd:pkg_config$secondaryArchSuffix
+	cmd:sdl_config$secondaryArchSuffix
+	"
+
+BUILD()
+{
+	libtoolize --force --copy --install
+	aclocal --force --install -I acinclude
+	touch NEWS AUTHORS ChangeLog
+	automake --add-missing
+	autoconf
+	runConfigure ./configure
+	make
+}
+
+INSTALL()
+{
+	make install
+
+	# Static/shared install conflict (playbook class 4): upstream ran the two
+	# prepareInstalledDevelLib calls FIRST and only removed the static/libtool
+	# archives afterwards, so prepareInstalledDevelLib itself finds both a
+	# shared and a static libSDL_net still sitting in $developLibDir and dies
+	# "there is both a shared and a static library" before the rm below ever
+	# runs. Move the (now tolerant) removal ahead of both calls.
+	rm -f $developLibDir/*.a $developLibDir/*.la || true
+
+	prepareInstalledDevelLib libSDL_net
+	prepareInstalledDevelLib libSDL_net-1.2
+	fixPkgconfig
+
+	packageEntries devel $developDir
+}
