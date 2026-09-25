@@ -1,0 +1,108 @@
+SUMMARY="(streaming) protocol decoding library"
+DESCRIPTION="The sigrok project aims at creating a portable, cross-platform
+signal analysis software suite that supports various device types (such as \
+logic analyzers, oscilloscopes, multimeters, and more).
+
+libsigrokdecode is a shared library written in C which provides the basic API \
+for (streaming) protocol decoding functionality.
+
+The protocol decoders are written in Python (>= 3.0)."
+HOMEPAGE="https://sigrok.org/wiki/Libsigrokdecode"
+COPYRIGHT="2014-2020 sigrok contributors"
+LICENSE="GNU GPL v3"
+REVISION="6"
+SOURCE_URI="http://sigrok.org/download/source/libsigrokdecode/libsigrokdecode-$portVersion.tar.gz"
+CHECKSUM_SHA256="c50814aa6743cd8c4e88c84a0cdd8889d883c3be122289be90c63d7d67883fc0"
+
+ARCHITECTURES="all !x86_gcc2"
+SECONDARY_ARCHITECTURES="x86"
+
+libVersion="4.2.1"
+libVersionCompat="$libVersion compat >= ${libVersion%%.*}"
+
+pythonVersion=3.10
+
+PROVIDES="
+	libsigrokdecode$secondaryArchSuffix = $portVersion
+	lib:libsigrokdecode$secondaryArchSuffix = $libVersionCompat
+	"
+REQUIRES="
+	haiku$secondaryArchSuffix
+	lib:libglib_2.0$secondaryArchSuffix
+	lib:libpython$pythonVersion$secondaryArchSuffix
+	lib:libintl$secondaryArchSuffix
+	"
+
+PROVIDES_devel="
+	libsigrokdecode${secondaryArchSuffix}_devel = $portVersion
+	devel:libsigrokdecode$secondaryArchSuffix = $libVersionCompat
+	"
+REQUIRES_devel="
+	libsigrokdecode$secondaryArchSuffix == $portVersion base
+	"
+
+BUILD_REQUIRES="
+	haiku${secondaryArchSuffix}_devel
+	devel:libcheck$secondaryArchSuffix	# for unit-tests to actually be built/run.
+	devel:libglib_2.0$secondaryArchSuffix
+	devel:libpython$pythonVersion$secondaryArchSuffix
+	"
+# #560/class-21: devel:libpython$pythonVersion is already declared above in
+# BUILD_REQUIRES, but that alone was not enough. Measured failure:
+#   checking for python3... /bin/python3
+#   configure: error: Cannot find Python 3 development headers.
+# configure auto-detects the unversioned "python3" -- Haiku's default python on
+# this image is a different major.minor than $pythonVersion (3.10), so the
+# devel headers configure goes looking for do not match the ones declared/
+# installed here. Fix has two parts: (1) also declare cmd:python$pythonVersion
+# + devel:libpython$pythonVersion as BUILD_PREREQUIRES, since BUILD_REQUIRES
+# alone was observed not to be resolved by the dependency-closing build loop
+# (same gap as html5lib/pbr/libplacebo); (2) force configure to probe the
+# exact python$pythonVersion interpreter instead of the unversioned default.
+BUILD_PREREQUIRES="
+	cmd:awk
+	cmd:gcc$secondaryArchSuffix
+	cmd:make
+	cmd:pkg_config$secondaryArchSuffix
+	cmd:python$pythonVersion
+	devel:libpython$pythonVersion$secondaryArchSuffix
+	"
+
+BUILD()
+{
+	# Trying to use $LIBS makes the ./configure script to fail with:
+	# "configure: error: C compiler cannot create executables" (exit 77)
+#	export LIBS="python$pythonVersion"
+
+	# So let's try this instead:
+	export LDFLAGS="-lpython$pythonVersion"
+
+	# Force configure's python probe onto the exact interpreter whose devel
+	# headers we declared above, rather than whichever unversioned "python3"
+	# happens to be the image default (see REVISION 6 note).
+	export PYTHON=$portPackageLinksDir/cmd~python$pythonVersion/bin/python$pythonVersion
+
+	runConfigure ./configure --disable-static
+	make $jobArgs
+}
+
+INSTALL()
+{
+	make install
+
+	# remove libtool file
+	rm -f $libDir/libsigrokdecode.la
+
+	prepareInstalledDevelLib libsigrokdecode
+	fixPkgconfig
+
+	packageEntries devel $developDir
+}
+
+# Results for reference:
+# TOTAL:1
+# PASS:1
+TEST()
+{
+	make check
+}

@@ -1,0 +1,75 @@
+SUMMARY=" Python HTML parser/tokenizer based on the WHATWG HTML5 spec"
+DESCRIPTION="html5lib is a pure-python library for parsing HTML. It is \
+designed to conform to the WHATWG HTML specification, as is implemented by \
+all major web browsers."
+HOMEPAGE="https://github.com/html5lib"
+COPYRIGHT="2006-2020 James Graham and other contributors"
+LICENSE="MIT"
+REVISION="3"
+SOURCE_URI="https://github.com/html5lib/html5lib-python/archive/$portVersion.tar.gz"
+CHECKSUM_SHA256="66e9e24a53c10c27abb6be8a3cf2cf55824c6ea1cef8570a633cb223ec46e894"
+SOURCE_DIR="html5lib-python-$portVersion"
+
+ARCHITECTURES="any"
+
+PROVIDES="
+	$portName = $portVersion
+	"
+REQUIRES="
+	haiku
+	"
+
+BUILD_REQUIRES="
+	haiku_devel
+	"
+
+PYTHON_VERSIONS=(3.10)
+
+for pythonVersion in ${PYTHON_VERSIONS[@]}; do
+	pythonPackage=python${pythonVersion//.}
+
+	eval "PROVIDES_${pythonPackage}=\"
+		${portName}_$pythonPackage = $portVersion
+		\""
+	eval "REQUIRES_$pythonPackage=\"
+		haiku
+		six_$pythonPackage
+		webencodings_$pythonPackage
+		cmd:python$pythonVersion
+		\""
+
+	BUILD_REQUIRES+="
+		setuptools_$pythonPackage
+		"
+	# #560/class-21: BUILD_REQUIRES alone was not enough -- haikuporter's own
+	# dependency-closing loop reported setuptools_$pythonPackage unresolved and
+	# then proceeded to build anyway (measured: setup.py's "from pkg_resources
+	# import parse_version" died with ModuleNotFoundError even though the
+	# package was declared above). Also declaring it as a BUILD_PREREQUIRES
+	# closes that gap; upstream's BUILD_REQUIRES line is left in place since it
+	# is still the correct declaration for the built package's own metadata.
+	BUILD_PREREQUIRES+="
+		cmd:python$pythonVersion
+		setuptools_$pythonPackage
+		"
+done
+
+INSTALL()
+{
+	for pythonVersion in ${PYTHON_VERSIONS[@]}; do
+		pythonPackage=python${pythonVersion//.}
+
+		python=python$pythonVersion
+		installLocation=$prefix/lib/$python/vendor-packages/
+		export PYTHONPATH=$installLocation:$PYTHONPATH
+
+		mkdir -p $installLocation
+		rm -rf build
+
+		$python setup.py build install \
+			--root=/ --prefix=$prefix
+
+		packageEntries $pythonPackage \
+			$prefix/lib/python*
+	done
+}
