@@ -26,7 +26,29 @@ LocalPackageRepository HaikuPorts
 
 	# Image translator libraries: these turn on the libpng, jpeg, tiff and
 	# jasper build features, and with them the PNG, JPEG, TIFF and JPEG2000
-	# translators.
+	# translators. The sources live in-tree (src/add-ons/translators/) and are
+	# arch-neutral; they ship only when their build feature is on, which
+	# BuildFeatures gates on IsPackageAvailable <lib>_devel -- true only once the
+	# matching *_devel hpkg is staged into $(HAIKU_DOWNLOAD_DIR). Without these
+	# entries (and the bake staging them, see graviton/pipeline/buildspecs/
+	# cross-build.yml) FFilterByBuildFeatures silently strips every @libpng /
+	# @jpeg / @tiff / @jasper translator from the image. The upstream arm64
+	# build-packages mirror serves none of these, so DeBeOS builds and stages
+	# them natively; versions match the built file names in the pool, and all
+	# carry vendor "Haiku Project" (the bake feeds the whole set to
+	# `package_repo create`, which aborts on a mixed-vendor set -- see below).
+	#
+	# WebPTranslator@libwebp and AVIFTranslator@libavif are deliberately NOT
+	# enabled here yet:
+	#   * libwebp -- the only arm64 libwebp_devel built so far lives in the
+	#     DeBeOS repo and is re-stamped vendor "DeBeOS"; staging it alongside the
+	#     "Haiku Project" set makes `package_repo create` abort "package 'libwebp'
+	#     has unexpected vendor 'DeBeOS' (expected 'Haiku Project')". Shipping WebP
+	#     needs a "Haiku Project"-vendored libwebp(+_devel) in the pool.
+	#   * libavif -- BuildFeatures gates it on IsPackageAvailable libavif1.0_devel
+	#     (a >= 1.0 package); only libavif 0.9.3 (pre-1.0, package name libavif)
+	#     exists for arm64. Enabling AVIF needs a native libavif >= 1.0 build.
+	# Both are real package-build tasks, not a filter fix -- out of scope here.
 	jasper-2.0.33-2
 	jasper_devel-2.0.33-2
 	libjpeg_turbo-3.1.4.1-1
