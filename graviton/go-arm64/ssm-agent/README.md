@@ -33,7 +33,7 @@
 > real agent as the fleet SSM agent (issue #302).
 
 
-M3/M4/M5 of the "Go on DeBeOS/arm64" arc (see `../../docs/go-arm64-bringup-scope.md`).
+M3/M4/M5 of the "Go on DeBeOS/arm64" arc (see `../../docs/archive/go-arm64-bringup-scope.md`).
 M3/M4 got the real upstream `amazon-ssm-agent` to *compile + link* for
 haiku/arm64; **M5 got it to RUN and reach `Online` as an SSM managed node.**
 

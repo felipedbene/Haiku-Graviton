@@ -239,7 +239,7 @@ peer per run, so an apparatus failure there does not block manual validation):
 2. Launch an instance from it on the instance type you care about, boot, and run
    a representative workload. For the developer image that means a **parallel**
    `cargo build` of a real project while watching `df` for headroom — the
-   [out-of-space post-mortem](../docs/arm64-native-build-out-of-space.md)
+   [out-of-space post-mortem](../docs/archive/arm64-native-build-out-of-space.md)
    explains why a too-small root partition looks like build corruption.
 3. Promote when satisfied — `graviton/scripts/haiku-canonical promote <ami-id>`
    (atomic; preserves the single-canonical invariant) — or approve the pipeline's
@@ -630,7 +630,7 @@ These are inherent to the bake, not to this pipeline — flagged honestly:
   final image. The second pass mostly reuses cached objects, but it is real
   extra time and the ordering is load-bearing.
 - **Full-package (browser/desktop) builds are NOT in scope here.** Per
-  `docs/arm64-package-bootstrap.md`, the HaikuPorts arm64 set must be
+  `docs/archive/arm64-package-bootstrap.md`, the HaikuPorts arm64 set must be
   bootstrapped from source and is currently **blocked on a haikuporter
   chroot/permission issue** and needs a **KVM** builder to run haikuporter
   natively — CodeBuild containers have no `/dev/kvm`. This pipeline bakes

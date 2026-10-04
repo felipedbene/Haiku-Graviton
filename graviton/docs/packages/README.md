@@ -13,6 +13,6 @@ How DeBeOS builds, activates, and distributes native `.hpkg` packages on arm64.
   `haiku-repo-publish` / `haiku-s3` tooling that drives it.
 
 Related:
-- Building the chain itself lives in `../package-chain-status.md` and `../arm64-package-bootstrap.md`.
+- Building the chain itself lives in `../archive/package-chain-status.md` and `../archive/arm64-package-bootstrap.md`.
 - The propose-only bug-fix / enhancement tooling that drives fixes to hardware proof is in
   `../../audit/`.
