@@ -46,18 +46,19 @@ A full shallow clone (~48 s, 26k files) gives the WebPositive sources **and** th
 complete `headers/` tree — which matters because some private headers the app
 transitively includes are not in the `haiku_devel` subset (see §2).
 
-### git/curl/cargo CA note (fixed in curl 8.21.0-3+)
+### git/curl/cargo CA note (works in the served curl-8.21.0-1)
 
-Earlier `curl` packages compiled libcurl's CA-bundle path as a **package-version-specific**
-path (`/packages/curl-<ver>/ca_root_certificates/…`); bumping the `curl` revision dangled
-it, breaking HTTPS for curl, git *and* cargo (`[77] SSL CA cert bad` /
-`error adding trust anchors`). This is fixed in `curl-8.21.0-3` and later, which point
-libcurl at the stable, version-independent `/boot/system/data/ssl/CARootCertificates.pem`
-(always present from the base `ca_root_certificates`). Ensure you're current:
-`pkgman update curl`. On an older `curl` only, the interim workaround is
-`git config --global http.sslCAInfo /boot/system/data/ssl/CARootCertificates.pem`
-(note: `CURL_CA_BUNDLE` does *not* help cargo — cargo sets the CA path from libcurl's
-compiled default, which is exactly what the `-3` package fixes).
+The served `curl-8.21.0-1` compiles libcurl's CA path to the stable, version-independent
+`/boot/system/data/ssl/CARootCertificates.pem` (always present from the base
+`ca_root_certificates`), so HTTPS works for curl, git **and** cargo out of the box —
+hardware-verified 2026-10-04 on a fresh install: `curl -I https://github.com/` returns
+HTTP/2 200, `git ls-remote` over HTTPS succeeds, and `cargo search ripgrep` returns 15.2.0
+from crates.io. (Hazard to avoid in future curl recipes: compiling a *version-specific* CA
+path like `/packages/curl-<ver>/ca_root_certificates/…` would dangle on a revision bump and
+break all three with `[77] SSL CA cert bad` / `error adding trust anchors`. `CURL_CA_BUNDLE`
+does not help cargo — cargo reads the CA path compiled into libcurl, which the served build
+sets correctly.)
+
 
 ## 2. Compile — translate the Jamfile to a direct `g++` build
 
