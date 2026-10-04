@@ -116,7 +116,7 @@ built before that fix still shows it, so keep pinning until the guest is known g
 
 Any port whose build invokes `makeinfo` will fail the same way, so expect to repeat that
 cut. Stage-1 artifacts go to `hpkg-out/arm64/stage1/`, never to a shipping repo — see the
-ledger in `graviton/docs/sequencing.md`.
+ledger in `graviton/docs/archive/sequencing.md`.
 
 ## Native-build recipe fixes carried in `recipes/` (issues #44, #52)
 

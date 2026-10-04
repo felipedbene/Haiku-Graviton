@@ -39,7 +39,7 @@ Rebuilding the image never fixed it, because the harvest re-imported the stale
 artifact afterwards. The bug was in an unversioned shell script, invisible to
 `git log`, code review, and every image rebuild. Hence this directory.
 
-Full analysis: `graviton/docs/arm64-clock-step.md`.
+Full analysis: `graviton/docs/archive/arm64-clock-step.md`.
 
 ## The fix, and the invariant to preserve
 

@@ -7,7 +7,7 @@
 // Python + C extensions; this covers the exact verbs the publish flow calls,
 // in one CGO-free Go binary that cross-builds for GOOS=haiku GOARCH=arm64 with
 // the korli-go toolchain and links pure-Go TLS (proven on Graviton, see
-// graviton/docs/go-arm64-bringup-scope.md M2).
+// graviton/docs/archive/go-arm64-bringup-scope.md M2).
 //
 // Verbs (a deliberate subset of `aws s3` / `aws cloudfront`):
 //

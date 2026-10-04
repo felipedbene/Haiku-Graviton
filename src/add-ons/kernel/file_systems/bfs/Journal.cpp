@@ -1363,7 +1363,7 @@ Journal::_WriteTransactionToLog()
 	// (silent corruption). Flushing before the commit guarantees the body is
 	// durable first; the flush after the commit (below) then orders the log
 	// ahead of the in-place writeback. This is standard write-ahead-log commit
-	// ordering. See graviton/docs/device-watchdog-and-bfs-crashsafety.md.
+	// ordering. See graviton/docs/archive/device-watchdog-and-bfs-crashsafety.md.
 	//
 	// DeBeOS (#91 Gap 2): on a checksummed volume the per-entry checksum+sequence
 	// stamped above now lets replay *detect* a body that did not land and discard

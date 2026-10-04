@@ -1,6 +1,6 @@
 M6 proof — fix the fork+exec fault on DeBeOS (Haiku arm64) in the Go runtime and
 prove a FULLY FUNCTIONAL upstream amazon-ssm-agent: Run Command executes.
-Generated: 2026-09-18. Issue #302, milestone M6 (doc go-arm64-bringup-scope.md).
+Generated: 2026-09-18. Issue #302, milestone M6 (doc graviton/docs/archive/go-arm64-bringup-scope.md).
 
 HEADLINE RESULT
 ===============

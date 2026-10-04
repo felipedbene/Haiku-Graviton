@@ -319,7 +319,7 @@ There is **zero** `virtio-gpu` in any rig script or any running guest. The rigs 
 `usb-tablet`/`usb-kbd` (3 and 2 references), consistent with our earlier finding that
 `virtio-tablet-pci` yields no input.
 
-So although `graviton/docs/sequencing.md:223` records virtio-gpu-pci as previously proven
+So although `graviton/docs/archive/sequencing.md:223` records virtio-gpu-pci as previously proven
 to paint a desktop, **nothing we run today uses it.** Switching is an unrealized change,
 not a done deal.
 
@@ -383,12 +383,12 @@ in 2025–2026 upstream weakens it. But note the two frictions that remain unadd
 upstream: no hardware cursor and no damage tracking (a permanent 50 Hz full-screen blit),
 so the "real desktop" is software-composited and costs host bandwidth continuously.
 
-**One documentation correction, VERIFIED.** `graviton/docs/package-chain-status.md:25`
+**One documentation correction, VERIFIED.** `graviton/docs/archive/package-chain-status.md:25`
 says the netsurf render happened via "`RemoteHWInterface`/ramfb". That is self-contradictory
 and wrong: a `ramfb` guest binds `AccelerantHWInterface` with `framebuffer.accelerant`,
 and `ScreenManager.cpp:138` only builds a `RemoteHWInterface` when **no** local screen was
 acquired (`if (added == 0 && target != NULL)`). `graviton/docs/framebuffer-guest-capture.md`
-has it right. Do not cite `package-chain-status.md:25` as evidence about the remote path.
+has it right. Do not cite `archive/package-chain-status.md:25` as evidence about the remote path.
 
 ---
 
@@ -509,7 +509,7 @@ Stated plainly, so nothing here is mistaken for a measurement:
 - **I did not build anything and did not boot a virtio-gpu guest.** Every claim about
   virtio_gpu's *runtime* behaviour on arm64 is code reading plus upstream's own report in
   `b57d5d2f41`, not our own observation. The prior "proven under virtio-gpu-pci" record in
-  `graviton/docs/sequencing.md:223` is earlier work I did not re-run — and the builder
+  `graviton/docs/archive/sequencing.md:223` is earlier work I did not re-run — and the builder
   measurement shows nothing currently uses it.
 - **The ~415 MB/s blit figure is arithmetic**, not a measured host-bandwidth number.
 - **The barrier hazard is a code-inspection finding.** It is well-corroborated by

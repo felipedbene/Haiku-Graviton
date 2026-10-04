@@ -138,7 +138,7 @@ Approve stage between Test and Promote. If a candidate reached canonical without
 
 ### Boot target has no console output
 Ensure `get-console-output` uses `--latest`; a Haiku node generates no lifecycle event so a bare call
-returns stale/empty output (see `graviton/docs/ec2-stop-start.md`).
+returns stale/empty output (see `graviton/docs/archive/ec2-stop-start.md`).
 
 ### Network test shows no throughput
 Confirm the peer is same-subnet, MTU 9001 on both ends, and the SG ingress rule for the test port was

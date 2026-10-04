@@ -5,7 +5,7 @@
 # Runs on a Linux peer host with ssh reach to the test node (an in-VPC Linux box
 # such as the ephemeral peer the perf-gate spins up, not the workstation).
 # This is the prototype of the write-liveness assertion proposed in
-# graviton/docs/storage-perf-gate-proposal.md, and it exists because the defect it
+# graviton/docs/archive/storage-perf-gate-proposal.md, and it exists because the defect it
 # guards is a machine that reports healthy and does nothing.
 #
 # It is deliberately two-sided. Asserting only "the starvation stopped" would pass

@@ -45,7 +45,7 @@ moment its reader goes away (`StreamingRingBuffer.cpp`, the
 `fDiscardWithoutReader && fReader == NULL` branch). That branch is load-bearing
 and stays: without it a drawing thread blocks forever on a buffer nobody drains,
 which is the wedge that left the Deskbar black for a whole boot
-(`remote-desktop-send-buffer-wedge.md`).
+(`archive/remote-desktop-send-buffer-wedge.md`).
 
 But it is also how content comes to be **believed-sent-and-never-delivered**.
 Combined with `RemoteDrawingEngine`'s setter dedup — which will not re-send a
@@ -425,7 +425,7 @@ drawing:
   (~198 kB) were held and accounted for instead of vanishing.
 - **No drawing thread was ever blocked.** `listsem <app_server> | grep 'write
   notif'` never read `-1` in 60 samples across the two arms — the same reading that
-  was `-1` in 12 of 12 stock first boots in `remote-desktop-send-buffer-wedge.md`.
+  was `-1` in 12 of 12 stock first boots in `archive/remote-desktop-send-buffer-wedge.md`.
   That published result is the positive control for this instrument; **it was not
   re-demonstrated firing in this session**, and that is a real gap in this report.
 - `TRUNCATED_MESSAGES=0` in every capture: no partial message reached a client.

@@ -797,7 +797,7 @@ Interesting as a proof-of-concept for NEON in `app_server`; not a fleet win.
 ### 5.2 NEON in the tree: there is none, and three structural facts constrain adding it
 
 `git grep -l arm_neon.h` over `refs/heads/graviton` returns **one file, and it is
-a document** (`graviton/docs/arm64-memcpy.md`). **There are zero NEON intrinsics
+a document** (`graviton/docs/archive/arm64-memcpy.md`). **There are zero NEON intrinsics
 in the entire Haiku source tree** — no `__ARM_NEON`, `vld1*`, `vst1*`,
 `uint8x16_t`, `float32x4_t`, `vaddq_*`, `vmull_*` anywhere in `src/` or
 `headers/`. For comparison, x86 SIMD intrinsic headers appear in four files:
@@ -854,7 +854,7 @@ This is the best-specified SIMD opportunity in the tree, and it is not graphics.
 | **arm (32)** | `arch/arm/memcpy.S` — **assembly** | generic | generic |
 
 **(a) `memcpy`: a measured 1.1–2.0x gap, with the fix already named.**
-[arm64-memcpy.md](arm64-memcpy.md) §6 records, as this project's own
+[archive/arm64-memcpy.md](archive/arm64-memcpy.md) §6 records, as this project's own
 measurement, that **glibc's `memcpy` is still 1.1–2.0x faster than ours**, and
 states the remedy in terms: *"Closing it means `<arm_neon.h>` and `q`-register
 load-everything-first groups up to 128 bytes."* That is a **quantified gap with a
@@ -1075,7 +1075,7 @@ graphics — which is itself part of the answer.
 
 **(a) NEON `memcpy` — closes a measured 1.1–2.0x gap.**
 - **Magnitude: 1.1–2.0x on `memcpy` itself. MEASURED by this project** against
-  glibc ([arm64-memcpy.md](arm64-memcpy.md) §6) — not estimated, not AWS's.
+  glibc ([archive/arm64-memcpy.md](archive/arm64-memcpy.md) §6) — not estimated, not AWS's.
 - **Confidence: HIGH.** The gap is measured and the fix is already specified
   (`<arm_neon.h>`, `q`-register load-everything-first groups to 128 bytes).
 - **Effort: M.** The deferred kernel-SIMD policy question is answered (§5.3a):
@@ -1340,7 +1340,7 @@ checkable by a reader outside the project.
   in the kernel copy. (§5.3b)
 - The deferred "may the kernel use SIMD registers in `memcpy`" question is
   answered yes by the eager `_fp_save` on all eight exception vectors — which
-  corroborates what [arm64-memcpy.md](arm64-memcpy.md) §6 already suspected.
+  corroborates what [archive/arm64-memcpy.md](archive/arm64-memcpy.md) §6 already suspected.
   (§5.3a)
 - The missing `__i386__` guard at
   `src/apps/icon-o-matic/generic/support/support.h:47`. (§6.5)
@@ -1401,9 +1401,9 @@ floors per `-mcpu`; zlib-ng superseding zlib-cloudflare.
 - Internet checksum: **0.228 → 0.055 ns/byte, 4.15x on Neoverse V1**, with **no
   SIMD** (`e63fe3f24a`). The methodological headline of §5.3.
 - arm64 `memcpy`: **8.4% of receive CPU** (`f76217c69b`,
-  [arm64-memcpy.md](arm64-memcpy.md)) — the realism anchor for §6.3.
+  [archive/arm64-memcpy.md](archive/arm64-memcpy.md)) — the realism anchor for §6.3.
 - **glibc `memcpy` is still 1.1–2.0x faster than ours**
-  ([arm64-memcpy.md](arm64-memcpy.md) §6) — the only quantified gap with a
+  ([archive/arm64-memcpy.md](archive/arm64-memcpy.md) §6) — the only quantified gap with a
   named NEON fix in this document, and the basis for §6.3a.
 - LSE in the kernel: outline calls 1173 → 4, inline LSE 10 → 1179 (`20bf8f2711`)
   — instruction-level only; **no performance number was ever attached.**

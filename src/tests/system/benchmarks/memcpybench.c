@@ -7,7 +7,7 @@
 	sizes the network receive path actually uses, against the generic routine
 	arm64 used before.
 
-	Profiling receive on arm64 (see graviton/docs/net-receive-profile.md) put
+	Profiling receive on arm64 (see graviton/docs/archive/net-receive-profile.md) put
 	~78% of the CPU cost of a transfer in two byte-copies, at a combined ~4
 	cycles per byte -- one to two orders of magnitude more than a copy should
 	cost. This exists to say whether that is the memory system or the copy

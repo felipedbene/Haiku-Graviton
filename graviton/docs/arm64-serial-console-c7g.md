@@ -149,7 +149,7 @@ which is right, and it works.
 > now boots to userland** — 53 PCI devices, NVMe root mounted. Two fixes closed it:
 > arm64 GICv3 redistributor discovery (verified across multiple metal redistributor
 > layouts) and the PCI ECAM multi-region fix (`f5367b3602`, merged via `e270548f33`).
-> See `metal-gicv3-panic.md` and `metal-pci-segment.md`. The byte count and the
+> See `archive/metal-gicv3-panic.md` and `archive/metal-pci-segment.md`. The byte count and the
 > missing-loader-log observation are still accurate; the panic is not.
 
 With timestamps stripped, the `c7g.large` and `t4g.medium` logs differ only in

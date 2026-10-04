@@ -21,7 +21,7 @@ with, not enough to skip reading the code before acting.
 > | Missing `docs/watchdog-design.md`, `FINDINGS.md`, `HANDOFF.md` | **STILL TRUE** — and the count is **eight** citations, not six. *(Update 2026-08-31: `docs/watchdog-design.md` written, six citations resolve; the other two files still do not exist.)* |
 > | `hwRxDrops`/`hwTxDrops` unreadable, no ioctl | **STILL TRUE** |
 > | P1 watchdog gaps (`DEVICE_REQUEST_RESET`, `NOTIFICATION` unhandled) | **STILL TRUE** — only `LINK_CHANGE` and `KEEP_ALIVE` are registered |
-> | `XXX STRUCTURAL FIX STILL OWED` (unmask before drain) | **STILL OPEN** — `ena.cpp:221`. This is a **correctness/structural** fix, **not** the throughput lever: resolved 2026-08-25, the receive ceiling is bufferbloat in the receive FIFO + `TCPEndpoint::fLock` (`ena-receive-latency-account.md`) |
+> | `XXX STRUCTURAL FIX STILL OWED` (unmask before drain) | **STILL OPEN** — `ena.cpp:221`. This is a **correctness/structural** fix, **not** the throughput lever: resolved 2026-08-25, the receive ceiling is bufferbloat in the receive FIFO + `TCPEndpoint::fLock` (`graviton/docs/ena-receive-latency-account.md`) |
 >
 > **The P1 list is still the right list.** It is P3 that has been overtaken.
 
@@ -134,7 +134,7 @@ production-risk reduction available. **[reported]**
 >   The deciding control: **Linux forced to ONE ENA queue does 29826 Mbit/s against
 >   29823 on eight** (`c7g.16xlarge`, interleaved A/B). One queue already carries
 >   ~30 Gbps. Also, the IO-queue grant is a **fixed 8 for the whole C7g family**, not
->   a function of vCPU count. See `ena-multiqueue-headroom.md` §5.
+>   a function of vCPU count. See `archive/ena-multiqueue-headroom.md` §5.
 > - ~~**Doorbell / completion-ack / RX-refill batching is available today, ~40
 >   lines**~~ — **DEAD.** `219d8ab858` measured it: LLQ grants **2 ring entries per
 >   burst**, one jumbo frame consumes both, and **99.94% of transmit frames already
@@ -153,7 +153,7 @@ production-risk reduction available. **[reported]**
 > **What actually belongs in P3 now:** the unmask-before-drain fix at `ena.cpp:221`
 > is a **correctness/structural** item (we re-arm the vector before the ring has been
 > drained), **not** the throughput lever. Resolved 2026-08-25
-> (`ena-receive-latency-account.md`): the ~3× gap — DeBeOS plateaus at
+> (`graviton/docs/ena-receive-latency-account.md`): the ~3× gap — DeBeOS plateaus at
 > **9.0–10.2 Gbit/s** on `c7g.16xlarge` against Linux's **29.8** — is **bufferbloat in
 > the device-interface receive FIFO** (a standing ~13.7 ms, ~16 MiB queue that is
 > ~99.93% of a frame's transit time) **plus `TCPEndpoint::fLock`, ~47% of the

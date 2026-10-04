@@ -18,7 +18,7 @@ stays parked in `FINDINGS.md`.
 > instrument found **zero** corruption across cached, pure-`O_DIRECT`/raw-DMA, and rename-churn
 > patterns under memory pressure; squeezing free space reproduced the exact errno. Fixed by the
 > 20 GiB image bump (now the canonical AMI). See
-> `graviton/docs/arm64-native-build-out-of-space.md`. The NVMe `dsb oshst` barrier was hardware
+> `graviton/docs/archive/arm64-native-build-out-of-space.md`. The NVMe `dsb oshst` barrier was hardware
 > hygiene, **not** the fix. (A secondary `darling` 0.24.1 `rustc` ICE is an upstream compiler bug,
 > unrelated.)
 >
