@@ -248,6 +248,17 @@ export class HaikuGravitonPipelineStack extends cdk.Stack {
         conditions: regionCondition,
       }),
     );
+    // ec2:ImportSnapshot hands the vmimport role to the VM Import/Export service
+    // (vmie.amazonaws.com), so the caller needs iam:PassRole on it -- the vmimport
+    // bucket policy only authorizes S3 reads and does not cover passing the role.
+    register.addToRolePolicy(
+      new iam.PolicyStatement({
+        sid: 'PassVmimportRole',
+        actions: ['iam:PassRole'],
+        resources: [`arn:aws:iam::${cdk.Stack.of(this).account}:role/vmimport`],
+        conditions: { StringEquals: { 'iam:PassedToService': 'vmie.amazonaws.com' } },
+      }),
+    );
     // Tagging: scope to the register region and to snapshot/image creation.
     register.addToRolePolicy(
       new iam.PolicyStatement({
