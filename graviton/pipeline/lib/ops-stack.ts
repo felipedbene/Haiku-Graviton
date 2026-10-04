@@ -193,15 +193,31 @@ export class OpsStack extends cdk.Stack {
       // IKEv2 only, AES-256, SHA2-256/384/512, DH group 14-24. The L2
       // VpnConnection does not expose phase1/2 crypto, so set it on the
       // underlying CfnVPNConnection. Phase-1/2 algorithm changes modify the
-      // tunnels in place (no new outside IPs / PSKs).
-      const strong = {
+      // tunnels in place (no new outside IPs / PSKs). The explicit type
+      // annotation is load-bearing: it turns a mis-cased property (e.g.
+      // phase1DHGroupNumbers vs phase1DhGroupNumbers) into a compile error
+      // instead of a silently-dropped field.
+      const vpnTunnelLogs = new logs.LogGroup(this, 'VpnTunnelLogs', {
+        retention: logs.RetentionDays.ONE_MONTH,
+        removalPolicy: cdk.RemovalPolicy.DESTROY,
+      });
+      const strong: ec2.CfnVPNConnection.VpnTunnelOptionsSpecificationProperty = {
         ikeVersions: [{ value: 'ikev2' }],
         phase1EncryptionAlgorithms: [{ value: 'AES256' }],
         phase2EncryptionAlgorithms: [{ value: 'AES256' }],
         phase1IntegrityAlgorithms: [{ value: 'SHA2-256' }, { value: 'SHA2-384' }, { value: 'SHA2-512' }],
         phase2IntegrityAlgorithms: [{ value: 'SHA2-256' }, { value: 'SHA2-384' }, { value: 'SHA2-512' }],
-        phase1DHGroupNumbers: [{ value: 14 }, { value: 15 }, { value: 16 }, { value: 17 }, { value: 18 }, { value: 19 }, { value: 20 }, { value: 21 }, { value: 22 }, { value: 23 }, { value: 24 }],
-        phase2DHGroupNumbers: [{ value: 14 }, { value: 15 }, { value: 16 }, { value: 17 }, { value: 18 }, { value: 19 }, { value: 20 }, { value: 21 }, { value: 22 }, { value: 23 }, { value: 24 }],
+        phase1DhGroupNumbers: [{ value: 14 }, { value: 15 }, { value: 16 }, { value: 17 }, { value: 18 }, { value: 19 }, { value: 20 }, { value: 21 }, { value: 22 }, { value: 23 }, { value: 24 }],
+        phase2DhGroupNumbers: [{ value: 14 }, { value: 15 }, { value: 16 }, { value: 17 }, { value: 18 }, { value: 19 }, { value: 20 }, { value: 21 }, { value: 22 }, { value: 23 }, { value: 24 }],
+        // Tunnel logging to CloudWatch (off by default on AWS) -> IKE / tunnel
+        // state changes are visible for debugging and audit.
+        logOptions: {
+          cloudwatchLogOptions: {
+            logEnabled: true,
+            logGroupArn: vpnTunnelLogs.logGroupArn,
+            logOutputFormat: 'json',
+          },
+        },
       };
       const cfnVpn = vpn.node.defaultChild as ec2.CfnVPNConnection;
       cfnVpn.vpnTunnelOptionsSpecifications = [strong, strong];
