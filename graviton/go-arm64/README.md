@@ -2,7 +2,7 @@
 
 This directory holds the DeBeOS-side artifacts for bringing the Go toolchain to
 haiku/arm64 (AWS Graviton). The design and milestone ladder live in
-[`../docs/go-arm64-bringup-scope.md`](../docs/go-arm64-bringup-scope.md). **M0**
+[`../docs/archive/go-arm64-bringup-scope.md`](../docs/archive/go-arm64-bringup-scope.md). **M0**
 is *a `GOOS=haiku GOARCH=arm64` gc Go toolchain that cross-builds from a Linux
 host*; **M1** is *a cross-compiled binary that runs on real Graviton Haiku
 hardware, prints, and exits 0* — and validates the M0 runtime simplifications.
