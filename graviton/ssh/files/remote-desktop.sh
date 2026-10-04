@@ -24,7 +24,7 @@
 # wedge was reproduced on a boot where input_server was up first and completely
 # healthy. The cause was app_server's remote send buffer having no reader before
 # a client connects; it is fixed in RemoteHWInterface/StreamingRingBuffer. See
-# graviton/docs/remote-desktop-send-buffer-wedge.md. Do not re-derive an
+# graviton/docs/archive/remote-desktop-send-buffer-wedge.md. Do not re-derive an
 # ordering rule from the sleep below.
 #
 # RemoteHWInterface binds 127.0.0.1 (we changed it from INADDR_ANY,

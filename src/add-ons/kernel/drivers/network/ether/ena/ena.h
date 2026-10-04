@@ -230,7 +230,7 @@ extern "C" {
    to 6560 ms against a 6000 ms limit -- and every one of those reset a device
    that was carrying traffic perfectly well. Ten occurrences, not one of them a
    device that had stopped. See
-   graviton/docs/ena-keepalive-watchdog-false-reset.md.
+   graviton/docs/archive/ena-keepalive-watchdog-false-reset.md.
 
    Requiring two consecutive misses is deliberately not the same thing as raising
    the deadline. A late keep-alive is transient: the next one arrives,
@@ -278,7 +278,7 @@ extern "C" {
    marginal-deadline shape §7 warns against. Twenty misses give ~25 s of silence,
    ~1.9x over that 13 s worst case -- margin the eight-miss bound had lost -- while
    the paragraph above keeps a genuinely dead device caught in ~7 s.
-   See graviton/docs/ena-keepalive-watchdog-false-reset.md. */
+   See graviton/docs/archive/ena-keepalive-watchdog-false-reset.md. */
 #define ENA_KEEP_ALIVE_MISSES_WITH_TRAFFIC	20
 
 /* Missing-transmit-completion detection (docs/watchdog-design.md gap 4). The
@@ -300,7 +300,7 @@ extern "C" {
    deliberately conservative on two independent axes (a generous per-frame
    deadline AND a consecutive-check requirement below) rather than trusting either
    one alone. See the false-reset history in
-   graviton/docs/ena-keepalive-watchdog-false-reset.md: a check that resets a
+   graviton/docs/archive/ena-keepalive-watchdog-false-reset.md: a check that resets a
    healthy NIC is worse than a check that misses a rare wedge. */
 #define ENA_MISSING_TX_COMPLETION_TIMEOUT_US	5000000
 
@@ -384,7 +384,7 @@ extern "C" {
    can be interleaved inside a single boot; run-to-run transmit cost on this
    hardware is bimodal at about +-10%, which swamps the effect being measured if
    the conditions are separated by a reboot. See
-   graviton/docs/ena-tx-offload.md. */
+   graviton/docs/archive/ena-tx-offload.md. */
 #define ENA_IOCTL_TX_EXTRA_DOORBELLS	9802
 #define ENA_MAX_EXTRA_DOORBELLS		64
 
@@ -914,7 +914,7 @@ struct ena_haiku_device {
 	   doorbell is what refills that allowance -- so if one frame consumes the
 	   whole burst, no two consecutive frames can share a doorbell however
 	   clever the caller is. txBurstExhausted counts frames that left the
-	   allowance at zero. See graviton/docs/ena-tx-offload.md. */
+	   allowance at zero. See graviton/docs/archive/ena-tx-offload.md. */
 	uint64				txFrames;
 	/* Bytes accepted for transmit, summed from each net_buffer's size under
 	   txLock alongside txFrames; the transmit counterpart of rxBytes and likewise

@@ -4,7 +4,7 @@ so that `cmd:cmake` is not needed at all.
 This is what actually freed `zstd` and, behind it, `openssl3`. It replaced a much
 more ambitious attempt to build cmake itself, which failed (see
 cmake-4.1.6-bundled-libs-stage1.patch and Blocker 6 in
-graviton/docs/package-chain-status.md).
+graviton/docs/archive/package-chain-status.md).
 
 ## Why cmake was the blocker
 

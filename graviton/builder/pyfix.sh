@@ -69,7 +69,7 @@ if [ "$add" != "additive-ok" ]; then
 	echo "FATAL: this host's loader REPLACES the library search path (probe said: '${add:-<silence, exit 3>}')."
 	echo "       python will die at generate-posix-vars. Boot a guest from an image containing"
 	echo "       'runtime_loader: make LIBRARY_PATH and ADDON_PATH additive', or swap that one"
-	echo "       file into the guest's system package -- see graviton/docs/package-chain-status.md."
+	echo "       file into the guest's system package -- see graviton/docs/archive/package-chain-status.md."
 	exit 2
 fi
 echo "loader is additive: no RUNSHARED workaround needed"

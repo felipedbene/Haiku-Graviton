@@ -6,7 +6,7 @@
 # WHY THIS EXISTS: `graviton/scripts/haiku-crate-to-hpkg` builds a crates.io
 # crate UNMODIFIED. `cargo install coreutils 0.12.0` therefore pulls uucore (and
 # the uu_* applet crates) from crates.io with their Haiku `#[cfg]` gaps still
-# present (see graviton/docs/uutils-coreutils-arm64.md), which caps the applet
+# present (see graviton/docs/archive/uutils-coreutils-arm64.md), which caps the applet
 # set. This driver carries those fixes as a patchset -- one subdirectory per
 # crate under graviton/uutils/patches/<crate>/*.patch -- vendors each patched
 # crate, points the coreutils crate at them with [patch.crates-io] overrides,

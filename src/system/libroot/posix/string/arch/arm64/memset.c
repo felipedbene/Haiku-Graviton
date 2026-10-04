@@ -48,7 +48,7 @@
 	and it must be built with -fno-builtin -fno-tree-loop-distribute-patterns:
 	the zero-store fallback loop is exactly the shape the loop-idiom pass would
 	rewrite into a call to memset, i.e. into a call to this function from inside
-	itself. The Jamfile sets both flags; see graviton/docs/arm64-memcpy.md.
+	itself. The Jamfile sets both flags; see graviton/docs/archive/arm64-memcpy.md.
 */
 
 

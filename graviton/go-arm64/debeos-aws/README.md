@@ -48,7 +48,7 @@ Python + C-extension stack on Haiku arm64 is a large, uncertain port. The Go
 path is far more tractable and reuses proven ground:
 
 - **The Go toolchain already works on Haiku arm64** (the korli-go fork extended
-  to arm64; see `graviton/docs/go-arm64-bringup-scope.md`). HTTPS + the
+  to arm64; see `graviton/docs/archive/go-arm64-bringup-scope.md`). HTTPS + the
   concurrent netpoller are hardware-proven on Graviton (M2).
 - **aws-sdk-go-v2 is pure-Go and CGO_ENABLED=0-friendly**, with pure-Go
   `crypto/tls` — the exact properties that made the SSM-agent bring-up work.

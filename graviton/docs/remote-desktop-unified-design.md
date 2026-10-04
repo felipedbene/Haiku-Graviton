@@ -2,7 +2,7 @@
 
 Status: design of record. Supersedes the two competing proposals ("evolve `RP_`"
 and "clean-sheet codec stream") by merging them, and consolidates the earlier
-protocol review, `remote-desktop-options.md` (#95, Route 1), and
+protocol review, `archive/remote-desktop-options.md` (#95, Route 1), and
 `vfb-route2-streaming.md` (#118, Route 2) into one target.
 
 This document decides **what the protocol is**, how **one** protocol serves all
@@ -431,14 +431,14 @@ capability-gated).
 
 ## 11. Relationship to the existing docs
 
-- `remote-desktop-options.md` (#95, Route 1): its Option A "fix the native
+- `archive/remote-desktop-options.md` (#95, Route 1): its Option A "fix the native
   protocol" *is* M0 here; its Option B offscreen `BitmapHWInterface` is M4; its
   Option D libx264 pipeline is the encode lever of M3/M5. URP/1 is the protocol
   those options were missing.
 - `vfb-route2-streaming.md` (#118, Route 2): its Stage-1 QEMU-VNC streaming is the
   measured latency anchor (`§7`) and its `.metal` capture is the M3 pixel source;
   its blocking unknown is M0's parallel gate.
-- `remote-desktop-send-buffer-wedge.md`: the `discardWithoutReader` fix it shipped
+- `archive/remote-desktop-send-buffer-wedge.md`: the `discardWithoutReader` fix it shipped
   is load-bearing and stays — the M1 cache does **not** remove the cold first-paint
   burst that triggered the wedge (a first paint is all misses by construction).
 - The earlier protocol review (topic branch, not on trunk) supplied the D1–D10 and

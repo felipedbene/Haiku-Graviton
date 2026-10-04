@@ -15,8 +15,8 @@ no longer a pure plan.**
 > | 1 LSE atomics | **MERGED, hardware-verified** (via item 2) | `20bf8f2711` |
 > | 2 `-mcpu`/`-march` | **MERGED** — `-mcpu=neoverse-n1+crypto`, `ArchitectureRules:52` | `20bf8f2711` |
 > | 3 crc/crypto baseline | baseline **MERGED** with item 2; **intrinsic** crc32c/AES/SHA/PMULL still open | `20bf8f2711` |
-> | 4 ENA LLQ | **ANSWERED on hardware** — the device *does* offer LLQ; see item 4 | `ena-tx-offload.md` |
-> | 5 Multi-queue + RSS | **CANCELLED on evidence** — see item 5 | `ena-multiqueue-headroom.md` §5 |
+> | 4 ENA LLQ | **ANSWERED on hardware** — the device *does* offer LLQ; see item 4 | `archive/ena-tx-offload.md` |
+> | 5 Multi-queue + RSS | **CANCELLED on evidence** — see item 5 | `archive/ena-multiqueue-headroom.md` §5 |
 > | 5a Doorbell/ack batching | **DEAD on evidence** — see item 5a | `219d8ab858` |
 > | 6 Jumbo frames | **MERGED, hardware-verified** both directions | `21348b03b9` |
 > | 7 Barriers & alignment | open (audit said "mostly correct") | — |
@@ -131,7 +131,7 @@ now `-mcpu=neoverse-n1+crypto` at `ArchitectureRules:52`.
 > `ldapr` 0 → 168, binaries slightly smaller, clean boot on real Neoverse cores. Still
 > open: an actual performance measurement. Items 4-8 and 10 remain, gated on having a
 > userland that can generate real load. Project-wide ordering now lives in
-> [sequencing.md](sequencing.md).
+> [archive/sequencing.md](archive/sequencing.md).
 
 1. **Item 2 (`-mcpu=neoverse-n1`) first.** One line in `ArchitectureRules`. It
    subsumes item 1 (LSE atomics) and item 3 (crc/crypto baseline), and it
@@ -160,7 +160,7 @@ now `-mcpu=neoverse-n1+crypto` at `ArchitectureRules:52`.
    pulled *forward* — it is the only thing that converts the rest of this
    document from inference into measurement, and it is what makes item 10's
    research spike answerable rather than open-ended. **Item 12** belongs with
-   Phase 2/4 in [sequencing.md](sequencing.md), not here, because it gates the
+   Phase 2/4 in [archive/sequencing.md](archive/sequencing.md), not here, because it gates the
    ~150-package userland rather than the kernel.
 
    > **Outcome (2026-08-24).** All three of those calls were acted on. **Item 8a
@@ -412,7 +412,7 @@ and all the JVM material (JFR/JMC, `libperf-jvmti.so`, `-XX:` flags).
 
 1. "No synthetic benchmark is a substitute for your actual production code"
    (`perfrunbook/README.md`). We have no production workload — which is precisely
-   the gate [sequencing.md](sequencing.md) puts on Phase 7, arrived at
+   the gate [archive/sequencing.md](archive/sequencing.md) puts on Phase 7, arrived at
    independently. For the *atomics* change a microbenchmark is still defensible,
    because the change is a pure instruction substitution on a primitive we know
    is hot; but it must be labelled a microbenchmark, not a throughput result.
@@ -514,7 +514,7 @@ one portable binary but adds a branch per atomic. Decide LSE-hard
 **AWS guide (2026-08-22).** Resolved, in our favour and worse than the "adds a
 branch per atomic" framing above: the helpers never selected LSE at all, because
 nothing initialised `__aarch64_have_lse_atomics` (see Phase 1 in
-[sequencing.md](sequencing.md)). The GCC 13.3 manual confirms the mechanism —
+[archive/sequencing.md](archive/sequencing.md)). The GCC 13.3 manual confirms the mechanism —
 `-moutline-atomics` "is only applicable when compiling for the base ARMv8.0
 instruction set" and "is on by default", which is exactly the configuration the
 old `-march=armv8-a+crc` baseline created. AWS's verification recipe for this is
@@ -669,7 +669,7 @@ now tracked as item 12.
 > **ANSWERED on hardware 2026-08-24 — the device *does* offer LLQ, and the driver
 > is using it.** The "Recommendation: investigate before coding" and "Open
 > questions" below are **spent**; do not re-run them. Captured from a boot log on
-> the target instance (`ena-tx-offload.md` §5.1):
+> the target instance (`archive/ena-tx-offload.md` §5.1):
 >
 > ```
 > ena: LLQ configured: 256 byte entries, 16 descriptors per entry,
@@ -737,7 +737,7 @@ and unassisted; the hardware boot-log capture remains the only way to answer it.
 >
 > **Linux on the same instance class, forced down to ONE ENA queue, does
 > 29826 Mbit/s — against 29823 on eight** (interleaved A/B, four runs,
-> `c7g.16xlarge`; `ena-multiqueue-headroom.md` §5). One queue already carries
+> `c7g.16xlarge`; `archive/ena-multiqueue-headroom.md` §5). One queue already carries
 > ~30 Gbps. DeBeOS's plateau on that class is **9.0–10.2 Gbit/s**. More queues
 > cannot lift a ceiling that a single queue clears three times over, so queue count
 > is not the limiter and cannot be.
@@ -809,7 +809,7 @@ and unassisted; the hardware boot-log capture remains the only way to answer it.
 > Scope of the claim, so it is not over-read: this is **MTU 9001**, which is what we
 > run. At MTU 1500 a frame needs one entry, so two fit a burst and the ceiling on
 > the saving is half the doorbells — still bounded by what a doorbell costs, which
-> `ena-tx-offload.md` §5.2 puts a number on. Full working: `ena-tx-offload.md` §5.
+> `archive/ena-tx-offload.md` §5.2 puts a number on. Full working: `archive/ena-tx-offload.md` §5.
 >
 > The **~40 lines** and "the win is available today" below were both wrong. Retained
 > because the shape of the error is instructive: the reference driver amortises these
@@ -1273,7 +1273,7 @@ Three things, in order of usefulness:
 
 > **State on 2026-08-25: this is a correctness/structural fix, NOT the throughput
 > lever.** The receive ceiling was accounted for on 2026-08-25
-> (`ena-receive-latency-account.md`): it is **bufferbloat in the device-interface
+> (`graviton/docs/ena-receive-latency-account.md`): it is **bufferbloat in the device-interface
 > receive FIFO** — a standing ~13.7 ms, ~16 MiB queue that is ~99.93% of a frame's
 > transit time — **plus `TCPEndpoint::fLock`, ~47% of the ceiling**. The unmask-order
 > item below is worth doing on correctness grounds (we re-arm the vector before the
@@ -1301,13 +1301,13 @@ Three things, in order of usefulness:
 > plateaus at **9.0–10.2 Gbit/s** on `c7g.16xlarge` where Linux does **29.8 Gbit/s** —
 > and Linux does that on *one* queue, which is why item 5 was cancelled. But this ~3×
 > is **not** the unmask-order item: it is bufferbloat in the receive FIFO + the
-> `TCPEndpoint::fLock` serialization (`ena-receive-latency-account.md`; consumer 100%
+> `TCPEndpoint::fLock` serialization (`graviton/docs/ena-receive-latency-account.md`; consumer 100%
 > wall-saturated at ~53% CPU-busy). A time-based **CoDel** queue discipline was built
 > and hardware-measured but **NOT merged** — it cannot hit ≤0.2% loss and ≤1 ms
 > latency together (Mathis loss–delay coupling); **ECN** is the loss-free fix.
 >
 > **One figure to quote carefully.** The "**2.82 frames per interrupt**" number in
-> `ena-multiqueue-headroom.md` is a **lower bound, not a measurement** — it is
+> `archive/ena-multiqueue-headroom.md` is a **lower bound, not a measurement** — it is
 > `141,217 / 50,000` and assumes *every* interrupt is used, which is the most
 > favourable assumption available. Do not cite it as the observed cadence.
 
@@ -1399,7 +1399,7 @@ what interval the reference drivers actually pick. **Unverified.**
    `__aarch64_*` helpers, and hit the same permanently-zero
    `__aarch64_have_lse_atomics` we just fixed in the kernel: a call **plus** an
    LL/SC retry loop, for every atomic. This bears directly on Phase 2/4 in
-   [sequencing.md](sequencing.md) (the ~150-package userland). **Unverified** —
+   [archive/sequencing.md](archive/sequencing.md) (the ~150-package userland). **Unverified** —
    nobody has disassembled a haikuports-built arm64 binary to confirm it; that
    check is cheap and should be done early in Phase 2.
 
@@ -1584,7 +1584,7 @@ Full method, tables and the interleaved controls: `throughput-measurement.md`.
   ~3650 → 4950 Mbit/s while a shrink to 16 K is still honoured.
   Note the magnitude is **RTT-dependent** (the same pin costs 3.4× at 0.326 ms and
   1.3× at 0.18 ms), so quoting a ratio for this class without the RTT is
-  meaningless. See `tcp-rcvbuf-cliff.md`.
+  meaningless. See `archive/tcp-rcvbuf-cliff.md`.
 - ~~**No autotuning.** 256 KiB beats 65535 but every fixed value is wrong
   somewhere — a waste on a LAN, too small on a long fat path.~~
   **FIXED and merged 2026-08-24 (`85f9d73594` "tcp: autotune the send buffer
@@ -1605,7 +1605,7 @@ Full method, tables and the interleaved controls: `throughput-measurement.md`.
   and measured **25% slower than the fixed default it replaced**. And the probe must
   be in **microseconds**: `tcp_now()` ticks in milliseconds, so a data-centre round
   trip smooths to zero — exactly the path this feature exists for. Full method:
-  `tcp-send-autotune.md`.
+  `archive/tcp-send-autotune.md`.
 
 ---
 

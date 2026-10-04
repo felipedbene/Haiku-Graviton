@@ -116,7 +116,7 @@
 	B_UNCACHED_MEMORY -- which VMSAv8TranslationMap maps to Device-nGnRnE -- for
 	any caller that does not name a memory type. Copying to or from MMIO with
 	memcpy() was already wrong on arm64; with this routine it fails rather than
-	working by accident. See graviton/docs/arm64-memcpy.md for the audit of
+	working by accident. See graviton/docs/archive/arm64-memcpy.md for the audit of
 	which callers that reaches.
 */
 

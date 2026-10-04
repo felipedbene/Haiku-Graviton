@@ -114,7 +114,7 @@ The edit is **proven**: on run15 the `sed` landed (`signal.c` carries both `mctx
 the untouched `mctx->esp`), ruby compiled and linked, and the build then reached `miniruby`,
 which panicked the guest kernel with the `mprotect` defect. So the compile blocker is closed
 and the *only* thing between here and a ruby package is a guest running a kernel with the
-`Query()` fix — see `graviton/docs/arm64-mprotect-query-present.md`.
+`Query()` fix — see `graviton/docs/archive/arm64-mprotect-query-present.md`.
 
 ## `#136` s-z port-fix batch (CMake 4.x policy floor + a few small guards)
 

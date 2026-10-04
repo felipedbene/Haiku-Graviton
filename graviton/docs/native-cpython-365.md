@@ -9,7 +9,7 @@ the substrate #120 (native aws-cli / boto3 / meson) builds on.
 
 This was a **census-and-verify** job, not a from-scratch port: `python3.14` and
 its entire C-extension dependency closure were already built and published to the
-DeBeOS arm64 pool. The historical concern in `package-chain-status.md` — that the
+DeBeOS arm64 pool. The historical concern in `archive/package-chain-status.md` — that the
 Python under `haikuporter` was missing `zlib`/`_bz2`/`_lzma` — was a
 **bootstrap-guest image artifact**. On a native `pkgman install` those modules are
 present and import cleanly. Measured, don't assume.

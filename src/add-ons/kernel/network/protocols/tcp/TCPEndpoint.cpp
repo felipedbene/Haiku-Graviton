@@ -1607,7 +1607,7 @@ TCPEndpoint::_UpdateReceiveBuffer()
 	path, and on a short one large enough to be actively harmful, because with no
 	validation of the congestion window the send queue is in practice the only
 	thing keeping this stack from overdriving a short path. Both halves of that
-	are measured in graviton/docs/tcp-send-autotune.md: at 10 ms of round trip a
+	are measured in graviton/docs/archive/tcp-send-autotune.md: at 10 ms of round trip a
 	fixed 256 KiB costs 18x, and at 0.16 ms a fixed 8 MiB costs 45%.
 
 	So the target is the bandwidth-delay product and it has to be the real one:

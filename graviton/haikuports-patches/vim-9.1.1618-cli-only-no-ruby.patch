@@ -9,7 +9,7 @@ conditions were actually met rather than quietly forgotten.
 What retired each, and how it was verified:
 
 - **Cut 1 (ruby)** — the arm64 kernel `mprotect()` panic is fixed and hardware-verified
-  (`graviton/docs/arm64-mprotect-query-present.md`), so `ruby-3.2.9` now builds natively:
+  (`graviton/docs/archive/arm64-mprotect-query-present.md`), so `ruby-3.2.9` now builds natively:
   `ruby-3.2.9-1-arm64.hpkg` plus `ruby_devel` (providing `devel:libruby`) are in
   `hpkg-out/arm64/`. vim's build log then shows
   `checking --enable-rubyinterp argument... dynamic` and
@@ -185,7 +185,7 @@ input source package, so the tree recipe is the operative one)
 +# with cmd:ruby and --enable-rubyinterp. vim is built here for exactly one reason -- it is
 +# the only affordable provider of cmd:xxd, which netsurf-3.11 build-requires -- and xxd is
 +# a standalone hex dumper in vim's source tree with no connection to ruby. The cost is that
-+# vim has no :ruby command. See graviton/docs/package-chain-status.md.
++# vim has no :ruby command. See graviton/docs/archive/package-chain-status.md.
 @@ BUILD_PREREQUIRES
  	cmd:python3
 -	cmd:ruby

@@ -67,7 +67,7 @@
 #     actually reached the disk; a stop/start is the only thing that does. See
 #     the long comment on that section for the bug this exists to catch.
 #   - Two storage assertions (issue #112), described in
-#     graviton/docs/storage-perf-gate-proposal.md. (1) A depth-8 sequential-read
+#     graviton/docs/archive/storage-perf-gate-proposal.md. (1) A depth-8 sequential-read
 #     floor on a provisioned scratch volume -- the NVMe/devfs/DMA read path that a
 #     driver regression would show up in. It is OPT-IN (HG_SEQREAD_ASSERT=1) and
 #     OFF by default because it needs a scratch volume gp3 provisioned to
@@ -130,7 +130,7 @@
 #   HG_CLEAN_STOP_SECS    a stop at or past this looks like a hard power-off
 #                         rather than a handled ACPI power button (default 180)
 #
-# Storage assertions (issue #112 -- see graviton/docs/storage-perf-gate-proposal.md):
+# Storage assertions (issue #112 -- see graviton/docs/archive/storage-perf-gate-proposal.md):
 #   HG_DURABILITY_ASSERT  1 (default) runs the durability check; 0 disables it.
 #                         Safe on any instance type; adds no AWS permissions.
 #   HG_SEQREAD_ASSERT     1 attaches a scratch volume and asserts the depth-8

@@ -29,7 +29,7 @@ their repo-root paths, exactly as the driver's own comments cite them.
 |---|---|
 | Keep-alive liveness check | **Implemented.** 1000 ms cadence, 6000 ms deadline, consecutive-miss requirement |
 | Device reset and re-bring-up | **Implemented**, single ordering shared with attach |
-| Spurious resets of a healthy NIC | **Known defect, mitigated, not closed.** See §7 and `graviton/docs/ena-keepalive-watchdog-false-reset.md` |
+| Spurious resets of a healthy NIC | **Known defect, mitigated, not closed.** See §7 and `graviton/docs/archive/ena-keepalive-watchdog-false-reset.md` |
 | Admin-queue wedge, missing-TX-completion, RX stall, `DEVICE_REQUEST_RESET`, `NOTIFICATION`/hardware hints, reset-reason coverage, post-reset validation, queue-size backoff, uninit teardown order | **Not implemented.** Nine gaps, #105 |
 | Reset-vs-teardown race guards | **Verified by code reading only** — the weakest result in §8 |
 | Device drop counters harvested by the watchdog path | Stored, **no ioctl reads them** (#106) |
@@ -75,7 +75,7 @@ Three consequences worth stating because they are load-bearing:
 - **Priority is `B_URGENT_DISPLAY_PRIORITY`**, above normal. A watchdog that is
   itself scheduled late measures scheduler latency and calls it device death. On
   arm64 this is not hypothetical — see the scheduler placement work in
-  `graviton/docs/scheduler-smp-placement.md`.
+  `graviton/docs/archive/scheduler-smp-placement.md`.
 - **Deciding is separated from observing.** `ena_aenq_keep_alive()` runs from the
   management interrupt and does exactly two things: harvest the device's drop
   counters out of the descriptor and `atomic_set64(&device->lastKeepAlive,
@@ -275,7 +275,7 @@ is the diagnostic that says it is not.
 ## 7. Known broken: the watchdog resets a healthy NIC
 
 **This is the current state, not history.** Full writeup, with the protocol:
-`graviton/docs/ena-keepalive-watchdog-false-reset.md`. Tracked with the rest of
+`graviton/docs/archive/ena-keepalive-watchdog-false-reset.md`. Tracked with the rest of
 the watchdog work under #105.
 
 Under sustained receive load on `c7g.16xlarge` (8 genuinely concurrent flows,
@@ -430,7 +430,7 @@ weaker statement than it sounds, and no amount of tuning §4 improves it.
 
 ## 11. Related documents and issues
 
-- `graviton/docs/ena-keepalive-watchdog-false-reset.md` — the spurious-reset
+- `graviton/docs/archive/ena-keepalive-watchdog-false-reset.md` — the spurious-reset
   measurement, the mitigation, and the reproduction protocol. Read this before
   touching §4's constants.
 - `graviton/docs/ena-production-readiness.md` — the full backlog, including the
@@ -439,7 +439,7 @@ weaker statement than it sounds, and no amount of tuning §4 improves it.
 - `graviton/docs/ena-ack-completion-interrupts.md` — receive-side ACK transmits
   are ~28 % of io interrupts; relevant because interrupt pressure is the
   suspected mechanism behind the stretched keep-alive cadence.
-- `graviton/docs/ena-tx-offload.md` — includes why deferred doorbells would
+- `graviton/docs/archive/ena-tx-offload.md` — includes why deferred doorbells would
   deadlock against a watchdog that is keep-alive-only (§9, gap 4).
 - `ena-com/README.md` — the re-vendoring discipline. The HAL is byte-identical to
   `ena_freebsd_2.8.4`; nothing in this document justifies editing it.

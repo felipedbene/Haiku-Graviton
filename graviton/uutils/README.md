@@ -6,7 +6,7 @@ DeBeOS arm64 as a single multi-call binary, but a handful of `#[cfg]` cascades i
 included. This directory carries the fixes as a **patchset applied at build time**
 to the unmodified crates.io crates, plus a driver that produces the `.hpkg`.
 
-See `graviton/docs/uutils-coreutils-arm64.md` for the background and the applet
+See `graviton/docs/archive/uutils-coreutils-arm64.md` for the background and the applet
 inventory.
 
 ## Why a patchset (and not `haiku-crate-to-hpkg` directly)

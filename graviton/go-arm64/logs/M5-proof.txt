@@ -1,6 +1,6 @@
 M5 proof — run the real upstream amazon-ssm-agent (tag v3.3.3270.0) on DeBeOS
 (Haiku arm64) and register it as an SSM managed node that reaches Online.
-Generated: 2026-09-18. Issue #302, milestone M5 (doc go-arm64-bringup-scope.md).
+Generated: 2026-09-18. Issue #302, milestone M5 (doc graviton/docs/archive/go-arm64-bringup-scope.md).
 
 HEADLINE RESULT
 ===============

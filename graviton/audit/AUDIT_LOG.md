@@ -34,7 +34,7 @@ corruption across cached, pure-`O_DIRECT`/raw-DMA, and rename-churn patterns und
 squeezing free space reproduced the exact errno. Fixed by a 20 GiB image bump (now canonical), baked
 and validated (real parallel build finished with ~12.5 GiB to spare), promoted with the
 single-canonical invariant verified. The NVMe `dsb oshst` barrier was hardware hygiene, not the fix.
-Ref: `graviton/docs/arm64-native-build-out-of-space.md`. `PRIORITY.md` banner + BFS re-rank updated
+Ref: `graviton/docs/archive/arm64-native-build-out-of-space.md`. `PRIORITY.md` banner + BFS re-rank updated
 to match.
 
 **Meta-lesson (blog-post-worthy).** Static analysis *and two expert agent workflows* both

@@ -61,7 +61,7 @@ socket buffers to 65535 in `net_socket.cpp` with **no autotuning anywhere** --
 > - the **send default is 256 KiB** (`ed4ea6413a`), as this document's own §"the
 >   default was the number being measured" goes on to establish;
 > - **send-buffer autotuning is merged** (`85f9d73594`) — see the struck-out "Still
->   open" bullet below and `tcp-send-autotune.md`;
+>   open" bullet below and `archive/tcp-send-autotune.md`;
 > - **receive auto-sizing already existed** when this was written; the bug was that
 >   any explicit `SO_RCVBUF` switched it off (`d32920e691`), which this file discusses
 >   further down.
@@ -134,7 +134,7 @@ Health after 3.32 GB in and 3.34 GB out across 1.9 M packets: **0 errors,
 ## Explained: the "cliff" was asking versus not asking, not one byte
 
 Recorded here as measured; the cause is traced in
-[tcp-rcvbuf-cliff.md](tcp-rcvbuf-cliff.md). Short version: it is not the one
+[archive/tcp-rcvbuf-cliff.md](archive/tcp-rcvbuf-cliff.md). Short version: it is not the one
 byte. 65535 is the *default*, which is never set through `setsockopt`, and any
 explicit `SO_RCVBUF` used to switch off the receive-window growth that carries
 the default case past 64 KiB. The cliff is between "asked" and "did not ask".
@@ -165,7 +165,7 @@ story at all: `TCPEndpoint::SetReceiveBufferSize()` cleared
 `FLAG_AUTO_RECEIVE_BUFFER_SIZE`, so an application that set `SO_RCVBUF` to *any*
 size lost the window growth that took the untouched default to 4942 Mbit/s.
 Applications that set it "to be helpful" were indeed being punished for it. See
-[tcp-rcvbuf-cliff.md](tcp-rcvbuf-cliff.md).
+[archive/tcp-rcvbuf-cliff.md](archive/tcp-rcvbuf-cliff.md).
 
 ### Confirmed by experiment, and the original framing was wrong
 
@@ -221,7 +221,7 @@ the RTT is meaningless — a lesson worth more than the number.
 
 - ~~The fix for the receive cliff above is **built but not yet measured on
   hardware** -- see the confirmation runs in
-  [tcp-rcvbuf-cliff.md](tcp-rcvbuf-cliff.md).~~
+  [archive/tcp-rcvbuf-cliff.md](archive/tcp-rcvbuf-cliff.md).~~
   **MERGED and hardware-verified: `d32920e691` (2026-08-23).** The confirmation runs
   have been performed; do not re-run them. On `c7g.large` an explicit `SO_RCVBUF` of
   65536 went ~3650 → **4950 Mbit/s**. Note also that the *"cliff"* framing is
@@ -232,7 +232,7 @@ the RTT is meaningless — a lesson worth more than the number.
   guessed: a fixed 256 KiB is not merely "too small on a long fat path", it is
   **16x** too small at 10 ms of round trip, and it is also the *worst* of the
   three fixed values tested there. See
-  [tcp-send-autotune.md](tcp-send-autotune.md). The 256 KiB default stays, as a
+  [archive/tcp-send-autotune.md](archive/tcp-send-autotune.md). The 256 KiB default stays, as a
   floor rather than a guess, because the measured short-path optimum turns out to
   be *above* twice the bandwidth-delay product and auto-sizing on its own
   converges just below it.
@@ -250,14 +250,14 @@ the RTT is meaningless — a lesson worth more than the number.
   (`c7g.16xlarge`, interleaved A/B). One queue already carries ~30 Gbps, so more
   queues cannot lift a ceiling one queue clears three times over. The ENA IO-queue
   grant is also a **fixed 8 for the whole C7g family**, not a function of vCPU count.
-  See `ena-multiqueue-headroom.md` §5. The single-queue caveat on the numbers here
+  See `archive/ena-multiqueue-headroom.md` §5. The single-queue caveat on the numbers here
   still stands: 4.4 Gbit/s is one queue on one core pair, on **`c7g.large`**.
 - ~~PMU counters (`arch_pmu`) are still KDL-only~~ — **the PMUv3 facility is merged**
   (`af7e48b94c`), gated behind the `arm64_pmu` boot setting or KDL `pmu on`. It is
   **merged but unused: nothing has been measured with it.** So cycles-per-byte is
   still inferred from `active_time` rather than counted — the instrument now exists,
   the reading does not. A userland readout would still sharpen this.
-- **The network receive ceiling — RESOLVED 2026-08-25 (`ena-receive-latency-account.md`).**
+- **The network receive ceiling — RESOLVED 2026-08-25 (`graviton/docs/ena-receive-latency-account.md`).**
   DeBeOS plateaus at **9.0–10.2 Gbit/s** on `c7g.16xlarge` where Linux does **29.8**;
   that ~3× is **bufferbloat in the device-interface receive FIFO** — a standing
   ~13.7 ms, ~16 MiB queue that is ~99.93% of a frame's transit time — **plus

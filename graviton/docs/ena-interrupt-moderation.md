@@ -39,7 +39,7 @@ measurement instrument, not as a controller: nothing moves it on its own.
 
 ## The measurement that bounds the value of this work (READ THIS)
 
-`ena-rx-cadence-falsified.md` (c7g.16xlarge, 2026-08-24, pre-registered A/B, 35
+`archive/ena-rx-cadence-falsified.md` (c7g.16xlarge, 2026-08-24, pre-registered A/B, 35
 valid windows across two boots) established three things that constrain #108:
 
 1. **On that instance the device did not advertise moderation at all.**
@@ -135,7 +135,7 @@ The experiment, in order:
 2. If moderation is honoured: on one boot, drive receive load with `nettput`
    (multi-flow, fixed instance), and interleave adaptive-off vs adaptive-on in
    non-ascending order, several replicates, establishing a noise floor first —
-   the apparatus of `ena-rx-cadence-falsified.md`. Report interrupt rate
+   the apparatus of `archive/ena-rx-cadence-falsified.md`. Report interrupt rate
    (`ioInterrupts`), frames-per-interrupt (`rxFrames`/`irqArms`), CPU by
    wall-clock progress (never CloudWatch/`top` CPU%), and p99 request/reply
    latency on a separate low-rate flow to confirm the low-pps floor protects it.

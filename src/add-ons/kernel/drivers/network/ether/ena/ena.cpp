@@ -3434,7 +3434,7 @@ ena_send(ena_haiku_device* device, net_buffer* buffer)
 	   confirm it on hardware -- 99.94 % of transmit frames leave the allowance
 	   at zero -- so a deferred doorbell is forced by the very next frame and the
 	   achievable coalescing ratio is 1:1. See
-	   graviton/docs/ena-tx-offload.md section 5.
+	   graviton/docs/archive/ena-tx-offload.md section 5.
 
 	   Two things anyone reconsidering this needs, because neither is visible from
 	   here. First, deferring does not merely risk a frame going unsent: the wait

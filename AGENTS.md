@@ -40,6 +40,7 @@ upstream shape; Haiku-specific glue lives in `ena_plat.cpp`/`ena.cpp`.
   `servers/`, `bin/`, `libs/`, `tests/`)
 - `headers/` — public (`os/`), private (`private/`), and POSIX headers
 - `docs/` — developer and API docs (`docs/develop/`, `docs/user/`)
+- `graviton/docs/archive/` — resolved/superseded design notes kept for history only; it is **not** current context, do not plan or cite from it as live state
 - `build/jam/` — Jam build logic and user build config docs
 - `3rdparty/` — third-party integrations and helper scripts
 - `configure`, `Jamfile`, `Jamrules` — top-level build entry points

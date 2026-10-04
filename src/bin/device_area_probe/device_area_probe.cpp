@@ -13,7 +13,7 @@
  * and the loop panics -- with a perfectly valid, non-zero physical address.
  *
  * This is a different defect from the arm64 Query() valid-bit bug (see
- * graviton/docs/arm64-mprotect-query-present.md and src/bin/mprotect_probe):
+ * graviton/docs/archive/arm64-mprotect-query-present.md and src/bin/mprotect_probe):
  * there the physical address was 0 because the entry was absent, and the fix
  * was to stop reporting absent entries as present. Here the mapping really is
  * present and the address really is correct; there is simply no vm_page behind

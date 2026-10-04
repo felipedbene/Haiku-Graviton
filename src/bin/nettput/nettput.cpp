@@ -38,7 +38,7 @@
  * -w is not a free knob, and this is the subtle part. Both queues now grow
  * towards the bandwidth-delay product on their own, and a request for *more*
  * than the current size is treated as a floor rather than as a pin, precisely so
- * that asking cannot cost throughput (graviton/docs/tcp-rcvbuf-cliff.md). Only a
+ * that asking cannot cost throughput (graviton/docs/archive/tcp-rcvbuf-cliff.md). Only a
  * request for *less* switches auto-sizing off. So -w 1M does not measure a fixed
  * 1 MiB buffer -- it measures auto-sizing starting from 1 MiB.
  *

@@ -32,7 +32,7 @@ The doorbell cost is not amortised: the transmit accounting counters show
 one doorbell per frame (`txFrames == txDoorbells`), and each ACK is 66 bytes in
 one descriptor. In LLQ mode the device grants only 2 entries per burst, so
 consecutive frames cannot share a doorbell however the caller batches — see
-`ena-tx-offload.md`.
+`archive/ena-tx-offload.md`.
 
 ## Why it is a lever
 

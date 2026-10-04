@@ -27,7 +27,7 @@ injection**. This is why:
   *(Still true of **upstream** HaikuPorts. Note as of 2026-08-24 this tree has its
   own arm64 hpkg repo — 23 ports / 52 non-bootstrap packages, `pkgman`-installable —
   so read this as "upstream has none", not "none exists". See
-  `package-chain-status.md`.)*
+  `archive/package-chain-status.md`.)*
   This cross-builds **OpenSSH 10.4p1** (+ static **zlib 1.3.1**) against the
   arm64 cross-tools and the already-built `haiku`/`haiku_devel` package staging
   dirs, then wraps it as `openssh-10.4p1-1-arm64.hpkg`.
@@ -78,7 +78,7 @@ Copy to `generated.arm64/UserBuildConfig` (jam's supported extension point;
 > `sshd_boot.sh` now **parse-checks the key with `ssh-keygen -y`** rather than testing
 > for existence (one exec, and it turns the failure into a self-healing boot) and
 > **`sync`s** afterwards. The kernel-side cause was fixed separately
-> (`8331882470`). Full story: `ec2-stop-start.md`.
+> (`8331882470`). Full story: `archive/ec2-stop-start.md`.
 >
 > **Do not re-derive the `if [ ! -f ]` pattern from this section.** The general rule
 > it taught: an existence test is not an integrity test.

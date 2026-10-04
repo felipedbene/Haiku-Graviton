@@ -64,7 +64,7 @@ is worthwhile: **hobby-complete and self-hosted**, versus **community-distributa
 
 - **Remote desktop for headless Graviton — phased plan.** Graviton EC2 has no display device,
   so `app_server` runs its `RemoteHWInterface` (a display-list stream to a remote client) rather
-  than a local framebuffer. Design of record: `graviton/docs/remote-desktop-options.md`.
+  than a local framebuffer. Design of record: `graviton/docs/archive/remote-desktop-options.md`.
   - *Phase 0 (days):* latency fixes to the native display-list protocol — `TCP_NODELAY`, local
     `DrawString` pen-advance, cache/compress bitmaps, LZ4 + a larger send ring. Biggest felt-lag
     win, no new architecture.

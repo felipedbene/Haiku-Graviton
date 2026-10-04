@@ -1752,7 +1752,7 @@ What the code actually says, re-read in full:
 **First-scanned wins a tie, and non-packaged is scanned first — so a non-packaged
 driver returning the same support score as the packaged one WINS.** `ena` returning
 a flat `0.8f` (`ena.cpp:3258`) is therefore droppable-in, and the successful
-driver-only `ena` hot-swaps reported in `ena-tx-offload.md` are consistent with the
+driver-only `ena` hot-swaps reported in `archive/ena-tx-offload.md` are consistent with the
 code rather than in conflict with it.
 
 **Where the wrong version came from.** There *is* a reverse walk over the same array

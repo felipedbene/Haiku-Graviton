@@ -67,7 +67,7 @@
 # python3.10 is built against zlib/libbz2/liblzma, at which point tarfile handles
 # all three itself and none of this is reached. That chain is currently
 # tar -> libtool -> libiconv -> gettext -> xz_utils, plus openssl3, sqlite and
-# libedit for python3.10 itself -- see graviton/docs/sequencing.md.
+# libedit for python3.10 itself -- see graviton/docs/archive/sequencing.md.
 #
 # STILL NOT FIXED BY THIS
 #

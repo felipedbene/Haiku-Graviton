@@ -25,7 +25,7 @@ SEARCH_SOURCE += [ FDirName $(posixSources) string arch $(TARGET_ARCH) ] ;
 # *is* that function, so the compiler is free to recognise the loop and replace
 # it with a call to the function it is inside. The guards below are checked on
 # the generated object code rather than trusted: see
-# graviton/docs/arm64-memcpy.md. Without them, generic_memset.o carried an
+# graviton/docs/archive/arm64-memcpy.md. Without them, generic_memset.o carried an
 # R_AARCH64_CALL26 against memset itself at -O2 and -O3 under libroot's flags.
 # The kernel's own flags happen to avoid it via -fno-tree-vectorize, which is
 # incidental and is not something a memset should depend on -- note that the
