@@ -9,7 +9,7 @@ busload of other useful tricks."
 HOMEPAGE="https://curl.haxx.se/"
 COPYRIGHT="1996-2024 Daniel Stenberg"
 LICENSE="Curl"
-REVISION="1"
+REVISION="3"
 SOURCE_URI="https://github.com/curl/curl/releases/download/curl-${portVersion//\./_}/curl-$portVersion.tar.bz2"
 CHECKSUM_SHA256="ad6f2f94934b38e31e48272833c99b891d045b4565fe942a53fbd27bd3910e16"
 ADDITIONAL_FILES="curl.rdef"
@@ -93,10 +93,21 @@ defineDebugInfoPackage curl$secondaryArchSuffix \
 
 BUILD()
 {
-	certsInstallDir="$portPackageLinksDir/ca_root_certificates"
-	certsDir="$certsInstallDir/$relativeDataRootDir/ssl"
-
-	# graviton: --without-libpsl unconditionally (see the note above).
+	# graviton (#584): compile libcurl's default CA bundle (CAINFO) to the STABLE,
+	# version-independent system path. The base ca_root_certificates package installs
+	# the trust store as a SINGLE bundle at /boot/system/data/ssl/CARootCertificates.pem
+	# (verified on the arm64 image: that file is present and populated, while
+	# .../ssl/certs/ is an EMPTY directory -- there is no hashed CA *directory* to use,
+	# so --with-ca-path has nothing to point at here).
+	#
+	# The old recipe pointed --with-ca-bundle at $portPackageLinksDir/ca_root_certificates
+	# -- a package-links path that bakes a version-specific location into libcurl
+	# (e.g. /packages/curl-<ver>/...). Bumping the curl revision dangled that path, so
+	# libcurl returned CURLE_SSL_CACERT_BADFILE [77] ("SSL CA cert bad") and HTTPS broke
+	# for curl, git AND cargo (cargo takes its CA from libcurl's compiled default; the
+	# CURL_CA_BUNDLE env var does not reach it). Pointing the compiled default at the
+	# stable absolute path removes the dangle for every consumer. See
+	# graviton/docs/packages/native-package-creation.md.
 	configureArgs=--without-libpsl
 	autoreconf -vfi
 	autoconf
@@ -105,7 +116,7 @@ BUILD()
 		--enable-websockets \
 		--with-openssl --with-openssl-quic --with-libssh2 \
 		--disable-static \
-		--with-ca-bundle="$certsDir/CARootCertificates.pem"
+		--with-ca-bundle="/boot/system/data/ssl/CARootCertificates.pem"
 	make $jobArgs
 }
 
