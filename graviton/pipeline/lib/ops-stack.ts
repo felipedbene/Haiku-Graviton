@@ -165,6 +165,28 @@ export class OpsStack extends cdk.Stack {
         { name: 'builders', subnetType: ec2.SubnetType.PRIVATE_WITH_EGRESS, cidrMask: 22 },
       ],
     });
+
+    // Site-to-Site VPN to on-prem. GATED on deploy-time context — the on-prem
+    // public IP is non-public and this repo is public, so it is NEVER committed;
+    // pass it at deploy:  -c onPremPublicIp=<ip> [-c onPremCidr=10.0.0.0/16].
+    // Enables a VGW on BuildVpc, propagates its learned routes into the builder
+    // (private) subnets so instances can reach on-prem, and brings up a
+    // static-routed connection. BuildVpc is 10.128.0.0/16, non-overlapping with
+    // the on-prem 10.0.0.0/16 range, so routing is unambiguous.
+    const onPremPublicIp = this.node.tryGetContext('onPremPublicIp');
+    if (onPremPublicIp) {
+      const onPremCidr = this.node.tryGetContext('onPremCidr') ?? '10.0.0.0/16';
+      vpc.enableVpnGateway({
+        type: 'ipsec.1',
+        vpnRoutePropagation: [
+          { subnetType: ec2.SubnetType.PRIVATE_WITH_EGRESS },
+        ],
+      });
+      vpc.addVpnConnection('OnPremSiteToSite', {
+        ip: onPremPublicIp,
+        staticRoutes: [onPremCidr],
+      });
+    }
     // A managed NAT gateway needs no security-group rule: the private (builder)
     // subnets route out through it via their route tables (CDK wires this from
     // natGateways:1 + PRIVATE_WITH_EGRESS). Outbound is allowed by default.
