@@ -1,5 +1,16 @@
 # A latency account for the arm64 network receive path
 
+> **STATUS — archived instrument; these numbers do not describe trunk.** Measured
+> 2026-08-25 on the **pre-CoDel, pre-`ReceiveRing`** receive path. The two findings
+> shipped to `graviton`: the `TCPEndpoint::fLock` RX ceiling is addressed by the
+> lockless SPSC in-order receive hand-off (`b93a18cffd`, refined under #414), and the
+> 16 MiB standing FIFO by a runtime-tunable receive-FIFO **CoDel** (`4a341a7a96`). The
+> `rxlat` instrument is **deliberately not forward-ported** — CoDel + `ReceiveRing`
+> supersede the paths it measured. The instrument and the exact tree these numbers came
+> from are preserved at the git tag **`archive/rxlat-instrument`** (commit
+> `5631bd15d4`); see §9. The transmit-path standing queue noted in §4/§7 is tracked by
+> **#582**. **Everything below describes that pre-fix tree, not current `graviton`.**
+
 **Date:** 2026-08-25. **Hardware:** `c7g.16xlarge` (Graviton3, 64 vCPU),
 `us-west-2`, Haiku `hrev59996` from AMI `ami-049b28b6e06791056`, MTU 9001, single
 ENA queue, 8 concurrent receive flows.
@@ -37,10 +48,10 @@ to be wrong. Part II is the results.
    each. It is a lock two layers up, shared with the application.
 
 Three hypotheses for the receive shortfall are already dead and are not re-run
-here: packet loss / a 14.5 Gbit/s consumer ceiling (`ena-rx-cadence-falsified.md`
+here: packet loss / a 14.5 Gbit/s consumer ceiling (`archive/ena-rx-cadence-falsified.md`
 §"What this closes"), interrupt cadence and moderation
-(`ena-rx-cadence-falsified.md`), and multi-queue headroom
-(`ena-multiqueue-headroom.md`). What survives is *hand-off latency*, and the
+(`archive/ena-rx-cadence-falsified.md`), and multi-queue headroom
+(`archive/ena-multiqueue-headroom.md`). What survives is *hand-off latency*, and the
 explicit request from that work was **a latency account, not another rate
 sweep**.
 
@@ -52,7 +63,7 @@ The project rule is to check a mechanism against a capacity bound *before*
 pursuing it. Doing that here turns a vague hypothesis into an arithmetic one, and
 it can be done entirely from numbers already measured.
 
-From `ena-rx-cadence-falsified.md` §"Nothing is saturated", the shipped arm on
+From `archive/ena-rx-cadence-falsified.md` §"Nothing is saturated", the shipped arm on
 `c7g.16xlarge`, 8 receive flows, MTU 9001:
 
 | quantity | measured value |
@@ -86,7 +97,7 @@ Now the two bounds a chain of single-threaded stages can be against:
 predictions and is 50% of the overlap prediction.** That is the whole reason to
 believe a hand-off hypothesis rather than a cost hypothesis, and it is why the
 earlier dismissal of `receive_lock` — *"a blocked thread accrues no CPU time; it
-is a scalability limit, not a per-frame cost"* (`net-receive-profile.md` §6) — is
+is a scalability limit, not a per-frame cost"* (`archive/net-receive-profile.md` §6) — is
 the hole in the previous work. That sentence is correct about **CPU** and it is
 exactly the wrong thing to conclude about **rate**. A serialization limit is
 invisible to every instrument used so far, all of which measure CPU.
@@ -210,7 +221,7 @@ ships with a runtime switch and the load is measured three ways:
 
 **If (3) differs from (2) by more than the boot's noise floor, every latency
 number is discarded.** Arms interleaved, never in ascending order, following the
-apparatus rules in `ena-rx-cadence-falsified.md`. (1) versus (2) separates "the
+apparatus rules in `archive/ena-rx-cadence-falsified.md`. (1) versus (2) separates "the
 probe costs something when it runs" from "adding the probe changed the build".
 
 ### 1.5 Aggregation, not tracing
@@ -219,7 +230,7 @@ The probes accumulate into per-stage `{count, sum, sum of squares, min, max}` an
 a **base-2 histogram** of 32 buckets, read out by ioctl. Nothing is written to a
 log on the datapath: on this platform `dprintf` writes the UART one character at
 a time, synchronously — a barrier, not a probe
-(`ena-rx-cadence-falsified.md` §Apparatus). Histograms are reported rather than
+(`archive/ena-rx-cadence-falsified.md` §Apparatus). Histograms are reported rather than
 means because the hypothesis under test is about *tails*: a hand-off that is
 usually 200 ns and occasionally 400 us is invisible in a mean and is the entire
 story.
@@ -465,7 +476,8 @@ Two things this establishes that the kernel probe cannot:
   drain rate — which is the definition of a bottleneck being fed too hard.
 
 The transmit rows are a by-product worth recording: **the transmit path has a
-standing queue of its own**, 7.7 ms at 8 flows. It is not analysed here.
+standing queue of its own**, 7.7 ms at 8 flows. It is not analysed here; it is
+tracked separately in **#582**.
 
 ### 4.1 The sender's own view
 
@@ -547,7 +559,7 @@ Two limits on that number, stated because it is the tempting one to quote:
   can tell the two failure modes apart.
 
 **This also retires the "bigger FIFO changes nothing" result from
-`ena-rx-cadence-falsified.md`.** That experiment moved the cap 16 MiB → 128 MiB
+`archive/ena-rx-cadence-falsified.md`.** That experiment moved the cap 16 MiB → 128 MiB
 and correctly found no change in goodput. Both values are far past the knee; the
 cap was only ever tested in the direction that could not help.
 
@@ -569,7 +581,7 @@ cap was only ever tested in the direction that could not help.
 It is the bottleneck, it is fully saturated, and it is 53% busy.
 
 That sentence is the resolution of the paradox this whole line of work has been
-stuck on. `ena-rx-cadence-falsified.md` concluded "nothing is saturated, 97.3% of
+stuck on. `archive/ena-rx-cadence-falsified.md` concluded "nothing is saturated, 97.3% of
 the machine idle, the busiest thread at half a core". Both halves are true and
 the conclusion does not follow: **wall-clock occupancy and CPU utilisation are
 different quantities, and every instrument in this tree measured only the
@@ -630,7 +642,7 @@ Two candidate mechanisms were tested and one was killed:
   | 4 K | 6.777 us | 5.986 Gbit/s |
 
   No difference between 64 K and 1 M. (The 4 K row is the rate-dependent cost
-  inflation documented in `net-receive-profile.md` §3.2, not a lock effect.) So
+  inflation documented in `archive/net-receive-profile.md` §3.2, not a lock effect.) So
   the wait tracks the *total* time the application holds the lock, which is set
   by how much data it copies, not by how many calls it makes. Reducing the call
   count cannot help; shortening or splitting the critical section might.
@@ -672,7 +684,7 @@ Two candidate mechanisms were tested and one was killed:
    Gbit/s at the measured per-frame CPU cost. Reaching Linux parity needs a
    *cost* reduction as well, or more than one consumer thread.
 4. **The transmit path's own 7.7 ms standing queue** (§4). Measured in passing,
-   not analysed.
+   not analysed. Tracked in **#582**.
 
 ### A pre-registered falsifier that fired, and what it caught
 
@@ -706,7 +718,7 @@ reader.
 
 ## 8. Reconciling with the fitted cost model
 
-`net-receive-profile.md` fits receive cost as **2.34 us/frame + 1.85 ns/byte**,
+`archive/net-receive-profile.md` fits receive cost as **2.34 us/frame + 1.85 ns/byte**,
 with ~88% of the per-byte term unexplained. Two connections, one solid and one
 suggestive. Both carry the caveat that the fit was taken on `c7g.large` over an
 MTU sweep and this work is on `c7g.16xlarge` at a fixed MTU 9001, so these are
@@ -721,7 +733,7 @@ Anyone planning to attack per-frame overhead should know that the hand-offs
 themselves are already cheap.
 
 **The per-byte term: part of the unexplained 88% is queue-induced cache misses,
-and that is now a measurement rather than a hypothesis.** `net-receive-profile.md`
+and that is now a measurement rather than a hypothesis.** `archive/net-receive-profile.md`
 §4.1 proposed that most of the 1.85 ns/byte is *"demand cache misses on a
 scattered pattern the prefetcher cannot follow"*, and labelled it explicitly
 *"a hypothesis, not a result"*. Shortening the FIFO does not change a single byte
@@ -748,6 +760,13 @@ explanation consistent with nothing else having changed.**
 ---
 
 ## 9. Reproducing this
+
+**This reproduces only from the tag `archive/rxlat-instrument` (commit
+`5631bd15d4`).** The `rxlat` tool and the `stack`/`tcp` probes it drives were never
+forward-ported; trunk has neither, and the receive path they measured has since been
+replaced by CoDel (`4a341a7a96`) and `ReceiveRing` (`b93a18cffd`, #414). Check that
+tag out into a separate worktree to rebuild the instrument — the numbers above are a
+property of that tree, not of current `graviton`.
 
 Needs a Haiku node from the canonical AMI and a Linux peer on the same subnet;
 neither the ENA driver nor the kernel is modified, so no image bake is involved.
