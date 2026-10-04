@@ -185,10 +185,26 @@ export class OpsStack extends cdk.Stack {
           { subnetType: ec2.SubnetType.PRIVATE_WITH_EGRESS },
         ],
       });
-      vpc.addVpnConnection('OnPremSiteToSite', {
+      const vpn = vpc.addVpnConnection('OnPremSiteToSite', {
         ip: onPremPublicIp,
         staticRoutes: [onPremCidr],
       });
+      // Harden both tunnels off AWS's weak defaults (AES128/SHA1/DH2, IKEv1):
+      // IKEv2 only, AES-256, SHA2-256/384/512, DH group 14-24. The L2
+      // VpnConnection does not expose phase1/2 crypto, so set it on the
+      // underlying CfnVPNConnection. Phase-1/2 algorithm changes modify the
+      // tunnels in place (no new outside IPs / PSKs).
+      const strong = {
+        ikeVersions: [{ value: 'ikev2' }],
+        phase1EncryptionAlgorithms: [{ value: 'AES256' }],
+        phase2EncryptionAlgorithms: [{ value: 'AES256' }],
+        phase1IntegrityAlgorithms: [{ value: 'SHA2-256' }, { value: 'SHA2-384' }, { value: 'SHA2-512' }],
+        phase2IntegrityAlgorithms: [{ value: 'SHA2-256' }, { value: 'SHA2-384' }, { value: 'SHA2-512' }],
+        phase1DHGroupNumbers: [{ value: 14 }, { value: 15 }, { value: 16 }, { value: 17 }, { value: 18 }, { value: 19 }, { value: 20 }, { value: 21 }, { value: 22 }, { value: 23 }, { value: 24 }],
+        phase2DHGroupNumbers: [{ value: 14 }, { value: 15 }, { value: 16 }, { value: 17 }, { value: 18 }, { value: 19 }, { value: 20 }, { value: 21 }, { value: 22 }, { value: 23 }, { value: 24 }],
+      };
+      const cfnVpn = vpn.node.defaultChild as ec2.CfnVPNConnection;
+      cfnVpn.vpnTunnelOptionsSpecifications = [strong, strong];
     }
     // A managed NAT gateway needs no security-group rule: the private (builder)
     // subnets route out through it via their route tables (CDK wires this from
