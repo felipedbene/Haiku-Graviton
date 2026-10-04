@@ -158,6 +158,9 @@ export class OpsStack extends cdk.Stack {
       // 3 AZs so spot builders diversify across capacity pools (one instance per
       // launch, but the launcher picks a subnet per instance -> concurrent
       // builders spread across AZs, cutting spot-interruption correlation).
+      // Pin BuildVpc to 10.128.0.0/16 so it does not overlap on-prem
+      // (10.0.0.0/16) reached over the Site-to-Site VPN below.
+      ipAddresses: ec2.IpAddresses.cidr('10.128.0.0/16'),
       maxAzs: 3,
       natGateways: 1,
       subnetConfiguration: [
