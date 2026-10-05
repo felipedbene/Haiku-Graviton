@@ -126,15 +126,40 @@ bin/test-web --test-path <root> --filter debeos-demo --rebaseline -j1
 RequestServer, ImageDecoder, WebWorker — and composites via Skia CPU raster. The
 result is [`debeos-demo-render.png`](debeos-demo-render.png).
 
+## 8. Live internet sites — `headless-shot`
+
+`test-web` is a hermetic test runner (test mode, blocks real network), and
+WebDriver drives the Qt `Ladybird` chrome (gated out). So for *live* sites I
+built a minimal non-Qt chrome, [`headless-shot`](headless-shot) (a thin
+`LibWebView::Application` whose `execute()` runs `HeadlessMode::Screenshot`):
+
+```
+headless-shot --headless=screenshot --screenshot-delay 3 \
+    --screenshot-path out.png https://news.ycombinator.com/
+```
+
+It launches the real multi-process pipeline (WebContent/Compositor/RequestServer/
+ImageDecoder), navigates to a real URL over the builder's NAT (RequestServer +
+openssl3 TLS + DNS), lays it out, composites via Skia CPU raster, and writes a
+PNG. One extra fix was needed: Haiku ships the monospace font as **"Noto Mono"**,
+not "Noto Sans Mono", so `FontPlugin.cpp`'s monospace fallback list didn't
+resolve a `UiMonospace` font and WebContent VERIFY-crashed; added "Noto Mono" to
+the list.
+
+Proof of live rendering over NAT:
+- [`live-example-render.png`](live-example-render.png) — the *current* multilingual
+  example.com (English/Arabic/CJK/French/Russian/Spanish — real network content,
+  multilingual font fallback).
+- [`live-hackernews-render.png`](live-hackernews-render.png) — the full live
+  Hacker News front page (header, 30 stories with points/authors/timestamps/
+  comments/upvotes, footer, search box).
+
 ## Status / open items
 
-- **DONE:** full real build (1862 targets), all 6 service binaries + `test-web`,
-  cranelift ON, WebGL/EGL null backend, Skia with RTTI+fontconfig, and a
-  **rendered modern webpage (PNG)** — the Wave-3 goal.
-- **Open:** a *live* network site over the builder's NAT (RequestServer fetch)
-  needs a URL-driving chrome (WebDriver + a `Ladybird` headless binary) that this
-  Qt-gated configuration does not build; `test-web` renders local documents. The
-  rendered page exercises the full layout/style/compositor/IPC pipeline.
+- **DONE:** full real build (1862 targets), all service binaries + `test-web` +
+  `headless-shot`, cranelift ON, WebGL/EGL null backend, Skia with RTTI+fontconfig,
+  a **rendered modern webpage (PNG)**, AND **live modern internet sites rendered
+  over NAT** (example.com, Hacker News) — the Wave-3 goal, in full.
 - The Skia rebuild should ideally be re-expressed as a proper `args.gn`
   (`skia_use_fontconfig=true`, RTTI on, emulated-TLS) + a kept `gn` binary, rather
   than the ninja-rule edit used here.

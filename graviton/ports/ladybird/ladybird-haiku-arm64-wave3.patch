@@ -214,6 +214,19 @@ index a71ce7ccbe..266cfb3efe 100644
  {
      CraneliftInsn out {};
      auto const* insn = dispatch.instruction;
+diff --git a/Libraries/LibWeb/Platform/FontPlugin.cpp b/Libraries/LibWeb/Platform/FontPlugin.cpp
+index b63cd2ffdc..5257a55c16 100644
+--- a/Libraries/LibWeb/Platform/FontPlugin.cpp
++++ b/Libraries/LibWeb/Platform/FontPlugin.cpp
+@@ -97,7 +97,7 @@ void FontPlugin::update_generic_fonts()
+     // (We also add Android-specific font names to the list from W3 where required.)
+     Vector<FlyString> cursive_fallbacks { "Comic Sans MS"_fly_string, "Comic Sans"_fly_string, "Apple Chancery"_fly_string, "Bradley Hand"_fly_string, "Brush Script MT"_fly_string, "Snell Roundhand"_fly_string, "URW Chancery L"_fly_string, "Dancing Script"_fly_string };
+     Vector<FlyString> fantasy_fallbacks { "Impact"_fly_string, "Luminari"_fly_string, "Chalkduster"_fly_string, "Jazz LET"_fly_string, "Blippo"_fly_string, "Stencil Std"_fly_string, "Marker Felt"_fly_string, "Trattatello"_fly_string, "Coming Soon"_fly_string };
+-    Vector<FlyString> monospace_fallbacks { "Andale Mono"_fly_string, "Courier New"_fly_string, "Courier"_fly_string, "FreeMono"_fly_string, "OCR A Std"_fly_string, "Noto Sans Mono"_fly_string, "DejaVu Sans Mono"_fly_string, "Droid Sans Mono"_fly_string, "Liberation Mono"_fly_string };
++    Vector<FlyString> monospace_fallbacks { "Noto Mono"_fly_string, "Andale Mono"_fly_string, "Courier New"_fly_string, "Courier"_fly_string, "FreeMono"_fly_string, "OCR A Std"_fly_string, "Noto Sans Mono"_fly_string, "DejaVu Sans Mono"_fly_string, "Droid Sans Mono"_fly_string, "Liberation Mono"_fly_string };
+     Vector<FlyString> sans_serif_fallbacks { "Arial"_fly_string, "Helvetica"_fly_string, "Verdana"_fly_string, "Trebuchet MS"_fly_string, "Gill Sans"_fly_string, "Noto Sans"_fly_string, "Avantgarde"_fly_string, "Optima"_fly_string, "Arial Narrow"_fly_string, "Liberation Sans"_fly_string, "Roboto"_fly_string };
+     Vector<FlyString> serif_fallbacks { "Times"_fly_string, "Times New Roman"_fly_string, "Didot"_fly_string, "Georgia"_fly_string, "Palatino"_fly_string, "Bookman"_fly_string, "New Century Schoolbook"_fly_string, "American Typewriter"_fly_string, "Liberation Serif"_fly_string, "Roman"_fly_string, "Noto Serif"_fly_string };
+ 
 diff --git a/Meta/CMake/check_for_dependencies.cmake b/Meta/CMake/check_for_dependencies.cmake
 index d676306996..eeb588cf03 100644
 --- a/Meta/CMake/check_for_dependencies.cmake
@@ -356,6 +369,18 @@ index bd26c929ce..ea4eb5a7d9 100644
  
  set(latest_source_header "")
  set(latest_root_output_timestamp "")
+diff --git a/Services/CMakeLists.txt b/Services/CMakeLists.txt
+index 74f9b22c17..057944e772 100644
+--- a/Services/CMakeLists.txt
++++ b/Services/CMakeLists.txt
+@@ -8,6 +8,7 @@ add_subdirectory(RequestServer)
+ if (ENABLE_CRANELIFT_JIT)
+     add_subdirectory(WasmCompiler)
+ endif()
++add_subdirectory(HeadlessShot)
+ add_subdirectory(WebContent)
+ add_subdirectory(WebDriver)
+ add_subdirectory(WebWorker)
 diff --git a/Tests/LibWeb/test-web/Collection.cpp b/Tests/LibWeb/test-web/Collection.cpp
 index 822da849eb..c29ce4aeba 100644
 --- a/Tests/LibWeb/test-web/Collection.cpp
