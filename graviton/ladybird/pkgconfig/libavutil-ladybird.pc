@@ -1,0 +1,14 @@
+prefix=/boot/home/lbdeps
+exec_prefix=${prefix}
+libdir=/boot/home/lbdeps/lib
+includedir=/boot/home/lbdeps/include
+
+Name: libavutil
+Description: FFmpeg utility library
+Version: 59.39.100
+Requires: 
+Requires.private: 
+Conflicts:
+Libs: -L${libdir}  -lavutil 
+Libs.private: -pthread -lm -latomic
+Cflags: -I${includedir}
