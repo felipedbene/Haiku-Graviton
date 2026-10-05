@@ -6,8 +6,9 @@
 # Five of them diverge from what the repository shipped, so they are delivered
 # as their own pool packages (see build-dep-packages.sh) rather than bundled
 # privately: icu78 (net-new, coexists with icu74), libtommath 1.3.0 and
-# simdjson 5.0.2 (in-place bumps, no reverse dependencies), libpng16-1.6.53-2
-# (revision bump adding the ABI-additive APNG patch) and ffmpeg7 (net-new).
+# simdjson 5.0.2 (in-place bumps, no reverse dependencies), libpng16-1.6.53-3
+# (revision bump adding the ABI-additive APNG patch, required through its
+# `libpng16_apng` capability) and ffmpeg7 (net-new).
 # Nothing in this package lands in /boot/system/lib.
 #
 # Layout rationale ------------------------------------------------------------
@@ -31,7 +32,9 @@ B=${B:-/boot/home/lb/build-wave2}
 OUT=${OUT:-/boot/home/lbpkg}
 COMMIT=$(cut -c1-8 "$B/COMMIT")
 VERSION="0~git${COMMIT}"
-REVISION=1
+# Revision 2: same payload as 1; libpng16 is now required through the
+# `libpng16_apng` capability instead of `libpng16 >= 1.6.53-2` (see step 7).
+REVISION=2
 PKG="ladybird-${VERSION}-${REVISION}-arm64.hpkg"
 R="$OUT/pkgroot"
 P="$R/apps/Ladybird"
@@ -102,6 +105,12 @@ for l in "BSD (2-clause)" "BSD (3-clause)" "Apache v2" \
 done
 
 # --- 7. .PackageInfo ---------------------------------------------------------
+# libpng16: require `libpng16_apng`, NOT `libpng16 >= 1.6.53-2`.  Provides
+# carry no revision, so the base image's libpng16-1.6.53-1 (`libpng16 =
+# 1.6.53`) satisfies a revision-qualified expression and the solver never pulls
+# the APNG build -- liblagom-imagedecoders then fails to resolve
+# png_get_next_frame_fcTL at load.  Only libpng16 >= 1.6.53-3 provides
+# libpng16_apng.  (The description text below is left as revision 1's.)
 cat > "$R/.PackageInfo" <<EOF
 name			ladybird
 version			${VERSION}-${REVISION}
@@ -166,7 +175,7 @@ requires {
 	lib:libavformat >= 61
 	lib:libavutil >= 59
 	lib:libswresample >= 5
-	libpng16 >= 1.6.53-2
+	libpng16_apng >= 1.6.53
 	libavif
 	brotli
 	libsdl3
