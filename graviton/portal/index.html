@@ -1,0 +1,529 @@
+<!DOCTYPE html>
+<!--
+  DeBeOS package portal (issue #596).
+
+  ONE static page: inline CSS, vanilla JS, no build step, no backend. The
+  browser fetches /arm64/repo -- the same HPKR index pkgman reads -- and parses
+  it client-side. The parser between the HPKR_PARSER_START / HPKR_PARSER_END
+  sentinels is a JS port of graviton/scripts/hpkg_meta.py read_repo; the
+  parser-equality test (graviton/portal/test-parser-equality.mjs) extracts that
+  exact block and checks it against the Python reader on the live index.
+
+  Deploy: upload this file to the ROOT of the served (green) pool and set the
+  CloudFront default root object to index.html. Keep the viewer protocol policy
+  allowing plain HTTP so pkgman clients keep working. That is the only infra
+  change -- see graviton/portal/README.md.
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>DeBeOS packages</title>
+<style>
+  :root {
+    --bg: #16181d; --panel: #1e2129; --panel2: #262a34; --line: #333845;
+    --fg: #e6e8ec; --muted: #9aa3b2; --accent: #5aa9ff; --accent2: #7ee787;
+    --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--fg); line-height: 1.5;
+    font-family: system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
+  }
+  header {
+    padding: 1.4rem 1.2rem 1rem; border-bottom: 1px solid var(--line);
+    background: linear-gradient(180deg, #1b1e26, var(--bg));
+  }
+  .wrap { max-width: 980px; margin: 0 auto; }
+  h1 { margin: 0 0 .3rem; font-size: 1.35rem; letter-spacing: .2px; }
+  h1 span { color: var(--muted); font-weight: 400; font-size: .95rem; }
+  .addrepo {
+    display: flex; align-items: center; gap: .5rem; flex-wrap: wrap;
+    margin: .6rem 0 .2rem; font-family: var(--mono); font-size: .86rem;
+  }
+  .addrepo code {
+    background: var(--panel2); border: 1px solid var(--line); border-radius: 6px;
+    padding: .3rem .55rem; color: var(--accent2);
+  }
+  .stats { color: var(--muted); font-size: .83rem; margin-top: .35rem; }
+  .searchrow { margin: .9rem 0 .2rem; display: flex; gap: .6rem; align-items: center; flex-wrap: wrap; }
+  #q {
+    flex: 1 1 320px; min-width: 220px; font-size: 1.05rem; padding: .7rem .9rem;
+    border-radius: 8px; border: 1px solid var(--line); background: var(--panel);
+    color: var(--fg);
+  }
+  #q:focus { outline: 2px solid var(--accent); border-color: var(--accent); }
+  .toggle { color: var(--muted); font-size: .85rem; display: inline-flex; gap: .4rem; align-items: center; user-select: none; cursor: pointer; }
+  main { max-width: 980px; margin: 0 auto; padding: .5rem 1.2rem 3rem; }
+  .msg { padding: 2.2rem 1rem; text-align: center; color: var(--muted); }
+  .msg.err { color: #ff9b9b; }
+  .msg a { color: var(--accent); }
+  table { width: 100%; border-collapse: collapse; margin-top: .6rem; }
+  th, td { text-align: left; padding: .55rem .6rem; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { color: var(--muted); font-weight: 600; font-size: .78rem; text-transform: uppercase; letter-spacing: .5px; }
+  td.name { font-family: var(--mono); font-weight: 600; white-space: nowrap; }
+  td.ver { font-family: var(--mono); color: var(--muted); white-space: nowrap; }
+  td.sum { color: var(--fg); }
+  .prov { display: inline-block; margin-top: .25rem; font-family: var(--mono); font-size: .76rem; color: var(--accent2); }
+  .arch { font-family: var(--mono); font-size: .72rem; color: var(--muted); border: 1px solid var(--line); border-radius: 5px; padding: 0 .3rem; margin-left: .4rem; }
+  button.copy {
+    font-family: var(--mono); font-size: .76rem; cursor: pointer; white-space: nowrap;
+    background: var(--panel2); color: var(--fg); border: 1px solid var(--line);
+    border-radius: 6px; padding: .35rem .55rem;
+  }
+  button.copy:hover { border-color: var(--accent); color: var(--accent); }
+  button.copy.ok { color: var(--accent2); border-color: var(--accent2); }
+  .cap { color: var(--muted); font-size: .82rem; text-align: center; padding: 1rem; }
+  .spin { display: inline-block; width: 1rem; height: 1rem; border: 2px solid var(--line); border-top-color: var(--accent); border-radius: 50%; animation: s 0.8s linear infinite; vertical-align: -2px; margin-right: .5rem; }
+  @keyframes s { to { transform: rotate(360deg); } }
+</style>
+</head>
+<body>
+<header><div class="wrap">
+  <h1>DeBeOS packages <span>&mdash; arm64 (AWS Graviton)</span></h1>
+  <div class="addrepo">
+    <code id="addrepo">pkgman add-repo &hellip;</code>
+    <button class="copy" id="copyrepo" title="Copy">copy</button>
+  </div>
+  <div class="stats" id="stats">&nbsp;</div>
+  <div class="searchrow">
+    <input id="q" type="search" autocomplete="off" spellcheck="false"
+           placeholder="Search packages &mdash; name, command (go, git), or summary&hellip;" autofocus>
+    <label class="toggle"><input type="checkbox" id="showall"> show _devel / _debuginfo / source</label>
+  </div>
+</div></header>
+<main>
+  <div id="view"><div class="msg"><span class="spin"></span>Loading package index&hellip;</div></div>
+</main>
+
+<script>
+/*HPKR_PARSER_START*/
+// JS port of graviton/scripts/hpkg_meta.py read_repo (HPKR v2). Self-contained:
+// no DOM, no page globals. Exposed as globalThis.HPKR so both this page and the
+// Node equality test (test-parser-equality.mjs) run the identical code.
+globalThis.HPKR = (function () {
+  "use strict";
+
+  var REPO_MAGIC = 0x68706b72;      // "hpkr"
+  var REPO_HEADER_SIZE = 72;
+  var SUPPORTED_VERSION = 2;
+
+  // package-attributes section IDs (headers/os/package/hpkg/PackageAttributes.h)
+  var ID_NAME = 15, ID_SUMMARY = 16, ID_VENDOR = 18, ID_PACKAGER = 19,
+      ID_ARCHITECTURE = 21, ID_VERSION_MAJOR = 22, ID_VERSION_MINOR = 23,
+      ID_VERSION_MICRO = 24, ID_VERSION_REVISION = 25, ID_PROVIDES = 28,
+      ID_REQUIRES = 29, ID_VERSION_PRE_RELEASE = 36, ID_PACKAGE = 54;
+
+  // B_PACKAGE_ARCHITECTURE_* (headers/os/package/PackageArchitecture.h)
+  var ARCH_NAMES = {
+    0: "any", 1: "x86", 2: "x86_gcc2", 3: "source", 4: "x86_64",
+    5: "ppc", 6: "arm", 7: "m68k", 8: "sparc", 9: "arm64", 10: "riscv64"
+  };
+
+  function HpkgError(msg) { this.name = "HpkgError"; this.message = msg; }
+  HpkgError.prototype = Object.create(Error.prototype);
+
+  // Unsigned LEB128. Returns [value, newOffset]. Values here are small
+  // (tags, string indices, sizes) so Number precision is sufficient.
+  function leb128(buf, off) {
+    var shift = 0, result = 0, b;
+    for (;;) {
+      b = buf[off++];
+      result += (b & 0x7f) * Math.pow(2, shift);
+      if (!(b & 0x80)) return [result, off];
+      shift += 7;
+    }
+  }
+
+  function parseRepoHeader(dv) {
+    if (dv.byteLength < REPO_HEADER_SIZE || dv.getUint32(0, false) !== REPO_MAGIC)
+      throw new HpkgError("not an hpkr repo index (bad magic)");
+    var h = {};
+    h.header_size = dv.getUint16(4, false);
+    h.version = dv.getUint16(6, false);
+    h.total_size = Number(dv.getBigUint64(8, false));
+    h.minor_version = dv.getUint16(16, false);
+    h.heap_compression = dv.getUint16(18, false);
+    h.heap_chunk_size = dv.getUint32(20, false);
+    h.heap_size_compressed = Number(dv.getBigUint64(24, false));
+    h.heap_size_uncompressed = Number(dv.getBigUint64(32, false));
+    h.info_length = dv.getUint32(40, false);
+    h.packages_length = Number(dv.getBigUint64(48, false));
+    h.packages_strings_length = Number(dv.getBigUint64(56, false));
+    h.packages_strings_count = Number(dv.getBigUint64(64, false));
+    return h;
+  }
+
+  // Inflate one zlib-wrapped (B_HPKG_COMPRESSION_ZLIB) chunk.
+  async function inflate(bytes) {
+    var ds = new DecompressionStream("deflate");
+    var w = ds.writable.getWriter();
+    w.write(bytes); w.close();
+    var reader = ds.readable.getReader(), parts = [], total = 0, r;
+    for (;;) {
+      r = await reader.read();
+      if (r.done) break;
+      parts.push(r.value); total += r.value.length;
+    }
+    var out = new Uint8Array(total), o = 0, i;
+    for (i = 0; i < parts.length; i++) { out.set(parts[i], o); o += parts[i].length; }
+    return out;
+  }
+
+  // Decompress the entire heap into a Uint8Array of heap_size_uncompressed
+  // bytes, mirroring hpkg_meta._decompress_uncompressed_range over the whole
+  // heap. Supports B_HPKG_COMPRESSION_NONE (0) and _ZLIB (1).
+  async function decompressHeap(raw, h) {
+    var hs = h.header_size, chunk = h.heap_chunk_size || 65536;
+    var heapC = h.heap_size_compressed, heapU = h.heap_size_uncompressed;
+    if (h.heap_compression === 0) return raw.subarray(hs, hs + heapU);
+    if (h.heap_compression !== 1)
+      throw new HpkgError("unsupported heap compression " + h.heap_compression);
+
+    var n = heapU ? Math.ceil(heapU / chunk) : 1;
+    // uint16 chunk-size array (compressed size - 1), for all but the last chunk,
+    // stored at the end of the compressed heap.
+    var dv = new DataView(raw.buffer, raw.byteOffset, raw.byteLength);
+    var arrOff = hs + heapC - 2 * (n - 1);
+    var sizes = [], i;
+    for (i = 0; i < n - 1; i++) sizes.push(dv.getUint16(arrOff + 2 * i, false) + 1);
+    var coff = [hs];
+    for (i = 0; i < sizes.length; i++) coff.push(coff[coff.length - 1] + sizes[i]);
+    var lastC = arrOff - coff[n - 1];
+
+    var out = new Uint8Array(heapU), pos = 0, uLen, cLen, cb;
+    for (i = 0; i < n; i++) {
+      uLen = (i < n - 1) ? chunk : heapU - (n - 1) * chunk;
+      cLen = (i < n - 1) ? sizes[i] : lastC;
+      cb = raw.subarray(coff[i], coff[i] + cLen);
+      if (cLen === uLen) { out.set(cb, pos); }      // stored uncompressed
+      else { out.set(await inflate(cb), pos); }
+      pos += uLen;
+    }
+    return out;
+  }
+
+  // Decode one attribute value. Returns [value, newOffset]. RAW yields null.
+  function readValue(attr, off, dtype, encoding, strings) {
+    var length, value, end, idx;
+    if (dtype === 1 || dtype === 2) {            // INT / UINT (big-endian)
+      length = { 0: 1, 1: 2, 2: 4, 3: 8 }[encoding];
+      value = 0;
+      for (var k = 0; k < length; k++) value = value * 256 + attr[off + k];
+      return [value, off + length];
+    }
+    if (dtype === 3) {                           // STRING
+      if (encoding === 0) {                       // inline null-terminated
+        end = off; while (attr[end] !== 0) end++;
+        return [utf8(attr, off, end), end + 1];
+      }
+      idx = leb128(attr, off);                    // index into strings table
+      return [idx[0] < strings.length ? strings[idx[0]] : null, idx[1]];
+    }
+    if (dtype === 4) {                           // RAW (payload skipped)
+      var sz = leb128(attr, off); off = sz[1];
+      if (encoding === 0) return [null, off + sz[0]];  // inline
+      return [null, leb128(attr, off)[1]];             // heap ref: size + offset
+    }
+    throw new HpkgError("bad attribute data type " + dtype);
+  }
+
+  // Parse one 0-terminated attribute list, preserving structure.
+  // Returns [nodes, newOffset]; each node = { aid, value, children }.
+  function walkTree(attr, off, strings) {
+    var nodes = [], tag, t, aid, dtype, hasChildren, encoding, v, children;
+    for (;;) {
+      var r = leb128(attr, off); tag = r[0]; off = r[1];
+      if (tag === 0) return [nodes, off];
+      t = tag - 1;
+      aid = t & 0x7f;
+      dtype = (t >> 7) & 0x7;
+      hasChildren = (t >> 10) & 1;
+      encoding = (t >> 11) & 0x3;
+      var rv = readValue(attr, off, dtype, encoding, strings); v = rv[0]; off = rv[1];
+      children = [];
+      if (hasChildren) { var rc = walkTree(attr, off, strings); children = rc[0]; off = rc[1]; }
+      nodes.push({ aid: aid, value: v, children: children });
+    }
+  }
+
+  function flatten(nodes, out) {
+    for (var i = 0; i < nodes.length; i++) {
+      out.push(nodes[i]);
+      flatten(nodes[i].children, out);
+    }
+    return out;
+  }
+
+  // Build a package record from the attribute nodes of ONE package
+  // (the children of an HPKR PACKAGE entry). Mirrors _pkg_from_nodes.
+  function pkgFromNodes(nodes) {
+    var out = { name: null, summary: null, vendor: null, packager: null,
+                arch: null, version: null, revision: null,
+                provides: [], requires: [] };
+    var ver = {};
+    for (var i = 0; i < nodes.length; i++) {
+      var nd = nodes[i], aid = nd.aid, value = nd.value;
+      if (aid === ID_NAME && out.name === null) out.name = value;
+      else if (aid === ID_SUMMARY) out.summary = value;
+      else if (aid === ID_VENDOR) out.vendor = value;
+      else if (aid === ID_PACKAGER) out.packager = value;
+      else if (aid === ID_ARCHITECTURE)
+        out.arch = (value in ARCH_NAMES) ? ARCH_NAMES[value] : String(value);
+      else if (aid === ID_VERSION_MAJOR) {
+        if (!("major" in ver)) ver.major = value;
+        var kids = flatten(nd.children, []);
+        for (var j = 0; j < kids.length; j++) {
+          var caid = kids[j].aid, cval = kids[j].value;
+          if (caid === ID_VERSION_MINOR && !("minor" in ver)) ver.minor = cval;
+          else if (caid === ID_VERSION_MICRO && !("micro" in ver)) ver.micro = cval;
+          else if (caid === ID_VERSION_REVISION && !("revision" in ver)) ver.revision = cval;
+          else if (caid === ID_VERSION_PRE_RELEASE && !("pre" in ver)) ver.pre = cval;
+        }
+      }
+      else if (aid === ID_PROVIDES && value !== null) out.provides.push(value);
+      else if (aid === ID_REQUIRES && value !== null) out.requires.push(value);
+    }
+    var parts = [ver.major];
+    if (ver.minor) parts.push(ver.minor);
+    if (ver.micro) parts.push(ver.micro);
+    var v = parts.filter(function (p) { return p; }).join(".");
+    if (ver.pre) v += "~" + ver.pre;
+    out.version = v || null;
+    out.revision = (ver.revision === undefined) ? null : ver.revision;
+    return out;
+  }
+
+  function utf8(buf, start, end) {
+    return new TextDecoder("utf-8").decode(buf.subarray(start, end));
+  }
+
+  // Parse a whole HPKR repo index (ArrayBuffer/Uint8Array). Returns an array of
+  // { name, summary, vendor, packager, arch, version, revision, provides[],
+  //   requires[] } -- read_repo's fields plus summary (ID 16, which read_repo
+  //   does not extract; the equality test ignores it).
+  async function parseRepo(input) {
+    var raw = (input instanceof Uint8Array) ? input : new Uint8Array(input);
+    var dv = new DataView(raw.buffer, raw.byteOffset, raw.byteLength);
+    var h = parseRepoHeader(dv);
+    if (h.version !== SUPPORTED_VERSION)
+      throw new HpkgError("unknown HPKR version " + h.version);
+
+    var heapU = h.heap_size_uncompressed;
+    var plen = h.packages_length;
+    var pstrLen = h.packages_strings_length;
+    var heap = await decompressHeap(raw, h);
+    var attr = heap.subarray(heapU - plen, heapU);
+
+    // shared strings subsection: null-terminated strings up to pstrLen.
+    var strings = [], o = 0, end;
+    while (o < pstrLen && attr[o] !== 0) {
+      end = o; while (attr[end] !== 0) end++;
+      strings.push(utf8(attr, o, end));
+      o = end + 1;
+    }
+
+    var top = walkTree(attr, pstrLen, strings)[0];
+    var pkgs = [];
+    for (var i = 0; i < top.length; i++) {
+      if (top[i].aid !== ID_PACKAGE) continue;
+      var p = pkgFromNodes(top[i].children);
+      if (!p.name) p.name = top[i].value;   // PACKAGE value is the package name
+      pkgs.push(p);
+    }
+    return pkgs;
+  }
+
+  return { parseRepo: parseRepo, ARCH_NAMES: ARCH_NAMES, HpkgError: HpkgError };
+})();
+/*HPKR_PARSER_END*/
+
+// ------------------------------------------------------------------ page glue
+(function () {
+  "use strict";
+  if (typeof document === "undefined") return;   // Node: parser only.
+
+  var REPO_PATH = "/arm64/repo";
+  var ROW_CAP = 200;
+  var ISSUE_URL = "https://github.com/felipedbene/Haiku-Graviton/issues/new";
+
+  var qEl = document.getElementById("q");
+  var showAllEl = document.getElementById("showall");
+  var viewEl = document.getElementById("view");
+  var statsEl = document.getElementById("stats");
+  var addrepoEl = document.getElementById("addrepo");
+  var ALL = null;             // parsed packages
+  var LAST_MODIFIED = null;
+
+  // host for pkgman add-repo -- always http:// per the issue (pkgman clients).
+  var host = location.hostname || "packages.debene.dev";
+  var ADD_REPO = "pkgman add-repo http://" + host + "/arm64";
+  addrepoEl.textContent = ADD_REPO;
+  document.getElementById("copyrepo").addEventListener("click", function () {
+    copy(ADD_REPO, this);
+  });
+
+  function esc(s) {
+    return String(s == null ? "" : s).replace(/[&<>"']/g, function (c) {
+      return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c];
+    });
+  }
+
+  function copy(text, btn) {
+    var done = function () { if (btn) { var o = btn.textContent; btn.textContent = "copied"; btn.classList.add("ok"); setTimeout(function () { btn.textContent = o; btn.classList.remove("ok"); }, 1200); } };
+    if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(text).then(done, function () {});
+    else { var t = document.createElement("textarea"); t.value = text; document.body.appendChild(t); t.select(); try { document.execCommand("copy"); } catch (e) {} document.body.removeChild(t); done(); }
+  }
+
+  function isHidden(p) {
+    return /_devel$/.test(p.name) || /_debuginfo$/.test(p.name) || p.arch === "source";
+  }
+
+  function fmtDate(d) {
+    if (!d) return "unknown";
+    try { return new Date(d).toISOString().replace("T", " ").replace(/:\d\d\.\d+Z$/, " UTC"); }
+    catch (e) { return d; }
+  }
+
+  // Case-insensitive ranking. Returns { rank, provide } or null (no match).
+  // rank 0 exact cmd:/app: provide, 1 exact name, 2 name prefix, 3 name
+  // substring, 4 summary substring.
+  function score(p, q) {
+    var name = p.name.toLowerCase();
+    var provsLc = p._provLc || (p._provLc = p.provides.map(function (x) { return x.toLowerCase(); }));
+    var exact = "cmd:" + q, exactApp = "app:" + q, idx;
+    idx = provsLc.indexOf(exact);
+    if (idx < 0) idx = provsLc.indexOf(exactApp);
+    if (idx >= 0) return { rank: 0, provide: p.provides[idx] };
+    if (name === q) return { rank: 1, provide: matchProv(p, provsLc, q) };
+    if (name.indexOf(q) === 0) return { rank: 2, provide: matchProv(p, provsLc, q) };
+    if (name.indexOf(q) >= 0) return { rank: 3, provide: matchProv(p, provsLc, q) };
+    if (p.summary && p.summary.toLowerCase().indexOf(q) >= 0)
+      return { rank: 4, provide: matchProv(p, provsLc, q) };
+    var pm = matchProv(p, provsLc, q);
+    if (pm) return { rank: 5, provide: pm };     // provide substring (last resort)
+    return null;
+  }
+  function matchProv(p, provsLc, q) {
+    for (var i = 0; i < provsLc.length; i++)
+      if (provsLc[i].indexOf(q) >= 0 && provsLc[i] !== p.name.toLowerCase()) return p.provides[i];
+    return null;
+  }
+
+  function render() {
+    if (!ALL) return;
+    var q = qEl.value.trim().toLowerCase();
+    var showAll = showAllEl.checked;
+    var rows;
+
+    if (q === "") {
+      rows = ALL.filter(function (p) { return showAll || !isHidden(p); })
+               .map(function (p) { return { p: p, rank: 9, provide: null }; });
+      rows.sort(function (a, b) { return a.p.name < b.p.name ? -1 : a.p.name > b.p.name ? 1 : 0; });
+    } else {
+      rows = [];
+      for (var i = 0; i < ALL.length; i++) {
+        var p = ALL[i];
+        if (!showAll && isHidden(p)) continue;
+        var s = score(p, q);
+        if (s) rows.push({ p: p, rank: s.rank, provide: s.provide });
+      }
+      rows.sort(function (a, b) {
+        if (a.rank !== b.rank) return a.rank - b.rank;
+        return a.p.name < b.p.name ? -1 : a.p.name > b.p.name ? 1 : 0;
+      });
+    }
+
+    var total = ALL.length;
+    var shownUniverse = ALL.filter(function (p) { return showAll || !isHidden(p); }).length;
+    statsEl.innerHTML = esc(total.toLocaleString()) + " packages" +
+      (showAll ? "" : " (" + shownUniverse.toLocaleString() + " shown; _devel/_debuginfo/source hidden)") +
+      " &middot; last published " + esc(fmtDate(LAST_MODIFIED));
+
+    if (rows.length === 0) {
+      var body = "The DeBeOS arm64 repo has no package matching “" + q + "”.";
+      var link = ISSUE_URL + "?title=" + encodeURIComponent("Package request: " + qEl.value.trim()) +
+                 "&labels=enhancement&body=" + encodeURIComponent(body);
+      viewEl.innerHTML = '<div class="msg">No packages match <b>' + esc(qEl.value.trim()) +
+        '</b>.<br><br><a href="' + esc(link) + '" target="_blank" rel="noopener">Request this package &rarr;</a></div>';
+      return;
+    }
+
+    var capped = rows.slice(0, ROW_CAP);
+    var html = '<table><thead><tr><th>Package</th><th>Version</th><th>Summary</th><th></th></tr></thead><tbody>';
+    for (var r = 0; r < capped.length; r++) {
+      var it = capped[r], p = it.p;
+      var ver = esc(p.version || "?") + (p.revision != null ? "-" + esc(p.revision) : "");
+      var install = "pkgman install " + p.name;
+      var provLine = it.provide ? '<div class="prov">' + esc(it.provide) + "</div>" : "";
+      html += '<tr>' +
+        '<td class="name">' + esc(p.name) + '<span class="arch">' + esc(p.arch || "?") + '</span></td>' +
+        '<td class="ver">' + ver + '</td>' +
+        '<td class="sum">' + esc(p.summary || "") + provLine + '</td>' +
+        '<td><button class="copy" data-cmd="' + esc(install) + '" title="' + esc(install) + '">install</button></td>' +
+        '</tr>';
+    }
+    html += "</tbody></table>";
+    if (rows.length > ROW_CAP)
+      html += '<div class="cap">Showing first ' + ROW_CAP + " of " + rows.length.toLocaleString() +
+              " matches &mdash; refine your search to narrow it down.</div>";
+    viewEl.innerHTML = html;
+
+    var btns = viewEl.querySelectorAll("button.copy");
+    for (var b = 0; b < btns.length; b++)
+      btns[b].addEventListener("click", function () { copy(this.getAttribute("data-cmd"), this); });
+  }
+
+  function syncUrl() {
+    var q = qEl.value;
+    var u = new URL(location.href);
+    if (q) u.searchParams.set("q", q); else u.searchParams.delete("q");
+    history.replaceState(null, "", u.pathname + (u.search || "") + u.hash);
+  }
+
+  function fail(kind, detail) {
+    var m;
+    if (kind === "unreachable")
+      m = "The package index at <code>" + esc(REPO_PATH) + "</code> could not be loaded" +
+          (detail ? " (" + esc(detail) + ")" : "") +
+          ".<br>If this is <code>GET /</code> with no index served, the CloudFront default root object may be unset.";
+    else if (kind === "parse")
+      m = "The package index could not be parsed" + (detail ? ": " + esc(detail) : "") +
+          ".<br>It may be an unknown HPKR version or a truncated/corrupt index.";
+    else m = esc(detail || "Unknown error.");
+    viewEl.innerHTML = '<div class="msg err">' + m + "</div>";
+    statsEl.innerHTML = "&nbsp;";
+  }
+
+  async function boot() {
+    var resp;
+    try {
+      resp = await fetch(REPO_PATH, { cache: "no-cache" });   // revalidate on every load
+    } catch (e) { fail("unreachable", "network error"); return; }
+    if (!resp.ok) { fail("unreachable", "HTTP " + resp.status); return; }
+    LAST_MODIFIED = resp.headers.get("last-modified");
+    var buf;
+    try { buf = await resp.arrayBuffer(); } catch (e) { fail("unreachable", "read error"); return; }
+    try { ALL = await globalThis.HPKR.parseRepo(buf); }
+    catch (e) { fail("parse", e && e.message); return; }
+
+    // query from URL
+    var params = new URLSearchParams(location.search);
+    if (params.has("q")) qEl.value = params.get("q");
+
+    qEl.addEventListener("input", function () { syncUrl(); render(); });
+    showAllEl.addEventListener("change", render);
+    window.addEventListener("popstate", function () {
+      var p = new URLSearchParams(location.search);
+      qEl.value = p.get("q") || ""; render();
+    });
+
+    render();
+    qEl.focus();
+  }
+
+  boot();
+})();
+</script>
+</body>
+</html>
