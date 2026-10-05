@@ -512,6 +512,8 @@ TCPEndpoint::TCPEndpoint(net_socket* socket)
 	fReceiveQueue(socket->receive.buffer_size),
 	fReceiveRing(),
 	fPushSequence(0),
+	fFinishReceived(false),
+		// read by _ClosedReadStatus() even if the endpoint never connected
 	fSmoothedRoundTripTime(-1),
 	fRoundTripVariation(0),
 	fSendTime(0),
@@ -1037,10 +1039,16 @@ TCPEndpoint::ReadData(size_t numBytes, uint32 flags, net_buffer** _buffer)
 
 	*_buffer = NULL;
 
-	if (fState == CLOSED || fState == LISTEN) {
-		if (socket->error != B_OK)
-			return socket->error;
+	if (fState == LISTEN)
 		return ENOTCONN;
+	if (fState == CLOSED) {
+		// Data that arrived before the connection went away is still queued
+		// (_Close() does not purge it) and is delivered first, as on other
+		// systems; only once it is drained does the reader see why the
+		// connection ended. The wait loop below makes the same decision.
+		_DrainToRing();
+		if (_ReceiveAvailable() == 0)
+			return _ClosedReadStatus();
 	}
 
 	bigtime_t timeout = 0;
@@ -1071,18 +1079,6 @@ TCPEndpoint::ReadData(size_t numBytes, uint32 flags, net_buffer** _buffer)
 	// TODO: add support for urgent data (MSG_OOB)
 
 	while (true) {
-		// The connection can be torn down while we wait below: a reset reaches
-		// _HandleReset() -> _Close(), which sets CLOSED and wakes us. Nothing
-		// further will ever arrive, so without this re-check a blocking reader
-		// would go straight back to sleep forever (#605). Report it exactly as
-		// the entry check above does; _HandleReset() has recorded the error
-		// (ECONNRESET for an established connection) before releasing fLock.
-		if (fState == CLOSED) {
-			if (socket->error != B_OK)
-				return socket->error;
-			return ENOTCONN;
-		}
-
 		// Flush any contiguous prefix that back-pressure left staged in the
 		// reorder buffer into the ring, so the availability checks below (and
 		// the lock-free drain that follows) see everything deliverable. In the
@@ -1119,6 +1115,18 @@ TCPEndpoint::ReadData(size_t numBytes, uint32 flags, net_buffer** _buffer)
 			// ``If no text is awaiting delivery, the RECEIVE will
 			//   get a Connection closing''.
 			return B_OK;
+		}
+
+		if (fState == CLOSED) {
+			// The connection was torn down while we waited: a reset reaches
+			// _HandleReset() -> _Close(), which sets CLOSED and wakes us.
+			// Nothing further will ever arrive, so waiting again would block
+			// forever (#605). Whatever is queued is delivered first -- even
+			// short of the low-water mark or a MSG_WAITALL request -- and the
+			// next call reports the error.
+			if (available > 0)
+				break;
+			return _ClosedReadStatus();
 		}
 
 		if (timeout == 0)
@@ -1168,8 +1176,10 @@ TCPEndpoint::ReadData(size_t numBytes, uint32 flags, net_buffer** _buffer)
 	if (_ReceiveAvailable() == 0 && fState == FINISH_RECEIVED)
 		socket->receive.low_water_mark = 0;
 
-	// if we opened the window, check if we should send a window update
-	if (!clone) {
+	// if we opened the window, check if we should send a window update --
+	// except on a closed connection, where the segment would go out as an RST
+	// (_PrepareSendSegment()), possibly in answer to the peer's own reset.
+	if (!clone && fState != CLOSED) {
 		// Only send if there's less than half the window size remaining.
 		// TODO: This should use fReceiveWindow but that stays constant at present
 		// due to another TODO.
@@ -1191,6 +1201,22 @@ TCPEndpoint::ReadData(size_t numBytes, uint32 flags, net_buffer** _buffer)
 	}
 
 	return B_OK;
+}
+
+
+/*!	What a read on a CLOSED endpoint with nothing left to deliver returns:
+	the error that tore the connection down (ECONNRESET, ECONNREFUSED, ...),
+	end-of-file if it ended in an orderly close after the peer's FIN, or
+	ENOTCONN if it was never connected.
+*/
+status_t
+TCPEndpoint::_ClosedReadStatus() const
+{
+	if (socket->error != B_OK)
+		return socket->error;
+	if (fFinishReceived)
+		return B_OK;
+	return ENOTCONN;
 }
 
 
