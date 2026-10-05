@@ -1,0 +1,396 @@
+diff --git a/AK/ThreadID.cpp b/AK/ThreadID.cpp
+index 505594cd9b..f95c987fd5 100644
+--- a/AK/ThreadID.cpp
++++ b/AK/ThreadID.cpp
+@@ -15,6 +15,9 @@
+ #if defined(AK_OS_FREEBSD)
+ #    include <pthread_np.h>
+ #endif
++#if defined(AK_OS_HAIKU)
++#    include <OS.h>
++#endif
+ 
+ namespace AK {
+ 
+@@ -30,6 +33,11 @@ static u64 query_current_thread_id()
+     return thread_id;
+ #elif defined(AK_OS_FREEBSD)
+     return static_cast<u64>(pthread_getthreadid_np());
++#elif defined(AK_OS_HAIKU)
++    // Haiku has no gettid(); find_thread(NULL) returns the current thread_id.
++    // Without this the generic path returned 0 for every thread, so ThreadID
++    // was always invalid and IPC::Connection owner-thread VERIFY always failed.
++    return static_cast<u64>(find_thread(nullptr));
+ #else
+     return 0;
+ #endif
+diff --git a/CMakeLists.txt b/CMakeLists.txt
+index 76636afe95..8fa606df0a 100644
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -132,6 +132,21 @@ if (NOT (ENABLE_FUZZERS OR ENABLE_COMPILER_EXPLORER_BUILD OR ANDROID OR IOS))
+     add_subdirectory(Utilities)
+ 
+     include(CTest)
++    if (BUILD_TESTING AND NOT ENABLE_QT_UI)
++        # DeBeOS/Haiku headless: the Qt UI normally defines the resource-copy
++        # target (ladybird_build_resource_files), but it is gated out here. The
++        # headless render harness (test-web) still needs Ladybird's resource files
++        # in the build tree, so define the target from the shared, Qt-free
++        # ResourceFiles helper directly.
++        include(${LADYBIRD_SOURCE_DIR}/UI/cmake/ResourceFiles.cmake)
++        # copy_resources_to_build ties the resource target to the chrome target
++        # named \"ladybird\" (gated out here); a stub target satisfies that link
++        # without pulling in Qt.
++        if (NOT TARGET ladybird)
++            add_custom_target(ladybird)
++        endif()
++        copy_resources_to_build("${CMAKE_BINARY_DIR}/${IN_BUILD_PREFIX}${CMAKE_INSTALL_DATADIR}/Lagom" ladybird)
++    endif()
+     if (BUILD_TESTING)
+         add_subdirectory(Tests)
+     endif()
+@@ -139,7 +154,12 @@ endif()
+ 
+ if (ENABLE_GUI_TARGETS)
+     add_subdirectory(Services)
+-    add_subdirectory(UI)
++    # DeBeOS/Haiku: the Qt chrome is optional for a headless (render-to-PNG)
++    # build. Haiku has no Qt6 package, so gate the UI subdir and build only the
++    # Services (WebContent/WebDriver/Compositor) needed for headless rendering.
++    if (ENABLE_QT_UI)
++        add_subdirectory(UI)
++    endif()
+ endif()
+ 
+ add_custom_target(lint-shell-scripts
+diff --git a/Libraries/LibCompositing/CMakeLists.txt b/Libraries/LibCompositing/CMakeLists.txt
+index 505a5fbecd..b93ec96427 100644
+--- a/Libraries/LibCompositing/CMakeLists.txt
++++ b/Libraries/LibCompositing/CMakeLists.txt
+@@ -34,6 +34,7 @@ compile_ipc(FontClient.ipc FontClientEndpoint.h)
+ compile_ipc(FontServer.ipc FontServerEndpoint.h)
+ 
+ set(GENERATED_SOURCES
++    WebGL/GLFunctions.cpp
+     WebGL/WebGLCommands.cpp
+     ../../Services/Compositor/CompositorControlClientEndpoint.h
+     ../../Services/Compositor/CompositorControlServerEndpoint.h
+@@ -69,6 +70,15 @@ foreach(angle_target IN LISTS ANGLE_TARGETS)
+     target_compile_options(LibCompositing PRIVATE $<TARGET_PROPERTY:${angle_target},INTERFACE_COMPILE_OPTIONS>)
+ endforeach()
+ 
++# DeBeOS/Haiku: the DeBeOS GLES null backend (debeos_angle_shim) is a real shared
++# library providing the GL entry points. Unlike a system ANGLE that every process
++# links, our processes that load LibCompositing (WebContent, test-web, ...) must
++# resolve its GL symbols at load, so link the shim .so here (DT_NEEDED) to keep
++# LibCompositing self-contained.
++if(ANGLE_TARGETS)
++    target_link_libraries(LibCompositing PUBLIC ${ANGLE_TARGETS})
++endif()
++
+ get_target_property(_libcompositing_rust_lib libcompositing_rust IMPORTED_LOCATION)
+ if ((LINUX OR BSD) AND NOT BUILD_SHARED_LIBS)
+     target_link_options(LibCompositing INTERFACE LINKER:--allow-multiple-definition)
+diff --git a/Libraries/LibCore/Environment.cpp b/Libraries/LibCore/Environment.cpp
+index 38971f21d0..fc8b83f0c4 100644
+--- a/Libraries/LibCore/Environment.cpp
++++ b/Libraries/LibCore/Environment.cpp
+@@ -95,7 +95,7 @@ Optional<StringView> get(StringView name, [[maybe_unused]] SecureOnly secure)
+     // Note the explicit null terminators above.
+ 
+     // FreeBSD < 14, Android, generic BSDs, and Windows do not support secure_getenv.
+-#if (defined(__FreeBSD__) && __FreeBSD__ >= 14) || (!defined(AK_OS_BSD_GENERIC) && !defined(AK_OS_ANDROID) && !defined(AK_OS_WINDOWS))
++#if (defined(__FreeBSD__) && __FreeBSD__ >= 14) || (!defined(AK_OS_BSD_GENERIC) && !defined(AK_OS_ANDROID) && !defined(AK_OS_WINDOWS) && !defined(AK_OS_HAIKU))
+     char* result;
+     if (secure == SecureOnly::Yes) {
+         result = ::secure_getenv(builder.string_view().characters_without_null_termination());
+diff --git a/Libraries/LibCore/LocalServer.cpp b/Libraries/LibCore/LocalServer.cpp
+index 170681e70b..34a9426c4d 100644
+--- a/Libraries/LibCore/LocalServer.cpp
++++ b/Libraries/LibCore/LocalServer.cpp
+@@ -9,6 +9,7 @@
+ #include <LibCore/Socket.h>
+ #include <fcntl.h>
+ #include <stdio.h>
++#include <sys/ioctl.h>
+ #include <sys/socket.h>
+ #include <sys/stat.h>
+ #include <unistd.h>
+diff --git a/Libraries/LibGfx/ImageFormats/AVIFLoader.cpp b/Libraries/LibGfx/ImageFormats/AVIFLoader.cpp
+index 3dab695c87..5ccfd5216e 100644
+--- a/Libraries/LibGfx/ImageFormats/AVIFLoader.cpp
++++ b/Libraries/LibGfx/ImageFormats/AVIFLoader.cpp
+@@ -89,7 +89,9 @@ static ErrorOr<void> decode_avif_header(AVIFLoadingContext& context)
+     context.size = IntSize { context.decoder->image->width, context.decoder->image->height };
+     context.has_alpha = context.decoder->alphaPresent == 1;
+     context.image_count = context.decoder->imageCount;
+-    context.repetition_count = context.decoder->repetitionCount <= 0 ? 0 : context.decoder->repetitionCount;
++    // DeBeOS: libavif 0.9.3 (the version in the DeBeOS repo) has no avifDecoder::repetitionCount
++    // field (added in a later release). Default to 0 (the loader's own "no info / loop" value).
++    context.repetition_count = 0;
+     context.state = AVIFLoadingContext::State::HeaderDecoded;
+ 
+     if (context.decoder->image->icc.size > 0) {
+diff --git a/Libraries/LibJS/CMakeLists.txt b/Libraries/LibJS/CMakeLists.txt
+index 0e11e6d867..8937a2ae8a 100644
+--- a/Libraries/LibJS/CMakeLists.txt
++++ b/Libraries/LibJS/CMakeLists.txt
+@@ -334,7 +334,18 @@ if ("${CMAKE_SYSTEM_PROCESSOR}" MATCHES "^(x86_64|amd64|AMD64)$")
+ elseif ("${CMAKE_SYSTEM_PROCESSOR}" MATCHES "^(aarch64|arm64|ARM64)$")
+     set(FLAP_ARCH "aarch64")
+ else()
+-    message(FATAL_ERROR "LibJS requires JS interpreter support for ${CMAKE_SYSTEM_PROCESSOR}")
++    # DeBeOS/Haiku arm64: Haiku's `uname -p` returns "other", so CMake leaves
++    # CMAKE_SYSTEM_PROCESSOR as "other" on a native build and this check fails
++    # even though the machine is arm64. Fall back to the real machine arch.
++    execute_process(COMMAND uname -m
++        OUTPUT_VARIABLE _LADYBIRD_UNAME_M OUTPUT_STRIP_TRAILING_WHITESPACE)
++    if ("${_LADYBIRD_UNAME_M}" MATCHES "^(aarch64|arm64|ARM64)$")
++        set(FLAP_ARCH "aarch64")
++    elseif ("${_LADYBIRD_UNAME_M}" MATCHES "^(x86_64|amd64|AMD64)$")
++        set(FLAP_ARCH "x86_64")
++    else()
++        message(FATAL_ERROR "LibJS requires JS interpreter support for ${CMAKE_SYSTEM_PROCESSOR} (uname -m: ${_LADYBIRD_UNAME_M})")
++    endif()
+ endif()
+ 
+ if (DEFINED FLAP_ARCH)
+diff --git a/Libraries/LibWasm/AbstractMachine/BytecodeInterpreter.cpp b/Libraries/LibWasm/AbstractMachine/BytecodeInterpreter.cpp
+index 89823c8e02..1a63c12442 100644
+--- a/Libraries/LibWasm/AbstractMachine/BytecodeInterpreter.cpp
++++ b/Libraries/LibWasm/AbstractMachine/BytecodeInterpreter.cpp
+@@ -35,10 +35,12 @@
+ #else
+ #    include <signal.h>
+ #    include <unistd.h>
+-#    if defined(AK_OS_MACOS)
+-#        include <sys/ucontext.h>
+-#    else
+-#        include <ucontext.h>
++#    if WASM_COMPILED_FAULT_RECOVERY_SUPPORTED
++#        if defined(AK_OS_MACOS)
++#            include <sys/ucontext.h>
++#        else
++#            include <ucontext.h>
++#        endif
+ #    endif
+ #endif
+ 
+@@ -64,8 +66,12 @@ struct CompiledFaultRecoveryContext {
+ 
+ thread_local CompiledFaultRecoveryContext* s_compiled_fault_recovery = nullptr;
+ 
+-#if WASM_COMPILED_FAULT_RECOVERY_SUPPORTED
+-
++// cranelift_trap_message() decodes a Cranelift trap code to a message. It is
++// pure and platform-independent, and interpret() references it unconditionally,
++// so it must be defined regardless of whether compiled-fault recovery (the
++// signal-handler path) is supported. Keeping it inside the
++// WASM_COMPILED_FAULT_RECOVERY_SUPPORTED guard broke the build where that is 0
++// (e.g. Haiku/arm64, which still runs the Cranelift JIT).
+ static StringView cranelift_trap_message(u8 trap_code)
+ {
+     // Cranelift reserves trap codes at the high end of u8:
+@@ -85,6 +91,8 @@ static StringView cranelift_trap_message(u8 trap_code)
+     }
+ }
+ 
++#if WASM_COMPILED_FAULT_RECOVERY_SUPPORTED
++
+ static bool is_wasm_memory_fault(Wasm::Configuration& configuration, void* address)
+ {
+     auto const& memories = configuration.frame().module().memories();
+diff --git a/Libraries/LibWasm/CraneliftBridge.cpp b/Libraries/LibWasm/CraneliftBridge.cpp
+index a71ce7ccbe..266cfb3efe 100644
+--- a/Libraries/LibWasm/CraneliftBridge.cpp
++++ b/Libraries/LibWasm/CraneliftBridge.cpp
+@@ -797,7 +797,7 @@ static u64 runtime_layout_hash()
+     return hash;
+ }
+ 
+-static CraneliftInsn serialize_insn(Dispatch const& dispatch, SourcesAndDestination const& addr)
++[[maybe_unused]] static CraneliftInsn serialize_insn(Dispatch const& dispatch, SourcesAndDestination const& addr)
+ {
+     CraneliftInsn out {};
+     auto const* insn = dispatch.instruction;
+diff --git a/Libraries/LibWeb/Platform/FontPlugin.cpp b/Libraries/LibWeb/Platform/FontPlugin.cpp
+index b63cd2ffdc..5257a55c16 100644
+--- a/Libraries/LibWeb/Platform/FontPlugin.cpp
++++ b/Libraries/LibWeb/Platform/FontPlugin.cpp
+@@ -97,7 +97,7 @@ void FontPlugin::update_generic_fonts()
+     // (We also add Android-specific font names to the list from W3 where required.)
+     Vector<FlyString> cursive_fallbacks { "Comic Sans MS"_fly_string, "Comic Sans"_fly_string, "Apple Chancery"_fly_string, "Bradley Hand"_fly_string, "Brush Script MT"_fly_string, "Snell Roundhand"_fly_string, "URW Chancery L"_fly_string, "Dancing Script"_fly_string };
+     Vector<FlyString> fantasy_fallbacks { "Impact"_fly_string, "Luminari"_fly_string, "Chalkduster"_fly_string, "Jazz LET"_fly_string, "Blippo"_fly_string, "Stencil Std"_fly_string, "Marker Felt"_fly_string, "Trattatello"_fly_string, "Coming Soon"_fly_string };
+-    Vector<FlyString> monospace_fallbacks { "Andale Mono"_fly_string, "Courier New"_fly_string, "Courier"_fly_string, "FreeMono"_fly_string, "OCR A Std"_fly_string, "Noto Sans Mono"_fly_string, "DejaVu Sans Mono"_fly_string, "Droid Sans Mono"_fly_string, "Liberation Mono"_fly_string };
++    Vector<FlyString> monospace_fallbacks { "Noto Mono"_fly_string, "Andale Mono"_fly_string, "Courier New"_fly_string, "Courier"_fly_string, "FreeMono"_fly_string, "OCR A Std"_fly_string, "Noto Sans Mono"_fly_string, "DejaVu Sans Mono"_fly_string, "Droid Sans Mono"_fly_string, "Liberation Mono"_fly_string };
+     Vector<FlyString> sans_serif_fallbacks { "Arial"_fly_string, "Helvetica"_fly_string, "Verdana"_fly_string, "Trebuchet MS"_fly_string, "Gill Sans"_fly_string, "Noto Sans"_fly_string, "Avantgarde"_fly_string, "Optima"_fly_string, "Arial Narrow"_fly_string, "Liberation Sans"_fly_string, "Roboto"_fly_string };
+     Vector<FlyString> serif_fallbacks { "Times"_fly_string, "Times New Roman"_fly_string, "Didot"_fly_string, "Georgia"_fly_string, "Palatino"_fly_string, "Bookman"_fly_string, "New Century Schoolbook"_fly_string, "American Typewriter"_fly_string, "Liberation Serif"_fly_string, "Roman"_fly_string, "Noto Serif"_fly_string };
+ 
+diff --git a/Meta/CMake/check_for_dependencies.cmake b/Meta/CMake/check_for_dependencies.cmake
+index d676306996..eeb588cf03 100644
+--- a/Meta/CMake/check_for_dependencies.cmake
++++ b/Meta/CMake/check_for_dependencies.cmake
+@@ -67,7 +67,10 @@ else()
+ endif()
+ 
+ find_package(CURL REQUIRED)
+-find_package(ICU 78.3 EXACT REQUIRED COMPONENTS data i18n uc)
++# DeBeOS/Haiku: system ICU is icu74 (the version harfbuzz & friends are
++# built against). Drop the upstream "78.3 EXACT" pin and accept the
++# coherent system ICU instead.
++find_package(ICU REQUIRED COMPONENTS data i18n uc)
+ find_package(LibXml2 REQUIRED)
+ find_package(OpenSSL REQUIRED)
+ find_package(SDL3 CONFIG REQUIRED)
+@@ -91,8 +94,29 @@ find_package(unofficial-angle CONFIG)
+ if(unofficial-angle_FOUND)
+     set(ANGLE_TARGETS unofficial::angle::libEGL unofficial::angle::libGLESv2)
+ else()
+-    pkg_check_modules(angle REQUIRED IMPORTED_TARGET angle)
+-    set(ANGLE_TARGETS PkgConfig::angle)
++    # DeBeOS/Haiku arm64 ships no ANGLE and no system GLES/EGL. Provide a DeBeOS
++    # GLES compile interface + null backend (Track C) so WebGL compiles and links
++    # honestly; WebGL context creation reports no device and pages fall back to
++    # CPU raster. ANGLE_TARGETS is consumed exactly like a real ANGLE target.
++    pkg_check_modules(angle IMPORTED_TARGET angle)
++    if(angle_FOUND)
++        set(ANGLE_TARGETS PkgConfig::angle)
++    else()
++        add_library(debeos_angle_shim SHARED
++            "${LADYBIRD_SOURCE_DIR}/Meta/CMake/angle-shim/gles_null_backend.cpp")
++        target_include_directories(debeos_angle_shim SYSTEM PUBLIC
++            "$<BUILD_INTERFACE:${LADYBIRD_SOURCE_DIR}/Meta/CMake/angle-shim/include>")
++        set_target_properties(debeos_angle_shim PROPERTIES POSITION_INDEPENDENT_CODE ON)
++        # LibCompositing links the shim PUBLIC and is itself in the LagomTargets
++        # export set; a real (non-imported) dependency must be in that export set
++        # too, so register the shim like any other Lagom static lib.
++        install(TARGETS debeos_angle_shim EXPORT LagomTargets
++            RUNTIME COMPONENT Lagom_Runtime
++            LIBRARY COMPONENT Lagom_Runtime NAMELINK_COMPONENT Lagom_Development
++            ARCHIVE COMPONENT Lagom_Development
++            INCLUDES DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
++        set(ANGLE_TARGETS debeos_angle_shim)
++    endif()
+ endif()
+ 
+ if (WIN32)
+diff --git a/Meta/CMake/cmake_options.cmake b/Meta/CMake/cmake_options.cmake
+index 21efccd12d..d290b5b2d6 100644
+--- a/Meta/CMake/cmake_options.cmake
++++ b/Meta/CMake/cmake_options.cmake
+@@ -22,6 +22,7 @@ else()
+ endif()
+ 
+ option(ENABLE_GUI_TARGETS "Enable building GUI targets" ON)
++option(ENABLE_QT_UI "Build the Qt UI chrome (requires Qt6)" ON)
+ option(ENABLE_INSTALL_HEADERS "Enable installing headers" ON)
+ option(ENABLE_INSTALL_FREEDESKTOP_FILES "Enable installing .desktop and .service files" ${freedesktop_files_default})
+ option(LADYBIRD_ENABLE_CPPTRACE "Enable use of cpptrace as the default library for stacktraces. If not available falls back to backtrace.h" ON)
+diff --git a/Meta/CMake/compile_options.cmake b/Meta/CMake/compile_options.cmake
+index ec92bb9543..889085e6cc 100644
+--- a/Meta/CMake/compile_options.cmake
++++ b/Meta/CMake/compile_options.cmake
+@@ -219,6 +219,16 @@ if (HAIKU)
+     add_compile_definitions(_DEFAULT_SOURCE)
+     add_compile_definitions(_GNU_SOURCE)
+     add_compile_definitions(__USE_GNU)
++    # DeBeOS/Haiku: libc is split across libroot/libnetwork/libbsd/libgnu. BSD
++    # compat (getprogname, arc4random_buf, ...) lives in libbsd and sockets/
++    # getaddrinfo in libnetwork; without these every Lagom .so trips the
++    # --no-undefined/-z,defs link below. Link them globally.
++    link_libraries(bsd network)
++    # clang emits unsupported R_AARCH64_TLSDESC relocs for thread_local;
++    # emulated TLS (__emutls_get_address, from libgcc) uses only relocs
++    # Haiku's arm64 runtime_loader supports.
++    add_compile_options(-femulated-tls)
++    include_directories(SYSTEM /boot/home/lbdeps/include)
+ endif()
+ 
+ if (NOT WIN32)
+@@ -233,7 +243,7 @@ if (NOT WIN32 AND NOT APPLE AND NOT ENABLE_FUZZERS)
+     # NOTE: Assume ELF
+     # NOTE: --no-undefined is not compatible with clang sanitizer runtimes
+     # NOTE: Some BSDs don't export all symbols from LibC so we can't use --no-undefined
+-    if ((CMAKE_CXX_COMPILER_ID MATCHES "Clang$" AND (ENABLE_ADDRESS_SANITIZER OR ENABLE_MEMORY_SANITIZER OR ENABLE_THREAD_SANITIZER OR ENABLE_UNDEFINED_SANITIZER OR ENABLE_LAGOM_COVERAGE_COLLECTION)) OR BSD)
++    if ((CMAKE_CXX_COMPILER_ID MATCHES "Clang$" AND (ENABLE_ADDRESS_SANITIZER OR ENABLE_MEMORY_SANITIZER OR ENABLE_THREAD_SANITIZER OR ENABLE_UNDEFINED_SANITIZER OR ENABLE_LAGOM_COVERAGE_COLLECTION)) OR BSD OR HAIKU)
+         add_link_options(LINKER:--allow-shlib-undefined)
+         add_link_options(LINKER:-z,undefs)
+     else()
+diff --git a/Meta/CMake/rust_crate.cmake b/Meta/CMake/rust_crate.cmake
+index c6efdc78d7..7fe8771551 100644
+--- a/Meta/CMake/rust_crate.cmake
++++ b/Meta/CMake/rust_crate.cmake
+@@ -275,8 +275,21 @@ function(_rust_crate_common_setup)
+     # On Windows, rustc invokes the linker directly with MSVC-style flags, so we must not override it with a
+     # compiler driver like clang-cl.
+     if (NOT WIN32)
++        # DeBeOS/Haiku: bare clang cannot link a runnable Haiku executable (no
++        # Haiku clang driver toolchain -> missing crt + split-libc default libs),
++        # so Rust host build-scripts/proc-macros linked with it crash at startup
++        # (exit 255). gcc is Haiku's system driver and links them correctly. The
++        # crate here is a staticlib (archived by AR), so this linker only affects
++        # host build artifacts, never the objects linked into Ladybird by lld.
++        set(_ladybird_rust_linker "${CMAKE_C_COMPILER}")
++        if (HAIKU)
++            find_program(_ladybird_haiku_rust_linker cc)
++            if (_ladybird_haiku_rust_linker)
++                set(_ladybird_rust_linker "${_ladybird_haiku_rust_linker}")
++            endif()
++        endif()
+         list(APPEND cargo_env
+-            "CARGO_TARGET_${target_upper}_LINKER=${CMAKE_C_COMPILER}"
++            "CARGO_TARGET_${target_upper}_LINKER=${_ladybird_rust_linker}"
+             "AR_${target_underscore}=${CMAKE_AR}"
+         )
+     endif()
+@@ -293,7 +306,6 @@ function(_rust_crate_common_setup)
+         ${cargo_profile_flag}
+         --
+         -Cdefault-linker-libraries=yes
+-        -D warnings
+         --emit=dep-info
+     )
+ 
+diff --git a/Meta/CMake/sync_rust_ffi_header.cmake b/Meta/CMake/sync_rust_ffi_header.cmake
+index bd26c929ce..ea4eb5a7d9 100644
+--- a/Meta/CMake/sync_rust_ffi_header.cmake
++++ b/Meta/CMake/sync_rust_ffi_header.cmake
+@@ -13,6 +13,12 @@ if (FFI_HEADER STREQUAL "")
+ endif()
+ 
+ file(GLOB root_output_files "${CARGO_BUILD_SCRIPT_DIR}/${CRATE_NAME}-*/root-output")
++# DeBeOS/Haiku: this cargo (1.100 nightly) uses the new build-dir layout
++# build/<crate>/<hash>/run/root-output (crate name is a directory), not the
++# old build/<crate>-<hash>/root-output. Match both; the recurse is scoped to
++# the crate dir so sibling crates' RustFFI.h cannot bleed in.
++file(GLOB_RECURSE _ladybird_new_layout_root_outputs "${CARGO_BUILD_SCRIPT_DIR}/${CRATE_NAME}/root-output")
++list(APPEND root_output_files ${_ladybird_new_layout_root_outputs})
+ 
+ set(latest_source_header "")
+ set(latest_root_output_timestamp "")
+diff --git a/Services/CMakeLists.txt b/Services/CMakeLists.txt
+index 74f9b22c17..057944e772 100644
+--- a/Services/CMakeLists.txt
++++ b/Services/CMakeLists.txt
+@@ -8,6 +8,7 @@ add_subdirectory(RequestServer)
+ if (ENABLE_CRANELIFT_JIT)
+     add_subdirectory(WasmCompiler)
+ endif()
++add_subdirectory(HeadlessShot)
+ add_subdirectory(WebContent)
+ add_subdirectory(WebDriver)
+ add_subdirectory(WebWorker)
+diff --git a/Tests/LibWeb/test-web/Collection.cpp b/Tests/LibWeb/test-web/Collection.cpp
+index 822da849eb..c29ce4aeba 100644
+--- a/Tests/LibWeb/test-web/Collection.cpp
++++ b/Tests/LibWeb/test-web/Collection.cpp
+@@ -97,6 +97,8 @@ static StringView screenshot_platform_name()
+     return "linux"sv;
+ #elif defined(AK_OS_WINDOWS)
+     return "windows"sv;
++#elif defined(AK_OS_HAIKU)
++    return "haiku"sv;
+ #else
+ #    error "Unhandled platform for screenshot expectations"
+ #endif
