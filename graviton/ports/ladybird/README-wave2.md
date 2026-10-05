@@ -1,5 +1,13 @@
 # Ladybird browser on DeBeOS / Graviton (arm64 Haiku) — Wave 2
 
+> **Superseded by Wave 3.** This page records the Wave-2 recipe as it was. Steps 5-7
+> below (and the `DEBEOS_HEADLESS_ONLY` bullet) describe the Wave-2
+> `ladybird-haiku-arm64.patch`. The current recipe applies
+> `ladybird-haiku-arm64-wave3.patch` ([README-wave3.md](README-wave3.md)) and then
+> `ladybird-haiku-ui.patch` (the native Haiku front end), and selects the chrome with
+> `-DENABLE_QT_UI=OFF -DENABLE_HAIKU_UI=ON` (see `configure-wave2.sh`), which replaces
+> `DEBEOS_HEADLESS_ONLY`.
+
 Tracking issue: #575. This directory holds the reproducible recipe for building
 the [Ladybird](https://github.com/LadybirdBrowser/ladybird) browser engine
 natively on DeBeOS (arm64 Haiku) on AWS Graviton, with a **CPU-raster Skia**
