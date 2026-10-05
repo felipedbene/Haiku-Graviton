@@ -1,0 +1,72 @@
+diff --git a/BUILD.gn b/BUILD.gn
+index 0c14a65..5613cc5 100644
+--- a/BUILD.gn
++++ b/BUILD.gn
+@@ -601,7 +601,6 @@ if (skia_compile_modules) {
+       sources += skia_ports_windows_sources
+     } else {
+       sources += [ "src/ports/SkOSFile_posix.cpp" ]
+-      libs += [ "dl" ]
+     }
+     sources += skia_sksl_core_sources
+     sources += skia_sksl_codegen_sources
+@@ -728,7 +727,6 @@ if (skia_compile_sksl_tests) {
+       sources += skia_ports_windows_sources
+     } else {
+       sources += [ "src/ports/SkOSFile_posix.cpp" ]
+-      libs += [ "dl" ]
+     }
+     sources += skia_sksl_codegen_sources
+     sources += skia_sksl_core_sources
+@@ -2006,7 +2004,6 @@ skia_component("skia") {
+     if (is_ios) {
+       sources += [ "src/ports/SkOSFile_ios.h" ]
+     }
+-    libs += [ "dl" ]
+   }
+ 
+   if (is_android) {
+diff --git a/src/ports/SkMemory_malloc.cpp b/src/ports/SkMemory_malloc.cpp
+index d784af5..31de5ee 100644
+--- a/src/ports/SkMemory_malloc.cpp
++++ b/src/ports/SkMemory_malloc.cpp
+@@ -126,9 +126,12 @@ size_t sk_malloc_size(void* addr, size_t size) {
+     #elif defined(SK_BUILD_FOR_ANDROID) && __ANDROID_API__ >= 17
+         completeSize = malloc_usable_size(addr);
+         SkASSERT(completeSize >= size);
+-    #elif defined(SK_BUILD_FOR_UNIX)
++    #elif defined(SK_BUILD_FOR_UNIX) && !defined(__HAIKU__)
+         completeSize = malloc_usable_size(addr);
+         SkASSERT(completeSize >= size);
++    #elif defined(__HAIKU__)
++        // DeBeOS: Haiku libroot has no malloc_usable_size; report requested size.
++        completeSize = size;
+     #elif defined(SK_BUILD_FOR_WIN)
+         completeSize = _msize(addr);
+         SkASSERT(completeSize >= size);
+diff --git a/third_party/freetype2/BUILD.gn b/third_party/freetype2/BUILD.gn
+index 631b909..10088be 100644
+--- a/third_party/freetype2/BUILD.gn
++++ b/third_party/freetype2/BUILD.gn
+@@ -11,7 +11,7 @@ declare_args() {
+   skia_use_system_freetype2 =
+       (is_official_build || !(is_android || sanitize == "MSAN")) &&
+       !is_canvaskit
+-  skia_system_freetype2_include_path = "/usr/include/freetype2"
++  skia_system_freetype2_include_path = "/boot/system/develop/headers/freetype2"
+   skia_system_freetype2_lib = "freetype"
+ 
+   skia_use_freetype_woff2 = is_canvaskit
+diff --git a/third_party/harfbuzz/BUILD.gn b/third_party/harfbuzz/BUILD.gn
+index bd08b05..7f8a6f5 100644
+--- a/third_party/harfbuzz/BUILD.gn
++++ b/third_party/harfbuzz/BUILD.gn
+@@ -12,7 +12,7 @@ declare_args() {
+ 
+ if (skia_use_system_harfbuzz) {
+   system("harfbuzz") {
+-    include_dirs = [ "/usr/include/harfbuzz" ]
++    include_dirs = [ "/boot/system/develop/headers/harfbuzz" ]
+     libs = [ "harfbuzz" ]
+     if (skia_pdf_subset_harfbuzz) {
+       libs += [ "harfbuzz-subset" ]
