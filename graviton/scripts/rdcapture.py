@@ -2066,6 +2066,13 @@ class Capture(object):
         self.text_trailing_bytes = 0
         self.string_width_queries = 0
         self.string_width_times = []
+        # Burst timing (#548): monotonic wall time of the first and last
+        # draw-string round trip, so paint wall-time can be measured at
+        # loopback speed where the whole burst is sub-second.
+        self.first_draw_string_t = None
+        self.last_draw_string_t = None
+        self.draw_string_replies = 0
+        self.draw_string_times = []      # monotonic ts of every round trip
         self.clipped_out_ops = 0
         self.bitmaps_decoded = 0
         self.bitmaps_placeholder = 0
@@ -2943,6 +2950,12 @@ class Capture(object):
         the advance is mapped the same way here: answering point.x + advance for
         a rotated run would send the server off along a line its own renderer
         never drew."""
+        now = time.monotonic()
+        if self.first_draw_string_t is None:
+            self.first_draw_string_t = now
+        self.last_draw_string_t = now
+        self.draw_string_replies += 1
+        self.draw_string_times.append(now)
         if run is not None:
             if last_glyph_only:
                 # RP_DRAW_STRING_WITH_OFFSETS: the server placed every glyph
@@ -4512,6 +4525,19 @@ def report(cap, args, connected, elapsed, stop_reason, wire=None):
             "text_unsupported": dict(cap.text_unsupported),
             "text_runs": cap.text_records,
             "string_width_queries": cap.string_width_queries,
+            "draw_string_replies": cap.draw_string_replies,
+            "draw_string_burst_s": (
+                None if cap.first_draw_string_t is None
+                else cap.last_draw_string_t - cap.first_draw_string_t),
+            # Inter-arrival gaps (ms) between consecutive draw-string round
+            # trips. Under per-string serialization the dense repaint's typical
+            # gap == link RTT; idle gaps are outliers and excluded by taking a
+            # low percentile. (#548)
+            "draw_string_gaps_ms": (
+                [] if len(cap.draw_string_times) < 2
+                else [1000.0 * (cap.draw_string_times[i + 1]
+                                - cap.draw_string_times[i])
+                      for i in range(len(cap.draw_string_times) - 1)]),
             "bitmaps_decoded": cap.bitmaps_decoded,
             "bitmaps_placeholder": cap.bitmaps_placeholder,
             "bitmap_colorspaces": {"0x%04x" % k: v for k, v
