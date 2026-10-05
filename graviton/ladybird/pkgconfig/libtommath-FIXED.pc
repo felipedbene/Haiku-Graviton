@@ -1,0 +1,10 @@
+prefix=/boot/system
+exec_prefix=${prefix}
+libdir=${prefix}/develop/lib
+includedir=${prefix}/develop/headers
+
+Name: LibTomMath
+Description: public domain library for manipulating large integer numbers
+Version: 1.2.0
+Libs: -L${libdir} -ltommath
+Cflags: -I${includedir}

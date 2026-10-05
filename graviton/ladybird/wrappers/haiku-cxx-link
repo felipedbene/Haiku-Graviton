@@ -1,0 +1,31 @@
+#!/bin/bash
+# DeBeOS/Haiku Ladybird link wrapper. clang-21's Haiku driver cannot link a
+# runnable Haiku executable OR a loadable shared object (it emits an interp-less
+# -shared ET_DYN; such images fail runtime_loader with "Could not map image: Bad
+# data"). g++ links clang-compiled objects correctly (adds Haiku crt + interp).
+# So: compile with clang, link with g++. g++ -fuse-ld=lld is unusable (gcc passes
+# -m aarch64haiku which lld rejects), so we use GNU ld + --no-gc-sections to dodge
+# the ld-2.41 aarch64 stub bug. Strip clang/lld-only flags GNU ld/g++ reject.
+argv=("$@")
+n=${#argv[@]}
+args=()
+i=0
+while [ $i -lt $n ]; do
+  a="${argv[$i]}"
+  case "$a" in
+    --target=*|-fuse-ld=*|-stdlib=*|--sysroot=*) ;;
+    -Wl,--gdb-index|-Wl,-Bsymbolic-non-weak-functions) ;;
+    -Xlinker)
+      nxt="${argv[$((i+1))]}"
+      case "$nxt" in
+        --gdb-index|-Bsymbolic-non-weak-functions)
+          i=$((i+1)) ;;             # drop -Xlinker and its value
+        *)
+          args+=("$a") ;;           # keep -Xlinker; value kept next loop
+      esac
+      ;;
+    *) args+=("$a") ;;
+  esac
+  i=$((i+1))
+done
+exec /boot/system/bin/g++ -Wl,--no-gc-sections "${args[@]}"
