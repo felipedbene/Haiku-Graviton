@@ -13,8 +13,9 @@
 #               reverse dependency in the repo is libtommath_devel.
 #   simdjson    IN-PLACE BUMP 3.11.5 -> 5.0.2.  Different SONAME anyway
 #               (libsimdjson.so.24 -> .so.34); zero reverse dependencies.
-#   libpng16    REVISION BUMP 1.6.53-1 -> 1.6.53-2, adding the upstream APNG
-#               patch and the ARM NEON objects.  APNG is ABI-ADDITIVE: it adds
+#   libpng16    REVISION BUMP 1.6.53-1 -> 1.6.53-3, adding the upstream APNG
+#               patch and the ARM NEON objects, and a `libpng16_apng` provides
+#               that names the APNG capability (see the libpng16 section).  APNG is ABI-ADDITIVE: it adds
 #               png_get_acTL()/png_get_next_frame_fcTL() and keeps every
 #               existing symbol, so the ~70 existing consumers keep working.
 #               Verified: system 1.6.53-1 exports 0 acTL symbols, this build
@@ -156,13 +157,23 @@ R=$OUT/root-libpng16; rm -rf "$R"; mkdir -p "$R/lib"
 # comment says "That should actually be kind of fatal!").  $PNGVERS is a rebuild
 # with --version-script, so rev 2 is a genuine ABI superset of rev 1: same 257
 # exported names under the same PNG16_0 node, plus the 22 APNG entry points.
+#
+# Revision 3 has the same payload as revision 2 plus one provides entry,
+# `libpng16_apng`.  Revision 2 relied on ladybird requiring
+# `libpng16 >= 1.6.53-2`, which does not work: provides carry no revision, so
+# revision 1's `libpng16 = 1.6.53` satisfies that expression and pkgman kept
+# the non-APNG library (runtime_loader: could not resolve
+# png_get_next_frame_fcTL).  The capability a consumer needs has to be its own
+# resolvable.  Every existing provides line stays as it was, so
+# libpng16_devel's `libpng16 == 1.6.53` is still satisfied.  The description
+# is intentionally left as revision 2's so the rebuilt payload is unchanged.
 PNGVERS=${PNGVERS:-/boot/home/pngbuild/vers/.libs}
 copy_lib "$PNGVERS/libpng16.so.16.53.0" "$R/lib"
 rm -f "$R/lib/libpng.so" "$R/lib/libpng16.so"   # unversioned links belong to _devel
 mklic "$R" "LibPNG"
 cat > "$R/.PackageInfo" <<'EOF'
 name			libpng16
-version			1.6.53-2
+version			1.6.53-3
 architecture	arm64
 summary			"Portable Network Graphics library"
 description		"libpng is the official PNG reference library. Revision 2 adds the upstream libpng-apng patch (PNG_APNG_SUPPORTED: png_get_acTL(), png_get_next_frame_fcTL(), ...) and the ARM NEON optimised objects. Ladybird's LibImageDecoders hard-requires APNG, and revision 1 exports none of those symbols. APNG is ABI-additive -- every symbol revision 1 exported is still exported -- so existing consumers are unaffected."
@@ -179,13 +190,14 @@ licenses { "LibPNG" }
 provides {
 	libpng16 = 1.6.53 compat >= 1.6
 	lib:libpng16 = 16.53.0 compat >= 16
+	libpng16_apng = 1.6.53
 }
 requires {
 	haiku
 	lib:libz
 }
 EOF
-package create -C "$R" "libpng16-1.6.53-2-arm64.hpkg" >/dev/null
+package create -C "$R" "libpng16-1.6.53-3-arm64.hpkg" >/dev/null
 
 ################################################################ ffmpeg7
 R=$OUT/root-ffmpeg7; rm -rf "$R"; mkdir -p "$R/lib"

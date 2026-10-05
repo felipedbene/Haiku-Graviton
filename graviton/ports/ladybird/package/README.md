@@ -7,14 +7,15 @@ this document only records what is specific to Ladybird.
 
 Upstream reference point: Ladybird `90998c5d`. There are no release tags, so the
 package version follows the haikuports git-snapshot convention:
-`ladybird-0~git90998c5d-1-arm64.hpkg`.
+`ladybird-0~git90998c5d-2-arm64.hpkg` (revision 2 changed only the libpng
+requirement; see below).
 
 ## Two scripts
 
 | Script | Produces |
 |---|---|
 | `build-dep-packages.sh` | the five dependency pool packages (`icu78`, `libtommath`, `simdjson`, `libpng16`, `ffmpeg7`) |
-| `build-package.sh` | `ladybird-0~git90998c5d-1-arm64.hpkg` |
+| `build-package.sh` | `ladybird-0~git90998c5d-2-arm64.hpkg` |
 
 Both run on the builder, against the CMake build tree (`bin/`, `lib/`,
 `share/Lagom`) and the external dependency prefix the build used. Run
@@ -99,17 +100,32 @@ each needed a deliberate decision about blast radius first:
 | `icu78` 78.3-1 | net-new | the engine links ICU 78; the system ships icu74 and the SONAMEs differ (`libicuuc.so.78` vs `.74`) | none — the repository already carries nine coexisting ICU runtimes, this is the tenth, and `icu74` keeps serving its consumers |
 | `libtommath` 1.3.0-1 | in-place bump from 1.2.0 | 1.2.0 does not export `mp_expt_n()`, which LibCrypto calls (verified with `nm -D`) | only reverse dependency in the repository is `libtommath_devel` |
 | `simdjson` 5.0.2-1 | in-place bump from 3.11.5 | the engine links simdjson 5; SONAME moves `libsimdjson.so.24` → `.so.34` | zero reverse dependencies |
-| `libpng16` 1.6.53-**2** | revision bump | LibImageDecoders hard-requires APNG; revision 1 exports no `png_*_acTL`/`fcTL` at all, so `liblagom-imagedecoders` cannot load against it | ~70 consumers — see below |
+| `libpng16` 1.6.53-**3** | revision bump (+ `libpng16_apng` provides) | LibImageDecoders hard-requires APNG; revision 1 exports no `png_*_acTL`/`fcTL` at all, so `liblagom-imagedecoders` cannot load against it | ~70 consumers — see below |
 | `ffmpeg7` 7.1-1 | net-new | LibMedia links `libswresample`; nothing in the repository provided `lib:libavcodec` or `lib:libswresample` (`ffmpeg_x264` is a command-line package) | none |
 
 `requires` names a *capability* wherever possible (`lib:libicuuc >= 78`,
 `lib:libtommath >= 1.3`, `lib:libsimdjson >= 34`, `lib:libswresample >= 5`) so
 the old versions cannot satisfy it. libpng is the exception: APNG is additive
 inside one SONAME version, so there is no `lib:` version that distinguishes the
-two revisions, and the requirement has to be on the package —
-`libpng16 >= 1.6.53-2`. A future upstream bump to 1.6.54 would satisfy that
-expression without necessarily carrying the patch; the APNG recipe is the thing
-that has to be kept, not the comparison.
+two revisions. libpng16 therefore provides a capability of its own,
+`libpng16_apng = 1.6.53`, and ladybird requires `libpng16_apng >= 1.6.53`.
+
+> The first attempt, `libpng16 >= 1.6.53-2` (ladybird revision 1), did not work.
+> Provides carry no revision, so the base image's libpng16-1.6.53-1 provides
+> `libpng16 = 1.6.53` and satisfies that expression. On a fresh canonical box
+> `pkgman install ladybird` succeeded, kept revision 1, and
+> `ladybird-headless-shot` died at load with `Could not resolve symbol
+> 'png_get_next_frame_fcTL'`. A revision is a property of the package, not of
+> anything it provides, so the solver never sees it. Revision 3 has the same
+> payload as revision 2 and adds only the `libpng16_apng` provides. Every
+> earlier provides line is unchanged, so `libpng16_devel` (which requires
+> `libpng16 == 1.6.53`) still installs beside it. Verified on a fresh box:
+> ladybird-2 on its own fails with `nothing provides libpng16_apng>=1.6.53`,
+> ladybird-2 plus libpng16-3 upgrades libpng16 1.6.53-1 to 1.6.53-3 and renders,
+> and `libpng16_devel` then installs without displacing -3.
+>
+> A future libpng bump has to carry the APNG patch *and* the `libpng16_apng`
+> provides. The provides is the promise that the patch is there.
 
 ### Nothing to ship
 
@@ -118,7 +134,7 @@ and `skia` is a static `libskia.a` baked into `liblagom-gfx`. None appears in
 any `NEEDED`, so none needs a package. Their licences are bundled in the
 `ladybird` package instead, which is where the obligation actually lands.
 
-## libpng16 revision 2 — the part that needed real work
+## libpng16 revision 2 (payload of revision 3) — the part that needed real work
 
 The first APNG build was linked **without** a symbol-version script, so it
 carried no `PNG16_0` version node while the repository's revision 1 does. That
