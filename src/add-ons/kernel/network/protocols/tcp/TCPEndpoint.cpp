@@ -733,6 +733,10 @@ TCPEndpoint::Connect(const sockaddr* address)
 	TRACE("  Connect(): starting 3-way handshake...");
 
 	fFlags |= FLAG_CAN_NOTIFY;
+	// A FIN from an earlier connection on this endpoint must not make a read
+	// after a failed connect() look like an orderly close (EOF instead of
+	// ENOTCONN); _PrepareReceivePath() only clears it once a SYN arrives.
+	fFinishReceived = false;
 	fState = SYNCHRONIZE_SENT;
 	T(State(this));
 
