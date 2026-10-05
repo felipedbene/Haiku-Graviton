@@ -177,8 +177,8 @@ export class OpsStack extends cdk.Stack {
     // static-routed connection. BuildVpc is 10.128.0.0/16, non-overlapping with
     // the on-prem 10.0.0.0/16 range, so routing is unambiguous.
     const onPremPublicIp = this.node.tryGetContext('onPremPublicIp');
+    const onPremCidr = this.node.tryGetContext('onPremCidr') ?? '10.0.0.0/16';
     if (onPremPublicIp) {
-      const onPremCidr = this.node.tryGetContext('onPremCidr') ?? '10.0.0.0/16';
       vpc.enableVpnGateway({
         type: 'ipsec.1',
         vpnRoutePropagation: [
@@ -257,6 +257,19 @@ export class OpsStack extends cdk.Stack {
     });
     eiceSg.addEgressRule(builderSg, ec2.Port.tcp(22), 'EICE to builders SSH');
     builderSg.addIngressRule(eiceSg, ec2.Port.tcp(22), 'SSH via Instance Connect Endpoint');
+
+    // On-prem reach over the Site-to-Site VPN (gated on the VPN being
+    // configured): SSH, the remote-desktop ports (app_server :10900 + the
+    // remote_broker front door :10902), and ping -- all from the on-prem range,
+    // which is only routable once the tunnel is up. Codifies the rules that
+    // were otherwise added to the builder SG by hand.
+    if (onPremPublicIp) {
+      const onPrem = ec2.Peer.ipv4(onPremCidr);
+      builderSg.addIngressRule(onPrem, ec2.Port.tcp(22), 'SSH from on-prem over VPN');
+      builderSg.addIngressRule(onPrem, ec2.Port.tcpRange(10900, 10902),
+        'remote desktop (app_server + broker) from on-prem over VPN');
+      builderSg.addIngressRule(onPrem, ec2.Port.allIcmp(), 'ping from on-prem over VPN');
+    }
     const eice = new ec2.CfnInstanceConnectEndpoint(this, 'Eice', {
       subnetId: builderSubnetIds[0],
       securityGroupIds: [eiceSg.securityGroupId],
