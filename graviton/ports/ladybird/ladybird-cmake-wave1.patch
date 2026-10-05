@@ -1,0 +1,58 @@
+diff --git a/Libraries/LibJS/CMakeLists.txt b/Libraries/LibJS/CMakeLists.txt
+index 0e11e6d8..8937a2ae 100644
+--- a/Libraries/LibJS/CMakeLists.txt
++++ b/Libraries/LibJS/CMakeLists.txt
+@@ -334,7 +334,18 @@ if ("${CMAKE_SYSTEM_PROCESSOR}" MATCHES "^(x86_64|amd64|AMD64)$")
+ elseif ("${CMAKE_SYSTEM_PROCESSOR}" MATCHES "^(aarch64|arm64|ARM64)$")
+     set(FLAP_ARCH "aarch64")
+ else()
+-    message(FATAL_ERROR "LibJS requires JS interpreter support for ${CMAKE_SYSTEM_PROCESSOR}")
++    # DeBeOS/Haiku arm64: Haiku's `uname -p` returns "other", so CMake leaves
++    # CMAKE_SYSTEM_PROCESSOR as "other" on a native build and this check fails
++    # even though the machine is arm64. Fall back to the real machine arch.
++    execute_process(COMMAND uname -m
++        OUTPUT_VARIABLE _LADYBIRD_UNAME_M OUTPUT_STRIP_TRAILING_WHITESPACE)
++    if ("${_LADYBIRD_UNAME_M}" MATCHES "^(aarch64|arm64|ARM64)$")
++        set(FLAP_ARCH "aarch64")
++    elseif ("${_LADYBIRD_UNAME_M}" MATCHES "^(x86_64|amd64|AMD64)$")
++        set(FLAP_ARCH "x86_64")
++    else()
++        message(FATAL_ERROR "LibJS requires JS interpreter support for ${CMAKE_SYSTEM_PROCESSOR} (uname -m: ${_LADYBIRD_UNAME_M})")
++    endif()
+ endif()
+ 
+ if (DEFINED FLAP_ARCH)
+diff --git a/Meta/CMake/check_for_dependencies.cmake b/Meta/CMake/check_for_dependencies.cmake
+index d6763069..4efea951 100644
+--- a/Meta/CMake/check_for_dependencies.cmake
++++ b/Meta/CMake/check_for_dependencies.cmake
+@@ -67,7 +67,10 @@ else()
+ endif()
+ 
+ find_package(CURL REQUIRED)
+-find_package(ICU 78.3 EXACT REQUIRED COMPONENTS data i18n uc)
++# DeBeOS/Haiku: system ICU is icu74 (the version harfbuzz & friends are
++# built against). Drop the upstream "78.3 EXACT" pin and accept the
++# coherent system ICU instead.
++find_package(ICU REQUIRED COMPONENTS data i18n uc)
+ find_package(LibXml2 REQUIRED)
+ find_package(OpenSSL REQUIRED)
+ find_package(SDL3 CONFIG REQUIRED)
+@@ -91,8 +94,15 @@ find_package(unofficial-angle CONFIG)
+ if(unofficial-angle_FOUND)
+     set(ANGLE_TARGETS unofficial::angle::libEGL unofficial::angle::libGLESv2)
+ else()
+-    pkg_check_modules(angle REQUIRED IMPORTED_TARGET angle)
+-    set(ANGLE_TARGETS PkgConfig::angle)
++    # DeBeOS/Haiku headless: ANGLE (GLES) is not available and not needed
++    # for CPU raster. Keep it optional so a GPU-less configure succeeds;
++    # ANGLE_TARGETS is only consumed via foreach()/link lists, so empty is safe.
++    pkg_check_modules(angle IMPORTED_TARGET angle)
++    if(angle_FOUND)
++        set(ANGLE_TARGETS PkgConfig::angle)
++    else()
++        set(ANGLE_TARGETS "")
++    endif()
+ endif()
+ 
+ if (WIN32)
