@@ -1071,6 +1071,18 @@ TCPEndpoint::ReadData(size_t numBytes, uint32 flags, net_buffer** _buffer)
 	// TODO: add support for urgent data (MSG_OOB)
 
 	while (true) {
+		// The connection can be torn down while we wait below: a reset reaches
+		// _HandleReset() -> _Close(), which sets CLOSED and wakes us. Nothing
+		// further will ever arrive, so without this re-check a blocking reader
+		// would go straight back to sleep forever (#605). Report it exactly as
+		// the entry check above does; _HandleReset() has recorded the error
+		// (ECONNRESET for an established connection) before releasing fLock.
+		if (fState == CLOSED) {
+			if (socket->error != B_OK)
+				return socket->error;
+			return ENOTCONN;
+		}
+
 		// Flush any contiguous prefix that back-pressure left staged in the
 		// reorder buffer into the ring, so the availability checks below (and
 		// the lock-free drain that follows) see everything deliverable. In the
