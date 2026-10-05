@@ -2624,7 +2624,26 @@ TCPEndpoint::SegmentReceived(tcp_segment_header& segment, net_buffer* buffer)
 	// handle RESET action separately to use actual connection
 	// to generate the segment information
 	if ((segmentAction & RESET) != 0 && _SendReset(true) == B_OK) {
-		fState = CLOSED;
+		if (fState == SYNCHRONIZE_SENT || fState == TIME_WAIT
+			|| fState == CLOSED) {
+			// Left as it was. Nobody waits on a read in TIME_WAIT (it returns
+			// at once), and _Close() here would set FLAG_DELETE_ON_CLOSE, so
+			// the release below would drop the reference Free() took for the
+			// 2MSL wait and free the connection early -- the RFC 1337 hazard
+			// the inbound-reset path avoids by ignoring resets in TIME_WAIT.
+			// SYNCHRONIZE_SENT (a SYN-ACK with an unacceptable ACK) wants the
+			// RFC 9293 3.10.7.3 behaviour instead, reset and stay put, which
+			// is a separate change.
+			fState = CLOSED;
+		} else {
+			// Our own reset ends the connection just as the peer's does:
+			// cancel the timers, record the error, wake a blocked reader and
+			// writer. Only setting CLOSED left a recv() with no timeout asleep
+			// for good, and any in-window SYN, even on an idle ESTABLISHED
+			// connection, gets here (#609). The lifetime handling is that of
+			// the inbound-reset path, which reaches every one of these states.
+			_HandleReset(ECONNRESET);
+		}
 		segmentAction &= ~RESET;
 		pendingAcknowledge.valid = false;
 			// The connection is dead: a prepared plain ACK would go out AFTER
