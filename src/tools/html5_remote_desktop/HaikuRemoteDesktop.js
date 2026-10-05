@@ -2887,12 +2887,29 @@ function init()
 	if (localStorage.height)
 		heightInput.value = localStorage.height;
 
+	// Query-string overrides let a launcher hand a ready link, e.g.
+	//   HaikuRemoteDesktop.html?server=wss://host:10902&token=...&autoconnect=1
+	// Params win over the saved values. The token/cookie are secrets: they are
+	// accepted from the URL for one-click launch but, like a typed value, are
+	// never written to localStorage.
+	var params = new URLSearchParams(location.search);
+	if (params.get('server'))
+		targetAddressInput.value = params.get('server');
+	if (params.get('token'))
+		tokenInput.value = params.get('token');
+	if (params.get('cookie'))
+		cookieInput.value = params.get('cookie');
+	if (params.get('width'))
+		widthInput.value = params.get('width');
+	if (params.get('height'))
+		heightInput.value = params.get('height');
+
 	var onDisconnect = function(reason) {
 			document.body.classList.remove('connect');
 			gSession = undefined;
 		};
 
-	document.querySelector('#connectButton').onclick = function() {
+	var connect = function() {
 			document.body.classList.add('connect');
 
 			localStorage.width = widthInput.value;
@@ -2905,4 +2922,9 @@ function init()
 				heightInput.value, targetAddressInput.value, tokenInput.value,
 				cookieInput.value, onDisconnect);
 		};
+	document.querySelector('#connectButton').onclick = connect;
+
+	// Opt-in one-click, only when a server was actually supplied.
+	if (params.get('autoconnect') && targetAddressInput.value)
+		connect();
 }
