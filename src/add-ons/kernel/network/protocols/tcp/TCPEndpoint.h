@@ -127,6 +127,7 @@ private:
 			ssize_t		_ReceiveAvailable() const;
 			size_t		_ReceiveBuffered() const;
 			size_t		_ReceiveFree() const;
+			bool		_ReceiveWindowExhausted() const;
 			void		_DrainToRing();
 			void		_InitReceiveRing();
 			void		_NotifyReader();

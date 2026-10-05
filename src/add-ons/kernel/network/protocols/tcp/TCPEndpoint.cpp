@@ -1100,20 +1100,46 @@ TCPEndpoint::ReadData(size_t numBytes, uint32 flags, net_buffer** _buffer)
 		}
 
 		if (available > 0) {
+			if (available >= dataNeeded)
+				break;
+
 			// Honour a PUSH boundary: deliver early even below the low-water
 			// mark once everything up to the last pushed byte is available.
-			size_t pushedAvailable = 0;
-			if (fPushSequence != 0) {
-				tcp_sequence readerSequence = (fInitialReceiveSequence + 1)
-					+ fReceiveRing.Consumed();
-				tcp_sequence pushEnd = fPushSequence > fReceiveNext
-					? fReceiveNext : fPushSequence;
-				if (pushEnd > readerSequence)
-					pushedAvailable = (pushEnd - readerSequence).Number();
+			// Not for MSG_WAITALL, which asks for the full count: only that,
+			// end-of-file, an error, a signal or a timeout may end its wait,
+			// as on other systems. A sender pushes at the end of every send(),
+			// so honouring it here returned short counts on healthy
+			// connections (#610).
+			if ((flags & MSG_WAITALL) == 0) {
+				size_t pushedAvailable = 0;
+				if (fPushSequence != 0) {
+					tcp_sequence readerSequence = (fInitialReceiveSequence + 1)
+						+ fReceiveRing.Consumed();
+					tcp_sequence pushEnd = fPushSequence > fReceiveNext
+						? fReceiveNext : fPushSequence;
+					if (pushEnd > readerSequence)
+						pushedAvailable = (pushEnd - readerSequence).Number();
+				}
+
+				if (pushedAvailable > 0 && pushedAvailable >= available)
+					break;
 			}
 
-			if (available >= dataNeeded
-				|| (pushedAvailable > 0 && pushedAvailable >= available))
+			// The FIN is in: nothing more will arrive. (FIN implies PUSH, which
+			// used to cover this.)
+			if (fState == FINISH_RECEIVED)
+				break;
+
+			// More was asked for than the receive buffer can hold, and the
+			// peer cannot send another byte until we read: return what is
+			// there instead of waiting forever. socket_receive() comes back
+			// for the rest of a MSG_WAITALL request.
+			if (_ReceiveWindowExhausted())
+				break;
+
+			// MSG_DONTWAIT | MSG_WAITALL returns what there is, as on Linux,
+			// rather than nothing.
+			if (timeout == 0 && (flags & MSG_WAITALL) != 0)
 				break;
 		} else if (fState == FINISH_RECEIVED) {
 			// ``If no text is awaiting delivery, the RECEIVE will
@@ -1838,6 +1864,34 @@ size_t
 TCPEndpoint::_ReceiveBuffered() const
 {
 	return fReceiveRing.Available() + fReceiveQueue.Used();
+}
+
+
+/*!	Whether the peer has to wait for the application to read before it can
+	send anything more: it has used up the window it was offered, and what we
+	could offer now is less than a segment, which is all a peer avoiding silly
+	windows will send into (and less than one unit of our window scale, which
+	advertises as zero). Out-of-order data waiting for a hole to be filled
+	does not make the window exhausted -- the hole lies inside the window the
+	peer was already offered. A reader waiting for more than the buffer can
+	hold uses this to know that waiting longer would wait forever.
+*/
+bool
+TCPEndpoint::_ReceiveWindowExhausted() const
+{
+	uint32 segmentSize = fReceiveMaxSegmentSize;
+	if (segmentSize == 0)
+		segmentSize = TCP_DEFAULT_MAX_SEGMENT_SIZE;
+	size_t threshold = max_c((size_t)segmentSize,
+		(size_t)1 << fReceiveWindowShift);
+
+	// Signed: after the FIN, or after we accepted a segment that ran past the
+	// window, the receive point can be at or beyond the advertised edge.
+	int32 offered = (int32)(fReceiveMaxAdvertised - fReceiveNext).Number();
+	if (offered > 0 && (size_t)offered >= threshold)
+		return false;
+
+	return _ReceiveFree() < threshold;
 }
 
 
