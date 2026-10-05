@@ -1,0 +1,137 @@
+SUMMARY="Audio and video recording, conversion and streaming libraries (7.x)"
+DESCRIPTION="FFmpeg is a collection of libraries and tools to process \
+multimedia content such as audio, video, subtitles and related metadata.
+
+This is the 7.x shared-library runtime. It exists because Ladybird's LibMedia \
+links libswresample and nothing in the DeBeOS repository provided \
+lib:libavcodec or lib:libswresample at all -- ffmpeg_x264 is a command-line \
+package, not a shared-library one. It is therefore a NET-NEW port with no \
+collision surface."
+HOMEPAGE="https://ffmpeg.org"
+COPYRIGHT="2000-2003 Fabrice Bellard
+	2003-2026 the FFmpeg developers"
+# Built WITHOUT --enable-gpl and without any GPL-only external codec, so the
+# result is LGPL v2.1 or later.
+LICENSE="GNU LGPL v2.1"
+# DeBeOS: NEW PORT. Deliberately a MINIMAL build -- only the external libraries
+# Ladybird needs are enabled, which is also why REQUIRES below is short
+# (lib:libbz2, lib:libiconv, lib:libz) compared with the full-featured ffmpeg6
+# recipe. Do not "improve" it by switching on codecs the browser does not use
+# without also re-verifying the Ladybird render.
+#
+# NOTE for whoever first builds this: the shared libraries must come out with a
+# LOAD/RELRO layout that Haiku's runtime_loader accepts. GNU ld's default
+# 4-LOAD+RELRO layout is rejected with "Bad data"; add
+#   --extra-ldflags="-Wl,-z,noseparate-code"
+# to the configure line. (RELRO-neutral -- do NOT use -z norelro.)
+REVISION="1"
+SOURCE_URI="https://ffmpeg.org/releases/ffmpeg-$portVersion.tar.xz"
+# TODO fill on the first haikuporter fetch of 7.1 (it prints the actual
+# checksum on mismatch). The packaged build came from the n7.1 git tag of
+# github.com/FFmpeg/FFmpeg.
+CHECKSUM_SHA256="UNVERIFIED-FILL-ON-FIRST-FETCH"
+SOURCE_DIR="ffmpeg-$portVersion"
+
+ARCHITECTURES="all !x86_gcc2"
+SECONDARY_ARCHITECTURES="x86"
+
+# SONAME versions, as produced by the packaged 7.1 build.
+libavutilVersion="59.39.100"
+libavcodecVersion="61.19.100"
+libavformatVersion="61.7.100"
+libavdeviceVersion="61.3.100"
+libavfilterVersion="10.4.100"
+libswresampleVersion="5.3.100"
+libswscaleVersion="8.3.100"
+
+libavutilVersionCompat="$libavutilVersion compat >= ${libavutilVersion%%.*}"
+libavcodecVersionCompat="$libavcodecVersion compat >= ${libavcodecVersion%%.*}"
+libavformatVersionCompat="$libavformatVersion compat >= ${libavformatVersion%%.*}"
+libavdeviceVersionCompat="$libavdeviceVersion compat >= ${libavdeviceVersion%%.*}"
+libavfilterVersionCompat="$libavfilterVersion compat >= ${libavfilterVersion%%.*}"
+libswresampleVersionCompat="$libswresampleVersion compat >= ${libswresampleVersion%%.*}"
+libswscaleVersionCompat="$libswscaleVersion compat >= ${libswscaleVersion%%.*}"
+portVersionCompat="$portVersion compat >= 7"
+
+ffmpegLibs="libavcodec libavdevice libavfilter libavformat libavutil
+	libswresample libswscale"
+
+PROVIDES="
+	ffmpeg7$secondaryArchSuffix = $portVersionCompat
+	lib:libavcodec$secondaryArchSuffix = $libavcodecVersionCompat
+	lib:libavdevice$secondaryArchSuffix = $libavdeviceVersionCompat
+	lib:libavfilter$secondaryArchSuffix = $libavfilterVersionCompat
+	lib:libavformat$secondaryArchSuffix = $libavformatVersionCompat
+	lib:libavutil$secondaryArchSuffix = $libavutilVersionCompat
+	lib:libswresample$secondaryArchSuffix = $libswresampleVersionCompat
+	lib:libswscale$secondaryArchSuffix = $libswscaleVersionCompat
+	"
+REQUIRES="
+	haiku$secondaryArchSuffix
+	lib:libbz2$secondaryArchSuffix
+	lib:libiconv$secondaryArchSuffix
+	lib:libz$secondaryArchSuffix
+	"
+
+SUMMARY_devel="FFmpeg 7.x development files"
+PROVIDES_devel="
+	ffmpeg7${secondaryArchSuffix}_devel = $portVersionCompat
+	devel:libavcodec$secondaryArchSuffix = $libavcodecVersionCompat
+	devel:libavdevice$secondaryArchSuffix = $libavdeviceVersionCompat
+	devel:libavfilter$secondaryArchSuffix = $libavfilterVersionCompat
+	devel:libavformat$secondaryArchSuffix = $libavformatVersionCompat
+	devel:libavutil$secondaryArchSuffix = $libavutilVersionCompat
+	devel:libswresample$secondaryArchSuffix = $libswresampleVersionCompat
+	devel:libswscale$secondaryArchSuffix = $libswscaleVersionCompat
+	"
+REQUIRES_devel="
+	ffmpeg7$secondaryArchSuffix == $portVersion base
+	"
+
+BUILD_REQUIRES="
+	haiku${secondaryArchSuffix}_devel
+	devel:libbz2$secondaryArchSuffix
+	devel:libiconv$secondaryArchSuffix
+	devel:libz$secondaryArchSuffix
+	"
+BUILD_PREREQUIRES="
+	cmd:gcc$secondaryArchSuffix
+	cmd:ld$secondaryArchSuffix
+	cmd:make
+	cmd:pkg_config$secondaryArchSuffix
+	cmd:sed
+	"
+
+BUILD()
+{
+	# not an autotools configure
+	./configure \
+		--prefix=$prefix \
+		--bindir=$binDir \
+		--datadir=$dataDir/$portName \
+		--incdir=$includeDir \
+		--libdir=$libDir \
+		--shlibdir=$libDir \
+		--mandir=$manDir \
+		--disable-debug \
+		--disable-static \
+		--enable-shared \
+		--enable-pic \
+		--disable-doc \
+		--extra-ldflags="-Wl,-z,noseparate-code"
+
+	make $jobArgs
+}
+
+INSTALL()
+{
+	make install
+
+	prepareInstalledDevelLibs $ffmpegLibs
+	fixPkgconfig
+
+	rm -rf $prefix/share
+
+	packageEntries devel \
+		$developDir
+}
