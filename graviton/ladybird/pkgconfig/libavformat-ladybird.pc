@@ -1,0 +1,14 @@
+prefix=/boot/home/lbdeps
+exec_prefix=${prefix}
+libdir=/boot/home/lbdeps/lib
+includedir=/boot/home/lbdeps/include
+
+Name: libavformat
+Description: FFmpeg container format library
+Version: 61.7.100
+Requires: 
+Requires.private: libavcodec >= 61.19.100, libswresample >= 5.3.100, libavutil >= 59.39.100
+Conflicts:
+Libs: -L${libdir}  -lavformat 
+Libs.private: -lm -latomic -lbz2 -L/packages/zlib-1.3.2-1/.self/develop/lib -L/packages/zlib-1.3.2-1/.self/lib -lz -lnetwork
+Cflags: -I${includedir}

@@ -1,0 +1,10 @@
+prefix=/boot/home/lbdeps
+includedir=${prefix}/include
+libdir=${prefix}/lib
+
+Name: simdutf
+Description: Fast Unicode validation, transcoding and processing
+URL: 
+Version: 9.2.1
+Cflags: -I${includedir} 
+Libs: -L${libdir} -lsimdutf
