@@ -1,0 +1,3859 @@
+diff --git a/CMakeLists.txt b/CMakeLists.txt
+index 8fa606d..6d86536 100644
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -132,7 +132,7 @@ if (NOT (ENABLE_FUZZERS OR ENABLE_COMPILER_EXPLORER_BUILD OR ANDROID OR IOS))
+     add_subdirectory(Utilities)
+ 
+     include(CTest)
+-    if (BUILD_TESTING AND NOT ENABLE_QT_UI)
++    if (BUILD_TESTING AND NOT (ENABLE_QT_UI OR ENABLE_HAIKU_UI))
+         # DeBeOS/Haiku headless: the Qt UI normally defines the resource-copy
+         # target (ladybird_build_resource_files), but it is gated out here. The
+         # headless render harness (test-web) still needs Ladybird's resource files
+@@ -154,10 +154,10 @@ endif()
+ 
+ if (ENABLE_GUI_TARGETS)
+     add_subdirectory(Services)
+-    # DeBeOS/Haiku: the Qt chrome is optional for a headless (render-to-PNG)
+-    # build. Haiku has no Qt6 package, so gate the UI subdir and build only the
+-    # Services (WebContent/WebDriver/Compositor) needed for headless rendering.
+-    if (ENABLE_QT_UI)
++    # DeBeOS/Haiku: the chrome is either Qt or the native Haiku front end
++    # (UI/Haiku). With neither, only the Services needed for headless rendering
++    # are built.
++    if (ENABLE_QT_UI OR ENABLE_HAIKU_UI)
+         add_subdirectory(UI)
+     endif()
+ endif()
+diff --git a/Libraries/LibCore/LocalServer.cpp b/Libraries/LibCore/LocalServer.cpp
+index 34a9426..295ffba 100644
+--- a/Libraries/LibCore/LocalServer.cpp
++++ b/Libraries/LibCore/LocalServer.cpp
+@@ -73,7 +73,7 @@ bool LocalServer::listen(ByteString const& address)
+     fcntl(m_fd, F_SETFD, FD_CLOEXEC);
+ #endif
+     VERIFY(m_fd >= 0);
+-#if !defined(AK_OS_MACOS) && !defined(AK_OS_IOS)
++#if !defined(AK_OS_MACOS) && !defined(AK_OS_IOS) && !defined(AK_OS_HAIKU)
+     rc = fchmod(m_fd, 0600);
+     if (rc < 0) {
+         perror("fchmod");
+@@ -93,6 +93,13 @@ bool LocalServer::listen(ByteString const& address)
+         perror("bind");
+         return false;
+     }
++#if defined(AK_OS_HAIKU)
++    // Haiku refuses fchmod() on a socket descriptor, so restrict the bound socket node before listening.
++    if (::chmod(address.characters(), 0600) < 0) {
++        perror("chmod");
++        return false;
++    }
++#endif
+ 
+     rc = ::listen(m_fd, 5);
+     if (rc < 0) {
+diff --git a/Libraries/LibWebView/Process.cpp b/Libraries/LibWebView/Process.cpp
+index eb211c2..fc12053 100644
+--- a/Libraries/LibWebView/Process.cpp
++++ b/Libraries/LibWebView/Process.cpp
+@@ -341,7 +341,7 @@ ErrorOr<int> Process::create_ipc_socket(ByteString const& socket_path)
+     TRY(Core::System::fcntl(socket_fd, F_SETFD, FD_CLOEXEC));
+ #    endif
+ 
+-#    if !defined(AK_OS_BSD_GENERIC) && !defined(AK_OS_GNU_HURD)
++#    if !defined(AK_OS_BSD_GENERIC) && !defined(AK_OS_GNU_HURD) && !defined(AK_OS_HAIKU)
+     TRY(Core::System::fchmod(socket_fd, 0600));
+ #    endif
+ #endif
+@@ -350,6 +350,11 @@ ErrorOr<int> Process::create_ipc_socket(ByteString const& socket_path)
+     auto socket_address_un = socket_address.to_sockaddr_un().release_value();
+ 
+     TRY(Core::System::bind(socket_fd, reinterpret_cast<sockaddr*>(&socket_address_un), sizeof(socket_address_un)));
++#if defined(AK_OS_HAIKU)
++    // Haiku refuses fchmod() on a socket descriptor (B_NOT_SUPPORTED), so restrict the bound socket node itself,
++    // before listen() lets anyone connect.
++    TRY(Core::System::chmod(socket_path, 0600));
++#endif
+     TRY(Core::System::listen(socket_fd, 16));
+ 
+     return socket_fd;
+diff --git a/Meta/CMake/cmake_options.cmake b/Meta/CMake/cmake_options.cmake
+index d290b5b..7ce8d7a 100644
+--- a/Meta/CMake/cmake_options.cmake
++++ b/Meta/CMake/cmake_options.cmake
+@@ -22,7 +22,24 @@ else()
+ endif()
+ 
+ option(ENABLE_GUI_TARGETS "Enable building GUI targets" ON)
+-option(ENABLE_QT_UI "Build the Qt UI chrome (requires Qt6)" ON)
++# DeBeOS/Haiku: there is no Qt6 for Haiku arm64. The native Haiku chrome
++# (UI/Haiku, built on libbe) is the default there instead. Both declare the
++# `ladybird` target, so at most one may be enabled.
++if (HAIKU)
++    set(ladybird_qt_ui_default OFF)
++    set(ladybird_haiku_ui_default ON)
++else()
++    set(ladybird_qt_ui_default ON)
++    set(ladybird_haiku_ui_default OFF)
++endif()
++option(ENABLE_QT_UI "Build the Qt UI chrome (requires Qt6)" ${ladybird_qt_ui_default})
++option(ENABLE_HAIKU_UI "Build the native Haiku UI chrome (requires libbe)" ${ladybird_haiku_ui_default})
++if (ENABLE_HAIKU_UI AND NOT HAIKU)
++    message(FATAL_ERROR "ENABLE_HAIKU_UI requires a Haiku target")
++endif()
++if (ENABLE_HAIKU_UI AND ENABLE_QT_UI)
++    message(FATAL_ERROR "ENABLE_HAIKU_UI and ENABLE_QT_UI are mutually exclusive: both declare the ladybird target")
++endif()
+ option(ENABLE_INSTALL_HEADERS "Enable installing headers" ON)
+ option(ENABLE_INSTALL_FREEDESKTOP_FILES "Enable installing .desktop and .service files" ${freedesktop_files_default})
+ option(LADYBIRD_ENABLE_CPPTRACE "Enable use of cpptrace as the default library for stacktraces. If not available falls back to backtrace.h" ON)
+diff --git a/UI/CMakeLists.txt b/UI/CMakeLists.txt
+index 605ee37..82ea00d 100644
+--- a/UI/CMakeLists.txt
++++ b/UI/CMakeLists.txt
+@@ -49,6 +49,8 @@ endfunction()
+ 
+ if (ANDROID OR VCPKG_TARGET_ANDROID)
+     add_subdirectory("Android")
++elseif (ENABLE_HAIKU_UI)
++    add_subdirectory("Haiku")
+ else()
+     add_subdirectory("Qt")
+ endif()
+diff --git a/UI/Haiku/Application.cpp b/UI/Haiku/Application.cpp
+new file mode 100644
+index 0000000..07977c8
+--- /dev/null
++++ b/UI/Haiku/Application.cpp
+@@ -0,0 +1,468 @@
++/*
++ * Copyright (c) 2026, the DeBeOS developers
++ *
++ * SPDX-License-Identifier: BSD-2-Clause
++ */
++
++#include <LibCore/EventLoop.h>
++#include <LibWebView/BrowsingSession.h>
++#include <LibWebView/FileDownloader.h>
++#include <LibWebView/ProcessManager.h>
++#include <LibWebView/SessionStore.h>
++#include <UI/Haiku/Application.h>
++#include <UI/Haiku/Messages.h>
++#include <UI/Haiku/Tab.h>
++#include <UI/Haiku/WebViewBridge.h>
++#include <UI/Haiku/WindowModel.h>
++
++#include <Alert.h>
++#include <Application.h>
++#include <Clipboard.h>
++#include <Entry.h>
++#include <Path.h>
++
++namespace Ladybird {
++
++static Core::EventLoop* s_core_loop = nullptr;
++static thread_id s_core_thread = -1;
++static Atomic<bool> s_core_accepting { false };
++static Atomic<bool> s_core_has_exited { false };
++
++namespace {
++
++class LadybirdBApplication final : public BApplication {
++public:
++    explicit LadybirdBApplication(status_t* error)
++        // The status_t* constructor reports failure (no app_server, bad signature) instead of calling exit(0)
++        // the way the one-argument constructor does (src/kits/app/Application.cpp:533-540).
++        : BApplication(application_signature, error)
++    {
++    }
++
++    // The registrar hands our own argv back (B_ARGV_RECEIVED). Core::ArgsParser already consumed it in
++    // WebView::Application::initialize(), and a second launch is routed by BrowserProcess, not by the roster.
++    virtual void ArgvReceived(int32, char**) override { }
++
++    // Tracker "Open with Ladybird", or a file dropped on the Deskbar entry.
++    virtual void RefsReceived(BMessage* message) override
++    {
++        entry_ref ref;
++        for (int32 i = 0; message->FindRef("refs", i, &ref) == B_OK; ++i) {
++            BPath path;
++            if (BEntry(&ref, true).GetPath(&path) != B_OK)
++                continue;
++            Application::post_to_core([path = ByteString { path.Path() }] {
++                if (auto url = URL::create_with_file_scheme(path); url.has_value())
++                    Application::the().open_file(*url);
++            });
++        }
++    }
++
++    // Command+Q in any window and Deskbar's "Quit" both land here. The engine is torn down on the Core thread;
++    // the BApplication only goes away once Core has finished, at which point stop_haiku_application() asks again.
++    virtual bool QuitRequested() override
++    {
++        if (s_core_has_exited.load())
++            return true;
++        Application::post_to_core([] { Application::the().request_quit(); });
++        return false;
++    }
++};
++
++}
++
++Application::Application(ByteString application_directory)
++    // platform_init() takes the application *directory* (LibWebCommon/WebView/Utilities.cpp:54-55, 73-94).
++    : WebView::Application(move(application_directory))
++{
++}
++
++Application::~Application()
++{
++    // Normally empty: the last window closing is what ends the loop. If the loop stopped another way (a signal
++    // handler LibWebView installed, for instance), the remaining tabs are destroyed here, on the Core thread and
++    // while the ProcessManager the base class owns is still alive, so each page is still closed properly.
++    m_windows.clear();
++}
++
++bool Application::is_core_thread()
++{
++    return find_thread(nullptr) == s_core_thread;
++}
++
++bool Application::post_to_core(Function<void()> function)
++{
++    if (!s_core_accepting.load())
++        return false;
++    // Must be the loop *object*: the free Core::deferred_invoke targets the calling thread's loop (EventLoop.cpp:148-150).
++    s_core_loop->deferred_invoke(move(function));
++    return true;
++}
++
++void Application::create_platform_options(WebView::BrowserOptions&, WebView::RequestServerOptions&, WebView::WebContentOptions& web_content_options)
++{
++    // Hardware-proven requirement on Haiku: PathFontProvider finds no UiMonospace and FontPlugin VERIFYs
++    // (Services/HeadlessShot/main.cpp:26-32).
++    web_content_options.force_fontconfig = WebView::ForceFontconfig::Yes;
++}
++
++status_t Application::be_application_thread_entry(void* data)
++{
++    auto& self = *static_cast<Application*>(data);
++    auto* be_application = new LadybirdBApplication(&self.m_be_application_status);
++    auto status = self.m_be_application_status;
++    release_sem(self.m_be_application_ready);
++    if (status != B_OK) {
++        delete be_application;
++        return status;
++    }
++    be_application->Run();
++    // ~BApplication force-quits any window still open (src/kits/app/Application.cpp:318), which drops the
++    // PageViews' surface references while the app_server link is still alive.
++    delete be_application;
++    return B_OK;
++}
++
++ErrorOr<void> Application::start_haiku_application()
++{
++    // initialize() created the loop on this thread (WebView::Application::initialize, Application.cpp:696-697).
++    s_core_loop = &Core::EventLoop::current();
++    s_core_thread = find_thread(nullptr);
++    s_core_accepting.store(true);
++
++    m_be_application_ready = create_sem(0, "ladybird be_app ready");
++    if (m_be_application_ready < B_OK)
++        return Error::from_errno(ENOMEM);
++
++    m_be_application_thread = spawn_thread(be_application_thread_entry, "ladybird be_app", B_DISPLAY_PRIORITY, this);
++    if (m_be_application_thread < B_OK) {
++        delete_sem(m_be_application_ready);
++        return Error::from_string_literal("Unable to spawn the BApplication thread");
++    }
++    resume_thread(m_be_application_thread);
++
++    while (acquire_sem(m_be_application_ready) == B_INTERRUPTED) { }
++    delete_sem(m_be_application_ready);
++    m_be_application_ready = -1;
++
++    if (m_be_application_status != B_OK) {
++        status_t ignored;
++        wait_for_thread(m_be_application_thread, &ignored);
++        m_be_application_thread = -1;
++        s_core_accepting.store(false);
++        warnln("Ladybird: cannot connect to the app_server ({}). Use --headless when there is no display.", strerror(m_be_application_status));
++        return Error::from_errno(m_be_application_status);
++    }
++    return {};
++}
++
++void Application::stop_haiku_application()
++{
++    s_core_accepting.store(false);
++    s_core_has_exited.store(true);
++    if (m_be_application_thread < B_OK)
++        return;
++    be_app_messenger.SendMessage(B_QUIT_REQUESTED); // LadybirdBApplication::QuitRequested() now returns true
++    status_t ignored;
++    while (wait_for_thread(m_be_application_thread, &ignored) == B_INTERRUPTED) { }
++    m_be_application_thread = -1;
++}
++
++WindowModel& Application::new_window(Vector<URL::URL> const& initial_urls, Optional<Web::HTML::PreparedNavigationDescriptor> initial_navigation)
++{
++    VERIFY(is_core_thread());
++    auto id = m_next_window_id++;
++    auto model = WindowModel::create(id);
++    auto& model_ref = *model;
++    m_windows.set(id, move(model));
++    m_window_activation_order.append(id);
++
++    if (initial_navigation.has_value()) {
++        model_ref.create_new_tab(Web::HTML::ActivateTab::Yes).view().load(initial_navigation.release_value());
++    } else {
++        for (size_t i = 0; i < initial_urls.size(); ++i)
++            model_ref.new_tab_from_url(initial_urls[i], i == 0 ? Web::HTML::ActivateTab::Yes : Web::HTML::ActivateTab::No);
++    }
++    if (model_ref.tab_count() == 0)
++        model_ref.new_tab_from_url(settings().new_tab_page_url(), Web::HTML::ActivateTab::Yes);
++
++    model_ref.show();
++    return model_ref;
++}
++
++WindowModel* Application::window_model(u64 id)
++{
++    auto it = m_windows.find(id);
++    if (it == m_windows.end())
++        return nullptr;
++    return it->value.ptr();
++}
++
++WindowModel* Application::active_window_if_any() const
++{
++    if (m_window_activation_order.is_empty())
++        return nullptr;
++    auto it = m_windows.find(m_window_activation_order.last());
++    if (it == m_windows.end())
++        return nullptr;
++    return it->value.ptr();
++}
++
++void Application::set_active_window(u64 id)
++{
++    if (!m_windows.contains(id))
++        return;
++    m_window_activation_order.remove_all_matching([id](u64 candidate) { return candidate == id; });
++    m_window_activation_order.append(id);
++}
++
++void Application::window_model_closed(u64 id)
++{
++    VERIFY(is_core_thread());
++    m_window_activation_order.remove_all_matching([id](u64 candidate) { return candidate == id; });
++    // The model may be the caller; destroy it on the next turn of the loop, after its stack frame is gone.
++    if (auto model = m_windows.take(id); model.has_value())
++        Core::deferred_invoke([model = model.release_value()] { });
++
++    // Closing the last window ends the process, as Qt's quit-on-last-window does.
++    if (m_windows.is_empty())
++        begin_shutdown();
++}
++
++void Application::open_file(URL::URL const& url)
++{
++    if (auto* window = active_window_if_any()) {
++        window->new_tab_from_url(url, Web::HTML::ActivateTab::Yes);
++        window->activate();
++        return;
++    }
++    new_window({ url });
++}
++
++void Application::request_quit()
++{
++    if (m_quitting)
++        return;
++    if (file_downloader().has_unresumable_downloads()) {
++        // Mirrors Qt's confirm_stop_active_downloads (UI/Qt/Application.cpp:685-707), asynchronously: the window
++        // shows a BAlert and posts quit_confirmed() back only if the user accepts.
++        if (auto* window = active_window_if_any()) {
++            window->confirm_quit("Downloads in progress cannot be resumed after Ladybird quits."sv);
++            return;
++        }
++    }
++    quit_confirmed();
++}
++
++void Application::quit_confirmed()
++{
++    if (m_quitting)
++        return;
++    m_quitting = true;
++
++    file_downloader().pause_active_downloads(); // as UI/Qt/Application.cpp:706
++    // Before the windows close, or the session is persisted as "closed windows" (Qt Application.cpp:671).
++    default_session().session_store->application_quitting();
++
++    if (m_windows.is_empty()) {
++        begin_shutdown();
++        return;
++    }
++    Vector<u64> ids;
++    for (auto const& entry : m_windows)
++        ids.append(entry.key);
++    for (auto id : ids) {
++        if (auto* model = window_model(id))
++            model->close_for_quit(); // ends in window_model_closed(), the last of which calls begin_shutdown()
++    }
++}
++
++void Application::begin_shutdown()
++{
++    VERIFY(is_core_thread());
++    // On Haiku helpers exit only when their IPC socket closes: die_with_parent is Linux-only
++    // (LibCore/Process.cpp:325-330, 370-373) and the ProcessReaper is macOS-only (LibWebView/Process.cpp:142-172).
++    // Record who they are now, while the ProcessManager still exists, so main() can reap them with a bound.
++    m_helper_pids_at_shutdown = helper_pids();
++    s_core_accepting.store(false);
++    // Queued behind the deferred tab and window destructions (WindowModel::definitely_close_tab,
++    // window_model_closed), so every ViewImplementation is destroyed -- closing its page -- before the loop stops.
++    // process_did_exit() stops respawning once exit is requested (Application.cpp:2107-2110).
++    Core::deferred_invoke([] { Core::EventLoop::current().quit(0); });
++}
++
++Vector<pid_t> Application::helper_pids()
++{
++    Vector<pid_t> pids;
++    process_manager().for_each_process([&](WebView::Process& process) {
++        if (process.type() != WebView::ProcessType::Browser)
++            pids.append(process.pid());
++    });
++    return pids;
++}
++
++Optional<WebView::ViewImplementation&> Application::active_web_view() const
++{
++    if (auto* window = active_window_if_any(); window && window->current_tab())
++        return window->current_tab()->view();
++    return {};
++}
++
++Vector<WebView::ViewImplementation&> Application::active_window_web_views() const
++{
++    Vector<WebView::ViewImplementation&> views;
++    if (auto* window = active_window_if_any())
++        window->for_each_tab([&](Tab& tab) { views.append(tab.view()); });
++    return views;
++}
++
++bool Application::activate_tab_with_url(URL::URL const& url) const
++{
++    auto* window = active_window_if_any();
++    return window && window->activate_tab_with_url(url);
++}
++
++Optional<WebView::ViewImplementation&> Application::open_blank_new_tab(Web::HTML::ActivateTab activate_tab) const
++{
++    auto& self = const_cast<Application&>(*this);
++    if (auto* window = active_window_if_any())
++        return window->create_new_tab(activate_tab).view();
++    auto& window = self.new_window({ settings().new_tab_page_url() });
++    return window.current_tab()->view();
++}
++
++void Application::open_url_in_new_tab(URL::URL const& url, Web::HTML::ActivateTab activate_tab) const
++{
++    if (auto* window = active_window_if_any()) {
++        window->new_tab_from_url(url, activate_tab);
++        return;
++    }
++    const_cast<Application&>(*this).new_window({ url });
++}
++
++void Application::open_urls_in_new_tabs(ReadonlySpan<URL::URL> urls) const
++{
++    if (urls.is_empty())
++        return;
++    auto* window = active_window_if_any();
++    if (!window) {
++        const_cast<Application&>(*this).new_window(Vector<URL::URL> { urls });
++        return;
++    }
++    for (auto const& url : urls)
++        window->new_tab_from_url(url, Web::HTML::ActivateTab::No);
++}
++
++// Private windows are not offered (supports_private_browsing_windows() stays false), so IsPrivate is ignored.
++void Application::open_url_in_new_window(URL::URL const& url, WebView::IsPrivate)
++{
++    new_window({ url });
++}
++
++void Application::open_navigation_in_new_tab(Web::HTML::PreparedNavigationDescriptor navigation, Web::HTML::ActivateTab activate_tab) const
++{
++    if (auto* window = active_window_if_any()) {
++        window->create_new_tab(activate_tab).view().load(move(navigation));
++        return;
++    }
++    const_cast<Application&>(*this).new_window({}, move(navigation));
++}
++
++void Application::open_navigation_in_new_window(Web::HTML::PreparedNavigationDescriptor navigation, WebView::IsPrivate)
++{
++    new_window({}, move(navigation));
++}
++
++void Application::display_error_dialog(StringView error_message) const
++{
++    warnln("{}", error_message);
++    // initialize() can report errors before the BApplication exists (or under --headless); stderr is all there is then.
++    if (!be_app)
++        return;
++    // Go(nullptr) is asynchronous: the BAlert runs its own looper and deletes itself, so Core never blocks.
++    auto* alert = new BAlert("Ladybird", ByteString { error_message }.characters(), "OK", nullptr, nullptr, B_WIDTH_AS_USUAL, B_WARNING_ALERT);
++    alert->Go(nullptr);
++}
++
++// Haiku has one system clipboard; there is no X11-style selection buffer.
++bool Application::supports_clipboard_type(ClipboardType type) const
++{
++    return type == ClipboardType::Text;
++}
++
++Utf16String Application::clipboard_text(ClipboardType) const
++{
++    for (auto const& representation : clipboard_item().system_clipboard_representations) {
++        if (representation.name != "text/plain"sv)
++            continue;
++        if (auto const* data = representation.data.get_pointer<ByteString>())
++            return Utf16String::from_utf8(*data);
++    }
++    return {};
++}
++
++void Application::set_clipboard_text(String text, ClipboardType)
++{
++    Web::Clipboard::SystemClipboardItem item;
++    item.system_clipboard_representations.append({ .name = "text/plain"_string, .data = text.to_byte_string() });
++    insert_clipboard_item(move(item));
++}
++
++Web::Clipboard::SystemClipboardItem Application::clipboard_item() const
++{
++    // No BApplication (headless runs of this binary): fall back to the in-process clipboard.
++    if (!be_clipboard)
++        return WebView::Application::clipboard_item();
++    Web::Clipboard::SystemClipboardItem item;
++    if (!be_clipboard->Lock())
++        return item;
++    if (auto* data = be_clipboard->Data()) {
++        char* name = nullptr;
++        type_code type;
++        for (int32 i = 0; data->GetInfo(B_MIME_TYPE, i, &name, &type) == B_OK; ++i) {
++            void const* bytes = nullptr;
++            ssize_t size = 0;
++            if (data->FindData(name, B_MIME_TYPE, &bytes, &size) != B_OK)
++                continue;
++            auto mime = String::from_utf8(StringView { name, strlen(name) });
++            if (mime.is_error())
++                continue;
++            // Haiku text producers store "text/plain" without a trailing NUL; tolerate one if present.
++            auto length = static_cast<size_t>(size);
++            if (length > 0 && static_cast<char const*>(bytes)[length - 1] == '\0')
++                --length;
++            item.system_clipboard_representations.append({ .name = mime.release_value(), .data = ByteString { static_cast<char const*>(bytes), length } });
++        }
++    }
++    be_clipboard->Unlock();
++    // BClipboard carries bytes only, so SelectedFile representations never reach it: insert_clipboard_item() keeps
++    // them in the base class's in-process item. Merge them back so a pasted file still arrives.
++    auto in_process_item = WebView::Application::clipboard_item();
++    for (auto& representation : in_process_item.system_clipboard_representations) {
++        if (representation.data.has<Web::HTML::SelectedFile>())
++            item.system_clipboard_representations.append(move(representation));
++    }
++    return item;
++}
++
++void Application::insert_clipboard_item(Web::Clipboard::SystemClipboardItem item)
++{
++    if (!be_clipboard || !be_clipboard->Lock()) {
++        WebView::Application::insert_clipboard_item(move(item));
++        return;
++    }
++    be_clipboard->Clear();
++    if (auto* data = be_clipboard->Data()) {
++        for (auto const& representation : item.system_clipboard_representations) {
++            // SelectedFile representations only come from desktop file copies (SystemClipboard.h:23-29); BClipboard
++            // carries bytes, so they stay in-process through the base class below.
++            if (auto const* bytes = representation.data.get_pointer<ByteString>())
++                data->AddData(representation.name.to_byte_string().characters(), B_MIME_TYPE, bytes->characters(), bytes->length());
++        }
++        be_clipboard->Commit();
++    }
++    be_clipboard->Unlock();
++    WebView::Application::insert_clipboard_item(move(item));
++}
++
++}
+diff --git a/UI/Haiku/Application.h b/UI/Haiku/Application.h
+new file mode 100644
+index 0000000..ffc942c
+--- /dev/null
++++ b/UI/Haiku/Application.h
+@@ -0,0 +1,110 @@
++/*
++ * Copyright (c) 2026, the DeBeOS developers
++ *
++ * SPDX-License-Identifier: BSD-2-Clause
++ */
++
++#pragma once
++
++#include <AK/Atomic.h>
++#include <AK/Function.h>
++#include <AK/HashMap.h>
++#include <AK/NonnullOwnPtr.h>
++#include <AK/Vector.h>
++#include <LibURL/URL.h>
++#include <LibWebView/Application.h>
++
++#include <OS.h>
++
++namespace Ladybird {
++
++class Tab;
++class WindowModel;
++
++inline constexpr char const* application_signature = "application/x-vnd.DeBeOS-Ladybird";
++
++// Threading contract for the whole Haiku front end.
++//
++// [C] The Core thread is the team's main thread. It runs the stock Core::EventLoop (EventLoopManagerUnix,
++//     the path headless-shot proved on Haiku) and owns every LibWebView and LibIPC object. That is not a
++//     preference: IPC::ConnectionBase VERIFYs its owner thread (LibIPC/Connection.cpp:79,100,108,152,196) and
++//     ProcessManager its creation loop (LibWebView/ProcessManager.cpp:175-179).
++// [A] The BApplication is constructed and Run() on its own spawned thread. BLooper::Loop() only requires the
++//     constructing thread to be the running one (src/kits/app/Looper.cpp:499-512).
++// [W] Each BWindow is its own looper thread and only touches BViews.
++//
++// [A]/[W] reach [C] only through post_to_core(): EventLoop::deferred_invoke queues under a mutex and wakes the
++// loop when called from another thread (LibCore/EventLoopImplementation.cpp:43-48, ThreadEventQueue.cpp:97-104).
++// [C] reaches [W] only through BMessenger. [W] and [A] never wait for [C], so no lock-order cycle can form.
++class Application final : public WebView::Application {
++    WEB_VIEW_APPLICATION(Application)
++
++public:
++    virtual ~Application() override;
++
++    // [any] Fire-and-forget. Returns false once the Core loop has stopped accepting work.
++    static bool post_to_core(Function<void()>);
++    static bool is_core_thread();
++
++    // [C] Spawns the BApplication thread and waits until the BApplication exists, or failed to.
++    ErrorOr<void> start_haiku_application();
++    // [C] After execute() returned: quits the BApplication and joins its thread.
++    void stop_haiku_application();
++
++    // [C] Window bookkeeping.
++    WindowModel& new_window(Vector<URL::URL> const& initial_urls, Optional<Web::HTML::PreparedNavigationDescriptor> initial_navigation = {});
++    WindowModel* window_model(u64 id);
++    WindowModel* active_window_if_any() const;
++    void set_active_window(u64 id);
++    void window_model_closed(u64 id);
++    void open_file(URL::URL const&);
++
++    // [C] Explicit quit (Command+Q, Deskbar "Quit", B_QUIT_REQUESTED). Asks first if downloads would be lost.
++    void request_quit();
++    void quit_confirmed();
++
++    // [C] Helper pids recorded when shutdown began, for main() to reap after ~Application.
++    Vector<pid_t> const& helper_pids_at_shutdown() const { return m_helper_pids_at_shutdown; }
++    // [C] Every helper the ProcessManager currently knows (everything but the Browser process itself).
++    Vector<pid_t> helper_pids();
++
++private:
++    explicit Application(ByteString application_directory);
++
++    void begin_shutdown();
++
++    virtual void create_platform_options(WebView::BrowserOptions&, WebView::RequestServerOptions&, WebView::WebContentOptions&) override;
++
++    virtual Optional<WebView::ViewImplementation&> active_web_view() const override;
++    virtual Vector<WebView::ViewImplementation&> active_window_web_views() const override;
++    virtual bool activate_tab_with_url(URL::URL const&) const override;
++
++    virtual Optional<WebView::ViewImplementation&> open_blank_new_tab(Web::HTML::ActivateTab) const override;
++    virtual void open_url_in_new_tab(URL::URL const&, Web::HTML::ActivateTab) const override;
++    virtual void open_urls_in_new_tabs(ReadonlySpan<URL::URL>) const override;
++    virtual void open_url_in_new_window(URL::URL const&, WebView::IsPrivate) override;
++    virtual void open_navigation_in_new_tab(Web::HTML::PreparedNavigationDescriptor, Web::HTML::ActivateTab) const override;
++    virtual void open_navigation_in_new_window(Web::HTML::PreparedNavigationDescriptor, WebView::IsPrivate) override;
++
++    virtual void display_error_dialog(StringView error_message) const override;
++
++    virtual bool supports_clipboard_type(ClipboardType) const override;
++    virtual Utf16String clipboard_text(ClipboardType) const override;
++    virtual void set_clipboard_text(String, ClipboardType) override;
++    virtual Web::Clipboard::SystemClipboardItem clipboard_item() const override;
++    virtual void insert_clipboard_item(Web::Clipboard::SystemClipboardItem) override;
++
++    static status_t be_application_thread_entry(void*);
++
++    thread_id m_be_application_thread { -1 };
++    sem_id m_be_application_ready { -1 };
++    status_t m_be_application_status { B_NO_INIT };
++
++    HashMap<u64, NonnullOwnPtr<WindowModel>> m_windows;
++    Vector<u64> m_window_activation_order; // most recently activated last
++    u64 m_next_window_id { 1 };
++    bool m_quitting { false };
++    Vector<pid_t> m_helper_pids_at_shutdown;
++};
++
++}
+diff --git a/UI/Haiku/BrowserWindow.cpp b/UI/Haiku/BrowserWindow.cpp
+new file mode 100644
+index 0000000..46c6f6c
+--- /dev/null
++++ b/UI/Haiku/BrowserWindow.cpp
+@@ -0,0 +1,413 @@
++/*
++ * Copyright (c) 2026, the DeBeOS developers
++ *
++ * SPDX-License-Identifier: BSD-2-Clause
++ */
++
++#include <LibWebView/Application.h>
++#include <UI/Haiku/Application.h>
++#include <UI/Haiku/BrowserWindow.h>
++#include <UI/Haiku/Dialogs.h>
++#include <UI/Haiku/Messages.h>
++#include <UI/Haiku/PageView.h>
++#include <UI/Haiku/Tab.h>
++#include <UI/Haiku/TabStrip.h>
++#include <UI/Haiku/WindowModel.h>
++
++#include <Button.h>
++#include <CardLayout.h>
++#include <GroupView.h>
++#include <LayoutBuilder.h>
++#include <MessageFilter.h>
++#include <String.h>
++#include <TextControl.h>
++#include <TextView.h>
++
++namespace Ladybird {
++
++namespace {
++
++// BTextControl's own Enter handling is unusable for a location field (src/kits/interface/TextInput.cpp): Enter
++// does nothing if the text is unchanged since focus (:99-103), and losing focus with edited text Invokes (:133-134),
++// which would navigate to half-typed text when the user clicks the page. So the control has no message, and this
++// filter on its text view takes Enter and Escape.
++class LocationKeyFilter final : public BMessageFilter {
++public:
++    LocationKeyFilter(BLooper* window, BTextView* text_view)
++        : BMessageFilter(B_ANY_DELIVERY, B_ANY_SOURCE, B_KEY_DOWN)
++        , m_window(window)
++        , m_text_view(text_view)
++    {
++    }
++
++    virtual filter_result Filter(BMessage* message, BHandler**) override
++    {
++        char const* bytes = nullptr;
++        if (message->FindString("bytes", &bytes) != B_OK || !bytes || bytes[0] == '\0' || bytes[1] != '\0')
++            return B_DISPATCH_MESSAGE;
++        if (bytes[0] == B_ENTER) {
++            BMessage navigate(kMsgNavigate);
++            navigate.AddString("text", m_text_view->Text());
++            m_window->PostMessage(&navigate);
++            return B_SKIP_MESSAGE;
++        }
++        if (bytes[0] == B_ESCAPE) {
++            m_window->PostMessage(kMsgFocusLocation); // reselects; the URL is restored from the tab's state
++            return B_SKIP_MESSAGE;
++        }
++        return B_DISPATCH_MESSAGE;
++    }
++
++private:
++    BLooper* m_window { nullptr };
++    BTextView* m_text_view { nullptr };
++};
++
++}
++
++BrowserWindow::BrowserWindow(BRect frame, u64 model_id)
++    : BWindow(frame, "Ladybird", B_DOCUMENT_WINDOW_LOOK, B_NORMAL_WINDOW_FEEL, B_AUTO_UPDATE_SIZE_LIMITS | B_ASYNCHRONOUS_CONTROLS)
++    , m_model_id(model_id)
++{
++    m_tab_strip = new TabStrip();
++    // Text labels, not icons: a generic, font-only toolbar that renders on any DeBeOS image. Words rather than
++    // U+25C0/U+25B6, which Noto Sans (the default UI font) does not contain.
++    m_back_button = new BButton("back", "Back", new BMessage(kMsgBack));
++    m_forward_button = new BButton("forward", "Forward", new BMessage(kMsgForward));
++    m_reload_button = new BButton("reload", "Reload", new BMessage(kMsgReloadOrStop));
++    m_new_tab_button = new BButton("new tab", "+", new BMessage(kMsgNewTab));
++    // Keyboard navigation cycles between the page and the location field only, as in every mainstream browser:
++    // Tab out of the page reaches the URL. Left navigable, Tab from the page landed on the Back button (measured:
++    // Tab, typed URL, Enter -- and Enter pressed Back). Each button has a shortcut instead (Command+[Shift+]Left/
++    // Right, Command+R, Command+T). Cleared before SetEnabled(), which only restores B_NAVIGABLE when it removed it
++    // (src/kits/interface/Control.cpp:351-364).
++    for (auto* button : { m_back_button, m_forward_button, m_reload_button, m_new_tab_button })
++        button->SetFlags(button->Flags() & ~B_NAVIGABLE);
++    m_back_button->SetEnabled(false);
++    m_forward_button->SetEnabled(false);
++    for (auto* button : { m_back_button, m_forward_button, m_new_tab_button })
++        button->SetExplicitMaxSize(BSize(button->PreferredSize().width, B_SIZE_UNSET));
++
++    m_location = new BTextControl("location", nullptr, "", nullptr);
++    m_location->SetMessage(nullptr);
++    m_location->TextView()->AddFilter(new LocationKeyFilter(this, m_location->TextView()));
++
++    m_pages = new BCardLayout();
++    auto* pages_view = new BView("pages", 0, m_pages);
++
++    BLayoutBuilder::Group<>(this, B_VERTICAL, 0)
++        .Add(m_tab_strip)
++        .AddGroup(B_HORIZONTAL, B_USE_SMALL_SPACING)
++            .SetInsets(B_USE_SMALL_SPACING, B_USE_SMALL_SPACING, B_USE_SMALL_SPACING, B_USE_SMALL_SPACING)
++            .Add(m_back_button)
++            .Add(m_forward_button)
++            .Add(m_reload_button)
++            .Add(m_location, 10.0f)
++            .Add(m_new_tab_button)
++        .End()
++        .Add(pages_view, 1.0f);
++
++    // Command+W closes the current tab rather than the window (BWindow binds it to B_QUIT_REQUESTED by default,
++    // src/kits/interface/Window.cpp:2829). Command+Q is left to BWindow, which forwards it to be_app.
++    RemoveShortcut('W', B_COMMAND_KEY);
++    AddShortcut('W', B_COMMAND_KEY, new BMessage(kMsgCloseCurrentTab));
++    AddShortcut('T', B_COMMAND_KEY, new BMessage(kMsgNewTab));
++    AddShortcut('L', B_COMMAND_KEY, new BMessage(kMsgFocusLocation));
++    AddShortcut('R', B_COMMAND_KEY, new BMessage(kMsgReloadOrStop));
++    // Back/forward from anywhere in the window, including the location field (in the page itself, Command+Left/Right
++    // also reach LibWebView's Alt+arrow traversal through KeyMapping's Command -> Alt mapping).
++    AddShortcut(B_LEFT_ARROW, B_COMMAND_KEY | B_SHIFT_KEY, new BMessage(kMsgBack));
++    AddShortcut(B_RIGHT_ARROW, B_COMMAND_KEY | B_SHIFT_KEY, new BMessage(kMsgForward));
++}
++
++BrowserWindow::~BrowserWindow() = default;
++
++void BrowserWindow::post_to_model(Function<void(WindowModel&)> task)
++{
++    Application::post_to_core([model_id = m_model_id, task = move(task)]() mutable {
++        if (auto* model = Application::the().window_model(model_id))
++            task(*model);
++    });
++}
++
++void BrowserWindow::post_to_tab(u64 tab_id, Function<void(Tab&)> task)
++{
++    post_to_model([tab_id, task = move(task)](WindowModel& model) mutable {
++        if (auto* tab = model.tab(tab_id))
++            task(*tab);
++    });
++}
++
++void BrowserWindow::post_to_current_tab(Function<void(Tab&)> task)
++{
++    if (m_current_tab_id.has_value())
++        post_to_tab(*m_current_tab_id, move(task));
++}
++
++void BrowserWindow::add_tab(BMessage const& message)
++{
++    uint64 tab_id = 0;
++    uint64 view_id = 0;
++    void* surface_pointer = nullptr;
++    if (message.FindUInt64("tab", &tab_id) != B_OK || message.FindUInt64("view", &view_id) != B_OK
++        || message.FindPointer("surface", &surface_pointer) != B_OK || !surface_pointer)
++        return;
++    // WindowModel::create_new_tab took one reference for this message; adopt it.
++    auto surface = adopt_ref(*static_cast<PresentSurface*>(surface_pointer));
++    auto* page_view = new PageView(tab_id, view_id, move(surface));
++    m_pages->AddView(page_view);
++    m_tab_strip->add_tab(tab_id);
++    TabState state;
++    state.page_view = page_view;
++    m_tabs.set(tab_id, move(state));
++}
++
++void BrowserWindow::remove_tab(u64 tab_id)
++{
++    auto state = m_tabs.take(tab_id);
++    if (!state.has_value())
++        return;
++    m_tab_strip->remove_tab(tab_id);
++    m_pages->RemoveView(state->page_view);
++    state->page_view->RemoveSelf();
++    delete state->page_view; // the window owns its PageViews; the engine side is already gone or going
++    if (m_current_tab_id == tab_id)
++        m_current_tab_id = {};
++}
++
++void BrowserWindow::activate_tab(u64 tab_id, bool activate_window)
++{
++    auto it = m_tabs.find(tab_id);
++    if (it == m_tabs.end())
++        return;
++    m_current_tab_id = tab_id;
++    m_tab_strip->select(tab_id);
++    if (auto index = m_pages->IndexOfView(it->value.page_view); index >= 0)
++        m_pages->SetVisibleItem(index);
++    bool location_focused = m_location->TextView()->IsFocus();
++    if (!location_focused)
++        it->value.page_view->MakeFocus(true);
++    apply_current_tab_state();
++    // Switching tabs abandons whatever was being typed for the previous one, so the field shows this tab's URL even
++    // while it keeps focus (apply_current_tab_state() leaves a focused field alone; measured: a tab opened from a
++    // second launch otherwise kept the previous tab's "about:newtab").
++    if (location_focused) {
++        m_location->SetText(it->value.url.characters());
++        m_last_location_text = m_location->Text();
++        m_location->TextView()->SelectAll();
++    }
++    if (activate_window)
++        Activate(true);
++}
++
++void BrowserWindow::set_location_text(ByteString const& url)
++{
++    // Never overwrite what the user is typing: a focused field is replaced only while it still holds exactly what
++    // this window last put there (so a URL that arrives after Command+T or a tab switch still shows up).
++    if (m_location->TextView()->IsFocus() && m_last_location_text != m_location->Text())
++        return;
++    bool select = m_location->TextView()->IsFocus();
++    m_location->SetText(url.characters());
++    m_last_location_text = m_location->Text();
++    if (select)
++        m_location->TextView()->SelectAll();
++}
++
++void BrowserWindow::apply_current_tab_state()
++{
++    if (!m_current_tab_id.has_value())
++        return;
++    auto it = m_tabs.find(*m_current_tab_id);
++    if (it == m_tabs.end())
++        return;
++    auto const& state = it->value;
++    BString title;
++    if (state.title.is_empty())
++        title = "Ladybird";
++    else
++        title << state.title.characters() << " - Ladybird"; // the Qt chrome's format (UI/Qt/BrowserWindow.cpp:938-944)
++    SetTitle(title.String());
++    set_location_text(state.url);
++    m_back_button->SetEnabled(state.can_go_back);
++    m_forward_button->SetEnabled(state.can_go_forward);
++    m_reload_button->SetLabel(state.loading ? "Stop" : "Reload");
++}
++
++void BrowserWindow::MessageReceived(BMessage* message)
++{
++    uint64 tab_id = 0;
++    message->FindUInt64("tab", &tab_id);
++    auto is_current = m_current_tab_id == tab_id;
++
++    switch (message->what) {
++    // ---- From the WindowModel (Core thread) ----
++    case kMsgTabAdded:
++        add_tab(*message);
++        return;
++    case kMsgTabRemoved:
++        remove_tab(tab_id);
++        return;
++    case kMsgTabActivated:
++        activate_tab(tab_id, message->GetBool("activate_window", false));
++        return;
++    case kMsgTabTitle:
++        if (auto it = m_tabs.find(tab_id); it != m_tabs.end()) {
++            it->value.title = message->GetString("title", "");
++            m_tab_strip->set_label(tab_id, it->value.title);
++            if (is_current)
++                apply_current_tab_state();
++        }
++        return;
++    case kMsgTabUrl:
++        if (auto it = m_tabs.find(tab_id); it != m_tabs.end()) {
++            it->value.url = message->GetString("url", "");
++            if (is_current)
++                set_location_text(it->value.url);
++        }
++        return;
++    case kMsgTabNavState:
++        if (auto it = m_tabs.find(tab_id); it != m_tabs.end()) {
++            it->value.can_go_back = message->GetBool("back", false);
++            it->value.can_go_forward = message->GetBool("forward", false);
++            if (is_current)
++                apply_current_tab_state();
++        }
++        return;
++    case kMsgTabLoading:
++        if (auto it = m_tabs.find(tab_id); it != m_tabs.end()) {
++            it->value.loading = message->GetBool("loading", false);
++            if (is_current)
++                apply_current_tab_state();
++        }
++        return;
++    case kMsgCloseWindowNow:
++        m_may_quit = true;
++        PostMessage(B_QUIT_REQUESTED);
++        return;
++    case kMsgShowAlert:
++    case kMsgShowConfirm:
++    case kMsgShowPrompt: {
++        auto dialog_id = message->GetUInt64("dialog", 0);
++        auto const* origin = message->GetString("origin", "");
++        auto const* text = message->GetString("message", "");
++        BMessenger panel;
++        if (message->what == kMsgShowAlert)
++            panel = show_alert(BMessenger(this), tab_id, dialog_id, origin, text);
++        else if (message->what == kMsgShowConfirm)
++            panel = show_confirm(BMessenger(this), tab_id, dialog_id, origin, text);
++        else
++            panel = show_prompt(BMessenger(this), tab_id, dialog_id, origin, text, message->GetString("default", ""));
++        m_open_dialogs.set(dialog_id, panel);
++        return;
++    }
++    case kMsgDismissDialogs:
++        // Already resolved on the Core side (tab closing, WebDriver); take the panel down.
++        if (auto panel = m_open_dialogs.take(message->GetUInt64("dialog", 0)); panel.has_value() && panel->IsValid())
++            panel->SendMessage(B_QUIT_REQUESTED);
++        return;
++    case kMsgConfirmQuit:
++        show_quit_confirmation(BMessenger(this), message->GetString("reason", ""));
++        return;
++
++    // ---- Dialog replies ----
++    case kMsgAlertClosed: {
++        auto dialog_id = message->GetUInt64("dialog", 0);
++        m_open_dialogs.remove(dialog_id);
++        post_to_tab(tab_id, [dialog_id](Tab& tab) { tab.alert_closed(dialog_id); });
++        return;
++    }
++    case kMsgConfirmClosed: {
++        auto dialog_id = message->GetUInt64("dialog", 0);
++        auto accepted = message->GetInt32("which", 0) == 1;
++        m_open_dialogs.remove(dialog_id);
++        post_to_tab(tab_id, [dialog_id, accepted](Tab& tab) { tab.confirm_closed(dialog_id, accepted); });
++        return;
++    }
++    case kMsgPromptClosed: {
++        auto dialog_id = message->GetUInt64("dialog", 0);
++        Optional<String> text;
++        if (message->GetBool("accepted", false)) {
++            if (auto utf8 = String::from_utf8(StringView { message->GetString("text", ""), strlen(message->GetString("text", "")) }); !utf8.is_error())
++                text = utf8.release_value();
++        }
++        m_open_dialogs.remove(dialog_id);
++        post_to_tab(tab_id, [dialog_id, text = move(text)](Tab& tab) mutable { tab.prompt_closed(dialog_id, move(text)); });
++        return;
++    }
++    case kMsgQuitConfirmed:
++        if (message->GetInt32("which", 0) == 1)
++            Application::post_to_core([] { Application::the().quit_confirmed(); });
++        return;
++
++    // ---- Controls and shortcuts ----
++    case kMsgBack:
++        post_to_current_tab([](Tab& tab) { tab.go_back(); });
++        return;
++    case kMsgForward:
++        post_to_current_tab([](Tab& tab) { tab.go_forward(); });
++        return;
++    case kMsgReloadOrStop:
++        post_to_current_tab([](Tab& tab) { tab.reload_or_stop(); });
++        return;
++    case kMsgNewTab:
++        post_to_model([](WindowModel& model) {
++            model.new_tab_from_url(WebView::Application::settings().new_tab_page_url(), Web::HTML::ActivateTab::Yes);
++        });
++        m_location->MakeFocus(true);
++        return;
++    case kMsgCloseCurrentTab:
++        post_to_model([](WindowModel& model) { model.request_close_current_tab(); });
++        return;
++    case kMsgCloseTab:
++        post_to_model([tab_id](WindowModel& model) { model.request_close_tab(tab_id); });
++        return;
++    case kMsgSelectTab:
++        post_to_model([tab_id](WindowModel& model) { model.activate_tab(tab_id); });
++        return;
++    case kMsgFocusLocation:
++        if (m_current_tab_id.has_value()) {
++            if (auto it = m_tabs.find(*m_current_tab_id); it != m_tabs.end()) {
++                m_location->SetText(it->value.url.characters());
++                m_last_location_text = m_location->Text();
++            }
++        }
++        m_location->MakeFocus(true);
++        m_location->TextView()->SelectAll();
++        return;
++    case kMsgNavigate: {
++        auto const* text = message->GetString("text", "");
++        auto input = String::from_utf8(StringView { text, strlen(text) });
++        if (input.is_error() || input.value().is_empty())
++            return;
++        // Hand focus to the page first, so the URL the navigation reports can replace the typed text.
++        if (m_current_tab_id.has_value()) {
++            if (auto it = m_tabs.find(*m_current_tab_id); it != m_tabs.end())
++                it->value.page_view->MakeFocus(true);
++        }
++        post_to_current_tab([input = input.release_value()](Tab& tab) { tab.navigate_from_user_input(input); });
++        return;
++    }
++    default:
++        BWindow::MessageReceived(message);
++    }
++}
++
++bool BrowserWindow::QuitRequested()
++{
++    if (m_may_quit)
++        return true;
++    // Whether a tab may close (beforeunload) is a LibWebView question, so the Core thread decides. It runs Qt's
++    // request_close() per tab and, once the model has no tabs, sends kMsgCloseWindowNow.
++    post_to_model([](WindowModel& model) { model.request_close_window(); });
++    return false;
++}
++
++void BrowserWindow::WindowActivated(bool active)
++{
++    BWindow::WindowActivated(active);
++    if (!active)
++        return;
++    Application::post_to_core([model_id = m_model_id] { Application::the().set_active_window(model_id); });
++}
++
++}
+diff --git a/UI/Haiku/BrowserWindow.h b/UI/Haiku/BrowserWindow.h
+new file mode 100644
+index 0000000..14f972f
+--- /dev/null
++++ b/UI/Haiku/BrowserWindow.h
+@@ -0,0 +1,77 @@
++/*
++ * Copyright (c) 2026, the DeBeOS developers
++ *
++ * SPDX-License-Identifier: BSD-2-Clause
++ */
++
++#pragma once
++
++#include <AK/ByteString.h>
++#include <AK/Function.h>
++#include <AK/HashMap.h>
++
++#include <Messenger.h>
++#include <String.h>
++#include <Window.h>
++
++class BButton;
++class BCardLayout;
++class BTextControl;
++
++namespace Ladybird {
++
++class PageView;
++class Tab;
++class TabStrip;
++class WindowModel;
++
++// One browser window. [W] only: pure UI on its own looper thread. It holds no LibWebView pointer; every engine
++// request is a closure posted to the Core thread that re-resolves its WindowModel and Tab by id, and every engine
++// update arrives as a BMessage from the WindowModel.
++class BrowserWindow final : public BWindow {
++public:
++    BrowserWindow(BRect frame, u64 model_id);
++    virtual ~BrowserWindow() override;
++
++    virtual void MessageReceived(BMessage*) override;
++    virtual bool QuitRequested() override;
++    virtual void WindowActivated(bool active) override;
++
++private:
++    struct TabState {
++        PageView* page_view { nullptr };
++        ByteString title;
++        ByteString url;
++        bool can_go_back { false };
++        bool can_go_forward { false };
++        bool loading { false };
++    };
++
++    void post_to_model(Function<void(WindowModel&)>);
++    void post_to_tab(u64 tab_id, Function<void(Tab&)>);
++    void post_to_current_tab(Function<void(Tab&)>);
++
++    void add_tab(BMessage const&);
++    void remove_tab(u64 tab_id);
++    void activate_tab(u64 tab_id, bool activate_window);
++    void apply_current_tab_state();
++    void set_location_text(ByteString const&);
++
++    u64 m_model_id { 0 };
++    Optional<u64> m_current_tab_id;
++    HashMap<u64, TabState> m_tabs;
++
++    TabStrip* m_tab_strip { nullptr };
++    BButton* m_back_button { nullptr };
++    BButton* m_forward_button { nullptr };
++    BButton* m_reload_button { nullptr };
++    BButton* m_new_tab_button { nullptr };
++    BTextControl* m_location { nullptr };
++    BString m_last_location_text; // what set_location_text() last put in the field; anything else is the user's
++    BCardLayout* m_pages { nullptr };
++
++    HashMap<u64, BMessenger> m_open_dialogs; // dialog id -> its panel
++    bool m_may_quit { false };
++};
++
++}
+diff --git a/UI/Haiku/CMakeLists.txt b/UI/Haiku/CMakeLists.txt
+new file mode 100644
+index 0000000..cb13563
+--- /dev/null
++++ b/UI/Haiku/CMakeLists.txt
+@@ -0,0 +1,48 @@
++# Native Haiku (DeBeOS) chrome for Ladybird.
++#
++# Threading model, which every file here follows (see Application.h):
++#   - the team main thread runs Core::EventLoop and owns every LibWebView/LibIPC
++#     object (the stock EventLoopManagerUnix path headless-shot already uses);
++#   - the BApplication is constructed and Run() on its own spawned thread;
++#   - each BWindow is its own looper thread and only touches BViews.
++add_executable(ladybird main.cpp)
++target_sources(ladybird PRIVATE
++    Application.cpp
++    BrowserWindow.cpp
++    Dialogs.cpp
++    KeyMapping.cpp
++    PageView.cpp
++    Tab.cpp
++    TabStrip.cpp
++    WebViewBridge.cpp
++    WindowModel.cpp
++)
++
++# libbe only: BApplication/BWindow/BView/BBitmap/BTextControl/BAlert/BClipboard.
++# Every NEEDED entry becomes a package requirement, so nothing is linked
++# speculatively (libtracker/libtranslation are not used).
++target_link_libraries(ladybird PRIVATE be LibFileSystem)
++
++# OUTPUT_NAME "Ladybird" (WebDriver launches a binary of that name,
++# Services/WebDriver/main.cpp) and share/Lagom resources in the build tree.
++create_ladybird_bundle(ladybird)
++
++# Application identity: signature, launch flags, version, supported types and
++# the vector icon. rc and xres ship in the base image; mimeset is deliberately
++# not used, because it is a silent no-op without an app_server and BAppFileInfo
++# falls back from attributes to resources anyway.
++find_program(HAIKU_RC_EXECUTABLE rc REQUIRED)
++find_program(HAIKU_XRES_EXECUTABLE xres REQUIRED)
++set(ladybird_haiku_rsrc "${CMAKE_CURRENT_BINARY_DIR}/Ladybird.rsrc")
++add_custom_command(
++    OUTPUT "${ladybird_haiku_rsrc}"
++    COMMAND "${HAIKU_RC_EXECUTABLE}" -o "${ladybird_haiku_rsrc}" "${CMAKE_CURRENT_SOURCE_DIR}/Ladybird.rdef"
++    DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/Ladybird.rdef"
++    VERBATIM
++)
++add_custom_target(ladybird_haiku_resources DEPENDS "${ladybird_haiku_rsrc}")
++add_dependencies(ladybird ladybird_haiku_resources)
++add_custom_command(TARGET ladybird POST_BUILD
++    COMMAND "${HAIKU_XRES_EXECUTABLE}" -o "$<TARGET_FILE:ladybird>" "${ladybird_haiku_rsrc}"
++    VERBATIM
++)
+diff --git a/UI/Haiku/Dialogs.cpp b/UI/Haiku/Dialogs.cpp
+new file mode 100644
+index 0000000..715f3ef
+--- /dev/null
++++ b/UI/Haiku/Dialogs.cpp
+@@ -0,0 +1,147 @@
++/*
++ * Copyright (c) 2026, the DeBeOS developers
++ *
++ * SPDX-License-Identifier: BSD-2-Clause
++ */
++
++#include <UI/Haiku/Dialogs.h>
++#include <UI/Haiku/Messages.h>
++
++#include <Alert.h>
++#include <Button.h>
++#include <Invoker.h>
++#include <LayoutBuilder.h>
++#include <String.h>
++#include <StringView.h>
++#include <TextControl.h>
++#include <Window.h>
++
++namespace Ladybird {
++
++static BString title_for(char const* origin)
++{
++    BString title;
++    title << (origin && *origin ? origin : "Ladybird") << " says";
++    return title;
++}
++
++BMessenger show_alert(BMessenger target, u64 tab_id, u64 dialog_id, char const* origin, char const* message)
++{
++    auto* alert = new BAlert(title_for(origin).String(), message, "OK", nullptr, nullptr, B_WIDTH_AS_USUAL, B_INFO_ALERT);
++    alert->SetShortcut(0, B_ESCAPE);
++    BMessage reply(kMsgAlertClosed);
++    reply.AddUInt64("tab", tab_id);
++    reply.AddUInt64("dialog", dialog_id);
++    BMessenger panel(alert);
++    alert->Go(new BInvoker(new BMessage(reply), target)); // asynchronous: replies, then deletes itself
++    return panel;
++}
++
++BMessenger show_confirm(BMessenger target, u64 tab_id, u64 dialog_id, char const* origin, char const* message)
++{
++    auto* alert = new BAlert(title_for(origin).String(), message, "Cancel", "OK", nullptr, B_WIDTH_AS_USUAL, B_IDEA_ALERT);
++    alert->SetShortcut(0, B_ESCAPE);
++    BMessage reply(kMsgConfirmClosed); // BAlert adds "which": 0 = Cancel, 1 = OK
++    reply.AddUInt64("tab", tab_id);
++    reply.AddUInt64("dialog", dialog_id);
++    BMessenger panel(alert);
++    alert->Go(new BInvoker(new BMessage(reply), target));
++    return panel;
++}
++
++namespace {
++
++// window.prompt(): BAlert has no text field, so a small titled window. Replies exactly once.
++class PromptWindow final : public BWindow {
++public:
++    enum : uint32 {
++        kMsgOk = four_cc('l', 'b', 'P', 'o'),
++        kMsgCancel = four_cc('l', 'b', 'P', 'x'),
++    };
++
++    PromptWindow(BMessenger target, u64 tab_id, u64 dialog_id, char const* origin, char const* message, char const* default_text)
++        : BWindow(BRect(200, 200, 620, 320), title_for(origin).String(), B_TITLED_WINDOW_LOOK, B_FLOATING_ALL_WINDOW_FEEL,
++              B_NOT_ZOOMABLE | B_NOT_MINIMIZABLE | B_AUTO_UPDATE_SIZE_LIMITS | B_ASYNCHRONOUS_CONTROLS | B_CLOSE_ON_ESCAPE)
++        , m_target(target)
++        , m_tab_id(tab_id)
++        , m_dialog_id(dialog_id)
++    {
++        m_text = new BTextControl("prompt text", nullptr, default_text, nullptr);
++        auto* ok = new BButton("ok", "OK", new BMessage(kMsgOk));
++        auto* cancel = new BButton("cancel", "Cancel", new BMessage(kMsgCancel));
++        BLayoutBuilder::Group<>(this, B_VERTICAL, B_USE_DEFAULT_SPACING)
++            .SetInsets(B_USE_WINDOW_SPACING)
++            .Add(new BStringView("prompt message", message))
++            .Add(m_text)
++            .AddGroup(B_HORIZONTAL)
++                .AddGlue()
++                .Add(cancel)
++                .Add(ok)
++            .End();
++        SetDefaultButton(ok);
++        m_text->MakeFocus(true);
++        CenterOnScreen();
++    }
++
++    virtual void MessageReceived(BMessage* message) override
++    {
++        switch (message->what) {
++        case kMsgOk:
++            reply(true);
++            Quit();
++            return;
++        case kMsgCancel:
++            reply(false);
++            Quit();
++            return;
++        default:
++            BWindow::MessageReceived(message);
++        }
++    }
++
++    // Close box, Escape (B_CLOSE_ON_ESCAPE) and an early dismissal from the Core thread all come here.
++    virtual bool QuitRequested() override
++    {
++        reply(false);
++        return true;
++    }
++
++private:
++    void reply(bool accepted)
++    {
++        if (m_replied)
++            return;
++        m_replied = true;
++        BMessage message(kMsgPromptClosed);
++        message.AddUInt64("tab", m_tab_id);
++        message.AddUInt64("dialog", m_dialog_id);
++        message.AddBool("accepted", accepted);
++        message.AddString("text", m_text->Text());
++        m_target.SendMessage(&message);
++    }
++
++    BMessenger m_target;
++    u64 m_tab_id { 0 };
++    u64 m_dialog_id { 0 };
++    BTextControl* m_text { nullptr };
++    bool m_replied { false };
++};
++
++}
++
++BMessenger show_prompt(BMessenger target, u64 tab_id, u64 dialog_id, char const* origin, char const* message, char const* default_text)
++{
++    auto* window = new PromptWindow(target, tab_id, dialog_id, origin, message, default_text);
++    BMessenger panel(window);
++    window->Show();
++    return panel;
++}
++
++void show_quit_confirmation(BMessenger target, char const* reason)
++{
++    auto* alert = new BAlert("Quit Ladybird?", reason, "Cancel", "Quit", nullptr, B_WIDTH_AS_USUAL, B_WARNING_ALERT);
++    alert->SetShortcut(0, B_ESCAPE);
++    alert->Go(new BInvoker(new BMessage(kMsgQuitConfirmed), target)); // "which": 1 = Quit
++}
++
++}
+diff --git a/UI/Haiku/Dialogs.h b/UI/Haiku/Dialogs.h
+new file mode 100644
+index 0000000..32d9f0d
+--- /dev/null
++++ b/UI/Haiku/Dialogs.h
+@@ -0,0 +1,24 @@
++/*
++ * Copyright (c) 2026, the DeBeOS developers
++ *
++ * SPDX-License-Identifier: BSD-2-Clause
++ */
++
++#pragma once
++
++#include <AK/Types.h>
++
++#include <Messenger.h>
++#include <SupportDefs.h>
++
++namespace Ladybird {
++
++// JavaScript dialogs and the quit confirmation. [W] only. Every panel is asynchronous: it replies to `target` with a
++// BMessage (kMsgAlertClosed, kMsgConfirmClosed, kMsgPromptClosed, kMsgQuitConfirmed) and deletes itself; nothing
++// ever blocks a looper waiting for the user. Each returns a messenger to the panel so it can be taken down early.
++BMessenger show_alert(BMessenger target, u64 tab_id, u64 dialog_id, char const* origin, char const* message);
++BMessenger show_confirm(BMessenger target, u64 tab_id, u64 dialog_id, char const* origin, char const* message);
++BMessenger show_prompt(BMessenger target, u64 tab_id, u64 dialog_id, char const* origin, char const* message, char const* default_text);
++void show_quit_confirmation(BMessenger target, char const* reason);
++
++}
+diff --git a/UI/Haiku/KeyMapping.cpp b/UI/Haiku/KeyMapping.cpp
+new file mode 100644
+index 0000000..bb7672e
+--- /dev/null
++++ b/UI/Haiku/KeyMapping.cpp
+@@ -0,0 +1,183 @@
++/*
++ * Copyright (c) 2026, the DeBeOS developers
++ *
++ * SPDX-License-Identifier: BSD-2-Clause
++ */
++
++#include <AK/StringView.h>
++#include <AK/Utf8View.h>
++#include <UI/Haiku/KeyMapping.h>
++
++#include <InterfaceDefs.h>
++#include <View.h> // B_MOUSE_BUTTON, B_PRIMARY_MOUSE_BUTTON (headers/os/interface/View.h:19-25)
++
++namespace Ladybird {
++
++using namespace Web::UIEvents;
++
++HaikuKey key_for_haiku_key_code(int32 key)
++{
++    switch (key) {
++    case 0x01: return { Key_Escape };
++    case 0x02: return { Key_F1 };
++    case 0x03: return { Key_F2 };
++    case 0x04: return { Key_F3 };
++    case 0x05: return { Key_F4 };
++    case 0x06: return { Key_F5 };
++    case 0x07: return { Key_F6 };
++    case 0x08: return { Key_F7 };
++    case 0x09: return { Key_F8 };
++    case 0x0a: return { Key_F9 };
++    case 0x0b: return { Key_F10 };
++    case 0x0c: return { Key_F11 };
++    case 0x0d: return { Key_F12 };
++    case 0x0e: return { Key_PrintScreen };
++    case 0x0f: return { Key_ScrollLock };
++    case 0x10: return { Key_PauseBreak };
++    case 0x1e: return { Key_Backspace };
++    case 0x1f: return { Key_Insert };
++    case 0x20: return { Key_Home };
++    case 0x21: return { Key_PageUp };
++    case 0x22: return { Key_NumLock };
++    case 0x26: return { Key_Tab };
++    case 0x34: return { Key_Delete };
++    case 0x35: return { Key_End };
++    case 0x36: return { Key_PageDown };
++    case 0x3b: return { Key_CapsLock };
++    case 0x47: return { Key_Return };
++    case 0x57: return { Key_Up };
++    case 0x5e: return { Key_Space };
++    case 0x61: return { Key_Left };
++    case 0x62: return { Key_Down };
++    case 0x63: return { Key_Right };
++    case 0x68: return { Key_Menu };
++    case 0x7e: return { Key_SysRq };
++    case 0x7f: return { Key_PauseBreak };
++    case 0x5b: return { Key_Return, true }; // keypad Enter
++    // The remaining keypad keys resolve from the produced byte: NumLock decides digit versus navigation
++    // (for example 0x37 yields B_HOME or '7').
++    case 0x23: case 0x24: case 0x25: case 0x3a:
++    case 0x37: case 0x38: case 0x39: case 0x48: case 0x49: case 0x4a:
++    case 0x58: case 0x59: case 0x5a: case 0x64: case 0x65: case 0x6a:
++        return { Key_Invalid, true };
++    default:
++        return {};
++    }
++}
++
++KeyCode key_for_haiku_navigation_byte(u8 byte)
++{
++    switch (byte) {
++    case B_HOME: return Key_Home;
++    case B_END: return Key_End;
++    case B_INSERT: return Key_Insert;
++    case B_BACKSPACE: return Key_Backspace;
++    case B_TAB: return Key_Tab;
++    case B_RETURN: return Key_Return;
++    case B_PAGE_UP: return Key_PageUp;
++    case B_PAGE_DOWN: return Key_PageDown;
++    case B_ESCAPE: return Key_Escape;
++    case B_LEFT_ARROW: return Key_Left;
++    case B_RIGHT_ARROW: return Key_Right;
++    case B_UP_ARROW: return Key_Up;
++    case B_DOWN_ARROW: return Key_Down;
++    case B_SPACE: return Key_Space;
++    case B_DELETE: return Key_Delete;
++    default: return Key_Invalid;
++    }
++}
++
++// Command sits on the PC Alt key, so it maps to Mod_Alt; that makes Command+Left/Right history traversal through
++// LibWebView's non-mac Alt+arrow handling (ViewImplementation.cpp:881-913). Left Option is the Windows key, hence
++// Mod_Super. Right Option is AltGr: it composes characters and is not reported, or pages would see a modifier held
++// while the user types '@' on international layouts.
++KeyModifier web_modifiers_from_haiku(uint32 modifiers)
++{
++    auto result = Mod_None;
++    if (modifiers & B_SHIFT_KEY)
++        result |= Mod_Shift;
++    if (modifiers & B_CONTROL_KEY)
++        result |= Mod_Ctrl;
++    if (modifiers & B_COMMAND_KEY)
++        result |= Mod_Alt;
++    if (modifiers & B_LEFT_OPTION_KEY)
++        result |= Mod_Super;
++    return result;
++}
++
++MouseButton web_buttons_from_haiku(uint32 buttons)
++{
++    auto result = MouseButton::None;
++    if (buttons & B_PRIMARY_MOUSE_BUTTON)
++        result |= MouseButton::Primary;
++    if (buttons & B_SECONDARY_MOUSE_BUTTON)
++        result |= MouseButton::Secondary;
++    if (buttons & B_TERTIARY_MOUSE_BUTTON)
++        result |= MouseButton::Middle;
++    if (buttons & B_MOUSE_BUTTON(4))
++        result |= MouseButton::Backward;
++    if (buttons & B_MOUSE_BUTTON(5))
++        result |= MouseButton::Forward;
++    return result;
++}
++
++MouseButton web_button_from_changed_bits(uint32 changed)
++{
++    for (uint32 bit = 1; bit <= B_MOUSE_BUTTON(5); bit <<= 1) {
++        if (changed & bit)
++            return web_buttons_from_haiku(bit);
++    }
++    return MouseButton::None;
++}
++
++// What Qt reports as event text (UI/Qt/WebContentView.cpp:1838-1840): printable characters plus these controls.
++static bool is_text_code_point(u32 code_point)
++{
++    return (code_point >= 0x20 && code_point != 0x7f) || code_point == '\b' || code_point == '\t' || code_point == '\n'
++        || code_point == 0x1b || code_point == 0x7f;
++}
++
++MappedKey map_key_event(bool is_key_down, int32 key, int32 raw_char, uint32 haiku_modifiers, char const* bytes, int32 num_bytes)
++{
++    u32 code_point = 0;
++    if (bytes && num_bytes > 0) {
++        Utf8View utf8 { StringView { bytes, static_cast<size_t>(num_bytes) } };
++        if (utf8.validate() && !utf8.is_empty())
++            code_point = *utf8.begin();
++    }
++    auto control_held = (haiku_modifiers & B_CONTROL_KEY) != 0;
++
++    // key 0 is not a physical key; the remote stream reports it when a client sends no key code.
++    auto mapped = key > 0 ? key_for_haiku_key_code(key) : HaikuKey {};
++    auto key_code = mapped.key;
++    if (key_code == Key_Invalid && code_point != 0) {
++        if (code_point >= 0x20 && code_point != 0x7f)
++            key_code = code_point_to_key_code(code_point); // the produced character, as Qt does (Shift+1 -> '!')
++        else if (!control_held)
++            key_code = key_for_haiku_navigation_byte(static_cast<u8>(code_point));
++    }
++    if (key_code == Key_Invalid && raw_char > 0)
++        key_code = code_point_to_key_code(static_cast<u32>(raw_char)); // Ctrl+A: bytes 0x01, raw_char 'a'
++    if (key_code == Key_Invalid && control_held && code_point >= 0x01 && code_point <= 0x1a)
++        key_code = code_point_to_key_code('a' + code_point - 1); // no raw_char from the client
++
++    if (!is_text_code_point(code_point) || (control_held && code_point < 0x20 && code_point != '\b' && code_point != '\t' && code_point != '\n'))
++        code_point = 0;
++    if (key_code == Key_Return)
++        code_point = '\n'; // consistent across Enter and keypad Enter, as Qt (cpp:1848-1851)
++
++    auto modifiers = web_modifiers_from_haiku(haiku_modifiers);
++    if (mapped.is_keypad)
++        modifiers |= Mod_Keypad;
++
++    MappedKey result;
++    result.key = key_code;
++    result.modifiers = modifiers;
++    result.code_point = code_point;
++    // Command and Control combinations never insert text: BWindow has already run the Command shortcuts, and
++    // what is left are web shortcuts.
++    result.should_insert_text = is_key_down && code_point != 0 && (haiku_modifiers & (B_COMMAND_KEY | B_CONTROL_KEY)) == 0;
++    return result;
++}
++
++}
+diff --git a/UI/Haiku/KeyMapping.h b/UI/Haiku/KeyMapping.h
+new file mode 100644
+index 0000000..b97bda5
+--- /dev/null
++++ b/UI/Haiku/KeyMapping.h
+@@ -0,0 +1,47 @@
++/*
++ * Copyright (c) 2026, the DeBeOS developers
++ *
++ * SPDX-License-Identifier: BSD-2-Clause
++ */
++
++#pragma once
++
++#include <AK/Types.h>
++#include <LibWebCommon/UIEvents/KeyCode.h>
++#include <LibWebCommon/UIEvents/MouseButton.h>
++
++#include <SupportDefs.h>
++
++namespace Ladybird {
++
++// Pure functions, callable on any thread: Haiku input -> Web input vocabulary.
++
++struct HaikuKey {
++    Web::UIEvents::KeyCode key { Web::UIEvents::Key_Invalid };
++    bool is_keypad { false };
++};
++
++// Physical Haiku key codes (the raw numbering in src/data/keymaps/US-International.keymap).
++HaikuKey key_for_haiku_key_code(int32 key);
++
++// Navigation/control bytes Haiku produces (headers/os/interface/InterfaceDefs.h:46-80). Only meaningful without
++// Control held, because Ctrl+A..Z alias 0x01..0x1a.
++Web::UIEvents::KeyCode key_for_haiku_navigation_byte(u8);
++
++Web::UIEvents::KeyModifier web_modifiers_from_haiku(uint32 haiku_modifiers);
++Web::UIEvents::MouseButton web_buttons_from_haiku(uint32 haiku_buttons);
++// The single button that changed, lowest first; Web buttons are one bit each (MouseButton.h:15-22).
++Web::UIEvents::MouseButton web_button_from_changed_bits(uint32 changed);
++
++struct MappedKey {
++    Web::UIEvents::KeyCode key { Web::UIEvents::Key_Invalid };
++    Web::UIEvents::KeyModifier modifiers { Web::UIEvents::Mod_None };
++    u32 code_point { 0 };
++    bool should_insert_text { false };
++};
++
++// key: the "key" field or -1 when absent (the remote-desktop stream only adds it when the client sent it,
++// RemoteEventStream.cpp:198-205). raw_char: likewise, 0 when absent. bytes: the produced UTF-8.
++MappedKey map_key_event(bool is_key_down, int32 key, int32 raw_char, uint32 haiku_modifiers, char const* bytes, int32 num_bytes);
++
++}
+diff --git a/UI/Haiku/Ladybird.rdef b/UI/Haiku/Ladybird.rdef
+new file mode 100644
+index 0000000..0da057d
+--- /dev/null
++++ b/UI/Haiku/Ladybird.rdef
+@@ -0,0 +1,47 @@
++/*
++ * Application identity for the native Haiku (DeBeOS) Ladybird front end.
++ * Compiled with rc and attached with xres by UI/Haiku/CMakeLists.txt.
++ */
++
++resource app_signature "application/x-vnd.DeBeOS-Ladybird";
++
++/*
++ * B_MULTIPLE_LAUNCH, not B_SINGLE_LAUNCH: single-instance behaviour is per
++ * *profile* and is already enforced by LibWebView's BrowserProcess
++ * coordination (a second launch on the same profile forwards its URLs over the
++ * profile socket and exits before it constructs a BApplication). A roster-level
++ * single launch would also swallow --profile / --temporary-profile launches,
++ * which are legitimately separate instances.
++ */
++resource app_flags B_MULTIPLE_LAUNCH;
++
++resource app_version {
++	major  = 0,
++	middle = 0,
++	minor  = 0,
++
++	variety = B_APPV_DEVELOPMENT,
++	internal = 3,
++
++	short_info = "Ladybird",
++	long_info = "Ladybird web browser, native DeBeOS front end"
++};
++
++resource file_types message {
++	"types" = "text/html",
++	"types" = "application/xhtml+xml",
++	"types" = "application/x-vnd.Be.URL.http",
++	"types" = "application/x-vnd.Be.URL.https"
++};
++
++/*
++ * resource vector_icon: the HVIF is produced once, on a DeBeOS desktop, from
++ * Ladybird's own logo (Meta/CMake/freedesktop/org.ladybird.Ladybird.svg) with
++ * Icon-O-Matic ("Export > HVIF RDef"), and pasted here. The logo colours its
++ * inner path through a <style> class that Icon-O-Matic's SVG importer ignores,
++ * so the file must first be rewritten to an explicit fill:
++ *     sed 's/ class="cls-1"/ fill="#fff"/' org.ladybird.Ladybird.svg
++ * Until that hex is committed the application shows Haiku's generic
++ * application icon, and the package description says so (build-package.sh
++ * checks for the BEOS:ICON (VICN) resource with listres).
++ */
+diff --git a/UI/Haiku/Messages.h b/UI/Haiku/Messages.h
+new file mode 100644
+index 0000000..32c0aad
+--- /dev/null
++++ b/UI/Haiku/Messages.h
+@@ -0,0 +1,64 @@
++/*
++ * Copyright (c) 2026, the DeBeOS developers
++ *
++ * SPDX-License-Identifier: BSD-2-Clause
++ */
++
++#pragma once
++
++#include <SupportDefs.h>
++
++namespace Ladybird {
++
++// Four-character BMessage codes, built without multi-character literals: Ladybird compiles with clang -Werror,
++// and clang's -Wmultichar is on by default (Haiku's own tree passes -Wno-multichar for this reason). The values
++// are identical to the four-character literals they replace.
++constexpr uint32 four_cc(char a, char b, char c, char d)
++{
++    return (static_cast<uint32>(static_cast<unsigned char>(a)) << 24)
++        | (static_cast<uint32>(static_cast<unsigned char>(b)) << 16)
++        | (static_cast<uint32>(static_cast<unsigned char>(c)) << 8)
++        | static_cast<uint32>(static_cast<unsigned char>(d));
++}
++
++// BMessage codes exchanged between the Core thread and BLooper threads.
++// Core -> window messages carry plain data only (ids, strings, flags); window -> Core
++// requests never travel as BMessages, they are closures handed to Application::post_to_core().
++enum : uint32 {
++    // Core -> BrowserWindow
++    kMsgTabAdded = four_cc('l', 'b', 'T', 'A'),       // "tab" u64, "view" u64, "surface" pointer (one adopted ref)
++    kMsgTabRemoved = four_cc('l', 'b', 'T', 'R'),     // "tab" u64
++    kMsgTabActivated = four_cc('l', 'b', 'T', 'V'),   // "tab" u64, optional "activate_window" bool
++    kMsgTabTitle = four_cc('l', 'b', 'T', 'T'),       // "tab" u64, "title" string
++    kMsgTabUrl = four_cc('l', 'b', 'T', 'U'),         // "tab" u64, "url" string
++    kMsgTabNavState = four_cc('l', 'b', 'T', 'N'),    // "tab" u64, "back" bool, "forward" bool
++    kMsgTabLoading = four_cc('l', 'b', 'T', 'L'),     // "tab" u64, "loading" bool
++    kMsgCloseWindowNow = four_cc('l', 'b', 'C', 'W'), // no fields
++    kMsgShowAlert = four_cc('l', 'b', 'D', 'A'),      // "tab" u64, "dialog" u64, "origin" string, "message" string
++    kMsgShowConfirm = four_cc('l', 'b', 'D', 'C'),    // same fields as kMsgShowAlert
++    kMsgShowPrompt = four_cc('l', 'b', 'D', 'P'),     // same, plus "default" string
++    kMsgDismissDialogs = four_cc('l', 'b', 'D', 'X'), // "tab" u64, "dialog" u64
++    kMsgConfirmQuit = four_cc('l', 'b', 'C', 'Q'),    // "reason" string; downloads would be lost
++
++    // BrowserWindow-internal (controls, shortcuts, dialog replies)
++    kMsgBack = four_cc('l', 'b', 'B', 'k'),
++    kMsgForward = four_cc('l', 'b', 'F', 'w'),
++    kMsgReloadOrStop = four_cc('l', 'b', 'R', 'l'),
++    kMsgNewTab = four_cc('l', 'b', 'N', 'T'),
++    kMsgCloseCurrentTab = four_cc('l', 'b', 'C', 'T'),
++    kMsgCloseTab = four_cc('l', 'b', 'C', 't'),       // "tab" u64 (tab strip close glyph)
++    kMsgSelectTab = four_cc('l', 'b', 'S', 'T'),      // "tab" u64
++    kMsgFocusLocation = four_cc('l', 'b', 'F', 'L'),
++    kMsgNavigate = four_cc('l', 'b', 'N', 'v'),       // "text" string, from the location field's Enter filter
++    kMsgAlertClosed = four_cc('l', 'b', 'A', 'c'),    // "tab" u64, "dialog" u64
++    kMsgConfirmClosed = four_cc('l', 'b', 'C', 'c'),  // "tab" u64, "dialog" u64, "which" int32 (BAlert button index)
++    kMsgPromptClosed = four_cc('l', 'b', 'P', 'c'),   // "tab" u64, "dialog" u64, "accepted" bool, "text" string
++    kMsgQuitConfirmed = four_cc('l', 'b', 'Q', 'c'),  // "which" int32
++
++    // Core -> PageView (through PresentSurface's messenger)
++    kMsgFrameReady = four_cc('l', 'b', 'F', 'r'),
++    kMsgCursorChanged = four_cc('l', 'b', 'C', 'u'),
++    kMsgUnhandledKey = four_cc('l', 'b', 'U', 'k'),   // the original B_KEY_DOWN fields ("bytes", "modifiers", ...), re-coded
++};
++
++}
+diff --git a/UI/Haiku/PageView.cpp b/UI/Haiku/PageView.cpp
+new file mode 100644
+index 0000000..dabdec7
+--- /dev/null
++++ b/UI/Haiku/PageView.cpp
+@@ -0,0 +1,444 @@
++/*
++ * Copyright (c) 2026, the DeBeOS developers
++ *
++ * SPDX-License-Identifier: BSD-2-Clause
++ */
++
++#include <LibWebView/ViewImplementation.h>
++#include <UI/Haiku/Application.h>
++#include <UI/Haiku/KeyMapping.h>
++#include <UI/Haiku/Messages.h>
++#include <UI/Haiku/PageView.h>
++#include <UI/Haiku/WebViewBridge.h>
++
++#include <Autolock.h>
++#include <Window.h>
++
++namespace Ladybird {
++
++PageView::PageView(u64 tab_id, u64 view_id, NonnullRefPtr<PresentSurface> surface)
++    : BView("web page", B_WILL_DRAW | B_FRAME_EVENTS | B_NAVIGABLE)
++    , m_tab_id(tab_id)
++    , m_view_id(view_id)
++    , m_surface(move(surface))
++{
++    SetExplicitMinSize(BSize(100, 100));
++}
++
++PageView::~PageView()
++{
++    delete m_cursor;
++}
++
++// [W] -> [C]. Captures the view id, never `this` or a LibWebView pointer.
++void PageView::post_to_bridge(Function<void(WebViewBridge&)> task)
++{
++    Application::post_to_core([view_id = m_view_id, task = move(task)]() mutable {
++        auto view = WebView::ViewImplementation::find_view_by_id(view_id);
++        if (!view.has_value())
++            return; // the tab closed while this was in flight
++        task(static_cast<WebViewBridge&>(*view));
++    });
++}
++
++// ---- Attachment, geometry, focus ------------------------------------------------------------------------------
++
++void PageView::AttachedToWindow()
++{
++    BView::AttachedToWindow();
++    SetViewColor(B_TRANSPARENT_COLOR); // Draw() paints every pixel; skip app_server's erase
++    {
++        BAutolock locker(m_surface->lock);
++        m_surface->page_view = BMessenger(this);
++    }
++    m_surface->frame_message_pending = false;
++    Invalidate();
++    push_viewport();
++    push_focus();
++}
++
++void PageView::DetachedFromWindow()
++{
++    {
++        BAutolock locker(m_surface->lock);
++        m_surface->page_view = BMessenger();
++    }
++    BView::DetachedFromWindow();
++}
++
++// BCardLayout shows the selected tab's view; a hidden view may have missed FrameResized while hidden, so the
++// viewport is re-sent whenever the view becomes visible.
++void PageView::Show()
++{
++    BView::Show();
++    push_viewport();
++    Invalidate();
++}
++
++// Haiku rects are inclusive, so the pixel size is width + 1.
++void PageView::FrameResized(float width, float height)
++{
++    BView::FrameResized(width, height);
++    Gfx::IntSize size { static_cast<int>(width) + 1, static_cast<int>(height) + 1 };
++    post_to_bridge([size](WebViewBridge& view) { view.set_viewport_from_window(size); });
++}
++
++void PageView::push_viewport()
++{
++    auto bounds = Bounds();
++    FrameResized(bounds.Width(), bounds.Height());
++}
++
++void PageView::push_focus()
++{
++    auto focused = Window() && !IsHidden() && IsFocus() && Window()->IsActive();
++    post_to_bridge([focused](WebViewBridge& view) { view.set_has_system_focus(focused); });
++}
++
++void PageView::MakeFocus(bool focus)
++{
++    BView::MakeFocus(focus);
++    push_focus();
++}
++
++void PageView::WindowActivated(bool active)
++{
++    BView::WindowActivated(active);
++    if (!active)
++        m_pressed_keys.clear(); // releases happen elsewhere; the next press must not count as a repeat
++    push_focus();
++}
++
++// ---- Drawing --------------------------------------------------------------------------------------------------
++
++// Holding the surface lock across DrawBitmap is the point: DrawBitmap is DrawBitmapAsync + Sync()
++// (src/kits/interface/View.cpp:3126-3143), so once it returns app_server has finished reading the pixels and the
++// Core thread may overwrite them.
++void PageView::Draw(BRect update_rect)
++{
++    BAutolock locker(m_surface->lock);
++    SetHighColor(m_surface->background);
++    if (!m_surface->bitmap) {
++        FillRect(update_rect);
++        return;
++    }
++    BRect frame_rect = m_surface->bitmap->Bounds();
++    BRect source = update_rect & frame_rect;
++    if (source.IsValid()) {
++        SetDrawingMode(B_OP_COPY);
++        DrawBitmap(m_surface->bitmap, source, source);
++    }
++    // Whatever the frame does not cover (mid-resize) gets the page background, as Qt's paintEvent does
++    // (UI/Qt/WebContentView.cpp:903-910).
++    if (update_rect.right > frame_rect.right)
++        FillRect(BRect(frame_rect.right + 1, update_rect.top, update_rect.right, update_rect.bottom));
++    if (update_rect.bottom > frame_rect.bottom)
++        FillRect(BRect(update_rect.left, frame_rect.bottom + 1, min(update_rect.right, frame_rect.right), update_rect.bottom));
++}
++
++// ---- Mouse ----------------------------------------------------------------------------------------------------
++
++// Builds the plain-data event here (InputEvent.h:73-104 has no Core state) and hands it to the Core thread.
++void PageView::enqueue_mouse_event(Web::MouseEvent::Type type, BPoint where, Web::UIEvents::MouseButton button, uint32 haiku_buttons,
++    uint32 haiku_modifiers, int32 clicks, double wheel_delta_x, double wheel_delta_y)
++{
++    BPoint screen = ConvertToScreen(where);
++    Web::MouseEvent event {
++        type,
++        Web::DevicePixelPoint { static_cast<int>(where.x), static_cast<int>(where.y) },
++        Web::DevicePixelPoint { static_cast<int>(screen.x), static_cast<int>(screen.y) },
++        button,
++        web_buttons_from_haiku(haiku_buttons),
++        web_modifiers_from_haiku(haiku_modifiers),
++        wheel_delta_x,
++        wheel_delta_y,
++        Web::WheelDeltaPrecision::Discrete,
++        Web::ScrollGesturePhase::None,
++        clicks,
++        nullptr,
++    };
++    post_to_bridge([event = move(event)](WebViewBridge& view) mutable {
++        auto type = event.type;
++        auto button = event.button;
++        view.enqueue_input_event(move(event));
++        // The side buttons navigate history, as Qt does.
++        if (type == Web::MouseEvent::Type::MouseUp && button == Web::UIEvents::MouseButton::Backward)
++            view.traverse_the_history_by_delta(-1);
++        else if (type == Web::MouseEvent::Type::MouseUp && button == Web::UIEvents::MouseButton::Forward)
++            view.traverse_the_history_by_delta(1);
++    });
++}
++
++void PageView::MouseDown(BPoint where)
++{
++    MakeFocus(true);
++    // Keep receiving moves and the release while a button is held, even outside the view (text selection,
++    // scrollbar drags). Valid until all buttons are released (headers/os/interface/View.h:601).
++    SetMouseEventMask(B_POINTER_EVENTS, B_NO_POINTER_HISTORY);
++
++    auto const* message = Window()->CurrentMessage();
++    int32 buttons = 0;
++    int32 clicks = 1;
++    int32 modifier_state = static_cast<int32>(modifiers());
++    if (message) {
++        message->FindInt32("buttons", &buttons);
++        message->FindInt32("clicks", &clicks); // only present if the remote client sent it (RemoteEventStream.cpp:152-156)
++        message->FindInt32("modifiers", &modifier_state);
++    }
++    auto pressed = static_cast<uint32>(buttons) & ~m_last_buttons;
++    m_last_buttons = static_cast<uint32>(buttons);
++    m_last_mouse_position = where;
++
++    auto button = web_button_from_changed_bits(pressed);
++    if (button == Web::UIEvents::MouseButton::None)
++        return; // LibWeb asserts on button-less down/up (Qt guards the same way, cpp:1751-1755)
++    enqueue_mouse_event(Web::MouseEvent::Type::MouseDown, where, button, m_last_buttons, static_cast<uint32>(modifier_state), clicks);
++}
++
++void PageView::MouseUp(BPoint where)
++{
++    auto const* message = Window()->CurrentMessage();
++    int32 buttons = 0; // buttons still held after this release
++    int32 modifier_state = static_cast<int32>(modifiers());
++    if (message) {
++        message->FindInt32("buttons", &buttons);
++        message->FindInt32("modifiers", &modifier_state);
++    }
++    auto released = m_last_buttons & ~static_cast<uint32>(buttons);
++    m_last_buttons = static_cast<uint32>(buttons);
++    m_last_mouse_position = where;
++
++    auto button = web_button_from_changed_bits(released);
++    if (button == Web::UIEvents::MouseButton::None)
++        return;
++    enqueue_mouse_event(Web::MouseEvent::Type::MouseUp, where, button, m_last_buttons, static_cast<uint32>(modifier_state), 1);
++}
++
++void PageView::MouseMoved(BPoint where, uint32 transit, BMessage const*)
++{
++    m_last_mouse_position = where;
++    if (transit == B_EXITED_VIEW) {
++        enqueue_mouse_event(Web::MouseEvent::Type::MouseLeave, where, Web::UIEvents::MouseButton::None, m_last_buttons, modifiers(), 0);
++        return;
++    }
++    auto const* message = Window()->CurrentMessage();
++    int32 buttons = static_cast<int32>(m_last_buttons);
++    if (message)
++        message->FindInt32("buttons", &buttons);
++    enqueue_mouse_event(Web::MouseEvent::Type::MouseMove, where, Web::UIEvents::MouseButton::None, static_cast<uint32>(buttons), modifiers(), 0);
++}
++
++// ---- Keyboard -------------------------------------------------------------------------------------------------
++
++void PageView::enqueue_key_event(Web::KeyEvent::Type type, char const* bytes, int32 num_bytes)
++{
++    auto const* message = Window()->CurrentMessage();
++    if (!message)
++        return;
++    int32 key = -1;
++    int32 raw_char = 0;
++    int32 modifier_state = static_cast<int32>(modifiers());
++    int32 repeat_count = 0;
++    message->FindInt32("key", &key);           // optional on the remote-desktop path (RemoteEventStream.cpp:203-205)
++    message->FindInt32("raw_char", &raw_char); // likewise (:199-201)
++    message->FindInt32("modifiers", &modifier_state);
++    bool repeat = message->FindInt32("be:key_repeat", &repeat_count) == B_OK && repeat_count > 0;
++
++    // The remote stream carries no be:key_repeat, so a second KeyDown for a key still held is the repeat.
++    if (key > 0) {
++        auto index = m_pressed_keys.find_first_index(key);
++        if (type == Web::KeyEvent::Type::KeyDown) {
++            repeat = repeat || index.has_value();
++            if (!index.has_value())
++                m_pressed_keys.append(key);
++        } else if (index.has_value()) {
++            m_pressed_keys.remove(*index);
++        }
++    }
++
++    auto mapped = map_key_event(type == Web::KeyEvent::Type::KeyDown, key, raw_char, static_cast<uint32>(modifier_state), bytes, num_bytes);
++    Web::KeyEvent event { type, mapped.key, mapped.modifiers, mapped.code_point, repeat, mapped.should_insert_text, make<KeyData>(*message) };
++    post_to_bridge([event = move(event)](WebViewBridge& view) mutable {
++        // Escape stops a load in progress, as Qt does (cpp:601-605).
++        if (event.type == Web::KeyEvent::Type::KeyDown && event.key == Web::UIEvents::Key_Escape
++            && event.modifiers == Web::UIEvents::Mod_None && view.is_loading()) {
++            view.stop_loading();
++            return;
++        }
++        view.enqueue_input_event(move(event));
++    });
++}
++
++void PageView::KeyDown(char const* bytes, int32 num_bytes)
++{
++    enqueue_key_event(Web::KeyEvent::Type::KeyDown, bytes, num_bytes);
++}
++
++void PageView::KeyUp(char const* bytes, int32 num_bytes)
++{
++    enqueue_key_event(Web::KeyEvent::Type::KeyUp, bytes, num_bytes);
++}
++
++// Haiku sends no B_KEY_DOWN for a bare modifier; the web keydown/keyup are synthesized from the bit difference.
++void PageView::enqueue_modifier_key_events(uint32 old_modifiers, uint32 new_modifiers)
++{
++    using namespace Web::UIEvents;
++    static constexpr struct {
++        uint32 bit;
++        KeyCode key;
++        bool is_lock;
++    } modifier_keys[] = {
++        { B_LEFT_SHIFT_KEY, Key_LeftShift, false },
++        { B_RIGHT_SHIFT_KEY, Key_RightShift, false },
++        { B_LEFT_CONTROL_KEY, Key_LeftControl, false },
++        { B_RIGHT_CONTROL_KEY, Key_RightControl, false },
++        { B_LEFT_COMMAND_KEY, Key_LeftAlt, false },
++        { B_RIGHT_COMMAND_KEY, Key_RightAlt, false },
++        { B_LEFT_OPTION_KEY, Key_LeftSuper, false },
++        { B_RIGHT_OPTION_KEY, Key_AltGr, false },
++        { B_CAPS_LOCK, Key_CapsLock, true },
++        { B_NUM_LOCK, Key_NumLock, true },
++        { B_SCROLL_LOCK, Key_ScrollLock, true },
++    };
++    for (auto const& modifier_key : modifier_keys) {
++        auto was_down = (old_modifiers & modifier_key.bit) != 0;
++        auto is_down = (new_modifiers & modifier_key.bit) != 0;
++        if (was_down == is_down)
++            continue;
++        auto emit = [&](Web::KeyEvent::Type type) {
++            Web::KeyEvent event { type, modifier_key.key, web_modifiers_from_haiku(new_modifiers), 0, false, false, nullptr };
++            post_to_bridge([event = move(event)](WebViewBridge& view) mutable { view.enqueue_input_event(move(event)); });
++        };
++        // A lock key toggles its bit once per press: report each toggle as a press and a release.
++        if (modifier_key.is_lock) {
++            emit(Web::KeyEvent::Type::KeyDown);
++            emit(Web::KeyEvent::Type::KeyUp);
++        } else {
++            emit(is_down ? Web::KeyEvent::Type::KeyDown : Web::KeyEvent::Type::KeyUp);
++        }
++    }
++}
++
++// Keys without a character in the keymap (Menu, NumLock) arrive as B_UNMAPPED_KEY_DOWN/UP (Window.cpp:3298-3304).
++void PageView::enqueue_unmapped_key_event(Web::KeyEvent::Type type, BMessage const& message)
++{
++    int32 key = -1;
++    int32 modifier_state = 0;
++    if (message.FindInt32("key", &key) != B_OK)
++        return;
++    message.FindInt32("modifiers", &modifier_state);
++    auto mapped = key_for_haiku_key_code(key);
++    if (mapped.key == Web::UIEvents::Key_Invalid)
++        return; // modifiers are covered by B_MODIFIERS_CHANGED
++    auto web_modifiers = web_modifiers_from_haiku(static_cast<uint32>(modifier_state));
++    if (mapped.is_keypad)
++        web_modifiers |= Web::UIEvents::Mod_Keypad;
++    Web::KeyEvent event { type, mapped.key, web_modifiers, 0, false, false, make<KeyData>(message) };
++    post_to_bridge([event = move(event)](WebViewBridge& view) mutable { view.enqueue_input_event(move(event)); });
++}
++
++// ---- Messages -------------------------------------------------------------------------------------------------
++
++void PageView::MessageReceived(BMessage* message)
++{
++    switch (message->what) {
++    case kMsgFrameReady: {
++        BRect dirty;
++        {
++            BAutolock locker(m_surface->lock);
++            m_surface->frame_message_pending = false;
++            auto damage = m_surface->damage;
++            m_surface->damage = {};
++            if (damage.is_empty())
++                return;
++            dirty = BRect(damage.left(), damage.top(), damage.right() - 1, damage.bottom() - 1);
++        }
++        Invalidate(dirty);
++        return;
++    }
++    case kMsgCursorChanged: {
++        BCursor* cursor;
++        {
++            BAutolock locker(m_surface->lock);
++            cursor = m_surface->pending_cursor;
++            m_surface->pending_cursor = nullptr;
++        }
++        if (!cursor)
++            return;
++        SetViewCursor(cursor, true);
++        delete m_cursor; // app_server keeps its own copy once set
++        m_cursor = cursor;
++        return;
++    }
++    case kMsgUnhandledKey: {
++        // The message is the original B_KEY_DOWN with only `what` changed, so CurrentMessage() carries the top-level
++        // "bytes" and "modifiers" BWindow's Tab navigation reads. BView::KeyDown is called directly, not through
++        // BView::MessageReceived, so the key is not re-dispatched to this view's KeyDown() and cannot loop.
++        char const* bytes = nullptr;
++        if (message->FindString("bytes", &bytes) == B_OK)
++            BView::KeyDown(bytes, static_cast<int32>(strlen(bytes))); // Tab navigation (src/kits/interface/View.cpp:1323-1330)
++        return;
++    }
++    case B_MOUSE_WHEEL_CHANGED: {
++        float delta_x = 0;
++        float delta_y = 0;
++        message->FindFloat("be:wheel_delta_x", &delta_x);
++        message->FindFloat("be:wheel_delta_y", &delta_y);
++        auto modifier_state = modifiers();
++        if (modifier_state & B_CONTROL_KEY) {
++            // Ctrl+wheel zooms, as in Qt (cpp:728-731).
++            post_to_bridge([delta_y](WebViewBridge& view) { delta_y < 0 ? view.zoom_in() : view.zoom_out(); });
++            return;
++        }
++        // No position in the message (RemoteEventStream.cpp:163-170): use the last pointer position. Haiku and the web
++        // agree that positive Y scrolls down (View.cpp:6946-6948; Qt negates Qt's opposite sign, cpp:330-331). One notch
++        // is 120 px, Qt's scale (cpp:327-338).
++        static constexpr double pixels_per_notch = 120;
++        enqueue_mouse_event(Web::MouseEvent::Type::MouseWheel, m_last_mouse_position, Web::UIEvents::MouseButton::None,
++            m_last_buttons, modifier_state, 0, delta_x * pixels_per_notch, delta_y * pixels_per_notch);
++        return;
++    }
++    case B_MODIFIERS_CHANGED: {
++        int32 old_modifiers = static_cast<int32>(m_last_modifiers);
++        int32 new_modifiers = 0;
++        message->FindInt32("be:old_modifiers", &old_modifiers);
++        message->FindInt32("modifiers", &new_modifiers);
++        m_last_modifiers = static_cast<uint32>(new_modifiers);
++        enqueue_modifier_key_events(static_cast<uint32>(old_modifiers), m_last_modifiers);
++        return;
++    }
++    case B_UNMAPPED_KEY_DOWN:
++        enqueue_unmapped_key_event(Web::KeyEvent::Type::KeyDown, *message);
++        return;
++    case B_UNMAPPED_KEY_UP:
++        enqueue_unmapped_key_event(Web::KeyEvent::Type::KeyUp, *message);
++        return;
++    // BWindow's built-in Command+C/X/V/A shortcuts target the focus view (src/kits/interface/Window.cpp:2834-2837).
++    case B_COPY:
++        post_to_bridge([](WebViewBridge& view) {
++            view.selected_text()->when_resolved([](auto& text) {
++                if (!text.is_empty())
++                    Application::the().insert_clipboard_entry({ "text/plain"_string, text });
++            });
++        });
++        return;
++    case B_CUT:
++        post_to_bridge([](WebViewBridge& view) {
++            view.cut_selected_text()->when_resolved([](auto& text) {
++                if (!text.is_empty())
++                    Application::the().insert_clipboard_entry({ "text/plain"_string, text });
++            });
++        });
++        return;
++    case B_PASTE:
++        post_to_bridge([](WebViewBridge& view) { view.paste_from_clipboard(); });
++        return;
++    case B_SELECT_ALL:
++        post_to_bridge([](WebViewBridge& view) { view.select_all(); });
++        return;
++    default:
++        BView::MessageReceived(message);
++    }
++}
++
++}
+diff --git a/UI/Haiku/PageView.h b/UI/Haiku/PageView.h
+new file mode 100644
+index 0000000..4a206a2
+--- /dev/null
++++ b/UI/Haiku/PageView.h
+@@ -0,0 +1,67 @@
++/*
++ * Copyright (c) 2026, the DeBeOS developers
++ *
++ * SPDX-License-Identifier: BSD-2-Clause
++ */
++
++#pragma once
++
++#include <AK/Function.h>
++#include <AK/NonnullRefPtr.h>
++#include <AK/Vector.h>
++#include <LibWebCommon/Page/InputEvent.h>
++#include <UI/Haiku/PresentSurface.h>
++
++#include <View.h>
++
++namespace Ladybird {
++
++class WebViewBridge;
++
++// The page surface of one tab. [W] only: it lives on its BWindow's looper thread and is owned and deleted by the
++// window like any BView. It holds no LibWebView pointer, only the bridge's view id (re-resolved on the Core thread
++// with ViewImplementation::find_view_by_id, so input for a tab that has just closed is a no-op) and a reference to
++// the shared PresentSurface.
++class PageView final : public BView {
++public:
++    PageView(u64 tab_id, u64 view_id, NonnullRefPtr<PresentSurface>);
++    virtual ~PageView() override;
++
++    u64 tab_id() const { return m_tab_id; }
++
++    // ^BView
++    virtual void AttachedToWindow() override;
++    virtual void DetachedFromWindow() override;
++    virtual void Show() override;
++    virtual void Draw(BRect update_rect) override;
++    virtual void FrameResized(float width, float height) override;
++    virtual void MouseDown(BPoint where) override;
++    virtual void MouseUp(BPoint where) override;
++    virtual void MouseMoved(BPoint where, uint32 transit, BMessage const* drag_message) override;
++    virtual void KeyDown(char const* bytes, int32 num_bytes) override;
++    virtual void KeyUp(char const* bytes, int32 num_bytes) override;
++    virtual void MakeFocus(bool focus = true) override;
++    virtual void WindowActivated(bool active) override;
++    virtual void MessageReceived(BMessage*) override;
++
++private:
++    void post_to_bridge(Function<void(WebViewBridge&)>);
++    void push_viewport();
++    void push_focus();
++    void enqueue_mouse_event(Web::MouseEvent::Type, BPoint where, Web::UIEvents::MouseButton, uint32 haiku_buttons, uint32 haiku_modifiers, int32 clicks, double wheel_delta_x = 0, double wheel_delta_y = 0);
++    void enqueue_key_event(Web::KeyEvent::Type, char const* bytes, int32 num_bytes);
++    void enqueue_modifier_key_events(uint32 old_modifiers, uint32 new_modifiers);
++    void enqueue_unmapped_key_event(Web::KeyEvent::Type, BMessage const&);
++
++    u64 m_tab_id { 0 };
++    u64 m_view_id { 0 };
++    NonnullRefPtr<PresentSurface> m_surface;
++
++    uint32 m_last_buttons { 0 };
++    uint32 m_last_modifiers { 0 };
++    BPoint m_last_mouse_position;
++    Vector<int32> m_pressed_keys;
++    BCursor* m_cursor { nullptr };
++};
++
++}
+diff --git a/UI/Haiku/PresentSurface.h b/UI/Haiku/PresentSurface.h
+new file mode 100644
+index 0000000..c5a21e5
+--- /dev/null
++++ b/UI/Haiku/PresentSurface.h
+@@ -0,0 +1,58 @@
++/*
++ * Copyright (c) 2026, the DeBeOS developers
++ *
++ * SPDX-License-Identifier: BSD-2-Clause
++ */
++
++#pragma once
++
++#include <AK/Atomic.h>
++#include <AK/AtomicRefCounted.h>
++#include <LibGfx/Rect.h>
++#include <LibGfx/Size.h>
++
++#include <Autolock.h>
++#include <Bitmap.h>
++#include <Cursor.h>
++#include <Locker.h>
++#include <Messenger.h>
++
++namespace Ladybird {
++
++// The only state shared between a tab's Core-side WebViewBridge [C] and its window-side PageView [W].
++// Everything below `lock` is guarded by it. `lock` is a leaf: nobody takes another lock, sends a message
++// or waits for another thread while holding it -- except PageView::Draw, which holds it across DrawBitmap
++// (a synchronous app_server call that never depends on our threads), so that [C] cannot overwrite pixels
++// app_server is still reading (src/kits/interface/View.cpp:3126-3143).
++struct PresentSurface final : public AtomicRefCounted<PresentSurface> {
++    AK_ALLOC_WITH_KMALLOC;
++
++    ~PresentSurface()
++    {
++        delete bitmap;
++        delete pending_cursor;
++    }
++
++    BLocker lock { "ladybird present" };
++
++    // Written by [C] (WebViewBridge::present_front_bitmap), read by [W] (PageView::Draw).
++    BBitmap* bitmap { nullptr };
++    Gfx::IntSize size;
++    Gfx::IntRect damage;                        // accumulated until [W] invalidates it
++    rgb_color background { 255, 255, 255, 255 };
++    BCursor* pending_cursor { nullptr };        // handed from [C] to [W]
++
++    // Written by [W] in AttachedToWindow/DetachedFromWindow, copied by [C] before sending.
++    BMessenger page_view;
++
++    // At most one kMsgFrameReady in flight per view; damage accumulates meanwhile.
++    Atomic<bool> frame_message_pending { false };
++
++    BMessenger messenger()
++    {
++        BAutolock locker(lock);
++        return page_view;
++    }
++};
++
++}
+diff --git a/UI/Haiku/Tab.cpp b/UI/Haiku/Tab.cpp
+new file mode 100644
+index 0000000..ce95862
+--- /dev/null
++++ b/UI/Haiku/Tab.cpp
+@@ -0,0 +1,262 @@
++/*
++ * Copyright (c) 2026, the DeBeOS developers
++ *
++ * SPDX-License-Identifier: BSD-2-Clause
++ */
++
++#include <LibCore/EventLoop.h>
++#include <LibWebView/Application.h>
++#include <LibWebView/Menu.h>
++#include <LibWebView/URL.h>
++#include <UI/Haiku/Application.h>
++#include <UI/Haiku/Messages.h>
++#include <UI/Haiku/Tab.h>
++#include <UI/Haiku/WindowModel.h>
++
++#include <Message.h>
++
++namespace Ladybird {
++
++// Per-view back/forward actions report their enabled state inline, on the thread that changed it -- the Core
++// thread (LibWebView/Menu.cpp:43-51). The observer only republishes; it never touches a BView.
++class NavigationActionObserver final : public WebView::Action::Observer {
++public:
++    AK_ALLOC_WITH_KMALLOC;
++
++    explicit NavigationActionObserver(Function<void()> on_change)
++        : m_on_change(move(on_change))
++    {
++    }
++
++    virtual void on_enabled_state_changed(WebView::Action&) override { m_on_change(); }
++
++private:
++    Function<void()> m_on_change;
++};
++
++Tab::Tab(WindowModel& model, u64 id, Gfx::IntSize initial_viewport, Optional<WebView::CanonicalTraversable&> traversable)
++    : m_model(model)
++    , m_id(id)
++    , m_view(WebViewBridge::create(initial_viewport, traversable))
++{
++    VERIFY(Application::is_core_thread());
++    install_view_callbacks();
++}
++
++// The actions are owned by the view (ViewImplementation.h:687-688) and their observers with them, so destroying the
++// view destroys the observers too; nothing outlives the Tab.
++Tab::~Tab()
++{
++    VERIFY(Application::is_core_thread());
++}
++
++void Tab::send(BMessage& message)
++{
++    message.AddUInt64("tab", m_id);
++    m_model.send_to_window(message);
++}
++
++void Tab::install_view_callbacks()
++{
++    m_view->on_title_change = [this](Utf16String const&) { publish_title(); };
++    m_view->on_url_change = [this](URL::URL const&) { publish_url(); };
++    m_view->on_loading_state_change = [this](bool) { publish_loading_state(); };
++    m_view->on_load_start = [this] { m_suppress_dialogs_until_navigation = false; };
++    m_view->on_activate_tab = [this] { m_model.activate_tab(m_id); };
++    m_view->on_close = [this] { m_model.definitely_close_tab(m_id); }; // window.close() (Qt Tab.cpp:798-800)
++
++    // Must return the new view's handle synchronously (ViewImplementation.h:414), which is why tabs and their
++    // views are created on the Core thread and the window is told afterwards. Popups open as tabs.
++    m_view->on_new_web_view = [this](Web::HTML::ActivateTab activate_tab, Web::HTML::WebViewHints, WebView::CanonicalTraversable& traversable) -> String {
++        return m_model.create_new_tab(activate_tab, traversable).view().handle();
++    };
++
++    m_view->navigate_back_action().add_observer(make<NavigationActionObserver>([this] { publish_navigation_state(); }));
++    m_view->navigate_forward_action().add_observer(make<NavigationActionObserver>([this] { publish_navigation_state(); }));
++
++    // JavaScript dialogs. WebContentPage records a pending dialog before calling these hooks
++    // (WebContentPage.cpp:2256-2265), so leaving them unset would hang the page on alert().
++    m_view->on_request_alert = [this](Utf16String const& message) {
++        if (m_suppress_dialogs_until_navigation) {
++            m_view->alert_closed();
++            return;
++        }
++        show_dialog(DialogType::Alert, message);
++    };
++    m_view->on_request_confirm = [this](Utf16String const& message) {
++        if (m_suppress_dialogs_until_navigation) {
++            m_view->confirm_closed(false);
++            return;
++        }
++        show_dialog(DialogType::Confirm, message);
++    };
++    m_view->on_request_prompt = [this](Utf16String const& message, Utf16String const& default_text) {
++        if (m_suppress_dialogs_until_navigation) {
++            m_view->prompt_closed({});
++            return;
++        }
++        show_dialog(DialogType::Prompt, message, default_text);
++    };
++    m_view->on_request_set_prompt_text = [this](Utf16String const& text) { m_pending_prompt_text = text; };
++    // WebDriver's Accept/Dismiss Alert resolve the dialog here, on Core; the window only closes its panel.
++    m_view->on_request_accept_dialog = [this] { resolve_pending_dialog(true); };
++    m_view->on_request_dismiss_dialog = [this] { resolve_pending_dialog(false); };
++}
++
++void Tab::publish_title()
++{
++    BMessage message(kMsgTabTitle);
++    message.AddString("title", m_view->title().to_byte_string().characters());
++    send(message);
++}
++
++void Tab::publish_url()
++{
++    BMessage message(kMsgTabUrl);
++    message.AddString("url", m_view->url().serialize(URL::ExcludeFragment::No).to_byte_string().characters());
++    send(message);
++}
++
++void Tab::publish_navigation_state()
++{
++    BMessage message(kMsgTabNavState);
++    message.AddBool("back", m_view->navigate_back_action().enabled());
++    message.AddBool("forward", m_view->navigate_forward_action().enabled());
++    send(message);
++}
++
++void Tab::publish_loading_state()
++{
++    BMessage message(kMsgTabLoading);
++    message.AddBool("loading", m_view->is_loading());
++    send(message);
++}
++
++void Tab::publish_chrome_state()
++{
++    publish_title();
++    publish_url();
++    publish_navigation_state();
++    publish_loading_state();
++}
++
++void Tab::navigate_from_user_input(String const& input)
++{
++    if (input.is_empty())
++        return;
++    m_view->set_next_history_visit_transition(WebView::HistoryVisitTransition::Omnibox);
++    // load_from_user_input already runs sanitize_url with the configured search engine (ViewImplementation.cpp:281-284),
++    // so "news.ycombinator.com" becomes https://news.ycombinator.com/ with no Haiku-side parsing.
++    m_view->load_from_user_input(input);
++    // An external URL (mailto: ...) does not change the page; put the page's URL back (Qt Tab.cpp:1309-1313).
++    if (WebView::classify_user_input(input).classification == WebView::UserInputClassification::ExternalURL)
++        publish_url();
++}
++
++void Tab::go_back()
++{
++    auto& action = m_view->navigate_back_action();
++    if (action.enabled())
++        action.activate(); // traverse_the_history_by_delta(-1) (ViewImplementation.cpp:3603-3610)
++}
++
++void Tab::go_forward()
++{
++    auto& action = m_view->navigate_forward_action();
++    if (action.enabled())
++        action.activate();
++}
++
++void Tab::reload_or_stop()
++{
++    if (m_view->is_loading())
++        m_view->stop_loading();
++    else
++        m_view->reload();
++}
++
++void Tab::request_close()
++{
++    m_suppress_dialogs_until_navigation = true;
++    resolve_pending_dialog(false);
++
++    if (!m_view->needs_beforeunload_check()) {
++        auto close = m_view->prepare_for_immediate_close();
++        m_model.definitely_close_tab(m_id, move(close));
++        return;
++    }
++    // First request: let WebContent run beforeunload and shut down cleanly; on_close follows.
++    if (!m_already_requested_close) {
++        m_already_requested_close = true;
++        m_view->request_close();
++        return;
++    }
++    // The user asked twice: respect it.
++    m_model.definitely_close_tab(m_id);
++}
++
++void Tab::show_dialog(DialogType type, Utf16String const& message, Utf16String const& default_text)
++{
++    m_pending_dialog = type;
++    m_pending_dialog_id = m_next_dialog_id++;
++    m_pending_prompt_text = default_text;
++
++    BMessage request(type == DialogType::Alert ? kMsgShowAlert : type == DialogType::Confirm ? kMsgShowConfirm : kMsgShowPrompt);
++    request.AddUInt64("dialog", m_pending_dialog_id);
++    request.AddString("message", message.to_byte_string().characters());
++    request.AddString("origin", m_view->url().serialize_for_display().characters());
++    if (type == DialogType::Prompt)
++        request.AddString("default", default_text.to_byte_string().characters());
++    send(request);
++}
++
++// Resolves the pending dialog from the Core side (tab closing, WebDriver) and tells the window to take its panel down.
++void Tab::resolve_pending_dialog(bool accepted)
++{
++    auto type = exchange(m_pending_dialog, DialogType::None);
++    switch (type) {
++    case DialogType::None:
++        return;
++    case DialogType::Alert:
++        m_view->alert_closed();
++        break;
++    case DialogType::Confirm:
++        m_view->confirm_closed(accepted);
++        break;
++    case DialogType::Prompt:
++        m_view->prompt_closed(accepted ? Optional<Utf16String> { m_pending_prompt_text } : Optional<Utf16String> {});
++        break;
++    }
++    BMessage dismiss(kMsgDismissDialogs);
++    dismiss.AddUInt64("dialog", m_pending_dialog_id);
++    send(dismiss);
++}
++
++void Tab::alert_closed(u64 dialog_id)
++{
++    if (m_pending_dialog != DialogType::Alert || dialog_id != m_pending_dialog_id)
++        return;
++    m_pending_dialog = DialogType::None;
++    m_view->alert_closed();
++}
++
++void Tab::confirm_closed(u64 dialog_id, bool accepted)
++{
++    if (m_pending_dialog != DialogType::Confirm || dialog_id != m_pending_dialog_id)
++        return;
++    m_pending_dialog = DialogType::None;
++    m_view->confirm_closed(accepted);
++}
++
++void Tab::prompt_closed(u64 dialog_id, Optional<String> text)
++{
++    if (m_pending_dialog != DialogType::Prompt || dialog_id != m_pending_dialog_id)
++        return;
++    m_pending_dialog = DialogType::None;
++    if (text.has_value())
++        m_view->prompt_closed(Utf16String::from_utf8(text->bytes_as_string_view()));
++    else
++        m_view->prompt_closed({});
++}
++
++}
+diff --git a/UI/Haiku/Tab.h b/UI/Haiku/Tab.h
+new file mode 100644
+index 0000000..d99aac7
+--- /dev/null
++++ b/UI/Haiku/Tab.h
+@@ -0,0 +1,76 @@
++/*
++ * Copyright (c) 2026, the DeBeOS developers
++ *
++ * SPDX-License-Identifier: BSD-2-Clause
++ */
++
++#pragma once
++
++#include <AK/NonnullOwnPtr.h>
++#include <AK/String.h>
++#include <LibWebView/Forward.h>
++#include <UI/Haiku/WebViewBridge.h>
++
++class BMessage;
++
++namespace Ladybird {
++
++class WindowModel;
++
++// One browser tab. [C] only: owns the tab's WebViewBridge, wires its chrome callbacks, and reports to its window
++// with BMessages. It never touches a BView. Mirrors the Core-relevant half of UI/Qt/Tab.cpp.
++class Tab {
++public:
++    AK_ALLOC_WITH_KMALLOC;
++
++    Tab(WindowModel&, u64 id, Gfx::IntSize initial_viewport, Optional<WebView::CanonicalTraversable&> = {});
++    ~Tab();
++
++    u64 id() const { return m_id; }
++    WebViewBridge& view() { return *m_view; }
++    WebViewBridge const& view() const { return *m_view; }
++
++    void navigate_from_user_input(String const&); // the location field's Enter (Qt Tab.cpp:1295-1317, URL case)
++    void go_back();
++    void go_forward();
++    void reload_or_stop();
++    void request_close();                       // Qt Tab.cpp:1691-1711
++
++    // Replies from the window's dialogs. Stale ids (a dialog dismissed meanwhile) are ignored.
++    void alert_closed(u64 dialog_id);
++    void confirm_closed(u64 dialog_id, bool accepted);
++    void prompt_closed(u64 dialog_id, Optional<String> text);
++
++    // Title, URL, back/forward and loading state, sent when the tab becomes the window's current tab.
++    void publish_chrome_state();
++
++private:
++    enum class DialogType : u8 {
++        None,
++        Alert,
++        Confirm,
++        Prompt,
++    };
++
++    void install_view_callbacks();
++    void send(BMessage&);
++    void publish_title();
++    void publish_url();
++    void publish_navigation_state();
++    void publish_loading_state();
++    void show_dialog(DialogType, Utf16String const& message, Utf16String const& default_text = {});
++    void resolve_pending_dialog(bool accepted);
++
++    WindowModel& m_model;
++    u64 m_id { 0 };
++    NonnullOwnPtr<WebViewBridge> m_view;
++    bool m_already_requested_close { false };
++    bool m_suppress_dialogs_until_navigation { false };
++
++    DialogType m_pending_dialog { DialogType::None };
++    u64 m_pending_dialog_id { 0 };
++    Utf16String m_pending_prompt_text;
++    u64 m_next_dialog_id { 1 };
++};
++
++}
+diff --git a/UI/Haiku/TabStrip.cpp b/UI/Haiku/TabStrip.cpp
+new file mode 100644
+index 0000000..2b86f12
+--- /dev/null
++++ b/UI/Haiku/TabStrip.cpp
+@@ -0,0 +1,141 @@
++/*
++ * Copyright (c) 2026, the DeBeOS developers
++ *
++ * SPDX-License-Identifier: BSD-2-Clause
++ */
++
++#include <UI/Haiku/Messages.h>
++#include <UI/Haiku/TabStrip.h>
++
++#include <String.h>
++#include <Window.h>
++
++namespace Ladybird {
++
++static constexpr float maximum_tab_width = 220;
++static constexpr float close_box_size = 12;
++
++TabStrip::TabStrip()
++    : BView("tab strip", B_WILL_DRAW | B_FULL_UPDATE_ON_RESIZE | B_FRAME_EVENTS)
++{
++    SetViewUIColor(B_PANEL_BACKGROUND_COLOR);
++}
++
++float TabStrip::strip_height() const
++{
++    font_height metrics;
++    GetFontHeight(&metrics);
++    return ceilf(metrics.ascent + metrics.descent + metrics.leading) + 12;
++}
++
++BSize TabStrip::MinSize() { return BSize(50, strip_height()); }
++BSize TabStrip::MaxSize() { return BSize(B_SIZE_UNLIMITED, strip_height()); }
++BSize TabStrip::PreferredSize() { return BSize(400, strip_height()); }
++
++float TabStrip::tab_width() const
++{
++    if (m_items.is_empty())
++        return maximum_tab_width;
++    return min(maximum_tab_width, Bounds().Width() / static_cast<float>(m_items.size()));
++}
++
++BRect TabStrip::frame_for(size_t index) const
++{
++    auto width = tab_width();
++    auto left = floorf(index * width);
++    return BRect(left, 0, floorf(left + width) - 1, Bounds().bottom);
++}
++
++BRect TabStrip::close_box_for(BRect tab_frame) const
++{
++    auto top = floorf((tab_frame.Height() - close_box_size) / 2);
++    return BRect(tab_frame.right - close_box_size - 6, top, tab_frame.right - 6, top + close_box_size);
++}
++
++void TabStrip::add_tab(u64 tab_id)
++{
++    m_items.append({ tab_id, "New Tab" });
++    Invalidate();
++}
++
++void TabStrip::remove_tab(u64 tab_id)
++{
++    m_items.remove_all_matching([tab_id](auto const& item) { return item.tab_id == tab_id; });
++    if (m_selected == tab_id)
++        m_selected = {};
++    Invalidate();
++}
++
++void TabStrip::set_label(u64 tab_id, ByteString label)
++{
++    for (auto& item : m_items) {
++        if (item.tab_id == tab_id) {
++            item.label = label.is_empty() ? ByteString { "Untitled" } : move(label);
++            Invalidate();
++            return;
++        }
++    }
++}
++
++void TabStrip::select(u64 tab_id)
++{
++    m_selected = tab_id;
++    Invalidate();
++}
++
++void TabStrip::FrameResized(float width, float height)
++{
++    BView::FrameResized(width, height);
++    Invalidate();
++}
++
++void TabStrip::Draw(BRect)
++{
++    auto base = ui_color(B_PANEL_BACKGROUND_COLOR);
++    SetHighColor(base);
++    FillRect(Bounds());
++
++    for (size_t i = 0; i < m_items.size(); ++i) {
++        auto const& item = m_items[i];
++        auto frame = frame_for(i);
++        auto selected = m_selected == item.tab_id;
++
++        SetHighColor(selected ? ui_color(B_DOCUMENT_BACKGROUND_COLOR) : tint_color(base, B_DARKEN_1_TINT));
++        FillRect(frame.InsetByCopy(1, 2));
++        SetHighColor(tint_color(base, B_DARKEN_3_TINT));
++        StrokeRect(frame.InsetByCopy(1, 2));
++
++        auto close_box = close_box_for(frame);
++        BString label { item.label.characters() };
++        auto label_width = close_box.left - frame.left - 14;
++        TruncateString(&label, B_TRUNCATE_END, label_width);
++        font_height metrics;
++        GetFontHeight(&metrics);
++        SetHighColor(selected ? ui_color(B_DOCUMENT_TEXT_COLOR) : ui_color(B_PANEL_TEXT_COLOR));
++        SetLowColor(selected ? ui_color(B_DOCUMENT_BACKGROUND_COLOR) : tint_color(base, B_DARKEN_1_TINT));
++        DrawString(label.String(), BPoint(frame.left + 8, floorf((frame.Height() + metrics.ascent - metrics.descent) / 2)));
++
++        // The close glyph: a drawn cross, so it does not depend on a font having U+00D7.
++        SetHighColor(tint_color(base, B_DARKEN_4_TINT));
++        auto cross = close_box.InsetByCopy(2, 2);
++        StrokeLine(cross.LeftTop(), cross.RightBottom());
++        StrokeLine(cross.LeftBottom(), cross.RightTop());
++    }
++}
++
++void TabStrip::MouseDown(BPoint where)
++{
++    if (!Window())
++        return;
++    for (size_t i = 0; i < m_items.size(); ++i) {
++        auto frame = frame_for(i);
++        if (!frame.Contains(where))
++            continue;
++        BMessage message(close_box_for(frame).Contains(where) ? kMsgCloseTab : kMsgSelectTab);
++        message.AddUInt64("tab", m_items[i].tab_id);
++        Window()->PostMessage(&message);
++        return;
++    }
++}
++
++}
+diff --git a/UI/Haiku/TabStrip.h b/UI/Haiku/TabStrip.h
+new file mode 100644
+index 0000000..e96bbb8
+--- /dev/null
++++ b/UI/Haiku/TabStrip.h
+@@ -0,0 +1,54 @@
++/*
++ * Copyright (c) 2026, the DeBeOS developers
++ *
++ * SPDX-License-Identifier: BSD-2-Clause
++ */
++
++#pragma once
++
++#include <AK/ByteString.h>
++#include <AK/Optional.h>
++#include <AK/Vector.h>
++
++#include <View.h>
++
++namespace Ladybird {
++
++// A row of tabs with a close glyph each. [W] only.
++//
++// Not BTabView, read from the kit's own source: a BTab owns its view and deletes it (src/kits/interface/
++// TabView.cpp:92-100), a view cannot be detached (SetView(NULL) is an early return, :241), and there is no per-tab
++// close control. Here the window owns the PageViews in a BCardLayout and the strip only owns labels, the same split
++// WebPositive's TabManager uses (its own code is MIT-licensed and is not copied here).
++class TabStrip final : public BView {
++public:
++    TabStrip();
++
++    void add_tab(u64 tab_id);
++    void remove_tab(u64 tab_id);
++    void set_label(u64 tab_id, ByteString label);
++    void select(u64 tab_id);
++
++    virtual void Draw(BRect update_rect) override;
++    virtual void FrameResized(float width, float height) override;
++    virtual void MouseDown(BPoint where) override;
++    virtual BSize MinSize() override;
++    virtual BSize MaxSize() override;
++    virtual BSize PreferredSize() override;
++
++private:
++    struct Item {
++        u64 tab_id { 0 };
++        ByteString label;
++    };
++
++    float tab_width() const;
++    float strip_height() const;
++    BRect frame_for(size_t index) const;
++    BRect close_box_for(BRect tab_frame) const;
++
++    Vector<Item> m_items;
++    Optional<u64> m_selected;
++};
++
++}
+diff --git a/UI/Haiku/WebViewBridge.cpp b/UI/Haiku/WebViewBridge.cpp
+new file mode 100644
+index 0000000..572af6a
+--- /dev/null
++++ b/UI/Haiku/WebViewBridge.cpp
+@@ -0,0 +1,328 @@
++/*
++ * Copyright (c) 2026, the DeBeOS developers
++ *
++ * SPDX-License-Identifier: BSD-2-Clause
++ */
++
++#include <AK/LexicalPath.h>
++#include <LibCore/EventLoop.h>
++#include <LibGfx/Bitmap.h>
++#include <LibGfx/Palette.h>
++#include <LibGfx/SharedImageBuffer.h>
++#include <LibGfx/SystemTheme.h>
++#include <LibWebCommon/WebView/Utilities.h>
++#include <LibWebView/WebContentPage.h>
++#include <UI/Haiku/Application.h>
++#include <UI/Haiku/Messages.h>
++#include <UI/Haiku/WebViewBridge.h>
++
++#include <Autolock.h>
++#include <InterfaceDefs.h>
++#include <Screen.h>
++
++namespace Ladybird {
++
++static Gfx::Color to_gfx_color(rgb_color color)
++{
++    return Gfx::Color(color.red, color.green, color.blue, color.alpha);
++}
++
++static rgb_color to_rgb_color(Gfx::Color color)
++{
++    return { color.red(), color.green(), color.blue(), 255 };
++}
++
++static bool system_prefers_dark()
++{
++    return ui_color(B_DOCUMENT_BACKGROUND_COLOR).IsDark();
++}
++
++// The base theme is the same Default/Dark.ini headless-shot already loads on Haiku (Application.cpp:2047-2048),
++// with the colours a Haiku user expects carried over from the interface settings, as Qt does from its palette
++// (UI/Qt/WebContentView.cpp:1388-1420).
++static Core::AnonymousBuffer make_system_theme()
++{
++    auto dark = system_prefers_dark();
++    auto theme_path = LexicalPath::join(WebView::s_ladybird_resource_root, "themes"sv, dark ? "Dark.ini"sv : "Default.ini"sv);
++    auto theme = MUST(Gfx::load_system_theme(theme_path.string()));
++    Gfx::Palette palette(Gfx::PaletteImpl::create_with_anonymous_buffer(theme));
++    palette.set_color(Gfx::ColorRole::Link, to_gfx_color(ui_color(B_LINK_TEXT_COLOR)));
++    palette.set_color(Gfx::ColorRole::VisitedLink, to_gfx_color(ui_color(B_LINK_VISITED_COLOR)));
++    palette.set_color(Gfx::ColorRole::Selection, to_gfx_color(ui_color(B_LIST_SELECTED_BACKGROUND_COLOR)));
++    palette.set_flag(Gfx::FlagRole::IsDark, dark);
++    return theme;
++}
++
++NonnullOwnPtr<WebViewBridge> WebViewBridge::create(Gfx::IntSize initial_viewport, Optional<WebView::CanonicalTraversable&> traversable)
++{
++    VERIFY(Application::is_core_thread());
++    auto view = adopt_own(*new WebViewBridge(initial_viewport));
++    // After construction, so the virtual hooks initialize_tab reaches are this class's (as HeadlessWebView::create).
++    view->initialize_tab(Web::HTML::VisibilityState::Hidden, traversable);
++    return view;
++}
++
++WebViewBridge::WebViewBridge(Gfx::IntSize initial_viewport)
++    : m_surface(adopt_ref(*new PresentSurface))
++    , m_viewport_size(initial_viewport)
++{
++    // Haiku's app_server has no logical/physical pixel split: BView coordinates are device pixels, and text
++    // scaling is the zoom level's job. The ratio is therefore exactly 1.
++    m_device_pixel_ratio = 1.0;
++    set_page_background_color_to_system_canvas(system_prefers_dark());
++
++    on_ready_to_paint = [this] { present_front_bitmap(); };
++    on_page_background_color_change = [this](Gfx::Color color) {
++        {
++            BAutolock locker(m_surface->lock);
++            m_surface->background = to_rgb_color(color);
++        }
++        m_present_needs_full_copy = true;
++        post_frame_ready();
++    };
++    on_cursor_change = [this](Gfx::Cursor const& cursor) { update_cursor(cursor); };
++    on_finish_handling_key_event = [this](Web::KeyEvent const& event) { finish_handling_key_event(event); };
++}
++
++WebViewBridge::~WebViewBridge()
++{
++    VERIFY(Application::is_core_thread());
++}
++
++// ---- Frames ---------------------------------------------------------------------------------------------------
++
++// server_did_paint() calls this right after swapping the front buffer and before on_ready_to_paint
++// (ViewImplementation.cpp:209-217). Damage is relative to the previous frame, which our BBitmap still holds.
++void WebViewBridge::did_accept_presented_backing_store(i32, Gfx::IntRect damage_rect)
++{
++    VERIFY(Application::is_core_thread());
++    m_pending_damage = m_pending_damage.is_empty() ? damage_rect : m_pending_damage.united(damage_rect);
++}
++
++// Copies the new front buffer into the surface's BBitmap. This must happen here, synchronously: the only place the
++// front buffer is released back to the compositor is the next server_did_paint() on this same thread
++// (ViewImplementation.cpp:205-207), so nothing writes to it during the copy. The window thread only ever reads the
++// copy. Zero-copy is not possible: cross-team clone_area needs B_CLONEABLE_AREA (src/system/kernel/vm/vm.cpp:2540)
++// and the backing store is shm_open+mmap memory (LibCore/System.cpp:238-251).
++void WebViewBridge::present_front_bitmap()
++{
++    VERIFY(Application::is_core_thread());
++    VERIFY(Application::is_core_thread());
++    if (!m_has_usable_bitmap || !m_front_bitmap.shared_image_buffer)
++        return;
++    auto bitmap = m_front_bitmap.shared_image_buffer->bitmap_if_present();
++    if (!bitmap)
++        return; // no CPU pixels: only the IOSurface/dmabuf variants lack them, and neither exists on Haiku
++    // Gfx BGRA8888 stores (a<<24)|(r<<16)|(g<<8)|b (LibGfx/Color.h:139), memory bytes B,G,R,A on little-endian,
++    // which is exactly B_RGB32 "BGR-" (headers/os/interface/GraphicsDefs.h:176). The premultiplied alpha byte is
++    // ignored, as Qt ignores it with QImage::Format_RGB32 (UI/Qt/WebContentView.cpp:900).
++    VERIFY(bitmap->format() == Gfx::BitmapFormat::BGRA8888 || bitmap->format() == Gfx::BitmapFormat::BGRx8888);
++
++    auto size = m_front_bitmap.last_painted_size.to_type<int>();
++    size.set_width(min(size.width(), bitmap->width()));
++    size.set_height(min(size.height(), bitmap->height()));
++    if (size.is_empty())
++        return;
++
++    {
++        BAutolock locker(m_surface->lock);
++        if (!m_surface->bitmap || m_surface->size != size) {
++            delete m_surface->bitmap;
++            m_surface->bitmap = new BBitmap(BRect(0, 0, size.width() - 1, size.height() - 1), 0, B_RGB32);
++            if (m_surface->bitmap->InitCheck() != B_OK) {
++                delete m_surface->bitmap;
++                m_surface->bitmap = nullptr;
++                m_surface->size = {};
++                return;
++            }
++            m_surface->size = size;
++            m_present_needs_full_copy = true;
++        }
++
++        auto copy_rect = m_present_needs_full_copy ? Gfx::IntRect { {}, size } : m_pending_damage.intersected({ {}, size });
++        auto* destination = static_cast<u8*>(m_surface->bitmap->Bits());
++        auto destination_pitch = static_cast<size_t>(m_surface->bitmap->BytesPerRow());
++        auto row_bytes = static_cast<size_t>(copy_rect.width()) * 4;
++        for (int y = copy_rect.top(); y < copy_rect.bottom(); ++y)
++            __builtin_memcpy(destination + y * destination_pitch + copy_rect.left() * 4, bitmap->scanline_u8(y) + copy_rect.left() * 4, row_bytes);
++        m_surface->damage = m_surface->damage.is_empty() ? copy_rect : m_surface->damage.united(copy_rect);
++    }
++    m_pending_damage = {};
++    m_present_needs_full_copy = false;
++    post_frame_ready();
++}
++
++// Never sends while holding the surface lock (it is a leaf lock, see PresentSurface.h).
++void WebViewBridge::post_frame_ready()
++{
++    VERIFY(Application::is_core_thread());
++    if (m_surface->frame_message_pending.exchange(true))
++        return;
++    auto messenger = m_surface->messenger();
++    if (!messenger.IsValid() || messenger.SendMessage(kMsgFrameReady) != B_OK)
++        m_surface->frame_message_pending = false; // not attached yet: AttachedToWindow() repaints everything
++}
++
++// ---- Geometry -------------------------------------------------------------------------------------------------
++
++void WebViewBridge::set_viewport_from_window(Gfx::IntSize size)
++{
++    VERIFY(Application::is_core_thread());
++    VERIFY(Application::is_core_thread());
++    if (size.is_empty() || size == m_viewport_size)
++        return;
++    m_viewport_size = size;
++    if (m_viewport_push_pending)
++        return;
++    m_viewport_push_pending = true;
++    // One live resize produces a burst of FrameResized; push one viewport per loop turn.
++    Core::deferred_invoke([view_id = view_id()] {
++        auto view = WebView::ViewImplementation::find_view_by_id(view_id);
++        if (!view.has_value())
++            return;
++        auto& self = static_cast<WebViewBridge&>(*view);
++        self.m_viewport_push_pending = false;
++        self.page().async_set_window_size(self.viewport_size());
++        self.handle_resize(); // async_set_viewport(viewport_size(), m_device_pixel_ratio, ...) (ViewImplementation.cpp:2179-2190)
++    });
++}
++
++Web::DevicePixelSize WebViewBridge::viewport_size() const
++{
++    VERIFY(Application::is_core_thread());
++    return m_viewport_size.to_type<Web::DevicePixels>();
++}
++
++// The device pixel ratio is 1, so content and widget coordinates coincide (as in Qt at ratio 1, cpp:1591-1599).
++Gfx::IntPoint WebViewBridge::to_content_position(Gfx::IntPoint widget_position) const
++{
++    VERIFY(Application::is_core_thread());
++    return widget_position;
++}
++
++Gfx::IntPoint WebViewBridge::to_widget_position(Gfx::IntPoint content_position) const
++{
++    VERIFY(Application::is_core_thread());
++    return content_position;
++}
++
++void WebViewBridge::update_zoom()
++{
++    VERIFY(Application::is_core_thread());
++    ViewImplementation::update_zoom();
++    handle_resize(); // Qt re-pushes the viewport after a zoom change (UI/Qt/WebContentView.cpp:1356-1360)
++}
++
++void WebViewBridge::prepare_page_for_tab(WebView::WebContentPage& page)
++{
++    VERIFY(Application::is_core_thread());
++    ViewImplementation::prepare_page_for_tab(page);
++
++    page.async_update_system_theme(make_system_theme());
++    BRect screen = BScreen(B_MAIN_SCREEN_ID).Frame();
++    Vector<Web::DevicePixelRect> screen_rects;
++    screen_rects.append({ 0, 0, screen.IntegerWidth() + 1, screen.IntegerHeight() + 1 });
++    page.async_update_screen_rects(screen_rects, 0);
++    page.async_set_window_size(viewport_size());
++}
++
++// ---- Cursor ---------------------------------------------------------------------------------------------------
++
++static BCursorID cursor_id_for(Gfx::StandardCursor cursor)
++{
++    switch (cursor) {
++    case Gfx::StandardCursor::Hidden:
++        return B_CURSOR_ID_NO_CURSOR;
++    case Gfx::StandardCursor::Crosshair:
++        return B_CURSOR_ID_CROSS_HAIR;
++    case Gfx::StandardCursor::IBeam:
++        return B_CURSOR_ID_I_BEAM;
++    case Gfx::StandardCursor::ResizeHorizontal:
++    case Gfx::StandardCursor::ResizeColumn:
++        return B_CURSOR_ID_RESIZE_EAST_WEST;
++    case Gfx::StandardCursor::ResizeVertical:
++    case Gfx::StandardCursor::ResizeRow:
++        return B_CURSOR_ID_RESIZE_NORTH_SOUTH;
++    case Gfx::StandardCursor::ResizeDiagonalTLBR:
++        return B_CURSOR_ID_RESIZE_NORTH_WEST_SOUTH_EAST;
++    case Gfx::StandardCursor::ResizeDiagonalBLTR:
++        return B_CURSOR_ID_RESIZE_NORTH_EAST_SOUTH_WEST;
++    case Gfx::StandardCursor::Hand:
++        return B_CURSOR_ID_FOLLOW_LINK;
++    case Gfx::StandardCursor::Help:
++        return B_CURSOR_ID_HELP;
++    case Gfx::StandardCursor::OpenHand:
++        return B_CURSOR_ID_GRAB;
++    case Gfx::StandardCursor::Drag:
++        return B_CURSOR_ID_GRABBING;
++    case Gfx::StandardCursor::DragCopy:
++        return B_CURSOR_ID_COPY;
++    case Gfx::StandardCursor::Move:
++        return B_CURSOR_ID_MOVE;
++    case Gfx::StandardCursor::Wait:
++        return B_CURSOR_ID_PROGRESS;
++    case Gfx::StandardCursor::Disallowed:
++        return B_CURSOR_ID_NOT_ALLOWED;
++    case Gfx::StandardCursor::Zoom:
++        return B_CURSOR_ID_ZOOM_IN;
++    case Gfx::StandardCursor::Eyedropper: // no Haiku eyedropper cursor; Qt falls back to the arrow too (cpp:1541-1545)
++    case Gfx::StandardCursor::None:
++    case Gfx::StandardCursor::Arrow:
++        break;
++    }
++    return B_CURSOR_ID_SYSTEM_DEFAULT;
++}
++
++// Built here because an ImageCursor's pixels are Core-side state; the BCursor is then handed to the window.
++void WebViewBridge::update_cursor(Gfx::Cursor const& cursor)
++{
++    VERIFY(Application::is_core_thread());
++    BCursor* new_cursor = cursor.visit(
++        [](Gfx::StandardCursor standard) { return new BCursor(cursor_id_for(standard)); },
++        [](Gfx::ImageCursor const& image) -> BCursor* {
++            auto const* source = image.bitmap.bitmap();
++            if (!source)
++                return new BCursor(B_CURSOR_ID_SYSTEM_DEFAULT);
++            // B_RGBA32 cursors take straight alpha; Qt also reads these pixels as straight ARGB32 (cpp:1553).
++            auto straight = MUST(source->clone());
++            if (straight->alpha_type() == Gfx::AlphaType::Premultiplied)
++                straight->set_alpha_type_destructive(Gfx::AlphaType::Unpremultiplied);
++            BBitmap bitmap(BRect(0, 0, straight->width() - 1, straight->height() - 1), 0, B_RGBA32);
++            for (int y = 0; y < straight->height(); ++y)
++                __builtin_memcpy(static_cast<u8*>(bitmap.Bits()) + y * bitmap.BytesPerRow(), straight->scanline_u8(y), straight->width() * 4);
++            return new BCursor(&bitmap, BPoint(image.hotspot.x(), image.hotspot.y()));
++        });
++
++    BMessenger messenger;
++    {
++        BAutolock locker(m_surface->lock);
++        delete m_surface->pending_cursor;
++        m_surface->pending_cursor = new_cursor;
++        messenger = m_surface->page_view;
++    }
++    if (messenger.IsValid())
++        messenger.SendMessage(kMsgCursorChanged);
++}
++
++// ---- Keys -----------------------------------------------------------------------------------------------------
++
++// WebContent did not consume the key (ViewImplementation.cpp:900-928): hand the original message back to the view,
++// which resumes Haiku's default handling. That is how Tab moves focus from the page to the location field.
++// The original fields stay at the top level and only `what` changes: BWindow::_KeyboardNavigation() reads "bytes"
++// and "modifiers" from CurrentMessage() (src/kits/interface/Window.cpp:3877-3889), so a wrapper message with the key
++// nested inside it would never navigate.
++void WebViewBridge::finish_handling_key_event(Web::KeyEvent const& event)
++{
++    VERIFY(Application::is_core_thread());
++    if (event.type != Web::KeyEvent::Type::KeyDown || !event.browser_data)
++        return;
++    BMessage forward(as<KeyData>(*event.browser_data).message);
++    if (forward.what != B_KEY_DOWN)
++        return;
++    forward.what = kMsgUnhandledKey;
++    auto messenger = m_surface->messenger();
++    if (messenger.IsValid())
++        messenger.SendMessage(&forward);
++}
++
++}
+diff --git a/UI/Haiku/WebViewBridge.h b/UI/Haiku/WebViewBridge.h
+new file mode 100644
+index 0000000..ee9067c
+--- /dev/null
++++ b/UI/Haiku/WebViewBridge.h
+@@ -0,0 +1,79 @@
++/*
++ * Copyright (c) 2026, the DeBeOS developers
++ *
++ * SPDX-License-Identifier: BSD-2-Clause
++ */
++
++#pragma once
++
++#include <AK/NonnullOwnPtr.h>
++#include <AK/NonnullRefPtr.h>
++#include <LibGfx/Size.h>
++#include <LibWebView/ViewImplementation.h>
++#include <UI/Haiku/PresentSurface.h>
++
++#include <Message.h>
++
++namespace Ladybird {
++
++// Original Haiku key message, carried through WebContent and back so an unconsumed key can resume Haiku's
++// default handling (Tab navigation in BView::KeyDown). Mirrors Qt's KeyData (UI/Qt/WebContentView.cpp:1824-1831).
++struct KeyData final : public Web::BrowserInputData {
++    AK_ALLOC_WITH_KMALLOC;
++
++    explicit KeyData(BMessage const& message)
++        : message(message)
++    {
++    }
++
++    BMessage message;
++};
++
++// The WebView::ViewImplementation of one tab. [C] only: constructed, used and destroyed on the Core thread
++// (its constructor registers in a static map and creates a Core::Timer, ViewImplementation.cpp:72-87; its
++// destructor closes the page, :104-105). It never touches a BView; frames reach the window through the shared
++// PresentSurface, everything else through BMessenger.
++// Every method VERIFYs that it runs on the Core thread. The engine's own owner-thread VERIFYs
++// (LibIPC/Connection.cpp) guard only message receipt and dispatch, not async sends, so an input event pushed into
++// ViewImplementation from a window thread is NOT caught by the engine: it races silently (measured by mutation).
++class WebViewBridge final : public WebView::ViewImplementation {
++public:
++    AK_ALLOC_WITH_KMALLOC;
++
++    static NonnullOwnPtr<WebViewBridge> create(Gfx::IntSize initial_viewport, Optional<WebView::CanonicalTraversable&> = {});
++    virtual ~WebViewBridge() override;
++
++    PresentSurface& surface() { return *m_surface; }
++    NonnullRefPtr<PresentSurface> surface_ref() { return m_surface; }
++
++    // Called (via post_to_core) from PageView::FrameResized. Coalesced to one viewport push per loop turn,
++    // as Qt does (UI/Qt/WebContentView.cpp:1261-1272).
++    void set_viewport_from_window(Gfx::IntSize);
++
++    // [C] The viewport the page was last sized to (viewport_size() is the private ViewImplementation override).
++    Gfx::IntSize viewport() const { return m_viewport_size; }
++
++private:
++    explicit WebViewBridge(Gfx::IntSize initial_viewport);
++
++    // ^WebView::ViewImplementation
++    virtual void prepare_page_for_tab(WebView::WebContentPage&) override;
++    virtual void update_zoom() override;
++    virtual Web::DevicePixelSize viewport_size() const override;
++    virtual Gfx::IntPoint to_content_position(Gfx::IntPoint widget_position) const override;
++    virtual Gfx::IntPoint to_widget_position(Gfx::IntPoint content_position) const override;
++    virtual void did_accept_presented_backing_store(i32, Gfx::IntRect damage_rect) override;
++
++    void present_front_bitmap();
++    void post_frame_ready();
++    void update_cursor(Gfx::Cursor const&);
++    void finish_handling_key_event(Web::KeyEvent const&);
++
++    NonnullRefPtr<PresentSurface> m_surface;
++    Gfx::IntSize m_viewport_size;
++    bool m_viewport_push_pending { false };
++    Gfx::IntRect m_pending_damage;
++    bool m_present_needs_full_copy { true };
++};
++
++}
+diff --git a/UI/Haiku/WindowModel.cpp b/UI/Haiku/WindowModel.cpp
+new file mode 100644
+index 0000000..df03588
+--- /dev/null
++++ b/UI/Haiku/WindowModel.cpp
+@@ -0,0 +1,243 @@
++/*
++ * Copyright (c) 2026, the DeBeOS developers
++ *
++ * SPDX-License-Identifier: BSD-2-Clause
++ */
++
++#include <AK/OwnPtr.h>
++#include <LibCore/EventLoop.h>
++#include <LibWebView/BrowsingSession.h>
++#include <LibWebView/SessionStore.h>
++#include <UI/Haiku/Application.h>
++#include <UI/Haiku/BrowserWindow.h>
++#include <UI/Haiku/Messages.h>
++#include <UI/Haiku/Tab.h>
++#include <UI/Haiku/WindowModel.h>
++
++#include <Message.h>
++
++namespace Ladybird {
++
++static u64 s_next_tab_id = 1;
++static Gfx::IntSize default_viewport_size() { return { 1024, 700 }; }
++
++NonnullOwnPtr<WindowModel> WindowModel::create(u64 id)
++{
++    return adopt_own(*new WindowModel(id));
++}
++
++WindowModel::WindowModel(u64 id)
++    : m_id(id)
++{
++    VERIFY(Application::is_core_thread());
++    // Constructing a BWindow off its own thread is the normal Haiku pattern (apps build windows on the main thread
++    // before Run()). Its looper thread starts in Show().
++    auto* window = new BrowserWindow(BRect(80, 60, 80 + default_viewport_size().width() - 1, 60 + default_viewport_size().height() + 60), id);
++    m_window = BMessenger(window);
++    m_window_for_show = window;
++}
++
++WindowModel::~WindowModel()
++{
++    VERIFY(Application::is_core_thread());
++}
++
++void WindowModel::show()
++{
++    if (m_shown)
++        return;
++    m_shown = true;
++    // The only dereference of the BWindow from the Core thread: before its looper runs, so nothing races it.
++    exchange(m_window_for_show, nullptr)->Show();
++}
++
++void WindowModel::activate()
++{
++    BMessage message(kMsgTabActivated);
++    if (auto* tab = current_tab())
++        message.AddUInt64("tab", tab->id());
++    message.AddBool("activate_window", true);
++    send_to_window(message);
++}
++
++// Never blocks on a window that has quit: SendMessage fails with B_BAD_PORT_ID. Windows never wait for the Core
++// thread, so the (default, unbounded) timeout cannot deadlock while the window is alive.
++void WindowModel::send_to_window(BMessage& message)
++{
++    if (m_window.IsValid())
++        m_window.SendMessage(&message);
++}
++
++void WindowModel::confirm_quit(StringView reason)
++{
++    BMessage message(kMsgConfirmQuit);
++    message.AddString("reason", ByteString { reason }.characters());
++    send_to_window(message);
++}
++
++Optional<size_t> WindowModel::index_of(u64 tab_id) const
++{
++    for (size_t i = 0; i < m_tabs.size(); ++i) {
++        if (m_tabs[i]->id() == tab_id)
++            return i;
++    }
++    return {};
++}
++
++Tab* WindowModel::tab(u64 tab_id) const
++{
++    auto index = index_of(tab_id);
++    return index.has_value() ? m_tabs[*index].ptr() : nullptr;
++}
++
++Tab* WindowModel::current_tab() const
++{
++    return m_current_tab_id.has_value() ? tab(*m_current_tab_id) : nullptr;
++}
++
++void WindowModel::for_each_tab(Function<void(Tab&)> callback) const
++{
++    for (auto const& tab : m_tabs)
++        callback(*tab);
++}
++
++Tab& WindowModel::create_new_tab(Web::HTML::ActivateTab activate_tab, Optional<WebView::CanonicalTraversable&> traversable)
++{
++    VERIFY(Application::is_core_thread());
++    // A new tab starts at the size of the tab it sits next to; its PageView corrects it on attach.
++    auto viewport = default_viewport_size();
++    if (auto* current = current_tab())
++        viewport = current->view().viewport();
++
++    auto tab = make<Tab>(*this, s_next_tab_id++, viewport, traversable);
++    auto& tab_ref = *tab;
++    m_tabs.append(move(tab));
++
++    // Hand the window one reference to the shared surface, adopted by the PageView on arrival.
++    auto surface = tab_ref.view().surface_ref();
++    surface->ref();
++    BMessage message(kMsgTabAdded);
++    message.AddUInt64("tab", tab_ref.id());
++    message.AddUInt64("view", tab_ref.view().view_id());
++    message.AddPointer("surface", surface.ptr());
++    if (!m_window.IsValid() || m_window.SendMessage(&message) != B_OK)
++        surface->unref();
++
++    if (activate_tab == Web::HTML::ActivateTab::Yes || !m_current_tab_id.has_value())
++        this->activate_tab(tab_ref.id());
++    return tab_ref;
++}
++
++Tab& WindowModel::new_tab_from_url(URL::URL const& url, Web::HTML::ActivateTab activate_tab)
++{
++    auto& tab = create_new_tab(activate_tab);
++    tab.view().load(url);
++    return tab;
++}
++
++void WindowModel::activate_tab(u64 tab_id)
++{
++    auto* tab = this->tab(tab_id);
++    if (!tab)
++        return;
++    if (auto* previous = current_tab(); previous && previous != tab)
++        previous->view().set_system_visibility_state(Web::HTML::VisibilityState::Hidden);
++    m_current_tab_id = tab_id;
++    tab->view().set_system_visibility_state(Web::HTML::VisibilityState::Visible);
++
++    BMessage message(kMsgTabActivated);
++    message.AddUInt64("tab", tab_id);
++    send_to_window(message);
++    tab->publish_chrome_state();
++}
++
++bool WindowModel::activate_tab_with_url(URL::URL const& url)
++{
++    for (auto const& tab : m_tabs) {
++        if (tab->view().url() == url) {
++            activate_tab(tab->id());
++            return true;
++        }
++    }
++    return false;
++}
++
++bool WindowModel::definitely_close_tab(u64 tab_id, Function<void()> close)
++{
++    auto index = index_of(tab_id);
++    if (!index.has_value())
++        return false;
++
++    // Nullable owner: the deferred closure below releases it explicitly (NonnullOwnPtr has no nullptr assignment).
++    OwnPtr<Tab> tab = m_tabs.take(*index);
++    if (auto session_tab_id = tab->view().session_tab_id(); session_tab_id.has_value()) {
++        // As Qt BrowserWindow::definitely_close_tab (BrowserWindow.cpp:781-788).
++        WebView::SessionStore::TabClosed closed { .tab_id = *session_tab_id, .closed_at = UnixDateTime::now() };
++        if (auto result = WebView::Application::default_session().session_store->tab_closed(move(closed)); result.is_error())
++            dbgln("Unable to record the closed tab in the session store: {}", result.error());
++    }
++
++    BMessage removed(kMsgTabRemoved);
++    removed.AddUInt64("tab", tab_id);
++    send_to_window(removed);
++
++    // The view's own callbacks may be on the stack (on_close); destroy it on the next turn.
++    Core::deferred_invoke([close = move(close), tab = move(tab)]() mutable {
++        if (close)
++            close();
++        tab = nullptr;
++    });
++
++    if (m_current_tab_id == tab_id) {
++        m_current_tab_id = {};
++        if (!m_tabs.is_empty())
++            activate_tab(m_tabs[min(*index, m_tabs.size() - 1)]->id());
++    }
++    if (m_tabs.is_empty())
++        finish_close();
++    return true;
++}
++
++void WindowModel::request_close_tab(u64 tab_id)
++{
++    if (auto* tab = this->tab(tab_id))
++        tab->request_close();
++}
++
++void WindowModel::request_close_current_tab()
++{
++    if (auto* tab = current_tab())
++        tab->request_close();
++}
++
++void WindowModel::request_close_window()
++{
++    m_closing = true;
++    Vector<u64> ids;
++    for (auto const& tab : m_tabs)
++        ids.append(tab->id());
++    for (auto id : ids)
++        request_close_tab(id);
++}
++
++void WindowModel::close_for_quit()
++{
++    m_closing = true;
++    while (!m_tabs.is_empty()) {
++        auto& tab = *m_tabs.last();
++        auto close = tab.view().prepare_for_immediate_close();
++        definitely_close_tab(tab.id(), move(close));
++    }
++}
++
++void WindowModel::finish_close()
++{
++    if (m_closed)
++        return;
++    m_closed = true;
++    BMessage message(kMsgCloseWindowNow);
++    send_to_window(message);
++    Application::the().window_model_closed(m_id); // may destroy this model on the next loop turn
++}
++
++}
+diff --git a/UI/Haiku/WindowModel.h b/UI/Haiku/WindowModel.h
+new file mode 100644
+index 0000000..ffb8521
+--- /dev/null
++++ b/UI/Haiku/WindowModel.h
+@@ -0,0 +1,78 @@
++/*
++ * Copyright (c) 2026, the DeBeOS developers
++ *
++ * SPDX-License-Identifier: BSD-2-Clause
++ */
++
++#pragma once
++
++#include <AK/Function.h>
++#include <AK/NonnullOwnPtr.h>
++#include <AK/Optional.h>
++#include <AK/Vector.h>
++#include <LibURL/URL.h>
++#include <LibWebCommon/HTML/ActivateTab.h>
++#include <LibWebView/Forward.h>
++
++#include <Messenger.h>
++
++class BMessage;
++
++namespace Ladybird {
++
++class BrowserWindow;
++class Tab;
++
++// The Core-side controller of one browser window: owns its Tabs and mirrors the tab API of Qt's BrowserWindow
++// (create_new_tab, new_tab_from_url, definitely_close_tab). [C] only. It talks to its BrowserWindow (a BWindow on
++// its own looper thread) only through a BMessenger, and never dereferences the BWindow after showing it, because a
++// BWindow deletes itself once it quits.
++class WindowModel {
++public:
++    AK_ALLOC_WITH_KMALLOC;
++
++    static NonnullOwnPtr<WindowModel> create(u64 id);
++    ~WindowModel();
++
++    u64 id() const { return m_id; }
++
++    void show();
++    void activate();
++    void send_to_window(BMessage&);
++    void confirm_quit(StringView reason);
++
++    Tab& create_new_tab(Web::HTML::ActivateTab, Optional<WebView::CanonicalTraversable&> = {});
++    Tab& new_tab_from_url(URL::URL const&, Web::HTML::ActivateTab);
++
++    // Removes the tab now; its view is destroyed on the next loop turn, after `close` (if any) has run
++    // (Qt: remove_tab + deleteLater + deferred_invoke(request_close), BrowserWindow.cpp:774-797, Tab.cpp:1696-1700).
++    bool definitely_close_tab(u64 tab_id, Function<void()> close = {});
++    void request_close_tab(u64 tab_id);
++    void request_close_current_tab();
++    void request_close_window(); // the window's close box: every tab gets Qt's request_close() treatment
++    void close_for_quit();       // explicit application quit: close every tab immediately
++
++    void activate_tab(u64 tab_id);
++    bool activate_tab_with_url(URL::URL const&);
++    Tab* current_tab() const;
++    Tab* tab(u64 tab_id) const;
++    size_t tab_count() const { return m_tabs.size(); }
++    void for_each_tab(Function<void(Tab&)>) const;
++
++private:
++    explicit WindowModel(u64 id);
++
++    Optional<size_t> index_of(u64 tab_id) const;
++    void finish_close();
++
++    u64 m_id { 0 };
++    BMessenger m_window;
++    BrowserWindow* m_window_for_show { nullptr }; // used once by show(), never dereferenced afterwards
++    bool m_shown { false };
++    Vector<NonnullOwnPtr<Tab>> m_tabs;
++    Optional<u64> m_current_tab_id;
++    bool m_closing { false };
++    bool m_closed { false };
++};
++
++}
+diff --git a/UI/Haiku/main.cpp b/UI/Haiku/main.cpp
+new file mode 100644
+index 0000000..8263c4f
+--- /dev/null
++++ b/UI/Haiku/main.cpp
+@@ -0,0 +1,140 @@
++/*
++ * Copyright (c) 2026, the DeBeOS developers
++ *
++ * SPDX-License-Identifier: BSD-2-Clause
++ *
++ * Native Haiku (DeBeOS) front end for Ladybird. Structure mirrors UI/Qt/main.cpp; the threading model is
++ * described in Application.h.
++ */
++
++#include <AK/LexicalPath.h>
++#include <LibCore/Process.h>
++#include <LibCore/System.h>
++#include <LibFileSystem/FileSystem.h>
++#include <LibMain/Main.h>
++#include <LibWebView/BrowserProcess.h>
++#include <LibWebView/CrashReportStore.h>
++#include <LibWebView/URL.h>
++#include <UI/Haiku/Application.h>
++#include <UI/Haiku/Tab.h>
++#include <UI/Haiku/WebViewBridge.h>
++#include <UI/Haiku/WindowModel.h>
++
++#include <sys/wait.h>
++#include <unistd.h>
++
++// platform_init() treats its argument as the application directory (Utilities.cpp:54-55). Resolve symlinks so a
++// launch through a symlink still yields apps/Ladybird/bin; find_prefix() then gives apps/Ladybird, hence
++// share/Lagom and the helpers in bin/ (Utilities.cpp:62-71, 89, 96-110). image_info.name is the path as executed,
++// not realpath'd (LibCore/System.cpp:884-893), so this is not left to chance.
++static ErrorOr<ByteString> resolved_application_directory()
++{
++    auto executable = TRY(Core::System::current_executable_path());
++    auto real = TRY(FileSystem::real_path(executable));
++    return LexicalPath::dirname(real);
++}
++
++// Helpers exit when their IPC socket to us closes; nothing else ends them on Haiku (see Application::begin_shutdown).
++// A helper that ignores EOF (WebContent spinning in script, for instance) would outlive us, so wait with a bound,
++// then escalate. Every escalation is logged: the hardware proof greps for these lines.
++static void reap_helpers(Vector<pid_t> const& pids)
++{
++    if (pids.is_empty())
++        return;
++    auto wait_all = [&](int budget_ms) {
++        for (int waited = 0; waited <= budget_ms; waited += 50) {
++            bool all_gone = true;
++            for (auto pid : pids) {
++                auto result = Core::System::waitpid(pid, WNOHANG);
++                // ECHILD: already reaped by ProcessMonitor before it was destroyed, or not our child.
++                if (!result.is_error() && result.value().pid == 0 && kill(pid, 0) == 0)
++                    all_gone = false;
++            }
++            if (all_gone)
++                return true;
++            usleep(50'000);
++        }
++        return false;
++    };
++    if (wait_all(3000))
++        return;
++    for (auto mode : { Core::Process::TerminationMode::Graceful, Core::Process::TerminationMode::Forceful }) {
++        for (auto pid : pids) {
++            if (kill(pid, 0) != 0)
++                continue;
++            if (Core::Process::terminate_process(pid, mode).is_error())
++                continue;
++            warnln("Ladybird: helper {} still alive at shutdown, sent {}", pid, mode == Core::Process::TerminationMode::Graceful ? "SIGTERM"sv : "SIGKILL"sv);
++        }
++        if (wait_all(1000))
++            return;
++    }
++}
++
++ErrorOr<int> ladybird_main(Main::Arguments arguments)
++{
++    AK::set_rich_debug_enabled(true);
++
++    if (auto result = WebView::CrashReportStore::the().initialize_browser_crash_handler(); result.is_error())
++        warnln("Could not prepare Browser crash reporting: {}", result.error());
++
++    OwnPtr<Ladybird::Application> app = TRY(Ladybird::Application::create(arguments, TRY(resolved_application_directory())));
++    if (app->should_exit_after_profile_coordination()) {
++        // Another Ladybird owns this profile; our URLs went over its BrowserProcess socket (BrowserProcess.cpp:65-71).
++        // Return before a BApplication exists, so a second Deskbar click leaves no second roster entry.
++        outln("Opening in existing process");
++        return 0;
++    }
++
++    auto const& browser_options = Ladybird::Application::browser_options();
++
++    // The same binary still runs --headless (screenshot, layout dump, ...) without an app_server.
++    if (browser_options.headless_mode.has_value())
++        return app->execute();
++
++    if (auto result = app->start_haiku_application(); result.is_error()) {
++        // initialize() already launched RequestServer, ImageDecoder and friends. Returning with TRY would leave them
++        // running with nobody to close their sockets in a timely way, so take them down exactly as a normal exit does.
++        auto helper_pids = app->helper_pids();
++        app = nullptr;
++        reap_helpers(helper_pids);
++        return result.release_error();
++    }
++
++    auto& browser_process = app->browser_process();
++    browser_process.on_open_urls = [&](auto const& urls) {
++        for (auto const& url : urls)
++            app->open_file(url);
++    };
++    browser_process.on_new_tab = [&](auto const& urls) {
++        auto* window = app->active_window_if_any();
++        if (!window) {
++            app->new_window(urls);
++            return;
++        }
++        for (size_t i = 0; i < urls.size(); ++i)
++            window->new_tab_from_url(urls[i], i == 0 ? Web::HTML::ActivateTab::Yes : Web::HTML::ActivateTab::No);
++        window->activate();
++    };
++    browser_process.on_new_window = [&](auto const& urls) { app->new_window(urls); };
++
++    // browser_options.urls is never empty: about:newtab by default, about:welcome prepended on first run
++    // (LibWebView/URL.cpp:292-293, Application.cpp:665-670).
++    app->new_window(browser_options.urls);
++
++    // Earlier crash reports stay in the CrashReportStore. Qt presents them in a widget overlay on the first tab
++    // (UI/Qt/main.cpp:145-154, WebContentView::show_earlier_crash_reports); this front end has no review panel yet,
++    // so it says so on stderr instead of dropping them silently.
++    if (!browser_options.webdriver_browser_endpoint.has_value() && WebView::CrashReportStore::the().has_pending_reports())
++        warnln("Ladybird: earlier crash reports are pending; this front end cannot review them yet");
++
++    // Core::EventLoop on this (the team main) thread: the stock path, Application.cpp:2075.
++    auto result = app->execute();
++
++    app->stop_haiku_application();
++    auto helper_pids = app->helper_pids_at_shutdown();
++    // ~Application drops the ProcessManager, closing every helper's transport (LibWebView/Process.cpp:53-58).
++    app = nullptr;
++    reap_helpers(helper_pids);
++    return result;
++}
