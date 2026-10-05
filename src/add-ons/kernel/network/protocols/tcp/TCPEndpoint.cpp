@@ -2325,12 +2325,21 @@ TCPEndpoint::_Receive(tcp_segment_header& segment, net_buffer* buffer)
 	}
 
 	if (fState == FINISH_ACKNOWLEDGED
+		&& (fFlags & FLAG_CLOSED) != 0
 		&& segment.AcknowledgeOnly()
 		&& (fReceiveMaxAdvertised - fReceiveNext).Number() == 0
 		&& segmentLength == 0
 		&& segment.acknowledge == fSendUnacknowledged) {
-		// reset the connection - received another ack packet
-		// while finish acknowledged and zero receive window
+		// The application has close()d the socket, so nobody will ever read
+		// the data that filled our window and it will never open again: the
+		// peer's window probe would otherwise go on forever. Reset instead.
+		// Only after close(): FINISH_ACKNOWLEDGED is also where shutdown(SHUT_WR)
+		// leaves a connection the application is still reading from (a client
+		// that sends its request, half-closes and then reads a large response,
+		// as nc -N or HTTP/1.0 do). There the window opens as soon as it reads,
+		// and resetting would throw away data the peer has not delivered yet
+		// (#615) -- the probe is handled below like any other, as it is in
+		// ESTABLISHED. _SendReset() makes the same distinction.
 		return DROP | RESET;
 	}
 
