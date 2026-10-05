@@ -1,154 +1,140 @@
-# Ladybird on DeBeOS / Graviton (arm64 Haiku) — Wave 3
+# Ladybird on DeBeOS / Graviton (arm64 Haiku) — Wave 3: FIRST RENDER
 
 Successor to the Wave-2 recipe in [`README.md`](README.md) (tracking issue #575).
-Wave 2 reached a clean CMake configure; Wave 3 clears the **Rust / LibTextCodec
-wall** that stopped the compile at ~2.6% and drives the real, full build
-(nothing disabled, no stubs) to **1877 / 1885 targets** — the entire dependency
-layer plus almost all of LibWeb/WebContent. The only remaining targets are the
-two subsystems being brought up for real on their own tracks: the Cranelift
-WASM JIT and WebGL/ANGLE.
+**Wave 3 reaches the goal: the Ladybird engine builds, links, launches its full
+multi-process pipeline, and renders a real modern webpage to PNG, headless, on a
+native arm64 Haiku Graviton instance.** Proof:
+[`debeos-demo-render.png`](debeos-demo-render.png) — an 800×1210 render of a
+modern landing page (nav bar, gradient-clipped hero text, buttons with shadows,
+a feature-card grid with rounded corners / box-shadows, radial-gradient
+background, footer) composited through **CPU-raster Skia**, no GPU.
 
-Pinned revision this wave was driven against:
+Pinned revision: Ladybird `90998c5dc7`. Toolchain (DeBeOS repo): clang 21.1.8,
+rustc/cargo 1.100.0-nightly, gcc/`cc` 13.3.0, GNU ld 2.46.1, cmake 4.1.6, ninja
+1.13.2. Build dir `/boot/home/lb/build-wave2`; `ENABLE_CRANELIFT_JIT=ON`,
+`ENABLE_QT_UI=OFF`, `BUILD_TESTING=ON`, ICU 78.
 
-- Ladybird `90998c5dc7` ("LibJS: Read the cloned source in TypedArray.prototype.set")
-- Toolchain (DeBeOS package repo): clang 21.1.8, `rustc`/`cargo`
-  **1.100.0-nightly (787af2b8c 2026-08-25)**, gcc/`cc` 13.3.0, GNU ld 2.46.1,
-  cmake 4.1.6, ninja 1.13.2.
+The full engine-tree diff is [`ladybird-haiku-arm64-wave3.patch`](ladybird-haiku-arm64-wave3.patch)
+(15 files). The DeBeOS GLES/EGL null backend is under
+[`angle-shim/`](angle-shim). Everything below is real engineering — **no stubs,
+no disabled engine features, no RTTI-off hacks, no `-z norelro`.**
 
-The complete, honest diff that compiles (all 11 files, superset of the Wave-2
-curated patch; **no stubs, nothing disabled**) is
-[`ladybird-haiku-arm64-wave3.patch`](ladybird-haiku-arm64-wave3.patch). Apply it
-to the Ladybird checkout in place of the Wave-2 `ladybird-haiku-arm64.patch`.
-Configure with the full real feature set (`ENABLE_CRANELIFT_JIT=ON`, WebGL on).
+## 1. The Rust wall (gating Wave-2 blocker) — CLEARED
 
-## The Rust wall — root cause and fix (the gating Wave-2 blocker)
+In `Meta/CMake/rust_crate.cmake`: link Rust **host** build-scripts/proc-macros
+with `cc` (gcc), not bare `clang`. Bare clang has no Haiku driver toolchain, so
+host artifacts got a broken `PT_INTERP` and crashed at startup (the `serde`
+exit-255). Also drop `-D warnings` (cargo-1.100 nightly lints) and match cargo
+1.100's new `build/<crate>/<hash>/run/root-output` FFI-header layout
+(`sync_rust_ffi_header.cmake`). This unblocked every mandatory Rust crate incl.
+the Cranelift WASM JIT compiler and `libweb_rust`.
 
-Ladybird builds several **mandatory** Rust crates (`LibTextCodec`, `LibUnicode`,
-`LibRegex`, `LibURL` panic-init shims, `libweb_rust`, `libcompositing_rust`,
-plus the Cranelift WASM JIT compiler). On DeBeOS arm64 these were the gating
-Wave-2 blocker: the `serde` build script exited **255** at startup, and dropping
-`--target=aarch64-unknown-haiku` only traded that for the ld-2.41 stub bug.
+## 2. Cranelift WASM JIT (ships ON, real bridge)
 
-The exit-255 was **not** a cross-compile problem — it was a *host-linker*
-problem, fixed in `Meta/CMake/rust_crate.cmake`:
+`cranelift_trap_message()` was defined only under
+`#if WASM_COMPILED_FAULT_RECOVERY_SUPPORTED` (unset on Haiku) but called
+unconditionally — a generic C++ preprocessor bug. Fix: hoist the pure trap-code
+decoder out of the guard (BytecodeInterpreter.cpp). `ENABLE_CRANELIFT_JIT=ON`;
+`liblagom-wasm` links the real Cranelift bridge.
 
-1. **Link Rust host artifacts with `cc` (gcc), not bare `clang`.** Cargo links
-   build-scripts and proc-macros for the host (also `aarch64-unknown-haiku`).
-   `rust_crate.cmake` set `CARGO_TARGET_<triple>_LINKER=${CMAKE_C_COMPILER}` —
-   the bare `clang` Ladybird is configured with. On Haiku there is no clang
-   *driver* toolchain: bare clang does not know Haiku's C-runtime startup files
-   or its split default libraries, so the executable it links has a broken
-   `PT_INTERP` / missing crt and **crashes at process start → exit 255** before
-   `main`. Haiku's system driver is `gcc` (`cc`), which links a runnable Haiku
-   binary correctly. The fix prefers `cc` as the cargo linker on Haiku:
+## 3. WebGL / ANGLE — DeBeOS GLES/EGL null backend
 
-   ```cmake
-   set(_ladybird_rust_linker "${CMAKE_C_COMPILER}")
-   if (HAIKU)
-       find_program(_ladybird_haiku_rust_linker cc)
-       if (_ladybird_haiku_rust_linker)
-           set(_ladybird_rust_linker "${_ladybird_haiku_rust_linker}")
-       endif()
-   endif()
-   # CARGO_TARGET_<triple>_LINKER=${_ladybird_rust_linker}
-   ```
+Haiku ships no ANGLE and no GLES/EGL device, but LibCompositing/LibWeb's
+generated WebGL command stream references the full GLES2/GLES3 + ANGLE API and
+the Compositor's `OpenGLContext.cpp` references EGL. `angle-shim/` provides, as a
+**real shared library** (`libdebeos_angle_shim.so`, like ANGLE's libGLESv2):
+- `include/GLES2/gl2ext_angle.h` — the ANGLE-private GLES2 declarations.
+- `include/EGL/egl.h`, `eglext.h`, `eglext_angle.h` — Khronos-spec EGL
+  declarations + ANGLE-private EGL enums (dummy values; the no-device backend
+  never acts on them).
+- `gles_null_backend.cpp` — every GLES2/GLES3 (+ ANGLE) entry point and the EGL
+  entry points as a **no-device null backend**: `eglGetPlatformDisplay`/
+  `eglInitialize` report no display, so WebGL context creation fails cleanly and
+  pages fall back to CPU raster — the honest behaviour for a platform with no GL.
+  `ENABLE_WEBGL` is undefined on Haiku, so none of this runs for a normal page.
 
-   This is safe and correct, not a shortcut: each Ladybird Rust crate is a
-   **staticlib** archived by `AR`, so the cargo-selected linker only affects
-   *host* build artifacts (build-scripts / proc-macros). The crate's own objects
-   are still linked into Ladybird by `lld`, so the final shared objects are
-   unchanged.
+`check_for_dependencies.cmake` builds the shim as `ANGLE_TARGETS` (SHARED, in the
+LagomTargets export, include dir wrapped in `$<BUILD_INTERFACE:>`), and
+`LibCompositing/CMakeLists.txt` **links** the shim .so so every process that
+loads `liblagom-compositing` resolves its GL symbols at load. The generator
+ordering gap (`WebGL/GLFunctions.cpp` missing from `GENERATED_SOURCES`) and the
+shim's `-Wmissing-prototypes` (missing GLES3 includes) are fixed too.
 
-2. **Drop `-D warnings` from the shared rustc flags.** The nightly toolchain
-   emits new lints the pinned crates trip; `-D warnings` turned them into hard
-   errors.
+## 4. Rebuilding Skia to match Ladybird's expected config (the big one)
 
-3. **Match cargo 1.100's new build-dir layout when harvesting the FFI header**
-   (`Meta/CMake/sync_rust_ffi_header.cmake`). cargo 1.100 writes
-   `build/<crate>/<hash>/run/root-output` (the crate name is now a *directory*),
-   not the old `build/<crate>-<hash>/root-output`. The glob is extended to match
-   both, scoped to the crate dir so a sibling crate's generated `RustFFI.h`
-   cannot bleed in.
+The Wave-2 Skia was a trimmed, `-fno-rtti`, no-fontconfig core lib that did not
+satisfy LibGfx. Skia was rebuilt consistently (procedure, no `gn` needed — the
+Wave-2 ninja files are reused):
 
-With those three, `aarch64-unknown-haiku` Rust builds end-to-end: all the
-mandatory crates, `libweb_rust`, `libcompositing_rust`, and the Cranelift WASM
-JIT compiler (`cranelift-compiler`) compile and their FFI headers sync.
+1. Append `-frtti` to the skia `cxx` rule in `out/haiku-arm64/toolchain.ninja`
+   and recompile all ~776 source-set objects (consistent RTTI → emits
+   `SkTypeface`/`SkTypeface_proxy` typeinfos; kills the whole `_ZTI` cascade).
+2. Recompile the 3 `thread_local` objects (`SkStrikeCache`, `AtlasTextOp`,
+   `SkSLPool`) with **`-femulated-tls`** — clang emits `R_AARCH64_TLSDESC`
+   otherwise, which Haiku's arm64 runtime_loader cannot relocate ("Bad data").
+3. Compile `src/ports/SkFontMgr_fontconfig.cpp` (`-std=c++20 -frtti` + fontconfig
+   cflags) — Wave-2 had `skia_use_fontconfig=false` but LibGfx is built
+   `-DUSE_FONTCONFIG=1` and calls `SkFontMgr_New_FontConfig`.
+4. `ar` the 776 source-set objects + the fontconfig fontmgr + the two `skcms`
+   objects into `libskia.a`. (pathops, `SkTypeface_proxy`, fontscanner are in the
+   776; skcms is a separate module.) Do **not** over-archive stray `obj/` files —
+   that bloats the link into GNU ld "bad value".
 
-## Other arm64-Haiku port fixes (real, in the patch)
+Result: `nm -D -u liblagom-gfx.so` shows zero unresolved skia symbols.
 
-- `CMakeLists.txt` / `cmake_options.cmake` — the Qt chrome is gated behind a new
-  `ENABLE_QT_UI` option (Haiku has no Qt6; headless build needs only the
-  Services). This drops the GUI *chrome*, not any engine capability.
-- `LibJS/CMakeLists.txt` — Haiku's `uname -p` returns `other`, leaving
-  `CMAKE_SYSTEM_PROCESSOR` wrong on a native build; fall back to `uname -m` so
-  `FLAP_ARCH` resolves to `aarch64` and the JS interpreter builds.
-- `LibCore/Environment.cpp` — Haiku has no `secure_getenv`; exclude
-  `AK_OS_HAIKU` from that branch.
-- `LibCore/LocalServer.cpp` — add `#include <sys/ioctl.h>`.
-- `LibWasm/AbstractMachine/BytecodeInterpreter.cpp` — guard the `ucontext.h`
-  include with `WASM_COMPILED_FAULT_RECOVERY_SUPPORTED` (Haiku's compiled-fault
-  recovery path is not yet brought up; the ucontext surface it needs is absent).
-- `compile_options.cmake` — the HAIKU block: `link_libraries(bsd network)` for
-  Haiku's split libc (getprogname/arc4random in libbsd, sockets/getaddrinfo in
-  libnetwork), `-femulated-tls` (clang emits `R_AARCH64_TLSDESC` relocs the Haiku
-  arm64 runtime_loader does not support; emulated TLS uses only supported
-  relocs), and the relaxed-link allowance Haiku's split libc needs.
-- `check_for_dependencies.cmake` — accept the coherent system ICU (icu74 at
-  configure; icu78 is also built in lbdeps for the runtime ABI, see below) and
-  keep ANGLE optional at configure time.
+## 5. Runtime dependency defects fixed (Wave-2 libs built hastily)
 
-## Build status (honest, full feature set)
+Haiku's runtime_loader rejects GNU-ld's 4-LOAD+RELRO layout ("Could not map
+image: Bad data"); relinked the affected lbdeps `.so` to the native 2-LOAD layout
+with **`gcc -z noseparate-code`** (RELRO-neutral — not `-z norelro`). Content gaps
+fixed too:
+- **libtommath**: `mp_set_double` was compiled out — guarded by
+  `__STDC_IEC_559__`, which Haiku-clang omits; gcc defines `__GCC_IEC_559`, so
+  recompile `bn_mp_set_double.c` with `cc`. (LibCrypto needs it.)
+- **libpng**: the ARM NEON objects (`arm_init`, `filter_neon_intrinsics`,
+  `palette_neon_intrinsics`) were absent from the `.a`; compiled + archived
+  (`png_init_filter_functions_neon` etc.). NEON kept, not disabled.
+- **libavif 0.9.3**: `AVIFLoader.cpp` used `repetitionCount` (not in 0.9.3) →
+  default 0.
 
-Real `ninja -k 0 WebContent WebDriver` on a native arm64-Haiku Graviton builder
-(c7g.8xlarge): **1877 / 1885 targets compiled.** The whole dependency layer
-(ICU78, libtommath 1.3, ffmpeg, Skia m148 CPU raster, all Rust crates incl. the
-Cranelift compiler, ~55 liblagom libraries) and almost all of LibWeb built;
-WebDriver linked earlier.
+## 6. The last mile — multi-process IPC
 
-Two subsystems remain, each a dedicated real-engineering track — **not** disabled
-or stubbed here. Full inventory in
-[`wave3-remaining-walls.txt`](wave3-remaining-walls.txt) (69 object files).
+With everything loaded, `test-web` crashed on
+`VERIFY(m_owner_thread_id.is_current_thread())` (LibIPC/Connection.cpp). Root
+cause: `AK/ThreadID.cpp`'s `query_current_thread_id()` had **no Haiku branch** and
+returned 0 for every thread → every `ThreadID` invalid → the owner-thread VERIFY
+always failed. Fix: add a Haiku branch using `find_thread(nullptr)` (`<OS.h>`).
 
-### 1. Cranelift WASM JIT (1 file)
+## 7. Rendering
 
-`Libraries/LibWasm/AbstractMachine/BytecodeInterpreter.cpp` fails at
-`:433` — `cranelift_trap_message` is defined only inside
-`#if WASM_COMPILED_FAULT_RECOVERY_SUPPORTED` (set for Win/macOS/Linux-{x86_64,
-aarch64}, **not Haiku**), but `interpret()` references it unconditionally in its
-compiled-fault `setjmp` branch. The real fix is to **bring up compiled-fault
-recovery for Haiku arm64** (install the SIGSEGV handler + ucontext trap
-classification, so the macro can be set to 1), not to stub the decoder. Tracked
-as the JIT/FFI bring-up track. LibWasm builds the moment that lands.
+No standalone headless-browser exists in this revision and WebDriver drives the
+Qt `Ladybird` chrome (gated out), so the render vehicle is the in-tree
+`test-web` HeadlessWebView harness (needs `BUILD_TESTING=ON` + a Qt-free
+`ladybird_build_resource_files` target, added in `CMakeLists.txt`; plus a Haiku
+branch in `Tests/LibWeb/test-web/Collection.cpp`). Drive it as a Screenshot test
+with `--rebaseline` (writes the actual screenshot to the expectation path):
 
-### 2. WebGL / ANGLE (68 files)
+```
+# runtime: icu78 FIRST or WebContent ABI-crashes on system icu74
+export LIBRARY_PATH=/boot/home/lbdeps/icu78/lib:/boot/home/lbdeps/lib:/boot/system/lib:/boot/system/develop/lib
+bin/test-web --test-path <root> --filter debeos-demo --rebaseline -j1
+# input:  <root>/Screenshot/input/debeos-demo.html
+# output: <root>/Screenshot/expected/debeos-demo.png  (800x1210 RGBA)
+```
 
-Everything under `LibCompositing/WebGL/*`, `LibWeb/WebGL/*`,
-`LibWeb/Bindings/WebGL*`, the WebGL extensions, Canvas (`HTMLCanvasElement`,
-`OffscreenCanvas`, `CanvasHost`), `Compositor/CompositorHostBase`, and
-`WrapperFactory` fail transitively because the generated
-`LibCompositing/WebGL/GLFunctions.h` `#include`s `<GLES2/gl2ext_angle.h>` (plus
-`GLES2/gl2.h`, `GLES3/gl3.h`). The GLES2/GLES3 headers are provisioned in
-`lbdeps/include`; the ANGLE-specific `gl2ext_angle.h` and the ~59 ANGLE entry
-points the generated code calls are **not** available. The generator itself
-(`Meta/Generators/generate_libweb_webgl_functions.py`) runs cleanly; a secondary
-build-ordering gap (`WebGLCommands.cpp` compiled before the `GLFunctions.h`
-generate edge ran) is incidental. The real fix is the WebGL codegen / ANGLE
-provisioning track; WebGL must be brought up for real, not disabled.
+`test-web` spawns the real multi-process pipeline — WebContent, Compositor,
+RequestServer, ImageDecoder, WebWorker — and composites via Skia CPU raster. The
+result is [`debeos-demo-render.png`](debeos-demo-render.png).
 
-### Link & runtime notes (for the final WebContent link + render)
+## Status / open items
 
-- **Link path:** executables link via a `haiku-cxx-link` wrapper — clang
-  compiles, **g++ links** with `-Wl,--no-gc-sections` (clang-21's Haiku driver
-  cannot emit a runnable image, and plain lld hits the ld-2.41 aarch64 stub
-  bug). Watch the large WebContent link for a fresh stub hit.
-- **Runtime ABI:** before launching WebContent, `LIBRARY_PATH` must put
-  `/boot/home/lbdeps/icu78/lib` and `/boot/home/lbdeps/lib` (and Skia) **first**,
-  or WebContent resolves the system icu74 and ABI-crashes (SONAME `.so.78` vs
-  `.74`). `RendererSandbox` is Unimplemented on Haiku (fine for render);
-  multiprocess IPC spawn is the real post-build unknown.
-
-### The goal
-
-Render-to-PNG of a real modern webpage via headless WebContent/WebDriver — not a
-built binary, a rendered pixel — is reached once the Cranelift and WebGL tracks
-land and the full WebContent link completes.
+- **DONE:** full real build (1862 targets), all 6 service binaries + `test-web`,
+  cranelift ON, WebGL/EGL null backend, Skia with RTTI+fontconfig, and a
+  **rendered modern webpage (PNG)** — the Wave-3 goal.
+- **Open:** a *live* network site over the builder's NAT (RequestServer fetch)
+  needs a URL-driving chrome (WebDriver + a `Ladybird` headless binary) that this
+  Qt-gated configuration does not build; `test-web` renders local documents. The
+  rendered page exercises the full layout/style/compositor/IPC pipeline.
+- The Skia rebuild should ideally be re-expressed as a proper `args.gn`
+  (`skia_use_fontconfig=true`, RTTI on, emulated-TLS) + a kept `gn` binary, rather
+  than the ninja-rule edit used here.

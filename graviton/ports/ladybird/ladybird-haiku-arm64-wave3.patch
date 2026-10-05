@@ -1,8 +1,56 @@
+diff --git a/AK/ThreadID.cpp b/AK/ThreadID.cpp
+index 505594cd9b..f95c987fd5 100644
+--- a/AK/ThreadID.cpp
++++ b/AK/ThreadID.cpp
+@@ -15,6 +15,9 @@
+ #if defined(AK_OS_FREEBSD)
+ #    include <pthread_np.h>
+ #endif
++#if defined(AK_OS_HAIKU)
++#    include <OS.h>
++#endif
+ 
+ namespace AK {
+ 
+@@ -30,6 +33,11 @@ static u64 query_current_thread_id()
+     return thread_id;
+ #elif defined(AK_OS_FREEBSD)
+     return static_cast<u64>(pthread_getthreadid_np());
++#elif defined(AK_OS_HAIKU)
++    // Haiku has no gettid(); find_thread(NULL) returns the current thread_id.
++    // Without this the generic path returned 0 for every thread, so ThreadID
++    // was always invalid and IPC::Connection owner-thread VERIFY always failed.
++    return static_cast<u64>(find_thread(nullptr));
+ #else
+     return 0;
+ #endif
 diff --git a/CMakeLists.txt b/CMakeLists.txt
-index 76636afe95..15a207085b 100644
+index 76636afe95..8fa606df0a 100644
 --- a/CMakeLists.txt
 +++ b/CMakeLists.txt
-@@ -139,7 +139,12 @@ endif()
+@@ -132,6 +132,21 @@ if (NOT (ENABLE_FUZZERS OR ENABLE_COMPILER_EXPLORER_BUILD OR ANDROID OR IOS))
+     add_subdirectory(Utilities)
+ 
+     include(CTest)
++    if (BUILD_TESTING AND NOT ENABLE_QT_UI)
++        # DeBeOS/Haiku headless: the Qt UI normally defines the resource-copy
++        # target (ladybird_build_resource_files), but it is gated out here. The
++        # headless render harness (test-web) still needs Ladybird's resource files
++        # in the build tree, so define the target from the shared, Qt-free
++        # ResourceFiles helper directly.
++        include(${LADYBIRD_SOURCE_DIR}/UI/cmake/ResourceFiles.cmake)
++        # copy_resources_to_build ties the resource target to the chrome target
++        # named \"ladybird\" (gated out here); a stub target satisfies that link
++        # without pulling in Qt.
++        if (NOT TARGET ladybird)
++            add_custom_target(ladybird)
++        endif()
++        copy_resources_to_build("${CMAKE_BINARY_DIR}/${IN_BUILD_PREFIX}${CMAKE_INSTALL_DATADIR}/Lagom" ladybird)
++    endif()
+     if (BUILD_TESTING)
+         add_subdirectory(Tests)
+     endif()
+@@ -139,7 +154,12 @@ endif()
  
  if (ENABLE_GUI_TARGETS)
      add_subdirectory(Services)
@@ -16,6 +64,34 @@ index 76636afe95..15a207085b 100644
  endif()
  
  add_custom_target(lint-shell-scripts
+diff --git a/Libraries/LibCompositing/CMakeLists.txt b/Libraries/LibCompositing/CMakeLists.txt
+index 505a5fbecd..b93ec96427 100644
+--- a/Libraries/LibCompositing/CMakeLists.txt
++++ b/Libraries/LibCompositing/CMakeLists.txt
+@@ -34,6 +34,7 @@ compile_ipc(FontClient.ipc FontClientEndpoint.h)
+ compile_ipc(FontServer.ipc FontServerEndpoint.h)
+ 
+ set(GENERATED_SOURCES
++    WebGL/GLFunctions.cpp
+     WebGL/WebGLCommands.cpp
+     ../../Services/Compositor/CompositorControlClientEndpoint.h
+     ../../Services/Compositor/CompositorControlServerEndpoint.h
+@@ -69,6 +70,15 @@ foreach(angle_target IN LISTS ANGLE_TARGETS)
+     target_compile_options(LibCompositing PRIVATE $<TARGET_PROPERTY:${angle_target},INTERFACE_COMPILE_OPTIONS>)
+ endforeach()
+ 
++# DeBeOS/Haiku: the DeBeOS GLES null backend (debeos_angle_shim) is a real shared
++# library providing the GL entry points. Unlike a system ANGLE that every process
++# links, our processes that load LibCompositing (WebContent, test-web, ...) must
++# resolve its GL symbols at load, so link the shim .so here (DT_NEEDED) to keep
++# LibCompositing self-contained.
++if(ANGLE_TARGETS)
++    target_link_libraries(LibCompositing PUBLIC ${ANGLE_TARGETS})
++endif()
++
+ get_target_property(_libcompositing_rust_lib libcompositing_rust IMPORTED_LOCATION)
+ if ((LINUX OR BSD) AND NOT BUILD_SHARED_LIBS)
+     target_link_options(LibCompositing INTERFACE LINKER:--allow-multiple-definition)
 diff --git a/Libraries/LibCore/Environment.cpp b/Libraries/LibCore/Environment.cpp
 index 38971f21d0..fc8b83f0c4 100644
 --- a/Libraries/LibCore/Environment.cpp
@@ -41,6 +117,21 @@ index 170681e70b..34a9426c4d 100644
  #include <sys/socket.h>
  #include <sys/stat.h>
  #include <unistd.h>
+diff --git a/Libraries/LibGfx/ImageFormats/AVIFLoader.cpp b/Libraries/LibGfx/ImageFormats/AVIFLoader.cpp
+index 3dab695c87..5ccfd5216e 100644
+--- a/Libraries/LibGfx/ImageFormats/AVIFLoader.cpp
++++ b/Libraries/LibGfx/ImageFormats/AVIFLoader.cpp
+@@ -89,7 +89,9 @@ static ErrorOr<void> decode_avif_header(AVIFLoadingContext& context)
+     context.size = IntSize { context.decoder->image->width, context.decoder->image->height };
+     context.has_alpha = context.decoder->alphaPresent == 1;
+     context.image_count = context.decoder->imageCount;
+-    context.repetition_count = context.decoder->repetitionCount <= 0 ? 0 : context.decoder->repetitionCount;
++    // DeBeOS: libavif 0.9.3 (the version in the DeBeOS repo) has no avifDecoder::repetitionCount
++    // field (added in a later release). Default to 0 (the loader's own "no info / loop" value).
++    context.repetition_count = 0;
+     context.state = AVIFLoadingContext::State::HeaderDecoded;
+ 
+     if (context.decoder->image->icc.size > 0) {
 diff --git a/Libraries/LibJS/CMakeLists.txt b/Libraries/LibJS/CMakeLists.txt
 index 0e11e6d867..8937a2ae8a 100644
 --- a/Libraries/LibJS/CMakeLists.txt
@@ -124,7 +215,7 @@ index a71ce7ccbe..266cfb3efe 100644
      CraneliftInsn out {};
      auto const* insn = dispatch.instruction;
 diff --git a/Meta/CMake/check_for_dependencies.cmake b/Meta/CMake/check_for_dependencies.cmake
-index d676306996..4efea951ee 100644
+index d676306996..eeb588cf03 100644
 --- a/Meta/CMake/check_for_dependencies.cmake
 +++ b/Meta/CMake/check_for_dependencies.cmake
 @@ -67,7 +67,10 @@ else()
@@ -139,20 +230,34 @@ index d676306996..4efea951ee 100644
  find_package(LibXml2 REQUIRED)
  find_package(OpenSSL REQUIRED)
  find_package(SDL3 CONFIG REQUIRED)
-@@ -91,8 +94,15 @@ find_package(unofficial-angle CONFIG)
+@@ -91,8 +94,29 @@ find_package(unofficial-angle CONFIG)
  if(unofficial-angle_FOUND)
      set(ANGLE_TARGETS unofficial::angle::libEGL unofficial::angle::libGLESv2)
  else()
 -    pkg_check_modules(angle REQUIRED IMPORTED_TARGET angle)
 -    set(ANGLE_TARGETS PkgConfig::angle)
-+    # DeBeOS/Haiku headless: ANGLE (GLES) is not available and not needed
-+    # for CPU raster. Keep it optional so a GPU-less configure succeeds;
-+    # ANGLE_TARGETS is only consumed via foreach()/link lists, so empty is safe.
++    # DeBeOS/Haiku arm64 ships no ANGLE and no system GLES/EGL. Provide a DeBeOS
++    # GLES compile interface + null backend (Track C) so WebGL compiles and links
++    # honestly; WebGL context creation reports no device and pages fall back to
++    # CPU raster. ANGLE_TARGETS is consumed exactly like a real ANGLE target.
 +    pkg_check_modules(angle IMPORTED_TARGET angle)
 +    if(angle_FOUND)
 +        set(ANGLE_TARGETS PkgConfig::angle)
 +    else()
-+        set(ANGLE_TARGETS "")
++        add_library(debeos_angle_shim SHARED
++            "${LADYBIRD_SOURCE_DIR}/Meta/CMake/angle-shim/gles_null_backend.cpp")
++        target_include_directories(debeos_angle_shim SYSTEM PUBLIC
++            "$<BUILD_INTERFACE:${LADYBIRD_SOURCE_DIR}/Meta/CMake/angle-shim/include>")
++        set_target_properties(debeos_angle_shim PROPERTIES POSITION_INDEPENDENT_CODE ON)
++        # LibCompositing links the shim PUBLIC and is itself in the LagomTargets
++        # export set; a real (non-imported) dependency must be in that export set
++        # too, so register the shim like any other Lagom static lib.
++        install(TARGETS debeos_angle_shim EXPORT LagomTargets
++            RUNTIME COMPONENT Lagom_Runtime
++            LIBRARY COMPONENT Lagom_Runtime NAMELINK_COMPONENT Lagom_Development
++            ARCHIVE COMPONENT Lagom_Development
++            INCLUDES DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
++        set(ANGLE_TARGETS debeos_angle_shim)
 +    endif()
  endif()
  
@@ -251,3 +356,16 @@ index bd26c929ce..ea4eb5a7d9 100644
  
  set(latest_source_header "")
  set(latest_root_output_timestamp "")
+diff --git a/Tests/LibWeb/test-web/Collection.cpp b/Tests/LibWeb/test-web/Collection.cpp
+index 822da849eb..c29ce4aeba 100644
+--- a/Tests/LibWeb/test-web/Collection.cpp
++++ b/Tests/LibWeb/test-web/Collection.cpp
+@@ -97,6 +97,8 @@ static StringView screenshot_platform_name()
+     return "linux"sv;
+ #elif defined(AK_OS_WINDOWS)
+     return "windows"sv;
++#elif defined(AK_OS_HAIKU)
++    return "haiku"sv;
+ #else
+ #    error "Unhandled platform for screenshot expectations"
+ #endif
