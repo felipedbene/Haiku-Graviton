@@ -63,9 +63,12 @@ Three decisions worth stating, because each had a plausible alternative:
   requirement that made the choice is ordering: whoever mints the cookie must
   do so before the listener accepts anything, or there is a window in which the
   listener must either accept unauthorized connections or refuse legitimate
-  ones. The broker cannot satisfy that — it is started *on demand*, long after
-  app_server, and the listener is created lazily when a Desktop for that
-  `TARGET_SCREEN` first appears. `launch_daemon` could, but only by making a
+  ones. The broker cannot satisfy that — although it is now a boot-time
+  `launch_daemon` service (`x-vnd.Haiku-remote_broker` in `data/launch/system`),
+  it can still come up before app_server's remote listener exists, because that
+  listener is created lazily when a Desktop for that `TARGET_SCREEN` first
+  appears; the broker copes by re-reading the cookie per session rather than
+  caching one at start. `launch_daemon` could mint it instead, but only by making a
   boot-critical process responsible for a file another process validates, and a
   mismatch there (an image whose `launch_daemon` predates the change, an
   app_server started by hand) fails closed into "no remote desktop at all".

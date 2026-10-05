@@ -61,6 +61,21 @@ service x-vnd.Haiku-power_daemon {
 	legacy
 }
 
+# The remote-desktop front door. Terminates TLS and authenticates clients with a
+# shared token before relaying to app_server's loopback session port, so the
+# internet-facing surface is not the raw session port. The daemon self-provisions
+# on first boot: it writes broker.pem/broker.key/broker.fingerprint and a random
+# token (0600) into /system/settings/remote_desktop/ and re-reads app_server's
+# per-boot session cookie for every session, so it tolerates starting before the
+# remote screen backend is ready. Present only when built with the openssl
+# feature (remote_broker@openssl); on an image without it this entry is a no-op.
+# Not on_demand: it listens on a raw TCP port (:10902), which launch_daemon's
+# port-activation cannot trigger on.
+service x-vnd.Haiku-remote_broker {
+	launch /system/servers/remote_broker
+	no_safemode
+}
+
 job x-vnd.Haiku-cddb_lookup {
 	launch /system/bin/cddb_lookup
 	no_safemode
