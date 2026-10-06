@@ -1896,21 +1896,28 @@ TCPEndpoint::_ReceiveBuffered() const
 
 /*!	Whether the peer has to wait for the application to read before it can
 	send anything more: it has used up the window it was offered, and what we
-	could offer now is less than a segment, which is all a peer avoiding silly
-	windows will send into (and less than one unit of our window scale, which
-	advertises as zero). Out-of-order data waiting for a hole to be filled
-	does not make the window exhausted -- the hole lies inside the window the
-	peer was already offered. A reader waiting for more than the buffer can
-	hold uses this to know that waiting longer would wait forever.
+	could offer now is too small for a peer avoiding silly windows to send
+	into. Out-of-order data waiting for a hole to be filled does not make the
+	window exhausted -- the hole lies inside the window the peer was already
+	offered. A reader waiting for more than the buffer can hold uses this to
+	know that waiting longer would wait forever.
 */
 bool
 TCPEndpoint::_ReceiveWindowExhausted() const
 {
+	// "Too small" is the RFC 1122 4.2.3.3 receiver threshold, min(MSS, half
+	// the buffer): a sender sends into a window at least that large (its own
+	// rule, 4.2.3.4, is a full segment or half the largest window it has
+	// seen). The MSS alone is not enough: on loopback it is close to 64 KiB,
+	// larger than a small buffer altogether, so the window would always look
+	// exhausted and a MSG_PEEK | MSG_WAITALL would come back short on a
+	// healthy connection. Below one unit of our window scale the window
+	// advertises as zero, so it is never smaller than that.
 	uint32 segmentSize = fReceiveMaxSegmentSize;
 	if (segmentSize == 0)
 		segmentSize = TCP_DEFAULT_MAX_SEGMENT_SIZE;
-	size_t threshold = max_c((size_t)segmentSize,
-		(size_t)1 << fReceiveWindowShift);
+	size_t threshold = min_c((size_t)segmentSize, fReceiveQueue.Size() / 2);
+	threshold = max_c(threshold, (size_t)1 << fReceiveWindowShift);
 
 	// Signed: after the FIN, or after we accepted a segment that ran past the
 	// window, the receive point can be at or beyond the advertised edge.
