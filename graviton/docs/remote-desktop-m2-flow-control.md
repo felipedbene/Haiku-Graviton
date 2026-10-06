@@ -434,6 +434,41 @@ drawing:
   that exercises coalesce-and-collapse; the shipped-bound arm shows the bound is
   generous enough never to reach them. Both are stated as what they are.
 
+**The handshake drain: one place where drawing threads do wait (#625).** The
+"no drawing thread was ever blocked" result above predates #625, and it no longer
+holds for the handshake of a connection that negotiates `RP_CAP_COMPRESS_ZSTD`.
+`RemoteWireWriter::WriteAndEnable()` must put the queue and the `RP_HELLO_ACK` on
+the ring, plain, before it arms compression. If anything is queued, or the ring
+has no room, it delivers them with waiting writes:
+
+- The **remote event thread** does the waiting, and it **holds
+  `RemoteWireWriter::fLock`** while it waits. Every drawing thread that writes in
+  that time blocks on `fLock` until the drain is done. That is a stall of the
+  whole remote desktop, not of one producer.
+- **How long.** `kSendStallTimeout` (15 s) bounds *zero progress*, not the wait.
+  `NetSender` restarts its clock for each 4 KiB chunk it takes off the ring and
+  for every send that moves bytes. So a client that is slow but still reading can
+  hold the drain until the link has carried what the queue holds
+  (`RemoteFlowQueue::kMaxBytes`, 4 MiB, plus one overshooting message) and the
+  ack. For a full queue that is about 1.3 s at 25 Mbit/s and 34 s at 1 Mbit/s.
+  The client reads the ack only after the 1 MiB already on the ring as well.
+  `WriteAndEnable()` logs every drain that had to wait or deliver queued
+  messages (`handshake drain: N queued messages (B bytes) delivered ahead of the
+  acknowledgement in T us`), so field captures show how long it took.
+- **It cannot deadlock on the server.** `NetSender` drains the ring without
+  `fLock`. A reader that makes no progress for `kSendStallTimeout` is shut down,
+  and the `ClearReader()` that follows releases the waiting writer. The ring then
+  discards and the drain returns.
+- **PLAUSIBLE, not observed: a mutual block with the client.** While it drains,
+  the event thread is not reading, and it is the only consumer of the receive
+  ring. A client whose single thread is blocked in `send_all()`, because the
+  server stopped reading its input, also stops reading the server's output.
+  Neither side then makes progress. This still ends after the 15 s zero-progress
+  timeout, but it ends by dropping the session rather than finishing the
+  handshake. It is the same slow-reader territory as #621 (queue collapses under a
+  live slow reader). Do not treat it as ruled out until a client that floods
+  input during the handshake has been run against it.
+
 **Supersession did not fire on hardware.** `superseded 0` in both arms. That is
 consistent with the rules — these workloads are full of pinned text ops and
 `RP_COPY_RECT` barriers, and at a 64-message bound a frame rarely has a later

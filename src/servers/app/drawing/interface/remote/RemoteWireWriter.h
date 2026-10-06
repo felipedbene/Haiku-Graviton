@@ -148,6 +148,7 @@ private:
 			bool				_CanDeliver(size_t length) const;
 			bool				_LargerThanTheRing(size_t length) const;
 			void				_DrainQueue();
+			status_t			_DrainQueueWaiting();
 			status_t			_WriteCompressed(const void* buffer,
 									size_t length, bool flushNow);
 			status_t			_FlushLocked();

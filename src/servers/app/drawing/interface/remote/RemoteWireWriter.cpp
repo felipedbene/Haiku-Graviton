@@ -280,12 +280,55 @@ RemoteWireWriter::WriteAndEnable(const void* buffer, size_t length,
 		return B_NOT_ALLOWED;
 	}
 
-	status_t result = _WriteLocked(buffer, length);
+	if (capability == 0)
+		return _WriteLocked(buffer, length);
+
+	// The client switches its decoder at a byte position: right after this
+	// acknowledgement. So everything ahead of the acknowledgement must be on
+	// the ring, plain, before the capability is armed -- including whatever the
+	// flow-control queue is holding. The queue sits upstream of the compressor
+	// and _Deliver() decides plain-or-compressed when a message *leaves* it, so
+	// an acknowledgement that was merely queued here, with the capability then
+	// armed, had itself and every plain message queued in front of it
+	// compressed on the way out. The client, still parsing plain frames and
+	// waiting for the acknowledgement, read the first compressed segment's
+	// varint and zstd magic as a frame header ("declared frame size 800401410")
+	// and dropped the session. It took a busy screen and a slow link to hit:
+	// the queue only holds anything when the 1 MiB ring is full at the moment
+	// the client says RP_HELLO.
+	//
+	// Waiting is bounded the way every blocking write here is: a reader exists
+	// (it just sent RP_HELLO), and one that stops reading is dropped by
+	// NetSender after kSendStallTimeout, after which the ring discards. That is
+	// a bound on *zero progress*, not on the wait: NetSender restarts its clock
+	// whenever a send moves bytes (and for every chunk it takes off the ring), so
+	// a client that is slow but still reading holds this drain -- and fLock with
+	// it, so every drawing thread waits too -- until the link has carried as many
+	// bytes out of the full ring as the queue (RemoteFlowQueue::kMaxBytes, 4 MiB,
+	// plus the one message that may overshoot it) and this message put in: about
+	// 1.3 s at 25 Mbit/s and 34 s at 1 Mbit/s for a full queue. The client reads
+	// the acknowledgement only after the 1 MiB that was already on the ring as
+	// well. See "The handshake drain" in
+	// graviton/docs/remote-desktop-m2-flow-control.md.
+	const size_t queuedMessages = fQueue.CountMessages();
+	const size_t queuedBytes = fQueue.CountBytes();
+	const bool mustWait = queuedMessages > 0 || !_CanDeliver(length);
+	const bigtime_t drainStart = system_time();
+
+	fQueue.Observe(buffer, length);
+	fPlainBytes += length;
+	fMessages++;
+	status_t result = _DrainQueueWaiting();
+	if (result == B_OK)
+		result = _Deliver(buffer, length);
+	if (mustWait) {
+		TRACE_ALWAYS("handshake drain: %" B_PRIuSIZE " queued messages (%"
+			B_PRIuSIZE " bytes) delivered ahead of the acknowledgement in %"
+			B_PRIdBIGTIME " us: %s\n", queuedMessages, queuedBytes,
+			system_time() - drainStart, strerror(result));
+	}
 	if (result != B_OK)
 		return result;
-
-	if (capability == 0)
-		return B_OK;
 
 	fCapability = capability;
 	fPreparedCapability = 0;
@@ -511,6 +554,28 @@ RemoteWireWriter::_DrainQueue()
 		// and Reset() at the next connection is what clears it.
 		if (_Deliver(data, length) != B_OK)
 			return;
+
+		fQueue.PopFront();
+	}
+}
+
+
+/*!	Delivers everything queued, waiting for ring space instead of leaving it
+	queued. Only for a point in the stream that must not be overtaken by a
+	change of framing (see WriteAndEnable()).
+*/
+status_t
+RemoteWireWriter::_DrainQueueWaiting()
+{
+	while (true) {
+		size_t length = 0;
+		const uint8* data = fQueue.PeekFront(length);
+		if (data == NULL)
+			return B_OK;
+
+		status_t result = _Deliver(data, length);
+		if (result != B_OK)
+			return result;
 
 		fQueue.PopFront();
 	}
