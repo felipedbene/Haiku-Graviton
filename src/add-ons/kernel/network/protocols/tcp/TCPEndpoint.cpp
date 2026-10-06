@@ -1088,6 +1088,10 @@ TCPEndpoint::ReadData(size_t numBytes, uint32 flags, net_buffer** _buffer)
 
 	// TODO: add support for urgent data (MSG_OOB)
 
+	bool readAgain = false;
+		// set when a MSG_WAITALL read returns early only because the receive
+		// buffer cannot hold the rest; see the end of this function
+
 	while (true) {
 		// Flush any contiguous prefix that back-pressure left staged in the
 		// reorder buffer into the ring, so the availability checks below (and
@@ -1140,8 +1144,10 @@ TCPEndpoint::ReadData(size_t numBytes, uint32 flags, net_buffer** _buffer)
 			// peer cannot send another byte until we read: return what is
 			// there instead of waiting forever. socket_receive() comes back
 			// for the rest of a MSG_WAITALL request.
-			if (_ReceiveWindowExhausted())
+			if (_ReceiveWindowExhausted()) {
+				readAgain = (flags & (MSG_WAITALL | MSG_PEEK)) == MSG_WAITALL;
 				break;
+			}
 
 			// MSG_DONTWAIT | MSG_WAITALL returns what there is, as on Linux,
 			// rather than nothing.
@@ -1208,6 +1214,20 @@ TCPEndpoint::ReadData(size_t numBytes, uint32 flags, net_buffer** _buffer)
 	// BufferQueue::Get() path did.
 	if (receivedBytes < 0)
 		return receivedBytes;
+
+	// Tell socket_receive() whether to come back for the rest of a MSG_WAITALL
+	// request: only when the buffer filling up is what cut this read short.
+	// Not after a timeout or a signal: those end the call. Waiting again would
+	// start a fresh SO_RCVTIMEO, and a second wait in the same call is not
+	// interrupted by the signal that ended the first (seen as a recv() that
+	// hung after SIGALRM). Not at end of file, after an error or for
+	// MSG_DONTWAIT either, where there is nothing to wait for.
+	if (*_buffer != NULL) {
+		if (readAgain)
+			(*_buffer)->msg_flags |= MSG_WAITALL;
+		else
+			(*_buffer)->msg_flags &= ~MSG_WAITALL;
+	}
 
 	if (_ReceiveAvailable() == 0 && fState == FINISH_RECEIVED)
 		socket->receive.low_water_mark = 0;

@@ -1471,32 +1471,34 @@ socket_receive(net_socket* socket, msghdr* header, void* data, size_t length,
 		}
 	}
 
-	gNetBufferModule.free(buffer);
-
 	// MSG_WAITALL on a stream asks for the full count, but a protocol can only
 	// hand over what its receive buffer holds, and once that is full the peer
-	// cannot send more until we read. So read again, as other systems do,
-	// until the request is satisfied or a read ends without data (end of
-	// file, an error, a signal, a timeout). Whatever was copied is returned
-	// then; an error that ended the connection is still recorded and is
-	// reported by the next call. SO_RCVTIMEO applies to each read here, not
-	// to the call as a whole. MSG_PEEK cannot make progress this way.
-	if ((originalFlags & MSG_WAITALL) != 0 && (flags & MSG_PEEK) == 0
-		&& socket->type == SOCK_STREAM && bytesCopied == bytesReceived) {
-		while (bytesCopied < totalLength) {
-			status = socket->first_info->read_data(socket->first_protocol,
-				totalLength - bytesCopied, flags, &buffer);
-			if (status != B_OK || buffer == NULL)
-				break;
+	// cannot send more until we read. A protocol that returned early for that
+	// reason alone marks the buffer with MSG_WAITALL, and we read again, as
+	// other systems do, until the request is satisfied or a read ends any
+	// other way (end of file, an error, a signal, a timeout). Whatever was
+	// copied is returned then; an error that ended the connection is still
+	// recorded and is reported by the next call. SO_RCVTIMEO applies to each
+	// wait here, not to the call as a whole.
+	bool readAgain = (originalFlags & MSG_WAITALL) != 0
+		&& (buffer->msg_flags & MSG_WAITALL) != 0
+		&& socket->type == SOCK_STREAM && bytesCopied == bytesReceived;
+	gNetBufferModule.free(buffer);
 
-			ssize_t copied = copy_to_receive_vectors(buffer, header, data,
-				length, bytesCopied);
-			gNetBufferModule.free(buffer);
-			if (copied <= 0)
-				break;
+	while (readAgain && bytesCopied < totalLength) {
+		status = socket->first_info->read_data(socket->first_protocol,
+			totalLength - bytesCopied, flags, &buffer);
+		if (status != B_OK || buffer == NULL)
+			break;
 
-			bytesCopied += copied;
-		}
+		readAgain = (buffer->msg_flags & MSG_WAITALL) != 0;
+		ssize_t copied = copy_to_receive_vectors(buffer, header, data,
+			length, bytesCopied);
+		gNetBufferModule.free(buffer);
+		if (copied <= 0)
+			break;
+
+		bytesCopied += copied;
 	}
 
 	if (bytesCopied < bytesReceived) {
