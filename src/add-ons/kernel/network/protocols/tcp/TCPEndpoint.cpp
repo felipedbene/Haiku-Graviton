@@ -339,9 +339,12 @@ enum {
 		// receiver saw a CE mark; echo ECE on our ACKs until the peer sets CWR
 	FLAG_ECN_SEND_CWR			= 0x8000,
 		// sender reacted to an ECE; set CWR on our next outgoing data segment
-	FLAG_ECN_CWND_REDUCED		= 0x10000
+	FLAG_ECN_CWND_REDUCED		= 0x10000,
 		// sender already cut the window for this RTT; do not cut again until a
 		// full window (fECNReactSequence) has been acknowledged
+	FLAG_SEND_ERROR_REPORTED	= 0x20000
+		// a send() has reported the error that closed the connection; later
+		// ones fail with EPIPE (see _ClosedSendStatus())
 };
 
 
@@ -737,6 +740,7 @@ TCPEndpoint::Connect(const sockaddr* address)
 	// after a failed connect() look like an orderly close (EOF instead of
 	// ENOTCONN); _PrepareReceivePath() only clears it once a SYN arrives.
 	fFinishReceived = false;
+	fFlags &= ~FLAG_SEND_ERROR_REPORTED;
 	fState = SYNCHRONIZE_SENT;
 	T(State(this));
 
@@ -914,7 +918,7 @@ TCPEndpoint::SendData(net_buffer *buffer)
 		return EOPNOTSUPP;
 
 	if (fState == CLOSED)
-		return ENOTCONN;
+		return _ClosedSendStatus();
 	if (fState == LISTEN)
 		return EDESTADDRREQ;
 	if (!is_writable(fState) && !is_establishing(fState))
@@ -944,6 +948,8 @@ TCPEndpoint::SendData(net_buffer *buffer)
 				return posix_error(status);
 			}
 
+			if (fState == CLOSED)
+				return _ClosedSendStatus();
 			if (!is_writable(fState) && !is_establishing(fState))
 				return EPIPE;
 		}
@@ -1082,6 +1088,10 @@ TCPEndpoint::ReadData(size_t numBytes, uint32 flags, net_buffer** _buffer)
 
 	// TODO: add support for urgent data (MSG_OOB)
 
+	bool readAgain = false;
+		// set when a MSG_WAITALL read returns early only because the receive
+		// buffer cannot hold the rest; see the end of this function
+
 	while (true) {
 		// Flush any contiguous prefix that back-pressure left staged in the
 		// reorder buffer into the ring, so the availability checks below (and
@@ -1100,20 +1110,48 @@ TCPEndpoint::ReadData(size_t numBytes, uint32 flags, net_buffer** _buffer)
 		}
 
 		if (available > 0) {
+			if (available >= dataNeeded)
+				break;
+
 			// Honour a PUSH boundary: deliver early even below the low-water
 			// mark once everything up to the last pushed byte is available.
-			size_t pushedAvailable = 0;
-			if (fPushSequence != 0) {
-				tcp_sequence readerSequence = (fInitialReceiveSequence + 1)
-					+ fReceiveRing.Consumed();
-				tcp_sequence pushEnd = fPushSequence > fReceiveNext
-					? fReceiveNext : fPushSequence;
-				if (pushEnd > readerSequence)
-					pushedAvailable = (pushEnd - readerSequence).Number();
+			// Not for MSG_WAITALL, which asks for the full count: only that,
+			// end-of-file, an error, a signal or a timeout may end its wait,
+			// as on other systems. A sender pushes at the end of every send(),
+			// so honouring it here returned short counts on healthy
+			// connections (#610).
+			if ((flags & MSG_WAITALL) == 0) {
+				size_t pushedAvailable = 0;
+				if (fPushSequence != 0) {
+					tcp_sequence readerSequence = (fInitialReceiveSequence + 1)
+						+ fReceiveRing.Consumed();
+					tcp_sequence pushEnd = fPushSequence > fReceiveNext
+						? fReceiveNext : fPushSequence;
+					if (pushEnd > readerSequence)
+						pushedAvailable = (pushEnd - readerSequence).Number();
+				}
+
+				if (pushedAvailable > 0 && pushedAvailable >= available)
+					break;
 			}
 
-			if (available >= dataNeeded
-				|| (pushedAvailable > 0 && pushedAvailable >= available))
+			// The FIN is in: nothing more will arrive. (FIN implies PUSH, which
+			// used to cover this.)
+			if (fState == FINISH_RECEIVED)
+				break;
+
+			// More was asked for than the receive buffer can hold, and the
+			// peer cannot send another byte until we read: return what is
+			// there instead of waiting forever. socket_receive() comes back
+			// for the rest of a MSG_WAITALL request.
+			if (_ReceiveWindowExhausted()) {
+				readAgain = (flags & (MSG_WAITALL | MSG_PEEK)) == MSG_WAITALL;
+				break;
+			}
+
+			// MSG_DONTWAIT | MSG_WAITALL returns what there is, as on Linux,
+			// rather than nothing.
+			if (timeout == 0 && (flags & MSG_WAITALL) != 0)
 				break;
 		} else if (fState == FINISH_RECEIVED) {
 			// ``If no text is awaiting delivery, the RECEIVE will
@@ -1177,6 +1215,20 @@ TCPEndpoint::ReadData(size_t numBytes, uint32 flags, net_buffer** _buffer)
 	if (receivedBytes < 0)
 		return receivedBytes;
 
+	// Tell socket_receive() whether to come back for the rest of a MSG_WAITALL
+	// request: only when the buffer filling up is what cut this read short.
+	// Not after a timeout or a signal: those end the call. Waiting again would
+	// start a fresh SO_RCVTIMEO, and a second wait in the same call is not
+	// interrupted by the signal that ended the first (seen as a recv() that
+	// hung after SIGALRM). Not at end of file, after an error or for
+	// MSG_DONTWAIT either, where there is nothing to wait for.
+	if (*_buffer != NULL) {
+		if (readAgain)
+			(*_buffer)->msg_flags |= MSG_WAITALL;
+		else
+			(*_buffer)->msg_flags &= ~MSG_WAITALL;
+	}
+
 	if (_ReceiveAvailable() == 0 && fState == FINISH_RECEIVED)
 		socket->receive.low_water_mark = 0;
 
@@ -1220,6 +1272,27 @@ TCPEndpoint::_ClosedReadStatus() const
 		return socket->error;
 	if (fFinishReceived)
 		return B_OK;
+	return ENOTCONN;
+}
+
+
+/*!	What a send on a CLOSED endpoint returns. The first one after the
+	connection was torn down by an error (ECONNRESET, ...) reports that error,
+	which is how applications learn of a reset from the write side; every one
+	after that fails with EPIPE (and raises SIGPIPE), as on Linux. A
+	connection that ended without an error, or never existed, is ENOTCONN.
+	socket->error itself is left alone: the read side and SO_ERROR report it
+	independently (_ClosedReadStatus()).
+*/
+status_t
+TCPEndpoint::_ClosedSendStatus()
+{
+	if ((fFlags & FLAG_SEND_ERROR_REPORTED) != 0)
+		return EPIPE;
+	if (socket->error != B_OK) {
+		fFlags |= FLAG_SEND_ERROR_REPORTED;
+		return socket->error;
+	}
 	return ENOTCONN;
 }
 
@@ -1841,6 +1914,41 @@ TCPEndpoint::_ReceiveBuffered() const
 }
 
 
+/*!	Whether the peer has to wait for the application to read before it can
+	send anything more: it has used up the window it was offered, and what we
+	could offer now is too small for a peer avoiding silly windows to send
+	into. Out-of-order data waiting for a hole to be filled does not make the
+	window exhausted -- the hole lies inside the window the peer was already
+	offered. A reader waiting for more than the buffer can hold uses this to
+	know that waiting longer would wait forever.
+*/
+bool
+TCPEndpoint::_ReceiveWindowExhausted() const
+{
+	// "Too small" is the RFC 1122 4.2.3.3 receiver threshold, min(MSS, half
+	// the buffer): a sender sends into a window at least that large (its own
+	// rule, 4.2.3.4, is a full segment or half the largest window it has
+	// seen). The MSS alone is not enough: on loopback it is close to 64 KiB,
+	// larger than a small buffer altogether, so the window would always look
+	// exhausted and a MSG_PEEK | MSG_WAITALL would come back short on a
+	// healthy connection. Below one unit of our window scale the window
+	// advertises as zero, so it is never smaller than that.
+	uint32 segmentSize = fReceiveMaxSegmentSize;
+	if (segmentSize == 0)
+		segmentSize = TCP_DEFAULT_MAX_SEGMENT_SIZE;
+	size_t threshold = min_c((size_t)segmentSize, fReceiveQueue.Size() / 2);
+	threshold = max_c(threshold, (size_t)1 << fReceiveWindowShift);
+
+	// Signed: after the FIN, or after we accepted a segment that ran past the
+	// window, the receive point can be at or beyond the advertised edge.
+	int32 offered = (int32)(fReceiveMaxAdvertised - fReceiveNext).Number();
+	if (offered > 0 && (size_t)offered >= threshold)
+		return false;
+
+	return _ReceiveFree() < threshold;
+}
+
+
 /*!	Free receive space to advertise. Bounded both by the byte budget (max buffer
 	minus what is already buffered) and by the ring's free slot count so the
 	peer cannot send more in-order segments than the ring can hold.
@@ -2325,12 +2433,21 @@ TCPEndpoint::_Receive(tcp_segment_header& segment, net_buffer* buffer)
 	}
 
 	if (fState == FINISH_ACKNOWLEDGED
+		&& (fFlags & FLAG_CLOSED) != 0
 		&& segment.AcknowledgeOnly()
 		&& (fReceiveMaxAdvertised - fReceiveNext).Number() == 0
 		&& segmentLength == 0
 		&& segment.acknowledge == fSendUnacknowledged) {
-		// reset the connection - received another ack packet
-		// while finish acknowledged and zero receive window
+		// The application has close()d the socket, so nobody will ever read
+		// the data that filled our window and it will never open again: the
+		// peer's window probe would otherwise go on forever. Reset instead.
+		// Only after close(): FINISH_ACKNOWLEDGED is also where shutdown(SHUT_WR)
+		// leaves a connection the application is still reading from (a client
+		// that sends its request, half-closes and then reads a large response,
+		// as nc -N or HTTP/1.0 do). There the window opens as soon as it reads,
+		// and resetting would throw away data the peer has not delivered yet
+		// (#615) -- the probe is handled below like any other, as it is in
+		// ESTABLISHED. _SendReset() makes the same distinction.
 		return DROP | RESET;
 	}
 

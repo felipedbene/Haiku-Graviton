@@ -127,11 +127,13 @@ private:
 			ssize_t		_ReceiveAvailable() const;
 			size_t		_ReceiveBuffered() const;
 			size_t		_ReceiveFree() const;
+			bool		_ReceiveWindowExhausted() const;
 			void		_DrainToRing();
 			void		_InitReceiveRing();
 			void		_NotifyReader();
 			bool		_ShouldReceive() const;
 			status_t	_ClosedReadStatus() const;
+			status_t	_ClosedSendStatus();
 			void		_HandleReset(status_t error);
 			int32		_Spawn(TCPEndpoint* parent, tcp_segment_header& segment,
 							net_buffer* buffer);
