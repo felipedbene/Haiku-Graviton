@@ -299,13 +299,34 @@ RemoteWireWriter::WriteAndEnable(const void* buffer, size_t length,
 	//
 	// Waiting is bounded the way every blocking write here is: a reader exists
 	// (it just sent RP_HELLO), and one that stops reading is dropped by
-	// NetSender after kSendStallTimeout, after which the ring discards.
+	// NetSender after kSendStallTimeout, after which the ring discards. That is
+	// a bound on *zero progress*, not on the wait: NetSender restarts its clock
+	// whenever a send moves bytes (and for every chunk it takes off the ring), so
+	// a client that is slow but still reading holds this drain -- and fLock with
+	// it, so every drawing thread waits too -- until the link has carried as many
+	// bytes out of the full ring as the queue (RemoteFlowQueue::kMaxBytes, 4 MiB,
+	// plus the one message that may overshoot it) and this message put in: about
+	// 1.3 s at 25 Mbit/s and 34 s at 1 Mbit/s for a full queue. The client reads
+	// the acknowledgement only after the 1 MiB that was already on the ring as
+	// well. See "The handshake drain" in
+	// graviton/docs/remote-desktop-m2-flow-control.md.
+	const size_t queuedMessages = fQueue.CountMessages();
+	const size_t queuedBytes = fQueue.CountBytes();
+	const bool mustWait = queuedMessages > 0 || !_CanDeliver(length);
+	const bigtime_t drainStart = system_time();
+
 	fQueue.Observe(buffer, length);
 	fPlainBytes += length;
 	fMessages++;
 	status_t result = _DrainQueueWaiting();
 	if (result == B_OK)
 		result = _Deliver(buffer, length);
+	if (mustWait) {
+		TRACE_ALWAYS("handshake drain: %" B_PRIuSIZE " queued messages (%"
+			B_PRIuSIZE " bytes) delivered ahead of the acknowledgement in %"
+			B_PRIdBIGTIME " us: %s\n", queuedMessages, queuedBytes,
+			system_time() - drainStart, strerror(result));
+	}
 	if (result != B_OK)
 		return result;
 
