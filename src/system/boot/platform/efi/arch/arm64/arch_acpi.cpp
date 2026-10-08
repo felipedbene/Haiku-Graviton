@@ -10,8 +10,13 @@
 #include <arch_acpi.h>
 #include <arch_smp.h>
 
+#include "efi_platform.h"
 #include "serial.h"
 #include "acpi.h"
+
+#include <efi/protocol/pci-root-bridge-io.h>
+
+#include "aarch64.h"
 
 #include <arch/arm/arch_uart_pl011.h>
 #include <arch/generic/debug_uart_8250.h>
@@ -53,6 +58,319 @@ static void arch_acpi_get_uart_8250(const uart_info &uart)
 	static char sUART[sizeof(DebugUART8250)];
 	gUART = new(sUART) DebugUART8250(uart.regs.start,
 		uart.clock != 0 ? uart.clock : 1843200, uart.reg_shift);
+}
+
+
+// The console 16550 on AWS Graviton is a PCI function (1d0f:8250), and SPCR
+// names it by segment/bus/device/function as well as giving an address. The two
+// are not always consistent. Firmware observed on c7g.large and t4g.medium on
+// 2026-10-08 advertises 0x80000000. The function's BAR 0 is at 0x80048000 on
+// c7g.large, and that is what Linux drives as ttyS0 and what the EC2 console
+// captures. 0x80000000 is the ENA's BAR 2 (c7g.large: its 256 KiB LLQ transmit
+// window). So taking the address verbatim silences the console and, once the
+// ENA driver has turned on its memory decode, writes every debug byte into the
+// NIC. Earlier firmware advertised 0x090a0000, a live alias outside every BAR.
+// c7g.metal advertises the BAR itself. See
+// graviton/docs/arm64-serial-console-c7g.md.
+//
+// Firmware hands the function over with memory decode OFF. Linux on c7g.large
+// logs "serial 0000:00:01.0: enabling device (0010 -> 0012)", and nothing in
+// Haiku binds to this function to turn it on. So the BAR has to be enabled
+// here before it can be used, the same thing Linux's pci_enable_device() does.
+// Its address is not moved: the PCI manager reserves BARs that firmware
+// programmed and only assigns empty ones (PCI::_ReserveBARs/_AssignBARs in
+// bus_managers/pci/pci.cpp). It disables decode only on bridges.
+//
+// Every exit logs why. These lines are printed through EFI serial_io, before
+// the UART is switched, so they reach both syslog and the console. Any answer
+// short of certain keeps the SPCR address, which is the behaviour before this
+// check existed.
+
+
+// Config-space access to the one function SPCR names, through one of two
+// routes. EFI_PCI_ROOT_BRIDGE_IO is preferred because it returns errors instead
+// of faulting. A direct ECAM read is the fallback for firmware that does not
+// publish that protocol.
+struct spcr_pci_config {
+	efi_pci_root_bridge_io_protocol*	bridge;
+	uint64								efiAddress;
+	addr_t								ecam;
+};
+
+
+static bool
+spcr_config_read32(const spcr_pci_config &config, uint32 reg, uint32 &value)
+{
+	value = 0xffffffff;
+	if (config.bridge != NULL) {
+		return config.bridge->Pci.Read(config.bridge, EfiPciWidthUint32,
+			config.efiAddress | reg, 1, &value) == EFI_SUCCESS;
+	}
+
+	value = *(volatile uint32*)(config.ecam + reg);
+	return true;
+}
+
+
+static bool
+spcr_config_write16(const spcr_pci_config &config, uint32 reg, uint16 value)
+{
+	if (config.bridge != NULL) {
+		return config.bridge->Pci.Write(config.bridge, EfiPciWidthUint16,
+			config.efiAddress | reg, 1, &value) == EFI_SUCCESS;
+	}
+
+	*(volatile uint16*)(config.ecam + reg) = value;
+	return true;
+}
+
+
+// Probe the current stage 1 translation with AT, which reports a fault in
+// PAR_EL1 instead of taking one. Require Device memory and an identity mapping,
+// which is what UEFI promises for MMIO while boot services are active. The
+// caller then never dereferences an address the firmware has not mapped.
+static bool
+spcr_device_mapped(addr_t address, uint64 &par)
+{
+	par = 1;
+	switch (arch_exception_level()) {
+		case 1:
+			asm volatile("at s1e1r, %1\n\tisb\n\tmrs %0, par_el1"
+				: "=r"(par) : "r"(address) : "memory");
+			break;
+		case 2:
+			asm volatile("at s1e2r, %1\n\tisb\n\tmrs %0, par_el1"
+				: "=r"(par) : "r"(address) : "memory");
+			break;
+		default:
+			return false;
+	}
+
+	const uint64 kPageMask = 0x0000fffffffff000ULL;
+	return (par & 1) == 0				// translation succeeded
+		&& (par >> 60) == 0				// ATTR[7:4] == 0: Device memory
+		&& (par & kPageMask) == (address & kPageMask);
+}
+
+
+// Fallback config route through the MCFG ECAM window. Restricted to bus 0,
+// where every virtualized Graviton console seen so far lives, and bounds-checked
+// against the allocation's own bus range.
+static bool
+spcr_ecam_config(const acpi_spcr *spcr, spcr_pci_config &config)
+{
+	acpi_mcfg *mcfg = (acpi_mcfg*)acpi_find_table(ACPI_MCFG_SIGNATURE);
+	if (mcfg == NULL) {
+		dprintf("acpi: spcr pci check: no MCFG table, no ecam fallback\n");
+		return false;
+	}
+	if (spcr->pci_bus_num != 0 || spcr->pci_vendor_num > 31
+		|| spcr->pci_function_num > 7) {
+		dprintf("acpi: spcr pci check: ecam fallback only covers bus 0 "
+			"(spcr names %u:%02x:%02x.%u)\n", spcr->pci_segment,
+			spcr->pci_bus_num, spcr->pci_vendor_num, spcr->pci_function_num);
+		return false;
+	}
+
+	const char *end = (const char*)mcfg + mcfg->header.length;
+	for (const acpi_mcfg_allocation *alloc
+			= (const acpi_mcfg_allocation*)(mcfg + 1);
+			(const char*)(alloc + 1) <= end; alloc++) {
+		dprintf("acpi: spcr pci check: mcfg ecam %#" B_PRIx64 " segment %u "
+			"bus %u-%u\n", alloc->address, alloc->pci_segment,
+			alloc->start_bus_number, alloc->end_bus_number);
+		if (alloc->pci_segment != spcr->pci_segment
+			|| alloc->start_bus_number > spcr->pci_bus_num
+			|| alloc->end_bus_number < spcr->pci_bus_num) {
+			continue;
+		}
+
+		const addr_t function = (addr_t)(alloc->address
+			+ ((uint64)(spcr->pci_bus_num - alloc->start_bus_number) << 20)
+			+ ((uint64)spcr->pci_vendor_num << 15)
+			+ ((uint64)spcr->pci_function_num << 12));
+		uint64 par;
+		if (!spcr_device_mapped(function, par)) {
+			dprintf("acpi: spcr pci check: ecam config page %#" B_PRIxADDR
+				" is not identity-mapped Device memory (EL%" B_PRIu64
+				", PAR_EL1 %#" B_PRIx64 "); not touching it\n", function,
+				arch_exception_level(), par);
+			return false;
+		}
+
+		config.bridge = NULL;
+		config.efiAddress = 0;
+		config.ecam = function;
+		dprintf("acpi: spcr pci check: using ecam config page %#" B_PRIxADDR
+			"\n", function);
+		return true;
+	}
+
+	dprintf("acpi: spcr pci check: no MCFG allocation covers segment %u "
+		"bus %u\n", spcr->pci_segment, spcr->pci_bus_num);
+	return false;
+}
+
+
+// Preferred config route: the firmware's root bridge protocol for the segment
+// SPCR names, chosen by the bridge that answers with SPCR's vendor:device.
+static bool
+spcr_root_bridge_config(const acpi_spcr *spcr, uint32 expectedId,
+	spcr_pci_config &config)
+{
+	efi_guid guid = EFI_PCI_ROOT_BRIDGE_IO_PROTOCOL_GUID;
+	efi_handle *handles = NULL;
+	size_t count = 0;
+	efi_status status = kBootServices->LocateHandleBuffer(ByProtocol, &guid,
+		NULL, &count, &handles);
+	dprintf("acpi: spcr pci check: LocateHandleBuffer(PciRootBridgeIo) status "
+		"%#lx, %lu handle(s)\n", (unsigned long)status, (unsigned long)count);
+	if (status != EFI_SUCCESS || handles == NULL)
+		return false;
+
+	// EFI_PCI_ADDRESS layout for the root bridge Pci accessors. Note that
+	// acpi_spcr::pci_vendor_num is the SPCR "PCI Device Number" field.
+	const uint64 efiAddress = ((uint64)spcr->pci_bus_num << 24)
+		| ((uint64)spcr->pci_vendor_num << 16)
+		| ((uint64)spcr->pci_function_num << 8);
+
+	bool found = false;
+	for (size_t i = 0; i < count && !found; i++) {
+		efi_pci_root_bridge_io_protocol *bridge = NULL;
+		status = kBootServices->HandleProtocol(handles[i], &guid,
+			(void**)&bridge);
+		if (status != EFI_SUCCESS || bridge == NULL) {
+			dprintf("acpi: spcr pci check: bridge %lu: HandleProtocol status "
+				"%#lx\n", (unsigned long)i, (unsigned long)status);
+			continue;
+		}
+
+		spcr_pci_config candidate = { bridge, efiAddress, 0 };
+		uint32 id = 0xffffffff;
+		const bool read = spcr_config_read32(candidate, 0x00, id);
+		dprintf("acpi: spcr pci check: bridge %lu: segment %" B_PRIu32
+			", id read %s %#" B_PRIx32 "\n", (unsigned long)i,
+			bridge->SegmentNumber, read ? "ok" : "failed", id);
+		if (bridge->SegmentNumber != spcr->pci_segment || !read
+			|| id != expectedId) {
+			continue;
+		}
+
+		config = candidate;
+		found = true;
+	}
+
+	kBootServices->FreePool(handles);
+	return found;
+}
+
+
+// Returns true, with barBase set and memory decode on, only when the function
+// SPCR names is certainly a memory-mapped UART at barBase.
+static bool
+arch_acpi_spcr_pci_bar(const acpi_spcr *spcr, int8 regShift, uint64 &barBase)
+{
+	barBase = 0;
+
+	dprintf("acpi: spcr pci check: revision %u, length %" B_PRIu32 ", pci "
+		"%04x:%04x at %u:%02x:%02x.%u\n", spcr->header.revision,
+		spcr->header.length, spcr->pci_vendor_id, spcr->pci_device_id,
+		spcr->pci_segment, spcr->pci_bus_num, spcr->pci_vendor_num,
+		spcr->pci_function_num);
+
+	if (spcr->header.length < offsetof(acpi_spcr, clock)) {
+		dprintf("acpi: spcr pci check: table too short for pci fields\n");
+		return false;
+	}
+	if (spcr->pci_vendor_id == 0xffff || spcr->pci_device_id == 0xffff) {
+		dprintf("acpi: spcr pci check: spcr names no pci device\n");
+		return false;
+	}
+
+	const uint32 expectedId = (uint32)spcr->pci_device_id << 16
+		| spcr->pci_vendor_id;
+	spcr_pci_config config = { NULL, 0, 0 };
+	if (!spcr_root_bridge_config(spcr, expectedId, config)
+		&& !spcr_ecam_config(spcr, config)) {
+		dprintf("acpi: spcr pci check: no config-space route\n");
+		return false;
+	}
+
+	uint32 id = 0xffffffff;
+	uint32 command = 0;
+	uint32 bar = 0;
+	uint32 barHigh = 0;
+	if (!spcr_config_read32(config, 0x00, id)
+		|| !spcr_config_read32(config, 0x04, command)
+		|| !spcr_config_read32(config, 0x10, bar)) {
+		dprintf("acpi: spcr pci check: config read failed\n");
+		return false;
+	}
+	const bool is64 = (bar & 0x1) == 0 && ((bar >> 1) & 0x3) == 0x2;
+	if (is64 && !spcr_config_read32(config, 0x14, barHigh)) {
+		dprintf("acpi: spcr pci check: config read of BAR 1 failed\n");
+		return false;
+	}
+	dprintf("acpi: spcr pci check: id %#" B_PRIx32 ", command %#" B_PRIx32
+		", BAR 0 %#" B_PRIx32 ", BAR 1 %#" B_PRIx32 "%s\n", id, command & 0xffff,
+		bar, barHigh, is64 ? " (64-bit)" : "");
+
+	if (id != expectedId) {
+		dprintf("acpi: spcr pci check: function answers %#" B_PRIx32 ", not "
+			"%#" B_PRIx32 "\n", id, expectedId);
+		return false;
+	}
+	if ((bar & 0x1) != 0) {
+		dprintf("acpi: spcr pci check: BAR 0 is an i/o BAR\n");
+		return false;
+	}
+	const uint64 base = ((uint64)barHigh << 32) | (bar & ~(uint32)0xf);
+	if (base == 0) {
+		dprintf("acpi: spcr pci check: BAR 0 is unassigned\n");
+		return false;
+	}
+
+	uint64 par;
+	const addr_t registers = (addr_t)base;
+	if (!spcr_device_mapped(registers, par)) {
+		dprintf("acpi: spcr pci check: BAR 0 %#" B_PRIx64 " is not "
+			"identity-mapped Device memory (PAR_EL1 %#" B_PRIx64 ")\n", base,
+			par);
+		return false;
+	}
+
+	const uint16 kMemoryDecode = 0x2;
+	const uint16 oldCommand = (uint16)command;
+	if ((oldCommand & kMemoryDecode) == 0) {
+		uint32 now = 0;
+		if (!spcr_config_write16(config, 0x04, oldCommand | kMemoryDecode)
+			|| !spcr_config_read32(config, 0x04, now)
+			|| (now & kMemoryDecode) == 0) {
+			dprintf("acpi: spcr pci check: could not enable memory decode "
+				"(command %#x -> %#" B_PRIx32 ")\n", oldCommand, now & 0xffff);
+			return false;
+		}
+		dprintf("acpi: spcr pci check: enabled memory decode (command %#x -> "
+			"%#" B_PRIx32 ")\n", oldCommand, now & 0xffff);
+	}
+
+	// A decoding 16550 never reads LSR as all ones. A function that does is not
+	// answering at this address, so put the command register back and leave
+	// the console where it was.
+	const int shift = regShift >= 0 ? regShift : 0;
+	const uint8 lcr = *(volatile uint8*)(registers + (3 << shift));
+	const uint8 lsr = *(volatile uint8*)(registers + (5 << shift));
+	dprintf("acpi: spcr pci check: uart at BAR 0 reads LCR %#x, LSR %#x\n",
+		lcr, lsr);
+	if (lsr == 0xff) {
+		if ((oldCommand & kMemoryDecode) == 0)
+			spcr_config_write16(config, 0x04, oldCommand);
+		dprintf("acpi: spcr pci check: no uart answering at BAR 0\n");
+		return false;
+	}
+
+	barBase = base;
+	return true;
 }
 
 
@@ -338,6 +656,27 @@ arch_handle_acpi()
 			strcpy(uart.kind, kind);
 
 		uart.regs.start = spcr->base_address.address;
+
+		// The register file of a 16550 is a few bytes, so any address in the
+		// BAR's first page is the device itself. Anything else is a firmware
+		// inconsistency, and the BAR is the half of it that is verified.
+		uint64 barBase = 0;
+		if (arch_acpi_spcr_pci_bar(spcr,
+				arch_acpi_uart_reg_shift(spcr->base_address), barBase)) {
+			const bool inBar = uart.regs.start >= barBase
+				&& uart.regs.start < barBase + B_PAGE_SIZE;
+			dprintf("acpi: spcr console %#" B_PRIx64 ", pci %04x:%04x at "
+				"%u:%02x:%02x.%u has BAR 0 %#" B_PRIx64 "%s\n",
+				(uint64)uart.regs.start, spcr->pci_vendor_id,
+				spcr->pci_device_id, spcr->pci_segment, spcr->pci_bus_num,
+				spcr->pci_vendor_num, spcr->pci_function_num, barBase,
+				inBar ? "" : "; spcr address is not that device, using the BAR");
+			if (!inBar)
+				uart.regs.start = barBase;
+		} else {
+			dprintf("acpi: spcr pci check did not confirm a BAR; keeping spcr "
+				"console %#" B_PRIx64 "\n", (uint64)uart.regs.start);
+		}
 		uart.regs.size = B_PAGE_SIZE;
 		uart.irq = spcr->gisv;
 		uart.clock = spcr->clock;
