@@ -6,6 +6,7 @@
 
 #include <algorithm>
 #include <slab/Slab.h>
+#include <smp.h>
 #include <util/AutoLock.h>
 #include <util/ThreadAutoLock.h>
 #include <vm/VMAddressSpace.h>
@@ -881,6 +882,211 @@ VMSAv8TranslationMap::UnmapPages(VMArea* area, addr_t address, size_t size,
 
 	while (vm_page_mapping* mapping = queue.RemoveHead())
 		vm_free_page_mapping(mapping->page->physical_page_number, mapping, freeFlags);
+
+	// munmap() of part of an area (cut_area()) and resize_area() shrinking
+	// arrive here, not in UnmapArea().
+	if (!deletingAddressSpace)
+		ReclaimEmptyTables(address, size);
+}
+
+
+void
+VMSAv8TranslationMap::UnmapArea(VMArea* area, bool deletingAddressSpace,
+	bool ignoreTopCachePageFlags)
+{
+	VMTranslationMap::UnmapArea(area, deletingAddressSpace,
+		ignoreTopCachePageFlags);
+
+	// A dying address space frees every table at once in the destructor.
+	// Device and wired areas went through UnmapPages() above
+	// (VMTranslationMap.cpp:93), which has already reclaimed their range.
+	if (deletingAddressSpace || area->cache_type == CACHE_TYPE_DEVICE
+		|| area->wiring != B_NO_LOCK) {
+		return;
+	}
+
+	ReclaimEmptyTables(area->Base(), area->Size());
+}
+
+
+static void
+reclaim_quiesce_cpu(void*, int)
+{
+	// Taking this ICI proves the CPU has had IRQs unmasked since the caller
+	// unlinked its tables, so no fixup_entry() that could have read the old
+	// table descriptors is still running there.
+}
+
+
+/*!	Frees the level 1-3 tables under [va, va + size) that no longer hold any
+	descriptor.
+
+	Nothing else ever frees a table before the whole map dies (FreeTable() in
+	the destructor), so without this every table stays allocated for as long as
+	the team lives. With area placement randomised over a 512 GiB window
+	(VMUserAddressSpace::kMaxRandomize) nearly every new area lands in a 2 MiB
+	and a 1 GiB slot no earlier area touched, so each create/delete cycle left
+	an L3 and usually an L2 table behind: 8 KiB of wired memory that is in no
+	area and no cache. Ladybird's Compositor and app_server cycle ~325 areas/s
+	while animating, which is the 55-190 MiB/min "used" growth -- and for
+	app_server, which never exits, it was permanent.
+
+	Walkers of a user map, and why none can be inside a table we free:
+	- Map, Query, Protect, ClearFlags, ClearAccessedAndModified, Unmap*: their
+	  callers hold fLock (vm.cpp locks the map around every one), as do we.
+	- The hardware walker on any CPU: break-before-make on the table
+	  descriptor, see the TLBI below.
+	- fixup_entry() in arch_int.cpp, the software AF/DBM fault fixup. It walks
+	  TTBR0 without fLock and CASes a leaf, so if it read a parent descriptor
+	  just before we cleared it, it could write into a page we have already
+	  handed back to the allocator. It runs with IRQs masked from exception
+	  entry until it returns, so FlushReclaimBatch() waits for a synchronous
+	  ICI on every CPU before it frees anything -- the same quiescence Linux
+	  uses for its lock-free walkers (tlb_remove_table_sync_one()).
+	- QueryInterrupt() from KDL: read-only, other CPUs stopped; residual.
+
+	Called with the map unlocked; takes fLock. The caller may hold VMCache
+	locks and the address space lock: freeing a wired page only takes the
+	page-queue locks, which nest inside both (Map() allocates tables under the
+	same locks), and the ICI needs nothing but IRQs enabled, which fLock being
+	a mutex guarantees.
+*/
+void
+VMSAv8TranslationMap::ReclaimEmptyTables(addr_t va, size_t size)
+{
+	// The kernel map keeps its tables: it is never destroyed, its tables are
+	// shared through TTBR1 by every CPU, and it does not churn VA like a user
+	// address space does.
+	if (fIsKernel || size == 0)
+		return;
+
+	ThreadCPUPinner pinner(thread_get_current_thread());
+	RecursiveLocker locker(fLock);
+
+	if (fPageTable == 0)
+		return;
+
+	ReclaimBatch batch;
+	batch.count = 0;
+	// The root table itself stays: SwitchUserMap() installs it in TTBR0.
+	ReclaimEmptyTables(fPageTable, fInitialLevel, va, size, batch);
+	FlushReclaimBatch(batch);
+}
+
+
+/*!	Walks the table at \a ptPa (of \a level) over [va, va + size), recursing
+	first so that emptiness propagates upwards, and unlinks each child table
+	that ends up holding no descriptor at all, queueing it on \a batch to be
+	freed. Returns whether the table at \a ptPa is now entirely empty (the
+	caller decides whether to unlink it). Only slots holding a table
+	descriptor are descended into, so the cost is bounded by the tables that
+	actually exist under the range, like ProcessRange()'s.
+*/
+bool
+VMSAv8TranslationMap::ReclaimEmptyTables(phys_addr_t ptPa, int level,
+	addr_t va, size_t size, ReclaimBatch& batch)
+{
+	int tableBits = fPageBits - 3;
+	uint64_t tableSize = 1UL << tableBits;
+	uint64_t tableMask = tableSize - 1;
+	uint64_t vaMask = (1UL << fVaBits) - 1;
+	uint64_t* pt = TableFromPa(ptPa);
+	bool childSurvived = false;
+
+	if (level < 3) {
+		int shift = tableBits * (3 - level) + fPageBits;
+		uint64_t entrySize = 1UL << shift;
+		uint64_t end = va + size - 1;
+
+		for (uint64_t slotVa = va & ~(entrySize - 1); slotVa <= end;
+				slotVa += entrySize) {
+			int index = ((slotVa & vaMask) >> shift) & tableMask;
+			uint64_t pte = atomic_get64((int64*)&pt[index]);
+			if ((pte & kPteTypeMask) != kPteTypeL012Table)
+				continue;
+
+			uint64_t subStart = std::max<uint64_t>(slotVa, va);
+			uint64_t subEnd = std::min<uint64_t>(slotVa + entrySize - 1, end);
+			phys_addr_t subTable = pte & kPteAddrMask;
+			if (!ReclaimEmptyTables(subTable, level + 1, subStart,
+					subEnd - subStart + 1, batch)) {
+				childSurvived = true;
+				continue;
+			}
+
+			// Break-before-make for a table descriptor: invalidate it, then
+			// make every CPU drop walk-cache entries that still point at the
+			// table. TLBI VAE1IS (unlike VALE1IS, which only reaches the last
+			// level) invalidates entries from every level of the walk for that
+			// VA, and any VA inside the slot selects the walk-cache entry for
+			// this descriptor; the DSB does not complete until every walk that
+			// could have used the old entry has finished. This is what Linux
+			// does for freed tables (__flush_tlb_range(), last_level false).
+			// With fASID == -1 no CPU can hold entries for this map: whoever
+			// takes the ASID next flushes it wholesale in SwitchUserMap().
+			atomic_set64((int64*)&pt[index], 0);
+			{
+				InterruptsSpinLocker asidLocker(sAsidLock);
+				asm("dsb ishst");
+				if (fASID != -1) {
+					asm("tlbi vae1is, %0" :: "r"(((slotVa >> 12) & kTLBIMask)
+						| (uint64_t(fASID) << 48)));
+				}
+				asm("dsb ish");
+				asm("isb");
+			}
+
+			batch.tables[batch.count++] = subTable;
+			if (batch.count == ReclaimBatch::kMaxTables)
+				FlushReclaimBatch(batch);
+		}
+	}
+
+	// The root is never freed, and a table with a surviving child table in
+	// range cannot be empty: skip the scan in both cases.
+	if (childSurvived || level == fInitialLevel)
+		return false;
+
+	for (uint64_t i = 0; i < tableSize; i++) {
+		if (atomic_get64((int64*)&pt[i]) != 0)
+			return false;
+	}
+	return true;
+}
+
+
+/*!	Frees the tables queued on \a batch, which are already unlinked and
+	invalidated in the TLB, once no software walker can still be inside them.
+	Called with fLock held.
+*/
+void
+VMSAv8TranslationMap::FlushReclaimBatch(ReclaimBatch& batch)
+{
+	if (batch.count == 0)
+		return;
+
+	// fixup_entry() only walks the map installed in its own CPU's TTBR0, so
+	// the ICI can be skipped when no CPU but this (pinned) one has the map
+	// installed. A CPU that installs it after this check only ever reads the
+	// cleared descriptors: sAsidLock orders it after our stores.
+	bool otherCpus;
+	{
+		InterruptsSpinLocker asidLocker(sAsidLock);
+		bool onThisCpu = (READ_SPECIALREG(TTBR0_EL1) & kTtbrBasePhysAddrMask)
+			== fPageTable;
+		otherCpus = fRefcount > (onThisCpu ? 1 : 0);
+	}
+	if (otherCpus)
+		call_all_cpus_sync(&reclaim_quiesce_cpu, NULL);
+
+	vm_page_reservation reservation = {};
+	for (int i = 0; i < batch.count; i++) {
+		vm_page* page = vm_lookup_page(batch.tables[i] >> fPageBits);
+		DEBUG_PAGE_ACCESS_START(page);
+		vm_page_free_etc(NULL, page, &reservation);
+	}
+	vm_page_unreserve_pages(&reservation);
+	batch.count = 0;
 }
 
 

@@ -148,6 +148,11 @@ TableFromPa(phys_addr_t pa)
 }
 
 
+// Walks the live TTBR0/TTBR1 tables without the translation map's lock. That
+// is only safe because it runs with IRQs masked (from exception entry until
+// do_sync_handler() enables them): VMSAv8TranslationMap::FlushReclaimBatch()
+// waits for a synchronous ICI on every other CPU before it frees an unlinked
+// table. Do not enable interrupts before calling this.
 static bool
 fixup_entry(phys_addr_t ptPa, int level, addr_t va, bool wr)
 {

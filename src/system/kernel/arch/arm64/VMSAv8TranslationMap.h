@@ -77,6 +77,9 @@ public:
 	virtual	void				UnmapPages(VMArea* area, addr_t base,
 									size_t size, bool updatePageQueue,
 									bool deletingAddressSpace);
+	virtual	void				UnmapArea(VMArea* area,
+									bool deletingAddressSpace,
+									bool ignoreTopCachePageFlags);
 
 	virtual	status_t			Query(addr_t virtualAddress,
 									phys_addr_t* _physicalAddress,
@@ -138,6 +141,15 @@ private:
 		vm_page_reservation* reservation, UpdatePte &&updatePte);
 	bool AttemptPteBreakBeforeMake(uint64_t* ptePtr, uint64_t oldPte, addr_t va);
 	bool FlushVAIfAccessed(uint64_t pte, addr_t va);
+	struct ReclaimBatch {
+		static constexpr int kMaxTables = 32;
+		phys_addr_t tables[kMaxTables];
+		int count;
+	};
+	bool ReclaimEmptyTables(phys_addr_t ptPa, int level, addr_t va, size_t size,
+		ReclaimBatch& batch);
+	void ReclaimEmptyTables(addr_t va, size_t size);
+	void FlushReclaimBatch(ReclaimBatch& batch);
 };
 
 
