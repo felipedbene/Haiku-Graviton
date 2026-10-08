@@ -907,6 +907,20 @@ RemoteHWInterface::_EventThread()
 						break;
 				}
 
+				// Solicited, not unhandled. RP_DRAW_STRING and
+				// RP_DRAW_STRING_WITH_OFFSETS still ask for this reply
+				// (RemoteDrawingEngine::DrawString), but since they became
+				// fire-and-forget (#548) nothing waits for it, so the engine can
+				// be deleted -- removing its callback in ~RemoteDrawingEngine --
+				// while the reply is still in flight. An orphan carries nothing
+				// the server uses and NextMessage() skips its unread body, so
+				// drop it quietly and keep the log for events that really have
+				// no handler. Not gated on any capability: the reply is answered
+				// by every client, and bit 0 (the retired string-width reply)
+				// never governed it.
+				if (code == RP_DRAW_STRING_RESULT)
+					break;
+
 				TRACE_ERROR("unhandled remote event code %u\n", code);
 				break;
 			}
