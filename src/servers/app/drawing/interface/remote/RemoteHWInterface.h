@@ -142,7 +142,8 @@ typedef bool (*CallbackFunction)(void* cookie, RemoteMessage& message);
 										RemoteDrawingEngine* engine);
 
 private:
-		callback_info*				_FindCallback(uint32 token);
+		callback_info*				_AcquireCallback(uint32 token);
+		void						_ReleaseCallback();
 static	int							_CallbackCompare(const uint32* key,
 										const callback_info* info);
 
@@ -227,6 +228,15 @@ static	void						_ConnectionClosedCallback(void *cookie);
 
 		BLocker						fCallbackLocker;
 		BObjectList<callback_info>	fCallbacks;
+
+		// The callback the event thread is running right now, or NULL. Set by
+		// the same locked lookup that finds it and cleared under the same lock,
+		// so RemoveCallback() can tell when the record -- and the cookie, which
+		// is the drawing engine being destroyed -- is still in use, and waits on
+		// fCallbackDone for it instead of deleting it underneath the callback.
+		callback_info*				fCallbackInFlight;
+		int32						fCallbackWaiters;
+		sem_id						fCallbackDone;
 
 		BLocker						fEngineListLocker;
 		BObjectList<RemoteDrawingEngine>

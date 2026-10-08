@@ -148,6 +148,9 @@ RemoteHWInterface::RemoteHWInterface(const char* target)
 	fEventThread(-1),
 	fEventStream(NULL),
 	fCallbackLocker("callback locker"),
+	fCallbackInFlight(NULL),
+	fCallbackWaiters(0),
+	fCallbackDone(-1),
 	fEngineListLocker("engine list locker")
 {
 	memset(fSessionCookie, 0, sizeof(fSessionCookie));
@@ -329,6 +332,14 @@ RemoteHWInterface::RemoteHWInterface(const char* target)
 		return;
 	}
 
+	// Before the event thread, which is the only thing that runs callbacks and
+	// so the only thing RemoveCallback() can be waiting for.
+	fCallbackDone = create_sem(0, "remote callback done");
+	if (fCallbackDone < 0) {
+		fInitStatus = fCallbackDone;
+		return;
+	}
+
 	fEventThread = spawn_thread(_EventThreadEntry, "remote event thread",
 		B_NORMAL_PRIORITY, this);
 	if (fEventThread < 0) {
@@ -355,6 +366,9 @@ RemoteHWInterface::~RemoteHWInterface()
 	fListenEndpoint.Unset();
 
 	fEventStream.Unset();
+
+	if (fCallbackDone >= 0)
+		delete_sem(fCallbackDone);
 
 	// The cookie is only a secret while there is a listener to present it to.
 	// Removing the file with the listener keeps a dead secret from lying around
@@ -551,7 +565,39 @@ RemoteHWInterface::RemoveCallback(uint32 token)
 	if (index < 0)
 		return false;
 
-	delete fCallbacks.RemoveItemAt(index);
+	callback_info* info = fCallbacks.RemoveItemAt(index);
+
+	// Unlisted now, so no later lookup can find it -- but the event thread may
+	// already have, and be inside info->callback(info->cookie, ...) without
+	// fCallbackLocker. The caller is ~RemoteDrawingEngine, which deletes the
+	// semaphore the callback releases and then the engine the cookie points to
+	// as soon as this returns, so deleting the record now let a late reply run
+	// on freed memory. Since DrawString became fire-and-forget (#548) a reply
+	// still in flight when its engine dies is routine (it is the orphan
+	// RP_DRAW_STRING_RESULT), so wait for the callback to finish. The wait is
+	// as long as one callback: the event thread holds nothing this thread can
+	// hold, and a callback blocked reading a body is released by more input or
+	// by the connection closing (MakeEmpty() cancels the read). Never on the
+	// event thread itself, which would be waiting for itself.
+	while (fCallbackInFlight == info && find_thread(NULL) != fEventThread) {
+		fCallbackWaiters++;
+		lock.Unlock();
+
+		status_t result;
+		do {
+			result = acquire_sem(fCallbackDone);
+		} while (result == B_INTERRUPTED);
+
+		lock.Lock();
+		if (result != B_OK) {
+			// The semaphore is gone: the interface itself is being torn down
+			// under a running callback. Leaking the record is the only safe
+			// thing left to do with it.
+			return true;
+		}
+	}
+
+	delete info;
 	return true;
 }
 
@@ -572,11 +618,31 @@ RemoteHWInterface::UnregisterDrawingEngine(RemoteDrawingEngine* engine)
 }
 
 
+/*!	Finds the callback for \a token and marks it in flight, under the lock
+	RemoveCallback() takes. Every non-NULL return must be paired with
+	_ReleaseCallback() once the callback has returned; until then the record and
+	its cookie stay alive.
+*/
 callback_info*
-RemoteHWInterface::_FindCallback(uint32 token)
+RemoteHWInterface::_AcquireCallback(uint32 token)
 {
 	BAutolock lock(fCallbackLocker);
-	return fCallbacks.BinarySearchByKey(token, &_CallbackCompare);
+	callback_info* info = fCallbacks.BinarySearchByKey(token, &_CallbackCompare);
+	fCallbackInFlight = info;
+	return info;
+}
+
+
+void
+RemoteHWInterface::_ReleaseCallback()
+{
+	BAutolock lock(fCallbackLocker);
+	fCallbackInFlight = NULL;
+
+	if (fCallbackWaiters > 0) {
+		release_sem_etc(fCallbackDone, fCallbackWaiters, 0);
+		fCallbackWaiters = 0;
+	}
 }
 
 
@@ -902,9 +968,14 @@ RemoteHWInterface::_EventThread()
 			{
 				uint32 token;
 				if (message.Read(token) == B_OK) {
-					callback_info* info = _FindCallback(token);
-					if (info != NULL && info->callback(info->cookie, message))
-						break;
+					// Held in flight across the call: see RemoveCallback().
+					callback_info* info = _AcquireCallback(token);
+					if (info != NULL) {
+						bool handled = info->callback(info->cookie, message);
+						_ReleaseCallback();
+						if (handled)
+							break;
+					}
 				}
 
 				// Solicited, not unhandled. RP_DRAW_STRING and
