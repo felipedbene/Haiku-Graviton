@@ -114,7 +114,11 @@ public:
 				Test-and-clear rather than a callback, because the repair
 				(RP_RESYNC plus a state replay) has to be emitted *through* this
 				object and so cannot run while its lock is held. The owner polls
-				this from a place where it is safe to write. */
+				this from a place where it is safe to write.
+
+				Returns false, and keeps the debt, while the send ring has no
+				reader: there is nobody to repair for until the next connection,
+				and that connection's Reset() retires the debt. */
 			bool				TakeResyncOwed();
 
 			/*!	Flow-control counters for the connection: messages queued,

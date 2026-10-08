@@ -435,6 +435,15 @@ RemoteWireWriter::TakeResyncOwed()
 	if (!fQueue.ResyncOwed())
 		return false;
 
+	// Held, not reported, while nobody is reading. A repair emitted now would
+	// itself be dropped (see _WriteLocked()), and reporting the debt would latch
+	// it again on the very next message -- one syslog line and one futile repair
+	// request per frame for as long as no client is attached (#617). The debt
+	// is retired by Reset() at the next connection boundary, whose replay and
+	// full repaint are what pay it.
+	if (!fTarget->HasReader())
+		return false;
+
 	fQueue.ClearResyncOwed();
 	return true;
 }
@@ -478,6 +487,10 @@ RemoteWireWriter::GetFlowDepth(size_t& _messages, size_t& _bytes) const
 	the caller believed it sent, and the client that connected later was never
 	told. Now there is nowhere for a message to vanish that is not a counted,
 	bounded, resync-forcing policy decision.
+
+	With no reader the queue still takes messages, but only until its bound
+	collapses it once; from then until the next connection boundary messages
+	are dropped on arrival, which the latched debt already accounts for.
 */
 status_t
 RemoteWireWriter::_WriteLocked(const void* buffer, size_t length)
@@ -486,6 +499,32 @@ RemoteWireWriter::_WriteLocked(const void* buffer, size_t length)
 	fMessages++;
 
 	fQueue.Observe(buffer, length);
+
+	// Nobody is reading and the queue has already collapsed for it: whatever
+	// arrives now cannot reach a client before the debt is paid, and the only
+	// thing that pays it is the next connection -- _NewConnection() calls
+	// Reset(), which drops the queue and the debt, then replays state, and the
+	// client repaints the whole screen. Queueing here bought a malloc and a copy
+	// per message and, at the bound, coalesce and supersede scans under fLock
+	// and another collapse: ~240 a second with an animating app and no client
+	// (#617). So drop it here, in O(1). The debt stays latched, and
+	// TakeResyncOwed() holds it while there is no reader.
+	//
+	// Keyed on the debt, not on the missing reader alone, for the window between
+	// Reset() and NetSender's SetReader() in _NewConnection(). Reset() has just
+	// cleared the debt, so output there is still queued and is drained to the new
+	// client in order, as before. Dropping it would latch a debt that the first
+	// Invalidate() after connect reports, adding an RP_RESYNC barrier and a
+	// whole-desktop repaint to every connect -- and it would drop silently an
+	// RP_CREATE_STATE racing _ReplayState() (RemoteDrawingEngine's constructor
+	// emits it before RegisterDrawingEngine()). The cost of keying on the debt is
+	// one bounded fill and one collapse per period with no client, instead of one
+	// per bound's worth of output.
+	//
+	// What the queue still holds here stays until Reset() frees it: freeing it
+	// now would count a second collapse for one discard.
+	if (fQueue.ResyncOwed() && !fTarget->HasReader())
+		return B_OK;
 
 	if (!fQueue.IsEmpty()) {
 		_DrainQueue();

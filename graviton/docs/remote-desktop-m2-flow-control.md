@@ -322,6 +322,17 @@ reaches there at all: a collapse while no client is attached is dropped at the
 connection boundary, because `_NewConnection()` replays state and the arriving
 client repaints the whole screen anyway.
 
+**With no reader the queue fills once, then drops (#617).** Once a collapse has
+latched the debt and the send ring still has no reader, `_WriteLocked()` drops each
+further message on arrival, in O(1), and `TakeResyncOwed()` holds the debt instead of
+reporting it, until `Reset()` at the next connection boundary retires both. A
+headless guest therefore pays one bounded fill and one collapse per period without a
+client, not one collapse per bound's worth of output (measured before this change:
+~240 a second with an animating app). The drop is keyed on the debt, not on the
+missing reader alone, so the gap between `Reset()` and the new `NetSender`'s
+`SetReader()` in `_NewConnection()` is still queued and delivered in order, and a
+connect does not cost an extra `RP_RESYNC` and repaint.
+
 ---
 
 ## 6. Verification
