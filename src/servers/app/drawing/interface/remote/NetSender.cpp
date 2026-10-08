@@ -126,7 +126,19 @@ NetSender::_NetworkSender()
 		uint8* position = buffer;
 		bigtime_t lastProgress = system_time();
 		while (readSize > 0) {
-			int32 sendSize = fEndpoint->Send(position, readSize);
+			// MSG_NOSIGNAL is load-bearing (#617). A peer that resets the
+			// connection while this thread is parked in send() waiting for
+			// window space -- the normal state under heavy paint, when the
+			// socket's send queue is full -- wakes it with EPIPE (the
+			// post-wait is_writable() check, TCPEndpoint.cpp:947-948), and
+			// socket_send() then raises SIGPIPE (net_socket.cpp:1611-1612).
+			// Its default action kills the whole team, and not through
+			// debug_server, so one client disconnecting at the wrong moment
+			// took app_server and every window on the Desktop down with it.
+			// With the flag the failure comes back here as EPIPE and ends
+			// only this connection, like the ENOTCONN a send() issued after
+			// the reset already got (TCPEndpoint.cpp:916-917).
+			int32 sendSize = fEndpoint->Send(position, readSize, MSG_NOSIGNAL);
 			if (sendSize < 0) {
 				// BNetEndpoint::Send() fails without calling send() at all when
 				// the endpoint has no socket, leaving errno untouched, so the
