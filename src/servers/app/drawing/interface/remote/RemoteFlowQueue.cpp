@@ -298,6 +298,24 @@ op_is_mode_independent(uint16 code)
 }
 
 
+/*static*/ size_t
+RemoteFlowQueue::ByteBoundFor(uint64 plainBytes, uint64 wireBytes)
+{
+	// Nothing measured yet, or a stream that did not shrink: a plain byte is a
+	// stream byte.
+	if (wireBytes == 0 || plainBytes <= wireBytes)
+		return kMaxBytes;
+
+	// Divide first. kMaxBytes * plainBytes overflows 64 bits after 4 TiB, and
+	// a floored ratio only ever errs towards the smaller, original bound.
+	const uint64 ratio = plainBytes / wireBytes;
+	if (ratio >= kMaxPlainBytes / kMaxBytes)
+		return kMaxPlainBytes;
+
+	return kMaxBytes * (size_t)ratio;
+}
+
+
 void
 RemoteFlowQueue::SetExplicitBoundaries(bool explicitBoundaries)
 {

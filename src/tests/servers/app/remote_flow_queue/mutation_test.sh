@@ -182,6 +182,30 @@ mutate trust-fractional-damage \
 	'		if (false)
 			return false;'
 
+# M13 -- the byte bound ignores the compression ratio (the pre-fix behaviour:
+# 4 MiB of plain whatever the stream shrank to).
+mutate bound-ignores-ratio \
+	'	return kMaxBytes * (size_t)ratio;' \
+	'	return kMaxBytes;'
+
+# M14 -- the scaled bound has no memory ceiling.
+mutate bound-without-ceiling \
+	'	if (ratio >= kMaxPlainBytes / kMaxBytes)
+		return kMaxPlainBytes;' \
+	'	if (false)
+		return kMaxPlainBytes;'
+
+# M15 -- a stream that grew (ratio below 1) is let through to the multiply,
+# which floors to a zero-byte bound.
+mutate bound-below-plain \
+	'	if (wireBytes == 0 || plainBytes <= wireBytes)' \
+	'	if (wireBytes == 0)'
+
+# M16 -- multiply before dividing, which overflows.
+mutate bound-multiply-first \
+	'	const uint64 ratio = plainBytes / wireBytes;' \
+	'	const uint64 ratio = (kMaxBytes * plainBytes) / wireBytes / kMaxBytes;'
+
 echo
 echo "mutants killed $killed, survived $survived"
 [ "$survived" -eq 0 ]

@@ -148,6 +148,7 @@ RemoteWireWriter::RemoteWireWriter(StreamingRingBuffer* target)
 	fQueue(),
 	fPlainBytes(0),
 	fWireBytes(0),
+	fDeliveredBytes(0),
 	fMessages(0),
 	fExemptMessages(0),
 	fFlushes(0),
@@ -393,7 +394,8 @@ RemoteWireWriter::Reset()
 
 	_ResetCodec();
 
-	fPlainBytes = fWireBytes = fMessages = fExemptMessages = fFlushes = 0;
+	fPlainBytes = fWireBytes = fDeliveredBytes = fMessages = fExemptMessages
+		= fFlushes = 0;
 	fEncodeTime = 0;
 	fLastReport = 0;
 }
@@ -529,13 +531,41 @@ RemoteWireWriter::_WriteLocked(const void* buffer, size_t length)
 	if (!fQueue.IsEmpty()) {
 		_DrainQueue();
 		if (!fQueue.IsEmpty())
-			return fQueue.Enqueue(buffer, length, find_thread(NULL));
+			return _Enqueue(buffer, length);
 	}
 
 	if (!_CanDeliver(length) && !_LargerThanTheRing(length))
-		return fQueue.Enqueue(buffer, length, find_thread(NULL));
+		return _Enqueue(buffer, length);
 
 	return _Deliver(buffer, length);
+}
+
+
+/*!	Queues one message, with the queue's byte bound first restated in the unit
+	it was derived in: bytes of stream still owed to the link.
+
+	On a plain connection that is the message's own length, so the bound is
+	RemoteFlowQueue::kMaxBytes as it always was. On a compressed one a queued
+	plain byte costs the link only 1/ratio of a byte, and a bound left in plain
+	bytes held ~40 kB of stream under an animating browser and collapsed about a
+	hundred times sooner than the bound means (M1: 6.55 GB plain, 73 MB wire).
+	So scale it by the ratio this connection has actually achieved, up to the
+	memory ceiling RemoteFlowQueue::kMaxPlainBytes.
+
+	Only while there is a reader. Without one nothing queued will be delivered
+	and there is no stream to measure against, so the bound stays at kMaxBytes
+	of plain: the no-client fill that ends in the one collapse _WriteLocked()
+	then drops after is the same 4 MiB as before.
+*/
+status_t
+RemoteWireWriter::_Enqueue(const void* buffer, size_t length)
+{
+	size_t bound = RemoteFlowQueue::kMaxBytes;
+	if (fCapability != 0 && fTarget->HasReader())
+		bound = RemoteFlowQueue::ByteBoundFor(fDeliveredBytes, fWireBytes);
+
+	fQueue.SetMaxBytes(bound);
+	return fQueue.Enqueue(buffer, length, find_thread(NULL));
 }
 
 
@@ -546,6 +576,16 @@ RemoteWireWriter::_WriteLocked(const void* buffer, size_t length)
 	the compressed form of a message is at worst marginally larger than the
 	plain form and is emitted in segments of at most kOutputBufferSize, so that
 	headroom bounds the expansion for any message the ring could hold at all.
+
+	Plain length on purpose, even though the ring holds compressed bytes and the
+	typical message needs ~1/100 of it: it is the only static upper bound, and
+	that is what keeps a delivered message from parking in a blocking Write()
+	with fLock held, which would stall every drawing thread behind a slow link.
+	The queue's byte bound, not this gate, is where the ratio belongs (see
+	_Enqueue()). One known gap: under ZSTD_e_continue a call can also emit up to
+	one block (128 KiB) of earlier messages' buffered input, more than the
+	headroom here, so a rare Write() can wait for the drain. It still writes
+	whole segments; it is the pre-queue behaviour, not a tear.
 */
 bool
 RemoteWireWriter::_CanDeliver(size_t length) const
@@ -626,6 +666,7 @@ RemoteWireWriter::_Deliver(const void* buffer, size_t length)
 {
 	if (fCapability == 0) {
 		fWireBytes += length;
+		fDeliveredBytes += length;
 		return fTarget->Write(buffer, length);
 	}
 
@@ -656,6 +697,9 @@ RemoteWireWriter::_Deliver(const void* buffer, size_t length)
 			result = _WriteRawSegment(buffer, length);
 	} else
 		result = _WriteCompressed(buffer, length, _MustFlushNow(code));
+
+	if (result == B_OK)
+		fDeliveredBytes += length;
 
 	_MaybeReportStatistics();
 	return result;

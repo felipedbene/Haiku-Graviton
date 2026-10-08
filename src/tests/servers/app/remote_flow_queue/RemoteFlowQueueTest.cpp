@@ -905,6 +905,65 @@ testResetClearsEverything()
 }
 
 
+static void
+testByteBoundCountsTheStream()
+{
+	const size_t mib = 1024 * 1024;
+
+	// The golden values are written out, not derived from kMaxBytes, so a
+	// change to either constant has to change this test too.
+	check(RemoteFlowQueue::kMaxBytes == 4 * mib
+			&& RemoteFlowQueue::kMaxPlainBytes == 32 * mib,
+		"71: the bound is 4 MiB of stream with a 32 MiB memory ceiling");
+	check(RemoteFlowQueue::ByteBoundFor(0, 0) == 4 * mib,
+		"72: nothing measured yet keeps the plain bound");
+	check(RemoteFlowQueue::ByteBoundFor(1000, 1000) == 4 * mib,
+		"73: a plain stream (ratio 1) keeps the plain bound");
+	check(RemoteFlowQueue::ByteBoundFor(500, 1000) == 4 * mib,
+		"74: a stream that grew never shrinks the bound below kMaxBytes");
+	check(RemoteFlowQueue::ByteBoundFor(5160, 1000) == 20 * mib,
+		"75: ratio 5.16 holds 4 MiB of stream as 20 MiB of plain (floored)");
+	check(RemoteFlowQueue::ByteBoundFor(7999, 1000) == 28 * mib,
+		"76: just under the ceiling is still scaled, not capped");
+	check(RemoteFlowQueue::ByteBoundFor(6554556042ULL, 73208394ULL)
+			== 32 * mib,
+		"77: the measured browser ratio (M1, ~89x) is held at the ceiling");
+	check(RemoteFlowQueue::ByteBoundFor(1ULL << 60, 3) == 32 * mib,
+		"78: a huge ratio cannot overflow past the ceiling");
+}
+
+
+static void
+testSetMaxBytesMovesTheBound()
+{
+	// pixelOp() is 14 bytes; 100 of them are 1400 bytes.
+	RemoteFlowQueue queue(1000, 256);
+	queue.SetMaxBytes(4096);
+	check(queue.MaxBytes() == 4096, "79: SetMaxBytes() takes the new bound");
+
+	for (uint32 i = 0; i < 100; i++)
+		feed(queue, pixelOp(RP_FILL_RECT, 1, 9500 + i), 1);
+
+	Stats raised = statsOf(queue);
+	check(queue.CountMessages() == 100 && queue.CountBytes() == 1400
+			&& raised.collapses == 0 && !queue.ResyncOwed(),
+		"80: a raised bound holds 1400 bytes that the constructed 256 would "
+		"have collapsed");
+
+	queue.SetMaxBytes(256);
+	feed(queue, pixelOp(RP_FILL_RECT, 1, 9600), 1);
+
+	Stats lowered = statsOf(queue);
+	check(queue.CountMessages() == 1 && queue.CountBytes() == 14
+			&& lowered.collapses == 1 && queue.ResyncOwed(),
+		"81: a lowered bound runs the overflow policy at the next Enqueue()");
+
+	queue.Reset();
+	check(queue.MaxBytes() == 256,
+		"82: Reset() leaves the bound to the owner");
+}
+
+
 int
 main()
 {
@@ -931,6 +990,8 @@ main()
 	testFrameBoundaryMode();
 	testSupersedeWithExplicitBoundaries();
 	testResetClearsEverything();
+	testByteBoundCountsTheStream();
+	testSetMaxBytesMovesTheBound();
 
 	printf("%s  %d checks, %d failures\n", sFailures == 0 ? "PASS" : "FAIL",
 		sChecks, sFailures);

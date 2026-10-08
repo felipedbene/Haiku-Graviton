@@ -151,6 +151,7 @@ private:
 			status_t			_Deliver(const void* buffer, size_t length);
 			bool				_CanDeliver(size_t length) const;
 			bool				_LargerThanTheRing(size_t length) const;
+			status_t			_Enqueue(const void* buffer, size_t length);
 			void				_DrainQueue();
 			status_t			_DrainQueueWaiting();
 			status_t			_WriteCompressed(const void* buffer,
@@ -232,6 +233,12 @@ private:
 
 			uint64				fPlainBytes;
 			uint64				fWireBytes;
+
+			// Plain bytes of the messages that reached the ring, i.e. the
+			// input fWireBytes is the output of. Unlike fPlainBytes it leaves
+			// out what the queue discarded, so their ratio is the stream's
+			// real compression ratio, which the queue's bound is scaled by.
+			uint64				fDeliveredBytes;
 			uint64				fMessages;
 			uint64				fExemptMessages;
 			uint64				fFlushes;
