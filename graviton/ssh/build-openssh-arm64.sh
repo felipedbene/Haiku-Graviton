@@ -24,6 +24,11 @@ OUT=${OUT:-/opt/haiku/ssh}
 SYSROOT=${SYSROOT:-/opt/haiku/sysroot-arm64}
 OSSH_VERSION=${OSSH_VERSION:-10.4p1}
 ZLIB_VERSION=${ZLIB_VERSION:-1.3.1}
+# The Haiku patchset for OSSH_VERSION comes from haikuports, pinned to the commit
+# that introduced it: master only carries the patchset for its current version,
+# so an upstream version bump 404s every bake (haikuports a1fcf91857, 10.6p1,
+# 2026-10-09). Bump both together.
+HAIKUPORTS_REV=${HAIKUPORTS_REV:-abfcb50d4e6782a1d97bd3fabb72c036c4942c14}
 PKG_REVISION=1
 SRCDIR="$(cd "$(dirname "$0")" && pwd)"
 
@@ -113,7 +118,7 @@ echo "== openssh $OSSH_VERSION =="
 [ -f "openssh-$OSSH_VERSION.tar.gz" ] || curl -sSLf -o "openssh-$OSSH_VERSION.tar.gz" \
 	"https://cdn.openbsd.org/pub/OpenBSD/OpenSSH/portable/openssh-$OSSH_VERSION.tar.gz"
 [ -f "openssh-$OSSH_VERSION.patchset" ] || curl -sSLf -o "openssh-$OSSH_VERSION.patchset" \
-	"https://raw.githubusercontent.com/haikuports/haikuports/master/net-misc/openssh/patches/openssh-$OSSH_VERSION.patchset"
+	"https://raw.githubusercontent.com/haikuports/haikuports/$HAIKUPORTS_REV/net-misc/openssh/patches/openssh-$OSSH_VERSION.patchset"
 rm -rf "openssh-$OSSH_VERSION"
 tar xf "openssh-$OSSH_VERSION.tar.gz"
 cd "openssh-$OSSH_VERSION"
