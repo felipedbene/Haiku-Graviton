@@ -2992,8 +2992,18 @@ TCPEndpoint::_ShouldSendSegment(tcp_segment_header& segment, uint32 length,
 		// - the buffer is at least larger than half of the maximum send window,
 		//   or
 		// - we're retransmitting data
+		// TCP_NODELAY is deliberately not a reason. It disables Nagle, and
+		// this stack has no Nagle test: a short tail goes out at once through
+		// the end-of-queue clause, whatever is in flight. What the option used
+		// to bypass here is sender SWS avoidance (RFC 1122 4.2.3.4), which
+		// applies with or without Nagle -- Linux, too, makes a NODELAY socket
+		// wait for min(MSS, queued) bytes of window (tcp_snd_wnd_test()).
+		// The bypass released a sub-MSS runt on every window-limited ACK:
+		// ~450 vs 1347 bytes per segment and 0.65-0.92 vs 1.13-1.20 MB/s at
+		// 79 ms RTT. Only data that does not fit the window waits now, for the
+		// next ACK (or the persist timer when nothing is in flight); the last
+		// byte of a write needs that same ACK either way.
 		if (length == segmentMaxSize
-			|| (fOptions & TCP_NODELAY) != 0
 			|| tcp_sequence(fSendNext + length) == fSendQueue.LastSequence()
 			|| (fSendMaxWindow > 0 && length >= fSendMaxWindow / 2))
 			return true;
