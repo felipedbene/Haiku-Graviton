@@ -1,0 +1,382 @@
+diff --git a/UI/Haiku/DamageRefinement.h b/UI/Haiku/DamageRefinement.h
+new file mode 100644
+index 00000000..bd4e9e98
+--- /dev/null
++++ b/UI/Haiku/DamageRefinement.h
+@@ -0,0 +1,184 @@
++/*
++ * Copyright (c) 2026, the DeBeOS developers
++ *
++ * SPDX-License-Identifier: BSD-2-Clause
++ */
++
++#pragma once
++
++// Shrinks the damage Ladybird reports to what actually changed on screen, and finds vertical scrolls that the
++// window can replay as a blit. Pure functions over 32-bit pixel buffers: no Haiku, AK or LibGfx dependency, so the
++// logic is unit-testable on any host.
++//
++// Why this exists (Haiku-Graviton #622): Compositor's damage_since_last_raster() reports the whole viewport on every
++// scroll (by design) and on text edits whose display-list diff is unbounded. On a local display that costs a memcpy;
++// over the remote desktop every DrawBitmap goes on the wire, so one keystroke cost 2.7 MB and one scroll notch 2.7-5.4 MB.
++//
++// Correctness never depends on Ladybird's damage, on a hash, or on the guessed scroll distance: a row or span is left
++// out of the damage only after memcmp() has proven it byte-identical to what the window will show.
++
++#include <stddef.h>
++#include <stdint.h>
++#include <string.h>
++
++namespace Ladybird::DamageRefinement {
++
++static constexpr size_t bytes_per_pixel = 4;
++
++struct Rect {
++    int x { 0 };
++    int y { 0 };
++    int width { 0 };
++    int height { 0 };
++
++    bool is_empty() const { return width <= 0 || height <= 0; }
++};
++
++// Destination rows [top, bottom) of the new frame are byte-identical to rows [top + dy, bottom + dy) of the old one.
++struct VerticalShift {
++    int dy { 0 };
++    int top { 0 };
++    int bottom { 0 };
++
++    bool is_valid() const { return dy != 0 && bottom > top; }
++};
++
++// Copies every pixel of `rect` that differs between `source` and `destination` into `destination`, and returns the
++// bounding box of the pixels that differed: exactly the pixels whose on-screen value changes. Pixels outside the box
++// were byte-identical before the copy, so the window already shows them.
++//
++// Rows in [skip_top, skip_bottom) are still copied but not reported: the caller replays them with a blit. Pass an
++// empty range (skip_top >= skip_bottom) to report every row.
++//
++// The alpha byte is compared too. Display ignores it, so a difference only in alpha reports a pixel that did not
++// visibly change: the error is in the conservative direction.
++inline Rect copy_changed(uint8_t* destination, size_t destination_pitch, uint8_t const* source, size_t source_pitch,
++    Rect rect, int skip_top = 0, int skip_bottom = 0)
++{
++    int top = -1;
++    int bottom = -1;
++    int left = rect.x + rect.width;
++    int right = rect.x;
++    if (rect.is_empty())
++        return {};
++    size_t const row_bytes = static_cast<size_t>(rect.width) * bytes_per_pixel;
++    for (int y = rect.y; y < rect.y + rect.height; ++y) {
++        auto* destination_row = destination + static_cast<size_t>(y) * destination_pitch + static_cast<size_t>(rect.x) * bytes_per_pixel;
++        auto const* source_row = source + static_cast<size_t>(y) * source_pitch + static_cast<size_t>(rect.x) * bytes_per_pixel;
++        if (memcmp(destination_row, source_row, row_bytes) == 0)
++            continue;
++        bool const reported = y < skip_top || y >= skip_bottom;
++        if (reported) {
++            // First and last differing pixel of this row; the memcmp above guarantees both exist.
++            int first = 0;
++            while (memcmp(destination_row + static_cast<size_t>(first) * bytes_per_pixel, source_row + static_cast<size_t>(first) * bytes_per_pixel, bytes_per_pixel) == 0)
++                ++first;
++            int last = rect.width - 1;
++            while (memcmp(destination_row + static_cast<size_t>(last) * bytes_per_pixel, source_row + static_cast<size_t>(last) * bytes_per_pixel, bytes_per_pixel) == 0)
++                --last;
++            if (top < 0)
++                top = y;
++            bottom = y + 1;
++            if (rect.x + first < left)
++                left = rect.x + first;
++            if (rect.x + last + 1 > right)
++                right = rect.x + last + 1;
++        }
++        memcpy(destination_row, source_row, row_bytes);
++    }
++    if (top < 0)
++        return {};
++    return { left, top, right - left, bottom - top };
++}
++
++// A deterministic row hash. Equal rows always hash equal, so a hash mismatch proves the rows differ; a hash match is
++// only a candidate and is confirmed with memcmp().
++inline uint64_t hash_row(uint8_t const* row, size_t bytes)
++{
++    uint64_t hash = 0xcbf29ce484222325ull ^ bytes;
++    size_t i = 0;
++    for (; i + 8 <= bytes; i += 8) {
++        uint64_t word;
++        memcpy(&word, row + i, 8);
++        hash = (hash ^ word) * 0x9e3779b97f4a7c15ull;
++        hash ^= hash >> 29;
++    }
++    for (; i < bytes; ++i)
++        hash = (hash ^ row[i]) * 0x100000001b3ull;
++    return hash ^ (hash >> 32);
++}
++
++// Looks for a vertical shift of the whole frame (a scroll) between `old_frame` (what the window shows) and
++// `new_frame`. Both are `width` x `height`, full rows. `scratch` must hold 2 * height values.
++//
++// Candidate shifts are voted for by rows whose hash matches the old frame at that offset; rows identical to the row
++// above (blank bands) carry no information about the offset and do not vote. The winner is then verified row by row
++// with memcmp, and the longest run of exactly matching rows is returned, if it is at least `minimum_rows` tall.
++// A wrong vote can therefore only cost a missed blit, never a wrong pixel.
++inline VerticalShift find_vertical_shift(uint8_t const* old_frame, size_t old_pitch, uint8_t const* new_frame, size_t new_pitch,
++    int width, int height, uint64_t* scratch, int minimum_rows)
++{
++    if (width <= 0 || height <= 0 || minimum_rows <= 0 || height <= minimum_rows)
++        return {};
++    size_t const row_bytes = static_cast<size_t>(width) * bytes_per_pixel;
++    uint64_t* old_hashes = scratch;
++    uint64_t* new_hashes = scratch + height;
++    for (int y = 0; y < height; ++y) {
++        old_hashes[y] = hash_row(old_frame + static_cast<size_t>(y) * old_pitch, row_bytes);
++        new_hashes[y] = hash_row(new_frame + static_cast<size_t>(y) * new_pitch, row_bytes);
++    }
++    // A blit can only save rows that changed in place; with fewer than that, there is nothing to win.
++    int changed_rows = 0;
++    for (int y = 0; y < height; ++y)
++        changed_rows += new_hashes[y] != old_hashes[y];
++    if (changed_rows < minimum_rows)
++        return {};
++
++    int best_dy = 0;
++    int best_votes = 0;
++    int const reach = height - minimum_rows;
++    for (int dy = -reach; dy <= reach; ++dy) {
++        if (dy == 0)
++            continue; // an unshifted match is copy_changed()'s business
++        int const first = dy < 0 ? -dy : 0;
++        int const end = dy > 0 ? height - dy : height;
++        int votes = 0;
++        for (int y = first; y < end; ++y) {
++            if (new_hashes[y] != old_hashes[y + dy])
++                continue;
++            if (y > 0 && new_hashes[y] == new_hashes[y - 1])
++                continue;
++            ++votes;
++        }
++        // Ties go to the smaller distance.
++        if (votes > best_votes || (votes == best_votes && votes > 0 && (dy < 0 ? -dy : dy) < (best_dy < 0 ? -best_dy : best_dy))) {
++            best_votes = votes;
++            best_dy = dy;
++        }
++    }
++    if (best_votes == 0)
++        return {};
++
++    int const first = best_dy < 0 ? -best_dy : 0;
++    int const end = best_dy > 0 ? height - best_dy : height;
++    VerticalShift best {};
++    int run_top = -1;
++    for (int y = first; y <= end; ++y) {
++        bool matches = y < end
++            && new_hashes[y] == old_hashes[y + best_dy]
++            && memcmp(new_frame + static_cast<size_t>(y) * new_pitch, old_frame + static_cast<size_t>(y + best_dy) * old_pitch, row_bytes) == 0;
++        if (matches) {
++            if (run_top < 0)
++                run_top = y;
++            continue;
++        }
++        if (run_top >= 0 && y - run_top > best.bottom - best.top)
++            best = { best_dy, run_top, y };
++        run_top = -1;
++    }
++    if (best.bottom - best.top < minimum_rows)
++        return {};
++    return best;
++}
++
++}
+diff --git a/UI/Haiku/PageView.cpp b/UI/Haiku/PageView.cpp
+index dabdec78..5d4a3fb9 100644
+--- a/UI/Haiku/PageView.cpp
++++ b/UI/Haiku/PageView.cpp
+@@ -50,6 +50,8 @@ void PageView::AttachedToWindow()
+     {
+         BAutolock locker(m_surface->lock);
+         m_surface->page_view = BMessenger(this);
++        m_surface->scroll_pending = false; // Invalidate() below repaints everything
++        m_surface->painted_while_scroll_pending = {};
+     }
+     m_surface->frame_message_pending = false;
+     Invalidate();
+@@ -128,6 +130,13 @@ void PageView::Draw(BRect update_rect)
+         SetDrawingMode(B_OP_COPY);
+         DrawBitmap(m_surface->bitmap, source, source);
+     }
++    // The bitmap already holds the frame after a pending blit; see PresentSurface::scroll_pending.
++    if (m_surface->scroll_pending) {
++        Gfx::IntRect painted { static_cast<int>(update_rect.left), static_cast<int>(update_rect.top),
++            update_rect.IntegerWidth() + 1, update_rect.IntegerHeight() + 1 };
++        auto& recorded = m_surface->painted_while_scroll_pending;
++        recorded = recorded.is_empty() ? painted : recorded.united(painted);
++    }
+     // Whatever the frame does not cover (mid-resize) gets the page background, as Qt's paintEvent does
+     // (UI/Qt/WebContentView.cpp:903-910).
+     if (update_rect.right > frame_rect.right)
+@@ -343,17 +352,40 @@ void PageView::MessageReceived(BMessage* message)
+ {
+     switch (message->what) {
+     case kMsgFrameReady: {
+-        BRect dirty;
++        Gfx::IntRect damage;
++        bool scroll = false;
++        int dy = 0;
++        Gfx::IntRect band; // blit destination
++        Gfx::IntRect stale;
+         {
+             BAutolock locker(m_surface->lock);
+             m_surface->frame_message_pending = false;
+-            auto damage = m_surface->damage;
++            damage = m_surface->damage;
+             m_surface->damage = {};
+-            if (damage.is_empty())
+-                return;
+-            dirty = BRect(damage.left(), damage.top(), damage.right() - 1, damage.bottom() - 1);
++            scroll = m_surface->scroll_pending;
++            if (scroll) {
++                dy = m_surface->scroll_dy;
++                band = { 0, m_surface->scroll_top, m_surface->size.width(), m_surface->scroll_bottom - m_surface->scroll_top };
++                stale = m_surface->painted_while_scroll_pending;
++                m_surface->scroll_pending = false;
++                m_surface->painted_while_scroll_pending = {};
++            }
++        }
++        auto to_brect = [](Gfx::IntRect rect) { return BRect(rect.left(), rect.top(), rect.right() - 1, rect.bottom() - 1); };
++        if (scroll) {
++            // #622. Reaches the wire as one RP_COPY_RECT instead of a full-view RP_DRAW_BITMAP. app_server copies only
++            // what is clean and re-dirties the rest at the destination (src/servers/app/Window.cpp:464-540), and the
++            // part not visible at both ends is invalidated for us.
++            CopyBits(to_brect(band.translated(0, dy)), to_brect(band));
++            // Pixels painted from the new frame before the blit were moved by it once more: paint them again.
++            if (!stale.is_empty()) {
++                auto moved = stale.translated(0, -dy).intersected(band);
++                if (!moved.is_empty())
++                    Invalidate(to_brect(moved));
++            }
+         }
+-        Invalidate(dirty);
++        if (!damage.is_empty())
++            Invalidate(to_brect(damage));
+         return;
+     }
+     case kMsgCursorChanged: {
+diff --git a/UI/Haiku/PresentSurface.h b/UI/Haiku/PresentSurface.h
+index c5a21e57..7aadb379 100644
+--- a/UI/Haiku/PresentSurface.h
++++ b/UI/Haiku/PresentSurface.h
+@@ -39,6 +39,16 @@ struct PresentSurface final : public AtomicRefCounted<PresentSurface> {
+     BBitmap* bitmap { nullptr };
+     Gfx::IntSize size;
+     Gfx::IntRect damage;                        // accumulated until [W] invalidates it
++    // A scroll [C] found by row comparison (DamageRefinement::find_vertical_shift, #622): before invalidating
++    // `damage`, [W] blits window rows [scroll_top + scroll_dy, scroll_bottom + scroll_dy) to [scroll_top, scroll_bottom).
++    // `bitmap` already holds the scrolled frame, so whatever [W] paints from it before the blit lands on the blit's
++    // source with the new frame's pixels, and the blit would then move them a second time. Draw() records each such
++    // paint in `painted_while_scroll_pending`, and [W] repaints that area again, shifted, after the blit.
++    bool scroll_pending { false };
++    int scroll_dy { 0 };
++    int scroll_top { 0 };
++    int scroll_bottom { 0 };
++    Gfx::IntRect painted_while_scroll_pending;
+     rgb_color background { 255, 255, 255, 255 };
+     BCursor* pending_cursor { nullptr };        // handed from [C] to [W]
+ 
+diff --git a/UI/Haiku/WebViewBridge.cpp b/UI/Haiku/WebViewBridge.cpp
+index 572af6af..feb5c458 100644
+--- a/UI/Haiku/WebViewBridge.cpp
++++ b/UI/Haiku/WebViewBridge.cpp
+@@ -13,6 +13,7 @@
+ #include <LibWebCommon/WebView/Utilities.h>
+ #include <LibWebView/WebContentPage.h>
+ #include <UI/Haiku/Application.h>
++#include <UI/Haiku/DamageRefinement.h>
+ #include <UI/Haiku/Messages.h>
+ #include <UI/Haiku/WebViewBridge.h>
+ 
+@@ -22,6 +23,9 @@
+ 
+ namespace Ladybird {
+ 
++// The shortest run of rows worth replaying as a blit instead of drawing (#622).
++static constexpr int minimum_scroll_rows = 32;
++
+ static Gfx::Color to_gfx_color(rgb_color color)
+ {
+     return Gfx::Color(color.red, color.green, color.blue, color.alpha);
+@@ -139,13 +143,49 @@ void WebViewBridge::present_front_bitmap()
+             m_present_needs_full_copy = true;
+         }
+ 
+-        auto copy_rect = m_present_needs_full_copy ? Gfx::IntRect { {}, size } : m_pending_damage.intersected({ {}, size });
++        auto full_rect = Gfx::IntRect { {}, size };
++        auto copy_rect = m_present_needs_full_copy ? full_rect : m_pending_damage.intersected(full_rect);
+         auto* destination = static_cast<u8*>(m_surface->bitmap->Bits());
+         auto destination_pitch = static_cast<size_t>(m_surface->bitmap->BytesPerRow());
+-        auto row_bytes = static_cast<size_t>(copy_rect.width()) * 4;
+-        for (int y = copy_rect.top(); y < copy_rect.bottom(); ++y)
+-            __builtin_memcpy(destination + y * destination_pitch + copy_rect.left() * 4, bitmap->scanline_u8(y) + copy_rect.left() * 4, row_bytes);
+-        m_surface->damage = m_surface->damage.is_empty() ? copy_rect : m_surface->damage.united(copy_rect);
++        Gfx::IntRect changed;
++        if (m_present_needs_full_copy) {
++            // A new BBitmap holds no frame the window has shown, so nothing in it can be compared against.
++            auto row_bytes = static_cast<size_t>(copy_rect.width()) * 4;
++            for (int y = copy_rect.top(); y < copy_rect.bottom(); ++y)
++                __builtin_memcpy(destination + y * destination_pitch + copy_rect.left() * 4, bitmap->scanline_u8(y) + copy_rect.left() * 4, row_bytes);
++            changed = copy_rect;
++            m_surface->scroll_pending = false; // the full repaint below supersedes a blit [W] has not run yet
++        } else {
++            // #622. Invariant: once [W] has run any pending blit and invalidated `damage`, the window shows exactly
++            // this BBitmap. So a pixel that is byte-identical in the new frame needs no repaint, whatever Ladybird
++            // reported, and only the pixels memcmp() proves different become damage.
++            DamageRefinement::VerticalShift shift;
++            // Ladybird reports the whole viewport on a scroll (Services/Compositor/ContextState.cpp,
++            // damage_since_last_raster). Look for the scroll only then, and not on top of an unreplayed one.
++            if (copy_rect == full_rect && !m_surface->scroll_pending && size.height() > 2 * minimum_scroll_rows) {
++                m_row_hashes.resize(2 * static_cast<size_t>(size.height()));
++                shift = DamageRefinement::find_vertical_shift(destination, destination_pitch, bitmap->scanline_u8(0), bitmap->pitch(),
++                    size.width(), size.height(), m_row_hashes.data(), minimum_scroll_rows);
++            }
++            auto rect = DamageRefinement::copy_changed(destination, destination_pitch, bitmap->scanline_u8(0), bitmap->pitch(),
++                { copy_rect.x(), copy_rect.y(), copy_rect.width(), copy_rect.height() }, shift.top, shift.bottom);
++            changed = { rect.x, rect.y, rect.width, rect.height };
++            if (shift.is_valid()) {
++                m_surface->scroll_pending = true;
++                m_surface->scroll_dy = shift.dy;
++                m_surface->scroll_top = shift.top;
++                m_surface->scroll_bottom = shift.bottom;
++                // Damage [W] has not invalidated yet is still stale on screen, and the blit carries it along: treat it
++                // like a paint made while the blit was pending.
++                m_surface->painted_while_scroll_pending = m_surface->damage;
++            }
++            if (changed.is_empty() && !shift.is_valid()) {
++                m_pending_damage = {};
++                return; // the frame is byte-identical to what the window shows
++            }
++        }
++        if (!changed.is_empty())
++            m_surface->damage = m_surface->damage.is_empty() ? changed : m_surface->damage.united(changed);
+     }
+     m_pending_damage = {};
+     m_present_needs_full_copy = false;
+diff --git a/UI/Haiku/WebViewBridge.h b/UI/Haiku/WebViewBridge.h
+index ee9067c7..d021418e 100644
+--- a/UI/Haiku/WebViewBridge.h
++++ b/UI/Haiku/WebViewBridge.h
+@@ -8,6 +8,7 @@
+ 
+ #include <AK/NonnullOwnPtr.h>
+ #include <AK/NonnullRefPtr.h>
++#include <AK/Vector.h>
+ #include <LibGfx/Size.h>
+ #include <LibWebView/ViewImplementation.h>
+ #include <UI/Haiku/PresentSurface.h>
+@@ -74,6 +75,7 @@ private:
+     bool m_viewport_push_pending { false };
+     Gfx::IntRect m_pending_damage;
+     bool m_present_needs_full_copy { true };
++    Vector<u64> m_row_hashes; // scratch for DamageRefinement::find_vertical_shift
+ };
+ 
+ }
