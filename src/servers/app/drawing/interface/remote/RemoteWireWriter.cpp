@@ -148,6 +148,7 @@ RemoteWireWriter::RemoteWireWriter(StreamingRingBuffer* target)
 	fQueue(),
 	fPlainBytes(0),
 	fWireBytes(0),
+	fDeliveredBytes(0),
 	fMessages(0),
 	fExemptMessages(0),
 	fFlushes(0),
@@ -393,7 +394,8 @@ RemoteWireWriter::Reset()
 
 	_ResetCodec();
 
-	fPlainBytes = fWireBytes = fMessages = fExemptMessages = fFlushes = 0;
+	fPlainBytes = fWireBytes = fDeliveredBytes = fMessages = fExemptMessages
+		= fFlushes = 0;
 	fEncodeTime = 0;
 	fLastReport = 0;
 }
@@ -433,6 +435,15 @@ RemoteWireWriter::TakeResyncOwed()
 		return false;
 
 	if (!fQueue.ResyncOwed())
+		return false;
+
+	// Held, not reported, while nobody is reading. A repair emitted now would
+	// itself be dropped (see _WriteLocked()), and reporting the debt would latch
+	// it again on the very next message -- one syslog line and one futile repair
+	// request per frame for as long as no client is attached (#617). The debt
+	// is retired by Reset() at the next connection boundary, whose replay and
+	// full repaint are what pay it.
+	if (!fTarget->HasReader())
 		return false;
 
 	fQueue.ClearResyncOwed();
@@ -478,6 +489,10 @@ RemoteWireWriter::GetFlowDepth(size_t& _messages, size_t& _bytes) const
 	the caller believed it sent, and the client that connected later was never
 	told. Now there is nowhere for a message to vanish that is not a counted,
 	bounded, resync-forcing policy decision.
+
+	With no reader the queue still takes messages, but only until its bound
+	collapses it once; from then until the next connection boundary messages
+	are dropped on arrival, which the latched debt already accounts for.
 */
 status_t
 RemoteWireWriter::_WriteLocked(const void* buffer, size_t length)
@@ -487,16 +502,70 @@ RemoteWireWriter::_WriteLocked(const void* buffer, size_t length)
 
 	fQueue.Observe(buffer, length);
 
+	// Nobody is reading and the queue has already collapsed for it: whatever
+	// arrives now cannot reach a client before the debt is paid, and the only
+	// thing that pays it is the next connection -- _NewConnection() calls
+	// Reset(), which drops the queue and the debt, then replays state, and the
+	// client repaints the whole screen. Queueing here bought a malloc and a copy
+	// per message and, at the bound, coalesce and supersede scans under fLock
+	// and another collapse: ~240 a second with an animating app and no client
+	// (#617). So drop it here, in O(1). The debt stays latched, and
+	// TakeResyncOwed() holds it while there is no reader.
+	//
+	// Keyed on the debt, not on the missing reader alone, for the window between
+	// Reset() and NetSender's SetReader() in _NewConnection(). Reset() has just
+	// cleared the debt, so output there is still queued and is drained to the new
+	// client in order, as before. Dropping it would latch a debt that the first
+	// Invalidate() after connect reports, adding an RP_RESYNC barrier and a
+	// whole-desktop repaint to every connect -- and it would drop silently an
+	// RP_CREATE_STATE racing _ReplayState() (RemoteDrawingEngine's constructor
+	// emits it before RegisterDrawingEngine()). The cost of keying on the debt is
+	// one bounded fill and one collapse per period with no client, instead of one
+	// per bound's worth of output.
+	//
+	// What the queue still holds here stays until Reset() frees it: freeing it
+	// now would count a second collapse for one discard.
+	if (fQueue.ResyncOwed() && !fTarget->HasReader())
+		return B_OK;
+
 	if (!fQueue.IsEmpty()) {
 		_DrainQueue();
 		if (!fQueue.IsEmpty())
-			return fQueue.Enqueue(buffer, length, find_thread(NULL));
+			return _Enqueue(buffer, length);
 	}
 
 	if (!_CanDeliver(length) && !_LargerThanTheRing(length))
-		return fQueue.Enqueue(buffer, length, find_thread(NULL));
+		return _Enqueue(buffer, length);
 
 	return _Deliver(buffer, length);
+}
+
+
+/*!	Queues one message, with the queue's byte bound first restated in the unit
+	it was derived in: bytes of stream still owed to the link.
+
+	On a plain connection that is the message's own length, so the bound is
+	RemoteFlowQueue::kMaxBytes as it always was. On a compressed one a queued
+	plain byte costs the link only 1/ratio of a byte, and a bound left in plain
+	bytes held ~40 kB of stream under an animating browser and collapsed about a
+	hundred times sooner than the bound means (M1: 6.55 GB plain, 73 MB wire).
+	So scale it by the ratio this connection has actually achieved, up to the
+	memory ceiling RemoteFlowQueue::kMaxPlainBytes.
+
+	Only while there is a reader. Without one nothing queued will be delivered
+	and there is no stream to measure against, so the bound stays at kMaxBytes
+	of plain: the no-client fill that ends in the one collapse _WriteLocked()
+	then drops after is the same 4 MiB as before.
+*/
+status_t
+RemoteWireWriter::_Enqueue(const void* buffer, size_t length)
+{
+	size_t bound = RemoteFlowQueue::kMaxBytes;
+	if (fCapability != 0 && fTarget->HasReader())
+		bound = RemoteFlowQueue::ByteBoundFor(fDeliveredBytes, fWireBytes);
+
+	fQueue.SetMaxBytes(bound);
+	return fQueue.Enqueue(buffer, length, find_thread(NULL));
 }
 
 
@@ -507,6 +576,16 @@ RemoteWireWriter::_WriteLocked(const void* buffer, size_t length)
 	the compressed form of a message is at worst marginally larger than the
 	plain form and is emitted in segments of at most kOutputBufferSize, so that
 	headroom bounds the expansion for any message the ring could hold at all.
+
+	Plain length on purpose, even though the ring holds compressed bytes and the
+	typical message needs ~1/100 of it: it is the only static upper bound, and
+	that is what keeps a delivered message from parking in a blocking Write()
+	with fLock held, which would stall every drawing thread behind a slow link.
+	The queue's byte bound, not this gate, is where the ratio belongs (see
+	_Enqueue()). One known gap: under ZSTD_e_continue a call can also emit up to
+	one block (128 KiB) of earlier messages' buffered input, more than the
+	headroom here, so a rare Write() can wait for the drain. It still writes
+	whole segments; it is the pre-queue behaviour, not a tear.
 */
 bool
 RemoteWireWriter::_CanDeliver(size_t length) const
@@ -587,6 +666,7 @@ RemoteWireWriter::_Deliver(const void* buffer, size_t length)
 {
 	if (fCapability == 0) {
 		fWireBytes += length;
+		fDeliveredBytes += length;
 		return fTarget->Write(buffer, length);
 	}
 
@@ -617,6 +697,9 @@ RemoteWireWriter::_Deliver(const void* buffer, size_t length)
 			result = _WriteRawSegment(buffer, length);
 	} else
 		result = _WriteCompressed(buffer, length, _MustFlushNow(code));
+
+	if (result == B_OK)
+		fDeliveredBytes += length;
 
 	_MaybeReportStatistics();
 	return result;

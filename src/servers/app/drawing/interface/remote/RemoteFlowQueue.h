@@ -90,9 +90,38 @@ public:
 				above anything a healthy session produces: the queue exists for
 				a reader that stopped, not for ordinary burstiness, and a bound
 				that a real session can reach is a bound that turns latency into
-				corruption-adjacent policy for no reason. */
+				corruption-adjacent policy for no reason.
+
+				Those figures were all measured on a plain wire, where a byte
+				queued is a byte the link still owes, so kMaxBytes is a bound on
+				*undelivered stream* (the M2 design states it as "at most ~5 MiB
+				of undelivered stream" with the 1 MiB ring in front). The queue
+				sits upstream of the compressor and holds plain bytes, so on a
+				compressed connection the same 4 MiB of plain is only 4 MiB
+				divided by the ratio of stream -- ~40 kB at the 90-180x measured
+				under an animating browser -- and the bound collapses about that
+				many times too early. The owner therefore states the byte bound
+				with SetMaxBytes(), using ByteBoundFor() on a compressed
+				connection that has a reader and kMaxBytes otherwise. */
 	static	const size_t		kMaxMessages = 32768;
 	static	const size_t		kMaxBytes = 4 * 1024 * 1024;
+
+			/*!	The ceiling on queued *plain* bytes, i.e. on memory, whatever
+				the compression ratio says. 8x kMaxBytes: the whole bound in
+				stream terms is honoured for any ratio up to 8x, which covers the
+				interactive census (5.16x at the shipped drain window), and above
+				that memory wins -- at 100x, 4 MiB of stream would be 400 MiB of
+				app_server heap. The message bound is unchanged and still caps
+				the scans _EnforceBound() runs under the writer's lock. */
+	static	const size_t		kMaxPlainBytes = 8 * kMaxBytes;
+
+			/*!	The plain byte bound that holds kMaxBytes of *stream*, given
+				that \a plainBytes of messages became \a wireBytes on the ring
+				on this connection: kMaxBytes times the (floored) ratio, never
+				below kMaxBytes and never above kMaxPlainBytes. Pure, so the
+				arithmetic is tested off-target. */
+	static	size_t				ByteBoundFor(uint64 plainBytes,
+									uint64 wireBytes);
 
 								RemoteFlowQueue(size_t maxMessages = kMaxMessages,
 									size_t maxBytes = kMaxBytes);
@@ -108,6 +137,14 @@ public:
 			void				SetExplicitBoundaries(bool explicitBoundaries);
 			bool				ExplicitBoundaries() const
 									{ return fExplicitBoundaries; }
+
+			/*!	Replaces the byte bound. Takes effect at the next Enqueue(): a
+				queue already over a lowered bound runs the overflow policy
+				then, exactly as if it had just grown past it. Reset() leaves
+				the bound alone; the owner restates it. */
+			void				SetMaxBytes(size_t maxBytes)
+									{ fMaxBytes = maxBytes; }
+			size_t				MaxBytes() const { return fMaxBytes; }
 
 			/*!	Updates the tracking state this class needs from a message that
 				is NOT being queued -- i.e. one that went straight to the ring.

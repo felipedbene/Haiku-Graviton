@@ -22,7 +22,7 @@ The charter, verbatim from §10:
 | **What is queued** | whole framed `RP` messages, never bytes |
 | **Where** | `RemoteFlowQueue`, inside `RemoteWireWriter`, **upstream of the compressor** |
 | **When it engages** | when the send ring has no reader, or less free space than the message plus one staging buffer |
-| **Bound** | **32768 messages** and **4 MiB**, whichever is reached first, plus at most one oversized message |
+| **Bound** | **32768 messages** and **4 MiB of stream**, whichever is reached first, plus at most one oversized message; on a compressed connection with a reader the byte bound is scaled to plain bytes by the measured ratio, up to a **32 MiB** plain ceiling |
 | **At the bound** | coalesce → supersede → collapse, in that order |
 | **Coalesce** | an `RP_SET_*` / `RP_CONSTRAIN_CLIPPING_REGION` / `RP_MOVE_CURSOR_TO` that a later message in the same frame, from the same emitter, for the same token, sets again with nothing in between that could have observed it |
 | **Supersede** | a whole frame, if it is closed, contains nothing but pure pixel producers, declares a non-empty damage region, has no surface-reading op after it anywhere in the queue, and its damage is covered by the union of the damage of the later frames that will be kept |
@@ -280,6 +280,20 @@ reader that stopped, not for ordinary burstiness, and a bound a real session can
 reach is a bound that converts latency into policy for no reason. With the 1 MiB
 send ring in front of it, a session holds at most ~5 MiB of undelivered stream.
 
+**4 MiB is stream, not plain.** Every figure above was measured on a plain wire,
+where the two are the same. Under `RP_CAP_COMPRESS_ZSTD` they are not: the queue
+sits upstream of the compressor and holds plain bytes, so 4 MiB of plain was ~40 kB
+of stream at the 90-180x an animating browser compresses to (M1 of the 2026-10-07
+evidence: 6.55 GB plain, 73 MB wire, 849 collapses), and the bound tripped about a
+hundred times early. `RemoteWireWriter::_Enqueue()` now restates it before each
+enqueue with `RemoteFlowQueue::ByteBoundFor()`: kMaxBytes times this connection's
+floored ratio (plain bytes delivered over wire bytes written), never below 4 MiB and
+never above `kMaxPlainBytes` = 32 MiB, which is a memory ceiling. With no reader, or
+no compression, the bound is 4 MiB of plain as before. The message bound is
+unchanged. `_CanDeliver()` deliberately still compares plain length against ring
+space: it is the only static upper bound, and the guarantee it buys is that a
+delivered message never waits in `Write()` with the writer lock held.
+
 **A single message is never split to fit.** If one message is larger than the
 whole bound, the queue collapses and then holds that one message alone, so the
 effective bound is "4 MiB plus one message". A larger bound is a cost; a split
@@ -322,6 +336,17 @@ reaches there at all: a collapse while no client is attached is dropped at the
 connection boundary, because `_NewConnection()` replays state and the arriving
 client repaints the whole screen anyway.
 
+**With no reader the queue fills once, then drops (#617).** Once a collapse has
+latched the debt and the send ring still has no reader, `_WriteLocked()` drops each
+further message on arrival, in O(1), and `TakeResyncOwed()` holds the debt instead of
+reporting it, until `Reset()` at the next connection boundary retires both. A
+headless guest therefore pays one bounded fill and one collapse per period without a
+client, not one collapse per bound's worth of output (measured before this change:
+~240 a second with an animating app). The drop is keyed on the debt, not on the
+missing reader alone, so the gap between `Reset()` and the new `NetSender`'s
+`SetReader()` in `_NewConnection()` is still queued and delivered in order, and a
+connect does not cost an extra `RP_RESYNC` and repaint.
+
 ---
 
 ## 6. Verification
@@ -334,8 +359,8 @@ off-target with a host compiler. Flow control that can only be exercised by
 booting an image is flow control nobody tests.
 
 ```
-src/tests/servers/app/remote_flow_queue/run.sh            -> PASS  78 checks, 0 failures
-src/tests/servers/app/remote_flow_queue/mutation_test.sh  -> mutants killed 12, survived 0
+src/tests/servers/app/remote_flow_queue/run.sh            -> PASS  90 checks, 0 failures
+src/tests/servers/app/remote_flow_queue/mutation_test.sh  -> mutants killed 16, survived 0
 ```
 
 The test includes the awkward cases by name: overflow with a frame left open,

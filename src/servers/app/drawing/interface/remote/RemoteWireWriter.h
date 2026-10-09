@@ -114,7 +114,11 @@ public:
 				Test-and-clear rather than a callback, because the repair
 				(RP_RESYNC plus a state replay) has to be emitted *through* this
 				object and so cannot run while its lock is held. The owner polls
-				this from a place where it is safe to write. */
+				this from a place where it is safe to write.
+
+				Returns false, and keeps the debt, while the send ring has no
+				reader: there is nobody to repair for until the next connection,
+				and that connection's Reset() retires the debt. */
 			bool				TakeResyncOwed();
 
 			/*!	Flow-control counters for the connection: messages queued,
@@ -147,6 +151,7 @@ private:
 			status_t			_Deliver(const void* buffer, size_t length);
 			bool				_CanDeliver(size_t length) const;
 			bool				_LargerThanTheRing(size_t length) const;
+			status_t			_Enqueue(const void* buffer, size_t length);
 			void				_DrainQueue();
 			status_t			_DrainQueueWaiting();
 			status_t			_WriteCompressed(const void* buffer,
@@ -228,6 +233,12 @@ private:
 
 			uint64				fPlainBytes;
 			uint64				fWireBytes;
+
+			// Plain bytes of the messages that reached the ring, i.e. the
+			// input fWireBytes is the output of. Unlike fPlainBytes it leaves
+			// out what the queue discarded, so their ratio is the stream's
+			// real compression ratio, which the queue's bound is scaled by.
+			uint64				fDeliveredBytes;
 			uint64				fMessages;
 			uint64				fExemptMessages;
 			uint64				fFlushes;
