@@ -346,8 +346,13 @@ WebSocketStream::Relay(WebSocketStream& webSocket, TLSStream& stream,
 	int plainSocket)
 {
 	// Bound on a blocked relay write; a peer that stalls the stream this
-	// long is gone or hostile either way.
-	static const bigtime_t kRelayWriteTimeout = 30 * 1000 * 1000;
+	// long is gone or hostile either way. It must stay BELOW app_server's
+	// zero-progress drop (kSendStallTimeout, 15 s, NetSender.cpp:34): while
+	// this write blocks the relay reads nothing from app_server, so a longer
+	// bound here only lets app_server give up first and blame the loopback
+	// hop for a stall that is on the client link. One WriteAll carries at
+	// most one 16 KiB frame, so this is effectively a zero-progress bound.
+	static const bigtime_t kRelayWriteTimeout = 10 * 1000 * 1000;
 
 	// A *read* of the client direction must not block for long, even with a
 	// partial frame in hand: the two directions share this thread, so a
@@ -388,8 +393,13 @@ WebSocketStream::Relay(WebSocketStream& webSocket, TLSStream& stream,
 			ssize_t read = recv(plainSocket, buffer, sizeof(buffer), 0);
 			if (read <= 0)
 				return;
-			if (webSocket.WriteAll(buffer, read,
-					system_time() + kRelayWriteTimeout) != B_OK) {
+			status_t writeResult = webSocket.WriteAll(buffer, read,
+				system_time() + kRelayWriteTimeout);
+			if (writeResult != B_OK) {
+				if (writeResult == B_TIMED_OUT) {
+					TRACE_ERROR("client accepted no data for %" B_PRId64
+						" us, dropping session\n", kRelayWriteTimeout);
+				}
 				return;
 			}
 		}
