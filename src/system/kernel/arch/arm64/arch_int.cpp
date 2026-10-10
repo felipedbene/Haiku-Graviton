@@ -152,10 +152,14 @@ TableFromPa(phys_addr_t pa)
 // is only safe because it runs with IRQs masked (from exception entry until
 // do_sync_handler() enables them): VMSAv8TranslationMap::FlushReclaimBatch()
 // waits for a synchronous ICI on every other CPU before it frees an unlinked
-// table. Do not enable interrupts before calling this.
+// table. Do not enable interrupts before calling this; the ASSERT below turns
+// a violation into a panic on KDEBUG kernels instead of a silent write into a
+// freed and reused page.
 static bool
 fixup_entry(phys_addr_t ptPa, int level, addr_t va, bool wr)
 {
+	ASSERT(!are_interrupts_enabled());
+
 	int tableBits = page_bits - 3;
 	uint64_t tableMask = (1UL << tableBits) - 1;
 
