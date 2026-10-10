@@ -355,6 +355,10 @@ process_ancillary_data(net_socket* socket, ancillary_data_container* container,
 	int dataBufferLen = messageHeader->msg_controllen;
 
 	if (container == NULL || dataBuffer == NULL) {
+		// ancillary data the caller left no room for is discarded, and
+		// reported like any other truncation (POSIX, as on Linux)
+		if (container != NULL)
+			messageHeader->msg_flags |= MSG_CTRUNC;
 		messageHeader->msg_controllen = 0;
 		return B_OK;
 	}
