@@ -635,11 +635,18 @@ TCPEndpoint::Close()
 		return B_OK;
 	}
 
-	// handle linger with zero timeout
+	// handle linger with zero timeout: an abortive close (RFC 793 ABORT),
+	// which tells the peer with a RST and discards what is still queued.
+	// The RST has to be sent through _SendReset(): _SendQueued() refuses to
+	// send anything once the state is CLOSED, so a peer never learnt of the
+	// abort until its next send bounced off the vanished endpoint.
 	if ((socket->options & SO_LINGER) != 0 && socket->linger == 0) {
+		bool sendReset = fState != CLOSED && fState != TIME_WAIT;
 		fState = CLOSED;
 		T(State(this));
-		return _SendQueued(true);
+		if (sendReset)
+			_SendReset(true);
+		return B_OK;
 	}
 
 	status_t status = _Disconnect(true);
