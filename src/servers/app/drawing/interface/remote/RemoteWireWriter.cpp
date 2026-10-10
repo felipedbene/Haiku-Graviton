@@ -59,6 +59,15 @@ static const int kWindowLog = 20;
 static const size_t kSegmentHeaderReserve = REMOTE_SEGMENT_MAX_VARINT_SIZE;
 static const size_t kOutputBufferSize = 64 * 1024 + kSegmentHeaderReserve;
 
+// Ring space the flusher requires before it closes a window, so that the flush
+// cannot park in a blocking ring Write() with fLock held. A flush emits what the
+// compressor is holding of messages already admitted to the stream: at most one
+// zstd block (128 KiB) of buffered input, at worst marginally expanded (zstd's
+// own bound for a block is under 1/256 extra), framed in segments whose headers
+// the one staging buffer of slack covers.
+static const size_t kFlushHeadroom = 128 * 1024 + 128 * 1024 / 128
+	+ kOutputBufferSize;
+
 // At most one statistics line per this interval. The serial console on the
 // target is write-bound, so the instrumentation has to cost bytes it can afford.
 static const bigtime_t kStatisticsInterval = 5 * 1000 * 1000;
@@ -994,6 +1003,21 @@ RemoteWireWriter::_Flusher()
 			bool quiet = fWindowMessages == seen;
 			bool expired = system_time() - fWindowOpened >= fFlushWindow;
 			if (quiet || expired) {
+				// Every other outbound path is gated on ring space, and this one
+				// has to be too: a slow but reading client would otherwise hold
+				// the flush in a blocking Write() with fLock held, stalling every
+				// drawing thread for as long as the link takes to drain. The
+				// bytes cannot be queued or dropped instead -- they are the tail
+				// of messages already inside the zstd stream -- so the window
+				// stays open and is retried next interval; a message that runs
+				// it out closes it sooner. Without a reader the ring discards
+				// rather than blocks, so the flush is let through as before.
+				if (fTarget->HasReader()
+					&& fTarget->FreeSpace() < kFlushHeadroom) {
+					seen = fWindowMessages;
+					continue;
+				}
+
 				_FlushLocked();
 				break;
 			}
