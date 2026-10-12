@@ -943,7 +943,8 @@ TCPEndpoint::SendData(net_buffer *buffer)
 	}
 
 	while (left > 0) {
-		while (fSendQueue.Free() < socket->send.low_water_mark) {
+		size_t wanted = socket->send.low_water_mark;
+		while (fSendQueue.Free() < wanted) {
 			// initiate a send before waiting
 			_SendQueued();
 
@@ -959,6 +960,16 @@ TCPEndpoint::SendData(net_buffer *buffer)
 				return _ClosedSendStatus();
 			if (!is_writable(fState) && !is_establishing(fState))
 				return EPIPE;
+
+			// Once the full queue has made this writer wait, it resumes only
+			// with room for a real chunk: a third of the queue, or the rest of
+			// this write if that is less (_SendResumeThreshold()). Waking it
+			// for every freed sliver made the stream dribble whenever the
+			// bandwidth-delay product exceeds the send buffer -- behind a deep
+			// bottleneck queue each ACK freed ~1-2 segments' worth, the writer
+			// queued just that, and it left as its own runt (#639).
+			wanted = max_c((size_t)socket->send.low_water_mark,
+				min_c(left, _SendResumeThreshold()));
 		}
 
 		size_t size = fSendQueue.Free();
@@ -1011,9 +1022,14 @@ TCPEndpoint::SendAvailable()
 
 	ssize_t available = 0;
 
-	if (is_writable(fState))
+	if (is_writable(fState)) {
+		// select()/poll() see the queue writable at the same threshold a
+		// blocked send() resumes at, so an O_NONBLOCK writer does not dribble
+		// either (Linux: sk_stream_is_writeable()).
 		available = fSendQueue.Free();
-	else if (is_establishing(fState))
+		if ((size_t)available < _SendResumeThreshold())
+			available = 0;
+	} else if (is_establishing(fState))
 		available = 0;
 	else if ((fFlags & FLAG_CAN_NOTIFY) != 0)
 		available = EPIPE;
@@ -1280,6 +1296,18 @@ TCPEndpoint::_ClosedReadStatus() const
 	if (fFinishReceived)
 		return B_OK;
 	return ENOTCONN;
+}
+
+
+/*!	How much of the send queue must be free before a writer the full queue
+	stopped is let in again (blocked send(), select()/poll() writability):
+	a third of it, like Linux's sk_stream_min_wspace() (free >= queued / 2),
+	and never less than SO_SNDLOWAT.
+*/
+size_t
+TCPEndpoint::_SendResumeThreshold() const
+{
+	return max_c((size_t)socket->send.low_water_mark, fSendQueue.Size() / 3);
 }
 
 
@@ -3617,7 +3645,9 @@ TCPEndpoint::_Acknowledged(tcp_segment_header& segment)
 		if (is_writable(fState)) {
 			// notify threads waiting on the socket to become writable again
 			fSendCondition.NotifyAll();
-			gSocketModule->notify(socket, B_SELECT_WRITE, fSendQueue.Free());
+			size_t freeBytes = fSendQueue.Free();
+			gSocketModule->notify(socket, B_SELECT_WRITE,
+				freeBytes >= _SendResumeThreshold() ? freeBytes : 0);
 		}
 	}
 

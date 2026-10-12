@@ -134,6 +134,7 @@ private:
 			bool		_ShouldReceive() const;
 			status_t	_ClosedReadStatus() const;
 			status_t	_ClosedSendStatus();
+			size_t		_SendResumeThreshold() const;
 			void		_HandleReset(status_t error);
 			int32		_Spawn(TCPEndpoint* parent, tcp_segment_header& segment,
 							net_buffer* buffer);
