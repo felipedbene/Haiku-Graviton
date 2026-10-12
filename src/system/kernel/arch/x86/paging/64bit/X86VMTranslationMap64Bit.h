@@ -34,6 +34,9 @@ struct X86VMTranslationMap64Bit : X86VMTranslationMap {
 	virtual	void				UnmapPages(VMArea* area, addr_t base,
 									size_t size, bool updatePageQueue,
 									bool deletingAddressSpace);
+	virtual	void				UnmapArea(VMArea* area,
+									bool deletingAddressSpace,
+									bool ignoreTopCachePageFlags);
 
 	virtual	status_t			Query(addr_t virtualAddress,
 									phys_addr_t* _physicalAddress,
@@ -60,6 +63,19 @@ struct X86VMTranslationMap64Bit : X86VMTranslationMap {
 	virtual	X86PagingStructures* PagingStructures() const;
 	inline	X86PagingStructures64Bit* PagingStructures64Bit() const
 									{ return fPagingStructures; }
+
+private:
+			struct ReclaimBatch {
+				static const int	kMaxTables = 32;
+				phys_addr_t			tables[kMaxTables];
+				int					count;
+			};
+
+			void				_ReclaimEmptyTables(addr_t va, size_t size);
+			bool				_ReclaimEmptyTables(uint64* table, int level,
+									addr_t va, size_t size,
+									ReclaimBatch& batch);
+			void				_FlushReclaimBatch(ReclaimBatch& batch);
 
 private:
 			X86PagingStructures64Bit* fPagingStructures;

@@ -462,6 +462,193 @@ X86VMTranslationMap64Bit::UnmapPages(VMArea* area, addr_t base, size_t size,
 		| (isKernelSpace ? CACHE_DONT_LOCK_KERNEL_SPACE : 0);
 	while (vm_page_mapping* mapping = queue.RemoveHead())
 		vm_free_page_mapping(mapping->page->physical_page_number, mapping, freeFlags);
+
+	// munmap() of part of an area (cut_area()) and resize_area() shrinking
+	// arrive here, not in UnmapArea().
+	if (!deletingAddressSpace)
+		_ReclaimEmptyTables(base, size);
+}
+
+
+void
+X86VMTranslationMap64Bit::UnmapArea(VMArea* area, bool deletingAddressSpace,
+	bool ignoreTopCachePageFlags)
+{
+	X86VMTranslationMap::UnmapArea(area, deletingAddressSpace,
+		ignoreTopCachePageFlags);
+
+	// A dying address space frees every table at once in the destructor.
+	// Device and wired areas went through UnmapPages() above
+	// (VMTranslationMap.cpp:93), which has already reclaimed their range.
+	if (deletingAddressSpace || area->cache_type == CACHE_TYPE_DEVICE
+		|| area->wiring != B_NO_LOCK) {
+		return;
+	}
+
+	_ReclaimEmptyTables(area->Base(), area->Size());
+}
+
+
+/*!	Frees the paging structures (page tables, page directories, PDPTs and, with
+	LA57, PML4s) under [va, va + size) that no longer hold any entry.
+
+	Before this, nothing freed a table before the whole map died (the
+	destructor above), so every table stayed allocated for as long as the team
+	lived. Area placement is randomised over a 512 GiB window
+	(VMUserAddressSpace.cpp:36, kMaxRandomize) and libroot's large allocations
+	ask for B_RANDOMIZED_ANY_ADDRESS (PagesAllocator.cpp:355), so nearly every
+	new area lands in a 2 MiB and a 1 GiB slot no earlier area touched: each
+	create/delete cycle left a page table and usually a page directory behind,
+	8 KiB of wired memory in no area and no cache, released only at team exit.
+	The same defect, and this same design, as arm64's
+	VMSAv8TranslationMap::ReclaimEmptyTables() (#629, #632).
+
+	Walkers of a user map, and why none can be inside a table we free:
+	- Map, Query, Protect, ClearFlags, ClearAccessedAndModified, Unmap*: their
+	  callers hold fLock (vm.cpp locks the map around every one), as do we.
+	- The hardware walker on any CPU, including its paging-structure caches.
+	  We clear the parent entry first, then invalidate a VA inside the freed
+	  slot on every CPU the map is active on (_FlushReclaimBatch() -> Flush(),
+	  a synchronous ICI) before the page goes back to the allocator. INVLPG
+	  invalidates the paging-structure-cache entries for that address (Intel
+	  SDM vol. 3 4.10.4.1; AMD APM vol. 2 5.5.2), and a CPU the map is not
+	  active on holds none: Haiku never enables PCID (IA32_CR4_PCIDE is defined
+	  but not set, arch_cpu.h:481), so loading another CR3 flushed them. A walk
+	  in flight when the ICI arrives completes before the handler runs, since
+	  interrupts are taken at instruction boundaries.
+	- Unlike arm64 there is no software walker that runs without fLock: the
+	  hardware sets the accessed and dirty bits itself, so there is no
+	  fixup_entry() equivalent and no extra quiescence is needed.
+	- QueryInterrupt() from KDL: read-only, other CPUs stopped; residual.
+
+	Called with the map unlocked; takes fLock. The caller may hold VMCache
+	locks and the address space lock: freeing a wired page only takes the
+	page-queue locks, which nest inside both (Map() allocates tables under the
+	same locks, X86PagingMethod64Bit.cpp:243).
+*/
+void
+X86VMTranslationMap64Bit::_ReclaimEmptyTables(addr_t va, size_t size)
+{
+	// The kernel map keeps its tables: it is never destroyed, its top-level
+	// entries are copied into every user map (Init() above), and it does not
+	// churn VA like a user address space does.
+	if (fIsKernelMap || size == 0 || fPagingStructures == NULL)
+		return;
+
+	RecursiveLocker locker(fLock);
+	ThreadCPUPinner pinner(thread_get_current_thread());
+
+	ReclaimBatch batch;
+	batch.count = 0;
+	// The top-level table itself stays: it is what CR3 points at.
+	_ReclaimEmptyTables(fPagingStructures->VirtualPMLTop(), fLA57 ? 4 : 3,
+		va, size, batch);
+	_FlushReclaimBatch(batch);
+}
+
+
+/*!	Walks  table, of  level (0 = page table, 1 = page directory,
+	2 = PDPT, 3 = PML4, 4 = PML5), over [va, va + size), recursing first so
+	that emptiness propagates upwards, and unlinks each child table that ends
+	up holding no entry at all, queueing it on  batch to be freed. Returns
+	whether  table is now entirely empty (the caller decides whether to
+	unlink it). Only present, non-large entries are descended into, so the
+	cost is bounded by the tables that actually exist under the range.
+*/
+bool
+X86VMTranslationMap64Bit::_ReclaimEmptyTables(uint64* table, int level,
+	addr_t va, size_t size, ReclaimBatch& batch)
+{
+	const int topLevel = fLA57 ? 4 : 3;
+	bool childSurvived = false;
+
+	if (level > 0) {
+		// Each entry of a level-n table maps 4 KiB << (9 * n).
+		const int shift = 12 + 9 * level;
+		const uint64 entrySize = 1ULL << shift;
+		const uint64 end = va + size - 1;
+
+		for (uint64 slotVa = va & ~(entrySize - 1); slotVa <= end;
+				slotVa += entrySize) {
+			uint64* entryPointer = &table[(slotVa >> shift)
+				% k64BitTableEntryCount];
+			uint64 entry = *(volatile uint64*)entryPointer;
+			if ((entry & X86_64_PDE_PRESENT) == 0)
+				continue;
+			if (level <= 2 && (entry & X86_64_PDE_LARGE_PAGE) != 0) {
+				// A 2 MiB or 1 GiB page, not a table.
+				childSurvived = true;
+				continue;
+			}
+
+			uint64 subStart = slotVa > va ? slotVa : va;
+			uint64 subEnd = slotVa + entrySize - 1 < end
+				? slotVa + entrySize - 1 : end;
+			phys_addr_t subTable = entry & X86_64_PDE_ADDRESS_MASK;
+				// the address mask is the same at every level (paging.h)
+			if (!_ReclaimEmptyTables(
+					(uint64*)fPageMapper->GetPageTableAt(subTable), level - 1,
+					subStart, subEnd - subStart + 1, batch)) {
+				childSurvived = true;
+				continue;
+			}
+
+			// Unlink, then queue an invalidation of a VA inside the slot: the
+			// page itself is freed only after _FlushReclaimBatch() has made
+			// every CPU drop what it cached of the old entry.
+			X86PagingMethod64Bit::ClearTableEntry(entryPointer);
+			InvalidatePage(slotVa);
+			// Allocating a table counts in fMapCount
+			// (X86PagingMethod64Bit.cpp:257, :288, :318, :381).
+			fMapCount--;
+
+			batch.tables[batch.count++] = subTable;
+			if (batch.count == ReclaimBatch::kMaxTables)
+				_FlushReclaimBatch(batch);
+		}
+	}
+
+	// The top-level table is never freed, and a table with a surviving child
+	// in range cannot be empty: skip the scan in both cases.
+	if (childSurvived || level == topLevel)
+		return false;
+
+	for (uint32 i = 0; i < k64BitTableEntryCount; i++) {
+		if (*(volatile uint64*)&table[i] != 0)
+			return false;
+	}
+	return true;
+}
+
+
+/*!	Frees the tables queued on  batch, which are already unlinked, after the
+	TLB shootdown that makes every CPU forget them. Called with fLock held and
+	the thread pinned.
+*/
+void
+X86VMTranslationMap64Bit::_FlushReclaimBatch(ReclaimBatch& batch)
+{
+	if (batch.count == 0)
+		return;
+
+	// Synchronous: invalidates the queued VAs (or the whole user TLB, past
+	// PAGE_INVALIDATE_CACHE_SIZE) on every CPU in active_on_cpus, this one
+	// included, and returns only when they all have.
+	Flush();
+
+	vm_page_reservation reservation = {};
+	for (int i = 0; i < batch.count; i++) {
+		vm_page* page = vm_lookup_page(batch.tables[i] / B_PAGE_SIZE);
+		if (page == NULL) {
+			panic("reclaimed paging structure on invalid page %#"
+				B_PRIxPHYSADDR "\n", batch.tables[i]);
+			continue;
+		}
+		DEBUG_PAGE_ACCESS_START(page);
+		vm_page_free_etc(NULL, page, &reservation);
+	}
+	vm_page_unreserve_pages(&reservation);
+	batch.count = 0;
 }
 
 
