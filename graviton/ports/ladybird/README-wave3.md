@@ -163,3 +163,42 @@ Proof of live rendering over NAT:
 - The Skia rebuild should ideally be re-expressed as a proper `args.gn`
   (`skia_use_fontconfig=true`, RTTI on, emulated-TLS) + a kept `gn` binary, rather
   than the ninja-rule edit used here.
+
+## Native Haiku front end — `ladybird-haiku-ui.patch` (package revision 3)
+
+Applied on top of `ladybird-haiku-arm64-wave3.patch`, this adds `UI/Haiku/`: a
+browser chrome written against the Be API (BApplication/BWindow/BView), selected by
+`-DENABLE_QT_UI=OFF -DENABLE_HAIKU_UI=ON` (the default on Haiku). It builds the
+`Ladybird` binary and moves the helper processes to `libexec/`. The builder's
+`build-wave2` tree was reconfigured in place with those two flags; delete stale
+helper copies from `build-wave2/bin` afterwards (`package/build-package.sh` refuses to
+package a helper present in both directories).
+
+Threading: the stock `Core::EventLoop` runs on the team's main thread and owns every
+LibWebView/LibIPC object. The BApplication runs on its own thread, and each BWindow
+on its own looper. Windows reach the engine only through `Application::post_to_core()`.
+Every `WebViewBridge` method `VERIFY`s that it is on the Core thread. That check is
+load-bearing. The engine's own owner-thread `VERIFY`s cover IPC receipt and
+dispatch, not async sends. A mutation that pushed a mouse event into
+`ViewImplementation` from a window thread ran silently. The same mutation aimed at a
+bridge method aborted on the first click.
+
+Hardware-verified on a Graviton builder under the remote-desktop app_server:
+- live Hacker News in a native window, with title and location field;
+- exact byte order (a red page samples (255,0,0), a blue page (0,0,255));
+- navigation from the location field, link clicks, Back/Forward (button and
+  Command+Shift+Left) with correct enabled state;
+- scrolling at 120 px per wheel notch;
+- typing into a page `<input>`;
+- Tab and Shift+Tab between page and location field;
+- `alert()`, Command+T and Command+W;
+- a second launch opening a tab in the running instance;
+- clean shutdown with no helper left behind (close box, `hey ... quit`, a
+  `while(1)` page, `kill -9`, and a failed start with no app_server).
+
+Frames: [`native-ui-hackernews.png`](native-ui-hackernews.png),
+[`native-ui-example-multiscript.png`](native-ui-example-multiscript.png). The package
+requires `dejavu` and `noto_sans_cjk_sc` so Arabic and CJK text have a fallback face,
+and a post-install script runs `fc-cache -f`: fontconfig validates its cache by
+directory mtime, and packagefs directories keep their package's build time, so a
+newly activated font package is otherwise invisible.

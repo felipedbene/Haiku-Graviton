@@ -2205,6 +2205,38 @@ class Capture(object):
             st.pixels_touched += touched
         return touched
 
+    @staticmethod
+    def gradient_color_at(stops, offset):
+        """Colour of a BGradient at \a offset (0..255), stops sorted by offset;
+        clamped outside the first and last stop, as app_server does."""
+        if offset <= stops[0][0]:
+            return stops[0][1]
+        for (o0, c0), (o1, c1) in zip(stops, stops[1:]):
+            if offset <= o1:
+                f = 0.0 if o1 <= o0 else (offset - o0) / (o1 - o0)
+                return tuple(int(round(c0[i] + (c1[i] - c0[i]) * f))
+                             for i in range(3))
+        return stops[-1][1]
+
+    def _paint_linear_gradient(self, st, box, start, end, stops):
+        """Fill \a box with a linear gradient from \a start to \a end (device
+        pixels), one strip per row or column along the dominant axis."""
+        x0, y0, x1, y1 = box
+        dx, dy = end[0] - start[0], end[1] - start[1]
+        length2 = dx * dx + dy * dy
+        vertical = abs(dy) >= abs(dx)
+        rng = range(y0, y1 + 1) if vertical else range(x0, x1 + 1)
+        for v in rng:
+            if vertical:
+                px, py = (x0 + x1) / 2.0, v + 0.5
+            else:
+                px, py = v + 0.5, (y0 + y1) / 2.0
+            t = 0.0 if length2 == 0 else (
+                ((px - start[0]) * dx + (py - start[1]) * dy) / length2)
+            color = self.gradient_color_at(stops, max(0.0, min(1.0, t)) * 255.0)
+            strip = (x0, v, x1, v) if vertical else (v, y0, v, y1)
+            self._paint(st, "fill", strip, color)
+
     def _paint_glyph(self, st, glyph, gx, gy, color):
         """Blit one rendered glyph, clipped the same way a fill would be.
 
@@ -2645,6 +2677,55 @@ class Capture(object):
                 self._reply_read_bitmap(token, rect)
             return
 
+        # ---- gradient rects (decorator tabs, Deskbar, buttons) ---------
+        if code == RP_FILL_RECT_GRADIENT:
+            # RemoteDrawingEngine::FillRect(BRect, const BGradient&): token,
+            # rect, then RemoteMessage::AddGradient (RemoteMessage.cpp:274-353):
+            # uint32 type, the type's geometry, int32 stop count, then per stop
+            # rgb_color + float offset (0..255); types numbered as in
+            # headers/os/interface/Gradient.h. A LINEAR gradient is rasterised
+            # exactly along its dominant axis; the other types are painted with
+            # their mean stop colour and counted as estimated. Painting every
+            # gradient as PLACEHOLDER (near-black) is what made every window
+            # tab and the Deskbar's rows come out black, title text and all.
+            rect = r.rect()
+            box = self._rect_px(st, rect)
+            self._note_dest(st, *box)
+            gtype = r.u32()
+            start = end = None
+            if gtype == 0:                                   # TYPE_LINEAR
+                start, end = r.point(), r.point()
+            elif gtype == 1:                                 # TYPE_RADIAL
+                r.point(); r.f32()
+            elif gtype == 2:                                 # TYPE_RADIAL_FOCUS
+                r.point(); r.point(); r.f32()
+            elif gtype == 3:                                 # TYPE_DIAMOND
+                r.point()
+            elif gtype == 4:                                 # TYPE_CONIC
+                r.point(); r.f32()
+            stops = []
+            for _ in range(max(0, r.i32())):
+                c = r.color()
+                stops.append((r.f32(), c[:3]))
+            stops.sort()
+            if not stops:
+                self._paint(st, "fill", box, PLACEHOLDER, estimated=True)
+                self.undecoded_drawing_ops += 1
+                st.undecoded_drawing_ops += 1
+                st.estimated_ops += 1
+                return
+            if start is None:
+                mean = tuple(int(round(sum(c[i] for _o, c in stops)
+                                       / float(len(stops)))) for i in range(3))
+                self._paint(st, "fill", box, mean, estimated=True)
+                st.estimated_ops += 1
+                return
+            ox, oy = self._xy(st)
+            sx, sy = start[0] + ox, start[1] + oy
+            ex, ey = end[0] + ox, end[1] + oy
+            self._paint_linear_gradient(st, box, (sx, sy), (ex, ey), stops)
+            return
+
         # ---- approximated geometry -----------------------------------
         if code in LEADING_RECT_OPS:
             rect = r.rect()
@@ -2758,7 +2839,16 @@ class Capture(object):
             return None
 
         ox, oy = self._xy(st)
-        color = st.effective_color()
+        # Text is ALWAYS the high colour: app_server's Painter::DrawString (both
+        # overloads) holds a SolidPatternGuard that forces B_SOLID_HIGH for the
+        # duration of the string (src/servers/app/drawing/Painter/Painter.cpp:
+        # 181-194, 1492, 1513). Using the pattern-dependent fill colour here drew
+        # every string that followed a B_SOLID_LOW background fill in the LOW
+        # colour -- white on white -- which is exactly what BTextView does
+        # (FillRect(..., B_SOLID_LOW) then DrawString), so every text view's
+        # contents (a browser's location field, StyledEdit's document) came out
+        # as written-but-invisible ink.
+        color = st.high_color[:3]
         xf = run.transform or FontTransform()          # embedded only
         cf = run.combined or xf                         # embedded * view-linear
         # The run origin goes through the FULL view affine; the glyph rasters and
@@ -3909,6 +3999,27 @@ def f_key(down, ch, raw=0, keycode=0):
                                                              keycode))
 
 
+def f_modifiers(mods):
+    """RP_MODIFIERS_CHANGED: RemoteEventStream keeps the value and stamps it on
+    every later mouse and key event (RemoteEventStream.cpp, RP_MODIFIERS_CHANGED),
+    so a chord is modifiers-down, key down/up, modifiers-up."""
+    return frame(RP_MODIFIERS_CHANGED, struct.pack("<I", mods))
+
+
+# headers/os/interface/InterfaceDefs.h
+B_SHIFT_KEY = 0x00000001
+B_COMMAND_KEY = 0x00000002
+B_LEFT_SHIFT_KEY = 0x00000100
+B_LEFT_COMMAND_KEY = 0x00000400
+B_LEFT_ARROW = 0x1c
+B_ENTER = 0x0a
+# Physical key codes (src/data/keymaps/US-International.keymap).
+KEY_LEFT_ARROW = 0x61
+KEY_ENTER = 0x47
+B_TAB = 0x09
+KEY_TAB = 0x26
+
+
 def off_screen_points(named_points, width, height):
     """Which of (name, (x, y)) fall outside a width x height screen.
 
@@ -3922,7 +4033,8 @@ def off_screen_points(named_points, width, height):
             if not (0 <= p[0] < width and 0 <= p[1] < height)]
 
 
-def build_workload(name, width, height, rect=None, fill_seconds=0.0):
+def build_workload(name, width, height, rect=None, fill_seconds=0.0,
+                   point=None, text=None):
     """Return (steps, named_points) for a workload.
 
     \a fill_seconds, if > 0, REPEATS the action sequence until it spans at least
@@ -4045,6 +4157,130 @@ def build_workload(name, width, height, rect=None, fill_seconds=0.0):
             at(t, f_move(*p))
         t += 0.2
         at(t, f_up(*start))
+
+    elif name == "press":
+        # A click with the button HELD for 0.3 s. BMenu tracks the pointer by
+        # polling GetMouse(), so a press and release in the same instant (the
+        # 'click' workload) is never seen by an open menu: the item highlights
+        # and nothing is invoked. Use this one for menus.
+        if point is None:
+            raise ValueError("workload 'press' needs --workload-point")
+        points += [("press", point)]
+        t = 0.5
+        at(t, f_move(*point))
+        t += 0.4
+        at(t, f_down(*point))
+        t += 0.3
+        at(t, f_up(*point))
+
+    elif name == "scroll-down":
+        # Five wheel notches DOWN only, one per 0.3 s. 'scroll' goes 20 down
+        # and 10 back up, so on a page shorter than 20 notches it ends where it
+        # started and a "content moved" assertion cannot fail; this one ends
+        # displaced by exactly five notches, which also measures px per notch.
+        points += [("lower", lower)]
+        t = 0.5
+        at(t, f_move(*lower))
+        for i in range(5):
+            t += 0.3
+            at(t, f_wheel(0.0, 1.0))
+
+    elif name == "click":
+        # One primary click at a DISCOVERED point (--workload-point): a link in
+        # a page, or a toolbar button such as a browser's Back. Moving there
+        # first gives the target its hover state, as a real pointer would.
+        if point is None:
+            raise ValueError("workload 'click' needs --workload-point")
+        points += [("click", point)]
+        t = 0.5
+        at(t, f_move(*point))
+        t += 0.4
+        at(t, f_down(*point), f_up(*point))
+
+    elif name == "navigate":
+        # Browser navigation through the keyboard alone: Command+L focuses and
+        # selects the location field, the URL is typed, Enter submits.
+        # BWindow matches a Command shortcut on the first byte of "bytes"
+        # (Window.cpp:3689-3692), so every key carries its character; raw_char
+        # is sent too, for views that read it.
+        if not text:
+            raise ValueError("workload 'navigate' needs --workload-text")
+        command = B_COMMAND_KEY | B_LEFT_COMMAND_KEY
+        t = 0.5
+        at(t, f_modifiers(command))
+        t += 0.1
+        at(t, f_key(True, "l", ord("l")), f_key(False, "l", ord("l")))
+        t += 0.1
+        at(t, f_modifiers(0))
+        t += 0.4
+        for ch in text:
+            t += 0.06
+            at(t, f_key(True, ch, ord(ch)), f_key(False, ch, ord(ch)))
+        t += 0.3
+        at(t, f_key(True, "\n", B_ENTER, KEY_ENTER),
+           f_key(False, "\n", B_ENTER, KEY_ENTER))
+
+    elif name == "tab-type":
+        # Tab from whatever has focus, then type --workload-text and Enter.
+        # With the page focused in a browser this proves keyboard navigation
+        # reached the location field: the typed URL is only submitted if Tab
+        # moved focus there (BWindow's Tab navigation, Window.cpp:3877-3899).
+        if not text:
+            raise ValueError("workload 'tab-type' needs --workload-text")
+        t = 0.5
+        at(t, f_key(True, "\t", B_TAB, KEY_TAB), f_key(False, "\t", B_TAB, KEY_TAB))
+        t += 0.6
+        for ch in text:
+            t += 0.06
+            at(t, f_key(True, ch, ord(ch)), f_key(False, ch, ord(ch)))
+        t += 0.3
+        at(t, f_key(True, "\n", B_ENTER, KEY_ENTER),
+           f_key(False, "\n", B_ENTER, KEY_ENTER))
+
+    elif name == "tab":
+        # A single Tab: keyboard navigation forwards.
+        t = 0.5
+        at(t, f_key(True, "\t", B_TAB, KEY_TAB), f_key(False, "\t", B_TAB, KEY_TAB))
+
+    elif name == "shift-tab":
+        # Shift+Tab: keyboard navigation backwards.
+        shift = B_SHIFT_KEY | B_LEFT_SHIFT_KEY
+        t = 0.5
+        at(t, f_modifiers(shift))
+        t += 0.1
+        at(t, f_key(True, "\t", B_TAB, KEY_TAB), f_key(False, "\t", B_TAB, KEY_TAB))
+        t += 0.1
+        at(t, f_modifiers(0))
+
+    elif name == "command-key":
+        # Command+<first character of --workload-text>, e.g. "t" for a new
+        # browser tab or "w" to close one. The character travels in "bytes",
+        # which is what BWindow's shortcut table matches.
+        if not text:
+            raise ValueError("workload 'command-key' needs --workload-text")
+        ch = text[0]
+        command = B_COMMAND_KEY | B_LEFT_COMMAND_KEY
+        t = 0.5
+        at(t, f_modifiers(command))
+        t += 0.1
+        at(t, f_key(True, ch, ord(ch)), f_key(False, ch, ord(ch)))
+        t += 0.1
+        at(t, f_modifiers(0))
+
+    elif name == "back-key":
+        # Command+Shift+Left: the browser window's Back shortcut. Run it with
+        # the PAGE focused: while the location field (a BTextView) has focus,
+        # BWindow hands Command+arrow chords to the text view instead of the
+        # shortcut table (Window.cpp:3778-3785), and nothing navigates.
+        chord = B_COMMAND_KEY | B_LEFT_COMMAND_KEY | B_SHIFT_KEY | B_LEFT_SHIFT_KEY
+        t = 0.5
+        at(t, f_modifiers(chord))
+        t += 0.1
+        left = bytes([B_LEFT_ARROW])
+        at(t, f_key(True, left, B_LEFT_ARROW, KEY_LEFT_ARROW),
+           f_key(False, left, B_LEFT_ARROW, KEY_LEFT_ARROW))
+        t += 0.1
+        at(t, f_modifiers(0))
 
     else:
         raise ValueError("unknown workload %r" % name)
@@ -5388,6 +5624,62 @@ def selftest(allow_skip=False):
               % (onto_white.text_ink_pixels, onto_white.text_ink_visible,
                  onto_white.text_invisible_runs))
 
+        # A vertical LINEAR gradient rect (the shape of every window tab and
+        # Deskbar row) must be rasterised, not painted PLACEHOLDER-black.
+        grad = run_stream(
+            bytes(frame(RP_CREATE_STATE, struct.pack("<I", gtoken))
+                  + frame(RP_FILL_RECT_GRADIENT,
+                          struct.pack("<Iffff", gtoken, 0.0, 0.0, 99.0, 99.0)
+                          + struct.pack("<I", 0)
+                          + struct.pack("<ffff", 0.0, 0.0, 0.0, 99.0)
+                          + struct.pack("<i", 2)
+                          + bytes((255, 0, 0, 255)) + struct.pack("<f", 0.0)
+                          + bytes((0, 0, 255, 255)) + struct.pack("<f", 255.0))),
+            glyphs=ras)
+        def fbpx(c, x, y):
+            o = (y * c.fb.width + x) * 3
+            return tuple(c.fb.buf[o:o + 3])
+        top_px = fbpx(grad, 50, 0)
+        bottom_px = fbpx(grad, 50, 99)
+        mid_px = fbpx(grad, 50, 50)
+        check("a linear gradient rect is rasterised: red at the start edge, "
+              "blue at the end, a blend in the middle (not PLACEHOLDER)",
+              top_px[0] > 240 and top_px[2] < 15
+              and bottom_px[2] > 240 and bottom_px[0] < 15
+              and 90 < mid_px[0] < 165 and 90 < mid_px[2] < 165
+              and grad.undecoded_drawing_ops == 0,
+              "top=%s mid=%s bottom=%s undecoded=%d"
+              % (top_px, mid_px, bottom_px, grad.undecoded_drawing_ops))
+
+        # The BTextView shape: background filled B_SOLID_LOW (white low colour),
+        # then a string with a BLACK high colour and the pattern still solid-low.
+        # app_server draws the string in the high colour (SolidPatternGuard), so
+        # its ink must be VISIBLE. Taking the fill colour for text made this
+        # white-on-white -- every text view's contents vanished.
+        textview = run_stream(
+            bytes(frame(RP_CREATE_STATE, struct.pack("<I", gtoken))
+                  + frame(RP_SET_LOW_COLOR, struct.pack("<I", gtoken)
+                          + bytes((255, 255, 255, 255)))
+                  + frame(RP_SET_HIGH_COLOR, struct.pack("<I", gtoken)
+                          + bytes((0, 0, 0, 255)))
+                  + frame(RP_SET_PATTERN, struct.pack("<I", gtoken)
+                          + b"\x00" * 8)
+                  + frame(RP_FILL_RECT,
+                          struct.pack("<Iffff", gtoken, 0.0, 0.0, 199.0, 119.0))
+                  + frame(RP_SET_FONT, font_payload(gtoken, 16.0))
+                  + frame(RP_DRAW_STRING,
+                          struct.pack("<I", gtoken)
+                          + struct.pack("<ff", 30.0, 90.0)
+                          + struct.pack("<I", 2) + b"Hi" + b"\x00")),
+            glyphs=ras)
+        check("text after a B_SOLID_LOW fill is drawn in the HIGH colour and is "
+              "visible (BTextView: location fields, documents)",
+              (textview.text_ink_visible > 0
+               and textview.text_invisible_runs == 0),
+              "written=%d visible=%d invisible_runs=%d"
+              % (textview.text_ink_pixels, textview.text_ink_visible,
+                 textview.text_invisible_runs))
+
         # ---- the assertions, mutation tested ------------------------
         # Every check above this line lives in the same file as the code it
         # checks. These do not: they run the caller-facing assertions with
@@ -6371,6 +6663,78 @@ def selftest(allow_skip=False):
               off_screen_points(small_points, 320, 240) == [],
               str(off_screen_points(small_points, 320, 240)))
 
+    # -- browser workloads: click / navigate / back-key ----------------------
+    steps_c, points_c = build_workload("click", 1200, 760, point=(100.0, 50.0))
+    check("the click workload moves then presses+releases at its point",
+          len(steps_c) == 2 and points_c == [("click", (100.0, 50.0))],
+          "%d steps %s" % (len(steps_c), points_c))
+    check("POSITIVE CONTROL: a click point off a 1200x760 screen is caught",
+          off_screen_points(build_workload("click", 1200, 760,
+                                           point=(1300.0, 50.0))[1],
+                            1200, 760) != [])
+    try:
+        build_workload("click", 1200, 760)
+        missing_point = False
+    except ValueError:
+        missing_point = True
+    check("MUTATION: the click workload REFUSES to run without a point",
+          missing_point)
+    steps_n, _pn = build_workload("navigate", 1200, 760, text="ab")
+    check("navigate = Command down, L, Command up, one key per character, "
+          "Enter (6 steps for 'ab')", len(steps_n) == 6,
+          "%d steps" % len(steps_n))
+    check("navigate's first step sets Command (0x402) and a later one clears it",
+          steps_n[0][1] == f_modifiers(B_COMMAND_KEY | B_LEFT_COMMAND_KEY)
+          and steps_n[2][1] == f_modifiers(0))
+    try:
+        build_workload("navigate", 1200, 760)
+        missing_text = False
+    except ValueError:
+        missing_text = True
+    check("MUTATION: the navigate workload REFUSES to run without text",
+          missing_text)
+    steps_b, points_b = build_workload("back-key", 1200, 760)
+    check("back-key = Command+Shift down, Left, modifiers up (3 steps, "
+          "0x503, no pointer)",
+          len(steps_b) == 3 and points_b == []
+          and steps_b[0][1] == f_modifiers(0x503))
+    steps_pr, points_pr = build_workload("press", 1200, 760, point=(10.0, 20.0))
+    check("press = move, button down, and a SEPARATE later button up (held)",
+          len(steps_pr) == 3 and steps_pr[2][0] - steps_pr[1][0] >= 0.25
+          and points_pr == [("press", (10.0, 20.0))])
+    steps_sd, points_sd = build_workload("scroll-down", 1200, 760)
+    check("scroll-down = a move then five wheel notches, all DOWN",
+          len(steps_sd) == 6
+          and all(b == f_wheel(0.0, 1.0) for _t, b in steps_sd[1:]),
+          "%d steps" % len(steps_sd))
+    steps_tt, _ = build_workload("tab-type", 1200, 760, text="ab")
+    check("tab-type = Tab, one key per character, Enter (4 steps for 'ab')",
+          len(steps_tt) == 4)
+    steps_t1, _ = build_workload("tab", 1200, 760)
+    check("tab = exactly one Tab press+release step", len(steps_t1) == 1)
+    steps_st, _ = build_workload("shift-tab", 1200, 760)
+    check("shift-tab = Shift down, Tab, Shift up (3 steps, 0x101 then 0)",
+          len(steps_st) == 3 and steps_st[0][1] == f_modifiers(0x101)
+          and steps_st[2][1] == f_modifiers(0))
+    steps_ck, _ = build_workload("command-key", 1200, 760, text="t")
+    check("command-key = Command down, the key, Command up (3 steps)",
+          len(steps_ck) == 3 and steps_ck[0][1] == f_modifiers(0x402))
+    for wl in ("tab-type", "command-key"):
+        try:
+            build_workload(wl, 1200, 760)
+            refused = False
+        except ValueError:
+            refused = True
+        check("MUTATION: workload %r REFUSES to run without text" % wl, refused)
+    for name, kw in (("click", {"point": (10.0, 10.0)}),
+                     ("scroll-down", {}), ("tab-type", {"text": "x"}),
+                     ("tab", {}), ("shift-tab", {}),
+                     ("command-key", {"text": "t"}),
+                     ("navigate", {"text": "x"}), ("back-key", {})):
+        st, _ = build_workload(name, 1200, 760, **kw)
+        check("workload %r steps are monotonically scheduled" % name,
+              all(st[i][0] <= st[i + 1][0] for i in range(len(st) - 1)))
+
     # -- rect-targeted workloads (the fix for the non-discriminating arms) --
     #
     # The first census pass ran these against a BARE desktop and all three
@@ -6525,7 +6889,10 @@ def main(argv=None):
     p.add_argument("--png", help="write the framebuffer here as 8-bit RGB PNG")
     p.add_argument("--json", help="write the full summary here as JSON")
     p.add_argument("--workload", metavar="NAME",
-                   choices=["idle", "menu", "text", "scroll", "window"],
+                   choices=["idle", "menu", "text", "scroll", "window",
+                            "scroll-down", "click", "press", "navigate",
+                            "back-key",
+                            "tab", "tab-type", "shift-tab", "command-key"],
                    help="drive an interactive workload on this connection while "
                         "capturing, for the M2 byte census (#58): idle (control, "
                         "sends nothing), menu, text, scroll, window. Every "
@@ -6547,6 +6914,13 @@ def main(argv=None):
                         "window open, the text/scroll/menu arms all degenerate "
                         "into 'the mouse moved' and their op profiles come out "
                         "within a few percent of each other.")
+    p.add_argument("--workload-point", metavar="X,Y",
+                   help="target of the click workload. Pass a point that was "
+                        "DISCOVERED in a previous capture (a link's or a "
+                        "button's bbox), for the same reason as --workload-rect")
+    p.add_argument("--workload-text", metavar="TEXT",
+                   help="what the navigate workload types into the location "
+                        "field before Enter, e.g. https://example.com/")
     p.add_argument("--wire-dump", metavar="PATH",
                    help="append every decoded RP message to PATH as a "
                         "timestamped record: float64 seconds-since-connect, "
@@ -6850,11 +7224,27 @@ def main(argv=None):
                 sys.stderr.write("rdcapture: --workload-rect wants "
                                  "X0,Y0,X1,Y1\n")
                 return 7
-        steps, points = build_workload(args.workload, args.width, args.height,
-                                       rect=wrect,
-                                       fill_seconds=(args.seconds - 2.0
-                                                     if args.workload_loop
-                                                     else 0.0))
+        wpoint = None
+        if args.workload_point:
+            try:
+                wpoint = tuple(float(v) for v
+                               in args.workload_point.split(","))
+                if len(wpoint) != 2:
+                    raise ValueError
+            except ValueError:
+                sys.stderr.write("rdcapture: --workload-point wants X,Y\n")
+                return 7
+        try:
+            steps, points = build_workload(args.workload, args.width,
+                                           args.height, rect=wrect,
+                                           fill_seconds=(args.seconds - 2.0
+                                                         if args.workload_loop
+                                                         else 0.0),
+                                           point=wpoint,
+                                           text=args.workload_text)
+        except ValueError as e:
+            sys.stderr.write("rdcapture: %s\n" % e)
+            return 7
         # Refuse rather than measure nothing.  This guard is the whole reason
         # the previous campaign's "feature dead" verdict was wrong (#525): an
         # event aimed one pixel off the screen is correctly ignored, and the

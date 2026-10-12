@@ -1,8 +1,18 @@
 #!/bin/sh
-# DeBeOS Ladybird Wave-2 CMake configure (run in /boot/home/lb after applying
-# ladybird-haiku-arm64.patch and provisioning Skia + APNG libpng + libtommath).
+# DeBeOS Ladybird CMake configure. Run in /boot/home/lb after applying
+# ladybird-haiku-arm64-wave3.patch and then ladybird-haiku-ui.patch, with Skia,
+# APNG libpng and libtommath provisioned (README-wave2.md steps 1-4).
 #
-# Result: a FULL, clean configure — no CMake errors. Verified markers:
+# The name is historical: it was written for Wave 2 and its
+# ladybird-haiku-arm64.patch, which is superseded by the Wave-3 patch.
+#
+# This configures a FRESH build-wave1 (the rm -rf below: no cache is reused).
+# The builder's long-lived tree is /boot/home/lb/build-wave2 (README-wave3.md),
+# and the native-UI hardware proof reconfigured THAT directory in place with
+#   cmake -B build-wave2 -S . -DENABLE_QT_UI=OFF -DENABLE_HAIKU_UI=ON
+# instead of running this script.
+#
+# Result: a FULL, clean configure -- no CMake errors. Verified markers:
 #   -- Found skia, version 148
 #   -- Performing Test LIBPNG_HAS_APNG - Success
 #   -- Build files have been written to: .../build-wave1
@@ -19,7 +29,7 @@ rm -rf build-wave1
 cmake -G Ninja -B build-wave1 -S . \
   -DCMAKE_BUILD_TYPE=Release \
   -DENABLE_LTO_FOR_RELEASE=OFF \
-  -DDEBEOS_HEADLESS_ONLY=ON \
+  -DENABLE_QT_UI=OFF -DENABLE_HAIKU_UI=ON \
   -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++ \
   -DCMAKE_PREFIX_PATH=/boot/home/lbdeps \
   -DFastFloat_DIR=/boot/home/lbdeps/share/cmake/FastFloat \
@@ -34,5 +44,11 @@ cmake -G Ninja -B build-wave1 -S . \
   -DCMAKE_SHARED_LINKER_FLAGS="-lbsd -lnetwork" \
   -DCMAKE_MODULE_LINKER_FLAGS="-lbsd -lnetwork"
 
-# Then: ninja -j"$(nproc)" -C build-wave1 test-web
+# DEBEOS_HEADLESS_ONLY was read only by the Wave-2 ladybird-haiku-arm64.patch;
+# from Wave 3 on, the chrome is selected by ENABLE_QT_UI / ENABLE_HAIKU_UI
+# (Meta/CMake/cmake_options.cmake). ENABLE_QT_UI=OFF is passed explicitly
+# because there is no Qt6 for Haiku arm64; ENABLE_HAIKU_UI=ON builds the native
+# front end (UI/Haiku, binary bin/Ladybird).
+#
+# Then: ninja -j"$(nproc)" -C build-wave1 ladybird headless-shot test-web
 #   (export the same PATH/PKG_CONFIG_PATH/LIBRARY_PATH for the build too).
