@@ -339,9 +339,12 @@ enum {
 		// receiver saw a CE mark; echo ECE on our ACKs until the peer sets CWR
 	FLAG_ECN_SEND_CWR			= 0x8000,
 		// sender reacted to an ECE; set CWR on our next outgoing data segment
-	FLAG_ECN_CWND_REDUCED		= 0x10000
+	FLAG_ECN_CWND_REDUCED		= 0x10000,
 		// sender already cut the window for this RTT; do not cut again until a
 		// full window (fECNReactSequence) has been acknowledged
+	FLAG_SEND_ERROR_REPORTED	= 0x20000
+		// a send() has reported the error that closed the connection; later
+		// ones fail with EPIPE (see _ClosedSendStatus())
 };
 
 
@@ -632,11 +635,18 @@ TCPEndpoint::Close()
 		return B_OK;
 	}
 
-	// handle linger with zero timeout
+	// handle linger with zero timeout: an abortive close (RFC 793 ABORT),
+	// which tells the peer with a RST and discards what is still queued.
+	// The RST has to be sent through _SendReset(): _SendQueued() refuses to
+	// send anything once the state is CLOSED, so a peer never learnt of the
+	// abort until its next send bounced off the vanished endpoint.
 	if ((socket->options & SO_LINGER) != 0 && socket->linger == 0) {
+		bool sendReset = fState != CLOSED && fState != TIME_WAIT;
 		fState = CLOSED;
 		T(State(this));
-		return _SendQueued(true);
+		if (sendReset)
+			_SendReset(true);
+		return B_OK;
 	}
 
 	status_t status = _Disconnect(true);
@@ -737,6 +747,7 @@ TCPEndpoint::Connect(const sockaddr* address)
 	// after a failed connect() look like an orderly close (EOF instead of
 	// ENOTCONN); _PrepareReceivePath() only clears it once a SYN arrives.
 	fFinishReceived = false;
+	fFlags &= ~FLAG_SEND_ERROR_REPORTED;
 	fState = SYNCHRONIZE_SENT;
 	T(State(this));
 
@@ -914,7 +925,7 @@ TCPEndpoint::SendData(net_buffer *buffer)
 		return EOPNOTSUPP;
 
 	if (fState == CLOSED)
-		return ENOTCONN;
+		return _ClosedSendStatus();
 	if (fState == LISTEN)
 		return EDESTADDRREQ;
 	if (!is_writable(fState) && !is_establishing(fState))
@@ -944,6 +955,8 @@ TCPEndpoint::SendData(net_buffer *buffer)
 				return posix_error(status);
 			}
 
+			if (fState == CLOSED)
+				return _ClosedSendStatus();
 			if (!is_writable(fState) && !is_establishing(fState))
 				return EPIPE;
 		}
@@ -1220,6 +1233,27 @@ TCPEndpoint::_ClosedReadStatus() const
 		return socket->error;
 	if (fFinishReceived)
 		return B_OK;
+	return ENOTCONN;
+}
+
+
+/*!	What a send on a CLOSED endpoint returns. The first one after the
+	connection was torn down by an error (ECONNRESET, ...) reports that error,
+	which is how applications learn of a reset from the write side; every one
+	after that fails with EPIPE (and raises SIGPIPE), as on Linux. A
+	connection that ended without an error, or never existed, is ENOTCONN.
+	socket->error itself is left alone: the read side and SO_ERROR report it
+	independently (_ClosedReadStatus()).
+*/
+status_t
+TCPEndpoint::_ClosedSendStatus()
+{
+	if ((fFlags & FLAG_SEND_ERROR_REPORTED) != 0)
+		return EPIPE;
+	if (socket->error != B_OK) {
+		fFlags |= FLAG_SEND_ERROR_REPORTED;
+		return socket->error;
+	}
 	return ENOTCONN;
 }
 
