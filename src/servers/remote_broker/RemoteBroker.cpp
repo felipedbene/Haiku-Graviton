@@ -1122,19 +1122,20 @@ main(int argc, char** argv)
 			continue;
 		}
 
-		// Deliberately NOT TCP_NODELAY. Haiku's TCP has no Nagle algorithm
-		// to disable: a write that ends the send queue always goes out at
-		// once (TCPEndpoint::_ShouldSendSegment, TCPEndpoint.cpp:2994-2998,
-		// end-of-queue clause). The only thing TCP_NODELAY switches off
-		// there is sender silly-window avoidance, so on a window-limited
-		// WAN path every ACK releases a sub-MSS runt. Measured on hardware
-		// (Haiku sender, 79 ms RTT, 12 Mbit/s bottleneck, MSS 1348):
-		// NODELAY 0.65-0.92 MB/s at ~470-byte segments, without it
-		// 1.13-1.18 MB/s at full MSS (0.27-0.37 vs 1.07-1.15 when the
-		// bottleneck charges per packet, as VPNs do), with write style
-		// (blocking or O_NONBLOCK+select, split or single TLS record)
-		// making no difference. Interactive latency is unchanged: the tail segment
-		// of every write is still sent immediately.
+		// TCP_NODELAY: this socket carries interactive traffic (input echo,
+		// cursor, small drawing updates) to a client across a WAN, and Haiku's
+		// TCP now has Nagle (TCPEndpoint::_ShouldSendSegment(), #639), which
+		// would hold every short tail for up to a round trip while earlier
+		// data is unacknowledged. NODELAY used to cost a sub-MSS runt on every
+		// window-limited ACK -- the reason this socket went without it (#630)
+		// -- but sender SWS avoidance now applies to NODELAY sockets too
+		// (#640), and a select()-driven writer is no longer let in for every
+		// freed sliver (#639): 2.0% sub-MSS segments behind a 400 ms tbf
+		// queue at 79 ms RTT, with or without the option.
+		int noDelay = 1;
+		setsockopt(clientSocket, IPPROTO_TCP, TCP_NODELAY, &noDelay,
+			sizeof(noDelay));
+
 		int keepAlive = 1;
 		setsockopt(clientSocket, SOL_SOCKET, SO_KEEPALIVE, &keepAlive,
 			sizeof(keepAlive));
