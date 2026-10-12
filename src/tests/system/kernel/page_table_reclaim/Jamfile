@@ -1,0 +1,7 @@
+SubDir HAIKU_TOP src tests system kernel page_table_reclaim ;
+
+# #632/#629: user page tables freed on unmap. leak632 is the acceptance test
+# (system used memory with a churning process alive vs. after it exits);
+# integ632 is the data-integrity stress for the reclaim's TLB shootdown.
+SimpleTest leak632 : leak632.c ;
+SimpleTest integ632 : integ632.c ;

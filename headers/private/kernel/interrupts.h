@@ -79,8 +79,15 @@ are_interrupts_enabled(void)
 
 status_t reserve_io_interrupt_vectors(int32 count, int32 startVector,
 	enum interrupt_type type);
+#ifdef __cplusplus
 status_t allocate_io_interrupt_vectors(int32 count, int32 *startVector,
 	enum interrupt_type type, bool independentVectors = false);
+#else
+	// C sources include this too (the nvmm driver, x86 only): no default
+	// arguments there.
+status_t allocate_io_interrupt_vectors(int32 count, int32 *startVector,
+	enum interrupt_type type, bool independentVectors);
+#endif
 void free_io_interrupt_vectors(int32 count, int32 startVector);
 
 int32 assign_io_interrupt_to_cpu(int32 vector, int32 cpu);
