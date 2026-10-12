@@ -342,9 +342,12 @@ enum {
 	FLAG_ECN_CWND_REDUCED		= 0x10000,
 		// sender already cut the window for this RTT; do not cut again until a
 		// full window (fECNReactSequence) has been acknowledged
-	FLAG_SEND_ERROR_REPORTED	= 0x20000
+	FLAG_SEND_ERROR_REPORTED	= 0x20000,
 		// a send() has reported the error that closed the connection; later
 		// ones fail with EPIPE (see _ClosedSendStatus())
+	FLAG_WAS_ESTABLISHED		= 0x40000
+		// this connection reached ESTABLISHED, so a send() once it is CLOSED
+		// is EPIPE, not ENOTCONN, even after SO_ERROR consumed the error
 };
 
 
@@ -747,7 +750,7 @@ TCPEndpoint::Connect(const sockaddr* address)
 	// after a failed connect() look like an orderly close (EOF instead of
 	// ENOTCONN); _PrepareReceivePath() only clears it once a SYN arrives.
 	fFinishReceived = false;
-	fFlags &= ~FLAG_SEND_ERROR_REPORTED;
+	fFlags &= ~(FLAG_SEND_ERROR_REPORTED | FLAG_WAS_ESTABLISHED);
 	fState = SYNCHRONIZE_SENT;
 	T(State(this));
 
@@ -1314,8 +1317,11 @@ TCPEndpoint::_SendResumeThreshold() const
 /*!	What a send on a CLOSED endpoint returns. The first one after the
 	connection was torn down by an error (ECONNRESET, ...) reports that error,
 	which is how applications learn of a reset from the write side; every one
-	after that fails with EPIPE (and raises SIGPIPE), as on Linux. A
-	connection that ended without an error, or never existed, is ENOTCONN.
+	after that fails with EPIPE (and raises SIGPIPE), as on Linux. Any other
+	send on a connection that was once established is EPIPE as well -- also
+	when getsockopt(SO_ERROR) has already consumed the error, which clears
+	socket->error (net_socket.cpp, SO_ERROR) and used to leave ENOTCONN behind
+	(#624). Only an endpoint that never got connected reports ENOTCONN.
 	socket->error itself is left alone: the read side and SO_ERROR report it
 	independently (_ClosedReadStatus()).
 */
@@ -1328,6 +1334,8 @@ TCPEndpoint::_ClosedSendStatus()
 		fFlags |= FLAG_SEND_ERROR_REPORTED;
 		return socket->error;
 	}
+	if ((fFlags & FLAG_WAS_ESTABLISHED) != 0)
+		return EPIPE;
 	return ENOTCONN;
 }
 
@@ -1562,6 +1570,7 @@ void
 TCPEndpoint::_MarkEstablished()
 {
 	fState = ESTABLISHED;
+	fFlags |= FLAG_WAS_ESTABLISHED;
 	T(State(this));
 
 	gSocketModule->set_connected(socket);
