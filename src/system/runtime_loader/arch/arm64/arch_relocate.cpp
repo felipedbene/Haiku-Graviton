@@ -8,6 +8,7 @@
 #include <stdlib.h>
 
 #include "arch_elf.h"
+#include "elf_tls.h"
 #include "runtime_loader_private.h"
 
 #include <commpage_defs.h>
@@ -88,6 +89,45 @@ arch_call_ifunc_resolver(addr_t resolverAddress)
 }
 
 
+// R_AARCH64_TLSDESC. The descriptor is two words, { resolver, argument }; see
+// arch_tlsdesc.S for the calling convention. DeBeOS allocates every module's
+// TLS block on first use through the dynamic thread vector (elf_tls.cpp), so
+// there is no static TLS block to resolve against at load time and every
+// descriptor gets the dynamic resolver. Its argument packs the module id and
+// the offset into that module's block, which keeps the descriptor
+// self-contained: nothing is allocated per relocation, so nothing has to be
+// freed when the image is unloaded.
+//
+// Relocations are bound eagerly here, including the PLT's (arch_relocate_image()
+// below), so the lazy TLSDESC binding the ABI also allows (DT_TLSDESC_PLT /
+// DT_TLSDESC_GOT) never happens and those dynamic tags are ignored.
+extern "C" void __arm64_tlsdesc_dynamic();
+
+static const unsigned kTLSDescOffsetBits = 40;
+static const uint64 kTLSDescOffsetMask = (1ULL << kTLSDescOffsetBits) - 1;
+
+
+extern "C" addr_t
+__arm64_tlsdesc_address(uint64 argument)
+{
+	return (addr_t)get_tls_address(argument >> kTLSDescOffsetBits,
+		argument & kTLSDescOffsetMask);
+}
+
+
+static status_t
+arch_tlsdesc_argument(unsigned dso, Elf64_Addr offset, uint64* _argument)
+{
+	if (dso == unsigned(-1) || dso >= (1U << (64 - kTLSDescOffsetBits))
+		|| offset > kTLSDescOffsetMask) {
+		return B_BAD_DATA;
+	}
+
+	*_argument = ((uint64)dso << kTLSDescOffsetBits) | offset;
+	return B_OK;
+}
+
+
 static status_t
 relocate_rela(image_t* rootImage, image_t* image, Elf64_Rela* rel,
 	size_t relLength, SymbolLookupCache* cache)
@@ -151,6 +191,26 @@ relocate_rela(image_t* rootImage, image_t* image, Elf64_Rela* rel,
 			case R_AARCH64_TLS_DTPREL64:
 				relocValue = symAddr;
 				break;
+			case R_AARCH64_TLSDESC:
+			{
+				// The variable is symAddr + addend into the TLS block of the
+				// module defining it -- this image, for a local-dynamic access
+				// that carries no symbol (symIndex 0).
+				unsigned dso = symbolImage == NULL
+					? image->dso_tls_id : symbolImage->dso_tls_id;
+				uint64 argument;
+				if (arch_tlsdesc_argument(dso, symAddr + rel[i].r_addend,
+						&argument) != B_OK) {
+					TRACE(("bad TLSDESC: dso %u, offset %#lx\n", dso,
+						(unsigned long)(symAddr + rel[i].r_addend)));
+					return B_BAD_DATA;
+				}
+
+				Elf64_Addr* descriptor = (Elf64_Addr*)relocAddr;
+				descriptor[1] = argument;
+				descriptor[0] = (Elf64_Addr)&__arm64_tlsdesc_dynamic;
+				continue;
+			}
 			default:
 				TRACE(("unhandled relocation type %d\n", type));
 				return B_BAD_DATA;

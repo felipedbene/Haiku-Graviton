@@ -1,0 +1,186 @@
+#!/bin/sh
+
+# program -> libtlsdesc_link.so (loaded at startup)
+# dlopen():  libtlsdesc_dl.so   (same source, loaded later)
+#
+# Both libraries are built with TLS descriptors (-mtls-dialect=desc on
+# aarch64, gnu2 on x86_64) and must contain R_AARCH64_TLSDESC /
+# R_X86_64_TLSDESC relocations, or the test is not testing anything.
+#
+# Expected: in the main thread and in four more threads, every TLS variable
+# of both libraries -- an initialized one (.tdata), a zero-initialized one
+# (.tbss) and a file-local one (local-dynamic access) -- starts at its exact
+# initial value, then holds exactly the per-thread sentinel written to it;
+# the two libraries' copies never alias. Exit code 0.
+
+
+. ./test_setup
+
+case $(uname -m) in
+	aarch64|arm64)	dialect=-mtls-dialect=desc; reloc=TLSDESC;;
+	x86_64)			dialect=-mtls-dialect=gnu2; reloc=TLSDESC;;
+	*)				echo "tls_desc1: no TLS descriptor dialect for $(uname -m)";
+					exit 1;;
+esac
+
+
+# Each build gets its own exported variable names: with one name, the
+# dlopen()ed copy would bind to the startup library's definition (ELF symbol
+# interposition) and the two would legitimately share the variable.
+cat > lib.c << EOI
+#define CAT2(a, b) a##b
+#define CAT(a, b) CAT2(a, b)
+#define V(name) CAT(PFX, name)
+
+__thread long V(tdata_var) = 0x1111111111111111L;
+__thread long V(tbss_var);
+static __thread int local_var = 77;
+
+long get_tdata(void) { return V(tdata_var); }
+void set_tdata(long v) { V(tdata_var) = v; }
+long get_tbss(void) { return V(tbss_var); }
+void set_tbss(long v) { V(tbss_var) = v; }
+int get_local(void) { return local_var; }
+void set_local(int v) { local_var = v; }
+long* addr_tdata(void) { return &V(tdata_var); }
+EOI
+
+compile_lib $dialect -O2 -DPFX=link_ -o libtlsdesc_link.so lib.c
+compile_lib $dialect -O2 -DPFX=dl_ -o libtlsdesc_dl.so lib.c
+
+# The libraries must really use descriptors; otherwise this would pass on a
+# loader that has no TLSDESC support at all.
+for lib in libtlsdesc_link.so libtlsdesc_dl.so; do
+	if command -v readelf > /dev/null 2>&1; then
+		count=$(readelf -r $lib | grep -c "$reloc")
+	else
+		count=$(objdump -R $lib | grep -c "$reloc")
+	fi
+	if [ "$count" -lt 3 ]; then
+		echo "tls_desc1: $lib has $count $reloc relocations, expected >= 3"
+		exit 1
+	fi
+done
+
+
+cat > program.c << EOI
+#include <dlfcn.h>
+#include <pthread.h>
+#include <stdio.h>
+#include <stdlib.h>
+
+extern long get_tdata(void);
+extern void set_tdata(long);
+extern long get_tbss(void);
+extern void set_tbss(long);
+extern int get_local(void);
+extern void set_local(int);
+extern long* addr_tdata(void);
+
+struct lib {
+	long (*get_tdata)(void);
+	void (*set_tdata)(long);
+	long (*get_tbss)(void);
+	void (*set_tbss)(long);
+	int (*get_local)(void);
+	void (*set_local)(int);
+	long* (*addr_tdata)(void);
+};
+
+static struct lib sLink = { get_tdata, set_tdata, get_tbss, set_tbss,
+	get_local, set_local, addr_tdata };
+static struct lib sDl;
+static pthread_barrier_t sBarrier;
+static int sFailures;
+
+#define CHECK(what, got, want) \
+	do { \
+		long g_ = (long)(got), w_ = (long)(want); \
+		if (g_ != w_) { \
+			fprintf(stderr, "thread %d: %s = %#lx, expected %#lx\n", id, \
+				what, g_, w_); \
+			__atomic_add_fetch(&sFailures, 1, __ATOMIC_SEQ_CST); \
+		} \
+	} while (0)
+
+static void*
+worker(void* arg)
+{
+	int id = (int)(long)arg;
+
+	/* fresh thread: initial values in both libraries */
+	CHECK("link tdata initial", sLink.get_tdata(), 0x1111111111111111L);
+	CHECK("link tbss initial", sLink.get_tbss(), 0);
+	CHECK("link local initial", sLink.get_local(), 77);
+	CHECK("dl tdata initial", sDl.get_tdata(), 0x1111111111111111L);
+	CHECK("dl tbss initial", sDl.get_tbss(), 0);
+	CHECK("dl local initial", sDl.get_local(), 77);
+	CHECK("link and dl blocks distinct",
+		sLink.addr_tdata() != sDl.addr_tdata(), 1);
+
+	sLink.set_tdata(0x7a00000000L + id);
+	sLink.set_tbss(0x7b00000000L + id);
+	sLink.set_local(1000 + id);
+	sDl.set_tdata(0x6a00000000L + id);
+	sDl.set_tbss(0x6b00000000L + id);
+	sDl.set_local(2000 + id);
+
+	/* everybody has written; nobody may see anybody else's values */
+	pthread_barrier_wait(&sBarrier);
+
+	CHECK("link tdata", sLink.get_tdata(), 0x7a00000000L + id);
+	CHECK("link tbss", sLink.get_tbss(), 0x7b00000000L + id);
+	CHECK("link local", sLink.get_local(), 1000 + id);
+	CHECK("dl tdata", sDl.get_tdata(), 0x6a00000000L + id);
+	CHECK("dl tbss", sDl.get_tbss(), 0x6b00000000L + id);
+	CHECK("dl local", sDl.get_local(), 2000 + id);
+	CHECK("link tdata via address", *sLink.addr_tdata(), 0x7a00000000L + id);
+	CHECK("dl tdata via address", *sDl.addr_tdata(), 0x6a00000000L + id);
+	return NULL;
+}
+
+int
+main()
+{
+	enum { kThreads = 4 };
+	pthread_t threads[kThreads];
+	void* handle;
+	int i;
+
+	handle = dlopen("./libtlsdesc_dl.so", RTLD_NOW | RTLD_LOCAL);
+	if (handle == NULL) {
+		fprintf(stderr, "dlopen: %s\n", dlerror());
+		return 2;
+	}
+	sDl.get_tdata = (long (*)(void))dlsym(handle, "get_tdata");
+	sDl.set_tdata = (void (*)(long))dlsym(handle, "set_tdata");
+	sDl.get_tbss = (long (*)(void))dlsym(handle, "get_tbss");
+	sDl.set_tbss = (void (*)(long))dlsym(handle, "set_tbss");
+	sDl.get_local = (int (*)(void))dlsym(handle, "get_local");
+	sDl.set_local = (void (*)(int))dlsym(handle, "set_local");
+	sDl.addr_tdata = (long* (*)(void))dlsym(handle, "addr_tdata");
+	if (sDl.get_tdata == NULL || sDl.addr_tdata == NULL) {
+		fprintf(stderr, "dlsym: %s\n", dlerror());
+		return 3;
+	}
+
+	pthread_barrier_init(&sBarrier, NULL, kThreads + 1);
+	for (i = 0; i < kThreads; i++)
+		pthread_create(&threads[i], NULL, worker, (void*)(long)(i + 1));
+	worker((void*)0);
+	for (i = 0; i < kThreads; i++)
+		pthread_join(threads[i], NULL);
+
+	if (sFailures != 0) {
+		fprintf(stderr, "%d check(s) failed\n", sFailures);
+		return 1;
+	}
+	printf("tls_desc1: %d threads x 2 libraries: all checks passed\n",
+		kThreads + 1);
+	return 0;
+}
+EOI
+
+compile_program_dl -o program program.c ./libtlsdesc_link.so -lpthread
+
+test_run_ok ./program 0
