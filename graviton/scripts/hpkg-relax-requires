@@ -1,0 +1,122 @@
+#!/usr/bin/env bash
+#
+# hpkg-relax-requires -- re-pack a .hpkg with one of its REQUIRES entries
+# rewritten, so a third-party package can be installed against DeBeOS's own
+# system packages instead of dragging in the publisher's.
+#
+# Why it exists: some arm64 packages built for other Haiku images pin
+# `haiku >= <their own build>`. Installing one with pkgman then *replaces the
+# `haiku` system package* -- kernel, boot loader, runtime_loader, servers --
+# with the publisher's build. On DeBeOS that kernel cannot boot on EC2 Graviton
+# (it hangs right after "Calling ExitBootServices", on every boot), so the box
+# is lost. When DeBeOS already carries whatever fix the pin was for, relaxing
+# the pin is the correct install path.
+#
+# It runs on a *Haiku host*, because `package` is a Haiku tool. It never
+# downloads anything and never installs anything: you supply the package file,
+# it writes a new one and prints exactly what changed; `pkgman install ./OUT`
+# is a separate step you take after reading that.
+#
+#   hpkg-relax-requires IN.hpkg OUT.hpkg [--dep NAME] [--to 'SPEC']
+#       --dep NAME   the requirement to rewrite (default: haiku)
+#       --to SPEC    its replacement (default: the bare NAME, i.e. any version)
+#   hpkg-relax-requires --info-only IN.PackageInfo OUT.PackageInfo [--dep ..] [--to ..]
+#       rewrite a .PackageInfo text file only (no `package` tool; used by the
+#       selftest, and handy for inspecting a change before re-packing)
+#
+# Refuses (exit 2):
+#   - a package that is, or PROVIDES, the dependency it is asked to relax (it
+#     must never become a way to install a replacement system package);
+#   - a package with no REQUIRES entry for NAME (nothing to relax: a typo in
+#     --dep should not silently produce an unchanged copy).
+# Only an entry whose name is exactly NAME is rewritten: --dep haiku leaves
+# haiku_devel, haiku_extras and lib:libhaiku alone.
+set -euo pipefail
+
+usage() { sed -n '17,26p' "$0" | sed 's/^# \{0,1\}//'; exit 64; }
+
+INFO_ONLY=0
+if [ "${1:-}" = "--info-only" ]; then INFO_ONLY=1; shift; fi
+[ $# -ge 2 ] || usage
+IN="$1"; OUT="$2"; shift 2
+DEP="haiku"; TO=""
+while [ $# -gt 0 ]; do
+	case "$1" in
+		--dep) DEP="${2:?--dep needs a name}"; shift 2 ;;
+		--to) TO="${2:?--to needs a spec}"; shift 2 ;;
+		-h|--help) usage ;;
+		*) echo "unknown argument: $1" >&2; usage ;;
+	esac
+done
+[ -n "$TO" ] || TO="$DEP"
+case "$DEP" in *[!A-Za-z0-9_.:+-]*|"") echo "error: bad --dep name '$DEP'" >&2; exit 64 ;; esac
+
+# relax_info IN.PackageInfo OUT.PackageInfo
+#   Rewrites, inside the `requires { ... }` block only, every entry whose first
+#   token is exactly $DEP. Prints "OLD -> NEW" per rewrite on stdout. Exit 2 on
+#   a refusal (see header), 0 otherwise.
+relax_info() {
+	awk -v dep="$DEP" -v to="$TO" '
+		function first_token(s,   t) { t = s; sub(/^[ \t]+/, "", t); sub(/[ \t<>=!].*$/, "", t); return t }
+		function trim(s) { sub(/^[ \t]+/, "", s); sub(/[ \t]+$/, "", s); return s }
+		BEGIN { block = ""; rewrites = 0; refuse = ""; report = "" }
+		{
+			line = $0
+			if (block == "") {
+				if (line ~ /^[ \t]*name[ \t]+/) {
+					n = line; sub(/^[ \t]*name[ \t]+/, "", n); n = trim(n); gsub(/"/, "", n)
+					if (n == dep) refuse = "the package itself is \"" dep "\""
+				}
+				if (line ~ /^[ \t]*(requires|provides)[ \t]*\{/) {
+					block = line; sub(/^[ \t]*/, "", block); sub(/[ \t]*\{.*$/, "", block)
+					print line; next
+				}
+				print line; next
+			}
+			if (line ~ /^[ \t]*\}/) { block = ""; print line; next }
+			if (block == "provides" && first_token(line) == dep)
+				refuse = "the package provides \"" dep "\" (" trim(line) ")"
+			if (block == "requires" && first_token(line) == dep) {
+				indent = line; sub(/[^ \t].*$/, "", indent)
+				report = report trim(line) " -> " to "\n"
+				print indent to; rewrites++; next
+			}
+			print line
+		}
+		END {
+			if (refuse != "") { printf "refused: %s\n", refuse > "/dev/stderr"; exit 2 }
+			if (rewrites == 0) { printf "refused: no requires entry named \"%s\"\n", dep > "/dev/stderr"; exit 2 }
+			# rewrites are reported only once the result is known to be kept
+			printf "%s", report > "/dev/stderr"
+		}
+	' "$1" > "$2.tmp" 2> "$2.log" || { st=$?; cat "$2.log" >&2; rm -f "$2.tmp" "$2.log"; return $st; }
+	cat "$2.log"; rm -f "$2.log"; mv "$2.tmp" "$2"
+}
+
+if [ "$INFO_ONLY" = 1 ]; then
+	relax_info "$IN" "$OUT"
+	exit 0
+fi
+
+command -v package >/dev/null 2>&1 || { echo "error: 'package' not found -- run this on Haiku" >&2; exit 69; }
+[ -f "$IN" ] || { echo "error: no such package file: $IN" >&2; exit 66; }
+[ ! -e "$OUT" ] || { echo "error: refusing to overwrite $OUT" >&2; exit 73; }
+
+WORK="$(mktemp -d /tmp/hpkg-relax.XXXXXX)"
+trap 'rm -rf "$WORK"' EXIT
+mkdir "$WORK/root"
+package extract -C "$WORK/root" "$IN"
+[ -f "$WORK/root/.PackageInfo" ] || { echo "error: $IN has no .PackageInfo" >&2; exit 65; }
+
+echo "== $IN: requires before"
+sed -n '/^[ \t]*requires[ \t]*{/,/^[ \t]*}/p' "$WORK/root/.PackageInfo"
+echo "== rewriting"
+relax_info "$WORK/root/.PackageInfo" "$WORK/PackageInfo.new"
+mv "$WORK/PackageInfo.new" "$WORK/root/.PackageInfo"
+
+package create -C "$WORK/root" "$OUT"
+echo "== $OUT: requires after (read back from the new package)"
+package list -i "$OUT" | sed -n '/[Rr]equires/,/^[^ \t]/p' | head -40
+echo
+echo "wrote $OUT. Install with:  pkgman install ./$(basename "$OUT")"
+echo "If pkgman then proposes to replace the '$DEP' system package, answer NO."

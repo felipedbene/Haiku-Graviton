@@ -1,0 +1,75 @@
+#!/usr/bin/env bash
+#
+# hpkg-relax-requires-selftest -- exact-output checks for the .PackageInfo
+# rewriter in hpkg-relax-requires (the --info-only path; runs on any host).
+set -uo pipefail
+TOOL="$(dirname "$0")/hpkg-relax-requires"
+T="$(mktemp -d)"; trap 'rm -rf "$T"' EXIT
+fail=0
+check() {	# name expected actual
+	if [ "$2" = "$3" ]; then echo "ok   $1"; else
+		echo "FAIL $1"; echo "  expected: $(printf %q "$2")"; echo "  actual:   $(printf %q "$3")"; fail=1; fi
+}
+
+cat > "$T/app.info" <<'EOF'
+name			rchromium
+version			154.0.8036.0-5
+architecture	arm64
+provides {
+	rchromium = 154.0.8036.0-5
+	app:rchromium
+}
+requires {
+	haiku >= r1~beta6_hrev59990_renku-1
+	haiku_devel >= r1~beta6
+	lib:libfreetype
+	lib:libhaiku_shim
+}
+EOF
+
+# 1. default: haiku pin -> bare haiku; nothing else touched (haiku_devel, lib:...)
+"$TOOL" --info-only "$T/app.info" "$T/out1" 2> "$T/err1" > "$T/msg1"; st=$?
+check "default rewrite exit status" 0 "$st"
+check "default rewrite report" "haiku >= r1~beta6_hrev59990_renku-1 -> haiku" "$(cat "$T/msg1")"
+expected1="$(sed 's/^\thaiku >= r1~beta6_hrev59990_renku-1$/\thaiku/' "$T/app.info")"
+check "default rewrite output, byte for byte" "$expected1" "$(cat "$T/out1")"
+check "haiku_devel untouched" "1" "$(grep -c $'^\thaiku_devel >= r1~beta6$' "$T/out1")"
+check "provides block untouched" "1" "$(grep -c $'^\trchromium = 154.0.8036.0-5$' "$T/out1")"
+
+# 2. --to with an explicit floor
+"$TOOL" --info-only "$T/app.info" "$T/out2" --to 'haiku >= r1~beta6_hrev59996' > "$T/msg2" 2>/dev/null
+check "--to report" "haiku >= r1~beta6_hrev59990_renku-1 -> haiku >= r1~beta6_hrev59996" "$(cat "$T/msg2")"
+check "--to line" "1" "$(grep -c $'^\thaiku >= r1~beta6_hrev59996$' "$T/out2")"
+
+# 3. no such requirement -> refuse, no output file
+"$TOOL" --info-only "$T/app.info" "$T/out3" --dep libnosuch > /dev/null 2> "$T/err3"; st=$?
+check "missing dep exit status" 2 "$st"
+check "missing dep message" 'refused: no requires entry named "libnosuch"' "$(cat "$T/err3")"
+check "missing dep writes nothing" "absent" "$([ -e "$T/out3" ] && echo present || echo absent)"
+
+# 4. the system package itself -> refuse
+sed 's/^name\t\t\trchromium$/name\t\t\thaiku/' "$T/app.info" > "$T/sys.info"
+"$TOOL" --info-only "$T/sys.info" "$T/out4" > /dev/null 2> "$T/err4"; st=$?
+check "package named haiku refused" 2 "$st"
+check "package named haiku message" 'refused: the package itself is "haiku"' "$(cat "$T/err4")"
+
+# 5. a package that PROVIDES haiku -> refuse
+awk '{print} /^provides \{/{print "\thaiku = r1~beta6_hrev59990_renku-1"}' "$T/app.info" > "$T/prov.info"
+"$TOOL" --info-only "$T/prov.info" "$T/out5" > /dev/null 2> "$T/err5"; st=$?
+check "provides haiku refused" 2 "$st"
+check "provides haiku message" 'refused: the package provides "haiku" (haiku = r1~beta6_hrev59990_renku-1)' "$(cat "$T/err5")"
+
+# 6. an entry that only starts with the name is not a match (exact token)
+printf 'name\tx\nrequires {\n\thaikuports_extra\n}\n' > "$T/prefix.info"
+"$TOOL" --info-only "$T/prefix.info" "$T/out6" > /dev/null 2> "$T/err6"; st=$?
+check "prefix is not a match" 2 "$st"
+
+# 7. the compact form real packages carry (no spaces around the operator,
+#    tab before the brace), as in DeBeOS's own haiku package's .PackageInfo
+printf 'name\tx\nrequires\t{\n\thaiku>=r1~beta6_hrev59996-1\n\tlib:libz>=1.2.13\n}\n' > "$T/compact.info"
+"$TOOL" --info-only "$T/compact.info" "$T/out7" > "$T/msg7" 2>/dev/null; st=$?
+check "compact form exit status" 0 "$st"
+check "compact form report" "haiku>=r1~beta6_hrev59996-1 -> haiku" "$(cat "$T/msg7")"
+check "compact form output" "$(printf 'name\tx\nrequires\t{\n\thaiku\n\tlib:libz>=1.2.13\n}')" "$(cat "$T/out7")"
+
+[ "$fail" = 0 ] && echo "all checks passed" || { echo "checks FAILED"; exit 1; }
