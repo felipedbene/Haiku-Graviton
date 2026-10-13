@@ -24,6 +24,25 @@ provides {
 #else
 	haiku=%HAIKU_VERSION% compat>=R1~beta1
 #endif
+#if defined(HAIKU_PACKAGING_ARCH_arm64)
+	/* Third-party arm64 packages built for other Haiku arm64 images (the R
+	   Chromium package among them) require "haiku_arm64", the
+	   secondary-architecture style name, rather than "haiku". Nothing here
+	   provided it, so pkgman resolved the requirement from the publisher's
+	   repository and replaced this package -- kernel, loader, servers -- with
+	   theirs, whose kernel does not boot on EC2 Graviton. Provide the name
+	   from the real system package so such requirements are met by it. */
+	haiku_arm64=%HAIKU_VERSION% compat>=R1~beta1
+	/* The capability token R Chromium's package requires from the system
+	   package instead of a kernel build. It stands for three fixes, all
+	   present here: AArch64 TLSDESC relocations in runtime_loader (#652),
+	   lock_memory_etc() unwinding a mid-area wiring failure (#651), and
+	   VMSAv8TranslationMap::Query() reporting an invalid PTE as absent
+	   (VMSAv8TranslationMap.cpp, the kPteValidMask check). Providing it lets
+	   the package install from its apps-only repository; its arm64-system
+	   repository, which would replace this package, is never needed. */
+	haiku_rchromium_fixes=1
+#endif
 	cmd:arp
 	cmd:chop
 	cmd:clear
