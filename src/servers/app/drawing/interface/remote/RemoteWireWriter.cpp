@@ -152,8 +152,7 @@ RemoteWireWriter::RemoteWireWriter(StreamingRingBuffer* target)
 	fWindowOpened(0),
 	fWindowMessages(0),
 	fFlusher(-1),
-	fFlushSignal(-1),
-	fFlusherQuitting(false),
+	fFlusherContext(NULL),
 	fQueue(),
 	fPlainBytes(0),
 	fWireBytes(0),
@@ -879,6 +878,28 @@ RemoteWireWriter::_FlushLocked()
 }
 
 
+/*!	What one flusher thread runs on: its wake semaphore and its quit flag.
+
+	One per thread, never reused, and nobody rewrites it after the spawn (#626).
+	The writer's own members used to be both: _StopFlusher() set the quit flag
+	and deleted the semaphore without fLock, so a _StartFlusher() for a handshake
+	running at the same moment (WriteAndEnable() on the event thread, Reset() on
+	the NetReceiver thread) could have its fresh semaphore deleted between
+	create_sem() and spawn_thread(), leaving fFlusher pointing at a thread that
+	exited on its first acquire_sem() -- and the next handshake then saw
+	fFlusher >= 0 and started none, so that connection ran compressed with
+	nothing to close its drain windows. Taking fLock in _StopFlusher() alone is
+	not enough: a _StartFlusher() during the join would reset a shared quit flag
+	and the thread being joined would park on the new semaphore forever. With a
+	context per thread the flag a thread watches is only ever set for it.
+*/
+struct RemoteWireWriter::FlusherContext {
+	RemoteWireWriter*	writer;
+	sem_id				signal;
+	volatile bool		quitting;
+};
+
+
 /*!	Records that a message is sitting unflushed in the compressor, waking the
 	flusher for the first one. With fLock held.
 */
@@ -893,22 +914,33 @@ RemoteWireWriter::_OpenWindow()
 
 	// One wakeup per window, not per message: the flusher is released only as
 	// the window opens, and watches fWindowMessages for the rest of it.
-	if (fFlushSignal >= 0)
-		release_sem(fFlushSignal);
+	if (fFlusherContext != NULL)
+		release_sem(fFlusherContext->signal);
 }
 
 
 void
 RemoteWireWriter::_StartFlusher()
 {
+	// With fLock held (WriteAndEnable()), which is what makes the handoff with
+	// _StopFlusher() atomic: it snapshots and clears fFlusher/fFlusherContext
+	// under the same lock.
 	if (fFlusher >= 0)
 		return;
 
-	fFlusherQuitting = false;
-	fFlushSignal = create_sem(0, "remote wire flush");
-	if (fFlushSignal < 0) {
+	FlusherContext* context = new(std::nothrow) FlusherContext;
+	if (context == NULL) {
+		TRACE_ERROR("no flusher context; flushing every message\n");
+		fFlushWindow = 0;
+		return;
+	}
+	context->writer = this;
+	context->quitting = false;
+	context->signal = create_sem(0, "remote wire flush");
+	if (context->signal < 0) {
 		TRACE_ERROR("no flush semaphore (%s); flushing every message\n",
-			strerror(fFlushSignal));
+			strerror(context->signal));
+		delete context;
 		fFlushWindow = 0;
 		return;
 	}
@@ -917,13 +949,13 @@ RemoteWireWriter::_StartFlusher()
 	// bytes a client is waiting for do not leave until it runs. Below the
 	// drawing threads' own urgency, so it cannot preempt the work it exists to
 	// batch.
-	fFlusher = spawn_thread(_FlusherEntry, "remote wire flusher",
-		B_DISPLAY_PRIORITY, this);
-	if (fFlusher < 0) {
+	thread_id thread = spawn_thread(_FlusherEntry, "remote wire flusher",
+		B_DISPLAY_PRIORITY, context);
+	if (thread < 0) {
 		TRACE_ERROR("no flusher thread (%s); flushing every message\n",
-			strerror(fFlusher));
-		delete_sem(fFlushSignal);
-		fFlushSignal = -1;
+			strerror(thread));
+		delete_sem(context->signal);
+		delete context;
 
 		// Without the thread nothing would ever close a window, and a message
 		// could sit in the compressor until the next one happened along. Fall
@@ -932,40 +964,58 @@ RemoteWireWriter::_StartFlusher()
 		return;
 	}
 
-	resume_thread(fFlusher);
+	fFlusher = thread;
+	fFlusherContext = context;
+	resume_thread(thread);
 }
 
 
 /*!	Stops the flusher thread. Must be called with fLock *not* held: the thread
 	takes that lock, so joining it while holding the lock would deadlock.
+
+	The thread and its context are taken over under fLock, so this can never see
+	a _StartFlusher() half done, and are then joined and freed outside it. A
+	_StartFlusher() that runs during the join installs a new thread with a new
+	context; the old thread's quit flag is its own and stays set (#626).
 */
 void
 RemoteWireWriter::_StopFlusher()
 {
-	if (fFlusher < 0) {
-		if (fFlushSignal >= 0) {
-			delete_sem(fFlushSignal);
-			fFlushSignal = -1;
+	thread_id thread;
+	FlusherContext* context;
+	{
+		BAutolock lock(fLock);
+		if (!lock.IsLocked())
+			return;
+
+		thread = fFlusher;
+		context = fFlusherContext;
+		fFlusher = -1;
+		fFlusherContext = NULL;
+
+		if (context != NULL) {
+			context->quitting = true;
+			release_sem(context->signal);
 		}
-		return;
 	}
 
-	fFlusherQuitting = true;
-	release_sem(fFlushSignal);
+	if (thread >= 0) {
+		status_t unused;
+		wait_for_thread(thread, &unused);
+	}
 
-	status_t unused;
-	wait_for_thread(fFlusher, &unused);
-	fFlusher = -1;
-
-	delete_sem(fFlushSignal);
-	fFlushSignal = -1;
+	if (context != NULL) {
+		delete_sem(context->signal);
+		delete context;
+	}
 }
 
 
 /*static*/ int32
 RemoteWireWriter::_FlusherEntry(void* data)
 {
-	((RemoteWireWriter*)data)->_Flusher();
+	FlusherContext* context = (FlusherContext*)data;
+	context->writer->_Flusher(context);
 	return 0;
 }
 
@@ -979,16 +1029,16 @@ RemoteWireWriter::_FlusherEntry(void* data)
 	would be latency bought for no bytes at all.
 */
 void
-RemoteWireWriter::_Flusher()
+RemoteWireWriter::_Flusher(FlusherContext* context)
 {
-	while (!fFlusherQuitting) {
+	while (!context->quitting) {
 		// An idle stream has no open window, so this thread costs nothing until
 		// a message is actually held back.
-		if (acquire_sem(fFlushSignal) != B_OK)
+		if (acquire_sem(context->signal) != B_OK)
 			break;
 
 		uint64 seen = 0;
-		while (!fFlusherQuitting) {
+		while (!context->quitting) {
 			snooze(kQuiescenceInterval);
 
 			BAutolock lock(fLock);
