@@ -168,8 +168,9 @@ private:
 			void				_OpenWindow();
 			void				_StartFlusher();
 			void				_StopFlusher();
+			struct FlusherContext;
 	static	int32				_FlusherEntry(void* data);
-			void				_Flusher();
+			void				_Flusher(FlusherContext* context);
 			void				_MaybeReportStatistics();
 
 			StreamingRingBuffer* fTarget;
@@ -216,9 +217,13 @@ private:
 			// stopped feeding the window, so it can be closed early.
 			uint64				fWindowMessages;
 
+			// The flusher thread and the context it was spawned with (its wake
+			// semaphore and quit flag). Both are installed and taken away only
+			// under fLock; the context itself belongs to that one thread for
+			// its whole life and is freed by whoever joined it (see
+			// _StopFlusher()).
 			thread_id			fFlusher;
-			sem_id				fFlushSignal;
-			bool				fFlusherQuitting;
+			FlusherContext*		fFlusherContext;
 
 			/*!	The M2 flow-control policy. Sits here, upstream of the
 				compressor, and that placement is the whole reason the frame
