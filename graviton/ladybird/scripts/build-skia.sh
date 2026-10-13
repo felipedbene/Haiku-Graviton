@@ -12,6 +12,14 @@ mkdir -p out/haiku-arm64
 cp /boot/home/ladybird-wave2/skia-args.gn out/haiku-arm64/args.gn
 gn gen out/haiku-arm64
 ninja -C out/haiku-arm64 -j32 skia
+# PathOps (Op(SkPath, SkPath, SkPathOp)) is not in libskia.a with this arg set: m148 links the :pathops source set
+# into the "skia" component only through :pdf (BUILD.gn: skia_component("skia") -> :pdf -> :pathops), and
+# skia_enable_pdf is false. LibGfx calls Op(), so without this liblagom-gfx fails to load with
+# "Could not resolve symbol '_Z2OpRK6SkPathS1_8SkPathOp'". Build the source set and add its objects.
+ninja -C out/haiku-arm64 -j32 pathops
+ar rcs out/haiku-arm64/libskia.a $(find out/haiku-arm64/obj/src/pathops -name '*.o' | sort)
+nm -C --defined-only out/haiku-arm64/libskia.a | grep -q " T Op(SkPath const&, SkPath const&, SkPathOp)" \
+    || { echo "PathOps missing from libskia.a" >&2; exit 1; }
 echo "SKIA BUILD DONE (libskia.a in out/haiku-arm64)"
 # Then expose it to Ladybird via the pkg-config shim:
 #   cp <repo>/graviton/ladybird/pkgconfig/skia.pc /boot/home/lbdeps/lib/pkgconfig/

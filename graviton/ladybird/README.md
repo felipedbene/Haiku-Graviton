@@ -70,7 +70,7 @@ Run natively on the Graviton Haiku builder, as `baron`, from `/boot/home`.
    ```
    scripts/run-skia-fetch.sh                      # clone chrome/m148 + sync deps
    cd /boot/home/skia && git apply <repo>/graviton/ladybird/patches/skia-haiku.patch
-   scripts/build-skia.sh                          # gn gen (skia/args.gn) + ninja skia
+   scripts/build-skia.sh                          # gn gen (skia/args.gn) + ninja skia + PathOps
    ```
 8. **Expose the lbdeps pkg-config shims**. Copy everything in `pkgconfig/` into
    `/boot/home/lbdeps/lib/pkgconfig/` (the `*-ladybird.pc` ffmpeg aliases,
@@ -89,6 +89,14 @@ Run natively on the Graviton Haiku builder, as `baron`, from `/boot/home`.
 `scripts/run-craneliftB.sh` is an auxiliary track that reconfigures a separate
 `build-craneliftB` with `-DENABLE_CRANELIFT_JIT=ON` to prove LibWasm links the
 Cranelift WASM JIT (not stubbed).
+
+## Skia PathOps (found on the rev-4 build, #622)
+
+With `skia_enable_pdf = false`, Skia m148 leaves PathOps out of `libskia.a`: the `:pathops` source set reaches the
+`skia` component only through `:pdf`. LibGfx calls `Op(SkPath, SkPath, SkPathOp)`, so the build links but
+`liblagom-gfx` fails to load (`Could not resolve symbol '_Z2OpRK6SkPathS1_8SkPathOp'`). `scripts/build-skia.sh`
+builds the `pathops` target and adds its objects to the archive, and checks that `Op` is defined. The first rev-4
+package (sha256 `313114347c...`, never launched) had this defect.
 
 ## Wrapper shims (`wrappers/`)
 
