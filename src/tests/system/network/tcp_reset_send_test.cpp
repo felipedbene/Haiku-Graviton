@@ -198,6 +198,34 @@ arm_unblocked()
 }
 
 
+/*!	getsockopt(SO_ERROR) reports the reset and clears it; the send() after
+	that still fails with EPIPE and SIGPIPE, as on Linux, and not with
+	ENOTCONN as for a socket that was never connected (#624).
+*/
+static void
+arm_so_error()
+{
+	int client, server;
+	connected_pair(client, server);
+
+	reset_by_peer(server);
+	usleep(200000);
+
+	int error = 0;
+	socklen_t length = sizeof(error);
+	getsockopt(client, SOL_SOCKET, SO_ERROR, &error, &length);
+	check("so_error", "SO_ERROR after reset", error, ECONNRESET);
+
+	char byte = 'x';
+	int before = sPipeSignals;
+	int sendErrno = send_errno(client, &byte, 1);
+	check("so_error", "send() after SO_ERROR was read", sendErrno, EPIPE);
+	check_count("so_error", "SIGPIPE from that send()", sPipeSignals - before,
+		1);
+	close(client);
+}
+
+
 int
 main()
 {
@@ -205,6 +233,7 @@ main()
 
 	arm_blocked();
 	arm_unblocked();
+	arm_so_error();
 
 	if (sFailures != 0) {
 		printf("%d check(s) failed\n", sFailures);
