@@ -136,6 +136,7 @@ RemoteHWInterface::RemoteHWInterface(const char* target)
 	fConnectionGeneration(0),
 	fFrameSequence(0),
 	fRepaintOwed(0),
+	fLastRepair(0),
 	fConnectionSpeed(0),
 	fListenPort(10901),
 	fSessionCookieLength(0),
@@ -660,6 +661,10 @@ RemoteHWInterface::_CallbackCompare(const uint32* key,
 }
 
 
+// Floor between two repairs of flow-control collapses; see _RepairIfOwed().
+static const bigtime_t kMinRepairInterval = 100000;
+
+
 int32
 RemoteHWInterface::_EventThreadEntry(void* data)
 {
@@ -686,6 +691,27 @@ RemoteHWInterface::_EventThread()
 		// change at any instant and a reset in the middle of reading a body
 		// would lose fields the handler is about to use.
 		message.ResetIfGenerationChanged(ConnectionGeneration());
+
+		// #621: a repair owed by a flow-control collapse must not wait for
+		// the client's next inbound message. A viewer that is only watching
+		// (a page animating, a video, a long scroll settling) sends nothing,
+		// so the collapse's discarded content stayed missing -- a frozen
+		// screen -- until the user next touched the mouse. Wait for input
+		// here first: _CheckResyncOwed() wakes this wait, and a repair held
+		// back by the rate limit below is retried when its interval ends.
+		// Nothing about the inbound stream changes: no byte is consumed, and
+		// a cancel armed by _ConnectionClosed() is left for NextMessage().
+		bigtime_t wait = B_INFINITE_TIMEOUT;
+		if (atomic_get(&fRepaintOwed) != 0 && fIsConnected) {
+			wait = fLastRepair + kMinRepairInterval - system_time();
+			if (wait < 0)
+				wait = 0;
+		}
+		status_t waitResult = fReceiveBuffer->WaitForData(wait);
+		if (waitResult == B_INTERRUPTED || waitResult == B_TIMED_OUT) {
+			_RepairIfOwed();
+			continue;
+		}
 
 		uint16 code;
 		status_t result = message.NextMessage(code);
@@ -723,29 +749,9 @@ RemoteHWInterface::_EventThread()
 		TRACE("got message code %" B_PRIu16 " with %" B_PRIu32 " bytes\n", code,
 			message.DataLeft());
 
-		// A flow-control collapse owes a full repaint, and this is the thread
-		// that can safely ask for one: re-dirtying the desktop goes through the
-		// screen-changed listeners, which want locks a drawing thread is already
-		// holding when it discovers the debt. Consumed here rather than on a
-		// timer because any session with a client attached is a session sending
-		// input, so this runs within a frame of the collapse in practice --
-		// unmeasured, and stated as such in the flow-control document.
-		if (atomic_and(&fRepaintOwed, 0) != 0) {
-			TRACE_ERROR("repairing after a flow-control collapse\n");
-
-			// The same three steps, in the same order, as the
-			// client-requested RP_RESYNC below: the barrier says which
-			// generation the bytes behind it belong to, the replay restores
-			// how to draw, and the screen-changed notification is what
-			// restores *what* was drawn. Only the last one needs this thread,
-			// but splitting them across threads would put the replay ahead of
-			// its own barrier.
-			if ((fClientCapabilities & RP_CAP_RESYNC) != 0)
-				_SendResyncBarrier();
-
-			_ReplayState();
-			_NotifyScreenChanged();
-		}
+		// Also here, after every inbound message, as before: with a client
+		// sending input this is the earliest point.
+		_RepairIfOwed();
 
 		if (code >= RP_MOUSE_MOVED && code <= RP_MODIFIERS_CHANGED) {
 			// an input event, dispatch to the event stream
@@ -1489,6 +1495,46 @@ RemoteHWInterface::_EndFrame(RemoteMessage& message)
 }
 
 
+/*!	Pays a repaint owed by a flow-control collapse. Event thread only: this is
+	the thread that can safely ask for one, because re-dirtying the desktop goes
+	through the screen-changed listeners, which want locks a drawing thread is
+	already holding when it discovers the debt (see _CheckResyncOwed()).
+
+	At most one per kMinRepairInterval. A repair is a full repaint, on the link
+	that just overflowed; on a link slower than the screen's compressed rate
+	that repaint can collapse the queue again, and without a floor the two would
+	alternate at link speed with nothing else getting through. A repair held
+	back keeps fRepaintOwed set and is retried by the event thread's timed wait.
+	Returns whether it repaired.
+*/
+bool
+RemoteHWInterface::_RepairIfOwed()
+{
+	if (atomic_get(&fRepaintOwed) == 0 || !fIsConnected)
+		return false;
+	if (system_time() - fLastRepair < kMinRepairInterval)
+		return false;
+	if (atomic_and(&fRepaintOwed, 0) == 0)
+		return false;
+
+	fLastRepair = system_time();
+	TRACE_ERROR("repairing after a flow-control collapse\n");
+
+	// The same three steps, in the same order, as the client-requested
+	// RP_RESYNC: the barrier says which generation the bytes behind it belong
+	// to, the replay restores how to draw, and the screen-changed notification
+	// is what restores *what* was drawn. Only the last one needs this thread,
+	// but splitting them across threads would put the replay ahead of its own
+	// barrier.
+	if ((fClientCapabilities & RP_CAP_RESYNC) != 0)
+		_SendResyncBarrier();
+
+	_ReplayState();
+	_NotifyScreenChanged();
+	return true;
+}
+
+
 /*!	Records that the flow-control policy had to discard content it could not
 	prove would be redrawn, so that the event thread repairs it.
 
@@ -1517,6 +1563,11 @@ RemoteHWInterface::_CheckResyncOwed()
 
 	TRACE_ERROR("flow control had to discard; a resync is owed\n");
 	atomic_or(&fRepaintOwed, 1);
+
+	// Wake the event thread so the repair does not wait for client input
+	// (#621). WakeReader() takes only the receive ring's data lock, a leaf
+	// lock, so it is safe here under the engine lock this thread holds.
+	fReceiveBuffer->WakeReader();
 }
 
 

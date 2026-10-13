@@ -39,6 +39,20 @@ public:
 
 		void					MakeEmpty();
 
+		/*!	For the single reader, between messages: waits until there is
+			something to read, \a timeout passes (B_TIMED_OUT), or another
+			thread calls WakeReader() (B_INTERRUPTED). Consumes no data, so the
+			caller can do other work and then Read() as usual. A cancel armed
+			by MakeEmpty()/ClearReader() is left for the next Read() to report;
+			this returns B_OK for it. */
+		status_t				WaitForData(bigtime_t timeout);
+
+		/*!	Makes the reader's current or next WaitForData() return
+			B_INTERRUPTED. Never touches the data or a Read() in progress (one
+			woken by it re-checks and parks again). Takes only the data lock,
+			which nests inside every other lock, so any thread may call it. */
+		void					WakeReader();
+
 		/*!	How many bytes Write() can take right now without waiting, and the
 			total size of the ring.
 
@@ -65,6 +79,7 @@ private:
 		bool					fWriterWaiting;
 		bool					fCancelRead;
 		bool					fCancelWrite;
+		bool					fWakeReader;
 		sem_id					fReaderNotifier;
 		sem_id					fWriterNotifier;
 
