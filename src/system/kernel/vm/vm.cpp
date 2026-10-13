@@ -5246,8 +5246,13 @@ lock_memory_etc(team_id team, void* address, size_t numBytes, uint32 flags)
 				cacheChainLocker.Unlock();
 				range->~VMAreaWiredRange();
 				free_etc(range, mallocFlags);
-			} else
+			} else {
+				// Only [areaStart, nextAddress) has been wired. Shrink the
+				// range to that, since unlock_memory_etc() below looks it up
+				// by exact base and size and would otherwise not find it.
+				range->size = nextAddress - areaStart;
 				cacheChainLocker.Unlock();
+			}
 
 			break;
 		}
