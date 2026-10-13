@@ -32,6 +32,7 @@ StreamingRingBuffer::StreamingRingBuffer(size_t bufferSize,
 	fWriterWaiting(false),
 	fCancelRead(false),
 	fCancelWrite(false),
+	fWakeReader(false),
 	fReaderNotifier(-1),
 	fWriterNotifier(-1),
 	fReaderLocker("StreamingRingBuffer reader"),
@@ -322,6 +323,76 @@ StreamingRingBuffer::MakeEmpty()
 	fCancelRead = true;
 	if (fReaderWaiting) {
 		release_sem_etc(fReaderNotifier, 1, 0);
+		fReaderWaiting = false;
+	}
+}
+
+
+status_t
+StreamingRingBuffer::WaitForData(bigtime_t timeout)
+{
+	BAutolock readerLock(fReaderLocker);
+	if (!readerLock.IsLocked())
+		return B_ERROR;
+
+	BAutolock dataLock(fDataLocker);
+	if (!dataLock.IsLocked())
+		return B_ERROR;
+
+	bigtime_t deadline = timeout == B_INFINITE_TIMEOUT
+		? B_INFINITE_TIMEOUT : system_time() + timeout;
+	while (fReadable == 0) {
+		// Both flags are checked under fDataLocker right before parking, the
+		// same way Read() checks fCancelRead, so a wake or cancel requested
+		// while this thread was on its way here is not lost.
+		if (fWakeReader) {
+			fWakeReader = false;
+			return B_INTERRUPTED;
+		}
+		if (fCancelRead)
+			return B_OK;
+
+		fReaderWaiting = true;
+		dataLock.Unlock();
+
+		status_t result = deadline == B_INFINITE_TIMEOUT
+			? acquire_sem(fReaderNotifier)
+			: acquire_sem_etc(fReaderNotifier, 1, B_ABSOLUTE_TIMEOUT, deadline);
+
+		if (!dataLock.Lock())
+			return B_ERROR;
+
+		if (result == B_TIMED_OUT) {
+			// A writer that released the semaphore after the timeout left a
+			// count behind; the next Read()/WaitForData() takes it as a
+			// spurious wake and re-checks, which both already do.
+			fReaderWaiting = false;
+			if (fReadable > 0)
+				return B_OK;
+			if (fWakeReader) {
+				fWakeReader = false;
+				return B_INTERRUPTED;
+			}
+			return B_TIMED_OUT;
+		}
+		if (result != B_OK && result != B_INTERRUPTED)
+			return result;
+	}
+
+	return B_OK;
+}
+
+
+void
+StreamingRingBuffer::WakeReader()
+{
+	BAutolock dataLock(fDataLocker);
+	if (!dataLock.IsLocked())
+		return;
+
+	fWakeReader = true;
+	if (fReaderWaiting) {
+		release_sem_etc(fReaderNotifier, 1, B_DO_NOT_RESCHEDULE);
 		fReaderWaiting = false;
 	}
 }

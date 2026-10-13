@@ -161,6 +161,7 @@ static	void						_ConnectionClosedCallback(void *cookie);
 
 		void						_ReplayState();
 		void						_SendResyncBarrier();
+		bool						_RepairIfOwed();
 
 		void						_EndFrame(RemoteMessage& message);
 		void						_CheckResyncOwed();
@@ -195,6 +196,7 @@ static	void						_ConnectionClosedCallback(void *cookie);
 		// engine's state from a drawing thread deadlocks them against each
 		// other (see _CheckResyncOwed()).
 		int32						fRepaintOwed;
+		bigtime_t					fLastRepair;
 
 		uint32						fConnectionSpeed;
 		display_mode				fFallbackMode;
