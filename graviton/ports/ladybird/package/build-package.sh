@@ -41,7 +41,9 @@ VERSION="0~git${COMMIT}"
 # Revision 3: adds the native DeBeOS browser front end (UI/Haiku, binary
 # "Ladybird"), its Deskbar entry and the `ladybird` command; requires are now
 # derived mechanically (derive-requires.sh) instead of typed.
-REVISION=3
+# Revision 4: the UI/Haiku damage refinement of #622 (ladybird-622.patch): keystrokes and scroll notches no
+# longer present the whole view, and Skia now carries PathOps (graviton/ladybird/scripts/build-skia.sh).
+REVISION=4
 PKG="ladybird-${VERSION}-${REVISION}-arm64.hpkg"
 R="$OUT/pkgroot"
 P="$R/apps/Ladybird"
