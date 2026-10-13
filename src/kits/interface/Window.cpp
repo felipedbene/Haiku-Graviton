@@ -3018,11 +3018,16 @@ BWindow::task_looper()
 	if (IsLocked())
 		debugger("window must not be locked!");
 
+	bool portGone = false;
+
 	while (!fTerminating) {
 		// Did we get a message?
 		BMessage* msg = MessageFromPort();
 		if (msg)
 			_AddMessagePriv(msg);
+		else
+			_WaitIfPortGone(portGone);
+				// see BLooper::_WaitIfPortGone(): no spinning on a dead port
 
 		//	Get message count from port
 		int32 msgCount = port_count(fMsgPort);
