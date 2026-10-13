@@ -23,6 +23,8 @@ SimpleTest live_query :
 	: be [ TargetLibsupc++ ]
 ;
 
+SimpleTest lock_memory_partial_test : lock_memory_partial_test.c ;
+
 SimpleTest lock_node_test :
 	lock_node_test.cpp
 	: be
