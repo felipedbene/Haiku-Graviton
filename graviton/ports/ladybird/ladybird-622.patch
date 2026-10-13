@@ -1,9 +1,9 @@
 diff --git a/UI/Haiku/DamageRefinement.h b/UI/Haiku/DamageRefinement.h
 new file mode 100644
-index 00000000..bd4e9e98
+index 0000000000..4eb321eef8
 --- /dev/null
 +++ b/UI/Haiku/DamageRefinement.h
-@@ -0,0 +1,184 @@
+@@ -0,0 +1,232 @@
 +/*
 + * Copyright (c) 2026, the DeBeOS developers
 + *
@@ -187,12 +187,68 @@ index 00000000..bd4e9e98
 +    return best;
 +}
 +
++// The rectangles still wrong on screen once the window has blitted destination rows [band_top, band_bottom) from
++// rows + dy (an empty band means no blit): for a row inside the band the screen then shows old row y + dy, for any
++// other row it still shows old row y. Every pixel that differs from `new_frame` there is covered; nothing else is.
++// Consecutive differing rows form one rect spanning their leftmost to rightmost differing pixel, so an overlay
++// scrollbar thumb and the strip a scroll exposes come out as two small rects instead of one rect the size of the
++// view. At most `max_rects` are produced (the last absorbs any further rows). Returns the number written to `out`;
++// `*area` receives the pixels they cover.
++inline int residual_rects(uint8_t const* old_frame, size_t old_pitch, uint8_t const* new_frame, size_t new_pitch,
++    int width, int height, int dy, int band_top, int band_bottom, Rect* out, int max_rects, long* area)
++{
++    int count = 0;
++    *area = 0;
++    if (width <= 0 || height <= 0 || max_rects <= 0)
++        return 0;
++    size_t const row_bytes = static_cast<size_t>(width) * bytes_per_pixel;
++    bool open = false;
++    for (int y = 0; y < height; ++y) {
++        bool const blitted = y >= band_top && y < band_bottom;
++        int const source_y = blitted ? y + dy : y;
++        auto const* shown = old_frame + static_cast<size_t>(source_y) * old_pitch;
++        auto const* wanted = new_frame + static_cast<size_t>(y) * new_pitch;
++        if (memcmp(shown, wanted, row_bytes) == 0) {
++            open = false;
++            continue;
++        }
++        int first = 0;
++        while (memcmp(shown + static_cast<size_t>(first) * bytes_per_pixel, wanted + static_cast<size_t>(first) * bytes_per_pixel, bytes_per_pixel) == 0)
++            ++first;
++        int last = width - 1;
++        while (memcmp(shown + static_cast<size_t>(last) * bytes_per_pixel, wanted + static_cast<size_t>(last) * bytes_per_pixel, bytes_per_pixel) == 0)
++            --last;
++        if (!open && count == max_rects)
++            open = true; // keep growing the last rect
++        if (!open) {
++            out[count++] = { first, y, last - first + 1, 1 };
++            open = true;
++            continue;
++        }
++        Rect& r = out[count - 1];
++        int const left = first < r.x ? first : r.x;
++        int const right = last > r.x + r.width - 1 ? last : r.x + r.width - 1;
++        r = { left, r.y, right - left + 1, y - r.y + 1 };
++    }
++    for (int i = 0; i < count; ++i)
++        *area += static_cast<long>(out[i].width) * out[i].height;
++    return count;
++}
++
 +}
 diff --git a/UI/Haiku/PageView.cpp b/UI/Haiku/PageView.cpp
-index dabdec78..5d4a3fb9 100644
+index dabdec7878..05f86db5d7 100644
 --- a/UI/Haiku/PageView.cpp
 +++ b/UI/Haiku/PageView.cpp
-@@ -50,6 +50,8 @@ void PageView::AttachedToWindow()
+@@ -4,6 +4,7 @@
+  * SPDX-License-Identifier: BSD-2-Clause
+  */
+ 
++#include <Region.h>
+ #include <LibWebView/ViewImplementation.h>
+ #include <UI/Haiku/Application.h>
+ #include <UI/Haiku/KeyMapping.h>
+@@ -50,6 +51,8 @@ void PageView::AttachedToWindow()
      {
          BAutolock locker(m_surface->lock);
          m_surface->page_view = BMessenger(this);
@@ -201,21 +257,37 @@ index dabdec78..5d4a3fb9 100644
      }
      m_surface->frame_message_pending = false;
      Invalidate();
-@@ -128,6 +130,13 @@ void PageView::Draw(BRect update_rect)
+@@ -126,7 +129,28 @@ void PageView::Draw(BRect update_rect)
+     BRect source = update_rect & frame_rect;
+     if (source.IsValid()) {
          SetDrawingMode(B_OP_COPY);
-         DrawBitmap(m_surface->bitmap, source, source);
-     }
+-        DrawBitmap(m_surface->bitmap, source, source);
++        // #622. update_rect is only the bounding box of what is dirty. During an update app_server clips drawing
++        // to the dirty region (src/servers/app/Window.cpp:708-711, GetEffectiveDrawingRegion), and that region is
++        // what GetClippingRegion() returns. Drawing it rect by rect keeps two small damage rects far apart from
++        // costing one bitmap the size of their bounding box on the remote desktop.
++        BRegion clip;
++        GetClippingRegion(&clip);
++        if (clip.CountRects() > 1) {
++            for (int32 i = 0; i < clip.CountRects(); ++i) {
++                BRect part = clip.RectAt(i) & source;
++                if (part.IsValid())
++                    DrawBitmap(m_surface->bitmap, part, part);
++            }
++        } else {
++            DrawBitmap(m_surface->bitmap, source, source);
++        }
++    }
 +    // The bitmap already holds the frame after a pending blit; see PresentSurface::scroll_pending.
 +    if (m_surface->scroll_pending) {
 +        Gfx::IntRect painted { static_cast<int>(update_rect.left), static_cast<int>(update_rect.top),
 +            update_rect.IntegerWidth() + 1, update_rect.IntegerHeight() + 1 };
 +        auto& recorded = m_surface->painted_while_scroll_pending;
 +        recorded = recorded.is_empty() ? painted : recorded.united(painted);
-+    }
+     }
      // Whatever the frame does not cover (mid-resize) gets the page background, as Qt's paintEvent does
      // (UI/Qt/WebContentView.cpp:903-910).
-     if (update_rect.right > frame_rect.right)
-@@ -343,17 +352,40 @@ void PageView::MessageReceived(BMessage* message)
+@@ -343,17 +367,50 @@ void PageView::MessageReceived(BMessage* message)
  {
      switch (message->what) {
      case kMsgFrameReady: {
@@ -225,6 +297,8 @@ index dabdec78..5d4a3fb9 100644
 +        int dy = 0;
 +        Gfx::IntRect band; // blit destination
 +        Gfx::IntRect stale;
++        Gfx::IntRect rects[PresentSurface::max_damage_rects];
++        int rect_count = 0;
          {
              BAutolock locker(m_surface->lock);
              m_surface->frame_message_pending = false;
@@ -234,6 +308,10 @@ index dabdec78..5d4a3fb9 100644
 -            if (damage.is_empty())
 -                return;
 -            dirty = BRect(damage.left(), damage.top(), damage.right() - 1, damage.bottom() - 1);
++            rect_count = m_surface->damage_rect_count;
++            for (int i = 0; i < rect_count; ++i)
++                rects[i] = m_surface->damage_rects[i];
++            m_surface->damage_rect_count = 0;
 +            scroll = m_surface->scroll_pending;
 +            if (scroll) {
 +                dy = m_surface->scroll_dy;
@@ -255,21 +333,34 @@ index dabdec78..5d4a3fb9 100644
 +                if (!moved.is_empty())
 +                    Invalidate(to_brect(moved));
 +            }
++        }
++        if (rect_count > 0) {
++            for (int i = 0; i < rect_count; ++i)
++                Invalidate(to_brect(rects[i]));
++        } else if (!damage.is_empty()) {
++            Invalidate(to_brect(damage));
          }
 -        Invalidate(dirty);
-+        if (!damage.is_empty())
-+            Invalidate(to_brect(damage));
          return;
      }
      case kMsgCursorChanged: {
 diff --git a/UI/Haiku/PresentSurface.h b/UI/Haiku/PresentSurface.h
-index c5a21e57..7aadb379 100644
+index c5a21e5739..5c878e5dfc 100644
 --- a/UI/Haiku/PresentSurface.h
 +++ b/UI/Haiku/PresentSurface.h
-@@ -39,6 +39,16 @@ struct PresentSurface final : public AtomicRefCounted<PresentSurface> {
+@@ -38,7 +38,24 @@ struct PresentSurface final : public AtomicRefCounted<PresentSurface> {
+     // Written by [C] (WebViewBridge::present_front_bitmap), read by [W] (PageView::Draw).
      BBitmap* bitmap { nullptr };
      Gfx::IntSize size;
-     Gfx::IntRect damage;                        // accumulated until [W] invalidates it
+-    Gfx::IntRect damage;                        // accumulated until [W] invalidates it
++    Gfx::IntRect damage;                        // accumulated until [W] invalidates it: the bounding box of
++                                                // damage_rects, or everything when they overflowed
++    // #622. The rects that make up `damage`. A scroll leaves two small ones far apart (an overlay scrollbar thumb
++    // and the exposed strip) whose bounding box is the whole view; invalidating them one by one keeps the repaint,
++    // and so the remote desktop's bitmap traffic, to what changed. -1: more than fit, use `damage`.
++    static constexpr int max_damage_rects = 8;
++    Gfx::IntRect damage_rects[max_damage_rects];
++    int damage_rect_count { 0 };
 +    // A scroll [C] found by row comparison (DamageRefinement::find_vertical_shift, #622): before invalidating
 +    // `damage`, [W] blits window rows [scroll_top + scroll_dy, scroll_bottom + scroll_dy) to [scroll_top, scroll_bottom).
 +    // `bitmap` already holds the scrolled frame, so whatever [W] paints from it before the blit lands on the blit's
@@ -284,7 +375,7 @@ index c5a21e57..7aadb379 100644
      BCursor* pending_cursor { nullptr };        // handed from [C] to [W]
  
 diff --git a/UI/Haiku/WebViewBridge.cpp b/UI/Haiku/WebViewBridge.cpp
-index 572af6af..feb5c458 100644
+index 572af6afea..ce5f66ea03 100644
 --- a/UI/Haiku/WebViewBridge.cpp
 +++ b/UI/Haiku/WebViewBridge.cpp
 @@ -13,6 +13,7 @@
@@ -305,7 +396,44 @@ index 572af6af..feb5c458 100644
  static Gfx::Color to_gfx_color(rgb_color color)
  {
      return Gfx::Color(color.red, color.green, color.blue, color.alpha);
-@@ -139,13 +143,49 @@ void WebViewBridge::present_front_bitmap()
+@@ -73,9 +77,16 @@ WebViewBridge::WebViewBridge(Gfx::IntSize initial_viewport)
+ 
+     on_ready_to_paint = [this] { present_front_bitmap(); };
+     on_page_background_color_change = [this](Gfx::Color color) {
++        auto background = to_rgb_color(color);
+         {
+             BAutolock locker(m_surface->lock);
+-            m_surface->background = to_rgb_color(color);
++            // #622. WebContent re-announces the page background on relayouts (every keystroke in a text field, every
++            // scroll notch) with the colour unchanged. Forcing a full copy for those threw away the damage
++            // refinement below and sent the whole view over the remote desktop each time; only a real change can
++            // alter what the window shows.
++            if (m_surface->background == background)
++                return;
++            m_surface->background = background;
+         }
+         m_present_needs_full_copy = true;
+         post_frame_ready();
+@@ -104,6 +115,18 @@ void WebViewBridge::did_accept_presented_backing_store(i32, Gfx::IntRect damage_
+ // (ViewImplementation.cpp:205-207), so nothing writes to it during the copy. The window thread only ever reads the
+ // copy. Zero-copy is not possible: cross-team clone_area needs B_CLONEABLE_AREA (src/system/kernel/vm/vm.cpp:2540)
+ // and the backing store is shm_open+mmap memory (LibCore/System.cpp:238-251).
++void WebViewBridge::add_damage_locked(Gfx::IntRect rect)
++{
++    if (rect.is_empty())
++        return;
++    m_surface->damage = m_surface->damage.is_empty() ? rect : m_surface->damage.united(rect);
++    auto& count = m_surface->damage_rect_count;
++    if (count >= 0 && count < PresentSurface::max_damage_rects)
++        m_surface->damage_rects[count++] = rect;
++    else
++        count = -1;
++}
++
+ void WebViewBridge::present_front_bitmap()
+ {
+     VERIFY(Application::is_core_thread());
+@@ -139,13 +162,72 @@ void WebViewBridge::present_front_bitmap()
              m_present_needs_full_copy = true;
          }
  
@@ -326,6 +454,7 @@ index 572af6af..feb5c458 100644
 +                __builtin_memcpy(destination + y * destination_pitch + copy_rect.left() * 4, bitmap->scanline_u8(y) + copy_rect.left() * 4, row_bytes);
 +            changed = copy_rect;
 +            m_surface->scroll_pending = false; // the full repaint below supersedes a blit [W] has not run yet
++            add_damage_locked(changed);
 +        } else {
 +            // #622. Invariant: once [W] has run any pending blit and invalidated `damage`, the window shows exactly
 +            // this BBitmap. So a pixel that is byte-identical in the new frame needs no repaint, whatever Ladybird
@@ -338,30 +467,52 @@ index 572af6af..feb5c458 100644
 +                shift = DamageRefinement::find_vertical_shift(destination, destination_pitch, bitmap->scanline_u8(0), bitmap->pitch(),
 +                    size.width(), size.height(), m_row_hashes.data(), minimum_scroll_rows);
 +            }
-+            auto rect = DamageRefinement::copy_changed(destination, destination_pitch, bitmap->scanline_u8(0), bitmap->pitch(),
-+                { copy_rect.x(), copy_rect.y(), copy_rect.width(), copy_rect.height() }, shift.top, shift.bottom);
-+            changed = { rect.x, rect.y, rect.width, rect.height };
 +            if (shift.is_valid()) {
-+                m_surface->scroll_pending = true;
-+                m_surface->scroll_dy = shift.dy;
-+                m_surface->scroll_top = shift.top;
-+                m_surface->scroll_bottom = shift.bottom;
++                // Blit whichever band leaves less to repaint: the run of rows that matched exactly, or the whole
++                // overlap of the two frames. An overlay scrollbar thumb moves with the page and cuts the exact run,
++                // but it only spans a few columns, so blitting through it and repainting the thumb is far cheaper.
++                // Either way the damage is exactly the pixels still wrong after the blit (residual_rects()).
++                int const height = size.height();
++                int const overlap_top = shift.dy < 0 ? -shift.dy : 0;
++                int const overlap_bottom = shift.dy > 0 ? height - shift.dy : height;
++                DamageRefinement::Rect exact[PresentSurface::max_damage_rects];
++                DamageRefinement::Rect overlap[PresentSurface::max_damage_rects];
++                long exact_area = 0;
++                long overlap_area = 0;
++                int const exact_count = DamageRefinement::residual_rects(destination, destination_pitch, bitmap->scanline_u8(0), bitmap->pitch(),
++                    size.width(), height, shift.dy, shift.top, shift.bottom, exact, PresentSurface::max_damage_rects, &exact_area);
++                int const overlap_count = DamageRefinement::residual_rects(destination, destination_pitch, bitmap->scanline_u8(0), bitmap->pitch(),
++                    size.width(), height, shift.dy, overlap_top, overlap_bottom, overlap, PresentSurface::max_damage_rects, &overlap_area);
++                bool const use_overlap = overlap_area < exact_area;
 +                // Damage [W] has not invalidated yet is still stale on screen, and the blit carries it along: treat it
 +                // like a paint made while the blit was pending.
 +                m_surface->painted_while_scroll_pending = m_surface->damage;
-+            }
-+            if (changed.is_empty() && !shift.is_valid()) {
-+                m_pending_damage = {};
-+                return; // the frame is byte-identical to what the window shows
++                m_surface->scroll_pending = true;
++                m_surface->scroll_dy = shift.dy;
++                m_surface->scroll_top = use_overlap ? overlap_top : shift.top;
++                m_surface->scroll_bottom = use_overlap ? overlap_bottom : shift.bottom;
++                auto row_bytes = static_cast<size_t>(size.width()) * 4;
++                for (int y = 0; y < height; ++y)
++                    __builtin_memcpy(destination + y * destination_pitch, bitmap->scanline_u8(y), row_bytes);
++                auto const* rects = use_overlap ? overlap : exact;
++                for (int i = 0, n = use_overlap ? overlap_count : exact_count; i < n; ++i)
++                    add_damage_locked({ rects[i].x, rects[i].y, rects[i].width, rects[i].height });
++            } else {
++                auto rect = DamageRefinement::copy_changed(destination, destination_pitch, bitmap->scanline_u8(0), bitmap->pitch(),
++                    { copy_rect.x(), copy_rect.y(), copy_rect.width(), copy_rect.height() });
++                changed = { rect.x, rect.y, rect.width, rect.height };
++                if (changed.is_empty()) {
++                    m_pending_damage = {};
++                    return; // the frame is byte-identical to what the window shows
++                }
++                add_damage_locked(changed);
 +            }
 +        }
-+        if (!changed.is_empty())
-+            m_surface->damage = m_surface->damage.is_empty() ? changed : m_surface->damage.united(changed);
      }
      m_pending_damage = {};
      m_present_needs_full_copy = false;
 diff --git a/UI/Haiku/WebViewBridge.h b/UI/Haiku/WebViewBridge.h
-index ee9067c7..d021418e 100644
+index ee9067c761..74a6aa3aca 100644
 --- a/UI/Haiku/WebViewBridge.h
 +++ b/UI/Haiku/WebViewBridge.h
 @@ -8,6 +8,7 @@
@@ -372,11 +523,12 @@ index ee9067c7..d021418e 100644
  #include <LibGfx/Size.h>
  #include <LibWebView/ViewImplementation.h>
  #include <UI/Haiku/PresentSurface.h>
-@@ -74,6 +75,7 @@ private:
+@@ -74,6 +75,8 @@ private:
      bool m_viewport_push_pending { false };
      Gfx::IntRect m_pending_damage;
      bool m_present_needs_full_copy { true };
 +    Vector<u64> m_row_hashes; // scratch for DamageRefinement::find_vertical_shift
++    void add_damage_locked(Gfx::IntRect); // m_surface->lock held
  };
  
  }
