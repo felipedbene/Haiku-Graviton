@@ -24,6 +24,16 @@ provides {
 #else
 	haiku=%HAIKU_VERSION% compat>=R1~beta1
 #endif
+#if defined(HAIKU_PACKAGING_ARCH_arm64)
+	/* Third-party arm64 packages built for other Haiku arm64 images (the R
+	   Chromium package among them) require "haiku_arm64", the
+	   secondary-architecture style name, rather than "haiku". Nothing here
+	   provided it, so pkgman resolved the requirement from the publisher's
+	   repository and replaced this package -- kernel, loader, servers -- with
+	   theirs, whose kernel does not boot on EC2 Graviton. Provide the name
+	   from the real system package so such requirements are met by it. */
+	haiku_arm64=%HAIKU_VERSION% compat>=R1~beta1
+#endif
 	cmd:arp
 	cmd:chop
 	cmd:clear
