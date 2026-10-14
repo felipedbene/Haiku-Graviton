@@ -4,11 +4,23 @@ import { Construct } from 'constructs';
  * Tags every DeBeOS-owned stack applies. `auto-stop`/`auto-delete` are the
  * account's spring-clean/idle-reaper protection keys (honored by the cleanup);
  * `Project` groups the fleet. Single source for both the bake and ops stacks.
+ *
+ * `auto-delete` must be `'no'`, not `'off'`: SpringClean's manifest asks for the
+ * value "no", so `'off'` protects nothing while reading exactly like protection.
+ * Older DeBeOS resources used `'off'` and that is how the live canonical
+ * ami-05cf86c1c19e3ca58 ended up reapable and had to be protected by hand (see
+ * haiku-canonical's promote path, #520). This value predated that discovery.
+ *
+ * Scope note: these are CDK *stack* tags, so they land on the durable pipeline
+ * and ops infrastructure, NOT on the AMIs the bake scripts register at runtime.
+ * Baked-image retention is deliberately the opposite policy -- only the current
+ * canonical and the live builder AMI are protected, and superseded ones are
+ * released so `cmd_prune` and the reaper can retire them.
  */
 export const DEBEOS_TAGS: Record<string, string> = {
   Project: 'haiku-graviton',
   'auto-stop': 'no',
-  'auto-delete': 'off',
+  'auto-delete': 'no',
 };
 
 /**
