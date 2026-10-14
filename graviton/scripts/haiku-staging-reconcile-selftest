@@ -72,16 +72,50 @@ def _u32(aid, val, children=0):
     return _tag(aid, 2, children, 2) + struct.pack(">I", val)
 
 
-def build_hpkg(name, major, minor, micro, rev, vendor=None, packager=None):
+def _version_node(major, minor=None, micro=None, rev=None, pre=None):
+    """A version attribute as real packages store it: minor/micro/revision/
+    pre-release are CHILDREN of major, not siblings. This fixture used to emit
+    them flat at the top level, which no real hpkg does -- and that is why it
+    did not catch the read_meta version leak (nested resolvable constraints
+    being harvested as the package's own version)."""
+    kids = b""
+    if minor is not None:
+        kids += _s(23, minor)
+    if micro is not None:
+        kids += _s(24, micro)
+    if rev is not None:
+        kids += _u32(25, rev)
+    if pre is not None:
+        kids += _s(36, pre)
+    if not kids:
+        return _s(22, major)
+    return _tag(22, 3, 1, 0) + major.encode() + b"\x00" + kids + _leb128(0)
+
+
+def _resolvable(aid, name, major, minor=None, micro=None, pre=None):
+    """One PROVIDES (28) / REQUIRES (29) entry, carrying its own nested version
+    constraint -- the shape that fooled the old flat reader."""
+    return (_tag(aid, 3, 1, 0) + name.encode() + b"\x00"
+            + _version_node(major, minor, micro, pre=pre) + _leb128(0))
+
+
+def build_hpkg(name, major, minor, micro, rev, vendor=None, packager=None,
+               provides=(), requires=()):
     """A minimal but real HPKG (uncompressed heap) that hpkg_meta.read_meta and
     read_meta_via_ranges parse. `vendor`/`packager` let a fixture carry the same
-    name+version as another while differing in BYTES."""
+    name+version as another while differing in BYTES. `provides`/`requires` are
+    (name, major[, minor, micro, pre]) tuples whose nested version constraints
+    must NOT leak into the package's own version."""
     attrs = _s(15, name)
     if vendor:
         attrs += _s(18, vendor)
     if packager:
         attrs += _s(19, packager)
-    attrs += _s(22, major) + _s(23, minor) + _s(24, micro) + _u32(25, rev)
+    attrs += _version_node(major, minor, micro, rev)
+    for r in provides:
+        attrs += _resolvable(28, *r)
+    for r in requires:
+        attrs += _resolvable(29, *r)
     attrs += _leb128(0)
     strings = b"\x00"
     section = strings + attrs
@@ -193,6 +227,9 @@ def make_store():
         ("published-pkg", "1", "0", "0", 1, 9),   # exact identity, other bytes
         ("superseded-pkg", "2", "0", "0", 1, 9),  # newer than staged 1.0.0
         ("unrelated", "5", "5", "5", 1, 9),
+        # Real shape of the #561 false-orphan class: a two-component version
+        # (no micro, no pre-release), exactly like autoconf-2.72-1.
+        ("leaky-pkg", "2", "72", "", 1, 9),
     ])
     blue = build_repo([
         ("published-pkg", "1", "0", "0", 1, 9),   # present in blue too
@@ -216,6 +253,18 @@ def make_store():
         # ORPHANED: pool has only an OLDER 1.0.0-1 (nothing newer)
         (POOL_BUCKET, "staging/d/downgrade-pkg-2.0.0-1-arm64.hpkg"):
             (build_hpkg("downgrade-pkg", "2", "0", "0", 1), old),
+        # PUBLISHED: the regression. Its own version is 2.72-1 with NO micro and
+        # NO pre-release, but it requires `haiku >= r1~beta6_hrev59996` and
+        # `cmd:awk >= 3.1.8`, whose nested constraints can donate exactly those
+        # two unset slots. read_meta used to harvest them and report
+        # `2.72.8~beta6_hrev59996`, which matches nothing in the pool -- so a
+        # package sitting byte-for-byte in green came back ORPHANED. 21 of the
+        # 333 "unpublished" items in #561 were this artifact.
+        (POOL_BUCKET, "staging/e/leaky-pkg-2.72-1-arm64.hpkg"):
+            (build_hpkg("leaky-pkg", "2", "72", None, 1,
+                        vendor="Haiku Project", packager="staged <x@y>",
+                        requires=[("haiku", "r1", None, None, "beta6_hrev59996"),
+                                  ("cmd:awk", "3", "1", "8")]), old),
     }
     return store
 
@@ -284,6 +333,9 @@ def main():
     ok &= check(v.get("published-pkg-1.0.0-1-arm64.hpkg") == "PUBLISHED",
                 "PUBLISHED: same name+version+revision, DIFFERENT bytes "
                 "(re-stamp) -> PUBLISHED, not a false orphan")
+    ok &= check(v.get("leaky-pkg-2.72-1-arm64.hpkg") == "PUBLISHED",
+                "PUBLISHED: nested requires constraints do NOT leak into the "
+                "package's own version (the #561 false-orphan regression)")
     ok &= check(v.get("superseded-pkg-1.0.0-1-arm64.hpkg") == "SUPERSEDED",
                 "SUPERSEDED: pool has a newer 2.0.0-1 of the name")
     ok &= check(v.get("orphan-pkg-3.0.0-1-arm64.hpkg") == "ORPHANED",

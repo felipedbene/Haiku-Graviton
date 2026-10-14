@@ -40,6 +40,14 @@
 # status checks. It is intentionally NOT wired in here -- a new failing check in
 # the session hook would be disruptive; wiring is a deliberate follow-up.
 #
+# That follow-up is now actually viable. Until #658 the ORPHANED class
+# false-positived badly: `read_meta` fabricated versions out of nested
+# provides/requires constraints, so 21 packages sitting byte-for-byte in green
+# reported as stranded, and wiring this in would have fired 21 false alarms into
+# every session. With #658 fixed a `--candidates` run over the live pools reads
+# 0 ORPHANED, 3 SUPERSEDED, 101 PUBLISHED -- i.e. quiet, which is the
+# precondition for a hook check.
+#
 # No account-scoped name is baked into this tracked file: the account id is read
 # at runtime from `aws sts get-caller-identity` (like haiku-status), and every
 # bucket/prefix can be overridden by flag or env.

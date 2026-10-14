@@ -208,6 +208,23 @@ lands) are the publisher's `/dev/shm` and disk sizing:
 - **Exclude decompression bombs (>300 MB uncompressed):** `0ad_data`,
   `openarena_data`, `ayat_recit_ghamadi`, `another_world`, `yab_ide`,
   `vvvvvv_data` blow `/dev/shm` on re-stamp by themselves → `needs_human` (#168).
+
+  > **Both of the two rules above are probably obsolete — confirm before relying
+  > on either.** They exist because the old re-stamp ran a whole-tree `package
+  > extract`. The re-stamp is now **metadata-only** (#41/#164): it edits
+  > `.PackageInfo` and splices it back with `package add -f -i`, never unpacking
+  > contents, so a package's uncompressed size is irrelevant and the former
+  > size guard is gone — see the comment at `graviton/scripts/haiku-repo-add:66-73`.
+  > A **16-package single `haiku-repo-add` call succeeded** on 2026-10-14 (the
+  > blue→green promote of plan `20261014T151755Z`, via the
+  > `debeos-repo-promote-green` CodeBuild project; 16 packages verified live in
+  > green afterwards). That is *consistent* with the ≤18 rule and does not test
+  > it — the untested range is **19–26 packages**, and no bomb has been run
+  > through the metadata-only re-stamp at all. So both rules stay written down.
+  > **One publish of 19–26 packages settles the chunk rule**; one bomb settles
+  > the other; if either clears, delete that rule. Related dead config:
+  > `haiku-repo-restamp-packager`'s `RESTAMP_MAX_BYTES`/`--max-bytes` are defined
+  > and never referenced again.
 - **The index rebuild syncs the whole pool** — the publisher root must fit it
   (≥40–60 GB as the pool grows; `HG_PUBLISHER_DISK_GIB`), or it ENOSPCs mid-sync.
 - **Verify the result against S3, not the publish log** — `| tail` masks the exit
@@ -567,6 +584,35 @@ named per entry.
   `pkgman list-installed` / the pool's real provides (§2.1), never an assumed
   baseline — a `NOPROV:` on a name the pool actually ships is a crediting bug, not a
   missing port.
+- **`haiku-staging-reconcile`'s ORPHANED class false-positived until #658 (fixed
+  2026-10-14); the lesson outlives the bug.** A run reported 21 ORPHANED; **every
+  one spot-checked was already in green under the identical filename**. Cause: the
+  two readers disagreed about a package's own version. Reading the hpkg directly
+  gave `autoconf-2.72.8~beta6_hrev59996-1`, while the green `repo` index — and the
+  filename — said `autoconf-2.72-1`. The staged and published copies are
+  byte-different but carry the *same* internal identity, differing only by the
+  canonical re-stamp (`packager`/`vendor`), so they are the same package and
+  nothing was stranded. **Mechanism** (`graviton/scripts/hpkg_meta.py`): a
+  package's own version sits at the TOP level of the attributes section, but every
+  `provides`/`requires` resolvable nests its own version *constraint* underneath
+  itself. `read_meta`'s flat, fully-recursive, first-wins walk harvested those and
+  filled whichever slots the package left unset — `requires cmd:awk >= 3.1.8`
+  donated the micro, `requires haiku >= r1~beta6_hrev59996` the pre-release. The
+  fabricated version is always *greater-looking* than the real one. **Consequence
+  had it been acted on:** publishing those "orphans" pushes bootstrap-era
+  artifacts into live green at apparently newer versions, after which every future
+  promote withholds the clean copies as `green-is-newer-or-equal` — a self-locking
+  regression.
+- **Rule (two readers, one comparator).** `hpkg_meta` has a direct-hpkg reader and
+  a pool-index reader, and `haiku-pool-gc` **deletes** on their shared comparator.
+  They MUST share the parse, not merely agree by luck: `read_meta` and `read_repo`
+  both go through `_walk_tree` + `_pkg_from_nodes`, and version components are read
+  from the **direct children of `VERSION_MAJOR` only**. Any change here must show
+  `read_repo` output unchanged over the live green index (the `graviton/portal` JS
+  port asserts equality against it) and must keep
+  `haiku-staging-reconcile-selftest` green — including its `--mutate` run, which
+  proves the identity match is load-bearing. Fixture versions must **nest** as real
+  hpkgs do; the flat-sibling fixture is what let this bug ship.
 
 ### 13.5 Decouple builds from publishing; publish incrementally, single-flight, foreground (extends §3)
 
@@ -593,10 +639,30 @@ named per entry.
   harvest-minus-green diff would add junk to the pool. Publish **only the set THIS wave
   actually built** — filter the harvest to the wave's own completions and drop
   `_bootstrap`/`_debuginfo` unless a wave deliberately built them.
+- **Rule (backfill).** A *backfill* campaign (publishing deps that earlier waves
+  built but never published) has no single wave to scope to, so rule (5) above
+  gives it no answer. Scope it **dep-driven, not
+  census-driven**: take the `requires` of the blocked consumers, subtract what the
+  green index already `provides`, and publish only the resulting *names* — resolving
+  each to its newest built artifact. Never diff the build census against green:
+  `hpkg/arm64-incoming/` holds ~144k objects and is a build census by design (most
+  of it is legitimately unpublished at any moment), so that diff flags the entire
+  backlog. Note no code implements the `_bootstrap`/`_debuginfo` filter rule (5)
+  mandates — it is prose only, so a backfill must filter caller-side, and
+  `haiku-repo-promote-green` will **not** do it for you (it has no subset or filter
+  flag at all; it is always a whole-pool blue→green union add).
 - **Check.** After each publish, verify against S3, not the log tail (§3/§7): count
   objects/index in the pool prefix. Confirm exactly one publisher is running (§3)
   and that the next build wave launched **without** waiting for it. Confirm no
   `_bootstrap`/`_debuginfo` object landed that this wave did not build.
+- **Known deviation: green carries two `_debuginfo` packages (2026-10-14).** The
+  blue→green promote of plan `20261014T151755Z` put `blis_debuginfo` and
+  `graphicsmagick_debuginfo` into live green, because `haiku-repo-promote-green`
+  is a whole-pool union add with **no subset or filter flag** — the only way to
+  exclude them was to remove them from blue first, and that was not done. So the
+  `_debuginfo` half of the check above is **expected to flag these two** until
+  either the tool gains a filter or they are removed from green deliberately.
+  Do not "fix" it by deleting from green on a hunch; green is live.
 
 ### 13.6 Native-builder launch constraints: default disk, cap parallelism, absolute interpreters (extends §8)
 

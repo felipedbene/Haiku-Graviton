@@ -13,23 +13,32 @@
 # blue stays the pipeline's staging pool, and reaching users becomes this
 # explicit, automated-but-gated promote.
 #
-# TWO MEASURED FACTS THAT CONSTRAIN THIS TOOL (#443, re-measured here)
-# -------------------------------------------------------------------
-# 1. GREEN IS NOT A SUBSET OF BLUE. Ten packages exist only in green. A mirror
-#    (`s3 sync --delete` blue -> green) would delete packages users can install
-#    right now -- `freetype` and `coreutils` among them. So the promote is a
-#    UNION ADD and has NO delete path. `haiku-repo-add` is exactly that
-#    primitive: it pulls the WHOLE target pool, adds the incoming packages,
-#    rebuilds the index over the union, and uploads packages first, index last.
+# TWO MEASURED FACTS THAT CONSTRAIN THIS TOOL (#443)
+# --------------------------------------------------
+# The counts below are the ORIGINAL #443 measurement, kept because they are the
+# evidence for the design. They are a snapshot, not current state -- the pools
+# move. Run `--plan` (read-only, the default) for current numbers.
+#
+# 1. GREEN IS NOT A SUBSET OF BLUE. Packages exist only in green (ten at the time
+#    of writing). A mirror (`s3 sync --delete` blue -> green) would delete
+#    packages users can install right now -- `freetype` and `coreutils` among
+#    them. So the promote is a UNION ADD and has NO delete path. `haiku-repo-add`
+#    is exactly that primitive: it pulls the WHOLE target pool, adds the incoming
+#    packages, rebuilds the index over the union, and uploads packages first,
+#    index last. This fact is structural and still holds.
 # 2. The user-visible gap is small (25 blue-only files at the time of writing,
 #    not the 1,287 a wave added to blue), because green had already been pushed
-#    ahead of blue through the manual path.
+#    ahead of blue through the manual path. Still small for the same reason: the
+#    first real promote (plan 20261014T151755Z) moved 16 packages and left 10
+#    blue-only files, all of them correctly WITHHELD bootstrap/superseded junk.
 #
 # THE COLLISION THAT FACT 1 HIDES -- and why this tool is version-aware
 # --------------------------------------------------------------------
 # Measured on the live pools while building this: every one of those ten
 # green-only FILES is a same-name, different-version collision with one of the
-# blue-only files, and for SIX of the names GREEN IS NEWER:
+# blue-only files, and for SIX of the names GREEN IS NEWER. (Borne out in
+# practice: the first real promote withheld 10 files, every one of them for
+# `green-is-newer-or-equal`, and all of this same bootstrap/superseded class.)
 #
 #     name              blue-only                    green-only        newer
 #     freetype          2.6.3_bootstrap-1            2.14.3-1          green
