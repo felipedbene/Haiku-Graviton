@@ -47,16 +47,7 @@ _ARCH_NAMES = {
     5: "ppc", 6: "arm", 7: "m68k", 8: "sparc", 9: "arm64", 10: "riscv64",
 }
 
-_WANT = {
-    _ID_NAME: "name",
-    _ID_VENDOR: "vendor",
-    _ID_PACKAGER: "packager",
-    _ID_VERSION_MAJOR: "version_major",
-    _ID_VERSION_MINOR: "version_minor",
-    _ID_VERSION_MICRO: "version_micro",
-    _ID_VERSION_REVISION: "version_revision",
-    _ID_VERSION_PRE_RELEASE: "version_prerelease",
-}
+_ID_VERSION_COMPATIBLE = 37  # minimum compatible version, nests under PROVIDES
 
 
 class HpkgError(Exception):
@@ -153,48 +144,26 @@ def _decompress_uncompressed_range(raw, hdr, u_start, u_end):
     return bytes(out), first * chunk
 
 
-def _parse_attribute_list(attr, off, strings, result):
-    """Walk one attribute list (0-tag terminated), recursing into children,
-    collecting the string/uint values in _WANT. `off` is an index into attr."""
-    while True:
-        tag, off = _leb128(attr, off)
-        if tag == 0:
-            return off
-        t = tag - 1
-        aid = t & 0x7F
-        dtype = (t >> 7) & 0x7
-        has_children = (t >> 10) & 1
-        encoding = (t >> 11) & 0x3
-        value = None
-        if dtype in (1, 2):  # INT / UINT
-            length = {0: 1, 1: 2, 2: 4, 3: 8}[encoding]
-            value = int.from_bytes(attr[off : off + length], "big")
-            off += length
-        elif dtype == 3:  # STRING
-            if encoding == 0:  # inline null-terminated
-                end = attr.index(b"\x00", off)
-                value = attr[off:end].decode("utf-8", "replace")
-                off = end + 1
-            else:  # index into strings table
-                idx, off = _leb128(attr, off)
-                value = strings[idx] if idx < len(strings) else None
-        elif dtype == 4:  # RAW
-            size, off = _leb128(attr, off)
-            if encoding == 0:  # inline
-                off += size
-            else:  # heap ref: size + offset
-                _heap_off, off = _leb128(attr, off)
-        else:
-            raise HpkgError("bad attribute data type %d" % dtype)
-        if aid in _WANT and _WANT[aid] not in result:
-            result[_WANT[aid]] = value
-        if has_children:
-            off = _parse_attribute_list(attr, off, strings, result)
-
-
 def read_meta(raw):
     """Parse the package-attributes section of a full-file hpkg byte string.
-    Returns {name, vendor, packager, version} (missing keys omitted)."""
+    Returns {name, vendor, packager, version, revision}.
+
+    Uses the structure-preserving walk below (`_walk_tree` + `_pkg_from_nodes`),
+    the same code `read_repo` runs, so the two readers cannot disagree about a
+    package's identity.
+
+    This used to be a FLAT, fully-recursive walk with first-wins collection,
+    which silently fabricated versions: a package's own version attributes sit
+    at the TOP level, but every PROVIDES and REQUIRES resolvable nests its own
+    version constraint underneath itself, and the flat walk harvested those too.
+    Measured on `autoconf-2.72-1-arm64.hpkg`: real version major=2 minor=72, no
+    micro, no pre-release -- but `requires cmd:awk >= 3.1.8` donated the unset
+    micro and `requires haiku >= r1~beta6_hrev59996` donated the unset
+    pre-release, so it read as `2.72.8~beta6_hrev59996` while `read_repo` read
+    the same package as `2.72`. Anything matching on (name, version, revision)
+    across the two readers -- `haiku-staging-reconcile`, and `haiku-pool-gc`,
+    which DELETES -- saw packages that are byte-for-byte present as missing.
+    """
     hdr = parse_header(raw)
     heap_u = hdr["heap_size_uncompressed"]
     attr_len = hdr["attributes_length"]
@@ -210,25 +179,13 @@ def read_meta(raw):
         end = attr.index(b"\x00", o)
         strings.append(attr[o:end].decode("utf-8", "replace"))
         o = end + 1
-    result = {}
-    _parse_attribute_list(attr, astr_len, strings, result)
 
-    # compose a human version string like `package list -i` / the filename
-    parts = [result.get("version_major")]
-    for k in ("version_minor", "version_micro"):
-        if result.get(k):
-            parts.append(result[k])
-    ver = ".".join(p for p in parts if p)
-    if result.get("version_prerelease"):
-        ver += "~" + result["version_prerelease"]
-    out = {
-        "name": result.get("name"),
-        "vendor": result.get("vendor"),
-        "packager": result.get("packager"),
-        "version": ver or None,
-        "revision": result.get("version_revision"),
-    }
-    return out
+    # An hpkg's top-level attribute list IS the package's own attribute list,
+    # so it feeds _pkg_from_nodes directly (for HPKR it is the children of a
+    # PACKAGE entry instead -- see read_repo).
+    nodes, _ = _walk_tree(attr, astr_len, strings)
+    pkg = _pkg_from_nodes(nodes)
+    return {k: pkg[k] for k in ("name", "vendor", "packager", "version", "revision")}
 
 
 def read_meta_file(path):
@@ -248,9 +205,11 @@ def read_meta_file(path):
 # cheaper than a ranged read of all ~2400 hpkgs, and it is exactly the set the
 # repo advertises to pkgman.
 #
-# These functions preserve nesting (unlike read_meta's flat _parse_attribute_list,
-# which is kept untouched for the proven #41 packager-audit path) so a package's
-# provides/requires resolvable lists can be collected without clobbering.
+# These functions preserve nesting, so a package's provides/requires resolvable
+# lists can be collected without clobbering -- and so version attributes are
+# read only from the node they actually belong to. `read_meta` (the direct-hpkg
+# reader) now shares them: it used to run its own flat walk, which fabricated
+# versions out of nested resolvable constraints. See read_meta's docstring.
 
 def _read_value(attr, off, dtype, encoding, strings):
     """Decode one attribute value; return (value, new_off). RAW yields None."""
@@ -292,12 +251,6 @@ def _walk_tree(attr, off, strings):
         nodes.append((aid, value, children))
 
 
-def _flatten(nodes):
-    for aid, value, children in nodes:
-        yield aid, value
-        yield from _flatten(children)
-
-
 def _pkg_from_nodes(nodes):
     """Build a package dict from the attribute nodes of ONE package (the
     top-level list of an hpkg, or the children of an HPKR PACKAGE entry)."""
@@ -314,9 +267,12 @@ def _pkg_from_nodes(nodes):
         elif aid == _ID_ARCHITECTURE:
             out["arch"] = _ARCH_NAMES.get(value, str(value))
         elif aid == _ID_VERSION_MAJOR:
-            # minor/micro/revision/prerelease nest under major; flatten them all.
+            # minor/micro/revision/prerelease are DIRECT children of major, and
+            # are leaves. Do not recurse: deeper nodes under a top-level major
+            # would belong to something else, and harvesting them is exactly the
+            # bug read_meta used to have (see its docstring).
             ver.setdefault("major", value)
-            for caid, cval in _flatten(children):
+            for caid, cval, _cch in children:
                 if caid == _ID_VERSION_MINOR:
                     ver.setdefault("minor", cval)
                 elif caid == _ID_VERSION_MICRO:
