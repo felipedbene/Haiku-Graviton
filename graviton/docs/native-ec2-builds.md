@@ -88,9 +88,21 @@ guests on a half-wired python3.14/gobject-introspection; on native EC2 it builds
 (produces `glib2-2.88.1-8` + `gobject_introspection-1.86.0-8` + devels).
 
 **1. Launch** a Graviton instance from `$(aws ssm get-parameter --name
-/haiku-graviton/canonical-ami-id ...)` (see above). For real builds, give it a big root via
-`--block-device-mappings` (online grow is NOT seen — Haiku caches disk size at boot), then
-`partition_grow` + `resizefs` at first boot.
+/haiku-graviton/canonical-ami-id ...)` (see above) with the **DEFAULT root size**.
+
+> **Do not pass a `--block-device-mappings` / `--disk` size override to a builder you
+> drive over SSM** (#254, `../ops/SOPs.md` §13.6 — the authority). Haiku caches disk
+> size at boot, so the override needs a first-boot `partition_grow` + `resizefs`, and
+> that userland job races the network-gated SSM and sshd launch jobs: the box boots
+> healthy and is then unreachable by any channel. This run predates that finding.
+>
+> The fix that would lift this restriction has landed but is **not boot-proven**:
+> the partition grow moved into the EFI loader
+> (`EfiDevice::GrowBootGptPartition()`), which runs before the kernel mounts the
+> boot volume and so removes the launch-daemon ordering dependency entirely — see
+> `develop/bfs-auto-grow-design.md`. It is compile-proven only; the one-boot
+> hardware confirmation (verification plan T4) is still owed. **Until T4 lands,
+> follow §13.6 and launch at the default size.**
 
 **2. Provision the toolchain** (all from the DeBeOS repo; accept the bootstrap→DeBeOS
 vendor change — pkgman "solution 1"; non-interactive: `printf '1\n…\ny\n' | pkgman install`).
