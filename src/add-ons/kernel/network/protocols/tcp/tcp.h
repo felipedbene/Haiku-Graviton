@@ -190,6 +190,12 @@ operator==(tcp_sequence a, tcp_sequence b)
 #define TCP_MAX_SEGMENT_LIFETIME		60000000	// 60 secs
 #define TCP_PERSIST_TIMEOUT				1000000		// 1 sec
 
+// Rate limit for the RFC 5961 challenge acknowledgements, per endpoint: at
+// most this many within one window. Linux's sysctl_tcp_challenge_ack_limit
+// defaults to the same 1000 per second. A healthy connection never sends one.
+#define TCP_CHALLENGE_ACKNOWLEDGE_LIMIT		1000
+#define TCP_CHALLENGE_ACKNOWLEDGE_WINDOW	1000000		// 1 sec
+
 // Minimum retransmit timeout (consider delayed ack)
 #define TCP_MIN_RETRANSMIT_TIMEOUT		200000		// 200 msecs
 // Maximum retransmit timeout (per RFC6298)
