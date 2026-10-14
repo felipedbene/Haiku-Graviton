@@ -63,6 +63,9 @@ typedef DoublyLinkedList<net_socket_private> SocketList;
 struct net_socket_private : net_socket,
 		DoublyLinkedListLinkImpl<net_socket_private> {
 	struct net_socket		*parent;
+	bool					is_connected;
+		// which of the parent's two lists this socket is on; socket_aborted()
+		// has to remove it from the right one
 
 	team_id					owner;
 	uint32					max_backlog;
@@ -115,6 +118,28 @@ static bool sSimultaneousConnect = false;
 static bool sSimultaneousClose = false;
 static bool sServerActiveClose = false;
 
+// Spoofed inbound segments, for the RFC 5961 and RFC 9293 3.10.7.3 paths
+// (#613, #614). No sequence of connect/send/drop/reorder produces one: those
+// paths answer a segment no honest peer in this harness sends -- a SYN-ACK
+// acknowledging something that was never sent, and an in-window SYN or reset
+// that does not sit at RCV.NXT. They are what an off-path attacker puts on the
+// wire, so the harness has to be able to put them there too.
+//
+// The bad SYN-ACK is a rewrite, the bare SYN and reset are injected copies,
+// and the difference is not cosmetic. #613 wants the client to see a bogus
+// SYN-ACK and nothing else while in SYN-SENT, and clobbering the honest one
+// costs only a retransmit -- which is itself the thing under test, since the
+// point is that the attempt survives to accept the next SYN-ACK. #614 needs an
+// established connection still carrying traffic, so taking a segment off the
+// wire to make room would break the stream the test is watching: the first cut
+// of this ate the handshake-completing ACK one run and 1448 bytes of payload
+// the next. An off-path attacker adds segments; it cannot remove them.
+static int32 sSpoofBadSynAck = 0;
+static int32 sSpoofFlags = 0;
+static int32 sSpoofOffset = 1;
+static int32 sSpoofRemaining = 0;
+static bool sSpoofAtServer = true;
+
 static struct net_domain sDomain = {
 	"ipv4",
 	AF_INET,
@@ -154,6 +179,101 @@ static bool
 is_fin(net_buffer* buffer)
 {
 	return (tcp_segment_flags(buffer) & TCP_FLAG_FINISH) != 0;
+}
+
+
+/*!	Forges a segment from \a buffer if a spoof is armed for the side that is
+	about to receive it, and reports whether it did.
+
+	NET_BUFFER_L4_CHECKSUM_VALID is set afterwards rather than recomputing the
+	checksum: tcp_receive_data() honours that flag exactly as it does for a NIC
+	that checksummed in hardware, and the checksum is not what these tests are
+	about.
+*/
+static bool
+spoof_segment(net_buffer* buffer, bool server)
+{
+	NetBufferHeaderReader<tcp_header> bufferHeader(buffer);
+	if (bufferHeader.Status() < B_OK)
+		return false;
+
+	tcp_header& header = bufferHeader.Data();
+
+	if (sSpoofBadSynAck != 0 && !server
+		&& (header.flags & (TCP_FLAG_SYNCHRONIZE | TCP_FLAG_ACKNOWLEDGE))
+			== (TCP_FLAG_SYNCHRONIZE | TCP_FLAG_ACKNOWLEDGE)) {
+		// The client is in SYN-SENT and this is the SYN-ACK it is waiting for.
+		// Move the acknowledgement far outside [ISS, SND.MAX] so that it
+		// acknowledges a byte the client never sent, which is the segment
+		// RFC 9293 3.10.7.3 is about.
+		const uint32 acknowledge = header.Acknowledge() + 0x10000;
+		header.acknowledge = B_HOST_TO_BENDIAN_INT32(acknowledge);
+		bufferHeader.Sync();
+
+		buffer->buffer_flags |= NET_BUFFER_L4_CHECKSUM_VALID;
+		sSpoofBadSynAck = 0;
+
+		printf("<**** SPOOF: SYN-ACK acknowledging %" B_PRIu32 ", which was "
+			"never sent ****>\n", acknowledge);
+		return true;
+	}
+
+	if (sSpoofRemaining <= 0 || server != sSpoofAtServer)
+		return false;
+	if ((header.flags & TCP_FLAG_SYNCHRONIZE) != 0)
+		return false;
+		// leave the handshake alone: there is no connection to challenge yet,
+		// and the states that carry one are the point of the exercise
+
+	// In the window (the offset defaults to one byte past what the receiver is
+	// waiting for) but deliberately not at RCV.NXT, which is the distinction
+	// RFC 5961 turns on.
+	//
+	// The forged segment is a *copy*: the honest one goes on untouched behind
+	// it. Rewriting in place was the first attempt and it cost the test its
+	// stream, because the segment displaced was whatever happened to arrive
+	// next -- the ACK that completes the handshake, or 1448 bytes the client
+	// then had to resend into a hole it did not know about. An off-path
+	// attacker adds a segment to the wire; it cannot take one off.
+	const uint32 sequence = header.Sequence() + sSpoofOffset;
+	const uint32 headerLength = header.HeaderLength();
+	bufferHeader.Sync();
+		// nothing was changed; this just releases the honest buffer before it
+		// is duplicated
+
+	net_buffer* spoof = gNetBufferModule.duplicate(buffer);
+	if (spoof == NULL)
+		return false;
+
+	{
+		NetBufferHeaderReader<tcp_header> spoofHeader(spoof);
+		if (spoofHeader.Status() < B_OK) {
+			gNetBufferModule.free(spoof);
+			return false;
+		}
+
+		// The flags are replaced rather than added to, so what lands is the
+		// bare SYN or bare reset an attacker sends, and the payload goes with
+		// them -- neither carries data.
+		tcp_header& forged = spoofHeader.Data();
+		forged.sequence = B_HOST_TO_BENDIAN_INT32(sequence);
+		forged.flags = (uint8)sSpoofFlags;
+		spoofHeader.Sync();
+	}
+
+	gNetBufferModule.trim(spoof, headerLength);
+	spoof->buffer_flags |= NET_BUFFER_L4_CHECKSUM_VALID;
+	sSpoofRemaining--;
+
+	printf("<**** SPOOF: bare %s at %" B_PRIu32 " (RCV.NXT + %" B_PRId32 ") to "
+		"the %s ****>\n",
+		(sSpoofFlags & TCP_FLAG_SYNCHRONIZE) != 0 ? "SYN" : "RST", sequence,
+		sSpoofOffset, server ? "server" : "client");
+
+	if (sDomain.module->receive_data(spoof) < B_OK)
+		gNetBufferModule.free(spoof);
+
+	return true;
 }
 
 
@@ -282,7 +402,20 @@ socket_create(int family, int type, int protocol, net_socket **_socket)
 	if (socket == NULL)
 		return B_NO_MEMORY;
 
+	// The memset deliberately stops at the net_socket base: the two SocketList
+	// members construct themselves and clearing them by hand would corrupt
+	// them. But nothing then initialized net_socket_private's own scalars, so
+	// parent held whatever the heap last did -- _MarkEstablished() passed it to
+	// socket_connected(), which read it as a live socket and locked garbage.
+	// Every connect() in this harness crashed there.
 	memset(socket, 0, sizeof(net_socket));
+	socket->parent = NULL;
+	socket->is_connected = false;
+	socket->owner = -1;
+	socket->max_backlog = 0;
+	socket->child_count = 0;
+	socket->select_pool = NULL;
+
 	socket->family = family;
 	socket->type = type;
 	socket->protocol = protocol;
@@ -608,8 +741,39 @@ socket_connected(net_socket *socket)
 
 	parent->pending_children.Remove(socket_private);
 	parent->connected_children.Add(socket_private);
+	socket_private->is_connected = true;
 
 	mutex_unlock(&parent->lock);
+	return B_OK;
+}
+
+
+/*!	Detaches an aborted child from its parent.
+
+	TCPEndpoint::_Close() calls this for any endpoint that still has a parent,
+	which is every server-side connection the harness has not dequeued yet --
+	so every reset that arrives before accept() landed here, on a NULL hook,
+	and took the process down. The real stack also drops the parent's
+	reference; the harness never took one, so unlinking is the whole job.
+*/
+status_t
+socket_set_aborted(net_socket *_socket)
+{
+	net_socket_private *socket = (net_socket_private *)_socket;
+	net_socket_private *parent = (net_socket_private *)socket->parent;
+	if (parent == NULL)
+		return B_BAD_VALUE;
+
+	MutexLocker _(parent->lock);
+
+	if (socket->is_connected)
+		parent->connected_children.Remove(socket);
+	else
+		parent->pending_children.Remove(socket);
+
+	parent->child_count--;
+	socket->parent = NULL;
+
 	return B_OK;
 }
 
@@ -681,7 +845,7 @@ net_socket_module_info gNetSocketModule = {
 	socket_set_max_backlog,
 	socket_has_parent,
 	socket_connected,
-	NULL, // set_aborted
+	socket_set_aborted,
 
 	// notifications
 	NULL, // request_notification,
@@ -955,6 +1119,30 @@ domain_get_mtu(net_protocol *protocol, const struct sockaddr *address)
 }
 
 
+/*!	Accepts and ignores every option.
+
+	TCPEndpoint::_PrepareSendPath() sets IP_DONTFRAG on the layer below for
+	every connection, so leaving this NULL made connect() call through a null
+	pointer -- the harness crashed before it could open anything. Nothing in
+	the emulated path fragments, so accepting the option without recording it
+	is accurate rather than merely convenient.
+*/
+status_t
+domain_setsockopt(net_protocol *protocol, int level, int option,
+	const void *value, int length)
+{
+	return B_OK;
+}
+
+
+status_t
+domain_getsockopt(net_protocol *protocol, int level, int option, void *value,
+	int *_length)
+{
+	return B_ERROR;
+}
+
+
 status_t
 domain_receive_data(net_buffer *buffer)
 {
@@ -1020,8 +1208,8 @@ net_protocol_module_info gDomainModule = {
 	domain_connect,
 	domain_accept,
 	domain_control,
-	NULL, // getsockopt
-	NULL, // setsockopt
+	domain_getsockopt,
+	domain_setsockopt,
 	domain_bind,
 	domain_unbind,
 	domain_listen,
@@ -1250,6 +1438,8 @@ receiving_thread(void* _data)
 
 			if (buffer == NULL)
 				break;
+
+			spoof_segment(buffer, context->server);
 
 			if (sSimultaneousConnect && context->server && is_syn(buffer)) {
 				// delay getting the SYN request, and connect as well
@@ -1714,6 +1904,68 @@ do_round_trip_time(int argc, char** argv)
 
 
 static void
+do_bad_synack(int argc, char** argv)
+{
+	if (argc > 1 && !strcmp(argv[1], "-f")) {
+		sSpoofBadSynAck = 0;
+		puts("bad SYN-ACK disarmed.");
+		return;
+	}
+
+	if (argc > 1) {
+		puts("usage: bad_synack [-f]\n\n"
+			"Arms a one-shot: the next SYN-ACK delivered to the client has its\n"
+			"acknowledgement moved outside [ISS, SND.MAX], so it acknowledges a\n"
+			"byte the client never sent (RFC 9293 3.10.7.3, issue #613). Call\n"
+			"this before connect. The server retransmits its SYN-ACK, so a stack\n"
+			"that stays in SYN-SENT still connects -- one that goes to CLOSED\n"
+			"leaves connect() asleep until it times out. -f disarms.");
+		return;
+	}
+
+	sSpoofBadSynAck = 1;
+	puts("the next SYN-ACK to the client will be spoofed.");
+}
+
+
+static void
+do_spoof(int argc, char** argv)
+{
+	if (argc > 1 && !strcmp(argv[1], "-f")) {
+		sSpoofRemaining = 0;
+		puts("spoofing disarmed.");
+		return;
+	}
+
+	if (argc < 2 || (strcmp(argv[1], "syn") != 0
+			&& strcmp(argv[1], "rst") != 0)) {
+		puts("usage: spoof <syn|rst> [<sequence-offset> [<count> [side]]]\n"
+			"   or: spoof -f\n\n"
+			"Rewrites the next inbound segment into a bare SYN or reset carrying\n"
+			"RCV.NXT + <sequence-offset> (default 1): in the receive window, but\n"
+			"not the sequence number the receiver is waiting for. That is the\n"
+			"blind-reset segment RFC 5961 sections 3 and 4 answer with a\n"
+			"challenge acknowledgement instead of tearing the connection down\n"
+			"(issues #609, #614). <count> defaults to 1 and [side] to \"server\";\n"
+			"pass \"client\" to aim it the other way. An offset of 0 makes the\n"
+			"segment acceptable, which is the control -- the connection should\n"
+			"then die. -f disarms.");
+		return;
+	}
+
+	sSpoofFlags = !strcmp(argv[1], "syn")
+		? TCP_FLAG_SYNCHRONIZE : TCP_FLAG_RESET;
+	sSpoofOffset = argc > 2 ? strtol(argv[2], NULL, 0) : 1;
+	sSpoofRemaining = argc > 3 ? strtol(argv[3], NULL, 0) : 1;
+	sSpoofAtServer = argc > 4 ? strcmp(argv[4], "client") != 0 : true;
+
+	printf("will spoof %" B_PRId32 " bare %s at RCV.NXT + %" B_PRId32
+		" to the %s.\n", sSpoofRemaining, argv[1], sSpoofOffset,
+		sSpoofAtServer ? "server" : "client");
+}
+
+
+static void
 do_dprintf(int argc, char** argv)
 {
 	if (argc > 1)
@@ -1733,6 +1985,8 @@ static cmd_entry sBuiltinCommands[] = {
 	{"dprintf", do_dprintf, "Toggles debug output"},
 	{"drop", do_drop, "Lets you drop packets during transfer"},
 	{"reorder", do_reorder, "Lets you reorder packets during transfer"},
+	{"bad_synack", do_bad_synack, "Spoofs a SYN-ACK the client never asked for"},
+	{"spoof", do_spoof, "Spoofs an in-window bare SYN or reset"},
 	{"help", do_help, "prints this help text"},
 	{"rtt", do_round_trip_time, "Specifies the round trip time"},
 	{"quit", NULL, "exits the application"},
