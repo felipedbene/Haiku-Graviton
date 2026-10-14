@@ -1163,8 +1163,9 @@ class ViewTransform(object):
     attributes turn each run about its own baseline, while this turns/scales the
     whole view the drawing lands in.  The server sends state->Transform() -- the
     view's BAffineTransform, without the RP_SET_OFFSETS view offset folded in
-    (RemoteDrawingEngine.cpp:317-331, "TODO: take offset into account") -- so the
-    offset stays the separate post-translation this tool already applies.
+    (RemoteDrawingEngine::SetTransform(), which sends the bare matrix and the
+    offsets as two opcodes) -- so the offset stays the separate post-translation
+    this tool already applies.
 
     The six wire members are agg trans_affine order sx shy shx sy tx ty
     (RemoteMessage.cpp:321-326), applied as x' = sx*x + shx*y + tx,

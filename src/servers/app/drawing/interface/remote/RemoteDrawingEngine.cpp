@@ -31,6 +31,8 @@ RemoteDrawingEngine::RemoteDrawingEngine(RemoteHWInterface* interface)
 	DrawingEngine(interface),
 	fHWInterface(interface),
 	fToken(gTokenSpace.NewToken(kRemoteDrawingEngineToken, this)),
+	fXOffset(0),
+	fYOffset(0),
 	fExtendWidth(0),
 	fCallbackAdded(false),
 	fReadBitmapNotify(-1),
@@ -86,9 +88,9 @@ RemoteDrawingEngine::ReplayState()
 	// makes a steady-state session cheap is the same guard that makes a
 	// reconnect wrong, so a replay has to go around it, not through it.
 	//
-	// fState is deliberately left alone. It is still an accurate record of what
-	// the client has -- that is precisely what this restores -- so the guards
-	// remain meaningful for every op after this one.
+	// fState and the offsets shadow are deliberately left alone. They are still
+	// an accurate record of what the client has -- that is precisely what this
+	// restores -- so the guards remain meaningful for every op after this one.
 	message.Start(RP_SET_HIGH_COLOR);
 	message.Add(fToken);
 	message.Add(fState.HighColor());
@@ -124,6 +126,15 @@ RemoteDrawingEngine::ReplayState()
 	message.Add(fToken);
 	message.AddFont(fState.Font());
 
+	// The offsets and the transform are one piece of state split across two
+	// opcodes: the client's effective matrix is the transform conjugated by the
+	// offsets, so replaying either without the other leaves it rendering at the
+	// wrong origin. Offsets first, because the transform is what reads them.
+	message.Start(RP_SET_OFFSETS);
+	message.Add(fToken);
+	message.Add(fXOffset);
+	message.Add(fYOffset);
+
 	message.Start(RP_SET_TRANSFORM);
 	message.Add(fToken);
 	message.AddTransform(fState.Transform());
@@ -145,10 +156,6 @@ RemoteDrawingEngine::ReplayState()
 	message.Add(fToken);
 
 	message.Flush();
-
-	// Deliberately not replayed: RP_SET_OFFSETS. The offsets are arguments to
-	// SetDrawState() and are not retained anywhere, so there is nothing to
-	// replay; every drawing sequence sends them again ahead of its own ops.
 
 	if (locked)
 		UnlockExclusiveAccess();
@@ -211,13 +218,9 @@ RemoteDrawingEngine::SetDrawState(const DrawState* state, int32 xOffset,
 	SetHighColor(state->HighColor());
 	SetLowColor(state->LowColor());
 	SetFont(state->Font());
+	// This sends RP_SET_OFFSETS as well -- it is the one place that does, so
+	// that the shadow cannot disagree with the wire. See SetTransform().
 	SetTransform(state->CombinedTransform(), xOffset, yOffset);
-
-	RemoteMessage message(NULL, fHWInterface->SendBuffer());
-	message.Start(RP_SET_OFFSETS);
-	message.Add(fToken);
-	message.Add(xOffset);
-	message.Add(yOffset);
 }
 
 
@@ -370,7 +373,18 @@ void
 RemoteDrawingEngine::SetTransform(const BAffineTransform& transform,
 	int32 xOffset, int32 yOffset)
 {
-	// TODO: take offset into account
+	// Both callers that supply offsets arrive here -- SetDrawState() above and
+	// the picture playback in CanvasCallbacks (ServerPicture.cpp), which passes
+	// its canvas's pen-to-screen origin -- so this is where the offsets are
+	// owned. They used to be dropped on this path ("TODO: take offset into
+	// account"), which was invisible only because SetDrawState() re-sent them
+	// unconditionally straight afterwards; with a guard in place, a second
+	// writer that silently discarded them would be a hole in the shadow.
+	//
+	// Before the transform guard, not after: the offsets are the origin the
+	// transform is conjugated about, so an unchanged transform with a moved
+	// origin is still a changed matrix on the client.
+	_SetOffsets(xOffset, yOffset);
 
 	if (fState.Transform() == transform)
 		return;
@@ -1198,6 +1212,32 @@ RemoteDrawingEngine::ReadBitmap(ServerBitmap* bitmap, bool drawCursor,
 
 
 // #pragma mark -
+
+
+/*!	The sole writer of RP_SET_OFFSETS, guarded like every other setter.
+
+	Guarding this one is not free the way the others are: the offsets become
+	retained state the moment they are only sent on a change, and retained state
+	that is not replayed is D4. ReplayState() therefore sends them too, and the
+	two changes are a pair -- remove the replay and the guard here silently
+	withholds the offsets from every reconnected client, which draws at the
+	previous view's origin rather than not at all.
+*/
+void
+RemoteDrawingEngine::_SetOffsets(int32 xOffset, int32 yOffset)
+{
+	if (fXOffset == xOffset && fYOffset == yOffset)
+		return;
+
+	fXOffset = xOffset;
+	fYOffset = yOffset;
+
+	RemoteMessage message(NULL, fHWInterface->SendBuffer());
+	message.Start(RP_SET_OFFSETS);
+	message.Add(fToken);
+	message.Add(xOffset);
+	message.Add(yOffset);
+}
 
 
 status_t
