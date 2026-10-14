@@ -1912,3 +1912,57 @@ test('#506 mutation: a STALE staged driver is refused loudly (VERDICT=FAIL RC=3)
   expect(r.log).toContain('STALE DRIVER');
   expect(r.log).toContain('REFUSING TO BUILD');
 });
+
+// ---------------------------------------------------------------------------
+// #505: RecordOutcome must not leave the previous failure's fields on a row it
+// has just marked `built`. haiku-triage-failures maps `last_error_class` onto
+// the row's CURRENT error class, so residue is counted as a live failure -- it
+// is what inflated the "unresolvable" population from 323 to 486 on the live
+// table. Exercised by driving the real handler against a fake Table that
+// captures the UpdateExpression, so the assertion is on what DynamoDB would
+// actually be asked to do, not on a reimplementation of it.
+function recordOutcomeExpression(ok: boolean): string {
+  const py = [
+    'import json,sys,types',
+    `sys.path.insert(0,${JSON.stringify(OPS_LAMBDAS)})`,
+    // Stub boto3 before record.py imports it: no credentials, no network.
+    'calls=[]',
+    'class T:',
+    '    def update_item(self, **kw):',
+    '        calls.append(kw)',
+    '        return {"Attributes": {"attempt_count": 1}}',
+    'class R:',
+    '    def Table(self, name): return T()',
+    'fake=types.ModuleType("boto3")',
+    'fake.resource=lambda svc: R()',
+    'sys.modules["boto3"]=fake',
+    'import record',
+    `record.handler({"table":"t","pkg":"sdl2","target":"r1","ok":${ok ? 'True' : 'False'}}, None)`,
+    'sys.stdout.write(json.dumps([c["UpdateExpression"] for c in calls]))',
+  ].join('\n');
+  const out = child_process.execFileSync('python3', ['-c', py], { encoding: 'utf8' });
+  return (JSON.parse(out) as string[]).join(' || ');
+}
+
+test('#505: a success clears the previous failure residue', () => {
+  const expr = recordOutcomeExpression(true);
+  expect(expr).toContain('build_state=:s');
+  // Each field the triage census would otherwise read as current state.
+  for (const attr of ['last_error_class', 'esc_reason', 'log_url', 'attempt_count']) {
+    expect(expr).toContain(attr);
+  }
+  const removeClause = expr.slice(expr.indexOf('REMOVE'));
+  for (const attr of ['last_error_class', 'esc_reason', 'log_url', 'attempt_count']) {
+    expect(removeClause).toContain(attr);
+  }
+  // last_attempt_at means "last time we tried" and is set by claim.py when a
+  // lease is taken, so a success must NOT clear it.
+  expect(expr).not.toContain('last_attempt_at');
+});
+
+test('#505: a failure still records the error class it was given', () => {
+  const expr = recordOutcomeExpression(false);
+  expect(expr).toContain('last_error_class=:e');
+  // The failure path must not clear what it is in the middle of writing.
+  expect(expr).not.toContain('REMOVE last_error_class');
+});
