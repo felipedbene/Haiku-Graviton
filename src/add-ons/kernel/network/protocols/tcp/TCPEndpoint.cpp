@@ -1633,6 +1633,16 @@ TCPEndpoint::_WaitForEstablished(MutexLocker &locker, bigtime_t timeout)
 {
 	// TODO: Checking for CLOSED seems correct, but breaks several neon tests.
 	// When investigating this, also have a look at _Close() and _HandleReset().
+	//
+	// CLOSED is 0, so it is also < ESTABLISHED and the loop would re-enter the
+	// wait: what ends the wait on a connection attempt that dies is the error
+	// test below. Every way out of SYN-SENT that is not an established
+	// connection now sets one -- _HandleReset() notifies B_SELECT_ERROR, which
+	// is what assigns socket->error -- and the one path that reached CLOSED
+	// without notifying anything (SegmentReceived()'s answer to an
+	// unacceptable acknowledgement) no longer leaves SYN-SENT at all, so a
+	// waiter cannot observe it. The commented-out test is belt and braces
+	// rather than load-bearing, and enabling it still needs those tests run.
 	while (fState < ESTABLISHED/* && fState != CLOSED*/) {
 		if (socket->error != B_OK)
 			return socket->error;
@@ -2374,8 +2384,20 @@ TCPEndpoint::_SynchronizeSentReceive(tcp_segment_header &segment,
 
 	if ((segment.flags & TCP_FLAG_ACKNOWLEDGE) != 0
 		&& (fInitialSendSequence >= segment.acknowledge
-			|| fSendMax < segment.acknowledge))
+			|| fSendMax < segment.acknowledge)) {
+		// The acknowledgement is for something we never sent, so this segment
+		// does not belong to the connection we are opening: reset it and stay
+		// in SYN-SENT (RFC 9293 3.10.7.3, see SegmentReceived()). "Unless the
+		// RST bit is set, if so drop the segment and return" -- answering a
+		// reset with a reset is what lets two stacks that both arrive here
+		// trade them until something gives up, and a reset carrying an
+		// acknowledgement this far out says nothing about our connection
+		// anyway.
+		if ((segment.flags & TCP_FLAG_RESET) != 0)
+			return DROP;
+
 		return DROP | RESET;
+	}
 
 	if (segment.flags & TCP_FLAG_RESET) {
 		_HandleReset(ECONNREFUSED);
@@ -2840,46 +2862,76 @@ TCPEndpoint::SegmentReceived(tcp_segment_header& segment, net_buffer* buffer)
 	// down. _SendReset() refuses to send in LISTEN anyway, and tcp.cpp emits
 	// the reply for the RESET action we keep returning.
 	if ((segmentAction & RESET) != 0 && fState != LISTEN) {
-		// Ending the connection must NOT depend on our own RST getting out:
-		// _SendReset() also fails for reasons that say nothing about the
-		// connection (no buffer, send path down). The endpoint used to be left
-		// running in that case -- state unchanged, timers armed, a blocked
-		// reader never woken -- which is the #609 hang again, while the peer
-		// does get a reset, because tcp.cpp answers with one of its own for any
-		// RESET action we return. So end the connection either way, and only
-		// keep the RESET action (tcp.cpp's reply) when our own RST never left.
-		const bool resetSent = _SendReset(true) == B_OK;
-
-		if (fState == SYNCHRONIZE_SENT || fState == TIME_WAIT
-			|| fState == CLOSED) {
-			// Left as it was. Nobody waits on a read in TIME_WAIT (it returns
-			// at once), and _Close() here would set FLAG_DELETE_ON_CLOSE, so
-			// the release below would drop the reference Free() took for the
-			// 2MSL wait and free the connection early -- the RFC 1337 hazard
-			// the inbound-reset path avoids by ignoring resets in TIME_WAIT.
-			// SYNCHRONIZE_SENT (a SYN-ACK with an unacceptable ACK) wants the
-			// RFC 9293 3.10.7.3 behaviour instead, reset and stay put, which
-			// is a separate change.
-			fState = CLOSED;
+		if (fState == SYNCHRONIZE_SENT) {
+			// RFC 9293 3.10.7.3: a segment whose acknowledgement is
+			// unacceptable in SYN-SENT is answered with
+			// <SEQ=SEG.ACK><CTL=RST>, and then we "discard the segment and
+			// return" -- the connection attempt itself is NOT abandoned. That
+			// is what keeps one bogus or spoofed SYN-ACK from killing a
+			// legitimate connect(): we stay in SYN-SENT, the retransmit timer
+			// goes on retransmitting the SYN, and the real peer's SYN-ACK is
+			// still accepted when it arrives. (connect() does not return any
+			// sooner than it did; it waits for that peer, or for its own
+			// timeout. Going to CLOSED here did not shorten the wait either --
+			// nothing woke the waiter and nothing recorded an error, so it
+			// slept out the full connection timeout on a dead endpoint.)
+			//
+			// The reset is left to tcp.cpp (EndpointManager::ReplyWithReset()
+			// for the RESET action we keep returning), which is the only one
+			// of the two that gets this segment right. _SendReset() builds
+			// from _PrepareSendSegment(), which sets SYN in this state: it
+			// would put a SYN|RST at SND.NXT on the wire -- not the
+			// <SEQ=SEG.ACK><CTL=RST> the peer will act on -- and
+			// _PrepareAndSend() would then count that phantom SYN into
+			// SND.NXT/SND.MAX, widening the range of acknowledgements
+			// _SynchronizeSentReceive() accepts for the rest of the attempt.
+			//
+			// There is nothing to undo here: no acknowledgement can be pending
+			// (the only producer of RESET in this state returns DROP | RESET
+			// by itself, and _PrepareAcknowledge() refuses to defer a
+			// SYN-bearing segment anyway), and an endpoint that is still
+			// connecting holds no 2MSL reference for the tail below to release.
 		} else {
-			// Our own reset ends the connection just as the peer's does:
-			// cancel the timers, record the error, wake a blocked reader and
-			// writer. Only setting CLOSED left a recv() with no timeout asleep
-			// for good, and any in-window SYN, even on an idle ESTABLISHED
-			// connection, gets here (#609). The lifetime handling is that of
-			// the inbound-reset path, which reaches every one of these states.
-			_HandleReset(ECONNRESET);
-		}
+			// Ending the connection must NOT depend on our own RST getting
+			// out: _SendReset() also fails for reasons that say nothing about
+			// the connection (no buffer, send path down). The endpoint used to
+			// be left running in that case -- state unchanged, timers armed, a
+			// blocked reader never woken -- which is the #609 hang again, while
+			// the peer does get a reset, because tcp.cpp answers with one of
+			// its own for any RESET action we return. So end the connection
+			// either way, and only keep the RESET action (tcp.cpp's reply)
+			// when our own RST never left.
+			const bool resetSent = _SendReset(true) == B_OK;
 
-		if (resetSent)
-			segmentAction &= ~RESET;
-		pendingAcknowledge.valid = false;
-			// The connection is dead: a prepared plain ACK would go out AFTER
-			// the RST (it is emitted below, with the lock released) and only
-			// provoke another one. This is reachable -- e.g. a SYN-ACK that
-			// establishes the connection and is then rejected by the same
-			// _Receive() call, which returns DROP | RESET under
-			// IMMEDIATE_ACKNOWLEDGE.
+			if (fState == TIME_WAIT || fState == CLOSED) {
+				// Left as it was. Nobody waits on a read in TIME_WAIT (it
+				// returns at once), and _Close() here would set
+				// FLAG_DELETE_ON_CLOSE, so the release below would drop the
+				// reference Free() took for the 2MSL wait and free the
+				// connection early -- the RFC 1337 hazard the inbound-reset
+				// path avoids by ignoring resets in TIME_WAIT.
+				fState = CLOSED;
+			} else {
+				// Our own reset ends the connection just as the peer's does:
+				// cancel the timers, record the error, wake a blocked reader
+				// and writer. Only setting CLOSED left a recv() with no
+				// timeout asleep for good, and any in-window SYN, even on an
+				// idle ESTABLISHED connection, gets here (#609). The lifetime
+				// handling is that of the inbound-reset path, which reaches
+				// every one of these states.
+				_HandleReset(ECONNRESET);
+			}
+
+			if (resetSent)
+				segmentAction &= ~RESET;
+			pendingAcknowledge.valid = false;
+				// The connection is dead: a prepared plain ACK would go out
+				// AFTER the RST (it is emitted below, with the lock released)
+				// and only provoke another one. This is reachable -- e.g. a
+				// SYN-ACK that establishes the connection and is then rejected
+				// by the same _Receive() call, which returns DROP | RESET
+				// under IMMEDIATE_ACKNOWLEDGE.
+		}
 	}
 
 	// Snapshot, under fLock, everything the deferred work below needs, then
