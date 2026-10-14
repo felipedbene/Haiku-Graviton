@@ -85,6 +85,15 @@ done
 
 say() { printf 'haiku-bake-builder: %s\n' "$*" >&2; }
 
+# Backing snapshot(s) of an AMI. Needed wherever SpringClean protection is set or
+# released: it deletes a snapshot separately from its image, so protecting only
+# the image record still loses the data under it.
+ami_snaps() {
+  aws ec2 describe-images --region "$REGION" --image-ids "$1" \
+    --query 'Images[0].BlockDeviceMappings[?Ebs].Ebs.SnapshotId' \
+    --output text 2>/dev/null
+}
+
 # Resolve the work bucket the builder's instance role can read (same convention
 # as ssm-run / haiku-nativebuild): haiku-graviton-<account>-<region>.
 ACCT=$(aws sts get-caller-identity --query Account --output text)
@@ -169,11 +178,18 @@ if [ -n "$DISK" ]; then
   say "bake box root: ${DISK} GiB gp3"
 fi
 
+# auto-stop=no is load-bearing here: the account's idle reaper must not stop the
+# box mid-bake. There is deliberately NO auto-delete tag -- this instance is
+# temporary and the EXIT trap below terminates it, so if the script is killed
+# before the trap fires, the reaper SHOULD be free to collect the orphan. It used
+# to carry auto-delete=off, which protects nothing (SpringClean's manifest only
+# honours the value "no") while reading like protection -- the same misleading
+# no-op that made #521 hard to see.
 IID=$(aws ec2 run-instances --image-id "$BASE" --instance-type "$STAGE_TYPE" \
   --security-group-ids "$SG" --subnet-id "$SUBNET" $PUBIP_FLAG --key-name "$KEY" \
   --iam-instance-profile "Name=$PROFILE" --region "$REGION" \
   ${BDM_ARG:+"$BDM_ARG"} \
-  --tag-specifications 'ResourceType=instance,Tags=[{Key=Name,Value=haiku-builder-bake},{Key=Project,Value=haiku-graviton},{Key=auto-stop,Value=no},{Key=auto-delete,Value=off}]' \
+  --tag-specifications 'ResourceType=instance,Tags=[{Key=Name,Value=haiku-builder-bake},{Key=Project,Value=haiku-graviton},{Key=auto-stop,Value=no}]' \
   --query 'Instances[0].InstanceId' --output text)
 say "launched temp builder $IID; waiting for SSM registration..."
 trap 'aws ec2 terminate-instances --instance-ids "$IID" --region "$REGION" >/dev/null 2>&1 || true' EXIT
@@ -283,13 +299,48 @@ if [ "$REPOINT" = 1 ]; then
   for a in $PRIOR; do
     [ "$a" = "$NEW" ] && continue
     aws ec2 delete-tags --resources "$a" --region "$REGION" --tags Key=builder-canonical >/dev/null 2>&1 || true
+    # Release the superseded builder's SpringClean protection in the SAME loop
+    # that strips builder-canonical, for the reason #520 learned on the boot AMI
+    # (0f7c321dd7): protecting each new holder without ever unprotecting the old
+    # one accumulates, so nothing is ever reapable and the account fills with
+    # images no process will clean. Safe to release -- the old AMI stays intact
+    # for rollback until the reaper reaches it, which is the intended outcome.
+    aws ec2 delete-tags --resources "$a" $(ami_snaps "$a") --region "$REGION" \
+      --tags Key=auto-delete >/dev/null 2>&1 || true
   done
   aws ec2 create-tags --resources "$NEW" --region "$REGION" --tags Key=builder-canonical,Value=true
+  # Protect the AMI the param is about to point at (#521). SpringClean reaps
+  # AMIs/snapshots in this account and honours the retain tag "auto-delete=no"
+  # (NOT "off"); the baker set no retain tag at all, so every bake birthed an
+  # unprotected builder-canonical -- the same gap #520 fixed for the boot AMI's
+  # promote. Protection tracks the SSM param, exactly like builder-canonical=true
+  # above, so it is set HERE and not at create-image time: a --no-repoint bake is
+  # not the param target and must not claim protection.
+  #
+  # Tag the AMI AND its backing snapshot(s): SpringClean deletes a snapshot
+  # separately, and losing it corrupts the AMI even if the image record lives.
+  #
+  # Non-fatal, like promote's equivalent: the repoint has already happened and
+  # the param is the source of truth, so warn and let the operator protect by
+  # hand rather than failing a bake that otherwise succeeded.
+  NEW_SNAPS=$(ami_snaps "$NEW")
+  if aws ec2 create-tags --resources "$NEW" $NEW_SNAPS --region "$REGION" \
+      --tags Key=auto-delete,Value=no >/dev/null 2>&1; then
+    say "protected (auto-delete=no): $NEW $NEW_SNAPS"
+  else
+    say "warning: failed to tag $NEW auto-delete=no; protect it by hand or" \
+      "SpringClean may reap the builder AMI the build-wave launches from"
+  fi
   aws ssm put-parameter --name "$PARAM" --type String --overwrite --value "$NEW" --region "$REGION" >/dev/null
   say "repointed $PARAM: $OLD -> $NEW (builder-canonical tag moved; old AMI intact for rollback)"
 else
   # Staged bake: findable as awaiting promotion, but it does NOT claim canonical
   # (not the param target). Promote by hand to move builder-canonical onto it.
+  # Deliberately NOT protected with auto-delete=no either, for the same reason:
+  # protection follows the param, and pinning every staged image would recreate
+  # the accumulation 0f7c321dd7 removed. A staged AMI left unpromoted long enough
+  # is therefore reapable -- so when promoting one by hand, set auto-delete=no on
+  # it and its snapshot(s) as part of that promotion.
   aws ec2 create-tags --resources "$NEW" --region "$REGION" --tags Key=builder-staged,Value=true
   say "NOT repointing $PARAM (per --no-repoint). New AMI: $NEW (tagged builder-staged=true)"
 fi
