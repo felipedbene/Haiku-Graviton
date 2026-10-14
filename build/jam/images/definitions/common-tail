@@ -116,14 +116,21 @@ AddVariableToScript $(script) : installDir : $(HAIKU_INSTALL_DIR) ;
 AddVariableToScript $(script) : imageSize : $(HAIKU_IMAGE_SIZE) ;
 AddVariableToScript $(script) : imageLabel : $(HAIKU_IMAGE_LABEL) ;
 
-# DeBeOS/arm64: bake the root BFS with grow-headroom so a canonical AMI booted
-# on a larger root EBS can auto-grow its filesystem at mount time with no on-disk
-# relocation (see graviton/docs/develop/bfs-auto-grow-design.md, Part A). This is
-# opt-in per architecture: only the arm64/Graviton image passes "growheadroom
-# true" to the BFS initialize; every other arch/image formats a stock volume.
+# DeBeOS/arm64: bake the root BFS with grow-headroom so an image written to a
+# block device larger than it was built for can auto-grow its filesystem at
+# mount time with no on-disk relocation (see
+# graviton/docs/develop/bfs-auto-grow-design.md, Part A). This is opt-in per
+# architecture: only the arm64 image passes "growheadroom true" to the BFS
+# initialize; every other arch/image formats a stock volume.
 # The build_haiku_image script assembles the actual init-parameter string, so
 # the value here is only a boolean flag (shell metacharacters like the driver-
 # settings ';' separator cannot travel safely through AddVariableToScript).
+#
+# The arm64 test here is the architecture, and that is deliberate -- do NOT
+# narrow it to EC2 (#429). The AMI-on-a-bigger-root-EBS case is what motivated
+# it, but the reserved gap and the mount-time grow are properties of the volume,
+# not of the platform: a card image written to an SD card larger than the image
+# benefits identically. Nothing in Part A reads a platform fact.
 local bfsGrowHeadroom = ;
 if $(HAIKU_PACKAGING_ARCH) = arm64 {
 	bfsGrowHeadroom = 1 ;

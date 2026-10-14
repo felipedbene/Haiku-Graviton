@@ -51,6 +51,35 @@ Exit You must NOT copy UserBuildConfig.ReadMe directly but use parts of it! ;
 #	image: the build stops and tells you to pass it with -s instead.
 
 
+# HAIKU_ARM64_PLATFORM
+
+# Unlike the baseline above, this one *can* be set here: it is consumed when the
+# image definitions are read, which is after UserBuildConfig.
+#
+#	Selects what machine the arm64 *image* is for, which is a different question
+#	from which instructions the code in it may require. Known values:
+#
+#	  ec2        DEFAULT. AWS Graviton EC2. Firmware starts the EFI loader
+#	             directly; the only NIC is ENA.
+#	  rpi5       Raspberry Pi 5.
+#	  rpi4       Raspberry Pi 4.
+#	  rpi3       Raspberry Pi 3.
+#	  generic    Any other arm64 machine, including qemu-system-aarch64 -M virt.
+#
+#	Anything other than "ec2" currently has one meaning, "not EC2": the image
+#	gains the conventional PCI/PCIe NIC drivers, and a u-boot boot.scr is built
+#	and placed on the MMC image. The board names are spelled out anyway so that
+#	the distinction has somewhere to grow and so a typo is an error rather than
+#	silently an EC2 image. Usage:
+#
+#	  jam -q -sHAIKU_ARM64_PLATFORM=rpi5 -sHAIKU_ARM64_CPU_BASELINE=rpi5 \
+#	      @minimum-mmc
+#
+#	Set the CPU baseline to match: the two are independent on purpose, but a
+#	board platform carrying a Graviton baseline is almost always a mistake, and
+#	the build says so.
+
+
 # Adjusting Build Variables
 
 # The following variables can be configured per subdirectory (or subtree) or

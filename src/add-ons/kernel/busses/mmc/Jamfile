@@ -8,6 +8,13 @@ SubDirHdrs $(HAIKU_TOP) src system kernel device_manager ;
 SubDirHdrs $(HAIKU_TOP) src add-ons kernel bus_managers acpi acpica include ;
 SubDirHdrs $(HAIKU_TOP) src add-ons kernel bus_managers acpi acpica include platform ;
 
+# There is no sdhci_fdt.cpp: sdhci_pci.cpp requires bus == "pci" and
+# sdhci_acpi.cpp requires an ACPI node, so this add-on cannot bind to an on-SoC
+# MMIO SD host described only in a device tree -- even though sdhci, mmc and
+# mmc_disk are in the arm64 boot module links (build/jam/packages/Haiku). On a
+# device-tree-only machine SD-card boot is therefore impossible, and the boot
+# module list implies otherwise. Known gap, not an oversight to paper over: see
+# X41 in graviton/docs/platform-portability.md (#429).
 KernelAddon sdhci :
 	sdhci.cpp
 	sdhci_acpi.cpp

@@ -136,6 +136,47 @@ rule CheckArm64CpuBaseline
 	}
 }
 
+rule SetupArm64Platform
+{
+	# SetupArm64Platform ;
+	#
+	# Called after UserBuildConfig has been included and before any image
+	# definition is read. HAIKU_ARM64_PLATFORM answers "what machine is this
+	# image for", which is a different question from HAIKU_ARM64_CPU_BASELINE's
+	# "what instructions may the code in it require". Conflating the two is how
+	# the tree came to use the arm64 architecture token as a synonym for AWS
+	# EC2: three image sites tested the ISA when they meant the platform (#429).
+	#
+	# Only "ec2 or not" is consumed today. The board names are still spelled out
+	# and validated, so that the distinction has somewhere to grow and so a typo
+	# is an error rather than silently an EC2 image.
+	HAIKU_ARM64_PLATFORM ?= ec2 ;
+
+	if ! ( $(HAIKU_ARM64_PLATFORM) in ec2 rpi5 rpi4 rpi3 generic ) {
+		Exit "Unknown HAIKU_ARM64_PLATFORM"
+			"\"$(HAIKU_ARM64_PLATFORM)\". Known platforms: ec2 (default),"
+			"rpi5, rpi4, rpi3, generic. See build/jam/ArchitectureRules." ;
+	}
+
+	if $(HAIKU_ARM64_PLATFORM) != ec2 {
+		ECHO "arm64 image platform:" $(HAIKU_ARM64_PLATFORM) ;
+
+		# A Pi image built with a Graviton ISA baseline faults on the first LSE
+		# atomic in the boot loader (#425). Warn rather than stop: `armv8` and
+		# an explicit -m... are both legitimate baselines for a board, so the
+		# only combination worth flagging is a Pi platform carrying Graviton
+		# codegen.
+		if ( $(HAIKU_ARM64_PLATFORM) in rpi5 rpi4 rpi3 )
+				&& [ Match "(graviton)"
+					: $(HAIKU_ARM64_CPU_BASELINE_APPLIED) ] {
+			ECHO "WARNING: the ISA baseline applied was"
+				$(HAIKU_ARM64_CPU_BASELINE_APPLIED) "-- this image requires"
+				"instructions a Raspberry Pi core does not implement. Pass a"
+				"matching -sHAIKU_ARM64_CPU_BASELINE=... ." ;
+		}
+	}
+}
+
 rule ArchitectureSetup architecture
 {
 	# ArchitectureSetup <architecture> ;

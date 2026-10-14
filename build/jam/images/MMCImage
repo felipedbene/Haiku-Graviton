@@ -167,7 +167,14 @@ for platform in [ MultiBootSubDirSetup ] {
 	on $(platform) {
 		# SD/mmc image targets
 		if $(TARGET_BOOT_PLATFORM) = efi {
-			if $(TARGET_ARCH) = arm || $(TARGET_ARCH) = riscv64 {
+			# A non-EC2 arm64 card is in the first branch too. EC2 hands the EFI
+			# loader straight to it from firmware, so the AMI needs no u-boot
+			# script and must not grow a dependency on mkimage; a Raspberry Pi
+			# reaches EFI through u-boot, which has to be told what to load, and
+			# with no boot.scr on the card there is nothing to tell it (#429).
+			if $(TARGET_ARCH) = arm || $(TARGET_ARCH) = riscv64
+					|| ( $(TARGET_ARCH) = arm64
+						&& $(HAIKU_ARM64_PLATFORM) != ec2 ) {
 				# These EFI platforms need u-boot to get them going
 				BuildSDImage $(HAIKU_MMC_NAME) : $(HAIKU_IMAGE)
 					haiku_loader.$(TARGET_BOOT_PLATFORM)
