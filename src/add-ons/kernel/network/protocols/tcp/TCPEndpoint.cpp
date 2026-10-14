@@ -463,6 +463,35 @@ is_establishing(tcp_state state)
 }
 
 
+/*!	The states in which an in-window reset or SYN that would otherwise tear the
+	connection down is answered with an RFC 5961 challenge acknowledgement
+	instead.
+
+	These are RFC 793's synchronized states, minus TIME_WAIT: there is no
+	connection left there to protect, resets are ignored in it anyway (RFC
+	1337), and a SYN is most likely a peer reusing the port pair. We do not
+	implement the RFC 6191 reopen, so a reset is the better answer -- it lets
+	that peer's connect() fail at once and retry from another port, where a
+	challenge acknowledgement would only draw a reset we then ignore, for as
+	long as the 2MSL wait lasts.
+
+	SYNCHRONIZE_RECEIVED is left out as well, and keeps accepting any in-window
+	reset. The blind-reset window that RFC 5961 closes is a property of a
+	long-lived connection; a half-open one lives for a round trip or two, and
+	refusing resets there would leave spawned children retransmitting their
+	SYN-ACK at a peer that has already given up. A challenge from that state
+	would also not be a bare acknowledgement: _PrepareSendSegment() sets SYN in
+	it, so it would answer each spoofed reset with a full SYN-ACK.
+*/
+static inline bool
+is_challengeable(tcp_state state)
+{
+	return state == ESTABLISHED || state == FINISH_RECEIVED
+		|| state == WAIT_FOR_FINISH_ACKNOWLEDGE || state == FINISH_SENT
+		|| state == FINISH_ACKNOWLEDGED || state == CLOSING;
+}
+
+
 static inline uint32
 tcp_now()
 {
@@ -529,6 +558,8 @@ TCPEndpoint::TCPEndpoint(net_socket* socket)
 	fPushSequence(0),
 	fFinishReceived(false),
 		// read by _ClosedReadStatus() even if the endpoint never connected
+	fChallengeAcknowledgeTime(0),
+	fChallengeAcknowledgeCount(0),
 	fSmoothedRoundTripTime(-1),
 	fRoundTripVariation(0),
 	fSendTime(0),
@@ -1689,6 +1720,67 @@ TCPEndpoint::_HandleReset(status_t error)
 }
 
 
+/*!	Whether an in-window reset may be acted on, under the RFC 5961 section 3
+	rule: its sequence number has to match RCV.NXT exactly. Landing anywhere in
+	the receive window used to be enough, so an off-path attacker who knew the
+	port pair only had to guess one sequence number out of a window, rather
+	than the one value we are actually waiting for.
+
+	One exception, which Linux needs for the same reason (tcp_reset_check()):
+	once we have consumed the peer's FIN, RCV.NXT is one past it, and an
+	abortive close that follows -- the peer's application closing with data
+	still unread, or a middlebox -- carries the sequence number of that FIN.
+	Such a reset is genuine and nothing will re-send it at RCV.NXT, so accept
+	it in the three states that can have consumed a FIN.
+*/
+bool
+TCPEndpoint::_IsResetAcceptable(const tcp_segment_header& segment) const
+{
+	if (tcp_sequence(segment.sequence) == fReceiveNext)
+		return true;
+
+	return (fState == FINISH_RECEIVED || fState == CLOSING
+			|| fState == WAIT_FOR_FINISH_ACKNOWLEDGE)
+		&& tcp_sequence(segment.sequence + 1) == fReceiveNext;
+}
+
+
+/*!	Whether another RFC 5961 challenge acknowledgement may be sent now, and
+	counts it if so.
+
+	The challenge needs a limit of its own: it answers a segment we would
+	otherwise have acted on, so without one a sender of spoofed resets or SYNs
+	gets a reply per segment out of us -- an amplifier, and an acknowledgement
+	loop with any peer that answers an unacceptable acknowledgement of its own
+	with a challenge.
+
+	Per endpoint rather than per host, deliberately. Linux's original global
+	counter made the shared budget observable: an off-path attacker could spend
+	it and measure what was left to learn whether two hosts had a connection at
+	all, and then to narrow its sequence numbers (CVE-2016-5696). A budget
+	nobody else draws on cannot be used to watch anybody else.
+
+	A plain window-and-count, not a token bucket: this caps an anomaly rather
+	than shaping a flow, and a healthy connection never reaches it.
+*/
+bool
+TCPEndpoint::_AllowChallengeAcknowledge()
+{
+	const bigtime_t now = system_time();
+
+	if ((now - fChallengeAcknowledgeTime) >= TCP_CHALLENGE_ACKNOWLEDGE_WINDOW) {
+		fChallengeAcknowledgeTime = now;
+		fChallengeAcknowledgeCount = 0;
+	}
+
+	if (fChallengeAcknowledgeCount >= TCP_CHALLENGE_ACKNOWLEDGE_LIMIT)
+		return false;
+
+	fChallengeAcknowledgeCount++;
+	return true;
+}
+
+
 void
 TCPEndpoint::_DuplicateAcknowledge(tcp_segment_header &segment)
 {
@@ -2516,7 +2608,11 @@ TCPEndpoint::_Receive(tcp_segment_header& segment, net_buffer* buffer)
 			TRACE("  Receive(): segment out of window, next: %" B_PRIu32
 				" wnd: %" B_PRIu32, fReceiveNext.Number(), fReceiveWindow);
 			if ((segment.flags & TCP_FLAG_RESET) != 0) {
-				// TODO: this doesn't look right - review!
+				// Dropping it silently is right, and is what RFC 5961 section
+				// 3 asks for (rule 1): a reset from outside the window cannot
+				// have come from a peer that shares our sequence numbers, and
+				// acknowledging it would tell a blind sender it had guessed
+				// the connection correctly.
 				return DROP;
 			}
 			return DROP | IMMEDIATE_ACKNOWLEDGE;
@@ -2530,6 +2626,20 @@ TCPEndpoint::_Receive(tcp_segment_header& segment, net_buffer* buffer)
 			&& tcp_sequence(segment.sequence) < (fLastAcknowledgeSent
 				+ fReceiveWindow)
 			&& fState != TIME_WAIT) {
+			if (is_challengeable(fState) && !_IsResetAcceptable(segment)) {
+				// RFC 5961 section 3 (rule 3): in the window but not at
+				// RCV.NXT, so answer with a challenge acknowledgement rather
+				// than believing it. That is also how the exchange converges
+				// with a peer that really did reset: our acknowledgement tells
+				// it which sequence number we are waiting for, and its next
+				// reset carries it. A blind sender, which never sees the
+				// acknowledgement, gets nowhere.
+				if (_AllowChallengeAcknowledge())
+					return DROP | IMMEDIATE_ACKNOWLEDGE;
+
+				return DROP;
+			}
+
 			status_t error;
 			if (fState == SYNCHRONIZE_RECEIVED)
 				error = ECONNREFUSED;
@@ -2563,14 +2673,37 @@ TCPEndpoint::_Receive(tcp_segment_header& segment, net_buffer* buffer)
 		return DROP | RESET;
 	}
 
-	if ((segment.flags & TCP_FLAG_SYNCHRONIZE) != 0
-		|| (fState == SYNCHRONIZE_RECEIVED
-			&& (fInitialReceiveSequence > segment.sequence
-				|| ((segment.flags & TCP_FLAG_ACKNOWLEDGE) != 0
-					&& (fSendUnacknowledged > segment.acknowledge
-						|| fSendMax < segment.acknowledge))))) {
-		// reset the connection - either the initial SYN was faulty, or we
-		// received a SYN within the data stream
+	if ((segment.flags & TCP_FLAG_SYNCHRONIZE) != 0) {
+		// A SYN inside the data stream. The handshake's own SYN never gets
+		// here (_Spawn() and _SynchronizeSentReceive() clear the flag before
+		// calling us) and neither does a retransmitted one, which falls behind
+		// RCV.NXT and is answered by the out-of-window path above -- so this is
+		// an anomaly, and resetting on it handed an off-path attacker a whole
+		// window of sequence numbers to aim a SYN at to kill an established
+		// connection (#609, #614).
+		//
+		// RFC 5961 section 4 instead: answer with a challenge acknowledgement
+		// and keep the connection. A peer that genuinely restarted will reset
+		// us when that acknowledgement reaches it, which is the one way out
+		// that does not take instructions from an unauthenticated SYN.
+		if (is_challengeable(fState)) {
+			if (_AllowChallengeAcknowledge())
+				return DROP | IMMEDIATE_ACKNOWLEDGE;
+
+			return DROP;
+		}
+
+		return DROP | RESET;
+	}
+
+	if (fState == SYNCHRONIZE_RECEIVED
+		&& (fInitialReceiveSequence > segment.sequence
+			|| ((segment.flags & TCP_FLAG_ACKNOWLEDGE) != 0
+				&& (fSendUnacknowledged > segment.acknowledge
+					|| fSendMax < segment.acknowledge)))) {
+		// The initial SYN was faulty, or the acknowledgement of our SYN-ACK is
+		// for something we never sent (RFC 9293 3.10.7.4). Reset: there is no
+		// connection here yet for a challenge to protect.
 		return DROP | RESET;
 	}
 
@@ -2915,10 +3048,12 @@ TCPEndpoint::SegmentReceived(tcp_segment_header& segment, net_buffer* buffer)
 				// Our own reset ends the connection just as the peer's does:
 				// cancel the timers, record the error, wake a blocked reader
 				// and writer. Only setting CLOSED left a recv() with no
-				// timeout asleep for good, and any in-window SYN, even on an
-				// idle ESTABLISHED connection, gets here (#609). The lifetime
-				// handling is that of the inbound-reset path, which reaches
-				// every one of these states.
+				// timeout asleep for good (#609), which ordinary traffic was
+				// enough to reach: a reader blocked on a full window, our
+				// shutdown(SHUT_WR), and then the peer's window probe against
+				// the window close() shut for good, which FINISH_ACKNOWLEDGED
+				// answers with a reset. The lifetime handling is that of the
+				// inbound-reset path, which reaches every one of these states.
 				_HandleReset(ECONNRESET);
 			}
 

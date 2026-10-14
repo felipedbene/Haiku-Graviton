@@ -137,6 +137,9 @@ private:
 			status_t	_ClosedSendStatus();
 			size_t		_SendResumeThreshold() const;
 			void		_HandleReset(status_t error);
+			bool		_IsResetAcceptable(
+							const tcp_segment_header& segment) const;
+			bool		_AllowChallengeAcknowledge();
 			int32		_Spawn(TCPEndpoint* parent, tcp_segment_header& segment,
 							net_buffer* buffer);
 			int32		_ListenReceive(tcp_segment_header& segment,
@@ -243,6 +246,12 @@ private:
 	bool			fFinishReceived;
 	tcp_sequence	fFinishReceivedAt;
 	tcp_sequence	fInitialReceiveSequence;
+
+	bigtime_t		fChallengeAcknowledgeTime;
+	uint32			fChallengeAcknowledgeCount;
+		// Start of the current rate-limit window for the RFC 5961 challenge
+		// acknowledgements, and how many have been sent in it. Per endpoint on
+		// purpose -- see _AllowChallengeAcknowledge().
 
 	// round trip time and retransmit timeout computation
 	int32			fSmoothedRoundTripTime;
