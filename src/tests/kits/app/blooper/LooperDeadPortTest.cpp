@@ -120,7 +120,7 @@ public:
 
 
 static port_id
-find_port(const char* name)
+find_team_port(const char* name)
 {
 	thread_info thread;
 	get_thread_info(find_thread(NULL), &thread);
@@ -171,7 +171,7 @@ exercise(BLooper* target, Counter& counter, thread_id thread,
 		wait_for_count(counter, kBefore, 3000000),
 		"%lld of %lld", counter.Count(), kBefore);
 
-	port_id port = find_port(portName);
+	port_id port = find_team_port(portName);
 	check("looper port found", port >= 0, "port %lld, %lld", port, 0);
 	check("looper port deleted", delete_port(port) == B_OK,
 		"port %lld, %lld", port, 0);
