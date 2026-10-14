@@ -50,6 +50,13 @@
 #                             each binary's `--version` to prove it activates.
 #     -h, --help
 #
+# ENVIRONMENT:
+#   CARGO_BUILD_LOCK_WAIT   seconds to wait for the on-box cargo lock before
+#                           giving up (default 7200; 0 = fail immediately).
+#                           Concurrent cargo runs corrupt each other on DeBeOS
+#                           because std's File::lock is a no-op on Haiku
+#                           (DeBeOS #638) -- see graviton/docs/rust-file-locking.md.
+#
 # FAILURE MODES HANDLED (all seen on real builds, see the native-dev memories):
 #   * GNU ld 2.41 aarch64 stub bug ("can not size stub section" /
 #     unresolvable ADR_GOT_PAGE): rustc defaults to --gc-sections which trips it.
@@ -158,10 +165,58 @@ command -v cargo >/dev/null 2>&1 || die "cargo not found -- run 'pkgman install 
 say "crate=$CRATE version=$VERSION  ->  package $PKGNAME-$PKGVER (arm64)"
 
 STAGE=$(mktemp -d /tmp/crate2hpkg.XXXXXX) || die "cannot make a work dir"
-trap 'rm -rf "$STAGE"' EXIT
+CARGO_LOCK_DIR="${CARGO_HOME:-$HOME/.cargo}/.debeos-cargo.lock"
+CARGO_LOCK_HELD=0
+cleanup() {
+	rm -rf "$STAGE"
+	[ "$CARGO_LOCK_HELD" -eq 1 ] && rm -rf "$CARGO_LOCK_DIR"
+	return 0
+}
+trap cleanup EXIT
 ROOT="$STAGE/root"           # cargo install --root target
 TREE="$STAGE/tree"           # the hpkg content tree (.PackageInfo + bin/)
 mkdir -p "$ROOT" "$TREE/bin" "$OUTDIR"
+
+# ---- serialise cargo on this builder (DeBeOS #638) -------------------------
+# Rust std returns ErrorKind::Unsupported from File::lock on Haiku (target_os
+# "haiku" is absent from the flock cfg lists in library/std/src/sys/fs/unix.rs
+# up to and including the rust_bin we ship), and cargo treats an unsupported
+# lock as ACQUIRED without warning. So cargo's package-cache lock over
+# $CARGO_HOME is a silent no-op here: two concurrent cargo runs both believe
+# they own ~/.cargo/registry/{src,cache} and interleave writes to it, leaving a
+# torn artifact that stays CACHED, so the resulting rustc ICE then recurs.
+# Take the lock ourselves until rust_bin ships >= nightly-2026-10-13 (upstream
+# rust-lang/rust#164031). See graviton/docs/rust-file-locking.md.
+#
+# mkdir is atomic on BFS, which is the whole trick. CARGO_BUILD_LOCK_WAIT is a
+# timeout in seconds (default 2 h, 0 = fail immediately rather than queue).
+cargo_lock_acquire() {
+	_limit="${CARGO_BUILD_LOCK_WAIT:-7200}"
+	# A non-integer here would make every [ -ge ] below fail and spin forever.
+	case "$_limit" in ''|*[!0-9]*) die "CARGO_BUILD_LOCK_WAIT must be a whole number of seconds, got '$_limit'";; esac
+	_waited=0
+	mkdir -p "${CARGO_HOME:-$HOME/.cargo}" 2>/dev/null
+	while ! mkdir "$CARGO_LOCK_DIR" 2>/dev/null; do
+		# Take over a lock whose owner is gone: a killed SSM command or a
+		# crashed build would otherwise wedge every later build on the box.
+		_owner=$(cat "$CARGO_LOCK_DIR/pid" 2>/dev/null)
+		if [ -n "$_owner" ] && ! kill -0 "$_owner" 2>/dev/null; then
+			say "stale cargo lock from pid $_owner -- taking it over"
+			rm -rf "$CARGO_LOCK_DIR"
+			continue
+		fi
+		if [ "$_waited" -ge "$_limit" ]; then
+			die "another cargo holds $CARGO_LOCK_DIR (pid ${_owner:-unknown}) after ${_waited}s -- concurrent cargo corrupts artifacts on DeBeOS (#638); wait for it, or raise CARGO_BUILD_LOCK_WAIT"
+		fi
+		[ "$_waited" -eq 0 ] && say "waiting for the cargo lock held by pid ${_owner:-unknown} (#638)"
+		sleep 5
+		_waited=$((_waited + 5))
+	done
+	CARGO_LOCK_HELD=1
+	printf '%s\n' "$$" > "$CARGO_LOCK_DIR/pid"
+	[ "$_waited" -gt 0 ] && say "cargo lock acquired after ${_waited}s"
+	return 0
+}
 
 # ---- build with cargo ------------------------------------------------------
 # Assemble the argv once; run_cargo optionally forces serial (--jobs 1).
@@ -185,6 +240,7 @@ run_cargo() {
 	cargo "$@" > "$BUILD_LOG" 2>&1
 }
 
+cargo_lock_acquire
 FORCE_SERIAL=0
 run_cargo
 crc=$?

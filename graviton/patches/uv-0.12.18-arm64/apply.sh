@@ -12,6 +12,34 @@ export CARGO_PROFILE_RELEASE_DEBUG=0
 export CARGO_BUILD_RUSTFLAGS="$CARGO_BUILD_RUSTFLAGS -C codegen-units=1"
 export CARGO_BUILD_JOBS=4
 
+# ---- single-instance guard (DeBeOS #638) -----------------------------------
+# This script is a RESUME driver: it rewrites files under ~/uv and then builds
+# into the fixed ~/uv/target. A full build is 55-90 min detached, so one that
+# looks stalled gets re-launched -- which used to put two cargo processes on the
+# same target dir. That is silently unsafe on DeBeOS: std's File::lock returns
+# ErrorKind::Unsupported on Haiku and cargo treats an unsupported lock as
+# ACQUIRED without warning, so neither cargo blocks and both interleave writes
+# to target/ and ~/.cargo/registry. The torn rlib then stays cached and rustc
+# keeps ICEing on it -- cf. the zeroed-ODHT rmeta failure in README.md.
+# Keyed on $CARGO_HOME so this also excludes haiku-crate-to-hpkg, which shares
+# the registry. Drop once rust_bin ships >= nightly-2026-10-13 (upstream
+# rust-lang/rust#164031). See graviton/docs/rust-file-locking.md.
+LOCK_DIR="${CARGO_HOME:-$HOME/.cargo}/.debeos-cargo.lock"
+mkdir -p "${CARGO_HOME:-$HOME/.cargo}"
+if ! mkdir "$LOCK_DIR" 2>/dev/null; then
+	owner=$(cat "$LOCK_DIR/pid" 2>/dev/null || true)
+	if [ -n "$owner" ] && ! kill -0 "$owner" 2>/dev/null; then
+		echo "== stale cargo lock from pid $owner -- taking it over =="
+		rm -rf "$LOCK_DIR"
+		mkdir "$LOCK_DIR"
+	else
+		echo "== ABORT: cargo already running here (pid ${owner:-unknown}); concurrent cargo corrupts ~/uv/target on DeBeOS (#638) =="
+		exit 1
+	fi
+fi
+printf '%s\n' "$$" > "$LOCK_DIR/pid"
+trap 'rm -rf "$LOCK_DIR"' EXIT
+
 cat > ~/uv/crates/uv-unix/src/resource_limits.rs <<'EOF'
 //! Helper for adjusting Unix resource limits.  See upstream for context.
 

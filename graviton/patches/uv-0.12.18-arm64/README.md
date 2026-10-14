@@ -99,6 +99,23 @@ corrupted), so a `cargo clean` + fully-serial `cargo build --jobs 1` is needed
 to work around it. This is the memoried "parallel rustc corrupts a `.rmeta`"
 BFS issue, not code portability.
 
+**Re-examine that attribution before chasing it as a BFS bug.** There is a
+second, now-confirmed mechanism that produces exactly this signature: on DeBeOS
+cargo's file locking is a silent no-op (std's `File::lock` returns
+`ErrorKind::Unsupported` on Haiku, and cargo treats an unsupported lock as
+*acquired* without printing anything — DeBeOS #638,
+[../../docs/rust-file-locking.md](../../docs/rust-file-locking.md)). `apply.sh`
+is a *resume* driver with a fixed `~/uv/target`, and before it grew the
+single-instance guard it had no lock at all — so two overlapping runs, the
+normal reaction to a 55-90 minute detached build that looks stalled, would both
+build into the same target dir with neither blocking. If that is what happened
+here, it is #638 and not a filesystem bug. Note that #638 explains
+*cargo-versus-cargo* races only; it does **not** explain corruption from one
+cargo's internal `--jobs 4` rustc parallelism, which cargo coordinates with a
+jobserver rather than with `File::lock`. Which of the two it was has not been
+measured. `apply.sh` now refuses to start if another cargo is running, so a
+recurrence after this point is evidence for the BFS theory.
+
 ## Reproduction summary
 
 - Instance: `c7g.2xlarge` from canonical AMI `ami-032bdab7af564b2ea` (baked

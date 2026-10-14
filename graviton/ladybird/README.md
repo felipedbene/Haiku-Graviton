@@ -90,6 +90,19 @@ Run natively on the Graviton Haiku builder, as `baron`, from `/boot/home`.
 `build-craneliftB` with `-DENABLE_CRANELIFT_JIT=ON` to prove LibWasm links the
 Cranelift WASM JIT (not stubbed).
 
+> **Do not run two `ninja` invocations against the same build tree, and do not
+> run the `build-wave2` and `build-craneliftB` tracks at the same time.** On
+> DeBeOS, cargo's file locking is a silent no-op (std's `File::lock` returns
+> `Unsupported` on Haiku and cargo reads that as *acquired*), so concurrent
+> cargo processes corrupt shared build state without any warning — see
+> [../docs/rust-file-locking.md](../docs/rust-file-locking.md), DeBeOS #638.
+> `ninja -j32` on its own is safe: Ladybird's `Meta/CMake/rust_crate.cmake`
+> declares a depth-1 `cargo` job pool and tags every cargo command with it, so
+> one ninja run never starts two cargos even though all library crates share
+> `${CMAKE_BINARY_DIR}/cargo/build`. That pool only binds within a single ninja
+> process; it does not protect a second ninja, or the second build tree, which
+> shares `~/.cargo/registry`.
+
 ## Skia PathOps (found on the rev-4 build, #622)
 
 With `skia_enable_pdf = false`, Skia m148 leaves PathOps out of `libskia.a`: the `:pathops` source set reaches the

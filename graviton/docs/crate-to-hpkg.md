@@ -38,6 +38,15 @@ sources to set `CARGO_BUILD_RUSTFLAGS=-C link-arg=-Wl,--no-gc-sections` and
 linker needs. Drive the script through a login shell (`bash -lc`) so those are
 set; it also re-asserts them itself for non-login shells.
 
+> **Run one cargo at a time per builder.** Rust std's `File::lock` returns
+> `ErrorKind::Unsupported` on Haiku and cargo treats that as *lock acquired*
+> without warning, so two concurrent cargo runs silently interleave writes to
+> `~/.cargo/registry` (and to any shared `--target-dir`) and leave a torn rlib
+> that stays cached. `haiku-crate-to-hpkg` takes an on-box lock itself and will
+> queue behind another cargo rather than race it — override the wait with
+> `CARGO_BUILD_LOCK_WAIT`. Background, and the toolchain bump that removes the
+> need for it, are in [rust-file-locking.md](rust-file-locking.md) (DeBeOS #638).
+
 ## Usage
 
 ```
