@@ -764,7 +764,16 @@ TCPEndpoint::Connect(const sockaddr* address)
 	// after a failed connect() look like an orderly close (EOF instead of
 	// ENOTCONN); _PrepareReceivePath() only clears it once a SYN arrives.
 	fFinishReceived = false;
-	fFlags &= ~(FLAG_SEND_ERROR_REPORTED | FLAG_WAS_ESTABLISHED);
+	// FLAG_DELETE_ON_CLOSE belongs to the connection that just ended, not to
+	// the one being opened here. It is set by every teardown that happens
+	// before close() -- a reset, or an orderly close that reaches CLOSED from
+	// WAIT_FOR_FINISH_ACKNOWLEDGE after a shutdown(SHUT_WR) -- and nothing
+	// else ever cleared it. A stale one makes Free() take no reference and
+	// skip the 2MSL wait, so this connection would be destroyed the moment
+	// close() returns: still in FINISH_SENT, losing the FIN retransmission
+	// and whatever is left in the send queue.
+	fFlags &= ~(FLAG_SEND_ERROR_REPORTED | FLAG_WAS_ESTABLISHED
+		| FLAG_DELETE_ON_CLOSE);
 	fState = SYNCHRONIZE_SENT;
 	T(State(this));
 
