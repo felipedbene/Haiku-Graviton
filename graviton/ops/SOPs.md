@@ -215,9 +215,14 @@ lands) are the publisher's `/dev/shm` and disk sizing:
   > `.PackageInfo` and splices it back with `package add -f -i`, never unpacking
   > contents, so a package's uncompressed size is irrelevant and the former
   > size guard is gone — see the comment at `graviton/scripts/haiku-repo-add:66-73`.
-  > Nothing has yet demonstrated a >18-package single call, so the limit stays
-  > written down until someone does. **One publish of ~25 packages settles it**;
-  > if it clears, delete both rules. Related dead config:
+  > A **16-package single `haiku-repo-add` call succeeded** on 2026-10-14 (the
+  > blue→green promote of plan `20261014T151755Z`, via the
+  > `debeos-repo-promote-green` CodeBuild project; 16 packages verified live in
+  > green afterwards). That is *consistent* with the ≤18 rule and does not test
+  > it — the untested range is **19–26 packages**, and no bomb has been run
+  > through the metadata-only re-stamp at all. So both rules stay written down.
+  > **One publish of 19–26 packages settles the chunk rule**; one bomb settles
+  > the other; if either clears, delete that rule. Related dead config:
   > `haiku-repo-restamp-packager`'s `RESTAMP_MAX_BYTES`/`--max-bytes` are defined
   > and never referenced again.
 - **The index rebuild syncs the whole pool** — the publisher root must fit it
@@ -635,8 +640,8 @@ named per entry.
   actually built** — filter the harvest to the wave's own completions and drop
   `_bootstrap`/`_debuginfo` unless a wave deliberately built them.
 - **Rule (backfill).** A *backfill* campaign (publishing deps that earlier waves
-  built but never published, e.g. the class-20 cohort) has no single wave to scope
-  to, so rule (5) above gives it no answer. Scope it **dep-driven, not
+  built but never published) has no single wave to scope to, so rule (5) above
+  gives it no answer. Scope it **dep-driven, not
   census-driven**: take the `requires` of the blocked consumers, subtract what the
   green index already `provides`, and publish only the resulting *names* — resolving
   each to its newest built artifact. Never diff the build census against green:
@@ -650,6 +655,14 @@ named per entry.
   objects/index in the pool prefix. Confirm exactly one publisher is running (§3)
   and that the next build wave launched **without** waiting for it. Confirm no
   `_bootstrap`/`_debuginfo` object landed that this wave did not build.
+- **Known deviation: green carries two `_debuginfo` packages (2026-10-14).** The
+  blue→green promote of plan `20261014T151755Z` put `blis_debuginfo` and
+  `graphicsmagick_debuginfo` into live green, because `haiku-repo-promote-green`
+  is a whole-pool union add with **no subset or filter flag** — the only way to
+  exclude them was to remove them from blue first, and that was not done. So the
+  `_debuginfo` half of the check above is **expected to flag these two** until
+  either the tool gains a filter or they are removed from green deliberately.
+  Do not "fix" it by deleting from green on a hunch; green is live.
 
 ### 13.6 Native-builder launch constraints: default disk, cap parallelism, absolute interpreters (extends §8)
 
