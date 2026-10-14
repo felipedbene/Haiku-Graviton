@@ -43,3 +43,8 @@ AGENTS.local.md
 graviton/audit/*.local.md
 graviton/audit/review/
 graviton/audit/reports/
+
+# Transient git worktrees created for parallel agent runs. Each one is a full
+# checkout of this repo under .claude/, so leaving them untracked makes every
+# `git status` noisy and risks one being committed into the other.
+.claude/worktrees/
