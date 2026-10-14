@@ -20,6 +20,7 @@ SimpleTest tcp_shell :
 	tcp.cpp
 	TCPEndpoint.cpp
 	BufferQueue.cpp
+	ReceiveRing.cpp
 	EndpointManager.cpp
 
 	# misc
@@ -44,7 +45,8 @@ SimpleTest BufferQueueTest :
 ;
 
 SEARCH on [ FGristFiles
-		tcp.cpp TCPEndpoint.cpp BufferQueue.cpp EndpointManager.cpp
+		tcp.cpp TCPEndpoint.cpp BufferQueue.cpp ReceiveRing.cpp
+		EndpointManager.cpp
 	] = [ FDirName $(HAIKU_TOP) src add-ons kernel network protocols tcp ] ;
 
 SEARCH on [ FGristFiles
