@@ -2833,8 +2833,23 @@ TCPEndpoint::SegmentReceived(tcp_segment_header& segment, net_buffer* buffer)
 		_SendQueued();
 
 	// handle RESET action separately to use actual connection
-	// to generate the segment information
-	if ((segmentAction & RESET) != 0 && _SendReset(true) == B_OK) {
+	// to generate the segment information.
+	// LISTEN is left out: a reset asked for in that state answers a segment
+	// for a connection that never existed (a bare ACK, see _ListenReceive()),
+	// so it says nothing about this endpoint and must not take the listener
+	// down. _SendReset() refuses to send in LISTEN anyway, and tcp.cpp emits
+	// the reply for the RESET action we keep returning.
+	if ((segmentAction & RESET) != 0 && fState != LISTEN) {
+		// Ending the connection must NOT depend on our own RST getting out:
+		// _SendReset() also fails for reasons that say nothing about the
+		// connection (no buffer, send path down). The endpoint used to be left
+		// running in that case -- state unchanged, timers armed, a blocked
+		// reader never woken -- which is the #609 hang again, while the peer
+		// does get a reset, because tcp.cpp answers with one of its own for any
+		// RESET action we return. So end the connection either way, and only
+		// keep the RESET action (tcp.cpp's reply) when our own RST never left.
+		const bool resetSent = _SendReset(true) == B_OK;
+
 		if (fState == SYNCHRONIZE_SENT || fState == TIME_WAIT
 			|| fState == CLOSED) {
 			// Left as it was. Nobody waits on a read in TIME_WAIT (it returns
@@ -2855,7 +2870,9 @@ TCPEndpoint::SegmentReceived(tcp_segment_header& segment, net_buffer* buffer)
 			// the inbound-reset path, which reaches every one of these states.
 			_HandleReset(ECONNRESET);
 		}
-		segmentAction &= ~RESET;
+
+		if (resetSent)
+			segmentAction &= ~RESET;
 		pendingAcknowledge.valid = false;
 			// The connection is dead: a prepared plain ACK would go out AFTER
 			// the RST (it is emitted below, with the lock released) and only
