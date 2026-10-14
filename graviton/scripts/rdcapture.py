@@ -31,6 +31,20 @@ the direction the ink actually ran, which --expect-text (an origin the rotated
 and unrotated runs SHARE) and --min-glyph-ink (a pixel count they share too)
 both cannot see.
 
+TILED BITMAPS (#522).  B_TILE_BITMAP is honoured, and the active clipping
+region is applied to the whole-bitmap blit.  Same defect family one layer down
+again: the bitmap op was rasterised as a plain scaled blit, so neither tiled
+path rendered faithfully -- and with no clip applied there was no seam in the
+PNG to assert about, which is why the pixel-level seam check #507/#516 wanted
+("sample the same phase either side of the clip seam and require equality")
+could not be constructed and verification fell back to the wire opcode.  Both
+tiled paths are now modelled: the single clipped whole-bitmap RP_DRAW_BITMAP the
+server sends since #507, and the older RP_DRAW_BITMAP_RECTS split in which every
+sub-rect restarts the tile grid at its own origin.  The second is modelled
+rather than corrected, because being able to render the seam is the whole point.
+See Framebuffer.draw_bitmap and Capture._paint_bitmap; the seam assertion and
+its mutation arms are in --selftest.
+
 Stdlib only.  No PIL: the PNG is written by hand with zlib + struct, and the
 one non-stdlib dependency is libfreetype.so.6 via ctypes -- which is also the
 library app_server renders with, and whose absence is reported as "not ground
@@ -275,6 +289,19 @@ B_GRAY8 = 0x0002
 TRANSPARENT_MAGIC_BGR = (0x77, 0x74, 0x77)
 
 PLACEHOLDER = (1, 1, 1)     # "something was drawn here but we did not decode it"
+
+
+# ---------------------------------------------------------------------------
+# DrawBitmap options -- headers/os/interface/InterfaceDefs.h:306-311
+# ---------------------------------------------------------------------------
+#
+# Note the value of B_TILE_BITMAP: it is the OR of both axis bits, and app_server
+# tests `(options & B_TILE_BITMAP) != 0` (BitmapPainter.cpp:166), so *either*
+# bit selects the tiling accessor -- which wraps BOTH axes
+# (DrawBitmapGeneric.h:26-29).  There is no single-axis tiling in the painter.
+B_TILE_BITMAP_X = 0x00000001
+B_TILE_BITMAP_Y = 0x00000002
+B_TILE_BITMAP = 0x00000003
 
 
 # ---------------------------------------------------------------------------
@@ -1571,6 +1598,22 @@ def write_png(path: str, width: int, height: int, rgb: bytes) -> None:
 # Software framebuffer
 # ---------------------------------------------------------------------------
 
+def tile_wrap(v, period):
+    """Wrap a source coordinate into [0, period) for a B_TILE_BITMAP draw.
+
+    POSITIVE remainder, deliberately, and a named function so the selftest can
+    mutate exactly this and nothing else.  agg's wrap_mode_repeat -- the accessor
+    app_server's tiling path uses (DrawBitmapGeneric.h:26-29) -- adds a large
+    multiple of the period before taking the modulus precisely so that a
+    negative coordinate wraps forward.  A tiled draw's phase comes from
+    bitmap->Bounds().OffsetToCopy(phase), whose origin is routinely negative, so
+    negative input here is the normal case rather than an edge one.  Python's %
+    on ints is already floor-modulo and so already positive; C's % and
+    math.fmod() truncate towards zero and are the classic bug, which is why this
+    is pinned by a mutation arm instead of left to look obvious."""
+    return v % period
+
+
 def rect_to_pixels(rect):
     """BRect (float, right/bottom inclusive) -> inclusive integer pixel box.
 
@@ -1830,8 +1873,26 @@ class Framebuffer(object):
         return touched
 
     # -- bitmap blit -----------------------------------------------------
-    def draw_bitmap(self, bmp, src_rect, dst_rect):
+    def draw_bitmap(self, bmp, src_rect, dst_rect, tile=False, box=None):
         """Nearest-neighbour blit of a decoded bitmap into dst_rect.
+
+        \a tile honours B_TILE_BITMAP, which is a different mapping and not a
+        variation on the scaled one (BitmapPainter.cpp:196-229): a tiled draw is
+        never scaled -- fScaleX = fScaleY = 1.0 -- and the destination is filled
+        by *wrapping* the source, period the whole bitmap, rather than by
+        stretching src_rect over it.  src_rect then carries only the tile grid's
+        PHASE (BView::DrawTiledBitmapAsync passes bitmap->Bounds().OffsetToCopy
+        (phase), so its origin can be negative), and the offset app_server
+        derives from it is dst.left - src.left, inverted into the source lookup
+        src = device - offset (DrawBitmapGeneric.h:49-56), then wrapped by
+        tile_wrap() -- see there for the negative-phase detail.
+
+        \a box optionally limits the blit to an inclusive clip rectangle, as
+        blend_coverage does.  It limits *writes only* -- the source lookup stays
+        keyed to the unclipped dst_rect origin, so every clip rect of one region
+        shares one tile grid.  Deriving the phase from each clipped rect's own
+        origin instead is exactly the server-side defect #507 fixed, and it is
+        what makes the pattern jump at a clip seam.
 
         Returns (touched, decoded) where decoded is False when the colour space
         was not handled and dst_rect got the flat placeholder instead."""
@@ -1839,7 +1900,16 @@ class Framebuffer(object):
         w, h, bpr, bits = bmp["width"], bmp["height"], bmp["bpr"], bmp["bits"]
         dx0, dy0, dx1, dy1 = rect_to_pixels(dst_rect)
         if cs not in (B_RGB32, B_RGBA32) or w <= 0 or h <= 0 or bpr <= 0:
-            return self.fill_box(dx0, dy0, dx1, dy1, PLACEHOLDER,
+            # Intersect with the clip AS AN INTERSECTION and bail on an empty
+            # span rather than handing fill_box an inverted rect, which it would
+            # normalise by swapping into an in-range one (the #500 lesson).
+            px0, py0, px1, py1 = dx0, dy0, dx1, dy1
+            if box is not None:
+                px0, py0 = max(px0, box[0]), max(py0, box[1])
+                px1, py1 = min(px1, box[2]), min(py1, box[3])
+            if px0 > px1 or py0 > py1:
+                return 0, False
+            return self.fill_box(px0, py0, px1, py1, PLACEHOLDER,
                                  estimated=True), False
 
         sx0, sy0, sx1, sy1 = rect_to_pixels(src_rect)
@@ -1850,23 +1920,44 @@ class Framebuffer(object):
         if dw <= 0 or dh <= 0:
             return 0, True
 
+        # Visit only the clipped span, but keep the loop variables measured from
+        # the UNCLIPPED origin so the mapping below is unaffected by the clip.
+        tx_lo, tx_hi = 0, dw - 1
+        ty_lo, ty_hi = 0, dh - 1
+        if box is not None:
+            tx_lo = max(tx_lo, box[0] - dx0)
+            ty_lo = max(ty_lo, box[1] - dy0)
+            tx_hi = min(tx_hi, box[2] - dx0)
+            ty_hi = min(ty_hi, box[3] - dy0)
+            if tx_lo > tx_hi or ty_lo > ty_hi:
+                return 0, True
+
         has_alpha = (cs == B_RGBA32)
+        # Resolved once per blit, by name, so a selftest mutation arm can swap
+        # the wrap rule out from under this and nothing else.
+        wrap = tile_wrap
         touched = 0
-        for ty in range(dh):
+        for ty in range(ty_lo, ty_hi + 1):
             y = dy0 + ty
             if y < 0 or y >= self.height:
                 continue
-            src_y = sy0 + (ty * sh) // dh
-            if src_y < 0 or src_y >= h:
-                continue
+            if tile:
+                src_y = wrap(sy0 + ty, h)
+            else:
+                src_y = sy0 + (ty * sh) // dh
+                if src_y < 0 or src_y >= h:
+                    continue
             rowbase = src_y * bpr
-            for tx in range(dw):
+            for tx in range(tx_lo, tx_hi + 1):
                 x = dx0 + tx
                 if x < 0 or x >= self.width:
                     continue
-                src_x = sx0 + (tx * sw) // dw
-                if src_x < 0 or src_x >= w:
-                    continue
+                if tile:
+                    src_x = wrap(sx0 + tx, w)
+                else:
+                    src_x = sx0 + (tx * sw) // dw
+                    if src_x < 0 or src_x >= w:
+                        continue
                 o = rowbase + src_x * 4
                 if o + 3 > len(bits):
                     continue
@@ -2263,6 +2354,40 @@ class Capture(object):
             st.pixels_touched += written
         return written, changed
 
+    def _paint_bitmap(self, st, bmp, src, dst, tile):
+        """Blit a bitmap, clipped the same way a fill would be (#522).
+
+        Separate from _paint() because it reports (touched, decoded) and because
+        the clip has to reach the blit as a *box* rather than as a rewritten
+        destination: a tiled draw's phase is keyed to the whole viewRect, so
+        handing each clip rect to the blit as its own destination would restart
+        the tile grid at every seam.  Framebuffer.draw_bitmap takes the box for
+        that reason; see its docstring.
+
+        The whole-bitmap path used to ignore the clipping region entirely, which
+        is why the pixel-level seam assertion #507 wanted could not be built --
+        with no clip there is no seam to sample either side of."""
+        clips = self._clip_boxes(st)
+        if clips is not None and len(clips) == 0:
+            self.clipped_out_ops += 1
+            # An empty box still gets the colour-space verdict out, so a fully
+            # clipped-away undecoded bitmap is not booked as decoded.
+            return self.fb.draw_bitmap(bmp, src, dst, tile=tile,
+                                       box=(0, 0, -1, -1))
+        if clips is None:
+            return self.fb.draw_bitmap(bmp, src, dst, tile=tile)
+        ox, oy = self._xy(st)
+        touched = 0
+        decoded = True
+        for clip in clips:
+            cx0, cy0, cx1, cy1 = rect_to_pixels(clip)
+            n, ok = self.fb.draw_bitmap(bmp, src, dst, tile=tile,
+                                        box=(cx0 + ox, cy0 + oy,
+                                             cx1 + ox, cy1 + oy))
+            touched += n
+            decoded = decoded and ok
+        return touched, decoded
+
     def _rect_px(self, st, rect):
         ox, oy = self._xy(st) if st is not None else (0, 0)
         x0, y0, x1, y1 = rect_to_pixels(rect)
@@ -2508,7 +2633,7 @@ class Capture(object):
             # BRect viewRect, uint32 options, AddBitmap (non-minimal).
             bitmap_rect = r.rect()
             view_rect = r.rect()
-            r.u32()                                  # options
+            options = r.u32()
             bmp = r.bitmap()
             self.bitmap_colorspaces[bmp["colorspace"]] = \
                 self.bitmap_colorspaces.get(bmp["colorspace"], 0) + 1
@@ -2516,7 +2641,12 @@ class Capture(object):
             dst = (view_rect[0] + ox, view_rect[1] + oy,
                    view_rect[2] + ox, view_rect[3] + oy)
             self._note_dest(st, *rect_to_pixels(dst))
-            n, decoded = fb.draw_bitmap(bmp, bitmap_rect, dst)
+            # Since #507 this is the message a CLIPPED tiled draw arrives as --
+            # one whole-bitmap blit carrying the phase in bitmapRect, for the
+            # client to clip itself.  So it must both tile and clip (#522).
+            n, decoded = self._paint_bitmap(
+                st, bmp, bitmap_rect, dst,
+                (options & B_TILE_BITMAP) != 0)
             st.pixels_touched += n
             if decoded:
                 self.bitmaps_decoded += 1
@@ -2529,7 +2659,7 @@ class Capture(object):
             # RemoteDrawingEngine.cpp:365-380 -- token, uint32 options,
             # color_space, uint32 flags, int32 rectCount, then per rect:
             # BRect viewRect + AddBitmap(minimal=true).
-            r.u32()                                  # options
+            options = r.u32()
             colorspace = r.u32()
             flags = r.u32()
             count = r.i32()
@@ -2543,10 +2673,16 @@ class Capture(object):
                 dst = (view_rect[0] + ox, view_rect[1] + oy,
                        view_rect[2] + ox, view_rect[3] + oy)
                 self._note_dest(st, *rect_to_pixels(dst))
-                # RemoteView.cpp:798 draws bitmap->Bounds() -> viewRect.
+                # RemoteView.cpp:956 draws bitmap->Bounds() -> viewRect, and
+                # passes the options word through, so each sub-rect tiles with a
+                # phase of its OWN origin.  Modelled, not corrected: that
+                # per-rect phase restart is the server-side defect #507 fixed,
+                # and the instrument has to be able to render it to be able to
+                # show the seam it produces (#522).
                 src = (0.0, 0.0, float(bmp["width"] - 1),
                        float(bmp["height"] - 1))
-                n, decoded = fb.draw_bitmap(bmp, src, dst)
+                n, decoded = self._paint_bitmap(
+                    st, bmp, src, dst, (options & B_TILE_BITMAP) != 0)
                 st.pixels_touched += n
                 if decoded:
                     self.bitmaps_decoded += 1
@@ -6478,6 +6614,243 @@ def selftest(allow_skip=False):
           Framebuffer(560, 64).blend_coverage(
               42, 6, 10, 9, 10, cov9, (255, 255, 255),
               (2, 21, 512, 25)) == (0, 0))
+
+    # ---- #522: tiled bitmaps and the clip seam that asserts them -----------
+    #
+    # WHAT THIS IS.  The assertion #507/#516 wanted and could not build --
+    # "sample the same phase either side of the clip seam and require equality"
+    # -- made constructible, because the instrument now implements both of the
+    # things it needs: B_TILE_BITMAP and the clipping region on the whole-bitmap
+    # blit.  Pure Framebuffer/Capture arithmetic: no rasteriser, no network, so
+    # this group always runs.
+    print("  -- tiled bitmap + clip seam (#522) --")
+    # A 10x10 source whose every pixel encodes its own (column, row), so a
+    # mis-phased lookup shows up as a WRONG COLOUR and not merely as a missing
+    # pixel.  A flat tile would make every check below vacuous.
+    TW = TH = 10
+    _tbits = bytearray()
+    for _sy in range(TH):
+        for _sx in range(TW):
+            _tbits += bytes((200, 10 + _sy * 20, 10 + _sx * 20, 255))    # BGRA
+    _tbits = bytes(_tbits)
+    tile_full = struct.pack("<iiiIII", TW, TH, TW * 4, B_RGB32, 0,
+                            len(_tbits)) + _tbits
+    # minimal=True: colour space and flags live in the RECTS header, not in each
+    # bitmap, so the per-bitmap prologue is w/h/bpr/bitsLength only.
+    tile_mini = struct.pack("<iiiI", TW, TH, TW * 4, len(_tbits)) + _tbits
+    # The shape of the #507/#516 hardware case: a 160x160 viewRect, a 10x10
+    # tile, a two-rect clipping region.  Three details are load-bearing.  The
+    # phase is NEGATIVE on both axes, which is what tile_wrap() is about.  The
+    # seam is NOT at a multiple of the tile period (203, not 200), so a restarted
+    # tile grid cannot coincidentally land back in phase.  And the region stops
+    # short of the viewRect's right edge, so "the clip was applied at all" gets
+    # its own witness instead of being inferred.
+    VIEW = (120.0, 120.0, 279.0, 279.0)
+    PHASE = (-3.0, -5.0)        # Bounds().OffsetToCopy(phase)
+    BMPRECT = (PHASE[0], PHASE[1], PHASE[0] + TW - 1, PHASE[1] + TH - 1)
+    SEAM = 203
+    CLIP = [(120.0, 120.0, float(SEAM - 1), 279.0),
+            (float(SEAM), 120.0, 259.0, 279.0)]
+    CLIP_SPANS = [(120, SEAM - 1), (SEAM, 259)]
+
+    def tiled_cap(code):
+        """Push one tiled draw through the real parser; returns the Capture.
+
+        RP_DRAW_BITMAP is the single clipped whole-bitmap message app_server
+        sends for a tiled draw since #507 (RemoteDrawingEngine.cpp:419-447).
+        RP_DRAW_BITMAP_RECTS is the older split it replaced: one sub-blit per
+        clip rect, each drawn bitmap->Bounds() -> its own viewRect
+        (RemoteView.cpp:956), so each restarts the tile grid at its own origin.
+        """
+        c = Capture(320, 320, clip=True, apply_offsets=False, verbose=False,
+                    reply=False, glyphs=None)
+        tok = 3
+        c.handle(RP_CREATE_STATE, struct.pack("<I", tok))
+        c.handle(RP_CONSTRAIN_CLIPPING_REGION,
+                 struct.pack("<Ii", tok, len(CLIP))
+                 + b"".join(struct.pack("<ffff", *rc) for rc in CLIP))
+        if code == RP_DRAW_BITMAP:
+            c.handle(RP_DRAW_BITMAP,
+                     struct.pack("<I", tok)
+                     + struct.pack("<ffff", *BMPRECT)
+                     + struct.pack("<ffff", *VIEW)
+                     + struct.pack("<I", B_TILE_BITMAP) + tile_full)
+        else:
+            payload = (struct.pack("<I", tok)
+                       + struct.pack("<III", B_TILE_BITMAP, B_RGB32, 0)
+                       + struct.pack("<i", len(CLIP)))
+            for rc in CLIP:
+                payload += struct.pack("<ffff", *rc) + tile_mini
+            c.handle(RP_DRAW_BITMAP_RECTS, payload)
+        return c
+
+    def tpx(fb, x, y):
+        o = (y * fb.width + x) * 3
+        return (fb.buf[o], fb.buf[o + 1], fb.buf[o + 2])
+
+    def seam_mismatches(cap, period=TW):
+        """THE SEAM ASSERTION.  Every pair of pixels one tile period apart,
+        anywhere inside the clipping region, must be the same colour -- on both
+        axes.  That is what "one tile grid over the whole draw" means in pixels,
+        and pairs that straddle the seam are included, which is the only place a
+        restarted grid can be seen.  Returns the mismatching pairs."""
+        fb = cap.fb
+        x_lo, x_hi = CLIP_SPANS[0][0], CLIP_SPANS[-1][1]
+        y_lo, y_hi = 120, 279
+        bad = []
+        for y in range(y_lo, y_hi + 1):
+            for x in range(x_lo, x_hi + 1 - period):
+                a, b = tpx(fb, x, y), tpx(fb, x + period, y)
+                if a != b:
+                    bad.append(("x", x, y, a, b))
+        for y in range(y_lo, y_hi + 1 - period):
+            for x in range(x_lo, x_hi + 1):
+                a, b = tpx(fb, x, y), tpx(fb, x, y + period)
+                if a != b:
+                    bad.append(("y", x, y, a, b))
+        return bad
+
+    def isolated_mismatches(cap, period=TW):
+        """The SAME check confined to within one clip rect -- i.e. the shape of
+        check that a reviewer reaches for first, and that the issue warns passes
+        on the bug.  Kept so that the difference between the two is
+        demonstrated below rather than asserted in a comment."""
+        fb = cap.fb
+        bad = []
+        for (x_lo, x_hi) in CLIP_SPANS:
+            for y in range(120, 280):
+                for x in range(x_lo, x_hi + 1 - period):
+                    a, b = tpx(fb, x, y), tpx(fb, x + period, y)
+                    if a != b:
+                        bad.append(("x", x, y, a, b))
+        return bad
+
+    def tile_color(sx, sy):
+        """The source pixel (sx, sy) as the framebuffer stores it, R G B."""
+        return (10 + sx * 20, 10 + sy * 20, 200)
+
+    v = tiled_cap(RP_DRAW_BITMAP)
+    check("the tiled whole-bitmap draw decoded and painted",
+          v.bitmaps_decoded == 1 and v.bitmaps_placeholder == 0,
+          "decoded=%d placeholder=%d" % (v.bitmaps_decoded,
+                                         v.bitmaps_placeholder))
+    # GROUND TRUTH, pinned not derived.  At the viewRect's top-left corner the
+    # source coordinate is the bare phase, (-3, -5), so the wrapped lookup must
+    # be column 7 row 5.  A truncating remainder would reach for column -3 of
+    # row -5 -- which in Python indexes backwards from the end of the bits and
+    # so silently returns *a* colour, the worst possible failure mode.
+    check("tile_wrap puts the negative phase (-3,-5) on source pixel (7,5)",
+          tpx(v.fb, 120, 120) == tile_color(7, 5),
+          "%s != %s" % (tpx(v.fb, 120, 120), tile_color(7, 5)))
+    check("...and one period in, at (130,130), on the very same source pixel",
+          tpx(v.fb, 130, 130) == tile_color(7, 5),
+          str(tpx(v.fb, 130, 130)))
+    seam_bad = seam_mismatches(v)
+    check("SEAM: same phase either side of the clip seam is the same colour, "
+          "everywhere in the region",
+          not seam_bad,
+          "%d mismatching pair(s), first %s" % (len(seam_bad),
+                                                seam_bad[0] if seam_bad else ""))
+    # The clip's own witness: the viewRect runs to x=279, the region stops at
+    # 259, so 260..279 must still be black.  Without the clip applied the blit
+    # would have painted straight over it.
+    tail = [(x, y) for y in range(120, 280) for x in range(260, 280)
+            if tpx(v.fb, x, y) != (0, 0, 0)]
+    check("the clipping region is applied: the 260..279 tail of the viewRect "
+          "stays black", not tail,
+          "%d painted pixel(s) outside the region" % len(tail))
+
+    # An EMPTY clipping region (rectCount 0) must paint nothing and be counted,
+    # not fall through to an unclipped blit -- the same hole #500 found in the
+    # glyph path, in the bitmap path.
+    empty = Capture(320, 320, clip=True, apply_offsets=False, verbose=False,
+                    reply=False, glyphs=None)
+    empty.handle(RP_CREATE_STATE, struct.pack("<I", 3))
+    empty.handle(RP_CONSTRAIN_CLIPPING_REGION, struct.pack("<Ii", 3, 0))
+    empty.handle(RP_DRAW_BITMAP,
+                 struct.pack("<I", 3) + struct.pack("<ffff", *BMPRECT)
+                 + struct.pack("<ffff", *VIEW)
+                 + struct.pack("<I", B_TILE_BITMAP) + tile_full)
+    check("an empty clipping region paints no bitmap pixel at all",
+          empty.fb.black_counts()[0] == 320 * 320
+          and empty.clipped_out_ops == 1,
+          "black=%d clipped_out=%d" % (empty.fb.black_counts()[0],
+                                       empty.clipped_out_ops))
+
+    # ---- the older split, modelled rather than corrected ----------------
+    # This is the discriminator the issue describes at the wire level, now
+    # readable in pixels: the RECTS split re-extracts each sub-blit from its own
+    # rect origin, so the tile grid restarts at the seam.  The instrument must
+    # RENDER that, not hide it, or it cannot show a client-side tiling
+    # regression either.
+    rects = tiled_cap(RP_DRAW_BITMAP_RECTS)
+    rect_seam = seam_mismatches(rects)
+    check("the RECTS split's per-rect phase restart IS visible at the seam",
+          len(rect_seam) > 0, "no mismatch found, so the seam is invisible")
+    rect_iso = isolated_mismatches(rects)
+    check("...while the per-rect-ISOLATED check passes on that same picture, "
+          "which is why it is not the assertion",
+          not rect_iso, "%d mismatch(es)" % len(rect_iso))
+    check("the whole-bitmap draw passes the isolated check too, so the two "
+          "checks differ only on the bug", not isolated_mismatches(v),
+          str(len(isolated_mismatches(v))))
+
+    # ---- MUTATION ARMS --------------------------------------------------
+    # Each arm deletes one half of the fix and requires the seam assertion (or,
+    # for the clip, its witness) to go RED.  A check that is green before and
+    # after a change is worth nothing, and this family of defect -- #475 -> #493
+    # -> #494/#498 -> #515 -> #522 -- is entirely made of such checks.
+    saved_draw = Framebuffer.draw_bitmap
+    saved_wrap = tile_wrap
+
+    def _untiled(self, bmp, src_rect, dst_rect, tile=False, box=None):
+        """MUTATION 1: the pre-#522 blit -- B_TILE_BITMAP ignored, so the draw
+        is a plain scaled stretch of the source over the viewRect."""
+        return saved_draw(self, bmp, src_rect, dst_rect, False, box)
+
+    def _unclipped(self, bmp, src_rect, dst_rect, tile=False, box=None):
+        """MUTATION 2: the pre-#522 blit's other half -- the clipping region
+        never reaches the whole-bitmap path."""
+        return saved_draw(self, bmp, src_rect, dst_rect, tile, None)
+
+    def _trunc_wrap(v_, period):
+        """MUTATION 3: C's % / math.fmod -- truncation towards zero instead of
+        a positive remainder.  Correct for every non-negative coordinate, wrong
+        for exactly the negative-phase ones a tiled draw is made of."""
+        return int(math.fmod(v_, period))
+
+    Framebuffer.draw_bitmap = _untiled
+    m_untiled = tiled_cap(RP_DRAW_BITMAP)
+    Framebuffer.draw_bitmap = _unclipped
+    m_unclipped = tiled_cap(RP_DRAW_BITMAP)
+    Framebuffer.draw_bitmap = saved_draw
+    globals()["tile_wrap"] = _trunc_wrap
+    try:
+        m_trunc = tiled_cap(RP_DRAW_BITMAP)
+    finally:
+        globals()["tile_wrap"] = saved_wrap
+
+    m1 = seam_mismatches(m_untiled)
+    check("MUTATION 1: drop B_TILE_BITMAP and the seam assertion goes RED",
+          len(m1) > 0, "seam still clean on the untiled blit")
+    m2_tail = [(x, y) for y in range(120, 280) for x in range(260, 280)
+               if tpx(m_unclipped.fb, x, y) != (0, 0, 0)]
+    check("MUTATION 2: drop the clipping region and its witness goes RED",
+          len(m2_tail) > 0, "tail still black with no clip applied")
+    m3 = seam_mismatches(m_trunc)
+    check("MUTATION 3: truncate the wrap towards zero and the seam assertion "
+          "goes RED on the negative phase",
+          len(m3) > 0, "seam still clean with a truncating remainder")
+    check("...and MUTATION 3's ground-truth pixel is wrong too, so it is the "
+          "phase that broke and not just the equality",
+          tpx(m_trunc.fb, 120, 120) != tile_color(7, 5),
+          str(tpx(m_trunc.fb, 120, 120)))
+    # Back to GREEN after all three arms, from a freshly parsed stream.
+    back = tiled_cap(RP_DRAW_BITMAP)
+    check("the real tiled, clipped blit is back after the mutation arms",
+          not seam_mismatches(back)
+          and tpx(back.fb, 120, 120) == tile_color(7, 5),
+          str(tpx(back.fb, 120, 120)))
 
     # UTF-8 decoding has to agree with the count the server sized its point
     # list by, or WITH_OFFSETS desynchronises.  Pinned, not derived.
