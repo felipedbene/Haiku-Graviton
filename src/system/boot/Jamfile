@@ -414,7 +414,14 @@ for platform in [ MultiBootSubDirSetup ] {
 						: <revisioned>boot_loader_$(TARGET_BOOT_PLATFORM) ;
 				}
 
-				if $(TARGET_ARCH) = arm || $(TARGET_ARCH) = riscv64 {
+				# Keep this condition in step with the one in
+				# build/jam/images/MMCImage, which puts the script on the card.
+				# arm64 is included only off EC2: there firmware starts the EFI
+				# loader directly, and building the script would put mkimage in
+				# the way of the one image that is actually baked (#429).
+				if $(TARGET_ARCH) = arm || $(TARGET_ARCH) = riscv64
+						|| ( $(TARGET_ARCH) = arm64
+							&& $(HAIKU_ARM64_PLATFORM) != ec2 ) {
 					# These EFI platforms need u-boot to get them going
 					BuildUImageScript boot.scr
 						: [ FDirName $(HAIKU_TOP) data boot u-boot boot-$(TARGET_ARCH).scr.txt ] ;

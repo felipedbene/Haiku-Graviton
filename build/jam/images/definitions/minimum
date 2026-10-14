@@ -347,34 +347,41 @@ SYSTEM_ADD_ONS_DRIVERS_GRAPHICS = [ FFilterByBuildFeatures
 
 SYSTEM_ADD_ONS_DRIVERS_MIDI = ;
 
+# The conventional add-in NIC set: PCI/PCIe cards plus the handful of USB
+# adapters that come with them. Named once so the arm64 block below can take the
+# same set as riscv64 without a second copy to keep in step.
+local conventionalNics =
+	3com
+	asix88xxx
+	atheros813x
+	atheros81xx
+	attansic_l1
+	attansic_l2
+	broadcom440x
+	broadcom570x
+	dec21xxx
+	ipro100
+	ipro1000
+	intel22x
+	jmicron2x0
+	marvell_yukon
+	nforce
+	pcnet
+	pegasus
+	rtl8125
+	rtl8139
+	rtl81xx
+	sis19x
+	sis900
+	syskonnect
+	via_rhine
+	vmxnet
+	vt612x
+	;
+
 SYSTEM_ADD_ONS_DRIVERS_NET = [ FFilterByBuildFeatures
 	x86,x86_64,riscv64 @{
-		3com
-		asix88xxx
-		atheros813x
-		atheros81xx
-		attansic_l1
-		attansic_l2
-		broadcom440x
-		broadcom570x
-		dec21xxx
-		ipro100
-		ipro1000
-		intel22x
-		jmicron2x0
-		marvell_yukon
-		nforce
-		pcnet
-		pegasus
-		rtl8125
-		rtl8139
-		rtl81xx
-		sis19x
-		sis900
-		syskonnect
-		via_rhine
-		vmxnet
-		vt612x
+		$(conventionalNics)
 	}@ # x86,x86_64,riscv64
 
 	etherpci
@@ -382,6 +389,22 @@ SYSTEM_ADD_ONS_DRIVERS_NET = [ FFilterByBuildFeatures
 	usb_rndis
 	wb840
 ] ;
+
+# arm64 is deliberately absent from the architecture list above, and that is
+# only correct for AWS EC2: there the sole NIC is ENA (added unfiltered in
+# build/jam/packages/Haiku), nothing on this list can be present, and the AMI is
+# kept lean on purpose. Any other arm64 machine can have a PCIe NIC in a slot,
+# and without this it would boot with no driver for it -- the arm64 token was
+# standing in for the platform (#429). riscv64 is the precedent: same EFI, same
+# device tree, same ECAM, same set.
+#
+# This buys a Raspberry Pi nothing. A Pi 3's Ethernet is a USB LAN9514 and a Pi
+# 5's is a GENET MAC with a BCM54213 PHY; the tree has a driver for neither, and
+# claiming otherwise is the gap this does not close (see X42 and §7 in
+# graviton/docs/platform-portability.md).
+if $(HAIKU_PACKAGING_ARCH) = arm64 && $(HAIKU_ARM64_PLATFORM) != ec2 {
+	SYSTEM_ADD_ONS_DRIVERS_NET += $(conventionalNics) ;
+}
 
 SYSTEM_ADD_ONS_DRIVERS_POWER = [ FFilterByBuildFeatures
 	# acpi_button is architecture-neutral -- it only talks to the ACPI bus
@@ -492,12 +515,17 @@ AddFilesToHaikuImage system settings network : $(networkSettingsFiles) ;
 # version line with DeBeOS's own build, and upstream publishes newer hrevs -- so
 # `pkgman update` silently prefers upstream and REPLACES the DeBeOS-patched,
 # Graviton-bootable base with STOCK Haiku, which faults right after
-# ExitBootServices (no DeBeOS GIC/ECAM/RTC/system_time/ENA bring-up). On the
-# modular AMI the base OS is delivered by the AMI itself; the ONLY runtime update
-# source is the DeBeOS CDN repo (the standalone config added below). This does
-# NOT change build-time package resolution -- that uses the repository caches fed
-# to the solver in ImageRules (PopulateHaikuImage), not these installed configs.
-# Other arches keep the upstream repos (non-modular, normal Haiku images).
+# ExitBootServices (no DeBeOS GIC/ECAM/RTC/system_time/ENA bring-up). The base OS
+# is delivered by the image itself; the ONLY runtime update source is the DeBeOS
+# CDN repo (the standalone config added below). This does NOT change build-time
+# package resolution -- that uses the repository caches fed to the solver in
+# ImageRules (PopulateHaikuImage), not these installed configs. Other arches keep
+# the upstream repos (non-modular, normal Haiku images).
+#
+# The test is the architecture, and that is deliberate -- do NOT narrow it to EC2
+# (#429). The version-line collision is a property of the arm64 port, not of the
+# platform it runs on: a card image for a board is built from the same patched
+# base and is bricked by the same `pkgman update`.
 local repository ;
 if $(HAIKU_PACKAGING_ARCH) != arm64 {
 	for repository in $(HAIKU_REPOSITORIES) {
@@ -519,7 +547,8 @@ if $(HAIKU_PACKAGING_ARCH) != arm64 {
 # (binding it to the image solve would force the index to exist at bake and fail
 # on a lagging 404). This is what makes a lean image modular -- a fresh boot can
 # `pkgman refresh && pkgman install <pkg>` from the repo with no manual add-repo.
-# arm64-only: the repo path is arm64 (multi-arch is future).
+# arm64-only because the repo path is arm64 (multi-arch is future) -- again the
+# architecture and not the platform, since any arm64 image wants this repo.
 if $(HAIKU_PACKAGING_ARCH) = arm64 {
 	AddFilesToHaikuImage system settings package-repositories
 		: [ FDirName $(HAIKU_TOP) data settings package-repositories DeBeOS ] ;

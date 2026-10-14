@@ -45,6 +45,7 @@ rule DefineDefaultBuildProfiles
 	# which makes it the place to catch build variables that were set too late
 	# to have any effect.
 	CheckArm64CpuBaseline ;
+	SetupArm64Platform ;
 
 	# release profiles
 	DefineBuildProfile release-raw : image : "haiku-release.image" ;

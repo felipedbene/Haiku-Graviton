@@ -320,19 +320,71 @@ shipped", contradicting the package list.
 **X3 — `build/jam/packages/Haiku:149`.** The `ena` driver is listed unfiltered, so a
 RISC-V or Pi image ships a driver for a NIC that platform cannot have.
 
-**X4 — `build/jam/images/definitions/minimum:350-383`.** The conventional-NIC driver block
+> **WITHDRAWN (#429).** Re-read, this is waste and not a defect, and the obvious fix is
+> wrong: `ena@arm64` would drop the driver from an x86_64 image, and x86_64 EC2 instances
+> have ENA too. `ena` binds by PCI vendor/device ID, so on a Pi or a RISC-V board it is
+> one add-on that never matches. Left as it is, on purpose.
+
+**X4 — `build/jam/images/definitions/minimum:350-384`.** The conventional-NIC driver block
 excludes `arm64` while *including* `riscv64`. On the reasoning that arm64 means EC2 and
 EC2 means ENA. A Pi has neither ENA nor any of these NICs, so an arm64 Pi image would
 contain **no network driver at all**.
+
+> **PARTLY FIXED (#429), and the claim above is too strong.** An arm64 image is not left
+> with nothing: `etherpci`, `usb_davicom`, `usb_rndis` and `wb840` are outside the gated
+> sublist, and `ena`, `usb_ecm` and `virtio_net` come from `packages/Haiku`. What it has no
+> driver for is **any modern PCIe NIC**. The set is now named once as `conventionalNics`
+> and appended for arm64 when `HAIKU_ARM64_PLATFORM != ec2`, so a board or a QEMU `virt`
+> with an e1000/rtl8139 gets a driver while the EC2 image is unchanged (widening the token
+> list itself would have put ~26 add-ons into the one image that is actually baked, for
+> hardware it cannot have). **This still buys a Raspberry Pi nothing**: a Pi 3's Ethernet
+> is a USB LAN9514 and a Pi 5's is a GENET MAC with a BCM54213 PHY, and the tree has a
+> driver for neither — that part of X4 is open, and is a driver to write, not a filter to
+> fix.
 
 **X5 — `build/jam/images/definitions/common-tail:127-131`, `minimum:502`, `minimum:523-525`.**
 Three sites using the architecture token `arm64` as a proxy for "this is an AWS EC2
 instance". The condition to test is a platform property; the token tests an ISA.
 
+> **RETRACTED as a behaviour bug (#429); fixed as a documentation bug.** All three
+> conditions were read again against what they actually control, and all three are correct
+> on the architecture:
+>
+> - `common-tail` (BFS grow-headroom) — the reserved gap and the mount-time grow are
+>   properties of the *volume*, not the platform (`bfs-auto-grow-design.md` Part A reads no
+>   platform fact). An SD card larger than the image benefits exactly as a larger root EBS
+>   does.
+> - `minimum` (skip the upstream repo configs) — the `r1~beta6_hrevNNNNN` version-line
+>   collision that makes `pkgman update` replace the patched base with stock Haiku is a
+>   property of the arm64 *port*. A card image is built from the same base and is bricked
+>   the same way.
+> - `minimum` (register the DeBeOS CDN repo) — the repo path is `arm64`; every arm64 image
+>   wants it.
+>
+> What was wrong was that all three *justifications* were written in terms of AMIs and EBS,
+> which is why this audit read them as EC2 proxies — the real hazard. Each now states the
+> property it depends on and carries an explicit "do NOT narrow this to EC2". Narrowing
+> them would have been a regression: a Pi image would have shipped the upstream repos and
+> been one `pkgman update` from unbootable.
+
 **X6 — `build/jam/images/MMCImage:170`.** No `boot.scr` is generated for arm64 and there
 is no staging of `config.txt` or vendor firmware blobs. The MMC image is shaped for a
 UEFI/EFI-boot machine. Pi 5 can UEFI-boot with third-party firmware; Pi 3 conventionally
 cannot, so this is a real gap for Pi 3 and an open question for Pi 5.
+
+> **HALF FIXED (#429).** `boot.scr` is now built and placed on the card for arm64 when
+> `HAIKU_ARM64_PLATFORM != ec2`, in `MMCImage` and in `src/system/boot/Jamfile` (the two
+> conditions have to agree, and the comments say so). `data/boot/u-boot/boot-arm64.scr.txt`
+> is a byte-identical copy of the 32-bit arm script: it is architecture-neutral u-boot
+> shell, and the rule keys the filename off `TARGET_ARCH`, so a per-arch file is the
+> convention rather than a choice. Gating it off EC2 also keeps `mkimage` out of the
+> dependency graph of the image that is actually baked.
+>
+> `config.txt` is **not** fixed and was not attempted. Its contents name the Pi firmware
+> blobs and the second-stage payload (`start4.elf`, a `u-boot.bin` or a `kernel8.img`),
+> none of which this tree ships or can legally vendor, so anything written here would point
+> at files that are not there. That is a bring-up task with the board in hand, not a build
+> fix.
 
 **X7 — `build/jam/ArchitectureRules:638-640`.** `case arm : return ;` in
 `ArchitectureSetupWarnings` disables `-Werror` tree-wide for 32-bit arm. Whatever the
@@ -570,15 +622,29 @@ interrupt-map routing to buses 0-7.
 `sdhci_pci.cpp` and `sdhci_acpi.cpp` **only — there is no `sdhci_fdt.cpp`**, and
 `sdhci_pci.cpp:269` requires `bus == "pci"` while `sdhci_acpi.cpp:182` requires ACPI. Yet
 `sdhci`, `mmc` and `mmc_disk` are all in the arm64 boot module links
-(`build/jam/packages/Haiku:353,368`, `minimum:420`). A Pi's SD host controller is an
+(`build/jam/packages/Haiku:352,353,368`, `minimum:420`). A Pi's SD host controller is an
 on-SoC MMIO device described in the device tree, so it can never bind: **SD-card boot is
 impossible on either Pi**, and the boot module list currently implies otherwise.
+
+> **CONFIRMED and left alone (#429).** Checked rather than assumed: `sdhci_fdt.cpp` has
+> never existed on any ref in this repository (`git log --all --diff-filter=A` finds no
+> addition; the only commit mentioning the name is the one that added this document). So
+> there is nothing to wire up — this is a driver to write against a device tree and verify
+> by booting, which is the opposite of a build-side fix, and a speculative FDT attach path
+> would only move the failure later. The line references above were off by one and are
+> corrected.
 
 **X42 — USB, tree-wide.** There is **no `dwc2`/`dwc_otg` driver at all**, and `xhci`,
 `ehci`, `ohci` and `uhci` all match on `bus == "pci"` exclusively. On a Pi 3, whose
 Ethernet hangs off USB, this combines with X4 and X41 to mean there is **no working
 storage path and no working network path whatsoever** — which is the honest reason Pi 3 is
 staged last below, independent of X1.
+
+> **CONFIRMED and left alone (#429).** Re-verified: no `dwc2`/`dwc_otg` anywhere in the
+> tree, and `strcmp(bus, "pci") != 0` rejections at `xhci.cpp:193`, `ehci.cpp:188`,
+> `ohci.cpp:189` and `uhci.cpp:187`. Nothing here is a filter or a wiring mistake: `dwc2`
+> is a host-controller driver that does not exist, and an FDT attach path for the four that
+> do exist is only correct once something boots behind it. Not attempted.
 
 ---
 
@@ -700,8 +766,8 @@ What the tree says statically:
 `build/jam/ArchitectureRules:68` is `case riscv64 : archFlags += -march=rv64gc ;` — which
 is, ironically, the *best-constructed* ISA line in the file: a named baseline profile
 rather than a specific vendor part. The architecture appears in the image definitions and
-`minimum:350-383` even includes it in the conventional-NIC block that arm64 is excluded
-from (X4).
+`minimum:350-384` even includes it in the conventional-NIC block that arm64 is excluded
+from (X4 — arm64 now takes the same set off EC2).
 
 But it is **sweep-maintained, not developed**. The only substantive riscv-specific commit
 in four years is `src/system/libroot/os/arch/riscv64` (2026-04-27);
@@ -854,10 +920,18 @@ Not filed from here; listed so they can be, with the file each would touch.
     `ECAMPCIControllerFDT.cpp:113`. **Same coordination caveat.**
 15. **`mmc: sdhci has no FDT attach path, so SD boot is impossible on an MMIO SD host`** —
     `src/add-ons/kernel/busses/mmc/`, and the boot module lists in
-    `build/jam/packages/Haiku:353,368` that imply otherwise.
-16. **`images: stop using the arm64 architecture token as a proxy for AWS EC2`** —
+    `build/jam/packages/Haiku:352,353,368` that imply otherwise. **Still open and still
+    needs a board** — see the note under X41; the file to add has never existed, so this is
+    driver work, not build work.
+16. ~~**`images: stop using the arm64 architecture token as a proxy for AWS EC2`** —
     `build/jam/images/definitions/common-tail:127-131`, `minimum:350-383,502,523-525`,
-    `build/jam/packages/Haiku:149`.
+    `build/jam/packages/Haiku:149`.~~ **Filed as #429; the build-side half is done** — see
+    the notes under X3, X4, X5 and X6. `HAIKU_ARM64_PLATFORM` (default `ec2`) now carries
+    the platform question that the architecture token was answering. Two of the five
+    original claims did not survive re-reading: X3 is waste rather than a bug, and the
+    three X5 sites were right on the architecture all along. What remains under #429 needs
+    hardware: a Pi NIC driver (X4), `config.txt` and the firmware chain (X6), `sdhci_fdt`
+    (X41) and USB (X42).
 17. **`build: remove the dead board/ directory and re-enable -Werror for arm`** —
     `build/jam/board/`, `build/jam/ArchitectureRules:638-640`.
 18. **`riscv64: publish the actual build error list`** — no file; the deliverable is the
