@@ -35,11 +35,11 @@ set -eu
 REGION="${AWS_REGION:-${HAIKU_GRAVITON_REGION:-us-west-2}}"
 SECRET="${HG_BARON_SECRET:-haiku-graviton/baron-ssh-key}"
 
-# Adopt the project profile only if the caller has not already chosen creds --
-# an ambient AWS_ACCESS_KEY_ID / AWS_PROFILE means "use these", never override.
-if [ -z "${AWS_PROFILE:-}" ] && [ -z "${AWS_ACCESS_KEY_ID:-}" ]; then
-	export AWS_PROFILE="${HAIKU_GRAVITON_PROFILE:-haiku-graviton}"
-fi
+# Resolve this account's credentials the same way every tool here does: an
+# ambient AWS_ACCESS_KEY_ID / AWS_PROFILE means "use these", never override --
+# and so does an ambient default that already works, which the inline version
+# of this check used to clobber with the project profile.
+. "$(cd -- "$(dirname -- "$0")" && pwd)/haiku-aws-env.sh"
 
 # If the caller passes their own -i, honour it and just exec ssh -- covers the
 # "I'm ssh'ing to a non-canonical box with a normal key" case. Accept both the

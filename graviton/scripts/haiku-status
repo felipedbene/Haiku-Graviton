@@ -31,13 +31,13 @@ BUDGET="${HAIKU_GRAVITON_TIMEOUT:-45}"
 say() { printf '%s\n' "$*"; }
 aws_q() { timeout 15 aws --region "$REGION" "$@" 2>/dev/null; }
 
-# The account's creds come from a self-refreshing `credential_process` profile, not
-# from ambient env vars or a `default` profile -- so a hook that calls plain `aws`
-# sees nothing and misreports "expired" while working creds sit one variable away.
-# Adopt the project profile unless the caller has already chosen one.
-if [ -z "${AWS_PROFILE:-}" ] && [ -z "${AWS_ACCESS_KEY_ID:-}" ]; then
-	export AWS_PROFILE="${HAIKU_GRAVITON_PROFILE:-haiku-graviton}"
-fi
+# The account's creds may be in the project profile or in an ambient default --
+# so a hook that calls plain `aws` can see nothing and misreport "expired" while
+# working creds sit one variable away. Shared resolver: obey an explicit choice,
+# keep working ambient credentials, else adopt the project profile. The inline
+# version this replaces skipped the middle case and would override a default that
+# `ada credentials update` had just refreshed.
+. "$HERE/haiku-aws-env.sh"
 
 say "=== Haiku/Graviton status ($(date -u '+%Y-%m-%d %H:%M UTC')) ==="
 
