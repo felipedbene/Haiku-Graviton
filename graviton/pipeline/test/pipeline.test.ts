@@ -199,11 +199,24 @@ test('the perf gate may only SendCommand to its own tagged peer', () => {
   }
 });
 
-// Attaching an instance profile at RunInstances needs iam:PassRole, which must be
-// scoped to exactly the peer's role and restricted to being passed to EC2. The
-// peer role is now created in the stack (a dedicated least-priv role), so the
-// PassRole resource is a GetAtt token to that role rather than a literal ARN.
-test('the perf gate PassRole is scoped to EC2 and the peer role', () => {
+// This stack passes a role in TWO places, and the invariant that matters is the
+// same for both: an iam:PassRole is never granted on `*` and never without an
+// iam:PassedToService condition, because either one lets the holder hand ANY
+// passable role to a service of its choosing.
+//
+//   PassVmimportRole            -- ec2:ImportSnapshot hands `role/vmimport` to
+//                                  VM Import/Export (vmie.amazonaws.com).
+//   PassPeerInstanceProfileRole -- RunInstances attaches the perf gate peer's
+//                                  dedicated least-priv profile, so the role
+//                                  inside it is passed to ec2.amazonaws.com. The
+//                                  role is created by this stack, so its Resource
+//                                  is a GetAtt token, not a literal ARN.
+//
+// Asserted per-statement rather than by counting: a third *scoped* PassRole is a
+// legitimate future change and should not fail this test, but an unscoped one must.
+// The sid set is pinned as well, so an unexpected grant still has to be declared
+// here deliberately instead of slipping in under the invariant.
+test('every iam:PassRole is scoped to one service and one role, never *', () => {
   const t = synth();
   const policies = t.findResources('AWS::IAM::Policy');
   const statements = Object.values(policies).flatMap(
@@ -212,9 +225,30 @@ test('the perf gate PassRole is scoped to EC2 and the peer role', () => {
   const passers = statements.filter((s) =>
     ([] as string[]).concat(s.Action ?? []).includes('iam:PassRole'),
   );
-  expect(passers).toHaveLength(1);
-  expect(passers[0].Condition.StringEquals['iam:PassedToService']).toBe('ec2.amazonaws.com');
-  expect(JSON.stringify(passers[0].Resource)).toContain('PerfGatePeerRole');
+
+  expect(passers.length).toBeGreaterThan(0); // the filter itself must not silently match nothing
+  expect(passers.map((s) => s.Sid).sort()).toEqual([
+    'PassPeerInstanceProfileRole',
+    'PassVmimportRole',
+  ]);
+
+  for (const s of passers) {
+    const resources = ([] as any[]).concat(s.Resource ?? []);
+    expect(resources).not.toContain('*');
+    expect(resources).toHaveLength(1);
+    // A PassRole with no PassedToService is passable to anything that will take it.
+    expect(s.Condition?.StringEquals?.['iam:PassedToService']).toBeDefined();
+  }
+
+  const bySid = Object.fromEntries(passers.map((s) => [s.Sid, s]));
+  expect(bySid.PassVmimportRole.Condition.StringEquals['iam:PassedToService'])
+    .toBe('vmie.amazonaws.com');
+  expect(JSON.stringify(bySid.PassVmimportRole.Resource)).toContain('role/vmimport');
+
+  expect(bySid.PassPeerInstanceProfileRole.Condition.StringEquals['iam:PassedToService'])
+    .toBe('ec2.amazonaws.com');
+  expect(JSON.stringify(bySid.PassPeerInstanceProfileRole.Resource))
+    .toContain('PerfGatePeerRole');
 });
 
 // The self-provisioned peer's instance profile is a dedicated least-priv role,
