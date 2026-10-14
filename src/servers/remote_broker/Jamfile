@@ -16,7 +16,8 @@ if [ FIsBuildFeatureEnabled openssl ] {
 		TLSStream.cpp
 		WebSocketStream.cpp
 
-		: be network [ BuildFeatureAttribute openssl : libraries ]
+		: be network libbnetapi.so
+			[ BuildFeatureAttribute openssl : libraries ]
 			[ TargetLibsupc++ ]
 	;
 }
