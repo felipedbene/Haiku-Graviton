@@ -122,13 +122,25 @@ for pl in haiku-graviton-bake haiku-graviton2-bake haiku-graviton3-bake haiku-gr
 	printf '  %-22s inflight:%-12s approve:%s\n' "$pl" "${inflight:-idle}" "${appr:-n/a}"
 done
 
+# GREEN is live -- `debeos-repo-green/arm64` is what the CloudFront distribution
+# serves as packages.debene.dev (OriginPath /debeos-repo-green), so it is the only
+# count that answers "what can a user install right now". BLUE (`debeos-repo/arm64`)
+# is the publish-leg staging pool and is served by nothing. This block used to
+# report blue alone and call it "the package repo", which under-reported the live
+# pool by however far the two had diverged -- 3192 vs 3189 raw objects on
+# 2026-10-14, with 13 green-only and 10 blue-only names. Report both, label which
+# one is live, and name the gate between them (haiku-repo-promote-green).
+count_pool() {  # $1 = pool prefix
+	timeout 20 aws --region "$REGION" s3 ls \
+		"s3://haiku-graviton-hpkg-${ident}/$1/arm64/packages/" 2>/dev/null \
+		| awk '{print $4}' | sed -E 's/-[0-9].*//' \
+		| grep -vE '_devel$|_debuginfo$|_tools$|_doc$|_source$|_bin$' | sort -u | wc -l
+}
 say ""
-say "--- package repo (debeos-repo/arm64) ---"
-cnt=$(timeout 20 aws --region "$REGION" s3 ls \
-	"s3://haiku-graviton-hpkg-${ident}/debeos-repo/arm64/packages/" 2>/dev/null \
-	| awk '{print $4}' | sed -E 's/-[0-9].*//' \
-	| grep -vE '_devel$|_debuginfo$|_tools$|_doc$|_source$|_bin$' | sort -u | wc -l)
-say "  published base packages: ${cnt:-?}"
+say "--- package repo ---"
+say "  LIVE   green (debeos-repo-green/arm64): $(count_pool debeos-repo-green) base packages"
+say "  stage  blue  (debeos-repo/arm64):       $(count_pool debeos-repo) base packages"
+say "  (blue -> green is gated: haiku-repo-promote-green --plan, read-only, for the delta)"
 
 # ----------------------------------------------------- debeos-devops: build-wave
 # The autonomous package-maintenance path (DebeosOpsStack, see graviton/ops/SOPs.md).
@@ -165,8 +177,26 @@ say "  backlog: ${hist:-<no DDB access>}"
 # missing its `queued_at` range key. That divergence hid 88 rows (incl. two `queued`
 # ports a wave could never pick up) until #487. Assert the two agree, here, because
 # this is the one thing that runs on every session start. Read-only; never fatal.
-inv=$(timeout 25 "$HERE/haiku-state-guard" check --quiet 2>/dev/null)
-say "  ${inv:-state-board invariant: NOT VERIFIED (haiku-state-guard unavailable)}"
+# NEVER collapse "the invariant is violated" into "the checker didn't run". This
+# line used to do exactly that -- `2>/dev/null` plus a `${inv:-...}` fallback, so a
+# host whose system python3 lacks boto3 printed "NOT VERIFIED (unavailable)" every
+# single session and nobody ever saw the invariant's actual verdict. An invariant
+# that reports "unverified" forever is an invariant nobody is checking. So: the
+# checker prints its summary on stdout in both the OK and the VIOLATED case; empty
+# stdout means the checker itself failed, and then we surface WHY (last stderr
+# line) rather than a generic word. Set HG_PYTHON=/path/to/python-with-boto3 to
+# point this at a venv on a host where the system interpreter is bare.
+inv_err=$(mktemp)
+inv=$(timeout 25 ${HG_PYTHON:+"$HG_PYTHON"} \
+	"$HERE/haiku-state-guard" check --quiet 2>"$inv_err")
+if [ -n "$inv" ]; then
+	say "  $inv"
+else
+	say "  state-board invariant: CHECKER FAILED -- $(tail -n 1 "$inv_err" 2>/dev/null \
+		| cut -c1-120 || echo 'no diagnostic')"
+	say "    (read-only check; set HG_PYTHON to an interpreter with boto3 if that is the cause)"
+fi
+rm -f "$inv_err"
 # Newest execution across all history -- SUCCEEDED/RUNNING/FAILED/ABORTED all
 # meaningful in a cold-session snapshot.
 sm_arn="arn:aws:states:${REGION}:${ident}:stateMachine:debeos-build-wave"
