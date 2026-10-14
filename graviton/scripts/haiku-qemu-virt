@@ -1,0 +1,296 @@
+#!/usr/bin/env bash
+#
+# haiku-qemu-virt -- boot a DeBeOS arm64 image under qemu-system-aarch64 -M virt
+# with EDK2 (UEFI) firmware, capturing the serial console to a log.
+#
+# This exists for issue #484: the EFI boot loader took a synchronous exception
+# during partition scanning under -M virt with EDK2, which is why kernel-side
+# data for the arm64 boot path had to come from real Graviton EC2 instances
+# instead of emulation. The cause turned out to be the emulated CPU model, not
+# the firmware, the ACPI tables or the block transport -- see the note below.
+# The harness is the cheap arm of a boot A/B, so it covers the axes that
+# question actually turns on:
+#
+#   * both root transports the bug was reported against -- NVMe and USB storage
+#     -- plus virtio, because the fault was transport-independent,
+#   * ACPI and the FDT path (--acpi off). #94 measured both booting to
+#     `bfs: mounted "Haiku"` on an in-floor CPU, so neither is the faulting
+#     axis; --acpi off remains useful as a control and for Pi-shaped testing,
+#   * the CPU model, which IS the faulting axis (--cpu),
+#   * serial output captured to a file rather than streamed, so a failing boot
+#     can be diffed against a passing one line for line.
+#
+# The firmware is driven as a pflash pair rather than with -bios: the ACPI vs
+# FDT distinction only exists when the variable store is writable, and -bios
+# gives no varstore at all.
+#
+# THE CPU MODEL IS THE LOAD-BEARING ARGUMENT. An emulated CPU below the image's
+# own ISA floor cannot boot it, and fails in a way that looks like anything but
+# an ISA problem: everything here is built `-mcpu=neoverse-n1+crypto`
+# (build/jam/ArchitectureRules), so haiku_loader.efi contains FEAT_LSE atomics
+# (ARMv8.1) and kernel_arm64 contains FEAT_LRCPC loads (ARMv8.2). On an ARMv8.0
+# model those are undefined instructions, and the loader's first atomic executes
+# inside Partition::Partition during add_partitions_for -- so the boot dies with
+# a synchronous exception in the middle of partition enumeration and looks like
+# a partition or block-transport bug on every transport at once. That is
+# issue #484. The default below is the build baseline itself; --cpu refuses to
+# go under it without --force-cpu.
+#
+# Usage:
+#   haiku-qemu-virt --image generated.arm64/haiku-nightly-anyboot.iso
+#   haiku-qemu-virt --image haiku.image --root usb
+#   haiku-qemu-virt --image haiku.image --acpi off          # FDT control
+#   haiku-qemu-virt --efi-app /usr/share/edk2/aarch64/Shell.efi   # self-test
+#
+# Exit status is QEMU's, or 124 if the timeout fired (which for a boot test
+# usually means "hung", not "passed" -- always read the log).
+
+set -o pipefail
+
+PROGRAM="$(basename "$0")"
+
+EDK2_DIR="${EDK2_DIR:-/usr/share/edk2/aarch64}"
+QEMU="${QEMU:-qemu-system-aarch64}"
+
+ROOT_TRANSPORT=nvme
+ACPI=on
+IMAGE=
+EFI_APP=
+LOG=
+TIMEOUT=120
+SMP=4
+MEM=2048
+CPU=neoverse-n1
+FORCE_CPU=0
+STDIN_SCRIPT=
+KEEP_WORKDIR=0
+EXTRA_ARGS=()
+
+# QEMU CPU models measured to be below the image's ISA floor. Taken by reading
+# ID_AA64ISAR0_EL1.Atomic (FEAT_LSE, ARMv8.1) and ID_AA64ISAR1_EL1.LRCPC
+# (FEAT_LRCPC, ARMv8.2) from a bare-metal payload under QEMU 11.0.0, and by
+# executing an `ldaddal` and an `ldapr` to confirm the register agrees with
+# reality. Atomic/LRCPC, and where the boot would die:
+#
+#   cortex-a35    0/0   loader, at its first atomic
+#   cortex-a53    0/0   loader
+#   cortex-a57    0/0   loader
+#   cortex-a72    0/0   loader   <- what boot-qemu.sh used to pass
+#   a64fx         2/0   kernel, later: LSE is there but LRCPC is not
+#   cortex-a55    2/1   boots
+#   cortex-a76    2/-   boots
+#   neoverse-n1   2/1   boots    <- the build baseline, and the default here
+#   neoverse-n2   2/2   boots
+#   neoverse-v1   2/2   boots    <- Graviton3
+#   cortex-a710   2/2   boots
+#   max           3/2   boots
+CPUS_BELOW_FLOOR="cortex-a35 cortex-a53 cortex-a57 cortex-a72 a64fx"
+
+die() { echo "$PROGRAM: $*" >&2; exit 1; }
+
+usage() {
+	awk 'NR>1 && /^#/ { sub(/^# ?/, ""); print; next } NR>1 { exit }' "$0"
+	cat <<'EOF'
+
+Options:
+  --image PATH        raw disk image to boot as the root device (anyboot .iso or
+                      haiku.image). Attached via --root's transport.
+  --efi-app PATH      instead of --image, synthesize a throwaway GPT disk with an
+                      EFI System Partition holding PATH as EFI/BOOT/BOOTAA64.EFI.
+                      Used to prove the harness itself boots (Shell.efi) without
+                      needing a built Haiku image.
+  --root nvme|usb|virtio
+                      root block transport (default: nvme). nvme and usb are the
+                      two #484 was reported against; virtio is a third control.
+  --acpi on|off       ACPI tables (default: on). "off" is the FDT path of #94 and
+                      is the known-good control.
+  --log PATH          serial log file (default: qemu-virt-<root>-acpi<on|off>.log)
+  --timeout SECONDS   kill QEMU after this long (default: 120)
+  --smp N             vCPUs (default: 4)
+  --mem MB            guest RAM in MiB (default: 2048)
+  --cpu MODEL         QEMU CPU model (default: neoverse-n1, the build baseline).
+                      Models measured to sit below the image's ISA floor are
+                      refused, because they fail as a synchronous exception
+                      during partition scanning rather than as anything that
+                      names the ISA -- that is issue #484.
+  --force-cpu         run a below-the-floor --cpu anyway (to reproduce #484)
+  --stdin-script FILE feed FILE to the guest serial input (e.g. UEFI Shell cmds)
+  --keep-workdir      do not delete the scratch dir (varstore, synthesized disk)
+  --                  pass all remaining arguments straight to QEMU
+EOF
+}
+
+while [ $# -gt 0 ]; do
+	case "$1" in
+		--image) IMAGE="$2"; shift 2;;
+		--efi-app) EFI_APP="$2"; shift 2;;
+		--root) ROOT_TRANSPORT="$2"; shift 2;;
+		--acpi) ACPI="$2"; shift 2;;
+		--log) LOG="$2"; shift 2;;
+		--timeout) TIMEOUT="$2"; shift 2;;
+		--smp) SMP="$2"; shift 2;;
+		--mem) MEM="$2"; shift 2;;
+		--cpu) CPU="$2"; shift 2;;
+		--force-cpu) FORCE_CPU=1; shift;;
+		--stdin-script) STDIN_SCRIPT="$2"; shift 2;;
+		--keep-workdir) KEEP_WORKDIR=1; shift;;
+		-h|--help) usage; exit 0;;
+		--) shift; EXTRA_ARGS=("$@"); break;;
+		*) die "unknown option '$1' (see --help)";;
+	esac
+done
+
+case "$ACPI" in on|off) ;; *) die "--acpi must be on or off";; esac
+case "$ROOT_TRANSPORT" in nvme|usb|virtio) ;; *) die "--root must be nvme, usb or virtio";; esac
+
+for below in $CPUS_BELOW_FLOOR; do
+	[ "$CPU" = "$below" ] || continue
+	if [ "$FORCE_CPU" = 1 ]; then
+		echo "$PROGRAM: warning: --cpu $CPU is below the image's ISA floor;" \
+			"expect a synchronous exception in the loader during partition" \
+			"enumeration (issue #484), not a successful boot" >&2
+	else
+		die "--cpu $CPU is below the ISA floor of a -mcpu=neoverse-n1 image
+  (see the table at the top of this script). It will not boot: the loader takes
+  a synchronous exception on an undefined FEAT_LSE atomic inside
+  add_partitions_for, which is issue #484. Use --cpu neoverse-n1 (the build
+  baseline), or --force-cpu to reproduce the failure deliberately."
+	fi
+done
+
+command -v "$QEMU" >/dev/null || die "$QEMU not found"
+
+CODE_FLASH="$EDK2_DIR/QEMU_EFI-pflash.raw"
+VARS_TEMPLATE="$EDK2_DIR/vars-template-pflash.raw"
+[ -r "$CODE_FLASH" ] || die "no EDK2 code flash at $CODE_FLASH (set EDK2_DIR)"
+[ -r "$VARS_TEMPLATE" ] || die "no EDK2 vars template at $VARS_TEMPLATE"
+
+if [ -n "$IMAGE" ] && [ -n "$EFI_APP" ]; then
+	die "--image and --efi-app are mutually exclusive"
+fi
+if [ -z "$IMAGE" ] && [ -z "$EFI_APP" ]; then
+	die "need --image or --efi-app (see --help)"
+fi
+[ -z "$IMAGE" ] || [ -r "$IMAGE" ] || die "cannot read image '$IMAGE'"
+[ -z "$EFI_APP" ] || [ -r "$EFI_APP" ] || die "cannot read EFI app '$EFI_APP'"
+
+WORKDIR="$(mktemp -d "${TMPDIR:-/tmp}/haiku-qemu-virt.XXXXXX")" || die "mktemp failed"
+cleanup() { [ "$KEEP_WORKDIR" = 1 ] || rm -rf "$WORKDIR"; }
+trap cleanup EXIT
+
+# The variable store has to be writable, and per-run: a varstore carried between
+# runs remembers Boot#### entries for disks that are no longer attached, which
+# makes one run's result depend on the previous run's transport.
+VARS="$WORKDIR/vars.raw"
+cp "$VARS_TEMPLATE" "$VARS" || die "could not copy varstore template"
+chmod u+w "$VARS"
+
+# Synthesize a GPT disk with an ESP when asked for a bare EFI application. The
+# partition table is real on purpose: the ESP has to be found by firmware the
+# same way it is on a Haiku image, so a self-test run exercises the same
+# firmware partition enumeration #484 happens underneath.
+if [ -n "$EFI_APP" ]; then
+	for tool in sgdisk mkfs.vfat mmd mcopy truncate; do
+		command -v "$tool" >/dev/null || die "--efi-app needs $tool"
+	done
+	IMAGE="$WORKDIR/esp-disk.raw"
+	FAT="$WORKDIR/esp.fat"
+	truncate -s 64M "$IMAGE" || die "truncate failed"
+	sgdisk -o -n 1:2048:+32M -t 1:ef00 -c 1:"EFI System Partition" "$IMAGE" \
+		> "$WORKDIR/sgdisk.log" 2>&1 || { cat "$WORKDIR/sgdisk.log" >&2; die "sgdisk failed"; }
+	truncate -s 32M "$FAT" || die "truncate failed"
+	mkfs.vfat -F 16 -n EFI "$FAT" > /dev/null 2>&1 || die "mkfs.vfat failed"
+	mmd -i "$FAT" ::/EFI ::/EFI/BOOT || die "mmd failed"
+	mcopy -i "$FAT" "$EFI_APP" ::/EFI/BOOT/BOOTAA64.EFI || die "mcopy failed"
+	dd if="$FAT" of="$IMAGE" bs=512 seek=2048 conv=notrunc status=none \
+		|| die "dd of ESP into disk failed"
+fi
+
+if [ -z "$LOG" ]; then
+	LOG="qemu-virt-${CPU}-${ROOT_TRANSPORT}-acpi${ACPI}.log"
+fi
+
+# gic-version=3 because GICv3 (with ITS) is what the arm64 kernel targets and
+# what Graviton presents; the ITS is what src/system/kernel/arch/arm64 drives.
+MACHINE="virt,gic-version=3"
+[ "$ACPI" = off ] && MACHINE="$MACHINE,acpi=off"
+
+ARGS=(
+	-machine "$MACHINE"
+	-cpu "$CPU"
+	-smp "$SMP"
+	-m "$MEM"
+	-drive "if=pflash,format=raw,unit=0,readonly=on,file=$CODE_FLASH"
+	-drive "if=pflash,format=raw,unit=1,file=$VARS"
+	-display none
+	-serial stdio
+	# No default NIC. EDK2's virtio-net driver publishes SimpleNetwork, which
+	# makes the loader's net_stack_init() take the network path before it ever
+	# enumerates block devices; keeping it out of the picture isolates the
+	# partition scan. Add one back explicitly with `-- -nic user,model=virtio`
+	# when network boot is what is under test.
+	-nic none
+)
+
+# The root device, by transport. Each uses a raw backing file and no cache
+# flushing games, so a run is reproducible and the image is not mutated
+# surprisingly -- note the loader's arm64 GPT auto-grow does write to the disk,
+# so snapshot=on keeps a run from editing the source image's partition table.
+case "$ROOT_TRANSPORT" in
+	nvme)
+		ARGS+=(
+			-drive "if=none,id=root,format=raw,snapshot=on,file=$IMAGE"
+			-device "nvme,drive=root,serial=debeos484"
+		)
+		;;
+	usb)
+		ARGS+=(
+			-device qemu-xhci,id=xhci
+			-drive "if=none,id=root,format=raw,snapshot=on,file=$IMAGE"
+			-device "usb-storage,bus=xhci.0,drive=root"
+		)
+		;;
+	virtio)
+		ARGS+=(
+			-drive "if=none,id=root,format=raw,snapshot=on,file=$IMAGE"
+			-device "virtio-blk-pci,drive=root"
+		)
+		;;
+esac
+
+ARGS+=("${EXTRA_ARGS[@]}")
+
+{
+	echo "=== $PROGRAM: $(date -Is)"
+	echo "=== qemu:      $("$QEMU" --version | head -n 1)"
+	echo "=== firmware:  $CODE_FLASH"
+	echo "=== machine:   $MACHINE"
+	echo "=== cpu:       $CPU"
+	echo "=== root:      $ROOT_TRANSPORT ($IMAGE)"
+	echo "=== command:   $QEMU ${ARGS[*]}"
+	echo "==="
+} > "$LOG"
+
+echo "$PROGRAM: booting (cpu=$CPU root=$ROOT_TRANSPORT acpi=$ACPI), serial -> $LOG" >&2
+
+if [ -n "$STDIN_SCRIPT" ]; then
+	[ -r "$STDIN_SCRIPT" ] || die "cannot read --stdin-script '$STDIN_SCRIPT'"
+	timeout --foreground -k 5 "$TIMEOUT" "$QEMU" "${ARGS[@]}" \
+		< "$STDIN_SCRIPT" 2>&1 | tee -a "$LOG" > /dev/null
+else
+	timeout --foreground -k 5 "$TIMEOUT" "$QEMU" "${ARGS[@]}" \
+		< /dev/null 2>&1 | tee -a "$LOG" > /dev/null
+fi
+status=$?
+
+if [ "$status" = 124 ]; then
+	echo "$PROGRAM: timed out after ${TIMEOUT}s -- read $LOG, a boot test that" \
+		"runs out the clock has usually hung rather than passed" >&2
+else
+	echo "$PROGRAM: qemu exited $status" >&2
+fi
+
+echo "$PROGRAM: last lines of $LOG:" >&2
+tail -n 25 "$LOG" >&2
+
+exit "$status"

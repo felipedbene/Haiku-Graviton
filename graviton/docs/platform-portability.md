@@ -168,6 +168,65 @@ any crypto-using code is compiled with these flags, which is a reason to fix X1 
 but it is not what breaks a Pi 5 today. Recorded here because a refuted concern is worth
 as much as a confirmed one.
 
+### Per-CPU-model ISA floor, and why emulation looked broken (issue #484)
+
+Run 4's fault was reported again independently as issue #484, described as a synchronous
+exception "inside DxeCore" during partition scanning, reached through
+`add_partitions_for`, on both an NVMe and a USB-storage root under `-M virt` with EDK2.
+It is the same defect as run 4 — X1 — and nothing about the firmware, the ACPI tables or
+the block transport is involved. Three things gave it that disguise:
+
+* The loader's first FEAT_LSE atomic happens to execute in `Partition::Partition`, so an
+  ISA fault always surfaces during partition enumeration and never anywhere else.
+* It therefore reproduces on *every* root transport, which reads as evidence that the
+  transport is irrelevant for the wrong reason — the fault is in our own instruction
+  stream, not in any I/O path.
+* `ESR 0x02000000` is `EC 0x00` ("unknown reason") with `IL 1`, an **undefined
+  instruction**, and `FAR` is 0. A malformed pointer or an undersized buffer handed to
+  firmware would be a *data abort* (`EC 0x24`/`0x25`) with a meaningful `FAR`. So the
+  "we corrupted something DxeCore then dereferenced" reading is excluded by the ESR
+  itself, and module attribution of a PC inside a DxeCore-allocated image buffer should
+  not be trusted over the exception class.
+
+Because the faulting axis is the CPU model and nothing else, it is worth having the
+models tabulated. Measured under QEMU 11.0.0 on an arm64 host by reading
+`ID_AA64ISAR0_EL1.Atomic` (FEAT_LSE, ARMv8.1) and `ID_AA64ISAR1_EL1.LRCPC` (FEAT_LRCPC,
+ARMv8.2) from a bare-metal payload, then *executing* an `ldaddal` and an `ldapr` to
+confirm the ID registers agree with behaviour:
+
+| `-cpu` | Atomic | LRCPC | `ldaddal` | `ldapr` | verdict |
+|---|---|---|---|---|---|
+| `cortex-a35` | 0 | 0 | traps | — | dies in the loader |
+| `cortex-a53` | 0 | 0 | traps | — | dies in the loader (run 4) |
+| `cortex-a57` | 0 | 0 | traps | — | dies in the loader |
+| `cortex-a72` | 0 | 0 | traps | — | dies in the loader |
+| `a64fx` | 2 | 0 | ok | traps | loader survives, dies in the kernel |
+| `cortex-a55` | 2 | 1 | ok | ok | above the floor |
+| `cortex-a76` | 2 | — | ok | — | above the floor (run 3) |
+| `neoverse-n1` | 2 | 1 | ok | ok | above the floor; **the build baseline** |
+| `neoverse-n2` | 2 | 2 | ok | ok | above the floor |
+| `neoverse-v1` | 2 | 2 | ok | ok | above the floor (Graviton3) |
+| `cortex-a710` | 2 | 2 | ok | ok | above the floor |
+| `max` | 3 | 2 | ok | ok | above the floor (runs 1 and 2) |
+
+The operational consequence is the whole of #484: **`graviton/builder/boot-qemu.sh` asked
+for `-cpu cortex-a72` in both of its emulated profiles** (`tcg` and `gicv3`), which is
+below the floor, so every emulated boot anyone attempted through the tree's own harness
+died in partition enumeration. That is why boot-path data had to be bought from real
+`c7g` instances: not because emulation cannot run this image, but because the harness was
+asking for a core that cannot. `-cpu neoverse-n1` is the build baseline exactly
+(`build/jam/ArchitectureRules`: `-mcpu=neoverse-n1+crypto`) and clears both features,
+and the two profiles now name it.
+
+Note that this does not retire X1. Raising the emulated CPU restores emulation as the
+cheap arm of a boot A/B; it does nothing for a Pi 3, whose Cortex-A53 is real silicon and
+cannot be re-specified. X1 is still stage 0 for that reason.
+
+`graviton/scripts/haiku-qemu-virt` is the harness built for this: EDK2 as a pflash pair
+with a per-run varstore, NVMe/USB/virtio roots, `--acpi on|off`, serial to a log, and a
+`--cpu` that refuses a below-the-floor model unless `--force-cpu` is given — so this
+failure cannot be re-encountered by accident and mistaken for a partition bug again.
+
 ### Why the passing runs did not expose three of the (X) items
 
 The three defects below would each be invisible to anyone who only ran the boots above.

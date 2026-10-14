@@ -14,6 +14,20 @@
 #                      (app_server cannot start, exactly as on EC2) and
 #                      tcp/2222 on the host forwarded to tcp/22 in the guest.
 #
+# IMPORTANT (measured): the emulated profiles must name a CPU at or above the
+# ISA floor of the image they are booting, and `cortex-a72` is not. Everything
+# in this tree is built `-mcpu=neoverse-n1+crypto` (build/jam/ArchitectureRules),
+# which is ARMv8.2, so `haiku_loader.efi` contains FEAT_LSE atomics and
+# `kernel_arm64` contains FEAT_LRCPC loads. Cortex-A72 is ARMv8.0 and implements
+# neither: measured under this QEMU, `-cpu cortex-a72` reports
+# ID_AA64ISAR0_EL1.Atomic = 0 and traps the loader's first `ldaddal` as an
+# undefined instruction (ESR 0x02000000 -- EC 0x00, IL 1 -- with FAR 0). That
+# lands in Partition::Partition during add_partitions_for, which is why the
+# failure looked like a partition-scanning or block-transport bug and reproduced
+# on every root transport. `-cpu neoverse-n1` is the build baseline exactly and
+# reports Atomic = 2 / LRCPC = 1, clearing both. See issue #484 and
+# graviton/docs/platform-portability.md (X1).
+#
 # IMPORTANT (measured): virtio-net must be given `vectors=0`. With MSI-X
 # enabled, virtio_net transmits fine but never receives -- DHCP OFFERs are on
 # the wire (verified with -object filter-dump) and are simply never delivered to
@@ -48,14 +62,14 @@ common=(-m "$MEM" -smp "$SMP" -bios "$FW" -device ramfb "${display[@]}")
 case "$PROFILE" in
   tcg)
     # GICv2: upstream Haiku has no GICv3 driver yet.
-    exec qemu-system-aarch64 -M virt,gic-version=2 -cpu cortex-a72 "${common[@]}" \
+    exec qemu-system-aarch64 -M virt,gic-version=2 -cpu neoverse-n1 "${common[@]}" \
       -device qemu-xhci,id=xhci -device usb-storage,bus=xhci.0,drive=hd \
       -device usb-tablet,bus=xhci.0 -device usb-kbd,bus=xhci.0 \
       -drive if=none,id=hd,file="$IMAGE",format=raw \
       -device virtio-net-pci,netdev=n0 -netdev user,id=n0
     ;;
   gicv3)
-    exec qemu-system-aarch64 -M virt,gic-version=3,its=on -cpu cortex-a72 "${common[@]}" \
+    exec qemu-system-aarch64 -M virt,gic-version=3,its=on -cpu neoverse-n1 "${common[@]}" \
       -device qemu-xhci,id=xhci -device usb-storage,bus=xhci.0,drive=hd \
       -device usb-tablet,bus=xhci.0 -device usb-kbd,bus=xhci.0 \
       -drive if=none,id=hd,file="$IMAGE",format=raw \
