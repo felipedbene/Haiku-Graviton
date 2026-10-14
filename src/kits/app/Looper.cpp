@@ -19,6 +19,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <syslog.h>
 
 #include <Autolock.h>
 #include <Message.h>
@@ -1158,6 +1159,56 @@ BLooper::ConvertToMessage(void* buffer, int32 code)
 }
 
 
+/*!	Called by task_looper() (and BWindow's copy of it) when MessageFromPort()
+	came back without a message.
+
+	Normally that only happens when the read was interrupted or timed out, and
+	the loop just goes round again. But once fMsgPort is gone -- deleted, or
+	closed and drained -- port_buffer_size_etc() fails with B_BAD_PORT_ID at
+	once, so the "blocking" read never blocks again and the loop busy-spins a
+	CPU for the rest of the looper's life (seen as R Chromium's BApplication
+	thread at 100%, DeBeOS #655).
+
+	The looper still works without its port: messages from inside the team
+	(PostMessage(), a same-team BMessenger, be_app_messenger, Quit() from
+	another thread) are put straight into its queue by BMessage::_SendMessage()
+	(Message.cpp, the BDirectMessageTarget path), which only *tries* to wake
+	the looper with a 0-byte port write. So the looper must keep dispatching --
+	ending it here would free a BLooper that other threads still post to, or
+	return from BApplication::Run() under live windows. What it must stop doing
+	is spinning: with no port to block on and nothing to wake it, it polls its
+	queue at a fixed interval instead. That adds at most that interval of
+	latency, and only to loopers whose port is already gone.
+*/
+void
+BLooper::_WaitIfPortGone(bool& portGone)
+{
+	// Long enough that polling costs nothing measurable, short enough that a
+	// message posted from inside the team is still handled promptly.
+	static const bigtime_t kPollInterval = 10000;
+
+	if (!portGone) {
+		// A zero-timeout probe tells "gone" apart from an interrupted or
+		// timed-out read on a live port: on a live, empty port it returns
+		// B_WOULD_BLOCK, and while messages remain queued it returns their
+		// size even on a closed port.
+		if (port_buffer_size_etc(fMsgPort, B_RELATIVE_TIMEOUT, 0)
+				!= B_BAD_PORT_ID) {
+			return;
+		}
+
+		portGone = true;
+		syslog(LOG_WARNING, "BLooper \"%s\" (thread %" B_PRId32 "): its "
+			"message port %" B_PRId32 " no longer exists; the looper now polls "
+			"its queue for messages sent from within the team\n",
+			Name() != NULL ? Name() : "", find_thread(NULL), fMsgPort);
+	}
+
+	if (fDirectTarget->Queue()->IsEmpty())
+		snooze(kPollInterval);
+}
+
+
 void
 BLooper::task_looper()
 {
@@ -1169,6 +1220,8 @@ BLooper::task_looper()
 
 	if (IsLocked())
 		debugger("looper must not be locked!");
+
+	bool portGone = false;
 
 	// loop: As long as we are not terminating.
 	while (!fTerminating) {
@@ -1182,6 +1235,8 @@ BLooper::task_looper()
 		//	Did we get a message?
 		if (msg)
 			_AddMessagePriv(msg);
+		else
+			_WaitIfPortGone(portGone);
 
 		// Get message count from port
 		int32 msgCount = port_count(fMsgPort);

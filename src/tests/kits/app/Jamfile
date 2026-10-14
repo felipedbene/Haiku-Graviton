@@ -164,6 +164,10 @@ UnitTestLib libappteststub.so
 	: libapptest.so [ TargetLibstdc++ ]
 ;
 
+SimpleTest LooperDeadPortTest :
+	LooperDeadPortTest.cpp
+	: be ;
+
 SimpleTest DanoMessageTest :
 	DanoMessageTest.cpp
 	dano_message.cpp

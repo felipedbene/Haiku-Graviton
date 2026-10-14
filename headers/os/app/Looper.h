@@ -148,6 +148,7 @@ private:
 								bigtime_t timeout = B_INFINITE_TIMEOUT);
 	virtual	BMessage*		ConvertToMessage(void* raw, int32 code);
 	virtual	void			task_looper();
+			void			_WaitIfPortGone(bool& portGone);
 			void			_QuitRequested(BMessage* msg);
 			bool			AssertLocked() const;
 			BHandler*		_TopLevelFilter(BMessage* msg, BHandler* target);
