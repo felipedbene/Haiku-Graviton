@@ -1319,6 +1319,13 @@ Two things worth keeping from this:
 
 ### The KDL cross-check is now available
 
+> **Firmware-dependent (#635).** This was true on the firmware present when it
+> was written. On the firmware observed from 2026-10-08, SPCR points at the
+> ENA's BAR rather than at a UART, so serial KDL needs the #628 BAR-first
+> loader fix (`d91ae903b5`) — on an image built before that, the session below
+> will connect and show nothing. See
+> `graviton/docs/arm64-serial-console-c7g.md`.
+
 With the serial/KDL-entry fix merged, the capture originally planned can finally
 be done as a *cross-check* on the counters rather than as the primary evidence:
 

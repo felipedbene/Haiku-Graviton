@@ -1,5 +1,25 @@
 # arm64 serial console on c7g: which UART carries `get-console-output`
 
+> **FIRMWARE CHANGED — the central conclusion of this document is no longer
+> true (#635).** Everything below was measured against the firmware present up
+> to roughly 2026-09. On **2026-10-08** the firmware on `c7g.large` and
+> `t4g.medium` advertises the console at **`0x80000000`**, which is inside the
+> **ENA's** BARs (BAR 2, the 256 KiB LLQ transmit window, on `c7g.large`) and is
+> not a UART at all. The old SPCR alias `0x090a0000` is gone.
+>
+> So the recommendation this document ends with — *"Haiku's existing SPCR-based
+> discovery is correct … Do not switch it to the PCI BAR"* — **was reversed**.
+> `d91ae903b5` (#628, merged 2026-10-09) now steers an SPCR console to the PCI
+> BAR of the function SPCR itself names, and enables memory decode. See
+> [Superseded: the BAR-first policy](#superseded-the-bar-first-policy) for what
+> the code does today and the measurements behind it.
+>
+> The rest of the document is kept because the *method* (write a marker byte to
+> a candidate THR, read it back from `get-console-output`) is how the question
+> was settled and is how it should be settled again, and because
+> [The real blind spot](#the-real-blind-spot) — always pass `--latest` — is
+> still correct and still the most frequently useful thing here.
+
 Investigation of the report *"`aws ec2 get-console-output` returns Haiku's boot log
 on t4g but comes back completely empty on c7g"*.
 
@@ -118,6 +138,53 @@ anyway, so SPCR is the strictly better of the two everywhere tested.
 **Conclusion: Haiku's existing SPCR-based discovery is correct and portable
 across virtualized and bare-metal Graviton. Do not switch it to the PCI BAR.**
 
+> **This conclusion is withdrawn (#635).** Both halves of the argument above
+> failed:
+>
+> - *"the SPCR alias is a fixed platform address that cannot move"* — it moved.
+>   The firmware stopped publishing `0x090a0000` and published `0x80000000`, an
+>   address that belongs to a different device entirely.
+> - *"the BAR … can be reassigned by Haiku's own PCI bus manager mid-boot"* —
+>   it cannot. `PCI::_ReserveBARs` keeps every BAR that firmware programmed, and
+>   `_AssignBARs` only fills BARs that are empty. The hazard this paragraph
+>   weighed against the BAR does not exist in this tree.
+>
+> The real hazard turned out to be the opposite one, and it is worse than a
+> dead console: once the ENA enabled its own memory decode, kernel debug bytes
+> were being written into the ENA's transmit window.
+
+### Superseded: the BAR-first policy
+
+`d91ae903b5` (#628, merged 2026-10-09) replaces the policy above. When SPCR
+names a PCI function, the loader reads that function's config space, requires a
+matching `vendor:device` and an assigned, identity-mapped Device-memory BAR 0,
+turns memory decode on if firmware left it off, requires `LSR != 0xff`, and then
+uses BAR 0 **when the SPCR address is not inside its first page**. Every
+uncertain case keeps the SPCR address, i.e. the old behaviour; every exit logs
+its reason. `c7g.metal`, where SPCR already *is* BAR 0, is unaffected. No kernel
+change — `arch_debug_console_init()` still takes the address from
+`kernel_args`.
+
+Measured 2026-10-08, and the reason the table earlier in this section is now
+wrong:
+
+| | SPCR base (2026-10-08) | UART BAR 0 | what `0x80000000` actually is |
+|---|---|---|---|
+| `c7g.large` | `0x80000000` | `0x80048000` | ENA BAR 2, 256 KiB LLQ TX window |
+| `t4g.medium` | `0x80000000` | `0x80008000` | inside the ENA's BARs |
+| `c7g.metal` | `0xe2f00000` | `0xe2f00000` | (SPCR is the BAR; unchanged) |
+
+**Firmware hands both the UART and the ENA over with PCI memory decode off** —
+Linux logs `serial 0000:00:01.0: enabling device (0010 -> 0012)`. Reads from an
+address whose decode is off return all ones, which is why a loader that checked
+the BAR but refused to enable decode (the first attempt, candidate
+`ami-0b6f650a3ed496390`) silently fell back to `0x80000000`, and why an
+unconditioned "is the UART ready?" poll on an undecoded window always says yes.
+
+Hardware-verified 2026-10-08 on oven candidates (`c7g.large`, `t4g.medium`):
+full boot log on the EC2 console (**46 KB, against 582 B before**), UART at the
+BAR (`0x80048000` / `0x80008000`), and a KDL round trip over the serial console.
+
 
 ## What Haiku actually does today
 
@@ -134,6 +201,12 @@ discovered uart from acpi: base=90a0000, irq=37, clock=0, reg_shift=0
 ```
 
 which is right, and it works.
+
+> **Out of date (#635).** This described the loader before #628. On today's
+> firmware the same code path logs `base=80000000` and the console dies after
+> `Found 'SPCR'`. `arch_handle_acpi()` still prefers SPCR, but
+> `arch_acpi.cpp` now steers a PCI-named SPCR console to BAR 0 per
+> [the BAR-first policy](#superseded-the-bar-first-policy).
 
 
 ## Boot results from one image (`ami-0cff6f999ca5003ff`, hrev59996)
