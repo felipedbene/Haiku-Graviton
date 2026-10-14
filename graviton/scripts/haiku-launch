@@ -67,10 +67,12 @@ set -euo pipefail
 
 REGION="${AWS_REGION:-${HAIKU_GRAVITON_REGION:-us-west-2}}"
 
-# Adopt the project profile only if the caller has not already chosen creds.
-if [ -z "${AWS_PROFILE:-}" ] && [ -z "${AWS_ACCESS_KEY_ID:-}" ]; then
-	export AWS_PROFILE="${HAIKU_GRAVITON_PROFILE:-haiku-graviton}"
-fi
+# Resolve this account's credentials the same way every tool here does: obey an
+# explicit choice, keep working ambient credentials, else adopt the project
+# profile. This used to adopt the project profile whenever neither AWS_PROFILE
+# nor AWS_ACCESS_KEY_ID was set, which overrode a *working* ambient default --
+# e.g. right after `ada credentials update` with no --profile.
+. "$(cd -- "$(dirname -- "$0")" && pwd)/haiku-aws-env.sh"
 
 # Default to c7g.large: on the current canonical image c9g.large boots with a
 # dead NIC (GICv3 ITS requester-id overflow, #260), while c7g.large is clean.

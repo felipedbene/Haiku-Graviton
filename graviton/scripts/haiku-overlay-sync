@@ -12,6 +12,12 @@
 # Run at deploy time / after committing a recipe bump:
 #   haiku-overlay-sync
 set -euo pipefail
+
+# Resolve this account's credentials the same way every tool here does: obey an
+# explicit choice, keep working ambient credentials, else adopt the project
+# profile. Shared so a tool cannot report "no AWS credentials" while valid ones
+# sit one variable away.
+. "$(cd -- "$(dirname -- "$0")" && pwd)/haiku-aws-env.sh"
 REGION="${HAIKU_GRAVITON_REGION:-us-west-2}"
 HERE="$(cd "$(dirname "$0")" && pwd)"
 OVERLAY="$HERE/../haikuports-patches/recipes"

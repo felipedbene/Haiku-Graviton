@@ -32,6 +32,12 @@
 
 set -uo pipefail
 
+# Resolve this account's credentials the same way every tool here does: obey an
+# explicit choice, keep working ambient credentials, else adopt the project
+# profile. Shared so a tool cannot report "no AWS credentials" while valid ones
+# sit one variable away.
+. "$(cd -- "$(dirname -- "$0")" && pwd)/haiku-aws-env.sh"
+
 REGION="${HAIKU_GRAVITON_REGION:-us-west-2}"
 BUCKET="${HAIKU_GRAVITON_BUCKET:-}"
 PREFIX="${HAIKU_GRAVITON_SSM_PREFIX:-ssm-out}"
