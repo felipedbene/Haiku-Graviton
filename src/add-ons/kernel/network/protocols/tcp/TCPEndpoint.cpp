@@ -345,9 +345,18 @@ enum {
 	FLAG_SEND_ERROR_REPORTED	= 0x20000,
 		// a send() has reported the error that closed the connection; later
 		// ones fail with EPIPE (see _ClosedSendStatus())
-	FLAG_WAS_ESTABLISHED		= 0x40000
+	FLAG_WAS_ESTABLISHED		= 0x40000,
 		// this connection reached ESTABLISHED, so a send() once it is CLOSED
 		// is EPIPE, not ENOTCONN, even after SO_ERROR consumed the error
+	FLAG_TIME_WAIT_REFERENCE	= 0x80000
+		// Free() acquired a socket reference of its own so that the endpoint
+		// outlives close() for the 2MSL wait. It owns exactly one reference,
+		// and whoever ends that wait -- the time-wait timer, or a segment that
+		// tears the connection down before the timer runs -- test-and-clears
+		// this flag under fLock and releases that one reference. Without the
+		// flag the release is not idempotent: every further segment on a
+		// CLOSED endpoint with FLAG_DELETE_ON_CLOSE released again, so a third
+		// segment could lock an fLock that the second one had already freed.
 };
 
 
@@ -690,10 +699,15 @@ TCPEndpoint::Free()
 	fFlags |= FLAG_CLOSED;
 	if ((fFlags & FLAG_DELETE_ON_CLOSE) == 0) {
 		// we'll be freed later when the 2MSL timer expires
-		gSocketModule->acquire_socket(socket);
+		if (gSocketModule->acquire_socket(socket)) {
+			// Record that this reference exists: it is the only one not owned
+			// by an active caller, so its single release has to be claimed
+			// (see FLAG_TIME_WAIT_REFERENCE).
+			fFlags |= FLAG_TIME_WAIT_REFERENCE;
 
-		// we are only interested in the timer, not in changing state
-		_EnterTimeWait();
+			// we are only interested in the timer, not in changing state
+			_EnterTimeWait();
+		}
 	}
 }
 
@@ -750,7 +764,16 @@ TCPEndpoint::Connect(const sockaddr* address)
 	// after a failed connect() look like an orderly close (EOF instead of
 	// ENOTCONN); _PrepareReceivePath() only clears it once a SYN arrives.
 	fFinishReceived = false;
-	fFlags &= ~(FLAG_SEND_ERROR_REPORTED | FLAG_WAS_ESTABLISHED);
+	// FLAG_DELETE_ON_CLOSE belongs to the connection that just ended, not to
+	// the one being opened here. It is set by every teardown that happens
+	// before close() -- a reset, or an orderly close that reaches CLOSED from
+	// WAIT_FOR_FINISH_ACKNOWLEDGE after a shutdown(SHUT_WR) -- and nothing
+	// else ever cleared it. A stale one makes Free() take no reference and
+	// skip the 2MSL wait, so this connection would be destroyed the moment
+	// close() returns: still in FINISH_SENT, losing the FIN retransmission
+	// and whatever is left in the send queue.
+	fFlags &= ~(FLAG_SEND_ERROR_REPORTED | FLAG_WAS_ESTABLISHED
+		| FLAG_DELETE_ON_CLOSE);
 	fState = SYNCHRONIZE_SENT;
 	T(State(this));
 
@@ -1515,6 +1538,29 @@ TCPEndpoint::_UpdateTimeWait()
 {
 	gStackModule->set_timer(&fTimeWaitTimer, TCP_MAX_SEGMENT_LIFETIME << 1);
 	T(TimerSet(this, "time-wait", TCP_MAX_SEGMENT_LIFETIME << 1));
+}
+
+
+/*!	Takes over the socket reference Free() acquired for the 2MSL wait, if it is
+	still outstanding. Exactly one caller is told to go ahead, and that caller
+	then owns the reference and must release it once.
+
+	fLock has to be held, and it is what makes this safe: every caller -- a
+	segment that ends the connection before the wait is over, another segment
+	looked up concurrently on the same endpoint, and the time-wait timer --
+	decides here under fLock, and each of them holds a socket reference of its
+	own while it does (the lookup's, or the one we are claiming). So the
+	endpoint cannot be freed underneath the decision, and no two callers can
+	both decide to release.
+*/
+bool
+TCPEndpoint::_ClaimTimeWaitReference()
+{
+	if ((fFlags & FLAG_TIME_WAIT_REFERENCE) == 0)
+		return false;
+
+	fFlags &= ~FLAG_TIME_WAIT_REFERENCE;
+	return true;
 }
 
 
@@ -2787,8 +2833,23 @@ TCPEndpoint::SegmentReceived(tcp_segment_header& segment, net_buffer* buffer)
 		_SendQueued();
 
 	// handle RESET action separately to use actual connection
-	// to generate the segment information
-	if ((segmentAction & RESET) != 0 && _SendReset(true) == B_OK) {
+	// to generate the segment information.
+	// LISTEN is left out: a reset asked for in that state answers a segment
+	// for a connection that never existed (a bare ACK, see _ListenReceive()),
+	// so it says nothing about this endpoint and must not take the listener
+	// down. _SendReset() refuses to send in LISTEN anyway, and tcp.cpp emits
+	// the reply for the RESET action we keep returning.
+	if ((segmentAction & RESET) != 0 && fState != LISTEN) {
+		// Ending the connection must NOT depend on our own RST getting out:
+		// _SendReset() also fails for reasons that say nothing about the
+		// connection (no buffer, send path down). The endpoint used to be left
+		// running in that case -- state unchanged, timers armed, a blocked
+		// reader never woken -- which is the #609 hang again, while the peer
+		// does get a reset, because tcp.cpp answers with one of its own for any
+		// RESET action we return. So end the connection either way, and only
+		// keep the RESET action (tcp.cpp's reply) when our own RST never left.
+		const bool resetSent = _SendReset(true) == B_OK;
+
 		if (fState == SYNCHRONIZE_SENT || fState == TIME_WAIT
 			|| fState == CLOSED) {
 			// Left as it was. Nobody waits on a read in TIME_WAIT (it returns
@@ -2809,7 +2870,9 @@ TCPEndpoint::SegmentReceived(tcp_segment_header& segment, net_buffer* buffer)
 			// the inbound-reset path, which reaches every one of these states.
 			_HandleReset(ECONNRESET);
 		}
-		segmentAction &= ~RESET;
+
+		if (resetSent)
+			segmentAction &= ~RESET;
 		pendingAcknowledge.valid = false;
 			// The connection is dead: a prepared plain ACK would go out AFTER
 			// the RST (it is emitted below, with the lock released) and only
@@ -2828,8 +2891,17 @@ TCPEndpoint::SegmentReceived(tcp_segment_header& segment, net_buffer* buffer)
 	// already sees the data published above or is registered for this notify.
 	const bool notifyReader = (segmentAction & NOTIFY_READER) != 0;
 	const ssize_t availableData = notifyReader ? _AvailableData() : 0;
-	const bool releaseReference = (fFlags & (FLAG_CLOSED | FLAG_DELETE_ON_CLOSE))
-		== (FLAG_CLOSED | FLAG_DELETE_ON_CLOSE);
+	// The connection is over, so there is nothing left to wait out: hand back
+	// the reference Free() took for the 2MSL wait (FLAG_CLOSED is implied by
+	// holding it). Claiming it is what makes this idempotent. Before, the test
+	// was on the flags alone and nothing cleared them, so EVERY later segment
+	// on a closed, reset endpoint released again -- as did the time-wait timer,
+	// which this path does not cancel. Two or three segments looked up
+	// concurrently were enough to take the count to zero while one of them was
+	// still inside SegmentReceived(), and the next one locked a destroyed
+	// fLock (MutexLocker here cannot tell: the lock is gone, not just failed).
+	const bool releaseReference = (fFlags & FLAG_DELETE_ON_CLOSE) != 0
+		&& _ClaimTimeWaitReference();
 
 	locker.Unlock();
 
@@ -3854,7 +3926,17 @@ TCPEndpoint::_TimeWaitTimer(net_timer* timer, void* _endpoint)
 		return;
 	}
 
+	// The wait is over, but the reference that paid for it is not necessarily
+	// ours to release: a reset may have ended the connection early and claimed
+	// it in SegmentReceived(), and this timer is armed on state transitions to
+	// TIME_WAIT as well, so it can fire on an endpoint whose Free() never took
+	// a reference at all. Releasing in either case is one release too many.
+	if (!endpoint->_ClaimTimeWaitReference())
+		return;
+
 	locker.Unlock();
+		// Safe without the lock: the claimed reference is the one we are about
+		// to release, so nothing else can free the endpoint before we do.
 
 	gSocketModule->release_socket(endpoint->socket);
 }

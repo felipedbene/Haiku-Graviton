@@ -102,6 +102,7 @@ private:
 			void		_StartPersistTimer();
 			void		_EnterTimeWait();
 			void		_UpdateTimeWait();
+			bool		_ClaimTimeWaitReference();
 			void		_Close();
 			void		_CancelConnectionTimers();
 
