@@ -26,7 +26,13 @@ it can; the 35 % is irreducible cost, not waste.
 So this tool's job changed from "find the waste" to "keep proving there is
 none" -- and to find the setter that IS unguarded, which turned out to be
 ``RP_SET_OFFSETS`` (30 of 48 carrying a value already in effect, because
-``SetDrawState()`` sends it with no guard at all).
+``SetDrawState()`` sent it with no guard at all).
+
+That guard now exists (issue #544), in ``RemoteDrawingEngine::_SetOffsets()``,
+paired with a replay in ``ReplayState()`` -- the guard alone would turn the
+offsets into retained state that a reconnected client never receives, which is
+D4.  ``--max-same-value 0`` over a post-fix capture is the gate that keeps the
+guard honest; it says nothing about the replay, which only a reconnect can test.
 
 TWO KINDS OF REDUNDANCY, COUNTED SEPARATELY
 -------------------------------------------

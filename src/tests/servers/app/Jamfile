@@ -278,6 +278,7 @@ SubInclude HAIKU_TOP src tests servers app painter ;
 SubInclude HAIKU_TOP src tests servers app playground ;
 SubInclude HAIKU_TOP src tests servers app pulsed_drawing ;
 SubInclude HAIKU_TOP src tests servers app regularapps ;
+SubInclude HAIKU_TOP src tests servers app remote_offsets ;
 SubInclude HAIKU_TOP src tests servers app resize_limits ;
 SubInclude HAIKU_TOP src tests servers app scrollbar ;
 SubInclude HAIKU_TOP src tests servers app scrolling ;

@@ -110,6 +110,30 @@ OFFSETS note -- RP_SET_OFFSETS is *not* a coordinate translation.
   So this tool records offsets and reports them but does NOT translate by
   them.  --apply-offsets exists to test that reading, and it should make the
   picture visibly wrong.
+
+  --view-transform is the OTHER reading, and the correct one: the offsets are
+  the fixed point of the view transform, i.e. the client renders
+  p' = off + M*(p - off), with M the RP_SET_TRANSFORM matrix and off the
+  RP_SET_OFFSETS pair.  That is literally what both renderers compute --
+  Painter::SetTransform() (Painter.cpp:372-383) builds
+  translation(-off) *= M *= translation(+off) in agg apply-order, and
+  HaikuRemoteDesktop.js:1348-1352 brackets the canvas transform the same way.
+  WITHOUT this flag the raster does not depend on RP_SET_OFFSETS at all, so a
+  capture cannot distinguish a client that replays the offsets from one that
+  loses them (#544): it would pass either way, the same trap RemoteView falls
+  into at RemoteView.cpp:861-868.  Turning it on is therefore a requirement for
+  any measurement *about* the offsets, and pointless for anything else -- which
+  is why it is opt-in rather than the default.
+
+  The modelled transform is restricted to the axis-aligned case (a scale and a
+  translation, no rotation or shear), because the rasteriser here fills boxes
+  and spans and cannot honestly claim to rasterise a rotated path.  A sheared
+  or rotated matrix is counted as unsupported and reported, never silently
+  dropped.  Pen width is also NOT scaled: the real client sets lineWidth in
+  pre-transform user space, so a 2x view scales a 1px stroke to 2px, while this
+  tool strokes one pixel.  Both facts make the absolute raster an approximation
+  of the client's -- they do not weaken a comparison of two captures taken
+  through this same model, which is how #544 is measured.
 """
 
 from __future__ import annotations
@@ -1163,8 +1187,9 @@ class ViewTransform(object):
     attributes turn each run about its own baseline, while this turns/scales the
     whole view the drawing lands in.  The server sends state->Transform() -- the
     view's BAffineTransform, without the RP_SET_OFFSETS view offset folded in
-    (RemoteDrawingEngine.cpp:317-331, "TODO: take offset into account") -- so the
-    offset stays the separate post-translation this tool already applies.
+    (RemoteDrawingEngine::SetTransform(), which sends the bare matrix and the
+    offsets as two opcodes) -- so the offset stays the separate post-translation
+    this tool already applies.
 
     The six wire members are agg trans_affine order sx shy shx sy tx ty
     (RemoteMessage.cpp:321-326), applied as x' = sx*x + shx*y + tx,
@@ -1972,6 +1997,20 @@ class Framebuffer(object):
         return touched, True
 
     # -- census ----------------------------------------------------------
+    def digest(self):
+        """A content hash of the raster, for framebuffer-against-framebuffer
+        comparison.
+
+        The estimated mask is hashed too: two rasters that agree pixel for
+        pixel but disagree about which pixels are guesses are not the same
+        measurement, and a comparison that called them equal would be claiming
+        more than it knows."""
+        h = hashlib.sha256()
+        h.update(b"%d:%d:" % (self.width, self.height))
+        h.update(self.buf)
+        h.update(self.est)
+        return h.hexdigest()
+
     def black_counts(self, box=None):
         """Returns (black, black_strict) inside box (inclusive) or whole screen.
 
@@ -2113,12 +2152,19 @@ class Capture(object):
 
     def __init__(self, width, height, clip=True, apply_offsets=False,
                  verbose=False, reply=True, glyphs=None,
-                 answer_string_width=False):
+                 answer_string_width=False, view_transform=False):
         self.fb = Framebuffer(width, height)
         self.width = width
         self.height = height
         self.do_clip = clip
         self.apply_offsets = apply_offsets
+        # Model the view transform on shape geometry, conjugated by the view
+        # offsets (see the OFFSETS note).  Off by default: it changes what the
+        # raster means, and only a measurement *about* the transform or the
+        # offsets wants it.
+        self.do_view_transform = view_transform
+        self.view_transform_ops = 0        # ops whose geometry it moved
+        self.view_transform_unsupported = 0  # rotated/sheared: left alone
         self.verbose = verbose
         self.reply = reply
         self.tokens = {}
@@ -2232,9 +2278,61 @@ class Capture(object):
             return None
         return st.clip
 
+    def _view_transform_geom(self, st, kind, geom):
+        """Map shape geometry through p' = off + M*(p - off), the conjugation
+        both reference renderers compute (see the OFFSETS note).
+
+        The clipping region is deliberately NOT transformed.  In the HTML5
+        client applyClipping() runs *before* the transform is installed on the
+        context (HaikuRemoteDesktop.js:1345-1352), and app_server computes the
+        region in screen space to begin with, so screen space is where it
+        belongs.
+
+        Returns the mapped geom, or the original when there is nothing to do.
+        A rotated or sheared M is counted and left alone rather than faked."""
+        if st is None or st.transform is None or st.transform.linear_identity:
+            return geom
+        m = st.transform
+        if abs(m.m01) > 1e-9 or abs(m.m10) > 1e-9:
+            self.view_transform_unsupported += 1
+            return geom
+
+        ox, oy = st.current_offsets()
+
+        def pt(x, y):
+            # Only the linear part needs the conjugation; m.tx/m.ty is a plain
+            # post-translation in device space, exactly as agg applies it.
+            return (ox + m.m00 * (x - ox) + m.tx,
+                    oy + m.m11 * (y - oy) + m.ty)
+
+        if kind == "point":
+            x, y = pt(geom[0], geom[1])
+            out = (int(round(x)), int(round(y)))
+        elif kind == "line":
+            xa, ya = pt(geom[0], geom[1])
+            xb, yb = pt(geom[2], geom[3])
+            out = (int(round(xa)), int(round(ya)),
+                   int(round(xb)), int(round(yb)))
+        else:
+            # fill / stroke / invert: a box.  A negative scale would flip the
+            # corners, so re-normalise instead of assuming the order survives.
+            x0, y0 = pt(geom[0], geom[1])
+            x1, y1 = pt(geom[2], geom[3])
+            if x1 < x0:
+                x0, x1 = x1, x0
+            if y1 < y0:
+                y0, y1 = y1, y0
+            out = (int(math.floor(x0)), int(math.floor(y0)),
+                   int(math.ceil(x1)), int(math.ceil(y1)))
+
+        self.view_transform_ops += 1
+        return out
+
     def _paint(self, st, kind, geom, color, estimated=False):
         """kind in {'fill','stroke','line','point','invert'}; geom in pixels."""
         ox, oy = self._xy(st) if st is not None else (0, 0)
+        if self.do_view_transform:
+            geom = self._view_transform_geom(st, kind, geom)
         clips = self._clip_boxes(st)
         if clips is not None and len(clips) == 0:
             self.clipped_out_ops += 1
@@ -4670,6 +4768,15 @@ def report(cap, args, connected, elapsed, stop_reason, wire=None):
                  wire.compressed_segments, wire.raw_segments))
     print("offsets applied as translation: %s (see OFFSETS note in source)"
           % ("YES" if cap.apply_offsets else "no"))
+    print("view transform modelled       : %s"
+          % ("YES, %d op(s) moved" % cap.view_transform_ops
+             if cap.do_view_transform
+             else "no -- the raster does NOT depend on RP_SET_OFFSETS"))
+    if cap.view_transform_unsupported:
+        print("WARNING: %d op(s) carried a ROTATED or SHEARED view transform "
+              "and were rasterised UNTRANSFORMED -- this capture is not a "
+              "faithful model of the client for those ops."
+              % cap.view_transform_unsupported)
     print("clipping applied              : %s"
           % ("yes" if cap.do_clip else "no"))
     if cap.errors:
@@ -4853,6 +4960,9 @@ def report(cap, args, connected, elapsed, stop_reason, wire=None):
             "stop_reason": stop_reason,
             "screen": [cap.width, cap.height],
             "apply_offsets": cap.apply_offsets,
+            "view_transform": cap.do_view_transform,
+            "view_transform_ops": cap.view_transform_ops,
+            "view_transform_unsupported": cap.view_transform_unsupported,
             "clipping": cap.do_clip,
             "black_screen": black_all,
             "black_screen_strict": strict_all,
@@ -5422,6 +5532,110 @@ def selftest(allow_skip=False):
           "(tokens %s)" % sorted(good_arm.tokens))
     check("nor is it counted as an unknown opcode",
           RP_TIER_END_FRAME not in good_arm.unknown_codes)
+
+    # ---- --view-transform: the conjugation, and that it can FAIL ----
+    #
+    # The instrument's own control for #544. The claim being instrumented is
+    # that the client renders p' = off + M*(p - off), so the raster depends on
+    # RP_SET_OFFSETS. Four arms, and the third is the one that matters: without
+    # the flag the SAME two streams -- identical but for the offsets -- must
+    # rasterise identically, which is exactly why a capture taken without it
+    # cannot measure the offsets at all.
+    def offsets_stream(ox, oy, send_offsets=True, matrix=None):
+        """A scale-2 view transform at pen origin (ox, oy), filling one rect.
+
+        send_offsets=False models a client that lost the RP_SET_OFFSETS on a
+        reconnect -- the D4 regression #544's guard would reintroduce."""
+        # Both state ops carry the token first -- they address a drawing state,
+        # not the connection. Omitting it does not fail loudly: the token is
+        # read out of the payload's first four bytes either way, so the op lands
+        # on a DIFFERENT state and the one under test stays untransformed, which
+        # is exactly how the first draft of this test passed for the wrong
+        # reason.
+        out = bytearray()
+        if send_offsets:
+            out += frame(RP_SET_OFFSETS, struct.pack("<Iii", token, ox, oy))
+        six = matrix if matrix is not None else (2.0, 0.0, 0.0, 2.0, 0.0, 0.0)
+        out += frame(RP_SET_TRANSFORM,
+                     struct.pack("<I", token) + bytes((0,))
+                     + struct.pack("<dddddd", *six))
+        out += frame(RP_FILL_RECT_COLOR,
+                     struct.pack("<Iffff", token, 20.0, 20.0, 30.0, 30.0)
+                     + bytes((1, 2, 3, 255)))
+        return bytes(out)
+
+    def feed_vt(stream_bytes, view_transform):
+        c = Capture(width, height, clip=True, apply_offsets=False,
+                    verbose=False, reply=True, glyphs=None,
+                    view_transform=view_transform)
+        at = 0
+        while at + HEADER <= len(stream_bytes):
+            code, length = struct.unpack_from("<HI", stream_bytes, at)
+            c.handle(code, bytes(stream_bytes[at + HEADER:at + length]))
+            at += length
+        return c
+
+    # The fixed point is the offset itself: a point AT the view origin must not
+    # move, whatever the scale. That is the whole content of the conjugation,
+    # and it is checked on the method rather than through a raster so an
+    # arithmetic slip cannot hide inside a rounding rule.
+    fixed = feed_vt(offsets_stream(10, 10), True)
+    fixed_st = fixed.token_state(token)
+    check("conjugation fixes the view origin",
+          fixed._view_transform_geom(fixed_st, "point", (10, 10)) == (10, 10),
+          "(%s)" % (fixed._view_transform_geom(fixed_st, "point", (10, 10)),))
+    check("and scales distance FROM the origin, not from (0,0)",
+          fixed._view_transform_geom(fixed_st, "point", (20, 20)) == (30, 30),
+          "(%s)" % (fixed._view_transform_geom(fixed_st, "point", (20, 20)),))
+
+    # With the flag, the raster must MOVE when only the offsets differ.
+    vt_a = feed_vt(offsets_stream(10, 10), True)
+    vt_b = feed_vt(offsets_stream(40, 40), True)
+    check("--view-transform: the raster depends on RP_SET_OFFSETS",
+          vt_a.fb.digest() != vt_b.fb.digest())
+    check("and both arms actually transformed an op",
+          vt_a.view_transform_ops == 1 and vt_b.view_transform_ops == 1,
+          "(%d, %d)" % (vt_a.view_transform_ops, vt_b.view_transform_ops))
+
+    # NEGATIVE CONTROL: the default reading is blind to the offsets. This is
+    # not a bug in the default -- the coordinates on the wire really are
+    # screen-absolute -- it is the reason --view-transform has to exist before
+    # #544 can be measured at all.
+    off_a = feed_vt(offsets_stream(10, 10), False)
+    off_b = feed_vt(offsets_stream(40, 40), False)
+    check("NEGATIVE CONTROL: without the flag the raster is INDEPENDENT of "
+          "RP_SET_OFFSETS -- so a capture taken without it cannot see #544",
+          off_a.fb.digest() == off_b.fb.digest())
+
+    # MUTATION: a client that drops the offsets entirely must differ from one
+    # that sends them. This is the shape of the #544 regression, asserted on
+    # the instrument before it is asserted on a server.
+    lost = feed_vt(offsets_stream(10, 10, send_offsets=False), True)
+    check("MUTATION: losing RP_SET_OFFSETS changes the raster",
+          lost.fb.digest() != vt_a.fb.digest())
+
+    # A rotation is refused, loudly, rather than rasterised as if it were a
+    # scale: a box rasteriser cannot honestly claim a rotated path.
+    rot = feed_vt(offsets_stream(10, 10,
+                                 matrix=(0.0, 1.0, -1.0, 0.0, 0.0, 0.0)), True)
+    check("a ROTATED view transform is reported unsupported, not faked",
+          rot.view_transform_unsupported == 1 and rot.view_transform_ops == 0,
+          "(%d unsupported, %d applied)"
+          % (rot.view_transform_unsupported, rot.view_transform_ops))
+
+    # The CLI actually reaches the Capture. Every arm above builds a Capture
+    # directly, which is why the flag could ship -- and did -- parsing fine,
+    # printing its help and doing nothing at all. A capture taken with the flag
+    # and silently without the behaviour is worse than no flag: it reports
+    # "view transform modelled: no" in small print under a command line that
+    # asked for it.
+    cli_on = capture_from_args(build_parser().parse_args(["--view-transform"]),
+                               None)
+    cli_off = capture_from_args(build_parser().parse_args([]), None)
+    check("--view-transform on the COMMAND LINE reaches the Capture",
+          cli_on.do_view_transform is True)
+    check("and it is off by default",
+          cli_off.do_view_transform is False)
 
     # Now the negotiated path, driven end to end through a real libzstd
     # compressor configured the way RemoteWireWriter configures it.
@@ -7244,7 +7458,21 @@ def selftest(allow_skip=False):
 # main
 # ---------------------------------------------------------------------------
 
-def main(argv=None):
+def capture_from_args(args, glyphs):
+    """Build the Capture main() will run, from parsed arguments.
+
+    Separate from main() so the selftest can assert the CLI actually REACHES
+    the Capture. --view-transform shipped once as a flag that parsed, printed
+    its help and did nothing, because the keyword was missing here -- and no
+    test caught it, since every other arm constructs Capture directly."""
+    return Capture(args.width, args.height, clip=args.clip,
+                   apply_offsets=args.apply_offsets, verbose=args.verbose,
+                   reply=args.reply, glyphs=glyphs,
+                   answer_string_width=args.answer_string_width,
+                   view_transform=args.view_transform)
+
+
+def build_parser():
     p = argparse.ArgumentParser(
         description="Minimal Haiku app_server remote-desktop protocol client "
                     "that measures whether anything is actually drawing.",
@@ -7310,6 +7538,16 @@ def main(argv=None):
                         " OFF by default because both reference clients show "
                         "coordinates are already screen-absolute; see the "
                         "OFFSETS note in the source.")
+    p.add_argument("--view-transform", action="store_true",
+                   help="rasterise shape geometry through the RP_SET_TRANSFORM "
+                        "matrix conjugated by RP_SET_OFFSETS, p' = off + M*"
+                        "(p - off), as both reference renderers do. REQUIRED "
+                        "for any measurement about the offsets (#544): without "
+                        "it the raster does not depend on RP_SET_OFFSETS and a "
+                        "client that loses them captures identically to one "
+                        "that replays them. Axis-aligned matrices only; a "
+                        "rotation or shear is counted as unsupported and "
+                        "reported. See the OFFSETS note in the source.")
     p.add_argument("--no-reply", dest="reply", action="store_false",
                    help="do not answer RP_DRAW_STRING / RP_STRING_WIDTH / "
                         "RP_READ_BITMAP (WARNING: makes the server block ~1s "
@@ -7455,6 +7693,11 @@ def main(argv=None):
                         "fingerprint (see broker.fingerprint on the server)")
     p.add_argument("--insecure", action="store_true",
                    help="with --wss: skip certificate pinning (still TLS)")
+    return p
+
+
+def main(argv=None):
+    p = build_parser()
     args = p.parse_args(argv)
 
     if args.port is None:
@@ -7483,10 +7726,7 @@ def main(argv=None):
                              "is NOT text ground truth\n" % exc)
             print("GLYPH_RASTERISER_ERROR=%s" % exc)
 
-    cap = Capture(args.width, args.height, clip=args.clip,
-                  apply_offsets=args.apply_offsets, verbose=args.verbose,
-                  reply=args.reply, glyphs=glyphs,
-                  answer_string_width=args.answer_string_width)
+    cap = capture_from_args(args, glyphs)
 
     started = time.monotonic()
     deadline = started + max(0.1, args.seconds)

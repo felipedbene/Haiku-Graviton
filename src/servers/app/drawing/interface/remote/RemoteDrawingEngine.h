@@ -164,6 +164,8 @@ public:
 									int32 yOffset) const;
 
 private:
+			void				_SetOffsets(int32 xOffset, int32 yOffset);
+
 			status_t			_AddCallback();
 			void				_DrainResultSem();
 
@@ -182,6 +184,19 @@ private:
 
 			DrawState			fState;
 			BRegion				fClippingRegion;
+
+			// The view offsets are the origin the client conjugates its affine
+			// transform about -- translate(-offset) * transform *
+			// translate(offset), as Painter::SetTransform() does locally. They
+			// are not a DrawState field, so they are shadowed here rather than
+			// in fState, but they are part of the same shadow and carry the
+			// same meaning: what the client has been told. Zero is the value
+			// both reference clients start at (RemoteView's offscreen pen,
+			// RemoteState in HaikuRemoteDesktop.js), which is what makes the
+			// initial value a shadow rather than a guess.
+			int32				fXOffset;
+			int32				fYOffset;
+
 			float				fExtendWidth;
 
 			bool				fCallbackAdded;
