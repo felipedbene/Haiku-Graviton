@@ -23,11 +23,27 @@ REQUIRES="
 BUILD_REQUIRES="
 	haiku_devel
 	"
+# cmd:tex / cmd:dvips were MISSING from the upstream recipe, and they are hard
+# requirements, not optional doc polish. gri's `doc/Makefile:893` has
+#   all-local: refcard.ps cmdrefcard.ps
+# and `doc/Makefile:850-856` builds both from `refcard.tex` / `cmdrefcard.tex`
+# via `$(TEX)` + `dvips`. Neither `.ps` ships in the release tarball (the
+# `.info` files and man pages do), and `install-data-local` installs both into
+# $(DOC_DIR) unconditionally -- so they cannot be skipped without cutting
+# installed documentation, which this project does not do. Measured natively:
+# with the flags undeclared the build dies at `../missing: line 46: tex:
+# command not found` / `make[2]: *** [Makefile:851: refcard.ps] Error 1`
+# AFTER a fully successful compile and link. Declaring them makes haikuporter
+# fail fast and name the real missing dependency instead. See #592 for the
+# class-35 and Class-6 triage, and the texlive-on-arm64 blocker issue for why
+# `cmd:tex` is not yet satisfiable in the DeBeOS pool.
 BUILD_PREREQUIRES="
 	cmd:gcc
 	cmd:ld
 	cmd:make
 	cmd:perl
+	cmd:tex
+	cmd:dvips
 	devel:libreadline
 	"
 
@@ -55,6 +71,8 @@ BUILD()
 	# which on LP64 is a silent pointer truncation (#592, and see the playbook's
 	# class 35 for the measurement: this port emits no loses-precision at all).
 	sed -i "s|^\tdef_word\[0\] = '\\\\0';$|\tdef_word[0] = NULL;|" src/query.cc
+	grep -q 'def_word\[0\] = NULL;' src/query.cc \
+		|| { echo "gri: query.cc def_word sed did not apply" >&2; exit 1; }
 
 	runConfigure ./configure --enable-shared
 	make $jobArgs

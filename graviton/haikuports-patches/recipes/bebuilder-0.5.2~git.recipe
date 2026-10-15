@@ -1,0 +1,90 @@
+SUMMARY="GUI designer for BeOS"
+DESCRIPTION="BeBuilder is a GUI designer for BeOS."
+HOMEPAGE="https://github.com/HaikuArchives/BeBuilder"
+COPYRIGHT="1999 Jerome Fillmon"
+LICENSE="Public Domain"
+REVISION="3"
+srcGitRev="a488ce807404481b74f989eac179398b5a48c1d5"
+SOURCE_URI="https://github.com/HaikuArchives/BeBuilder/archive/$srcGitRev.tar.gz"
+CHECKSUM_SHA256="a42815e7672c7c393850ee282f1e66acd195d4faaea33f1884a4418f4853a82f"
+SOURCE_FILENAME="BeBuilder-$srcGitRev.tar.gz"
+SOURCE_DIR="BeBuilder-$srcGitRev"
+
+ARCHITECTURES="all"
+
+PROVIDES="
+	bebuilder = $portVersion
+	app:BeBuilder = $portVersion
+	"
+REQUIRES="
+	haiku
+	"
+
+BUILD_REQUIRES="
+	haiku_devel
+	"
+BUILD_PREREQUIRES="
+	makefile_engine
+	cmd:g++
+	cmd:ld
+	cmd:make
+	"
+
+BUILD()
+{
+	# Class 35 (#592) -- and the one class-35 site across all five of the #592
+	# ports that is a REAL BUG rather than a pedantic older-C++ diagnostic.
+	#
+	#   Kernel/FileWriter.cpp:43:56: error: invalid conversion from 'char'
+	#     to 'const void*' [-fpermissive]
+	#      43 |  FNbBytesWrite += TheBFileWriter->Write('\0',1);
+	#
+	# `BFile::Write(const void *buffer, size_t size)`. The intent is plainly to
+	# append one NUL terminator byte, but `'\0'` is being passed as the BUFFER
+	# POINTER, not as the data. Under the older rules `'\0'` is an integer
+	# constant expression of value 0, so it converts to a null pointer -- which
+	# is exactly what `-fpermissive` would do here. The flag therefore does not
+	# "allow an old spelling"; it compiles this into `Write(NULL, 1)`, a
+	# one-byte read from address 0. Two consequences, both silent:
+	#   * the NUL terminator every caller of WriteData() expects is never
+	#     written, so the file is left unterminated; and
+	#   * `BFile::Write` returns `B_BAD_ADDRESS` (a NEGATIVE ssize_t), and that
+	#     error code is accumulated into `FNbBytesWrite`, corrupting the
+	#     byte counter the class reports.
+	# This is the case #592 was opened to catch, so it is fixed at the source
+	# and the flag is not used. `""` is a `const char[1]` whose single byte is
+	# the NUL, so writing 1 byte from it is precisely the intended behaviour.
+	sed -i "s|TheBFileWriter->Write('\\\\0',1)|TheBFileWriter->Write(\"\", 1)|" \
+		Kernel/FileWriter.cpp
+	grep -q 'Write("", 1)' Kernel/FileWriter.cpp \
+		|| { echo "bebuilder: FileWriter NUL-terminator sed did not apply" >&2; exit 1; }
+
+	# Independent of class 35: `TObject::ShowDebug(ostrstream)` takes a
+	# `std::ostrstream` BY VALUE -- streams are not copyable, so the overload
+	# was never callable, and its body `cout << AStream;` has no matching
+	# `operator<<` (gcc 13: "no match for 'operator<<' ... and
+	# 'std::ostrstream'"). It has zero callers anywhere in the tree; every
+	# `ShowDebug()` call site uses the `std::string` overload. Take the stream
+	# by reference and print its characters, which is what the body meant --
+	# `ostrstream::str()` returns an unterminated buffer and freezes it, hence
+	# the `ends` and the matching `freeze(false)`.
+	sed -i \
+		-e 's|void TObject::ShowDebug(ostrstream AStream)|void TObject::ShowDebug(ostrstream\& AStream)|' \
+		-e 's|cout << AStream;|AStream << ends; cout << AStream.str(); AStream.freeze(false);|' \
+		Kernel/Object.cpp
+	sed -i 's|void ShowDebug(ostrstream AStream);|void ShowDebug(ostrstream\& AStream);|' \
+		Kernel/Object.h
+	grep -q 'ShowDebug(ostrstream& AStream)' Kernel/Object.h \
+		|| { echo "bebuilder: Object.h ShowDebug retype did not apply" >&2; exit 1; }
+
+	cd V0.5.2BeBuilder
+	mkdir -p bin
+	make $jobArgs TARGET_DIR=bin
+}
+
+INSTALL()
+{
+	install -d $appsDir
+	install -t $appsDir V0.5.2BeBuilder/bin/BeBuilder
+	addAppDeskbarSymlink $appsDir/BeBuilder
+}

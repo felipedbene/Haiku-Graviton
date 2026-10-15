@@ -1,0 +1,138 @@
+SUMMARY="Library to use arbitrary fonts in OpenGL applications"
+DESCRIPTION="FTGL is a free cross-platform Open Source C++ library that uses \
+Freetype2 to simplify rendering fonts in OpenGL applications."
+HOMEPAGE="https://sourceforge.net/projects/ftgl"
+COPYRIGHT="2001-2004 Unicode, Inc.
+	2001-2009 Henry Maddocks"
+LICENSE="MIT"
+REVISION="3"
+SOURCE_URI="https://sourceforge.net/projects/canvasdraw/files/5.11.1/Docs%20and%20Sources/ftgl-${portVersion}_Sources.tar.gz"
+CHECKSUM_SHA256="690a7f80375846765f5cbbc10d0d859bfb62281441ff5878f818ced447fca763"
+SOURCE_DIR="ftgl"
+PATCHES="ftgl-$portVersion.patchset"
+
+ARCHITECTURES="all"
+SECONDARY_ARCHITECTURES="x86_gcc2 x86"
+
+PROVIDES="
+	ftgl$secondaryArchSuffix = $portVersion compat >= 2
+	lib:libftgl$secondaryArchSuffix = 2.1.3 compat >= 2
+	"
+REQUIRES="
+	haiku$secondaryArchSuffix
+	lib:libbz2$secondaryArchSuffix
+	lib:libfreetype$secondaryArchSuffix
+	lib:libgl$secondaryArchSuffix
+	lib:libglu$secondaryArchSuffix
+	lib:libpng16$secondaryArchSuffix
+	lib:libz$secondaryArchSuffix
+	"
+
+PROVIDES_devel="
+	ftgl${secondaryArchSuffix}_devel = $portVersion compat >= 1
+	devel:libftgl$secondaryArchSuffix = 2.1.3 compat >= 2
+	"
+REQUIRES_devel="
+	ftgl$secondaryArchSuffix == $portVersion base
+	devel:libfreetype$secondaryArchSuffix
+	"
+
+BUILD_REQUIRES="
+	haiku${secondaryArchSuffix}_devel
+	devel:libfreetype$secondaryArchSuffix
+	devel:libgl$secondaryArchSuffix
+	devel:libglu$secondaryArchSuffix
+	"
+BUILD_PREREQUIRES="
+	cmd:aclocal
+	cmd:autoconf
+	cmd:automake
+	cmd:gcc$secondaryArchSuffix
+	cmd:g++$secondaryArchSuffix
+	cmd:ld$secondaryArchSuffix
+	cmd:libtoolize$secondaryArchSuffix
+	cmd:make
+	cmd:pkg_config$secondaryArchSuffix
+	"
+
+BUILD()
+{
+	touch src/ftgl.dep
+
+	# Class 35 (#592). The real class-35 site in this port, which the #592
+	# cross-compile triage missed and the native build found:
+	#
+	#   FTVectoriser.cpp:169:25: error: invalid conversion from
+	#       'unsigned char*' to 'char*' [-fpermissive]
+	#
+	# `FT_Outline.tags` is `unsigned char*` (freetype2 `ftimage.h`), while
+	# FTGL writes `char* tagList = &outline.tags[startIndex];` and hands it to
+	# `FTContour::FTContour(FT_Vector*, char* tags, unsigned int)`, which is
+	# declared with a plain `char*`. Since the callee's signature is `char*`,
+	# the minimal honest fix is an explicit cast at the one call site rather
+	# than retyping the local (which would just move the error to the call).
+	#
+	# NOT a precision bug: this is a signedness-only reinterpret of a pointer
+	# to a byte, identical in width on ILP32 and LP64, and the tag bytes are
+	# only ever tested against FT_CURVE_TAG_* masks. Measured on the native
+	# arm64 builder: the full compile emits ZERO `loses precision`.
+	#
+	# `-fpermissive` is also unreachable here even if it were wanted: tecmake
+	# composes `CXXFLAGS` with a plain `=` (tecmake.mak), so it overrides the
+	# environment, and `make CXXFLAGS=...` would wipe every include and define.
+	sed -i \
+		's|char\* tagList = &outline\.tags\[startIndex\];|char* tagList = (char*)\&outline.tags[startIndex];|' \
+		src/FTVectoriser.cpp
+	grep -q '(char\*)&outline.tags' src/FTVectoriser.cpp \
+		|| { echo "ftgl: FTVectoriser tag-pointer sed did not apply"; exit 1; }
+
+	# tecmake derives word size and byte order from `uname -p`, which on Haiku
+	# returns the literal string "other". That matches neither its `x86`/`arm`
+	# little-endian cases nor its `x64`/`ia64` 64-bit cases, so tecmake.mak
+	# falls through to its defaults and compiles arm64 with
+	#   -DTEC_BIGENDIAN -DTEC_32
+	# on a little-endian LP64 target. FTGL's own sources never read these
+	# macros (so FTGL itself is not miscompiled), but tecmake does -- they pick
+	# its `be32`/`le64` Lua-object subdirectory and `_be32`/`_le64` suffixes --
+	# and any tecmake port that consults them would be wrong on Graviton.
+	# State the truth instead of inheriting the fallback. These are plain `=`
+	# assignments in tecmake.mak, and a `make VAR=value` command-line variable
+	# overrides a makefile `=` and propagates to the recursive sub-make, so
+	# unlike the CXXFLAGS case this override genuinely reaches the compiler
+	# without clobbering anything else.
+	local tecArgs=
+	if [ "$effectiveTargetArchitecture" = arm64 ]; then
+		tecArgs="TEC_WORDSIZE=TEC_64 TEC_BYTEORDER=TEC_LITTLEENDIAN"
+	fi
+
+	make $jobArgs $tecArgs
+}
+
+INSTALL()
+{
+	mkdir -p $libDir
+	mkdir -p $includeDir
+
+	# tecmake writes into lib/$(TEC_UNAME), and TEC_UNAME is built from
+	# `uname -s` + `uname -r`; on this image that is the 38-character
+	# "HaikuR1~beta6+developmentR1~beta6+development", not the "Haiku11" the
+	# upstream recipe hardcoded. Hardcoding any single spelling makes the
+	# recipe silently x86/BeOS-era-only (the same defect as jam's
+	# `bin.haikux86`), so resolve the directory by glob and fail loudly if
+	# there is no shared library rather than installing an empty package.
+	local ftglLibDir=$(ls -d lib/Haiku*/ 2>/dev/null | head -n 1)
+	if [ -z "$ftglLibDir" ] || [ -z "$(ls $ftglLibDir*.so* 2>/dev/null)" ]; then
+		echo "ftgl: no libftgl*.so under lib/Haiku*/ -- tecmake did not link" >&2
+		ls -la lib/ >&2
+		exit 1
+	fi
+	cp $ftglLibDir*.so* $libDir
+	cp -r include/FTGL $includeDir
+
+	prepareInstalledDevelLibs libftgl
+	fixPkgconfig
+
+	# devel package
+	packageEntries devel \
+		$developDir
+}
