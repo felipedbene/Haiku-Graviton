@@ -19,7 +19,7 @@ index 76636afe95..15a207085b 100644
 diff --git a/Libraries/LibCompositing/CMakeLists.txt b/Libraries/LibCompositing/CMakeLists.txt
 --- a/Libraries/LibCompositing/CMakeLists.txt
 +++ b/Libraries/LibCompositing/CMakeLists.txt
-@@ -56,6 +56,20 @@
+@@ -56,6 +56,29 @@
  test_rust_crate(MANIFEST_PATH Rust/Cargo.toml CRATE_NAME libcompositing_rust)
 
  ladybird_lib(LibCompositing compositing EXPLICIT_SYMBOL_EXPORT)
@@ -36,6 +36,15 @@ diff --git a/Libraries/LibCompositing/CMakeLists.txt b/Libraries/LibCompositing/
 +# the generator target directly; this has to come after ladybird_lib(), which is what
 +# creates the LibCompositing target.
 +add_dependencies(LibCompositing generate_GLFunctions.cpp)
++
++# Upstream hands out only ANGLE's *compile* interface here, because on every
++# platform it supports the GL entry points live in the Compositor service. The
++# DeBeOS shim (check_for_dependencies.cmake) is a real .so that carries them,
++# and the processes that load liblagom-compositing without the Compositor --
++# WebContent and the headless render path -- have to resolve them, so link it.
++if(ANGLE_TARGETS)
++    target_link_libraries(LibCompositing PUBLIC ${ANGLE_TARGETS})
++endif()
 +
  target_link_libraries(LibCompositing PUBLIC LibWebCommon)
  target_link_libraries(LibCompositing PRIVATE LibCore LibGfx LibIPC LibMedia LibThreading skia libcompositing_rust)
@@ -143,18 +152,41 @@ diff --git a/Meta/CMake/check_for_dependencies.cmake b/Meta/CMake/check_for_depe
 index d676306996..4efea951ee 100644
 --- a/Meta/CMake/check_for_dependencies.cmake
 +++ b/Meta/CMake/check_for_dependencies.cmake
-@@ -91,8 +91,15 @@ find_package(unofficial-angle CONFIG)
+@@ -91,8 +91,38 @@ find_package(unofficial-angle CONFIG)
  if(unofficial-angle_FOUND)
      set(ANGLE_TARGETS unofficial::angle::libEGL unofficial::angle::libGLESv2)
  else()
 -    pkg_check_modules(angle REQUIRED IMPORTED_TARGET angle)
 -    set(ANGLE_TARGETS PkgConfig::angle)
-+    # DeBeOS/Haiku headless: ANGLE (GLES) is not available and not needed
-+    # for CPU raster. Keep it optional so a GPU-less configure succeeds;
-+    # ANGLE_TARGETS is only consumed via foreach()/link lists, so empty is safe.
++    # DeBeOS/Haiku arm64 ships no ANGLE and has no GLES/EGL device. The
++    # generated WebGL command stream declares the full GLES2/GLES3 + ANGLE API
++    # regardless -- WebGL/GLFunctions.h, emitted by
++    # Meta/Generators/generate_libweb_webgl_commands.py, opens with
++    # #include <GLES2/gl2ext_angle.h> -- and LibCompositing compiles against it
++    # even in a CPU-raster build, so the headers have to exist:
++    #   GLFunctions.h:8:10: fatal error: 'GLES2/gl2ext_angle.h' file not found
++    # Build DeBeOS's own no-device GLES/EGL backend as a real shared library and
++    # consume it exactly like a system ANGLE. eglGetPlatformDisplay and
++    # eglInitialize report no display, so WebGL context creation fails cleanly
++    # and pages fall back to CPU raster -- the honest answer for a platform with
++    # no GL, as opposed to a header stub that resolves to nothing at run time.
 +    pkg_check_modules(angle IMPORTED_TARGET angle)
 +    if(angle_FOUND)
 +        set(ANGLE_TARGETS PkgConfig::angle)
++    elseif(DEBEOS_ANGLE_SHIM_DIR)
++        add_library(debeos_angle_shim SHARED
++            "${DEBEOS_ANGLE_SHIM_DIR}/gles_null_backend.cpp")
++        target_include_directories(debeos_angle_shim SYSTEM PUBLIC
++            "$<BUILD_INTERFACE:${DEBEOS_ANGLE_SHIM_DIR}/include>")
++        set_target_properties(debeos_angle_shim PROPERTIES POSITION_INDEPENDENT_CODE ON)
++        # LibCompositing links the shim PUBLIC and is itself in the LagomTargets
++        # export set, so a real (non-imported) dependency has to be exported too.
++        install(TARGETS debeos_angle_shim EXPORT LagomTargets
++            RUNTIME COMPONENT Lagom_Runtime
++            LIBRARY COMPONENT Lagom_Runtime NAMELINK_COMPONENT Lagom_Development
++            ARCHIVE COMPONENT Lagom_Development
++            INCLUDES DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
++        set(ANGLE_TARGETS debeos_angle_shim)
 +    else()
 +        set(ANGLE_TARGETS "")
 +    endif()

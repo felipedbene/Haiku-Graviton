@@ -179,6 +179,7 @@ phase_configure() {
 		-DICU_ROOT=$PREFIX/icu78 \
 		-DFastFloat_DIR=$PREFIX/share/cmake/FastFloat \
 		-Dsimdutf_DIR=$PREFIX/lib/cmake/simdutf \
+		-DDEBEOS_ANGLE_SHIM_DIR="$REPO/graviton/ports/ladybird/angle-shim" \
 		-DWUFFS_INCLUDE_DIR=$PREFIX/include \
 		-DPNG_PNG_INCLUDE_DIR=$PREFIX/include \
 		-DPNG_LIBRARY=$PREFIX/lib/libpng16.so \
