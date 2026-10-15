@@ -70,8 +70,14 @@ phase_png() {
 	cd libpng-1.6.53
 	patch -p1 --no-backup-if-mismatch < "$RECIPE/patches/libpng-1.6.53-apng.patch"
 	sh "$RECIPE/scripts/build-png.sh"
-	grep -q 'define PNG_APNG_SUPPORTED' "$PREFIX/include/pnglibconf.h" \
-		|| { echo "APNG missing from installed pnglibconf.h" >&2; return 1; }
+	# The vendored patch writes the three APNG defines into png.h itself, not
+	# into the generated pnglibconf.h, so png.h is where to check. Confirm the
+	# library really exports an APNG entry point too: the defines alone would
+	# also be satisfied by a header-only patch that never got compiled in.
+	grep -q 'define PNG_APNG_SUPPORTED' "$PREFIX/include/png.h" \
+		|| { echo "APNG missing from installed png.h" >&2; return 1; }
+	nm -D "$PREFIX/lib/libpng16.so" | grep -q ' T png_read_frame_head' \
+		|| { echo "libpng16.so does not export png_read_frame_head" >&2; return 1; }
 }
 
 phase_ffmpeg() {
