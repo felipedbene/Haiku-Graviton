@@ -48,6 +48,23 @@ _ARCH_NAMES = {
 }
 
 _ID_VERSION_COMPATIBLE = 37  # minimum compatible version, nests under PROVIDES
+_ID_RESOLVABLE_OPERATOR = 34  # nests under REQUIRES: the <, <=, ==, != , >=, >
+
+# BPackageResolvableOperator (headers/os/package/PackageResolvableOperator.h).
+# Needed because a REQUIRES entry's *operator* decides whether an unsatisfiable
+# constraint is fatal: `==` can only ever be met by one exact version, so a base
+# package superseded out from under an exact pin makes the pinning package
+# permanently uninstallable (issue 708).
+OP_LESS = 0
+OP_LESS_EQUAL = 1
+OP_EQUAL = 2
+OP_NOT_EQUAL = 3
+OP_GREATER_EQUAL = 4
+OP_GREATER = 5
+OP_NAMES = {
+    OP_LESS: "<", OP_LESS_EQUAL: "<=", OP_EQUAL: "==",
+    OP_NOT_EQUAL: "!=", OP_GREATER_EQUAL: ">=", OP_GREATER: ">",
+}
 
 
 class HpkgError(Exception):
@@ -144,26 +161,8 @@ def _decompress_uncompressed_range(raw, hdr, u_start, u_end):
     return bytes(out), first * chunk
 
 
-def read_meta(raw):
-    """Parse the package-attributes section of a full-file hpkg byte string.
-    Returns {name, vendor, packager, version, revision}.
-
-    Uses the structure-preserving walk below (`_walk_tree` + `_pkg_from_nodes`),
-    the same code `read_repo` runs, so the two readers cannot disagree about a
-    package's identity.
-
-    This used to be a FLAT, fully-recursive walk with first-wins collection,
-    which silently fabricated versions: a package's own version attributes sit
-    at the TOP level, but every PROVIDES and REQUIRES resolvable nests its own
-    version constraint underneath itself, and the flat walk harvested those too.
-    Measured on `autoconf-2.72-1-arm64.hpkg`: real version major=2 minor=72, no
-    micro, no pre-release -- but `requires cmd:awk >= 3.1.8` donated the unset
-    micro and `requires haiku >= r1~beta6_hrev59996` donated the unset
-    pre-release, so it read as `2.72.8~beta6_hrev59996` while `read_repo` read
-    the same package as `2.72`. Anything matching on (name, version, revision)
-    across the two readers -- `haiku-staging-reconcile`, and `haiku-pool-gc`,
-    which DELETES -- saw packages that are byte-for-byte present as missing.
-    """
+def _read_pkg_nodes(raw):
+    """Parse one .hpkg's package-attributes section into a full package dict."""
     hdr = parse_header(raw)
     heap_u = hdr["heap_size_uncompressed"]
     attr_len = hdr["attributes_length"]
@@ -184,7 +183,47 @@ def read_meta(raw):
     # so it feeds _pkg_from_nodes directly (for HPKR it is the children of a
     # PACKAGE entry instead -- see read_repo).
     nodes, _ = _walk_tree(attr, astr_len, strings)
-    pkg = _pkg_from_nodes(nodes)
+    return _pkg_from_nodes(nodes)
+
+
+def read_pkg(raw):
+    """Like `read_meta`, but return the WHOLE package dict -- including
+    provides/requires and their constraints -- for a single .hpkg.
+
+    `read_meta` narrows the same parse to the identity fields its callers want.
+    The coherence check (issue 708) needs the resolvable constraints of packages
+    that are staged on disk but not yet in any index, which is the one case the
+    HPKR reader cannot serve.
+    """
+    return _read_pkg_nodes(raw)
+
+
+def read_pkg_file(path):
+    with open(path, "rb") as f:
+        return read_pkg(f.read())
+
+
+def read_meta(raw):
+    """Parse the package-attributes section of a full-file hpkg byte string.
+    Returns {name, vendor, packager, version, revision}.
+
+    Uses the structure-preserving walk below (`_walk_tree` + `_pkg_from_nodes`),
+    the same code `read_repo` runs, so the two readers cannot disagree about a
+    package's identity.
+
+    This used to be a FLAT, fully-recursive walk with first-wins collection,
+    which silently fabricated versions: a package's own version attributes sit
+    at the TOP level, but every PROVIDES and REQUIRES resolvable nests its own
+    version constraint underneath itself, and the flat walk harvested those too.
+    Measured on `autoconf-2.72-1-arm64.hpkg`: real version major=2 minor=72, no
+    micro, no pre-release -- but `requires cmd:awk >= 3.1.8` donated the unset
+    micro and `requires haiku >= r1~beta6_hrev59996` donated the unset
+    pre-release, so it read as `2.72.8~beta6_hrev59996` while `read_repo` read
+    the same package as `2.72`. Anything matching on (name, version, revision)
+    across the two readers -- `haiku-staging-reconcile`, and `haiku-pool-gc`,
+    which DELETES -- saw packages that are byte-for-byte present as missing.
+    """
+    pkg = _read_pkg_nodes(raw)
     return {k: pkg[k] for k in ("name", "vendor", "packager", "version", "revision")}
 
 
@@ -251,11 +290,57 @@ def _walk_tree(attr, off, strings):
         nodes.append((aid, value, children))
 
 
+def _resolvable_expr(name, children):
+    """Decode ONE provides/requires resolvable node into
+    {name, op, version, revision, compat}.
+
+    A resolvable's version constraint nests UNDERNEATH the resolvable, with the
+    same major/minor/micro/revision/pre-release shape a package's own version
+    uses, plus (requires only) an operator and (provides only) a minimum
+    compatible version. `op` is None for an unversioned resolvable.
+
+    Kept separate from `_pkg_from_nodes`' top-level version harvesting for the
+    reason read_meta's docstring records: mixing the two levels is what used to
+    fabricate versions out of nested constraints.
+    """
+    out = {"name": name, "op": None, "version": None, "revision": None,
+           "compat": None}
+    for aid, value, cc in children:
+        if aid == _ID_RESOLVABLE_OPERATOR:
+            out["op"] = value
+        elif aid == _ID_VERSION_MAJOR:
+            parts = [value]
+            pre = None
+            for caid, cval, _ in cc:
+                if caid in (_ID_VERSION_MINOR, _ID_VERSION_MICRO):
+                    parts.append(cval)
+                elif caid == _ID_VERSION_REVISION:
+                    out["revision"] = cval
+                elif caid == _ID_VERSION_PRE_RELEASE:
+                    pre = cval
+                elif caid == _ID_VERSION_COMPATIBLE:
+                    out["compat"] = cval
+            v = ".".join(p for p in parts if p)
+            if pre:
+                v += "~" + pre
+            out["version"] = v or None
+        elif aid == _ID_VERSION_COMPATIBLE:
+            out["compat"] = value
+    return out
+
+
 def _pkg_from_nodes(nodes):
     """Build a package dict from the attribute nodes of ONE package (the
-    top-level list of an hpkg, or the children of an HPKR PACKAGE entry)."""
+    top-level list of an hpkg, or the children of an HPKR PACKAGE entry).
+
+    `provides`/`requires` stay bare resolvable-NAME strings: callers that
+    predate the coherence check (haiku-pool-gc's closure walk) index on them.
+    The constraints live alongside, in `provides_expr`/`requires_expr`, so
+    adding them cannot change what those callers see.
+    """
     out = {"name": None, "vendor": None, "packager": None, "arch": None,
-           "version": None, "revision": None, "provides": [], "requires": []}
+           "version": None, "revision": None, "provides": [], "requires": [],
+           "provides_expr": [], "requires_expr": []}
     ver = {}
     for aid, value, children in nodes:
         if aid == _ID_NAME and out["name"] is None:
@@ -283,8 +368,10 @@ def _pkg_from_nodes(nodes):
                     ver.setdefault("pre", cval)
         elif aid == _ID_PROVIDES and value is not None:
             out["provides"].append(value)
+            out["provides_expr"].append(_resolvable_expr(value, children))
         elif aid == _ID_REQUIRES and value is not None:
             out["requires"].append(value)
+            out["requires_expr"].append(_resolvable_expr(value, children))
     parts = [ver.get("major")]
     for k in ("minor", "micro"):
         if ver.get(k):

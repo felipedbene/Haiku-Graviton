@@ -1,0 +1,39 @@
+# haiku-repo-coherence.baseline -- EXACT (`==`) requirements that the live green
+# pool already cannot satisfy (issue 708).
+#
+# These are pre-existing debt, not accepted design. Each line is a package that
+# is UNINSTALLABLE right now. They are listed so that the coherence gate blocks
+# NEW incoherence without blocking every unrelated publish; clearing one means
+# rebuilding and republishing the port, after which `--strict-baseline` reports
+# the line as STALE and it must be deleted. The list only shrinks.
+#
+# Format:  <pinning-package> <required-resolvable> <required-version>   # reason
+# (the key is the first three fields; everything after `#` is the reason)
+#
+# Measured against s3://<pool>/debeos-repo-green/arm64/repo of 2026-10-14.
+
+# --- base superseded out from under a subpackage (the issue-708 defect) ------
+# haiku-repo-add's per-NAME supersede dropped the pinned base version; the
+# subpackage is a different name, so the glob left it behind. Fix: rebuild and
+# republish the subpackage at the base's current version.
+simdjson_devel simdjson 3.11.5        # base republished 5.0.2-1 on 2026-10-05
+libtommath_devel libtommath 1.2.0     # base republished 1.3.0-1 on 2026-10-05
+ripgrep_debuginfo ripgrep 14.0.1      # base at 15.2.0-1; debuginfo never rebuilt
+
+# --- base never published for arm64 at all -----------------------------------
+# The arch-independent subpackage was published while its arch-specific base
+# was not, so there is nothing to pin to. Fix: build the base for arm64, or drop
+# the orphaned subpackage from the pool.
+moleinvasion_music moleinvasion 0.4   # no moleinvasion-* in the arm64 pool
+
+# --- upstream recipe names the wrong resolvable ------------------------------
+# NOT a publish-coherence problem: icu67-67.1-1 provides the resolvable `icu67`,
+# and every sibling (icu66/70/73/74/75/76/77_tools) correctly pins `icuNN`.
+# Only icu67_tools pins the bare `icu`, which is provided solely by icu-57.2.
+# A recipe defect, arch-independent, tracked separately.
+icu67_tools icu 67.1                  # should pin icu67 == 67.1; see issue 717
+
+# --- resolvable never packaged for arm64 -------------------------------------
+# No Java runtime is ported to Haiku arm64, so nothing can provide java:runtime.
+# geogebra is unusable on this arch regardless of the repo's coherence.
+geogebra java:runtime 8               # no JRE port for arm64

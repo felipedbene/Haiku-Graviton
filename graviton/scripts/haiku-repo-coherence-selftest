@@ -1,0 +1,429 @@
+#!/usr/bin/env python3
+"""haiku-repo-coherence-selftest [--mutate]
+
+Offline test for the issue-708 repo coherence gate. No AWS, no network, no
+Haiku host tools: it synthesises real HPKG packages and a real HPKR `repo`
+index -- byte-for-byte parseable by the in-tree hpkg_meta reader the tool
+itself uses -- and drives haiku-repo-coherence end to end over both.
+
+WHY IT EXISTS. A coherence check that has never been shown to FIND an
+incoherence is not known to find one: "every `==` requirement is satisfiable"
+then means nothing. So the discriminating assertion is a known-broken pin on
+known inputs, run through the same HPKG/HPKR parse and the same classifier the
+live gate uses, alongside the near-miss cases that must NOT fire.
+
+The fixtures, and what each proves:
+  * simdjson 5.0.2-1 + simdjson_devel 3.11.5-1   -- the issue-708 shape: base
+    superseded, subpackage left pinning the version that was dropped. MUST be a
+    finding. This is the whole point of the tool.
+  * coherent 2.0.0-1 + coherent_devel 2.0.0-1    -- base and subpackage at the
+    same version. MUST NOT fire; otherwise the gate blocks every publish.
+  * orphan_music 0.4-2 pinning absent `orphan`   -- base not in the set at all.
+    MUST be a finding (a missing provider is not the same code path as a
+    drifted one, and the message differs).
+  * looseptr 1.0.0-1 requiring `absent >= 9.9`   -- an unsatisfiable NON-`==`
+    requirement. MUST NOT fire: `>=` and unversioned requirements are normally
+    met by the installed base system, which is not in any index, so checking
+    them would be almost all false alarm. The operator filter is load-bearing
+    and `--mutate` is what proves it.
+  * sysuser 1.0.0-1 requiring `haiku == r1~beta6_hrev1-1` -- an `==` pin on a
+    BASE-SYSTEM resolvable. MUST NOT fire: `haiku` is provided by the installed
+    image, never by the repo, and every `haiku_devel` in the real pool carries
+    exactly this pin.
+  * revless 3.0.0-2 pinned by revless_devel as `== 3.0.0` (no revision) -- MUST
+    NOT fire. Haiku compares only the components the requirement states, so a
+    revision-less pin is met by ANY revision. Getting this wrong would report
+    most of the pool as broken.
+  * revpin 4.0.0-2 pinned by revpin_devel as `== 4.0.0-1` (revision stated and
+    DIFFERENT) -- MUST fire. The converse of the case above: when the pin does
+    state a revision, it has to match.
+
+It also asserts the baseline is a ratchet, not a mute: a baselined finding
+stops failing but is still REPORTED, a non-baselined finding still fails even
+when the baseline is non-empty, and a baseline entry that no longer reproduces
+is reported STALE (and fails under --strict-baseline).
+
+  --mutate   strip the operator filter from the classifier in memory, so every
+             requirement is treated as an exact pin, and assert that `looseptr`
+             (whose `absent >= 9.9` must be ignored) is then MIS-reported as
+             incoherent -- the exact false alarm that would make the gate
+             unusable. Exits 0 when the mutation is detected (the test goes red
+             without a working operator filter). The tracked file is never
+             touched.
+
+Exit status: 0 pass; 1 an assertion failed.
+"""
+import argparse
+import os
+import struct
+import subprocess
+import sys
+import tempfile
+import types
+
+HERE = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, HERE)
+import hpkg_meta  # noqa: E402
+
+TOOL = os.path.join(HERE, "haiku-repo-coherence")
+
+# --- HPKG / HPKR synthesis ---------------------------------------------------
+# Same encoding the sibling selftests use (haiku-staging-reconcile-selftest),
+# extended with the resolvable OPERATOR attribute (34) that an `==` pin needs
+# and that no other fixture in the tree emits.
+
+
+def _leb128(n):
+    out = bytearray()
+    while True:
+        b = n & 0x7F
+        n >>= 7
+        if n:
+            out.append(b | 0x80)
+        else:
+            out.append(b)
+            return bytes(out)
+
+
+def _tag(aid, dtype, children, encoding):
+    t = (aid & 0x7F) | (dtype << 7) | ((1 if children else 0) << 10) | (encoding << 11)
+    return _leb128(t + 1)
+
+
+def _s(aid, val, children=0):
+    return _tag(aid, 3, children, 0) + val.encode() + b"\x00"
+
+
+def _u32(aid, val, children=0):
+    return _tag(aid, 2, children, 2) + struct.pack(">I", val)
+
+
+def _version_node(ver, rev=None):
+    """`ver` is 'major[.minor[.micro]][~pre]'. minor/micro/revision/pre-release
+    are CHILDREN of major, as real packages store them."""
+    pre = None
+    if "~" in ver:
+        ver, pre = ver.split("~", 1)
+    parts = ver.split(".")
+    major = parts[0]
+    kids = b""
+    if len(parts) > 1:
+        kids += _s(23, parts[1])
+    if len(parts) > 2:
+        kids += _s(24, parts[2])
+    if rev is not None:
+        kids += _u32(25, rev)
+    if pre is not None:
+        kids += _s(36, pre)
+    if not kids:
+        return _s(22, major)
+    return _tag(22, 3, 1, 0) + major.encode() + b"\x00" + kids + _leb128(0)
+
+
+def _resolvable(aid, name, ver=None, rev=None, op=None):
+    """One PROVIDES (28) / REQUIRES (29) entry with its nested constraint."""
+    kids = b""
+    if op is not None:
+        kids += _u32(34, op)
+    if ver is not None:
+        kids += _version_node(ver, rev)
+    if not kids:
+        return _s(aid, name)
+    return _tag(aid, 3, 1, 0) + name.encode() + b"\x00" + kids + _leb128(0)
+
+
+def _pkg_attrs(name, ver, rev, arch=9, provides=(), requires=()):
+    a = _s(15, name) + _u32(21, arch) + _version_node(ver, rev)
+    for r in provides:
+        a += _resolvable(28, *r)
+    for r in requires:
+        a += _resolvable(29, *r)
+    return a
+
+
+def build_hpkg(name, ver, rev, arch=9, provides=(), requires=()):
+    attrs = _pkg_attrs(name, ver, rev, arch, provides, requires) + _leb128(0)
+    strings = b"\x00"
+    section = strings + attrs
+    heap = section
+    hs = 80
+    hdr = bytearray(hs)
+    hdr[0:4] = b"hpkg"
+    struct.pack_into(">H", hdr, 4, hs)
+    struct.pack_into(">H", hdr, 6, 2)
+    struct.pack_into(">Q", hdr, 8, hs + len(heap))
+    struct.pack_into(">H", hdr, 18, 0)        # heap_compression = NONE
+    struct.pack_into(">I", hdr, 20, 65536)
+    struct.pack_into(">Q", hdr, 24, len(heap))
+    struct.pack_into(">Q", hdr, 32, len(heap))
+    struct.pack_into(">I", hdr, 40, len(section))
+    struct.pack_into(">I", hdr, 44, len(strings))
+    struct.pack_into(">I", hdr, 48, 0)
+    return bytes(hdr) + heap
+
+
+def build_repo(fixtures):
+    body = bytearray()
+    for f in fixtures:
+        children = _pkg_attrs(f["name"], f["ver"], f["rev"], f.get("arch", 9),
+                              f.get("provides", ()), f.get("requires", ()))
+        children += _leb128(0)
+        body += _tag(54, 3, 1, 0) + f["name"].encode() + b"\x00" + children
+    body += _leb128(0)
+    strings = b"\x00"
+    section = strings + bytes(body)
+    heap = section
+    hs = 72
+    hdr = bytearray(hs)
+    hdr[0:4] = b"hpkr"
+    struct.pack_into(">H", hdr, 4, hs)
+    struct.pack_into(">H", hdr, 6, 2)
+    struct.pack_into(">Q", hdr, 8, hs + len(heap))
+    struct.pack_into(">H", hdr, 16, 0)
+    struct.pack_into(">H", hdr, 18, 0)
+    struct.pack_into(">I", hdr, 20, 65536)
+    struct.pack_into(">Q", hdr, 24, len(heap))
+    struct.pack_into(">Q", hdr, 32, len(heap))
+    struct.pack_into(">I", hdr, 40, 0)
+    struct.pack_into(">Q", hdr, 48, len(section))
+    struct.pack_into(">Q", hdr, 56, len(strings))
+    struct.pack_into(">Q", hdr, 64, 0)
+    return bytes(hdr) + heap
+
+
+EQ = hpkg_meta.OP_EQUAL
+GE = hpkg_meta.OP_GREATER_EQUAL
+
+# name, version, revision, provides[(name,ver,rev,op)], requires[...]
+FIXTURES = [
+    # the issue-708 shape: base superseded, subpackage left behind
+    dict(name="simdjson", ver="5.0.2", rev=1,
+         provides=[("simdjson", "5.0.2")]),
+    dict(name="simdjson_devel", ver="3.11.5", rev=1,
+         provides=[("simdjson_devel", "3.11.5")],
+         requires=[("simdjson", "3.11.5", None, EQ)]),
+    # coherent pair -- must stay silent
+    dict(name="coherent", ver="2.0.0", rev=1,
+         provides=[("coherent", "2.0.0")]),
+    dict(name="coherent_devel", ver="2.0.0", rev=1,
+         provides=[("coherent_devel", "2.0.0")],
+         requires=[("coherent", "2.0.0", None, EQ)]),
+    # subpackage whose base is absent from the set entirely
+    dict(name="orphan_music", ver="0.4", rev=2, arch=0,
+         provides=[("orphan_music", "0.4")],
+         requires=[("orphan", "0.4", None, EQ)]),
+    # unsatisfiable NON-== requirement -- must stay silent
+    dict(name="looseptr", ver="1.0.0", rev=1,
+         provides=[("looseptr", "1.0.0")],
+         requires=[("absent", "9.9", None, GE)]),
+    # == pin on a base-system resolvable -- must stay silent
+    dict(name="sysuser", ver="1.0.0", rev=1,
+         provides=[("sysuser", "1.0.0")],
+         requires=[("haiku", "r1~beta6_hrev1", 1, EQ)]),
+    # revision-less pin must match ANY revision of that version
+    dict(name="revless", ver="3.0.0", rev=2,
+         provides=[("revless", "3.0.0")]),
+    dict(name="revless_devel", ver="3.0.0", rev=2,
+         provides=[("revless_devel", "3.0.0")],
+         requires=[("revless", "3.0.0", None, EQ)]),
+    # pin that STATES a revision must match it
+    dict(name="revpin", ver="4.0.0", rev=2,
+         provides=[("revpin", "4.0.0", 2)]),
+    dict(name="revpin_devel", ver="4.0.0", rev=2,
+         provides=[("revpin_devel", "4.0.0")],
+         requires=[("revpin", "4.0.0", 1, EQ)]),
+]
+
+MUST_FIRE = {"simdjson_devel", "orphan_music", "revpin_devel"}
+MUST_BE_SILENT = {"simdjson", "coherent", "coherent_devel", "looseptr",
+                  "sysuser", "revless", "revless_devel", "revpin"}
+
+FAILURES = []
+
+
+def check(cond, msg):
+    if cond:
+        print("  ok   %s" % msg)
+    else:
+        print("  FAIL %s" % msg)
+        FAILURES.append(msg)
+
+
+def load_tool(mutate=False):
+    """Import haiku-repo-coherence as a module. With `mutate`, strip the
+    operator filter so every requirement is treated as an exact pin."""
+    src = open(TOOL).read()
+    if mutate:
+        needle = 'if r["op"] != hpkg_meta.OP_EQUAL:'
+        if needle not in src:
+            raise SystemExit("selftest: operator filter not found -- the "
+                             "mutation target moved; update this selftest")
+        src = src.replace(needle, 'if False:')
+    mod = types.ModuleType("coh")
+    mod.__file__ = TOOL
+    exec(compile(src, TOOL, "exec"), mod.__dict__)
+    return mod
+
+
+def run(args):
+    """Run the tool as a subprocess; return (rc, stdout+stderr)."""
+    p = subprocess.run([sys.executable, TOOL] + args,
+                       capture_output=True, text=True)
+    return p.returncode, p.stdout + p.stderr
+
+
+def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--mutate", action="store_true")
+    args = ap.parse_args()
+
+    work = tempfile.mkdtemp(prefix="coherence-selftest.")
+    repo_path = os.path.join(work, "repo")
+    with open(repo_path, "wb") as f:
+        f.write(build_repo(FIXTURES))
+    pkgdir = os.path.join(work, "packages")
+    os.mkdir(pkgdir)
+    for fx in FIXTURES:
+        arch = {0: "any", 9: "arm64"}[fx.get("arch", 9)]
+        fn = "%s-%s-%d-%s.hpkg" % (fx["name"], fx["ver"], fx["rev"], arch)
+        with open(os.path.join(pkgdir, fn), "wb") as f:
+            f.write(build_hpkg(fx["name"], fx["ver"], fx["rev"],
+                               fx.get("arch", 9), fx.get("provides", ()),
+                               fx.get("requires", ())))
+
+    mod = load_tool(mutate=args.mutate)
+
+    if args.mutate:
+        print("== --mutate: operator filter stripped; the >= fixture must "
+              "become a false finding")
+        pkgs = hpkg_meta.read_repo_file(repo_path)
+        fired = {f.pkg for f in mod.check(pkgs)}
+        if "looseptr" in fired:
+            print("  ok   mutation DETECTED: looseptr (absent >= 9.9) was "
+                  "mis-reported as incoherent, so the operator filter is "
+                  "load-bearing and this test can go red")
+            return 0
+        print("  FAIL mutation NOT detected: stripping the operator filter "
+              "changed nothing, so the filter is untested")
+        return 1
+
+    # --- the HPKR path (what the live gate reads) ---------------------------
+    print("== HPKR index parse + classify")
+    pkgs = hpkg_meta.read_repo_file(repo_path)
+    check(len(pkgs) == len(FIXTURES),
+          "index round-trips all %d fixtures (got %d)" % (len(FIXTURES), len(pkgs)))
+    findings = mod.check(pkgs)
+    fired = {f.pkg for f in findings}
+    check(fired == MUST_FIRE,
+          "exactly the known-broken pins fire: expected %s, got %s"
+          % (sorted(MUST_FIRE), sorted(fired)))
+    for n in sorted(MUST_BE_SILENT):
+        check(n not in fired, "%s does not fire" % n)
+
+    by = {f.pkg: f for f in findings}
+    check(by["simdjson_devel"].available == ["5.0.2"],
+          "drift finding names the version the set DOES provide (5.0.2), which "
+          "is what distinguishes it from a missing package")
+    check(by["orphan_music"].available == [],
+          "missing-base finding reports no available version")
+    check("set provides no orphan at all" in by["orphan_music"].describe(),
+          "missing-base message says the provider is absent, not drifted")
+
+    # --- the directory path (staged, not yet indexed) ----------------------
+    print("== *.hpkg directory parse + classify")
+    dpkgs = mod.read_from_dir(pkgdir)
+    check(len(dpkgs) == len(FIXTURES),
+          "directory reader sees all %d fixtures" % len(FIXTURES))
+    check({f.pkg for f in mod.check(dpkgs)} == MUST_FIRE,
+          "directory reader and index reader agree on the findings")
+
+    # --- end to end, exit codes --------------------------------------------
+    print("== end-to-end exit codes")
+    rc, out = run(["--repo", repo_path, "--no-baseline"])
+    check(rc == 1, "a new finding exits 1")
+    check("INCOHERENT: simdjson_devel" in out, "the finding is reported")
+    check("issue 708" in out, "the remedy message cites the issue")
+
+    # --- the baseline is a ratchet, not a mute -----------------------------
+    print("== baseline ratchet")
+    bl = os.path.join(work, "bl")
+    with open(bl, "w") as f:
+        f.write("# comment only\n\n"
+                "simdjson_devel simdjson 3.11.5   # known\n"
+                "orphan_music orphan 0.4          # known\n"
+                "revpin_devel revpin 4.0.0-1      # known\n")
+    rc, out = run(["--repo", repo_path, "--baseline", bl])
+    check(rc == 0, "a fully baselined set exits 0")
+    check(out.count("known-broken:") == 3,
+          "baselined findings are still REPORTED, not silenced (got %d)"
+          % out.count("known-broken:"))
+
+    partial = os.path.join(work, "bl2")
+    with open(partial, "w") as f:
+        f.write("simdjson_devel simdjson 3.11.5\n")
+    rc, out = run(["--repo", repo_path, "--baseline", partial])
+    check(rc == 1, "a non-baselined finding still fails with a non-empty baseline")
+    check("INCOHERENT: orphan_music" in out and "known-broken: simdjson_devel" in out,
+          "the two classes are reported separately")
+
+    stale = os.path.join(work, "bl3")
+    with open(stale, "w") as f:
+        f.write("simdjson_devel simdjson 3.11.5\n"
+                "orphan_music orphan 0.4\n"
+                "revpin_devel revpin 4.0.0-1\n"
+                "gone_devel gone 1.0.0   # cleared long ago\n")
+    rc, out = run(["--repo", repo_path, "--baseline", stale])
+    check(rc == 0, "a stale entry alone does not fail by default")
+    check("STALE baseline entry" in out, "a stale entry is reported")
+    rc, out = run(["--repo", repo_path, "--baseline", stale, "--strict-baseline"])
+    check(rc == 1, "--strict-baseline fails on a stale entry, so the list shrinks")
+
+    bad = os.path.join(work, "bl4")
+    with open(bad, "w") as f:
+        f.write("simdjson_devel simdjson\n")
+    rc, out = run(["--repo", repo_path, "--baseline", bad])
+    check(rc != 0 and "need at least" in out,
+          "a malformed baseline line is rejected, not read as a wildcard")
+
+    # --- the shipped baseline parses ---------------------------------------
+    print("== shipped baseline")
+    shipped = os.path.join(HERE, "haiku-repo-coherence.baseline")
+    if os.path.exists(shipped):
+        keys = mod.load_baseline(shipped)
+        check(len(keys) > 0, "shipped baseline parses (%d entries)" % len(keys))
+        check(all(len(k.split()) == 3 for k in keys),
+              "every shipped baseline key has exactly 3 fields")
+    else:
+        check(False, "shipped baseline %s is missing" % shipped)
+
+    # --- the gate is actually wired, and wired BEFORE the upload -----------
+    # A gate that runs after `s3 sync` would report an incoherent pool that is
+    # already live, which is the whole failure this exists to prevent. The
+    # ordering is the assertion; a bare "is it mentioned" check would pass on a
+    # call placed at the end of the file.
+    print("== wiring into haiku-repo-add")
+    add = os.path.join(HERE, "haiku-repo-add")
+    if os.path.exists(add):
+        src = open(add).read()
+        i_call = src.find('"$COHERENCE_TOOL" --repo')
+        i_up = src.find('s3 sync "$RO/packages/"')
+        check(i_call != -1, "haiku-repo-add invokes haiku-repo-coherence")
+        check(i_up != -1, "haiku-repo-add's package upload is still recognisable")
+        check(i_call != -1 and i_up != -1 and i_call < i_up,
+              "the coherence gate runs BEFORE the package upload, so an "
+              "incoherent union is never published")
+        check("die " in src[i_call:i_call + 400] or "die \"" in src[i_call:i_up],
+              "a failed coherence check aborts the publish (die), not just warns")
+    else:
+        check(False, "haiku-repo-add is missing")
+
+    print()
+    if FAILURES:
+        print("FAILED: %d assertion(s)" % len(FAILURES))
+        return 1
+    print("PASS")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
