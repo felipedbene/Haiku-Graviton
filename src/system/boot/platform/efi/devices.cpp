@@ -437,12 +437,25 @@ platform_add_boot_device(struct stage2_args *args, NodeList *devicesList)
 			!= EFI_BUFFER_TOO_SMALL)
 		panic("Cannot read size of block device handles!");
 
-	uint32 noOfHandles = memSize / sizeof(efi_handle);
+	// The handle array is heap allocated, not a stack array sized by memSize.
+	// memSize is whatever the firmware says it needs -- one handle per disk
+	// *and* one per partition, so a machine with many volumes can ask for far
+	// more than the loader's stack can give, and the loader runs on the stack
+	// firmware handed it. Overrunning it faults inside firmware code, which is
+	// then reported against a firmware module (issue #484 was read that way for
+	// a while) instead of against the loader. ReadAt's bounce buffer above was
+	// made fixed-size for exactly this reason; this is the same hazard.
+	efi_handle* handles = (efi_handle*)malloc(memSize);
+	if (handles == NULL)
+		panic("Can't allocate memory for block device handles!");
 
-	efi_handle handles[noOfHandles];
 	if (kBootServices->LocateHandle(ByProtocol, &BlockIoGUID, 0, &memSize,
 			handles) != EFI_SUCCESS)
 		panic("Failed to locate block devices!");
+
+	// LocateHandle writes back the size it actually used, so the count is only
+	// correct after the second call.
+	uint32 noOfHandles = memSize / sizeof(efi_handle);
 
 	// All block devices has one for the disk and one per partition
 	// There is a special case for a device with one fixed partition
@@ -490,6 +503,8 @@ platform_add_boot_device(struct stage2_args *args, NodeList *devicesList)
 
 		devicesList->Insert(device);
 	}
+
+	free(handles);
 
 	return devicesList->Count() > 0 ? B_OK : B_ENTRY_NOT_FOUND;
 }
