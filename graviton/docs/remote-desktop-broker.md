@@ -140,11 +140,25 @@ Why a broker process instead of TLS inside app_server:
 Failure handling: token comparison is hash-then-compare
 (SHA-256 + `CRYPTO_memcmp`, constant time, no length oracle); a failed
 attempt is answered after a 2 s delay and counted per source address with
-exponential backoff (TLS/WebSocket handshake failures count too, so plaintext
-probes back off the same way); the reply does not say why authentication
-failed. An unauthenticated connection can neither observe nor displace a live
+exponential backoff; the reply does not say why authentication
+failed. TLS and WebSocket handshake failures are deliberately *not* counted —
+the documented first-use flow produces them (a browser declining the
+self-signed certificate, a plaintext probe), and counting them would back off
+the user's own address before their first real connection. An unauthenticated
+connection can neither observe nor displace a live
 session; a newly *authenticated* client takes the session over
 (newest-wins, matching the session port's reconnect model).
+
+Flood handling, which is a separate control from the backoff above: a
+handshake holds a slot from `accept()` until it either authenticates or runs
+out of its 15 s budget, and there are **8 slots in total, of which one source
+address may hold at most 3** (#695). The global ceiling bounds how much
+concurrent TLS work the broker will do; the per-address share is what stops one
+host from owning the whole ceiling — which it could do without ever being
+recorded as an authentication failure, since a peer that connects and sends
+nothing never reaches the token check. Refused connections are logged, rate
+limited to one line a minute with a suppressed count, because the flood being
+refused is the only thing that generates them in volume.
 
 In app_server, independently of the broker: a connection to the RP listener
 no longer preempts a live session merely by connecting. It is parked as a

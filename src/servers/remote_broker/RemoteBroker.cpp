@@ -137,6 +137,21 @@ static const bigtime_t kAuthFailureDelay = 2 * 1000 * 1000;
 
 static const int kMaxConcurrentHandshakes = 8;
 
+// How many of those slots a single source address may hold at once. The broker
+// serves one session at a time, so a second concurrent handshake from the same
+// client never gains it anything -- but refusing one would break flows that are
+// not an attack: a browser's speculative preconnect or favicon probe arrives
+// alongside the WebSocket it is about to open, and a reload can overlap a
+// handshake the user is still clicking a certificate warning through. Three
+// absorbs those and still leaves five slots that no single address can touch,
+// so saturating the global cap takes three cooperating sources instead of one.
+static const int kMaxHandshakesPerAddress = 3;
+
+// How often a refused connection may be reported. See
+// report_refused_handshake(): the condition that produces refusals in bulk is
+// the very flood being refused.
+static const bigtime_t kRefusalReportInterval = 60 * 1000 * 1000;
+
 static const size_t kMaxAuthMessageSize = 4096;
 static const size_t kMaxTokenLength = 1024;
 
@@ -155,9 +170,6 @@ static const size_t kMinCookieLength = 16;
 // one. Hosts in this fleet have one or two; reaching this bound means a
 // configuration worth looking at, hence the log when it happens.
 static const int32 kMaxCertificateAddresses = 24;
-
-
-static int32 sConcurrentHandshakes = 0;
 
 
 /*!	What the token a client presented entitles it to. A controller is what
@@ -268,6 +280,121 @@ private:
 };
 
 
+/*!	In-flight handshake accounting: a ceiling on how much concurrent TLS work
+	the broker will do at all, and a per-source-address share of that ceiling.
+
+	The ceiling on its own was not enough (#695). A slot is held for up to
+	kHandshakeTimeout, and a peer that completes the TCP connection and then
+	sends nothing is deliberately never charged an authentication failure (see
+	handle_connection()), so RateLimiter never learns its address exists. One
+	source holding kMaxConcurrentHandshakes sockets open across the budget
+	therefore kept the front door shut for everyone, indefinitely, at well
+	under one connection per second -- and the limiter that would have blocked
+	it only ever sees addresses that got as far as the token check, which this
+	flood never does. Bounding total work and bounding one source's share of it
+	are separate jobs; both live here, under one lock, so the two numbers cannot
+	disagree with each other.
+
+	The table is sized from an invariant rather than guessed: a row is occupied
+	only while that address holds at least one of the global slots, so occupied
+	rows can never outnumber the slots. One row per slot therefore cannot
+	overflow and needs no eviction policy -- unlike RateLimiter, whose entries
+	have to outlive the connections they describe.
+*/
+class HandshakeLimiter {
+public:
+	enum Admission {
+		kAdmitted,
+		kRefusedTotal,
+		kRefusedSource
+	};
+
+	HandshakeLimiter()
+		:
+		fLock("remote_broker handshake limiter"),
+		fTotal(0)
+	{
+		memset(fEntries, 0, sizeof(fEntries));
+	}
+
+	Admission Acquire(in_addr_t address)
+	{
+		BAutolock lock(fLock);
+		if (fTotal >= kMaxConcurrentHandshakes)
+			return kRefusedTotal;
+
+		Entry* entry = _FindEntry(address);
+		if (entry != NULL && entry->count >= kMaxHandshakesPerAddress)
+			return kRefusedSource;
+
+		if (entry == NULL) {
+			entry = _FreeEntry();
+			if (entry == NULL) {
+				// Unreachable while the table has a row per slot and fTotal is
+				// under the cap, both checked above. Refusing is the safe
+				// answer to a table that cannot be: the alternative is handing
+				// out a slot nothing is counting.
+				return kRefusedTotal;
+			}
+
+			entry->address = address;
+			entry->count = 0;
+		}
+
+		entry->count++;
+		fTotal++;
+		return kAdmitted;
+	}
+
+	void Release(in_addr_t address)
+	{
+		BAutolock lock(fLock);
+		Entry* entry = _FindEntry(address);
+		if (entry == NULL) {
+			// A release with no claim behind it would mean a slot was handed
+			// back twice. Not decrementing is the conservative half of that,
+			// but the counters have drifted and the caps no longer mean what
+			// they say, so it is worth a line rather than silence.
+			TRACE_ERROR("handshake slot released without a matching claim\n");
+			return;
+		}
+
+		entry->count--;
+		fTotal--;
+	}
+
+private:
+	struct Entry {
+		in_addr_t	address;
+		int32		count;
+	};
+
+	Entry* _FindEntry(in_addr_t address)
+	{
+		for (size_t i = 0; i < B_COUNT_OF(fEntries); i++) {
+			if (fEntries[i].count > 0 && fEntries[i].address == address)
+				return &fEntries[i];
+		}
+
+		return NULL;
+	}
+
+	Entry* _FreeEntry()
+	{
+		for (size_t i = 0; i < B_COUNT_OF(fEntries); i++) {
+			if (fEntries[i].count == 0)
+				return &fEntries[i];
+		}
+
+		return NULL;
+	}
+
+	BLocker	fLock;
+	int32	fTotal;
+	Entry	fEntries[kMaxConcurrentHandshakes];
+};
+
+
 // #pragma mark - session registry
 
 
@@ -345,6 +472,7 @@ struct BrokerConfiguration {
 static BrokerConfiguration sConfiguration;
 static TLSContext sTLSContext;
 static RateLimiter sRateLimiter;
+static HandshakeLimiter sHandshakes;
 static SessionRegistry sSessions;
 
 
@@ -1319,13 +1447,39 @@ struct ConnectionContext {
 	int			socket;
 	in_addr_t	peerAddress;
 	char		peerName[INET_ADDRSTRLEN];
+	// Whether this connection still holds its handshake slot. Two paths give
+	// the slot up before they are finished with the connection, so releasing
+	// has to be harmless the second time; only this connection's own thread
+	// ever touches the flag, so it needs no atomics.
+	bool		holdsHandshakeSlot;
 };
 
 
-static status_t
-handle_connection(void* data)
+/*!	Gives this connection's handshake slot back, once.
+
+	The slot is accounted per source address as well as globally now (#695),
+	and the release used to be open-coded at ten separate sites. Adding a
+	second counter to all ten is how such a fix leaks: miss one path and that
+	address is permanently down a slot, with nothing in the log to say so. So
+	the release lives here, and every exit from handle_connection() falls
+	through connection_thread(), which calls it -- a forgotten path cannot
+	leak, and the two paths that deliberately release early simply get here
+	first.
+*/
+static void
+release_handshake_slot(ConnectionContext* context)
 {
-	ConnectionContext* context = (ConnectionContext*)data;
+	if (!context->holdsHandshakeSlot)
+		return;
+
+	context->holdsHandshakeSlot = false;
+	sHandshakes.Release(context->peerAddress);
+}
+
+
+static status_t
+handle_connection(ConnectionContext* context)
+{
 	bigtime_t deadline = system_time() + kHandshakeTimeout;
 
 	TLSStream tls;
@@ -1340,8 +1494,6 @@ handle_connection(void* data)
 		// what the limiter is for, and brute force has to reach the token
 		// check to make progress.
 		TRACE_LOG("%s: TLS handshake failed\n", context->peerName);
-		atomic_add(&sConcurrentHandshakes, -1);
-		delete context;
 		return result;
 	}
 
@@ -1349,8 +1501,6 @@ handle_connection(void* data)
 	result = ws.AcceptHandshake(deadline);
 	if (result != B_OK) {
 		TRACE_LOG("%s: WebSocket handshake failed\n", context->peerName);
-		atomic_add(&sConcurrentHandshakes, -1);
-		delete context;
 		return result;
 	}
 
@@ -1370,12 +1520,11 @@ handle_connection(void* data)
 		// only has a fixed 10 byte denial left to write, and holding one of
 		// the few concurrent-handshake slots through a deliberate delay
 		// would spend the broker's capacity rather than the attacker's.
-		atomic_add(&sConcurrentHandshakes, -1);
+		release_handshake_slot(context);
 
 		snooze(kAuthFailureDelay);
 		send_auth_result(ws, kAuthResultDenied, system_time() + 1000000);
 		ws.SendClose(1008, system_time() + 1000000);
-		delete context;
 		return result;
 	}
 
@@ -1394,9 +1543,7 @@ handle_connection(void* data)
 			strerror(cookieResult));
 		send_auth_result(ws, kAuthResultNoCookie, system_time() + 1000000);
 		ws.SendClose(1011, system_time() + 1000000);
-		atomic_add(&sConcurrentHandshakes, -1);
 		OPENSSL_cleanse(authBuffer, sizeof(authBuffer));
-		delete context;
 		return cookieResult;
 	}
 
@@ -1405,9 +1552,7 @@ handle_connection(void* data)
 		TRACE_ERROR("%s: session port unreachable\n", context->peerName);
 		send_auth_result(ws, kAuthResultNoSession, system_time() + 1000000);
 		ws.SendClose(1011, system_time() + 1000000);
-		atomic_add(&sConcurrentHandshakes, -1);
 		OPENSSL_cleanse(cookie, sizeof(cookie));
-		delete context;
 		return B_ERROR;
 	}
 
@@ -1442,14 +1587,12 @@ handle_connection(void* data)
 	OPENSSL_cleanse(authBuffer, sizeof(authBuffer));
 	if (forwardResult != B_OK) {
 		close(backendSocket);
-		atomic_add(&sConcurrentHandshakes, -1);
-		delete context;
 		return B_ERROR;
 	}
 
 	// From here on this thread owns a live session; it no longer counts
 	// against the handshake budget.
-	atomic_add(&sConcurrentHandshakes, -1);
+	release_handshake_slot(context);
 
 	TRACE_LOG("%s: authenticated as %s, session connected\n",
 		context->peerName,
@@ -1473,12 +1616,68 @@ handle_connection(void* data)
 	}
 
 	TRACE_LOG("%s: session ended\n", context->peerName);
-	delete context;
 	return B_OK;
 }
 
 
+/*!	Thread entry. The handshake slot and the context are given back here, at
+	the one point every path out of handle_connection() reaches, rather than
+	being repeated at each of its early returns.
+*/
+static status_t
+connection_thread(void* data)
+{
+	ConnectionContext* context = (ConnectionContext*)data;
+	status_t result = handle_connection(context);
+
+	release_handshake_slot(context);
+	delete context;
+	return result;
+}
+
+
 // #pragma mark - main
+
+
+/*!	Reports a connection refused by the handshake caps, at most once per
+	kRefusalReportInterval.
+
+	A refusal used to be a bare close() with nothing written anywhere, which is
+	how a flood could hold the door shut and leave the operator looking at a
+	broker that simply "does not answer" (#695). It is reported now -- but a
+	flood is also the only thing that produces refusals in any volume, so a
+	line per refused connection would turn a cheap attack into a log-filling
+	one. The first refusal after a quiet interval is reported at once, and the
+	next line carries the count that was suppressed behind it, so the rate is
+	bounded while the magnitude is not lost. Only the accept loop refuses
+	connections, so this state is touched by one thread and needs no lock.
+*/
+static void
+report_refused_handshake(const char* peerName,
+	HandshakeLimiter::Admission reason)
+{
+	static bigtime_t sLastReport = 0;
+	static int32 sSuppressed = 0;
+
+	bigtime_t now = system_time();
+	if (sLastReport != 0 && now - sLastReport < kRefusalReportInterval) {
+		sSuppressed++;
+		return;
+	}
+
+	const char* limit = reason == HandshakeLimiter::kRefusedSource
+		? "this address holds every handshake slot it may at once"
+		: "all handshake slots are in use";
+	if (sSuppressed > 0) {
+		TRACE_ERROR("%s: connection refused, %s (%" B_PRId32 " further"
+			" refusals since the previous report were not logged)\n", peerName,
+			limit, sSuppressed);
+	} else
+		TRACE_ERROR("%s: connection refused, %s\n", peerName, limit);
+
+	sSuppressed = 0;
+	sLastReport = now;
+}
 
 
 static void
@@ -1656,16 +1855,9 @@ main(int argc, char** argv)
 			}
 		}
 
-		// Cheap gates before any TLS work: per-address backoff and a global
-		// cap on concurrent handshakes.
+		// Cheap gates before any TLS work: per-address failure backoff, then
+		// admission against the global and per-address handshake caps.
 		if (sRateLimiter.IsBlocked(peer.sin_addr.s_addr)) {
-			close(clientSocket);
-			continue;
-		}
-
-		if (atomic_add(&sConcurrentHandshakes, 1) + 1
-				> kMaxConcurrentHandshakes) {
-			atomic_add(&sConcurrentHandshakes, -1);
 			close(clientSocket);
 			continue;
 		}
@@ -1690,22 +1882,39 @@ main(int argc, char** argv)
 
 		ConnectionContext* context = new(std::nothrow) ConnectionContext;
 		if (context == NULL) {
-			atomic_add(&sConcurrentHandshakes, -1);
 			close(clientSocket);
 			continue;
 		}
 
 		context->socket = clientSocket;
 		context->peerAddress = peer.sin_addr.s_addr;
+		context->holdsHandshakeSlot = false;
 		if (inet_ntop(AF_INET, &peer.sin_addr, context->peerName,
 				sizeof(context->peerName)) == NULL) {
 			strlcpy(context->peerName, "?", sizeof(context->peerName));
 		}
 
-		thread_id thread = spawn_thread((thread_func)handle_connection,
+		// Claimed only once the context exists, so that the slot has an owner
+		// from the moment it is taken and is released through the one path
+		// that owner has (release_handshake_slot()).
+		HandshakeLimiter::Admission admission
+			= sHandshakes.Acquire(context->peerAddress);
+		if (admission != HandshakeLimiter::kAdmitted) {
+			// Not recorded as an authentication failure: being refused is not
+			// evidence about this peer, and an address shared by a NAT with a
+			// flooding host must not inherit its backoff.
+			report_refused_handshake(context->peerName, admission);
+			close(clientSocket);
+			delete context;
+			continue;
+		}
+
+		context->holdsHandshakeSlot = true;
+
+		thread_id thread = spawn_thread((thread_func)connection_thread,
 			"broker connection", B_NORMAL_PRIORITY, context);
 		if (thread < 0) {
-			atomic_add(&sConcurrentHandshakes, -1);
+			release_handshake_slot(context);
 			close(clientSocket);
 			delete context;
 			continue;
