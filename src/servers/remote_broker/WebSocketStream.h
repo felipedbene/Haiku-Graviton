@@ -11,6 +11,24 @@
 class TLSStream;
 
 
+/*!	Policy applied to the WebSocket -> plain socket direction of Relay(),
+	given the bytes before anything is written to the socket. It forwards
+	itself rather than returning what to forward, because a filter that drops
+	part of a stream has to buffer across read boundaries and would otherwise
+	need to hand back more bytes than it was given.
+
+	Returning anything but B_OK ends the relay, so a filter that can no longer
+	decide must say so rather than pass bytes through unclassified.
+*/
+class RelayFilter {
+public:
+	virtual						~RelayFilter();
+
+	virtual	status_t			Forward(int socket, const uint8* buffer,
+									size_t size) = 0;
+};
+
+
 /*!	RFC 6455 WebSocket framing over a TLSStream, presented as a plain byte
 	stream: consecutive binary frames are one continuous stream in both
 	directions (the remote protocol has its own 6-byte framing and does not
@@ -47,9 +65,11 @@ public:
 
 			// Bidirectional relay between this WebSocket and a plain
 			// socket, until either side ends. Blocks; run it on the thread
-			// that owns both.
+			// that owns both. \a inboundFilter, when given, decides what of
+			// the WebSocket direction reaches \a plainSocket.
 	static	void				Relay(WebSocketStream& webSocket,
-									TLSStream& stream, int plainSocket);
+									TLSStream& stream, int plainSocket,
+									RelayFilter* inboundFilter = NULL);
 
 private:
 			ssize_t				_ParseBuffer(uint8* buffer, size_t size);

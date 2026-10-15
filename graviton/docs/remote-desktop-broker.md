@@ -162,7 +162,10 @@ On first run the broker generates into its settings directory
 | `broker.pem` | 0644 | self-signed P-256 certificate, 10 years |
 | `broker.key` | 0600 | private key |
 | `broker.fingerprint` | 0644 | SHA-256 of the certificate (the **pin**) |
-| `token` | 0600 | 64 hex chars of randomness (the shared token) |
+| `token` | 0600 | 64 hex chars of randomness (the shared token — the **controller** token) |
+
+`token.viewer` lives in the same directory and is the operator's to create; it
+is never generated. See *viewer and controller roles* below.
 
 `session_cookie.<port>` lives in the same directory but is **not** the broker's
 file: app_server writes it and the broker only reads it (`-c <path>` overrides
@@ -218,6 +221,62 @@ The token is created random on first run; replace the file to set your own
 (min 16 characters, whitespace-trimmed). Rotate by rewriting the file and
 restarting the broker. The broker keeps only the token's hash in memory and
 never logs it.
+
+## Viewer and controller roles
+
+Issue #551, first step. The token a client presents decides what that session
+may do, for the whole of the session:
+
+| token file | role | may send input |
+|---|---|---|
+| `token` | controller | yes — unchanged in every respect |
+| `token.viewer` (0600, same rules, **never generated**) | viewer | no: dropped at the broker |
+
+A viewer completes the identical handshake, gets `RP_AUTH_RESULT` status 0 and
+receives the display stream like any other client. What differs is one
+direction of the relay: the broker frames the client → server byte stream
+itself and swallows every message in the input block — exactly the contiguous
+opcode range app_server dispatches to its event stream, `RP_MOUSE_MOVED`
+(220) through `RP_MODIFIERS_CHANGED` (244). Nothing else is touched:
+`RP_INIT_CONNECTION`, `RP_HELLO`, `RP_RESYNC`, query replies and frame
+acknowledgements all go through, so a viewer is a normal participant in the
+display half of the protocol and flow control still works for it.
+
+Why the broker and not app_server: app_server has one session and no notion
+of who is driving it, while the broker already decides per connection whether
+this peer may be there at all. Dropping input in front of the loopback hop
+also means a viewer's keystrokes do not exist anywhere inside the display
+server, which is the property worth having.
+
+Four consequences to know about:
+
+- **No viewer token, no change at all.** The file is never created, so an
+  existing deployment keeps exactly one token and every session is a
+  controller. A `token.viewer` that exists but is unreadable or too weak is an
+  error at start-up rather than a silent demotion to "no viewer access".
+- **Sessions are still one at a time.** The session port serves one
+  connection and the broker is newest-wins, so a viewer connecting *replaces*
+  a live controller session rather than joining it. Watching alongside a
+  controller needs the display fan-out that #551's later steps own; what this
+  step buys is that the credential you hand out cannot drive. It is strictly
+  less power than the alternative available before it, which was handing over
+  the controller token.
+- **The viewer is not told.** `RP_AUTH_RESULT` carries status only, so a
+  viewer client sees its input vanish without a message saying why; the
+  broker's log is where the role is visible. Telling the client is a wire
+  change and belongs with the client-side UX, not here.
+- **"Watch-only" is about input events, not the display mode.**
+  `RP_UPDATE_DISPLAY_MODE` is not an input event and is still forwarded, so a
+  viewer can still resize the shared desktop. Hand a viewer token to someone
+  you would let change your resolution, not to an arbitrary stranger; closing
+  this is the first thing #551's next step should decide.
+
+Observability is the broker's own log: `authenticated as viewer|controller`
+per session, one line the first time input is dropped, and a per-session
+summary when it ends (`dropped N input messages (M bytes), forwarded K other
+messages`). A viewer stream whose framing cannot be followed ends the session
+— input that cannot be delimited cannot be dropped — and app_server's parser
+calls the same two cases a desync, so nothing legitimate is lost.
 
 ## Clients
 
