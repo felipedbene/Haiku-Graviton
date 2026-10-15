@@ -265,6 +265,7 @@ Thread::Thread(const char* name, thread_id threadID, struct cpu_ent* cpu)
 	flags(0),
 	serial_number(-1),
 	hash_next(NULL),
+	going_to_suspend(false),
 	priority(-1),
 	io_priority(-1),
 	cpu(cpu),
