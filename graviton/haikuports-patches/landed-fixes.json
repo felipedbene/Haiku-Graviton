@@ -9,14 +9,25 @@
     "  \"<class-number>\": {",
     "    \"pr\":       \"<repo PR URL, or 'pending' before the PR is opened>\",",
     "    \"commit\":   \"<merge SHA on graviton, or null while parked>\",",
-    "    \"coverage\": [\"<port>\", ...]",
+    "    \"coverage\": [\"<port>\", ...],",
+    "    \"note\":     \"<optional; why coverage is what it is>\"",
     "  }",
     "",
     "The classifier sets triage_fix_landed=True for a port iff its triage_class",
     "matches an entry AND the port is in that entry's coverage list. `commit`",
     "may be null while the class PR is still open (parked, unmerged) --",
     "fix_landed is a claim that the fix is *authored* in-tree, not yet a merge",
-    "marker. Once the PR merges, populate `commit` so an audit can cite it."
+    "marker. Once the PR merges, populate `commit` so an audit can cite it.",
+    "",
+    "coverage is a per-PORT claim, not a per-class one, and it must list only",
+    "ports whose recipe is actually IN this tree: `git show graviton:",
+    "graviton/haikuports-patches/recipes/<port>-*.recipe` has to succeed. A",
+    "class PR that lands 3 of its 7 ports covers 3. Listing the held 4 is how",
+    "issue #560 happened a second time (see class 35's note, issue #592):",
+    "fix_landed=True with no in-tree recipe requeues a port that cannot have",
+    "changed, and the wave spends an attempt slot to re-derive the same failure.",
+    "Likewise `commit` must be a real object -- both class 27 and class 35 once",
+    "cited 528ed63c0a, which `git cat-file -t` rejects."
   ],
   "classes": {
     "2": {
@@ -118,7 +129,7 @@
     },
     "27": {
       "pr": "https://github.com/felipedbene/Haiku-Graviton/pull/566",
-      "commit": "528ed63c0a",
+      "commit": "42bebcbcdc",
       "coverage": [
         "hteditor",
         "mimetic",
@@ -141,14 +152,10 @@
       ]
     },
     "35": {
-      "pr": "https://github.com/felipedbene/Haiku-Graviton/pull/566",
-      "commit": "528ed63c0a",
-      "coverage": [
-        "ftgl",
-        "gri",
-        "qemacs",
-        "rssavers"
-      ]
+      "pr": "pending",
+      "commit": null,
+      "coverage": [],
+      "note": "EMPTY ON PURPOSE (#592). This entry previously claimed ftgl, gri, qemacs and rssavers on PR 566 -- but PR 566 was the class-27 PR and landed only hteditor, mimetic and sum_it; the four class-35 recipes were held pending a native build and had no recipe in this tree at all, so the entry asserted fix_landed=True for a fix that did not exist. gri-2.12.23.recipe and qemacs-0.4.1~pre20170225.recipe are now in recipes/ with call-site source fixes (#592), and they are STILL not listed here: fix_landed claims a port is expected to BUILD on the next wave, and neither has a native RC=0 -- the fixes are verified only by cross-compile sweeps. ftgl needs no recipe change (it has no class-35 site); rssavers is blocked on 36 further errors in Microcosm/extensions.cpp. Add a port here once its native build passes, not before. Per-port triage: the playbook's Class 35 section."
     }
   }
 }
