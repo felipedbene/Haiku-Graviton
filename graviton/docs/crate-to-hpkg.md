@@ -75,6 +75,18 @@ haiku-crate-to-hpkg --install hyperfine 1.19.0   # → hyperfine, 512 KB hpkg, r
 
 Both emitted `requires { haiku; lib:libgcc_s }`, correctly derived from the ELF.
 
+### Named candidates (not yet built)
+
+- **`uv`** (astral-sh/uv) — a Rust Python package/project manager, and the
+  standing answer to the missing-`pip` situation: it manages Python installs,
+  venvs and package installs itself, so it could be the recommended Python
+  workflow here rather than bootstrapping `pip`. Being Rust makes it a plausible
+  target for this script rather than a from-scratch port. Expect to shake out
+  Haiku-specific syscall and path assumptions — `uv` does a lot of filesystem,
+  process and network work — so `uv venv` and `uv pip install` must be proven
+  end-to-end on a native instance before it counts as ported. Nice-to-have,
+  unsequenced; this entry is the design of record for the retired DeBeOS #554.
+
 ## Failure modes it handles
 
 - **GNU ld 2.41 aarch64 stub bug** ("can not size stub section" /

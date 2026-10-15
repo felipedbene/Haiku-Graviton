@@ -290,6 +290,27 @@ client rasterises). Levers below are ours, measured here unless noted.
   property if `ssh -C` proves insufficient.
 - **ECN** (staged design, `ref-ecn-design.md`) — relevant only to the media
   channel's congestion response; not a throughput lever here.
+- **QUIC / WebTransport** (M5) — the transport upgrade over the M1 `wss` broker,
+  and the only lever in this section that changes *which* delays are possible
+  rather than how large they are. Four properties earn it: **no head-of-line
+  blocking across streams**, so input and cursor never stall behind a lost
+  bulk-tile packet — the interactive-feel difference on real internet paths, and
+  the reason this is not merely a throughput item; **datagrams for full-motion
+  tiles**, so a stale frame is dropped instead of retransmitted; **0-RTT
+  reconnect and connection migration**, so roaming survives without a
+  re-handshake; and **TLS 1.3 built in**, which *replaces* the broker's own TLS
+  layer rather than stacking on it. A userspace QUIC stack over UDP also
+  sidesteps DeBeOS's own TCP receive-path limits (§7, #57) for this stream
+  specifically.
+  Browser-primary is preserved via **WebTransport**, beside and eventually
+  instead of `wss`. The insertion point is the broker daemon, so `app_server`
+  stays crypto- and transport-free on loopback. Candidates: **quiche** (Rust —
+  native Rust is proven on arm64, see `crate-to-hpkg.md`) or **ngtcp2**. Stream
+  map: control/input on a reliable stream, display-list on a reliable stream,
+  Tier-P tiles as datagrams. Sequenced after M1 (the `wss` broker, shipped) and
+  **with M3**, where multi-stream and datagram semantics actually pay — before
+  full-motion there is nothing for the datagram half to carry. This entry is the
+  design of record for the retired DeBeOS #418.
 
 ### Decode / present
 - **Entirely the client's problem; no Graviton lever touches it.** This is stated
@@ -424,8 +445,10 @@ capability-gated).
   instance rather than only `.metal`. Pays for itself before any video ships.
 - **M5 — full hybrid.** Per-region Tier P codec tiles multiplexed with Tier V
   under the damage router; SPICE-style promotion of a repeatedly-updated
-  cache key at fixed geometry into an inter-coded stream; QUIC/WebRTC transport;
-  Opus audio. The draw-op path remains the default and the fallback throughout.
+  cache key at fixed geometry into an inter-coded stream; **QUIC/WebTransport**
+  transport (§6 *Transport* carries the stream map and the head-of-line-blocking
+  rationale); Opus audio. The draw-op path remains the default and the fallback
+  throughout.
 
 ---
 
