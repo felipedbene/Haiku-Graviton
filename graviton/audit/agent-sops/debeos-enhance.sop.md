@@ -33,7 +33,7 @@ never builds (there is no `aarch64-haiku` cross-toolchain here). All work happen
 Parse `enhancement` into `id`, `title`, `subsystem`, `description`, `rationale`, `acceptance`.
 
 **Constraints:**
-- You MUST reject and STOP (writing a report with `classification: "out-of-scope"`) if the enhancement's target files are not under one of the active-surface roots — `src/system/kernel/arch/arm64/`, `src/add-ons/kernel/drivers/network/ether/ena/`, `src/add-ons/kernel/network/`, `src/add-ons/kernel/file_systems/bfs/`, `src/servers/app/drawing/interface/remote/` — because DeBeOS's exercised surface is where an enhancement can be proven on hardware.
+- You MUST reject and STOP (writing a report with `classification: "out-of-scope"`) if the enhancement's target files are not under one of the active-surface roots — `src/system/kernel/arch/arm64/`, `src/add-ons/kernel/drivers/network/ether/ena/`, `src/add-ons/kernel/network/`, `src/add-ons/kernel/file_systems/bfs/`, `src/servers/app/drawing/interface/remote/`, `src/servers/remote_broker/` — because DeBeOS's exercised surface is where an enhancement can be proven on hardware. (`src/servers/remote_broker/` was added after this SOP was first written; it is the URP/1 broker daemon and is part of the `app_server-remote` subsystem for backlog purposes, so an enhancement targeting it is in scope and classifies under that subsystem.)
 - You MUST process exactly one enhancement per run, because mixing enhancements into one diff violates the one-change-per-commit rule.
 
 ### 2. Create an isolated scratch worktree
