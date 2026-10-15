@@ -206,6 +206,7 @@ extern "C" {
 #endif
 
 void handle_signals(Thread* thread);
+void signal_discard_thread_start_signal(Thread* thread);
 bool is_team_signal_blocked(Team* team, int signal);
 void signal_get_user_stack(addr_t address, stack_t* stack);
 

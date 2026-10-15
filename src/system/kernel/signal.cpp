@@ -1298,6 +1298,42 @@ handle_signals(Thread* thread)
 }
 
 
+/*!	Discards the kernel-internal continue signal a new thread was started with.
+
+	A thread created via spawn_thread() starts out suspended and is made
+	runnable by resume_thread(), which sends it \c SIGNAL_CONTINUE_THREAD. That
+	signal exists only to keep an interrupted syscall from being restarted --
+	the BeOS suspend_thread()/resume_thread() contract -- but a thread that has
+	never run has no syscall to restart.
+
+	The first entry into userland does not go through thread_at_kernel_exit(),
+	so handle_signals() never gets a chance to drain the signal before the
+	thread's first instruction. Left pending it is poison: it is neither
+	catchable nor blockable, so the thread's first interruptible wait refuses to
+	block and reports \c B_INTERRUPTED, which userland sees as an EINTR that no
+	signal handler can account for.
+
+	A pending stop signal is deliberately left to resolve on its own: in that
+	case handle_signals() still has to decide between stopping and continuing,
+	and the queued continue signal is how resume_thread() wins that race.
+
+	\param thread The current thread, about to enter userland for the first
+		time.
+*/
+void
+signal_discard_thread_start_signal(Thread* thread)
+{
+	InterruptsSpinLocker locker(thread->team->signal_lock);
+
+	if ((thread->AllPendingSignals() & STOP_SIGNALS) != 0)
+		return;
+
+	thread->RemovePendingSignals(SIGNAL_TO_MASK(SIGNAL_CONTINUE_THREAD));
+	atomic_and(&thread->flags, ~THREAD_FLAGS_DONT_RESTART_SYSCALL);
+	update_thread_signals_flag(thread);
+}
+
+
 /*!	Checks whether the given signal is blocked for the given team (i.e. all of
 	its threads).
 	The caller must hold the team's lock and \c signal_lock.
