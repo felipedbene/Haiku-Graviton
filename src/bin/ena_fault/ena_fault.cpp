@@ -21,7 +21,7 @@
  *   ena_fault hold <ms>    stall the next reset for <ms>, 0 to disable
  *   ena_fault doorbells <n>  ring the transmit doorbell n extra times per frame
  *   ena_fault stats [s]    sample the counters for s seconds and report frames
- *                          per io interrupt
+ *                          per io interrupt, and the transmit ring-full stalls
  *
  * The doorbell knob is a measurement tool rather than a fault, and unlike the
  * other two it is always compiled into the driver. It prices one doorbell write
@@ -69,12 +69,19 @@ struct ena_irq_stats {
 	uint64	txFrames;
 	uint64	resetCount;
 	uint64	rearmMode;
-	/* These two trailing fields must stay in lockstep with struct ena_irq_stats
+	/* These trailing fields must stay in lockstep with struct ena_irq_stats
 	   in the driver's ena.h: ENA_IOCTL_GET_IRQ_STATS rejects the call when the
 	   caller's sizeof does not match the driver's, so a short struct here makes
 	   `ena_fault stats` fail with B_BAD_VALUE ("Invalid Argument"). */
 	uint64	rxIrqInterval;
 	uint64	intrDelayResolution;
+	/* Transmit ring-full stalls, microseconds for the two times (#582). The
+	   last is a since-boot high-water mark and not a counter, so a delta of it
+	   means only "a new worst case was set in this interval". */
+	uint64	txRingFullStalls;
+	uint64	txRingFullWaits;
+	uint64	txRingFullTime;
+	uint64	txRingFullMaxTime;
 };
 
 
@@ -88,7 +95,8 @@ usage(const char* program)
 		"       %s rearm <0|1>\n"
 		"  stats [s]     sample the driver's counters over [s] seconds "
 		"(default 10)\n"
-		"                and report frames per io interrupt\n"
+		"                and report frames per io interrupt, plus how long\n"
+		"                senders spent parked on a full transmit ring\n"
 		"  rearm <0|1>   where the io vector is re-armed: 0 in the interrupt\n"
 		"                handler (the old cadence), 1 after the drain (default)\n"
 		"  0             stop suppressing keep-alive\n"
@@ -137,6 +145,13 @@ send_value(const char* program, uint32 op, int32 value, const char* description)
 
 	Deltas rather than totals, so it can be run against a load that is already in
 	flight without counting the idle period before it.
+
+	It also reports the transmit ring-full stalls, which is the one number
+	#582 needs and the only one here that is a wall-clock duration rather than a
+	rate: time a sender spent parked in ena_send() because the submission queue
+	had no room. Judge that by this and by the peer's wall-clock throughput --
+	never by CloudWatch CPU% or `top`, which under-report by ~55x on Haiku arm64
+	(#140) and will call a stalled machine idle.
 */
 static int
 show_stats(const char* program, int seconds)
@@ -219,6 +234,41 @@ show_stats(const char* program, int seconds)
 	}
 	if (drains > 0)
 		printf("frames/drain        %.2f\n", (double)frames / drains);
+
+	/* Transmit ring-full stalls (#582). Printed after the interrupt block
+	   because it is read against it: a stall is time the *calling* thread spent
+	   parked waiting for a transmit completion, so its duration is bounded
+	   below by the interrupt cadence above, and the two have to be read
+	   together or the stall figure cannot be attributed. */
+	const uint64 stalls = after.txRingFullStalls - before.txRingFullStalls;
+	const uint64 waits = after.txRingFullWaits - before.txRingFullWaits;
+	const uint64 stallTime = after.txRingFullTime - before.txRingFullTime;
+
+	printf("tx ring-full stalls %llu", (unsigned long long)stalls);
+	if (txFrames > 0) {
+		printf(" (%.3f%% of tx frames)",
+			100.0 * (double)stalls / (double)txFrames);
+	}
+	printf("\n");
+
+	if (stalls > 0) {
+		printf("tx stalled total    %.3f ms (%.1f us mean)\n",
+			(double)stallTime / 1000.0, (double)stallTime / (double)stalls);
+		/* Near 1 means the thread genuinely slept for a completion interrupt.
+		   Much above 1 with a short mean means acquire_sem() kept returning
+		   immediately on credit banked by earlier interrupts and the wait
+		   degenerated into a poll that retakes txLock once per turn. */
+		printf("tx waits/stall      %.2f\n", (double)waits / (double)stalls);
+	}
+
+	/* A high-water mark, so it is reported absolute. The delta only says
+	   whether this interval contained the worst case so far, which is still
+	   worth knowing: a tail that never recurs is a different problem from one
+	   the current load reproduces. */
+	printf("tx worst stall      %.3f ms (since boot%s)\n",
+		(double)after.txRingFullMaxTime / 1000.0,
+		after.txRingFullMaxTime > before.txRingFullMaxTime
+			? "; a new worst case was set in this interval" : "");
 
 	return 0;
 }
