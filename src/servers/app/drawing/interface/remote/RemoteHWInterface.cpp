@@ -135,6 +135,7 @@ RemoteHWInterface::RemoteHWInterface(const char* target)
 	fClientCapabilities(0),
 	fConnectionGeneration(0),
 	fFrameSequence(0),
+	fFrameAckLocker("frame ack locker"),
 	fRepaintOwed(0),
 	fLastRepair(0),
 	fConnectionSpeed(0),
@@ -932,6 +933,53 @@ RemoteHWInterface::_EventThread()
 				break;
 			}
 
+			case RP_FRAME_ACK:
+			{
+				// The client's answer to one RP_TIER_END_FRAME. Read in full or
+				// not at all: a short read leaves the fields that did arrive
+				// paired with uninitialised ones, and a bogus held_ms is worse
+				// than a missing ack.
+				uint32 frameId = 0;
+				uint16 decodeMillis = 0;
+				uint8 queueDepth = 0;
+				uint16 heldMillis = 0;
+				message.Read(frameId);
+				message.Read(decodeMillis);
+				message.Read(queueDepth);
+				result = message.Read(heldMillis);
+				if (result != B_OK) {
+					TRACE_ERROR("failed to read frame ack\n");
+					break;
+				}
+
+				// Only a client that negotiated frame boundaries was ever told
+				// a frame_seq, so an ack from one that did not is answering a
+				// question nobody asked it. Dropped rather than fed in: the
+				// estimator would reject the unknown id anyway, and counting
+				// it as the client's fault reads better in the statistics than
+				// as the link's.
+				if ((fClientCapabilities & RP_CAP_FRAME_BOUNDARY) == 0) {
+					TRACE_ERROR("frame ack from a client that did not "
+						"negotiate RP_CAP_FRAME_BOUNDARY\n");
+					break;
+				}
+
+				BAutolock lock(fFrameAckLocker);
+				fFrameAck.NoteAck(frameId, decodeMillis, queueDepth,
+					heldMillis, system_time());
+
+				// Off by default like every TRACE here, and the only way to see
+				// the estimate at all until Tier P's pacer consumes it: the
+				// correction this whole path exists for is invisible in the
+				// bytes on the wire.
+				TRACE("frame ack %" B_PRIu32 ": link %" B_PRIdBIGTIME " us "
+					"(held %" B_PRIu16 " ms, decode %" B_PRIu16 " ms, depth %"
+					B_PRIu8 "), %" B_PRIu32 " outstanding\n", frameId,
+					fFrameAck.RoundTripTime(), heldMillis, decodeMillis,
+					queueDepth, fFrameAck.OutstandingFrames());
+				break;
+			}
+
 			case RP_UPDATE_DISPLAY_MODE:
 			{
 				int32 width, height;
@@ -1041,6 +1089,18 @@ RemoteHWInterface::_NewConnection(BNetEndpoint &endpoint)
 	// the server does not act on a feature this client never advertised.
 	fClientProtocolVersion = 0;
 	fClientCapabilities = 0;
+
+	// Nor the frames the previous client never acknowledged, or its link's
+	// round-trip time: this client has acked nothing, and the departed link is
+	// no evidence about this one. _ConnectionClosed() already did this at the
+	// other end of the disconnect, and does it early enough to matter; repeating
+	// it here is for the same reason the capabilities above are cleared twice,
+	// so that a connection accepted without that callback having run cannot
+	// start out owing the previous client's debt.
+	{
+		BAutolock lock(fFrameAckLocker);
+		fFrameAck.Reset();
+	}
 
 	// A new connection is a new generation. Published before the sender exists,
 	// so nothing can be written for this client until the event thread can
@@ -1171,6 +1231,39 @@ RemoteHWInterface::_ConnectionClosed()
 	// client's capabilities into a connection that never sent an RP_HELLO.
 	fClientProtocolVersion = 0;
 	fClientCapabilities = 0;
+
+	// And nor the frames it never acknowledged, or its link's round-trip time.
+	// This end of the connection is where it matters: it runs before the next
+	// client is accepted, and with the capabilities cleared above no frame
+	// boundary -- so no frame in flight -- can be recorded in between.
+	// _NewConnection() repeats it anyway, for a path that reaches an accept
+	// without this callback having run.
+	{
+		BAutolock lock(fFrameAckLocker);
+
+		// One line at each disconnect, like the wire writer's summary and for
+		// the same reason: until Tier P's pacer consumes the estimate, these
+		// counters are the only evidence that the client and this end disagree
+		// about what was sent, and a counter nothing ever prints is a counter
+		// nobody can act on. The link figures are this connection's, because
+		// the next line resets them; the five counts are for the life of the
+		// interface by design, so read them as running totals.
+		uint64 sent, accepted, unknown, implausible, forgotten;
+		fFrameAck.GetStatistics(sent, accepted, unknown, implausible,
+			forgotten);
+		if (sent > 0 || accepted > 0 || unknown > 0) {
+			TRACE_ALWAYS("frame acks at disconnect: link %" B_PRIdBIGTIME
+				" us (min %" B_PRIdBIGTIME " us), %" B_PRIu32 " outstanding; "
+				"totals sent %" B_PRIu64 " accepted %" B_PRIu64 " unknown %"
+				B_PRIu64 " implausible %" B_PRIu64 " forgotten %" B_PRIu64
+				"\n", fFrameAck.RoundTripTime(),
+				fFrameAck.MinimumRoundTripTime(),
+				fFrameAck.OutstandingFrames(), sent, accepted, unknown,
+				implausible, forgotten);
+		}
+
+		fFrameAck.Reset();
+	}
 
 	fSender.Unset();
 
@@ -1483,6 +1576,21 @@ RemoteHWInterface::Invalidate(const BRect& frame)
 	Start() flushes whatever was being composed, so the invalidate leaves first
 	and the boundary follows it in the same thread's stream -- which is what the
 	flow-control queue's frame model depends on.
+
+	This is also where a frame enters the ack estimator's count of frames in
+	flight, and the only place it can be: the count has to be of frames the
+	client was actually given the chance to acknowledge, so it is taken at the
+	instant a boundary is written for a client that negotiated them, not from the
+	frame sequence (which advances for every composed frame, including those
+	composed with nobody attached).
+
+	The timestamp is taken here, when the boundary is written, so the sample
+	includes however long the bytes then sat in the flow queue and the send ring.
+	That is deliberate: it is delay the client really waits through, and
+	excluding it would mean timestamping bytes in the sender thread. The lock is
+	taken after the message calls, never around them -- Start() flushes the
+	message in front of this one and a flush can block on the ring, which is not
+	something to hold a lock the event thread wants across.
 */
 void
 RemoteHWInterface::_EndFrame(RemoteMessage& message)
@@ -1490,8 +1598,12 @@ RemoteHWInterface::_EndFrame(RemoteMessage& message)
 	if ((fClientCapabilities & RP_CAP_FRAME_BOUNDARY) == 0)
 		return;
 
+	uint32 frameId = (uint32)atomic_add(&fFrameSequence, 1);
 	message.Start(RP_TIER_END_FRAME);
-	message.Add((uint32)atomic_add(&fFrameSequence, 1));
+	message.Add(frameId);
+
+	BAutolock lock(fFrameAckLocker);
+	fFrameAck.NoteFrameSent(frameId, system_time());
 }
 
 

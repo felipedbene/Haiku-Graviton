@@ -257,10 +257,11 @@ enum {
 	RP_STROKE_TRIANGLE_GRADIENT,
 	RP_STROKE_LINE_GRADIENT,
 
-	// Tier P -- per-region encoded pixels and audio. Not implemented yet (a
-	// later URP/1 milestone owns them); the values are reserved here the same
-	// way M0 reserved the broker's RP_AUTHENTICATE pair before app_server used
-	// it, so nothing else claims the block.
+	// Tier P -- per-region encoded pixels and audio. The encoder is not
+	// implemented yet (a later URP/1 milestone owns it), so RP_TIER_BEGIN_FRAME,
+	// RP_CODEC_TILE and RP_AUDIO_PACKET are reserved values with no payload
+	// defined, the same way M0 reserved the broker's RP_AUTHENTICATE pair before
+	// app_server used it, so nothing else claims the block.
 	//
 	// They are reserved *now*, ahead of their implementation, because
 	// RemoteWireWriter::_IsPreCompressed() has to name them: an
@@ -270,6 +271,35 @@ enum {
 	// compressor's window has moved on by the time its output could be
 	// judged), so the alternative to reserving them is a rule that silently
 	// fails to apply on the day Tier P lands.
+	//
+	// Two of the block are live ahead of the encoder, because neither needs it.
+	// RP_TIER_END_FRAME (payload: uint32 frame_seq) is the stated frame boundary
+	// RP_CAP_FRAME_BOUNDARY negotiates, emitted for every composed frame; see
+	// the capability above.
+	//
+	// RP_FRAME_ACK is its answer, client -> server, one per presented frame:
+	//
+	//     uint32 frame_seq     the RP_TIER_END_FRAME sequence being answered
+	//     uint16 decode_ms     client decode/paint cost for that frame
+	//     uint8  queue_depth   frames the client still has queued undisplayed
+	//     uint16 held_ms       the whole client-side residency: from the frame's
+	//                          last byte arriving to this ack reaching the
+	//                          socket, decode_ms included
+	//
+	// Packed in that order, host byte order, like every other RP payload.
+	// held_ms is last so the first three fields keep the offsets the unified
+	// design published for them.
+	//
+	// held_ms exists because an ack timed by the server alone measures the
+	// client's scheduler as much as the link: a client in a backgrounded
+	// browser tab has its timers clamped to one second and would report a
+	// one-second LAN. The server subtracts it (and only it -- decode_ms is
+	// inside it) to recover the link delay; see RemoteAckEstimator.
+	//
+	// A client MUST NOT send this unless it negotiated RP_CAP_FRAME_BOUNDARY:
+	// without that bit it is never told a frame_seq, so it has nothing to
+	// answer about, and the server discards an ack naming a frame it did not
+	// send.
 	RP_TIER_BEGIN_FRAME = 280,
 	RP_CODEC_TILE,
 	RP_TIER_END_FRAME,

@@ -10,6 +10,7 @@
 
 #include "HWInterface.h"
 #include "NetReceiver.h"
+#include "RemoteAckEstimator.h"
 #include "RemoteWireWriter.h"
 
 #include <AutoDeleter.h>
@@ -189,6 +190,19 @@ static	void						_ConnectionClosedCallback(void *cookie);
 		// back (Tier P's RP_FRAME_ACK), and reusing numbers across a reconnect
 		// would make two different frames answer to the same name.
 		int32						fFrameSequence;
+
+		// What the client's RP_FRAME_ACKs say about the link. Frames are noted
+		// as sent from whichever drawing thread composed them and acks arrive on
+		// the event thread, so unlike the flow-control queue there is no
+		// existing lock that already serialises both sides and this one has its
+		// own. Uncontended once per composed frame; the estimator itself does no
+		// allocation and no I/O under it.
+		//
+		// Nothing consumes the estimate yet: the pacer that would act on it
+		// belongs to Tier P's encoder. It is measured now because the
+		// measurement is what the pacer will be wrong without.
+		RemoteAckEstimator			fFrameAck;
+		BLocker						fFrameAckLocker;
 
 		// Set when the flow-control queue had to discard content it could not
 		// prove would be redrawn. The drawing thread that notices only sets
