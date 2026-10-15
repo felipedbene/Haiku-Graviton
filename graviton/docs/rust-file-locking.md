@@ -7,7 +7,7 @@ bump that is **OWED** (needs a `rust_bin` re-bake); interim serialisation locks 
 ## TL;DR — what to do
 
 1. **Builders:** nothing to do if you only ever run one `cargo` at a time per box.
-   If you run more than one, they corrupt each other. The two drivers in this repo
+   If you run more than one, they corrupt each other. The four drivers in this repo
    that could overlap now take a lock themselves (see *Interim mitigation* below).
 2. **Real fix:** re-bake `rust_bin` from an upstream nightly **≥ `nightly-2026-10-13`**.
    The fix is already upstream; DeBeOS does not need to carry a patch. See
@@ -60,8 +60,8 @@ in this tree:
 | Constants + prototype | `headers/posix/sys/file.h:13-23` |
 | Userland wrapper | `src/system/libroot/posix/sys/flock.c:16-29` |
 | Syscall | `headers/private/system/syscalls.h:282` (`_kern_flock`) |
-| Kernel entry | `src/system/kernel/fs/vfs.cpp:9451-9499` (`_user_flock`) |
-| Lock machinery | `src/system/kernel/fs/vfs.cpp:1803-1885` (`acquire_advisory_lock`), `:1689-1791` (`release_advisory_lock`), `:181-214` (structs) |
+| Kernel entry | `src/system/kernel/fs/vfs.cpp:9454-9502` (`_user_flock`) |
+| Lock machinery | `src/system/kernel/fs/vfs.cpp:1806-1888` (`acquire_advisory_lock`), `:1689-1794` (`release_advisory_lock`), `:181-214` (structs) |
 
 `LOCK_SH/EX/NB/UN` are `0x01/0x02/0x04/0x08` — identical to Linux and the BSDs, so
 `libc`'s constants for the Haiku target line up.
@@ -71,13 +71,13 @@ What std's flock-based implementation assumes, and what it gets:
 | std assumes | DeBeOS kernel | |
 | --- | --- | --- |
 | `flock()` is real | `_kern_flock` → `_user_flock` | OK |
-| `LOCK_SH` is genuinely shared | `advisory_lock::shared`, checked at `vfs.cpp:1838` | OK |
-| `LOCK_NB` conflict → `EWOULDBLOCK`/`EAGAIN` | `B_WOULD_BLOCK` at `vfs.cpp:1849-1854`; `EAGAIN == EWOULDBLOCK == B_TO_POSIX_ERROR(B_WOULD_BLOCK)` | OK — so `try_lock` correctly yields `WouldBlock`, not an error |
-| BSD per-open-file ownership; `dup`/`fork` share; released on last close | owner key is `struct file_descriptor*` (`vfs.cpp:1811`); release gated on `open_count` reaching 0 (`fd.cpp:230` → `file_close`, `vfs.cpp:5786-5807`) | OK |
-| `LOCK_EX` on an `O_RDONLY` fd succeeds | no mode check in the flock path; the check exists only for `fcntl` (`vfs.cpp:6527-6532`) | OK |
+| `LOCK_SH` is genuinely shared | `advisory_lock::shared`, checked at `vfs.cpp:1841` | OK |
+| `LOCK_NB` conflict → `EWOULDBLOCK`/`EAGAIN` | `B_WOULD_BLOCK` at `vfs.cpp:1852-1857`; `EAGAIN == EWOULDBLOCK == B_TO_POSIX_ERROR(B_WOULD_BLOCK)` | OK — so `try_lock` correctly yields `WouldBlock`, not an error |
+| BSD per-open-file ownership; `dup`/`fork` share; released on last close | owner key is `struct file_descriptor*` (`vfs.cpp:1814`); release gated on `open_count` reaching 0 (`fd.cpp:230` → `file_close`, `vfs.cpp:5789-5810`) | OK |
+| `LOCK_EX` on an `O_RDONLY` fd succeeds | no mode check in the flock path; the check exists only for `fcntl` (`vfs.cpp:6530-6535`) | OK |
 | advisory, not mandatory | advisory only | OK |
 
-`vfs.cpp:1794-1802` states the intent explicitly: "If `descriptor` is NULL, POSIX
+`vfs.cpp:1797-1805` states the intent explicitly: "If `descriptor` is NULL, POSIX
 semantics are used for this lock. Otherwise, BSD `flock()` semantics are used".
 
 ### Semantic mismatches worth knowing
@@ -87,9 +87,9 @@ released on one fd — but they are real and are why upstream did *not* simply t
 Haiku like Linux in the test suite.
 
 1. **`LOCK_EX` → `LOCK_SH` downgrade is a silent no-op.** `acquire_advisory_lock`
-   skips same-owner locks (`vfs.cpp:1831-1844`, with the standing
+   skips same-owner locks (`vfs.cpp:1834-1847`, with the standing
    `// TODO: locks from the same team might be joinable!`) and then unconditionally
-   appends a *new* record (`:1867-1881`). There is no merge and no conversion, so the
+   appends a *new* record (`:1870-1884`). There is no merge and no conversion, so the
    exclusive record survives a downgrade and other processes stay blocked.
    Upstream's own test change reflects this: in `library/std/src/fs/tests.rs` the
    `file_lock_double` case now reads
@@ -102,21 +102,27 @@ Haiku like Linux in the test suite.
    lock. BSD/Linux would treat that as the same holder and succeed.
 3. **Repeated `lock()` without `unlock()` leaks one `advisory_lock` per call.**
    `LOCK_UN` does clean all of them up.
-4. **No deadlock detection** — `vfs.cpp:1814` `// TODO: do deadlock detection!`. A
+4. **No deadlock detection** — `vfs.cpp:1817` `// TODO: do deadlock detection!`. A
    blocking `File::lock` cycle hangs until a signal produces `EINTR`, which std
    surfaces as `ErrorKind::Interrupted` and does *not* retry.
 5. **`EINVAL` for non-regular-file fds.** `_user_flock` rejects any fd whose
-   `descriptor->ops != &sFileOps` (`vfs.cpp:9471`), so `flock()` on a directory,
+   `descriptor->ops != &sFileOps` (`vfs.cpp:9474`), so `flock()` on a directory,
    pipe or socket fails where Linux allows it.
 6. **flock and fcntl locks share one per-vnode list**, so they conflict with each
    other across processes — stricter than Linux, where the two namespaces are
    independent.
 
-Unrelated bug noticed in the same code, recorded here so it is not lost:
-`release_advisory_lock` overwrites `lock->end` at `vfs.cpp:1738` *before* copying it
-into the split-off tail record at `:1745`, so an `fcntl` middle-range unlock loses
-the tail region. Harmless for `flock()`, which only ever locks `[0, OFF_MAX)` and
-never splits.
+Unrelated bug noticed in the same code, now **fixed** in this tree:
+`release_advisory_lock` overwrote `lock->end` *before* copying it into the split-off
+tail record, so an `fcntl` middle-range unlock of a lock that extended past both ends
+of the released range produced a tail record of `[l_start + l_len, l_start - 1]` — an
+inverted, never-matching range. The effect was that the tail region silently lost its
+lock, and the phantom record stayed on the vnode until a whole-file release swept it.
+The truncation now happens after the copy (`vfs.cpp`, `release_advisory_lock`, the
+"divide the lock into two locks" branch). This was never reachable from `flock()`,
+which only ever locks `[0, OFF_MAX)` and so never splits — so it is **not** a cause of
+#638. It is reachable from `fcntl(F_SETLK, F_UNLCK)` byte-range users, SQLite being the
+obvious one.
 
 ## Upstream state: already fixed — bump, do not patch
 
@@ -287,8 +293,8 @@ already-corrupt rlib; it only avoids writing a new one.
 
 ## Interim mitigation landed in this tree
 
-Two drivers on a builder could overlap. Both now take an advisory lock themselves,
-keyed on `$CARGO_HOME`, so they queue instead of racing:
+Every cargo driver on a builder could overlap. All four now take an advisory lock
+themselves, keyed on `$CARGO_HOME`, so they queue or abort instead of racing:
 
 - `graviton/scripts/haiku-crate-to-hpkg` — the crate→hpkg packager. Its `cargo install`
   uses a fresh per-invocation `--root`, so two runs do not share a *target* dir, but
@@ -297,10 +303,18 @@ keyed on `$CARGO_HOME`, so they queue instead of racing:
   fixed log and builds into a fixed `~/uv/target`, with no lock and no pidfile. A
   55-90 minute detached build that looks stalled is routinely re-launched, which put
   two cargos on one target dir. This was the sharpest live exposure in the repo.
+- `graviton/ladybird/scripts/run-build.sh` — `ninja WebContent WebDriver -j32` in the
+  fixed `~/lb/build-wave2`. Ladybird's depth-1 `cargo` job pool makes this safe
+  *within* one ninja, but a job pool binds only inside one ninja process, so a
+  re-launched "stalled" build is the same hazard as `apply.sh`.
+- `graviton/ladybird/scripts/run-craneliftB.sh` — the track-B driver. Its own build dir
+  gives it a distinct target dir, but it shares `$CARGO_HOME` with `run-build.sh`, so
+  the two must not overlap either.
 
-Both use the same `mkdir`-based lock (atomic on BFS), honour `CARGO_BUILD_LOCK_WAIT`
-(seconds, default 7200; `0` = fail immediately), and take over a lock whose owning pid
-is gone.
+All use the same `mkdir`-based lock (atomic on BFS) and take over a lock whose owning
+pid is gone. The two packagers wait, honouring `CARGO_BUILD_LOCK_WAIT` (seconds,
+default 7200; `0` = fail immediately); the two Ladybird drivers abort immediately
+instead, since a second copy of a 1-2 hour detached build is never what was wanted.
 
 ## Exposure audit — what is *not* at risk
 
@@ -318,7 +332,10 @@ Recorded so the next person does not re-derive it.
   (the depth-1 `console` pool). **No DeBeOS patch to `rust_crate.cmake` is needed, and
   adding a second job pool would be redundant.**
   A job pool only binds *within* one ninja process, so two concurrent `ninja` runs in
-  the *same* build tree would still race on the shared target dir. Do not do that.
+  the *same* build tree would still race on the shared target dir. That is now
+  prevented for the repo's own drivers by the `$CARGO_HOME` lock in
+  `run-build.sh`/`run-craneliftB.sh` (see *Interim mitigation*); a hand-typed `ninja`
+  still bypasses it, so do not do that.
 - **`build-wave2` and `build-craneliftB` as parallel tracks** use different
   `CMAKE_BINARY_DIR`s and therefore different target dirs, but they share `$CARGO_HOME`.
   Run them sequentially, or give each its own `CARGO_HOME`.
@@ -397,7 +414,13 @@ was run):**
   toolchain bump.
 - A `rust_bin` re-baked from `nightly-2026-10-13`+, and confirmation that
   `File::lock` then blocks rather than returning `Unsupported`.
-- Smoke-testing the two `mkdir`-lock mitigations on a real builder, including the
-  stale-pid takeover path.
+- Smoke-testing the four `mkdir`-lock mitigations on a real builder. The guard's
+  three paths (acquire/release, abort while held, stale-pid takeover) were exercised
+  on a Linux desk against the block as shipped, but `mkdir` atomicity *on BFS* and
+  `kill -0` against a Haiku pid are the parts that only a builder can confirm.
 - Whether a Haiku `cargo` build of anything non-trivial still hits the separate
   parallel-rustc/BFS corruption once cargo-versus-cargo races are excluded.
+- A runtime check of the fixed `release_advisory_lock` split path — that an `fcntl`
+  middle-range unlock now leaves a head `[S, l_start - 1]` *and* a tail
+  `[l_start + l_len, E]`. The fix is build-verified only; it is not on any `flock()`
+  path, so it cannot be exercised by the cargo reproduction above.
