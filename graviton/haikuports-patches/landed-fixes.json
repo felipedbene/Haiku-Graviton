@@ -152,7 +152,7 @@
       ]
     },
     "35": {
-      "pr": "pending",
+      "pr": "https://github.com/felipedbene/Haiku-Graviton/pull/703",
       "commit": null,
       "coverage": [
         "bebuilder",
