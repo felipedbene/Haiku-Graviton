@@ -35,8 +35,8 @@ BUILD_REQUIRES="
 # command not found` / `make[2]: *** [Makefile:851: refcard.ps] Error 1`
 # AFTER a fully successful compile and link. Declaring them makes haikuporter
 # fail fast and name the real missing dependency instead. See #592 for the
-# class-35 and Class-6 triage, and the texlive-on-arm64 blocker issue for why
-# `cmd:tex` is not yet satisfiable in the DeBeOS pool.
+# class-35 and Class-6 triage, and #702 for why `cmd:tex` is not yet
+# satisfiable in the DeBeOS pool (no texlive built for arm64).
 BUILD_PREREQUIRES="
 	cmd:gcc
 	cmd:ld

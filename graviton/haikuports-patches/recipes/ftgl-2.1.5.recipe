@@ -94,7 +94,8 @@ BUILD()
 	# on a little-endian LP64 target. FTGL's own sources never read these
 	# macros (so FTGL itself is not miscompiled), but tecmake does -- they pick
 	# its `be32`/`le64` Lua-object subdirectory and `_be32`/`_le64` suffixes --
-	# and any tecmake port that consults them would be wrong on Graviton.
+	# and any tecmake port that consults them would be wrong on Graviton
+	# (filed as #701 -- the class fix belongs in tecmake, not here).
 	# State the truth instead of inheriting the fallback. These are plain `=`
 	# assignments in tecmake.mak, and a `make VAR=value` command-line variable
 	# overrides a makefile `=` and propagates to the recursive sub-make, so

@@ -1454,7 +1454,8 @@ headers, or compiled files the real build never compiles** — which is the gene
 
 ### Two further arm64 defects found while doing this
 
-Neither is class 35; both were only visible on a native build.
+Neither is class 35; both were only visible on a native build, and both are filed
+(**#701**, **#702**).
 
 - **tecmake misdetects word size and byte order on Haiku arm64.** `tecmake.mak` derives
   `TEC_SYSARCH` from `uname -p`, which on Haiku returns the literal string **`other`**.
@@ -1466,14 +1467,17 @@ Neither is class 35; both were only visible on a native build.
   suffixes) and any tecmake port that consults them is wrong on Graviton. The `ftgl`
   recipe now passes `TEC_WORDSIZE=TEC_64 TEC_BYTEORDER=TEC_LITTLEENDIAN` on the `make`
   command line — which, unlike the `CXXFLAGS` case below, **does** override a makefile
-  `=` and propagates to the recursive sub-make.
+  `=` and propagates to the recursive sub-make. Filed as **#701**; the class fix belongs
+  in tecmake's own architecture detection (prefer `uname -m`, which says `arm64`).
 - **`gri` needs a real TeX and the recipe never said so.** `doc/Makefile:893` has
   `all-local: refcard.ps cmdrefcard.ps`, built from `refcard.tex`/`cmdrefcard.tex` by
   `$(TEX)` + `dvips` (`:850-856`). Neither `.ps` ships in the tarball, and
   `install-data-local` installs both, so they cannot be skipped without cutting
   installed documentation. The recipe now declares `cmd:tex` + `cmd:dvips`, so
   haikuporter fails fast naming the real dependency instead of dying after a fully
-  successful compile at `../missing: line 46: tex: command not found`.
+  successful compile at `../missing: line 46: tex: command not found`. Nothing in the
+  DeBeOS pool provides `cmd:tex` for arm64 yet — filed as **#702**, and that is the sole
+  thing between `gri` and RC=0.
 
 **Why the `CXXFLAGS` unblock is a fiction, port by port** — this is the part worth reading
 before writing any `-fpermissive` recipe (and it answers #592's third "done when"):
