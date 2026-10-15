@@ -1,0 +1,67 @@
+SUMMARY="A graphics programming language"
+DESCRIPTION="Gri is a language for scientific graphics programming. The word \
+'language' is important: Gri is command-driven, not point/click. Gri can make \
+x-y graphs, contour graphs, and image graphs, in PostScript and (someday) SVG \
+formats. Control is provided over all aspects of drawing, e.g. line widths, \
+colors, and fonts. A TeX-like syntax provides common mathematical symbols."
+HOMEPAGE="http://gri.sourceforge.net/"
+COPYRIGHT="2002-2011 Dan Kelley and Peter Galbraith"
+LICENSE="GNU GPL v1"
+REVISION="2"
+SOURCE_URI="http://downloads.sourceforge.net/project/gri/gri/2.12.23/gri-2.12.23.tar.gz?r=http%3A%2F%2Fsourceforge.net%2Fprojects%2Fgri%2Ffiles%2F&ts=1356118794&use_mirror=ignum"
+CHECKSUM_SHA256="a24e703f30250ed705c0a242aa59a24748259ea7355fca52152f367f45bfd2e7"
+
+ARCHITECTURES="?all x86_gcc2"
+
+PROVIDES="
+	gri = $portVersion
+	"
+REQUIRES="
+	haiku
+	"
+
+BUILD_REQUIRES="
+	haiku_devel
+	"
+BUILD_PREREQUIRES="
+	cmd:gcc
+	cmd:ld
+	cmd:make
+	cmd:perl
+	devel:libreadline
+	"
+
+BUILD()
+{
+	# Class 6 (#592): gri's bundled config.guess is timestamp='2009-12-30' and
+	# contains no aarch64 or arm64 case at all, so ./configure aborts with
+	# "cannot guess build type; you must specify one" before compiling anything.
+	# runConfigure supplies --host but not --build, and autoconf derives build
+	# from config.guess regardless. The bundled config.sub (2010-01-22) does
+	# accept aarch64-unknown-haiku, so replacing just config.guess is enough --
+	# the same house fix as llvm12/llvm21/haiku_format/keystone, scoped to arm64
+	# so other architectures keep the vendored script.
+	if [ "$effectiveTargetArchitecture" = arm64 ]; then
+		printf '#!/bin/sh\necho aarch64-unknown-haiku\n' > config.guess
+		chmod +x config.guess
+	fi
+
+	# Class 35 (#592): `def_word[0] = '\0'` assigns a char to a char*, which
+	# gcc 13 reports as `error: invalid conversion from 'char' to 'char*'
+	# [-fpermissive]`. def_word is `char *def_word[NCHAR]`, so the null POINTER
+	# is what was meant -- chop_into_words() fills the array and the assignment
+	# only pre-clears the first slot. Fixed at the call site rather than with
+	# -fpermissive, because that flag also demotes `cast ... loses precision`,
+	# which on LP64 is a silent pointer truncation (#592, and see the playbook's
+	# class 35 for the measurement: this port emits no loses-precision at all).
+	sed -i "s|^\tdef_word\[0\] = '\\\\0';$|\tdef_word[0] = NULL;|" src/query.cc
+
+	runConfigure ./configure --enable-shared
+	make $jobArgs
+}
+
+INSTALL()
+{
+	make install
+	addAppsDeskbarSymlink $appsDir/Gri
+}
