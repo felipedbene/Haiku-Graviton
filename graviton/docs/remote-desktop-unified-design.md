@@ -174,9 +174,12 @@ timestamp** (u64 µs, server monotonic, epoch = `RP_HELLO`):
 | `RP_FRAME_ACK` | client→server pacing | `frame_seq:u32`, `decode_ms:u16`, `queue_depth:u8` |
 
 Codec ids: `0` raw BGRA, `1` JPEG (still/near-lossless), `2` x264, `3` x265,
-`4` AV1, plus Opus for audio. Codec is negotiated and may differ **per tile** —
-the proven game-streaming/DCV pattern: JPEG or near-lossless for static tiles,
-`x264 --tune zerolatency --intra-refresh` only on moving tiles.
+`4` AV1, `5` VP8, `6` VP9, plus Opus for audio. Ids `2`/`3` are reachable only
+through the optional out-of-process helper (§6); **`6` VP9 — with `5` VP8 as the
+compatibility fallback — is the default moving-tile codec**, since it is the one
+that may be linked into the MIT base image (#550). Codec is negotiated and may
+differ **per tile** — the proven game-streaming/DCV pattern: JPEG or near-lossless
+for static tiles, zerolatency + intra-refresh video only on moving tiles.
 
 **Damage router (server-side).** For each damage rect the back end keeps a churn
 score (updates/s × area). Below threshold → Tier V (crisp text, cheap idle).
@@ -263,18 +266,69 @@ client rasterises). Levers below are ours, measured here unless noted.
   the `libjpeg-arm64` finding: building with `-DCMAKE_SYSTEM_PROCESSOR=aarch64`
   turns NEON *on* (it ships off by default), so the still path is NEON without new
   code.
-- **NEON `libx264` linked directly** (no ffmpeg needed) for moving tiles,
-  `--tune zerolatency --intra-refresh` with a VBV cap; ~0.3–0.7 of one core for
-  1080p30 ultrafast. **Intra-refresh, not periodic keyframes** — a keyframe spike
-  through a small ring and an SSH tunnel is a visible hitch.
+- **Decision (#550): the moving-tile encoder is NEON `libvpx` (VP8/VP9), linked
+  directly into `app_server`, and the out-of-process helper is no longer
+  mandatory.** It becomes an *option*, required only if `x264`/`x265` are ever
+  actually wanted. The **licence, not the architecture, was the entire reason for
+  the helper**: `app_server` is MIT and ships in the base image, so the thing being
+  avoided is an in-image **GPLv2** encoder. `libvpx` is BSD (3-clause) and carries
+  no such constraint, so it links in directly and the pipe simply disappears.
+  Still tiles keep `libjpeg-turbo`; `--tune zerolatency`-equivalent settings with a
+  VBV cap and **intra-refresh rather than periodic keyframes** carry over unchanged
+  from the x264 plan (a keyframe spike through a small ring and an SSH tunnel is a
+  visible hitch, whichever codec produces it).
+
+  Consequences, plainly:
+  - **Cost removed.** No second process in the frame path: no frame-sized IPC copy
+    or pipe round-trip per tile in the latency budget (§7), no helper lifetime,
+    restart or back-pressure semantics to specify, and no encoder state split
+    across a process boundary to re-establish on reconnect (§3).
+  - **Cost accepted.** A codec crash now lands *inside* the display server instead
+    of behind a pipe. That isolation was a real secondary benefit of the helper and
+    is being given up knowingly — it is bought back by treating encode input as
+    untrusted and keeping the encoder off the drawing thread, not by a process
+    boundary.
+  - **VP8/VP9, not H.264.** A client that can only decode H.264 is served by Tier V
+    or by the optional helper, never by the default path.
+  - **`x264`/`x265` remain reachable but GPL-contained** — behind the helper only.
+    Nothing GPLv2 is ever linked into `app_server`.
+- **`openh264` is deliberately *not* the permissive choice.** It is BSD-licensed
+  *source*, but Cisco's H.264 patent-royalty shield covers only Cisco's own
+  prebuilt binary, and a self-built `openh264` does not inherit it. DeBeOS builds
+  all of its own arm64 packages, so a self-built one is the only kind available
+  here. `libvpx` has no equivalent asterisk, which is why it wins over the other
+  nominally-permissive H.264 option.
+- **AV1 stays decode/archival only** — SVT-AV1 encode is not interactive on
+  Neoverse cores (§9). `dav1d`/`svt_av13` are present for decode, not for the live
+  encode path.
+- **Availability is already settled — the part most likely to have blocked this.**
+  Every candidate is built *and published* for arm64 in the live DeBeOS repo
+  (`packages.debene.dev/arm64`, served from the `debeos-repo-green` pool):
+  `libvpx1.16-1.16.0-3` **with its `libvpx1.16_devel` sub-package**, alongside
+  `x264`, `x265`, `openh264`, `aom`, `dav1d` and `svt_av13` — the codec tier built
+  under #337 (`1bd7a62634`). `libvpx1.16`'s NEON is *verified, not assumed*:
+  `graviton/haikuports-patches/recipes/libvpx1.16-1.16.0.recipe:95-108` forces
+  `--target=arm64-linux-gcc --disable-runtime-cpu-detect` precisely because libvpx
+  otherwise configures itself as `generic-gnu` and the resulting `libvpx.so`
+  carried **zero** `*_neon` symbols.
+- **What shipping it still needs is a pin, not a port.** `libvpx1.16` and
+  `libvpx1.16_devel` are *installable* from the repo but are **not in the base
+  image**: `build/jam/repositories/HaikuPortsLocal/arm64` pins `libjpeg_turbo`
+  (`:54-55`) and no video codec at all. Linking `app_server` against `libvpx` means
+  adding those two packages to that list and to the `<hg-pool>` set in
+  `graviton/ssh/UserBuildConfig`, exactly as `libjpeg_turbo-3.1.4.1-1` is handled
+  there (`:293`).
 - **`-mcpu=neoverse-*` / LSE atomics baseline** (merged, `20bf8f2711`) is the
   general compute lever the encoder inherits; SVE is now safe at EL0 (#88) but
   must be vector-length-agnostic and per-generation (the `_g3`/`_g4` flavour
   pattern), so encode kernels either stay NEON or ship per-generation.
-- **Out-of-process encoder helper**, mandatory: `x264`/`x265` are GPLv2 and
-  `app_server` is MIT and ships in the base image, so the codec lives behind a
-  pipe (which also isolates a codec crash from the display server). The in-image
-  default codec is permissively licensed (`libvpx`/SVT-AV1/`dav1d`/`openh264`).
+- **This decision is recorded ahead of its implementation.** Tier P does not exist
+  yet: `src/servers/app/drawing/interface/remote/RemoteProtocol.h:259-283` reserves
+  `RP_TIER_BEGIN_FRAME`, `RP_CODEC_TILE`, `RP_TIER_END_FRAME`, `RP_AUDIO_PACKET`
+  and `RP_FRAME_ACK` and marks the block "Not implemented yet". Nothing above
+  claims an encoder has been wired up or measured. It fixes *which* encoder the
+  milestone that does so will reach for, and takes the helper off that milestone's
+  critical path before anyone builds it.
 
 ### Transport
 - **`TCP_NODELAY`** — never set today (only `SO_REUSEADDR` exists anywhere in the
@@ -390,9 +444,11 @@ conformance case), and the inclusive-edge `BRect` off-by-one (`§2`).
   ACKs), so #61 mostly bounds any inbound bulk and the media-channel feedback loop
   rather than the outbound video — but it is a real cap on symmetric or
   clipboard/file-heavy sessions and is out of scope here.
-- **GPLv2 codec licensing** forces the out-of-process encoder helper and a
-  permissive in-image default (`§6`); "we have x264" and "app_server can link x264
-  in the shipping image" are different statements.
+- **GPLv2 codec licensing** still means "we have x264" and "`app_server` can link
+  x264 in the shipping image" are different statements — but as of #550 it no
+  longer *forces* an out-of-process helper. Choosing a BSD encoder (`libvpx`,
+  already built and published for arm64) satisfies the licence directly, so the
+  helper is retained only as the optional escape hatch for x264/x265 (`§6`).
 - **Multi-monitor is blocked in `app_server` itself** (`VirtualScreen.cpp`
   `RemoveScreen` returns `B_ERROR`) and virtio-gpu hardcodes scanout 0 — single
   head only.
@@ -435,10 +491,12 @@ capability-gated).
   `RP_RESYNC`). Replaces "discard when nobody listens" with a policy. Both halves
   are delivered: the measurement gate in `remote-desktop-m2-pricing.md`, the flow
   control in `remote-desktop-m2-flow-control.md`.
-- **M3 — first full-motion, via Route 2.** Host-side NEON `libx264` on the metal
+- **M3 — first full-motion, via Route 2.** Host-side NEON encode on the metal host
   feeds Tier P over the media channel; the fastest path to moving pixels because
   it needs no in-guest encoder and is already proven to paint. Target ~45–60 ms
-  glass-to-glass nearby.
+  glass-to-glass nearby. This stage may use `libx264`: the encoder runs on the
+  **Linux metal host**, not inside the MIT DeBeOS image, so the §6/#550 in-image
+  licence constraint does not reach it. M5's *in-guest* encoder is `libvpx`.
 - **M4 — portable capture, in-guest.** Server-side rasterising `BitmapHWInterface`
   (#95, R8) as a third `HWInterface`: in-guest screenshots (impossible today),
   headless GUI verification in CI, a real damage source, and Tier P on **any**
@@ -456,8 +514,10 @@ capability-gated).
 
 - `archive/remote-desktop-options.md` (#95, Route 1): its Option A "fix the native
   protocol" *is* M0 here; its Option B offscreen `BitmapHWInterface` is M4; its
-  Option D libx264 pipeline is the encode lever of M3/M5. URP/1 is the protocol
-  those options were missing.
+  Option D libx264 pipeline is the encode lever of M3/M5 — though per #550 the
+  in-guest codec is now `libvpx`, and Option D's x264 survives only host-side (M3)
+  or behind the optional helper (`§6`). URP/1 is the protocol those options were
+  missing.
 - `vfb-route2-streaming.md` (#118, Route 2): its Stage-1 QEMU-VNC streaming is the
   measured latency anchor (`§7`) and its `.metal` capture is the M3 pixel source;
   its blocking unknown is M0's parallel gate.

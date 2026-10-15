@@ -1,17 +1,22 @@
 # Rust file locking on DeBeOS: `File::lock` is a silent no-op, and cargo believes it
 
-DeBeOS #638. Status: root cause **VERIFIED**; the real fix is an upstream toolchain
-bump that is **OWED** (needs a `rust_bin` re-bake); interim serialisation locks are
-**landed** in this tree.
+DeBeOS #638. Status: root cause **VERIFIED**; the upstream code fix is **merged**, but
+landing it here is **OWED** and needs a from-source `rust_bin` re-bake (verified
+2026-10-15: there is no prebuilt arm64-Haiku toolchain to bump a pin to, because
+upstream neither publishes Haiku artifacts nor even defines the `aarch64-unknown-haiku`
+target); interim serialisation locks are **landed** in this tree.
 
 ## TL;DR — what to do
 
 1. **Builders:** nothing to do if you only ever run one `cargo` at a time per box.
    If you run more than one, they corrupt each other. The four drivers in this repo
    that could overlap now take a lock themselves (see *Interim mitigation* below).
-2. **Real fix:** re-bake `rust_bin` from an upstream nightly **≥ `nightly-2026-10-13`**.
-   The fix is already upstream; DeBeOS does not need to carry a patch. See
-   *Upstream state*.
+2. **Real fix:** re-bake `rust_bin` at an upstream base commit **≥ `nightly-2026-10-13`**.
+   The fix is already upstream; DeBeOS does not need to carry a patch. But this is
+   **not a pin bump and there is nothing to download** — upstream publishes no Rust
+   artifact for any Haiku target, and `aarch64-unknown-haiku` is not even an upstream
+   rustc target. It is a from-source rebuild, re-running DeBeOS's own bake at a newer
+   base commit. See *Upstream state* and *What a re-bake requires*.
 3. **Do not** set a global `build.target-dir` / `CARGO_TARGET_DIR` in
    `graviton/ssh/files/cargo-config.toml`. Today every cargo on the box gets its own
    default target dir; a global one would merge them all into a single *unlocked*
@@ -148,18 +153,81 @@ each revision and counting `target_os = "haiku"` inside the lock region):
 So **`nightly-2026-10-13` is the first good nightly.** A `rust_bin` built from that
 or newer needs no DeBeOS patch at all.
 
-### What a bump requires
+### What a re-bake requires
 
-`rust_bin` is a prebuilt, binary-only artifact; see *Toolchain provenance*. Bumping it
-means rebuilding/repacking the hpkg out of band and then updating:
+**Checked 2026-10-15. There is no upstream artifact to fetch, so "bump the pin" is not
+an available move.** Two independent verifications:
 
-- the pinned filename at `graviton/ssh/UserBuildConfig:317`
-  (`rust_bin-1.100.0~nightly_787af2b8c-2-arm64.hpkg`),
-- the published DeBeOS repo via `haiku-repo-add` → `haiku-repo-promote-green`
-  (revision bump, cf. `haiku-repo-add:509`),
-- the `s3://<workBucket>/hpkg-pool/` prefix, which
-  `graviton/pipeline/lib/haiku-graviton-pipeline-stack.ts:206-210` notes is
-  "Populated out-of-band".
+- **Upstream publishes nothing for Haiku, on any architecture.** The nightly channel
+  manifest `https://static.rust-lang.org/dist/2026-10-13/channel-rust-nightly.toml`
+  (923,466 bytes, `date = "2026-10-13"`) contains **zero** occurrences of `haiku` —
+  no `rustc`, no `rust-std`, for `i686`/`x86_64` either. Haiku is tier 3 and tier-3
+  targets are not distributed. That same manifest pins
+  `git_commit_hash = e9bbadf6824e65b3583c2dda3a0926ec76df9143`, confirming
+  `nightly-2026-10-13` is indeed the first nightly carrying rust-lang/rust#164031
+  (merged 2026-10-12, title "Adding File Lock Support for Haiku").
+- **`aarch64-unknown-haiku` is not an upstream rustc target at all.** Upstream
+  `compiler/rustc_target/src/spec/mod.rs` on `master` today registers only
+  `("i686-unknown-haiku", …)` and `("x86_64-unknown-haiku", …)` (`:1415-1416`). The
+  arm64 target exists **solely** because DeBeOS added it.
+
+So the shipped `rust_bin` is a **DeBeOS-built artifact, cross-compiled from the Linux
+desk**, and its inputs are preserved out of band in
+`s3://haiku-graviton-668984504585-us-west-2/rust/` (all dated 2026-08-26):
+
+| key | what it is |
+|---|---|
+| `recipe/rust-haiku-recipe.tar.gz` | the whole port, 6 files (below) |
+| `recipe/rust-haiku-sysroot.tar.gz` | the link sysroot the wrappers point `-L` at |
+| `dist/rustc-nightly-aarch64-unknown-haiku.tar.{xz,gz}` | built rustc for the target |
+| `dist/rust-std-nightly-aarch64-unknown-haiku.tar.{xz,gz}` | built std for the target |
+| `hpkg/rust_bin-1.100.0~nightly_787af2b8c-{1,2}-arm64.hpkg` | the packed result; `-2` is what is pinned |
+| `cargo-dyncurl/cargo-1.100.0-dyncurl-arm64` | cargo, built separately with dynamic curl |
+| `SHA256SUMS` | digests for all of the above |
+
+The port itself is small — `recipe/` holds `aarch64_unknown_haiku.rs` (the rustc target
+spec: `+v8a,+lse,+rcpc,+dotprod,+aes,+sha2`, `tier: 3`, `host_tools: false`, PIE, no
+SVE because nothing on Haiku sets `CPACR_EL1.ZEN`), `aarch64-unknown-haiku.json` (the
+same thing as a JSON target), `mod.rs.registration.diff` (the one line registering it),
+`haiku-rust-gcc` / `haiku-rust-g++` (wrappers invoking this tree's
+`cross-tools-arm64/bin/aarch64-unknown-haiku-gcc` with `-lbsd -lnetwork -lgnu`), and
+`rust-src-tree.base-commit.txt` = `787af2b8c80638c51a4fc8e44f84e6891f243ec7`.
+
+**Procedure for the re-bake** (not attempted here — it produces a toolchain artifact):
+
+1. Check out `rust-lang/rust` at a commit **≥ `e9bbadf6824e65b3583c2dda3a0926ec76df9143`**
+   (`nightly-2026-10-13`). #164031 is already in it; **do not** apply the std patch
+   reproduced above — at that commit it is redundant.
+2. Re-apply the port from `recipe/`: drop `aarch64_unknown_haiku.rs` into
+   `compiler/rustc_target/src/spec/targets/`, then register it. **The stored
+   `mod.rs.registration.diff` will not apply as-is** — it was generated against
+   `787af2b8c`, where the Haiku block sat near `:1403`; on master it is at
+   `:1415-1416`. It is a one-line re-base, not a port.
+3. Unpack `rust-haiku-sysroot.tar.gz` and install the two wrappers. Both **hardcode**
+   `/opt/haiku/haiku/generated.arm64/cross-tools-arm64/bin/` and
+   `/opt/haiku/rust-haiku-sysroot/lib`; either reproduce those paths or edit the
+   wrappers.
+4. Build **rustc, rust-std *and* cargo** for `aarch64-unknown-haiku`. Cargo is not
+   optional: the defect is cargo's own `File::lock` call, which lives in the cargo
+   binary and was compiled against cargo's own std. A refreshed `rust-std` alone fixes
+   `File::lock` for *user* crates and leaves cargo's target-dir and package-cache
+   locking exactly as broken as it is today. That is the whole point of this issue.
+5. Repack as `rust_bin-1.101.0~nightly_<short-sha>-1-arm64.hpkg`.
+6. Update the pinned filename at `graviton/ssh/UserBuildConfig:317`
+   (today `rust_bin-1.100.0~nightly_787af2b8c-2-arm64.hpkg`).
+7. Publish via `haiku-repo-add` → `haiku-repo-promote-green` (revision bump, cf.
+   `haiku-repo-add:509`), and populate the `s3://<workBucket>/hpkg-pool/` prefix that
+   `graviton/pipeline/lib/haiku-graviton-pipeline-stack.ts:206-210` notes is
+   "Populated out-of-band".
+8. Confirm `File::lock` blocks rather than returning `Unsupported`, and run the
+   two-concurrent-`cargo build --target-dir T` reproduction.
+
+> **Gap worth closing independently of #638:** the *driving build script* for step 4
+> was never preserved. Only the six recipe inputs are in S3; `bake-scripts/` holds
+> nothing Rust-related and the tree has no `x.py` invocation, `bootstrap.toml` or
+> equivalent. The bake is reproducible in principle — target spec, sysroot, wrappers
+> and base commit are all kept — but step 4's exact configuration has to be
+> reconstructed by whoever runs it. It should be committed when it is.
 
 A newer `rust_bin` is wanted for unrelated reasons too, so this is not a cost carried
 only by #638: `graviton/docs/archive/uutils-coreutils-arm64.md:174-186` ("The fix
@@ -183,8 +251,11 @@ precondition at `:150`, `graviton/uutils/build-uutils-hpkg.sh:23-25`,
 
 Nothing in this tree builds rustc, cargo or std:
 
-- **No `rust`/`rust_bin` recipe exists.** The 174-recipe overlay in
-  `graviton/haikuports-patches/recipes/` has none.
+- **No `rust`/`rust_bin` recipe exists *in this tree*.** The 174-recipe overlay in
+  `graviton/haikuports-patches/recipes/` has none. There *is* an out-of-band port
+  recipe, but it lives in S3 rather than in git — see *What a re-bake requires*. That
+  is exactly why a std patch has no home here: the recipe that would consume it is not
+  version-controlled.
 - **Upstream HaikuPorts cannot supply one**: per
   `graviton/docs/archive/webpositive-arm64-plan.md:249-253`, `dev-lang/rust_bin` is
   `ARCHITECTURES="!x86_gcc2 ?x86 x86_64"` (prebuilt i686/x86_64 tarballs, no arm64)
@@ -269,14 +340,20 @@ The companion `library/std/src/fs/tests.rs` half adds the same line to five test
 `cfg`s and changes `if cfg!(windows)` to `if cfg!(any(windows, target_os = "haiku"))`
 in `file_lock_double`. Take it from upstream `5a1dda9` rather than retyping it.
 
-To make this patch *reachable* you would need, in order: an arm64-enabled from-source
-`rust` recipe with a `PATCHES=` patchset; a stage-0 rustc/cargo for
-`aarch64-unknown-haiku` (bootstrappable from the existing `rust_bin`) and an LLVM
-(`llvm21-21.1.8` already builds — `graviton/haikuports-patches/recipes/llvm21-21.1.8.recipe:671`);
-human sign-off plus a non-wave build path, since `rust*` is denylisted; and the
-publish/pin/pool updates listed above. That is a large piece of net-new plumbing to
-carry a five-line change that upstream has already made — hence the recommendation to
-bump.
+To make this patch *reachable through one of the three in-tree conventions* you would
+need, in order: an arm64-enabled from-source `rust` recipe with a `PATCHES=` patchset;
+a stage-0 rustc/cargo for `aarch64-unknown-haiku` and an LLVM (`llvm21-21.1.8` already
+builds — `graviton/haikuports-patches/recipes/llvm21-21.1.8.recipe:671`); human sign-off
+plus a non-wave build path, since `rust*` is denylisted; and the publish/pin/pool
+updates listed above. That is a large piece of net-new plumbing to carry a five-line
+change that upstream has already made — hence the recommendation to re-bake instead.
+
+**And re-baking is the cheaper path for a concrete reason:** the bake has already been
+done once, out of band, on 2026-08-26, and its inputs were kept (*What a re-bake
+requires*). A stage-0 is not needed from scratch either — the existing `rust_bin` is
+one. So the real cost is re-running a known bake at a newer base commit with a one-line
+diff re-based, not inventing a from-source Rust port. What is genuinely missing is the
+driving build script, which was never committed.
 
 ## Workaround until a fixed `rust_bin` ships
 
@@ -406,14 +483,26 @@ and is the right layer.
 - Cargo's silent `Ok(true)` on unsupported, at `src/util/flock.rs`.
 - Upstream Ladybird `90998c5d` already serialises cargo with a depth-1 `cargo` job
   pool, so the `ninja -j32` intra-build exposure does not exist.
+- **(2026-10-15) There is no prebuilt toolchain to bump to.** The `nightly-2026-10-13`
+  channel manifest names zero Haiku targets, and upstream `rustc_target`'s
+  `mod.rs:1415-1416` registers only i686/x86_64 Haiku — `aarch64-unknown-haiku` is
+  DeBeOS's own target. Fetched/read directly, not inferred.
+- **(2026-10-15) The 2026-08-26 bake's inputs survive** in
+  `s3://haiku-graviton-668984504585-us-west-2/rust/` (target spec, registration diff,
+  cross-gcc wrappers, link sysroot, base commit `787af2b8c`, plus the resulting dist
+  tarballs and hpkgs). Listed and the recipe tarball unpacked and read.
+- **(2026-10-15) The bake's driving build script does not survive** — not in
+  `rust/`, not in `bake-scripts/`, not in the tree.
 
 **OWED — needs a DeBeOS Graviton instance (the test fleet is stopped; nothing below
 was run):**
 
 - The two-concurrent-`cargo build --target-dir T` reproduction, before and after the
   toolchain bump.
-- A `rust_bin` re-baked from `nightly-2026-10-13`+, and confirmation that
-  `File::lock` then blocks rather than returning `Unsupported`.
+- A `rust_bin` re-baked at base commit `nightly-2026-10-13`+ — **including a rebuilt
+  cargo**, not just `rust-std` — and confirmation that `File::lock` then blocks rather
+  than returning `Unsupported`. This is a from-source toolchain build on a builder, per
+  *What a re-bake requires*; it is the sole remaining blocker on this issue.
 - Smoke-testing the four `mkdir`-lock mitigations on a real builder. The guard's
   three paths (acquire/release, abort while held, stale-pid takeover) were exercised
   on a Linux desk against the block as shipped, but `mkdir` atomicity *on BFS* and
