@@ -202,6 +202,61 @@ generalises the existing token-less two-drawing-states-over-one-surface trick
 (`RP_COPY_RECT_NO_CLIPPING` + `RP_FILL_REGION_COLOR_NO_CLIPPING`) into a
 first-class composition.
 
+**Reference-chain gating (per region).** Each Tier P region's tiles form an
+**independent** reference chain: a tile is either a keyframe (`flags` keyframe bit
+set — self-contained) or a delta, which decodes only against that region's own
+previous tile. The rule the damage router owes that chain is: **after any tile for
+a region is lost or dropped, the server must emit no further deltas for that
+region until that region's next keyframe.** A delta decoded against a reference
+the client never received does not glitch and recover — it corrupts that region
+persistently, until something unrelated happens to force a keyframe. Regions are
+re-IDR'd independently rather than by a periodic whole-screen keyframe, which
+keeps keyframe cost proportional to the damaged area instead of to the screen.
+
+Two corollaries. **Stateless tiles are never gated**: codec `0` (raw BGRA) and `1`
+(JPEG) carry no reference chain, so a dropped stateless tile costs exactly one
+repaint and gating it would only add latency. And **a fresh or reconnected client
+starts fully gated**, releasing per region on that region's first keyframe, so a
+joiner never decodes mid-GOP garbage — the same reason `RP_RESYNC` exists on the
+Tier V side.
+
+This is not a hypothetical loss model. The M2 flow queue already classifies
+`RP_CODEC_TILE` as droppable ("Tier P is the media channel: lossy-tolerant by
+design" — `RemoteFlowQueue.cpp`), and its overflow ladder coalesces, then
+supersedes whole-frame content, then degrades to `RP_RESYNC`. So the drop that
+makes gating necessary is the *designed* behaviour of shipped code, not a network
+accident: without gating, the first queue overflow over an inter-coded region
+corrupts it for as long as the region keeps producing deltas. `RP_CODEC_TILE`'s
+`flags:u16` field in the table above exists for this rule and for no other reason.
+
+**Why this is written here rather than implemented.** `RP_CODEC_TILE` is a
+reserved opcode with **no encoder**, and the header says so in those terms. On
+trunk every single reference to it is classification or test scaffolding —
+`RemoteWireWriter::_IsPreCompressed()`, the flow queue's droppable and `op_class`
+tables, `WireSelfTest.cpp`'s fuzz payloads (whose own comment records that
+"nothing in this tree emits either"), `graviton/scripts/rdcapture.py`'s constant,
+and this document's wire table. Nothing composes one, and the payload beyond the
+opcode number is still undefined. There is therefore no stream to gate: the rule
+cannot be exercised, measured or falsified today, and implementing it now would
+add unreachable code whose first real execution would be its first test. The
+encoder is M5's (in-guest `libvpx`, per #550); M3's host-side encoder is the other
+possible first producer.
+
+**Acceptance criterion, for whoever lands the encoder.** With a tile drop injected
+on one inter-coded region: that region emits no delta until its next keyframe; the
+client's framebuffer for that region becomes bit-identical to a no-drop run once
+that keyframe arrives; **other regions keep receiving deltas throughout** (a drop
+in one region must never gate the screen); and a JPEG or raw-BGRA region under the
+same injected drop is never gated at all and recovers on its next tile. All four
+are observable from a capture plus a framebuffer compare, so they need an encoder
+but not a GPU and not special hardware.
+
+The gating rule is the cheap half of this work and it is now recorded; the encoder
+is the expensive half and is unstarted. This subsection is the design of record
+for the retired DeBeOS 549 §1 — sections §2 (seconds-of-stream queue bound) and §3
+(`RP_FRAME_ACK` held-time correction) of that issue shipped, in `RemoteWireWriter`
+and `RemoteAckEstimator` respectively.
+
 ### 4.2 Channels and transport
 
 - **Control channel — reliable, ordered:** handshake, capability negotiation,
@@ -517,7 +572,10 @@ capability-gated).
   headless GUI verification in CI, a real damage source, and Tier P on **any**
   instance rather than only `.metal`. Pays for itself before any video ships.
 - **M5 — full hybrid.** Per-region Tier P codec tiles multiplexed with Tier V
-  under the damage router; SPICE-style promotion of a repeatedly-updated
+  under the damage router, **including the per-region reference-chain gating rule
+  specified in §4.1** (which is the correctness condition for inter-coded tiles,
+  not an optimisation, and has no meaning before this encoder exists);
+  SPICE-style promotion of a repeatedly-updated
   cache key at fixed geometry into an inter-coded stream; **QUIC/WebTransport**
   transport (§6 *Transport* carries the stream map and the head-of-line-blocking
   rationale); Opus audio. The draw-op path remains the default and the fallback
