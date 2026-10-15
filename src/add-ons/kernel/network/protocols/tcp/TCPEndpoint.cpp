@@ -2556,7 +2556,22 @@ TCPEndpoint::_SynchronizeSentReceive(tcp_segment_header &segment,
 		return DROP | RESET;
 	}
 
-	if (segment.flags & TCP_FLAG_RESET) {
+	if ((segment.flags & TCP_FLAG_RESET) != 0) {
+		// Only a reset whose acknowledgement we have just found acceptable says
+		// anything about the connection we are opening -- RFC 9293 3.10.7.3
+		// ends the reset rule with "Otherwise (no ACK), drop the segment and
+		// return". A bare reset needs no sequence number and no
+		// acknowledgement number guessed at all, so acting on one let anybody
+		// who knew, or could guess, the port pair abort any outgoing connect()
+		// with a single segment: the blind-reset hole of #614, in the one state
+		// that has no receive window to validate against. Nothing legitimate
+		// is lost, because a peer refusing a connection answers a SYN (which
+		// carries no ACK) with RST|ACK, as 3.10.7.1 requires. Linux drops it
+		// here for the same reason (tcp_rcv_synsent_state_process(), under
+		// "No ACK in the segment").
+		if ((segment.flags & TCP_FLAG_ACKNOWLEDGE) == 0)
+			return DROP;
+
 		_HandleReset(ECONNREFUSED);
 		return DROP;
 	}

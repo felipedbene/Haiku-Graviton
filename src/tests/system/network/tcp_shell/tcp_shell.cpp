@@ -134,7 +134,15 @@ static bool sServerActiveClose = false;
 // wire to make room would break the stream the test is watching: the first cut
 // of this ate the handshake-completing ACK one run and 1448 bytes of payload
 // the next. An off-path attacker adds segments; it cannot remove them.
-static int32 sSpoofBadSynAck = 0;
+enum spoof_syn_acknowledge {
+	SPOOF_SYN_ACKNOWLEDGE_NONE = 0,
+	SPOOF_SYN_ACKNOWLEDGE_BAD_ACK,
+		// a SYN-ACK acknowledging a byte that was never sent
+	SPOOF_SYN_ACKNOWLEDGE_BARE_RESET
+		// a bare reset, which carries no acknowledgement to validate at all
+};
+
+static int32 sSpoofBadSynAck = SPOOF_SYN_ACKNOWLEDGE_NONE;
 static int32 sSpoofFlags = 0;
 static int32 sSpoofOffset = 1;
 static int32 sSpoofRemaining = 0;
@@ -199,10 +207,30 @@ spoof_segment(net_buffer* buffer, bool server)
 
 	tcp_header& header = bufferHeader.Data();
 
-	if (sSpoofBadSynAck != 0 && !server
+	if (sSpoofBadSynAck != SPOOF_SYN_ACKNOWLEDGE_NONE && !server
 		&& (header.flags & (TCP_FLAG_SYNCHRONIZE | TCP_FLAG_ACKNOWLEDGE))
 			== (TCP_FLAG_SYNCHRONIZE | TCP_FLAG_ACKNOWLEDGE)) {
 		// The client is in SYN-SENT and this is the SYN-ACK it is waiting for.
+		if (sSpoofBadSynAck == SPOOF_SYN_ACKNOWLEDGE_BARE_RESET) {
+			// A bare reset: no acknowledgement, so there is nothing in it for
+			// the client to validate against what it sent, and SYN-SENT has no
+			// receive window to validate the sequence number against either.
+			// This is the whole segment an off-path attacker needs to guess --
+			// the port pair and nothing else -- so it has to be dropped
+			// (RFC 9293 3.10.7.3, "Otherwise (no ACK), drop the segment and
+			// return"). Rewriting the SYN-ACK rather than adding a segment
+			// costs a retransmit, which is what the attempt has to survive.
+			header.flags = TCP_FLAG_RESET;
+			bufferHeader.Sync();
+
+			buffer->buffer_flags |= NET_BUFFER_L4_CHECKSUM_VALID;
+			sSpoofBadSynAck = SPOOF_SYN_ACKNOWLEDGE_NONE;
+
+			puts("<**** SPOOF: bare reset, no acknowledgement, in SYN-SENT "
+				"****>");
+			return true;
+		}
+
 		// Move the acknowledgement far outside [ISS, SND.MAX] so that it
 		// acknowledges a byte the client never sent, which is the segment
 		// RFC 9293 3.10.7.3 is about.
@@ -211,7 +239,7 @@ spoof_segment(net_buffer* buffer, bool server)
 		bufferHeader.Sync();
 
 		buffer->buffer_flags |= NET_BUFFER_L4_CHECKSUM_VALID;
-		sSpoofBadSynAck = 0;
+		sSpoofBadSynAck = SPOOF_SYN_ACKNOWLEDGE_NONE;
 
 		printf("<**** SPOOF: SYN-ACK acknowledging %" B_PRIu32 ", which was "
 			"never sent ****>\n", acknowledge);
@@ -1907,23 +1935,38 @@ static void
 do_bad_synack(int argc, char** argv)
 {
 	if (argc > 1 && !strcmp(argv[1], "-f")) {
-		sSpoofBadSynAck = 0;
+		sSpoofBadSynAck = SPOOF_SYN_ACKNOWLEDGE_NONE;
 		puts("bad SYN-ACK disarmed.");
 		return;
 	}
 
-	if (argc > 1) {
-		puts("usage: bad_synack [-f]\n\n"
-			"Arms a one-shot: the next SYN-ACK delivered to the client has its\n"
-			"acknowledgement moved outside [ISS, SND.MAX], so it acknowledges a\n"
-			"byte the client never sent (RFC 9293 3.10.7.3, issue #613). Call\n"
-			"this before connect. The server retransmits its SYN-ACK, so a stack\n"
-			"that stays in SYN-SENT still connects -- one that goes to CLOSED\n"
-			"leaves connect() asleep until it times out. -f disarms.");
+	if (argc > 2 || (argc == 2 && strcmp(argv[1], "ack") != 0
+			&& strcmp(argv[1], "rst") != 0)) {
+		puts("usage: bad_synack [ack|rst]\n"
+			"   or: bad_synack -f\n\n"
+			"Arms a one-shot on the next SYN-ACK delivered to the client. It\n"
+			"is rewritten into one of the two segments RFC 9293 3.10.7.3\n"
+			"refuses to take instructions from:\n\n"
+			"  ack  (the default) its acknowledgement is moved outside\n"
+			"       [ISS, SND.MAX], so it acknowledges a byte the client\n"
+			"       never sent (issue #613);\n"
+			"  rst  it becomes a bare reset, carrying no acknowledgement at\n"
+			"       all -- the whole segment an off-path attacker who knows\n"
+			"       only the port pair can send (issue #614).\n\n"
+			"Call this before connect. The server retransmits its SYN-ACK,\n"
+			"so a stack that stays in SYN-SENT still connects; one that\n"
+			"gives up fails connect() or leaves it asleep until it times\n"
+			"out. -f disarms.");
 		return;
 	}
 
-	sSpoofBadSynAck = 1;
+	if (argc == 2 && !strcmp(argv[1], "rst")) {
+		sSpoofBadSynAck = SPOOF_SYN_ACKNOWLEDGE_BARE_RESET;
+		puts("the next SYN-ACK to the client will become a bare reset.");
+		return;
+	}
+
+	sSpoofBadSynAck = SPOOF_SYN_ACKNOWLEDGE_BAD_ACK;
 	puts("the next SYN-ACK to the client will be spoofed.");
 }
 
