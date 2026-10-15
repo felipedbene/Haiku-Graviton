@@ -70,9 +70,18 @@
 // a trace facility, and it costs a dprintf per event. See
 // tcp_note_averted_release() for why the measurement has to be made here and
 // cannot be made from userland.
-// Overridable from the build so that measuring does not need an edit (and so
-// the measured module and the committed source cannot silently disagree):
-//   jam -qa ... -sTCP_DIAG=1   via HAIKU_CCFLAGS, or just -D on the compile.
+// Turned on from the build so that measuring does not need an edit (and so the
+// measured module and the committed source cannot silently disagree):
+//
+//	jam -qa -sTCP_TIME_WAIT_DIAG=1 tcp
+//
+// The Jamfile turns that into a SubDirC++Flags -D. Do NOT try to pass the -D
+// through HAIKU_KERNEL_CCFLAGS instead: Jamrules assigns that variable itself,
+// so a -s override of it is discarded silently and the build yields a module
+// identical to the undiagnosed one while appearing to have honoured the
+// request. Confirm the switch took effect from the loaded module's own output
+// rather than with `strings`: Haiku's `strings` does not report this format
+// string even in a module that demonstrably prints it.
 #ifndef TCP_TIME_WAIT_REFERENCE_DIAGNOSTICS
 #	define TCP_TIME_WAIT_REFERENCE_DIAGNOSTICS 0
 #endif
