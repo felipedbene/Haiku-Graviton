@@ -369,7 +369,9 @@ rule DetermineHaikuRevision
 {
 	# If existing, make the target depend on the $GIT_DIR/index file,
 	# so it gets updated when the revision changes due to commits or merges.
-	# If GIT_DIR is not set, fall back to .git/index.
+	# If GIT_DIR is not set, fall back to .git/index, or -- in a linked
+	# worktree, where .git is a pointer file rather than a directory -- to that
+	# pointer file.
 	local dotGit = <haiku-rootdir>.git ;
 	local revisionFile = <haiku-rootdir>haiku-revision ;
 	if ! [ on $(dotGit) return $(HAIKU_GIT_REVISION_DETERMINED) ] {
@@ -388,8 +390,39 @@ rule DetermineHaikuRevision
 			SEARCH on $(gitIndex) = [ FDirName $(HAIKU_TOP) .git ] ;
 			Depends $(revisionFile) : $(gitIndex) ;
 			DetermineHaikuRevision1 $(revisionFile) : $(gitIndex) ;
+		} else if [ Glob [ FDirName $(HAIKU_TOP) ] : .git ] {
+			# .git is there, but there is no index beside it, so it is not a
+			# repository directory: in a linked worktree (git worktree add)
+			# .git is a regular file reading
+			# "gitdir: <repo>/.git/worktrees/<name>", and the index we would
+			# want to depend on lives over there. Jam cannot follow that
+			# pointer -- Glob is its only filesystem primitive, there is none
+			# that reads a file's contents -- which is also why "is a regular
+			# file" is spelled here as "exists, but has no index in it".
+			# Following the pointer is not actually needed to get the revision
+			# right, though: determine_haiku_revision runs git inside
+			# $(HAIKU_TOP), so it reports the worktree's own HEAD and not the
+			# primary checkout's. So depend on the pointer file instead and
+			# let the worktree derive its revision, rather than bailing out and
+			# making the caller invent one with -sHAIKU_REVISION -- an invented
+			# revision is stamped into the image whether or not it is true.
+			# Caveat: unlike an index, the pointer file's mtime does not move
+			# when HEAD does, so to pick up a commit made in the worktree,
+			# delete $(HAIKU_BUILD_OUTPUT_DIR)/haiku-revision (or `jam clean`).
+			SEARCH on $(dotGit) = [ FDirName $(HAIKU_TOP) ] ;
+			Depends $(revisionFile) : $(dotGit) ;
+			DetermineHaikuRevision1 $(revisionFile) : $(dotGit) ;
 		} else {
-			Exit "ERROR: Haiku revision could not be determined." ;
+			# Name the cause and the way out: this used to be a bare "could
+			# not be determined", which told whoever hit it nothing about
+			# which of the three lookups above had declined, nor that the
+			# revision can simply be supplied.
+			Exit "ERROR: Haiku revision could not be determined:"
+				"HAIKU_REVISION is not set, GIT_DIR is \"$(GIT_DIR)\", and the"
+				"source tree \"$(HAIKU_TOP)\" has no .git in it, so there is"
+				"no git checkout to read a revision from (an unpacked source"
+				"archive, say). Pass the revision on the jam command line"
+				"instead: -sHAIKU_REVISION=<revision>." ;
 		}
 	}
 
