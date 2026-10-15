@@ -103,7 +103,18 @@ phase_ffmpeg() {
 
 phase_lb() {
 	sh "$RECIPE/scripts/run-lb-clone.sh"
+	phase_lbpatch
+}
+
+# Re-apply the Haiku patch to an existing checkout. Every iteration on
+# ladybird-haiku.patch needs the tree back at 90998c5d first, and a re-clone of
+# Ladybird's full history to undo a dozen edited lines is not a sensible price.
+# `checkout -- .` only touches tracked files, so the build tree under
+# /boot/home/lb/build-* (untracked) survives; deliberately no `clean`, which
+# would delete it.
+phase_lbpatch() {
 	cd /boot/home/lb
+	git checkout -- .
 	patch -p1 --no-backup-if-mismatch < "$RECIPE/patches/ladybird-haiku.patch"
 }
 
