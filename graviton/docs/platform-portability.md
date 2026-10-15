@@ -474,9 +474,35 @@ against **every physical block device on every boot**, with no `Media->ReadOnly`
 `Media->RemovableMedia` check. The behaviour is correct and wanted for an EBS root that
 was resized; it is not something to do unconditionally to whatever is plugged into a Pi.
 
+> **FIXED (#484).** The grow is now attempted only on the disk the loader image was
+> itself loaded from — the firmware's `EFI_LOADED_IMAGE_PROTOCOL.DeviceHandle` device
+> path, matched by prefix against each physical disk's path — and only when
+> `Media->ReadOnly` is clear. `RemovableMedia` is deliberately *not* a condition: a
+> removable *boot* disk is the install that was just booted, and skipping it would
+> break USB-root auto-grow, which is one of the transports this had to be verified on.
+> The boot-disk test is what removes the hazard, which was writing to disks the boot
+> has no business touching. Measured, as an A/B under `qemu -M virt` + EDK2 with a
+> second (non-boot) GPT disk whose trailing partition is BFS attached: before, both
+> disks were grown and the non-boot disk's image hash changed; after, only the boot
+> disk is grown and the non-boot image is byte-identical. Same result on NVMe, USB and
+> virtio roots, each still reaching `bfs: mounted "Haiku"`. **Not verified on Nitro
+> firmware** — no Graviton instance was available — so whether EC2's UEFI describes the
+> loaded image such that the prefix match succeeds there is still open; if it does not,
+> the new `GPT auto-grow skipped` line says so in the boot log rather than failing
+> silently.
+
 **X19 — `devices.cpp:442`.** `efi_handle handles[noOfHandles];` — a variable-length array
 sized by a value the firmware returns. This is the exact hazard the bounce buffer at
 `85-96` in the same file was added to remove.
+
+> **FIXED (#484).** Heap allocated instead, with the count taken from the size
+> `LocateHandle` writes back on the *second* call rather than the first. Measured under
+> `qemu -M virt` + EDK2: a plain one-disk boot asks for 3 handles (24 bytes), and
+> attaching three 100-partition disks takes it to 306 handles (2448 bytes) — one handle
+> per disk *and* per partition, i.e. a number the loader does not control and that
+> scales with whatever is plugged in. This is hardening: no overflow was reproduced
+> (filling the firmware's stack needs thousands of volumes), so the fix is verified as
+> non-regressive rather than as a crash that stopped.
 
 **X20 — `src/system/boot/platform/efi/arch/arm64/arch_acpi.cpp:31`.** A literal 24 MHz
 PL011 clock. Correct for the platforms measured; a fact about a platform, written as a
