@@ -134,11 +134,24 @@ static bool sServerActiveClose = false;
 // wire to make room would break the stream the test is watching: the first cut
 // of this ate the handshake-completing ACK one run and 1448 bytes of payload
 // the next. An off-path attacker adds segments; it cannot remove them.
-static int32 sSpoofBadSynAck = 0;
+enum spoof_syn_acknowledge {
+	SPOOF_SYN_ACKNOWLEDGE_NONE = 0,
+	SPOOF_SYN_ACKNOWLEDGE_BAD_ACK,
+		// a SYN-ACK acknowledging a byte that was never sent
+	SPOOF_SYN_ACKNOWLEDGE_BARE_RESET
+		// a bare reset, which carries no acknowledgement to validate at all
+};
+
+static int32 sSpoofBadSynAck = SPOOF_SYN_ACKNOWLEDGE_NONE;
 static int32 sSpoofFlags = 0;
 static int32 sSpoofOffset = 1;
 static int32 sSpoofRemaining = 0;
 static bool sSpoofAtServer = true;
+static bool sSpoofLate = false;
+	// Whether the forged copy is delivered after the honest segment instead of
+	// before it. The reset at RCV.NXT - 1 is only that once the FIN it shares a
+	// sequence number with has been consumed; injected ahead of that FIN the
+	// same segment sits at RCV.NXT and is simply acceptable.
 
 static struct net_domain sDomain = {
 	"ipv4",
@@ -183,26 +196,50 @@ is_fin(net_buffer* buffer)
 
 
 /*!	Forges a segment from \a buffer if a spoof is armed for the side that is
-	about to receive it, and reports whether it did.
+	about to receive it.
+
+	Returns the forged segment, which the caller then owns, when it is to be
+	delivered AFTER the honest one ("spoof ... late"); NULL otherwise, having
+	either delivered it already or rewritten the honest segment in place.
 
 	NET_BUFFER_L4_CHECKSUM_VALID is set afterwards rather than recomputing the
 	checksum: tcp_receive_data() honours that flag exactly as it does for a NIC
 	that checksummed in hardware, and the checksum is not what these tests are
 	about.
 */
-static bool
+static net_buffer*
 spoof_segment(net_buffer* buffer, bool server)
 {
 	NetBufferHeaderReader<tcp_header> bufferHeader(buffer);
 	if (bufferHeader.Status() < B_OK)
-		return false;
+		return NULL;
 
 	tcp_header& header = bufferHeader.Data();
 
-	if (sSpoofBadSynAck != 0 && !server
+	if (sSpoofBadSynAck != SPOOF_SYN_ACKNOWLEDGE_NONE && !server
 		&& (header.flags & (TCP_FLAG_SYNCHRONIZE | TCP_FLAG_ACKNOWLEDGE))
 			== (TCP_FLAG_SYNCHRONIZE | TCP_FLAG_ACKNOWLEDGE)) {
 		// The client is in SYN-SENT and this is the SYN-ACK it is waiting for.
+		if (sSpoofBadSynAck == SPOOF_SYN_ACKNOWLEDGE_BARE_RESET) {
+			// A bare reset: no acknowledgement, so there is nothing in it for
+			// the client to validate against what it sent, and SYN-SENT has no
+			// receive window to validate the sequence number against either.
+			// This is the whole segment an off-path attacker needs to guess --
+			// the port pair and nothing else -- so it has to be dropped
+			// (RFC 9293 3.10.7.3, "Otherwise (no ACK), drop the segment and
+			// return"). Rewriting the SYN-ACK rather than adding a segment
+			// costs a retransmit, which is what the attempt has to survive.
+			header.flags = TCP_FLAG_RESET;
+			bufferHeader.Sync();
+
+			buffer->buffer_flags |= NET_BUFFER_L4_CHECKSUM_VALID;
+			sSpoofBadSynAck = SPOOF_SYN_ACKNOWLEDGE_NONE;
+
+			puts("<**** SPOOF: bare reset, no acknowledgement, in SYN-SENT "
+				"****>");
+			return NULL;
+		}
+
 		// Move the acknowledgement far outside [ISS, SND.MAX] so that it
 		// acknowledges a byte the client never sent, which is the segment
 		// RFC 9293 3.10.7.3 is about.
@@ -211,17 +248,17 @@ spoof_segment(net_buffer* buffer, bool server)
 		bufferHeader.Sync();
 
 		buffer->buffer_flags |= NET_BUFFER_L4_CHECKSUM_VALID;
-		sSpoofBadSynAck = 0;
+		sSpoofBadSynAck = SPOOF_SYN_ACKNOWLEDGE_NONE;
 
 		printf("<**** SPOOF: SYN-ACK acknowledging %" B_PRIu32 ", which was "
 			"never sent ****>\n", acknowledge);
-		return true;
+		return NULL;
 	}
 
 	if (sSpoofRemaining <= 0 || server != sSpoofAtServer)
-		return false;
+		return NULL;
 	if ((header.flags & TCP_FLAG_SYNCHRONIZE) != 0)
-		return false;
+		return NULL;
 		// leave the handshake alone: there is no connection to challenge yet,
 		// and the states that carry one are the point of the exercise
 
@@ -243,13 +280,13 @@ spoof_segment(net_buffer* buffer, bool server)
 
 	net_buffer* spoof = gNetBufferModule.duplicate(buffer);
 	if (spoof == NULL)
-		return false;
+		return NULL;
 
 	{
 		NetBufferHeaderReader<tcp_header> spoofHeader(spoof);
 		if (spoofHeader.Status() < B_OK) {
 			gNetBufferModule.free(spoof);
-			return false;
+			return NULL;
 		}
 
 		// The flags are replaced rather than added to, so what lands is the
@@ -266,14 +303,18 @@ spoof_segment(net_buffer* buffer, bool server)
 	sSpoofRemaining--;
 
 	printf("<**** SPOOF: bare %s at %" B_PRIu32 " (RCV.NXT + %" B_PRId32 ") to "
-		"the %s ****>\n",
+		"the %s, %s the honest segment ****>\n",
 		(sSpoofFlags & TCP_FLAG_SYNCHRONIZE) != 0 ? "SYN" : "RST", sequence,
-		sSpoofOffset, server ? "server" : "client");
+		sSpoofOffset, server ? "server" : "client",
+		sSpoofLate ? "after" : "before");
+
+	if (sSpoofLate)
+		return spoof;
 
 	if (sDomain.module->receive_data(spoof) < B_OK)
 		gNetBufferModule.free(spoof);
 
-	return true;
+	return NULL;
 }
 
 
@@ -1439,7 +1480,7 @@ receiving_thread(void* _data)
 			if (buffer == NULL)
 				break;
 
-			spoof_segment(buffer, context->server);
+			net_buffer* lateSpoof = spoof_segment(buffer, context->server);
 
 			if (sSimultaneousConnect && context->server && is_syn(buffer)) {
 				// delay getting the SYN request, and connect as well
@@ -1474,6 +1515,17 @@ receiving_thread(void* _data)
 						gNetBufferModule.free(reorderBuffer);
 					reorderBuffer = NULL;
 				}
+			}
+
+			if (lateSpoof != NULL) {
+				// Behind the honest segment on purpose, which is what
+				// "spoof ... late" asked for: receive_data() above runs the
+				// whole input path inline, so RCV.NXT has already moved
+				// past it. Do not combine this with reorder or drop on the
+				// same segment -- the honest one would then not have gone
+				// in first, which is the entire point.
+				if (sDomain.module->receive_data(lateSpoof) < B_OK)
+					gNetBufferModule.free(lateSpoof);
 			}
 		}
 	}
@@ -1907,23 +1959,38 @@ static void
 do_bad_synack(int argc, char** argv)
 {
 	if (argc > 1 && !strcmp(argv[1], "-f")) {
-		sSpoofBadSynAck = 0;
+		sSpoofBadSynAck = SPOOF_SYN_ACKNOWLEDGE_NONE;
 		puts("bad SYN-ACK disarmed.");
 		return;
 	}
 
-	if (argc > 1) {
-		puts("usage: bad_synack [-f]\n\n"
-			"Arms a one-shot: the next SYN-ACK delivered to the client has its\n"
-			"acknowledgement moved outside [ISS, SND.MAX], so it acknowledges a\n"
-			"byte the client never sent (RFC 9293 3.10.7.3, issue #613). Call\n"
-			"this before connect. The server retransmits its SYN-ACK, so a stack\n"
-			"that stays in SYN-SENT still connects -- one that goes to CLOSED\n"
-			"leaves connect() asleep until it times out. -f disarms.");
+	if (argc > 2 || (argc == 2 && strcmp(argv[1], "ack") != 0
+			&& strcmp(argv[1], "rst") != 0)) {
+		puts("usage: bad_synack [ack|rst]\n"
+			"   or: bad_synack -f\n\n"
+			"Arms a one-shot on the next SYN-ACK delivered to the client. It\n"
+			"is rewritten into one of the two segments RFC 9293 3.10.7.3\n"
+			"refuses to take instructions from:\n\n"
+			"  ack  (the default) its acknowledgement is moved outside\n"
+			"       [ISS, SND.MAX], so it acknowledges a byte the client\n"
+			"       never sent (issue #613);\n"
+			"  rst  it becomes a bare reset, carrying no acknowledgement at\n"
+			"       all -- the whole segment an off-path attacker who knows\n"
+			"       only the port pair can send (issue #614).\n\n"
+			"Call this before connect. The server retransmits its SYN-ACK,\n"
+			"so a stack that stays in SYN-SENT still connects; one that\n"
+			"gives up fails connect() or leaves it asleep until it times\n"
+			"out. -f disarms.");
 		return;
 	}
 
-	sSpoofBadSynAck = 1;
+	if (argc == 2 && !strcmp(argv[1], "rst")) {
+		sSpoofBadSynAck = SPOOF_SYN_ACKNOWLEDGE_BARE_RESET;
+		puts("the next SYN-ACK to the client will become a bare reset.");
+		return;
+	}
+
+	sSpoofBadSynAck = SPOOF_SYN_ACKNOWLEDGE_BAD_ACK;
 	puts("the next SYN-ACK to the client will be spoofed.");
 }
 
@@ -1933,23 +2000,31 @@ do_spoof(int argc, char** argv)
 {
 	if (argc > 1 && !strcmp(argv[1], "-f")) {
 		sSpoofRemaining = 0;
+		sSpoofLate = false;
 		puts("spoofing disarmed.");
 		return;
 	}
 
 	if (argc < 2 || (strcmp(argv[1], "syn") != 0
 			&& strcmp(argv[1], "rst") != 0)) {
-		puts("usage: spoof <syn|rst> [<sequence-offset> [<count> [side]]]\n"
+		puts("usage: spoof <syn|rst> [<offset> [<count> [side [late]]]]\n"
 			"   or: spoof -f\n\n"
 			"Rewrites the next inbound segment into a bare SYN or reset carrying\n"
-			"RCV.NXT + <sequence-offset> (default 1): in the receive window, but\n"
-			"not the sequence number the receiver is waiting for. That is the\n"
+			"RCV.NXT + <offset> (default 1): in the receive window, but not\n"
+			"the sequence number the receiver is waiting for. That is the\n"
 			"blind-reset segment RFC 5961 sections 3 and 4 answer with a\n"
 			"challenge acknowledgement instead of tearing the connection down\n"
 			"(issues #609, #614). <count> defaults to 1 and [side] to \"server\";\n"
 			"pass \"client\" to aim it the other way. An offset of 0 makes the\n"
 			"segment acceptable, which is the control -- the connection should\n"
-			"then die. -f disarms.");
+			"then die.\n\n"
+			"A fifth argument of \"late\" delivers the forgery after the\n"
+			"segment it was built from instead of before it. That is what\n"
+			"reaches the one reset outside the window that is still\n"
+			"believed, the abortive close at RCV.NXT - 1: arm\n"
+			"\"rst 0 1 <side> late\" and let it fire on a FIN, which the\n"
+			"receiver consumes first, so the reset lands one behind the\n"
+			"RCV.NXT it leaves. -f disarms.");
 		return;
 	}
 
@@ -1958,10 +2033,12 @@ do_spoof(int argc, char** argv)
 	sSpoofOffset = argc > 2 ? strtol(argv[2], NULL, 0) : 1;
 	sSpoofRemaining = argc > 3 ? strtol(argv[3], NULL, 0) : 1;
 	sSpoofAtServer = argc > 4 ? strcmp(argv[4], "client") != 0 : true;
+	sSpoofLate = argc > 5 && strcmp(argv[5], "late") == 0;
 
 	printf("will spoof %" B_PRId32 " bare %s at RCV.NXT + %" B_PRId32
-		" to the %s.\n", sSpoofRemaining, argv[1], sSpoofOffset,
-		sSpoofAtServer ? "server" : "client");
+		" to the %s, %s the segment it is built from.\n", sSpoofRemaining,
+		argv[1], sSpoofOffset, sSpoofAtServer ? "server" : "client",
+		sSpoofLate ? "after" : "before");
 }
 
 

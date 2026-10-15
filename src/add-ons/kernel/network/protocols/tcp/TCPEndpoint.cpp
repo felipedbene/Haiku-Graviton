@@ -1797,6 +1797,10 @@ TCPEndpoint::_HandleReset(status_t error)
 	still unread, or a middlebox -- carries the sequence number of that FIN.
 	Such a reset is genuine and nothing will re-send it at RCV.NXT, so accept
 	it in the three states that can have consumed a FIN.
+
+	Note that this makes the predicate wider than the receive window rather
+	than narrower, which is why both arms of the sequence check in _Receive()
+	consult it: a reset at RCV.NXT - 1 is out of the window by definition.
 */
 bool
 TCPEndpoint::_IsResetAcceptable(const tcp_segment_header& segment) const
@@ -2556,7 +2560,22 @@ TCPEndpoint::_SynchronizeSentReceive(tcp_segment_header &segment,
 		return DROP | RESET;
 	}
 
-	if (segment.flags & TCP_FLAG_RESET) {
+	if ((segment.flags & TCP_FLAG_RESET) != 0) {
+		// Only a reset whose acknowledgement we have just found acceptable says
+		// anything about the connection we are opening -- RFC 9293 3.10.7.3
+		// ends the reset rule with "Otherwise (no ACK), drop the segment and
+		// return". A bare reset needs no sequence number and no
+		// acknowledgement number guessed at all, so acting on one let anybody
+		// who knew, or could guess, the port pair abort any outgoing connect()
+		// with a single segment: the blind-reset hole of #614, in the one state
+		// that has no receive window to validate against. Nothing legitimate
+		// is lost, because a peer refusing a connection answers a SYN (which
+		// carries no ACK) with RST|ACK, as 3.10.7.1 requires. Linux drops it
+		// here for the same reason (tcp_rcv_synsent_state_process(), under
+		// "No ACK in the segment").
+		if ((segment.flags & TCP_FLAG_ACKNOWLEDGE) == 0)
+			return DROP;
+
 		_HandleReset(ECONNREFUSED);
 		return DROP;
 	}
@@ -2678,20 +2697,36 @@ TCPEndpoint::_Receive(tcp_segment_header& segment, net_buffer* buffer)
 				// have come from a peer that shares our sequence numbers, and
 				// acknowledging it would tell a blind sender it had guessed
 				// the connection correctly.
-				return DROP;
-			}
-			return DROP | IMMEDIATE_ACKNOWLEDGE;
+				//
+				// Save for the one reset we believe that is outside the window
+				// by construction: the abortive close at RCV.NXT - 1 after a
+				// FIN we have already consumed. A zero-length segment before
+				// RCV.NXT fails segment_in_sequence(), so this arm is the only
+				// place it can be let through -- which is why Linux puts the
+				// same exception in the same place (tcp_validate_incoming()
+				// calls tcp_reset_check() here, not just below).
+				if (!_IsResetAcceptable(segment))
+					return DROP;
+			} else
+				return DROP | IMMEDIATE_ACKNOWLEDGE;
 		}
 	}
 
 	if ((segment.flags & TCP_FLAG_RESET) != 0) {
 		// Is this a valid reset?
 		// We generally ignore resets in time wait state (see RFC 1337)
-		if (fLastAcknowledgeSent <= segment.sequence
+		const bool acceptable = _IsResetAcceptable(segment);
+		const bool inWindow = fLastAcknowledgeSent <= segment.sequence
 			&& tcp_sequence(segment.sequence) < (fLastAcknowledgeSent
-				+ fReceiveWindow)
-			&& fState != TIME_WAIT) {
-			if (is_challengeable(fState) && !_IsResetAcceptable(segment)) {
+				+ fReceiveWindow);
+			// A reset we may act on is not necessarily in this window -- the
+			// post-FIN one is below it, and at a receive window closed to zero
+			// the window holds nothing at all, not even RCV.NXT. The window is
+			// what decides whether a reset we do NOT act on is worth a
+			// challenge; it is not the test of whether we act.
+
+		if ((acceptable || inWindow) && fState != TIME_WAIT) {
+			if (!acceptable && is_challengeable(fState)) {
 				// RFC 5961 section 3 (rule 3): in the window but not at
 				// RCV.NXT, so answer with a challenge acknowledgement rather
 				// than believing it. That is also how the exchange converges
