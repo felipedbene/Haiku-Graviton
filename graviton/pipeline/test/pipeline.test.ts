@@ -1621,6 +1621,30 @@ test('the perf gate stamps a per-run id on both instances it launches', () => {
   expect(gate).toMatch(/if \[ -z "\$RUN_ID" \]; then/);
 });
 
+// ---- #576: no launcher may opt a native-Haiku node into AWS-UpdateSSMAgent -------
+//
+// The account's AWS-UpdateSSMAgent association was re-scoped off InstanceIds:* on
+// 2026-10-04 and now targets tag:SSMAgentAutoUpdate=enabled. That is the only thing
+// keeping the Linux agent-update document away from native-Haiku builders, and it is a
+// tag -- so a launcher that ever stamped it would silently re-opt the whole native
+// fleet back in. Haiku runs haiku-mgmt-agent, not amazon-ssm-agent, so the update
+// document has nothing to update and must never be dispatched to it.
+test('#576: no instance launcher tags a node SSMAgentAutoUpdate', () => {
+  const launchers = [
+    path.join(GRAVITON_SCRIPTS, 'haiku-launch'),
+    path.join(GRAVITON_SCRIPTS, 'haiku-bake-builder'),
+    path.join(GRAVITON_SCRIPTS, 'haiku-perf-gate'),
+    path.join(GRAVITON_SCRIPTS, 'haiku-repo-publish-ephemeral'),
+    path.join(__dirname, '..', 'ops-lambdas', 'launch_builder.py'),
+  ];
+  for (const f of launchers) {
+    const src = fs.readFileSync(f, 'utf8');
+    // Sanity: this really is a launcher, so the assertion below means something.
+    expect(src).toMatch(/tag-specifications|TagSpecifications/);
+    expect(src).not.toContain('SSMAgentAutoUpdate');
+  }
+});
+
 test('the straggler sweep only sweeps this run, and sweeps nothing if it cannot tell', () => {
   const spec = fs.readFileSync(path.join(BUILDSPEC_DIR, 'perf-test.yml'), 'utf8');
   expect(spec).toContain('export HG_RUN_ID="$CODEBUILD_BUILD_ID"');

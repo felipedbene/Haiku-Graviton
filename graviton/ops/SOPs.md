@@ -687,9 +687,13 @@ named per entry.
   Every builder-side tool MUST exec its interpreter by **absolute path**
   (`#!/boot/system/bin/python3`, not `env`).
 - **Check.** After launch, a healthy default-disk builder registers as an SSM Online
-  node in ~1 min — if a builder never appears, suspect a disk override before an
-  IAM/egress/clock theory. For a build that died mid-run, `grep` for
-  `waitpid`/`No child process` before blaming the port, and re-run at `-j16`.
+  node within **~1–4 min** — poll until that horizon before concluding anything. On
+  2026-10-14 `i-0a9c668e1e721fe3f` (canonical, default disk) was *not* yet a node at
+  launch+2 min but was serving commands by launch+3.5 min, and a check at the 2-minute
+  mark was reported as a registration failure it was not (#576). If a builder has still
+  not appeared after ~4 min, suspect a disk override before an IAM/egress/clock theory.
+  For a build that died mid-run, `grep` for `waitpid`/`No child process` before blaming
+  the port, and re-run at `-j16`.
 
 ### 13.7 The publisher's instance profile must be able to read the host-tools (extends §3, #41)
 
@@ -769,3 +773,78 @@ named per entry.
   once (no duplicate/missing definitions); the PR is marked `[HELD]` if its hardware
   claim is still unproven. After the bake: the perf-gate/hardware A/B recorded the
   measured number, and it met the floor — then drop the hold.
+
+### 13.11 Account-wide SSM associations vs native-Haiku nodes: read the targets before blaming the agent (#576)
+
+- **Symptom.** A native-Haiku builder is an SSM `Online` node (`PlatformName=Haiku`,
+  agent `3.3.0.0`) yet its SSM compliance looks broken, and the account carries
+  QuickSetup / Default Host Management Configuration (DHMC) associations it cannot
+  service. #576 read that as a *wedge*: a fleet-wide `AWS-UpdateSSMAgent` association on
+  `InstanceIds:*` pushing the Linux agent-update document onto Haiku, hanging the native
+  agent and serializing its command loop so every `AWS-RunShellScript` sat
+  Pending/InProgress forever. **That mechanism is no longer present** — see the Rule —
+  and the account-wide association that *does* still fail on Haiku is noise, not a wedge.
+- **Rule.** Distinguish the two failure shapes before escalating, because they have
+  opposite remedies:
+  - **A wedge** stops `AWS-RunShellScript` from executing at all, on every invocation.
+    Evidence is `list-command-invocations` showing no `Success` — not an association's
+    own red status.
+  - **Association noise** is a permanently-failing *association* execution against the
+    Haiku node — a Linux-only document dispatched account-wide. It accumulates failed
+    executions and makes fleet compliance look bad, but it does **not** block
+    RunShellScript. Do not halt a wave for it.
+
+  Verified state of this account (`668984504585`, `us-west-2`) as of **2026-10-15**:
+
+  | Association | Targets | Status | Hits a fresh Haiku builder? |
+  |---|---|---|---|
+  | `AWS-UpdateSSMAgent` | `tag:SSMAgentAutoUpdate=enabled` | Success | **No** |
+  | `AWSQuickSetupType-EnableDHMC` | `aws:NoOpAutomationTag` | Success | No |
+  | `AWS-EnableExplorer`, `…EnableAREX`, `…SetupJITNAResources` | `aws:NoOpAutomationTag` | Success | No |
+  | `AWS-GatherSoftwareInventory` | `InstanceIds:*` | Pending/Associated | No RunCommand dispatch observed |
+  | `AWS-RunPatchBaseline` | `InstanceIds:*` | Failed (stale) | **No** — one-shot `at(2026-08-30)`, already elapsed |
+  | `EpoxyChronicleInstallationDocument` | `InstanceIds:*`, `rate(1 day)` | Failed | **Yes** — fails daily, noise only |
+
+  `AWS-UpdateSSMAgent` was **re-scoped off `InstanceIds:*` on 2026-10-04**
+  (association version 1 → 2: `InstanceIds:*` + `rate(14 days)` → `tag:SSMAgentAutoUpdate=enabled`,
+  no schedule). No launcher in this repo applies that tag (`haiku-launch`,
+  `haiku-bake-builder`, `haiku-perf-gate`, `haiku-repo-publish-ephemeral`,
+  `launch_builder.py`), so native builders are out of its scope by construction and the
+  document has never been invoked against one. **Keep it that way: never add an
+  `SSMAgentAutoUpdate` tag to a Haiku instance** — the pipeline test suite asserts this.
+  DHMC is on account-wide (`/ssm/managed-instance/default-ec2-instance-management-role`
+  is `Customized`), but it is not implicated: a Haiku node ran `AWS-RunShellScript` to
+  `Success` repeatedly on 2026-10-14/15 with DHMC unchanged.
+
+  The one live residual is `EpoxyChronicleInstallationDocument`, whose only step
+  (`InstallChronicleOnLinux`, `rc=1`, *"ipc messaging received timeout signal"*) assumes
+  Linux. Same execution, split by platform, proves it is the platform and not the node:
+  Haiku `i-0a9c668e1e721fe3f` / `i-0bbfa2a6cf4708fd7` `Failed`, Ubuntu
+  `i-0e2cd3d53a5757493` `Success`. It is an **account-level** association not created by
+  this project, so narrowing it is an account-owner decision (and central tooling may
+  recreate it); the repo-side cost is one failed execution per node per day and nothing
+  else. If an owner does want it silenced, the remedy is targeting — narrow it off
+  `InstanceIds:*` to a tag the Haiku nodes do not carry — **not** a change on the Haiku
+  side and **not** disabling DHMC.
+- **Check.** Before blaming SSM for a wave that will not start, run these read-only
+  checks in this order; all are `describe`/`list` and safe:
+
+  ```bash
+  # 1. Is any association actually targeting every instance?
+  aws ssm list-associations --region us-west-2 \
+    --query 'Associations[].{Name:Name,Targets:Targets,Status:Overview.Status}'
+
+  # 2. Has AWS-UpdateSSMAgent been re-widened to InstanceIds:* ? (expect the tag target)
+  aws ssm describe-association --region us-west-2 \
+    --association-id a1c5c244-4b1f-4fd2-aef0-ade825d85b61 \
+    --query 'AssociationDescription.{Version:AssociationVersion,Targets:Targets}'
+
+  # 3. Is the command channel actually wedged, or just noisy?
+  aws ssm list-command-invocations --region us-west-2 --instance-id <i-…> \
+    --query 'CommandInvocations[].[RequestedDateTime,DocumentName,Status]' --output text
+  ```
+
+  A wedge means **zero** `AWS-RunShellScript Success` rows in step 3 — if any are
+  `Success`, the channel works and the problem is elsewhere. Expect `AWS-UpdateSSMAgent`
+  to be absent from that history entirely; if it appears against a Haiku node, step 2
+  has regressed and the #576 mechanism is back.
