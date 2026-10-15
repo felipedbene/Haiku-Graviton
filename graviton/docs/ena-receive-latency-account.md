@@ -472,7 +472,10 @@ Two things this establishes that the kernel probe cannot:
   drain rate — which is the definition of a bottleneck being fed too hard.
 
 The transmit rows are a by-product worth recording: **the transmit path has a
-standing queue of its own**, 7.7 ms at 8 flows. It is not analysed here (tracked in #582).
+standing queue of its own**, 7.7 ms at 8 flows. It is not analysed here (tracked in #582;
+the pre-run account is `ena-transmit-latency-account.md`, which argues from source that
+the *cause* may be on the transmit side while the *queue* is on the receive side, since an
+ICMP round trip cannot tell the two apart).
 
 ### 4.1 The sender's own view
 

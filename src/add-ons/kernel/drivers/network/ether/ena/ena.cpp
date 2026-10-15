@@ -3209,6 +3209,27 @@ ena_reclaim_transmitted(ena_haiku_device* device)
 }
 
 
+/*!	Charges one finished transmit ring-full stall to the txRingFull* counters.
+
+	Must be called with \a txLock held, and only from a path that actually
+	entered ena_send()'s wait loop (\a start non-zero). Separate from the loop
+	because the loop has three exits -- it runs out of work to wait for, the
+	caller asked not to block, or a reset freed the ring under us -- and the
+	longest stalls leave by the last of them, so an accounting that only
+	happened on the normal exit would systematically discard the tail it exists
+	to measure.
+*/
+static inline void
+ena_account_tx_stall(ena_haiku_device* device, bigtime_t start)
+{
+	const bigtime_t elapsed = system_time() - start;
+
+	device->txRingFullTime += elapsed;
+	if (elapsed > device->txRingFullMaxTime)
+		device->txRingFullMaxTime = elapsed;
+}
+
+
 static status_t
 ena_send(ena_haiku_device* device, net_buffer* buffer)
 {
@@ -3257,17 +3278,44 @@ ena_send(ena_haiku_device* device, net_buffer* buffer)
 	   exactly the `num_bufs + 1` it checks for itself (ena_eth_com.c:457).
 	   Waiting on txFreeCount alone would never block, and we would drop frames
 	   instead. */
+	bigtime_t stallStart = 0;
 	while (device->txFreeCount < segments
 			|| !ena_com_sq_have_enough_space(device->txSubmissionQueue,
 				(uint16)(segments + 1))) {
+		/* Timed from the first turn, because what is parked here is whichever
+		   thread called us -- and for a frame TCP emits out of
+		   SegmentReceived() that is the network stack's single receive-FIFO
+		   consumer, which therefore stops draining the receive queue for
+		   exactly this long. That coupling is how a transmit-side limit
+		   surfaces as receive-side latency, and #582's figure (an ICMP round
+		   trip) cannot separate the two. Two clock reads per stall, none at all
+		   on the path where the ring had room. */
+		if (stallStart == 0) {
+			stallStart = system_time();
+			device->txRingFullStalls++;
+		}
+
+		/* Tested before the unlock, unlike the rest of the loop: it is a plain
+		   flag read either way, and doing it here is what lets the stall be
+		   charged under the lock that protects the counters. */
+		if (device->nonBlocking) {
+			ena_account_tx_stall(device, stallStart);
+			return B_WOULD_BLOCK;
+		}
+
+		device->txRingFullWaits++;
 		locker.Unlock();
 
-		if (device->nonBlocking)
-			return B_WOULD_BLOCK;
-
 		status_t status = acquire_sem(device->txCompleted);
-		if (status != B_OK)
+		if (status != B_OK) {
+			/* The semaphore has been deleted, i.e. the device is going away
+			   under us. Counted as a stall but deliberately not timed: that is
+			   a teardown, and putting its duration into a latency figure would
+			   corrupt the one number these counters exist to report. It costs
+			   the mean one untimed sample per teardown, which is the cheaper
+			   of the two errors. */
 			return status;
+		}
 
 		locker.Lock();
 
@@ -3275,11 +3323,16 @@ ena_send(ena_haiku_device* device, net_buffer* buffer)
 		   run and freed the TX ring -- and it is the reset that woke us. Re-check
 		   before ena_reclaim_transmitted(), which would touch the freed ring.
 		   This mirrors the equivalent guard on the receive path. */
-		if (device->resetting || device->deviceDead)
+		if (device->resetting || device->deviceDead) {
+			ena_account_tx_stall(device, stallStart);
 			return B_DEV_NOT_READY;
+		}
 
 		ena_reclaim_transmitted(device);
 	}
+
+	if (stallStart != 0)
+		ena_account_tx_stall(device, stallStart);
 
 	/* Claim one slot per segment. A slot and a request id are the same
 	   resource -- txBuffers is indexed by request id -- so the chain is drawn
@@ -4022,6 +4075,10 @@ ena_ioctl(void* cookie, uint32 op, void* buffer, size_t length)
 				&device->rxIrqInterval);
 			stats.intrDelayResolution = device->comDev.intr_delay_resolution;
 			stats.rearmMode = (uint64)(uint32)atomic_get(&device->rearmMode);
+			stats.txRingFullStalls = device->txRingFullStalls;
+			stats.txRingFullWaits = device->txRingFullWaits;
+			stats.txRingFullTime = (uint64)device->txRingFullTime;
+			stats.txRingFullMaxTime = (uint64)device->txRingFullMaxTime;
 
 			return user_memcpy(buffer, &stats, sizeof(stats));
 		}

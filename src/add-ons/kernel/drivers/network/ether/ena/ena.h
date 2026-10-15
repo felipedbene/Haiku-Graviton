@@ -512,6 +512,20 @@ struct ena_irq_stats {
 	   that the conversion is a measurement taken alongside the numbers it
 	   applies to, rather than an assumption made later. */
 	uint64	intrDelayResolution;
+	/* Transmit ring-full stalls; see the txRingFull* fields. These ride in this
+	   snapshot rather than the ENI one because this is the snapshot that has a
+	   reader: ena_fault samples it as a delta over an interval and throws the
+	   sample away if the device reset inside it, which is exactly the discipline
+	   a stall figure needs. The two times are microseconds.
+
+	   Appended at the end, and ENA_IOCTL_GET_IRQ_STATS compares the caller's
+	   sizeof against this struct, so the copy in src/bin/ena_fault must grow by
+	   the same four fields or `ena_fault stats` starts failing with
+	   B_BAD_VALUE. */
+	uint64	txRingFullStalls;
+	uint64	txRingFullWaits;
+	uint64	txRingFullTime;
+	uint64	txRingFullMaxTime;
 };
 
 /* Snapshot returned by ENA_IOCTL_GET_ENI_STATS. Every field is uint64 on
@@ -923,6 +937,34 @@ struct ena_haiku_device {
 	uint64				txDoorbells;
 	uint64				txBurstExhausted;
 	uint16				txBurstLeftMin;
+
+	/* --- transmit ring-full stalls (#582) -------------------------------- */
+	/* ena_send() has no queue to fall back on: when the submission queue has no
+	   room it parks the *calling* thread on txCompleted until a completion frees
+	   descriptors. For a frame arriving from TCP's SegmentReceived() that caller
+	   is the stack's single receive-FIFO consumer thread, so the whole receive
+	   queue stops draining for the length of the stall. That is the one
+	   mechanism by which a transmit-side limit can show up as receive-side
+	   latency, and nothing in the tree measured it -- #582's 7.7 ms was an ICMP
+	   round trip, which cannot tell the two paths apart.
+
+	   All four are written only under txLock, like txFrames, and are monotonic
+	   across a reset.
+
+	   The ratio of the first two is the diagnosis, not either alone:
+	   - waits/stalls near 1 means the thread really slept for an interrupt, and
+	     time/stalls is the interrupt-completion latency;
+	   - waits/stalls large with a small time/stalls means acquire_sem() returned
+	     at once on credit banked by earlier interrupts (ena_io_interrupt()
+	     releases one unit per interrupt whether or not a sender is waiting, and
+	     unlike rxReady nothing collapses the backlog), i.e. the loop degenerated
+	     into a poll that retakes txLock once per turn. */
+	uint64				txRingFullStalls;
+	uint64				txRingFullWaits;
+	bigtime_t			txRingFullTime;
+	/* The worst single stall. #582 needs a maximum and not just a mean: a mean
+	   diluted by millions of unobstructed frames cannot refute a tail. */
+	bigtime_t			txRingFullMaxTime;
 
 	/* Debug knob, driver settings "tx_extra_doorbells": ring the doorbell this
 	   many extra times per frame. Writing the same tail again is a no-op for
