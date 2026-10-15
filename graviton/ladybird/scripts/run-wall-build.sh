@@ -8,8 +8,8 @@
 # them.
 #
 # Usage, run natively on the builder as baron:
-#     run-wall-build.sh <phase>...     # toolchain deps png ffmpeg lb skia pc
-#                                      # configure build
+#     run-wall-build.sh <phase>...     # toolchain deps png ffmpeg lb skiafetch
+#                                      # skiabuild pc configure build
 #     run-wall-build.sh all
 #
 # Each phase appends to its own log under $LOGDIR and prints a SENTINEL line on
@@ -94,8 +94,24 @@ phase_lb() {
 	patch -p1 --no-backup-if-mismatch < "$RECIPE/patches/ladybird-haiku.patch"
 }
 
-phase_skia() {
-	sh "$RECIPE/scripts/run-skia-fetch.sh"
+# Split in two because the fetch is ~8 GB and run-skia-fetch.sh starts with
+# `rm -rf skia`: anything that makes the compile fail (a bad patch, a missing
+# gn) must not cost another full clone to retry. Note run-skia-fetch.sh exits
+# non-zero even on success -- git-sync-deps' last step is bin/fetch-gn, whose
+# platform map has no 'haiku' key, so it raises KeyError after every external
+# has already been synced. gn comes from pkgman here, so that step is not
+# needed; assert on the externals instead of on the exit status.
+phase_skiafetch() {
+	sh "$RECIPE/scripts/run-skia-fetch.sh" || true
+	# DEPS lists ~46 externals; harfbuzz and icu are the ones args.gn actually
+	# compiles, so a truncated sync shows up here rather than 40 minutes in.
+	for d in harfbuzz icu libpng zlib; do
+		test -d "/boot/home/skia/third_party/externals/$d" \
+			|| { echo "skia external $d not synced" >&2; return 1; }
+	done
+}
+
+phase_skiabuild() {
 	cd /boot/home/skia
 	patch -p1 --no-backup-if-mismatch < "$RECIPE/patches/skia-haiku.patch"
 	JOBS="$JOBS" sh "$RECIPE/scripts/build-skia.sh"
@@ -177,7 +193,7 @@ run_phase() {
 }
 
 if [ "$1" = all ]; then
-	set -- toolchain deps png ffmpeg lb skia pc configure build
+	set -- toolchain deps png ffmpeg lb skiafetch skiabuild pc configure build
 fi
 test $# -gt 0 || { echo "usage: $0 <phase>... | all" >&2; exit 2; }
 
