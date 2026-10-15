@@ -1,0 +1,760 @@
+
+Downloading: https://ftp.gnu.org/gnu/libffcall/libffcall-2.5.tar.gz ...
+[srccache] HIT 6523c94d73b30980862db0b1ee13260b198ad90cf3c695008e2d772da343e281-libffcall-2.5.tar.gz (1451999 bytes)
+Validating checksum of libffcall-2.5.tar.gz
+Unpacking source of libffcall-2.5.tar.gz
+Initialized empty Git repository in /boot/home/haikuports/dev-libs/ffcall/work-2.5/sources/libffcall-2.5/.git/
+chroot has these packages active:
+	/boot/system/packages/autoconf-2.72-1-arm64.hpkg
+	/boot/system/packages/automake-1.18.1-1-arm64.hpkg
+	/boot/system/packages/bash-5.3_bootstrap-1-arm64.hpkg
+	/boot/system/packages/binutils-2.41_2026_03_10_bootstrap-2-arm64.hpkg
+	/boot/system/packages/bzip2-1.0.8-3-arm64.hpkg
+	/boot/system/packages/ca_root_certificates-2025_12_02-1-any.hpkg
+	/boot/system/packages/coreutils-9.9_bootstrap-1-arm64.hpkg
+	/boot/system/packages/diffutils-3.12-1-arm64.hpkg
+	/boot/system/packages/findutils-4.9.0_bootstrap-1-arm64.hpkg
+	/boot/system/packages/freetype-2.14.3-1-arm64.hpkg
+	/boot/system/packages/gawk-3.1.8_bootstrap-2-arm64.hpkg
+	/boot/system/packages/gcc-13.3.0_2026_03_29_bootstrap-1-arm64.hpkg
+	/boot/system/packages/gcc_syslibs-13.3.0_2026_03_29_bootstrap-1-arm64.hpkg
+	/boot/system/packages/grep-3.11_bootstrap-1-arm64.hpkg
+	/boot/system/packages/gzip-1.14-1-arm64.hpkg
+	/boot/system/packages/haiku-r1~beta6_hrev59996-1-arm64.hpkg
+	/boot/system/packages/haiku_devel-r1~beta6_hrev59996-1-arm64.hpkg
+	/boot/system/packages/icu74-74.1_bootstrap-1-arm64.hpkg
+	/boot/system/packages/libiconv-1.18-1-arm64.hpkg
+	/boot/system/packages/libpng16-1.6.53-1-arm64.hpkg
+	/boot/system/packages/libtool-2.5.4-1-arm64.hpkg
+	/boot/system/packages/libtool_libltdl-2.5.4-1-arm64.hpkg
+	/boot/system/packages/m4-1.4.19_bootstrap-1-arm64.hpkg
+	/boot/system/packages/make-4.4.1_bootstrap-1-arm64.hpkg
+	/boot/system/packages/ncurses6-6.6_bootstrap-1-arm64.hpkg
+	/boot/system/packages/noto-20170202_bootstrap-7-any.hpkg
+	/boot/system/packages/openssl3-3.5.7-1-arm64.hpkg
+	/boot/system/packages/perl-5.42.2-1-arm64.hpkg
+	/boot/system/packages/sed-4.9_bootstrap-1-arm64.hpkg
+	/boot/system/packages/tar-1.35-2-arm64.hpkg
+	/boot/system/packages/unzip-6.10c23-6-arm64.hpkg
+	/boot/system/packages/which-2.21-6-arm64.hpkg
+	/boot/system/packages/zlib-1.3.2-1-arm64.hpkg
+	/boot/system/packages/zstd-1.5.6-2-arm64.hpkg
+----- Package Info ----------------
+header size:                     80
+heap size:                     1162
+TOC size:                        41
+package attributes size:       1478
+total size:                    1242
+-----------------------------------
+----- Package Info ----------------
+header size:                     80
+heap size:                     1165
+TOC size:                        41
+package attributes size:       1590
+total size:                    1245
+-----------------------------------
+----- Package Info ----------------
+header size:                     80
+heap size:                     1205
+TOC size:                        41
+package attributes size:       1552
+total size:                    1285
+-----------------------------------
+waiting for build package ffcall-2.5-1 to be activated
+waiting for build package ffcall_debuginfo-2.5-1 to be activated
+waiting for build package ffcall_devel-2.5-1 to be activated
+Building ...
+libtoolize: putting auxiliary files in AC_CONFIG_AUX_DIR, 'build-aux'.
+libtoolize: copying file 'build-aux/ltmain.sh'
+libtoolize: putting macros in AC_CONFIG_MACRO_DIRS, 'm4'.
+libtoolize: copying file 'm4/libtool.m4'
+libtoolize: copying file 'm4/ltoptions.m4'
+libtoolize: copying file 'm4/ltsugar.m4'
+libtoolize: copying file 'm4/ltversion.m4'
+libtoolize: copying file 'm4/lt~obsolete.m4'
+libtoolize: Consider adding '-I m4' to ACLOCAL_AMFLAGS in Makefile.am.
+configure.ac:59: installing 'build-aux/compile'
+configure.ac:22: installing 'build-aux/missing'
+gnulib-lib/Makefile.am: installing 'build-aux/depcomp'
+checking for a BSD-compatible install... /bin/install -c
+checking whether sleep supports fractional seconds... yes
+checking filesystem timestamp resolution... 0.01
+checking whether build environment is sane... yes
+checking for a race-free mkdir -p... /bin/mkdir -p
+checking for gawk... gawk
+checking whether make sets $(MAKE)... yes
+checking whether make supports nested variables... yes
+checking xargs -n works... yes
+checking whether UID '0' is supported by ustar format... yes
+checking whether GID '0' is supported by ustar format... yes
+checking how to create a ustar tar archive... gnutar
+checking whether make sets $(MAKE)... (cached) yes
+checking for gcc... gcc
+checking whether the C compiler works... yes
+checking for C compiler default output file name... a.out
+checking for suffix of executables... 
+checking whether we are cross compiling... no
+checking for suffix of object files... o
+checking whether the compiler supports GNU C... yes
+checking whether gcc accepts -g... yes
+checking for gcc option to enable C11 features... none needed
+checking whether gcc understands -c and -o together... yes
+checking whether the compiler is clang... no
+checking for compiler option needed when checking for declarations... none
+checking whether make supports the include directive... yes (GNU style)
+checking dependency style of gcc... gcc3
+checking how to run the C preprocessor... gcc -E
+checking for egrep -e... /bin/grep -E
+checking whether using GNU C... yes
+checking for grep that handles long lines and -e... /bin/grep
+checking for egrep... /bin/grep -E
+checking whether C symbols are prefixed with underscore at the linker level... no
+checking whether to use C++... yes
+checking for g++... g++
+checking whether the C++ compiler (g++  ) works... yes
+checking whether the C++ compiler supports namespaces... yes
+checking dependency style of g++... gcc3
+checking whether the compiler supports GNU C++... yes
+checking whether g++ accepts -g... yes
+checking for Minix Amsterdam compiler... no
+checking for ar... ar
+checking for ranlib... ranlib
+checking how to make hard links... cp -p
+checking for stdio.h... yes
+checking for stdlib.h... yes
+checking for string.h... yes
+checking for inttypes.h... yes
+checking for stdint.h... yes
+checking for strings.h... yes
+checking for sys/stat.h... yes
+checking for sys/types.h... yes
+checking for unistd.h... yes
+checking for wchar.h... yes
+checking for minix/config.h... no
+checking for limits.h... yes
+checking for threads.h... yes
+checking for pthread.h... yes
+checking for sys/socket.h... yes
+checking for error.h... no
+checking for mntent.h... no
+checking for sys/param.h... yes
+checking for sys/time.h... yes
+checking for stdbool.h... yes
+checking for stdckdint.h... no
+checking whether it is safe to define __EXTENSIONS__... yes
+checking whether _XOPEN_SOURCE should be defined... no
+checking build system type... aarch64-unknown-haiku
+checking host system type... aarch64-unknown-haiku
+checking whether the C++ compiler (g++ -g -O2 ) works... yes
+checking whether the C++ compiler supports namespaces... yes
+checking dependency style of g++... (cached) gcc3
+checking whether the compiler supports GNU C++... (cached) yes
+checking whether g++ accepts -g... (cached) yes
+checking for gcc option to support large files... none needed
+checking host CPU and C ABI... arm64
+checking how to print strings... printf
+checking for a sed that does not truncate output... /bin/sed
+checking for fgrep... /bin/grep -F
+checking for ld used by gcc... /boot/system/develop/tools/aarch64-unknown-haiku/bin/ld
+checking if the linker (/boot/system/develop/tools/aarch64-unknown-haiku/bin/ld) is GNU ld... yes
+checking for BSD- or MS-compatible name lister (nm)... /bin/nm -B
+checking the name lister (/bin/nm -B) interface... BSD nm
+checking whether ln -s works... yes
+checking the maximum length of command line arguments... 65536
+checking how to convert aarch64-unknown-haiku file names to aarch64-unknown-haiku format... func_convert_file_noop
+checking how to convert aarch64-unknown-haiku file names to toolchain format... func_convert_file_noop
+checking for /boot/system/develop/tools/aarch64-unknown-haiku/bin/ld option to reload object files... -r
+checking for file... :
+checking for objdump... objdump
+checking how to recognize dependent libraries... pass_all
+checking for dlltool... no
+checking how to associate runtime and link libraries... printf %s\n
+checking for archiver @FILE support... @
+checking for strip... strip
+checking command to parse /bin/nm -B output from gcc object... ok
+checking for sysroot... no
+checking for a working dd... /bin/dd
+checking how to truncate binary pipes... /bin/dd bs=4096 count=1
+checking for mt... no
+checking if : is a manifest tool... no
+checking for dlfcn.h... yes
+checking for objdir... .libs
+checking if gcc supports -fno-rtti -fno-exceptions... no
+checking for gcc option to produce PIC...  -DPIC
+checking if gcc PIC flag  -DPIC works... yes
+checking if gcc static flag  works... yes
+checking if gcc supports -c -o file.o... yes
+checking if gcc supports -c -o file.o... (cached) yes
+checking whether the gcc linker (/boot/system/develop/tools/aarch64-unknown-haiku/bin/ld) supports shared libraries... yes
+checking whether -lc should be explicitly linked in... yes
+checking dynamic linker characteristics... haiku runtime_loader
+checking how to hardcode library paths into programs... immediate
+checking whether stripping libraries is possible... yes
+checking if libtool supports shared libraries... yes
+checking whether to build shared libraries... yes
+checking whether to build static libraries... no
+checking how to run the C++ preprocessor... g++ -E
+checking for ld used by g++... /boot/system/develop/tools/aarch64-unknown-haiku/bin/ld
+checking if the linker (/boot/system/develop/tools/aarch64-unknown-haiku/bin/ld) is GNU ld... yes
+checking whether the g++ linker (/boot/system/develop/tools/aarch64-unknown-haiku/bin/ld) supports shared libraries... yes
+checking for g++ option to produce PIC...  -DPIC
+checking if g++ PIC flag  -DPIC works... yes
+checking if g++ static flag  works... yes
+checking if g++ supports -c -o file.o... yes
+checking if g++ supports -c -o file.o... (cached) yes
+checking whether the g++ linker (/boot/system/develop/tools/aarch64-unknown-haiku/bin/ld) supports shared libraries... yes
+checking dynamic linker characteristics... haiku runtime_loader
+checking how to hardcode library paths into programs... immediate
+checking for unistd.h... (cached) yes
+checking for mmap... yes
+checking for MAP_ANONYMOUS... yes
+checking for gcc options needed to detect all undeclared functions... none needed
+checking whether code in malloc()ed memory is executable... no
+checking for sys/mman.h... yes
+checking for mmap... (cached) yes
+checking for working mmap with MAP_ANONYMOUS... yes
+checking for mprotect... yes
+checking for working mprotect... yes
+checking whether mprotect can make malloc()ed memory executable... yes
+checking whether mprotect can make mmap()ed memory executable... yes
+checking for setmntent... no
+checking whether the preprocessor supports include_next... yes
+checking whether source code line length is unlimited... yes
+checking whether limits.h has WORD_BIT, BOOL_WIDTH etc.... no
+checking whether imported symbols can be declared weak... yes
+checking for pthread.h... (cached) yes
+checking for pthread_kill in -lpthread... yes
+checking whether POSIX threads API is available... yes
+checking for multithread API to use... posix
+checking whether the compiler produces multi-arch binaries... no
+checking for wint_t... yes
+checking whether wint_t is large enough... yes
+checking whether stdint.h conforms to C99... no
+checking for sys/inttypes.h... no
+checking for sys/bitypes.h... no
+checking for bit size of ptrdiff_t... 64
+checking for bit size of size_t... 64
+checking for bit size of sig_atomic_t... 32
+checking for bit size of wchar_t... 32
+checking for bit size of wint_t... 32
+checking whether sig_atomic_t is signed... yes
+checking whether wchar_t is signed... yes
+checking whether wint_t is signed... no
+checking for ptrdiff_t integer literal suffix... l
+checking for size_t integer literal suffix... ul
+checking for sig_atomic_t integer literal suffix... 
+checking for wchar_t integer literal suffix... 
+checking for wint_t integer literal suffix... u
+checking for pid_t... yes
+checking for mode_t... yes
+checking for off64_t... no
+checking for size_t... yes
+checking for working alloca.h... yes
+checking for alloca... yes
+checking for inline... inline
+checking for __sync_bool_compare_and_swap... yes
+checking for _set_invalid_parameter_handler... no
+checking for fcntl... yes
+checking for symlink... yes
+checking for getdtablesize... yes
+checking for getexecname... no
+checking for lstat... yes
+checking for sigaction... yes
+checking for sigaltstack... yes
+checking for siginterrupt... yes
+checking for mquery... no
+checking for pstat_getprocvm... no
+checking for complete errno.h... yes
+checking for error... no
+checking whether error_at_line is declared... no
+checking whether strerror_r is declared... yes
+checking whether strerror_r returns char *... no
+checking whether ctype.h defines __header_inline... no
+checking for sig_atomic_t... yes
+checking for working fcntl.h... no (bad O_NOATIME)
+checking whether stat file-mode macros are broken... no
+checking for C/C++ restrict keyword... __restrict__
+checking for nlink_t... yes
+checking whether getdtablesize is declared... yes
+checking for GNU libc compatible malloc... yes
+checking for O_CLOEXEC... yes
+checking for promoted mode_t type... mode_t
+checking for pthread_t... yes
+checking for pthread_spinlock_t... yes
+checking for pthread_spin_init... yes
+checking for sigset_t... yes
+checking for glibc-compatible sys/cdefs.h... no
+checking for sched.h... yes
+checking for struct sched_param... yes
+checking for uid_t... yes
+checking for gid_t... yes
+checking for volatile sig_atomic_t... yes
+checking for sighandler_t... yes
+checking for good max_align_t... yes
+checking whether NULL can be used in arbitrary expressions... yes
+checking for unreachable... no
+checking whether nullptr_t needs <stddef.h>... no
+checking for clean definition of __STDC_VERSION_STDDEF_H__... yes
+checking whether fcloseall is declared... yes
+checking whether getw is declared... no
+checking whether putw is declared... no
+checking which flavor of printf attribute matches inttypes macros... system
+checking for nl_langinfo and CODESET... yes
+checking for an english Unicode locale... en_US.UTF-8
+checking whether ecvt is declared... yes
+checking whether fcvt is declared... yes
+checking whether gcvt is declared... yes
+checking whether MB_CUR_MAX is correct... yes
+checking whether strerror(0) succeeds... yes
+checking for struct timespec in <time.h>... yes
+checking for TIME_UTC in <time.h>... yes
+checking whether execvpe is declared... yes
+checking for C compiler option to allow warnings... -Wno-error
+checking for pthread_rwlock_t... yes
+checking whether pthread_rwlock_rdlock prefers a writer to a reader... yes
+checking for ssize_t... yes
+checking for working stdnoreturn.h... yes
+checking whether pthread_once works... yes
+checking for PTHREAD_CREATE_DETACHED... yes
+checking for PTHREAD_MUTEX_RECURSIVE... yes
+checking for PTHREAD_MUTEX_ROBUST... no
+checking for PTHREAD_PROCESS_SHARED... yes
+checking that generated files are newer than configure... done
+configure: creating ./config.status
+config.status: creating Makefile
+config.status: creating gnulib-lib/Makefile
+config.status: creating avcall/Makefile
+config.status: creating vacall/Makefile
+config.status: creating trampoline/Makefile
+config.status: creating callback/Makefile
+config.status: creating callback/vacall_r/Makefile
+config.status: creating callback/trampoline_r/Makefile
+config.status: creating config.h
+config.status: creating ffcall-version.h
+config.status: executing depfiles commands
+config.status: executing libtool commands
+cd gnulib-lib && make all
+/bin/sh ./libtool --mode=compile gcc -I. -I. -I.. -I./.. -I./vacall_r  -g -O2 -c ./ffcall-version.c
+make: *** No rule to make target 'avcall/avcall.lo', needed by 'libffcall.la'.  Stop.
+make: *** Waiting for unfinished jobs....
+make[1]: Entering directory '/sources/libffcall-2.5/gnulib-lib'
+sed -e 1h -e '1s,.*,/* DO NOT EDIT! GENERATED AUTOMATICALLY! */,' -e 1G \
+      -e 's|@''GUARD_PREFIX''@|GL|g' \
+      -e 's|@''INCLUDE_NEXT''@|include_next|g' \
+      -e 's|@''PRAGMA_SYSTEM_HEADER''@|#pragma GCC system_header|g' \
+      -e 's|@''PRAGMA_COLUMNS''@||g' \
+      -e 's|@''NEXT_LIMITS_H''@|<limits.h>|g' \
+      ./limits.in.h > limits.h-t
+sed -e 1h -e '1s,.*,/* DO NOT EDIT! GENERATED AUTOMATICALLY! */,' -e 1G \
+      -e 's|@''GUARD_PREFIX''@|GL|g' \
+      -e 's|@''HAVE_PTHREAD_H''@|1|g' \
+      -e 's|@''INCLUDE_NEXT''@|include_next|g' \
+      -e 's|@''PRAGMA_SYSTEM_HEADER''@|#pragma GCC system_header|g' \
+      -e 's|@''PRAGMA_COLUMNS''@||g' \
+      -e 's|@''NEXT_PTHREAD_H''@|<pthread.h>|g' \
+      -e 's/@''GNULIB_PTHREAD_THREAD''@/0/g' \
+      -e 's/@''GNULIB_PTHREAD_ONCE''@/1/g' \
+      -e 's/@''GNULIB_PTHREAD_MUTEX''@/0/g' \
+      -e 's/@''GNULIB_PTHREAD_RWLOCK''@/0/g' \
+      -e 's/@''GNULIB_PTHREAD_COND''@/0/g' \
+      -e 's/@''GNULIB_PTHREAD_TSS''@/0/g' \
+      -e 's/@''GNULIB_PTHREAD_SPIN''@/0/g' \
+      -e 's/@''GNULIB_PTHREAD_MUTEX_TIMEDLOCK''@/0/g' \
+      -e 's|@''HAVE_PTHREAD_T''@|1|g' \
+      -e 's|@''HAVE_PTHREAD_SPINLOCK_T''@|1|g' \
+      -e 's|@''HAVE_PTHREAD_CREATE_DETACHED''@|1|g' \
+      -e 's|@''HAVE_PTHREAD_MUTEX_RECURSIVE''@|1|g' \
+      -e 's|@''HAVE_PTHREAD_MUTEX_ROBUST''@|0|g' \
+      -e 's|@''HAVE_PTHREAD_PROCESS_SHARED''@|1|g' \
+      -e 's|@''HAVE_PTHREAD_CREATE''@|1|g' \
+      -e 's|@''HAVE_PTHREAD_ATTR_INIT''@|1|g' \
+      -e 's|@''HAVE_PTHREAD_ATTR_GETDETACHSTATE''@|1|g' \
+      -e 's|@''HAVE_PTHREAD_ATTR_SETDETACHSTATE''@|1|g' \
+      -e 's|@''HAVE_PTHREAD_ATTR_DESTROY''@|1|g' \
+      -e 's|@''HAVE_PTHREAD_SELF''@|1|g' \
+      -e 's|@''HAVE_PTHREAD_EQUAL''@|1|g' \
+      -e 's|@''HAVE_PTHREAD_DETACH''@|1|g' \
+      -e 's|@''HAVE_PTHREAD_JOIN''@|1|g' \
+      -e 's|@''HAVE_PTHREAD_EXIT''@|1|g' \
+      < ./pthread.in.h > pthread.h-t1
+sed -e 1h -e '1s,.*,/* DO NOT EDIT! GENERATED AUTOMATICALLY! */,' -e 1G \
+      -e 's|@''GUARD_PREFIX''@|GL|g' \
+      -e 's|@''HAVE_SCHED_H''@|1|g' \
+      -e 's|@''HAVE_SYS_CDEFS_H''@|0|g' \
+      -e 's|@''INCLUDE_NEXT''@|include_next|g' \
+      -e 's|@''PRAGMA_SYSTEM_HEADER''@|#pragma GCC system_header|g' \
+      -e 's|@''PRAGMA_COLUMNS''@||g' \
+      -e 's|@''NEXT_SCHED_H''@|<sched.h>|g' \
+      -e 's|@''HAVE_STRUCT_SCHED_PARAM''@|1|g' \
+      -e 's/@''GNULIB_SCHED_YIELD''@/0/g' \
+      -e 's|@''HAVE_SCHED_YIELD''@|1|g' \
+      -e 's|@''REPLACE_SCHED_YIELD''@|0|g' \
+      -e '/definitions of _GL_FUNCDECL_RPL/r ./c++defs.h' \
+      -e '/definition of _GL_WARN_ON_USE/r ./warn-on-use.h' \
+      ./sched.in.h > sched.h-t
+sed -e 1h -e '1s,.*,/* DO NOT EDIT! GENERATED AUTOMATICALLY! */,' -e 1G \
+      -e 's|@''GUARD_PREFIX''@|GL|g' \
+      -e 's|@''INCLUDE_NEXT''@|include_next|g' \
+      -e 's|@''PRAGMA_SYSTEM_HEADER''@|#pragma GCC system_header|g' \
+      -e 's|@''PRAGMA_COLUMNS''@||g' \
+      -e 's|@''NEXT_STDDEF_H''@|<stddef.h>|g' \
+      -e 's|@''NULLPTR_T_NEEDS_STDDEF''@|0|g' \
+      -e 's|@''STDDEF_NOT_IDEMPOTENT''@|0|g' \
+      -e 's|@''REPLACE_NULL''@|0|g' \
+      -e 's|@''HAVE_MAX_ALIGN_T''@|1|g' \
+      ./stddef.in.h > stddef.h-t
+sed -e 1h -e '1s,.*,/* DO NOT EDIT! GENERATED AUTOMATICALLY! */,' -e 1G \
+      -e 's|@''GUARD_PREFIX''@|GL|g' \
+      -e 's/@''HAVE_STDINT_H''@/1/g' \
+      -e 's|@''INCLUDE_NEXT''@|include_next|g' \
+      -e 's|@''PRAGMA_SYSTEM_HEADER''@|#pragma GCC system_header|g' \
+      -e 's|@''PRAGMA_COLUMNS''@||g' \
+      -e 's|@''NEXT_STDINT_H''@|<stdint.h>|g' \
+      -e 's/@''HAVE_C99_STDINT_H''@/0/g' \
+      -e 's/@''HAVE_SYS_TYPES_H''@/1/g' \
+      -e 's/@''HAVE_INTTYPES_H''@/1/g' \
+      -e 's/@''HAVE_SYS_INTTYPES_H''@/0/g' \
+      -e 's/@''HAVE_SYS_BITYPES_H''@/0/g' \
+      -e 's/@''HAVE_WCHAR_H''@/1/g' \
+      -e 's/@''APPLE_UNIVERSAL_BUILD''@/0/g' \
+      -e 's/@''BITSIZEOF_PTRDIFF_T''@/64/g' \
+      -e 's/@''PTRDIFF_T_SUFFIX''@/l/g' \
+      -e 's/@''BITSIZEOF_SIG_ATOMIC_T''@/32/g' \
+      -e 's/@''HAVE_SIGNED_SIG_ATOMIC_T''@/1/g' \
+      -e 's/@''SIG_ATOMIC_T_SUFFIX''@//g' \
+      -e 's/@''BITSIZEOF_SIZE_T''@/64/g' \
+      -e 's/@''SIZE_T_SUFFIX''@/ul/g' \
+      -e 's/@''BITSIZEOF_WCHAR_T''@/32/g' \
+      -e 's/@''HAVE_SIGNED_WCHAR_T''@/1/g' \
+      -e 's/@''WCHAR_T_SUFFIX''@//g' \
+      -e 's/@''BITSIZEOF_WINT_T''@/32/g' \
+      -e 's/@''HAVE_SIGNED_WINT_T''@/0/g' \
+      -e 's/@''WINT_T_SUFFIX''@/u/g' \
+      -e 's/@''GNULIBHEADERS_OVERRIDE_WINT_T''@/0/g' \
+      ./stdint.in.h > stdint.h-t
+/bin/mkdir -p 'sys'
+mv limits.h-t limits.h
+sed -e 1h -e '1s,.*,/* DO NOT EDIT! GENERATED AUTOMATICALLY! */,' -e 1G \
+      -e 's|@''GUARD_PREFIX''@|GL|g' \
+      -e 's|@''INCLUDE_NEXT''@|include_next|g' \
+      -e 's|@''PRAGMA_SYSTEM_HEADER''@|#pragma GCC system_header|g' \
+      -e 's|@''PRAGMA_COLUMNS''@||g' \
+      -e 's|@''NEXT_SYS_TYPES_H''@|<sys/types.h>|g' \
+      -e 's|@''WINDOWS_64_BIT_OFF_T''@|0|g' \
+      -e 's|@''HAVE_OFF64_T''@|0|g' \
+      -e 's|@''WINDOWS_STAT_INODES''@|0|g' \
+      ./sys_types.in.h > sys/types.h-t
+mv sched.h-t sched.h
+sed -e 1h -e '1s,.*,/* DO NOT EDIT! GENERATED AUTOMATICALLY! */,' -e 1G \
+      -e 's|@''GUARD_PREFIX''@|GL|g' \
+      -e 's|@''INCLUDE_NEXT''@|include_next|g' \
+      -e 's|@''PRAGMA_SYSTEM_HEADER''@|#pragma GCC system_header|g' \
+      -e 's|@''PRAGMA_COLUMNS''@||g' \
+      -e 's|@''NEXT_TIME_H''@|<time.h>|g' \
+      -e 's/@''GNULIB_CTIME''@/0/g' \
+      -e 's/@''GNULIB_LOCALTIME''@/0/g' \
+      -e 's/@''GNULIB_MKTIME''@/0/g' \
+      -e 's/@''GNULIB_NANOSLEEP''@/0/g' \
+      -e 's/@''GNULIB_STRFTIME''@/0/g' \
+      -e 's/@''GNULIB_STRPTIME''@/0/g' \
+      -e 's/@''GNULIB_TIME''@/0/g' \
+      -e 's/@''GNULIB_TIMEGM''@/0/g' \
+      -e 's/@''GNULIB_TIMESPEC_GET''@/0/g' \
+      -e 's/@''GNULIB_TIMESPEC_GETRES''@/0/g' \
+      -e 's/@''GNULIB_TIME_R''@/0/g' \
+      -e 's/@''GNULIB_TIME_RZ''@/0/g' \
+      -e 's/@''GNULIB_TZNAME''@/0/g' \
+      -e 's/@''GNULIB_TZSET''@/0/g' \
+      -e 's/@''GNULIB_MDA_TZSET''@/1/g' \
+      -e 's|@''HAVE_DECL_LOCALTIME_R''@|1|g' \
+      -e 's|@''HAVE_NANOSLEEP''@|1|g' \
+      -e 's|@''HAVE_STRPTIME''@|1|g' \
+      -e 's|@''HAVE_TIMEGM''@|1|g' \
+      -e 's|@''HAVE_TIMESPEC_GET''@|1|g' \
+      -e 's|@''HAVE_TIMESPEC_GETRES''@|1|g' \
+      -e 's|@''HAVE_TIMEZONE_T''@|0|g' \
+      -e 's|@''REPLACE_CTIME''@|0|g' \
+      -e 's|@''REPLACE_GMTIME''@|0|g' \
+      -e 's|@''REPLACE_LOCALTIME''@|0|g' \
+      -e 's|@''REPLACE_LOCALTIME_R''@|0|g' \
+      -e 's|@''REPLACE_MKTIME''@|0|g' \
+      -e 's|@''REPLACE_NANOSLEEP''@|0|g' \
+      -e 's|@''REPLACE_STRFTIME''@|0|g' \
+      -e 's|@''REPLACE_TIME''@|0|g' \
+      -e 's|@''REPLACE_TIMEGM''@|0|g' \
+      -e 's|@''REPLACE_TIMESPEC_GET''@|0|g' \
+      -e 's|@''REPLACE_TIMESPEC_GETRES''@|0|g' \
+      -e 's|@''REPLACE_TZSET''@|0|g' \
+      -e 's|@''PTHREAD_H_DEFINES_STRUCT_TIMESPEC''@|0|g' \
+      -e 's|@''SYS_TIME_H_DEFINES_STRUCT_TIMESPEC''@|0|g' \
+      -e 's|@''TIME_H_DEFINES_STRUCT_TIMESPEC''@|1|g' \
+      -e 's|@''UNISTD_H_DEFINES_STRUCT_TIMESPEC''@|0|g' \
+      -e 's|@''TIME_H_DEFINES_TIME_UTC''@|1|g' \
+      -e '/definitions of _GL_FUNCDECL_RPL/r ./c++defs.h' \
+      -e '/definition of _GL_ARG_NONNULL/r ./arg-nonnull.h' \
+      -e '/definition of _GL_WARN_ON_USE/r ./warn-on-use.h' \
+      ./time.in.h > time.h-t
+mv stddef.h-t stddef.h
+sed \
+      -e 's|@''HAVE_PTHREAD_ONCE''@|1|g' \
+      -e 's|@''HAVE_PTHREAD_MUTEX_INIT''@|1|g' \
+      -e 's|@''HAVE_PTHREAD_MUTEXATTR_INIT''@|1|g' \
+      -e 's|@''HAVE_PTHREAD_MUTEXATTR_GETTYPE''@|1|g' \
+      -e 's|@''HAVE_PTHREAD_MUTEXATTR_SETTYPE''@|1|g' \
+      -e 's|@''HAVE_PTHREAD_MUTEXATTR_GETROBUST''@|1|g' \
+      -e 's|@''HAVE_PTHREAD_MUTEXATTR_SETROBUST''@|1|g' \
+      -e 's|@''HAVE_PTHREAD_MUTEXATTR_DESTROY''@|1|g' \
+      -e 's|@''HAVE_PTHREAD_MUTEX_LOCK''@|1|g' \
+      -e 's|@''HAVE_PTHREAD_MUTEX_TRYLOCK''@|1|g' \
+      -e 's|@''HAVE_PTHREAD_MUTEX_TIMEDLOCK''@|1|g' \
+      -e 's|@''HAVE_PTHREAD_MUTEX_UNLOCK''@|1|g' \
+      -e 's|@''HAVE_PTHREAD_MUTEX_DESTROY''@|1|g' \
+      -e 's|@''HAVE_PTHREAD_RWLOCK_INIT''@|1|g' \
+      -e 's|@''HAVE_PTHREAD_RWLOCKATTR_INIT''@|1|g' \
+      -e 's|@''HAVE_PTHREAD_RWLOCKATTR_DESTROY''@|1|g' \
+      -e 's|@''HAVE_PTHREAD_RWLOCK_RDLOCK''@|1|g' \
+      -e 's|@''HAVE_PTHREAD_RWLOCK_WRLOCK''@|1|g' \
+      -e 's|@''HAVE_PTHREAD_RWLOCK_TRYRDLOCK''@|1|g' \
+      -e 's|@''HAVE_PTHREAD_RWLOCK_TRYWRLOCK''@|1|g' \
+      -e 's|@''HAVE_PTHREAD_RWLOCK_TIMEDRDLOCK''@|1|g' \
+      -e 's|@''HAVE_PTHREAD_RWLOCK_TIMEDWRLOCK''@|1|g' \
+      -e 's|@''HAVE_PTHREAD_RWLOCK_UNLOCK''@|1|g' \
+      -e 's|@''HAVE_PTHREAD_RWLOCK_DESTROY''@|1|g' \
+      -e 's|@''HAVE_PTHREAD_COND_INIT''@|1|g' \
+      -e 's|@''HAVE_PTHREAD_CONDATTR_INIT''@|1|g' \
+      -e 's|@''HAVE_PTHREAD_CONDATTR_DESTROY''@|1|g' \
+      -e 's|@''HAVE_PTHREAD_COND_WAIT''@|1|g' \
+      -e 's|@''HAVE_PTHREAD_COND_TIMEDWAIT''@|1|g' \
+      -e 's|@''HAVE_PTHREAD_COND_SIGNAL''@|1|g' \
+      -e 's|@''HAVE_PTHREAD_COND_BROADCAST''@|1|g' \
+      -e 's|@''HAVE_PTHREAD_COND_DESTROY''@|1|g' \
+      -e 's|@''HAVE_PTHREAD_KEY_CREATE''@|1|g' \
+      -e 's|@''HAVE_PTHREAD_SETSPECIFIC''@|1|g' \
+      -e 's|@''HAVE_PTHREAD_GETSPECIFIC''@|1|g' \
+      -e 's|@''HAVE_PTHREAD_KEY_DELETE''@|1|g' \
+      -e 's|@''HAVE_PTHREAD_SPIN_INIT''@|1|g' \
+      -e 's|@''HAVE_PTHREAD_SPIN_LOCK''@|1|g' \
+      -e 's|@''HAVE_PTHREAD_SPIN_TRYLOCK''@|1|g' \
+      -e 's|@''HAVE_PTHREAD_SPIN_UNLOCK''@|1|g' \
+      -e 's|@''HAVE_PTHREAD_SPIN_DESTROY''@|1|g' \
+      < pthread.h-t1 > pthread.h-t2
+mv stdint.h-t stdint.h
+mv sys/types.h-t sys/types.h
+mv time.h-t time.h
+libtool: compile:  gcc -I. -I. -I.. -I./.. -I./vacall_r -g -O2 -c ./ffcall-version.c  -DPIC -o .libs/ffcall-version.o
+sed \
+      -e 's|@''REPLACE_PTHREAD_CREATE''@|0|g' \
+      -e 's|@''REPLACE_PTHREAD_ATTR_INIT''@|0|g' \
+      -e 's|@''REPLACE_PTHREAD_ATTR_GETDETACHSTATE''@|0|g' \
+      -e 's|@''REPLACE_PTHREAD_ATTR_SETDETACHSTATE''@|0|g' \
+      -e 's|@''REPLACE_PTHREAD_ATTR_DESTROY''@|0|g' \
+      -e 's|@''REPLACE_PTHREAD_SELF''@|0|g' \
+      -e 's|@''REPLACE_PTHREAD_EQUAL''@|0|g' \
+      -e 's|@''REPLACE_PTHREAD_DETACH''@|0|g' \
+      -e 's|@''REPLACE_PTHREAD_JOIN''@|0|g' \
+      -e 's|@''REPLACE_PTHREAD_EXIT''@|0|g' \
+      -e 's|@''REPLACE_PTHREAD_ONCE''@|0|g' \
+      -e 's|@''REPLACE_PTHREAD_MUTEX_INIT''@|0|g' \
+      -e 's|@''REPLACE_PTHREAD_MUTEXATTR_INIT''@|0|g' \
+      -e 's|@''REPLACE_PTHREAD_MUTEXATTR_GETTYPE''@|0|g' \
+      -e 's|@''REPLACE_PTHREAD_MUTEXATTR_SETTYPE''@|0|g' \
+      -e 's|@''REPLACE_PTHREAD_MUTEXATTR_GETROBUST''@|0|g' \
+      -e 's|@''REPLACE_PTHREAD_MUTEXATTR_SETROBUST''@|0|g' \
+      -e 's|@''REPLACE_PTHREAD_MUTEXATTR_DESTROY''@|0|g' \
+      -e 's|@''REPLACE_PTHREAD_MUTEX_LOCK''@|0|g' \
+      -e 's|@''REPLACE_PTHREAD_MUTEX_TRYLOCK''@|0|g' \
+      -e 's|@''REPLACE_PTHREAD_MUTEX_TIMEDLOCK''@|0|g' \
+      -e 's|@''REPLACE_PTHREAD_MUTEX_UNLOCK''@|0|g' \
+      -e 's|@''REPLACE_PTHREAD_MUTEX_DESTROY''@|0|g' \
+      -e 's|@''REPLACE_PTHREAD_RWLOCK_INIT''@|0|g' \
+      -e 's|@''REPLACE_PTHREAD_RWLOCKATTR_INIT''@|0|g' \
+      -e 's|@''REPLACE_PTHREAD_RWLOCKATTR_DESTROY''@|0|g' \
+      -e 's|@''REPLACE_PTHREAD_RWLOCK_RDLOCK''@|0|g' \
+      -e 's|@''REPLACE_PTHREAD_RWLOCK_WRLOCK''@|0|g' \
+      -e 's|@''REPLACE_PTHREAD_RWLOCK_TRYRDLOCK''@|0|g' \
+      -e 's|@''REPLACE_PTHREAD_RWLOCK_TRYWRLOCK''@|0|g' \
+      -e 's|@''REPLACE_PTHREAD_RWLOCK_TIMEDRDLOCK''@|0|g' \
+      -e 's|@''REPLACE_PTHREAD_RWLOCK_TIMEDWRLOCK''@|0|g' \
+      -e 's|@''REPLACE_PTHREAD_RWLOCK_UNLOCK''@|0|g' \
+      -e 's|@''REPLACE_PTHREAD_RWLOCK_DESTROY''@|0|g' \
+      < pthread.h-t2 > pthread.h-t3
+sed \
+      -e 's|@''REPLACE_PTHREAD_COND_INIT''@|0|g' \
+      -e 's|@''REPLACE_PTHREAD_CONDATTR_INIT''@|0|g' \
+      -e 's|@''REPLACE_PTHREAD_CONDATTR_DESTROY''@|0|g' \
+      -e 's|@''REPLACE_PTHREAD_COND_WAIT''@|0|g' \
+      -e 's|@''REPLACE_PTHREAD_COND_TIMEDWAIT''@|0|g' \
+      -e 's|@''REPLACE_PTHREAD_COND_SIGNAL''@|0|g' \
+      -e 's|@''REPLACE_PTHREAD_COND_BROADCAST''@|0|g' \
+      -e 's|@''REPLACE_PTHREAD_COND_DESTROY''@|0|g' \
+      -e 's|@''REPLACE_PTHREAD_KEY_CREATE''@|0|g' \
+      -e 's|@''REPLACE_PTHREAD_SETSPECIFIC''@|0|g' \
+      -e 's|@''REPLACE_PTHREAD_GETSPECIFIC''@|0|g' \
+      -e 's|@''REPLACE_PTHREAD_KEY_DELETE''@|0|g' \
+      -e 's|@''REPLACE_PTHREAD_SPIN_INIT''@|0|g' \
+      -e 's|@''REPLACE_PTHREAD_SPIN_LOCK''@|0|g' \
+      -e 's|@''REPLACE_PTHREAD_SPIN_TRYLOCK''@|0|g' \
+      -e 's|@''REPLACE_PTHREAD_SPIN_UNLOCK''@|0|g' \
+      -e 's|@''REPLACE_PTHREAD_SPIN_DESTROY''@|0|g' \
+      -e '/definitions of _GL_FUNCDECL_RPL/r ./c++defs.h' \
+      -e '/definition of _Noreturn/r ./_Noreturn.h' \
+      -e '/definition of _GL_ARG_NONNULL/r ./arg-nonnull.h' \
+      -e '/definition of _GL_WARN_ON_USE/r ./warn-on-use.h' \
+      < pthread.h-t3 > pthread.h-t4
+rm -f pthread.h-t1 pthread.h-t2 pthread.h-t3
+mv pthread.h-t4 pthread.h
+make  all-recursive
+make[2]: Entering directory '/sources/libffcall-2.5/gnulib-lib'
+make[3]: Entering directory '/sources/libffcall-2.5/gnulib-lib'
+/bin/sh ../libtool  --tag=CC   --mode=compile gcc -DHAVE_CONFIG_H -I. -I..     -Wno-cast-qual -Wno-conversion -Wno-float-equal -Wno-sign-compare -Wno-undef -Wno-unused-function -Wno-unused-parameter -Wno-float-conversion -Wimplicit-fallthrough -Wno-pedantic -Wno-sign-conversion -Wno-type-limits -Wno-unsuffixed-float-constants -g -O2 -MT glthread/libgnu_la-lock.lo -MD -MP -MF glthread/.deps/libgnu_la-lock.Tpo -c -o glthread/libgnu_la-lock.lo `test -f 'glthread/lock.c' || echo './'`glthread/lock.c
+/bin/sh ../libtool  --tag=CC   --mode=compile gcc -DHAVE_CONFIG_H -I. -I..     -Wno-cast-qual -Wno-conversion -Wno-float-equal -Wno-sign-compare -Wno-undef -Wno-unused-function -Wno-unused-parameter -Wno-float-conversion -Wimplicit-fallthrough -Wno-pedantic -Wno-sign-conversion -Wno-type-limits -Wno-unsuffixed-float-constants -g -O2 -MT glthread/libgnu_la-once.lo -MD -MP -MF glthread/.deps/libgnu_la-once.Tpo -c -o glthread/libgnu_la-once.lo `test -f 'glthread/once.c' || echo './'`glthread/once.c
+/bin/sh ../libtool  --tag=CC   --mode=compile gcc -DHAVE_CONFIG_H -I. -I..     -Wno-cast-qual -Wno-conversion -Wno-float-equal -Wno-sign-compare -Wno-undef -Wno-unused-function -Wno-unused-parameter -Wno-float-conversion -Wimplicit-fallthrough -Wno-pedantic -Wno-sign-conversion -Wno-type-limits -Wno-unsuffixed-float-constants -g -O2 -MT glthread/libgnu_la-threadlib.lo -MD -MP -MF glthread/.deps/libgnu_la-threadlib.Tpo -c -o glthread/libgnu_la-threadlib.lo `test -f 'glthread/threadlib.c' || echo './'`glthread/threadlib.c
+libtool: compile:  gcc -DHAVE_CONFIG_H -I. -I.. -Wno-cast-qual -Wno-conversion -Wno-float-equal -Wno-sign-compare -Wno-undef -Wno-unused-function -Wno-unused-parameter -Wno-float-conversion -Wimplicit-fallthrough -Wno-pedantic -Wno-sign-conversion -Wno-type-limits -Wno-unsuffixed-float-constants -g -O2 -MT glthread/libgnu_la-lock.lo -MD -MP -MF glthread/.deps/libgnu_la-lock.Tpo -c glthread/lock.c  -DPIC -o glthread/.libs/libgnu_la-lock.o
+libtool: compile:  gcc -DHAVE_CONFIG_H -I. -I.. -Wno-cast-qual -Wno-conversion -Wno-float-equal -Wno-sign-compare -Wno-undef -Wno-unused-function -Wno-unused-parameter -Wno-float-conversion -Wimplicit-fallthrough -Wno-pedantic -Wno-sign-conversion -Wno-type-limits -Wno-unsuffixed-float-constants -g -O2 -MT glthread/libgnu_la-once.lo -MD -MP -MF glthread/.deps/libgnu_la-once.Tpo -c glthread/once.c  -DPIC -o glthread/.libs/libgnu_la-once.o
+libtool: compile:  gcc -DHAVE_CONFIG_H -I. -I.. -Wno-cast-qual -Wno-conversion -Wno-float-equal -Wno-sign-compare -Wno-undef -Wno-unused-function -Wno-unused-parameter -Wno-float-conversion -Wimplicit-fallthrough -Wno-pedantic -Wno-sign-conversion -Wno-type-limits -Wno-unsuffixed-float-constants -g -O2 -MT glthread/libgnu_la-threadlib.lo -MD -MP -MF glthread/.deps/libgnu_la-threadlib.Tpo -c glthread/threadlib.c  -DPIC -o glthread/.libs/libgnu_la-threadlib.o
+mv -f glthread/.deps/libgnu_la-once.Tpo glthread/.deps/libgnu_la-once.Plo
+mv -f glthread/.deps/libgnu_la-lock.Tpo glthread/.deps/libgnu_la-lock.Plo
+mv -f glthread/.deps/libgnu_la-threadlib.Tpo glthread/.deps/libgnu_la-threadlib.Plo
+/bin/sh ../libtool  --tag=CC   --mode=link gcc  -Wno-cast-qual -Wno-conversion -Wno-float-equal -Wno-sign-compare -Wno-undef -Wno-unused-function -Wno-unused-parameter -Wno-float-conversion -Wimplicit-fallthrough -Wno-pedantic -Wno-sign-conversion -Wno-type-limits -Wno-unsuffixed-float-constants -g -O2  -no-undefined -lpthread     -o libgnu.la                     glthread/libgnu_la-lock.lo    glthread/libgnu_la-once.lo               glthread/libgnu_la-threadlib.lo           
+libtool: link: ar cr .libs/libgnu.a glthread/.libs/libgnu_la-lock.o glthread/.libs/libgnu_la-once.o glthread/.libs/libgnu_la-threadlib.o 
+libtool: link: ranlib .libs/libgnu.a
+libtool: link: ( cd ".libs" && rm -f "libgnu.la" && ln -s "../libgnu.la" "libgnu.la" )
+make[3]: Leaving directory '/sources/libffcall-2.5/gnulib-lib'
+make[2]: Leaving directory '/sources/libffcall-2.5/gnulib-lib'
+make[1]: Leaving directory '/sources/libffcall-2.5/gnulib-lib'
+cd avcall && make all
+make[1]: Entering directory '/sources/libffcall-2.5/avcall'
+case "haiku" in \
+  macos* | darwin*) input=avcall-arm64-macos-macro.S ;; \
+  *) input=avcall-arm64-macro.S ;; \
+esac; \
+gcc -E `if test false = true; then echo '-DASM_UNDERSCORE'; fi` -I./../common ./${input} | grep -v '^ *#line' | grep -v '^#' | sed -e 's,% ,%,g' -e 's,//,@,g' -e 's,\$,#,g' > avcall-arm64.s
+/bin/sh ../libtool --mode=compile gcc -I. -I. -I.. -I./..  -g -O2 -fno-strict-aliasing -c ./avcall-libapi.c
+/bin/sh ../libtool --mode=compile gcc -I./../common  -g -O2 -c ./avcall-structcpy.c
+/bin/sh ../libtool --mode=compile gcc -I. -I. -I.. -I./..  -g -O2 -c ./avcall-compat.c
+/bin/sh ../libtool --mode=compile gcc -x none -c avcall-arm64.s
+libtool: compile:  gcc -I. -I. -I.. -I./.. -g -O2 -fno-strict-aliasing -c ./avcall-libapi.c  -DPIC -o .libs/avcall-libapi.o
+libtool: compile:  gcc -I. -I. -I.. -I./.. -g -O2 -c ./avcall-compat.c  -DPIC -o .libs/avcall-compat.o
+libtool: compile:  gcc -I./../common -g -O2 -c ./avcall-structcpy.c  -DPIC -o .libs/avcall-structcpy.o
+libtool: compile:  gcc -x none -c avcall-arm64.s  -DPIC -o .libs/avcall-arm64.o
+rm -f avcall.lo avcall.o
+cp -p avcall-arm64.lo avcall.lo
+if test -f avcall-arm64.o; then cp -p avcall-arm64.o avcall.o; fi
+/bin/sh ../libtool --mode=link gcc -o libavcall.la -rpath /packages/ffcall-2.5-1/.self/lib -no-undefined -export-symbols-regex '^avcall_|^__builtin_avcall$' -version-info 2:1:1 avcall.lo avcall-libapi.lo avcall-structcpy.lo avcall-compat.lo 
+libtool: link: /bin/nm -B  .libs/avcall-arm64.o .libs/avcall-libapi.o .libs/avcall-structcpy.o .libs/avcall-compat.o   | /bin/sed -n -e 's/^.*[	 ]\([ABCDGIRSTW][ABCDGIRSTW]*\)[	 ][	 ]*\([_A-Za-z][_A-Za-z0-9]*\)$/\1 \2 \2/p' | /bin/sed '/ __gnu_lto/d' | /bin/sed 's/.* //' | sort | uniq > .libs/libavcall.exp
+libtool: link: /bin/grep -E -e "^avcall_|^__builtin_avcall$" ".libs/libavcall.exp" > ".libs/libavcall.expT"
+libtool: link: mv -f ".libs/libavcall.expT" ".libs/libavcall.exp"
+libtool: link: gcc -shared  .libs/avcall-arm64.o .libs/avcall-libapi.o .libs/avcall-structcpy.o .libs/avcall-compat.o      -Wl,-soname -Wl,libavcall.so.1 -o .libs/libavcall.so.1.1.1
+libtool: link: (cd ".libs" && rm -f "libavcall.so.1" && ln -s "libavcall.so.1.1.1" "libavcall.so.1")
+libtool: link: (cd ".libs" && rm -f "libavcall.so" && ln -s "libavcall.so.1.1.1" "libavcall.so")
+libtool: link: ( cd ".libs" && rm -f "libavcall.la" && ln -s "../libavcall.la" "libavcall.la" )
+make[1]: Leaving directory '/sources/libffcall-2.5/avcall'
+cd vacall && make all
+make[1]: Entering directory '/sources/libffcall-2.5/vacall'
+case "haiku" in \
+  macos* | darwin*) input=vacall-arm64-macos-macro.S ;; \
+  *) input=vacall-arm64-macro.S ;; \
+esac; \
+gcc -E `if test false = true; then echo '-DASM_UNDERSCORE'; fi` -I./../common ./${input} | grep -v '^ *#line' | grep -v '^#' | sed -e 's,% ,%,g' -e 's,//,@,g' -e 's,\$,#,g' > vacall-arm64.s
+gcc -I. -I. -I.. -I./.. -I../gnulib-lib -I./../gnulib-lib  -g -O2 -fno-strict-aliasing -c ./vacall-libapi.c
+gcc -I./../common  -g -O2 -c ./vacall-structcpy.c
+gcc -x none -c vacall-arm64.s
+In file included from ./vacall-internal.h:22,
+                 from ./vacall-libapi.c:23:
+../ffcall-stdint.h:35: warning: "intptr_t" redefined
+   35 | #define intptr_t ff_intptr_t
+      | 
+In file included from /boot/system/develop/headers/bsd/stdlib.h:15,
+                 from ./vacall-libapi.c:20:
+../gnulib-lib/stdint.h:331: note: this is the location of the previous definition
+  331 | #  define intptr_t gl_intptr_t
+      | 
+../ffcall-stdint.h:36: warning: "uintptr_t" redefined
+   36 | #define uintptr_t ff_uintptr_t
+      | 
+../gnulib-lib/stdint.h:332: note: this is the location of the previous definition
+  332 | #  define uintptr_t gl_uintptr_t
+      | 
+rm -f vacall.o
+cp -p vacall-arm64.o vacall.o
+rm -f libvacall.a
+ar rc libvacall.a vacall.o vacall-libapi.o vacall-structcpy.o
+ranlib libvacall.a
+make[1]: Leaving directory '/sources/libffcall-2.5/vacall'
+cd trampoline && make all
+make[1]: Entering directory '/sources/libffcall-2.5/trampoline'
+/bin/sh ../libtool --mode=compile gcc -I. -I. -I.. -I../gnulib-lib -I./../gnulib-lib  -g -O2 -c ./trampoline.c
+libtool: compile:  gcc -I. -I. -I.. -I../gnulib-lib -I./../gnulib-lib -g -O2 -c ./trampoline.c  -DPIC -o .libs/trampoline.o
+/bin/sh ../libtool --mode=link gcc -o libtrampoline.la -rpath /packages/ffcall-2.5-1/.self/lib -no-undefined -export-symbols-regex 'trampoline' -version-info 1:4:0 trampoline.lo  ../gnulib-lib/libgnu.la  
+libtool: link: /bin/nm -B  .libs/trampoline.o   ../gnulib-lib/.libs/libgnu.a | /bin/sed -n -e 's/^.*[	 ]\([ABCDGIRSTW][ABCDGIRSTW]*\)[	 ][	 ]*\([_A-Za-z][_A-Za-z0-9]*\)$/\1 \2 \2/p' | /bin/sed '/ __gnu_lto/d' | /bin/sed 's/.* //' | sort | uniq > .libs/libtrampoline.exp
+libtool: link: /bin/grep -E -e "trampoline" ".libs/libtrampoline.exp" > ".libs/libtrampoline.expT"
+libtool: link: mv -f ".libs/libtrampoline.expT" ".libs/libtrampoline.exp"
+libtool: link: gcc -shared  .libs/trampoline.o  -Wl,--whole-archive ../gnulib-lib/.libs/libgnu.a -Wl,--no-whole-archive  -lpthread    -Wl,-soname -Wl,libtrampoline.so.1 -o .libs/libtrampoline.so.1.0.4
+libtool: link: (cd ".libs" && rm -f "libtrampoline.so.1" && ln -s "libtrampoline.so.1.0.4" "libtrampoline.so.1")
+libtool: link: (cd ".libs" && rm -f "libtrampoline.so" && ln -s "libtrampoline.so.1.0.4" "libtrampoline.so")
+libtool: link: ( cd ".libs" && rm -f "libtrampoline.la" && ln -s "../libtrampoline.la" "libtrampoline.la" )
+make[1]: Leaving directory '/sources/libffcall-2.5/trampoline'
+cd callback && make all
+make[1]: Entering directory '/sources/libffcall-2.5/callback'
+cd vacall_r && make all
+make[1]: *** No rule to make target 'vacall_r/libvacall.la', needed by 'libcallback.la'.  Stop.
+make[1]: *** Waiting for unfinished jobs....
+make[2]: Entering directory '/sources/libffcall-2.5/callback/vacall_r'
+case "haiku" in \
+  macos* | darwin*) input=vacall-arm64-macos-macro.S ;; \
+  *) input=vacall-arm64-macro.S ;; \
+esac; \
+gcc -E `if test false = true; then echo '-DASM_UNDERSCORE'; fi` -I. -I./../../common ./${input} | grep -v '^ *#line' | grep -v '^#' | sed -e 's,% ,%,g' -e 's,//,@,g' -e 's,\$,#,g' > vacall-arm64.s
+/bin/sh ../../libtool --mode=compile gcc -I. -I. -I./../../vacall -I../.. -I./../.. -I../../gnulib-lib -I./../../gnulib-lib  -g -O2 -fno-strict-aliasing -DREENTRANT -c ./vacall-libapi.c
+/bin/sh ../../libtool --mode=compile gcc -I./../../common  -g -O2 -c ./vacall-structcpy.c
+/bin/sh ../../libtool --mode=compile gcc -x none -c vacall-arm64.s
+libtool: compile:  gcc -I. -I. -I./../../vacall -I../.. -I./../.. -I../../gnulib-lib -I./../../gnulib-lib -g -O2 -fno-strict-aliasing -DREENTRANT -c ./vacall-libapi.c  -DPIC -o .libs/vacall-libapi.o
+libtool: compile:  gcc -I./../../common -g -O2 -c ./vacall-structcpy.c  -DPIC -o .libs/vacall-structcpy.o
+In file included from ./../../vacall/vacall-internal.h:22,
+                 from ./vacall-libapi.c:23:
+../../ffcall-stdint.h:35: warning: "intptr_t" redefined
+   35 | #define intptr_t ff_intptr_t
+      | 
+In file included from /boot/system/develop/headers/bsd/stdlib.h:15,
+                 from ./vacall-libapi.c:20:
+../../gnulib-lib/stdint.h:331: note: this is the location of the previous definition
+  331 | #  define intptr_t gl_intptr_t
+      | 
+../../ffcall-stdint.h:36: warning: "uintptr_t" redefined
+   36 | #define uintptr_t ff_uintptr_t
+      | 
+../../gnulib-lib/stdint.h:332: note: this is the location of the previous definition
+  332 | #  define uintptr_t gl_uintptr_t
+      | 
+rm -f vacall.lo vacall.o
+cp -p vacall-arm64.lo vacall.lo
+if test -f vacall-arm64.o; then cp -p vacall-arm64.o vacall.o; fi
+/bin/sh ../../libtool --mode=link gcc -o libvacall.la -rpath /packages/ffcall-2.5-1/.self/lib -no-undefined vacall.lo vacall-libapi.lo vacall-structcpy.lo 
+libtool: link: gcc -shared  .libs/vacall-arm64.o .libs/vacall-libapi.o .libs/vacall-structcpy.o      -Wl,-soname -Wl,libvacall.so.0 -o .libs/libvacall.so.0.0.0
+libtool: link: (cd ".libs" && rm -f "libvacall.so.0" && ln -s "libvacall.so.0.0.0" "libvacall.so.0")
+libtool: link: (cd ".libs" && rm -f "libvacall.so" && ln -s "libvacall.so.0.0.0" "libvacall.so")
+libtool: link: ( cd ".libs" && rm -f "libvacall.la" && ln -s "../libvacall.la" "libvacall.la" )
+make[2]: Leaving directory '/sources/libffcall-2.5/callback/vacall_r'
+cd trampoline_r && make all
+make[2]: Entering directory '/sources/libffcall-2.5/callback/trampoline_r'
+/bin/sh ../../libtool --mode=compile gcc -I. -I. -I../.. -I./../.. -I../../gnulib-lib -I./../../gnulib-lib  -g -O2 -c ./trampoline.c
+libtool: compile:  gcc -I. -I. -I../.. -I./../.. -I../../gnulib-lib -I./../../gnulib-lib -g -O2 -c ./trampoline.c  -DPIC -o .libs/trampoline.o
+/bin/sh ../../libtool --mode=link gcc -o libtrampoline.la -rpath /packages/ffcall-2.5-1/.self/lib -no-undefined trampoline.lo  ../../gnulib-lib/libgnu.la  
+libtool: link: gcc -shared  .libs/trampoline.o  -Wl,--whole-archive ../../gnulib-lib/.libs/libgnu.a -Wl,--no-whole-archive  -lpthread    -Wl,-soname -Wl,libtrampoline.so.0 -o .libs/libtrampoline.so.0.0.0
+libtool: link: (cd ".libs" && rm -f "libtrampoline.so.0" && ln -s "libtrampoline.so.0.0.0" "libtrampoline.so.0")
+libtool: link: (cd ".libs" && rm -f "libtrampoline.so" && ln -s "libtrampoline.so.0.0.0" "libtrampoline.so")
+libtool: link: ( cd ".libs" && rm -f "libtrampoline.la" && ln -s "../libtrampoline.la" "libtrampoline.la" )
+make[2]: Leaving directory '/sources/libffcall-2.5/callback/trampoline_r'
+make[1]: Leaving directory '/sources/libffcall-2.5/callback'
+make: *** [Makefile:68: all-subdirs] Error 2
+Warning: Command '['bash', '-c', '. /wrapper-script']' returned non-zero exit status 2.
+cleaning 'chroot/boot' folder
+keeping chroot folder /boot/home/haikuports/dev-libs/ffcall/work-2.5 intact for inspection
+Checking if any dependency-infos need to be updated ...
+Looking for stale dependency-infos ...
+Looking for stale cached recipes ...
+----------------------------------------------------------------------
+dev-libs::ffcall-2.5
+	/boot/home/haikuports/dev-libs/ffcall/ffcall-2.5.recipe
+----------------------------------------------------------------------
+Error: Build has failed - stopping.

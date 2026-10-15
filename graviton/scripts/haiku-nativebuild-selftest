@@ -1,7 +1,8 @@
 #!/bin/sh
 # haiku-nativebuild-selftest [--mutate]
 #
-# Offline self-test for haiku-nativebuild's dependency diagnostic (#485/#486). Runs
+# Offline self-test for haiku-nativebuild's dependency diagnostic (#485/#486) and for
+# its failure-log CAPTURE (#505 §E -- see "the log-capture arms" below). Runs
 # ANYWHERE -- Linux dev host or Haiku builder -- because it never calls the real
 # pkgman: it puts a stub pkgman on PATH that replays pkgman's own wording, taken from
 # the DeBeOS sources that print it:
@@ -20,10 +21,11 @@
 # from the alternatives, so each case below asserts BOTH the verdict that should appear
 # AND the verdict that must not.
 #
-#   --mutate   Re-run the suite against the ORIGINAL, evidence-discarding install_dep
-#              (`pkgman install ... >/dev/null 2>&1`). The suite MUST go red: if it
-#              stays green it is not testing the mechanism. Exit 0 means "mutation
-#              detected" (test is alive); exit 1 means the suite is vacuous.
+#   --mutate   Re-run the suite against the ORIGINAL, evidence-discarding code: the
+#              old install_dep (`pkgman install ... >/dev/null 2>&1`) AND the old
+#              capture (pre-#505 narrow lexicon, no first-error window). The suite
+#              MUST go red: if it stays green it is not testing the mechanism. Exit 0
+#              means "mutation detected" (test is alive); exit 1 means it is vacuous.
 set -u
 MUTATE=0
 [ "${1:-}" = "--mutate" ] && MUTATE=1
@@ -102,9 +104,15 @@ chmod +x "$work/bin/pkgman"
 # down is its main body (it would run a build and exit).
 sed '/^# Refresh the pkgman repo caches/,$d' "$SUT" > "$work/sut.sh"
 if [ "$MUTATE" = 1 ]; then
-	# The mutation: put back the original evidence-discarding install_dep.
+	# The mutations: put back the original evidence-discarding install_dep, and the
+	# capture as it stood before #505 §E -- the narrow lexicon (verbatim, this is the
+	# pattern that was in emit_log_capture) and no first-error window. That pairing is
+	# precisely what left `pnet` with a two-line grep block and no cause.
 	cat >> "$work/sut.sh" <<'MUT'
 install_dep() { feed | pkgman install "$1" >/dev/null 2>&1; }
+NB_DIAG_RE='error:|Error [0-9]+|CMake Error|fatal error:|cannot find -l|command not found|No such file or directory|undefined reference|multiple definition of|does not name a type|ModuleNotFoundError|No module named|Read-only file system|not supported|unsupported|unknown word-size|guess (build|host) type|required file .* not found|unable to resolve|could not be resolved|is not available, please install|prepareInstalledDevelLib|possibly undefined macro|narrowing conversion|CHECKSUM|checksum'
+emit_first_error_window() { :; }
+have_hpkg() { ls "$GP/${1}"-[0-9]*.hpkg >/dev/null 2>&1; }
 MUT
 fi
 PATH="$work/bin:$PATH"
@@ -176,12 +184,167 @@ run_case ambiguous "devel:liblua" \
 	"NO_MATCH_BUT_CANDIDATES_EXIST" "lua5.4_devel" \
 	-- "UNRESOLVABLE" "ABSENT_CONFIRMED"
 
+# ---- the log-capture arms (#505 §E) ---------------------------------------
+# WHAT THESE GUARD. The capture is the only thing that decides which log content
+# leaves the scratch builder, and the builder is destroyed after the wave: a line this
+# function drops is gone for good. `pnet`'s log was 416 720 lines, so the bounded path
+# kept head+grep+tail and discarded the middle 415 300 -- and the grep lexicon could
+# not see the one line in there that stated a reason. What came back was a checksum
+# notice and make's cascade, which is why #505 recorded it as "cause lost in the
+# discarded middle".
+#
+# THE FIXTURE IS REAL, and that matters more than convenience here: a fabricated log
+# had to be removed from this tree once already. graviton/testdata/ffcall-wd-492-nodiag.log
+# is the inner haikuporter log of the #492 re-wave's `ffcall` failure, carved out of
+# that run's own captured window (lines 4-763 of the gunzipped
+# s3://haiku-graviton-668984504585-us-west-2/logs/wd-492-nodiag/ffcall.log.gz).
+# `ffcall` is the right stand-in because its log is COMPLETE (760 lines -- it fit under
+# the cap and was kept whole, so nothing about it is inferred) and it carries the same
+# shape of cause as `pnet`: a `No rule to make target` in the body, at line 338. Scale
+# the caps down and the bounded path runs over real content whose true first reason
+# line is known -- which is pnet's failure mode, reproduced without inventing text.
+# The fixture is verbatim and its LINE NUMBERS are load-bearing (the arms below name
+# 338 and the window 258-418): do not reflow, annotate or prepend a header to it.
+#
+# AND THE WARNING, repeated here because this is where someone will come looking:
+# recovering that line is NOT diagnosing the build. `No rule to make target` is a
+# downstream symptom -- something that should have produced the file failed earlier --
+# and reading it as the cause is the mistake #505 §E exists to prevent. These arms
+# assert the capture CARRIES the evidence; they make no claim about what it means.
+FIXTURE="$here/../testdata/ffcall-wd-492-nodiag.log"
+FFCALL_ROOT="No rule to make target 'avcall/avcall.lo'"
+
+# cap_case <name> <capture-output> <expect...> -- <forbid...>
+# Fixed-string matching: every pattern below is literal log text, and `make: ***` is
+# not something to have to escape for a regex.
+cap_case() {
+	name="$1"; got="$2"; shift 2
+	mode=expect
+	for pat in "$@"; do
+		if [ "$pat" = "--" ]; then mode=forbid; continue; fi
+		if printf '%s\n' "$got" | grep -qF -- "$pat"; then hit=1; else hit=0; fi
+		if [ "$mode" = expect ] && [ "$hit" = 1 ]; then
+			pass=$((pass+1)); echo "  ok    $name: found   '$pat'"
+		elif [ "$mode" = forbid ] && [ "$hit" = 0 ]; then
+			pass=$((pass+1)); echo "  ok    $name: absent  '$pat'"
+		else
+			fail=$((fail+1))
+			[ "$mode" = expect ] \
+				&& echo "  FAIL  $name: MISSING '$pat'" \
+				|| echo "  FAIL  $name: PRESENT (must not be) '$pat'"
+		fi
+	done
+	return 0
+}
+
+if [ ! -f "$FIXTURE" ]; then
+	# Do not quietly skip: a missing fixture is a suite that stopped testing the
+	# capture, and that is the state #505 §E was in.
+	fail=$((fail+1)); echo "  FAIL  capture: fixture missing: $FIXTURE"
+else
+
+# 6. THE PREMISE. Before asserting the fix, assert the fixture really does reproduce
+#    pnet: with these caps the root diagnostic is in neither the head nor the tail, so
+#    head+tail alone cannot carry it. No SUT code involved -- this is the control.
+head_tail=$( { head -n 150 "$FIXTURE"; tail -n 50 "$FIXTURE"; } )
+cap_case premise "$head_tail" -- "$FFCALL_ROOT"
+
+# 7. THE BOUNDED PATH, with the caps scaled so 760 lines overflows them. The window
+#    must be centred on line 338 (the first reason line that is not boilerplate) and
+#    the capture must carry the diagnostic the head+tail of arm 6 cannot.
+bounded=$( ( NB_LOG_FULL_LINES=500; NB_LOG_HEAD=150; NB_LOG_TAIL=50; NB_LOG_CTX=80
+	emit_log_capture "$FIXTURE" ) )
+cap_case bounded "$bounded" \
+	"$FFCALL_ROOT" \
+	"first error window: lines 258-418 around the first reason line (338)" \
+	"338:make: *** $FFCALL_ROOT" \
+	"not necessarily the root cause" \
+	"head+window+grep+tail capture" \
+	-- "NO non-boilerplate reason line"
+
+# 8. THE WIDENED LEXICON, separately from the window: the grep block itself must now
+#    list line 338. Before #505 §E this block was two lines -- a checksum notice and
+#    make's cascade -- which is the exact shape pnet came back with.
+grepblock=$(printf '%s\n' "$bounded" | awk '/^---- diagnostic lines/,/^---- build log TAIL/')
+cap_case lexicon "$grepblock" \
+	"338:make: *** $FFCALL_ROOT" \
+	-- "---- first error window"
+
+# 9. THE NOISE LIST IS LOAD-BEARING. ffcall's FIRST line matching the lexicon is line
+#    4, `Validating checksum of libffcall-2.5.tar.gz` -- which is printed by every run
+#    and states nothing. Blank the noise list and the window centres there instead of
+#    on 338: that one arm is what makes the window land on evidence. (The other arms
+#    are not exercised by this fixture; per #505's own lesson -- "inert" is a property
+#    of the corpus, not the regex -- that is recorded as untested here, not as proof
+#    they are unnecessary.)
+nonoise=$( ( NB_LOG_FULL_LINES=500; NB_LOG_HEAD=150; NB_LOG_TAIL=50; NB_LOG_CTX=80
+	NB_NOISE_RE='^\{no arm can match this\}$'
+	emit_log_capture "$FIXTURE" ) )
+cap_case noise_needed "$nonoise" \
+	"around the first reason line (4)" \
+	-- "around the first reason line (338)"
+
+# 10. NOTHING BUT NOISE. A log in which every matching line is boilerplate must say so
+#     in as many words. An empty window and a window that was never attempted are
+#     different findings, and #492's `ffcall` was filed as "emitted no reason" when in
+#     fact the capture had dropped it. Fixture built from the real log's own lines:
+#     every line that states no reason, plus the real boilerplate lines.
+{ grep -vE "$NB_DIAG_RE" "$FIXTURE"; grep -E "$NB_NOISE_RE" "$FIXTURE"; } > "$work/noise.log"
+noiseonly=$( ( NB_LOG_FULL_LINES=100; NB_LOG_HEAD=20; NB_LOG_TAIL=20
+	emit_log_capture "$work/noise.log" ) )
+cap_case noise_only "$noiseonly" \
+	"first error window: NO non-boilerplate reason line in" \
+	-- "around the first reason line"
+
+# 11. THE WHOLE-LOG PATH is untouched: under the cap the log is still emitted entire,
+#     with no window (there is nothing to recover from a log that was fully kept).
+whole=$(emit_log_capture "$FIXTURE")
+cap_case whole_log "$whole" \
+	"---- full build log (760 lines)" \
+	"$FFCALL_ROOT" \
+	-- "---- first error window" "build log HEAD"
+
+fi
+
+# ---- the success rule (#505 §C, driver half) -------------------------------
+# `have_hpkg` IS the success rule ("success = the hpkg exists", SOP §7), and it got
+# `cmake_haiku` recorded `failed` after a build that worked: the old glob was
+# `<port>-[0-9]*.hpkg`, so the real `cmake_haiku-git-4-arm64.hpkg` did not match a
+# version that starts with a letter. The hpkg was harvested to the pool all the same,
+# which is how the row ended up `failed` with its package published. Both directions
+# are asserted, because the digit was there to stop a sibling package satisfying the
+# test and widening the glob must not give that up.
+GP="$work/packages"
+mkdir -p "$GP"
+
+# hpkg_case <name> <port> <yes|no>
+hpkg_case() {
+	if have_hpkg "$2"; then got=yes; else got=no; fi
+	if [ "$got" = "$3" ]; then
+		pass=$((pass+1)); echo "  ok    $1: have_hpkg $2 -> $got"
+	else
+		fail=$((fail+1)); echo "  FAIL  $1: have_hpkg $2 -> $got, wanted $3"
+	fi
+}
+
+: > "$GP/cmake_haiku-git-4-arm64.hpkg"
+hpkg_case hpkg_git cmake_haiku yes
+# A sibling whose name merely STARTS with the port name must not count.
+rm -f "$GP/cmake_haiku-git-4-arm64.hpkg"
+: > "$GP/cmake_haiku_tools-1.2-3-arm64.hpkg"
+hpkg_case hpkg_sibling cmake_haiku no
+# And a numerically versioned hpkg still counts, which is the common case.
+: > "$GP/sdl2-2.30.9-1-arm64.hpkg"
+hpkg_case hpkg_numeric sdl2 yes
+hpkg_case hpkg_absent nosuchport no
+
 echo "----"
 echo "pass=$pass fail=$fail"
 if [ "$MUTATE" = 1 ]; then
 	if [ "$fail" -gt 0 ]; then
 		echo "MUTATION DETECTED: the suite goes red without the captured pkgman"
-		echo "evidence, so it is testing the mechanism and not just the wording."
+		echo "evidence and without the widened lexicon + first-error window, so it is"
+		echo "testing both mechanisms and not just their wording."
 		exit 0
 	fi
 	echo "VACUOUS SUITE: the mutation did not break any assertion."
