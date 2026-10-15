@@ -93,23 +93,39 @@ diff --git a/Libraries/LibWasm/AbstractMachine/BytecodeInterpreter.cpp b/Librari
 index 89823c8e02..67fde6e9c7 100644
 --- a/Libraries/LibWasm/AbstractMachine/BytecodeInterpreter.cpp
 +++ b/Libraries/LibWasm/AbstractMachine/BytecodeInterpreter.cpp
-@@ -35,10 +35,12 @@
- #else
- #    include <signal.h>
+@@ -37,7 +37,8 @@
  #    include <unistd.h>
--#    if defined(AK_OS_MACOS)
--#        include <sys/ucontext.h>
+ #    if defined(AK_OS_MACOS)
+ #        include <sys/ucontext.h>
 -#    else
--#        include <ucontext.h>
-+#    if WASM_COMPILED_FAULT_RECOVERY_SUPPORTED
-+#        if defined(AK_OS_MACOS)
-+#            include <sys/ucontext.h>
-+#        else
-+#            include <ucontext.h>
-+#        endif
++#    elif !defined(AK_OS_HAIKU)
++// DeBeOS/Haiku has no <ucontext.h>; ucontext_t is declared by <signal.h>, above.
+ #        include <ucontext.h>
  #    endif
  #endif
- 
+@@ -64,8 +65,10 @@
+
+ thread_local CompiledFaultRecoveryContext* s_compiled_fault_recovery = nullptr;
+
+-#if WASM_COMPILED_FAULT_RECOVERY_SUPPORTED
+-
++// Kept outside the WASM_COMPILED_FAULT_RECOVERY_SUPPORTED guard below: interpret()
++// calls this unconditionally, so a platform that takes the unsupported branch does
++// not compile without it. It is a pure trap-code-to-message mapping with no
++// platform dependency, so there is nothing to guard.
+ static StringView cranelift_trap_message(u8 trap_code)
+ {
+     // Cranelift reserves trap codes at the high end of u8:
+@@ -85,6 +88,8 @@
+     }
+ }
+
++#if WASM_COMPILED_FAULT_RECOVERY_SUPPORTED
++
+ static bool is_wasm_memory_fault(Wasm::Configuration& configuration, void* address)
+ {
+     auto const& memories = configuration.frame().module().memories();
+
 diff --git a/Libraries/LibWasm/CraneliftBridge.cpp b/Libraries/LibWasm/CraneliftBridge.cpp
 index a71ce7ccbe..266cfb3efe 100644
 --- a/Libraries/LibWasm/CraneliftBridge.cpp
