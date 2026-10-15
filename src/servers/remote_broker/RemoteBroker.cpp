@@ -44,8 +44,12 @@
 #include <FindDirectory.h>
 #include <Locker.h>
 #include <Autolock.h>
+#include <NetworkInterface.h>
+#include <NetworkRoster.h>
 #include <OS.h>
 #include <Path.h>
+#include <String.h>
+#include <StringList.h>
 
 #include <openssl/crypto.h>
 #include <openssl/evp.h>
@@ -56,9 +60,11 @@
 #include <openssl/x509v3.h>
 
 #include <arpa/inet.h>
+#include <ctype.h>
 #include <errno.h>
 #include <new>
 #include <fcntl.h>
+#include <net/if.h>
 #include <netinet/in.h>
 #include <netinet/tcp.h>
 #include <signal.h>
@@ -113,6 +119,15 @@ static const size_t kMaxCookieLength = 256;
 // A cookie this short is not one app_server minted (that is 64 hex characters),
 // so it is refused rather than presented -- the same floor the token has.
 static const size_t kMinCookieLength = 16;
+
+// Upper bound on the interface addresses a generated certificate names (the
+// host name and loopback are always named, on top of this). A server
+// certificate is not an inventory of the machine, and the subjectAltName is
+// what every client parses before it has decided to trust anything, so a host
+// with an unusual number of configured addresses should not produce an outsized
+// one. Hosts in this fleet have one or two; reaching this bound means a
+// configuration worth looking at, hence the log when it happens.
+static const int32 kMaxCertificateAddresses = 24;
 
 
 static int32 sConcurrentHandshakes = 0;
@@ -304,13 +319,240 @@ write_file(const char* path, const void* data, size_t size, mode_t mode)
 }
 
 
-/*!	Generates the first-boot self-signed server certificate: a P-256 key and
-	a ten year certificate, both PEM. A real CA-issued certificate can later
-	be dropped into the same files (the certificate file is loaded as a
-	chain).
+/*!	Collects the names a generated certificate must assert, each already in
+	OpenSSL's subjectAltName syntax ("DNS:..." / "IP:...").
+
+	A client dials this host by whatever address routes to it -- a VPC or LAN
+	address, typically, not the host name and not loopback -- and verifies that
+	name against the certificate. So every address the host actually answers at
+	has to be in there, which means asking the network stack rather than
+	guessing: BNetworkRoster over the interfaces, BNetworkInterface over each
+	interface's addresses, the same iteration ifconfig and the Network
+	preferences use.
+
+	Deliberate restrictions:
+	- Only IFF_UP interfaces. Not IFF_LINK as well, although the stock
+	  "is there a usable interface" test adds it: an interface that is
+	  configured but momentarily has no carrier still owns its address and will
+	  serve on it when the carrier returns, and making the certificate depend on
+	  carrier state would re-roll it on every cable event (see
+	  certificate_is_current() for why re-rolling is expensive).
+	- Only AF_INET. The listener is a single AF_INET socket, so this host cannot
+	  be reached over IPv6 at all and asserting an IPv6 name would be a claim
+	  about an address that goes nowhere. (It would also be unverifiable where
+	  it matters most: a link-local address needs a zone index, which the
+	  iPAddress form of a subjectAltName cannot carry.)
+	- The addresses are sorted before kMaxCertificateAddresses is applied, so
+	  that a given set always yields the same list regardless of the order the
+	  stack enumerated them in. Without that, a host over the bound could
+	  select a different subset on each start and certificate_is_current()
+	  would re-roll the certificate forever.
+
+	The list is widened from "host name plus loopback" to "every address this
+	host answers at", which widens what the certificate asserts -- but every one
+	of those addresses *is* this host, the key stays in a 0600 file here, and
+	the default certificate is self-signed, so it asserts nothing any client
+	trusts without being told to. No wildcard and no 0.0.0.0 catch-all: those
+	would assert names that are not this host.
+*/
+static void
+collect_alt_names(BStringList& altNames)
+{
+	char hostname[256] = "debeos-remote-desktop";
+	gethostname(hostname, sizeof(hostname) - 1);
+
+	// The entries are handed to OpenSSL as one comma-separated,
+	// colon-delimited string, so a host name holding either character would
+	// not widen the subjectAltName but corrupt it -- the whole extension is
+	// then rejected and the certificate ends up without one, which is the
+	// failure this function exists to prevent. Anything outside a host name's
+	// alphabet costs the DNS entry rather than the extension.
+	bool nameUsable = hostname[0] != '\0';
+	for (const char* c = hostname; nameUsable && *c != '\0'; c++) {
+		nameUsable = isalnum((unsigned char)*c) != 0 || *c == '-' || *c == '.'
+			|| *c == '_';
+	}
+
+	if (nameUsable) {
+		BString entry;
+		altNames.Add(entry.SetToFormat("DNS:%s", hostname));
+	} else {
+		TRACE_ERROR("host name \"%s\" is not usable as a certificate name;"
+			" the certificate will assert addresses only\n", hostname);
+	}
+
+	// Added unconditionally rather than left to the loopback interface showing
+	// up in the enumeration below: the SSH-tunnel rescue path dials 127.0.0.1
+	// and must keep working even if that enumeration comes up empty. It is also
+	// why these two are added before the cap is applied and the interface
+	// addresses after it -- the cap must never be able to evict loopback.
+	altNames.Add("IP:127.0.0.1");
+
+	BStringList addresses;
+	BNetworkRoster& roster = BNetworkRoster::Default();
+	BNetworkInterface interface;
+	uint32 cookie = 0;
+	while (roster.GetNextInterface(&cookie, interface) == B_OK) {
+		if ((interface.Flags() & IFF_UP) == 0)
+			continue;
+
+		int32 count = interface.CountAddresses();
+		for (int32 i = 0; i < count; i++) {
+			BNetworkInterfaceAddress interfaceAddress;
+			if (interface.GetAddressAt(i, interfaceAddress) != B_OK)
+				break;
+
+			const BNetworkAddress& address = interfaceAddress.Address();
+			if (address.Family() != AF_INET || address.IsEmpty()
+				|| address.IsWildcard()) {
+				continue;
+			}
+
+			BString entry;
+			entry.SetToFormat("IP:%s", address.ToString(false).String());
+			if (entry.Length() > 3 && !altNames.HasString(entry)
+				&& !addresses.HasString(entry)) {
+				addresses.Add(entry);
+			}
+		}
+	}
+
+	addresses.Sort();
+
+	if (addresses.CountStrings() > kMaxCertificateAddresses) {
+		TRACE_ERROR("%" B_PRId32 " local addresses for the certificate, naming"
+			" the first %" B_PRId32 "; clients dialling one of the rest will"
+			" fail name verification\n", addresses.CountStrings(),
+			kMaxCertificateAddresses);
+		addresses.Remove(kMaxCertificateAddresses,
+			addresses.CountStrings() - kMaxCertificateAddresses);
+	}
+
+	altNames.Add(addresses);
+}
+
+
+/*!	Renders one subjectAltName entry of a stored certificate in the same
+	syntax collect_alt_names() produces, so the two can be compared. Entry
+	types the broker never writes come back empty.
+*/
+static BString
+alt_name_to_string(const GENERAL_NAME* name)
+{
+	BString entry;
+
+	switch (name->type) {
+		case GEN_DNS:
+		{
+			int length = ASN1_STRING_length(name->d.dNSName);
+			const unsigned char* data
+				= ASN1_STRING_get0_data(name->d.dNSName);
+			if (data != NULL && length > 0)
+				entry.SetToFormat("DNS:%.*s", length, (const char*)data);
+			break;
+		}
+
+		case GEN_IPADD:
+		{
+			int length = ASN1_STRING_length(name->d.iPAddress);
+			const unsigned char* data
+				= ASN1_STRING_get0_data(name->d.iPAddress);
+			char buffer[INET6_ADDRSTRLEN];
+			int family = length == 4 ? AF_INET
+				: (length == 16 ? AF_INET6 : AF_UNSPEC);
+			if (data != NULL && family != AF_UNSPEC
+				&& inet_ntop(family, data, buffer, sizeof(buffer)) != NULL) {
+				entry.SetToFormat("IP:%s", buffer);
+			}
+			break;
+		}
+
+		default:
+			break;
+	}
+
+	return entry;
+}
+
+
+/*!	Whether the stored certificate still asserts every name in \a altNames,
+	i.e. whether it is usable for every address this host now answers at.
+
+	Regenerating is not free: it changes the certificate, so it changes the
+	SHA-256 fingerprint, and the fingerprint is the pin the native client and
+	the test instrument verify. Every pinning client therefore breaks until it
+	is re-pinned from the new broker.fingerprint. The browser client cannot pin
+	and has the opposite problem -- it checks the name, so a certificate missing
+	the dialled address breaks it outright. The policy that costs the least on
+	both sides is to re-roll only when the certificate is genuinely unusable:
+
+	- A name the host answers at that the certificate does not carry means a
+	  client dialling it fails verification: regenerate.
+	- A name the certificate carries that the host no longer has is harmless and
+	  is left alone. It asserts an address nothing answers at, and since the
+	  private key never left this host nobody else can present the certificate
+	  for it. Dropping it would break every pin for no gain. The entry does
+	  disappear the next time something else forces a regeneration.
+	- A certificate that is not self-signed is never ours to rotate: the
+	  operator dropped in a CA-issued pair, and a CA-issued name set is the
+	  CA's business. Reported current whatever it contains.
+	- A certificate that cannot be read or parsed is likewise reported current.
+	  Overwriting a file we failed to understand is worse than letting
+	  InitServer() refuse it with an error the operator can act on.
+*/
+static bool
+certificate_is_current(const char* certificatePath,
+	const BStringList& altNames)
+{
+	FILE* file = fopen(certificatePath, "r");
+	if (file == NULL)
+		return true;
+
+	X509* certificate = PEM_read_X509(file, NULL, NULL, NULL);
+	fclose(file);
+	if (certificate == NULL)
+		return true;
+
+	bool current = true;
+	if (X509_NAME_cmp(X509_get_subject_name(certificate),
+			X509_get_issuer_name(certificate)) == 0) {
+		BStringList stored;
+		GENERAL_NAMES* names = (GENERAL_NAMES*)X509_get_ext_d2i(certificate,
+			NID_subject_alt_name, NULL, NULL);
+		if (names != NULL) {
+			for (int i = 0; i < sk_GENERAL_NAME_num(names); i++) {
+				BString entry
+					= alt_name_to_string(sk_GENERAL_NAME_value(names, i));
+				if (entry.Length() > 0)
+					stored.Add(entry);
+			}
+			GENERAL_NAMES_free(names);
+		}
+
+		for (int32 i = 0; i < altNames.CountStrings(); i++) {
+			// Names are compared case-insensitively: a DNS entry is
+			// case-insensitive by definition, and nothing is gained by
+			// re-rolling the certificate over the spelling of a host name.
+			if (!stored.HasString(altNames.StringAt(i), true)) {
+				current = false;
+				break;
+			}
+		}
+	}
+
+	X509_free(certificate);
+	return current;
+}
+
+
+/*!	Generates the self-signed server certificate: a P-256 key and a ten year
+	certificate, both PEM, asserting \a altNames. A real CA-issued certificate
+	can later be dropped into the same files (the certificate file is loaded as
+	a chain).
 */
 static status_t
-generate_certificate(const char* certificatePath, const char* keyPath)
+generate_certificate(const char* certificatePath, const char* keyPath,
+	const BString& altNames)
 {
 	status_t result = B_ERROR;
 	X509* certificate = NULL;
@@ -349,19 +591,21 @@ generate_certificate(const char* certificatePath, const char* keyPath)
 		X509_set_issuer_name(certificate, name);
 
 		// A subjectAltName, or modern clients reject the certificate outright
-		// (CN-only has not been accepted for years). The address a client
-		// dials is not known here, so the name is the host name plus
-		// loopback; the trust decision is the fingerprint pin either way,
-		// and a browser accepting the certificate once needs the extension
-		// to exist at all.
-		char altNames[512];
-		snprintf(altNames, sizeof(altNames), "DNS:%s,IP:127.0.0.1",
-			hostname);
+		// (CN-only has not been accepted for years), and it has to name every
+		// address this host answers at or a client dialling one of them fails
+		// name verification -- see collect_alt_names(). Built as a list of
+		// whole entries joined by the caller, not formatted into a fixed
+		// buffer: a subjectAltName truncated mid-entry is worse than a short
+		// one, because it asserts a name that is a prefix of a real address.
 		X509_EXTENSION* extension = X509V3_EXT_conf_nid(NULL, NULL,
-			NID_subject_alt_name, altNames);
+			NID_subject_alt_name, altNames.String());
 		if (extension != NULL) {
 			X509_add_ext(certificate, extension, -1);
 			X509_EXTENSION_free(extension);
+		} else {
+			TRACE_ERROR("could not build subjectAltName from \"%s\"\n",
+				altNames.String());
+			goto out;
 		}
 
 		if (X509_set_pubkey(certificate, key) != 1)
@@ -606,16 +850,49 @@ prepare_settings(BrokerConfiguration& configuration)
 	BPath fingerprintPath(directory.Path(), "broker.fingerprint");
 	BPath tokenPath(directory.Path(), "token");
 
+	BStringList altNames;
+	collect_alt_names(altNames);
+	BString altNameList = altNames.Join(",");
+
 	struct stat st;
 	if (stat(certificatePath.Path(), &st) != 0
 		|| stat(keyPath.Path(), &st) != 0) {
-		TRACE_LOG("generating self-signed certificate in %s\n",
-			directory.Path());
+		TRACE_LOG("generating self-signed certificate in %s for %s\n",
+			directory.Path(), altNameList.String());
 		status_t result = generate_certificate(certificatePath.Path(),
-			keyPath.Path());
+			keyPath.Path(), altNameList);
 		if (result != B_OK) {
 			TRACE_ERROR("certificate generation failed\n");
 			return result;
+		}
+	} else if (!certificate_is_current(certificatePath.Path(), altNames)) {
+		// This host answers at an address the stored certificate does not
+		// assert -- a new ENI, a different subnet, a renamed host -- so a
+		// client dialling that address fails name verification. Re-roll it.
+		//
+		// Via temporaries and renames rather than over the files in place:
+		// generate_certificate() removes what it was writing when it fails,
+		// and a failed re-roll must leave the working pair behind rather than
+		// take the whole daemon down with it.
+		BPath newCertificatePath(directory.Path(), "broker.pem.new");
+		BPath newKeyPath(directory.Path(), "broker.key.new");
+
+		status_t result = generate_certificate(newCertificatePath.Path(),
+			newKeyPath.Path(), altNameList);
+		if (result == B_OK
+			&& rename(newKeyPath.Path(), keyPath.Path()) == 0
+			&& rename(newCertificatePath.Path(), certificatePath.Path())
+				== 0) {
+			// Loud: this changed the certificate, so it changed the pin.
+			TRACE_LOG("certificate refreshed for %s -- the fingerprint below"
+				" is a new one, pinning clients must re-pin from"
+				" broker.fingerprint\n", altNameList.String());
+		} else {
+			unlink(newCertificatePath.Path());
+			unlink(newKeyPath.Path());
+			TRACE_ERROR("could not refresh the certificate, keeping the"
+				" stored one: clients dialling an address it does not assert"
+				" will fail name verification\n");
 		}
 	}
 
@@ -964,6 +1241,11 @@ print_usage(const char* program)
 		" owner-readable only) in the settings\ndirectory. Replace"
 		" broker.pem/broker.key with a CA-issued pair to use a\nreal"
 		" certificate.\n\n");
+	printf("The generated certificate names this host's own interface"
+		" addresses, so a\nclient may dial any of them. A later start that"
+		" finds an address the stored\ncertificate does not name regenerates"
+		" it -- which changes the fingerprint,\nso pinning clients must"
+		" re-pin. A CA-issued pair is never regenerated.\n\n");
 	printf("The session cookie is NOT generated here: app_server mints it per"
 		" listener\nbefore it starts listening, and this daemon presents it to"
 		" the session port\nafter a client's token was accepted. Without it the"

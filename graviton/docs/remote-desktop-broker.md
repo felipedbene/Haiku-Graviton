@@ -176,6 +176,44 @@ certificate is a drop-in: replace `broker.pem` (loaded as a chain, so include
 intermediates) and `broker.key` and restart the broker; pinning clients keep
 working if re-pinned, browsers then trust it natively.
 
+### subjectAltName: the host's own addresses, and when it is re-rolled
+
+A pinning client never looks at the certificate's names, but a browser has
+nothing else to go on — it checks the address it dialled against the
+subjectAltName. The generated certificate therefore names the host name,
+`127.0.0.1`, **and every IPv4 address configured on an up interface** (asked of
+the network stack at generation time), so dialling a Graviton instance by its
+VPC address verifies instead of failing with `certificate verify failed`.
+Only IPv4: the broker's listener is a single `AF_INET` socket, so an IPv6 name
+would assert an address that goes nowhere.
+
+An address set does change — a new ENI, a different subnet, a rename — and a
+stored certificate keeps the names it was born with. So every start compares
+the stored subjectAltName against the host's current addresses and regenerates
+when the host answers at an address the certificate does not name. Two
+deliberate limits on that:
+
+- **It regenerates only when a name is missing, never because one went stale.**
+  A name for an address the host no longer has asserts nothing anyone can use
+  (the private key never left the host), and dropping it would cost every pin
+  for no gain.
+- **A certificate that is not self-signed is never touched.** Issuer ≠ subject
+  means an operator dropped in a CA-issued pair, and its names are the CA's
+  business.
+
+> **Regenerating changes the pin.** It is a new certificate, so
+> `broker.fingerprint` changes and every pinning client (`RemoteDesktop --pin`,
+> `rdcapture.py --pin`) fails until re-pinned from the new value. This is the
+> cross-client trade-off in the open: the browser needs the names right, the
+> native client needs the fingerprint stable, and they cannot both be had when
+> the host's addresses change. The broker logs the refresh and the new
+> fingerprint at startup.
+
+Two consequences worth knowing. The broker is not sequenced after the network,
+so a first boot where it starts before the DHCP lease generates a certificate
+with no interface addresses; the next start notices and refreshes it. And an
+address set changing *while* the broker runs is not picked up until it restarts.
+
 The token is created random on first run; replace the file to set your own
 (min 16 characters, whitespace-trimmed). Rotate by rewriting the file and
 restarting the broker. The broker keeps only the token's hash in memory and
