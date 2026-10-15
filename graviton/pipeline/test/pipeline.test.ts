@@ -2195,6 +2195,8 @@ test('#505 §C: RecordFn is wired to the harvest pool and may only LIST it', () 
     ([] as string[]).concat(s.Action ?? []).includes('s3:ListBucket'));
   expect(([] as string[]).concat(listStatement.Resource))
     .toEqual([`arn:aws:s3:::haiku-graviton-${config.account}-us-west-2`]);
+});
+
 // #611: the public endpoint for the remote_broker front door.
 //
 // This is the only outward-facing resource in the account, so the tests below
