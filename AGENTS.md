@@ -153,9 +153,47 @@ Booting is verified on real AWS Graviton (arm64) EC2 instances in **us-west-2**.
   separate commits and write focused, imperative commit subjects (see
   `git log` for the house style, e.g. `arm64: ...`, `ena: ...`).
 
+## Issue tracking
+
+The tracker is **this repo's GitHub issues** (`gh issue …`), and it is the source of
+truth for what is open. The rule is **deduplicate, not suppress** — the backlog looking
+long is never a reason to swallow a real defect.
+
+Before filing, search **open and closed** issues for the same symptom *and* the same
+code site:
+
+```bash
+gh issue list --state all --search "<symptom keywords>"
+gh issue list --state all --search "<file or function name>"
+```
+
+A fix that landed under a different title still makes the finding a duplicate, so search
+by code site as well as by wording.
+
+- **A match exists** → comment on it with the new evidence. Never open a second issue
+  for a defect that already has one.
+- **No match, and the finding is substantiated** (a named reproduction, or `file:line`
+  evidence that the defect is real) → **file it.** One issue per defect: do not split one
+  defect across several, and do not bundle several into one.
+- **No match, but the finding is unsubstantiated** — a suspicion, a style nit, or
+  something noticed in passing while fixing something else and not run down → it does
+  **not** become an issue. Put it in the PR body under incidental observations, where it
+  stays attached to the evidence without claiming to be a tracked defect.
+
+**Closing is as much of the job as opening.** When a fix lands and is verified, close the
+issue with the evidence. Note that this repo squash-merges, so a merged topic branch's
+tip is **never** an ancestor of trunk — `git merge-base --is-ancestor` will wrongly say
+the work is unmerged. Verify by content instead:
+
+```bash
+git show origin/graviton:<path> | grep <symbol>
+```
+
 ## Useful references
 
 - Source browsers: <https://git.haiku-os.org/> and
   <https://grok.nikisoft.one/opengrok/>
 - API docs: <https://api.haiku-os.org>
-- Issue tracker: <https://dev.haiku-os.org/>
+- DeBeOS issue tracker: this repo's GitHub issues (`gh issue list`) — see
+  "Issue tracking" above. <https://dev.haiku-os.org/> is **upstream Haiku's** tracker
+  and is reference only; DeBeOS defects are never filed there.
