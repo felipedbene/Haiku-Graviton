@@ -1735,8 +1735,6 @@ release_advisory_lock(struct vnode* vnode, struct io_context* context,
 					return B_NO_MEMORY;
 				}
 
-				lock->end = flock->l_start - 1;
-
 				secondLock->bound_to = context;
 				secondLock->team = lock->team;
 				secondLock->session = lock->session;
@@ -1744,6 +1742,11 @@ release_advisory_lock(struct vnode* vnode, struct io_context* context,
 				secondLock->start = flock->l_start + flock->l_len;
 				secondLock->end = lock->end;
 				secondLock->shared = lock->shared;
+
+				// Truncate the head only now: the tail record above inherits
+				// lock->end, so clipping it any earlier drops the tail region
+				// instead of splitting it off.
+				lock->end = flock->l_start - 1;
 
 				locking->locks.Add(secondLock);
 			}
