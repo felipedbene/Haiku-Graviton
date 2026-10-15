@@ -2,6 +2,7 @@ import * as cdk from 'aws-cdk-lib';
 import { Construct } from 'constructs';
 import * as dynamodb from 'aws-cdk-lib/aws-dynamodb';
 import * as ec2 from 'aws-cdk-lib/aws-ec2';
+import * as elbv2 from 'aws-cdk-lib/aws-elasticloadbalancingv2';
 import * as iam from 'aws-cdk-lib/aws-iam';
 import * as lambda from 'aws-cdk-lib/aws-lambda';
 import * as sfn from 'aws-cdk-lib/aws-stepfunctions';
@@ -32,6 +33,74 @@ export function readNativebuildVersion(): string {
       `staleness guard cannot be bound to the driver. Add the marker before synth.`);
   }
   return m[1];
+}
+
+/**
+ * The port `remote_broker` listens on, and the only port the public endpoint
+ * below ever carries. app_server's own RP listener (:10900) is loopback-only and
+ * is deliberately NOT in this range: the broker is the front door, and putting
+ * :10900 behind a load balancer would hand out a session with no TLS and no
+ * token in front of it.
+ */
+export const BROKER_PORT = 10902;
+
+/**
+ * #611: parse the public broker endpoint's source allowlist out of deploy-time
+ * context. PURE so the invariants below are testable without synthesizing, and
+ * so a bad value is a synth error rather than a surprise in the console.
+ *
+ * The endpoint is OFF unless `brokerEndpointAllowCidrs` is given, because an
+ * internet-facing listener in front of someone's live desktop is not a default
+ * anybody should acquire by deploying the ops stack for an unrelated reason. The
+ * same argument applies one level down: a public endpoint whose source is
+ * `0.0.0.0/0` is a different decision from one scoped to an office range, so a
+ * prefix shorter than /16 is refused unless the operator ALSO passes
+ * `brokerEndpointAllowWorld=true`. Two flags, because the second one is the one
+ * nobody can claim they set by accident.
+ *
+ * The token in front of the broker is 256 bits and compared in constant time, so
+ * it is not the brute-force surface that worries this guard -- the pre-auth
+ * surface behind it is (a hand-written TLS + WebSocket handshake path, and a
+ * global cap of 8 concurrent handshakes that a trickle of connections can hold
+ * shut). See graviton/docs/remote-desktop-public-endpoint.md.
+ */
+export function parseBrokerEndpointAllowList(
+  rawCidrs: unknown, rawAllowWorld: unknown): string[] {
+  if (rawCidrs === undefined || rawCidrs === null || rawCidrs === '') return [];
+  if (typeof rawCidrs !== 'string') {
+    throw new Error(
+      `#611: brokerEndpointAllowCidrs must be a comma-separated string of IPv4 ` +
+      `CIDRs, got ${typeof rawCidrs}`);
+  }
+  const allowWorld = rawAllowWorld === true || rawAllowWorld === 'true';
+  const out: string[] = [];
+  for (const piece of rawCidrs.split(',')) {
+    const cidr = piece.trim();
+    if (cidr === '') continue;
+    const m = cidr.match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})\/(\d{1,2})$/);
+    if (!m) {
+      throw new Error(
+        `#611: "${cidr}" is not an IPv4 CIDR. The broker endpoint allowlist is ` +
+        `explicit prefixes only -- no host names, no "any", no IPv6 (the broker ` +
+        `listens on a single AF_INET socket).`);
+    }
+    for (const octet of m.slice(1, 5)) {
+      if (Number(octet) > 255) throw new Error(`#611: "${cidr}" has an octet > 255`);
+    }
+    const prefix = Number(m[5]);
+    if (prefix > 32) throw new Error(`#611: "${cidr}" has a prefix length > 32`);
+    if (prefix < 16 && !allowWorld) {
+      throw new Error(
+        `#611: refusing to open the broker endpoint to "${cidr}" (prefix /${prefix}). ` +
+        `A prefix shorter than /16 is effectively "the internet", and the broker's ` +
+        `shared token is a single long-lived credential for full control of a live ` +
+        `desktop with no central revocation. Scope it to the range you actually ` +
+        `connect from, or state the decision explicitly with ` +
+        `-c brokerEndpointAllowWorld=true.`);
+    }
+    if (!out.includes(cidr)) out.push(cidr);
+  }
+  return out;
 }
 
 export interface OpsStackProps extends cdk.StackProps {
@@ -275,6 +344,134 @@ export class OpsStack extends cdk.Stack {
       securityGroupIds: [eiceSg.securityGroupId],
       preserveClientIp: false,
     });
+
+    // ---- #611: public endpoint for the remote_broker front door ----------
+    // The broker (TLS + token, :10902) is the designed front door for remote
+    // desktop, but a builder has no public IP and BuilderSg only lets the
+    // on-prem VPN range in, so today the front door is reachable only from the
+    // corporate VPN. This is the shared endpoint that fixes that -- the
+    // "shared reverse proxy fronting many private brokers" shape argued for in
+    // #547, built as a TCP-passthrough NLB.
+    //
+    // Why an NLB passing TCP through, and not an ALB terminating TLS:
+    //
+    //  * The broker already terminates its own TLS and its trust model is
+    //    certificate PINNING, not a CA chain (graviton/docs/remote-desktop-broker.md).
+    //    Terminating again at an ALB would make a client's --pin verify the
+    //    load balancer rather than the desktop it is talking to, and would put
+    //    the token and the per-boot session cookie in cleartext inside a
+    //    component that previously held no secret. Passthrough keeps TLS
+    //    end-to-end and leaves the trust boundary exactly where the design
+    //    put it.
+    //  * The broker rate-limits failed authentication per source address
+    //    (RemoteBroker.cpp: the limiter is keyed on peer.sin_addr.s_addr).
+    //    Behind an L7 proxy every client collapses into the proxy's few
+    //    addresses, so one abusive client's backoff would land on everybody.
+    //    An NLB with INSTANCE targets preserves the client address, so the
+    //    limiter keeps discriminating.
+    //  * The design of record ends at QUIC/WebRTC (unified-design §10, M5).
+    //    An ALB is HTTP-only and can never carry UDP; an NLB grows a `UDP`
+    //    or `TCP_UDP` listener on the same DNS name when that lands. Choosing
+    //    an L7 front now would be choosing a dead end for M5.
+    //
+    // OFF by default (see parseBrokerEndpointAllowList): no context, no
+    // endpoint, no internet exposure, and no standing charge in an account
+    // whose test instances are deliberately ephemeral. Enable with
+    //   -c brokerEndpointAllowCidrs=<cidr>[,<cidr>...]
+    //
+    // The target group ships EMPTY on purpose. Instances here are ephemeral and
+    // created outside CloudFormation (haiku-launch / launch_builder), so there
+    // is nothing stable to register at synth time -- and an endpoint that
+    // exposes a desktop only once a human registers that specific instance is
+    // the safer default anyway. See graviton/docs/remote-desktop-public-endpoint.md
+    // for the register/deregister commands.
+    const brokerAllowCidrs = parseBrokerEndpointAllowList(
+      this.node.tryGetContext('brokerEndpointAllowCidrs'),
+      this.node.tryGetContext('brokerEndpointAllowWorld'));
+    if (brokerAllowCidrs.length > 0) {
+      const brokerSg = new ec2.SecurityGroup(this, 'BrokerEndpointSg', {
+        vpc, allowAllOutbound: false,
+        description: 'DeBeOS remote_broker public endpoint (NLB) -- :10902 only',
+      });
+      for (const cidr of brokerAllowCidrs) {
+        brokerSg.addIngressRule(ec2.Peer.ipv4(cidr), ec2.Port.tcp(BROKER_PORT),
+          `remote_broker wss from ${cidr}`);
+      }
+      // allowTo writes both halves: egress on the endpoint SG, ingress on the
+      // builder SG. allowAllOutbound is false above so this is the ONLY place
+      // the endpoint may talk to.
+      brokerSg.connections.allowTo(builderSg, ec2.Port.tcp(BROKER_PORT),
+        'public endpoint to remote_broker');
+      // Note what this does NOT do: BuilderSg gains ingress from the ENDPOINT'S
+      // security group, never from a CIDR. The fleet-wide builder SG stays
+      // closed to the internet, so an instance that is not registered in the
+      // target group is not reachable even while the endpoint exists.
+
+      const brokerNlb = new elbv2.NetworkLoadBalancer(this, 'BrokerNlb', {
+        vpc,
+        internetFacing: true,
+        // ONE public subnet, not all three. There is normally one registered
+        // desktop. A node per AZ would mean two thirds of DNS answers landing
+        // on a node whose AZ holds no target unless cross-zone carried them
+        // anyway, and AWS bills every in-use public IPv4 address -- so the
+        // extra two nodes buy AZ redundancy for a test endpoint and nothing
+        // else. Subnets can be added to a live NLB without replacing it, so
+        // this is not a one-way door.
+        vpcSubnets: { subnets: [vpc.publicSubnets[0]] },
+        securityGroups: [brokerSg],
+        // ON, and load-bearing given the single subnet above: the desktop is
+        // in whichever builder subnet haiku-launch picked, which is usually
+        // NOT this AZ. Without cross-zone the endpoint would only reach a
+        // target that happened to land in the same AZ as the node. The cost is
+        // cross-AZ data processing on an interactive draw-op stream, i.e.
+        // cents.
+        crossZoneEnabled: true,
+      });
+      const brokerTargets = new elbv2.NetworkTargetGroup(this, 'BrokerTargets', {
+        vpc,
+        port: BROKER_PORT,
+        protocol: elbv2.Protocol.TCP,
+        // INSTANCE, not IP: it is what preserves the client address for the
+        // broker's per-source backoff, and it is what `register-targets
+        // --targets Id=<instance-id>` takes, so the operator never has to look
+        // a private IP up.
+        targetType: elbv2.TargetType.INSTANCE,
+        preserveClientIp: true,
+        // A bare TCP open/close. It does NOT trip the broker's rate limiter: a
+        // failed TLS handshake is deliberately not counted as an authentication
+        // failure (RemoteBroker.cpp, handle_connection), precisely so that
+        // probes and browsers abandoning an untrusted certificate cannot lock
+        // an address out.
+        healthCheck: { protocol: elbv2.Protocol.TCP },
+        // The instance behind this is ephemeral and may be terminated at any
+        // time; there is no reason to hold a dead target's connections open for
+        // the 300 s default.
+        deregistrationDelay: cdk.Duration.seconds(10),
+      });
+      brokerNlb.addListener('BrokerListener', {
+        port: BROKER_PORT,
+        // TCP, with no `certificates`: passthrough. If this ever becomes
+        // elbv2.Protocol.TLS, the broker stops being the thing the client's
+        // --pin authenticates -- read the trust-model note above first.
+        protocol: elbv2.Protocol.TCP,
+        defaultTargetGroups: [brokerTargets],
+      });
+
+      new cdk.CfnOutput(this, 'BrokerEndpointDnsName', {
+        value: brokerNlb.loadBalancerDnsName,
+        description: `wss://<this>:${BROKER_PORT} -- pass the instance's ` +
+          'broker.fingerprint to the client as --pin; the self-signed ' +
+          'certificate does not name this host.',
+      });
+      new cdk.CfnOutput(this, 'BrokerEndpointTargetGroupArn', {
+        value: brokerTargets.targetGroupArn,
+        description: 'Register the one instance to expose: aws elbv2 ' +
+          'register-targets --target-group-arn <this> --targets Id=<instance-id>',
+      });
+      new cdk.CfnOutput(this, 'BrokerEndpointSecurityGroupId', {
+        value: brokerSg.securityGroupId,
+      });
+    }
 
     // ---- task Lambdas ----------------------------------------------------
     const lambdasDir = path.join(__dirname, '..', 'ops-lambdas');

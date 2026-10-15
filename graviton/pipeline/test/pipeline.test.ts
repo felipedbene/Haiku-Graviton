@@ -6,7 +6,9 @@ import * as path from 'path';
 import * as cdk from 'aws-cdk-lib';
 import { Match, Template } from 'aws-cdk-lib/assertions';
 import { HaikuGravitonPipelineStack } from '../lib/haiku-graviton-pipeline-stack';
-import { OpsStack, readNativebuildVersion } from '../lib/ops-stack';
+import {
+  BROKER_PORT, OpsStack, parseBrokerEndpointAllowList, readNativebuildVersion,
+} from '../lib/ops-stack';
 import { HaikuPipelineConfig, loadConfig } from '../lib/config';
 
 // Obviously-synthetic values throughout -- all-zero ids in the same style as the
@@ -2193,4 +2195,166 @@ test('#505 §C: RecordFn is wired to the harvest pool and may only LIST it', () 
     ([] as string[]).concat(s.Action ?? []).includes('s3:ListBucket'));
   expect(([] as string[]).concat(listStatement.Resource))
     .toEqual([`arn:aws:s3:::haiku-graviton-${config.account}-us-west-2`]);
+// #611: the public endpoint for the remote_broker front door.
+//
+// This is the only outward-facing resource in the account, so the tests below
+// are mostly about what it must REFUSE to synthesize. Three invariants carry
+// the security of the thing:
+//
+//   1. absent by default -- deploying DebeosOpsStack for an unrelated reason
+//      must not acquire an internet-facing listener (or its monthly bill);
+//   2. TCP passthrough, never TLS termination -- the broker terminates its own
+//      TLS and clients authenticate it by pinning its fingerprint, so a
+//      certificate on this listener would silently move the trust boundary
+//      into the load balancer;
+//   3. the builder SG is never widened to a CIDR -- only to the endpoint's own
+//      security group, so an instance nobody registered stays unreachable.
+// ---------------------------------------------------------------------------
+
+function synthOpsCtx(context: Record<string, unknown>): Template {
+  const app = new cdk.App({ context });
+  const stack = new OpsStack(app, 'TestOpsStack', {
+    env: { account: config.account, region: config.region },
+    config,
+  });
+  return Template.fromStack(stack);
+}
+
+test('#611: no endpoint without the allowlist context -- nothing internet-facing by default', () => {
+  const t = synthOps();
+  t.resourceCountIs('AWS::ElasticLoadBalancingV2::LoadBalancer', 0);
+  t.resourceCountIs('AWS::ElasticLoadBalancingV2::TargetGroup', 0);
+  t.resourceCountIs('AWS::ElasticLoadBalancingV2::Listener', 0);
+  // And the builder SG's only SG-sourced ingress is still the EICE's :22.
+  const ingress = Object.values(t.findResources('AWS::EC2::SecurityGroupIngress'));
+  expect(ingress.length).toBe(1);
+  expect((ingress[0] as any).Properties.FromPort).toBe(22);
+  // An empty string is "not set", not "set to nothing".
+  expect(parseBrokerEndpointAllowList('', undefined)).toEqual([]);
+  expect(parseBrokerEndpointAllowList(undefined, undefined)).toEqual([]);
+});
+
+test('#611: with an allowlist, the endpoint is an internet-facing NLB in ONE public subnet', () => {
+  const t = synthOpsCtx({ brokerEndpointAllowCidrs: '203.0.113.0/24' });
+  t.hasResourceProperties('AWS::ElasticLoadBalancingV2::LoadBalancer', {
+    Type: 'network',
+    Scheme: 'internet-facing',
+    LoadBalancerAttributes: Match.arrayWith([
+      // Load-bearing, not a default: the NLB has a node in one AZ and the one
+      // registered desktop is in whichever builder subnet haiku-launch picked,
+      // usually a different AZ. Without cross-zone the endpoint reaches
+      // nothing unless the two happen to coincide.
+      { Key: 'load_balancing.cross_zone.enabled', Value: 'true' },
+    ]),
+  });
+  const lb: any = Object.values(
+    t.findResources('AWS::ElasticLoadBalancingV2::LoadBalancer'))[0];
+  const subnetRefs = lb.Properties.Subnets.map((s: any) => s.Ref);
+  // Public -- a private-subnet NLB would be unreachable, which is the bug
+  // being fixed. Exactly one, because AWS bills every in-use public IPv4
+  // address and a per-AZ node buys only AZ redundancy for a test endpoint.
+  expect(subnetRefs.length).toBe(1);
+  for (const ref of subnetRefs) expect(ref).toMatch(/publicSubnet/);
+});
+
+test('#611: the listener is TCP passthrough on :10902 and carries NO certificate', () => {
+  const t = synthOpsCtx({ brokerEndpointAllowCidrs: '203.0.113.0/24' });
+  const listeners = t.findResources('AWS::ElasticLoadBalancingV2::Listener');
+  expect(Object.keys(listeners).length).toBe(1);
+  const props = (Object.values(listeners)[0] as any).Properties;
+  expect(props.Protocol).toBe('TCP');
+  expect(props.Port).toBe(BROKER_PORT);
+  // The whole point. A `Certificates` list here means the load balancer, not
+  // remote_broker, is what a client's --pin would be verifying, and the token
+  // and the per-boot session cookie would transit it in cleartext.
+  expect(props.Certificates).toBeUndefined();
+  expect(props.SslPolicy).toBeUndefined();
+});
+
+test('#611: targets are INSTANCE-type with client IP preserved, and NONE are registered at deploy', () => {
+  const t = synthOpsCtx({ brokerEndpointAllowCidrs: '203.0.113.0/24' });
+  const tg: any = Object.values(
+    t.findResources('AWS::ElasticLoadBalancingV2::TargetGroup'))[0];
+  expect(tg.Properties.Protocol).toBe('TCP');
+  expect(tg.Properties.Port).toBe(BROKER_PORT);
+  expect(tg.Properties.TargetType).toBe('instance');
+  expect(tg.Properties.HealthCheckProtocol).toBe('TCP');
+  // remote_broker's failed-auth backoff is keyed on the peer's source address,
+  // so losing the client IP would merge every client into one bucket.
+  expect(tg.Properties.TargetGroupAttributes).toEqual(
+    expect.arrayContaining([{ Key: 'preserve_client_ip.enabled', Value: 'true' }]));
+  // Builders are ephemeral and created outside CloudFormation. Shipping an
+  // empty target group means the endpoint exposes a desktop only once a human
+  // registers that one instance.
+  expect(tg.Properties.Targets).toBeUndefined();
+});
+
+test('#611: the builder SG is widened only to the endpoint SG -- never to a CIDR', () => {
+  const t = synthOpsCtx({ brokerEndpointAllowCidrs: '203.0.113.0/24' });
+  const brokerIngress = Object.values(t.findResources('AWS::EC2::SecurityGroupIngress'))
+    .filter((r: any) => r.Properties.FromPort === BROKER_PORT);
+  expect(brokerIngress.length).toBe(1);
+  const props = (brokerIngress[0] as any).Properties;
+  expect(props.SourceSecurityGroupId).toBeDefined();
+  expect(props.CidrIp).toBeUndefined();
+  // Every :10902 CIDR rule anywhere in the template must be on the ENDPOINT's
+  // security group, which is the only thing the allowlist describes.
+  const sgs = t.findResources('AWS::EC2::SecurityGroup');
+  for (const [logicalId, sg] of Object.entries(sgs)) {
+    for (const rule of ((sg as any).Properties.SecurityGroupIngress ?? [])) {
+      if (rule.FromPort === BROKER_PORT && rule.CidrIp) {
+        expect(logicalId).toMatch(/^BrokerEndpointSg/);
+      }
+    }
+  }
+  // ...and that SG carries the allowlist and nothing else inbound.
+  const brokerSg: any = Object.entries(sgs)
+    .find(([k]) => k.startsWith('BrokerEndpointSg'))![1];
+  expect(brokerSg.Properties.SecurityGroupIngress).toEqual([{
+    CidrIp: '203.0.113.0/24',
+    Description: 'remote_broker wss from 203.0.113.0/24',
+    FromPort: BROKER_PORT,
+    IpProtocol: 'tcp',
+    ToPort: BROKER_PORT,
+  }]);
+  // Egress is not allow-all: the endpoint may reach the broker port and
+  // nothing else, so the listener is not a route into the build VPC.
+  const egress = Object.values(t.findResources('AWS::EC2::SecurityGroupEgress'))
+    .filter((r: any) => (r as any).Properties.GroupId?.['Fn::GetAtt']?.[0]
+      ?.startsWith('BrokerEndpointSg'));
+  expect(egress.length).toBe(1);
+  expect((egress[0] as any).Properties.ToPort).toBe(BROKER_PORT);
+});
+
+test('#611: "the internet" needs a second, explicit flag -- a short prefix alone is refused', () => {
+  // The lazy value, and the ones that mean the same thing while looking scoped.
+  for (const cidr of ['0.0.0.0/0', '0.0.0.0/8', '203.0.113.0/15']) {
+    expect(() => parseBrokerEndpointAllowList(cidr, undefined))
+      .toThrow(/refusing to open the broker endpoint/);
+    expect(() => synthOpsCtx({ brokerEndpointAllowCidrs: cidr }))
+      .toThrow(/refusing to open the broker endpoint/);
+  }
+  // Stated explicitly, it is the operator's call and it synthesizes.
+  expect(parseBrokerEndpointAllowList('0.0.0.0/0', 'true')).toEqual(['0.0.0.0/0']);
+  expect(parseBrokerEndpointAllowList('0.0.0.0/0', true)).toEqual(['0.0.0.0/0']);
+  const t = synthOpsCtx({
+    brokerEndpointAllowCidrs: '0.0.0.0/0', brokerEndpointAllowWorld: 'true',
+  });
+  t.resourceCountIs('AWS::ElasticLoadBalancingV2::LoadBalancer', 1);
+  // A /16 is the floor and does not need the flag.
+  expect(parseBrokerEndpointAllowList('198.51.100.0/16', undefined))
+    .toEqual(['198.51.100.0/16']);
+});
+
+test('#611: a malformed allowlist fails synth instead of quietly opening or closing the endpoint', () => {
+  for (const bad of ['203.0.113.4', 'example.com', 'any', '203.0.113.0/33',
+                     '203.0.113.256/24', '::/0', '203.0.113.0/24;198.51.100.0/24']) {
+    expect(() => parseBrokerEndpointAllowList(bad, 'true')).toThrow(/#611/);
+  }
+  expect(() => parseBrokerEndpointAllowList(['203.0.113.0/24'], undefined))
+    .toThrow(/comma-separated string/);
+  // Several ranges are fine; whitespace and duplicates are tolerated.
+  expect(parseBrokerEndpointAllowList(
+    ' 203.0.113.0/24 , 198.51.100.0/24 ,203.0.113.0/24 ', undefined))
+    .toEqual(['203.0.113.0/24', '198.51.100.0/24']);
 });
