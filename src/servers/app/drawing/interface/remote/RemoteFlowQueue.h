@@ -41,12 +41,16 @@
 	of is PINNED, so a future opcode is safe by default and only becomes
 	droppable when someone states that it is.
 
-	**Bounded, and the bound degrades to RP_RESYNC.** At kMaxMessages or
-	kMaxBytes the queue coalesces, then supersedes, and if it is still over the
-	bound it drops everything and latches ResyncOwed(). The owner must then send
-	an RP_RESYNC barrier and replay state before the stream is trustworthy
-	again; a screen that is merely a frame behind is acceptable, a screen that is
-	wrong is not.
+	**Bounded, and the bound degrades to RP_RESYNC.** At kMaxMessages or the
+	byte bound -- a constant kMaxBytes of stream, or what the link's observed
+	rate says kMaxQueuedStreamTime of stream is, whichever is smaller (see
+	StreamBoundFor()) -- the queue coalesces, then supersedes, and if it is
+	still over the bound it drops everything and latches ResyncOwed(). The
+	ladder and its order are the same whichever bound was reached: the unit a
+	bound is stated in is the owner's business, the policy at the bound is this
+	class's. The owner must then send an RP_RESYNC barrier and replay state
+	before the stream is trustworthy again; a screen that is merely a frame
+	behind is acceptable, a screen that is wrong is not.
 
 	Not internally locked. The caller serialises (RemoteWireWriter::fLock already
 	serialises every writer, and the compressed stream requires that anyway), so
@@ -101,8 +105,10 @@ public:
 				divided by the ratio of stream -- ~40 kB at the 90-180x measured
 				under an animating browser -- and the bound collapses about that
 				many times too early. The owner therefore states the byte bound
-				with SetMaxBytes(), using ByteBoundFor() on a compressed
-				connection that has a reader and kMaxBytes otherwise. */
+				with SetMaxBytes(), using StreamBoundFor() on a connection that
+				has a reader -- which folds in both the ratio and the link's
+				observed rate -- and kMaxBytes otherwise, there being no stream
+				to measure against without a reader. */
 	static	const size_t		kMaxMessages = 32768;
 	static	const size_t		kMaxBytes = 4 * 1024 * 1024;
 
@@ -122,6 +128,64 @@ public:
 				arithmetic is tested off-target. */
 	static	size_t				ByteBoundFor(uint64 plainBytes,
 									uint64 wireBytes);
+
+			/*!	The seconds-of-stream bound, as microseconds of stream, and
+				the floor under the byte bound derived from it.
+
+				Bytes are the wrong unit for a link whose rate is not known in
+				advance, which is every link here. The same 4 MiB of stream is
+				1.3 s of a 25 Mbit/s connection and 34 s of a 1 Mbit/s one, and
+				34 s behind is not "a frame behind": it is a desktop showing
+				what the user did half a minute ago, which an RP_RESYNC and a
+				repaint would have corrected in a fraction of the time the
+				backlog itself needs to drain. What wants bounding is therefore
+				how far behind the link this queue may put the client, measured
+				in time.
+
+				2 s, for the same reason kMaxBytes is 4 MiB: far above anything
+				a healthy session produces -- this queue holds nothing at all
+				until the send ring is full, and a client that keeps reading
+				never lets it stay that way for two seconds -- and below the
+				point at which a user reads the screen as wrong rather than
+				merely slow.
+
+				The floor matters as much as the window. Collapsing only pays
+				while the replay it forces is cheaper than the backlog it
+				discards, and a replay costs about one cold first paint (~32 kB
+				measured). kMinStreamBound is eight of those, so the repair
+				never costs more than about an eighth of the stream it replaces
+				-- which is also what stops a link of a few kB/s from thrashing
+				the ladder. At a 2 s window the floor is what binds below
+				~1 Mbit/s. */
+	static	const bigtime_t		kMaxQueuedStreamTime = 2000000;
+	static	const size_t		kMinStreamBound = 256 * 1024;
+
+			/*!	The plain byte bound that holds \a window of stream on a link
+				observed to carry \a wireBytesPerSecond, given that \a
+				plainBytes of messages became \a wireBytes on the ring.
+
+				ByteBoundFor() with its constant kMaxBytes of stream replaced by
+				what the measured rate says \a window of stream is, clamped into
+				[kMinStreamBound, kMaxBytes] and then scaled to plain bytes by
+				the same ratio, so the memory ceiling kMaxPlainBytes still
+				holds.
+
+				Clamped at kMaxBytes because a rate is new information about the
+				link, not permission to hold more stream than the old bound
+				already allowed. That clamp is what makes this safe for a fast
+				client: a link carrying more than kMaxBytes per \a window
+				(2 MB/s, i.e. 16 Mbit/s, at kMaxQueuedStreamTime) gets exactly
+				the bound it got before this existed, so it cannot be made to
+				collapse by this at all.
+
+				A \a wireBytesPerSecond of 0 means "no rate measured", and a \a
+				window of 0 disables the rate bound; both return
+				ByteBoundFor()'s answer unchanged. Pure, so the arithmetic is
+				tested off-target. */
+	static	size_t				StreamBoundFor(uint64 plainBytes,
+									uint64 wireBytes,
+									uint64 wireBytesPerSecond,
+									bigtime_t window);
 
 								RemoteFlowQueue(size_t maxMessages = kMaxMessages,
 									size_t maxBytes = kMaxBytes);
@@ -229,6 +293,9 @@ private:
 			void				_CloseFrame(int32 owner);
 			int					_ModeOf(uint32 token) const;
 			void				_NoteMode(uint32 token, int mode);
+
+	static	size_t				_ScaleToPlain(size_t wireBound,
+									uint64 plainBytes, uint64 wireBytes);
 
 	static	bool				_ReadToken(const uint8* data, size_t length,
 									uint32& _token);

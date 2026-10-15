@@ -152,6 +152,7 @@ private:
 			bool				_CanDeliver(size_t length) const;
 			bool				_LargerThanTheRing(size_t length) const;
 			status_t			_Enqueue(const void* buffer, size_t length);
+			uint64				_DrainRate() const;
 			void				_DrainQueue();
 			status_t			_DrainQueueWaiting();
 			status_t			_WriteCompressed(const void* buffer,
@@ -206,6 +207,13 @@ private:
 			// per message -- which is what the A/B's control arm runs.
 			bigtime_t			fFlushWindow;
 
+			// How far behind the link a backlog may put the client, as
+			// microseconds of stream at the rate the link is measured to carry
+			// (see RemoteFlowQueue::kMaxQueuedStreamTime). Zero leaves the
+			// queue bounded in bytes alone, which is the control arm of the
+			// A/B.
+			bigtime_t			fStreamWindow;
+
 			// system_time() when the open window's first message was
 			// compressed, or 0 when no window is open, i.e. when everything
 			// written so far has been flushed. Guarded by fLock, like
@@ -244,6 +252,16 @@ private:
 			// out what the queue discarded, so their ratio is the stream's
 			// real compression ratio, which the queue's bound is scaled by.
 			uint64				fDeliveredBytes;
+
+			// The current backlog episode: system_time() when the queue last
+			// stopped being empty, and fWireBytes at that instant. Their
+			// difference over the elapsed time is the link's drain rate, which
+			// is only observable while the queue holds something -- see
+			// _DrainRate(). Zero while no episode has started on this
+			// connection.
+			bigtime_t			fBacklogStarted;
+			uint64				fBacklogWireMark;
+
 			uint64				fMessages;
 			uint64				fExemptMessages;
 			uint64				fFlushes;

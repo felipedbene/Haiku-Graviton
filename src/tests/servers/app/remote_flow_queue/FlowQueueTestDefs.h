@@ -28,6 +28,10 @@ typedef int64_t		int64;
 
 typedef int32		status_t;
 
+// Microseconds, as on the target: the seconds-of-stream bound is stated in
+// them and StreamBoundFor() takes one.
+typedef int64		bigtime_t;
+
 #define B_OK			((status_t)0)
 #define B_ERROR			((status_t)-1)
 #define B_BAD_VALUE		((status_t)-2147483642)

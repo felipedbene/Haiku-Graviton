@@ -185,12 +185,12 @@ mutate trust-fractional-damage \
 # M13 -- the byte bound ignores the compression ratio (the pre-fix behaviour:
 # 4 MiB of plain whatever the stream shrank to).
 mutate bound-ignores-ratio \
-	'	return kMaxBytes * (size_t)ratio;' \
-	'	return kMaxBytes;'
+	'	return wireBound * (size_t)ratio;' \
+	'	return wireBound;'
 
 # M14 -- the scaled bound has no memory ceiling.
 mutate bound-without-ceiling \
-	'	if (ratio >= kMaxPlainBytes / kMaxBytes)
+	'	if (ratio >= kMaxPlainBytes / wireBound)
 		return kMaxPlainBytes;' \
 	'	if (false)
 		return kMaxPlainBytes;'
@@ -204,7 +204,44 @@ mutate bound-below-plain \
 # M16 -- multiply before dividing, which overflows.
 mutate bound-multiply-first \
 	'	const uint64 ratio = plainBytes / wireBytes;' \
-	'	const uint64 ratio = (kMaxBytes * plainBytes) / wireBytes / kMaxBytes;'
+	'	const uint64 ratio = (wireBound * plainBytes) / wireBytes / wireBound;'
+
+# M17 -- the seconds-of-stream bound ignores the measured rate, i.e. it is just
+# the constant byte bound again under another name.
+mutate rate-bound-ignores-the-rate \
+	'	uint64 wireBound = wireBytesPerSecond * (uint64)window / 1000000;' \
+	'	uint64 wireBound = kMaxBytes;'
+
+# M18 -- no floor, so a link of a few kB/s is bounded below the replay a
+# collapse forces and the ladder thrashes.
+mutate rate-bound-without-floor \
+	'	if (wireBound < kMinStreamBound)
+		wireBound = kMinStreamBound;' \
+	'	if (false)
+		wireBound = kMinStreamBound;'
+
+# M19 -- the rate bound is allowed to loosen the byte bound, which is what
+# makes a fast client unable to collapse: a measured rate above kMaxBytes per
+# window would otherwise hold more stream than the constant bound ever allowed
+# (and overflow the multiplication for an extreme one).
+mutate rate-bound-may-loosen \
+	'	if (wireBytesPerSecond >= ceilingRate)
+		return ByteBoundFor(plainBytes, wireBytes);' \
+	'	if (false)
+		return ByteBoundFor(plainBytes, wireBytes);'
+
+# M20 -- a disabled window (the A/B control arm) is not honoured. Two guards
+# cover it, and on arm64 the second one masks the first: udiv by zero yields 0
+# there rather than trapping, so kMaxBytes * 1000000 / window is 0 and every
+# rate is at or above it, which returns the unscaled bound anyway. So the pair
+# has to be broken together for the mutant to be alive at all.
+mutate2 rate-bound-ignores-a-disabled-window \
+	'	if (wireBytesPerSecond == 0 || window <= 0)' \
+	'	if (wireBytesPerSecond == 0)' \
+	'	if (wireBytesPerSecond >= ceilingRate)
+		return ByteBoundFor(plainBytes, wireBytes);' \
+	'	if (false)
+		return ByteBoundFor(plainBytes, wireBytes);'
 
 echo
 echo "mutants killed $killed, survived $survived"

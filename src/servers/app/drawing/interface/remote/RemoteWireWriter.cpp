@@ -121,18 +121,43 @@ static const bigtime_t kQuiescenceInterval = 500;
 static const char* const kFlushWindowEnvironmentVariable
 	= "REMOTE_WIRE_FLUSH_WINDOW";
 
+/*!	How long a backlog must have lasted before its drain rate is believed.
 
+	A rate is bytes over an interval, and over a short enough interval it is the
+	ring's slack and TCP's send window talking, not the link: an episode that
+	began with the ring nearly empty shows the ring filling, which is memcpy
+	speed. 100 ms is long enough that a full ring (1 MiB) cannot dominate the
+	sample for any link this bound can tighten at all (2 MB/s and below, so
+	200 kB in the sample), and short enough that the bound is in force long
+	before the backlog it is bounding could have been delivered.
+*/
+static const bigtime_t kMinDrainSample = 100000;
+
+/*!	Environment override for the seconds-of-stream window, in microseconds,
+	read once per writer.
+
+	Zero disables the rate bound, leaving the byte bound exactly as it was
+	before the rate bound existed -- which is the control arm for measuring this
+	policy against a throttled client, on the same binary and the same boot, in
+	the same way REMOTE_WIRE_FLUSH_WINDOW=0 is the control arm for the drain
+	window.
+*/
+static const char* const kStreamWindowEnvironmentVariable
+	= "REMOTE_WIRE_STREAM_WINDOW";
+
+
+/*!	Reads \a variable as a non-negative microsecond count, or \a fallback. */
 static bigtime_t
-configured_flush_window()
+configured_window(const char* variable, bigtime_t fallback)
 {
-	const char* value = getenv(kFlushWindowEnvironmentVariable);
+	const char* value = getenv(variable);
 	if (value == NULL || value[0] == '\0')
-		return kFlushWindow;
+		return fallback;
 
 	char* end = NULL;
 	long long window = strtoll(value, &end, 10);
 	if (end == value || window < 0)
-		return kFlushWindow;
+		return fallback;
 
 	return (bigtime_t)window;
 }
@@ -148,7 +173,10 @@ RemoteWireWriter::RemoteWireWriter(StreamingRingBuffer* target)
 	fCompressionContext(NULL),
 	fOutputBuffer(NULL),
 	fOutputBufferSize(0),
-	fFlushWindow(configured_flush_window()),
+	fFlushWindow(configured_window(kFlushWindowEnvironmentVariable,
+		kFlushWindow)),
+	fStreamWindow(configured_window(kStreamWindowEnvironmentVariable,
+		RemoteFlowQueue::kMaxQueuedStreamTime)),
 	fWindowOpened(0),
 	fWindowMessages(0),
 	fFlusher(-1),
@@ -157,6 +185,8 @@ RemoteWireWriter::RemoteWireWriter(StreamingRingBuffer* target)
 	fPlainBytes(0),
 	fWireBytes(0),
 	fDeliveredBytes(0),
+	fBacklogStarted(0),
+	fBacklogWireMark(0),
 	fMessages(0),
 	fExemptMessages(0),
 	fFlushes(0),
@@ -406,6 +436,12 @@ RemoteWireWriter::Reset()
 		= fFlushes = 0;
 	fEncodeTime = 0;
 	fLastReport = 0;
+
+	// The next connection's link is not this one's, and its backlog has not
+	// started. Measuring across the boundary would hand the new client the old
+	// client's rate.
+	fBacklogStarted = 0;
+	fBacklogWireMark = 0;
 }
 
 
@@ -549,31 +585,92 @@ RemoteWireWriter::_WriteLocked(const void* buffer, size_t length)
 }
 
 
-/*!	Queues one message, with the queue's byte bound first restated in the unit
-	it was derived in: bytes of stream still owed to the link.
+/*!	Queues one message, with the queue's byte bound first restated in the
+	units it was derived in: bytes of stream still owed to the link, and
+	seconds of stream at the rate the link is observed to carry them.
 
-	On a plain connection that is the message's own length, so the bound is
-	RemoteFlowQueue::kMaxBytes as it always was. On a compressed one a queued
-	plain byte costs the link only 1/ratio of a byte, and a bound left in plain
-	bytes held ~40 kB of stream under an animating browser and collapsed about a
-	hundred times sooner than the bound means (M1: 6.55 GB plain, 73 MB wire).
-	So scale it by the ratio this connection has actually achieved, up to the
-	memory ceiling RemoteFlowQueue::kMaxPlainBytes.
+	A queued plain byte is not a stream byte. On a compressed connection it
+	costs the link only 1/ratio of a byte, and a bound left in plain bytes held
+	~40 kB of stream under an animating browser and collapsed about a hundred
+	times sooner than the bound means (M1: 6.55 GB plain, 73 MB wire). On a
+	plain connection the two are equal by construction -- _Deliver() adds the
+	same length to both counters -- so the ratio is 1 and
+	RemoteFlowQueue::StreamBoundFor() reduces to the rate bound alone.
 
-	Only while there is a reader. Without one nothing queued will be delivered
-	and there is no stream to measure against, so the bound stays at kMaxBytes
-	of plain: the no-client fill that ends in the one collapse _WriteLocked()
-	then drops after is the same 4 MiB as before.
+	Nor is a stream byte a fixed amount of latency, which is what this adds: the
+	same 4 MiB is 1.3 s of a 25 Mbit/s link and 34 s of a 1 Mbit/s one. So the
+	bound is also stated in time, at the rate _DrainRate() measured, and the
+	smaller of the two is what the queue enforces. The ladder at the bound is
+	unchanged: coalesce, then supersede, then collapse to an owed RP_RESYNC.
+
+	Only while there is a reader. Without one nothing queued will be delivered,
+	there is no stream to measure against, and no rate can be observed, so the
+	bound stays at kMaxBytes of plain: the no-client fill that ends in the one
+	collapse _WriteLocked() then drops after is the same 4 MiB as before.
 */
 status_t
 RemoteWireWriter::_Enqueue(const void* buffer, size_t length)
 {
+	// A backlog episode starts the moment the queue stops being empty, and the
+	// rate is measured across it (see _DrainRate()), so the mark has to be
+	// taken before this message goes in.
+	if (fQueue.IsEmpty()) {
+		fBacklogStarted = system_time();
+		fBacklogWireMark = fWireBytes;
+	}
+
 	size_t bound = RemoteFlowQueue::kMaxBytes;
-	if (fCapability != 0 && fTarget->HasReader())
-		bound = RemoteFlowQueue::ByteBoundFor(fDeliveredBytes, fWireBytes);
+	if (fTarget->HasReader()) {
+		bound = RemoteFlowQueue::StreamBoundFor(fDeliveredBytes, fWireBytes,
+			_DrainRate(), fStreamWindow);
+	}
 
 	fQueue.SetMaxBytes(bound);
 	return fQueue.Enqueue(buffer, length, find_thread(NULL));
+}
+
+
+/*!	The wire bytes per second this link has carried since the current backlog
+	started, or 0 while that is not measurable.
+
+	Measured across the backlog and not across the connection, because those are
+	different numbers and only the first one is the link's rate. The queue holds
+	nothing until the ring could not take a message whole, so the interval since
+	fBacklogStarted is an interval in which the link, not the desktop, set the
+	pace: every byte that left in it left as fast as the link would take it. An
+	average over the whole connection would instead divide by every idle second
+	of an interactive session and read a fast client as a slow one -- and a slow
+	rate is what tightens the bound, so that mistake would collapse the queue of
+	the client that has no problem.
+
+	fWireBytes is bytes handed to the send ring rather than bytes acknowledged
+	by the socket, so it leads the link by at most the ring's 1 MiB. Across a
+	backlog that lasts longer than kMinDrainSample the ring is full throughout
+	and the two rates are the same; the lead only matters at the start of an
+	episode, which is what kMinDrainSample waits out.
+
+	Zero bytes in the window yields a rate of 0, i.e. no rate bound. A client
+	making no progress at all is NetSender's kSendStallTimeout to end (15 s of
+	zero progress drops the reader, after which the ring discards and the queue
+	is bounded by kMaxBytes as before); this bound is for the client that is
+	moving, slowly, and would otherwise be allowed to fall minutes behind.
+*/
+uint64
+RemoteWireWriter::_DrainRate() const
+{
+	// No backlog, no measurement: with the queue empty the pace is the
+	// desktop's again, and fBacklogStarted belongs to an episode that has
+	// already ended. Saying 0 here rather than dividing by a dead episode's
+	// elapsed time is what keeps the reported rate (see
+	// _MaybeReportStatistics()) the same number the bound was derived from.
+	if (fBacklogStarted == 0 || fQueue.IsEmpty())
+		return 0;
+
+	const bigtime_t elapsed = system_time() - fBacklogStarted;
+	if (elapsed < kMinDrainSample)
+		return 0;
+
+	return (fWireBytes - fBacklogWireMark) * 1000000 / (uint64)elapsed;
 }
 
 
@@ -1287,10 +1384,17 @@ RemoteWireWriter::_MaybeReportStatistics()
 	uint64 encodePerMessage = fMessages > 0
 		? (uint64)fEncodeTime * 1000 / fMessages : 0;
 	uint64 messagesPerFlush = fFlushes > 0 ? fMessages * 100 / fFlushes : 0;
+	// The bound the queue was last held to and the rate it came from, because
+	// otherwise a rate-derived bound is invisible: a collapse on a throttled
+	// client could not be told from a collapse on a busy one, and the number
+	// the bound is supposed to track could not be checked against it.
 	TRACE_ALWAYS("zstd msgs %" B_PRIu64 " exempt %" B_PRIu64 " plain %" B_PRIu64
 		" wire %" B_PRIu64 " ratio %" B_PRIu64 ".%02" B_PRIu64 "x flushes %"
 		B_PRIu64 " (%" B_PRIu64 ".%02" B_PRIu64 " msgs each) encode %" B_PRIu64
-		"ns/msg\n", fMessages, fExemptMessages, fPlainBytes, fWireBytes,
-		ratio / 100, ratio % 100, fFlushes, messagesPerFlush / 100,
-		messagesPerFlush % 100, encodePerMessage);
+		"ns/msg bound %" B_PRIuSIZE " drain %" B_PRIu64 "B/s queued %"
+		B_PRIuSIZE "/%" B_PRIuSIZE "\n", fMessages, fExemptMessages,
+		fPlainBytes, fWireBytes, ratio / 100, ratio % 100, fFlushes,
+		messagesPerFlush / 100,
+		messagesPerFlush % 100, encodePerMessage, fQueue.MaxBytes(),
+		_DrainRate(), fQueue.CountMessages(), fQueue.CountBytes());
 }
