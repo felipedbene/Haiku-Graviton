@@ -126,6 +126,19 @@ phase_pc() {
 	ln -sf libpng16.pc "$PREFIX/lib/pkgconfig/libpng.pc"
 	pkg-config --exists libavcodec-ladybird \
 		|| { echo "libavcodec-ladybird.pc not visible" >&2; return 1; }
+
+	# find_package(LIBAVIF) is a config-package lookup, not pkg-config, so the
+	# shadow config has to land under a CMAKE_PREFIX_PATH entry and be named the
+	# way CMake searches for it (<lowercase name>-config.cmake). The system
+	# config at /boot/system/lib/cmake/libavif derives _IMPORT_PREFIX by walking
+	# up from its own directory, landing on /boot/system, and then advertises
+	# /boot/system/include -- a path Haiku does not have (headers are under
+	# develop/headers). A non-existent INTERFACE_INCLUDE_DIRECTORIES on an
+	# imported target is a hard CMake generate-step error, so configure cannot
+	# get past LibImageDecoders without this.
+	mkdir -p "$PREFIX/lib/cmake/libavif"
+	cp "$RECIPE/pkgconfig/libavif-config-SHADOW.cmake" \
+		"$PREFIX/lib/cmake/libavif/libavif-config.cmake"
 }
 
 phase_configure() {
@@ -138,6 +151,7 @@ phase_configure() {
 		-DBUILD_TESTING=OFF \
 		-DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++ \
 		-DCMAKE_PREFIX_PATH=$PREFIX \
+		-DLIBAVIF_DIR=$PREFIX/lib/cmake/libavif \
 		-DFastFloat_DIR=$PREFIX/share/cmake/FastFloat \
 		-Dsimdutf_DIR=$PREFIX/lib/cmake/simdutf \
 		-DWUFFS_INCLUDE_DIR=$PREFIX/include \
