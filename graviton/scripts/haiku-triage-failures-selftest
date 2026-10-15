@@ -47,10 +47,13 @@ executable form.
                       counts from the #488 census. Skipped when the directory is absent,
                       so the test still runs on a machine with no cache.
   --deep-logs DIR     the same, over a cache of DEEP-capture logs (*.log.gz) from the #492
-                      re-wave: #505's arm 2. Pass BOTH --logs and --deep-logs to get the
-                      control in one run -- the widened lexicon must see MORE on the deep
-                      corpus than on the truncated one, or it is matching boilerplate that
-                      is in every log instead of reasons that are only in some.
+                      re-wave: #505's arm 2. The corpus is 105 logs under TWO S3 prefixes
+                      (DEEP_CORPUS below lists both); fetch both, or the run says so
+                      instead of mistaking the gap for a detector regression. Pass BOTH
+                      --logs and --deep-logs to get the control in one run -- the widened
+                      lexicon must see MORE on the deep corpus than on the truncated one,
+                      or it is matching boilerplate that is in every log instead of reasons
+                      that are only in some.
   --list-arms         print the mutation arms and exit.
 """
 import argparse
@@ -779,6 +782,21 @@ DEEP_EXPECT = {
 DEEP_NODIAG = ("blis camlp5 cmake_haiku di graphicsmagick lbreakouthd libimagequant "
                "squashfs_tools stockfish tk")
 
+# WHERE THE CORPUS LIVES, and why it is two prefixes. The #492 re-wave ran a two-port smoke
+# (`di`, `colors`) before the main batch and kept its own run id, so the 105 logs are split
+# 103 + 2. Recorded here because the obvious fetch -- the prefix named after the run -- gives
+# 103 logs and a NO_DIAGNOSTIC set short by `di`, which reads as a detector regression rather
+# than as a half-fetched corpus. The caller is not expected to know that; the guard below
+# tells them.
+DEEP_CORPUS = (
+    "s3://haiku-graviton-668984504585-us-west-2/logs/wd-492-nodiag/   (103 logs)",
+    "s3://haiku-graviton-668984504585-us-west-2/logs/wd-492-smoke2/   (2 logs: di colors)",
+)
+# Every port this file names an expectation for. A corpus missing any of them cannot carry
+# an exact-set assertion, so the guard stops rather than reporting the absence as a verdict.
+DEEP_NAMED = set(DEEP_NODIAG.split()).union(
+    *(set(names.split()) for names in DEEP_EXPECT.values()))
+
 
 def main():
     ap = argparse.ArgumentParser()
@@ -1007,24 +1025,37 @@ def main():
                 texts[name] = open(p, errors="replace").read()
             got.setdefault(mod.classify(texts[name])[0], set()).add(name)
         print("deep-capture logs: %d" % len(texts))
-        for cls, names in sorted(DEEP_EXPECT.items()):
-            want, have = set(names.split()), got.get(cls, set())
-            if have == want:
+        # An EXACT-SET assertion over a corpus cannot distinguish "the detector regressed"
+        # from "the corpus is short a log" -- both read as want-not-got. The #492 re-wave
+        # uploaded under TWO run prefixes (see DEEP_CORPUS), so fetching only the obvious one
+        # yields 103 of 105 logs and reports the absent `di` as a NO_DIAGNOSTIC mismatch,
+        # i.e. as a regression in the very fix this corpus exists to pin. Name the real cause
+        # and stop: a short corpus cannot support the assertions that follow.
+        short = sorted(DEEP_NAMED - set(texts))
+        if short:
+            fails += 1
+            print("  FAIL  deep corpus incomplete, missing %s -- fetch ALL of:\n%s"
+                  % (short, "\n".join("          " + u for u in DEEP_CORPUS)))
+        else:
+            for cls, names in sorted(DEEP_EXPECT.items()):
+                want, have = set(names.split()), got.get(cls, set())
+                if have == want:
+                    passes += 1
+                    print("  ok    class %-3s %3d ports, exact set" % (cls, len(have)))
+                else:
+                    fails += 1
+                    print("  FAIL  class %-3s want-not-got=%s got-not-want=%s"
+                          % (cls, sorted(want - have) or "-", sorted(have - want) or "-"))
+            nd = {n for n in got.get(None, set())
+                  if not mod.has_captured_diagnostic(texts[n])}
+            want_nd = set(DEEP_NODIAG.split())
+            if nd == want_nd:
                 passes += 1
-                print("  ok    class %-3s %3d ports, exact set" % (cls, len(have)))
+                print("  ok    deep NO_DIAGNOSTIC %d ports, exact set" % len(nd))
             else:
                 fails += 1
-                print("  FAIL  class %-3s want-not-got=%s got-not-want=%s"
-                      % (cls, sorted(want - have) or "-", sorted(have - want) or "-"))
-        nd = {n for n in got.get(None, set()) if not mod.has_captured_diagnostic(texts[n])}
-        want_nd = set(DEEP_NODIAG.split())
-        if nd == want_nd:
-            passes += 1
-            print("  ok    deep NO_DIAGNOSTIC %d ports, exact set" % len(nd))
-        else:
-            fails += 1
-            print("  FAIL  deep NO_DIAGNOSTIC want-not-got=%s got-not-want=%s"
-                  % (sorted(want_nd - nd) or "-", sorted(nd - want_nd) or "-"))
+                print("  FAIL  deep NO_DIAGNOSTIC want-not-got=%s got-not-want=%s"
+                      % (sorted(want_nd - nd) or "-", sorted(nd - want_nd) or "-"))
 
     print("----")
     print("pass=%d fail=%d" % (passes, fails))
