@@ -8,8 +8,8 @@
 # them.
 #
 # Usage, run natively on the builder as baron:
-#     run-wall-build.sh <phase>...     # toolchain deps png ffmpeg lb skiafetch
-#                                      # skiabuild pc configure build
+#     run-wall-build.sh <phase>...     # toolchain deps png icu ffmpeg lb
+#                                      # skiafetch skiabuild pc configure build
 #     run-wall-build.sh all
 #
 # Each phase appends to its own log under $LOGDIR and prints a SENTINEL line on
@@ -78,6 +78,19 @@ phase_png() {
 		|| { echo "APNG missing from installed png.h" >&2; return 1; }
 	nm -D "$PREFIX/lib/libpng16.so" | grep -q ' T png_read_frame_head' \
 		|| { echo "libpng16.so does not export png_read_frame_head" >&2; return 1; }
+}
+
+# ICU 78.3 into $PREFIX/icu78, beside (not over) the system icu74 that
+# harfbuzz_devel and the rest of the C++ stack are built against. ICU suffixes
+# every exported symbol and namespace with its major version (icu_74 vs
+# icu_78), so the two coexist in one process by design -- which is the only
+# reason Ladybird can use 78 while linking a harfbuzz that uses 74.
+phase_icu() {
+	JOBS="$JOBS" sh "$RECIPE/scripts/run-icu2.sh"
+	grep -q '"78' "$PREFIX/icu78/include/unicode/uvernum.h" \
+		|| { echo "icu78 headers are not 78.x" >&2; return 1; }
+	test -e "$PREFIX/icu78/lib/libicuuc.so" \
+		|| { echo "icu78 libicuuc.so missing" >&2; return 1; }
 }
 
 phase_ffmpeg() {
@@ -152,6 +165,7 @@ phase_configure() {
 		-DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++ \
 		-DCMAKE_PREFIX_PATH=$PREFIX \
 		-DLIBAVIF_DIR=$PREFIX/lib/cmake/libavif \
+		-DICU_ROOT=$PREFIX/icu78 \
 		-DFastFloat_DIR=$PREFIX/share/cmake/FastFloat \
 		-Dsimdutf_DIR=$PREFIX/lib/cmake/simdutf \
 		-DWUFFS_INCLUDE_DIR=$PREFIX/include \
@@ -207,7 +221,8 @@ run_phase() {
 }
 
 if [ "$1" = all ]; then
-	set -- toolchain deps png ffmpeg lb skiafetch skiabuild pc configure build
+	set -- toolchain deps png icu ffmpeg lb skiafetch skiabuild pc configure \
+		build
 fi
 test $# -gt 0 || { echo "usage: $0 <phase>... | all" >&2; exit 2; }
 

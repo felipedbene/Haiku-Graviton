@@ -12,12 +12,13 @@ export CC=clang CXX=clang++
 PREFIX=/boot/home/lbdeps
 mkdir -p $PREFIX/lib/pkgconfig $PREFIX/include/wuffs
 
-# 1. System devel deps. NOTE: ICU is icu74 (NOT icu77/78) because that is the
-#    version harfbuzz_devel and the rest of the C++ stack are built against;
-#    forcing icu77_devel conflicts with harfbuzz_devel's devel:libicuuc dep.
-#    (ICU 78.3 is instead built from source into lbdeps/icu78 by run-icu2.sh if
-#    the upstream "78.3 EXACT" pin is kept; the shipped patch relaxes that pin
-#    to the coherent system icu74 — see patches/ladybird-haiku.patch.)
+# 1. System devel deps. NOTE: icu74_devel here is for harfbuzz_devel and the
+#    rest of the C++ stack, which are built against icu74; forcing icu77_devel
+#    conflicts with harfbuzz_devel's devel:libicuuc dep. Ladybird itself needs
+#    ICU 78.3, which run-icu2.sh builds from source into lbdeps/icu78 -- that
+#    step is mandatory, not optional. LibUnicode uses ICU 78 C++ internals
+#    (UnicodeSet::strings(), the Calendar::internalGetMonth signature), so
+#    pointing it at icu74 does not compile however the version pin is set.
 #    simdjson_devel and libtommath_devel are deliberately NOT in this list: the
 #    DeBeOS arm64 repo publishes each _devel subpackage at an older version than
 #    its own runtime package (simdjson 5.0.2-1 vs simdjson_devel 3.11.5-1;
