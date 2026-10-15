@@ -33,7 +33,7 @@ export PATH=/boot/home/config/non-packaged/bin:/boot/system/non-packaged/bin:$PA
 # checking). BUMP THIS whenever a driver change must reach a wave; then republish the
 # script to s3://<bucket>/bake-scripts/haiku-nativebuild (graviton/scripts/haiku-publish-driver)
 # and redeploy the ops stack. Format: YYYY-MM-DD.<serial>.
-NATIVEBUILD_VERSION="2026-10-15.1"
+NATIVEBUILD_VERSION="2026-10-15.2"
 HP=/boot/home/haikuports
 GP=$HP/packages
 AGENT=/boot/system/bin/debeos-ssm-agent
@@ -277,7 +277,16 @@ NB_DIAG_RE='error:|Error [0-9]+|Error: |CMake Error|fatal error:|error adding sy
 # or that a routine step ran (the two checksum notices, which appear in every log and
 # are the reason `pnet`'s grep block opened with a line about a tarball). Each is
 # asserted by the selftest, not asserted in this comment.
-NB_NOISE_RE='^(make|gmake)(\[[0-9]+\])?: \*\*\* (\[[^]]*\] )?Error [0-9]+|^(make|gmake)(\[[0-9]+\])?: \*\*\* Waiting for unfinished jobs|^collect2: error: ld returned|^Error: Build has failed|^Validating checksum of|^Skipping checksum validation of|^[^[:space:]]*: FAILED, no missing-dep|^Warning: Command '
+#
+# The `PLEASE MOVE TO A TAG` arm was added after the fixed capture was run on a real
+# builder: it is haikuporter's advice about RECIPE hygiene for a git source carrying no
+# checksum, printed during the download, before anything is built, on success as much as
+# on failure. It reaches NB_DIAG_RE through the `CHECKSUM` arm, and because it is printed
+# near the TOP of the log it wins the "first match" race against the actual reason. On
+# `libavlduptree` -- the fixture below -- it put the window on line 4 and left the real
+# `No targets specified and no makefile found` at line 52 outside it. That is the git-
+# sourced port class #505 §C has just made buildable, so it is worth an arm.
+NB_NOISE_RE='^(make|gmake)(\[[0-9]+\])?: \*\*\* (\[[^]]*\] )?Error [0-9]+|^(make|gmake)(\[[0-9]+\])?: \*\*\* Waiting for unfinished jobs|^collect2: error: ld returned|^Error: Build has failed|^Validating checksum of|^Skipping checksum validation of|^[^[:space:]]*: FAILED, no missing-dep|^Warning: Command |^Warning: PLEASE MOVE TO A TAG'
 
 # Emit a capture of the haikuporter log to STDOUT on failure. This is load-bearing
 # for triage: run_ssm._wrapper gzips this process's stdout and uploads it as the

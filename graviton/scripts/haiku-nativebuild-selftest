@@ -273,16 +273,59 @@ cap_case lexicon "$grepblock" \
 # 9. THE NOISE LIST IS LOAD-BEARING. ffcall's FIRST line matching the lexicon is line
 #    4, `Validating checksum of libffcall-2.5.tar.gz` -- which is printed by every run
 #    and states nothing. Blank the noise list and the window centres there instead of
-#    on 338: that one arm is what makes the window land on evidence. (The other arms
-#    are not exercised by this fixture; per #505's own lesson -- "inert" is a property
-#    of the corpus, not the regex -- that is recorded as untested here, not as proof
-#    they are unnecessary.)
+#    on 338: that one arm is what makes the window land on evidence. (The remaining arms
+#    are not exercised by THIS fixture -- arm 9b brings a second real log for the
+#    git-source arm; per #505's own lesson -- "inert" is a property of the corpus, not
+#    the regex -- the rest are recorded as untested here, not as proof they are
+#    unnecessary. The git-source arm is what came of taking that seriously: it was added
+#    only because a real builder produced a log the ffcall corpus had no case for.)
 nonoise=$( ( NB_LOG_FULL_LINES=500; NB_LOG_HEAD=150; NB_LOG_TAIL=50; NB_LOG_CTX=80
 	NB_NOISE_RE='^\{no arm can match this\}$'
 	emit_log_capture "$FIXTURE" ) )
 cap_case noise_needed "$nonoise" \
 	"around the first reason line (4)" \
 	-- "around the first reason line (338)"
+
+# 9b. THE GIT-SOURCE BOILERPLATE, which is the arm the ffcall fixture cannot exercise
+#     and which the fixed capture hit the first time it ran on a real builder. Second
+#     real fixture, and it is the whole inner haikuporter log of the #492 re-wave's
+#     `libavlduptree` failure -- 63 lines, kept whole by the capture, so again nothing
+#     about it is inferred (verbatim lines 4-66 of the gunzipped
+#     s3://haiku-graviton-668984504585-us-west-2/logs/wd-492-nodiag/libavlduptree.log.gz).
+#     ITS LINE NUMBERS ARE LOAD-BEARING: 4 is haikuporter's `PLEASE MOVE TO A TAG OR
+#     COMMIT WITH CHECKSUM ASAP!` advice about the recipe's unchecksummed git source,
+#     printed during the download before a compiler runs, and 52 is the reason the build
+#     actually failed. Do not reflow or prepend a header to the fixture.
+#
+#     Why this one matters more than its one-in-96 incidence suggests: a git source is
+#     exactly what #505 §C unblocked (`have_hpkg`'s old `-[0-9]*` glob could never match
+#     `<port>-git-N-arm64.hpkg`), so the port class whose window this line steals is the
+#     class that is only now reaching a build at all.
+GITFIX="$here/../testdata/libavlduptree-wd-492-nodiag.log"
+AVL_ROOT="No targets specified and no makefile found"
+if [ ! -f "$GITFIX" ]; then
+	fail=$((fail+1)); echo "  FAIL  capture: fixture missing: $GITFIX"
+else
+gitcaps="NB_LOG_FULL_LINES=40 NB_LOG_HEAD=10 NB_LOG_TAIL=10 NB_LOG_CTX=20"
+gitbounded=$( ( eval "$gitcaps"; emit_log_capture "$GITFIX" ) )
+cap_case git_boilerplate "$gitbounded" \
+	"around the first reason line (52)" \
+	"52:make: *** $AVL_ROOT" \
+	-- "around the first reason line (4)"
+
+# 9c. AND THAT ARM IS LOAD-BEARING TOO: drop just it from the noise list -- leaving the
+#     rest intact, so this is not arm 9 restated -- and the window goes back to centring
+#     on line 4, which is the defect as observed.
+gitnoarm=$( ( eval "$gitcaps"
+	NB_NOISE_RE=$(printf '%s' "$NB_NOISE_RE" | sed 's/|\^Warning: PLEASE MOVE TO A TAG//')
+	case "$NB_NOISE_RE" in
+	*"PLEASE MOVE TO A TAG"*) echo "SELFTEST BUG: could not remove the arm" ;;
+	esac
+	emit_log_capture "$GITFIX" ) )
+cap_case git_boilerplate_needed "$gitnoarm" \
+	"around the first reason line (4)" \
+	-- "around the first reason line (52)" "SELFTEST BUG"
+fi
 
 # 10. NOTHING BUT NOISE. A log in which every matching line is boilerplate must say so
 #     in as many words. An empty window and a window that was never attempted are
