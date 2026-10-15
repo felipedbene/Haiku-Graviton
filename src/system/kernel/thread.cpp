@@ -265,6 +265,7 @@ Thread::Thread(const char* name, thread_id threadID, struct cpu_ent* cpu)
 	flags(0),
 	serial_number(-1),
 	hash_next(NULL),
+	going_to_suspend(false),
 	priority(-1),
 	io_priority(-1),
 	cpu(cpu),
@@ -746,6 +747,11 @@ enter_userspace(Thread* thread, UserThreadEntryArguments* args)
 	}
 
 	user_debug_update_new_thread_flags(thread);
+
+	// Get rid of the continue signal resume_thread() started us with before it
+	// can interrupt our first syscall. See the function's comment for why that
+	// cannot wait for the first thread_at_kernel_exit().
+	signal_discard_thread_start_signal(thread);
 
 	// init the thread's user_thread
 	user_thread* userThread = thread->user_thread;
