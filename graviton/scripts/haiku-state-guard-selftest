@@ -19,10 +19,13 @@ gets a test that names the actual phantom key from the incident, per writer.
              Exits 0 when the mutation is detected (i.e. the test goes red without
              the guard).
 
-Exit status: 0 pass; 1 a guard did not behave as asserted.
+Exit status: 0 pass; 1 a guard did not behave as asserted, or an arm never reached its
+writer at all (see BROKEN / #693 -- an unreached writer is reported as such, never as
+a guard that failed to refuse).
 """
 import argparse
 import importlib
+import inspect
 import os
 import sys
 import types
@@ -68,20 +71,58 @@ def load_script(name):
     return mod
 
 
-def check(label, fn, want_refused, pkgkey, results):
-    """Call fn(); record whether it raised BadPkgKey, against what we wanted."""
+# Exceptions that mean *this file* is wrong rather than that a guard is missing. A
+# writer whose signature drifted away from the call below is never actually reached,
+# so the call says nothing about its guard -- see #693, where write_triage() gained a
+# parameter, the call kept passing the old seven arguments, and the resulting
+# TypeError was reported as "the guard let the write through" for however long.
+BROKEN = (TypeError, AttributeError, NameError)
+
+
+def check(label, fn, args, want_refused, pkgkey, results, kwargs=None):
+    """Call fn(*args, **kwargs); record whether it raised BadPkgKey, against what we
+    wanted.
+
+    Three outcomes, and collapsing the last two into the second is exactly how #693
+    hid for as long as it did:
+
+      BadPkgKey                 the guard refused. The thing this suite exists to see.
+      any other exception       the guard let the key through and the call died later
+                                (no such table, no credentials). That is what "not
+                                refused" means here, and it is a real result.
+      BROKEN, or arguments that
+      do not fit fn's signature the selftest itself is wrong: the writer was never
+                                reached, so nothing was learned about its guard. Named
+                                loudly, never silently folded into "not refused".
+    """
+    kwargs = kwargs or {}
+    broken = None
+    refused = False
+    # Bind before calling, so arity drift is diagnosed as drift -- with the writer's
+    # real signature in the message -- instead of surfacing as a bare TypeError that
+    # looks like a writer which failed to refuse.
     try:
-        fn()
-    except pkgkey.BadPkgKey:
-        refused = True
-    except Exception:
-        # Reached a later failure (no table / no creds). That means the guard let it
-        # through -- which is exactly what "not refused" means here.
-        refused = False
-    else:
-        refused = False
+        inspect.signature(fn).bind(*args, **kwargs)
+    except TypeError as e:
+        broken = ("this selftest's arguments do not fit %s%s: %s"
+                  % (getattr(fn, "__name__", fn), inspect.signature(fn), e))
+    if broken is None:
+        try:
+            fn(*args, **kwargs)
+        except pkgkey.BadPkgKey:
+            refused = True
+        except BROKEN as e:
+            broken = "%s: %s" % (type(e).__name__, e)
+        except Exception:
+            # Reached a later failure (no table / no creds). That means the guard let it
+            # through -- which is exactly what "not refused" means here.
+            refused = False
+    if broken is not None:
+        results.append("broken")
+        print("  %-46s %-12s <-- TEST BROKEN: %s" % (label, "n/a", broken))
+        return
     ok = refused == want_refused
-    results.append(ok)
+    results.append("ok" if ok else "unexpected")
     print("  %-46s %-12s %s" % (label, "REFUSED" if refused else "passed",
                                 "ok" if ok else "<-- UNEXPECTED"))
 
@@ -110,31 +151,34 @@ def main():
     record = importlib.import_module("record")
     importlib.reload(claim)
     importlib.reload(record)
-    check("ClaimBatch (ops-lambdas/claim.py)",
-          lambda: claim.handler({"chain": ["zlib", PHANTOM],
-                                 "target": {"zlib": "1.3", PHANTOM: "1.0"}}, ctx),
+    check("ClaimBatch (ops-lambdas/claim.py)", claim.handler,
+          ({"chain": ["zlib", PHANTOM],
+            "target": {"zlib": "1.3", PHANTOM: "1.0"}}, ctx),
           want, pkgkey, results)
-    check("RecordOutcome (ops-lambdas/record.py)",
-          lambda: record.handler({"pkg": PHANTOM, "target": "1.0", "ok": True}, ctx),
+    check("RecordOutcome (ops-lambdas/record.py)", record.handler,
+          ({"pkg": PHANTOM, "target": "1.0", "ok": True}, ctx),
           want, pkgkey, results)
 
     triage = load_script("haiku-triage-failures")
-    check("haiku-triage-failures write_triage()",
-          lambda: triage.write_triage(os.environ["TABLE"], "us-west-2", PHANTOM,
-                                      "1", True, "ref", 0),
+    # (table, region, pkg, cls, auto, fix_landed, fix_ref, ts). fix_landed is False
+    # because that is what main() passes when no landed-fixes manifest claims the
+    # port (#560's honest default); write_triage only ever bool()s it, and the guard
+    # at haiku-triage-failures:1115 fires before the UpdateItem either way.
+    check("haiku-triage-failures write_triage()", triage.write_triage,
+          (os.environ["TABLE"], "us-west-2", PHANTOM, "1", True, False, "ref", 0),
           want, pkgkey, results)
 
     cff = load_script("haiku-correct-false-failure")
-    check("haiku-correct-false-failure (argv)",
-          lambda: cff.validate_pkg_key(PHANTOM, where="selftest"), want, pkgkey, results)
+    check("haiku-correct-false-failure (argv)", cff.validate_pkg_key, (PHANTOM,),
+          want, pkgkey, results, kwargs={"where": "selftest"})
 
     # state-sync.py lives outside graviton/scripts; import it by path.
     ss_path = os.path.join(ROOT, "graviton", "ops", "state-sync.py")
     ss = types.ModuleType("state_sync")
     ss.__file__ = ss_path
     exec(compile(open(ss_path).read(), ss_path, "exec"), ss.__dict__)
-    check("state-sync.py (report row)",
-          lambda: ss.validate_pkg_key(PHANTOM, where="selftest"), want, pkgkey, results)
+    check("state-sync.py (report row)", ss.validate_pkg_key, (PHANTOM,),
+          want, pkgkey, results, kwargs={"where": "selftest"})
 
     # ---- the totality comparison, on synthetic counts (no AWS) ----------------
     print()
@@ -152,7 +196,7 @@ def main():
              "no_queued_at": [], "bad_keys": bad, "absent_state": []}
         got = (m["scan_total"] == m["gsi_total"] and not m["bad_keys"])
         ok = got == expect
-        results.append(ok)
+        results.append("ok" if ok else "unexpected")
         print("  totality scan=%-5d gsi=%-5d bad=%d -> %-9s %s"
               % (scan, gsi, len(bad), "PASS" if got else "VIOLATED",
                  "ok" if ok else "<-- UNEXPECTED"))
@@ -162,7 +206,12 @@ def main():
         "split_pkg_key lost or invented a name"
     print("  split_pkg_key recovers all 13 phantom names: ok")
 
-    bad = results.count(False)
+    broken = results.count("broken")
+    bad = len(results) - results.count("ok")
+    if broken:
+        print("\n%d arm(s) never reached the writer they claim to test. That is a broken "
+              "selftest, not a missing guard (#693): until the call is fixed, those "
+              "writers' phantom-key guards are UNTESTED." % broken)
     print("\nhaiku-state-guard-selftest%s: %s"
           % (" --mutate" if args.mutate else "", "PASS" if not bad else "FAIL (%d)" % bad))
     return 1 if bad else 0
