@@ -177,7 +177,7 @@ diff --git a/Meta/CMake/compile_options.cmake b/Meta/CMake/compile_options.cmake
 index ec92bb9543..889085e6cc 100644
 --- a/Meta/CMake/compile_options.cmake
 +++ b/Meta/CMake/compile_options.cmake
-@@ -219,6 +219,16 @@ if (HAIKU)
+@@ -219,6 +219,33 @@
      add_compile_definitions(_DEFAULT_SOURCE)
      add_compile_definitions(_GNU_SOURCE)
      add_compile_definitions(__USE_GNU)
@@ -191,10 +191,27 @@ index ec92bb9543..889085e6cc 100644
 +    # Haiku's arm64 runtime_loader supports.
 +    add_compile_options(-femulated-tls)
 +    include_directories(SYSTEM /boot/home/lbdeps/include)
++    # Haiku has no separate PIE link mode: clang's Haiku driver links *every*
++    # executable with `ld.lld -shared` (Haiku executables are ET_DYN, entered
++    # through start_dyn.o), and lld then treats every default-visibility
++    # definition in the output as preemptible. CMake's PIE flag (-fPIE) tells
++    # clang the opposite -- that nothing in the link can be interposed -- so it
++    # emits direct ADRP/ADD for COMDAT vtables and template instantiations that
++    # a linked .so also exports, and lld rejects them:
++    #   ld.lld: error: relocation R_AARCH64_ADR_PREL_PG_HI21 cannot be used
++    #   against symbol 'vtable for Core::Socket'; recompile with -fPIC
++    # It cannot fall back to a copy relocation or canonical PLT either, because
++    # under -shared lld is in PIC mode. Haiku's clang already defaults to full
++    # PIC (-mrelocation-model pic -pic-level 2, no -pic-is-pie), so -fPIE is a
++    # downgrade from the correct default; override the flag CMake substitutes
++    # for POSITION_INDEPENDENT_CODE rather than appending and relying on the
++    # order the two end up in on the command line.
++    set(CMAKE_C_COMPILE_OPTIONS_PIE -fPIC)
++    set(CMAKE_CXX_COMPILE_OPTIONS_PIE -fPIC)
  endif()
  
  if (NOT WIN32)
-@@ -233,7 +243,7 @@ if (NOT WIN32 AND NOT APPLE AND NOT ENABLE_FUZZERS)
+@@ -233,7 +260,7 @@
      # NOTE: Assume ELF
      # NOTE: --no-undefined is not compatible with clang sanitizer runtimes
      # NOTE: Some BSDs don't export all symbols from LibC so we can't use --no-undefined
