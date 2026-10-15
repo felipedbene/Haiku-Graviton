@@ -60,3 +60,7 @@ SEARCH on [ FGristFiles
 SEARCH on [ FGristFiles
 		argv.c
 	] = [ FDirName $(HAIKU_TOP) src tests add-ons kernel file_systems fs_shell ] ;
+
+# The same harness built for the build host, so a segment exchange can be
+# scripted without a Haiku machine (#686).
+SubInclude HAIKU_TOP src tests system network tcp_shell host ;

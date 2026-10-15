@@ -101,6 +101,17 @@ extern int			_kern_dup(int fd);
 extern status_t		_kern_lock_node(int fd);
 extern status_t		_kern_unlock_node(int fd);
 
+/* thread blocking
+ *
+ * These are not file system calls like the rest of this header, and nothing
+ * shadows them: they are the one piece of the real syscall interface that the
+ * kernel-land emulation needs in order to park a thread, so a host build has
+ * to get them from somewhere. The host side of the emulation implements both
+ * with a condition variable per thread.
+ */
+extern status_t		_kern_block_thread(uint32 flags, bigtime_t timeout);
+extern status_t		_kern_unblock_thread(thread_id thread, status_t status);
+
 #ifdef __cplusplus
 }
 #endif
