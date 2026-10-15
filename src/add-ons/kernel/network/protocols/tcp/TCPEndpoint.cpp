@@ -65,6 +65,18 @@
 //#define TRACE_TCP
 //#define PROBE_TCP
 
+// Counts, rather than traces, the time-wait reference releases the #616 fix
+// averts. Off by default: it is a measuring instrument for that one defect, not
+// a trace facility, and it costs a dprintf per event. See
+// tcp_note_averted_release() for why the measurement has to be made here and
+// cannot be made from userland.
+// Overridable from the build so that measuring does not need an edit (and so
+// the measured module and the committed source cannot silently disagree):
+//   jam -qa ... -sTCP_DIAG=1   via HAIKU_CCFLAGS, or just -D on the compile.
+#ifndef TCP_TIME_WAIT_REFERENCE_DIAGNOSTICS
+#	define TCP_TIME_WAIT_REFERENCE_DIAGNOSTICS 0
+#endif
+
 #ifdef TRACE_TCP
 // the space before ', ##args' is important in order for this to work with cpp 2.95
 #	define TRACE(format, args...)	dprintf("%" B_PRId32 ": TCP [%" \
@@ -1570,6 +1582,50 @@ TCPEndpoint::_UpdateTimeWait()
 	gStackModule->set_timer(&fTimeWaitTimer, TCP_MAX_SEGMENT_LIFETIME << 1);
 	T(TimerSet(this, "time-wait", TCP_MAX_SEGMENT_LIFETIME << 1));
 }
+
+
+#if TCP_TIME_WAIT_REFERENCE_DIAGNOSTICS
+
+/*!	Counts the releases the pre-#616 code would have performed without owning a
+	reference -- the refcount underflows the fix averts.
+
+	This exists because the obvious runtime test does not work. A stress load
+	(connect/close churn, segments arriving on a closed endpoint, sockets left
+	in TIME_WAIT across 2MSL) runs clean on BOTH the fixed and the unfixed
+	stack, because what it observes is liveness: file descriptors still usable,
+	accept() still succeeding, the machine still up. An extra release is only
+	visible that way if the count actually reaches zero, and short of that the
+	defect leaves no trace a userland harness can see. So the assertion is made
+	on the BOOKKEEPING instead: every claim that finds the flag already clear is
+	one release the old code would have made and did not own.
+
+	A non-zero count is therefore a positive demonstration that the hazard is
+	reached under this load, on this hardware -- without needing the unfixed
+	kernel to crash, which is a coin toss depending on how many other
+	references the socket happens to hold at that instant.
+
+	Counted per site, because the two sites fail for different reasons and a
+	single total would hide that: SegmentReceived() is the concurrent-segment
+	race, while the timer is the case where Free() never took a reference at all
+	(a state transition into TIME_WAIT on a socket that is still open).
+*/
+static int32 sAvertedReleaseOnSegment;
+static int32 sAvertedReleaseOnTimer;
+
+
+static void
+tcp_note_averted_release(int32* counter, const char* site)
+{
+	const int32 count = atomic_add(counter, 1) + 1;
+
+	// Every one of these is worth a line: they are rare, and a count alone
+	// cannot be correlated with the phase of the test that produced it.
+	dprintf("tcp: time-wait reference NOT owned at %s -- the pre-#616 code "
+		"would have released here (averted %" B_PRId32 " time(s) at this "
+		"site)\n", site, count);
+}
+
+#endif	// TCP_TIME_WAIT_REFERENCE_DIAGNOSTICS
 
 
 /*!	Takes over the socket reference Free() acquired for the 2MSL wait, if it is
@@ -3087,8 +3143,15 @@ TCPEndpoint::SegmentReceived(tcp_segment_header& segment, net_buffer* buffer)
 	// concurrently were enough to take the count to zero while one of them was
 	// still inside SegmentReceived(), and the next one locked a destroyed
 	// fLock (MutexLocker here cannot tell: the lock is gone, not just failed).
-	const bool releaseReference = (fFlags & FLAG_DELETE_ON_CLOSE) != 0
-		&& _ClaimTimeWaitReference();
+	const bool deleteOnClose = (fFlags & FLAG_DELETE_ON_CLOSE) != 0;
+	const bool releaseReference = deleteOnClose && _ClaimTimeWaitReference();
+
+#if TCP_TIME_WAIT_REFERENCE_DIAGNOSTICS
+	// The old test was deleteOnClose alone, so this is exactly the case where
+	// it released and we do not.
+	if (deleteOnClose && !releaseReference)
+		tcp_note_averted_release(&sAvertedReleaseOnSegment, "SegmentReceived");
+#endif
 
 	locker.Unlock();
 
@@ -4118,8 +4181,14 @@ TCPEndpoint::_TimeWaitTimer(net_timer* timer, void* _endpoint)
 	// it in SegmentReceived(), and this timer is armed on state transitions to
 	// TIME_WAIT as well, so it can fire on an endpoint whose Free() never took
 	// a reference at all. Releasing in either case is one release too many.
-	if (!endpoint->_ClaimTimeWaitReference())
+	if (!endpoint->_ClaimTimeWaitReference()) {
+#if TCP_TIME_WAIT_REFERENCE_DIAGNOSTICS
+		// The old code released here unconditionally, so every denial is one
+		// unowned release.
+		tcp_note_averted_release(&sAvertedReleaseOnTimer, "_TimeWaitTimer");
+#endif
 		return;
+	}
 
 	locker.Unlock();
 		// Safe without the lock: the claimed reference is the one we are about

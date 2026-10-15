@@ -3,6 +3,22 @@ SubDir HAIKU_TOP src add-ons kernel network protocols tcp ;
 UsePrivateKernelHeaders ;
 UsePrivateHeaders net ;
 
+# The #616 time-wait reference diagnostics in TCPEndpoint.cpp are compiled in
+# only on request:
+#
+#	jam -qa -sTCP_TIME_WAIT_DIAG=1 tcp
+#
+# The switch is here rather than passed as a -D through HAIKU_KERNEL_CCFLAGS
+# because that does not work: Jamrules assigns that variable itself, so a -s
+# override of it is discarded without a word and the build produces a module
+# byte-identical to the undiagnosed one while appearing to have honoured the
+# request. Confirm the switch took effect before trusting a measurement:
+#
+#	strings <module> | grep 'pre-#616 code'
+if $(TCP_TIME_WAIT_DIAG) {
+	SubDirC++Flags -DTCP_TIME_WAIT_REFERENCE_DIAGNOSTICS=1 ;
+}
+
 KernelAddon tcp :
 	tcp.cpp
 	TCPEndpoint.cpp
