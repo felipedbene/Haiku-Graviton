@@ -168,6 +168,73 @@ any crypto-using code is compiled with these flags, which is a reason to fix X1 
 but it is not what breaks a Pi 5 today. Recorded here because a refuted concern is worth
 as much as a confirmed one.
 
+### The X1 fix, measured
+
+The table above describes the tree **before** X1 was addressed, and it is kept as the
+original datum. X1 was filed as #425 and the fix landed in PR #472: the single hard-coded
+flag became `HAIKU_ARM64_CPU_BASELINE`, a baseline selected **by name** per target
+(`Arm64CpuBaselineFlags` at the top of `build/jam/ArchitectureRules`), with `graviton`
+still the default so a default build's codegen is unchanged.
+
+Stage 0 below set the verification gate as "re-run the scan and confirm the LSE and
+`ldapr` counts drop to zero for a v8.0 target". That gate is now met. Re-measured with
+this tree's own cross-tools (`aarch64-unknown-haiku-objdump -d`), which the original audit
+did not have and had to substitute a Capstone PE/COFF reader for:
+
+The compiler invocation jam actually issues, for a kernel translation unit, default
+baseline (abridged to the flag in question):
+
+```
+aarch64-unknown-haiku-gcc -c ../src/system/kernel/fs/vfs.cpp -O2 ... \
+    -mcpu=neoverse-n1+crypto ... -o .../vfs.o
+```
+
+With `-sHAIKU_ARM64_CPU_BASELINE=rpi3`, jam reports and applies the substitution, and it
+reaches **both** a kernel object and an EFI boot-loader object (the boot flags derive from
+the same `ccBaseFlags`, so the loader is not a separate path that can be forgotten):
+
+```
+arm64 CPU baseline: rpi3 -> -mcpu=cortex-a53 -mno-outline-atomics
+```
+
+Recompiling the most atomics-dense kernel TU both ways and disassembling:
+
+| `vfs.o` built with | FEAT_LSE (v8.1) | FEAT_LRCPC (v8.2) | LL/SC (`ldxr`/`stxr`) |
+|---|---|---|---|
+| `-mcpu=neoverse-n1+crypto` (default `graviton`) | 275 | 4 | 0 |
+| `-mcpu=cortex-a53 -mno-outline-atomics` (`rpi3`) | **0** | **0** | 550 |
+
+So the v8.0 profile emits no LSE and no LRCPC, and gets inline LL/SC instead. It also
+emits **zero** `__aarch64_*` relocations, i.e. `-mno-outline-atomics` is doing what the
+table's comment says it must: at v8.0 GCC's default outline atomics would route every
+atomic through a libgcc helper that branches on `__aarch64_have_lse_atomics`, whose only
+initialiser sits inside `#ifdef __gnu_linux__` and is therefore never run here — an
+indirect call for a dispatch that can never come out the other way.
+
+Two corroborations that the measurement technique agrees with the original audit: at the
+default baseline this tree's `libroot.so` measures **94** LSE and **17** LRCPC, matching
+the table above exactly, and `kernel_arm64` measures 1198 LSE / 222 LRCPC against the
+recorded 1194 / 216 (the tree has moved since). The loader still carries LSE at the
+default baseline — 5 instructions across `intel.o`, `Referenceable.o` and `partitions.o`,
+`partitions.o` being the object run 4 faulted inside.
+
+**One thing the prebuilt packages do not break.** A selectable in-tree baseline would be
+worthless if the toolchain's own runtime libraries required v8.1, since nothing in this
+tree governs how they were built. Measured: the bootstrap `gcc_syslibs` `libgcc_s.so` and
+`libstdc++.so` contain **zero** LSE instructions and export no `__aarch64_*` outline-atomic
+helpers. All LSE in the image comes from code this tree compiles, which the baseline
+governs. Third-party HaikuPorts packages are a different matter and are **not** measured
+here — they are built natively on Graviton (see `native-ec2-builds.md`) and their baseline
+is not controlled by `HAIKU_ARM64_CPU_BASELINE`; this does not affect a `@minimum` image,
+which contains none of them.
+
+**What is still unproven.** Stage 0's gate had a second leg — "re-run run 4's exact
+command and confirm it gets past `Partition::Partition`" — and that leg has **not** been
+re-run. It needs a full image built at the `rpi3` baseline, and the result would in any
+case stop at the next Pi blocker rather than boot (see §9). The claim established here is
+exactly and only the codegen one: the baseline no longer assumes FEAT_LSE, and a v8.0
+profile produces v8.0-legal code for the loader and the kernel alike.
+
 ### Per-CPU-model ISA floor, and why emulation looked broken (issue #484)
 
 Run 4's fault was reported again independently as issue #484, described as a synchronous
@@ -829,6 +896,10 @@ need hardware that does not exist here.
 
 ### Stage 0 — make a second ISA compile and a non-v8.2 core execute
 **Clears X1, X2, X3, X7, X8.** No hardware needed.
+**Status: done on the codegen side.** X2 landed as #426, X1 as #472 (filed as #425), and
+X3/X4/X5/X6's build half landed under #429. The verification gate this stage set for X1 —
+LSE and `ldapr` counts at zero for a v8.0 target — is measured met in "The X1 fix,
+measured" (§1). Its second leg, re-running run 4 to a boot, is not done: see §9.
 
 X2 first, because it is a compile failure and nothing else can be attempted past it: guard
 the SVE test sources, or gate their `SubInclude` and package entry on arm64. Then X1: a
@@ -909,9 +980,14 @@ port, not a fix list.
 
 Not filed from here; listed so they can be, with the file each would touch.
 
-1. **`arm64: replace the unconditional -mcpu=neoverse-n1+crypto with a per-target ISA baseline`** —
+1. ~~**`arm64: replace the unconditional -mcpu=neoverse-n1+crypto with a per-target ISA baseline`** —
    `build/jam/ArchitectureRules:52`. Measured: the current flag puts FEAT_LSE atomics in
-   the boot loader and faults on any ARMv8.0 core.
+   the boot loader and faults on any ARMv8.0 core.~~ **Filed as #425, landed in PR #472.**
+   The baseline is now `HAIKU_ARM64_CPU_BASELINE`, a named per-target choice —
+   `rpi3`/`cortex-a53`, `rpi4`/`cortex-a72`, `rpi5`/`cortex-a76`, `armv8`, an explicit
+   `-m...` escape hatch, and `graviton` still the default. Re-measured in "The X1 fix,
+   measured" above: a v8.0 profile emits zero FEAT_LSE and zero FEAT_LRCPC. **X1 is
+   cleared on the codegen side**; no Cortex-A53 silicon has run the result.
 2. ~~**`sve_test: guard the aarch64 assembly so a non-arm64 build compiles`** —
    `src/bin/sve_test/*`, `src/bin/Jamfile:264`, `build/jam/packages/Haiku:256`. Currently a
    hard compile failure for riscv64 and x86.~~ **Filed and fixed as #426** — see the
@@ -948,7 +1024,8 @@ Not filed from here; listed so they can be, with the file each would touch.
     `src/add-ons/kernel/busses/mmc/`, and the boot module lists in
     `build/jam/packages/Haiku:352,353,368` that imply otherwise. **Still open and still
     needs a board** — see the note under X41; the file to add has never existed, so this is
-    driver work, not build work.
+    driver work, not build work. **Retired to §9** as a capability gap rather than a defect,
+    with its acceptance criterion written out there.
 16. ~~**`images: stop using the arm64 architecture token as a proxy for AWS EC2`** —
     `build/jam/images/definitions/common-tail:127-131`, `minimum:350-383,502,523-525`,
     `build/jam/packages/Haiku:149`.~~ **Filed as #429; the build-side half is done** — see
@@ -957,7 +1034,8 @@ Not filed from here; listed so they can be, with the file each would touch.
     original claims did not survive re-reading: X3 is waste rather than a bug, and the
     three X5 sites were right on the architecture all along. What remains under #429 needs
     hardware: a Pi NIC driver (X4), `config.txt` and the firmware chain (X6), `sdhci_fdt`
-    (X41) and USB (X42).
+    (X41) and USB (X42). **Those four are retired to §9**, which is their design of record;
+    X1, the fifth remaining item, turned out to be already cleared (§1).
 17. **`build: remove the dead board/ directory and re-enable -Werror for arm`** —
     `build/jam/board/`, `build/jam/ArchitectureRules:638-640`.
 18. **`riscv64: publish the actual build error list`** — no file; the deliverable is the
@@ -986,3 +1064,139 @@ An audit finds what is wrong with what exists. Only hardware finds what is missi
 
 The (X) count is a floor, not a total. Four areas were audited; the rest of the tree —
 app_server, the network stack above the driver, the file systems, userland — was not.
+
+---
+
+## 9. Raspberry Pi bring-up — design of record for the retired DeBeOS 429
+
+Issue 429 began as "an arm64 image ships with no NIC driver" and was narrowed twice as
+each half of it was either fixed or refuted. What it became is **four absent drivers and
+one unverified firmware chain** — and that list is the reason it could not resolve as a
+tracker item: a defect report names something that is broken, and these name things that
+were never built. They are capability gaps. This section is their design of record, so the
+gaps stay written down with their evidence and their acceptance criteria instead of living
+as a bundle nobody can start.
+
+**What 429 did deliver, and is not repeated here.** The image-definition arch filters
+(X3-X5) are fixed: `images/definitions/minimum:405` adds `$(conventionalNics)` for every
+non-`ec2` arm64 platform, and `HAIKU_ARM64_PLATFORM` (default `ec2`) now carries the
+platform question that the architecture token was wrongly answering. The FreeBSD-compat
+layer got its arm64 arch dispatch (PR #700), without which adding those drivers made a
+non-EC2 arm64 image **unbuildable**. Networking on a generic arm64 machine is measured
+working, not asserted: `ipro1000` binding at 1000 Mbps with a DHCP lease and 21
+bidirectional ICMP exchanges under `qemu-system-aarch64 -M virt`, plus the virtio-MMIO
+disk and NIC paths and `finalize PCI controller from FDT` (§1, runs 1-4). And X1, the ISA
+baseline, is cleared on the codegen side — measured in §1, "The X1 fix, measured".
+
+**None of the five below is on the canonical Graviton image's path.** That is why they are
+unsequenced: an EC2 instance reaches its root disk and its network through ENA and NVMe and
+is handed the EFI loader by firmware, so nothing here can regress the flagship. Equally,
+**no Raspberry Pi of any generation can boot this tree today**, and fixing any one of these
+in isolation does not change that — a Pi 3 needs the SD host *and* USB *and* a USB NIC
+before it is a usable machine. That mutual dependency, not difficulty, is what makes these
+a staged port rather than a backlog.
+
+### X41 — SD/MMC host controller attached from a device tree
+
+`src/add-ons/kernel/busses/mmc/` contains `sdhci.cpp`, `sdhci_pci.cpp` and
+`sdhci_acpi.cpp`, and **no `sdhci_fdt.cpp`**. The PCI arm needs a `bus == "pci"` parent and
+the ACPI arm needs an ACPI node, so the add-on cannot bind to an on-SoC MMIO SD host that
+is described only in a device tree. The Jamfile in that directory already says so in a
+comment and points back at this item, which is the honest state: `sdhci`, `mmc` and
+`mmc_disk` *are* in the arm64 boot-module links in `build/jam/packages/Haiku`, so the boot
+module list implies a capability the tree does not have.
+
+Why it matters: this is the **first** blocker for both Pis, ahead of everything else in
+this section. A Pi boots from an SD card. With no FDT attach path there is no root device,
+so there is nothing for the other four items to be useful for.
+
+What it would take: a third attach arm alongside the existing two, taking its register
+window and interrupt from the device tree the way the FDT bus manager already publishes
+them for other drivers (the FDT bus manager is live and measured — §1 run 2). This is new
+code, but it is new code in an existing driver against an existing bus manager, not a new
+subsystem.
+
+Acceptance criterion: on a device-tree-only machine with an MMIO SD host, `sdhci` binds,
+`mmc_disk` publishes a device, and the kernel mounts a BFS root from the card — the
+`bfs: mounted "Haiku"` line that §1's virtio runs already produce, but sourced from SD.
+**Needs hardware**, or a QEMU machine model with an FDT-described SD controller; `-M virt`
+has none, which is why §1's four runs could not exercise it.
+
+### X42 — USB host controller (`dwc2` / `dwc_otg`)
+
+There is **no `dwc2` and no `dwc_otg` anywhere in the tree** — the string does not appear
+in `src/`, `build/` or `headers/`. The four host controller drivers that do exist
+(`ehci`, `ohci`, `uhci`, `xhci`) each reject a non-PCI parent explicitly: `ehci.cpp:188`,
+`ohci.cpp:189`, `uhci.cpp:187`, `xhci.cpp:193` are all `if (strcmp(bus, "pci") != 0)`
+followed by a refusal, and each publishes a `B_DEVICE_BUS` of `"pci"`.
+
+Why it matters: on a Pi 3 **both** mass storage beyond the SD card and the Ethernet hang
+off USB, so with no USB host there is no network path at all even once X41 lands. The Pi 5
+has a genuine PCIe root complex and a separate `dwc2` for its USB, so it is less dependent
+on this — one more reason the Pi 5 is the earlier target of the two.
+
+What it would take: an MMIO-attached host controller driver for the Synopsys DesignWare
+core, plus the FDT attach path the existing four do not have. Two pieces of work, and the
+larger of the two Pi driver items.
+
+Acceptance criterion: `dwc2` binds from a device tree, enumerates the root hub, and a USB
+mass-storage device mounts; then, with the item below, a USB Ethernet interface appears
+and completes a DHCP lease. **Needs hardware.**
+
+### X4 (Pi half) — Pi Ethernet silicon: LAN9514 and GENET
+
+Neither Pi's MAC has a driver. A Pi 3's Ethernet is an SMSC **LAN9514** behind USB; a
+Pi 4/5's is Broadcom **GENET** with a **BCM54213** PHY. `images/definitions/minimum:401`
+already carries the comment recording that the tree has a driver for neither. Both Pis
+reach the network through one of these, never through PCI, so the conventional-NIC list
+that PR #700 proved out on arm64 buys a Pi nothing.
+
+Two measured nuances worth keeping, because they change the size of the work:
+
+- **The Pi 3 case is one driver in a family that already exists.** The tree ships
+  `usb_davicom`, `usb_ecm`, `usb_rndis`, `pegasus` and `asix88xxx` — a working USB
+  Ethernet stack with no `smsc95xx`-equivalent in it. So LAN9514 support is a new sibling
+  driver, not a new subsystem. It is nonetheless gated on X42: a USB NIC needs a USB host.
+- **For the Pi 5, half of it is already present.** The PHY is: `brgphy.c:159` carries
+  `MII_PHY_DESC(BROADCOM4, BCM54213PE)` and `:417` handles that model, inside the
+  `broadcom570x` driver's FreeBSD-compat MII layer. What is missing is the **GENET MAC**,
+  which is not a 570x part and shares no register interface with one. The PHY being
+  supported is convenient and is not the hard half.
+
+Acceptance criterion, either part: the interface appears under `/dev/net/`, reports link
+up at its negotiated speed, completes a DHCP lease, and sustains bidirectional ICMP — the
+same evidence standard PR #700 met for `ipro1000` on arm64, which is the bar to match.
+**Needs hardware.**
+
+### X6 — `config.txt` and the u-boot firmware chain
+
+Partly built, wholly unverified. `build/jam/images/MMCImage:166-185` now emits a
+`boot.scr` for every non-`ec2` arm64 EFI card and deliberately keeps EC2 out of that branch
+so the AMI build grows no `mkimage` dependency — EC2 firmware hands the EFI loader straight
+to the image, whereas a Pi reaches EFI through u-boot, which has to be told what to load.
+Still absent: a **`config.txt`**, which is what the Pi's own first-stage firmware reads to
+decide what to load before u-boot is even in the picture.
+
+Why it matters: this is the only item here that is a few lines of build logic rather than a
+driver, and it is also the only one whose current state is "written but never run". That
+combination is worth flagging precisely because it looks done.
+
+Acceptance criterion: a card written by `jam -q @minimum-mmc` at a Pi baseline boots on a
+real Pi as far as the EFI loader's first output — which is all this item owns; what happens
+after that belongs to X41. Verifying it needs `mkimage` installed and **a board**.
+
+### Disposition
+
+All five are retired here rather than tracked. Each is independently verifiable and
+independently fixable, and when someone picks up Pi bring-up the right move is to file the
+one they are actually starting, with this section as its specification — not to re-open a
+five-item bundle. Filing five issues nobody is working on is backlog noise rather than
+tracking; leaving one issue open that names five unstartable things is the same noise with
+a single number on it.
+
+What this section does **not** claim: that any of the five is small; that the list is
+complete for a Pi (§6 stages 3 and 5 enumerate the rest, including the Pi 3's SoC-local
+interrupt controller at X25 and its non-conformant timer INTIDs at X22, both of which are
+ahead of the drivers above in a real bring-up); or that a Pi boots. No Pi was booted,
+because there is no Pi in the account. As §8 puts it: an audit finds what is wrong with
+what exists, and only hardware finds what is missing.
