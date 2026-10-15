@@ -3,8 +3,6 @@
  * Distributed under the terms of the MIT License.
  */
 
-#define DEBUG_TCP_BUFFER_QUEUE 1
-
 #include "BufferQueue.h"
 
 #include <stdio.h>
@@ -35,12 +33,12 @@ create_filled_buffer(size_t bytes)
 
 	status_t status = gBufferModule->append(buffer, data, bytes);
 	if (status != B_OK) {
-		printf("appending %lu bytes to buffer %p failed: %s\n", bytes, buffer,
-			strerror(status));
+		printf("appending %" B_PRIuSIZE " bytes to buffer %p failed: %s\n",
+			bytes, buffer, strerror(status));
 		gBufferModule->free(buffer);
 		return NULL;
 	}
-	
+
 	return buffer;
 }
 
@@ -60,17 +58,29 @@ eat(size_t bytes)
 	if (status == B_OK) {
 		ASSERT(buffer->size == bytes);
 		gBufferModule->free(buffer);
-	} else
-		printf("getting %lu bytes failed: %s\n", bytes, strerror(status));
+	} else {
+		printf("getting %" B_PRIuSIZE " bytes failed: %s\n", bytes,
+			strerror(status));
+	}
 }
 
 
 void
 dump(const char* text = "")
 {
-	printf("%s (available %lu at %lu)\n", text, gQueue.Available(),
-		(uint32)gQueue.FirstSequence());
+	// tcp_sequence holds its value privately and has no conversion operator,
+	// so Number() is the only way out of it.
+	printf("%s (available %" B_PRIuSIZE " at %" B_PRIu32 ")\n", text,
+		gQueue.Available(), gQueue.FirstSequence().Number());
+
+	// Dump() and the Verify() behind BufferQueue's internal VERIFY() only exist
+	// when the tree's DEBUG_TCP_BUFFER_QUEUE is on (it follows KDEBUG_LEVEL_2,
+	// so on by default). Predefining it here would not help -- BufferQueue.cpp
+	// is a separate translation unit and takes the config's value -- so follow
+	// the config instead of fighting it.
+#if DEBUG_TCP_BUFFER_QUEUE
 	gQueue.Dump();
+#endif
 }
 
 
