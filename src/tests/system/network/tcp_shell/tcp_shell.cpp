@@ -27,7 +27,6 @@
 #include <KernelExport.h>
 #include <Select.h>
 #include <module.h>
-#include <Locker.h>
 
 #include <netinet/in.h>
 #include <netinet/ip.h>
@@ -42,7 +41,10 @@
 
 
 struct context {
-	BLocker		lock;
+	mutex		lock;
+		// a kernel mutex rather than a BLocker: the only thing this ever
+		// needed was mutual exclusion, and BLocker would make the harness
+		// depend on libbe, which the host build (#686) has no equivalent of
 	sem_id		wait_sem;
 	struct list list;
 	net_route	route;
@@ -953,9 +955,9 @@ datalink_send_data(struct net_route *route, net_buffer *buffer)
 	buffer->interface_address = &gInterfaceAddress;
 	gInterfaceAddress.AcquireReference();
 
-	context->lock.Lock();
+	mutex_lock(&context->lock);
 	list_add_item(&context->list, buffer);
-	context->lock.Unlock();
+	mutex_unlock(&context->lock);
 
 	release_sem(context->wait_sem);
 	return B_OK;
@@ -1472,10 +1474,10 @@ receiving_thread(void* _data)
 			break;
 
 		while (true) {
-			context->lock.Lock();
+			mutex_lock(&context->lock);
 			net_buffer* buffer = (net_buffer*)list_remove_head_item(
 				&context->list);
-			context->lock.Unlock();
+			mutex_unlock(&context->lock);
 
 			if (buffer == NULL)
 				break;
@@ -1614,6 +1616,7 @@ setup_server()
 void
 setup_context(struct context& context, bool server)
 {
+	mutex_init(&context.lock, server ? "server context" : "client context");
 	list_init(&context.list);
 	context.route.interface_address = &gInterfaceAddress;
 	context.route.gateway = (sockaddr *)&context;
@@ -1636,6 +1639,8 @@ cleanup_context(struct context& context)
 
 	status_t status;
 	wait_for_thread(context.thread, &status);
+
+	mutex_destroy(&context.lock);
 }
 
 

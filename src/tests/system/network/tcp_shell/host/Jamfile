@@ -1,0 +1,128 @@
+SubDir HAIKU_TOP src tests system network tcp_shell host ;
+
+# The host-runnable tcp_shell (#686).
+#
+# This lives in its own subdirectory rather than beside the SimpleTest, because
+# both Main and BuildPlatformMain name their objects [ FGristFiles
+# <source>.o ] and set PLATFORM on them, so one Jamfile cannot build the same
+# source for both the target and the host -- the second rule would just
+# overwrite the first one's platform. A sibling directory gives the host
+# objects their own grist. That is what the file-system shells
+# (src/tests/add-ons/kernel/file_systems/*/*_shell) do for the same reason.
+
+SEARCH_SOURCE += [ FDirName $(HAIKU_TOP) src tests system network tcp_shell ] ;
+SEARCH_SOURCE += [ FDirName $(HAIKU_TOP) src add-ons kernel network protocols
+	tcp ] ;
+SEARCH_SOURCE += [ FDirName $(HAIKU_TOP) src add-ons kernel network protocols
+	ipv4 ] ;
+SEARCH_SOURCE += [ FDirName $(HAIKU_TOP) src add-ons kernel network stack ] ;
+SEARCH_SOURCE += [ FDirName $(HAIKU_TOP) src tests add-ons kernel
+	kernelland_emu ] ;
+SEARCH_SOURCE += [ FDirName $(HAIKU_TOP) src tests add-ons kernel file_systems
+	fs_shell ] ;
+SEARCH_SOURCE += [ FDirName $(HAIKU_TOP) src system kernel util ] ;
+SEARCH_SOURCE += [ FDirName $(HAIKU_TOP) src kits support ] ;
+SEARCH_SOURCE += [ FDirName $(HAIKU_TOP) src build libroot ] ;
+
+SubDirHdrs [ FDirName $(HAIKU_TOP) src tests system network tcp_shell ] ;
+SubDirHdrs [ FDirName $(HAIKU_TOP) src add-ons kernel network protocols tcp ] ;
+SubDirHdrs [ FDirName $(HAIKU_TOP) src add-ons kernel network stack ] ;
+SubDirHdrs [ FDirName $(HAIKU_TOP) src tests add-ons kernel kernelland_emu ] ;
+SubDirHdrs [ FDirName $(HAIKU_TOP) src tests add-ons kernel file_systems
+	fs_shell ] ;
+
+# The build headers come first and are not optional: they are what makes
+# <OS.h>, <SupportDefs.h> and friends mean the host's fixed-width types rather
+# than the target's. headers/build/posix and headers/build/private/kernel carry
+# the shims this test needed (the BSD socket and <netinet/*> headers the stack
+# includes, and the handful of kernel arch headers it reaches for); see
+# headers/build/posix/README.md.
+UseHeaders [ FDirName $(HAIKU_TOP) headers build ] : true ;
+UseHeaders [ FDirName $(HAIKU_TOP) headers build posix ] : true ;
+UseHeaders [ FDirName $(HAIKU_TOP) headers build os ] : true ;
+UseHeaders [ FDirName $(HAIKU_TOP) headers build os kernel ] : true ;
+UseHeaders [ FDirName $(HAIKU_TOP) headers build os support ] : true ;
+UseHeaders [ FDirName $(HAIKU_TOP) headers build os app ] : true ;
+UseHeaders [ FDirName $(HAIKU_TOP) headers build os storage ] : true ;
+UseHeaders [ FDirName $(HAIKU_TOP) headers build os interface ] : true ;
+UseHeaders [ FDirName $(HAIKU_TOP) headers build private kernel ] : true ;
+UseHeaders [ FDirName $(HAIKU_TOP) headers build private libroot ] : true ;
+UseHeaders [ FDirName $(HAIKU_TOP) headers build private ] : true ;
+	# headers/build/host/<platform> is already in HOST_HDRS
+
+# Deliberately *not* $(HAIKU_PRIVATE_KERNEL_HEADERS): that list ends with the
+# target's arch headers, and the arm64 ones describe arm64 registers and page
+# tables to a compiler building x86-64 or host-arm64 code.
+UseHeaders [ FDirName $(HAIKU_TOP) headers private kernel ] : true ;
+UseHeaders [ FDirName $(HAIKU_TOP) headers private net ] : true ;
+UseHeaders [ FDirName $(HAIKU_TOP) headers private shared ] : true ;
+UseHeaders [ FDirName $(HAIKU_TOP) headers private system ] : true ;
+UseHeaders [ FDirName $(HAIKU_TOP) headers private libroot ] : true ;
+UseHeaders [ FDirName $(HAIKU_TOP) headers private ] : true ;
+UseHeaders [ FDirName $(HAIKU_TOP) headers os ] : true ;
+UseHeaders [ FDirName $(HAIKU_TOP) headers os kernel ] : true ;
+UseHeaders [ FDirName $(HAIKU_TOP) headers os support ] : true ;
+UseHeaders [ FDirName $(HAIKU_TOP) headers os drivers ] : true ;
+UseHeaders [ FDirName $(HAIKU_TOP) headers os net ] : true ;
+UseHeaders [ FDirName $(HAIKU_TOP) headers ] : true ;
+
+# HAIKU_BUILD_COMPATIBILITY_H keeps HaikuBuildCompatibility.h out: this is
+# kernel code built for the host, not a host tool using the Haiku API.
+DEFINES += _KERNEL_MODE HAIKU_BUILD_COMPATIBILITY_H ;
+
+SubDirC++Flags -Wno-multichar -Wno-sign-compare -fno-strict-aliasing ;
+SubDirCcFlags -Wno-multichar -Wno-sign-compare -fno-strict-aliasing ;
+
+local hostSources =
+	# the harness itself
+	tcp_shell.cpp
+	host_platform.cpp
+	host_module.cpp
+
+	# tcp
+	tcp.cpp
+	TCPEndpoint.cpp
+	BufferQueue.cpp
+	ReceiveRing.cpp
+	EndpointManager.cpp
+
+	# stack
+	ancillary_data.cpp
+	net_buffer.cpp
+	utility.cpp
+
+	# kernel-land emulation
+	condition_variable.cpp
+	debug.cpp
+	heap.cpp
+	KernelReferenceable.cpp
+	lock.cpp
+	low_resource_manager.cpp
+	misc.cpp
+	Random.cpp
+	slab.cpp
+	vm.cpp
+
+	# misc
+	argv.c
+	errors.cpp
+	ipv4_address.cpp
+	list.cpp
+	Referenceable.cpp
+;
+
+# errors.cpp is the other half of the E* remap in headers/build/os/support/
+# Errors.h: everything else sees EINVAL and friends redefined to Haiku's
+# values, and errno redirected through _haiku_build_errno(), which translates.
+# The translator itself has to see the host's real values, hence
+# BUILDING_HAIKU_ERROR_MAPPER -- and it needs <Errors.h> for the HAIKU_E*
+# constants, which is what the Be API force-include brings in. (USES_BE_API
+# would do the same, but on the target it also links libroot_build, whose
+# semaphores assume a single-threaded caller and call debugger().)
+ObjectDefines errors.cpp : BUILDING_HAIKU_ERROR_MAPPER=1 ;
+ObjectC++Flags errors.cpp : $(HOST_BE_API_C++FLAGS) ;
+
+BuildPlatformTest <build>tcp_shell : $(hostSources) ;
+
+LinkAgainst <build>tcp_shell : $(HOST_LIBSUPC++) $(HOST_LIBSTDC++) ;
+LINKFLAGS on <build>tcp_shell += -pthread ;
