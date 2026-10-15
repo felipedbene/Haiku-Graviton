@@ -317,7 +317,13 @@ export class OpsStack extends cdk.Stack {
       NATIVEBUILD_VERSION: readNativebuildVersion(),
     });
     const pollFn = mkFn('PollFn', 'poll_ssm.handler');
-    const recordFn = mkFn('RecordFn', 'record.handler');
+    // #505 §C: record.py applies SOP §7 ("success = the hpkg exists") instead of
+    // trusting the driver's exit code, so it has to be able to see the harvest pool
+    // the driver pushes finished hpkgs to. Same URI the publish job reads below --
+    // one value, so the two cannot drift onto different prefixes.
+    const recordFn = mkFn('RecordFn', 'record.handler', {
+      HARVEST_S3: `s3://${workBucket}/hpkg/arm64`,
+    });
     const reapFn = mkFn('ReapFn', 'reap.handler');
 
     // IAM per Lambda (least privilege).
@@ -351,6 +357,15 @@ export class OpsStack extends cdk.Stack {
       actions: ['ec2:TerminateInstances'],
       resources: ['*'],
       conditions: { StringEquals: { 'aws:ResourceTag/Name': 'haiku-native-builder' } },
+    }));
+    // RecordFn LISTS the harvest pool (#505 §C) and nothing more: the false-failure
+    // check only needs each candidate hpkg's key, size and age, all of which come back
+    // in the ListObjectsV2 page. No s3:GetObject -- it never reads an hpkg's contents,
+    // and granting a read it does not take would widen the blast radius of the one
+    // Lambda that writes build outcomes for nothing.
+    recordFn.addToRolePolicy(new iam.PolicyStatement({
+      actions: ['s3:ListBucket'],
+      resources: [`arn:aws:s3:::${workBucket}`],
     }));
     // BuildFn lists the DeBeOS overlay in S3 (to stage recipe bumps onto the tree).
     buildFn.addToRolePolicy(new iam.PolicyStatement({

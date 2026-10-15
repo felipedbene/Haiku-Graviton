@@ -1750,12 +1750,91 @@ other class moved. The 5 that remain are **not** truncation:
   `.hpkg` exists. There is no reason line because there was no reason. That is #505 §C, the
   false-failure record path, not a detector gap.
 
-**Still owed on the capture side:** `pnet`'s log is **416,720 lines**, so it took the
-`head+grep+tail` path and the root cause is in the discarded middle. The widened detector now
-sees a reason line in it (`make[1]: *** No rule to make target 'cg_ainit.c'`), but that is a
-*symptom*: the generator that should have produced `cg_ainit.c` failed somewhere in the
-middle 400k lines. **A capture gap, not a detector one** — fix it by uploading the whole
-gzipped log past the line cap, and do not read the recovered symptom as a diagnosis.
+### #505 §E: the capture's middle-of-log blind spot — CLOSED (two defects, both measured)
+
+`pnet`'s log is **416,720 lines**, so it took the `head+grep+tail` path and its cause was in
+the discarded middle. Measuring the 105 deep logs rather than reasoning from `pnet` alone
+turned one suspected defect into two, and neither is the line cap:
+
+1. **The capture's grep lexicon was narrower than the post-#510 detector's.** 89 of the 105
+   logs carry a line the fixed detector reads as a reason, and for **18 of those 89** the
+   capture's own pattern could not see that line: `error adding symbols` /
+   `relocations in generic ELF` (becasso, fasm, sdljoytest), `No rule to make target`
+   (ffcall, opensound, **pnet**), `No targets specified and no makefile found`
+   (libavlduptree, slunkcrypt), `unzip: cannot find/open` (helpviewer, yoshi),
+   `objcopy: … No such file` (hwloc2), `[Errno -2147483643]` (the three `*_firmwares`),
+   `syntax error near` (libeditline), `Can't locate … in @INC` (ne), `no such user`
+   (privoxy), `Operation not allowed` (timezone_data). Those 18 survived only because their
+   logs fit under the cap and were kept whole. **The capture decides what the detector can
+   ever read**, so the two lexicons are now kept in step deliberately: `NB_DIAG_RE` in
+   `graviton/scripts/haiku-nativebuild` mirrors `_REASON_ARMS`, with the measurement above
+   written beside it.
+2. **Even where the grep hit, it returned one line and nothing around it.** A matched line is
+   frequently a consequence, and the command that produced it, its arguments and its output
+   were all dropped. The bounded capture now emits a **first-error window** —
+   `NB_LOG_CTX` (80) lines either side of the first match that is not boilerplate — between
+   the head and the grep block.
+
+Only **2 of the 105** captures took the bounded path at all (`pnet` 416,720 lines; `muscle`
+4,585), which is why this went unnoticed: on 103 logs the cap was never reached.
+
+The arms live in `graviton/scripts/haiku-nativebuild-selftest` and run on a **real** log:
+`graviton/testdata/ffcall-wd-492-nodiag.log` is `ffcall`'s own complete 760-line inner log
+from this run, and scaling the caps down reproduces `pnet`'s failure mode on content whose
+true first reason line is known (line 338). Before: a 206-line capture whose grep block was
+`Validating checksum of libffcall-2.5.tar.gz` plus `make: *** [Makefile:68: all-subdirs]
+Error 2` — the exact two-line shape `pnet` came back with — and the diagnostic lost. After:
+the window lands on 338 and the grep block lists it. `--mutate` restores the old lexicon and
+drops the window, and the suite goes red.
+
+> **Recovering the line is not diagnosing the build.** `pnet`'s recovered line is
+> `make: *** No rule to make target 'cg_ainit.c'`, and that is a **symptom** — something
+> that should have generated `cg_ainit.c` failed earlier. Reading it as the cause is the
+> specific mistake this part of #505 exists to prevent, which is why the capture labels the
+> region "first error window", not "root cause". `pnet`'s own cause is **unrecoverable**: the
+> 416,720-line log died with the builder and only the 1,410-line capture survives. It needs a
+> re-wave, which is blocked on #576.
+
+**Still owed, deliberately:** the unconditional backstop — upload the whole gzipped log when
+it exceeds the cap (it compresses ~20x). It is a new S3 artifact nothing reads yet and no
+lifecycle rule covers, it cannot be exercised without a builder, and the measured defect is
+closed by the two fixes above, which are testable offline today. Ports like `stockfish` and
+`di`, whose build tool keeps its reason in a private log, are not fixed by it either.
+
+### #505 §C: the false-failure check now runs where the outcome is decided — CLOSED
+
+`sip` and `cmake_haiku` **produced their `.hpkg`** and were recorded `failed`. SOP §7 says
+success is the hpkg existing, but nothing on the wave path applied that rule: the driver's
+`build_one` returns rc=1, `run_ssm`'s wrapper ends `exit $RC`, and `poll_ssm` computes
+`ok = (verdict == "OK" and rc == 0)` — so the verdict believes the exit code.
+`haiku-correct-false-failure` was written for exactly this and is **manual**, so it never ran.
+
+Two folds, both landed:
+
+* **The driver's own success rule.** `build_one` tested `"$GP/<port>"-[0-9]*.hpkg`, which
+  demands a numeral after the dash. `cmake_haiku`'s version is `git`: haikuporter really
+  built `cmake_haiku-git-4-arm64.hpkg` (14,465 B, still in the pool under
+  `hpkg/arm64-incoming/`), the glob did not match, and the wave recorded `failed` — while
+  `harvest`, which globs `$GP/*.hpkg`, pushed the good hpkg to the pool anyway. **A
+  git-versioned port could never be recorded built.** Now a named predicate, `have_hpkg`,
+  matching `<port>-*` (the literal `-` is what keeps `cmake_haiku_tools` out — that is all
+  the digit was ever protecting), asserted both ways by the selftest.
+* **The record path asks the pool.** `record.py` now LISTs the harvest prefix before writing
+  a failure, and records `built` with `corrected_by`/`correction_note` provenance if the
+  package's hpkg is there. Three guards, each with its own test: the name is anchored on the
+  leading component; the object must exceed 2,048 B (class 9's ~800 B empty-package trap must
+  never be promoted); and it must be younger than `FALSE_FAILURE_MAX_AGE_SECS` (6 h), because
+  `HARVEST_S3` is durable until a publish prunes it and a genuine failure must not be
+  "corrected" by the hpkg its own previous success left behind. The check is checked BEFORE
+  the failure write, so a false failure never bumps `attempt_count` — three of them would
+  otherwise escalate a healthy package to `needs_human`. Unset env or an S3 error records the
+  failure exactly as before: this path can only turn `failed` into `built` on positive
+  evidence, never the reverse.
+
+What it does **not** fix: `sip` produces `sip_python310-*.hpkg`, which no leading-component
+match can tie to the backlog key `sip`. That is a recipe/key naming mismatch and a separate
+defect — the record path will keep reporting `sip` as failed, correctly, until the key and
+the package name are reconciled.
 
 **And one correction to #505's own text:** `ffcall` was reported as "the one honest silent
 build — no diagnostic anywhere in a complete 768-line log". It is not silent. Line **340 of

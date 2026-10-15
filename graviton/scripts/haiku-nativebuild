@@ -33,7 +33,7 @@ export PATH=/boot/home/config/non-packaged/bin:/boot/system/non-packaged/bin:$PA
 # checking). BUMP THIS whenever a driver change must reach a wave; then republish the
 # script to s3://<bucket>/bake-scripts/haiku-nativebuild (graviton/scripts/haiku-publish-driver)
 # and redeploy the ops stack. Format: YYYY-MM-DD.<serial>.
-NATIVEBUILD_VERSION="2026-09-22.1"
+NATIVEBUILD_VERSION="2026-10-15.1"
 HP=/boot/home/haikuports
 GP=$HP/packages
 AGENT=/boot/system/bin/debeos-ssm-agent
@@ -238,6 +238,47 @@ resolve_port_name() {
 	echo "$arg"
 }
 
+# The lexicon of lines that STATE A REASON for a failure, as one ERE. This is the
+# same subject as `_REASON_ARMS` in graviton/scripts/haiku-triage-failures, and the
+# two must stay in step for a reason that cost #505 a port: the classifier can only
+# ever read what this grep decided to keep, so a wording the DETECTOR understands and
+# this pattern does not is thrown away on the builder and is gone when it is reaped.
+#
+# MEASURED, and this is why the arms below were added (#505 §E). Of the 105 logs from
+# the #492 re-wave, 89 carry a line the fixed detector reads as a reason -- and for 18
+# of those 89 the pattern as it stood could not see that line:
+#   becasso fasm sdljoytest     ld: ... error adding symbols / relocations in generic ELF
+#   ffcall opensound pnet       make: *** No rule to make target '<file>'
+#   libavlduptree slunkcrypt    make: *** No targets specified and no makefile found
+#   helpviewer yoshi            unzip: cannot find/open "<archive>"
+#   hwloc2                      objcopy: '<path>': No such file   (no "or directory")
+#   intel/ralink/realtek_*_firmwares  [Errno -2147483643] Invalid Argument
+#   libeditline                 ./configure: line N: syntax error near unexpected token
+#   ne                          Can't locate <Module>.pm in @INC
+#   privoxy                     id: 'user': no such user
+#   timezone_data               ./zic: Can't link A to B: Operation not allowed
+# Those 18 survived only because their logs fit under NB_LOG_FULL_LINES and were kept
+# whole. `pnet` did not fit (416 720 lines) and its reason line was discarded -- the
+# grep block it got back was two lines long, a checksum notice and make's cascade.
+# ERE only (no \b, \d, \S): this is POSIX `grep -E` on Haiku, not PCRE.
+NB_DIAG_RE='error:|Error [0-9]+|Error: |CMake Error|fatal error:|error adding symbols|relocations in generic ELF|cannot find -l|command not found|No rule to make target|No targets specified and no makefile found|\[Errno -?[0-9]+\]|syntax error near|Can.t locate [^[:space:]]* in @INC|cannot find/open|No such file|[Nn]o such user|undefined reference|multiple definition of|Permission denied|No space left|Operation not allowed|does not name a type|ModuleNotFoundError|No module named|Read-only file system|not supported|unsupported|unknown word-size|guess (build|host) type|required file .* not found|unable to resolve|could not be resolved|is not available, please install|prepareInstalledDevelLib|possibly undefined macro|narrowing conversion|CHECKSUM|checksum'
+
+# Lines that match NB_DIAG_RE and still say nothing but "a step gave up", or that are
+# printed by every run whether it failed or not. Used ONLY to pick WHICH match the
+# first-error window centres on -- never to drop a line from the capture, so being
+# wrong here costs context, not evidence.
+#
+# This is the mirror of `_CONTENTLESS_ARMS` in the classifier, and #505's lesson
+# applies to it with full force: that arm was once documented "inert today", measured
+# against the `tail -20` corpus, and on the deep corpus it ate three ports' entire
+# diagnostic. "Inert" is a property of the CORPUS, not of the regex. So every arm here
+# is one that says only that something stopped (make's exit-status recursion, its
+# jobserver notice, collect2's summary, haikuporter's epilogue, our own verdict lines)
+# or that a routine step ran (the two checksum notices, which appear in every log and
+# are the reason `pnet`'s grep block opened with a line about a tarball). Each is
+# asserted by the selftest, not asserted in this comment.
+NB_NOISE_RE='^(make|gmake)(\[[0-9]+\])?: \*\*\* (\[[^]]*\] )?Error [0-9]+|^(make|gmake)(\[[0-9]+\])?: \*\*\* Waiting for unfinished jobs|^collect2: error: ld returned|^Error: Build has failed|^Validating checksum of|^Skipping checksum validation of|^[^[:space:]]*: FAILED, no missing-dep|^Warning: Command '
+
 # Emit a capture of the haikuporter log to STDOUT on failure. This is load-bearing
 # for triage: run_ssm._wrapper gzips this process's stdout and uploads it as the
 # S3 build log (log_url), so whatever we DON'T print here is lost when the scratch
@@ -247,9 +288,26 @@ resolve_port_name() {
 # found 35% of UNMATCHED logs were "truncated tail" with no root cause captured
 # (#136/#90). We now keep enough to always carry the root error: the HEAD (early
 # configure/arch errors), every diagnostic line anywhere in the log (grep -- the
-# root error wherever it scrolled to), and the TAIL (the cascade + verdict).
+# root error wherever it scrolled to), the WINDOW around the first such line, and
+# the TAIL (the cascade + verdict).
 # Bounded so a huge ninja build (llvm) doesn't balloon the uploaded log: the whole
-# log when small, else head+grep+tail. All caps are env-overridable.
+# log when small, else head+window+grep+tail. All caps are env-overridable.
+#
+# WHY THE WINDOW EXISTS (#505 §E). head+grep+tail still lost a cause, and `pnet` is the
+# worked example: 416 720 lines, so the middle 415 300 were discarded, and the single
+# `grep -n` hit in them was make's cascade. Two defects, not one:
+#   1. the lexicon was narrower than the detector's -- see NB_DIAG_RE; and
+#   2. even where grep DID hit, it returned that one line and nothing around it, so the
+#      command that produced the error, its arguments and its own output were dropped.
+# A matched line on its own is frequently not a diagnosis. The window carries the
+# context lines either side of the first match that is not NB_NOISE_RE, which is where
+# the cause actually is when the matched line is a consequence.
+#
+# AND A WARNING FOR WHOEVER READS THE OUTPUT. Recovering a line is not diagnosing the
+# failure. `pnet`'s recovered line is `make: *** No rule to make target 'cg_ainit.c'`,
+# and that is a SYMPTOM: something that should have generated `cg_ainit.c` failed
+# earlier. Reading it as the cause is the specific mistake #505 §E exists to prevent --
+# which is why the window is labelled "first error window", not "root cause".
 emit_log_capture() {
 	f="$1"
 	[ -f "$f" ] || { echo "(no log file $f)"; return 0; }
@@ -262,11 +320,47 @@ emit_log_capture() {
 	fi
 	echo "---- build log HEAD (first ${NB_LOG_HEAD:-1200} of $lines lines): $f ----"
 	head -n "${NB_LOG_HEAD:-1200}" "$f"
+	emit_first_error_window "$f" "$lines"
 	echo "---- diagnostic lines (grep; root cause wherever it scrolled to) ----"
-	grep -nE 'error:|Error [0-9]+|CMake Error|fatal error:|cannot find -l|command not found|No such file or directory|undefined reference|multiple definition of|does not name a type|ModuleNotFoundError|No module named|Read-only file system|not supported|unsupported|unknown word-size|guess (build|host) type|required file .* not found|unable to resolve|could not be resolved|is not available, please install|prepareInstalledDevelLib|possibly undefined macro|narrowing conversion|CHECKSUM|checksum' "$f" 2>/dev/null | head -n "${NB_LOG_GREP:-400}"
+	grep -nE "$NB_DIAG_RE" "$f" 2>/dev/null | head -n "${NB_LOG_GREP:-400}"
 	echo "---- build log TAIL (last ${NB_LOG_TAIL:-200} lines) ----"
 	tail -n "${NB_LOG_TAIL:-200}" "$f"
-	echo "---- end build log ($lines lines total; head+grep+tail capture) ----"
+	echo "---- end build log ($lines lines total; head+window+grep+tail capture) ----"
+}
+
+# Print the NB_LOG_CTX lines either side of the FIRST reason line that is not just
+# "something gave up". Line numbers are printed so the window can be placed in the
+# original log. Only called on the bounded path -- on the whole-log path there is
+# nothing to recover.
+emit_first_error_window() {
+	f="$1"
+	lines="$2"
+	ctx="${NB_LOG_CTX:-80}"
+	# `grep -v` on the NUMBERED output, so a noise arm anchored at ^ still has to match
+	# the line itself: strip the "N:" prefix for the test, keep it for the result.
+	first=$(grep -nE "$NB_DIAG_RE" "$f" 2>/dev/null \
+		| while IFS= read -r hit; do
+			n=${hit%%:*}
+			case "$n" in ''|*[!0-9]*) continue ;; esac
+			printf '%s\n' "${hit#*:}" | grep -qE "$NB_NOISE_RE" && continue
+			echo "$n"
+			break
+		done)
+	case "$first" in
+		''|*[!0-9]*)
+			# Nothing but noise matched. Say so: an empty window and a window that was
+			# never attempted are different findings, and #505's `ffcall` was read as
+			# "the build emitted no reason" when the capture had simply dropped it.
+			echo "---- first error window: NO non-boilerplate reason line in $lines lines ----"
+			return 0 ;;
+	esac
+	from=$((first - ctx)); [ "$from" -lt 1 ] && from=1
+	to=$((first + ctx))
+	echo "---- first error window: lines $from-$to around the first reason line ($first) ----"
+	echo "---- (this is the FIRST error, not necessarily the root cause -- read upwards) ----"
+	sed -n "${from},${to}p" "$f" 2>/dev/null \
+		| awk -v b="$from" '{ printf "%d:%s\n", NR + b - 1, $0 }'
+	echo "---- end first error window ----"
 }
 
 # Report a round that made no progress. Everything printed here is either an
@@ -334,6 +428,25 @@ report_no_progress() {
 	fi
 }
 
+# Did this port produce an hpkg? This predicate IS the success rule the file header
+# states ("Success is asserted by the .hpkg EXISTING, never by an exit code"), so it is
+# the one place that decides whether a build failed, and it has to agree with the SOP's
+# §7 wording rather than with a guess about how versions are spelled.
+#
+# IT USED TO READ `"$GP/${port}"-[0-9]*.hpkg`, AND THAT DIGIT COST #505 A PORT. The glob
+# demanded a numeral immediately after the dash, i.e. a numeric version. `cmake_haiku`'s
+# version is `git`: haikuporter really built `cmake_haiku-git-4-arm64.hpkg` (14 465 B,
+# still in the pool under hpkg/arm64-incoming/), this test did not match it, build_one
+# returned 1, the driver exited rc=1, and the wave recorded `failed` for a package that
+# had succeeded -- while `harvest` below, which globs `$GP/*.hpkg` with no such
+# restriction, pushed the good hpkg to the pool regardless. A git-versioned port could
+# therefore never be recorded built. `-*` matches any version spelling; the literal `-`
+# still keeps `cmake_haiku` from being satisfied by a `cmake_haiku_tools-*` hpkg, which
+# is the only thing the digit was protecting against.
+have_hpkg() {
+	ls "$GP/${1}"-*.hpkg >/dev/null 2>&1
+}
+
 build_one() {
 	port="$1"
 	log="/boot/home/nb-$port.log"
@@ -345,7 +458,7 @@ build_one() {
 	while [ "$attempt" -le "$MAX_ATTEMPTS" ]; do
 		( cd "$HP" && haikuporter -y "$port" ) > "$log" 2>&1
 		# success = an hpkg for this port now exists
-		if ls "$GP/${port}"-[0-9]*.hpkg >/dev/null 2>&1; then
+		if have_hpkg "$port"; then
 			echo "$port: BUILD_OK (attempt $attempt)"
 			return 0
 		fi

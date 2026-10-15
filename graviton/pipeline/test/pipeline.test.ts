@@ -2024,3 +2024,173 @@ test('#505: a failure still records the error class it was given', () => {
   // The failure path must not clear what it is in the middle of writing.
   expect(expr).not.toContain('REMOVE last_error_class');
 });
+
+// ---------------------------------------------------------------------------
+// #505 §C: two ports of the #492 re-wave (`sip`, `cmake_haiku`) BUILT their hpkg
+// and were recorded `failed`, because the wave classifies from the driver's exit
+// code and SOP §7 says success is the hpkg existing. `haiku-correct-false-failure`
+// was written for exactly that and is manual, so it never ran. The check now lives
+// in the record path: before a failure is written, the harvest pool is asked. These
+// arms drive the real handler against a fake Table and a fake S3 lister, so what is
+// asserted is the UpdateExpression DynamoDB would receive -- and each guard (size
+// floor, freshness, name anchoring) is asserted on its own, because a check that
+// accepts anything is worse here than no check at all: it would write `built` over
+// a real failure.
+// ---------------------------------------------------------------------------
+type PoolObj = { key: string; size: number; age: number };
+
+function recordWithPool(opts: {
+  pkg?: string; ok?: boolean; harvest?: string;
+  objs?: PoolObj[]; honourPrefix?: boolean;
+}): {
+  state: string; hpkg?: string; exprs: string[];
+  values: Record<string, string>[]; listed: { bucket: string; prefix: string }[];
+} {
+  const pkg = opts.pkg ?? 'cmake_haiku';
+  const harvest = opts.harvest ?? 's3://wb/hpkg/arm64';
+  const py = [
+    'import datetime,json,os,sys,time,types',
+    `sys.path.insert(0,${JSON.stringify(OPS_LAMBDAS)})`,
+    // HARVEST_S3 is read at import time, as it is in Lambda.
+    `os.environ["HARVEST_S3"]=${JSON.stringify(harvest)}`,
+    `OBJS=json.loads(${JSON.stringify(JSON.stringify(opts.objs ?? []))})`,
+    `HONOUR=${(opts.honourPrefix ?? true) ? 'True' : 'False'}`,
+    'calls=[]; listed=[]',
+    'class T:',
+    '    def update_item(self, **kw):',
+    '        calls.append(kw)',
+    '        return {"Attributes": {"attempt_count": 1}}',
+    'class R:',
+    '    def Table(self, name): return T()',
+    'class Pag:',
+    '    def paginate(self, Bucket=None, Prefix=None):',
+    '        listed.append({"bucket": Bucket, "prefix": Prefix})',
+    '        now=time.time(); items=[]',
+    '        for o in OBJS:',
+    // honourPrefix=false makes the lister ignore the key prefix, so the only thing
+    // left rejecting a sibling package is record.py's anchored basename pattern.
+    '            if HONOUR and not o["key"].startswith(Prefix): continue',
+    '            items.append({"Key": o["key"], "Size": o["size"],',
+    '                "LastModified": datetime.datetime.fromtimestamp(',
+    '                    now - o["age"], datetime.timezone.utc)})',
+    '        return [{"Contents": items}]',
+    'class S3:',
+    '    def get_paginator(self, name): return Pag()',
+    'fake=types.ModuleType("boto3")',
+    'fake.resource=lambda svc: R()',
+    'fake.client=lambda svc: S3()',
+    'sys.modules["boto3"]=fake',
+    'import record',
+    `ev=record.handler({"table":"t","pkg":${JSON.stringify(pkg)},"target":"r1",`,
+    `  "ok":${opts.ok ? 'True' : 'False'}}, None)`,
+    'print(json.dumps({"state": ev.get("recorded_state"),',
+    '  "hpkg": ev.get("false_failure_hpkg"),',
+    '  "exprs": [c["UpdateExpression"] for c in calls],',
+    '  "values": [{k: str(v) for k, v in c["ExpressionAttributeValues"].items()}',
+    '             for c in calls],',
+    '  "listed": listed}))',
+  ].join('\n');
+  const out = child_process.execFileSync('python3', ['-c', py], { encoding: 'utf8' });
+  // record.py also prints its own operator lines; the JSON is the last line.
+  const lines = out.trimEnd().split('\n');
+  return JSON.parse(lines[lines.length - 1]);
+}
+
+// The real `cmake_haiku` case: 14 465 B, version `git-4`, harvested minutes earlier.
+const CMAKE_HAIKU_HPKG: PoolObj = {
+  key: 'hpkg/arm64/cmake_haiku-git-4-arm64.hpkg', size: 14465, age: 120,
+};
+
+test('#505 §C: a reported failure whose hpkg is in the harvest pool is recorded built', () => {
+  const r = recordWithPool({ objs: [CMAKE_HAIKU_HPKG] });
+  expect(r.state).toBe('built');
+  expect(r.hpkg).toBe('s3://wb/hpkg/arm64/cmake_haiku-git-4-arm64.hpkg');
+  // ONE write, and it is the success write: a false failure must not pass through
+  // the attempt_count increment on its way to `built`, or three of them would
+  // escalate a package that builds fine to needs_human.
+  expect(r.exprs).toHaveLength(1);
+  expect(r.exprs[0]).toContain('build_state=:s');
+  expect(r.values[0][':s']).toBe('built');
+  expect(r.exprs[0]).not.toContain('attempt_count=if_not_exists');
+  // Auditable as corrected, with the same attributes haiku-correct-false-failure
+  // writes, and the version parsed the way that tool parses it.
+  expect(r.values[0][':who']).toBe('RecordOutcome');
+  expect(r.values[0][':ver']).toBe('git-4');
+  expect(r.values[0][':note']).toContain('false failure');
+  // And the residue of the failure it was reported as is still cleared.
+  expect(r.exprs[0].slice(r.exprs[0].indexOf('REMOVE'))).toContain('last_error_class');
+});
+
+test('#505 §C: the pool is listed under the package key prefix, not scanned', () => {
+  const r = recordWithPool({ objs: [CMAKE_HAIKU_HPKG] });
+  expect(r.listed).toEqual([{ bucket: 'wb', prefix: 'hpkg/arm64/cmake_haiku-' }]);
+});
+
+test('#505 §C: a reported success never consults the pool', () => {
+  const r = recordWithPool({ ok: true, objs: [CMAKE_HAIKU_HPKG] });
+  expect(r.state).toBe('built');
+  expect(r.listed).toEqual([]);
+  // No correction provenance on a build that really was reported OK.
+  expect(r.values[0][':who']).toBeUndefined();
+});
+
+test('#505 §C: a class-9 empty hpkg does not promote a failure to built', () => {
+  // ~800 B is the measured class-9 trap: an hpkg that shipped nothing.
+  const r = recordWithPool({ objs: [{ ...CMAKE_HAIKU_HPKG, size: 800 }] });
+  expect(r.state).toBe('failed');
+  expect(r.exprs[0]).toContain('attempt_count=if_not_exists');
+});
+
+test('#505 §C: a stale hpkg from an earlier success does not mask a real failure', () => {
+  // HARVEST_S3 is durable until a publish prunes it, so the pool can still hold the
+  // hpkg of a previous successful build of this very package.
+  const r = recordWithPool({ objs: [{ ...CMAKE_HAIKU_HPKG, age: 60 * 60 * 24 * 9 }] });
+  expect(r.state).toBe('failed');
+});
+
+test('#505 §C: another package\'s hpkg cannot confirm this one', () => {
+  // honourPrefix=false: the lister hands back everything, so only the anchored
+  // basename pattern stands between `cmake_haiku` and a `cmake_haiku_tools` hpkg --
+  // the one thing the old driver glob's digit was protecting against.
+  const r = recordWithPool({
+    honourPrefix: false,
+    objs: [
+      { key: 'hpkg/arm64/cmake_haiku_tools-1.2-3-arm64.hpkg', size: 99999, age: 60 },
+      { key: 'hpkg/arm64/cmake_haiku-git-4/inner.hpkg', size: 99999, age: 60 },
+    ],
+  });
+  expect(r.state).toBe('failed');
+});
+
+test('#505 §C: with no HARVEST_S3 the failure path is exactly what it was', () => {
+  const r = recordWithPool({ harvest: '', objs: [CMAKE_HAIKU_HPKG] });
+  expect(r.state).toBe('failed');
+  expect(r.listed).toEqual([]);
+});
+
+test('#505 §C: RecordFn is wired to the harvest pool and may only LIST it', () => {
+  const t = synthOps();
+  const fns = t.findResources('AWS::Lambda::Function');
+  const recordFns = Object.values(fns).filter(
+    (f: any) => f.Properties.Handler === 'record.handler');
+  expect(recordFns.length).toBe(1);
+  const harvest = (recordFns[0] as any).Properties.Environment.Variables.HARVEST_S3;
+  expect(harvest).toBeDefined();
+  // Same prefix the driver harvests to and the publish job reads.
+  expect(JSON.stringify(harvest)).toContain('hpkg/arm64');
+  // The grant is ListBucket only: the check reads keys, sizes and ages out of the
+  // listing and never opens an hpkg, so this Lambda holds no s3:GetObject.
+  // Follow the Lambda's own role, so this is about what RecordFn can do and not
+  // about which statement happens to look narrow in the template.
+  const roleId = (recordFns[0] as any).Properties.Role['Fn::GetAtt'][0];
+  const own = Object.values(t.findResources('AWS::IAM::Policy'))
+    .filter((p: any) => JSON.stringify(p.Properties.Roles ?? []).includes(roleId))
+    .flatMap((p: any) => p.Properties.PolicyDocument.Statement as any[]);
+  const s3Actions = own.flatMap((s) => ([] as string[]).concat(s.Action ?? []))
+    .filter((a) => a.startsWith('s3:'));
+  expect(s3Actions).toEqual(['s3:ListBucket']);
+  const listStatement = own.find((s) =>
+    ([] as string[]).concat(s.Action ?? []).includes('s3:ListBucket'));
+  expect(([] as string[]).concat(listStatement.Resource))
+    .toEqual([`arn:aws:s3:::haiku-graviton-${config.account}-us-west-2`]);
+});
