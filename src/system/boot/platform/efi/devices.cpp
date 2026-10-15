@@ -16,6 +16,8 @@
 
 #include "efi_platform.h"
 #include <efi/protocol/block-io.h>
+#include <efi/protocol/device-path.h>
+#include <efi/protocol/loaded-image.h>
 
 #include "gpt.h"
 #include "gpt_known_guids.h"
@@ -32,6 +34,10 @@
 
 
 static efi_guid BlockIoGUID = EFI_BLOCK_IO_PROTOCOL_GUID;
+#ifdef __aarch64__
+static efi_guid DevicePathGUID = EFI_DEVICE_PATH_PROTOCOL_GUID;
+static efi_guid LoadedImageGUID = EFI_LOADED_IMAGE_PROTOCOL_GUID;
+#endif
 
 
 class EfiDevice : public Node
@@ -166,6 +172,8 @@ gpt_write_blocks(efi_block_io_protocol* blockIo, uint64 lba, uint32 count,
 	size_t bytes = (size_t)count * blockSize;
 	if (bytes == 0 || bytes > kGptBounceSize)
 		return false;
+	if (blockIo->WriteBlocks == NULL)
+		return false;
 
 	memcpy(sGptBounce, buffer, bytes);
 	if (blockIo->WriteBlocks(blockIo, blockIo->Media->MediaId, lba, bytes,
@@ -197,7 +205,10 @@ gpt_write_blocks(efi_block_io_protocol* blockIo, uint64 lba, uint32 count,
 	Safety contract: arm64 only; grow-only, never shrink; the trailing partition
 	only, and only when it is BFS; idempotent (a no-op once the partition already
 	fills the disk). On any parse or geometry inconsistency this does nothing and
-	returns, so a failed grow can never keep the machine from booting.
+	returns, so a failed grow can never keep the machine from booting. The caller
+	owns the remaining condition, and it is the important one: this is called for
+	the boot disk alone (see is_boot_disk()), because a grow rewrites a partition
+	table and no boot has business rewriting tables on disks it merely found.
 */
 void
 EfiDevice::GrowBootGptPartition()
@@ -360,6 +371,75 @@ out:
 	free(backupBlock);
 	free(entries);
 }
+
+
+/*!	The device path of the volume this loader image was loaded from, or NULL if
+	the firmware does not describe one (a network or memory-mapped boot).
+
+	This is the ESP's path -- a partition, not a disk -- so it is only useful in
+	combination with is_boot_disk() below.
+*/
+static efi_device_path_protocol*
+boot_volume_device_path()
+{
+	efi_loaded_image_protocol* loadedImage;
+	if (kBootServices->HandleProtocol(kImage, &LoadedImageGUID,
+			(void**)&loadedImage) != EFI_SUCCESS)
+		return NULL;
+
+	if (loadedImage->DeviceHandle == NULL)
+		return NULL;
+
+	efi_device_path_protocol* path;
+	if (kBootServices->HandleProtocol(loadedImage->DeviceHandle,
+			&DevicePathGUID, (void**)&path) != EFI_SUCCESS)
+		return NULL;
+
+	return path;
+}
+
+
+/*!	Does \a handle name the disk that \a bootVolumePath lives on?
+
+	A partition's device path is its disk's device path with a media node
+	appended (UEFI 2.10, 10.3.5), so "the ESP is on this disk" is exactly "this
+	disk's path is a prefix of the ESP's path". Node lengths are compared too, so
+	a short node cannot match a longer one that merely starts the same way.
+*/
+static bool
+is_boot_disk(efi_handle handle, const efi_device_path_protocol* bootVolumePath)
+{
+	if (bootVolumePath == NULL)
+		return false;
+
+	const efi_device_path_protocol* diskPath;
+	if (kBootServices->HandleProtocol(handle, &DevicePathGUID,
+			(void**)&diskPath) != EFI_SUCCESS)
+		return false;
+
+	while (diskPath->Type != DEVICE_PATH_END) {
+		// A node that cannot hold its own header would make the walk run away;
+		// treat a malformed path as "not the boot disk" rather than trusting it.
+		if (diskPath->Length < sizeof(*diskPath)
+			|| bootVolumePath->Length < sizeof(*bootVolumePath))
+			return false;
+
+		if (bootVolumePath->Type == DEVICE_PATH_END)
+			return false;
+
+		if (diskPath->Length != bootVolumePath->Length
+			|| memcmp(diskPath, bootVolumePath, diskPath->Length) != 0)
+			return false;
+
+		diskPath = (const efi_device_path_protocol*)((const uint8*)diskPath
+			+ diskPath->Length);
+		bootVolumePath = (const efi_device_path_protocol*)
+			((const uint8*)bootVolumePath + bootVolumePath->Length);
+	}
+
+	// The disk path ran out while still matching: it is a prefix of the ESP's.
+	return true;
+}
 #endif	// __aarch64__
 
 
@@ -418,6 +498,11 @@ platform_add_boot_device(struct stage2_args *args, NodeList *devicesList)
 	efi_block_io_protocol *blockIo;
 	size_t memSize = 0;
 
+#ifdef __aarch64__
+	efi_device_path_protocol* bootDevicePath = boot_volume_device_path();
+	bool attemptedBootDiskGrow = false;
+#endif
+
 	// If the bootloader was started from the network (net_stack_init will find
 	// the ip= parameter in the LoadOptions), add network booting as the first
 	// entry if available
@@ -437,12 +522,25 @@ platform_add_boot_device(struct stage2_args *args, NodeList *devicesList)
 			!= EFI_BUFFER_TOO_SMALL)
 		panic("Cannot read size of block device handles!");
 
-	uint32 noOfHandles = memSize / sizeof(efi_handle);
+	// The handle array is heap allocated, not a stack array sized by memSize.
+	// memSize is whatever the firmware says it needs -- one handle per disk
+	// *and* one per partition, so a machine with many volumes can ask for far
+	// more than the loader's stack can give, and the loader runs on the stack
+	// firmware handed it. Overrunning it faults inside firmware code, which is
+	// then reported against a firmware module (issue #484 was read that way for
+	// a while) instead of against the loader. ReadAt's bounce buffer above was
+	// made fixed-size for exactly this reason; this is the same hazard.
+	efi_handle* handles = (efi_handle*)malloc(memSize);
+	if (handles == NULL)
+		panic("Can't allocate memory for block device handles!");
 
-	efi_handle handles[noOfHandles];
 	if (kBootServices->LocateHandle(ByProtocol, &BlockIoGUID, 0, &memSize,
 			handles) != EFI_SUCCESS)
 		panic("Failed to locate block devices!");
+
+	// LocateHandle writes back the size it actually used, so the count is only
+	// correct after the second call.
+	uint32 noOfHandles = memSize / sizeof(efi_handle);
 
 	// All block devices has one for the disk and one per partition
 	// There is a special case for a device with one fixed partition
@@ -483,13 +581,36 @@ platform_add_boot_device(struct stage2_args *args, NodeList *devicesList)
 		// happen here, before the partition scan and the disk-identifier
 		// checksum in register_boot_file_system(), so the kernel sees the grown
 		// partition and BFS grows the filesystem on the first mount. See
-		// GrowBootGptPartition() for the full rationale. Grow-only and a no-op on
-		// any inconsistency, so it is safe to attempt on every physical disk.
-		device->GrowBootGptPartition();
+		// GrowBootGptPartition() for the full rationale.
+		//
+		// Only ever the disk this loader was itself loaded from, and only if the
+		// firmware will let us write it. The grow rewrites a partition table, so
+		// doing it to every attached disk means editing disks the boot has no
+		// business touching -- a second Haiku disk's last partition silently
+		// grows to fill its disk on every boot of this one.
+		if (!blockIo->Media->ReadOnly
+			&& is_boot_disk(handles[n], bootDevicePath)) {
+			attemptedBootDiskGrow = true;
+			device->GrowBootGptPartition();
+		}
 #endif
 
 		devicesList->Insert(device);
 	}
+
+#ifdef __aarch64__
+	// Say so when the grow could not be attempted at all. The two-boot problem
+	// it exists to solve is invisible from the loader (it shows up later, as a
+	// root filesystem that never used the rest of its volume), so a platform
+	// whose firmware describes the loaded image differently than expected has to
+	// be loud here rather than quietly skipping the grow.
+	if (!attemptedBootDiskGrow) {
+		dprintf("efi/devices: no writable boot disk matched the loaded image, "
+			"GPT auto-grow skipped\n");
+	}
+#endif
+
+	free(handles);
 
 	return devicesList->Count() > 0 ? B_OK : B_ENTRY_NOT_FOUND;
 }
