@@ -1834,11 +1834,45 @@ other class moved. The 5 that remain are **not** truncation:
   `.hpkg` exists. There is no reason line because there was no reason. That is #505 §C, the
   false-failure record path, not a detector gap.
 
+### #505 §B1: `BObjectList(int, bool)` — 11 ports, and the obvious fix is the wrong one
+
+`batchrename bemines bescreencapture bevexed burnitnow dockbert friss runprogram scoundrel
+substrate torrentor` all fail identically:
+
+```
+error: no matching function for call to 'BObjectList<StyleData>::BObjectList(int, bool)'
+```
+
+#505 proposed restoring a deprecated `BObjectList(int32, bool)` overload in our headers —
+one change for 11 ports. **That fix is not possible, and this is recorded here because the
+reasoning is not obvious from the error message.** `headers/os/support/ObjectList.h`:
+
+```
+:49   template<class T, bool Owning = false> class BObjectList;
+:123  BObjectList(int32 itemsPerBlock = 20);          // the ONLY constructor
+```
+
+`Owning` is a **template parameter**, resolved at compile time, not a runtime argument. The
+old API was `BObjectList<T>(itemsPerBlock, owning)`; the current one is `BObjectList<T, true>`.
+A two-argument constructor could not set `Owning`, because `Owning` is part of the type — so
+the "one header change clears 11 ports" option does not exist, and adding a constructor that
+accepted and ignored a `bool` would compile these ports into **silently leaking** ones. The
+current error is better than that.
+
+**The decision: migrate per port** — `BObjectList<T>(n, true)` → `BObjectList<T, true>(n)`.
+Mechanical, local to each recipe's patchset, and it keeps ownership visible in the type.
+This is an API-migration class, not 11 port bugs and not a devel-header regression.
+
 ### #505 §E: the capture's middle-of-log blind spot — CLOSED (two defects, both measured)
 
-`pnet`'s log is **416,720 lines**, so it took the `head+grep+tail` path and its cause was in
-the discarded middle. Measuring the 105 deep logs rather than reasoning from `pnet` alone
-turned one suspected defect into two, and neither is the line cap:
+`pnet`'s log is **416,720 lines**, so it took the `head+grep+tail` path. Measuring the 105
+deep logs rather than reasoning from `pnet` alone turned one suspected defect into two, and
+neither is the line cap — nor, it turns out, the discarded middle. (#505's body says the root
+error was *in* the discarded middle. It was not: the September capture carries
+`make[1]: *** No rule to make target 'cg_ainit.c'` at capture line 1390, inside its TAIL
+block, and the `treecc` line at 1392. The line was **in the capture and invisible to the
+lexicon** — which makes defect 1 below the whole of it, and is a sharper reason to keep the
+two lexicons in step than "the middle was dropped" ever was.)
 
 1. **The capture's grep lexicon was narrower than the post-#510 detector's.** 89 of the 105
    logs carry a line the fixed detector reads as a reason, and for **18 of those 89** the
@@ -1875,15 +1909,81 @@ drops the window, and the suite goes red.
 > `make: *** No rule to make target 'cg_ainit.c'`, and that is a **symptom** — something
 > that should have generated `cg_ainit.c` failed earlier. Reading it as the cause is the
 > specific mistake this part of #505 exists to prevent, which is why the capture labels the
-> region "first error window", not "root cause". `pnet`'s own cause is **unrecoverable**: the
-> 416,720-line log died with the builder and only the 1,410-line capture survives. It needs a
-> re-wave, which is blocked on #576.
+> region "first error window", not "root cause". `pnet` was re-run to get its cause; see
+> "verified on hardware" below.
 
 **Still owed, deliberately:** the unconditional backstop — upload the whole gzipped log when
 it exceeds the cap (it compresses ~20x). It is a new S3 artifact nothing reads yet and no
 lifecycle rule covers, it cannot be exercised without a builder, and the measured defect is
 closed by the two fixes above, which are testable offline today. Ports like `stockfish` and
 `di`, whose build tool keeps its reason in a private log, are not fixed by it either.
+
+#### §C and §E verified on hardware (2026-10-15, `i-01886408618b237de`)
+
+Both fixes had been verified only offline, against captured September logs. They were then
+run on a native arm64 builder over SSM — **five ports, not a 105-port re-wave**, each chosen
+to exercise one fixed path:
+
+| port | why it was picked |
+| --- | --- |
+| `slunkcrypt`, `libavlduptree` | reason line `No targets specified and no makefile found` — a **new** lexicon arm |
+| `helpviewer` | reason line `unzip: cannot find/open` — a **new** lexicon arm |
+| `cmake_haiku` | **git-versioned**, so `have_hpkg`'s old `-[0-9]*` glob could never match its hpkg |
+| `pnet` | the only port in the set that genuinely took the **bounded** path (and the one whose cause was owed) |
+
+**§C — the success rule.** `cmake_haiku` built (`BUILD_OK (attempt 1)`, driver `rc=0`) and
+produced `cmake_haiku-git-3-arm64.hpkg` (14,481 B). A/B'd on that very file: old glob
+`NOMATCH`, new `have_hpkg` `MATCH`; `ftgl` and `libffi` (numeric) `MATCH` under both, so
+nothing regressed; a port with no hpkg `NOMATCH` under both, so it is not a blanket yes. The
+old driver would have returned 1 and the wave would have recorded `failed` **for a build that
+worked**. The record half was then run against the real S3 objects with DynamoDB stubbed (the
+production table was never written): old `record.py` → `failed`; new → `built`, with
+`corrected_by=RecordOutcome`, `built_version=git-4`, and the `false_failure_hpkg` provenance.
+Its guards hold: an 800-byte decoy stays `failed` (under `FALSE_FAILURE_MIN_BYTES`), so does
+an age-limited run (`FALSE_FAILURE_MAX_AGE_SECS=1`), and `cmake_haiku_tools-*` is not matched
+for `cmake_haiku`.
+
+**§E — the lexicon and the window.** Fresh logs, caps scaled so the bounded path runs, old
+pattern vs new on the same bytes:
+
+| port | old grep block | new |
+| --- | --- | --- |
+| `slunkcrypt` (65 lines) | `7:Validating checksum of slunkcrypt…` only — **reason absent** | adds `54:make: *** No targets specified…`; window `34-74` around 54 |
+| `helpviewer` (55) | checksum line only — **reason absent** | adds `44:unzip: cannot find/open "arm64/HelpViewer.zip"`; window around 44 |
+| `libavlduptree` (63) | `4:Warning: PLEASE MOVE TO A TAG…` only — **reason absent** | adds `52:make: *** No targets specified…` |
+| `pnet` (205,830) | two lines: a checksum notice and `Error 1` | `205812:make[1]: *** No rule to make target 'cg_ainit.c'` + window `205732-205892` |
+
+**And it immediately found its own residual defect**, which is the value of running it:
+`libavlduptree`'s grep block gained the reason, but the **window still centred on line 4** —
+haikuporter's `Warning: PLEASE MOVE TO A TAG OR COMMIT WITH CHECKSUM ASAP!`, advice about the
+recipe's unchecksummed git source, printed before anything is built and on success as much as
+on failure. It reaches `NB_DIAG_RE` through the `CHECKSUM` arm and was missing from
+`NB_NOISE_RE`. One port in 96 — but a *git-sourced* port, which is the class §C has only just
+made buildable. Filed as #707 and fixed with one noise arm, a second real fixture
+(`graviton/testdata/libavlduptree-wd-492-nodiag.log`) and two selftest arms, one of which
+removes just that arm and asserts the window falls back to line 4.
+
+**`pnet`'s cause, now proven rather than suspected.** From the re-run's `codegen/` output,
+verbatim and in log order:
+
+```
+make[1]: Entering directory '/sources/pnet-0.8.0/codegen'
+make[1]: *** No rule to make target 'cg_ainit.c', needed by 'all'.  Stop.
+make[1]: *** Waiting for unfinished jobs....
+/boot/system/bin/treecc cg_all.tc && touch stamp-treecc
+```
+
+The `treecc` run that *generates* `cg_ainit.c` appears **after** the failure, and
+`Waiting for unfinished jobs` only prints under `-j>1`. So `all`'s prerequisite was evaluated
+while the concurrent `stamp-treecc` job that produces it was still running: a **missing make
+dependency exposed by parallel make**, not a missing tool — `treecc` is installed and
+`configure` found it (`checking for treecc... /boot/system/bin/treecc`). The recipe-side fix
+is to serialise `codegen` or declare `cg_*.c: stamp-treecc`; it is not a capture defect.
+
+One caveat on the method, recorded so the next reader does not over-read the table: the
+builder was shared with another agent's work at the time, and `feed | pkgman refresh` took
+~15 minutes before the first driver line appeared. The three small builds themselves took 26
+seconds. Budget the refresh, not the build.
 
 ### #505 §C: the false-failure check now runs where the outcome is decided — CLOSED
 
