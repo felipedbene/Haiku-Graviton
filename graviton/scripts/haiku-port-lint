@@ -48,6 +48,17 @@ WHAT IT CHECKS (each links to the fact that motivates it):
      `aarch64`, which GNU config.guess/config.sub and hand-rolled arch switches choke on
      (playbook Class 6 / Class 19).
 
+  7. `uname -p`, which is worse than `uname -m` and so is checked separately. There is no
+     processor field in Haiku's `struct utsname`; the string comes from the coreutils
+     port, and it is `other` with the image's bootstrap coreutils and `unknown` with the
+     9.11 pool build -- never an architecture. A build that keys on it takes its fallback
+     on Graviton, silently.
+
+  8. tecmake (ftgl, cd/canvasdraw, iup, im). Its TEC_SYSARCH table has no arm64 entry, so
+     byte order and word size both fall through to `-DTEC_BIGENDIAN -DTEC_32` on a
+     little-endian LP64 target -- and they fall through for `arm64` and `aarch64` too, so
+     this is NOT fixed by fixing `uname -p`. Override on make's command line. (#701.)
+
 WHAT IT IS -- and IS NOT. Read-only static analysis: it reads files and prints findings.
 It never edits a recipe, a source file, or anything else. It is a heuristic linter, not a
 compiler -- findings are ranked ERROR / WARN / INFO by how mechanically certain the arm64
@@ -88,7 +99,10 @@ BUILD_FILE_NAMES = {
     "cmakelists.txt", "meson.build", "meson_options.txt",
     "configure.ac", "configure.in", "configure",
 }
-BUILD_FILE_EXTS = {".mk", ".cmake", ".pro", ".pri"}
+# `.mak` earns its place alongside `.mk`: tecmake -- the Tecgraf build system vendored by
+# ftgl, cd/canvasdraw, iup and im -- keeps all of its host detection in `tecmake.mak`, so
+# without this extension the whole family's arch logic was invisible to this linter (#701).
+BUILD_FILE_EXTS = {".mk", ".mak", ".cmake", ".pro", ".pri"}
 RECIPE_EXTS = {".recipe"}
 
 MAX_BYTES = 4 * 1024 * 1024  # skip files larger than this (generated/vendored blobs)
@@ -203,6 +217,19 @@ RE_IFUNC = re.compile(
 # CMake CPU-string matching that can silently miss Haiku's arm64.
 RE_CMAKE_PROC = re.compile(r"CMAKE_SYSTEM_PROCESSOR", re.IGNORECASE)
 
+# `uname -p` is worse than `uname -m` on Haiku and gets its own check: -m at least reports
+# `arm64`, while -p reports no architecture at all (see lint_build for the measurements).
+RE_UNAME_P = re.compile(r"\buname\b[^\n|;&]*?\s-\w*p\b")
+# ... but every autoconf-generated `configure` echoes `uname -p` into config.log from its
+# "## Platform. ##" banner and never branches on the result. Flagging that would fire the
+# check on every autotools port and teach the reader to ignore it, so the banner form --
+# `<prog> -p = `(<prog> -p) 2>/dev/null || echo unknown`` -- is excluded by shape.
+RE_UNAME_BANNER = re.compile(r"uname\s+-\w*p\s*=|2>/dev/null\s*\|\|\s*echo unknown")
+
+# tecmake derives both byte order and word size from TEC_SYSARCH, and its fallback is
+# big-endian 32-bit -- the worst possible default on a little-endian LP64 target.
+RE_TECMAKE_ARCH = re.compile(r"\bTEC_(?:SYSARCH|BYTEORDER|WORDSIZE|BIGENDIAN)\b")
+
 # char-signedness: declarations of a bare `char` (not signed/unsigned, not pointer/array).
 RE_CHAR_DECL = re.compile(
     r"(?<![\w])(?<!unsigned )(?<!signed )char\s+"
@@ -294,6 +321,10 @@ def lint_source(path, lines, out):
 
 
 def lint_build(path, lines, out):
+    # Both arch-detection checks below fire on every line of a detection table (tecmake.mak
+    # alone names TEC_SYSARCH thirty-odd times), and thirty copies of one finding buries the
+    # rest of the report. Report each at its first site only.
+    once = set()
     for i, raw in enumerate(lines, 1):
         s = _strip(raw)
         m = RE_X86_FLAG.search(s)
@@ -319,6 +350,28 @@ def lint_build(path, lines, out):
                 "INFO", "arch-detect", path, i, raw,
                 "Hand-rolled host-arch detection. Haiku's `uname -m` reports 'arm64' (not "
                 "'aarch64'); ensure an arm64/aarch64 branch exists (playbook Class 6/19)."))
+        if RE_UNAME_P.search(s) and not RE_UNAME_BANNER.search(s) \
+                and "uname-p" not in once:
+            once.add("uname-p")
+            out.append(Finding(
+                "WARN", "uname-p", path, i, raw,
+                "Host arch taken from `uname -p`, which on Haiku names no architecture at "
+                "all: the processor string is the coreutils port's, and it is 'other' with "
+                "the bootstrap coreutils (B_CPU_ARM_64 falls into its switch default) or "
+                "'unknown' with the 9.11 pool build (no processor patch at all). `uname -m` "
+                "is the one that answers 'arm64'. Any branch keyed on `uname -p` therefore "
+                "takes its fallback on Graviton -- silently (#701)."))
+        if RE_TECMAKE_ARCH.search(s) and "tecmake-arch" not in once:
+            once.add("tecmake-arch")
+            out.append(Finding(
+                "WARN", "tecmake-arch", path, i, raw,
+                "tecmake build. Its TEC_SYSARCH table knows only i686/i386/powerpc/"
+                "x86_64/amd64/armv7l, and the byte-order and word-size tests then fall "
+                "through to -DTEC_BIGENDIAN -DTEC_32 -- measured for 'other', 'unknown', "
+                "'arm64' AND 'aarch64' alike, so correcting `uname -p` does NOT fix this. "
+                "State the truth on make's command line, where it overrides tecmake's "
+                "plain `=` and reaches the recursive sub-make: "
+                "`make TEC_WORDSIZE=TEC_64 TEC_BYTEORDER=TEC_LITTLEENDIAN` (#701)."))
 
 
 def lint_recipe(path, lines, out):
@@ -375,6 +428,18 @@ DeBeOS arm64 port-hygiene checklist (manual companion to `haiku-port-lint`)
     `-DCMAKE_SYSTEM_PROCESSOR=aarch64`. Haiku `uname -m` is `arm64`, not `aarch64` -- GNU
     config.guess/config.sub and hand-rolled arch switches need an arm64 case
     (playbook Class 6/19).
+
+[ ] `uname -p`. Haiku has no processor field in `struct utsname`; the string is the
+    coreutils port's own, and it is `other` (bootstrap coreutils) or `unknown` (9.11 pool
+    build) -- never an architecture. Anything keyed on `uname -p` takes its fallback here.
+    Re-key on `uname -m`, or state the answer explicitly.
+
+[ ] tecmake (ftgl, cd/canvasdraw, iup, im). Byte order and word size both fall through to
+    `-DTEC_BIGENDIAN -DTEC_32` on Graviton -- and for `arm64`/`aarch64` too, so an
+    `uname -p` fix does not reach it. Pass
+    `make TEC_WORDSIZE=TEC_64 TEC_BYTEORDER=TEC_LITTLEENDIAN`: tecmake assigns both with a
+    plain `=`, which a command-line variable overrides and an exported environment
+    variable does not.
 """
 
 

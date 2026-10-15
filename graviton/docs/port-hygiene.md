@@ -29,11 +29,33 @@ this file and the script are standalone and carry no dependency on that skill.
 | **x86-only compiler flags** | `-msse2`, `-mavx`, `-mfpmath=sse`, `-mmmx`, … in a recipe body or build file | aarch64 gcc: `unrecognized command-line option` | gate on x86/x86_64 (playbook Class 5) |
 | **IFUNC / target_clones** | `--enable-ifunc`, `HAVE_IFUNC`, `__attribute__((ifunc))`, `target_clones`, `__builtin_cpu_supports` | ifunc *auto*-dispatch is unimplemented in the userland runtime_loader — an `R_AARCH64_IRELATIVE` reloc falls through, so the `.so` **fails to load silently** (diagnostic compiled out). **Explicit** runtime dispatch does work: `getauxval(AT_HWCAP/AT_HWCAP2)` is implemented (commpage-backed, NEON caps advertised as of #329). | disable ifunc; select the code path explicitly at runtime via `getauxval`, or decide SIMD at compile time |
 | **CPU-string / config.guess** | CMake `CMAKE_SYSTEM_PROCESSOR` matching `x86\|aarch64\|arm`; `uname -m` arch switches | Haiku reports `arm64` (not `aarch64`), matching no branch → NEON silently disabled (the libjpeg-turbo defect); GNU config.guess/config.sub choke | `-DCMAKE_SYSTEM_PROCESSOR=aarch64`; add an arm64 case (playbook Class 6/19) |
+| **`uname -p`** | `$(shell uname -p)` / `` `uname -p` `` feeding an arch switch (**not** autoconf's `## Platform. ##` log banner, which only echoes it) | `uname -p` names **no architecture at all** on Haiku. There is no processor field in `struct utsname`; the string is the coreutils port's own, and it is `other` with the image's bootstrap coreutils and `unknown` with the 9.11 pool build. Every branch keyed on it takes its fallback. **Silent.** | re-key on `uname -m` (`arm64`), or state the answer explicitly — see #701 |
+| **tecmake word size / byte order** | a vendored `tecmake.mak`; `TEC_SYSARCH`, `TEC_BYTEORDER`, `TEC_WORDSIZE` (ftgl, cd/canvasdraw, iup, im) | tecmake's arch table knows only `i686`/`i386`/`powerpc`/`x86_64`/`amd64`/`armv7l`, and both the byte-order and the word-size test fall through to **`-DTEC_BIGENDIAN -DTEC_32`** on little-endian LP64. Measured identical for `other`, `unknown`, `arm64` **and** `aarch64` — so an `uname -p` fix does **not** reach it. **Silent.** | `make TEC_WORDSIZE=TEC_64 TEC_BYTEORDER=TEC_LITTLEENDIAN`: tecmake assigns both with a plain `=`, which a command-line variable overrides and an exported environment variable does not |
 
 The evidence behind these lives in [simd-vectorization-review.md](simd-vectorization-review.md)
 (the IFUNC hazard §2.1, the `#ifdef __i386__` app_server gap §5.1, the libjpeg-turbo
 `CPU_TYPE=other` find §6.2, and AWS's `-fsigned-char` note §1.4) and the
 [porting-playbook.md](porting-playbook.md) (Class 5 x86 flags, Class 6/19 arch naming).
+
+The last two rows are #701, and the reason they are *two* rows is that fixing the first
+does not fix the second. Where `uname -p`'s answer comes from, measured rather than
+assumed: `src/system/libroot/posix/sys/uname.c:88` already maps `B_CPU_ARM_64` to `arm64`
+and `src/system/kernel/arch/arm64/arch_system_info.cpp:142` already reports that platform,
+so `uname -m` is correct and **nothing in this tree is broken**. `-p` is not ours: POSIX has
+no processor field, and the string comes from a HaikuPorts patch to coreutils' own
+`src/uname.c` whose switch covered only `B_CPU_x86`/`B_CPU_x86_64` and answered `other` for
+everything else. The image's `coreutils-9.9_bootstrap-1-arm64.hpkg` carries exactly that
+(its `bin/uname` imports `get_cpu_topology_info` and contains the literals `other` and
+`x86_64` but not `arm64`); the pool's `coreutils-9.11-2-arm64.hpkg` carries **no** processor
+patch at all (no such import, no such literals), which answers `unknown`. HaikuPorts has
+since fixed both spellings upstream — a `B_CPU_ARM_64` case for 9.11 and a switch to
+`utsname.machine` for 9.12 — so a coreutils rebuild is what retires the first row. It is
+worth doing for CMake's sake rather than tecmake's: `CMakeDetermineSystem.cmake` reaches
+`uname -m` only through a `Linux|CYGWIN|MSYS|GNU|Android` branch, a Darwin branch and an
+OpenBSD branch, so Haiku lands in the final `else()`, which runs `uname -p` and retries with
+`uname -m` **only if `-p` exits non-zero** — and it exits zero while printing `other`. That is
+how `CMAKE_SYSTEM_PROCESSOR` becomes `other` for every cmake port here (see
+[codec-tier-arm64.md](../haikuports-patches/codec-tier-arm64.md)).
 
 ## Usage
 
@@ -69,5 +91,5 @@ otherwise. It adds no runtime dependency (headers only).
 
 ## Checklist
 
-Run `haiku-port-lint --checklist` for the current text; the checks are the six rows in
+Run `haiku-port-lint --checklist` for the current text; the checks are the eight rows in
 the table above.
