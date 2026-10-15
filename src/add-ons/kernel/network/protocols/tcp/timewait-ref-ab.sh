@@ -17,6 +17,22 @@
 # what is actually loaded, and that is the only acceptable evidence of which
 # kernel produced a result.
 #
+# THE REBOOT MUST BE A COLD BOOT (ec2 stop + start), NOT `shutdown -r`.
+# Measured 2026-10-15: `shutdown -r` over SSM boots the machine fine -- the
+# console shows a complete second boot, and ena passes traffic -- but the SSM
+# agent never re-registers. PingStatus goes ConnectionLost and stays there, so
+# the target becomes undriveable and the A/B strands after arm U with no result.
+# What is documented as proven is *cold-boot* auto-register
+# (graviton/docs/archive/go-arm64-bringup-scope.md:195), and that is what this
+# script now uses. A warm reboot is not a cheaper version of it.
+#
+# Corollary: every write must be flushed BEFORE the stop, and `sync` is not
+# enough on its own. On this build the page writer never flushes file data on a
+# timeout at all (graviton/docs/archive/ec2-stop-start.md), and /bin/sync comes
+# from the haikuports coreutils package rather than the base image, so it may
+# not even exist. Writes are therefore verified by reading the file back and
+# checksumming it before the instance is stopped, not assumed from `sync`.
+#
 # Usage:  timewait-ref-ab.sh <instance-id> <module-path> [rounds]
 
 set -e
@@ -32,6 +48,33 @@ export AWS_PROFILE
 strings "$MODULE" | grep -q 'pre-#616 code' || {
 	echo "REFUSING: $MODULE has no diagnostics compiled in." >&2
 	echo "Build it with: jam -qa -sTCP_TIME_WAIT_DIAG=1 tcp" >&2
+	exit 1
+}
+
+# A cold boot, and a wait for the agent to come back rather than a fixed sleep:
+# the whole reason this function exists is that the previous `shutdown -r` left
+# the target ConnectionLost, so "did the agent actually return" is the thing that
+# has to be asserted before any arm is measured.
+cold_boot() {
+	echo "-- stopping $INSTANCE"
+	aws ec2 stop-instances --instance-ids "$INSTANCE" >/dev/null
+	aws ec2 wait instance-stopped --instance-ids "$INSTANCE"
+	echo "-- starting $INSTANCE"
+	aws ec2 start-instances --instance-ids "$INSTANCE" >/dev/null
+	aws ec2 wait instance-running --instance-ids "$INSTANCE"
+
+	echo "-- waiting for the SSM agent to re-register"
+	n=0
+	while [ "$n" -lt 60 ]; do
+		sleep 15
+		p=$(aws ssm describe-instance-information \
+			--filters "Key=InstanceIds,Values=$INSTANCE" \
+			--query 'InstanceInformationList[0].PingStatus' --output text 2>/dev/null)
+		[ "$p" = "Online" ] && { echo "-- agent Online after $((n * 15))s"; return 0; }
+		n=$((n + 1))
+	done
+	echo "FATAL: agent did not come back Online within 15 minutes." >&2
+	echo "       Do not interpret any later output as a measurement." >&2
 	exit 1
 }
 
@@ -75,8 +118,10 @@ report_counters() {
 }
 
 echo "=============== ARM U: packaged module, no override (pre-#657) ==========="
-ssm "[\"test -e $OVERRIDE && mv $OVERRIDE /boot/home/tcp-override.saved || true\",\"sync\",\"shutdown -r\"]" >/dev/null || true
-sleep 120
+# Move the override aside and PROVE it is gone before the stop, so a lost write
+# cannot be mistaken for arm U having run.
+ssm "[\"test -e $OVERRIDE && mv $OVERRIDE /boot/home/tcp-override.saved || true\",\"sync 2>/dev/null || true\",\"test -e $OVERRIDE && echo OVERRIDE-STILL-PRESENT || echo OVERRIDE-MOVED-ASIDE\"]"
+cold_boot
 report_loaded
 run_harness
 report_counters
@@ -86,13 +131,20 @@ echo "      the module cannot count -- judge arm U by whether it survived."
 echo "=============== ARM F: this branch, diagnostics on ======================="
 B64=$(base64 -w0 "$MODULE")
 # SSM caps a parameter, so the module goes over in chunks and is reassembled
-# and checksummed on the far side.
+# and checksummed on the far side. Truncate first: the chunks are APPENDED, so a
+# leftover tcp.b64 from an interrupted run would silently prepend itself and the
+# module would decode to garbage.
+ssm '["rm -f /boot/home/tcp.b64 /boot/home/tcp.new"]' >/dev/null
 echo "$B64" | fold -w 40000 | while read -r chunk; do
 	ssm "[\"echo -n '$chunk' >> /boot/home/tcp.b64\"]" >/dev/null
 done
-ssm "[\"base64 -d /boot/home/tcp.b64 > /boot/home/tcp.new\",\"rm -f /boot/home/tcp.b64\",\"sha256sum /boot/home/tcp.new\",\"mkdir -p $(dirname $OVERRIDE)\",\"cp /boot/home/tcp.new $OVERRIDE\",\"chmod 755 $OVERRIDE\",\"sync\",\"shutdown -r\"]" >/dev/null || true
+# Read the installed module back and checksum it BEFORE the stop. `sync` is not
+# trustworthy here (see the header), so the checksum is the flush evidence.
 echo "expected sha256: $(sha256sum "$MODULE" | cut -d' ' -f1)"
-sleep 120
+ssm "[\"base64 -d /boot/home/tcp.b64 > /boot/home/tcp.new\",\"rm -f /boot/home/tcp.b64\",\"mkdir -p $(dirname $OVERRIDE)\",\"cp /boot/home/tcp.new $OVERRIDE\",\"chmod 755 $OVERRIDE\",\"sync 2>/dev/null || true\",\"echo INSTALLED:\",\"sha256sum $OVERRIDE\"]"
+echo "^^ the sha above MUST equal the expected sha. If it does not, stop here:"
+echo "   arm F would measure whatever module is actually on disk, not this one."
+cold_boot
 report_loaded
 run_harness
 report_counters
