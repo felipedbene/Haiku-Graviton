@@ -22,7 +22,7 @@ The charter, verbatim from §10:
 | **What is queued** | whole framed `RP` messages, never bytes |
 | **Where** | `RemoteFlowQueue`, inside `RemoteWireWriter`, **upstream of the compressor** |
 | **When it engages** | when the send ring has no reader, or less free space than the message plus one staging buffer |
-| **Bound** | **32768 messages** and **4 MiB of stream**, whichever is reached first, plus at most one oversized message; on a compressed connection with a reader the byte bound is scaled to plain bytes by the measured ratio, up to a **32 MiB** plain ceiling |
+| **Bound** | **32768 messages**, and the smaller of **4 MiB of stream** and **2 s of stream** at the rate the link is measured to drain, whichever is reached first, plus at most one oversized message, never below a **256 KiB** floor (so below roughly 1 Mbit/s the bound is a constant again); on any connection with a reader the byte bound is scaled to plain bytes by the measured compression ratio — 1 on an uncompressed one, where a plain byte *is* a stream byte — up to a **32 MiB** plain ceiling |
 | **At the bound** | coalesce → supersede → collapse, in that order |
 | **Coalesce** | an `RP_SET_*` / `RP_CONSTRAIN_CLIPPING_REGION` / `RP_MOVE_CURSOR_TO` that a later message in the same frame, from the same emitter, for the same token, sets again with nothing in between that could have observed it |
 | **Supersede** | a whole frame, if it is closed, contains nothing but pure pixel producers, declares a non-empty damage region, has no surface-reading op after it anywhere in the queue, and its damage is covered by the union of the damage of the later frames that will be kept |
@@ -294,6 +294,35 @@ unchanged. `_CanDeliver()` deliberately still compares plain length against ring
 space: it is the only static upper bound, and the guarantee it buys is that a
 delivered message never waits in `Write()` with the writer lock held.
 
+**4 MiB of stream is not a fixed amount of latency, either.** A byte bound is
+still the wrong unit for a link whose rate nobody knows in advance: the same
+4 MiB is 1.3 s of a 25 Mbit/s connection and 34 s of a 1 Mbit/s one, and 34 s
+behind is not "a frame behind", it is a desktop showing what the user did half a
+minute ago — which an `RP_RESYNC` and a repaint (~32 kB, one cold first paint)
+would have corrected in a fraction of the time the backlog itself needs to
+drain. So the bound is also stated in time: `RemoteFlowQueue::StreamBoundFor()`
+is `ByteBoundFor()` with its constant 4 MiB of stream replaced by what the
+measured rate says `kMaxQueuedStreamTime` (2 s) of stream is, and the smaller of
+the two is what the queue enforces. The ladder at the bound does not change.
+
+The rate is measured by `RemoteWireWriter::_DrainRate()` across the *backlog*,
+not across the connection: the queue holds nothing until the ring could not take
+a message whole, so the interval since the queue stopped being empty is an
+interval in which the link, not the desktop, set the pace. An average over the
+whole connection would divide by every idle second of an interactive session and
+read a fast client as a slow one — and it is a *slow* rate that tightens the
+bound. Three properties keep it safe in the other direction: the bound is
+clamped at 4 MiB of stream, so a link carrying more than 2 MB/s (16 Mbit/s) is
+left exactly where it was and a fast client cannot be made to collapse by this
+at all; it is floored at `kMinStreamBound` (256 KiB, eight cold first paints),
+so the repair a collapse forces never costs more than about an eighth of the
+stream it replaces and a link of a few kB/s cannot thrash the ladder; and a
+backlog shorter than 100 ms yields no rate at all, because over a shorter
+interval it is the ring's slack rather than the link that is being measured.
+Zero progress is not this bound's business — `kSendStallTimeout` (15 s) ends
+that — this one is for the client that is moving, slowly.
+`REMOTE_WIRE_STREAM_WINDOW=0` disables it, which is the control arm of the A/B.
+
 **A single message is never split to fit.** If one message is larger than the
 whole bound, the queue collapses and then holds that one message alone, so the
 effective bound is "4 MiB plus one message". A larger bound is a cost; a split
@@ -359,8 +388,8 @@ off-target with a host compiler. Flow control that can only be exercised by
 booting an image is flow control nobody tests.
 
 ```
-src/tests/servers/app/remote_flow_queue/run.sh            -> PASS  90 checks, 0 failures
-src/tests/servers/app/remote_flow_queue/mutation_test.sh  -> mutants killed 16, survived 0
+src/tests/servers/app/remote_flow_queue/run.sh            -> PASS  106 checks, 0 failures
+src/tests/servers/app/remote_flow_queue/mutation_test.sh  -> mutants killed 20, survived 0
 ```
 
 The test includes the awkward cases by name: overflow with a frame left open,
@@ -390,6 +419,10 @@ at a time in a throwaway copy and requires the suite to go red:
 | `frames-not-per-emitter` | frames become a stream property | 2 checks |
 | `drop-frame-without-damage` | a frame with no declared damage becomes coverable (**two** guards, mutated together, because either alone is masked by the other) | 2 checks |
 | `trust-fractional-damage` | non-integral edges enter inclusive-edge arithmetic | 1 check |
+| `rate-bound-ignores-the-rate` | the seconds-of-stream bound is the constant byte bound under another name | 6 checks |
+| `rate-bound-without-floor` | a few-kB/s link is bounded below the replay a collapse forces | 3 checks |
+| `rate-bound-may-loosen` | a measured rate is allowed to hold *more* stream than 4 MiB, so a fast client could collapse | 1 check |
+| `rate-bound-ignores-a-disabled-window` | `REMOTE_WIRE_STREAM_WINDOW=0` stops disabling the rate bound (**two** guards, mutated together: on arm64 `udiv` by zero yields 0 rather than trapping, so the second guard masks the first) | 2 checks |
 
 The "no partial message" instrument is a framing walker with **three positive
 controls of its own**: it must reject a stream truncated by one byte, a header
@@ -547,5 +580,5 @@ sshd back. **That leg is owed.**
 | `.../RemoteWireWriter.{h,cpp}` | engagement, drain, and the resync debt; the queue lives here, upstream of the compressor |
 | `.../RemoteHWInterface.{h,cpp}` | `RP_CAP_FRAME_BOUNDARY` negotiation, `RP_TIER_END_FRAME` emission, the event-thread repair |
 | `.../StreamingRingBuffer.{h,cpp}` | `FreeSpace()`, `BufferSize()`, `HasReader()` — so a caller can ask "will this whole message fit" before starting to write it |
-| `src/tests/servers/app/remote_flow_queue/` | `run.sh` (78 checks), `mutation_test.sh` (12 mutants), `mutate.py` |
+| `src/tests/servers/app/remote_flow_queue/` | `run.sh` (106 checks), `mutation_test.sh` (20 mutants), `mutate.py` |
 | `graviton/scripts/rdcapture.py` | `--frame-boundary`, `--starve-after`, boundary/sequence-gap census, 7 new selftest checks with a mutation arm |

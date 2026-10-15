@@ -301,18 +301,60 @@ op_is_mode_independent(uint16 code)
 /*static*/ size_t
 RemoteFlowQueue::ByteBoundFor(uint64 plainBytes, uint64 wireBytes)
 {
+	return _ScaleToPlain(kMaxBytes, plainBytes, wireBytes);
+}
+
+
+/*static*/ size_t
+RemoteFlowQueue::StreamBoundFor(uint64 plainBytes, uint64 wireBytes,
+	uint64 wireBytesPerSecond, bigtime_t window)
+{
+	// No rate measured, or the rate bound switched off: the constant bound
+	// stands alone, exactly as it did before this existed.
+	if (wireBytesPerSecond == 0 || window <= 0)
+		return ByteBoundFor(plainBytes, wireBytes);
+
+	// A link that carries the whole constant bound within the window is the
+	// fastest one this can tell anything about; above it the rate bound could
+	// only loosen, which it may not. Short-circuiting there also bounds the
+	// multiplication below to kMaxBytes * 1000000, so it cannot overflow for
+	// any rate a caller can measure.
+	const uint64 ceilingRate = (uint64)kMaxBytes * 1000000 / (uint64)window;
+	if (wireBytesPerSecond >= ceilingRate)
+		return ByteBoundFor(plainBytes, wireBytes);
+
+	uint64 wireBound = wireBytesPerSecond * (uint64)window / 1000000;
+	if (wireBound < kMinStreamBound)
+		wireBound = kMinStreamBound;
+
+	return _ScaleToPlain((size_t)wireBound, plainBytes, wireBytes);
+}
+
+
+/*!	Restates \a wireBound, a bound on bytes of stream, as a bound on the
+	plain bytes this queue actually holds, for a connection on which \a
+	plainBytes of messages became \a wireBytes on the ring.
+*/
+/*static*/ size_t
+RemoteFlowQueue::_ScaleToPlain(size_t wireBound, uint64 plainBytes,
+	uint64 wireBytes)
+{
+	if (wireBound == 0)
+		return 0;
+
 	// Nothing measured yet, or a stream that did not shrink: a plain byte is a
 	// stream byte.
 	if (wireBytes == 0 || plainBytes <= wireBytes)
-		return kMaxBytes;
+		return wireBound;
 
-	// Divide first. kMaxBytes * plainBytes overflows 64 bits after 4 TiB, and
-	// a floored ratio only ever errs towards the smaller, original bound.
+	// Divide first. wireBound * plainBytes overflows 64 bits for a plain count
+	// a long session really reaches, and a floored ratio only ever errs towards
+	// the smaller, unscaled bound.
 	const uint64 ratio = plainBytes / wireBytes;
-	if (ratio >= kMaxPlainBytes / kMaxBytes)
+	if (ratio >= kMaxPlainBytes / wireBound)
 		return kMaxPlainBytes;
 
-	return kMaxBytes * (size_t)ratio;
+	return wireBound * (size_t)ratio;
 }
 
 
