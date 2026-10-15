@@ -16,6 +16,30 @@ index 76636afe95..15a207085b 100644
  endif()
  
  add_custom_target(lint-shell-scripts
+diff --git a/Libraries/LibCompositing/CMakeLists.txt b/Libraries/LibCompositing/CMakeLists.txt
+--- a/Libraries/LibCompositing/CMakeLists.txt
++++ b/Libraries/LibCompositing/CMakeLists.txt
+@@ -56,6 +56,20 @@
+ test_rust_crate(MANIFEST_PATH Rust/Cargo.toml CRATE_NAME libcompositing_rust)
+
+ ladybird_lib(LibCompositing compositing EXPLICIT_SYMBOL_EXPORT)
++
++# WebGL/WebGLCommandList.cpp includes the generated WebGLCommands.h, which in turn includes
++# the generated <LibCompositing/WebGL/GLFunctions.h> (emitted by
++# Meta/Generators/generate_libweb_webgl_commands.py). That second header is NOT in this
++# library's GENERATED_SOURCES: GLFunctions.cpp is deliberately compiled into the Compositor
++# instead (Services/Compositor/CMakeLists.txt), so ladybird_generated_sources() never emits
++# an edge to the generate_GLFunctions.cpp target, and nothing else in the tree asks for it.
++# A build that does not also link compositorservice therefore never runs the generator at
++# all and fails with "LibCompositing/WebGL/GLFunctions.h: No such file or directory" --
++# `ninja WebContent WebDriver`, the headless render path, is exactly such a build. Depend on
++# the generator target directly; this has to come after ladybird_lib(), which is what
++# creates the LibCompositing target.
++add_dependencies(LibCompositing generate_GLFunctions.cpp)
++
+ target_link_libraries(LibCompositing PUBLIC LibWebCommon)
+ target_link_libraries(LibCompositing PRIVATE LibCore LibGfx LibIPC LibMedia LibThreading skia libcompositing_rust)
+
 diff --git a/Libraries/LibCore/Environment.cpp b/Libraries/LibCore/Environment.cpp
 index 38971f21d0..fc8b83f0c4 100644
 --- a/Libraries/LibCore/Environment.cpp
