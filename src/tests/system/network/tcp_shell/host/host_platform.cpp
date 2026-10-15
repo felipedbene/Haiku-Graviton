@@ -36,6 +36,7 @@
 #include <user_thread.h>
 
 #include <errno.h>
+#include <execinfo.h>
 #include <pthread.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -790,10 +791,23 @@ get_driver_boolean_parameter(void* handle, const char* key, bool unknownValue,
 }
 
 
+/*!	Where a panic or a failed ASSERT ends up.
+
+	The stack trace is printed here rather than left to a debugger, because the
+	failures worth having a host build for are the rare ones: an assertion that
+	fires in one run out of twenty does not survive being run under gdb, whose
+	slowdown is enough to lose the race. Printing on the way out means a single
+	loop of runs is enough to identify one.
+*/
 void
 debugger(const char* message)
 {
 	fprintf(stderr, "tcp_shell: debugger(): %s\n", message);
+
+	void* frames[32];
+	int count = backtrace(frames, 32);
+	backtrace_symbols_fd(frames, count, fileno(stderr));
+
 	abort();
 }
 

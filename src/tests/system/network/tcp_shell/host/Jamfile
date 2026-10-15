@@ -126,3 +126,5 @@ BuildPlatformTest <build>tcp_shell : $(hostSources) ;
 
 LinkAgainst <build>tcp_shell : $(HOST_LIBSUPC++) $(HOST_LIBSTDC++) ;
 LINKFLAGS on <build>tcp_shell += -pthread ;
+	# -rdynamic so the stack trace debugger() prints carries function names
+LINKFLAGS on <build>tcp_shell += -rdynamic ;
