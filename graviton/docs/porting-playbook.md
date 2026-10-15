@@ -1376,13 +1376,99 @@ with `[-fpermissive]`. Pre-standard C++ allowed an implicit conversion the curre
 does not, and gcc reports it as an error while naming the flag that restores the old
 behaviour. Arch-independent — this class would look identical on x86.
 
-**Symptom:**
+**Symptom** (qemacs, transcribed from an arm64 compile — note the *first* error, which the
+one-line excerpt in the earlier version of this section hid):
 ```
+qe.h:100:36: error: 'void*' is not a pointer-to-object type
+  100 | #define qe_free(pp)    do { typeof(**(pp)) **__ = (pp); (free)(*__); *__ = NULL; } while (0)
+haiku.cpp:332:5: note: in expansion of macro 'qe_free'
+  332 |     qe_free(&s->priv_data);
 haiku.cpp:332:13: error: invalid conversion from 'void**' to 'int**' [-fpermissive]
 ```
 
-**Fix.** Fix the conversion at the call site (correct), or add `-fpermissive` to the
-recipe's `CXXFLAGS` as a class-wide unblock.
+**Fix. Fix the conversion at the call site. There is no class-wide `CXXFLAGS` unblock** —
+this section used to prescribe one, and triaging the four held ports (#592) found it does
+not exist. `auto_recoverable` is therefore **False** for this class, for the same reason as
+Class 12: recoverable in principle, per-port judgement in practice.
+
+### The measured triage (#592)
+
+Every translation unit of all four ports was swept with **this tree's own arm64 cross
+`aarch64-unknown-haiku-g++` 13.3.0** against `headers/os` + `headers/posix`, strict and
+with `-fpermissive`. **The headline: zero `loses precision` diagnostics anywhere, in any
+sweep, in any of the four ports.** The precision fear that held these recipes is not
+realised — but the flag is still the wrong remedy, for unrelated reasons.
+
+| Port | class-35 site | Diagnostic | Precision risk | Verdict |
+|---|---|---|---|---|
+| `ftgl-2.1.5` | **none** | — | none | Not a class-35 port at all. 30/30 TUs compile **strict-clean**. |
+| `gri-2.12.23` | `src/query.cc:59` `def_word[0] = '\0';` | `invalid conversion from 'char' to 'char*'` | none — a null-pointer-constant conversion, value-preserving and identical on ILP32 and LP64 | Benign older-C++ diagnostic. One-line source fix (`= NULL`) beats the flag. |
+| `qemacs-0.4.1~pre20170225` | `haiku.cpp:332` `qe_free(&s->priv_data);` | `invalid conversion from 'void**' to 'int**'`, **cascading from** `qe.h:100:36: error: 'void*' is not a pointer-to-object type` | none (both 64-bit pointers) | **`-fpermissive` does not fix qemacs.** Needs a source fix. |
+| `rssavers-0.2` | `src/util/arguments.cpp:63,65,98,130` (decl `include/util/arguments.h:39`) | `invalid conversion from 'std::ios_base& (*)(std::ios_base&)' to 'std::ios& (*)(std::ios&)'` | none — function pointers, same width on every arch | Benign type, but UB if forced through. One-line header fix. |
+
+**Why the `CXXFLAGS` unblock is a fiction, port by port** — this is the part worth reading
+before writing any `-fpermissive` recipe (and it answers #592's third "done when"):
+
+- **`ftgl`** builds with **tecmake**, whose `tecmake.mak` does
+  `CXXFLAGS = $(CPPFLAGS) $(STDFLAGS) $(INCLUDES) $(STDINCS) $(PKGINCS) $(EXTRAINCS)
+  $(DEFINES) $(STDDEFS)` — a plain `=`, so a makefile assignment that **overrides the
+  environment**. `export CXXFLAGS=-fpermissive` is a no-op; `make CXXFLAGS=…` does reach
+  the compiler and **wipes every include path and define with it**. tecmake's C++ user-flag
+  slot is `CPPFLAGS` (and `FLAGS` for C).
+- **`qemacs`** compiles its only C++ TU with `g++ $(DEFINES) $(CFLAGS)` (`Makefile:343`);
+  `CXXFLAGS` appears nowhere in the build. And the flag would not help if it arrived: the
+  **primary** error is `'void*' is not a pointer-to-object type` from `qe_free`'s
+  `typeof(**(pp))`, which is not a `-fpermissive`-family diagnostic. Measured: strict = 2
+  errors, `-fpermissive` = **1 error remains**.
+- **`rssavers`** hardcodes `COMPILE = gcc $(INCLUDE) -O3` / `CFLAGS = -O3 … $(INCLUDE)`
+  with plain `=` in every subdir `Makefile` and never mentions `CXXFLAGS`.
+- **`gri`** is the only port the flag reaches. It carries a second, independent arm64
+  hazard: its bundled `config.guess` is `timestamp='2009-12-30'` and contains **no
+  `aarch64` or `arm64` case at all**, so `./configure` dies with
+  `configure: error: cannot guess build type; you must specify one` — **measured on
+  aarch64 Linux**. The recipe already routes through `runConfigure`, which supplies
+  `--host=aarch64-unknown-haiku` but **not** `--build`, and autoconf derives `build` from
+  `config.guess` regardless, so **expect Class 6 on the native builder too** (Haiku's
+  `uname -m` says `arm64`, which that vintage knows even less). Not confirmed natively, so
+  the in-tree recipe pre-empts it with the house Class 6 fix (replace `config.guess` on
+  arm64); the bundled `config.sub` (2010-01-22) does accept `aarch64-unknown-haiku`, which
+  is why replacing only `config.guess` is enough — verified by running the bundled script.
+
+**The per-port source fixes, all verified to compile.** Each was applied and re-swept
+**with no `-fpermissive` at all**:
+
+- `gri`: `src/query.cc:59` → `def_word[0] = NULL;` (`def_word` is `char *[]`, so `'\0'` was
+  a stray). Strict rebuild: 0 errors, 0 diagnostics, 72 objects, `src/gri` links.
+- `qemacs`: `haiku.cpp:332` → `(free)(s->priv_data); s->priv_data = NULL;` — the macro
+  expanded by hand, with `free` parenthesised because `qe.h` does
+  `#define free do_not_use_free`. Plus `haiku.cpp:230` → `(void *)(addr_t)find_thread(NULL)`.
+  Strict: **0 errors**; only 6 `[-Wnarrowing]` warnings remain (`haiku.cpp:643/752`,
+  independently confirming Class 27's qemacs note).
+- `rssavers`: `include/util/arguments.h:39` → `std::ios_base& (*f)(std::ios_base&))` —
+  which is the actual type of `std::hex`/`std::dec`/`std::oct`. Strict: 0 invalid
+  conversions.
+
+**What is landed, and what is still held.** `gri-2.12.23.recipe` and
+`qemacs-0.4.1~pre20170225.recipe` are in `graviton/haikuports-patches/recipes/` with the
+seds above (gri also carries the Class 6 `config.guess` replacement); see that directory's
+README for each one's exact verification status. **`ftgl` needs no recipe change at all** —
+re-wave it unchanged and read the real failure, because the class-35 filing was wrong about
+it. **`rssavers` stays held**: the header fix is one line, but `Microcosm/extensions.cpp`
+then fails with 36 errors that have nothing to do with class 35 (below), so a recipe would
+not build and listing it would repeat #560.
+
+**Verification honesty.** These are **cross-compile sweeps** (`-fsyntax-only`/`-c`) with the
+Haiku arm64 compiler plus one complete **aarch64 Linux** build-and-link of `gri` (gcc 14.2,
+72 objects, aarch64 ELF). **No native `haikuporter` build was run** for any of the four — the
+session's AWS credentials had expired and refreshing them is interactive — so #592's first
+"done when" is not satisfied and none of these may be listed in `landed-fixes.json` yet.
+Two known gaps in the sweep: `rssavers`'
+`rsHaikuScreenSaver.cpp` was never compiled (it needs mesa's `GLView.h`, which is not in
+this tree), and `rssavers`' `Microcosm/extensions.cpp` produces **36 errors unrelated to
+class 35** — `glXGetProcAddressARB` (Haiku has no GLX), ARB entry points declared as
+functions by a modern `glext.h` under `-DGL_GLEXT_PROTOTYPES` colliding with the
+`extern PFNGL…PROC` variables, and a missing `<string.h>`. The Haiku patchset never touched
+that file.
 
 **Two things this class deliberately does NOT claim, and they are the interesting part.**
 
@@ -1397,7 +1483,9 @@ recipe's `CXXFLAGS` as a class-wide unblock.
    prescribe the fix that is already applied. `nogravity` (Class 22) matches it too, with a
    third diagnostic ("expression list treated as compound expression in initializer").
 
-**Example ports:** bebuilder, ftgl, gri, qemacs, rssavers.
+**Example ports:** bebuilder, ftgl, gri, qemacs, rssavers. The last four are the #592 set
+triaged above; **`bebuilder` was not triaged** — it is the one class-35 port whose
+diagnostic has only been read, never reproduced.
 
 ---
 

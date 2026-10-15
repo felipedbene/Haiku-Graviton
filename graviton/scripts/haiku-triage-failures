@@ -40,6 +40,12 @@ It is False where "recoverable in principle" hides a per-port judgement call:
     gate (fetch, sha256, extract, verify version), and the egress-blocked subset
     (Cloudflare challenge / unreachable port) is "Not fixable by recipe" at all.
     So class 12 is False with a note: it needs per-port work, not a blind re-wave.
+  * Class 35 (`invalid conversion ... [-fpermissive]`) -- was True on the strength of
+    "add -fpermissive to the recipe's CXXFLAGS". Triaging the four held ports (#592)
+    found that three of them have no CXXFLAGS lever at all (ftgl's tecmake re-assigns
+    it, qemacs' and rssavers' Makefiles never read it) and that qemacs' primary error
+    is not even a -fpermissive diagnostic. The signature is right, the template was
+    not, so class 35 is now False -- see its rule comment for the per-port evidence.
 Never silently bucket an UNMATCHED log as recoverable: UNMATCHED and NO_LOG are
 always counted as not-auto-recoverable, and UNMATCHED logs are dumped (with
 --dump-unmatched) so the ruleset can be extended rather than guessed at.
@@ -609,12 +615,35 @@ RULES = [
     # would COMPILE it and silently truncate every pointer. An auto_recoverable=True class
     # whose template corrupts the package is worse than no class, so muscle stays on the
     # per-port frontier (and at 1 port it earns no class anyway).
-    (35, "class-35-invalid-conversion--fpermissive", True,
+    #
+    # AND auto_recoverable IS False (#592), demoted from True. The class signature is
+    # sound -- the diagnostic is real and benign on arm64, measured: across every TU of
+    # all four held ports, swept with this tree's own arm64 cross g++ 13.3, there is not
+    # one `loses precision`. What is NOT sound is the "add -fpermissive to CXXFLAGS"
+    # TEMPLATE, which is what auto_recoverable claims exists:
+    #   * ftgl    -- has no class-35 site at all (30/30 TUs compile strict-clean), and
+    #                tecmake.mak re-assigns CXXFLAGS with plain `=`, so the recipe cannot
+    #                set it anyway; CPPFLAGS is tecmake's C++ user-flag slot.
+    #   * qemacs  -- its Makefile compiles the one C++ TU with $(CFLAGS) and never
+    #                mentions CXXFLAGS, and the primary error (`'void*' is not a
+    #                pointer-to-object type`, from qe_free's typeof macro) is not a
+    #                -fpermissive-family diagnostic, so the flag does not clear it.
+    #   * rssavers -- every subdir Makefile hardcodes `COMPILE = gcc ... -O3` /
+    #                `CFLAGS = -O3 ...` with plain `=` and never mentions CXXFLAGS.
+    #   * gri     -- the only one the flag reaches, and it still needs a config.guess
+    #                arm64 fix (its 2009 config.guess rejects aarch64) before any compile.
+    # So this is class 12's situation, not class 15's: recoverable in principle, per-port
+    # judgement in practice. Each port's one-line source fix is in the playbook's Class 35
+    # section. DO NOT extend this to gcc's `loses precision [-fpermissive]`: that is a
+    # 64-bit pointer truncation and -fpermissive would hide it (see muscle).
+    (35, "class-35-invalid-conversion--fpermissive", False,
      _rx(r"error: invalid conversion from [^\n]*\[-fpermissive\]"),
-     "Fix the conversion at the call site (the correct fix), or -- as a class-wide unblock "
-     "-- add -fpermissive to the recipe's CXXFLAGS. Arch-independent. DO NOT extend this "
-     "to gcc's `loses precision [-fpermissive]`: that is a 64-bit pointer truncation and "
-     "-fpermissive would hide it (see muscle)."),
+     "Fix the conversion at the call site -- the only remedy that works across the class. "
+     "Benign on arm64 (no `loses precision` in any of the four ports, measured #592), but "
+     "there is NO class-wide CXXFLAGS unblock: ftgl/qemacs/rssavers build systems never "
+     "read CXXFLAGS, and qemacs' primary error is not a -fpermissive diagnostic. Per-port "
+     "fixes: playbook Class 35. DO NOT extend this to `loses precision [-fpermissive]`: "
+     "that is a 64-bit pointer truncation and -fpermissive would hide it (see muscle)."),
 
     # 32 -- Linux-only CPU-affinity / cpuset API (#488). glibc's sched_setaffinity
     # helpers (CPU_ALLOC, CPU_ISSET_S, CPU_*_S) have no Haiku equivalent, so the port

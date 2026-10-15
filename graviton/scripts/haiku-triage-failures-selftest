@@ -405,9 +405,21 @@ Validating checksum of chmlib-0.40.tar.gz
 chm_lib.c:179:2: error: #error "Please define the sized types for your platform in chm_lib.c"
 make: *** [Makefile:40: chm_lib.o] Error 1""", cat="dev-libs")
 
-# 35. qemacs: an implicit conversion pre-standard C++ allowed.
-FPERMISSIVE_CONVERSION = fx("qemacs", """haiku.cpp:332:13: error: invalid conversion from 'void**' to 'int**' [-fpermissive]
-  332 |   get_clipboard(&data, &len);
+# 35. qemacs: an implicit conversion pre-standard C++ allowed. TRANSCRIBED from a real
+# compile of qemacs-0.4.1~pre20170225's haiku.cpp with this tree's arm64 cross g++ 13.3
+# (#592) -- the earlier fixture quoted `get_clipboard(&data, &len)`, a line that exists
+# nowhere in qemacs, which made the class look like a plain call-site conversion. It is
+# not: the invalid conversion is the SECOND error, a cascade from qe_free's `typeof(**pp)`
+# macro on a `void *` member, and that first error is not a -fpermissive diagnostic -- it
+# survives the flag. Keeping both errors here is what keeps class 35's note honest.
+FPERMISSIVE_CONVERSION = fx("qemacs", """In file included from haiku.cpp:24:
+haiku.cpp: In function 'void haiku_close(QEditScreen*)':
+qe.h:100:36: error: 'void*' is not a pointer-to-object type
+  100 | #define qe_free(pp)    do { typeof(**(pp)) **__ = (pp); (free)(*__); *__ = NULL; } while (0)
+haiku.cpp:332:5: note: in expansion of macro 'qe_free'
+  332 |     qe_free(&s->priv_data);
+haiku.cpp:332:13: error: invalid conversion from 'void**' to 'int**' [-fpermissive]
+  332 |     qe_free(&s->priv_data);
 make: *** [Makefile:222: haiku.o] Error 1""", cat="app-editors")
 
 # deeperpeople matches a BARE `[-fpermissive]` fourteen times, and every one is a g++
