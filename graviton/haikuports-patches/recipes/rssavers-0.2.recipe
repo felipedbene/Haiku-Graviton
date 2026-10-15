@@ -1,0 +1,103 @@
+SUMMARY="Really Slick Screen Savers"
+DESCRIPTION="The Really Slick Screen Savers are a set of, as the name implies,\
+really slick screen savers! Originally made for Windows, these have been ported\
+ to Linux and Haiku too!"
+HOMEPAGE="http://reallyslick.com/screensavers/"
+COPYRIGHT="1999-2010  Terence M. Welsh\
+2014 Puck Meerburg (Haiku part)"
+LICENSE="GNU GPL v2"
+REVISION="3"
+SOURCE_URI="http://downloads.sourceforge.net/rssavers/rssavers-0.2.src.tar.gz"
+CHECKSUM_SHA256="be58390ea092ffe4ccecf827b04f5e99a1be5be12eaf5266a415fadb01ea4f24"
+PATCHES="rssavers-0.2.patchset"
+
+ARCHITECTURES="all !x86_64"
+
+PROVIDES="
+	rssavers = $portVersion
+	addon:Flocks = $portVersion
+	addon:Flux = $portVersion
+	addon:Hyperspace = $portVersion
+	addon:Microcosm = $portVersion
+	addon:Plasma = $portVersion
+	"
+REQUIRES="
+	haiku
+	lib:libgl
+	lib:libglu
+	"
+
+BUILD_REQUIRES="
+	haiku_devel
+	"
+BUILD_PREREQUIRES="
+	cmd:gcc
+	cmd:make
+	devel:libgl
+	devel:libglu
+	"
+
+BUILD()
+{
+	# Class 35 (#592). `from_string()` takes a stream-manipulator function
+	# pointer and declares it `std::ios& (*f)(std::ios&)`, but the real type of
+	# `std::hex` / `std::dec` is `std::ios_base& (*)(std::ios_base&)`, so every
+	# call site is an invalid conversion -- measured on the native arm64
+	# builder at `src/util/arguments.cpp:63`, `:65`, `:98` and `:130`:
+	#
+	#   error: invalid conversion from 'std::ios_base& (*)(std::ios_base&)'
+	#     to 'std::ios& (*)(std::ios&)' [-fpermissive]
+	#
+	# NOT a precision bug -- these are function pointers, the same width on
+	# every architecture, and the full native build log contains ZERO
+	# `loses precision`. But it must not be forced through with the flag
+	# either: `-fpermissive` would compile a call through a function pointer
+	# whose type does not match the function, which is undefined behaviour.
+	# `std::ios` is `std::basic_ios<char>`, a *derived* class of
+	# `std::ios_base`, so the two signatures do not even agree on the
+	# this-pointer adjustment the argument needs. Retyping the one parameter
+	# to the manipulators' actual type is the whole fix.
+	#
+	# The flag is unreachable here anyway: every `src/*/Makefile` hardcodes
+	# `COMPILE = gcc $(INCLUDE) -O3` with a plain `=` and never reads CXXFLAGS.
+	sed -i 's|std::ios& (\*f)(std::ios&))|std::ios_base\& (*f)(std::ios_base\&))|' \
+		include/util/arguments.h
+	grep -q 'std::ios_base& (\*f)(std::ios_base&)' include/util/arguments.h \
+		|| { echo "rssavers: arguments.h manipulator retype did not apply" >&2; exit 1; }
+
+	cd src
+	cd rsHaikuScreenSaver
+	make
+	cd ../rsMath
+	make
+	cd ../rsText
+	make
+	cd ../Rgbhsl
+	make
+	cd ../Implicit
+	make
+
+	cd ../Flocks
+	make
+
+	cd ../Flux
+	make
+
+	#cd ../Hyperspace # For some reason this won't run
+	#make
+
+	cd ../Microcosm
+	make
+
+	cd ../Plasma
+	make
+
+	cd ..
+}
+
+INSTALL()
+{
+	mkdir -p $addOnsDir/Screen\ Savers
+	cd bin
+	cp flocks flux microcosm plasma $addOnsDir/Screen\ Savers
+}
