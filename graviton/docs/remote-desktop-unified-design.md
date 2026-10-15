@@ -171,7 +171,19 @@ timestamp** (u64 µs, server monotonic, epoch = `RP_HELLO`):
 | `RP_CODEC_TILE` | one encoded rect | `rect`, `codec:u16`, `flags:u16` (keyframe/delta), `pts:u64`, `bytes:string` |
 | `RP_TIER_END_FRAME` | frame close | `frame_seq:u32` |
 | `RP_AUDIO_PACKET` | audio | `codec:u16` (Opus), `pts:u64`, `bytes:string` |
-| `RP_FRAME_ACK` | client→server pacing | `frame_seq:u32`, `decode_ms:u16`, `queue_depth:u8` |
+| `RP_FRAME_ACK` | client→server pacing | `frame_seq:u32`, `decode_ms:u16`, `queue_depth:u8`, `held_ms:u16` |
+
+`held_ms` is the client's whole residency for that frame — last byte in to ack out,
+`decode_ms` included — and the server subtracts it (and only it) to recover the link
+delay: an ack timed by the server alone measures the client's scheduler as much as
+the network, and a backgrounded browser tab with its timers clamped to 1 s would
+otherwise report a 1 s LAN. Backpressure is counted in **frames actually sent and
+unacked**, never in frame-id distance: capture here is damage-gated, so a still
+screen sends nothing, ids are also consumed by frames whose bytes the flow queue
+superseded (and which are therefore never acked themselves), and the id sequence
+runs for the life of the interface rather than restarting per connection — a
+client that attaches at id 50000 is 50000 ids away from a "frame 0" it never saw.
+See `RemoteAckEstimator`.
 
 Codec ids: `0` raw BGRA, `1` JPEG (still/near-lossless), `2` x264, `3` x265,
 `4` AV1, `5` VP8, `6` VP9, plus Opus for audio. Ids `2`/`3` are reachable only
@@ -322,11 +334,14 @@ client rasterises). Levers below are ours, measured here unless noted.
   general compute lever the encoder inherits; SVE is now safe at EL0 (#88) but
   must be vector-length-agnostic and per-generation (the `_g3`/`_g4` flavour
   pattern), so encode kernels either stay NEON or ship per-generation.
-- **This decision is recorded ahead of its implementation.** Tier P does not exist
-  yet: `src/servers/app/drawing/interface/remote/RemoteProtocol.h:259-283` reserves
-  `RP_TIER_BEGIN_FRAME`, `RP_CODEC_TILE`, `RP_TIER_END_FRAME`, `RP_AUDIO_PACKET`
-  and `RP_FRAME_ACK` and marks the block "Not implemented yet". Nothing above
-  claims an encoder has been wired up or measured. It fixes *which* encoder the
+- **This decision is recorded ahead of its implementation.** Tier P's encoder does
+  not exist yet: `src/servers/app/drawing/interface/remote/RemoteProtocol.h` keeps
+  `RP_TIER_BEGIN_FRAME`, `RP_CODEC_TILE` and `RP_AUDIO_PACKET` as reserved values
+  with no payload defined. Two of the block are live ahead of it because neither
+  needs it — `RP_TIER_END_FRAME`, the frame boundary `RP_CAP_FRAME_BOUNDARY`
+  negotiates, and `RP_FRAME_ACK`, its answer, whose payload and server-side
+  estimator are specified above. Nothing above claims an encoder has been wired up
+  or measured. It fixes *which* encoder the
   milestone that does so will reach for, and takes the helper off that milestone's
   critical path before anyone builds it.
 
