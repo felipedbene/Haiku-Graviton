@@ -1386,25 +1386,94 @@ haiku.cpp:332:5: note: in expansion of macro 'qe_free'
 haiku.cpp:332:13: error: invalid conversion from 'void**' to 'int**' [-fpermissive]
 ```
 
-**Fix. Fix the conversion at the call site. There is no class-wide `CXXFLAGS` unblock** —
-this section used to prescribe one, and triaging the four held ports (#592) found it does
-not exist. `auto_recoverable` is therefore **False** for this class, for the same reason as
-Class 12: recoverable in principle, per-port judgement in practice.
+**Fix. Fix the conversion at the call site, and read every site individually. There is
+no class-wide `CXXFLAGS` unblock** — this section used to prescribe one, and triaging the
+held ports (#592) found it does not exist. `auto_recoverable` is therefore **False** for
+this class, for the same reason as Class 12: recoverable in principle, per-port judgement
+in practice.
 
-### The measured triage (#592)
+### The measured triage (#592), confirmed on native arm64
 
-Every translation unit of all four ports was swept with **this tree's own arm64 cross
-`aarch64-unknown-haiku-g++` 13.3.0** against `headers/os` + `headers/posix`, strict and
-with `-fpermissive`. **The headline: zero `loses precision` diagnostics anywhere, in any
-sweep, in any of the four ports.** The precision fear that held these recipes is not
-realised — but the flag is still the wrong remedy, for unrelated reasons.
+All five ports have now been built with `haikuporter` **natively on a Graviton
+`c7g.8xlarge` arm64 Haiku builder**, which is what #592 asked for; the earlier
+cross-compile sweep is superseded wherever the two disagree, and they disagree in three
+places (see "What the native build changed", below).
 
-| Port | class-35 site | Diagnostic | Precision risk | Verdict |
-|---|---|---|---|---|
-| `ftgl-2.1.5` | **none** | — | none | Not a class-35 port at all. 30/30 TUs compile **strict-clean**. |
-| `gri-2.12.23` | `src/query.cc:59` `def_word[0] = '\0';` | `invalid conversion from 'char' to 'char*'` | none — a null-pointer-constant conversion, value-preserving and identical on ILP32 and LP64 | Benign older-C++ diagnostic. One-line source fix (`= NULL`) beats the flag. |
-| `qemacs-0.4.1~pre20170225` | `haiku.cpp:332` `qe_free(&s->priv_data);` | `invalid conversion from 'void**' to 'int**'`, **cascading from** `qe.h:100:36: error: 'void*' is not a pointer-to-object type` | none (both 64-bit pointers) | **`-fpermissive` does not fix qemacs.** Needs a source fix. |
-| `rssavers-0.2` | `src/util/arguments.cpp:63,65,98,130` (decl `include/util/arguments.h:39`) | `invalid conversion from 'std::ios_base& (*)(std::ios_base&)' to 'std::ios& (*)(std::ios&)'` | none — function pointers, same width on every arch | Benign type, but UB if forced through. One-line header fix. |
+**Headline 1 — the precision fear is not realised.** Across every one of the five full
+native build logs, grepped for `loses precision` and for `[-fpermissive]`: **zero
+`loses precision`, in any port, at any point.** No class-35 site in this set is a 64→32
+pointer truncation.
+
+**Headline 2 — but one of the five sites is a real bug the flag would compile.** This is
+the more important half, and it is exactly what #592 was opened to catch. `bebuilder`'s
+`Kernel/FileWriter.cpp:43` reads
+
+```cpp
+FNbBytesWrite += TheBFileWriter->Write('\0',1);     // BFile::Write(const void*, size_t)
+```
+
+The character is being passed as the **buffer pointer**. `'\0'` is an integer constant
+expression of value 0, so `-fpermissive` converts it to a null pointer and happily
+compiles `Write(NULL, 1)` — a one-byte read from address 0. The NUL terminator every
+caller of `WriteData()` expects is never written, and `BFile::Write`'s negative
+`B_BAD_ADDRESS` is accumulated into the class's own byte counter. The fix is `Write("", 1)`
+(a `const char[1]` whose single byte *is* the NUL).
+
+So: *"the diagnostic family is benign on arm64"* and *"this site is benign"* are different
+claims, and only the first one is true of class 35. **Never apply the flag to a site you
+have not read.**
+
+| Port | class-35 site | Diagnostic | Precision risk | Verdict | Native result |
+|---|---|---|---|---|---|
+| `bebuilder-0.5.2~git` | `Kernel/FileWriter.cpp:43` `Write('\0',1)` | `invalid conversion from 'char' to 'const void*'` | **none, but the site is a REAL BUG** — the char is the *buffer pointer*, so the flag compiles `Write(NULL,1)`: no terminator written, and `B_BAD_ADDRESS` summed into the byte counter | **(c) real defect.** Fix at the source: `Write("", 1)`. The flag must not be used. | **RC=0**, `bebuilder-0.5.2~git-3-arm64.hpkg` |
+| `ftgl-2.1.5` | `src/FTVectoriser.cpp:169` `char* tagList = &outline.tags[startIndex];` | `invalid conversion from 'unsigned char*' to 'char*'` | none — signedness-only reinterpret of a byte pointer, same width everywhere | **(b) benign diagnostic.** `FT_Outline.tags` is `unsigned char*`; `FTContour`'s ctor takes `char*`, so cast at the one call site. | **RC=0**, `ftgl-2.1.5-3-arm64.hpkg` + `_devel` |
+| `gri-2.12.23` | `src/query.cc:59` `def_word[0] = '\0';` | `invalid conversion from 'char' to 'char*'` | none — a null-pointer-constant conversion, value-preserving and identical on ILP32 and LP64 | **(b) benign diagnostic.** One-line source fix (`= NULL`) beats the flag. | compile+link **clean** (72 objects, `src/gri` linked); blocked later in `doc/` on `cmd:tex` |
+| `qemacs-0.4.1~pre20170225` | `haiku.cpp:332` `qe_free(&s->priv_data);` | `invalid conversion from 'void**' to 'int**'`, **cascading from** `qe.h:100:36: error: 'void*' is not a pointer-to-object type` | none (both 64-bit pointers) | **(b) benign diagnostic**, and `-fpermissive` does not fix it. Needs a source fix. | **RC=0**, `qemacs-0.4.1~pre20170225-6-arm64.hpkg` |
+| `rssavers-0.2` | `src/util/arguments.cpp:63,65,98,130` (decl `include/util/arguments.h:39`) | `invalid conversion from 'std::ios_base& (*)(std::ios_base&)' to 'std::ios& (*)(std::ios&)'` | none — function pointers, same width on every arch | **(b) benign type, but UB if forced through** (`std::ios` derives from `std::ios_base`, so the signatures disagree on the argument's base adjustment). One-line header retype. | **RC=0**, `rssavers-0.2-3-arm64.hpkg` |
+
+### What the native build changed
+
+Three of the cross-compile triage's conclusions did not survive contact with a real
+builder. All three failed in the same direction — **the sweep compiled against the wrong
+headers, or compiled files the real build never compiles** — which is the general lesson.
+
+1. **`ftgl` is a class-35 port after all.** The sweep reported "no class-35 site, 30/30
+   TUs strict-clean"; the native build reports
+   `FTVectoriser.cpp:169:25: error: invalid conversion from 'unsigned char*' to 'char*'
+   [-fpermissive]`. The sweep used the in-tree headers, where `FT_Outline.tags` differs
+   from the real `freetype-2.14.3` the builder installs (`ftimage.h:357`,
+   `unsigned char* tags`). Same bug the `tk` recipe already fixes in AndroWish's AGG.
+2. **`rssavers`' "36 unrelated errors in `Microcosm/extensions.cpp`" do not exist.** They
+   were the reason the recipe "stayed held". `extensions.cpp` is **not in the Haiku build
+   at all** — `src/Microcosm/Makefile` compiles `Microcosm.o MirrorBox.o rsCamera.o
+   Gizmo.o Texture1D.o` and nothing else. With the one-line header retype and real
+   mesa + glu installed, rssavers goes straight to RC=0.
+3. **`rsHaikuScreenSaver.cpp` compiles fine**, closing the sweep's other admitted gap
+   ("never compiled — needs mesa's `GLView.h`, absent from this tree"). Natively it
+   produces one `-Wwrite-strings` warning and no errors.
+
+### Two further arm64 defects found while doing this
+
+Neither is class 35; both were only visible on a native build.
+
+- **tecmake misdetects word size and byte order on Haiku arm64.** `tecmake.mak` derives
+  `TEC_SYSARCH` from `uname -p`, which on Haiku returns the literal string **`other`**.
+  That matches neither its little-endian cases (`x86*`, `arm`) nor its 64-bit cases
+  (`x64`, `ia64`, `BUILD_64`), so it falls through to its defaults and compiles arm64
+  with **`-DTEC_BIGENDIAN -DTEC_32`** — wrong on both counts for little-endian LP64.
+  FTGL's own sources never read these macros, so FTGL is not miscompiled, but tecmake
+  does (they select its `be32`/`le64` Lua-object subdirectory and `_be32`/`_le64`
+  suffixes) and any tecmake port that consults them is wrong on Graviton. The `ftgl`
+  recipe now passes `TEC_WORDSIZE=TEC_64 TEC_BYTEORDER=TEC_LITTLEENDIAN` on the `make`
+  command line — which, unlike the `CXXFLAGS` case below, **does** override a makefile
+  `=` and propagates to the recursive sub-make.
+- **`gri` needs a real TeX and the recipe never said so.** `doc/Makefile:893` has
+  `all-local: refcard.ps cmdrefcard.ps`, built from `refcard.tex`/`cmdrefcard.tex` by
+  `$(TEX)` + `dvips` (`:850-856`). Neither `.ps` ships in the tarball, and
+  `install-data-local` installs both, so they cannot be skipped without cutting
+  installed documentation. The recipe now declares `cmd:tex` + `cmd:dvips`, so
+  haikuporter fails fast naming the real dependency instead of dying after a fully
+  successful compile at `../missing: line 46: tex: command not found`.
 
 **Why the `CXXFLAGS` unblock is a fiction, port by port** — this is the part worth reading
 before writing any `-fpermissive` recipe (and it answers #592's third "done when"):
@@ -1422,53 +1491,64 @@ before writing any `-fpermissive` recipe (and it answers #592's third "done when
   errors, `-fpermissive` = **1 error remains**.
 - **`rssavers`** hardcodes `COMPILE = gcc $(INCLUDE) -O3` / `CFLAGS = -O3 … $(INCLUDE)`
   with plain `=` in every subdir `Makefile` and never mentions `CXXFLAGS`.
+- **`bebuilder`** builds through `makefile_engine`, whose `MakefileEngine` composes the
+  compiler line from `CFLAGS`/`OPTIMIZER`/`DEBUGGER` and the recipe's own `make` arguments;
+  the port's `V0.5.2BeBuilder/makefile` sets `COMPILER_FLAGS`/`OPTIMIZE` and never reads
+  `CXXFLAGS`. Irrelevant anyway — see below, this is the port where the flag is actively
+  dangerous.
 - **`gri`** is the only port the flag reaches. It carries a second, independent arm64
   hazard: its bundled `config.guess` is `timestamp='2009-12-30'` and contains **no
   `aarch64` or `arm64` case at all**, so `./configure` dies with
-  `configure: error: cannot guess build type; you must specify one` — **measured on
-  aarch64 Linux**. The recipe already routes through `runConfigure`, which supplies
+  `configure: error: cannot guess build type; you must specify one`. Confirmed on the
+  native builder, exactly as predicted: `runConfigure` supplies
   `--host=aarch64-unknown-haiku` but **not** `--build`, and autoconf derives `build` from
-  `config.guess` regardless, so **expect Class 6 on the native builder too** (Haiku's
-  `uname -m` says `arm64`, which that vintage knows even less). Not confirmed natively, so
-  the in-tree recipe pre-empts it with the house Class 6 fix (replace `config.guess` on
-  arm64); the bundled `config.sub` (2010-01-22) does accept `aarch64-unknown-haiku`, which
-  is why replacing only `config.guess` is enough — verified by running the bundled script.
+  `config.guess` regardless. The in-tree recipe applies the house Class 6 fix (replace
+  `config.guess` on arm64); the bundled `config.sub` (2010-01-22) does accept
+  `aarch64-unknown-haiku`, which is why replacing only `config.guess` is enough.
 
-**The per-port source fixes, all verified to compile.** Each was applied and re-swept
-**with no `-fpermissive` at all**:
+**The per-port source fixes, all verified natively.** Each was applied in the in-tree
+recipe and built by `haikuporter` on the arm64 builder **with no `-fpermissive` at all**:
 
+- `bebuilder`: `Kernel/FileWriter.cpp:43` → `Write("", 1)` (the real bug). Plus an
+  independent fix for `Kernel/Object.cpp:30` / `Object.h`, where
+  `TObject::ShowDebug(ostrstream)` took a non-copyable stream **by value** and so was
+  never callable; retyped to a reference and the body made to print `str()`. Native
+  **RC=0**.
+- `ftgl`: `src/FTVectoriser.cpp:169` → `(char*)&outline.tags[startIndex]`, plus the
+  tecmake word-size/byte-order overrides and a glob for tecmake's versioned
+  `lib/Haiku*/` output directory (the recipe hardcoded `lib/Haiku11`). Native **RC=0**.
 - `gri`: `src/query.cc:59` → `def_word[0] = NULL;` (`def_word` is `char *[]`, so `'\0'` was
-  a stray). Strict rebuild: 0 errors, 0 diagnostics, 72 objects, `src/gri` links.
+  a stray). Native compile+link: 0 errors, 0 warnings, 72 objects, `src/gri` links to a
+  10 MB arm64 ELF — then `doc/` stops on the missing `tex`.
 - `qemacs`: `haiku.cpp:332` → `(free)(s->priv_data); s->priv_data = NULL;` — the macro
   expanded by hand, with `free` parenthesised because `qe.h` does
   `#define free do_not_use_free`. Plus `haiku.cpp:230` → `(void *)(addr_t)find_thread(NULL)`.
-  Strict: **0 errors**; only 6 `[-Wnarrowing]` warnings remain (`haiku.cpp:643/752`,
+  Native **RC=0**; only 6 `[-Wnarrowing]` warnings remain (`haiku.cpp:643/752`,
   independently confirming Class 27's qemacs note).
 - `rssavers`: `include/util/arguments.h:39` → `std::ios_base& (*f)(std::ios_base&))` —
-  which is the actual type of `std::hex`/`std::dec`/`std::oct`. Strict: 0 invalid
-  conversions.
+  which is the actual type of `std::hex`/`std::dec`/`std::oct`. Native **RC=0**.
 
-**What is landed, and what is still held.** `gri-2.12.23.recipe` and
-`qemacs-0.4.1~pre20170225.recipe` are in `graviton/haikuports-patches/recipes/` with the
-seds above (gri also carries the Class 6 `config.guess` replacement); see that directory's
-README for each one's exact verification status. **`ftgl` needs no recipe change at all** —
-re-wave it unchanged and read the real failure, because the class-35 filing was wrong about
-it. **`rssavers` stays held**: the header fix is one line, but `Microcosm/extensions.cpp`
-then fails with 36 errors that have nothing to do with class 35 (below), so a recipe would
-not build and listing it would repeat #560.
+**What is landed, and what is still held.** All five recipes are in
+`graviton/haikuports-patches/recipes/` — `bebuilder-0.5.2~git.recipe`,
+`ftgl-2.1.5.recipe`, `gri-2.12.23.recipe`, `qemacs-0.4.1~pre20170225.recipe`,
+`rssavers-0.2.recipe` (gri also carries the Class 6 `config.guess` replacement); see that
+directory's README for each one's verification status. Four of the five reach native
+**RC=0** with `.hpkg` artifacts and are listed in `landed-fixes.json` coverage.
+**Only `gri` stays held**, and on a dependency, not on class 35: its compile and link are
+completely clean, and the sole blocker is that nothing in the DeBeOS pool provides
+`cmd:tex`/`cmd:dvips` for arm64 yet. It is deliberately **not** in coverage (the #560
+lesson: coverage means a native RC=0, not a plausible recipe).
 
-**Verification honesty.** These are **cross-compile sweeps** (`-fsyntax-only`/`-c`) with the
-Haiku arm64 compiler plus one complete **aarch64 Linux** build-and-link of `gri` (gcc 14.2,
-72 objects, aarch64 ELF). **No native `haikuporter` build was run** for any of the four — the
-session's AWS credentials had expired and refreshing them is interactive — so #592's first
-"done when" is not satisfied and none of these may be listed in `landed-fixes.json` yet.
-Two known gaps in the sweep: `rssavers`'
-`rsHaikuScreenSaver.cpp` was never compiled (it needs mesa's `GLView.h`, which is not in
-this tree), and `rssavers`' `Microcosm/extensions.cpp` produces **36 errors unrelated to
-class 35** — `glXGetProcAddressARB` (Haiku has no GLX), ARB entry points declared as
-functions by a modern `glext.h` under `-DGL_GLEXT_PROTOTYPES` colliding with the
-`extern PFNGL…PROC` variables, and a missing `<string.h>`. The Haiku patchset never touched
-that file.
+**Verification honesty.** Every claim in this section above the "two things this class does
+not claim" is from a native `haikuporter` run on a Graviton **c7g.8xlarge** against the
+DeBeOS package pool, with the full build log retained and grepped. The earlier
+cross-compile sweep (`-fsyntax-only`/`-c` with the Haiku arm64 cross compiler, plus one
+aarch64 **Linux** build of `gri`) is kept only where the two agree; where they disagree the
+native run wins, and the three places they disagreed are listed under "What the native
+build changed" above. That sweep also claimed two gaps —
+`rsHaikuScreenSaver.cpp` "never compiled" and `Microcosm/extensions.cpp` "36 errors
+unrelated to class 35" — and **both were artefacts of the sweep**: the first compiles fine
+against real mesa, and the second file is not in the build.
 
 **Two things this class deliberately does NOT claim, and they are the interesting part.**
 
@@ -1483,9 +1563,9 @@ that file.
    prescribe the fix that is already applied. `nogravity` (Class 22) matches it too, with a
    third diagnostic ("expression list treated as compound expression in initializer").
 
-**Example ports:** bebuilder, ftgl, gri, qemacs, rssavers. The last four are the #592 set
-triaged above; **`bebuilder` was not triaged** — it is the one class-35 port whose
-diagnostic has only been read, never reproduced.
+**Example ports:** bebuilder, ftgl, gri, qemacs, rssavers — all five triaged above, each
+built natively on arm64 (#592). `bebuilder`, previously the one port whose diagnostic had
+only been read and never reproduced, turned out to hold the only real defect in the set.
 
 ---
 
