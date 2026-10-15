@@ -10,32 +10,46 @@ local developLibDir = develop/lib$(secondaryArchSubDir) ;
 local developHeadersDir = develop/headers$(secondaryArchSubDir) ;
 
 local unavailableBuildFeatures ;
+local unrequestedBuildFeatures ;
 
 
 # SSL
 
 # Automatically enable the SSL feature, when the OpenSSL package is enabled.
-if [ IsHaikuImagePackageAdded openssl3 ] {
+#
+# A profile-less invocation (plain `jam <target>`, no `@profile`) builds no image
+# at all, so no profile ever runs AddHaikuImageSystemPackages and this gate can
+# never be satisfied -- which used to switch the feature off for component builds
+# and make every openssl-gated target (remote_broker, ...) vanish from the
+# dependency graph as a bare "don't know how to make" (#713). Request SSL
+# directly in that case, so a component build links the same way the image
+# profiles do; the package-availability check below still has the final say.
+if [ IsHaikuImagePackageAdded openssl3 ] || ! $(HAIKU_BUILD_PROFILE) {
 	HAIKU_BUILD_FEATURE_SSL = 1 ;
 }
 
-if $(HAIKU_BUILD_FEATURE_SSL) {
-	if [ IsPackageAvailable openssl3_devel ] {
-		ExtractBuildFeatureArchives openssl :
-			file: base openssl3
-				runtime: lib
-			file: devel openssl3_devel
-				depends: base
-				libraries:
-					$(developLibDir)/libcrypto.so
-					$(developLibDir)/libssl.so
-				headers: $(developHeadersDir)
-			;
+# Both off-states have to be reported, hence the top-level availability test
+# rather than one nested inside the SSL guard: a feature that is off but
+# announces neither "unavailable" nor "not requested" leaves a missing jam
+# target as its only symptom, which reads as a typo rather than as a disabled
+# feature (#713).
+if ! [ IsPackageAvailable openssl3_devel ] {
+	unavailableBuildFeatures += openssl ;
+} else if ! $(HAIKU_BUILD_FEATURE_SSL) {
+	unrequestedBuildFeatures += openssl ;
+} else {
+	ExtractBuildFeatureArchives openssl :
+		file: base openssl3
+			runtime: lib
+		file: devel openssl3_devel
+			depends: base
+			libraries:
+				$(developLibDir)/libcrypto.so
+				$(developLibDir)/libssl.so
+			headers: $(developHeadersDir)
+		;
 
-		EnableBuildFeatures openssl ;
-	} else {
-		unavailableBuildFeatures += openssl ;
-	}
+	EnableBuildFeatures openssl ;
 }
 
 
@@ -643,4 +657,13 @@ if [ IsPackageAvailable zstd_devel ] {
 if $(unavailableBuildFeatures) {
 	Echo "build-feature packages unavailable on $(TARGET_PACKAGING_ARCH):"
 		"$(unavailableBuildFeatures)" ;
+}
+
+# A feature whose packages are present but which this build never asked for is
+# just as invisible as a missing one: the only symptom is that targets gated on
+# it do not exist, which reads as a typo (#713). Say so explicitly.
+if $(unrequestedBuildFeatures) {
+	Echo "build features available but not requested on"
+		"$(TARGET_PACKAGING_ARCH): $(unrequestedBuildFeatures)"
+		"-- targets gated on them do not exist in this build" ;
 }
