@@ -177,7 +177,7 @@ diff --git a/Meta/CMake/compile_options.cmake b/Meta/CMake/compile_options.cmake
 index ec92bb9543..889085e6cc 100644
 --- a/Meta/CMake/compile_options.cmake
 +++ b/Meta/CMake/compile_options.cmake
-@@ -219,6 +219,33 @@
+@@ -219,6 +219,44 @@
      add_compile_definitions(_DEFAULT_SOURCE)
      add_compile_definitions(_GNU_SOURCE)
      add_compile_definitions(__USE_GNU)
@@ -208,10 +208,21 @@ index ec92bb9543..889085e6cc 100644
 +    # order the two end up in on the command line.
 +    set(CMAKE_C_COMPILE_OPTIONS_PIE -fPIC)
 +    set(CMAKE_CXX_COMPILE_OPTIONS_PIE -fPIC)
++    # lld lays arm64 PT_LOADs out at its default 64 KB max-page-size and emits
++    # four of them (.rodata, text, RELRO, post-RELRO .data), so every linked
++    # image carries three ~60 KB inter-segment holes. DeBeOS arm64 pages are
++    # 4 KB, and the runtime_loader refuses an image whose reserved span exceeds
++    # the sum of its mapped segments by more than two 64 KB pages
++    # (src/system/runtime_loader/images.cpp:341) -- a budget that fits GNU ld's
++    # two-segment output and nothing wider:
++    #   runtime_loader: .../bin/WebDriver: Could not map image: Bad data
++    # Lay the segments out at the page size the system actually uses, which
++    # shrinks each hole below a page and keeps the image loadable.
++    add_link_options(LINKER:-z,max-page-size=4096)
  endif()
  
  if (NOT WIN32)
-@@ -233,7 +260,7 @@
+@@ -233,7 +271,7 @@
      # NOTE: Assume ELF
      # NOTE: --no-undefined is not compatible with clang sanitizer runtimes
      # NOTE: Some BSDs don't export all symbols from LibC so we can't use --no-undefined
