@@ -27,25 +27,33 @@
 # reboots to rebind the module, SSM cannot carry it: the first reboot ends the
 # run. sshd, by contrast, comes back on every reboot.
 #
-# Getting an SSH key in is the one thing that needs SSM, exactly once, on a
-# freshly launched instance while its agent is still alive:
+# Log in as `baron` (uid 0) with the ed25519 key `haiku-rdclient`. Launch-time
+# provisioning writes two authorised keys into
+# /boot/home/config/settings/ssh/authorized_keys -- `haiku-graviton`
+# (SHA256:+MxTFW3bfqvHjvCQpI5rZUTnIq1uudmCtXaemkILLQg, public half in SSM
+# parameter /haiku-graviton/baron-ssh-key-pub) and `haiku-rdclient`
+# (SHA256:WkIB45TTTb1r93KttwGecZcaLYr4MsBONv5ZYS2XI0w) -- so read that file to
+# see what a given instance accepts rather than guessing.
+#
+# Two traps around that. First, the key MUST be ed25519: the target's sshd is
+# OpenSSH 10.4 with RSA disabled, advertising only
+# `ssh-ed25519,sk-ssh-ed25519`, so the RSA EC2 key pair the instance is
+# launched under can never authenticate no matter what
+# PubkeyAcceptedAlgorithms says -- and EC2 `KeyName` does not drive
+# authorized_keys on Haiku in the first place. Second, a key failing on one
+# instance says nothing about the AMI: an instance whose authorized_keys was
+# edited by hand in an earlier session sent this investigation off on a long
+# detour concluding the key was lost, which it is not. Check a freshly launched
+# instance before believing a rejection.
+#
+# If the authorised keys really are unavailable, SSM can install one, exactly
+# once, on a freshly launched instance while its agent is still alive:
 #
 #	ssh-keygen -t ed25519 -N '' -f /tmp/abkey
 #	aws ssm send-command --instance-ids "$ID" \
 #	    --document-name AWS-RunShellScript --parameters 'commands=["
 #	      echo '"'"'<contents of /tmp/abkey.pub>'"'"' \
 #	        >> /boot/home/config/settings/ssh/authorized_keys"]'
-#
-# sshd_config has `AuthorizedKeysFile config/settings/ssh/authorized_keys`,
-# relative to baron's home, and baron is uid 0. Do NOT go hunting for the key
-# the AMI was baked with: the image authorises ed25519 `haiku-graviton`
-# (SHA256:+MxTFW3bfqvHjvCQpI5rZUTnIq1uudmCtXaemkILLQg, public half in SSM
-# parameter /haiku-graviton/baron-ssh-key-pub) and ed25519 `haiku-rdclient`, and
-# neither private half is still in anyone's possession. Note also that the
-# target's sshd is OpenSSH 10.4 with RSA disabled -- it advertises only
-# `ssh-ed25519,sk-ssh-ed25519` -- so the RSA EC2 key pair that the instance is
-# launched under can never authenticate, no matter what
-# PubkeyAcceptedAlgorithms says. The key must be ed25519.
 #
 # The dev desk has no route to the target's private IP, so SSH goes through an
 # SSM port-forward on a second instance in the same VPC, which keeps the private
