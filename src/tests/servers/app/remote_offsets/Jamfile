@@ -1,0 +1,9 @@
+SubDir HAIKU_TOP src tests servers app remote_offsets ;
+
+SimpleTest remote_offsets :
+	remote_offsets.cpp
+	: be [ TargetLibstdc++ ] ;
+
+SimpleTest remote_offsets_relay :
+	relay.cpp
+	: network ;
