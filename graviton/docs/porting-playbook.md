@@ -1834,6 +1834,35 @@ other class moved. The 5 that remain are **not** truncation:
   `.hpkg` exists. There is no reason line because there was no reason. That is #505 §C, the
   false-failure record path, not a detector gap.
 
+### #505 §B1: `BObjectList(int, bool)` — 11 ports, and the obvious fix is the wrong one
+
+`batchrename bemines bescreencapture bevexed burnitnow dockbert friss runprogram scoundrel
+substrate torrentor` all fail identically:
+
+```
+error: no matching function for call to 'BObjectList<StyleData>::BObjectList(int, bool)'
+```
+
+#505 proposed restoring a deprecated `BObjectList(int32, bool)` overload in our headers —
+one change for 11 ports. **That fix is not possible, and this is recorded here because the
+reasoning is not obvious from the error message.** `headers/os/support/ObjectList.h`:
+
+```
+:49   template<class T, bool Owning = false> class BObjectList;
+:123  BObjectList(int32 itemsPerBlock = 20);          // the ONLY constructor
+```
+
+`Owning` is a **template parameter**, resolved at compile time, not a runtime argument. The
+old API was `BObjectList<T>(itemsPerBlock, owning)`; the current one is `BObjectList<T, true>`.
+A two-argument constructor could not set `Owning`, because `Owning` is part of the type — so
+the "one header change clears 11 ports" option does not exist, and adding a constructor that
+accepted and ignored a `bool` would compile these ports into **silently leaking** ones. The
+current error is better than that.
+
+**The decision: migrate per port** — `BObjectList<T>(n, true)` → `BObjectList<T, true>(n)`.
+Mechanical, local to each recipe's patchset, and it keeps ownership visible in the type.
+This is an API-migration class, not 11 port bugs and not a devel-header regression.
+
 ### #505 §E: the capture's middle-of-log blind spot — CLOSED (two defects, both measured)
 
 `pnet`'s log is **416,720 lines**, so it took the `head+grep+tail` path. Measuring the 105
