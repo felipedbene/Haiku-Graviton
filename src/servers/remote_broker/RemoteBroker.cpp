@@ -27,6 +27,18 @@
  * newest-wins reconnect model of the session port); an unauthenticated
  * connection can neither displace nor observe it.
  *
+ * A token carries a role, decided once at authentication time and for the
+ * whole of that session. The "token" file is the controller token: full
+ * input, exactly what the single shared token has always been. An optional
+ * second file, "token.viewer", holds a viewer token: such a session receives
+ * the display stream like any other, but the input events it sends are
+ * dropped here, before the loopback hop, so they never reach app_server.
+ * Dropping them at the broker rather than in app_server is the whole point of
+ * the role -- app_server has one session and no notion of who is driving it,
+ * while the broker already decides, per connection, whether this peer may be
+ * there at all. The viewer token is never generated: without that file every
+ * session is a controller and this daemon behaves as it did before roles.
+ *
  * Toward the session port the broker presents app_server's per-boot session
  * cookie (RP_SESSION_COOKIE), read from the owner-only file app_server
  * published before it began listening. That is what makes the broker's
@@ -90,6 +102,21 @@ static const uint16 kRPSessionCookie = 12;
 static const uint32 kAuthMethodSharedToken = 1;
 static const uint32 kCookieMethodPerBoot = 1;
 
+// The input event block: exactly what app_server dispatches to its event
+// stream ("code >= RP_MOUSE_MOVED && code <= RP_MODIFIERS_CHANGED" in
+// RemoteHWInterface::_EventThread()). Mirrored as the same contiguous range
+// rather than an enumeration of the opcodes in it, so that the two tests
+// cannot come to disagree about a value between the ends.
+static const uint16 kRPMouseMoved = 220;
+static const uint16 kRPModifiersChanged = 244;
+
+// RP message framing: uint16 code, uint32 total length (header included),
+// payload. The body maximum is RemoteMessage::NextMessage()'s own limit --
+// what that parser calls a framing desync must be a desync here too, or this
+// daemon and app_server would disagree about where a message ends.
+static const size_t kMessageHeaderSize = 6;
+static const uint32 kMaxMessageDataSize = 64 * 1024 * 1024;
+
 static const uint32 kAuthResultSuccess = 0;
 static const uint32 kAuthResultDenied = 1;
 static const uint32 kAuthResultNoSession = 2;
@@ -131,6 +158,15 @@ static const int32 kMaxCertificateAddresses = 24;
 
 
 static int32 sConcurrentHandshakes = 0;
+
+
+/*!	What the token a client presented entitles it to. A controller is what
+	the shared token has always been; a viewer watches and cannot touch.
+*/
+enum SessionRole {
+	kSessionRoleController,
+	kSessionRoleViewer
+};
 
 
 // #pragma mark - rate limiting
@@ -294,6 +330,12 @@ struct BrokerConfiguration {
 	uint16		targetPort;
 	BPath		settingsDirectory;
 	uint8		tokenDigest[SHA256_DIGEST_LENGTH];
+	// The optional viewer token, read from token.viewer if that file exists
+	// and never generated: a second credential nobody asked for should not
+	// come into existence on upgrade, and its absence is precisely the
+	// behaviour of a broker that has never heard of roles.
+	bool		hasViewerToken;
+	uint8		viewerTokenDigest[SHA256_DIGEST_LENGTH];
 	// The file app_server publishes the session cookie for the port this
 	// daemon proxies to. Read per connection, never cached: see the header
 	// comment.
@@ -686,35 +728,16 @@ write_fingerprint(const char* certificatePath, const char* fingerprintPath,
 }
 
 
-/*!	Loads the shared token, generating a random one on first run. Only its
-	SHA-256 stays in memory; comparison against it cannot leak the token
-	through timing (both sides are hashed, then compared in constant time).
+/*!	Reads a token file and leaves only its SHA-256 in \a digest; comparison
+	against that cannot leak the token through timing (both sides are hashed,
+	then compared in constant time).
 */
 static status_t
-ensure_token(const char* tokenPath, uint8* digest)
+read_token(const char* tokenPath, uint8* digest)
 {
 	int fd = open(tokenPath, O_RDONLY);
-	if (fd < 0) {
-		// First run: 32 bytes of randomness, stored as hex, owner-only.
-		unsigned char randomBytes[32];
-		if (RAND_bytes(randomBytes, sizeof(randomBytes)) != 1)
-			return B_ERROR;
-
-		char token[sizeof(randomBytes) * 2 + 2];
-		for (size_t i = 0; i < sizeof(randomBytes); i++)
-			sprintf(token + 2 * i, "%02x", randomBytes[i]);
-		token[sizeof(randomBytes) * 2] = '\n';
-		token[sizeof(randomBytes) * 2 + 1] = '\0';
-
-		status_t result = write_file(tokenPath, token, strlen(token), 0600);
-		if (result != B_OK)
-			return result;
-
-		TRACE_LOG("generated authentication token in %s\n", tokenPath);
-		fd = open(tokenPath, O_RDONLY);
-		if (fd < 0)
-			return errno;
-	}
+	if (fd < 0)
+		return errno;
 
 	// One byte more than the maximum is read so an over-long token is
 	// rejected rather than silently truncated -- a truncated token would
@@ -747,6 +770,67 @@ ensure_token(const char* tokenPath, uint8* digest)
 	SHA256((const unsigned char*)buffer, length, digest);
 	OPENSSL_cleanse(buffer, sizeof(buffer));
 	return B_OK;
+}
+
+
+/*!	Loads the controller token -- the shared token this daemon has always had
+	-- generating a random one on first run.
+*/
+static status_t
+ensure_token(const char* tokenPath, uint8* digest)
+{
+	int fd = open(tokenPath, O_RDONLY);
+	if (fd >= 0)
+		close(fd);
+	else {
+		// First run: 32 bytes of randomness, stored as hex, owner-only.
+		unsigned char randomBytes[32];
+		if (RAND_bytes(randomBytes, sizeof(randomBytes)) != 1)
+			return B_ERROR;
+
+		char token[sizeof(randomBytes) * 2 + 2];
+		for (size_t i = 0; i < sizeof(randomBytes); i++)
+			sprintf(token + 2 * i, "%02x", randomBytes[i]);
+		token[sizeof(randomBytes) * 2] = '\n';
+		token[sizeof(randomBytes) * 2 + 1] = '\0';
+
+		status_t result = write_file(tokenPath, token, strlen(token), 0600);
+		if (result != B_OK)
+			return result;
+
+		TRACE_LOG("generated authentication token in %s\n", tokenPath);
+	}
+
+	return read_token(tokenPath, digest);
+}
+
+
+/*!	Loads the viewer token if the operator created one. Absent is the normal
+	case and means every session is a controller; a file that exists but is
+	unusable is an error, because an operator who wrote it expects it to be in
+	force and a silent demotion to "no viewer access at all" would be found out
+	only by the person it was shared with.
+*/
+static status_t
+load_viewer_token(const char* tokenPath, BrokerConfiguration& configuration)
+{
+	status_t result = read_token(tokenPath, configuration.viewerTokenDigest);
+	if (result == B_OK) {
+		configuration.hasViewerToken = true;
+		TRACE_LOG("viewer token loaded from %s: a client presenting it gets a"
+			" watch-only session\n", tokenPath);
+		return B_OK;
+	}
+
+	if (result == ENOENT) {
+		TRACE_LOG("no viewer token in %s; every session is a controller\n",
+			tokenPath);
+		return B_OK;
+	}
+
+	TRACE_ERROR("viewer token in %s is unusable: %s\n", tokenPath,
+		strerror(result));
+	return result;
 }
 
 
@@ -849,6 +933,7 @@ prepare_settings(BrokerConfiguration& configuration)
 	BPath keyPath(directory.Path(), "broker.key");
 	BPath fingerprintPath(directory.Path(), "broker.fingerprint");
 	BPath tokenPath(directory.Path(), "token");
+	BPath viewerTokenPath(directory.Path(), "token.viewer");
 
 	BStringList altNames;
 	collect_alt_names(altNames);
@@ -908,6 +993,10 @@ prepare_settings(BrokerConfiguration& configuration)
 	if (result != B_OK)
 		return result;
 
+	result = load_viewer_token(viewerTokenPath.Path(), configuration);
+	if (result != B_OK)
+		return result;
+
 	return sTLSContext.InitServer(certificatePath.Path(), keyPath.Path());
 }
 
@@ -916,13 +1005,15 @@ prepare_settings(BrokerConfiguration& configuration)
 
 
 /*!	Reads and verifies the RP_AUTHENTICATE message that must be the client's
-	very first payload. On success any bytes the client pipelined after the
+	very first payload. On success \a role says what the token presented
+	entitles this session to, and any bytes the client pipelined after the
 	message are left in \a buffer (\a extraOffset/\a extraLength) to be
 	forwarded once the session is connected.
 */
 static status_t
 authenticate_client(WebSocketStream& ws, bigtime_t deadline, uint8* buffer,
-	size_t bufferSize, size_t& extraOffset, size_t& extraLength)
+	size_t bufferSize, size_t& extraOffset, size_t& extraLength,
+	SessionRole& role)
 {
 	size_t used = 0;
 
@@ -964,15 +1055,25 @@ authenticate_client(WebSocketStream& ws, bigtime_t deadline, uint8* buffer,
 	}
 
 	// Hash-then-compare: constant time, and independent of the length of
-	// the correct token.
+	// the correct token. Both roles' digests are compared unconditionally --
+	// not "controller, else viewer" -- so that which token was presented
+	// cannot be read off how much work this took.
 	uint8 digest[SHA256_DIGEST_LENGTH];
 	SHA256(buffer + 14, tokenLength, digest);
 
-	bool match = CRYPTO_memcmp(digest, sConfiguration.tokenDigest,
+	bool controllerMatch = CRYPTO_memcmp(digest, sConfiguration.tokenDigest,
 		SHA256_DIGEST_LENGTH) == 0;
+	bool viewerMatch = sConfiguration.hasViewerToken
+		&& CRYPTO_memcmp(digest, sConfiguration.viewerTokenDigest,
+			SHA256_DIGEST_LENGTH) == 0;
 
-	if (!match)
+	if (!controllerMatch && !viewerMatch)
 		return B_PERMISSION_DENIED;
+
+	// Controller wins if the two files happen to hold the same token: the
+	// operator already had that one secret and it already meant full control,
+	// so a copy of it in token.viewer must not quietly take control away.
+	role = controllerMatch ? kSessionRoleController : kSessionRoleViewer;
 
 	extraOffset = messageLength;
 	extraLength = used - messageLength;
@@ -1076,6 +1177,141 @@ send_session_cookie(int backendSocket, const char* cookie, size_t cookieLength)
 }
 
 
+// #pragma mark - viewer input filter
+
+
+/*!	Drops a viewer session's input events on their way to the session port.
+
+	Everything else the client sends is forwarded untouched, because a viewer
+	is a full participant in the display half of the protocol: it announces
+	itself (RP_INIT_CONNECTION, RP_HELLO), may ask for a resync, answers the
+	server's queries and paces frames. Only the input block is swallowed.
+
+	The filter sees a byte stream, so it has to do the protocol's framing
+	itself -- a WebSocket read boundary falls anywhere, including inside a
+	message header. State therefore spans calls: a partial header is stashed
+	until it completes, and the body of a message already judged is counted
+	down across reads. Nothing is buffered beyond those few header bytes; a
+	forwarded body is passed through as it arrives, so this adds no latency to
+	the traffic it does allow.
+
+	A stream whose framing stops making sense ends the session instead of
+	being passed through: a viewer whose messages cannot be delimited is a
+	viewer whose keystrokes cannot be stopped, and that is the one outcome
+	this class exists to prevent. app_server's parser treats the same two
+	cases as a desync, so nothing legitimate is lost.
+*/
+class ViewerInputFilter : public RelayFilter {
+public:
+	ViewerInputFilter()
+		:
+		fHeaderUsed(0),
+		fForwardRemaining(0),
+		fDropRemaining(0),
+		fDroppedMessages(0),
+		fDroppedBytes(0),
+		fForwardedMessages(0)
+	{
+	}
+
+	virtual	status_t		Forward(int socket, const uint8* buffer,
+								size_t size) override;
+
+			uint64			DroppedMessages() const
+								{ return fDroppedMessages; }
+			uint64			DroppedBytes() const { return fDroppedBytes; }
+			uint64			ForwardedMessages() const
+								{ return fForwardedMessages; }
+
+private:
+			uint8			fHeader[kMessageHeaderSize];
+			size_t			fHeaderUsed;
+			uint32			fForwardRemaining;
+			uint32			fDropRemaining;
+
+			uint64			fDroppedMessages;
+			uint64			fDroppedBytes;
+			uint64			fForwardedMessages;
+};
+
+
+status_t
+ViewerInputFilter::Forward(int socket, const uint8* buffer, size_t size)
+{
+	while (size > 0) {
+		if (fDropRemaining > 0) {
+			size_t chunk = size < fDropRemaining ? size : fDropRemaining;
+			fDropRemaining -= chunk;
+			buffer += chunk;
+			size -= chunk;
+			continue;
+		}
+
+		if (fForwardRemaining > 0) {
+			size_t chunk = size < fForwardRemaining ? size : fForwardRemaining;
+			status_t result = write_fully(socket, buffer, chunk);
+			if (result != B_OK)
+				return result;
+
+			fForwardRemaining -= chunk;
+			buffer += chunk;
+			size -= chunk;
+			continue;
+		}
+
+		// At a message boundary: collect the header, which may be split
+		// across reads, before anything about this message is decided.
+		size_t missing = kMessageHeaderSize - fHeaderUsed;
+		size_t chunk = size < missing ? size : missing;
+		memcpy(fHeader + fHeaderUsed, buffer, chunk);
+		fHeaderUsed += chunk;
+		buffer += chunk;
+		size -= chunk;
+		if (fHeaderUsed < kMessageHeaderSize)
+			break;
+
+		fHeaderUsed = 0;
+
+		// Explicitly little-endian, like all remote protocol framing.
+		uint16 code = (uint16)fHeader[0] | ((uint16)fHeader[1] << 8);
+		uint32 length = (uint32)fHeader[2] | ((uint32)fHeader[3] << 8)
+			| ((uint32)fHeader[4] << 16) | ((uint32)fHeader[5] << 24);
+
+		if (length < kMessageHeaderSize
+			|| length - kMessageHeaderSize > kMaxMessageDataSize) {
+			TRACE_ERROR("viewer session: message code %" B_PRIu16 " claims %"
+				B_PRIu32 " bytes; framing lost, ending the session\n", code,
+				length);
+			return B_BAD_DATA;
+		}
+
+		if (code >= kRPMouseMoved && code <= kRPModifiersChanged) {
+			fDropRemaining = length - (uint32)kMessageHeaderSize;
+			fDroppedMessages++;
+			fDroppedBytes += length;
+
+			// Logged once: the point is that the role took effect, and a line
+			// per keystroke would be a log amplifier a viewer controls.
+			if (fDroppedMessages == 1) {
+				TRACE_LOG("viewer session: dropping client input events, "
+					"first was code %" B_PRIu16 "\n", code);
+			}
+
+			continue;
+		}
+
+		status_t result = write_fully(socket, fHeader, kMessageHeaderSize);
+		if (result != B_OK)
+			return result;
+
+		fForwardedMessages++;
+		fForwardRemaining = length - (uint32)kMessageHeaderSize;
+	}
+
+	return B_OK;
+}
+
+
 // #pragma mark - per connection handler
 
 
@@ -1121,8 +1357,9 @@ handle_connection(void* data)
 	uint8 authBuffer[kMaxAuthMessageSize];
 	size_t extraOffset = 0;
 	size_t extraLength = 0;
+	SessionRole role = kSessionRoleController;
 	result = authenticate_client(ws, deadline, authBuffer,
-		sizeof(authBuffer), extraOffset, extraLength);
+		sizeof(authBuffer), extraOffset, extraLength, role);
 
 	if (result != B_OK) {
 		OPENSSL_cleanse(authBuffer, sizeof(authBuffer));
@@ -1186,9 +1423,20 @@ handle_connection(void* data)
 			system_time() + 1000000);
 	}
 
+	// A viewer's input is dropped here, in front of the loopback hop. The
+	// filter has to see this session's stream from its very first byte --
+	// including whatever the client pipelined behind the auth message, which
+	// is already part of the message framing it must stay aligned with.
+	ViewerInputFilter viewerFilter;
+	RelayFilter* clientFilter = role == kSessionRoleViewer
+		? &viewerFilter : NULL;
+
 	if (forwardResult == B_OK && extraLength > 0) {
-		forwardResult = write_fully(backendSocket, authBuffer + extraOffset,
-			extraLength);
+		forwardResult = clientFilter != NULL
+			? clientFilter->Forward(backendSocket, authBuffer + extraOffset,
+				extraLength)
+			: write_fully(backendSocket, authBuffer + extraOffset,
+				extraLength);
 	}
 	// The token (and everything else read pre-session) is no longer needed.
 	OPENSSL_cleanse(authBuffer, sizeof(authBuffer));
@@ -1203,14 +1451,26 @@ handle_connection(void* data)
 	// against the handshake budget.
 	atomic_add(&sConcurrentHandshakes, -1);
 
-	TRACE_LOG("%s: authenticated, session connected\n", context->peerName);
+	TRACE_LOG("%s: authenticated as %s, session connected\n",
+		context->peerName,
+		role == kSessionRoleViewer ? "viewer" : "controller");
 	sSessions.Adopt(context, tls.Socket(), backendSocket);
 
-	WebSocketStream::Relay(ws, tls, backendSocket);
+	WebSocketStream::Relay(ws, tls, backendSocket, clientFilter);
 
 	sSessions.Remove(context);
 	close(backendSocket);
 	ws.SendClose(1000, system_time() + 1000000);
+
+	if (clientFilter != NULL) {
+		// What the role actually did, in numbers: the counters are how a test
+		// (or an operator) sees that input was stopped here and that the rest
+		// of the client's traffic still went through.
+		TRACE_LOG("%s: viewer session ended, dropped %" B_PRIu64 " input "
+			"messages (%" B_PRIu64 " bytes), forwarded %" B_PRIu64 " other "
+			"messages\n", context->peerName, viewerFilter.DroppedMessages(),
+			viewerFilter.DroppedBytes(), viewerFilter.ForwardedMessages());
+	}
 
 	TRACE_LOG("%s: session ended\n", context->peerName);
 	delete context;
@@ -1246,6 +1506,12 @@ print_usage(const char* program)
 		" finds an address the stored\ncertificate does not name regenerates"
 		" it -- which changes the fingerprint,\nso pinning clients must"
 		" re-pin. A CA-issued pair is never regenerated.\n\n");
+	printf("The token file is the controller token: a client presenting it"
+		" drives the\ndesktop. Create a second token in token.viewer (same"
+		" rules, 0600) to hand\nout watch-only access: such a session receives"
+		" the display stream, but every\ninput event it sends is dropped here"
+		" and never reaches app_server. It is\nnever generated -- without that"
+		" file every session is a controller.\n\n");
 	printf("The session cookie is NOT generated here: app_server mints it per"
 		" listener\nbefore it starts listening, and this daemon presents it to"
 		" the session port\nafter a client's token was accepted. Without it the"

@@ -121,6 +121,14 @@ header_contains_token(const char* value, const char* token)
 }
 
 
+// #pragma mark - RelayFilter
+
+
+RelayFilter::~RelayFilter()
+{
+}
+
+
 // #pragma mark - WebSocketStream
 
 
@@ -343,7 +351,7 @@ WebSocketStream::HasBufferedData() const
 
 /*static*/ void
 WebSocketStream::Relay(WebSocketStream& webSocket, TLSStream& stream,
-	int plainSocket)
+	int plainSocket, RelayFilter* inboundFilter)
 {
 	// Bound on a blocked relay write; a peer that stalls the stream this
 	// long is gone or hostile either way. It must stay BELOW app_server's
@@ -418,6 +426,14 @@ WebSocketStream::Relay(WebSocketStream& webSocket, TLSStream& stream,
 		}
 		if (read <= 0)
 			return;
+
+		if (inboundFilter != NULL) {
+			// The filter owns the write: what it forwards is its decision,
+			// and it keeps whatever state spans this read boundary.
+			if (inboundFilter->Forward(plainSocket, buffer, read) != B_OK)
+				return;
+			continue;
+		}
 
 		const uint8* position = buffer;
 		size_t remaining = read;
