@@ -24,8 +24,17 @@ correct, and both fault-recovery paths return WASM traps instead of killing the
 process (a guard-page read gives `Memory access out of bounds`, `i32.div_s`
 by zero gives `Integer division overflow`). See "WASM Cranelift JIT" below.
 
-Not yet done: no rendered PNG through `WebDriver`, and the native (non-Qt) UI
-is still out of scope here (`ENABLE_QT_UI=OFF`).
+Not yet done: no rendered PNG, because nothing in this build can open a page.
+`WebDriver` starts a session by launching a browser process called `Ladybird`
+(`Services/WebDriver/main.cpp:216`), and `UI/` only has `Qt` and `Android` —
+the DeBeOS arm64 repo has no `qt6`, so no `Ladybird` binary exists and
+`ENABLE_QT_UI=OFF` is not a choice. The next wall for a usable browser is
+either qt6 for arm64 or a native `UI/Haiku` on the Interface Kit.
+
+Fonts are a hard runtime dependency, not a nicety: `FontPlugin`'s constructor
+`VERIFY`s that a fixed-width font resolved
+(`Libraries/LibWeb/Platform/FontPlugin.cpp:55`), and a stock DeBeOS image makes
+that fail — see "Monospace fonts" below.
 
 ## Target coordinates
 
@@ -172,6 +181,38 @@ build is gone".
 > `${CMAKE_BINARY_DIR}/cargo/build`. That pool only binds within a single ninja
 > process; it does not protect a second ninja, or the second build tree, which
 > shares `~/.cargo/registry`.
+
+## Monospace fonts (why `dejavu` is in the pkgman list)
+
+A stock DeBeOS arm64 install cannot start any Ladybird process that builds a
+`FontPlugin`:
+
+```
+VERIFICATION FAILED: m_default_fixed_width_font
+    at Libraries/LibWeb/Platform/FontPlugin.cpp:55
+```
+
+`FontPlugin`'s constructor resolves `GenericFont::UiMonospace` and `VERIFY`s the
+result. `compute_generic_font_name()` tries Skia's font manager first and then
+walks a hard-coded fallback list — `Andale Mono`, `Courier New`, `Courier`,
+`FreeMono`, `OCR A Std`, `Noto Sans Mono`, `DejaVu Sans Mono`,
+`Droid Sans Mono`, `Liberation Mono` — and if nothing matches it returns the
+*first* name anyway, so `FontDatabase::get()` answers null and the `VERIFY`
+fires. The image ships exactly one monospace family and it is named
+**`Noto Mono`** (`fc-query`: family `Noto Mono`, spacing 100), which is on
+neither that list nor fontconfig's own `60-latin.conf` monospace preferences.
+`pkgman install dejavu` supplies `DejaVu Sans Mono`, which is on both; after it
+the `FontPlugin` `VERIFY` passes.
+
+Do not expect fontconfig to paper over this. On DeBeOS every file in
+`/boot/system/settings/fonts/conf.d/` is a **dangling symlink** —
+`../../../../../.self/data/fontconfig/conf.avail/<name>.conf`, five levels up
+from `conf.d` lands at `/`, and `/.self` does not exist — so `fc-conflist`
+reports only `fonts.conf` as active and every generic-family, metric-alias and
+spacing rule is inert. Measured consequence: `fc-match monospace` answers
+`Noto Sans`, and `fc-match serif` answers `Noto Sans` where the same files
+included by absolute path answer `Noto Serif`. Filed separately; the recipe
+works around it by naming a real family rather than a generic one.
 
 ## Skia PathOps (found on the rev-4 build, #622)
 

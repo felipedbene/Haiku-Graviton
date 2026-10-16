@@ -30,12 +30,24 @@ mkdir -p $PREFIX/lib/pkgconfig $PREFIX/include/wuffs
 #    libavif_devel is deliberately not here either: the repo's is 0.9.3 and
 #    AVIFLoader.cpp needs avifDecoder::repetitionCount, so 1.4.2 is built from
 #    source below. dav1d_devel stays -- that build links the system dav1d.
+#    `dejavu` is a runtime, not a devel, dependency, and it is not optional:
+#    Web::Platform::FontPlugin VERIFYs that a fixed-width font exists at
+#    construction (Libraries/LibWeb/Platform/FontPlugin.cpp:55), and it looks
+#    only for the nine families in its monospace fallback list ("Andale Mono",
+#    "Courier New", "Courier", "FreeMono", "OCR A Std", "Noto Sans Mono",
+#    "DejaVu Sans Mono", "Droid Sans Mono", "Liberation Mono"). A stock DeBeOS
+#    install ships exactly one monospace family and it is called "Noto Mono"
+#    (fc-query: family `Noto Mono`, spacing 100), which matches none of them --
+#    nor any of fontconfig 60-latin.conf's monospace preferences -- so every
+#    process that constructs a FontPlugin aborts with
+#    `VERIFICATION FAILED: m_default_fixed_width_font`. dejavu provides
+#    "DejaVu Sans Mono", which is on both lists.
 pkgman install -y \
   libfmt_devel mimalloc_devel libsdl3_devel \
   fontconfig_devel libedit_devel harfbuzz_devel freetype_devel \
   libpng16_devel libjpeg_turbo_devel libwebp_devel brotli_devel woff2_devel \
   openssl3_devel curl_devel libxml2_devel sqlite_devel zlib_devel libpsl_devel \
-  dav1d_devel libdwarf_devel icu74_devel
+  dav1d_devel libdwarf_devel icu74_devel dejavu
 
 # 2. FastFloat (header-only) -- build+install its real CMake config package.
 cd /boot/home && git config --global core.fsync none || true

@@ -56,6 +56,13 @@ phase_toolchain() {
 
 phase_deps() {
 	sh "$RECIPE/scripts/provision-deps.sh"
+	# A monospace family Ladybird's fallback list actually names has to be on
+	# disk before anything that builds a FontPlugin will start -- the stock
+	# image's only mono font is "Noto Mono", which is on neither Ladybird's nor
+	# fontconfig's list. Assert the file, not the fontconfig view: the conf.d
+	# rules are inert on DeBeOS (dangling symlinks), so fc-match is no witness.
+	test -e /boot/system/data/fonts/ttfonts/DejaVuSansMono.ttf \
+		|| { echo "no DejaVu Sans Mono -- FontPlugin will abort" >&2; return 1; }
 }
 
 # A subset of phase `deps` (provision-deps.sh calls the same script), broken out
