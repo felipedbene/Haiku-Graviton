@@ -9,7 +9,8 @@
 #
 # Usage, run natively on the builder as baron:
 #     run-wall-build.sh <phase>...     # toolchain deps png icu ffmpeg lb
-#                                      # skiafetch skiabuild pc configure build
+#                                      # skiafetch skiabuild pc configure
+#                                      # craneliftcheck build wasmjit
 #                                      # tommath avif (re-runs of deps subsets)
 #     run-wall-build.sh all
 #
@@ -243,12 +244,18 @@ phase_pc() {
 # means that is never a mixed tree; a *reconfigure in place* of a previously
 # headless tree would leave helper copies in both bin/ and libexec/, which
 # package/build-package.sh refuses to package.
+#
+# ENABLE_CRANELIFT_JIT=ON is passed explicitly for the same reason as the two
+# chrome options: it is the upstream default, but a default is not a statement of
+# intent, and the WASM JIT is the one feature on this recipe that can switch
+# itself off without failing anything -- see phase_craneliftcheck.
 phase_configure() {
 	cd /boot/home/lb
 	rm -rf "$BUILDDIR"
 	cmake -G Ninja -B "$BUILDDIR" -S . \
 		-DCMAKE_BUILD_TYPE=Release \
 		-DENABLE_LTO_FOR_RELEASE=OFF \
+		-DENABLE_CRANELIFT_JIT=ON \
 		-DENABLE_QT_UI=OFF \
 		-DENABLE_HAIKU_UI=ON \
 		-DBUILD_TESTING=OFF \
@@ -274,11 +281,53 @@ phase_configure() {
 		-DCMAKE_CXX_USING_LINKER_MODE=FLAG
 }
 
-phase_build() {
-	# Single-instance cargo guard (DeBeOS #638). mkdir is the atomic primitive
-	# here: flock/File::lock is the thing that does not work on BFS. Keyed on
-	# CARGO_HOME, which is also the shared registry, so this excludes the other
-	# cargo drivers on the box too.
+# Assert the WASM Cranelift JIT is really in the graph, straight after configure
+# and before an hour of compiling.
+#
+# This exists because the JIT is the one feature here whose absence is
+# *completely silent*. WASM_COMPILED_FAULT_RECOVERY_SUPPORTED is set by
+# Libraries/LibWasm/CMakeLists.txt from a platform list that upstream writes as
+# WIN32 / APPLE / Linux-on-x86_64|aarch64; Haiku is not on it, and the DeBeOS
+# `elseif(HAIKU)` branch that puts it there keys off `uname -m` because
+# CMAKE_SYSTEM_PROCESSOR arrives as "other" (DeBeOS #701). If that probe ever
+# comes back empty the flag goes to 0, and a 0 flag does not drop fault recovery
+# alone -- try_cranelift_compile() returns false outright
+# (Libraries/LibWasm/CraneliftBridge.cpp:1293), so every function falls back to
+# the bytecode interpreter. Nothing fails. CMake prints nothing, ninja goes
+# green, liblagom-wasm still links the bridge translation unit, and the recipe
+# ships a browser whose WASM JIT never compiles a single function. The earlier
+# ports/ladybird/ladybird-haiku-arm64-wave3.patch stack did exactly that for a
+# whole wave while its notes recorded "cranelift ON" (issue 599, Track B).
+#
+# So: check the switch, the flag, and the object file. The object file is the
+# part that cannot be argued with -- CraneliftStubs.cpp is the no-JIT
+# translation unit, and if it is the one in the graph there is no JIT at all.
+phase_craneliftcheck() {
+	cd "/boot/home/lb/$BUILDDIR"
+	grep -q '^ENABLE_CRANELIFT_JIT:BOOL=ON$' CMakeCache.txt \
+		|| { echo "ENABLE_CRANELIFT_JIT is not ON in CMakeCache.txt" >&2; return 1; }
+	grep -q 'WASM_COMPILED_FAULT_RECOVERY_SUPPORTED=1' build.ninja \
+		|| { echo "WASM_COMPILED_FAULT_RECOVERY_SUPPORTED is not 1 -- the JIT would be inert (uname -m probe in LibWasm/CMakeLists.txt?)" >&2; return 1; }
+	# `if`, not `cmd && { ...; }`: under `set -e` a grep that correctly finds
+	# nothing would otherwise abort the phase as a false failure.
+	if grep -q 'WASM_COMPILED_FAULT_RECOVERY_SUPPORTED=0' build.ninja; then
+		echo "some target still compiles with WASM_COMPILED_FAULT_RECOVERY_SUPPORTED=0" >&2
+		return 1
+	fi
+	grep -q 'CraneliftBridge\.cpp\.o' build.ninja \
+		|| { echo "CraneliftBridge.cpp.o is not in the build graph" >&2; return 1; }
+	if grep -q 'CraneliftStubs\.cpp\.o' build.ninja; then
+		echo "CraneliftStubs.cpp.o is in the build graph -- this is the stubbed, no-JIT LibWasm" >&2
+		return 1
+	fi
+	echo "cranelift JIT is in the graph: flag 1, CraneliftBridge.cpp.o, no stubs"
+}
+
+# Single-instance cargo guard (DeBeOS #638). mkdir is the atomic primitive here:
+# flock/File::lock is the thing that does not work on BFS. Keyed on CARGO_HOME,
+# which is also the shared registry, so this excludes the other cargo drivers on
+# the box too. Every phase that can reach a Rust crate has to take it.
+take_cargo_lock() {
 	LOCK_DIR="$CARGO_HOME/.debeos-cargo.lock"
 	mkdir -p "$CARGO_HOME"
 	if ! mkdir "$LOCK_DIR" 2>/dev/null; then
@@ -294,7 +343,10 @@ phase_build() {
 	fi
 	printf '%s\n' "$$" > "$LOCK_DIR/pid"
 	trap 'rm -rf "$LOCK_DIR"' EXIT
+}
 
+phase_build() {
+	take_cargo_lock || return 1
 	cd "/boot/home/lb/$BUILDDIR"
 	# `ladybird` is the native chrome (OUTPUT_NAME "Ladybird"); it is the target
 	# WebDriver needs on PATH to start a session, and the one the headless-only
@@ -302,6 +354,69 @@ phase_build() {
 	ninja -j"$JOBS" ladybird WebContent WebDriver
 	test -x bin/Ladybird \
 		|| { echo "bin/Ladybird not produced" >&2; return 1; }
+}
+
+# Run the WASM Cranelift JIT, having asserted in phase_craneliftcheck that it is
+# in the graph. The graph check catches the switch regressing; this catches the
+# JIT regressing -- a bridge that compiles and links but emits nothing, or a
+# fault-recovery path that kills the process instead of raising a WASM trap.
+#
+# The module is 80 bytes of hand-assembled WASM rather than a checked-in fixture
+# or a wat2wasm dependency: three exported functions is the whole fixture, and
+# `i32.div_s` and `i32.load` are chosen because they are the two instructions
+# that reach the signal paths the DeBeOS patch adds. A division by zero is a
+# cranelift-emitted trap instruction (SIGILL/SIGFPE) decoded through the
+# function's trap table by cranelift_trap_message(); a load past the memory is a
+# guard-page SIGSEGV resumed through uc_mcontext.elr. Both of those are
+# DeBeOS-specific code, and neither is exercised by anything else in the recipe.
+phase_wasmjit() {
+	take_cargo_lock || return 1
+	cd "/boot/home/lb/$BUILDDIR"
+	ninja -j"$JOBS" wasm
+	test -x bin/wasm || { echo "bin/wasm not produced" >&2; return 1; }
+
+	mod=/boot/home/jit-probe.wasm
+	python3.10 - "$mod" <<-'PY'
+		import struct, sys
+		def sec(i, p): return bytes([i, len(p)]) + p
+		def exp(n, i): return bytes([len(n)]) + n.encode() + bytes([0, i])
+		def body(b): return bytes([len(b)]) + b
+		types = bytes([2, 0x60, 2, 0x7f, 0x7f, 1, 0x7f, 0x60, 1, 0x7f, 1, 0x7f])
+		mod = (b"\0asm" + struct.pack("<I", 1)
+		    + sec(1, types)                                   # (i32,i32)->i32, (i32)->i32
+		    + sec(3, bytes([3, 0, 0, 1]))                     # 3 funcs
+		    + sec(5, bytes([1, 0, 1]))                        # 1 memory, min 1 page
+		    + sec(7, bytes([3]) + exp("add", 0) + exp("dvs", 1) + exp("ld", 2))
+		    + sec(10, bytes([3])
+		        + body(bytes([0, 0x20, 0, 0x20, 1, 0x6a, 0x0b]))      # i32.add
+		        + body(bytes([0, 0x20, 0, 0x20, 1, 0x6d, 0x0b]))      # i32.div_s
+		        + body(bytes([0, 0x20, 0, 0x28, 2, 0, 0x0b]))))       # i32.load
+		open(sys.argv[1], "wb").write(mod)
+	PY
+
+	export LIBRARY_PATH="/boot/home/lb/$BUILDDIR/lib:$LIBRARY_PATH"
+
+	# --dump-native prints a byte count per cranelift-compiled function. A 0 flag
+	# makes try_cranelift_compile() return false and this list comes out empty,
+	# which is the inert-JIT signature. (The disassembly itself needs objdump at
+	# the hard-coded /usr/bin/objdump, which does not exist here; the byte count
+	# is the part that matters.)
+	./bin/wasm --dump-native -i "$mod" > jit-dump.txt 2>&1 || true
+	grep -q "Function #0 'add' ([1-9][0-9]* bytes)" jit-dump.txt \
+		|| { echo "no native code emitted for 'add' -- the JIT is inert" >&2; cat jit-dump.txt >&2; return 1; }
+
+	# bin/wasm pushes --arg onto a stack, so the LAST --arg is parameter 0.
+	# Reading that backwards makes a correct JIT look like it swaps every
+	# non-commutative operand: these two are div_s(12, 5) and div_s(12, 0).
+	./bin/wasm -e dvs --arg i32.const:5 --arg i32.const:12 "$mod" 2>&1 | grep -q '^  -> 2$' \
+		|| { echo "i32.div_s(12, 5) did not return 2" >&2; return 1; }
+	./bin/wasm -e dvs --arg i32.const:0 --arg i32.const:12 "$mod" 2>&1 \
+		| grep -q 'Execution trapped: Integer division overflow' \
+		|| { echo "i32.div_s by zero did not raise a WASM trap (cranelift trap table?)" >&2; return 1; }
+	./bin/wasm -e ld --arg i32.const:1048576 "$mod" 2>&1 \
+		| grep -q 'Execution trapped: Memory access out of bounds' \
+		|| { echo "out-of-bounds load did not raise a WASM trap (uc_mcontext.elr resume?)" >&2; return 1; }
+	echo "cranelift JIT emits native code and both fault-recovery paths trap"
 }
 
 run_phase() {
@@ -318,7 +433,7 @@ run_phase() {
 
 if [ "$1" = all ]; then
 	set -- toolchain deps png icu ffmpeg lb skiafetch skiabuild pc configure \
-		build
+		craneliftcheck build wasmjit
 fi
 test $# -gt 0 || { echo "usage: $0 <phase>... | all" >&2; exit 2; }
 

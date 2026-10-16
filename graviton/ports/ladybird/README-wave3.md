@@ -17,7 +17,8 @@ rustc/cargo 1.100.0-nightly, gcc/`cc` 13.3.0, GNU ld 2.46.1, cmake 4.1.6, ninja
 The full engine-tree diff is [`ladybird-haiku-arm64-wave3.patch`](ladybird-haiku-arm64-wave3.patch)
 (15 files). The DeBeOS GLES/EGL null backend is under
 [`angle-shim/`](angle-shim). Everything below is real engineering — **no stubs,
-no disabled engine features, no RTTI-off hacks, no `-z norelro`.**
+no disabled engine features, no RTTI-off hacks, no `-z norelro`** — with one
+correction: the WASM Cranelift JIT *was* capped in this wave, silently. See §2.
 
 ## 1. The Rust wall (gating Wave-2 blocker) — CLEARED
 
@@ -29,13 +30,35 @@ exit-255). Also drop `-D warnings` (cargo-1.100 nightly lints) and match cargo
 (`sync_rust_ffi_header.cmake`). This unblocked every mandatory Rust crate incl.
 the Cranelift WASM JIT compiler and `libweb_rust`.
 
-## 2. Cranelift WASM JIT (ships ON, real bridge)
+## 2. Cranelift WASM JIT — builds and links here, but was still INERT
 
 `cranelift_trap_message()` was defined only under
 `#if WASM_COMPILED_FAULT_RECOVERY_SUPPORTED` (unset on Haiku) but called
 unconditionally — a generic C++ preprocessor bug. Fix: hoist the pure trap-code
 decoder out of the guard (BytecodeInterpreter.cpp). `ENABLE_CRANELIFT_JIT=ON`;
 `liblagom-wasm` links the real Cranelift bridge.
+
+> **Correction (issue 599, Track B).** That is where this wave stopped, and it is
+> less than it reads as. Hoisting the decoder fixes the *build error* and nothing
+> else: `WASM_COMPILED_FAULT_RECOVERY_SUPPORTED` was still 0 on Haiku, and a 0
+> flag does not merely drop fault recovery — `try_cranelift_compile()` returns
+> `false` outright (`Libraries/LibWasm/CraneliftBridge.cpp:1293`), so every
+> function ran on the bytecode interpreter. This patch stack therefore *links*
+> the real bridge while compiling nothing with it, so the heading's "ships ON"
+> and the banner's "no disabled engine features" overstate it for the WASM JIT.
+> Nothing failed, which is the whole problem: a capped JIT here is silent.
+>
+> Turning it on takes two more changes, neither of them in this patch:
+> `Libraries/LibWasm/CMakeLists.txt` has to add Haiku to the platform list
+> (keyed on `uname -m`, because `CMAKE_SYSTEM_PROCESSOR` is `other` here —
+> DeBeOS #701), and `BytecodeInterpreter.cpp` needs the Haiku arm64 branches of
+> the fault-recovery context switch, where the resume address is
+> `uc_mcontext.elr`. Both live in
+> [`../../ladybird/patches/ladybird-haiku.patch`](../../ladybird/patches/ladybird-haiku.patch),
+> and the JIT is verified emitting native code and trapping correctly by
+> `run-wall-build.sh`'s `craneliftcheck` and `wasmjit` phases — see
+> [`../../ladybird/README.md`](../../ladybird/README.md) → "WASM Cranelift JIT".
+> Read this section as wave-3 history, not as current state.
 
 ## 3. WebGL / ANGLE — DeBeOS GLES/EGL null backend
 
@@ -157,7 +180,8 @@ Proof of live rendering over NAT:
 ## Status / open items
 
 - **DONE:** full real build (1862 targets), all service binaries + `test-web` +
-  `headless-shot`, cranelift ON, WebGL/EGL null backend, Skia with RTTI+fontconfig,
+  `headless-shot`, cranelift built and linked (inert in this wave — see §2),
+  WebGL/EGL null backend, Skia with RTTI+fontconfig,
   a **rendered modern webpage (PNG)**, AND **live modern internet sites rendered
   over NAT** (example.com, Hacker News) — the Wave-3 goal, in full.
 - The Skia rebuild should ideally be re-expressed as a proper `args.gn`
