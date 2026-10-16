@@ -80,8 +80,13 @@ phase_tommath() {
 
 # Also a subset of phase `deps`. Broken out for the same reason: the repo's
 # libavif 0.9.3 passes configure and then fails a compile 1900 targets in.
+# libavif1.0 (1.4.2) is a real pool package now, so this is an install and an
+# assertion rather than a source build -- see provision-deps.sh step 1b.
 phase_avif() {
-	PREFIX="$PREFIX" sh "$RECIPE/scripts/build-avif.sh"
+	pkgman uninstall -y libavif_devel || true
+	pkgman install -y libavif1.0_devel
+	grep -q repetitionCount /boot/system/develop/headers/avif/avif.h \
+		|| { echo "installed avif.h has no avifDecoder::repetitionCount" >&2; return 1; }
 }
 
 # libpng16 from the repo is built without APNG and LibImageDecoders hard-requires
@@ -212,15 +217,19 @@ phase_pc() {
 		|| { echo "libavcodec-ladybird.pc not visible" >&2; return 1; }
 
 	# find_package(LIBAVIF) is a config-package lookup, not pkg-config, and
-	# -DLIBAVIF_DIR points it at $PREFIX/lib/cmake/libavif. That config comes
-	# from phase `avif`'s own install, so assert it rather than writing a
-	# shadow: the system libavif's config is both too old (0.9.3) and broken
-	# (its _IMPORT_PREFIX walk advertises the non-existent
-	# /boot/system/include, DeBeOS #709), and a non-existent
-	# INTERFACE_INCLUDE_DIRECTORIES on an imported target is a hard CMake
-	# generate-step error.
-	test -e "$PREFIX/lib/cmake/libavif/libavif-config.cmake" \
-		|| { echo "libavif config missing -- run phase avif" >&2; return 1; }
+	# -DLIBAVIF_DIR points it at the pool package's own config under
+	# /boot/system. That pin is explicit even though the package sits on the
+	# default system prefix path and resolves without it: $PREFIX is on
+	# CMAKE_PREFIX_PATH and outranks the system prefix, so a builder left over
+	# from the retired from-source build would otherwise keep resolving to its
+	# stale $PREFIX/lib/cmake/libavif. Asserted rather than shadowed:
+	# libavif1.0 1.4.2's config advertises /boot/system/develop/headers, which
+	# exists (the _IMPORT_PREFIX walk onto the non-existent
+	# /boot/system/include, DeBeOS #709, was the 0.9.3 package's), and a
+	# non-existent INTERFACE_INCLUDE_DIRECTORIES on an imported target is a
+	# hard CMake generate-step error.
+	test -e /boot/system/lib/cmake/libavif/libavif-config.cmake \
+		|| { echo "libavif1.0_devel missing -- run phase avif" >&2; return 1; }
 }
 
 # ENABLE_HAIKU_UI=ON is what gets `bin/Ladybird` built, and without it WebDriver
@@ -245,7 +254,7 @@ phase_configure() {
 		-DBUILD_TESTING=OFF \
 		-DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++ \
 		-DCMAKE_PREFIX_PATH=$PREFIX \
-		-DLIBAVIF_DIR=$PREFIX/lib/cmake/libavif \
+		-DLIBAVIF_DIR=/boot/system/lib/cmake/libavif \
 		-DICU_ROOT=$PREFIX/icu78 \
 		-DFastFloat_DIR=$PREFIX/share/cmake/FastFloat \
 		-Dsimdutf_DIR=$PREFIX/lib/cmake/simdutf \
