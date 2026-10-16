@@ -48,11 +48,13 @@ WHAT IT CHECKS (each links to the fact that motivates it):
      `aarch64`, which GNU config.guess/config.sub and hand-rolled arch switches choke on
      (playbook Class 6 / Class 19).
 
-  7. `uname -p`, which is worse than `uname -m` and so is checked separately. There is no
-     processor field in Haiku's `struct utsname`; the string comes from the coreutils
-     port, and it is `other` with the image's bootstrap coreutils and `unknown` with the
-     9.11 pool build -- never an architecture. A build that keys on it takes its fallback
-     on Graviton, silently.
+  7. `uname -p`, which is less dependable than `uname -m` and so is checked separately.
+     There is no processor field in Haiku's `struct utsname`; the string comes from the
+     coreutils port, and it is `other` with the image's bootstrap coreutils while the
+     pool's non-bootstrap coreutils answers `arm64`. So a build that keys on it takes its
+     fallback on an unprovisioned Graviton box but not on a provisioned one -- silently,
+     and differently depending on where it ran. `uname -m` is libroot's and is always
+     `arm64`.
 
   8. tecmake (ftgl, cd/canvasdraw, iup, im). Its TEC_SYSARCH table has no arm64 entry, so
      byte order and word size both fall through to `-DTEC_BIGENDIAN -DTEC_32` on a
@@ -217,8 +219,9 @@ RE_IFUNC = re.compile(
 # CMake CPU-string matching that can silently miss Haiku's arm64.
 RE_CMAKE_PROC = re.compile(r"CMAKE_SYSTEM_PROCESSOR", re.IGNORECASE)
 
-# `uname -p` is worse than `uname -m` on Haiku and gets its own check: -m at least reports
-# `arm64`, while -p reports no architecture at all (see lint_build for the measurements).
+# `uname -p` is less dependable than `uname -m` on Haiku and gets its own check: -m is
+# libroot's and always reports `arm64`, while -p is the coreutils port's string and depends
+# on which coreutils is installed (see lint_build for the measurements).
 RE_UNAME_P = re.compile(r"\buname\b[^\n|;&]*?\s-\w*p\b")
 # ... but every autoconf-generated `configure` echoes `uname -p` into config.log from its
 # "## Platform. ##" banner and never branches on the result. Flagging that would fire the
@@ -355,12 +358,15 @@ def lint_build(path, lines, out):
             once.add("uname-p")
             out.append(Finding(
                 "WARN", "uname-p", path, i, raw,
-                "Host arch taken from `uname -p`, which on Haiku names no architecture at "
-                "all: the processor string is the coreutils port's, and it is 'other' with "
-                "the bootstrap coreutils (B_CPU_ARM_64 falls into its switch default) or "
-                "'unknown' with the 9.11 pool build (no processor patch at all). `uname -m` "
-                "is the one that answers 'arm64'. Any branch keyed on `uname -p` therefore "
-                "takes its fallback on Graviton -- silently (#701)."))
+                "Host arch taken from `uname -p`, which on Haiku is not libroot's answer "
+                "but the coreutils port's own string, so it depends on which coreutils is "
+                "installed: 'other' with the image's bootstrap coreutils (B_CPU_ARM_64 "
+                "falls into its switch default), 'arm64' with the pool's non-bootstrap "
+                "coreutils, which `haiku-provision-native-builder` now installs. `uname -m` "
+                "is libroot's and answers 'arm64' everywhere. A branch keyed on `uname -p` "
+                "therefore takes its fallback on an unprovisioned Graviton box and not on a "
+                "provisioned one -- silently, and differently depending on where it ran "
+                "(issue 701)."))
         if RE_TECMAKE_ARCH.search(s) and "tecmake-arch" not in once:
             once.add("tecmake-arch")
             out.append(Finding(
@@ -430,9 +436,10 @@ DeBeOS arm64 port-hygiene checklist (manual companion to `haiku-port-lint`)
     (playbook Class 6/19).
 
 [ ] `uname -p`. Haiku has no processor field in `struct utsname`; the string is the
-    coreutils port's own, and it is `other` (bootstrap coreutils) or `unknown` (9.11 pool
-    build) -- never an architecture. Anything keyed on `uname -p` takes its fallback here.
-    Re-key on `uname -m`, or state the answer explicitly.
+    coreutils port's own, so it is `other` with the image's bootstrap coreutils and
+    `arm64` with the pool's. Anything keyed on `uname -p` therefore takes its fallback on
+    an unprovisioned box and not on a provisioned one. Re-key on `uname -m`, which is
+    libroot's and is always `arm64`, or state the answer explicitly.
 
 [ ] tecmake (ftgl, cd/canvasdraw, iup, im). Byte order and word size both fall through to
     `-DTEC_BIGENDIAN -DTEC_32` on Graviton -- and for `arm64`/`aarch64` too, so an
