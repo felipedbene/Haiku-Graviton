@@ -1,22 +1,27 @@
 # Rust file locking on DeBeOS: `File::lock` is a silent no-op, and cargo believes it
 
-DeBeOS #638. Status: root cause **VERIFIED**; the upstream code fix is **merged**, but
-landing it here is **OWED** and needs a from-source `rust_bin` re-bake (verified
-2026-10-15: there is no prebuilt arm64-Haiku toolchain to bump a pin to, because
-upstream neither publishes Haiku artifacts nor even defines the `aarch64-unknown-haiku`
-target); interim serialisation locks are **landed** in this tree.
+DeBeOS issue 638. Status: root cause **VERIFIED**; the upstream code fix is **merged**;
+the from-source `rust_bin` re-bake carrying it is **DONE** (2026-10-16, base commit
+`e9bbadf68`, artifact `rust_bin-1.101.0~nightly_e9bbadf68-1-arm64.hpkg`), and the bake
+is now reproducible from `graviton/scripts/haiku-rust-bake` instead of being
+archaeology. What is still **OWED** is the gated publish into the green pool, the pin
+bump that follows it, and the *after* half of the on-device reproduction. Interim
+serialisation locks are **landed** in this tree. There is still no prebuilt arm64-Haiku
+toolchain to bump a pin to — upstream neither publishes Haiku artifacts nor even defines
+the `aarch64-unknown-haiku` target, so every refresh is a from-source cross-build.
 
 ## TL;DR — what to do
 
 1. **Builders:** nothing to do if you only ever run one `cargo` at a time per box.
    If you run more than one, they corrupt each other. The four drivers in this repo
    that could overlap now take a lock themselves (see *Interim mitigation* below).
-2. **Real fix:** re-bake `rust_bin` at an upstream base commit **≥ `nightly-2026-10-13`**.
-   The fix is already upstream; DeBeOS does not need to carry a patch. But this is
-   **not a pin bump and there is nothing to download** — upstream publishes no Rust
-   artifact for any Haiku target, and `aarch64-unknown-haiku` is not even an upstream
-   rustc target. It is a from-source rebuild, re-running DeBeOS's own bake at a newer
-   base commit. See *Upstream state* and *What a re-bake requires*.
+2. **Real fix:** re-bake `rust_bin` at an upstream base commit **≥ `nightly-2026-10-13`**
+   by running `graviton/scripts/haiku-rust-bake all` from an aarch64 Linux desk. The fix
+   is already upstream; DeBeOS does not need to carry a patch. But this is **not a pin
+   bump and there is nothing to download** — upstream publishes no Rust artifact for any
+   Haiku target, and `aarch64-unknown-haiku` is not even an upstream rustc target. It is
+   a from-source cross-build. Done once already; see *Upstream state*, *What a re-bake
+   requires*, and *The re-bake as actually performed*.
 3. **Do not** set a global `build.target-dir` / `CARGO_TARGET_DIR` in
    `graviton/ssh/files/cargo-config.toml`. Today every cargo on the box gets its own
    default target dir; a global one would merge them all into a single *unlocked*
@@ -222,18 +227,187 @@ same thing as a JSON target), `mod.rs.registration.diff` (the one line registeri
 8. Confirm `File::lock` blocks rather than returning `Unsupported`, and run the
    two-concurrent-`cargo build --target-dir T` reproduction.
 
-> **Gap worth closing independently of #638:** the *driving build script* for step 4
-> was never preserved. Only the six recipe inputs are in S3; `bake-scripts/` holds
-> nothing Rust-related and the tree has no `x.py` invocation, `bootstrap.toml` or
-> equivalent. The bake is reproducible in principle — target spec, sysroot, wrappers
-> and base commit are all kept — but step 4's exact configuration has to be
-> reconstructed by whoever runs it. It should be committed when it is.
+> **Gap now closed.** The 2026-08-26 bake's *driving build script* was never preserved —
+> only the six recipe inputs were in S3, `bake-scripts/` held nothing Rust-related, and
+> the tree had no `x.py` invocation or `bootstrap.toml`. It was reconstructed on
+> 2026-10-16 and committed as **`graviton/scripts/haiku-rust-bake`**, so steps 1–5 above
+> are now `haiku-rust-bake all` and the next refresh is not another archaeology
+> exercise. The reconstruction and the traps it encodes are written out in full in *The
+> re-bake as actually performed* below.
 
 A newer `rust_bin` is wanted for unrelated reasons too, so this is not a cost carried
-only by #638: `graviton/docs/archive/uutils-coreutils-arm64.md:174-186` ("The fix
+only by issue 638: `graviton/docs/archive/uutils-coreutils-arm64.md:174-186` ("The fix
 belongs in the toolchain (a newer `rust_bin`)"),
 `graviton/patches/uv-0.12.18-arm64/README.md:85-101`,
 `graviton/audit/doc-triage-phase1.md:91`.
+
+## The re-bake as actually performed — 2026-10-16
+
+Run from an aarch64 Amazon Linux 2023 desk, cross-compiling to
+`aarch64-unknown-haiku`. Driver: `graviton/scripts/haiku-rust-bake`
+(`fetch-inputs | port | std | dist | cargo | pack | all`). Base commit
+**`e9bbadf6824e65b3583c2dda3a0926ec76df9143`** (`nightly-2026-10-13`, rustc
+`1.101.0-nightly`). One package had to be installed: `ninja-build`. No rust was needed
+on the desk — `x.py`'s `bootstrap.py` downloads its own stage0.
+
+**The fix is gated by content, not by commit id**, so a different base cannot silently
+skip it:
+
+```sh
+n="$(grep -c 'target_os = "haiku"' library/std/src/sys/fs/unix.rs)"
+[ "$n" -ge 10 ] || die "base commit lacks rust-lang/rust#164031"
+```
+
+### `bootstrap.toml`
+
+```toml
+change-id = 162423
+
+[llvm]
+download-ci-llvm = false      # mandatory; see below
+ninja = true
+# Do NOT set llvm.targets / llvm.experimental-targets: they are global, so they would
+# also narrow the Haiku-hosted LLVM and ship a rustc that can only emit AArch64.
+
+[build]
+build  = "aarch64-unknown-linux-gnu"
+host   = ["aarch64-unknown-haiku"]
+target = ["aarch64-unknown-haiku"]
+docs = false
+compiler-docs = false
+extended = false
+tools = ["rustdoc"]           # rustdoc only; cargo is built standalone
+locked-deps = true
+vendor = false
+jobs = 16
+
+[rust]
+channel = "nightly"
+download-rustc = false
+debug = false
+debuginfo-level = 0
+backtrace = true
+incremental = false
+
+[dist]
+compression-formats = ["gz"]
+
+[target.aarch64-unknown-linux-gnu]
+cc = "gcc"
+cxx = "g++"
+
+[target.aarch64-unknown-haiku]
+cc     = "<workdir>/bin/haiku-rust-gcc"
+cxx    = "<workdir>/bin/haiku-rust-g++"
+linker = "<workdir>/bin/haiku-rust-gcc"
+ar     = "<haiku-tree>/generated.arm64/cross-tools-arm64/bin/aarch64-unknown-haiku-ar"
+ranlib = "<haiku-tree>/generated.arm64/cross-tools-arm64/bin/aarch64-unknown-haiku-ranlib"
+crt-static = false
+```
+
+### The `x.py` command lines
+
+```sh
+cd <workdir>/rust
+BOOTSTRAP_SKIP_TARGET_SANITY=1 python3 x.py build library --target aarch64-unknown-haiku
+BOOTSTRAP_SKIP_TARGET_SANITY=1 python3 x.py dist rustc rust-std
+```
+
+`BOOTSTRAP_SKIP_TARGET_SANITY=1` is **not optional**. Bootstrap validates
+`build.target` against the *stage0* rustc's target list (`src/bootstrap/src/core/sanity.rs:292`),
+stage0 is an upstream nightly, and upstream only knows `i686`/`x86_64-unknown-haiku` —
+so it rejects `aarch64-unknown-haiku` before the stage1 compiler that *does* know it has
+been built:
+
+```
+thread 'main' panicked at src/bootstrap/src/core/sanity.rs:292:
+aarch64-unknown-haiku: No such target exists in the target list,
+did you accidentally make a typo? Use BOOTSTRAP_SKIP_TARGET_SANITY=1 to bypass this check.
+```
+
+### Why `download-ci-llvm` must be `false`
+
+This is the one trap that costs an afternoon. The build host is tier 1 and CI LLVM
+*does* exist for it, so the obvious setting is `true`. It cannot be. Cross-building host
+tools hands `rustc_llvm`'s build script the **build host's** `llvm-config` (the target's
+is a Haiku binary and will not execute on Linux) and then rewrites the build triple to
+the target triple in every path it prints — `compiler/rustc_llvm/build.rs:286` for `-I`
+flags, `:453` for link search dirs. That only works if the two LLVMs are laid out and
+configured identically, which the build script admits in as many words ("This only
+really works if the host LLVM and target LLVM are compiled the same way"). With CI LLVM
+they are not, and it fails twice:
+
+1. **Paths.** CI LLVM unpacks to `build/<build-triple>/ci-llvm`, the cross-built one
+   lands in `build/<target>/llvm`, so the rewrite yields `build/<target>/ci-llvm/include`
+   — nonexistent: `llvm-wrapper/LLVMWrapper.h:6:10: fatal error: llvm/Config/llvm-config.h: No such file or directory`.
+2. **Link type**, which symlinking the path does *not* cure. CI LLVM is built
+   `LLVM_LINK_LLVM_DYLIB=ON` and ships only `libLLVM-*.so`, no static archives, while
+   bootstrap configures the cross LLVM `LLVM_LINK_LLVM_DYLIB=OFF`. So
+   `llvm-config --link-static --libs …` on the CI LLVM answers
+   `missing: …/ci-llvm/lib/libLLVMDemangle.a` for every component and exits 1.
+
+Building LLVM for the build host locally (~20 min) puts a static `llvm-config` under
+`build/<build-triple>/llvm`, and both the path rewrite and `--link-static` then agree.
+`x.py dist rustc rust-std` took 0:23:34 after that.
+
+Setting `llvm.targets` alongside `download-ci-llvm` is rejected outright anyway:
+`Setting \`llvm.targets\` is incompatible with \`llvm.download-ci-llvm\``
+(`src/bootstrap/src/core/download.rs:339`).
+
+### The cross-gcc wrappers, re-pointed
+
+The preserved wrappers hardcode `/opt/haiku/...` paths that exist on no current desk.
+The committed script regenerates them against the local tree and a **private** sysroot:
+
+```sh
+#!/bin/sh
+exec <xbin>/aarch64-unknown-haiku-gcc --sysroot=<sysroot> -D_DEFAULT_SOURCE \
+  -L<sysroot>/boot/system/develop/lib "$@" -lbsd -lnetwork -lgnu
+```
+
+Changes versus the 2026-08-26 originals: the real local `cross-tools-arm64/bin` path
+instead of `/opt/haiku/haiku/...`; an added `--sysroot=`; and `-L` pointing at the
+private sysroot's `develop/lib` instead of `/opt/haiku/rust-haiku-sysroot/lib`.
+
+The sysroot is assembled by copying **out of** the shared `generated.arm64` tree (never
+into it): `haiku_devel.hpkg`'s `develop/{lib,headers}`, `haiku.hpkg`'s `lib`, overlaid
+with the preserved `rust-haiku-sysroot`, plus libcurl/libnghttp2/libssh2 and `.so`/`.so.N`
+symlinks. Every `.pc` file has to be re-prefixed away from `/packages/<pkg>/.self`, and
+`libcurl.pc` has to be written by hand (Haiku's curl package ships none); a
+`curl-config` shim answers `--features` from the real `libcurl.so.4`'s `NEEDED` list.
+
+### Cargo is built standalone, not by `x.py`
+
+`tools = ["cargo"]` would build cargo `all-static`, which compiles OpenSSL and curl from
+source for the target. The shipped cargo is "dyncurl" — cargo's **default** features, so
+`curl-sys`/`openssl-sys`/`libz-sys` link against Haiku's system libraries:
+
+```sh
+cargo build --release --target aarch64-unknown-haiku   # with the stage1 rustc + the wrappers
+```
+
+with `LIBSSH2_SYS_USE_PKG_CONFIG=1` in the environment. Without it,
+`libssh2-sys-0.3.2/build.rs:117` compiles a vendored libssh2 at `-fvisibility=hidden`
+while Haiku's `libcurl.so.4` `DT_NEEDED`s `libssh2.so.1` and asks the linker for
+`libssh2_init`, and the link dies with `hidden symbol 'libssh2_init' … is referenced by
+DSO` / `final link failed: bad value`. Pointing it at the system shared libssh2 (headers
++ a re-prefixed `libssh2.pc` from `libssh2_devel-1.11.1-1-arm64.hpkg`) fixes it, and
+cargo links in 1m32s.
+
+As a side effect this *restores* ssh support that the 2026-08-26 cargo silently lacked:
+that binary has no `libssh2` in its `NEEDED` list and only libgit2's no-op
+`git_transport_ssh_libssh2_global_init` stub, so `cargo` could never clone a `git+ssh://`
+dependency. The new one `NEEDED`s `libssh2.so.1`.
+
+### Packing
+
+hpkg version grammar needs a `~` before a prerelease marker — `1.101.0-nightly_e9bbadf68-1`
+is rejected with `Parse error in .PackageInfo(2:24) -> invalid character in micro version
+string`, so the name is `1.101.0~nightly_e9bbadf68-1`, matching the old
+`1.100.0~nightly_787af2b8c-2`. `tools = ["rustdoc"]` exists purely so the package's
+promised `provides: cmd:rustdoc` has a binary behind it; with `tools = []` the rustc dist
+component ships none, and the 2026-08-26 package has exactly that unresolvable-provides
+defect (the same shape as issues 708 and 717).
 
 ## Toolchain provenance — why there is no in-tree std patch, and no place to put one
 
@@ -492,17 +666,64 @@ and is the right layer.
   cross-gcc wrappers, link sysroot, base commit `787af2b8c`, plus the resulting dist
   tarballs and hpkgs). Listed and the recipe tarball unpacked and read.
 - **(2026-10-15) The bake's driving build script does not survive** — not in
-  `rust/`, not in `bake-scripts/`, not in the tree.
+  `rust/`, not in `bake-scripts/`, not in the tree. **Superseded 2026-10-16:**
+  reconstructed and committed as `graviton/scripts/haiku-rust-bake`.
+- **(2026-10-16) The re-bake works.** `rust_bin-1.101.0~nightly_e9bbadf68-1-arm64.hpkg`
+  (183,503,957 bytes) built from base commit `e9bbadf68` on an aarch64 Linux desk:
+  stage1 std, `x.py dist rustc rust-std`, a standalone dyncurl cargo, and the hpkg.
+  Inputs and outputs under
+  `s3://haiku-graviton-668984504585-us-west-2/rust/rebake-2026-10-16/`.
+- **(2026-10-16) The DeBeOS port needs no changes at the new base commit.** The
+  preserved `aarch64_unknown_haiku.rs` compiles verbatim against `e9bbadf68`; only the
+  one-line `mod.rs` registration had to be re-based (anchor on the
+  `("i686-unknown-haiku", …)` line). No target-spec and no sysroot change was needed.
+- **(2026-10-16) `host_tools: false` in the target spec does not block building host
+  tools.** The contradiction in the preserved recipe (a `host_tools: false` target that
+  nonetheless shipped a cargo binary) is only apparent: `host_tools` is consumed by
+  `src/tools/build-manifest/build.rs` for the manifest and the platform-support table,
+  and `grep -rn host_tools src/bootstrap/src/` finds nothing — it is metadata, not a
+  bootstrap gate. The 2026-08-26 cargo's `strings` show `/home/cargo-rebuild/vendor/<crate>`
+  paths, i.e. it was built standalone with vendored deps, not by `x.py`.
+- **(2026-10-16) std-level A/B on the artifacts.** Old `libstd-*.rlib`: zero `flock`
+  references and four `"lock() not supported"` strings. New `libstd-*.rlib`: one `flock`
+  reference, zero such strings. A probe binary cross-compiled against the new std shows
+  `U flock` in `nm -D` — the dynamic reference to Haiku's `flock(2)` that the old std
+  never emitted.
+- **(2026-10-16) The *before* half of the reproduction, on the real builder**
+  (`i-01886408618b237de`, rustc `1.100.0-nightly (787af2b8c)`, cargo `1.100.0`):
 
-**OWED — needs a DeBeOS Graviton instance (the test fleet is stopped; nothing below
-was run):**
+  ```
+  lock() -> Err kind=Unsupported msg="lock() not supported"  waited=0ms   (holder)
+  lock() -> Err kind=Unsupported msg="lock() not supported"  waited=0ms   (contender)
+  c1: Finished `release` profile [optimized] target(s) in 30.57s   rc1=0
+  c2: Finished `release` profile [optimized] target(s) in 30.30s   rc2=0
+  BLOCKING_COUNT=0
+  FINISHED_COUNT=2
+  ```
 
-- The two-concurrent-`cargo build --target-dir T` reproduction, before and after the
-  toolchain bump.
-- A `rust_bin` re-baked at base commit `nightly-2026-10-13`+ — **including a rebuilt
-  cargo**, not just `rust-std` — and confirmation that `File::lock` then blocks rather
-  than returning `Unsupported`. This is a from-source toolchain build on a builder, per
-  *What a re-bake requires*; it is the sole remaining blocker on this issue.
+  Two cargos sharing `--target-dir T` on a crate whose `build.rs` sleeps 30 s both ran
+  the build concurrently and both reported success. Neither printed `Blocking waiting
+  for file lock`. That is the defect, measured.
+
+**OWED:**
+
+- **The *after* half of the reproduction on a native builder.** Not run: the only Haiku
+  node with `rust_bin` installed (`i-01886408618b237de`) has a wedged SSM command worker
+  — every command queued on it since 02:45 UTC on 2026-10-16, including other agents'
+  trivial ones, is stuck `InProgress` while the agent still heartbeats `Online`; and it
+  must not be rebooted (SSM does not survive a reboot there and sshd is ed25519-only).
+  The alternative node `i-05ed98f7af2c4ba14` is responsive and has every shared library
+  the new cargo needs, but no `rust_bin`, and staging the toolchain onto it was blocked
+  by a tooling permission denial. The expected result, for whoever runs it: the probe's
+  contender blocks for the holder's hold time instead of returning `Unsupported`, and
+  `BLOCKING_COUNT=1` / `FINISHED_COUNT=2` for the two-cargo run. The scripts are written
+  and need only a node to run on.
+- **Publishing and the pin bump.** The hpkg is built but not published; publishing to
+  the green pool is a gated human step. The pin at `graviton/ssh/UserBuildConfig:317`
+  is deliberately **left at `rust_bin-1.100.0~nightly_787af2b8c-2-arm64.hpkg`** — it
+  names a file that `HG_POOL_DIR` must actually contain, so bumping it before the
+  package is in the pool would break every image build. Bump it to
+  `rust_bin-1.101.0~nightly_e9bbadf68-1-arm64.hpkg` in the same change that publishes.
 - Smoke-testing the four `mkdir`-lock mitigations on a real builder. The guard's
   three paths (acquire/release, abort while held, stale-pid takeover) were exercised
   on a Linux desk against the block as shipped, but `mkdir` atomicity *on BFS* and
