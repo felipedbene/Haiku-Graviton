@@ -414,8 +414,43 @@ def main():
               "incoherent union is never published")
         check("die " in src[i_call:i_call + 400] or "die \"" in src[i_call:i_up],
               "a failed coherence check aborts the publish (die), not just warns")
+        # A MISSING tool used to print a NOTE and publish anyway, so every
+        # publisher that ships haiku-repo-add to a remote host without the tool
+        # beside it was silently ungated. Absence is now fatal; assert that, and
+        # assert that nothing has reintroduced a skip branch around the call.
+        check("coherence UNCHECKED" not in src,
+              "an absent coherence tool is not downgraded to a NOTE")
+        check('[ -x "$COHERENCE_TOOL" ] || die' in src,
+              "an absent coherence tool is fatal")
     else:
         check(False, "haiku-repo-add is missing")
+
+    print()
+    print("== the publishers that ship haiku-repo-add to a remote host "
+          "carry the gate with it")
+    # haiku-repo-add resolves the tool as its own sibling, so a publisher that
+    # base64's only haiku-repo-add onto a peer lands it alone in /tmp and the gate
+    # cannot be found. Every live remote-shipping publisher must carry the tool,
+    # the HPKR reader it imports, and the baseline it reads -- and chmod +x the
+    # tool, because `base64 -d >` makes it 0644 and `[ -x ]` would reject it.
+    # haiku-repo-publish-remote is exempt: its header declares it RETIRED and the
+    # metal host it drove is terminated.
+    for pub in ("haiku-repo-publish-ephemeral", "haiku-repo-publish-native"):
+        path = os.path.join(HERE, pub)
+        if not os.path.exists(path):
+            check(False, "%s is missing" % pub)
+            continue
+        psrc = open(path).read()
+        if "haiku-repo-add" not in psrc:
+            continue
+        for need in ("haiku-repo-coherence", "hpkg_meta.py",
+                     "haiku-repo-coherence.baseline"):
+            check(need in psrc, "%s ships %s to the peer" % (pub, need))
+        # Any `chmod +x` line naming the tool will do -- these scripts chmod the
+        # fetched host tools too, so match on the line, not on the first hit.
+        check(any(l.strip().startswith("chmod +x") and "haiku-repo-coherence" in l
+                  for l in psrc.splitlines()),
+              "%s chmod +x's the coherence tool on the peer" % pub)
 
     print()
     if FAILURES:
