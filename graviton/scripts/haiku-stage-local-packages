@@ -12,7 +12,24 @@
 # skipped and the build features that need it stay off. jam now prints a line
 # per missing package, so check its output rather than guessing.
 #
+# VENDOR INVARIANT. Every file staged here is handed to `package_repo create`
+# together with src/data/repository_infos/haikuports, which declares
+# vendor "Haiku Project"; RepositoryWriterImpl rejects the whole set if any
+# member disagrees (src/kits/package/hpkg/RepositoryWriterImpl.cpp, "has
+# unexpected vendor"). The trap is that DeBeOS keeps two differently stamped
+# copies of the same build: the pipeline hpkg pool carries the builder's
+# "Haiku Project" stamp, while the published repo at packages.debene.dev is
+# re-stamped to vendor "DeBeOS" by `haiku-repo-publish` because a served repo
+# must be single-vendor. Stage the published copy by mistake and the build runs
+# for the better part of an hour before dying in RepositoryCache1 with a message
+# that names neither the file nor the remedy, skipping every image target. So
+# check the vendor here, where the operator can still act on it (issue 737).
+#
 # Usage: haiku-stage-local-packages <generated-dir> [<hpkg-pool-dir>]
+#
+# Exit status: 0 everything staged; 1 some listed package was not in the pool
+# (tolerable -- its build features just stay off); 2 a vendor problem, which is
+# never tolerable because it fails the whole image.
 
 set -e
 
@@ -47,21 +64,126 @@ fi
 DOWNLOAD="$GENERATED/download"
 mkdir -p "$DOWNLOAD"
 
+# The vendor every staged file must carry, read from the very repository info
+# that package_repo will be given, so the two cannot drift apart.
+REPO_INFO="$TOP/src/data/repository_infos/haikuports"
+EXPECTED_VENDOR=$(sed -n 's/^vendor[[:space:]]*"\(.*\)"[[:space:]]*$/\1/p' \
+	"$REPO_INFO" 2>/dev/null | head -1)
+
+# Reading an hpkg's vendor needs the host `package` tool, which a jam pass
+# builds into the generated tree. It links against the build-system shims, so
+# point the loader and the license data dir at the in-tree copies (same
+# relocation the bake uses).
+PACKAGE_TOOL=$(find -L "$GENERATED/objects" -maxdepth 7 -type f \
+	-path '*/release/tools/package/package' 2>/dev/null | head -1)
+if [ -n "$PACKAGE_TOOL" ]; then
+	LDP=""
+	for d in $(find -L "$GENERATED/objects" -maxdepth 4 -type f \
+			-name '*_build.so' -exec dirname {} \; 2>/dev/null | sort -u); do
+		LDP="$d:$LDP"
+	done
+	LD_LIBRARY_PATH="${LDP}${LD_LIBRARY_PATH:-}"
+	HAIKU_BUILD_SYSTEM_DATA_DIRECTORY="$TOP/data/system/data"
+	export LD_LIBRARY_PATH HAIKU_BUILD_SYSTEM_DATA_DIRECTORY
+fi
+
+# hpkgVendor <file> -- the package's vendor field, or empty if unreadable.
+hpkgVendor()
+{
+	"$PACKAGE_TOOL" list -i "$1" 2>/dev/null \
+		| sed -n 's/^[[:space:]]*vendor:[[:space:]]*//p' | head -1
+}
+
+if [ -z "$EXPECTED_VENDOR" ]; then
+	echo "warning: no vendor declared in $REPO_INFO --" >&2
+	echo "  staged files not checked" >&2
+elif [ -z "$PACKAGE_TOOL" ]; then
+	echo "warning: no host 'package' tool under $GENERATED/objects, so the" >&2
+	echo "  vendor of the staged files is UNVERIFIED. A file not vendored" >&2
+	echo "  '$EXPECTED_VENDOR' will instead fail much later, in jam, as \"has" >&2
+	echo "  unexpected vendor\" from RepositoryCache1 .../HaikuPorts-local." >&2
+	echo "  Run a jam pass first, then re-run this script, to check it here." >&2
+fi
+
+# reportWrongVendor <what> <file> <vendor>
+reportWrongVendor()
+{
+	echo "WRONG VENDOR: the $1 copy of $2 carries vendor '$3', but the" >&2
+	echo "  local HaikuPorts cache is built against" >&2
+	echo "  $REPO_INFO, which declares" >&2
+	echo "  vendor '$EXPECTED_VENDOR'. package_repo create refuses a" >&2
+	echo "  mixed-vendor set, so this file fails the image build." >&2
+	echo "  Take it from the pipeline hpkg pool, NOT from the published repo" >&2
+	echo "  at packages.debene.dev -- haiku-repo-publish re-stamps everything" >&2
+	echo "  it serves to vendor 'DeBeOS'." >&2
+}
+
+checkVendor=
+if [ -n "$EXPECTED_VENDOR" ] && [ -n "$PACKAGE_TOOL" ]; then
+	checkVendor=1
+fi
+
+PACKAGES=$(sed -e 's/#.*//' "$LIST" \
+	| grep -Ev '^[[:space:]]*(LocalPackageRepository|:|;|$)' \
+	| tr -d '[:blank:]' | grep -E '^[A-Za-z0-9_]+-')
+
 missing=0
 staged=0
-for pkg in $(sed -e 's/#.*//' "$LIST" \
-		| grep -Ev '^[[:space:]]*(LocalPackageRepository|:|;|$)' \
-		| tr -d '[:blank:]' | grep -E '^[A-Za-z0-9_]+-'); do
+rejected=0
+for pkg in $PACKAGES; do
 	file="$pkg-$ARCH.hpkg"
 	if [ ! -f "$POOL/$file" ]; then
 		echo "MISSING in pool: $file"
 		missing=$((missing + 1))
 		continue
 	fi
+	if [ -n "$checkVendor" ]; then
+		vendor=$(hpkgVendor "$POOL/$file")
+		if [ -z "$vendor" ]; then
+			echo "UNREADABLE: $POOL/$file -- cannot read its vendor." >&2
+			rejected=$((rejected + 1))
+			continue
+		fi
+		if [ "$vendor" != "$EXPECTED_VENDOR" ]; then
+			reportWrongVendor pool "$file" "$vendor"
+			echo "  Not staging it." >&2
+			rejected=$((rejected + 1))
+			continue
+		fi
+	fi
 	cp -p "$POOL/$file" "$DOWNLOAD/$file"
 	echo "staged: $file"
 	staged=$((staged + 1))
 done
 
-echo "$staged staged into $DOWNLOAD, $missing missing from $POOL"
+# Audit what is actually in the download directory, not just what this run put
+# there. jam feeds package_repo whatever it finds under that name, so a file
+# left behind by an earlier run -- or copied in by hand from the published repo,
+# which is how issue 737 happened -- is just as fatal and is invisible to the
+# loop above. Flag it; do not delete it, since removing files from someone
+# else's download directory is not this script's call.
+stale=0
+if [ -n "$checkVendor" ]; then
+	for pkg in $PACKAGES; do
+		file="$pkg-$ARCH.hpkg"
+		[ -f "$DOWNLOAD/$file" ] || continue
+		vendor=$(hpkgVendor "$DOWNLOAD/$file")
+		[ "$vendor" = "$EXPECTED_VENDOR" ] && continue
+		reportWrongVendor staged "$file" "${vendor:-<unreadable>}"
+		echo "  Replace $DOWNLOAD/$file, or remove it to turn the" >&2
+		echo "  dependent build features off cleanly." >&2
+		stale=$((stale + 1))
+	done
+fi
+
+echo "$staged staged into $DOWNLOAD, $missing missing from $POOL,"\
+	"$rejected rejected, $stale already staged with the wrong vendor"
+
+# Exit 2, not 1, for a vendor problem. A lean bake deliberately stages only part
+# of the list and tolerates exit 1 ("missing" just turns the dependent build
+# features off); a wrong vendor is never tolerable, because it fails the whole
+# image, so callers need to be able to tell the two apart.
+if [ "$rejected" -ne 0 ] || [ "$stale" -ne 0 ]; then
+	exit 2
+fi
 [ "$missing" -eq 0 ] || exit 1

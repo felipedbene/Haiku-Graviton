@@ -103,8 +103,9 @@ phases:
       # HG_FATTY, so UserBuildConfig force-adds none of the WebKit/Rust/dev
       # closure -- every fatty feature is installed on demand from the baked
       # DeBeOS repo instead. haiku-stage-local-packages will report the other
-      # HaikuPortsLocal entries as "MISSING in pool" and exit non-zero; that is
-      # expected and tolerated (their build features simply stay off).
+      # HaikuPortsLocal entries as "MISSING in pool" and exit 1; that is
+      # expected and tolerated (their build features simply stay off). Its
+      # exit 2 -- a wrong vendor -- is NOT tolerated; see the call site below.
       # (A FATTY bake would sync s3://$WORK_BUCKET/hpkg-pool/ and export HG_FATTY=1.)
       - export HG_POOL_DIR="$HAIKU_TOP/hpkg-pool"
       - mkdir -p "$HG_POOL_DIR"
@@ -178,7 +179,22 @@ phases:
           exit 1
         fi
         ls -la "$HG_POOL_DIR"
-        ( cd "$HAIKU_TOP" && ./graviton/scripts/haiku-stage-local-packages "$GEN" "$HG_POOL_DIR" ) || echo "stage-local-packages reported issues (features for any un-staged pkg stay off)"
+        # A lean bake stages only part of the HaikuPortsLocal list, so exit 1
+        # ("missing from pool") is expected -- the dependent build features just
+        # stay off. Exit 2 is a VENDOR problem (issue 737) and must never be
+        # swallowed: package_repo create refuses a mixed-vendor set, so the whole
+        # image build would die ~an hour later in RepositoryCache1 instead.
+        rc=0
+        ( cd "$HAIKU_TOP" && ./graviton/scripts/haiku-stage-local-packages "$GEN" "$HG_POOL_DIR" ) || rc=$?
+        if [ "$rc" -ge 2 ]; then
+          echo "FATAL: haiku-stage-local-packages rejected a pool package on its vendor (see above)." >&2
+          echo "Re-seed hpkg-pool/ from the trunk pipeline's pool, which carries the builder's" >&2
+          echo "\"Haiku Project\" stamp -- NOT from the published repo, which haiku-repo-publish" >&2
+          echo "re-stamps to vendor \"DeBeOS\" for serving." >&2
+          exit 1
+        elif [ "$rc" -ne 0 ]; then
+          echo "stage-local-packages reported missing packages (features for any un-staged pkg stay off)"
+        fi
       # ---- first jam pass: stage the haiku / haiku_devel packages --------
       # build-openssh-arm64.sh reads the packages_build/minimum staging dirs,
       # which only exist after jam has assembled the base packages. This first
