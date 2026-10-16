@@ -31,6 +31,15 @@ moleinvasion_music moleinvasion 0.4   # no moleinvasion-* in the arm64 pool
 # and every sibling (icu66/70/73/74/75/76/77_tools) correctly pins `icuNN`.
 # Only icu67_tools pins the bare `icu`, which is provided solely by icu-57.2.
 # A recipe defect, arch-independent, tracked separately.
+#
+# RECIPE FIX HAS LANDED, PUBLISH HAS NOT. The corrected recipe is in-tree at
+# graviton/haikuports-patches/recipes/icu67-67.1.recipe (REVISION 2, pins
+# `icu67 == $portVersion base`). This line still reproduces because the POOL
+# still holds icu67_tools-67.1-1, built from the old recipe, so deleting the
+# line now would make the gate report a NEW finding and block every unrelated
+# publish -- measured: exit 1 against the 2026-10-16 green index. DELETE THIS
+# LINE in the same change that publishes icu67{,_devel,_tools}-67.1-2, at which
+# point `--strict-baseline` will report it STALE.
 icu67_tools icu 67.1                  # should pin icu67 == 67.1; see issue 717
 
 # --- resolvable never packaged for arm64 -------------------------------------
