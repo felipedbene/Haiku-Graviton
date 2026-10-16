@@ -727,9 +727,10 @@ test('promote: the #164 publish lock is banked beside haiku-repo-add', () => {
   // /opt/debeos-promote, so this list is also the assertion that all three land in
   // the SAME directory -- which is what makes haiku-repo-add's sibling lookup work.
   expect(Object.keys(banked).sort()).toEqual(
-    ['haiku-publish-lock.sh', 'haiku-repo-add', 'haiku-repo-promote-green']);
+    ['haiku-publish-lock.sh', 'haiku-repo-add', 'haiku-repo-coherence',
+      'haiku-repo-coherence.baseline', 'haiku-repo-promote-green', 'hpkg_meta.py']);
   const fetched = build.filter((c) => c.startsWith('aws s3 cp "$HG_SCRIPT'));
-  expect(fetched).toHaveLength(3);
+  expect(fetched).toHaveLength(6);
   for (const c of fetched) expect(c).toContain('/opt/debeos-promote/');
   expect(banked['haiku-publish-lock.sh']).toContain('publish_lock_acquire');
   expect(banked['haiku-repo-promote-green']).toContain(
@@ -806,7 +807,9 @@ test('ops: every inline buildspec stays well under CodeBuild\'s 25,600 ceiling (
 test('publish: haiku-repo-add is fetched from an asset and sha256-verified (#454)', () => {
   const p = opsProject('debeos-repo-publish');
   const banked = bankedScripts(p.build, p.env, '/tmp');
-  expect(Object.keys(banked).sort()).toEqual(['haiku-publish-lock.sh', 'haiku-repo-add']);
+  expect(Object.keys(banked).sort()).toEqual(
+    ['haiku-publish-lock.sh', 'haiku-repo-add', 'haiku-repo-coherence',
+      'haiku-repo-coherence.baseline', 'hpkg_meta.py']);
   expect(p.env.HG_SCRIPT_REPO_ADD).toMatch(/^s3:\/\/\S+$/);
   // Nothing is base64-inlined any more, in either project.
   for (const name of ['debeos-repo-publish', 'debeos-repo-promote-green']) {
@@ -818,6 +821,40 @@ test('publish: haiku-repo-add is fetched from an asset and sha256-verified (#454
   const run = p.build.findIndex(c => c === 'bash /tmp/haiku-repo-add');
   expect(verify).toBeGreaterThan(-1);
   expect(run).toBeGreaterThan(verify);
+});
+
+// Both CodeBuild jobs that run haiku-repo-add banked only the script and the lock
+// library, and PR 755 then made the issue-708 coherence gate a HARD failure on a
+// missing tool (haiku-repo-add:544-549). So neither job could publish at all: the add
+// would die before uploading anything. The gate resolves three files as siblings of
+// haiku-repo-add, and it needs a python3 to run them.
+test('publish and promote both carry the #708 coherence gate (and a python3)', () => {
+  for (const name of ['debeos-repo-publish', 'debeos-repo-promote-green']) {
+    const p = opsProject(name);
+    const dir = name === 'debeos-repo-publish' ? '/tmp' : '/opt/debeos-promote';
+    const banked = bankedScripts(p.build, p.env, dir);
+    // Fetched, sha256-verified, and in the SAME directory as haiku-repo-add -- which
+    // is what the sibling lookup needs. bankedScripts only yields a script that
+    // satisfies all three.
+    for (const f of ['haiku-repo-coherence', 'hpkg_meta.py',
+      'haiku-repo-coherence.baseline']) {
+      expect(Object.keys(banked)).toContain(f);
+    }
+    // `[ -x ]`, not `[ -f ]`: `aws s3 cp` creates mode 0644.
+    expect(p.build).toContain(`chmod +x ${dir}/haiku-repo-coherence`);
+    // The tool is `#!/usr/bin/env python3` and the minimal Ubuntu image ships no
+    // python3, so a job that banks it and cannot run it is no better off.
+    expect(p.install.join('\n')).toMatch(/apt-get install .*\bpython3\b/);
+    // It must be in place before the add runs, not merely somewhere in the job.
+    const ready = p.build.findIndex(c => c === `chmod +x ${dir}/haiku-repo-coherence`);
+    // The publish job runs the add directly; the promote job runs it indirectly,
+    // through haiku-repo-promote-green --apply, which is the single wiring point the
+    // gate's comment relies on.
+    const add = p.build.findIndex(c => c === 'bash /tmp/haiku-repo-add'
+      || c.endsWith('haiku-repo-promote-green --in-process'));
+    expect(ready).toBeGreaterThan(-1);
+    expect(add).toBeGreaterThan(ready);
+  }
 });
 
 // ---- ops: haiku-repo-add, EXECUTED (issues #452 and #453) --------------------
@@ -954,6 +991,24 @@ shift; shift   # drop 'create' arg list head: repo.info
 { echo "fake index"; for p in "$@"; do basename "$p"; done; } > repo
 `;
 
+// Local stand-in for the issue-708 coherence gate (haiku-repo-add step 4b). A
+// stand-in and not the tracked tool, for the same reason `package_repo` is one: the
+// real haiku-repo-coherence parses an HPKR index with hpkg_meta, and FAKE_PACKAGE_REPO
+// writes a plain-text file named `repo`. Pointing the real tool at that would assert
+// nothing about haiku-repo-add -- it would just fail on a bad magic number.
+//
+// What this harness is for is haiku-repo-add's BEHAVIOUR around the gate: that the gate
+// runs at all, that it runs before any upload, and that a FAIL stops the publish. So the
+// stub records its invocation (argv included, so the test can check the index it was
+// handed) and honours FAKE_COHERENCE_RC to play the failing case. The real tool's own
+// logic is not this file's subject.
+const FAKE_COHERENCE = `#!/usr/bin/env bash
+set -u
+echo "$@" >> "\${FAKE_COHERENCE_CALLS:?}"
+echo "fake-coherence: checked $*"
+exit "\${FAKE_COHERENCE_RC:-0}"
+`;
+
 interface RepoAddRun {
   status: number;
   stdout: string;
@@ -965,6 +1020,8 @@ interface RepoAddRun {
   /** lines of HG_PUBLISHED_LIST_OUT, or null if the script never wrote it */
   published: string[] | null;
   lockExists: boolean;
+  /** argv of each issue-708 coherence-gate invocation */
+  coherenceCalls: string[];
 }
 
 function runRepoAdd(opts: {
@@ -974,6 +1031,10 @@ function runRepoAdd(opts: {
   env?: Record<string, string>;
   /** pre-existing lock object content (to simulate another publisher) */
   heldLock?: string;
+  /** stage the issue-708 coherence gate's stand-in beside the script (default true) */
+  withCoherence?: boolean;
+  /** exit status for that stand-in (non-zero = an incoherent union) */
+  coherenceRc?: number;
 }): RepoAddRun {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'repo-add-harness-'));
   const bin = path.join(root, 'bin');
@@ -993,6 +1054,14 @@ function runRepoAdd(opts: {
   if (opts.withLock ?? true) {
     fs.symlinkSync(path.join(SCRIPTS_DIR, 'haiku-publish-lock.sh'),
       path.join(sandbox, 'haiku-publish-lock.sh'));
+  }
+  // The issue-708 gate resolves its tool as a SIBLING of haiku-repo-add, so it goes in
+  // the sandbox and not in `bin` -- which is also what makes `withCoherence: false` a
+  // faithful reproduction of a deployment that forgot to ship it.
+  const coherenceCalls = path.join(root, 'coherence.calls');
+  if (opts.withCoherence ?? true) {
+    fs.writeFileSync(path.join(sandbox, 'haiku-repo-coherence'), FAKE_COHERENCE,
+      { mode: 0o755 });
   }
   for (const [name, body] of Object.entries(opts.packages)) {
     fs.writeFileSync(path.join(incomingPrefix, name), body);
@@ -1028,6 +1097,8 @@ function runRepoAdd(opts: {
     // (TTL/3 = 100s) each of these runs took 100 seconds. 2s keeps the harness
     // honest (the heartbeat is still armed) and quick.
     HG_LOCK_HEARTBEAT: '2',
+    FAKE_COHERENCE_CALLS: coherenceCalls,
+    FAKE_COHERENCE_RC: String(opts.coherenceRc ?? 0),
     ...(opts.requireLock ? { HG_REQUIRE_PUBLISH_LOCK: '1' } : {}),
     ...(opts.env ?? {}),
   };
@@ -1046,6 +1117,9 @@ function runRepoAdd(opts: {
       ? fs.readFileSync(publishedOut, 'utf8').split('\n').filter(l => l.length > 0).sort()
       : null,
     lockExists: fs.existsSync(lockKey),
+    coherenceCalls: fs.existsSync(coherenceCalls)
+      ? fs.readFileSync(coherenceCalls, 'utf8').split('\n').filter(l => l.length > 0)
+      : [],
   };
 }
 
@@ -1074,6 +1148,67 @@ test('repo-add reports only the packages it PUBLISHED, never a skipped one (#452
   // the two (under their canonical names), and the skipped one is still in incoming.
   expect(r.pool).toEqual(['good_one-1.0-1-arm64.hpkg', 'good_two-2.0-3-arm64.hpkg']);
   expect(r.incoming).toEqual(['wrecked-9.9-1-arm64.hpkg']);
+});
+
+// ---- the issue-708 coherence gate, from haiku-repo-add's side ----------------
+//
+// Three facts about step 4b, none of which had a test. The gate was added in PR 755
+// and the harness was never taught about it, which is why every success-path arm in
+// this block was red: haiku-repo-add:544 requires an EXECUTABLE sibling
+// haiku-repo-coherence and dies without one, and runRepoAdd staged only
+// haiku-repo-add and haiku-publish-lock.sh. Exactly the arms that expect a failure
+// kept passing, which is the worst possible shape for a red suite -- it looks like a
+// flake rather than a harness that cannot reach the code it claims to cover.
+
+test('repo-add runs the #708 coherence gate on the freshly built index, before upload', () => {
+  const r = runRepoAdd({
+    packages: { 'good-one-1.0-1-arm64.hpkg': fakeHpkg('good_one', '1.0-1') },
+  });
+  expect(r.status).toBe(0);
+  // Called exactly once, and handed the INDEX -- not the packages directory. That is
+  // the gate's whole argument (haiku-repo-add:521-526): the index is the one small file
+  // pkgman will actually resolve against, so the check cannot disagree with the
+  // published result.
+  expect(r.coherenceCalls).toHaveLength(1);
+  expect(r.coherenceCalls[0]).toMatch(/^--repo \S+\/repo$/);
+  // And the ordering that makes it a gate rather than a report.
+  const ran = r.stdout.indexOf('fake-coherence: checked');
+  const uploaded = r.stdout.indexOf('== 5. upload packages');
+  expect(ran).toBeGreaterThan(-1);
+  expect(uploaded).toBeGreaterThan(ran);
+  expect(r.pool).toEqual(['good_one-1.0-1-arm64.hpkg']);
+});
+
+test('repo-add refuses to upload when the #708 gate FAILS (#708)', () => {
+  const r = runRepoAdd({
+    packages: { 'good-one-1.0-1-arm64.hpkg': fakeHpkg('good_one', '1.0-1') },
+    coherenceRc: 1,
+  });
+  expect(r.status).not.toBe(0);
+  expect(r.stderr).toContain('repo coherence check FAILED');
+  // Nothing published, and the package is still in incoming so the next run can
+  // retry it once the base it pins is republished alongside it.
+  expect(r.pool).toEqual([]);
+  expect(r.incoming).toEqual(['good-one-1.0-1-arm64.hpkg']);
+});
+
+// A missing tool is a HARD failure, not a NOTE. It used to be the latter, and the
+// first publish shipped from a remote peer proved why that is wrong: the caller
+// shipped only haiku-repo-add, the sibling lookup found nothing, and the entire gate
+// was skipped in silence on the one publish path actually in use. A check that
+// disables itself whenever the deployment forgets to carry it is not a check.
+test('repo-add DIES when the #708 coherence tool was never shipped (#708)', () => {
+  const r = runRepoAdd({
+    packages: { 'good-one-1.0-1-arm64.hpkg': fakeHpkg('good_one', '1.0-1') },
+    withCoherence: false,
+  });
+  expect(r.status).not.toBe(0);
+  expect(r.stderr).toContain('coherence tool not found or not executable');
+  // The message has to name what the caller must ship, because the fix is always in
+  // the caller -- as the two CodeBuild jobs in ops-stack.ts just demonstrated.
+  expect(r.stderr).toContain('hpkg_meta.py');
+  expect(r.coherenceCalls).toEqual([]);
+  expect(r.pool).toEqual([]);
 });
 
 // The worst case of #452: EVERY package fails the re-stamp. The repo is untouched,
@@ -1248,9 +1383,12 @@ test('publish: banks the lock, requires it, and prunes from the add step\'s repo
   const p = opsProject('debeos-repo-publish');
   const banked = bankedScripts(p.build, p.env, '/tmp');
   // bankedScripts only yields a script that is fetched AND sha256-verified into
-  // /tmp, so this is also the assertion that both land in the SAME directory --
-  // which is what makes haiku-repo-add's sibling lookup work.
-  expect(Object.keys(banked).sort()).toEqual(['haiku-publish-lock.sh', 'haiku-repo-add']);
+  // /tmp, so this is also the assertion that they all land in the SAME directory --
+  // which is what makes haiku-repo-add's two sibling lookups work (the #164 lock
+  // library and, since PR 755, the issue-708 coherence gate).
+  expect(Object.keys(banked).sort()).toEqual(
+    ['haiku-publish-lock.sh', 'haiku-repo-add', 'haiku-repo-coherence',
+      'haiku-repo-coherence.baseline', 'hpkg_meta.py']);
   expect(p.env.HG_SCRIPT_LOCK).toMatch(/^s3:\/\/\S+$/);
   expect(banked['haiku-publish-lock.sh']).toContain('publish_lock_acquire');
   // Both the fetch and the strict flag precede the run.

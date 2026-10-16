@@ -85,11 +85,14 @@ for f in "$@"; do [ -f "$f" ] || die "no such file: $f"; done
 [ -f "$HERE/haiku-repo-add" ] || die "haiku-repo-add not found next to this script"
 [ -f "$HERE/haiku-publish-lock.sh" ] || die "haiku-publish-lock.sh not found next to this script (#164 concurrency lock)"
 # The coherence gate is NOT optional on this path. `haiku-repo-add` step 4b tests
-# `[ -x "$HERE_RA/haiku-repo-coherence" ]` and, when the tool is absent, prints a
-# NOTE and publishes anyway. Shipping only haiku-repo-add to the peer therefore
-# made every ephemeral publish silently ungated -- which is the one path actually
-# in use, since haiku-repo-publish-native needs a debeos-aws that no builder has.
-# Refuse to launch rather than discover it in the log afterwards.
+# `[ -x "$HERE_RA/haiku-repo-coherence" ]`; when this check was written, an absent
+# tool meant a NOTE and a publish anyway, so shipping only haiku-repo-add to the
+# peer made every ephemeral publish silently ungated -- on the one path actually in
+# use, since haiku-repo-publish-native needs a debeos-aws that no builder has. Step
+# 4b now DIES on an absent tool instead, so this loop is no longer what stands
+# between a publish and an ungated one. It is still worth keeping: it fails here,
+# before an instance is launched and the pool is synced, rather than minutes later
+# on the peer.
 for f in haiku-repo-coherence hpkg_meta.py haiku-repo-coherence.baseline; do
 	[ -f "$HERE/$f" ] || die "$f not found next to this script (issue 708 coherence gate)"
 done
