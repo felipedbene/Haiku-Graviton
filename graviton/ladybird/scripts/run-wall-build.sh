@@ -10,7 +10,7 @@
 # Usage, run natively on the builder as baron:
 #     run-wall-build.sh <phase>...     # toolchain deps png icu ffmpeg lb
 #                                      # skiafetch skiabuild pc configure build
-#                                      # tommath (re-run of a deps subset)
+#                                      # tommath avif (re-runs of deps subsets)
 #     run-wall-build.sh all
 #
 # Each phase appends to its own log under $LOGDIR and prints a SENTINEL line on
@@ -63,6 +63,12 @@ phase_deps() {
 # shows up only as a WebContent that will not start -- see build-tommath.sh.
 phase_tommath() {
 	PREFIX="$PREFIX" sh "$RECIPE/scripts/build-tommath.sh"
+}
+
+# Also a subset of phase `deps`. Broken out for the same reason: the repo's
+# libavif 0.9.3 passes configure and then fails a compile 1900 targets in.
+phase_avif() {
+	PREFIX="$PREFIX" sh "$RECIPE/scripts/build-avif.sh"
 }
 
 # libpng16 from the repo is built without APNG and LibImageDecoders hard-requires
@@ -169,18 +175,16 @@ phase_pc() {
 	pkg-config --exists libavcodec-ladybird \
 		|| { echo "libavcodec-ladybird.pc not visible" >&2; return 1; }
 
-	# find_package(LIBAVIF) is a config-package lookup, not pkg-config, so the
-	# shadow config has to land under a CMAKE_PREFIX_PATH entry and be named the
-	# way CMake searches for it (<lowercase name>-config.cmake). The system
-	# config at /boot/system/lib/cmake/libavif derives _IMPORT_PREFIX by walking
-	# up from its own directory, landing on /boot/system, and then advertises
-	# /boot/system/include -- a path Haiku does not have (headers are under
-	# develop/headers). A non-existent INTERFACE_INCLUDE_DIRECTORIES on an
-	# imported target is a hard CMake generate-step error, so configure cannot
-	# get past LibImageDecoders without this.
-	mkdir -p "$PREFIX/lib/cmake/libavif"
-	cp "$RECIPE/pkgconfig/libavif-config-SHADOW.cmake" \
-		"$PREFIX/lib/cmake/libavif/libavif-config.cmake"
+	# find_package(LIBAVIF) is a config-package lookup, not pkg-config, and
+	# -DLIBAVIF_DIR points it at $PREFIX/lib/cmake/libavif. That config comes
+	# from phase `avif`'s own install, so assert it rather than writing a
+	# shadow: the system libavif's config is both too old (0.9.3) and broken
+	# (its _IMPORT_PREFIX walk advertises the non-existent
+	# /boot/system/include, DeBeOS #709), and a non-existent
+	# INTERFACE_INCLUDE_DIRECTORIES on an imported target is a hard CMake
+	# generate-step error.
+	test -e "$PREFIX/lib/cmake/libavif/libavif-config.cmake" \
+		|| { echo "libavif config missing -- run phase avif" >&2; return 1; }
 }
 
 phase_configure() {

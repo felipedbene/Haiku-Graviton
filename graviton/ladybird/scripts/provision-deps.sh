@@ -27,8 +27,11 @@ mkdir -p $PREFIX/lib/pkgconfig $PREFIX/include/wuffs
 #    the whole transaction with "nothing provides". Both are built from source
 #    into $PREFIX below instead, at the versions pkgconfig/simdjson.pc and
 #    pkgconfig/libtommath.pc already declare.
+#    libavif_devel is deliberately not here either: the repo's is 0.9.3 and
+#    AVIFLoader.cpp needs avifDecoder::repetitionCount, so 1.4.2 is built from
+#    source below. dav1d_devel stays -- that build links the system dav1d.
 pkgman install -y \
-  libfmt_devel mimalloc_devel libavif_devel libsdl3_devel \
+  libfmt_devel mimalloc_devel libsdl3_devel \
   fontconfig_devel libedit_devel harfbuzz_devel freetype_devel \
   libpng16_devel libjpeg_turbo_devel libwebp_devel brotli_devel woff2_devel \
   openssl3_devel curl_devel libxml2_devel sqlite_devel zlib_devel libpsl_devel \
@@ -75,6 +78,11 @@ ninja && ninja install
 #     and because a failed WebContent start is the only symptom of getting it
 #     wrong, which makes it worth re-running on its own.
 PREFIX=$PREFIX sh "$(dirname "$0")/build-tommath.sh"
+
+# 3d. libavif 1.4.2 -- the repo's 0.9.3 predates avifDecoder::repetitionCount,
+#     which AVIFLoader.cpp reads, and find_package(LIBAVIF) has no version
+#     constraint so configure cannot catch it. Own script; see build-avif.sh.
+PREFIX=$PREFIX sh "$(dirname "$0")/build-avif.sh"
 
 # 4. wuffs -- single-file header the LibImageDecoders find_path() needs.
 curl -fsSL -o $PREFIX/include/wuffs/wuffs-v0.3.c \
