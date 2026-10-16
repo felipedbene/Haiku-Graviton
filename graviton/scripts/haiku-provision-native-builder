@@ -173,8 +173,12 @@ log "refreshing the package repo"
 feed | pkgman refresh >/dev/null 2>&1 || true
 
 # Kept as one install so the solver resolves the set together. Anything already
-# active is a no-op. This is the set proven necessary to build real ports; add
-# more build-requires here as new ports surface them.
+# active is a no-op -- which is NOT the same as "ends up at the pool's version":
+# an active `*_bootstrap` package provides its own unversioned name, so this
+# install leaves it in place. See the `pkgman update` loop after the install for
+# the names where that distinction matters (issue 748). This is the set proven
+# necessary to build real ports; add more build-requires here as new ports
+# surface them.
 #
 # gettext (the TOOLS package, distinct from the gettext_libintl runtime lib) is
 # what carries `cmd:autopoint` plus the autoconf/automake macros AM_GNU_GETTEXT*
@@ -218,6 +222,48 @@ TOOLS="gcc binutils make m4 patch gawk diffutils bison flex \
 	coreutils haiku_devel curl git gzip tar unzip which dos2unix xz_utils libxml2"
 log "installing toolchain: $TOOLS"
 feed | pkgman install $TOOLS
+
+# `pkgman install coreutils` above CANNOT pull the pool's coreutils over the
+# image's (issue 748). The bootstrap package is itself named `coreutils` and
+# `provides: coreutils = 9.9 (compatible >= 8)`, so the solver sees the
+# requirement already satisfied by the active package and answers
+# "coreutils-9.9_bootstrap-1 from repository system is already installed.
+# Nothing to do." The versioned name is not installable either -- `pkgman
+# install coreutils-9.11-2` fails "Name not found", because that is a version,
+# not a resolvable. The one verb that supersedes an active package with a newer
+# one from a repository is `update`.
+#
+# This is the whole class, not just coreutils: every `*_bootstrap` package in
+# the lean base provides its unversioned name, so `install` is a no-op against
+# any of them. coreutils is the one that is load-bearing today (see the comment
+# above section 1 for why `uname -p` matters), so it is the one handled here;
+# add to the list if another bootstrap package turns out to matter.
+for boot_pkg in coreutils; do
+	log "superseding the bootstrap $boot_pkg with the pool's (issue 748)"
+	feed | pkgman update "$boot_pkg" || log "WARNING: pkgman update $boot_pkg failed"
+done
+
+# Assert the outcome rather than the command's exit status. The reason 748
+# existed at all is that the provisioner could not notice its own remedy had
+# done nothing: there was no check, so every builder since has been provisioned
+# with `uname -p` answering `other`. A builder that silently compiles ports for
+# the wrong word size and byte order (issue 701) is worse than one that refuses
+# to provision, so this is fatal.
+uname_p="$(uname -p 2>/dev/null || true)"
+case "$uname_p" in
+arm64|aarch64)
+	log "uname -p: $uname_p (ok)"
+	;;
+*)
+	echo "provision: FATAL: uname -p answers '$uname_p', not arm64 -- the" \
+		"image's coreutils is still active. Every cmake port built here" \
+		"would get CMAKE_SYSTEM_PROCESSOR=$uname_p, and tecmake-based" \
+		"ports would compile -DTEC_BIGENDIAN -DTEC_32 (issues 701, 748)." \
+		"Check that the DeBeOS repo is reachable (pkgman refresh) and that" \
+		"it publishes a non-bootstrap coreutils, then re-run." >&2
+	exit 1
+	;;
+esac
 
 # python-zlib is the historically fatal gap -- fail loudly and early, not deep
 # inside a tarfile stack trace, if this python cannot inflate a .tar.gz.
