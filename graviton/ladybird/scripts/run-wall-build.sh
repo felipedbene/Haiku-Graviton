@@ -10,6 +10,7 @@
 # Usage, run natively on the builder as baron:
 #     run-wall-build.sh <phase>...     # toolchain deps png icu ffmpeg lb
 #                                      # skiafetch skiabuild pc configure build
+#                                      # tommath (re-run of a deps subset)
 #     run-wall-build.sh all
 #
 # Each phase appends to its own log under $LOGDIR and prints a SENTINEL line on
@@ -55,6 +56,13 @@ phase_toolchain() {
 
 phase_deps() {
 	sh "$RECIPE/scripts/provision-deps.sh"
+}
+
+# A subset of phase `deps` (provision-deps.sh calls the same script), broken out
+# because getting libtommath wrong costs a full relink of liblagom-crypto and
+# shows up only as a WebContent that will not start -- see build-tommath.sh.
+phase_tommath() {
+	PREFIX="$PREFIX" sh "$RECIPE/scripts/build-tommath.sh"
 }
 
 # libpng16 from the repo is built without APNG and LibImageDecoders hard-requires

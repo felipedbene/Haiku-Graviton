@@ -70,17 +70,11 @@ cmake -G Ninja -DCMAKE_INSTALL_PREFIX=$PREFIX -DCMAKE_BUILD_TYPE=Release \
 ninja && ninja install
 
 # 3c. libtommath 1.3.0 -- LibCrypto needs mp_expt_n, added after 1.2.0, so the
-#     repo's 1.2.0 devel headers would not compile even if they installed.
-cd /boot/home && rm -rf libtommath-src
-git clone --depth 1 --template= -b v1.3.0 https://github.com/libtom/libtommath.git libtommath-src
-cd libtommath-src && mkdir build && cd build
-cmake -G Ninja -DCMAKE_INSTALL_PREFIX=$PREFIX -DCMAKE_BUILD_TYPE=Release \
-  -DCMAKE_C_COMPILER=clang \
-  -DCMAKE_AR=/boot/system/bin/ar -DCMAKE_RANLIB=/boot/system/bin/ranlib \
-  -DBUILD_SHARED_LIBS=OFF ..
-ninja && ninja install
-grep -q mp_expt_n $PREFIX/include/tommath.h \
-  || { echo "libtommath headers lack mp_expt_n" >&2; exit 1; }
+#     repo's 1.2.0 devel headers would not compile even if they installed. Its
+#     own script because the IEEE-754 macro it has to assert needs explaining
+#     and because a failed WebContent start is the only symptom of getting it
+#     wrong, which makes it worth re-running on its own.
+PREFIX=$PREFIX sh "$(dirname "$0")/build-tommath.sh"
 
 # 4. wuffs -- single-file header the LibImageDecoders find_path() needs.
 curl -fsSL -o $PREFIX/include/wuffs/wuffs-v0.3.c \
