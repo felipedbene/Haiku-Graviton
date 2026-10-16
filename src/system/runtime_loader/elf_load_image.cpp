@@ -138,6 +138,9 @@ parse_program_headers(image_t* image, char* buff, int phnum, int phentsize)
 				region.fdsize = pheader->p_filesz;
 				region.delta = 0;
 				region.flags = flags;
+				region.alignment = pheader->p_align;
+					// map_image() needs it to tell a segment alignment gap
+					// from a nonsensical one
 
 				if (pheader->p_memsz == pheader->p_filesz) {
 					// everything in one area
@@ -168,6 +171,7 @@ parse_program_headers(image_t* image, char* buff, int phnum, int phentsize)
 						regionB.fdsize = 0;
 						regionB.delta = 0;
 						regionB.flags = flags | RFLAG_ANON;
+						regionB.alignment = pheader->p_align;
 					}
 				}
 				regcount++;
