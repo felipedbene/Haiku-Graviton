@@ -24,12 +24,22 @@ correct, and both fault-recovery paths return WASM traps instead of killing the
 process (a guard-page read gives `Memory access out of bounds`, `i32.div_s`
 by zero gives `Integer division overflow`). See "WASM Cranelift JIT" below.
 
-Not yet done: no rendered PNG, because nothing in this build can open a page.
-`WebDriver` starts a session by launching a browser process called `Ladybird`
-(`Services/WebDriver/main.cpp:216`), and `UI/` only has `Qt` and `Android` —
-the DeBeOS arm64 repo has no `qt6`, so no `Ladybird` binary exists and
-`ENABLE_QT_UI=OFF` is not a choice. The next wall for a usable browser is
-either qt6 for arm64 or a native `UI/Haiku` on the Interface Kit.
+Not yet done: no rendered PNG *from this tree*, because the patch stack captured
+here is headless-only and so builds no chrome. `WebDriver` starts a session by
+launching a browser process called `Ladybird`
+(`Services/WebDriver/main.cpp:216`), and with only `ladybird-haiku.patch`
+applied, `UI/` has just `Qt` and `Android` — the DeBeOS arm64 repo has no `qt6`,
+so `ENABLE_QT_UI=OFF` is the only setting that configures and no `Ladybird`
+binary is produced.
+
+That front end is not missing from DeBeOS, only from this recipe: the native
+Interface Kit chrome is `../ports/ladybird/ladybird-haiku-ui.patch` (adds
+`UI/Haiku/`, selected with `-DENABLE_QT_UI=OFF -DENABLE_HAIKU_UI=ON`, produces
+`bin/Ladybird`), landed with package revision 3 in #618 and exercised by #622
+and #623. It applies on top of `ports/ladybird/ladybird-haiku-arm64-wave3.patch`,
+not on top of this directory's `ladybird-haiku.patch`, so the remaining work for
+an end-to-end browser *from this recipe* is reconciling the two stacks — not
+porting a UI.
 
 Fonts are a hard runtime dependency, not a nicety: `FontPlugin`'s constructor
 `VERIFY`s that a fixed-width font resolved
@@ -47,7 +57,7 @@ that fail — see "Monospace fonts" below.
 | ICU | **78.3 from source**, into `lbdeps/icu78` | mandatory: LibUnicode uses ICU 78 C++ internals, so relaxing the pin to the system icu74 does not compile |
 | ffmpeg | `n7.1` | real devel build (repo ships none) |
 | libtommath | `1.3.0`, `-D__STDC_IEC_559__` | needs `mp_expt_n` (repo image had 1.2.0); the macro is what makes `mp_set_double` exist under clang |
-| libavif | `1.4.2` from source | repo has 0.9.3, which has no `avifDecoder::repetitionCount` |
+| libavif | `1.4.2` from source | repo has 0.9.3, which has no `avifDecoder::repetitionCount` (DeBeOS #731) |
 | FastFloat | `v8.3.1` | header-only |
 | simdutf | from source | built static, CXX_STANDARD=20 |
 | simdjson | `5.0.2` (`simdjson_devel`) | from DeBeOS repo |
@@ -209,10 +219,17 @@ Do not expect fontconfig to paper over this. On DeBeOS every file in
 `../../../../../.self/data/fontconfig/conf.avail/<name>.conf`, five levels up
 from `conf.d` lands at `/`, and `/.self` does not exist — so `fc-conflist`
 reports only `fonts.conf` as active and every generic-family, metric-alias and
-spacing rule is inert. Measured consequence: `fc-match monospace` answers
-`Noto Sans`, and `fc-match serif` answers `Noto Sans` where the same files
-included by absolute path answer `Noto Serif`. Filed separately; the recipe
-works around it by naming a real family rather than a generic one.
+spacing rule is inert. Measured consequence, with the same 23 files re-aimed at
+`/boot/system/data/fontconfig/conf.avail/` where they actually live:
+
+| generic | stock image | correctly aimed |
+|---|---|---|
+| `serif` | DejaVu Math TeX Gyre | Noto Serif |
+| `sans-serif` | DejaVu Math TeX Gyre | Noto Sans |
+| `monospace` | DejaVu Math TeX Gyre | DejaVu Sans Mono |
+
+Filed as DeBeOS #730; the recipe works around it by naming a real family rather
+than a generic one.
 
 ## Skia PathOps (found on the rev-4 build, #622)
 

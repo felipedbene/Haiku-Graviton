@@ -29,7 +29,7 @@ mkdir -p $PREFIX/lib/pkgconfig $PREFIX/include/wuffs
 #    pkgconfig/libtommath.pc already declare.
 #    libavif_devel is deliberately not here either: the repo's is 0.9.3 and
 #    AVIFLoader.cpp needs avifDecoder::repetitionCount, so 1.4.2 is built from
-#    source below. dav1d_devel stays -- that build links the system dav1d.
+#    source below (DeBeOS #731). dav1d_devel stays -- that build links the system dav1d.
 #    `dejavu` is a runtime, not a devel, dependency, and it is not optional:
 #    Web::Platform::FontPlugin VERIFYs that a fixed-width font exists at
 #    construction (Libraries/LibWeb/Platform/FontPlugin.cpp:55), and it looks
