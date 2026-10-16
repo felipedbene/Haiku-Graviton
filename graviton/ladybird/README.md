@@ -160,7 +160,12 @@ The by-hand sequence it replaces, run natively on the builder as `baron` from
    system libtommath 1.2.0 `.pc` prefix if you fall back to the system copy.
    `find_package(LIBAVIF)` is a *config* lookup, not pkg-config: it reads
    `lbdeps/lib/cmake/libavif/libavif-config.cmake`, which step 2's libavif
-   build installs.
+   build installs. There is no longer a libavif CMake **shadow** config to copy
+   either: `libavif_devel-0.9.3-6` now installs a config whose exported include
+   dir is the one it actually installed to, so a `find_package(LIBAVIF)` that
+   does resolve to the system package no longer needs correcting (issue 709).
+   Ladybird itself still builds against the `lbdeps` copy, because the repo's
+   0.9.3 is too old for LibGfx (issue 731).
 9. **Configure Ladybird** (no vcpkg, plain `-G Ninja`):
    `scripts/configure-ladybird.sh` → `build-wave2`.
 10. **Build**: `run-wall-build.sh`'s `build` phase builds `ladybird`
