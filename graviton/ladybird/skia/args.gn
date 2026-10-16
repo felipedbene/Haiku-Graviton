@@ -10,7 +10,19 @@ skia_use_metal = false
 skia_use_direct3d = false
 skia_enable_ganesh = true
 skia_enable_graphite = false
-skia_use_fontconfig = false
+# LibGfx's skia_font_manager() calls SkFontMgr_New_FontConfig() on every
+# platform that is not Android, Windows or macOS -- Haiku included
+# (Libraries/LibGfx/Font/TypefaceSkia.cpp:115) -- and that entry point only
+# exists when Skia compiles src/ports/SkFontMgr_fontconfig.cpp, which is gated
+# here (gn/skia.gni:168, skia_enable_fontmgr_fontconfig). With it off,
+# liblagom-gfx links (the Haiku build needs -z undefs) and then cannot be
+# loaded at all:
+#   runtime_loader: .../liblagom-gfx.so.0.1.0: Troubles relocating:
+#       Symbol not found
+#       SkFontMgr_New_FontConfig(_FcConfig*, std::unique_ptr<SkFontScanner, ...>)
+# DeBeOS has fontconfig 2.18 and Ladybird already links it directly
+# (LibGfx/Font/GlobalFontConfig.cpp), so this adds no new dependency.
+skia_use_fontconfig = true
 skia_use_freetype = true
 skia_use_harfbuzz = true
 skia_use_icu = true
