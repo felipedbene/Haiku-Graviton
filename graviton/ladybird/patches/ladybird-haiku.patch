@@ -351,9 +351,9 @@ index ec92bb9543..889085e6cc 100644
 +    #   printf 'int main(){return 0;}' > /tmp/t.c
 +    #   clang -fuse-ld=lld -o /tmp/t /tmp/t.c && /tmp/t && echo "retire it"
 +    # "Could not map image: Bad data" means the running loader predates the fix
-+    # and the flag stays. The same applies to the two dependency builds that
-+    # pass this flag for the same reason, scripts/build-png.sh and
-+    # scripts/build-avif.sh; retire all three together.
++    # and the flag stays. The same applies to the dependency build that passes
++    # this flag for the same reason, scripts/build-png.sh; retire both
++    # together.
 +    add_link_options(LINKER:-z,max-page-size=4096)
  endif()
  

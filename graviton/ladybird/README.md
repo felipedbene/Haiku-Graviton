@@ -108,12 +108,14 @@ The by-hand sequence it replaces, run natively on the builder as `baron` from
    ```
 2. **Provision dependencies** into `/boot/home/lbdeps`:
    `scripts/provision-deps.sh` — installs the system `*_devel` set, builds
-   FastFloat, simdutf, simdjson, libtommath (`scripts/build-tommath.sh`) and
-   libavif (`scripts/build-avif.sh`) into `lbdeps`, drops the wuffs header, and
-   writes the ffmpeg `-ladybird` configure shims. `simdjson_devel`,
-   `libtommath_devel` and `libavif_devel` are deliberately *not* installed from
-   the repo — the first two are unsatisfiable there (DeBeOS #708) and the third
-   is too old (0.9.3).
+   FastFloat, simdutf, simdjson and libtommath (`scripts/build-tommath.sh`)
+   into `lbdeps`, drops the wuffs header, and writes the ffmpeg `-ladybird`
+   configure shims. `simdjson_devel` and `libtommath_devel` are deliberately
+   *not* installed from the repo — both are unsatisfiable there (DeBeOS #708).
+   AVIF comes from `libavif1.0_devel` (1.4.2), *not* `libavif_devel` (0.9.3,
+   which predates `avifDecoder::repetitionCount`, DeBeOS #731); the two declare
+   a `CONFLICTS` on each other, so the script takes the 0.9.3 devel package off
+   before installing.
 3. **Build real ffmpeg n7.1** into `lbdeps`: `scripts/run-ffmpeg.sh` (replaces
    the shims so LibMedia can link). The real `.pc` files are in `pkgconfig/`.
 4. **Rebuild libpng16 1.6.53 with APNG and with its NEON paths compiled**:
@@ -373,7 +375,10 @@ Verified at runtime, not just at link time:
   `cmake_options.cmake` `FATAL_ERROR`s if both are on.
 - `CMAKE_PREFIX_PATH=/boot/home/lbdeps`; explicit `FastFloat_DIR`,
   `simdutf_DIR`, `WUFFS_INCLUDE_DIR`, `PNG_PNG_INCLUDE_DIR`, `PNG_LIBRARY`,
-  `ICU_ROOT=lbdeps/icu78`, `LIBAVIF_DIR=lbdeps/lib/cmake/libavif`.
+  `ICU_ROOT=lbdeps/icu78`, `LIBAVIF_DIR=/boot/system/lib/cmake/libavif` (the
+  pool package's own config; pinned explicitly because `CMAKE_PREFIX_PATH`
+  outranks the system prefix and a builder left over from the retired
+  from-source build still has a stale `lbdeps/lib/cmake/libavif`).
 - `-fPIC`, never `-fPIE`, for executables too (DeBeOS #715 — the patch's two
   `COMPILE_OPTIONS_PIE` overrides are a local workaround, redundant once a cmake
   carrying #727's `Platform/Haiku.cmake` is installed; see the patch comment for
@@ -385,8 +390,8 @@ Verified at runtime, not just at link time:
   binary loads only on a system whose own `runtime_loader` carries the fix, and
   the builder AMIs (hrev59996) predate it. The retirement condition and a
   one-command check for it are recorded in `ladybird-haiku.patch`'s
-  `compile_options.cmake` hunk; `build-png.sh` and `build-avif.sh` pass the same
-  flag and retire with it.
+  `compile_options.cmake` hunk; `build-png.sh` passes the same flag and retires
+  with it.
 - `PKG_CONFIG_PATH=/boot/home/lbdeps/lib/pkgconfig:/boot/system/develop/lib/pkgconfig`.
 
 All paths are the builder's absolute `/boot/home/...` layout; adjust the prefix
