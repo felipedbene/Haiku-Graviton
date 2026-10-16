@@ -44,6 +44,12 @@
 #     --disk GiB    root volume size for the bake box, and hence the AMI floor
 #     --no-repoint  create + tag the new AMI but DON'T move the SSM param (safe
 #                   while a build fleet is mid-flight; repoint by hand later)
+#
+# Env:
+#   HAIKU_BUILDER_SUBNET / HAIKU_BUILDER_SG   pin the network instead of resolving
+#                   it by name from the DebeosOpsStack BuildVpc (see below)
+#   HAIKU_BAKE_ALLOW_STALE_TREE=1             bake the checkout as-is even when it
+#                   is behind origin/graviton or dirty under the staged paths
 set -euo pipefail
 
 # Resolve this account's credentials the same way every tool here does: obey an
@@ -55,11 +61,19 @@ set -euo pipefail
 REGION="${HAIKU_GRAVITON_REGION:-us-west-2}"
 HERE="$(cd "$(dirname "$0")" && pwd)"
 PARAM=/haiku-graviton/builder-ami-id
-# Default to the HARDENED DebeosOpsStack build VPC: a PRIVATE builder subnet with
+# Target the HARDENED DebeosOpsStack build VPC: a PRIVATE builder subnet with
 # egress via the fck-nat instance (no public IP). SSM registers over the NAT.
-# Override via env for the old public-subnet path if ever needed.
-SG="${HAIKU_BUILDER_SG:-sg-051df96be83375dbe}"                 # DebeosOpsStack BuilderSg
-SUBNET="${HAIKU_BUILDER_SUBNET:-subnet-07dbba65d3e44695c}"     # DebeosOpsStack private builder subnet
+# These are RESOLVED BY NAME below, never hard-coded -- a literal subnet/SG id
+# here is a time bomb, because destroying and re-deploying DebeosOpsStack mints
+# new ids and the old ones stop existing. That is exactly what happened: the
+# previous defaults (subnet-07dbba65d3e44695c / sg-051df96be83375dbe) pointed
+# into a destroyed VPC and every bake died at RunInstances with
+# `InvalidSubnetID.NotFound`. haiku-launch already learned this for issue 128
+# ("the builder subnet name pattern is the source of truth, not a label that a
+# decommissioned VPC in this account also carries"); this script never got the
+# same fix. Env overrides stay, for the public-subnet path or a one-off VPC.
+SG="${HAIKU_BUILDER_SG:-}"
+SUBNET="${HAIKU_BUILDER_SUBNET:-}"
 KEY="${HAIKU_BUILDER_KEY:-haiku-graviton}"
 PROFILE="${HAIKU_BUILDER_PROFILE:-DebeosOpsStack-BuilderProfile-tPCqkm9pVVKR}"
 # Public IP off by default (private + NAT). Set HAIKU_BUILDER_PUBLIC_IP=1 to force one.
@@ -113,6 +127,68 @@ if [ "$FROM_CANONICAL" = 1 ]; then
 fi
 [ -n "$BASE" ] || BASE=$(aws ssm get-parameter --name "$PARAM" --region "$REGION" --query Parameter.Value --output text)
 say "base AMI: $BASE ; provision=$PROVISION ; work bucket: $BUCKET"
+
+# Resolve the builder subnet + SG BY NAME, and do it BEFORE staging: a bake that
+# cannot launch should not first write a fresh set of scripts over the ones in
+# s3://$BUCKET/bake-scripts/, which a concurrent wave may be reading.
+# The AZ loop matters because the bake instance type is not offered in every AZ,
+# and RunInstances fails on the subnet's AZ, not on a friendlier error.
+if [ -z "$SUBNET" ]; then
+  AZ_LIST=$(aws ec2 describe-instance-type-offerings --region "$REGION" \
+    --location-type availability-zone \
+    --filters "Name=instance-type,Values=$STAGE_TYPE" \
+    --query 'InstanceTypeOfferings[].Location' --output text)
+  [ -n "$AZ_LIST" ] || { say "no AZ in $REGION offers $STAGE_TYPE"; exit 1; }
+  for az in $AZ_LIST; do
+    SUBNET=$(aws ec2 describe-subnets --region "$REGION" \
+      --filters "Name=tag:Name,Values=*BuildVpc/buildersSubnet*" \
+                "Name=availability-zone,Values=$az" \
+      --query 'Subnets[0].SubnetId' --output text 2>/dev/null || true)
+    case "$SUBNET" in
+      subnet-*) break ;;
+      *) SUBNET="" ;;
+    esac
+  done
+  [ -n "$SUBNET" ] || { say "no *BuildVpc/buildersSubnet* in any AZ offering $STAGE_TYPE -- is DebeosOpsStack deployed?"; exit 1; }
+fi
+VPC=$(aws ec2 describe-subnets --region "$REGION" --subnet-ids "$SUBNET" \
+  --query 'Subnets[0].VpcId' --output text)
+if [ -z "$SG" ]; then
+  SG=$(aws ec2 describe-security-groups --region "$REGION" \
+    --filters "Name=group-name,Values=DebeosOpsStack-BuilderSg*" \
+              "Name=vpc-id,Values=$VPC" \
+    --query 'SecurityGroups[0].GroupId' --output text 2>/dev/null || true)
+  case "$SG" in
+    sg-*) ;;
+    *) say "no DebeosOpsStack-BuilderSg* in $VPC -- pass HAIKU_BUILDER_SG"; exit 1 ;;
+  esac
+fi
+say "network: subnet $SUBNET ($VPC) sg $SG type $STAGE_TYPE"
+
+# The staged scripts are read from THIS checkout, so a stale or dirty tree bakes
+# stale tooling into the builder AMI -- silently, because the bake itself still
+# succeeds. That is the whole point of a rebase bake, so check it: SOPs.md 8 says
+# run tooling from origin/graviton, not a parked checkout. Refuse by default and
+# allow an explicit override, rather than warning into a scrollback nobody reads.
+if [ "${HAIKU_BAKE_ALLOW_STALE_TREE:-0}" != 1 ]; then
+  TREE_ROOT=$(cd "$HERE/../.." && pwd)
+  git -C "$TREE_ROOT" fetch -q origin graviton 2>/dev/null || true
+  HEAD_SHA=$(git -C "$TREE_ROOT" rev-parse --short HEAD 2>/dev/null || true)
+  TRUNK_SHA=$(git -C "$TREE_ROOT" rev-parse --short origin/graviton 2>/dev/null || true)
+  if [ -n "$HEAD_SHA" ] && [ -n "$TRUNK_SHA" ] && [ "$HEAD_SHA" != "$TRUNK_SHA" ]; then
+    say "REFUSING: $TREE_ROOT is at $HEAD_SHA but origin/graviton is at $TRUNK_SHA."
+    say "A bake from a stale tree bakes stale scripts into the AMI and still reports success."
+    say "Fast-forward the checkout, or set HAIKU_BAKE_ALLOW_STALE_TREE=1 if that is deliberate."
+    exit 1
+  fi
+  DIRTY=$(git -C "$TREE_ROOT" status --porcelain -- graviton/scripts graviton/builder graviton/haikuports-patches 2>/dev/null)
+  if [ -n "$DIRTY" ]; then
+    say "REFUSING: uncommitted changes under the staged paths:"
+    printf '%s\n' "$DIRTY" >&2
+    say "Commit them or set HAIKU_BAKE_ALLOW_STALE_TREE=1 to bake the working tree as-is."
+    exit 1
+  fi
+fi
 
 # 1) stage the scripts in S3 so the instance's agent can pull them. In provision
 # mode the provisioner itself is staged too, so the box installs its own
