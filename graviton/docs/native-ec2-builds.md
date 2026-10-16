@@ -32,7 +32,8 @@ AMI=$(aws ssm get-parameter --name /haiku-graviton/canonical-ami-id \
 aws ec2 run-instances --image-id "$AMI" --instance-type c8g.2xlarge \
   --security-group-ids sg-008114891fd207df1 --key-name haiku-graviton \
   --iam-instance-profile Name=AWSSupportPatchwork-SSMRoleForInstances \
-  --tag-specifications 'ResourceType=instance,Tags=[{Key=Name,Value=haiku-native-builder},{Key=Project,Value=haiku-graviton}]'
+#    auto-stop=no is NOT optional -- see "The janitor will stop your builder" below.
+  --tag-specifications 'ResourceType=instance,Tags=[{Key=Name,Value=haiku-native-builder},{Key=Project,Value=haiku-graviton},{Key=auto-stop,Value=no}]'
 
 # 2. The mgmt-agent registers the box as an SSM node within a few minutes. Confirm:
 aws ssm describe-instance-information --filters Key=InstanceIds,Values=<iid> \
@@ -42,6 +43,41 @@ aws ssm describe-instance-information --filters Key=InstanceIds,Values=<iid> \
 
 Drive it with plain `aws ssm send-command` / `graviton/scripts/ssm-run <iid>`.
 `PlatformType` reports `Linux` (closed SSM enum); `PlatformName` is the real `Haiku`.
+
+### The janitor will stop your builder
+
+The account runs the SpringClean janitor. Once a day, at the end of the owner's
+configured shift, it calls `StopInstances` on **every instance that does not carry
+`auto-stop=no`**. It reads no liveness signal — not CPU, not network, not SSM — so a
+box three hours into a silent `ninja` or `haikuporter` run is indistinguishable to it
+from a box nobody has touched.
+
+On 2026-10-16T20:06:24Z it stopped all three native arm64 builders in one sweep: one
+75 minutes into an haikuporter packaging phase, one 95% of the way through a 3-hour
+Ladybird build (issue 761). Both then looked like dead hardware — SSH answering
+`Connection timed out during banner exchange` / `kex_exchange_identification: read:
+Connection reset by peer` — which is the trap: the first thing to check when a builder
+goes unreachable mid-build is `describe-instances`, not `sshd`.
+
+Per SpringClean's own documentation the exemption tags are:
+
+| tag | effect |
+|---|---|
+| `auto-stop=no` | never stopped at shift end |
+| `auto-delete=no` / `never` | never deleted |
+| `auto-delete=<YYYY-MM-DD>` | not deleted until that date |
+| `auto-start=yes` | started before shift **and** exempt from deletion |
+
+Every in-tree launcher now sets `auto-stop=no` (`haiku-launch`, `haiku-bake-builder`,
+`haiku-perf-gate`, `haiku-repo-publish-ephemeral`, the wave's `launch_builder.py`);
+`graviton/scripts/haiku-launch-selftest` is the ratchet that keeps a newly added
+launcher from dropping it. `haiku-launch --reapable` opts back out for a box
+short-lived enough that a nightly stop is harmless.
+
+`auto-delete` is deliberately **not** set anywhere. These are ephemeral boxes and
+having the janitor reclaim a forgotten one is wanted — it is also what bounds the cost
+of `auto-stop=no`, since an instance left running is still deleted at the account's
+delete age, with a warning email first. Terminate your own builders anyway.
 
 ## Provision the toolchain (AMI is runtime-only)
 
