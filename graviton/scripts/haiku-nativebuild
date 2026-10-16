@@ -33,7 +33,7 @@ export PATH=/boot/home/config/non-packaged/bin:/boot/system/non-packaged/bin:$PA
 # checking). BUMP THIS whenever a driver change must reach a wave; then republish the
 # script to s3://<bucket>/bake-scripts/haiku-nativebuild (graviton/scripts/haiku-publish-driver)
 # and redeploy the ops stack. Format: YYYY-MM-DD.<serial>.
-NATIVEBUILD_VERSION="2026-10-16.2"
+NATIVEBUILD_VERSION="2026-10-16.3"
 HP=/boot/home/haikuports
 GP=$HP/packages
 # The S3 client used to harvest built hpkgs and mirror sources. RESOLVED, never a
@@ -65,6 +65,22 @@ MIRROR_S3="${MIRROR_S3:-s3://$BUCKET/download-mirror}"
 # Genuine non-progress is already detected exactly, and cheaply, by the prev_miss check
 # in build_one -- so the round cap only has to bound pathological oscillation.
 MAX_ATTEMPTS="${MAX_ATTEMPTS:-60}"
+# Free space on the ports volume below which a port is not STARTED, in MiB
+# (issue 769). This is a floor, not an estimate of what any port needs -- no such
+# estimate exists, since a recipe's unpacked work tree is not knowable before it is
+# unpacked. 3 GiB is chosen as the smallest amount in which a port that is going to
+# run out can still run out *cleanly*: haikuporter can write its work dir, fail, and
+# leave a log, and the operator can still log in and delete something. Issue 770 is
+# the reason that second clause is not optional -- a BFS root at genuinely 0 free
+# takes sshd and the SSM agent down with it, so an out-of-disk build becomes an
+# unreachable instance with the run's artifacts stranded on it.
+NB_DISK_FLOOR_MIB="${NB_DISK_FLOOR_MIB:-3072}"
+# Where the per-port haikuporter logs go. A variable only so the offline selftest can
+# drive build_one on a host that has no /boot (issue 769): the misclassification this
+# driver had was INSIDE build_one, so a suite that cannot call build_one cannot test it.
+# Nothing in the fleet sets this; the default is the path every tool and runbook already
+# greps for.
+NB_LOG_DIR="${NB_LOG_DIR:-/boot/home}"
 # Names of ports whose build produced an hpkg this run (space-separated). Only
 # these get their sources mirrored -- a successful build means haikuporter has
 # already fetched AND checksum-validated every source, so the files in the port's
@@ -300,6 +316,66 @@ NB_DIAG_RE='error:|Error [0-9]+|Error: |CMake Error|fatal error:|error adding sy
 # sourced port class #505 §C has just made buildable, so it is worth an arm.
 NB_NOISE_RE='^(make|gmake)(\[[0-9]+\])?: \*\*\* (\[[^]]*\] )?Error [0-9]+|^(make|gmake)(\[[0-9]+\])?: \*\*\* Waiting for unfinished jobs|^collect2: error: ld returned|^Error: Build has failed|^Validating checksum of|^Skipping checksum validation of|^[^[:space:]]*: FAILED, no missing-dep|^Warning: Command |^Warning: PLEASE MOVE TO A TAG'
 
+# ---------------------------------------------------------------------------
+# Capacity: the builder ran out of disk, which is NOT a port defect (issue 769).
+#
+# NB_DIAG_RE above already matches the evidence -- it carries both `No space left`
+# and `\[Errno -?[0-9]+\]` -- so the capture has always quoted the right line. But
+# matching a diagnostic is not classifying a run. Every NB_DIAG_RE arm feeds the one
+# verdict, so an out-of-disk build reached build_one's `FAILED, no missing-dep`
+# catch-all and a wave recorded `failed` against the RECIPE. Measured on
+# i-092201b33570a801d on 2026-10-16 driving the issue 702 chain: app-text/texlive
+# unpacked a 7.1 GiB texmf work tree onto a default 20 GiB root, died with
+# `[Errno -2147459065] No space left on device`, and the driver then started `gri`
+# on the full volume, where it "failed" two seconds later having compiled nothing.
+# Two false `failed` rows from one capacity event, and the run's own `failed=` tally
+# is how that becomes someone else's wasted afternoon.
+#
+# These arms are deliberately NARROW. A capacity verdict excuses a port from the
+# failure tally, so it must only fire on the filesystem saying it is full, never on
+# a port that merely mentions space. -2147459065 is Haiku's B_DEVICE_FULL as
+# haikuporter's Python prints it (`[Errno -2147459065]`); the two POSIX spellings
+# cover make/configure/cp reporting it through errno.
+#
+# They are still only a log match, so they can be wrong -- a build that hits ENOSPC
+# on some large temp write, recovers, and then fails for an unrelated reason would be
+# excused. That direction is the cheap one, and the asymmetry is the argument for
+# this design rather than a caveat about it: a false CAPACITY verdict costs one
+# re-queued build, while a false `failed` verdict buries a port that works and adds a
+# row to a tally people make decisions from. Erring toward "the builder's fault" is
+# the recoverable mistake.
+NB_ENOSPC_RE='No space left on device|\[Errno -2147459065\]|Disc full|disk full'
+
+# Free MiB on the volume holding $1, or nothing at all if it cannot be determined.
+#
+# Haiku's `df` given a PATH prints a detailed block rather than a POSIX line, so
+# there is no `df -P` one-liner to cut a column out of. The block carries both
+# numbers needed, each as an exact integer in parentheses:
+#     Block Size:    2.0 KiB (2048 byte)
+#     Free Blocks:  11.0 GiB (5774083 blocks)
+# The parenthesised integers are what this reads. The rendered "11.0 GiB" beside
+# them is ROUNDED -- at the point this check matters the difference between "0.0
+# GiB" and 112 KiB is the whole question, so parsing the pretty column would be
+# reading the one field that cannot answer it.
+#
+# Prints nothing on any failure to parse, and callers treat that as "unknown" and
+# proceed: a df this does not understand must not become a refusal to build. The
+# floor check is a guard against a known failure mode, not a gate.
+nb_free_mib() {
+	_d=$(df -k "$1" 2>/dev/null) || return 1
+	_bs=$(printf '%s\n' "$_d" | sed -n 's/^[[:space:]]*Block Size:.*(\([0-9][0-9]*\) byte).*$/\1/p' | head -1)
+	_fb=$(printf '%s\n' "$_d" | sed -n 's/^[[:space:]]*Free Blocks:.*(\([0-9][0-9]*\) blocks).*$/\1/p' | head -1)
+	[ -n "$_bs" ] && [ -n "$_fb" ] || return 1
+	# 64-bit shell arithmetic on arm64; a 20 GiB volume is nowhere near the limit.
+	echo $(( _fb * _bs / 1048576 ))
+}
+
+# Did this log die because the volume filled up?
+nb_log_is_enospc() {
+	[ -f "$1" ] || return 1
+	grep -Eq "$NB_ENOSPC_RE" "$1"
+}
+
 # Emit a capture of the haikuporter log to STDOUT on failure. This is load-bearing
 # for triage: run_ssm._wrapper gzips this process's stdout and uploads it as the
 # S3 build log (log_url), so whatever we DON'T print here is lost when the scratch
@@ -468,10 +544,38 @@ have_hpkg() {
 	ls "$GP/${1}"-*.hpkg >/dev/null 2>&1
 }
 
+# build_one's exit codes. 1 is "this port failed" and is the only one the caller used
+# to have; this one says the BUILDER is out of disk, which is a fact about the run and
+# not about the port, so the caller stops instead of walking the remaining ports into
+# the same wall (issue 769).
+#
+# 9, and NOT 3, deliberately. `run_ssm._wrapper` already spends 3 on its own meaning --
+# a stale staged driver (#506) -- and it prints `VERDICT=FAIL RC=3` without running the
+# build at all. Reusing 3 here would make "the builder is too small" arrive at
+# `poll_ssm` wearing the costume of "this wave is running the wrong driver", which is
+# the same conflation 769 is about, just moved one layer out. Anything the wave reads
+# must stay unambiguous end to end, so the driver takes a code nothing else claims.
+NB_RC_CAPACITY=9
+
 build_one() {
 	port="$1"
-	log="/boot/home/nb-$port.log"
+	log="$NB_LOG_DIR/nb-$port.log"
 	echo "===== $port : start $(date -u +%FT%TZ) ====="
+	# Refuse to START a port on a volume that is already too full to fail cleanly on
+	# (issue 769). Checked per port rather than once per run because the port before
+	# this one is what fills the disk.
+	_free=$(nb_free_mib "$HP" || true)
+	if [ -n "${_free:-}" ] && [ "$_free" -lt "$NB_DISK_FLOOR_MIB" ]; then
+		echo "$port: CAPACITY_ABORT -- ${_free} MiB free on the volume holding $HP,"
+		echo "  below the NB_DISK_FLOOR_MIB=$NB_DISK_FLOOR_MIB floor. NOT STARTED, and"
+		echo "  therefore NOT a failed build: nothing about this port has been tested."
+		echo "  Free space on the builder (the previous port's work-* tree is usually"
+		echo "  what filled it) or give the run a builder with a larger volume, then"
+		echo "  re-queue. See issue 769, and issue 770 for why this is a refusal rather"
+		echo "  than an attempt: a BFS root at 0 free takes sshd and the SSM agent down"
+		echo "  with it, so the artifacts already built by this run become unreachable."
+		return "$NB_RC_CAPACITY"
+	fi
 	rm -rf "$DEPDIR" 2>/dev/null
 	mkdir -p "$DEPDIR" 2>/dev/null || true
 	attempt=1
@@ -482,6 +586,19 @@ build_one() {
 		if have_hpkg "$port"; then
 			echo "$port: BUILD_OK (attempt $attempt)"
 			return 0
+		fi
+		# Checked BEFORE the missing-dep scan, because that scan is what misreads
+		# this case: a log that died on a write carries no `build-requires "..."`
+		# line, so `miss` comes out empty and the catch-all below calls it a port
+		# failure (issue 769).
+		if nb_log_is_enospc "$log"; then
+			echo "$port: BUILD_ABORTED_ENOSPC (attempt $attempt) -- the volume holding"
+			echo "  $HP filled up during the build. This is NOT a port defect and must"
+			echo "  not be recorded as a failed build; the recipe has not been tested."
+			echo "  $(nb_free_mib "$HP" 2>/dev/null || echo '?') MiB free now. The matching lines:"
+			grep -En "$NB_ENOSPC_RE" "$log" | head -5 | sed 's/^/    /'
+			emit_log_capture "$log"
+			return "$NB_RC_CAPACITY"
 		fi
 		# collect every resolvable haikuporter said it could not resolve
 		miss=$(grep -oE '(build-requires|build-prerequires|requires) "[^"]+"' "$log" \
@@ -520,6 +637,53 @@ build_one() {
 	echo "  is what the NO PROGRESS check above would otherwise have caught). Raise"
 	echo "  MAX_ATTEMPTS and re-wave -- this is a driver limit, not a port defect."
 	emit_log_capture "$log"; return 1
+}
+
+# Build every port named on the command line, in order, and decide what the RUN's
+# verdict is.
+#
+# A function rather than an inline loop so the selftest can drive it (issue 769). Half
+# of 769 is about this loop and not about build_one: a capacity event does not just
+# mislabel the port it happened on, it walks every REMAINING port into the same full
+# volume and mislabels those too -- two seconds each, no compiler ever invoked. That
+# fan-out is only observable across several ports, so it is only testable if the loop
+# can be called. Keep it above the "# Refresh the pkgman repo caches" line, which is
+# where the selftest stops sourcing.
+#
+# Sets the globals BUILT_OK, capacity_abort and not_attempted; returns 0, 1 or
+# $NB_RC_CAPACITY.
+run_ports() {
+	_rc=0
+	capacity_abort=""
+	not_attempted=""
+	for p in "$@"; do
+		# Normalize directory-style input (gdk-pixbuf) to recipe-basename form
+		# (gdk_pixbuf) before invoking haikuporter -- see resolve_port_name.
+		resolved=$(resolve_port_name "$p")
+		if [ -n "$capacity_abort" ]; then
+			not_attempted="$not_attempted $resolved"
+			continue
+		fi
+		if [ "$resolved" != "$p" ]; then
+			echo "resolved port name: $p -> $resolved"
+		fi
+		build_one "$resolved"
+		_brc=$?
+		if [ "$_brc" = 0 ]; then
+			BUILT_OK="$BUILT_OK $resolved"
+		elif [ "$_brc" = "$NB_RC_CAPACITY" ]; then
+			# Out of disk. Every remaining port would hit the same wall and be
+			# recorded as a failure it did not earn, so stop attempting them
+			# (issue 769). The caller still harvests: the hpkgs already built are
+			# real, and getting them off a builder that may be about to become
+			# unreachable (issue 770) matters more now than on a healthy run.
+			capacity_abort="$resolved"
+		else
+			_rc=1
+		fi
+	done
+	[ -z "$capacity_abort" ] || return "$NB_RC_CAPACITY"
+	return "$_rc"
 }
 
 # Push every *.hpkg to the pool (never the build-input haiku*.hpkg).
@@ -711,20 +875,12 @@ nb_lock_acquire || exit 1
 # that produced it, so a wrong run is detectable retroactively from the log alone.
 echo "===== haiku-nativebuild NATIVEBUILD_VERSION=$NATIVEBUILD_VERSION $(date -u +%FT%TZ) ====="
 
-rc=0
-for p in "$@"; do
-	# Normalize directory-style input (gdk-pixbuf) to recipe-basename form
-	# (gdk_pixbuf) before invoking haikuporter -- see resolve_port_name.
-	resolved=$(resolve_port_name "$p")
-	if [ "$resolved" != "$p" ]; then
-		echo "resolved port name: $p -> $resolved"
-	fi
-	if build_one "$resolved"; then
-		BUILT_OK="$BUILT_OK $resolved"
-	else
-		rc=1
-	fi
-done
+run_ports "$@"
+rc=$?
+# A capacity abort is not a port failure, and `rc` is re-derived from it at the end of
+# the run; collapse it to 0 here so the harvest below is the only thing that can turn
+# an otherwise-clean run into rc=1.
+[ "$rc" = "$NB_RC_CAPACITY" ] && rc=0
 # A harvest failure makes the RUN fail (issue 728). It did not before, and that
 # was the defect: the packages are what the wave exists to produce, so a run that
 # built them and could not publish them has not succeeded. The banner below is
@@ -740,5 +896,21 @@ if ! harvest; then
 		"failed builds -- fix the upload path and re-harvest from $GP."
 fi
 mirror_sources
+# A capacity abort owns the exit code (issue 769). It is reported LAST and with its
+# own code because the one thing a caller holding only `$?` must be able to tell is
+# "the ports in this run are broken" from "the builder this run was given is too
+# small" -- the first is work for whoever owns the recipes, the second is work for
+# whoever owns the fleet, and conflating them is what put false `failed` rows in the
+# backlog in the first place.
+if [ -n "$capacity_abort" ]; then
+	rc=$NB_RC_CAPACITY
+	echo "===== CAPACITY ABORT at port $capacity_abort: the builder ran out of disk ====="
+	echo "      NOT a port failure. Do not record $capacity_abort as failed -- re-queue it."
+	echo "      Ports built before the abort (valid, and harvested if the pool was" \
+		"reachable): ${BUILT_OK:-(none)}"
+	echo "      Ports NEVER ATTEMPTED, re-queue all of them:${not_attempted:- (none)}"
+	echo "      Free now: $(nb_free_mib "$HP" 2>/dev/null || echo '?') MiB" \
+		"(floor NB_DISK_FLOOR_MIB=$NB_DISK_FLOOR_MIB MiB)"
+fi
 echo "===== nativebuild done $(date -u +%FT%TZ) rc=$rc ====="
 exit $rc

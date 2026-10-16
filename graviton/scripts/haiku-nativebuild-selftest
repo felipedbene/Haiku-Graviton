@@ -1,8 +1,9 @@
 #!/bin/sh
 # haiku-nativebuild-selftest [--mutate]
 #
-# Offline self-test for haiku-nativebuild's dependency diagnostic (#485/#486) and for
-# its failure-log CAPTURE (#505 §E -- see "the log-capture arms" below). Runs
+# Offline self-test for haiku-nativebuild's dependency diagnostic (#485/#486), its
+# failure-log CAPTURE (#505 §E -- see "the log-capture arms" below) and its CAPACITY
+# classification (#769 -- see "the capacity arms"). Runs
 # ANYWHERE -- Linux dev host or Haiku builder -- because it never calls the real
 # pkgman: it puts a stub pkgman on PATH that replays pkgman's own wording, taken from
 # the DeBeOS sources that print it:
@@ -110,13 +111,18 @@ if [ "$MUTATE" = 1 ]; then
 	# The mutations: put back the original evidence-discarding install_dep, and the
 	# capture as it stood before #505 §E -- the narrow lexicon (verbatim, this is the
 	# pattern that was in emit_log_capture) and no first-error window. That pairing is
-	# precisely what left `pnet` with a two-line grep block and no cause.
+	# precisely what left `pnet` with a two-line grep block and no cause. Plus the
+	# pre-issue-769 absence of any notion of capacity: no ENOSPC classifier and no
+	# free-space reading at all, which is exactly the code that recorded `texlive` and
+	# `gri` as broken recipes when the builder's volume was what had failed.
 	cat >> "$work/sut.sh" <<'MUT'
 install_dep() { feed | pkgman install "$1" >/dev/null 2>&1; }
 NB_DIAG_RE='error:|Error [0-9]+|CMake Error|fatal error:|cannot find -l|command not found|No such file or directory|undefined reference|multiple definition of|does not name a type|ModuleNotFoundError|No module named|Read-only file system|not supported|unsupported|unknown word-size|guess (build|host) type|required file .* not found|unable to resolve|could not be resolved|is not available, please install|prepareInstalledDevelLib|possibly undefined macro|narrowing conversion|CHECKSUM|checksum'
 emit_first_error_window() { :; }
 have_hpkg() { ls "$GP/${1}"-[0-9]*.hpkg >/dev/null 2>&1; }
 nb_lock_acquire() { return 0; }
+nb_log_is_enospc() { return 1; }
+nb_free_mib() { return 1; }
 MUT
 fi
 PATH="$work/bin:$PATH"
@@ -446,13 +452,308 @@ lock_bool_case "lock_stale_banner: the reclaim is reported, not silent" "$g"
 rm -rf "$NB_LOCK"
 trap 'rm -rf "$work"' EXIT INT TERM
 
+# ---- the capacity arms (issue 769) ----------------------------------------
+# WHAT THESE GUARD. `haiku-nativebuild` had no notion of "the builder ran out of disk",
+# so an out-of-disk build took the one path available for "no hpkg and no missing
+# dependency" and came out as `<port>: FAILED, no missing-dep` -- which build-wave
+# records as a defect in the RECIPE. Then the loop moved on to the next port on the same
+# full volume and manufactured another one. Measured on i-092201b33570a801d on
+# 2026-10-16: `app-text/texlive` unpacked a 7.1 GiB texmf tree onto a 20 GiB root and
+# died, and `gri` "failed" two seconds after it started, having compiled nothing. Two
+# false `failed` rows, one capacity event.
+#
+# So there are two separate things to pin down and they need different arms: build_one
+# must not mislabel the port it happened to, and run_ports must not keep going. The
+# second is why the port loop is a function at all -- the fan-out is invisible from a
+# single port.
+#
+# THE df FIXTURE IS REAL and that is the whole point of it: nb_free_mib exists because
+# Haiku's `df` given a PATH prints a detailed block rather than a POSIX line, so there
+# is nothing to cut a column from and the function has to parse. Below is `df -k /boot`
+# verbatim from i-07e146b4785a17da8 (a live Graviton Haiku builder, 2026-10-16). The
+# two lines nb_free_mib reads are `Block Size:` and `Free Blocks:`, and it reads the
+# PARENTHESISED integers, not the rendered "11.0 GiB" beside them -- at the point this
+# check matters the difference between "0.0 GiB" and 112 KiB is the entire question, so
+# an arm that accepted the pretty column would be asserting the one field that cannot
+# answer it. Do not reflow or re-space this fixture; the spacing is what a real df
+# emits and tolerating it is part of what is under test.
+cat > "$work/df-real.txt" <<'DFREAL'
+   Device No.: 3
+   Mounted at: /boot
+  Volume Name: "Haiku"
+  File System: bfs
+       Device: /dev/disk/nvme/0/1
+        Flags: QAM-P-W
+     I/O Size:   64.0 KiB (65536 byte)
+   Block Size:    2.0 KiB (2048 byte)
+ Total Blocks:   20.0 GiB (10467319 blocks)
+  Used Blocks:    9.0 GiB (4693236 blocks)
+  Free Blocks:   11.0 GiB (5774083 blocks)
+      Usage %:   44.8 %
+  Total Nodes: 0
+   Used Nodes: 0
+   Free Nodes: 0
+   Root Inode: 524288
+DFREAL
+
+# The variants are DERIVED from that block by substituting its Free Blocks line, and
+# only that line, so the provenance of every other field stays visible in the sed:
+#  - full:  56 blocks x 2048 = 112.0 KiB, which is what the wedged builder reported at
+#           the moment SSM and sshd stopped answering (issue 770). 0 MiB.
+#  - edge:  1572864 blocks x 2048 = exactly 3072 MiB -- the floor itself, which must be
+#           ACCEPTED. `-lt` and `-le` are one character apart and the wrong one turns
+#           the guard into a refusal to build at a size that still builds.
+#  - under: 1572863 blocks, i.e. one block less, = 3071 MiB. Must be refused. The pair
+#           is what makes the boundary tested rather than asserted.
+dfvar() {
+	sed "s|^  Free Blocks:.*|  Free Blocks:    0.0 GiB ($1 blocks)|" \
+		"$work/df-real.txt" > "$work/df-$2.txt"
+}
+dfvar 56 full
+dfvar 1572864 edge
+dfvar 1572863 under
+printf 'Filesystem 1024-blocks Used Available Capacity Mounted on\n/dev/sda1 20971520 9386472 11548166 45%% /\n' \
+	> "$work/df-posix.txt"
+
+# `df` and `haikuporter` stubs. df replays whichever fixture $NBTEST_DF_PTR names, so a
+# port can FILL THE DISK as a side effect of its own build -- which is what actually
+# happens and is the only way the loop arm can observe the fan-out. An empty or missing
+# pointer means df itself failed, which is the case nb_free_mib must report as UNKNOWN:
+# a df this code cannot parse must not become a refusal to build.
+export NBTEST_DF_PTR="$work/df.ptr"
+cat > "$work/bin/df" <<'DFSTUB'
+#!/bin/sh
+p=$(cat "$NBTEST_DF_PTR" 2>/dev/null)
+[ -n "$p" ] && [ -f "$p" ] || exit 1
+cat "$p"
+DFSTUB
+cat > "$work/bin/haikuporter" <<'HPSTUB'
+#!/bin/sh
+# Records that it ran (the loop arm asserts a compiler was never invoked for the ports
+# after the abort), optionally produces an hpkg, optionally fills the disk, and always
+# exits non-zero -- build_one never reads this exit code, it asks have_hpkg.
+port=""
+for a in "$@"; do case "$a" in -*) ;; *) port="$a" ;; esac; done
+echo "$port" >> "$NBTEST_HP_CALLS"
+[ -n "${NBTEST_HP_MAKES_HPKG:-}" ] && : > "$GP/$port-1.0-1-arm64.hpkg"
+[ -n "${NBTEST_HP_FILLS:-}" ] && printf '%s\n' "$NBTEST_HP_FILLS" > "$NBTEST_DF_PTR"
+[ -n "${NBTEST_HP_OUT:-}" ] && [ -f "$NBTEST_HP_OUT" ] && cat "$NBTEST_HP_OUT"
+exit 1
+HPSTUB
+chmod +x "$work/bin/df" "$work/bin/haikuporter"
+
+# 14. nb_free_mib: the parse. Asserted as exact integers, because this is arithmetic on
+#     numbers a real df printed and "roughly 11 GiB" is not a thing a floor check can
+#     compare against.
+free_case() {
+	printf '%s\n' "$2" > "$NBTEST_DF_PTR"
+	got=$(nb_free_mib "$HP" 2>/dev/null || true)
+	if [ "${got:-}" = "$3" ]; then
+		pass=$((pass+1)); echo "  ok    $1: nb_free_mib -> '${got:-}' MiB"
+	else
+		fail=$((fail+1)); echo "  FAIL  $1: nb_free_mib -> '${got:-}', wanted '$3'"
+	fi
+}
+free_case free_real  "$work/df-real.txt"  11277
+free_case free_full  "$work/df-full.txt"  0
+free_case free_edge  "$work/df-edge.txt"  3072
+free_case free_under "$work/df-under.txt" 3071
+# A df this function does not understand yields NOTHING, which build_one treats as
+# "unknown, proceed". Both the POSIX-shaped output of a non-Haiku df and an outright
+# failed df are asserted, since the function runs on whatever the image ships.
+free_case free_posix   "$work/df-posix.txt" ""
+free_case free_df_fail "$work/nonexistent"  ""
+
+# 15. nb_log_is_enospc: the classifier. The ENOSPC line is VERBATIM from the 702 chain's
+#     own run on i-092201b33570a801d -- `[Errno -2147459065] No space left on device`,
+#     which is Haiku's B_DEVICE_FULL printed through haikuporter's Python. It carries
+#     both spellings at once, which is why the regex has to; the POSIX-only arms cover
+#     make/configure/cp reporting the same errno without the Haiku code.
+ENOSPC_HAIKU='[Errno -2147459065] No space left on device'
+enospc_case() {
+	printf '%s\n' "$2" > "$work/el.log"
+	if nb_log_is_enospc "$work/el.log"; then got=yes; else got=no; fi
+	if [ "$got" = "$3" ]; then
+		pass=$((pass+1)); echo "  ok    $1: enospc -> $got"
+	else
+		fail=$((fail+1)); echo "  FAIL  $1: enospc -> $got, wanted $3"
+	fi
+}
+enospc_case enospc_haiku  "$ENOSPC_HAIKU" yes
+enospc_case enospc_posix  "cp: error writing 'x': No space left on device" yes
+enospc_case enospc_errno  "tar: x: Cannot write: [Errno -2147459065]" yes
+# And it must stay NARROW: a capacity verdict excuses a port from the failure tally, so
+# a port that merely talks about disks is not one. `ffcall`'s real log is the strongest
+# negative available -- it is a genuine build failure, 760 lines, and if the regex fires
+# on it the classifier would be laundering real defects as infrastructure.
+enospc_case enospc_not_a_space_error \
+	"checking for available disk space... yes" no
+if [ -f "$FIXTURE" ]; then
+	if nb_log_is_enospc "$FIXTURE"; then
+		fail=$((fail+1)); echo "  FAIL  enospc_real_failure: fired on ffcall's real log"
+	else
+		pass=$((pass+1)); echo "  ok    enospc_real_failure: silent on ffcall's real log"
+	fi
+fi
+
+# 16. build_one: THE CASE THAT USED TO MISCLASSIFY. This is the arm issue 769 asks for by
+#     name. A log that died on a write carries no `build-requires "..."` line, so the
+#     missing-dep grep comes back empty and the old code fell through to the catch-all --
+#     so both directions are asserted, and the absent one is the actual defect.
+HP="$work/hp2"; GP="$work/pkgs2"; NB_LOG_DIR="$work/logs"
+mkdir -p "$HP" "$GP" "$NB_LOG_DIR"
+export GP
+MAX_ATTEMPTS=1
+BUILT_OK=""
+NBTEST_HP_CALLS="$work/hpcalls"; export NBTEST_HP_CALLS
+: > "$NBTEST_HP_CALLS"
+unset NBTEST_HP_MAKES_HPKG NBTEST_HP_FILLS 2>/dev/null || true
+export NBTEST_HP_OUT=""
+
+bo_case() {
+	name="$1"; want_rc="$2"; shift 2
+	out=$(build_one testport 2>&1); rc=$?
+	if [ "$rc" = "$want_rc" ]; then
+		pass=$((pass+1)); echo "  ok    $name: rc=$rc"
+	else
+		fail=$((fail+1)); echo "  FAIL  $name: rc=$rc, wanted $want_rc"
+	fi
+	cap_case "$name" "$out" "$@"
+}
+
+# (a) The disk fills DURING the build: capacity verdict, capacity rc, and emphatically
+#     not the port-defect verdict.
+printf '%s\n' "$work/df-real.txt" > "$NBTEST_DF_PTR"
+printf '%s\n' "$ENOSPC_HAIKU" > "$work/hp-enospc.log"
+export NBTEST_HP_OUT="$work/hp-enospc.log"
+bo_case build_one_enospc "$NB_RC_CAPACITY" \
+	"testport: BUILD_ABORTED_ENOSPC" \
+	"is NOT a port defect" \
+	"$ENOSPC_HAIKU" \
+	-- "FAILED, no missing-dep" "DEP_NO_PROGRESS"
+
+# (b) The same thing buried in a long real log, so the classification does not depend on
+#     the log being one line. Fixture is ffcall's real log with the measured errno line
+#     appended -- which is where it appears in a real run, haikuporter prints it last.
+if [ -f "$FIXTURE" ]; then
+	{ cat "$FIXTURE"; printf '%s\n' "$ENOSPC_HAIKU"; } > "$work/hp-enospc-long.log"
+	export NBTEST_HP_OUT="$work/hp-enospc-long.log"
+	bo_case build_one_enospc_buried "$NB_RC_CAPACITY" \
+		"testport: BUILD_ABORTED_ENOSPC" \
+		-- "FAILED, no missing-dep"
+fi
+
+# (c) THE CONTROL, and the arm that keeps (a) honest: a real failure must still be a
+#     failure. ffcall's unmodified log is a true build failure with no ENOSPC and no
+#     missing-dep line -- exactly the shape that legitimately belongs in the catch-all.
+#     Without this arm, `nb_log_is_enospc() { return 0; }` would pass the suite.
+if [ -f "$FIXTURE" ]; then
+	export NBTEST_HP_OUT="$FIXTURE"
+	bo_case build_one_real_failure 1 \
+		"testport: FAILED, no missing-dep" \
+		-- "BUILD_ABORTED_ENOSPC" "CAPACITY_ABORT"
+fi
+
+# (d) The floor: already below it before the port starts, so the port is NOT STARTED.
+#     Asserting the rc is not enough -- the point is that no compiler runs, because the
+#     alternative (issue 770) is a volume at 0 free that takes sshd and the SSM agent
+#     with it and strands the run's artifacts. So the stub's call log is asserted too.
+printf '%s\n' "$work/df-full.txt" > "$NBTEST_DF_PTR"
+: > "$NBTEST_HP_CALLS"
+export NBTEST_HP_OUT=""
+bo_case build_one_floor "$NB_RC_CAPACITY" \
+	"testport: CAPACITY_ABORT" \
+	"0 MiB free" \
+	"NOT STARTED" \
+	-- "BUILD_ABORTED_ENOSPC" "FAILED, no missing-dep"
+if [ -s "$NBTEST_HP_CALLS" ]; then
+	fail=$((fail+1)); echo "  FAIL  build_one_floor_no_exec: haikuporter ran anyway"
+else
+	pass=$((pass+1)); echo "  ok    build_one_floor_no_exec: haikuporter was never invoked"
+fi
+
+# (e) The boundary, both sides, through build_one rather than through nb_free_mib -- the
+#     comparison lives in build_one and that is where off-by-one would hide. At exactly
+#     the floor the port must START (and here reach the catch-all, since the stub log
+#     says nothing), one block below it must not.
+printf '%s\n' "$work/df-edge.txt" > "$NBTEST_DF_PTR"
+: > "$work/hp-silent.log"
+export NBTEST_HP_OUT="$work/hp-silent.log"
+bo_case build_one_at_floor 1 \
+	"testport: FAILED, no missing-dep" -- "CAPACITY_ABORT"
+printf '%s\n' "$work/df-under.txt" > "$NBTEST_DF_PTR"
+bo_case build_one_below_floor "$NB_RC_CAPACITY" \
+	"testport: CAPACITY_ABORT" "3071 MiB free" -- "FAILED, no missing-dep"
+
+# (f) An UNPARSEABLE df must not stop the build. The floor check is a guard against a
+#     known failure mode, not a gate, and a driver that refuses to build because it
+#     could not read df is a worse driver than the one 769 describes.
+printf '%s\n' "$work/df-posix.txt" > "$NBTEST_DF_PTR"
+bo_case build_one_df_unknown 1 \
+	"testport: FAILED, no missing-dep" -- "CAPACITY_ABORT"
+
+# 17. run_ports: THE FAN-OUT, which is the other half of 769's title ("the run keeps
+#     going and manufactures more"). Three ports; the first one's own build fills the
+#     volume, as texlive's did. What must happen: port 1 is a real BUILD_OK, port 2 is
+#     refused rather than attempted, port 3 is never looked at, the run's rc is the
+#     capacity code, and -- the assertion that matters most -- haikuporter is invoked
+#     exactly ONCE across all three. Ports 2 and 3 are the two false `failed` rows that
+#     this is here to prevent, and `gri`'s two-second "failure" is what they look like.
+: > "$NBTEST_HP_CALLS"
+printf '%s\n' "$work/df-real.txt" > "$NBTEST_DF_PTR"
+export NBTEST_HP_MAKES_HPKG=1
+export NBTEST_HP_FILLS="$work/df-full.txt"
+export NBTEST_HP_OUT=""
+BUILT_OK=""
+# NOT a command substitution: run_ports reports through the globals BUILT_OK,
+# capacity_abort and not_attempted, and `$(...)` would run it in a subshell where every
+# one of those assertions would read the parent's stale value and pass for free.
+run_ports portone porttwo portthree > "$work/rp.out" 2>&1; rc=$?
+out=$(cat "$work/rp.out")
+lock_rc_case run_ports_capacity_rc "$rc" "$NB_RC_CAPACITY"
+cap_case run_ports "$out" \
+	"portone: BUILD_OK" \
+	"porttwo: CAPACITY_ABORT" \
+	-- "portthree" "FAILED, no missing-dep" "porttwo: BUILD_ABORTED_ENOSPC"
+case "$BUILT_OK" in
+*portone*) pass=$((pass+1)); echo "  ok    run_ports_built: portone is recorded built" ;;
+*) fail=$((fail+1)); echo "  FAIL  run_ports_built: BUILT_OK='$BUILT_OK'" ;;
+esac
+case "$BUILT_OK" in
+*porttwo*|*portthree*)
+	fail=$((fail+1)); echo "  FAIL  run_ports_built_clean: BUILT_OK='$BUILT_OK'" ;;
+*) pass=$((pass+1)); echo "  ok    run_ports_built_clean: only portone is claimed" ;;
+esac
+# not_attempted is what the operator re-queues from, so it has to be complete AND it has
+# to exclude the port the abort happened on -- that one is named separately, because it
+# was refused rather than skipped and the distinction is the difference between "re-queue
+# this" and "this was never even looked at".
+case "$not_attempted" in
+*portthree*) pass=$((pass+1)); echo "  ok    run_ports_requeue: portthree is listed to re-queue" ;;
+*) fail=$((fail+1)); echo "  FAIL  run_ports_requeue: not_attempted='$not_attempted'" ;;
+esac
+case "$capacity_abort" in
+porttwo) pass=$((pass+1)); echo "  ok    run_ports_abort_port: porttwo named as the abort point" ;;
+*) fail=$((fail+1)); echo "  FAIL  run_ports_abort_port: capacity_abort='$capacity_abort'" ;;
+esac
+ncalls=$(wc -l < "$NBTEST_HP_CALLS" | tr -d ' ')
+if [ "$ncalls" = 1 ]; then
+	pass=$((pass+1)); echo "  ok    run_ports_no_further_exec: haikuporter ran once, for portone"
+else
+	fail=$((fail+1)); echo "  FAIL  run_ports_no_further_exec: haikuporter ran $ncalls time(s)"
+fi
+unset NBTEST_HP_MAKES_HPKG NBTEST_HP_FILLS
+
 echo "----"
 echo "pass=$pass fail=$fail"
 if [ "$MUTATE" = 1 ]; then
 	if [ "$fail" -gt 0 ]; then
 		echo "MUTATION DETECTED: the suite goes red without the captured pkgman"
-		echo "evidence and without the widened lexicon + first-error window, so it is"
-		echo "testing both mechanisms and not just their wording."
+		echo "evidence, without the widened lexicon + first-error window, and without"
+		echo "the capacity classifier -- so it is testing the mechanisms and not just"
+		echo "their wording. Note what the mutated run_ports arm reports: all three"
+		echo "ports claimed, haikuporter run three times on a full volume. That is"
+		echo "issue 769 reproduced, not a stand-in for it."
 		exit 0
 	fi
 	echo "VACUOUS SUITE: the mutation did not break any assertion."

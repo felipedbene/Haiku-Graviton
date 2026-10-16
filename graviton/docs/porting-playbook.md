@@ -1742,6 +1742,46 @@ gap with its cause named here.
 
 ---
 
+## Class 41: Builder out of disk — not a port defect
+
+**#769.** Class 25's sibling. Class 25 is the wave driver's own round cap; this is the
+builder's **volume** filling up. Neither is a fact about the recipe, and both used to be
+written to the state table as `failed` against the port that happened to be building.
+
+**Symptom** (haikuporter surfaces Haiku's `B_DEVICE_FULL` through Python's errno layer, so
+the number is negative and the text is the POSIX one):
+```
+[Errno -2147459065] No space left on device
+```
+The driver's own banners, which is what the wave greps for:
+```
+CAPACITY ABORT: <port> -- builder out of disk
+BUILD_ABORTED_ENOSPC
+```
+
+**Fix. Give the builder a bigger root volume — do not touch the recipe.** The port was
+never tested. `haiku-nativebuild` now refuses to start a port with less than
+`NB_DISK_FLOOR_MIB` (default 3072) free on `/boot`, exits `NB_RC_CAPACITY=9`, and stops the
+run instead of walking the remaining ports into the same full volume. `run_ssm`'s wrapper
+turns the banner into `VERDICT=CAPACITY`, `poll_ssm` into `error_class=capacity`, and
+`record.py` puts the row back to `build_state=queued` with **no attempt counted** — so three
+of these can no longer escalate a working port to `needs_human`.
+
+**Two things this class does not cover.** A 20 GiB root is not enough for
+`app-text/texlive` at all (#702), and raising it on an SSM-driven builder is forbidden by
+`graviton/docs/native-ec2-builds.md` §13.6 / #254 — that port needs a differently-sized
+builder, not a retry. And a volume that fills *completely* can take the whole instance off
+both SSH and SSM (#770), in which case there is no log to classify.
+
+**Not in the `haiku-triage-failures` ruleset**, deliberately. The classifier reads logs for
+rows that are already `failed`, and after this fix a capacity event never produces one. The
+`failed=410` rows recorded before the fix would need a re-triage pass, which is a separate
+job from stopping the misclassification.
+
+**Example ports:** gri, texlive (both on i-092201b33570a801d, 2026-10-16).
+
+---
+
 ## The 105 UNMATCHED logs that no regex can classify
 
 **#488.** `UNMATCHED` in the census is two different things, and conflating them libels the

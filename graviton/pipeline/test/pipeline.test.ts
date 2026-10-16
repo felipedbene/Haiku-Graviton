@@ -1913,14 +1913,19 @@ test('#506: run_ssm refreshes the driver from S3 and refuses a stale copy before
 // staged driver and REFUSE (RC=3) on a stale one. This runs the real _wrapper output
 // under /bin/sh with a stub agent that "stages" a chosen fixture -- the discriminating
 // check the issue asks for, exercised without a builder.
-function runGuard(fixtureVersion: string): { rc: number; verdict: string; log: string } {
+function runGuard(fixtureVersion: string, driverBody?: string):
+    { rc: number; verdict: string; log: string } {
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'nb506run-'));
   const nb = path.join(tmp, 'nb.sh');
   const agent = path.join(tmp, 'stub-agent');
   const fixture = path.join(tmp, 'fixture');
   const captured = path.join(tmp, 'captured.log.gz');
+  // driverBody lets a case choose what the staged driver PRINTS and EXITS with, which is
+  // the only thing the wrapper classifies from (issue 769 added a verdict that has to be
+  // reachable here). Default: the healthy single-port run the #506 arms assume.
+  const body = driverBody ?? `echo "$1: BUILD_OK"\nexit 0`;
   fs.writeFileSync(fixture,
-    `#!/bin/sh\nNATIVEBUILD_VERSION="${fixtureVersion}"\necho "$1: BUILD_OK"\nexit 0\n`);
+    `#!/bin/sh\nNATIVEBUILD_VERSION="${fixtureVersion}"\n${body}\n`);
   fs.writeFileSync(agent,
     `#!/bin/sh\n` +
     `if [ "$1" = s3 ] && [ "$2" = cp ]; then\n` +
@@ -1971,6 +1976,82 @@ test('#506 mutation: a STALE staged driver is refused loudly (VERDICT=FAIL RC=3)
   expect(r.rc).toBe(3);
   expect(r.log).toContain('STALE DRIVER');
   expect(r.log).toContain('REFUSING TO BUILD');
+});
+
+// ---------------------------------------------------------------------------
+// issue 769: an out-of-disk builder is not a broken recipe. The driver now says so
+// (CAPACITY_ABORT / BUILD_ABORTED_ENOSPC, rc=9) and the wave has to carry that all the
+// way to DynamoDB, because the harm is in what gets WRITTEN: on 2026-10-16
+// i-092201b33570a801d filled its 20 GiB root unpacking texlive's 7.1 GiB texmf tree,
+// and `gri` then "failed" two seconds later with nowhere to write. Both would have been
+// recorded `failed` against their recipes. Three of those reach the quarantine
+// threshold and the row becomes needs_human/repeated-failure.
+// ---------------------------------------------------------------------------
+
+test('769: the wrapper classifies an out-of-disk run as CAPACITY, not FAIL, and passes rc=9', () => {
+  const r = runGuard(readNativebuildVersion(),
+    `echo "$1: BUILD_ABORTED_ENOSPC -- the volume filled up"\nexit 9`);
+  expect(r.verdict).toBe('CAPACITY');
+  // The driver's own code reaches poll_ssm intact. 9 and not 3 on purpose: 3 is the
+  // stale-driver code below, and the two must not be confusable.
+  expect(r.rc).toBe(9);
+  expect(r.rc).not.toBe(3);
+});
+
+test('769: a run that built a port and THEN ran out of disk is CAPACITY, not OK', () => {
+  // The precedence that matters. A multi-port run's log carries `<pkg>: BUILD_OK` for
+  // everything it finished before the wall, so an ok_grep tested first would call an
+  // aborted run a success -- and the ports it never attempted would stay queued behind
+  // a wave that reported fine.
+  const r = runGuard(readNativebuildVersion(),
+    `echo "$1: BUILD_OK"\necho "===== CAPACITY ABORT at port gri: the builder ran out of disk ====="\nexit 9`);
+  expect(r.verdict).toBe('CAPACITY');
+  expect(r.rc).toBe(9);
+});
+
+test('769: a stale driver is still FAIL/RC=3 -- the capacity arm did not shadow it', () => {
+  // The capacity grep runs before the ok_grep, so it is worth asserting it did not get
+  // in front of the STALE short-circuit: a stale run never executes the driver at all,
+  // and must not be able to present itself as an infrastructure hiccup to be re-queued.
+  const r = runGuard('1970-01-01.0',
+    `echo "$1: BUILD_ABORTED_ENOSPC"\nexit 9`);
+  expect(r.verdict).toBe('FAIL');
+  expect(r.rc).toBe(3);
+});
+
+test('769: poll_ssm names the capacity verdict instead of flattening it to build-error', () => {
+  const py = [
+    'import json,sys,types',
+    `sys.path.insert(0,${JSON.stringify(OPS_LAMBDAS)})`,
+    'class Inv:',
+    '    pass',
+    'class SSM:',
+    '    class exceptions:',
+    '        class InvocationDoesNotExist(Exception): pass',
+    '    def __init__(self, out): self.out=out',
+    '    def get_command_invocation(self, CommandId=None, InstanceId=None):',
+    '        return {"Status": "Failed", "StandardOutputContent": self.out}',
+    'OUT={}',
+    'fake=types.ModuleType("boto3")',
+    'fake.client=lambda svc: SSM(OUT["out"])',
+    'sys.modules["boto3"]=fake',
+    'import poll_ssm',
+    'res={}',
+    'for v,rc in (("CAPACITY",9),("UNRESOLVABLE",1),("FAIL",1),("WEIRD",1)):',
+    '    OUT["out"]="VERDICT=%s RC=%d LOG=s3://b/k.log.gz" % (v,rc)',
+    '    ev=poll_ssm.handler({"command_id":"c","instance_id":"i"}, None)',
+    '    res[v]=[ev["ok"], ev["error_class"]]',
+    'print(json.dumps(res))',
+  ].join('\n');
+  const out = child_process.execFileSync('python3', ['-c', py], { encoding: 'utf8' });
+  const res = JSON.parse(out.trimEnd().split('\n').pop() as string);
+  expect(res.CAPACITY).toEqual([false, 'capacity']);
+  // The other classes are unchanged, and an unknown verdict stays the conservative
+  // default -- a verdict nobody recognises must look like a failure, not like something
+  // the wave may quietly retry forever.
+  expect(res.UNRESOLVABLE).toEqual([false, 'unresolvable']);
+  expect(res.FAIL).toEqual([false, 'build-error']);
+  expect(res.WEIRD).toEqual([false, 'build-error']);
 });
 
 // ---------------------------------------------------------------------------
@@ -2025,6 +2106,72 @@ test('#505: a failure still records the error class it was given', () => {
   expect(expr).toContain('last_error_class=:e');
   // The failure path must not clear what it is in the middle of writing.
   expect(expr).not.toContain('REMOVE last_error_class');
+});
+
+// issue 769, record half: drive the real handler with error_class=capacity and assert on
+// the writes DynamoDB would receive. An empty harvest pool, so nothing can turn this into
+// the #505 §C false-failure correction and the capacity branch is what is under test.
+function recordCapacity(errorClass: string): {
+  state: string; exprs: string[]; values: Record<string, string>[];
+} {
+  const py = [
+    'import json,sys,types',
+    `sys.path.insert(0,${JSON.stringify(OPS_LAMBDAS)})`,
+    'calls=[]',
+    'class T:',
+    '    def update_item(self, **kw):',
+    '        calls.append(kw)',
+    '        return {"Attributes": {"attempt_count": 1}}',
+    'class R:',
+    '    def Table(self, name): return T()',
+    'class Pag:',
+    '    def paginate(self, Bucket=None, Prefix=None): return [{"Contents": []}]',
+    'class S3:',
+    '    def get_paginator(self, name): return Pag()',
+    'fake=types.ModuleType("boto3")',
+    'fake.resource=lambda svc: R()',
+    'fake.client=lambda svc: S3()',
+    'sys.modules["boto3"]=fake',
+    'import record',
+    'ev=record.handler({"table":"t","pkg":"texlive","target":"r1","ok":False,',
+    `  "error_class":${JSON.stringify(errorClass)},"log_url":"s3://b/k.log.gz"}, None)`,
+    'print(json.dumps({"state": ev.get("recorded_state"),',
+    '  "exprs": [c["UpdateExpression"] for c in calls],',
+    '  "values": [{k: str(v) for k, v in c["ExpressionAttributeValues"].items()}',
+    '             for c in calls]}))',
+  ].join('\n');
+  const out = child_process.execFileSync('python3', ['-c', py], { encoding: 'utf8' });
+  return JSON.parse(out.trimEnd().split('\n').pop() as string);
+}
+
+test('769: a capacity event re-queues the package without counting an attempt', () => {
+  const r = recordCapacity('capacity');
+  expect(r.state).toBe('queued');
+  // ONE write, and it is the re-queue. The failure path is two writes and the first of
+  // them is the attempt_count increment -- which is the thing that must not happen here,
+  // because three of them escalate a package that was never built to needs_human.
+  expect(r.exprs).toHaveLength(1);
+  expect(r.values[0][':s']).toBe('queued');
+  expect(r.exprs[0]).not.toContain('attempt_count');
+  expect(r.exprs[0]).not.toContain('last_error_class');
+  // The lease has to come off or no other builder can pick the package up.
+  expect(r.exprs[0]).toContain('REMOVE lease_owner, lease_expires_at');
+  // queued_at is the by-build-state GSI's range key: a row written without it is
+  // silently absent from the index the triage census reads.
+  expect(r.exprs[0]).toContain('queued_at=if_not_exists');
+  // Not invisible, though -- a wave that keeps hitting this needs a bigger volume, and
+  // a bare `queued` would look like the package had simply never been tried.
+  expect(r.values[0][':o']).toBe('capacity-requeued');
+  expect(r.exprs[0]).toContain('log_url=:lu');
+});
+
+test('769: an ordinary build error is still a counted failure (the capacity branch is narrow)', () => {
+  // Without this arm, `if True:` in place of the capacity test would pass the suite --
+  // and every real recipe defect would be re-queued forever instead of escalating.
+  const r = recordCapacity('build-error');
+  expect(r.state).toBe('failed');
+  expect(r.exprs[0]).toContain('attempt_count=if_not_exists');
+  expect(r.exprs[0]).toContain('last_error_class=:e');
 });
 
 // ---------------------------------------------------------------------------
