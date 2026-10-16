@@ -1,0 +1,291 @@
+#!/usr/bin/env python3
+# haiku-repo-coherence -- assert that every EXACT (`==`) requirement in a
+# DeBeOS package set can be satisfied from within that same set (issue 708).
+#
+# WHY THIS EXISTS
+# ---------------
+# `haiku-repo-add` supersedes per package NAME. Staging one package drops every
+# other on-disk version of that name before the index is rebuilt:
+#
+#     graviton/scripts/haiku-repo-add:442-444
+#         # Drop any other on-disk version of the same package name so the repo
+#         # does not accumulate stale versions of a package we are
+#         # (re)publishing.
+#         pkgname="${canon%%-*}"
+#         find "$RO/packages" -maxdepth 1 -name "$pkgname-*.hpkg" ! -name "$canon" -delete
+#
+# A subpackage is a DIFFERENT name, so the glob never matches it: `simdjson-*`
+# does not match `simdjson_devel-...`. But a subpackage's REQUIRES pins its base
+# with `==` (haikuporter emits `<base> == $portVersion base`), and `==` can only
+# ever be met by that one version. So publishing `simdjson-5.0.2` DELETES
+# `simdjson-3.11.5` and leaves `simdjson_devel-3.11.5` behind, now pinning a
+# version the publish just removed -- permanently uninstallable:
+#
+#     problem 1: nothing provides simdjson==3.11.5 needed by simdjson_devel-3.11.5-1
+#
+# That makes the publish path, not the recipe, the defect: the base and its
+# subpackages must be (re)published together, and nothing checked that. The
+# failure is also silent in the worst direction -- pkgman says "nothing
+# provides", which reads as an unbuilt dependency, when the dependency is
+# published at a NEWER version.
+#
+# This tool is that missing check. `haiku-repo-add` runs it over the union pool
+# after staging and BEFORE any upload, so an incoherent set is never published;
+# `haiku-repo-promote-green --apply` goes through `haiku-repo-add`, so the
+# promote path is covered by the same single wiring point.
+#
+# WHAT IT CHECKS, AND WHAT IT DELIBERATELY DOES NOT
+# -------------------------------------------------
+# Only `==` requirements. A `>=` or unversioned requirement that is momentarily
+# unsatisfiable within the set is usually satisfied by the installed BASE SYSTEM
+# (`haiku` and the resolvables it provides are not repo-managed and never appear
+# in the index), so flagging those would be almost all false alarm. An `==`
+# requirement is different in kind: there is exactly one version that can ever
+# satisfy it, so if that version is not in the set, no future publish of the
+# same name will fix it either.
+#
+# Resolvables in EXTERNAL_RESOLVABLES are provided by the base system image
+# rather than by the repo, so an `==` pin on them is checked against the system,
+# not here, and is not a finding.
+#
+# THE BASELINE, AND WHY IT IS A RATCHET AND NOT A MUTE
+# ----------------------------------------------------
+# The live green pool ALREADY carries this debt (see the baseline file), and
+# each instance can only be cleared by rebuilding and republishing the port --
+# a build task, not something this tool can do. Hard-failing on the existing
+# set would therefore block every unrelated publish, so known instances are
+# listed, with a reason, in `haiku-repo-coherence.baseline` and reported as
+# KNOWN without affecting exit status. Anything NOT in the baseline fails.
+#
+# The ratchet only tightens: a baseline entry that no longer reproduces is
+# reported as STALE and, under --strict-baseline, fails -- so clearing an
+# instance forces the line to be deleted and the debt list shrinks. The
+# baseline can never hide a NEW incoherence.
+#
+# USAGE
+#   haiku-repo-coherence --repo <path>            # an HPKR `repo` index file
+#   haiku-repo-coherence --packages-dir <dir>     # a directory of *.hpkg
+#   haiku-repo-coherence --s3 <s3://.../packages/>  # download+check a pool
+#     --baseline <file>      default: haiku-repo-coherence.baseline beside this
+#     --no-baseline          treat every finding as new (exit 1 on any)
+#     --strict-baseline      also fail on STALE baseline entries
+#     --quiet                findings only, no per-source chatter
+#
+# Exit: 0 coherent (or only KNOWN findings); 1 a NEW finding (or, with
+# --strict-baseline, a stale entry); 2 bad usage / unreadable input.
+
+import argparse
+import os
+import subprocess
+import sys
+import tempfile
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import hpkg_meta  # noqa: E402  (co-located; reads HPKG/HPKR without a Haiku host)
+
+# Resolvables the REPO does not and should not provide: they come from the
+# installed base system image. `haiku` is the system package itself -- every
+# `*_devel` pins `haiku_devel`, and `haiku_devel` in turn pins
+# `haiku == <its own hrev>`, which is satisfied by the running system, never by
+# the repo index.
+EXTERNAL_RESOLVABLES = frozenset({"haiku"})
+
+DEFAULT_BASELINE = os.path.join(
+    os.path.dirname(os.path.abspath(__file__)), "haiku-repo-coherence.baseline")
+
+
+class Finding:
+    """One unsatisfiable `==` requirement."""
+
+    def __init__(self, pkg, pkg_version, dep, dep_version, available):
+        self.pkg = pkg
+        self.pkg_version = pkg_version
+        self.dep = dep
+        self.dep_version = dep_version
+        self.available = available      # versions of `dep` the set DOES provide
+
+    @property
+    def key(self):
+        """Baseline key. Deliberately excludes `available`: the point of a
+        baseline entry is "this package's pin is known-broken", and it must keep
+        matching when the base is superseded AGAIN to a third version. Including
+        the available set would make the entry go stale on every rebuild of the
+        base and silently re-fail an already-accepted instance."""
+        return "%s %s %s" % (self.pkg, self.dep, self.dep_version)
+
+    def describe(self):
+        if self.available:
+            had = "set provides %s: %s" % (self.dep, ", ".join(self.available))
+        else:
+            had = "set provides no %s at all" % self.dep
+        return "%s-%s requires %s == %s -- %s" % (
+            self.pkg, self.pkg_version, self.dep, self.dep_version, had)
+
+
+def _norm(version, revision):
+    """A provided version as an `==` requirement can match it.
+
+    Haiku compares only the components the REQUIREMENT specifies, so a pin
+    written `simdjson == 3.11.5` (no revision) is met by any revision of 3.11.5.
+    Revision is therefore compared only when the pin states one.
+    """
+    if version is None:
+        return None
+    return version if revision is None else "%s-%s" % (version, revision)
+
+
+def check(pkgs):
+    """Pure classifier: packages in -> list of Findings. `pkgs` are hpkg_meta
+    package dicts (from read_repo or read_pkg)."""
+    provided = {}
+    for p in pkgs:
+        for r in p.get("provides_expr") or []:
+            provided.setdefault(r["name"], set()).add(
+                (r["version"], r["revision"]))
+
+    findings = []
+    for p in pkgs:
+        for r in p.get("requires_expr") or []:
+            if r["op"] != hpkg_meta.OP_EQUAL:
+                continue
+            if r["name"] in EXTERNAL_RESOLVABLES:
+                continue
+            want_v, want_r = r["version"], r["revision"]
+            if want_v is None:
+                continue        # `== <nothing>` is not a version pin
+            have = provided.get(r["name"], set())
+            ok = False
+            for hv, hr in have:
+                if hv != want_v:
+                    continue
+                if want_r is None or want_r == hr:
+                    ok = True
+                    break
+            if ok:
+                continue
+            findings.append(Finding(
+                p["name"], _norm(p["version"], p["revision"]), r["name"],
+                _norm(want_v, want_r),
+                sorted(_norm(hv, hr) for hv, hr in have if hv)))
+    findings.sort(key=lambda f: (f.pkg, f.dep))
+    return findings
+
+
+def load_baseline(path):
+    """Parse the baseline: one `<pkg> <dep> <version>` key per line, `#`
+    comments and blank lines ignored. Trailing text after the third field is a
+    free-form reason and is not part of the key."""
+    keys = {}
+    if not path or not os.path.exists(path):
+        return keys
+    with open(path) as f:
+        for lineno, line in enumerate(f, 1):
+            line = line.split("#", 1)[0].strip()
+            if not line:
+                continue
+            parts = line.split()
+            if len(parts) < 3:
+                raise SystemExit(
+                    "haiku-repo-coherence: %s:%d: need at least "
+                    "'<pkg> <dep> <version>', got %r" % (path, lineno, line))
+            keys[" ".join(parts[:3])] = lineno
+    return keys
+
+
+def read_from_repo(path):
+    return hpkg_meta.read_repo_file(path)
+
+
+def read_from_dir(d):
+    pkgs = []
+    for name in sorted(os.listdir(d)):
+        if not name.endswith(".hpkg"):
+            continue
+        full = os.path.join(d, name)
+        try:
+            pkgs.append(hpkg_meta.read_pkg_file(full))
+        except hpkg_meta.HpkgError as e:
+            raise SystemExit("haiku-repo-coherence: %s: %s" % (full, e))
+    if not pkgs:
+        raise SystemExit("haiku-repo-coherence: no *.hpkg under %s" % d)
+    return pkgs
+
+
+def read_from_s3(url, quiet):
+    tmp = tempfile.mkdtemp(prefix="repo-coherence.")
+    cmd = ["aws", "s3", "sync", url.rstrip("/") + "/", tmp,
+           "--exclude", "*", "--include", "*.hpkg", "--only-show-errors"]
+    if not quiet:
+        print("== downloading %s" % url, file=sys.stderr)
+    r = subprocess.run(cmd)
+    if r.returncode != 0:
+        raise SystemExit("haiku-repo-coherence: aws s3 sync failed")
+    return read_from_dir(tmp)
+
+
+def main():
+    ap = argparse.ArgumentParser(
+        prog="haiku-repo-coherence", description=__doc__,
+        formatter_class=argparse.RawDescriptionHelpFormatter)
+    src = ap.add_mutually_exclusive_group(required=True)
+    src.add_argument("--repo", help="an HPKR `repo` index file")
+    src.add_argument("--packages-dir", help="a directory of *.hpkg")
+    src.add_argument("--s3", help="s3://.../packages/ prefix to download")
+    ap.add_argument("--baseline", default=DEFAULT_BASELINE)
+    ap.add_argument("--no-baseline", action="store_true")
+    ap.add_argument("--strict-baseline", action="store_true",
+                    help="also fail on baseline entries that no longer reproduce")
+    ap.add_argument("--quiet", action="store_true")
+    args = ap.parse_args()
+
+    if args.repo:
+        pkgs = read_from_repo(args.repo)
+        where = args.repo
+    elif args.packages_dir:
+        pkgs = read_from_dir(args.packages_dir)
+        where = args.packages_dir
+    else:
+        pkgs = read_from_s3(args.s3, args.quiet)
+        where = args.s3
+
+    baseline = {} if args.no_baseline else load_baseline(args.baseline)
+    findings = check(pkgs)
+
+    new = [f for f in findings if f.key not in baseline]
+    known = [f for f in findings if f.key in baseline]
+    seen = {f.key for f in findings}
+    stale = sorted(k for k in baseline if k not in seen)
+
+    if not args.quiet:
+        print("== repo coherence: %d package(s) from %s" % (len(pkgs), where))
+
+    for f in known:
+        print("   known-broken: %s" % f.describe())
+    for k in stale:
+        print("   STALE baseline entry (no longer reproduces, delete it): %s" % k)
+    for f in new:
+        print("   INCOHERENT: %s" % f.describe(), file=sys.stderr)
+
+    if new:
+        print("\nhaiku-repo-coherence: %d package(s) carry an EXACT requirement "
+              "this set cannot satisfy, so they are uninstallable. An `==` pin "
+              "names one version and only that version: a base package "
+              "superseded out from under its subpackages must be republished "
+              "TOGETHER with them (issue 708). Rebuild and publish the "
+              "subpackage(s) at the base's new version, or -- if the instance "
+              "is pre-existing debt being accepted deliberately -- add it to %s "
+              "with a reason." % (len(new), args.baseline), file=sys.stderr)
+        return 1
+    if stale and args.strict_baseline:
+        print("\nhaiku-repo-coherence: %d baseline entry/entries no longer "
+              "reproduce. The debt is cleared; delete those lines from %s."
+              % (len(stale), args.baseline), file=sys.stderr)
+        return 1
+    if not args.quiet:
+        print("   OK: every `==` requirement is satisfiable within the set"
+              + (" (%d known-broken, baselined)" % len(known) if known else ""))
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
