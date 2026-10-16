@@ -29,7 +29,7 @@ this file and the script are standalone and carry no dependency on that skill.
 | **x86-only compiler flags** | `-msse2`, `-mavx`, `-mfpmath=sse`, `-mmmx`, … in a recipe body or build file | aarch64 gcc: `unrecognized command-line option` | gate on x86/x86_64 (playbook Class 5) |
 | **IFUNC / target_clones** | `--enable-ifunc`, `HAVE_IFUNC`, `__attribute__((ifunc))`, `target_clones`, `__builtin_cpu_supports` | ifunc *auto*-dispatch is unimplemented in the userland runtime_loader — an `R_AARCH64_IRELATIVE` reloc falls through, so the `.so` **fails to load silently** (diagnostic compiled out). **Explicit** runtime dispatch does work: `getauxval(AT_HWCAP/AT_HWCAP2)` is implemented (commpage-backed, NEON caps advertised as of #329). | disable ifunc; select the code path explicitly at runtime via `getauxval`, or decide SIMD at compile time |
 | **CPU-string / config.guess** | CMake `CMAKE_SYSTEM_PROCESSOR` matching `x86\|aarch64\|arm`; `uname -m` arch switches | Haiku reports `arm64` (not `aarch64`), matching no branch → NEON silently disabled (the libjpeg-turbo defect); GNU config.guess/config.sub choke | `-DCMAKE_SYSTEM_PROCESSOR=aarch64`; add an arm64 case (playbook Class 6/19) |
-| **`uname -p`** | `$(shell uname -p)` / `` `uname -p` `` feeding an arch switch (**not** autoconf's `## Platform. ##` log banner, which only echoes it) | `uname -p` names **no architecture at all** on Haiku. There is no processor field in `struct utsname`; the string is the coreutils port's own, and it is `other` with the image's bootstrap coreutils and `unknown` with the 9.11 pool build. Every branch keyed on it takes its fallback. **Silent.** | re-key on `uname -m` (`arm64`), or state the answer explicitly — see #701 |
+| **`uname -p`** | `$(shell uname -p)` / `` `uname -p` `` feeding an arch switch (**not** autoconf's `## Platform. ##` log banner, which only echoes it) | `uname -p` names **no architecture at all** on Haiku. There is no processor field in `struct utsname`; the string is the coreutils port's own, and it is `other` with the image's bootstrap coreutils. The pool's non-bootstrap coreutils answers `arm64`, so a builder provisioned by `haiku-provision-native-builder` is correct and a bare image is not — which makes any branch keyed on `-p` **environment-dependent**, not reliably wrong. **Silent.** | re-key on `uname -m` (`arm64`), which is libroot's and always `arm64`, or state the answer explicitly — see issue 701 |
 | **tecmake word size / byte order** | a vendored `tecmake.mak`; `TEC_SYSARCH`, `TEC_BYTEORDER`, `TEC_WORDSIZE` (ftgl, cd/canvasdraw, iup, im) | tecmake's arch table knows only `i686`/`i386`/`powerpc`/`x86_64`/`amd64`/`armv7l`, and both the byte-order and the word-size test fall through to **`-DTEC_BIGENDIAN -DTEC_32`** on little-endian LP64. Measured identical for `other`, `unknown`, `arm64` **and** `aarch64` — so an `uname -p` fix does **not** reach it. **Silent.** | `make TEC_WORDSIZE=TEC_64 TEC_BYTEORDER=TEC_LITTLEENDIAN`: tecmake assigns both with a plain `=`, which a command-line variable overrides and an exported environment variable does not |
 
 The evidence behind these lives in [simd-vectorization-review.md](simd-vectorization-review.md)
@@ -46,11 +46,24 @@ no processor field, and the string comes from a HaikuPorts patch to coreutils' o
 `src/uname.c` whose switch covered only `B_CPU_x86`/`B_CPU_x86_64` and answered `other` for
 everything else. The image's `coreutils-9.9_bootstrap-1-arm64.hpkg` carries exactly that
 (its `bin/uname` imports `get_cpu_topology_info` and contains the literals `other` and
-`x86_64` but not `arm64`); the pool's `coreutils-9.11-2-arm64.hpkg` carries **no** processor
-patch at all (no such import, no such literals), which answers `unknown`. HaikuPorts has
-since fixed both spellings upstream — a `B_CPU_ARM_64` case for 9.11 and a switch to
-`utsname.machine` for 9.12 — so a coreutils rebuild is what retires the first row. It is
-worth doing for CMake's sake rather than tecmake's: `CMakeDetermineSystem.cmake` reaches
+`x86_64` but not `arm64`).
+
+What does **not** hold, and what this file asserted until it was run: that the pool build
+is equally broken. Measured on the live Graviton builder by extracting each hpkg and
+running its own `bin/uname`, and by configuring one `project(p701 NONE)` three times with
+each `uname` first on `PATH`:
+
+| `uname` | `-p` | `-m` | `CMAKE_SYSTEM_PROCESSOR` |
+|---|---|---|---|
+| image `coreutils-9.9_bootstrap-1` | `other` | `arm64` | `other` |
+| pool `coreutils-9.11-2` | `arm64` | `arm64` | `arm64` |
+| native-built `coreutils-9.12-1` | `arm64` | `arm64` | `arm64` |
+
+So the published pool has answered `arm64` all along and **no coreutils rebuild is
+needed**; the defect was that `haiku-provision-native-builder`'s `TOOLS` set never
+installed `coreutils` over the bootstrap package, so every builder kept the bootstrap
+`uname`. Adding it there is what retires the first row. The consequence is worth spelling
+out because it is CMake's and not tecmake's: `CMakeDetermineSystem.cmake` reaches
 `uname -m` only through a `Linux|CYGWIN|MSYS|GNU|Android` branch, a Darwin branch and an
 OpenBSD branch, so Haiku lands in the final `else()`, which runs `uname -p` and retries with
 `uname -m` **only if `-p` exits non-zero** — and it exits zero while printing `other`. That is
