@@ -121,7 +121,15 @@ def _wrapper(cmd, bucket, run_id, name, ok_grep, refresh="", prelude=""):
 
     The driver refresh runs FIRST and writes into "$LOG"; if it finds a stale driver it
     sets STALE=1 and we skip the build, emitting VERDICT=FAIL RC=3 -- poll_ssm records
-    that as a build-error with the diagnostic log, so a stale run can never pass silently."""
+    that as a build-error with the diagnostic log, so a stale run can never pass silently.
+
+    VERDICT=CAPACITY (issue 769) means the builder ran out of disk, which is not a fact
+    about the package. It is classified by GREP rather than by the driver's rc, for the
+    same reason OK is: the driver's exit code is the one thing on this path that a stale
+    or hand-edited copy can get wrong, whereas the banner is printed by the code that
+    made the finding. And it is tested BEFORE the ok_grep on purpose -- a multi-port run
+    that built its first port and then hit the wall has both `<pkg>: BUILD_OK` and the
+    abort banner in one log, and the run is not OK."""
     return f"""set -u
 LOG=/tmp/{name}.$$.log
 : > "$LOG"
@@ -133,6 +141,7 @@ else
 RC=$?
 fi
 if [ "$STALE" = 1 ]; then V=FAIL
+elif grep -qE "CAPACITY ABORT|CAPACITY_ABORT|BUILD_ABORTED_ENOSPC" "$LOG"; then V=CAPACITY
 elif grep -q {ok_grep} "$LOG"; then V=OK
 elif grep -q UNRESOLVABLE "$LOG"; then V=UNRESOLVABLE
 else V=FAIL; fi

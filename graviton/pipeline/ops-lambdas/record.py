@@ -7,6 +7,10 @@ Output: adds {recorded_state} to the event.
               AND clears the previous failure's residue (see below).
 - ok=False -> but an hpkg for this package is in the harvest pool: treated as a
               SUCCESS (SOP §7), with corrected_by/correction_note provenance.
+- ok=False, error_class=capacity -> the BUILDER ran out of disk, so the recipe was
+              never tested (issue 769): build_state=queued, lease released, and NO
+              attempt counted. See the capacity branch in handler() for why that is
+              not leniency.
 - ok=False -> attempt_count++, last_error_class, last_attempt_at, log_url.
               build_state=failed (backoff: state-sync won't re-queue until the
               target version changes), UNLESS attempt_count reaches the quarantine
@@ -188,6 +192,35 @@ def handler(event, context):
         table.update_item(Key={"pkg": pkg}, UpdateExpression=expr,
                           ExpressionAttributeValues=vals)
         event["recorded_state"] = "built"
+        return event
+
+    # CAPACITY: the builder ran out of disk, so this recipe was never tested (issue 769).
+    #
+    # Checked before the failure path, and it writes NONE of the failure attributes --
+    # not attempt_count, not last_error_class, not build_state=failed. That is the whole
+    # point. A capacity event on i-092201b33570a801d on 2026-10-16 would otherwise have
+    # written `failed` against `texlive` AND `gri`, and `gri` had been running for two
+    # seconds with nowhere to write; three such events reach QUARANTINE_AT and the row
+    # becomes `needs_human` with esc_reason "repeated-failure", which a person then has
+    # to disbelieve. The backlog's failed=410 is partly how that happens.
+    #
+    # The row goes back to `queued` -- the state it was in before the lease -- and the
+    # lease is released so another builder can take it. `last_outcome` records what
+    # really happened so this is not invisible: a wave that keeps hitting this needs a
+    # bigger volume, and `queued` with no attempt counted would otherwise look like the
+    # port had simply never been tried.
+    if (event.get("error_class") or "") == "capacity":
+        table.update_item(
+            Key={"pkg": pkg},
+            UpdateExpression=("SET build_state=:s, last_outcome=:o, log_url=:lu, "
+                              + _GSI_KEY + " REMOVE lease_owner, lease_expires_at"),
+            ExpressionAttributeValues={":s": "queued", ":o": "capacity-requeued",
+                                       ":now": now,
+                                       ":lu": event.get("log_url") or "n/a"},
+        )
+        print(f"RecordOutcome: {pkg} hit a builder capacity limit, not a port defect "
+              f"(issue 769) -> re-queued, no attempt counted")
+        event["recorded_state"] = "queued"
         return event
 
     # Failure path: increment attempts, decide failed vs needs_human.

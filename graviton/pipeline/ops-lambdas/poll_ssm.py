@@ -6,7 +6,7 @@ Output: adds {done: bool, ok: bool, error_class: str|None, ssm_status: str,
               Choice(done) until done, then branches on ok.
 
 The wrapper (run_ssm._wrapper) prints exactly one line:
-    VERDICT=<OK|UNRESOLVABLE|FAIL> RC=<n> LOG=s3://.../<name>.log.gz
+    VERDICT=<OK|CAPACITY|UNRESOLVABLE|FAIL> RC=<n> LOG=s3://.../<name>.log.gz
 so we classify from that (reliable, tiny) rather than scraping a truncated log.
 Falls back to SSM's own status if the verdict line is somehow absent (e.g. the
 instance died before printing it -> treat as timeout/build-error).
@@ -16,6 +16,21 @@ import boto3
 
 PENDING = {"Pending", "InProgress", "Delayed"}
 _VERDICT = re.compile(r"VERDICT=(\S+)\s+RC=(-?\d+)\s+LOG=(\S+)")
+
+# A not-OK verdict's error class. Anything unlisted is a build error, which is the
+# conservative default: an unrecognised verdict must look like a failure needing a
+# human, never like a success and never like something the wave is entitled to retry
+# silently.
+#
+# `capacity` (issue 769) is the one class here that is NOT about the package. The
+# builder ran out of disk, so the recipe was never tested -- record.py must put the row
+# back in the queue untouched rather than count an attempt against it. Keeping that
+# decision in record.py and only the NAMING here is deliberate: this function's job is
+# to say what happened, not what to do about it.
+_ERROR_CLASS = {
+    "UNRESOLVABLE": "unresolvable",
+    "CAPACITY": "capacity",
+}
 
 
 def handler(event, context):
@@ -41,7 +56,7 @@ def handler(event, context):
         verdict, rc, log_url = m.group(1), int(m.group(2)), m.group(3)
         ok = (verdict == "OK" and rc == 0)
         if not ok:
-            err = "unresolvable" if verdict == "UNRESOLVABLE" else "build-error"
+            err = _ERROR_CLASS.get(verdict, "build-error")
     else:
         # No verdict: the wrapper never finished (host died, SSM timeout, etc.).
         err = "timeout" if status in ("TimedOut", "DeliveryTimedOut",
