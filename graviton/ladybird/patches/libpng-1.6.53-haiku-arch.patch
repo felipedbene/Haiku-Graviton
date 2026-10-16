@@ -1,0 +1,53 @@
+Teach libpng's CMake build that DeBeOS/Haiku arm64 is arm64.
+
+CMake derives CMAKE_SYSTEM_PROCESSOR from `uname -p` on every platform
+except Darwin and OpenBSD (Modules/CMakeDetermineSystem.cmake, the final
+`else()` branch), falling back to `uname -m` only if `uname -p` *fails*.
+Haiku's uname answers "other" for -p and exits 0, so the fallback never
+runs and the architecture arrives in libpng's CMakeLists.txt as "other":
+
+    -- Building for target architecture: other
+
+That skips the whole `PNG_TARGET_ARCHITECTURE MATCHES "^(arm|aarch)"`
+block, so arm/arm_init.c, arm/filter_neon_intrinsics.c and
+arm/palette_neon_intrinsics.c are never compiled -- and, because the
+same block is what would otherwise define PNG_ARM_NEON_OPT=0, pngpriv.h
+goes on to enable the NEON code paths by itself from __ARM_NEON. The
+result is a shared library with four undefined NEON symbols, which links
+without complaint and then kills every consumer at load time:
+
+    runtime_loader: /boot/home/lbdeps/lib/libpng16.so.16.53.0:
+        Troubles relocating: Symbol not found
+    $ nm -D -u libpng16.so.16.53.0 | grep neon
+        U png_do_expand_palette_rgb8_neon
+        U png_do_expand_palette_rgba8_neon
+        U png_init_filter_functions_neon
+        U png_riffle_palette_neon
+
+`uname -m` does report arm64 here, so ask it directly rather than
+disabling the optimizations: DeBeOS is ARM-first and the NEON filter and
+palette-expansion paths are exactly the ones a browser's PNG decoding
+spends its time in.
+
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -120,5 +120,19 @@
+   string(TOLOWER "${CMAKE_OSX_ARCHITECTURES}" PNG_TARGET_ARCHITECTURE)
+ else()
+   string(TOLOWER "${CMAKE_SYSTEM_PROCESSOR}" PNG_TARGET_ARCHITECTURE)
+ endif()
++# DeBeOS/Haiku: `uname -p` answers "other" and exits 0, so CMake never takes
++# its own `uname -m` fallback and CMAKE_SYSTEM_PROCESSOR is "other" on arm64.
++# Left alone that drops the ARM block below -- both the arm/*.c sources and
++# the PNG_ARM_NEON_OPT=0 that would have told pngpriv.h to stay off -- and the
++# library ends up referencing NEON symbols it never compiled.
++if(PNG_TARGET_ARCHITECTURE STREQUAL "other")
++  execute_process(COMMAND uname -m
++                  OUTPUT_VARIABLE PNG_HAIKU_UNAME_M
++                  OUTPUT_STRIP_TRAILING_WHITESPACE
++                  ERROR_QUIET)
++  if(PNG_HAIKU_UNAME_M)
++    string(TOLOWER "${PNG_HAIKU_UNAME_M}" PNG_TARGET_ARCHITECTURE)
++  endif()
++endif()
+ message(STATUS "Building for target architecture: ${PNG_TARGET_ARCHITECTURE}")

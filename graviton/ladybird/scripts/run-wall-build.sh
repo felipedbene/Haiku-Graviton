@@ -77,6 +77,9 @@ phase_png() {
 	tar xzf libpng-1.6.53.tar.gz
 	cd libpng-1.6.53
 	patch -p1 --no-backup-if-mismatch < "$RECIPE/patches/libpng-1.6.53-apng.patch"
+	# Without this one the build is arch-blind (uname -p says "other") and
+	# produces a libpng16.so with undefined NEON symbols -- see the patch.
+	patch -p1 --no-backup-if-mismatch < "$RECIPE/patches/libpng-1.6.53-haiku-arch.patch"
 	sh "$RECIPE/scripts/build-png.sh"
 	# The vendored patch writes the three APNG defines into png.h itself, not
 	# into the generated pnglibconf.h, so png.h is where to check. Confirm the
@@ -86,6 +89,13 @@ phase_png() {
 		|| { echo "APNG missing from installed png.h" >&2; return 1; }
 	nm -D "$PREFIX/lib/libpng16.so" | grep -q ' T png_read_frame_head' \
 		|| { echo "libpng16.so does not export png_read_frame_head" >&2; return 1; }
+	# The NEON paths are enabled by pngpriv.h from __ARM_NEON whatever CMake
+	# thinks the architecture is, so an arch-blind configure yields a library
+	# that links fine and then cannot be loaded at all. Catch that here rather
+	# than in WebContent's runtime_loader output.
+	nm -D -u "$PREFIX/lib/libpng16.so" | grep -q 'neon' \
+		&& { echo "libpng16.so has undefined NEON symbols" >&2; return 1; }
+	:
 }
 
 # ICU 78.3 into $PREFIX/icu78, beside (not over) the system icu74 that
