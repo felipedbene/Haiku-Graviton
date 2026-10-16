@@ -59,7 +59,7 @@ WHAT IT CHECKS (each links to the fact that motivates it):
   8. tecmake (ftgl, cd/canvasdraw, iup, im). Its TEC_SYSARCH table has no arm64 entry, so
      byte order and word size both fall through to `-DTEC_BIGENDIAN -DTEC_32` on a
      little-endian LP64 target -- and they fall through for `arm64` and `aarch64` too, so
-     this is NOT fixed by fixing `uname -p`. Override on make's command line. (#701.)
+     this is NOT fixed by fixing `uname -p`. Patch tecmake's own detection. (#701.)
 
 WHAT IT IS -- and IS NOT. Read-only static analysis: it reads files and prints findings.
 It never edits a recipe, a source file, or anything else. It is a heuristic linter, not a
@@ -375,9 +375,15 @@ def lint_build(path, lines, out):
                 "x86_64/amd64/armv7l, and the byte-order and word-size tests then fall "
                 "through to -DTEC_BIGENDIAN -DTEC_32 -- measured for 'other', 'unknown', "
                 "'arm64' AND 'aarch64' alike, so correcting `uname -p` does NOT fix this. "
-                "State the truth on make's command line, where it overrides tecmake's "
-                "plain `=` and reaches the recursive sub-make: "
-                "`make TEC_WORDSIZE=TEC_64 TEC_BYTEORDER=TEC_LITTLEENDIAN` (#701)."))
+                "Patch tecmake's own detection, in its existing 'Itanium Exception' "
+                "idiom: insert an `ifeq ($(TEC_SYSARCH), arm64)` / `aarch64` pair "
+                "setting both macros BEFORE the first `STDDEFS :=` (that line is `:=`, "
+                "immediately expanded, so an append at end of file is read too late) -- "
+                "see ftgl-2.1.5.recipe. Overriding on make's command line also works "
+                "(it beats tecmake's plain `=` and reaches the recursive sub-make) but "
+                "must be repeated in every tecmake recipe, and leaves tecmake still "
+                "believing the target is big-endian 32-bit at tecmake.mak:503-530, "
+                "where both macros pick the be32/le64 object dir and suffixes (#701)."))
 
 
 def lint_recipe(path, lines, out):
