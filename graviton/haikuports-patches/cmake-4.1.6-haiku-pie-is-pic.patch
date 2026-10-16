@@ -1,0 +1,290 @@
+# cmake-4.1.6-haiku-pie-is-pic.patch  (issue 715)
+#
+# Teach CMake that on Haiku, POSITION_INDEPENDENT_CODE for an *executable* means
+# -fPIC, not -fPIE. This file is the explanatory note; the operative edit is the
+# PATCH() function in recipes/cmake-4.1.6.recipe, which appends a block to
+# Modules/Platform/Haiku.cmake inside the cmake source tree before BUILD().
+#
+# TOOLCHAIN INTEGRATION FIX, NOT A CUT. Nothing is removed from any build, no
+# declared dependency changes, and the cmake that comes out is what Kitware
+# intends everywhere except that it now asks this platform for the relocation
+# model the platform actually links with.
+#
+# THE FAILURE
+# -----------
+# Any CMake target that is an executable with POSITION_INDEPENDENT_CODE on --
+# CMake's default in many projects, and Ladybird's -- fails to link on arm64,
+# one error per weak/COMDAT symbol:
+#
+#     FAILED: [code=1] bin/WebDriver
+#     : && /boot/system/bin/clang++ ... -fPIE -pie -fuse-ld=lld ... -o bin/WebDriver
+#     ld.lld: error: relocation R_AARCH64_ADR_PREL_PG_HI21 cannot be used against
+#       symbol 'vtable for Core::Socket'; recompile with -fPIC
+#     ld.lld: error: relocation R_AARCH64_ADD_ABS_LO12_NC cannot be used against
+#       symbol 'AK::ErrorOr<void, AK::Error> AK::__format_value<AK::ByteString>(...)'
+#       ; recompile with -fPIC
+#     ld.lld: error: too many errors emitted, stopping now
+#
+# It is the first executable a C++ build reaches, and nothing about it is
+# Ladybird-specific.
+#
+# WHY
+# ---
+# Haiku has no separate PIE link mode. Executables are ET_DYN, entered through
+# start_dyn.o, so both system drivers link every executable as a shared object.
+# This is not incidental, it is written into the specs -- in the buildtools
+# checkout beside this repo:
+#
+#     gcc/config/aarch64/aarch64-haiku.h:68
+#       #define LINK_SPEC "-m " TARGET_LINKER_EMULATION " %{!r:-shared} \
+#         %{nostart:-e 0} %{shared:-e 0} %{!shared: %{!nostart: -no-undefined}} ...
+#
+#     gcc/config/haiku.h  (STARTFILE_SPEC)
+#       "crti.o%s crtbeginS.o%s %{!shared:%{!nostart:start_dyn.o%s}} init_term_dyn.o%s"
+#
+# "%{!r:-shared}" is unconditional for every non-relocatable link: there is no
+# spelling of the command line that links an executable without -shared. What
+# distinguishes an executable is only that the *user* did not say -shared, so
+# STARTFILE_SPEC adds start_dyn.o and LINK_SPEC leaves the entry point alone
+# (a user -shared forces "-e 0"). Observed, on the native arm64 builder
+# (clang 21 / gcc 13.3.0):
+#
+#     $ readelf -h /boot/system/bin/ls | grep Type
+#       Type:                              DYN (Shared object file)
+#
+#     $ clang -### -fPIE -pie -fuse-ld=lld t.c -o t
+#      "/boot/system/bin/ld.lld" "--eh-frame-hdr" "--enable-new-dtags" "-shared"
+#        "--no-undefined" "-o" "t" .../crti.o .../crtbeginS.o .../start_dyn.o ...
+#
+#     $ gcc -### -fPIE -pie t.c -o tg
+#      .../collect2 --eh-frame-hdr -m aarch64haiku -shared -no-undefined -EL -X
+#        -pie -o tg .../crti.o .../crtbeginS.o .../start_dyn.o ...
+#
+# -shared appears in both, and clang drops -pie entirely. Producing a shared
+# object, lld has to treat every default-visibility definition in the output as
+# preemptible, and being in PIC mode it has neither a copy relocation nor a
+# canonical PLT to fall back on, so a direct ADRP/ADD pair against one is a hard
+# error. -fPIE told the compiler the opposite -- that this is a non-shared main
+# program whose own definitions cannot be interposed -- which licenses exactly
+# that pair:
+#
+#     $ clang -### -c -fPIE t.c    # -> "-mrelocation-model" "pic" "-pic-level" "2"
+#                                  #    "-pic-is-pie"
+#     $ clang -### -c -fPIC t.c    # -> ... "-pic-level" "2"   (no -pic-is-pie)
+#     $ clang -### -c t.c          # -> ... "-pic-level" "2"   (no -pic-is-pie)
+#
+# so -fPIE is a *downgrade*: with no flag at all the driver already picks full
+# PIC, the only model consistent with how it links. CMake's PIE substitution
+# (Modules/Compiler/GNU.cmake:25, Modules/Compiler/Clang.cmake:29, both
+# "-fPIE") turns that correct default into an incorrect one.
+#
+# THE SHARPER STATEMENT: -fPIE DOES NOT ADD PIE, IT SUPPRESSES HAIKU'S -fPIC
+# --------------------------------------------------------------------------
+# The gcc side spells the mechanism out exactly. gcc/config/haiku.h:53,
+# HAIKU_CC1_SPEC (pasted into CC1_SPEC):
+#
+#     %{fpic|fPIC|fpie|fPIE|fno-pic|fno-PIC|fno-pie|fno-PIE:;:-fPIC}
+#
+# Read: if the user named any of those eight flags, emit nothing; otherwise
+# emit -fPIC. Haiku does not default to "whatever the target default is" -- it
+# *actively injects -fPIC*, and opts out the instant the user expresses any
+# opinion about the relocation model. So POSITION_INDEPENDENT_CODE -> -fPIE is
+# not a request layered on top of a PIC default; it is a request that *disables*
+# the platform's own -fPIC and installs a weaker model in its place. That is why
+# the linker's advice -- "recompile with -fPIC" -- is not a generic suggestion
+# but literally the correct instruction: it is asking for the flag the platform
+# would have supplied had CMake said nothing at all.
+#
+# PRECISELY WHICH SYMBOLS, AND A CORRECTION TO THE ISSUE'S WORDING
+# ----------------------------------------------------------------
+# Issue 715 describes these as "cross-DSO COMDAT symbols". That framing does not
+# survive testing and matters for anyone reproducing it. A reference to a symbol
+# only *defined* in a shared library is fine -- it still goes through the GOT --
+# and a two-file cross-DSO case links clean under -fPIE:
+#
+#     lib.cpp:  Sock::~Sock() {}  int Sock::fd() { return 7; }
+#               int useLib(Sock& s) { return s.fd(); }
+#     main.cpp: int main() { Sock s; return useLib(s) + s.fd(); }
+#     $ clang++ -fPIC -shared -o libsock.so lib.cpp
+#     $ clang++ -fPIE -pie -fuse-ld=lld -o x main.cpp -L. -lsock   # exit 0
+#
+# What actually fails is a weak/COMDAT default-visibility definition emitted
+# into *the executable's own object*, whose address the generated code forms
+# directly. The lld diagnostic says so: ">>> defined in .../main.o". The issue's
+# own nm evidence agrees -- "vtable for Core::Socket" is listed as `V` in
+# Session.cpp.o, i.e. present in the object being linked. A class defined in the
+# program, or a template instantiated there, is the everyday case; a C++ ctor
+# loads the vtable address directly, so it shows up immediately. Ladybird links
+# with -Xlinker -Bsymbolic-non-weak-functions, which already binds non-weak
+# functions locally, which is why only the weak symbols surface there.
+#
+# WHAT WAS REJECTED
+# -----------------
+# * Passing -pie through to lld as well, so that the output is a real PIE and
+#   -fPIE becomes self-consistent (which is what happens with gcc, whose ld sees
+#   "-shared ... -pie" and honours the later flag -- `g++ -fPIE -pie` links this
+#   case fine). lld refuses outright:
+#       ld.lld: error: -shared and -pie may not be used together
+#   Making clang's Haiku driver emit -pie instead of -shared would also change
+#   the ELF shape of every clang-linked executable on the platform, which is the
+#   loader's and the ELF segment model's business, not a CMake integration fix.
+#   Two concrete things in this tree would break if anyone tried it, both read
+#   from the DeBeOS sources (runtime_loader is another issue's territory; this is
+#   cited as a reason *not* to go that way, nothing here touches it):
+#
+#     - src/system/runtime_loader/arch/arm64/arch_relocate.cpp:214-216 ends its
+#       switch with "default: TRACE(...); return B_BAD_DATA;". It handles
+#       R_AARCH64_NONE, ABS64, GLOB_DAT, JUMP_SLOT, RELATIVE, IRELATIVE,
+#       TLS_DTPMOD64, TLS_DTPREL64 and TLSDESC -- and nothing else. R_AARCH64_COPY
+#       does not appear anywhere in runtime_loader, nor do ABS32/ABS16 or any
+#       PREL form. A non-PIC main program is precisely what emits copy
+#       relocations, so making executables genuinely non-PIC would produce images
+#       the loader rejects outright.
+#
+#     - src/system/runtime_loader/runtime_loader.cpp:498-500 is
+#       "if (elfHeader->e_entry == 0) { /* we don't like to open shared
+#       libraries */ status = B_NOT_AN_EXECUTABLE; }". Because executables and
+#       libraries are both ET_DYN here, a non-zero e_entry is the *only* thing
+#       that distinguishes them -- and LINK_SPEC above forces "-e 0" whenever the
+#       user passes -shared. The executable/library distinction on this platform
+#       is therefore load-bearing on the exact spec behaviour that -fPIE's
+#       premise contradicts.
+#
+# * Patching the clang and gcc drivers to make -fPIE an alias for -fPIC on this
+#   target. It would fix every build system at once, but it silently redefines a
+#   documented flag, has to be done twice in two separate toolchain packages, and
+#   is strictly more than is needed: no build system on this platform has a
+#   legitimate reason to ask for -fPIE, and CMake is the one that does.
+#
+# * Turning POSITION_INDEPENDENT_CODE off in the consumer project. That is the
+#   workaround, not the fix, and AGENTS.md rules it out as a deliverable. It
+#   happens to work only because the driver's no-flag default is already PIC --
+#   which is the same observation this patch acts on, except this patch has CMake
+#   *ask* for PIC rather than rely on the absence of a flag.
+#
+# WHERE IT HAS TO GO, AND WHY NOT A Platform/Haiku-<id>-<lang> FILE
+# -----------------------------------------------------------------
+# Modules/Compiler/<id>.cmake sets the generic -fPIE, and it is included from
+# CMake<lang>Information.cmake *before* any platform file. The only later hook
+# for Haiku today is that same file's second inclusion:
+#
+#     # CMakeCXXInformation.cmake
+#     include(Compiler/${CMAKE_CXX_COMPILER_ID}-CXX OPTIONAL)              # -fPIE set here
+#     ...
+#     include(Platform/...-${CMAKE_CXX_COMPILER_ID}-CXX OPTIONAL RESULT_VARIABLE _INCLUDED_FILE)
+#     if (NOT _INCLUDED_FILE)
+#       include(Platform/${CMAKE_SYSTEM_NAME} OPTIONAL)                    # <-- Haiku.cmake, again
+#     endif ()
+#
+# so the override belongs in Platform/Haiku.cmake. Adding a
+# Platform/Haiku-Clang-CXX.cmake or Platform/Haiku-GNU-CXX.cmake to carry it
+# instead -- the structurally tidier option, and how CYGWIN-GNU is organised --
+# would set _INCLUDED_FILE and thereby suppress that second inclusion. Haiku.cmake
+# *needs* it: its secondary-architecture detection shells out to
+# `${CMAKE_C_COMPILER} -print-search-dirs`, which cannot work at the first,
+# pre-compiler inclusion from CMakeSystemSpecificInformation.cmake. Moving the
+# PIE override into a platform-compiler file would therefore silently break x86
+# secondary-architecture include and library search. That is the reason for the
+# otherwise odd-looking foreach over language names.
+#
+# THE FIX
+# -------
+# Appended to Modules/Platform/Haiku.cmake:
+#
+#     foreach(lang C CXX ASM ASM-ATT OBJC OBJCXX Fortran)
+#       set(CMAKE_${lang}_COMPILE_OPTIONS_PIE "-fPIC")
+#       set(CMAKE_${lang}_LINK_OPTIONS_PIE "")
+#       set(CMAKE_${lang}_LINK_OPTIONS_NO_PIE "")
+#     endforeach()
+#
+# COMPILE_OPTIONS_PIC keeps its "-fPIC" from Compiler/GNU.cmake, so PIC and PIE
+# now agree, as they must on a platform with one relocation model. Both link
+# option sets are emptied: nothing extra is needed at link time, and -no-pie
+# cannot be honoured at all -- PIE is not something this platform can be asked
+# for or refused.
+#
+# _CMAKE_<lang>_PIE_MAY_BE_SUPPORTED_BY_LINKER is deliberately left YES.
+# check_pie_supported() then try-compiles with the (empty) PIE link options and
+# reports success, which is the honest answer here: every executable is position
+# independent. Forcing it NO, as CYGWIN-GNU does, would make projects that call
+# check_pie_supported() and require PIE fail for no reason.
+#
+# VERIFIED (native arm64 builder i-01886408618b237de, clang 21, lld, cmake 4.1.6)
+# -------------------------------------------------------------------------------
+# Minimal reproduction -- a weak COMDAT vtable defined in the executable:
+#
+#     $ clang++ -fPIC -shared -o libsock.so lib.cpp
+#     $ nm -C main_pie.o | grep MySock
+#     0000000000000000 V vtable for MySock
+#     $ clang++ -fPIE -pie -fuse-ld=lld -o m_pie main.cpp -L. -lsock
+#     ld.lld: error: relocation R_AARCH64_ADR_PREL_PG_HI21 cannot be used against
+#       symbol 'vtable for MySock'; recompile with -fPIC
+#     >>> defined in /tmp/main-39163a.o
+#     >>> referenced by main.cpp
+#     >>>               /tmp/main-39163a.o:(MySock::MySock())
+#     ... exit 1, no output file
+#     $ clang++ -fPIC -fuse-ld=lld -o m_pic main.cpp -L. -lsock
+#     ... exit 0, m_pic produced
+#
+# The same sources through a real CMake project (CMAKE_POSITION_INDEPENDENT_CODE
+# ON, add_library(sock SHARED) + add_executable(app) + target_link_libraries),
+# built twice against a copy of the shipped CMAKE_ROOT with and without the
+# appended block:
+#
+#     BEFORE   app CXX_FLAGS = -O3 -DNDEBUG -fPIE
+#              build exit 2, "relocation R_AARCH64_ADR_PREL_PG_HI21 cannot be
+#              used against symbol 'vtable for MySock'; recompile with -fPIC",
+#              no app produced
+#     AFTER    app CXX_FLAGS = -O3 -DNDEBUG -fPIC
+#              sock CXX_FLAGS = -O3 -DNDEBUG -fPIC
+#              link.txt carries no -pie
+#              build exit 0, app + libsock.so produced, app is ET_DYN
+#
+# check_pie_supported() under the fix: PIE_SUPPORTED=1 NO_PIE_SUPPORTED=1, no
+# warning. CMAKE_POSITION_INDEPENDENT_CODE=OFF still configures and builds, and
+# emits no -no-pie.
+#
+# AND IT RUNS. The same project reconfigured with the link flags a real lld
+# build on this platform uses -- "-fuse-ld=lld -Wl,-z,max-page-size=4096", which
+# is already what graviton/ladybird/patches/ladybird-haiku.patch passes -- builds
+# and executes:
+#
+#     app CXX_FLAGS = -O3 -DNDEBUG -fPIC
+#     app link.txt  = clang++ ... -fuse-ld=lld -Wl,-z,max-page-size=4096 ... -o app
+#     build exit 0, app (136184 bytes) + libsock.so produced, 4 PT_LOADs
+#     $ ./app ; echo $?
+#     9                      # main returns 9: it ran, and ran correctly
+#
+# and the matching control, same link flags but the *stock* Modules/Platform/
+# Haiku.cmake restored, still fails exactly as before:
+#
+#     app CXX_FLAGS = -O3 -DNDEBUG -fPIE
+#     build exit 2
+#     ld.lld: error: relocation R_AARCH64_ADR_PREL_PG_HI21 cannot be used
+#       against symbol 'vtable for MySock'; recompile with -fPIC
+#     ld.lld: error: relocation R_AARCH64_ADD_ABS_LO12_NC cannot be used
+#       against symbol 'vtable for MySock'; recompile with -fPIC
+#     no app produced
+#
+# So the patch is the only variable: with it the project links and runs, without
+# it the identical command line does not link.
+#
+# An earlier attempt to run the output did fail with "runtime_loader: .../app:
+# Could not map image: Bad data", and that was *not* issue 720 biting -- it was
+# this note's author omitting max-page-size=4096 from the link. Recorded here
+# because the wrong conclusion is an easy one to reach: issue 720 is about the
+# loader's inter-segment hole budget, and with 4096-byte max-page-size the holes
+# collapse to zero, so a correctly linked image maps. If an lld-linked
+# executable ever fails to map *with* that flag, that is a new finding and not
+# this patch and not issue 720.
+#
+# UPSTREAM: Modules/Platform/Haiku.cmake is CMake's own file and this gap is
+# CMake's, not DeBeOS's -- the same block would be correct in cmake.git, and
+# every Haiku architecture is affected (aarch64 is merely where lld makes it
+# fatal rather than silently wrong). Offering it there is a separate, optional
+# path and is not assumed; per project policy nothing here is submitted upstream.
+# The in-repo home is this recipe.
+#
+# Retire when: a shipped cmake carries PIE/PIC handling for Haiku of its own, at
+# which point the PATCH() guard already makes this a no-op and the function can
+# be deleted.

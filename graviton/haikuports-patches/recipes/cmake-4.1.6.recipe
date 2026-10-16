@@ -7,7 +7,9 @@ of your choice."
 HOMEPAGE="https://cmake.org/"
 COPYRIGHT="2002-2026 Kitware, Inc., Insight Consortium"
 LICENSE="CMake"
-REVISION="1"
+# 1 -> 2: PATCH() teaches Modules/Platform/Haiku.cmake that
+# POSITION_INDEPENDENT_CODE means -fPIC here, not -fPIE (issue 715).
+REVISION="2"
 SOURCE_URI="https://cmake.org/files/v${portVersion%.*}/cmake-$portVersion.tar.gz"
 CHECKSUM_SHA256="51338489f4fbae35a0a69b59416f512dc9c757129759a487c47b33dfd215520e"
 PATCHES="cmake-$portVersion.patchset"
@@ -82,6 +84,88 @@ defineDebugInfoPackage cmake$secondaryArchSuffix \
 	$prefix/bin/cmake \
 	$prefix/bin/cpack \
 	$prefix/bin/ctest
+
+PATCH()
+{
+	# DeBeOS (issue 715): on Haiku, POSITION_INDEPENDENT_CODE for an executable
+	# has to mean -fPIC, not -fPIE. Every Haiku executable is ET_DYN entered
+	# through start_dyn.o and both drivers link one with -shared, so -fPIE's
+	# premise -- a non-shared main program whose own definitions cannot be
+	# interposed -- is false, and on aarch64 lld rejects the direct ADRP/ADD
+	# pair it licenses: "relocation R_AARCH64_ADR_PREL_PG_HI21 cannot be used
+	# against symbol 'vtable for ...'; recompile with -fPIC". Full rationale and
+	# the before/after reproduction: ../cmake-4.1.6-haiku-pie-is-pic.patch.
+	#
+	# Appended rather than spliced because Modules/Platform/Haiku.cmake must be
+	# the file that carries this -- see the comment block itself -- and because
+	# upstream rewrites its body often enough that an anchored patch would rot.
+	# Guarded so a re-run of PATCH() cannot double-append.
+	local haikuPlatformModule=Modules/Platform/Haiku.cmake
+	if ! grep -q 'CMAKE_${lang}_COMPILE_OPTIONS_PIE' $haikuPlatformModule; then
+		cat >> $haikuPlatformModule <<-'CMAKEEOF'
+		
+		# Haiku has no separate PIE link mode, so POSITION_INDEPENDENT_CODE on an
+		# executable has to mean -fPIC, not -fPIE.
+		#
+		# Every Haiku executable is ET_DYN and is entered through start_dyn.o, and both
+		# system compiler drivers link one by handing the linker -shared unconditionally
+		# -- gcc/config/aarch64/aarch64-haiku.h LINK_SPEC is "-m ... %{!r:-shared} ...",
+		# and gcc/config/haiku.h STARTFILE_SPEC adds start_dyn.o to every non-shared
+		# link:
+		#
+		#   $ clang -### -fPIE -pie -fuse-ld=lld t.c -o t
+		#    ".../ld.lld" "--eh-frame-hdr" "--enable-new-dtags" "-shared" ... start_dyn.o
+		#   $ gcc -### -fPIE -pie t.c -o tg
+		#    .../collect2 --eh-frame-hdr -m aarch64haiku -shared ... -pie ... start_dyn.o
+		#
+		# Producing a shared object, lld has to treat every default-visibility
+		# definition in the output as preemptible, and being in PIC mode it has neither
+		# a copy relocation nor a canonical PLT to fall back on.  -fPIE asserts the
+		# opposite -- that this is a non-shared main program, so its own definitions
+		# cannot be interposed -- which lets the compiler mark them dso_local and form
+		# their addresses with a direct ADRP/ADD pair.  On aarch64 lld then refuses the
+		# object outright, once per such symbol:
+		#
+		#   ld.lld: error: relocation R_AARCH64_ADR_PREL_PG_HI21 cannot be used against
+		#     symbol 'vtable for MySock'; recompile with -fPIC
+		#
+		# What trips it in practice is a weak/COMDAT definition emitted into the
+		# executable whose address the generated code takes -- the vtable of a class
+		# defined in the program, or a template instantiation -- which is why it shows
+		# up as soon as a C++ project links its first executable.  (A reference to a
+		# symbol only *defined* in a shared library is unaffected: that still goes
+		# through the GOT.)  Passing -pie on to the linker as well is not an option
+		# either: "ld.lld: error: -shared and -pie may not be used together".
+		#
+		# -fPIE does not merely "add PIE" on top of the platform default; it replaces
+		# it.  gcc/config/haiku.h CC1_SPEC is
+		#
+		#   %{fpic|fPIC|fpie|fPIE|fno-pic|fno-PIC|fno-pie|fno-PIE:;:-fPIC}
+		#
+		# i.e. Haiku injects -fPIC whenever the user named none of those flags, and
+		# backs off the moment the user names any of them.  Asking for -fPIE therefore
+		# *suppresses* the platform's correct default and substitutes a weaker model,
+		# which is why the linker's advice to "recompile with -fPIC" is literally right.
+		# clang agrees: with no flags it already selects "-pic-level 2" and no
+		# "-pic-is-pie"; -fPIE is what adds "-pic-is-pie".  Nothing extra is needed at
+		# link time, and -no-pie cannot be honoured at all, so both link option sets are
+		# empty; PIE is not something this platform can be asked for or refused.
+		#
+		# These have to live in this file rather than in a Platform/Haiku-<id>-<lang>
+		# one.  Compiler/<id>.cmake sets the generic -fPIE, and the only later hook is
+		# this file's second inclusion from CMake<lang>Information.cmake --
+		# "include(Platform/${CMAKE_SYSTEM_NAME} OPTIONAL)" -- which is guarded by
+		# "if(NOT _INCLUDED_FILE)".  Adding a Platform/Haiku-<id>-<lang> file would set
+		# that variable and so suppress the second inclusion, taking the secondary
+		# architecture detection above down with it.
+		foreach(lang C CXX ASM ASM-ATT OBJC OBJCXX Fortran)
+		  set(CMAKE_${lang}_COMPILE_OPTIONS_PIE "-fPIC")
+		  set(CMAKE_${lang}_LINK_OPTIONS_PIE "")
+		  set(CMAKE_${lang}_LINK_OPTIONS_NO_PIE "")
+		endforeach()
+		CMAKEEOF
+	fi
+}
 
 BUILD()
 {
