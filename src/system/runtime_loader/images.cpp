@@ -41,6 +41,16 @@
 #	define MAX_PAGE_SIZE	B_PAGE_SIZE
 #endif
 
+// The largest segment alignment we are willing to believe. p_align is the
+// image's own choice, so the gap allowance derived from it below has to stop
+// somewhere; 2 MB is the coarsest alignment any toolchain here links with (it
+// is x86_64's MAX_PAGE_SIZE above, for huge page mappings).
+#define MAX_SEGMENT_ALIGNMENT	0x200000
+
+// How many maximal segment boundaries an image may spend in total. See the
+// second check in map_image().
+#define MAX_SEGMENT_GAP_COUNT	8
+
 
 bool gInvalidImageIDs;
 
@@ -166,6 +176,33 @@ topological_sort(image_t* image, uint32 slot, image_t** initList,
 
 	initList[slot] = image;
 	return slot + 1;
+}
+
+
+/*!	Returns how much unused address space the region may legitimately be
+	preceded by.
+
+	A linker has to keep p_vaddr and p_offset congruent modulo p_align, so each
+	segment boundary costs up to two alignments: one to advance to the next
+	aligned address, one for the segment's offset within it. That -- not the
+	size of the image -- is what a gap in a sane layout is made of, so the
+	allowance is per boundary and comes from the segment's own alignment.
+
+	Since p_align is the image's to choose, it buys no more than
+	MAX_SEGMENT_ALIGNMENT, and never less than MAX_PAGE_SIZE, the alignment
+	this platform's linker scripts use (0xf000 to 0x10000 of it is spent by
+	every image GNU ld and ld.lld produce here today).
+*/
+static size_t
+max_region_gap(const elf_region_t& region)
+{
+	addr_t alignment = region.alignment;
+	if (alignment > MAX_SEGMENT_ALIGNMENT)
+		alignment = MAX_SEGMENT_ALIGNMENT;
+	if (alignment < MAX_PAGE_SIZE)
+		alignment = MAX_PAGE_SIZE;
+
+	return alignment * 2;
 }
 
 
@@ -307,6 +344,8 @@ map_image(int fd, char const* path, image_t* image, bool fixed)
 
 	addr_t reservedAddress = 0;
 	addr_t loadAddress;
+	addr_t previousEnd = 0;
+	size_t maxGapLimit = 0;
 	size_t reservedSize = 0;
 	size_t length = 0;
 	uint32 addressSpecifier = B_RANDOMIZED_ANY_ADDRESS;
@@ -327,6 +366,18 @@ map_image(int fd, char const* path, image_t* image, bool fixed)
 			addressSpecifier = regionAddressSpecifier;
 		}
 
+		// Reject an image whose segments are scattered across the address
+		// space. Overlapping or descending regions are left to the mapping
+		// loop below, which fails on them anyway.
+		size_t gapLimit = max_region_gap(image->regions[i]);
+		if (gapLimit > maxGapLimit)
+			maxGapLimit = gapLimit;
+		if (i > 0 && loadAddress > previousEnd
+				&& loadAddress - previousEnd > gapLimit) {
+			return B_BAD_DATA;
+		}
+		previousEnd = TO_PAGE_SIZE(loadAddress + image->regions[i].vmsize);
+
 		length += TO_PAGE_SIZE(image->regions[i].vmsize
 			+ (loadAddress % B_PAGE_SIZE));
 
@@ -337,8 +388,21 @@ map_image(int fd, char const* path, image_t* image, bool fixed)
 	}
 
 	// Check whether the segments have an unreasonable amount of unused space
-	// inbetween.
-	if (reservedSize > length + MAX_PAGE_SIZE * 2)
+	// inbetween. The whole span of the image is reserved as one contiguous
+	// address range below (hrev31115), so every hole is address space the
+	// image claims without mapping anything into it, and a broken or hostile
+	// image must not be able to make that unbounded.
+	//
+	// The per-boundary bound above is the honest model of a legitimate hole,
+	// but on its own it is no bound on the reservation, because the number of
+	// segments is the image's choice (as many as fit in a page of program
+	// headers). Hence the total is capped as well, at as many maximal
+	// boundaries as a real layout has: ld.lld emits four PT_LOADs here by
+	// default and GNU ld two, and a PT_LOAD with a .bss contributes a second
+	// region with no hole in front of it. Together the two bounds keep the
+	// unused space constant, instead of growing with a segment count the image
+	// picks.
+	if (reservedSize > length + MAX_SEGMENT_GAP_COUNT * maxGapLimit)
 		return B_BAD_DATA;
 
 	// reserve that space and allocate the areas from that one

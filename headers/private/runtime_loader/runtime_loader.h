@@ -79,6 +79,7 @@ typedef struct elf_region_t {
 	addr_t		fdsize;
 	long		delta;
 	uint32		flags;
+	addr_t		alignment;		// p_align of the segment this region comes from
 } elf_region_t;
 
 typedef struct elf_version_info {
