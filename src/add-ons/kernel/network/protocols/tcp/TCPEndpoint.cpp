@@ -826,6 +826,13 @@ TCPEndpoint::Connect(const sockaddr* address)
 	// and whatever is left in the send queue.
 	fFlags &= ~(FLAG_SEND_ERROR_REPORTED | FLAG_WAS_ESTABLISHED
 		| FLAG_DELETE_ON_CLOSE);
+	// The latched error belongs to that connection too. _HandleReset()
+	// notifies B_SELECT_ERROR, which is what assigns socket->error, and
+	// nothing cleared it either -- so _WaitForEstablished() below read the
+	// dead connection's ECONNRESET on its first pass and failed the new
+	// attempt before its SYN could be answered. That is what kept the
+	// reconnect-after-reset sequence from ever reaching the clearing above.
+	socket->error = B_OK;
 	fState = SYNCHRONIZE_SENT;
 	T(State(this));
 
