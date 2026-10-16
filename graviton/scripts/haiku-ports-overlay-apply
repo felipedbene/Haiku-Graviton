@@ -91,11 +91,18 @@ STAGE1_PORTS="autoconf cmake zstd"
 # the silent-no-op this script exists to prevent. Keep it short: a flavor of an
 # EXISTING port (ffmpeg_x264, llama_cpp_g3) does NOT belong here -- the flavor-prefix
 # fallback below places it beside its base port, matching the tree's own
-# llvm21-in-sys-devel/llvm and gcc_syslibs-in-sys-devel/gcc convention.
+# llvm21-in-sys-devel/llvm and gcc_syslibs-in-sys-devel/gcc convention. Nor does a
+# NEW VERSION SERIES of an existing port (ffmpeg7, icu78): the version-series
+# fallback below finds the base port's directory, which is where the tree keeps
+# every series of a port.
 #
 #   simde  dev-libs  -- header-only SIMD-intrinsics library (ARCHITECTURES=any),
 #                       not in upstream HaikuPorts.
-NEW_PORT_DIRS="simde:dev-libs"
+#   aom    media-libs -- the AV1 reference codec, authored from scratch for arm64
+#                       (issue 337 / PR #383). Upstream media-libs/ carries dav1d and
+#                       svt-av1 but no aom port of any version, so no sibling search
+#                       can find it a home; it was unplaced from the day it landed.
+NEW_PORT_DIRS="simde:dev-libs aom:media-libs"
 
 WITH_STAGE1=0
 if [ "${1:-}" = "--stage1" ]; then
@@ -208,7 +215,42 @@ for src in "$OVERLAY"/recipes/*.recipe; do
 		continue
 	fi
 
-	# 4) genuinely-new port: create <category>/<portname>/ from the explicit
+	# 4) VERSION-SERIES fallback: a new major series of an existing port lives in
+	# that port's directory, not in one of its own -- icu77-77.1.recipe sits in
+	# dev-libs/icu/ exactly as llvm21-21.1.8.recipe sits in sys-devel/llvm/. Step 2
+	# locates that directory only when the tree already carries the SAME series
+	# number, which for a series upstream skipped (ffmpeg7 -- upstream has ffmpeg6
+	# and ffmpeg8) or has not reached (icu78 -- upstream stops at icu77) it does not.
+	# So strip the trailing numeric series off the port name and retry the sibling
+	# search. Issue 734: without this, those two recipes were unplaceable, and since
+	# an unplaced recipe is fatal below, the builder bake could not finish at all.
+	#
+	# This does not guess a category: the search pattern pins the found recipe's own
+	# port component, so a hit is always a directory that demonstrably holds that base
+	# port's recipes. The >= 3 char floor stops a mostly-numeric name (x264 -> "x")
+	# from reaching for some unrelated short port. Deliberately AFTER the flavor
+	# fallback, which must get first refusal on names like libgit2_1.9 (flavor base
+	# libgit2 is right; a numeric strip would reach for "libgit").
+	series_base="$port"
+	while :; do
+		case "$series_base" in
+			*[0-9]|*.) series_base=${series_base%?} ;;
+			*) break ;;
+		esac
+	done
+	if [ "$series_base" != "$port" ] && [ ${#series_base} -ge 3 ]; then
+		ssib=$(find "$TREE" -name "$series_base-*.recipe" -not -path "*/work-*" 2>/dev/null | head -1)
+		if [ -n "$ssib" ]; then
+			sdir=$(dirname "$ssib")
+			cp "$src" "$sdir/$base"
+			echo "overlay-apply: placed $sdir/$base (new $series_base version series)"
+			placed=$((placed + 1))
+			place_patchset "$base" "$sdir"
+			continue
+		fi
+	fi
+
+	# 5) genuinely-new port: create <category>/<portname>/ from the explicit
 	# NEW_PORT_DIRS map. Only ports named there get a directory conjured -- an
 	# unlisted unplaced recipe is still a hard failure (see below).
 	newcat=""
