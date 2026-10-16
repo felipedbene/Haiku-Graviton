@@ -1,8 +1,30 @@
 diff --git a/CMakeLists.txt b/CMakeLists.txt
-index 76636afe95..15a207085b 100644
+index 76636afe95..8fa606df0a 100644
 --- a/CMakeLists.txt
 +++ b/CMakeLists.txt
-@@ -139,7 +139,12 @@ endif()
+@@ -132,6 +132,21 @@ if (NOT (ENABLE_FUZZERS OR ENABLE_COMPILER_EXPLORER_BUILD OR ANDROID OR IOS))
+     add_subdirectory(Utilities)
+ 
+     include(CTest)
++    if (BUILD_TESTING AND NOT ENABLE_QT_UI)
++        # DeBeOS/Haiku headless: the Qt UI normally defines the resource-copy
++        # target (ladybird_build_resource_files), but it is gated out here. The
++        # headless render harness (test-web) still needs Ladybird's resource files
++        # in the build tree, so define the target from the shared, Qt-free
++        # ResourceFiles helper directly.
++        include(${LADYBIRD_SOURCE_DIR}/UI/cmake/ResourceFiles.cmake)
++        # copy_resources_to_build ties the resource target to the chrome target
++        # named \"ladybird\" (gated out here); a stub target satisfies that link
++        # without pulling in Qt.
++        if (NOT TARGET ladybird)
++            add_custom_target(ladybird)
++        endif()
++        copy_resources_to_build("${CMAKE_BINARY_DIR}/${IN_BUILD_PREFIX}${CMAKE_INSTALL_DATADIR}/Lagom" ladybird)
++    endif()
+     if (BUILD_TESTING)
+         add_subdirectory(Tests)
+     endif()
+@@ -139,7 +154,12 @@ endif()
  
  if (ENABLE_GUI_TARGETS)
      add_subdirectory(Services)

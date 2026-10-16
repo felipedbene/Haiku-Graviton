@@ -26,6 +26,11 @@ RECIPE="$REPO/graviton/ladybird"
 PREFIX=/boot/home/lbdeps
 LOGDIR="${LOGDIR:-/boot/home/wall-logs}"
 
+# The native Interface Kit chrome, referenced where it already lives rather than
+# copied in: it is one 148 KB patch and two copies would drift. See
+# phase_lbpatch for why it applies on top of this directory's patch.
+UI_PATCH="$REPO/graviton/ports/ladybird/ladybird-haiku-ui.patch"
+
 # A build tree and cargo home unique to this driver. cargo's target-dir locking
 # is a silent no-op on Haiku (DeBeOS #638: std's File::lock answers
 # ErrorKind::Unsupported, which cargo reads as "acquired"), so a second cargo on
@@ -138,16 +143,39 @@ phase_lb() {
 	phase_lbpatch
 }
 
-# Re-apply the Haiku patch to an existing checkout. Every iteration on
+# Re-apply the Haiku patch stack to an existing checkout. Every iteration on
 # ladybird-haiku.patch needs the tree back at 90998c5d first, and a re-clone of
 # Ladybird's full history to undo a dozen edited lines is not a sensible price.
 # `checkout -- .` only touches tracked files, so the build tree under
 # /boot/home/lb/build-* (untracked) survives; deliberately no `clean`, which
 # would delete it.
+#
+# TWO patches now, in this order, and the order is the whole point.
+# ladybird-haiku.patch is the port; it leaves CMakeLists.txt at blob 8fa606df0a,
+# which is exactly the pre-image ladybird-haiku-ui.patch was cut against (it was
+# cut on top of ports/ladybird/ladybird-haiku-arm64-wave3.patch, whose
+# CMakeLists.txt post-image is the same blob). LocalServer.cpp (34a9426c4d) and
+# cmake_options.cmake (d290b5b2d6) likewise agree between the two stacks, and
+# Process.cpp/UI/CMakeLists.txt are untouched by the first patch -- so all five
+# shared files line up and the UI patch applies unmodified.
+#
+# The first patch keeps its original `patch -p1` invocation deliberately -- it is
+# what every build so far has used against this exact checkout, and `git apply`
+# is stricter about context, so swapping it would be an untested change to a
+# working step. The UI patch gets `git apply` instead, because it creates 23 new
+# files under UI/Haiku/ and that wants to be all-or-nothing: `patch` would
+# cheerfully re-create them over a half-reverted tree, where `git apply` refuses
+# an already-applied patch outright. Those untracked files also survive
+# `checkout -- .`, so reverse the UI patch out before resetting, or the
+# re-apply trips over its own output.
 phase_lbpatch() {
 	cd /boot/home/lb
+	git apply -R --quiet "$UI_PATCH" 2>/dev/null || true
 	git checkout -- .
 	patch -p1 --no-backup-if-mismatch < "$RECIPE/patches/ladybird-haiku.patch"
+	git apply "$UI_PATCH"
+	test -f UI/Haiku/CMakeLists.txt \
+		|| { echo "UI/Haiku missing -- the UI patch did not apply" >&2; return 1; }
 }
 
 # Split in two because the fetch is ~8 GB and run-skia-fetch.sh starts with
@@ -195,6 +223,17 @@ phase_pc() {
 		|| { echo "libavif config missing -- run phase avif" >&2; return 1; }
 }
 
+# ENABLE_HAIKU_UI=ON is what gets `bin/Ladybird` built, and without it WebDriver
+# has no browser to launch (Services/WebDriver/main.cpp:216) -- that, not a
+# missing port, is why this recipe had no rendered pixel. The two chrome options
+# are mutually exclusive (cmake_options.cmake FATAL_ERRORs on both: each defines
+# the `ladybird` target), so QT_UI stays OFF. Both are passed explicitly rather
+# than leaning on the Haiku defaults, so the configure line says what it builds.
+#
+# The UI patch moves the helper services to libexec/. `rm -rf "$BUILDDIR"` above
+# means that is never a mixed tree; a *reconfigure in place* of a previously
+# headless tree would leave helper copies in both bin/ and libexec/, which
+# package/build-package.sh refuses to package.
 phase_configure() {
 	cd /boot/home/lb
 	rm -rf "$BUILDDIR"
@@ -202,6 +241,7 @@ phase_configure() {
 		-DCMAKE_BUILD_TYPE=Release \
 		-DENABLE_LTO_FOR_RELEASE=OFF \
 		-DENABLE_QT_UI=OFF \
+		-DENABLE_HAIKU_UI=ON \
 		-DBUILD_TESTING=OFF \
 		-DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++ \
 		-DCMAKE_PREFIX_PATH=$PREFIX \
@@ -247,7 +287,12 @@ phase_build() {
 	trap 'rm -rf "$LOCK_DIR"' EXIT
 
 	cd "/boot/home/lb/$BUILDDIR"
-	ninja -j"$JOBS" WebContent WebDriver
+	# `ladybird` is the native chrome (OUTPUT_NAME "Ladybird"); it is the target
+	# WebDriver needs on PATH to start a session, and the one the headless-only
+	# stack could not produce.
+	ninja -j"$JOBS" ladybird WebContent WebDriver
+	test -x bin/Ladybird \
+		|| { echo "bin/Ladybird not produced" >&2; return 1; }
 }
 
 run_phase() {

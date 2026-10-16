@@ -24,22 +24,38 @@ correct, and both fault-recovery paths return WASM traps instead of killing the
 process (a guard-page read gives `Memory access out of bounds`, `i32.div_s`
 by zero gives `Integer division overflow`). See "WASM Cranelift JIT" below.
 
-Not yet done: no rendered PNG *from this tree*, because the patch stack captured
-here is headless-only and so builds no chrome. `WebDriver` starts a session by
-launching a browser process called `Ladybird`
-(`Services/WebDriver/main.cpp:216`), and with only `ladybird-haiku.patch`
-applied, `UI/` has just `Qt` and `Android` — the DeBeOS arm64 repo has no `qt6`,
-so `ENABLE_QT_UI=OFF` is the only setting that configures and no `Ladybird`
-binary is produced.
+**The chrome is now in this recipe's stack.** It did not used to be: the
+captured stack was headless-only, so it built no browser for `WebDriver` to
+launch (`Services/WebDriver/main.cpp:216`), and with only `ladybird-haiku.patch`
+applied `UI/` has just `Qt` and `Android` — and the DeBeOS arm64 repo has no
+`qt6`. The native Interface Kit chrome was never missing from DeBeOS, only from
+here: it is `../ports/ladybird/ladybird-haiku-ui.patch` (adds `UI/Haiku/`,
+produces `bin/Ladybird`), landed with package revision 3 in #618 and exercised
+by #622 and #623.
 
-That front end is not missing from DeBeOS, only from this recipe: the native
-Interface Kit chrome is `../ports/ladybird/ladybird-haiku-ui.patch` (adds
-`UI/Haiku/`, selected with `-DENABLE_QT_UI=OFF -DENABLE_HAIKU_UI=ON`, produces
-`bin/Ladybird`), landed with package revision 3 in #618 and exercised by #622
-and #623. It applies on top of `ports/ladybird/ladybird-haiku-arm64-wave3.patch`,
-not on top of this directory's `ladybird-haiku.patch`, so the remaining work for
-an end-to-end browser *from this recipe* is reconciling the two stacks — not
-porting a UI.
+The two stacks are reconciled by applying that patch *unmodified* as the second
+patch in this recipe's stack (`phase_lbpatch`), with
+`-DENABLE_QT_UI=OFF -DENABLE_HAIKU_UI=ON`. It was cut against
+`ports/ladybird/ladybird-haiku-arm64-wave3.patch`, and what makes it apply here
+too is that both stacks leave the five files it shares with them in the same
+state — `CMakeLists.txt` at blob `8fa606df0a`, `LocalServer.cpp` at `34a9426c4d`,
+`cmake_options.cmake` at `d290b5b2d6`, with `LibWebView/Process.cpp` and
+`UI/CMakeLists.txt` untouched by either port patch and so still pristine. The
+one file where they *had* diverged was `CMakeLists.txt`: this recipe's patch was
+missing wave3's `BUILD_TESTING AND NOT ENABLE_QT_UI` resource-copy block, so its
+post-image was `15a207085b` instead. That block is now part of
+`ladybird-haiku.patch` verbatim, which both converges the blob and restores the
+`test-web` resource-copy path for a `BUILD_TESTING=ON` headless build. There is
+deliberately no second copy of the UI patch in `patches/` — it is referenced
+where it lives, the way `-DDEBEOS_ANGLE_SHIM_DIR` already points at
+`ports/ladybird/angle-shim`.
+
+Still not done: **no rendered PNG from this tree yet.** The stack is reconciled
+and `bin/Ladybird` is a target the recipe now builds and asserts, but that has
+been verified only as patch coherence (`git apply` of both patches in order) —
+not by a build, and not by a render. The renders that exist
+(`../ports/ladybird/native-ui-hackernews.png` and friends) came from the ports
+stack under #618, not from this recipe.
 
 Fonts are a hard runtime dependency, not a nicety: `FontPlugin`'s constructor
 `VERIFY`s that a fixed-width font resolved
@@ -119,10 +135,18 @@ The by-hand sequence it replaces, run natively on the builder as `baron` from
    symbol and namespace, which is also why Ladybird can use 78 while linking a
    harfbuzz built against 74.
 6. **Clone Ladybird** at `90998c5d`: `scripts/run-lb-clone.sh`, then apply the
-   port patch:
+   patch stack — the port first, then the native chrome, in this order (the
+   second is cut against the first's output; see the Status section):
    ```
-   cd /boot/home/lb && git apply <repo>/graviton/ladybird/patches/ladybird-haiku.patch
+   cd /boot/home/lb
+   git apply <repo>/graviton/ladybird/patches/ladybird-haiku.patch
+   git apply <repo>/graviton/ports/ladybird/ladybird-haiku-ui.patch
    ```
+   For the second one prefer `git apply` over `patch`: it is 23 new files under
+   `UI/Haiku/`, and `git apply` is all-or-nothing and refuses an
+   already-applied patch, where `patch` would re-create them over a
+   half-reverted tree. (`run-wall-build.sh`'s `lbpatch` phase keeps `patch -p1`
+   for the first one, which is what every build so far has used.)
 7. **Build Skia** (CPU raster) for arm64-Haiku:
    ```
    scripts/run-skia-fetch.sh                      # clone chrome/m148 + sync deps
@@ -139,7 +163,8 @@ The by-hand sequence it replaces, run natively on the builder as `baron` from
    build installs.
 9. **Configure Ladybird** (no vcpkg, plain `-G Ninja`):
    `scripts/configure-ladybird.sh` → `build-wave2`.
-10. **Build**: `scripts/run-build.sh` builds `WebContent` + `WebDriver`
+10. **Build**: `run-wall-build.sh`'s `build` phase builds `ladybird`
+    (`bin/Ladybird`, the native chrome) + `WebContent` + `WebDriver`
     (screenshot is built into WebDriver; there is no standalone
     headless-browser exe). A bare `ninja` builds the full default target,
     including the `Compositor`, `ImageDecoder`, `MediaServer`, `RequestServer`,
@@ -253,8 +278,13 @@ package (sha256 `313114347c...`, never launched) had this defect.
 
 ## Patches (`patches/`)
 
+The stack is two patches, applied in order: `ladybird-haiku.patch` from here,
+then `../ports/ladybird/ladybird-haiku-ui.patch` (the native chrome, referenced
+rather than duplicated). The remaining files below are dependency patches, not
+Ladybird ones.
+
 - **`ladybird-haiku.patch`** — the full port diff against Ladybird `90998c5d`
-  (11 files). Each change carries an inline rationale. Highlights:
+  (12 files). Each change carries an inline rationale. Highlights:
   - `Meta/CMake/rust_crate.cmake`: link Rust host build-scripts/proc-macros with
     Haiku's `cc` (gcc) not bare clang (clang-linked host artifacts crash exit
     255); drop `-D warnings` (nightly std deprecation would be fatal).
@@ -266,7 +296,10 @@ package (sha256 `313114347c...`, never launched) had this defect.
   - `Meta/CMake/check_for_dependencies.cmake`: make ANGLE optional (headless
     CPU raster needs no GLES). The `ICU 78.3 EXACT` pin is *kept* — see step 5.
   - `CMakeLists.txt` + `cmake_options.cmake`: add `ENABLE_QT_UI` and gate the Qt
-    `UI/` subdir (Haiku has no Qt6; headless renders via Services).
+    `UI/` subdir (Haiku has no Qt6), plus wave3's Qt-free resource-copy block so
+    a `BUILD_TESTING=ON` headless `test-web` still gets Ladybird's resources —
+    that block is also what leaves `CMakeLists.txt` at the blob the UI patch
+    expects.
   - `Libraries/LibJS/CMakeLists.txt`: `FLAP_ARCH` fallback via `uname -m`
     (Haiku `uname -p` returns `other`, so `CMAKE_SYSTEM_PROCESSOR` is wrong).
   - `LibCore/Environment.cpp`: no `secure_getenv` on Haiku → plain `getenv`.
@@ -330,7 +363,9 @@ Verified at runtime, not just at link time:
 - `CMAKE_AR/RANLIB` (and the `*_COMPILER_AR/RANLIB`) = binutils
   `/boot/system/bin/{ar,ranlib}` (no `llvm-ar` on the image).
 - `ENABLE_LTO_FOR_RELEASE=OFF` (no `llvm-ar` → `check_ipo_supported` fails),
-  `ENABLE_QT_UI=OFF`, `BUILD_TESTING=OFF`.
+  `ENABLE_QT_UI=OFF`, `ENABLE_HAIKU_UI=ON`, `BUILD_TESTING=OFF`. The two chrome
+  options are mutually exclusive — each defines the `ladybird` target, and
+  `cmake_options.cmake` `FATAL_ERROR`s if both are on.
 - `CMAKE_PREFIX_PATH=/boot/home/lbdeps`; explicit `FastFloat_DIR`,
   `simdutf_DIR`, `WUFFS_INCLUDE_DIR`, `PNG_PNG_INCLUDE_DIR`, `PNG_LIBRARY`,
   `ICU_ROOT=lbdeps/icu78`, `LIBAVIF_DIR=lbdeps/lib/cmake/libavif`.
