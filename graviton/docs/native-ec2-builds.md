@@ -247,7 +247,16 @@ the allocation paths just return `B_DEVICE_FULL` when the bitmap is exhausted
 usual ext4/UFS defence (a few percent only the superuser can dip into) does not exist
 here. That is a design gap, not a bug being hit.
 
-**Ruled out: the swap file.** The obvious theory — paging dies because the swap file
+**Established: BFS allocates eagerly, so `ENOSPC` is always delivered synchronously.**
+`Inode::WriteAt` grows the data stream *before* it touches the page cache — `SetFileSize`
+→ `_GrowStream` runs at `Inode.cpp:1621-1628` and its failure returns `B_DEVICE_FULL`
+straight to the caller with `*_length = 0`; only once that has succeeded does it call
+`file_cache_write` (`:1653`). There is no delayed allocation anywhere in the write path.
+This is the load-bearing fact for everything below: a dirty file-backed page in this
+filesystem **always already has its blocks**, so writeback cannot discover that the
+volume is full.
+
+**Ruled out (1): the swap file.** The obvious theory — paging dies because the swap file
 cannot grow — does not hold. BFS has no sparse files, and the kernel sizes swap once at
 boot and materialises it with `B_STAT_SIZE`, so its blocks are **already allocated**
 before the volume fills (`src/system/kernel/vm/VMAnonymousCache.cpp:1763-1791`; the size
@@ -256,12 +265,57 @@ page into an already-allocated range needs no new allocation, so a full volume d
 stop paging. Worth recording as a dead end so the next person does not spend the same
 hour on it.
 
-**Not established: what `sshd` blocks on.** This is issue 770's open half. The hypothesis
-is a write on the pre-auth path that blocks instead of returning `ENOSPC`, which a
-free-space reserve alone would not fix — but there is no `file:line` for it, and
-confirming it needs the box in that state, which is exactly the state in which nothing
-can be observed from inside it. Instrumenting this properly means reproducing the
-condition deliberately on a disposable builder with a serial console attached.
+**Ruled out (2): dirty pages that cannot be flushed starving the free-page pool.** This
+one is worth stating because it fits the symptoms so well and is still wrong. The shape
+is real: when a page write fails, `PageWriteWrapper::Done` sets `fPage->modified = true`
+and puts a non-temporary (file-backed) page **straight back on the modified queue**
+(`src/system/kernel/vm/vm_page_writer.cpp:261-311`), and the writer then retries forever,
+pausing 500 ms whenever a whole queue pass wrote nothing (`:632-637`). Pages stuck there
+are never freed, and `vm_page_reserve_pages` has no failure path at all — it is `void`,
+it calls `reserve_pages(..., dontWait = false)` (`vm_page.cpp:2675-2687`), and that ends
+in a bare `thread_block()` with no timeout (`:2405-2417`) which only
+`wake_up_page_reservation_waiters` can release, and only once `reserve_some_pages` has
+actually succeeded (`:1426-1451`). So *if* the pool were exhausted this way, every page
+reservation — including the one `fork()` needs for an incoming sshd session — would wait
+forever, which is exactly the observed "accepts TCP, never sends a banner".
+
+It does not happen, because of the eager allocation above: the failure arm of
+`PageWriteWrapper::Done` is not reachable for `B_DEVICE_FULL` on BFS. The blocks behind
+every modified page were allocated at `write()` time, so writeback has nothing left to
+allocate and cannot fail for lack of space. The unbounded wait is still there and is
+still worth knowing about — it is just not reached by a full volume.
+
+**Ruled out (3): the BFS journal running out of log space.** The log area is a fixed
+region allocated at `mkbfs` time, so it does not compete with file data — and when a
+transaction will not fit after a sync, `Journal::_WriteTransactionToLog` **panics** rather
+than blocking (`src/add-ons/kernel/file_systems/bfs/Journal.cpp:1198-1204`). The serial
+console showed no panic, so this path was not taken. That is the one place where the
+*absence* of console output is itself evidence.
+
+**Ruled out (4): `syslog()` blocking on a full daemon port.** `send_syslog_message` writes
+to the syslog daemon's port with **no timeout**, retrying forever on `B_INTERRUPTED`
+(`src/system/libroot/posix/syslog.cpp:172-177`, under the comment "make sure the message
+gets send"), and sshd logs on the pre-auth path. If the daemon ever stopped draining, every
+`syslog()` caller in the system would block there permanently. It keeps draining: a log
+write that fails just breaks out of the message handler and the read loop continues
+(`src/servers/syslog_daemon/syslog_output.cpp:201-205`, `SyslogDaemon.cpp:141`). Another
+unbounded primitive that is real but is not this bug.
+
+**Not established: what `sshd` blocks on.** This is issue 770's open half, and the four
+eliminations above narrow it rather than answer it. What they rule out collectively is the
+whole class of *deferred* failures — there is no path on this filesystem where a full
+volume is discovered late, by a kernel thread, after the `write()` that caused it already
+returned success. So whatever sshd waits on is reached while `ENOSPC` is being reported
+correctly, which means a free-space reserve in the allocator would very likely fix the
+symptom even without naming the wait.
+
+Closing it properly still needs a thread backtrace from a box in that state. That means
+reproducing the condition deliberately: fill a disposable builder's volume, then enter KDL
+over the EC2 serial console (account access is already enabled) and read `threads` plus a
+`bt` for the sshd team. `graviton/scripts/haiku-qemu-virt` is the cheaper arm of the same
+test and boots a DeBeOS arm64 image with the serial console on stdio, but it gives no
+userland shell on that console, so filling the volume from inside the guest needs an image
+with the fill scripted at boot.
 
 ## Standing rule
 
