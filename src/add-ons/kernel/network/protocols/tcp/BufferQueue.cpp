@@ -63,6 +63,20 @@ BufferQueue::SetInitialSequence(tcp_sequence sequence)
 	TRACE(("BufferQueue@%p::SetInitialSequence(%" B_PRIu32 ")\n", this,
 		sequence.Number()));
 
+	// Rebasing the sequence space is how a connection says "this queue is
+	// mine now", so whatever the previous one left has to go with it. It used
+	// to only move the two sequence numbers, which on a reconnect (connect()
+	// again after a reset) left buffers behind at sequence numbers from the
+	// dead connection while fFirstSequence/fLastSequence described the new
+	// one -- a queue the byte counters no longer matched and that the next
+	// Add() walked off the end of.
+	net_buffer* buffer;
+	while ((buffer = fList.RemoveHead()) != NULL)
+		gBufferModule->free(buffer);
+
+	fNumBytes = 0;
+	fContiguousBytes = 0;
+	fPushPointer = 0;
 	fFirstSequence = fLastSequence = sequence;
 }
 
