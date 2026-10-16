@@ -828,6 +828,126 @@ except Exception as exc:
 print("provision: #136 Class 8 cmake wrapper patched")
 PY
 
+# --- 2a-5. #758: batch packageEntries' per-file dirname/mkdir/mv ---------------
+# haikuporter's packageEntries() (HaikuPorter/ShellScriptlets.py) is the shell
+# helper every recipe's INSTALL() uses to move built files into a subpackage's
+# staging directory. Upstream forks THREE processes per entry -- `dirname`,
+# `mkdir -p`, `mv` -- which is invisible for the dozens of entries a normal
+# recipe packages, and fatal for app-text/texlive, whose INSTALL() hands it
+# ~400k entries. Measured on the native arm64 builder at ~27 entries/s, that is
+# ~7 hours in a single phase; the run was SIGKILLed partway through with no
+# output and no error, which reads as a build failure rather than as a loop that
+# simply had not finished (issue 758).
+#
+# This is haikuporter's own code path, not a recipe's, so there is no per-recipe
+# lever: a recipe cannot batch a function it only calls. Same channel as the
+# #136/#47 patches above and for the same reason.
+#
+# Three changes, none of which alter what ends up where:
+#   * `dirname` -> `${targetDir%/*}`. No fork. Safe because $packagePrefix is
+#     absolute, so the string always contains a slash -- the one case where the
+#     two differ is a doubled slash (`a//b`), where the parameter expansion
+#     yields `$packagePrefix/a/` and `dirname` yields `$packagePrefix/a`; both
+#     name the same directory, so the only effect is one extra mkdir.
+#   * `mkdir -p` only when the target directory actually changes. Entry lists
+#     reach here grouped by directory (they come from find/glob output), so in
+#     practice this is one mkdir per directory.
+#   * `mv` batched per directory, flushed when the directory changes and capped
+#     at 256 entries -- ~31 KB of argv, far under ARG_MAX -- so a single flat
+#     directory holding 400k files does not build one unbounded command line.
+#
+# Verified byte-equivalent to the upstream loop by running both over the SAME
+# 648-entry fixture (deep nesting, a 600-entry flat directory, names with
+# spaces, a literal `$`, an embedded newline, a bare directory entry, and an
+# absolute-form entry) with counting shims on all three commands: identical
+# package tree, identical leftovers under $installDestDir, identical
+# stdout/stderr, 1944 forks -> 24. `graviton/scripts/haiku-packageentries-selftest`
+# carries that harness. See
+# graviton/haikuports-patches/haikuporter-packageentries-batch.patch (issue 758).
+#
+# `lastDir` and `batch` MUST be `local`: packageDebugInfos() calls
+# packageEntries() again inside its own loop, so leaked state would flush a
+# stale batch into the wrong directory. `targetDir` is deliberately left
+# non-local, exactly as upstream leaks it.
+log "#758: batching packageEntries' per-file dirname/mkdir/mv in haikuporter"
+python3.14 - "$HP_DIR/HaikuPorter/ShellScriptlets.py" <<'PY'
+import io, py_compile, sys
+path = sys.argv[1]
+with io.open(path, 'r', encoding='utf-8') as fh:
+    text = fh.read()
+marker = "graviton/DeBeOS (issue 758)"
+if marker in text:
+    print("provision: #758 packageEntries already patched; skipping")
+    sys.exit(0)
+
+# Anchor A: the head of the move loop, where the batch state is declared.
+anchorA = "\t# move the entries provided\n\tfor file; do\n"
+# Anchor B: the three forks themselves, plus the loop terminator so the flush
+# can be appended after it.
+anchorB = (
+    "\t\t# make sure target containing directory exists and move there\n"
+    "\t\ttargetDir=$(dirname \"$packagePrefix/$file\")\n"
+    "\t\tmkdir -p \"$targetDir\"\n"
+    "\t\tmv \"$installDestDir$prefix/$file\" \"$targetDir\"\n"
+    "\tdone\n"
+)
+for name, anchor in (("A", anchorA), ("B", anchorB)):
+    count = text.count(anchor)
+    if count != 1:
+        sys.stderr.write(
+            "provision: FATAL #758: packageEntries anchor %s appears %d times "
+            "in %s, expected once -- haikuporter changed, re-check the patch\n"
+            % (name, count, path))
+        sys.exit(1)
+
+replA = (
+    "\t# move the entries provided\n"
+    "\t#\n"
+    "\t# graviton/DeBeOS (issue 758): batched. Upstream forked dirname + mkdir\n"
+    "\t# -p + mv per entry, which is ~7 hours for app-text/texlive's ~400k-entry\n"
+    "\t# INSTALL(). lastDir/batch are local because packageDebugInfos() re-enters\n"
+    "\t# this function.\n"
+    "\tlocal lastDir=\n"
+    "\tlocal -a batch=()\n"
+    "\tfor file; do\n"
+)
+replB = (
+    "\t\t# make sure target containing directory exists and move there,\n"
+    "\t\t# batching the move per directory (issue 758)\n"
+    "\t\ttargetDir=\"$packagePrefix/$file\"\n"
+    "\t\ttargetDir=${targetDir%/*}\n"
+    "\t\tif [ \"$targetDir\" != \"$lastDir\" ]; then\n"
+    "\t\t\tif [ ${#batch[@]} -gt 0 ]; then\n"
+    "\t\t\t\tmv \"${batch[@]}\" \"$lastDir\"\n"
+    "\t\t\t\tbatch=()\n"
+    "\t\t\tfi\n"
+    "\t\t\tmkdir -p \"$targetDir\"\n"
+    "\t\t\tlastDir=$targetDir\n"
+    "\t\telif [ ${#batch[@]} -ge 256 ]; then\n"
+    "\t\t\t# bound the argv a single flat directory can build\n"
+    "\t\t\tmv \"${batch[@]}\" \"$lastDir\"\n"
+    "\t\t\tbatch=()\n"
+    "\t\tfi\n"
+    "\t\tbatch+=(\"$installDestDir$prefix/$file\")\n"
+    "\tdone\n"
+    "\tif [ ${#batch[@]} -gt 0 ]; then\n"
+    "\t\tmv \"${batch[@]}\" \"$lastDir\"\n"
+    "\tfi\n"
+)
+text = text.replace(anchorA, replA, 1)
+text = text.replace(anchorB, replB, 1)
+
+with io.open(path, 'w', encoding='utf-8') as fh:
+    fh.write(text)
+try:
+    py_compile.compile(path, cfile='/tmp/.hp758-check.pyc', doraise=True)
+except Exception as exc:
+    sys.stderr.write("provision: FATAL #758: patched ShellScriptlets.py does not "
+        "compile: %s: %s\n" % (type(exc).__name__, exc))
+    sys.exit(1)
+print("provision: #758 packageEntries batched")
+PY
+
 log "writing $CONF"
 cat > "$CONF" <<EOF
 TREE_PATH="$PORTS_DIR"

@@ -1,0 +1,126 @@
+haikuporter: batch packageEntries' per-file dirname/mkdir/mv (issue 758)
+
+Patches haikuporter, not a recipe. Applied by
+`graviton/scripts/haiku-provision-native-builder` (section 2a-5) right after the
+haikuporter clone -- anchored, idempotent, byte-compiled to verify, and FATAL on
+a moved anchor. Guarded by `graviton/scripts/haiku-packageentries-selftest`.
+
+
+WHAT IS WRONG
+
+`HaikuPorter/ShellScriptlets.py:packageEntries()` is the shell helper every
+recipe's INSTALL() uses to move built files into a subpackage's staging
+directory. Upstream's loop forks three processes per entry:
+
+	for file; do
+		...
+		targetDir=$(dirname "$packagePrefix/$file")
+		mkdir -p "$targetDir"
+		mv "$installDestDir$prefix/$file" "$targetDir"
+	done
+
+For the dozens or hundreds of entries a normal recipe packages that is
+invisible. `app-text/texlive` hands it roughly 400,000 entries, so it is
+~1,200,000 forks. Measured on the native arm64 builder at ~27 entries/s, the
+phase needs about 7 hours. The observed run was SIGKILLed partway through, with
+no output and no error message of its own -- which reads as a build failure
+rather than as a loop that simply had not finished yet.
+
+There is no recipe-side lever. This is haikuporter's own code, and a recipe
+cannot batch a function it only calls. Same channel, and the same reasoning, as
+the `#136`/`#47` haikuporter patches in this directory.
+
+
+THE CHANGE
+
+Three edits inside the loop, none of which alters what ends up where:
+
+  * `dirname` -> `${targetDir%/*}`. No fork at all. Safe because
+    `$packagePrefix` is absolute, so the string always contains a slash. The
+    one input where the two spellings differ is a doubled slash (`a//b`), where
+    the parameter expansion yields `.../a/` and `dirname` yields `.../a`; both
+    name the same directory, so the only effect is one extra `mkdir -p`.
+
+  * `mkdir -p` only when the target directory actually changes. Entry lists
+    reach this function grouped by directory -- they come from `find`/glob
+    output -- so in practice this collapses to one `mkdir` per directory.
+
+  * `mv` batched per directory, flushed when the directory changes and capped
+    at 256 entries. 256 x ~120 B is ~31 KB of argv, far under ARG_MAX, so a
+    single flat directory holding 400k files cannot build one unbounded command
+    line. `"${batch[@]}"` is used throughout, so names containing spaces or
+    newlines are passed intact.
+
+`lastDir` and `batch` are declared `local`. That is load-bearing, not tidiness:
+`packageDebugInfos()` calls `packageEntries()` again inside its own loop, so
+leaked state would flush a stale batch into the wrong directory on the second
+call. `targetDir` is deliberately left non-local, exactly as upstream leaks it.
+
+
+HOW IT WAS VERIFIED
+
+Not by reading it. `haiku-packageentries-selftest` applies the real patcher to a
+recorded copy of upstream `packageEntries`, then *runs both shell functions* --
+upstream's and the patched one -- over the same entry list with counting shims
+on `dirname`, `mkdir` and `mv`, and compares the results byte for byte. The
+fixture is 648 entries covering deep nesting, a 600-entry flat directory (which
+is what exercises the 256 cap), names with spaces, a literal `$`, an embedded
+newline, a bare directory entry, an absolute-form entry, and a second
+`packageEntries` call in the same shell to catch leaked loop state:
+
+	ok   resulting package tree identical (648 entries)
+	ok   what is left behind in installDestDir identical
+	ok   stdout identical
+	ok   stderr identical
+	ok   exit status identical (0)
+	ok   fork count cut by >10x: 1947 -> 24
+	ok   zero dirname forks (was 649)
+	     upstream: dirname=649  mkdir=649  mv=649  total=1947
+	     patched : dirname=0    mkdir=11   mv=13   total=24
+
+81x fewer forks with byte-identical placement. The test also proves the patcher
+aborts FATAL rather than silently no-op'ing when either anchor moves, that a
+second application is a no-op, and -- via `--mutate`, which drops the trailing
+flush -- that the equivalence comparison can actually go red.
+
+`--upstream` re-fetches the live `ShellScriptlets.py` and asserts the recorded
+copy still matches it, which is the one thing a recorded copy cannot tell you.
+
+
+WHAT THE SPEEDUP ACTUALLY DEPENDS ON
+
+The gain comes from consecutive entries sharing a directory, so it is worth
+being explicit about the bound rather than quoting 81x as if it were universal.
+The selftest therefore carries a second, adversarial fixture of 300 entries in
+300 *different* directories, where no batching is structurally possible:
+
+	ok   identical placement with every entry in its own directory
+	ok   never slower than upstream: 903 -> 602 forks (1.5x)
+	ok   the dirname saving survives even with no batching
+
+1.5x -- the `dirname` saving alone. That is the floor, it is still a strict
+improvement, and the assertion is that it is never slower rather than that it is
+always 81x faster. Real entry lists cluster by directory, which is where the 81x
+comes from.
+
+
+ONE BEHAVIOUR DIFFERENCE, ON FAILING BUILDS ONLY
+
+A batched `mv` reports a failure at different granularity than a per-file one.
+Under `set -e`, upstream aborts on the exact entry that failed, with everything
+before it already moved; the batched version aborts on the whole batch, so a
+different subset of that directory's files will have moved before the abort.
+
+This cannot affect a build that succeeds, and a build that fails here is thrown
+away either way -- haikuporter does not resume a partially packaged subpackage.
+It is recorded because the staging directory left behind after a failure is
+sometimes inspected by hand, and it will look different.
+
+
+RETIRE WHEN
+
+haikuporter's own `packageEntries` stops forking per entry -- upstream has no
+such change as of 2026-10-16. The patcher's idempotency marker makes it a no-op
+once the anchors stop matching... except that a moved anchor is deliberately
+FATAL, not skipped, so an upstream rewrite surfaces as a loud provisioning
+failure and this note is what explains it. Delete the patcher, keep this file.

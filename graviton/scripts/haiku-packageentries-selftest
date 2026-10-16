@@ -1,0 +1,465 @@
+#!/usr/bin/env python3
+"""Selftest for the #758 packageEntries batching patch.
+
+What this guards
+----------------
+`graviton/scripts/haiku-provision-native-builder` section 2a-5 rewrites
+haikuporter's `packageEntries()` shell helper to stop forking three processes
+per packaged file (issue 758). That patch is applied by text substitution
+against a file we do not own, and it changes the single function every recipe's
+INSTALL() uses to place its files. Two things can go wrong, and both are silent:
+
+  1. The anchors stop matching, because haikuporter changed. The patcher is
+     written to fail loudly in that case -- this test proves it actually does,
+     rather than installing a no-op.
+  2. The replacement is not equivalent to what it replaced, so files land in
+     the wrong place or get left behind. A build would still "succeed"; the
+     package would just be wrong.
+
+So this test applies the real patcher to a recorded copy of upstream's
+`packageEntries`, then *runs both shell functions* over the same entry list and
+compares the resulting trees byte for byte. It is offline: no AWS, no network,
+no Haiku host. `--upstream` additionally re-checks the anchors against the live
+upstream file, which is the one thing a recorded copy cannot tell you.
+
+A check that has never been shown to FIND a defect is not known to find one, so
+`--mutate` breaks the batched implementation on purpose and asserts the
+equivalence comparison goes red.
+
+Usage:
+  haiku-packageentries-selftest            # offline, the default
+  haiku-packageentries-selftest --upstream # also re-verify anchors vs upstream
+  haiku-packageentries-selftest --mutate   # prove the comparison can fail
+"""
+
+import os
+import re
+import shutil
+import subprocess
+import sys
+import tempfile
+
+HERE = os.path.dirname(os.path.abspath(__file__))
+PROVISIONER = os.path.join(HERE, "haiku-provision-native-builder")
+UPSTREAM_URL = ("https://raw.githubusercontent.com/haikuports/haikuporter/"
+                "master/HaikuPorter/ShellScriptlets.py")
+
+# Upstream packageEntries(), recorded verbatim from
+# HaikuPorter/ShellScriptlets.py (haikuports/haikuporter master, 2026-10-16).
+# The patcher's anchors are matched against this, so an upstream change shows up
+# here as a FAIL rather than as a quietly skipped patch.
+UPSTREAM_PACKAGE_ENTRIES = '''packageEntries()
+{
+\t# Usage: packageEntries <packageSuffix> <entry> ...
+\t# Moves the given entries to the packaging directory for the package
+\t# specified by package name suffix (e.g. "devel").
+\t# Entry paths can be absolute or relative to $prefix.
+
+\tif [ $# -lt 2 ]; then
+\t\techo >&2 "Usage: packageEntries <packageSuffix> <entry> ..."
+\t\texit 1
+\tfi
+
+\tlocal packageSuffix="$1"
+\tshift 1
+
+\tlocal packagePrefix=$(getPackagePrefix $packageSuffix)
+
+\techo $packagePrefix
+
+\t# move the entries provided
+\tfor file; do
+\t\t# If absolute, resolve to relative file name.
+\t\tif [[ "$file" = /* ]]; then
+\t\t\tif [[ "$file" =~ "$installDestDir$prefix"/(.*) ]]; then
+\t\t\t\tfile=${BASH_REMATCH[1]}
+\t\t\telse
+\t\t\t\techo >&2 "packageEntries: error: absolute entry \\"$file\\""
+\t\t\t\techo >&2 "doesn't appear to be in \\"$installDestDir$prefix\\"."
+\t\t\tfi
+\t\tfi
+
+\t\t# make sure target containing directory exists and move there
+\t\ttargetDir=$(dirname "$packagePrefix/$file")
+\t\tmkdir -p "$targetDir"
+\t\tmv "$installDestDir$prefix/$file" "$targetDir"
+\tdone
+}
+'''
+
+FAILURES = []
+OKS = [0]
+
+
+def check(cond, msg):
+	if cond:
+		OKS[0] += 1
+		print("  ok   %s" % msg)
+	else:
+		FAILURES.append(msg)
+		print("  FAIL %s" % msg)
+	return cond
+
+
+def section(title):
+	print("== %s" % title)
+
+
+# ---------------------------------------------------------------------------
+# 1. pull the patcher out of the provisioner
+# ---------------------------------------------------------------------------
+
+def extract_patcher(text):
+	"""Return the python source of the #758 heredoc in the provisioner."""
+	blocks = re.findall(r"<<'PY'\n(.*?)\nPY\n", text, re.S)
+	hits = [b for b in blocks if "issue 758" in b]
+	if len(hits) != 1:
+		return None, "expected exactly 1 #758 PY heredoc, found %d" % len(hits)
+	return hits[0], None
+
+
+def make_fixture(path, shell_text):
+	"""Write a minimal but *valid* ShellScriptlets.py carrying shell_text.
+
+	Upstream keeps these helpers inside a triple-quoted python string, and the
+	patcher py_compile()s the file afterwards, so the fixture has to be real
+	python with the shell embedded the same way.
+	"""
+	with open(path, "w", encoding="utf-8") as fh:
+		fh.write("# fixture\nsetupCommonVariables = '''\n")
+		fh.write(shell_text)
+		fh.write("'''\n")
+
+
+def read_shell(path):
+	text = open(path, encoding="utf-8").read()
+	m = re.search(r"'''\n(.*)'''\n", text, re.S)
+	return m.group(1)
+
+
+def grab_function(shell_text, name):
+	m = re.search(r"^%s\(\)\n\{\n(.*?)^\}\n" % re.escape(name),
+	              shell_text, re.S | re.M)
+	return m.group(0) if m else None
+
+
+# ---------------------------------------------------------------------------
+# 2. the differential harness: run both functions over the same entry list
+# ---------------------------------------------------------------------------
+
+FIXTURE_DIRS = ["bin", "lib", "develop/headers/os/foo", "develop/headers/os/bar",
+                "data/texlive/texmf-dist/tex/latex/base", "data/locale"]
+
+HARNESS = r'''
+set -u
+root="$1"; impl="$2"; counts="$3"
+p="$root/dest/boot/system"
+export PATH="$root/../shim:$PATH"
+export COUNTS="$counts"
+getPackagePrefix() { echo "$PKGPREFIX"; }
+installDestDir="$root/dest"
+prefix="/boot/system"
+PKGPREFIX="$root/pkg"
+. "$impl"
+# Mirror packageDebugInfos(): packageEntries is called more than once in a
+# single shell, so any loop state it leaks shows up on the second call.
+packageEntries devel "${@:4}"
+packageEntries devel "second/only"
+'''
+
+
+def build_tree(root):
+	p = os.path.join(root, "dest/boot/system")
+	entries = []
+	for d in FIXTURE_DIRS:
+		os.makedirs(os.path.join(p, d), exist_ok=True)
+		for n in range(1, 8):
+			open(os.path.join(p, d, "f%d" % n), "w").write("x")
+			entries.append("%s/f%d" % (d, n))
+	# a single flat directory large enough to exercise the 256 argv cap
+	os.makedirs(os.path.join(p, "flat"), exist_ok=True)
+	for n in range(1, 601):
+		open(os.path.join(p, "flat/e%d" % n), "w").write("y")
+		entries.append("flat/e%d" % n)
+	open(os.path.join(p, "top"), "w").write("z")
+	entries.append("top")
+	# names a naive implementation mangles
+	odd = os.path.join(p, "sp ace/sub")
+	os.makedirs(odd, exist_ok=True)
+	for name in ["has space", "dollar$sign", "new\nline"]:
+		open(os.path.join(odd, name), "w").write("q")
+		entries.append("sp ace/sub/%s" % name)
+	# an absolute-form entry, which the function resolves itself
+	open(os.path.join(odd, "abs"), "w").write("q")
+	entries.append(os.path.join(p, "sp ace/sub/abs"))
+	# a bare directory entry (moved whole, not its contents)
+	os.makedirs(os.path.join(p, "empty/dir/deep"), exist_ok=True)
+	entries.append("empty/dir/deep")
+	# the second packageEntries call's entry
+	os.makedirs(os.path.join(p, "second"), exist_ok=True)
+	open(os.path.join(p, "second/only"), "w").write("s")
+	os.makedirs(os.path.join(root, "pkg"), exist_ok=True)
+	return entries
+
+
+def worst_tree(root):
+	"""Adversarial fixture: every entry in a directory of its own.
+
+	No two consecutive entries share a target directory, so neither the mkdir
+	elision nor the mv batching can do anything. This is the floor of the
+	speedup, and the arm that proves the patch is never *slower*.
+	"""
+	p = os.path.join(root, "dest/boot/system")
+	entries = []
+	for n in range(1, 301):
+		os.makedirs(os.path.join(p, "d%d" % n), exist_ok=True)
+		open(os.path.join(p, "d%d/f" % n), "w").write("x")
+		entries.append("d%d/f" % n)
+	os.makedirs(os.path.join(p, "second"), exist_ok=True)
+	open(os.path.join(p, "second/only"), "w").write("s")
+	os.makedirs(os.path.join(root, "pkg"), exist_ok=True)
+	return entries
+
+
+def make_shims(d):
+	os.makedirs(d, exist_ok=True)
+	for cmd in ("dirname", "mkdir", "mv"):
+		path = os.path.join(d, cmd)
+		with open(path, "w") as fh:
+			fh.write('#!/bin/sh\necho %s >> "$COUNTS"\nexec /usr/bin/%s "$@"\n'
+			         % (cmd, cmd))
+		os.chmod(path, 0o755)
+
+
+def run_impl(workdir, label, func_text, entries, fixture=build_tree):
+	root = os.path.join(workdir, label)
+	os.makedirs(root, exist_ok=True)
+	fixture(root)
+	impl = os.path.join(root, "impl.sh")
+	open(impl, "w").write(func_text)
+	harness = os.path.join(workdir, "harness.sh")
+	open(harness, "w").write(HARNESS)
+	counts = os.path.join(root, "counts")
+	open(counts, "w").close()
+	proc = subprocess.run(["bash", harness, root, impl, counts] + entries,
+	                      capture_output=True, text=True)
+	forks = {}
+	for line in open(counts):
+		forks[line.strip()] = forks.get(line.strip(), 0) + 1
+	# the workdir path differs between the two arms, so normalise it away
+	norm = lambda s: s.replace(root, "ROOT")
+	return {
+		"root": root,
+		"stdout": norm(proc.stdout),
+		"stderr": norm(proc.stderr),
+		"rc": proc.returncode,
+		"forks": forks,
+		"total": sum(forks.values()),
+	}
+
+
+def tree_snapshot(top):
+	"""Relative path -> contents, for every file under top."""
+	out = {}
+	for dirpath, dirnames, filenames in os.walk(top):
+		rel = os.path.relpath(dirpath, top)
+		for d in dirnames:
+			out[os.path.join(rel, d) + "/"] = None
+		for f in filenames:
+			full = os.path.join(dirpath, f)
+			out[os.path.join(rel, f)] = open(full, "rb").read()
+	return out
+
+
+def differential(workdir, upstream_fn, patched_fn, mutate=False,
+                 fixture=build_tree):
+	make_shims(os.path.join(workdir, "shim"))
+	if mutate:
+		# Drop the trailing flush. Every entry destined for the LAST directory
+		# visited is then silently never moved -- the exact class of bug this
+		# comparison exists to catch.
+		patched_fn = re.sub(
+			r"\tif \[ \$\{#batch\[@\]\} -gt 0 \]; then\n\t\tmv \"\$\{batch\[@\]\}\" \"\$lastDir\"\n\tfi\n",
+			"", patched_fn, count=1)
+
+	# Build the fixture once in a scratch root purely to learn the entry list,
+	# then template the root out of it: absolute-form entries have to be
+	# re-pointed per arm, and both arms must receive the SAME list.
+	probe = os.path.join(workdir, "probe")
+	os.makedirs(probe, exist_ok=True)
+	entries = [e.replace(probe, "@ROOT@") for e in fixture(probe)]
+	shutil.rmtree(probe)
+
+	results = {}
+	for label, fn in (("old", upstream_fn), ("new", patched_fn)):
+		root = os.path.join(workdir, label)
+		ents = [e.replace("@ROOT@", root) for e in entries]
+		results[label] = run_impl(workdir, label, fn, ents, fixture=fixture)
+
+	a, b = results["old"], results["new"]
+	pkg_a = tree_snapshot(os.path.join(a["root"], "pkg"))
+	pkg_b = tree_snapshot(os.path.join(b["root"], "pkg"))
+	dest_a = tree_snapshot(os.path.join(a["root"], "dest"))
+	dest_b = tree_snapshot(os.path.join(b["root"], "dest"))
+	return {
+		"pkg_same": pkg_a == pkg_b,
+		"dest_same": dest_a == dest_b,
+		"stdout_same": a["stdout"] == b["stdout"],
+		"stderr_same": a["stderr"] == b["stderr"],
+		"rc_same": a["rc"] == b["rc"],
+		"entries": len(entries),
+		"old": a,
+		"new": b,
+		"pkg_only_old": sorted(set(pkg_a) - set(pkg_b))[:5],
+		"pkg_only_new": sorted(set(pkg_b) - set(pkg_a))[:5],
+	}
+
+
+# ---------------------------------------------------------------------------
+# main
+# ---------------------------------------------------------------------------
+
+def main():
+	mutate = "--mutate" in sys.argv
+	upstream = "--upstream" in sys.argv
+
+	if not os.path.exists(PROVISIONER):
+		print("FATAL: %s not found" % PROVISIONER)
+		return 2
+	ptext = open(PROVISIONER, encoding="utf-8").read()
+
+	section("the patcher is where it is supposed to be")
+	patcher, err = extract_patcher(ptext)
+	if not check(patcher is not None, err or "#758 patcher block found in %s"
+	             % os.path.basename(PROVISIONER)):
+		return 1
+	check("graviton/DeBeOS (issue 758)" in patcher,
+	      "patcher stamps an idempotency marker")
+	check("py_compile" in patcher, "patcher byte-compiles the result")
+	check("expected once" in patcher, "patcher fails loudly on a moved anchor")
+	check("local lastDir=" in patcher and "local -a batch=()" in patcher,
+	      "batch state is declared local (packageDebugInfos re-enters)")
+
+	workdir = tempfile.mkdtemp(prefix="pe758.")
+	fixture = os.path.join(workdir, "ShellScriptlets.py")
+	make_fixture(fixture, UPSTREAM_PACKAGE_ENTRIES)
+
+	section("the patch applies to recorded upstream, and only once")
+	r = subprocess.run([sys.executable, "-", fixture], input=patcher,
+	                   capture_output=True, text=True)
+	check(r.returncode == 0, "patcher exits 0 on pristine upstream (%s)"
+	      % (r.stderr.strip().splitlines()[-1] if r.returncode else "ok"))
+	patched_shell = read_shell(fixture)
+	check("${targetDir%/*}" in patched_shell, "dirname fork is gone")
+	check("$(dirname \"$packagePrefix/$file\")" not in patched_shell,
+	      "no dirname call survives in packageEntries")
+	r2 = subprocess.run([sys.executable, "-", fixture], input=patcher,
+	                    capture_output=True, text=True)
+	check(r2.returncode == 0 and "already patched" in r2.stdout,
+	      "second run is a no-op, not a double-patch")
+	check(read_shell(fixture) == patched_shell, "re-running changes nothing")
+
+	section("a moved anchor is fatal, not a silent skip")
+	for label, broken in (
+		("anchor A (loop head)",
+		 UPSTREAM_PACKAGE_ENTRIES.replace("\t# move the entries provided\n", "")),
+		("anchor B (the three forks)",
+		 UPSTREAM_PACKAGE_ENTRIES.replace('targetDir=$(dirname "$packagePrefix/$file")',
+		                                  'targetDir=$(dirname -- "$packagePrefix/$file")')),
+	):
+		f2 = os.path.join(workdir, "broken.py")
+		make_fixture(f2, broken)
+		rb = subprocess.run([sys.executable, "-", f2], input=patcher,
+		                    capture_output=True, text=True)
+		check(rb.returncode == 1 and "FATAL" in rb.stderr,
+		      "%s moved -> patcher aborts FATAL" % label)
+		check("expected once" in rb.stderr,
+		      "%s abort names the anchor-count contract" % label)
+
+	section("patched == upstream, run side by side")
+	up_fn = grab_function(UPSTREAM_PACKAGE_ENTRIES, "packageEntries")
+	new_fn = grab_function(patched_shell, "packageEntries")
+	if not check(up_fn and new_fn, "both function bodies extracted"):
+		return 1
+	for label, fn in (("upstream", up_fn), ("patched", new_fn)):
+		sh = os.path.join(workdir, "syn_%s.sh" % label)
+		open(sh, "w").write("getPackagePrefix() { echo x; }\n" + fn)
+		rs = subprocess.run(["bash", "-n", sh], capture_output=True, text=True)
+		check(rs.returncode == 0, "%s packageEntries parses (bash -n)" % label)
+
+	d = differential(os.path.join(workdir, "diff"), up_fn, new_fn, mutate=mutate)
+	if mutate:
+		section("--mutate: trailing flush removed; this comparison must go red")
+		bad = not (d["pkg_same"] and d["dest_same"])
+		check(bad, "mutation DETECTED: a dropped final flush fails the "
+		           "equivalence comparison, so it can go red")
+		if bad:
+			print("       files upstream placed that the mutant did not: %s"
+			      % (d["pkg_only_old"] or "(none)"))
+	else:
+		check(d["pkg_same"], "resulting package tree identical (%d entries)"
+		      % d["entries"])
+		if not d["pkg_same"]:
+			print("       only upstream: %s" % d["pkg_only_old"])
+			print("       only patched : %s" % d["pkg_only_new"])
+		check(d["dest_same"], "what is left behind in installDestDir identical")
+		check(d["stdout_same"], "stdout identical")
+		check(d["stderr_same"], "stderr identical")
+		check(d["rc_same"], "exit status identical (%d)" % d["old"]["rc"])
+		o, n = d["old"], d["new"]
+		check(n["total"] < o["total"] / 10,
+		      "fork count cut by >10x: %d -> %d" % (o["total"], n["total"]))
+		check(n["forks"].get("dirname", 0) == 0,
+		      "zero dirname forks (was %d)" % o["forks"].get("dirname", 0))
+		print("       upstream: dirname=%-4d mkdir=%-4d mv=%-4d total=%d"
+		      % (o["forks"].get("dirname", 0), o["forks"].get("mkdir", 0),
+		         o["forks"].get("mv", 0), o["total"]))
+		print("       patched : dirname=%-4d mkdir=%-4d mv=%-4d total=%d"
+		      % (n["forks"].get("dirname", 0), n["forks"].get("mkdir", 0),
+		         n["forks"].get("mv", 0), n["total"]))
+
+		section("the adversarial floor: no two entries share a directory")
+		# The gain above comes from consecutive entries clustering by
+		# directory, which is what real find/glob output does. Measure the
+		# case where batching is structurally impossible, so the claimed
+		# speedup has a stated floor instead of one happy number.
+		w = differential(os.path.join(workdir, "worst"), up_fn, new_fn,
+		                 fixture=worst_tree)
+		check(w["pkg_same"] and w["dest_same"],
+		      "identical placement with every entry in its own directory")
+		wo, wn = w["old"], w["new"]
+		check(wn["total"] <= wo["total"],
+		      "never slower than upstream: %d -> %d forks (%.1fx)"
+		      % (wo["total"], wn["total"], wo["total"] / float(wn["total"])))
+		check(wn["forks"].get("dirname", 0) == 0,
+		      "the dirname saving survives even with no batching")
+
+	if upstream:
+		section("--upstream: anchors still match the live haikuporter")
+		try:
+			import urllib.request
+			live = urllib.request.urlopen(UPSTREAM_URL, timeout=30).read().decode()
+		except Exception as exc:
+			check(False, "fetch %s: %s" % (UPSTREAM_URL, exc))
+		else:
+			live_fn = grab_function(live, "packageEntries")
+			check(live_fn is not None, "upstream still defines packageEntries")
+			check(live_fn == up_fn,
+			      "upstream packageEntries matches the copy recorded here "
+			      "(if this FAILs, re-record UPSTREAM_PACKAGE_ENTRIES and "
+			      "re-verify the patch)")
+
+	shutil.rmtree(workdir, ignore_errors=True)
+	print()
+	if FAILURES:
+		print("FAIL                      (%d assertions, %d failures)"
+		      % (OKS[0] + len(FAILURES), len(FAILURES)))
+		for f in FAILURES:
+			print("  - %s" % f)
+		return 1
+	print("PASS                      (%d assertions, 0 failures)" % OKS[0])
+	return 0
+
+
+if __name__ == "__main__":
+	sys.exit(main())
