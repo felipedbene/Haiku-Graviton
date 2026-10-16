@@ -125,6 +125,20 @@
 #                the line out (haikuporter keeps its dead default). The mirror is
 #                populated from verified fetches -- see haiku-mirror-sync and the
 #                mirror-promote step in haiku-nativebuild. Passed by the bake.
+#   OVERLAY_DIR  local path to graviton/haikuports-patches, if it is already on
+#                this box (default $HP_HOME/haikuports-patches). When that path
+#                has no recipes/ subdir, the overlay is fetched from OVERLAY_REPO
+#                instead. Issue 764.
+#   OVERLAY_APPLY  local path to haiku-ports-overlay-apply (default
+#                $HP_HOME/haiku-ports-overlay-apply). Fetched with the overlay
+#                when absent. haiku-bake-builder stages both here already, so a
+#                baked builder re-provisioning uses its own copies.
+#   OVERLAY_REPO DeBeOS repo to fetch the overlay from when it is not already on
+#                the box (default the public DeBeOS repo). Needs no credentials.
+#   OVERLAY_REF  branch/tag to fetch the overlay from (default graviton).
+#   OVERLAY_SKIP 1 = do NOT apply the recipe overlay. Logged as a WARNING,
+#                never the default: a builder without the overlay re-fails ports
+#                this project has already fixed (issue 764).
 #
 set -eu
 
@@ -136,6 +150,11 @@ PACKAGER="${PACKAGER:-DeBeOS <debeos@example.invalid>}"
 SEED_DIR="${SEED_DIR:-$HP_HOME/seed}"
 SRCCACHE_S3="${SRCCACHE_S3:-}"
 DOWNLOAD_MIRROR="${DOWNLOAD_MIRROR:-}"
+OVERLAY_DIR="${OVERLAY_DIR:-$HP_HOME/haikuports-patches}"
+OVERLAY_APPLY="${OVERLAY_APPLY:-$HP_HOME/haiku-ports-overlay-apply}"
+OVERLAY_REPO="${OVERLAY_REPO:-https://github.com/felipedbene/Haiku-Graviton.git}"
+OVERLAY_REF="${OVERLAY_REF:-graviton}"
+OVERLAY_SKIP="${OVERLAY_SKIP:-0}"
 
 PORTS_DIR="$HP_HOME/haikuports"
 HP_DIR="$HP_HOME/haikuporter"
@@ -486,6 +505,115 @@ if [ ! -d "$PORTS_DIR/.git" ]; then
 else
 	log "ports tree already present: $PORTS_DIR"
 fi
+
+# --- 2b. the DeBeOS recipe overlay (issue 764) -----------------------------
+#
+# The clone above is PRISTINE upstream HaikuPorts, which knows nothing about
+# arm64 Haiku. Every recipe fix this project has merged lives in
+# graviton/haikuports-patches/recipes/ and reaches a ports tree only through
+# haiku-ports-overlay-apply -- and until this section existed, the ONLY caller of
+# that script was haiku-bake-builder. So the overlay was applied while baking a
+# builder AMI and never when provisioning an instance directly, which is the
+# path graviton/docs/native-ec2-builds.md documents for building ports on a
+# canonical-AMI box. A builder provisioned that way silently carried none of the
+# project's recipe fixes and re-failed ports the tracker says are fixed.
+#
+# Measured, not inferred: instance i-092201b33570a801d, provisioned 2026-10-16
+# from this script at d0eacc5aed, had the pristine upstream
+# app-text/tesseract/tesseract-3.05.02.recipe with `autogen.sh` at line 86 --
+# the exact bug commit 562c42b98b fixed and checked in under recipes/. That
+# killed the gri -> texlive_core -> ghostscript_gpl -> tesseract chain at the
+# bottom for an already-solved defect.
+#
+# Obtaining the overlay: OVERLAY_DIR if it is already on the box (what the bake
+# stages, so a baked builder re-provisioning uses its own copies), otherwise a
+# sparse shallow clone of the DeBeOS repo -- public, so no credentials, and
+# --filter=blob:none --sparse keeps it to the two paths needed rather than the
+# whole Haiku tree, which matters on a 20 GiB BFS root. The scratch clone is
+# removed once the two paths are copied out.
+#
+# NOT skipped on failure. A fix-less builder is indistinguishable from a correct
+# one until a port fails with an error the tracker calls closed, so this is
+# FATAL -- the same contract as the #171/#329/#758 patchers, which abort rather
+# than install a silent no-op. OVERLAY_SKIP=1 is the explicit, logged opt-out.
+#
+# --stage1 is deliberately NOT passed: a native builder's output goes to the
+# shipping DeBeOS repo, and the overlay's stage-1 recipes are feature-capped
+# bootstrap expedients ("never ship feature-capped builds", AGENTS.md).
+fetch_recipe_overlay() {
+	if [ -d "$OVERLAY_DIR/recipes" ] && [ -f "$OVERLAY_APPLY" ]; then
+		log "#764 overlay: using $OVERLAY_DIR (already on this box)"
+		return 0
+	fi
+	log "#764 overlay: fetching from $OVERLAY_REPO ($OVERLAY_REF)"
+	_src="$HP_HOME/.overlay-src"
+	rm -rf "$_src"
+	# A git too old for partial clone falls back to a full depth-1 clone on its
+	# own and still produces the paths, so this is a size optimisation, not a
+	# correctness dependency.
+	if ! git clone --depth 1 --branch "$OVERLAY_REF" --filter=blob:none \
+			--sparse "$OVERLAY_REPO" "$_src"; then
+		echo "provision: FATAL #764 overlay: cannot clone $OVERLAY_REPO" \
+			"($OVERLAY_REF). Set OVERLAY_DIR to a local copy of" \
+			"graviton/haikuports-patches, or OVERLAY_SKIP=1 to provision a" \
+			"builder that will re-fail already-fixed ports." >&2
+		exit 1
+	fi
+	(cd "$_src" && git sparse-checkout set graviton/haikuports-patches \
+		graviton/scripts >/dev/null)
+	if [ ! -d "$_src/graviton/haikuports-patches/recipes" ] \
+			|| [ ! -f "$_src/graviton/scripts/haiku-ports-overlay-apply" ]; then
+		echo "provision: FATAL #764 overlay: the sparse checkout of" \
+			"$OVERLAY_REPO ($OVERLAY_REF) has no" \
+			"graviton/haikuports-patches/recipes or no" \
+			"haiku-ports-overlay-apply -- the repo layout moved" >&2
+		exit 1
+	fi
+	rm -rf "$OVERLAY_DIR"
+	cp -r "$_src/graviton/haikuports-patches" "$OVERLAY_DIR"
+	cp "$_src/graviton/scripts/haiku-ports-overlay-apply" "$OVERLAY_APPLY"
+	chmod +x "$OVERLAY_APPLY"
+	rm -rf "$_src"
+	log "#764 overlay: fetched -> $OVERLAY_DIR"
+}
+
+apply_recipe_overlay() {
+	if [ "$OVERLAY_SKIP" = 1 ]; then
+		echo "provision: WARNING #764 overlay: OVERLAY_SKIP=1 -- the ports tree" \
+			"is pristine upstream and carries NONE of this project's arm64" \
+			"recipe fixes. Ports the tracker calls fixed will fail again." >&2
+		return 0
+	fi
+	fetch_recipe_overlay
+	log "#764 overlay: applying $OVERLAY_DIR -> $PORTS_DIR (no --stage1)"
+	if ! /bin/sh "$OVERLAY_APPLY" "$OVERLAY_DIR" "$PORTS_DIR"; then
+		echo "provision: FATAL #764 overlay: haiku-ports-overlay-apply failed." \
+			"It exits non-zero when a recipe cannot be placed in the tree, which" \
+			"means that fix would be silently unused -- see its WARNING lines" \
+			"above for which ones." >&2
+		exit 1
+	fi
+	# Success is not an artifact. Count the overlay recipes that are now
+	# byte-identical in the tree, and refuse a run where the overlay reached
+	# nothing -- a summary line of "0 updated, 0 placed" is exactly the silent
+	# no-op this section exists to end.
+	_landed=0
+	for _r in "$OVERLAY_DIR"/recipes/*.recipe; do
+		[ -f "$_r" ] || continue
+		_b=$(basename "$_r")
+		_t=$(find "$PORTS_DIR" -name "$_b" -not -path "*/work-*" 2>/dev/null | head -1)
+		[ -n "$_t" ] || continue
+		cmp -s "$_r" "$_t" && _landed=$((_landed + 1))
+	done
+	if [ "$_landed" -eq 0 ]; then
+		echo "provision: FATAL #764 overlay: haiku-ports-overlay-apply reported" \
+			"success but not one overlay recipe is byte-identical in" \
+			"$PORTS_DIR -- the overlay did not reach the tree" >&2
+		exit 1
+	fi
+	log "#764 overlay: $_landed overlay recipe(s) verified byte-identical in $PORTS_DIR"
+}
+apply_recipe_overlay
 
 if [ ! -d "$HP_DIR/.git" ] && [ ! -x "$HP_DIR/haikuporter" ]; then
 	log "cloning haikuporter -> $HP_DIR"
@@ -1249,6 +1377,7 @@ provision: done. This box is a native arm64 package builder.
   seed dir   : $SEED_DIR  (drop upstream tarballs here to bypass a flaky fetch)
   src cache  : ${SRCCACHE_S3:-off}  (shared S3 tier via $SHIM_DIR/haiku-srccache-fetch)
   dl mirror  : ${DOWNLOAD_MIRROR:-off}  (haikuports.conf DOWNLOAD_MIRROR fallback, #172)
+  recipe overlay: $([ "$OVERLAY_SKIP" = 1 ] && echo "SKIPPED -- this tree has NONE of the project's arm64 recipe fixes (#764)" || echo "$OVERLAY_DIR applied to the ports tree (#764)")
   chain plan : $SHIM_DIR/depclosure, $SHIM_DIR/haiku-package-closure
                (launchers; source deployed to $HP_HOME by haiku-bake-builder)
 
