@@ -33,7 +33,7 @@ export PATH=/boot/home/config/non-packaged/bin:/boot/system/non-packaged/bin:$PA
 # checking). BUMP THIS whenever a driver change must reach a wave; then republish the
 # script to s3://<bucket>/bake-scripts/haiku-nativebuild (graviton/scripts/haiku-publish-driver)
 # and redeploy the ops stack. Format: YYYY-MM-DD.<serial>.
-NATIVEBUILD_VERSION="2026-10-16.1"
+NATIVEBUILD_VERSION="2026-10-16.2"
 HP=/boot/home/haikuports
 GP=$HP/packages
 # The S3 client used to harvest built hpkgs and mirror sources. RESOLVED, never a
@@ -609,6 +609,81 @@ mirror_sources() {
 	done
 }
 
+# Ports-tree mutex. haikuporter is NOT safe to run twice against one $HP, and nothing
+# used to stop it: two drivers on one builder shared the chroot under
+# <port>/work-<version>, and shared /boot/home/nb-<port>.log, which build_one opens
+# with `>`.
+#
+# Measured on this builder (issue 702). Run A started texlive_core at
+# 2026-10-16T02:39:09Z. Run B started the SAME port at 04:11:26Z; haikuporter's
+# chroot-setup scriptlet does `rm -f boot/system/packages/*.hpkg`, re-links the
+# packages IT wants, and only then tries `unmount boot/system` -- which failed with
+# `unmount: unmounting failed: Device/File/Resource busy` because run A's chroot was
+# live, so `set -e` aborted the scriptlet before `mount -t packagefs` ran. Run B died
+# in six seconds, having already stripped run A's chroot of its build packages and
+# truncated run A's log. Six hours later run A's `make install` found no activated
+# texlive_core build package, so $prefix did not exist and /packages resolved to the
+# host's read-only package-links:
+#     /boot/system/bin/mkdir -p '/packages/texlive_core-2026-1/.self/documentation/info'
+#     mkdir: cannot create directory '/packages/texlive_core-2026-1': Read-only file system
+# That reads exactly like a recipe baking an unwritable --infodir, and it is not one:
+# the same run's own configure line shows haikuporter's correct
+# `--infodir=/packages/texlive_core-2026-1/.self/documentation/info`, doc/Makefile's
+# install-info-am does `$(MKDIR_P) "$(DESTDIR)$(infodir)"`, and ghostscript_gpl wrote
+# under its own $prefix on this box minutes earlier. Hours were spent on the wrong
+# suspect, so refuse the overlap instead of allowing it.
+#
+# mkdir(2) is the mutex: it is atomic and there is no flock(1) on Haiku. A lock whose
+# owner pid is gone is stale and gets reclaimed -- otherwise one killed driver wedges
+# the builder forever. kill -0 is the liveness test because Haiku's ps has neither -p
+# nor -e. Pid reuse could in principle make a stale lock look live; the wait cap
+# bounds that to NB_LOCK_WAIT_SECS.
+NB_LOCK="${NB_LOCK:-$HP/.nativebuild.lock}"
+NB_LOCK_WAIT_SECS="${NB_LOCK_WAIT_SECS:-3600}"
+NB_LOCK_HELD=""
+nb_lock_release() { [ -n "$NB_LOCK_HELD" ] && rm -rf "$NB_LOCK"; }
+nb_lock_acquire() {
+	waited=0
+	while :; do
+		if mkdir "$NB_LOCK" 2>/dev/null; then
+			echo "$$" > "$NB_LOCK/pid"
+			date -u +%FT%TZ > "$NB_LOCK/since"
+			NB_LOCK_HELD=1
+			trap 'nb_lock_release' EXIT
+			trap 'nb_lock_release; exit 130' INT
+			trap 'nb_lock_release; exit 143' TERM
+			return 0
+		fi
+		# mkdir can fail for reasons that are not contention (no $HP, read-only
+		# tree). Those must not be mistaken for a stale lock, or the reclaim arm
+		# below spins forever on an error it cannot clear.
+		if [ ! -d "$NB_LOCK" ]; then
+			echo "nativebuild: cannot create $NB_LOCK (is $HP present and writable?)" >&2
+			return 1
+		fi
+		holder=$(cat "$NB_LOCK/pid" 2>/dev/null || true)
+		if [ -z "$holder" ] || ! kill -0 "$holder" 2>/dev/null; then
+			echo "nativebuild: reclaiming stale $NB_LOCK" \
+				"(owner pid ${holder:-unknown} is gone)"
+			rm -rf "$NB_LOCK"
+			continue
+		fi
+		if [ "$waited" -ge "$NB_LOCK_WAIT_SECS" ]; then
+			echo "===== nativebuild REFUSING TO RUN: $HP is held by pid $holder since" \
+				"$(cat "$NB_LOCK/since" 2>/dev/null) and has not finished within" \
+				"${NB_LOCK_WAIT_SECS}s. Nothing was built and nothing was clobbered." \
+				"=====" >&2
+			return 1
+		fi
+		if [ "$waited" -eq 0 ]; then
+			echo "nativebuild: $HP is busy (haikuporter holder pid $holder);" \
+				"waiting up to ${NB_LOCK_WAIT_SECS}s rather than clobbering its chroot"
+		fi
+		sleep 15
+		waited=$((waited + 15))
+	done
+}
+
 # Refresh the pkgman repo caches so deps published since this builder booted resolve
 # (otherwise pkgman installs against a stale index).
 #
@@ -624,6 +699,13 @@ mirror_sources() {
 # so dependencies are published before their consumers, or publish incrementally
 # (still to be designed -- see #485).
 feed | pkgman refresh >/dev/null 2>&1 || true
+
+# Take the ports-tree mutex before anything mutates $HP or the system package set.
+# This call sits BELOW the "# Refresh the pkgman repo caches" line on purpose:
+# haiku-nativebuild-selftest sources everything above that line as a library
+# (`sed '/^# Refresh the pkgman repo caches/,$d'`), so an acquire placed any higher
+# would run -- and block -- on every offline test host.
+nb_lock_acquire || exit 1
 
 # Provenance stamp (#506): first meaningful line of every per-port log names the driver
 # that produced it, so a wrong run is detectable retroactively from the log alone.

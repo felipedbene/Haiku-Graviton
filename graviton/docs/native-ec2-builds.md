@@ -81,6 +81,18 @@ loop (build → auto-install whatever repo dep haikuporter reports missing → r
 to the pool). Launch a builder from `aws ssm get-parameter --name /haiku-graviton/builder-ami-id`
 (tag `builder-canonical=true`) and drive it over SSM.
 
+**One driver per builder.** The driver takes a mutex (`$HP/.nativebuild.lock`) for the
+whole run and refuses to start while another holds it, because haikuporter is not safe to
+run twice against one ports tree: the second run's chroot-setup deletes the links in
+`boot/system/packages`, then aborts on `unmount: unmounting failed: Device/File/Resource
+busy` before it can remount packagefs — so the *first* run's build packages are gone and
+its `make install` fails hours later with `mkdir: cannot create directory
+'/packages/<port>-<version>-<revision>': Read-only file system`, which looks nothing like
+the cause (issue 702). The two runs also share `/boot/home/nb-<port>.log`, which the
+driver opens with `>`, so the surviving run's log is truncated too. A lock whose owner
+pid is gone is reclaimed automatically; `NB_LOCK_WAIT_SECS` sets how long a second driver
+waits (default 3600) before refusing.
+
 ## Reproduced sequence — lean AMI → builder → glib2 (2026-08-30, RC=0)
 
 This is the exact, working sequence. glib2 is the proof case: it "blocked" in the QEMU
