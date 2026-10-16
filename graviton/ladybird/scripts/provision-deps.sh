@@ -42,12 +42,23 @@ mkdir -p $PREFIX/lib/pkgconfig $PREFIX/include/wuffs
 #    process that constructs a FontPlugin aborts with
 #    `VERIFICATION FAILED: m_default_fixed_width_font`. dejavu provides
 #    "DejaVu Sans Mono", which is on both lists.
+#    `mesa_devel` is here for its headers only -- nothing links against Mesa.
+#    The DeBeOS ANGLE shim (graviton/ports/ladybird/angle-shim) authors only the
+#    ANGLE-private declarations (EGL/eglext_angle.h, GLES2/gl2ext_angle.h); the
+#    base Khronos headers its gles_null_backend.cpp includes -- GLES2/gl2.h,
+#    GLES2/gl2ext.h, GLES3/gl3.h, gl31.h, gl32.h, EGL/egl.h, EGL/eglext.h -- are
+#    expected to come from the system, and a lean DeBeOS install ships none of
+#    them, so the debeos_angle_shim target dies at
+#    `fatal error: 'GLES2/gl2.h' file not found`. mesa_devel pulls
+#    libglvnd_devel, which installs them under
+#    /boot/system/develop/headers/os/opengl -- already on clang's default
+#    `#include <...>` search path, so no extra -I is needed.
 pkgman install -y \
   libfmt_devel mimalloc_devel libsdl3_devel \
   fontconfig_devel libedit_devel harfbuzz_devel freetype_devel \
   libpng16_devel libjpeg_turbo_devel libwebp_devel brotli_devel woff2_devel \
   openssl3_devel curl_devel libxml2_devel sqlite_devel zlib_devel libpsl_devel \
-  dav1d_devel libdwarf_devel icu74_devel dejavu
+  dav1d_devel libdwarf_devel icu74_devel mesa_devel dejavu
 
 # 2. FastFloat (header-only) -- build+install its real CMake config package.
 cd /boot/home && git config --global core.fsync none || true

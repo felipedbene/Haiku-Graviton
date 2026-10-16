@@ -113,7 +113,12 @@ The by-hand sequence it replaces, run natively on the builder as `baron` from
    writes the ffmpeg `-ladybird` configure shims. `simdjson_devel`,
    `libtommath_devel` and `libavif_devel` are deliberately *not* installed from
    the repo — the first two are unsatisfiable there (DeBeOS #708) and the third
-   is too old (0.9.3).
+   is too old (0.9.3). `mesa_devel` *is* installed, for headers only: it pulls
+   `libglvnd_devel`, whose `GLES2/gl2.h`, `GLES3/gl3[12].h` and `EGL/egl.h` land
+   under `/boot/system/develop/headers/os/opengl` (already on clang's default
+   include path) and are what the ANGLE shim's `gles_null_backend.cpp` includes
+   around the ANGLE-private headers it authors itself. Without it the
+   `debeos_angle_shim` target fails at `'GLES2/gl2.h' file not found`.
 3. **Build real ffmpeg n7.1** into `lbdeps`: `scripts/run-ffmpeg.sh` (replaces
    the shims so LibMedia can link). The real `.pc` files are in `pkgconfig/`.
 4. **Rebuild libpng16 1.6.53 with APNG and with its NEON paths compiled**:
