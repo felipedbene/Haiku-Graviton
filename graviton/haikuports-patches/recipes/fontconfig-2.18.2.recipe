@@ -1,0 +1,187 @@
+SUMMARY="A library for font customization and configuration"
+DESCRIPTION="Fontconfig is a library for font customization and configuration."
+HOMEPAGE="https://www.freedesktop.org/wiki/Software/fontconfig"
+COPYRIGHT="2000,2001,2002,2003,2004,2006,2007 Keith Packard
+	2005 Patrick Lam
+	2007 Dwayne Bailey and Translate.org.za
+	2009 Roozbeh Pournader
+	2008,2009,2010,2011,2012,2013,2014,2015,2016,2017,2018,2019,2020 Red Hat, Inc.
+	2008 Danilo Šegan
+	2012 Google, Inc."
+LICENSE="MIT"
+REVISION="3"
+SOURCE_URI="https://gitlab.freedesktop.org/api/v4/projects/890/packages/generic/fontconfig/$portVersion/fontconfig-$portVersion.tar.xz"
+CHECKSUM_SHA256="cf8e6576ef0484c15079bdaf77cd9c51c464df5365814ada4d3ee7331ea31eb5"
+PATCHES="fontconfig-$portVersion.patchset"
+
+ARCHITECTURES="all"
+SECONDARY_ARCHITECTURES="x86"
+
+libVersion="1.16.1"
+libVersionCompat="$libVersion compat >= ${libVersion%%.*}"
+
+GLOBAL_WRITABLE_FILES="
+	settings/fonts/conf.d directory keep-old
+	settings/fonts/fonts.conf auto-merge
+	"
+
+PROVIDES="
+	fontconfig$secondaryArchSuffix = $portVersion compat >= 2
+	cmd:fc_cache$secondaryArchSuffix
+	cmd:fc_cat$secondaryArchSuffix
+	cmd:fc_conflist$secondaryArchSuffix
+	cmd:fc_list$secondaryArchSuffix
+	cmd:fc_match$secondaryArchSuffix
+	cmd:fc_pattern$secondaryArchSuffix
+	cmd:fc_query$secondaryArchSuffix
+	cmd:fc_scan$secondaryArchSuffix
+	cmd:fc_validate$secondaryArchSuffix
+	lib:libfontconfig$secondaryArchSuffix = $libVersionCompat
+	"
+REQUIRES="
+	haiku$secondaryArchSuffix
+	lib:libbz2$secondaryArchSuffix
+	lib:libfreetype$secondaryArchSuffix
+	lib:libiconv$secondaryArchSuffix
+	lib:libintl$secondaryArchSuffix
+	lib:libxml2$secondaryArchSuffix
+	lib:libz$secondaryArchSuffix
+	"
+
+PROVIDES_devel="
+	fontconfig${secondaryArchSuffix}_devel = $portVersion compat >= 2.1
+	devel:libfontconfig$secondaryArchSuffix = $libVersionCompat
+	"
+REQUIRES_devel="
+	fontconfig$secondaryArchSuffix == $portVersion base
+	devel:libfreetype$secondaryArchSuffix
+	devel:libxml2$secondaryArchSuffix
+	"
+
+defineDebugInfoPackage fontconfig$secondaryArchSuffix \
+	$libDir/libfontconfig.so.$libVersion
+
+BUILD_REQUIRES="
+	haiku${secondaryArchSuffix}_devel
+	devel:libbz2$secondaryArchSuffix
+	devel:libfreetype$secondaryArchSuffix
+	devel:libiconv$secondaryArchSuffix
+	devel:libintl$secondaryArchSuffix
+	devel:libxml2$secondaryArchSuffix
+	devel:libz$secondaryArchSuffix
+	"
+BUILD_PREREQUIRES="
+	cmd:aclocal
+	cmd:autoconf
+	cmd:automake
+	cmd:autopoint
+	cmd:awk
+	cmd:gcc$secondaryArchSuffix
+	cmd:gperf
+	cmd:ld$secondaryArchSuffix
+	cmd:libtoolize$secondaryArchSuffix
+	cmd:make
+	cmd:pkg_config$secondaryArchSuffix
+	cmd:python3
+	"
+
+TEST_REQUIRES="
+	#cmd:curl # needed for 1 test, but that hangs on beta 5
+	"
+
+BUILD()
+{
+	mkdir -p `finddir B_USER_CACHE_DIRECTORY`
+	autoreconf -vfi
+	FONTS_DIR=`finddir B_SYSTEM_FONTS_DIRECTORY`
+	FONTS_DIR2=`finddir B_SYSTEM_NONPACKAGED_FONTS_DIRECTORY`
+	FONTS_DIR3=`finddir B_USER_FONTS_DIRECTORY`
+	FONTS_DIR4=`finddir B_USER_NONPACKAGED_FONTS_DIRECTORY`
+	CACHE_DIR=`finddir B_USER_CACHE_DIRECTORY`
+	runConfigure ./configure \
+		--enable-libxml2 \
+		--with-default-fonts=${FONTS_DIR} \
+		--with-add-fonts=${FONTS_DIR2},${FONTS_DIR3},${FONTS_DIR4} \
+		--with-cache-dir=${CACHE_DIR}
+	make $jobArgs
+}
+
+INSTALL()
+{
+	make install RUN_FC_CACHE_TEST=false
+
+	rm $libDir/*.la
+
+	prepareInstalledDevelLibs \
+		libfontconfig
+	fixPkgconfig
+
+	# The pkgconfig file reference other libraries using the wrong paths, which
+	# creates a lot of confusion. Fix them so correct paths are used.
+	local develPackageName="${portName}_devel-$portFullVersion"
+	local packageLinksDir=$(dirname $portPackageLinksDir)
+	local linksDir="$packageLinksDir/${develPackageName}/devel~libfreetype$secondaryArchSuffix/$relativeDevelopLibDir"
+	sed -i -e "s,^\(Libs.private.*\)-L.* \(-lfreetype.*\)$,\1-L$linksDir \2," \
+		$developLibDir/pkgconfig/fontconfig.pc
+	linksDir="$packageLinksDir/${develPackageName}/devel~libxml2$secondaryArchSuffix/$relativeDevelopLibDir"
+	sed -i -e "s,^\(Libs.private.*-lfreetype.*\) -L.* \(-lxml2.*\)$,\1-L$linksDir \2," \
+		$developLibDir/pkgconfig/fontconfig.pc
+	linksDir="$packageLinksDir/${develPackageName}/devel~libfreetype$secondaryArchSuffix/$relativeIncludeDir"
+	sed -i -e "s,^\(Cflags.*\)-I/packages.*\(/freetype2.*\)$,\1-I$linksDir\2," \
+		$developLibDir/pkgconfig/fontconfig.pc
+	linksDir="$packageLinksDir/${develPackageName}/devel~libxml2$secondaryArchSuffix/$relativeIncludeDir"
+	sed -i -e "s,^\(Cflags.*freetype2.*\)-I/packages.*\(/libxml2.*\)$,\1-I$linksDir\2," \
+		$developLibDir/pkgconfig/fontconfig.pc
+
+	packageEntries devel \
+		$developDir \
+		$manDir \
+		$docDir
+
+	# Aim the conf.d symlinks at the installed conf.avail directory.
+	#
+	# `make install` writes each conf.d entry as an absolute symlink into
+	# $dataDir/fontconfig/conf.avail, which at build time is the package's own
+	# /packages/<port>-<rev>/.self/data/... path. The previous
+	#
+	#	ln -f -r -s "`readlink "$i"`" "$i"
+	#
+	# rewrote that as a path relative to the STAGING tree, which sits at a
+	# different depth, giving ../../../../../.self/data/fontconfig/conf.avail/.
+	# Five levels up from <install-location>/settings/fonts/conf.d is `/`, there
+	# is no /.self, so all 23 links dangled: fontconfig then loaded nothing but
+	# fonts.conf, fc-conflist reported a single active file, and fc-match
+	# answered a math font for serif/sans-serif/monospace (DeBeOS issue 730).
+	#
+	# Correcting the depth is not enough. fontconfig reaches conf.d through its
+	# compiled-in config dir, which is this package's own $settingsDir --
+	# /packages/<port>-<rev>/.settings/fonts/conf.d -- and FcConfigRealFilename()
+	# resolves a relative link target LEXICALLY against that string rather than
+	# letting the kernel resolve it. `.settings` is itself a symlink to the
+	# install location's settings dir, so ../../../data/... collapses lexically
+	# to /packages/<port>-<rev>/data/..., which does not exist: the package's
+	# own files are under .self/. Measured: with ../../../data/fontconfig/
+	# conf.avail links, which every shell and `ls` resolves correctly,
+	# fc-conflist still reports 1 active file.
+	#
+	# An absolute link into the install location's conf.avail satisfies both
+	# resolvers -- the kernel follows it from settings/fonts/conf.d, and
+	# fontconfig takes an absolute target as-is -- and it carries no package
+	# revision, so it survives updates of a `keep-old` conf.d. The recipe is
+	# already specific to the system install location (--with-default-fonts
+	# above), so finddir adds no new assumption here.
+	local availDir=`finddir B_SYSTEM_DATA_DIRECTORY`/fontconfig/conf.avail
+	for i in $settingsDir/fonts/conf.d/*.conf; do
+		local name=`basename "$i"`
+		if [ ! -f "$dataDir/fontconfig/conf.avail/$name" ]; then
+			echo "fontconfig: no conf.avail/$name to link $i to" >&2
+			exit 1
+		fi
+		ln -f -s "$availDir/$name" "$i"
+	done
+}
+
+TEST()
+{
+	make check
+}
