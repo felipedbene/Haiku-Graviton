@@ -178,6 +178,31 @@ ami_snaps() {
 # as ssm-run / haiku-nativebuild): haiku-graviton-<account>-<region>.
 ACCT=$(aws sts get-caller-identity --query Account --output text)
 BUCKET="${HAIKU_GRAVITON_BUCKET:-haiku-graviton-${ACCT}-${REGION}}"
+
+# Everything this bake stages goes to a prefix that is the BAKE's, not the fleet's.
+# It used to stage straight into s3://$BUCKET/bake-scripts/, which is also where
+# `bake-scripts/haiku-nativebuild` -- the LIVE wave driver -- lives, so every bake
+# republished the driver as a side effect of needing a copy on its own box.
+#
+# That is not a race, it is a durable break (issue 738). A wave's build Lambda
+# refreshes the driver from that key and then asserts it against the
+# NATIVEBUILD_VERSION it was DEPLOYED with (run_ssm.py:41, ops-stack.ts's
+# readNativebuildVersion()), so moving the S3 half alone wedges every wave at
+# VERDICT=FAIL RC=3 until someone redeploys the ops stack -- an operator who baked
+# an AMI and never meant to publish a driver, and was told nothing. Publishing that
+# key is `haiku-publish-driver`'s job precisely because it owns both halves of the
+# pair and says what is owed; the bake has no business touching it.
+#
+# Safe to move because every staged artifact is now fetched with a presigned GET
+# (issue 728), so the key only has to be readable by THIS script -- it is no longer
+# a fixed path some other tool resolves. run_ssm.py's DRIVER_KEY is the one reader
+# of the live key, and nothing reads the other five objects at all.
+#
+# One fixed prefix rather than one per bake: it keeps the bake-vs-wave break out
+# while leaving bake-vs-bake exactly as it has always been (last writer wins, with
+# no accumulating scratch to garbage-collect).
+STAGE_PREFIX="s3://$BUCKET/bake-scripts/bake-staging"
+
 # Resolve the base. --from-canonical reads the `canonical=true` tag, which is the
 # authoritative pointer (NOT newest CreationDate, NOT the canonical-ami-id SSM
 # parameter -- that one has drifted before).
@@ -195,8 +220,9 @@ fi
 say "base AMI: $BASE ; provision=$PROVISION ; work bucket: $BUCKET"
 
 # Resolve the builder subnet + SG BY NAME, and do it BEFORE staging: a bake that
-# cannot launch should not first write a fresh set of scripts over the ones in
-# s3://$BUCKET/bake-scripts/, which a concurrent wave may be reading.
+# cannot launch should not first write a fresh set of scripts over $STAGE_PREFIX.
+# That used to matter because a concurrent WAVE read the same prefix; since 738 it
+# does not, and this ordering now only avoids churning the bake's own scratch.
 # The AZ loop matters because the bake instance type is not offered in every AZ,
 # and RunInstances fails on the subnet's AZ, not on a friendlier error.
 if [ -z "$SUBNET" ]; then
@@ -263,9 +289,9 @@ STAGE="haiku-nativebuild haiku-repo-publish"
 [ "$PROVISION" = 1 ] && STAGE="$STAGE haiku-provision-native-builder haiku-ports-overlay-apply"
 for s in $STAGE; do
   [ -f "$HERE/$s" ] || { say "missing $HERE/$s"; exit 1; }
-  aws s3 cp "$HERE/$s" "s3://$BUCKET/bake-scripts/$s" --region "$REGION" >/dev/null
+  aws s3 cp "$HERE/$s" "$STAGE_PREFIX/$s" --region "$REGION" >/dev/null
 done
-say "staged to s3://$BUCKET/bake-scripts/: $STAGE"
+say "staged to $STAGE_PREFIX/: $STAGE"
 
 # The build-wave planner's chain tools ride along too. depclosure.py lives beside
 # the other builder tools (graviton/builder/); haiku-package-closure is here in
@@ -273,9 +299,9 @@ say "staged to s3://$BUCKET/bake-scripts/: $STAGE"
 # pulled onto /boot/home in step 3 so a wave can run them (see #163).
 DEPCLOSURE_SRC="$HERE/../builder/depclosure.py"
 [ -f "$DEPCLOSURE_SRC" ] || { say "missing $DEPCLOSURE_SRC"; exit 1; }
-aws s3 cp "$DEPCLOSURE_SRC" "s3://$BUCKET/bake-scripts/depclosure.py" --region "$REGION" >/dev/null
+aws s3 cp "$DEPCLOSURE_SRC" "$STAGE_PREFIX/depclosure.py" --region "$REGION" >/dev/null
 [ -f "$HERE/haiku-package-closure" ] || { say "missing $HERE/haiku-package-closure"; exit 1; }
-aws s3 cp "$HERE/haiku-package-closure" "s3://$BUCKET/bake-scripts/haiku-package-closure" --region "$REGION" >/dev/null
+aws s3 cp "$HERE/haiku-package-closure" "$STAGE_PREFIX/haiku-package-closure" --region "$REGION" >/dev/null
 say "staged chain tools: depclosure.py haiku-package-closure"
 
 # The DeBeOS recipe overlay has to travel with the bake. A builder clones upstream
@@ -291,7 +317,7 @@ if [ "$PROVISION" = 1 ]; then
   # overlay is a few hundred KB of text; compression buys nothing worth that trap.
   OVERLAY_TAR=$(mktemp -t overlay-XXXXXX.tar)
   tar -cf "$OVERLAY_TAR" -C "$(dirname "$OVERLAY_DIR")" "$(basename "$OVERLAY_DIR")"
-  aws s3 cp "$OVERLAY_TAR" "s3://$BUCKET/bake-scripts/haikuports-patches.tar" --region "$REGION" >/dev/null
+  aws s3 cp "$OVERLAY_TAR" "$STAGE_PREFIX/haikuports-patches.tar" --region "$REGION" >/dev/null
   rm -f "$OVERLAY_TAR"
   say "staged recipe overlay ($(ls -1 "$OVERLAY_DIR"/recipes/*.recipe | wc -l | tr -d ' ') recipes)"
 
@@ -304,7 +330,7 @@ if [ "$PROVISION" = 1 ]; then
   AUXV_SRC="$(cd "$HERE/../.." && pwd)/headers/posix/sys/auxv.h"
   [ -f "$AUXV_SRC" ] || { say "missing $AUXV_SRC"; exit 1; }
   grep -q 'HWCAP2_I8MM' "$AUXV_SRC" || { say "$AUXV_SRC lacks HWCAP2_I8MM -- source tree predates #329?"; exit 1; }
-  aws s3 cp "$AUXV_SRC" "s3://$BUCKET/bake-scripts/auxv.h" --region "$REGION" >/dev/null
+  aws s3 cp "$AUXV_SRC" "$STAGE_PREFIX/auxv.h" --region "$REGION" >/dev/null
   say "staged #329 public header sys/auxv.h"
 fi
 
@@ -355,7 +381,7 @@ if [ "$PROVISION" = 1 ]; then
   "$HERE/ssm-run" "$IID" -t 2400 <<EOF
 set -eu
 $REMOTE_FETCH_PRELUDE
-fetch '$(presign "s3://$BUCKET/bake-scripts/haiku-provision-native-builder")' /boot/home/haiku-provision-native-builder
+fetch '$(presign "$STAGE_PREFIX/haiku-provision-native-builder")' /boot/home/haiku-provision-native-builder
 chmod +x /boot/home/haiku-provision-native-builder
 # Pass the work bucket so the fetch shims cache SOURCE tarballs to the shared S3
 # tier (issue #162), and the DeBeOS source mirror so haikuporter's fallback URI
@@ -367,7 +393,7 @@ chmod +x /boot/home/haiku-provision-native-builder
 # (issue 728): the provisioner runs ON the box, where there is no S3 client, so
 # it cannot resolve an s3:// URI itself. It still accepts AUXV_OVERLAY_S3 for a
 # box that does have a client, and prefers the URL when both are set.
-SRCCACHE_S3="s3://$BUCKET/srccache" DOWNLOAD_MIRROR="$DOWNLOAD_MIRROR" AUXV_OVERLAY_S3="s3://$BUCKET/bake-scripts/auxv.h" AUXV_OVERLAY_URL='$(presign "s3://$BUCKET/bake-scripts/auxv.h")' /boot/home/haiku-provision-native-builder
+SRCCACHE_S3="s3://$BUCKET/srccache" DOWNLOAD_MIRROR="$DOWNLOAD_MIRROR" AUXV_OVERLAY_S3="$STAGE_PREFIX/auxv.h" AUXV_OVERLAY_URL='$(presign "$STAGE_PREFIX/auxv.h")' /boot/home/haiku-provision-native-builder
 EOF
   # Overlay BEFORE the cache warm-up, so the dependency infos baked into the AMI
   # are computed from the recipes we will actually build with.
@@ -378,9 +404,9 @@ $REMOTE_FETCH_PRELUDE
 cd /boot/home
 # UNCOMPRESSED tar to match the staging above: \`tar -z\` fails on the Haiku SSM
 # shell ("gzip: Cannot exec") because its Linux-shaped PATH omits /boot/system/bin.
-fetch '$(presign "s3://$BUCKET/bake-scripts/haikuports-patches.tar")' /boot/home/haikuports-patches.tar
+fetch '$(presign "$STAGE_PREFIX/haikuports-patches.tar")' /boot/home/haikuports-patches.tar
 tar -xf /boot/home/haikuports-patches.tar -C /boot/home
-fetch '$(presign "s3://$BUCKET/bake-scripts/haiku-ports-overlay-apply")' /boot/home/haiku-ports-overlay-apply
+fetch '$(presign "$STAGE_PREFIX/haiku-ports-overlay-apply")' /boot/home/haiku-ports-overlay-apply
 chmod +x /boot/home/haiku-ports-overlay-apply
 /boot/home/haiku-ports-overlay-apply /boot/home/haikuports-patches /boot/home/haikuports
 EOF
@@ -401,10 +427,10 @@ fi
 "$HERE/ssm-run" "$IID" -t 300 <<EOF
 set -e
 $REMOTE_FETCH_PRELUDE
-fetch '$(presign "s3://$BUCKET/bake-scripts/haiku-nativebuild")' /boot/home/haiku-nativebuild
-fetch '$(presign "s3://$BUCKET/bake-scripts/haiku-repo-publish")' /boot/home/haiku-repo-publish
-fetch '$(presign "s3://$BUCKET/bake-scripts/depclosure.py")' /boot/home/depclosure.py
-fetch '$(presign "s3://$BUCKET/bake-scripts/haiku-package-closure")' /boot/home/haiku-package-closure
+fetch '$(presign "$STAGE_PREFIX/haiku-nativebuild")' /boot/home/haiku-nativebuild
+fetch '$(presign "$STAGE_PREFIX/haiku-repo-publish")' /boot/home/haiku-repo-publish
+fetch '$(presign "$STAGE_PREFIX/depclosure.py")' /boot/home/depclosure.py
+fetch '$(presign "$STAGE_PREFIX/haiku-package-closure")' /boot/home/haiku-package-closure
 chmod +x /boot/home/haiku-nativebuild /boot/home/haiku-repo-publish /boot/home/haiku-package-closure
 ls -l /boot/home/haiku-nativebuild /boot/home/haiku-repo-publish /boot/home/depclosure.py /boot/home/haiku-package-closure
 EOF
@@ -494,4 +520,37 @@ else
   aws ec2 create-tags --resources "$NEW" --region "$REGION" --tags Key=builder-staged,Value=true
   say "NOT repointing $PARAM (per --no-repoint). New AMI: $NEW (tagged builder-staged=true)"
 fi
+
+# 6) Say what a WAVE will actually run, which is not what this bake just baked.
+#
+# The AMI carries the tree's haiku-nativebuild, but a wave does not use it: the
+# build Lambda re-fetches bake-scripts/haiku-nativebuild onto each builder and
+# asserts it against the NATIVEBUILD_VERSION the Lambda was deployed with. Three
+# versions can therefore disagree, and the bake is the last moment anyone is
+# looking. Reported, never enforced -- all three are legitimately allowed to
+# differ, and a bake that produced a good AMI must not fail over a publish it was
+# never asked to perform (issue 738, pairing contract from #506).
+driver_pairing_notice() {
+  local tree pub dep
+  tree=$(sed -n 's/^NATIVEBUILD_VERSION="\([^"]*\)".*/\1/p' "$HERE/haiku-nativebuild" | head -1)
+  pub=$(aws s3 cp "s3://$BUCKET/bake-scripts/haiku-nativebuild" - --region "$REGION" 2>/dev/null \
+          | sed -n 's/^NATIVEBUILD_VERSION="\([^"]*\)".*/\1/p' | head -1 || true)
+  # By name prefix, not a hard-coded physical id: CloudFormation mints a new one
+  # on replacement, and a stale literal here would silently report nothing.
+  dep=$(aws lambda list-functions --region "$REGION" \
+          --query "Functions[?starts_with(FunctionName, 'DebeosOpsStack-BuildFn')].Environment.Variables.NATIVEBUILD_VERSION" \
+          --output text 2>/dev/null | head -1 || true)
+  say "wave driver: baked=${tree:-<none>} published=${pub:-<absent>} deployed=${dep:-<unknown>}"
+  if [ -n "$pub" ] && [ -n "$dep" ] && [ "$pub" != "$dep" ]; then
+    say "WARNING the published driver ($pub) and the deployed BuildFn ($dep) disagree:" \
+      "EVERY wave will fail VERDICT=FAIL RC=3 until the ops stack is redeployed." \
+      "Run: cdk deploy DebeosOpsStack (from graviton/pipeline; cdk diff FIRST, the live stack has drifted -- issue 611)."
+  elif [ -n "$tree" ] && [ -n "$pub" ] && [ "$tree" != "$pub" ]; then
+    say "NOTE this bake did not publish the driver (it never should -- issue 738)." \
+      "A wave still runs $pub, not the $tree in this AMI. To ship it:" \
+      "graviton/scripts/haiku-publish-driver && cdk deploy DebeosOpsStack."
+  fi
+}
+driver_pairing_notice || say "warning: could not read back the driver versions (non-fatal)"
+
 say "done."
