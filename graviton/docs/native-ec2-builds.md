@@ -192,6 +192,77 @@ Harvest with `haiku-mgmt-agent s3 cp .../packages/<pkg>.hpkg s3://…` and publi
 > The per-package prereq chase above is what a baked builder AMI eliminates — bake the
 > toolchain + a common prereq set so builds start clean.
 
+## Recovering a builder whose boot volume filled up
+
+**Issue 770, open.** A builder whose 20 GiB BFS root reaches 0 free stops answering
+*every* channel: SSM goes `ConnectionLost` in the same minute, `sshd` accepts the TCP
+connection and never sends a banner, and EC2's instance reachability check flips to
+`impaired` while the system check stays `ok`. The serial console shows no panic — the
+kernel is alive and still allocating. There is **no in-place recovery**: the one thing
+you would do (log in and delete something) is the thing that stops working.
+
+So the procedure is about the *volume*, not the instance.
+
+**1. Do not terminate it.** The hpkgs the run already built are on that volume and
+nowhere else — harvest runs at the END of a run, and on the current builder image it is
+a fatal no-op anyway (issue 728). Terminating with the default `DeleteOnTermination=true`
+destroys them.
+
+**2. Stop, then start.** `stop-instances` is a hard power-off from the guest's point of
+view, but the EBS root survives it, and a fresh boot gets you a running system with a
+(still full) volume. This is a **modify** on a running instance, so it needs explicit
+operator sign-off — it is not something automation should do on its own.
+
+> After any stop/start, come back over **SSH**, not SSM. The SSM registration does not
+> survive a reboot on this image, and `sshd` is ed25519-only — see
+> `haiku-launch`/`haiku-ssh` and the access notes. Have the tunnel open before you need
+> it: `aws ec2-instance-connect open-tunnel --instance-id <iid> --remote-port 22
+> --local-port 22NN`, then `graviton/scripts/haiku-ssh -p 22NN baron@127.0.0.1`.
+
+**3. Delete with a budget, not with `rm -rf`.** The tree to remove is usually
+`/boot/home/haikuports/work-*` or a single port's work directory, and on BFS a 7 GiB
+delete takes minutes. Do **not** wrap it in a short `timeout` — a `timeout 110` has
+already killed one of these mid-delete, which leaves the tree half-removed and the
+volume still full. Run it under `nohup`, poll `df -k /boot` separately.
+
+**4. If it does not come back from the stop/start**, the volume is still readable: detach
+it and attach it to a NEW Haiku builder as a secondary device (`/dev/sdf` →
+`/dev/disk/nvme/1/...`), mount it read-only, and copy the hpkgs out. BFS is not readable
+from a Linux host, so a Linux rescue instance is no help here.
+
+**5. Prevention is the driver's job now.** `haiku-nativebuild` refuses to start a port
+with less than `NB_DISK_FLOOR_MIB` (default 3072 MiB) free, aborts the run on an ENOSPC
+verdict rather than walking the remaining ports into the same wall, and the wave records
+that as `capacity`, not as a port failure (issue 769, playbook Class 41). That makes this
+state much harder to reach — it does not make it impossible, because a single `haikuporter`
+invocation can still consume the floor in one step.
+
+### What is established about the cause, and what is not
+
+**Established.** BFS keeps **no free-space reserve for root or for an interactive user**.
+`BlockAllocator::InitializeAndClearBitmap` reserves only metadata — the boot block, the log area and
+the block bitmap (`src/add-ons/kernel/file_systems/bfs/BlockAllocator.cpp:621-635`) — and
+the allocation paths just return `B_DEVICE_FULL` when the bitmap is exhausted
+(`:1020`, `:1148`, `:1163`). There is no uid carve-out anywhere in the allocator, so the
+usual ext4/UFS defence (a few percent only the superuser can dip into) does not exist
+here. That is a design gap, not a bug being hit.
+
+**Ruled out: the swap file.** The obvious theory — paging dies because the swap file
+cannot grow — does not hold. BFS has no sparse files, and the kernel sizes swap once at
+boot and materialises it with `B_STAT_SIZE`, so its blocks are **already allocated**
+before the volume fills (`src/system/kernel/vm/VMAnonymousCache.cpp:1763-1791`; the size
+is min(RAM, 25% of free) for automatic swap, `:1689-1697` and `:1771-1773`). Writing a
+page into an already-allocated range needs no new allocation, so a full volume does not
+stop paging. Worth recording as a dead end so the next person does not spend the same
+hour on it.
+
+**Not established: what `sshd` blocks on.** This is issue 770's open half. The hypothesis
+is a write on the pre-auth path that blocks instead of returning `ENOSPC`, which a
+free-space reserve alone would not fix — but there is no `file:line` for it, and
+confirming it needs the box in that state, which is exactly the state in which nothing
+can be observed from inside it. Instrumenting this properly means reproducing the
+condition deliberately on a disposable builder with a serial console attached.
+
 ## Standing rule
 
 Do **not** ship feature-capped builds (a backend/loader/subpackage disabled just to go
