@@ -33,7 +33,10 @@ git clone --depth 1 --template= -b v1.4.2 \
 	https://github.com/AOMediaCodec/libavif.git libavif-src
 cd libavif-src && mkdir build && cd build
 # -z max-page-size=4096 for the same reason as every other image in this
-# recipe: runtime_loader's inter-segment hole budget (DeBeOS #720).
+# recipe: runtime_loader's inter-segment hole budget (DeBeOS #720). Fixed in
+# DeBeOS trunk (067dce7ff5), but not retirable until the builder AMI boots an
+# image carrying that loader -- retirement condition and check are recorded in
+# patches/ladybird-haiku.patch (Meta/CMake/compile_options.cmake hunk).
 cmake -G Ninja -DCMAKE_INSTALL_PREFIX="$PREFIX" -DCMAKE_BUILD_TYPE=Release \
   -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++ \
   -DCMAKE_AR=/boot/system/bin/ar -DCMAKE_RANLIB=/boot/system/bin/ranlib \
