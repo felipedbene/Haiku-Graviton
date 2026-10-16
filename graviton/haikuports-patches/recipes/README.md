@@ -299,6 +299,13 @@ builder (hpkg exists) and harvested to the pool.
 | `draco-1.5.6.recipe` | `-DCMAKE_INTERPROCEDURAL_OPTIMIZATION=ON` → `OFF` | native gcc has no LTO plugin: `cc1plus: error: LTO support has not been enabled in this configuration` / `'-fno-fat-lto-objects' are supported only with linker plugin` |
 | `bonnie++-2.00a.recipe` | `autoreconf` → `autoreconf -fi` | `configure.in: error: required file 'install-sh' not found; try running autoreconf --install` |
 | `autoconf2.71-2.71.recipe` | bare `./configure $configureDirArgs` → `runConfigure ./configure` | `configure: error: cannot guess build type; you must specify one` — the sibling `autoconf-2.72.recipe` already uses `runConfigure` (which passes the host triple), so this mirrors the working pattern |
+| `tesseract-3.05.02.recipe` | bare `autogen.sh` → `./autogen.sh`, and `runConfigure configure` → `runConfigure ./configure` | first command of `BUILD()` dies: `/port.recipe: line 86: autogen.sh: command not found` → `Warning: Command '['bash', '-c', '. /wrapper-script']' returned non-zero exit status 127`. The chroot has no `.` on `PATH`; the house idiom is `runConfigure ./configure` (HaikuPorter's own `generic_*.recipe` templates). Same class as `autoconf2.71` above. Native RC=0 after the fix: `tesseract-3.05.02-4-arm64.hpkg` (1,459,791 B) + `_devel` (81,219 B) + `_debuginfo` (10,694,986 B). Issue 702's critical path — `devel:libtesseract` is the sole unmet build-require of `ghostscript_gpl`, which is the sole unmet build-require of `texlive_core`, the only provider of gri's `cmd:tex` |
+
+`tesseract-3.05.02.recipe` is the one row above that is **not yet in the pool**: it is
+proven RC=0 on the builder with the hpkgs sitting in
+`/boot/home/haikuports/packages/`, but harvest-to-S3 is a silent no-op on the current
+image (issue 728), and publishing is a gated human step. Treat its pool availability as
+pending, not done.
 
 `devil-1.8.0` (media-libs) was also requeued failed→built in this pass with **no
 recipe change**: its `#136` failure was a transient dep-resolution oscillation in
