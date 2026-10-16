@@ -5,7 +5,7 @@ HOMEPAGE="https://sourceforge.net/projects/ftgl"
 COPYRIGHT="2001-2004 Unicode, Inc.
 	2001-2009 Henry Maddocks"
 LICENSE="MIT"
-REVISION="3"
+REVISION="4"
 SOURCE_URI="https://sourceforge.net/projects/canvasdraw/files/5.11.1/Docs%20and%20Sources/ftgl-${portVersion}_Sources.tar.gz"
 CHECKSUM_SHA256="690a7f80375846765f5cbbc10d0d859bfb62281441ff5878f818ced447fca763"
 SOURCE_DIR="ftgl"
@@ -86,27 +86,64 @@ BUILD()
 	grep -q '(char\*)&outline.tags' src/FTVectoriser.cpp \
 		|| { echo "ftgl: FTVectoriser tag-pointer sed did not apply"; exit 1; }
 
-	# tecmake derives word size and byte order from `uname -p`, which on Haiku
-	# returns the literal string "other". That matches neither its `x86`/`arm`
-	# little-endian cases nor its `x64`/`ia64` 64-bit cases, so tecmake.mak
-	# falls through to its defaults and compiles arm64 with
-	#   -DTEC_BIGENDIAN -DTEC_32
-	# on a little-endian LP64 target. FTGL's own sources never read these
-	# macros (so FTGL itself is not miscompiled), but tecmake does -- they pick
-	# its `be32`/`le64` Lua-object subdirectory and `_be32`/`_le64` suffixes --
-	# and any tecmake port that consults them would be wrong on Graviton
-	# (filed as #701 -- the class fix belongs in tecmake, not here).
-	# State the truth instead of inheriting the fallback. These are plain `=`
-	# assignments in tecmake.mak, and a `make VAR=value` command-line variable
-	# overrides a makefile `=` and propagates to the recursive sub-make, so
-	# unlike the CXXFLAGS case this override genuinely reaches the compiler
-	# without clobbering anything else.
-	local tecArgs=
-	if [ "$effectiveTargetArchitecture" = arm64 ]; then
-		tecArgs="TEC_WORDSIZE=TEC_64 TEC_BYTEORDER=TEC_LITTLEENDIAN"
-	fi
+	# Teach tecmake's own detection what arm64 is, instead of overriding its
+	# conclusion from the command line (issue 701).
+	#
+	# tecmake.mak:212-231 derives byte order and word size from TEC_SYSARCH,
+	# and :29-31 singles Haiku out to take TEC_SYSARCH from `uname -p` rather
+	# than the `uname -m` every other platform gets. Measured, by pinning
+	# TEC_SYSARCH and evaluating that chain:
+	#
+	#   x86     LITTLEENDIAN 32      arm64    BIGENDIAN    32   <- wrong
+	#   x64     LITTLEENDIAN 64      aarch64  BIGENDIAN    32   <- wrong
+	#   arm     LITTLEENDIAN 32      other    BIGENDIAN    32   <- wrong
+	#   ia64    LITTLEENDIAN 64      ppc      BIGENDIAN    32
+	#
+	# "arm64" neither contains "x86" nor equals "arm", so byte order falls
+	# through to TEC_BIGENDIAN; it does not equal "x64" and BUILD_64 is unset,
+	# so word size falls through to TEC_32. Note that "arm64" and "other" land
+	# in exactly the same place -- so making `uname -p` truthful (the
+	# provisioner now installs the pool coreutils instead of leaving the
+	# image's bootstrap one, which is what made it answer "other") does NOT on
+	# its own fix this. Both halves are needed and neither is sufficient.
+	#
+	# The two macros are not merely compile defines: tecmake reads them at
+	# :503-530 to choose the be32/le64 object directory and the _be32/_le64
+	# filename suffixes, so a build and whatever later looks for its output can
+	# disagree. FTGL's own sources never consult them, so FTGL is not
+	# miscompiled -- this is a latent class defect that bites the first tecmake
+	# port whose sources do.
+	#
+	# Patching the detection rather than passing TEC_WORDSIZE/TEC_BYTEORDER on
+	# the command line (which did work -- a command-line variable beats a
+	# makefile `=` and propagates to sub-makes) because the command-line form
+	# has to be repeated, correctly, in every tecmake recipe forever, and it
+	# leaves tecmake still *believing* the target is big-endian 32-bit
+	# everywhere else it asks. Anchored before the first `STDDEFS :=` because
+	# that is a `:=` -- immediately expanded -- so an append at end of file
+	# would be read too late to matter.
+	#
+	# Not taking issue 701's option (2), making an unrecognised TEC_SYSARCH
+	# fatal: tecmake supports platforms whose arch it legitimately does not
+	# enumerate, and they build correctly today on the defaults.
+	awk '
+		/^STDDEFS[ \t]*:=/ && !done {
+			print "ifeq ($(TEC_SYSARCH), arm64)"
+			print "  TEC_BYTEORDER = TEC_LITTLEENDIAN"
+			print "  TEC_WORDSIZE = TEC_64"
+			print "endif"
+			print "ifeq ($(TEC_SYSARCH), aarch64)"
+			print "  TEC_BYTEORDER = TEC_LITTLEENDIAN"
+			print "  TEC_WORDSIZE = TEC_64"
+			print "endif"
+			done = 1
+		}
+		{ print }
+	' tecmake.mak > tecmake.mak.701 && mv tecmake.mak.701 tecmake.mak
+	grep -q 'ifeq ($(TEC_SYSARCH), arm64)' tecmake.mak \
+		|| { echo "ftgl: tecmake.mak arm64 detection insert did not apply"; exit 1; }
 
-	make $jobArgs $tecArgs
+	make $jobArgs
 }
 
 INSTALL()
