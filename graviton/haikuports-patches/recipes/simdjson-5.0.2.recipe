@@ -25,8 +25,9 @@ LICENSE="Apache v2"
 # See the icu78 recipe for the -Wl,-z,noseparate-code note -- it applies here too.
 REVISION="1"
 SOURCE_URI="$HOMEPAGE/archive/refs/tags/v$portVersion.tar.gz"
-# TODO fill on the first haikuporter fetch of v5.0.2.
-CHECKSUM_SHA256="UNVERIFIED-FILL-ON-FIRST-FETCH"
+# Upstream tag v5.0.2 of github.com/simdjson/simdjson, GitHub's generated tag
+# archive (8331647 bytes, top-level dir simdjson-5.0.2/).
+CHECKSUM_SHA256="09de4289a26d3a0453569901a3837450b5b98a5c317d635eeee8e2a82b1ebe6b"
 SOURCE_FILENAME="simdjson-v$portVersion.tar.gz"
 
 ARCHITECTURES="all !x86_gcc2"
