@@ -22,6 +22,33 @@ REQUIRES="
 
 BUILD_REQUIRES="
 	haiku_devel
+	# A `tex` that merely EXISTS is not enough -- it has to be a working one.
+	# `cmd:tex` from app-text/texlive_core is the kpathsea-linked BINARY only;
+	# the macros, formats and fonts live in the texmf tree shipped by
+	# app-text/texlive. With texlive_core alone the refcard step got past
+	# `tex: command not found` and straight into (measured natively on arm64,
+	# issue 702):
+	#   warning: kpathsea: configuration file texmf.cnf not found in these
+	#     directories: .../data/texlive/texmf-dist/web2c:...
+	#   kpathsea: Running mktexfmt tex.fmt
+	#   /boot/system/bin/mktexfmt: kpsewhich -var-value=TEXMFROOT failed,
+	#     aborting early.
+	#   I can't find the format file `tex.fmt'!
+	#   make[2]: *** [Makefile:851: refcard.ps] Error 1
+	# So declare what the two cards actually consume: plain TeX plus the
+	# tex.ini/hyphen.tex pair `mktexfmt` needs to dump tex.fmt, the Computer
+	# Modern fonts they select by name (cmbx10, cmr6, cmsy6, cmr8, cmbx8,
+	# cmti8, cmtt8, cmsy8 -- refcard.tex:86-95, cmdrefcard.tex:84-93), and
+	# dvips' config.ps/psfonts.map. All six resolvables come from the
+	# texlive_basic subpackage. This is the same split dvipng and xindy use:
+	# the executables as cmd:* in BUILD_PREREQUIRES, the texmf content as
+	# tex:* in BUILD_REQUIRES.
+	tex:plain
+	tex:tex_ini_files
+	tex:hyphen_base
+	tex:knuth_lib
+	tex:cm
+	tex:dvips
 	"
 # cmd:tex / cmd:dvips were MISSING from the upstream recipe, and they are hard
 # requirements, not optional doc polish. gri's `doc/Makefile:893` has
@@ -35,8 +62,7 @@ BUILD_REQUIRES="
 # command not found` / `make[2]: *** [Makefile:851: refcard.ps] Error 1`
 # AFTER a fully successful compile and link. Declaring them makes haikuporter
 # fail fast and name the real missing dependency instead. See #592 for the
-# class-35 and Class-6 triage, and #702 for why `cmd:tex` is not yet
-# satisfiable in the DeBeOS pool (no texlive built for arm64).
+# class-35 and Class-6 triage.
 BUILD_PREREQUIRES="
 	cmd:gcc
 	cmd:ld

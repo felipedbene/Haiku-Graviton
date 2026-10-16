@@ -23,9 +23,12 @@
 #
 #   --mutate   Re-run the suite against the ORIGINAL, evidence-discarding code: the
 #              old install_dep (`pkgman install ... >/dev/null 2>&1`) AND the old
-#              capture (pre-#505 narrow lexicon, no first-error window). The suite
-#              MUST go red: if it stays green it is not testing the mechanism. Exit 0
-#              means "mutation detected" (test is alive); exit 1 means it is vacuous.
+#              capture (pre-#505 narrow lexicon, no first-error window), and the
+#              pre-issue-702 absence of a ports-tree mutex (a no-op nb_lock_acquire,
+#              which is exactly what the driver did when two runs clobbered one
+#              chroot). The suite MUST go red: if it stays green it is not testing the
+#              mechanism. Exit 0 means "mutation detected" (test is alive); exit 1
+#              means it is vacuous.
 set -u
 MUTATE=0
 [ "${1:-}" = "--mutate" ] && MUTATE=1
@@ -113,6 +116,7 @@ install_dep() { feed | pkgman install "$1" >/dev/null 2>&1; }
 NB_DIAG_RE='error:|Error [0-9]+|CMake Error|fatal error:|cannot find -l|command not found|No such file or directory|undefined reference|multiple definition of|does not name a type|ModuleNotFoundError|No module named|Read-only file system|not supported|unsupported|unknown word-size|guess (build|host) type|required file .* not found|unable to resolve|could not be resolved|is not available, please install|prepareInstalledDevelLib|possibly undefined macro|narrowing conversion|CHECKSUM|checksum'
 emit_first_error_window() { :; }
 have_hpkg() { ls "$GP/${1}"-[0-9]*.hpkg >/dev/null 2>&1; }
+nb_lock_acquire() { return 0; }
 MUT
 fi
 PATH="$work/bin:$PATH"
@@ -380,6 +384,67 @@ hpkg_case hpkg_sibling cmake_haiku no
 : > "$GP/sdl2-2.30.9-1-arm64.hpkg"
 hpkg_case hpkg_numeric sdl2 yes
 hpkg_case hpkg_absent nosuchport no
+
+# 13. THE PORTS-TREE MUTEX (issue 702). Two haikuporter runs over one $HP is what
+#     turned a healthy texlive_core build into `mkdir: cannot create directory
+#     '/packages/texlive_core-2026-1': Read-only file system` six hours in: the second
+#     run's chroot-setup stripped the first run's build packages, then aborted on
+#     `unmount: unmounting failed: Device/File/Resource busy` before it could remount
+#     packagefs. Three arms matter and they pull in opposite directions, which is why
+#     each is asserted separately -- a guard that only ever refuses wedges the builder
+#     after one killed driver, and a guard that only ever reclaims is not a guard.
+lock_rc_case() {
+	if [ "$2" = "$3" ]; then
+		pass=$((pass+1)); echo "  ok    $1: rc=$2"
+	else
+		fail=$((fail+1)); echo "  FAIL  $1: rc=$2, wanted $3"
+	fi
+}
+lock_bool_case() {
+	if [ "$2" = yes ]; then
+		pass=$((pass+1)); echo "  ok    $1"
+	else
+		fail=$((fail+1)); echo "  FAIL  $1"
+	fi
+}
+HP="$work/hp"; mkdir -p "$HP"
+NB_LOCK="$HP/.nativebuild.lock"
+NB_LOCK_WAIT_SECS=0   # a test never waits: refuse or reclaim immediately
+
+# (a) A free tree is taken, and the lock records WHO holds it -- the stale check is
+#     only ever as good as that record.
+NB_LOCK_HELD=""
+nb_lock_acquire >/dev/null 2>&1; rc=$?
+lock_rc_case lock_free "$rc" 0
+[ "$(cat "$NB_LOCK/pid" 2>/dev/null)" = "$$" ] && g=yes || g=no
+lock_bool_case "lock_owner: the lock names this process" "$g"
+
+# (b) Held by a LIVE process: refuse, say so, and leave the holder's lock alone.
+mkdir -p "$NB_LOCK"
+sleep 120 & livepid=$!
+echo "$livepid" > "$NB_LOCK/pid"
+NB_LOCK_HELD=""
+out=$(nb_lock_acquire 2>&1); rc=$?
+lock_rc_case lock_live_refused "$rc" 1
+printf '%s' "$out" | grep -q "REFUSING TO RUN" && g=yes || g=no
+lock_bool_case "lock_live_banner: the operator is told which pid holds the tree" "$g"
+[ -d "$NB_LOCK" ] && g=yes || g=no
+lock_bool_case "lock_live_kept: the holder's lock survives a refused acquire" "$g"
+kill "$livepid" 2>/dev/null
+wait "$livepid" 2>/dev/null
+
+# (c) Held by a pid that is GONE: reclaim, so one killed driver cannot wedge the box.
+mkdir -p "$NB_LOCK"
+echo "$livepid" > "$NB_LOCK/pid"
+NB_LOCK_HELD=""
+out=$(nb_lock_acquire 2>&1); rc=$?
+lock_rc_case lock_stale_reclaimed "$rc" 0
+printf '%s' "$out" | grep -q "reclaiming stale" && g=yes || g=no
+lock_bool_case "lock_stale_banner: the reclaim is reported, not silent" "$g"
+
+# nb_lock_acquire installs its own EXIT trap; put the suite's cleanup back.
+rm -rf "$NB_LOCK"
+trap 'rm -rf "$work"' EXIT INT TERM
 
 echo "----"
 echo "pass=$pass fail=$fail"
