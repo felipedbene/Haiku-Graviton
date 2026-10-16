@@ -533,18 +533,27 @@ echo "   index sha256=$(cat "$RO/repo.sha256")"
 # without failing, so this blocks NEW incoherence without blocking unrelated
 # publishes. There is deliberately no skip switch: to accept an instance, add it
 # to the baseline with a reason, where it is auditable and version-controlled.
+#
+# A MISSING tool is a hard failure, not a warning. This used to print a NOTE and
+# publish anyway, and the first publish shipped from a remote peer proved why that
+# is wrong: haiku-repo-publish-ephemeral base64'd only this script onto the peer,
+# so the sibling lookup below found nothing and the entire gate was skipped in
+# silence -- on the one publish path that is actually usable today. A check that
+# disables itself whenever the deployment forgets to carry it is not a check.
+# Absence is a packaging bug in the caller, and the caller is where it gets fixed.
 COHERENCE_TOOL="$HERE_RA/haiku-repo-coherence"
-if [ -x "$COHERENCE_TOOL" ]; then
-	echo "== 4b. coherence: every '==' requirement satisfiable within the union =="
-	if ! "$COHERENCE_TOOL" --repo "$RO/repo"; then
-		die "repo coherence check FAILED -- refusing to upload. The union pool \
+[ -x "$COHERENCE_TOOL" ] || die "coherence tool not found or not executable at \
+$COHERENCE_TOOL -- refusing to upload. The issue-708 gate resolves it as a \
+sibling of this script, so whatever shipped this script has to ship \
+haiku-repo-coherence, hpkg_meta.py and haiku-repo-coherence.baseline beside it \
+(and chmod +x the tool). Nothing has been uploaded; green is unchanged."
+echo "== 4b. coherence: every '==' requirement satisfiable within the union =="
+if ! "$COHERENCE_TOOL" --repo "$RO/repo"; then
+	die "repo coherence check FAILED -- refusing to upload. The union pool \
 contains package(s) whose exact ('==') requirement nothing in the pool can \
 satisfy, so they would be published uninstallable (issue 708). Nothing has been \
 uploaded; green is unchanged. Republish the subpackage(s) together with the base \
 they pin, or baseline the instance with a reason."
-	fi
-else
-	echo "   NOTE: $COHERENCE_TOOL not found or not executable -- coherence UNCHECKED for this publish (issue 708)" >&2
 fi
 
 echo "== 5. upload packages (new, immutable) then index (last) =="
