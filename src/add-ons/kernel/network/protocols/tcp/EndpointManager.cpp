@@ -273,8 +273,17 @@ EndpointManager::SetConnection(TCPEndpoint* endpoint, const sockaddr* _local,
 	}
 
 	// We want to create a connection for (local, peer), so check to make sure
-	// that this pair is not already in use by an existing connection.
-	if (_LookupConnection(*local, peer) != NULL)
+	// that this pair is not already in use by an existing connection -- by
+	// some *other* endpoint, that is. Connect() only gets here from CLOSED or
+	// LISTEN, and a listener is registered against an empty peer, so the one
+	// endpoint this lookup could find and must not refuse is this one: its own
+	// registration from the connection that just ended. Counting that as a
+	// conflict made connect() to the same peer again fail with EADDRINUSE for
+	// the rest of the socket's life -- the reconnect-after-reset sequence --
+	// even though nothing else holds the tuple and the removal below is
+	// already there to replace the stale entry.
+	TCPEndpoint* other = _LookupConnection(*local, peer);
+	if (other != NULL && other != endpoint)
 		return EADDRINUSE;
 
 	endpoint->LocalAddress().SetTo(*local);
