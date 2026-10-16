@@ -320,6 +320,10 @@ Ladybird ones.
     a `BUILD_TESTING=ON` headless `test-web` still gets Ladybird's resources —
     that block is also what leaves `CMakeLists.txt` at the blob the UI patch
     expects.
+  - `Libraries/LibCompositing/CMakeLists.txt`: `add_dependencies(LibCompositing
+    generate_GLFunctions.cpp)` — the WebGL codegen edge upstream never draws.
+    See "WebGL `GLFunctions.h` codegen" below; `phase_configure` asserts this
+    one survived the patch re-cut, because nothing else in the build does.
   - `Libraries/LibJS/CMakeLists.txt`: `FLAP_ARCH` fallback via `uname -m`
     (Haiku `uname -p` returns `other`, so `CMAKE_SYSTEM_PROCESSOR` is wrong).
   - `LibCore/Environment.cpp`: no `secure_getenv` on Haiku → plain `getenv`.
@@ -338,6 +342,73 @@ Ladybird ones.
   `CMAKE_SYSTEM_PROCESSOR` arrives as `other`, so libpng's ARM block actually
   runs. See the patch's own preamble for the four undefined NEON symbols it
   removes.
+
+## WebGL `GLFunctions.h` codegen
+
+`Libraries/LibCompositing/WebGL/GLFunctions.{h,cpp}` are generated from
+`Libraries/LibCompositing/WebGL/GLFunctions.json` by
+`Meta/Generators/generate_libweb_webgl_functions.py`, wired up at
+`Meta/CMake/libcompositing_generators.cmake:4-12`. On a from-scratch build the
+generator never ran, and the recipe's own build line
+(`ninja ladybird WebContent WebDriver`) died with:
+
+```
+In file included from Libraries/LibCompositing/WebGL/WebGLCommandList.cpp:8:
+In file included from Libraries/LibCompositing/WebGL/WebGLCommandList.h:15:
+<build>/Libraries/LibCompositing/WebGL/WebGLCommands.h:8:10: fatal error:
+    'LibCompositing/WebGL/GLFunctions.h' file not found
+    8 | #include <LibCompositing/WebGL/GLFunctions.h>
+```
+
+Three upstream facts combine into that:
+
+1. `invoke_py_generator` wraps the generator in a custom target created
+   **without** `ALL` (`add_custom_target("generate_${name}" …)`,
+   `Meta/CMake/utils.cmake:80`), so nothing builds it unless some target
+   depends on it.
+2. The only edge to a generator comes from `ladybird_generated_sources()`
+   (`Meta/CMake/utils.cmake:4-13`), which walks `GENERATED_SOURCES` and emits
+   `add_dependencies(<target> generate_<basename>)`. `GLFunctions.cpp` is
+   declared only by `Services/Compositor/CMakeLists.txt:33`
+   (`${CMAKE_BINARY_DIR}/Libraries/LibCompositing/WebGL/GLFunctions.cpp`) —
+   deliberately, because the GL entry points live in the Compositor process, so
+   the `.cpp` must not be compiled into `liblagom-compositing` as well.
+   `Libraries/LibCompositing/CMakeLists.txt:36-44` lists its sibling
+   `WebGL/WebGLCommands.cpp` but not `GLFunctions.cpp`, so LibCompositing gets
+   an edge to `generate_WebGLCommands.cpp` and none to
+   `generate_GLFunctions.cpp`.
+3. LibCompositing nonetheless compiles two translation units that need the
+   header: its own `WebGL/WebGLCommandList.cpp` (via `WebGLCommandList.h:15` →
+   generated `WebGLCommands.h:8`) and the generated `WebGL/WebGLCommands.cpp`.
+
+So the header is reachable only from a build that also links
+`compositorservice`. `ninja ladybird WebContent WebDriver` does not: the
+Compositor is a separate executable. `ladybird_codegen_accumulator`, the meta
+target that collects every generator, is likewise not `ALL`
+(`Meta/CMake/targets.cmake:185-187`), so it does not rescue a plain `ninja`
+either.
+
+The fix is a dependency-only edge, added after `ladybird_lib()` (which is what
+creates the target):
+
+```cmake
+add_dependencies(LibCompositing generate_GLFunctions.cpp)
+```
+
+Dependency-only on purpose: putting `WebGL/GLFunctions.cpp` into
+LibCompositing's `GENERATED_SOURCES` instead — as the superseded
+`../ports/ladybird/ladybird-haiku-arm64-wave3.patch:75` did — compiles it twice,
+because `ladybird_lib`/`ladybird_bin` pass `${GENERATED_SOURCES}` straight to
+`add_library`/`add_executable`, and `compositorservice` already compiles it.
+
+An audit of the generated graph on the builder found this is the **only** one of
+the 63 `generate_*` targets whose output has no path from its consumer: every
+other generated header is listed in some target's `SOURCES` or
+`GENERATED_SOURCES`, which makes CMake add the generated file itself to that
+target's `cmake_object_order_depends_target_*` node (`HSTSPreloadData.h`, listed
+in `SOURCES` at `Libraries/LibHTTP/CMakeLists.txt:19`, is covered that way).
+That is why a dropped hunk here is invisible until a compile two hours in, and
+why `phase_configure` now greps `build.ninja` for the edge instead.
 
 ## WASM Cranelift JIT
 
