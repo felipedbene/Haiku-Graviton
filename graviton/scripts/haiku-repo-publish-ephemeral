@@ -215,13 +215,19 @@ launch_peer() {
 	# with a badly disguised cause, because the symptom is a wall of per-object
 	# "download failed" lines rather than one clear message.
 	local diskopt="--block-device-mappings DeviceName=/dev/sda1,Ebs={VolumeSize=${DISK},VolumeType=gp3,DeleteOnTermination=true}"
+	# auto-stop=no in the tag spec below: SpringClean's shift-end sweep calls
+	# StopInstances on every instance that lacks it and consults no liveness
+	# signal at all (issue 761). A publish is only minutes, but those minutes
+	# include `haiku-repo-add` syncing the whole green pool down and the new
+	# index back up, and a stop landing in there is the one window where the
+	# LIVE repo can be left half-written.
 	id=$(aws --region "$region" ec2 run-instances \
 		--image-id "$ami" --instance-type "$TYPE" \
 		--subnet-id "$SUBNET" --security-group-ids "$SG" $keyopt \
 		--iam-instance-profile "Name=$PROFILE" \
 		$diskopt \
 		--user-data "$userdata" \
-		--tag-specifications "ResourceType=instance,Tags=[{Key=Project,Value=haiku-graviton},{Key=Name,Value=haiku-repo-publisher},{Key=ephemeral,Value=true}]" \
+		--tag-specifications "ResourceType=instance,Tags=[{Key=Project,Value=haiku-graviton},{Key=Name,Value=haiku-repo-publisher},{Key=ephemeral,Value=true},{Key=auto-stop,Value=no}]" \
 		--query 'Instances[0].InstanceId' --output text 2>&1)
 	case "$id" in
 		i-*) ;;

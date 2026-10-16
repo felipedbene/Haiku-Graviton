@@ -1,0 +1,261 @@
+#!/usr/bin/env python3
+"""haiku-launch-selftest [--mutate]
+
+Offline test that every instance this project launches is exempt from the
+account's SpringClean janitor. No AWS, no network: it reads the committed
+launchers and executes the one branch in haiku-launch that decides the tag.
+
+WHY IT EXISTS. On 2026-10-16T20:06:24Z SpringClean's daily shift-end sweep
+called StopInstances on all three native arm64 builders at once -- one 75
+minutes into an haikuporter packaging phase, one 95% of the way through a
+3-hour Ladybird build (issue 761). It reads no liveness signal: not CPU, not
+network, not SSM. An instance is stopped unless it carries `auto-stop=no`, full
+stop. Both boxes then read as wedged hardware -- SSH answering `Connection
+timed out during banner exchange` -- which is what sent the first investigation
+hunting a dead sshd instead of a stopped instance, so the cost of this bug is
+not just the lost builds.
+
+`haiku-bake-builder` had the tag and the comment explaining it since it was
+written. The other four launch paths did not, which is the whole defect: the
+fix is only worth anything if it covers every site, and "every site" is exactly
+what drifts when a fifth launcher is added. Hence a check rather than four
+edits.
+
+`auto-delete` is deliberately NOT asserted. These are ephemeral boxes and
+SpringClean reclaiming a forgotten one is wanted -- it is also what bounds the
+cost of `auto-stop=no`, since an instance left running is still deleted at the
+account's DELETE_AGE with a warning email first. Asserting `auto-delete=no`
+here would turn every leaked builder into an unbounded bill.
+
+  --mutate   strip `${NOSTOP_TAG}` from haiku-launch's tag specification in a
+             scratch copy and assert this test then FAILS. A check that has
+             never been shown to go red is not known to check anything. Exits 0
+             when the mutation is detected. The tracked file is never touched.
+
+Exit status: 0 pass; 1 an assertion failed.
+"""
+import argparse
+import os
+import re
+import subprocess
+import sys
+
+HERE = os.path.dirname(os.path.abspath(__file__))
+ROOT = os.path.dirname(HERE)          # graviton/
+
+# Every committed site that creates an EC2 instance, and the tag each one must
+# carry. Listed explicitly rather than discovered, so that ADDING a launcher
+# fails this test (unknown site) instead of silently not being covered.
+LAUNCHERS = [
+    "scripts/haiku-launch",
+    "scripts/haiku-bake-builder",
+    "scripts/haiku-perf-gate",
+    "scripts/haiku-repo-publish-ephemeral",
+    "pipeline/ops-lambdas/launch_builder.py",
+]
+
+# `aws ec2 run-instances` in shell, `ec2.run_instances(` in the boto lambda.
+RUN_RE = re.compile(r"ec2\s+run-instances|\.run_instances\s*\(")
+
+FAILURES = []
+
+
+def check(cond, msg):
+    if cond:
+        print("  ok   %s" % msg)
+    else:
+        print("  FAIL %s" % msg)
+        FAILURES.append(msg)
+
+
+def discover():
+    """Find every file under graviton/ that creates an instance, so a new
+    launcher cannot be added without either carrying the tag or failing here."""
+    found = set()
+    for dirpath, dirnames, filenames in os.walk(ROOT):
+        dirnames[:] = [d for d in dirnames
+                       if d not in (".git", "node_modules", "docs", "cdk.out")]
+        for fn in filenames:
+            if fn.endswith((".md", ".json", ".patch", ".png", ".log")):
+                continue
+            # A selftest that talks ABOUT run-instances is not a launcher --
+            # including this one, which quotes both call shapes and would
+            # otherwise report itself.
+            if fn.endswith("-selftest"):
+                continue
+            path = os.path.join(dirpath, fn)
+            try:
+                with open(path, encoding="utf-8", errors="replace") as f:
+                    src = f.read()
+            except OSError:
+                continue
+            # A mention in prose or an error string is not a launch; require the
+            # call shape AND a tag specification in the same file.
+            if RUN_RE.search(src) and ("tag-specifications" in src
+                                       or "TagSpecifications" in src):
+                found.add(os.path.relpath(path, ROOT))
+    return found
+
+
+def tag_blocks(src):
+    """The tag specification attached to each instance-creating call.
+
+    Anchored on the call, not on the file: a launcher that tags its *volumes*
+    with auto-stop=no and its instance with nothing would pass a bare "is the
+    string present" test. For shell, take the --tag-specifications line inside
+    the same backslash-continued command; for boto, the TagSpecifications list
+    that follows the call."""
+    blocks = []
+    lines = src.splitlines()
+    for i, line in enumerate(lines):
+        if not RUN_RE.search(line):
+            continue
+        # Shell: the command ends at the first line not ending in a backslash.
+        if "run-instances" in line:
+            j = i
+            chunk = []
+            while j < len(lines):
+                chunk.append(lines[j])
+                if not lines[j].rstrip().endswith("\\"):
+                    break
+                j += 1
+            blocks.append("\n".join(chunk))
+        else:
+            # boto3: the kwargs are assembled above the call in launch_builder,
+            # so take the enclosing function body. Bounded, not to EOF.
+            blocks.append("\n".join(lines[max(0, i - 60):i + 20]))
+    return blocks
+
+
+def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--mutate", action="store_true")
+    args = ap.parse_args()
+
+    if args.mutate:
+        return mutate()
+
+    print("== every committed launcher is enumerated")
+    found = discover()
+    for rel in sorted(found):
+        check(rel in LAUNCHERS,
+              "%s is a known launcher (add it to LAUNCHERS and give it "
+              "auto-stop=no)" % rel)
+    for rel in LAUNCHERS:
+        check(os.path.exists(os.path.join(ROOT, rel)),
+              "%s still exists" % rel)
+
+    print()
+    print("== each run-instances call tags the INSTANCE auto-stop=no")
+    for rel in LAUNCHERS:
+        path = os.path.join(ROOT, rel)
+        if not os.path.exists(path):
+            continue
+        src = open(path, encoding="utf-8").read()
+        blocks = tag_blocks(src)
+        check(len(blocks) > 0, "%s: found an instance-creating call" % rel)
+        for n, blk in enumerate(blocks, 1):
+            # haiku-launch composes the tag through a variable so that
+            # --reapable can omit it; accept either the literal or that
+            # variable, and test the variable's two values separately below.
+            ok = ("auto-stop" in blk and "Value=no" in blk) \
+                or ('"auto-stop"' in blk and '"no"' in blk) \
+                or "NOSTOP_TAG" in blk
+            check(ok, "%s call %d carries auto-stop=no" % (rel, n))
+
+    print()
+    print("== haiku-launch's --reapable branch, executed")
+    # Run the real branch rather than re-deriving it: the bug class here is a
+    # default that silently flips, and only executing it catches that.
+    launch = os.path.join(HERE, "haiku-launch")
+    branch = extract_branch(launch)
+    check(branch is not None, "the REAPABLE branch is still recognisable")
+    if branch:
+        for reapable, want in ((0, ",{Key=auto-stop,Value=no}"), (1, "")):
+            out = subprocess.run(
+                ["bash", "-c",
+                 'set -u; REAPABLE=%d; NOSTOP_TAG="";\n%s\nprintf "%%s" '
+                 '"$NOSTOP_TAG"' % (reapable, branch)],
+                capture_output=True, text=True)
+            check(out.stdout == want,
+                  "REAPABLE=%d yields NOSTOP_TAG=%r (got %r)"
+                  % (reapable, want, out.stdout))
+        check("--reapable" in open(launch, encoding="utf-8").read(),
+              "the opt-out is reachable from the command line")
+
+    print()
+    print("== shell launchers still parse")
+    for rel in LAUNCHERS:
+        path = os.path.join(ROOT, rel)
+        if not os.path.exists(path) or rel.endswith(".py"):
+            continue
+        rc = subprocess.run(["bash", "-n", path],
+                            capture_output=True, text=True)
+        check(rc.returncode == 0,
+              "bash -n %s (%s)" % (rel, rc.stderr.strip() or "clean"))
+    for rel in LAUNCHERS:
+        if not rel.endswith(".py"):
+            continue
+        path = os.path.join(ROOT, rel)
+        rc = subprocess.run([sys.executable, "-m", "py_compile", path],
+                            capture_output=True, text=True)
+        check(rc.returncode == 0,
+              "py_compile %s (%s)" % (rel, rc.stderr.strip() or "clean"))
+
+    print()
+    if FAILURES:
+        print("FAILED: %d assertion(s)" % len(FAILURES))
+        return 1
+    print("PASS")
+    return 0
+
+
+def extract_branch(path):
+    """The `if [ "$REAPABLE" ... ]` block, verbatim, from the live script."""
+    src = open(path, encoding="utf-8").read()
+    i = src.find('if [ "$REAPABLE" -eq 1 ]')
+    if i == -1:
+        return None
+    j = src.find("\nfi\n", i)
+    if j == -1:
+        return None
+    return src[i:j + 4]
+
+
+def mutate():
+    """Drop ${NOSTOP_TAG} from the tag spec in a scratch copy of the tree and
+    assert this test fails on it. Proves the assertion is load-bearing."""
+    import shutil
+    import tempfile
+    print("== --mutate: ${NOSTOP_TAG} removed from haiku-launch's tag spec; "
+          "this test must go red")
+    work = tempfile.mkdtemp(prefix="haiku-launch-selftest.")
+    try:
+        dst = os.path.join(work, "graviton")
+        shutil.copytree(ROOT, dst,
+                        ignore=shutil.ignore_patterns(".git", "node_modules"))
+        target = os.path.join(dst, "scripts", "haiku-launch")
+        src = open(target, encoding="utf-8").read()
+        if "${NOSTOP_TAG}" not in src:
+            print("  FAIL mutation target not found -- the tag spec moved; "
+                  "update this selftest")
+            return 1
+        open(target, "w", encoding="utf-8").write(
+            src.replace("${NOSTOP_TAG}", ""))
+        rc = subprocess.run(
+            [sys.executable, os.path.join(dst, "scripts",
+                                          "haiku-launch-selftest")],
+            capture_output=True, text=True)
+        if rc.returncode != 0:
+            print("  ok   mutation DETECTED: an untagged haiku-launch fails "
+                  "this test, so the assertion can go red")
+            return 0
+        print("  FAIL mutation NOT detected: removing the tag changed "
+              "nothing, so this test asserts nothing")
+        return 1
+    finally:
+        shutil.rmtree(work, ignore_errors=True)
+
+
+if __name__ == "__main__":
+    sys.exit(main())

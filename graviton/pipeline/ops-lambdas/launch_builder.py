@@ -67,6 +67,15 @@ def handler(event, context):
                 {"Key": "Name", "Value": "haiku-native-builder"},
                 {"Key": "debeos-build-exec", "Value": exec_id},
                 {"Key": "Project", "Value": "haiku-graviton"},
+                # SpringClean's daily shift-end sweep calls StopInstances on
+                # every untagged instance in the account and reads no liveness
+                # signal at all, so a wave builder hours into a port is stopped
+                # exactly like an idle one. It took all three native arm64
+                # builders down mid-build on 2026-10-16 (issue 761). The wave
+                # terminates its own builders, so nothing here leaks; this only
+                # prevents a stop. `auto-delete` is deliberately left unset, so
+                # a builder the wave fails to reap is still reclaimed.
+                {"Key": "auto-stop", "Value": "no"},
             ],
         }],
     )

@@ -495,7 +495,7 @@ launch_peer() {
 		--key-name "$KEY_NAME" --subnet-id "$SUBNET" --security-group-ids "$TEST_SG" \
 		--iam-instance-profile "Name=$PEER_PROFILE" \
 		--user-data "$userdata" \
-		--tag-specifications "ResourceType=instance,Tags=[{Key=Project,Value=haiku-graviton},{Key=Name,Value=haiku-perf-gate-peer},{Key=ephemeral,Value=true},{Key=run-id,Value=${RUN_ID}}]" \
+		--tag-specifications "ResourceType=instance,Tags=[{Key=Project,Value=haiku-graviton},{Key=Name,Value=haiku-perf-gate-peer},{Key=ephemeral,Value=true},{Key=auto-stop,Value=no},{Key=run-id,Value=${RUN_ID}}]" \
 		--query 'Instances[0].InstanceId' --output text 2>&1)
 	case "$id" in
 		i-*) ;;
@@ -563,11 +563,16 @@ if [ "$SEQREAD_ASSERT" != 0 ]; then
 fi
 
 say "launching $TEST_TYPE from $AMI"
+# auto-stop=no on both this instance and the peer above: SpringClean's shift-end
+# sweep stops anything without it, reading no liveness signal, and a stop that
+# lands mid-measurement surfaces as a failed gate rather than as "the instance
+# went away" -- the same class of confound the spot warning in the header is
+# about, and the one that took three builders down on 2026-10-16 (issue 761).
 INSTANCE=$(aws --region "$REGION" ec2 run-instances \
 	--image-id "$AMI" --instance-type "$TEST_TYPE" \
 	--key-name "$KEY_NAME" --subnet-id "$SUBNET" --security-group-ids "$TEST_SG" \
 	${STORAGE_BDM[@]+"${STORAGE_BDM[@]}"} \
-	--tag-specifications "ResourceType=instance,Tags=[{Key=Project,Value=haiku-graviton},{Key=Name,Value=haiku-perf-gate},{Key=ephemeral,Value=true},{Key=run-id,Value=${RUN_ID}}]" \
+	--tag-specifications "ResourceType=instance,Tags=[{Key=Project,Value=haiku-graviton},{Key=Name,Value=haiku-perf-gate},{Key=ephemeral,Value=true},{Key=auto-stop,Value=no},{Key=run-id,Value=${RUN_ID}}]" \
 	--query 'Instances[0].InstanceId' --output text 2>&1)
 case "$INSTANCE" in
 	i-*) ;;

@@ -28,7 +28,31 @@
 #   * IAM profile: ssm-instance-profile (AmazonSSMManagedInstanceCore) so the
 #          baked debeos-ssm-agent can register.
 #   * Tags: Project=haiku-graviton, ephemeral=true (so cost tooling can find
-#          throwaway boxes), Name=<--name> or a generated one.
+#          throwaway boxes), Name=<--name> or a generated one, and
+#          auto-stop=no.
+#          auto-stop=no is load-bearing, the same way it is at
+#          haiku-bake-builder:349. The account runs the SpringClean janitor,
+#          whose daily shift-end sweep calls StopInstances on every instance
+#          that does NOT carry it -- it does not look at CPU, network or any
+#          other liveness signal, so a box three hours into a silent `ninja` is
+#          indistinguishable to it from a box nobody has touched. Per
+#          SpringClean's own documentation the exemption tags are
+#          `auto-stop=no` (never stopped at shift end) and `auto-delete=no`
+#          (never deleted); it ignores everything else, including
+#          `ephemeral=true`.
+#          On 2026-10-16T20:06:24Z that sweep stopped all three native arm64
+#          builders at once -- one 75 minutes into an haikuporter packaging
+#          phase, one 95% of the way through a 3-hour Ladybird build (issue
+#          761). Both read afterwards as a wedged instance: SSH answers with
+#          `Connection timed out during banner exchange`, which is what sent
+#          the first investigation looking for a dead sshd instead of a stopped
+#          box.
+#          `auto-delete` is deliberately NOT set. These are ephemeral boxes and
+#          SpringClean reclaiming a forgotten one is wanted, not a bug -- it
+#          also bounds what `auto-stop=no` can cost, since an instance left
+#          running is still deleted at the account's DELETE_AGE (7 days) with a
+#          warning email on day 4. Pass `--reapable` for a box short-lived
+#          enough that a nightly stop is harmless.
 #   * Spot: `--spot` (or HG_LAUNCH_SPOT=1) requests a one-time spot instance that
 #          TERMINATES on interruption, and tags it market=spot. Validation here is
 #          ad-hoc and throwaway by preference -- no long-lived validation box -- so
@@ -59,6 +83,8 @@
 #   haiku-launch --disk 500                 # 500 GiB root instead of the AMI's
 #   haiku-launch --sg sg-...                # force a security group
 #   haiku-launch --wait                     # block until sshd answers via EICE
+#   haiku-launch --reapable                 # let SpringClean stop it at shift
+#                                           # end (omit auto-stop=no)
 #
 # On completion prints the instance id and the ssh recipe on stdout, one line
 # each (id first) so callers can `read`.
@@ -89,7 +115,9 @@ DISK="${HG_LAUNCH_DISK:-}"
 SG_OVERRIDE="${HG_LAUNCH_SG:-}"
 SPOT="${HG_LAUNCH_SPOT:-0}"
 SPOT_ARG=""
+REAPABLE="${HG_LAUNCH_REAPABLE:-0}"
 MARKET_TAG=""   # must be set: `set -u` is on and the tag string expands it unconditionally
+NOSTOP_TAG=""   # likewise
 
 while [ $# -gt 0 ]; do
 	case "$1" in
@@ -103,7 +131,8 @@ while [ $# -gt 0 ]; do
 		--spot)    SPOT=1; shift ;;
 		--public)  PUBLIC=1; shift ;;
 		--wait)    WAIT=1; shift ;;
-		-h|--help) sed -n '2,64p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+		--reapable) REAPABLE=1; shift ;;
+		-h|--help) sed -n '2,92p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
 		*) echo "haiku-launch: unknown arg $1" >&2; exit 2 ;;
 	esac
 done
@@ -232,6 +261,15 @@ if [ "$SPOT" -eq 1 ]; then
 	echo "haiku-launch: requesting SPOT ($TYPE); do not measure performance on this" >&2
 fi
 
+# Exempt the box from SpringClean's shift-end StopInstances sweep (issue 761).
+# This is the default because every instance this script launches exists to run
+# a build, and a build here is measured in hours. `--reapable` opts out.
+if [ "$REAPABLE" -eq 1 ]; then
+	echo "haiku-launch: --reapable: no auto-stop=no tag; SpringClean may stop this box at shift end" >&2
+else
+	NOSTOP_TAG=",{Key=auto-stop,Value=no}"
+fi
+
 INSTANCE="$(aws ec2 run-instances --region "$REGION" \
 	--image-id "$AMI" \
 	--instance-type "$TYPE" \
@@ -242,7 +280,7 @@ INSTANCE="$(aws ec2 run-instances --region "$REGION" \
 	--iam-instance-profile "Name=$IAM_PROFILE" \
 	${BDM_ARG:+"$BDM_ARG"} \
 	${SPOT_ARG:+"$SPOT_ARG"} \
-	--tag-specifications "ResourceType=instance,Tags=[{Key=Project,Value=haiku-graviton},{Key=Name,Value=$NAME},{Key=ephemeral,Value=true}${MARKET_TAG}]" \
+	--tag-specifications "ResourceType=instance,Tags=[{Key=Project,Value=haiku-graviton},{Key=Name,Value=$NAME},{Key=ephemeral,Value=true}${NOSTOP_TAG}${MARKET_TAG}]" \
 	--query 'Instances[0].InstanceId' --output text)"
 case "$INSTANCE" in
 	i-*) ;;
