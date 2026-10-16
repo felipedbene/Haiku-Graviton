@@ -15,6 +15,22 @@
 #
 # Versions and revisions must match the built file names exactly, e.g.
 # libpng16-1.6.53-1 -> libpng16-1.6.53-1-arm64.hpkg.
+#
+# VENDOR INVARIANT -- applies to EVERY entry below, not just the ones whose
+# comment mentions it. RemotePackageRepository (build/jam/RepositoryRules) feeds
+# the staged files to `package_repo create` together with
+# src/data/repository_infos/haikuports, which declares vendor "Haiku Project";
+# RepositoryWriterImpl aborts the whole set if any member disagrees. The trap is
+# that DeBeOS keeps two differently stamped copies of the same build: the
+# pipeline hpkg pool carries the builder's "Haiku Project" stamp, while the
+# published repo at packages.debene.dev is re-stamped to vendor "DeBeOS" by
+# haiku-repo-publish, because a *served* repo must be single-vendor. Stage the
+# published copy of any entry below and the build dies in RepositoryCache1 with
+# "has unexpected vendor", skipping every image target -- that was issue 737,
+# with openssl3. So stage from the pool, and stage with
+# graviton/scripts/haiku-stage-local-packages, which checks the vendor of what
+# it copies AND of what is already in the download dir, and refuses rather than
+# leaving the failure for jam to hit an hour later.
 
 LocalPackageRepository HaikuPorts
 	: arm64
@@ -34,17 +50,17 @@ LocalPackageRepository HaikuPorts
 	# cross-build.yml) FFilterByBuildFeatures silently strips every @libpng /
 	# @jpeg / @tiff / @jasper translator from the image. The upstream arm64
 	# build-packages mirror serves none of these, so DeBeOS builds and stages
-	# them natively; versions match the built file names in the pool, and all
-	# carry vendor "Haiku Project" (the bake feeds the whole set to
-	# `package_repo create`, which aborts on a mixed-vendor set -- see below).
+	# them natively; versions match the built file names in the pool, which is
+	# also where the vendor invariant at the top of this file is satisfied.
 	#
 	# WebPTranslator@libwebp and AVIFTranslator@libavif are deliberately NOT
 	# enabled here yet:
-	#   * libwebp -- the only arm64 libwebp_devel built so far lives in the
-	#     DeBeOS repo and is re-stamped vendor "DeBeOS"; staging it alongside the
-	#     "Haiku Project" set makes `package_repo create` abort "package 'libwebp'
-	#     has unexpected vendor 'DeBeOS' (expected 'Haiku Project')". Shipping WebP
-	#     needs a "Haiku Project"-vendored libwebp(+_devel) in the pool.
+	#   * libwebp -- the only arm64 libwebp_devel built so far exists solely as
+	#     the published repo's copy, i.e. re-stamped vendor "DeBeOS", so it
+	#     violates the vendor invariant above. Shipping WebP needs a
+	#     "Haiku Project"-vendored libwebp(+_devel) in the pool. Unlike openssl3
+	#     (issue 737) there is no pool copy to fall back on, so this one really
+	#     does need a build.
 	#   * libavif -- BuildFeatures gates it on IsPackageAvailable libavif1.0_devel
 	#     (a >= 1.0 package); only libavif 0.9.3 (pre-1.0, package name libavif)
 	#     exists for arm64. Enabling AVIF needs a native libavif >= 1.0 build.
@@ -76,6 +92,11 @@ LocalPackageRepository HaikuPorts
 	# first-boot stall), and TLS cert verification has no CA store (https =
 	# "Operation not allowed"). zstd (runtime) alone only satisfies openssl3's
 	# lib:libzstd>=1.5.6; the reader needs the build feature, i.e. zstd_devel.
+	# Staging openssl3 WITHOUT the zstd runtime does not surface as a solver
+	# error, which is what you would expect: the downloaded mirror index does
+	# advertise zstd-1.5.6-2, so the solver resolves lib:libzstd to it happily
+	# and build_haiku_image then tries to fetch it from the arm64 mirror, which
+	# 404s (measured on issue 737). So openssl3 and zstd are staged as a pair.
 	# NOTE: openssl3 and zstd must NOT also be force-added via <hg-pool> in
 	# graviton/ssh/UserBuildConfig -- the profile's by-name add installs one
 	# instance, so a second (file) instance makes the image solver report

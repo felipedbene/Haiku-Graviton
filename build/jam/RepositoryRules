@@ -301,6 +301,13 @@ rule RemotePackageRepository repository : architecture : repositoryUrl
 			# a non-empty BaseURL, and the URLs it then prints resolve to files
 			# already staged in HAIKU_DOWNLOAD_DIR, which build_haiku_image's
 			# downloadFile skips -- so nothing is refetched.
+			# Consequence: every staged local file must carry that info's vendor,
+			# because package_repo create refuses a mixed-vendor set. If this
+			# target fails with "has unexpected vendor", the staged file is the
+			# wrong copy of the package, not a bug in this rule -- see the vendor
+			# invariant at the top of
+			# build/jam/repositories/HaikuPortsLocal/<arch>, and stage with
+			# graviton/scripts/haiku-stage-local-packages, which checks it.
 			RepositoryCache $(localCache) : $(repositoryInfo) : $(localFiles) ;
 			HAIKU_SOLVER_EXTRA_REPOSITORY_CACHES += $(localCache) ;
 		}
