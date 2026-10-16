@@ -17,6 +17,9 @@
 #
 #   * `recipes/*.recipe` -- COPIED OVER the tree's copy. These are complete recipe
 #     files and are the overlay's source of truth (see recipes/README.md).
+#   * `recipes/*.patchset` -- COPIED into the port's `patches/` dir, which is where
+#     haikuporter looks for the file a recipe's PATCHES= line names. Installed only
+#     alongside the matching recipe, so the pair moves as a unit.
 #   * `*.patch` at the overlay root -- NOT applied. Those files are explanatory
 #     notes, not inputs to patch(1): two of them do not parse at all, and none is
 #     verified to apply to a pristine recipe. They document WHY a recipe in
@@ -106,7 +109,40 @@ TREE="${2:-/boot/home/haikuports}"
 [ -d "$OVERLAY/recipes" ] || { echo "overlay-apply: no $OVERLAY/recipes" >&2; exit 1; }
 [ -d "$TREE" ] || { echo "overlay-apply: no ports tree at $TREE" >&2; exit 1; }
 
-applied=0; placed=0; missing=0; skipped=0
+applied=0; placed=0; missing=0; skipped=0; patchsets=0
+
+# Install the patchset that belongs to a recipe we just placed, if the overlay
+# carries one, into <portdir>/patches/ -- where haikuporter looks for the file a
+# recipe's PATCHES= line names.
+#
+# This is NOT the same thing as the `*.patch` files at the overlay ROOT, which are
+# explanatory notes and stay unapplied (see the header). `recipes/*.patchset` are
+# real patch(1) inputs. Most overlay recipes declare PATCHES= and get the file from
+# the upstream tree's own patches/ dir, which the clone already provides; the few
+# patchsets carried HERE are precisely the ones upstream cannot supply -- a flavor
+# port with no upstream directory (ffmpeg_x264, llama_cpp_g3), or a port where this
+# project added a PATCHES= line upstream does not have (libavif, issue 709).
+#
+# Omitting them was a silent-no-op of the exact kind this script exists to end: the
+# pipeline's staging path already places patchsets correctly
+# (graviton/pipeline/ops-lambdas/run_ssm.py), so the manual path disagreed with the
+# automated one and a fix verified through a build wave would vanish on a
+# hand-driven builder.
+#
+# Keyed off the recipe's own basename, so the pair is installed or skipped as a
+# unit: a stage-1 recipe that was skipped never has its patchset placed either, and
+# a patchset can never land next to a recipe that did not.
+place_patchset() {
+	_base=$1
+	_dir=$2
+	_ps="$OVERLAY/recipes/${_base%.recipe}.patchset"
+	[ -f "$_ps" ] || return 0
+	_psbase=$(basename "$_ps")
+	mkdir -p "$_dir/patches"
+	cp "$_ps" "$_dir/patches/$_psbase"
+	echo "overlay-apply:   + $_dir/patches/$_psbase"
+	patchsets=$((patchsets + 1))
+}
 
 for src in "$OVERLAY"/recipes/*.recipe; do
 	[ -f "$src" ] || continue
@@ -133,6 +169,7 @@ for src in "$OVERLAY"/recipes/*.recipe; do
 		cp "$src" "$dst"
 		echo "overlay-apply: updated $dst"
 		applied=$((applied + 1))
+		place_patchset "$base" "$(dirname "$dst")"
 		continue
 	fi
 
@@ -147,6 +184,7 @@ for src in "$OVERLAY"/recipes/*.recipe; do
 		cp "$src" "$dir/$base"
 		echo "overlay-apply: placed $dir/$base (new version)"
 		placed=$((placed + 1))
+		place_patchset "$base" "$dir"
 		continue
 	fi
 
@@ -166,6 +204,7 @@ for src in "$OVERLAY"/recipes/*.recipe; do
 		cp "$src" "$flavor_dir/$base"
 		echo "overlay-apply: placed $flavor_dir/$base (flavor of $flavor_base)"
 		placed=$((placed + 1))
+		place_patchset "$base" "$flavor_dir"
 		continue
 	fi
 
@@ -184,6 +223,7 @@ for src in "$OVERLAY"/recipes/*.recipe; do
 		cp "$src" "$newdir/$base"
 		echo "overlay-apply: created $newdir/$base (new port)"
 		placed=$((placed + 1))
+		place_patchset "$base" "$newdir"
 		continue
 	fi
 
@@ -191,7 +231,7 @@ for src in "$OVERLAY"/recipes/*.recipe; do
 	missing=$((missing + 1))
 done
 
-echo "overlay-apply: $applied updated, $placed placed, $skipped stage-1 skipped, $missing unplaced"
+echo "overlay-apply: $applied updated, $placed placed, $patchsets patchset(s), $skipped stage-1 skipped, $missing unplaced"
 [ "$WITH_STAGE1" -eq 1 ] && echo "overlay-apply: WARNING --stage1 used; do NOT publish this builder's output to the shipping repo" >&2
 # Unplaced recipes are a real defect (the fix silently would not be used), so fail
 # loudly rather than let a bake bake them away.

@@ -1,0 +1,51 @@
+From c2d2d1234100424438b9d0bd9fbc0afe72bbace3 Mon Sep 17 00:00:00 2001
+From: DeBeOS <debeos@felipedbene.github.io>
+Date: Thu, 15 Oct 2026 23:26:28 +0000
+Subject: [PATCH] export the include dir that CMAKE_INSTALL_INCLUDEDIR actually
+ installed to
+
+target_include_directories() hardcoded $<INSTALL_INTERFACE:include> while the
+install() rule for avif/avif.h uses ${CMAKE_INSTALL_INCLUDEDIR}. When those
+disagree -- as they do on Haiku, where headers go to develop/headers -- the
+generated libavif-config.cmake exports
+${_IMPORT_PREFIX}/include, a directory that does not exist. CMake treats a
+non-existent INTERFACE_INCLUDE_DIRECTORIES entry on an imported target as a
+hard error, so every find_package(LIBAVIF) consumer dies at the generate step:
+
+  Imported target "avif" includes non-existent path "/boot/system/include"
+  in its INTERFACE_INCLUDE_DIRECTORIES.
+  CMake Generate step failed.
+
+Make the exported path track the variable the install rules use.
+
+GNUInstallDirs has to be included before this point as well as at its existing
+site further down, because INSTALL_INTERFACE genex content is expanded when the
+target_include_directories() line is parsed. Without it the variable is set only
+when an explicit -DCMAKE_INSTALL_INCLUDEDIR is passed; otherwise it expands
+empty and the property is omitted from the config altogether, which moves the
+breakage from the generate step to a bare "avif/avif.h: No such file".
+---
+ CMakeLists.txt | 8 +++++++-
+ 1 file changed, 7 insertions(+), 1 deletion(-)
+
+diff --git a/CMakeLists.txt b/CMakeLists.txt
+index 7182df7..7150fd2 100644
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -417,9 +417,15 @@ target_compile_definitions(avif
+                            PRIVATE ${AVIF_PLATFORM_DEFINITIONS} ${AVIF_CODEC_DEFINITIONS})
+ target_link_libraries(avif
+                       PRIVATE ${AVIF_CODEC_LIBRARIES} ${AVIF_PLATFORM_LIBRARIES})
++# The exported include directory must track CMAKE_INSTALL_INCLUDEDIR, which the
++# install() rules below already honour for avif.h. GNUInstallDirs is included
++# here as well as further down because the INSTALL_INTERFACE genex content is
++# expanded when THIS line is parsed, which happens first; without it the
++# variable is only set by an explicit -D on the command line.
++include(GNUInstallDirs)
+ target_include_directories(avif
+                            PUBLIC $<BUILD_INTERFACE:${libavif_SOURCE_DIR}/include>
+-                                  $<INSTALL_INTERFACE:include>
++                                  $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>
+                            PRIVATE ${AVIF_PLATFORM_INCLUDES} ${AVIF_CODEC_INCLUDES})
+ set(AVIF_PKG_CONFIG_EXTRA_CFLAGS "")
+ if(BUILD_SHARED_LIBS)
