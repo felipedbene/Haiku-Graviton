@@ -10,11 +10,12 @@
 #
 # Haiku's libc headers define neither macro, and clang -- unlike gcc, which
 # defines __GCC_IEC_559 -- does not define one either, so with CC=clang the
-# whole translation unit disappears and the archive member is empty:
+# function disappears and the archive member carries no symbols at all:
 #
-#   $ nm -D /boot/home/lbdeps/lib/libtommath.a | grep -A1 set_double
-#   bn_mp_set_double.c.o:
-#   nm: bn_mp_set_double.c.o: no symbols
+#   $ clang -c bn_mp_set_double.c && nm bn_mp_set_double.o
+#   bn_mp_set_double.c:44:6: warning: "mp_set_double implementation is only
+#       available on platforms with IEEE754 floating point format"
+#   (no output)
 #
 # There is no link error, because Ladybird's Haiku build needs
 # --allow-shlib-undefined/-z undefs (split libc), so liblagom-crypto links with
@@ -43,6 +44,9 @@ ninja && ninja install
 
 grep -q mp_expt_n "$PREFIX/include/tommath.h" \
   || { echo "libtommath headers lack mp_expt_n" >&2; exit 1; }
-nm -D "$PREFIX/lib/libtommath.a" 2>/dev/null | grep -q ' T mp_set_double' \
+# Plain nm, not `nm -D`: a static archive has no dynamic symbol table, so
+# `nm -D` reports "no symbols" for every member and the check would pass
+# vacuously -- in both directions.
+nm "$PREFIX/lib/libtommath.a" 2>/dev/null | grep -q ' T mp_set_double' \
   || { echo "libtommath.a does not define mp_set_double" >&2; exit 1; }
 echo "TOMMATH BUILD+INSTALL DONE"
