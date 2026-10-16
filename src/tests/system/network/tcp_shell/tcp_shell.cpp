@@ -69,6 +69,14 @@ struct net_socket_private : net_socket,
 		// which of the parent's two lists this socket is on; socket_aborted()
 		// has to remove it from the right one
 
+	int32					ref_count;
+		// What keeps the endpoint alive for as long as anyone is inside it.
+		// The real stack makes net_socket_private a BWeakReferenceable and
+		// socket_acquire() an increment-if-non-zero; a plain counter here
+		// models the same primitive without giving this struct a vtable,
+		// which would move the net_socket base off offset 0 and break the
+		// C-style downcasts this harness (and the stack) do everywhere.
+
 	team_id					owner;
 	uint32					max_backlog;
 	uint32					child_count;
@@ -99,10 +107,20 @@ extern module_info *modules[];
 
 
 extern struct net_protocol_module_info gDomainModule;
-struct InterfaceAddress gInterfaceAddress;
+InterfaceAddress& gInterfaceAddress = *new InterfaceAddress();
+	// Deliberately never destroyed. Every queued net_buffer holds a reference
+	// to this, and a socket that close() left in TIME_WAIT keeps its queues --
+	// and so its references -- until the 2MSL timer runs, which is 120 seconds
+	// after the shell has exited. A static object destroyed with references
+	// outstanding makes ~BReferenceable() call debugger(), so as a static this
+	// aborted the process at exit in a run that had done nothing wrong: a
+	// failure whose only cause was the harness looking at the wrong moment.
 extern struct net_socket_module_info gNetSocketModule;
 struct net_protocol_module_info *gTCPModule;
 struct net_socket *gServerSocket, *gClientSocket;
+static int32 sClientClosed = 0;
+static int32 sServerClosed = 0;
+	// see close_owned_socket()
 static struct context sClientContext, sServerContext;
 
 static int32 sPacketNumber = 1;
@@ -454,6 +472,9 @@ socket_create(int family, int type, int protocol, net_socket **_socket)
 	memset(socket, 0, sizeof(net_socket));
 	socket->parent = NULL;
 	socket->is_connected = false;
+	socket->ref_count = 1;
+		// the creator's reference, handed to whoever owns the socket: the
+		// shell for the two sockets it opens, the parent for a spawned child
 	socket->owner = -1;
 	socket->max_backlog = 0;
 	socket->child_count = 0;
@@ -496,6 +517,15 @@ socket_create(int family, int type, int protocol, net_socket **_socket)
 }
 
 
+bool socket_release(net_socket* _socket);
+
+
+/*!	Runs when the last reference is gone -- never directly from close().
+
+	This is where the TCP endpoint is destroyed, so every caller that is still
+	inside it has to hold a reference of its own. That is the whole point of
+	the counter: close() only drops the owner's reference.
+*/
 void
 socket_delete(net_socket *_socket)
 {
@@ -503,6 +533,22 @@ socket_delete(net_socket *_socket)
 
 	if (socket->parent != NULL)
 		panic("socket still has a parent!");
+
+	// Children that were never accepted still carry this socket's reference;
+	// unlink them and hand it back, exactly as ~net_socket_private() does.
+	mutex_lock(&socket->lock);
+	SocketList orphans;
+	while (net_socket_private* child = socket->pending_children.RemoveHead())
+		orphans.Add(child);
+	while (net_socket_private* child = socket->connected_children.RemoveHead())
+		orphans.Add(child);
+	socket->child_count = 0;
+	mutex_unlock(&socket->lock);
+
+	while (net_socket_private* child = orphans.RemoveHead()) {
+		child->parent = NULL;
+		socket_release(child);
+	}
 
 	socket->first_info->uninit_protocol(socket->first_protocol);
 	mutex_destroy(&socket->lock);
@@ -652,16 +698,60 @@ socket_recv(net_socket *socket, void *data, size_t length, int flags)
 }
 
 
+/*!	Increments the use count, but only while it is still non-zero.
+
+	These two were stubs returning true, which meant the harness modelled no
+	socket lifetime at all: EndpointManager::FindConnection() took no
+	reference, so close_protocol() destroyed the endpoint under a segment that
+	was already inside SegmentReceived(). It also made the harness blind to
+	the defect it most needs to see -- a release that nobody owned is only
+	observable if the count is real.
+
+	Increment-if-non-zero has to be atomic for the same reason the real
+	socket_acquire() uses a weak-reference upgrade: a plain increment can
+	resurrect a socket whose final release has already committed to deleting
+	it.
+*/
 bool
 socket_acquire(net_socket* _socket)
 {
-	return true;
+	net_socket_private* socket = (net_socket_private*)_socket;
+
+	int32 count = atomic_get(&socket->ref_count);
+	while (count > 0) {
+		const int32 found = atomic_test_and_set(&socket->ref_count, count + 1,
+			count);
+		if (found == count)
+			return true;
+
+		count = found;
+	}
+
+	return false;
 }
 
 
 bool
 socket_release(net_socket* _socket)
 {
+	net_socket_private* socket = (net_socket_private*)_socket;
+
+	const int32 previous = atomic_add(&socket->ref_count, -1);
+	if (previous <= 0) {
+		// The hazard issue 616 is about: a reference released by someone who
+		// did not own it. On a real kernel this is absorbed silently whenever
+		// another reference happens to be outstanding, which is why a stress
+		// test that only watches for a crash cannot find it. Here it is fatal
+		// on the spot.
+		panic("socket %p: reference count released below zero (%" B_PRId32
+			")", socket, previous - 1);
+		return false;
+	}
+
+	if (previous > 1)
+		return false;
+
+	socket_delete(socket);
 	return true;
 }
 
@@ -712,13 +802,22 @@ socket_dequeue_connected(net_socket *_parent, net_socket **_socket)
 
 	net_socket_private *socket = parent->connected_children.RemoveHead();
 	if (socket != NULL) {
+		// The child's one reference moves from the parent to the accept()ing
+		// caller; acquire before unlinking so it is never momentarily zero.
+		socket_acquire(socket);
 		socket->parent = NULL;
 		parent->child_count--;
 		*_socket = socket;
 	}
 
 	mutex_unlock(&parent->lock);
-	return socket != NULL ? B_OK : B_ENTRY_NOT_FOUND;
+
+	if (socket == NULL)
+		return B_ENTRY_NOT_FOUND;
+
+	socket_release(socket);
+		// the parent's reference
+	return B_OK;
 }
 
 
@@ -745,21 +844,31 @@ socket_set_max_backlog(net_socket *_socket, uint32 backlog)
 	mutex_lock(&socket->lock);
 
 	// first remove the pending connections, then the already connected ones as needed
+	SocketList dropped;
 	net_socket_private *child;
 	while (socket->child_count > backlog
 		&& (child = socket->pending_children.RemoveTail()) != NULL) {
-		child->parent = NULL;
+		dropped.Add(child);
 		socket->child_count--;
 	}
 	while (socket->child_count > backlog
 		&& (child = socket->connected_children.RemoveTail()) != NULL) {
-		child->parent = NULL;
-		socket_delete(child);
+		dropped.Add(child);
 		socket->child_count--;
 	}
 
 	socket->max_backlog = backlog;
 	mutex_unlock(&socket->lock);
+
+	// Outside the parent's lock: the last release destroys the child's
+	// endpoint, which takes its own fLock. Dropping a pending child used to
+	// just unlink it and leak it, and dropping a connected one deleted it
+	// outright no matter who was still inside it.
+	while ((child = dropped.RemoveHead()) != NULL) {
+		child->parent = NULL;
+		socket_release(child);
+	}
+
 	return B_OK;
 }
 
@@ -796,8 +905,12 @@ socket_connected(net_socket *socket)
 	TCPEndpoint::_Close() calls this for any endpoint that still has a parent,
 	which is every server-side connection the harness has not dequeued yet --
 	so every reset that arrives before accept() landed here, on a NULL hook,
-	and took the process down. The real stack also drops the parent's
-	reference; the harness never took one, so unlinking is the whole job.
+	and took the process down.
+
+	Like the real socket_aborted(), it also hands back the parent's reference.
+	That cannot be the last one: the caller is inside the child's
+	SegmentReceived(), and the lookup that got it there holds a reference of
+	its own.
 */
 status_t
 socket_set_aborted(net_socket *_socket)
@@ -816,6 +929,7 @@ socket_set_aborted(net_socket *_socket)
 
 	parent->child_count--;
 	socket->parent = NULL;
+	socket_release(socket);
 
 	return B_OK;
 }
@@ -934,13 +1048,49 @@ init_protocol(net_socket** _socket)
 }
 
 
-void
+/*!	What close() does to a socket, and nothing more.
+
+	It used to uninit the protocol inline -- destroying the endpoint the moment
+	free() returned, regardless of who was still inside it. The real stack
+	splits this the way it is split here: socket_close() runs the protocol's
+	close(), socket_free() runs its free() and then drops the owner's
+	reference, and the endpoint is destroyed by whichever reference turns out
+	to be the last (see socket_delete()). TCPEndpoint::Free() takes a
+	reference of its own for the 2MSL wait, so for a socket entering TIME_WAIT
+	the release below is deliberately not the last one.
+*/
+bool
 close_protocol(net_protocol* protocol)
 {
+	net_socket* socket = protocol->socket;
+
 	gTCPModule->close(protocol);
-	if (gTCPModule->free(protocol) == B_OK)
-		gTCPModule->uninit_protocol(protocol);
-		//socket_delete(protocol->socket);
+	gTCPModule->free(protocol);
+	return socket_release(socket);
+}
+
+
+/*!	Gives back the shell's own reference to one of its two sockets, once.
+
+	The client can be closed either by "quit" or by the simultaneous-close path
+	in the receiving thread, and the shell holds exactly one reference. Closing
+	twice would be an over-release by the harness itself -- indistinguishable,
+	in the report, from the stack defect this harness exists to look for.
+
+	It also reports whether the endpoint outlived the close, which is the one
+	thing a liveness test cannot see. A connection that still owes its peer a
+	FIN has to take a reference of its own in TCPEndpoint::Free() and so must
+	survive this release; "destroyed" there means Free() took none.
+*/
+void
+close_owned_socket(net_socket* socket, const char* name, int32* closed)
+{
+	if (atomic_get_and_set(closed, 1) != 0)
+		return;
+
+	const bool destroyed = close_protocol(socket->first_protocol);
+	printf("%s: close gave back the shell's reference; endpoint %s\n", name,
+		destroyed ? "destroyed" : "still alive");
 }
 
 
@@ -1500,7 +1650,7 @@ receiving_thread(void* _data)
 				sSimultaneousConnect = false;
 			}
 			if (sSimultaneousClose && !context->server && is_fin(buffer)) {
-				close_protocol(gClientSocket->first_protocol);
+				close_owned_socket(gClientSocket, "client", &sClientClosed);
 				sSimultaneousClose = false;
 			}
 			if ((sRandomReorder > 0.0
@@ -1539,6 +1689,15 @@ receiving_thread(void* _data)
 int32
 server_thread(void*)
 {
+	// A reference for as long as this thread is inside the listening socket,
+	// which is the job the accept()ing file descriptor does in the real
+	// kernel. Without it, the shell's own "quit" (close_protocol() on the
+	// listener) destroys the endpoint while Accept() is parked on
+	// fAcceptSemaphore, and the re-lock of fLock on the way out touches a
+	// destroyed mutex.
+	if (!socket_acquire(gServerSocket))
+		return 0;
+
 	while (true) {
 		// main accept() loop
 		net_socket* connectionSocket;
@@ -1555,16 +1714,23 @@ server_thread(void*)
 
 		char buffer[1024];
 		ssize_t bytesRead;
+		bool activeClose = false;
 		while ((bytesRead = socket_recv(connectionSocket, buffer,
 				sizeof(buffer), 0)) > 0) {
 			printf("server: received %ld bytes\n", bytesRead);
 
 			if (sServerActiveClose) {
 				printf("server: active close\n");
-				close_protocol(connectionSocket->first_protocol);
-				return 0;
+				activeClose = true;
+				break;
 			}
 		}
+
+		if (activeClose) {
+			close_protocol(connectionSocket->first_protocol);
+			break;
+		}
+
 		if (bytesRead < 0)
 			printf("server: receiving failed: %s\n", strerror(bytesRead));
 		else
@@ -1574,6 +1740,7 @@ server_thread(void*)
 		close_protocol(connectionSocket->first_protocol);
 	}
 
+	socket_release(gServerSocket);
 	return 0;
 }
 
@@ -2192,8 +2359,8 @@ main(int argc, char* argv[])
 		free(argv);
 	}
 
-	close_protocol(client);
-	close_protocol(server);
+	close_owned_socket(gClientSocket, "client", &sClientClosed);
+	close_owned_socket(gServerSocket, "server", &sServerClosed);
 
 	snooze(2000000);
 
