@@ -23,7 +23,7 @@
 # a DeBeOS build that contains the fix. The retirement condition, and the
 # one-line check for it, are recorded once in
 # patches/ladybird-haiku.patch (Meta/CMake/compile_options.cmake hunk);
-# retire that site, build-avif.sh and this one together.
+# retire that site and this one together.
 set -e
 export PATH=/boot/system/bin:$PATH
 cd /boot/home/pngbuild/libpng-1.6.53

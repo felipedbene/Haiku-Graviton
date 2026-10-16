@@ -15,8 +15,14 @@ mkdir -p $PREFIX/lib/pkgconfig $PREFIX/include/wuffs
 # 1. System devel deps. NOTE: ICU is icu74 (NOT icu77/78) because that is the
 #    version harfbuzz_devel and the rest of the C++ stack are built against;
 #    forcing icu77_devel conflicts with harfbuzz_devel's devel:libicuuc dep.
+#    AVIF is libavif1.0_devel, not libavif_devel: the latter is 0.9.3 from 2021
+#    and has no avifDecoder::repetitionCount, which AVIFLoader.cpp:92 reads.
+#    The two declare a CONFLICTS on each other and pkgman fails the whole
+#    transaction rather than resolving it, so a box provisioned by an older
+#    revision of this script needs the 0.9.3 devel package off first.
+pkgman uninstall -y libavif_devel || true
 pkgman install -y \
-  libfmt_devel mimalloc_devel simdjson_devel libavif_devel libsdl3_devel \
+  libfmt_devel mimalloc_devel simdjson_devel libavif1.0_devel libsdl3_devel \
   fontconfig_devel libedit_devel libtommath_devel harfbuzz_devel freetype_devel \
   libpng16_devel libjpeg_turbo_devel libwebp_devel brotli_devel woff2_devel \
   openssl3_devel curl_devel libxml2_devel sqlite_devel zlib_devel libpsl_devel \

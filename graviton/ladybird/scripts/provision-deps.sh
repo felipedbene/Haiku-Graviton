@@ -27,9 +27,16 @@ mkdir -p $PREFIX/lib/pkgconfig $PREFIX/include/wuffs
 #    the whole transaction with "nothing provides". Both are built from source
 #    into $PREFIX below instead, at the versions pkgconfig/simdjson.pc and
 #    pkgconfig/libtommath.pc already declare.
-#    libavif_devel is deliberately not here either: the repo's is 0.9.3 and
-#    AVIFLoader.cpp needs avifDecoder::repetitionCount, so 1.4.2 is built from
-#    source below (DeBeOS #731). dav1d_devel stays -- that build links the system dav1d.
+#    AVIF comes from libavif1.0_devel (1.4.2), NOT libavif_devel: the latter is
+#    0.9.3 from 2021 and has no avifDecoder::repetitionCount, which
+#    Libraries/LibGfx/ImageFormats/AVIFLoader.cpp:92 reads, and
+#    find_package(LIBAVIF) carries no version constraint so configure cannot
+#    catch it -- the build dies ~1900 targets in, inside the ImageDecoder
+#    service (DeBeOS #731). The two packages declare a CONFLICTS on each other
+#    and pkgman does not resolve it for you; it stops the whole transaction
+#    ("package libavif1.0_devel-1.4.2-2 conflicts with libavif_devel provided
+#    by libavif_devel-0.9.3-6"), which is why the 0.9.3 devel package is taken
+#    off first below. dav1d_devel stays -- libavif1.0 links the system dav1d.
 #    `dejavu` is a runtime, not a devel, dependency, and it is not optional:
 #    Web::Platform::FontPlugin VERIFYs that a fixed-width font exists at
 #    construction (Libraries/LibWeb/Platform/FontPlugin.cpp:55), and it looks
@@ -53,12 +60,31 @@ mkdir -p $PREFIX/lib/pkgconfig $PREFIX/include/wuffs
 #    libglvnd_devel, which installs them under
 #    /boot/system/develop/headers/os/opengl -- already on clang's default
 #    `#include <...>` search path, so no extra -I is needed.
+#
+#    `libavif1.0_devel` CONFLICTS with the 0.9.3 `libavif_devel` and pkgman does
+#    NOT auto-resolve it -- `pkgman -y` reports the conflict and exits 1 -- so the
+#    old devel has to come off first. `|| true` because `pkgman uninstall` of an
+#    absent package is also an error (`Name not found`), which is the normal case
+#    on a fresh builder (issue 731).
+pkgman uninstall -y libavif_devel || true
 pkgman install -y \
   libfmt_devel mimalloc_devel libsdl3_devel \
   fontconfig_devel libedit_devel harfbuzz_devel freetype_devel \
   libpng16_devel libjpeg_turbo_devel libwebp_devel brotli_devel woff2_devel \
   openssl3_devel curl_devel libxml2_devel sqlite_devel zlib_devel libpsl_devel \
-  dav1d_devel libdwarf_devel icu74_devel mesa_devel dejavu
+  dav1d_devel libavif1.0_devel libdwarf_devel icu74_devel mesa_devel dejavu
+
+# 1b. Assert the AVIF header LibImageDecoders will actually see, not the version
+#     macro alone: a 1.x header installed without the decoder field Ladybird
+#     reads is exactly DeBeOS #731's failure mode, and it is invisible at
+#     configure time.
+AVIF_H=/boot/system/develop/headers/avif/avif.h
+grep -q 'define AVIF_VERSION_MAJOR 1' "$AVIF_H" \
+  || { echo "installed avif.h is not 1.x -- is libavif_devel 0.9.3 back?" >&2; exit 1; }
+grep -q repetitionCount "$AVIF_H" \
+  || { echo "installed avif.h has no avifDecoder::repetitionCount" >&2; exit 1; }
+test -e /boot/system/lib/cmake/libavif/libavif-config.cmake \
+  || { echo "libavif1.0_devel installed no CMake config package" >&2; exit 1; }
 
 # 2. FastFloat (header-only) -- build+install its real CMake config package.
 cd /boot/home && git config --global core.fsync none || true
@@ -101,11 +127,6 @@ ninja && ninja install
 #     and because a failed WebContent start is the only symptom of getting it
 #     wrong, which makes it worth re-running on its own.
 PREFIX=$PREFIX sh "$(dirname "$0")/build-tommath.sh"
-
-# 3d. libavif 1.4.2 -- the repo's 0.9.3 predates avifDecoder::repetitionCount,
-#     which AVIFLoader.cpp reads, and find_package(LIBAVIF) has no version
-#     constraint so configure cannot catch it. Own script; see build-avif.sh.
-PREFIX=$PREFIX sh "$(dirname "$0")/build-avif.sh"
 
 # 4. wuffs -- single-file header the LibImageDecoders find_path() needs.
 curl -fsSL -o $PREFIX/include/wuffs/wuffs-v0.3.c \
