@@ -17,6 +17,13 @@
 # That is a load-time failure of every consumer, so WebContent and WebDriver
 # would not start even once they linked. Laying the segments out at the 4 KB
 # page the system really uses shrinks each hole below a page.
+#
+# #720 is fixed in DeBeOS trunk (067dce7ff5), but the loader ships inside the
+# booted image, so these flags only become redundant once the builder AMI runs
+# a DeBeOS build that contains the fix. The retirement condition, and the
+# one-line check for it, are recorded once in
+# patches/ladybird-haiku.patch (Meta/CMake/compile_options.cmake hunk);
+# retire that site, build-avif.sh and this one together.
 set -e
 export PATH=/boot/system/bin:$PATH
 cd /boot/home/pngbuild/libpng-1.6.53

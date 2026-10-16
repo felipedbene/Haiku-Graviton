@@ -373,7 +373,15 @@ Verified at runtime, not just at link time:
   `COMPILE_OPTIONS_PIE` overrides are a local workaround, redundant once a cmake
   carrying #727's `Platform/Haiku.cmake` is installed; see the patch comment for
   the measurement), and
-  `-z max-page-size=4096` on every image (DeBeOS #720).
+  `-z max-page-size=4096` on every image (DeBeOS #720). #720 itself is **fixed
+  in DeBeOS trunk** (`067dce7ff5`: `max_region_gap()` bounds the hole per
+  segment boundary by that segment's own alignment), but the flag is *not* yet
+  retirable, because the loader ships inside the booted image — an unflagged
+  binary loads only on a system whose own `runtime_loader` carries the fix, and
+  the builder AMIs (hrev59996) predate it. The retirement condition and a
+  one-command check for it are recorded in `ladybird-haiku.patch`'s
+  `compile_options.cmake` hunk; `build-png.sh` and `build-avif.sh` pass the same
+  flag and retire with it.
 - `PKG_CONFIG_PATH=/boot/home/lbdeps/lib/pkgconfig:/boot/system/develop/lib/pkgconfig`.
 
 All paths are the builder's absolute `/boot/home/...` layout; adjust the prefix

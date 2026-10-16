@@ -272,7 +272,7 @@ diff --git a/Meta/CMake/compile_options.cmake b/Meta/CMake/compile_options.cmake
 index ec92bb9543..889085e6cc 100644
 --- a/Meta/CMake/compile_options.cmake
 +++ b/Meta/CMake/compile_options.cmake
-@@ -219,6 +219,54 @@
+@@ -219,6 +219,85 @@
      add_compile_definitions(_DEFAULT_SOURCE)
      add_compile_definitions(_GNU_SOURCE)
      add_compile_definitions(__USE_GNU)
@@ -313,16 +313,47 @@ index ec92bb9543..889085e6cc 100644
 +    # and so drops the last -fPIE this override cannot reach. Delete these two
 +    # lines once such a cmake is installed -- not before: the cmake on the
 +    # published arm64 repo (4.1.6) still has the stock module.
-+    # lld lays arm64 PT_LOADs out at its default 64 KB max-page-size and emits
-+    # four of them (.rodata, text, RELRO, post-RELRO .data), so every linked
-+    # image carries three ~60 KB inter-segment holes. DeBeOS arm64 pages are
-+    # 4 KB, and the runtime_loader refuses an image whose reserved span exceeds
-+    # the sum of its mapped segments by more than two 64 KB pages
-+    # (src/system/runtime_loader/images.cpp:341) -- a budget that fits GNU ld's
-+    # two-segment output and nothing wider:
++
++    # A second, unrelated workaround, for DeBeOS #720. lld lays arm64 PT_LOADs
++    # out at its default 64 KB max-page-size and emits four of them (.rodata,
++    # text, RELRO, post-RELRO .data), so every linked image carries three
++    # ~60 KB inter-segment holes -- 193 KB in total on a hello-world. DeBeOS
++    # arm64 pages are 4 KB, and the runtime_loader that shipped in the builder
++    # images refuses an image whose reserved span exceeds the sum of its mapped
++    # segments by more than two 64 KB pages -- a 128 KB budget that fits GNU
++    # ld's two-segment output and nothing wider:
 +    #   runtime_loader: .../bin/WebDriver: Could not map image: Bad data
 +    # Lay the segments out at the page size the system actually uses, which
 +    # shrinks each hole below a page and keeps the image loadable.
++    #
++    # Retirement condition. #720 is FIXED IN DeBeOS TRUNK -- commit 067dce7ff5,
++    # "runtime_loader: bound the inter-segment hole per boundary, by its own
++    # alignment" (PR #736, 2026-10-16) -- and the fix admits exactly these
++    # layouts: src/system/runtime_loader/images.cpp now allows each segment
++    # boundary twice that segment's own p_align via max_region_gap() (capped at
++    # MAX_SEGMENT_ALIGNMENT = 2 MB, floored at MAX_PAGE_SIZE), and caps the
++    # whole image at MAX_SEGMENT_GAP_COUNT = 8 such boundaries. lld's four
++    # PT_LOADs at a 64 KB p_align spend three boundaries against a per-boundary
++    # allowance of 128 KB, so an unflagged image fits with room to spare.
++    #
++    # That is NOT yet sufficient to delete this line, and it is the one thing
++    # worth being precise about: the loader is part of the *image being booted*,
++    # not of the toolchain. An unflagged binary loads only on a system whose own
++    # runtime_loader carries 067dce7ff5. The builders here run hrev59996 AMIs
++    # baked before it landed, so for them the flag is still load-bearing, and
++    # dropping it on the strength of `git log origin/graviton` alone would
++    # produce a tree of binaries that cannot be mapped.
++    #
++    # Delete this line once the builder AMI boots a DeBeOS image built at or
++    # after 067dce7ff5. The check is one command on the builder, and it tests
++    # the loader rather than the revision string -- link anything without the
++    # flag and see whether it runs:
++    #   printf 'int main(){return 0;}' > /tmp/t.c
++    #   clang -fuse-ld=lld -o /tmp/t /tmp/t.c && /tmp/t && echo "retire it"
++    # "Could not map image: Bad data" means the running loader predates the fix
++    # and the flag stays. The same applies to the two dependency builds that
++    # pass this flag for the same reason, scripts/build-png.sh and
++    # scripts/build-avif.sh; retire all three together.
 +    add_link_options(LINKER:-z,max-page-size=4096)
  endif()
  
