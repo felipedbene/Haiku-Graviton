@@ -272,6 +272,30 @@ phase_configure() {
 		-DCMAKE_CXX_USING_LINKER_LLD=-fuse-ld=lld \
 		-DCMAKE_C_USING_LINKER_MODE=FLAG \
 		-DCMAKE_CXX_USING_LINKER_MODE=FLAG
+
+	# Assert the WebGL codegen edge here, in the graph, rather than finding out
+	# in a compile two hours away. LibCompositing compiles WebGL/WebGLCommandList.cpp
+	# and the generated WebGL/WebGLCommands.cpp; both reach
+	# <LibCompositing/WebGL/GLFunctions.h> through
+	# WebGLCommands.h:8 (emitted by Meta/Generators/generate_libweb_webgl_commands.py).
+	# Upstream never gives LibCompositing an edge to the generator that writes
+	# that header -- only Services/Compositor declares GLFunctions.cpp, and the
+	# generate_GLFunctions.cpp custom target is not ALL (Meta/CMake/utils.cmake,
+	# add_custom_target without ALL), so `ninja ladybird WebContent WebDriver`
+	# never asks for it and dies with
+	# "'LibCompositing/WebGL/GLFunctions.h' file not found". patches/
+	# ladybird-haiku.patch adds the missing
+	# `add_dependencies(LibCompositing generate_GLFunctions.cpp)`; this checks
+	# that it survived the last re-cut of that patch. Of the 63 generators in the
+	# graph it is the only one whose output has no path from its consumer, which
+	# is exactly why nothing else catches a dropped hunk (issue 599).
+	if ! grep '^build cmake_object_order_depends_target_LibCompositing:' \
+			"$BUILDDIR/build.ninja" \
+			| grep -q 'Libraries/LibCompositing/generate_GLFunctions\.cpp'; then
+		echo "LibCompositing has no order-only edge to generate_GLFunctions.cpp --" >&2
+		echo "the ladybird-haiku.patch LibCompositing/CMakeLists.txt hunk is gone" >&2
+		return 1
+	fi
 }
 
 phase_build() {
