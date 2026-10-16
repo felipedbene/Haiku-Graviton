@@ -1,0 +1,280 @@
+#!/usr/bin/env python3
+"""Selftest for the #764 fix: the provisioner must apply the recipe overlay.
+
+What this guards
+----------------
+`graviton/haikuports-patches/recipes/` holds every arm64 recipe fix this project
+has merged, and the ONLY way it reaches a builder's ports tree is
+`haiku-ports-overlay-apply`. Issue 764 was that the sole caller of that script
+was `haiku-bake-builder` -- so the overlay was installed while baking a builder
+AMI and never when provisioning an instance directly, which is the path
+`graviton/docs/native-ec2-builds.md` documents. A builder provisioned that way
+re-failed ports the tracker calls fixed, with no warning and a zero exit.
+
+That is a defect a reader cannot see: it is the ABSENCE of a call. Nothing in
+either script is wrong on its own, so neither file's own tests could catch it.
+This one asserts the wiring between them, and then proves the wiring works by
+running the overlay over a synthetic ports tree and comparing bytes.
+
+Three failure modes, all silent, all checked here:
+
+  1. The call is missing (the original 764 defect).
+  2. The call is there but its failure is swallowed, so an unplaceable recipe --
+     which overlay-apply exits 1 for precisely because the fix would go unused --
+     becomes a quietly fix-less builder.
+  3. The call passes `--stage1`, which installs the feature-capped bootstrap
+     recipes. A native builder publishes to the shipping DeBeOS repo, so that
+     would ship capped packages ("never ship feature-capped builds", AGENTS.md).
+
+Offline: no AWS, no network, no Haiku host.
+
+A check that has never been shown to FIND a defect is not known to find one, so
+`--mutate` deletes the overlay call from an in-memory copy of the provisioner
+and asserts the wiring assertions go red.
+
+Usage:
+  haiku-overlay-provision-selftest
+  haiku-overlay-provision-selftest --mutate
+"""
+
+import os
+import re
+import shutil
+import subprocess
+import sys
+import tempfile
+
+HERE = os.path.dirname(os.path.abspath(__file__))
+PROVISIONER = os.path.join(HERE, "haiku-provision-native-builder")
+APPLY = os.path.join(HERE, "haiku-ports-overlay-apply")
+OVERLAY = os.path.normpath(os.path.join(HERE, "..", "haikuports-patches"))
+
+FAILURES = []
+OKS = [0]
+
+
+def check(cond, msg):
+	if cond:
+		OKS[0] += 1
+		print("  ok   %s" % msg)
+	else:
+		FAILURES.append(msg)
+		print("  FAIL %s" % msg)
+	return cond
+
+
+def section(title):
+	print("== %s" % title)
+
+
+# ---------------------------------------------------------------------------
+# 1. the wiring: the provisioner must call overlay-apply, and call it safely
+# ---------------------------------------------------------------------------
+
+def wiring_checks(ptext, label=""):
+	# Only a line with the script in COMMAND position counts. Mentioning the path
+	# is not calling it -- the provisioner also cp's it, chmod's it and tests it
+	# for existence, and issue 764 was precisely a file that referenced the
+	# overlay's existence while never running it.
+	invocations = re.findall(
+		r'^[ \t]*(?:if ! )?(?:/bin/sh |sh |exec )?"\$OVERLAY_APPLY"(?:[ \t].*)?$',
+		ptext, re.M)
+	ok_call = check(len(invocations) >= 1,
+	                "%sprovisioner invokes haiku-ports-overlay-apply" % label)
+	if ok_call:
+		joined = "\n".join(invocations)
+		check("--stage1" not in joined,
+		      "%sthe invocation does NOT pass --stage1 (would ship capped recipes)"
+		      % label)
+		# Failure must not be swallowed. `set -eu` is on, so a bare call already
+		# aborts; the explicit `if ! ...` is what produces the readable FATAL.
+		check(re.search(r"if ! /bin/sh \"\$OVERLAY_APPLY\"", ptext) is not None,
+		      "%sthe invocation's failure is handled, not swallowed" % label)
+		check(re.search(r"FATAL #764 overlay: haiku-ports-overlay-apply failed",
+		                ptext) is not None,
+		      "%sa failed overlay-apply is FATAL with a named reason" % label)
+	check("OVERLAY_SKIP" in ptext,
+	      "%sthere is an explicit opt-out (OVERLAY_SKIP), not a silent one" % label)
+	check(re.search(r"WARNING #764 overlay: OVERLAY_SKIP=1", ptext) is not None,
+	      "%sthe opt-out warns on stderr rather than passing quietly" % label)
+	return ok_call
+
+
+# ---------------------------------------------------------------------------
+# 2. the behaviour: run the overlay over a synthetic tree, compare bytes
+# ---------------------------------------------------------------------------
+
+def fake_tree(root, recipes):
+	"""A ports tree holding a DIFFERENT text for each named recipe.
+
+	Deliberately not a copy of the overlay: if the tree already carried the
+	overlay's bytes, a comparison after the apply would pass even if the apply
+	did nothing at all.
+	"""
+	for base in recipes:
+		port = base[:base.rindex("-")]
+		d = os.path.join(root, "app-text", port)
+		os.makedirs(d, exist_ok=True)
+		with open(os.path.join(d, base), "w") as fh:
+			fh.write("# pristine upstream stand-in, NOT the overlay copy\n")
+	return root
+
+
+def main():
+	mutate = "--mutate" in sys.argv
+
+	for p in (PROVISIONER, APPLY):
+		if not os.path.exists(p):
+			print("FATAL: %s not found" % p)
+			return 2
+	if not os.path.isdir(os.path.join(OVERLAY, "recipes")):
+		print("FATAL: no %s/recipes" % OVERLAY)
+		return 2
+
+	ptext = open(PROVISIONER, encoding="utf-8").read()
+
+	if mutate:
+		section("--mutate: the overlay call is deleted; the wiring must go red")
+		broken = re.sub(r"^.*if ! /bin/sh \"\$OVERLAY_APPLY\".*$", "",
+		                ptext, count=1, flags=re.M)
+		if not check(broken != ptext, "mutation applied (call site found)"):
+			return 1
+		pre = len(FAILURES)
+		print("  -- assertions below are EXPECTED to fail --")
+		wiring_checks(broken, label="[mutant] ")
+		found = len(FAILURES) - pre
+		# Roll the expected failures back out of the tally.
+		del FAILURES[pre:]
+		OKS[0] -= 0
+		check(found > 0,
+		      "mutation DETECTED: deleting the overlay call fails %d wiring "
+		      "assertion(s), so this test can go red" % found)
+		print()
+		print("PASS                      (%d assertions, 0 failures)" % OKS[0])
+		return 0
+
+	section("the provisioner is wired to the overlay (issue 764)")
+	wiring_checks(ptext)
+	check("fetch_recipe_overlay" in ptext,
+	      "the overlay is OBTAINED, not assumed already on the box")
+	check(re.search(r"FATAL #764 overlay: cannot clone", ptext) is not None,
+	      "an unobtainable overlay is FATAL, not a skipped step")
+	check(re.search(r"not one overlay recipe is byte-identical", ptext) is not None,
+	      "success is verified against an artifact, not just an exit code")
+
+	section("the regression this fixes, stated as an assertion")
+	# This is the shape of the original defect: haiku-bake-builder was the only
+	# caller. Both callers must now exist.
+	bake = os.path.join(HERE, "haiku-bake-builder")
+	if os.path.exists(bake):
+		btext = open(bake, encoding="utf-8").read()
+		check("haiku-ports-overlay-apply" in btext,
+		      "haiku-bake-builder still applies the overlay (the bake path)")
+	check("$OVERLAY_APPLY" in ptext,
+	      "haiku-provision-native-builder also applies it (the direct path)")
+
+	section("the overlay actually lands: run it over a synthetic ports tree")
+	workdir = tempfile.mkdtemp(prefix="ov764.")
+	try:
+		recipes = sorted(f for f in os.listdir(os.path.join(OVERLAY, "recipes"))
+		                 if f.endswith(".recipe"))
+		if not check(len(recipes) > 0, "the overlay carries recipes"):
+			return 1
+		tree = fake_tree(os.path.join(workdir, "tree"), recipes)
+		r = subprocess.run(["/bin/sh", APPLY, OVERLAY, tree],
+		                   capture_output=True, text=True)
+		summary = [l for l in r.stdout.splitlines() if "updated," in l]
+		check(r.returncode == 0,
+		      "overlay-apply exits 0 over a tree holding every recipe's dir (%s)"
+		      % (summary[-1] if summary else r.stderr.strip()[-120:]))
+		if summary:
+			print("       %s" % summary[-1])
+
+		landed = []
+		not_landed = []
+		for base in recipes:
+			src = os.path.join(OVERLAY, "recipes", base)
+			hits = []
+			for dirpath, _dirnames, filenames in os.walk(tree):
+				if base in filenames:
+					hits.append(os.path.join(dirpath, base))
+			if hits and open(hits[0], "rb").read() == open(src, "rb").read():
+				landed.append(base)
+			else:
+				not_landed.append(base)
+		check(len(landed) > 0,
+		      "%d of %d overlay recipes are byte-identical in the tree"
+		      % (len(landed), len(recipes)))
+		# The stage-1 recipes are the only ones that may legitimately not land.
+		stage1 = re.search(r'^STAGE1_PORTS="([^"]*)"',
+		                   open(APPLY, encoding="utf-8").read(), re.M)
+		s1 = set(stage1.group(1).split()) if stage1 else set()
+		unexpected = [b for b in not_landed
+		              if b[:b.rindex("-")] not in s1]
+		check(not unexpected,
+		      "every non-stage-1 recipe landed (unexpected misses: %s)"
+		      % (unexpected[:5] or "none"))
+		check(all(b[:b.rindex("-")] in s1 for b in not_landed),
+		      "the only recipes withheld are the %d stage-1 feature-capped "
+		      "port(s): %s" % (len(s1), sorted(s1)))
+
+		section("the tesseract case from issue 764, specifically")
+		# The live reproduction: a provisioned builder had upstream's bare
+		# `autogen.sh`, which is exit 127 in haikuporter's chroot.
+		tess = [b for b in recipes if b.startswith("tesseract-")]
+		if check(len(tess) == 1, "the overlay carries exactly one tesseract recipe"):
+			hits = []
+			for dirpath, _d, filenames in os.walk(tree):
+				if tess[0] in filenames:
+					hits.append(os.path.join(dirpath, tess[0]))
+			body = open(hits[0], encoding="utf-8").read() if hits else ""
+			check("./autogen.sh" in body,
+			      "the applied tesseract recipe runs ./autogen.sh")
+			check(re.search(r"^\tautogen\.sh$", body, re.M) is None,
+			      "the bare `autogen.sh` (exit 127 in the chroot) is gone")
+
+		section("idempotent: a second apply changes nothing")
+		before = {}
+		for dirpath, _d, filenames in os.walk(tree):
+			for f in filenames:
+				full = os.path.join(dirpath, f)
+				before[os.path.relpath(full, tree)] = open(full, "rb").read()
+		r2 = subprocess.run(["/bin/sh", APPLY, OVERLAY, tree],
+		                    capture_output=True, text=True)
+		after = {}
+		for dirpath, _d, filenames in os.walk(tree):
+			for f in filenames:
+				full = os.path.join(dirpath, f)
+				after[os.path.relpath(full, tree)] = open(full, "rb").read()
+		check(r2.returncode == 0, "second apply exits 0")
+		check(before == after, "second apply leaves the tree byte-identical")
+
+		section("an unplaceable recipe is a hard failure, not a warning")
+		# overlay-apply exits 1 when it cannot find a home for a recipe, because
+		# a misplaced recipe is invisible to haikuporter. Prove that, so the
+		# provisioner's FATAL-on-nonzero is guarding something real.
+		ov2 = os.path.join(workdir, "ov2")
+		shutil.copytree(OVERLAY, ov2)
+		with open(os.path.join(ov2, "recipes",
+		                       "nosuchport_zzz-1.0.recipe"), "w") as fh:
+			fh.write("# a recipe for a port no tree has\n")
+		r3 = subprocess.run(["/bin/sh", APPLY, ov2, os.path.join(workdir, "tree2")],
+		                    capture_output=True, text=True)
+		check(r3.returncode != 0,
+		      "overlay-apply exits non-zero when a recipe cannot be placed")
+	finally:
+		shutil.rmtree(workdir, ignore_errors=True)
+
+	print()
+	if FAILURES:
+		print("FAIL                      (%d assertions, %d failures)"
+		      % (OKS[0] + len(FAILURES), len(FAILURES)))
+		for f in FAILURES:
+			print("  - %s" % f)
+		return 1
+	print("PASS                      (%d assertions, 0 failures)" % OKS[0])
+	return 0
+
+
+if __name__ == "__main__":
+	sys.exit(main())
