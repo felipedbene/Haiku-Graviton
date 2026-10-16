@@ -2214,6 +2214,27 @@ do_spoof(int argc, char** argv)
 }
 
 
+/*!	Waits before reading the next command.
+
+	A scripted run otherwise has no way to say "let this finish": commands are
+	read as fast as the pipe delivers them, so "quit" lands while the handshake
+	and the transfer it follows are still in flight. That overlap is sometimes
+	exactly what a test wants, but when it is not, the only control available
+	was how fast the shell happened to be -- which made reproductions rate
+	measurements rather than tests.
+*/
+static void
+do_sleep(int argc, char** argv)
+{
+	if (argc != 2) {
+		puts("usage: sleep <time in ms>");
+		return;
+	}
+
+	snooze((bigtime_t)strtoul(argv[1], NULL, 0) * 1000);
+}
+
+
 static void
 do_dprintf(int argc, char** argv)
 {
@@ -2238,6 +2259,7 @@ static cmd_entry sBuiltinCommands[] = {
 	{"spoof", do_spoof, "Spoofs an in-window bare SYN or reset"},
 	{"help", do_help, "prints this help text"},
 	{"rtt", do_round_trip_time, "Specifies the round trip time"},
+	{"sleep", do_sleep, "Waits before reading the next command"},
 	{"quit", NULL, "exits the application"},
 	{NULL, NULL, NULL},
 };
