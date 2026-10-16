@@ -31,8 +31,7 @@ spends its time in.
 
 --- a/CMakeLists.txt
 +++ b/CMakeLists.txt
-@@ -120,5 +120,19 @@
-    string(TOLOWER "${CMAKE_OSX_ARCHITECTURES}" PNG_TARGET_ARCHITECTURE)
+@@ -122,6 +122,20 @@
  else()
    string(TOLOWER "${CMAKE_SYSTEM_PROCESSOR}" PNG_TARGET_ARCHITECTURE)
  endif()
@@ -51,3 +50,5 @@ spends its time in.
 +  endif()
 +endif()
  message(STATUS "Building for target architecture: ${PNG_TARGET_ARCHITECTURE}")
+ 
+ # Allow the users to specify a custom location of zlib.
