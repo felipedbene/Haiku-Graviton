@@ -22,7 +22,9 @@ The WASM Cranelift JIT is **compiled in and exercised**, not stubbed:
 `bin/wasm --dump-native` emits native arm64 code per function, arithmetic is
 correct, and both fault-recovery paths return WASM traps instead of killing the
 process (a guard-page read gives `Memory access out of bounds`, `i32.div_s`
-by zero gives `Integer division overflow`). See "WASM Cranelift JIT" below.
+by zero gives `Integer division overflow`). All four of those are now asserted
+by the driver's `craneliftcheck` and `wasmjit` phases rather than left to a
+manual check — see "WASM Cranelift JIT" below.
 
 **The chrome is now in this recipe's stack.** It did not used to be: the
 captured stack was headless-only, so it built no browser for `WebDriver` to
@@ -182,6 +184,12 @@ The by-hand sequence it replaces, run natively on the builder as `baron` from
     including the `Compositor`, `ImageDecoder`, `MediaServer`, `RequestServer`,
     `WasmCompiler` and `WebWorker` services. See "Detaching a long build"
     below — `nohup` alone is not enough here.
+
+11. **Cranelift gates**: phase `craneliftcheck` runs between `configure` and
+    `build` and refuses to spend an hour compiling a browser whose WASM JIT has
+    silently switched itself off; phase `wasmjit` then builds `bin/wasm` and
+    actually runs the JIT. Both are in `all`. See "WASM Cranelift JIT" below for
+    why a green build is not evidence here.
 
 `scripts/run-craneliftB.sh` is an auxiliary track that reconfigures a separate
 `build-craneliftB` with `-DENABLE_CRANELIFT_JIT=ON` to prove LibWasm links the
@@ -364,6 +372,37 @@ Verified at runtime, not just at link time:
 > `bin/wasm` pushes `--arg` values onto a stack, so the **last** `--arg` becomes
 > parameter 0. Reading that backwards makes a correct JIT look like it swaps
 > every non-commutative operand.
+
+### Why this is a driver phase and not a note
+
+A capped JIT here does not fail anything. A 0 flag is not a compile error and
+not a link error; `try_cranelift_compile()` just answers `false` and every
+function quietly runs on the bytecode interpreter. `liblagom-wasm` still links,
+`bin/wasm` still runs, ninja still goes green, and the only trace is the absence
+of lines in `--dump-native` output that nobody is reading. That is exactly how
+the earlier `ports/ladybird/ladybird-haiku-arm64-wave3.patch` stack came to ship
+an inert JIT for a whole wave while its notes recorded "cranelift ON": that
+patch hoisted `cranelift_trap_message` out of the guard, which fixes the *build
+error*, and stopped there — the flag stayed 0 (issue 599, Track B).
+
+So the two checks above are phases, and both fail the run:
+
+- `craneliftcheck` (after `configure`, before `build`) asserts
+  `ENABLE_CRANELIFT_JIT:BOOL=ON` in `CMakeCache.txt`, that *no* target compiles
+  with `WASM_COMPILED_FAULT_RECOVERY_SUPPORTED=0`, and that
+  `CraneliftBridge.cpp.o` and not `CraneliftStubs.cpp.o` is in `build.ninja`.
+  The `uname -m` probe regressing — which is all it would take — is caught here
+  in a second rather than after the build.
+- `wasmjit` (after `build`) builds `bin/wasm`, hand-assembles an 80-byte module
+  exporting `i32.add`, `i32.div_s` and `i32.load`, and asserts native code was
+  emitted for it plus the three runtime results in the table. `div_s` and `load`
+  are the chosen instructions because they are the two that reach the signal
+  paths the DeBeOS patch adds; nothing else in the recipe exercises them.
+
+`-DENABLE_CRANELIFT_JIT=ON` is also passed explicitly on the configure line now.
+It is the upstream default, but relying on a default makes the configure line
+silent about the one feature on this recipe that can disappear without
+complaint.
 
 ## Key build settings (from the live `build-wave2` CMakeCache)
 
