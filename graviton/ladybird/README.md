@@ -317,7 +317,10 @@ Verified at runtime, not just at link time:
 - `CMAKE_PREFIX_PATH=/boot/home/lbdeps`; explicit `FastFloat_DIR`,
   `simdutf_DIR`, `WUFFS_INCLUDE_DIR`, `PNG_PNG_INCLUDE_DIR`, `PNG_LIBRARY`,
   `ICU_ROOT=lbdeps/icu78`, `LIBAVIF_DIR=lbdeps/lib/cmake/libavif`.
-- `-fPIC`, never `-fPIE`, for executables too (DeBeOS #715), and
+- `-fPIC`, never `-fPIE`, for executables too (DeBeOS #715 — the patch's two
+  `COMPILE_OPTIONS_PIE` overrides are a local workaround, redundant once a cmake
+  carrying #727's `Platform/Haiku.cmake` is installed; see the patch comment for
+  the measurement), and
   `-z max-page-size=4096` on every image (DeBeOS #720).
 - `PKG_CONFIG_PATH=/boot/home/lbdeps/lib/pkgconfig:/boot/system/develop/lib/pkgconfig`.
 

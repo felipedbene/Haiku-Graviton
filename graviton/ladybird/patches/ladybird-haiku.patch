@@ -250,7 +250,7 @@ diff --git a/Meta/CMake/compile_options.cmake b/Meta/CMake/compile_options.cmake
 index ec92bb9543..889085e6cc 100644
 --- a/Meta/CMake/compile_options.cmake
 +++ b/Meta/CMake/compile_options.cmake
-@@ -219,6 +219,44 @@
+@@ -219,6 +219,54 @@
      add_compile_definitions(_DEFAULT_SOURCE)
      add_compile_definitions(_GNU_SOURCE)
      add_compile_definitions(__USE_GNU)
@@ -281,6 +281,16 @@ index ec92bb9543..889085e6cc 100644
 +    # order the two end up in on the command line.
 +    set(CMAKE_C_COMPILE_OPTIONS_PIE -fPIC)
 +    set(CMAKE_CXX_COMPILE_OPTIONS_PIE -fPIC)
++    # This is a Ladybird-local workaround for DeBeOS #715, and it is redundant
++    # on any image whose cmake carries the patched Platform/Haiku.cmake from
++    # DeBeOS #727. Measured on this builder against a private CMAKE_ROOT holding
++    # #727's module text: with the patch and these two lines deleted, `ninja -t
++    # commands WebDriver` yields -fPIE x0 / -fPIC x338 against -fPIE x1 /
++    # -fPIC x338 here, and the only command line that differs in the whole graph
++    # is the `-o bin/WebDriver` link, where #727 also empties LINK_OPTIONS_PIE
++    # and so drops the last -fPIE this override cannot reach. Delete these two
++    # lines once such a cmake is installed -- not before: the cmake on the
++    # published arm64 repo (4.1.6) still has the stock module.
 +    # lld lays arm64 PT_LOADs out at its default 64 KB max-page-size and emits
 +    # four of them (.rodata, text, RELRO, post-RELRO .data), so every linked
 +    # image carries three ~60 KB inter-segment holes. DeBeOS arm64 pages are
