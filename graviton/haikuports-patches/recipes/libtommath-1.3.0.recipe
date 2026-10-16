@@ -59,7 +59,12 @@ INSTALL()
 	export INCPATH=$includeDir
 	make -f makefile.shared install
 
-	rm $libDir/libtommath.{a,la}
+	# -f, as in the 1.2.0 recipe this was bumped from. 1.3.0's
+	# makefile.shared installs no static libtommath.a, so a bare `rm` exits
+	# non-zero on the missing file AND prompts on the mode-644 .la, which
+	# fails the whole INSTALL ("wrapper-script returned non-zero exit
+	# status 1") after an otherwise clean build.
+	rm -f $libDir/libtommath.{a,la}
 
 	prepareInstalledDevelLibs libtommath
 	fixPkgconfig
