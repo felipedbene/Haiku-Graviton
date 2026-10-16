@@ -84,6 +84,15 @@ for f in "$@"; do [ -f "$f" ] || die "no such file: $f"; done
 [ -x "$SSM_RUN" ] || die "ssm-run not found next to this script"
 [ -f "$HERE/haiku-repo-add" ] || die "haiku-repo-add not found next to this script"
 [ -f "$HERE/haiku-publish-lock.sh" ] || die "haiku-publish-lock.sh not found next to this script (#164 concurrency lock)"
+# The coherence gate is NOT optional on this path. `haiku-repo-add` step 4b tests
+# `[ -x "$HERE_RA/haiku-repo-coherence" ]` and, when the tool is absent, prints a
+# NOTE and publishes anyway. Shipping only haiku-repo-add to the peer therefore
+# made every ephemeral publish silently ungated -- which is the one path actually
+# in use, since haiku-repo-publish-native needs a debeos-aws that no builder has.
+# Refuse to launch rather than discover it in the log afterwards.
+for f in haiku-repo-coherence hpkg_meta.py haiku-repo-coherence.baseline; do
+	[ -f "$HERE/$f" ] || die "$f not found next to this script (issue 708 coherence gate)"
+done
 
 PEER_AMI_PARAM="${HG_PEER_AMI_PARAM:-/aws/service/canonical/ubuntu/server/24.04/stable/current/arm64/hvm/ebs-gp3/ami-id}"
 PROFILE="${HG_PUBLISHER_PROFILE:-}"
@@ -270,6 +279,9 @@ done
 log "running haiku-repo-add on the publisher over SSM"
 addb64=$(base64 -w0 "$HERE/haiku-repo-add"         2>/dev/null || base64 "$HERE/haiku-repo-add"        | tr -d '\n')
 lockb64=$(base64 -w0 "$HERE/haiku-publish-lock.sh" 2>/dev/null || base64 "$HERE/haiku-publish-lock.sh" | tr -d '\n')
+cohb64=$(base64  -w0 "$HERE/haiku-repo-coherence"  2>/dev/null || base64 "$HERE/haiku-repo-coherence" | tr -d '\n')
+metab64=$(base64 -w0 "$HERE/hpkg_meta.py"          2>/dev/null || base64 "$HERE/hpkg_meta.py"         | tr -d '\n')
+baseb64=$(base64 -w0 "$HERE/haiku-repo-coherence.baseline" 2>/dev/null || base64 "$HERE/haiku-repo-coherence.baseline" | tr -d '\n')
 "$SSM_RUN" "$PUBLISHER" -t 2400 <<EOF
 set -e
 export HG_REPO_S3='$HG_REPO_S3'
@@ -285,6 +297,15 @@ export HAIKU_BUILD_SYSTEM_DATA_DIRECTORY=/opt/haiku-tools/data
 printf '%s' '$addb64'  | base64 -d > /tmp/haiku-repo-add
 # The #164 concurrency lock lib MUST sit beside haiku-repo-add so its source finds it.
 printf '%s' '$lockb64' | base64 -d > /tmp/haiku-publish-lock.sh
+# Likewise the issue-708 coherence gate: step 4b resolves the tool as a sibling of
+# haiku-repo-add and skips the check when it is not executable, so the baseline and
+# the hpkg_meta reader have to land beside it too -- and the +x is load-bearing,
+# because \`base64 -d >\` creates mode 0644 and the \`[ -x ]\` test would fail.
+printf '%s' '$cohb64'  | base64 -d > /tmp/haiku-repo-coherence
+printf '%s' '$metab64' | base64 -d > /tmp/hpkg_meta.py
+printf '%s' '$baseb64' | base64 -d > /tmp/haiku-repo-coherence.baseline
+chmod +x /tmp/haiku-repo-coherence
+command -v python3 >/dev/null 2>&1 || { echo "publish-ephemeral: FATAL: peer has no python3, the coherence gate cannot run" >&2; exit 1; }
 bash /tmp/haiku-repo-add
 EOF
 

@@ -139,6 +139,9 @@ log "running haiku-repo-add natively on $PUBLISHER over SSM"
 addb64=$(base64 -w0 "$HERE/haiku-repo-add"          2>/dev/null || base64 "$HERE/haiku-repo-add"          | tr -d '\n')
 awsb64=$(base64 -w0 "$HERE/haiku-aws"               2>/dev/null || base64 "$HERE/haiku-aws"               | tr -d '\n')
 lockb64=$(base64 -w0 "$HERE/haiku-publish-lock.sh"  2>/dev/null || base64 "$HERE/haiku-publish-lock.sh"   | tr -d '\n')
+cohb64=$(base64  -w0 "$HERE/haiku-repo-coherence"   2>/dev/null || base64 "$HERE/haiku-repo-coherence"     | tr -d '\n')
+metab64=$(base64 -w0 "$HERE/hpkg_meta.py"           2>/dev/null || base64 "$HERE/hpkg_meta.py"             | tr -d '\n')
+baseb64=$(base64 -w0 "$HERE/haiku-repo-coherence.baseline" 2>/dev/null || base64 "$HERE/haiku-repo-coherence.baseline" | tr -d '\n')
 "$SSM_RUN" "$PUBLISHER" -t "$SSM_TIMEOUT" <<EOF
 set -e
 export HG_REPO_S3='$HG_REPO_S3'
@@ -155,7 +158,13 @@ printf '%s' '$addb64'  | base64 -d > "\$workdir/haiku-repo-add"
 printf '%s' '$awsb64'  | base64 -d > "\$workdir/haiku-aws"
 # The #164 concurrency lock lib MUST sit beside haiku-repo-add so its source finds it.
 printf '%s' '$lockb64' | base64 -d > "\$workdir/haiku-publish-lock.sh"
-chmod +x "\$workdir/haiku-repo-add" "\$workdir/haiku-aws"
+# And the issue-708 coherence gate, for the same reason: haiku-repo-add resolves it
+# as a sibling and now refuses to upload when it is missing, so the tool, the HPKR
+# reader it imports and the baseline it reads all have to come along.
+printf '%s' '$cohb64'  | base64 -d > "\$workdir/haiku-repo-coherence"
+printf '%s' '$metab64' | base64 -d > "\$workdir/hpkg_meta.py"
+printf '%s' '$baseb64' | base64 -d > "\$workdir/haiku-repo-coherence.baseline"
+chmod +x "\$workdir/haiku-repo-add" "\$workdir/haiku-aws" "\$workdir/haiku-repo-coherence"
 bash "\$workdir/haiku-repo-add"
 rc=\$?
 rm -rf "\$workdir"
