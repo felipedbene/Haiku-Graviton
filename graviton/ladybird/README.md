@@ -75,8 +75,10 @@ Run natively on the Graviton Haiku builder, as `baron`, from `/boot/home`.
 8. **Expose the lbdeps pkg-config shims**. Copy everything in `pkgconfig/` into
    `/boot/home/lbdeps/lib/pkgconfig/` (the `*-ladybird.pc` ffmpeg aliases,
    `skia.pc`, `simdjson.pc`, `simdutf.pc`, `libtommath.pc`, `libpng16.pc`;
-   symlink `libpng.pc -> libpng16.pc`). `libavif-config-SHADOW.cmake` corrects
-   the system libavif CMake config's bad Haiku include path;
+   symlink `libpng.pc -> libpng16.pc`). There is no longer a libavif CMake
+   shadow config to copy: `libavif_devel-0.9.3-6` installs a config whose
+   exported include dir is the one it actually installed to, so plain
+   `find_package(LIBAVIF)` works against the system package (issue 709).
    `libtommath-FIXED.pc` corrects the system libtommath 1.2.0 `.pc` prefix if
    you fall back to the system copy.
 9. **Configure Ladybird** (no vcpkg, plain `-G Ninja`):
