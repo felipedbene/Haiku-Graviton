@@ -99,6 +99,72 @@ done
 
 say() { printf 'haiku-bake-builder: %s\n' "$*" >&2; }
 
+# --- getting files onto the box (issue 728) ----------------------------------
+# Every staging step below used to be `/boot/system/bin/debeos-ssm-agent s3 cp`.
+# Issue #302 replaced that interim custom agent (AgentVersion 0.4.0, which carried
+# an `s3 cp` subcommand) with the real upstream amazon-ssm-agent, which has no S3
+# verbs -- and the bake's hpkg pool stages `amazon_ssm_agent` only
+# (pipeline/buildspecs/cross-build.yml). So a current canonical image has NO S3
+# client of any kind, and every fetch here died with
+#   /boot/system/bin/debeos-ssm-agent: No such file or directory
+#   failed to run commands: exit status 127
+# on line 2 of the first generated script.
+#
+# The fix presigns on the WORKSTATION, where the credentials already are, and
+# curls on the box. Nothing on the box needs S3 access, no credential ever leaves
+# this machine, and it works on the leanest possible image.
+#
+# NOT `pkgman install debeos_ssm_agent`, even though that 0.4.0 hpkg is still
+# sitting in the green pool and would be the one-line fix: the package ships
+# data/launch/, so baking it would start the retired agent on every subsequent
+# boot of this AMI, where it would race the real agent for the instance's
+# managed-node registration -- re-creating precisely the condition #302 removed.
+# The right long-term answer is to package go-arm64/debeos-aws into the image;
+# that is tracked on 728 and is a larger change than this one.
+presign() {
+  aws s3 presign "$1" --region "$REGION" --expires-in "${2:-10800}"
+}
+
+# Emitted at the top of every remote script that fetches. `fetch <url> <dest>`
+# writes to a .part and moves it into place only on success AND non-empty, so a
+# failed or truncated download never masquerades as a staged file -- the same
+# rule haiku-srccache-fetch applies to source tarballs. Loud and fatal: the
+# whole point of 728 is that a silent transfer failure is worse than a dead one.
+#
+# curl is NOT on the lean canonical image -- haiku-provision-native-builder
+# installs it as part of its TOOLS set -- so bootstrap it here if absent. `feed`
+# is the same non-interactive pkgman shape the provisioner uses: the lean base
+# ships bootstrap "Haiku Project" libs that the DeBeOS repo supersedes, so
+# pulling curl (-> lib:libz>=1.3.2) raises a numbered "allow vendor change"
+# prompt that stays interactive even under `pkgman -y`.
+REMOTE_FETCH_PRELUDE='
+_feed() { i=0; while [ $i -lt 80 ]; do echo 1; i=$((i+1)); done; echo yes; }
+CURL=/boot/system/bin/curl
+if [ ! -x "$CURL" ]; then
+  CURL=$(command -v curl 2>/dev/null || true)
+fi
+if [ -z "$CURL" ]; then
+  echo "stage: no curl on this image; installing it from the repo (issue 728)" >&2
+  _feed | pkgman refresh >/dev/null 2>&1 || true
+  _feed | pkgman install curl >/dev/null 2>&1 || true
+  CURL=/boot/system/bin/curl
+fi
+if [ ! -x "$CURL" ]; then
+  echo "stage: FATAL: this image has no S3 client and no curl, so nothing can be" >&2
+  echo "  staged onto it. See issue 728: the image carries amazon-ssm-agent," >&2
+  echo "  which has no S3 verbs, and debeos-ssm-agent is gone." >&2
+  exit 1
+fi
+fetch() {
+  "$CURL" -fsSL --retry 3 --retry-delay 5 -o "$2.part" "$1" || {
+    echo "stage: FATAL: could not fetch $2" >&2; rm -f "$2.part"; exit 1; }
+  if [ ! -s "$2.part" ]; then
+    echo "stage: FATAL: fetched 0 bytes for $2" >&2; rm -f "$2.part"; exit 1
+  fi
+  mv "$2.part" "$2"
+}
+'
+
 # Backing snapshot(s) of an AMI. Needed wherever SpringClean protection is set or
 # released: it deletes a snapshot separately from its image, so protecting only
 # the image record still loses the data under it.
@@ -288,26 +354,33 @@ if [ "$PROVISION" = 1 ]; then
   say "provisioning toolchain + ports tree on $IID (several minutes)"
   "$HERE/ssm-run" "$IID" -t 2400 <<EOF
 set -eu
-/boot/system/bin/debeos-ssm-agent s3 cp s3://$BUCKET/bake-scripts/haiku-provision-native-builder /boot/home/haiku-provision-native-builder
+$REMOTE_FETCH_PRELUDE
+fetch '$(presign "s3://$BUCKET/bake-scripts/haiku-provision-native-builder")' /boot/home/haiku-provision-native-builder
 chmod +x /boot/home/haiku-provision-native-builder
 # Pass the work bucket so the fetch shims cache SOURCE tarballs to the shared S3
 # tier (issue #162), and the DeBeOS source mirror so haikuporter's fallback URI
 # points at a live host instead of the dead ports-mirror.haiku-os.org default
 # (issue #172). Both are resolved here at bake time, never baked into the tracked
 # provisioner file.
-SRCCACHE_S3="s3://$BUCKET/srccache" DOWNLOAD_MIRROR="$DOWNLOAD_MIRROR" AUXV_OVERLAY_S3="s3://$BUCKET/bake-scripts/auxv.h" /boot/home/haiku-provision-native-builder
+#
+# AUXV_OVERLAY_URL is a presigned GET for the same object AUXV_OVERLAY_S3 names
+# (issue 728): the provisioner runs ON the box, where there is no S3 client, so
+# it cannot resolve an s3:// URI itself. It still accepts AUXV_OVERLAY_S3 for a
+# box that does have a client, and prefers the URL when both are set.
+SRCCACHE_S3="s3://$BUCKET/srccache" DOWNLOAD_MIRROR="$DOWNLOAD_MIRROR" AUXV_OVERLAY_S3="s3://$BUCKET/bake-scripts/auxv.h" AUXV_OVERLAY_URL='$(presign "s3://$BUCKET/bake-scripts/auxv.h")' /boot/home/haiku-provision-native-builder
 EOF
   # Overlay BEFORE the cache warm-up, so the dependency infos baked into the AMI
   # are computed from the recipes we will actually build with.
   say "installing the DeBeOS recipe overlay into the ports tree"
   "$HERE/ssm-run" "$IID" -t 900 <<EOF
 set -eu
+$REMOTE_FETCH_PRELUDE
 cd /boot/home
 # UNCOMPRESSED tar to match the staging above: \`tar -z\` fails on the Haiku SSM
 # shell ("gzip: Cannot exec") because its Linux-shaped PATH omits /boot/system/bin.
-/boot/system/bin/debeos-ssm-agent s3 cp s3://$BUCKET/bake-scripts/haikuports-patches.tar /boot/home/haikuports-patches.tar
+fetch '$(presign "s3://$BUCKET/bake-scripts/haikuports-patches.tar")' /boot/home/haikuports-patches.tar
 tar -xf /boot/home/haikuports-patches.tar -C /boot/home
-/boot/system/bin/debeos-ssm-agent s3 cp s3://$BUCKET/bake-scripts/haiku-ports-overlay-apply /boot/home/haiku-ports-overlay-apply
+fetch '$(presign "s3://$BUCKET/bake-scripts/haiku-ports-overlay-apply")' /boot/home/haiku-ports-overlay-apply
 chmod +x /boot/home/haiku-ports-overlay-apply
 /boot/home/haiku-ports-overlay-apply /boot/home/haikuports-patches /boot/home/haikuports
 EOF
@@ -324,13 +397,14 @@ df /boot | grep -iE 'Used Blocks|Free Blocks'
 EOF
 fi
 
-# 3) pull the scripts onto /boot/home and make them executable (agent s3 cp).
+# 3) pull the scripts onto /boot/home and make them executable (presigned curl).
 "$HERE/ssm-run" "$IID" -t 300 <<EOF
 set -e
-/boot/system/bin/debeos-ssm-agent s3 cp s3://$BUCKET/bake-scripts/haiku-nativebuild /boot/home/haiku-nativebuild
-/boot/system/bin/debeos-ssm-agent s3 cp s3://$BUCKET/bake-scripts/haiku-repo-publish /boot/home/haiku-repo-publish
-/boot/system/bin/debeos-ssm-agent s3 cp s3://$BUCKET/bake-scripts/depclosure.py /boot/home/depclosure.py
-/boot/system/bin/debeos-ssm-agent s3 cp s3://$BUCKET/bake-scripts/haiku-package-closure /boot/home/haiku-package-closure
+$REMOTE_FETCH_PRELUDE
+fetch '$(presign "s3://$BUCKET/bake-scripts/haiku-nativebuild")' /boot/home/haiku-nativebuild
+fetch '$(presign "s3://$BUCKET/bake-scripts/haiku-repo-publish")' /boot/home/haiku-repo-publish
+fetch '$(presign "s3://$BUCKET/bake-scripts/depclosure.py")' /boot/home/depclosure.py
+fetch '$(presign "s3://$BUCKET/bake-scripts/haiku-package-closure")' /boot/home/haiku-package-closure
 chmod +x /boot/home/haiku-nativebuild /boot/home/haiku-repo-publish /boot/home/haiku-package-closure
 ls -l /boot/home/haiku-nativebuild /boot/home/haiku-repo-publish /boot/home/depclosure.py /boot/home/haiku-package-closure
 EOF

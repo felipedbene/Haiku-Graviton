@@ -124,7 +124,19 @@ def srccache_basename(key):
 
 
 class S3:
-	"""Thin S3 wrapper over either the awscli or debeos-ssm-agent."""
+	"""Thin S3 wrapper over either the awscli or a native Haiku S3 client."""
+
+	# Candidate native clients, in preference order. RESOLVED at construction
+	# rather than hard-coded (issue 728): debeos-ssm-agent was the interim custom
+	# SSM agent and issue #302 replaced it fleet-wide with the real
+	# amazon-ssm-agent, which has no `s3` verbs -- so on a current canonical image
+	# the old path simply does not exist and every call failed with 127.
+	# debeos-aws is the designed replacement.
+	NATIVE_CLIENTS = (
+		'/boot/system/bin/debeos-aws',
+		'/boot/home/config/non-packaged/bin/debeos-aws',
+		'/boot/system/bin/debeos-ssm-agent',
+	)
 
 	def __init__(self, tool):
 		self.tool = tool
@@ -132,7 +144,15 @@ class S3:
 			self._base = ['aws', 's3']
 			self._api = ['aws', 's3api']
 		elif tool == 'agent':
-			self._base = ['/boot/system/bin/debeos-ssm-agent', 's3']
+			found = next((c for c in self.NATIVE_CLIENTS
+				if os.path.isfile(c) and os.access(c, os.X_OK)), None)
+			if found is None:
+				raise SystemExit(
+					'haiku-mirror-sync: no native S3 client on this image '
+					'(issue 728). Looked for: %s. The image ships '
+					'amazon-ssm-agent, which has no "s3" verbs, and the interim '
+					'debeos-ssm-agent is gone.' % ', '.join(self.NATIVE_CLIENTS))
+			self._base = [found, 's3']
 			self._api = None
 		else:
 			raise ValueError('unknown s3 tool %r' % tool)
