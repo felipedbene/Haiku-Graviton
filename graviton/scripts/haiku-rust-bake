@@ -1,0 +1,579 @@
+#!/usr/bin/env bash
+#
+# haiku-rust-bake -- build the DeBeOS `rust_bin` hpkg (rustc + rust-std + cargo)
+# for aarch64-unknown-haiku, by cross-compiling from an aarch64 **Linux** desk.
+#
+# WHY THIS FILE EXISTS. The toolchain was baked once out of band on 2026-08-26
+# and the driving build script was never kept -- only six recipe inputs survived,
+# in S3. Re-baking it for issue 638 meant reconstructing the configuration from
+# the artifacts, and the reconstruction is the expensive part, not the build. So
+# it lives here now. Everything below is what was actually run, not a sketch.
+#
+# WHAT IT IS NOT. This is not a HaikuPorts recipe and not part of the jam build.
+# `rust*` is on the mega-build denylist (haiku-build-wave-driver) and there is no
+# in-tree `rust` recipe; `rust_bin` is a prebuilt hpkg installed with
+# `pkgman install rust_bin`. Upstream distributes nothing for Haiku on any
+# architecture (tier 3), and `aarch64-unknown-haiku` is not even an upstream
+# rustc target -- it is DeBeOS's own. There is nothing to download and no pin to
+# bump; a new toolchain means running this.
+#
+# SHAPE OF THE BUILD. Cross-OS, same-arch: host and target are both aarch64, only
+# the OS differs.
+#
+#     build host : aarch64-unknown-linux-gnu   (LLVM built here, supplies llvm-tblgen)
+#     dist host  : aarch64-unknown-haiku       (LLVM is cross-built for Haiku)
+#     target     : aarch64-unknown-haiku
+#
+# Three phases, because they fail differently:
+#
+#   std      x.py build library --target aarch64-unknown-haiku
+#            Cheapest useful checkpoint (~4 min). Proves the target spec, the
+#            cross wrappers and the sysroot before committing to an LLVM build.
+#   dist     x.py dist rustc rust-std
+#            The long one. Builds LLVM twice -- once natively for the build
+#            host (whose llvm-config and llvm-tblgen the cross build reuses)
+#            and once cross for Haiku, ~20 min each -- then the Haiku-hosted
+#            rustc, then the two dist tarballs. Budget ~1h on 16 cores.
+#   cargo    a *standalone* cargo build, NOT x.py.
+#            See "why cargo is built separately" below.
+#   pack     assemble the hpkg with the host `package` tool out of the Haiku
+#            build of this tree (generated.*/objects/linux/...).
+#
+# WHY CARGO IS BUILT SEPARATELY ("dyncurl"). The preserved 2026-08-26 artifact is
+# `cargo-1.100.0-dyncurl-arm64`, kept apart from the dist tarballs, and its
+# strings carry `/home/cargo-rebuild/vendor/...` build paths -- so it was built
+# out of a standalone cargo checkout with vendored deps, not by x.py. Its
+# `readelf -d` explains why: it NEEDs libcurl.so.4, libssl.so.3, libcrypto.so.3
+# and libz.so.1. x.py builds cargo with cargo's `all-static` feature
+# (vendored-openssl + curl/static-curl + vendored-libgit2), which compiles
+# OpenSSL and curl from source for the target; "dyncurl" is cargo's *default*
+# feature set instead, linking the system libraries dynamically. That is the
+# build this script reproduces.
+#
+# This also settles an apparent contradiction in the target spec, which says
+# `host_tools: false` while a cargo binary plainly exists. `host_tools` is
+# metadata only: it feeds the platform-support table and `build-manifest`
+# (src/tools/build-manifest/build.rs) and bootstrap never reads it -- `grep -rn
+# host_tools src/bootstrap/src/` is empty. It does not gate building host tools.
+#
+# PREREQUISITES on the desk
+#   * ninja   (`yum install ninja-build`) -- LLVM's generator.
+#   * cmake >= 3.20, python3 >= 3.6, a host g++. No rust needed: bootstrap
+#     downloads its own stage0 rustc/cargo.
+#   * this tree's arm64 cross-tools, i.e. `generated.arm64/cross-tools-arm64/`,
+#     plus the staged haiku/haiku_devel package contents under
+#     `generated.arm64/objects/haiku/arm64/packaging/packages_build/minimum/`.
+#     READ ONLY -- a generated.* dir is shared with other builds; this script
+#     copies what it needs into its own workdir and never writes there.
+#   * the preserved recipe inputs, pulled from S3 (see fetch-inputs).
+#
+# USAGE
+#   haiku-rust-bake [--workdir DIR] [--base-commit SHA] [--haiku-tree DIR]
+#                   [--jobs N] [--revision N] PHASE...
+#   PHASE := fetch-inputs | port | std | dist | cargo | pack | all
+#
+# Example (what was run for issue 638):
+#   haiku-rust-bake --workdir ~/rustbake638 \
+#       --base-commit e9bbadf6824e65b3583c2dda3a0926ec76df9143 all
+#
+set -euo pipefail
+
+BASE_COMMIT="e9bbadf6824e65b3583c2dda3a0926ec76df9143"   # nightly-2026-10-13
+WORKDIR="${HOME}/rustbake"
+HAIKU_TREE=""
+JOBS="$(getconf _NPROCESSORS_ONLN 2>/dev/null || echo 8)"
+REVISION=1
+TARGET="aarch64-unknown-haiku"
+BUILD_TRIPLE="aarch64-unknown-linux-gnu"
+S3_PREFIX="${HAIKU_RUST_S3_PREFIX:-}"
+
+die() { printf 'haiku-rust-bake: %s\n' "$*" >&2; exit 1; }
+say() { printf '\n=== haiku-rust-bake: %s\n' "$*" >&2; }
+
+PHASES=()
+while [ $# -gt 0 ]; do
+	case "$1" in
+		--workdir)     WORKDIR="$2"; shift 2 ;;
+		--base-commit) BASE_COMMIT="$2"; shift 2 ;;
+		--haiku-tree)  HAIKU_TREE="$2"; shift 2 ;;
+		--jobs)        JOBS="$2"; shift 2 ;;
+		--revision)    REVISION="$2"; shift 2 ;;
+		-h|--help)     sed -n '2,80p' "$0"; exit 0 ;;
+		-*)            die "unknown option $1" ;;
+		*)             PHASES+=("$1"); shift ;;
+	esac
+done
+[ "${#PHASES[@]}" -gt 0 ] || die "no phase given (fetch-inputs|port|std|dist|cargo|pack|all)"
+case "${PHASES[0]}" in all) PHASES=(fetch-inputs port std dist cargo pack) ;; esac
+
+# The Haiku tree supplying the cross-tools and the staged system libraries.
+# Default to the repo this script lives in.
+if [ -z "$HAIKU_TREE" ]; then
+	HAIKU_TREE="$(cd -- "$(dirname -- "$0")/../.." && pwd)"
+fi
+GEN="$HAIKU_TREE/generated.arm64"
+XBIN="$GEN/cross-tools-arm64/bin"
+STAGED="$GEN/objects/haiku/arm64/packaging/packages_build/minimum"
+HOST_PACKAGE="$GEN/objects/linux/arm64/release/tools/package/package"
+
+SRC="$WORKDIR/rust"
+SYSROOT="$WORKDIR/sysroot-haiku"          # --sysroot handed to the cross gcc
+SY="$SYSROOT/boot/system"
+BIN="$WORKDIR/bin"                        # cross wrappers + curl-config shim
+DL="$WORKDIR/dl"
+OUT="$WORKDIR/out"
+
+has_phase() { local p; for p in "${PHASES[@]}"; do [ "$p" = "$1" ] && return 0; done; return 1; }
+
+# ---------------------------------------------------------------- fetch-inputs
+#
+# The 2026-08-26 inputs that are still the only copy of the port. Note the
+# recipe's `haiku-rust-gcc`/`haiku-rust-g++` hardcode /opt/haiku paths that need
+# not exist anywhere; this script writes its own wrappers instead (see `port`)
+# and only uses the recipe for the target spec and the link sysroot.
+fetch_inputs() {
+	say "fetch-inputs"
+	mkdir -p "$DL"
+	[ -n "$S3_PREFIX" ] || die "set HAIKU_RUST_S3_PREFIX=s3://<bucket>/rust"
+	local k
+	for k in recipe/rust-haiku-recipe.tar.gz recipe/rust-haiku-sysroot.tar.gz \
+	         cargo-dyncurl/curl-runtime-bundle.tgz SHA256SUMS; do
+		[ -f "$DL/$(basename "$k")" ] && continue
+		aws s3 cp "$S3_PREFIX/$k" "$DL/" --only-show-errors
+	done
+	# Not part of the 2026-08-26 recipe -- see the libssh2 note in `port`.
+	# Any libssh2_devel >= 1.11 built for arm64 will do; this is the one in the
+	# incoming pool at the time of writing.
+	[ -f "$DL/libssh2_devel.hpkg" ] || aws s3 cp \
+		"${HAIKU_LIBSSH2_DEVEL_S3:-${S3_PREFIX%/rust}/hpkg/arm64-incoming/49/libssh2_devel-1.11.1-1-arm64.hpkg}" \
+		"$DL/libssh2_devel.hpkg" --only-show-errors
+	# All three unpack with their own top-level dir: recipe/, rust-haiku-sysroot/,
+	# curlbundle/. The recipe tarball also carries its own SHA256SUMS, which the
+	# top-level one duplicates; checksums are keyed on the `recipe/`-prefixed
+	# paths, so verify from $DL.
+	tar xzf "$DL/rust-haiku-recipe.tar.gz"  -C "$DL"
+	tar xzf "$DL/rust-haiku-sysroot.tar.gz" -C "$DL"
+	tar xzf "$DL/curl-runtime-bundle.tgz"   -C "$DL"
+	( cd "$DL" && sha256sum -c --ignore-missing SHA256SUMS ) || die "checksum mismatch"
+	[ -f "$DL/recipe/aarch64_unknown_haiku.rs" ] || die "recipe did not unpack"
+}
+
+# ------------------------------------------------------------------------ port
+#
+# Assemble the sysroot and the wrappers, check out rust, and apply the port.
+port() {
+	say "port: sysroot"
+	[ -d "$XBIN" ]    || die "no cross-tools at $XBIN"
+	[ -d "$STAGED" ]  || die "no staged Haiku packages at $STAGED -- build the arm64 tree first"
+	rm -rf "$SYSROOT"
+	mkdir -p "$SY/develop/lib" "$SY/develop/headers" "$SY/lib"
+	# The cross gcc's built-in sysroot ($GEN/cross-tools-arm64/sysroot) is not
+	# populated in a tree built with jam, so libroot/crti.o/start_dyn.o come
+	# from the staged haiku_devel package instead and the wrappers pass
+	# --sysroot at us. Copying rather than pointing at generated.* keeps the
+	# shared tree read-only.
+	cp -a "$STAGED/hpkg_-haiku_devel.hpkg/contents/develop/lib/."     "$SY/develop/lib/"
+	cp -a "$STAGED/hpkg_-haiku_devel.hpkg/contents/develop/headers/." "$SY/develop/headers/"
+	cp -a "$STAGED/hpkg_-haiku.hpkg/contents/lib/."                   "$SY/lib/"
+	# Overlay the preserved link sysroot: openssl3, zlib, zstd, libstdc++, libgcc_s.
+	local RS="$DL/rust-haiku-sysroot"
+	if [ -d "$RS" ]; then
+		cp -a "$RS/lib/."             "$SY/develop/lib/" 2>/dev/null || true
+		cp -a "$RS/develop/lib/."     "$SY/develop/lib/" 2>/dev/null || true
+		cp -a "$RS/develop/headers/." "$SY/develop/headers/" 2>/dev/null || true
+		cp -a "$RS/lib/."             "$SY/lib/" 2>/dev/null || true
+	fi
+	# libcurl is NOT in the preserved link sysroot -- that is what the separate
+	# curl-runtime-bundle is for. cargo links it dynamically, so it needs an
+	# unversioned .so to link against.
+	if [ -d "$DL/curlbundle" ]; then
+		cp -a "$DL"/curlbundle/*.so* "$SY/develop/lib/"
+		cp -a "$DL"/curlbundle/*.so* "$SY/lib/"
+		( cd "$SY/develop/lib"
+		  ln -sf libcurl.so.4.8.0      libcurl.so
+		  ln -sf libnghttp2.so.14.28.2 libnghttp2.so
+		  ln -sf libssh2.so.1.0.1      libssh2.so )
+	fi
+	# libssh2 headers and .pc, from the DeBeOS libssh2_devel package. Needed so
+	# libssh2-sys links the *system* shared libssh2 rather than vendoring a
+	# static one. With a vendored static libssh2 the final cargo link fails:
+	#
+	#   ld: hidden symbol `libssh2_init' in liblibssh2_sys-*.rlib(global.o)
+	#       is referenced by DSO
+	#   ld: final link failed: bad value
+	#
+	# because libssh2-sys compiles its bundled copy with -fvisibility=hidden
+	# (its build.rs:117) while Haiku's libcurl.so.4 carries a DT_NEEDED on
+	# libssh2.so.1 and so asks the linker for libssh2_init -- which it can then
+	# only find as a hidden definition. Linking the shared library removes the
+	# duplicate definition entirely.
+	#
+	# (The 2026-08-26 cargo sidestepped this by building libgit2 *without* ssh:
+	# its `readelf -d` has no libssh2 NEEDED, it contains no libssh2 code --
+	# `strings | grep -c libssh2_` is 1 -- and the one libssh2 symbol it does
+	# define, git_transport_ssh_libssh2_global_init, is libgit2's no-op stub
+	# from outside the `#ifdef GIT_SSH_LIBSSH2` guard. That is a capability
+	# regression, not a goal; do it properly.)
+	if [ -f "$DL/libssh2_devel.hpkg" ]; then
+		rm -rf "$DL/ssh2dev"; mkdir -p "$DL/ssh2dev"
+		"$HOST_PACKAGE" extract -C "$DL/ssh2dev" "$DL/libssh2_devel.hpkg"
+		cp -a "$DL"/ssh2dev/develop/headers/libssh2*.h "$SY/develop/headers/"
+		sed -e "s|^prefix=.*|prefix=$SY|" \
+			"$DL/ssh2dev/develop/lib/pkgconfig/libssh2.pc" \
+			> "$SY/develop/lib/pkgconfig/libssh2.pc"
+	fi
+	# The staged .pc files carry Haiku packagefs prefixes (/packages/<pkg>/.self)
+	# that do not exist on the desk, so pkg-config resolves them to nothing and
+	# openssl-sys/libz-sys silently fall back to building from source. Re-point
+	# them at this sysroot. zlib.pc also has a separate hardcoded `sharedlibdir`.
+	python3 - "$SY" <<'PY'
+import os, re, sys
+sy = sys.argv[1]
+d = os.path.join(sy, "develop/lib/pkgconfig")
+for f in ("openssl.pc", "libssl.pc", "libcrypto.pc", "zlib.pc", "libzstd.pc"):
+    p = os.path.join(d, f)
+    if not os.path.exists(p):
+        continue
+    out = []
+    for line in open(p).read().splitlines():
+        if   re.match(r'^prefix=', line):       line = "prefix=" + sy
+        elif re.match(r'^exec_prefix=', line):  line = "exec_prefix=${prefix}"
+        elif re.match(r'^libdir=', line):       line = "libdir=${prefix}/develop/lib"
+        elif re.match(r'^sharedlibdir=', line): line = "sharedlibdir=${prefix}/develop/lib"
+        elif re.match(r'^includedir=', line):   line = "includedir=${prefix}/develop/headers"
+        out.append(line)
+    open(p, "w").write("\n".join(out) + "\n")
+PY
+	# libcurl has no .pc in the bundle; curl-sys needs one to take the dynamic path.
+	cat > "$SY/develop/lib/pkgconfig/libcurl.pc" <<EOF
+prefix=$SY
+exec_prefix=\${prefix}
+libdir=\${prefix}/develop/lib
+includedir=\${prefix}/develop/headers
+
+Name: libcurl
+URL: https://curl.se/
+Description: Library to transfer files with HTTP, FTP, etc.
+Version: 8.8.0
+Libs: -L\${libdir} -lcurl
+Libs.private: -lssl -lcrypto -lz -lnghttp2 -lssh2
+Cflags: -I\${includedir}
+EOF
+
+	say "port: cross wrappers"
+	mkdir -p "$BIN"
+	# Equivalent to the preserved recipe wrappers, with the /opt/haiku paths
+	# replaced by this tree's cross-tools and this workdir's sysroot. The
+	# trailing -lbsd -lnetwork -lgnu are from the original and are load-bearing:
+	# rustc passes its own object list before them.
+	cat > "$BIN/haiku-rust-gcc" <<EOF
+#!/bin/sh
+exec $XBIN/aarch64-unknown-haiku-gcc --sysroot=$SYSROOT -D_DEFAULT_SOURCE -L$SY/develop/lib "\$@" -lbsd -lnetwork -lgnu
+EOF
+	cat > "$BIN/haiku-rust-g++" <<EOF
+#!/bin/sh
+exec $XBIN/aarch64-unknown-haiku-g++ --sysroot=$SYSROOT -D_DEFAULT_SOURCE -L$SY/develop/lib "\$@" -lbsd -lnetwork -lgnu
+EOF
+	# curl-sys asks `curl-config --features` whether the system libcurl has
+	# HTTP2 and builds curl from source if the answer is no or the program is
+	# missing. Cross-compiling, there is no runnable target curl-config, so
+	# answer from the real libcurl.so.4.8.0's NEEDED list: libnghttp2 => HTTP2,
+	# libssh2 => SCP/SFTP, libssl/libcrypto => SSL, libz => libz.
+	cat > "$BIN/curl-config" <<EOF
+#!/bin/sh
+case "\$1" in
+  --features)  printf 'SSL\nIPv6\nUnixSockets\nlibz\nAsynchDNS\nNTLM\nHTTP2\nHTTPS-proxy\nalt-svc\nthreadsafe\n' ;;
+  --version)   echo 'libcurl 8.8.0' ;;
+  --vernum)    echo '080800' ;;
+  --cflags)    echo '-I$SY/develop/headers' ;;
+  --libs)      echo '-L$SY/develop/lib -lcurl' ;;
+  --prefix)    echo '$SY' ;;
+  --protocols) printf 'HTTP\nHTTPS\nFTP\nFTPS\nSCP\nSFTP\nFILE\n' ;;
+  *) exit 1 ;;
+esac
+EOF
+	chmod +x "$BIN/haiku-rust-gcc" "$BIN/haiku-rust-g++" "$BIN/curl-config"
+
+	say "port: rust source at $BASE_COMMIT"
+	mkdir -p "$SRC"
+	if [ ! -d "$SRC/.git" ]; then
+		git -C "$SRC" init -q .
+		git -C "$SRC" remote add origin https://github.com/rust-lang/rust.git
+	fi
+	git -C "$SRC" fetch --depth 1 origin "$BASE_COMMIT"
+	git -C "$SRC" checkout -q FETCH_HEAD
+
+	# Gate on the thing the bake is for, by content rather than by commit:
+	# rust-lang/rust#164031 ("Adding File Lock Support for Haiku", 5a1dda9,
+	# merged 2026-10-12) adds `target_os = "haiku"` to the five flock
+	# cfg_select! lists. Checking by content also survives a rebase/rollup.
+	local n
+	n="$(grep -c 'target_os = "haiku"' "$SRC/library/std/src/sys/fs/unix.rs" || true)"
+	[ "${n:-0}" -ge 10 ] || die "base commit $BASE_COMMIT lacks the Haiku flock support (found $n 'target_os = \"haiku\"' in library/std/src/sys/fs/unix.rs, want >= 10); use a commit >= nightly-2026-10-13"
+	say "port: library/std/src/sys/fs/unix.rs carries $n target_os=\"haiku\" (>= 10 => flock wired up)"
+
+	# The port proper: the target spec module, plus one line registering it.
+	# The preserved mod.rs.registration.diff does NOT apply -- it was cut
+	# against 787af2b8c, where the Haiku block sat ~:1403. Re-insert instead.
+	cp "$DL/recipe/aarch64_unknown_haiku.rs" "$SRC/compiler/rustc_target/src/spec/targets/"
+	if ! grep -q '"aarch64-unknown-haiku", aarch64_unknown_haiku' "$SRC/compiler/rustc_target/src/spec/mod.rs"; then
+		python3 - "$SRC/compiler/rustc_target/src/spec/mod.rs" <<'PY'
+import sys
+p = sys.argv[1]
+s = open(p).read()
+anchor = '    ("i686-unknown-haiku", i686_unknown_haiku),'
+assert anchor in s, "i686-unknown-haiku registration not found"
+s = s.replace(anchor, '    ("aarch64-unknown-haiku", aarch64_unknown_haiku),\n' + anchor, 1)
+open(p, "w").write(s)
+PY
+	fi
+
+	say "port: bootstrap.toml"
+	cat > "$SRC/bootstrap.toml" <<EOF
+# Written by graviton/scripts/haiku-rust-bake. Base commit $BASE_COMMIT.
+change-id = 162423
+
+[llvm]
+# download-ci-llvm MUST be false, even though $BUILD_TRIPLE is tier 1 and CI
+# LLVM does exist for it. It looks like free money -- it is the single most
+# expensive wrong turn in this bake, so the reasoning is written out.
+#
+# Cross-building host tools means rustc_llvm's build script gets handed the
+# *build host's* llvm-config, because the target's is a Haiku binary that cannot
+# be executed on Linux. It then rewrites the build triple to the target triple
+# in every path llvm-config prints: compiler/rustc_llvm/build.rs:286 for -I
+# flags, :453 for link search dirs. That only works if the two LLVMs are laid
+# out and configured identically -- which build.rs says in as many words, "This
+# only really works if the host LLVM and target LLVM are compiled the same way".
+# With download-ci-llvm they are not, and it fails twice over:
+#
+#   1. Paths. CI LLVM unpacks to build/$BUILD_TRIPLE/ci-llvm, while a locally
+#      cross-built LLVM lands in build/$TARGET/llvm, so the rewrite produces
+#      build/$TARGET/ci-llvm/include -- which does not exist:
+#      "llvm/Config/llvm-config.h: No such file or directory".
+#   2. Link type, which symlinking around (1) does not cure. CI LLVM is built
+#      LLVM_LINK_LLVM_DYLIB=ON and ships only libLLVM.so with no static
+#      archives, while bootstrap configures the cross LLVM
+#      LLVM_LINK_LLVM_DYLIB=OFF. So \`llvm-config --link-static --libs ...\` on
+#      the CI LLVM reports "missing: .../libLLVMDemangle.a" for every component
+#      and exits 1.
+#
+# Building LLVM for the build host locally yields a static llvm-config under
+# build/$BUILD_TRIPLE/llvm, so the path rewrite lands on the real cross LLVM and
+# --link-static agrees. Cost: one extra ~20 min LLVM build. Pay it.
+download-ci-llvm = false
+ninja = true
+# Do NOT set llvm.targets / llvm.experimental-targets. They are global, so they
+# would also narrow the Haiku-hosted LLVM and ship a rustc that can only emit
+# AArch64 -- strictly less capable than the toolchain being replaced. Keep the
+# defaults. (They are also rejected outright alongside download-ci-llvm:
+# "Setting \`llvm.targets\` is incompatible with \`llvm.download-ci-llvm\`".)
+
+[build]
+build = "$BUILD_TRIPLE"
+host = ["$TARGET"]
+target = ["$TARGET"]
+docs = false
+compiler-docs = false
+# rustdoc only. cargo is deliberately NOT in this list and is built standalone
+# (see the header) because x.py builds it with the all-static feature set, which
+# compiles OpenSSL and curl from source for the target. rustdoc, though, has to
+# be here: with `tools = []` the rustc dist component ships no rustdoc binary,
+# while .PackageInfo promises `provides: cmd:rustdoc` -- which is exactly the
+# unresolvable-provides shape of issues 708 and 717. (The 2026-08-26 package has
+# that mismatch; it is not reproduced here.)
+extended = false
+tools = ["rustdoc"]
+locked-deps = true
+vendor = false
+jobs = $JOBS
+
+[rust]
+channel = "nightly"
+download-rustc = false
+debug = false
+debuginfo-level = 0
+backtrace = true
+incremental = false
+
+[dist]
+compression-formats = ["gz"]
+
+[target.$BUILD_TRIPLE]
+cc = "gcc"
+cxx = "g++"
+
+[target.$TARGET]
+cc = "$BIN/haiku-rust-gcc"
+cxx = "$BIN/haiku-rust-g++"
+linker = "$BIN/haiku-rust-gcc"
+ar = "$XBIN/aarch64-unknown-haiku-ar"
+ranlib = "$XBIN/aarch64-unknown-haiku-ranlib"
+crt-static = false
+EOF
+}
+
+# BOOTSTRAP_SKIP_TARGET_SANITY is mandatory, not a workaround for a broken tree:
+# bootstrap validates build.target against the *stage0* rustc's target list, and
+# stage0 is an upstream nightly which has never heard of aarch64-unknown-haiku
+# (upstream registers only i686/x86_64 Haiku). The check runs before the stage1
+# compiler that does know the target exists. Bootstrap names this escape hatch
+# itself, in the panic message at src/bootstrap/src/core/sanity.rs.
+xpy() { ( cd "$SRC" && BOOTSTRAP_SKIP_TARGET_SANITY=1 python3 x.py "$@" ); }
+
+# ------------------------------------------------------------------------- std
+# ~4 min. Builds the stage1 compiler for the build host and rust-std for Haiku.
+# Run it on its own first: it exercises the target spec, both cross wrappers and
+# the whole sysroot, and a failure here is cheap to read.
+std() {
+	say "std"
+	xpy build library --target "$TARGET"
+	local lib="$SRC/build/host/stage1/lib/rustlib/$TARGET/lib"
+	[ -d "$lib" ] || die "no std at $lib"
+	# Direct artifact-level check that the flock path got compiled in: the fixed
+	# libstd references flock as an undefined symbol and drops the four
+	# "lock() not supported" messages. The broken one is the exact inverse.
+	local flock notsup
+	flock="$("$XBIN/aarch64-unknown-haiku-nm" "$lib"/libstd-*.rlib 2>/dev/null | grep -c 'flock' || true)"
+	notsup="$(strings -a "$lib"/libstd-*.rlib | grep -c 'lock() not supported' || true)"
+	say "std: libstd flock refs=$flock  \"lock() not supported\" strings=$notsup (want >=1 and 0)"
+	[ "${flock:-0}" -ge 1 ] || die "libstd has no flock reference -- File::lock would still be Unsupported"
+	[ "${notsup:-1}" -eq 0 ] || die "libstd still carries \"lock() not supported\""
+}
+
+# ------------------------------------------------------------------------ dist
+# The long phase: LLVM cross-built for Haiku, then the Haiku-hosted rustc, then
+# `rustc-nightly-<target>.tar.gz` and `rust-std-nightly-<target>.tar.gz` --
+# the same two components the 2026-08-26 bake left in S3.
+dist() {
+	say "dist (LLVM for $BUILD_TRIPLE, then LLVM for $TARGET, then Haiku-hosted rustc; budget ~1h on 16 cores)"
+	xpy dist rustc rust-std
+	ls -la "$SRC/build/dist/"
+}
+
+# ----------------------------------------------------------------------- cargo
+# Standalone cross-build of cargo with its DEFAULT features -- no `all-static`,
+# so libcurl/libssl/libcrypto/libz link dynamically. See the header.
+cargo_build() {
+	say "cargo (standalone, dynamic curl/openssl/zlib)"
+	local RUSTC="$SRC/build/host/stage1/bin/rustc"
+	local CARGO="$SRC/build/$BUILD_TRIPLE/stage0/bin/cargo"
+	[ -x "$RUSTC" ] || die "no stage1 rustc at $RUSTC -- run the dist phase first"
+	[ -x "$CARGO" ] || die "no stage0 cargo at $CARGO"
+	local U="${TARGET//-/_}"; U="$(printf '%s' "$U" | tr '[:lower:]' '[:upper:]')"
+	( cd "$SRC/src/tools/cargo"
+	  export PATH="$BIN:$PATH"
+	  export RUSTC CARGO_TARGET_DIR="$WORKDIR/cargo-target"
+	  export "CARGO_TARGET_${U}_LINKER=$BIN/haiku-rust-gcc"
+	  # cc-rs / pkg-config, for the C bits: libgit2-sys, libssh2-sys,
+	  # libsqlite3-sys (all vendored C) and openssl-sys (system).
+	  export "CC_${TARGET//-/_}=$BIN/haiku-rust-gcc"
+	  export "CXX_${TARGET//-/_}=$BIN/haiku-rust-g++"
+	  export "AR_${TARGET//-/_}=$XBIN/aarch64-unknown-haiku-ar"
+	  export PKG_CONFIG_ALLOW_CROSS=1
+	  export PKG_CONFIG_LIBDIR="$SY/develop/lib/pkgconfig"
+	  export OPENSSL_LIB_DIR="$SY/develop/lib"
+	  export OPENSSL_INCLUDE_DIR="$SY/develop/headers"
+	  # libssh2-sys vendors a static libssh2 unless told otherwise, and that
+	  # static copy collides with Haiku's libcurl.so.4 -- see the libssh2 note
+	  # in `port`. This makes it pkg-config the system shared library instead.
+	  export LIBSSH2_SYS_USE_PKG_CONFIG=1
+	  "$CARGO" build --release --locked --target "$TARGET" --bin cargo -j "$JOBS" )
+	local out="$WORKDIR/cargo-target/$TARGET/release/cargo"
+	[ -f "$out" ] || die "cargo binary not produced"
+	mkdir -p "$OUT" && cp "$out" "$OUT/cargo"
+	"$XBIN/aarch64-unknown-haiku-readelf" -d "$OUT/cargo" | grep NEEDED
+}
+
+# ------------------------------------------------------------------------ pack
+# Assemble the hpkg. The layout is read off the 2026-08-26 package, so a
+# `pkgman update` from the old revision to this one moves the same paths:
+#   lib/*.so                            proc-macro dylibs + librustc_driver
+#   lib/rustlib/etc/*.py                gdb/lldb pretty printers
+#   lib/rustlib/<target>/{lib,bin}      std rlibs, rust-objcopy
+#   bin/{rustc,rust-gdb,rust-lldb,...}  from the rustc component
+#   bin/cargo                           from the cargo phase
+#   data/licenses/MIT
+pack() {
+	say "pack"
+	[ -x "$HOST_PACKAGE" ] || die "no host package tool at $HOST_PACKAGE"
+	[ -f "$OUT/cargo" ]    || die "no cargo at $OUT/cargo -- run the cargo phase"
+	local ver stage
+	# hpkg version grammar: major.minor.micro[~prerelease]-revision. The nightly
+	# marker must hang off a `~`, not a `-`, or `package create` rejects it with
+	# "invalid character in micro version string". Matches the 2026-08-26
+	# package's 1.100.0~nightly_787af2b8c-2.
+	ver="$(sed -n 1p "$SRC/src/version")~nightly_$(git -C "$SRC" rev-parse --short=9 HEAD)"
+	stage="$WORKDIR/pkgroot"
+	rm -rf "$stage"; mkdir -p "$stage"
+	# Both tarballs are rust-installer shaped:
+	#   <name>-nightly-<target>/{components,install.sh,version,<component>/...}
+	# and only the <component>/ payload goes in the package -- install.sh and the
+	# manifest are the rustup path, which Haiku does not use. rust-std's payload
+	# dir is `rust-std-<target>`, rustc's is `rustc`, so glob for it.
+	local t tb tmp comp
+	for t in rustc rust-std; do
+		tb="$SRC/build/dist/$t-nightly-$TARGET.tar.gz"
+		[ -f "$tb" ] || die "missing $tb"
+		tmp="$WORKDIR/tmpdist-$t"
+		rm -rf "$tmp"; mkdir -p "$tmp"
+		tar xzf "$tb" -C "$tmp"
+		comp="$(find "$tmp" -mindepth 2 -maxdepth 2 -type d -name "$t*" | head -1)"
+		[ -n "$comp" ] || die "no $t payload dir inside $tb"
+		# Payload is <comp>/{bin,lib,...} plus a manifest.in listing them.
+		cp -a "$comp/." "$stage/"
+		rm -f "$stage/manifest.in"
+	done
+	install -m755 "$OUT/cargo" "$stage/bin/cargo"
+	mkdir -p "$stage/data/licenses"
+	cp "$SRC/LICENSE-MIT" "$stage/data/licenses/MIT"
+	# Shared libraries the toolchain is linked against become `requires` so
+	# pkgman pulls them; `curl` and `ca_root_certificates` are cargo's runtime
+	# needs, and gcc/gcc_syslibs_devel are what rustc drives to link.
+	cat > "$stage/.PackageInfo" <<EOF
+name			rust_bin
+version			$ver-$REVISION
+architecture	arm64
+summary			"Rust compiler and Cargo (DeBeOS arm64 build)"
+description		"aarch64-unknown-haiku build of the Rust toolchain (rustc + cargo + std), cross-compiled from Linux by graviton/scripts/haiku-rust-bake. Base commit $(git -C "$SRC" rev-parse HEAD). Link large binaries with -C link-arg=-Wl,--no-gc-sections to avoid a GNU ld 2.41 aarch64 stub bug."
+packager		"DeBeOS Haiku-Graviton"
+vendor			"DeBeOS"
+copyrights		"The Rust Project Developers"
+licenses			"MIT"
+provides {
+	rust_bin = $(sed -n 1p "$SRC/src/version")
+	cmd:rustc = $(sed -n 1p "$SRC/src/version")
+	cmd:cargo = $(sed -n 1p "$SRC/src/version")
+	cmd:rustdoc = $(sed -n 1p "$SRC/src/version")
+}
+requires {
+	haiku >= r1~beta5
+	lib:libssl
+	lib:libcrypto
+	lib:libssh2
+	lib:libzstd
+	lib:libz
+	lib:libstdc++
+	lib:libgcc_s
+	gcc
+	gcc_syslibs_devel
+	curl
+	ca_root_certificates
+}
+EOF
+	mkdir -p "$OUT"
+	local hpkg="$OUT/rust_bin-$ver-$REVISION-arm64.hpkg"
+	rm -f "$hpkg"
+	( cd "$stage" && "$HOST_PACKAGE" create -C "$stage" -i "$stage/.PackageInfo" "$hpkg" )
+	ls -la "$hpkg"
+	say "pack: built $hpkg"
+	say "pack: publishing is a GATED HUMAN STEP -- see graviton/docs/rust-file-locking.md"
+}
+
+has_phase fetch-inputs && fetch_inputs
+has_phase port         && port
+has_phase std          && std
+has_phase dist         && dist
+has_phase cargo        && cargo_build
+has_phase pack         && pack
+say "done: ${PHASES[*]}"
