@@ -33,10 +33,22 @@ export PATH=/boot/home/config/non-packaged/bin:/boot/system/non-packaged/bin:$PA
 # checking). BUMP THIS whenever a driver change must reach a wave; then republish the
 # script to s3://<bucket>/bake-scripts/haiku-nativebuild (graviton/scripts/haiku-publish-driver)
 # and redeploy the ops stack. Format: YYYY-MM-DD.<serial>.
-NATIVEBUILD_VERSION="2026-10-15.2"
+NATIVEBUILD_VERSION="2026-10-16.1"
 HP=/boot/home/haikuports
 GP=$HP/packages
-AGENT=/boot/system/bin/debeos-ssm-agent
+# The S3 client used to harvest built hpkgs and mirror sources. RESOLVED, never a
+# single hard-coded path (issue 728): `debeos-ssm-agent` was the interim custom
+# agent and issue #302 replaced it fleet-wide with the real amazon-ssm-agent,
+# which has no `s3` verbs -- so on a current canonical image this binary is
+# simply absent. It was hard-coded here, and because harvest()'s upload is written
+# as `"$AGENT" s3 cp ... >/dev/null 2>&1 && echo harvested`, its absence made
+# every upload a SILENT no-op: a port built to rc=0, was recorded `built`, and its
+# .hpkg never reached the pool. debeos-aws first -- it is the designed replacement
+# and is what should be found here once it is packaged into the image.
+AGENT=""
+for _c in /boot/system/bin/debeos-aws /boot/system/bin/debeos-ssm-agent; do
+	[ -x "$_c" ] && { AGENT="$_c"; break; }
+done
 BUCKET="${HAIKU_GRAVITON_BUCKET:-haiku-graviton-668984504585-us-west-2}"
 S3="s3://$BUCKET/hpkg/arm64"
 # DeBeOS-owned HaikuPorts source mirror prefix (issue #172). After a port builds
@@ -510,14 +522,44 @@ build_one() {
 	emit_log_capture "$log"; return 1
 }
 
+# Push every *.hpkg to the pool (never the build-input haiku*.hpkg).
+#
+# LOUD, and it returns non-zero (issue 728). This used to be
+#     "$AGENT" s3 cp "$f" "$S3/..." >/dev/null 2>&1 && echo "harvested ..."
+# -- stderr discarded, no else, no return value. So when the hard-coded agent
+# path stopped existing (the #302 migration; see the AGENT comment at the top)
+# every upload failed with 127, printed nothing, and the loop moved on: ports
+# built to rc=0, were recorded `built`, and their packages never reached
+# s3://.../hpkg/arm64. A package counted as delivered that does not exist is a
+# worse outcome than a failed wave, because nothing downstream can detect it.
+# This is the same failure shape as issue #419, where a sync filter that matched
+# nothing was swallowed by `|| echo` and the bake "succeeded" into an AMI with no
+# SSM agent.
+#
+# The caller decides what a harvest failure means for the port's recorded state;
+# this function's job is to make it impossible to miss. The error text names the
+# real reason -- $AGENT empty means no client on the image at all, which no
+# amount of retrying fixes.
 harvest() {
-	# push every *.hpkg newer than the marker to the pool (never the build-input haiku*.hpkg)
+	harvest_rc=0
+	if [ -z "$AGENT" ]; then
+		echo "harvest: FATAL: no S3 client on this image, so nothing can be" >&2
+		echo "  uploaded (issue 728). The image ships amazon-ssm-agent, which has" >&2
+		echo "  no 's3' verbs, and the interim debeos-ssm-agent is gone. Built" >&2
+		echo "  packages are still in $GP -- they are NOT in the pool." >&2
+		return 1
+	fi
 	for f in "$GP"/*.hpkg; do
 		[ -e "$f" ] || continue
 		case "$(basename "$f")" in haiku.hpkg|haiku_*|haiku-*) continue ;; esac
-		"$AGENT" s3 cp "$f" "$S3/$(basename "$f")" >/dev/null 2>&1 \
-			&& echo "harvested $(basename "$f")"
+		if err=$("$AGENT" s3 cp "$f" "$S3/$(basename "$f")" 2>&1 >/dev/null); then
+			echo "harvested $(basename "$f")"
+		else
+			echo "harvest: FAILED $(basename "$f") -> $S3/: ${err:-no error text}" >&2
+			harvest_rc=1
+		fi
 	done
+	return $harvest_rc
 }
 
 # Promote the sources of every port that built OK to the DeBeOS download mirror
@@ -540,6 +582,14 @@ harvest() {
 mirror_sources() {
 	[ -n "$MIRROR_S3" ] || return 0
 	[ -n "$BUILT_OK" ] || return 0
+	# No S3 client on this image (issue 728) -- say so once instead of printing a
+	# "mirror-store failed" line for every source file of every port. Unlike
+	# harvest this is genuinely non-fatal: the issue #172 mirror is a fallback for
+	# later waves, not an output of this one.
+	if [ -z "$AGENT" ]; then
+		echo "mirror-store skipped: no S3 client on this image (issue 728)" >&2
+		return 0
+	fi
 	for port in $BUILT_OK; do
 		# The recipe dir is $HP/<category>/<port>; find its download/ dir.
 		for dd in "$HP"/*/"$port"/download; do
@@ -593,7 +643,20 @@ for p in "$@"; do
 		rc=1
 	fi
 done
-harvest
+# A harvest failure makes the RUN fail (issue 728). It did not before, and that
+# was the defect: the packages are what the wave exists to produce, so a run that
+# built them and could not publish them has not succeeded. The banner below is
+# deliberately explicit, because "built but not published" and "build failed" are
+# very different problems and the exit code alone cannot tell them apart -- the
+# ports listed as built here really did build, and their hpkgs are still on the
+# builder under $GP.
+if ! harvest; then
+	rc=1
+	echo "===== HARVEST FAILED: these ports BUILT but their packages are NOT in" \
+		"the pool: ${BUILT_OK:-(none)} ====="
+	echo "      The build results above are valid. Do not re-queue these as" \
+		"failed builds -- fix the upload path and re-harvest from $GP."
+fi
 mirror_sources
 echo "===== nativebuild done $(date -u +%FT%TZ) rc=$rc ====="
 exit $rc

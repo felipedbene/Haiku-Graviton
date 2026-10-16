@@ -341,8 +341,18 @@ overlay_gnu_compat_headers
 # already defines HWCAP2_I8MM -- i.e. once a haiku_devel built from #329 source
 # ships in the repo, or AUXV_OVERLAY_S3 is unset.
 AUXV_OVERLAY_S3="${AUXV_OVERLAY_S3:-}"
+# A presigned GET for the same object (issue 728). This script runs ON the box,
+# which since the #302 agent migration has no S3 client at all -- the real
+# amazon-ssm-agent has no `s3` verbs and the interim debeos-ssm-agent is gone --
+# so it cannot resolve an s3:// URI itself. haiku-bake-builder presigns where the
+# credentials are and passes the URL in. Preferred when set; AUXV_OVERLAY_S3 is
+# still honoured for a box that does have a client.
+AUXV_OVERLAY_URL="${AUXV_OVERLAY_URL:-}"
 overlay_public_auxv_header() {
-	[ -n "$AUXV_OVERLAY_S3" ] || { log "#329 overlay: AUXV_OVERLAY_S3 unset; skipping"; return 0; }
+	if [ -z "$AUXV_OVERLAY_URL" ] && [ -z "$AUXV_OVERLAY_S3" ]; then
+		log "#329 overlay: neither AUXV_OVERLAY_URL nor AUXV_OVERLAY_S3 set; skipping"
+		return 0
+	fi
 	dst=/boot/system/develop/headers/posix/sys/auxv.h
 	if grep -q 'HWCAP2_I8MM' "$dst" 2>/dev/null; then
 		log "#329 overlay: <sys/auxv.h> already defines HWCAP2_I8MM; skipping"
@@ -354,13 +364,27 @@ overlay_public_auxv_header() {
 			"/boot/system/packages" >&2
 		exit 1
 	fi
-	log "#329 overlay: fetching current <sys/auxv.h> from $AUXV_OVERLAY_S3"
 	rm -rf /tmp/auxv-overlay /tmp/auxv-overlay.hpkg /tmp/auxv-overlay-verify
 	mkdir -p /tmp/auxv-overlay/develop/headers/posix/sys
-	if ! /boot/system/bin/debeos-ssm-agent s3 cp "$AUXV_OVERLAY_S3" \
-			/tmp/auxv-overlay/develop/headers/posix/sys/auxv.h >/dev/null 2>&1; then
-		echo "provision: FATAL #329 overlay: could not fetch $AUXV_OVERLAY_S3" >&2
-		exit 1
+	_auxv_dst=/tmp/auxv-overlay/develop/headers/posix/sys/auxv.h
+	if [ -n "$AUXV_OVERLAY_URL" ]; then
+		# Section 1 above installed curl, so it is on PATH by the time this runs.
+		log "#329 overlay: fetching current <sys/auxv.h> over a presigned URL"
+		if ! curl -fsSL --retry 3 --retry-delay 5 -o "$_auxv_dst" \
+				"$AUXV_OVERLAY_URL"; then
+			echo "provision: FATAL #329 overlay: could not fetch the presigned" \
+				"auxv.h URL (expired? see issue 728)" >&2
+			exit 1
+		fi
+	else
+		log "#329 overlay: fetching current <sys/auxv.h> from $AUXV_OVERLAY_S3"
+		if ! /boot/system/bin/debeos-ssm-agent s3 cp "$AUXV_OVERLAY_S3" \
+				"$_auxv_dst" >/dev/null 2>&1; then
+			echo "provision: FATAL #329 overlay: could not fetch" \
+				"$AUXV_OVERLAY_S3. This image has no S3 client (issue 728):" \
+				"pass AUXV_OVERLAY_URL instead -- haiku-bake-builder does." >&2
+			exit 1
+		fi
 	fi
 	if ! grep -q 'HWCAP2_I8MM' \
 			/tmp/auxv-overlay/develop/headers/posix/sys/auxv.h 2>/dev/null; then
@@ -865,6 +889,22 @@ case "$REAL_CURL" in
 	"$SHIM_DIR"/*|"") REAL_CURL="/boot/system/bin/curl" ;;
 esac
 REAL_PY="$(command -v python3.14 2>/dev/null || echo /boot/system/bin/python3.14)"
+# The S3 client for the shared source cache, resolved the same way and allowed to
+# come out empty (issue 728). Since the #302 migration a canonical image ships
+# only the real amazon-ssm-agent, which has no `s3` verbs, so on most boxes this
+# is genuinely absent and the helper must run with its S3 tier off instead of
+# baking a dead absolute path. debeos-aws first: it is the designed replacement
+# and the one to find here once it is packaged into the image.
+SRCCACHE_AGENT=""
+for _c in /boot/system/bin/debeos-aws /boot/system/bin/debeos-ssm-agent; do
+	[ -x "$_c" ] && { SRCCACHE_AGENT="$_c"; break; }
+done
+if [ -n "$SRCCACHE_AGENT" ]; then
+	log "source-cache S3 client: $SRCCACHE_AGENT"
+else
+	log "source-cache S3 client: NONE on this image (issue 728) -- the issue #162"
+	log "  shared cache tier will be off; seed and upstream fetches are unaffected"
+fi
 HELPER="$SHIM_DIR/haiku-srccache-fetch"
 
 # The fetch helper: seed -> shared S3 cache -> upstream (then store to S3). The
@@ -881,7 +921,13 @@ REAL_CURL="$REAL_CURL"
 REAL_PY="$REAL_PY"
 SEED_DIR="$SEED_DIR"
 SRCCACHE_S3="$SRCCACHE_S3"
-AGENT="/boot/system/bin/debeos-ssm-agent"
+# Resolved at provision time, and may legitimately be empty (issue 728): the
+# image has carried no S3 client since the #302 agent migration replaced the
+# interim debeos-ssm-agent with the real amazon-ssm-agent, which has no \`s3\`
+# verbs. The body below treats an empty AGENT as "S3 tier off" and says so once,
+# rather than silently skipping the shared cache on every single fetch -- the
+# local seed and upstream legs are unaffected either way.
+AGENT="$SRCCACHE_AGENT"
 HEADER
 cat >> "$HELPER" <<'BODY'
 #
@@ -920,7 +966,11 @@ fi
 # haiku-source-proxy's cache_path, so two URLs never collide and the object is
 # still recognizable at a glance. Computed with python (a guaranteed builder
 # dependency) by absolute path.
-if [ -n "$SRCCACHE_S3" ]; then
+# An empty AGENT means this image has no S3 client at all (issue 728), so the
+# shared tier cannot be read OR written and there is no point computing a key:
+# skip straight to upstream rather than letting every fetch burn an exec that
+# fails 127 into /dev/null.
+if [ -n "$SRCCACHE_S3" ] && [ -n "$AGENT" ]; then
 	key=$("$REAL_PY" - "$url" <<'PY'
 import hashlib, os, re, sys, urllib.parse
 url = sys.argv[1]

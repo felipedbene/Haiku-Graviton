@@ -95,11 +95,23 @@ printf '%s' "$ready" | grep -q HAVE_package_repo   || die "no 'package_repo' too
 # ------------------------------------------------- seed debeos-aws if missing
 if printf '%s' "$ready" | grep -q NO_debeos_aws; then
 	[ -n "${HG_DEBEOS_AWS_S3:-}" ] || die "debeos-aws is not on PATH on $PUBLISHER and HG_DEBEOS_AWS_S3 is unset"
-	printf '%s' "$ready" | grep -q HAVE_ssm_agent || die "cannot seed debeos-aws: neither debeos-aws nor debeos-ssm-agent is present on $PUBLISHER"
-	log "seeding debeos-aws from $HG_DEBEOS_AWS_S3 via the baked native S3 getter"
+	# Presign here and curl there (issue 728). The seed step used to require the
+	# baked `debeos-ssm-agent s3 cp`, which was the chicken-and-egg: since the
+	# #302 migration the image carries only the real amazon-ssm-agent, which has
+	# no S3 verbs, so the one mechanism for getting debeos-aws ONTO a box depended
+	# on the very thing that is missing. A presigned GET needs nothing on the box
+	# but curl, and no credential leaves this machine.
+	log "seeding debeos-aws from $HG_DEBEOS_AWS_S3 over a presigned URL"
+	SEED_URL=$(aws s3 presign "$HG_DEBEOS_AWS_S3" --expires-in 3600) \
+		|| die "could not presign $HG_DEBEOS_AWS_S3"
 	"$SSM_RUN" "$PUBLISHER" -t 300 <<SEED
 set -e
-/boot/system/bin/debeos-ssm-agent s3 cp '$HG_DEBEOS_AWS_S3' /boot/home/debeos-aws
+CURL=/boot/system/bin/curl
+[ -x "\$CURL" ] || CURL=\$(command -v curl 2>/dev/null || true)
+[ -n "\$CURL" ] || { echo "no curl on $PUBLISHER -- cannot seed debeos-aws (issue 728)" >&2; exit 1; }
+"\$CURL" -fsSL --retry 3 -o /boot/home/debeos-aws.part '$SEED_URL'
+[ -s /boot/home/debeos-aws.part ] || { echo "seeded debeos-aws is 0 bytes" >&2; exit 1; }
+mv /boot/home/debeos-aws.part /boot/home/debeos-aws
 chmod +x /boot/home/debeos-aws
 mkdir -p /boot/home/config/non-packaged/bin
 cp -f /boot/home/debeos-aws /boot/home/config/non-packaged/bin/debeos-aws
