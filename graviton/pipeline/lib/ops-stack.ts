@@ -683,6 +683,29 @@ export class OpsStack extends cdk.Stack {
     const repoAddScript = bankScript('RepoAddScript', 'haiku-repo-add');
     const publishLockScript = bankScript('PublishLockScript', 'haiku-publish-lock.sh');
     const promoteScript = bankScript('PromoteGreenScript', 'haiku-repo-promote-green');
+    // The issue-708 coherence gate. haiku-repo-add resolves the tool as a SIBLING of
+    // itself and treats absence as a HARD failure ("Absence is a packaging bug in the
+    // caller, and the caller is where it gets fixed" -- haiku-repo-add:537-549), so
+    // banking only haiku-repo-add means this job cannot publish at all. The tool needs
+    // two more files beside it: hpkg_meta.py, which it imports from its own directory,
+    // and the baseline, whose default path it derives the same way. All three travel
+    // together or none of them are any use.
+    const coherenceScripts = [
+      bankScript('RepoCoherenceScript', 'haiku-repo-coherence'),
+      bankScript('HpkgMetaModule', 'hpkg_meta.py'),
+      bankScript('RepoCoherenceBaseline', 'haiku-repo-coherence.baseline'),
+    ];
+    // Matched to the ENV VAR NAMES the buildspec reads, since a banked asset's URI
+    // can only reach the buildspec through the environment (see fetchScript).
+    const coherenceVars = ['HG_SCRIPT_COHERENCE', 'HG_SCRIPT_HPKG_META',
+      'HG_SCRIPT_COHERENCE_BASELINE'];
+    const coherenceEnv = Object.fromEntries(
+      coherenceScripts.map((s, i) => [coherenceVars[i], { value: s.asset.s3ObjectUrl }]));
+    const fetchCoherence = (dir: string) => [
+      ...coherenceScripts.flatMap((s, i) => fetchScript(s, coherenceVars[i], dir)),
+      // The gate tests for -x, not just -f.
+      `chmod +x ${dir}/haiku-repo-coherence`,
+    ];
 
     // Fetching the banked Linux host tools is identical for every job that has to
     // run `package`/`package_repo` (the incremental publish and the blue->green
@@ -792,6 +815,7 @@ export class OpsStack extends cdk.Stack {
         // (#453). Without it banked here, every pipeline publish wrote the live pool
         // with the lock silently degraded to a warning.
         HG_SCRIPT_LOCK: { value: publishLockScript.asset.s3ObjectUrl },
+        ...coherenceEnv,
         ARCH: { value: 'arm64' },
       },
       buildSpec: codebuild.BuildSpec.fromObject({
@@ -804,7 +828,11 @@ export class OpsStack extends cdk.Stack {
               // jq is load-bearing for the batched harvest prune below: it builds the
               // delete-objects request JSON from the raw key list, so key quoting and
               // escaping are jq's job rather than hand-rolled shell string surgery.
-              'apt-get install -y --no-install-recommends curl unzip ca-certificates file jq',
+              // python3 is load-bearing for the issue-708 coherence gate, which
+              // haiku-repo-add runs before it uploads anything; the minimal Ubuntu
+              // image does not ship it, and the promote job already installs it for
+              // the same reason.
+              'apt-get install -y --no-install-recommends curl unzip ca-certificates file jq python3',
               'if ! command -v aws >/dev/null 2>&1; then curl -sSLf https://awscli.amazonaws.com/awscli-exe-linux-aarch64.zip -o /tmp/awscliv2.zip && (cd /tmp && unzip -q awscliv2.zip && ./aws/install); fi',
             ],
           },
@@ -835,6 +863,12 @@ export class OpsStack extends cdk.Stack {
               // promote job reaches the same conclusion from the other side --
               // haiku-repo-promote-green refuses outright.)
               ...fetchScript(publishLockScript, 'HG_SCRIPT_LOCK', '/tmp'),
+              // The issue-708 coherence gate's three files, in the SAME directory for
+              // the same sibling-lookup reason as the lock library. haiku-repo-add dies
+              // without them, so this job could not publish at all between PR 755 and
+              // this change -- the gate's own die message says absence is the caller's
+              // bug, and this is the caller.
+              ...fetchCoherence('/tmp'),
               'export HG_REQUIRE_PUBLISH_LOCK=1',
               'export HG_INCOMING_S3="$INCOMING"',
               // The prune below deletes from the DURABLE harvest, so its key set must
@@ -1001,6 +1035,7 @@ export class OpsStack extends cdk.Stack {
         HG_SCRIPT_PROMOTE: { value: promoteScript.asset.s3ObjectUrl },
         HG_SCRIPT_REPO_ADD: { value: repoAddScript.asset.s3ObjectUrl },
         HG_SCRIPT_LOCK: { value: publishLockScript.asset.s3ObjectUrl },
+        ...coherenceEnv,
         ARCH: { value: 'arm64' },
       },
       buildSpec: codebuild.BuildSpec.fromObject({
@@ -1033,6 +1068,12 @@ export class OpsStack extends cdk.Stack {
               ...fetchScript(promoteScript, 'HG_SCRIPT_PROMOTE', promoteScriptsDir),
               ...fetchScript(repoAddScript, 'HG_SCRIPT_REPO_ADD', promoteScriptsDir),
               ...fetchScript(publishLockScript, 'HG_SCRIPT_LOCK', promoteScriptsDir),
+              // --apply does its work by CALLING haiku-repo-add with HG_REPO_S3 pointed
+              // at green, so the issue-708 gate runs on this path too and needs its
+              // three files beside it. That is the single wiring point the gate's
+              // comment describes -- but it only holds if the deployment carries the
+              // tool, which this job did not until now.
+              ...fetchCoherence(promoteScriptsDir),
               `chmod +x ${promoteScriptsDir}/haiku-repo-promote-green ${promoteScriptsDir}/haiku-repo-add`,
               // The ordering + classifier logic decides whether a promote REPLACES
               // a live package, so prove it before letting it look at the pools. It
