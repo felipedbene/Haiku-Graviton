@@ -245,11 +245,10 @@ struct BilinearDefault :
 		// bitmap. Those bytes are weighted zero so the drawn pixel does not
 		// depend on them, but the read happens all the same.
 		//
-		// There can be more than one such entry at the end. The clamp in
-		// DrawBitmapBilinear::Draw() maps every destination row or column
-		// that falls past the source onto the last one, and a fractional
-		// destination rect produces several of them. So step back over the
-		// whole trailing run rather than a single entry.
+		// There can be more than one such entry at the end: a bitmap only
+		// one pixel wide or high puts every entry on index 0 with a weight
+		// of 255. So step back over the whole trailing run rather than a
+		// single entry.
 		int32 yMax = y2;
 		if (this->fSource->height() > 1) {
 			while (yMax >= y1 && this->fWeightsY[yMax].weight == 255
@@ -302,16 +301,23 @@ struct BilinearDefault :
 				DrawMode::Blend(d, &t[0]);
 			}
 			// last columns of pixels if necessary
-			if (this->fSource->height() > 1) {
-				for (int32 x = xIndexMax + 1; x <= xIndexR; x++) {
-					const uint8* s = src + this->fWeightsX[x].index;
-					const uint8* sBottom = s + this->fSourceBytesPerRow;
+			for (int32 x = xIndexMax + 1; x <= xIndexR; x++) {
+				const uint8* s = src + this->fWeightsX[x].index;
 
-					uint32 t[4];
+				uint32 t[4];
+				if (this->fSource->height() > 1) {
+					const uint8* sBottom = s + this->fSourceBytesPerRow;
 					ColorType::InterpolateLastColumn(&t[0], s, sBottom, wTop,
 						wBottom);
-					DrawMode::Blend(d, &t[0]);
+				} else {
+					// a single-row bitmap has no row below to interpolate
+					// with, so this is a plain copy, as the corner is
+					t[0] = s[0];
+					t[1] = s[1];
+					t[2] = s[2];
+					t[3] = s[3];
 				}
+				DrawMode::Blend(d, &t[0]);
 			}
 
 			this->fDestination += this->fDestinationBytesPerRow;
@@ -585,6 +591,14 @@ struct DrawBitmapBilinear {
 		const int32 xBitmapShift = (int32)(destinationRect.left - offset.x);
 		const int32 yBitmapShift = (int32)(destinationRect.top - offset.y);
 
+		// The index below is computed over the whole bitmap and then shifted
+		// by the crop, so the highest index it may produce is one that lands
+		// on the rightmost/bottommost source pixel *after* the shift.
+		// _DetermineTransform() constrains the source rect to the bitmap
+		// bounds, so the shift is never larger than the bitmap.
+		const int32 xMaxIndex = (int32)srcWidth - 1 - xBitmapShift;
+		const int32 yMaxIndex = (int32)srcHeight - 1 - yBitmapShift;
+
 		for (uint32 i = 0; i < dstWidth; i++) {
 			// fractional index into source
 			// NOTE: It is very important to calculate the fractional index
@@ -600,9 +614,11 @@ struct DrawBitmapBilinear {
 			// then dstWidth is the rounded-up pixel count while scaleX is
 			// the fractional ratio, so the last few indices run past the
 			// rightmost source column. Clamp them onto it, which is the
-			// weighting of 255 the NOTE promises.
-			if (index > srcWidth - 1)
-				index = srcWidth - 1;
+			// weighting of 255 the NOTE promises. A cropped source runs past
+			// the end for an integral width too, hence xMaxIndex rather than
+			// srcWidth - 1.
+			if (index > xMaxIndex)
+				index = xMaxIndex;
 			// round down to get the left pixel
 			filterData.fWeightsX[i].index = (uint16)index;
 			filterData.fWeightsX[i].weight =
@@ -624,8 +640,8 @@ struct DrawBitmapBilinear {
 			float index = (i + filterData.fIndexOffsetY) * (srcHeight - 1)
 				/ (srcHeight * scaleY - 1);
 			// see the clamp in the x loop above
-			if (index > srcHeight - 1)
-				index = srcHeight - 1;
+			if (index > yMaxIndex)
+				index = yMaxIndex;
 			// round down to get the top pixel
 			filterData.fWeightsY[i].index = (uint16)index;
 			filterData.fWeightsY[i].weight =
