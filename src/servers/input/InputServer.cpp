@@ -573,6 +573,7 @@ InputServer::MessageReceived(BMessage* message)
 		case IS_CONTROL_DEVICES:
 		case SYSTEM_SHUTTING_DOWN:
 		case IS_METHOD_REGISTER:
+		case IS_SECURE_ATTENTION:
 			fAddOnManager->PostMessage(message);
 			return;
 

@@ -327,11 +327,7 @@ KeyboardDevice::_ControlThread()
 			LOG_EVENT("TeamMonitor called\n");
 
 			// show the team monitor
-			if (fOwner->fTeamMonitorWindow == NULL)
-				fOwner->fTeamMonitorWindow = new(std::nothrow) TeamMonitorWindow();
-
-			if (fOwner->fTeamMonitorWindow != NULL)
-				fOwner->fTeamMonitorWindow->Enable();
+			fOwner->_ShowTeamMonitor();
 
 			ctrlAltDelPressed = true;
 		}
@@ -587,6 +583,7 @@ KeyboardInputDevice::KeyboardInputDevice()
 	:
 	fDevices(2),
 	fDeviceListLock("KeyboardInputDevice list"),
+	fTeamMonitorLock("KeyboardInputDevice team monitor"),
 	fTeamMonitorWindow(NULL)
 {
 	CALLED();
@@ -664,12 +661,72 @@ KeyboardInputDevice::Control(const char* name, void* cookie,
 
 	if (command == B_NODE_MONITOR)
 		_HandleMonitor(message);
+	else if (command == IS_SECURE_ATTENTION)
+		_HandleSecureAttention();
 	else if (command >= B_KEY_MAP_CHANGED
 		&& command <= B_KEY_REPEAT_RATE_CHANGED) {
 		KeyboardDevice* device = (KeyboardDevice*)cookie;
 		device->UpdateSettings(command);
 	}
 	return B_OK;
+}
+
+
+/*!	Raises Team Monitor, creating it on first use, and returns it (NULL if it
+	could not be created). Shared by the local driver thread and the remote
+	secure-attention path so that both raise the same window the same way.
+	Locked because those run on different threads -- a device's control
+	thread and input_server's add-on manager looper -- and an unlocked
+	check-then-create would let each make its own window.
+*/
+TeamMonitorWindow*
+KeyboardInputDevice::_ShowTeamMonitor()
+{
+	TeamMonitorWindow* window;
+	{
+		BAutolock lock(fTeamMonitorLock);
+		if (fTeamMonitorWindow == NULL)
+			fTeamMonitorWindow = new(std::nothrow) TeamMonitorWindow();
+		window = fTeamMonitorWindow;
+	}
+
+	if (window != NULL)
+		window->Enable();
+
+	return window;
+}
+
+
+/*!	A secure-attention request that did not come from a keyboard this add-on
+	drives -- a remote-desktop session's (IS_SECURE_ATTENTION, routed here by
+	AddOnManager::_HandleSecureAttention()). Remote key events enter
+	app_server's event stream directly, so they never reach the Ctrl+Alt+Del
+	check in KeyboardDevice::_ControlThread() above.
+
+	It does what that check does for a local press and release: raise the
+	window, then tell it the chord went down and came back up. The release is
+	not optional. Holding Ctrl+Alt+Del is a deliberate local gesture -- the
+	window starts a countdown on "key down" and force-reboots unless "key up"
+	cancels it (TeamDescriptionView::CtrlAltDelPressed()) -- and a remote
+	release can be lost with the connection, so the remote request is a whole
+	press-and-release, never a held chord.
+*/
+void
+KeyboardInputDevice::_HandleSecureAttention()
+{
+	LOG_EVENT("TeamMonitor called (secure attention)\n");
+
+	TeamMonitorWindow* window = _ShowTeamMonitor();
+	if (window == NULL)
+		return;
+
+	BMessage pressed(kMsgCtrlAltDelPressed);
+	pressed.AddBool("key down", true);
+	window->PostMessage(&pressed);
+
+	BMessage released(kMsgCtrlAltDelPressed);
+	released.AddBool("key down", false);
+	window->PostMessage(&released);
 }
 
 

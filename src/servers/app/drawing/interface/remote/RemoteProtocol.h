@@ -88,8 +88,13 @@ enum {
 	// one, and its byte stream is unchanged.
 	RP_CAP_FRAME_BOUNDARY		= 1 << 3,
 
-	// (1 << 4 is claimed by RP_CAP_SECURE_ATTENTION, in flight on
-	// feat/remote-team-monitor; do not reuse it.)
+	// The server honours RP_SECURE_ATTENTION: it raises Team Monitor, exactly
+	// as a local Ctrl+Alt+Del does. The server advertises it unconditionally;
+	// what the bit tells a *client* is that the request will be acted on, so
+	// it may offer the action in its UI. A client that did not negotiate it
+	// MUST NOT send the opcode -- an older server has no case for it and
+	// hands it to its callback table as if it were a reply.
+	RP_CAP_SECURE_ATTENTION		= 1 << 4,
 
 	// The client wants to know which font file the server is laying text out
 	// with. When this is negotiated, every RP_SET_FONT carries a font identity
@@ -291,6 +296,22 @@ enum {
 	RP_UNMAPPED_KEY_DOWN,
 	RP_UNMAPPED_KEY_UP,
 	RP_MODIFIERS_CHANGED,
+
+	// client -> server, gated on RP_CAP_SECURE_ATTENTION, no payload: "the
+	// user asked for the secure-attention sequence." The server raises Team
+	// Monitor as a local Ctrl+Alt+Del does. Value 245.
+	//
+	// A message rather than the key chord, for two reasons. Team Monitor is
+	// raised by the local keyboard driver thread from raw key *states*
+	// (KeyboardInputDevice.cpp, KeyboardDevice::_ControlThread()), and remote
+	// keys never pass through it: they enter app_server's event stream as
+	// already-translated events. And holding the chord is itself a command --
+	// held for four seconds it force-reboots the machine -- which a release
+	// lost with a dropped connection would issue by accident. This opcode is
+	// a whole press-and-release, so it can never be held. It is deliberately
+	// outside the RP_MOUSE_MOVED..RP_MODIFIERS_CHANGED range RemoteHWInterface
+	// routes to RemoteEventStream: it is not an app_server input event.
+	RP_SECURE_ATTENTION,
 
 	RP_STROKE_ARC_GRADIENT = 260,
 	RP_STROKE_BEZIER_GRADIENT,

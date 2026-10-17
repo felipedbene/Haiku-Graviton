@@ -49,6 +49,15 @@
 #define IS_ACQUIRE_INPUT				'Iaqi'
 #define IS_RELEASE_INPUT				'Irli'
 
+// The secure-attention sequence (Ctrl+Alt+Del) from an input source that is
+// not a local keyboard driver -- a remote-desktop session. A notification with
+// no payload and no reply. input_server hands it to the device add-on(s) that
+// own /dev/input/keyboard, which raise Team Monitor exactly as their own
+// driver thread does on a local Ctrl+Alt+Del. It exists because Team Monitor
+// is created by the keyboard add-on, inside input_server, and remote input
+// enters app_server directly, never passing through that add-on.
+#define IS_SECURE_ATTENTION				'Isat'
+
 // Method Replicant
 #define IS_SET_METHOD					'MRsm'
 #define IS_METHOD_REGISTER				'MRmr'
