@@ -28,6 +28,45 @@ SKIA=/boot/home/skia
 cd "$SKIA"
 # NOTE: target_os="linux" — Haiku has no Skia port; Haiku is classified
 # SK_BUILD_FOR_UNIX via __unix__, which is the correct minimal surface.
+#
+# -frtti and -femulated-tls below replace the hand edits README-wave3.md §4
+# describes (appending -frtti to the skia cxx rule in out/*/toolchain.ninja and
+# recompiling three objects by hand). Both now come out of args.gn, so a fresh
+# checkout reproduces the library:
+#
+#   -frtti        Ladybird needs RTTI in skia; gn/BUILDCONFIG.gn:185 applies
+#                 //gn/skia:no_rtti to every target by default. gn/skia/BUILD.gn
+#                 emits extra_cflags_cc AFTER that config, so the generated
+#                 cflags_cc end as `... -fno-rtti -DSKCMS_DLL ... -frtti` and
+#                 clang takes the last one. Verified in out/*/obj/core.ninja.
+#                 This also covers SkFontMgr_fontconfig.cpp, which wave 3 had
+#                 to compile by hand: skia_use_fontconfig=true gives it a real
+#                 gn target (obj/fontmgr_fontconfig.ninja) with these flags.
+#   -femulated-tls  clang otherwise emits R_AARCH64_TLSDESC for thread_local,
+#                 which Haiku's arm64 runtime_loader cannot relocate — the
+#                 library loads as "Bad data". Three objects need it
+#                 (SkStrikeCache, AtlasTextOp, SkSLPool); it goes in
+#                 extra_cflags rather than extra_cflags_cc so C and C++ both
+#                 get it, and it is a no-op for objects without thread_local.
+#
+# LOADER FLOOR: this needs a runtime_loader carrying the per-boundary segment
+# gap bound (commit 067dce7ff5, issue 736). ld.lld lays libskia.so out as four
+# PT_LOADs — separate rodata, text, RELRO, data — with p_align 0x10000, and the
+# loader that shipped before that commit bounded the TOTAL inter-segment hole at
+# a flat MAX_PAGE_SIZE * 2 = 0x20000, i.e. one boundary's worth. Measured on
+# hrev59996 with a loader built 2026-10-16 00:33 (13h before the fix): gaps
+# 0x158f8 + 0x10000 + 0xf8b8 = 0x351b0, dlopen fails B_ERROR and the syslog says
+#   runtime_loader: .../libskia.so: Could not map image: Bad data
+# while the library itself is complete. Do NOT add a link workaround for this —
+# the bug is fixed in tree. If you must run the library on an older image,
+# -Wl,--no-rosegment drops it to three PT_LOADs (0x1f000 of hole, under the old
+# flat bound by 0x1000) and dlopen then succeeds; that is a stale-image escape
+# hatch, not part of the build.
+#
+# This is also why wave 3 ended up hand-ar'ing a static libskia.a: a static
+# archive never goes through the loader, so the layout limit was invisible there
+# and got worked around instead of hit. is_component_build=true above makes it a
+# real .so again.
 gn gen out/cpu --args='
   is_official_build=true
   is_component_build=true
@@ -48,8 +87,8 @@ gn gen out/cpu --args='
   skia_use_system_icu=true
   cc="clang"
   cxx="clang++"
-  extra_cflags=["-Wno-psabi"]
-  extra_cflags_cc=["-DSKCMS_DLL","-USK_HIDE_PATH_EDIT_METHODS"]
+  extra_cflags=["-Wno-psabi","-femulated-tls"]
+  extra_cflags_cc=["-DSKCMS_DLL","-USK_HIDE_PATH_EDIT_METHODS","-frtti"]
 '
 ninja -j"$(nproc)" -C out/cpu :skia :modules
 
