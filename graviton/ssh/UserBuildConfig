@@ -314,7 +314,16 @@ rule UserBuildConfigRulePreImage
 			<hg-pool>readline-8.3.003-1-arm64.hpkg
 			<hg-pool>sqlite-3.50.4.0-1-arm64.hpkg
 			<hg-pool>woff2-1.0.2-3-arm64.hpkg
-			<hg-pool>rust_bin-1.100.0~nightly_787af2b8c-2-arm64.hpkg
+			# nightly-2026-10-13, which carries rust-lang/rust#164031 so that
+			# `File::lock` is a real lock on Haiku instead of returning
+			# Unsupported. Cargo's build-directory lock reads that return value
+			# and treats Unsupported as "lock acquired", so every toolchain
+			# before this one let two `cargo build --target-dir T` runs interleave
+			# writes into deps/, .fingerprint/ and the .rmeta/.rlib outputs with
+			# nothing logged (issue 638). This filename must name a package the
+			# pool actually serves -- HG_POOL_DIR is an S3 sync of the live repo
+			# -- so it moves in lockstep with the publish, never ahead of it.
+			<hg-pool>rust_bin-1.101.0~nightly_e9bbadf68-1-arm64.hpkg
 			<hg-pool>gcc-13.3.0_2026_03_29_bootstrap-1-arm64.hpkg
 			# Archiving tools (cargo/dev workflows expect them, and the arm64
 			# mirror does not serve tar/gzip). Built natively; pooled like gcc.
