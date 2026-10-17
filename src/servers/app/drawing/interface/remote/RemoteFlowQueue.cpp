@@ -172,6 +172,7 @@ RemoteFlowQueue::Classify(uint16 code)
 		case RP_SET_DRAWING_MODE:
 		case RP_SET_FONT:
 		case RP_SET_TRANSFORM:
+		case RP_SET_SUBPIXEL_PRECISE:
 		case RP_CONSTRAIN_CLIPPING_REGION:
 		case RP_MOVE_CURSOR_TO:
 			// Latest position wins; an intermediate one has no other effect.

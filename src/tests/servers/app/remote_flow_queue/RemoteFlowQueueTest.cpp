@@ -272,6 +272,11 @@ testClassification()
 		"3: RP_INVALIDATE_REGION is droppable");
 	check(Q::Classify(RP_SET_HIGH_COLOR) == Q::OP_COALESCABLE,
 		"4: RP_SET_HIGH_COLOR is coalescable, not droppable");
+	// Value 50 pinned: the client decodes the opcode by number.
+	check(RP_SET_SUBPIXEL_PRECISE == 50
+			&& Q::Classify(RP_SET_SUBPIXEL_PRECISE) == Q::OP_COALESCABLE,
+		"4b: RP_SET_SUBPIXEL_PRECISE (50) is coalescable, not droppable or "
+		"pinned -- dropping it leaves a precise view drawn as a plain one");
 	check(Q::Classify(RP_CONSTRAIN_CLIPPING_REGION) == Q::OP_COALESCABLE,
 		"5: RP_CONSTRAIN_CLIPPING_REGION is coalescable");
 	check(Q::Classify(RP_COPY_RECT_NO_CLIPPING) == Q::OP_BARRIER,

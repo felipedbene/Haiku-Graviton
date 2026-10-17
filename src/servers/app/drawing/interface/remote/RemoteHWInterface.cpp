@@ -77,8 +77,11 @@ supported_capabilities()
 	//
 	// RP_CAP_SECURE_ATTENTION is unconditional too: honouring it needs only a
 	// message to input_server (see the RP_SECURE_ATTENTION case below).
+	//
+	// RP_CAP_SUBPIXEL_PRECISE is unconditional too: the flag is read off the
+	// DrawState every engine is already given, and the message is 11 bytes.
 	return RP_CAP_RESYNC | RP_CAP_FRAME_BOUNDARY | RP_CAP_SECURE_ATTENTION
-		| RP_CAP_FONT_IDENTITY
+		| RP_CAP_FONT_IDENTITY | RP_CAP_SUBPIXEL_PRECISE
 		| RemoteWireWriter::SupportedCapabilities();
 }
 
@@ -901,6 +904,15 @@ RemoteHWInterface::_EventThread()
 				// Re-state the fonts now that the bit is agreed.
 				if ((fClientCapabilities & RP_CAP_FONT_IDENTITY) != 0)
 					_ReplayFonts();
+
+				// The same replay went out with no capabilities for the
+				// B_SUBPIXEL_PRECISE flags too, and therefore without
+				// RP_SET_SUBPIXEL_PRECISE -- and the setter
+				// dedups, so an unchanged flag would never be sent at all. A
+				// precise view would then draw as a plain one until it next
+				// toggled. State the flags now that the bit is agreed.
+				if ((fClientCapabilities & RP_CAP_SUBPIXEL_PRECISE) != 0)
+					_ReplaySubpixelPrecise();
 				break;
 			}
 
@@ -1258,6 +1270,18 @@ RemoteHWInterface::_ReplayFonts()
 	BAutolock lock(fEngineListLocker);
 	for (int32 i = 0; i < fDrawingEngines.CountItems(); i++)
 		fDrawingEngines.ItemAt(i)->ReplayFont();
+}
+
+
+/*!	Re-states every live drawing engine's B_SUBPIXEL_PRECISE flag, and nothing
+	else. See the RP_HELLO handler for why.
+*/
+void
+RemoteHWInterface::_ReplaySubpixelPrecise()
+{
+	BAutolock lock(fEngineListLocker);
+	for (int32 i = 0; i < fDrawingEngines.CountItems(); i++)
+		fDrawingEngines.ItemAt(i)->ReplaySubpixelPrecise();
 }
 
 
