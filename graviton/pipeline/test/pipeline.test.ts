@@ -2576,6 +2576,53 @@ test('#611: targets are INSTANCE-type with client IP preserved, and NONE are reg
   expect(tg.Properties.Targets).toBeUndefined();
 });
 
+test('#766: brokerEndpointQuic makes the endpoint TCP_UDP, UDP rules beside every TCP one', () => {
+  const t = synthOpsCtx({
+    brokerEndpointAllowCidrs: '203.0.113.0/24', brokerEndpointQuic: 'true' });
+  const listeners = t.findResources('AWS::ElasticLoadBalancingV2::Listener');
+  expect(Object.keys(listeners).length).toBe(1);
+  const listener = (Object.values(listeners)[0] as any).Properties;
+  // One TCP_UDP listener: an NLB cannot hold a TCP and a UDP listener on the
+  // same port. Still passthrough -- the broker terminates both TLS and QUIC.
+  expect(listener.Protocol).toBe('TCP_UDP');
+  expect(listener.Port).toBe(BROKER_PORT);
+  expect(listener.Certificates).toBeUndefined();
+  const tg: any = Object.values(
+    t.findResources('AWS::ElasticLoadBalancingV2::TargetGroup'))[0];
+  expect(tg.Properties.Protocol).toBe('TCP_UDP');
+  expect(tg.Properties.HealthCheckProtocol).toBe('TCP');
+  expect(tg.Properties.TargetGroupAttributes).toEqual(
+    expect.arrayContaining([{ Key: 'preserve_client_ip.enabled', Value: 'true' }]));
+  const sgs = t.findResources('AWS::EC2::SecurityGroup');
+  const brokerSg: any = Object.entries(sgs)
+    .find(([k]) => k.startsWith('BrokerEndpointSg'))![1];
+  expect(brokerSg.Properties.SecurityGroupIngress).toEqual(expect.arrayContaining([
+    expect.objectContaining({ CidrIp: '203.0.113.0/24', IpProtocol: 'tcp',
+      FromPort: BROKER_PORT, ToPort: BROKER_PORT }),
+    expect.objectContaining({ CidrIp: '203.0.113.0/24', IpProtocol: 'udp',
+      FromPort: BROKER_PORT, ToPort: BROKER_PORT }),
+  ]));
+  expect(brokerSg.Properties.SecurityGroupIngress.length).toBe(2);
+  // The builder SG still opens only to the endpoint SG, now for both protocols.
+  const brokerIngress = Object.values(t.findResources('AWS::EC2::SecurityGroupIngress'))
+    .filter((r: any) => r.Properties.FromPort === BROKER_PORT) as any[];
+  expect(brokerIngress.map((r) => r.Properties.IpProtocol).sort()).toEqual(['tcp', 'udp']);
+  for (const r of brokerIngress) {
+    expect(r.Properties.SourceSecurityGroupId).toBeDefined();
+    expect(r.Properties.CidrIp).toBeUndefined();
+  }
+});
+
+test('#766: without brokerEndpointQuic the endpoint stays TCP only', () => {
+  const t = synthOpsCtx({ brokerEndpointAllowCidrs: '203.0.113.0/24' });
+  const listener = (Object.values(
+    t.findResources('AWS::ElasticLoadBalancingV2::Listener'))[0] as any).Properties;
+  expect(listener.Protocol).toBe('TCP');
+  const udp = Object.values(t.findResources('AWS::EC2::SecurityGroupIngress'))
+    .filter((r: any) => r.Properties.IpProtocol === 'udp' && r.Properties.FromPort === BROKER_PORT);
+  expect(udp.length).toBe(0);
+});
+
 test('#611: the builder SG is widened only to the endpoint SG -- never to a CIDR', () => {
   const t = synthOpsCtx({ brokerEndpointAllowCidrs: '203.0.113.0/24' });
   const brokerIngress = Object.values(t.findResources('AWS::EC2::SecurityGroupIngress'))

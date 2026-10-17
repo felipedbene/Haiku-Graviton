@@ -117,6 +117,21 @@ if (connectionArn) {
     testOnly: true,
     tags: { project: 'haiku-graviton', component: 'oven-pipeline' },
   });
+
+  // A second oven, owned by the remote-desktop QUIC transport work (#766, the
+  // follow-up to #418). Identical to the oven above -- testOnly, so it can never
+  // promote -- and separate only so that work's bakes neither queue behind nor
+  // load the shared oven. Seed its work bucket the same way.
+  new HaikuGravitonPipelineStack(app, 'HaikuGravitonQuicOvenPipeline', {
+    env: { account: config.account, region: config.region },
+    description:
+      'TEST-ONLY oven for the remote-desktop QUIC transport work (#418 follow-up): ' +
+      'Source -> CrossBuild -> Register -> Test, no Approve/Promote, no role able ' +
+      'to move canonical. A copy of HaikuGravitonOvenPipeline with its own bucket.',
+    config: { ...config, amiNamePrefix: 'haiku-quic-oven', workBucketName: undefined },
+    testOnly: true,
+    tags: { project: 'haiku-graviton', component: 'quic-oven-pipeline' },
+  });
 }
 
 app.synth();
