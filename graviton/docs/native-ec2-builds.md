@@ -136,21 +136,26 @@ guests on a half-wired python3.14/gobject-introspection; on native EC2 it builds
 (produces `glib2-2.88.1-8` + `gobject_introspection-1.86.0-8` + devels).
 
 **1. Launch** a Graviton instance from `$(aws ssm get-parameter --name
-/haiku-graviton/canonical-ami-id ...)` (see above) with the **DEFAULT root size**.
+/haiku-graviton/canonical-ami-id ...)` (see above). This run used the default root
+size; a bigger one is now fine — see below.
 
-> **Do not pass a `--block-device-mappings` / `--disk` size override to a builder you
-> drive over SSM** (#254, `../ops/SOPs.md` §13.6 — the authority). Haiku caches disk
-> size at boot, so the override needs a first-boot `partition_grow` + `resizefs`, and
-> that userland job races the network-gated SSM and sshd launch jobs: the box boots
-> healthy and is then unreachable by any channel. This run predates that finding.
+> **`--disk` is allowed again, as of 2026-10-17.** The old prohibition (#254,
+> `../ops/SOPs.md` §13.6) was real: Haiku caches disk size at boot, the override
+> needed a first-boot userland `partition_grow`, and that job raced the
+> network-gated SSM and sshd launch jobs, so the box booted healthy and was then
+> unreachable by any channel.
 >
-> The fix that would lift this restriction has landed but is **not boot-proven**:
-> the partition grow moved into the EFI loader
-> (`EfiDevice::GrowBootGptPartition()`), which runs before the kernel mounts the
-> boot volume and so removes the launch-daemon ordering dependency entirely — see
-> `develop/bfs-auto-grow-design.md`. It is compile-proven only; the one-boot
-> hardware confirmation (verification plan T4) is still owed. **Until T4 lands,
-> follow §13.6 and launch at the default size.**
+> The partition grow has since moved into the EFI loader
+> (`EfiDevice::GrowBootGptPartition()`), which runs *before* the kernel mounts the
+> boot volume, removing the launch-daemon ordering dependency entirely. That is now
+> boot-proven: verification plan **T4** passed on two instances launched with
+> `haiku-launch --disk 100` and `--disk 60`, both of which reported the full size
+> from `df -k /boot` on **boot one**, both reachable on that same boot, `checkfs`
+> showing no allocation or structural errors, and the second boot a no-op. The
+> measurement is in `develop/bfs-auto-grow-design.md`.
+>
+> So: `haiku-launch --disk <GiB>` for a build that needs room, and do **not** reboot
+> to converge it — there is nothing left to converge.
 
 **2. Provision the toolchain** (all from the DeBeOS repo; accept the bootstrap→DeBeOS
 vendor change — pkgman "solution 1"; non-interactive: `printf '1\n…\ny\n' | pkgman install`).

@@ -22,9 +22,16 @@
 #          `--disk <GiB>` overrides it for builds that need room -- an LLVM or
 #          WebKit build ENOSPCs on the stock size, and past "BFS corruption"
 #          turned out to be exactly that (see build-corruption-was-enospc).
-#          Convergence is TWO boots: first boot's launch_daemon job grows the
-#          GPT partition, the next root mount grows BFS to fill it. `--wait`
-#          plus a reboot is how you get the space before starting a build.
+#          Convergence is ONE boot: the EFI loader grows the GPT partition
+#          (EfiDevice::GrowBootGptPartition) before the kernel mounts the boot
+#          volume, so the mount-time BFS grow fires on boot one. Do NOT reboot
+#          to converge it -- measured on 2026-10-17, `--disk 100` and
+#          `--disk 60` instances both reported the full size from `df -k /boot`
+#          on their first boot and were reachable on it (verification plan T4,
+#          graviton/docs/develop/bfs-auto-grow-design.md). The userland
+#          partition_grow job remains as an idempotent fallback, and the old
+#          two-boot rule -- plus the #254 ban on a disk override for an
+#          SSM-driven builder -- is gone with it.
 #   * IAM profile: ssm-instance-profile (AmazonSSMManagedInstanceCore) so the
 #          baked debeos-ssm-agent can register.
 #   * Tags: Project=haiku-graviton, ephemeral=true (so cost tooling can find

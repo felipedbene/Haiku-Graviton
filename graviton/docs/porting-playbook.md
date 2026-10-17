@@ -1768,10 +1768,11 @@ turns the banner into `VERDICT=CAPACITY`, `poll_ssm` into `error_class=capacity`
 of these can no longer escalate a working port to `needs_human`.
 
 **Two things this class does not cover.** A 20 GiB root is not enough for
-`app-text/texlive` at all (#702), and raising it on an SSM-driven builder is forbidden by
-`graviton/docs/native-ec2-builds.md` §13.6 / #254 — that port needs a differently-sized
-builder, not a retry. And a volume that fills *completely* can take the whole instance off
-both SSH and SSM (#770), in which case there is no log to classify.
+`app-text/texlive` at all (issue 702) — that port needs a differently-sized builder, not a
+retry, and `haiku-launch --disk <GiB>` is now the way to get one (the §13.6 / #254
+prohibition on a disk override was lifted on 2026-10-17 once verification plan T4 passed;
+see `develop/bfs-auto-grow-design.md`). And a volume that fills *completely* can take the
+whole instance off both SSH and SSM (issue 770), in which case there is no log to classify.
 
 **Not in the `haiku-triage-failures` ruleset**, deliberately. The classifier reads logs for
 rows that are already `failed`, and after this fix a capacity event never produces one. The
@@ -2450,13 +2451,15 @@ Two distinct states, and conflating them is a recurring error:
   errors**. `-j16` built the full 6633-target project clean in one pass. Cap
   parallelism or wrap big builds in a resume loop; don't misread the race as a
   build defect.
-- **Disk: launch at the final root size, don't `--disk`-override a canonical
-  builder (#254).** A builder launched with a `--block-device-mappings` disk
-  override (e.g. 40 GiB) boots healthy but is **unreachable** — the first-boot
-  `partition_grow` races the network-gated `sshd`/SSM `launch_daemon` jobs, so no
-  control channel ever comes up. A default-disk (20 GiB) builder is Online in ~1
-  min. Real builds still want a big root, so provision it at launch rather than
-  growing on first boot, until the grow is sequenced before the network jobs.
+- **Disk: `haiku-launch --disk <GiB>` is the way to get a big root (#254, fixed
+  2026-10-17).** It used to be a trap: a builder launched with a disk override
+  booted healthy but was **unreachable**, because the first-boot userland
+  `partition_grow` raced the network-gated `sshd`/SSM `launch_daemon` jobs. The grow
+  is now sequenced before the network jobs by construction — it happens in the EFI
+  loader, before the kernel mounts the boot volume — and that is boot-proven
+  (verification plan T4, `develop/bfs-auto-grow-design.md`): `--disk 100` and
+  `--disk 60` instances both reported the full size on **boot one** and were
+  reachable on that same boot. Don't reboot to converge it.
 - Native builders are provisioned with `haiku-provision-native-builder` (seeds the
   download shims and applies `haikuporter-cmake-policy-minimum.patch`), driven over
   SSM. Reap the builder after the run.
