@@ -151,9 +151,50 @@ place_patchset() {
 	patchsets=$((patchsets + 1))
 }
 
+# The syntax gate in the loop needs a real bash. Resolve it ONCE and degrade to a
+# warning if there is none, rather than letting `bash -n` fail-to-run read as
+# "every recipe is broken" and abort the whole overlay -- that would turn a missing
+# interpreter into a dead builder. Haiku's base ships bash as its login shell, so
+# the empty case is the unexpected one and says so.
+RECIPE_SYNTAX_BASH=$(command -v bash 2>/dev/null || true)
+if [ -z "$RECIPE_SYNTAX_BASH" ]; then
+	echo "overlay-apply: WARNING no bash on PATH, so recipes are placed WITHOUT a" \
+		"syntax check. haikuporter sources recipes with bash, so a recipe that" \
+		"does not parse will fail on the builder instead of here." >&2
+fi
+
 for src in "$OVERLAY"/recipes/*.recipe; do
 	[ -f "$src" ] || continue
 	base=$(basename "$src")
+
+	# Syntax gate. haikuporter SOURCES a recipe with bash, so a recipe that
+	# does not parse is not a bad dependency declaration -- it is no recipe at
+	# all: `Warning: skipping <port>, as the recipe is broken` followed by
+	# `Error: No version of <port> can be built`, with the parse error pointing
+	# into work-*/port.recipe rather than at anything in this repo.
+	#
+	# Measured, issue 702: gri-2.12.23.recipe carried a 21-line explanatory
+	# comment block INSIDE the BUILD_REQUIRES="..." value. Inside double quotes
+	# `#` is not a comment, so the block became literal resolvable content, and
+	# an unpaired backtick in the quoted phrase "`tex.fmt'" opened a command
+	# substitution that ran to end-of-file:
+	#   port.recipe: line 96: unexpected EOF while looking for matching ``'
+	# That shipped through a merge and sat in the overlay until a builder tried
+	# to use it, which is precisely the failure mode this script exists to
+	# prevent (see the header note on a misplaced recipe being invisible).
+	#
+	# FATAL, not a skip: placing a recipe that cannot be parsed is strictly
+	# worse than leaving the tree's own copy alone, and silently leaving it
+	# alone would be the #764 shape again -- a builder that is not what the
+	# tracker says it is.
+	if [ -n "$RECIPE_SYNTAX_BASH" ] && ! "$RECIPE_SYNTAX_BASH" -n "$src" 2>/dev/null; then
+		echo "overlay-apply: FATAL $base does not parse as bash, so haikuporter" \
+			"cannot source it and the port cannot be built at all:" >&2
+		"$RECIPE_SYNTAX_BASH" -n "$src" 2>&1 | sed 's/^/overlay-apply:   /' >&2
+		echo "overlay-apply:   (a '#' line inside a double-quoted value is NOT a" \
+			"comment -- keep prose above the assignment)" >&2
+		exit 1
+	fi
 
 	# Stage-1 gate, before anything touches the tree.
 	portname=${base%-*}
