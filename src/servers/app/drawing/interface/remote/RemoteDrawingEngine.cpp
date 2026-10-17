@@ -137,6 +137,13 @@ RemoteDrawingEngine::ReplayState()
 	message.Add(fToken);
 	message.AddTransform(fState.Transform());
 
+	// Only to a client that negotiated it. At accept that is never the case --
+	// this replay runs before the client's RP_HELLO is read -- so the RP_HELLO
+	// handler states the flag separately once the bit is agreed
+	// (ReplaySubpixelPrecise); this covers a resync within such a session.
+	if (_SendsSubpixelPrecise())
+		_AddSetSubpixelPrecise(message, fState.SubPixelPrecise());
+
 	// The clipping region too, for the same reason: ConstrainClippingRegion()
 	// short-circuits on an equal region, so the client would be left clipping
 	// to its own default -- and several ops here (InvertRect, DrawBitmap) test
@@ -154,6 +161,22 @@ RemoteDrawingEngine::ReplayState()
 	message.Add(fToken);
 
 	message.Flush();
+
+	if (locked)
+		UnlockExclusiveAccess();
+}
+
+
+void
+RemoteDrawingEngine::ReplaySubpixelPrecise()
+{
+	bool locked = LockExclusiveAccess();
+
+	if (_SendsSubpixelPrecise()) {
+		RemoteMessage message(NULL, fHWInterface->SendBuffer());
+		_AddSetSubpixelPrecise(message, fState.SubPixelPrecise());
+		message.Flush();
+	}
 
 	if (locked)
 		UnlockExclusiveAccess();
@@ -219,6 +242,47 @@ RemoteDrawingEngine::SetDrawState(const DrawState* state, int32 xOffset,
 	// This sends RP_SET_OFFSETS as well -- it is the one place that does, so
 	// that the shadow cannot disagree with the wire. See SetTransform().
 	SetTransform(state->CombinedTransform(), xOffset, yOffset);
+	// What Painter::SetDrawState() reads into fSubpixelPrecise.
+	_SetSubpixelPrecise(state->SubPixelPrecise());
+}
+
+
+/*!	The shadow always follows the state, whether or not this client hears
+	about it: it is what ReplayState() and ReplaySubpixelPrecise() state when a
+	client that negotiated RP_CAP_SUBPIXEL_PRECISE needs telling. Only the
+	message is gated, read per call like RP_CAP_FONT_IDENTITY, because the
+	capability can arrive after the state did.
+*/
+void
+RemoteDrawingEngine::_SetSubpixelPrecise(bool precise)
+{
+	if (fState.SubPixelPrecise() == precise)
+		return;
+
+	fState.SetSubPixelPrecise(precise);
+
+	if (!_SendsSubpixelPrecise())
+		return;
+
+	RemoteMessage message(NULL, fHWInterface->SendBuffer());
+	_AddSetSubpixelPrecise(message, precise);
+}
+
+
+bool
+RemoteDrawingEngine::_SendsSubpixelPrecise() const
+{
+	return (fHWInterface->ClientCapabilities() & RP_CAP_SUBPIXEL_PRECISE) != 0;
+}
+
+
+void
+RemoteDrawingEngine::_AddSetSubpixelPrecise(RemoteMessage& message,
+	bool precise)
+{
+	message.Start(RP_SET_SUBPIXEL_PRECISE);
+	message.Add(fToken);
+	message.Add(precise);
 }
 
 
