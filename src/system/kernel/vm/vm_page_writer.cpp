@@ -586,6 +586,12 @@ ModifiedPageQueue::_PageWriter()
 
 	page_num_t pagesSinceLastSuccessfulWrite = 0;
 
+	// Bookkeeping for the no-progress report below. Both are wall-clock in
+	// system_time() terms; 0 means "not currently stalled".
+	const bigtime_t kStallReportInterval = 10000000;	// 10 seconds
+	bigtime_t stalledSince = 0;
+	bigtime_t lastStallReport = 0;
+
 	while (fWriterThread >= 0) {
 		if (queue.Count() < kNumPages) {
 			// Wait the full amount when no one triggers us.
@@ -632,6 +638,52 @@ ModifiedPageQueue::_PageWriter()
 		if (modifiedPages <= pagesSinceLastSuccessfulWrite) {
 			// We ran through the whole queue without being able to write a
 			// single page. Take a break.
+			//
+			// Say so, rate-limited, because reaching this point repeatedly is
+			// not a slow device, it is a stuck one -- and the consequences are
+			// severe and entirely silent. PageWriteWrapper::Done() puts a
+			// failed non-temporary page straight back on the modified queue
+			// rather than lose its contents, so a device that fails every
+			// write leaves a queue that cannot drain and pages that can never
+			// be freed. Anything that then calls vm_page_reserve_pages() --
+			// which returns void, cannot fail, and ends in a thread_block()
+			// with no timeout -- waits forever. The machine stays up and
+			// answers nothing.
+			//
+			// Worth noting what this is *not*: it is not the ordinary full
+			// volume, at least not on BFS, which grows a data stream at
+			// write() time and so reports B_DEVICE_FULL to the caller
+			// synchronously. Writeback there has nothing left to allocate and
+			// cannot fail for lack of space. The cases that do reach here are
+			// real I/O errors, a device that has gone away under a mounted
+			// volume, and any filesystem that allocates lazily.
+			//
+			// The reason for printing rather than acting is diagnostic cost. A
+			// Graviton builder that became unreachable in this family of
+			// states kept its SSH listener open while no session ever
+			// completed, SSM went ConnectionLost, EC2 called the instance
+			// impaired -- and the serial console said nothing whatsoever about
+			// why (issue 770). On a box in that condition the console is the
+			// one channel still working, so a line here is the difference
+			// between a diagnosis and a guess.
+			//
+			// Diagnostic only. The re-queue policy is deliberately unchanged:
+			// dropping the page would discard written data, which is a call
+			// for a human to make and not a side effect of adding a printf.
+			const bigtime_t now = system_time();
+			if (stalledSince == 0) {
+				stalledSince = now;
+				lastStallReport = 0;
+			}
+			if (lastStallReport == 0
+					|| (now - lastStallReport) >= kStallReportInterval) {
+				lastStallReport = now;
+				dprintf("page writer: no page written for %" B_PRIdBIGTIME
+					" ms with %" B_PRIu64 " page(s) modified; writeback is "
+					"making no progress\n",
+					(now - stalledSince) / 1000, (uint64)modifiedPages);
+			}
+
 			snooze(500000);
 			pagesSinceLastSuccessfulWrite = 0;
 		}
@@ -779,8 +831,16 @@ ModifiedPageQueue::_PageWriter()
 
 		if (failedPages == numPages)
 			pagesSinceLastSuccessfulWrite += modifiedPages - maxPagesToSee;
-		else
+		else {
 			pagesSinceLastSuccessfulWrite = 0;
+			// At least one page reached the device, so whatever the stall
+			// report above was timing is over. Clearing it here and not on the
+			// other side of that `if` matters: the stall path resets
+			// pagesSinceLastSuccessfulWrite itself, so the very next round
+			// takes the non-stalled branch even while nothing is being
+			// written, and timing from there would report 0 ms forever.
+			stalledSince = 0;
+		}
 
 		if (failedPages == 0 && numPages > 0) {
 			// Runs of fewer than 8 pages are too short to be a useful sample,
