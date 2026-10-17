@@ -356,10 +356,257 @@ rather than ignored: `--token` only to the broker, `--cookie` only to the
 session port. Prefer the `--token-file` / `--cookie-file` forms — a secret in
 an argument is visible in `ps` and in shell history.
 
+## QUIC front door (M5a)
+
+Issue #766: the first, deliberately narrow, step of the QUIC/WebTransport
+transport that `remote-desktop-unified-design.md` §6 *Transport* and §10 M5
+carry as the design of record (retired #418). M5a puts QUIC in front of the
+broker **as a second way to reach the same relay**, and changes nothing else:
+one QUIC stream carries exactly the bytes a `wss` connection carries today.
+It gives TLS 1.3 without TCP, and a stream that bypasses DeBeOS's own TCP
+receive path (§7, #57). It does **not** give head-of-line-blocking or
+datagram wins, nor connection migration (see *Stack*). Those need the
+multi-stream layout below, which waits for Tier P (M3).
+
+```
+ native client ──quic (UDP)──┐
+                             ├──▶  remote_broker :10902  ──tcp──▶  app_server RP :10900
+ browser / native ──wss──────┘     (same token gate, same relay, same roles)
+```
+
+Implementation: `src/servers/remote_broker/QuicStream.{h,cpp}`. The token
+check, session cookie, relay and roles are shared with the WebSocket front
+door through `serve_session()` in `RemoteBroker.cpp`. The client is
+DeBeOS-RDP's `QuicTransport` (`--url quic://HOST[:PORT]`, or a profile's
+`quic` mode).
+
+### Stack: OpenSSL's own QUIC, not a new dependency
+
+The broker already links OpenSSL, and the image ships `openssl3` **3.5.7**,
+whose QUIC implementation includes the server side (3.5 is the first release
+with it). The arm64 `openssl3-3.5.7-1` package in the bake pool exports
+`OSSL_QUIC_server_method`, `SSL_new_listener`, `SSL_accept_connection`,
+`SSL_accept_stream` and `SSL_poll`, so the quiche/ngtcp2 port the design
+anticipated is not needed. 3.5 has no 0-RTT, no RFC 9221 datagrams, and **no
+connection migration** ("future versions", `ossl-guide-quic-introduction(7)`).
+A client whose address changes loses the connection and reconnects, as over
+`wss`. Datagrams and migration are why the multi-stream step may still need
+ngtcp2.
+
+The listener runs in OpenSSL's thread-assisted concurrency model with
+reliable blocking. Every connection is served from its own thread, as on the
+TCP front door; the relay uses two threads per session, because `SSL_poll()`
+cannot wait on the session port's socket.
+
+Three things in 3.5 needed handling, each commented at its site in
+`QuicStream.cpp`. Two are OpenSSL defects with an upstream or recipe fix and
+are fenced as **temporary** blocks that are deleted when that fix ships; the
+third is a missing API and stays.
+
+- **Haiku's negative `errno` (temporary, #790).** OpenSSL packs a system error
+  as `errno & INT_MAX`. On Haiku `EAGAIN` is `B_WOULD_BLOCK` (`0x8000000b`), so
+  it packs to 11, and `BIO_err_is_non_fatal()` reads the first empty
+  non-blocking read as a dead network. Unpatched, no QUIC handshake ever
+  completes on DeBeOS (`system library::No Error (11)`, then `quic network
+  error`). Until the `openssl3` recipe carries the #790 patch, the datagram
+  BIO's filter re-raises transient failures as `BIO_R_NON_FATAL`; DeBeOS-RDP's
+  client carries the same block, on Haiku only. Building with
+  `QUIC_ERRNO_WORKAROUND=0` (`jam -sQUIC_ERRNO_WORKAROUND=0`, or
+  `-DQUIC_ERRNO_WORKAROUND=0` for the broker and for `rd766.c`) compiles it
+  out; that build is #790's acceptance check 2, and on today's 3.5.7 it fails
+  every positive check of `rd766`, which is what makes the check meaningful.
+- **`SSL_poll()` reporting failure on readiness (temporary, #792).** 3.5.7's
+  `poll_block()` (`ssl/rio/poll_immediate.c`) returns failure, with nothing on
+  the error queue, when the polled object becomes ready while it enters its
+  blocking section. The relay's two threads wait on one stream and make each
+  other's object ready constantly, so taken as fatal it ended a healthy session
+  every few hundred kilobytes (`rd766 --soak` fails with the handling removed).
+  Fixed upstream in 3.5.8 (openssl/openssl#31743). Until the recipe has it, a
+  failure with an empty error queue is polled again at once -- no pause and no
+  retry budget; any failure that raised an error stays fatal.
+- **No peer address for a QUIC connection.** 3.5 has no `SSL_get_peer_addr`.
+  The same filter hands the stack one datagram per read and records its
+  source. The new-pending-connection callback, which runs while the datagram
+  that creates the connection is processed, stores that address on the
+  connection. That datagram is the client's Initial carrying a valid Retry
+  token, so the address is a validated one. A connection whose source is
+  unknown is refused, not let in unaccounted.
+
+### Wire rules
+
+1. **UDP 10902**: the TCP listener's port number, bound to the same address
+   (`-l`), IPv4 only like the TCP listener. **Off unless the broker is started
+   with `-q`**, so an existing deployment opens no new port. The image's launch
+   entry does not pass it.
+2. **ALPN `debeos-urp/1`**, required. A handshake without it fails with
+   `no_application_protocol`. The `/1` versions the *QUIC stream layout*, not
+   the RP protocol, whose features are still negotiated by `RP_HELLO`. The
+   multi-stream layout will be `debeos-urp/2`, chosen per connection by ALPN,
+   so old clients keep working.
+3. **Same certificate.** The broker serves `broker.pem` / `broker.key` on both
+   listeners, so `broker.fingerprint` is the pin for both, and a client's
+   known-brokers entry for `host:10902` covers both. Pinning or trust on first
+   use applies exactly as on `wss`.
+4. **Exactly one stream**: client-initiated bidirectional stream 0 (the ID
+   alone means both, RFC 9000 §2.1). Every stream the peer opens is accepted
+   into the queue; the broker takes the first, and anything else in the queue,
+   before or after, closes the connection with application error 2. 3.5 cannot
+   advertise a smaller stream limit than its default, so the rule is enforced
+   rather than negotiated.
+5. **Stream 0 carries the `wss` payload with no WebSocket framing.** The
+   client's first bytes are one `RP_AUTHENTICATE`; the broker answers
+   `RP_AUTH_RESULT`; after that it is the raw RP byte stream relayed to the
+   session port. Every rule of *Wire handshake* above is unchanged: pipelining
+   after the auth message, no client-sent cookie, the 2 s delay and backoff on
+   failure, newest-wins takeover, viewer/controller filtering.
+6. **No 0-RTT.** Early data could replay `RP_AUTHENTICATE` or input. 3.5
+   cannot accept it, but it does advertise it in its session tickets when
+   `max_early_data` is set, so the broker pins it to 0 explicitly and `rd766`
+   asserts that the tickets it receives allow none.
+7. **Close.** A FIN on stream 0, from either side, is the orderly close, the
+   same "peer closed cleanly" the TCP and `wss` transports report. The broker
+   then closes with application error 0. Error 1 means the broker gave up on
+   the session: the session port went away, a write stalled past 10 s, a
+   newer client took the session over, or the token was refused (the reason is
+   in `RP_AUTH_RESULT` first). Error 2 means a stream-rule violation. The idle
+   timeout is OpenSSL's: 30 s by default and the minimum of the two sides'.
+   A server connection object only exists once the connection is established,
+   so the broker cannot change it. The stack keeps a quiet session alive on
+   its own; `rd766 --long` holds an idle session past it.
+
+### What the broker's existing controls become over UDP
+
+- **Address validation stays on.** A UDP source address can be spoofed until
+  QUIC validates it, so OpenSSL's Retry round trip (its default) is left
+  enabled. The per-address backoff and the handshake-slot share (#695) see
+  the address recorded at validation (above). The 3× anti-amplification
+  limit is the stack's own.
+- **Handshake slots are shared** between the two listeners: 8 in total, 3 per
+  source address, whichever transport the handshake arrives on. A QUIC slot
+  is taken when the stack hands the connection over and held until
+  authentication, as on TCP.
+- **No migration means no migrated accounting.** The address a connection
+  was validated from is its address for life.
+
+### Clients and discovery
+
+There is no Alt-Svc; a client that fetches the broker's token and
+certificate over SSH learns about QUIC the same way, from **`broker.quic`**
+in the broker's settings directory: one ALPN per line, today exactly
+`debeos-urp/1`. The broker removes the file at every start and writes it
+only once the QUIC listener is up, so it always describes the running
+broker: a broker without `-q` has none, and never promises a port that is
+not open.
+
+DeBeOS-RDP has `--url quic://HOST[:PORT]` (default port 10902), a forced
+profile mode `quic`, and in its **auto** mode (`direct`) tries the broker over
+QUIC first, then over `wss`, then the SSH tunnel. The QUIC route is taken only
+when the client was built with QUIC (OpenSSL 3.5+) *and* the fetched
+`broker.quic` lists `debeos-urp/1`; otherwise it fails at once, visibly, and
+`wss` goes ahead on the same credentials. A blocked UDP path is silent rather
+than refused, so auto gives the QUIC handshake 3 s before it falls back (a
+forced `quic` route waits 10 s). The browser stays on `wss` until
+WebTransport (which needs HTTP/3) is its own step.
+
+### Measured: QUIC vs wss (the gate for the multi-stream step)
+
+Measured with a Linux client in the build VPC against a c7g.large DeBeOS
+broker: one connection per transport to the same broker and the same echoing
+session port, `tc netem` delay and loss on both directions of that one host
+pair, 300 sequential 6-byte round trips, then a bulk echo. Two runs per row.
+
+| path | transport | RTT p50 | RTT p99 | bulk echo |
+|---|---|---|---|---|
+| VPC, no impairment | quic | 0.34 ms | 0.46 ms | 1 MiB in 0.072–0.077 s |
+| | wss | 0.27 ms | 0.38–0.49 ms | 1 MiB in 0.030 s |
+| 40 ms RTT | quic | 40.5 ms | 40.6 ms | 256 KiB in 0.21–0.31 s |
+| | wss | 40.4–40.6 ms | 40.6–40.9 ms | 256 KiB in 0.20–0.24 s |
+| 40 ms RTT, 1% loss | quic | 40.5 ms | 172–251 ms | 256 KiB in 1.5–1.7 s |
+| | wss | 40.5 ms | 299–325 ms | 256 KiB in 0.36–0.87 s |
+| 40 ms RTT, 3% loss | quic | 40.5 ms | 254–528 ms | 256 KiB in 2.4–2.6 s |
+| | wss | 40.4 ms | 330 ms | 256 KiB in 0.56–0.71 s |
+
+What this says. On a clean path the two are the same to a fraction of a
+millisecond. Under 1% loss QUIC's tail latency is somewhat better, because
+loss recovery reacts faster than a TCP retransmission timeout. Under loss,
+OpenSSL 3.5's QUIC moves bulk data 2–4× slower than the kernel's TCP. With a
+single stream, the HoL-blocking argument for QUIC does not apply yet.
+
+So the broker side ships opt-in (`-q`), and a client prefers QUIC only where
+a broker has been opted in, falling back to `wss` -- the product decision is
+to run on QUIC where it is offered, with these numbers as its known cost under
+loss. The multi-stream step should not be started on the OpenSSL 3.5 stack. If it is started, the
+first experiment is its datagram and congestion behaviour against this
+table, on whichever stack (ngtcp2) can carry datagrams at all.
+
+### Infrastructure
+
+The public NLB (`ops-stack.ts`) carries QUIC only on request: with
+`-c brokerEndpointQuic=true`, its listener and target group become a single
+`TCP_UDP` pair on 10902. An NLB cannot hold a TCP and a UDP listener on one
+port. The endpoint SG gains a `udp` rule beside every `tcp` one, and the
+builder SG opens to the endpoint SG for both. Without the flag the endpoint
+is exactly what #611 shipped, so an existing endpoint is not replaced on its
+next deploy. The same shape, internal and VPN-only, was built for the
+measurements above and carried both `wss` and `quic` to a real desktop.
+Bakes for this work go through `HaikuGravitonQuicOvenPipeline`, a test-only
+copy of the oven.
+
+### Verifying it
+
+`graviton/scripts/rd766.c` is the harness, built for the target (see its
+header). It starts its own broker with `-q` on a free loopback port, with a
+scratch settings directory and a mock session port it serves itself, and
+asserts each wire rule from both ends:
+
+- the `broker.quic` advertisement, written with `-q` and removed without it;
+- ALPN refusal and the pin;
+- the cookie arriving first, then pipelined bytes, then 30 kB both ways
+  intact; session tickets that allow no 0-RTT;
+- the tarpit, and per-address backoff (127.0.0.2/.3 where the loopback has
+  them, else the host's own address against 127.0.0.1, as on Haiku);
+- the stream rules, the viewer filter, both orderly ends, and takeover;
+- with `--long`, an idle session outliving the idle timeout;
+- with `--soak N`, N sessions of 300 kB each relayed intact.
+
+It prints `RD766=PASS CHECKS=<n> ... WORKAROUND=harness:in|out,broker:in|out`.
+Each check has a mutation that turns it red: accept any ALPN, record a
+constant peer address, drop the viewer filter, ignore extra streams, skip the
+takeover interrupt, misreport either FIN, remove the tarpit, write or keep a
+wrong advertisement, allow early data in tickets, or (soak) take #792's
+`SSL_poll()` report as fatal.
+
+#790's acceptance check 2, once a patched `openssl3` is in the sysroot:
+
+```
+jam -sQUIC_ERRNO_WORKAROUND=0 remote_broker    # or -DQUIC_ERRNO_WORKAROUND=0
+$CROSS -O1 -DQUIC_ERRNO_WORKAROUND=0 -o rd766 rd766.c -lssl -lcrypto -lnetwork
+rd766 ./remote_broker --long --soak 30         # expect WORKAROUND=harness:out,broker:out
+```
+
+### Not in M5a: the multi-stream layout (`debeos-urp/2`)
+
+§6's stream map has control/input and the display list on separate streams,
+and Tier P tiles as datagrams. It needs four decisions this step does not
+make, and the measurement above argues for making them on another stack:
+
+- **The split.** app_server emits one byte stream. Splitting it means either
+  app_server writing channels separately or the broker parsing opcodes, which
+  today it does only for the viewer filter.
+- **Cross-stream ordering.** `RP_STRING_WIDTH` request/reply, `RP_RESYNC`
+  barriers and input interleaved with state ops all assume one order.
+- **Datagram framing.** Tiles must fit ~1200-byte datagrams, so they need
+  their own fragmentation and loss rules.
+- **The stack.** OpenSSL 3.5 has no datagrams.
+
+It is sequenced with M3, where there is something for the datagram half to
+carry.
+
 ## Running it
 
 ```
 remote_broker                          # listen *:10902 → 127.0.0.1:10900
+remote_broker -q                       # ... and QUIC on UDP *:10902 too (#766)
 remote_broker -l 10443 -t 127.0.0.1:10900 -s /custom/settings/dir
 ```
 

@@ -8,10 +8,19 @@ UsePrivateHeaders shared support ;
 if [ FIsBuildFeatureEnabled openssl ] {
 	UseBuildFeatureHeaders openssl ;
 
-	Includes [ FGristFiles RemoteBroker.cpp TLSStream.cpp WebSocketStream.cpp ]
+	Includes [ FGristFiles RemoteBroker.cpp QuicStream.cpp TLSStream.cpp
+		WebSocketStream.cpp ]
 		: [ BuildFeatureAttribute openssl : headers ] ;
 
+	# #790's acceptance check 2: jam -sQUIC_ERRNO_WORKAROUND=0 builds the
+	# broker without its OpenSSL errno workaround (QuicStream.cpp). Delete
+	# this with the workaround.
+	if $(QUIC_ERRNO_WORKAROUND) = 0 {
+		SubDirC++Flags -DQUIC_ERRNO_WORKAROUND=0 ;
+	}
+
 	Application remote_broker :
+		QuicStream.cpp
 		RemoteBroker.cpp
 		TLSStream.cpp
 		WebSocketStream.cpp

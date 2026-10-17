@@ -434,7 +434,14 @@ client rasterises). Levers below are ours, measured here unless noted.
   Tier-P tiles as datagrams. Sequenced after M1 (the `wss` broker, shipped) and
   **with M3**, where multi-stream and datagram semantics actually pay — before
   full-motion there is nothing for the datagram half to carry. This entry is the
-  design of record for the retired DeBeOS #418.
+  design of record for the retired DeBeOS #418. Its first step, M5a (#766:
+  one QUIC stream into the existing broker relay), is implemented and measured
+  in `remote-desktop-broker.md`, "QUIC front door". On OpenSSL 3.5 it has no
+  connection migration, 0-RTT or datagrams, and under packet loss it moved bulk
+  data 2-4x slower than the kernel's TCP. The broker serves it opt-in (`-q`,
+  advertised in `broker.quic`); DeBeOS-RDP's auto mode prefers it where it is
+  advertised and falls back to `wss`. The multi-stream step above should be
+  weighed against those numbers and another stack.
 
 ### Decode / present
 - **Entirely the client's problem; no Graviton lever touches it.** This is stated
