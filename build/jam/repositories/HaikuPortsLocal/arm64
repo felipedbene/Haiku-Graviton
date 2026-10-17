@@ -58,6 +58,38 @@ LocalPackageRepository HaikuPorts
 	# versions of one package, picks the newer, and jam copies and activates
 	# that one -- exactly how openssl3 and zstd already work.
 	ca_root_certificates-2026_07_16-1
+
+	# The openssl CLI's man pages. Architecture "any", like ca_root_certificates
+	# above, so the staged file is -any.hpkg and not -arm64.hpkg.
+	#
+	# A DECLARATION plus a by-name add in DefaultBuildProfiles' minimum-* list,
+	# deliberately NOT a <hg-pool> force-add. Unlike ncurses6 (issue 784) there
+	# is no competing bootstrap build to confuse the solver: the checksummed
+	# remote index serves no openssl3_man at all, so there is no version
+	# ordering to get wrong and the ordinary declared route works.
+	#
+	# The version is not free to drift. Read out of the hpkg with
+	# `package list -i` -- not out of the recipe -- openssl3_man-3.5.9-2 carries
+	#     requires:    openssl3 == 3.5.9
+	#     supplements: openssl3 == 3.5.9
+	# an EXACT pin on the runtime, i.e. the issue-708 zlib_devel shape. So this
+	# moves in lockstep with the openssl3 pin further down or not at all: bump
+	# openssl3 to some 3.6.x and leave this at 3.5.9 and the image solver has no
+	# candidate for the man package's own requirement. Revisions are free, since
+	# the pin is on the version only; versions are not.
+	#
+	# The `supplements` line is why this entry can look unnecessary: a solver
+	# that honours weak reverse-dependencies would pull the pages in by itself
+	# once openssl3 is installed. build_haiku_image does not, hence the explicit
+	# by-name add beside openssl3.
+	#
+	# Worth knowing before expecting to read them: the canonical arm64 image
+	# ships no man viewer. Neither man nor mandoc nor groff is served by the
+	# checksummed index or declared here, so the pages land under
+	# /boot/system/documentation/man/ as raw roff with nothing on the image to
+	# format them. `man openssl` will not work; the files are still the
+	# reference for the openssl CLI that IS on the image.
+	openssl3_man-3.5.9-2
 	:
 	# repository architecture packages
 	# primary architecture (arm64)
