@@ -364,6 +364,37 @@ write that fails just breaks out of the message handler and the read loop contin
 (`src/servers/syslog_daemon/syslog_output.cpp:201-205`, `SyslogDaemon.cpp:141`). Another
 unbounded primitive that is real but is not this bug.
 
+That wait is now **bounded anyway**: `send_syslog_message` uses `write_port_etc` with a
+1 s absolute deadline, and `B_TIMED_OUT` falls into the pre-existing `LOG_CONS` fallback,
+so a message that cannot be handed over goes to the console instead of stopping its
+caller. Hardening, not the fix — it removes the primitive from the list of things the
+next person has to re-eliminate.
+
+**Still live, and the best remaining candidate: `getpwnam()` waits on the registrar with
+no timeout, behind a single serialized request thread.** This is *not* one of the
+eliminations above, and sshd calls it pre-auth for every incoming connection.
+
+- Client side: `getpwnam`/`getpwuid`/`getspnam` go through
+  `BPrivate::send_authentication_request_to_registrar`
+  (`src/system/libroot/posix/user_group_common.cpp:78-87`), which calls
+  `KMessage::SendTo(port, 0, &reply)`. `replyTimeout` **defaults to -1**
+  (`headers/private/kernel/util/KMessage.h:167-171`), and `SendTo` passes it to
+  `reply->ReceiveFrom(replyPort, replyTimeout)` (`KMessage.cpp:576-577`), where a
+  negative timeout takes the plain `read_port()` arm (`:614-618`). So the caller waits
+  forever for the registrar to answer.
+- Server side: the registrar serves **every** such request from one thread,
+  `AuthenticationManager::_RequestThread` (`src/servers/registrar/AuthenticationManager.cpp:797`),
+  a single `read_port` loop. That same thread also does the disk writes —
+  `fUserDB->WriteToDisk()` at `:1082`, which `fopen(kPasswdFile, "w")`s at `:578`.
+
+So any stall inside that one thread is a system-wide, uninterruptible, pre-auth lockout
+for every process that looks up a user — which is the exact shape of "accepts TCP, never
+sends a banner". What is **not** established is that a full volume stalls it: by the eager
+allocation above, its `fopen`/`fwrite`/`fclose` should fail with `ENOSPC` synchronously and
+return. Verifying that is the next probe, and unlike a thread backtrace it can be done from
+userland on a *healthy* box first — time a `getpwnam()` while the registrar is forced
+through `WriteToDisk` — before trying to reach the full-volume case.
+
 **Not established: what `sshd` blocks on.** This is issue 770's open half, and the four
 eliminations above narrow it rather than answer it. What they rule out collectively is the
 whole class of *deferred* failures — there is no path on this filesystem where a full
