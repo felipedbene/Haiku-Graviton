@@ -131,8 +131,18 @@ waits (default 3600) before refusing.
 
 ### Run it DETACHED, with its output on the builder (issue 779)
 
-The driver keeps its only progress record on stdout. Do **not** leave that record on
-your own connection:
+As of `NATIVEBUILD_VERSION=2026-10-17.1` the driver keeps its own run log on the
+builder at `$HP/nativebuild-run.log` (`NB_RUN_LOG` to override), so the verdicts
+survive whoever is watching going away. Read it when a run's stdout is gone:
+
+```sh
+haiku-ssh -p <port> baron@127.0.0.1 'tail -40 /boot/home/haikuports/nativebuild-run.log'
+```
+
+Still run it detached. The run log saves the *record* on every image; it saves
+*liveness* only where `tee` supports `--output-error=warn-nopipe` (the base image's
+`/boot/system/bin/tee` does, but the driver probes rather than assumes). Detaching
+makes the question moot:
 
 ```sh
 # stage the driver on the builder, then start it detached -- two separate calls
