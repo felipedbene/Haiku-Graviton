@@ -303,14 +303,41 @@ log "generator tier on PATH: cmake ninja meson pkg-config makeinfo (ok)"
 # quiet-degradation mode issue 776 was filed about, reached this time through a
 # check that reported the tier was fine.
 #
-# The remedy is the one coreutils needs below, for the same reason: a bootstrap
-# package provides its unversioned name, so `pkgman install` is a no-op against
-# it and only `update` supersedes it. A non-bootstrap texinfo-7.2-1 builds clean
-# natively and bakes /packages/texinfo-7.2-1/.self/..., which matches what it
-# installs as, so this picks the fix up by itself once that package is in the
-# pool. It warns rather than exits because the provisioner cannot create that
-# package: refusing to provision would take the fleet down over a defect it has
-# no way to repair.
+# A non-bootstrap texinfo-7.2-1 bakes /packages/texinfo-7.2-1/.self/..., which
+# matches what it installs as, and it is now in the pool -- so on a canonical
+# image, where texinfo is absent entirely (OptionalPackages lists it under
+# AddHaikuImageDisabledPackages), the `pkgman install ... texinfo` above is a
+# FIRST install and lands the working package. Measured on a canonical-image
+# box: makeinfo --version reports texi2any 7.2 and a three-line document
+# compiles. That is the path this provisioner actually takes, and it is green.
+#
+# The `pkgman update` below is for the other case, a box that already carries
+# texinfo-7.2_bootstrap-1, and it CANNOT repair the same-version skew. It was
+# written by analogy with coreutils further down, but the analogy only holds
+# when the pool's version is strictly newer. It is not here:
+#
+#   PackageInfoParser.cpp:393 takes the pre-release part from the last `~`, not
+#   from `_`, so `7.2_bootstrap` has no pre-release and :415-429 splits it into
+#   major 7, minor `2_bootstrap`. PackageVersion.cpp:97 then reaches
+#   NaturalCompare("2_bootstrap", "2"), which matches the `2` chunks, finds an
+#   ASCII chunk on one side and end-of-string on the other, and returns "longer
+#   wins". So 7.2_bootstrap > 7.2 and the pool's package is a DOWNGRADE.
+#
+# Measured on the identical skew in ncurses6 (issue 784) on a canonical-image
+# box: `pkgman install ncurses6`, `pkgman install ncurses6-6.6-1` and
+# `pkgman update ncurses6` all decline -- "Nothing to do", "Nothing to do" and
+# "Name not found" respectively. coreutils works only because the pool's 9.11-2
+# really is newer than the image's 9.9_bootstrap-1.
+#
+# The attempt is kept because it does the right thing the moment a strictly
+# newer texinfo is published, which is the realistic way this gets repaired on
+# an existing box. What is NOT kept is the claim that it is the remedy: when it
+# declines, the warning below has to leave a human something usable, so it
+# names the measured PERL5LIB workaround from issue 782.
+#
+# It warns rather than exits because the provisioner cannot create the package
+# it needs: refusing to provision would take the fleet down over a defect it
+# has no way to repair.
 makeinfo_probe="${TMPDIR:-/tmp}/provision-makeinfo-probe.texi"
 printf '@node Top\n@top probe\n@bye\n' > "$makeinfo_probe"
 makeinfo_runs() {
@@ -328,11 +355,17 @@ else
 	else
 		makeinfo "$makeinfo_probe" 2>&1 | sed 's/^/provision:   /' >&2
 		echo "provision: WARNING: makeinfo is on PATH and aborts on every" \
-			"document (issue 782). The pool has no non-bootstrap texinfo to" \
-			"supersede the image's with, so ports built here that declare" \
-			"cmd:makeinfo will not regenerate their manuals and will ship" \
-			"whatever .info their tarball already contained, without failing." \
-			"Publish texinfo-7.2-1-arm64 to the pool to clear this." >&2
+			"document (issue 782), and the pool's texinfo-7.2-1 cannot" \
+			"supersede the active texinfo-7.2_bootstrap-1 because" \
+			"7.2_bootstrap sorts above 7.2 -- see the comment above this" \
+			"check. Ports built here that declare cmd:makeinfo will not" \
+			"regenerate their manuals and will ship whatever .info their" \
+			"tarball already contained, without failing. Workaround for this" \
+			"box, measured in issue 782: export PERL5LIB=\$D:\$D/lib/" \
+			"Text-Unidecode/lib:\$D/lib/Unicode-EastAsianWidth/lib:\$D/lib/" \
+			"libintl-perl/lib with D=/boot/system/data/texi2any. The real" \
+			"repair is to reprovision from an image that never baked the" \
+			"bootstrap copy." >&2
 	fi
 fi
 rm -f "$makeinfo_probe" "$makeinfo_probe.info"
@@ -352,6 +385,17 @@ rm -f "$makeinfo_probe" "$makeinfo_probe.info"
 # any of them. coreutils is the one that is load-bearing today (see the comment
 # above section 1 for why `uname -p` matters), so it is the one handled here;
 # add to the list if another bootstrap package turns out to matter.
+#
+# But `update` only finishes the job when the pool's version is strictly NEWER,
+# which is true for coreutils (9.11-2 against the image's 9.9_bootstrap-1) and
+# is NOT true wherever the bootstrap suffix rides in the version rather than
+# the port name. `6.6_bootstrap` and `7.2_bootstrap` both sort ABOVE `6.6` and
+# `7.2` -- PackageInfoParser.cpp:393 only treats `~` as a pre-release marker,
+# so `_bootstrap` lands in the minor and NaturalCompare prefers the longer
+# chunk. For those, `update` declines too and the only fix is the image (issues
+# 782 and 784). Do not add such a package to this loop expecting it to work:
+# measure `pkgman update <name>` on a box that has the bootstrap copy active
+# first.
 for boot_pkg in coreutils; do
 	log "superseding the bootstrap $boot_pkg with the pool's (issue 748)"
 	feed | pkgman update "$boot_pkg" || log "WARNING: pkgman update $boot_pkg failed"

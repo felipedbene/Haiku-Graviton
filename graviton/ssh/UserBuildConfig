@@ -309,7 +309,23 @@ rule UserBuildConfigRulePreImage
 			<hg-pool>libwebp-1.6.0-3-arm64.hpkg
 			<hg-pool>libxml2-2.15.3-1-arm64.hpkg
 			<hg-pool>libxslt-1.1.45-2-arm64.hpkg
-			<hg-pool>ncurses6-6.6_bootstrap-1-arm64.hpkg
+			# Non-bootstrap, because the bootstrap build cannot find its own
+			# terminfo database (issue 784). libncursesw's compiled-in default
+			# path is built from portName=ncurses6_bootstrap, portVersion=6.6,
+			# revision=1 -- /packages/ncurses6_bootstrap-6.6-1/.self/... --
+			# while the hpkg is stamped name=ncurses6, version=6.6_bootstrap,
+			# so it installs as /packages/ncurses6-6.6_bootstrap-1. The data is
+			# on the image (TERMINFO=/boot/system/data/terminfo makes infocmp
+			# and tput work); only the lookup path is unreachable.
+			#
+			# This has to be fixed in what the image BAKES, not from the repo.
+			# `6.6_bootstrap` sorts ABOVE `6.6`, so the published non-bootstrap
+			# ncurses6-6.6-1 is a downgrade and neither verb takes it --
+			# measured on a canonical-image box, `pkgman install ncurses6` and
+			# `pkgman update ncurses6` both answer "Nothing to do". That is why
+			# this is not the coreutils case of issue 748, where the pool's
+			# version was genuinely newer and `update` superseded it.
+			<hg-pool>ncurses6-6.6-1-arm64.hpkg
 			<hg-pool>nghttp2-1.63.0-1-arm64.hpkg
 			<hg-pool>readline-8.3.003-1-arm64.hpkg
 			<hg-pool>sqlite-3.50.4.0-1-arm64.hpkg
