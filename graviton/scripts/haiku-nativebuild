@@ -22,6 +22,16 @@
 #  - The lean base ships bootstrap "Haiku Project" libs that collide with DeBeOS repo
 #    versions, so every install needs an "allow vendor change" (solution 1); we feed it.
 #  - Success is asserted by the .hpkg EXISTING, never by an exit code.
+#
+# RUN IT DETACHED, WITH ITS OUTPUT ON THE BUILDER (issue 779). Every verdict this
+# driver produces -- BUILD_OK, FAILED, `attempt N installing:`, the harvest banner --
+# is an `echo` to stdout and is written NOWHERE ELSE. Driving it over an interactive
+# SSH session therefore ties both the run's liveness and its entire audit trail to a
+# connection that is expected to drop: measured on a texlive build, an expired token
+# closed the tunnel, the run died at the one statement between diagnosing a missing
+# dependency and installing it, and nothing on the builder recorded that the run had
+# existed. Stage the script and `nohup sh <script> <ports> > <log> 2>&1 &` instead; see
+# the "Run it DETACHED" section of graviton/docs/native-ec2-builds.md.
 set -u
 export PATH=/boot/home/config/non-packaged/bin:/boot/system/non-packaged/bin:$PATH
 # Driver version marker (#506). This string is the single source of truth for "which

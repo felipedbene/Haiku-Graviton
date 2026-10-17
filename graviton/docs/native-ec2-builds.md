@@ -129,6 +129,54 @@ driver opens with `>`, so the surviving run's log is truncated too. A lock whose
 pid is gone is reclaimed automatically; `NB_LOCK_WAIT_SECS` sets how long a second driver
 waits (default 3600) before refusing.
 
+### Run it DETACHED, with its output on the builder (issue 779)
+
+The driver keeps its only progress record on stdout. Do **not** leave that record on
+your own connection:
+
+```sh
+# stage the driver on the builder, then start it detached -- two separate calls
+haiku-ssh -p <port> baron@127.0.0.1 'cat > /boot/home/nativebuild.sh' \
+    < graviton/scripts/haiku-nativebuild
+haiku-ssh -p <port> baron@127.0.0.1 \
+    'nohup sh /boot/home/nativebuild.sh <port>... > /boot/home/nb-driver.log 2>&1 &'
+# then poll, from any later connection
+haiku-ssh -p <port> baron@127.0.0.1 'tail -20 /boot/home/nb-driver.log'
+```
+
+The obvious one-liner is the one that fails:
+
+```sh
+# DON'T -- the run dies with the connection and leaves no verdict behind
+haiku-ssh -p <port> baron@127.0.0.1 'sh -s <port>...' < graviton/scripts/haiku-nativebuild
+```
+
+Measured on `i-076018fb6c01ef378`, building `app-text/texlive`. An expired token killed
+the `ec2-instance-connect open-tunnel`:
+
+```
+aws: [ERROR]: An error occurred (ExpiredTokenException) when calling the GetSecretValue operation: ...
+kex_exchange_identification: read: Connection reset by peer
+```
+
+On a fresh tunnel both processes were still alive and reparented to init, so the drop
+had not killed them outright — but eight minutes later both were gone, with
+`/boot/home/nb-texlive.log` frozen on haikuporter's attempt-1 verdict
+(`build-requires "cmd:luametatex" ... could not be resolved`), `luametatex` **not**
+installed, the lock released, and no `BUILD_OK`/`FAILED`/`attempt N installing:` line
+anywhere on the builder. `build_one` writes that line to stdout immediately before
+calling `install_dep`, which is exactly the gap the run died in.
+
+Two things make this worse than a lost terminal. The drop is **scheduled** — credentials
+expire, so every port whose build outlasts the credential lifetime is affected, which is
+the same set that most needs a driver (texlive, llvm, rust, ladybird). And the leftover
+state is **misleading**: a frozen per-port log ending in a dependency-resolution error
+reads as "this port cannot resolve its dependencies", when the driver had diagnosed the
+dependency correctly and was one statement from installing it. Same shape as #769 and
+#776 — the visible symptom names something other than the cause.
+
+The detached form above is what got the build going again, and it survives the drop.
+
 ## Reproduced sequence — lean AMI → builder → glib2 (2026-08-30, RC=0)
 
 This is the exact, working sequence. glib2 is the proof case: it "blocked" in the QEMU
