@@ -106,15 +106,35 @@ rm -f /tmp/$run_id.sh
 exit \$rc"
 
 req=$(mktemp -t ssm-run.XXXXXX.json) || die "cannot create a temp file"
-trap 'rm -f "$req"' EXIT
+remote_file=$(mktemp -t ssm-run.XXXXXX.sh) || die "cannot create a temp file"
+trap 'rm -f "$req" "$remote_file"' EXIT
 
-INSTANCE="$INSTANCE" REMOTE="$remote" BUCKET="$BUCKET" S3PREFIX="$s3_prefix" \
-	TIMEOUT="$DEADLINE_SECS" python3 -c '
+# Hand the wrapper to python through a FILE, not through the environment.
+#
+# This used to be REMOTE="$remote" on the command line below. The environment is
+# counted against the same execve() limit as argv, and Linux caps any single
+# string there at MAX_ARG_STRLEN -- 32 pages, 128 KiB -- independently of the
+# generous total. $remote carries the base64 of the whole script bundle, which is
+# 4/3 of its size, so a bundle over about 96 KiB makes execve() fail with E2BIG
+# and bash reports "Argument list too long" against /usr/bin/python3. That is
+# what it looked like from the outside: a publish that had already launched its
+# peer and uploaded its packages died with python3 apparently missing, and the
+# only thing that had changed was the coherence gate (issues 708, 754, 772)
+# growing the bundle past the limit.
+#
+# A file has no such ceiling, and it keeps the payload out of /proc/<pid>/environ
+# as a side benefit.
+printf '%s' "$remote" > "$remote_file" || die "cannot stage the remote script"
+
+INSTANCE="$INSTANCE" REMOTE_FILE="$remote_file" BUCKET="$BUCKET" \
+	S3PREFIX="$s3_prefix" TIMEOUT="$DEADLINE_SECS" python3 -c '
 import json, os, sys
+with open(os.environ["REMOTE_FILE"]) as f:
+    remote = f.read()
 json.dump({
     "InstanceIds": [os.environ["INSTANCE"]],
     "DocumentName": "AWS-RunShellScript",
-    "Parameters": {"commands": [os.environ["REMOTE"]],
+    "Parameters": {"commands": [remote],
                    "executionTimeout": [str(max(60, int(os.environ["TIMEOUT"])))]},
     "OutputS3BucketName": os.environ["BUCKET"],
     "OutputS3KeyPrefix": os.environ["S3PREFIX"],
