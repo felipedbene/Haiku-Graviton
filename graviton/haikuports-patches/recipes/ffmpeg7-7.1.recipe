@@ -106,7 +106,19 @@ BUILD_REQUIRES="
 	devel:libiconv$secondaryArchSuffix
 	devel:libz$secondaryArchSuffix
 	"
+# cmd:awk and cmd:cmp are NOT optional, even though ffmpeg's configure is not an
+# autotools configure and keeps going after they fail. Without them the build
+# dies, and the first error is 150 lines of
+#   ./configure: line 4299: awk: command not found
+#   ./configure: line 1774: cmp: command not found
+# which looks like a broken builder and is really a missing declaration: inside
+# haikuporter's build environment only the declared cmd: prerequisites are
+# linked into PATH, so an undeclared tool is absent no matter what the host has
+# installed. Every sibling recipe in the same port directory -- ffmpeg6,
+# ffmpeg8, ffmpeg_x264 -- already declares both; this recipe was the odd one out.
 BUILD_PREREQUIRES="
+	cmd:awk
+	cmd:cmp
 	cmd:gcc$secondaryArchSuffix
 	cmd:ld$secondaryArchSuffix
 	cmd:make
