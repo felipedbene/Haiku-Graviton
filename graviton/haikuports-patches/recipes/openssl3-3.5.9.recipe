@@ -1,0 +1,208 @@
+SUMMARY="Full-strength general purpose cryptography library (with SSL/TLS)"
+DESCRIPTION="The OpenSSL Project is a collaborative effort to develop a \
+robust, commercial-grade, full-featured, and Open Source toolkit implementing \
+the Secure Sockets Layer (SSL v2/v3) and Transport Layer Security (TLS v1) \
+protocols as well as a full-strength general purpose cryptography library. The \
+project is managed by a worldwide community of volunteers that use the \
+Internet to communicate, plan, and develop the OpenSSL toolkit and its related \
+documentation.
+OpenSSL is based on the excellent SSLeay library developed by Eric A. Young \
+and Tim J. Hudson. The OpenSSL toolkit is licensed under an Apache-style \
+licence, which basically means that you are free to get and use it for \
+commercial and non-commercial purposes subject to some simple license \
+conditions."
+HOMEPAGE="https://www.openssl.org/"
+COPYRIGHT="1995-1998 Eric Young
+	1998-2024 The OpenSSL Project"
+LICENSE="OpenSSL"
+# 2, not 1: the patchset beside this recipe carries a tenth commit that upstream
+# haikuports' 3.5.9-1 does not have (issue 790 -- ERR_GET_REASON strips the sign
+# of a negative Haiku errno). Same version, different binary, so it must not
+# claim the same revision as the unpatched build.
+REVISION="2"
+SOURCE_URI="https://www.openssl.org/source/openssl-$portVersion.tar.gz"
+CHECKSUM_SHA256="603f5602e2eef00d77fbd429d34dcd5822bb301757a1bc9cdb24c670f1eb859a"
+SOURCE_DIR="openssl-$portVersion"
+PATCHES="openssl3-$portVersion.patchset"
+
+ARCHITECTURES="all"
+SECONDARY_ARCHITECTURES="x86"
+
+libVersion="3"
+libVersionCompat="$libVersion compat >= $libVersion"
+
+PROVIDES="
+	openssl3$secondaryArchSuffix = $portVersion compat >= 3
+	lib:libcrypto$secondaryArchSuffix = $libVersionCompat
+	lib:libssl$secondaryArchSuffix = $libVersionCompat
+	"
+if [ -z "$secondaryArchSuffix" ]; then
+	PROVIDES="$PROVIDES
+		cmd:c_rehash = $portVersion compat >= 3
+		cmd:openssl = $portVersion compat >= 3
+		"
+fi
+
+REQUIRES="
+	haiku$secondaryArchSuffix
+	lib:libz$secondaryArchSuffix >= 1.2.3
+	lib:libzstd$secondaryArchSuffix
+	ca_root_certificates
+	"
+
+if [ -z "$secondaryArchSuffix" ]; then
+	SUMMARY_man="Manual pages for openssl $portVersion"
+	ARCHITECTURES_man="any"
+	PROVIDES_man="
+		openssl3_man = $portVersion
+		"
+	REQUIRES_man="
+		openssl3 == $portVersion
+		"
+	SUPPLEMENTS_man="
+		openssl3 == $portVersion
+		"
+	CONFLICTS_man="
+		openssl_man
+		"
+fi
+
+PROVIDES_devel="
+	openssl3${secondaryArchSuffix}_devel = $portVersion
+	devel:libcrypto$secondaryArchSuffix = $libVersionCompat
+	devel:libssl$secondaryArchSuffix = $libVersionCompat
+	"
+REQUIRES_devel="
+	openssl3$secondaryArchSuffix == $portVersion base
+	"
+CONFLICTS_devel="
+	openssl${secondaryArchSuffix}_devel
+	"
+
+BUILD_REQUIRES="
+	devel:libz$secondaryArchSuffix >= 1.2.3
+	devel:libzstd$secondaryArchSuffix
+	"
+BUILD_PREREQUIRES="
+	haiku${secondaryArchSuffix}_devel
+	cmd:awk
+	cmd:gcc$secondaryArchSuffix
+	cmd:ld$secondaryArchSuffix
+	cmd:make
+	cmd:perl >= 5
+	cmd:sed
+	"
+
+if [ -n "$secondaryArchSuffix" ]; then
+	maybe_binDir_runtimes=
+else
+	maybe_binDir_runtimes="
+		$binDir/openssl \
+		"
+fi
+
+defineDebugInfoPackage openssl3$secondaryArchSuffix \
+	$libDir/engines-3/capi.so \
+	$libDir/engines-3/loader_attic.so \
+	$libDir/engines-3/padlock.so \
+	$libDir/libcrypto.so.$libVersion \
+	$libDir/libssl.so.$libVersion \
+	$maybe_binDir_runtimes
+
+PATCH()
+{
+	# fix includedir for installed config files
+	sed -i "s|=include|=$relativeIncludeDir|g" exporters/build.info
+}
+
+BUILD()
+{
+	local configFlags=no-asm
+	if [ "$targetArchitecture" = x86_64 ]; then
+		configFlags=
+	fi
+
+	./config --prefix=$prefix --libdir=$relativeLibDir \
+		--openssldir=$dataRootDir/ssl \
+		enable-zlib enable-zstd shared $configFlags -g
+	make $jobArgs
+}
+
+INSTALL()
+{
+	make MANDIR=$manDir DOCDIR=$docDir install
+
+	# move include dir to correct location
+	mkdir -p $(dirname $includeDir)
+	mv $prefix/include $includeDir
+
+	# remove static libraries
+	rm $libDir/*.a
+
+	# prepare develop/lib
+	prepareInstalledDevelLibs libcrypto libssl
+	fixPkgconfig
+
+	if [ -n "$secondaryArchSuffix" ]; then
+		maybe_docDir_html_man3=
+		maybe_manDir_man3=
+	else
+		maybe_docDir_html_man3=$docDir/html/man3
+		maybe_manDir_man3=$manDir/man3
+	fi
+
+	chmod 700 $dataRootDir/ssl/private
+
+	# devel package
+	packageEntries devel \
+		$developDir \
+		$maybe_docDir_html_man3 \
+		$maybe_manDir_man3 \
+		$libDir/cmake
+
+	# Remove stuff we don't need in the secondary architecture base package
+	if [ -n "$secondaryArchSuffix" ]; then
+		true
+		rm -rf $prefix/bin
+		rm -rf $dataRootDir/ssl
+		rm -rf $documentationDir
+	else
+		# man package
+		packageEntries man \
+			$manDir
+	fi
+}
+
+TEST()
+{
+# Test Summary Report
+# -------------------
+# 04-test_bio_dgram.t                   (Wstat: 256 (exited 1) Tests: 1 Failed: 1)
+#   Failed test:  1
+#   Non-zero exit status: 1
+# 70-test_quic_multistream.t            (Wstat: 256 (exited 1) Tests: 2 Failed: 1)
+#   Failed test:  1
+#   Non-zero exit status: 1
+# 70-test_quic_radix.t                  (Wstat: 256 (exited 1) Tests: 1 Failed: 1)
+#   Failed test:  1
+#   Non-zero exit status: 1
+# 70-test_quic_tserver.t                (Wstat: 256 (exited 1) Tests: 1 Failed: 1)
+#   Failed test:  1
+#   Non-zero exit status: 1
+# 75-test_quicapi.t                     (Wstat: 256 (exited 1) Tests: 1 Failed: 1)
+#   Failed test:  1
+#   Non-zero exit status: 1
+# 82-test_ocsp_cert_chain.t             (Wstat: 256 (exited 1) Tests: 3 Failed: 1)
+#   Failed test:  3
+#   Non-zero exit status: 1
+# 90-test_asn1_time.t                   (Wstat: 256 (exited 1) Tests: 1 Failed: 1)
+#   Failed test:  1
+#   Non-zero exit status: 1
+# Files=343, Tests=4450, 563 wallclock secs ( 6.15 usr  0.70 sys + 383.63 cusr 120.52 csys = 511.00 CPU)
+# Result: FAIL
+
+	# VFP = show subtests verbosely and show failed tests verbosely
+	# Normal V=1 would show everything verbosely but this slows things down.
+	export LIBRARY_PATH=$LIBRARY_PATH:$sourceDir
+	make VFP=1 test
+}
