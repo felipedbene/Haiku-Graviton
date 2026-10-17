@@ -23,15 +23,18 @@
 #    versions, so every install needs an "allow vendor change" (solution 1); we feed it.
 #  - Success is asserted by the .hpkg EXISTING, never by an exit code.
 #
-# RUN IT DETACHED, WITH ITS OUTPUT ON THE BUILDER (issue 779). Every verdict this
-# driver produces -- BUILD_OK, FAILED, `attempt N installing:`, the harvest banner --
-# is an `echo` to stdout and is written NOWHERE ELSE. Driving it over an interactive
-# SSH session therefore ties both the run's liveness and its entire audit trail to a
-# connection that is expected to drop: measured on a texlive build, an expired token
+# THE RUN'S VERDICTS LIVE ON THE BUILDER, NOT ON YOUR CONNECTION (issue 779). They
+# used not to: BUILD_OK, FAILED, `attempt N installing:` and the harvest banner were
+# echoes to stdout and were written nowhere else, so driving the script over an
+# interactive SSH session tied both the run's liveness and its entire audit trail to a
+# connection that is expected to drop. Measured on a texlive build: an expired token
 # closed the tunnel, the run died at the one statement between diagnosing a missing
 # dependency and installing it, and nothing on the builder recorded that the run had
-# existed. Stage the script and `nohup sh <script> <ports> > <log> 2>&1 &` instead; see
-# the "Run it DETACHED" section of graviton/docs/native-ec2-builds.md.
+# existed. Everything now goes through tee into $NB_RUN_LOG -- see the NB_RUN_LOG block
+# further down for why that needs --output-error=warn-nopipe and why the exit code
+# travels in a file. Still prefer the detached invocation, `nohup sh <script> <ports> >
+# <log> 2>&1 &`, which also keeps the run alive where the fallback tee cannot: see the
+# "Run it DETACHED" section of graviton/docs/native-ec2-builds.md.
 set -u
 export PATH=/boot/home/config/non-packaged/bin:/boot/system/non-packaged/bin:$PATH
 # Driver version marker (#506). This string is the single source of truth for "which
@@ -43,7 +46,7 @@ export PATH=/boot/home/config/non-packaged/bin:/boot/system/non-packaged/bin:$PA
 # checking). BUMP THIS whenever a driver change must reach a wave; then republish the
 # script to s3://<bucket>/bake-scripts/haiku-nativebuild (graviton/scripts/haiku-publish-driver)
 # and redeploy the ops stack. Format: YYYY-MM-DD.<serial>.
-NATIVEBUILD_VERSION="2026-10-16.3"
+NATIVEBUILD_VERSION="2026-10-17.1"
 HP=/boot/home/haikuports
 GP=$HP/packages
 # The S3 client used to harvest built hpkgs and mirror sources. RESOLVED, never a
@@ -816,6 +819,50 @@ NB_LOCK="${NB_LOCK:-$HP/.nativebuild.lock}"
 NB_LOCK_WAIT_SECS="${NB_LOCK_WAIT_SECS:-3600}"
 NB_LOCK_HELD=""
 nb_lock_release() { [ -n "$NB_LOCK_HELD" ] && rm -rf "$NB_LOCK"; }
+
+# THE RUN'S OWN LOG (issue 779). Every verdict this driver produces -- BUILD_OK,
+# FAILED, `attempt N installing:`, the harvest and capacity banners -- used to be an
+# echo to stdout and was written NOWHERE ELSE. Driving the script over an interactive
+# SSH session therefore tied both the run's liveness and its entire audit trail to a
+# connection that is expected to drop: measured on a texlive build, an expired token
+# closed the tunnel and the run died at the single statement between diagnosing a
+# missing dependency and installing it, leaving a per-port log frozen on a
+# dependency-resolution error, the dep uninstalled, the mutex released, and no verdict
+# anywhere on the builder. An operator reconnecting reads that as "this port cannot
+# resolve its dependencies", which is not what happened.
+#
+# So the whole run is piped through tee into a file ON THE BUILDER. Two details matter:
+#
+#   * --output-error=warn-nopipe, when tee supports it. Plain tee EXITS when its own
+#     stdout write fails, which would hand the EPIPE straight back to the script and
+#     reproduce the bug through the fix. With the flag, a vanished viewer is a warning
+#     and tee keeps writing the log. Probed rather than assumed -- /boot/system/bin/tee
+#     on the base image does support it, but assuming a tool's capabilities is what
+#     issue 776 was filed about, so the fallback is a plain `tee -a` that still saves
+#     the record even where liveness cannot be saved.
+#   * the exit code travels in a FILE, not out of the pipeline. `rc=$?` after a
+#     pipeline reports the LAST element's status -- tee's -- and this script's exit
+#     code is load-bearing: NB_RC_CAPACITY must stay distinguishable from a port
+#     failure (issue 769), because the first is work for whoever owns the fleet and
+#     the second for whoever owns the recipes.
+NB_RUN_LOG="${NB_RUN_LOG:-$HP/nativebuild-run.log}"
+NB_RC_FILE="${NB_RC_FILE:-$HP/.nativebuild.rc}"
+# Probed, but overridable: `NB_TEE_WARN_NOPIPE=` forces the fallback, which is how the
+# degraded path gets tested on a host whose tee does support the flag.
+if [ -z "${NB_TEE_WARN_NOPIPE+set}" ]; then
+	if tee --output-error=warn-nopipe -a /dev/null </dev/null >/dev/null 2>&1; then
+		NB_TEE_WARN_NOPIPE=1
+	else
+		NB_TEE_WARN_NOPIPE=""
+	fi
+fi
+nb_tee() {
+	if [ -n "$NB_TEE_WARN_NOPIPE" ]; then
+		tee --output-error=warn-nopipe -a "$NB_RUN_LOG"
+	else
+		tee -a "$NB_RUN_LOG"
+	fi
+}
 nb_lock_acquire() {
 	waited=0
 	while :; do
@@ -874,12 +921,19 @@ nb_lock_acquire() {
 # (still to be designed -- see #485).
 feed | pkgman refresh >/dev/null 2>&1 || true
 
+# The run proper. A function only so its output can be piped through nb_tee as one
+# stream (issue 779) while its exit code still reaches the caller -- see NB_RC_FILE
+# above. It runs in the pipeline's subshell, which is harmless: every global it sets
+# (BUILT_OK, capacity_abort, not_attempted) is consumed inside it, and the EXIT trap
+# nb_lock_acquire installs fires on the subshell, so the mutex is released exactly as
+# before.
+nb_main() {
 # Take the ports-tree mutex before anything mutates $HP or the system package set.
 # This call sits BELOW the "# Refresh the pkgman repo caches" line on purpose:
 # haiku-nativebuild-selftest sources everything above that line as a library
 # (`sed '/^# Refresh the pkgman repo caches/,$d'`), so an acquire placed any higher
 # would run -- and block -- on every offline test host.
-nb_lock_acquire || exit 1
+nb_lock_acquire || return 1
 
 # Provenance stamp (#506): first meaningful line of every per-port log names the driver
 # that produced it, so a wrong run is detectable retroactively from the log alone.
@@ -923,4 +977,18 @@ if [ -n "$capacity_abort" ]; then
 		"(floor NB_DISK_FLOOR_MIB=$NB_DISK_FLOOR_MIB MiB)"
 fi
 echo "===== nativebuild done $(date -u +%FT%TZ) rc=$rc ====="
-exit $rc
+return $rc
+}
+
+# Run it, with everything it says landing in $NB_RUN_LOG as well as on whoever is
+# watching. A missing rc file means nb_main did not reach its own last line -- killed,
+# or the volume holding $HP went read-only -- which is a failed run, so default to 1
+# rather than to the empty string's 0.
+rm -f "$NB_RC_FILE" 2>/dev/null || true
+{ nb_main "$@"; echo $? > "$NB_RC_FILE"; } 2>&1 | nb_tee
+rc=$(cat "$NB_RC_FILE" 2>/dev/null || true)
+case "$rc" in
+	''|*[!0-9]*) rc=1 ;;
+esac
+rm -f "$NB_RC_FILE" 2>/dev/null || true
+exit "$rc"
