@@ -101,8 +101,17 @@ LocalPackageRepository HaikuPorts
 	# graviton/ssh/UserBuildConfig -- the profile's by-name add installs one
 	# instance, so a second (file) instance makes the image solver report
 	# "would need to uninstall package openssl3".
-	openssl3-3.5.7-1
-	openssl3_devel-3.5.7-1
+	# 3.5.9-2, not 3.5.7-1, and not upstream haikuports' 3.5.9-1: the DeBeOS
+	# patchset (graviton/haikuports-patches/recipes/openssl3-3.5.9.patchset)
+	# carries a tenth commit that keeps the sign of a negative Haiku errno in
+	# ERR_GET_REASON (issue 790), so every consumer that inspects a system error
+	# reads EAGAIN as retryable instead of as a fatal "No Error (11)". Same
+	# upstream version, different binary, hence REVISION 2. The bump also picks
+	# up the SSL_poll abort_blocking repair upstream shipped in 3.5.8
+	# (openssl/openssl#31743, tracked as issue 792). Verified on arm64 hardware
+	# with graviton/scripts/ossl790.c: 10 failures on 3.5.7-1, 0 on 3.5.9-2.
+	openssl3-3.5.9-2
+	openssl3_devel-3.5.9-2
 	zstd-1.5.6-2
 	zstd_devel-1.5.6-2
 	# zstd_source provides the zstd .c/.h tree at develop/sources/zstd-1.5.6-2/
