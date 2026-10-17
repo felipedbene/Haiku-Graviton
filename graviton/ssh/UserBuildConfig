@@ -280,6 +280,16 @@ rule UserBuildConfigRulePreImage
 		# profile's by-name `AddHaikuImageSystemPackages openssl3` (which also
 		# turns on the `openssl` build feature). Pooling them too would double-add
 		# openssl3/zstd and make the image solver "would need to uninstall" them.
+		# ca_root_certificates is in exactly that position too, which is why it
+		# is no longer pooled below: build/jam/DefaultBuildProfiles:208-213 adds
+		# it by name alongside openssl3, and 2026_07_16-1 is now declared in
+		# repositories/HaikuPortsLocal/arm64 (openssl3-3.5.9-2 requires
+		# `ca_root_certificates >= 2026_07_16`, which the checksummed index's
+		# 2025_12_02-1 cannot satisfy). The by-name add now resolves that
+		# declared version, so the file instance this used to force-add would be
+		# a second instance of one package -- the same "would need to uninstall"
+		# the openssl3 note above describes. zlib is likewise declared, not
+		# pooled.
 		# gcc is pooled because the
 		# arm64 mirror does not serve a bare `gcc` compiler; gcc_syslibs and
 		# gcc_syslibs_devel are NOT pooled -- the mirror serves newer, non-bootstrap
@@ -294,7 +304,6 @@ rule UserBuildConfigRulePreImage
 			<hg-pool>libpng16-1.6.53-1-arm64.hpkg
 			<hg-pool>tiff-4.7.0-1-arm64.hpkg
 			<hg-pool>brotli-1.2.0-1-arm64.hpkg
-			<hg-pool>ca_root_certificates-2026_07_16-1-any.hpkg
 			<hg-pool>curl-8.21.0-1-arm64.hpkg
 			<hg-pool>gettext_libintl-1.0-1-arm64.hpkg
 			<hg-pool>giflib-5.2.2-1-arm64.hpkg
