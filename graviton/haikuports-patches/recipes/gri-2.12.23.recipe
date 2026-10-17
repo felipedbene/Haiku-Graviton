@@ -20,29 +20,39 @@ REQUIRES="
 	haiku
 	"
 
+# A `tex` that merely EXISTS is not enough -- it has to be a working one.
+# `cmd:tex` from app-text/texlive_core is the kpathsea-linked BINARY only;
+# the macros, formats and fonts live in the texmf tree shipped by
+# app-text/texlive. With texlive_core alone the refcard step got past
+# `tex: command not found` and straight into (measured natively on arm64,
+# issue 702):
+#   warning: kpathsea: configuration file texmf.cnf not found in these
+#     directories: .../data/texlive/texmf-dist/web2c:...
+#   kpathsea: Running mktexfmt tex.fmt
+#   /boot/system/bin/mktexfmt: kpsewhich -var-value=TEXMFROOT failed,
+#     aborting early.
+#   I can't find the format file 'tex.fmt'!
+#   make[2]: *** [Makefile:851: refcard.ps] Error 1
+# So declare what the two cards actually consume: plain TeX plus the
+# tex.ini/hyphen.tex pair `mktexfmt` needs to dump tex.fmt, the Computer
+# Modern fonts they select by name (cmbx10, cmr6, cmsy6, cmr8, cmbx8,
+# cmti8, cmtt8, cmsy8 -- refcard.tex:86-95, cmdrefcard.tex:84-93), and
+# dvips' config.ps/psfonts.map. All six resolvables come from the
+# texlive_basic subpackage. This is the same split dvipng and xindy use:
+# the executables as cmd:* in BUILD_PREREQUIRES, the texmf content as
+# tex:* in BUILD_REQUIRES.
+#
+# These notes live ABOVE the assignment, not inside it. A recipe is sourced by
+# bash, so `#` inside a double-quoted value is NOT a comment: the whole block
+# became literal BUILD_REQUIRES content, and the unpaired backtick in
+# "`tex.fmt'" opened a command substitution that ran to end-of-file. The recipe
+# then did not parse at all --
+#   port.recipe: line 96: unexpected EOF while looking for matching ``'
+#   Warning: skipping gri-2.12.23, as the recipe is broken
+#   Error: No version of gri can be built
+# -- which is a harder failure than the missing provider this was documenting.
 BUILD_REQUIRES="
 	haiku_devel
-	# A `tex` that merely EXISTS is not enough -- it has to be a working one.
-	# `cmd:tex` from app-text/texlive_core is the kpathsea-linked BINARY only;
-	# the macros, formats and fonts live in the texmf tree shipped by
-	# app-text/texlive. With texlive_core alone the refcard step got past
-	# `tex: command not found` and straight into (measured natively on arm64,
-	# issue 702):
-	#   warning: kpathsea: configuration file texmf.cnf not found in these
-	#     directories: .../data/texlive/texmf-dist/web2c:...
-	#   kpathsea: Running mktexfmt tex.fmt
-	#   /boot/system/bin/mktexfmt: kpsewhich -var-value=TEXMFROOT failed,
-	#     aborting early.
-	#   I can't find the format file `tex.fmt'!
-	#   make[2]: *** [Makefile:851: refcard.ps] Error 1
-	# So declare what the two cards actually consume: plain TeX plus the
-	# tex.ini/hyphen.tex pair `mktexfmt` needs to dump tex.fmt, the Computer
-	# Modern fonts they select by name (cmbx10, cmr6, cmsy6, cmr8, cmbx8,
-	# cmti8, cmtt8, cmsy8 -- refcard.tex:86-95, cmdrefcard.tex:84-93), and
-	# dvips' config.ps/psfonts.map. All six resolvables come from the
-	# texlive_basic subpackage. This is the same split dvipng and xindy use:
-	# the executables as cmd:* in BUILD_PREREQUIRES, the texmf content as
-	# tex:* in BUILD_REQUIRES.
 	tex:plain
 	tex:tex_ini_files
 	tex:hyphen_base
