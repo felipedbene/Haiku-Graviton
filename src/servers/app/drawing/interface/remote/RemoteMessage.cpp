@@ -205,6 +205,48 @@ RemoteMessage::AddFont(const ServerFont& font)
 }
 
 
+/*!	The font identity block RP_CAP_FONT_IDENTITY appends to RP_SET_FONT; see
+	RemoteProtocol.h for the layout and the reasoning. Only ever written for a
+	client that negotiated the bit, so a legacy client's RP_SET_FONT is byte for
+	byte what it always was.
+*/
+void
+RemoteMessage::AddFontIdentity(const ServerFont& font)
+{
+	const char* family = font.Family();
+	const char* style = font.Style();
+	if (family == NULL)
+		family = "";
+	if (style == NULL)
+		style = "";
+	AddString(family, strlen(family));
+	AddString(style, strlen(style));
+
+	Add((uint32)font.FaceIndex());
+
+	uint32 checksumAdjustment;
+	uint32 fontRevision;
+	font.GetFileIdentity(checksumAdjustment, fontRevision);
+	Add(checksumAdjustment);
+	Add(fontRevision);
+
+	// What FontCacheEntry::Init and _RenderTypeFor read to decide how a glyph
+	// is loaded: the hinting decision for this font, and whether glyphs are
+	// rendered for an LCD (FontEngine::PrepareGlyph's FT_LOAD_TARGET_LCD).
+	uint8 renderFlags = 0;
+	if (font.Hinting())
+		renderFlags |= 0x01;
+	if (gSubpixelAntialiasing)
+		renderFlags |= 0x02;
+	Add(renderFlags);
+
+	const char* path = font.Path();
+	if (path == NULL)
+		path = "";
+	AddString(path, strlen(path));
+}
+
+
 void
 RemoteMessage::AddDrawState(const DrawState& drawState)
 {

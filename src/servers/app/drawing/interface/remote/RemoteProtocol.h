@@ -87,6 +87,51 @@ enum {
 	// default case: a client that did not ask for frame boundaries never sees
 	// one, and its byte stream is unchanged.
 	RP_CAP_FRAME_BOUNDARY		= 1 << 3,
+
+	// (1 << 4 is claimed by RP_CAP_SECURE_ATTENTION, in flight on
+	// feat/remote-team-monitor; do not reuse it.)
+
+	// The client wants to know which font file the server is laying text out
+	// with. When this is negotiated, every RP_SET_FONT carries a font identity
+	// block after the 29-byte font record (RemoteMessage::AddFontIdentity):
+	//
+	//     string family        FontFamily::Name() -- FreeType's family_name
+	//     string style         FontStyle::Name()  -- FreeType's style_name
+	//     uint32 faceIndex     FT_Face::face_index, named instance in the high
+	//                          16 bits, exactly as FontEngine::Init opens it
+	//     uint32 checksumAdjustment   sfnt 'head' table, 0 if there is none
+	//     uint32 fontRevision         sfnt 'head' table (16.16), 0 likewise
+	//     uint8  renderFlags   bit 0: ServerFont::Hinting() for this font;
+	//                          bit 1: gSubpixelAntialiasing
+	//     string path          FontStyle::Path(), empty for a memory font
+	//
+	// (string = uint32 length + that many bytes, no terminator, as everywhere
+	// else on this wire.) A client that knows a later revision of this block
+	// may find more bytes after `path`; one that does not must skip them by the
+	// declared message length.
+	//
+	// Why the record alone is not enough: familyAndStyle is a pair of IDs that
+	// FontManager hands out in the order it happens to find fonts
+	// (FontManager::_AddFont, FontFamily::AddStyle -- fNextID++), which is
+	// directory-scan order, lazily extended by node monitoring as fonts come
+	// and go; and an application's own fonts are numbered downwards from 0xffff
+	// in a per-application namespace (AppFontManager::_NextID), so the same ID
+	// pair can name two different fonts in two applications at once. No client
+	// can map the IDs back to a font. The names and the file identity can be
+	// resolved against the client's own font files -- and since this server
+	// computes every advance from that file (DrawString returns
+	// ServerFont::StringWidth), the client has to draw from the same file for
+	// its glyphs to land where the server put them.
+	//
+	// Inline in RP_SET_FONT rather than defined once per ID by a message of
+	// its own, because "once per ID" has nothing sound to key on: the
+	// per-application IDs collide, a flow-control collapse discards queued
+	// messages, and a reconnect replays state ahead of the RP_HELLO that
+	// negotiates this bit. A self-contained RP_SET_FONT is right in all three
+	// cases with no cache on either side; the cost is ~100 bytes per font
+	// change, which RemoteDrawingEngine already elides when unchanged and which
+	// the zstd stream reduces to almost nothing.
+	RP_CAP_FONT_IDENTITY		= 1 << 5,
 };
 
 // Session-cookie methods, carried in the RP_SESSION_COOKIE message. Only one

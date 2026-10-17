@@ -40,6 +40,12 @@ public:
 			// client that is no longer here was told.
 			void				ReplayState();
 
+			// Re-states only RP_SET_FONT. Called when a client negotiates
+			// RP_CAP_FONT_IDENTITY: the state replay at accept ran before its
+			// RP_HELLO, so the fonts it carried had no identity block, and
+			// SetFont()'s dedup would never send them again.
+			void				ReplayFont();
+
 	// for screen shots
 	virtual	status_t			ReadBitmap(ServerBitmap* bitmap,
 									bool drawCursor, BRect bounds);
@@ -167,6 +173,8 @@ private:
 			void				_SetOffsets(int32 xOffset, int32 yOffset);
 
 			status_t			_AddCallback();
+			void				_AddSetFont(RemoteMessage& message,
+									const ServerFont& font);
 			void				_DrainResultSem();
 
 	static	bool				_DrawingEngineResult(void* cookie,

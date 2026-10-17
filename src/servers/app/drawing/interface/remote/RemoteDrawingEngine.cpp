@@ -122,9 +122,7 @@ RemoteDrawingEngine::ReplayState()
 	message.Add(fToken);
 	message.Add(fState.GetDrawingMode());
 
-	message.Start(RP_SET_FONT);
-	message.Add(fToken);
-	message.AddFont(fState.Font());
+	_AddSetFont(message, fState.Font());
 
 	// The offsets and the transform are one piece of state split across two
 	// opcodes: the client's effective matrix is the transform conjugated by the
@@ -356,9 +354,40 @@ RemoteDrawingEngine::SetFont(const ServerFont& font)
 	fState.SetFont(font);
 
 	RemoteMessage message(NULL, fHWInterface->SendBuffer());
+	_AddSetFont(message, font);
+}
+
+
+void
+RemoteDrawingEngine::ReplayFont()
+{
+	bool locked = LockExclusiveAccess();
+
+	RemoteMessage message(NULL, fHWInterface->SendBuffer());
+	_AddSetFont(message, fState.Font());
+	message.Flush();
+
+	if (locked)
+		UnlockExclusiveAccess();
+}
+
+
+/*!	One RP_SET_FONT, with the identity block when the client negotiated
+	RP_CAP_FONT_IDENTITY (see RemoteProtocol.h). The capability is read per
+	message: a font set while the handshake is still in flight goes out without
+	the block, which is the legacy wire and still decodes -- and the RP_HELLO
+	handler replays every engine's font once the bit is agreed, so no state is
+	left without one.
+*/
+void
+RemoteDrawingEngine::_AddSetFont(RemoteMessage& message,
+	const ServerFont& font)
+{
 	message.Start(RP_SET_FONT);
 	message.Add(fToken);
 	message.AddFont(font);
+	if ((fHWInterface->ClientCapabilities() & RP_CAP_FONT_IDENTITY) != 0)
+		message.AddFontIdentity(font);
 }
 
 

@@ -84,6 +84,15 @@ class ServerFont {
 									{ return fStyle->Family()->ID(); }
 			uint32				GetFamilyAndStyle() const;
 
+			// What identifies the bytes of the file this font renders from,
+			// independently of the family/style IDs above -- which are handed
+			// out in scan order and are only meaningful inside this
+			// app_server instance (FontManager::_AddFont). Reads the sfnt
+			// 'head' table's checkSumAdjustment and fontRevision; returns false
+			// (and zeroes both) for a face without one, e.g. a Type 1 font.
+			bool				GetFileIdentity(uint32& checksumAdjustment,
+									uint32& fontRevision) const;
+
 			void				SetDirection(font_direction dir)
 									{ fDirection = dir; }
 			void				SetEncoding(uint32 encoding)

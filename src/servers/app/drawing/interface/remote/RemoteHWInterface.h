@@ -161,6 +161,7 @@ static	void						_ConnectionClosedCallback(void *cookie);
 		void						_Disconnect();
 
 		void						_ReplayState();
+		void						_ReplayFonts();
 		void						_SendResyncBarrier();
 		bool						_RepairIfOwed();
 

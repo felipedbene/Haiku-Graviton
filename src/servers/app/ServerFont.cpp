@@ -22,6 +22,7 @@
 #include FT_FREETYPE_H
 #include FT_GLYPH_H
 #include FT_OUTLINE_H
+#include FT_TRUETYPE_TABLES_H
 
 #ifdef FONTCONFIG_ENABLED
 
@@ -384,6 +385,35 @@ ServerFont::GetFamilyAndStyle() const
 		return 0;
 
 	return (FamilyID() << 16) | StyleID();
+}
+
+
+bool
+ServerFont::GetFileIdentity(uint32& checksumAdjustment,
+	uint32& fontRevision) const
+{
+	checksumAdjustment = 0;
+	fontRevision = 0;
+	if (fStyle == NULL)
+		return false;
+
+	// The FT_Face is shared by every user of this style; take the style lock
+	// the way GetTransformedFace() does. FT_Get_Sfnt_Table() only returns a
+	// pointer to the table FreeType parsed when the face was opened.
+	fStyle->Lock();
+	bool found = false;
+	FT_Face face = fStyle->FreeTypeFace();
+	if (face != NULL) {
+		const TT_Header* head
+			= (const TT_Header*)FT_Get_Sfnt_Table(face, FT_SFNT_HEAD);
+		if (head != NULL) {
+			checksumAdjustment = (uint32)head->CheckSum_Adjust;
+			fontRevision = (uint32)head->Font_Revision;
+			found = true;
+		}
+	}
+	fStyle->Unlock();
+	return found;
 }
 
 
