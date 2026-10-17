@@ -143,7 +143,8 @@ Painter::BitmapPainter::Draw(const BRect& sourceRect,
 			if ((fOptions & B_FILTER_BITMAP_BILINEAR) != 0) {
 				DrawBitmapBilinear<ColorTypeRgb, DrawModeCopy> drawBilinear;
 				drawBilinear.Draw(fPainter, fPainter->fInternal,
-					fBitmap, fOffset, fScaleX, fScaleY, fDestinationRect);
+					fBitmap, fSourceRect, fScaleX, fScaleY,
+					fDestinationRect);
 			} else {
 				DrawBitmapNearestNeighborCopy::Draw(fPainter, fPainter->fInternal,
 					fBitmap, fOffset, fScaleX, fScaleY, fDestinationRect);
@@ -158,7 +159,7 @@ Painter::BitmapPainter::Draw(const BRect& sourceRect,
 			&& (fOptions & B_FILTER_BITMAP_BILINEAR) != 0) {
 			DrawBitmapBilinear<ColorTypeRgba, DrawModeAlphaOverlay> drawBilinear;
 			drawBilinear.Draw(fPainter, fPainter->fInternal,
-				fBitmap, fOffset, fScaleX, fScaleY, fDestinationRect);
+				fBitmap, fSourceRect, fScaleX, fScaleY, fDestinationRect);
 			return;
 		}
 	}
@@ -226,6 +227,8 @@ Painter::BitmapPainter::_DetermineTransform(BRect sourceRect,
 		fScaleX = 1.0;
 		fScaleY = 1.0;
 	}
+
+	fSourceRect = sourceRect;
 
 	fOffset.x = fDestinationRect.left - sourceRect.left;
 	fOffset.y = fDestinationRect.top - sourceRect.top;

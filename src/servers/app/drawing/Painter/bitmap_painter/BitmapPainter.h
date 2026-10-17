@@ -50,6 +50,8 @@ private:
 			color_space				fColorSpace;
 			uint32					fOptions;
 
+			BRect					fSourceRect;
+				// the source rect after being constrained to the bitmap
 			BRect					fDestinationRect;
 			double					fScaleX;
 			double					fScaleY;

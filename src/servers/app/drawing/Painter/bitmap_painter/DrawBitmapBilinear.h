@@ -534,14 +534,18 @@ template<class ColorType, class DrawMode>
 struct DrawBitmapBilinear {
 	void
 	Draw(const Painter* painter, PainterAggInterface& aggInterface,
-		agg::rendering_buffer& bitmap, BPoint offset,
+		agg::rendering_buffer& bitmap, BRect sourceRect,
 		double scaleX, double scaleY, BRect destinationRect)
 	{
 		//bigtime_t now = system_time();
 		uint32 dstWidth = destinationRect.IntegerWidth() + 1;
 		uint32 dstHeight = destinationRect.IntegerHeight() + 1;
-		uint32 srcWidth = bitmap.width();
-		uint32 srcHeight = bitmap.height();
+
+		// The part of the bitmap that is actually being drawn. Everything
+		// below works in this rect's coordinates, with the crop's left top
+		// corner added back at the end.
+		const double cropWidth = sourceRect.Width() + 1;
+		const double cropHeight = sourceRect.Height() + 1;
 
 		// Do not calculate more filter weights than necessary and also
 		// keep the stack based allocations reasonably sized
@@ -584,20 +588,26 @@ struct DrawBitmapBilinear {
 		filterData.fWeightsY = &yWeights[0];
 #endif
 
-		// Extract the cropping information for the source bitmap,
-		// If only a part of the source bitmap is to be drawn with scale,
-		// the offset will be different from the destinationRect left top
-		// corner.
-		const int32 xBitmapShift = (int32)(destinationRect.left - offset.x);
-		const int32 yBitmapShift = (int32)(destinationRect.top - offset.y);
+		// Where the crop starts in the bitmap. The weights below are indices
+		// into the crop, so this is added back to each of them.
+		const int32 xBitmapShift = (int32)sourceRect.left;
+		const int32 yBitmapShift = (int32)sourceRect.top;
 
-		// The index below is computed over the whole bitmap and then shifted
-		// by the crop, so the highest index it may produce is one that lands
-		// on the rightmost/bottommost source pixel *after* the shift.
-		// _DetermineTransform() constrains the source rect to the bitmap
-		// bounds, so the shift is never larger than the bitmap.
-		const int32 xMaxIndex = (int32)srcWidth - 1 - xBitmapShift;
-		const int32 yMaxIndex = (int32)srcHeight - 1 - yBitmapShift;
+		// The last index the loops below may produce, which is the crop's
+		// rightmost/bottommost pixel. That is also within the bitmap:
+		// _DetermineTransform() has already constrained the source rect to
+		// the bitmap's bounds, and the shift above only truncates the rect's
+		// left top corner, so the crop's extent can never reach past what is
+		// left of the bitmap after shifting.
+		const float xMaxIndex = sourceRect.Width();
+		const float yMaxIndex = sourceRect.Height();
+
+		// The span the indices are spread over, which works out to
+		// destinationRect.Width() / Height(). A destination exactly one pixel
+		// wide or high makes it zero, and then there is nothing to spread: it
+		// is the crop's left top corner, whatever the crop's extent.
+		const double xSpan = cropWidth * scaleX - 1;
+		const double ySpan = cropHeight * scaleY - 1;
 
 		for (uint32 i = 0; i < dstWidth; i++) {
 			// fractional index into source
@@ -607,16 +617,20 @@ struct DrawBitmapBilinear {
 			// to access the rightmost pixel of the source with a weighting
 			// of 255. This in turn will trigger an optimization in the loop
 			// that also prevents out of bounds access.
-			float index = (i + filterData.fIndexOffsetX) * (srcWidth - 1)
-				/ (srcWidth * scaleX - 1);
+			// The extent here has to be the crop's, not the whole bitmap's:
+			// scaleX is the destination's ratio to the crop, so pairing it
+			// with the bitmap's width traverses a cropped source too fast
+			// and the destination runs out of source before it runs out of
+			// pixels. cropWidth * scaleX - 1 is destinationRect.Width().
+			float index = xSpan > 0
+				? (i + filterData.fIndexOffsetX) * (cropWidth - 1) / xSpan
+				: 0;
 			// The NOTE above only holds for an integral destination width.
 			// A B_SUBPIXEL_PRECISE view can ask for a fractional one, and
 			// then dstWidth is the rounded-up pixel count while scaleX is
 			// the fractional ratio, so the last few indices run past the
 			// rightmost source column. Clamp them onto it, which is the
-			// weighting of 255 the NOTE promises. A cropped source runs past
-			// the end for an integral width too, hence xMaxIndex rather than
-			// srcWidth - 1.
+			// weighting of 255 the NOTE promises.
 			if (index > xMaxIndex)
 				index = xMaxIndex;
 			// round down to get the left pixel
@@ -637,8 +651,10 @@ struct DrawBitmapBilinear {
 			// destination to access the bottommost pixel of the source with a
 			// weighting of 255. This in turn will trigger an optimization in
 			// the loop that also prevents out of bounds access.
-			float index = (i + filterData.fIndexOffsetY) * (srcHeight - 1)
-				/ (srcHeight * scaleY - 1);
+			// see the note about the crop's extent in the x loop above
+			float index = ySpan > 0
+				? (i + filterData.fIndexOffsetY) * (cropHeight - 1) / ySpan
+				: 0;
 			// see the clamp in the x loop above
 			if (index > yMaxIndex)
 				index = yMaxIndex;
