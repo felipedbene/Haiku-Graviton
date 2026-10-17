@@ -666,11 +666,21 @@ named per entry.
 
 ### 13.6 Native-builder launch constraints: default disk, cap parallelism, absolute interpreters (extends §8)
 
-- **Symptom (disk, #254).** A builder launched from canonical with a large
-  `--disk` / block-device size override boots a healthy box that is **unreachable by
-  any channel** — SSM (outbound) and sshd/EICE (inbound :22) are late-boot,
-  network-gated launch jobs, and the first-boot `partition_grow` races/blocks them.
-  This was the real cause of the "#50 builder stalled across two boots" mystery.
+- **Symptom (disk, #254) — FIXED, and the rule below has been lifted for it.**
+  A builder launched from canonical with a large `--disk` / block-device size
+  override used to boot a healthy box that was **unreachable by any channel** —
+  SSM (outbound) and sshd/EICE (inbound :22) are late-boot, network-gated launch
+  jobs, and the first-boot userland `partition_grow` raced/blocked them. This was
+  the real cause of the "#50 builder stalled across two boots" mystery.
+
+  The partition grow has since moved out of userland and into the EFI boot loader
+  (`EfiDevice::GrowBootGptPartition()`,
+  `src/system/boot/platform/efi/devices.cpp:324`), which runs **before** the kernel
+  mounts the boot volume — so there is no launch-daemon ordering dependency left to
+  race. That was compile-proven only until the one-boot hardware confirmation
+  (verification plan **T4**, `graviton/docs/develop/bfs-auto-grow-design.md`) ran on
+  2026-10-17. It passed; the measurement is recorded there. **A `--disk` override on
+  an SSM-driven builder is no longer prohibited.**
 - **Symptom (parallelism, #262).** Large builds at high `-j` die with
   `ninja: fatal: waitpid(...): No child process` — an ECHILD child-reaping race on
   Haiku arm64 under many short-lived children, with **zero** compile errors (not a
@@ -679,21 +689,21 @@ named per entry.
   in-memory / un-bakeable) and the SSM shell hands children an **empty PATH**, so a
   `#!/usr/bin/env python3` builder-side script fails as "no python3" even though it
   is installed.
-- **Rule.** Launch native builders with the **DEFAULT root size** and rely on the
-  AMI's own auto-grow (or bake a bigger baked root) — **never** pass a `--disk`
-  override to a builder you must reach over SSM (`haiku-bake-builder` does not, so
-  bakes are fine; only wave/build launches with an override stall). Cap native build
-  parallelism at **~`-j16`**, or wrap large `ninja`/`jam` builds in a resume loop.
-  Every builder-side tool MUST exec its interpreter by **absolute path**
-  (`#!/boot/system/bin/python3`, not `env`).
-- **Check.** After launch, a healthy default-disk builder registers as an SSM Online
-  node within **~1–4 min** — poll until that horizon before concluding anything. On
-  2026-10-14 `i-0a9c668e1e721fe3f` (canonical, default disk) was *not* yet a node at
-  launch+2 min but was serving commands by launch+3.5 min, and a check at the 2-minute
-  mark was reported as a registration failure it was not (#576). If a builder has still
-  not appeared after ~4 min, suspect a disk override before an IAM/egress/clock theory.
-  For a build that died mid-run, `grep` for `waitpid`/`No child process` before blaming
-  the port, and re-run at `-j16`.
+- **Rule.** `haiku-launch --disk <GiB>` is now the supported way to give a builder
+  room, including one driven over SSM: the volume is at its full size on **boot one**,
+  before anything network-gated starts. Do not reboot to "converge" it — there is
+  nothing left to converge. Cap native build parallelism at **~`-j16`**, or wrap large
+  `ninja`/`jam` builds in a resume loop. Every builder-side tool MUST exec its
+  interpreter by **absolute path** (`#!/boot/system/bin/python3`, not `env`).
+- **Check.** After launch, a healthy builder registers as an SSM Online node within
+  **~1–4 min** — poll until that horizon before concluding anything. On 2026-10-14
+  `i-0a9c668e1e721fe3f` (canonical, default disk) was *not* yet a node at launch+2 min
+  but was serving commands by launch+3.5 min, and a check at the 2-minute mark was
+  reported as a registration failure it was not (#576). A disk override is no longer a
+  candidate explanation for a builder that never appears — on the T4 runs both
+  oversized boxes were SSM `Online` and answering sshd on the first boot — so go
+  straight to an IAM/egress/clock theory. For a build that died mid-run, `grep` for
+  `waitpid`/`No child process` before blaming the port, and re-run at `-j16`.
 
 ### 13.7 The publisher's instance profile must be able to read the host-tools (extends §3, #41)
 

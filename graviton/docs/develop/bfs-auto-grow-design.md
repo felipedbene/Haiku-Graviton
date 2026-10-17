@@ -32,10 +32,50 @@ GPT/geometry/CRC inconsistency so it never bricks boot.
 - **Build-verified** against the arm64 cross-tools: `haiku_loader.efi` links clean.
 - **In-place append grow** (19→40 GiB, mount-time engine) was previously
   hardware-proven (checkfs clean across crash-states + power-cut).
-- **Owed:** a hardware one-boot confirmation of the *loader-driven* trigger — bake the
-  canonical image onto a larger EBS and confirm `df /boot` widens on the first boot
-  with checkfs clean and the second boot a no-op (verification plan T4). Until that
-  run lands, treat the loader trigger as compile-proven, not boot-proven.
+- **T4 — PASSED on real Graviton, 2026-10-17.** The loader-driven trigger is now
+  boot-proven, not just compile-proven. Measurement below.
+
+### T4 result (2026-10-17)
+
+Two instances launched from the canonical AMI `ami-0de9d45ed8c03cad1` (whose snapshot
+is 20 GiB) with `haiku-launch --disk`, no reboot and no manual step in between:
+
+| instance | type | `--disk` | `df -k /boot` on **boot one** |
+|---|---|---|---|
+| `i-076018fb6c01ef378` | c7g.2xlarge | 100 | `Total Blocks: 100.0 GiB (52410359 blocks)` |
+| `i-067b77e63441ac207` | c7g.large | 60 | `Total Blocks: 60.0 GiB (31438839 blocks)` |
+
+**Both were reachable on that same first boot** — `haiku-launch --wait` reported
+`sshd answered on probe 2` for each, and `describe-instance-information` returned
+`Ping: Online, Platform: Haiku` for the 100 GiB box. That is the #254 symptom
+("healthy box unreachable by any channel") not reproducing, which is the point of the
+loader move.
+
+**Attribution is structural, not inferred from a log line.** `partition_grow` is a
+userland `launch_daemon` job (`src/bin/partition_grow/partition_grow.cpp`), so it
+cannot run until after `/boot` is already mounted. BFS was *already* at the full size
+at that first mount, so the GPT partition must have been extended before the kernel
+mounted the volume — which only the loader can do. (The loader's own
+`efi/devices: growing boot GPT partition` dprintf at `devices.cpp:324` was not
+available as corroboration: EC2's console buffer had already rolled past boot one by
+the time it was read.)
+
+**`checkfs /boot` on the grown 100 GiB volume:** `444 nodes checked, 0 blocks not
+allocated, 0 blocks already set, 1 blocks could be freed`. No allocation or structural
+errors. The one freeable block is the ordinary artifact of running `checkfs` against a
+mounted read-write volume and is reported here verbatim rather than rounded to "clean".
+
+**Second boot is a no-op.** After a `shutdown -r` (two `ena: driver build` banners in
+the console log confirm two boots), `df -k /boot` reported the *identical*
+`Total Blocks: 100.0 GiB (52410359 blocks)`. No further grow, and the box came back on
+SSH; SSM kept pinging on its 5-minute cadence across the reboot
+(`LastPingDateTime` 23:55:34Z → 00:00:34Z).
+
+This lifts the `--disk` prohibition in `../ops/SOPs.md` §13.6 / #254, which is
+updated in the same change. It does **not** touch the separate gate at the top of this
+document: the online/in-place grow engine stays behind `B_NOT_SUPPORTED` until the
+crash-injection acceptance (T1.5/T2) passes. T4 only proves the launch-at-final-size
+path.
 
 Detection of an **online** EBS grow, a **hot-attached** second volume, and
 **multi-controller** NVMe enumeration is out of scope here and tracked separately
