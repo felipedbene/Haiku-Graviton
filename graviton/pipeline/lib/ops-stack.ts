@@ -388,6 +388,16 @@ export class OpsStack extends cdk.Stack {
     const brokerAllowCidrs = parseBrokerEndpointAllowList(
       this.node.tryGetContext('brokerEndpointAllowCidrs'),
       this.node.tryGetContext('brokerEndpointAllowWorld'));
+    // #766: the broker's QUIC front door (remote_broker -q) is UDP on the same
+    // port, and an NLB cannot have a TCP and a UDP listener on one port -- it
+    // takes ONE TCP_UDP listener and target group instead. That replaces the
+    // TCP-only pair, so it is its own opt-in rather than something an existing
+    // endpoint picks up on its next deploy:  -c brokerEndpointQuic=true
+    const rawBrokerQuic = this.node.tryGetContext('brokerEndpointQuic');
+    const brokerQuic = rawBrokerQuic === true || rawBrokerQuic === 'true';
+    const brokerPorts: ec2.Port[] = brokerQuic
+      ? [ec2.Port.tcp(BROKER_PORT), ec2.Port.udp(BROKER_PORT)]
+      : [ec2.Port.tcp(BROKER_PORT)];
     if (brokerAllowCidrs.length > 0) {
       const brokerSg = new ec2.SecurityGroup(this, 'BrokerEndpointSg', {
         vpc, allowAllOutbound: false,
@@ -396,12 +406,18 @@ export class OpsStack extends cdk.Stack {
       for (const cidr of brokerAllowCidrs) {
         brokerSg.addIngressRule(ec2.Peer.ipv4(cidr), ec2.Port.tcp(BROKER_PORT),
           `remote_broker wss from ${cidr}`);
+        if (brokerQuic) {
+          brokerSg.addIngressRule(ec2.Peer.ipv4(cidr), ec2.Port.udp(BROKER_PORT),
+            `remote_broker quic from ${cidr}`);
+        }
       }
       // allowTo writes both halves: egress on the endpoint SG, ingress on the
       // builder SG. allowAllOutbound is false above so this is the ONLY place
       // the endpoint may talk to.
-      brokerSg.connections.allowTo(builderSg, ec2.Port.tcp(BROKER_PORT),
-        'public endpoint to remote_broker');
+      for (const port of brokerPorts) {
+        brokerSg.connections.allowTo(builderSg, port,
+          'public endpoint to remote_broker');
+      }
       // Note what this does NOT do: BuilderSg gains ingress from the ENDPOINT'S
       // security group, never from a CIDR. The fleet-wide builder SG stays
       // closed to the internet, so an instance that is not registered in the
@@ -430,14 +446,16 @@ export class OpsStack extends cdk.Stack {
       const brokerTargets = new elbv2.NetworkTargetGroup(this, 'BrokerTargets', {
         vpc,
         port: BROKER_PORT,
-        protocol: elbv2.Protocol.TCP,
+        protocol: brokerQuic ? elbv2.Protocol.TCP_UDP : elbv2.Protocol.TCP,
         // INSTANCE, not IP: it is what preserves the client address for the
         // broker's per-source backoff, and it is what `register-targets
         // --targets Id=<instance-id>` takes, so the operator never has to look
         // a private IP up.
         targetType: elbv2.TargetType.INSTANCE,
         preserveClientIp: true,
-        // A bare TCP open/close. It does NOT trip the broker's rate limiter: a
+        // A bare TCP open/close -- also with TCP_UDP, where the UDP half has no
+        // health check of its own and the broker serves both or neither. It
+        // does NOT trip the broker's rate limiter: a
         // failed TLS handshake is deliberately not counted as an authentication
         // failure (RemoteBroker.cpp, handle_connection), precisely so that
         // probes and browsers abandoning an untrusted certificate cannot lock
@@ -450,10 +468,11 @@ export class OpsStack extends cdk.Stack {
       });
       brokerNlb.addListener('BrokerListener', {
         port: BROKER_PORT,
-        // TCP, with no `certificates`: passthrough. If this ever becomes
-        // elbv2.Protocol.TLS, the broker stops being the thing the client's
-        // --pin authenticates -- read the trust-model note above first.
-        protocol: elbv2.Protocol.TCP,
+        // TCP (or TCP_UDP for QUIC), with no `certificates`: passthrough. If
+        // this ever becomes elbv2.Protocol.TLS, the broker stops being the
+        // thing the client's --pin authenticates -- read the trust-model note
+        // above first.
+        protocol: brokerQuic ? elbv2.Protocol.TCP_UDP : elbv2.Protocol.TCP,
         defaultTargetGroups: [brokerTargets],
       });
 

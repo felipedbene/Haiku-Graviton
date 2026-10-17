@@ -15,6 +15,11 @@
  * crash- and exploit-isolated from the display server that owns every
  * keystroke, and app_server itself carries no crypto at all.
  *
+ * With -q the same front door also listens for QUIC on the UDP port of the
+ * same number (#766, QuicStream.cpp): ALPN debeos-urp/1, one stream carrying
+ * exactly what the WebSocket carries, and everything below from step 2 on
+ * unchanged.
+ *
  * Client handshake, all inside TLS:
  *   1. HTTP/1.1 WebSocket upgrade (subprotocol "binary").
  *   2. First binary payload: an RP-framed RP_AUTHENTICATE message
@@ -50,6 +55,7 @@
  * again.
  */
 
+#include "QuicStream.h"
 #include "TLSStream.h"
 #include "WebSocketStream.h"
 
@@ -68,6 +74,7 @@
 #include <openssl/pem.h>
 #include <openssl/rand.h>
 #include <openssl/sha.h>
+#include <openssl/ssl.h>
 #include <openssl/x509.h>
 #include <openssl/x509v3.h>
 
@@ -398,34 +405,47 @@ private:
 // #pragma mark - session registry
 
 
+/*!	How the registry ends a session it is replacing, without touching the
+	other thread's resources beyond waking it: the WebSocket session shuts its
+	TCP socket down, the QUIC session interrupts its stream's waits (its UDP
+	socket is the listener's, shared by every connection).
+*/
+class SessionInterrupt {
+public:
+	virtual						~SessionInterrupt() {}
+	virtual	void				Interrupt() = 0;
+};
+
+
 /*!	At most one client session is live at a time; a newly *authenticated*
-	client takes the session over. Takeover only shuts the previous session's
-	sockets down (waking its relay thread, which then cleans up what it owns)
-	-- it never closes another thread's file descriptors.
+	client takes the session over, whichever listener either arrived on.
+	Takeover only wakes the previous session (shutting its session port socket
+	down and interrupting its client side), whose relay thread then cleans up
+	what it owns -- it never closes another thread's file descriptors.
 */
 class SessionRegistry {
 public:
 	SessionRegistry()
 		:
 		fLock("remote_broker session registry"),
-		fClientSocket(-1),
+		fClient(NULL),
 		fBackendSocket(-1),
 		fOwner(NULL)
 	{
 	}
 
-	void Adopt(void* owner, int clientSocket, int backendSocket)
+	void Adopt(void* owner, SessionInterrupt* client, int backendSocket)
 	{
 		BAutolock lock(fLock);
 		if (fOwner != NULL) {
 			TRACE_LOG("replacing live session with newly authenticated "
 				"client\n");
-			shutdown(fClientSocket, SHUT_RDWR);
+			fClient->Interrupt();
 			shutdown(fBackendSocket, SHUT_RDWR);
 		}
 
 		fOwner = owner;
-		fClientSocket = clientSocket;
+		fClient = client;
 		fBackendSocket = backendSocket;
 	}
 
@@ -434,16 +454,16 @@ public:
 		BAutolock lock(fLock);
 		if (fOwner == owner) {
 			fOwner = NULL;
-			fClientSocket = -1;
+			fClient = NULL;
 			fBackendSocket = -1;
 		}
 	}
 
 private:
-	BLocker	fLock;
-	int		fClientSocket;
-	int		fBackendSocket;
-	void*	fOwner;
+	BLocker				fLock;
+	SessionInterrupt*	fClient;
+	int					fBackendSocket;
+	void*				fOwner;
 };
 
 
@@ -467,6 +487,9 @@ struct BrokerConfiguration {
 	// daemon proxies to. Read per connection, never cached: see the header
 	// comment.
 	BPath		cookiePath;
+	// Whether the QUIC front door (UDP, same address and port) is enabled.
+	// Off by default, so an existing deployment opens no new port.
+	bool		quic;
 };
 
 static BrokerConfiguration sConfiguration;
@@ -1138,8 +1161,9 @@ prepare_settings(BrokerConfiguration& configuration)
 	message are left in \a buffer (\a extraOffset/\a extraLength) to be
 	forwarded once the session is connected.
 */
+template<class Stream>
 static status_t
-authenticate_client(WebSocketStream& ws, bigtime_t deadline, uint8* buffer,
+authenticate_client(Stream& ws, bigtime_t deadline, uint8* buffer,
 	size_t bufferSize, size_t& extraOffset, size_t& extraLength,
 	SessionRole& role)
 {
@@ -1209,8 +1233,9 @@ authenticate_client(WebSocketStream& ws, bigtime_t deadline, uint8* buffer,
 }
 
 
+template<class Stream>
 static status_t
-send_auth_result(WebSocketStream& ws, uint32 status, bigtime_t deadline)
+send_auth_result(Stream& ws, uint32 status, bigtime_t deadline)
 {
 	// Explicitly little-endian, like all remote protocol framing.
 	uint8 reply[10];
@@ -1444,9 +1469,13 @@ ViewerInputFilter::Forward(int socket, const uint8* buffer, size_t size)
 
 
 struct ConnectionContext {
+	// The TCP front door's connection socket, or -1 for a QUIC connection.
 	int			socket;
+	// The QUIC front door's connection, or NULL for a TCP one. Owned here.
+	QuicStream*	quic;
 	in_addr_t	peerAddress;
-	char		peerName[INET_ADDRSTRLEN];
+	// Room for an address and the "/quic" suffix the QUIC front door adds.
+	char		peerName[INET_ADDRSTRLEN + 8];
 	// Whether this connection still holds its handshake slot. Two paths give
 	// the slot up before they are finished with the connection, so releasing
 	// has to be harmless the second time; only this connection's own thread
@@ -1477,38 +1506,96 @@ release_handshake_slot(ConnectionContext* context)
 }
 
 
+// #pragma mark - the two front doors
+
+
+/*!	The WebSocket front door's side of a session: what serve_session() needs
+	from the client transport, beyond reading and writing.
+*/
+class WebSocketSession : public SessionInterrupt {
+public:
+	WebSocketSession(TLSStream& tls, WebSocketStream& ws)
+		:
+		fTLS(tls),
+		fWebSocket(ws)
+	{
+	}
+
+	ssize_t ReadSome(void* buffer, size_t size, bigtime_t deadline)
+		{ return fWebSocket.ReadSome(buffer, size, deadline); }
+	status_t WriteAll(const void* buffer, size_t size, bigtime_t deadline)
+		{ return fWebSocket.WriteAll(buffer, size, deadline); }
+
+	// Policy violation: the token was refused.
+	void EndRefused()
+		{ fWebSocket.SendClose(1008, system_time() + 1000000); }
+	// The broker could not open the session.
+	void EndFailed()
+		{ fWebSocket.SendClose(1011, system_time() + 1000000); }
+
+	void Relay(int backendSocket, RelayFilter* filter)
+	{
+		WebSocketStream::Relay(fWebSocket, fTLS, backendSocket, filter);
+		fWebSocket.SendClose(1000, system_time() + 1000000);
+	}
+
+	virtual void Interrupt()
+		{ shutdown(fTLS.Socket(), SHUT_RDWR); }
+
+private:
+	TLSStream&			fTLS;
+	WebSocketStream&	fWebSocket;
+};
+
+
+/*!	The QUIC front door's side of a session. The stream carries exactly what
+	the WebSocket carries, minus the WebSocket framing.
+*/
+class QuicSession : public SessionInterrupt {
+public:
+	QuicSession(QuicStream& stream)
+		:
+		fStream(stream)
+	{
+	}
+
+	ssize_t ReadSome(void* buffer, size_t size, bigtime_t deadline)
+		{ return fStream.ReadSome(buffer, size, deadline); }
+	status_t WriteAll(const void* buffer, size_t size, bigtime_t deadline)
+		{ return fStream.WriteAll(buffer, size, deadline); }
+
+	// RP_AUTH_RESULT already said why; the close itself is not orderly.
+	void EndRefused()
+		{ fStream.Close(kQuicErrorRelay, system_time() + 1000000); }
+	void EndFailed()
+		{ fStream.Close(kQuicErrorRelay, system_time() + 1000000); }
+
+	void Relay(int backendSocket, RelayFilter* filter)
+	{
+		uint64 errorCode = QuicStream::Relay(fStream, backendSocket, filter);
+		fStream.Close(errorCode, system_time() + 1000000);
+	}
+
+	virtual void Interrupt()
+		{ fStream.Interrupt(); }
+
+private:
+	QuicStream&			fStream;
+};
+
+
+/*!	Everything after the transport handshake, identical for both front doors:
+	the token check, the session cookie, the session port and the relay.
+*/
+template<class Session>
 static status_t
-handle_connection(ConnectionContext* context)
+serve_session(ConnectionContext* context, Session& session, bigtime_t deadline)
 {
-	bigtime_t deadline = system_time() + kHandshakeTimeout;
-
-	TLSStream tls;
-	status_t result = tls.Accept(sTLSContext, context->socket, deadline);
-	if (result != B_OK) {
-		// Deliberately NOT counted as an authentication failure. The
-		// documented first-use flow produces exactly these: a browser
-		// aborting the handshake on the not-yet-trusted self-signed
-		// certificate, a plain http:// probe, a favicon fetch. Counting
-		// them would block the user's address before their first real
-		// connection, with nothing on screen to explain why. Brute force is
-		// what the limiter is for, and brute force has to reach the token
-		// check to make progress.
-		TRACE_LOG("%s: TLS handshake failed\n", context->peerName);
-		return result;
-	}
-
-	WebSocketStream ws(tls);
-	result = ws.AcceptHandshake(deadline);
-	if (result != B_OK) {
-		TRACE_LOG("%s: WebSocket handshake failed\n", context->peerName);
-		return result;
-	}
-
 	uint8 authBuffer[kMaxAuthMessageSize];
 	size_t extraOffset = 0;
 	size_t extraLength = 0;
 	SessionRole role = kSessionRoleController;
-	result = authenticate_client(ws, deadline, authBuffer,
+	status_t result = authenticate_client(session, deadline, authBuffer,
 		sizeof(authBuffer), extraOffset, extraLength, role);
 
 	if (result != B_OK) {
@@ -1523,8 +1610,8 @@ handle_connection(ConnectionContext* context)
 		release_handshake_slot(context);
 
 		snooze(kAuthFailureDelay);
-		send_auth_result(ws, kAuthResultDenied, system_time() + 1000000);
-		ws.SendClose(1008, system_time() + 1000000);
+		send_auth_result(session, kAuthResultDenied, system_time() + 1000000);
+		session.EndRefused();
 		return result;
 	}
 
@@ -1541,8 +1628,9 @@ handle_connection(ConnectionContext* context)
 		TRACE_ERROR("%s: cannot read the session cookie from %s: %s\n",
 			context->peerName, sConfiguration.cookiePath.Path(),
 			strerror(cookieResult));
-		send_auth_result(ws, kAuthResultNoCookie, system_time() + 1000000);
-		ws.SendClose(1011, system_time() + 1000000);
+		send_auth_result(session, kAuthResultNoCookie,
+			system_time() + 1000000);
+		session.EndFailed();
 		OPENSSL_cleanse(authBuffer, sizeof(authBuffer));
 		return cookieResult;
 	}
@@ -1550,9 +1638,11 @@ handle_connection(ConnectionContext* context)
 	int backendSocket = connect_backend();
 	if (backendSocket < 0) {
 		TRACE_ERROR("%s: session port unreachable\n", context->peerName);
-		send_auth_result(ws, kAuthResultNoSession, system_time() + 1000000);
-		ws.SendClose(1011, system_time() + 1000000);
+		send_auth_result(session, kAuthResultNoSession,
+			system_time() + 1000000);
+		session.EndFailed();
 		OPENSSL_cleanse(cookie, sizeof(cookie));
+		OPENSSL_cleanse(authBuffer, sizeof(authBuffer));
 		return B_ERROR;
 	}
 
@@ -1564,7 +1654,7 @@ handle_connection(ConnectionContext* context)
 	OPENSSL_cleanse(cookie, sizeof(cookie));
 
 	if (forwardResult == B_OK) {
-		forwardResult = send_auth_result(ws, kAuthResultSuccess,
+		forwardResult = send_auth_result(session, kAuthResultSuccess,
 			system_time() + 1000000);
 	}
 
@@ -1597,13 +1687,12 @@ handle_connection(ConnectionContext* context)
 	TRACE_LOG("%s: authenticated as %s, session connected\n",
 		context->peerName,
 		role == kSessionRoleViewer ? "viewer" : "controller");
-	sSessions.Adopt(context, tls.Socket(), backendSocket);
+	sSessions.Adopt(context, &session, backendSocket);
 
-	WebSocketStream::Relay(ws, tls, backendSocket, clientFilter);
+	session.Relay(backendSocket, clientFilter);
 
 	sSessions.Remove(context);
 	close(backendSocket);
-	ws.SendClose(1000, system_time() + 1000000);
 
 	if (clientFilter != NULL) {
 		// What the role actually did, in numbers: the counters are how a test
@@ -1620,6 +1709,61 @@ handle_connection(ConnectionContext* context)
 }
 
 
+static status_t
+handle_connection(ConnectionContext* context)
+{
+	bigtime_t deadline = system_time() + kHandshakeTimeout;
+
+	TLSStream tls;
+	status_t result = tls.Accept(sTLSContext, context->socket, deadline);
+	if (result != B_OK) {
+		// Deliberately NOT counted as an authentication failure. The
+		// documented first-use flow produces exactly these: a browser
+		// aborting the handshake on the not-yet-trusted self-signed
+		// certificate, a plain http:// probe, a favicon fetch. Counting
+		// them would block the user's address before their first real
+		// connection, with nothing on screen to explain why. Brute force is
+		// what the limiter is for, and brute force has to reach the token
+		// check to make progress.
+		TRACE_LOG("%s: TLS handshake failed\n", context->peerName);
+		return result;
+	}
+
+	WebSocketStream ws(tls);
+	result = ws.AcceptHandshake(deadline);
+	if (result != B_OK) {
+		TRACE_LOG("%s: WebSocket handshake failed\n", context->peerName);
+		return result;
+	}
+
+	WebSocketSession session(tls, ws);
+	return serve_session(context, session, deadline);
+}
+
+
+static status_t
+handle_quic_connection(ConnectionContext* context)
+{
+	bigtime_t deadline = system_time() + kHandshakeTimeout;
+	QuicStream& stream = *context->quic;
+
+	status_t result = stream.AcceptStream(deadline);
+	if (result != B_OK) {
+		// Not an authentication failure, for the reason given in
+		// handle_connection(); a broken stream rule is the peer's own
+		// protocol error and is said so in the close.
+		TRACE_LOG("%s: QUIC handshake or stream setup failed\n",
+			context->peerName);
+		stream.Close(result == B_NOT_ALLOWED ? kQuicErrorStreamRules
+			: kQuicErrorRelay, system_time() + 1000000);
+		return result;
+	}
+
+	QuicSession session(stream);
+	return serve_session(context, session, deadline);
+}
+
+
 /*!	Thread entry. The handshake slot and the context are given back here, at
 	the one point every path out of handle_connection() reaches, rather than
 	being repeated at each of its early returns.
@@ -1628,9 +1772,11 @@ static status_t
 connection_thread(void* data)
 {
 	ConnectionContext* context = (ConnectionContext*)data;
-	status_t result = handle_connection(context);
+	status_t result = context->quic != NULL
+		? handle_quic_connection(context) : handle_connection(context);
 
 	release_handshake_slot(context);
+	delete context->quic;
 	delete context;
 	return result;
 }
@@ -1680,11 +1826,100 @@ report_refused_handshake(const char* peerName,
 }
 
 
+/*!	Admits a connection from either front door: the per-address failure
+	backoff, then the global and per-address handshake caps, then a thread of
+	its own. Takes ownership of \a context; returns false (having disposed of
+	it) when the connection is refused.
+*/
+static bool
+admit_connection(ConnectionContext* context)
+{
+	if (sRateLimiter.IsBlocked(context->peerAddress))
+		return false;
+
+	// Claimed only once the context exists, so that the slot has an owner
+	// from the moment it is taken and is released through the one path
+	// that owner has (release_handshake_slot()).
+	HandshakeLimiter::Admission admission
+		= sHandshakes.Acquire(context->peerAddress);
+	if (admission != HandshakeLimiter::kAdmitted) {
+		// Not recorded as an authentication failure: being refused is not
+		// evidence about this peer, and an address shared by a NAT with a
+		// flooding host must not inherit its backoff.
+		report_refused_handshake(context->peerName, admission);
+		return false;
+	}
+
+	context->holdsHandshakeSlot = true;
+
+	thread_id thread = spawn_thread((thread_func)connection_thread,
+		"broker connection", B_NORMAL_PRIORITY, context);
+	if (thread < 0) {
+		release_handshake_slot(context);
+		return false;
+	}
+
+	resume_thread(thread);
+	return true;
+}
+
+
+/*!	The QUIC front door's accept loop, on a thread of its own beside the TCP
+	one. Connections arrive here only after the stack validated their source
+	address (a Retry round trip), so the accounting below sees a real address.
+*/
+static status_t
+quic_accept_thread(void* data)
+{
+	QuicListener* listener = (QuicListener*)data;
+
+	while (true) {
+		SSL* connection = listener->Accept();
+		if (connection == NULL)
+			continue;
+
+		ConnectionContext* context = new(std::nothrow) ConnectionContext;
+		QuicStream* stream = new(std::nothrow) QuicStream(connection);
+		if (context == NULL || stream == NULL) {
+			delete context;
+			if (stream != NULL)
+				stream->Close(kQuicErrorRelay, 0);
+			delete stream;
+			if (stream == NULL)
+				SSL_free(connection);
+			continue;
+		}
+
+		context->socket = -1;
+		context->quic = stream;
+		context->peerAddress = stream->PeerAddress();
+		context->holdsHandshakeSlot = false;
+		struct in_addr peer;
+		peer.s_addr = context->peerAddress;
+		if (inet_ntop(AF_INET, &peer, context->peerName,
+				sizeof(context->peerName)) == NULL) {
+			strlcpy(context->peerName, "?", sizeof(context->peerName));
+		}
+		strlcat(context->peerName, "/quic", sizeof(context->peerName));
+
+		if (!admit_connection(context)) {
+			// One non-blocking attempt at a close: the accept loop must not
+			// wait on a peer it is refusing.
+			stream->Close(kQuicErrorRelay, 0);
+			delete stream;
+			delete context;
+		}
+	}
+
+	return B_OK;
+}
+
+
 static void
 print_usage(const char* program)
 {
 	printf("usage: %s [-l [<address>:]<port>] [-t <address>:<port>]"
-		" [-s <directory>]\n       [-c <path>]\n\n", program);
+		" [-s <directory>]\n       [-c <path>] [-q]\n\n", program);
 	printf("TLS + WebSocket + authentication front door for the remote"
 		" desktop.\n\n");
 	printf("  -l   listen address (default: all interfaces, port 10902)\n");
@@ -1693,7 +1928,10 @@ print_usage(const char* program)
 		" directory,\n       subdirectory remote_desktop)\n");
 	printf("  -c   app_server's session cookie file for the session port\n"
 		"       (default: <system settings>/remote_desktop/session_cookie."
-		"<port>)\n\n");
+		"<port>)\n");
+	printf("  -q   also listen for QUIC (ALPN debeos-urp/1) on the same address"
+		" and\n       port over UDP: the same certificate, token and session,"
+		" one stream\n       carrying what the WebSocket carries\n\n");
 	printf("First run generates a self-signed certificate (broker.pem /"
 		" broker.key),\nits pinnable SHA-256 fingerprint"
 		" (broker.fingerprint) and a random\nauthentication token (token,"
@@ -1761,6 +1999,7 @@ main(int argc, char** argv)
 	sConfiguration.listenPort = 10902;
 	sConfiguration.targetAddress = htonl(INADDR_LOOPBACK);
 	sConfiguration.targetPort = 10900;
+	sConfiguration.quic = false;
 
 	for (int i = 1; i < argc; i++) {
 		if (strcmp(argv[i], "-l") == 0 && i + 1 < argc) {
@@ -1781,6 +2020,8 @@ main(int argc, char** argv)
 			sConfiguration.settingsDirectory.SetTo(argv[++i]);
 		} else if (strcmp(argv[i], "-c") == 0 && i + 1 < argc) {
 			sConfiguration.cookiePath.SetTo(argv[++i]);
+		} else if (strcmp(argv[i], "-q") == 0) {
+			sConfiguration.quic = true;
 		} else {
 			print_usage(argv[0]);
 			return strcmp(argv[i], "--help") == 0 ? 0 : 1;
@@ -1822,6 +2063,55 @@ main(int argc, char** argv)
 	TRACE_LOG("listening on port %u, proxying to port %u\n",
 		sConfiguration.listenPort, sConfiguration.targetPort);
 
+	// The QUIC advertisement: a client that fetches the token and certificate
+	// over SSH reads this file to learn whether this broker serves QUIC, and
+	// which stream layouts (one ALPN per line), before it tries UDP. Removed
+	// at every start and written only once the listener is up, so that it
+	// always describes the running broker and never promises a port that is
+	// not open.
+	BPath quicAdvertPath(sConfiguration.settingsDirectory.Path(),
+		"broker.quic");
+	if (unlink(quicAdvertPath.Path()) != 0 && errno != ENOENT) {
+		TRACE_ERROR("cannot remove a stale %s: %s\n", quicAdvertPath.Path(),
+			strerror(errno));
+		return 1;
+	}
+
+	if (sConfiguration.quic) {
+		// Fatal when asked for and unavailable, rather than a TCP-only broker
+		// that looks like it is serving QUIC.
+		BPath certificatePath(sConfiguration.settingsDirectory.Path(),
+			"broker.pem");
+		BPath keyPath(sConfiguration.settingsDirectory.Path(), "broker.key");
+		QuicListener* listener = new(std::nothrow) QuicListener;
+		if (listener == NULL
+			|| listener->Init(certificatePath.Path(), keyPath.Path(),
+				sConfiguration.listenAddress, sConfiguration.listenPort)
+				!= B_OK) {
+			TRACE_ERROR("failed to start the QUIC listener on UDP port %u\n",
+				sConfiguration.listenPort);
+			return 1;
+		}
+
+		thread_id thread = spawn_thread(quic_accept_thread,
+			"broker quic accept", B_NORMAL_PRIORITY, listener);
+		if (thread < 0) {
+			TRACE_ERROR("failed to start the QUIC accept thread\n");
+			return 1;
+		}
+		resume_thread(thread);
+
+		static const char kAdvert[] = "debeos-urp/1\n";
+		if (write_file(quicAdvertPath.Path(), kAdvert, sizeof(kAdvert) - 1,
+				0644) != B_OK) {
+			TRACE_ERROR("cannot write %s\n", quicAdvertPath.Path());
+			return 1;
+		}
+
+		TRACE_LOG("listening for QUIC (ALPN debeos-urp/1) on UDP port %u\n",
+			sConfiguration.listenPort);
+	}
+
 	while (true) {
 		struct sockaddr_in peer;
 		socklen_t peerLength = sizeof(peer);
@@ -1855,8 +2145,9 @@ main(int argc, char** argv)
 			}
 		}
 
-		// Cheap gates before any TLS work: per-address failure backoff, then
-		// admission against the global and per-address handshake caps.
+		// Cheap gate before any TLS work: per-address failure backoff (again
+		// in admit_connection(), which the QUIC front door shares, but here it
+		// also spares a blocked peer the socket options and the allocation).
 		if (sRateLimiter.IsBlocked(peer.sin_addr.s_addr)) {
 			close(clientSocket);
 			continue;
@@ -1887,6 +2178,7 @@ main(int argc, char** argv)
 		}
 
 		context->socket = clientSocket;
+		context->quic = NULL;
 		context->peerAddress = peer.sin_addr.s_addr;
 		context->holdsHandshakeSlot = false;
 		if (inet_ntop(AF_INET, &peer.sin_addr, context->peerName,
@@ -1894,33 +2186,10 @@ main(int argc, char** argv)
 			strlcpy(context->peerName, "?", sizeof(context->peerName));
 		}
 
-		// Claimed only once the context exists, so that the slot has an owner
-		// from the moment it is taken and is released through the one path
-		// that owner has (release_handshake_slot()).
-		HandshakeLimiter::Admission admission
-			= sHandshakes.Acquire(context->peerAddress);
-		if (admission != HandshakeLimiter::kAdmitted) {
-			// Not recorded as an authentication failure: being refused is not
-			// evidence about this peer, and an address shared by a NAT with a
-			// flooding host must not inherit its backoff.
-			report_refused_handshake(context->peerName, admission);
+		if (!admit_connection(context)) {
 			close(clientSocket);
 			delete context;
-			continue;
 		}
-
-		context->holdsHandshakeSlot = true;
-
-		thread_id thread = spawn_thread((thread_func)connection_thread,
-			"broker connection", B_NORMAL_PRIORITY, context);
-		if (thread < 0) {
-			release_handshake_slot(context);
-			close(clientSocket);
-			delete context;
-			continue;
-		}
-
-		resume_thread(thread);
 	}
 
 	return 0;

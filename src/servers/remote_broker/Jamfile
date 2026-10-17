@@ -8,10 +8,16 @@ UsePrivateHeaders shared support ;
 if [ FIsBuildFeatureEnabled openssl ] {
 	UseBuildFeatureHeaders openssl ;
 
-	Includes [ FGristFiles RemoteBroker.cpp TLSStream.cpp WebSocketStream.cpp ]
+	Includes [ FGristFiles RemoteBroker.cpp QuicStream.cpp TLSStream.cpp
+		WebSocketStream.cpp ]
 		: [ BuildFeatureAttribute openssl : headers ] ;
 
+	# QuicStream.cpp needs openssl3 >= 3.5.9-2 (#790, #792): it refuses to
+	# compile against an older one and to start QUIC on an unpatched one.
+	# build/jam/repositories/HaikuPortsLocal/arm64 pins that build.
+
 	Application remote_broker :
+		QuicStream.cpp
 		RemoteBroker.cpp
 		TLSStream.cpp
 		WebSocketStream.cpp
