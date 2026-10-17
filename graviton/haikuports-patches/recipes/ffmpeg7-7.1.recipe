@@ -26,10 +26,22 @@ LICENSE="GNU LGPL v2.1"
 # to the configure line. (RELRO-neutral -- do NOT use -z norelro.)
 REVISION="1"
 SOURCE_URI="https://ffmpeg.org/releases/ffmpeg-$portVersion.tar.xz"
-# TODO fill on the first haikuporter fetch of 7.1 (it prints the actual
-# checksum on mismatch). The packaged build came from the n7.1 git tag of
-# github.com/FFmpeg/FFmpeg.
-CHECKSUM_SHA256="UNVERIFIED-FILL-ON-FIRST-FETCH"
+# Measured from the release tarball fetched over https from the SOURCE_URI
+# above: `sha256sum ffmpeg-7.1.tar.xz` on 11011364 bytes. This replaces a
+# fill-me-in placeholder that made the recipe unbuildable -- haikuporter refuses
+# to proceed on a checksum mismatch, so nothing could regenerate this port,
+# which is why only the runtime half ever reached the repository (see below).
+# Do not reintroduce a placeholder here: the repo is scanned for them, and a
+# recipe carrying one cannot be built by anyone.
+#
+# The packaged ffmpeg7-7.1-1 in the repository was built from the n7.1 git tag
+# of github.com/FFmpeg/FFmpeg rather than from this tarball, so the two are the
+# same release but not provably the same bytes. The ABI contract is what has to
+# hold, and it does: the SONAMEs pinned below are exactly those of the published
+# runtime -- libavcodec.so.61.19.100 and the rest, read off an instance with
+# ffmpeg7-7.1-1 installed -- so a devel package built from this tarball matches
+# the runtime it is version-locked to by REQUIRES_devel.
+CHECKSUM_SHA256="40973d44970dbc83ef302b0609f2e74982be2d85916dd2ee7472d30678a7abe6"
 SOURCE_DIR="ffmpeg-$portVersion"
 
 ARCHITECTURES="all !x86_gcc2"
