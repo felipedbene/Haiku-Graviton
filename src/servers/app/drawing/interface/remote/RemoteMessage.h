@@ -77,6 +77,7 @@ public:
 		void					AddBitmap(const ServerBitmap& bitmap,
 									bool minimal = false);
 		void					AddFont(const ServerFont& font);
+		void					AddFontIdentity(const ServerFont& font);
 		void					AddPattern(const Pattern& pattern);
 		void					AddDrawState(const DrawState& drawState);
 		void					AddArrayLine(const ViewLineArrayInfo& line);

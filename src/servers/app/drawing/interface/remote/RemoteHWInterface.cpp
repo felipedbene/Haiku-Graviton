@@ -67,7 +67,12 @@ supported_capabilities()
 	// never asks a client for text metrics, so advertising the bit would promise
 	// a query that is never sent. A client that still offers it simply sees it
 	// masked out of the acknowledged intersection.
-	return RP_CAP_RESYNC | RP_CAP_FRAME_BOUNDARY
+	//
+	// RP_CAP_FONT_IDENTITY is unconditional too: the identity block is read
+	// off the ServerFont the record already comes from (FontStyle names, the
+	// FreeType face's 'head' table), so there is nothing that could be missing
+	// from a build.
+	return RP_CAP_RESYNC | RP_CAP_FRAME_BOUNDARY | RP_CAP_FONT_IDENTITY
 		| RemoteWireWriter::SupportedCapabilities();
 }
 
@@ -880,7 +885,16 @@ RemoteHWInterface::_EventThread()
 				if (result != B_OK) {
 					TRACE_ERROR("failed to acknowledge hello: %s\n",
 						strerror(result));
+					break;
 				}
+
+				// The state replay at accept (_NewConnection) ran before this
+				// RP_HELLO was read, so every RP_SET_FONT in it went out with
+				// no capabilities and therefore no identity block -- and
+				// SetFont() dedups, so a repaint would never send them again.
+				// Re-state the fonts now that the bit is agreed.
+				if ((fClientCapabilities & RP_CAP_FONT_IDENTITY) != 0)
+					_ReplayFonts();
 				break;
 			}
 
@@ -1193,6 +1207,18 @@ RemoteHWInterface::_ReplayState()
 	BAutolock lock(fEngineListLocker);
 	for (int32 i = 0; i < fDrawingEngines.CountItems(); i++)
 		fDrawingEngines.ItemAt(i)->ReplayState();
+}
+
+
+/*!	Re-states every live drawing engine's font, and nothing else. See the
+	RP_HELLO handler for why.
+*/
+void
+RemoteHWInterface::_ReplayFonts()
+{
+	BAutolock lock(fEngineListLocker);
+	for (int32 i = 0; i < fDrawingEngines.CountItems(); i++)
+		fDrawingEngines.ItemAt(i)->ReplayFont();
 }
 
 
