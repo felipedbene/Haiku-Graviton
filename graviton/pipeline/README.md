@@ -207,6 +207,20 @@ builder instance id are not stored in `cdk.json` because both embed identifiers
 this repository does not carry; pass them per deploy, or export `HAIKU_*`.
 `haiku:repoName` defaults to `haiku`, which is not this fork's name — pass it too.
 
+> **`DebeosOpsStack` has its own required context, and omitting it deletes live
+> resources.** Its Site-to-Site VPN is gated on `-c onPremPublicIp=<ip>`
+> (`lib/ops-stack.ts:248-250`), and that value is deliberately never committed —
+> the on-prem public address is not public information and this repository is.
+> CloudFormation cannot tell "the operator did not pass this flag" from "delete
+> these", so a deploy without it destroys the VPN gateway, customer gateway,
+> connection, static route, route propagation and tunnel log group, plus the
+> `BuilderSg` ingress for SSH, remote desktop and ping from on-prem. The VPN
+> returns with new outside tunnel addresses and new pre-shared keys, so on-prem
+> has to be reconfigured. The flags are tabulated in
+> [`graviton/docs/remote-desktop-public-endpoint.md`](../docs/remote-desktop-public-endpoint.md)
+> → *Context flags are not optional*. The check: if a diff of this stack shows
+> `AWS::EC2::VPNConnection … destroy`, a flag is missing — stop and add it.
+
 > **Deploy from a `graviton` checkout that is synced with `origin`.** The
 > CodeBuild environment this deploy bakes in — the root volume size
 > (`rootVolumeBytes`), the image size, whether the perf-gate **Test** stage

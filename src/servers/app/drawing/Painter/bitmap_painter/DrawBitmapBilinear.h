@@ -237,12 +237,37 @@ struct BilinearDefault :
 
 		// The last column/row handling does not need to be performed
 		// for all clipping rects!
+		//
+		// A weight entry that lands on the last source row or column with a
+		// weight of 255 must not go through ColorType::Interpolate(): that
+		// reads the row below the entry's index and the pixel to the right
+		// of it, which for the last row or column is past the end of the
+		// bitmap. Those bytes are weighted zero so the drawn pixel does not
+		// depend on them, but the read happens all the same.
+		//
+		// There can be more than one such entry at the end: a bitmap only
+		// one pixel wide or high puts every entry on index 0 with a weight
+		// of 255. So step back over the whole trailing run rather than a
+		// single entry.
 		int32 yMax = y2;
-		if (this->fWeightsY[yMax].weight == 255)
+		if (this->fSource->height() > 1) {
+			while (yMax >= y1 && this->fWeightsY[yMax].weight == 255
+				&& this->fWeightsY[yMax].index
+					== this->fWeightsY[y2].index) {
+				yMax--;
+			}
+		} else if (this->fWeightsY[yMax].weight == 255) {
+			// Interpolate() is never used for a single-row bitmap, so
+			// there is no row over-read to step back over here.
 			yMax--;
+		}
 		int32 xIndexMax = xIndexR;
-		if (this->fWeightsX[xIndexMax].weight == 255)
+		while (xIndexMax >= xIndexL
+			&& this->fWeightsX[xIndexMax].weight == 255
+			&& this->fWeightsX[xIndexMax].index
+				== this->fWeightsX[xIndexR].index) {
 			xIndexMax--;
+		}
 
 		for (; y1 <= yMax; y1++) {
 			// cache the weight of the top and bottom row
@@ -275,28 +300,38 @@ struct BilinearDefault :
 				}
 				DrawMode::Blend(d, &t[0]);
 			}
-			// last column of pixels if necessary
-			if (xIndexMax < xIndexR && this->fSource->height() > 1) {
-				const uint8* s = src + this->fWeightsX[xIndexR].index;
-				const uint8* sBottom = s + this->fSourceBytesPerRow;
+			// last columns of pixels if necessary
+			for (int32 x = xIndexMax + 1; x <= xIndexR; x++) {
+				const uint8* s = src + this->fWeightsX[x].index;
 
 				uint32 t[4];
-				ColorType::InterpolateLastColumn(&t[0], s, sBottom, wTop,
-					wBottom);
+				if (this->fSource->height() > 1) {
+					const uint8* sBottom = s + this->fSourceBytesPerRow;
+					ColorType::InterpolateLastColumn(&t[0], s, sBottom, wTop,
+						wBottom);
+				} else {
+					// a single-row bitmap has no row below to interpolate
+					// with, so this is a plain copy, as the corner is
+					t[0] = s[0];
+					t[1] = s[1];
+					t[2] = s[2];
+					t[3] = s[3];
+				}
 				DrawMode::Blend(d, &t[0]);
 			}
 
 			this->fDestination += this->fDestinationBytesPerRow;
 		}
 
-		// last row of pixels if necessary
-		// buffer offset into source (bottom row)
-		const uint8* src
-			= this->fSource->row_ptr(this->fWeightsY[y2].index);
-		// buffer handle for destination to be incremented per pixel
-		uint8* d = this->fDestination;
+		// last rows of pixels if necessary. Blend() advances the destination
+		// pointer it is handed, so each row needs a fresh one.
+		for (int32 y = yMax + 1; y <= y2; y++) {
+			// buffer offset into source (bottom row)
+			const uint8* src
+				= this->fSource->row_ptr(this->fWeightsY[y].index);
+			// buffer handle for destination to be incremented per pixel
+			uint8* d = this->fDestination;
 
-		if (yMax < y2) {
 			for (int32 x = xIndexL; x <= xIndexMax; x++) {
 				const uint8* s = src + this->fWeightsX[x].index;
 				const uint16 wLeft = this->fWeightsX[x].weight;
@@ -305,13 +340,15 @@ struct BilinearDefault :
 				ColorType::InterpolateLastRow(&t[0], s, wLeft, wRight);
 				DrawMode::Blend(d, &t[0]);
 			}
-		}
 
-		// pixel in bottom right corner if necessary
-		if (yMax < y2 && xIndexMax < xIndexR) {
-			const uint8* s = src + this->fWeightsX[xIndexR].index;
-			uint32 t[4] = {s[0], s[1], s[2], s[3]};
-			DrawMode::Blend(d, &t[0]);
+			// pixels in the bottom right corner if necessary
+			for (int32 x = xIndexMax + 1; x <= xIndexR; x++) {
+				const uint8* s = src + this->fWeightsX[x].index;
+				uint32 t[4] = {s[0], s[1], s[2], s[3]};
+				DrawMode::Blend(d, &t[0]);
+			}
+
+			this->fDestination += this->fDestinationBytesPerRow;
 		}
 	}
 };
@@ -415,13 +452,21 @@ struct BilinearSimd : DrawBitmapBilinearOptimized<BilinearSimd> {
 		// routines for the processing of the single display lines.
 
 		// The last column/row handling does not need to be performed
-		// for all clipping rects!
+		// for all clipping rects! As in BilinearDefault above, step back
+		// over the whole trailing run of entries that land on the last
+		// source row or column with a weight of 255, not just one: a
+		// fractional destination rect produces several, and the SIMD x loop
+		// reads the row below and the pixel to the right unconditionally.
 		int32 yMax = y2;
-		if (fWeightsY[yMax].weight == 255)
+		while (yMax >= y1 && fWeightsY[yMax].weight == 255
+			&& fWeightsY[yMax].index == fWeightsY[y2].index) {
 			yMax--;
+		}
 		int32 xIndexMax = xIndexR;
-		if (fWeightsX[xIndexMax].weight == 255)
+		while (xIndexMax >= xIndexL && fWeightsX[xIndexMax].weight == 255
+			&& fWeightsX[xIndexMax].index == fWeightsX[xIndexR].index) {
 			xIndexMax--;
+		}
 
 		for (; y1 <= yMax; y1++) {
 			// cache the weight of the top and bottom row
@@ -433,30 +478,33 @@ struct BilinearSimd : DrawBitmapBilinearOptimized<BilinearSimd> {
 			// buffer handle for destination to be incremented per
 			// pixel
 			uint8* d = fDestination;
-			bilinear_scale_xloop_mmxsse(src, fDestination, fWeightsX, xIndexL,
-				xIndexMax, wTop, fSourceBytesPerRow);
-			// increase pointer by processed pixels
-			d += (xIndexMax - xIndexL + 1) * 4;
+			if (xIndexMax >= xIndexL) {
+				bilinear_scale_xloop_mmxsse(src, fDestination, fWeightsX,
+					xIndexL, xIndexMax, wTop, fSourceBytesPerRow);
+				// increase pointer by processed pixels
+				d += (xIndexMax - xIndexL + 1) * 4;
+			}
 
-			// last column of pixels if necessary
-			if (xIndexMax < xIndexR) {
-				const uint8* s = src + fWeightsX[xIndexR].index;
+			// last columns of pixels if necessary
+			for (int32 x = xIndexMax + 1; x <= xIndexR; x++) {
+				const uint8* s = src + fWeightsX[x].index;
 				const uint8* sBottom = s + fSourceBytesPerRow;
 				d[0] = (s[0] * wTop + sBottom[0] * wBottom) >> 8;
 				d[1] = (s[1] * wTop + sBottom[1] * wBottom) >> 8;
 				d[2] = (s[2] * wTop + sBottom[2] * wBottom) >> 8;
+				d += 4;
 			}
 
 			fDestination += fDestinationBytesPerRow;
 		}
 
-		// last row of pixels if necessary
-		// buffer offset into source (bottom row)
-		const uint8* src = fSource->row_ptr(fWeightsY[y2].index);
-		// buffer handle for destination to be incremented per pixel
-		uint8* d = fDestination;
+		// last rows of pixels if necessary
+		for (int32 y = yMax + 1; y <= y2; y++) {
+			// buffer offset into source (bottom row)
+			const uint8* src = fSource->row_ptr(fWeightsY[y].index);
+			// buffer handle for destination to be incremented per pixel
+			uint8* d = fDestination;
 
-		if (yMax < y2) {
 			for (int32 x = xIndexL; x <= xIndexMax; x++) {
 				const uint8* s = src + fWeightsX[x].index;
 				const uint16 wLeft = fWeightsX[x].weight;
@@ -466,12 +514,15 @@ struct BilinearSimd : DrawBitmapBilinearOptimized<BilinearSimd> {
 				d[2] = (s[2] * wLeft + s[6] * wRight) >> 8;
 				d += 4;
 			}
-		}
 
-		// pixel in bottom right corner if necessary
-		if (yMax < y2 && xIndexMax < xIndexR) {
-			const uint8* s = src + fWeightsX[xIndexR].index;
-			*(uint32*)d = *(uint32*)s;
+			// pixels in the bottom right corner if necessary
+			for (int32 x = xIndexMax + 1; x <= xIndexR; x++) {
+				const uint8* s = src + fWeightsX[x].index;
+				*(uint32*)d = *(uint32*)s;
+				d += 4;
+			}
+
+			fDestination += fDestinationBytesPerRow;
 		}
 	}
 };
@@ -483,14 +534,18 @@ template<class ColorType, class DrawMode>
 struct DrawBitmapBilinear {
 	void
 	Draw(const Painter* painter, PainterAggInterface& aggInterface,
-		agg::rendering_buffer& bitmap, BPoint offset,
+		agg::rendering_buffer& bitmap, BRect sourceRect,
 		double scaleX, double scaleY, BRect destinationRect)
 	{
 		//bigtime_t now = system_time();
 		uint32 dstWidth = destinationRect.IntegerWidth() + 1;
 		uint32 dstHeight = destinationRect.IntegerHeight() + 1;
-		uint32 srcWidth = bitmap.width();
-		uint32 srcHeight = bitmap.height();
+
+		// The part of the bitmap that is actually being drawn. Everything
+		// below works in this rect's coordinates, with the crop's left top
+		// corner added back at the end.
+		const double cropWidth = sourceRect.Width() + 1;
+		const double cropHeight = sourceRect.Height() + 1;
 
 		// Do not calculate more filter weights than necessary and also
 		// keep the stack based allocations reasonably sized
@@ -533,12 +588,26 @@ struct DrawBitmapBilinear {
 		filterData.fWeightsY = &yWeights[0];
 #endif
 
-		// Extract the cropping information for the source bitmap,
-		// If only a part of the source bitmap is to be drawn with scale,
-		// the offset will be different from the destinationRect left top
-		// corner.
-		const int32 xBitmapShift = (int32)(destinationRect.left - offset.x);
-		const int32 yBitmapShift = (int32)(destinationRect.top - offset.y);
+		// Where the crop starts in the bitmap. The weights below are indices
+		// into the crop, so this is added back to each of them.
+		const int32 xBitmapShift = (int32)sourceRect.left;
+		const int32 yBitmapShift = (int32)sourceRect.top;
+
+		// The last index the loops below may produce, which is the crop's
+		// rightmost/bottommost pixel. That is also within the bitmap:
+		// _DetermineTransform() has already constrained the source rect to
+		// the bitmap's bounds, and the shift above only truncates the rect's
+		// left top corner, so the crop's extent can never reach past what is
+		// left of the bitmap after shifting.
+		const float xMaxIndex = sourceRect.Width();
+		const float yMaxIndex = sourceRect.Height();
+
+		// The span the indices are spread over, which works out to
+		// destinationRect.Width() / Height(). A destination exactly one pixel
+		// wide or high makes it zero, and then there is nothing to spread: it
+		// is the crop's left top corner, whatever the crop's extent.
+		const double xSpan = cropWidth * scaleX - 1;
+		const double ySpan = cropHeight * scaleY - 1;
 
 		for (uint32 i = 0; i < dstWidth; i++) {
 			// fractional index into source
@@ -548,8 +617,22 @@ struct DrawBitmapBilinear {
 			// to access the rightmost pixel of the source with a weighting
 			// of 255. This in turn will trigger an optimization in the loop
 			// that also prevents out of bounds access.
-			float index = (i + filterData.fIndexOffsetX) * (srcWidth - 1)
-				/ (srcWidth * scaleX - 1);
+			// The extent here has to be the crop's, not the whole bitmap's:
+			// scaleX is the destination's ratio to the crop, so pairing it
+			// with the bitmap's width traverses a cropped source too fast
+			// and the destination runs out of source before it runs out of
+			// pixels. cropWidth * scaleX - 1 is destinationRect.Width().
+			float index = xSpan > 0
+				? (i + filterData.fIndexOffsetX) * (cropWidth - 1) / xSpan
+				: 0;
+			// The NOTE above only holds for an integral destination width.
+			// A B_SUBPIXEL_PRECISE view can ask for a fractional one, and
+			// then dstWidth is the rounded-up pixel count while scaleX is
+			// the fractional ratio, so the last few indices run past the
+			// rightmost source column. Clamp them onto it, which is the
+			// weighting of 255 the NOTE promises.
+			if (index > xMaxIndex)
+				index = xMaxIndex;
 			// round down to get the left pixel
 			filterData.fWeightsX[i].index = (uint16)index;
 			filterData.fWeightsX[i].weight =
@@ -568,8 +651,13 @@ struct DrawBitmapBilinear {
 			// destination to access the bottommost pixel of the source with a
 			// weighting of 255. This in turn will trigger an optimization in
 			// the loop that also prevents out of bounds access.
-			float index = (i + filterData.fIndexOffsetY) * (srcHeight - 1)
-				/ (srcHeight * scaleY - 1);
+			// see the note about the crop's extent in the x loop above
+			float index = ySpan > 0
+				? (i + filterData.fIndexOffsetY) * (cropHeight - 1) / ySpan
+				: 0;
+			// see the clamp in the x loop above
+			if (index > yMaxIndex)
+				index = yMaxIndex;
 			// round down to get the top pixel
 			filterData.fWeightsY[i].index = (uint16)index;
 			filterData.fWeightsY[i].weight =
