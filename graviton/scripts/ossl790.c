@@ -78,8 +78,8 @@ check_one_errno(const char *name, int errnum, int expectNonFatal)
 		int nonFatal = BIO_err_is_non_fatal(code);
 		snprintf(detail, sizeof(detail), "BIO_err_is_non_fatal=%d (want %d)",
 			nonFatal, expectNonFatal);
-		check("  and it is classed retryable" + (expectNonFatal ? 0 : 0),
-			nonFatal == expectNonFatal, detail);
+		check("  and it is classed retryable", nonFatal == expectNonFatal,
+			detail);
 	}
 }
 
