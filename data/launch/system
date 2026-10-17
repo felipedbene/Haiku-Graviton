@@ -71,8 +71,12 @@ service x-vnd.Haiku-power_daemon {
 # feature (remote_broker@openssl); on an image without it this entry is a no-op.
 # Not on_demand: it listens on a raw TCP port (:10902), which launch_daemon's
 # port-activation cannot trigger on.
+# -q: the QUIC front door (#766) on UDP :10902 too, bound like the TCP listener
+# (IPv4, all interfaces) and advertised to clients in broker.quic. It widens
+# nothing by itself: reaching UDP 10902 still takes a security-group or NLB rule
+# for it (ops-stack's brokerEndpointQuic, off by default).
 service x-vnd.Haiku-remote_broker {
-	launch /system/servers/remote_broker
+	launch /system/servers/remote_broker -q
 	no_safemode
 }
 

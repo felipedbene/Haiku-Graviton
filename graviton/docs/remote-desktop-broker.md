@@ -435,9 +435,11 @@ third is a missing API and stays.
 ### Wire rules
 
 1. **UDP 10902**: the TCP listener's port number, bound to the same address
-   (`-l`), IPv4 only like the TCP listener. **Off unless the broker is started
-   with `-q`**, so an existing deployment opens no new port. The image's launch
-   entry does not pass it.
+   (`-l`), IPv4 only like the TCP listener. Off unless the broker is started
+   with `-q`; the image's launch entry (`data/launch/system`) passes it. What
+   reaches the port is still decided by security groups and the NLB: no
+   existing rule admits UDP 10902, and the public endpoint carries it only with
+   `brokerEndpointQuic`.
 2. **ALPN `debeos-urp/1`**, required. A handshake without it fails with
    `no_application_protocol`. The `/1` versions the *QUIC stream layout*, not
    the RP protocol, whose features are still negotiated by `RP_HELLO`. The
