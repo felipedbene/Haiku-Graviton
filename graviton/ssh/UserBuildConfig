@@ -395,7 +395,12 @@ rule UserBuildConfigRulePreImage
 			<hg-pool>libuv-1.52.1-1-arm64.hpkg
 			<hg-pool>libyaml-0.2.5-2-arm64.hpkg
 			<hg-pool>mandoc-1.14.6-1-arm64.hpkg
-			<hg-pool>openssl3_man-3.5.7-1-any.hpkg
+			# Follows the openssl3/openssl3_devel pin in
+			# build/jam/repositories/HaikuPortsLocal/arm64 -- the man package is
+			# arch-independent but is still versioned with the library, and a
+			# stale 3.5.7-1 here would resolve openssl3_man's
+			# `requires openssl3 == 3.5.7` against a 3.5.9-2 library.
+			<hg-pool>openssl3_man-3.5.9-2-any.hpkg
 			<hg-pool>rhash-1.4.6-2-arm64.hpkg
 			<hg-pool>bzip2-1.0.8-3-arm64.hpkg
 			# newer libffi than the mirror's bootstrap one (python3.14/ruby need
