@@ -21,8 +21,14 @@ static const int32 kEntryRemoved = -2;
 EntryCacheGeneration::EntryCacheGeneration()
 	:
 	next_index(0),
+	entries_size(0),
 	entries(NULL)
 {
+	// entries_size has to be zeroed here and not only in Init(): a generation
+	// that is default-constructed and never Init()ed otherwise carries garbage
+	// in it, and the bounds checks in _AddEntryToCurrentGeneration() are the
+	// only thing standing between that garbage and a store through the NULL
+	// `entries` beside it (#786).
 }
 
 
@@ -86,21 +92,39 @@ EntryCache::Init()
 		return error;
 
 	int32 entriesSize = 1024;
-	fGenerationCount = 8;
+	int32 generationCount = 8;
 
 	// TODO: Choose generation size/count more scientifically?
 	// TODO: Add low_resource handler hook?
 	if (vm_available_memory() >= (1024*1024*1024)) {
 		entriesSize = 8192;
-		fGenerationCount = 16;
+		generationCount = 16;
 	}
 
-	fGenerations = new(std::nothrow) EntryCacheGeneration[fGenerationCount];
-	for (int32 i = 0; i < fGenerationCount; i++) {
-		error = fGenerations[i].Init(entriesSize);
-		if (error != B_OK)
+	// Build the generations in a local and publish them only once every one of
+	// them is usable. fGenerationCount is the single gate Add() checks before
+	// handing an entry to _AddEntryToCurrentGeneration(), so setting it ahead
+	// of the allocations -- as this used to -- means a failure partway through
+	// leaves a cache that reports itself ready while its later generations
+	// still have `entries == NULL`. The one caller does check the error and
+	// fails the mount, so that was latent rather than measured, but it is one
+	// edit away from being live and the allocation below was not checked for
+	// NULL at all before being dereferenced on the next line (#786).
+	EntryCacheGeneration* generations
+		= new(std::nothrow) EntryCacheGeneration[generationCount];
+	if (generations == NULL)
+		return B_NO_MEMORY;
+
+	for (int32 i = 0; i < generationCount; i++) {
+		error = generations[i].Init(entriesSize);
+		if (error != B_OK) {
+			delete[] generations;
 			return error;
+		}
 	}
+
+	fGenerations = generations;
+	fGenerationCount = generationCount;
 
 	return B_OK;
 }
@@ -220,9 +244,34 @@ EntryCache::_AddEntryToCurrentGeneration(EntryCacheEntry* entry, bool move)
 	if (move) {
 		const int32 oldGeneration = atomic_get_and_set(&entry->generation,
 			fCurrentGeneration);
-		if (oldGeneration == fCurrentGeneration || entry->index < 0) {
-			// The entry is already in the current generation or is being moved to
-			// it by another thread.
+		if (oldGeneration == fCurrentGeneration || oldGeneration < 0
+				|| entry->index < 0) {
+			// The entry is already in the current generation, has never been
+			// placed in one at all, or is being moved to it by another thread.
+			//
+			// `oldGeneration < 0` is the case this used to miss, and it
+			// panicked the kernel on arm64 (#786). Add() publishes an entry
+			// into fEntries (see Add()) BEFORE this function gives it a
+			// generation and an index, and it initialises generation to -1 and
+			// index to kEntryNotInArray. A concurrent Lookup() therefore meets
+			// entries mid-publication and has to see the two fields as a
+			// consistent pair -- but they are set by plain stores, `generation`
+			// first and `index` second, with nothing ordering them. On x86's
+			// TSO that is enough. arm64 is weakly ordered and may make the
+			// store to `index` visible first, so a reader can hold a valid
+			// index together with generation == -1, clear the `index < 0`
+			// guard, and fall into `fGenerations[-1]` below -- which reads an
+			// EntryCacheEntry** out of the 8 bytes underneath the array and
+			// stores through it. Measured on a Graviton builder as
+			//   PANIC: vm_page_fault: unhandled page fault in kernel space
+			//     at 0xc928, ip ... EntryCache<...>
+			//     ::_AddEntryToCurrentGeneration + 0x264
+			// from `rm` in _user_unlink, where 0xc928 is 6437 *
+			// sizeof(EntryCacheEntry*) -- an entries[6437] store off a NULL
+			// base. Rejecting the negative generation makes that observable
+			// state harmless instead of fatal: -1 is the only out-of-range
+			// value `generation` ever holds, and an entry that has not been
+			// placed in a generation has nothing to be removed from.
 			return true;
 		}
 
