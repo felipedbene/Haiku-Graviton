@@ -1,0 +1,456 @@
+diff --git a/Libraries/LibMedia/Audio/PlaybackStreamHaiku.cpp b/Libraries/LibMedia/Audio/PlaybackStreamHaiku.cpp
+new file mode 100644
+index 00000000..bddd0e22
+--- /dev/null
++++ b/Libraries/LibMedia/Audio/PlaybackStreamHaiku.cpp
+@@ -0,0 +1,367 @@
++/*
++ * Copyright (c) 2026, Felipe De Bene <felipe@debene.dev>
++ *
++ * SPDX-License-Identifier: BSD-2-Clause
++ */
++
++#include <AK/Atomic.h>
++#include <AK/Math.h>
++#include <AK/Mutex.h>
++#include <AK/Span.h>
++#include <AK/StdLibExtras.h>
++#include <AK/Variant.h>
++#include <AK/Vector.h>
++#include <LibCore/ThreadedPromise.h>
++#include <LibMedia/Audio/ChannelMap.h>
++#include <LibMedia/Audio/PlaybackStreamHaiku.h>
++
++#include <MediaDefs.h>
++#include <SoundPlayer.h>
++
++namespace Audio {
++
++// The media kit hands us one buffer of this many bytes at a time. Haiku's
++// mixer is not obliged to honor a request, but it does negotiate against it,
++// and a buffer much larger than a few thousand frames makes the node chain
++// allocate unreasonably, so the requested latency is clamped to this.
++static constexpr size_t MAX_BUFFER_BYTES = 16384;
++static constexpr size_t MIN_BUFFER_BYTES = 1024;
++
++static constexpr u32 DEFAULT_SAMPLE_RATE = 48000;
++static constexpr u32 DEFAULT_CHANNEL_COUNT = 2;
++
++static ErrorOr<ChannelMap> channel_map_for_count(u32 channel_count)
++{
++    switch (channel_count) {
++    case 1:
++        return ChannelMap::mono();
++    case 2:
++        return ChannelMap::stereo();
++    case 4:
++        return ChannelMap::quadrophonic();
++    case 6:
++        return ChannelMap::surround_5_1();
++    case 8:
++        return ChannelMap::surround_7_1();
++    default:
++        return Error::from_string_literal("Unsupported Haiku audio channel count");
++    }
++}
++
++struct HaikuAudioTask {
++    enum class Type {
++        Play,
++        Pause,
++        PauseAndDiscard,
++        Volume,
++    };
++
++    void resolve(AK::Duration time)
++    {
++        promise.visit(
++            [](Empty) { VERIFY_NOT_REACHED(); },
++            [&](NonnullRefPtr<Core::ThreadedPromise<void>>& promise) {
++                promise->resolve();
++            },
++            [&](NonnullRefPtr<Core::ThreadedPromise<AK::Duration>>& promise) {
++                promise->resolve(move(time));
++            });
++    }
++
++    Type type;
++    Variant<Empty, NonnullRefPtr<Core::ThreadedPromise<void>>, NonnullRefPtr<Core::ThreadedPromise<AK::Duration>>> promise;
++    Optional<double> data {};
++};
++
++class HaikuAudioState : public RefCounted<HaikuAudioState> {
++public:
++    static ErrorOr<NonnullRefPtr<HaikuAudioState>> create(PlaybackStream::AudioDataRequestCallback data_request_callback, OutputState initial_output_state, u32 target_latency_ms)
++    {
++        auto state = TRY(adopt_nonnull_ref_or_enomem(new (nothrow) HaikuAudioState(move(data_request_callback), initial_output_state)));
++
++        media_raw_audio_format format = media_raw_audio_format::wildcard;
++        format.frame_rate = DEFAULT_SAMPLE_RATE;
++        format.channel_count = DEFAULT_CHANNEL_COUNT;
++        format.format = media_raw_audio_format::B_AUDIO_FLOAT;
++        format.byte_order = B_MEDIA_HOST_ENDIAN;
++
++        size_t bytes_per_frame = DEFAULT_CHANNEL_COUNT * sizeof(float);
++        size_t requested_frames = (static_cast<size_t>(DEFAULT_SAMPLE_RATE) * target_latency_ms) / 1000;
++        size_t requested_bytes = clamp(requested_frames * bytes_per_frame, MIN_BUFFER_BYTES, MAX_BUFFER_BYTES);
++        format.buffer_size = (requested_bytes / bytes_per_frame) * bytes_per_frame;
++
++        state->m_player = new (nothrow) BSoundPlayer(&format, "Ladybird", HaikuAudioState::on_buffer_request, nullptr, state.ptr());
++        if (state->m_player == nullptr)
++            return Error::from_errno(ENOMEM);
++        if (auto status = state->m_player->InitCheck(); status != B_OK)
++            return Error::from_errno(status > 0 ? EIO : -status);
++
++        // The mixer negotiates, so report back what it actually gave us rather
++        // than what we asked for.
++        auto negotiated = state->m_player->Format();
++        if (negotiated.format != media_raw_audio_format::B_AUDIO_FLOAT)
++            return Error::from_string_literal("Haiku audio mixer did not accept float samples");
++        auto channel_map = TRY(channel_map_for_count(negotiated.channel_count));
++        state->m_sample_specification = SampleSpecification(static_cast<u32>(negotiated.frame_rate), channel_map);
++        if (!state->m_sample_specification.is_valid())
++            return Error::from_string_literal("Haiku audio mixer negotiated an unusable format");
++
++        // Latency() needs a round trip to the media server, so it is read once
++        // here rather than from the buffer callback.
++        state->m_latency_frames = (state->m_player->Latency() * negotiated.frame_rate) / 1'000'000;
++
++        // The node runs for the stream's whole life and emits silence while
++        // suspended. Stopping it instead would be tidier, but Stop() blocks for
++        // up to 500ms plus the chain's latency and cannot be called from the
++        // buffer callback, which is where tasks are picked up. The AudioUnit
++        // backend keeps its output unit running for the same reason.
++        if (auto status = state->m_player->Start(); status != B_OK)
++            return Error::from_errno(status > 0 ? EIO : -status);
++
++        return state;
++    }
++
++    ~HaikuAudioState()
++    {
++        // The destructor stops the node and blocks until it has, so the buffer
++        // callback cannot be running once this returns. It has to happen before
++        // anything else it touches goes away.
++        delete m_player;
++        m_player = nullptr;
++    }
++
++    void queue_task(HaikuAudioTask task)
++    {
++        MutexLocker lock(m_task_queue_mutex);
++        m_task_queue.append(move(task));
++        m_task_queue_is_empty = false;
++    }
++
++    void notify_data_available()
++    {
++        m_data_notified = true;
++    }
++
++    SampleSpecification const& sample_specification() const { return m_sample_specification; }
++
++    AK::Duration last_sample_time() const
++    {
++        return AK::Duration::from_time_units(m_output_time, 1, m_sample_specification.sample_rate());
++    }
++
++private:
++    HaikuAudioState(PlaybackStream::AudioDataRequestCallback data_request_callback, OutputState initial_output_state)
++        : m_paused(initial_output_state == OutputState::Playing ? Paused::No : Paused::Explicit)
++        , m_data_request_callback(move(data_request_callback))
++    {
++    }
++
++    Optional<HaikuAudioTask> dequeue_task()
++    {
++        // OPTIMIZATION: As in the other backends, skip the lock on the audio
++        //               thread when there is nothing queued, which is the
++        //               common case.
++        if (m_task_queue_is_empty.load())
++            return {};
++
++        MutexLocker lock(m_task_queue_mutex);
++
++        m_task_queue_is_empty = m_task_queue.size() == 1;
++        return m_task_queue.take_first();
++    }
++
++    // Runs on the SoundPlayNode's buffer thread. Nothing here may block: the
++    // node is mid-way through filling a buffer it owes the mixer.
++    static void on_buffer_request(void* user_data, void* buffer, size_t size, media_raw_audio_format const&)
++    {
++        auto& state = *static_cast<HaikuAudioState*>(user_data);
++        VERIFY(state.m_sample_specification.is_valid());
++
++        auto channel_count = state.m_sample_specification.channel_count();
++        auto output_buffer = Bytes(reinterpret_cast<u8*>(buffer), size).reinterpret<float>();
++        output_buffer = output_buffer.trim((output_buffer.size() / channel_count) * channel_count);
++
++        auto was_paused = state.m_paused.load();
++
++        // Only Underrun -> No, so an explicit suspend that raced with the
++        // underrun is not overwritten by the recovery. The compare-exchange
++        // writes the state it found back into was_paused either way, so the
++        // result does not need checking: on success it stays Underrun and the
++        // resume below rebases the clock, and on failure it becomes whatever
++        // the suspending thread set.
++        if (was_paused == Paused::Underrun && state.m_data_notified.exchange(false))
++            (void)state.m_paused.compare_exchange_strong(was_paused, Paused::No);
++
++        // The buffer being filled now reaches the speakers one chain latency
++        // from now, so what has been played is the performance clock's progress
++        // since the last resume, bounded by what has actually been handed over.
++        i64 output_time = state.m_frames_written;
++        if (state.m_performance_time_at_resume >= 0) {
++            auto elapsed = state.m_player->PerformanceTime() - state.m_performance_time_at_resume;
++            output_time = state.m_frames_written_at_resume
++                + (elapsed * state.m_sample_specification.sample_rate()) / 1'000'000
++                - state.m_latency_frames;
++            output_time = clamp(output_time, state.m_output_time.load(), state.m_frames_written);
++        }
++        state.m_output_time = output_time;
++        auto output_timestamp = AK::Duration::from_time_units(output_time, 1, state.m_sample_specification.sample_rate());
++
++        if (auto task = state.dequeue_task(); task.has_value()) {
++            switch (task->type) {
++            case HaikuAudioTask::Type::Play:
++                state.m_paused = Paused::No;
++                break;
++
++            case HaikuAudioTask::Type::Pause:
++            case HaikuAudioTask::Type::PauseAndDiscard:
++                // Discarding is the same as draining here. What the node chain
++                // has already queued cannot be dropped: BSoundPlayer::Stop()
++                // ignores its flush argument (src/kits/media/SoundPlayer.cpp,
++                // "// TODO: flush is ignored"), and there is no other handle on
++                // the buffers in flight. The cost is up to one chain latency of
++                // already-submitted audio after a discard.
++                state.m_paused = Paused::Explicit;
++                break;
++
++            case HaikuAudioTask::Type::Volume:
++                VERIFY(task->data.has_value());
++                // Applied in software rather than through BSoundPlayer::
++                // SetVolume(), which reaches the mixer's parameter web and
++                // blocks on a reply from the media server.
++                // FIXME: Move this to the mixer once there is a thread that can
++                //        afford to block on it, so that Haiku's own per-
++                //        application volume control sees it.
++                state.m_volume = static_cast<float>(clamp(*task->data, 0.0, 1.0));
++                break;
++            }
++
++            task->resolve(output_timestamp);
++        }
++
++        if (state.m_paused == Paused::No) {
++            if (was_paused != Paused::No) {
++                state.m_frames_written_at_resume = state.m_frames_written;
++                state.m_performance_time_at_resume = state.m_player->PerformanceTime();
++            }
++
++            auto written_buffer = state.m_data_request_callback(output_buffer);
++            state.m_frames_written += static_cast<i64>(written_buffer.size() / channel_count);
++
++            if (written_buffer.is_empty()) {
++                state.m_paused = Paused::Underrun;
++            } else {
++                if (state.m_volume != 1.0f) {
++                    for (auto& sample : output_buffer.trim(written_buffer.size()))
++                        sample *= state.m_volume;
++                }
++                // The node plays the whole buffer whether or not the callback
++                // filled it, so a partial fill has to be padded here.
++                output_buffer.slice(written_buffer.size()).fill(0);
++            }
++        }
++
++        if (state.m_paused != Paused::No)
++            output_buffer.fill(0);
++    }
++
++    BSoundPlayer* m_player { nullptr };
++    SampleSpecification m_sample_specification;
++    i64 m_latency_frames { 0 };
++
++    Mutex m_task_queue_mutex;
++    Vector<HaikuAudioTask, 4> m_task_queue;
++    Atomic<bool> m_task_queue_is_empty { true };
++
++    enum class Paused : u8 {
++        No,
++        Explicit,
++        Underrun,
++    };
++    Atomic<Paused> m_paused { Paused::Explicit };
++
++    PlaybackStream::AudioDataRequestCallback m_data_request_callback;
++    Atomic<bool> m_data_notified { false };
++    // Only touched by the buffer callback.
++    bigtime_t m_performance_time_at_resume { -1 };
++    i64 m_frames_written_at_resume { 0 };
++    i64 m_frames_written { 0 };
++    float m_volume { 1.0f };
++    Atomic<i64> m_output_time { 0 };
++};
++
++NonnullRefPtr<PlaybackStream::CreatePromise> PlaybackStream::create_platform_playback_stream(OutputState initial_output_state, u32 target_latency_ms, AudioDataRequestCallback&& data_request_callback)
++{
++    return PlaybackStreamHaiku::create(initial_output_state, target_latency_ms, move(data_request_callback));
++}
++
++NonnullRefPtr<PlaybackStream::CreatePromise> PlaybackStreamHaiku::create(OutputState initial_output_state, u32 target_latency_ms, AudioDataRequestCallback&& data_request_callback)
++{
++    auto promise = CreatePromise::construct();
++    // FIXME: Create the state off this thread. Connecting to the mixer is
++    //        synchronous and talks to the media server, as the AudioUnit
++    //        backend's equivalent FIXME notes for Core Audio.
++    auto state_or_error = HaikuAudioState::create(move(data_request_callback), initial_output_state, target_latency_ms);
++    if (state_or_error.is_error()) {
++        promise->reject(state_or_error.release_error());
++        return promise;
++    }
++    auto stream = adopt_ref(*new PlaybackStreamHaiku(state_or_error.release_value()));
++    promise->resolve(stream);
++    return promise;
++}
++
++PlaybackStreamHaiku::PlaybackStreamHaiku(NonnullRefPtr<HaikuAudioState> state)
++    : m_state(move(state))
++{
++}
++
++PlaybackStreamHaiku::~PlaybackStreamHaiku() = default;
++
++SampleSpecification PlaybackStreamHaiku::sample_specification() const
++{
++    return m_state->sample_specification();
++}
++
++NonnullRefPtr<Core::ThreadedPromise<AK::Duration>> PlaybackStreamHaiku::resume()
++{
++    auto promise = Core::ThreadedPromise<AK::Duration>::create();
++    m_state->queue_task({ HaikuAudioTask::Type::Play, promise });
++
++    return promise;
++}
++
++NonnullRefPtr<Core::ThreadedPromise<void>> PlaybackStreamHaiku::drain_buffer_and_suspend()
++{
++    auto promise = Core::ThreadedPromise<void>::create();
++    m_state->queue_task({ HaikuAudioTask::Type::Pause, promise });
++
++    return promise;
++}
++
++NonnullRefPtr<Core::ThreadedPromise<void>> PlaybackStreamHaiku::discard_buffer_and_suspend()
++{
++    auto promise = Core::ThreadedPromise<void>::create();
++    m_state->queue_task({ HaikuAudioTask::Type::PauseAndDiscard, promise });
++
++    return promise;
++}
++
++void PlaybackStreamHaiku::notify_data_available()
++{
++    m_state->notify_data_available();
++}
++
++AK::Duration PlaybackStreamHaiku::total_time_played() const
++{
++    return m_state->last_sample_time();
++}
++
++NonnullRefPtr<Core::ThreadedPromise<void>> PlaybackStreamHaiku::set_volume(double volume)
++{
++    auto promise = Core::ThreadedPromise<void>::create();
++    m_state->queue_task({ HaikuAudioTask::Type::Volume, promise, volume });
++
++    return promise;
++}
++
++}
+diff --git a/Libraries/LibMedia/Audio/PlaybackStreamHaiku.h b/Libraries/LibMedia/Audio/PlaybackStreamHaiku.h
+new file mode 100644
+index 00000000..a224f16c
+--- /dev/null
++++ b/Libraries/LibMedia/Audio/PlaybackStreamHaiku.h
+@@ -0,0 +1,40 @@
++/*
++ * Copyright (c) 2026, Felipe De Bene <felipe@debene.dev>
++ *
++ * SPDX-License-Identifier: BSD-2-Clause
++ */
++
++#pragma once
++
++#include "PlaybackStream.h"
++#include <AK/Error.h>
++#include <AK/NonnullRefPtr.h>
++
++namespace Audio {
++
++class HaikuAudioState;
++
++class PlaybackStreamHaiku final : public PlaybackStream {
++public:
++    static NonnullRefPtr<CreatePromise> create(OutputState initial_output_state, u32 target_latency_ms, AudioDataRequestCallback&&);
++
++    virtual SampleSpecification sample_specification() const override;
++
++    virtual NonnullRefPtr<Core::ThreadedPromise<AK::Duration>> resume() override;
++    virtual NonnullRefPtr<Core::ThreadedPromise<void>> drain_buffer_and_suspend() override;
++    virtual NonnullRefPtr<Core::ThreadedPromise<void>> discard_buffer_and_suspend() override;
++
++    virtual void notify_data_available() override;
++
++    virtual AK::Duration total_time_played() const override;
++
++    virtual NonnullRefPtr<Core::ThreadedPromise<void>> set_volume(double) override;
++
++private:
++    explicit PlaybackStreamHaiku(NonnullRefPtr<HaikuAudioState>);
++    ~PlaybackStreamHaiku();
++
++    NonnullRefPtr<HaikuAudioState> m_state;
++};
++
++}
+diff --git a/Libraries/LibMedia/CMakeLists.txt b/Libraries/LibMedia/CMakeLists.txt
+index 315fe0b1..22630173 100644
+--- a/Libraries/LibMedia/CMakeLists.txt
++++ b/Libraries/LibMedia/CMakeLists.txt
+@@ -160,6 +160,16 @@ elseif(LADYBIRD_AUDIO_BACKEND STREQUAL "WASAPI")
+     target_sources(LibMedia PRIVATE Audio/PlaybackStreamWasapi.cpp)
+     target_compile_definitions(LibMedia PRIVATE LIBMEDIA_AUDIO_BACKEND=1)
+     target_link_libraries(LibMedia PRIVATE ole32 avrt winmm)
++elseif(LADYBIRD_AUDIO_BACKEND STREQUAL "HAIKU")
++    target_sources(LibMedia PRIVATE Audio/PlaybackStreamHaiku.cpp)
++    target_compile_definitions(LibMedia PRIVATE LIBMEDIA_AUDIO_BACKEND=1)
++    target_link_libraries(LibMedia PRIVATE media)
+ elseif (DEFINED LADYBIRD_AUDIO_BACKEND)
+     message(FATAL_ERROR "Please update ${CMAKE_CURRENT_LIST_FILE} for audio backend ${LADYBIRD_AUDIO_BACKEND}")
++else()
++    # Not a warning: with no backend every stream becomes a NullPlaybackStream
++    # and the browser plays nothing, which is indistinguishable from broken
++    # audio at runtime. Fail the configure so a new platform has to say what
++    # it wants.
++    message(FATAL_ERROR "No audio backend was selected for this platform. Add one in Meta/CMake/audio.cmake and a branch here.")
+ endif()
+diff --git a/Meta/CMake/audio.cmake b/Meta/CMake/audio.cmake
+index 2fa79829..d3055bc9 100644
+--- a/Meta/CMake/audio.cmake
++++ b/Meta/CMake/audio.cmake
+@@ -4,6 +4,11 @@ include_guard()
+ if (APPLE AND NOT IOS)
+     set(LADYBIRD_AUDIO_BACKEND "AUDIO_UNIT")
+     return()
++elseif (HAIKU)
++    # Haiku has no PulseAudio, so without this it would fall through the
++    # NOT WIN32 branch below and leave LADYBIRD_AUDIO_BACKEND undefined.
++    set(LADYBIRD_AUDIO_BACKEND "HAIKU")
++    return()
+ elseif (NOT WIN32)
+     pkg_check_modules(PULSEAUDIO IMPORTED_TARGET libpulse)
+ 
