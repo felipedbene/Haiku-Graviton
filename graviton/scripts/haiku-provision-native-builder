@@ -236,11 +236,51 @@ feed | pkgman refresh >/dev/null 2>&1 || true
 #   native-built coreutils 9.12-1  -> uname -p = arm64   CMAKE_SYSTEM_PROCESSOR=arm64
 # So the published pool already answers correctly and no rebuild is needed; the gap
 # was only that provisioning never pulled it in over the bootstrap package.
+#
+# cmake/ninja/meson/pkgconf/texinfo are the generator and configure-helper tier, and
+# they were MISSING from this list until 2026-10-17 even though
+# ../docs/native-ec2-builds.md has always told the reader to install them. The
+# consequence is not a late compile error: haikuporter resolves BUILD_PREREQUIRES
+# against `/boot/home/haikuports/packages` and `/boot/system/packages` only, so an
+# unresolvable `cmd:cmake` aborts the run at DEPENDENCY RESOLUTION, before any port
+# is built -- and the message names the first port in the closure that happens to
+# need it rather than the missing tool, e.g.
+#   Reason: build-prerequires "cmd:cmake" of package "graphite2-1.3.14"
+#           could not be resolved
+# on a builder where graphite2 was already installed from the pool. Measured on
+# i-076018fb6c01ef378, provisioned cold from this script at 344be90868: cmake,
+# ninja, meson, pkg-config and makeinfo were all absent, which is every CMake port,
+# every Meson port, every port whose configure wants pkg-config, and (via
+# cmd:makeinfo) app-text/texlive_core -- the bottom of issue 702's chain.
+# pkg-config is provided by `pkgconf`, NOT by a package called `pkgconfig`;
+# makeinfo comes from `texinfo`. This tier is exactly the gap #764 was about in a
+# different register: the script patched haikuporter's cmake handling in four
+# places (sections 2a-1/2a-2 below) while never installing cmake.
 TOOLS="gcc binutils make m4 patch gawk diffutils bison flex \
 	python3.14 autoconf automake libtool perl gettext gettext_libintl \
-	coreutils haiku_devel curl git gzip tar unzip which dos2unix xz_utils libxml2"
+	coreutils haiku_devel curl git gzip tar unzip which dos2unix xz_utils libxml2 \
+	cmake ninja meson pkgconf texinfo"
 log "installing toolchain: $TOOLS"
 feed | pkgman install $TOOLS
+
+# Assert the generator tier actually landed, for the same reason the `uname -p`
+# check below is fatal rather than advisory: a builder missing one of these does
+# not fail where the cause is, it fails at dependency resolution naming an
+# unrelated port, hours of operator time away from the answer.
+missing_tools=""
+for want in cmake ninja meson pkg-config makeinfo; do
+	command -v "$want" >/dev/null 2>&1 || missing_tools="$missing_tools $want"
+done
+if [ -n "$missing_tools" ]; then
+	echo "provision: FATAL: these build tools are not on PATH after installing" \
+		"\$TOOLS:$missing_tools. haikuporter resolves BUILD_PREREQUIRES only" \
+		"against installed packages, so every port whose recipe declares the" \
+		"corresponding cmd: resolvable will abort this builder at dependency" \
+		"resolution. pkg-config comes from 'pkgconf' and makeinfo from" \
+		"'texinfo' -- check those package names first if the pool moved." >&2
+	exit 1
+fi
+log "generator tier on PATH: cmake ninja meson pkg-config makeinfo (ok)"
 
 # `pkgman install coreutils` above CANNOT pull the pool's coreutils over the
 # image's (issue 748). The bootstrap package is itself named `coreutils` and
