@@ -130,8 +130,11 @@ $ aws acm list-certificates --query 'CertificateSummaryList[].[DomainName,Status
 One internet-facing Network Load Balancer, one TCP listener on `:10902`, one
 instance-target target group that **ships empty**, and a dedicated security
 group whose ingress is an explicit CIDR allowlist. The whole block is gated on
-deploy-time context, so an ordinary `cdk deploy` of `DebeosOpsStack` creates
-none of it.
+deploy-time context, so a `cdk deploy` of `DebeosOpsStack` without
+`-c brokerEndpointAllowCidrs` creates none of it — but read
+[Context flags are not optional](#context-flags-are-not-optional) before
+running any deploy of this stack, because a *different* gate in the same stack
+deletes the Site-to-Site VPN if its flag is left off.
 
 ```
 reviewer's laptop                      BuildVpc 10.128.0.0/16
@@ -332,9 +335,36 @@ Set against that: the stack already pays for a NAT gateway
 hourly rate plus data processing) that nothing in this change touches.
 
 The design's answer to the cost is that **the endpoint does not exist unless
-someone asks for it**. No context key, no resources, no bill — `cdk deploy` with
-no extra flags produces a template with no load balancer in it, which is the
-first of the seven tests. Teardown is a deploy without the flag.
+someone asks for it**. No `brokerEndpointAllowCidrs`, no load balancer, no bill
+— that is the first of the seven tests. Teardown is a deploy that drops the
+allowlist flag while keeping every other flag the stack needs.
+
+## Context flags are not optional
+
+`DebeosOpsStack` has **two** independent context gates, and CloudFormation has
+no way to tell "the operator did not pass this flag" from "these resources
+should go away". Every flag a live resource depends on has to be on *every*
+deploy of this stack, not only the one that created it.
+
+| flag | gates | leaving it off |
+|---|---|---|
+| `-c onPremPublicIp=<ip>` | the Site-to-Site VPN — VPN gateway, customer gateway, connection, static route, route propagation, tunnel log group, and the `BuilderSg` ingress for TCP 22 / TCP 10900-10902 / ICMP from on-prem (`ops-stack.ts:248-250`) | **destroys the live VPN.** It comes back with new outside tunnel IP addresses and new pre-shared keys, so on-prem has to be reconfigured; on-prem loses SSH, remote desktop and ping to the builders in the meantime |
+| `-c brokerEndpointAllowCidrs=<cidr>[,…]` | the public endpoint — NLB, listener, target group, `BrokerEndpointSg` (`ops-stack.ts:401`) | no endpoint. This is the intended default, and the intended teardown |
+| `-c brokerEndpointQuic=true` | makes the endpoint's listener and target group a single `TCP_UDP` pair instead of `TCP` (`ops-stack.ts:398-400`, `:449`, `:475`) | endpoint carries `wss` only. **A modifier, not a gate** — on its own, with no allowlist, it produces nothing at all |
+| `-c onPremCidr=<cidr>` | the VPN's static route; defaults to `10.0.0.0/16` | the default, which is correct for this account |
+
+`onPremPublicIp` is deliberately **not** committed anywhere: the on-prem public
+address is not public information and this repository is. That is why it has to
+be typed each time, and why it is easy to forget.
+
+Confirm what a deploy would do before running one. If the diff shows
+`AWS::EC2::VPNConnection … destroy`, a flag is missing — stop and add it.
+
+```bash
+cdk diff DebeosOpsStack \
+  -c onPremPublicIp=<on-prem public ip> \
+  -c brokerEndpointAllowCidrs=<your.public.ip>/32
+```
 
 ## Applying it
 
@@ -342,18 +372,23 @@ first of the seven tests. Teardown is a deploy without the flag.
 are for a human to execute after reviewing the above. Run from
 `graviton/pipeline`.
 
-Review the diff before anything else:
+Review the diff before anything else, with the VPN flag included:
 
 ```bash
-cdk diff DebeosOpsStack -c brokerEndpointAllowCidrs=<your.public.ip>/32
+cdk diff DebeosOpsStack \
+  -c onPremPublicIp=<on-prem public ip> \
+  -c brokerEndpointAllowCidrs=<your.public.ip>/32
 ```
 
 Create the endpoint. Scope the allowlist to what you actually connect from; a
 `/32` of your current public address is the right default. Multiple prefixes are
-comma-separated.
+comma-separated. Add `-c brokerEndpointQuic=true` to carry QUIC as well as
+`wss` (one `TCP_UDP` listener instead of a `TCP` one).
 
 ```bash
-cdk deploy DebeosOpsStack -c brokerEndpointAllowCidrs=<your.public.ip>/32
+cdk deploy DebeosOpsStack \
+  -c onPremPublicIp=<on-prem public ip> \
+  -c brokerEndpointAllowCidrs=<your.public.ip>/32
 ```
 
 The deploy prints three outputs: `BrokerEndpointDnsName`,
@@ -393,15 +428,19 @@ aws elbv2 deregister-targets \
   --target-group-arn <BrokerEndpointTargetGroupArn> \
   --targets Id=<instance-id>
 
-cdk deploy DebeosOpsStack
+cdk deploy DebeosOpsStack -c onPremPublicIp=<on-prem public ip>
 ```
 
-The final deploy, with no context flag, deletes the load balancer, listener,
-target group and security group, and removes the `BuilderSg` rule that
-referenced it. The monthly charge stops.
+The final deploy drops `brokerEndpointAllowCidrs` and so deletes the load
+balancer, listener, target group and security group, and removes the
+`BuilderSg` rule that referenced it. The monthly charge stops.
+
+**Keep `-c onPremPublicIp` on that command.** A bare `cdk deploy
+DebeosOpsStack` tears down the Site-to-Site VPN along with the endpoint — see
+[Context flags are not optional](#context-flags-are-not-optional).
 
 To rotate the allowlist without touching the target, re-deploy with a different
-`brokerEndpointAllowCidrs`.
+`brokerEndpointAllowCidrs` (and the same `onPremPublicIp`).
 
 ## Where the code lives
 

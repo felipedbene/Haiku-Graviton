@@ -534,9 +534,19 @@ BApplication::_InitData(const char* signature, bool initGUI, status_t* _error)
 	// has been supplied.
 	if (_error != NULL) {
 		*_error = fInitError;
-	} else if (fInitError != B_OK) {
-		DBG(OUT("BApplication::InitData() failed: %s\n", strerror(fInitError)));
+	} else if (fInitError == B_ALREADY_RUNNING) {
+		// Not a failure: the already running instance has been handed this
+		// team's argv above, which was the whole job.
 		exit(0);
+	} else if (fInitError != B_OK) {
+		// Say why, on a channel that survives a release build: the DBG()
+		// below compiles out, so without this the team dies without a word.
+		// And exit non-zero, because exiting 0 told whoever launched the
+		// application that it came up.
+		fprintf(stderr, "BApplication: initialization failed: %s\n",
+			strerror(fInitError));
+		DBG(OUT("BApplication::InitData() failed: %s\n", strerror(fInitError)));
+		exit(1);
 	}
 DBG(OUT("BApplication::InitData() done\n"));
 }
