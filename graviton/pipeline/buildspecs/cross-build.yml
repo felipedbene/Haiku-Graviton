@@ -162,7 +162,17 @@ phases:
       # "Haiku Project"-vendored files in hpkg-pool/. (libwebp/libavif are not
       # staged -- see the HaikuPortsLocal/arm64 note: no "Haiku Project"-vendored
       # libwebp_devel and no libavif >= 1.0 exist for arm64 yet.)
-      - aws s3 sync "s3://$WORK_BUCKET/hpkg-pool/" "$HG_POOL_DIR/" --region "$AWS_DEFAULT_REGION" --exclude "*" --include "openssl3-*" --include "openssl3_devel-*" --include "zstd-*" --include "zstd_devel-*" --include "zstd_source-*" --include "zlib-*" --include "zlib_devel-*" --include "ca_root_certificates-*" --include "amazon_ssm_agent-*" --include "debeos_cloudwatch-*" --include "fluidlite-*" --include "fluidlite_devel-*" --include "libvorbis-*" --include "libvorbis_devel-*" --include "libpng16-*" --include "libpng16_devel-*" --include "libjpeg_turbo-*" --include "libjpeg_turbo_devel-*" --include "jasper-*" --include "jasper_devel-*" --include "tiff-*" --include "tiff_devel-*"
+      # ncurses6 is synced for issue 784: UserBuildConfig force-adds the
+      # non-bootstrap ncurses6-6.6-1 into system/packages so the terminfo lookup
+      # path on the image exists. That force-add reads the file out of
+      # $HG_POOL_DIR, so without this include the pin is inert -- which is how it
+      # shipped: the entry landed inside UserBuildConfig's `if $(HG_FATTY)`
+      # block, which no buildspec enters, and the sync filter would have dropped
+      # the file anyway. The glob is deliberately loose here and exact there:
+      # `ncurses6-*` is disjoint from `ncurses6_devel-*`, and the Glob in
+      # UserBuildConfig demands the precise revision, so a bootstrap-versioned
+      # file reaching the pool is ignored rather than baked.
+      - aws s3 sync "s3://$WORK_BUCKET/hpkg-pool/" "$HG_POOL_DIR/" --region "$AWS_DEFAULT_REGION" --exclude "*" --include "ncurses6-*" --include "openssl3-*" --include "openssl3_devel-*" --include "zstd-*" --include "zstd_devel-*" --include "zstd_source-*" --include "zlib-*" --include "zlib_devel-*" --include "ca_root_certificates-*" --include "amazon_ssm_agent-*" --include "debeos_cloudwatch-*" --include "fluidlite-*" --include "fluidlite_devel-*" --include "libvorbis-*" --include "libvorbis_devel-*" --include "libpng16-*" --include "libpng16_devel-*" --include "libjpeg_turbo-*" --include "libjpeg_turbo_devel-*" --include "jasper-*" --include "jasper_devel-*" --include "tiff-*" --include "tiff_devel-*"
       - |
         # Must-have packages: the image is WRONG without these, so their
         # absence fails the bake loudly instead of shipping a quiet regression.
@@ -224,6 +234,22 @@ phases:
             ls "$HG_POOL_DIR/${pkg}"-[0-9]*.hpkg >/dev/null 2>&1 || missing="$missing $pkg"
           fi
         done
+        # The <hg-pool> force-adds cannot be checked by the loop above, because a
+        # name-only glob cannot tell the two ncurses6 builds apart:
+        # `ncurses6-[0-9]*` matches ncurses6-6.6_bootstrap-1 exactly as happily
+        # as ncurses6-6.6-1, and the bootstrap one IS the defect (issue 784). So
+        # check the exact filename, and read it out of UserBuildConfig rather
+        # than repeating it here, so the buildspec and the jam config cannot
+        # drift apart -- the way they already had: the pin sat in a `$(HG_FATTY)`
+        # block no buildspec enters, and nothing noticed.
+        ncursesPin=$(sed -n 's/^[[:space:]]*local ncursesFileName = \(ncurses6-[^ ]*\.hpkg\) ;.*/\1/p' \
+          "$HAIKU_TOP/graviton/ssh/UserBuildConfig" | head -1)
+        if [ -z "$ncursesPin" ]; then
+          echo "FATAL: could not read the ncurses6 force-add filename out of graviton/ssh/UserBuildConfig." >&2
+          echo "The 'local ncursesFileName = ...' line is how this guard knows which build to require (issue 784)." >&2
+          exit 1
+        fi
+        [ -f "$HG_POOL_DIR/$ncursesPin" ] || missing="$missing $ncursesPin"
         if [ -n "$missing" ]; then
           echo "FATAL: hpkg pool s3://$WORK_BUCKET/hpkg-pool/ did not provide required package(s):$missing" >&2
           echo "The pool is stale or mis-seeded, or a pin in build/jam/repositories/HaikuPortsLocal/arm64 moved ahead of it." >&2
