@@ -91,7 +91,7 @@ LocalPackageRepository HaikuPorts
 	# loses its dependency, the /boot/system volume goes inconsistent (intermittent
 	# first-boot stall), and TLS cert verification has no CA store (https =
 	# "Operation not allowed"). zstd (runtime) alone only satisfies openssl3's
-	# lib:libzstd>=1.5.6; the reader needs the build feature, i.e. zstd_devel.
+	# lib:libzstd floor; the reader needs the build feature, i.e. zstd_devel.
 	# Staging openssl3 WITHOUT the zstd runtime does not surface as a solver
 	# error, which is what you would expect: the downloaded mirror index does
 	# advertise zstd-1.5.6-2, so the solver resolves lib:libzstd to it happily
@@ -112,8 +112,18 @@ LocalPackageRepository HaikuPorts
 	# with graviton/scripts/ossl790.c: 10 failures on 3.5.7-1, 0 on 3.5.9-2.
 	openssl3-3.5.9-2
 	openssl3_devel-3.5.9-2
-	zstd-1.5.6-2
-	zstd_devel-1.5.6-2
+	# 1.5.7-1, not 1.5.6-2: the openssl3 pin above is not a free-standing
+	# choice of version. haikuporter stamps the concrete library floor from
+	# whatever the build linked against, so openssl3-3.5.9-2's own metadata
+	# carries `requires lib:libzstd >= 1.5.7` even though the recipe asks only
+	# for a bare `lib:libzstd` -- read out of the hpkg with
+	# graviton/scripts/hpkg_meta.py, not out of the recipe. zstd-1.5.6-2
+	# provides lib:libzstd = 1.5.6, which does not satisfy it, so pinning
+	# openssl3 without moving zstd leaves the image solver with no candidate
+	# and it falls back to fetching zstd from the arm64 mirror, which 404s
+	# (the issue-737 shape described above).
+	zstd-1.5.7-1
+	zstd_devel-1.5.7-1
 	# zstd_source provides the zstd .c/.h tree at develop/sources/zstd-1.5.6-2/
 	# sources, which the kernel (src/system/kernel/lib/zstd) and EFI boot loader
 	# compile into kernel_libzstd.a via [ BuildFeatureAttribute zstd : sources ].

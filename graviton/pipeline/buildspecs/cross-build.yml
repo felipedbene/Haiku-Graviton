@@ -168,14 +168,37 @@ phases:
         #     PNG/JPEG/JPEG2000/TIFF translator (the lean-canonical gap).
         #     Listed here so a stale/incomplete pool fails the bake loudly
         #     instead of quietly shipping a feature-capped image again.
+        # Check the EXACT pinned filename, not just the package name. A
+        # name-only glob is satisfied by any version in the pool, so bumping a
+        # pin in HaikuPortsLocal/arm64 ahead of the pool passed this guard and
+        # then lost the package anyway: haiku-stage-local-packages matches names
+        # exactly, revision included, so it reported the pinned file "MISSING in
+        # pool", exited 1 (tolerated below), and the dependent build feature
+        # stayed off -- which is the feature-capped image this guard exists to
+        # prevent. Measured: the openssl3 pin moved to 3.5.9-2 while every bake
+        # pool still held only 3.5.7-1, and `ls openssl3-[0-9]*.hpkg` matched the
+        # 3.5.7 file and said nothing.
+        # amazon_ssm_agent/debeos_cloudwatch are not pinned in HaikuPortsLocal
+        # (UserBuildConfig picks them up by Glob), so they keep the name-only
+        # check.
         missing=""
         for pkg in amazon_ssm_agent debeos_cloudwatch openssl3 openssl3_devel zstd zstd_devel zstd_source \
                    libpng16 libpng16_devel libjpeg_turbo libjpeg_turbo_devel jasper jasper_devel tiff tiff_devel; do
-          ls "$HG_POOL_DIR/${pkg}"-[0-9]*.hpkg >/dev/null 2>&1 || missing="$missing $pkg"
+          pin=""
+          if [ -f "$HAIKU_TOP/build/jam/repositories/HaikuPortsLocal/arm64" ]; then
+            pin=$(sed -e 's/#.*//' "$HAIKU_TOP/build/jam/repositories/HaikuPortsLocal/arm64" \
+              | tr -d '[:blank:]' | grep -E "^${pkg}-[0-9]" | head -1)
+          fi
+          if [ -n "$pin" ]; then
+            [ -f "$HG_POOL_DIR/$pin-arm64.hpkg" ] || missing="$missing $pin-arm64.hpkg"
+          else
+            ls "$HG_POOL_DIR/${pkg}"-[0-9]*.hpkg >/dev/null 2>&1 || missing="$missing $pkg"
+          fi
         done
         if [ -n "$missing" ]; then
           echo "FATAL: hpkg pool s3://$WORK_BUCKET/hpkg-pool/ did not provide required package(s):$missing" >&2
-          echo "The pool is stale or mis-seeded. Sync it from the trunk pipeline's hpkg-pool/ prefix (additive; see issue #419), then retry the bake." >&2
+          echo "The pool is stale or mis-seeded, or a pin in build/jam/repositories/HaikuPortsLocal/arm64 moved ahead of it." >&2
+          echo "Pins and pool must move together: build the package natively, upload it to s3://$WORK_BUCKET/hpkg-pool/ (additive; see issue #419), then retry the bake." >&2
           exit 1
         fi
         ls -la "$HG_POOL_DIR"
