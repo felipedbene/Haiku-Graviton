@@ -11,10 +11,19 @@
 #include <string.h>
 #include <stdarg.h>
 
+#include <OS.h>
+
 #include <launch.h>
 #include <syslog_daemon.h>
 #include <TLS.h>
 #include <util/KMessage.h>
+
+
+// How long send_syslog_message() is prepared to wait for the syslog daemon to
+// take a message. A logging call is not allowed to become the thing that stops
+// its caller from making progress, and on a machine in trouble the daemon is
+// exactly the service least likely to be draining its port.
+static const bigtime_t kSyslogSendTimeout = 1000000;	// 1 second
 
 
 struct syslog_context {
@@ -169,11 +178,32 @@ send_syslog_message(syslog_context *context, int priority, const char *text,
 	} else
 		buffer[length - 1] = '\n';
 
+	// Give the message a bounded chance of reaching the daemon, rather than
+	// blocking here until it does.
+	//
+	// This used to be an untimed write_port() in a B_INTERRUPTED retry loop,
+	// which is to say a wait that is neither bounded nor signal-breakable. If
+	// the daemon stops reading its port -- because it is itself blocked, or
+	// because the machine has no resources left to schedule it with -- then
+	// every syslog() caller in the system stops with it, and they stop inside
+	// a call whose entire contract is that it is advisory.
+	//
+	// Measured on a Graviton builder whose BFS boot volume reached 0 free bytes
+	// (issue 770): the box stayed up and kept accepting TCP connections on 22,
+	// but no SSH session ever completed. sshd logs the incoming connection
+	// *before* authenticating it, so an operator trying to log in and delete
+	// something hung pre-auth, with no banner and nothing on the console to say
+	// why. The deadline is absolute rather than relative so that a storm of
+	// interruptions cannot keep extending the wait one restart at a time.
+	//
+	// B_TIMED_OUT is < B_OK, so the LOG_CONS fallback below already covers it:
+	// a message that could not be handed over goes to the console instead of
+	// being silently dropped.
+	const bigtime_t deadline = system_time() + kSyslogSendTimeout;
 	status_t status;
 	do {
-		// make sure the message gets send (if there is a valid port)
-		status = write_port(port, SYSLOG_MESSAGE, &message,
-			sizeof(syslog_message) + length);
+		status = write_port_etc(port, SYSLOG_MESSAGE, &message,
+			sizeof(syslog_message) + length, B_ABSOLUTE_TIMEOUT, deadline);
 	} while (status == B_INTERRUPTED);
 
 	if (status < B_OK && (options & LOG_CONS) != 0
