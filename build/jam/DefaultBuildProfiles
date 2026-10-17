@@ -198,6 +198,16 @@ rule DefineDefaultBuildProfiles
 			# any https BUrlRequest) can't be fetched. Both must be present in the
 			# bake pool, or AddHaikuImageSystemPackages silently skips them.
 			#
+			# openssl3_man is the openssl CLI's man pages. It is named here and
+			# not left to its own `supplements: openssl3 == 3.5.9` because
+			# build_haiku_image does not install weak reverse-dependencies. The
+			# silent-skip above applies to it too, which is why cross-build.yml's
+			# pool guard treats it as a must-have: the version is pinned in
+			# repositories/HaikuPortsLocal/arm64, and a pool that does not carry
+			# the pinned file would otherwise drop the pages with no message --
+			# the shape of issue 784. Note there is no man viewer on the image;
+			# see that file for what that does and does not buy.
+			#
 			# gawk and which are basic userland the lean image otherwise lacks:
 			# gawk provides awk (cmd:awk), and which resolves commands on PATH.
 			# Provisioning scripts and many HaikuPorts recipe build steps assume
@@ -209,6 +219,7 @@ rule DefineDefaultBuildProfiles
 				ca_root_certificates
 				gawk
 				openssl3
+				openssl3_man
 				which
 				;
 		}

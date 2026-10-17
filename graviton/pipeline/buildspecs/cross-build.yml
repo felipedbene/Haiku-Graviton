@@ -172,7 +172,15 @@ phases:
       # `ncurses6-*` is disjoint from `ncurses6_devel-*`, and the Glob in
       # UserBuildConfig demands the precise revision, so a bootstrap-versioned
       # file reaching the pool is ignored rather than baked.
-      - aws s3 sync "s3://$WORK_BUCKET/hpkg-pool/" "$HG_POOL_DIR/" --region "$AWS_DEFAULT_REGION" --exclude "*" --include "ncurses6-*" --include "openssl3-*" --include "openssl3_devel-*" --include "zstd-*" --include "zstd_devel-*" --include "zstd_source-*" --include "zlib-*" --include "zlib_devel-*" --include "ca_root_certificates-*" --include "amazon_ssm_agent-*" --include "debeos_cloudwatch-*" --include "fluidlite-*" --include "fluidlite_devel-*" --include "libvorbis-*" --include "libvorbis_devel-*" --include "libpng16-*" --include "libpng16_devel-*" --include "libjpeg_turbo-*" --include "libjpeg_turbo_devel-*" --include "jasper-*" --include "jasper_devel-*" --include "tiff-*" --include "tiff_devel-*"
+      # openssl3_man needs its OWN include, and that is the trap worth naming:
+      # these globs anchor on the hyphen, so `openssl3-*` matches
+      # openssl3-3.5.9-2-arm64.hpkg and does NOT match
+      # openssl3_man-3.5.9-2-any.hpkg -- the same reason openssl3_devel is
+      # listed separately. Copying the man hpkg into hpkg-pool/ therefore did
+      # nothing on its own: the file sat in the bucket and never reached
+      # $HG_POOL_DIR. Adding a package to a pool is two steps, the upload and
+      # the include, and the sync is silent about the half that is missing.
+      - aws s3 sync "s3://$WORK_BUCKET/hpkg-pool/" "$HG_POOL_DIR/" --region "$AWS_DEFAULT_REGION" --exclude "*" --include "ncurses6-*" --include "openssl3-*" --include "openssl3_devel-*" --include "openssl3_man-*" --include "zstd-*" --include "zstd_devel-*" --include "zstd_source-*" --include "zlib-*" --include "zlib_devel-*" --include "ca_root_certificates-*" --include "amazon_ssm_agent-*" --include "debeos_cloudwatch-*" --include "fluidlite-*" --include "fluidlite_devel-*" --include "libvorbis-*" --include "libvorbis_devel-*" --include "libpng16-*" --include "libpng16_devel-*" --include "libjpeg_turbo-*" --include "libjpeg_turbo_devel-*" --include "jasper-*" --include "jasper_devel-*" --include "tiff-*" --include "tiff_devel-*"
       - |
         # Must-have packages: the image is WRONG without these, so their
         # absence fails the bake loudly instead of shipping a quiet regression.
@@ -217,8 +225,19 @@ phases:
         # file is -any.hpkg, not -arm64.hpkg: test both suffixes rather than
         # assuming the primary arch, or the guard reports a package that is
         # sitting right there.
+        # openssl3_man is the other "any" package, and it is a must-have for the
+        # silent-skip reason rather than a boot-breaking one: it reaches the
+        # image through DefaultBuildProfiles' by-name AddHaikuImageSystemPackages
+        # in the minimum-* profile, and that call drops a package it cannot
+        # resolve without saying so. Its version is pinned in HaikuPortsLocal
+        # with an exact `openssl3 == 3.5.9` dependency, so pin and pool have to
+        # move together exactly as they do for openssl3 itself. Same treatment as
+        # libpng16/jasper/tiff above, which are likewise not fatal to booting --
+        # a declared pin the pool does not carry is a mis-seed, and the whole
+        # point of this guard is that a mis-seed fails here rather than shipping
+        # a quietly feature-stripped image.
         missing=""
-        for pkg in amazon_ssm_agent debeos_cloudwatch openssl3 openssl3_devel zstd zstd_devel zstd_source \
+        for pkg in amazon_ssm_agent debeos_cloudwatch openssl3 openssl3_devel openssl3_man zstd zstd_devel zstd_source \
                    zlib zlib_devel ca_root_certificates \
                    libpng16 libpng16_devel libjpeg_turbo libjpeg_turbo_devel jasper jasper_devel tiff tiff_devel; do
           pin=""
