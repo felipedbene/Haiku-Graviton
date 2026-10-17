@@ -36,6 +36,36 @@ const char* BPrivate::kShadowPwdFile = "/etc/shadow";
 static mutex sUserGroupLock = MUTEX_INITIALIZER(kUserGroupLockName);
 static port_id sRegistrarPort = -1;
 
+/*!	How long a user/group lookup will wait on the registrar before giving up.
+
+	This used to be unbounded, and that is what made a full boot volume
+	unrecoverable (issue 770) rather than merely annoying. Every lookup is a
+	synchronous round trip to the registrar's single _RequestThread
+	(src/servers/registrar/AuthenticationManager.cpp:797), and that same thread
+	also writes the on-disk databases (fUserDB->WriteToDisk() at :1082,
+	fGroupDB->WriteToDisk() at :1199 and :1245, each an fopen("w") at :578). So
+	if one of those writes cannot complete, the thread never comes back to the
+	request queue -- and with no timeout, KMessage::ReceiveFrom() passes a
+	negative value straight into get_port_message_info_etc() with no
+	B_RELATIVE_TIMEOUT flag (src/system/kernel/messaging/KMessage.cpp:614-618),
+	i.e. an indefinite wait. sshd calls getpwnam() pre-auth for every incoming
+	connection, so the operator is locked out of the one machine that needs
+	deleting done, exactly when it needs doing.
+
+	Timing out does not fix a full volume, and is not meant to: it converts an
+	indefinite hang into getpwnam() == NULL with errno set, which a caller can
+	report and act on.
+
+	The value is deliberately far above anything a healthy registrar does.
+	Measured with graviton/scripts/pw770.c on arm64 hardware, 2000 lookups per
+	phase: 37 us mean and 135 us worst when idle; 54 us mean and 1320 us worst
+	while a second thread drove groupadd/groupdel in a tight loop, i.e. with a
+	real WriteToDisk() on the request thread between lookups. 30 seconds is
+	more than twenty thousand times that worst case, so a loaded-but-working
+	registrar cannot trip it; only a stuck one can.
+*/
+static const bigtime_t kRegistrarRequestTimeout = 30 * 1000000LL;
+
 
 status_t
 BPrivate::user_group_lock()
@@ -78,8 +108,12 @@ status_t
 BPrivate::send_authentication_request_to_registrar(KMessage& request,
 	KMessage& reply)
 {
+	// Bound both halves of the round trip. The delivery half can block as well
+	// as the reply half: if the request thread is stuck, its port queue fills
+	// and write_port() is what waits (KMessage::SendTo passes the delivery
+	// timeout down to it), so timing out only the reply would still hang here.
 	status_t error = request.SendTo(get_registrar_authentication_port(), 0,
-		&reply);
+		&reply, kRegistrarRequestTimeout, kRegistrarRequestTimeout);
 	if (error != B_OK)
 		return error;
 
