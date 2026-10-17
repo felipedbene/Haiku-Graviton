@@ -16,6 +16,9 @@
 #     script says so.
 #  3. A polling loop with no deadline hangs a session on an instance whose SSM
 #     agent has gone away.
+#  4. SendCommand caps its document plus parameters at 97 KB, so a large script
+#     cannot ride in the request at all. Past a threshold the script is staged in
+#     S3 and the request carries only a fetch-and-exec. See kInlinePayloadMax.
 #
 # Usage:
 #   ssm-run <instance-id> <<'EOF'          # script on stdin
@@ -82,32 +85,78 @@ while getopts "f:t:q" opt; do
 	esac
 done
 
+req=$(mktemp -t ssm-run.XXXXXX.json) || die "cannot create a temp file"
+remote_file=$(mktemp -t ssm-run.XXXXXX.sh) || die "cannot create a temp file"
+body=$(mktemp -t ssm-run.XXXXXX.body) || die "cannot create a temp file"
+trap 'rm -f "$req" "$remote_file" "$body"' EXIT
+
+# Keep the script itself on disk, not just its base64. The large-payload path
+# below has to upload the bytes, and reading stdin twice is not an option.
 if [ -n "$SCRIPT_FILE" ]; then
 	[ -r "$SCRIPT_FILE" ] || die "cannot read $SCRIPT_FILE"
-	payload=$(base64 -w0 < "$SCRIPT_FILE")
+	cp -- "$SCRIPT_FILE" "$body" || die "cannot read $SCRIPT_FILE"
 else
-	payload=$(base64 -w0)
+	cat > "$body"
 fi
-[ -n "$payload" ] || die "empty script"
+[ -s "$body" ] || die "empty script"
+payload=$(base64 -w0 < "$body")
 
 # A unique prefix per run, so concurrent runs never read each other's output.
 run_id="run-$$-$(od -An -N3 -tx1 /dev/urandom | tr -d ' \n')"
 s3_prefix="$PREFIX/$run_id"
+
+# How much base64 we are willing to put in the SendCommand request itself.
+#
+# SendCommand caps the document plus all of its parameters at 97 KB server-side,
+# and rejects the whole call with MaxDocumentSizeExceeded when the sum goes over.
+# 64 KiB of base64 is 48 KiB of script, which is more than any hand-written
+# remote step here, and it leaves the rest of the budget for the document and
+# the other parameters rather than guessing how large they are.
+kInlinePayloadMax=65536
 
 # AWS-RunShellScript runs its commands under /bin/sh, which on Amazon Linux is
 # dash: no `set -o pipefail`, and several bashisms a build script will reasonably
 # use are missing. So the wrapper stays strictly POSIX and hands the decoded
 # script to bash, where pipefail is set for it -- a failing stage in a pipeline
 # must not be hidden by a succeeding tail.
-remote="printf '%s' '$payload' | base64 -d > /tmp/$run_id.sh
+if [ "${#payload}" -le "$kInlinePayloadMax" ]; then
+	remote="printf '%s' '$payload' | base64 -d > /tmp/$run_id.sh
 bash -o pipefail /tmp/$run_id.sh
 rc=\$?
 rm -f /tmp/$run_id.sh
 exit \$rc"
+else
+	# Too big to inline, so the script travels the same way its output does: via
+	# S3, under this run's own prefix, with only a fetch-and-exec in the request.
+	#
+	# This is the second of two separate size ceilings on this path, and the one
+	# that is not local. The first was execve()'s MAX_ARG_STRLEN below; fixing it
+	# got the request built, and SendCommand then refused it with
+	# MaxDocumentSizeExceeded -- the base64 of the publish bundle is ~112 KB
+	# against a 97 KB API limit. No amount of local plumbing moves that, so the
+	# payload has to stop being a parameter.
+	#
+	# The cost is that the far side now needs an S3 client, which rules out Haiku
+	# targets (issue 728: the image has awscli nowhere, only single-file
+	# `debeos-ssm-agent s3 cp`). That is why this is a size-triggered fallback and
+	# not the only path -- every Haiku-side caller stays well under the inline
+	# limit, and the callers that do not are the Ubuntu publisher peers, which
+	# have awscli by construction.
+	script_s3="s3://$BUCKET/$s3_prefix/script.sh"
+	chatter "script is $(wc -c < "$body" | tr -d ' ') bytes: too large to inline,"
+	chatter "  staging it at $script_s3"
+	aws --region "$REGION" s3 cp "$body" "$script_s3" --only-show-errors \
+		|| die "cannot stage the script at $script_s3"
 
-req=$(mktemp -t ssm-run.XXXXXX.json) || die "cannot create a temp file"
-remote_file=$(mktemp -t ssm-run.XXXXXX.sh) || die "cannot create a temp file"
-trap 'rm -f "$req" "$remote_file"' EXIT
+	# `|| exit 1` rather than letting bash run a file that is not there: a failed
+	# fetch and a script that genuinely exited 1 would otherwise be the same
+	# observation, and the stderr above says which happened.
+	remote="aws s3 cp '$script_s3' /tmp/$run_id.sh --region '$REGION' --only-show-errors || exit 1
+bash -o pipefail /tmp/$run_id.sh
+rc=\$?
+rm -f /tmp/$run_id.sh
+exit \$rc"
+fi
 
 # Hand the wrapper to python through a FILE, not through the environment.
 #
