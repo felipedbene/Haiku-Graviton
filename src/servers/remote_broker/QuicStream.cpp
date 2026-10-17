@@ -81,7 +81,7 @@ select_alpn(SSL* ssl, const unsigned char** out, unsigned char* outLength,
 
 
 /*	The listener's datagram BIO is wrapped in a filter that records peer
-	addresses (and, until #790 lands, carries the errno workaround below).
+	addresses.
 
 	OpenSSL 3.5 has no call that returns a QUIC connection's peer address, and
 	the broker's per-address accounting (failure backoff, the per-address share
@@ -137,115 +137,40 @@ struct PeerRecordingState {
 };
 
 
-// ---- Haiku-Graviton #790 workaround: begin ---------------------------------
+// The OpenSSL this front door needs. Two defects of DeBeOS's earlier
+// openssl3 3.5.7 broke it outright, and neither is worked around here:
 //
-// TEMPORARY. When the openssl3 recipe carries the #790 patch, delete this
-// block and keep only its #else branch; nothing else in the file changes.
-// Build with QUIC_ERRNO_WORKAROUND=0 (jam -sQUIC_ERRNO_WORKAROUND=0, or
-// -DQUIC_ERRNO_WORKAROUND=0) to run #790's acceptance check 2: rd766, built
-// the same way, against a broker without it.
-//
-// OpenSSL packs a system error as ERR_SYSTEM_FLAG | (errno & INT_MAX)
-// (include/openssl/err.h, ERR_GET_REASON), and BIO_err_is_non_fatal()
-// (crypto/bio/bio_lib.c) unpacks it and compares against EAGAIN. Haiku's errno
-// values are negative -- EAGAIN is B_WOULD_BLOCK, 0x8000000b -- so the packing
-// strips the sign, the comparison fails, and "no datagram yet" reads as a
-// dead network: the QUIC stack shuts its port down on the very first empty
-// non-blocking read and no handshake ever completes. Seen on DeBeOS with
-// openssl3 3.5.7 ("system library::No Error (11)", then "quic network
-// error"). So the datagram calls restate a transient failure in the one form
-// that survives the packing, BIO_R_NON_FATAL. On other systems this changes
-// nothing: there the packed form was already recognised.
-
-#ifndef QUIC_ERRNO_WORKAROUND
-#define QUIC_ERRNO_WORKAROUND 1
+// - Haiku-Graviton #790: ERR_GET_REASON() masked a system error with INT_MAX,
+//   which strips the sign of Haiku's negative errno, so BIO_err_is_non_fatal()
+//   took EAGAIN for a dead network and no QUIC handshake ever completed.
+//   Fixed by the DeBeOS recipe openssl3-3.5.9-2 (revision 2; upstream's
+//   3.5.9-1 lacks the patch). A version number cannot tell the two apart, so
+//   QuicListener::Init() checks the behaviour itself (errno_sign_survives()).
+// - Haiku-Graviton #792: SSL_poll() reported failure on its abort_blocking
+//   path, ending healthy sessions. Fixed upstream in 3.5.8
+//   (openssl/openssl#31743), which the check below enforces.
+#if OPENSSL_VERSION_NUMBER < 0x30500080L
+#	error "remote_broker's QUIC front door needs openssl3 >= 3.5.9-2 (#790, #792)"
 #endif
 
-#if QUIC_ERRNO_WORKAROUND
-static bool
-is_transient_failure()
-{
-	int error = errno;
-	if (error == EAGAIN || error == EWOULDBLOCK || error == EINTR)
-		return true;
 
+/*!	Whether the OpenSSL in use -- the inline ERR_GET_REASON() this was compiled
+	with, and the linked BIO_err_is_non_fatal() -- keeps a negative errno
+	intact (#790). False on an unpatched build, where QUIC cannot work.
+*/
+static bool
+errno_sign_survives()
+{
+	ERR_set_mark();
+	ERR_raise(ERR_LIB_SYS, EAGAIN);
 	unsigned long packed = ERR_peek_last_error();
-	if (!ERR_SYSTEM_ERROR(packed))
-		return false;
-	unsigned long reason = ERR_GET_REASON(packed);
-	return reason == ((unsigned int)EAGAIN & ERR_SYSTEM_MASK)
-		|| reason == ((unsigned int)EWOULDBLOCK & ERR_SYSTEM_MASK)
-		|| reason == ((unsigned int)EINTR & ERR_SYSTEM_MASK);
+	bool intact = ERR_GET_REASON(packed) == EAGAIN
+		&& BIO_err_is_non_fatal(packed) == 1;
+	ERR_pop_to_mark();
+	return intact;
 }
 
 
-static int
-finish_datagram_call(int result)
-{
-	if (result) {
-		ERR_clear_last_mark();
-		return result;
-	}
-
-	if (is_transient_failure()) {
-		ERR_pop_to_mark();
-		ERR_raise(ERR_LIB_BIO, BIO_R_NON_FATAL);
-	} else
-		ERR_clear_last_mark();
-	return 0;
-}
-
-
-// Said once at startup, so a log shows which build is running.
-static void __attribute__((constructor))
-announce_errno_workaround()
-{
-	TRACE_ERROR("OpenSSL errno workaround (#790) compiled in\n");
-}
-#else
-static int
-finish_datagram_call(int result)
-{
-	ERR_clear_last_mark();
-	return result;
-}
-#endif
-
-// ---- Haiku-Graviton #790 workaround: end -----------------------------------
-
-
-// ---- Haiku-Graviton #792 workaround: begin ---------------------------------
-//
-// TEMPORARY. OpenSSL 3.5.7's SSL_poll() reports *failure* when an object
-// becomes ready while it is entering its blocking section: poll_block()
-// (ssl/rio/poll_immediate.c) leaves ok = 0 on its abort_blocking path, with
-// nothing on the error queue and errno untouched. The broker's relay hits
-// that race constantly, because its two threads wait on one stream (one for
-// R, one for W) and each makes the other's object ready; unhandled, it ended
-// a healthy session every few hundred kilobytes. Fixed upstream in 3.5.8
-// (openssl/openssl#31743, commit d6ca7796bf); when the openssl3 recipe is at
-// 3.5.8 or carries that commit, delete this block and make _Wait() treat
-// every SSL_poll() failure as fatal.
-//
-// So a failure with nothing on the error queue is taken for that report and
-// polled again at once, when the readout reports the event: no pause. Every
-// real failure on the readout and translation paths raises an error and stays
-// fatal. The one real failure that raises nothing, the OS poll() itself
-// failing, would repeat on every call, so a run of kMaxSilentPollFailures
-// with no successful poll between them is fatal too; the race never comes
-// close (it needs another thread to make this object ready each time).
-
-static const int32 kMaxSilentPollFailures = 1000;
-
-static bool
-poll_failure_is_readiness(int32& silentFailures)
-{
-	if (ERR_peek_error() != 0)
-		return false;
-	return ++silentFailures < kMaxSilentPollFailures;
-}
-
-// ---- Haiku-Graviton #792 workaround: end -----------------------------------
 
 
 static int
@@ -258,12 +183,8 @@ peer_bio_recvmmsg(BIO* bio, BIO_MSG* messages, size_t stride, size_t count,
 		return 1;
 
 	// One datagram per call: see above.
-	ERR_set_mark();
-	errno = 0;
-	if (!finish_datagram_call(BIO_recvmmsg(BIO_next(bio), messages, stride, 1,
-			flags, processed))) {
+	if (!BIO_recvmmsg(BIO_next(bio), messages, stride, 1, flags, processed))
 		return 0;
-	}
 
 	state->hasLastPeer = false;
 	if (*processed == 1 && messages[0].peer != NULL
@@ -285,10 +206,8 @@ static int
 peer_bio_sendmmsg(BIO* bio, BIO_MSG* messages, size_t stride, size_t count,
 	uint64_t flags, size_t* processed)
 {
-	ERR_set_mark();
-	errno = 0;
-	return finish_datagram_call(BIO_sendmmsg(BIO_next(bio), messages, stride,
-		count, flags, processed));
+	return BIO_sendmmsg(BIO_next(bio), messages, stride, count, flags,
+		processed);
 }
 
 
@@ -378,6 +297,12 @@ status_t
 QuicListener::Init(const char* certificatePath, const char* privateKeyPath,
 	in_addr_t address, uint16 port)
 {
+	if (!errno_sign_survives()) {
+		TRACE_ERROR("this OpenSSL strips the sign of Haiku's errno (#790):"
+			" QUIC needs openssl3 >= 3.5.9-2\n");
+		return B_NOT_SUPPORTED;
+	}
+
 	fContext = SSL_CTX_new(OSSL_QUIC_server_method());
 	if (fContext == NULL) {
 		log_openssl_error("SSL_CTX_new(QUIC)");
@@ -880,7 +805,6 @@ status_t
 QuicStream::_Wait(ssl_st* object, uint64 events, bigtime_t deadline,
 	uint64* revents)
 {
-	int32 silentFailures = 0;
 	while (true) {
 		if (__atomic_load_n(&fStopped, __ATOMIC_SEQ_CST) != 0)
 			return B_INTERRUPTED;
@@ -903,15 +827,10 @@ QuicStream::_Wait(ssl_st* object, uint64 events, bigtime_t deadline,
 		item.events = events;
 
 		size_t count = 0;
-		errno = 0;
 		if (SSL_poll(&item, 1, sizeof(item), &timeout, 0, &count) != 1) {
-			if (poll_failure_is_readiness(silentFailures))
-				continue;
-			TRACE_ERROR("SSL_poll failed (errno %d)\n", errno);
 			log_openssl_error("SSL_poll");
 			return B_IO_ERROR;
 		}
-		silentFailures = 0;
 
 		if (count > 0 && (item.revents & events) != 0) {
 			if (revents != NULL)

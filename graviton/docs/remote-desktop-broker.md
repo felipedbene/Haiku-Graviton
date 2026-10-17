@@ -398,32 +398,19 @@ reliable blocking. Every connection is served from its own thread, as on the
 TCP front door; the relay uses two threads per session, because `SSL_poll()`
 cannot wait on the session port's socket.
 
-Three things in 3.5 needed handling, each commented at its site in
-`QuicStream.cpp`. Two are OpenSSL defects with an upstream or recipe fix and
-are fenced as **temporary** blocks that are deleted when that fix ships; the
-third is a missing API and stays.
+Two defects in DeBeOS's earlier openssl3 3.5.7 broke this outright and are
+fixed in the library, not worked around: **#790**, `ERR_GET_REASON()`
+stripping the sign of Haiku's negative `errno`, so `EAGAIN` read as a dead
+network and no handshake completed; and **#792**, `SSL_poll()` reporting
+failure on its abort_blocking path (openssl/openssl#31743), which ended
+healthy sessions every few hundred kilobytes. Both are fixed by the DeBeOS
+recipe **openssl3-3.5.9-2** (revision 2; upstream's 3.5.9-1 lacks the #790
+patch), which the image pins. `QuicStream.cpp` refuses to compile against
+anything older than 3.5.8, and the listener checks the #790 behaviour at
+startup, because a version number cannot tell 3.5.9-1 from 3.5.9-2: on an
+unpatched library `-q` fails to start rather than serving a QUIC that cannot
+work. `rd766` makes the same check. One thing 3.5 lacks is handled here:
 
-- **Haiku's negative `errno` (temporary, #790).** OpenSSL packs a system error
-  as `errno & INT_MAX`. On Haiku `EAGAIN` is `B_WOULD_BLOCK` (`0x8000000b`), so
-  it packs to 11, and `BIO_err_is_non_fatal()` reads the first empty
-  non-blocking read as a dead network. Unpatched, no QUIC handshake ever
-  completes on DeBeOS (`system library::No Error (11)`, then `quic network
-  error`). Until the `openssl3` recipe carries the #790 patch, the datagram
-  BIO's filter re-raises transient failures as `BIO_R_NON_FATAL`; DeBeOS-RDP's
-  client carries the same block, on Haiku only. Building with
-  `QUIC_ERRNO_WORKAROUND=0` (`jam -sQUIC_ERRNO_WORKAROUND=0`, or
-  `-DQUIC_ERRNO_WORKAROUND=0` for the broker and for `rd766.c`) compiles it
-  out; that build is #790's acceptance check 2, and on today's 3.5.7 it fails
-  every positive check of `rd766`, which is what makes the check meaningful.
-- **`SSL_poll()` reporting failure on readiness (temporary, #792).** 3.5.7's
-  `poll_block()` (`ssl/rio/poll_immediate.c`) returns failure, with nothing on
-  the error queue, when the polled object becomes ready while it enters its
-  blocking section. The relay's two threads wait on one stream and make each
-  other's object ready constantly, so taken as fatal it ended a healthy session
-  every few hundred kilobytes (`rd766 --soak` fails with the handling removed).
-  Fixed upstream in 3.5.8 (openssl/openssl#31743). Until the recipe has it, a
-  failure with an empty error queue is polled again at once -- no pause and no
-  retry budget; any failure that raised an error stays fatal.
 - **No peer address for a QUIC connection.** 3.5 has no `SSL_get_peer_addr`.
   The same filter hands the stack one datagram per read and records its
   source. The new-pending-connection callback, which runs while the datagram
@@ -571,20 +558,13 @@ asserts each wire rule from both ends:
 - with `--long`, an idle session outliving the idle timeout;
 - with `--soak N`, N sessions of 300 kB each relayed intact.
 
-It prints `RD766=PASS CHECKS=<n> ... WORKAROUND=harness:in|out,broker:in|out`.
+It prints `RD766=PASS CHECKS=<n> FAILED=0`; on an OpenSSL without the #790
+fix it stops with `RD766=SETUP-FAILED`.
 Each check has a mutation that turns it red: accept any ALPN, record a
 constant peer address, drop the viewer filter, ignore extra streams, skip the
 takeover interrupt, misreport either FIN, remove the tarpit, write or keep a
-wrong advertisement, allow early data in tickets, or (soak) take #792's
-`SSL_poll()` report as fatal.
-
-#790's acceptance check 2, once a patched `openssl3` is in the sysroot:
-
-```
-jam -sQUIC_ERRNO_WORKAROUND=0 remote_broker    # or -DQUIC_ERRNO_WORKAROUND=0
-$CROSS -O1 -DQUIC_ERRNO_WORKAROUND=0 -o rd766 rd766.c -lssl -lcrypto -lnetwork
-rd766 ./remote_broker --long --soak 30         # expect WORKAROUND=harness:out,broker:out
-```
+wrong advertisement, or allow early data in tickets. On openssl3 3.5.7 the
+broker refuses `-q` and rd766 refuses to run.
 
 ### Not in M5a: the multi-stream layout (`debeos-urp/2`)
 

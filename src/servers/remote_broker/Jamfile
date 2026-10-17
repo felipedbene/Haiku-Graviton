@@ -12,12 +12,9 @@ if [ FIsBuildFeatureEnabled openssl ] {
 		WebSocketStream.cpp ]
 		: [ BuildFeatureAttribute openssl : headers ] ;
 
-	# #790's acceptance check 2: jam -sQUIC_ERRNO_WORKAROUND=0 builds the
-	# broker without its OpenSSL errno workaround (QuicStream.cpp). Delete
-	# this with the workaround.
-	if $(QUIC_ERRNO_WORKAROUND) = 0 {
-		SubDirC++Flags -DQUIC_ERRNO_WORKAROUND=0 ;
-	}
+	# QuicStream.cpp needs openssl3 >= 3.5.9-2 (#790, #792): it refuses to
+	# compile against an older one and to start QUIC on an unpatched one.
+	# build/jam/repositories/HaikuPortsLocal/arm64 pins that build.
 
 	Application remote_broker :
 		QuicStream.cpp

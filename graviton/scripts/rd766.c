@@ -480,117 +480,19 @@ showBrokerLog()
 // #pragma mark - QUIC client
 
 
-/* ---- Haiku-Graviton #790 workaround: begin ---------------------------------
-	TEMPORARY. Delete this block, keeping only the #else branch, once the
-	openssl3 recipe carries the #790 patch.
-
-	OpenSSL packs a system error as ERR_SYSTEM_FLAG | (errno & INT_MAX), which
-	strips the sign off Haiku's negative errno values, so its QUIC stack takes
-	EAGAIN on a non-blocking datagram read for a dead network. The broker works
-	around it in QuicStream.cpp; the client side of this harness needs the same
-	filter to run on Haiku at all. Build with -DQUIC_ERRNO_WORKAROUND=0 (both
-	this harness and the broker) to run #790's acceptance check 2.
-*/
-#ifndef QUIC_ERRNO_WORKAROUND
-#define QUIC_ERRNO_WORKAROUND 1
-#endif
-
-#if QUIC_ERRNO_WORKAROUND
-static const char kErrnoWorkaround[] = "compiled in";
-
+/*	The harness needs an OpenSSL that keeps Haiku's negative errno intact
+	(#790, fixed in DeBeOS's openssl3-3.5.9-2); on one that strips it, no QUIC
+	handshake completes and every check would fail for that reason alone. */
 static bool
-transientFailure()
+errnoSignSurvives()
 {
-	int error = errno;
-	if (error == EAGAIN || error == EWOULDBLOCK || error == EINTR)
-		return true;
+	ERR_set_mark();
+	ERR_raise(ERR_LIB_SYS, EAGAIN);
 	unsigned long packed = ERR_peek_last_error();
-	if (!ERR_SYSTEM_ERROR(packed))
-		return false;
-	unsigned long reason = ERR_GET_REASON(packed);
-	return reason == ((unsigned int)EAGAIN & ERR_SYSTEM_MASK)
-		|| reason == ((unsigned int)EWOULDBLOCK & ERR_SYSTEM_MASK)
-		|| reason == ((unsigned int)EINTR & ERR_SYSTEM_MASK);
-}
-
-
-static int
-finishDatagramCall(int result)
-{
-	if (result) {
-		ERR_clear_last_mark();
-		return result;
-	}
-	if (transientFailure()) {
-		ERR_pop_to_mark();
-		ERR_raise(ERR_LIB_BIO, BIO_R_NON_FATAL);
-	} else
-		ERR_clear_last_mark();
-	return 0;
-}
-#else
-static const char kErrnoWorkaround[] = "compiled out";
-
-static int
-finishDatagramCall(int result)
-{
-	ERR_clear_last_mark();
-	return result;
-}
-#endif
-/* ---- Haiku-Graviton #790 workaround: end ----------------------------------- */
-
-
-static int
-fixRecvmmsg(BIO *bio, BIO_MSG *messages, size_t stride, size_t count,
-	uint64_t flags, size_t *processed)
-{
-	ERR_set_mark();
-	errno = 0;
-	return finishDatagramCall(BIO_recvmmsg(BIO_next(bio), messages, stride,
-		count, flags, processed));
-}
-
-
-static int
-fixSendmmsg(BIO *bio, BIO_MSG *messages, size_t stride, size_t count,
-	uint64_t flags, size_t *processed)
-{
-	ERR_set_mark();
-	errno = 0;
-	return finishDatagramCall(BIO_sendmmsg(BIO_next(bio), messages, stride,
-		count, flags, processed));
-}
-
-
-static long
-fixCtrl(BIO *bio, int command, long number, void *pointer)
-{
-	return BIO_ctrl(BIO_next(bio), command, number, pointer);
-}
-
-
-static int
-fixCreate(BIO *bio)
-{
-	BIO_set_init(bio, 1);
-	return 1;
-}
-
-
-static BIO_METHOD *
-fixMethod()
-{
-	static BIO_METHOD *sMethod = NULL;
-	if (sMethod == NULL) {
-		sMethod = BIO_meth_new(BIO_get_new_index() | BIO_TYPE_FILTER,
-			"rd766 errno fix");
-		BIO_meth_set_recvmmsg(sMethod, fixRecvmmsg);
-		BIO_meth_set_sendmmsg(sMethod, fixSendmmsg);
-		BIO_meth_set_ctrl(sMethod, fixCtrl);
-		BIO_meth_set_create(sMethod, fixCreate);
-	}
-	return sMethod;
+	bool intact = ERR_GET_REASON(packed) == EAGAIN
+		&& BIO_err_is_non_fatal(packed) == 1;
+	ERR_pop_to_mark();
+	return intact;
 }
 
 
@@ -679,9 +581,7 @@ clientConnect(Client *client, const char *sourceAddress, const char *alpn,
 
 	client->connection = SSL_new(client->context);
 	BIO *datagram = BIO_new_dgram(client->socket, BIO_NOCLOSE);
-	BIO *filter = BIO_new(fixMethod());
-	BIO_push(filter, datagram);
-	SSL_set_bio(client->connection, filter, filter);
+	SSL_set_bio(client->connection, datagram, datagram);
 	SSL_set_alpn_protos(client->connection, (const unsigned char *)alpn,
 		(unsigned int)alpnLength);
 	SSL_set_default_stream_mode(client->connection,
@@ -1326,6 +1226,12 @@ main(int argc, char **argv)
 			keep = true;
 	}
 
+	if (!errnoSignSurvives()) {
+		printf("RD766=SETUP-FAILED (this OpenSSL strips the sign of Haiku's"
+			" errno, #790: openssl3 >= 3.5.9-2 is required)\n");
+		return 2;
+	}
+
 	signal(SIGPIPE, SIG_IGN);
 	srand((unsigned)(getpid() ^ (unsigned)now()));
 
@@ -1354,13 +1260,6 @@ main(int argc, char **argv)
 
 	printf("rd766: broker pid %d on 127.0.0.1:%d (tcp+udp), mock session port"
 		" %d, scratch %s\n", (int)sBroker, sPort, sMockPort, sDirectory);
-	// #790: which builds are under test. Its acceptance check 2 needs both
-	// to say "compiled out".
-	const char *brokerWorkaround
-		= brokerLogHas("errno workaround (#790) compiled in")
-			? "compiled in" : "compiled out";
-	printf("rd766: OpenSSL errno workaround (#790): harness %s, broker %s\n",
-		kErrnoWorkaround, brokerWorkaround);
 
 	checkAdvert();
 	checkALPN();
@@ -1384,9 +1283,7 @@ main(int argc, char **argv)
 	if (sFailures > 0 || keep)
 		showBrokerLog();
 
-	printf("RD766=%s CHECKS=%d FAILED=%d WORKAROUND=harness:%s,broker:%s\n",
-		sFailures == 0 ? "PASS" : "FAIL", sChecks, sFailures,
-		strcmp(kErrnoWorkaround, "compiled in") == 0 ? "in" : "out",
-		strcmp(brokerWorkaround, "compiled in") == 0 ? "in" : "out");
+	printf("RD766=%s CHECKS=%d FAILED=%d\n", sFailures == 0 ? "PASS" : "FAIL",
+		sChecks, sFailures);
 	return sFailures == 0 ? 0 : 3;
 }
