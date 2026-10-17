@@ -282,6 +282,61 @@ if [ -n "$missing_tools" ]; then
 fi
 log "generator tier on PATH: cmake ninja meson pkg-config makeinfo (ok)"
 
+# On PATH is not the same as usable, and makeinfo is where the two came apart.
+# The image's texinfo-7.2_bootstrap-1 installs a `makeinfo` that cannot run at
+# all: it is a symlink to texi2any, whose BEGIN block unshifts onto @INC a
+# modules directory computed at configure time from portName
+# `texinfo_bootstrap` + version `7.2`, so it looks under
+# /packages/texinfo_bootstrap-7.2-1/.self/... -- while the hpkg is stamped
+# name=texinfo, version=7.2_bootstrap and therefore installs as
+# /packages/texinfo-7.2_bootstrap-1. Measured on i-076018fb6c01ef378:
+#   $ makeinfo /tmp/t.texi
+#   Can't locate Texinfo/ModulePath.pm in @INC (@INC entries checked:
+#     /packages/texinfo_bootstrap-7.2-1/.self/data/texi2any ...)
+#     at /boot/system/bin/makeinfo line 115.
+#   BEGIN failed--compilation aborted at /boot/system/bin/makeinfo line 120.
+# Every module is in the package and installed; only the prefix is wrong
+# (issue 782). `command -v makeinfo` passes regardless, so the check above
+# printed "(ok)" for a tool that aborts before reading its input -- and
+# autotools routes makeinfo through ./missing, which downgrades the abort to a
+# warning and ships whatever stale .info the tarball already had. That is the
+# quiet-degradation mode issue 776 was filed about, reached this time through a
+# check that reported the tier was fine.
+#
+# The remedy is the one coreutils needs below, for the same reason: a bootstrap
+# package provides its unversioned name, so `pkgman install` is a no-op against
+# it and only `update` supersedes it. A non-bootstrap texinfo-7.2-1 builds clean
+# natively and bakes /packages/texinfo-7.2-1/.self/..., which matches what it
+# installs as, so this picks the fix up by itself once that package is in the
+# pool. It warns rather than exits because the provisioner cannot create that
+# package: refusing to provision would take the fleet down over a defect it has
+# no way to repair.
+makeinfo_probe="${TMPDIR:-/tmp}/provision-makeinfo-probe.texi"
+printf '@node Top\n@top probe\n@bye\n' > "$makeinfo_probe"
+makeinfo_runs() {
+	rm -f "$makeinfo_probe.info"
+	makeinfo "$makeinfo_probe" -o "$makeinfo_probe.info" >/dev/null 2>&1 \
+		&& [ -s "$makeinfo_probe.info" ]
+}
+if makeinfo_runs; then
+	log "makeinfo runs on a real document (ok)"
+else
+	log "makeinfo is on PATH but cannot run (issue 782); trying pkgman update texinfo"
+	feed | pkgman update texinfo || log "WARNING: pkgman update texinfo failed"
+	if makeinfo_runs; then
+		log "makeinfo runs after superseding the bootstrap texinfo (ok)"
+	else
+		makeinfo "$makeinfo_probe" 2>&1 | sed 's/^/provision:   /' >&2
+		echo "provision: WARNING: makeinfo is on PATH and aborts on every" \
+			"document (issue 782). The pool has no non-bootstrap texinfo to" \
+			"supersede the image's with, so ports built here that declare" \
+			"cmd:makeinfo will not regenerate their manuals and will ship" \
+			"whatever .info their tarball already contained, without failing." \
+			"Publish texinfo-7.2-1-arm64 to the pool to clear this." >&2
+	fi
+fi
+rm -f "$makeinfo_probe" "$makeinfo_probe.info"
+
 # `pkgman install coreutils` above CANNOT pull the pool's coreutils over the
 # image's (issue 748). The bootstrap package is itself named `coreutils` and
 # `provides: coreutils = 9.9 (compatible >= 8)`, so the solver sees the
