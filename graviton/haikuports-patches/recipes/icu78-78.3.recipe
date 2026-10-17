@@ -55,6 +55,25 @@ LICENSE="ICU"
 REVISION="1"
 SOURCE_URI="https://github.com/unicode-org/icu/releases/download/release-$portVersion/icu4c-$portVersion-sources.tgz"
 CHECKSUM_SHA256="3a2e7a47604ba702f345878308e6fefeca612ee895cf4a5f222e7955fabfe0c0"
+# The locale data is a SEPARATE download and BUILD() below hard-depends on it:
+# it unzips ../../../sources-2/icu4c-*-data.zip and then deletes the prebuilt
+# data/in/icudt??l.dat so the data is regenerated for the target. Without this
+# declaration there is no sources-2 directory at all and the build dies on
+#   unzip: cannot find/open "../../../sources-2/icu4c-*-data.zip"
+# Every sibling icu recipe in this port directory -- icu70 through icu77 --
+# declares the pair; this recipe was the only one missing it, which is why the
+# port could never be rebuilt and only its runtime half ever reached the
+# repository.
+#
+# Note the release-78 naming, which is why copying the sibling line verbatim
+# does not work: icu70..icu77 use underscores and a -src suffix
+# (icu4c-77_1-data.zip under release-77-1), and both of those 404 for this
+# release. ICU 78 publishes dotted names, matching the SOURCE_URI above.
+# Measured: `sha256sum icu4c-78.3-data.zip` on 20187983 bytes fetched over
+# https from the URI below; the archive holds 4811 files rooted at data/, which
+# is the layout BUILD() unzips into source/.
+SOURCE_URI_2="https://github.com/unicode-org/icu/releases/download/release-$portVersion/icu4c-$portVersion-data.zip#noarchive"
+CHECKSUM_SHA256_2="9d8b3899096aeb83e4e21ef8a40fec9e03b28db18c48452efac882ce25a91e27"
 SOURCE_DIR="icu"
 
 ARCHITECTURES="?all !x86_gcc2"
