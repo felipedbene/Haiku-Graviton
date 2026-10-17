@@ -118,14 +118,30 @@ phases:
       # BSecureSocket ships as the B_UNSUPPORTED stub (https "Operation not
       # supported"). Filtering the already-granted pool keeps the image lean
       # (3 packages, not the full ~69) without an IAM/pipeline redeploy.
-      # NOTE: do NOT stage ca_root_certificates here. The base @minimum-mmc
-      # HaikuPorts index already pins/provides it (2025_12_02), and image
-      # generation copies THAT version into system/packages. Staging a newer
-      # pool copy (2026_07_16) makes the by-name AddHaikuImageSystemPackages
-      # resolve to the pool version while the image carries the index version
-      # -- a skew that leaves ca_root_certificates present-but-not-activated
-      # (no CARootCertificates.pem, so TLS verify fails B_NOT_ALLOWED). Let the
-      # single index version be the one resolved and activated.
+      # ca_root_certificates-2026_07_16-1 IS staged, and the reason it is safe
+      # now is that it is also DECLARED, in
+      # build/jam/repositories/HaikuPortsLocal/arm64. That distinction is the
+      # whole of the old warning this replaces. Staging the newer pool copy
+      # WITHOUT declaring it is what produced the skew: the by-name
+      # AddHaikuImageSystemPackages resolved the *index* version (2025_12_02,
+      # repositories/HaikuPorts/arm64:6) while the newer file sat unreferenced
+      # beside it, so the package ended up present-but-not-activated -- no
+      # CARootCertificates.pem, TLS verify failing B_NOT_ALLOWED. Declared in
+      # HaikuPortsLocal it is an ordinary member of the same HaikuPorts
+      # repository as the index, so the solver sees two versions of one package,
+      # picks the newer, and jam copies and activates that one -- exactly how
+      # openssl3 and zstd already work. It has to move, not merely may:
+      # openssl3-3.5.9-2 requires `ca_root_certificates >= 2026_07_16` (read out
+      # of the hpkg with graviton/scripts/hpkg_meta.py, not out of the recipe --
+      # haikuporter stamps the floor from whatever was installed on the builder
+      # that linked it), and the index serves only 2025_12_02-1.
+      # Same story for zlib: that pin carries `lib:libz >= 1.3.2`, the index
+      # serves only zlib-1.2.13_bootstrap-1 (:42-43), and nothing else in the
+      # set provides lib:libz, so the image solver reports "nothing provides
+      # lib:libz>=1.3.2 needed by openssl3-3.5.9-2". zlib and zlib_devel move as
+      # a pair -- zlib_devel-1.2.13_bootstrap-1 requires `zlib == 1.2.13`
+      # exactly (the issue-708 exact-pin shape), so a newer runtime zlib without
+      # its matching devel package is unsatisfiable.
       # NO fallback on this sync (issue #419): it used to end in
       # `|| echo "no lean hpkg pool"`, which swallowed BOTH a real sync error
       # and -- worse -- a filter that matched nothing. When this pipeline's
@@ -146,7 +162,7 @@ phases:
       # "Haiku Project"-vendored files in hpkg-pool/. (libwebp/libavif are not
       # staged -- see the HaikuPortsLocal/arm64 note: no "Haiku Project"-vendored
       # libwebp_devel and no libavif >= 1.0 exist for arm64 yet.)
-      - aws s3 sync "s3://$WORK_BUCKET/hpkg-pool/" "$HG_POOL_DIR/" --region "$AWS_DEFAULT_REGION" --exclude "*" --include "openssl3-*" --include "openssl3_devel-*" --include "zstd-*" --include "zstd_devel-*" --include "zstd_source-*" --include "amazon_ssm_agent-*" --include "debeos_cloudwatch-*" --include "fluidlite-*" --include "fluidlite_devel-*" --include "libvorbis-*" --include "libvorbis_devel-*" --include "libpng16-*" --include "libpng16_devel-*" --include "libjpeg_turbo-*" --include "libjpeg_turbo_devel-*" --include "jasper-*" --include "jasper_devel-*" --include "tiff-*" --include "tiff_devel-*"
+      - aws s3 sync "s3://$WORK_BUCKET/hpkg-pool/" "$HG_POOL_DIR/" --region "$AWS_DEFAULT_REGION" --exclude "*" --include "openssl3-*" --include "openssl3_devel-*" --include "zstd-*" --include "zstd_devel-*" --include "zstd_source-*" --include "zlib-*" --include "zlib_devel-*" --include "ca_root_certificates-*" --include "amazon_ssm_agent-*" --include "debeos_cloudwatch-*" --include "fluidlite-*" --include "fluidlite_devel-*" --include "libvorbis-*" --include "libvorbis_devel-*" --include "libpng16-*" --include "libpng16_devel-*" --include "libjpeg_turbo-*" --include "libjpeg_turbo_devel-*" --include "jasper-*" --include "jasper_devel-*" --include "tiff-*" --include "tiff_devel-*"
       - |
         # Must-have packages: the image is WRONG without these, so their
         # absence fails the bake loudly instead of shipping a quiet regression.
@@ -181,8 +197,19 @@ phases:
         # amazon_ssm_agent/debeos_cloudwatch are not pinned in HaikuPortsLocal
         # (UserBuildConfig picks them up by Glob), so they keep the name-only
         # check.
+        # zlib/zlib_devel and ca_root_certificates are must-haves for the same reason
+        # openssl3 and zstd are: the openssl3 pin's own metadata requires
+        # `lib:libz >= 1.3.2` and `ca_root_certificates >= 2026_07_16`, and
+        # neither floor can be met from the checksummed index, so a pool missing
+        # them does not degrade gracefully -- the image solver has no candidate
+        # at all and the bake dies mid-image (measured in a quic-oven bake).
+        # ca_root_certificates is an "any"-architecture package, so the pinned
+        # file is -any.hpkg, not -arm64.hpkg: test both suffixes rather than
+        # assuming the primary arch, or the guard reports a package that is
+        # sitting right there.
         missing=""
         for pkg in amazon_ssm_agent debeos_cloudwatch openssl3 openssl3_devel zstd zstd_devel zstd_source \
+                   zlib zlib_devel ca_root_certificates \
                    libpng16 libpng16_devel libjpeg_turbo libjpeg_turbo_devel jasper jasper_devel tiff tiff_devel; do
           pin=""
           if [ -f "$HAIKU_TOP/build/jam/repositories/HaikuPortsLocal/arm64" ]; then
@@ -190,7 +217,9 @@ phases:
               | tr -d '[:blank:]' | grep -E "^${pkg}-[0-9]" | head -1)
           fi
           if [ -n "$pin" ]; then
-            [ -f "$HG_POOL_DIR/$pin-arm64.hpkg" ] || missing="$missing $pin-arm64.hpkg"
+            if [ ! -f "$HG_POOL_DIR/$pin-arm64.hpkg" ] && [ ! -f "$HG_POOL_DIR/$pin-any.hpkg" ]; then
+              missing="$missing $pin-{arm64,any}.hpkg"
+            fi
           else
             ls "$HG_POOL_DIR/${pkg}"-[0-9]*.hpkg >/dev/null 2>&1 || missing="$missing $pkg"
           fi

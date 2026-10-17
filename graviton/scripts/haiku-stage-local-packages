@@ -127,11 +127,29 @@ PACKAGES=$(sed -e 's/#.*//' "$LIST" \
 	| grep -Ev '^[[:space:]]*(LocalPackageRepository|:|;|$)' \
 	| tr -d '[:blank:]' | grep -E '^[A-Za-z0-9_]+-')
 
+# An entry in the list may be an "any"-architecture package: the list has a
+# separate section for them (ca_root_certificates is the first), and their files
+# are named -any.hpkg, not -arm64.hpkg. Resolve the architecture suffix from
+# what the pool actually holds rather than assuming the primary one, or every
+# such entry is reported MISSING forever -- which the lean bake tolerates, so it
+# would have been a silent omission of exactly the kind the must-have guard in
+# cross-build.yml exists to stop.
+poolFile()
+{
+	if [ -f "$POOL/$1-$ARCH.hpkg" ]; then
+		echo "$1-$ARCH.hpkg"
+	elif [ -f "$POOL/$1-any.hpkg" ]; then
+		echo "$1-any.hpkg"
+	else
+		echo "$1-$ARCH.hpkg"
+	fi
+}
+
 missing=0
 staged=0
 rejected=0
 for pkg in $PACKAGES; do
-	file="$pkg-$ARCH.hpkg"
+	file="$(poolFile "$pkg")"
 	if [ ! -f "$POOL/$file" ]; then
 		echo "MISSING in pool: $file"
 		missing=$((missing + 1))
@@ -165,14 +183,20 @@ done
 stale=0
 if [ -n "$checkVendor" ]; then
 	for pkg in $PACKAGES; do
-		file="$pkg-$ARCH.hpkg"
-		[ -f "$DOWNLOAD/$file" ] || continue
-		vendor=$(hpkgVendor "$DOWNLOAD/$file")
-		[ "$vendor" = "$EXPECTED_VENDOR" ] && continue
-		reportWrongVendor staged "$file" "${vendor:-<unreadable>}"
-		echo "  Replace $DOWNLOAD/$file, or remove it to turn the" >&2
-		echo "  dependent build features off cleanly." >&2
-		stale=$((stale + 1))
+		# Resolve the suffix against the download dir, not the pool: this loop
+		# exists precisely to catch a file nobody here copied, so the pool may
+		# not hold it at all. Check both names -- an "any"-arch package can be
+		# wrong-vendored just as easily, and that is the one that gets copied in
+		# by hand (ca_root_certificates is how issue 737 nearly repeated).
+		for file in "$pkg-$ARCH.hpkg" "$pkg-any.hpkg"; do
+			[ -f "$DOWNLOAD/$file" ] || continue
+			vendor=$(hpkgVendor "$DOWNLOAD/$file")
+			[ "$vendor" = "$EXPECTED_VENDOR" ] && continue
+			reportWrongVendor staged "$file" "${vendor:-<unreadable>}"
+			echo "  Replace $DOWNLOAD/$file, or remove it to turn the" >&2
+			echo "  dependent build features off cleanly." >&2
+			stale=$((stale + 1))
+		done
 	done
 fi
 
