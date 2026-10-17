@@ -92,6 +92,8 @@ private:
 	// find a better way...
 
 			status_t			_HandleMonitor(BMessage* message);
+			void				_HandleSecureAttention();
+			TeamMonitorWindow*	_ShowTeamMonitor();
 			void				_RecursiveScan(const char* directory);
 
 			KeyboardDevice*		_FindDevice(const char* path) const;
@@ -100,6 +102,7 @@ private:
 
 			BObjectList<KeyboardDevice, true> fDevices;
 			BLocker				fDeviceListLock;
+			BLocker				fTeamMonitorLock;
 			TeamMonitorWindow*	fTeamMonitorWindow;
 };
 

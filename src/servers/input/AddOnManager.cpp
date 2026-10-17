@@ -181,6 +181,13 @@ AddOnManager::MessageReceived(BMessage* message)
 			_HandleDeviceMonitor(message);
 			return;
 
+		case IS_SECURE_ATTENTION:
+			// A notification: app_server sends it with no reply handler, so a
+			// reply would land on its be_app_messenger as a stray message (the
+			// same trap IS_SCREEN_BOUNDS_UPDATED documents in InputServer.cpp).
+			_HandleSecureAttention(message);
+			return;
+
 		default:
 			AddOnMonitor::MessageReceived(message);
 			return;
@@ -951,6 +958,37 @@ AddOnManager::_HandleDeviceMonitor(BMessage* message)
 
 			break;
 		}
+	}
+}
+
+
+/*!	Hands a secure-attention request (IS_SECURE_ATTENTION) to the add-on(s)
+	that own keyboards, which is where Team Monitor lives.
+
+	It cannot go through ControlDevices(): that reaches registered *devices*,
+	and a remote-desktop guest typically has none -- its input arrives over the
+	network, not from /dev/input/keyboard -- so the keyboard add-on would never
+	hear of it. It is therefore addressed to the add-on itself, with a NULL
+	device name and cookie, the same calling convention _HandleDeviceMonitor()
+	above already uses for B_NODE_MONITOR.
+
+	And it is addressed only to add-ons that watch the keyboard device
+	directory, never broadcast: those are exactly the add-ons already required
+	to accept a NULL cookie, because they receive node monitor messages that
+	way. Other add-ons are not -- VirtioInputDevice::Control() dereferences its
+	cookie unconditionally -- so a broadcast would crash input_server.
+*/
+void
+AddOnManager::_HandleSecureAttention(BMessage* message)
+{
+	CALLED();
+
+	for (int32 i = 0; i < fDeviceAddOns.CountItems(); i++) {
+		DeviceAddOn* addOn = fDeviceAddOns.ItemAt(i);
+		if (!addOn->HasPath("/dev/input/keyboard"))
+			continue;
+
+		addOn->Device()->Control(NULL, NULL, IS_SECURE_ATTENTION, message);
 	}
 }
 

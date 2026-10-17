@@ -75,6 +75,7 @@ private:
 									BMessage* reply);
 			status_t			_HandleSystemShuttingDown(BMessage* message,
 									BMessage* reply);
+			void				_HandleSecureAttention(BMessage* message);
 			status_t			_HandleMethodReplicant(BMessage* message,
 									BMessage* reply);
 			void				_HandleDeviceMonitor(BMessage* message);

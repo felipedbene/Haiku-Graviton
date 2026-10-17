@@ -19,6 +19,8 @@
 
 #include <Autolock.h>
 #include <FindDirectory.h>
+#include <InputServerTypes.h>
+#include <Messenger.h>
 #include <NetEndpoint.h>
 #include <Path.h>
 
@@ -67,7 +69,10 @@ supported_capabilities()
 	// never asks a client for text metrics, so advertising the bit would promise
 	// a query that is never sent. A client that still offers it simply sees it
 	// masked out of the acknowledged intersection.
-	return RP_CAP_RESYNC | RP_CAP_FRAME_BOUNDARY
+	//
+	// RP_CAP_SECURE_ATTENTION is unconditional too: honouring it needs only a
+	// message to input_server (see the RP_SECURE_ATTENTION case below).
+	return RP_CAP_RESYNC | RP_CAP_FRAME_BOUNDARY | RP_CAP_SECURE_ATTENTION
 		| RemoteWireWriter::SupportedCapabilities();
 }
 
@@ -977,6 +982,39 @@ RemoteHWInterface::_EventThread()
 					B_PRIu8 "), %" B_PRIu32 " outstanding\n", frameId,
 					fFrameAck.RoundTripTime(), heldMillis, decodeMillis,
 					queueDepth, fFrameAck.OutstandingFrames());
+				break;
+			}
+
+			case RP_SECURE_ATTENTION:
+			{
+				// Remote Ctrl+Alt+Del. Team Monitor belongs to input_server's
+				// keyboard add-on, which raises it from its own driver thread
+				// and nowhere else, so ask input_server to have that add-on do
+				// it (AddOnManager::_HandleSecureAttention()). Not delivered as
+				// key events: see RP_SECURE_ATTENTION in RemoteProtocol.h.
+				if ((fClientCapabilities & RP_CAP_SECURE_ATTENTION) == 0) {
+					// A client that sends what it did not negotiate is
+					// confused about what this server is; say so rather than
+					// act on a guess.
+					TRACE_ERROR("secure attention from a client that did not "
+						"negotiate RP_CAP_SECURE_ATTENTION; ignored\n");
+					break;
+				}
+
+				// A notification with no reply handler, and bounded: this is
+				// the thread that reads the client, so it must not wait on an
+				// input_server that is busy or gone. The messenger is resolved
+				// per request rather than cached, so an input_server that was
+				// restarted since the last request is still found.
+				BMessenger inputServer("application/x-vnd.Be-input_server");
+				BMessage request(IS_SECURE_ATTENTION);
+				status_t sent = inputServer.SendMessage(&request,
+					(BHandler*)NULL, 500000);
+				if (sent != B_OK) {
+					TRACE_ERROR("secure attention: cannot reach input_server: "
+						"%s\n", strerror(sent));
+				} else
+					TRACE_ALWAYS("secure attention: Team Monitor requested\n");
 				break;
 			}
 
