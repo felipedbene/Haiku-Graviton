@@ -87,6 +87,33 @@ enum {
 	// default case: a client that did not ask for frame boundaries never sees
 	// one, and its byte stream is unchanged.
 	RP_CAP_FRAME_BOUNDARY		= 1 << 3,
+
+	// (1 << 4 is RP_CAP_SECURE_ATTENTION, feat/remote-team-monitor, and
+	// 1 << 5 is RP_CAP_FONT_IDENTITY, feat/remote-font-names; both in flight,
+	// do not reuse them.)
+
+	// The client renders with the view's B_SUBPIXEL_PRECISE flag, and wants
+	// it. When this is negotiated, RemoteDrawingEngine sends
+	// RP_SET_SUBPIXEL_PRECISE (below) whenever the flag of the drawing state it
+	// is given changes, and in every state replay.
+	//
+	// The flag is drawing state like the pen or the transform: View.cpp copies
+	// it into the view's DrawState (fDrawState->SetSubPixelPrecise(fFlags &
+	// B_SUBPIXEL_PRECISE)), and Painter::SetDrawState() reads it into
+	// fSubpixelPrecise, which decides whether _Align() rounds a coordinate to
+	// the pixel grid, whether AlignRect() floors or ceils a rect's far edge,
+	// whether AlignEllipseRect() touches the rect at all, whether StrokeLine()
+	// takes its one-pixel square-cap path, and whether DrawString() rounds the
+	// baseline. A client that reproduces Painter therefore draws a precise view
+	// differently, and it is not rare: HaikuControlLook sets the flag for its
+	// slider triangles and pop-up markers (DrawSliderTriangle,
+	// _DrawPopUpMarker). The legacy wire never carried it,
+	// so every client had to assume false.
+	//
+	// Gated because the in-tree clients route an unknown opcode to their
+	// default case: a client that did not ask never sees the message, and its
+	// byte stream is unchanged.
+	RP_CAP_SUBPIXEL_PRECISE		= 1 << 6,
 };
 
 // Session-cookie methods, carried in the RP_SESSION_COOKIE message. Only one
@@ -169,6 +196,12 @@ enum {
 	RP_SET_DRAWING_MODE,
 	RP_SET_FONT,
 	RP_SET_TRANSFORM,
+
+	// The view's B_SUBPIXEL_PRECISE flag (50), gated on
+	// RP_CAP_SUBPIXEL_PRECISE. Payload: int32 token, then the flag as Add(bool)
+	// writes it -- one byte, 0 or 1. Coalescable like every other RP_SET_*: the
+	// latest value for a token is the whole of the state.
+	RP_SET_SUBPIXEL_PRECISE,
 
 	RP_CONSTRAIN_CLIPPING_REGION = 60,
 	RP_COPY_RECT_NO_CLIPPING,

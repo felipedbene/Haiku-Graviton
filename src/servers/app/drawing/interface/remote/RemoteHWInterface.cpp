@@ -67,7 +67,10 @@ supported_capabilities()
 	// never asks a client for text metrics, so advertising the bit would promise
 	// a query that is never sent. A client that still offers it simply sees it
 	// masked out of the acknowledged intersection.
-	return RP_CAP_RESYNC | RP_CAP_FRAME_BOUNDARY
+	//
+	// RP_CAP_SUBPIXEL_PRECISE is unconditional too: the flag is read off the
+	// DrawState every engine is already given, and the message is 11 bytes.
+	return RP_CAP_RESYNC | RP_CAP_FRAME_BOUNDARY | RP_CAP_SUBPIXEL_PRECISE
 		| RemoteWireWriter::SupportedCapabilities();
 }
 
@@ -880,7 +883,17 @@ RemoteHWInterface::_EventThread()
 				if (result != B_OK) {
 					TRACE_ERROR("failed to acknowledge hello: %s\n",
 						strerror(result));
+					break;
 				}
+
+				// The state replay at accept (_NewConnection) ran before this
+				// RP_HELLO was read, so it went out with no capabilities and
+				// therefore without RP_SET_SUBPIXEL_PRECISE -- and the setter
+				// dedups, so an unchanged flag would never be sent at all. A
+				// precise view would then draw as a plain one until it next
+				// toggled. State the flags now that the bit is agreed.
+				if ((fClientCapabilities & RP_CAP_SUBPIXEL_PRECISE) != 0)
+					_ReplaySubpixelPrecise();
 				break;
 			}
 
@@ -1193,6 +1206,18 @@ RemoteHWInterface::_ReplayState()
 	BAutolock lock(fEngineListLocker);
 	for (int32 i = 0; i < fDrawingEngines.CountItems(); i++)
 		fDrawingEngines.ItemAt(i)->ReplayState();
+}
+
+
+/*!	Re-states every live drawing engine's B_SUBPIXEL_PRECISE flag, and nothing
+	else. See the RP_HELLO handler for why.
+*/
+void
+RemoteHWInterface::_ReplaySubpixelPrecise()
+{
+	BAutolock lock(fEngineListLocker);
+	for (int32 i = 0; i < fDrawingEngines.CountItems(); i++)
+		fDrawingEngines.ItemAt(i)->ReplaySubpixelPrecise();
 }
 
 

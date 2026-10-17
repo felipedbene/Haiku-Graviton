@@ -40,6 +40,12 @@ public:
 			// client that is no longer here was told.
 			void				ReplayState();
 
+			// Re-states only RP_SET_SUBPIXEL_PRECISE. Called when a client
+			// negotiates RP_CAP_SUBPIXEL_PRECISE: the state replay at accept
+			// ran before its RP_HELLO, so it could not include the flag, and
+			// the setter's dedup would never send an unchanged one again.
+			void				ReplaySubpixelPrecise();
+
 	// for screen shots
 	virtual	status_t			ReadBitmap(ServerBitmap* bitmap,
 									bool drawCursor, BRect bounds);
@@ -165,6 +171,10 @@ public:
 
 private:
 			void				_SetOffsets(int32 xOffset, int32 yOffset);
+			void				_SetSubpixelPrecise(bool precise);
+			bool				_SendsSubpixelPrecise() const;
+			void				_AddSetSubpixelPrecise(RemoteMessage& message,
+									bool precise);
 
 			status_t			_AddCallback();
 			void				_DrainResultSem();
