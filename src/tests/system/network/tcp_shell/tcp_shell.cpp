@@ -194,8 +194,14 @@ struct synchronize_acknowledge {
 static const int32 kMaxRecordedSynAcknowledges = 2;
 
 static bool sRecordHandshake = false;
-static bool sLoseSynAcknowledge = false;
+static int32 sLoseSynAcknowledges = 0;
+	// how many of the server's SYN-ACKs to lose; -1 loses all of them
+static bool sLoseClientSynchronize = false;
+static int32 sClientSynchronizeCount = 0;
 static int32 sSynAcknowledgeCount = 0;
+static int32 sSynAcknowledgeTotal = 0;
+	// sSynAcknowledgeCount stops at the two that are compared; this one counts
+	// every SYN-ACK, which is what a test of how many go out needs
 static synchronize_acknowledge sSynAcknowledges[kMaxRecordedSynAcknowledges];
 static uint32 sClientAcknowledge = 0;
 static bool sClientAcknowledgeSeen = false;
@@ -1382,6 +1388,9 @@ record_handshake(net_buffer* buffer)
 	const uint8 handshake = TCP_FLAG_SYNCHRONIZE | TCP_FLAG_ACKNOWLEDGE;
 
 	if (!is_server((sockaddr*)buffer->source)) {
+		if ((flags & handshake) == TCP_FLAG_SYNCHRONIZE)
+			sClientSynchronizeCount++;
+
 		// The first bare acknowledgement from the client is the one that
 		// completes the handshake, and what it acknowledges is the server's
 		// initial sequence number as the client understood it -- the same
@@ -1395,8 +1404,12 @@ record_handshake(net_buffer* buffer)
 		return;
 	}
 
-	if ((flags & handshake) != handshake
-		|| sSynAcknowledgeCount >= kMaxRecordedSynAcknowledges)
+	if ((flags & handshake) != handshake)
+		return;
+
+	sSynAcknowledgeTotal++;
+
+	if (sSynAcknowledgeCount >= kMaxRecordedSynAcknowledges)
 		return;
 
 	synchronize_acknowledge& record = sSynAcknowledges[sSynAcknowledgeCount++];
@@ -1464,11 +1477,25 @@ domain_receive_data(net_buffer *buffer)
 	// Losing the SYN-ACK by what it is rather than by its packet number: the
 	// number depends on how many segments precede the handshake, which is not
 	// something a test of the handshake should have to know.
-	if (sLoseSynAcknowledge && is_server((sockaddr*)buffer->source)
+	if (sLoseSynAcknowledges != 0 && is_server((sockaddr*)buffer->source)
 		&& (tcp_segment_flags(buffer)
 				& (TCP_FLAG_SYNCHRONIZE | TCP_FLAG_ACKNOWLEDGE))
 			== (TCP_FLAG_SYNCHRONIZE | TCP_FLAG_ACKNOWLEDGE)) {
-		sLoseSynAcknowledge = false;
+		if (sLoseSynAcknowledges > 0)
+			sLoseSynAcknowledges--;
+		drop = true;
+	}
+
+	// Losing the client's SYN retransmissions as well leaves the server's own
+	// retransmission of its SYN-ACK as the only thing that can complete the
+	// handshake, which is what makes that a test rather than a race: both ends
+	// start from the same one-second initial timeout, so watching which RTO
+	// fires first would decide nothing.
+	if (sLoseClientSynchronize && sClientSynchronizeCount > 0
+		&& !is_server((sockaddr*)buffer->source)
+		&& (tcp_segment_flags(buffer)
+				& (TCP_FLAG_SYNCHRONIZE | TCP_FLAG_ACKNOWLEDGE))
+			== TCP_FLAG_SYNCHRONIZE) {
 		drop = true;
 	}
 
@@ -2278,10 +2305,9 @@ do_bad_synack(int argc, char** argv)
 			"  rst  it becomes a bare reset, carrying no acknowledgement at\n"
 			"       all -- the whole segment an off-path attacker who knows\n"
 			"       only the port pair can send (issue #614).\n\n"
-			"Call this before connect. The server retransmits its SYN-ACK,\n"
-			"so a stack that stays in SYN-SENT still connects; one that\n"
-			"gives up fails connect() or leaves it asleep until it times\n"
-			"out. -f disarms.");
+			"Call this before connect. The handshake is retried, so a stack\n"
+			"that stays in SYN-SENT still connects; one that gives up fails\n"
+			"connect() or leaves it asleep until it times out. -f disarms.");
 		return;
 	}
 
@@ -2362,24 +2388,39 @@ do_spoof(int argc, char** argv)
 static void
 do_lost_synack(int argc, char** argv)
 {
-	if (argc > 1) {
-		puts("usage: lost_synack\n\n"
+	const bool serverOnly = argc == 2 && !strcmp(argv[1], "-s");
+	const bool giveUp = argc == 2 && !strcmp(argv[1], "-g");
+
+	if (argc > 1 && !serverOnly && !giveUp) {
+		puts("usage: lost_synack [-s|-g]\n\n"
 			"Drops the server's first SYN-ACK, lets the client's SYN\n"
 			"retransmission provoke the next one, and checks that it is a\n"
 			"retransmission of the first rather than a new segment: same\n"
 			"sequence number, same MSS, window-scale and SACK-permitted, and\n"
 			"a client acknowledging the ISN + 1 it was originally offered\n"
 			"(issue #830). Prints PASS or FAIL and does its own connect, so\n"
-			"it replaces the connect command rather than following it.");
+			"it replaces the connect command rather than following it.\n\n"
+			"-s also drops every SYN the client retransmits, which leaves\n"
+			"the server's own retransmission of its SYN-ACK as the only way\n"
+			"the handshake can complete at all (issue #832). Both ends start\n"
+			"from the same one-second timeout, so this is the test that does\n"
+			"not come down to which RTO happens to fire first.\n\n"
+			"-g drops every SYN-ACK as well, so the server runs out of\n"
+			"retransmissions and has to give up on the half-open connection\n"
+			"instead of retrying it for as long as the listener lives.\n"
+			"Takes as long as connect() does to time out.");
 		return;
 	}
 
 	for (int32 i = 0; i < kMaxRecordedSynAcknowledges; i++)
 		sSynAcknowledges[i].seen = false;
 	sSynAcknowledgeCount = 0;
+	sSynAcknowledgeTotal = 0;
+	sClientSynchronizeCount = 0;
 	sClientAcknowledgeSeen = false;
 	sRecordHandshake = true;
-	sLoseSynAcknowledge = true;
+	sLoseSynAcknowledges = giveUp ? -1 : 1;
+	sLoseClientSynchronize = serverOnly || giveUp;
 
 	char* connect = (char*)"connect";
 	do_connect(1, &connect);
@@ -2389,14 +2430,36 @@ do_lost_synack(int argc, char** argv)
 	// send path room rather than racing it.
 	snooze(250000);
 
-	sLoseSynAcknowledge = false;
+	sLoseSynAcknowledges = 0;
+	sLoseClientSynchronize = false;
 	sRecordHandshake = false;
 
 	int32 failures = 0;
 
-	if (sSynAcknowledgeCount < 2) {
-		printf("FAIL: the server sent %" B_PRId32 " SYN-ACK(s); the lost one "
-			"was never answered again\n", sSynAcknowledgeCount);
+	if (giveUp) {
+		// One SYN-ACK plus the retransmissions it is allowed, and then the
+		// half-open connection has to be given up rather than retried for as
+		// long as the listener lives. connect() timing out is what bounds the
+		// wait here, and it outlasts the last retransmission by design.
+		const int32 expected = TCP_MAX_SYN_ACKNOWLEDGE_RETRANSMITS + 1;
+		if (sSynAcknowledgeTotal != expected) {
+			printf("FAIL: the server put %" B_PRId32 " SYN-ACK(s) on the wire, "
+				"expected %" B_PRId32 "\n", sSynAcknowledgeTotal, expected);
+			failures++;
+		} else {
+			printf("the server sent %" B_PRId32 " SYN-ACKs and stopped\n",
+				sSynAcknowledgeTotal);
+		}
+	} else if (sSynAcknowledgeCount < 2) {
+		if (serverOnly) {
+			printf("FAIL: the server never retransmitted its SYN-ACK; with "
+				"the client's %" B_PRId32 " SYN retransmission(s) lost too, "
+				"nothing was left to complete the handshake\n",
+				sClientSynchronizeCount - 1);
+		} else {
+			printf("FAIL: the server sent %" B_PRId32 " SYN-ACK(s); the lost "
+				"one was never answered again\n", sSynAcknowledgeCount);
+		}
 		failures++;
 	} else {
 		const synchronize_acknowledge& first = sSynAcknowledges[0];

@@ -2497,6 +2497,15 @@ TCPEndpoint::_Spawn(TCPEndpoint* parent, tcp_segment_header& segment,
 		return DROP;
 	}
 
+	// Arm the retransmit timer for it, exactly as Connect() does for the SYN
+	// it sends. Without this, a lost SYN-ACK was repaired only when the peer's
+	// own SYN retransmission arrived: the recovery became the peer's RTO
+	// rather than ours, and a peer with a shorter connect timeout than our
+	// silence took the connection with it.
+	fRetransmitInitialCount = 0;
+	gStackModule->set_timer(&fRetransmitTimer, fRetransmitTimeout);
+	T(TimerSet(this, "retransmit", fRetransmitTimeout));
+
 	segment.flags &= ~TCP_FLAG_SYNCHRONIZE;
 		// we handled this flag now, it must not be set for further processing
 
@@ -2733,7 +2742,23 @@ TCPEndpoint::_Receive(tcp_segment_header& segment, net_buffer* buffer)
 				// _PrepareSendSegment() only adds them at the initial send
 				// sequence, so the connection silently loses the MSS, SACK and
 				// window-scale it had already negotiated.
-				_RetransmitSynchronizeAcknowledge();
+				if (_RetransmitSynchronizeAcknowledge() == B_OK) {
+					// Push the retransmit timer back and charge the attempt to
+					// the same budget the timer uses. Without the first, the
+					// timer -- armed when the SYN-ACK first went out -- fires
+					// an instant later and puts a second identical copy on the
+					// wire for the peer to acknowledge twice; what it measures
+					// is silence since our last send, and this was a send.
+					// Without the second, a peer that keeps retransmitting its
+					// SYN without ever completing the handshake could hold the
+					// half-open connection open for as long as it liked, since
+					// the timer that would eventually give up on it would never
+					// get to fire.
+					fRetransmitInitialCount++;
+					gStackModule->set_timer(&fRetransmitTimer,
+						fRetransmitTimeout);
+					T(TimerSet(this, "retransmit", fRetransmitTimeout));
+				}
 				return DROP;
 			} else
 				return DROP | IMMEDIATE_ACKNOWLEDGE;
@@ -4116,7 +4141,15 @@ TCPEndpoint::_Acknowledged(tcp_segment_header& segment)
 }
 
 
-void
+/*!	Retransmits what the current state owes the peer, and re-arms the timer.
+
+	Returns whether the caller has inherited a socket reference that it must
+	release once fLock is dropped: a half-open connection that has run out of
+	SYN-ACK retransmissions is given up on here, and the teardown that follows
+	cannot be allowed to delete the endpoint from inside its own timer handler.
+	See the give-up arm below and _RetransmitTimer().
+*/
+bool
 TCPEndpoint::_Retransmit()
 {
 	TRACE("Retransmit()");
@@ -4138,12 +4171,51 @@ TCPEndpoint::_Retransmit()
 		if (_SendAcknowledge() == B_OK)
 			fRetransmitInitialCount++;
 		gStackModule->set_timer(&fRetransmitTimer, fRetransmitTimeout);
+	} else if (fState == SYNCHRONIZE_RECEIVED) {
+		// The SYN-ACK. _SendQueued() below cannot retransmit it: it refuses
+		// every state under ESTABLISHED, so sending this state there left the
+		// timer firing into a function that declined to do anything.
+		//
+		// The attempt is counted whether or not it got out, unlike the
+		// SYNCHRONIZE_SENT arm above. That one can afford to count only what
+		// it sends because connect() is waiting on it with a timeout of its
+		// own; here nothing is waiting -- the connection has not been accepted
+		// yet -- so a send that keeps failing (no route, no memory) has to run
+		// out of attempts on its own or it never ends.
+		if (fRetransmitInitialCount >= TCP_MAX_SYN_ACKNOWLEDGE_RETRANSMITS) {
+			// Give up on the half-open connection. ECONNREFUSED is what a
+			// reset arriving in this state reports, and this is the same
+			// outcome by a slower route: the peer never completed the
+			// handshake.
+			//
+			// _Close() hands the parent's reference back through
+			// set_aborted(), and in timer context that is the only reference
+			// there is -- a segment reaching the same teardown through
+			// SegmentReceived() is holding the one its endpoint lookup took,
+			// which is why that path can abort an unaccepted child inline and
+			// this one cannot. Taking a reference first moves the delete out
+			// of the teardown, and _RetransmitTimer() then releases it with
+			// fLock dropped, the way _TimeWaitTimer() does.
+			if (!gSocketModule->acquire_socket(socket)) {
+				// Already on its way out; there is nothing left to give up on.
+				return false;
+			}
+
+			_HandleReset(ECONNREFUSED);
+			return true;
+		}
+
+		fRetransmitInitialCount++;
+		_RetransmitSynchronizeAcknowledge();
+		gStackModule->set_timer(&fRetransmitTimer, fRetransmitTimeout);
 	} else
 		_SendQueued();
 
 	fRecover = fSendNext.Number() - 1;
 	if ((fFlags & FLAG_RECOVERY) != 0)
 		fFlags &= ~FLAG_RECOVERY;
+
+	return false;
 }
 
 
@@ -4229,7 +4301,19 @@ TCPEndpoint::_RetransmitTimer(net_timer* timer, void* _endpoint)
 	if (!locker.IsLocked() || gStackModule->is_timer_active(timer))
 		return;
 
-	endpoint->_Retransmit();
+	if (!endpoint->_Retransmit())
+		return;
+
+	locker.Unlock();
+		// Safe without the lock, and only safe this way: the reference
+		// _Retransmit() took for us is the last one, so this release deletes
+		// the endpoint -- fLock along with it -- and nothing may touch it
+		// afterwards. wait_for_timer() in the destructor returns B_BAD_VALUE
+		// rather than waiting when it is this timer's own thread asking, and
+		// the timer thread does not read the timer back once the hook returns,
+		// so the structure going away underneath it is not a problem either.
+
+	gSocketModule->release_socket(endpoint->socket);
 }
 
 
