@@ -1479,6 +1479,17 @@ page_queue_for(vm_page* page, uint8 state)
 			return &sInactivePageQueue;
 		case PAGE_STATE_MODIFIED:
 		{
+			if (page->Cache() == NULL) {
+				// Which modified queue a page is on is a property of its
+				// cache, so the state cannot be resolved once the page has
+				// been detached: a caller discarding a MODIFIED page has to
+				// clear the state first, while the cache is still attached
+				// (see VMCache::Delete()). Say so -- the dereference below
+				// would otherwise fault on NULL and report nothing.
+				panic("page %p is MODIFIED but has no cache", page);
+				return NULL;
+			}
+
 			VMPageQueue* queue = page->Cache()->ModifiedQueue();
 			if (queue != NULL)
 				return queue;

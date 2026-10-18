@@ -1255,7 +1255,6 @@ VMAnonymousCache::_MergePagesSmallerConsumer(VMAnonymousCache* source)
 			ASSERT_PRINT(sourcePage->WiredCount() == 0
 					&& sourcePage->mappings.IsEmpty(),
 				"sourcePage: %p, page: %p", sourcePage, page);
-			source->RemovePage(sourcePage);
 			if (sourcePage->State() == PAGE_STATE_MODIFIED) {
 				// A page can't be freed while MODIFIED: vm_page_free_etc()
 				// asserts this because the modified queue can't be resolved at
@@ -1264,9 +1263,17 @@ VMAnonymousCache::_MergePagesSmallerConsumer(VMAnonymousCache* source)
 				// are stale and no writeback is needed -- just clear the
 				// modified state, exactly as the sibling free paths do
 				// (VMCache::Delete/Resize/FlushAndRemoveAllPages).
+				//
+				// This has to happen while the page is still in the cache.
+				// There is no single modified queue to resolve the state
+				// against: page_queue_for() reads the page's cache to find
+				// which one it is on, so a detached MODIFIED page dereferences
+				// NULL there -- and even if it did not, it would be taken off
+				// the wrong queue.
 				sourcePage->modified = false;
 				vm_page_set_state(sourcePage, PAGE_STATE_CACHED);
 			}
+			source->RemovePage(sourcePage);
 			vm_page_free_etc(source, sourcePage, &reservation);
 		}
 
@@ -1318,15 +1325,16 @@ VMAnonymousCache::_MergeSwapPages(VMAnonymousCache* source)
 					if (page != NULL) {
 						DEBUG_PAGE_ACCESS_START(page);
 						ASSERT_PRINT(!page->busy, "page: %p", page);
-						source->RemovePage(page);
 						if (page->State() == PAGE_STATE_MODIFIED) {
 							// Shadowed by a consumer swap page and discarded;
 							// clear MODIFIED before freeing, as freeing a
-							// MODIFIED page is not allowed (see the comment in
-							// _MergePagesSmallerConsumer).
+							// MODIFIED page is not allowed, and before removing
+							// it, as the queue the state names is the cache's
+							// (see the comment in _MergePagesSmallerConsumer).
 							page->modified = false;
 							vm_page_set_state(page, PAGE_STATE_CACHED);
 						}
+						source->RemovePage(page);
 						vm_page_free(source, page);
 					}
 				}
