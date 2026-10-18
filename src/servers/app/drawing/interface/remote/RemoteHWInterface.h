@@ -163,6 +163,7 @@ static	void						_ConnectionClosedCallback(void *cookie);
 		void						_ReplayState();
 		void						_ReplayFonts();
 		void						_ReplaySubpixelPrecise();
+		void						_SendGlyphRasterizer();
 		void						_SendResyncBarrier();
 		bool						_RepairIfOwed();
 

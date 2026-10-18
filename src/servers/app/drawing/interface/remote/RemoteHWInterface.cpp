@@ -17,6 +17,8 @@
 
 #include "SystemPalette.h"
 
+#include "FontEngine.h"
+
 #include <Autolock.h>
 #include <FindDirectory.h>
 #include <InputServerTypes.h>
@@ -80,8 +82,12 @@ supported_capabilities()
 	//
 	// RP_CAP_SUBPIXEL_PRECISE is unconditional too: the flag is read off the
 	// DrawState every engine is already given, and the message is 11 bytes.
+	//
+	// RP_CAP_GLYPH_RASTERIZER is unconditional too: the four numbers come from
+	// the FreeType this app_server is linked against, which is always there.
 	return RP_CAP_RESYNC | RP_CAP_FRAME_BOUNDARY | RP_CAP_SECURE_ATTENTION
 		| RP_CAP_FONT_IDENTITY | RP_CAP_SUBPIXEL_PRECISE
+		| RP_CAP_GLYPH_RASTERIZER
 		| RemoteWireWriter::SupportedCapabilities();
 }
 
@@ -897,6 +903,11 @@ RemoteHWInterface::_EventThread()
 					break;
 				}
 
+				// Say what rasterises the glyphs before any font is re-stated
+				// below, so the client knows it before it draws a string.
+				if ((fClientCapabilities & RP_CAP_GLYPH_RASTERIZER) != 0)
+					_SendGlyphRasterizer();
+
 				// The state replay at accept (_NewConnection) ran before this
 				// RP_HELLO was read, so every RP_SET_FONT in it went out with
 				// no capabilities and therefore no identity block -- and
@@ -1282,6 +1293,34 @@ RemoteHWInterface::_ReplaySubpixelPrecise()
 	BAutolock lock(fEngineListLocker);
 	for (int32 i = 0; i < fDrawingEngines.CountItems(); i++)
 		fDrawingEngines.ItemAt(i)->ReplaySubpixelPrecise();
+}
+
+
+/*!	Tells a client that negotiated RP_CAP_GLYPH_RASTERIZER which FreeType, built
+	how, rasterises this server's glyphs. See RemoteProtocol.h.
+*/
+void
+RemoteHWInterface::_SendGlyphRasterizer()
+{
+	uint32 version = 0;
+	uint32 flags = 0;
+	uint32 interpreter = 0;
+	if (!FontEngine::GetRasterizerIdentity(&version, &flags, &interpreter)) {
+		// Nothing true to say. Silence leaves the client on its assumption
+		// about the canonical image, which a made-up answer would not.
+		TRACE_ERROR("cannot read the FreeType identity; RP_GLYPH_RASTERIZER "
+			"not sent\n");
+		return;
+	}
+
+	RemoteMessage message(NULL, fWireWriter.Get());
+	message.Start(RP_GLYPH_RASTERIZER);
+	message.Add((uint32)1);
+		// engine: FreeType
+	message.Add(version);
+	message.Add(flags);
+	message.Add(interpreter);
+	message.Flush();
 }
 
 

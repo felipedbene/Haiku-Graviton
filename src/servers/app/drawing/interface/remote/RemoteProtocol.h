@@ -160,6 +160,23 @@ enum {
 	// default case: a client that did not ask never sees the message, and its
 	// byte stream is unchanged.
 	RP_CAP_SUBPIXEL_PRECISE		= 1 << 6,
+
+	// The client wants to know what rasterises the server's glyphs. When this
+	// is negotiated the server sends RP_GLYPH_RASTERIZER (below) once, right
+	// after RP_HELLO_ACK.
+	//
+	// RP_DRAW_STRING carries text, not pixels, so a client draws the server's
+	// glyphs only if it rasterises them with the same FreeType, built the same
+	// way -- and that varies. This image's freetype_bootstrap 2.6.3 is built
+	// without FT_CONFIG_OPTION_SUBPIXEL_RENDERING, so the LCD glyphs
+	// FontEngine asks for come back as greyscale repeated into all three
+	// subpixels, and without TT_CONFIG_OPTION_SUBPIXEL_HINTING, so TrueType is
+	// hinted by the v35 interpreter; a current FreeType renders LCD glyphs in
+	// colour and hints with v40. A client that cannot see which one it is
+	// talking to can only guess, and a wrong guess is wrong in every pixel of
+	// every string. Gated, like every message after the handshake, because the
+	// in-tree clients route an unknown opcode to their default case.
+	RP_CAP_GLYPH_RASTERIZER		= 1 << 7,
 };
 
 // Session-cookie methods, carried in the RP_SESSION_COOKIE message. Only one
@@ -224,6 +241,25 @@ enum {
 	// reaches the message parser -- so above the gate a client's stream still
 	// begins with RP_INIT_CONNECTION, exactly as before.
 	RP_SESSION_COOKIE = 12,
+
+	// What rasterises this server's glyphs, server -> client, sent once
+	// straight after RP_HELLO_ACK when RP_CAP_GLYPH_RASTERIZER is negotiated
+	// (FontEngine::GetRasterizerIdentity). Session-level, no token:
+	//
+	//     uint32 engine         1 = FreeType
+	//     uint32 version        major << 16 | minor << 8 | patch, as
+	//                           FT_Library_Version reports it
+	//     uint32 flags          bit 0: FT_Library_SetLcdFilter is implemented,
+	//                           i.e. the library was built with
+	//                           FT_CONFIG_OPTION_SUBPIXEL_RENDERING
+	//     uint32 ttInterpreter  the TrueType driver's "interpreter-version"
+	//                           property (35, 38, 40), 0 if it cannot be read
+	//
+	// Read off a throwaway FT_Library, exactly as every FontEngine's library
+	// starts out: FontEngine sets no property and no LCD filter. A client that
+	// knows a later revision may find more bytes after ttInterpreter; one that
+	// does not must skip them by the declared message length.
+	RP_GLYPH_RASTERIZER,
 
 	RP_CREATE_STATE = 20,
 	RP_DELETE_STATE,
