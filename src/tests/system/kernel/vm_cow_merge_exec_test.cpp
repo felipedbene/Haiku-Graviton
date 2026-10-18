@@ -36,17 +36,28 @@
 	when the sixteen source pages it has just shadowed -- now mapped by nobody --
 	are the best candidates the daemon has.
 
-		./vm_cow_merge_exec_test --hog 1200 &
-		./vm_cow_merge_exec_test --hog 1200 &
-		./vm_cow_merge_exec_test --hog 1200 &
-		./vm_cow_merge_exec_test 8 64 0 1500
+	The recipe that reproduces it on a 4 GiB box with 4 GiB of swap -- six
+	hogs, let them settle, then run:
+
+		for i in 1 2 3 4 5 6; do ./vm_cow_merge_exec_test --hog 1100 & done
+		sleep 30
+		./vm_cow_merge_exec_test 8 64 0 2000
+
+	Both the count and the size matter, because reaching MODIFIED is not
+	enough: the page writer writes a MODIFIED page out to swap and it comes
+	back as CACHED, so the state only lasts while the writer is behind. Six
+	hogs at 1100 MiB push the total dirty past RAM plus swap, swap reservation
+	starts failing, and the state sticks. Three at 1200 MiB does not -- that
+	produces genuine scarcity ("low resource pages" in the syslog) and still
+	never panics.
 
 	The pressure deliberately comes from other teams. The low-resource handler
 	kills the biggest offender, so a test that eats the memory itself gets
 	killed before it reaches the merge -- and in the report this issue came
 	from, the team that died was not the team that had eaten the memory either.
-	The third argument asks for pressure from this team instead, which is
-	useful for watching that happen but not for reaching the merge.
+	Six hogs are each bigger than this test, which is what keeps the handler
+	aimed at them. The third argument asks for pressure from this team instead,
+	which is useful for watching that happen but not for reaching the merge.
 
 	With no pressure at all the test exercises the same merge without being able
 	to reach the MODIFIED arm of it, which is a much weaker thing to run.
