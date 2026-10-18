@@ -2714,6 +2714,27 @@ TCPEndpoint::_Receive(tcp_segment_header& segment, net_buffer* buffer)
 				// calls tcp_reset_check() here, not just below).
 				if (!_IsResetAcceptable(segment))
 					return DROP;
+			} else if (fState == SYNCHRONIZE_RECEIVED
+					&& (segment.flags & TCP_FLAG_SYNCHRONIZE) != 0
+					&& (segment.flags & TCP_FLAG_ACKNOWLEDGE) == 0
+					&& fInitialReceiveSequence == tcp_sequence(segment.sequence)) {
+				// The peer is retransmitting the SYN that opened this
+				// connection, because our SYN-ACK was lost. It is out of window
+				// by construction -- a zero-length segment at RCV.NXT - 1 --
+				// but it must be answered by retransmitting the SYN-ACK, not by
+				// acknowledging (RFC 9293 section 3.10.7.4).
+				//
+				// A bare acknowledgement is actively wrong here, and is what
+				// the arm below would have sent: _PrepareAndSend() stamps
+				// fSendNext, which is ISS + 1 once the first SYN-ACK is out, so
+				// the peer reads ISS + 1 as our initial sequence number and
+				// drops the first byte of the stream -- fatal to a TLS
+				// handshake. The handshake options go the same way, since
+				// _PrepareSendSegment() only adds them at the initial send
+				// sequence, so the connection silently loses the MSS, SACK and
+				// window-scale it had already negotiated.
+				_RetransmitSynchronizeAcknowledge();
+				return DROP;
 			} else
 				return DROP | IMMEDIATE_ACKNOWLEDGE;
 		}
@@ -3771,6 +3792,52 @@ TCPEndpoint::_SendReset(bool force)
 		return B_NO_MEMORY;
 
 	return _PrepareAndSend(segment, buffer, false);
+}
+
+
+/*!	Retransmits the SYN-ACK of a connection still in SYNCHRONIZE_RECEIVED.
+
+	Both the sequence number and the handshake options follow from fSendNext:
+	_PrepareAndSend() stamps it as the segment's sequence, and
+	_PrepareSendSegment() adds the MSS, SACK-permitted and window-scale options
+	only when it sits at the initial send sequence. So rewinding it to the ISS
+	is what makes this a retransmission of the original segment rather than a
+	new one, and _PrepareAndSend() counts the SYN's sequence number back
+	afterwards, leaving fSendNext at ISS + 1 exactly where it was.
+
+	_SendQueued() cannot do this: it refuses any state below ESTABLISHED, and
+	with an empty send queue it would find nothing to send anyway.
+*/
+status_t
+TCPEndpoint::_RetransmitSynchronizeAcknowledge()
+{
+	if (fRoute == NULL)
+		return B_ERROR;
+
+	ASSERT(fState == SYNCHRONIZE_RECEIVED);
+
+	const tcp_sequence sendNext = fSendNext;
+	fSendNext = fInitialSendSequence;
+	tcp_segment_header segment = _PrepareSendSegment();
+
+	net_buffer* buffer = gBufferModule->create(256);
+	if (buffer == NULL) {
+		fSendNext = sendNext;
+		return B_NO_MEMORY;
+	}
+
+	// isRetransmit: this segment must not be timed. An acknowledgement of it
+	// may have been provoked by the SYN-ACK that was already sent, which would
+	// report a round trip shorter than the path has.
+	status_t status = _PrepareAndSend(segment, buffer, true);
+	if (status != B_OK) {
+		// _PrepareAndSend() advances fSendNext only once the segment is away,
+		// so on failure the rewind above is still in place. Put it back rather
+		// than leaving the endpoint ready to reuse a consumed sequence number.
+		fSendNext = sendNext;
+	}
+
+	return status;
 }
 
 
