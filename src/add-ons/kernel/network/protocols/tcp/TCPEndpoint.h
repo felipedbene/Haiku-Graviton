@@ -122,6 +122,7 @@ private:
 							const PendingAcknowledge& pending);
 			status_t	_SendReset(bool force = false);
 			status_t	_SendQueued(bool force = false);
+			status_t	_RetransmitSynchronizeAcknowledge();
 
 			status_t	_Disconnect(bool closing);
 			ssize_t		_AvailableData() const;
