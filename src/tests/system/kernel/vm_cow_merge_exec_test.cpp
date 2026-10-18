@@ -36,10 +36,20 @@
 	when the sixteen source pages it has just shadowed -- now mapped by nobody --
 	are the best candidates the daemon has.
 
-		./vm_cow_merge_exec_test 8 64 3072		# 3 GiB of pressure per round
+		./vm_cow_merge_exec_test --hog 1200 &
+		./vm_cow_merge_exec_test --hog 1200 &
+		./vm_cow_merge_exec_test --hog 1200 &
+		./vm_cow_merge_exec_test 8 64 0 1500
 
-	With no pressure argument the test exercises the same merge without being
-	able to reach the MODIFIED arm of it, which is a much weaker thing to run.
+	The pressure deliberately comes from other teams. The low-resource handler
+	kills the biggest offender, so a test that eats the memory itself gets
+	killed before it reaches the merge -- and in the report this issue came
+	from, the team that died was not the team that had eaten the memory either.
+	The third argument asks for pressure from this team instead, which is
+	useful for watching that happen but not for reaching the merge.
+
+	With no pressure at all the test exercises the same merge without being able
+	to reach the MODIFIED arm of it, which is a much weaker thing to run.
 
 	Nothing is asserted beyond survival: the failure is a kernel panic, so the
 	test either prints its summary or never returns.
@@ -64,6 +74,37 @@ static const size_t kDefaultAreaSize = 64 * 1024 * 1024;
 
 static size_t sAreaSize = kDefaultAreaSize;
 static size_t sPressureSize = 0;
+static bigtime_t sSettleTime = 0;
+
+
+/*!	Sustained pressure from a separate team: dirties a region and keeps walking
+	it, so the page daemon has to keep scanning for as long as this runs.
+
+	It has to be a separate team because the low-resource handler kills the
+	biggest offender, and the point is that the team doing the fork and exec is
+	not it -- in the report this issue came from, the team that died was not the
+	team that had eaten the memory either.
+*/
+static int
+hog_main(size_t size)
+{
+	uint8* region = (uint8*)mmap(NULL, size, PROT_READ | PROT_WRITE,
+		MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+	if (region == MAP_FAILED) {
+		fprintf(stderr, "hog: mmap(%zu): %s\n", size, strerror(errno));
+		return 1;
+	}
+
+	uint8 value = 1;
+	while (true) {
+		for (size_t offset = 0; offset < size; offset += B_PAGE_SIZE)
+			region[offset] = value;
+		value++;
+		snooze(50000);
+	}
+
+	return 0;
+}
 
 
 /*!	Dirties a region sized to not fit, so the page daemon has to scan. The
@@ -86,11 +127,6 @@ acquire_memory_pressure()
 
 	for (size_t offset = 0; offset < sPressureSize; offset += B_PAGE_SIZE)
 		pressure[offset] = 0x55;
-
-	// Give the daemon two passes with it: the active-queue scan to push our
-	// unmapped source pages down to INACTIVE, and the inactive-queue scan to
-	// find them dirty there and move them to MODIFIED.
-	snooze(500000);
 
 	return pressure;
 }
@@ -200,6 +236,12 @@ one_round(const char* self, int round)
 	// MODIFIED in the meantime.
 	uint8* pressure = acquire_memory_pressure();
 
+	// Two daemon passes have to happen in here: the active-queue scan that
+	// pushes our unmapped source pages down to INACTIVE, and the inactive-queue
+	// scan that finds them dirty there and moves them to MODIFIED.
+	if (sSettleTime > 0)
+		snooze(sSettleTime);
+
 	token = 'g';
 	write(goPipe[1], &token, 1);
 	close(goPipe[1]);
@@ -245,6 +287,9 @@ main(int argc, char** argv)
 	if (argc > 1 && strcmp(argv[1], "--child") == 0)
 		return child_main();
 
+	if (argc > 2 && strcmp(argv[1], "--hog") == 0)
+		return hog_main((size_t)atoi(argv[2]) * 1024 * 1024);
+
 	int rounds = kDefaultRounds;
 	if (argc > 1)
 		rounds = atoi(argv[1]);
@@ -252,15 +297,18 @@ main(int argc, char** argv)
 		sAreaSize = (size_t)atoi(argv[2]) * 1024 * 1024;
 	if (argc > 3)
 		sPressureSize = (size_t)atoi(argv[3]) * 1024 * 1024;
+	if (argc > 4)
+		sSettleTime = (bigtime_t)atoi(argv[4]) * 1000;
 	if (rounds <= 0 || sAreaSize < (size_t)kShadowPages * B_PAGE_SIZE) {
-		fprintf(stderr, "usage: %s [rounds] [area MiB] [pressure MiB]\n",
-			argv[0]);
+		fprintf(stderr, "usage: %s [rounds] [area MiB] [pressure MiB] "
+			"[settle ms]\n       %s --hog <MiB>\n", argv[0], argv[0]);
 		return 1;
 	}
 
 	printf("%s: %d round(s), %zu MiB area, %d shadowing page(s), "
-		"%zu MiB pressure\n", argv[0], rounds, sAreaSize / (1024 * 1024),
-		kShadowPages, sPressureSize / (1024 * 1024));
+		"%zu MiB pressure, %" B_PRIdBIGTIME " ms settle\n", argv[0], rounds,
+		sAreaSize / (1024 * 1024), kShadowPages, sPressureSize / (1024 * 1024),
+		sSettleTime / 1000);
 
 	for (int round = 0; round < rounds; round++) {
 		if (one_round(argv[0], round) != B_OK) {
