@@ -352,6 +352,7 @@ deploy of this stack, not only the one that created it.
 | `-c brokerEndpointAllowCidrs=<cidr>[,…]` | the public endpoint — NLB, listener, target group, `BrokerEndpointSg` (`ops-stack.ts:401`) | no endpoint. This is the intended default, and the intended teardown |
 | `-c brokerEndpointQuic=true` | makes the endpoint's listener and target group a single `TCP_UDP` pair instead of `TCP` (`ops-stack.ts:398-400`, `:449`, `:475`) | endpoint carries `wss` only. **A modifier, not a gate** — on its own, with no allowlist, it produces nothing at all |
 | `-c onPremCidr=<cidr>` | the VPN's static route; defaults to `10.0.0.0/16` | the default, which is correct for this account |
+| `-c onPremSgCidr=<cidr>` | the `BuilderSg` on-prem ingress range only (`ops-stack.ts:336`); defaults to `onPremCidr` | the SG narrows to `onPremCidr`. **This account needs `10.0.0.0/8`** — the live rules cover peered VPCs, not just on-prem. Do not widen `onPremCidr` to do this instead: `10.0.0.0/8` as a *static route* is a supernet of `BuildVpc`'s own `10.128.0.0/16` |
 
 `onPremPublicIp` is deliberately **not** committed anywhere: the on-prem public
 address is not public information and this repository is. That is why it has to
@@ -495,13 +496,15 @@ Daemon-side work this endpoint argues for, which is **not** in this change
 
 Observations noted while measuring, not defects being claimed here:
 
-- The live `sg-0efc97cc673949063` has **drifted from this CDK stack**. The
-  three remote-desktop rules were hand-edited: the stack writes `onPremCidr`
-  (default `10.0.0.0/16`) with descriptions like "remote desktop (app_server +
-  broker) from on-prem over VPN", while the live rules say `10.0.0.0/8` /
-  "VPC+peers (user-approved 2026-10-12)", and the live ICMP rule has no
-  description at all. The next `cdk deploy DebeosOpsStack` will try to
-  reconcile this. Worth looking at before deploying anything to this stack.
+- The live `sg-0efc97cc673949063` had **drifted from this CDK stack**, and the
+  stack could not express the live state: one `onPremCidr` drove both the VPN
+  static route and the SG peer, so matching the hand-edited `10.0.0.0/8` would
+  have widened the route into a supernet of `BuildVpc`'s own `10.128.0.0/16`.
+  Issue 827 split them. The SG range is now `-c onPremSgCidr`, and this account
+  wants `10.0.0.0/8` on every deploy — pass it, or the three rules narrow back
+  to `onPremCidr` and whatever reaches the builders from a peered VPC stops.
+  The live ICMP rule still has no description; the stack supplies one, which is
+  a cosmetic difference the deploy will reconcile.
 - `remote-desktop-broker.md` states that TLS and WebSocket handshake failures
   count toward the per-source backoff. `RemoteBroker.cpp:1098-1105` says the
   opposite, in a comment, deliberately. The code is right and the doc is stale;

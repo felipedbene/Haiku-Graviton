@@ -240,13 +240,22 @@ export class OpsStack extends cdk.Stack {
 
     // Site-to-Site VPN to on-prem. GATED on deploy-time context — the on-prem
     // public IP is non-public and this repo is public, so it is NEVER committed;
-    // pass it at deploy:  -c onPremPublicIp=<ip> [-c onPremCidr=10.0.0.0/16].
+    // pass it at deploy:  -c onPremPublicIp=<ip> [-c onPremCidr=10.0.0.0/16]
+    //                     [-c onPremSgCidr=10.0.0.0/8].
     // Enables a VGW on BuildVpc, propagates its learned routes into the builder
     // (private) subnets so instances can reach on-prem, and brings up a
     // static-routed connection. BuildVpc is 10.128.0.0/16, non-overlapping with
     // the on-prem 10.0.0.0/16 range, so routing is unambiguous.
     const onPremPublicIp = this.node.tryGetContext('onPremPublicIp');
     const onPremCidr = this.node.tryGetContext('onPremCidr') ?? '10.0.0.0/16';
+    // The builder SG's on-prem ingress (below) is a separate knob from this
+    // static route, because the two want different ranges: the SG has to cover
+    // peered VPCs as well as on-prem, while the route must stay specific.
+    // Widening onPremCidr itself to do both would put a 10.0.0.0/8 static route
+    // on the VPN -- a supernet of BuildVpc's own 10.128.0.0/16 -- and propagate
+    // that ambiguity into the builder subnets' route tables. Defaults to
+    // onPremCidr, so passing only -c onPremCidr behaves as it always did.
+    const onPremSgCidr = this.node.tryGetContext('onPremSgCidr') ?? onPremCidr;
     if (onPremPublicIp) {
       vpc.enableVpnGateway({
         type: 'ipsec.1',
@@ -331,9 +340,10 @@ export class OpsStack extends cdk.Stack {
     // configured): SSH, the remote-desktop ports (app_server :10900 + the
     // remote_broker front door :10902), and ping -- all from the on-prem range,
     // which is only routable once the tunnel is up. Codifies the rules that
-    // were otherwise added to the builder SG by hand.
+    // were otherwise added to the builder SG by hand -- including the widening
+    // to cover peered VPCs, which is what onPremSgCidr is for.
     if (onPremPublicIp) {
-      const onPrem = ec2.Peer.ipv4(onPremCidr);
+      const onPrem = ec2.Peer.ipv4(onPremSgCidr);
       builderSg.addIngressRule(onPrem, ec2.Port.tcp(22), 'SSH from on-prem over VPN');
       builderSg.addIngressRule(onPrem, ec2.Port.tcpRange(10900, 10902),
         'remote desktop (app_server + broker) from on-prem over VPN');
