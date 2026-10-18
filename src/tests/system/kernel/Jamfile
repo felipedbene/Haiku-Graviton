@@ -68,6 +68,8 @@ SimpleTest syscall_restart_test : syscall_restart_test.cpp
 
 SimpleTest syscall_time : syscall_time.cpp ;
 
+SimpleTest vm_cow_merge_exec_test : vm_cow_merge_exec_test.cpp ;
+
 SimpleTest wait_test_1 : wait_test_1.c ;
 SimpleTest wait_test_2 : wait_test_2.cpp ;
 SimpleTest wait_test_3 : wait_test_3.cpp ;
