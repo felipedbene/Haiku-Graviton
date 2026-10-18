@@ -120,6 +120,13 @@ class FontEngine {
 			bool				GetKerning(uint32 first, uint32 second,
 									double* x, double* y);
 
+	// What turns this server's glyphs into pixels, for a remote client that
+	// has to do the same (RP_GLYPH_RASTERIZER): the FreeType version as
+	// major << 16 | minor << 8 | patch, flags (bit 0: LCD filtering compiled
+	// in) and the TrueType interpreter version, 0 if unknown.
+	static	bool				GetRasterizerIdentity(uint32* version,
+									uint32* flags, uint32* ttInterpreter);
+
  private:
 			// disallowed stuff:
 								FontEngine(const FontEngine&);

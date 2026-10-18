@@ -30,6 +30,7 @@
 #include FT_GLYPH_H
 #include FT_OUTLINE_H
 #include FT_LCD_FILTER_H
+#include FT_MODULE_H
 
 #include <stdio.h>
 
@@ -634,6 +635,45 @@ FontEngine::GetKerning(uint32 first, uint32 second, double* x, double* y)
 		return true;
 	}
 	return false;
+}
+
+
+/*static*/ bool
+FontEngine::GetRasterizerIdentity(uint32* version, uint32* flags,
+	uint32* ttInterpreter)
+{
+	// A library of its own, set up exactly as the constructor sets up every
+	// engine's (FT_Init_FreeType and nothing else), so what is read is what
+	// every FontEngine rasterises with -- and so probing the LCD filter below
+	// cannot change any engine's.
+	FT_Library library;
+	if (FT_Init_FreeType(&library) != 0)
+		return false;
+
+	FT_Int major = 0;
+	FT_Int minor = 0;
+	FT_Int patch = 0;
+	FT_Library_Version(library, &major, &minor, &patch);
+	*version = ((uint32)major << 16) | ((uint32)minor << 8) | (uint32)patch;
+
+	// Without FT_CONFIG_OPTION_SUBPIXEL_RENDERING the call is a stub that
+	// returns FT_Err_Unimplemented_Feature, and FT_RENDER_MODE_LCD then
+	// renders greyscale into all three subpixels.
+	*flags = 0;
+	if (FT_Library_SetLcdFilter(library, FT_LCD_FILTER_NONE)
+			!= FT_Err_Unimplemented_Feature) {
+		*flags |= 1;
+	}
+
+	FT_UInt interpreter = 0;
+	if (FT_Property_Get(library, "truetype", "interpreter-version",
+			&interpreter) != 0) {
+		interpreter = 0;
+	}
+	*ttInterpreter = interpreter;
+
+	FT_Done_FreeType(library);
+	return true;
 }
 
 
