@@ -37,22 +37,13 @@ SendSignal(debug_exception_type type, uint32 signalNumber, int32 signalCode,
 	addr_t signalAddress = 0, int32 signalError = B_ERROR)
 {
 	if (SstatusReg{.val = Sstatus()}.spp == modeU) {
-		struct sigaction action;
 		Thread* thread = thread_get_current_thread();
 
 		enable_interrupts();
 
-		// If the thread has a signal handler for the signal, we simply send it
-		// the signal. Otherwise we notify the user debugger first.
-		if ((sigaction(signalNumber, NULL, &action) == 0
-				&& action.sa_handler != SIG_DFL
-				&& action.sa_handler != SIG_IGN)
-			|| user_debug_exception_occurred(type, signalNumber)) {
-			Signal signal(signalNumber, signalCode, signalError,
-				thread->team->id);
-			signal.SetAddress((void*)signalAddress);
-			send_signal_to_thread(thread, signal, 0);
-		}
+		Signal signal(signalNumber, signalCode, signalError, thread->team->id);
+		signal.SetAddress((void*)signalAddress);
+		send_fault_signal(signal, type);
 	} else {
 		panic("Unexpected exception occurred in kernel mode!");
 	}
