@@ -25,8 +25,11 @@ and sighandler needs that g to raise a recoverable panic. Such a fault is a
 SIGSEGV/SIGBUS whose fault address equals the PC, with LR in Go text.
 
 When the signal stack is not a heap span (GODEBUG=efence=1, stackFromSystem)
-there is nowhere to read g0 from, so sigFetchG falls back to the R28 g, the
-pre-patch behaviour, rather than returning nil and exiting via badsignal.
+there is nowhere to read g0 from, so sigFetchG returns nil, as it does for
+the Linux VDSO. It must not fall back to R28: in libroot that is the
+clobbered value this patch exists to avoid. sigtrampgo already drops a
+SIGPROF or SIGURG that arrives with no g, so only a synchronous fault taken
+inside libroot reaches badsignal.
 
 minit writes g0 at gsignal.stack.lo, and sigFetchG finds that same address
 from the handler's SP as the start of the stack span element holding it, so
@@ -38,7 +41,7 @@ Native Go toolchains, and every Go binary built with them, need rebuilding
 for the fix to take effect (the golang hpkg, amazon-ssm-agent).
 
 diff --git a/src/runtime/os2_haiku.go b/src/runtime/os2_haiku.go
-index 05f4b3b..9502aa3 100644
+index 05f4b3b..a617061 100644
 --- a/src/runtime/os2_haiku.go
 +++ b/src/runtime/os2_haiku.go
 @@ -237,11 +237,26 @@ func miniterrno()
@@ -52,7 +55,7 @@ index 05f4b3b..9502aa3 100644
 +	// It finds this address from the handler's SP alone, as the start of
 +	// the stack span element that holds SP, which is stack.lo for any
 +	// heap-allocated stack. (An efence stack has no span; sigFetchG then
-+	// falls back to R28.)
++	// returns nil, which sigtrampgo tolerates for SIGURG and SIGPROF.)
 +	// The word is below every frame the signal handler can use, which is
 +	// also where Linux keeps g across a VDSO call. It is stored as a
 +	// uintptr because there is no P here to run a write barrier; m.g0
@@ -128,10 +131,10 @@ index 0000000..7c8990e
 +//go:nosplit
 +func sigInLibroot(c *sigctxt) bool { return false }
 diff --git a/src/runtime/signal_unix.go b/src/runtime/signal_unix.go
-index f352cb3..f3abdfc 100644
+index f352cb3..f47b728 100644
 --- a/src/runtime/signal_unix.go
 +++ b/src/runtime/signal_unix.go
-@@ -399,18 +399,51 @@ func preemptM(mp *m) {
+@@ -399,19 +399,44 @@ func preemptM(mp *m) {
  func sigFetchG(c *sigctxt) *g {
  	switch GOARCH {
  	case "arm", "arm64", "loong64", "ppc64", "ppc64le", "riscv64", "s390x":
@@ -157,7 +160,6 @@ index f352cb3..f3abdfc 100644
  			s := spanOf(sp)
  			if s != nil && s.state.get() == mSpanManual && s.base() < sp && sp < s.limit {
 -				gp := *(**g)(unsafe.Pointer(s.base()))
--				return gp
 +				// The word lives at gsignal.stack.lo. That is s.base() only
 +				// while the signal stack has the span to itself; a stack
 +				// carved from a stackpool span shares it with others of
@@ -168,21 +170,14 @@ index f352cb3..f3abdfc 100644
 +					lo += (sp - lo) / s.elemsize * s.elemsize
 +				}
 +				gp := *(**g)(unsafe.Pointer(lo))
-+				if gp != nil || GOOS != "haiku" {
-+					return gp
-+				}
-+				// minit stores the word before sigaltstack installs this
-+				// stack, so nil means the layout assumption failed. Fall
-+				// back to R28, as below.
-+				return getg()
-+			}
-+			if GOOS == "haiku" {
-+				// No heap span to read g0 from: with GODEBUG=efence=1 or
-+				// stackFromSystem the signal stack is sysAlloc'd. Returning
-+				// nil would send every SIGURG/SIGPROF that lands in libroot
-+				// to badsignal, which exits without cgo. Fall back to what
-+				// sigtramp loaded from R28, as before libroot was special.
-+				return getg()
+ 				return gp
  			}
++			// No heap span to read g0 from (GODEBUG=efence=1 or
++			// stackFromSystem sysAllocs the signal stack). Return nil
++			// rather than the R28 g: on haiku/arm64 that value is exactly
++			// what libroot may have clobbered (issue 843). sigtrampgo
++			// already drops a SIGPROF or SIGURG that arrives with no g,
++			// so only a synchronous fault in libroot reaches badsignal.
  			return nil
  		}
+ 	}

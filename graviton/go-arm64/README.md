@@ -297,7 +297,12 @@ against the spinning threads. Every one was at `runtime.sigtrampgo`
 **Fix** ([`patches/0005-haiku-arm64-signal-g-in-libroot.patch`](patches/0005-haiku-arm64-signal-g-in-libroot.patch)).
 This uses the same mechanism Linux uses for a signal that lands inside the VDSO.
 `minit` stores the M's `g0` at the bottom of its signal stack, and `sigFetchG`
-returns it whenever the interrupted PC is outside Go text. libroot only ever runs
+returns it whenever the signal interrupted libroot: the PC is outside Go text and
+the signal is not an instruction-fetch fault Go itself caused (a call through a
+nil funcval keeps R28's `g`, so it still panics recoverably). With no heap span
+under the signal stack (`GODEBUG=efence=1`), `sigFetchG` returns nil rather than
+the possibly clobbered R28, and `sigtrampgo` drops a SIGURG/SIGPROF that arrives
+with no `g`. libroot only ever runs
 on `g0` (asmcgocall switches to it), or from the signal handler with every signal
 blocked, so `g0` is the right `g` there. The hot path is unchanged: there is no
 `save_g` on every `g` switch, which a TLS copy of `g` would need.
