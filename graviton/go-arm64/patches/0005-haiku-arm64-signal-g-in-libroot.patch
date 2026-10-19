@@ -28,14 +28,20 @@ When the signal stack is not a heap span (GODEBUG=efence=1, stackFromSystem)
 there is nowhere to read g0 from, so sigFetchG falls back to the R28 g, the
 pre-patch behaviour, rather than returning nil and exiting via badsignal.
 
+minit writes g0 at gsignal.stack.lo, and sigFetchG finds that same address
+from the handler's SP as the start of the stack span element holding it, so
+writer and reader agree whether the signal stack has a span to itself or was
+carved from a stackpool span. The Linux VDSO read uses the same lookup; for
+its dedicated 32 KiB gsignal span the result is unchanged.
+
 Native Go toolchains, and every Go binary built with them, need rebuilding
 for the fix to take effect (the golang hpkg, amazon-ssm-agent).
 
 diff --git a/src/runtime/os2_haiku.go b/src/runtime/os2_haiku.go
-index 05f4b3b..8fca863 100644
+index 05f4b3b..9502aa3 100644
 --- a/src/runtime/os2_haiku.go
 +++ b/src/runtime/os2_haiku.go
-@@ -237,11 +237,22 @@ func miniterrno()
+@@ -237,11 +237,26 @@ func miniterrno()
  // Called to initialize a new m (including the bootstrap m).
  // Called on the new thread, cannot allocate memory.
  func minit() {
@@ -43,6 +49,10 @@ index 05f4b3b..8fca863 100644
 +	// signal is unblocked. A signal that lands while libroot code is
 +	// running cannot trust R28 to hold g (see sigFetchG), and every
 +	// libroot call runs on g0, so sigFetchG reads the g0 back from here.
++	// It finds this address from the handler's SP alone, as the start of
++	// the stack span element that holds SP, which is stack.lo for any
++	// heap-allocated stack. (An efence stack has no span; sigFetchG then
++	// falls back to R28.)
 +	// The word is below every frame the signal handler can use, which is
 +	// also where Linux keeps g across a VDSO call. It is stored as a
 +	// uintptr because there is no P here to run a write barrier; m.g0
@@ -118,10 +128,10 @@ index 0000000..7c8990e
 +//go:nosplit
 +func sigInLibroot(c *sigctxt) bool { return false }
 diff --git a/src/runtime/signal_unix.go b/src/runtime/signal_unix.go
-index f352cb3..e5ed8de 100644
+index f352cb3..f3abdfc 100644
 --- a/src/runtime/signal_unix.go
 +++ b/src/runtime/signal_unix.go
-@@ -399,19 +399,37 @@ func preemptM(mp *m) {
+@@ -399,18 +399,51 @@ func preemptM(mp *m) {
  func sigFetchG(c *sigctxt) *g {
  	switch GOARCH {
  	case "arm", "arm64", "loong64", "ppc64", "ppc64le", "riscv64", "s390x":
@@ -146,9 +156,26 @@ index f352cb3..e5ed8de 100644
  			sp := sys.GetCallerSP()
  			s := spanOf(sp)
  			if s != nil && s.state.get() == mSpanManual && s.base() < sp && sp < s.limit {
- 				gp := *(**g)(unsafe.Pointer(s.base()))
- 				return gp
- 			}
+-				gp := *(**g)(unsafe.Pointer(s.base()))
+-				return gp
++				// The word lives at gsignal.stack.lo. That is s.base() only
++				// while the signal stack has the span to itself; a stack
++				// carved from a stackpool span shares it with others of
++				// the same size, so step to the start of the element that
++				// holds sp.
++				lo := s.base()
++				if s.elemsize != 0 {
++					lo += (sp - lo) / s.elemsize * s.elemsize
++				}
++				gp := *(**g)(unsafe.Pointer(lo))
++				if gp != nil || GOOS != "haiku" {
++					return gp
++				}
++				// minit stores the word before sigaltstack installs this
++				// stack, so nil means the layout assumption failed. Fall
++				// back to R28, as below.
++				return getg()
++			}
 +			if GOOS == "haiku" {
 +				// No heap span to read g0 from: with GODEBUG=efence=1 or
 +				// stackFromSystem the signal stack is sysAlloc'd. Returning
@@ -156,7 +183,6 @@ index f352cb3..e5ed8de 100644
 +				// to badsignal, which exits without cgo. Fall back to what
 +				// sigtramp loaded from R28, as before libroot was special.
 +				return getg()
-+			}
+ 			}
  			return nil
  		}
- 	}
