@@ -263,3 +263,51 @@ CGO stays off (`CGO_ENABLED=0`, the distribution default); native cgo is a
 follow-up and is not needed for pure-Go builds. The hpkg is harvested to
 **STAGING only** (`s3://…/staging/go-arm64/`), not the green pool; baking is a
 separate gated step.
+
+## Fix: signals that land in libroot no longer livelock (issue 843)
+
+**Symptom.** A native `go build` of a large module (kubectl, or just
+`go build -a std cmd`) stopped making progress: one `compile`/`asm`/`go` thread
+pinned a core at ~30% user / ~70% kernel, made no syscalls, ignored `SIGQUIT`, and
+the rest of the process waited behind it. `GODEBUG=asyncpreemptoff=1` hid it.
+
+**Root cause** (Go runtime, not the kernel). haiku/arm64 keeps `g` only in R28;
+with `CGO_ENABLED=0`, `runtime·load_g` does nothing, so `sigtramp` passes
+`sigtrampgo` whatever R28 held when the signal arrived. Go code never uses R28
+for anything else. libroot is C, though, and to C x28 is just a callee-saved
+register: `realloc`/`omalloc`/`__allocate_pages` use it as a local while they run.
+When a SIGURG async-preemption signal arrives during the malloc that
+`pthread_create` or `semacreate` does, `sigtrampgo` sees `g = 0x1` (or `0xffff`) and
+faults reading `g.m`. Go installs its handlers with `sa_mask` = all signals, so
+that SIGSEGV is blocked, and the kernel just resumes the faulting load, over and
+over. With async preemption on, signals arrive often enough that this happens
+within seconds of a parallel build.
+
+Caught on hardware with a team-debugger probe ([`tests/m9/tprobe.c`](tests/m9/tprobe.c))
+against the spinning threads. Every one was at `runtime.sigtrampgo`
+(`signal_unix.go:439`, `MOVD 48(R0), R2` with `R0 = 0x1`), handling signal 26
+(SIGURG), and its saved context had been interrupted inside libroot
+(`_kern_resize_area` under `__allocate_pages`, `_kern_mutex_lock` under
+`__mutex_lock`, or `realloc`), with interrupted `x28` = `0x1`, `0x2` or `0xffff`.
+
+**Fix** ([`patches/0005-haiku-arm64-signal-g-in-libroot.patch`](patches/0005-haiku-arm64-signal-g-in-libroot.patch)).
+This uses the same mechanism Linux uses for a signal that lands inside the VDSO.
+`minit` stores the M's `g0` at the bottom of its signal stack, and `sigFetchG`
+returns it whenever the interrupted PC is outside Go text. libroot only ever runs
+on `g0` (asmcgocall switches to it), or from the signal handler with every signal
+blocked, so `g0` is the right `g` there. The hot path is unchanged: there is no
+`save_g` on every `g` switch, which a TLS copy of `g` would need.
+
+**Hardware A/B.** One c8g.2xlarge on the canonical AMI (hrev59996, Oct 19 kernel).
+A and B were cross-built from the same tree, with and without 0005, and runs
+alternated A, B, A, B:
+
+| Workload | A (0001–0004) | B (0001–0005) |
+|---|---|---|
+| cold `go build -a std cmd` (stall = no GOCACHE growth for 120 s) | **3/3 stalled** (at 190 s, 140 s, 141 s) | **3/3 OK**, 70 s / 71 s / 70 s |
+| [`tests/m9/preemptlibroot.go`](tests/m9/preemptlibroot.go) | **8/9 stalled** | **9/9 PASS** |
+
+**Rebuild required.** The fix lives in the runtime, so it is in a binary only if
+that binary was built with a patched toolchain. That means the `golang` hpkg (now
+revision 2, see [`package/`](package/)), and then every Go binary built with the
+old one, including amazon-ssm-agent.

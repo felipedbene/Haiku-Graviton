@@ -5,7 +5,7 @@
 set -e
 HERE="$(cd "$(dirname "$0")" && pwd)"
 VER=$(sed -n '1s/^go//p' "$HERE/root/develop/lib/go/VERSION")
-HPKG="$HERE/golang-${VER}-1-arm64.hpkg"
+HPKG="$HERE/golang-${VER}-2-arm64.hpkg"
 
 echo "############## INSTALL ##############"
 INSTALLED=no

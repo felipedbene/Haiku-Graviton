@@ -3,7 +3,7 @@
 # self-contained GOROOT) into a packagefs layout, on a Linux cross-host.
 #
 # Prereq: a korli/go fork checkout with the DeBeOS haiku/arm64 patchset applied
-# (patches/0001..0004) whose host `bin/go` (linux/amd64) has already
+# (patches/0001..0005) whose host `bin/go` (linux/amd64) has already
 # cross-installed the target toolchain:
 #
 #     GOOS=haiku GOARCH=arm64 CGO_ENABLED=0 GOTOOLCHAIN=local \
