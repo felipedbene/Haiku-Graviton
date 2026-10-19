@@ -61,12 +61,16 @@
 	(SIGNAL_TO_MASK(SIGCHLD) | SIGNAL_TO_MASK(SIGWINCH) \
 	| SIGNAL_TO_MASK(SIGCONT) \
 	| SIGNAL_RANGE_TO_MASK(SIGNAL_REALTIME_MIN, SIGNAL_REALTIME_MAX))
+// The fault signals cannot be deferred: deferring one returns to the faulting
+// instruction, which faults again before userland can undefer.
 #define NON_DEFERRABLE_SIGNALS	\
 	(KILL_SIGNALS				\
 	| SIGNAL_TO_MASK(SIGNAL_DEBUG_THREAD) \
 	| SIGNAL_TO_MASK(SIGILL)	\
 	| SIGNAL_TO_MASK(SIGFPE)	\
-	| SIGNAL_TO_MASK(SIGSEGV))
+	| SIGNAL_TO_MASK(SIGSEGV)	\
+	| SIGNAL_TO_MASK(SIGBUS)	\
+	| SIGNAL_TO_MASK(SIGTRAP))
 
 
 static const struct {
@@ -1598,6 +1602,57 @@ send_signal_to_thread(Thread* thread, const Signal& signal, uint32 flags)
 		scheduler_reschedule_if_necessary();
 
 	return B_OK;
+}
+
+
+/*!	Sends the current thread a signal raised by a synchronous fault in
+	userland (a data or instruction abort, an undefined instruction, a
+	breakpoint, an FP trap, ...).
+
+	A fault signal cannot wait the way an asynchronous one can: returning to
+	userland with it still pending just retries the faulting instruction,
+	which faults again, so the thread spins forever and only SIGKILL gets rid
+	of it. That happens whenever the signal is blocked -- most often because
+	the fault is inside a handler that runs with a full \c sa_mask -- or
+	ignored. Like Linux (force_sig_fault()) and FreeBSD (trapsignal()), the
+	signal is then unblocked and its action reset to \c SIG_DFL, so the team
+	dies with the signal instead.
+
+	If the thread has a handler for the signal, the signal is sent directly.
+	Otherwise the user debugger is notified about the exception first, and
+	the signal is sent unless the debugger decides to ignore the event.
+
+	Interrupts must be enabled and the caller must not hold any locks.
+
+	\param signal The signal to deliver. Its number must be a blockable one.
+	\param exception The exception type to report to the user debugger.
+*/
+void
+send_fault_signal(const Signal& signal, debug_exception_type exception)
+{
+	Thread* thread = thread_get_current_thread();
+	Team* team = thread->team;
+	int number = signal.Number();
+	sigset_t mask = SIGNAL_TO_MASK(number);
+
+	bool hasHandler;
+	{
+		TeamLocker teamLocker(team);
+		struct sigaction& action = team->SignalActionFor(number);
+
+		InterruptsSpinLocker locker(team->signal_lock);
+		if ((thread->sig_block_mask & mask) != 0
+			|| action.sa_handler == SIG_IGN) {
+			action.sa_handler = SIG_DFL;
+			thread->sig_block_mask &= ~mask;
+			update_thread_signals_flag(thread);
+		}
+
+		hasHandler = action.sa_handler != SIG_DFL;
+	}
+
+	if (hasHandler || user_debug_exception_occurred(exception, number))
+		send_signal_to_thread(thread, signal, 0);
 }
 
 

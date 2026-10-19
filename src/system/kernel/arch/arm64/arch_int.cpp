@@ -460,20 +460,13 @@ do_sync_handler(iframe * frame)
 	}
 
 	if (isUser) {
-		struct sigaction action;
 		Thread* thread = thread_get_current_thread();
 
 		enable_interrupts();
 
-		if ((sigaction(signalNumber, NULL, &action) == 0
-				&& action.sa_handler != SIG_DFL
-				&& action.sa_handler != SIG_IGN)
-			|| user_debug_exception_occurred(exceptionType, signalNumber)) {
-			Signal signal(signalNumber, signalCode, B_ERROR,
-				thread->team->id);
-			signal.SetAddress((void*)signalAddress);
-			send_signal_to_thread(thread, signal, 0);
-		}
+		Signal signal(signalNumber, signalCode, B_ERROR, thread->team->id);
+		signal.SetAddress((void*)signalAddress);
+		send_fault_signal(signal, exceptionType);
 	} else {
 		panic("unhandled exception! FAR=%lx ELR=%lx ESR=%lx (EC=%lx)",
 			frame->far, frame->elr, frame->esr, (frame->esr >> 26) & 0x3f);
