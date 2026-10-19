@@ -40,7 +40,7 @@ and OpenSSH packages here.
 ## Build it
 
 1. **Cross-build the native toolchain** on a Linux host, from a korli/go
-   checkout with the DeBeOS patchset (`../patches/0001..0004`) applied and a
+   checkout with the DeBeOS patchset (`../patches/0001..0005`) applied and a
    working host `bin/go`:
 
    ```sh
@@ -50,14 +50,15 @@ and OpenSSH packages here.
 
    This regenerates `bin/haiku_arm64/{go,gofmt}` and `pkg/tool/haiku_arm64/*`.
    Rebuild after any fork patch — the M6 fork+exec fix (0004) **must** be in the
-   native `go`, since `go build` spawns compile/link through it.
+   native `go`, since `go build` spawns compile/link through it, and the signal
+   fix (0005) must be in every tool, or `go build` livelocks (issue 843).
 
 2. **Stage the GOROOT** (Linux): `SRC=/path/to/korli-go sh stage-goroot.sh`
    → a packagefs layout in `$ROOT` (default `/tmp/go-pkg-378/root`).
 
 3. **Create the hpkg** on a Haiku box (the `package` tool is Haiku-only): copy
    `$ROOT` + this dir's scripts over and `sh build-hpkg-golang.sh`
-   → `golang-<ver>-1-arm64.hpkg` (zlib). `verify-native.sh` installs it and
+   → `golang-<ver>-2-arm64.hpkg` (zlib). `verify-native.sh` installs it and
    runs the acceptance builds.
 
 No archiver/gzip ships on the lean image; `pkgman install -y tar gzip` first if

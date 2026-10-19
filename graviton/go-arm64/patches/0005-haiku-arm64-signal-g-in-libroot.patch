@@ -1,0 +1,77 @@
+haiku/arm64: find g safely when a signal lands in libroot (issue 843)
+
+haiku/arm64 keeps g only in R28 -- with CGO_ENABLED=0 runtime·load_g is a
+no-op, so sigtramp hands sigtrampgo whatever R28 held when the signal
+arrived. Go code never uses R28 for anything else, but libroot is C code and
+x19-x28 are ordinary callee-saved registers to it: realloc/omalloc and
+__allocate_pages use x28 as a local while they run. A SIGURG async
+preemption that lands in there (in practice: during the malloc that
+pthread_create and semacreate do, or a _kern_mutex_lock under it) gives
+sigtrampgo g = 0x1 or 0xffff. Dereferencing g.m faults inside the handler,
+where Go's sa_mask blocks SIGSEGV, so the faulting load is retried forever:
+a thread pinned at ~30% user / ~70% kernel, no syscalls, SIGQUIT never
+handled, and the rest of the process wedged behind it (STW, malloc lock).
+
+Fix it the way Linux handles a signal inside the VDSO: minit stores the M's
+g0 at the bottom of its gsignal stack, and sigFetchG returns that whenever
+the interrupted PC is outside Go text. libroot only ever runs on g0 (or on
+gsignal with signals blocked), so g0 is the correct g there.
+
+Native Go toolchains, and every Go binary built with them, need rebuilding
+for the fix to take effect (the golang hpkg, amazon-ssm-agent).
+
+diff --git a/src/runtime/os2_haiku.go b/src/runtime/os2_haiku.go
+index 05f4b3b..8fca863 100644
+--- a/src/runtime/os2_haiku.go
++++ b/src/runtime/os2_haiku.go
+@@ -237,11 +237,22 @@ func miniterrno()
+ // Called to initialize a new m (including the bootstrap m).
+ // Called on the new thread, cannot allocate memory.
+ func minit() {
++	// Record this M's g0 at the bottom of its signal stack before any
++	// signal is unblocked. A signal that lands while libroot code is
++	// running cannot trust R28 to hold g (see sigFetchG), and every
++	// libroot call runs on g0, so sigFetchG reads the g0 back from here.
++	// The word is below every frame the signal handler can use, which is
++	// also where Linux keeps g across a VDSO call. It is stored as a
++	// uintptr because there is no P here to run a write barrier; m.g0
++	// keeps the g reachable.
++	mp := getg().m
++	*(*uintptr)(unsafe.Pointer(mp.gsignal.stack.lo)) = uintptr(unsafe.Pointer(mp.g0))
++
+ 	asmcgocall(unsafe.Pointer(abi.FuncPCABI0(miniterrno)), unsafe.Pointer(&libc__errnop))
+ 
+ 	minitSignals()
+ 
+-	getg().m.procid = uint64(pthread_self())
++	mp.procid = uint64(pthread_self())
+ }
+ 
+ // Called from dropm to undo the effect of an minit.
+diff --git a/src/runtime/signal_unix.go b/src/runtime/signal_unix.go
+index f352cb3..20dba84 100644
+--- a/src/runtime/signal_unix.go
++++ b/src/runtime/signal_unix.go
+@@ -415,6 +415,22 @@ func sigFetchG(c *sigctxt) *g {
+ 			return nil
+ 		}
+ 	}
++	if GOOS == "haiku" && GOARCH == "arm64" && !iscgo && findmoduledatap(c.sigpc()) == nil {
++		// The signal interrupted libroot rather than Go code. haiku/arm64
++		// keeps g only in R28 (there is no TLS copy without cgo), and R28
++		// is an ordinary callee-saved register to the C code in libroot:
++		// malloc, for one, uses it as a scratch register while it runs.
++		// libroot is only ever called on g0 (asmcgocall switches to it),
++		// or from the signal handler itself with every signal blocked, so
++		// take the g0 that minit stored at the bottom of this M's signal
++		// stack, the way the Linux VDSO case above does.
++		sp := sys.GetCallerSP()
++		s := spanOf(sp)
++		if s != nil && s.state.get() == mSpanManual && s.base() < sp && sp < s.limit {
++			return *(**g)(unsafe.Pointer(s.base()))
++		}
++		return nil
++	}
+ 	return getg()
+ }
+ 
