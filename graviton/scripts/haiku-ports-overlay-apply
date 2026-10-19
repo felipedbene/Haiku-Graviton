@@ -102,7 +102,10 @@ STAGE1_PORTS="autoconf cmake zstd"
 #                       (issue 337 / PR #383). Upstream media-libs/ carries dav1d and
 #                       svt-av1 but no aom port of any version, so no sibling search
 #                       can find it a home; it was unplaced from the day it landed.
-NEW_PORT_DIRS="simde:dev-libs aom:media-libs"
+#   kubectl sys-cluster -- the Kubernetes CLI, a pure-Go build on the haiku/arm64
+#                       toolchain. Upstream HaikuPorts carries no Kubernetes tooling;
+#                       sys-cluster is where it keeps cluster software (openmpi).
+NEW_PORT_DIRS="simde:dev-libs aom:media-libs kubectl:sys-cluster"
 
 WITH_STAGE1=0
 if [ "${1:-}" = "--stage1" ]; then
