@@ -1870,10 +1870,10 @@ index c85cdcd..b4d8a64 100644
 +}
 diff --git a/vendor/github.com/creack/pty/ioctl_haiku.go b/vendor/github.com/creack/pty/ioctl_haiku.go
 new file mode 100644
-index 0000000..7980043
+index 0000000..5077bd0
 --- /dev/null
 +++ b/vendor/github.com/creack/pty/ioctl_haiku.go
-@@ -0,0 +1,89 @@
+@@ -0,0 +1,104 @@
 +//go:build haiku
 +// +build haiku
 +
@@ -1959,9 +1959,24 @@ index 0000000..7980043
 +	return nil
 +}
 +
-+// ioctlFile is ioctl on f's descriptor.
++// ioctlFile is ioctl on f's descriptor. It reaches the descriptor through
++// SyscallConn().Control, never f.Fd(): Fd() switches the file to blocking
++// mode for good, after which Close() can no longer wake a goroutine blocked
++// in Read on the pty side. A session that ends while its shell is idle would
++// then leak that goroutine and its thread, or hang teardown. Upstream
++// creack/pty moved to SyscallConn for the same reason.
 +func ioctlFile(f *os.File, cmd uintptr, arg unsafe.Pointer, size uintptr) error {
-+	return ioctl(f.Fd(), cmd, arg, size)
++	sc, err := f.SyscallConn()
++	if err != nil {
++		return err
++	}
++	var ierr error
++	if err := sc.Control(func(fd uintptr) {
++		ierr = ioctl(fd, cmd, arg, size)
++	}); err != nil {
++		return err
++	}
++	return ierr
 +}
 diff --git a/vendor/github.com/creack/pty/pty_haiku.go b/vendor/github.com/creack/pty/pty_haiku.go
 new file mode 100644
