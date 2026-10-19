@@ -14,8 +14,15 @@ handled, and the rest of the process wedged behind it (STW, malloc lock).
 
 Fix it the way Linux handles a signal inside the VDSO: minit stores the M's
 g0 at the bottom of its gsignal stack, and sigFetchG returns that whenever
-the interrupted PC is outside Go text. libroot only ever runs on g0 (or on
-gsignal with signals blocked), so g0 is the correct g there.
+the signal interrupted libroot. libroot only ever runs on g0 (or on gsignal
+with signals blocked), so g0 is the correct g there.
+
+"Interrupted libroot" is decided by sigInLibroot: the PC is outside Go text,
+and the signal is not an instruction-fetch fault that Go itself caused. A
+call through a zeroed funcval jumps to PC 0 (or a corrupt one to any
+unmapped address); no instruction there ran, R28 still holds the caller's g,
+and sighandler needs that g to raise a recoverable panic. Such a fault is a
+SIGSEGV/SIGBUS whose fault address equals the PC, with LR in Go text.
 
 Native Go toolchains, and every Go binary built with them, need rebuilding
 for the fix to take effect (the golang hpkg, amazon-ssm-agent).
@@ -48,8 +55,66 @@ index 05f4b3b..8fca863 100644
  }
  
  // Called from dropm to undo the effect of an minit.
+diff --git a/src/runtime/signal_haiku_arm64.go b/src/runtime/signal_haiku_arm64.go
+index 709ef87..36c0507 100644
+--- a/src/runtime/signal_haiku_arm64.go
++++ b/src/runtime/signal_haiku_arm64.go
+@@ -71,3 +71,33 @@ func (c *sigctxt) set_r28(x uint64) { c.regs().x[28] = x }
+ 
+ func (c *sigctxt) set_sigcode(x uint64) { c.info.si_code = int32(x) }
+ func (c *sigctxt) set_sigaddr(x uint64) { c.info.si_addr = uintptr(x) }
++
++// sigInLibroot reports whether the signal described by c interrupted C code
++// in libroot (or another loaded image) rather than Go, so that R28 cannot be
++// trusted to hold g and sigFetchG must use the g0 that minit stored instead.
++//
++// A PC outside Go text is not enough on its own: Go code that calls through a
++// zeroed funcval jumps to PC 0, and a corrupt function value can land on any
++// unmapped address. That faults on the instruction fetch, so no instruction
++// at the PC ever ran and R28 still holds the caller's g; sighandler has to
++// see that g to turn the fault into a recoverable panic rather than a fatal
++// "unexpected signal during runtime execution". Such a fault is a SIGSEGV
++// or SIGBUS whose fault address is the PC itself (Haiku reports FAR, which
++// equals ELR for an instruction abort, and ELR for a misaligned PC), and the
++// branch that got there left LR pointing into Go text. Both together mean
++// "Go jumped somewhere bad" and keep R28. A fetch fault reached from C code
++// leaves LR in C, and an asynchronous signal (SIGURG, SIGPROF) never has a
++// fault address equal to an executing PC, so neither is excluded.
++//
++//go:nosplit
++func sigInLibroot(c *sigctxt) bool {
++	pc := c.sigpc()
++	if findmoduledatap(pc) != nil {
++		return false
++	}
++	if sig := uint32(c.info.si_signo); (sig == _SIGSEGV || sig == _SIGBUS) &&
++		c.fault() == pc && findmoduledatap(c.siglr()) != nil {
++		return false
++	}
++	return true
++}
+diff --git a/src/runtime/signal_libroot_none.go b/src/runtime/signal_libroot_none.go
+new file mode 100644
+index 0000000..7c8990e
+--- /dev/null
++++ b/src/runtime/signal_libroot_none.go
+@@ -0,0 +1,14 @@
++// Copyright 2026 The Go Authors. All rights reserved.
++// Use of this source code is governed by a BSD-style
++// license that can be found in the LICENSE file.
++
++//go:build unix && !(haiku && arm64)
++
++package runtime
++
++// sigInLibroot is only meaningful on haiku/arm64, where g lives solely in
++// R28 and C code in libroot may hold something else there. See
++// signal_haiku_arm64.go.
++//
++//go:nosplit
++func sigInLibroot(c *sigctxt) bool { return false }
 diff --git a/src/runtime/signal_unix.go b/src/runtime/signal_unix.go
-index f352cb3..cb1b955 100644
+index f352cb3..0b344f1 100644
 --- a/src/runtime/signal_unix.go
 +++ b/src/runtime/signal_unix.go
 @@ -399,13 +399,23 @@ func preemptM(mp *m) {
@@ -57,8 +122,7 @@ index f352cb3..cb1b955 100644
  	switch GOARCH {
  	case "arm", "arm64", "loong64", "ppc64", "ppc64le", "riscv64", "s390x":
 -		if !iscgo && inVDSOPage(c.sigpc()) {
-+		if !iscgo && (inVDSOPage(c.sigpc()) ||
-+			GOOS == "haiku" && GOARCH == "arm64" && findmoduledatap(c.sigpc()) == nil) {
++		if !iscgo && (inVDSOPage(c.sigpc()) || sigInLibroot(c)) {
  			// When using cgo, we save the g on TLS and load it from there
  			// in sigtramp. Just use that.
  			// Otherwise, before making a VDSO call we save the g to the
@@ -73,7 +137,8 @@ index f352cb3..cb1b955 100644
 +			// runs. libroot is only ever called on g0 (asmcgocall switches
 +			// to it), or from the signal handler itself with every signal
 +			// blocked, so minit stores the M's g0 at the bottom of the
-+			// signal stack and a signal outside Go text fetches it here.
++			// signal stack and a signal that interrupted libroot fetches
++			// it here (see sigInLibroot for what counts as that).
  			sp := sys.GetCallerSP()
  			s := spanOf(sp)
  			if s != nil && s.state.get() == mSpanManual && s.base() < sp && sp < s.limit {
