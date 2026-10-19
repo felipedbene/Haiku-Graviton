@@ -11,6 +11,7 @@
 #include <signal.h>
 
 #include <KernelExport.h>
+#include <debugger.h>
 
 #include <signal_defs.h>
 
@@ -216,6 +217,7 @@ status_t send_signal_to_thread(Thread* thread, const Signal& signal,
 	uint32 flags);
 status_t send_signal_to_thread_id(thread_id threadID, const Signal& signal,
 	uint32 flags);
+void send_fault_signal(const Signal& signal, debug_exception_type exception);
 
 status_t send_signal_to_team_locked(Team* team, uint32 signalNumber,
 	Signal* signal, uint32 flags);
