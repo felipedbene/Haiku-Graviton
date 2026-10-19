@@ -13,16 +13,34 @@
 // a Go duration ("30s", "2m"), at least one second; the default is 60 s. A
 // malformed or non-positive duration exits 2 rather than running nothing
 // and printing PASS. Prints PASS once the duration has elapsed.
+//
+// The livelock this hunts wedges stop-the-world and libroot's malloc lock,
+// so the in-process stall check below may never get scheduled to report
+// it. A watchdog therefore runs as a separate process (this binary,
+// re-executed with preemptlibrootWatchdogEnv set) whose runtime is not under
+// the stress load. The test writes it a heartbeat byte every second; after
+// watchdogLimit without one, the watchdog prints FAIL and SIGKILLs the test
+// (a shell reports 137). Any exit without a PASS line is a failure.
 package main
 
 import (
 	"fmt"
+	"io"
 	"os"
+	"os/exec"
 	"runtime"
 	"strconv"
 	"sync"
 	"sync/atomic"
+	"syscall"
 	"time"
+)
+
+const (
+	preemptlibrootWatchdogEnv = "PREEMPTLIBROOT_WATCHDOG"
+	// Well past the five-second in-process stall window, so a runtime
+	// that can still schedule main reports its own stall first.
+	watchdogLimit = 20 * time.Second
 )
 
 var spins, threads atomic.Uint64
@@ -61,7 +79,76 @@ func usage(msg string) {
 	os.Exit(2)
 }
 
+// startWatchdog re-executes this binary as the watchdog and returns the
+// write end of its heartbeat pipe.
+func startWatchdog() (*os.File, error) {
+	exe, err := os.Executable()
+	if err != nil {
+		return nil, err
+	}
+	r, w, err := os.Pipe()
+	if err != nil {
+		return nil, err
+	}
+	cmd := exec.Command(exe)
+	cmd.Env = append(os.Environ(), preemptlibrootWatchdogEnv+"=1")
+	cmd.Stdin, cmd.Stdout, cmd.Stderr = r, os.Stdout, os.Stderr
+	if err := cmd.Start(); err != nil {
+		r.Close()
+		w.Close()
+		return nil, err
+	}
+	r.Close()
+	// Reap the watchdog if it exits first, so it does not linger as a
+	// zombie; the FAIL it prints goes straight to the shared stdout.
+	go cmd.Wait()
+	return w, nil
+}
+
+// watchdog runs in the child. EOF on stdin means the test exited on its
+// own (PASS or FAIL), so the watchdog exits quietly.
+func watchdog() {
+	parent := os.Getppid()
+	var last atomic.Int64
+	last.Store(time.Now().UnixNano())
+	done := make(chan struct{})
+	go func() {
+		buf := make([]byte, 64)
+		for {
+			if _, err := os.Stdin.Read(buf); err != nil {
+				if err != io.EOF {
+					fmt.Fprintf(os.Stderr, "watchdog: read: %v\n", err)
+				}
+				close(done)
+				return
+			}
+			last.Store(time.Now().UnixNano())
+		}
+	}()
+	tick := time.NewTicker(time.Second)
+	defer tick.Stop()
+	for {
+		select {
+		case <-done:
+			os.Exit(0)
+		case <-tick.C:
+		}
+		quiet := time.Since(time.Unix(0, last.Load()))
+		if quiet < watchdogLimit {
+			continue
+		}
+		fmt.Printf("FAIL: watchdog: no heartbeat from pid %d for %v, runtime wedged; killing it\n",
+			parent, quiet.Round(time.Second))
+		syscall.Kill(parent, syscall.SIGKILL)
+		os.Exit(1)
+	}
+}
+
 func main() {
+	if os.Getenv(preemptlibrootWatchdogEnv) != "" {
+		watchdog()
+		return
+	}
 	dur := 60
 	if len(os.Args) > 2 {
 		usage("too many arguments")
@@ -72,6 +159,18 @@ func main() {
 			usage(err.Error())
 		}
 	}
+	heartbeat, err := startWatchdog()
+	if err != nil {
+		fmt.Printf("FAIL: cannot start watchdog: %v\n", err)
+		os.Exit(1)
+	}
+	beat := func() {
+		if _, err := heartbeat.Write([]byte{0}); err != nil {
+			fmt.Printf("FAIL: watchdog gone: %v\n", err)
+			os.Exit(1)
+		}
+	}
+	beat()
 	for i := 0; i < 4; i++ {
 		go func() {
 			for {
@@ -109,6 +208,7 @@ func main() {
 	stuck := 0
 	for sec := 1; sec <= dur; sec++ {
 		time.Sleep(time.Second)
+		beat()
 		s, t := spins.Load(), threads.Load()
 		// A stall is five consecutive seconds without progress. Scattered
 		// slow seconds on a small, busy instance are not a livelock, so
