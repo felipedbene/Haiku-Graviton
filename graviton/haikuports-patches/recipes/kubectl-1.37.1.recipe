@@ -1,0 +1,86 @@
+SUMMARY="Command-line client for Kubernetes clusters"
+DESCRIPTION="kubectl controls the Kubernetes cluster manager. It talks to the \
+API server of a cluster to deploy applications, inspect and manage cluster \
+resources, and view logs.
+
+DeBeOS build: compiled natively with the haiku/arm64 Go toolchain, from the \
+upstream kubernetes/kubernetes release tree and its own vendored modules."
+HOMEPAGE="https://kubernetes.io/docs/reference/kubectl/"
+COPYRIGHT="2014-2026 The Kubernetes Authors"
+LICENSE="Apache v2"
+REVISION="1"
+# kubectl is developed in kubernetes/kubernetes (staging/src/k8s.io/kubectl);
+# github.com/kubernetes/kubectl is a read-only publish mirror of that staging
+# dir and carries no vendor/ tree. The main repo's vendor/ makes the build
+# hermetic: no module proxy, no network inside the build chroot.
+SOURCE_URI="https://github.com/kubernetes/kubernetes/archive/refs/tags/v$portVersion.tar.gz"
+CHECKSUM_SHA256="89295ac375eb0fdfe68a0696d81be615771d6b27c7ad9bb675dc6ffd0d2ce5f3"
+SOURCE_FILENAME="kubernetes-$portVersion.tar.gz"
+SOURCE_DIR="kubernetes-$portVersion"
+PATCHES="kubectl-$portVersion.patchset"
+
+ARCHITECTURES="?x86_64 arm64"
+
+PROVIDES="
+	kubectl = $portVersion
+	cmd:kubectl = $portVersion
+	"
+REQUIRES="
+	haiku
+	"
+
+BUILD_REQUIRES="
+	haiku_devel
+	"
+BUILD_PREREQUIRES="
+	cmd:go >= 1.26
+	"
+
+# The commit the v$portVersion tag points at; `kubectl version` reports it.
+gitCommit="f78e722310e50bcaca9276be22276d9e91d91308"
+buildDate="2026-09-23T19:13:17Z"
+
+BUILD()
+{
+	export GOPATH=$(pwd)/../gopath
+	export GOCACHE=$(pwd)/../gocache
+	export GOTOOLCHAIN=local
+	export GOPROXY=off
+	export GOFLAGS=-mod=vendor
+	export CGO_ENABLED=0
+	# Issue 843: with async preemption on, the native compile livelocks partway
+	# through this build (a compile thread spins in the kernel, no progress).
+	# The -X below gives the shipped kubectl the same default; GODEBUG still
+	# overrides it. Drop both once 843 is fixed.
+	export GODEBUG=asyncpreemptoff=1
+
+	# Same variables hack/lib/version.sh stamps, in both version packages.
+	local major=${portVersion%%.*}
+	local minor=${portVersion#*.}; minor=${minor%%.*}
+	local ldflags="-s -w -X runtime.godebugDefault=asyncpreemptoff=1"
+	local pkg
+	for pkg in k8s.io/client-go/pkg/version k8s.io/component-base/version; do
+		ldflags="$ldflags -X $pkg.gitVersion=v$portVersion"
+		ldflags="$ldflags -X $pkg.gitMajor=$major -X $pkg.gitMinor=$minor"
+		ldflags="$ldflags -X $pkg.gitCommit=$gitCommit"
+		ldflags="$ldflags -X $pkg.gitTreeState=clean"
+		ldflags="$ldflags -X $pkg.buildDate=$buildDate"
+	done
+
+	go build -trimpath -ldflags "$ldflags" -o kubectl ./cmd/kubectl
+}
+
+INSTALL()
+{
+	install -d $binDir
+	install -m 755 kubectl $binDir/kubectl
+
+	# Running the binary is also the smoke test that it loads on this host.
+	install -d $dataDir/bash-completion/completions
+	./kubectl completion bash > $dataDir/bash-completion/completions/kubectl
+}
+
+TEST()
+{
+	./kubectl version --client
+}
