@@ -108,7 +108,12 @@ agent's job is to review, not redo:
    between waves). Independent chains → parallel builders.
 3. **Builder budget (default):** at most **4** concurrent builders,
    `c8g.2xlarge`, **spot**. More than 4 chains → queue the rest for the next
-   wave. Raising the budget is a human decision (escalate to ask).
+   wave. Raising the budget is a human decision (escalate to ask). When a spot
+   pool is dry, `launch_builder` walks every builder subnet, then the same-size
+   fallbacks `c7g.2xlarge` / `m8g.2xlarge` (`FALLBACK_INSTANCE_TYPES`, approved
+   2026-10-19, #838) — still spot, still counted against the budget. On-demand
+   is off unless `on_demand_fallback` is set; the launched type and market are
+   in the execution output.
 4. **Do not queue mega-builds without human sign-off:** `gcc`, `binutils`,
    `llvm*`, `rust*`, `mesa`, `webkit`. If queued, move them to `needs_human`
    with reason `mega-build-approval` rather than starting them.
