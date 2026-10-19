@@ -557,7 +557,8 @@ export class OpsStack extends cdk.Stack {
     // IAM per Lambda (least privilege).
     this.table.grantReadWriteData(claimFn);
     this.table.grantReadWriteData(recordFn);
-    this.table.grantReadWriteData(releaseFn);
+    // release.py only does conditional UpdateItem on rows this execution leased.
+    this.table.grant(releaseFn, 'dynamodb:UpdateItem');
     launchFn.addToRolePolicy(new iam.PolicyStatement({
       // DescribeImages: the launcher reads the builder AMI's RootDeviceName so its
       // per-launch volume mapping targets the real root device (a mismatched
