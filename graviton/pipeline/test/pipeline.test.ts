@@ -2694,6 +2694,105 @@ test('#611: a malformed allowlist fails synth instead of quietly opening or clos
 });
 
 // ---------------------------------------------------------------------------
+// issue 837: the build-wave overlay staging must find a port whose HaikuPorts
+// directory hyphenates what the package name underscores (dfu_util lives in
+// app-mobilephone/dfu-util/). It looked the dir up by `-name <pkg>` only, found
+// nothing, and the build silently ran the stock recipe. Drive the real
+// _overlay_stage + _wrapper output under /bin/sh against a fake ports tree.
+// ---------------------------------------------------------------------------
+
+function runOverlayStage(pkg: string, overlay: string[], tree: string[]):
+    { staged: string[]; log: string } {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'ov837-'));
+  const hp = path.join(tmp, 'haikuports');
+  const agent = path.join(tmp, 'stub-agent');
+  const captured = path.join(tmp, 'captured.log.gz');
+  for (const rel of tree) {
+    const p = path.join(hp, rel);
+    if (rel.endsWith('/')) { fs.mkdirSync(p, { recursive: true }); continue; }
+    fs.mkdirSync(path.dirname(p), { recursive: true });
+    fs.writeFileSync(p, 'stock\n');
+  }
+  // The stub agent "downloads" an overlay object by writing a marker at the dest.
+  fs.writeFileSync(agent,
+    `#!/bin/sh\n` +
+    `if [ "$1" = s3 ] && [ "$2" = cp ]; then\n` +
+    `  case "$3" in\n` +
+    `    s3://*/debeos-overlay/*) echo overlay > "$4" ;;\n` +
+    `    *.log.gz) cp "$3" "${captured}" 2>/dev/null || true ;;\n` +
+    `  esac\n` +
+    `fi\nexit 0\n`);
+  fs.chmodSync(agent, 0o755);
+  const py = [
+    'import os,sys,types',
+    `os.environ["SSM_AGENT_PATH"]=${JSON.stringify(agent)}`,
+    `os.environ["HP_TREE"]=${JSON.stringify(hp)}`,
+    `sys.path.insert(0,${JSON.stringify(OPS_LAMBDAS)})`,
+    `KEYS=${JSON.stringify(overlay.map(b => 'debeos-overlay/' + b))}`,
+    'class Pg:',
+    '    def paginate(self, Bucket=None, Prefix=None):',
+    '        return [{"Contents": [{"Key": k} for k in KEYS]}]',
+    'class S3:',
+    '    def get_paginator(self, name): return Pg()',
+    'fake=types.ModuleType("boto3")',
+    'fake.client=lambda svc: S3()',
+    'sys.modules["boto3"]=fake',
+    'import run_ssm',
+    `prelude=run_ssm._overlay_stage(${JSON.stringify(pkg)},"b")`,
+    `script=run_ssm._wrapper("true","b","r",${JSON.stringify(pkg)},`,
+    `  ok_grep='"^${pkg}: BUILD_OK"',refresh="",prelude=prelude)`,
+    'sys.stdout.write(script)',
+  ].join('\n');
+  const script = child_process.execFileSync('python3', ['-c', py], { encoding: 'utf8' });
+  child_process.spawnSync('sh', ['-c', script], { encoding: 'utf8' });
+  const staged: string[] = [];
+  const walk = (d: string) => {
+    for (const e of fs.readdirSync(d, { withFileTypes: true })) {
+      const p = path.join(d, e.name);
+      if (e.isDirectory()) walk(p);
+      else if (fs.readFileSync(p, 'utf8') === 'overlay\n') staged.push(path.relative(hp, p));
+    }
+  };
+  walk(hp);
+  let log = '';
+  try {
+    log = child_process.execFileSync('gunzip', ['-c', captured], { encoding: 'utf8' });
+  } catch { /* no log */ }
+  fs.rmSync(tmp, { recursive: true, force: true });
+  return { staged: staged.sort(), log };
+}
+
+test('837: the overlay reaches a port whose dir hyphenates the underscored package name', () => {
+  const r = runOverlayStage('dfu_util', ['dfu_util-0.9.recipe'],
+    ['app-mobilephone/dfu-util/dfu_util-0.9.recipe']);
+  expect(r.staged).toEqual(['app-mobilephone/dfu-util/dfu_util-0.9.recipe']);
+  expect(r.log).toContain('overlay: staging dfu_util into');
+});
+
+test('837: a hyphenated port dir with no recipe of that name yet is still found by dir name', () => {
+  const r = runOverlayStage('pkcs11_helper', ['pkcs11_helper-1.30.0.recipe'],
+    ['app-crypt/pkcs11-helper/']);
+  expect(r.staged).toEqual(['app-crypt/pkcs11-helper/pkcs11_helper-1.30.0.recipe']);
+});
+
+test('837: the recipe lookup pins the port name, so a prefix-sharing port is not chosen', () => {
+  // sdl2's overlay must land beside sdl2's recipe, never in sdl2_image/ (whose
+  // recipe also starts with "sdl2"), and never in a work-* chroot.
+  const r = runOverlayStage('sdl2', ['sdl2-2.30.0.recipe'], [
+    'media-libs/sdl2_image/sdl2_image-2.8.2.recipe',
+    'media-libs/sdl2/work-2.30.0/sdl2-2.30.0.recipe',
+    'media-libs/sdl2/sdl2-2.30.0.recipe',
+  ]);
+  expect(r.staged).toEqual(['media-libs/sdl2/sdl2-2.30.0.recipe']);
+});
+
+test('837: an unlocatable port says so in the build log instead of skipping silently', () => {
+  const r = runOverlayStage('x16_emulator', ['x16_emulator-46.recipe'], ['app-emulation/']);
+  expect(r.staged).toEqual([]);
+  expect(r.log).toContain('overlay: WARNING no port dir for x16_emulator');
+});
+
+// ---------------------------------------------------------------------------
 // Issue 838: a dry spot pool must not drop the chain. LaunchBuilder used to make
 // exactly one spot request (one type, one random subnet); InsufficientInstanceCapacity
 // failed the Lambda and the execution went LaunchBuilder -> ReapOnFailure. Drive the
