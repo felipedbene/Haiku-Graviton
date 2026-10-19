@@ -115,11 +115,12 @@ behaviour is unchanged and the job now launches on every boot.
 assembled **on a Graviton DeBeOS box**. `build-hpkg.sh` does it:
 
 ```sh
-# On a DeBeOS/Haiku arm64 instance, with the 8 cross-built binaries in $BINDIR:
+# On a DeBeOS/Haiku arm64 instance, from a copy of this package/ directory on
+# the box, with the 8 cross-built binaries in $BINDIR. PKGDIR defaults to the
+# directory build-hpkg.sh lives in, so it needs no setting here.
 BINDIR=/boot/home/ssm-real/bin \
-PKGDIR=<this dir> \
 OUTDIR=/boot/home \
-    sh build-hpkg.sh
+    sh ./build-hpkg.sh
 # -> /boot/home/amazon_ssm_agent-<version from .PackageInfo>-arm64.hpkg  (zlib)
 ```
 
@@ -131,8 +132,16 @@ eight `makefile` targets. The `-2` binaries were built from the upstream
 `3.3.3270.0` GitHub tarball like this, with upstream's non-PIE flags:
 
 ```sh
+# On the Linux cross-host. Prerequisites, from ../README.md "How to reproduce":
+# the haiku/arm64 fork toolchain is first on PATH (step 1), and the current
+# directory is the patched v3.3.3270.0 source tree (step 2).
+# BINDIR is the directory the eight binaries land in. It plays the same role as
+# build-hpkg.sh's BINDIR, whose default on the Haiku box is
+# /boot/home/ssm-real/bin; copy the files there afterwards.
+BINDIR="$PWD/ssm-bin"
+mkdir -p "$BINDIR"
 export GOOS=haiku GOARCH=arm64 CGO_ENABLED=0 GOTOOLCHAIN=local GOFLAGS=-mod=vendor
-B() { out=$1; shift; go build -ldflags "-s -w" -trimpath -o "$OUT/$out" "$@"; }
+B() { out=$1; shift; go build -ldflags "-s -w" -trimpath -o "$BINDIR/$out" "$@"; }
 B amazon-ssm-agent    core/agent.go core/agent_unix.go core/agent_parser.go
 B ssm-agent-worker    agent/agent.go agent/agent_unix.go agent/agent_parser.go
 B updater             agent/update/updater/updater.go agent/update/updater/updater_unix.go
