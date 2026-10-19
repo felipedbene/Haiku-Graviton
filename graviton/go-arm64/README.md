@@ -241,12 +241,16 @@ packages that.
 - **Cross-built the native toolchain** from the patched korli/go tree
   (`0001`–`0004`) on a Linux host: `GOOS=haiku GOARCH=arm64 CGO_ENABLED=0
   GOTOOLCHAIN=local ./bin/go install std cmd` → `bin/haiku_arm64/{go,gofmt}` and
-  all **19** `pkg/tool/haiku_arm64/*` as AArch64 Haiku ELF. **No new fork patch**
-  — the native `go` just has to carry patch `0004` (rebuilt from the patched
-  tree so it does).
-- **Packaged a self-contained GOROOT** (`/boot/system/develop/lib/go`) as
-  **`golang-1.26.1-1-arm64.hpkg`** (~116 MiB, **zlib**, sha256
-  `9858b9611d47d9c25b35173d696354edd9962707d69f40c8cb7284c9820dfdce`). Recipe,
+  all **19** `pkg/tool/haiku_arm64/*` as AArch64 Haiku ELF. M8 itself added no
+  fork patch; the native `go` only had to carry patch `0004`, so it was rebuilt
+  from the patched tree.
+- **Packaged a self-contained GOROOT** (`/boot/system/develop/lib/go`). The M8
+  proof below used revision 1, **`golang-1.26.1-1-arm64.hpkg`** (~116 MiB,
+  **zlib**, sha256
+  `9858b9611d47d9c25b35173d696354edd9962707d69f40c8cb7284c9820dfdce`), built
+  from `0001`–`0004`. **Revision 1 is superseded.** It lacks the issue-843
+  signal fix (see below), and the current package is
+  **`golang-1.26.1-2-arm64.hpkg`**, built from `0001`–`0005`. Recipe,
   staging/build scripts, `.PackageInfo`, profile.d, and the reproduce steps are
   in [`package/`](package/).
 - **Verified NATIVELY** on a Graviton `c7g.large` (canonical
