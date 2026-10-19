@@ -66,6 +66,16 @@ run_bounded() {   # run_bounded <label> <cmd...>
 	return $_rc
 }
 
+# The lean image ships no `file`; under `set -e` a bare call aborted the run
+# right after the first successful build, before any verdict was printed.
+describe_elf() {
+	if command -v file >/dev/null 2>&1; then
+		file "$1"
+	else
+		ls -l "$1"
+	fi
+}
+
 echo "############## go version ##############"
 "$GO" version
 
@@ -77,7 +87,7 @@ cd "$HERE/tests/hello"
 rm -f hello
 HELLO_RC=0; run_bounded "go build hello" "$GO" build -o hello ./hello.go || HELLO_RC=$?
 if [ "$HELLO_RC" = 0 ]; then
-	echo "-- file --"; file ./hello
+	echo "-- file --"; describe_elf ./hello
 	echo "-- run --"; ./hello; HELLO_RC=$?
 fi
 echo "hello-rc=$HELLO_RC"
@@ -87,7 +97,7 @@ cd "$HERE/tests/greetmod"
 rm -f greetmod
 GREET_RC=0; run_bounded "go build greetmod" "$GO" build -o greetmod . || GREET_RC=$?
 if [ "$GREET_RC" = 0 ]; then
-	echo "-- file --"; file ./greetmod
+	echo "-- file --"; describe_elf ./greetmod
 	echo "-- run --"; ./greetmod; GREET_RC=$?
 fi
 echo "greet-rc=$GREET_RC"
