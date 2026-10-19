@@ -1,0 +1,301 @@
+#!/usr/bin/env python3
+"""haiku-hpkg-provenance -- tie the hand-built Go hpkgs to their in-tree source.
+
+    haiku-hpkg-provenance check-pool [--package NAME] [--top DIR] POOL_DIR
+    haiku-hpkg-provenance check-bump [--base REF] [--head REF] [--top DIR]
+
+Issue #846. amazon_ssm_agent (and golang) are built by hand, outside any
+pipeline, and the bakes consume whatever prebuilt file sits in the pool. The
+must-have check in cross-build.yml looked only at the package NAME, and the hpkg
+recorded nothing about its source, so PR #555's agent fix sat merged but
+unshipped for 25 days (#553). Two checks close that:
+
+check-pool  (run by the bake, cross-build.yml, after the pool sync)
+    The pool must hold EXACTLY ONE NAME-*.hpkg: UserBuildConfig bakes the first
+    Glob match in readdir order, so two files means either may ship. The
+    package's description must carry the source digest build-hpkg.sh stamps
+    ("DeBeOS-Source-Digest: sha256:<hex>"), and it must equal the digest of the
+    checked-out tree (hpkg-source-manifest --digest). A mismatch means trunk
+    holds source that this hpkg does not carry, and the bake fails with the
+    rebuild steps.
+
+    An unstamped hpkg fails, unless its file sha256 has a record in
+    graviton/go-arm64/provenance-legacy/<sha256>.manifest. Those records cover
+    packages built before stamping existed (today: amazon_ssm_agent -2). A
+    legacy package whose recorded manifest matches trunk passes. One that
+    drifted passes with a WARNING that lists the drifted inputs. That is the
+    grace path so the first bake after this lands does not break. Once a
+    stamped rebuild is in every pool, delete the record.
+
+check-bump  (run by haiku-hpkg-provenance-selftest; cheap, git only)
+    For each package, if the source manifest at REF (default: the merge-base
+    with origin/graviton) differs from the working tree's, the `version` line
+    of its .PackageInfo must differ too. A source change without a revision
+    bump would rebuild into a file with the SAME name as the old one, so
+    neither a reviewer nor a pool listing could tell them apart (PR #555).
+
+Exit status: 0 ok (warnings allowed), 1 check failed, 2 usage/internal error.
+"""
+import argparse
+import glob
+import hashlib
+import os
+import re
+import subprocess
+import sys
+import tarfile
+import tempfile
+import io
+
+HERE = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, HERE)
+import hpkg_meta  # noqa: E402
+
+GENERATOR = os.path.join(HERE, "hpkg-source-manifest")
+STAMP_RE = re.compile(r"DeBeOS-Source-Digest: sha256:([0-9a-f]{64})")
+LEGACY_REL = "graviton/go-arm64/provenance-legacy"
+
+PACKAGES = {
+    "amazon_ssm_agent": "graviton/go-arm64/ssm-agent/package/amazon_ssm_agent.PackageInfo",
+    "golang": "graviton/go-arm64/package/golang.PackageInfo",
+}
+
+REBUILD = {
+    "amazon_ssm_agent": """\
+To ship trunk's agent source (graviton/go-arm64/ssm-agent/package/README.md):
+  1. bump the revision in graviton/go-arm64/ssm-agent/package/amazon_ssm_agent.PackageInfo
+  2. cross-build the 8 binaries from this tree (graviton/go-arm64/ssm-agent/README.md,
+     "How to reproduce", with the korli/go fork carrying EVERY patches/0*.patch), then
+       graviton/scripts/hpkg-source-manifest amazon_ssm_agent > $BINDIR/SOURCE-MANIFEST
+  3. on a DeBeOS arm64 box, from a checkout of the same tree: sh build-hpkg.sh
+     (it stamps the source digest into the package)
+  4. REPLACE (not add) the file in s3://<work-bucket>/hpkg-pool/ of every bake pool""",
+    "golang": """\
+To ship trunk's toolchain source (graviton/go-arm64/package/README.md):
+  1. bump the revision in graviton/go-arm64/package/golang.PackageInfo
+  2. rebuild the native toolchain from a fork with EVERY patches/0*.patch applied,
+     stage it with stage-goroot.sh (it stamps the source digest), and create the
+     hpkg on a DeBeOS box with build-hpkg-golang.sh""",
+}
+
+
+class Fail(Exception):
+    pass
+
+
+def manifest(top, package):
+    """The source manifest text of `package` in tree `top` (the one generator)."""
+    r = subprocess.run(["sh", GENERATOR, "--top", top, package],
+                       capture_output=True, text=True)
+    if r.returncode != 0:
+        raise Fail("hpkg-source-manifest failed for %s in %s:\n%s"
+                   % (package, top, r.stderr.strip()))
+    return r.stdout
+
+
+def digest_of(manifest_text):
+    # Identical to `hpkg-source-manifest --digest`: sha256 of the printed text,
+    # trailing newline included.
+    return hashlib.sha256(manifest_text.encode()).hexdigest()
+
+
+def file_sha256(path):
+    h = hashlib.sha256()
+    with open(path, "rb") as f:
+        for chunk in iter(lambda: f.read(1 << 20), b""):
+            h.update(chunk)
+    return h.hexdigest()
+
+
+def manifest_records(text):
+    return [l for l in text.splitlines() if l and not l.startswith("#")]
+
+
+def diff_manifests(old, new, old_label="the package", new_label="trunk"):
+    """Human-readable list of inputs that differ between two manifests."""
+    def keyed(text):
+        out = {}
+        for line in manifest_records(text):
+            parts = line.split()
+            key = " ".join(parts[:2]) if parts[0] == "file" else parts[0]
+            out[key] = line
+        return out
+    a, b = keyed(old), keyed(new)
+    lines = []
+    for k in sorted(set(a) | set(b)):
+        if a.get(k) == b.get(k):
+            continue
+        if k not in a:
+            lines.append("  + %s   (in %s, NOT in %s)" % (b[k], new_label, old_label))
+        elif k not in b:
+            lines.append("  - %s   (in %s, gone from %s)" % (a[k], old_label, new_label))
+        else:
+            lines.append("  ~ %s: %s\n    %s: %s" % (old_label, a[k], new_label, b[k]))
+    return "\n".join(lines) or "  (manifests differ only in layout)"
+
+
+def load_legacy(top):
+    """{hpkg sha256: manifest text} from the legacy records directory."""
+    recs = {}
+    for path in sorted(glob.glob(os.path.join(top, LEGACY_REL, "*.manifest"))):
+        sha = os.path.basename(path)[:-len(".manifest")]
+        if not re.fullmatch(r"[0-9a-f]{64}", sha):
+            raise Fail("legacy record %s: name must be <hpkg sha256>.manifest" % path)
+        with open(path) as f:
+            body = "\n".join(manifest_records(f.read())) + "\n"
+        recs[sha] = body
+    return recs
+
+
+def check_pool(pool, package, top, out=print, warn=None):
+    """Return a list of warnings; raise Fail on a hard failure."""
+    warn = warn or (lambda m: print("WARNING: " + m, file=sys.stderr))
+    warnings = []
+    # Anchor on "<name>-" + a digit: `golang-` must not match a `golang_x-...`.
+    files = sorted(f for f in os.listdir(pool)
+                   if f.startswith(package + "-") and f.endswith(".hpkg")
+                   and f[len(package) + 1:len(package) + 2].isdigit())
+    if not files:
+        raise Fail("pool %s holds no %s-*.hpkg" % (pool, package))
+    if len(files) > 1:
+        raise Fail("pool %s holds %d %s hpkgs, exactly one is allowed:\n  %s\n"
+                   "UserBuildConfig bakes the FIRST Glob match in readdir order, not the "
+                   "newest, so any of these may ship. Remove all but one from the pool."
+                   % (pool, len(files), package, "\n  ".join(files)))
+    name = files[0]
+    path = os.path.join(pool, name)
+    trunk = manifest(top, package)
+    trunk_digest = digest_of(trunk)
+    desc = hpkg_meta.read_description_file(path) or ""
+    m = STAMP_RE.search(desc)
+    if m:
+        if m.group(1) == trunk_digest:
+            out("ok: %s was built from this tree's source (sha256:%s)" % (name, trunk_digest))
+            return warnings
+        raise Fail("%s was built from source digest sha256:%s, but this tree's %s source "
+                   "digest is sha256:%s. Trunk carries %s source that the pool's package "
+                   "does not.\nThis tree's manifest:\n%s\n%s"
+                   % (name, m.group(1), package, trunk_digest, package,
+                      _indent(trunk), REBUILD[package]))
+    sha = file_sha256(path)
+    legacy = load_legacy(top).get(sha)
+    if legacy is None:
+        raise Fail("%s (sha256 %s) carries no source digest (no 'DeBeOS-Source-Digest' in "
+                   "its description) and has no legacy record under %s/. Nothing ties it "
+                   "to any source, so it cannot be shown to carry trunk's.\n%s"
+                   % (name, sha, LEGACY_REL, REBUILD[package]))
+    if legacy == trunk:
+        out("ok: %s is a legacy (unstamped) build whose recorded source matches this tree"
+            % name)
+        return warnings
+    msg = ("%s is a LEGACY unstamped build (record %s/%s.manifest) and trunk's %s "
+           "source has moved past it. Accepted for now so the bake does not break, but "
+           "this image will NOT carry trunk's source:\n%s\n%s"
+           % (name, LEGACY_REL, sha, package, diff_manifests(legacy, trunk),
+              REBUILD[package]))
+    warn(msg)
+    warnings.append(msg)
+    return warnings
+
+
+def _indent(text):
+    return "\n".join("  " + l for l in text.splitlines())
+
+
+def _git(top, *args, binary=False):
+    r = subprocess.run(["git", "-C", top] + list(args), capture_output=True,
+                       text=not binary)
+    if r.returncode != 0:
+        raise Fail("git %s failed: %s" % (" ".join(args),
+                   (r.stderr.decode() if binary else r.stderr).strip()))
+    return r.stdout
+
+
+def version_line(info_path):
+    with open(info_path) as f:
+        for line in f:
+            if re.match(r"^version\s", line):
+                return line.split(None, 1)[1].strip()
+    return None
+
+
+def _extract(top, ref, dest):
+    raw = _git(top, "archive", ref, "graviton/go-arm64", binary=True)
+    with tarfile.open(fileobj=io.BytesIO(raw)) as t:
+        if hasattr(tarfile, "data_filter"):
+            t.extractall(dest, filter="data")
+        else:
+            t.extractall(dest)
+
+
+def check_bump(top, base=None, head=None, out=print):
+    """Raise Fail if a package's source moved since `base` but its version did not.
+
+    The new side is the working tree of `top`, or commit `head` when given (used
+    to replay a historical PR)."""
+    if base is None:
+        base = _git(top, "merge-base", "origin/graviton", "HEAD").strip()
+    failures = []
+    with tempfile.TemporaryDirectory() as old, tempfile.TemporaryDirectory() as hd:
+        _extract(top, base, old)
+        if head is not None:
+            _extract(top, head, hd)
+            top = hd
+        for package, info_rel in sorted(PACKAGES.items()):
+            old_info = os.path.join(old, info_rel)
+            if not os.path.exists(old_info):
+                out("skip: %s has no .PackageInfo at %s" % (package, base[:12]))
+                continue
+            try:
+                old_m = manifest(old, package)
+            except Fail as e:
+                out("skip: %s source at %s is not manifestable (%s)"
+                    % (package, base[:12], str(e).splitlines()[-1]))
+                continue
+            new_m = manifest(top, package)
+            old_v = version_line(old_info)
+            new_v = version_line(os.path.join(top, info_rel))
+            if old_m == new_m:
+                out("ok: %s source unchanged since %s" % (package, base[:12]))
+            elif old_v != new_v:
+                out("ok: %s source changed and its version moved %s -> %s"
+                    % (package, old_v, new_v))
+            else:
+                failures.append(
+                    "%s source changed since %s but %s still says `version %s`:\n%s\n"
+                    "Bump the revision in the same PR. Otherwise the rebuild has the same "
+                    "file name as the hpkg already in the pools, and nobody can tell them "
+                    "apart (#846)."
+                    % (package, base[:12], info_rel, new_v, diff_manifests(old_m, new_m, "base", "head")))
+    if failures:
+        raise Fail("\n\n".join(failures))
+
+
+def main(argv=None):
+    ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
+    sub = ap.add_subparsers(dest="cmd", required=True)
+    p = sub.add_parser("check-pool")
+    p.add_argument("pool")
+    p.add_argument("--package", default="amazon_ssm_agent", choices=sorted(PACKAGES))
+    p.add_argument("--top", default=os.path.dirname(os.path.dirname(HERE)))
+    b = sub.add_parser("check-bump")
+    b.add_argument("--base")
+    b.add_argument("--head", help="compare against this commit instead of the working tree")
+    b.add_argument("--top", default=os.path.dirname(os.path.dirname(HERE)))
+    a = ap.parse_args(argv)
+    try:
+        if a.cmd == "check-pool":
+            check_pool(a.pool, a.package, a.top)
+        else:
+            check_bump(a.top, a.base, a.head)
+    except Fail as e:
+        print("FATAL: %s" % e, file=sys.stderr)
+        return 1
+    except (OSError, hpkg_meta.HpkgError) as e:
+        print("haiku-hpkg-provenance: %s" % e, file=sys.stderr)
+        return 2
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

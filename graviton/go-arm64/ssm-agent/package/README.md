@@ -71,6 +71,19 @@ file in the pools. The #553 fix sat in source for 25 days that way.
 `build-hpkg.sh` takes the version from `.PackageInfo`, so the file name and the
 package inside it can no longer disagree.
 
+**Provenance (#846).** That gap now fails loudly. `build-hpkg.sh` stamps
+`DeBeOS-Source-Digest: sha256:<hex>` into the package description, and ships the
+manifest itself as `data/amazon_ssm_agent/source-manifest`. The digest is the
+sha256 of what `graviton/scripts/hpkg-source-manifest amazon_ssm_agent` prints:
+the upstream tag, this patch, the launch job and every Go toolchain
+`patches/0*.patch`. The bake (`cross-build.yml`) runs
+`haiku-hpkg-provenance check-pool`. That fails when the pool's agent digest is
+not trunk's, and when the pool holds anything other than exactly one
+`amazon_ssm_agent-*`. `haiku-hpkg-provenance-selftest` also fails a branch that
+changes those inputs without bumping `version`. A pre-stamping build is accepted
+only through a record in `../../provenance-legacy/` (today: `-2`, with a warning
+until a stamped rebuild replaces it in the pools).
+
 **Replace, don't add, in a bake pool.** `graviton/ssh/UserBuildConfig` bakes the
 first `amazon_ssm_agent-*-arm64.hpkg` its Glob returns (readdir order, not
 version order). A pool holding both `-1` and `-2` may bake either, so the old
@@ -84,6 +97,7 @@ bin/ssm-session-worker        bin/ssm-session-logger   bin/ssm-cli
 bin/updater                   bin/ssm-setup-cli
 data/launch/amazon_ssm_agent               # launch_daemon service (static PATH)
 data/licenses/Apache-2.0                    # bundled (not a Haiku system license)
+data/amazon_ssm_agent/source-manifest       # what it was built from (#846)
 .PackageInfo
 ```
 
@@ -152,6 +166,17 @@ B ssm-session-logger  agent/session/logging/main.go
 B ssm-session-worker  agent/framework/processor/executer/outofproc/sessionworker/main.go
 B ssm-setup-cli       agent/setupcli/setupcli.go
 ```
+
+Then record what the binaries were built from, next to them, and send that file
+over with them:
+
+```sh
+graviton/scripts/hpkg-source-manifest amazon_ssm_agent > "$OUT/SOURCE-MANIFEST"
+```
+
+`build-hpkg.sh` refuses to package binaries whose `SOURCE-MANIFEST` disagrees
+with the checkout it runs from. Without the file it stamps the checkout's
+manifest and prints a warning.
 
 The build is reproducible. A second pristine apply and build gave a
 byte-identical `ssm-session-worker` (sha256 `d26c4457…f08f56`).

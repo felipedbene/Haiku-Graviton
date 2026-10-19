@@ -58,7 +58,52 @@ for b in $BINARIES; do
 done
 
 cp "$PKGDIR/launch-amazon_ssm_agent" "$STAGING/data/launch/amazon_ssm_agent"
-cp "$PKGDIR/amazon_ssm_agent.PackageInfo" "$STAGING/.PackageInfo"
+
+# Provenance (#846): stamp the digest of the source manifest into the package
+# description, which is where the bake's check-pool reads it. Nothing else ties
+# a pooled hpkg to its source. Two copies of the manifest can exist.
+# $BINDIR/SOURCE-MANIFEST is written next to the binaries on the cross-host, so
+# it records what they were BUILT from. The tree's copy is computed here, so it
+# records what this checkout says they SHOULD be built from. If both are present
+# they must agree, which catches old binaries packaged from a newer tree.
+MANIFEST_GEN="${MANIFEST_GEN:-$PKGDIR/../../../scripts/hpkg-source-manifest}"
+TREE_MANIFEST=""
+BIN_MANIFEST=""
+[ -f "$MANIFEST_GEN" ] && TREE_MANIFEST="$(sh "$MANIFEST_GEN" amazon_ssm_agent)"
+[ -f "$BINDIR/SOURCE-MANIFEST" ] && BIN_MANIFEST="$(cat "$BINDIR/SOURCE-MANIFEST")"
+if [ -n "$TREE_MANIFEST" ] && [ -n "$BIN_MANIFEST" ]; then
+	if [ "$TREE_MANIFEST" != "$BIN_MANIFEST" ]; then
+		echo "build-hpkg.sh: the binaries in $BINDIR were built from different source than this tree" >&2
+		printf '%s\n' "$BIN_MANIFEST" > "$STAGING.bin-manifest"
+		printf '%s\n' "$TREE_MANIFEST" > "$STAGING.tree-manifest"
+		diff "$STAGING.bin-manifest" "$STAGING.tree-manifest" >&2 || true
+		echo "Rebuild the binaries from this tree, or package from the tree they came from." >&2
+		exit 1
+	fi
+	MANIFEST="$TREE_MANIFEST"
+elif [ -n "$TREE_MANIFEST" ]; then
+	echo "build-hpkg.sh: WARNING: no $BINDIR/SOURCE-MANIFEST; stamping this tree's manifest," \
+		"which asserts the binaries were built from it" >&2
+	MANIFEST="$TREE_MANIFEST"
+elif [ -n "$BIN_MANIFEST" ]; then
+	MANIFEST="$BIN_MANIFEST"
+else
+	echo "build-hpkg.sh: no source manifest: neither $MANIFEST_GEN nor $BINDIR/SOURCE-MANIFEST" >&2
+	echo "Run from a checkout of the repo, or ship SOURCE-MANIFEST with the binaries." >&2
+	exit 1
+fi
+mkdir -p "$STAGING/data/amazon_ssm_agent"
+printf '%s\n' "$MANIFEST" > "$STAGING/data/amazon_ssm_agent/source-manifest"
+DIGEST="$(sha256sum "$STAGING/data/amazon_ssm_agent/source-manifest" 2>/dev/null \
+	|| shasum -a 256 "$STAGING/data/amazon_ssm_agent/source-manifest")"
+DIGEST="${DIGEST%% *}"
+sed "s/^\(description[[:space:]]*\".*\)\"[[:space:]]*\$/\1 DeBeOS-Source-Digest: sha256:$DIGEST\"/" \
+	"$PKGDIR/amazon_ssm_agent.PackageInfo" > "$STAGING/.PackageInfo"
+grep -q "DeBeOS-Source-Digest: sha256:$DIGEST\"" "$STAGING/.PackageInfo" || {
+	echo "build-hpkg.sh: could not stamp the source digest into the description line" >&2
+	exit 1
+}
+echo "source digest: sha256:$DIGEST"
 
 echo "== package create (-z zlib) =="
 rm -f "$OUT"

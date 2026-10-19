@@ -214,7 +214,7 @@ phases:
         # 3.5.7 file and said nothing.
         # amazon_ssm_agent/debeos_cloudwatch are not pinned in HaikuPortsLocal
         # (UserBuildConfig picks them up by Glob), so they keep the name-only
-        # check.
+        # check. amazon_ssm_agent then gets the stricter provenance check below.
         # zlib/zlib_devel and ca_root_certificates are must-haves for the same reason
         # openssl3 and zstd are: the openssl3 pin's own metadata requires
         # `lib:libz >= 1.3.2` and `ca_root_certificates >= 2026_07_16`, and
@@ -275,6 +275,22 @@ phases:
           echo "Pins and pool must move together: build the package natively, upload it to s3://$WORK_BUCKET/hpkg-pool/ (additive; see issue #419), then retry the bake." >&2
           exit 1
         fi
+        # Provenance (issue #846). The agent hpkg is built by hand, and the
+        # name-only check above passes ANY revision, including one built before
+        # the current patch. That is how PR #555's fix sat merged but unbaked
+        # for 25 days (#553). check-pool requires exactly one
+        # amazon_ssm_agent-* in the pool, because UserBuildConfig bakes the
+        # first Glob match in readdir order. It also requires the source digest
+        # stamped in that hpkg to equal the digest of THIS checkout's agent
+        # patch, launch job, upstream tag and Go toolchain patches. An
+        # unstamped hpkg passes only through a legacy record in
+        # graviton/go-arm64/provenance-legacy/ (today: -2, which passes with a
+        # WARNING that names what trunk has and the package lacks).
+        python3 "$HAIKU_TOP/graviton/scripts/haiku-hpkg-provenance" check-pool \
+          --package amazon_ssm_agent --top "$HAIKU_TOP" "$HG_POOL_DIR" || {
+          echo "FATAL: s3://$WORK_BUCKET/hpkg-pool/ failed the amazon_ssm_agent provenance check (see above)." >&2
+          exit 1
+        }
         ls -la "$HG_POOL_DIR"
         # A lean bake stages only part of the HaikuPortsLocal list, so exit 1
         # ("missing from pool") is expected -- the dependent build features just

@@ -1,0 +1,26 @@
+# Legacy provenance record (issue #846) for an hpkg built BEFORE build-hpkg.sh
+# stamped a source digest into the package. The file name is the sha256 of the
+# hpkg itself; the body (every non-comment line) is the source manifest it was
+# built from, exactly as graviton/scripts/hpkg-source-manifest prints it.
+#
+#   file:    amazon_ssm_agent-3.3.3270.0-2-arm64.hpkg (36,811,697 bytes)
+#   source:  the tree at d35adbd92a (PR #848): the agent patch with the #553
+#            ssm-user fix and the creack/pty Haiku backend, on korli/go
+#            go1.26.1-haiku1 with patches 0001-0004. Patch 0005 (#851) came
+#            later and is NOT in these binaries.
+#   baked:   canonical ami-058776e58bd902fba
+#
+# haiku-hpkg-provenance check-pool accepts this hpkg with a WARNING while its
+# manifest differs from trunk. This is a grace record so the next bake does not
+# break. It is not a waiver. Delete this file once every bake pool carries a
+# stamped rebuild (-3 or later).
+debeos-source-manifest 1
+package amazon_ssm_agent
+upstream github.com/aws/amazon-ssm-agent 3.3.3270.0
+toolchain github.com/korli/go go1.26.1-haiku1
+file patches/0001-haiku-arm64-M0-toolchain.patch c405843eaee7feb46226775382da53f94c530c01aa0fddde64502305ffdbd710
+file patches/0002-haiku-arm64-M2-errno-zero-extend.patch ecfc7a26a1fed981e5474c009d7e97695ffaa0c612254d632c96868f8694219e
+file patches/0003-haiku-arm64-M4-flock-statfs-uname.patch 821555892ce203a28c0b8edef0a57a630c83a479fb3d33cdfe319e0c57809ab6
+file patches/0004-haiku-arm64-M6-pipe-forkexec.patch db7895e8767ae4c03b7fdc9ed06d9653c78b284b46131543bfa8bf7d6e1db959
+file ssm-agent/amazon-ssm-agent-haiku-arm64.patch 2c2508f4b2b9389f75fa066797e72cf13f5bbbdd3d4f1396f870cbff4590cc36
+file ssm-agent/package/launch-amazon_ssm_agent 0232d882399b9669bb327a3310eaa224047b24a4af4d8b34e87c60e68ba5d55c

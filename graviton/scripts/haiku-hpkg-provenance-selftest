@@ -1,0 +1,478 @@
+#!/usr/bin/env python3
+"""haiku-hpkg-provenance-selftest [--mutate]
+
+Offline test for the #846 source-to-hpkg provenance guard. No AWS, no network,
+no Haiku host. It copies the real graviton/go-arm64 inputs into a scratch tree.
+It runs the REAL build-hpkg.sh there, against a stub `package` tool that
+synthesises an HPKG from the staged .PackageInfo, so the stamp the bake reads
+is the one the build script actually writes. Then it drives
+haiku-hpkg-provenance over the result.
+
+WHY IT EXISTS. PR #555 changed the agent patch, the bake's must-have check
+looked only at the package name, and the fix shipped in no image for 25 days
+(#553). The check that replaces it has to be shown to FIND that drift. A guard
+that has never refused anything is not known to refuse anything. The
+discriminating cases:
+  * stamped hpkg built from this tree           -> pass
+  * the agent patch changes after the build      -> FAIL  (the #555 shape)
+  * a toolchain patch is added after the build   -> FAIL  (the #851 shape)
+  * two agent hpkgs in the pool, or none         -> FAIL  (readdir-order Glob)
+  * unstamped hpkg with no legacy record         -> FAIL
+  * unstamped hpkg WITH a legacy record          -> pass, and WARN once trunk
+                                                    moves past it (the -2 grace)
+  * binaries whose SOURCE-MANIFEST disagrees with the tree -> build-hpkg.sh refuses
+  * check-bump: a source change without a version bump -> FAIL; with a bump, or
+    a build-script-only change -> pass
+  * replaying the real PR #555 commit (6e42211ad3) through check-bump -> FAIL,
+    when that history is present.
+It also checks the shipped legacy records and the wiring into cross-build.yml.
+
+  --mutate   rewrite the tool in memory so check-pool accepts any stamped
+             hpkg (the old name-only check) and check-bump accepts any
+             unbumped change. It then asserts that the drift and no-bump cases
+             PASS. That proves the failures above come from the comparisons
+             and not from something incidental. Exits 0 when the mutation is
+             detected (the test goes red without the comparisons). The tracked
+             file is never touched.
+
+Exit status: 0 pass; 1 an assertion failed.
+"""
+import argparse
+import hashlib
+import os
+import re
+import shutil
+import struct
+import subprocess
+import sys
+import tempfile
+import types
+
+HERE = os.path.dirname(os.path.abspath(__file__))
+ROOT = os.path.dirname(os.path.dirname(HERE))
+sys.path.insert(0, HERE)
+import hpkg_meta  # noqa: E402
+
+TOOL = os.path.join(HERE, "haiku-hpkg-provenance")
+GEN = os.path.join(HERE, "hpkg-source-manifest")
+GO = os.path.join(ROOT, "graviton", "go-arm64")
+PR555_COMMIT = "6e42211ad3"   # "run interactive Session Manager shell as current user"
+PR848_COMMIT = "d35adbd92a"   # the -2 build's tree
+LEGACY_2_SHA = "c602566a190024308b2dda4aa0e7722f3508bfc3804c809e3d2e6068726d3727"
+
+FAILURES = []
+
+
+def check(cond, what):
+    print(("ok   " if cond else "FAIL ") + what)
+    if not cond:
+        FAILURES.append(what)
+
+
+# --- HPKG synthesis (same encoding as haiku-repo-coherence-selftest) ---------
+
+def _leb128(n):
+    out = bytearray()
+    while True:
+        b = n & 0x7F
+        n >>= 7
+        if n:
+            out.append(b | 0x80)
+        else:
+            out.append(b)
+            return bytes(out)
+
+
+def _tag(aid, dtype, children, encoding):
+    t = (aid & 0x7F) | (dtype << 7) | ((1 if children else 0) << 10) | (encoding << 11)
+    return _leb128(t + 1)
+
+
+def _s(aid, val):
+    return _tag(aid, 3, 0, 0) + val.encode() + b"\x00"
+
+
+def _u32(aid, val):
+    return _tag(aid, 2, 0, 2) + struct.pack(">I", val)
+
+
+def build_hpkg(name, ver, rev, description):
+    parts = ver.split(".")
+    kids = b"".join(_s(23 + i, p) for i, p in enumerate(parts[1:3])) + _u32(25, rev)
+    attrs = (_s(15, name) + _u32(21, 9)
+             + _tag(22, 3, 1, 0) + parts[0].encode() + b"\x00" + kids + _leb128(0)
+             + _s(17, description) + _leb128(0))
+    section = b"\x00" + attrs
+    hs = 80
+    hdr = bytearray(hs)
+    hdr[0:4] = b"hpkg"
+    struct.pack_into(">H", hdr, 4, hs)
+    struct.pack_into(">H", hdr, 6, 2)
+    struct.pack_into(">Q", hdr, 8, hs + len(section))
+    struct.pack_into(">H", hdr, 18, 0)
+    struct.pack_into(">I", hdr, 20, 65536)
+    struct.pack_into(">Q", hdr, 24, len(section))
+    struct.pack_into(">Q", hdr, 32, len(section))
+    struct.pack_into(">I", hdr, 40, len(section))
+    struct.pack_into(">I", hdr, 44, 1)
+    return bytes(hdr) + section
+
+
+def stub_package(argv):
+    """Stand-in for Haiku's `package`: `create -z zlib -C DIR -i INFO OUT` writes
+    an HPKG whose attributes come from INFO; `list` succeeds silently."""
+    if not argv or argv[0] != "create":
+        return 0
+    info, out = argv[argv.index("-i") + 1], argv[-1]
+    text = open(info).read()
+    name = re.search(r"^name\s+(\S+)", text, re.M).group(1)
+    ver, rev = re.search(r"^version\s+(\S+)", text, re.M).group(1).rsplit("-", 1)
+    desc = re.search(r'^description\s+"(.*)"\s*$', text, re.M).group(1)
+    with open(out, "wb") as f:
+        f.write(build_hpkg(name, ver, int(rev), desc))
+    return 0
+
+
+# --- scratch tree ------------------------------------------------------------
+
+def make_tree(work):
+    top = os.path.join(work, "tree")
+    go = os.path.join(top, "graviton", "go-arm64")
+    for rel in ("golang-1.26.1.recipe", "patches", "ssm-agent/amazon-ssm-agent-haiku-arm64.patch",
+                "ssm-agent/package", "package"):
+        src = os.path.join(GO, rel)
+        dst = os.path.join(go, rel)
+        os.makedirs(os.path.dirname(dst), exist_ok=True)
+        if os.path.isdir(src):
+            shutil.copytree(src, dst)
+        else:
+            shutil.copy2(src, dst)
+    os.makedirs(os.path.join(top, "graviton", "scripts"))
+    shutil.copy2(GEN, os.path.join(top, "graviton", "scripts", "hpkg-source-manifest"))
+    return top
+
+
+def run(cmd, env=None, cwd=None):
+    r = subprocess.run(cmd, capture_output=True, text=True, env=env, cwd=cwd)
+    return r.returncode, r.stdout + r.stderr
+
+
+def build_agent(work, top, bindir, tag):
+    """Run the REAL build-hpkg.sh (copied into the scratch tree) with the stub."""
+    stubdir = os.path.join(work, "stub-bin")
+    os.makedirs(stubdir, exist_ok=True)
+    stub = os.path.join(stubdir, "package")
+    with open(stub, "w") as f:
+        f.write('#!/bin/sh\nexec "%s" "%s" --stub-package "$@"\n'
+                % (sys.executable, os.path.abspath(__file__)))
+    os.chmod(stub, 0o755)
+    out = os.path.join(work, "out-" + tag)
+    os.makedirs(out)
+    env = dict(os.environ, PATH=stubdir + os.pathsep + os.environ["PATH"],
+               BINDIR=bindir, OUTDIR=out, STAGING=os.path.join(work, "staging-" + tag))
+    env.pop("VERSION", None)
+    pkgdir = os.path.join(top, "graviton", "go-arm64", "ssm-agent", "package")
+    rc, log = run(["sh", os.path.join(pkgdir, "build-hpkg.sh")], env=env)
+    files = [os.path.join(out, f) for f in os.listdir(out) if f.endswith(".hpkg")]
+    return rc, log, files, env["STAGING"]
+
+
+def make_bindir(work, tag):
+    b = os.path.join(work, "bin-" + tag)
+    os.makedirs(b)
+    for n in ("amazon-ssm-agent ssm-agent-worker ssm-document-worker ssm-session-worker "
+              "ssm-session-logger ssm-cli updater ssm-setup-cli").split():
+        with open(os.path.join(b, n), "w") as f:
+            f.write("binary " + n + "\n")
+    return b
+
+
+def pool_with(work, tag, *files):
+    p = os.path.join(work, "pool-" + tag)
+    os.makedirs(p)
+    for f in files:
+        shutil.copy2(f, p)
+    return p
+
+
+def load_tool(mutate=False):
+    src = open(TOOL).read()
+    if mutate:
+        pool_cmp = "if m.group(1) == trunk_digest:"
+        bump_cmp = "elif old_v != new_v:"
+        if src.count(pool_cmp) == 1 and src.count(bump_cmp) == 1:
+            # The name-only check this replaced, and a bump check that never asks.
+            src = src.replace(pool_cmp, "if True:").replace(bump_cmp, "elif True:")
+        else:
+            raise SystemExit("--mutate: could not find both comparisons to neuter; "
+                             "haiku-hpkg-provenance changed shape -- fix this selftest.")
+    mod = types.ModuleType("haiku_hpkg_provenance")
+    mod.__file__ = TOOL
+    exec(compile(src, TOOL, "exec"), mod.__dict__)
+    return mod
+
+
+def outcome(fn, *a, **kw):
+    """(ok, text): ok=False when the tool raises Fail."""
+    lines = []
+    kw.setdefault("out", lines.append)
+    try:
+        fn(*a, **kw)
+        return True, "\n".join(lines)
+    except Exception as e:  # Fail
+        return False, str(e)
+
+
+def append(path, text):
+    with open(path, "a") as f:
+        f.write(text)
+
+
+def git(top, *args):
+    return run(["git", "-C", top] + list(args))
+
+
+def init_repo(top):
+    for a in (["init", "-q"], ["config", "user.email", "t@t"], ["config", "user.name", "t"],
+              ["add", "-A"], ["commit", "-qm", "base"]):
+        rc, out = git(top, *a)
+        if rc != 0:
+            raise SystemExit("git %s failed: %s" % (a, out))
+    return git(top, "rev-parse", "HEAD")[1].strip()
+
+
+# --- arms ---------------------------------------------------------------------
+
+def arm_mutate(work):
+    mod = load_tool(mutate=True)
+    top = make_tree(os.path.join(work, "m"))
+    rc, log, files, _ = build_agent(os.path.join(work, "m"), top,
+                                    make_bindir(os.path.join(work, "m"), "a"), "a")
+    if rc != 0 or len(files) != 1:
+        print(log)
+        raise SystemExit("--mutate: the baseline build did not produce an hpkg")
+    append(os.path.join(top, "graviton/go-arm64/ssm-agent/amazon-ssm-agent-haiku-arm64.patch"),
+           "+drift\n")
+    pool = pool_with(os.path.join(work, "m"), "drift", files[0])
+    ok_pool, _ = outcome(mod.check_pool, pool, "amazon_ssm_agent", top)
+    base = init_repo(top)
+    append(os.path.join(top, "graviton/go-arm64/ssm-agent/amazon-ssm-agent-haiku-arm64.patch"),
+           "+drift2\n")
+    ok_bump, _ = outcome(mod.check_bump, top, base)
+    print("mutated check-pool on a drifted hpkg: %s" % ("PASSED" if ok_pool else "failed"))
+    print("mutated check-bump on an unbumped change: %s" % ("PASSED" if ok_bump else "failed"))
+    if ok_pool and ok_bump:
+        print("MUTATION DETECTED: without the comparisons both drift cases pass, so the "
+              "real test's failures come from the comparisons.")
+        return 0
+    print("MUTATION NOT DETECTED: a drift case still fails without its comparison, so "
+          "that failure comes from something else.")
+    return 1
+
+
+def main():
+    if len(sys.argv) > 1 and sys.argv[1] == "--stub-package":
+        return stub_package(sys.argv[2:])
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--mutate", action="store_true")
+    a = ap.parse_args()
+    work = tempfile.mkdtemp(prefix="provenance-selftest.")
+    try:
+        if a.mutate:
+            return arm_mutate(work)
+        return arm_main(work)
+    finally:
+        shutil.rmtree(work, ignore_errors=True)
+
+
+def arm_main(work):
+    mod = load_tool()
+    top = make_tree(work)
+    patch = os.path.join(top, "graviton/go-arm64/ssm-agent/amazon-ssm-agent-haiku-arm64.patch")
+
+    print("== manifest generator")
+    rc1, m1 = run(["sh", GEN, "--top", top, "amazon_ssm_agent"])
+    rc2, m2 = run(["sh", GEN, "--top", top, "amazon_ssm_agent"])
+    rc3, d = run(["sh", GEN, "--top", top, "--digest", "amazon_ssm_agent"])
+    check(rc1 == 0 and m1 == m2, "manifest is deterministic")
+    check(rc3 == 0 and d.strip() == "sha256:" + hashlib.sha256(m1.encode()).hexdigest()
+          == "sha256:" + mod.digest_of(m1), "--digest, sha256 of the text and digest_of agree")
+    check("file ssm-agent/amazon-ssm-agent-haiku-arm64.patch " in m1
+          and "file patches/0001-" in m1 and "upstream github.com/aws/amazon-ssm-agent " in m1,
+          "agent manifest names the patch, the toolchain patches and the upstream tag")
+    check("build-hpkg.sh" not in m1, "build scripts are not manifest inputs")
+    rc, mg = run(["sh", GEN, "--top", top, "golang"])
+    check(rc == 0 and "file package/profile.d/go.sh " in mg and "file patches/0001-" in mg,
+          "golang manifest names its patches and profile.d")
+    rc, out = run(["sh", GEN, "--top", os.path.join(work, "nonexistent"), "amazon_ssm_agent"])
+    check(rc != 0 and out.count("debeos-source-manifest") == 0,
+          "a missing input fails without printing a partial manifest")
+
+    print("== build-hpkg.sh stamps the digest")
+    bindir = make_bindir(work, "a")
+    rc, log, files, staging = build_agent(work, top, bindir, "a")
+    check(rc == 0 and len(files) == 1, "build-hpkg.sh produced one hpkg (rc=%d)" % rc)
+    if rc != 0 or len(files) != 1:
+        print(log)
+        print("FAILED: cannot continue without a built hpkg")
+        return 1
+    hpkg = files[0]
+    desc = hpkg_meta.read_description_file(hpkg) or ""
+    check(("DeBeOS-Source-Digest: " + d.strip()) in desc,
+          "the hpkg description carries this tree's digest")
+    check(open(os.path.join(staging, "data/amazon_ssm_agent/source-manifest")).read() == m1,
+          "data/amazon_ssm_agent/source-manifest is the tree's manifest")
+    check("WARNING: no " in log, "building without BINDIR/SOURCE-MANIFEST warns")
+
+    print("== check-pool")
+    ok, text = outcome(mod.check_pool, pool_with(work, "good", hpkg), "amazon_ssm_agent", top)
+    check(ok and "built from this tree's source" in text, "stamped + matching -> pass")
+    rc, _ = run([sys.executable, TOOL, "check-pool", "--top", top, pool_with(work, "cli", hpkg)])
+    check(rc == 0, "the CLI exits 0 on a matching pool")
+
+    two = pool_with(work, "two", hpkg)
+    shutil.copy2(hpkg, os.path.join(two, "amazon_ssm_agent-3.3.3270.0-1-arm64.hpkg"))
+    ok, text = outcome(mod.check_pool, two, "amazon_ssm_agent", top)
+    check(not ok and "exactly one" in text, "two agent hpkgs in the pool -> FAIL")
+    empty = pool_with(work, "empty")
+    open(os.path.join(empty, "debeos_cloudwatch-1.0-1-arm64.hpkg"), "w").close()
+    ok, text = outcome(mod.check_pool, empty, "amazon_ssm_agent", top)
+    check(not ok and "holds no" in text, "no agent hpkg -> FAIL (other packages don't count)")
+    rc, _ = run([sys.executable, TOOL, "check-pool", "--top", top, two])
+    check(rc == 1, "the CLI exits 1 on a failed check")
+
+    saved = open(patch).read()
+    append(patch, "+drift\n")
+    ok, text = outcome(mod.check_pool, pool_with(work, "drift", hpkg), "amazon_ssm_agent", top)
+    check(not ok and "REPLACE (not add)" in text and "amazon-ssm-agent-haiku-arm64.patch" in text,
+          "agent patch changed after the build (the #555 shape) -> FAIL with rebuild steps")
+    open(patch, "w").write(saved)
+    p6 = os.path.join(top, "graviton/go-arm64/patches/0099-later-runtime-fix.patch")
+    open(p6, "w").write("later\n")
+    ok, text = outcome(mod.check_pool, pool_with(work, "drift-tc", hpkg), "amazon_ssm_agent", top)
+    check(not ok, "toolchain patch added after the build (the #851 shape) -> FAIL")
+    os.remove(p6)
+
+    print("== unstamped and legacy hpkgs")
+    plain = os.path.join(work, "amazon_ssm_agent-3.3.3270.0-2-arm64.hpkg")
+    with open(plain, "wb") as f:
+        f.write(build_hpkg("amazon_ssm_agent", "3.3.3270.0", 2, "no stamp here"))
+    ok, text = outcome(mod.check_pool, pool_with(work, "plain", plain), "amazon_ssm_agent", top)
+    check(not ok and "no legacy record" in text, "unstamped, no legacy record -> FAIL")
+    legacy_dir = os.path.join(top, "graviton/go-arm64/provenance-legacy")
+    os.makedirs(legacy_dir)
+    sha = hashlib.sha256(open(plain, "rb").read()).hexdigest()
+    with open(os.path.join(legacy_dir, sha + ".manifest"), "w") as f:
+        f.write("# a comment\n" + m1)
+    ok, text = outcome(mod.check_pool, pool_with(work, "leg", plain), "amazon_ssm_agent", top)
+    check(ok and "legacy" in text, "unstamped + legacy record matching trunk -> pass")
+    append(patch, "+drift\n")
+    warned = []
+    ok, _ = outcome(mod.check_pool, pool_with(work, "leg2", plain), "amazon_ssm_agent", top,
+                    warn=warned.append)
+    check(ok and warned and "amazon-ssm-agent-haiku-arm64.patch" in warned[0]
+          and "LEGACY" in warned[0],
+          "legacy record behind trunk -> pass with a WARNING that names the drifted input")
+    open(patch, "w").write(saved)
+    with open(os.path.join(legacy_dir, "not-a-sha.manifest"), "w") as f:
+        f.write(m1)
+    ok, text = outcome(mod.check_pool, pool_with(work, "leg3", plain), "amazon_ssm_agent", top)
+    check(not ok and "<hpkg sha256>.manifest" in text, "a misnamed legacy record is rejected")
+    shutil.rmtree(legacy_dir)
+
+    print("== build-hpkg.sh refuses binaries built from other source")
+    bindir_b = make_bindir(work, "b")
+    with open(os.path.join(bindir_b, "SOURCE-MANIFEST"), "w") as f:
+        f.write(m1.replace("debeos-source-manifest 1", "debeos-source-manifest 1\n# old"))
+    rc, log, files, _ = build_agent(work, top, bindir_b, "b")
+    check(rc != 0 and not files and "different source" in log,
+          "a disagreeing BINDIR/SOURCE-MANIFEST stops the build, no hpkg written")
+    bindir_c = make_bindir(work, "c")
+    with open(os.path.join(bindir_c, "SOURCE-MANIFEST"), "w") as f:
+        f.write(m1)
+    rc, log, files, _ = build_agent(work, top, bindir_c, "c")
+    check(rc == 0 and len(files) == 1 and "WARNING: no " not in log,
+          "an agreeing BINDIR/SOURCE-MANIFEST builds without the warning")
+
+    print("== check-bump")
+    base = init_repo(top)
+    ok, text = outcome(mod.check_bump, top, base)
+    check(ok and "unchanged" in text, "no change -> pass")
+    append(os.path.join(top, "graviton/go-arm64/ssm-agent/package/build-hpkg.sh"), "# edit\n")
+    ok, _ = outcome(mod.check_bump, top, base)
+    check(ok, "a build-script-only change needs no bump")
+    append(patch, "+fix\n")
+    ok, text = outcome(mod.check_bump, top, base)
+    check(not ok and "Bump the revision" in text and "amazon_ssm_agent" in text,
+          "agent patch changed, version not bumped -> FAIL")
+    info = os.path.join(top, "graviton/go-arm64/ssm-agent/package/amazon_ssm_agent.PackageInfo")
+    itext = open(info).read()
+    open(info, "w").write(re.sub(r"^(version\s+\S+)-(\d+)$",
+                                 lambda m: "%s-%d" % (m.group(1), int(m.group(2)) + 1),
+                                 itext, flags=re.M))
+    ok, text = outcome(mod.check_bump, top, base)
+    check(ok and "version moved" in text, "agent patch changed and revision bumped -> pass")
+    open(os.path.join(top, "graviton/go-arm64/patches/0099-x.patch"), "w").write("x\n")
+    ok, text = outcome(mod.check_bump, top, base)
+    check(not ok and "golang source changed" in text,
+          "a toolchain patch without a golang bump -> FAIL")
+
+    print("== replay of real history")
+    have = run(["git", "-C", ROOT, "cat-file", "-e", PR555_COMMIT + "^{commit}"])[0] == 0
+    if have:
+        ok, text = outcome(mod.check_bump, ROOT, PR555_COMMIT + "~1", PR555_COMMIT)
+        check(not ok and "3.3.3270.0-1" in text,
+              "PR #555's commit (patch changed, PackageInfo left at -1) -> FAIL")
+        ok, _ = outcome(mod.check_bump, ROOT, PR848_COMMIT + "~1", PR848_COMMIT)
+        check(ok, "PR #848's commit (patch changed, bumped to -2) -> pass")
+    else:
+        print("skip PR #555 replay: %s not in this clone" % PR555_COMMIT)
+
+    print("== shipped legacy records")
+    recs = mod.load_legacy(ROOT)
+    for sha, body in sorted(recs.items()):
+        check(body.startswith("debeos-source-manifest 1\npackage "),
+              "legacy %s... is a manifest" % sha[:12])
+    check(LEGACY_2_SHA in recs, "the -2 agent (sha256 %s...) has a legacy record" % LEGACY_2_SHA[:12])
+    if have and LEGACY_2_SHA in recs:
+        old = os.path.join(work, "at-848")
+        mod._extract(ROOT, PR848_COMMIT, old)
+        check(mod.manifest(old, "amazon_ssm_agent") == recs[LEGACY_2_SHA],
+              "the -2 record is exactly the manifest of the tree it was built from (%s)"
+              % PR848_COMMIT)
+
+    print("== wiring")
+    spec = open(os.path.join(ROOT, "graviton/pipeline/buildspecs/cross-build.yml")).read()
+    i_sync = spec.find('aws s3 sync "s3://$WORK_BUCKET/hpkg-pool/"')
+    i_call = spec.find("haiku-hpkg-provenance\" check-pool")
+    i_jam2 = spec.find('cp "$HAIKU_TOP/graviton/ssh/UserBuildConfig"')
+    check(-1 not in (i_sync, i_call, i_jam2) and i_sync < i_call < i_jam2,
+          "cross-build.yml runs check-pool after the pool sync and before the image pass")
+    check("--package amazon_ssm_agent" in spec[i_call:i_call + 200]
+          and "exit 1" in spec[i_call:i_call + 600],
+          "cross-build.yml checks the agent and a failed check exits the bake")
+    for rel in ("graviton/go-arm64/ssm-agent/package/build-hpkg.sh",
+                "graviton/go-arm64/package/stage-goroot.sh"):
+        s = open(os.path.join(ROOT, rel)).read()
+        check("hpkg-source-manifest" in s and "DeBeOS-Source-Digest: sha256:" in s,
+              "%s stamps the source digest" % rel)
+
+    print("== live: this checkout against its merge-base with origin/graviton")
+    mb = run(["git", "-C", ROOT, "merge-base", "origin/graviton", "HEAD"])
+    if mb[0] == 0:
+        ok, text = outcome(mod.check_bump, ROOT, mb[1].strip())
+        print(text)
+        check(ok, "this branch bumps every package whose source it changes")
+    else:
+        print("skip live check-bump: no origin/graviton")
+
+    print()
+    if FAILURES:
+        print("FAILED: %d assertion(s)" % len(FAILURES))
+        return 1
+    print("PASS")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
