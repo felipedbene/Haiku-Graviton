@@ -2693,6 +2693,229 @@ test('#611: a malformed allowlist fails synth instead of quietly opening or clos
     .toEqual(['203.0.113.0/24', '198.51.100.0/24']);
 });
 
+// ---------------------------------------------------------------------------
+// issue 837: the build-wave overlay staging must find a port whose HaikuPorts
+// directory hyphenates what the package name underscores (dfu_util lives in
+// app-mobilephone/dfu-util/). It looked the dir up by `-name <pkg>` only, found
+// nothing, and the build silently ran the stock recipe. Drive the real
+// _overlay_stage + _wrapper output under /bin/sh against a fake ports tree.
+// ---------------------------------------------------------------------------
+
+function runOverlayStage(pkg: string, overlay: string[], tree: string[]):
+    { staged: string[]; log: string } {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'ov837-'));
+  const hp = path.join(tmp, 'haikuports');
+  const agent = path.join(tmp, 'stub-agent');
+  const captured = path.join(tmp, 'captured.log.gz');
+  for (const rel of tree) {
+    const p = path.join(hp, rel);
+    if (rel.endsWith('/')) { fs.mkdirSync(p, { recursive: true }); continue; }
+    fs.mkdirSync(path.dirname(p), { recursive: true });
+    fs.writeFileSync(p, 'stock\n');
+  }
+  // The stub agent "downloads" an overlay object by writing a marker at the dest.
+  fs.writeFileSync(agent,
+    `#!/bin/sh\n` +
+    `if [ "$1" = s3 ] && [ "$2" = cp ]; then\n` +
+    `  case "$3" in\n` +
+    `    s3://*/debeos-overlay/*) echo overlay > "$4" ;;\n` +
+    `    *.log.gz) cp "$3" "${captured}" 2>/dev/null || true ;;\n` +
+    `  esac\n` +
+    `fi\nexit 0\n`);
+  fs.chmodSync(agent, 0o755);
+  const py = [
+    'import os,sys,types',
+    `os.environ["SSM_AGENT_PATH"]=${JSON.stringify(agent)}`,
+    `os.environ["HP_TREE"]=${JSON.stringify(hp)}`,
+    `sys.path.insert(0,${JSON.stringify(OPS_LAMBDAS)})`,
+    `KEYS=${JSON.stringify(overlay.map(b => 'debeos-overlay/' + b))}`,
+    'class Pg:',
+    '    def paginate(self, Bucket=None, Prefix=None):',
+    '        return [{"Contents": [{"Key": k} for k in KEYS]}]',
+    'class S3:',
+    '    def get_paginator(self, name): return Pg()',
+    'fake=types.ModuleType("boto3")',
+    'fake.client=lambda svc: S3()',
+    'sys.modules["boto3"]=fake',
+    'import run_ssm',
+    `prelude=run_ssm._overlay_stage(${JSON.stringify(pkg)},"b")`,
+    `script=run_ssm._wrapper("true","b","r",${JSON.stringify(pkg)},`,
+    `  ok_grep='"^${pkg}: BUILD_OK"',refresh="",prelude=prelude)`,
+    'sys.stdout.write(script)',
+  ].join('\n');
+  const script = child_process.execFileSync('python3', ['-c', py], { encoding: 'utf8' });
+  child_process.spawnSync('sh', ['-c', script], { encoding: 'utf8' });
+  const staged: string[] = [];
+  const walk = (d: string) => {
+    for (const e of fs.readdirSync(d, { withFileTypes: true })) {
+      const p = path.join(d, e.name);
+      if (e.isDirectory()) walk(p);
+      else if (fs.readFileSync(p, 'utf8') === 'overlay\n') staged.push(path.relative(hp, p));
+    }
+  };
+  walk(hp);
+  let log = '';
+  try {
+    log = child_process.execFileSync('gunzip', ['-c', captured], { encoding: 'utf8' });
+  } catch { /* no log */ }
+  fs.rmSync(tmp, { recursive: true, force: true });
+  return { staged: staged.sort(), log };
+}
+
+test('837: the overlay reaches a port whose dir hyphenates the underscored package name', () => {
+  const r = runOverlayStage('dfu_util', ['dfu_util-0.9.recipe'],
+    ['app-mobilephone/dfu-util/dfu_util-0.9.recipe']);
+  expect(r.staged).toEqual(['app-mobilephone/dfu-util/dfu_util-0.9.recipe']);
+  expect(r.log).toContain('overlay: staging dfu_util into');
+});
+
+test('837: a hyphenated port dir with no recipe of that name yet is still found by dir name', () => {
+  const r = runOverlayStage('pkcs11_helper', ['pkcs11_helper-1.30.0.recipe'],
+    ['app-crypt/pkcs11-helper/']);
+  expect(r.staged).toEqual(['app-crypt/pkcs11-helper/pkcs11_helper-1.30.0.recipe']);
+});
+
+test('837: the recipe lookup pins the port name, so a prefix-sharing port is not chosen', () => {
+  // sdl2's overlay must land beside sdl2's recipe, never in sdl2_image/ (whose
+  // recipe also starts with "sdl2"), and never in a work-* chroot.
+  const r = runOverlayStage('sdl2', ['sdl2-2.30.0.recipe'], [
+    'media-libs/sdl2_image/sdl2_image-2.8.2.recipe',
+    'media-libs/sdl2/work-2.30.0/sdl2-2.30.0.recipe',
+    'media-libs/sdl2/sdl2-2.30.0.recipe',
+  ]);
+  expect(r.staged).toEqual(['media-libs/sdl2/sdl2-2.30.0.recipe']);
+});
+
+test('837: an unlocatable port says so in the build log instead of skipping silently', () => {
+  const r = runOverlayStage('x16_emulator', ['x16_emulator-46.recipe'], ['app-emulation/']);
+  expect(r.staged).toEqual([]);
+  expect(r.log).toContain('overlay: WARNING no port dir for x16_emulator');
+});
+
+// ---------------------------------------------------------------------------
+// Issue 838: a dry spot pool must not drop the chain. LaunchBuilder used to make
+// exactly one spot request (one type, one random subnet); InsufficientInstanceCapacity
+// failed the Lambda and the execution went LaunchBuilder -> ReapOnFailure. Drive the
+// real handler against a fake EC2 that is dry for chosen (type, subnet, market) pools.
+// boto3 AND botocore are stubbed, so the test needs neither credentials nor an SDK.
+// ---------------------------------------------------------------------------
+
+function runLaunch(opts: { dry: string[]; fatal?: string; event?: object;
+                           env?: Record<string, string> }): any {
+  const py = [
+    'import json,os,sys,types',
+    `sys.path.insert(0,${JSON.stringify(OPS_LAMBDAS)})`,
+    'class ClientError(Exception):',
+    '    def __init__(self, code):',
+    '        super().__init__(code); self.response={"Error":{"Code":code}}',
+    'bc=types.ModuleType("botocore"); bcc=types.ModuleType("botocore.config")',
+    'bce=types.ModuleType("botocore.exceptions")',
+    'bcc.Config=lambda **kw: kw; bce.ClientError=ClientError',
+    'sys.modules.update({"botocore":bc,"botocore.config":bcc,"botocore.exceptions":bce})',
+    `DRY=set(${JSON.stringify(opts.dry)}); FATAL=json.loads(${JSON.stringify(JSON.stringify(opts.fatal ?? null))})`,
+    'CALLS=[]',
+    'class EC2:',
+    '    def describe_images(self, ImageIds): return {"Images":[{"RootDeviceName":"/dev/sda1"}]}',
+    '    def run_instances(self, **kw):',
+    '        mkt=kw.get("InstanceMarketOptions",{}).get("MarketType","on-demand")',
+    '        key="%s/%s/%s" % (kw["InstanceType"], kw["SubnetId"], mkt)',
+    '        CALLS.append(key)',
+    '        if FATAL: raise ClientError(FATAL)',
+    '        if key in DRY or "*/*/"+mkt in DRY: raise ClientError("InsufficientInstanceCapacity")',
+    '        return {"Instances":[{"InstanceId":"i-"+key}]}',
+    'class SSM:',
+    '    def get_parameter(self, Name): return {"Parameter":{"Value":"ami-1"}}',
+    'fake=types.ModuleType("boto3")',
+    'fake.client=lambda svc, **kw: EC2() if svc=="ec2" else SSM()',
+    'sys.modules["boto3"]=fake',
+    'os.environ.update({"SUBNET_IDS":"s-a,s-b","SG_ID":"sg","INSTANCE_PROFILE_ARN":"arn",',
+    '    "INSTANCE_TYPE":"c8g.2xlarge","FALLBACK_INSTANCE_TYPES":"c7g.2xlarge,m8g.2xlarge"})',
+    `os.environ.update(${JSON.stringify(opts.env ?? {})})`,
+    'import launch_builder',
+    'class Ctx: aws_request_id="req"',
+    'try:',
+    `    ev=launch_builder.handler(json.loads(${JSON.stringify(JSON.stringify(opts.event ?? {}))}), Ctx())`,
+    '    out={"ok":True,"ev":ev}',
+    'except Exception as e:',
+    '    out={"ok":False,"err":type(e).__name__}',
+    'out["calls"]=CALLS',
+    'print(json.dumps(out))',
+  ].join('\n');
+  const out = child_process.execFileSync('python3', ['-c', py], { encoding: 'utf8' });
+  return JSON.parse(out.trimEnd().split('\n').pop() as string);
+}
+
+test('838: a dry c8g spot pool walks the other AZ, then an equivalent type, still on spot', () => {
+  const r = runLaunch({ dry: ['c8g.2xlarge/s-a/spot', 'c8g.2xlarge/s-b/spot'] });
+  expect(r.ok).toBe(true);
+  expect(r.ev.instance_type).toBe('c7g.2xlarge');
+  expect(r.ev.market).toBe('spot');
+  // Both AZs are tried for the primary type before any fallback type, and every
+  // attempt is spot: no on-demand request is made while a spot pool has room.
+  expect(r.calls.slice(0, 2).sort())
+    .toEqual(['c8g.2xlarge/s-a/spot', 'c8g.2xlarge/s-b/spot']);
+  expect(r.calls[2]).toMatch(/^c7g\.2xlarge\/s-[ab]\/spot$/);
+  expect(r.calls.length).toBe(3);
+});
+
+test('838: with every spot pool dry and no opt-in, it never buys on-demand and raises the retryable error', () => {
+  const r = runLaunch({ dry: ['*/*/spot'] });
+  expect(r.ok).toBe(false);
+  expect(r.err).toBe('BuilderCapacityUnavailable');
+  expect(r.calls.length).toBe(6);  // 3 types x 2 subnets
+  expect(r.calls.every((c: string) => c.endsWith('/spot'))).toBe(true);
+  // Env "false" is still off.
+  const r2 = runLaunch({ dry: ['*/*/spot'], env: { ON_DEMAND_FALLBACK: 'false' } });
+  expect(r2.err).toBe('BuilderCapacityUnavailable');
+  expect(r2.calls.some((c: string) => c.endsWith('/on-demand'))).toBe(false);
+});
+
+test('838: on-demand fallback only when explicitly enabled, primary type first, and reported', () => {
+  const r = runLaunch({ dry: ['*/*/spot'], event: { on_demand_fallback: true } });
+  expect(r.ok).toBe(true);
+  expect(r.ev.market).toBe('on-demand');
+  expect(r.ev.instance_type).toBe('c8g.2xlarge');
+  expect(r.calls.length).toBe(7);
+  expect(r.calls[6]).toMatch(/^c8g\.2xlarge\/s-[ab]\/on-demand$/);
+  const viaEnv = runLaunch({ dry: ['*/*/spot'], env: { ON_DEMAND_FALLBACK: 'true' } });
+  expect(viaEnv.ev.market).toBe('on-demand');
+});
+
+test('838: a non-capacity launch error still fails at once, and a pinned type is not swapped', () => {
+  const r = runLaunch({ dry: [], fatal: 'InvalidAMIID.NotFound' });
+  expect(r.ok).toBe(false);
+  expect(r.err).toBe('ClientError');
+  expect(r.calls.length).toBe(1);
+  const pinned = runLaunch({ dry: ['*/*/spot'], event: { instance_type: 'c8g.4xlarge' } });
+  expect(pinned.err).toBe('BuilderCapacityUnavailable');
+  expect(pinned.calls.every((c: string) => c.startsWith('c8g.4xlarge/'))).toBe(true);
+});
+
+test('838: the stack wires the spot fallback list, keeps on-demand off, and retries LaunchBuilder on capacity', () => {
+  const t = synthOps();
+  const fns = Object.values(t.findResources('AWS::Lambda::Function')).filter(
+    (f: any) => f.Properties.Handler === 'launch_builder.handler') as any[];
+  expect(fns.length).toBe(1);
+  const env = fns[0].Properties.Environment.Variables;
+  expect(env.INSTANCE_TYPE).toBe('c8g.2xlarge');
+  expect(env.FALLBACK_INSTANCE_TYPES).toBe('c7g.2xlarge,m8g.2xlarge');
+  expect(env.ON_DEMAND_FALLBACK).toBe('false');
+  expect(fns[0].Properties.Timeout).toBeGreaterThanOrEqual(180);
+  // The definition is an Fn::Join of literal JSON and tokens; tokens only sit inside
+  // string values, so substituting a placeholder leaves parseable JSON.
+  const sms = Object.values(t.findResources('AWS::StepFunctions::StateMachine')) as any[];
+  const wave = sms.find((s: any) => s.Properties.StateMachineName === 'debeos-build-wave');
+  const parts = wave.Properties.DefinitionString['Fn::Join'][1];
+  const def = JSON.parse(parts.map((p: any) => (typeof p === 'string' ? p : 'X')).join(''));
+  const lb = def.States.LaunchBuilder;
+  const retry = (lb.Retry || []).find(
+    (r: any) => (r.ErrorEquals || []).includes('BuilderCapacityUnavailable'));
+  expect(retry).toBeDefined();
+  expect(retry.MaxAttempts).toBeGreaterThanOrEqual(1);
+  // The catch-all reap path is still there for everything else.
+  expect(lb.Catch.some((c: any) => c.ErrorEquals.includes('States.ALL'))).toBe(true);
+});
+
 // ---- issue 839: a failed execution hands its unbuilt leases back --------------
 // Drive the real release.py against an in-memory table that EVALUATES the update's
 // ConditionExpression the way DynamoDB would for the two attributes it may name. A

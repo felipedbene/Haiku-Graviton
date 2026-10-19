@@ -504,13 +504,14 @@ export class OpsStack extends cdk.Stack {
 
     // ---- task Lambdas ----------------------------------------------------
     const lambdasDir = path.join(__dirname, '..', 'ops-lambdas');
-    const mkFn = (id: string, handler: string, extraEnv: Record<string, string> = {}) =>
+    const mkFn = (id: string, handler: string, extraEnv: Record<string, string> = {},
+                  timeout: cdk.Duration = cdk.Duration.seconds(60)) =>
       new lambda.Function(this, id, {
         runtime: lambda.Runtime.PYTHON_3_12,
         architecture: lambda.Architecture.ARM_64,
         code: lambda.Code.fromAsset(lambdasDir),
         handler,
-        timeout: cdk.Duration.seconds(60),
+        timeout,
         logRetention: logs.RetentionDays.THREE_MONTHS,
         environment: {
           TABLE: this.table.tableName,
@@ -525,11 +526,18 @@ export class OpsStack extends cdk.Stack {
       SG_ID: builderSg.securityGroupId,
       INSTANCE_PROFILE_ARN: builderProfile.attrArn,
       INSTANCE_TYPE: 'c8g.2xlarge',
+      // Issue 838: a dry spot pool used to drop the chain. The launcher walks every
+      // builder subnet (AZ) for INSTANCE_TYPE, then for these same-size Graviton
+      // equivalents, still on spot. On-demand stays OFF: SOP section 2 budgets
+      // builders as spot, so paying on-demand is an explicit per-wave opt-in
+      // (`on_demand_fallback: true` in the execution input), never a silent default.
+      FALLBACK_INSTANCE_TYPES: 'c7g.2xlarge,m8g.2xlarge',
+      ON_DEMAND_FALLBACK: 'false',
       // Builders size their root per launch (overridable per wave via
       // `disk_gib`) instead of inheriting the AMI's baked snapshot size, so the
       // builder AMI can stay lean. DeBeOS grows BFS to fill the volume on boot.
       BUILDER_DISK_GIB: '200',
-    });
+    }, cdk.Duration.minutes(3));  // room for the spot walk + an opted-in on-demand walk
     const waitSsmFn = mkFn('WaitSsmFn', 'wait_ssm.handler');
     // #506: the build Lambda stages the driver from S3 onto each builder and refuses to
     // build unless the staged copy matches the driver in THIS tree. Read that driver's
@@ -1314,6 +1322,17 @@ export class OpsStack extends cdk.Stack {
 
     const claim = li('ClaimBatch', claimFn);
     const launch = li('LaunchBuilder', launchFn);
+    // Issue 838: when the launcher has walked every pool and still found no room it
+    // raises BuilderCapacityUnavailable. Spot capacity frees up on the scale of
+    // minutes, so wait and walk again (2, 4, 8 min) before the catch below reaps
+    // and fails the chain. Nothing was launched on that path, so a retry cannot
+    // double a builder. Any other launch error still fails straight away.
+    launch.addRetry({
+      errors: ['BuilderCapacityUnavailable'],
+      interval: cdk.Duration.minutes(2),
+      backoffRate: 2,
+      maxAttempts: 3,
+    });
     claim.next(launch);
     launch.next(checkSsm);
 

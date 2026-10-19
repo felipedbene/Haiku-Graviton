@@ -106,12 +106,27 @@ def _overlay_stage(pkg, bucket):
                 files.append((o["Key"], base))
     if not files:
         return ""
-    lines = [f'D=$(find {HP_TREE} -maxdepth 2 -type d -name {pkg} | head -1)',
-             'if [ -n "$D" ]; then mkdir -p "$D/patches"']
+    # Issue 837: HaikuPorts dirs hyphenate what package names underscore (dfu_util
+    # lives in app-mobilephone/dfu-util/), so a dir-name match alone misses them and
+    # the build silently runs the stock recipe. Locate the dir the way the tree names
+    # things -- by the port's own <pkg>-<version>.recipe, whose basename keeps the
+    # underscore -- and fall back to the dir name in either spelling.
+    names = f"-name {pkg}"
+    if "_" in pkg:
+        names = f"\\( {names} -o -name {pkg.replace('_', '-')} \\)"
+    lines = [f'R=$(find {HP_TREE} -mindepth 3 -maxdepth 3 -type f -name "{pkg}-*.recipe" '
+             f'-not -path "*/work-*" | head -1)',
+             'if [ -n "$R" ]; then D=$(dirname "$R"); else '
+             f'D=$(find {HP_TREE} -mindepth 2 -maxdepth 2 -type d {names} | head -1); fi',
+             'if [ -n "$D" ]; then mkdir -p "$D/patches"',
+             f'echo "overlay: staging {pkg} into $D" >> "$LOG"']
     for key, base in files:
         dest = '"$D/patches/"' if base.endswith(".patchset") else '"$D/"'
         lines.append(f'{AGENT} s3 cp "s3://{bucket}/{key}" {dest}{base} || true')
-    lines.append('fi')
+    lines += ['else',
+              f'echo "overlay: WARNING no port dir for {pkg} under {HP_TREE} -- '
+              f'overlay NOT staged, building the stock recipe" >> "$LOG"',
+              'fi']
     return "\n".join(lines) + "\n"
 
 
