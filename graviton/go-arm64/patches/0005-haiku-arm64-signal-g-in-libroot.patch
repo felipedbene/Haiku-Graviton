@@ -24,6 +24,10 @@ unmapped address); no instruction there ran, R28 still holds the caller's g,
 and sighandler needs that g to raise a recoverable panic. Such a fault is a
 SIGSEGV/SIGBUS whose fault address equals the PC, with LR in Go text.
 
+When the signal stack is not a heap span (GODEBUG=efence=1, stackFromSystem)
+there is nowhere to read g0 from, so sigFetchG falls back to the R28 g, the
+pre-patch behaviour, rather than returning nil and exiting via badsignal.
+
 Native Go toolchains, and every Go binary built with them, need rebuilding
 for the fix to take effect (the golang hpkg, amazon-ssm-agent).
 
@@ -114,10 +118,10 @@ index 0000000..7c8990e
 +//go:nosplit
 +func sigInLibroot(c *sigctxt) bool { return false }
 diff --git a/src/runtime/signal_unix.go b/src/runtime/signal_unix.go
-index f352cb3..0b344f1 100644
+index f352cb3..e5ed8de 100644
 --- a/src/runtime/signal_unix.go
 +++ b/src/runtime/signal_unix.go
-@@ -399,13 +399,23 @@ func preemptM(mp *m) {
+@@ -399,19 +399,37 @@ func preemptM(mp *m) {
  func sigFetchG(c *sigctxt) *g {
  	switch GOARCH {
  	case "arm", "arm64", "loong64", "ppc64", "ppc64le", "riscv64", "s390x":
@@ -142,3 +146,17 @@ index f352cb3..0b344f1 100644
  			sp := sys.GetCallerSP()
  			s := spanOf(sp)
  			if s != nil && s.state.get() == mSpanManual && s.base() < sp && sp < s.limit {
+ 				gp := *(**g)(unsafe.Pointer(s.base()))
+ 				return gp
+ 			}
++			if GOOS == "haiku" {
++				// No heap span to read g0 from: with GODEBUG=efence=1 or
++				// stackFromSystem the signal stack is sysAlloc'd. Returning
++				// nil would send every SIGURG/SIGPROF that lands in libroot
++				// to badsignal, which exits without cgo. Fall back to what
++				// sigtramp loaded from R28, as before libroot was special.
++				return getg()
++			}
+ 			return nil
+ 		}
+ 	}
