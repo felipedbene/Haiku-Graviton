@@ -1,5 +1,5 @@
 #!/bin/sh
-# build-hpkg.sh -- assemble amazon_ssm_agent-<ver>-1-arm64.hpkg on a DeBeOS
+# build-hpkg.sh -- assemble amazon_ssm_agent-<ver>-<rev>-arm64.hpkg on a DeBeOS
 # (Haiku) arm64 box, using the native `package` tool.
 #
 # Runs ON a Haiku arm64 instance (the `package` tool is not available when
@@ -18,9 +18,25 @@
 # the lean image and the full system.
 set -e
 
-VERSION="${VERSION:-3.3.3270.0-1}"
 BINDIR="${BINDIR:-/boot/home/ssm-real/bin}"
 PKGDIR="${PKGDIR:-$(cd "$(dirname "$0")" && pwd)}"
+
+# The version comes from .PackageInfo, the only place it is declared. It used to
+# be a second hard-coded default here, so bumping one and not the other wrote a
+# file whose name disagreed with the package inside it -- and the bake pools and
+# UserBuildConfig select this package by FILE NAME. A VERSION override is still
+# accepted, but only if it matches.
+PKGINFO_VERSION="$(sed -n 's/^version[[:space:]]*//p' "$PKGDIR/amazon_ssm_agent.PackageInfo")"
+if [ -z "$PKGINFO_VERSION" ]; then
+	echo "build-hpkg.sh: no version in $PKGDIR/amazon_ssm_agent.PackageInfo" >&2
+	exit 1
+fi
+if [ -n "${VERSION:-}" ] && [ "$VERSION" != "$PKGINFO_VERSION" ]; then
+	echo "build-hpkg.sh: VERSION=$VERSION disagrees with .PackageInfo" \
+		"($PKGINFO_VERSION); bump the PackageInfo instead" >&2
+	exit 1
+fi
+VERSION="$PKGINFO_VERSION"
 OUTDIR="${OUTDIR:-/boot/home}"
 STAGING="${STAGING:-/boot/home/ssm-pkg/root}"
 OUT="$OUTDIR/amazon_ssm_agent-${VERSION}-arm64.hpkg"

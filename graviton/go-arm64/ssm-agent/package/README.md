@@ -43,9 +43,31 @@ Run Command work** with the real agent on DeBeOS/arm64.
 
 ## The package
 
-`amazon_ssm_agent-3.3.3270.0-1-arm64.hpkg` — **zlib-compressed** (~35 MB;
-`package create -z zlib`, sha256 `3871b026cdf2b2919e9970580582168ec07fdf0cde96f7e61693596725786187`
-for the build below). Layout (package root maps to `/boot/system`):
+Current: `amazon_ssm_agent-3.3.3270.0-2-arm64.hpkg` — **zlib-compressed**
+(36,811,697 bytes; `package create -z zlib`, sha256
+`c602566a190024308b2dda4aa0e7722f3508bfc3804c809e3d2e6068726d3727`). Staged at
+`s3://haiku-graviton-668984504585-us-west-2/staging/ssm-agent/`. `-2` is the
+first build carrying the interactive Session Manager fix (#553: the ssm-user
+short-circuit plus the creack/pty Haiku backend), hardware-verified as described
+in `../README.md`. `-1` (36,814,905 bytes, sha256
+`3871b026cdf2b2919e9970580582168ec07fdf0cde96f7e61693596725786187`, binaries dated
+2026-09-18) predates both and is what canonical `ami-06f217c8b8ce37c9e` ships.
+
+**A source change to the agent needs a revision bump and a rebuild.** Nothing
+rebuilds this package automatically. The bake pools hold a prebuilt hpkg that
+`cross-build.yml` syncs as-is, so a merged change to
+`../amazon-ssm-agent-haiku-arm64.patch` reaches no image until someone rebuilds
+the hpkg, bumps `version` in `amazon_ssm_agent.PackageInfo`, and replaces the
+file in the pools. The #553 fix sat in source for 25 days that way.
+`build-hpkg.sh` takes the version from `.PackageInfo`, so the file name and the
+package inside it can no longer disagree.
+
+**Replace, don't add, in a bake pool.** `graviton/ssh/UserBuildConfig` bakes the
+first `amazon_ssm_agent-*-arm64.hpkg` its Glob returns (readdir order, not
+version order). A pool holding both `-1` and `-2` may bake either, so the old
+file has to come out of `hpkg-pool/` when the new one goes in.
+
+Layout (package root maps to `/boot/system`):
 
 ```
 bin/amazon-ssm-agent          bin/ssm-agent-worker     bin/ssm-document-worker
@@ -98,14 +120,35 @@ BINDIR=/boot/home/ssm-real/bin \
 PKGDIR=<this dir> \
 OUTDIR=/boot/home \
     sh build-hpkg.sh
-# -> /boot/home/amazon_ssm_agent-3.3.3270.0-1-arm64.hpkg  (zlib)
+# -> /boot/home/amazon_ssm_agent-<version from .PackageInfo>-arm64.hpkg  (zlib)
 ```
 
 The eight binaries are produced by the cross-build in `../README.md`
 ("How to reproduce"): pristine `amazon-ssm-agent` v3.3.3270.0 + the
 `../amazon-ssm-agent-haiku-arm64.patch` + the korli/go fork with the
 M0/M2/M4/M6 patchset, `GOOS=haiku GOARCH=arm64 CGO_ENABLED=0 go build` of the
-eight `makefile` targets.
+eight `makefile` targets. The `-2` binaries were built from the upstream
+`3.3.3270.0` GitHub tarball like this, with upstream's non-PIE flags:
+
+```sh
+export GOOS=haiku GOARCH=arm64 CGO_ENABLED=0 GOTOOLCHAIN=local GOFLAGS=-mod=vendor
+B() { out=$1; shift; go build -ldflags "-s -w" -trimpath -o "$OUT/$out" "$@"; }
+B amazon-ssm-agent    core/agent.go core/agent_unix.go core/agent_parser.go
+B ssm-agent-worker    agent/agent.go agent/agent_unix.go agent/agent_parser.go
+B updater             agent/update/updater/updater.go agent/update/updater/updater_unix.go
+B ssm-cli             agent/cli-main/cli-main.go
+B ssm-document-worker agent/framework/processor/executer/outofproc/worker/main.go
+B ssm-session-logger  agent/session/logging/main.go
+B ssm-session-worker  agent/framework/processor/executer/outofproc/sessionworker/main.go
+B ssm-setup-cli       agent/setupcli/setupcli.go
+```
+
+The build is reproducible. A second pristine apply and build gave a
+byte-identical `ssm-session-worker` (sha256 `d26c4457…f08f56`).
+
+The lean image has no `tar`, `gzip` or `curl`. To get the binaries onto the
+Haiku box, stream each file over `haiku-ssh` (`haiku-ssh … 'cat > <path>' <
+<file>`, through an EICE tunnel). That moves about 20 MB in 20 s.
 
 ## Baking it into the image (wiring plan — NOT done here)
 
