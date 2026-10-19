@@ -1881,10 +1881,10 @@ index 0000000..c57ccf9
 +}
 diff --git a/vendor/github.com/creack/pty/pty_haiku.go b/vendor/github.com/creack/pty/pty_haiku.go
 new file mode 100644
-index 0000000..650c0e8
+index 0000000..17e1b71
 --- /dev/null
 +++ b/vendor/github.com/creack/pty/pty_haiku.go
-@@ -0,0 +1,64 @@
+@@ -0,0 +1,65 @@
 +//go:build haiku
 +// +build haiku
 +
@@ -1897,8 +1897,9 @@ index 0000000..650c0e8
 +	"unsafe"
 +)
 +
-+// Haiku's pty driver (src/add-ons/kernel/drivers/pty) hands out a free master
-+// on open("/dev/ptmx"); the matching slave is /dev/tt/<letter><hex digit>.
++// Haiku's pty driver (src/add-ons/kernel/drivers/pty) hands out a free pty
++// (controller) side on open("/dev/ptmx"); the matching tty side is
++// /dev/tt/<letter><hex digit>.
 +// These are libroot's grantpt() and ptsname_r() requests
 +// (headers/private/drivers/tty.h), done here directly because there is no cgo.
 +const (
@@ -1913,14 +1914,14 @@ index 0000000..650c0e8
 +	if err != nil {
 +		return nil, nil, err
 +	}
-+	// In case of error after this point, make sure we close the master fd.
++	// In case of error after this point, make sure we close the pty fd.
 +	defer func() {
 +		if err != nil {
 +			_ = p.Close() // Best effort.
 +		}
 +	}()
 +
-+	// grantpt(): chown the slave to the caller. unlockpt() is a no-op on Haiku.
++	// grantpt(): chown the tty side to the caller. unlockpt() is a no-op on Haiku.
 +	if err := ioctl(p.Fd(), ioctlGrantTTY, 0); err != nil {
 +		return nil, nil, err
 +	}
