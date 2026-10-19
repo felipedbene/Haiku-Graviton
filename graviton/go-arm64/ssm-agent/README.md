@@ -1,25 +1,49 @@
 # amazon-ssm-agent — haiku/arm64 port (M3 + M4 + M5 + M6 + M7)
 
-> **Interactive Session Manager fix (issue #553): shell sessions now run as the
-> current user.** `aws ssm start-session --target <id>` with no document (the
-> default `Standard_Stream` shell) failed with `Unable to start command: exit
-> status 1`, while Run Command and port forwarding worked. Root cause: the
-> `session/shell` layer was reused from the Linux path build-tag-only, so on a
-> root session it tried to create and drop privileges to `ssm-user`
-> (`CreateLocalAdminUser` → `useradd -m ssm-user`, then `getUserCredentials` →
-> `id -u ssm-user`). On Haiku both exit 1 — `useradd` has no `-m` flag, there is
-> no `ssm-user`, the agent already runs as the sole (root) user, and
-> `getUserCredentials` rejects uid 0 anyway. The fix (in
-> `agent/session/shell/shell_unix.go`, carried in the combined patch) short-circuits
-> the ssm-user model on `runtime.GOOS == "haiku"` and runs the interactive shell as
-> the current user with no privilege switch — Haiku is single-user, so RunAs is not
-> meaningful and is ignored rather than failing the session. Verified: pristine
-> `v3.3.3270.0` + `git apply` of the updated patch + `GOOS=haiku GOARCH=arm64
-> CGO_ENABLED=0 go build ./...` exits 0 and `ssm-session-worker` links as an
-> AArch64 Haiku ELF. On-hardware start-session (does `creack/pty.Start` bring up a
-> working pty on Haiku) is the one step not yet exercised end-to-end: the deployed
-> binary lives on the read-only system partition, so a live A/B needs a fresh
-> agent hpkg bake.
+> **Interactive Session Manager (issue #553): hardware-verified 2026-10-19 in
+> `amazon_ssm_agent-3.3.3270.0-2`.** `aws ssm start-session --target <id>` with no
+> document (the default `Standard_Stream` shell) never gave a shell. Two layers had
+> to be fixed, and the second only showed up once the first was on hardware:
+>
+> 1. **ssm-user model** (`agent/session/shell/shell_unix.go`, landed in PR #555).
+>    The shell layer reused the Linux path build-tag-only, so a root session tried
+>    `useradd -m ssm-user` and then `id -u ssm-user`. Both exit 1 on Haiku (its
+>    `useradd` has no `-m`, there is no ssm-user, and `getUserCredentials` rejects
+>    uid 0 anyway), so the worker died with `Unable to start command: exit status
+>    1`. On `runtime.GOOS == "haiku"` the shell now runs as the current user with
+>    no privilege switch. Haiku is single-user, so RunAs is ignored rather than
+>    failing the session. Because `runtime.GOOS` is a constant, the compiler drops
+>    the ssm-user branch from the haiku binary entirely: the `-2`
+>    `ssm-session-worker` does not contain `please set the RunAs default user` or
+>    `Failed to retrieve uid for`, and the `-1` one does.
+> 2. **No pty backend** (`vendor/github.com/creack/pty`, added for `-2`). With layer
+>    1 on hardware the session got one step further and failed with `Unable to
+>    start command: Failed to start pty: unsupported`. creack/pty v1.1.11 has no
+>    Haiku backend, so `pty.Start` returned `ErrUnsupported`. Its raw
+>    `syscall.Syscall(SYS_IOCTL, ...)` form cannot work on Haiku either: the fork's
+>    `syscall.Syscall` goes through `_kern_generic_syscall`, which reads its first
+>    argument as a subsystem name. The earlier "the pty path is already proven on
+>    Haiku" note here was wrong. `pty_haiku.go` now opens `/dev/ptmx`, does
+>    libroot's `grantpt` (`B_IOCTL_GRANT_TTY`) and `ptsname_r`
+>    (`B_IOCTL_GET_TTY_INDEX` -> `/dev/tt/<letter><hex>`), and opens the slave.
+>    `ioctl_haiku.go`/`asm_haiku.s` route the package's `ioctl` helper, which also
+>    backs `Setsize`, through the syscall package's libroot `ioctl` trampoline.
+>    `util.go`'s `windowRectCall` now calls that helper, which on every other OS is
+>    the same raw syscall it made before (later creack/pty releases do the same).
+>
+> **Hardware A/B** (`c7g.large` instances launched fresh from canonical
+> `ami-06f217c8b8ce37c9e`, scripted `aws ssm start-session` under `script -qfc`
+> sending `echo MARK_$((6*7))`, `echo SELF=$$ PARENT=$PPID; ps`, `exit`):
+>
+> | instance | package | runs | result |
+> |---|---|---|---|
+> | `i-00c19d0572ed8d744` | `-1` (as baked) | 2 | **FAIL** 2/2: `Unable to start command: exit status 1`, `createLocalUser`/`getUserCredentials` errors in `errors.log` |
+> | `i-00c19d0572ed8d744` | `-2` (`pkgman install`, agent restarted) | 3 | **PASS** 3/3: `MARK_42` echoed, `sh` is a child of `ssm-session-worker` (e.g. `SELF=463 PARENT=453`, `ps` shows team 453 = `ssm-session-worker`), `exit` ends the session (`Exiting session with sessionId`), no new errors |
+> | `i-070c87925e61a6976` | layer 1 only | 3 | **FAIL** 3/3: `Failed to start pty: unsupported` (found layer 2) |
+>
+> Run Command on the same `-2` box still returns `Success`/RC 0 (n=3). It takes
+> about 65 s to report, but that is the same on `-1` (measured n=2 on a separate
+> fresh `-1` instance), so it is not a regression from this change.
 
 > **M7 (2026-09-18): EC2-native registration gate CLEARED + packaged as an hpkg.**
 > The real agent registered **EC2-native** (an `i-` node via IMDS + instance
@@ -127,8 +151,8 @@ files only had `haiku` appended to their `//go:build … freebsd || linux || …
 constraint (and the legacy `// +build` line). They fall into: appconfig / path
 constants, process control (`SysProcAttr{Setpgid}`, `syscall.Kill`,
 `syscall.Sync`, `syscall.Credential`), platform-info and inventory gatherers,
-session/shell/pty (`syscall.Syscall(SYS_IOCTL, …)` — the fork provides the
-generic `Syscall` shim and `SYS_IOCTL`), TLS cert-pool, logging, the setup-cli
+session/shell (the pty itself needs a Haiku arm in the vendored creack/pty;
+see section 2 and the #553 note above), TLS cert-pool, logging, the setup-cli
 service/package managers, and the vendored `go-git` worktree (`_unix_other`).
 The `serialport` and `startup` packages join their existing **skip/stub**
 variant (the non-Linux no-op path) rather than the real one.
@@ -141,6 +165,7 @@ variant (the non-Linux no-op path) rather than the real one.
 | `vendor/github.com/go-git/go-billy/v5/osfs/os_haiku.go` | Same: `os_posix.go` uses `golang.org/x/sys/unix` `Flock`/`LOCK_EX`, which the agent's vendored x/sys/unix has no haiku port for | **Real** `FcntlFlock` locks; `rename`/`umask` identical to POSIX arm. `os_posix.go` gets `&& !haiku` |
 | `agent/fileutil/fileutil_diskspace_haiku.go` (+ `..._statfs.go`) | `syscall.Statfs`/`Statfs_t` not wrapped for haiku | `GetDiskSpaceInfo` split out: statfs version keeps the old unix set; **haiku returns a 1 TiB sentinel** so pre-download space guards don't spuriously block. *Degraded* — TODO: back with `statvfs`. |
 | `vendor/github.com/fsnotify/fsnotify/haiku.go` | fsnotify v1.5.1 has backends for inotify/kqueue/FEN/Windows only — none for Haiku | **Stub** `Watcher` (open, idle channels; `Add`/`Remove` no-op). *Degraded* — never fires events. TODO: back with Haiku `watch_node`. |
+| `vendor/github.com/creack/pty/pty_haiku.go` (+ `ioctl_haiku.go`, `asm_haiku.s`) | creack/pty v1.1.11 has no Haiku backend (`pty.Start` returns `ErrUnsupported`), and its raw `syscall.Syscall(SYS_IOCTL, …)` cannot reach Haiku's `ioctl` | **Real** pty: `/dev/ptmx` + `B_IOCTL_GRANT_TTY` + `B_IOCTL_GET_TTY_INDEX` -> `/dev/tt/<letter><hex>`, ioctls through the syscall package's libroot trampoline. `ioctl.go`/`pty_unsupported.go` get `!haiku`; `util.go`'s `windowRectCall` calls the shared `ioctl` helper (#553) |
 | `agent/plugins/inventory/gatherers/instancedetailedinformation/dataProvider_haiku.go` | The unix gatherer parses `lscpu` and calls `unix.Uname` (`golang.org/x/sys/unix`, no haiku port) | **Degraded** gatherer returns empty detailed-CPU info; not on the control path. TODO: populate from `get_system_info`. |
 
 ### 3. One pre-existing file edited in the body (1 file)
