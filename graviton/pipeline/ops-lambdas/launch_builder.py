@@ -96,6 +96,13 @@ def _root_device(ec2, ami):
 def _launch(ec2, spec, types, subnets, spot):
     """First pool with room wins; returns (instance, type, market) or None."""
     market = "spot" if spot else "on-demand"
+    # auto-stop=no keeps SpringClean off a mid-build builder (issue 761); the
+    # tags are built in handler(), so refuse a spec that lost them rather than
+    # launch a box the janitor will stop.
+    inst_tags = [t for s in spec.get("TagSpecifications", [])
+                 if s.get("ResourceType") == "instance" for t in s.get("Tags", [])]
+    if {"Key": "auto-stop", "Value": "no"} not in inst_tags:
+        raise ValueError("launch_builder: instance spec lacks auto-stop=no")
     for itype in types:
         for subnet in subnets:
             attempt = dict(spec, InstanceType=itype, SubnetId=subnet)
