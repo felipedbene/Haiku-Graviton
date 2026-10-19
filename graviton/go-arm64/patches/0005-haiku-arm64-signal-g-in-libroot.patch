@@ -49,29 +49,31 @@ index 05f4b3b..8fca863 100644
  
  // Called from dropm to undo the effect of an minit.
 diff --git a/src/runtime/signal_unix.go b/src/runtime/signal_unix.go
-index f352cb3..20dba84 100644
+index f352cb3..cb1b955 100644
 --- a/src/runtime/signal_unix.go
 +++ b/src/runtime/signal_unix.go
-@@ -415,6 +415,22 @@ func sigFetchG(c *sigctxt) *g {
- 			return nil
- 		}
- 	}
-+	if GOOS == "haiku" && GOARCH == "arm64" && !iscgo && findmoduledatap(c.sigpc()) == nil {
-+		// The signal interrupted libroot rather than Go code. haiku/arm64
-+		// keeps g only in R28 (there is no TLS copy without cgo), and R28
-+		// is an ordinary callee-saved register to the C code in libroot:
-+		// malloc, for one, uses it as a scratch register while it runs.
-+		// libroot is only ever called on g0 (asmcgocall switches to it),
-+		// or from the signal handler itself with every signal blocked, so
-+		// take the g0 that minit stored at the bottom of this M's signal
-+		// stack, the way the Linux VDSO case above does.
-+		sp := sys.GetCallerSP()
-+		s := spanOf(sp)
-+		if s != nil && s.state.get() == mSpanManual && s.base() < sp && sp < s.limit {
-+			return *(**g)(unsafe.Pointer(s.base()))
-+		}
-+		return nil
-+	}
- 	return getg()
- }
- 
+@@ -399,13 +399,23 @@ func preemptM(mp *m) {
+ func sigFetchG(c *sigctxt) *g {
+ 	switch GOARCH {
+ 	case "arm", "arm64", "loong64", "ppc64", "ppc64le", "riscv64", "s390x":
+-		if !iscgo && inVDSOPage(c.sigpc()) {
++		if !iscgo && (inVDSOPage(c.sigpc()) ||
++			GOOS == "haiku" && GOARCH == "arm64" && findmoduledatap(c.sigpc()) == nil) {
+ 			// When using cgo, we save the g on TLS and load it from there
+ 			// in sigtramp. Just use that.
+ 			// Otherwise, before making a VDSO call we save the g to the
+ 			// bottom of the signal stack. Fetch from there.
+ 			// TODO: in efence mode, stack is sysAlloc'd, so this wouldn't
+ 			// work.
++			//
++			// haiku/arm64 has the same problem with libroot: it keeps g
++			// only in R28 (there is no TLS copy without cgo), and R28 is
++			// an ordinary callee-saved register to the C code in libroot
++			// -- malloc, for one, uses it as a scratch register while it
++			// runs. libroot is only ever called on g0 (asmcgocall switches
++			// to it), or from the signal handler itself with every signal
++			// blocked, so minit stores the M's g0 at the bottom of the
++			// signal stack and a signal outside Go text fetches it here.
+ 			sp := sys.GetCallerSP()
+ 			s := spanOf(sp)
+ 			if s != nil && s.state.get() == mSpanManual && s.base() < sp && sp < s.limit {
