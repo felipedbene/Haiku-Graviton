@@ -74,13 +74,18 @@ func main() {
 	for sec := 1; sec <= dur; sec++ {
 		time.Sleep(time.Second)
 		s, t := spins.Load(), threads.Load()
+		// A stall is five consecutive seconds without progress. Scattered
+		// slow seconds on a small, busy instance are not a livelock, so
+		// any second in which both counters move resets the count.
 		if s == lastS || t == lastT {
 			stuck++
 			fmt.Printf("t=%d no progress (spins=%d threads=%d)\n", sec, s, t)
+		} else {
+			stuck = 0
 		}
 		lastS, lastT = s, t
 		if stuck >= 5 {
-			fmt.Println("FAIL: stalled")
+			fmt.Printf("FAIL: stalled for %d consecutive seconds\n", stuck)
 			os.Exit(1)
 		}
 	}
