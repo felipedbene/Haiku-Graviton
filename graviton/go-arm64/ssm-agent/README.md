@@ -1,5 +1,61 @@
 # amazon-ssm-agent — haiku/arm64 port (M3 + M4 + M5 + M6 + M7)
 
+> **IPC completion latency (issue #847): hardware-verified 2026-10-19 in
+> `amazon_ssm_agent-3.3.3270.0-3`.** Every Run Command took ~65 s to report and
+> every interactive session left `ipc messaging received timedout signal!`
+> behind, although the work finished in milliseconds.
+>
+> **Cause.** The agent-worker talks to `ssm-document-worker` /
+> `ssm-session-worker` through files (`common/filewatcherbasedipc`): the sender
+> writes `tmp/<seq>` and renames it into the channel directory, and the
+> receiver's `watch()` loop consumes it on an fsnotify `Create` event. The
+> vendored fsnotify had only an idle stub on Haiku, so the master never saw the
+> worker's `complete` message. It sat on disk until the worker had exited and
+> `WaitForProcess` had run out `defaultZombieProcessTimeout` (60 s, `master.go`).
+> The stop timer then made `Close()` drain the directory, which is how the
+> result still arrived, correct but late. Measured on `-2`
+> (`i-0df3578e6d6c771f9`, fresh from canonical `ami-058776e58bd902fba`): the
+> worker logged `sending document complete response` at 22:39:15.576 and
+> `document worker closed` at .576; 15 s later no `ssm-document-worker` was
+> running, and the channel directory still held the unread
+> `worker-20261019223915-000` (`reply`) and `-001` (`complete`). The master
+> logged `ipc messaging received timedout signal!` at 22:40:18.580 and only then
+> `sending document ... complete response`. The master's own message that
+> starts a run still reached the worker, because the worker's `watch()` drains
+> the directory once at startup, before it waits for events.
+>
+> **Fix.** `vendor/github.com/fsnotify/fsnotify/haiku.go` is now a polling
+> backend. Every 100 ms it lists each watched directory (or stats each watched
+> file) and diffs the result against the last snapshot. A new name gives
+> `Create` (which covers a rename into the directory), a missing name gives
+> `Remove`, a size or mtime change gives `Write`, and a mode change gives
+> `Chmod`. Removing the watched path itself gives `Remove` and drops the watch,
+> as with inotify. Directory watches are not recursive, and a new batch is
+> emitted in name order, which is the IPC sequence order. Only the haiku build
+> sees this file; the inotify/kqueue backends are untouched. A `watch_node`
+> backend would remove the poll, but it needs a KMessage parser in pure Go
+> (`CGO_ENABLED=0`).
+>
+> **Hardware A/B** (same instance, `c7g.large`; `-2` as baked, then `-3` via
+> `pkgman install -y` and `launch_roster stop/start x-vnd.debeos-amazon-ssm-agent`):
+>
+> | measurement | `-2` (as baked) | `-3` |
+> |---|---|---|
+> | Run Command, `send-command` to `Success`, client-side poll every 0.5 s | 65.2 / 65.2 / 65.2 s (n=3; a 4th, from the agent log, 63 s) | 1.6 / 1.6 / 1.6 s (n=3; 1.6–1.7 s, n=4, on the unstamped build of the same binaries) |
+> | worker `complete` sent to master `complete` (agent log), Run Command | 63.0 s | 66 / 65 / 68 ms |
+> | same, interactive session after `exit` | 63.0 / 63.0 / 63.0 s | 25 / 62 / 48 ms |
+> | session probe (`echo MARK_$((6*7))`, `ps`, `exit` under `script -qfc`) | PASS 3/3 | PASS 3/3: `MARK_42`, `sh` a child of `ssm-session-worker` (e.g. `SELF=1075 PARENT=1065`), `exit` ends it |
+> | new `ipc messaging received timedout signal!` lines | one per run and session | none |
+> | channel directories left under `channels/` | one per run | none |
+> | `ssm-document-worker` / `ssm-session-worker` left running (`ps`, `top -n 1 -d`) | none | none |
+> | idle CPU of `amazon-ssm-agent` + `ssm-agent-worker`, 60 s window | 0.3–0.4 ms/s (n=2, a second fresh `-2` box) | 3.7–4.0 ms/s (n=2) |
+>
+> The polling costs about 3.5 ms of CPU per second at idle, ~0.35% of one
+> core. `-3` is also the first agent built with toolchain patch `0005`
+> (`../patches/`, issue #843), so it no longer carries the signal-`g` livelock.
+> No spinning worker was seen on either build in this run, so that signature is
+> still unconfirmed for the agent.
+
 > **Interactive Session Manager (issue #553): hardware-verified 2026-10-19 in
 > `amazon_ssm_agent-3.3.3270.0-2`.** `aws ssm start-session --target <id>` with no
 > document (the default `Standard_Stream` shell) never gave a shell. Two layers had
@@ -164,7 +220,7 @@ variant (the non-Linux no-op path) rather than the real one.
 | `agent/fileutil/advisorylock/advisorylock_haiku.go` | Haiku libroot has no `flock(2)`; `syscall.Flock`/`LOCK_*` are not wrapped | **Real** impl via `syscall.FcntlFlock(F_SETLK)` + `Flock_t` (all present for haiku/arm64) |
 | `vendor/github.com/go-git/go-billy/v5/osfs/os_haiku.go` | Same: `os_posix.go` uses `golang.org/x/sys/unix` `Flock`/`LOCK_EX`, which the agent's vendored x/sys/unix has no haiku port for | **Real** `FcntlFlock` locks; `rename`/`umask` identical to POSIX arm. `os_posix.go` gets `&& !haiku` |
 | `agent/fileutil/fileutil_diskspace_haiku.go` (+ `..._statfs.go`) | `syscall.Statfs`/`Statfs_t` not wrapped for haiku | `GetDiskSpaceInfo` split out: statfs version keeps the old unix set; **haiku returns a 1 TiB sentinel** so pre-download space guards don't spuriously block. *Degraded* — TODO: back with `statvfs`. |
-| `vendor/github.com/fsnotify/fsnotify/haiku.go` | fsnotify v1.5.1 has backends for inotify/kqueue/FEN/Windows only — none for Haiku | **Stub** `Watcher` (open, idle channels; `Add`/`Remove` no-op). *Degraded* — never fires events. TODO: back with Haiku `watch_node`. |
+| `vendor/github.com/fsnotify/fsnotify/haiku.go` | fsnotify v1.5.1 has backends for inotify/kqueue/FEN/Windows only — none for Haiku | **Polling** `Watcher` (100 ms directory/stat diff; `Create`/`Remove`/`Write`/`Chmod` as inotify reports them). It was an idle stub until `-3`, which stalled every worker IPC exchange by 60 s (#847, see the note above). TODO: a `watch_node` backend would drop the poll. |
 | `vendor/github.com/creack/pty/pty_haiku.go` (+ `ioctl_haiku.go`, `asm_haiku.s`) | creack/pty v1.1.11 has no Haiku backend (`pty.Start` returns `ErrUnsupported`), and its raw `syscall.Syscall(SYS_IOCTL, …)` cannot reach Haiku's `ioctl` | **Real** pty: `/dev/ptmx` + `B_IOCTL_GRANT_TTY` + `B_IOCTL_GET_TTY_INDEX` -> `/dev/tt/<letter><hex>`, ioctls through the syscall package's libroot trampoline. `ioctl.go`/`pty_unsupported.go` get `!haiku`; `util.go`'s `windowRectCall` calls the shared `ioctl` helper (#553) |
 | `agent/plugins/inventory/gatherers/instancedetailedinformation/dataProvider_haiku.go` | The unix gatherer parses `lscpu` and calls `unix.Uname` (`golang.org/x/sys/unix`, no haiku port) | **Degraded** gatherer returns empty detailed-CPU info; not on the control path. TODO: populate from `get_system_info`. |
 
@@ -218,7 +274,8 @@ Agent changes made by M4 (folded into `amazon-ssm-agent-haiku-arm64.patch`):
 Still stubbed / deferred after M4:
 
 - `vendor/.../fsnotify/fsnotify/haiku.go` — idle `Watcher` stub. Not one of the
-  three toolchain gaps; needs a Haiku `watch_node` backend. Deferred.
+  three toolchain gaps; needs a Haiku `watch_node` backend. Deferred. (Replaced
+  by a polling backend in `-3`, #847.)
 - CPU topology in the detailed-info gatherer — needs Haiku `get_system_info()`
   (no `lscpu`). Deferred.
 - Full `golang.org/x/sys/unix` haiku/arm64 port — deferred (see gap 3 above).

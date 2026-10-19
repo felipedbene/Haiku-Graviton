@@ -1988,69 +1988,298 @@ index 8fdde0b..8534056 100644
  }
 diff --git a/vendor/github.com/fsnotify/fsnotify/haiku.go b/vendor/github.com/fsnotify/fsnotify/haiku.go
 new file mode 100644
-index 0000000..7d1c190
+index 0000000..8eac7e5
 --- /dev/null
 +++ b/vendor/github.com/fsnotify/fsnotify/haiku.go
-@@ -0,0 +1,60 @@
+@@ -0,0 +1,289 @@
 +//go:build haiku
 +// +build haiku
 +
-+// Package fsnotify: Haiku stub backend.
++// Package fsnotify: Haiku polling backend.
 +//
 +// fsnotify v1.5.1 ships backends for inotify (Linux), kqueue (BSD/macOS), FEN
-+// (Solaris) and ReadDirectoryChangesW (Windows); Haiku has none of these.
-+// Haiku's native mechanism is node monitoring (watch_node(3) / B_NODE_MONITOR),
-+// which is a separate, larger port. This stub provides the exported Watcher API
-+// so that packages depending on fsnotify compile and run on haiku/arm64; it
-+// simply never delivers filesystem events (the Events/Errors channels stay
-+// open and idle). TODO(go-arm64): replace with a watch_node-backed watcher.
++// (Solaris) and ReadDirectoryChangesW (Windows); Haiku has none of these. The
++// first Haiku port was an idle stub that never delivered an event, and that
++// stalled the agent: its worker IPC (common/filewatcherbasedipc) learns about
++// an inbound message only from a Create event, so the document worker's
++// "complete" reply sat on disk until the 60 s zombie-process timer made the
++// executer drain the directory. Every Run Command took ~65 s to report and
++// every session logged "ipc messaging received timedout signal!" (#847).
++//
++// This backend polls instead. Every pollInterval it lists each watched
++// directory (or stats each watched file) and diffs the result against the
++// previous snapshot, emitting the events inotify would have emitted for the
++// same change: Create for a new name (including a rename into the
++// directory), Remove for a vanished one, Write for a size or mtime change of
++// a regular file, Chmod for a mode change. Like inotify, a directory watch is
++// not recursive: a child directory reports Create/Remove, never Write. Names
++// that appear in one poll are emitted in lexical order, which is also the
++// IPC channel's sequence order.
++//
++// Haiku's native mechanism is node monitoring (watch_node(3) delivering
++// B_NODE_MONITOR messages to a port). A watch_node backend would remove the
++// poll latency and the idle wakeups, but it needs a KMessage parser in pure
++// Go (the agent builds with CGO_ENABLED=0); polling is the bounded fix.
 +package fsnotify
 +
-+import "errors"
++import (
++	"errors"
++	"fmt"
++	"os"
++	"path/filepath"
++	"sort"
++	"sync"
++	"time"
++)
 +
-+// Watcher watches a set of paths, delivering events on a channel.
++// pollInterval bounds the latency the IPC channel sees per message. A Run
++// Command round trip is a handful of messages, so 100 ms keeps it well under
++// a second while costing one ReadDir per watched path per tick.
++const pollInterval = 100 * time.Millisecond
++
++// Watcher watches a set of files, delivering events to a channel.
 +type Watcher struct {
 +	Events chan Event
 +	Errors chan error
 +
-+	done chan struct{}
++	mu      sync.Mutex
++	watches map[string]*watch // key: cleaned path passed to Add
++	closed  bool
++
++	done     chan struct{} // closed by Close to stop the poller
++	doneResp chan struct{} // closed by the poller once it has exited
 +}
 +
-+// NewWatcher creates a new stub watcher.
++type fileState struct {
++	size  int64
++	mtime time.Time
++	mode  os.FileMode
++}
++
++type watch struct {
++	isDir bool
++	self  fileState            // the watched path itself
++	kids  map[string]fileState // isDir only; key: child name
++}
++
++// NewWatcher creates a new polling watcher.
 +func NewWatcher() (*Watcher, error) {
-+	return &Watcher{
-+		Events: make(chan Event),
-+		Errors: make(chan error),
-+		done:   make(chan struct{}),
-+	}, nil
++	w := &Watcher{
++		Events:   make(chan Event),
++		Errors:   make(chan error),
++		watches:  make(map[string]*watch),
++		done:     make(chan struct{}),
++		doneResp: make(chan struct{}),
++	}
++	go w.poll()
++	return w, nil
 +}
 +
 +// Close removes all watches and closes the events channel.
 +func (w *Watcher) Close() error {
-+	select {
-+	case <-w.done:
++	w.mu.Lock()
++	if w.closed {
++		w.mu.Unlock()
 +		return nil
-+	default:
 +	}
++	w.closed = true
++	w.watches = make(map[string]*watch)
++	w.mu.Unlock()
++
 +	close(w.done)
-+	close(w.Events)
-+	close(w.Errors)
++	<-w.doneResp
 +	return nil
 +}
 +
-+// Add starts watching the named file or directory (no-op on Haiku).
++// Add starts watching the named file or directory (non-recursively). What is
++// already there when Add returns is the baseline; only later changes are
++// reported, as with inotify.
 +func (w *Watcher) Add(name string) error {
-+	select {
-+	case <-w.done:
++	name = filepath.Clean(name)
++	wt, err := snapshot(name)
++	if err != nil {
++		return err
++	}
++	w.mu.Lock()
++	defer w.mu.Unlock()
++	if w.closed {
 +		return errors.New("fsnotify: watcher already closed")
-+	default:
-+		return nil
++	}
++	if _, ok := w.watches[name]; !ok {
++		w.watches[name] = wt
++	}
++	return nil
++}
++
++// Remove stops watching the named file or directory (non-recursively).
++func (w *Watcher) Remove(name string) error {
++	name = filepath.Clean(name)
++	w.mu.Lock()
++	defer w.mu.Unlock()
++	if _, ok := w.watches[name]; !ok {
++		return fmt.Errorf("can't remove non-existent polling watch for: %s", name)
++	}
++	delete(w.watches, name)
++	return nil
++}
++
++func stateOf(fi os.FileInfo) fileState {
++	return fileState{size: fi.Size(), mtime: fi.ModTime(), mode: fi.Mode()}
++}
++
++func snapshot(name string) (*watch, error) {
++	// Stat, not Lstat: inotify_add_watch follows a symlinked watch path.
++	fi, err := os.Stat(name)
++	if err != nil {
++		return nil, err
++	}
++	wt := &watch{isDir: fi.IsDir(), self: stateOf(fi)}
++	if !wt.isDir {
++		return wt, nil
++	}
++	ents, err := os.ReadDir(name)
++	if err != nil {
++		return nil, err
++	}
++	wt.kids = make(map[string]fileState, len(ents))
++	for _, e := range ents {
++		info, err := e.Info()
++		if err != nil {
++			// Removed between ReadDir and Lstat; it is simply not there.
++			continue
++		}
++		wt.kids[e.Name()] = stateOf(info)
++	}
++	return wt, nil
++}
++
++// diff compares a fresh snapshot against the previous one.
++func diff(name string, old, cur *watch) []Event {
++	var evs []Event
++	if !old.isDir || !cur.isDir {
++		if old.self.mode != cur.self.mode {
++			evs = append(evs, Event{Name: name, Op: Chmod})
++		}
++		if !cur.isDir && (old.self.size != cur.self.size || !old.self.mtime.Equal(cur.self.mtime)) {
++			evs = append(evs, Event{Name: name, Op: Write})
++		}
++		return evs
++	}
++
++	names := make([]string, 0, len(cur.kids))
++	for n := range cur.kids {
++		names = append(names, n)
++	}
++	sort.Strings(names)
++	for _, n := range names {
++		c := cur.kids[n]
++		o, existed := old.kids[n]
++		path := filepath.Join(name, n)
++		switch {
++		case !existed:
++			evs = append(evs, Event{Name: path, Op: Create})
++		case o.mode.IsDir() != c.mode.IsDir():
++			// Replaced by a different kind of node under the same name.
++			evs = append(evs, Event{Name: path, Op: Remove}, Event{Name: path, Op: Create})
++		default:
++			if o.mode != c.mode {
++				evs = append(evs, Event{Name: path, Op: Chmod})
++			}
++			if !c.mode.IsDir() && (o.size != c.size || !o.mtime.Equal(c.mtime)) {
++				evs = append(evs, Event{Name: path, Op: Write})
++			}
++		}
++	}
++
++	var gone []string
++	for n := range old.kids {
++		if _, ok := cur.kids[n]; !ok {
++			gone = append(gone, n)
++		}
++	}
++	sort.Strings(gone)
++	for _, n := range gone {
++		evs = append(evs, Event{Name: filepath.Join(name, n), Op: Remove})
++	}
++	return evs
++}
++
++func (w *Watcher) poll() {
++	defer close(w.doneResp)
++	defer close(w.Errors)
++	defer close(w.Events)
++
++	ticker := time.NewTicker(pollInterval)
++	defer ticker.Stop()
++
++	for {
++		select {
++		case <-w.done:
++			return
++		case <-ticker.C:
++		}
++
++		w.mu.Lock()
++		names := make([]string, 0, len(w.watches))
++		for n := range w.watches {
++			names = append(names, n)
++		}
++		w.mu.Unlock()
++		sort.Strings(names)
++
++		for _, name := range names {
++			cur, err := snapshot(name)
++
++			w.mu.Lock()
++			old, ok := w.watches[name]
++			if !ok {
++				// Removed while we were listing it.
++				w.mu.Unlock()
++				continue
++			}
++			var evs []Event
++			if err != nil {
++				if os.IsNotExist(err) {
++					// The watched path itself went away: inotify reports
++					// IN_DELETE_SELF as Remove and drops the watch.
++					delete(w.watches, name)
++					evs = []Event{{Name: name, Op: Remove}}
++					err = nil
++				}
++			} else {
++				evs = diff(name, old, cur)
++				w.watches[name] = cur
++			}
++			w.mu.Unlock()
++
++			if err != nil && !w.send(nil, err) {
++				return
++			}
++			for i := range evs {
++				if !w.send(&evs[i], nil) {
++					return
++				}
++			}
++		}
 +	}
 +}
 +
-+// Remove stops watching the named file or directory (no-op on Haiku).
-+func (w *Watcher) Remove(name string) error {
-+	return nil
++// send delivers one event or error, giving up if the watcher is closed.
++func (w *Watcher) send(ev *Event, err error) bool {
++	if ev != nil {
++		select {
++		case w.Events <- *ev:
++			return true
++		case <-w.done:
++			return false
++		}
++	}
++	select {
++	case w.Errors <- err:
++		return true
++	case <-w.done:
++		return false
++	}
 +}
 diff --git a/vendor/github.com/go-git/go-billy/v5/osfs/os_haiku.go b/vendor/github.com/go-git/go-billy/v5/osfs/os_haiku.go
 new file mode 100644

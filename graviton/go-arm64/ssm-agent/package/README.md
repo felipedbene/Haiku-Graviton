@@ -43,15 +43,24 @@ Run Command work** with the real agent on DeBeOS/arm64.
 
 ## The package
 
-Current: `amazon_ssm_agent-3.3.3270.0-2-arm64.hpkg` — **zlib-compressed**
-(36,811,697 bytes; `package create -z zlib`, sha256
-`c602566a190024308b2dda4aa0e7722f3508bfc3804c809e3d2e6068726d3727`). Staged at
-`s3://haiku-graviton-668984504585-us-west-2/staging/ssm-agent/`. `-2` is the
+Current: `amazon_ssm_agent-3.3.3270.0-3-arm64.hpkg` — **zlib-compressed**
+(36,848,167 bytes; `package create -z zlib`, sha256
+`25eaabcb443f7a6b152220d5a79b9e56b0d1c11d6836db9eb5573ff69a6026cf`, stamped
+`DeBeOS-Source-Digest: sha256:38d71b5057788931e6163bcb828d4b5d0faee613978526aea2eb1c11c8b4955f`).
+Staged at `s3://haiku-graviton-668984504585-us-west-2/staging/ssm-agent/`. `-3`
+carries the fsnotify polling backend (#847: Run Command and session completion
+drop from ~65 s to under 2 s) and is the first agent built with toolchain patch
+`0005` (the #843 signal-`g` fix), hardware-verified as described in
+`../README.md`.
+
+`-2` (36,811,697 bytes, sha256
+`c602566a190024308b2dda4aa0e7722f3508bfc3804c809e3d2e6068726d3727`) is the
 first build carrying the interactive Session Manager fix (#553: the ssm-user
-short-circuit plus the creack/pty Haiku backend), hardware-verified as described
-in `../README.md`. `-1` (36,814,905 bytes, sha256
+short-circuit plus the creack/pty Haiku backend) and is what canonical
+`ami-058776e58bd902fba` ships. `-1` (36,814,905 bytes, sha256
 `3871b026cdf2b2919e9970580582168ec07fdf0cde96f7e61693596725786187`, binaries dated
-2026-09-18) predates both and is what canonical `ami-06f217c8b8ce37c9e` ships.
+2026-09-18) predates both and is what the earlier canonical `ami-06f217c8b8ce37c9e`
+shipped.
 
 **A source change to the agent needs a revision bump and a rebuild.** Nothing
 rebuilds this package automatically. The bake pools hold a prebuilt hpkg that
@@ -127,8 +136,9 @@ The eight binaries are produced by the cross-build in `../README.md`
 ("How to reproduce"): pristine `amazon-ssm-agent` v3.3.3270.0 + the
 `../amazon-ssm-agent-haiku-arm64.patch` + the korli/go fork with the
 M0/M2/M4/M6 patchset, `GOOS=haiku GOARCH=arm64 CGO_ENABLED=0 go build` of the
-eight `makefile` targets. The `-2` binaries were built from the upstream
-`3.3.3270.0` GitHub tarball like this, with upstream's non-PIE flags:
+eight `makefile` targets. The `-2` and `-3` binaries were built from the upstream
+`3.3.3270.0` GitHub tarball like this, with upstream's non-PIE flags (`-3` with
+all of `../../patches/0001..0005` applied to `go1.26.1-haiku1`):
 
 ```sh
 export GOOS=haiku GOARCH=arm64 CGO_ENABLED=0 GOTOOLCHAIN=local GOFLAGS=-mod=vendor
