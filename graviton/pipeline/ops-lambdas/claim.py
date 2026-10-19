@@ -1,7 +1,7 @@
 """ClaimBatch: atomically lease each pkg in the chain (queued -> building).
 
 Input : {table, chain:[pkg,...], target:{pkg:ver}, exec_id, lease_secs?}
-Output: adds {claimed:[...], skipped:[...]} to the event.
+Output: adds {claimed:[...], skipped:[...], lease_owner} to the event.
 
 Uses a conditional update so two concurrent executions can never build the same
 package: claim succeeds only if the item is currently `queued` (or a stale
@@ -60,6 +60,11 @@ def handler(event, context):
             skipped.append(pkg)
     event["claimed"] = claimed
     event["skipped"] = skipped
+    # The owner every lease above was written with. The driver sends no exec_id, so
+    # this is the Lambda request id -- not derivable later from the execution -- and
+    # ReleaseLeasesOnFailure (release.py, issue 839) needs it to revert exactly these
+    # leases and nobody else's.
+    event["lease_owner"] = exec_id
     # Per-item objects for the Step Functions Map iterator (each carries its own
     # target so the iterator needn't index the target map by a dynamic key).
     event["claimed_items"] = [{"pkg": p, "target": event["target"][p]} for p in claimed]

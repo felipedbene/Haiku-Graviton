@@ -2915,3 +2915,149 @@ test('838: the stack wires the spot fallback list, keeps on-demand off, and retr
   // The catch-all reap path is still there for everything else.
   expect(lb.Catch.some((c: any) => c.ErrorEquals.includes('States.ALL'))).toBe(true);
 });
+
+// ---- issue 839: a failed execution hands its unbuilt leases back --------------
+// Drive the real release.py against an in-memory table that EVALUATES the update's
+// ConditionExpression the way DynamoDB would for the two attributes it may name. A
+// release that dropped its condition would apply to every row here -- and clobber the
+// built row and the other execution's claim -- so this is not a string match on the
+// expression alone.
+function releaseLeases(rows: Record<string, Record<string, unknown>>,
+  ev: Record<string, unknown>): {
+  out: Record<string, unknown>; rows: Record<string, Record<string, unknown>>;
+} {
+  const py = [
+    'import json,sys,types',
+    `sys.path.insert(0,${JSON.stringify(OPS_LAMBDAS)})`,
+    `rows=json.loads(${JSON.stringify(JSON.stringify(rows))})`,
+    'class CCF(Exception): pass',
+    'def holds(cond, item, v):',
+    '    if not cond: return True',
+    '    known = {"lease_owner = :o": item.get("lease_owner") == v.get(":o"),',
+    '             "build_state = :b": item.get("build_state") == v.get(":b")}',
+    '    terms = [t.strip() for t in cond.split(" AND ")]',
+    '    assert all(t in known for t in terms), cond',
+    '    return all(known[t] for t in terms)',
+    'class T:',
+    '    def update_item(self, Key, UpdateExpression, ExpressionAttributeValues,',
+    '                    ConditionExpression=None):',
+    '        item = rows[Key["pkg"]]; v = ExpressionAttributeValues',
+    '        if not holds(ConditionExpression, item, v): raise CCF("ConditionalCheckFailed")',
+    '        s, _, r = UpdateExpression.partition(" REMOVE ")',
+    '        assert s.startswith("SET "), s',
+    '        for a in s[4:].split(", "):',
+    '            k, _, e = a.partition("=")',
+    '            if e.startswith("if_not_exists("):',
+    '                item.setdefault(k, v[e[len("if_not_exists("):-1].split(",")[1]])',
+    '            else: item[k] = v[e]',
+    '        for k in (r.split(", ") if r else []): item.pop(k.strip(), None)',
+    'class R:',
+    '    def Table(self, name): return T()',
+    'fake=types.ModuleType("boto3")',
+    'fake.resource=lambda svc: R()',
+    'sys.modules["boto3"]=fake',
+    'import release',
+    `out=release.handler(json.loads(${JSON.stringify(JSON.stringify(ev))}), None)`,
+    'print(json.dumps({"out": out, "rows": rows}))',
+  ].join('\n');
+  const out = child_process.execFileSync('python3', ['-c', py], { encoding: 'utf8' });
+  return JSON.parse(out.trimEnd().split('\n').pop() as string);
+}
+
+test('839: only this execution\'s still-building leases go back to queued', () => {
+  const ours = 'aa129488-0361-49c9-84b6-d594f4595240';
+  const rows = {
+    // Claimed and never built (the wd-10191705-w1-c05 shape).
+    libmcrypt: { build_state: 'building', lease_owner: ours, lease_expires_at: 2,
+      queued_at: 1788296277, attempt_count: 1, last_attempt_at: 1792429508 },
+    // BuildChain recorded it before the wave died: record.py REMOVEs the lease.
+    librsync: { build_state: 'built', queued_at: 5 },
+    // Our lease expired and another execution re-claimed it.
+    libnpupnp: { build_state: 'building', lease_owner: 'someone-else',
+      lease_expires_at: 9, queued_at: 6 },
+    // record.py's capacity re-queue (issue 769): already queued, lease removed.
+    liborigin: { build_state: 'queued', queued_at: 7, last_outcome: 'capacity-requeued' },
+  };
+  const r = releaseLeases(rows, {
+    table: 't', lease_owner: ours,
+    claimed: ['libmcrypt', 'librsync', 'libnpupnp', 'liborigin'],
+  });
+  expect(r.out.released).toEqual(['libmcrypt']);
+  expect(r.out.release_kept).toEqual(['librsync', 'libnpupnp', 'liborigin']);
+  expect(r.rows.libmcrypt).toEqual({
+    build_state: 'queued',
+    // The GSI range key keeps its real queue timestamp (#487).
+    queued_at: 1788296277,
+    // No build ran: the attempt count and last-attempt stamp are not touched.
+    attempt_count: 1, last_attempt_at: 1792429508,
+  });
+  expect(r.rows.librsync).toEqual(rows.librsync);
+  expect(r.rows.libnpupnp).toEqual(rows.libnpupnp);
+  expect(r.rows.liborigin).toEqual(rows.liborigin);
+});
+
+test('839: without a lease owner the release writes nothing', () => {
+  // A failure before ClaimBatch returned: there is no owner to match, and a release
+  // that guessed would revert leases belonging to whoever holds them.
+  const rows = { a: { build_state: 'building', lease_owner: 'x', queued_at: 1 } };
+  const r = releaseLeases(rows, { table: 't', claimed: ['a'] });
+  expect(r.out.released).toEqual([]);
+  expect(r.rows.a).toEqual(rows.a);
+});
+
+test('839: ClaimBatch reports the lease owner it wrote', () => {
+  const py = [
+    'import json,sys,types',
+    `sys.path.insert(0,${JSON.stringify(OPS_LAMBDAS)})`,
+    'owners=[]',
+    'class T:',
+    '    def update_item(self, **kw): owners.append(kw["ExpressionAttributeValues"][":o"])',
+    'class R:',
+    '    def Table(self, name): return T()',
+    'fake=types.ModuleType("boto3")',
+    'fake.resource=lambda svc: R()',
+    'sys.modules["boto3"]=fake',
+    'import claim',
+    'class Ctx: aws_request_id="req-123"',
+    'ev=claim.handler({"table":"t","chain":["a","b"],"target":{"a":"1","b":"2"}}, Ctx())',
+    'print(json.dumps({"owner": ev.get("lease_owner"), "owners": owners}))',
+  ].join('\n');
+  const r = JSON.parse(child_process.execFileSync('python3', ['-c', py],
+    { encoding: 'utf8' }).trimEnd().split('\n').pop() as string);
+  // The driver sends no exec_id, so the owner is the request id -- recoverable by the
+  // failure path only because ClaimBatch hands it on.
+  expect(r.owners).toEqual(['req-123', 'req-123']);
+  expect(r.owner).toBe('req-123');
+});
+
+test('839: every failure path releases leases before it reaps', () => {
+  const app = new cdk.App();
+  const stack = new OpsStack(app, 'TestOpsStack', {
+    env: { account: config.account, region: config.region },
+    config,
+  });
+  const t = Template.fromStack(stack);
+  const sm = Object.values(t.findResources('AWS::StepFunctions::StateMachine'))[0] as any;
+  const def = sm.Properties.DefinitionString;
+  const text = typeof def === 'string' ? def
+    : def['Fn::Join'][1].map((p: unknown) => (typeof p === 'string' ? p : 'TOKEN')).join('');
+  const states = JSON.parse(text).States;
+  const release = states.ReleaseLeasesOnFailure;
+  expect(release).toBeDefined();
+  expect(release.Next).toBe('ReapOnFailure');
+  // An error in the release must still reap the builder.
+  expect(release.Catch.map((c: any) => c.Next)).toEqual(['ReapOnFailure']);
+  expect(states.ReapOnFailure.Next).toBe('BuildWaveFailed');
+  // Nothing may reach the reap-and-fail path without going through the release.
+  for (const [name, s] of Object.entries(states) as [string, any][]) {
+    if (name === 'ReleaseLeasesOnFailure') continue;
+    for (const c of s.Catch ?? []) {
+      expect([name, c.Next]).not.toEqual([name, 'ReapOnFailure']);
+    }
+    expect([name, s.Next]).not.toEqual([name, 'ReapOnFailure']);
+  }
+  for (const name of ['LaunchBuilder', 'CheckSSM', 'BuildChain']) {
+    expect(states[name].Catch.map((c: any) => c.Next)).toContain('ReleaseLeasesOnFailure');
+  }
+  expect(states.ReleasePublishLockOnFailure.Next).toBe('ReleaseLeasesOnFailure');
+});

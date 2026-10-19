@@ -559,10 +559,14 @@ export class OpsStack extends cdk.Stack {
       HARVEST_S3: `s3://${workBucket}/hpkg/arm64`,
     });
     const reapFn = mkFn('ReapFn', 'reap.handler');
+    // Issue 839: hands a failed execution's still-`building` leases back to `queued`.
+    const releaseFn = mkFn('ReleaseFn', 'release.handler');
 
     // IAM per Lambda (least privilege).
     this.table.grantReadWriteData(claimFn);
     this.table.grantReadWriteData(recordFn);
+    // release.py only does conditional UpdateItem on rows this execution leased.
+    this.table.grant(releaseFn, 'dynamodb:UpdateItem');
     launchFn.addToRolePolicy(new iam.PolicyStatement({
       // DescribeImages: the launcher reads the builder AMI's RootDeviceName so its
       // per-launch volume mapping targets the real root device (a mismatched
@@ -613,8 +617,18 @@ export class OpsStack extends cdk.Stack {
 
     const reap = (id: string) => li(id, reapFn);
 
-    // Reap-on-failure terminal path (shared catch target).
-    const reapFail = reap('ReapOnFailure').next(new sfn.Fail(this, 'BuildWaveFailed'));
+    // Reap-on-failure terminal path (shared catch target). Releases this execution's
+    // unbuilt leases first (issue 839): without it, a wave that dies before or inside
+    // BuildChain leaves every unrecorded claimed port `building` -- invisible to the
+    // driver, which reads `queued` -- for the full 6h lease. release.py's update is
+    // conditional on OUR lease_owner and build_state=building, so rows BuildChain
+    // recorded, or another execution re-claimed, are untouched. It never raises by
+    // design, and the catch is belt-and-braces: nothing on this path may skip the reap.
+    const reapOnFailure = reap('ReapOnFailure');
+    reapOnFailure.next(new sfn.Fail(this, 'BuildWaveFailed'));
+    const reapFail = li('ReleaseLeasesOnFailure', releaseFn);
+    reapFail.addCatch(reapOnFailure, { resultPath: '$.release_error' });
+    reapFail.next(reapOnFailure);
 
     // Per-package iterator (dep order => MaxConcurrency 1). Poll loop: the
     // hours-long wait lives in SFN (Wait), not a Lambda.
