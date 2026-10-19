@@ -50,7 +50,21 @@ cp -a "$(dirname "$0")/profile.d/go.sh" "$ROOT/data/profile.d/go.sh"
 
 echo "== .PackageInfo =="
 VER=$(sed -n '1s/^go//p' "$SRC/VERSION")
-sed "s/@VER@/$VER/g" "$(dirname "$0")/golang.PackageInfo" > "$ROOT/.PackageInfo"
+# Provenance (#846): stamp the digest of this tree's source manifest (fork ref,
+# patches/0*.patch, profile.d) into the description, and ship the manifest
+# itself as data/golang/source-manifest. The assertion is that $SRC carries
+# exactly this tree's patches.
+mkdir -p "$ROOT/data/golang"
+sh "$(dirname "$0")/../../scripts/hpkg-source-manifest" golang > "$ROOT/data/golang/source-manifest"
+DIGEST="$(sha256sum "$ROOT/data/golang/source-manifest" | sed 's/ .*//')"
+sed -e "s/@VER@/$VER/g" \
+	-e "s/^\(description[[:space:]]*\".*\)\"[[:space:]]*\$/\1 DeBeOS-Source-Digest: sha256:$DIGEST\"/" \
+	"$(dirname "$0")/golang.PackageInfo" > "$ROOT/.PackageInfo"
+grep -q "DeBeOS-Source-Digest: sha256:$DIGEST\"" "$ROOT/.PackageInfo" || {
+	echo "stage-goroot.sh: could not stamp the source digest into the description line" >&2
+	exit 1
+}
+echo "source digest: sha256:$DIGEST"
 
 echo "== layout =="
 du -sh "$G" "$G/src" "$G/pkg/tool" "$G/bin"

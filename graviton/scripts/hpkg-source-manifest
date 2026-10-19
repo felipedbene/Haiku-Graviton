@@ -1,0 +1,116 @@
+#!/bin/sh
+# hpkg-source-manifest -- print the source manifest of an in-tree Go hpkg
+# (amazon_ssm_agent or golang), or the digest of that manifest. Issue #846.
+#
+#   hpkg-source-manifest [--top DIR] [--digest] amazon_ssm_agent|golang
+#
+# WHY. These two hpkgs are built by hand, outside any pipeline, and the bakes
+# consume whatever prebuilt file sits in a pool. Nothing tied the file to the
+# source it came from, so a merged change to the agent patch (PR #555) shipped
+# in no image for 25 days (#553). The manifest names every in-tree input that
+# ends up inside the package. Its sha256 (the "source digest") is stamped into
+# the hpkg's description at build time (build-hpkg.sh, stage-goroot.sh), and
+# the bake recomputes it from the checked-out tree and refuses a pool package
+# that disagrees (haiku-hpkg-provenance check-pool).
+#
+# What counts as an input. Anything compiled or copied INTO the package:
+#   amazon_ssm_agent: the upstream tag, the agent patch, the launch job, and
+#     the Go toolchain (fork ref + every patches/0*.patch). The toolchain is in
+#     because the agent is a static Go binary: a runtime fix (patch 0005,
+#     issue 843) reaches the agent only by rebuilding it.
+#   golang: the fork ref, every patches/0*.patch, and profile.d/go.sh.
+# Build scripts are deliberately NOT inputs: editing build-hpkg.sh does not
+# change what is in the package, and must not demand a rebuild.
+#
+# The output is plain text, one record per line, in a fixed order, so it can be
+# diffed against an older manifest to say WHICH input moved. POSIX sh plus
+# sed/sha256sum only: it also runs on the lean Haiku image, where build-hpkg.sh
+# runs and there is no python.
+set -eu
+
+TOP=""
+DIGEST=0
+while [ $# -gt 0 ]; do
+	case "$1" in
+	--top) TOP="$2"; shift 2 ;;
+	--digest) DIGEST=1; shift ;;
+	-h|--help) sed -n '2,6p' "$0"; exit 0 ;;
+	-*) echo "hpkg-source-manifest: unknown option $1" >&2; exit 2 ;;
+	*) break ;;
+	esac
+done
+[ $# -eq 1 ] || { echo "usage: hpkg-source-manifest [--top DIR] [--digest] amazon_ssm_agent|golang" >&2; exit 2; }
+PKG="$1"
+[ -n "$TOP" ] || TOP="$(cd "$(dirname "$0")/../.." && pwd)"
+GO="$TOP/graviton/go-arm64"
+
+sha() {
+	if command -v sha256sum >/dev/null 2>&1; then
+		sha256sum "$1" | sed 's/ .*//'
+	else
+		shasum -a 256 "$1" | sed 's/ .*//'
+	fi
+}
+
+need() {
+	[ -f "$GO/$1" ] || { echo "hpkg-source-manifest: missing input $GO/$1" >&2; exit 1; }
+}
+
+file_line() {	# path relative to graviton/go-arm64
+	need "$1"
+	echo "file $1 $(sha "$GO/$1")"
+}
+
+toolchain_lines() {
+	need golang-1.26.1.recipe
+	ref="$(sed -n 's/^srcGitRev="\(.*\)"$/\1/p' "$GO/golang-1.26.1.recipe" | head -1)"
+	[ -n "$ref" ] || { echo "hpkg-source-manifest: no srcGitRev in golang recipe" >&2; exit 1; }
+	echo "toolchain github.com/korli/go $ref"
+	n=0
+	for p in $(cd "$GO" && LC_ALL=C ls patches/ | LC_ALL=C sort | grep '^0.*\.patch$'); do
+		file_line "patches/$p"
+		n=$((n + 1))
+	done
+	[ "$n" -gt 0 ] || { echo "hpkg-source-manifest: no toolchain patches under $GO/patches" >&2; exit 1; }
+}
+
+manifest() {
+	echo "debeos-source-manifest 1"
+	echo "package $PKG"
+	case "$PKG" in
+	amazon_ssm_agent)
+		info="ssm-agent/package/amazon_ssm_agent.PackageInfo"
+		need "$info"
+		# The upstream tag is the version without its -revision: a revision
+		# bump is a repackage, not a source change.
+		ver="$(sed -n 's/^version[[:space:]]*//p' "$GO/$info" | head -1)"
+		tag="${ver%-*}"
+		[ -n "$tag" ] || { echo "hpkg-source-manifest: no version in $info" >&2; exit 1; }
+		echo "upstream github.com/aws/amazon-ssm-agent $tag"
+		toolchain_lines
+		file_line ssm-agent/amazon-ssm-agent-haiku-arm64.patch
+		file_line ssm-agent/package/launch-amazon_ssm_agent
+		;;
+	golang)
+		toolchain_lines
+		file_line package/profile.d/go.sh
+		;;
+	*)
+		echo "hpkg-source-manifest: unknown package '$PKG' (amazon_ssm_agent|golang)" >&2
+		exit 2
+		;;
+	esac
+}
+
+# Build the manifest fully before printing anything, so a missing input never
+# yields a truncated manifest (and a digest of it) on stdout.
+out="$(manifest)"
+if [ "$DIGEST" = 1 ]; then
+	tmp="${TMPDIR:-/tmp}/hpkg-source-manifest.$$"
+	printf '%s\n' "$out" > "$tmp"
+	d="$(sha "$tmp")"
+	rm -f "$tmp"
+	echo "sha256:$d"
+else
+	printf '%s\n' "$out"
+fi

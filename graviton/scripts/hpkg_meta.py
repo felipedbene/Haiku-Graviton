@@ -29,6 +29,7 @@ REPO_HEADER_SIZE = 72
 
 # package-attributes section string-typed IDs we care about (PackageAttributes.h)
 _ID_NAME = 15
+_ID_DESCRIPTION = 17
 _ID_VENDOR = 18
 _ID_PACKAGER = 19
 _ID_VERSION_MAJOR = 22
@@ -161,8 +162,8 @@ def _decompress_uncompressed_range(raw, hdr, u_start, u_end):
     return bytes(out), first * chunk
 
 
-def _read_pkg_nodes(raw):
-    """Parse one .hpkg's package-attributes section into a full package dict."""
+def _read_attr_nodes(raw):
+    """Parse one .hpkg's package-attributes section into its raw node list."""
     hdr = parse_header(raw)
     heap_u = hdr["heap_size_uncompressed"]
     attr_len = hdr["attributes_length"]
@@ -183,7 +184,31 @@ def _read_pkg_nodes(raw):
     # so it feeds _pkg_from_nodes directly (for HPKR it is the children of a
     # PACKAGE entry instead -- see read_repo).
     nodes, _ = _walk_tree(attr, astr_len, strings)
-    return _pkg_from_nodes(nodes)
+    return nodes
+
+
+def _read_pkg_nodes(raw):
+    """Parse one .hpkg's package-attributes section into a full package dict."""
+    return _pkg_from_nodes(_read_attr_nodes(raw))
+
+
+def read_description(raw):
+    """The package's own `description` string (attribute 17), or None.
+
+    Kept out of `_pkg_from_nodes` on purpose: the portal's JS port asserts
+    field-for-field equality with `read_repo`, and only the provenance check
+    (haiku-hpkg-provenance, issue #846) needs the description -- the source
+    digest of the in-tree Go packages is stamped there.
+    """
+    for aid, value, _children in _read_attr_nodes(raw):
+        if aid == _ID_DESCRIPTION:
+            return value
+    return None
+
+
+def read_description_file(path):
+    with open(path, "rb") as f:
+        return read_description(f.read())
 
 
 def read_pkg(raw):

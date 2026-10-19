@@ -54,7 +54,15 @@ and OpenSSH packages here.
    fix (0005) must be in every tool, or `go build` livelocks (issue 843).
 
 2. **Stage the GOROOT** (Linux): `SRC=/path/to/korli-go sh stage-goroot.sh`
-   → a packagefs layout in `$ROOT` (default `/tmp/go-pkg-378/root`).
+   → a packagefs layout in `$ROOT` (default `/tmp/go-pkg-378/root`). It stamps
+   `DeBeOS-Source-Digest: sha256:<hex>` (the digest of
+   `graviton/scripts/hpkg-source-manifest golang`: fork ref, every
+   `patches/0*.patch`, `profile.d/go.sh`) into the description and ships the
+   manifest as `data/golang/source-manifest` (#846). Run it from the checkout
+   whose patches `$SRC` carries. A patch change without a revision bump in
+   `golang.PackageInfo` fails `haiku-hpkg-provenance-selftest`.
+   `haiku-hpkg-provenance check-pool --package golang <dir>` compares a built
+   hpkg with the tree.
 
 3. **Create the hpkg** on a Haiku box (the `package` tool is Haiku-only): copy
    `$ROOT` + this dir's scripts over and `sh build-hpkg-golang.sh`
