@@ -326,7 +326,20 @@ def preflight_driver_version(region, sm_arn):
     if not expected or not bucket:
         return None, None
     # The marker is in the driver's first few lines; no need to pull the whole script.
-    body = s3.get_object(Bucket=bucket, Key=key, Range="bytes=0-8191")["Body"].read()
+    # A driver that is ABSENT is a mismatch, not an unreadable deployment: every build
+    # would refuse, which is the thing this pre-flight exists to catch. Only errors that
+    # say nothing about the driver's version (denied, throttled, network) propagate to
+    # the caller's best-effort handler.
+    try:
+        body = s3.get_object(Bucket=bucket, Key=key, Range="bytes=0-8191")["Body"].read()
+    except Exception as e:
+        if type(e).__name__ not in ("NoSuchKey", "NoSuchBucket", "ClientError"):
+            raise
+        code = ((getattr(e, "response", None) or {}).get("Error") or {}).get("Code", "")
+        if type(e).__name__ in ("NoSuchKey", "NoSuchBucket") or \
+                code in ("NoSuchKey", "NoSuchBucket", "404"):
+            return expected, None
+        raise
     m = _VERSION_MARKER.search(body.decode("utf-8", "replace"))
     found = m.group(1) if m else None
     return expected, found
