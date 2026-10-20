@@ -135,8 +135,12 @@ def _wrapper(cmd, bucket, run_id, name, ok_grep, refresh="", prelude=""):
     then run cmd, classify, gzip+upload the full log, echo the compact verdict.
 
     The driver refresh runs FIRST and writes into "$LOG"; if it finds a stale driver it
-    sets STALE=1 and we skip the build, emitting VERDICT=FAIL RC=3 -- poll_ssm records
-    that as a build-error with the diagnostic log, so a stale run can never pass silently.
+    sets STALE=1 and we skip the build, emitting VERDICT=STALE RC=3 -- the refusal is
+    loud (a stale run can never pass silently), but it is its OWN verdict, not FAIL.
+    Nothing was built, so it is not a fact about the package: issue 845 saw 95 of 96
+    ports charged an attempt for one un-republished driver, 63 of them quarantined as
+    `needs_human`/`repeated-failure` for a build that never ran. poll_ssm classifies
+    STALE as `stale-driver` and record.py re-queues it with no attempt counted.
 
     VERDICT=CAPACITY (issue 769) means the builder ran out of disk, which is not a fact
     about the package. It is classified by GREP rather than by the driver's rc, for the
@@ -155,7 +159,7 @@ else
 {cmd} >> "$LOG" 2>&1
 RC=$?
 fi
-if [ "$STALE" = 1 ]; then V=FAIL
+if [ "$STALE" = 1 ]; then V=STALE
 elif grep -qE "CAPACITY ABORT|CAPACITY_ABORT|BUILD_ABORTED_ENOSPC" "$LOG"; then V=CAPACITY
 elif grep -q {ok_grep} "$LOG"; then V=OK
 elif grep -q UNRESOLVABLE "$LOG"; then V=UNRESOLVABLE

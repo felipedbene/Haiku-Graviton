@@ -22,14 +22,16 @@ _VERDICT = re.compile(r"VERDICT=(\S+)\s+RC=(-?\d+)\s+LOG=(\S+)")
 # human, never like a success and never like something the wave is entitled to retry
 # silently.
 #
-# `capacity` (issue 769) is the one class here that is NOT about the package. The
-# builder ran out of disk, so the recipe was never tested -- record.py must put the row
-# back in the queue untouched rather than count an attempt against it. Keeping that
-# decision in record.py and only the NAMING here is deliberate: this function's job is
-# to say what happened, not what to do about it.
+# `capacity` (issue 769) and `stale-driver` (issue 845) are the classes here that are
+# NOT about the package: the builder ran out of disk, or the #506 guard refused to run
+# a driver that disagrees with this deployment. Either way the recipe was never tested,
+# so record.py must put the row back in the queue untouched rather than count an attempt
+# against it. Keeping that decision in record.py and only the NAMING here is deliberate:
+# this function's job is to say what happened, not what to do about it.
 _ERROR_CLASS = {
     "UNRESOLVABLE": "unresolvable",
     "CAPACITY": "capacity",
+    "STALE": "stale-driver",
 }
 
 
