@@ -216,30 +216,71 @@ def filter_to_queued(items, table, region):
     Best-effort by design: a port we cannot read is KEPT. ClaimBatch is still the
     authority (its lease is conditional and atomic), so the worst case of a stale read
     here is the pre-849 behaviour for that one chain -- never a double build.
+
+    This filter must never be STRICTER than that authority, or it removes work the wave
+    could legitimately have done. So it mirrors claim.py's condition rather than testing
+    `queued` alone: a `building` row whose lease has EXPIRED is claimable, and is the
+    only in-tree way to recover ports stranded by an execution that skipped the catch
+    (StopExecution does not run Step Functions catchers, and load_queued reads `queued`
+    only, so the DDB path never returns them). Dropping those would make a stranded
+    backlog undrivable.
     """
     import boto3
     ddb = boto3.client("dynamodb", region_name=region)
-    pkgs = [i["pkg"] for i in items]
+    now = int(time.time())
+    # De-duplicate: BatchGetItem REJECTS a request whose Keys repeat a key
+    # (ValidationException), and load_plan_file happily yields the same port from two
+    # chains or two waves. One duplicate would otherwise fail its whole 100-key chunk.
+    pkgs = list(dict.fromkeys(i["pkg"] for i in items))
     state = {}
     for k in range(0, len(pkgs), 100):          # BatchGetItem caps at 100 keys
-        chunk = pkgs[k:k + 100]
-        keys = [{"pkg": {"S": p}} for p in chunk]
-        while keys:
+        keys = [{"pkg": {"S": p}} for p in pkgs[k:k + 100]]
+        # UnprocessedKeys is DynamoDB's throttle signal. Retry it, but BOUNDED and with
+        # a pause: an unbounded hot loop would hang the driver before it launched
+        # anything, which is worse than the degraded path this already has for errors.
+        for attempt in range(5):
             try:
                 r = ddb.batch_get_item(RequestItems={table: {
-                    "Keys": keys, "ProjectionExpression": "pkg, build_state"}})
+                    "Keys": keys,
+                    "ProjectionExpression": "pkg, build_state, lease_expires_at",
+                    # The whole point is to see a lease another run took moments ago; an
+                    # eventually-consistent replica read can still say `queued` and send
+                    # the chain anyway. One RCU per key is worth it.
+                    "ConsistentRead": True}})
             except Exception as e:
                 log("WARNING: could not read live state for %d planned port(s) "
                     "(%s: %s) -- driving them unfiltered." % (len(keys), type(e).__name__, e))
                 break
             for it in r.get("Responses", {}).get(table, []):
-                state[it["pkg"]["S"]] = it.get("build_state", {}).get("S")
+                state[it["pkg"]["S"]] = (
+                    it.get("build_state", {}).get("S"),
+                    it.get("lease_expires_at", {}).get("N"))
             keys = r.get("UnprocessedKeys", {}).get(table, {}).get("Keys") or []
+            if not keys:
+                break
+            time.sleep(0.5 * (attempt + 1))
+        else:
+            # Only the keys we never got a row for are driven unfiltered; anything the
+            # earlier attempts DID return is in `state` and is used. Saying "driving
+            # them unfiltered" about keys we actually read would be a false report.
+            unread = [k["pkg"]["S"] for k in keys if k["pkg"]["S"] not in state]
+            log("WARNING: DynamoDB left %d key(s) unprocessed after 5 attempts; %d of "
+                "them were never read and are driven unfiltered." % (len(keys), len(unread)))
     kept, dropped = [], []
     for i in items:
-        st = state.get(i["pkg"])
-        # Unknown (never read, or no such row) is kept: see the docstring.
-        if st is None or st == "queued":
+        got = state.get(i["pkg"])
+        if got is None:
+            kept.append(i)         # never read, or no such row: see the docstring
+            continue
+        st, expires = got
+        if st is None:
+            # The row exists but carries no build_state. That is not a state this can
+            # reason about, so it is unknown -- kept, like an unread row.
+            kept.append(i)
+        elif st == "queued":
+            kept.append(i)
+        elif st == "building" and expires is not None and int(expires) < now:
+            # Claimable by claim.py's own condition, so it is drivable work.
             kept.append(i)
         else:
             dropped.append((i["pkg"], st))
@@ -310,14 +351,32 @@ def resolve_sm_arn(region, override):
     raise SystemExit("could not resolve state machine %r in %s" % (SM_NAME, region))
 
 
+def _claimed_nothing(output):
+    """True when an execution's output carries MarkNothingClaimed's stamp. Unreadable
+    or absent output means "not a no-op": a chain that really built must never be
+    miscounted as one, and the stamp is the only positive evidence either way."""
+    if not output:
+        return False
+    try:
+        return json.loads(output).get("nothing_claimed") is True
+    except (ValueError, AttributeError):
+        return False
+
+
 def drive_wave(sfn, sm_arn, label, chains, run_id, budget, publish, disk_gib,
                lease_secs, poll_secs):
     """Run a wave's chains through a concurrency-<=budget pool: keep <=budget
     executions in flight, launch the next as one finishes, until all chains are
-    done. Returns (ok_count, bad_count, [failed_arns])."""
+    done. Returns (ok_count, bad_count, [failed_arns], noop_count).
+
+    `noop_count` is the chains that SUCCEEDED having claimed nothing (issue 849): no
+    builder, no build, backlog untouched. They are counted apart from `ok` because a
+    wave of nothing but those is not a wave that built, and reporting it as "N ok" would
+    read as success.
+    """
     pending = list(enumerate(chains))
     inflight = {}          # arn -> chain index
-    ok = bad = 0
+    ok = bad = noop = 0
     failed = []
     launched = 0
 
@@ -340,16 +399,23 @@ def drive_wave(sfn, sm_arn, label, chains, run_id, budget, publish, disk_gib,
             inflight[launch(idx, chain)] = idx
         time.sleep(poll_secs)
         for arn in list(inflight):
-            st = sfn.describe_execution(executionArn=arn)["status"]
+            d = sfn.describe_execution(executionArn=arn)
+            st = d["status"]
             if st in TERMINAL_OK:
-                ok += 1
+                # MarkNothingClaimed (ops-stack.ts) stamps the output of a chain that
+                # leased nothing, so a no-op is tellable from a build without guessing.
+                if _claimed_nothing(d.get("output")):
+                    noop += 1
+                    log("    no-op execution (claimed nothing, no builder): %s" % arn)
+                else:
+                    ok += 1
                 del inflight[arn]
             elif st in TERMINAL_BAD:
                 bad += 1
                 failed.append(arn)
                 log("    FAILED execution (%s): %s" % (st, arn))
                 del inflight[arn]
-    return ok, bad, failed
+    return ok, bad, failed, noop
 
 
 # ---------------------------------------------------------------- main
@@ -484,7 +550,7 @@ def main():
     sfn = boto3.client("stepfunctions", region_name=args.region)
     log("\nstate machine     : %s" % sm_arn)
 
-    driven = grand_ok = grand_bad = 0
+    driven = grand_ok = grand_bad = grand_noop = 0
     all_failed = []
     for label, chains in plan:
         if args.max_chains and driven >= args.max_chains:
@@ -494,14 +560,16 @@ def main():
             chains = chains[:max(0, args.max_chains - driven)]
         log("\n>>> WAVE %s : %d chain(s), %d ports (budget %d) <<<" %
             (label, len(chains), sum(len(c) for c in chains), args.budget))
-        ok, bad, failed = drive_wave(
+        ok, bad, failed, noop = drive_wave(
             sfn, sm_arn, label, chains, args.run_id, args.budget,
             not args.no_publish, args.disk_gib, args.lease_secs, args.poll_secs)
         driven += len(chains)
         grand_ok += ok
         grand_bad += bad
+        grand_noop += noop
         all_failed += failed
-        log("<<< wave %s done: %d ok, %d failed >>>" % (label, ok, bad))
+        log("<<< wave %s done: %d ok, %d failed%s >>>"
+            % (label, ok, bad, ", %d no-op (claimed nothing)" % noop if noop else ""))
         if bad:
             # A failed chain-execution is not fatal to the campaign (individual
             # port failures are recorded by record.py into Sec 4 backoff), but a
@@ -510,7 +578,16 @@ def main():
                 "Inspect before relying on this wave's pool output." % bad)
 
     log("\n=== driver summary ===")
-    log("chains driven     : %d  (%d ok, %d failed executions)" % (driven, grand_ok, grand_bad))
+    log("chains driven     : %d  (%d ok, %d failed executions%s)"
+        % (driven, grand_ok, grand_bad,
+           ", %d no-op" % grand_noop if grand_noop else ""))
+    if grand_noop:
+        # Issue 849: these succeeded without building anything, because every port in
+        # the chain was already leased. Said plainly, because `N ok` would read as
+        # work done and the backlog is untouched.
+        log("no-op chains      : %d claimed nothing (ports already leased by another "
+            "run, or a stranded lease). No builder was launched and nothing was built; "
+            "re-run once the holder finishes." % grand_noop)
     if all_failed:
         log("failed executions : %s" % ", ".join(all_failed))
     log("Re-run this driver any time to resume: it re-reads live queued state, and "

@@ -1342,14 +1342,27 @@ export class OpsStack extends cdk.Stack {
     // a Succeed instead. Nothing was claimed and nothing was launched, so there is
     // nothing to release and nothing to reap -- and it must NOT go down the failure
     // path, because an empty claim is a scheduling overlap, not a defect.
+    //
+    // It succeeds, so the driver counts it in `ok` -- and a wave in which EVERY chain
+    // claimed nothing would otherwise read as "8 ok, 0 failed" with the backlog
+    // untouched, which is a success that built nothing and says so nowhere. Mark the
+    // output before succeeding so the outcome is countable: the driver reads
+    // `nothing_claimed` off the execution output and reports those chains separately.
+    const markNothingClaimed = new sfn.Pass(this, 'MarkNothingClaimed', {
+      parameters: {
+        nothing_claimed: true,
+        'skipped.$': '$.skipped',
+      },
+    });
     const nothingClaimed = new sfn.Succeed(this, 'NothingClaimed', {
       comment: 'ClaimBatch leased no port (all already held) -- no builder launched.',
     });
+    markNothingClaimed.next(nothingClaimed);
     // `$.claimed_items[0]` is present only for a non-empty array, which is how a
     // Choice asks "is this list empty" without a States.ArrayLength intrinsic.
     const claimedAny = new sfn.Choice(this, 'ClaimedAny?')
       .when(sfn.Condition.isPresent('$.claimed_items[0]'), launch)
-      .otherwise(nothingClaimed);
+      .otherwise(markNothingClaimed);
     claim.next(claimedAny);
     launch.next(checkSsm);
 
