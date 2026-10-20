@@ -81,7 +81,8 @@
 >    argument as a subsystem name. The earlier "the pty path is already proven on
 >    Haiku" note here was wrong. `pty_haiku.go` now opens `/dev/ptmx`, does
 >    libroot's `grantpt` (`B_IOCTL_GRANT_TTY`) and `ptsname_r`
->    (`B_IOCTL_GET_TTY_INDEX` -> `/dev/tt/<letter><hex>`), and opens the slave.
+>    (`B_IOCTL_GET_TTY_INDEX` -> `/dev/tt/<letter><hex>`), and opens the tty
+>    (replica) side.
 >    `ioctl_haiku.go`/`asm_haiku.s` route the package's `ioctl` helper, which also
 >    backs `Setsize`, through the syscall package's libroot `ioctl` trampoline.
 >    `util.go`'s `windowRectCall` now calls that helper, which on every other OS is

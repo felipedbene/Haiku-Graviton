@@ -1827,64 +1827,163 @@ index 3e0ef6c..47931af 100644
  
 diff --git a/vendor/github.com/creack/pty/asm_haiku.s b/vendor/github.com/creack/pty/asm_haiku.s
 new file mode 100644
-index 0000000..eaa7cb9
+index 0000000..c3c812e
 --- /dev/null
 +++ b/vendor/github.com/creack/pty/asm_haiku.s
-@@ -0,0 +1,12 @@
+@@ -0,0 +1,7 @@
 +//go:build haiku
 +// +build haiku
 +
-+#include "textflag.h"
-+
-+// func libcIoctl(fd, req, arg uintptr) (err syscall.Errno)
-+//
-+// Tail-call the syscall package's ioctl trampoline, which calls libroot's
-+// ioctl() through the runtime's libc dispatcher. Same signature, so the
-+// argument frame is passed through unchanged.
-+TEXT ·libcIoctl(SB),NOSPLIT,$0-32
-+	JMP	syscall·ioctl(SB)
++// Intentionally empty. ioctl_haiku.go declares sysvicall6 without a body
++// (its body is runtime.syscall_sysvicall6, bound by //go:linkname), and the
++// compiler only accepts a bodyless declaration in a package that has an
++// assembly file.
 diff --git a/vendor/github.com/creack/pty/ioctl.go b/vendor/github.com/creack/pty/ioctl.go
-index c85cdcd..d0ce2d8 100644
+index c85cdcd..b4d8a64 100644
 --- a/vendor/github.com/creack/pty/ioctl.go
 +++ b/vendor/github.com/creack/pty/ioctl.go
-@@ -1,4 +1,4 @@
+@@ -1,8 +1,12 @@
 -// +build !windows,!solaris
 +// +build !windows,!solaris,!haiku
  
  package pty
  
+-import "syscall"
++import (
++	"os"
++	"syscall"
++	"unsafe"
++)
+ 
+ func ioctl(fd, cmd, ptr uintptr) error {
+ 	_, _, e := syscall.Syscall(syscall.SYS_IOCTL, fd, cmd, ptr)
+@@ -11,3 +15,10 @@ func ioctl(fd, cmd, ptr uintptr) error {
+ 	}
+ 	return nil
+ }
++
++// ioctlFile is ioctl on f's descriptor, used by util.go's Setsize and
++// GetsizeFull. size is the byte length of *arg; only Haiku's libroot ioctl()
++// takes a length (ioctl_haiku.go), so it is unused here.
++func ioctlFile(f *os.File, cmd uintptr, arg unsafe.Pointer, size uintptr) error {
++	return ioctl(f.Fd(), cmd, uintptr(arg))
++}
 diff --git a/vendor/github.com/creack/pty/ioctl_haiku.go b/vendor/github.com/creack/pty/ioctl_haiku.go
 new file mode 100644
-index 0000000..c57ccf9
+index 0000000..5077bd0
 --- /dev/null
 +++ b/vendor/github.com/creack/pty/ioctl_haiku.go
-@@ -0,0 +1,20 @@
+@@ -0,0 +1,104 @@
 +//go:build haiku
 +// +build haiku
 +
 +package pty
 +
-+import "syscall"
++import (
++	"fmt"
++	"os"
++	"sync"
++	"syscall"
++	"unsafe"
++)
 +
-+// libcIoctl is libroot's ioctl(), reached through the syscall package's own
-+// libc trampoline (see asm_haiku.s). Haiku has no raw ioctl trap that
-+// syscall.Syscall can reach: on Haiku, syscall.Syscall dispatches through
-+// _kern_generic_syscall, which treats its first argument as a subsystem name,
-+// so the raw SYS_IOCTL form used by ioctl.go cannot work.
-+func libcIoctl(fd, req, arg uintptr) (err syscall.Errno)
++// Haiku has no raw ioctl trap that syscall.Syscall can reach: on Haiku,
++// syscall.Syscall dispatches through _kern_generic_syscall, which treats its
++// first argument as a subsystem name, so the raw SYS_IOCTL form used by
++// ioctl.go cannot work. The package calls libroot's ioctl() itself instead.
++//
++// libroot's ioctl() is variadic, ioctl(int fd, ulong cmd, ...), and always
++// va_args both a void* argument and a size_t length, which it hands to
++// _kern_ioctl() (src/system/libroot/posix/unistd/ioctl.c). On arm64 those
++// land in x2 and x3, so every call passes all four: whatever sat in x3 would
++// otherwise become the length.
++//
++// ABI: librootIoctl is the dynamic import of libroot's ioctl symbol, and
++// sysvicall6 is runtime.syscall_sysvicall6, the dispatcher behind the fork's
++// syscall.sysvicall6 that every libroot call in its syscall package goes
++// through. The runtime exports it by name with a push //go:linkname, so this
++// binds to a deliberately exported entry point rather than tail-jumping into a
++// private syscall-package helper; if the runtime ever drops it, the link
++// fails. It loads nargs arguments from a1..a6 into x0..x5, calls fn, and
++// returns x0 in r1 and libroot's errno in err. errno is read after every call,
++// so r1 decides whether the call failed. checkIoctlABI below catches a
++// signature change that still links.
++// asm_haiku.s is only there so the bodyless declaration below compiles.
++//
++//go:cgo_import_dynamic pty_libroot_ioctl ioctl "libroot.so"
++//go:linkname librootIoctl pty_libroot_ioctl
++var librootIoctl uintptr
 +
-+func ioctl(fd, cmd, ptr uintptr) error {
-+	if e := libcIoctl(fd, cmd, ptr); e != 0 {
++//go:linkname sysvicall6 runtime.syscall_sysvicall6
++func sysvicall6(fn, nargs, a1, a2, a3, a4, a5, a6 uintptr) (r1, r2, err uintptr)
++
++func librootIoctlCall(fd, cmd uintptr, arg unsafe.Pointer, size uintptr) syscall.Errno {
++	r1, _, e := sysvicall6(uintptr(unsafe.Pointer(&librootIoctl)), 4,
++		fd, cmd, uintptr(arg), size, 0, 0)
++	if int32(r1) >= 0 {
++		return 0
++	}
++	if e == 0 {
++		return syscall.EINVAL
++	}
++	return syscall.Errno(e)
++}
++
++var (
++	abiCheckOnce sync.Once
++	abiCheckErr  error
++)
++
++// checkIoctlABI makes one ioctl on a descriptor that cannot be open. If the
++// linkname above ever stops matching the runtime's dispatcher, the result and
++// errno slots are misread and this does not come back as EBADF, so the pty is
++// refused with a clear error rather than run with garbage results.
++func checkIoctlABI() error {
++	abiCheckOnce.Do(func() {
++		if e := librootIoctlCall(^uintptr(0), ioctlGetTTYIndex, nil, 0); e != syscall.EBADF {
++			abiCheckErr = fmt.Errorf("pty: libroot ioctl ABI check: got %v (%#x), want EBADF", e, uintptr(e))
++		}
++	})
++	return abiCheckErr
++}
++
++// ioctl is libroot's ioctl(fd, cmd, arg, size). size is the byte length of
++// *arg, or 0 when the request takes no argument.
++func ioctl(fd, cmd uintptr, arg unsafe.Pointer, size uintptr) error {
++	if err := checkIoctlABI(); err != nil {
++		return err
++	}
++	if e := librootIoctlCall(fd, cmd, arg, size); e != 0 {
 +		return e
 +	}
 +	return nil
 +}
++
++// ioctlFile is ioctl on f's descriptor. It reaches the descriptor through
++// SyscallConn().Control, never f.Fd(): Fd() switches the file to blocking
++// mode for good, after which Close() can no longer wake a goroutine blocked
++// in Read on the pty side. A session that ends while its shell is idle would
++// then leak that goroutine and its thread, or hang teardown. Upstream
++// creack/pty moved to SyscallConn for the same reason.
++func ioctlFile(f *os.File, cmd uintptr, arg unsafe.Pointer, size uintptr) error {
++	sc, err := f.SyscallConn()
++	if err != nil {
++		return err
++	}
++	var ierr error
++	if err := sc.Control(func(fd uintptr) {
++		ierr = ioctl(fd, cmd, arg, size)
++	}); err != nil {
++		return err
++	}
++	return ierr
++}
 diff --git a/vendor/github.com/creack/pty/pty_haiku.go b/vendor/github.com/creack/pty/pty_haiku.go
 new file mode 100644
-index 0000000..650c0e8
+index 0000000..94d4b43
 --- /dev/null
 +++ b/vendor/github.com/creack/pty/pty_haiku.go
-@@ -0,0 +1,64 @@
+@@ -0,0 +1,66 @@
 +//go:build haiku
 +// +build haiku
 +
@@ -1897,8 +1996,9 @@ index 0000000..650c0e8
 +	"unsafe"
 +)
 +
-+// Haiku's pty driver (src/add-ons/kernel/drivers/pty) hands out a free master
-+// on open("/dev/ptmx"); the matching slave is /dev/tt/<letter><hex digit>.
++// Haiku's pty driver (src/add-ons/kernel/drivers/pty) hands out a free pty
++// (controller) side on open("/dev/ptmx"); the matching tty side is
++// /dev/tt/<letter><hex digit>.
 +// These are libroot's grantpt() and ptsname_r() requests
 +// (headers/private/drivers/tty.h), done here directly because there is no cgo.
 +const (
@@ -1913,15 +2013,15 @@ index 0000000..650c0e8
 +	if err != nil {
 +		return nil, nil, err
 +	}
-+	// In case of error after this point, make sure we close the master fd.
++	// In case of error after this point, make sure we close the pty fd.
 +	defer func() {
 +		if err != nil {
 +			_ = p.Close() // Best effort.
 +		}
 +	}()
 +
-+	// grantpt(): chown the slave to the caller. unlockpt() is a no-op on Haiku.
-+	if err := ioctl(p.Fd(), ioctlGrantTTY, 0); err != nil {
++	// grantpt(): chown the tty side to the caller. unlockpt() is a no-op on Haiku.
++	if err := ioctlFile(p, ioctlGrantTTY, nil, 0); err != nil {
 +		return nil, nil, err
 +	}
 +
@@ -1940,7 +2040,8 @@ index 0000000..650c0e8
 +// ptsname mirrors libroot's ptsname_r().
 +func ptsname(f *os.File) (string, error) {
 +	var index int32
-+	if err := ioctl(f.Fd(), ioctlGetTTYIndex, uintptr(unsafe.Pointer(&index))); err != nil {
++	if err := ioctlFile(f, ioctlGetTTYIndex, unsafe.Pointer(&index),
++		unsafe.Sizeof(index)); err != nil {
 +		return "", err
 +	}
 +	if index < 0 {
@@ -1960,20 +2061,30 @@ index ceb425b..2069175 100644
  package pty
  
 diff --git a/vendor/github.com/creack/pty/util.go b/vendor/github.com/creack/pty/util.go
-index 8fdde0b..8534056 100644
+index 8fdde0b..2b52e86 100644
 --- a/vendor/github.com/creack/pty/util.go
 +++ b/vendor/github.com/creack/pty/util.go
-@@ -50,15 +50,12 @@ type Winsize struct {
+@@ -25,13 +25,13 @@ func InheritSize(pty, tty *os.File) error {
+ 
+ // Setsize resizes t to s.
+ func Setsize(t *os.File, ws *Winsize) error {
+-	return windowRectCall(ws, t.Fd(), syscall.TIOCSWINSZ)
++	return windowRectCall(ws, t, syscall.TIOCSWINSZ)
+ }
+ 
+ // GetsizeFull returns the full terminal size description.
+ func GetsizeFull(t *os.File) (size *Winsize, err error) {
+ 	var ws Winsize
+-	err = windowRectCall(&ws, t.Fd(), syscall.TIOCGWINSZ)
++	err = windowRectCall(&ws, t, syscall.TIOCGWINSZ)
+ 	return &ws, err
+ }
+ 
+@@ -50,15 +50,13 @@ type Winsize struct {
  	Y    uint16 // ws_ypixel: Height in pixels
  }
  
-+// windowRectCall goes through the package's per-OS ioctl helper rather than
-+// a raw syscall.Syscall(SYS_IOCTL, ...). On every OS that already used this
-+// file the helper is that same raw syscall (ioctl.go). Haiku has no raw ioctl
-+// trap reachable through syscall.Syscall -- it must go through libroot's
-+// ioctl() -- so it supplies its own helper in ioctl_haiku.go. Later creack/pty
-+// releases route Setsize/GetsizeFull through the ioctl helper the same way.
- func windowRectCall(ws *Winsize, fd, a2 uintptr) error {
+-func windowRectCall(ws *Winsize, fd, a2 uintptr) error {
 -	_, _, errno := syscall.Syscall(
 -		syscall.SYS_IOCTL,
 -		fd,
@@ -1984,7 +2095,15 @@ index 8fdde0b..8534056 100644
 -		return syscall.Errno(errno)
 -	}
 -	return nil
-+	return ioctl(fd, a2, uintptr(unsafe.Pointer(ws)))
++// windowRectCall goes through the package's per-OS ioctlFile helper rather
++// than a raw syscall.Syscall(SYS_IOCTL, ...). On every OS that already used
++// this file the helper is that same raw syscall on t.Fd() (ioctl.go). Haiku
++// has no raw ioctl trap reachable through syscall.Syscall -- it must go
++// through libroot's ioctl(), which also takes the argument's length -- so it
++// supplies its own helper in ioctl_haiku.go. Later creack/pty releases route
++// Setsize/GetsizeFull through a per-OS ioctl helper the same way.
++func windowRectCall(ws *Winsize, t *os.File, a2 uintptr) error {
++	return ioctlFile(t, a2, unsafe.Pointer(ws), unsafe.Sizeof(*ws))
  }
 diff --git a/vendor/github.com/fsnotify/fsnotify/haiku.go b/vendor/github.com/fsnotify/fsnotify/haiku.go
 new file mode 100644

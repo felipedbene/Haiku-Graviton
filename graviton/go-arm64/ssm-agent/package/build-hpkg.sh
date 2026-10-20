@@ -26,9 +26,35 @@ PKGDIR="${PKGDIR:-$(cd "$(dirname "$0")" && pwd)}"
 # file whose name disagreed with the package inside it -- and the bake pools and
 # UserBuildConfig select this package by FILE NAME. A VERSION override is still
 # accepted, but only if it matches.
-PKGINFO_VERSION="$(sed -n 's/^version[[:space:]]*//p' "$PKGDIR/amazon_ssm_agent.PackageInfo")"
+#
+# Parse defensively, because a sloppy value becomes part of the file name and
+# still matches the bake glob: take the FIRST `version` line only, drop a CR
+# (CRLF checkout), a trailing `#` comment, surrounding whitespace and optional
+# quotes, then insist on <ver>[~<pre>]-<rev>, the shape the file name needs.
+PKGINFO="$PKGDIR/amazon_ssm_agent.PackageInfo"
+if [ ! -r "$PKGINFO" ]; then
+	echo "build-hpkg.sh: cannot read $PKGINFO" >&2
+	exit 1
+fi
+PKGINFO_VERSION="$(awk '
+	{ sub(/\r$/, "") }
+	/^[ \t]*version([ \t]|$)/ {
+		sub(/^[ \t]*version/, "")
+		sub(/#.*$/, "")
+		gsub(/^[ \t]+|[ \t]+$/, "")
+		if ($0 ~ /^".*"$/)
+			$0 = substr($0, 2, length($0) - 2)
+		print
+		exit
+	}' "$PKGINFO")"
 if [ -z "$PKGINFO_VERSION" ]; then
-	echo "build-hpkg.sh: no version in $PKGDIR/amazon_ssm_agent.PackageInfo" >&2
+	echo "build-hpkg.sh: no version in $PKGINFO" >&2
+	exit 1
+fi
+if ! printf '%s\n' "$PKGINFO_VERSION" | grep -Eqx \
+		'[0-9A-Za-z_]+(\.[0-9A-Za-z_]+)*(~[0-9A-Za-z_.]+)?-[0-9]+'; then
+	echo "build-hpkg.sh: malformed version '$PKGINFO_VERSION' in $PKGINFO" \
+		"(want <ver>[~<pre>]-<rev>, e.g. 3.3.3270.0-2)" >&2
 	exit 1
 fi
 if [ -n "${VERSION:-}" ] && [ "$VERSION" != "$PKGINFO_VERSION" ]; then
