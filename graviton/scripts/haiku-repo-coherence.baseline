@@ -1,4 +1,4 @@
-# haiku-repo-coherence.baseline -- EXACT (`==`) requirements that the live green
+# haiku-repo-coherence.baseline -- EXACT (`==`) requirements that a live DeBeOS
 # pool already cannot satisfy (issue 708).
 #
 # These are pre-existing debt, not accepted design. Each line is a package that
@@ -10,7 +10,18 @@
 # Format:  <pinning-package> <required-resolvable> <required-version>   # reason
 # (the key is the first three fields; everything after `#` is the reason)
 #
-# Measured against s3://<pool>/debeos-repo-green/arm64/repo of 2026-10-14.
+# ONE FILE, EVERY TARGET. The gate runs over the union of whatever pool is being
+# published into plus the incoming set, so a baseline cut against ONE target
+# blocks the others on debt they did not create (issue 852: this file was
+# measured against green, and every blue publish then failed on blue's own
+# bootstrap-era orphans). A key is a package's broken pin, which is a fact about
+# the package and not about where it is stored, so the entries are pooled here
+# and each section says where it was measured.
+#
+# Measured against:
+#   - s3://<pool>/debeos-repo-green/arm64/repo of 2026-10-14   (green)
+#   - s3://<pool>/debeos-repo/arm64/packages/ of 2026-10-19    (blue, issue 852)
+#   - s3://<work>/hpkg/arm64/ of 2026-10-19                    (wave harvest, issue 852)
 
 # --- base superseded out from under a subpackage (the issue-708 defect) ------
 # haiku-repo-add's per-NAME supersede dropped the pinned base version; the
@@ -28,3 +39,31 @@ moleinvasion_music moleinvasion 0.4   # no moleinvasion-* in the arm64 pool
 # No Java runtime is ported to Haiku arm64, so nothing can provide java:runtime.
 # geogebra is unusable on this arch regardless of the repo's coherence.
 geogebra java:runtime 8               # no JRE port for arm64
+
+# --- blue: subpackage published against a BOOTSTRAP base (issue 852) ---------
+# Blue (`debeos-repo/arm64`) was seeded on 2026-09-21 from a bootstrap set: the
+# base is the `_bootstrap` build at an older version, while a later non-bootstrap
+# subpackage was published beside it, pinning a version blue never carried. These
+# predate every build wave, so they are not a wave's incoherence to answer for.
+# Fix: build and publish the non-bootstrap base at the pinned version (which
+# retires the `_bootstrap` package too), then delete the line.
+coreutils_debuginfo coreutils 9.11    # blue has coreutils-9.9_bootstrap-1 only
+freetype_debuginfo freetype 2.14.3    # blue has freetype-2.6.3_bootstrap-1 only
+
+# --- subpackage pins the WRONG resolvable name (issue 852) -------------------
+# icu67_tools requires the generic `icu == 67.1`, but the package that carries
+# 67.1 is named icu67 and provides only `icu67` (verified by reading
+# icu67-67.1-1-arm64.hpkg: provides icu67, lib:libicu*, never `icu`). The only
+# `icu` in blue is icu-57.2-3. So no publish of any icu can satisfy this pin --
+# it is a recipe defect in the icu67 port's `_tools` subpackage, not missing
+# build output. Fix: correct the recipe's REQUIRES to icu67, rebuild, republish.
+icu67_tools icu 67.1                  # pins `icu`, but 67.1 is provided as `icu67`
+
+# --- harvest: subpackage built and harvested without its base (issue 852) ----
+# The wave harvest holds a `_devel` whose base was never harvested alongside it,
+# so the incoming set offers the subpackage alone. Published as accepted debt on
+# the operator's call (2026-10-20) rather than held back, so the rest of the
+# wave output is not blocked behind them. Fix: build the base at the pinned
+# version and publish the pair, then delete the line.
+ffmpeg7_devel ffmpeg7 7.1             # no ffmpeg7 base in blue or the harvest
+icu78_devel icu78 78.3                # no icu78 base in blue or the harvest
