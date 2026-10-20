@@ -668,6 +668,30 @@ named per entry.
   `_debuginfo` half of the check above is **expected to flag these two** until
   either the tool gains a filter or they are removed from green deliberately.
   Do not "fix" it by deleting from green on a hunch; green is live.
+- **The coherence baseline is UNION-wide, so it must cover every target (issue 852).**
+  The #708 gate runs over *the pool being published into* ∪ *the incoming set*, and
+  `haiku-repo-coherence.baseline` had been measured against **green** only. Blue
+  (`debeos-repo/arm64`) carries its own bootstrap-era debt from its 2026-09-21
+  seeding, so from the moment the gate landed, **every** incremental publish into blue
+  refused — builds succeeded and harvested, nothing reached the pool, and each chain
+  then failed via `ReleasePublishLockOnFailure`. A baseline cut against one target
+  blocks the others on debt they did not create. A baseline key is a package's broken
+  pin — a fact about the package, not about where it is stored — so the entries live
+  in one file, each section naming where it was measured. The gate is invoked
+  **without** `--strict-baseline`, so an entry that does not reproduce in the target
+  being published is reported STALE and does not fail; only the selftest is strict.
+- **Reading a blocked publish.** `INCOHERENT:` means the gate found a NEW instance and
+  refused; `known-broken:` means it was baselined and the publish proceeded. If every
+  publish is failing on names no wave touched, suspect target-specific debt before
+  suspecting the wave. The union is cheap to reproduce by hand:
+  `haiku-repo-coherence --packages-dir <dir>` over a sync of the pool plus the
+  incoming set gives the same findings the CodeBuild log does.
+- **Known deviation: two orphan `_devel` packages published as accepted debt
+  (2026-10-20).** `ffmpeg7_devel-7.1-1` and `icu78_devel-78.3-1` sat in the harvest
+  with no base built for either. On the operator's call they are **baselined and
+  published** rather than held back, so the other 140 harvested packages are not
+  blocked behind them. Both are uninstallable until their base is built at the pinned
+  version; clearing them is a build task, after which the baseline lines go.
 
 ### 13.6 Native-builder launch constraints: default disk, cap parallelism, absolute interpreters (extends §8)
 
