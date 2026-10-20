@@ -3061,3 +3061,125 @@ test('839: every failure path releases leases before it reaps', () => {
   }
   expect(states.ReleasePublishLockOnFailure.Next).toBe('ReleaseLeasesOnFailure');
 });
+
+// ---------------------------------------------------------------------------
+// Issue 849: a chain that claims nothing must not launch a builder. ClaimBatch
+// returned `claimed: []` when every port was already leased, and the graph went to
+// LaunchBuilder regardless -- a spot instance booted, waited for SSM, ran an empty
+// BuildChain, and the publish exited 1 on `no incoming *.hpkg`, so the execution
+// ended FAILED while holding a budget slot (wd-10192101-w1-c01/-c05, 2026-10-19).
+function waveStates() {
+  const app = new cdk.App();
+  const stack = new OpsStack(app, 'TestOpsStack', {
+    env: { account: config.account, region: config.region },
+    config,
+  });
+  const t = Template.fromStack(stack);
+  const sms = Object.values(t.findResources('AWS::StepFunctions::StateMachine')) as any[];
+  const wave = sms.find((s: any) => s.Properties.StateMachineName === 'debeos-build-wave');
+  const def = wave.Properties.DefinitionString;
+  const text = typeof def === 'string' ? def
+    : def['Fn::Join'][1].map((p: unknown) => (typeof p === 'string' ? p : 'TOKEN')).join('');
+  return JSON.parse(text).States;
+}
+
+test('849: ClaimBatch goes to a Choice, not straight to LaunchBuilder', () => {
+  const states = waveStates();
+  const next = states.ClaimBatch.Next;
+  expect(next).not.toBe('LaunchBuilder');
+  expect(states[next].Type).toBe('Choice');
+});
+
+test('849: an empty claim succeeds without launching, and never reaps', () => {
+  const states = waveStates();
+  const choice = states[states.ClaimBatch.Next];
+  // The only non-default branch is the one that has work, and it is the launch.
+  expect(choice.Choices).toHaveLength(1);
+  expect(choice.Choices[0].Next).toBe('LaunchBuilder');
+  // It tests the claimed list for a first element -- "is this array non-empty".
+  expect(choice.Choices[0].Variable).toBe('$.claimed_items[0]');
+  expect(choice.Choices[0].IsPresent).toBe(true);
+  // Claiming nothing is a scheduling overlap, not a defect: it must not reach the
+  // failure path (which would release leases we do not hold and reap no builder),
+  // and it must not terminate an instance that was never launched.
+  const empty = states[choice.Default];
+  expect(empty.Type).toBe('Succeed');
+  expect(choice.Default).not.toBe('ReleaseLeasesOnFailure');
+  expect(choice.Default).not.toBe('ReapOnFailure');
+  expect(choice.Default).not.toBe('BuildWaveFailed');
+});
+
+// The driver half: a --plan-file is a snapshot, so reconcile it with live state
+// before planning. Without this, the two overlapping chains above were sent at all.
+function filterToQueued(rows: Record<string, string | null>, pkgs: string[],
+                        opts: { fail?: boolean } = {}) {
+  const py = [
+    'import json,sys,types',
+    'import importlib.util',
+    `rows=json.loads(${JSON.stringify(JSON.stringify(rows))})`,
+    `fail=${opts.fail ? 'True' : 'False'}`,
+    'calls=[]',
+    'class C:',
+    '    def batch_get_item(self, RequestItems):',
+    '        t,spec = list(RequestItems.items())[0]',
+    '        calls.append(len(spec["Keys"]))',
+    '        if fail: raise RuntimeError("boom")',
+    '        resp=[]',
+    '        for k in spec["Keys"]:',
+    '            p=k["pkg"]["S"]',
+    '            if p not in rows: continue',          // no such row
+    '            it={"pkg":{"S":p}}',
+    '            if rows[p] is not None: it["build_state"]={"S":rows[p]}',
+    '            resp.append(it)',
+    '        return {"Responses":{t:resp}}',
+    'fake=types.ModuleType("boto3")',
+    'fake.client=lambda svc, region_name=None: C()',
+    'sys.modules["boto3"]=fake',
+    `spec=importlib.util.spec_from_loader("drv", importlib.machinery.SourceFileLoader("drv", ${JSON.stringify(path.join(GRAVITON_SCRIPTS, 'haiku-build-wave-driver'))}))`,
+    'drv=importlib.util.module_from_spec(spec); spec.loader.exec_module(drv)',
+    `items=[{"pkg":p,"wave":1,"target":"0"} for p in json.loads(${JSON.stringify(JSON.stringify(pkgs))})]`,
+    'kept,dropped=drv.filter_to_queued(items,"t","us-west-2")',
+    'print(json.dumps({"kept":[i["pkg"] for i in kept],"dropped":dropped,"calls":calls}))',
+  ].join('\n');
+  const out = child_process.execFileSync('python3', ['-c', py], { encoding: 'utf8' });
+  return JSON.parse(out.trimEnd().split('\n').pop() as string);
+}
+
+test('849: the driver drops planned ports that are no longer queued', () => {
+  // The wd-10192101 shape: a snapshot plan whose ports have since been leased by the
+  // still-running wd-10192051 chain, or already built.
+  const r = filterToQueued({
+    libgphoto2: 'building', libmatroska: 'building', libmcrypt: 'built',
+    libnpupnp: 'queued', liborigin: 'queued', librnp: 'failed',
+  }, ['libgphoto2', 'libmatroska', 'libmcrypt', 'libnpupnp', 'liborigin', 'librnp']);
+  expect(r.kept).toEqual(['libnpupnp', 'liborigin']);
+  expect(r.dropped.sort()).toEqual([
+    ['libgphoto2', 'building'], ['libmatroska', 'building'],
+    ['libmcrypt', 'built'], ['librnp', 'failed'],
+  ]);
+});
+
+test('849: a port the driver cannot read is kept, not silently dropped', () => {
+  // ClaimBatch's conditional lease is still the authority, so the cost of keeping an
+  // unreadable port is the pre-849 behaviour for that chain -- never a double build.
+  // Dropping it instead would make an unreadable table look like an empty queue.
+  const absent = filterToQueued({ a: 'queued' }, ['a', 'ghost']);
+  expect(absent.kept).toEqual(['a', 'ghost']);
+  expect(absent.dropped).toEqual([]);
+
+  const noState = filterToQueued({ a: 'queued', b: null }, ['a', 'b']);
+  expect(noState.kept).toEqual(['a', 'b']);
+
+  const broken = filterToQueued({ a: 'built' }, ['a', 'b'], { fail: true });
+  expect(broken.kept).toEqual(['a', 'b']);
+  expect(broken.dropped).toEqual([]);
+});
+
+test('849: the live-state read is chunked to DynamoDB\'s 100-key BatchGetItem cap', () => {
+  const rows: Record<string, string> = {};
+  const pkgs: string[] = [];
+  for (let i = 0; i < 250; i++) { pkgs.push(`p${i}`); rows[`p${i}`] = 'queued'; }
+  const r = filterToQueued(rows, pkgs);
+  expect(r.calls).toEqual([100, 100, 50]);
+  expect(r.kept).toHaveLength(250);
+});

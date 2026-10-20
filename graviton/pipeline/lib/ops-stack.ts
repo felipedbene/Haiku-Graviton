@@ -1333,7 +1333,24 @@ export class OpsStack extends cdk.Stack {
       backoffRate: 2,
       maxAttempts: 3,
     });
-    claim.next(launch);
+    // Issue 849: a chain can claim nothing -- every port already leased by an
+    // overlapping run, or still held by a stranded lease. There is then no work for a
+    // builder to do, but the graph used to launch one anyway: a spot instance booted,
+    // waited for SSM, ran an empty BuildChain, and the publish exited 1 on `no
+    // incoming *.hpkg`, so the execution ended FAILED while occupying a budget slot
+    // for its whole life (wd-10192101-w1-c01 and -c05, 2026-10-19). Short-circuit to
+    // a Succeed instead. Nothing was claimed and nothing was launched, so there is
+    // nothing to release and nothing to reap -- and it must NOT go down the failure
+    // path, because an empty claim is a scheduling overlap, not a defect.
+    const nothingClaimed = new sfn.Succeed(this, 'NothingClaimed', {
+      comment: 'ClaimBatch leased no port (all already held) -- no builder launched.',
+    });
+    // `$.claimed_items[0]` is present only for a non-empty array, which is how a
+    // Choice asks "is this list empty" without a States.ArrayLength intrinsic.
+    const claimedAny = new sfn.Choice(this, 'ClaimedAny?')
+      .when(sfn.Condition.isPresent('$.claimed_items[0]'), launch)
+      .otherwise(nothingClaimed);
+    claim.next(claimedAny);
     launch.next(checkSsm);
 
     // Reap on any failure from LaunchBuilder onward. Catches attach to the

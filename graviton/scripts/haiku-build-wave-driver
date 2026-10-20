@@ -204,6 +204,48 @@ def load_plan_file(path):
     return items
 
 
+def filter_to_queued(items, table, region):
+    """Drop planned ports that are not `queued` right now. Returns (kept, dropped).
+
+    Issue 849: a plan file is a snapshot. Driving one re-sends ports that have since
+    been built, or that another run is holding, and ClaimBatch then leases nothing for
+    that chain. The DDB path cannot hit this (it reads `queued` itself); the plan-file
+    path can, and did -- wd-10192101 (2026-10-19) overlapped the still-running
+    wd-10192051 chain and sent two chains whose every port was already leased.
+
+    Best-effort by design: a port we cannot read is KEPT. ClaimBatch is still the
+    authority (its lease is conditional and atomic), so the worst case of a stale read
+    here is the pre-849 behaviour for that one chain -- never a double build.
+    """
+    import boto3
+    ddb = boto3.client("dynamodb", region_name=region)
+    pkgs = [i["pkg"] for i in items]
+    state = {}
+    for k in range(0, len(pkgs), 100):          # BatchGetItem caps at 100 keys
+        chunk = pkgs[k:k + 100]
+        keys = [{"pkg": {"S": p}} for p in chunk]
+        while keys:
+            try:
+                r = ddb.batch_get_item(RequestItems={table: {
+                    "Keys": keys, "ProjectionExpression": "pkg, build_state"}})
+            except Exception as e:
+                log("WARNING: could not read live state for %d planned port(s) "
+                    "(%s: %s) -- driving them unfiltered." % (len(keys), type(e).__name__, e))
+                break
+            for it in r.get("Responses", {}).get(table, []):
+                state[it["pkg"]["S"]] = it.get("build_state", {}).get("S")
+            keys = r.get("UnprocessedKeys", {}).get(table, {}).get("Keys") or []
+    kept, dropped = [], []
+    for i in items:
+        st = state.get(i["pkg"])
+        # Unknown (never read, or no such row) is kept: see the docstring.
+        if st is None or st == "queued":
+            kept.append(i)
+        else:
+            dropped.append((i["pkg"], st))
+    return kept, dropped
+
+
 # ---------------------------------------------------------------- wave planning
 def build_waves(items, chain_size, include_unwaved):
     """Group items into ordered waves, each wave split into chains of <=chain_size
@@ -317,6 +359,9 @@ def main():
     ap.add_argument("--region", default=os.environ.get("AWS_DEFAULT_REGION", "us-west-2"))
     ap.add_argument("--plan-file", help="read waves from a JSON artifact instead of DDB")
     ap.add_argument("--plan-out", help="write the computed wave plan to this JSON path")
+    ap.add_argument("--no-live-filter", action="store_true",
+                    help="with --plan-file, drive the plan as written instead of "
+                         "dropping ports that are no longer `queued` (issue 849).")
     ap.add_argument("--chain-size", type=int, default=12,
                     help="ports per execution/builder (<=18 keeps per-wave publish "
                          "inside the /dev/shm re-stamp limit, #168). Default 12.")
@@ -359,6 +404,16 @@ def main():
     if args.plan_file:
         items = load_plan_file(args.plan_file)
         src = "plan-file %s" % args.plan_file
+        # A plan file is a snapshot; reconcile it with live state before planning, or
+        # a chain of already-leased ports claims nothing (issue 849).
+        if not args.no_live_filter:
+            items, not_queued = filter_to_queued(items, args.table, args.region)
+            if not_queued:
+                shown = ", ".join("%s(%s)" % (p, s) for p, s in sorted(not_queued)[:8])
+                log("plan-file reconcile: dropped %d port(s) no longer `queued`: %s%s"
+                    % (len(not_queued), shown, " ..." if len(not_queued) > 8 else ""))
+            else:
+                log("plan-file reconcile: all %d planned port(s) still `queued`" % len(items))
     else:
         items = load_queued(args.table, args.region)
         src = "DDB %s (build_state=queued)" % args.table
