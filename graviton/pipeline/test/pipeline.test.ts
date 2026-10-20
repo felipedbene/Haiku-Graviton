@@ -3061,3 +3061,235 @@ test('839: every failure path releases leases before it reaps', () => {
   }
   expect(states.ReleasePublishLockOnFailure.Next).toBe('ReleaseLeasesOnFailure');
 });
+
+// ---------------------------------------------------------------------------
+// Issue 849: a chain that claims nothing must not launch a builder. ClaimBatch
+// returned `claimed: []` when every port was already leased, and the graph went to
+// LaunchBuilder regardless -- a spot instance booted, waited for SSM, ran an empty
+// BuildChain, and the publish exited 1 on `no incoming *.hpkg`, so the execution
+// ended FAILED while holding a budget slot (wd-10192101-w1-c01/-c05, 2026-10-19).
+function waveStates() {
+  const app = new cdk.App();
+  const stack = new OpsStack(app, 'TestOpsStack', {
+    env: { account: config.account, region: config.region },
+    config,
+  });
+  const t = Template.fromStack(stack);
+  const sms = Object.values(t.findResources('AWS::StepFunctions::StateMachine')) as any[];
+  const wave = sms.find((s: any) => s.Properties.StateMachineName === 'debeos-build-wave');
+  const def = wave.Properties.DefinitionString;
+  const text = typeof def === 'string' ? def
+    : def['Fn::Join'][1].map((p: unknown) => (typeof p === 'string' ? p : 'TOKEN')).join('');
+  return JSON.parse(text).States;
+}
+
+test('849: ClaimBatch goes to a Choice, not straight to LaunchBuilder', () => {
+  const states = waveStates();
+  const next = states.ClaimBatch.Next;
+  expect(next).not.toBe('LaunchBuilder');
+  expect(states[next].Type).toBe('Choice');
+});
+
+test('849: an empty claim succeeds without launching, and never reaps', () => {
+  const states = waveStates();
+  const choice = states[states.ClaimBatch.Next];
+  // The only non-default branch is the one that has work, and it is the launch.
+  expect(choice.Choices).toHaveLength(1);
+  expect(choice.Choices[0].Next).toBe('LaunchBuilder');
+  // It tests the claimed list for a first element -- "is this array non-empty".
+  expect(choice.Choices[0].Variable).toBe('$.claimed_items[0]');
+  expect(choice.Choices[0].IsPresent).toBe(true);
+  // Claiming nothing is a scheduling overlap, not a defect: it must not reach the
+  // failure path (which would release leases we do not hold and reap no builder),
+  // and it must not terminate an instance that was never launched.
+  // It stamps the output, then succeeds. The stamp is what makes a no-op countable
+  // instead of indistinguishable from a chain that built (review finding 5).
+  const mark = states[choice.Default];
+  expect(mark.Type).toBe('Pass');
+  expect(mark.Parameters.nothing_claimed).toBe(true);
+  expect(states[mark.Next].Type).toBe('Succeed');
+  for (const bad of ['ReleaseLeasesOnFailure', 'ReapOnFailure', 'BuildWaveFailed']) {
+    expect(choice.Default).not.toBe(bad);
+    expect(mark.Next).not.toBe(bad);
+  }
+});
+
+// The driver half: a --plan-file is a snapshot, so reconcile it with live state
+// before planning. Without this, the two overlapping chains above were sent at all.
+function filterToQueued(
+    rows: Record<string, string | null | [string, number | null]>, pkgs: string[],
+    opts: { fail?: boolean; unprocessed?: number } = {}) {
+  const py = [
+    'import json,sys,types',
+    'import importlib.util',
+    `rows=json.loads(${JSON.stringify(JSON.stringify(rows))})`,
+    `fail=${opts.fail ? 'True' : 'False'}`,
+    `unprocessed=${opts.unprocessed ?? 0}`,
+    'calls=[]',
+    'left=[unprocessed]',
+    'class C:',
+    '    def batch_get_item(self, RequestItems):',
+    '        t,spec = list(RequestItems.items())[0]',
+    '        calls.append(len(spec["Keys"]))',
+    '        if fail: raise RuntimeError("boom")',
+    '        assert spec.get("ConsistentRead") is True, "must be a consistent read"',
+    '        ks=[k["pkg"]["S"] for k in spec["Keys"]]',
+    '        assert len(ks)==len(set(ks)), "BatchGetItem rejects duplicate keys"',
+    '        resp=[]',
+    '        for p in ks:',
+    '            if p not in rows: continue',          // no such row
+    '            v=rows[p]',
+    '            it={"pkg":{"S":p}}',
+    '            if isinstance(v, list):',
+    '                it["build_state"]={"S":v[0]}',
+    '                if v[1] is not None: it["lease_expires_at"]={"N":str(v[1])}',
+    '            elif v is not None: it["build_state"]={"S":v}',
+    '            resp.append(it)',
+    '        out={"Responses":{t:resp}}',
+    '        if left[0] > 0:',
+    '            left[0]-=1',
+    '            out["UnprocessedKeys"]={t:{"Keys":spec["Keys"]}}',
+    '        return out',
+    'fake=types.ModuleType("boto3")',
+    'fake.client=lambda svc, region_name=None: C()',
+    'sys.modules["boto3"]=fake',
+    `spec=importlib.util.spec_from_loader("drv", importlib.machinery.SourceFileLoader("drv", ${JSON.stringify(path.join(GRAVITON_SCRIPTS, 'haiku-build-wave-driver'))}))`,
+    'drv=importlib.util.module_from_spec(spec); spec.loader.exec_module(drv)',
+    // Keep the throttle backoff real in production but instant here: the assertion is
+    // the bound on attempts, not the wall time spent honouring it.
+    'slept=[]',
+    'drv.time.sleep=lambda s: slept.append(s)',
+    `items=[{"pkg":p,"wave":1,"target":"0"} for p in json.loads(${JSON.stringify(JSON.stringify(pkgs))})]`,
+    'kept,dropped=drv.filter_to_queued(items,"t","us-west-2")',
+    'print(json.dumps({"kept":[i["pkg"] for i in kept],"dropped":dropped,'
+      + '"calls":calls,"slept":slept}))',
+  ].join('\n');
+  const out = child_process.execFileSync('python3', ['-c', py], { encoding: 'utf8' });
+  return JSON.parse(out.trimEnd().split('\n').pop() as string);
+}
+
+test('849: the driver drops planned ports that are no longer queued', () => {
+  // The wd-10192101 shape: a snapshot plan whose ports have since been leased by the
+  // still-running wd-10192051 chain, or already built.
+  const r = filterToQueued({
+    libgphoto2: 'building', libmatroska: 'building', libmcrypt: 'built',
+    libnpupnp: 'queued', liborigin: 'queued', librnp: 'failed',
+  }, ['libgphoto2', 'libmatroska', 'libmcrypt', 'libnpupnp', 'liborigin', 'librnp']);
+  expect(r.kept).toEqual(['libnpupnp', 'liborigin']);
+  expect(r.dropped.sort()).toEqual([
+    ['libgphoto2', 'building'], ['libmatroska', 'building'],
+    ['libmcrypt', 'built'], ['librnp', 'failed'],
+  ]);
+});
+
+test('849: a port the driver cannot read is kept, not silently dropped', () => {
+  // ClaimBatch's conditional lease is still the authority, so the cost of keeping an
+  // unreadable port is the pre-849 behaviour for that chain -- never a double build.
+  // Dropping it instead would make an unreadable table look like an empty queue.
+  const absent = filterToQueued({ a: 'queued' }, ['a', 'ghost']);
+  expect(absent.kept).toEqual(['a', 'ghost']);
+  expect(absent.dropped).toEqual([]);
+
+  const noState = filterToQueued({ a: 'queued', b: null }, ['a', 'b']);
+  expect(noState.kept).toEqual(['a', 'b']);
+
+  const broken = filterToQueued({ a: 'built' }, ['a', 'b'], { fail: true });
+  expect(broken.kept).toEqual(['a', 'b']);
+  expect(broken.dropped).toEqual([]);
+});
+
+test('849: the live-state read is chunked to DynamoDB\'s 100-key BatchGetItem cap', () => {
+  const rows: Record<string, string> = {};
+  const pkgs: string[] = [];
+  for (let i = 0; i < 250; i++) { pkgs.push(`p${i}`); rows[`p${i}`] = 'queued'; }
+  const r = filterToQueued(rows, pkgs);
+  expect(r.calls).toEqual([100, 100, 50]);
+  expect(r.kept).toHaveLength(250);
+});
+
+// Review findings on the first cut of this filter. Each of these is a way the filter
+// was STRICTER or less robust than the authority it defers to (ClaimBatch), which
+// would have removed work the wave could legitimately have done.
+
+test('849: a building row whose lease EXPIRED is kept -- claim.py would claim it', () => {
+  // claim.py leases `queued` OR `building AND lease_expires_at < now`. Testing
+  // `queued` alone was stricter than that, and since load_queued() reads `queued`
+  // only, re-driving a plan file was the only in-tree way to recover ports stranded
+  // by an execution that skipped the catch (StopExecution runs no catchers). Dropping
+  // them made a stranded backlog undrivable.
+  const now = Math.floor(Date.now() / 1000);
+  const r = filterToQueued({
+    stranded: ['building', now - 60],     // lease expired: claimable
+    live: ['building', now + 3600],       // another run holds it: not ours
+    nolease: ['building', null],          // building with no lease attr: leave alone
+    fresh: 'queued',
+  }, ['stranded', 'live', 'nolease', 'fresh']);
+  expect(r.kept.sort()).toEqual(['fresh', 'stranded']);
+  expect(r.dropped.sort()).toEqual([['live', 'building'], ['nolease', 'building']]);
+});
+
+test('849: the live-state read is consistent and de-duplicated', () => {
+  // Both assertions are inside the stub: ConsistentRead must be true (an eventually
+  // consistent replica can still say `queued` for a port leased moments ago, which is
+  // the exact race this filter exists to catch), and the key list must not repeat a
+  // key -- DynamoDB rejects a duplicated BatchGetItem key outright, and the broad
+  // except would have swallowed that into "driving them unfiltered" for a whole chunk.
+  const r = filterToQueued({ a: 'built', b: 'queued' },
+    ['a', 'b', 'a', 'b', 'a']);   // load_plan_file can yield a port twice
+  expect(r.kept).toEqual(['b', 'b']);        // both plan entries for b survive
+  expect(r.calls).toEqual([2]);              // de-duplicated down to 2 keys
+});
+
+test('849: UnprocessedKeys is retried, but boundedly', () => {
+  // DynamoDB signals throttling with UnprocessedKeys. Retrying it unbounded would hang
+  // the driver before it launched anything -- worse than the degraded path it already
+  // has. It retries, and if the keys never clear it says so and drives unfiltered.
+  const ok = filterToQueued({ a: 'built' }, ['a'], { unprocessed: 2 });
+  expect(ok.calls.length).toBe(3);           // 2 retries, then clear
+  expect(ok.dropped).toEqual([['a', 'built']]);
+  // It pauses between attempts, and the pause grows -- a hot retry is the failure mode.
+  expect(ok.slept).toEqual([0.5, 1]);
+
+  // Keys that never clear: it gives up after a bounded number of attempts rather than
+  // looping. A row it DID manage to read along the way is still used -- only genuinely
+  // unread keys are driven unfiltered, so the warning does not overstate what it lost.
+  const stuck = filterToQueued({ a: 'built' }, ['a'], { unprocessed: 99 });
+  expect(stuck.calls.length).toBeLessThanOrEqual(5);
+  expect(stuck.dropped).toEqual([['a', 'built']]);
+
+  // And a key that is never read at all survives as unknown.
+  const never = filterToQueued({}, ['ghost'], { unprocessed: 99 });
+  expect(never.calls.length).toBeLessThanOrEqual(5);
+  expect(never.kept).toEqual(['ghost']);
+  expect(never.dropped).toEqual([]);
+});
+
+test('849: the driver tells a no-op chain from one that built', () => {
+  const py = [
+    'import json,sys,types,importlib.util,importlib.machinery',
+    `spec=importlib.util.spec_from_loader("drv", importlib.machinery.SourceFileLoader("drv", ${JSON.stringify(path.join(GRAVITON_SCRIPTS, 'haiku-build-wave-driver'))}))`,
+    'drv=importlib.util.module_from_spec(spec); spec.loader.exec_module(drv)',
+    'cases={',
+    '  "stamped": json.dumps({"nothing_claimed": True, "skipped": ["a"]}),',
+    '  "built": json.dumps({"instance_id": "i-1", "claimed": ["a"]}),',
+    '  "false_stamp": json.dumps({"nothing_claimed": False}),',
+    '  "empty": "",',
+    '  "none": None,',
+    '  "garbage": "not json",',
+    '  "list": json.dumps([1,2,3]),',
+    '}',
+    'print(json.dumps({k: drv._claimed_nothing(v) for k,v in cases.items()}))',
+  ].join('\n');
+  const r = JSON.parse(child_process.execFileSync('python3', ['-c', py],
+    { encoding: 'utf8' }).trimEnd().split('\n').pop() as string);
+  expect(r.stamped).toBe(true);
+  // Everything else counts as a real execution. A chain that actually built must never
+  // be miscounted as a no-op, so the stamp is the only thing that says "no-op" --
+  // absent, unparseable or non-object output is not evidence either way.
+  expect(r.built).toBe(false);
+  expect(r.false_stamp).toBe(false);
+  expect(r.empty).toBe(false);
+  expect(r.none).toBe(false);
+  expect(r.garbage).toBe(false);
+  expect(r.list).toBe(false);
+});
