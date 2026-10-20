@@ -18,7 +18,7 @@ no upstream arm64 bootstrap)."
 HOMEPAGE="https://github.com/korli/go/"
 COPYRIGHT="2009-2026 The Go Authors"
 LICENSE="BSD (3-clause)"
-REVISION="1"
+REVISION="2"
 srcGitRev="go1.26.1-haiku1"
 SOURCE_URI="https://github.com/korli/go/archive/$srcGitRev.tar.gz"
 SOURCE_DIR="go-$srcGitRev"
@@ -39,8 +39,17 @@ SOURCE_URI_3="https://sources.debene.dev/go-arm64/go-1.26.1-haiku-arm64-bootstra
 CHECKSUM_SHA256_3="2fe368b44cdb4789016499ccf5d5308ad4d6cdd1aa176001e9617baff5e8d667"
 SOURCE_DIR_3="go-haiku-arm64-bootstrap"
 
-# Apply the haiku/arm64 arch patchset on top of the fork tarball.
-PATCHES="0001-haiku-arm64-M0-toolchain.patch"
+# Apply the haiku/arm64 patchset on top of the fork tarball, in order. This is
+# the same set the native toolchain in ./package is built from; keep the two in
+# step, and bump REVISION whenever a patch is added or changed so the result
+# never shares a version with a package built without it.
+PATCHES="
+	0001-haiku-arm64-M0-toolchain.patch
+	0002-haiku-arm64-M2-errno-zero-extend.patch
+	0003-haiku-arm64-M4-flock-statfs-uname.patch
+	0004-haiku-arm64-M6-pipe-forkexec.patch
+	0005-haiku-arm64-signal-g-in-libroot.patch
+	"
 
 ARCHITECTURES="x86_64 arm64"
 
