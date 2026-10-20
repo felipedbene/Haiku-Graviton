@@ -3173,10 +3173,14 @@ function preflight(opts: {
     'class Body:',
     '    def __init__(self, b): self.b=b',
     '    def read(self): return self.b',
+    'class Missing(Exception):',
+    '    response={"Error":{"Code":"NoSuchKey"}}',
+    'Missing.__name__="NoSuchKey"',
     'class S3:',
     '    def get_object(self, Bucket=None, Key=None, Range=None):',
     '        calls.append("get_object:%s/%s:%s" % (Bucket,Key,Range))',
     '        if raise_on=="s3": raise RuntimeError("denied")',
+    '        if raise_on=="absent": raise Missing("no such key")',
     '        head = b"#!/bin/sh\\n"',
     '        if pub is not None:',
     '            head += b\'NATIVEBUILD_VERSION="%s"\\n\' % pub.encode()',
@@ -3504,4 +3508,17 @@ test('849: the driver tells a no-op chain from one that built', () => {
     }
   }
 });
+<<<<<<< HEAD
 >>>>>>> b3d69f6753 (ops: a stale-driver refusal is not a port failure)
+=======
+
+test('845: an ABSENT published driver is a mismatch, not an unreadable deployment', () => {
+  // The distinction matters: with no driver in S3 every build refuses, which is exactly
+  // what the pre-flight is for. Letting NoSuchKey fall into the best-effort handler
+  // would make the worst case -- nothing published at all -- the one it waves through.
+  const r = preflight({ raise: 'absent' });
+  expect(r.error).toBeNull();
+  expect(r.expected).toBe('2026-10-17.1');
+  expect(r.found).toBeNull();
+});
+>>>>>>> 8af00f4d57 (ops: an absent published driver is a pre-flight mismatch, not an unreadable deployment)
