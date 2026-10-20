@@ -66,6 +66,7 @@ failed execution while --execute, or on a usage/credentials error.
 import argparse
 import json
 import os
+import re
 import sys
 import time
 from collections import defaultdict
@@ -268,6 +269,69 @@ def resolve_sm_arn(region, override):
     raise SystemExit("could not resolve state machine %r in %s" % (SM_NAME, region))
 
 
+_VERSION_MARKER = re.compile(r'^NATIVEBUILD_VERSION="([^"]+)"', re.M)
+
+
+def _find_build_fn(defn, want="StartBuild"):
+    """The FunctionName of the `want` task, wherever it sits -- the build task lives
+    inside the BuildChain Map's ItemProcessor, not at the top level."""
+    def walk(states):
+        for name, st in (states or {}).items():
+            if name == want:
+                return (st.get("Parameters") or {}).get("FunctionName")
+            for sub in ("ItemProcessor", "Iterator"):
+                hit = walk((st.get(sub) or {}).get("States"))
+                if hit:
+                    return hit
+        return None
+    return walk(defn.get("States"))
+
+
+def preflight_driver_version(region, sm_arn):
+    """#506/845 preflight: refuse to drive when the published build driver disagrees
+    with what the deployed build Lambda expects. Returns (expected, found).
+
+    The per-build #506 guard is still the authority -- it is what actually refuses to
+    run stale code on a builder. But it fires once PER PORT, on a booted builder, after
+    the claim: wave wd-10191705 (2026-10-19) spent 11 executions and 96 refusals to
+    learn one fact, because the stack had been deployed at 15:34Z expecting
+    2026-10-17.1 while S3 still held 2026-10-16.1 (no `haiku-publish-driver` after the
+    deploy). One read before the first StartExecution says the same thing for free.
+
+    Read from the deployment, not from this checkout: the mismatch that matters is
+    Lambda-env vs S3, and a local tree can be ahead of both. The Lambda's env also
+    carries the work bucket, so the driver object read here is the exact one the
+    builders will stage.
+
+    Best-effort on the READ, strict on the COMPARISON: if the Lambda config, its env or
+    the S3 object cannot be read we return (None, None) and the caller warns and
+    proceeds (the per-build guard still protects the wave). A version that is read and
+    disagrees is fatal.
+    """
+    import boto3
+    sfn = boto3.client("stepfunctions", region_name=region)
+    lam = boto3.client("lambda", region_name=region)
+    s3 = boto3.client("s3", region_name=region)
+    # Find the build Lambda through the state machine rather than by name convention,
+    # so a renamed/re-id'd function cannot make this check quietly skip itself.
+    defn = json.loads(sfn.describe_state_machine(stateMachineArn=sm_arn)["definition"])
+    fn = _find_build_fn(defn)
+    if not fn:
+        return None, None
+    cfg = lam.get_function_configuration(FunctionName=fn)
+    env = cfg.get("Environment", {}).get("Variables", {})
+    expected = env.get("NATIVEBUILD_VERSION")
+    bucket = env.get("WORK_BUCKET")
+    key = env.get("NATIVEBUILD_S3_KEY") or "bake-scripts/haiku-nativebuild"
+    if not expected or not bucket:
+        return None, None
+    # The marker is in the driver's first few lines; no need to pull the whole script.
+    body = s3.get_object(Bucket=bucket, Key=key, Range="bytes=0-8191")["Body"].read()
+    m = _VERSION_MARKER.search(body.decode("utf-8", "replace"))
+    found = m.group(1) if m else None
+    return expected, found
+
+
 def drive_wave(sfn, sm_arn, label, chains, run_id, budget, publish, disk_gib,
                lease_secs, poll_secs):
     """Run a wave's chains through a concurrency-<=budget pool: keep <=budget
@@ -317,6 +381,9 @@ def main():
     ap.add_argument("--region", default=os.environ.get("AWS_DEFAULT_REGION", "us-west-2"))
     ap.add_argument("--plan-file", help="read waves from a JSON artifact instead of DDB")
     ap.add_argument("--plan-out", help="write the computed wave plan to this JSON path")
+    ap.add_argument("--skip-driver-preflight", action="store_true",
+                    help="skip the #506/845 published-driver vs deployed-Lambda version "
+                         "check (the per-build guard still refuses).")
     ap.add_argument("--chain-size", type=int, default=12,
                     help="ports per execution/builder (<=18 keeps per-wave publish "
                          "inside the /dev/shm re-stamp limit, #168). Default 12.")
@@ -428,6 +495,37 @@ def main():
     import boto3
     sfn = boto3.client("stepfunctions", region_name=args.region)
     log("\nstate machine     : %s" % sm_arn)
+
+    # #506/845 preflight: one read, before the first StartExecution. A published driver
+    # that disagrees with the deployed Lambda makes EVERY port in the wave refuse to
+    # build, so learning it here costs one GetObject instead of 11 executions, 96
+    # builders' worth of boot time, and 96 refusals (wave wd-10191705, 2026-10-19).
+    if not args.skip_driver_preflight:
+        try:
+            expected, found = preflight_driver_version(args.region, sm_arn)
+        except Exception as e:
+            expected = found = None
+            log("WARNING: driver preflight could not read the deployment (%s: %s) -- "
+                "proceeding; the per-build #506 guard still applies."
+                % (type(e).__name__, e))
+        if expected is None:
+            log("driver preflight  : UNVERIFIED (could not read the expected version)")
+        elif found == expected:
+            log("driver preflight  : OK (published driver is NATIVEBUILD_VERSION=%s)" % expected)
+        else:
+            raise SystemExit(
+                "REFUSING to drive: the published build driver is %s, but the deployed "
+                "build Lambda expects NATIVEBUILD_VERSION=%s. Every port in this wave "
+                "would refuse to build (#506) and be re-queued (issue 845), having built "
+                "nothing.\n"
+                "  Fix: run `graviton/scripts/haiku-publish-driver` to publish the "
+                "current driver, then re-run this driver.\n"
+                "  If the DEPLOYMENT is the stale half instead, redeploy DebeosOpsStack "
+                "so the Lambda carries the tree's version.\n"
+                "  Override with --skip-driver-preflight (the per-build guard still "
+                "refuses, so this only buys you the old failure mode)."
+                % (("%s" % found) if found else "missing its NATIVEBUILD_VERSION marker",
+                   expected))
 
     driven = grand_ok = grand_bad = 0
     all_failed = []

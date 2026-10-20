@@ -2108,9 +2108,13 @@ test('#506 mutation: a CURRENT staged driver proceeds to build (VERDICT=OK)', ()
   expect(r.rc).toBe(0);
 });
 
-test('#506 mutation: a STALE staged driver is refused loudly (VERDICT=FAIL RC=3)', () => {
+test('#506 mutation: a STALE staged driver is refused loudly (VERDICT=STALE RC=3)', () => {
   const r = runGuard('1970-01-01.0');
-  expect(r.verdict).toBe('FAIL');
+  // Issue 845 gave the refusal its own verdict. It is still just as loud -- same rc,
+  // same diagnostic log -- but it is no longer FAIL, because FAIL is what record.py
+  // charges to the package, and nothing was built here.
+  expect(r.verdict).toBe('STALE');
+  expect(r.verdict).not.toBe('FAIL');
   expect(r.rc).toBe(3);
   expect(r.log).toContain('STALE DRIVER');
   expect(r.log).toContain('REFUSING TO BUILD');
@@ -2147,13 +2151,16 @@ test('769: a run that built a port and THEN ran out of disk is CAPACITY, not OK'
   expect(r.rc).toBe(9);
 });
 
-test('769: a stale driver is still FAIL/RC=3 -- the capacity arm did not shadow it', () => {
+test('769: a stale driver is STALE/RC=3 -- the capacity arm did not shadow it', () => {
   // The capacity grep runs before the ok_grep, so it is worth asserting it did not get
-  // in front of the STALE short-circuit: a stale run never executes the driver at all,
-  // and must not be able to present itself as an infrastructure hiccup to be re-queued.
+  // in front of the STALE short-circuit. A stale run never executes the driver at all,
+  // so it must report what actually happened -- the refusal -- and not borrow the
+  // out-of-disk verdict, which would name the wrong remedy (a bigger volume) for a
+  // driver that simply needs republishing.
   const r = runGuard('1970-01-01.0',
     `echo "$1: BUILD_ABORTED_ENOSPC"\nexit 9`);
-  expect(r.verdict).toBe('FAIL');
+  expect(r.verdict).toBe('STALE');
+  expect(r.verdict).not.toBe('CAPACITY');
   expect(r.rc).toBe(3);
 });
 
@@ -3060,4 +3067,216 @@ test('839: every failure path releases leases before it reaps', () => {
     expect(states[name].Catch.map((c: any) => c.Next)).toContain('ReleaseLeasesOnFailure');
   }
   expect(states.ReleasePublishLockOnFailure.Next).toBe('ReleaseLeasesOnFailure');
+});
+
+// ---------------------------------------------------------------------------
+// Issue 845: a #506 stale-driver refusal is an infrastructure mismatch, not a port
+// defect. It used to go down the ordinary failure path, so wave wd-10191705
+// (2026-10-19) charged 95 of 96 ports an attempt and left 63 of them
+// needs_human/repeated-failure, having built nothing at all -- the ops stack had been
+// deployed at 15:34Z expecting 2026-10-17.1 while S3 still held 2026-10-16.1.
+// ---------------------------------------------------------------------------
+
+test('845: poll_ssm classifies the refusal as stale-driver, not build-error', () => {
+  const py = [
+    'import json,sys,types',
+    `sys.path.insert(0,${JSON.stringify(OPS_LAMBDAS)})`,
+    'class SSM:',
+    '    class exceptions:',
+    '        class InvocationDoesNotExist(Exception): pass',
+    '    def __init__(self, out): self.out=out',
+    '    def get_command_invocation(self, CommandId=None, InstanceId=None):',
+    '        return {"Status": "Failed", "StandardOutputContent": self.out}',
+    'OUT={}',
+    'fake=types.ModuleType("boto3")',
+    'fake.client=lambda svc: SSM(OUT["out"])',
+    'sys.modules["boto3"]=fake',
+    'import poll_ssm',
+    'res={}',
+    'for v,rc in (("STALE",3),("CAPACITY",9),("FAIL",1)):',
+    '    OUT["out"]="VERDICT=%s RC=%d LOG=s3://b/k.log.gz" % (v,rc)',
+    '    ev=poll_ssm.handler({"command_id":"c","instance_id":"i"}, None)',
+    '    res[v]=[ev["ok"], ev["error_class"]]',
+    'print(json.dumps(res))',
+  ].join('\n');
+  const out = child_process.execFileSync('python3', ['-c', py], { encoding: 'utf8' });
+  const res = JSON.parse(out.trimEnd().split('\n').pop() as string);
+  expect(res.STALE).toEqual([false, 'stale-driver']);
+  // Still not a success, and still distinct from the out-of-disk class: the two have
+  // different remedies (republish the driver vs. a bigger volume).
+  expect(res.CAPACITY).toEqual([false, 'capacity']);
+  expect(res.FAIL).toEqual([false, 'build-error']);
+});
+
+test('845: a stale-driver outcome re-queues the port without counting an attempt', () => {
+  const r = recordCapacity('stale-driver');
+  expect(r.state).toBe('queued');
+  // One write, the re-queue -- not the two-write failure path whose first write is the
+  // attempt_count increment. That increment is the whole harm: three of them escalate a
+  // port that was never built to needs_human/repeated-failure.
+  expect(r.exprs).toHaveLength(1);
+  expect(r.values[0][':s']).toBe('queued');
+  expect(r.exprs[0]).not.toContain('attempt_count');
+  expect(r.exprs[0]).not.toContain('last_error_class');
+  expect(r.exprs[0]).toContain('REMOVE lease_owner, lease_expires_at');
+  expect(r.exprs[0]).toContain('queued_at=if_not_exists');
+  // Named distinctly from the capacity re-queue, so the two are tellable apart on the
+  // row afterwards -- they point at different fixes.
+  expect(r.values[0][':o']).toBe('stale-driver-requeued');
+  expect(r.values[0][':o']).not.toBe('capacity-requeued');
+});
+
+test('845: the not-the-port branch stayed narrow -- unknown classes still count', () => {
+  // Guards the generalisation from capacity to a SET: a membership test that accepted
+  // anything would re-queue real recipe defects forever instead of escalating them.
+  for (const cls of ['build-error', 'unresolvable', 'timeout', '']) {
+    const r = recordCapacity(cls);
+    expect([cls, r.state]).toEqual([cls, 'failed']);
+    expect(r.exprs[0]).toContain('attempt_count=if_not_exists');
+  }
+});
+
+// The pre-flight: one read before the first StartExecution, instead of 96 refusals on
+// 11 booted builders. Drives the real function against a stubbed boto3.
+function preflight(opts: {
+  expected?: string | null; published?: string | null;
+  noFn?: boolean; raise?: string;
+}): { expected: string | null; found: string | null; error?: string; calls: string[] } {
+  const py = [
+    'import json,sys,types,importlib.util,importlib.machinery',
+    // Python literals: a JSON `null` is not one, so map absent -> None explicitly.
+    `exp=${opts.expected === undefined ? "'2026-10-17.1'"
+      : opts.expected === null ? 'None' : JSON.stringify(opts.expected)}`,
+    `pub=${opts.published === undefined ? "'2026-10-17.1'"
+      : opts.published === null ? 'None' : JSON.stringify(opts.published)}`,
+    `noFn=${opts.noFn ? 'True' : 'False'}`,
+    `raise_on=${JSON.stringify(opts.raise || '')}`,
+    'calls=[]',
+    // The real shape: StartBuild lives inside the BuildChain Map's ItemProcessor.
+    'DEF={"States":{"ClaimBatch":{"Type":"Task"},"BuildChain":{"Type":"Map",',
+    '  "ItemProcessor":{"States":{"StartBuild":{"Type":"Task","Parameters":',
+    '    {"FunctionName":"arn:aws:lambda:us-west-2:1:function:BuildFn"}},',
+    '   "PollBuild":{"Type":"Task"}}}}}}',
+    'if noFn: DEF={"States":{"ClaimBatch":{"Type":"Task"}}}',
+    'class SFN:',
+    '    def describe_state_machine(self, stateMachineArn=None):',
+    '        calls.append("describe_state_machine")',
+    '        if raise_on=="sfn": raise RuntimeError("denied")',
+    '        return {"definition": json.dumps(DEF)}',
+    'class LAM:',
+    '    def get_function_configuration(self, FunctionName=None):',
+    '        calls.append("get_function_configuration:"+FunctionName)',
+    '        if raise_on=="lambda": raise RuntimeError("denied")',
+    '        env={"WORK_BUCKET":"wb"}',
+    '        if exp is not None: env["NATIVEBUILD_VERSION"]=exp',
+    '        return {"Environment":{"Variables":env}}',
+    'class Body:',
+    '    def __init__(self, b): self.b=b',
+    '    def read(self): return self.b',
+    'class S3:',
+    '    def get_object(self, Bucket=None, Key=None, Range=None):',
+    '        calls.append("get_object:%s/%s:%s" % (Bucket,Key,Range))',
+    '        if raise_on=="s3": raise RuntimeError("denied")',
+    '        head = b"#!/bin/sh\\n"',
+    '        if pub is not None:',
+    '            head += b\'NATIVEBUILD_VERSION="%s"\\n\' % pub.encode()',
+    '        return {"Body": Body(head+b"# rest of driver\\n")}',
+    'fake=types.ModuleType("boto3")',
+    'def client(svc, region_name=None):',
+    '    return {"stepfunctions":SFN(),"lambda":LAM(),"s3":S3()}[svc]',
+    'fake.client=client',
+    'sys.modules["boto3"]=fake',
+    `spec=importlib.util.spec_from_loader("drv", importlib.machinery.SourceFileLoader("drv", ${JSON.stringify(path.join(GRAVITON_SCRIPTS, 'haiku-build-wave-driver'))}))`,
+    'drv=importlib.util.module_from_spec(spec); spec.loader.exec_module(drv)',
+    'err=None; e_=f_=None',
+    'try:',
+    '    e_,f_=drv.preflight_driver_version("us-west-2","arn:sm")',
+    'except Exception as ex: err="%s: %s" % (type(ex).__name__, ex)',
+    'print(json.dumps({"expected":e_,"found":f_,"error":err,"calls":calls}))',
+  ].join('\n');
+  const out = child_process.execFileSync('python3', ['-c', py], { encoding: 'utf8' });
+  return JSON.parse(out.trimEnd().split('\n').pop() as string);
+}
+
+test('845: the pre-flight reads the deployment and reports agreement', () => {
+  const r = preflight({});
+  expect([r.expected, r.found]).toEqual(['2026-10-17.1', '2026-10-17.1']);
+  // It reads the EXPECTED version from the Lambda's env, not from this checkout: the
+  // mismatch that matters is deployment-vs-S3, and a local tree can be ahead of both.
+  expect(r.calls).toContain('get_function_configuration:arn:aws:lambda:us-west-2:1:function:BuildFn');
+  // The bucket comes from that same env, so the object read is the one the builders
+  // would stage, and only the marker's worth of it is fetched.
+  expect(r.calls).toContain('get_object:wb/bake-scripts/haiku-nativebuild:bytes=0-8191');
+});
+
+test('845: the pre-flight reports the real wd-10191705 mismatch', () => {
+  const r = preflight({ expected: '2026-10-17.1', published: '2026-10-16.1' });
+  expect(r.expected).toBe('2026-10-17.1');
+  expect(r.found).toBe('2026-10-16.1');
+  expect(r.found).not.toBe(r.expected);
+});
+
+test('845: an unmarked published driver is a mismatch, not a pass', () => {
+  // A driver with no marker at all is exactly what the per-build guard refuses, so the
+  // pre-flight must not read "no version found" as "no disagreement".
+  const r = preflight({ published: null });
+  expect(r.found).toBeNull();
+  expect(r.expected).toBe('2026-10-17.1');
+});
+
+test('845: the pre-flight finds the build task through the graph, not by name', () => {
+  // If the task cannot be found it returns UNVERIFIED rather than guessing a function
+  // name -- a convention that silently stopped matching would turn this check off.
+  const r = preflight({ noFn: true });
+  expect([r.expected, r.found]).toEqual([null, null]);
+  expect(r.calls).toEqual(['describe_state_machine']);
+});
+
+test('845: a deployment with no expected version is UNVERIFIED, not a mismatch', () => {
+  const r = preflight({ expected: null });
+  expect([r.expected, r.found]).toEqual([null, null]);
+});
+
+test('845: the pre-flight is best-effort on the read -- a denial does not block a wave', () => {
+  // Strict on the comparison, best-effort on the read. The per-build #506 guard is the
+  // real authority; this is an early warning, so a missing IAM grant must not be able
+  // to stop every wave.
+  for (const svc of ['sfn', 'lambda', 's3']) {
+    const r = preflight({ raise: svc });
+    expect([svc, r.error]).toEqual([svc, 'RuntimeError: denied']);
+  }
+});
+
+test('845: the operator role can run the pre-flight, and still cannot invoke', () => {
+  const app = new cdk.App();
+  const stack = new OpsStack(app, 'TestOpsStack', {
+    env: { account: config.account, region: config.region },
+    config,
+  });
+  const t = Template.fromStack(stack);
+  // Only the OPERATOR role's policy. The state machine's own role legitimately holds
+  // lambda:InvokeFunction, so scanning every policy in the stack would assert nothing.
+  const roleId = Object.keys(t.findResources('AWS::IAM::Role', {
+    Properties: { RoleName: 'debeos-operator' },
+  }))[0];
+  expect(roleId).toBeDefined();
+  const pols = (Object.values(t.findResources('AWS::IAM::Policy')) as any[])
+    .filter((p: any) => JSON.stringify(p.Properties.Roles ?? []).includes(roleId));
+  expect(pols).toHaveLength(1);
+  const acts = pols[0].Properties.PolicyDocument.Statement
+    .flatMap((s: any) => (Array.isArray(s.Action) ? s.Action : [s.Action]));
+  expect(acts).toContain('states:DescribeStateMachine');
+  expect(acts).toContain('lambda:GetFunctionConfiguration');
+  // Describe-only. Reading a function's config must not come with the right to run it,
+  // change it, or read anyone else's -- this role is what a prompt-injectable agent is.
+  expect(acts).not.toContain('lambda:InvokeFunction');
+  expect(acts).not.toContain('lambda:UpdateFunctionCode');
+  expect(acts).not.toContain('lambda:GetFunction');
+  // Both new grants are resource-scoped, not '*'.
+  for (const s of pols[0].Properties.PolicyDocument.Statement) {
+    const a = Array.isArray(s.Action) ? s.Action : [s.Action];
+    if (a.includes('states:DescribeStateMachine') || a.includes('lambda:GetFunctionConfiguration')) {
+      expect(s.Resource).not.toBe('*');
+    }
+  }
 });
