@@ -49,7 +49,7 @@ const uint32 kIterations = 50000;
 void
 test(BCollator *collator, const char *name, int8 strength)
 {
-	collator->SetDefaultStrength(strength);
+	collator->SetStrength(strength);
 
 	BStopWatch watch(name, true);
 
