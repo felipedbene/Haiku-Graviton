@@ -11,8 +11,11 @@
 #include <Application.h>
 #include <Catalog.h>
 #include <DefaultCatalog.h>
+#include <EditableCatalog.h>
 #include <Entry.h>
+#include <HashMapCatalog.h>
 #include <Locale.h>
+#include <LocaleRoster.h>
 #include <Path.h>
 #include <Roster.h>
 
@@ -35,8 +38,8 @@ CatalogTest::Run()
 	status_t res;
 	BString s;
 	s << "string" << "\x01" << B_TRANSLATION_CONTEXT << "\x01";
-	size_t hashVal = CatKey::HashFun(s.String());
-	assert(be_locale != NULL);
+	size_t hashVal = BPrivate::CatKey::HashFun(s.String());
+	assert(BLocaleRoster::Default() != NULL);
 	system("mkdir -p ./locale/catalogs/"catSig);
 
 	// create an empty catalog of default type...
@@ -90,7 +93,7 @@ CatalogTest::Run()
 	res = be_app->GetAppInfo(&appInfo);
 	assert(res == B_OK);
 	// embed created catalog into application file (catalogTest):
-	res = catb.WriteToResource(&appInfo.ref);
+	res = catb.WriteToResource(appInfo.ref);
 	assert(res == B_OK);
 
 	printf("ok.\n");
@@ -105,23 +108,24 @@ CatalogTest::Check()
 	printf("app-check...");
 	BString s;
 	s << "string" << "\x01" << B_TRANSLATION_CONTEXT << "\x01";
-	size_t hashVal = CatKey::HashFun(s.String());
+	size_t hashVal = BPrivate::CatKey::HashFun(s.String());
 	// ok, we now try to re-load the catalog that has just been written:
 	//
 	// actually, the following code can be seen as an example of what an
 	// app needs in order to translate strings:
-	BCatalog cat;
-	res = be_locale->GetAppCatalog(&cat);
+	BCatalog* cat = BLocaleRoster::Default()->GetCatalog();
+	assert(cat != NULL);
+	res = cat->InitCheck();
 	assert(res == B_OK);
 	// fetch basic data:
 	uint32 fingerprint = 0;
-	res = cat.GetFingerprint(&fingerprint);
+	res = cat->GetFingerprint(&fingerprint);
 	assert(res == B_OK);
 	BString lang;
-	res = cat.GetLanguage(&lang);
+	res = cat->GetLanguage(&lang);
 	assert(res == B_OK);
 	BString sig;
-	res = cat.GetSignature(&sig);
+	res = cat->GetSignature(&sig);
 	assert(res == B_OK);
 
 	// now check strings:
@@ -148,11 +152,18 @@ CatalogTest::Check()
 	s = B_TRANSLATE("string");
 	assert(s == "Schnur");
 
-	// now check if trying to access same catalog by specifying its data works:
-	BCatalog cat2(sig.String(), lang.String(), fingerprint);
+	// Now check that addressing the same catalog by its own data works.
+	// BCatalog has no (signature, language, fingerprint) constructor any more;
+	// the fingerprint survives only on the entry_ref form, so the catalog is
+	// addressed by the application's ref -- which is what the signature
+	// resolved to anyway.
+	app_info appInfo;
+	res = be_app->GetAppInfo(&appInfo);
+	assert(res == B_OK);
+	BCatalog cat2(appInfo.ref, lang.String(), fingerprint);
 	assert(cat2.InitCheck() == B_OK);
 	// now check if trying to access same catalog with wrong fingerprint fails:
-	BCatalog cat3(sig.String(), lang.String(), fingerprint*-1);
+	BCatalog cat3(appInfo.ref, lang.String(), fingerprint*-1);
 	assert(cat3.InitCheck() == B_NO_INIT);
 	// translating through an invalid catalog should yield the native string:
 	s = cat3.GetString("string");
