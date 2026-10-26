@@ -6,6 +6,7 @@
 
 #include <Collator.h>
 #include <Locale.h>
+#include <LocaleRoster.h>
 #include <StopWatch.h>
 
 #include <stdio.h>
@@ -71,7 +72,7 @@ void
 usage()
 {
 	fprintf(stderr,
-		"usage: collatorSpeed [-i] [<add-on path>]\n"
+		"usage: collatorSpeed [-i]\n"
 		"  -i\tignore punctuation (defaults to: punctuation matters)\n");
 	exit(-1);
 }
@@ -83,8 +84,6 @@ main(int argc, char **argv)
 	// Parse command line arguments
 
 	bool ignorePunctuation = false;
-	char *addon = NULL;
-	BCollator *collator = NULL;
 
 	while ((++argv)[0]) {
 		if (argv[0][0] == '-') {
@@ -93,45 +92,33 @@ main(int argc, char **argv)
 			else if (!strcmp(argv[0], "--help"))
 				usage();
 		} else {
-			// this will be the add-on to be loaded
-			addon = argv[0];
+			// The add-on path argument used to name a collator add-on to load.
+			// That architecture (BCollatorAddOn, instantiate_collator()) was
+			// removed, so there is nothing left for a positional argument to
+			// select.
+			usage();
 		}
 	}
 
-	// load the collator add-on if necessary
+	// The default locale's collator is the only one there is now.
 
-	if (addon != NULL) {
-		image_id image = load_add_on(addon);
-		if (image < B_OK)
-			fprintf(stderr, "could not load add-on at \"%s\": %s.\n", addon, strerror(image));
-
-		BCollatorAddOn *(*instantiate)(void);
-		if (get_image_symbol(image, "instantiate_collator",
-				B_SYMBOL_TYPE_TEXT, (void **)&instantiate) == B_OK) {
-			BCollatorAddOn *collatorAddOn = instantiate();
-			if (collatorAddOn != NULL)
-				collator = new BCollator(collatorAddOn, B_COLLATE_PRIMARY, true);
-		} else if (image >= B_OK) {
-			fprintf(stderr, "could not find instantiate_collator() function in add-on!\n");
-			unload_add_on(image);
-		}
-	}
-
-	if (collator == NULL) {
-		collator = be_locale->Collator();
-		addon = (char*)"default";
+	BCollator collator;
+	const BLocale* locale = BLocaleRoster::Default()->GetDefaultLocale();
+	if (locale == NULL || locale->GetCollator(&collator) != B_OK) {
+		fprintf(stderr, "could not get the default locale's collator.\n");
+		return 1;
 	}
 
 	// test key creation speed
 
-	collator->SetIgnorePunctuation(ignorePunctuation);
+	collator.SetIgnorePunctuation(ignorePunctuation);
 
-	printf("%s:\n", addon);
-	test(collator, "primary:   ", B_COLLATE_PRIMARY);
-	test(collator, "secondary: ", B_COLLATE_SECONDARY);
-	test(collator, "tertiary:  ", B_COLLATE_TERTIARY);
-	test(collator, "quaternary:", B_COLLATE_QUATERNARY);
-	test(collator, "identical: ", B_COLLATE_IDENTICAL);
+	printf("default:\n");
+	test(&collator, "primary:   ", B_COLLATE_PRIMARY);
+	test(&collator, "secondary: ", B_COLLATE_SECONDARY);
+	test(&collator, "tertiary:  ", B_COLLATE_TERTIARY);
+	test(&collator, "quaternary:", B_COLLATE_QUATERNARY);
+	test(&collator, "identical: ", B_COLLATE_IDENTICAL);
 
 	return 0;
 }
