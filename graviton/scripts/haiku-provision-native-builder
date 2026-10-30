@@ -107,6 +107,7 @@
 #   HP_HOME      home dir to install under      (default /boot/home)
 #   PORTS_REPO   ports tree git URL             (default the public HaikuPorts tree)
 #   HP_REPO      haikuporter git URL            (default the public HaikuPorts haikuporter)
+#   HP_REF       haikuporter commit to check out (default pinned below, issue 865)
 #   TARGET_ARCH  packaging target architecture  (default arm64)
 #   PACKAGER     PACKAGER line for haikuports.conf (default a generic DeBeOS id)
 #   SEED_DIR     wget/curl-shim seed directory  (default $HP_HOME/seed)
@@ -145,6 +146,12 @@ set -eu
 HP_HOME="${HP_HOME:-/boot/home}"
 PORTS_REPO="${PORTS_REPO:-https://github.com/haikuports/haikuports.git}"
 HP_REPO="${HP_REPO:-https://github.com/haikuports/haikuporter.git}"
+# Issue 865: the haikuporter patchers below are anchored on its exact source text
+# and refuse to run when it moves, so an unpinned HEAD lets an upstream refactor
+# break every rebase bake overnight (601d31b506 rewrote the packageEntries loop
+# that #758 patches). Pin the last commit the anchors were verified against;
+# moving the pin means re-verifying every patcher, not just bumping the hash.
+HP_REF="${HP_REF:-faa30769682fb85970846190ae8f4dbc99327d3a}"
 TARGET_ARCH="${TARGET_ARCH:-arm64}"
 PACKAGER="${PACKAGER:-DeBeOS <debeos@example.invalid>}"
 SEED_DIR="${SEED_DIR:-$HP_HOME/seed}"
@@ -755,8 +762,16 @@ apply_recipe_overlay() {
 apply_recipe_overlay
 
 if [ ! -d "$HP_DIR/.git" ] && [ ! -x "$HP_DIR/haikuporter" ]; then
-	log "cloning haikuporter -> $HP_DIR"
-	git clone --depth 1 "$HP_REPO" "$HP_DIR"
+	log "cloning haikuporter @ $HP_REF -> $HP_DIR"
+	# Fetch the one pinned commit by hash; a branch clone would take HEAD.
+	git init -q "$HP_DIR"
+	git -C "$HP_DIR" fetch -q --depth 1 "$HP_REPO" "$HP_REF"
+	git -C "$HP_DIR" checkout -q --detach FETCH_HEAD
+	if [ "$(git -C "$HP_DIR" rev-parse HEAD)" != "$HP_REF" ]; then
+		echo "provision: FATAL #865: haikuporter is at" \
+			"$(git -C "$HP_DIR" rev-parse HEAD), not the pinned $HP_REF" >&2
+		exit 1
+	fi
 else
 	log "haikuporter already present: $HP_DIR"
 fi
