@@ -46,6 +46,7 @@ import { order as semverOrder, satisfies as semverSatisfies } from "./lib/semver
 import { deepEquals } from "./lib/deepequals.mjs";
 import { bunWhich } from "./lib/which.mjs";
 import * as misc from "./lib/misc.mjs";
+import { parse as tomlParse } from "./lib/toml.mjs";
 
 const Bun = {
 	hash: makeHash(),			// vectors: hash.vectors.json, 3353/3353
@@ -65,6 +66,7 @@ const Bun = {
 	file: misc.file,
 	stdin: misc.stdin,
 	main: misc.main,
+	TOML: { parse: tomlParse },	// toml.cases.json, 120762 match + 10 named known differences (LIMITATIONS.md)
 	// `unsafe` is a namespace in Bun. The bundle calls Bun.unsafe.setJITPolicy?.()
 	// on a timer guarded only by `typeof Bun`, so the namespace must exist; its one
 	// member used, a JavaScriptCore JIT knob, has no V8 counterpart and is absent.
