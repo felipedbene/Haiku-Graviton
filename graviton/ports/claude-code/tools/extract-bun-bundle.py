@@ -5,8 +5,9 @@ Read-only with respect to the input: the binary is parsed, never executed.
 Writes every module (contents, plus sourcemap/bytecode when present) under OUTDIR,
 and a manifest.json describing each record, the entry point and the compile argv.
 
-Format (Bun StandaloneModuleGraph, as found in Bun v1.4.x ELF builds):
-  ELF section `.bun` = u64 payload_len | payload | "\\n---- Bun! ----\\n"
+Format (Bun StandaloneModuleGraph, as found in Bun v1.4.x ELF and Mach-O builds):
+  ELF section `.bun` (Mach-O: `__BUN,__bun`)
+                     = u64 payload_len | payload | "\\n---- Bun! ----\\n"
   payload tail       = Offsets { u64 byte_count; StringPointer modules;
                                  u32 entry_point_id; StringPointer compile_exec_argv;
                                  u32 flags }                       (32 bytes)
@@ -35,9 +36,42 @@ def die(msg):
 	sys.exit("extract-bun-bundle: " + msg)
 
 
+def macho_bun_section(d):
+	# Thin little-endian Mach-O 64 (Bun's darwin builds): the payload is the
+	# section `__BUN,__bun`, with the same u64 len | payload | trailer layout.
+	ncmds, sizeofcmds = struct.unpack_from("<II", d, 16)
+	if 32 + sizeofcmds > len(d):
+		die("Mach-O load commands run past end of file")
+	found, o = [], 32
+	for _ in range(ncmds):
+		cmd, cmdsize = struct.unpack_from("<II", d, o)
+		if cmdsize < 8 or o + cmdsize > 32 + sizeofcmds:
+			die("Mach-O load command at %d has bad size %d" % (o, cmdsize))
+		if cmd == 0x19:		# LC_SEGMENT_64
+			nsects, = struct.unpack_from("<I", d, o + 64)
+			if 72 + nsects * 80 > cmdsize:
+				die("Mach-O segment at %d: %d sections overflow the command" % (o, nsects))
+			for j in range(nsects):
+				so = o + 72 + j * 80
+				sect, seg = d[so:so + 16].rstrip(b"\0"), d[so + 16:so + 32].rstrip(b"\0")
+				size, off = struct.unpack_from("<QI", d, so + 40)
+				if (seg, sect) == (b"__BUN", b"__bun"):
+					if off + size > len(d):
+						die("__BUN,__bun runs past end of file")
+					found.append(d[off:off + size])
+		o += cmdsize
+	if len(found) != 1:
+		die("expected exactly one __BUN,__bun section, found %d" % len(found))
+	return found[0]
+
+
 def bun_section(d):
+	if d[:4] == b"\xcf\xfa\xed\xfe":
+		return macho_bun_section(d)
+	if d[:4] in (b"\xca\xfe\xba\xbe", b"\xfe\xed\xfa\xcf", b"\xce\xfa\xed\xfe"):
+		die("fat, big-endian or 32-bit Mach-O: unsupported layout")
 	if d[:4] != b"\x7fELF" or d[4] != 2 or d[5] != 1:
-		die("not a little-endian ELF64 file")
+		die("not a little-endian ELF64 or Mach-O 64 file")
 	shoff, = struct.unpack_from("<Q", d, 0x28)
 	shentsize, shnum, shstrndx = struct.unpack_from("<HHH", d, 0x3A)
 	sh = lambda i: struct.unpack_from("<IIQQQQIIQQ", d, shoff + i * shentsize)
