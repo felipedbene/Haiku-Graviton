@@ -1,17 +1,50 @@
 #!/bin/bash
 # dev-linux-run <instance> <label> <step-script>: ship this port's tools/ and
-# compat/ to /opt/cc/port on the Linux reference box, then run <step-script>
-# there through ssm-run (so every iteration leaves an evidence log).
+# compat/ to $REMOTE_DIR (default /opt/cc/port) on the Linux reference box, then
+# run <step-script> there, from that directory, through ssm-run (so every
+# iteration leaves an evidence log). Parallel workers must each set their own
+# REMOTE_DIR: the staging file lives next to it, so distinct dirs never collide.
+#
+# SSM caps a command document at 97 KB, so the payload is staged first in
+# 48 KB base64 chunks (plain send-command, not evidence: it is file transfer),
+# its sha256 checked on the box, then unpacked by the evidence step itself.
 set -euo pipefail
 here=$(cd "$(dirname "$0")/.." && pwd)
 inst=$1 label=$2 step=$3
-payload=$(COPYFILE_DISABLE=1 tar --no-xattrs -czf - -C "$here" tools compat 2>/dev/null | base64 | tr -d '\n')
+region=${AWS_REGION:-us-west-2}
+R=${REMOTE_DIR:-/opt/cc/port}
+ST="$R.stage"
+tmp=$(mktemp -d)
+trap 'rm -rf "$tmp"' EXIT
+COPYFILE_DISABLE=1 tar --no-xattrs -czf "$tmp/p.tgz" -C "$here" tools compat 2>/dev/null
+sum=$(shasum -a 256 "$tmp/p.tgz" | cut -d' ' -f1)
+base64 < "$tmp/p.tgz" | tr -d '\n' | fold -w 49152 > "$tmp/chunks"
+
+send() {	# send <shell command>: run it, wait, fail unless Success
+	local cid st
+	cid=$(aws ssm send-command --region "$region" --instance-ids "$inst" --document-name AWS-RunShellScript \
+		--parameters "$(python3 -I -c 'import json,sys;print(json.dumps({"commands":[sys.argv[1]]}))' "$1")" \
+		--query Command.CommandId --output text) || return 1
+	while :; do
+		st=$(aws ssm get-command-invocation --region "$region" --command-id "$cid" --instance-id "$inst" \
+			--query Status --output text 2>/dev/null || echo Pending)
+		case $st in Pending|InProgress|Delayed) sleep 2 ;; *) break ;; esac
+	done
+	[ "$st" = Success ] || { echo "dev-linux-run: staging command $cid ended $st" >&2; return 1; }
+}
+
+send "mkdir -p $ST && : > $ST/p.b64"
+while IFS= read -r chunk || [ -n "$chunk" ]; do
+	send "printf '%s' '$chunk' >> $ST/p.b64"
+done < "$tmp/chunks"
+send "base64 -d $ST/p.b64 > $ST/p.tgz && echo '$sum  $ST/p.tgz' | sha256sum -c --quiet -"
+
 s=$(mktemp)
 {
 	echo 'set -u'
-	echo 'rm -rf /opt/cc/port && mkdir -p /opt/cc/port'
-	echo "echo $payload | base64 -d | tar xzf - -C /opt/cc/port 2>/dev/null"
-	echo 'cd /opt/cc/port'
+	echo "echo '$sum  $ST/p.tgz' | sha256sum -c --quiet - || exit 1"
+	echo "rm -rf $R && mkdir -p $R && tar xzf $ST/p.tgz -C $R 2>/dev/null"
+	echo "cd $R"
 	cat "$step"
 } > "$s"
 "$here/tools/ssm-run" "$inst" "$label" "$s" "${TIMEOUT:-1800}"

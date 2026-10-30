@@ -1,0 +1,9 @@
+doctor
+mcp list
+plugin list
+auth status
+agents
+-p hello
+-p --output-format json hello
+config list
+update --help
