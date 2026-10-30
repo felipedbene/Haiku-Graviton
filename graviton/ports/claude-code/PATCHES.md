@@ -49,6 +49,10 @@ sha256 and each original text, then acorn-parses every rewritten module.
 |---|---|---|---|---|
 | P4 | 60 modules (126 sites: platform 102, arch 22, both 2) | each folded `"linux"`/`"arm64"` → `process.platform`/`process.arch` (in template text, `${…}`) | The folded literal reports Linux on Haiku. The 10 P1/P2 switch sites are part of the 126; P4 verifies and skips them when relocation already ran P1/P2. Includes the main platform host `new u({platform:"linux",…})` in `chunk-8dvz2fjk.js`. | n |
 
+| P5 | `chunk-8dvz2fjk.js` · `getPlatform()` (`tools/apply-haiku-names.py`) | adds `else if(platform==="haiku") → "haiku"` | The main host's platform helper (`M()`) returns `macos`/`windows`/`wsl`/`linux`/`unknown`; with P4 live, Haiku would be `unknown`. You asked for an explicit haiku case. | n |
+| P6 | `chunk-8dvz2fjk.js` · `G1e` | adds `case"haiku":return"Haiku"` | display-name map; the default returned the raw `haiku` | n |
+| P7 | `chunk-yt5m1rse.js` · `nTo` | adds `e==="haiku"?"Haiku"` | display-name map compared with a peer's `osPlatform`; every other OS became `"Linux"` | n |
+
 Not rewritten, by design: `chunk-9deh4a76.js` `"arm64-linux"` (napi addon dir; the
 addon is a Linux ELF and stays absent on Haiku either way), `chunk-3c6t0j11.js`'s
 macOS-only message, and `chunk-szzxb7zd.js` `te()` (an `Fv` result folded in place, not a
