@@ -12,10 +12,22 @@
 #include <Application.h>
 #include <StopWatch.h>
 
+class BCatalog;
+static BCatalog* sCatalog = NULL;
+	// B_TRANSLATE() and B_TRANSLATE_ID() expand to B_CATALOG->GetString().
+	// This test used to redirect the global be_catalog so those macros looked
+	// up in the catalog it had just written. be_catalog no longer exists, but
+	// B_CATALOG is guarded by #ifndef, so defining it here keeps the lookup
+	// benchmarks measuring the test's own catalog rather than the
+	// application's. It must be defined before <Catalog.h> is included.
+#define B_CATALOG sCatalog
+
 #include <Catalog.h>
+#include <EditableCatalog.h>
 #include <HashMapCatalog.h>
 #include <Entry.h>
 #include <Locale.h>
+#include <LocaleRoster.h>
 #include <Path.h>
 #include <Roster.h>
 
@@ -54,7 +66,7 @@ CatalogSpeed::TestCreation()
 	BStopWatch watch("catalogSpeed", true);
 
 	status_t res;
-	assert(be_locale != NULL);
+	assert(BLocaleRoster::Default() != NULL);
 	system("mkdir -p ./locale/catalogs/"catSig);
 
 	// create an empty catalog of default type...
@@ -84,7 +96,7 @@ CatalogSpeed::TestLookup()
 {
 	BStopWatch watch("catalogSpeed", true);
 
-	BCatalog *cat = be_catalog = new BCatalog(catSig, "klingon");
+	BCatalog *cat = sCatalog = new BCatalog(catSig, "klingon");
 
 	assert(cat != NULL);
 	assert(cat->InitCheck() == B_OK);
@@ -115,7 +127,7 @@ CatalogSpeed::TestIdCreation()
 	BString s("string");
 	s << "\x01" << typeid(*this).name() << "\x01";
 	//size_t hashVal = __stl_hash_string(s.String());
-	assert(be_locale != NULL);
+	assert(BLocaleRoster::Default() != NULL);
 	system("mkdir -p ./locale/catalogs/"catSig);
 
 	// create an empty catalog of default type...
@@ -150,7 +162,7 @@ CatalogSpeed::TestIdLookup()
 {
 	BStopWatch watch("catalogSpeed", true);
 
-	BCatalog *cat = be_catalog = new BCatalog(catSig, "klingon");
+	BCatalog *cat = sCatalog = new BCatalog(catSig, "klingon");
 
 	assert(cat != NULL);
 	assert(cat->InitCheck() == B_OK);

@@ -189,12 +189,12 @@ main(int argc, char **argv)
 	printf("test the BCollator::Compare() and GetSortKey() methods\n");
 
 	const char *strengthLabels[] = {"primary:  ", "secondary:", "tertiary: "};
-	uint32 strengths[] = {B_COLLATE_PRIMARY, B_COLLATE_SECONDARY, B_COLLATE_TERTIARY};
+	int8 strengths[] = {B_COLLATE_PRIMARY, B_COLLATE_SECONDARY, B_COLLATE_TERTIARY};
 
 	gCollator->SetIgnorePunctuation(ignorePunctuation);
 
 	for (uint32 i = 0; i < sizeof(strengths) / sizeof(strengths[0]); i++) {
-		gCollator->SetDefaultStrength(strengths[i]);
+		gCollator->SetStrength(strengths[i]);
 		qsort(kStrings, kNumStrings, sizeof(char *), compareStrings);
 
 		printArray(strengthLabels[i], kStrings, kNumStrings);
