@@ -1431,6 +1431,20 @@ export class OpsStack extends cdk.Stack {
       actions: ['ssm:GetParameter', 'ssm:DescribeInstanceInformation'],
       resources: ['*'],
     }));
+    // Issue 845: the wave driver's pre-flight reads the build Lambda's expected
+    // NATIVEBUILD_VERSION and compares it with the driver published in S3, so a
+    // mismatch costs one GetObject instead of a whole wave of #506 refusals. Both
+    // are describe-only: DescribeStateMachine to find the build function through the
+    // graph (rather than by a name convention that could silently stop matching),
+    // and GetFunctionConfiguration to read its env. Neither can invoke or mutate.
+    operatorRole.addToPolicy(new iam.PolicyStatement({
+      actions: ['states:DescribeStateMachine'],
+      resources: [this.stateMachine.stateMachineArn],
+    }));
+    operatorRole.addToPolicy(new iam.PolicyStatement({
+      actions: ['lambda:GetFunctionConfiguration'],
+      resources: [buildFn.functionArn],
+    }));
     // Deliberately NOT granted: codebuild:StartBuild on debeos-repo-promote-green.
     // A promote goes LIVE, and this role is the identity a prompt-injectable agent
     // runs as. The gate in #443 is a human reading a plan and applying THAT plan;

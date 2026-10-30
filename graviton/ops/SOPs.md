@@ -531,6 +531,37 @@ named per entry.
   record and a stale-AMI launch is visible in the run summary rather than inferred
   hours later.
 
+### 13.1b Publishing the build driver is part of the deploy (extends §13.1, #506, #845)
+
+- **Symptom.** Wave `wd-10191705` (2026-10-19) built **nothing** in 11 executions.
+  The ops stack had been deployed at 15:34Z expecting `NATIVEBUILD_VERSION=2026-10-17.1`,
+  but `s3://…/bake-scripts/haiku-nativebuild` still held `2026-10-16.1` — no
+  `haiku-publish-driver` after the deploy. The #506 guard correctly refused on every
+  builder, 96 times, and (before the issue-845 fix) each refusal was recorded as a port
+  **build-error**: 95 ports charged an attempt, 32 → `failed`, 63 → `needs_human` /
+  `repeated-failure`, for recipes that were never run.
+- **Rule.** A `cdk deploy DebeosOpsStack` that changes the driver and a
+  `haiku-publish-driver` are **one operation**. The Lambda's expected version is read
+  from the tree at synth time, so deploying without republishing guarantees that every
+  port in the next wave refuses. Treat it like §13.1's rebake barrier: both halves land
+  before any StartExecution.
+- **Check.** The driver now pre-flights this itself: one read before the first
+  execution, and it **refuses to drive** on a mismatch, naming
+  `haiku-publish-driver` as the fix. To check by hand:
+
+  ```bash
+  aws lambda get-function-configuration --function-name <BuildFn> \
+    --query 'Environment.Variables.NATIVEBUILD_VERSION' --output text
+  aws s3 cp s3://<workBucket>/bake-scripts/haiku-nativebuild - | grep -m1 NATIVEBUILD_VERSION=
+  ```
+
+  The two must be equal. `--skip-driver-preflight` exists for the case where the
+  pre-flight itself cannot read the deployment; it does not make a stale driver safe,
+  it only restores the old 96-refusal failure mode.
+- **Reading the outcome.** A refusal is now `VERDICT=STALE` → `error_class=stale-driver`
+  → re-queued with `last_outcome=stale-driver-requeued` and **no attempt counted**. A
+  row in that state was not tested; it needs the driver republished, not triage.
+
 ### 13.2 Driver liveness check must be path-qualified (extends §8, §10.4)
 
 - **Symptom.** `pgrep -f haiku-build-wave-driver` used to test "is the campaign
