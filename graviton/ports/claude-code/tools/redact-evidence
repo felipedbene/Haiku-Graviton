@@ -1,0 +1,17 @@
+#!/bin/bash
+# redact-evidence [file...]: replace this AWS account's 12-digit ID with
+# <ACCOUNT_ID>, and any S3 presigned-URL query string with <PRESIGNED>, in evidence logs (default: every evidence/*.log), in place, and
+# record the redaction in the log's header. The ID is resolved at run time so it
+# never appears in a tracked file. Idempotent.
+set -euo pipefail
+here=$(cd "$(dirname "$0")/.." && pwd)
+acct=$(aws sts get-caller-identity --query Account --output text)
+[ $# -gt 0 ] || set -- "$here"/evidence/*.log
+for f in "$@"; do
+	[ -f "$f" ] || continue
+	if LC_ALL=C grep -aqE "$acct|X-Amz-(Credential|Signature)=" "$f"; then
+		LC_ALL=C sed -i '' -E "s/$acct/<ACCOUNT_ID>/g; s/\?([^\"' ]*&)?X-Amz-[^\"' ]*/?<PRESIGNED>/g" "$f"
+		grep -q '^# redacted: ' "$f" || { printf '# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>\n' | cat - "$f" > "$f.tmp" && mv "$f.tmp" "$f"; }
+		echo "redacted: $f"
+	fi
+done

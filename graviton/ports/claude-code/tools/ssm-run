@@ -23,7 +23,10 @@ ssm() {	# ssm <timeout> <shell command> -> prints StandardOutputContent; dies on
 	cid=$(aws ssm send-command --region "$region" --instance-ids "$inst" \
 		--document-name AWS-RunShellScript --timeout-seconds "$1" \
 		--parameters "$(python3 -I -c 'import json,sys;print(json.dumps({"commands":[sys.argv[1]],"executionTimeout":[sys.argv[2]]}))' "$2" "$1")" \
-		--query Command.CommandId --output text)
+		--query Command.CommandId --output text) || cid=""
+	# The caller's `|| true` disables set -e in here, so a failed send must be
+	# caught explicitly or the poll below would wait on an empty id forever.
+	[ -n "$cid" ] || { echo "ssm-run: send-command to $inst failed" >&2; exit 1; }
 	while :; do
 		st=$(aws ssm get-command-invocation --region "$region" --command-id "$cid" \
 			--instance-id "$inst" --query Status --output text 2>/dev/null || echo Pending)
@@ -63,5 +66,7 @@ while [ "$off" -lt "$size" ]; do
 done
 got=$(($(wc -c < "$out") - $(sed -n '/^# ---- raw output ----$/=' "$out" | head -1 | xargs -I{} sh -c "head -n {} '$out' | wc -c")))
 [ "$got" -eq "$size" ] || { echo "ssm-run: fetched $got of $size bytes" >&2; exit 1; }
+# Byte count above is checked BEFORE redaction, which changes the length.
+"$here/tools/redact-evidence" "$out" > /dev/null
 echo "$out (rc=$rc, $size bytes)"
 exit "${rc:-1}"

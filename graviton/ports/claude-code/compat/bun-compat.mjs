@@ -33,3 +33,25 @@ registerHooks({
 		return nextLoad(url, context);
 	},
 });
+
+// --- globalThis.Bun ----------------------------------------------------------
+// Only members with a real, diff-tested implementation are defined. Absent
+// members stay absent so feature detection at the call sites sees the truth.
+import { makeHash } from "./lib/hash.mjs";
+import { stringWidth } from "./lib/width.mjs";
+import { stripANSI } from "./lib/strip.mjs";
+import { sliceAnsi } from "./lib/slice.mjs";
+import { wrapAnsi } from "./lib/wrap.mjs";
+
+const Bun = {
+	hash: makeHash(),			// vectors: hash.vectors.json, 3353/3353
+	stringWidth,				// vectors: width.*, 3608650/3608650
+	stripANSI,				// vectors: strip.cases.json, 20008/20008
+	sliceAnsi,				// vectors: slice.cases.json, 40900/40900
+	wrapAnsi,				// vectors: wrap.cases.json, 40000/40000
+	// `unsafe` is a namespace in Bun. The bundle calls Bun.unsafe.setJITPolicy?.()
+	// on a timer guarded only by `typeof Bun`, so the namespace must exist; its one
+	// member used, a JavaScriptCore JIT knob, has no V8 counterpart and is absent.
+	unsafe: {},
+};
+Object.defineProperty(globalThis, "Bun", { value: Bun, writable: false, enumerable: false, configurable: false });
