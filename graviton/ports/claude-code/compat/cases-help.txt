@@ -1,0 +1,20 @@
+--version
+--help
+agents --help
+attach --help
+auth --help
+auto-mode --help
+doctor --help
+gateway --help
+import --help
+install --help
+logs --help
+mcp --help
+plugin --help
+purge --help
+respawn --help
+rm --help
+setup-token --help
+stop --help
+ultrareview --help
+update --help

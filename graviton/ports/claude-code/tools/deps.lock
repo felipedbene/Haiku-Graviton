@@ -1,0 +1,5 @@
+# name version tarball-url npm-integrity (sha512, from `npm view <name>@<version> dist.integrity`)
+# ws: runtime -- Bun ships "ws" built in; Node does not. Pure JS, no dependencies.
+ws 8.22.0 https://registry.npmjs.org/ws/-/ws-8.22.0.tgz sha512-Ydggc987+RO0AnWtZ/7Wq9FtNvcrL1b/RO0ud9mWjUPgDrsAAwQSF51sm2hm1XofbU/4jkpGEsLFsZZxU+1DOg==
+# acorn: build-time only (analyze-requires.mjs); not installed into the tree.
+acorn 8.19.0 https://registry.npmjs.org/acorn/-/acorn-8.19.0.tgz sha512-oJlA3XiRm7Cyk6qFD2Jn8ak9B7jSy0qy00ADO3+8dpT0LSjFihQYv4C02LFCSYJV3Q37xYwwRy5m+IpIiUzqWw==

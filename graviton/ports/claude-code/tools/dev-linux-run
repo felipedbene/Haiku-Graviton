@@ -1,0 +1,17 @@
+#!/bin/bash
+# dev-linux-run <instance> <label> <step-script>: ship this port's tools/ and
+# compat/ to /opt/cc/port on the Linux reference box, then run <step-script>
+# there through ssm-run (so every iteration leaves an evidence log).
+set -euo pipefail
+here=$(cd "$(dirname "$0")/.." && pwd)
+inst=$1 label=$2 step=$3
+payload=$(COPYFILE_DISABLE=1 tar --no-xattrs -czf - -C "$here" tools compat 2>/dev/null | base64 | tr -d '\n')
+s=$(mktemp)
+{
+	echo 'set -u'
+	echo 'rm -rf /opt/cc/port && mkdir -p /opt/cc/port'
+	echo "echo $payload | base64 -d | tar xzf - -C /opt/cc/port 2>/dev/null"
+	echo 'cd /opt/cc/port'
+	cat "$step"
+} > "$s"
+"$here/tools/ssm-run" "$inst" "$label" "$s" "${TIMEOUT:-1800}"

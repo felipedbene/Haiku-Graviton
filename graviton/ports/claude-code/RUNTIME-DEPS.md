@@ -25,7 +25,7 @@ runtime options, (i) Node + compat and (ii) a Bun port.
 | Feature | Uses | Node 22 status |
 |---|---|---|
 | `import.meta.require(...)` (synchronous require from ESM) | **547 in 118 modules** | absent; **runtime-confirmed first failure**: `TypeError: (intermediate value).require is not a function` |
-| `import.meta.dir` | 141 in 50 modules | absent (Node has `import.meta.dirname`) |
+| `import.meta.dir` | **9** (Bun-only; the census's first figure, 141, wrongly counted 132 `import.meta.dirname`, which Node supports) | absent; Node has `import.meta.dirname` |
 | `bun:jsc` | 3 modules: `heapStats().objectTypeCounts`, `edenGC()` (diagnostics; both inside try) | absent |
 | `// @bun @bytecode` pragma | every chunk | comment; harmless |
 | absolute `/$bunfs/` specifiers | all modules | resolvable via the `/$bunfs` symlink |

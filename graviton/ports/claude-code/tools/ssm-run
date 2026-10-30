@@ -1,0 +1,67 @@
+#!/bin/bash
+# ssm-run <instance-id> <label> <script> [timeout-secs]
+#
+# Run <script> on an SSM-managed instance (Linux or Haiku) and save the COMPLETE
+# raw output as evidence/<utc-start>_<instance>_<label>.log, with a header naming
+# the instance, command id, start/end times and the script's sha256. SSM truncates
+# StandardOutputContent at 24 KB, so the remote side writes the log to a file and
+# this side pulls it back in base64 chunks; the saved log is never the truncated one.
+# Never pass secrets in <script>: it is copied verbatim into the evidence log.
+set -euo pipefail
+[ $# -ge 3 ] || { echo "usage: ssm-run <instance-id> <label> <script> [timeout]" >&2; exit 2; }
+inst=$1 label=$2 script=$3 tmo=${4:-3600}
+region=${AWS_REGION:-us-west-2}
+here=$(cd "$(dirname "$0")/.." && pwd)
+mkdir -p "$here/evidence"
+start=$(date -u +%Y%m%dT%H%M%SZ)
+rid="cc-$start-$$"
+out="$here/evidence/${start}_${inst}_${label}.log"
+b64=$(base64 < "$script" | tr -d '\n')
+
+ssm() {	# ssm <timeout> <shell command> -> prints StandardOutputContent; dies on failure
+	local cid st
+	cid=$(aws ssm send-command --region "$region" --instance-ids "$inst" \
+		--document-name AWS-RunShellScript --timeout-seconds "$1" \
+		--parameters "$(python3 -I -c 'import json,sys;print(json.dumps({"commands":[sys.argv[1]],"executionTimeout":[sys.argv[2]]}))' "$2" "$1")" \
+		--query Command.CommandId --output text)
+	while :; do
+		st=$(aws ssm get-command-invocation --region "$region" --command-id "$cid" \
+			--instance-id "$inst" --query Status --output text 2>/dev/null || echo Pending)
+		case $st in Pending|InProgress|Delayed) sleep 5 ;; *) break ;; esac
+	done
+	echo "$cid" > "$here/evidence/.last-cid"
+	aws ssm get-command-invocation --region "$region" --command-id "$cid" \
+		--instance-id "$inst" --query StandardOutputContent --output text
+	[ "$st" = Success ] || { echo "ssm-run: command $cid ended $st" >&2; return 1; }
+}
+
+# Run: script output (stdout+stderr) goes to a file on the instance; rc is recorded.
+ssm "$tmo" "mkdir -p /tmp/ccrun && echo $b64 | base64 -d > /tmp/ccrun/$rid.sh && \
+	{ bash /tmp/ccrun/$rid.sh > /tmp/ccrun/$rid.log 2>&1; echo \$? > /tmp/ccrun/$rid.rc; }; \
+	wc -c < /tmp/ccrun/$rid.log" > /dev/null || true
+run_cid=$(cat "$here/evidence/.last-cid")
+end=$(date -u +%Y%m%dT%H%M%SZ)
+
+# Fetch the log in 16 KB chunks (base64 keeps each reply under SSM's 24 KB cap).
+size=$(ssm 120 "wc -c < /tmp/ccrun/$rid.log" | tr -dc 0-9)
+rc=$(ssm 120 "cat /tmp/ccrun/$rid.rc" | tr -dc 0-9)
+{
+	echo "# evidence: $label"
+	echo "# instance: $inst   region: $region"
+	echo "# ssm command: $run_cid"
+	echo "# start: $start   end: $end   rc: $rc   log bytes: $size"
+	echo "# script sha256: $(shasum -a 256 "$script" | cut -d' ' -f1)"
+	echo "# ---- script ----"
+	sed 's/^/# | /' "$script"
+	echo "# ---- raw output ----"
+} > "$out"
+off=0
+while [ "$off" -lt "$size" ]; do
+	ssm 120 "dd if=/tmp/ccrun/$rid.log bs=16384 skip=$((off / 16384)) count=1 2>/dev/null | base64" \
+		| tr -d '\n\r' | base64 -d >> "$out"
+	off=$((off + 16384))
+done
+got=$(($(wc -c < "$out") - $(sed -n '/^# ---- raw output ----$/=' "$out" | head -1 | xargs -I{} sh -c "head -n {} '$out' | wc -c")))
+[ "$got" -eq "$size" ] || { echo "ssm-run: fetched $got of $size bytes" >&2; exit 1; }
+echo "$out (rc=$rc, $size bytes)"
+exit "${rc:-1}"
