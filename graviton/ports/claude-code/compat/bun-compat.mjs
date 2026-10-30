@@ -48,6 +48,8 @@ import { bunWhich } from "./lib/which.mjs";
 import * as misc from "./lib/misc.mjs";
 import { parse as tomlParse } from "./lib/toml.mjs";
 import { spawn } from "./lib/spawn.mjs";
+import { parse as yamlParse } from "./lib/yaml-parse.mjs";
+import { stringify as yamlStringify } from "./lib/yaml-stringify.mjs";
 
 const Bun = {
 	hash: makeHash(),			// vectors: hash.vectors.json, 3353/3353
@@ -68,6 +70,7 @@ const Bun = {
 	stdin: misc.stdin,
 	main: misc.main,
 	spawn,					// spawn scenarios, 213/218 match; 5 explicit refusals (LIMITATIONS.md)
+	YAML: { parse: yamlParse, stringify: yamlStringify },	// yaml-parse 97532x6 seeds; yaml-stringify 119328
 	TOML: { parse: tomlParse },	// toml.cases.json, 120762 match + 10 named known differences (LIMITATIONS.md)
 	// `unsafe` is a namespace in Bun. The bundle calls Bun.unsafe.setJITPolicy?.()
 	// on a timer guarded only by `typeof Bun`, so the namespace must exist; its one

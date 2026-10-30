@@ -91,3 +91,13 @@ binary they pass `process.argv[1]`, so on Node they start `node <prefix>/cli …
 doesn't carry the compat preload or `--zero-fill-buffers`. One site also passes Bun's
 `--smol` flag to `process.execPath` (plugin hook build, `chunk-7hh7yp6n.js`), which node
 rejects. Design pending; see PATCHES.md once decided.
+
+### `Bun.YAML.parse`: depth limits and inputs over 2 GiB
+- **Depth:** Bun's nesting limit is a native-stack check that differs per construct (deepest
+  accepted: flow seq 4723, flow map 4515, compact seq 4085, block map 3364). The port
+  reproduces those four exactly with a per-construct cost model fitted to stock Bun, and
+  re-runs a parse that overflows Node's default stack on a worker thread with a 32 MB stack,
+  waited on synchronously. Bun itself wavers by one level at the limit, so inputs exactly
+  there can't match deterministically; limits for untested construct mixes are estimates.
+  Not yet run on Haiku (needs `worker_threads` and a 32 MB thread stack there).
+- **> 2 GiB input:** Bun throws a `RangeError` naming `input.byteLength`; not implemented.
