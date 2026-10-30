@@ -122,3 +122,14 @@ rejects. Design pending; see PATCHES.md once decided.
   there can't match deterministically; limits for untested construct mixes are estimates.
   Not yet run on Haiku (needs `worker_threads` and a 32 MB thread stack there).
 - **> 2 GiB input:** Bun throws a `RangeError` naming `input.byteLength`; not implemented.
+
+## Platform audit (in progress)
+
+### Environment metadata reports `linux` on Haiku, by upstream design
+`chunk-4hr1rwfw.js` builds its environment record with
+`platform: ["win32","darwin"].includes(process.platform) ? process.platform : "linux"`.
+The fallback `"linux"` is the same literal in the darwin build, so it isn't a fold. Upstream
+maps every OS other than Windows/macOS to `linux` there (and `CLAUDE_CODE_HOST_PLATFORM`
+accepts only win32/darwin/linux). Telemetry and the host-platform hint therefore say
+`linux` on Haiku. Not patched: changing it would invent a value upstream's consumers
+don't handle. `M()`/`getPlatform()` (P5) is the helper that reports `haiku`.
