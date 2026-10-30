@@ -37,3 +37,27 @@ nothing here is a guess.
 - **Effect:** the bundle wraps it (`embedded asset is missing or corrupt`), so it isn't
   visible.
 - **Fix would need:** a map from zlib zstd error codes to Bun's names.
+
+### `Bun.TOML.parse`: dates and times are strings, not Temporal objects
+- **What:** Bun 1.4.4 returns `Temporal.Instant`/`PlainDateTime`/`PlainDate`/`PlainTime`.
+  Node 24 has no `Temporal` by default, so the port returns the string Bun's object
+  stringifies to (Temporal canonical form, ported: offsets folded to UTC, leap second
+  clamped, fraction ≤ 9 digits). `String(x)` is identical; `typeof` is not.
+- **Effect:** the bundle's only TOML input is another agent's `config.toml` import, which
+  it validates with zod; that schema has no date fields. Not observable in Claude Code
+  as far as the call site shows.
+- **Fix would need:** Node 24's V8 13.6 has Temporal behind `--harmony-temporal` ("in
+  progress / experimental", measured: `typeof Temporal` = `object` with the flag). The
+  port already exposes `parseWith(input, onDateTime)` to construct real Temporal objects.
+  That would make an experimental engine flag part of the runtime. Owner's call.
+
+### `Bun.TOML.parse`: Blob input, error-object extras, depth
+- **Blob:** Bun reads a `Blob` argument synchronously; Node can't, so the port throws a
+  `TypeError` saying to pass `await blob.text()`. The bundle passes file text.
+- **Error objects:** type, message and `code` match (`SyntaxError "TOML Parse error: …"`,
+  `ERR_INVALID_ARG_TYPE`, `ERR_OUT_OF_RANGE`). JSC adds `line`/`column`/`sourceURL` to
+  error objects and V8 doesn't; `code` is an own non-enumerable property here and not own in Bun.
+- **Depth:** Bun overflows its native stack on very deep nesting (inline tables > ~10k,
+  arrays > ~20k, headers > ~50k); the port uses an explicit stack (toml.rs's own
+  non-recursive structure) and parses those. Ten named vectors cover this, and the checker
+  fails if any of them starts matching.
