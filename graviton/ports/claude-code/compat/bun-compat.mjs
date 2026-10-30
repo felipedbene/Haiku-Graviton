@@ -50,6 +50,13 @@ import { parse as tomlParse } from "./lib/toml.mjs";
 import { spawn } from "./lib/spawn.mjs";
 import { parse as yamlParse } from "./lib/yaml-parse.mjs";
 import { stringify as yamlStringify } from "./lib/yaml-stringify.mjs";
+import http from "node:http";
+import { serve, listen, connect, installHttpMaxHeaderSize } from "./lib/net.mjs";
+
+// Bun lets `http.maxHeaderSize = n` raise the header limit of its servers; the
+// gateway does exactly that before Bun.serve. Node's property is getter-only, so
+// without this the assignment throws in strict-mode ESM.
+installHttpMaxHeaderSize(http);
 
 const Bun = {
 	hash: makeHash(),			// vectors: hash.vectors.json, 3353/3353
@@ -71,6 +78,9 @@ const Bun = {
 	main: misc.main,
 	spawn,					// spawn scenarios, 213/218 match; 5 explicit refusals (LIMITATIONS.md)
 	YAML: { parse: yamlParse, stringify: yamlStringify },	// yaml-parse 97532x6 seeds; yaml-stringify 119328
+	serve,					// net scenarios, 41/42 match; the 1 is Node's Response defaults (LIMITATIONS.md)
+	listen,
+	connect,
 	TOML: { parse: tomlParse },	// toml.cases.json, 120762 match + 10 named known differences (LIMITATIONS.md)
 	// `unsafe` is a namespace in Bun. The bundle calls Bun.unsafe.setJITPolicy?.()
 	// on a timer guarded only by `typeof Bun`, so the namespace must exist; its one

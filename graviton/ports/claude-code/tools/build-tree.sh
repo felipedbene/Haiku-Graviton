@@ -4,7 +4,8 @@
 # <depsdir> holds fetch-deps.sh output (integrity-verified ws + acorn).
 #
 # The whole deterministic pass, in order: extract the Bun module graph, relocate
-# (R1-R3, P1-P3), analyze evaluation-time requires, apply R4, then install the
+# (R1-R3, P1-P3), analyze evaluation-time requires, apply R4, restore the
+# build-time platform/arch folds (P4, sites in folds-<version>.json), then install the
 # runtime support files (compat preload, the pinned ws package, node-fetch).
 # Each step asserts its own counts; any change in upstream shape stops the build.
 set -euo pipefail
@@ -16,6 +17,7 @@ python3 -I "$here/extract-bun-bundle.py" "$bin" "$work/bunfs"
 python3 -I "$here/relocate-bundle.py" "$work/bunfs" "$out" "$prefix"
 "$node" "$here/analyze-requires.mjs" "$out" "$prefix" "$deps" > "$work/requires.json"
 python3 -I "$here/apply-r4.py" "$out" "$work/requires.json"
+python3 -I "$here/apply-folds.py" "$out" "$here/folds-2.1.314.json" --acorn "$deps/acorn" --node "$node"
 cp "$work/requires.json" "$out/REQUIRES.json"
 cp "$here/../compat/bun-compat.mjs" "$out/"
 mkdir -p "$out/lib" && cp "$here/../compat/lib/"*.mjs "$out/lib/"

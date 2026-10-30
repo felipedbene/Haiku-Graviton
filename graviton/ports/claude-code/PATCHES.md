@@ -35,6 +35,25 @@ restored; they are covered by the audit (LIMITATIONS.md).
 | P2 | `chunk-v0b8hfja.js` · `xE` | `switch("arm64")` → `switch(process.arch)`: seccomp-filter arch selection | n |
 | P3 | `chunk-jwstday3.js` · `Fv` | adds `case "haiku": return "haiku"` to the platform helper | n |
 
+### Every folded site (P4, `tools/apply-folds.py`)
+
+P1/P2 were found by eye. P4 finds all of them mechanically: `tools/find-folds.py` aligns
+the linux-arm64 tokens against the darwin-arm64 build (decides `"linux"`) and the
+linux-x64 build (decides `"arm64"`), both pinned by npm integrity. A literal is a fold
+only where the other build has the other OS/arch word and 4 aligned neighbours agree
+on each side. The 126 sites in 60 modules are listed with module, offset, position and
+snippet in `tools/folds-2.1.314.json`; `apply-folds.py` asserts the count, the source
+sha256 and each original text, then acorn-parses every rewritten module.
+
+| ID | File(s) | What | Why | Upstream-able |
+|---|---|---|---|---|
+| P4 | 60 modules (126 sites: platform 102, arch 22, both 2) | each folded `"linux"`/`"arm64"` → `process.platform`/`process.arch` (in template text, `${…}`) | The folded literal reports Linux on Haiku. The 10 P1/P2 switch sites are part of the 126; P4 verifies and skips them when relocation already ran P1/P2. Includes the main platform host `new u({platform:"linux",…})` in `chunk-8dvz2fjk.js`. | n |
+
+Not rewritten, by design: `chunk-9deh4a76.js` `"arm64-linux"` (napi addon dir; the
+addon is a Linux ELF and stays absent on Haiku either way), `chunk-3c6t0j11.js`'s
+macOS-only message, and `chunk-szzxb7zd.js` `te()` (an `Fv` result folded in place, not a
+raw platform value). Code the bundler deleted is in the audit (LIMITATIONS.md).
+
 ## B. Runtime support installed next to the bundle
 
 | ID | File | What | Why | Upstream-able |
@@ -42,7 +61,29 @@ restored; they are covered by the audit (LIMITATIONS.md).
 | C1 | `bun-compat.mjs` (`node --import`) | load hook serving Bun "text"-loader files as their contents | Bun's `text` loader makes `import`/`require` of a file yield its string. Node has no such loader. The hook serves exactly the 98 files `LOADERS.json` marks as text, keyed by file because two `.mjs` files are text, not code. | n |
 | C2 | `node_modules/ws` | npm `ws` 8.22.0, integrity-pinned in `tools/deps.lock` | Bun provides `ws` as a built-in; the bundle imports it externally (4 sites). | n |
 | C3 | `node_modules/node-fetch` | re-exports Node's native `fetch`/`Headers`/`Request`/`Response`/`FormData`/`Blob`/`File` | Bun's built-in `node-fetch` is the same re-export of its native fetch. 1 dynamic import, used when `window` is absent. | n |
-| C4… | `bun-compat.mjs` | `Bun.*` APIs: one entry each as implemented and diff-tested | — | — |
+
+`Bun.*` members in `bun-compat.mjs`. Each is a port of Bun 1.4.4's source (or of its
+contract, where noted) diff-tested against stock Bun 1.4.4 on the Linux reference box;
+the vector counts are the last run's. Anything not listed is absent, never a stub.
+
+| ID | Member(s) · `compat/lib/` | Why the bundle needs it | Diff test | Upstream-able |
+|---|---|---|---|---|
+| C4 | `hash` (wyhash + crc32/xxHash64…) · `hash.mjs` | content hashes; must be bit-exact or cached keys change | 3,353/3,353 | n |
+| C5 | `stringWidth` · `width.mjs`, `width-tables.mjs` (generated from Bun's `stringWidthTables.h`) | TUI layout | 3,608,650/3,608,650 | n |
+| C6 | `stripANSI` · `strip.mjs` | TUI text | 20,008/20,008 | n |
+| C7 | `sliceAnsi` · `slice.mjs`, `sgr.mjs` | TUI text | 40,900/40,900 | n |
+| C8 | `wrapAnsi` · `wrap.mjs` | TUI text | 40,000/40,000 | n |
+| C9 | `semver.order`/`satisfies` · `semver.mjs` | update/plugin version checks | 100,009/100,009 | n |
+| C10 | `deepEquals` · `deepequals.mjs` | state comparison | 354/354 | n |
+| C11 | `which` · `which.mjs` | locating rg, git, shells | 38/38 | n |
+| C12 | `sleepSync`, `gc`, `SHA256`, `zstdDecompress(Sync)`, `generateHeapSnapshot`, `file`, `stdin`, `main` · `misc.mjs` (contract ports on Node primitives) | assorted call sites | 35/35 | n |
+| C13 | `spawn` · `spawn.mjs` | every tool subprocess (Bash, Grep, git) | 213/218 + 5 explicit refusals | n |
+| C14 | `YAML.parse` · `yaml-parse.mjs` | frontmatter, config | 97,532 × 6 seeds | n |
+| C15 | `YAML.stringify` · `yaml-stringify.mjs` | frontmatter writes | 119,328 | n |
+| C16 | `TOML.parse` · `toml.mjs` | another agent's `config.toml` import | 120,762 + 10 named differences | n |
+| C17 | `serve`, `listen`, `connect` · `net.mjs` (on node:http/https/net) | gateway, OAuth callback, MCP and relay sockets | 41/42 (the 1: Node's `Response` defaults, LIMITATIONS.md) | n |
+| C18 | `http.maxHeaderSize` setter · `net.mjs` `installHttpMaxHeaderSize` | the gateway assigns it; Node's property is getter-only, so the assignment throws in strict ESM | covered by C17's header-limit scenario | n |
+| C19 | `unsafe: {}` (namespace, no members) | `Bun.unsafe.setJITPolicy?.()` is guarded only by `typeof Bun`; the JSC JIT knob itself has no V8 counterpart and stays absent | — | n |
 
 ## C. Recipes
 

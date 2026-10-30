@@ -85,6 +85,27 @@ behaviour; the diff test (213/218 match) requires exactly that throw for these f
   (`ChildProcess.prototype.spawn` for a synchronous spawn errno, `child._handle.kill`).
   Pinned by the Node version; re-check on a Node upgrade.
 
+### `Bun.serve` / `listen` / `connect`
+- **Response defaults (the 1 of 42 mismatch):** Node's `Response` sets its default
+  `content-type` when the object is built: `text/plain;charset=UTF-8` vs Bun's
+  `charset=utf-8`; `application/json` vs Bun's `application/json;charset=utf-8`. It also
+  sets it on HEAD, where Bun omits it. That is Node's fetch implementation, not the
+  net layer, which can't tell a default from a header the handler set. Clients compare
+  media types case-insensitively, so the effect on Claude Code's local servers is nil.
+- **Refused explicitly** (throw "not implemented"): `serve` with `routes`/`static`,
+  `websocket`, `unix`, `baseURI`, `app`, `http2`/`http3`, `http1:false`, or tls keys beyond
+  cert/key/ca/passphrase/requestCert/rejectUnauthorized; `listen`/`connect` with `tls`,
+  `unix`, `fd`; writing a Blob to a socket. No bundle call site uses them.
+- **`hostname` is required**: Bun binds every interface when it is omitted; the port throws
+  instead of guessing. Every bundle call site passes it.
+- **Dev error page / stderr wording**: status, content-type and the fact that a page is
+  served match; the HTML and Bun's stderr formatting are not byte-identical.
+- **Not yet run on Haiku:** the `SO_REUSEPORT` fallback (`development:false`; libuv
+  ENOTSUP expected on Haiku → bind without it, as uSockets does), dual-stack requestIP.
+- **Absent members** (never touched by the bundle): Server `fetch`/`upgrade`/`publish`/
+  `reload`/`timeout`/…, Listener `reload`/`fd`/…, Socket `flush`/`shutdown`/TLS getters/….
+  The full list is in `compat/lib/net.mjs`'s header.
+
 ### Self re-exec under Node (open, integration item)
 26 bundle modules re-exec Claude Code via `process.execPath`. Outside a standalone
 binary they pass `process.argv[1]`, so on Node they start `node <prefix>/cli …`, which
