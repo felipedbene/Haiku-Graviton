@@ -393,6 +393,25 @@ def main():
         check(len(keys) > 0, "shipped baseline parses (%d entries)" % len(keys))
         check(all(len(k.split()) == 3 for k in keys),
               "every shipped baseline key has exactly 3 fields")
+        # Issue 852: the five instances that made EVERY blue publish fail. These are
+        # the exact keys the live gate reported for waves wd-10192051/wd-10192101 on
+        # 2026-10-19 (three pre-existing in blue since 2026-09-21, two orphan
+        # subpackages in the wave harvest). Asserted by key so that a reformat or a
+        # careless edit of the file cannot silently re-block the publish path -- the
+        # symptom would otherwise only reappear hours later, in CodeBuild.
+        for k in ("coreutils_debuginfo coreutils 9.11",
+                  "freetype_debuginfo freetype 2.14.3",
+                  "icu67_tools icu 67.1",
+                  "ffmpeg7_devel ffmpeg7 7.1",
+                  "icu78_devel icu78 78.3"):
+            check(k in keys, "issue 852 instance is baselined: %s" % k)
+        # Every entry carries a reason. A bare key is unauditable: the file's whole
+        # claim is that each line is known debt with a way out, and `only shrinks`
+        # cannot be enforced against lines nobody can explain.
+        for lineno, line in enumerate(open(shipped), 1):
+            body = line.split("#", 1)[0].strip()
+            if body:
+                check("#" in line, "baseline line %d states a reason" % lineno)
     else:
         check(False, "shipped baseline %s is missing" % shipped)
 
