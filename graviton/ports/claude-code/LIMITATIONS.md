@@ -61,3 +61,33 @@ nothing here is a guess.
   arrays > ~20k, headers > ~50k); the port uses an explicit stack (toml.rs's own
   non-recursive structure) and parses those. Ten named vectors cover this, and the checker
   fails if any of them starts matching.
+
+### `Bun.spawn`: features refused explicitly
+Each throws `… is not supported by the Node compat layer` instead of silently changing
+behaviour; the diff test (213/218 match) requires exactly that throw for these five:
+- **`terminal`** (a PTY via `Bun.Terminal` or Terminal options): Node has no PTY API, and
+  compat has no `Bun.Terminal`. Effect: Claude Code's background-agent PTY host
+  (`--bg-pty-host`, `chunk-yeqe6mfj.js`/`chunk-yhsj03zd.js`) can't run; the bundle reports
+  "Bun.Terminal unavailable (running under Node?)" for it. **Background agents that need
+  a PTY are unavailable.** A fix would need a PTY addon built for Haiku (forkpty is in
+  libroot/libbsd) exposed as `Bun.Terminal`.
+- **`cgroup`** (Linux only; ignored elsewhere, like Bun on non-cgroup platforms). The bundle
+  passes it only on linux/wsl, so on Haiku it's never reached.
+- **`ipc`** callback, **`"pipe"` at stdio index ≥ 3**, **`resourceUsage()`** after exit: the
+  bundle doesn't use them.
+
+### `Bun.spawn`: other measured differences
+- A **relative** `Bun.file(path)` used as a stdio target is resolved against the
+  directory current when `Bun.file()` was called; Bun opens it in the child after its
+  chdir. Differs only for a relative path combined with `cwd`; the bundle passes absolute
+  paths.
+- The implementation relies on two undocumented Node 24 internals
+  (`ChildProcess.prototype.spawn` for a synchronous spawn errno, `child._handle.kill`).
+  Pinned by the Node version; re-check on a Node upgrade.
+
+### Self re-exec under Node (open, integration item)
+26 bundle modules re-exec Claude Code via `process.execPath`. Outside a standalone
+binary they pass `process.argv[1]`, so on Node they start `node <prefix>/cli …`, which
+doesn't carry the compat preload or `--zero-fill-buffers`. One site also passes Bun's
+`--smol` flag to `process.execPath` (plugin hook build, `chunk-7hh7yp6n.js`), which node
+rejects. Design pending; see PATCHES.md once decided.
