@@ -1,0 +1,56 @@
+# evidence: builder-ami-038dc6d8-smoke
+# instance: i-07980b4809dfd8d75   region: us-west-2
+# ssm command: 3faf8e97-f95f-4f66-b390-3cd9bc8ece98
+# start: 20261030T203205Z   end: 20261030T203353Z   rc: 0   log bytes: 955
+# script sha256: 735ec7decfe253b8665b46fd527862e5ddf1f3f4f4be5d3e3639b76dae13332b
+# ---- script ----
+# | set -u
+# | echo "== image"; uname -a
+# | cd /boot/home
+# | echo "== haikuporter pin"; git -C haikuporter rev-parse HEAD
+# | echo "== #758 patch present"; grep -c 'graviton/DeBeOS (issue 758)' haikuporter/HaikuPorter/ShellScriptlets.py
+# | echo "== ports tree"; git -C haikuports log -1 --format='%H %cd' --date=iso
+# | ls haikuports/net-libs/nodejs/ haikuports/net-libs/nodejs/patches/ 2>&1
+# | echo "== overlay landed (sample)"; ls haikuports-patches/recipes 2>/dev/null | wc -l
+# | echo "== toolchain"; gcc --version | head -1; python3.14 --version; ninja --version; cmake --version | head -1
+# | echo "== representative build: lzip (configure+make C port)"
+# | R=$(find haikuports -mindepth 3 -maxdepth 3 -name 'lzip-*.recipe' | head -1); echo "recipe: $R"
+# | cd haikuports && timeout 1500 haikuporter --no-dependencies -j4 lzip > /tmp/smoke-lzip.log 2>&1; rc=$?
+# | tail -15 /tmp/smoke-lzip.log; echo "lzip rc=$rc"
+# | ls -la /boot/home/haikuports/packages/lzip-*.hpkg 2>&1 | tail -2
+# | exit 0
+# ---- raw output ----
+== image
+Haiku ip-10-128-10-176.us-west-2.comp R1~beta6+development hrev59996 Oct 19 2026 21:09:42 arm64 arm64 Haiku
+== haikuporter pin
+faa30769682fb85970846190ae8f4dbc99327d3a
+== #758 patch present
+1
+== ports tree
+fdb507a2290123e23c351e78975b0a1033d9fea8 2026-10-30 14:11:45 +0100
+haikuports/net-libs/nodejs/:
+nodejs20-20.15.1.recipe
+nodejs22-22.23.3.recipe
+nodejs24-24.21.0.recipe
+patches
+work-20.15.1
+work-22.23.3
+work-24.21.0
+
+haikuports/net-libs/nodejs/patches/:
+nodejs-20.15.1.patchset
+nodejs-22.23.3.patchset
+nodejs-24.21.0.patchset
+nodejs_x86-20.15.1.patchset
+== overlay landed (sample)
+189
+== toolchain
+gcc (2026_03_29) 13.3.0
+Python 3.14.7
+1.13.2
+cmake version 4.1.6
+== representative build: lzip (configure+make C port)
+recipe: haikuports/app-arch/lzip/lzip-1.23.recipe
+timeout: failed to run command 'haikuporter': No such file or directory
+lzip rc=127
+ls: cannot access '/boot/home/haikuports/packages/lzip-*.hpkg': No such file or directory

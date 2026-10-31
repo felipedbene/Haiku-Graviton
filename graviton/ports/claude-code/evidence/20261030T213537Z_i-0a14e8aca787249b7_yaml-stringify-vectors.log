@@ -1,0 +1,59 @@
+# evidence: yaml-stringify-vectors
+# instance: i-0a14e8aca787249b7   region: us-west-2
+# ssm command: 11cd3c3f-afa1-42b8-bc5b-c067f39e8b34
+# start: 20261030T213537Z   end: 20261030T213557Z   rc: 0   log bytes: 2816
+# script sha256: 238fba26522ecfaec42ce9c04e93e3e374a1918b4cfda4cc1dfcb4ead531981a
+# ---- script ----
+# | set -u
+# | echo 'c19c19873979a5a46c40b10b64359a8ce337389fb488910ec441689bd14fe17f  /opt/cc/w-yaml-stringify.stage/p.tgz' | sha256sum -c --quiet - || exit 1
+# | rm -rf /opt/cc/w-yaml-stringify && mkdir -p /opt/cc/w-yaml-stringify && tar xzf /opt/cc/w-yaml-stringify.stage/p.tgz -C /opt/cc/w-yaml-stringify 2>/dev/null
+# | cd /opt/cc/w-yaml-stringify
+# | set -e
+# | W=/opt/cc/w-yaml-stringify-vec
+# | mkdir -p $W
+# | echo "bun $(bun --version)  node $(/opt/node24/bin/node --version)"
+# | bun compat/test/gen-yaml-stringify-vectors.js $W
+# | ls -la $W
+# | /opt/node24/bin/node compat/test/check-yaml-stringify.mjs $W
+# ---- raw output ----
+bun 1.4.4  node v24.22.2
+YAML.stringify cases: 119328 divergent: 10 maxDepth: {"space=0":23399,"space=2":23399}
+total 124156
+drwxr-xr-x  2 root root      4096 Oct 30 21:35 .
+drwxr-xr-x 24 root root      4096 Oct 30 21:35 ..
+-rw-r--r--  1 root root 127126371 Oct 30 21:35 yaml-stringify.cases.json
+YAML.stringify corpus: 47328 match / 0 mismatch
+YAML.stringify fuzz: 72000 match / 0 mismatch
+YAML.stringify total: 119328 match / 0 mismatch
+known divergences (not counted; Bun output depends on JSC value representation or engine error text):
+  computed zero root
+    space=2  node {"v":"0"}  bun {"v":"+0"}
+    minified node {"v":"0"}  bun {"v":"+0"}
+  computed zero in obj
+    space=2  node {"v":"a: 0"}  bun {"v":"a: +0"}
+    minified node {"v":"{a: 0}"}  bun {"v":"{a: +0}"}
+  literal zero in Double-shaped array
+    space=2  node {"v":"- 1.5\n- 0"}  bun {"v":"- 1.5\n- +0"}
+    minified node {"v":"[1.5,0]"}  bun {"v":"[1.5,+0]"}
+  zero pushed after double
+    space=2  node {"v":"- 1.5\n- 0"}  bun {"v":"- 1.5\n- +0"}
+    minified node {"v":"[1.5,0]"}  bun {"v":"[1.5,+0]"}
+  zero before double then string
+    space=2  node {"v":"- 0\n- 1.5\n- s"}  bun {"v":"- +0\n- 1.5\n- s"}
+    minified node {"v":"[0,1.5,s]"}  bun {"v":"[0,1.5,s]"}
+  Float64Array zero
+    space=2  node {"v":"\"0\": 0\n\"1\": 1.5"}  bun {"v":"\"0\": +0\n\"1\": 1.5"}
+    minified node {"v":"{\"0\": 0,\"1\": 1.5}"}  bun {"v":"{\"0\": +0,\"1\": 1.5}"}
+  -0 then 0
+    space=2  node {"v":"- -0\n- 0"}  bun {"v":"- -0\n- +0"}
+    minified node {"v":"[-0,0]"}  bun {"v":"[-0,+0]"}
+  engine TypeError: boxed valueOf returns BigInt
+    space=2  node {"e":["TypeError","Cannot convert a BigInt value to a number"]}  bun {"e":["TypeError","Conversion from 'BigInt' to 'number' is not allowed."]}
+    minified node {"e":["TypeError","Cannot convert a BigInt value to a number"]}  bun {"e":["TypeError","Conversion from 'BigInt' to 'number' is not allowed."]}
+  engine TypeError: revoked proxy
+    space=2  node {"e":["TypeError","Cannot perform 'ownKeys' on a proxy that has been revoked"]}  bun {"e":["TypeError","Proxy has already been revoked. No more operations are allowed to be performed on it"]}
+    minified node {"e":["TypeError","Cannot perform 'ownKeys' on a proxy that has been revoked"]}  bun {"e":["TypeError","Proxy has already been revoked. No more operations are allowed to be performed on it"]}
+  engine TypeError: String toString returns symbol
+    space=2  node {"e":["TypeError","Cannot convert a Symbol value to a string"]}  bun {"e":["TypeError","Cannot convert a symbol to a string"]}
+    minified node {"e":["TypeError","Cannot convert a Symbol value to a string"]}  bun {"e":["TypeError","Cannot convert a symbol to a string"]}
+max nesting depth: node {"space=0":1953,"space=2":1953} bun {"space=0":23399,"space=2":23399}

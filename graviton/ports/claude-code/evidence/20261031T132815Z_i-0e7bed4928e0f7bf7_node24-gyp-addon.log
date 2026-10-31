@@ -1,0 +1,67 @@
+# evidence: node24-gyp-addon
+# instance: i-0e7bed4928e0f7bf7   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261031T132815Z   end: 20261031T133857Z   rc: 0
+# script sha256: b6598fbf6df2ff65ad0be6dc58fdc367555c0aa21f26e438b0b0872d56eba3cd
+# ---- script ----
+# | set -u
+# | W=/boot/home/node-accept; G=$W/package/node_modules/node-gyp/bin/node-gyp.js
+# | node --version; node $G --version; command -v make gcc g++ python3
+# | cd $W/node-accept/addon && rm -rf build
+# | node $G rebuild 2>&1 | grep -v -E '^gyp info (it worked|using|ok|spawn args)' | tail -25; echo "gyp rc=${PIPESTATUS[0]}"
+# | ls -l build/Release/*.node 2>&1
+# | node -e 'const a=require("./build/Release/accept_addon.node"); console.log("addon add(2,40) =", a.add(2,40))'; echo "addon rc=$?"
+# ---- raw output ----
+v24.21.0
+v13.0.0
+/boot/system/bin/make
+/boot/system/bin/gcc
+/boot/system/bin/g++
+/boot/home/config/non-packaged/bin/python3
+gyp info find Python using Python version 3.14.7 found at "/boot/home/config/non-packaged/bin/python3"
+
+gyp http GET https://nodejs.org/download/release/v24.21.0/node-v24.21.0-headers.tar.gz
+gyp http 200 https://nodejs.org/download/release/v24.21.0/node-v24.21.0-headers.tar.gz
+gyp http GET https://nodejs.org/download/release/v24.21.0/SHASUMS256.txt
+gyp http 200 https://nodejs.org/download/release/v24.21.0/SHASUMS256.txt
+gyp info spawn /boot/home/config/non-packaged/bin/python3
+gyp info spawn make
+make: Entering directory '/boot/home/node-accept/node-accept/addon/build'
+  CC(target) Release/obj.target/accept_addon/addon.o
+  SOLINK_MODULE(target) Release/obj.target/accept_addon.node
+make: aarch64-unknown-haiku-g++: No such file or directory
+make: *** [accept_addon.target.mk:128: Release/obj.target/accept_addon.node] Error 127
+make: Leaving directory '/boot/home/node-accept/node-accept/addon/build'
+gyp ERR! build error 
+gyp ERR! stack Error: `make` failed with exit code: 2
+gyp ERR! stack at ChildProcess.<anonymous> (/boot/home/node-accept/package/node_modules/node-gyp/lib/build.js:219:23)
+gyp ERR! System Haiku R1~beta6+development
+gyp ERR! command "/boot/system/bin/node" "/boot/home/node-accept/package/node_modules/node-gyp/bin/node-gyp.js" "rebuild"
+gyp ERR! cwd /boot/home/node-accept/node-accept/addon
+gyp ERR! node -v v24.21.0
+gyp ERR! node-gyp -v v13.0.0
+gyp ERR! not ok 
+gyp rc=1
+ls: cannot access 'build/Release/*.node': No such file or directory
+node:internal/modules/cjs/loader:1568
+  throw err;
+  ^
+
+Error: Cannot find module './build/Release/accept_addon.node'
+Require stack:
+- /boot/home/node-accept/node-accept/addon/[eval]
+    at Module._resolveFilename (node:internal/modules/cjs/loader:1564:15)
+    at wrapResolveFilename (node:internal/modules/cjs/loader:1118:27)
+    at defaultResolveImplForCJSLoading (node:internal/modules/cjs/loader:1142:10)
+    at resolveForCJSWithHooks (node:internal/modules/cjs/loader:1169:12)
+    at Module._load (node:internal/modules/cjs/loader:1341:5)
+    at wrapModuleLoad (node:internal/modules/cjs/loader:261:19)
+    at Module.require (node:internal/modules/cjs/loader:1674:12)
+    at require (node:internal/modules/helpers:157:16)
+    at [eval]:1:9
+    at runScriptInThisContext (node:internal/vm:219:10) {
+  code: 'MODULE_NOT_FOUND',
+  requireStack: [ '/boot/home/node-accept/node-accept/addon/[eval]' ]
+}
+
+Node.js v24.21.0
+addon rc=1

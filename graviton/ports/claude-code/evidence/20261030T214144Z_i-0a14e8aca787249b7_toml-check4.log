@@ -1,0 +1,80 @@
+# evidence: toml-check4
+# instance: i-0a14e8aca787249b7   region: us-west-2
+# ssm command: 72026e19-257f-4f40-aab4-15fdd2eef7a7
+# start: 20261030T214144Z   end: 20261030T214159Z   rc: 0   log bytes: 4968
+# script sha256: c8e1681b389706dd97f1c70170943263a64b6fc90700bfc1337b7f8c2a2bd78e
+# ---- script ----
+# | set -u
+# | echo '2ef2fe7133bb99141ae2cde545b0b7f0a13a89cae16fdac1ba550fa2f33c878a  /opt/cc/w-toml-parse.stage/p.tgz' | sha256sum -c --quiet - || exit 1
+# | rm -rf /opt/cc/w-toml-parse && mkdir -p /opt/cc/w-toml-parse && tar xzf /opt/cc/w-toml-parse.stage/p.tgz -C /opt/cc/w-toml-parse 2>/dev/null
+# | cd /opt/cc/w-toml-parse
+# | mkdir -p out
+# | cd compat/test
+# | echo "== bun $(bun --version) gen"; time bun gen-toml-vectors.js ../../out || exit 1
+# | ls -la ../../out
+# | echo "== node $(/opt/node24/bin/node --version) check"; time /opt/node24/bin/node check-toml.mjs ../../out
+# | echo "check rc=$?"
+# ---- raw output ----
+== bun 1.4.4 gen
+edge: 664 (301 parse, 363 throw)
+bytes: 19 (2 parse, 17 throw)
+config: 17 (8 parse, 9 throw)
+coerce: 32 (17 parse, 15 throw)
+depth: 40 (31 parse, 9 throw)
+fuzz: 40000 (4795 parse, 35205 throw)
+fuzzshort: 40000 (13578 parse, 26422 throw)
+mutate: 40000 (10434 parse, 29566 throw)
+
+real	0m4.813s
+user	0m5.304s
+sys	0m0.358s
+total 23148
+drwxr-xr-x 2 root root     4096 Oct 30 21:41 .
+drwxr-xr-x 5 root root     4096 Oct 30 21:41 ..
+-rw-r--r-- 1 root root 23694799 Oct 30 21:41 toml.cases.json
+== node v24.22.2 check
+toml.edge: 664 match / 0 mismatch
+toml.bytes: 19 match / 0 mismatch
+toml.config: 17 match / 0 mismatch
+KNOWN coerce:blob -- Bun reads a Blob synchronously; Node cannot, so the port throws a TypeError instead 
+  got {"e":{"e":"TypeError","m":"Bun.TOML.parse: a Blob cannot be read synchronously on Node; pass await blob.text()","c":null}} 
+  exp {"v":{"o":[["a",{"n":"3ff0000000000000"}]]}}
+toml.coerce: 31 match / 0 mismatch
+KNOWN depth:inline-20000 -- Bun overflows its native stack at this depth; the port has no recursion and parses it 
+  got {"v":"{\"a\":{\"b\":{\"b\":{\"b\":{\"b\":{\"b\":{\"b\":{\"b\":{\"b\":{\"b\":{\"b\":{\"b\":{\"b\":{\"b\":{\"b\":{\"b\":{\"b\":{\"b\":{\"b\":{\"b\":{\"b\":{\"b\":{\"b\":{\"b\":{\"b\":{\"b\":{\"b\":{\"b\ 
+  exp {"e":{"e":"RangeError","m":"Maximum call stack size exceeded.","c":null}}
+KNOWN depth:array-30000 -- Bun overflows its native stack at this depth; the port has no recursion and parses it 
+  got {"v":"{\"a\":[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[ 
+  exp {"e":{"e":"RangeError","m":"Maximum call stack size exceeded.","c":null}}
+KNOWN depth:inline-30000 -- Bun overflows its native stack at this depth; the port has no recursion and parses it 
+  got {"v":"{\"a\":{\"b\":{\"b\":{\"b\":{\"b\":{\"b\":{\"b\":{\"b\":{\"b\":{\"b\":{\"b\":{\"b\":{\"b\":{\"b\":{\"b\":{\"b\":{\"b\":{\"b\":{\"b\":{\"b\":{\"b\":{\"b\":{\"b\":{\"b\":{\"b\":{\"b\":{\"b\":{\"b\ 
+  exp {"e":{"e":"RangeError","m":"Maximum call stack size exceeded.","c":null}}
+KNOWN depth:array-50000 -- Bun overflows its native stack at this depth; the port has no recursion and parses it 
+  got {"v":"{\"a\":[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[ 
+  exp {"e":{"e":"RangeError","m":"Maximum call stack size exceeded.","c":null}}
+KNOWN depth:inline-50000 -- Bun overflows its native stack at this depth; the port has no recursion and parses it 
+  got {"v":"{\"a\":{\"b\":{\"b\":{\"b\":{\"b\":{\"b\":{\"b\":{\"b\":{\"b\":{\"b\":{\"b\":{\"b\":{\"b\":{\"b\":{\"b\":{\"b\":{\"b\":{\"b\":{\"b\":{\"b\":{\"b\":{\"b\":{\"b\":{\"b\":{\"b\":{\"b\":{\"b\":{\"b\ 
+  exp {"e":{"e":"RangeError","m":"Maximum call stack size exceeded.","c":null}}
+KNOWN depth:array-100000 -- Bun overflows its native stack at this depth; the port has no recursion and parses it 
+  got {"v":"{\"a\":[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[ 
+  exp {"e":{"e":"RangeError","m":"Maximum call stack size exceeded.","c":null}}
+KNOWN depth:inline-100000 -- Bun overflows its native stack at this depth; the port has no recursion and parses it 
+  got {"v":"{\"a\":{\"b\":{\"b\":{\"b\":{\"b\":{\"b\":{\"b\":{\"b\":{\"b\":{\"b\":{\"b\":{\"b\":{\"b\":{\"b\":{\"b\":{\"b\":{\"b\":{\"b\":{\"b\":{\"b\":{\"b\":{\"b\":{\"b\":{\"b\":{\"b\":{\"b\":{\"b\":{\"b\ 
+  exp {"e":{"e":"RangeError","m":"Maximum call stack size exceeded.","c":null}}
+KNOWN depth:header-100000 -- Bun overflows its native stack at this depth; the port has no recursion and parses it 
+  got {"v":"{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\ 
+  exp {"e":{"e":"RangeError","m":"Maximum call stack size exceeded.","c":null}}
+KNOWN depth:dotted-100000 -- Bun overflows its native stack at this depth; the port has no recursion and parses it 
+  got {"v":"{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\ 
+  exp {"e":{"e":"RangeError","m":"Maximum call stack size exceeded.","c":null}}
+toml.depth: 31 match / 0 mismatch
+toml.fuzz: 40000 match / 0 mismatch
+toml.fuzzshort: 40000 match / 0 mismatch
+toml.mutate: 40000 match / 0 mismatch
+toml: 3842 vectors contain date/times (Temporal objects in Bun; strings equal to their String() from parse(), type-checked through parseWith)
+toml: 10 known difference(s), listed above
+
+real	0m6.638s
+user	0m7.136s
+sys	0m0.638s
+check rc=0

@@ -1,0 +1,103 @@
+# evidence: toml-probe1
+# instance: i-0a14e8aca787249b7   region: us-west-2
+# ssm command: b34e02e6-7845-4114-bfa9-24a3bc62daba
+# start: 20261030T212629Z   end: 20261030T212632Z   rc: 0   log bytes: 4288
+# script sha256: 9ce18367aa69850330d688ebf96dc421365550d58dc39b7916e80792698f8673
+# ---- script ----
+# | set -u
+# | echo '45200788103ec9a55a7455592c07802768dfc2f2fed1853e856982c80e1a59a5  /opt/cc/w-toml-parse.stage/p.tgz' | sha256sum -c --quiet - || exit 1
+# | rm -rf /opt/cc/w-toml-parse && mkdir -p /opt/cc/w-toml-parse && tar xzf /opt/cc/w-toml-parse.stage/p.tgz -C /opt/cc/w-toml-parse 2>/dev/null
+# | cd /opt/cc/w-toml-parse
+# | cat > /tmp/w-toml-probe.js <<'JS'
+# | const P = (label, f) => { try { const v = f(); console.log(label, "=>", typeof v, Object.prototype.toString.call(v), JSON.stringify(v, (k, x) => typeof x === "number" && !isFinite(x) ? String(x) : (typeof x === "object" && x && !Array.isArray(x) && Object.getPrototypeOf(x) !== Object.prototype && Object.getPrototypeOf(x) !== null) ? "[proto:" + (x.constructor && x.constructor.name) + "]" + String(x) : x)); } catch (e) { console.log(label, "THROW", Object.prototype.toString.call(e), e.constructor.name, JSON.stringify(e.message), JSON.stringify(Object.getOwnPropertyNames(e)), e.code); } };
+# | const T = Bun.TOML.parse;
+# | P("dt", () => T("d = 1979-05-27T07:32:00Z\nl = 1979-05-27T07:32:00\nld = 1979-05-27\nlt = 07:32:00\nf = 1979-05-27T07:32:00.1234567891234Z\nsp = 1979-05-27 07:32:00+01:00\nlow=1979-05-27t07:32z\nnos=07:32"));
+# | P("dttype", () => { const o = T("d = 1979-05-27T07:32:00Z"); return [typeof o.d, o.d && o.d.constructor && o.d.constructor.name]; });
+# | P("proto", () => { const o = T("__proto__ = 1\na = 2"); return [Object.getOwnPropertyNames(o), Object.getPrototypeOf(o) === Object.prototype, o.__proto__]; });
+# | P("protot", () => { const o = T("[__proto__]\nx = 1"); return [Object.getOwnPropertyNames(o), Object.getPrototypeOf(o) === Object.prototype, JSON.stringify(Object.getOwnPropertyDescriptor(o, "__proto__"))]; });
+# | P("protoinl", () => { const o = T("a = {__proto__ = {x=1}}"); return [Object.getOwnPropertyNames(o.a), Object.getPrototypeOf(o.a) === Object.prototype]; });
+# | P("order", () => Object.keys(T("b=1\n2=1\n1=1\na=1\n\"-1\"=1\n4294967295=1\n4294967294=1")));
+# | P("desc", () => JSON.stringify(Object.getOwnPropertyDescriptor(T("a=1"), "a")));
+# | P("proto-root", () => [Object.getPrototypeOf(T("a=1")) === Object.prototype, Object.isExtensible(T("a=1"))]);
+# | P("negzero", () => Object.is(T("a=-0").a, -0));
+# | P("negzerof", () => Object.is(T("a=-0.0").a, -0));
+# | P("nan", () => String(T("a=-nan").a));
+# | P("undef", () => T());
+# | P("undef2", () => T(undefined));
+# | P("null", () => T(null));
+# | P("num", () => T(123));
+# | P("obj", () => T({ toString() { return "a=1"; } }));
+# | P("sym", () => T(Symbol("x")));
+# | P("bool", () => T(true));
+# | P("arr", () => T(["a=1"]));
+# | P("buf", () => T(Buffer.from("a=1")));
+# | P("u8", () => T(new Uint8Array([0x61,0x3d,0x31])));
+# | P("ab", () => T(new Uint8Array([0x61,0x3d,0x31]).buffer));
+# | P("dv", () => T(new DataView(new Uint8Array([0x61,0x3d,0x31]).buffer)));
+# | P("u16", () => T(new Uint16Array([0x3d61, 0x0a31])));
+# | P("blob", () => T(new Blob(["a=1"])));
+# | P("badutf8", () => T(Buffer.from([0x61,0x3d,0x22,0xff,0x22])));
+# | P("lonesur", () => T('a = "\uD800"'));
+# | P("lonesurkey", () => T('"\uD800" = 1'));
+# | P("empty", () => T(""));
+# | P("bom", () => T("﻿a=1"));
+# | P("bomstr", () => T("a='﻿'"));
+# | P("extra", () => T("a=1", 5));
+# | P("str-obj", () => T(new String("a=1")));
+# | P("dup", () => T("a=1\na=2"));
+# | P("unq", () => T("a = hello"));
+# | P("big", () => T("a = 9007199254740992"));
+# | P("cc", () => T("a = 1 # \u0001"));
+# | P("ctrlnul", () => T("a = 1 # \u0000"));
+# | P("nonascii", () => T("a = 1 é"));
+# | P("keynon", () => T("é = 1"));
+# | P("unicodestr", () => T('a = "é\\u00e9\\U0001F600"'));
+# | JS
+# | bun --version; bun /tmp/w-toml-probe.js
+# | echo ==== node
+# | /opt/node24/bin/node -e 'console.log(typeof Temporal)'
+# ---- raw output ----
+1.4.4
+dt => object [object Object] {"d":"1979-05-27T07:32:00Z","l":"1979-05-27T07:32:00","ld":"1979-05-27","lt":"07:32:00","f":"1979-05-27T07:32:00.123456789Z","sp":"1979-05-27T06:32:00Z","low":"1979-05-27T07:32:00Z","nos":"07:32:00"}
+dttype => object [object Array] ["object","Instant"]
+proto => object [object Array] [["__proto__","a"],true,1]
+protot => object [object Array] [["__proto__"],true,"{\"value\":{\"x\":1},\"writable\":true,\"enumerable\":true,\"configurable\":true}"]
+protoinl => object [object Array] [["__proto__"],true]
+order => object [object Array] ["1","2","4294967294","b","a","-1","4294967295"]
+desc => string [object String] "{\"value\":1,\"writable\":true,\"enumerable\":true,\"configurable\":true}"
+proto-root => object [object Array] [true,true]
+negzero => boolean [object Boolean] false
+negzerof => boolean [object Boolean] true
+nan => string [object String] "NaN"
+undef THROW [object Error] TypeError "input must be a string, ArrayBuffer, ArrayBufferView or Blob" ["message","originalLine","originalColumn","line","column","sourceURL","stack"] ERR_INVALID_ARG_TYPE
+undef2 THROW [object Error] TypeError "input must be a string, ArrayBuffer, ArrayBufferView or Blob" ["message","originalLine","originalColumn","line","column","sourceURL","stack"] ERR_INVALID_ARG_TYPE
+null THROW [object Error] TypeError "input must be a string, ArrayBuffer, ArrayBufferView or Blob" ["message","originalLine","originalColumn","line","column","sourceURL","stack"] ERR_INVALID_ARG_TYPE
+num THROW [object Error] SyntaxError "TOML Parse error: Expected '=' after a key but found end of file" ["message","originalLine","originalColumn","line","column","sourceURL","stack"] undefined
+obj => object [object Object] {"a":1}
+sym THROW [object Error] TypeError "Cannot convert a symbol to a string" ["message","originalLine","originalColumn","line","column","sourceURL","stack"] undefined
+bool THROW [object Error] SyntaxError "TOML Parse error: Expected '=' after a key but found end of file" ["message","originalLine","originalColumn","line","column","sourceURL","stack"] undefined
+arr => object [object Object] {"a":1}
+buf => object [object Object] {"a":1}
+u8 => object [object Object] {"a":1}
+ab => object [object Object] {"a":1}
+dv => object [object Object] {"a":1}
+u16 => object [object Object] {"a":1}
+blob => object [object Object] {"a":1}
+badutf8 THROW [object Error] SyntaxError "TOML Parse error: Invalid UTF-8 byte sequence" ["message","originalLine","originalColumn","line","column","sourceURL","stack"] undefined
+lonesur => object [object Object] {"a":"�"}
+lonesurkey => object [object Object] {"�":1}
+empty => object [object Object] {}
+bom => object [object Object] {"a":1}
+bomstr => object [object Object] {"a":"﻿"}
+extra => object [object Object] {"a":1}
+str-obj => object [object Object] {"a":1}
+dup THROW [object Error] SyntaxError "TOML Parse error: Cannot redefine key 'a'" ["message","originalLine","originalColumn","line","column","sourceURL","stack"] undefined
+unq THROW [object Error] SyntaxError "TOML Parse error: Strings must be quoted: \"hello\"" ["message","originalLine","originalColumn","line","column","sourceURL","stack"] undefined
+big THROW [object Error] SyntaxError "TOML Parse error: Integer cannot be losslessly represented as a JavaScript number; it must be within +/-(2^53 - 1)" ["message","originalLine","originalColumn","line","column","sourceURL","stack"] undefined
+cc THROW [object Error] SyntaxError "TOML Parse error: Control character is not allowed in a comment: (0x01)" ["message","originalLine","originalColumn","line","column","sourceURL","stack"] undefined
+ctrlnul THROW [object Error] SyntaxError "TOML Parse error: Control character is not allowed in a comment: (0x00)" ["message","originalLine","originalColumn","line","column","sourceURL","stack"] undefined
+nonascii THROW [object Error] SyntaxError "TOML Parse error: Expected a newline or end of file after a key/value pair" ["message","originalLine","originalColumn","line","column","sourceURL","stack"] undefined
+keynon THROW [object Error] SyntaxError "TOML Parse error: Expected a key but found (0xC3)" ["message","originalLine","originalColumn","line","column","sourceURL","stack"] undefined
+unicodestr => object [object Object] {"a":"éé😀"}
+==== node
+undefined

@@ -1,0 +1,59 @@
+# evidence: toml-check1
+# instance: i-0a14e8aca787249b7   region: us-west-2
+# ssm command: 236696b4-6e6d-4c75-945d-c6c73a6d237e
+# start: 20261030T213745Z   end: 20261030T213754Z   rc: 0   log bytes: 1583
+# script sha256: 5c4d444dd7b6786ae65db5a4d7317d64905ed2f50759817efd0734c0e2be5de1
+# ---- script ----
+# | set -u
+# | echo '69fb45fceae2015e80e7b83384d90a33a8b78e64e125428fc3bfc03a62112aaa  /opt/cc/w-toml-parse.stage/p.tgz' | sha256sum -c --quiet - || exit 1
+# | rm -rf /opt/cc/w-toml-parse && mkdir -p /opt/cc/w-toml-parse && tar xzf /opt/cc/w-toml-parse.stage/p.tgz -C /opt/cc/w-toml-parse 2>/dev/null
+# | cd /opt/cc/w-toml-parse
+# | mkdir -p out
+# | cd compat/test
+# | echo "== bun $(bun --version) gen"; time bun gen-toml-vectors.js ../../out || exit 1
+# | ls -la ../../out
+# | echo "== node $(/opt/node24/bin/node --version) check"; time /opt/node24/bin/node check-toml.mjs ../../out
+# | echo "check rc=$?"
+# ---- raw output ----
+== bun 1.4.4 gen
+edge: 664 (301 parse, 363 throw)
+bytes: 19 (2 parse, 17 throw)
+config: 17 (8 parse, 9 throw)
+coerce: 32 (17 parse, 15 throw)
+depth: 28 (20 parse, 8 throw)
+fuzz: 40000 (4795 parse, 35205 throw)
+mutate: 40000 (10073 parse, 29927 throw)
+
+real	0m3.315s
+user	0m3.719s
+sys	0m0.250s
+total 16240
+drwxr-xr-x 2 root root     4096 Oct 30 21:37 .
+drwxr-xr-x 5 root root     4096 Oct 30 21:37 ..
+-rw-r--r-- 1 root root 16620481 Oct 30 21:37 toml.cases.json
+== node v24.22.2 check
+toml.edge: 664 match / 0 mismatch
+toml.bytes: 19 match / 0 mismatch
+toml.config: 17 match / 0 mismatch
+KNOWN coerce:blob -- Bun reads a Blob synchronously; Node cannot, so the port throws a TypeError instead 
+  got {"e":{"e":"TypeError","m":"Bun.TOML.parse: a Blob cannot be read synchronously on Node; pass await blob.text()","c":null}} 
+  exp {"v":{"o":[["a",{"n":"3ff0000000000000"}]]}}
+toml.coerce: 31 match / 0 mismatch
+file:///opt/cc/w-toml-parse/compat/test/check-toml.mjs:15
+const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
+                                                  ^
+
+RangeError: Maximum call stack size exceeded
+    at JSON.stringify (<anonymous>)
+    at same (file:///opt/cc/w-toml-parse/compat/test/check-toml.mjs:15:51)
+    at file:///opt/cc/w-toml-parse/compat/test/check-toml.mjs:39:17
+    at ModuleJob.run (node:internal/modules/esm/module_job:561:25)
+    at async node:internal/modules/esm/loader:647:26
+    at async asyncRunEntryPointWithESMLoader (node:internal/modules/run_main:101:5)
+
+Node.js v24.22.2
+
+real	0m0.644s
+user	0m0.818s
+sys	0m0.088s
+check rc=1

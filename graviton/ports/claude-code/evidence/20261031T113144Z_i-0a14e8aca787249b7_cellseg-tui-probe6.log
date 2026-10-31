@@ -1,0 +1,64 @@
+# evidence: cellseg-tui-probe6
+# instance: i-0a14e8aca787249b7   region: us-west-2
+# ssm command: ab41589b-9573-4fc5-8168-08883129f396
+# start: 20261031T113144Z   end: 20261031T113205Z   rc: 0   log bytes: 1716
+# script sha256: 77cf3a4388a7151732c6ad4d021512b1172cee1da1e4859a31a99c4f3ac3e4f2
+# ---- script ----
+# | set -u
+# | N=/opt/node24/bin/node; W=/opt/cc/w-cellseg
+# | H=/tmp/tuih; rm -rf $H; mkdir -p $H/.claude; echo '{"prefersReducedMotion":true}' > $H/.claude/settings.json
+# | cat > /tmp/cswrap.mjs <<'J'
+# | import { appendFileSync } from "node:fs";
+# | import { CellSegmenter } from "/opt/cc/w-cellseg/tree/lib/cellseg.mjs";
+# | const counts = {};
+# | for (const m of ["segment", "paint", "setCell"]) {
+# |   const f = CellSegmenter.prototype[m];
+# |   CellSegmenter.prototype[m] = function (...a) { counts[m] = (counts[m] || 0) + 1; try { return f.apply(this, a); } catch (e) { appendFileSync("/tmp/cs.log", m + " THROW " + e.stack + "\n"); throw e; } };
+# | }
+# | setInterval(() => appendFileSync("/tmp/cs.log", JSON.stringify(counts) + "\n"), 2000).unref();
+# | process.on("uncaughtException", (e) => appendFileSync("/tmp/cs.log", "UNCAUGHT " + e.stack + "\n"));
+# | J
+# | rm -f /tmp/cs.log
+# | tmux kill-session -t t 2>/dev/null
+# | tmux new-session -d -s t -x 100 -y 30 "cd /tmp && HOME=$H TERM=xterm-256color $N --zero-fill-buffers --import /tmp/cswrap.mjs $W/tree/claude.mjs 2>/tmp/tui-B.err; echo EXIT=\$? >> /tmp/tui-B.err; sleep 30"
+# | sleep 14
+# | tmux capture-pane -t t -p | head -30
+# | tmux kill-session -t t 2>/dev/null
+# | head -c 4000 /tmp/cs.log; head -c 1000 /tmp/tui-B.err
+# ---- raw output ----
+                                             ░▓▓███▓▓░
+ *                                 ░░░░
+                                 ░░░░░░░░
+                               ░░░░░░░░░░░░░░░░
+       █████████                                        *
+      ██▄█████▄██                        *
+       █████████      *
+.......█ █   █ █..........................................
+
+ Let's get started.
+
+ Choose the text style that looks best with your terminal
+ To change this later, run /theme
+
+     Auto (match terminal)
+ ❯ ✔ Dark mode
+     Light mode
+     Dark mode (colorblind-friendly)
+     Light mode (colorblind-friendly)
+     Dark mode (ANSI colors only)
+     Light mode (ANSI colors only)
+
+ ╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌
+  1  function greet() {
+  2 -  console.log("Hello, World!");
+  2 +  console.log("Hello, Claude!");
+  3  }
+ ╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌
+  Syntax theme: Monokai Extended (ctrl+t to disable)
+
+{}
+{"segment":16,"paint":16}
+{"segment":72,"paint":47}
+{"segment":72,"paint":47}
+{"segment":72,"paint":47}
+{"segment":72,"paint":47}

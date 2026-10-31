@@ -1,0 +1,30 @@
+# evidence: fetch-probe3
+# instance: i-0a14e8aca787249b7   region: us-west-2
+# ssm command: a89b26ab-b8f6-486e-aa38-86902e3cb6b5
+# start: 20261031T025357Z   end: 20261031T025400Z   rc: 0   log bytes: 618
+# script sha256: e039563f2a851ba2cefcf44b5a0219431017212d44e3c322d50c5598c19707f3
+# ---- script ----
+# | set -u
+# | echo 'db6b0560bfa18818eea82290da0e3a2c3daee59d05abd72b465bdbda593979c5  /opt/cc/w-fetch.stage/p.tgz' | sha256sum -c --quiet - || exit 1
+# | rm -rf /opt/cc/w-fetch && mkdir -p /opt/cc/w-fetch && tar xzf /opt/cc/w-fetch.stage/p.tgz -C /opt/cc/w-fetch 2>/dev/null
+# | cd /opt/cc/w-fetch
+# | cd /opt/cc/bun-src
+# | grep -rn "fn from_env\|fn from_explicit\|struct ProxySettings" src --include=*.rs | head
+# | grep -rln "no_proxy\|NO_PROXY" src --include=*.rs | head -20
+# ---- raw output ----
+src/http/lib.rs:705:pub struct ProxySettings {
+src/http/lib.rs:731:    pub fn from_env(env: &bun_dotenv::Loader) -> Option<Box<Self>> {
+src/http/lib.rs:741:    pub fn from_explicit(
+src/install/lib.rs:350:        pub fn from_env(shell: &[u8]) -> Shell {
+src/dotenv/env_loader.rs
+src/dotenv/lib.rs
+src/dotenv/no_proxy.rs
+src/jsc/rare_data.rs
+src/jsc/virtual_machine_exports.rs
+src/http/lib.rs
+src/runtime/api/BunObject.rs
+src/runtime/webcore/fetch/FetchSession.rs
+src/runtime/webcore/fetch/FetchTasklet.rs
+src/runtime/webcore/fetch/proxy_testing.rs
+src/runtime/webcore/fetch.rs
+src/runtime/webcore/s3/simple_request.rs

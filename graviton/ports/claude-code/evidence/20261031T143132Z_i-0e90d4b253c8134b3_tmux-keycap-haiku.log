@@ -1,0 +1,16 @@
+# evidence: tmux-keycap-haiku
+# instance: i-0e90d4b253c8134b3   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261031T143132Z   end: 20261031T143154Z   rc: 0
+# script sha256: a0978a97f251acfb988f45fcd4e8d030c65c5a3405b423b3b5bbd7aa63c20487
+# ---- script ----
+# | tmux -V
+# | tmux -L kc kill-server 2>/dev/null
+# | tmux -L kc new-session -d -s kc -x 60 -y 5 "printf 'A 1\357\270\217\342\203\243 B\n'; sleep 30"
+# | sleep 2; tmux -L kc capture-pane -t kc -p | head -1 | od -c | head -3
+# | tmux -L kc capture-pane -t kc -p | head -1
+# | tmux -L kc kill-server
+# ---- raw output ----
+tmux 3.7c
+0000000   A       1 357 270 217 342 203 243       B  \n
+0000014
+A 1️⃣ B

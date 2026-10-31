@@ -1,0 +1,55 @@
+# evidence: cellseg-tui-probe5
+# instance: i-0a14e8aca787249b7   region: us-west-2
+# ssm command: 0a4a851c-87f0-4862-8b30-b9f3250a05ff
+# start: 20261031T112829Z   end: 20261031T112843Z   rc: 0   log bytes: 1717
+# script sha256: f9708cdd4454433ecb92f6c12391197afe8cc5875089e6fc8512f8194f9e8296
+# ---- script ----
+# | set -u
+# | N=/opt/node24/bin/node; W=/opt/cc/w-cellseg
+# | H=/tmp/tuih; rm -rf $H; mkdir -p $H/.claude; echo '{"prefersReducedMotion":true}' > $H/.claude/settings.json
+# | cat > /tmp/cswrap.mjs <<'J'
+# | import { appendFileSync } from "node:fs";
+# | import { CellSegmenter } from "/opt/cc/w-cellseg/tree/lib/cellseg.mjs";
+# | const counts = {};
+# | for (const m of ["segment", "paint", "setCell"]) {
+# |   const f = CellSegmenter.prototype[m];
+# |   CellSegmenter.prototype[m] = function (...a) { counts[m] = (counts[m] || 0) + 1; try { return f.apply(this, a); } catch (e) { appendFileSync("/tmp/cs.log", m + " THROW " + e.stack + "\n"); throw e; } };
+# | }
+# | setInterval(() => appendFileSync("/tmp/cs.log", JSON.stringify(counts) + "\n"), 2000).unref();
+# | process.on("uncaughtException", (e) => appendFileSync("/tmp/cs.log", "UNCAUGHT " + e.stack + "\n"));
+# | J
+# | rm -f /tmp/cs.log
+# | tmux kill-session -t t 2>/dev/null
+# | tmux new-session -d -s t -x 100 -y 30 "cd /tmp && HOME=$H TERM=xterm-256color $N --zero-fill-buffers --import /tmp/cswrap.mjs $W/tree/claude.mjs 2>/tmp/tui-B.err; echo EXIT=\$? >> /tmp/tui-B.err; sleep 30"
+# | sleep 12
+# | tmux capture-pane -t t -p | grep -v '^$' | head -5
+# | tmux kill-session -t t 2>/dev/null
+# | head -c 4000 /tmp/cs.log; head -c 1000 /tmp/tui-B.err
+# ---- raw output ----
+{}
+UNCAUGHT TypeError: Cannot read properties of undefined (reading 'split')
+    at pf.ansiCodes (file:///opt/cc/w-cellseg/tree/chunk-x65c4var.js:31:12553)
+    at pf.styleId (file:///opt/cc/w-cellseg/tree/chunk-x65c4var.js:31:12452)
+    at pf.runWords (file:///opt/cc/w-cellseg/tree/chunk-x65c4var.js:31:11643)
+    at pf.paint (file:///opt/cc/w-cellseg/tree/chunk-x65c4var.js:31:11793)
+    at xg (file:///opt/cc/w-cellseg/tree/chunk-x65c4var.js:23:32505)
+    at QC (file:///opt/cc/w-cellseg/tree/chunk-x65c4var.js:33:2079)
+    at Smt.get (file:///opt/cc/w-cellseg/tree/chunk-x65c4var.js:33:1080)
+    at XXe.renderer (file:///opt/cc/w-cellseg/tree/chunk-x65c4var.js:55:3236)
+    at XXe.onRender (file:///opt/cc/w-cellseg/tree/chunk-x65c4var.js:55:21892)
+    at file:///opt/cc/w-cellseg/tree/chunk-x65c4var.js:55:20507
+{"segment":1}
+UNCAUGHT TypeError: Cannot read properties of undefined (reading 'split')
+    at pf.ansiCodes (file:///opt/cc/w-cellseg/tree/chunk-x65c4var.js:31:12553)
+    at pf.styleId (file:///opt/cc/w-cellseg/tree/chunk-x65c4var.js:31:12452)
+    at pf.runWords (file:///opt/cc/w-cellseg/tree/chunk-x65c4var.js:31:11643)
+    at pf.paint (file:///opt/cc/w-cellseg/tree/chunk-x65c4var.js:31:11793)
+    at xg (file:///opt/cc/w-cellseg/tree/chunk-x65c4var.js:23:32505)
+    at QC (file:///opt/cc/w-cellseg/tree/chunk-x65c4var.js:33:2079)
+    at Smt.get (file:///opt/cc/w-cellseg/tree/chunk-x65c4var.js:33:1080)
+    at XXe.renderer (file:///opt/cc/w-cellseg/tree/chunk-x65c4var.js:55:3236)
+    at XXe.onRender (file:///opt/cc/w-cellseg/tree/chunk-x65c4var.js:55:21892)
+    at file:///opt/cc/w-cellseg/tree/chunk-x65c4var.js:55:20507
+{"segment":3,"paint":1}
+{"segment":3,"paint":1}
+{"segment":3,"paint":1}

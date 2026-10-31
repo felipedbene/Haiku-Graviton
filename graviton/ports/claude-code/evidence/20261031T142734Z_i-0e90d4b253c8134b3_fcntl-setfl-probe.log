@@ -1,0 +1,25 @@
+# evidence: fcntl-setfl-probe
+# instance: i-0e90d4b253c8134b3   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261031T142734Z   end: 20261031T142756Z   rc: 127
+# script sha256: 9752b40d3a97ce6a9526cb31e3053670c4ea1670b8d8d8079938076379336af3
+# ---- script ----
+# | python3 - <<'PY'
+# | import os, fcntl, tempfile
+# | def probe(name, fd):
+# |     try:
+# |         fl = fcntl.fcntl(fd, fcntl.F_GETFL)
+# |         fcntl.fcntl(fd, fcntl.F_SETFL, fl & ~os.O_NONBLOCK)
+# |         r1 = "ok"
+# |     except OSError as e: r1 = f"ERR {e.errno} {e.strerror}"
+# |     try:
+# |         fcntl.fcntl(fd, fcntl.F_SETFL, fl | os.O_NONBLOCK); r2 = "ok"
+# |     except OSError as e: r2 = f"ERR {e.errno} {e.strerror}"
+# |     print(f"{name:22} getfl=0x{fl:x} setfl(clear NB)={r1} setfl(set NB)={r2}")
+# | probe("/dev/null (rdonly)", os.open("/dev/null", os.O_RDONLY))
+# | probe("/dev/null (rdwr)", os.open("/dev/null", os.O_RDWR))
+# | f = tempfile.NamedTemporaryFile(delete=False); probe("regular file (bfs)", f.fileno())
+# | r, w = os.pipe(); probe("pipe read end", r); probe("pipe write end", w)
+# | probe("/dev/zero", os.open("/dev/zero", os.O_RDONLY))
+# | PY
+# ---- raw output ----
+/tmp/ccrun/cc-20261031T142734Z-14867.sh: line 1: python3: command not found

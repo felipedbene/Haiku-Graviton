@@ -1,0 +1,101 @@
+# evidence: toml-probe2
+# instance: i-0a14e8aca787249b7   region: us-west-2
+# ssm command: 6a8eedc9-3243-4cb9-9790-daef81fc2e67
+# start: 20261030T212830Z   end: 20261030T212839Z   rc: 0   log bytes: 5564
+# script sha256: 9258c53cb10e433f564585318024ad99af096058878fb0bd4b4d13b5e54d5105
+# ---- script ----
+# | set -u
+# | echo '5ccebe55f17a1898bdcc38931ecdd6a9d1c4cf81e421504d7d1b049810215835  /opt/cc/w-toml-parse.stage/p.tgz' | sha256sum -c --quiet - || exit 1
+# | rm -rf /opt/cc/w-toml-parse && mkdir -p /opt/cc/w-toml-parse && tar xzf /opt/cc/w-toml-parse.stage/p.tgz -C /opt/cc/w-toml-parse 2>/dev/null
+# | cd /opt/cc/w-toml-parse
+# | cat > probe2.js <<'JS'
+# | const P = (label, f) => { try { const v = f(); console.log(label, "=>", v); } catch (e) { console.log(label, "THROW", e.constructor.name, JSON.stringify(e.message), JSON.stringify(Object.getOwnPropertyNames(e)), e.code, Object.getOwnPropertyDescriptor(e, "code")); } };
+# | const T = Bun.TOML.parse;
+# | const D = (s) => { const v = T("v = " + s).v; return typeof v === "object" ? v.constructor.name + " " + String(v) + " json=" + JSON.stringify(v) : typeof v + " " + String(v) + (Object.is(v, -0) ? " NEGZERO" : ""); };
+# | for (const s of ["+1.5", "-1.5", "1e400", "-1e400", "1e-400", "-1e-400", "+1e5", "1_000.5", "+0.0", "0e0", "1E+2", "3.14159265358979323846264338327950288", "9007199254740993.0", "+inf", "-inf", "+nan", "inf", "0x7FFFFFFF", "0b1_0", "0o777", "+0", "-0", "9007199254740991", "-9007199254740991", "-9223372036854775808", "9223372036854775808", "0xFFFFFFFFFFFFFFFFFF",
+# |   "1979-05-27T07:32:00Z", "1979-05-27T07:32:60Z", "1979-05-27T23:59:60", "1979-05-27T07:32:00.100Z", "1979-05-27T07:32:00.000", "07:32:00.500", "07:32:60", "0000-01-01T00:00:00+01:00", "9999-12-31T23:59:59-01:00", "0000-01-01", "2000-02-29", "1979-05-27T07:32:00.1234567899", "1979-05-27 07:32", "1979-05-27T00:00:00-00:00", "1979-05-27T07:32:00.12345678912345+05:30", "0001-01-01T00:00:00Z", "1979-05-27T07:32:00+23:59", "12:00:60.999999999999"])
+# |   P(s, () => D(s));
+# | P("nonascii-key", () => T('"é" = 1\n"é" = 2'));
+# | P("nul-key", () => T('"a\\u0000b" = 1\n"a\\u0000b" = 2'));
+# | P("crkey", () => T('"a\\rb" = 1\n"a\\rb" = 2'));
+# | P("barecr", () => T("a=1\r"));
+# | P("undef", () => T());
+# | for (const n of [1000, 5000, 10000, 20000, 50000, 100000, 200000]) {
+# |   P("deep-arr-" + n, () => { const v = T("a = " + "[".repeat(n) + "]".repeat(n)); return "ok"; });
+# |   P("deep-inl-" + n, () => { const v = T("a = " + "{b=".repeat(n) + "1" + "}".repeat(n)); return "ok"; });
+# | }
+# | P("deep-header", () => { T("[" + Array(100000).fill("a").join(".") + "]"); return "ok"; });
+# | P("deep-dotted", () => { T(Array(100000).fill("a").join(".") + " = 1"); return "ok"; });
+# | try { const b = Buffer.allocUnsafe(2 ** 31); P("2g", () => T(b)); } catch (e) { console.log("2g alloc fail", e.message); }
+# | try { const b = Buffer.allocUnsafe(2 ** 31 - 1); b.fill(0x20); P("2g-1", () => T(b)); } catch (e) { console.log("2g-1 alloc fail", e.message); }
+# | JS
+# | bun probe2.js 2>&1 | cut -c1-600
+# ---- raw output ----
++1.5 => number 1.5
+-1.5 => number -1.5
+1e400 => number Infinity
+-1e400 => number -Infinity
+1e-400 => number 0
+-1e-400 => number 0 NEGZERO
++1e5 => number 100000
+1_000.5 => number 1000.5
++0.0 => number 0
+0e0 => number 0
+1E+2 => number 100
+3.14159265358979323846264338327950288 => number 3.141592653589793
+9007199254740993.0 => number 9007199254740992
++inf => number Infinity
+-inf => number -Infinity
++nan => number NaN
+inf => number Infinity
+0x7FFFFFFF => number 2147483647
+0b1_0 => number 2
+0o777 => number 511
++0 => number 0
+-0 => number 0
+9007199254740991 => number 9007199254740991
+-9007199254740991 => number -9007199254740991
+-9223372036854775808 THROW SyntaxError "TOML Parse error: Integer cannot be losslessly represented as a JavaScript number; it must be within +/-(2^53 - 1)" ["message","originalLine","originalColumn","line","column","sourceURL","stack"] undefined undefined
+9223372036854775808 THROW SyntaxError "TOML Parse error: Integer is outside the 64-bit signed range" ["message","originalLine","originalColumn","line","column","sourceURL","stack"] undefined undefined
+0xFFFFFFFFFFFFFFFFFF THROW SyntaxError "TOML Parse error: Integer is outside the 64-bit signed range" ["message","originalLine","originalColumn","line","column","sourceURL","stack"] undefined undefined
+1979-05-27T07:32:00Z => Instant 1979-05-27T07:32:00Z json="1979-05-27T07:32:00Z"
+1979-05-27T07:32:60Z => Instant 1979-05-27T07:32:59Z json="1979-05-27T07:32:59Z"
+1979-05-27T23:59:60 => PlainDateTime 1979-05-27T23:59:59 json="1979-05-27T23:59:59"
+1979-05-27T07:32:00.100Z => Instant 1979-05-27T07:32:00.1Z json="1979-05-27T07:32:00.1Z"
+1979-05-27T07:32:00.000 => PlainDateTime 1979-05-27T07:32:00 json="1979-05-27T07:32:00"
+07:32:00.500 => PlainTime 07:32:00.5 json="07:32:00.5"
+07:32:60 => PlainTime 07:32:59 json="07:32:59"
+0000-01-01T00:00:00+01:00 => Instant -000001-12-31T23:00:00Z json="-000001-12-31T23:00:00Z"
+9999-12-31T23:59:59-01:00 => Instant +010000-01-01T00:59:59Z json="+010000-01-01T00:59:59Z"
+0000-01-01 => PlainDate 0000-01-01 json="0000-01-01"
+2000-02-29 => PlainDate 2000-02-29 json="2000-02-29"
+1979-05-27T07:32:00.1234567899 => PlainDateTime 1979-05-27T07:32:00.123456789 json="1979-05-27T07:32:00.123456789"
+1979-05-27 07:32 => PlainDateTime 1979-05-27T07:32:00 json="1979-05-27T07:32:00"
+1979-05-27T00:00:00-00:00 => Instant 1979-05-27T00:00:00Z json="1979-05-27T00:00:00Z"
+1979-05-27T07:32:00.12345678912345+05:30 => Instant 1979-05-27T02:02:00.123456789Z json="1979-05-27T02:02:00.123456789Z"
+0001-01-01T00:00:00Z => Instant 0001-01-01T00:00:00Z json="0001-01-01T00:00:00Z"
+1979-05-27T07:32:00+23:59 => Instant 1979-05-26T07:33:00Z json="1979-05-26T07:33:00Z"
+12:00:60.999999999999 => PlainTime 12:00:59.999999999 json="12:00:59.999999999"
+nonascii-key THROW SyntaxError "TOML Parse error: Cannot redefine key 'é'" ["message","originalLine","originalColumn","line","column","sourceURL","stack"] undefined undefined
+nul-key THROW SyntaxError "TOML Parse error: Cannot redefine key 'a\u0000b'" ["message","originalLine","originalColumn","line","column","sourceURL","stack"] undefined undefined
+crkey THROW SyntaxError "TOML Parse error: Cannot redefine key 'a\rb'" ["message","originalLine","originalColumn","line","column","sourceURL","stack"] undefined undefined
+barecr THROW SyntaxError "TOML Parse error: Bare carriage return is not allowed; use \\r\\n or \\n" ["message","originalLine","originalColumn","line","column","sourceURL","stack"] undefined undefined
+undef THROW TypeError "input must be a string, ArrayBuffer, ArrayBufferView or Blob" ["message","originalLine","originalColumn","line","column","sourceURL","stack"] ERR_INVALID_ARG_TYPE undefined
+deep-arr-1000 => ok
+deep-inl-1000 => ok
+deep-arr-5000 => ok
+deep-inl-5000 => ok
+deep-arr-10000 => ok
+deep-inl-10000 => ok
+deep-arr-20000 => ok
+deep-inl-20000 THROW RangeError "Maximum call stack size exceeded." ["message","originalLine","originalColumn","line","column","sourceURL","stack"] undefined undefined
+deep-arr-50000 THROW RangeError "Maximum call stack size exceeded." ["message","originalLine","originalColumn","line","column","sourceURL","stack"] undefined undefined
+deep-inl-50000 THROW RangeError "Maximum call stack size exceeded." ["message","originalLine","originalColumn","line","column","sourceURL","stack"] undefined undefined
+deep-arr-100000 THROW RangeError "Maximum call stack size exceeded." ["message","originalLine","originalColumn","line","column","sourceURL","stack"] undefined undefined
+deep-inl-100000 THROW RangeError "Maximum call stack size exceeded." ["message","originalLine","originalColumn","line","column","sourceURL","stack"] undefined undefined
+deep-arr-200000 THROW RangeError "Maximum call stack size exceeded." ["message","originalLine","originalColumn","line","column","sourceURL","stack"] undefined undefined
+deep-inl-200000 THROW RangeError "Maximum call stack size exceeded." ["message","originalLine","originalColumn","line","column","sourceURL","stack"] undefined undefined
+deep-header THROW RangeError "Maximum call stack size exceeded." ["message","originalLine","originalColumn","line","column","sourceURL","stack"] undefined undefined
+deep-dotted THROW RangeError "Maximum call stack size exceeded." ["message","originalLine","originalColumn","line","column","sourceURL","stack"] undefined undefined
+2g THROW RangeError "The value of \"input.byteLength\" is out of range. It must be <= 2147483647. Received 2147483648" ["message","originalLine","originalColumn","line","column","sourceURL","stack"] ERR_OUT_OF_RANGE undefined
+2g-1 => {}

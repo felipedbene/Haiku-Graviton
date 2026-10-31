@@ -1,0 +1,70 @@
+# evidence: yaml-probe1
+# instance: i-0a14e8aca787249b7   region: us-west-2
+# ssm command: 2c5a3b62-cf96-4400-a3f2-50a90259d968
+# start: 20261030T212728Z   end: 20261030T212731Z   rc: 0   log bytes: 2270
+# script sha256: 7ab89e892c039f618df4caf2ec4cd72fd655ce99977f3d4eac61a4f310f0dc24
+# ---- script ----
+# | set -u
+# | echo '0f1e566f0773542929b398443008aba80c6220856f15f75a5236ab9ed382eb2d  /opt/cc/w-yaml-parse.stage/p.tgz' | sha256sum -c --quiet - || exit 1
+# | rm -rf /opt/cc/w-yaml-parse && mkdir -p /opt/cc/w-yaml-parse && tar xzf /opt/cc/w-yaml-parse.stage/p.tgz -C /opt/cc/w-yaml-parse 2>/dev/null
+# | cd /opt/cc/w-yaml-parse
+# | cat > /opt/cc/w-yaml-parse/probe.js <<'JS'
+# | const P = (x) => { try { const v = Bun.YAML.parse(x); return "OK " + Bun.inspect(v, {depth: 6}).replace(/\n/g, " ") + " keys=" + (v && typeof v === "object" ? JSON.stringify(Reflect.ownKeys(v)) : ""); } catch (e) { return "ERR " + (e && e.constructor && e.constructor.name) + ": " + (e && e.message) + (e && e.code ? " code=" + e.code : ""); } };
+# | const cases = [
+# |   [], [undefined], [null], [123], [true], [{}], [{toString(){return "a: 1"}}], [Symbol("x")], [Buffer.from("a: 1")], [new Uint8Array([0x61,0x3a,0x20,0x31])], [new ArrayBuffer(2)], [new Uint8Array([0x61,0x3a,0x20,0xff,0xfe])],
+# |   ["a: 1\nb: [1, 2]"], ["a: \ud800"], ["\ufeffa: 1"], ["a: !!str"], ["<<: {a: 1, b: 2}\nc: 3"], ["c: 3\n<<: {a: 1, b: 2, a: 5}"], ["__proto__: 1\nx: 2"], ["? {toString: 1}\n: x"], ["? [1, [2, 3]]\n: x\ny: 2"], ["&a [*a]"], ["&a {b: *a}"],
+# |   ["a: [1"], ["\"abc"], ["- a\nb: 1"], ["*x"], ["a: 1\na: 2"], ["---\na: 1\n---\nb: 2"], [""], ["# c"], ["---"], ["a:\tb"], ["%YAML 1.2\n---\nx"], ["!<tag:x> 5"], ["0x1F"], ["0o17"], ["-0"], [".NaN"], ["1e400"], ["0b11"], ["12:30"], ["2001-12-14"],
+# |   ["[" .repeat(5000)], ["[".repeat(20000) + "]".repeat(20000)],
+# | ];
+# | for (const c of cases) console.log(JSON.stringify(c.map(x => typeof x === "string" ? x.slice(0, 60) : String(x?.constructor?.name ?? x))), "=>", c.length ? P(...c) : P());
+# | try { Bun.YAML.parse(); } catch (e) { console.log("noarg", e.constructor.name, e.message); }
+# | console.log(typeof Bun.YAML.parse, Bun.YAML.parse.length, Bun.YAML.parse.name);
+# | JS
+# | bun probe.js
+# ---- raw output ----
+[] => OK "undefined" keys=
+["undefined"] => OK "undefined" keys=
+["null"] => OK null keys=
+["Number"] => OK 123 keys=
+["Boolean"] => OK true keys=
+["Object"] => OK [ "object Object" ] keys=["0","length"]
+["Object"] => OK {   a: 1, } keys=["a"]
+["Symbol"] => ERR TypeError: Cannot convert a symbol to a string
+["Buffer"] => OK {   a: 1, } keys=["a"]
+["Uint8Array"] => OK {   a: 1, } keys=["a"]
+["ArrayBuffer"] => ERR SyntaxError: YAML Parse error: Unexpected character
+["Uint8Array"] => OK {   a: "��", } keys=["a"]
+["a: 1\nb: [1, 2]"] => OK {   a: 1,   b: [ 1, 2 ], } keys=["a","b"]
+["a: \ud800"] => OK {   a: "�", } keys=["a"]
+["﻿a: 1"] => OK {   a: 1, } keys=["a"]
+["a: !!str"] => OK {   a: "", } keys=["a"]
+["<<: {a: 1, b: 2}\nc: 3"] => OK {   b: 2,   a: 1,   c: 3, } keys=["b","a","c"]
+["c: 3\n<<: {a: 1, b: 2, a: 5}"] => OK {   c: 3,   a: 5,   b: 2, } keys=["c","a","b"]
+["__proto__: 1\nx: 2"] => OK {   __proto__: 1,   x: 2, } keys=["__proto__","x"]
+["? {toString: 1}\n: x"] => ERR TypeError: No default value
+["? [1, [2, 3]]\n: x\ny: 2"] => OK {   "1,2,3": "x",   y: 2, } keys=["1,2,3","y"]
+["&a [*a]"] => OK [   [Circular] ] keys=["0","length"]
+["&a {b: *a}"] => OK {   b: [Circular], } keys=["b"]
+["a: [1"] => ERR SyntaxError: YAML Parse error: Unexpected token
+["\"abc"] => ERR SyntaxError: YAML Parse error: Unexpected EOF
+["- a\nb: 1"] => ERR SyntaxError: YAML Parse error: Unexpected token
+["*x"] => ERR SyntaxError: YAML Parse error: Unresolved alias
+["a: 1\na: 2"] => OK {   a: 2, } keys=["a"]
+["---\na: 1\n---\nb: 2"] => OK [   {     a: 1,   }, {     b: 2,   } ] keys=["0","1","length"]
+[""] => OK null keys=
+["# c"] => OK null keys=
+["---"] => OK null keys=
+["a:\tb"] => OK {   a: "b", } keys=["a"]
+["%YAML 1.2\n---\nx"] => OK "x" keys=
+["!<tag:x> 5"] => OK "5" keys=
+["0x1F"] => OK 31 keys=
+["0o17"] => OK 15 keys=
+["-0"] => OK -0 keys=
+[".NaN"] => OK NaN keys=
+["1e400"] => OK Infinity keys=
+["0b11"] => OK "0b11" keys=
+["12:30"] => OK "12:30" keys=
+["2001-12-14"] => OK "2001-12-14" keys=
+["[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[["] => ERR RangeError: Maximum call stack size exceeded.
+["[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[["] => ERR RangeError: Maximum call stack size exceeded.
+function 1 parse

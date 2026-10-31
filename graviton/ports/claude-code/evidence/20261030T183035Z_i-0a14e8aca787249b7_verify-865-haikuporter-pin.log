@@ -1,0 +1,626 @@
+# evidence: verify-865-haikuporter-pin
+# instance: i-0a14e8aca787249b7   region: us-west-2
+# ssm command: 4b927b9f-eb77-4631-a104-0cdd1f01448f
+# start: 20261030T183035Z   end: 20261030T183044Z   rc: 0   log bytes: 693
+# script sha256: 759b60da45e45a189538f07f6c2182dbc07a8f1a79eb8e0f841d17f730940a04
+# ---- script ----
+# | set -u; HP_DIR=/tmp/hp865; rm -rf $HP_DIR
+# | HP_REPO=https://github.com/haikuports/haikuporter.git
+# | HP_REF="${HP_REF:-faa30769682fb85970846190ae8f4dbc99327d3a}"
+# | # Fetch the one pinned commit by hash; a branch clone would take HEAD.
+# | git init -q "$HP_DIR"
+# | git -C "$HP_DIR" fetch -q --depth 1 "$HP_REPO" "$HP_REF"
+# | git -C "$HP_DIR" checkout -q --detach FETCH_HEAD
+# | if [ "$(git -C "$HP_DIR" rev-parse HEAD)" != "$HP_REF" ]; then
+# | 	echo "provision: FATAL #865: haikuporter is at" \
+# | 		"$(git -C "$HP_DIR" rev-parse HEAD), not the pinned $HP_REF" >&2
+# | 	exit 1
+# | fi
+# | echo "pinned at: $(git -C $HP_DIR rev-parse HEAD)"
+# | echo '=== pass 1 ==='
+# | python3 -I - "$HP_DIR/HaikuPorter/Port.py" <<'PY'
+# | import io, py_compile, sys
+# | path = sys.argv[1]
+# | with io.open(path, 'r', encoding='utf-8') as fh:
+# |     text = fh.read()
+# | if 'CMAKE_POLICY_VERSION_MINIMUM' in text:
+# |     print("provision: #47 cmakeDirArgs already patched; skipping")
+# |     sys.exit(0)
+# | anchor = "for k, v in cmakeDirArgs.items())\n"
+# | count = text.count(anchor)
+# | if count != 1:
+# |     sys.stderr.write(
+# |         "provision: FATAL #47: cmakeDirArgs anchor appears %d times in %s, "
+# |         "expected once -- haikuporter changed, re-check the patch\n"
+# |         % (count, path))
+# |     sys.exit(1)
+# | addition = (
+# |     "for k, v in cmakeDirArgs.items())\n"
+# |     "\t\t# graviton/DeBeOS (#47): default the floor policy so cmake 4.x still\n"
+# |     "\t\t# configures projects/bundled trees declaring cmake_minimum_required\n"
+# |     "\t\t# (<3.5). Cache var -> reaches add_subdirectory() bundles; projects\n"
+# |     "\t\t# asking for a newer minimum are unaffected.\n"
+# |     "\t\tself.shellVariables['cmakeDirArgs'] += "
+# |     "' -DCMAKE_POLICY_VERSION_MINIMUM=3.5'\n"
+# | )
+# | with io.open(path, 'w', encoding='utf-8') as fh:
+# |     fh.write(text.replace(anchor, addition, 1))
+# | try:
+# |     py_compile.compile(path, cfile='/tmp/.hp47-check.pyc', doraise=True)
+# | except Exception as exc:
+# |     sys.stderr.write("provision: FATAL #47: patched Port.py does not compile: "
+# |         "%s: %s\n" % (type(exc).__name__, exc))
+# |     sys.exit(1)
+# | print("provision: #47 cmakeDirArgs patched")
+# | PY
+# | echo "  rc=$?"
+# | python3 -I - "$HP_DIR/HaikuPorter/Utils.py" <<'PY'
+# | import io, py_compile, sys
+# | path = sys.argv[1]
+# | with io.open(path, 'r', encoding='utf-8') as fh:
+# |     text = fh.read()
+# | if 'CMAKE_POLICY_VERSION_MINIMUM' in text:
+# |     print("provision: #136 filteredEnvironment already patched; skipping")
+# |     sys.exit(0)
+# | # Anchor on the exact env-dict default block and the passthrough loop that
+# | # follow it in filteredEnvironment(). Both are matched so a haikuporter refactor
+# | # of either one fails loudly instead of silently no-op'ing.
+# | env_anchor = (
+# |     "\tenv = {\n"
+# |     "\t\t'LC_ALL': 'POSIX',\n"
+# |     "\t\t'TERM': 'xterm',\n"
+# |     "\t}\n"
+# | )
+# | loop_anchor = "\tfor key in ['LIBRARY_PATH', 'PATH']:\n"
+# | for name, anchor in (('env-dict', env_anchor), ('passthrough-loop', loop_anchor)):
+# |     c = text.count(anchor)
+# |     if c != 1:
+# |         sys.stderr.write(
+# |             "provision: FATAL #136: filteredEnvironment %s anchor appears %d "
+# |             "times in %s, expected once -- haikuporter changed, re-check the "
+# |             "patch\n" % (name, c, path))
+# |         sys.exit(1)
+# | new_env = (
+# |     "\tenv = {\n"
+# |     "\t\t'LC_ALL': 'POSIX',\n"
+# |     "\t\t'TERM': 'xterm',\n"
+# |     "\t\t# graviton/DeBeOS (#136): default cmake's policy floor to 3.5 for EVERY\n"
+# |     "\t\t# cmake invocation in a port BUILD(), independent of how the recipe\n"
+# |     "\t\t# calls cmake. cmake >= 3.31 reads CMAKE_POLICY_VERSION_MINIMUM from the\n"
+# |     "\t\t# environment, so this reaches recipes that pass an explicit arg list\n"
+# |     "\t\t# and never reference $cmakeDirArgs. Only raises the floor; an explicit\n"
+# |     "\t\t# override in os.environ still wins (passthrough loop below).\n"
+# |     "\t\t'CMAKE_POLICY_VERSION_MINIMUM': '3.5',\n"
+# |     "\t}\n"
+# | )
+# | new_loop = "\tfor key in ['LIBRARY_PATH', 'PATH', 'CMAKE_POLICY_VERSION_MINIMUM']:\n"
+# | text = text.replace(env_anchor, new_env, 1).replace(loop_anchor, new_loop, 1)
+# | with io.open(path, 'w', encoding='utf-8') as fh:
+# |     fh.write(text)
+# | try:
+# |     py_compile.compile(path, cfile='/tmp/.hp136-check.pyc', doraise=True)
+# | except Exception as exc:
+# |     sys.stderr.write("provision: FATAL #136: patched Utils.py does not compile: "
+# |         "%s: %s\n" % (type(exc).__name__, exc))
+# |     sys.exit(1)
+# | print("provision: #136 filteredEnvironment patched")
+# | PY
+# | echo "  rc=$?"
+# | python3 -I - "$HP_DIR/HaikuPorter/ShellScriptlets.py" <<'PY'
+# | import io, py_compile, sys
+# | path = sys.argv[1]
+# | with io.open(path, 'r', encoding='utf-8') as fh:
+# |     text = fh.read()
+# | tools = ['cmd:gzip', 'cmd:tar', 'cmd:unzip', 'cmd:which']
+# | if all(('\t' + t + '\n') in text for t in tools):
+# |     print("provision: #136 scriptletPrerequirements already patched; skipping")
+# |     sys.exit(0)
+# | # Anchor on the tail of the base prerequisite block (the cmd:xres line that ends
+# | # the list, followed by the closing triple-quote). Matched exactly once so a
+# | # haikuporter change to the base set fails loudly instead of silently no-op'ing.
+# | anchor = "\tcmd:xres\n'''\n"
+# | count = text.count(anchor)
+# | if count != 1:
+# |     sys.stderr.write(
+# |         "provision: FATAL #136 Class 2: scriptletPrerequirements anchor appears "
+# |         "%d times in %s, expected once -- haikuporter changed, re-check the "
+# |         "patch\n" % (count, path))
+# |     sys.exit(1)
+# | addition = (
+# |     "\tcmd:xres\n"
+# |     "\t# graviton/DeBeOS (#136, Class 2): universal build utilities every recipe\n"
+# |     "\t# reasonably assumes are present -- man-page gzip on `make install`, a\n"
+# |     "\t# bundled-archive tar/unzip, a which-based configure probe -- but that\n"
+# |     "\t# recipes routinely forget to declare. Same 'universal tool' bar as the\n"
+# |     "\t# entries above (all of which are themselves ports), so no new\n"
+# |     "\t# self-dependency class. Build-time only. Feature-specific tools\n"
+# |     "\t# (gettext msgfmt/msgattrib, dos2unix) stay per-recipe.\n"
+# |     "\tcmd:gzip\n"
+# |     "\tcmd:tar\n"
+# |     "\tcmd:unzip\n"
+# |     "\tcmd:which\n"
+# |     "'''\n"
+# | )
+# | with io.open(path, 'w', encoding='utf-8') as fh:
+# |     fh.write(text.replace(anchor, addition, 1))
+# | try:
+# |     py_compile.compile(path, cfile='/tmp/.hp136c2-check.pyc', doraise=True)
+# | except Exception as exc:
+# |     sys.stderr.write("provision: FATAL #136 Class 2: patched ShellScriptlets.py "
+# |         "does not compile: %s: %s\n" % (type(exc).__name__, exc))
+# |     sys.exit(1)
+# | print("provision: #136 scriptletPrerequirements patched")
+# | PY
+# | echo "  rc=$?"
+# | python3 -I - "$HP_DIR/HaikuPorter/ShellScriptlets.py" <<'PY'
+# | import io, py_compile, sys
+# | path = sys.argv[1]
+# | with io.open(path, 'r', encoding='utf-8') as fh:
+# |     text = fh.read()
+# | marker = "graviton/DeBeOS (#136, Class 8)"
+# | if marker in text:
+# |     print("provision: #136 Class 8 cmake wrapper already patched; skipping")
+# |     sys.exit(0)
+# | 
+# | # (A) absent CMAKE_BUILD_TYPE: default to Release instead of aborting.
+# | anchorA = (
+# |     "\t\tif [[ \"$*\" != *CMAKE_BUILD_TYPE* ]]; then\n"
+# |     "\t\t\techo \"error: invoking cmake without CMAKE_BUILD_TYPE specified!\"\n"
+# |     "\t\t\techo \"note: you probably want -DCMAKE_BUILD_TYPE=Release or "
+# |     "-DCMAKE_BUILD_TYPE=RelWithDebInfo\"\n"
+# |     "\t\t\texit 1\n"
+# | )
+# | cA = text.count(anchorA)
+# | if cA != 1:
+# |     sys.stderr.write(
+# |         "provision: FATAL #136 Class 8: cmake-wrapper anchor A appears %d times "
+# |         "in %s, expected once -- haikuporter changed, re-check the patch\n"
+# |         % (cA, path))
+# |     sys.exit(1)
+# | replA = (
+# |     "\t\tif [[ \"$*\" != *CMAKE_BUILD_TYPE* ]]; then\n"
+# |     "\t\t\t# graviton/DeBeOS (#136, Class 8): a recipe that calls cmake with no\n"
+# |     "\t\t\t# CMAKE_BUILD_TYPE previously aborted here. Supply the wrapper's own\n"
+# |     "\t\t\t# recommended default (Release) instead, so every such port configures\n"
+# |     "\t\t\t# regardless of whether it uses $cmakeDirArgs or an explicit arg list.\n"
+# |     "\t\t\t# cmake reads CMAKE_BUILD_TYPE only from -D/cache (not the env), so this\n"
+# |     "\t\t\t# cannot be an env default; only this always-failed branch changes --\n"
+# |     "\t\t\t# recipes that already pass a type are untouched.\n"
+# |     "\t\t\tset -- -DCMAKE_BUILD_TYPE=Release \"$@\"\n"
+# | )
+# | text = text.replace(anchorA, replA, 1)
+# | 
+# | # (B) RelWithDebInfo without a _debuginfo subpackage: rewrite to Release.
+# | anchorB = (
+# |     "\t\telif [[ \"$*\" = *CMAKE_BUILD_TYPE=RelWithDebInfo* ]] && "
+# |     "[ -z \"$DEBUG_INFO_PACKAGES\" ]; then\n"
+# |     "\t\t\techo -n \"error: invoking cmake with -DCMAKE_BUILD_TYPE=RelWithDebInfo "
+# |     "without debug info \"\n"
+# |     "\t\t\techo \"packages specified\"\n"
+# |     "\t\t\techo \"note: you probably want -DCMAKE_BUILD_TYPE=Release\"\n"
+# |     "\t\t\texit 1\n"
+# | )
+# | cB = text.count(anchorB)
+# | if cB != 1:
+# |     sys.stderr.write(
+# |         "provision: FATAL #136 Class 8: cmake-wrapper anchor B appears %d times "
+# |         "in %s, expected once -- haikuporter changed, re-check the patch\n"
+# |         % (cB, path))
+# |     sys.exit(1)
+# | replB = (
+# |     "\t\telif [[ \"$*\" = *CMAKE_BUILD_TYPE=RelWithDebInfo* ]] && "
+# |     "[ -z \"$DEBUG_INFO_PACKAGES\" ]; then\n"
+# |     "\t\t\t# graviton/DeBeOS (#136, Class 8): the recipe asked for RelWithDebInfo\n"
+# |     "\t\t\t# but declared no _debuginfo subpackage, which previously aborted.\n"
+# |     "\t\t\t# Rewrite the requested type to Release (the wrapper's own advice) so\n"
+# |     "\t\t\t# the port builds; only this always-failed branch changes.\n"
+# |     "\t\t\tset -- \"${@/CMAKE_BUILD_TYPE=RelWithDebInfo/CMAKE_BUILD_TYPE=Release}\"\n"
+# | )
+# | text = text.replace(anchorB, replB, 1)
+# | 
+# | with io.open(path, 'w', encoding='utf-8') as fh:
+# |     fh.write(text)
+# | try:
+# |     py_compile.compile(path, cfile='/tmp/.hp136c8-check.pyc', doraise=True)
+# | except Exception as exc:
+# |     sys.stderr.write("provision: FATAL #136 Class 8: patched ShellScriptlets.py "
+# |         "does not compile: %s: %s\n" % (type(exc).__name__, exc))
+# |     sys.exit(1)
+# | print("provision: #136 Class 8 cmake wrapper patched")
+# | PY
+# | echo "  rc=$?"
+# | python3 -I - "$HP_DIR/HaikuPorter/ShellScriptlets.py" <<'PY'
+# | import io, py_compile, sys
+# | path = sys.argv[1]
+# | with io.open(path, 'r', encoding='utf-8') as fh:
+# |     text = fh.read()
+# | marker = "graviton/DeBeOS (issue 758)"
+# | if marker in text:
+# |     print("provision: #758 packageEntries already patched; skipping")
+# |     sys.exit(0)
+# | 
+# | # Anchor A: the head of the move loop, where the batch state is declared.
+# | anchorA = "\t# move the entries provided\n\tfor file; do\n"
+# | # Anchor B: the three forks themselves, plus the loop terminator so the flush
+# | # can be appended after it.
+# | anchorB = (
+# |     "\t\t# make sure target containing directory exists and move there\n"
+# |     "\t\ttargetDir=$(dirname \"$packagePrefix/$file\")\n"
+# |     "\t\tmkdir -p \"$targetDir\"\n"
+# |     "\t\tmv \"$installDestDir$prefix/$file\" \"$targetDir\"\n"
+# |     "\tdone\n"
+# | )
+# | for name, anchor in (("A", anchorA), ("B", anchorB)):
+# |     count = text.count(anchor)
+# |     if count != 1:
+# |         sys.stderr.write(
+# |             "provision: FATAL #758: packageEntries anchor %s appears %d times "
+# |             "in %s, expected once -- haikuporter changed, re-check the patch\n"
+# |             % (name, count, path))
+# |         sys.exit(1)
+# | 
+# | replA = (
+# |     "\t# move the entries provided\n"
+# |     "\t#\n"
+# |     "\t# graviton/DeBeOS (issue 758): batched. Upstream forked dirname + mkdir\n"
+# |     "\t# -p + mv per entry, which is ~7 hours for app-text/texlive's ~400k-entry\n"
+# |     "\t# INSTALL(). lastDir/batch are local because packageDebugInfos() re-enters\n"
+# |     "\t# this function.\n"
+# |     "\tlocal lastDir=\n"
+# |     "\tlocal -a batch=()\n"
+# |     "\tfor file; do\n"
+# | )
+# | replB = (
+# |     "\t\t# make sure target containing directory exists and move there,\n"
+# |     "\t\t# batching the move per directory (issue 758)\n"
+# |     "\t\ttargetDir=\"$packagePrefix/$file\"\n"
+# |     "\t\ttargetDir=${targetDir%/*}\n"
+# |     "\t\tif [ \"$targetDir\" != \"$lastDir\" ]; then\n"
+# |     "\t\t\tif [ ${#batch[@]} -gt 0 ]; then\n"
+# |     "\t\t\t\tmv \"${batch[@]}\" \"$lastDir\"\n"
+# |     "\t\t\t\tbatch=()\n"
+# |     "\t\t\tfi\n"
+# |     "\t\t\tmkdir -p \"$targetDir\"\n"
+# |     "\t\t\tlastDir=$targetDir\n"
+# |     "\t\telif [ ${#batch[@]} -ge 256 ]; then\n"
+# |     "\t\t\t# bound the argv a single flat directory can build\n"
+# |     "\t\t\tmv \"${batch[@]}\" \"$lastDir\"\n"
+# |     "\t\t\tbatch=()\n"
+# |     "\t\tfi\n"
+# |     "\t\tbatch+=(\"$installDestDir$prefix/$file\")\n"
+# |     "\tdone\n"
+# |     "\tif [ ${#batch[@]} -gt 0 ]; then\n"
+# |     "\t\tmv \"${batch[@]}\" \"$lastDir\"\n"
+# |     "\tfi\n"
+# | )
+# | text = text.replace(anchorA, replA, 1)
+# | text = text.replace(anchorB, replB, 1)
+# | 
+# | with io.open(path, 'w', encoding='utf-8') as fh:
+# |     fh.write(text)
+# | try:
+# |     py_compile.compile(path, cfile='/tmp/.hp758-check.pyc', doraise=True)
+# | except Exception as exc:
+# |     sys.stderr.write("provision: FATAL #758: patched ShellScriptlets.py does not "
+# |         "compile: %s: %s\n" % (type(exc).__name__, exc))
+# |     sys.exit(1)
+# | print("provision: #758 packageEntries batched")
+# | PY
+# | echo "  rc=$?"
+# | echo '=== pass 2 ==='
+# | python3 -I - "$HP_DIR/HaikuPorter/Port.py" <<'PY'
+# | import io, py_compile, sys
+# | path = sys.argv[1]
+# | with io.open(path, 'r', encoding='utf-8') as fh:
+# |     text = fh.read()
+# | if 'CMAKE_POLICY_VERSION_MINIMUM' in text:
+# |     print("provision: #47 cmakeDirArgs already patched; skipping")
+# |     sys.exit(0)
+# | anchor = "for k, v in cmakeDirArgs.items())\n"
+# | count = text.count(anchor)
+# | if count != 1:
+# |     sys.stderr.write(
+# |         "provision: FATAL #47: cmakeDirArgs anchor appears %d times in %s, "
+# |         "expected once -- haikuporter changed, re-check the patch\n"
+# |         % (count, path))
+# |     sys.exit(1)
+# | addition = (
+# |     "for k, v in cmakeDirArgs.items())\n"
+# |     "\t\t# graviton/DeBeOS (#47): default the floor policy so cmake 4.x still\n"
+# |     "\t\t# configures projects/bundled trees declaring cmake_minimum_required\n"
+# |     "\t\t# (<3.5). Cache var -> reaches add_subdirectory() bundles; projects\n"
+# |     "\t\t# asking for a newer minimum are unaffected.\n"
+# |     "\t\tself.shellVariables['cmakeDirArgs'] += "
+# |     "' -DCMAKE_POLICY_VERSION_MINIMUM=3.5'\n"
+# | )
+# | with io.open(path, 'w', encoding='utf-8') as fh:
+# |     fh.write(text.replace(anchor, addition, 1))
+# | try:
+# |     py_compile.compile(path, cfile='/tmp/.hp47-check.pyc', doraise=True)
+# | except Exception as exc:
+# |     sys.stderr.write("provision: FATAL #47: patched Port.py does not compile: "
+# |         "%s: %s\n" % (type(exc).__name__, exc))
+# |     sys.exit(1)
+# | print("provision: #47 cmakeDirArgs patched")
+# | PY
+# | echo "  rc=$?"
+# | python3 -I - "$HP_DIR/HaikuPorter/Utils.py" <<'PY'
+# | import io, py_compile, sys
+# | path = sys.argv[1]
+# | with io.open(path, 'r', encoding='utf-8') as fh:
+# |     text = fh.read()
+# | if 'CMAKE_POLICY_VERSION_MINIMUM' in text:
+# |     print("provision: #136 filteredEnvironment already patched; skipping")
+# |     sys.exit(0)
+# | # Anchor on the exact env-dict default block and the passthrough loop that
+# | # follow it in filteredEnvironment(). Both are matched so a haikuporter refactor
+# | # of either one fails loudly instead of silently no-op'ing.
+# | env_anchor = (
+# |     "\tenv = {\n"
+# |     "\t\t'LC_ALL': 'POSIX',\n"
+# |     "\t\t'TERM': 'xterm',\n"
+# |     "\t}\n"
+# | )
+# | loop_anchor = "\tfor key in ['LIBRARY_PATH', 'PATH']:\n"
+# | for name, anchor in (('env-dict', env_anchor), ('passthrough-loop', loop_anchor)):
+# |     c = text.count(anchor)
+# |     if c != 1:
+# |         sys.stderr.write(
+# |             "provision: FATAL #136: filteredEnvironment %s anchor appears %d "
+# |             "times in %s, expected once -- haikuporter changed, re-check the "
+# |             "patch\n" % (name, c, path))
+# |         sys.exit(1)
+# | new_env = (
+# |     "\tenv = {\n"
+# |     "\t\t'LC_ALL': 'POSIX',\n"
+# |     "\t\t'TERM': 'xterm',\n"
+# |     "\t\t# graviton/DeBeOS (#136): default cmake's policy floor to 3.5 for EVERY\n"
+# |     "\t\t# cmake invocation in a port BUILD(), independent of how the recipe\n"
+# |     "\t\t# calls cmake. cmake >= 3.31 reads CMAKE_POLICY_VERSION_MINIMUM from the\n"
+# |     "\t\t# environment, so this reaches recipes that pass an explicit arg list\n"
+# |     "\t\t# and never reference $cmakeDirArgs. Only raises the floor; an explicit\n"
+# |     "\t\t# override in os.environ still wins (passthrough loop below).\n"
+# |     "\t\t'CMAKE_POLICY_VERSION_MINIMUM': '3.5',\n"
+# |     "\t}\n"
+# | )
+# | new_loop = "\tfor key in ['LIBRARY_PATH', 'PATH', 'CMAKE_POLICY_VERSION_MINIMUM']:\n"
+# | text = text.replace(env_anchor, new_env, 1).replace(loop_anchor, new_loop, 1)
+# | with io.open(path, 'w', encoding='utf-8') as fh:
+# |     fh.write(text)
+# | try:
+# |     py_compile.compile(path, cfile='/tmp/.hp136-check.pyc', doraise=True)
+# | except Exception as exc:
+# |     sys.stderr.write("provision: FATAL #136: patched Utils.py does not compile: "
+# |         "%s: %s\n" % (type(exc).__name__, exc))
+# |     sys.exit(1)
+# | print("provision: #136 filteredEnvironment patched")
+# | PY
+# | echo "  rc=$?"
+# | python3 -I - "$HP_DIR/HaikuPorter/ShellScriptlets.py" <<'PY'
+# | import io, py_compile, sys
+# | path = sys.argv[1]
+# | with io.open(path, 'r', encoding='utf-8') as fh:
+# |     text = fh.read()
+# | tools = ['cmd:gzip', 'cmd:tar', 'cmd:unzip', 'cmd:which']
+# | if all(('\t' + t + '\n') in text for t in tools):
+# |     print("provision: #136 scriptletPrerequirements already patched; skipping")
+# |     sys.exit(0)
+# | # Anchor on the tail of the base prerequisite block (the cmd:xres line that ends
+# | # the list, followed by the closing triple-quote). Matched exactly once so a
+# | # haikuporter change to the base set fails loudly instead of silently no-op'ing.
+# | anchor = "\tcmd:xres\n'''\n"
+# | count = text.count(anchor)
+# | if count != 1:
+# |     sys.stderr.write(
+# |         "provision: FATAL #136 Class 2: scriptletPrerequirements anchor appears "
+# |         "%d times in %s, expected once -- haikuporter changed, re-check the "
+# |         "patch\n" % (count, path))
+# |     sys.exit(1)
+# | addition = (
+# |     "\tcmd:xres\n"
+# |     "\t# graviton/DeBeOS (#136, Class 2): universal build utilities every recipe\n"
+# |     "\t# reasonably assumes are present -- man-page gzip on `make install`, a\n"
+# |     "\t# bundled-archive tar/unzip, a which-based configure probe -- but that\n"
+# |     "\t# recipes routinely forget to declare. Same 'universal tool' bar as the\n"
+# |     "\t# entries above (all of which are themselves ports), so no new\n"
+# |     "\t# self-dependency class. Build-time only. Feature-specific tools\n"
+# |     "\t# (gettext msgfmt/msgattrib, dos2unix) stay per-recipe.\n"
+# |     "\tcmd:gzip\n"
+# |     "\tcmd:tar\n"
+# |     "\tcmd:unzip\n"
+# |     "\tcmd:which\n"
+# |     "'''\n"
+# | )
+# | with io.open(path, 'w', encoding='utf-8') as fh:
+# |     fh.write(text.replace(anchor, addition, 1))
+# | try:
+# |     py_compile.compile(path, cfile='/tmp/.hp136c2-check.pyc', doraise=True)
+# | except Exception as exc:
+# |     sys.stderr.write("provision: FATAL #136 Class 2: patched ShellScriptlets.py "
+# |         "does not compile: %s: %s\n" % (type(exc).__name__, exc))
+# |     sys.exit(1)
+# | print("provision: #136 scriptletPrerequirements patched")
+# | PY
+# | echo "  rc=$?"
+# | python3 -I - "$HP_DIR/HaikuPorter/ShellScriptlets.py" <<'PY'
+# | import io, py_compile, sys
+# | path = sys.argv[1]
+# | with io.open(path, 'r', encoding='utf-8') as fh:
+# |     text = fh.read()
+# | marker = "graviton/DeBeOS (#136, Class 8)"
+# | if marker in text:
+# |     print("provision: #136 Class 8 cmake wrapper already patched; skipping")
+# |     sys.exit(0)
+# | 
+# | # (A) absent CMAKE_BUILD_TYPE: default to Release instead of aborting.
+# | anchorA = (
+# |     "\t\tif [[ \"$*\" != *CMAKE_BUILD_TYPE* ]]; then\n"
+# |     "\t\t\techo \"error: invoking cmake without CMAKE_BUILD_TYPE specified!\"\n"
+# |     "\t\t\techo \"note: you probably want -DCMAKE_BUILD_TYPE=Release or "
+# |     "-DCMAKE_BUILD_TYPE=RelWithDebInfo\"\n"
+# |     "\t\t\texit 1\n"
+# | )
+# | cA = text.count(anchorA)
+# | if cA != 1:
+# |     sys.stderr.write(
+# |         "provision: FATAL #136 Class 8: cmake-wrapper anchor A appears %d times "
+# |         "in %s, expected once -- haikuporter changed, re-check the patch\n"
+# |         % (cA, path))
+# |     sys.exit(1)
+# | replA = (
+# |     "\t\tif [[ \"$*\" != *CMAKE_BUILD_TYPE* ]]; then\n"
+# |     "\t\t\t# graviton/DeBeOS (#136, Class 8): a recipe that calls cmake with no\n"
+# |     "\t\t\t# CMAKE_BUILD_TYPE previously aborted here. Supply the wrapper's own\n"
+# |     "\t\t\t# recommended default (Release) instead, so every such port configures\n"
+# |     "\t\t\t# regardless of whether it uses $cmakeDirArgs or an explicit arg list.\n"
+# |     "\t\t\t# cmake reads CMAKE_BUILD_TYPE only from -D/cache (not the env), so this\n"
+# |     "\t\t\t# cannot be an env default; only this always-failed branch changes --\n"
+# |     "\t\t\t# recipes that already pass a type are untouched.\n"
+# |     "\t\t\tset -- -DCMAKE_BUILD_TYPE=Release \"$@\"\n"
+# | )
+# | text = text.replace(anchorA, replA, 1)
+# | 
+# | # (B) RelWithDebInfo without a _debuginfo subpackage: rewrite to Release.
+# | anchorB = (
+# |     "\t\telif [[ \"$*\" = *CMAKE_BUILD_TYPE=RelWithDebInfo* ]] && "
+# |     "[ -z \"$DEBUG_INFO_PACKAGES\" ]; then\n"
+# |     "\t\t\techo -n \"error: invoking cmake with -DCMAKE_BUILD_TYPE=RelWithDebInfo "
+# |     "without debug info \"\n"
+# |     "\t\t\techo \"packages specified\"\n"
+# |     "\t\t\techo \"note: you probably want -DCMAKE_BUILD_TYPE=Release\"\n"
+# |     "\t\t\texit 1\n"
+# | )
+# | cB = text.count(anchorB)
+# | if cB != 1:
+# |     sys.stderr.write(
+# |         "provision: FATAL #136 Class 8: cmake-wrapper anchor B appears %d times "
+# |         "in %s, expected once -- haikuporter changed, re-check the patch\n"
+# |         % (cB, path))
+# |     sys.exit(1)
+# | replB = (
+# |     "\t\telif [[ \"$*\" = *CMAKE_BUILD_TYPE=RelWithDebInfo* ]] && "
+# |     "[ -z \"$DEBUG_INFO_PACKAGES\" ]; then\n"
+# |     "\t\t\t# graviton/DeBeOS (#136, Class 8): the recipe asked for RelWithDebInfo\n"
+# |     "\t\t\t# but declared no _debuginfo subpackage, which previously aborted.\n"
+# |     "\t\t\t# Rewrite the requested type to Release (the wrapper's own advice) so\n"
+# |     "\t\t\t# the port builds; only this always-failed branch changes.\n"
+# |     "\t\t\tset -- \"${@/CMAKE_BUILD_TYPE=RelWithDebInfo/CMAKE_BUILD_TYPE=Release}\"\n"
+# | )
+# | text = text.replace(anchorB, replB, 1)
+# | 
+# | with io.open(path, 'w', encoding='utf-8') as fh:
+# |     fh.write(text)
+# | try:
+# |     py_compile.compile(path, cfile='/tmp/.hp136c8-check.pyc', doraise=True)
+# | except Exception as exc:
+# |     sys.stderr.write("provision: FATAL #136 Class 8: patched ShellScriptlets.py "
+# |         "does not compile: %s: %s\n" % (type(exc).__name__, exc))
+# |     sys.exit(1)
+# | print("provision: #136 Class 8 cmake wrapper patched")
+# | PY
+# | echo "  rc=$?"
+# | python3 -I - "$HP_DIR/HaikuPorter/ShellScriptlets.py" <<'PY'
+# | import io, py_compile, sys
+# | path = sys.argv[1]
+# | with io.open(path, 'r', encoding='utf-8') as fh:
+# |     text = fh.read()
+# | marker = "graviton/DeBeOS (issue 758)"
+# | if marker in text:
+# |     print("provision: #758 packageEntries already patched; skipping")
+# |     sys.exit(0)
+# | 
+# | # Anchor A: the head of the move loop, where the batch state is declared.
+# | anchorA = "\t# move the entries provided\n\tfor file; do\n"
+# | # Anchor B: the three forks themselves, plus the loop terminator so the flush
+# | # can be appended after it.
+# | anchorB = (
+# |     "\t\t# make sure target containing directory exists and move there\n"
+# |     "\t\ttargetDir=$(dirname \"$packagePrefix/$file\")\n"
+# |     "\t\tmkdir -p \"$targetDir\"\n"
+# |     "\t\tmv \"$installDestDir$prefix/$file\" \"$targetDir\"\n"
+# |     "\tdone\n"
+# | )
+# | for name, anchor in (("A", anchorA), ("B", anchorB)):
+# |     count = text.count(anchor)
+# |     if count != 1:
+# |         sys.stderr.write(
+# |             "provision: FATAL #758: packageEntries anchor %s appears %d times "
+# |             "in %s, expected once -- haikuporter changed, re-check the patch\n"
+# |             % (name, count, path))
+# |         sys.exit(1)
+# | 
+# | replA = (
+# |     "\t# move the entries provided\n"
+# |     "\t#\n"
+# |     "\t# graviton/DeBeOS (issue 758): batched. Upstream forked dirname + mkdir\n"
+# |     "\t# -p + mv per entry, which is ~7 hours for app-text/texlive's ~400k-entry\n"
+# |     "\t# INSTALL(). lastDir/batch are local because packageDebugInfos() re-enters\n"
+# |     "\t# this function.\n"
+# |     "\tlocal lastDir=\n"
+# |     "\tlocal -a batch=()\n"
+# |     "\tfor file; do\n"
+# | )
+# | replB = (
+# |     "\t\t# make sure target containing directory exists and move there,\n"
+# |     "\t\t# batching the move per directory (issue 758)\n"
+# |     "\t\ttargetDir=\"$packagePrefix/$file\"\n"
+# |     "\t\ttargetDir=${targetDir%/*}\n"
+# |     "\t\tif [ \"$targetDir\" != \"$lastDir\" ]; then\n"
+# |     "\t\t\tif [ ${#batch[@]} -gt 0 ]; then\n"
+# |     "\t\t\t\tmv \"${batch[@]}\" \"$lastDir\"\n"
+# |     "\t\t\t\tbatch=()\n"
+# |     "\t\t\tfi\n"
+# |     "\t\t\tmkdir -p \"$targetDir\"\n"
+# |     "\t\t\tlastDir=$targetDir\n"
+# |     "\t\telif [ ${#batch[@]} -ge 256 ]; then\n"
+# |     "\t\t\t# bound the argv a single flat directory can build\n"
+# |     "\t\t\tmv \"${batch[@]}\" \"$lastDir\"\n"
+# |     "\t\t\tbatch=()\n"
+# |     "\t\tfi\n"
+# |     "\t\tbatch+=(\"$installDestDir$prefix/$file\")\n"
+# |     "\tdone\n"
+# |     "\tif [ ${#batch[@]} -gt 0 ]; then\n"
+# |     "\t\tmv \"${batch[@]}\" \"$lastDir\"\n"
+# |     "\tfi\n"
+# | )
+# | text = text.replace(anchorA, replA, 1)
+# | text = text.replace(anchorB, replB, 1)
+# | 
+# | with io.open(path, 'w', encoding='utf-8') as fh:
+# |     fh.write(text)
+# | try:
+# |     py_compile.compile(path, cfile='/tmp/.hp758-check.pyc', doraise=True)
+# | except Exception as exc:
+# |     sys.stderr.write("provision: FATAL #758: patched ShellScriptlets.py does not "
+# |         "compile: %s: %s\n" % (type(exc).__name__, exc))
+# |     sys.exit(1)
+# | print("provision: #758 packageEntries batched")
+# | PY
+# | echo "  rc=$?"
+# | cd $HP_DIR && python3 -c "import ast,sys; [ast.parse(open(f).read()) for f in [\"HaikuPorter/Port.py\",\"HaikuPorter/Utils.py\",\"HaikuPorter/ShellScriptlets.py\"]]; print(\"patched files parse OK\")"
+# | exit 0
+# ---- raw output ----
+pinned at: faa30769682fb85970846190ae8f4dbc99327d3a
+=== pass 1 ===
+provision: #47 cmakeDirArgs patched
+  rc=0
+provision: #136 filteredEnvironment patched
+  rc=0
+provision: #136 scriptletPrerequirements patched
+  rc=0
+provision: #136 Class 8 cmake wrapper patched
+  rc=0
+provision: #758 packageEntries batched
+  rc=0
+=== pass 2 ===
+provision: #47 cmakeDirArgs already patched; skipping
+  rc=0
+provision: #136 filteredEnvironment already patched; skipping
+  rc=0
+provision: #136 scriptletPrerequirements already patched; skipping
+  rc=0
+provision: #136 Class 8 cmake wrapper already patched; skipping
+  rc=0
+provision: #758 packageEntries already patched; skipping
+  rc=0
+patched files parse OK

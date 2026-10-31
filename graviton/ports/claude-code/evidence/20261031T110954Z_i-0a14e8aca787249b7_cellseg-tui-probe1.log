@@ -1,0 +1,113 @@
+# evidence: cellseg-tui-probe1
+# instance: i-0a14e8aca787249b7   region: us-west-2
+# ssm command: f41a79ac-cc8c-48ba-b556-fda14655c7c4
+# start: 20261031T110954Z   end: 20261031T112539Z   rc: 0   log bytes: 3735
+# script sha256: 94eead2148e665d66f8d81ad5f2ed8014f0055356a688c1e2bf8e205fad45ca7
+# ---- script ----
+# | set -u
+# | echo '2046e32cb4229bc9417b1b47d55b8fa68760648fa4a56544aa8800dfbea4b049  /opt/cc/w-cellseg/port.stage/p.tgz' | sha256sum -c --quiet - || exit 1
+# | rm -rf /opt/cc/w-cellseg/port && mkdir -p /opt/cc/w-cellseg/port && tar xzf /opt/cc/w-cellseg/port.stage/p.tgz -C /opt/cc/w-cellseg/port 2>/dev/null
+# | cd /opt/cc/w-cellseg/port
+# | set -u
+# | BIN=/opt/cc/v2.1.314/package/claude; N=/opt/node24/bin/node; W=/opt/cc/w-cellseg
+# | mkdir -p $W/deps && bash tools/fetch-deps.sh $W/deps >/dev/null && echo deps-ok
+# | if [ ! -f $W/tree/claude.mjs ] || [ compat/lib/cellseg.mjs -nt $W/tree/lib/cellseg.mjs ]; then rm -rf $W/tree; bash tools/build-tree.sh $BIN $W/tree $W/tree $N $W/deps > $W/build.log 2>&1; tail -2 $W/build.log; fi
+# | grep -c "ant: Object.freeze" $W/tree/bun-compat.mjs
+# | cap() { # cap side name
+# |   local side=$1 H=/tmp/tuih; rm -rf $H; mkdir -p $H/.claude; echo '{"prefersReducedMotion":true}' > $H/.claude/settings.json
+# |   local cmd="$BIN"; [ $side = B ] && cmd="$N --zero-fill-buffers $W/tree/claude.mjs"
+# |   tmux kill-session -t t 2>/dev/null; tmux new-session -d -s t -x 100 -y 30 "cd /tmp && HOME=$H TERM=xterm-256color $cmd 2>/tmp/tui-$side.err"
+# |   sleep 6; tmux capture-pane -t t -p > /tmp/tui-$side.txt; tmux capture-pane -t t -p -e > /tmp/tui-$side.e; sleep 2; tmux capture-pane -t t -p -e > /tmp/tui-$side.e2
+# |   tmux kill-session -t t 2>/dev/null
+# |   echo "== $side stable=$(cmp -s /tmp/tui-$side.e /tmp/tui-$side.e2 && echo yes || echo no)"; cat /tmp/tui-$side.txt | head -30; head -c 600 /tmp/tui-$side.err
+# | }
+# | cap A; cap B
+# | cmp /tmp/tui-A.e /tmp/tui-B.e && echo SAME-E || diff /tmp/tui-A.e /tmp/tui-B.e | head -20 | cat -v
+# ---- raw output ----
+deps-ok
+P7 applied in chunk-yt5m1rse.js
+build-tree: /opt/cc/w-cellseg/tree ready (prefix /opt/cc/w-cellseg/tree)
+1
+== A stable=yes
+                                             ░▓▓███▓▓░
+ *                                 ░░░░
+                                 ░░░░░░░░
+                               ░░░░░░░░░░░░░░░░
+       █████████                                        *
+      ██▄█████▄██                        *
+       █████████      *
+.......█ █   █ █..........................................
+
+ Let's get started.
+
+ Choose the text style that looks best with your terminal
+ To change this later, run /theme
+
+     Auto (match terminal)
+ ❯ ✔ Dark mode
+     Light mode
+     Dark mode (colorblind-friendly)
+     Light mode (colorblind-friendly)
+     Dark mode (ANSI colors only)
+     Light mode (ANSI colors only)
+
+ ╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌
+  1  function greet() {
+  2 -  console.log("Hello, World!");
+  2 +  console.log("Hello, Claude!");
+  3  }
+ ╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌
+  Syntax theme: Monokai Extended (ctrl+t to disable)
+
+== B stable=yes
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+/tmp/tui-A.e /tmp/tui-B.e differ: byte 1, line 1
+1,29c1,29
+<                                              M-bM-^VM-^QM-bM-^VM-^SM-bM-^VM-^SM-bM-^VM-^HM-bM-^VM-^HM-bM-^VM-^HM-bM-^VM-^SM-bM-^VM-^SM-bM-^VM-^Q
+< ^[[38;5;246m *^[[39m                                 ^[[38;5;246mM-bM-^VM-^QM-bM-^VM-^QM-bM-^VM-^QM-bM-^VM-^Q^[[39m
+< ^[[38;5;246m ^[[39m                                ^[[38;5;246mM-bM-^VM-^QM-bM-^VM-^QM-bM-^VM-^QM-bM-^VM-^QM-bM-^VM-^QM-bM-^VM-^QM-bM-^VM-^QM-bM-^VM-^Q^[[39m
+< ^[[38;5;246m ^[[39m                              ^[[38;5;246mM-bM-^VM-^QM-bM-^VM-^QM-bM-^VM-^QM-bM-^VM-^QM-bM-^VM-^QM-bM-^VM-^QM-bM-^VM-^QM-bM-^VM-^QM-bM-^VM-^QM-bM-^VM-^QM-bM-^VM-^QM-bM-^VM-^QM-bM-^VM-^QM-bM-^VM-^QM-bM-^VM-^QM-bM-^VM-^Q^[[39m
+<       ^[[38;5;174m M-bM-^VM-^HM-bM-^VM-^HM-bM-^VM-^HM-bM-^VM-^HM-bM-^VM-^HM-bM-^VM-^HM-bM-^VM-^HM-bM-^VM-^HM-bM-^VM-^H^[[39m                                        ^[[38;5;246m*^[[39m
+<       ^[[38;5;174mM-bM-^VM-^HM-bM-^VM-^HM-bM-^VM-^DM-bM-^VM-^HM-bM-^VM-^HM-bM-^VM-^HM-bM-^VM-^HM-bM-^VM-^HM-bM-^VM-^DM-bM-^VM-^HM-bM-^VM-^H^[[39m                        ^[[1m*^[[0m
+<       ^[[38;5;174m M-bM-^VM-^HM-bM-^VM-^HM-bM-^VM-^HM-bM-^VM-^HM-bM-^VM-^HM-bM-^VM-^HM-bM-^VM-^HM-bM-^VM-^HM-bM-^VM-^H^[[39m      *
+< .......^[[38;5;174mM-bM-^VM-^H^[[39m ^[[38;5;174mM-bM-^VM-^H^[[39m   ^[[38;5;174mM-bM-^VM-^H^[[39m ^[[38;5;174mM-bM-^VM-^H^[[39m..........................................
+< 
+<  Let's get started.
+< 
+<  ^[[1mChoose^[[0m ^[[1mthe^[[0m ^[[1mtext^[[0m ^[[1mstyle^[[0m ^[[1mthat^[[0m ^[[1mlooks^[[0m ^[[1mbest^[[0m ^[[1mwith^[[0m ^[[1myour^[[0m ^[[1mterminal^[[0m
+<  ^[[38;5;246mTo^[[39m ^[[38;5;246mchange^[[39m ^[[38;5;246mthis^[[39m ^[[38;5;246mlater,^[[39m ^[[38;5;246mrun^[[39m ^[[38;5;246m/theme^[[39m
+< 
+<      Auto (match terminal)
+<  ^[[38;5;153mM-bM-^]M-/^[[39m ^[[38;5;114mM-bM-^\M-^T^[[39m ^[[38;5;153mDark^[[39m ^[[38;5;153mmode^[[39m
+<      Light mode
+<      Dark mode (colorblind-friendly)
+<      Light mode (colorblind-friendly)

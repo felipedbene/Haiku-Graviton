@@ -1,0 +1,11 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: cellseg-upload-v1
+# instance: i-0a14e8aca787249b7   region: us-west-2
+# ssm command: 64198970-9fcf-4314-a0db-d2dbfa605f34
+# start: 20261031T024803Z   end: 20261031T024806Z   rc: 0   log bytes: 137
+# script sha256: 3763e05ade5fe53460fa6601483521b913e867e27429847441ce9b3311754938
+# ---- script ----
+# | cd /opt/cc/w-cellseg-vec && tar czf /tmp/cellseg-vec.tgz cellseg.* && ls -la /tmp/cellseg-vec.tgz && aws s3 cp /tmp/cellseg-vec.tgz s3://haiku-graviton-work-<ACCOUNT_ID>-us-west-2/cc-cellseg/vec-v1.tgz --region us-west-2 2>&1 | tail -2
+# ---- raw output ----
+-rw-r--r-- 1 root root 1247525 Oct 31 02:48 /tmp/cellseg-vec.tgz
+/tmp/ccrun/cc-20261031T024803Z-47205.sh: line 1: aws: command not found

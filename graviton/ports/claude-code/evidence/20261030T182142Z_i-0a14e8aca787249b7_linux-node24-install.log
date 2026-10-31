@@ -1,0 +1,24 @@
+# evidence: linux-node24-install
+# instance: i-0a14e8aca787249b7   region: us-west-2
+# ssm command: 0f8a0899-ff59-42a7-85c9-617ca30f40d7
+# start: 20261030T182142Z   end: 20261030T182152Z   rc: 0   log bytes: 134
+# script sha256: 0ffddcbe1f3d32fdb79a75284a3ff99711e6138d5abfd65877fcd0892a633f6e
+# ---- script ----
+# | set -euo pipefail
+# | cd /opt/cc/dl
+# | curl -fsSL https://nodejs.org/dist/latest-v24.x/SHASUMS256.txt -o node24-SHASUMS256.txt
+# | NT=$(grep -oE 'node-v24\.[0-9.]+-linux-arm64\.tar\.xz' node24-SHASUMS256.txt | head -1)
+# | [ -f "$NT" ] || curl -fsSLO https://nodejs.org/dist/latest-v24.x/$NT
+# | grep " $NT\$" node24-SHASUMS256.txt | sha256sum -c -
+# | tar -xJf $NT -C /opt && ln -sfn /opt/${NT%.tar.xz} /opt/node24
+# | /opt/node24/bin/node --version
+# | /opt/node24/bin/node -e 'const z=require("zlib");console.log("zstd:",typeof z.zstdDecompressSync, "require(esm):", process.features.require_module)'
+# | echo "bun: $(bun --version)"
+# | for f in /etc/environment /root/.bashrc /root/.profile /home/ubuntu/.bashrc /home/ubuntu/.profile; do grep -q ANTHROPIC_API_KEY "$f" 2>/dev/null && echo "ANTHROPIC_API_KEY referenced in $f"; done
+# | bash -lc '[ -n "${ANTHROPIC_API_KEY:-}" ] && echo "login-shell env: ANTHROPIC_API_KEY is set" || echo "login-shell env: ANTHROPIC_API_KEY not set"'
+# ---- raw output ----
+node-v24.22.2-linux-arm64.tar.xz: OK
+v24.22.2
+zstd: function require(esm): true
+bun: 1.4.4
+login-shell env: ANTHROPIC_API_KEY not set

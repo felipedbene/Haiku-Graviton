@@ -1,0 +1,13 @@
+# evidence: ps-format-probe
+# instance: i-0e90d4b253c8134b3   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261031T143412Z   end: 20261031T143433Z   rc: 0
+# script sha256: aa68d4fbf8dac3ea1902536885a116cdc88b7878d7ebfec4973619b5689a5b99
+# ---- script ----
+# | tmux -L p kill-server 2>/dev/null; tmux -L p new-session -d -s p -x 100 -y 30 "HOME=/tmp/ph claude"; sleep 12; ps | head -3; ps | grep -i -E "node|claude"; tmux -L p kill-server
+# ---- raw output ----
+Team                                                  Id #Threads  Gid  Uid 
+kernel_team                                            1       38    0    0 
+/boot/system/servers/launch_daemon                    34        2    0    0 
+/boot/system/bin/node --zero-fill-buffers /boot/system/lib/clau  9453       11    0    0 
+/boot/system/bin/node --zero-fill-buffers /boot/system/lib/clau  9525       11    0    0 
+/boot/system/bin/grep -i -E node|claude             9543        1    0    0 

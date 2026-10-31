@@ -1,0 +1,165 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: vectors-gen-linux
+# instance: i-0a14e8aca787249b7   region: us-west-2
+# ssm command: 605d4e3b-7c37-480b-9e74-7d0560565120
+# start: 20261031T032545Z   end: 20261031T034149Z   rc: 0   log bytes: 8421
+# script sha256: 60b4da1eb88f49b2ccaac2853d22f1e04cb70b2d6640c8c63a96b36cef5c5619
+# ---- script ----
+# | set -u
+# | echo '35386c4f43c57444e713d9607553ad48f9221e1fadef4c48001569dce1f67619  /opt/cc/w-vec.stage/p.tgz' | sha256sum -c --quiet - || exit 1
+# | rm -rf /opt/cc/w-vec && mkdir -p /opt/cc/w-vec && tar xzf /opt/cc/w-vec.stage/p.tgz -C /opt/cc/w-vec 2>/dev/null
+# | cd /opt/cc/w-vec
+# | set -u
+# | YAML_PARSE_CORPUS=/opt/cc/w-yaml-parse/compat/test/yaml-parse-corpus.json bash tools/gen-vectors.sh /opt/cc/vec-all > /opt/cc/vec-gen.log 2>&1 || { tail -20 /opt/cc/vec-gen.log; exit 1; }
+# | tail -1 /opt/cc/vec-gen.log
+# | bash tools/check-vectors.sh /opt/cc/vec-all /opt/node24/bin/node; rc=$?
+# | tar -czf /opt/cc/vectors.tgz -C /opt/cc vec-all && ls -l /opt/cc/vectors.tgz && sha256sum /opt/cc/vectors.tgz
+# | curl -sSf -X PUT --upload-file /opt/cc/vectors.tgz 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.amazonaws.com/claude-code-port/vectors-2.1.314.tgz?<PRESIGNED>' && echo upload-ok
+# | exit $rc
+# ---- raw output ----
+gen-vectors: 28 files in /opt/cc/vec-all
+node v24.22.2 on Linux aarch64; vectors from bun 1.4.4
+[hash] hash vectors (bun 1.4.4 38afee6c84fcf48c0edb2466aa4b27d287a59c30): 3353 match, 0 mismatch
+[hash] rc=0
+[width] stringWidth: codepoints 3336192 match / 0 mismatch; total 3608650 match / 0 mismatch
+[width] rc=0
+[slice] sliceAnsi: 40900 match / 0 mismatch; stripANSI: 20008 match / 0 mismatch
+[slice] rc=0
+[wrap] wrapAnsi: 40000 match / 0 mismatch
+[wrap] rc=0
+[semver] semver.order: 40003 match / 0 mismatch
+[semver] semver.satisfies: 60006 match / 0 mismatch
+[semver] rc=0
+[deepequals] deepEquals: 354 match / 0 mismatch (118 pairs x 3 modes)
+[deepequals] rc=0
+[yaml-stringify] YAML.stringify corpus: 47328 match / 0 mismatch
+[yaml-stringify] YAML.stringify fuzz: 72000 match / 0 mismatch
+[yaml-stringify] YAML.stringify total: 119328 match / 0 mismatch
+[yaml-stringify] known divergences (not counted; Bun output depends on JSC value representation or engine error text):
+[yaml-stringify] max nesting depth: node {"space=0":1953,"space=2":1953} bun {"space=0":23407,"space=2":23407}
+[yaml-stringify] rc=0
+[toml-0xC0FFEE] toml.edge: 664 match / 0 mismatch
+[toml-0xC0FFEE] toml.bytes: 19 match / 0 mismatch
+[toml-0xC0FFEE] toml.config: 17 match / 0 mismatch
+[toml-0xC0FFEE] toml.coerce: 31 match / 0 mismatch
+[toml-0xC0FFEE] toml.depth: 31 match / 0 mismatch
+[toml-0xC0FFEE] toml.fuzz: 40000 match / 0 mismatch
+[toml-0xC0FFEE] toml.fuzzshort: 40000 match / 0 mismatch
+[toml-0xC0FFEE] toml.mutate: 40000 match / 0 mismatch
+[toml-0xC0FFEE] toml: 3850 vectors contain date/times (Temporal objects in Bun; strings equal to their String() from parse(), type-checked through parseWith)
+[toml-0xC0FFEE] toml: 10 known difference(s), listed above
+[toml-0xC0FFEE] rc=0
+[toml-0xDEADBEEF12345] toml.edge: 664 match / 0 mismatch
+[toml-0xDEADBEEF12345] toml.bytes: 19 match / 0 mismatch
+[toml-0xDEADBEEF12345] toml.config: 17 match / 0 mismatch
+[toml-0xDEADBEEF12345] toml.coerce: 31 match / 0 mismatch
+[toml-0xDEADBEEF12345] toml.depth: 31 match / 0 mismatch
+[toml-0xDEADBEEF12345] toml.fuzz: 40000 match / 0 mismatch
+[toml-0xDEADBEEF12345] toml.fuzzshort: 40000 match / 0 mismatch
+[toml-0xDEADBEEF12345] toml.mutate: 40000 match / 0 mismatch
+[toml-0xDEADBEEF12345] toml: 3772 vectors contain date/times (Temporal objects in Bun; strings equal to their String() from parse(), type-checked through parseWith)
+[toml-0xDEADBEEF12345] toml: 10 known difference(s), listed above
+[toml-0xDEADBEEF12345] rc=0
+[toml-1] toml.edge: 664 match / 0 mismatch
+[toml-1] toml.bytes: 19 match / 0 mismatch
+[toml-1] toml.config: 17 match / 0 mismatch
+[toml-1] toml.coerce: 31 match / 0 mismatch
+[toml-1] toml.depth: 31 match / 0 mismatch
+[toml-1] toml.fuzz: 40000 match / 0 mismatch
+[toml-1] toml.fuzzshort: 40000 match / 0 mismatch
+[toml-1] toml.mutate: 40000 match / 0 mismatch
+[toml-1] toml: 3883 vectors contain date/times (Temporal objects in Bun; strings equal to their String() from parse(), type-checked through parseWith)
+[toml-1] toml: 10 known difference(s), listed above
+[toml-1] rc=0
+[toml-987654321] toml.edge: 664 match / 0 mismatch
+[toml-987654321] toml.bytes: 19 match / 0 mismatch
+[toml-987654321] toml.config: 17 match / 0 mismatch
+[toml-987654321] toml.coerce: 31 match / 0 mismatch
+[toml-987654321] toml.depth: 31 match / 0 mismatch
+[toml-987654321] toml.fuzz: 40000 match / 0 mismatch
+[toml-987654321] toml.fuzzshort: 40000 match / 0 mismatch
+[toml-987654321] toml.mutate: 40000 match / 0 mismatch
+[toml-987654321] toml: 3876 vectors contain date/times (Temporal objects in Bun; strings equal to their String() from parse(), type-checked through parseWith)
+[toml-987654321] toml: 10 known difference(s), listed above
+[toml-987654321] rc=0
+[toml-default] toml.edge: 664 match / 0 mismatch
+[toml-default] toml.bytes: 19 match / 0 mismatch
+[toml-default] toml.config: 17 match / 0 mismatch
+[toml-default] toml.coerce: 31 match / 0 mismatch
+[toml-default] toml.depth: 31 match / 0 mismatch
+[toml-default] toml.fuzz: 40000 match / 0 mismatch
+[toml-default] toml.fuzzshort: 40000 match / 0 mismatch
+[toml-default] toml.mutate: 40000 match / 0 mismatch
+[toml-default] toml: 3842 vectors contain date/times (Temporal objects in Bun; strings equal to their String() from parse(), type-checked through parseWith)
+[toml-default] toml: 10 known difference(s), listed above
+[toml-default] rc=0
+[yaml-parse-0] yaml-parse.edge: 366 match / 0 mismatch
+[yaml-parse-0] yaml-parse.depth: 19 match / 0 mismatch
+[yaml-parse-0] yaml-parse.depthBand: 14 match / 0 mismatch
+[yaml-parse-0] yaml-parse.frontmatter: 25 match / 0 mismatch
+[yaml-parse-0] yaml-parse.markdownHead: 154 match / 0 mismatch
+[yaml-parse-0] yaml-parse.yamlTestSuite: 1954 match / 0 mismatch
+[yaml-parse-0] yaml-parse.grammar: 30000 match / 0 mismatch
+[yaml-parse-0] yaml-parse.grammarClean: 20000 match / 0 mismatch
+[yaml-parse-0] yaml-parse.mutation: 40000 match / 0 mismatch
+[yaml-parse-0] yaml-parse.frontmatterMutation: 5000 match / 0 mismatch
+[yaml-parse-0] rc=0
+[yaml-parse-11] yaml-parse.edge: 366 match / 0 mismatch
+[yaml-parse-11] yaml-parse.depth: 19 match / 0 mismatch
+[yaml-parse-11] yaml-parse.depthBand: 14 match / 0 mismatch
+[yaml-parse-11] yaml-parse.frontmatter: 25 match / 0 mismatch
+[yaml-parse-11] yaml-parse.markdownHead: 154 match / 0 mismatch
+[yaml-parse-11] yaml-parse.yamlTestSuite: 1954 match / 0 mismatch
+[yaml-parse-11] yaml-parse.grammar: 30000 match / 0 mismatch
+[yaml-parse-11] yaml-parse.grammarClean: 20000 match / 0 mismatch
+[yaml-parse-11] yaml-parse.mutation: 40000 match / 0 mismatch
+[yaml-parse-11] yaml-parse.frontmatterMutation: 5000 match / 0 mismatch
+[yaml-parse-11] rc=0
+[yaml-parse-22] yaml-parse.edge: 366 match / 0 mismatch
+[yaml-parse-22] yaml-parse.depth: 19 match / 0 mismatch
+[yaml-parse-22] yaml-parse.depthBand: 14 match / 0 mismatch
+[yaml-parse-22] yaml-parse.frontmatter: 25 match / 0 mismatch
+[yaml-parse-22] yaml-parse.markdownHead: 154 match / 0 mismatch
+[yaml-parse-22] yaml-parse.yamlTestSuite: 1954 match / 0 mismatch
+[yaml-parse-22] yaml-parse.grammar: 30000 match / 0 mismatch
+[yaml-parse-22] yaml-parse.grammarClean: 20000 match / 0 mismatch
+[yaml-parse-22] yaml-parse.mutation: 40000 match / 0 mismatch
+[yaml-parse-22] yaml-parse.frontmatterMutation: 5000 match / 0 mismatch
+[yaml-parse-22] rc=0
+[yaml-parse-33] yaml-parse.edge: 366 match / 0 mismatch
+[yaml-parse-33] yaml-parse.depth: 19 match / 0 mismatch
+[yaml-parse-33] yaml-parse.depthBand: 14 match / 0 mismatch
+[yaml-parse-33] yaml-parse.frontmatter: 25 match / 0 mismatch
+[yaml-parse-33] yaml-parse.markdownHead: 154 match / 0 mismatch
+[yaml-parse-33] yaml-parse.yamlTestSuite: 1954 match / 0 mismatch
+[yaml-parse-33] yaml-parse.grammar: 30000 match / 0 mismatch
+[yaml-parse-33] yaml-parse.grammarClean: 20000 match / 0 mismatch
+[yaml-parse-33] yaml-parse.mutation: 40000 match / 0 mismatch
+[yaml-parse-33] yaml-parse.frontmatterMutation: 5000 match / 0 mismatch
+[yaml-parse-33] rc=0
+[yaml-parse-44] yaml-parse.edge: 366 match / 0 mismatch
+[yaml-parse-44] yaml-parse.depth: 19 match / 0 mismatch
+[yaml-parse-44] yaml-parse.depthBand: 14 match / 0 mismatch
+[yaml-parse-44] yaml-parse.frontmatter: 25 match / 0 mismatch
+[yaml-parse-44] yaml-parse.markdownHead: 154 match / 0 mismatch
+[yaml-parse-44] yaml-parse.yamlTestSuite: 1954 match / 0 mismatch
+[yaml-parse-44] yaml-parse.grammar: 30000 match / 0 mismatch
+[yaml-parse-44] yaml-parse.grammarClean: 20000 match / 0 mismatch
+[yaml-parse-44] yaml-parse.mutation: 40000 match / 0 mismatch
+[yaml-parse-44] yaml-parse.frontmatterMutation: 5000 match / 0 mismatch
+[yaml-parse-44] rc=0
+[yaml-parse-55] yaml-parse.edge: 366 match / 0 mismatch
+[yaml-parse-55] yaml-parse.depth: 19 match / 0 mismatch
+[yaml-parse-55] yaml-parse.depthBand: 14 match / 0 mismatch
+[yaml-parse-55] yaml-parse.frontmatter: 25 match / 0 mismatch
+[yaml-parse-55] yaml-parse.markdownHead: 154 match / 0 mismatch
+[yaml-parse-55] yaml-parse.yamlTestSuite: 1954 match / 0 mismatch
+[yaml-parse-55] yaml-parse.grammar: 30000 match / 0 mismatch
+[yaml-parse-55] yaml-parse.grammarClean: 20000 match / 0 mismatch
+[yaml-parse-55] yaml-parse.mutation: 40000 match / 0 mismatch
+[yaml-parse-55] yaml-parse.frontmatterMutation: 5000 match / 0 mismatch
+[yaml-parse-55] rc=0
+check-vectors: ALL PASS
+-rw-r--r-- 1 root root 58633636 Oct 31 03:28 /opt/cc/vectors.tgz
+bb1b89ec5923981f1bca7306fab1d3157faf7058d91de0e0d04f04597843d2f3  /opt/cc/vectors.tgz
+upload-ok

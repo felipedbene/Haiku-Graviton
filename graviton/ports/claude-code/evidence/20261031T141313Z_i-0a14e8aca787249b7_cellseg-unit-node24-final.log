@@ -1,0 +1,27 @@
+# evidence: cellseg-unit-node24-final
+# instance: i-0a14e8aca787249b7   region: us-west-2
+# ssm command: 350bffc8-5ccd-4d03-8a21-b03ca13813b2
+# start: 20261031T141313Z   end: 20261031T141322Z   rc: 0   log bytes: 743
+# script sha256: 61b4fbe3aed21c205d6a06a778e28504d985d1adf5e87d3570c766c9ff3c8467
+# ---- script ----
+# | set -u
+# | echo '4a47577ec23b144a3ead0c3784b3f972cd2bb0c8ef18035c7ea3a0f7f09d8b66  /opt/cc/w-cellseg/unit2.stage/p.tgz' | sha256sum -c --quiet - || exit 1
+# | rm -rf /opt/cc/w-cellseg/unit2 && mkdir -p /opt/cc/w-cellseg/unit2 && tar xzf /opt/cc/w-cellseg/unit2.stage/p.tgz -C /opt/cc/w-cellseg/unit2 2>/dev/null
+# | cd /opt/cc/w-cellseg/unit2
+# | W=/opt/cc/w-cellseg; N=/opt/node24/bin/node
+# | $N --version
+# | sha256sum /opt/cc/w-cellseg-vec/cellseg.*
+# | mkdir -p $W/deps2 && bash tools/fetch-deps.sh $W/deps2 | grep bidi
+# | cd compat/test
+# | NODE_PATH=$W/deps2 SHOW=0 $N check-cellseg.mjs /opt/cc/w-cellseg-vec 2>&1 | cut -c1-400 | tail -60; echo "check-cellseg rc=${PIPESTATUS[0]}"
+# | NODE_PATH=$W/deps2 $N check-cellseg-props.mjs 2>&1 | tail -3; echo "props rc=${PIPESTATUS[0]}"
+# ---- raw output ----
+v24.22.2
+634b2f9eac287f683dbf3dc166fa22a8383406d8003eadfbf91a11b68fc84551  /opt/cc/w-cellseg-vec/cellseg.cases.jsonl
+64e121c369ac7422baf9421cbc08bc4aaade3ca0f32de53d145d572b72470a5f  /opt/cc/w-cellseg-vec/cellseg.edge.json
+fetch-deps: bidi-js 1.1.0 OK (sha512-fX1Onk0tdVPC7obPWB5EbJ1z7NVhLq4m2xZLq2YXBkxzMXIGRpNMU88n0EPgWseKl12J7zXs7qrDxPK4sRs2fg==)
+CellSegmenter: sessions 3820 exact + 173 equivalent-after-overflow (named difference) / 7 mismatch of 4000; steps 28606 identical / 402 differ; edge 94 match / 0 mismatch
+check-cellseg rc=1
+
+cellseg properties over 72456 corpus strings: P1 order 72456 pass / 0 fail; P2 breaks 72456 / 0; P3 width 72456 strings pass (7362 cells via the measured rule) / 0 fail; P4 reorder 67998 / 0
+props rc=0

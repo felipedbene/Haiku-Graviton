@@ -1,0 +1,10 @@
+# evidence: ssm-run-selftest
+# instance: i-07451948888de2466   region: us-west-2
+# ssm command: 0fb146ed-e166-4b4b-bad5-7e658054ce23 (agent status: Success)
+# start: 20261031T051731Z   end: 20261031T053249Z   rc: 0   log bytes: 9
+# script sha256: c227760562ee133a4c1c13d47ea41a06cb3afc8be81c47242f6d809350896768
+# ---- script ----
+# | echo hi; uname -s
+# ---- raw output ----
+hi
+Haiku

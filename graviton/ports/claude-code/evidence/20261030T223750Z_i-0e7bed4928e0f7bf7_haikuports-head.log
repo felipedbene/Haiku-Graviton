@@ -1,0 +1,26 @@
+# evidence: haikuports-head
+# instance: i-0e7bed4928e0f7bf7   region: us-west-2
+# ssm command: 461bc853-54f3-45d8-bacf-b2b3513cac00
+# start: 20261030T223750Z   end: 20261030T223900Z   rc: 0   log bytes: 704
+# script sha256: 4e7743d9c1774ebeee6b5516957f5a78cb13dd1efb600517058376403f51841b
+# ---- script ----
+# | cd /boot/home/haikuports; git rev-parse HEAD; git log -1 --format=%cI; ls -d */nodejs*; cat /boot/home/haikuports.conf | grep -v -i secret
+# ---- raw output ----
+fdb507a2290123e23c351e78975b0a1033d9fea8
+2026-10-30T14:11:45+01:00
+net-libs/nodejs
+repository/nodejs20-20.15.1.DependencyInfo
+repository/nodejs20-20.15.1.DependencyInfoMarker
+repository/nodejs20_devel-20.15.1.DependencyInfo
+repository/nodejs22-22.23.3.DependencyInfo
+repository/nodejs22-22.23.3.DependencyInfoMarker
+repository/nodejs22_devel-22.23.3.DependencyInfo
+repository/nodejs24-24.21.0.DependencyInfo
+repository/nodejs24-24.21.0.DependencyInfoMarker
+repository/nodejs24_devel-24.21.0.DependencyInfo
+TREE_PATH="/boot/home/haikuports"
+PACKAGER="DeBeOS <debeos@example.invalid>"
+TARGET_ARCHITECTURE="arm64"
+ALLOW_UNTESTED="yes"
+ALLOW_UNSAFE_SOURCES="yes"
+DOWNLOAD_MIRROR="https://sources.debene.dev"

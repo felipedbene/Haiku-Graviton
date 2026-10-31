@@ -1,0 +1,24 @@
+# evidence: node24-testpy-selection
+# instance: i-0e7bed4928e0f7bf7   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261031T141238Z   end: 20261031T141351Z   rc: 0
+# script sha256: 073f08a88b3d6f3a5d9636ce4e15f09623683123f0b9ddbdffeee23d75fef9e6
+# ---- script ----
+# | set -u
+# | cd /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0 || exit 1
+# | for sel in "parallel/test-buffer-a*" "parallel/test-b*" "parallel/test-[a-c]*" "parallel/test-*" "parallel/*" "parallel"; do
+# | 	s=$(date +%s)
+# | 	n=$(python3 tools/test.py --shell=/boot/system/bin/node -j 16 -p tap "$sel" 2>&1 | grep -c '^ok \|^not ok ')
+# | 	echo "[$sel] results=$n time=$(( $(date +%s) - s ))s"
+# | done
+# | python3 tools/test.py --shell=/boot/system/bin/node -j 16 -p tap parallel 2>&1 | head -5
+# ---- raw output ----
+[parallel/test-buffer-a*] results=0 time=1s
+[parallel/test-b*] results=0 time=1s
+[parallel/test-[a-c]*] results=0 time=11s
+[parallel/test-*] results=0 time=11s
+[parallel/*] results=0 time=11s
+[parallel] results=0 time=12s
+TAP version 13
+1..4507
+
+All tests passed.

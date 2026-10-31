@@ -1,0 +1,86 @@
+# evidence: fetch-probe5
+# instance: i-0a14e8aca787249b7   region: us-west-2
+# ssm command: fdbd678e-11d4-44c8-a4b3-01e34983d286
+# start: 20261031T025648Z   end: 20261031T025650Z   rc: 0   log bytes: 2984
+# script sha256: 6abb6929ff4c54cfe94049842bf9b6f3ae7355ffec001615e200f14a0cdc18da
+# ---- script ----
+# | set -u
+# | echo 'f52918df7d828bfe90a86bc1ea7956945d89333bf5af5598b800e4da580da630  /opt/cc/w-fetch.stage/p.tgz' | sha256sum -c --quiet - || exit 1
+# | rm -rf /opt/cc/w-fetch && mkdir -p /opt/cc/w-fetch && tar xzf /opt/cc/w-fetch.stage/p.tgz -C /opt/cc/w-fetch 2>/dev/null
+# | cd /opt/cc/w-fetch
+# | cd /opt/cc/bun-src
+# | sed -n 320,340p src/http/lib.rs
+# | sed -n 1265,1295p src/http/HTTPThread.rs
+# | sed -n 125,140p src/runtime/socket/SSLConfig.rs
+# | grep -o 'b"[a-zA-Z_]*"' src/runtime/socket/SSLConfig.rs | sort -u | tr '\n' ' '; echo
+# | grep -n 'get(global, "[a-zA-Z]*"\|get_truthy(global, "[a-zA-Z]*"\|"[a-zA-Z]*" =>' src/runtime/socket/SSLConfig.rs | head -60
+# ---- raw output ----
+/// Set once during single-threaded CLI parsing; read from the HTTP thread.
+pub static OVERRIDDEN_DEFAULT_USER_AGENT: std::sync::OnceLock<&'static [u8]> =
+    std::sync::OnceLock::new();
+
+/// Idle timeout for HTTP client sockets, in seconds. The timer is armed in
+/// `on_open` (so it covers the TLS handshake) and re-armed on writes and on
+/// body-phase reads; response-header reads do not re-arm it, so it is an
+/// absolute deadline for the header block to complete (undici `headersTimeout`
+/// semantics). 0 disables the timer (matching `disable_timeout = true`).
+/// Overridable via `BUN_CONFIG_HTTP_IDLE_TIMEOUT`. Default is 5 minutes.
+/// `HTTPThread::on_start` stores it padded for the timer-wheel sweep (see
+/// [`normalize_idle_timeout_seconds`]).
+pub(crate) static IDLE_TIMEOUT_SECONDS: AtomicU32 = AtomicU32::new(300);
+
+/// Safe accessor for [`IDLE_TIMEOUT_SECONDS`].
+#[inline]
+pub(crate) fn idle_timeout_seconds() -> c_uint {
+    IDLE_TIMEOUT_SECONDS.load(Ordering::Relaxed)
+}
+
+/// Normalise an idle timeout (seconds) for uSockets' timer wheels. The sweep
+        }
+        bun_core::Global::crash()
+    }
+
+    fn on_start(opts: InitOpts) {
+        Output::Source::configure_named_thread(bun_core::zstr!("HTTP Client"));
+
+        // Normalising once here (see `normalize_idle_timeout_seconds`) keeps
+        // the h1 (`HTTPClient::set_timeout`) and h2
+        // (`ClientSession::rearm_timeout`) paths identical without duplicating
+        // the math at each call site.
+        crate::IDLE_TIMEOUT_SECONDS.store(
+            crate::normalize_idle_timeout_seconds(
+                bun_core::env_var::BUN_CONFIG_HTTP_IDLE_TIMEOUT
+                    .get()
+                    .unwrap_or(300),
+            ),
+            core::sync::atomic::Ordering::Relaxed,
+        );
+
+        // Critical side effect: `init_global` calls
+        // `internal_loop_data.set_parent_raw(2 /* mini */, mini_ptr)` on this
+        // thread's uSockets loop. Without it, the macOS DNS cache-miss path
+        // (`dns::getaddrinfo` → `(*loop).internal_loop_data.get_parent()`)
+        // panics with `Parent loop not set - pointer is null`, which aborts
+        // the process — `bun install` SIGABRT on the first uncached lookup.
+        let loop_ = mini_event_loop::init_global(None, None);
+        // `init_global` returns the heap-allocated thread-local singleton (never
+        // null); this thread owns it for the thread lifetime. `loop_ptr()` reads
+        // a stable field via `&self`, so a `ParentRef` shared deref suffices.
+        let uws_loop = bun_ptr::ParentRef::from(
+pub(crate) trait SSLConfigFromJs: Sized {
+    fn from_js(
+        vm: &VirtualMachine,
+        global: &JSGlobalObject,
+        value: JSValue,
+        is_server: bool,
+    ) -> JsResult<Option<Self>>;
+
+    fn from_generated(
+        vm: &VirtualMachine,
+        global: &JSGlobalObject,
+        generated: &generated::TLSOptions,
+        is_server: bool,
+    ) -> JsResult<Option<Self>>;
+}
+
+b"auto" 

@@ -1,0 +1,31 @@
+# evidence: node24-test-suites-dots
+# instance: i-0e7bed4928e0f7bf7   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261031T132804Z   end: 20261031T135446Z   rc: 0
+# script sha256: eac94bc58be02290096666342f263a825d31eabee7aa3e00097d99addbf3b624
+# ---- script ----
+# | set -u
+# | cd /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0 || exit 1
+# | pkill -f "tools/test.py" 2>/dev/null; sleep 1
+# | for s in parallel sequential; do
+# | 	start=$(date +%s)
+# | 	python3 tools/test.py --shell=/boot/system/bin/node -j 16 -p dots "$s" > /boot/home/node-$s.dots 2>&1; rc=$?
+# | 	echo "== $s: test.py rc=$rc, $(( $(date +%s) - start ))s, $(wc -c < /boot/home/node-$s.dots) bytes of output"
+# | 	tail -c 3000 /boot/home/node-$s.dots | grep -v '^\.*$' | tail -15
+# | 	echo "failed tests listed: $(grep -c '^=== release ' /boot/home/node-$s.dots)"
+# | 	grep '^=== release ' /boot/home/node-$s.dots | head -150
+# | done
+# ---- raw output ----
+== parallel: test.py rc=0, 11s, 71 bytes of output
+Running 4507 tests
+===
+=== All tests succeeded
+===
+All tests passed.
+failed tests listed: 0
+== sequential: test.py rc=0, 3s, 70 bytes of output
+Running 120 tests
+===
+=== All tests succeeded
+===
+All tests passed.
+failed tests listed: 0

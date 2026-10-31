@@ -1,0 +1,66 @@
+# evidence: fetch-dbg1
+# instance: i-0a14e8aca787249b7   region: us-west-2
+# ssm command: ca2d1c5a-4312-4e3e-b066-7774b7ceadc4
+# start: 20261031T032350Z   end: 20261031T032358Z   rc: 0   log bytes: 977
+# script sha256: eacabf35e431972ecdc7d8696b1545e9d64d3fa2c06f27c44537ee9b47464f44
+# ---- script ----
+# | set -u
+# | echo 'a6f7be38d3a59fc854690af8ad51c22b368b9edf45bd19601b8758a87cc837a0  /opt/cc/w-fetch.stage/p.tgz' | sha256sum -c --quiet - || exit 1
+# | rm -rf /opt/cc/w-fetch && mkdir -p /opt/cc/w-fetch && tar xzf /opt/cc/w-fetch.stage/p.tgz -C /opt/cc/w-fetch 2>/dev/null
+# | cd /opt/cc/w-fetch
+# | cd compat/test/fetch
+# | N=/opt/node24/bin/node
+# | WK=$(mktemp -d /tmp/ccfetch.XXXXXX); mkdir -p $WK/sock
+# | bash gen-certs.sh $WK/certs > /dev/null
+# | cat > $WK/t.js <<'JS'
+# | const { spawn } = require("child_process");
+# | const net = require("net");
+# | const fx = spawn(process.env.N, [__dirname + "/fixture.js", process.argv[2], process.argv[3]], { stdio: ["pipe", "pipe", "inherit"], cwd: process.env.D });
+# | fx.stdout.once("data", async (d) => {
+# |   const P = JSON.parse(d);
+# |   const ctl = (c) => new Promise((ok) => { const s = net.connect(P.ctl, "127.0.0.1"); let b = ""; s.on("data", (x) => b += x); s.on("end", () => ok(JSON.parse(b))); s.write(c + "\n"); });
+# |   await ctl("reset");
+# |   for (let i = 0; i < 3; i++) { const r = await fetch(`http://127.0.0.1:${P.hk}/echo`); const t = await r.text(); console.log(i, r.headers.get("connection"), r.headers.get("keep-alive"), t.length); }
+# |   console.log("conn", JSON.stringify((await ctl("stats")).conn));
+# |   await new Promise((r) => setTimeout(r, 50));
+# |   for (let i = 0; i < 2; i++) { const r = await fetch(`http://127.0.0.1:${P.hk}/echo`); await r.arrayBuffer(); }
+# |   console.log("conn after arrayBuffer", JSON.stringify((await ctl("stats")).conn));
+# |   fx.stdin.end(); 
+# | });
+# | JS
+# | cp $WK/t.js ./dbg-t.js
+# | N=$N D=$PWD $N dbg-t.js $WK/certs $WK/sock
+# | echo "--- bun"; N=$N D=$PWD bun dbg-t.js $WK/certs $WK/sock
+# | rm -f dbg-t.js; rm -rf $WK
+# | ss -ltn | wc -l
+# ---- raw output ----
+0 keep-alive timeout=5 142
+1 keep-alive timeout=5 142
+2 keep-alive timeout=5 142
+conn {"hk":2}
+conn after arrayBuffer {"hk":2}
+--- bun
+node:events:505
+    throw er; // Unhandled 'error' event
+    ^
+
+Error: listen EADDRINUSE: address already in use /tmp/ccfetch.Qd5T29/sock/ux.sock
+    at Server.setupListenHandle [as _listen2] (node:net:2368:21)
+    at listenInCluster (node:net:2499:12)
+    at Server.listen (node:net:2641:5)
+    at ports.sock (/opt/cc/w-fetch/compat/test/fetch/fixture.js:147:31)
+    at new Promise (<anonymous>)
+    at /opt/cc/w-fetch/compat/test/fetch/fixture.js:147:8
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+Emitted 'error' event on Server instance at:
+    at emitErrorNT (node:net:2478:8)
+    at process.processTicksAndRejections (node:internal/process/task_queues:90:21) {
+  code: 'EADDRINUSE',
+  errno: -98,
+  syscall: 'listen',
+  address: '/tmp/ccfetch.Qd5T29/sock/ux.sock',
+  port: -1
+}
+
+Node.js v24.22.2
+5

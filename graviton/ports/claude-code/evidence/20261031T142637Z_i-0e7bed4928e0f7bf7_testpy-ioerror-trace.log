@@ -1,0 +1,26 @@
+# evidence: testpy-ioerror-trace
+# instance: i-0e7bed4928e0f7bf7   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261031T142637Z   end: 20261031T142659Z   rc: 0
+# script sha256: 8cfeb08a30909443128f807dc46a646576a2fb32eca0ece6f13ae9e12d18e097
+# ---- script ----
+# | cd /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0 || exit 1
+# | python3 - <<'PY'
+# | import re
+# | s = open("tools/test.py").read()
+# | s = s.replace("      except IOError:\n        return\n", "      except IOError:\n        import traceback; traceback.print_exc()\n        return\n", 1)
+# | open("tools/test-diag.py", "w").write(s)
+# | PY
+# | python3 tools/test-diag.py --shell=/boot/system/bin/node -j 1 -p tap 'parallel/test-buffer-alloc' < /dev/null 2>&1 | head -30
+# | rm -f tools/test-diag.py
+# ---- raw output ----
+TAP version 13
+1..1
+Traceback (most recent call last):
+  File "/boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/tools/test-diag.py", line 201, in RunSingle
+    output = case.Run()
+  File "/boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/tools/test.py", line 628, in Run
+    for fd in 0,1,2: fcntl(fd, F_SETFL, ~O_NONBLOCK & fcntl(fd, F_GETFL))
+                     ~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+PermissionError: [Errno -2147483633] Operation not allowed
+
+All tests passed.

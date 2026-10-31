@@ -1,0 +1,115 @@
+# evidence: fetch-diff1
+# instance: i-0a14e8aca787249b7   region: us-west-2
+# ssm command: 696f95a6-530f-4624-b5dc-27350ba3d903
+# start: 20261031T031523Z   end: 20261031T031643Z   rc: 0   log bytes: 3075
+# script sha256: b4251725cb9ef5080091cfe4b5000388708a8819bbae803f9c3692abeff56bcd
+# ---- script ----
+# | set -u
+# | echo '874c8ce7f6a1d5e8b9a00b62e9cd5c7659baaacc17280f7d3461a41f6cd9bc51  /opt/cc/w-fetch.stage/p.tgz' | sha256sum -c --quiet - || exit 1
+# | rm -rf /opt/cc/w-fetch && mkdir -p /opt/cc/w-fetch && tar xzf /opt/cc/w-fetch.stage/p.tgz -C /opt/cc/w-fetch 2>/dev/null
+# | cd /opt/cc/w-fetch
+# | # Step script for tools/dev-linux-run (REMOTE_DIR=/opt/cc/w-fetch): the fetch diff test.
+# | # Builds a tree (fetch-deps + build-tree), records the scenarios under stock bun,
+# | # checks them under node + the tree's compat preload, compares, and verifies that
+# | # no listener is left behind. ONLY=<regex> limits the scenarios.
+# | set -u
+# | W=/opt/cc/w-fetch N=/opt/node24/bin/node
+# | bash tools/fetch-deps.sh $W/deps > $W/deps.log 2>&1 || { cat $W/deps.log; exit 1; }
+# | grep undici $W/deps.log
+# | rm -rf $W/tree && bash tools/build-tree.sh /opt/cc/v2.1.314/package/claude $W/tree $W/tree $N $W/deps > $W/build.log 2>&1 || { tail -20 $W/build.log; exit 1; }
+# | tail -1 $W/build.log; ls $W/tree/node_modules
+# | cd compat/test/fetch
+# | WK=$(mktemp -d /tmp/ccfetch.XXXXXX); mkdir -p $WK/sock
+# | bash gen-certs.sh $WK/certs > /dev/null
+# | ss -ltn | awk 'NR>1{print $4}' | sort > $WK/ss-before
+# | export FIXTURE_NODE=$N
+# | timeout 600 bun run.js $WK/bun.json $WK/certs $WK/sock "${ONLY:-}"; echo bun-rc=$?
+# | timeout 600 $N --import $W/tree/bun-compat.mjs run.js $WK/node.json $WK/certs $WK/sock "${ONLY:-}"; echo node-rc=$?
+# | $N check.mjs $WK/bun.json $WK/node.json; echo check-rc=$?
+# | ss -ltn | awk 'NR>1{print $4}' | sort > $WK/ss-after
+# | echo "listeners left: $(comm -13 $WK/ss-before $WK/ss-after | wc -l)"; comm -13 $WK/ss-before $WK/ss-after
+# | echo "--- ss -ltnp"; ss -ltnp
+# | mkdir -p $W.out && cp $WK/bun.json $WK/node.json $W.out/
+# | rm -rf $WK
+# ---- raw output ----
+fetch-deps: undici 7.30.1 OK (sha512-03KrMbjIFDWQR5RNPrSw3bd1r12JpyFQl9/yxjUbJtqkjmllqC5lFjZh6ujeuJCKr8EOQvRW872Oy/az+nLYxg==)
+build-tree: /opt/cc/w-fetch/tree ready (prefix /opt/cc/w-fetch/tree)
+node-fetch
+undici
+ws
+ HTTP/1.1 GET http://127.0.0.1:41265/echo
+ Connection: keep-alive
+ User-Agent: Bun/1.4.4
+ Accept: */*
+ Host: 127.0.0.1:41265
+ Accept-Encoding: gzip, deflate, br, zstd
+< 200 OK
+< connection: close
+< content-type: application/json
+< Date: Sat, 31 Oct 2026 03:16:35 GMT
+< Transfer-Encoding: chunked
+
+scenarios: 61
+bun-rc=0
+node:events:505
+    throw er; // Unhandled 'error' event
+    ^
+
+Error: listen EADDRINUSE: address already in use /tmp/ccfetch.2qDrCH/sock/ux.sock
+    at Server.setupListenHandle [as _listen2] (node:net:2368:21)
+    at listenInCluster (node:net:2499:12)
+    at Server.listen (node:net:2641:5)
+    at ports.sock (/opt/cc/w-fetch/compat/test/fetch/fixture.js:144:31)
+    at new Promise (<anonymous>)
+    at /opt/cc/w-fetch/compat/test/fetch/fixture.js:144:8
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+Emitted 'error' event on Server instance at:
+    at emitErrorNT (node:net:2478:8)
+    at process.processTicksAndRejections (node:internal/process/task_queues:90:21) {
+  code: 'EADDRINUSE',
+  errno: -98,
+  syscall: 'listen',
+  address: '/tmp/ccfetch.2qDrCH/sock/ux.sock',
+  port: -1
+}
+
+Node.js v24.22.2
+/opt/cc/w-fetch/compat/test/fetch/run.js:14
+		fx.on("exit", (c) => fail(new Error("fixture exited " + c)));
+		                          ^
+
+Error: fixture exited 1
+    at ChildProcess.<anonymous> (/opt/cc/w-fetch/compat/test/fetch/run.js:14:29)
+    at ChildProcess.emit (node:events:514:28)
+    at ChildProcess._handle.onexit (node:internal/child_process:324:12)
+
+Node.js v24.22.2
+node-rc=1
+node:fs:483
+    return binding.readFileUtf8(path, stringToFlags(options.flag));
+                   ^
+
+Error: ENOENT: no such file or directory, open '/tmp/ccfetch.2qDrCH/node.json'
+    at readFileSync (node:fs:483:20)
+    at file:///opt/cc/w-fetch/compat/test/fetch/check.mjs:5:68
+    at Array.map (<anonymous>)
+    at file:///opt/cc/w-fetch/compat/test/fetch/check.mjs:5:38
+    at ModuleJob.run (node:internal/modules/esm/module_job:561:25)
+    at async node:internal/modules/esm/loader:647:26
+    at async asyncRunEntryPointWithESMLoader (node:internal/modules/run_main:101:5) {
+  errno: -2,
+  code: 'ENOENT',
+  syscall: 'open',
+  path: '/tmp/ccfetch.2qDrCH/node.json'
+}
+
+Node.js v24.22.2
+check-rc=1
+listeners left: 0
+--- ss -ltnp
+State  Recv-Q Send-Q Local Address:Port Peer Address:PortProcess                                   
+LISTEN 0      4096   127.0.0.53%lo:53        0.0.0.0:*    users:(("systemd-resolve",pid=455,fd=15))
+LISTEN 0      4096      127.0.0.54:53        0.0.0.0:*    users:(("systemd-resolve",pid=455,fd=17))
+LISTEN 0      4096         0.0.0.0:22        0.0.0.0:*    users:(("systemd",pid=1,fd=87))          
+LISTEN 0      4096            [::]:22           [::]:*    users:(("systemd",pid=1,fd=88))          
+cp: cannot stat '/tmp/ccfetch.2qDrCH/node.json': No such file or directory

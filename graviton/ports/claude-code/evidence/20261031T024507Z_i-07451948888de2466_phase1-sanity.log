@@ -1,0 +1,83 @@
+# evidence: phase1-sanity
+# instance: i-07451948888de2466   region: us-west-2
+# ssm command: 036602ea-8320-4498-9fb8-3b94d4f6f510
+# start: 20261031T024507Z   end: 20261031T024616Z   rc: 0   log bytes: 2068
+# script sha256: 6d9ed1efae894e607f1833ef67343696351f0746a72f12c0e8b85c88809acce2
+# ---- script ----
+# | set -u
+# | uname -a
+# | for c in bash git rg sh curl ps tar gzip; do printf '%-5s %s\n' $c "$(command -v $c || echo MISSING)"; done
+# | bash --version | head -1; git --version; rg --version | head -1
+# | T=$(mktemp -d /tmp/p1.XXXX); cd $T
+# | echo "== bash: features the Bash tool's shell snapshot and commands use"
+# | bash -c 'set -o pipefail; false | true; echo "pipefail rc=$?"'
+# | bash -c 'shopt -s extglob; x=abc; echo "${x//+(b)/B}"; cat <(echo procsubst); read -r a <<< "here string"; echo "$a"; declare -f >/dev/null && echo declare-f ok; alias ll="ls -l"; shopt -p | wc -l; set -o | wc -l'
+# | bash -c 'eval "echo eval ok"; printf "%q\n" "a b'"'"'c"; trap "echo trap ok" EXIT'
+# | bash -c 'cd /tmp && pwd -P; echo "$((2**40))"; [[ "abc" =~ ^a(.)c$ ]] && echo "regex ${BASH_REMATCH[1]}"'
+# | echo "== git"
+# | git init -q repo && cd repo && git config user.email t@t && git config user.name t
+# | printf 'hello\nwörld 日本\n' > a.txt && git add a.txt && git commit -qm "first" && echo change >> a.txt
+# | git status --porcelain=v1; git diff --stat; git log --oneline | wc -l
+# | git worktree add -q ../wt -b side && git -C ../wt branch --show-current
+# | git rev-parse --show-toplevel; git ls-files; git check-ignore -q a.txt; echo "check-ignore rc=$? (1 = not ignored)"
+# | echo "== rg"
+# | mkdir -p sub/.hidden && printf 'needle one\nNeedle two\n' > sub/x.js && printf 'needle hidden\n' > sub/.hidden/y.js && printf 'wörld 日本 needle\n' > u.md && echo 'sub/ignored.txt' > .gitignore && echo needle > sub/ignored.txt
+# | rg -n needle | sort; echo "rc=$?"
+# | rg -i -c needle --sort path; rg --files --sort path; rg --files --hidden --sort path | wc -l
+# | rg -l '日本'; rg --json needle u.md | head -c 300; echo
+# | rg -n 'needle' --glob '*.js' --no-ignore --hidden --sort path; rg nomatch; echo "nomatch rc=$?"
+# | rg -n -U 'one\nNeedle' sub/x.js
+# | cd /; rm -rf $T
+# ---- raw output ----
+Haiku ip-10-128-14-31.us-west-2.compu R1~beta6+development hrev59996 Oct 19 2026 21:09:42 arm64 other Haiku
+bash  /boot/system/bin/bash
+git   MISSING
+rg    MISSING
+sh    /boot/system/bin/sh
+curl  MISSING
+ps    /boot/system/bin/ps
+tar   MISSING
+gzip  MISSING
+GNU bash, version 5.3.0(1)-release (aarch64-unknown-haiku)
+/tmp/ccrun/cc-20261031T024507Z-45235.sh: line 4: git: command not found
+/tmp/ccrun/cc-20261031T024507Z-45235.sh: line 4: rg: command not found
+== bash: features the Bash tool's shell snapshot and commands use
+pipefail rc=1
+aBc
+cat: /dev/fd/63: No such file or directory
+here string
+declare-f ok
+59
+27
+eval ok
+a\ b\'c
+trap ok
+/boot/system/cache/tmp
+1099511627776
+regex b
+== git
+/tmp/ccrun/cc-20261031T024507Z-45235.sh: line 12: git: command not found
+/tmp/ccrun/cc-20261031T024507Z-45235.sh: line 13: git: command not found
+/tmp/ccrun/cc-20261031T024507Z-45235.sh: line 14: git: command not found
+/tmp/ccrun/cc-20261031T024507Z-45235.sh: line 14: git: command not found
+/tmp/ccrun/cc-20261031T024507Z-45235.sh: line 14: git: command not found
+0
+/tmp/ccrun/cc-20261031T024507Z-45235.sh: line 15: git: command not found
+/tmp/ccrun/cc-20261031T024507Z-45235.sh: line 16: git: command not found
+/tmp/ccrun/cc-20261031T024507Z-45235.sh: line 16: git: command not found
+/tmp/ccrun/cc-20261031T024507Z-45235.sh: line 16: git: command not found
+check-ignore rc=127 (1 = not ignored)
+== rg
+/tmp/ccrun/cc-20261031T024507Z-45235.sh: line 19: rg: command not found
+rc=0
+/tmp/ccrun/cc-20261031T024507Z-45235.sh: line 20: rg: command not found
+/tmp/ccrun/cc-20261031T024507Z-45235.sh: line 20: rg: command not found
+/tmp/ccrun/cc-20261031T024507Z-45235.sh: line 20: rg: command not found
+0
+/tmp/ccrun/cc-20261031T024507Z-45235.sh: line 21: rg: command not found
+/tmp/ccrun/cc-20261031T024507Z-45235.sh: line 21: rg: command not found
+
+/tmp/ccrun/cc-20261031T024507Z-45235.sh: line 22: rg: command not found
+/tmp/ccrun/cc-20261031T024507Z-45235.sh: line 22: rg: command not found
+nomatch rc=127
+/tmp/ccrun/cc-20261031T024507Z-45235.sh: line 23: rg: command not found

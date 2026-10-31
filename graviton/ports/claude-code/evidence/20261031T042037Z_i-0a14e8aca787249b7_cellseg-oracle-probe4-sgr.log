@@ -1,0 +1,37 @@
+# evidence: cellseg-oracle-probe4-sgr
+# instance: i-0a14e8aca787249b7   region: us-west-2
+# ssm command: 24b7cbb5-3a86-456d-9625-3de632e34fc1
+# start: 20261031T042037Z   end: 20261031T042040Z   rc: 0   log bytes: 987
+# script sha256: b64fdd3aff23f34151250d7217254881a5d16fbed47b60a00a2f45161396ebef
+# ---- script ----
+# | BIN=/opt/cc/v2.1.314/package/claude
+# | W=/opt/cc/w-cellseg/probe; mkdir -p $W/home; cd $W
+# | cat > pre.js <<'J'
+# | const C = Bun.ant.CellSegmenter;
+# | const E = (s) => JSON.stringify(s).replace(/\\u001b/g, "E").replace(/\\u0000/g, "|");
+# | const lines = ["\x1b[31ma\x1b[1mb\x1b[31mc", "\x1b[31ma\x1b[1mb\x1b[1;31mc", "\x1b[999ma\x1b[1mb\x1b[999mc", "\x1b[38:2::1:2:3ma\x1b[1mb\x1b[38:2::1:2:3mc",
+# |  "\x1b[38;5;1ma\x1b[1mb\x1b[38;5;1mc", "\x1b[1ma\x1b[31mb\x1b[1mc", "\x1b[4:3ma\x1b[1mb\x1b[4:3mc", "\x1b[31ma\x1b[1mb\x1b[32;31mc", "\x1b[31ma\x1b[1mb\x1b[1;1;31mc",
+# |  "\x1b[2ma\x1b[1mb\x1b[2mc", "\x1b[1ma\x1b[2mb\x1b[1mc", "\x1b[53ma\x1b[1mb\x1b[53mc", "\x1b[38ma\x1b[1mb\x1b[38mc", "\x1b[38;2;1;2;3ma\x1b[1mb\x1b[38;2;1;2;3mc", "\x1b[999;31ma\x1b[1mb\x1b[999mc", "\x1b[7ma\x1b[1mb\x1b[7mc", "\x9b31ma\x1b[1mb\x1b[31mc", "\x1b[31ma\x1b[1mb\x9b31mc"];
+# | for (const l of lines) { const s = new C({}); const c = new Int32Array(64), r = new Int32Array(64); const n = s.segment(l, c, r, false); console.log(E(l), n, E(s.sgrKeys.slice(1))); }
+# | process.exit(0)
+# | J
+# | HOME=$W/home BUN_OPTIONS="--preload $W/pre.js" timeout 20 $BIN --version 2>&1 | head -80
+# ---- raw output ----
+"E[31maE[1mbE[31mc" 3 ["E[31m","E[31m|E[1m"]
+"E[31maE[1mbE[1;31mc" 3 ["E[31m","E[31m|E[1m"]
+"E[999maE[1mbE[999mc" 3 ["E[999m","E[999m|E[1m","E[1m|E[999m"]
+"E[38:2::1:2:3maE[1mbE[38:2::1:2:3mc" 3 ["E[38:2::1:2:3m","E[38:2::1:2:3m|E[1m","E[1m|E[38:2::1:2:3m"]
+"E[38;5;1maE[1mbE[38;5;1mc" 3 ["E[38;5;1m","E[38;5;1m|E[1m"]
+"E[1maE[31mbE[1mc" 3 ["E[1m","E[1m|E[31m"]
+"E[4:3maE[1mbE[4:3mc" 3 ["E[4:3m","E[4:3m|E[1m","E[1m|E[4:3m"]
+"E[31maE[1mbE[32;31mc" 3 ["E[31m","E[31m|E[1m","E[1m|E[31m"]
+"E[31maE[1mbE[1;1;31mc" 3 ["E[31m","E[31m|E[1m"]
+"E[2maE[1mbE[2mc" 3 ["E[2m","E[2m|E[1m"]
+"E[1maE[2mbE[1mc" 3 ["E[1m","E[1m|E[2m"]
+"E[53maE[1mbE[53mc" 3 ["E[53m","E[53m|E[1m"]
+"E[38maE[1mbE[38mc" 3 ["E[38m","E[38m|E[1m"]
+"E[38;2;1;2;3maE[1mbE[38;2;1;2;3mc" 3 ["E[38;2;1;2;3m","E[38;2;1;2;3m|E[1m"]
+"E[999;31maE[1mbE[999mc" 3 ["E[999;31m","E[999;31m|E[1m","E[1m|E[999m"]
+"E[7maE[1mbE[7mc" 3 ["E[7m","E[7m|E[1m"]
+"31maE[1mbE[31mc" 3 ["E[31m","E[31m|E[1m"]
+"E[31maE[1mb31mc" 3 ["E[31m","E[31m|E[1m"]

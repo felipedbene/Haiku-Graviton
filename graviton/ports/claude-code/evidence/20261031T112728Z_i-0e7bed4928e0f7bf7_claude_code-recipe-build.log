@@ -1,0 +1,93 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: claude_code-recipe-build
+# instance: i-0e7bed4928e0f7bf7   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261031T112728Z   end: 20261031T112935Z   rc: 0
+# script sha256: 314bcb1bf5a2de55ae7c706aa371d48a5a44442b3713e26d57add85cc4714e6c
+# ---- script ----
+# | set -u
+# | cd /boot/home && curl -sSfo claude_code-recipe.tgz 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.amazonaws.com/claude-code-port/claude_code-recipe.tgz?<PRESIGNED>' || exit 1
+# | echo '368b61260ba85a3244652e05261017ea9f1abc6534d12dab94dd05d05647f262  claude_code-recipe.tgz' | sha256sum -c - || exit 1
+# | rm -rf /boot/home/haikuports/dev-util/claude_code && tar xzf claude_code-recipe.tgz -C /boot/home/haikuports && ls /boot/home/haikuports/dev-util/claude_code
+# | node --version; python3 --version
+# | sh /boot/home/haiku-nativebuild claude_code > /boot/home/cc-nb.log 2>&1; echo "nativebuild rc=$?"
+# | grep -E "BUILD_OK|FAILED|attempt" /boot/home/cc-nb.log | tail -5
+# | echo "---- haikuporter log tail ----"; tail -60 /boot/home/nb-claude_code.log
+# | ls -l /boot/home/haikuports/packages/claude_code* 2>&1
+# | sha256sum /boot/home/haikuports/packages/claude_code* 2>/dev/null
+# ---- raw output ----
+  % Total    % Received % Xferd  Average Speed  Time    Time    Time   Current
+                                 Dload  Upload  Total   Spent   Left   Speed
+  0      0   0      0   0      0      0      0                              0100 327.9k 100 327.9k   0      0  6.13M      0                              0100 327.9k 100 327.9k   0      0  6.10M      0                              0100 327.9k 100 327.9k   0      0  6.07M      0                              0
+[srccache] MISS https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.amazonaws.com/claude-code-port/claude_code-recipe.tgz?<PRESIGNED> (335844 bytes)
+claude_code-recipe.tgz: OK
+additional-files
+claude_code-2.1.314.recipe
+licenses
+v24.21.0
+Python 3.14.7
+nativebuild rc=1
+claude_code: BUILD_OK (attempt 1)
+===== HARVEST FAILED: these ports BUILT but their packages are NOT in the pool:  claude_code =====
+---- haikuporter log tail ----
+licenses {
+	"Anthropic Legal Agreements"
+}
+copyrights {
+	"Anthropic PBC (Claude Code)"
+	"2026 DeBeOS (port tooling and compatibility layer)"
+}
+provides {
+	claude_code = 2.1.314
+	cmd:claude = 2.1.314
+}
+requires {
+	haiku >= r1~beta6_hrev59996-1
+	nodejs24 >= 24.21.0
+	cmd:bash >= 5.3
+	cmd:git >= 2.54.0
+	cmd:rg
+}
+urls {
+	"https://code.claude.com/"
+}
+source-urls {
+# Download
+	"https://registry.npmjs.org/@anthropic-ai/claude-code-linux-arm64/-/claude-code-linux-arm64-2.1.314.tgz"
+# Location 2
+	"https://sources.debene.dev/claude_code/claude-code-linux-arm64-2.1.314.tgz"
+# Download
+	"https://registry.npmjs.org/ws/-/ws-8.22.0.tgz"
+# Location 2
+	"https://sources.debene.dev/claude_code/ws-8.22.0.tgz"
+# Download
+	"https://registry.npmjs.org/acorn/-/acorn-8.19.0.tgz"
+# Location 2
+	"https://sources.debene.dev/claude_code/acorn-8.19.0.tgz"
+# Download
+	"https://registry.npmjs.org/undici/-/undici-7.30.1.tgz"
+# Location 2
+	"https://sources.debene.dev/claude_code/undici-7.30.1.tgz"
+}
+mimesetting files for package claude_code-2.1.314-1-arm64.hpkg ...
+mimeset: warning: application init failed (General system error); continuing without it.
+creating package claude_code-2.1.314-1-arm64.hpkg ...
+----- Package Info ----------------
+header size:                     80
+heap size:                 19672944
+TOC size:                    211605
+package attributes size:       1495
+total size:                19673024
+-----------------------------------
+waiting for build package claude_code-2.1.314-1 to be deactivated
+cleaning chroot folder
+grabbing claude_code-2.1.314-1-arm64.hpkg and moving it to /boot/home/haikuports/packages/claude_code-2.1.314-1-arm64.hpkg
+Checking if any dependency-infos need to be updated ...
+	updating dependency infos of claude_code-2.1.314
+Looking for stale dependency-infos ...
+Looking for stale cached recipes ...
+----------------------------------------------------------------------
+dev-util::claude_code-2.1.314
+	/boot/home/haikuports/dev-util/claude_code/claude_code-2.1.314.recipe
+----------------------------------------------------------------------
+-rw-r--r-- 1 baron 20 19673024 Oct 31 11:29 /boot/home/haikuports/packages/claude_code-2.1.314-1-arm64.hpkg
+ef955d86b0129b7e2d5da0b21030876a27eb2f5ee3fa109ebfd52b4393d60553  /boot/home/haikuports/packages/claude_code-2.1.314-1-arm64.hpkg

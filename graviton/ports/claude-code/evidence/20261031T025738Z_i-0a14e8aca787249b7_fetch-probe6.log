@@ -1,0 +1,86 @@
+# evidence: fetch-probe6
+# instance: i-0a14e8aca787249b7   region: us-west-2
+# ssm command: 43637475-fa66-4680-91fc-192d51b45519
+# start: 20261031T025738Z   end: 20261031T025741Z   rc: 0   log bytes: 2732
+# script sha256: bccf644feb54dede68f0a7bf884bd0f7becc1ed2ba24fdec5009a168a78c143c
+# ---- script ----
+# | set -u
+# | echo 'aed03a7a7f05b41d5c639f2b5844735717c2009bd9f37c485a30db65df9acc16  /opt/cc/w-fetch.stage/p.tgz' | sha256sum -c --quiet - || exit 1
+# | rm -rf /opt/cc/w-fetch && mkdir -p /opt/cc/w-fetch && tar xzf /opt/cc/w-fetch.stage/p.tgz -C /opt/cc/w-fetch 2>/dev/null
+# | cd /opt/cc/w-fetch
+# | cd /opt/cc/bun-src
+# | grep -rln "TLSOptions" src --include=*.ts --include=*.bind.ts --include=*.idl 2>/dev/null | head
+# | f=$(grep -rln "TLSOptions" src --include=*.bind.ts 2>/dev/null | head -1); [ -n "$f" ] && sed -n 1,140p "$f"
+# | grep -n 'reject_unauthorized\|server_name\|servername\|serverName' src/runtime/socket/SSLConfig.rs | head -20
+# ---- raw output ----
+src/js/node/net.ts
+src/js/node/tls.ts
+src/js/internal/sql/options.ts
+src/js/internal/sql/pool.ts
+src/runtime/socket/SSLConfig.bind.ts
+src/runtime/socket/SocketConfig.bind.ts
+import * as b from "../../codegen/bindgen-lib.ts";
+
+export const TLSOptionsSingleFile = b.union({
+  string: b.string,
+  buffer: b.bufferSource.arrayBuffer,
+  file: b.blob,
+});
+
+export const TLSOptionsFile = b.union({
+  none: b.null,
+  string: b.string,
+  buffer: b.bufferSource.arrayBuffer,
+  file: b.blob,
+  array: b.array(TLSOptionsSingleFile),
+});
+
+export const ALPNProtocols = b.union({
+  none: b.null,
+  string: b.string,
+  buffer: b.bufferSource.arrayBuffer,
+});
+
+export const TLSOptions = b.dictionary(
+  {
+    passphrase: b.string.nullable,
+    dhParamsFile: b.string.nullable,
+    serverName: { type: b.string.nullable, altNames: ["servername"] },
+    lowMemoryMode: b.bool.default(false),
+    rejectUnauthorized: b.bool.nullable,
+    requestCert: b.bool.default(false),
+    ca: TLSOptionsFile,
+    cert: TLSOptionsFile,
+    key: TLSOptionsFile,
+    secureOptions: b.u32.allowBigInt.default(0),
+    minVersion: { type: b.i32.allowBigInt.default(0), rustName: "ssl_min_version" },
+    maxVersion: { type: b.i32.allowBigInt.default(0), rustName: "ssl_max_version" },
+    keyFile: b.string.nullable,
+    certFile: b.string.nullable,
+    caFile: b.string.nullable,
+    ALPNProtocols,
+    ciphers: b.string.nullable,
+    clientRenegotiationLimit: b.u32.allowBigInt.default(0),
+    clientRenegotiationWindow: b.u32.allowBigInt.default(0),
+    crl: TLSOptionsFile,
+    allowPartialTrustChain: b.bool.default(false),
+    sessionTimeout: b.i32.allowBigInt.default(0),
+    sigalgs: b.string.nullable,
+    ecdhCurve: b.string.nullable,
+  },
+  { fromJS: true },
+);
+170:        if let Some(server_name) = generated.server_name.as_ref() {
+171:            let server_name = server_name.to_owned_slice_z();
+172:            // `server_name` is a C string: SNI and the certificate check would see the name up to the NUL.
+173:            if bun_core::strings::contains_char(server_name.as_bytes(), 0) {
+175:                    "\"serverName\" must not contain null bytes"
+178:            result.server_name = zbox_into_raw(&server_name);
+183:        result.reject_unauthorized = generated
+184:            .reject_unauthorized
+185:            .unwrap_or_else(|| is_server || vm.get_tls_reject_unauthorized())
+209:            || generated.reject_unauthorized.is_some()
+288:    cfg.reject_unauthorized = (is_server || vm.get_tls_reject_unauthorized()) as i32;
+310:pub(crate) fn resolve_reject_unauthorized(
+316:        Some(cfg) => (!is_server || cfg.request_cert != 0) && cfg.reject_unauthorized != 0,
+317:        None => !is_server && vm.get_tls_reject_unauthorized(),

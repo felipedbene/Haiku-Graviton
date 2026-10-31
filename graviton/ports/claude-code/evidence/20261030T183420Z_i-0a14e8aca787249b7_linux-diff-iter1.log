@@ -1,0 +1,372 @@
+# evidence: linux-diff-iter1
+# instance: i-0a14e8aca787249b7   region: us-west-2
+# ssm command: c9fbe2f7-b9ab-4a59-a745-ecebf7ace350
+# start: 20261030T183420Z   end: 20261030T183529Z   rc: 0   log bytes: 18520
+# script sha256: 2deaec524f21fe140b2124e9e90fb2f1cc2ab7ac78e0f32bfa59d4fe3e1d5d22
+# ---- script ----
+# | set -u
+# | mkdir -p /opt/cc/stage && cd /opt/cc/stage && rm -rf compat tools && echo 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AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA== | base64 -d | tar xzf - 2>/dev/null
+# | cp tools/relocate-bundle.py /opt/cc/tools/ && rm -rf /opt/cc/compat && cp -r compat /opt/cc/compat && cp compat/cases-help.txt /opt/cc/cases.txt
+# | echo IyEvYmluL2Jhc2gKIyBkaWZmIGhhcm5lc3M6IHJ1biBlYWNoIGNhc2UgdW5kZXIgQSAoc3RvY2sgYnVuKSBhbmQgQiAobm9kZSArIGNvbXBhdCksIGNvbXBhcmUgb3V0L2Vyci9yYy4Kc2V0IC11ClA9L29wdC9jbGF1ZGUtY29kZS8yLjEuMzE0OyBOPS9vcHQvbm9kZTI0L2Jpbi9ub2RlCnJ1bigpIHsgbG9jYWwgc2lkZT0kMSBvZj0kMjsgc2hpZnQgMjsgbG9jYWwgaD0vdG1wL2NjaG9tZS0kc2lkZTsgcm0gLXJmICRoOyBta2RpciAtcCAkaAoJaWYgWyAkc2lkZSA9IEEgXTsgdGhlbiAoY2QgL3RtcCAmJiBIT01FPSRoIHRpbWVvdXQgNjAgYnVuIC0temVyby1maWxsLWJ1ZmZlcnMgJFAvY2xpICIkQCIgPiAkb2Yub3V0IDI+ICRvZi5lcnIgPCAvZGV2L251bGw7IGVjaG8gJD8gPiAkb2YucmMpCgllbHNlIChjZCAvdG1wICYmIEhPTUU9JGggdGltZW91dCA2MCAkTiAtLXplcm8tZmlsbC1idWZmZXJzIC0taW1wb3J0ICRQL2J1bi1jb21wYXQubWpzICRQL2NsaSAiJEAiID4gJG9mLm91dCAyPiAkb2YuZXJyIDwgL2Rldi9udWxsOyBlY2hvICQ/ID4gJG9mLnJjKTsgZmkKCXNlZCAtaSAicyMvdG1wL2NjaG9tZS0kc2lkZSNcJEhPTUUjZyIgJG9mLm91dCAkb2YuZXJyOyB9CkQ9L3RtcC9jY2RpZmY7IHJtIC1yZiAkRDsgbWtkaXIgLXAgJEQ7IHNhbWU9MDsgZGlmPTAKd2hpbGUgSUZTPSByZWFkIC1yIGxpbmU7IGRvIFsgLXogIiRsaW5lIiBdICYmIGNvbnRpbnVlOyB0PSQoZWNobyAiJGxpbmUiIHwgdHIgJyAvJyAnX18nKTsgZXZhbCAic2V0IC0tICRsaW5lIgoJcnVuIEEgJEQvQS0kdCAiJEAiOyBydW4gQiAkRC9CLSR0ICIkQCIKCWlmIGNtcCAtcyAkRC9BLSR0Lm91dCAkRC9CLSR0Lm91dCAmJiBjbXAgLXMgJEQvQS0kdC5yYyAkRC9CLSR0LnJjICYmIGNtcCAtcyAkRC9BLSR0LmVyciAkRC9CLSR0LmVycjsgdGhlbiBzYW1lPSQoKHNhbWUrMSkpOyBlY2hvICJTQU1FICBbJGxpbmVdIHJjPSQoY2F0ICREL0EtJHQucmMpIgoJZWxzZSBkaWY9JCgoZGlmKzEpKTsgZWNobyAiRElGRiAgWyRsaW5lXSByY0E9JChjYXQgJEQvQS0kdC5yYykgcmNCPSQoY2F0ICREL0ItJHQucmMpIjsgZGlmZiAkRC9BLSR0Lm91dCAkRC9CLSR0Lm91dCB8IGhlYWQgLSR7RElGRk46LTZ9OyBkaWZmICREL0EtJHQuZXJyICREL0ItJHQuZXJyIHwgaGVhZCAtJHtESUZGTjotMTJ9OyBmaQpkb25lIDwgJHtDQVNFUzotL29wdC9jYy9jYXNlcy50eHR9CmVjaG8gInN1bW1hcnk6IHNhbWU9JHNhbWUgZGlmZj0kZGlmIjsgZXhpdCAwCg== | base64 -d > /opt/cc/tools/linux-diff.sh
+# | P=/opt/claude-code/2.1.314; keep=$(mktemp -d); cp -r $P/node_modules $keep/ 2>/dev/null
+# | rm -rf $P && python3 -I /opt/cc/tools/relocate-bundle.py /opt/cc/v2.1.314/bunfs $P $P || exit 1
+# | cp -r $keep/node_modules $P/ && cp /opt/cc/compat/bun-compat.mjs $P/ && rm -rf /opt/cc/compat/node_modules/ws
+# | bash /opt/cc/tools/linux-diff.sh
+# ---- raw output ----
+relocated 2871 files to /opt/claude-code/2.1.314 (prefix /opt/claude-code/2.1.314)
+rule totals: {"R1": 250476, "R2": 547, "R3": 9, "P1": 9, "P2": 1, "P3": 1}
+SAME  [--version] rc=0
+DIFF  [--help] rcA=0 rcB=1
+1,313d0
+< Usage: claude [options] [command] [prompt]
+< 
+< Claude Code - starts an interactive session by default, use -p/--print for
+< non-interactive output
+< 
+0a1,19
+> node:internal/modules/esm/loader:370
+>       throw new ERR_REQUIRE_CYCLE_MODULE(message);
+>             ^
+> 
+> Error [ERR_REQUIRE_CYCLE_MODULE]: Cannot import Module /opt/claude-code/2.1.314/chunk-zy2k3hny.js in a cycle. (from /opt/claude-code/2.1.314/chunk-vgzpjjhb.js)
+>     at #checkCachedJobForRequireESM (node:internal/modules/esm/loader:370:13)
+>     at #getOrCreateModuleJobAfterResolve (node:internal/modules/esm/loader:550:42)
+>     at afterResolve (node:internal/modules/esm/loader:611:52)
+>     at ModuleLoader.getOrCreateModuleJob (node:internal/modules/esm/loader:617:12)
+>     at ModuleJobSync.syncLink (node:internal/modules/esm/module_job:276:33)
+>     at ModuleJobSync.link (node:internal/modules/esm/module_job:611:17)
+DIFF  [agents --help] rcA=0 rcB=1
+1,44d0
+< Usage: claude agents [options]
+< 
+< Manage background agents
+< 
+< Options:
+0a1,19
+> node:internal/modules/esm/loader:370
+>       throw new ERR_REQUIRE_CYCLE_MODULE(message);
+>             ^
+> 
+> Error [ERR_REQUIRE_CYCLE_MODULE]: Cannot import Module /opt/claude-code/2.1.314/chunk-zy2k3hny.js in a cycle. (from /opt/claude-code/2.1.314/chunk-vgzpjjhb.js)
+>     at #checkCachedJobForRequireESM (node:internal/modules/esm/loader:370:13)
+>     at #getOrCreateModuleJobAfterResolve (node:internal/modules/esm/loader:550:42)
+>     at afterResolve (node:internal/modules/esm/loader:611:52)
+>     at ModuleLoader.getOrCreateModuleJob (node:internal/modules/esm/loader:617:12)
+>     at ModuleJobSync.syncLink (node:internal/modules/esm/module_job:276:33)
+>     at ModuleJobSync.link (node:internal/modules/esm/module_job:611:17)
+DIFF  [attach --help] rcA=0 rcB=1
+1,3d0
+< Usage: claude attach <id|name>
+< 
+<   Open the background session in this terminal. ← returns to agent view, Ctrl+Z drops back to your shell. The session keeps running either way. Part of the session name works in place of the id. Put a name with spaces in quotes.
+0a1,19
+> node:internal/modules/esm/loader:370
+>       throw new ERR_REQUIRE_CYCLE_MODULE(message);
+>             ^
+> 
+> Error [ERR_REQUIRE_CYCLE_MODULE]: Cannot import Module /opt/claude-code/2.1.314/chunk-zy2k3hny.js in a cycle. (from /opt/claude-code/2.1.314/chunk-vgzpjjhb.js)
+>     at #checkCachedJobForRequireESM (node:internal/modules/esm/loader:370:13)
+>     at #getOrCreateModuleJobAfterResolve (node:internal/modules/esm/loader:550:42)
+>     at afterResolve (node:internal/modules/esm/loader:611:52)
+>     at ModuleLoader.getOrCreateModuleJob (node:internal/modules/esm/loader:617:12)
+>     at ModuleJobSync.syncLink (node:internal/modules/esm/module_job:276:33)
+>     at ModuleJobSync.link (node:internal/modules/esm/module_job:611:17)
+DIFF  [auth --help] rcA=0 rcB=1
+1,12d0
+< Usage: claude auth [options] [command]
+< 
+< Manage authentication
+< 
+< Options:
+0a1,19
+> node:internal/modules/esm/loader:370
+>       throw new ERR_REQUIRE_CYCLE_MODULE(message);
+>             ^
+> 
+> Error [ERR_REQUIRE_CYCLE_MODULE]: Cannot import Module /opt/claude-code/2.1.314/chunk-zy2k3hny.js in a cycle. (from /opt/claude-code/2.1.314/chunk-vgzpjjhb.js)
+>     at #checkCachedJobForRequireESM (node:internal/modules/esm/loader:370:13)
+>     at #getOrCreateModuleJobAfterResolve (node:internal/modules/esm/loader:550:42)
+>     at afterResolve (node:internal/modules/esm/loader:611:52)
+>     at ModuleLoader.getOrCreateModuleJob (node:internal/modules/esm/loader:617:12)
+>     at ModuleJobSync.syncLink (node:internal/modules/esm/module_job:276:33)
+>     at ModuleJobSync.link (node:internal/modules/esm/module_job:611:17)
+DIFF  [auto-mode --help] rcA=0 rcB=1
+1,16d0
+< Usage: claude auto-mode [options] [command]
+< 
+< Inspect or reset auto mode configuration
+< 
+< Options:
+0a1,19
+> node:internal/modules/esm/loader:370
+>       throw new ERR_REQUIRE_CYCLE_MODULE(message);
+>             ^
+> 
+> Error [ERR_REQUIRE_CYCLE_MODULE]: Cannot import Module /opt/claude-code/2.1.314/chunk-zy2k3hny.js in a cycle. (from /opt/claude-code/2.1.314/chunk-vgzpjjhb.js)
+>     at #checkCachedJobForRequireESM (node:internal/modules/esm/loader:370:13)
+>     at #getOrCreateModuleJobAfterResolve (node:internal/modules/esm/loader:550:42)
+>     at afterResolve (node:internal/modules/esm/loader:611:52)
+>     at ModuleLoader.getOrCreateModuleJob (node:internal/modules/esm/loader:617:12)
+>     at ModuleJobSync.syncLink (node:internal/modules/esm/module_job:276:33)
+>     at ModuleJobSync.link (node:internal/modules/esm/module_job:611:17)
+DIFF  [doctor --help] rcA=0 rcB=1
+1,8d0
+< Usage: claude doctor [options]
+< 
+< Check the health of your Claude Code installation. Reads settings files in the
+< current directory without a trust prompt. For a full checkup that can also fix
+< issues, run /doctor in a session.
+0a1,19
+> node:internal/modules/esm/loader:370
+>       throw new ERR_REQUIRE_CYCLE_MODULE(message);
+>             ^
+> 
+> Error [ERR_REQUIRE_CYCLE_MODULE]: Cannot import Module /opt/claude-code/2.1.314/chunk-zy2k3hny.js in a cycle. (from /opt/claude-code/2.1.314/chunk-vgzpjjhb.js)
+>     at #checkCachedJobForRequireESM (node:internal/modules/esm/loader:370:13)
+>     at #getOrCreateModuleJobAfterResolve (node:internal/modules/esm/loader:550:42)
+>     at afterResolve (node:internal/modules/esm/loader:611:52)
+>     at ModuleLoader.getOrCreateModuleJob (node:internal/modules/esm/loader:617:12)
+>     at ModuleJobSync.syncLink (node:internal/modules/esm/module_job:276:33)
+>     at ModuleJobSync.link (node:internal/modules/esm/module_job:611:17)
+DIFF  [gateway --help] rcA=0 rcB=1
+1,7d0
+< Usage: claude gateway [options]
+< 
+< Run the enterprise auth/telemetry gateway
+< 
+< Options:
+0a1,19
+> node:internal/modules/esm/loader:370
+>       throw new ERR_REQUIRE_CYCLE_MODULE(message);
+>             ^
+> 
+> Error [ERR_REQUIRE_CYCLE_MODULE]: Cannot import Module /opt/claude-code/2.1.314/chunk-zy2k3hny.js in a cycle. (from /opt/claude-code/2.1.314/chunk-vgzpjjhb.js)
+>     at #checkCachedJobForRequireESM (node:internal/modules/esm/loader:370:13)
+>     at #getOrCreateModuleJobAfterResolve (node:internal/modules/esm/loader:550:42)
+>     at afterResolve (node:internal/modules/esm/loader:611:52)
+>     at ModuleLoader.getOrCreateModuleJob (node:internal/modules/esm/loader:617:12)
+>     at ModuleJobSync.syncLink (node:internal/modules/esm/module_job:276:33)
+>     at ModuleJobSync.link (node:internal/modules/esm/module_job:611:17)
+DIFF  [import --help] rcA=0 rcB=1
+1,12d0
+< Usage: claude import [options] [source]
+< 
+< Import config from another AI coding agent into Claude Code
+< 
+< Arguments:
+0a1,19
+> node:internal/modules/esm/loader:370
+>       throw new ERR_REQUIRE_CYCLE_MODULE(message);
+>             ^
+> 
+> Error [ERR_REQUIRE_CYCLE_MODULE]: Cannot import Module /opt/claude-code/2.1.314/chunk-zy2k3hny.js in a cycle. (from /opt/claude-code/2.1.314/chunk-vgzpjjhb.js)
+>     at #checkCachedJobForRequireESM (node:internal/modules/esm/loader:370:13)
+>     at #getOrCreateModuleJobAfterResolve (node:internal/modules/esm/loader:550:42)
+>     at afterResolve (node:internal/modules/esm/loader:611:52)
+>     at ModuleLoader.getOrCreateModuleJob (node:internal/modules/esm/loader:617:12)
+>     at ModuleJobSync.syncLink (node:internal/modules/esm/module_job:276:33)
+>     at ModuleJobSync.link (node:internal/modules/esm/module_job:611:17)
+DIFF  [install --help] rcA=0 rcB=1
+1,8d0
+< Usage: claude install [options] [target]
+< 
+< Install Claude Code native build. Use [target] to specify version (stable,
+< latest, or specific version)
+< 
+0a1,19
+> node:internal/modules/esm/loader:370
+>       throw new ERR_REQUIRE_CYCLE_MODULE(message);
+>             ^
+> 
+> Error [ERR_REQUIRE_CYCLE_MODULE]: Cannot import Module /opt/claude-code/2.1.314/chunk-zy2k3hny.js in a cycle. (from /opt/claude-code/2.1.314/chunk-vgzpjjhb.js)
+>     at #checkCachedJobForRequireESM (node:internal/modules/esm/loader:370:13)
+>     at #getOrCreateModuleJobAfterResolve (node:internal/modules/esm/loader:550:42)
+>     at afterResolve (node:internal/modules/esm/loader:611:52)
+>     at ModuleLoader.getOrCreateModuleJob (node:internal/modules/esm/loader:617:12)
+>     at ModuleJobSync.syncLink (node:internal/modules/esm/module_job:276:33)
+>     at ModuleJobSync.link (node:internal/modules/esm/module_job:611:17)
+DIFF  [logs --help] rcA=0 rcB=1
+1,3d0
+< Usage: claude logs <id|name>
+< 
+<   Print the background session's recent terminal output. Part of the session name works in place of the id. Put a name with spaces in quotes.
+0a1,19
+> node:internal/modules/esm/loader:370
+>       throw new ERR_REQUIRE_CYCLE_MODULE(message);
+>             ^
+> 
+> Error [ERR_REQUIRE_CYCLE_MODULE]: Cannot import Module /opt/claude-code/2.1.314/chunk-zy2k3hny.js in a cycle. (from /opt/claude-code/2.1.314/chunk-vgzpjjhb.js)
+>     at #checkCachedJobForRequireESM (node:internal/modules/esm/loader:370:13)
+>     at #getOrCreateModuleJobAfterResolve (node:internal/modules/esm/loader:550:42)
+>     at afterResolve (node:internal/modules/esm/loader:611:52)
+>     at ModuleLoader.getOrCreateModuleJob (node:internal/modules/esm/loader:617:12)
+>     at ModuleJobSync.syncLink (node:internal/modules/esm/module_job:276:33)
+>     at ModuleJobSync.link (node:internal/modules/esm/module_job:611:17)
+DIFF  [mcp --help] rcA=0 rcB=1
+1,46d0
+< Usage: claude mcp [options] [command]
+< 
+< Configure and manage MCP servers
+< 
+< Options:
+0a1,19
+> node:internal/modules/esm/loader:370
+>       throw new ERR_REQUIRE_CYCLE_MODULE(message);
+>             ^
+> 
+> Error [ERR_REQUIRE_CYCLE_MODULE]: Cannot import Module /opt/claude-code/2.1.314/chunk-zy2k3hny.js in a cycle. (from /opt/claude-code/2.1.314/chunk-vgzpjjhb.js)
+>     at #checkCachedJobForRequireESM (node:internal/modules/esm/loader:370:13)
+>     at #getOrCreateModuleJobAfterResolve (node:internal/modules/esm/loader:550:42)
+>     at afterResolve (node:internal/modules/esm/loader:611:52)
+>     at ModuleLoader.getOrCreateModuleJob (node:internal/modules/esm/loader:617:12)
+>     at ModuleJobSync.syncLink (node:internal/modules/esm/module_job:276:33)
+>     at ModuleJobSync.link (node:internal/modules/esm/module_job:611:17)
+DIFF  [plugin --help] rcA=0 rcB=1
+1,57d0
+< Usage: claude plugin|plugins [options] [command]
+< 
+< Manage Claude Code plugins
+< 
+< Options:
+0a1,19
+> node:internal/modules/esm/loader:370
+>       throw new ERR_REQUIRE_CYCLE_MODULE(message);
+>             ^
+> 
+> Error [ERR_REQUIRE_CYCLE_MODULE]: Cannot import Module /opt/claude-code/2.1.314/chunk-zy2k3hny.js in a cycle. (from /opt/claude-code/2.1.314/chunk-vgzpjjhb.js)
+>     at #checkCachedJobForRequireESM (node:internal/modules/esm/loader:370:13)
+>     at #getOrCreateModuleJobAfterResolve (node:internal/modules/esm/loader:550:42)
+>     at afterResolve (node:internal/modules/esm/loader:611:52)
+>     at ModuleLoader.getOrCreateModuleJob (node:internal/modules/esm/loader:617:12)
+>     at ModuleJobSync.syncLink (node:internal/modules/esm/module_job:276:33)
+>     at ModuleJobSync.link (node:internal/modules/esm/module_job:611:17)
+DIFF  [purge --help] rcA=0 rcB=1
+1,12d0
+< Usage: claude purge [options] [path]
+< 
+< Delete a project's Claude Code data (transcripts, tasks, file history, and its
+< entry in ~/.claude.json) from this computer only
+< 
+0a1,19
+> node:internal/modules/esm/loader:370
+>       throw new ERR_REQUIRE_CYCLE_MODULE(message);
+>             ^
+> 
+> Error [ERR_REQUIRE_CYCLE_MODULE]: Cannot import Module /opt/claude-code/2.1.314/chunk-zy2k3hny.js in a cycle. (from /opt/claude-code/2.1.314/chunk-vgzpjjhb.js)
+>     at #checkCachedJobForRequireESM (node:internal/modules/esm/loader:370:13)
+>     at #getOrCreateModuleJobAfterResolve (node:internal/modules/esm/loader:550:42)
+>     at afterResolve (node:internal/modules/esm/loader:611:52)
+>     at ModuleLoader.getOrCreateModuleJob (node:internal/modules/esm/loader:617:12)
+>     at ModuleJobSync.syncLink (node:internal/modules/esm/module_job:276:33)
+>     at ModuleJobSync.link (node:internal/modules/esm/module_job:611:17)
+DIFF  [respawn --help] rcA=0 rcB=1
+1,3d0
+< Usage: claude respawn <id>|--all
+< 
+<   Restart a background session (or all of them) so it picks up the current Claude binary.
+0a1,19
+> node:internal/modules/esm/loader:370
+>       throw new ERR_REQUIRE_CYCLE_MODULE(message);
+>             ^
+> 
+> Error [ERR_REQUIRE_CYCLE_MODULE]: Cannot import Module /opt/claude-code/2.1.314/chunk-zy2k3hny.js in a cycle. (from /opt/claude-code/2.1.314/chunk-vgzpjjhb.js)
+>     at #checkCachedJobForRequireESM (node:internal/modules/esm/loader:370:13)
+>     at #getOrCreateModuleJobAfterResolve (node:internal/modules/esm/loader:550:42)
+>     at afterResolve (node:internal/modules/esm/loader:611:52)
+>     at ModuleLoader.getOrCreateModuleJob (node:internal/modules/esm/loader:617:12)
+>     at ModuleJobSync.syncLink (node:internal/modules/esm/module_job:276:33)
+>     at ModuleJobSync.link (node:internal/modules/esm/module_job:611:17)
+DIFF  [rm --help] rcA=0 rcB=1
+1,5d0
+< Usage: claude rm <id> [--discard-unpushed <commit>@<worktree-id>] [--force-remove-worktree <worktree-id>]
+< 
+<   Delete a background session and its worktree. Unlike `stop`, works on already-exited sessions.
+<   --discard-unpushed <commit>@<worktree-id>  also discard the worktree's unpushed commits (and any uncommitted changes) while it is still the same worktree at that commit — pass the value a previous 'claude rm <id>' reported
+<   --force-remove-worktree <worktree-id>      delete the worktree directory even though the WorktreeRemove hook or git couldn't remove it (its repository must list it as a worktree, or have dropped it in a removal that couldn't delete it; no uncommitted changes to tracked files, submodules included; the branch is kept) — pass the value a previous 'claude rm <id>' reported
+0a1,19
+> node:internal/modules/esm/loader:370
+>       throw new ERR_REQUIRE_CYCLE_MODULE(message);
+>             ^
+> 
+> Error [ERR_REQUIRE_CYCLE_MODULE]: Cannot import Module /opt/claude-code/2.1.314/chunk-zy2k3hny.js in a cycle. (from /opt/claude-code/2.1.314/chunk-vgzpjjhb.js)
+>     at #checkCachedJobForRequireESM (node:internal/modules/esm/loader:370:13)
+>     at #getOrCreateModuleJobAfterResolve (node:internal/modules/esm/loader:550:42)
+>     at afterResolve (node:internal/modules/esm/loader:611:52)
+>     at ModuleLoader.getOrCreateModuleJob (node:internal/modules/esm/loader:617:12)
+>     at ModuleJobSync.syncLink (node:internal/modules/esm/module_job:276:33)
+>     at ModuleJobSync.link (node:internal/modules/esm/module_job:611:17)
+DIFF  [setup-token --help] rcA=0 rcB=1
+1,6d0
+< Usage: claude setup-token [options]
+< 
+< Set up a long-lived authentication token (requires Claude subscription)
+< 
+< Options:
+0a1,19
+> node:internal/modules/esm/loader:370
+>       throw new ERR_REQUIRE_CYCLE_MODULE(message);
+>             ^
+> 
+> Error [ERR_REQUIRE_CYCLE_MODULE]: Cannot import Module /opt/claude-code/2.1.314/chunk-zy2k3hny.js in a cycle. (from /opt/claude-code/2.1.314/chunk-vgzpjjhb.js)
+>     at #checkCachedJobForRequireESM (node:internal/modules/esm/loader:370:13)
+>     at #getOrCreateModuleJobAfterResolve (node:internal/modules/esm/loader:550:42)
+>     at afterResolve (node:internal/modules/esm/loader:611:52)
+>     at ModuleLoader.getOrCreateModuleJob (node:internal/modules/esm/loader:617:12)
+>     at ModuleJobSync.syncLink (node:internal/modules/esm/module_job:276:33)
+>     at ModuleJobSync.link (node:internal/modules/esm/module_job:611:17)
+DIFF  [stop --help] rcA=0 rcB=1
+1,3d0
+< Usage: claude stop <id>
+< 
+<   Stop a background session. Its conversation is kept; resume it later with `claude attach <id>`.
+0a1,19
+> node:internal/modules/esm/loader:370
+>       throw new ERR_REQUIRE_CYCLE_MODULE(message);
+>             ^
+> 
+> Error [ERR_REQUIRE_CYCLE_MODULE]: Cannot import Module /opt/claude-code/2.1.314/chunk-zy2k3hny.js in a cycle. (from /opt/claude-code/2.1.314/chunk-vgzpjjhb.js)
+>     at #checkCachedJobForRequireESM (node:internal/modules/esm/loader:370:13)
+>     at #getOrCreateModuleJobAfterResolve (node:internal/modules/esm/loader:550:42)
+>     at afterResolve (node:internal/modules/esm/loader:611:52)
+>     at ModuleLoader.getOrCreateModuleJob (node:internal/modules/esm/loader:617:12)
+>     at ModuleJobSync.syncLink (node:internal/modules/esm/module_job:276:33)
+>     at ModuleJobSync.link (node:internal/modules/esm/module_job:611:17)
+DIFF  [ultrareview --help] rcA=0 rcB=1
+1,21d0
+< Usage: claude ultrareview [target] [options]
+< 
+< Run a cloud-hosted multi-agent code review of the current branch (or a PR number
+< / base branch) and print the findings
+< 
+0a1,19
+> node:internal/modules/esm/loader:370
+>       throw new ERR_REQUIRE_CYCLE_MODULE(message);
+>             ^
+> 
+> Error [ERR_REQUIRE_CYCLE_MODULE]: Cannot import Module /opt/claude-code/2.1.314/chunk-zy2k3hny.js in a cycle. (from /opt/claude-code/2.1.314/chunk-vgzpjjhb.js)
+>     at #checkCachedJobForRequireESM (node:internal/modules/esm/loader:370:13)
+>     at #getOrCreateModuleJobAfterResolve (node:internal/modules/esm/loader:550:42)
+>     at afterResolve (node:internal/modules/esm/loader:611:52)
+>     at ModuleLoader.getOrCreateModuleJob (node:internal/modules/esm/loader:617:12)
+>     at ModuleJobSync.syncLink (node:internal/modules/esm/module_job:276:33)
+>     at ModuleJobSync.link (node:internal/modules/esm/module_job:611:17)
+DIFF  [update --help] rcA=0 rcB=1
+1,7d0
+< Usage: claude update|upgrade [options]
+< 
+< Check for updates and install if available; package-manager installs update
+< through the package manager
+< 
+0a1,19
+> node:internal/modules/esm/loader:370
+>       throw new ERR_REQUIRE_CYCLE_MODULE(message);
+>             ^
+> 
+> Error [ERR_REQUIRE_CYCLE_MODULE]: Cannot import Module /opt/claude-code/2.1.314/chunk-zy2k3hny.js in a cycle. (from /opt/claude-code/2.1.314/chunk-vgzpjjhb.js)
+>     at #checkCachedJobForRequireESM (node:internal/modules/esm/loader:370:13)
+>     at #getOrCreateModuleJobAfterResolve (node:internal/modules/esm/loader:550:42)
+>     at afterResolve (node:internal/modules/esm/loader:611:52)
+>     at ModuleLoader.getOrCreateModuleJob (node:internal/modules/esm/loader:617:12)
+>     at ModuleJobSync.syncLink (node:internal/modules/esm/module_job:276:33)
+>     at ModuleJobSync.link (node:internal/modules/esm/module_job:611:17)
+summary: same=1 diff=19

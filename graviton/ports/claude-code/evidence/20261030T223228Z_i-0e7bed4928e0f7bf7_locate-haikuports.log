@@ -1,0 +1,29 @@
+# evidence: locate-haikuports
+# instance: i-0e7bed4928e0f7bf7   region: us-west-2
+# ssm command: 24655337-86fa-43b7-9dee-097f0f8ddb76
+# start: 20261030T223228Z   end: 20261030T223407Z   rc: 1   log bytes: 404
+# script sha256: 85cf4698c711717f33a883c46bba083b7e6528fc6b22fdfee81033aff4139790
+# ---- script ----
+# | ls /boot/home; ls -d /boot/home/*/haikuports* /boot/*/haikuports* 2>/dev/null; find /boot/home -maxdepth 4 -type d -name nodejs24 2>/dev/null; cat /boot/home/config/settings/haikuports.conf 2>/dev/null
+# ---- raw output ----
+Desktop
+config
+depclosure.py
+haiku-nativebuild
+haiku-package-closure
+haiku-ports-overlay-apply
+haiku-provision-native-builder
+haiku-repo-publish
+haikuporter
+haikuports
+haikuports-patches
+haikuports-patches.tar
+haikuports.conf
+mail
+seed
+warm.log
+/boot/home/haikuporter/haikuports-sample.conf
+/boot/home/haikuports
+/boot/home/haikuports-patches
+/boot/home/haikuports-patches.tar
+/boot/home/haikuports.conf

@@ -1,0 +1,25 @@
+# evidence: testpy-stdin-probe
+# instance: i-0e7bed4928e0f7bf7   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261031T142515Z   end: 20261031T142535Z   rc: 0
+# script sha256: 256e0f03d1de411f988f3a88f8e2a2e73fd313242c7430a12476a857697bb4a4
+# ---- script ----
+# | cd /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0 || exit 1
+# | echo "stdin: $(ls -l /proc/self/fd/0 2>/dev/null || echo n/a) tty=$(tty)"
+# | echo "devnull-in: $(python3 tools/test.py --shell=/boot/system/bin/node -j 2 -p tap 'parallel/test-buffer-a*' < /dev/null 2>&1 | grep -c '^ok')"
+# | echo "script-tty: $(script -qc "python3 tools/test.py --shell=/boot/system/bin/node -j 2 -p tap 'parallel/test-buffer-a*'" /dev/null 2>&1 | grep -c '^ok')"
+# | python3 tools/test.py --shell=/boot/system/bin/node -j 2 -p tap -v 'parallel/test-buffer-alloc' < /dev/null 2>&1 | head -20
+# ---- raw output ----
+stdin: n/a tty=not a tty
+devnull-in: 0
+script-tty: 0
+# /boot/system/bin/node -p process.arch
+# /boot/system/bin/node -p process.versions.openssl
+# /boot/system/bin/node -p process.config.variables.asan
+# /boot/system/bin/node -p process.config.variables.v8_enable_pointer_compression
+# /boot/system/bin/node -p process.features.inspector
+# /boot/system/bin/node -p process.versions.openssl
+TAP version 13
+1..1
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-buffer-alloc.js
+
+All tests passed.

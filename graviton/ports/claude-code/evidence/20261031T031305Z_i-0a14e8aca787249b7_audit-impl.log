@@ -1,0 +1,106 @@
+# evidence: audit-impl
+# instance: i-0a14e8aca787249b7   region: us-west-2
+# ssm command: 8fd865c7-705c-4314-8e88-7e9cada12e42
+# start: 20261031T031305Z   end: 20261031T031513Z   rc: 0   log bytes: 3726
+# script sha256: 58d88762839bd3a10435824dd312b98cb05748c5a56814a7f48ef75b70af2acd
+# ---- script ----
+# | set -u
+# | echo '22dc56fa01273ed9bcb19bc0083f17cfc57121de255a6df4f86e0456a10720c6  /opt/cc/w-audit.stage/p.tgz' | sha256sum -c --quiet - || exit 1
+# | rm -rf /opt/cc/w-audit && mkdir -p /opt/cc/w-audit && tar xzf /opt/cc/w-audit.stage/p.tgz -C /opt/cc/w-audit 2>/dev/null
+# | cd /opt/cc/w-audit
+# | W=/opt/cc/w-audit-run; N=/opt/node24/bin/node; BIN=/opt/cc/v2.1.314/package/claude
+# | bun --version; $N --version; git_sha=$(sha256sum tools/apply-haiku-impl.py | cut -c1-16); echo "apply-haiku-impl.py sha256 $git_sha"
+# | echo "== deps"; bash tools/fetch-deps.sh $W/deps || exit 1
+# | rm -rf $W/tree; echo "== build-tree"; bash tools/build-tree.sh $BIN $W/tree $W/tree $N $W/deps || exit 1
+# | python3 -I -c "import json;print(json.load(open('$W/tree/RELOCATION.json'))['rule_totals'])"
+# | echo "== second apply must refuse"; python3 -I tools/apply-haiku-impl.py $W/tree; echo "rc=$?"
+# | echo "== linux-side expression counts (must equal the pre-P8 tree: 61 12 6 1 60 43 51 2 1 1 1 9; haiku gates 23)"
+# | T=$W/tree
+# | for pat in '/proc/self/fd/' '/proc/${e}/stat' '"xdg-open"' '"notify-send"' 'Bo=' '524288' '2097152' '"ps",["-A"' 'case"unknown":return{unavailable:"unsupported_platform"}' 'linux:4096,wsl:4096' 'powershell",["-NoProfile","-NonInteractive","-Command",k],r),!0' 'M()==="linux"||M()==="wsl"' 'process.platform==="haiku"'; do
+# |   printf '%-62s %s\n' "$pat" "$(cat $T/chunk-*.js | grep -o -F -- "$pat" | wc -l)"
+# | done
+# | echo "== gates evaluate to the Linux side here"
+# | $N -e 'console.log("process.platform="+process.platform, "haiku-gate="+(process.platform==="haiku"))'
+# | bun -e 'console.log("bun process.platform="+process.platform, "haiku-gate="+(process.platform==="haiku"))'
+# | echo "== diff cases-help"; TREE=$W/tree NODE=$N WORK=$W/scratch-help CASES=compat/cases-help.txt bash tools/linux-diff.sh; rc=$?
+# | echo "overall diff rc=$rc"; exit $rc
+# ---- raw output ----
+1.4.4
+v24.22.2
+apply-haiku-impl.py sha256 33c93a3c17c6bf06
+== deps
+fetch-deps: ws 8.22.0 OK (sha512-Ydggc987+RO0AnWtZ/7Wq9FtNvcrL1b/RO0ud9mWjUPgDrsAAwQSF51sm2hm1XofbU/4jkpGEsLFsZZxU+1DOg==)
+fetch-deps: acorn 8.19.0 OK (sha512-oJlA3XiRm7Cyk6qFD2Jn8ak9B7jSy0qy00ADO3+8dpT0LSjFihQYv4C02LFCSYJV3Q37xYwwRy5m+IpIiUzqWw==)
+== build-tree
+modules=2871 entry=/$bunfs/root/cli argv='--zero-fill-buffers'
+contents=54.3MB sourcemap=0.0MB module_info=0.0MB bytecode_region=102.9MB (not extracted)
+relocated 2871 files to /opt/cc/w-audit-run/tree (prefix /opt/cc/w-audit-run/tree)
+rule totals: {"R1": 250476, "R2": 547, "R3": 9, "P1": 9, "P2": 1, "P3": 1}
+R4 applied: [['chunk-zy2k3hny.js', 'chunk-vgzpjjhb.js']]
+parsed 56 modules, 0 failed
+P4 applied 116 sites in 56 modules; skipped 10 already rewritten by P1,P2
+P5 applied in chunk-8dvz2fjk.js
+P6 applied in chunk-8dvz2fjk.js
+P7 applied in chunk-yt5m1rse.js
+parsed 16 modules, 0 failed
+P8 applied in chunk-hv6m45s7.js (1 sites)
+P9 applied in chunk-aa47jmf3.js (4 sites)
+P10 applied in chunk-9deh4a76.js (3 sites)
+P11 applied in chunk-wg6ymv3p.js (1 sites)
+P12 applied in chunk-ddrd3r4k.js (1 sites)
+P13 applied in chunk-k1pd3pap.js (1 sites)
+P13 applied in chunk-v5xftfk7.js (1 sites)
+P13 applied in chunk-s7yyd1p6.js (2 sites)
+P14 applied in chunk-12xea136.js (2 sites)
+P15 applied in chunk-m6kk55rf.js (5 sites)
+P16 applied in chunk-szzxb7zd.js (1 sites)
+P16 applied in chunk-zy2k3hny.js (1 sites)
+P17 applied in chunk-6h8148nz.js (7 sites, + teaminfo helper)
+P17 applied in chunk-fgccedbt.js (1 sites, + teaminfo helper)
+P17 applied in chunk-2hxx68dq.js (1 sites, + teaminfo helper)
+P17 applied in chunk-s0dw5891.js (1 sites)
+build-tree: /opt/cc/w-audit-run/tree ready (prefix /opt/cc/w-audit-run/tree)
+{'R1': 250476, 'R2': 547, 'R3': 9, 'P1': 9, 'P2': 1, 'P3': 1, 'R4': 1, 'P4': 116, 'P4_skipped': 10, 'P5': 1, 'P6': 1, 'P7': 1, 'P8': 1, 'P9': 4, 'P10': 3, 'P11': 1, 'P12': 1, 'P13': 4, 'P14': 2, 'P15': 5, 'P16': 2, 'P17': 10}
+== second apply must refuse
+apply-haiku-impl: already applied to this tree
+rc=1
+== linux-side expression counts (must equal the pre-P8 tree: 61 12 6 1 60 43 51 2 1 1 1 9; haiku gates 23)
+/proc/self/fd/                                                 61
+/proc/${e}/stat                                                12
+"xdg-open"                                                     6
+"notify-send"                                                  1
+Bo=                                                            60
+524288                                                         43
+2097152                                                        51
+"ps",["-A"                                                     2
+case"unknown":return{unavailable:"unsupported_platform"}       1
+linux:4096,wsl:4096                                            1
+powershell",["-NoProfile","-NonInteractive","-Command",k],r),!0 1
+M()==="linux"||M()==="wsl"                                     9
+process.platform==="haiku"                                     23
+== gates evaluate to the Linux side here
+process.platform=linux haiku-gate=false
+bun process.platform=linux haiku-gate=false
+== diff cases-help
+SAME  [--version] rc=0
+SAME  [--help] rc=0
+SAME  [agents --help] rc=0
+SAME  [attach --help] rc=0
+SAME  [auth --help] rc=0
+SAME  [auto-mode --help] rc=0
+SAME  [doctor --help] rc=0
+SAME  [gateway --help] rc=0
+SAME  [import --help] rc=0
+SAME  [install --help] rc=0
+SAME  [logs --help] rc=0
+SAME  [mcp --help] rc=0
+SAME  [plugin --help] rc=0
+SAME  [purge --help] rc=0
+SAME  [respawn --help] rc=0
+SAME  [rm --help] rc=0
+SAME  [setup-token --help] rc=0
+SAME  [stop --help] rc=0
+SAME  [ultrareview --help] rc=0
+SAME  [update --help] rc=0
+summary: same=20 diff=0
+overall diff rc=0

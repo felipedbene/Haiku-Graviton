@@ -1,0 +1,35 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: tui-capture-A-linux
+# instance: i-0a14e8aca787249b7   region: us-west-2
+# ssm command: a4d1a343-d4e1-4958-a9d5-946686a2bc43 (agent status: Success)
+# start: 20261031T141957Z   end: 20261031T142415Z   rc: 0   log bytes: 696
+# script sha256: f068306615bda701ef0c798e46fc1aa039d71aff76bf690dfa31c15a4f863ba3
+# ---- script ----
+# | set -u
+# | echo '60b7cd4b8ec0150eaa94c0719b97e5f990beeea6c22e008f82af46fc43c98dd0  /opt/cc/w-tuiA.stage/p.tgz' | sha256sum -c --quiet - || exit 1
+# | rm -rf /opt/cc/w-tuiA && mkdir -p /opt/cc/w-tuiA && tar xzf /opt/cc/w-tuiA.stage/p.tgz -C /opt/cc/w-tuiA 2>/dev/null
+# | cd /opt/cc/w-tuiA
+# | set -u
+# | TUI_ONLY=A OUT=/opt/cc/tui-A bash tools/tui-diff.sh /opt/cc/v2.1.314/package/claude /opt/node24/bin/node /nonexistent 2>&1 | tail -30
+# | ls /opt/cc/tui-A | wc -l
+# | tar -czf /opt/cc/tui-A.tgz -C /opt/cc tui-A && curl -sSf -X PUT --upload-file /opt/cc/tui-A.tgz 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.amazonaws.com/claude-code-port/tui-A-linux.tgz?<PRESIGNED>' && echo upload-ok
+# ---- raw output ----
+captured theme-100x30 (1 snaps, side A)
+captured theme-80x24 (1 snaps, side A)
+captured theme-40x20 (1 snaps, side A)
+captured theme-200x50 (1 snaps, side A)
+captured theme-120x40 (1 snaps, side A)
+captured theme-60x16 (1 snaps, side A)
+captured theme-arrows (11 snaps, side A)
+captured theme-resize (5 snaps, side A)
+captured theme-arrow-resize (4 snaps, side A)
+captured login-flow (3 snaps, side A)
+captured text-100x30 (8 snaps, side A)
+captured text-40x20 (8 snaps, side A)
+captured text-resize (6 snaps, side A)
+captured text-rtl (5 snaps, side A)
+captured text-rtl-vscode (6 snaps, side A)
+captured theme-vscode (2 snaps, side A)
+tui-diff: captured side A into /opt/cc/tui-A
+136
+upload-ok

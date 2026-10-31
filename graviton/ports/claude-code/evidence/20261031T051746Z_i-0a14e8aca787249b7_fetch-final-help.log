@@ -1,0 +1,293 @@
+# evidence: fetch-final-help
+# instance: i-0a14e8aca787249b7   region: us-west-2
+# ssm command: b5eb19f4-2031-464f-baf4-c7510aa9c700
+# start: 20261031T051746Z   end: 20261031T053247Z   rc: 0   log bytes: 11601
+# script sha256: 1a27cc9fa10de093506f32b77e4a61fe7e3713c5825238478a744b5abaf7ca64
+# ---- script ----
+# | set -u
+# | echo '317041518ac35f3972f1b02e9e933d846c1456ab4a24f4a2d86a428e6147fd7d  /opt/cc/w-fetch.stage/p.tgz' | sha256sum -c --quiet - || exit 1
+# | rm -rf /opt/cc/w-fetch && mkdir -p /opt/cc/w-fetch && tar xzf /opt/cc/w-fetch.stage/p.tgz -C /opt/cc/w-fetch 2>/dev/null
+# | cd /opt/cc/w-fetch
+# | O=/opt/cc/w-fetch.out
+# | /opt/node24/bin/node -e '
+# | const m=new Map(JSON.parse(require("fs").readFileSync(process.argv[1])));
+# | for (const k of ["tls ca replaces the default roots (public host)","env HTTPS_PROXY set at runtime: plain fetch https goes through it","env HTTPS_PROXY given at spawn","FetchSession reuse, separate pool, close, fetch after close","BUN_CONFIG_HTTP_IDLE_TIMEOUT=2: default times out, timeout:false does not","explicit proxy respects NO_PROXY by default; respectNoProxy:false does not"]) { const v=m.get(k); console.log("## bun:",k); console.log(JSON.stringify(k.startsWith("env HTTPS_PROXY set")||k.startsWith("explicit")?{proxied:JSON.stringify(v).includes("\"kind\":\"connect\"")}:v).slice(0,600)); }' $O/bun.json
+# | mkdir -p /tmp/ccf-help && TREE=/opt/cc/w-fetch/tree NODE=/opt/node24/bin/node WORK=/tmp/ccf-help CASES=compat/cases-help.txt bash tools/linux-diff.sh; echo linux-diff-rc=$?
+# | rm -rf /tmp/ccf-help
+# | ss -ltn | awk 'NR>1{print $4}' | sort | tr '\n' ' '; echo
+# ---- raw output ----
+## bun: tls ca replaces the default roots (public host)
+{"withTestCA":"fail","defaultRoots":"ok"}
+## bun: env HTTPS_PROXY set at runtime: plain fetch https goes through it
+{"proxied":true}
+## bun: env HTTPS_PROXY given at spawn
+{"c":{"code":0,"out":"hs","err":""},"seen":{"conn":{"px":1,"hs":1},"proxy":[{"proxy":"px","kind":"connect","url":"localhost:<hs>","headers":[["host","localhost:<hs>"],["proxy-connection","Keep-Alive"]]}]}}
+## bun: FetchSession reuse, separate pool, close, fetch after close
+{"ok":[true,true,true,true,true,true],"reused":true,"plainOpensItsOwn":1,"openAfterClose":1,"afterCloseOpensOne":1,"closeReturns":"undefined"}
+## bun: BUN_CONFIG_HTTP_IDLE_TIMEOUT=2: default times out, timeout:false does not
+{"code":0,"out":"[\"err:TimeoutError:23:5.5-11s\",\"ok:ab\"]","err":""}
+## bun: explicit proxy respects NO_PROXY by default; respectNoProxy:false does not
+{"proxied":true}
+DIFF  [--version] rcA=1 rcB=1
+1c1,18
+< error: Module not found "/opt/cc/w-fetch/tree/cli"
+---
+> node:internal/modules/cjs/loader:1568
+>   throw err;
+>   ^
+> 
+> Error: Cannot find module '/opt/cc/w-fetch/tree/claude.mjs'
+>     at Module._resolveFilename (node:internal/modules/cjs/loader:1564:15)
+>     at wrapResolveFilename (node:internal/modules/cjs/loader:1118:27)
+>     at defaultResolveImplForCJSLoading (node:internal/modules/cjs/loader:1142:10)
+>     at resolveForCJSWithHooks (node:internal/modules/cjs/loader:1169:12)
+DIFF  [--help] rcA=1 rcB=1
+1c1,18
+< error: Module not found "/opt/cc/w-fetch/tree/cli"
+---
+> node:internal/modules/cjs/loader:1568
+>   throw err;
+>   ^
+> 
+> Error: Cannot find module '/opt/cc/w-fetch/tree/claude.mjs'
+>     at Module._resolveFilename (node:internal/modules/cjs/loader:1564:15)
+>     at wrapResolveFilename (node:internal/modules/cjs/loader:1118:27)
+>     at defaultResolveImplForCJSLoading (node:internal/modules/cjs/loader:1142:10)
+>     at resolveForCJSWithHooks (node:internal/modules/cjs/loader:1169:12)
+DIFF  [agents --help] rcA=1 rcB=1
+1c1,18
+< error: Module not found "/opt/cc/w-fetch/tree/cli"
+---
+> node:internal/modules/cjs/loader:1568
+>   throw err;
+>   ^
+> 
+> Error: Cannot find module '/opt/cc/w-fetch/tree/claude.mjs'
+>     at Module._resolveFilename (node:internal/modules/cjs/loader:1564:15)
+>     at wrapResolveFilename (node:internal/modules/cjs/loader:1118:27)
+>     at defaultResolveImplForCJSLoading (node:internal/modules/cjs/loader:1142:10)
+>     at resolveForCJSWithHooks (node:internal/modules/cjs/loader:1169:12)
+DIFF  [attach --help] rcA=1 rcB=1
+1c1,18
+< error: Module not found "/opt/cc/w-fetch/tree/cli"
+---
+> node:internal/modules/cjs/loader:1568
+>   throw err;
+>   ^
+> 
+> Error: Cannot find module '/opt/cc/w-fetch/tree/claude.mjs'
+>     at Module._resolveFilename (node:internal/modules/cjs/loader:1564:15)
+>     at wrapResolveFilename (node:internal/modules/cjs/loader:1118:27)
+>     at defaultResolveImplForCJSLoading (node:internal/modules/cjs/loader:1142:10)
+>     at resolveForCJSWithHooks (node:internal/modules/cjs/loader:1169:12)
+DIFF  [auth --help] rcA=1 rcB=1
+1c1,18
+< error: Module not found "/opt/cc/w-fetch/tree/cli"
+---
+> node:internal/modules/cjs/loader:1568
+>   throw err;
+>   ^
+> 
+> Error: Cannot find module '/opt/cc/w-fetch/tree/claude.mjs'
+>     at Module._resolveFilename (node:internal/modules/cjs/loader:1564:15)
+>     at wrapResolveFilename (node:internal/modules/cjs/loader:1118:27)
+>     at defaultResolveImplForCJSLoading (node:internal/modules/cjs/loader:1142:10)
+>     at resolveForCJSWithHooks (node:internal/modules/cjs/loader:1169:12)
+DIFF  [auto-mode --help] rcA=1 rcB=1
+1c1,18
+< error: Module not found "/opt/cc/w-fetch/tree/cli"
+---
+> node:internal/modules/cjs/loader:1568
+>   throw err;
+>   ^
+> 
+> Error: Cannot find module '/opt/cc/w-fetch/tree/claude.mjs'
+>     at Module._resolveFilename (node:internal/modules/cjs/loader:1564:15)
+>     at wrapResolveFilename (node:internal/modules/cjs/loader:1118:27)
+>     at defaultResolveImplForCJSLoading (node:internal/modules/cjs/loader:1142:10)
+>     at resolveForCJSWithHooks (node:internal/modules/cjs/loader:1169:12)
+DIFF  [doctor --help] rcA=1 rcB=1
+1c1,18
+< error: Module not found "/opt/cc/w-fetch/tree/cli"
+---
+> node:internal/modules/cjs/loader:1568
+>   throw err;
+>   ^
+> 
+> Error: Cannot find module '/opt/cc/w-fetch/tree/claude.mjs'
+>     at Module._resolveFilename (node:internal/modules/cjs/loader:1564:15)
+>     at wrapResolveFilename (node:internal/modules/cjs/loader:1118:27)
+>     at defaultResolveImplForCJSLoading (node:internal/modules/cjs/loader:1142:10)
+>     at resolveForCJSWithHooks (node:internal/modules/cjs/loader:1169:12)
+DIFF  [gateway --help] rcA=1 rcB=1
+1c1,18
+< error: Module not found "/opt/cc/w-fetch/tree/cli"
+---
+> node:internal/modules/cjs/loader:1568
+>   throw err;
+>   ^
+> 
+> Error: Cannot find module '/opt/cc/w-fetch/tree/claude.mjs'
+>     at Module._resolveFilename (node:internal/modules/cjs/loader:1564:15)
+>     at wrapResolveFilename (node:internal/modules/cjs/loader:1118:27)
+>     at defaultResolveImplForCJSLoading (node:internal/modules/cjs/loader:1142:10)
+>     at resolveForCJSWithHooks (node:internal/modules/cjs/loader:1169:12)
+DIFF  [import --help] rcA=1 rcB=1
+1c1,18
+< error: Module not found "/opt/cc/w-fetch/tree/cli"
+---
+> node:internal/modules/cjs/loader:1568
+>   throw err;
+>   ^
+> 
+> Error: Cannot find module '/opt/cc/w-fetch/tree/claude.mjs'
+>     at Module._resolveFilename (node:internal/modules/cjs/loader:1564:15)
+>     at wrapResolveFilename (node:internal/modules/cjs/loader:1118:27)
+>     at defaultResolveImplForCJSLoading (node:internal/modules/cjs/loader:1142:10)
+>     at resolveForCJSWithHooks (node:internal/modules/cjs/loader:1169:12)
+DIFF  [install --help] rcA=1 rcB=1
+1c1,18
+< error: Module not found "/opt/cc/w-fetch/tree/cli"
+---
+> node:internal/modules/cjs/loader:1568
+>   throw err;
+>   ^
+> 
+> Error: Cannot find module '/opt/cc/w-fetch/tree/claude.mjs'
+>     at Module._resolveFilename (node:internal/modules/cjs/loader:1564:15)
+>     at wrapResolveFilename (node:internal/modules/cjs/loader:1118:27)
+>     at defaultResolveImplForCJSLoading (node:internal/modules/cjs/loader:1142:10)
+>     at resolveForCJSWithHooks (node:internal/modules/cjs/loader:1169:12)
+DIFF  [logs --help] rcA=1 rcB=1
+1c1,18
+< error: Module not found "/opt/cc/w-fetch/tree/cli"
+---
+> node:internal/modules/cjs/loader:1568
+>   throw err;
+>   ^
+> 
+> Error: Cannot find module '/opt/cc/w-fetch/tree/claude.mjs'
+>     at Module._resolveFilename (node:internal/modules/cjs/loader:1564:15)
+>     at wrapResolveFilename (node:internal/modules/cjs/loader:1118:27)
+>     at defaultResolveImplForCJSLoading (node:internal/modules/cjs/loader:1142:10)
+>     at resolveForCJSWithHooks (node:internal/modules/cjs/loader:1169:12)
+DIFF  [mcp --help] rcA=1 rcB=1
+1c1,18
+< error: Module not found "/opt/cc/w-fetch/tree/cli"
+---
+> node:internal/modules/cjs/loader:1568
+>   throw err;
+>   ^
+> 
+> Error: Cannot find module '/opt/cc/w-fetch/tree/claude.mjs'
+>     at Module._resolveFilename (node:internal/modules/cjs/loader:1564:15)
+>     at wrapResolveFilename (node:internal/modules/cjs/loader:1118:27)
+>     at defaultResolveImplForCJSLoading (node:internal/modules/cjs/loader:1142:10)
+>     at resolveForCJSWithHooks (node:internal/modules/cjs/loader:1169:12)
+DIFF  [plugin --help] rcA=1 rcB=1
+1c1,18
+< error: Module not found "/opt/cc/w-fetch/tree/cli"
+---
+> node:internal/modules/cjs/loader:1568
+>   throw err;
+>   ^
+> 
+> Error: Cannot find module '/opt/cc/w-fetch/tree/claude.mjs'
+>     at Module._resolveFilename (node:internal/modules/cjs/loader:1564:15)
+>     at wrapResolveFilename (node:internal/modules/cjs/loader:1118:27)
+>     at defaultResolveImplForCJSLoading (node:internal/modules/cjs/loader:1142:10)
+>     at resolveForCJSWithHooks (node:internal/modules/cjs/loader:1169:12)
+DIFF  [purge --help] rcA=1 rcB=1
+1c1,18
+< error: Module not found "/opt/cc/w-fetch/tree/cli"
+---
+> node:internal/modules/cjs/loader:1568
+>   throw err;
+>   ^
+> 
+> Error: Cannot find module '/opt/cc/w-fetch/tree/claude.mjs'
+>     at Module._resolveFilename (node:internal/modules/cjs/loader:1564:15)
+>     at wrapResolveFilename (node:internal/modules/cjs/loader:1118:27)
+>     at defaultResolveImplForCJSLoading (node:internal/modules/cjs/loader:1142:10)
+>     at resolveForCJSWithHooks (node:internal/modules/cjs/loader:1169:12)
+DIFF  [respawn --help] rcA=1 rcB=1
+1c1,18
+< error: Module not found "/opt/cc/w-fetch/tree/cli"
+---
+> node:internal/modules/cjs/loader:1568
+>   throw err;
+>   ^
+> 
+> Error: Cannot find module '/opt/cc/w-fetch/tree/claude.mjs'
+>     at Module._resolveFilename (node:internal/modules/cjs/loader:1564:15)
+>     at wrapResolveFilename (node:internal/modules/cjs/loader:1118:27)
+>     at defaultResolveImplForCJSLoading (node:internal/modules/cjs/loader:1142:10)
+>     at resolveForCJSWithHooks (node:internal/modules/cjs/loader:1169:12)
+DIFF  [rm --help] rcA=1 rcB=1
+1c1,18
+< error: Module not found "/opt/cc/w-fetch/tree/cli"
+---
+> node:internal/modules/cjs/loader:1568
+>   throw err;
+>   ^
+> 
+> Error: Cannot find module '/opt/cc/w-fetch/tree/claude.mjs'
+>     at Module._resolveFilename (node:internal/modules/cjs/loader:1564:15)
+>     at wrapResolveFilename (node:internal/modules/cjs/loader:1118:27)
+>     at defaultResolveImplForCJSLoading (node:internal/modules/cjs/loader:1142:10)
+>     at resolveForCJSWithHooks (node:internal/modules/cjs/loader:1169:12)
+DIFF  [setup-token --help] rcA=1 rcB=1
+1c1,18
+< error: Module not found "/opt/cc/w-fetch/tree/cli"
+---
+> node:internal/modules/cjs/loader:1568
+>   throw err;
+>   ^
+> 
+> Error: Cannot find module '/opt/cc/w-fetch/tree/claude.mjs'
+>     at Module._resolveFilename (node:internal/modules/cjs/loader:1564:15)
+>     at wrapResolveFilename (node:internal/modules/cjs/loader:1118:27)
+>     at defaultResolveImplForCJSLoading (node:internal/modules/cjs/loader:1142:10)
+>     at resolveForCJSWithHooks (node:internal/modules/cjs/loader:1169:12)
+DIFF  [stop --help] rcA=1 rcB=1
+1c1,18
+< error: Module not found "/opt/cc/w-fetch/tree/cli"
+---
+> node:internal/modules/cjs/loader:1568
+>   throw err;
+>   ^
+> 
+> Error: Cannot find module '/opt/cc/w-fetch/tree/claude.mjs'
+>     at Module._resolveFilename (node:internal/modules/cjs/loader:1564:15)
+>     at wrapResolveFilename (node:internal/modules/cjs/loader:1118:27)
+>     at defaultResolveImplForCJSLoading (node:internal/modules/cjs/loader:1142:10)
+>     at resolveForCJSWithHooks (node:internal/modules/cjs/loader:1169:12)
+DIFF  [ultrareview --help] rcA=1 rcB=1
+1c1,18
+< error: Module not found "/opt/cc/w-fetch/tree/cli"
+---
+> node:internal/modules/cjs/loader:1568
+>   throw err;
+>   ^
+> 
+> Error: Cannot find module '/opt/cc/w-fetch/tree/claude.mjs'
+>     at Module._resolveFilename (node:internal/modules/cjs/loader:1564:15)
+>     at wrapResolveFilename (node:internal/modules/cjs/loader:1118:27)
+>     at defaultResolveImplForCJSLoading (node:internal/modules/cjs/loader:1142:10)
+>     at resolveForCJSWithHooks (node:internal/modules/cjs/loader:1169:12)
+DIFF  [update --help] rcA=1 rcB=1
+1c1,18
+< error: Module not found "/opt/cc/w-fetch/tree/cli"
+---
+> node:internal/modules/cjs/loader:1568
+>   throw err;
+>   ^
+> 
+> Error: Cannot find module '/opt/cc/w-fetch/tree/claude.mjs'
+>     at Module._resolveFilename (node:internal/modules/cjs/loader:1564:15)
+>     at wrapResolveFilename (node:internal/modules/cjs/loader:1118:27)
+>     at defaultResolveImplForCJSLoading (node:internal/modules/cjs/loader:1142:10)
+>     at resolveForCJSWithHooks (node:internal/modules/cjs/loader:1169:12)
+summary: same=0 diff=20
+linux-diff-rc=1
+0.0.0.0:22 127.0.0.53%lo:53 127.0.0.54:53 [::]:22 

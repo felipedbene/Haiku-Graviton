@@ -1,0 +1,183 @@
+# evidence: worker-bun-record
+# instance: i-0a14e8aca787249b7   region: us-west-2
+# ssm command: b20297a4-243a-4259-9f80-92916ee0215e
+# start: 20261031T023221Z   end: 20261031T023230Z   rc: 0   log bytes: 2442
+# script sha256: 30f5a68a58dddaa15fe2bfd87ac7725579454059cc96939c19b8ffb52314b6c1
+# ---- script ----
+# | set -u
+# | echo '75f114b887bf42f178ff86bb8458ea77cd2bbeb1549d983a0d66ad50dc95807b  /opt/cc/w-worker.stage/p.tgz' | sha256sum -c --quiet - || exit 1
+# | rm -rf /opt/cc/w-worker && mkdir -p /opt/cc/w-worker && tar xzf /opt/cc/w-worker.stage/p.tgz -C /opt/cc/w-worker 2>/dev/null
+# | cd /opt/cc/w-worker
+# | cd compat/test/worker && bun --version && timeout 120 bun run.js /tmp/wk-bun.json; echo rc=$?; cat /tmp/wk-bun.json; echo "== unref"; timeout 10 bun unref-child.js; echo rc=$?
+# ---- raw output ----
+1.4.4
+scenarios: 13
+rc=0
+[
+ [
+  "globals",
+  {
+   "typeofWorker": "function",
+   "isEventTarget": true,
+   "members": [
+    [
+     "postMessage",
+     "function"
+    ],
+    [
+     "terminate",
+     "function"
+    ],
+    [
+     "ref",
+     "function"
+    ],
+    [
+     "unref",
+     "function"
+    ],
+    [
+     "addEventListener",
+     "function"
+    ],
+    [
+     "removeEventListener",
+     "function"
+    ]
+   ]
+  }
+ ],
+ [
+  "blob CommonJS script with require and onmessage assignment",
+  {
+   "type": "message",
+   "ctor": "MessageEvent",
+   "data": {
+    "echo": {
+     "a": 1,
+     "b": [
+      1,
+      2
+     ]
+    },
+    "writeSync": "function",
+    "self": "object",
+    "selfIsGlobal": true,
+    "bun": "object",
+    "name": null
+   }
+  }
+ ],
+ [
+  "file ESM worker, workerData, self.onmessage",
+  {
+   "type": "message",
+   "ctor": "MessageEvent",
+   "data": {
+    "got": "hi",
+    "workerData": {
+     "stamp": 7,
+     "list": [
+      1,
+      2
+     ]
+    },
+    "isMainThread": false,
+    "threadIdType": "number"
+   }
+  }
+ ],
+ [
+  "string path to ESM file",
+  {
+   "type": "message",
+   "ctor": "MessageEvent",
+   "data": {
+    "ok": true,
+    "meta": "string"
+   }
+  }
+ ],
+ [
+  "MessagePort transfer and port.onmessage",
+  {
+   "data": {
+    "back": 42
+   },
+   "ctor": "MessageEvent"
+  }
+ ],
+ [
+  "SharedArrayBuffer + Atomics across threads",
+  {
+   "wait": "ok",
+   "value": 42
+  }
+ ],
+ [
+  "Uint8Array slice clones by value",
+  {
+   "type": "message",
+   "ctor": "MessageEvent",
+   "data": {
+    "ctor": "Uint8Array",
+    "len": 3,
+    "first": 8,
+    "last": 6
+   }
+  }
+ ],
+ [
+  "addEventListener('message')",
+  {
+   "data": [
+    "via listener",
+    3
+   ],
+   "type": "message"
+  }
+ ],
+ [
+  "uncaught throw in worker -> error event",
+  {
+   "error": true,
+   "type": "error",
+   "message": "1 | onmessage = () => { throw new TypeError(\"boom here\") }\n                                  ^\nTypeError: boom here\n      at onmessage (blob:a6f022a2-ced1-4f27-b2ea-2d564e0bbea8:1:31)\n",
+   "ctor": "ErrorEvent"
+  }
+ ],
+ [
+  "syntax error in blob -> error event",
+  {
+   "error": true,
+   "type": "error",
+   "ctor": "ErrorEvent"
+  }
+ ],
+ [
+  "self.close() stops the worker",
+  {
+   "first": "bye",
+   "more": false
+  }
+ ],
+ [
+  "terminate stops delivery",
+  {
+   "got": false
+  }
+ ],
+ [
+  "constructor errors",
+  {
+   "no args": [
+    "TypeError"
+   ],
+   "number": [
+    "TypeError"
+   ]
+  }
+ ]
+]== unref
+exited fast
+rc=0

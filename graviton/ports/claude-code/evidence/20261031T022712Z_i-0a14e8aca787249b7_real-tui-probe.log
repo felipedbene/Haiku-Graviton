@@ -1,0 +1,44 @@
+# evidence: real-tui-probe
+# instance: i-0a14e8aca787249b7   region: us-west-2
+# ssm command: 44fbe26a-abcb-486b-a424-8cebfafcb00b
+# start: 20261031T022712Z   end: 20261031T022727Z   rc: 0   log bytes: 1660
+# script sha256: 69eef1e81ebd8035e986570d51d1e20cf87cc2319ff5c33d24cd7bc94eda3f0e
+# ---- script ----
+# | command -v tmux && tmux -V || { apt-get install -y -qq tmux >/dev/null 2>&1; tmux -V; }
+# | BIN=/opt/cc/v2.1.314/package/claude; H=/opt/cc/tui-home; rm -rf $H; mkdir -p $H
+# | tmux kill-server 2>/dev/null
+# | tmux new-session -d -s real -x 100 -y 30 "cd /tmp && HOME=$H TERM=xterm-256color $BIN"
+# | sleep 8
+# | echo "== capture (plain)"; tmux capture-pane -t real -p | sed 's/[[:space:]]*$//' | grep -v '^$' | head -30
+# | echo "== escape bytes in styled capture: $(tmux capture-pane -t real -p -e | wc -c)"
+# | tmux kill-server
+# ---- raw output ----
+/usr/bin/tmux
+tmux 3.4
+== capture (plain)
+                                             ░▓▓███▓▓░
+ *                                 ░░░░
+                                 ░░░░░░░░
+                               ░░░░░░░░░░░░░░░░
+       █████████                                        *
+      ██▄█████▄██                        *
+       █████████      *
+.......█ █   █ █..........................................
+ Let's get started.
+ Choose the text style that looks best with your terminal
+ To change this later, run /theme
+     Auto (match terminal)
+ ❯ ✔ Dark mode
+     Light mode
+     Dark mode (colorblind-friendly)
+     Light mode (colorblind-friendly)
+     Dark mode (ANSI colors only)
+     Light mode (ANSI colors only)
+ ╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌
+  1  function greet() {
+  2 -  console.log("Hello, World!");
+  2 +  console.log("Hello, Claude!");
+  3  }
+ ╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌
+  Syntax theme: Monokai Extended (ctrl+t to disable)
+== escape bytes in styled capture: 2592

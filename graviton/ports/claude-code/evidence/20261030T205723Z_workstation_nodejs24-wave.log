@@ -1,0 +1,20 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+plan-file reconcile: all 1 planned port(s) still `queued`
+=== DeBeOS build-wave driver ===
+source            : plan-file /tmp/cc-nodejs24-plan.json
+mode              : EXECUTE
+budget            : 4 concurrent
+chain size        : 12 ports/execution   publish=False
+ports to drive    : 1 across 1 chains, 1 wave(s)
+  wave 1      :   1 ports  -> 1 chain(s)
+
+state machine     : arn:aws:states:us-west-2:<ACCOUNT_ID>:stateMachine:debeos-build-wave
+driver preflight  : UNVERIFIED (could not read the expected version)
+
+>>> WAVE 1 : 1 chain(s), 1 ports (budget 4) <<<
+    launched wd-10301557-w1-c01-1793393844  (1 pkg: nodejs24)
+<<< wave 1 done: 1 ok, 0 failed >>>
+
+=== driver summary ===
+chains driven     : 1  (1 ok, 0 failed executions)
+Re-run this driver any time to resume: it re-reads live queued state, and ClaimBatch prevents double-building. Builders are reaped by the state machine.

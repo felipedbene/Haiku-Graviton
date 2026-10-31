@@ -1,0 +1,16 @@
+# evidence: node24-temporal-probe
+# instance: i-0a14e8aca787249b7   region: us-west-2
+# ssm command: c9c4c937-42bd-4521-ac05-68640931e49f
+# start: 20261030T214624Z   end: 20261030T214628Z   rc: 0   log bytes: 214
+# script sha256: 7d63bd9efa904a7fbf348afe6e43aa191cbcc139536a2cb9dc12ac95679eeb7f
+# ---- script ----
+# | N=/opt/node24/bin/node; echo "node $($N --version) v8 $($N -p process.versions.v8)"
+# | $N -p 'typeof Temporal'; $N --harmony-temporal -p 'typeof Temporal' 2>&1 | tail -1; $N --v8-options | grep -i temporal | head -3
+# | grep -rn -E 'datetime|Temporal|z\.date|\.date\(' /opt/cc/v2.1.314/bunfs/root/chunk-1neynjgw.js 2>/dev/null | head -2 | cut -c1-200; exit 0
+# ---- raw output ----
+node v24.22.2 v8 13.6.233.17-node.63
+undefined
+object
+  --trace-temporal (trace temporal code)
+        type: bool  default: --no-trace-temporal
+  --harmony-temporal (enable "Temporal" (in progress / experimental))

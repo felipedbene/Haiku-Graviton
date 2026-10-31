@@ -1,0 +1,36 @@
+# evidence: node-accept-linux-ref
+# instance: i-0a14e8aca787249b7   region: us-west-2
+# ssm command: 461db82c-e5e2-4acf-b0fa-e052a495c5d5 (agent status: Success)
+# start: 20261031T075152Z   end: 20261031T080654Z   rc: 0   log bytes: 989
+# script sha256: fdfea3b2d55de66c78340129068c52b315aea794ff291629d56007c11dc3f972
+# ---- script ----
+# | set -u
+# | echo '56f8b11c5619e8e179dcb14fd2687cacc6f6b6b346b1ea8fa91ff03c1327b1e0  /opt/cc/port.stage/p.tgz' | sha256sum -c --quiet - || exit 1
+# | rm -rf /opt/cc/port && mkdir -p /opt/cc/port && tar xzf /opt/cc/port.stage/p.tgz -C /opt/cc/port 2>/dev/null
+# | cd /opt/cc/port
+# | cd compat/test/node-accept && /opt/node24/bin/node accept.mjs; echo rc=$?
+# ---- raw output ----
+versions {"node":"v24.22.2","v8":"13.6.233.17-node.63","icu":"78.3","unicode":"17.0","undici":"7.30.1","uv":"1.52.1","openssl":"3.5.9","platform":"linux","arch":"arm64"}
+PASS Segmenter ZWJ family: 1
+PASS Segmenter flags: 2
+PASS Segmenter combining: 2
+PASS Segmenter Hangul jamo: 1
+PASS Segmenter Devanagari: 1
+PASS Segmenter skin tone: 2
+PASS Segmenter words de: ["Grüße","Welt"]
+PASS NumberFormat de-DE: "1.234.567,891"
+PASS NumberFormat de-DE EUR: "1.234,50 €"
+PASS NumberFormat ja-JP: "￥5,000"
+PASS DisplayNames fr region: "États-Unis"
+PASS DateTimeFormat de: "Samstag, 31. Oktober 2026"
+PASS Collator de: ["a","ä","z"]
+PASS full ICU locales: 4
+PASS zstd round trip: true
+PASS zstd compresses: true
+PASS process.execve present: "function"
+PASS worker_threads: 42
+INFO fs.watch dir: rename:x.txt
+INFO fs.watch file: change
+PASS https fetch + TLS roots: "sha512-Ydggc987+RO0AnWtZ/7Wq9FtNvcrL1b/RO0ud9mWjUPgDrsAAwQSF51sm2hm1XofbU/4jkpGEsLFsZZxU+1DOg=="
+node-accept: ALL PASS
+rc=0

@@ -1,0 +1,45 @@
+# evidence: reexec-wrapper
+# instance: i-0a14e8aca787249b7   region: us-west-2
+# ssm command: 406953a3-e06b-468b-b8f8-a864ef4337b0
+# start: 20261031T022033Z   end: 20261031T022243Z   rc: 0   log bytes: 426
+# script sha256: 5c396985c9b89fd6e07c439ba322d670f3e95e31aae1d36c61190eb6787cc3f9
+# ---- script ----
+# | set -u
+# | echo 'fb670890bac372ca2adf19540d6bf157144a5352f1c9f4fac49a77fc0869847c  /opt/cc/w-reexec.stage/p.tgz' | sha256sum -c --quiet - || exit 1
+# | rm -rf /opt/cc/w-reexec && mkdir -p /opt/cc/w-reexec && tar xzf /opt/cc/w-reexec.stage/p.tgz -C /opt/cc/w-reexec 2>/dev/null
+# | cd /opt/cc/w-reexec
+# | set -u
+# | W=/opt/cc/w-reexec; N=/opt/node24/bin/node; BIN=/opt/cc/v2.1.314/package/claude
+# | bash tools/fetch-deps.sh $W/deps > /dev/null || exit 1
+# | rm -rf $W/tree; bash tools/build-tree.sh $BIN $W/tree $W/tree $N $W/deps | tail -1 || exit 1
+# | rc=0
+# | echo "== diff via claude.mjs"; TREE=$W/tree NODE=$N WORK=$W/s CASES=compat/cases-help.txt bash tools/linux-diff.sh | tail -1 || rc=1
+# | echo "== relaunch form (no node flags), as the 26 sites spawn it"
+# | for a in "--version" "doctor --help" "mcp --help"; do
+# | 	A=$(cd /tmp && HOME=$W/hA bun --zero-fill-buffers $W/tree/cli $a 2>&1; echo "rc=$?")
+# | 	B=$(cd /tmp && HOME=$W/hB $N $W/tree/claude.mjs $a 2>&1; echo "rc=$?")
+# | 	[ "$A" = "$B" ] && echo "SAME [$a]" || { echo "DIFF [$a]"; diff <(echo "$A") <(echo "$B") | head; rc=1; }
+# | done
+# | echo "== child state"; HOME=$W/hB $N -e '
+# | const { spawnSync } = require("node:child_process");
+# | const r = spawnSync(process.execPath, [process.argv[1], "--version"], { encoding: "utf8" });
+# | console.log("child rc", r.status, "out", r.stdout.trim(), "err bytes", r.stderr.length);' $W/tree/claude.mjs
+# | cat > $W/probe.mjs <<'X'
+# | console.log(JSON.stringify({ execArgv: process.execArgv, bun: typeof Bun, main: Bun.main, zero: Buffer.allocUnsafe(32).every((b) => b === 0) }));
+# | X
+# | cp $W/tree/claude.mjs $W/tree/probe-entry.mjs && sed -i 's#await import("./cli");#await import("../probe.mjs");#' $W/tree/probe-entry.mjs
+# | echo "probe (no flag):"; $N $W/tree/probe-entry.mjs; rm $W/tree/probe-entry.mjs
+# | echo "overall rc=$rc"; exit $rc
+# ---- raw output ----
+build-tree: /opt/cc/w-reexec/tree ready (prefix /opt/cc/w-reexec/tree)
+== diff via claude.mjs
+summary: same=20 diff=0
+== relaunch form (no node flags), as the 26 sites spawn it
+SAME [--version]
+SAME [doctor --help]
+SAME [mcp --help]
+== child state
+child rc 0 out 2.1.314 (Claude Code) err bytes 0
+probe (no flag):
+{"execArgv":["--zero-fill-buffers"],"bun":"object","main":"/opt/cc/w-reexec/tree/cli","zero":true}
+overall rc=0

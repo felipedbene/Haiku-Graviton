@@ -1,0 +1,21 @@
+# evidence: tmux-keycap-linux
+# instance: i-0a14e8aca787249b7   region: us-west-2
+# ssm command: c2a70536-99f5-4552-b99d-c2aa3047da63 (agent status: Success)
+# start: 20261031T143156Z   end: 20261031T143204Z   rc: 0   log bytes: 90
+# script sha256: 6d16a3c574d33f2dd5f5f1dd32a77906a5a3ab6dcb23384dc2e4b9902c6041cd
+# ---- script ----
+# | set -u
+# | echo '915d62fb5d34961b22bd13e1cfd10baf1db3516b3899a32336c776285c753c06  /opt/cc/w-kc.stage/p.tgz' | sha256sum -c --quiet - || exit 1
+# | rm -rf /opt/cc/w-kc && mkdir -p /opt/cc/w-kc && tar xzf /opt/cc/w-kc.stage/p.tgz -C /opt/cc/w-kc 2>/dev/null
+# | cd /opt/cc/w-kc
+# | tmux -V
+# | tmux -L kc kill-server 2>/dev/null
+# | tmux -L kc new-session -d -s kc -x 60 -y 5 "printf 'A 1\357\270\217\342\203\243 B\n'; sleep 30"
+# | sleep 2; tmux -L kc capture-pane -t kc -p | head -1 | od -c | head -3
+# | tmux -L kc capture-pane -t kc -p | head -1
+# | tmux -L kc kill-server
+# ---- raw output ----
+tmux 3.4
+0000000   A       1 357 270 217     342 203 243       B  \n
+0000015
+A 1️ ⃣ B

@@ -1,0 +1,73 @@
+# evidence: toml-check2
+# instance: i-0a14e8aca787249b7   region: us-west-2
+# ssm command: 72630fcd-aaca-4306-bc4d-aa80df1030ab
+# start: 20261030T213910Z   end: 20261030T213925Z   rc: 0   log bytes: 4581
+# script sha256: 7fadf84800b89564f5d2035c093b3966a250ac5f4e94db6b49c83458a47bdeca
+# ---- script ----
+# | set -u
+# | echo '9f1128d3b4e0f916b5742c3fec56343693b5967503f9cb0da074a5d33fc4b88f  /opt/cc/w-toml-parse.stage/p.tgz' | sha256sum -c --quiet - || exit 1
+# | rm -rf /opt/cc/w-toml-parse && mkdir -p /opt/cc/w-toml-parse && tar xzf /opt/cc/w-toml-parse.stage/p.tgz -C /opt/cc/w-toml-parse 2>/dev/null
+# | cd /opt/cc/w-toml-parse
+# | mkdir -p out
+# | cd compat/test
+# | echo "== bun $(bun --version) gen"; time bun gen-toml-vectors.js ../../out || exit 1
+# | ls -la ../../out
+# | echo "== node $(/opt/node24/bin/node --version) check"; time /opt/node24/bin/node check-toml.mjs ../../out
+# | echo "check rc=$?"
+# ---- raw output ----
+== bun 1.4.4 gen
+edge: 664 (301 parse, 363 throw)
+bytes: 19 (2 parse, 17 throw)
+config: 17 (8 parse, 9 throw)
+coerce: 32 (17 parse, 15 throw)
+depth: 28 (22 parse, 6 throw)
+fuzz: 40000 (4795 parse, 35205 throw)
+fuzzshort: 40000 (13578 parse, 26422 throw)
+mutate: 40000 (10434 parse, 29566 throw)
+
+real	0m4.584s
+user	0m5.040s
+sys	0m0.341s
+total 21920
+drwxr-xr-x 2 root root     4096 Oct 30 21:39 .
+drwxr-xr-x 5 root root     4096 Oct 30 21:39 ..
+-rw-r--r-- 1 root root 22434152 Oct 30 21:39 toml.cases.json
+== node v24.22.2 check
+toml.edge: 664 match / 0 mismatch
+toml.bytes: 19 match / 0 mismatch
+toml.config: 17 match / 0 mismatch
+KNOWN coerce:blob -- Bun reads a Blob synchronously; Node cannot, so the port throws a TypeError instead 
+  got {"e":{"e":"TypeError","m":"Bun.TOML.parse: a Blob cannot be read synchronously on Node; pass await blob.text()","c":null}} 
+  exp {"v":{"o":[["a",{"n":"3ff0000000000000"}]]}}
+toml.coerce: 31 match / 0 mismatch
+MISMATCH depth:inline-3000 
+  got {"e":{"e":"RangeError","m":"Maximum call stack size exceeded.","c":null}} 
+  str {"e":{"e":"RangeError","m":"Maximum call stack size exceeded.","c":null}} 
+  exp {"v":"{\"a\":{\"b\":{\"b\":{\"b\":{\"b\":{\"b\":{\"b\":{\"b\":{\"b\":{\"b\":{\"b\":{\"b\":{\"b\":{\"b\":{\"b\":{\"b\":{\"b\":{\"b\":{\"b\":{\"b\":{\"b\":{\"b\":{\"b\":{\"b\":{\"b\":{\"b\":{\"b\":{\"b\":{\"b\":{\"b\":{\"b\":{\"b\":{\"b\":{\"b\":{\"b\":{\"b\":{\"b\":{\"b\":{\"b\":{\"b\":{\"b\":{\"b\":{\"b\":{\"b\":{\"b\":{\"b\":{\"b\":{\"b\":{\"b\":{\"b\":{\"b\":{\"b\":{\"b\":{\"b\":{\"b\":{\"b\":{\
+MISMATCH depth:array-5000 
+  got {"e":{"e":"RangeError","m":"Maximum call stack size exceeded.","c":null}} 
+  str {"e":{"e":"RangeError","m":"Maximum call stack size exceeded.","c":null}} 
+  exp {"v":"{\"a\":[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[
+MISMATCH depth:inline-5000 
+  got {"e":{"e":"RangeError","m":"Maximum call stack size exceeded.","c":null}} 
+  str {"e":{"e":"RangeError","m":"Maximum call stack size exceeded.","c":null}} 
+  exp {"v":"{\"a\":{\"b\":{\"b\":{\"b\":{\"b\":{\"b\":{\"b\":{\"b\":{\"b\":{\"b\":{\"b\":{\"b\":{\"b\":{\"b\":{\"b\":{\"b\":{\"b\":{\"b\":{\"b\":{\"b\":{\"b\":{\"b\":{\"b\":{\"b\":{\"b\":{\"b\":{\"b\":{\"b\":{\"b\":{\"b\":{\"b\":{\"b\":{\"b\":{\"b\":{\"b\":{\"b\":{\"b\":{\"b\":{\"b\":{\"b\":{\"b\":{\"b\":{\"b\":{\"b\":{\"b\":{\"b\":{\"b\":{\"b\":{\"b\":{\"b\":{\"b\":{\"b\":{\"b\":{\"b\":{\"b\":{\"b\":{\
+MISMATCH depth:header-100000 
+  got {"v":"{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\ 
+  str {"v":"{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\ 
+  exp {"e":{"e":"RangeError","m":"Maximum call stack size exceeded.","c":null}}
+MISMATCH depth:dotted-100000 
+  got {"v":"{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\ 
+  str {"v":"{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\ 
+  exp {"e":{"e":"RangeError","m":"Maximum call stack size exceeded.","c":null}}
+toml.depth: 23 match / 5 mismatch
+toml.fuzz: 40000 match / 0 mismatch
+toml.fuzzshort: 40000 match / 0 mismatch
+toml.mutate: 40000 match / 0 mismatch
+toml: 3842 vectors contain date/times (Temporal objects in Bun; strings equal to their String() from parse(), type-checked through parseWith)
+toml: 1 known difference(s), listed above
+
+real	0m5.396s
+user	0m5.810s
+sys	0m0.382s
+check rc=1

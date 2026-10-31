@@ -1,0 +1,10 @@
+# evidence: fetch-wait
+# instance: i-0a14e8aca787249b7   region: us-west-2
+# ssm command: 62ce1fcf-bd9e-4795-ab28-2d582f47d347
+# start: 20261031T044939Z   end: 20261031T044942Z   rc: 0   log bytes: 7
+# script sha256: 5869aa9bc141f47306a58a31a2526823555408c7f56d9d14187888f5700234a3
+# ---- script ----
+# | for i in $(seq 1 120); do pgrep -f 'compat/test/fetch|build-tree.sh|run.js' >/dev/null || break; sleep 5; done
+# | ps -eo pid,etime,args | grep -E 'run.js|fixture.js|build-tree' | grep -v grep; echo waited
+# ---- raw output ----
+waited

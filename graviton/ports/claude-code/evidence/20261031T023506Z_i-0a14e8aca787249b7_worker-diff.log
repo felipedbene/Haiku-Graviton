@@ -1,0 +1,73 @@
+# evidence: worker-diff
+# instance: i-0a14e8aca787249b7   region: us-west-2
+# ssm command: 718995e4-f2a7-4619-ac7b-b0459e3dad96
+# start: 20261031T023506Z   end: 20261031T023713Z   rc: 0   log bytes: 1461
+# script sha256: 0235a0476018c88389c4bb0793dfa9c39a354ed3ae9f47ba01e7dc53f9e00dde
+# ---- script ----
+# | set -u
+# | echo '30ba417bc4a302cfe06d76bb7a10455de12d6ddda12993b29824322431d45e94  /opt/cc/w-worker.stage/p.tgz' | sha256sum -c --quiet - || exit 1
+# | rm -rf /opt/cc/w-worker && mkdir -p /opt/cc/w-worker && tar xzf /opt/cc/w-worker.stage/p.tgz -C /opt/cc/w-worker 2>/dev/null
+# | cd /opt/cc/w-worker
+# | set -u
+# | W=/opt/cc/w-worker; N=/opt/node24/bin/node; BIN=/opt/cc/v2.1.314/package/claude
+# | bash tools/fetch-deps.sh $W/deps > /dev/null || exit 1
+# | rm -rf $W/tree; bash tools/build-tree.sh $BIN $W/tree $W/tree $N $W/deps | tail -1 || exit 1
+# | cd compat/test/worker
+# | for run in 1 2; do
+# | echo "######## run $run"
+# | timeout 120 bun run.js /tmp/wk-bun.json; echo "bun rc=$?"
+# | timeout 120 $N --zero-fill-buffers --import $W/tree/bun-compat.mjs run.js /tmp/wk-node.json; echo "node rc=$?"
+# | $N check.mjs /tmp/wk-bun.json /tmp/wk-node.json; echo "check rc=$?"
+# | echo "== unref: bun $(timeout 10 bun unref-child.js; echo rc=$?) / node $(timeout 10 $N --import $W/tree/bun-compat.mjs unref-child.js; echo rc=$?)"
+# | done
+# | echo "== help diff with Worker global"; cd ../../..; TREE=$W/tree NODE=$N WORK=$W/s CASES=compat/cases-help.txt bash tools/linux-diff.sh | tail -1
+# ---- raw output ----
+build-tree: /opt/cc/w-worker/tree ready (prefix /opt/cc/w-worker/tree)
+######## run 1
+scenarios: 13
+bun rc=0
+scenarios: 13
+node rc=0
+SAME globals
+SAME blob CommonJS script with require and onmessage assignment
+SAME file ESM worker, workerData, self.onmessage
+SAME string path to ESM file
+SAME MessagePort transfer and port.onmessage
+SAME SharedArrayBuffer + Atomics across threads
+SAME Uint8Array slice clones by value
+SAME addEventListener('message')
+SAME uncaught throw in worker -> error event
+SAME syntax error in blob -> error event
+SAME self.close() stops the worker
+SAME terminate stops delivery
+SAME constructor errors
+worker: 13 match / 0 mismatch (13 scenarios)
+check rc=0
+== unref: bun exited fast
+rc=0 / node exited fast
+rc=0
+######## run 2
+scenarios: 13
+bun rc=0
+scenarios: 13
+node rc=0
+SAME globals
+SAME blob CommonJS script with require and onmessage assignment
+SAME file ESM worker, workerData, self.onmessage
+SAME string path to ESM file
+SAME MessagePort transfer and port.onmessage
+SAME SharedArrayBuffer + Atomics across threads
+SAME Uint8Array slice clones by value
+SAME addEventListener('message')
+SAME uncaught throw in worker -> error event
+SAME syntax error in blob -> error event
+SAME self.close() stops the worker
+SAME terminate stops delivery
+SAME constructor errors
+worker: 13 match / 0 mismatch (13 scenarios)
+check rc=0
+== unref: bun exited fast
+rc=0 / node exited fast
+rc=0
+== help diff with Worker global
+summary: same=20 diff=0

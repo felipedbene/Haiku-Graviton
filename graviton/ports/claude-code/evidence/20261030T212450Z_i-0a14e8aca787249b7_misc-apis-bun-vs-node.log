@@ -1,0 +1,15 @@
+# evidence: misc-apis-bun-vs-node
+# instance: i-0a14e8aca787249b7   region: us-west-2
+# ssm command: f31d3a54-4ee4-47d7-9bb9-8abe8ddf7f8a
+# start: 20261030T212450Z   end: 20261030T212453Z   rc: 0   log bytes: 65
+# script sha256: 1eac5676ac4340e4820a43ce9f3582af9feb3df8dd3e2e48bd8637d79a6ab2dc
+# ---- script ----
+# | set -u
+# | echo 'a22d0509b0d9b277328cc38f03f42c892e3fcf6d9096ed9df4a07ec641d44373  /opt/cc/port.stage/p.tgz' | sha256sum -c --quiet - || exit 1
+# | rm -rf /opt/cc/port && mkdir -p /opt/cc/port && tar xzf /opt/cc/port.stage/p.tgz -C /opt/cc/port 2>/dev/null
+# | cd /opt/cc/port
+# | mkdir -p /opt/cc/vec && cd compat/test && printf 'piped-stdin\n' | bun gen-misc-vectors.js /opt/cc/vec && printf 'piped-stdin\n' | /opt/node24/bin/node check-misc.mjs /opt/cc/vec; echo "check rc=$?"; exit 0
+# ---- raw output ----
+misc observations written
+misc: 35 match / 0 mismatch
+check rc=0

@@ -1,0 +1,104 @@
+# evidence: yaml-probe1
+# instance: i-0a14e8aca787249b7   region: us-west-2
+# ssm command: ec216ef8-04ce-435d-9b20-b9aed930231b
+# start: 20261030T212842Z   end: 20261030T212903Z   rc: 0   log bytes: 3335
+# script sha256: 104f06501dc1d77d53a30046192be8ad8e8f759e901dabf9a4d34f9e4c395be5
+# ---- script ----
+# | set -u
+# | echo 'd0e0c5dd18a984ec6694c6f40d83b41b97cc48f7eaa5a05db6a19477f137cb08  /opt/cc/w-yaml-stringify.stage/p.tgz' | sha256sum -c --quiet - || exit 1
+# | rm -rf /opt/cc/w-yaml-stringify && mkdir -p /opt/cc/w-yaml-stringify && tar xzf /opt/cc/w-yaml-stringify.stage/p.tgz -C /opt/cc/w-yaml-stringify 2>/dev/null
+# | cd /opt/cc/w-yaml-stringify
+# | cat > /opt/cc/w-yaml-stringify/probe.js <<'JS'
+# | const S = (...a) => { try { const r = Bun.YAML.stringify(...a); return typeof r === "string" ? JSON.stringify(r) : "<" + typeof r + ">"; } catch (e) { return "THROW " + (e && e.constructor && e.constructor.name) + " " + JSON.stringify(e && e.message) + " code=" + (e && e.code) + " keys=" + Object.keys(e||{}); } };
+# | const P = (name, ...a) => console.log(name.padEnd(28), S(...a));
+# | P("0", 0); P("-0", -0); P("0.5-0.5", 0.5 - 0.5); let h = 0.5; P("h-h", h - h); P("JSON 0.0", JSON.parse("0.0")); P("parseFloat", parseFloat("0.0")); P("round", Math.round(0.2)); P("1-1", 1 - 1);
+# | P("[1.5,0]", [1.5, 0]); P("[0]", [0]); P("{a:h-h}", { a: h - h }); P("[h-h]", [h - h]);
+# | P("nums", [1e21, 1e-7, 123.456, 2 ** 53, 2 ** 31, -(2 ** 31), 0.1, NaN, Infinity, -Infinity, 5e-324, 1.7976931348623157e308]);
+# | P("nums min", [1e21, 0.1, NaN, -Infinity], null, 0);
+# | P("tRuE", "tRuE"); P("yes", "yes"); P("y", "y"); P("multi", "multi\nline"); P("lone", "\ud800x");
+# | P("replacer fn", 1, () => 1); P("replacer arr", 1, ["a"]); P("replacer undef value", undefined, () => 1); P("replacer 0", 1, 0); P("replacer false", 1, false); P("replacer str", 1, "");
+# | P("bigint", 1n); P("deep bigint", { a: [1, { b: 2n }] }); P("Object(1n)", Object(1n));
+# | P("sym", Symbol("x")); P("Object(sym)", Object(Symbol("x"))); P("{s:Object(sym)}", { s: Object(Symbol("x")) }, null, 2); P("[Object(sym)]", [Object(Symbol("x"))], null, 2);
+# | P("fn", () => 1); P("undef", undefined); P("noargs");
+# | P("callable proxy", new Proxy(() => 1, {})); P("obj proxy", new Proxy({ a: 1 }, {})); P("arr proxy", new Proxy([1, 2], {}), null, 2);
+# | P("Array ctor in obj", { a: Array, b: Map, c: Function.prototype, d: (() => 1).bind(null), e: async () => 1, f: class {}, g: function* () {} });
+# | P("date", new Date(0)); P("map", new Map([[1, 2]])); P("set", new Set([1])); P("regex", /x/g); P("err", new Error("m"), null, 2); P("u8", new Uint8Array([1, 2]), null, 2); P("ab", new ArrayBuffer(2));
+# | P("toJSON", { toJSON() { return 1; }, a: 1 }); P("boxed", [new Number(3), new String("s"), new Boolean(false)], null, 2);
+# | P("cyc", (() => { const a = { x: 1 }; a.self = a; return a; })(), null, 2);
+# | P("cyc min", (() => { const a = { x: 1 }; a.self = a; return a; })());
+# | P("deep", (() => { let a = []; for (let i = 0; i < 1e6; i++) a = [a]; return a; })());
+# | let dd = []; for (let i = 0; i < 3000; i++) dd = [dd]; P("deep3000", typeof Bun.YAML.stringify(dd));
+# | P("space objs", { a: [1, { b: 2 }] }, null, new Number(3)); P("space Str", { a: { b: 1 } }, null, new String("ab")); P("space 2.7", { a: { b: 1 } }, null, 2.7); P("space long", { a: { b: [1] } }, null, "0123456789ABC"); P("space true", { a: { b: 1 } }, null, true);
+# | P("keys", { "4294967295": 1, "4294967294": 2, b: 3, 1: 4, "-1": 5 });
+# | P("holes", [1, , 3], null, 2);
+# | const o = { get a() { delete this.b; return 1; }, b: 2, c: 3 }; P("getter delete", o);
+# | const pa = Object.create({ inh: 1 }); P("proto", pa);
+# | P("arr extra", Object.assign([1], { foo: 2 }));
+# | P("arguments", (function () { return arguments; })(1, 2));
+# | JS
+# | echo "bun $(bun --version)"; bun /opt/cc/w-yaml-stringify/probe.js
+# ---- raw output ----
+bun 1.4.4
+0                            "0"
+-0                           "-0"
+0.5-0.5                      "0"
+h-h                          "+0"
+JSON 0.0                     "0"
+parseFloat                   "0"
+round                        "0"
+1-1                          "0"
+[1.5,0]                      "[1.5,+0]"
+[0]                          "[0]"
+{a:h-h}                      "{a: +0}"
+[h-h]                        "[+0]"
+nums                         "[1e+21,1e-7,123.456,9007199254740992,2147483648,-2147483648,0.1,.nan,.inf,-.inf,5e-324,1.7976931348623157e+308]"
+nums min                     "[1e+21,0.1,.nan,-.inf]"
+tRuE                         "tRuE"
+yes                          "\"yes\""
+y                            "\"y\""
+multi                        "\"multi\\nline\""
+lone                         "\ud800x"
+replacer fn                  THROW Error "YAML.stringify does not support the replacer argument" code=undefined keys=
+replacer arr                 THROW Error "YAML.stringify does not support the replacer argument" code=undefined keys=
+replacer undef value         <undefined>
+replacer 0                   THROW Error "YAML.stringify does not support the replacer argument" code=undefined keys=
+replacer false               THROW Error "YAML.stringify does not support the replacer argument" code=undefined keys=
+replacer str                 THROW Error "YAML.stringify does not support the replacer argument" code=undefined keys=
+bigint                       THROW Error "YAML.stringify cannot serialize BigInt" code=undefined keys=
+deep bigint                  THROW Error "YAML.stringify cannot serialize BigInt" code=undefined keys=
+Object(1n)                   THROW Error "YAML.stringify cannot serialize BigInt" code=undefined keys=
+sym                          <undefined>
+Object(sym)                  "{}"
+{s:Object(sym)}              "s: {}"
+[Object(sym)]                "- {}"
+fn                           <undefined>
+undef                        <undefined>
+noargs                       <undefined>
+callable proxy               "{}"
+obj proxy                    "{a: 1}"
+arr proxy                    "\"0\": 1\n\"1\": 2"
+Array ctor in obj            "{}"
+date                         "{}"
+map                          "{}"
+set                          "{}"
+regex                        "{}"
+err                          "{}"
+u8                           "\"0\": 1\n\"1\": 2"
+ab                           "{}"
+toJSON                       "{a: 1}"
+boxed                        "- 3\n- s\n- false"
+cyc                          "&root\nx: 1\nself:\n  *root"
+cyc min                      "&root {x: 1,self: *root}"
+deep                         THROW RangeError "Maximum call stack size exceeded." code=undefined keys=
+deep3000                     "string"
+space objs                   "a:\n   - 1\n   - b: 2"
+space Str                    "a:\nabb: 1"
+space 2.7                    "a:\n  b: 1"
+space long                   "a:\n0123456789b:\n01234567890123456789- 1"
+space true                   "{a: {b: 1}}"
+keys                         "{\"1\": 4,\"4294967294\": 2,\"4294967295\": 1,b: 3,\"-1\": 5}"
+holes                        "- 1\n- 3"
+getter delete                "{a: 1,c: 3}"
+proto                        "{}"
+arr extra                    "[1]"
+arguments                    "{\"0\": 1,\"1\": 2}"

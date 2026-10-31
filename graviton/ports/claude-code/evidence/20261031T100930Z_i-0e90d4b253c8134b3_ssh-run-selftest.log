@@ -1,0 +1,9 @@
+# evidence: ssh-run-selftest
+# instance: i-0e90d4b253c8134b3   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261031T100930Z   end: 20261031T102448Z   rc: 3
+# script sha256: ed975c159e889f445c1a6101c4ad4c1224cc05d996bf17aba9ff140e4c8901a4
+# ---- script ----
+# | uname -a; echo hello-from-ssh-run; exit 3
+# ---- raw output ----
+Haiku ip-10-128-13-44.us-west-2.compu R1~beta6+development hrev59996 Oct 19 2026 21:09:42 arm64 other Haiku
+hello-from-ssh-run

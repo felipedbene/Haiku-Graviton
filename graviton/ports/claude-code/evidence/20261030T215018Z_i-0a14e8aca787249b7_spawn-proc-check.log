@@ -1,0 +1,13 @@
+# evidence: spawn-proc-check
+# instance: i-0a14e8aca787249b7   region: us-west-2
+# ssm command: 487a9739-5ed0-4a10-af11-af231696e6e1
+# start: 20261030T215018Z   end: 20261030T215021Z   rc: 0   log bytes: 51
+# script sha256: 47c56b90fea3feffd18ee3175d85e7a8b32600794db522320026c3c7852f5bc8
+# ---- script ----
+# | pgrep -af "w-spawn" | grep -v pgrep || echo none-w-spawn
+# | ps -eo pid,etimes,args | awk '$3=="sleep" && ($4=="30"||$4=="5"||$4=="3")' || true
+# | ls -d /opt/cc/w-spawn* 
+# ---- raw output ----
+none-w-spawn
+/opt/cc/w-spawn
+/opt/cc/w-spawn.stage

@@ -1,0 +1,29 @@
+# evidence: builder-ami-038dc6d8-smoke-build
+# instance: i-07980b4809dfd8d75   region: us-west-2
+# ssm command: 9482d705-3bbf-44aa-97b4-bfeed6f5fa54
+# start: 20261030T204843Z   end: 20261030T205017Z   rc: 0   log bytes: 765
+# script sha256: 214b78a2c53474d505a7113fe819744568e51bfd769f7422d0b2b7c1201213ec
+# ---- script ----
+# | set -u
+# | HP=$(ls /boot/home/config/non-packaged/bin/haikuporter /boot/system/non-packaged/bin/haikuporter 2>/dev/null | head -1); echo "wrapper: $HP"
+# | export PATH="$(dirname "$HP"):$PATH"
+# | cd /boot/home/haikuports && timeout 1500 haikuporter -y lzip > /tmp/smoke-lzip.log 2>&1; rc=$?
+# | tail -12 /tmp/smoke-lzip.log; echo "lzip rc=$rc"
+# | ls -la /boot/home/haikuports/packages/lzip-*.hpkg 2>&1 | tail -2
+# | exit 0
+# ---- raw output ----
+wrapper: /boot/home/config/non-packaged/bin/haikuporter
+total size:                   82188
+-----------------------------------
+waiting for build package lzip-1.23-1 to be deactivated
+cleaning chroot folder
+grabbing lzip-1.23-1-arm64.hpkg and moving it to /boot/home/haikuports/packages/lzip-1.23-1-arm64.hpkg
+Checking if any dependency-infos need to be updated ...
+Looking for stale dependency-infos ...
+Looking for stale cached recipes ...
+----------------------------------------------------------------------
+app-arch::lzip-1.23
+	/boot/home/haikuports/app-arch/lzip/lzip-1.23.recipe
+----------------------------------------------------------------------
+lzip rc=0
+-rw-r--r-- 1 baron root 82188 Oct 30 20:49 /boot/home/haikuports/packages/lzip-1.23-1-arm64.hpkg

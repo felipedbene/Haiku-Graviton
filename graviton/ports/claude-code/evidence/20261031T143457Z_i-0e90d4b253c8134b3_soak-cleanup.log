@@ -1,0 +1,8 @@
+# evidence: soak-cleanup
+# instance: i-0e90d4b253c8134b3   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261031T143457Z   end: 20261031T143518Z   rc: 0
+# script sha256: 38a01e38b2359bb50d08240fe9b7a2983fe0ca1f53480c603c4afb0972ac91e6
+# ---- script ----
+# | tmux -L p kill-server 2>/dev/null; tmux -L soak kill-server 2>/dev/null; sleep 2; ps | grep -c "lib/clau"
+# ---- raw output ----
+1

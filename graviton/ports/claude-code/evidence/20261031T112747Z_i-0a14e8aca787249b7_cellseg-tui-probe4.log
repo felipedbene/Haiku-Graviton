@@ -1,0 +1,25 @@
+# evidence: cellseg-tui-probe4
+# instance: i-0a14e8aca787249b7   region: us-west-2
+# ssm command: a3a6b92a-f6a9-4b26-b068-d8220082bbc2
+# start: 20261031T112747Z   end: 20261031T112801Z   rc: 0   log bytes: 796
+# script sha256: 8bad33012d11bc3c52dcd2b6e6cc6b879081451dc43a94289a333d93adea9565
+# ---- script ----
+# | set -u
+# | N=/opt/node24/bin/node; W=/opt/cc/w-cellseg
+# | H=/tmp/tuih; rm -rf $H; mkdir -p $H/.claude; echo '{"prefersReducedMotion":true}' > $H/.claude/settings.json
+# | tmux kill-session -t t 2>/dev/null
+# | tmux new-session -d -s t -x 100 -y 30 "cd /tmp && HOME=$H TERM=xterm-256color $N --zero-fill-buffers $W/tree/claude.mjs --debug 2>/tmp/tui-B.err; echo EXIT=\$? >> /tmp/tui-B.err; sleep 30"
+# | sleep 12
+# | ps -eo pid,stat,comm,args | grep -i "claude\|node" | grep -v grep | cut -c1-120
+# | tmux kill-session -t t 2>/dev/null
+# | grep -h "ERROR\|WARN\|rror\|xception\|render\|Ink\|segment" $H/.claude/debug/* | grep -v "CA certs" | cut -c1-400 | head -40
+# ---- raw output ----
+  30934 Ss   tmux: server    tmux new-session -d -s t -x 100 -y 30 cd /tmp && HOME=/tmp/tuih TERM=xterm-256color /opt/no
+  30935 Ss+  bash            bash -c cd /tmp && HOME=/tmp/tuih TERM=xterm-256color /opt/node24/bin/node --zero-fill-buff
+  30937 Sl+  claude          claude
+2026-10-31T11:27:51.474Z [DEBUG] Error log sink initialized
+2026-10-31T11:27:51.507Z [ERROR] Failed to save config with lock: Error: ENOENT: no such file or directory, lstat '/tmp/tuih/.claude.json'
+2026-10-31T11:27:52.598Z [DEBUG] Error log sink initialized
+2026-10-31T11:27:51.474Z [DEBUG] Error log sink initialized
+2026-10-31T11:27:51.507Z [ERROR] Failed to save config with lock: Error: ENOENT: no such file or directory, lstat '/tmp/tuih/.claude.json'
+2026-10-31T11:27:52.598Z [DEBUG] Error log sink initialized

@@ -1,0 +1,45 @@
+# evidence: spawn-diff2
+# instance: i-0a14e8aca787249b7   region: us-west-2
+# ssm command: 2dad46d9-ddec-48de-a425-45f9d4a29d67
+# start: 20261030T214515Z   end: 20261030T214605Z   rc: 0   log bytes: 936
+# script sha256: 7b24eb0540dc18056aa2630a3cbecf2f4ab211774a3f3235a52f38a8e4ec6e84
+# ---- script ----
+# | set -u
+# | echo '009e311fbb581d65f5175d2817334b0545068e184263b36ab22f6ee250f36775  /opt/cc/w-spawn.stage/p.tgz' | sha256sum -c --quiet - || exit 1
+# | rm -rf /opt/cc/w-spawn && mkdir -p /opt/cc/w-spawn && tar xzf /opt/cc/w-spawn.stage/p.tgz -C /opt/cc/w-spawn 2>/dev/null
+# | cd /opt/cc/w-spawn
+# | cd compat/test
+# | export CC_SPAWN_PRESET=orig CC_SPAWN_PRESET2=orig2
+# | timeout 400 bun spawn-scenarios.mjs /opt/cc/w-spawn/bun.json /opt/cc/w-spawn-work; echo bun-rc=$?
+# | timeout 400 /opt/node24/bin/node --import ./spawn-preload.mjs spawn-scenarios.mjs /opt/cc/w-spawn/node.json /opt/cc/w-spawn-work; echo node-rc=$?
+# | /opt/node24/bin/node check-spawn.mjs /opt/cc/w-spawn/bun.json /opt/cc/w-spawn/node.json; echo check-rc=$?
+# | rm -rf /opt/cc/w-spawn-work
+# ---- raw output ----
+bun: 218 scenarios -> /opt/cc/w-spawn/bun.json
+bun-rc=0
+Warning: Detected unsettled top-level await at file:///opt/cc/w-spawn/compat/test/spawn-scenarios.mjs:733
+	try { r = await fn(); } catch (e) { r = { scenarioThrew: errShape(e) }; }
+	          ^
+
+
+
+node-rc=13
+node:fs:483
+    return binding.readFileUtf8(path, stringToFlags(options.flag));
+                   ^
+
+Error: ENOENT: no such file or directory, open '/opt/cc/w-spawn/node.json'
+    at readFileSync (node:fs:483:20)
+    at load (file:///opt/cc/w-spawn/compat/test/check-spawn.mjs:11:40)
+    at file:///opt/cc/w-spawn/compat/test/check-spawn.mjs:12:38
+    at ModuleJob.run (node:internal/modules/esm/module_job:561:25)
+    at async node:internal/modules/esm/loader:647:26
+    at async asyncRunEntryPointWithESMLoader (node:internal/modules/run_main:101:5) {
+  errno: -2,
+  code: 'ENOENT',
+  syscall: 'open',
+  path: '/opt/cc/w-spawn/node.json'
+}
+
+Node.js v24.22.2
+check-rc=1

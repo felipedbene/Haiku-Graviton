@@ -1,0 +1,166 @@
+# evidence: cellseg-tui-diff-v1
+# instance: i-0a14e8aca787249b7   region: us-west-2
+# ssm command: 40a29fbb-c269-4603-8e71-20277c949c34
+# start: 20261031T113022Z   end: 20261031T113119Z   rc: 0   log bytes: 9828
+# script sha256: 36e2b90c78e4c21d8f7ec8c3728266c97eb4899af73c39f26d7e55c63e1d6fd0
+# ---- script ----
+# | set -u
+# | echo '382ec3194ac33b228f0ca6833a8334eecb18d7b60a3bbd01c50ee651dc0e1910  /opt/cc/w-cellseg/port.stage/p.tgz' | sha256sum -c --quiet - || exit 1
+# | rm -rf /opt/cc/w-cellseg/port && mkdir -p /opt/cc/w-cellseg/port && tar xzf /opt/cc/w-cellseg/port.stage/p.tgz -C /opt/cc/w-cellseg/port 2>/dev/null
+# | cd /opt/cc/w-cellseg/port
+# | W=/opt/cc/w-cellseg
+# | mkdir -p $W/deps && bash tools/fetch-deps.sh $W/deps >/dev/null
+# | rm -rf $W/tree; bash tools/build-tree.sh /opt/cc/v2.1.314/package/claude $W/tree $W/tree /opt/node24/bin/node $W/deps > $W/build.log 2>&1; tail -1 $W/build.log
+# | SHOW=25 bash tools/tui-diff.sh /opt/cc/v2.1.314/package/claude /opt/node24/bin/node $W/tree 2>&1 | head -150
+# ---- raw output ----
+build-tree: /opt/cc/w-cellseg/tree ready (prefix /opt/cc/w-cellseg/tree)
+FAIL theme-100x30#1
+1,8d0
+<                                              M-bM-^VM-^QM-bM-^VM-^SM-bM-^VM-^SM-bM-^VM-^HM-bM-^VM-^HM-bM-^VM-^HM-bM-^VM-^SM-bM-^VM-^SM-bM-^VM-^Q
+< ^[[38;5;246m *^[[39m                                 ^[[38;5;246mM-bM-^VM-^QM-bM-^VM-^QM-bM-^VM-^QM-bM-^VM-^Q^[[39m
+< ^[[38;5;246m ^[[39m                                ^[[38;5;246mM-bM-^VM-^QM-bM-^VM-^QM-bM-^VM-^QM-bM-^VM-^QM-bM-^VM-^QM-bM-^VM-^QM-bM-^VM-^QM-bM-^VM-^Q^[[39m
+< ^[[38;5;246m ^[[39m                              ^[[38;5;246mM-bM-^VM-^QM-bM-^VM-^QM-bM-^VM-^QM-bM-^VM-^QM-bM-^VM-^QM-bM-^VM-^QM-bM-^VM-^QM-bM-^VM-^QM-bM-^VM-^QM-bM-^VM-^QM-bM-^VM-^QM-bM-^VM-^QM-bM-^VM-^QM-bM-^VM-^QM-bM-^VM-^QM-bM-^VM-^Q^[[39m
+<       ^[[38;5;174m M-bM-^VM-^HM-bM-^VM-^HM-bM-^VM-^HM-bM-^VM-^HM-bM-^VM-^HM-bM-^VM-^HM-bM-^VM-^HM-bM-^VM-^HM-bM-^VM-^H^[[39m                                        ^[[38;5;246m*^[[39m
+<       ^[[38;5;174mM-bM-^VM-^HM-bM-^VM-^HM-bM-^VM-^DM-bM-^VM-^HM-bM-^VM-^HM-bM-^VM-^HM-bM-^VM-^HM-bM-^VM-^HM-bM-^VM-^DM-bM-^VM-^HM-bM-^VM-^H^[[39m                        ^[[1m*^[[0m
+<       ^[[38;5;174m M-bM-^VM-^HM-bM-^VM-^HM-bM-^VM-^HM-bM-^VM-^HM-bM-^VM-^HM-bM-^VM-^HM-bM-^VM-^HM-bM-^VM-^HM-bM-^VM-^H^[[39m      *
+--- theme-100x30 last screen (A, text only):
+                                             ░▓▓███▓▓░
+ *                                 ░░░░
+                                 ░░░░░░░░
+                               ░░░░░░░░░░░░░░░░
+       █████████                                        *
+      ██▄█████▄██                        *
+       █████████      *
+.......█ █   █ █..........................................
+ Let's get started.
+ Choose the text style that looks best with your terminal
+ To change this later, run /theme
+     Auto (match terminal)
+ ❯ ✔ Dark mode
+     Light mode
+     Dark mode (colorblind-friendly)
+     Light mode (colorblind-friendly)
+     Dark mode (ANSI colors only)
+     Light mode (ANSI colors only)
+ ╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌
+  1  function greet() {
+  2 -  console.log("Hello, World!");                                                           
+  2 +  console.log("Hello, Claude!");                                                          
+  3  }
+ ╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌
+  Syntax theme: Monokai Extended (ctrl+t to disable)
+FAIL theme-80x24#1
+1d0
+< ^[[38;5;174mWelcome^[[39m ^[[38;5;174mto^[[39m ^[[38;5;174mClaude^[[39m ^[[38;5;174mCode^[[39m ^[[38;5;246mv2.1.314^[[39m
+3,22d1
+<  Let's get started.
+< 
+<  ^[[1mChoose^[[0m ^[[1mthe^[[0m ^[[1mtext^[[0m ^[[1mstyle^[[0m ^[[1mthat^[[0m ^[[1mlooks^[[0m ^[[1mbest^[[0m ^[[1mwith^[[0m ^[[1myour^[[0m ^[[1mterminal^[[0m
+<  ^[[38;5;246mTo^[[39m ^[[38;5;246mchange^[[39m ^[[38;5;246mthis^[[39m ^[[38;5;246mlater,^[[39m ^[[38;5;246mrun^[[39m ^[[38;5;246m/theme^[[39m
+< 
+--- theme-80x24 last screen (A, text only):
+Welcome to Claude Code v2.1.314
+ Let's get started.
+ Choose the text style that looks best with your terminal
+ To change this later, run /theme
+     Auto (match terminal)
+ ❯ ✔ Dark mode
+     Light mode
+     Dark mode (colorblind-friendly)
+     Light mode (colorblind-friendly)
+     Dark mode (ANSI colors only)
+     Light mode (ANSI colors only)
+ ╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌
+  1  function greet() {
+  2 -  console.log("Hello, World!");                                       
+  2 +  console.log("Hello, Claude!");                                      
+  3  }
+ ╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌
+  Syntax theme: Monokai Extended (ctrl+t to disable)
+FAIL theme-40x20#1
+1d0
+<  Let's get started.
+3,19d1
+<  ^[[1mChoose^[[0m ^[[1mthe^[[0m ^[[1mtext^[[0m ^[[1mstyle^[[0m ^[[1mthat^[[0m ^[[1mlooks^[[0m ^[[1mbest^[[0m
+<  ^[[1mwith^[[0m ^[[1myour^[[0m ^[[1mterminal^[[0m
+<  ^[[38;5;246mTo^[[39m ^[[38;5;246mchange^[[39m ^[[38;5;246mthis^[[39m ^[[38;5;246mlater,^[[39m ^[[38;5;246mrun^[[39m ^[[38;5;246m/theme^[[39m
+< 
+<      Auto (match terminal)
+--- theme-40x20 last screen (A, text only):
+ Let's get started.
+ Choose the text style that looks best
+ with your terminal
+ To change this later, run /theme
+     Auto (match terminal)
+ ❯ ✔ Dark mode
+ ╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌
+  1  function greet() {
+  2 -  console.log("Hello, World!")
+    -;                             
+  2 +  console.log("Hello, Claude!"
+    +);                            
+  3  }
+ ╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌
+  Syntax theme: Monokai Extended
+ (ctrl+t to disable)
+FAIL theme-200x50#1
+1,2d0
+< ^[[38;5;174mWelcome^[[39m ^[[38;5;174mto^[[39m ^[[38;5;174mClaude^[[39m ^[[38;5;174mCode^[[39m ^[[38;5;246mv2.1.314^[[39m
+< ..........................................................
+4,37d1
+<      *                                       M-bM-^VM-^HM-bM-^VM-^HM-bM-^VM-^HM-bM-^VM-^HM-bM-^VM-^HM-bM-^VM-^SM-bM-^VM-^SM-bM-^VM-^Q
+<                                  *         M-bM-^VM-^HM-bM-^VM-^HM-bM-^VM-^HM-bM-^VM-^SM-bM-^VM-^Q     M-bM-^VM-^QM-bM-^VM-^Q
+<             M-bM-^VM-^QM-bM-^VM-^QM-bM-^VM-^QM-bM-^VM-^QM-bM-^VM-^QM-bM-^VM-^Q                        M-bM-^VM-^HM-bM-^VM-^HM-bM-^VM-^HM-bM-^VM-^SM-bM-^VM-^Q
+<     M-bM-^VM-^QM-bM-^VM-^QM-bM-^VM-^Q   M-bM-^VM-^QM-bM-^VM-^QM-bM-^VM-^QM-bM-^VM-^QM-bM-^VM-^QM-bM-^VM-^QM-bM-^VM-^QM-bM-^VM-^QM-bM-^VM-^QM-bM-^VM-^Q                      M-bM-^VM-^HM-bM-^VM-^HM-bM-^VM-^HM-bM-^VM-^SM-bM-^VM-^Q
+--- theme-200x50 last screen (A, text only):
+Welcome to Claude Code v2.1.314
+..........................................................
+     *                                       █████▓▓░
+                                 *         ███▓░     ░░
+            ░░░░░░                        ███▓░
+    ░░░   ░░░░░░░░░░                      ███▓░
+   ░░░░░░░░░░░░░░░░░░░    *                ██▓░░      ▓
+                                             ░▓▓███▓▓░
+ *                                 ░░░░
+                                 ░░░░░░░░
+                               ░░░░░░░░░░░░░░░░
+       █████████                                        *
+      ██▄█████▄██                        *
+       █████████      *
+.......█ █   █ █..........................................
+ Let's get started.
+ Choose the text style that looks best with your terminal
+ To change this later, run /theme
+     Auto (match terminal)
+ ❯ ✔ Dark mode
+     Light mode
+     Dark mode (colorblind-friendly)
+     Light mode (colorblind-friendly)
+     Dark mode (ANSI colors only)
+     Light mode (ANSI colors only)
+FAIL theme-120x40#1
+1,2d0
+< ^[[38;5;174mWelcome^[[39m ^[[38;5;174mto^[[39m ^[[38;5;174mClaude^[[39m ^[[38;5;174mCode^[[39m ^[[38;5;246mv2.1.314^[[39m
+< ..........................................................
+4,37d1
+<      *                                       M-bM-^VM-^HM-bM-^VM-^HM-bM-^VM-^HM-bM-^VM-^HM-bM-^VM-^HM-bM-^VM-^SM-bM-^VM-^SM-bM-^VM-^Q
+<                                  *         M-bM-^VM-^HM-bM-^VM-^HM-bM-^VM-^HM-bM-^VM-^SM-bM-^VM-^Q     M-bM-^VM-^QM-bM-^VM-^Q
+<             M-bM-^VM-^QM-bM-^VM-^QM-bM-^VM-^QM-bM-^VM-^QM-bM-^VM-^QM-bM-^VM-^Q                        M-bM-^VM-^HM-bM-^VM-^HM-bM-^VM-^HM-bM-^VM-^SM-bM-^VM-^Q
+<     M-bM-^VM-^QM-bM-^VM-^QM-bM-^VM-^Q   M-bM-^VM-^QM-bM-^VM-^QM-bM-^VM-^QM-bM-^VM-^QM-bM-^VM-^QM-bM-^VM-^QM-bM-^VM-^QM-bM-^VM-^QM-bM-^VM-^QM-bM-^VM-^Q                      M-bM-^VM-^HM-bM-^VM-^HM-bM-^VM-^HM-bM-^VM-^SM-bM-^VM-^Q
+--- theme-120x40 last screen (A, text only):
+Welcome to Claude Code v2.1.314
+..........................................................
+     *                                       █████▓▓░
+                                 *         ███▓░     ░░
+            ░░░░░░                        ███▓░
+    ░░░   ░░░░░░░░░░                      ███▓░
+   ░░░░░░░░░░░░░░░░░░░    *                ██▓░░      ▓
+                                             ░▓▓███▓▓░
+ *                                 ░░░░
+                                 ░░░░░░░░
+                               ░░░░░░░░░░░░░░░░
+       █████████                                        *
+      ██▄█████▄██                        *
+       █████████      *
+.......█ █   █ █..........................................
+ Let's get started.

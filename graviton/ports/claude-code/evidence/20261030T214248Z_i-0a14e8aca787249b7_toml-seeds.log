@@ -1,0 +1,71 @@
+# evidence: toml-seeds
+# instance: i-0a14e8aca787249b7   region: us-west-2
+# ssm command: 9a6875ac-d927-42ba-b472-02ac1ae4b848
+# start: 20261030T214248Z   end: 20261030T214339Z   rc: 0   log bytes: 3117
+# script sha256: 087868c40be8ceb6fb5f64a29a76ded27a144d55162bcc64cd5467365775adcb
+# ---- script ----
+# | set -u
+# | echo '878e7ade89c541b622d90b66c79289c011da1e94d100c520f2536c6ed9f96d3d  /opt/cc/w-toml-parse.stage/p.tgz' | sha256sum -c --quiet - || exit 1
+# | rm -rf /opt/cc/w-toml-parse && mkdir -p /opt/cc/w-toml-parse && tar xzf /opt/cc/w-toml-parse.stage/p.tgz -C /opt/cc/w-toml-parse 2>/dev/null
+# | cd /opt/cc/w-toml-parse
+# | cd compat/test
+# | for seed in 1 0xC0FFEE 987654321 0xDEADBEEF12345; do
+# | 	mkdir -p ../../out-$seed
+# | 	echo "== seed $seed"
+# | 	bun gen-toml-vectors.js ../../out-$seed $seed | tr '\n' ' '; echo
+# | 	/opt/node24/bin/node check-toml.mjs ../../out-$seed | grep -v '^  \|^KNOWN'
+# | 	echo "check rc=$?"
+# | done
+# ---- raw output ----
+== seed 1
+edge: 664 (301 parse, 363 throw) bytes: 19 (2 parse, 17 throw) config: 17 (8 parse, 9 throw) coerce: 32 (17 parse, 15 throw) depth: 40 (31 parse, 9 throw) fuzz: 40000 (4900 parse, 35100 throw) fuzzshort: 40000 (13519 parse, 26481 throw) mutate: 40000 (10406 parse, 29594 throw) 
+toml.edge: 664 match / 0 mismatch
+toml.bytes: 19 match / 0 mismatch
+toml.config: 17 match / 0 mismatch
+toml.coerce: 31 match / 0 mismatch
+toml.depth: 31 match / 0 mismatch
+toml.fuzz: 40000 match / 0 mismatch
+toml.fuzzshort: 40000 match / 0 mismatch
+toml.mutate: 40000 match / 0 mismatch
+toml: 3883 vectors contain date/times (Temporal objects in Bun; strings equal to their String() from parse(), type-checked through parseWith)
+toml: 10 known difference(s), listed above
+check rc=0
+== seed 0xC0FFEE
+edge: 664 (301 parse, 363 throw) bytes: 19 (2 parse, 17 throw) config: 17 (8 parse, 9 throw) coerce: 32 (17 parse, 15 throw) depth: 40 (31 parse, 9 throw) fuzz: 40000 (4869 parse, 35131 throw) fuzzshort: 40000 (13591 parse, 26409 throw) mutate: 40000 (10428 parse, 29572 throw) 
+toml.edge: 664 match / 0 mismatch
+toml.bytes: 19 match / 0 mismatch
+toml.config: 17 match / 0 mismatch
+toml.coerce: 31 match / 0 mismatch
+toml.depth: 31 match / 0 mismatch
+toml.fuzz: 40000 match / 0 mismatch
+toml.fuzzshort: 40000 match / 0 mismatch
+toml.mutate: 40000 match / 0 mismatch
+toml: 3850 vectors contain date/times (Temporal objects in Bun; strings equal to their String() from parse(), type-checked through parseWith)
+toml: 10 known difference(s), listed above
+check rc=0
+== seed 987654321
+edge: 664 (301 parse, 363 throw) bytes: 19 (2 parse, 17 throw) config: 17 (8 parse, 9 throw) coerce: 32 (17 parse, 15 throw) depth: 40 (31 parse, 9 throw) fuzz: 40000 (4933 parse, 35067 throw) fuzzshort: 40000 (13659 parse, 26341 throw) mutate: 40000 (10454 parse, 29546 throw) 
+toml.edge: 664 match / 0 mismatch
+toml.bytes: 19 match / 0 mismatch
+toml.config: 17 match / 0 mismatch
+toml.coerce: 31 match / 0 mismatch
+toml.depth: 31 match / 0 mismatch
+toml.fuzz: 40000 match / 0 mismatch
+toml.fuzzshort: 40000 match / 0 mismatch
+toml.mutate: 40000 match / 0 mismatch
+toml: 3876 vectors contain date/times (Temporal objects in Bun; strings equal to their String() from parse(), type-checked through parseWith)
+toml: 10 known difference(s), listed above
+check rc=0
+== seed 0xDEADBEEF12345
+edge: 664 (301 parse, 363 throw) bytes: 19 (2 parse, 17 throw) config: 17 (8 parse, 9 throw) coerce: 32 (17 parse, 15 throw) depth: 40 (31 parse, 9 throw) fuzz: 40000 (4809 parse, 35191 throw) fuzzshort: 40000 (13588 parse, 26412 throw) mutate: 40000 (10415 parse, 29585 throw) 
+toml.edge: 664 match / 0 mismatch
+toml.bytes: 19 match / 0 mismatch
+toml.config: 17 match / 0 mismatch
+toml.coerce: 31 match / 0 mismatch
+toml.depth: 31 match / 0 mismatch
+toml.fuzz: 40000 match / 0 mismatch
+toml.fuzzshort: 40000 match / 0 mismatch
+toml.mutate: 40000 match / 0 mismatch
+toml: 3772 vectors contain date/times (Temporal objects in Bun; strings equal to their String() from parse(), type-checked through parseWith)
+toml: 10 known difference(s), listed above
+check rc=0

@@ -1,0 +1,15 @@
+# evidence: nodejs24-nativebuild-start
+# instance: i-0e7bed4928e0f7bf7   region: us-west-2
+# ssm command: f2eab6cb-59d8-406c-8911-7949bb8f815d
+# start: 20261030T224812Z   end: 20261030T225010Z   rc: 0   log bytes: 144
+# script sha256: 90e16f71f225752b8edbfcf280576d2a33b50a25e2f241b75be5f501982538d8
+# ---- script ----
+# | set -u
+# | grep -c 'libicuuc$secondaryArchSuffix >= 78' /boot/home/haikuports/net-libs/nodejs/nodejs24-24.21.0.recipe
+# | nohup sh /boot/home/haiku-nativebuild nodejs24 > /boot/home/n24-nb.log 2>&1 &
+# | echo "pid $!"; sleep 45; tail -15 /boot/home/n24-nb.log
+# ---- raw output ----
+1
+pid 901
+===== haiku-nativebuild NATIVEBUILD_VERSION=2026-10-17.1 2026-10-30T22:48:13Z =====
+===== nodejs24 : start 2026-10-30T22:48:13Z =====

@@ -1,0 +1,10 @@
+# evidence: find-yaml-corpus
+# instance: i-0a14e8aca787249b7   region: us-west-2
+# ssm command: 75cbe945-eb34-40bd-8426-9055f1bc7d02
+# start: 20261031T032458Z   end: 20261031T032501Z   rc: 0   log bytes: 221
+# script sha256: 324f33748216f3195da9cf7b27a63f931f6e23e9fa04b6b94aacc8539ad4c637
+# ---- script ----
+# | ls -l /opt/cc/*/compat/test/yaml-parse-corpus.json 2>&1; sha256sum /opt/cc/*/compat/test/yaml-parse-corpus.json 2>/dev/null
+# ---- raw output ----
+-rw-r--r-- 1 503 staff 407371 Oct 30 21:41 /opt/cc/w-yaml-parse/compat/test/yaml-parse-corpus.json
+44c475c6432181f0a3a4a2bf60a5a9c44981616d644a81ccbf8aaa74f6b9b3e6  /opt/cc/w-yaml-parse/compat/test/yaml-parse-corpus.json

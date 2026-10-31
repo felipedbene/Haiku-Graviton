@@ -1,0 +1,71 @@
+# evidence: cellseg-tui-diff-v2-details
+# instance: i-0a14e8aca787249b7   region: us-west-2
+# ssm command: 9b2e4f30-e9e5-4496-91e8-65ff9c4e4a36
+# start: 20261031T115530Z   end: 20261031T115533Z   rc: 0   log bytes: 2736
+# script sha256: acfb07ddbc5c5fc7984a75617e4d53aaa1731977f14bb51de811e1aece98d1e5
+# ---- script ----
+# | cd /tmp/tuidiff
+# | for f in theme-arrow-resize.1 login-flow.3; do echo "=== $f"; diff $f.A $f.B | head -12 | cut -c1-220 | cat -v; done
+# | echo "=== text-100x30.6.A (plain)"; sed 's/\x1b\[[0-9;:]*m//g' text-100x30.6.A | grep -v '^ *$' | tail -8
+# | echo "=== text-40x20.7.A"; sed 's/\x1b\[[0-9;:]*m//g' text-40x20.7.A | grep -v '^ *$' | tail -8
+# | echo "=== text-rtl-vscode.4.A"; sed 's/\x1b\[[0-9;:]*m//g' text-rtl-vscode.4.A | grep -v '^ *$' | tail -4
+# | ls login-flow.* | head; cat login-flow.mask
+# ---- raw output ----
+=== theme-arrow-resize.1
+1,22c1
+< ^[[B^[[38;5;174mWelctoeClaude^[[39m ^[[38;5;174mCode^[[39m ^[[38;5;246mv2.1.314^[[39m
+< 
+<  Let's get started.
+< 
+<  ^[[1mChoose^[[0m ^[[1mthe^[[0m ^[[1mtext^[[0m ^[[1mstyle^[[0m ^[[1mthat^[[0m ^[[1mlooks^[[0m ^[[1mbest^[[0m ^[[1mwith^[[0m ^[[1myour^[[0m ^[[1mterminal^[[0m
+<  ^[[38;5;246mTo^[[39m ^[[38;5;246mchange^[[39m ^[[38;5;246mthis^[[39m ^[[38;5;246mlater,^[[39m ^[[38;5;246mrun^[[39m ^[[38;5;246m/theme^[[39m
+< 
+<      Auto (match terminal)
+<  ^[[38;5;153mM-bM-^]M-/^[[39m ^[[38;5;114mM-bM-^\M-^T^[[39m ^[[38;5;153mDark^[[39m ^[[38;5;153mmode^[[39m
+<      Light mode
+<      Dark mode (colorblind-friendly)
+=== login-flow.3
+20c20
+< ^[[38;5;246m^[]8;id=10appjx;https://claude.com/cai/oauth/authorize?code=true&client_id=9d1c250a-e61b-44d9-88ed-5944d1962f5e&response_type=code&redirect_uri=https%3A%2F%2Fplatform.claude.com%2Foauth%2Fcode%2Fcallback&scop
+---
+> ^[[38;5;246m^[]8;id=1j3apvi;https://claude.com/cai/oauth/authorize?code=true&client_id=9d1c250a-e61b-44d9-88ed-5944d1962f5e&response_type=code&redirect_uri=https%3A%2F%2Fplatform.claude.com%2Foauth%2Fcode%2Fcallback&scop
+23,24c23,24
+< %3Afile_upload+user%3Aplugins&code_challenge=mFuduLPgCfHAGpUj60U4EDHIx-UcRo_V9ewo_TteJr8&code_challe
+< nge_method=S256&state=YWQNtGdbZiWPO6-VJrhOfJhHgkkzBoGQlxejLujYn4Y^[[39m
+---
+> %3Afile_upload+user%3Aplugins&code_challenge=r3BL4NLQpkMqyXedqJl0LdlQ4Ji7GAAL7bO0T_SXvmo&code_challe
+> nge_method=S256&state=4OwVt-Cgqgj3XRbLCKFvkmcP_M1u2JIRAlhmmmkbp34^[[39m
+=== text-100x30.6.A (plain)
+       █████████      *
+.......█ █   █ █..........................................
+ Claude Code can be used with your Claude subscription or billed based on API usage through your
+ Console account.
+ Select login method:
+ ❯ 1. Claude account with subscription · Pro, Max, Team, or Enterprise
+   2. Anthropic Console account · API usage billing
+   3. 3rd-party platform · Amazon Bedrock, Microsoft Foundry, Google Vertex AI
+=== text-40x20.7.A
+ API usage through your Console account.
+ Select login method:
+ ❯ 1. Claude account with subscription ·
+      Pro, Max, Team, or Enterprise
+   2. Anthropic Console account · API
+      usage billing
+   3. 3rd-party platform · Amazon
+      Bedrock, Microsoft Foundry, Google
+=== text-rtl-vscode.4.A
+ Select login method:
+ ❯ 1. Claude account with subscription · Pro, Max, Team, or Enterprise
+   2. Anthropic Console account · API usage billing
+   3. 3rd-party platform · Amazon Bedrock, Microsoft Foundry, Google Vertex AI
+login-flow.1.A
+login-flow.1.B
+login-flow.2.A
+login-flow.2.B
+login-flow.3.A
+login-flow.3.A.raw
+login-flow.3.B
+login-flow.3.B.raw
+login-flow.A.err
+login-flow.B.err
+/Browser didn.t open/,/Paste code/{/Paste code/!d}

@@ -1,0 +1,14 @@
+# evidence: bun-src-grep-which
+# instance: i-0a14e8aca787249b7   region: us-west-2
+# ssm command: 0c6be6a1-ee74-4e38-8cb7-3560c8d8568d
+# start: 20261030T211305Z   end: 20261030T211314Z   rc: 0   log bytes: 251
+# script sha256: 8b8e370730f911f741af727edb379f31be307045e3f82118a7cfa9c1caad51f9
+# ---- script ----
+# | cd /opt/cc/bun-src/src && grep -rln -E 'fn which|pub fn which_' --include='*.rs' . | grep -i which | head; ls -d *which* 2>/dev/null; grep -rn 'functionBunWhich\|fn which(' --include='*.rs' --include='*.cpp' . | head -5
+# | exit 0
+# ---- raw output ----
+./which/lib.rs
+which
+./http_types/Method.rs:222:    pub fn which(str: &[u8]) -> Option<Method> {
+./runtime/cli/mod.rs:725:    fn which() -> Tag {
+./runtime/webcore/EncodingLabel.rs:163:    pub(crate) fn which(input_: &[u8]) -> Option<EncodingLabel> {

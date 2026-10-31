@@ -1,0 +1,46 @@
+# evidence: fetch-help-diff
+# instance: i-0a14e8aca787249b7   region: us-west-2
+# ssm command: c734f1d3-f9f1-4193-9cb8-6aecd129359e
+# start: 20261031T054846Z   end: 20261031T060417Z   rc: 0   log bytes: 759
+# script sha256: 1496086b5645f719218810cd7307b79d98d66099af1485e25f4332616413d6d8
+# ---- script ----
+# | set -u
+# | echo '6e71dc85e2e6c7482dce9cc4bc8b83fadd0d9c19c55a7de17ca6ef1d2aa7d2b4  /opt/cc/w-fetch.stage/p.tgz' | sha256sum -c --quiet - || exit 1
+# | rm -rf /opt/cc/w-fetch && mkdir -p /opt/cc/w-fetch && tar xzf /opt/cc/w-fetch.stage/p.tgz -C /opt/cc/w-fetch 2>/dev/null
+# | cd /opt/cc/w-fetch
+# | W=/opt/cc/w-fetch N=/opt/node24/bin/node T=/opt/cc/w-fetch-helptree
+# | bash tools/fetch-deps.sh $W/deps > /dev/null 2>&1 || exit 1
+# | rm -rf $T && bash tools/build-tree.sh /opt/cc/v2.1.314/package/claude $T $T $N $W/deps 2>&1 | tail -1
+# | ls $T/node_modules; ls $T/lib/fetch.mjs
+# | mkdir -p /tmp/ccf-help && TREE=$T NODE=$N WORK=/tmp/ccf-help CASES=compat/cases-help.txt bash tools/linux-diff.sh; echo linux-diff-rc=$?
+# | rm -rf /tmp/ccf-help $T
+# | ss -ltn | awk 'NR>1{print $4}' | sort | tr '\n' ' '; echo
+# ---- raw output ----
+build-tree: /opt/cc/w-fetch-helptree ready (prefix /opt/cc/w-fetch-helptree)
+node-fetch
+undici
+ws
+/opt/cc/w-fetch-helptree/lib/fetch.mjs
+SAME  [--version] rc=0
+SAME  [--help] rc=0
+SAME  [agents --help] rc=0
+SAME  [attach --help] rc=0
+SAME  [auth --help] rc=0
+SAME  [auto-mode --help] rc=0
+SAME  [doctor --help] rc=0
+SAME  [gateway --help] rc=0
+SAME  [import --help] rc=0
+SAME  [install --help] rc=0
+SAME  [logs --help] rc=0
+SAME  [mcp --help] rc=0
+SAME  [plugin --help] rc=0
+SAME  [purge --help] rc=0
+SAME  [respawn --help] rc=0
+SAME  [rm --help] rc=0
+SAME  [setup-token --help] rc=0
+SAME  [stop --help] rc=0
+SAME  [ultrareview --help] rc=0
+SAME  [update --help] rc=0
+summary: same=20 diff=0
+linux-diff-rc=0
+0.0.0.0:22 127.0.0.53%lo:53 127.0.0.54:53 [::]:22 

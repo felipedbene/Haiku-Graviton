@@ -1,0 +1,35 @@
+# evidence: bun-src-grep-whichoptions
+# instance: i-0a14e8aca787249b7   region: us-west-2
+# ssm command: 8129a885-36e5-4913-ba31-191b2bc5403f
+# start: 20261030T211449Z   end: 20261030T211452Z   rc: 0   log bytes: 1589
+# script sha256: 717448dc7e735b830118c3a2368e1803d10a63e6c8e1cc479173e92706164d8c
+# ---- script ----
+# | cd /opt/cc/bun-src/src && grep -rn -B2 -A12 'WhichOptions' --include='*.bind.ts' --include='*.ts' . | grep -v node_modules | head -30
+# | exit 0
+# ---- raw output ----
+./runtime/api/BunObject.bind.ts-148-});
+./runtime/api/BunObject.bind.ts-149-
+./runtime/api/BunObject.bind.ts:150:export const WhichOptions = b.dictionary(
+./runtime/api/BunObject.bind.ts-151-  {
+./runtime/api/BunObject.bind.ts-152-    PATH: b.string.loose.utf8.optional,
+./runtime/api/BunObject.bind.ts-153-    cwd: b.string.loose.utf8.optional,
+./runtime/api/BunObject.bind.ts-154-  },
+./runtime/api/BunObject.bind.ts-155-  { allowArray: true, nonObjectAsEmpty: true },
+./runtime/api/BunObject.bind.ts-156-);
+./runtime/api/BunObject.bind.ts-157-
+./runtime/api/BunObject.bind.ts-158-export const which = b.fn({
+./runtime/api/BunObject.bind.ts-159-  args: {
+./runtime/api/BunObject.bind.ts-160-    command: b.string.loose.utf8.nullable.default(""),
+./runtime/api/BunObject.bind.ts:161:    options: WhichOptions.nullable.default({}),
+./runtime/api/BunObject.bind.ts-162-  },
+./runtime/api/BunObject.bind.ts-163-  length: 1,
+./runtime/api/BunObject.bind.ts-164-  returns: b.string.local.nullable,
+./runtime/api/BunObject.bind.ts-165-  capability: "heap",
+./runtime/api/BunObject.bind.ts-166-  throws: true,
+./runtime/api/BunObject.bind.ts-167-});
+./runtime/api/BunObject.bind.ts-168-
+./runtime/api/BunObject.bind.ts-169-export const ZstdCompressionOptions = b.dictionary({ level: b.f64.loose.allowBigInt.optional }, { allowArray: true });
+./runtime/api/BunObject.bind.ts-170-
+./runtime/api/BunObject.bind.ts-171-const pinned = b.bytes({ from: ["string", "buffer"], held: "pinned" });
+./runtime/api/BunObject.bind.ts-172-
+./runtime/api/BunObject.bind.ts-173-export const zstdCompress = b.fn({

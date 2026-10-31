@@ -1,0 +1,77 @@
+# evidence: cellseg-tui-probe3
+# instance: i-0a14e8aca787249b7   region: us-west-2
+# ssm command: d224a3b5-a2aa-4946-85f0-d70091c98531
+# start: 20261031T112659Z   end: 20261031T112720Z   rc: 0   log bytes: 6560
+# script sha256: ba4f3cf2c829c8481dcb2396c42ffbc8eb3a785debefbacd75e4257157fa2d43
+# ---- script ----
+# | set -u
+# | N=/opt/node24/bin/node; W=/opt/cc/w-cellseg
+# | H=/tmp/tuih; rm -rf $H; mkdir -p $H/.claude; echo '{"prefersReducedMotion":true}' > $H/.claude/settings.json
+# | tmux kill-session -t t 2>/dev/null
+# | tmux new-session -d -s t -x 100 -y 30 "cd /tmp && HOME=$H TERM=xterm-256color $N --zero-fill-buffers $W/tree/claude.mjs --debug 2>/tmp/tui-B.err; echo EXIT=\$? >> /tmp/tui-B.err; sleep 30"
+# | sleep 15
+# | ps -eo pid,stat,etime,pcpu,args | grep -v grep | grep "claude.mjs" | cut -c1-150
+# | tmux capture-pane -t t -p | grep -v '^$' | head -5
+# | tmux kill-session -t t 2>/dev/null
+# | echo "== err"; head -c 2000 /tmp/tui-B.err
+# | echo "== debug"; ls -la $H/.claude $H/.claude/debug 2>&1 | head; for f in $H/.claude/debug/*; do tail -c 6000 "$f"; done 2>/dev/null | cut -c1-260 | tail -45
+# ---- raw output ----
+  30842 Ss         00:15  0.0 tmux new-session -d -s t -x 100 -y 30 cd /tmp && HOME=/tmp/tuih TERM=xterm-256color /opt/node24/bin/node --zero-fill-buf
+  30843 Ss+        00:15  0.0 bash -c cd /tmp && HOME=/tmp/tuih TERM=xterm-256color /opt/node24/bin/node --zero-fill-buffers /opt/cc/w-cellseg/tree/cl
+== err
+== debug
+/tmp/tuih/.claude:
+total 32
+drwxr-xr-x 7 root root 4096 Oct 31 11:27 .
+drwxr-xr-x 3 root root 4096 Oct 31 11:27 ..
+drwxr-xr-x 2 root root 4096 Oct 31 11:27 backups
+drwxr-xr-x 2 root root 4096 Oct 31 11:27 cache
+drwxr-xr-x 2 root root 4096 Oct 31 11:27 debug
+drwx------ 2 root root 4096 Oct 31 11:27 sessions
+-rw-r--r-- 1 root root   30 Oct 31 11:27 settings.json
+drwxr-xr-x 2 root root 4096 Oct 31 11:27 telemetry
+2026-10-31T11:27:05.906Z [DEBUG] Renaming /tmp/tuih/.claude.json.tmp.30845.4749fd0230ce to /tmp/tuih/.claude.json
+2026-10-31T11:27:05.906Z [DEBUG] File /tmp/tuih/.claude.json written atomically
+2026-10-31T11:27:14.090Z [ERROR] 1P event logging: 34 events failed to export (this runtime has no Bun.FetchSession)
+2026-10-31T11:27:14.091Z [DEBUG] [Anthropic telemetry] 1P event logging export failed (Failed to export 34 events (this runtime has no Bun.FetchSession)). This is Anthropic's own telemetry pipeline, not your OTel collector; further failures are counted and sum
+7:05.072Z [INFO] [uds-messaging] Connect when the data is ready (e.g. out=$(cmd); printf '%s\n' "$out" | nc -N -U "$CLAUDE_CODE_MESSAGING_SOCKET" — or the socat form above): a connection that sends no complete line within 30000 ms is closed
+2026-10-31T11:27:05.173Z [DEBUG] Error log sink initialized
+2026-10-31T11:27:05.204Z [DEBUG] hooks modules not loaded until workspace trust is accepted: cc-plugin-agents-md, cc-plugin-telemetry, cc-plugin-plugin-authoring, cc-plugin-diff
+2026-10-31T11:27:05.207Z [DEBUG] Registered 0 hooks from 4 plugins
+2026-10-31T11:27:05.213Z [DEBUG] CA certs: Building the list for hosts that aren't ours
+2026-10-31T11:27:05.213Z [DEBUG] CA certs: stores=bundled,system, extraCertsPath=undefined
+2026-10-31T11:27:05.213Z [DEBUG] CA certs: Loaded 118 bundled root certificates
+2026-10-31T11:27:05.242Z [DEBUG] CA certs: Loaded 360 system CA certificates
+2026-10-31T11:27:05.267Z [DEBUG] CA certs: Re-encoded certificate 40f6af0346a99aa1cd1d555a4e9cce62c7f9634603ee406615833dc8c8d00367 from bundled: the list for hosts that aren't ours trusts it, and its original text could stop that list from loading
+2026-10-31T11:27:05.288Z [DEBUG] CA certs: Re-encoded certificate 40f6af0346a99aa1cd1d555a4e9cce62c7f9634603ee406615833dc8c8d00367 from system: the list for hosts that aren't ours trusts it, and its original text could stop that list from loading
+2026-10-31T11:27:05.290Z [DEBUG] CA certs: Dropped blocked certificate 125609aa301da0a249b97a8239cb6a34216f44dcac9f3954b14292f2e8c8608f from system
+2026-10-31T11:27:05.291Z [DEBUG] CA certs: Dropped blocked certificate bc4d809b15189d78db3e1d8cf4f9726a795da1643ca5f1358e1ddb0edc0d7eb3 from system
+2026-10-31T11:27:05.355Z [DEBUG] CA certs: Dropped blocked certificate bc4d809b15189d78db3e1d8cf4f9726a795da1643ca5f1358e1ddb0edc0d7eb3 from system
+2026-10-31T11:27:05.356Z [DEBUG] CA certs: Dropped blocked certificate 125609aa301da0a249b97a8239cb6a34216f44dcac9f3954b14292f2e8c8608f from system
+2026-10-31T11:27:05.356Z [DEBUG] CA certs: Re-encoded certificate 40f6af0346a99aa1cd1d555a4e9cce62c7f9634603ee406615833dc8c8d00367 from system: the list for hosts that aren't ours trusts it, and its original text could stop that list from loading
+2026-10-31T11:27:05.367Z [DEBUG] CA certs: Dropped blocked certificate bc4d809b15189d78db3e1d8cf4f9726a795da1643ca5f1358e1ddb0edc0d7eb3 from system
+2026-10-31T11:27:05.367Z [DEBUG] CA certs: Dropped blocked certificate 125609aa301da0a249b97a8239cb6a34216f44dcac9f3954b14292f2e8c8608f from system
+2026-10-31T11:27:05.368Z [DEBUG] CA certs: Re-encoded certificate 40f6af0346a99aa1cd1d555a4e9cce62c7f9634603ee406615833dc8c8d00367 from system: the list for hosts that aren't ours trusts it, and its original text could stop that list from loading
+2026-10-31T11:27:05.399Z [DEBUG] mTLS: Creating HTTPS agent with custom certificates
+2026-10-31T11:27:05.429Z [DEBUG] [STARTUP] setup() completed in 726ms
+2026-10-31T11:27:05.442Z [DEBUG] [STARTUP] Loading commands and agents...
+2026-10-31T11:27:05.471Z [DEBUG] getSkills returning: 0 skill dir commands, 0 plugin skills, 31 bundled skills, 1 builtin plugin skills
+2026-10-31T11:27:05.508Z [DEBUG] [STARTUP] Commands and agents loaded in 66ms
+2026-10-31T11:27:05.512Z [DEBUG] Temp file written successfully, size: 423 bytes
+2026-10-31T11:27:05.512Z [DEBUG] Renaming /tmp/tuih/.claude.json.tmp.30845.377f89cc2ed5 to /tmp/tuih/.claude.json
+2026-10-31T11:27:05.598Z [DEBUG] [STARTUP] Running showSetupScreens()...
+2026-10-31T11:27:05.730Z [DEBUG] [keybindings] KeybindingSetup initialized with 227 bindings, 0 warnings
+2026-10-31T11:27:05.815Z [DEBUG] File /tmp/tuih/.claude.json written atomically
+2026-10-31T11:27:05.815Z [DEBUG] [keybindings] Watching for changes to /tmp/tuih/.claude/keybindings.json
+2026-10-31T11:27:05.825Z [DEBUG] XTVERSION: terminal identified as "tmux 3.4"
+2026-10-31T11:27:05.830Z [DEBUG] tmux images: passthrough off, focus events off, kitty no, iTerm2 no, pane's top-left at row 0, column 0 (from 0)
+2026-10-31T11:27:05.830Z [DEBUG] Terminal capabilities: extendedKeys=yes (env: terminal=tmux); synchronizedOutput=no (env: TMUX (tmux answers for itself), no answer); kittyKeyboard=no (probe: no reply to CSI ? u); kittyGraphics=no (probe: tmux does not know wh
+2026-10-31T11:27:05.830Z [DEBUG] DECSTBM: gated (TMUX=set ZELLIJ=unset TERM_PROGRAM=tmux TERM=xterm-256color)
+2026-10-31T11:27:05.901Z [DEBUG] Preserving file permissions: 100600
+2026-10-31T11:27:05.902Z [DEBUG] Writing to temp file: /tmp/tuih/.claude.json.tmp.30845.4749fd0230ce
+2026-10-31T11:27:05.902Z [DEBUG] Applied original permissions to temp file
+2026-10-31T11:27:05.906Z [DEBUG] Temp file written successfully, size: 464 bytes
+2026-10-31T11:27:05.906Z [DEBUG] Renaming /tmp/tuih/.claude.json.tmp.30845.4749fd0230ce to /tmp/tuih/.claude.json
+2026-10-31T11:27:05.906Z [DEBUG] File /tmp/tuih/.claude.json written atomically
+2026-10-31T11:27:14.090Z [ERROR] 1P event logging: 34 events failed to export (this runtime has no Bun.FetchSession)
+2026-10-31T11:27:14.091Z [DEBUG] [Anthropic telemetry] 1P event logging export failed (Failed to export 34 events (this runtime has no Bun.FetchSession)). This is Anthropic's own telemetry pipeline, not your OTel collector; further failures are counted and sum

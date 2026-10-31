@@ -1,0 +1,16 @@
+# evidence: which-vectors-bun-vs-node
+# instance: i-0a14e8aca787249b7   region: us-west-2
+# ssm command: 6ba86436-6bfc-4539-8270-d5afada1d924
+# start: 20261030T211546Z   end: 20261030T211549Z   rc: 0   log bytes: 56
+# script sha256: 161af748a76aa3b7ea3900f5390d3d26db861fc21587b4608a28b12420203781
+# ---- script ----
+# | set -u
+# | echo 'dca462329495b7aa54bf19a0359b0a8ab1e66422a01d4691fd543918806a9478  /opt/cc/stage/p.tgz' | sha256sum -c --quiet - || exit 1
+# | rm -rf /opt/cc/port && mkdir -p /opt/cc/port && tar xzf /opt/cc/stage/p.tgz -C /opt/cc/port 2>/dev/null
+# | cd /opt/cc/port
+# | rm -rf /tmp/wt && mkdir -p /tmp/wt/bin /tmp/wt/sub && cd /tmp/wt && printf '#!/bin/sh\n' > bin/tool && chmod +x bin/tool && printf 'x' > bin/noexec && mkdir -p bin/dirtool && cp bin/tool sub/rel && ln -sf tool bin/link && ln -sf missing bin/dangling && cp bin/tool "bin/sp ace"
+# | cd /opt/cc/port/compat/test && mkdir -p /opt/cc/vec && (cd /tmp/wt && bun /opt/cc/port/compat/test/gen-which-vectors.js /opt/cc/vec) && (cd /tmp/wt && /opt/node24/bin/node /opt/cc/port/compat/test/check-which.mjs /opt/cc/vec); echo "check rc=$?"; exit 0
+# ---- raw output ----
+which cases: 38
+which: 38 match / 0 mismatch
+check rc=0

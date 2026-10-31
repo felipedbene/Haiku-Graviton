@@ -1,0 +1,51 @@
+# evidence: nodejs24-harvest-teaminfo
+# instance: i-0e7bed4928e0f7bf7   region: us-west-2
+# ssm command: 47bf8880-79bd-4850-a7fd-e54cc03a31ac (run), log fetched by 2a21509c-48db-4aba-b082-a4d7e10cdd9b after ssm-run's fetch hit an agent 'no such process' failure
+# start: 20261031T043619Z   rc: 0
+# ---- raw output ----
+-rw-r--r-- 1 baron root 18304464 Oct 31 04:08 nodejs24-24.21.0-1-arm64.hpkg
+-rw-r--r-- 1 baron root   264355 Oct 31 04:08 nodejs24_devel-24.21.0-1-arm64.hpkg
+e2d2412dac826912daf8af623c262a10ac6f621e46203a562d89bb611003378b  nodejs24-24.21.0-1-arm64.hpkg
+1238b1e4b8ad02fb27ffabdf77e815c72285200505cb0201bfb20d15f0f48e74  nodejs24_devel-24.21.0-1-arm64.hpkg
+package-attributes:
+	name: nodejs24
+	summary: A JavaScript runtime built on Chrome's V8 Engine
+	description: Node.js is a JavaScript runtime built on Chrome's V8 JavaScript engine. As an asynchronous event driven JavaScript runtime, Node is designed to build scalable network applications. In the following "hello world" example, many connections can be handled concurrently. Upon each connection the callback is fired, but if there is no work to be done, Node will sleep.
+	vendor: Haiku Project
+	packager: DeBeOS <debeos@example.invalid>
+	architecture: arm64
+	version: 24.21.0-1
+	copyright: 2006-2019 The Node.js Foundation
+	license: BSD (2-clause)
+	URL: https://nodejs.org/
+	source URL: https://nodejs.org/dist/v24.21.0/node-v24.21.0.tar.gz
+	provides: nodejs24 = 24.21.0
+	provides: cmd:node = 24.21.0 (compatible >= 24)
+	requires: haiku>=r1~beta6_hrev59996-1
+	requires: lib:libbrotlidec>=1.2.0
+	requires: lib:libbrotlienc>=1.2.0
+	requires: lib:libcares>=2.19.7
+	requires: lib:libcrypto>=3
+	requires: lib:libexecinfo>=1.1
+	requires: lib:libicudata>=78.3
+	requires: lib:libicui18n>=78.3
+	requires: lib:libicuuc>=78.3
+	requires: lib:libnghttp2>=14.28.2
+	requires: lib:libssl>=3
+	requires: lib:libuv>=1.0.0
+	requires: lib:libz>=1.3.2
+	requires: lib:libstdc++>=6.0.32
+up1-ok
+up2-ok
+== cc-teaminfo
+/tmp/cc-teaminfo.c: OK
+gcc (2026_03_29) 13.3.0
+gcc rc=0
+11726 11722 11722 1 0 22168854570 1793421379202044 /boot/system/bin/bash /tmp/ccrun/cc-20261031T043619Z-66810.sh
+self rc=0
+usage: cc-teaminfo -a | cc-teaminfo <team>...
+usage: cc-teaminfo -a | cc-teaminfo <team>...
+0
+acc52b210a87de3f878484a1bf46097060f71f55ee8574ce902e0dd480ef0bdd  /tmp/cc-teaminfo
+up3-ok
+

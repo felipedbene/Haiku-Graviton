@@ -1,0 +1,117 @@
+# evidence: cellseg-tui-diff-v4
+# instance: i-0a14e8aca787249b7   region: us-west-2
+# ssm command: 1d8d5e74-e461-4c20-b649-e183a65d1f7d
+# start: 20261031T135441Z   end: 20261031T141213Z   rc: 0   log bytes: 5400
+# script sha256: 18a66a0101720f9deb24a6800e6f3f16681817cb33943bd40b9da17492347d93
+# ---- script ----
+# | set -u
+# | echo 'e3017c2d4b38000cb5f1213c6355dd15fefe6e5f6d53fc7f7f6ae298021461d8  /opt/cc/w-cellseg/port5.stage/p.tgz' | sha256sum -c --quiet - || exit 1
+# | rm -rf /opt/cc/w-cellseg/port5 && mkdir -p /opt/cc/w-cellseg/port5 && tar xzf /opt/cc/w-cellseg/port5.stage/p.tgz -C /opt/cc/w-cellseg/port5 2>/dev/null
+# | cd /opt/cc/w-cellseg/port5
+# | W=/opt/cc/w-cellseg
+# | if ! cmp -s compat/lib/cellseg.mjs $W/tree/lib/cellseg.mjs || ! cmp -s compat/bun-compat.mjs $W/tree/bun-compat.mjs; then
+# |   mkdir -p $W/deps && bash tools/fetch-deps.sh $W/deps >/dev/null
+# |   rm -rf $W/tree; bash tools/build-tree.sh /opt/cc/v2.1.314/package/claude $W/tree $W/tree /opt/node24/bin/node $W/deps > $W/build.log 2>&1; tail -1 $W/build.log
+# | fi
+# | SHOW= bash tools/tui-diff.sh /opt/cc/v2.1.314/package/claude /opt/node24/bin/node $W/tree 2>&1 | head -200
+# ---- raw output ----
+PASS theme-100x30#1 (2591 bytes)
+PASS theme-80x24#1 (1802 bytes)
+PASS theme-40x20#1 (1350 bytes)
+PASS theme-200x50#1 (3971 bytes)
+PASS theme-120x40#1 (3331 bytes)
+PASS theme-60x16#1 (1369 bytes)
+PASS theme-arrows#1 (2591 bytes)
+PASS theme-arrows#2 (2371 bytes)
+PASS theme-arrows#3 (2381 bytes)
+PASS theme-arrows#4 (2369 bytes)
+PASS theme-arrows#5 (2109 bytes)
+PASS theme-arrows#6 (2075 bytes)
+PASS theme-arrows#7 (2075 bytes)
+PASS theme-arrows#8 (2075 bytes)
+PASS theme-arrows#9 (2109 bytes)
+PASS theme-arrows#10 (2321 bytes)
+PASS theme-arrows#11 (2333 bytes)
+PASS theme-resize#1 (2591 bytes)
+PASS theme-resize#2 (1522 bytes)
+PASS theme-resize#3 (3491 bytes)
+PASS theme-resize#4 (865 bytes)
+PASS theme-resize#5 (2591 bytes)
+PASS theme-arrow-resize#1 (1882 bytes)
+PASS theme-arrow-resize#2 (1620 bytes)
+PASS theme-arrow-resize#3 (1318 bytes)
+PASS theme-arrow-resize#4 (1333 bytes)
+PASS login-flow#1 (2591 bytes)
+PASS login-flow#2 (2204 bytes)
+PASS login-flow#3 (31 bytes, masked: 1,/Paste/{/Paste/!d})
+PASS text-100x30#1 (2591 bytes)
+PASS text-100x30#2 (2204 bytes)
+PASS text-100x30#3 (31 bytes, masked: 1,/Paste/{/Paste/!d})
+PASS text-100x30#4 (61 bytes, masked: 1,/Paste/{/Paste/!d})
+PASS text-100x30#5 (93 bytes, masked: 1,/Paste/{/Paste/!d})
+PASS text-100x30#6 (130 bytes, masked: 1,/Paste/{/Paste/!d})
+PASS text-100x30#7 (115 bytes, masked: 1,/Paste/{/Paste/!d})
+PASS text-100x30#8 (207 bytes, masked: 1,/Paste/{/Paste/!d})
+  [text-100x30#3 A]  Paste code here if prompted >
+  [text-100x30#4 A]  Paste code here if prompted > *************국어 ＡＢＣ
+  [text-100x30#5 A]  Paste code here if prompted > ****************************🇺🇸🇯🇵   1️ ⃣❤️
+  [text-100x30#6 A]  Paste code here if prompted > ********************************************
+  [text-100x30#6 A]                                * a̐ क्ष กำ
+  [text-100x30#7 A]  Paste code here if prompted > ********************************************
+  [text-100x30#7 A]                                x̅ a̐
+  [text-100x30#8 A]  Paste code here if prompted > ********************************************
+  [text-100x30#8 A]                                **********************
+  [text-100x30#8 A]                                ***************************日本語日本語
+PASS text-40x20#1 (1350 bytes)
+PASS text-40x20#2 (967 bytes)
+PASS text-40x20#3 (31 bytes, masked: 1,/Paste/{/Paste/!d})
+PASS text-40x20#4 (184 bytes, masked: 1,/Paste/{/Paste/!d})
+PASS text-40x20#5 (298 bytes, masked: 1,/Paste/{/Paste/!d})
+PASS text-40x20#6 (404 bytes, masked: 1,/Paste/{/Paste/!d})
+PASS text-40x20#7 (367 bytes, masked: 1,/Paste/{/Paste/!d})
+PASS text-40x20#8 (0 bytes, masked: 1,/Paste/{/Paste/!d})
+  [text-40x20#3 A]  Paste code here if prompted >
+  [text-40x20#4 A]  Paste code here if prompted > ****
+  [text-40x20#4 A]                                ****
+  [text-40x20#4 A]                                ***
+  [text-40x20#5 A]  Paste code here if prompted > ****
+  [text-40x20#5 A]                                ****
+  [text-40x20#5 A]                                ***
+  [text-40x20#6 A]  Paste code here if prompted > ****
+  [text-40x20#6 A]                                ****
+  [text-40x20#6 A]                                ***
+  [text-40x20#7 A]  Paste code here if prompted > ****
+  [text-40x20#7 A]                                ****
+  [text-40x20#7 A]                                ***
+PASS text-resize#1 (1802 bytes)
+PASS text-resize#2 (594 bytes)
+PASS text-resize#3 (31 bytes, masked: 1,/Paste/{/Paste/!d})
+PASS text-resize#4 (125 bytes, masked: 1,/Paste/{/Paste/!d})
+PASS text-resize#5 (0 bytes, masked: 1,/Paste/{/Paste/!d})
+PASS text-resize#6 (93 bytes, masked: 1,/Paste/{/Paste/!d})
+  [text-resize#3 A]  Paste code here if prompted >
+  [text-resize#4 A]  Paste code here if prompted > ****************************
+  [text-resize#4 A]                                🇺🇸🇯🇵   1️ ⃣❤️
+  [text-resize#6 A]  Paste code here if prompted > ****************************🇺🇸🇯🇵   1️ ⃣❤️
+PASS text-rtl#1 (2591 bytes)
+PASS text-rtl#2 (2204 bytes)
+PASS text-rtl#3 (31 bytes, masked: 1,/Paste/{/Paste/!d})
+PASS text-rtl#4 (63 bytes, masked: 1,/Paste/{/Paste/!d})
+PASS text-rtl#5 (100 bytes, masked: 1,/Paste/{/Paste/!d})
+  [text-rtl#3 A]  Paste code here if prompted >
+  [text-rtl#4 A]  Paste code here if prompted > *************************bc 123
+  [text-rtl#5 A]  Paste code here if prompted > *********************************************************با ١٢٣
+PASS text-rtl-vscode#1 (2591 bytes)
+PASS text-rtl-vscode#2 (2204 bytes)
+PASS text-rtl-vscode#3 (31 bytes, masked: 1,/Paste/{/Paste/!d})
+PASS text-rtl-vscode#4 (63 bytes, masked: 1,/Paste/{/Paste/!d})
+PASS text-rtl-vscode#5 (100 bytes, masked: 1,/Paste/{/Paste/!d})
+PASS text-rtl-vscode#6 (157 bytes, masked: 1,/Paste/{/Paste/!d})
+  [text-rtl-vscode#3 A]  Paste code here if prompted >
+  [text-rtl-vscode#4 A]  Paste code here if prompted > *************************bc 123
+  [text-rtl-vscode#5 A]  Paste code here if prompted > ١٢٣ اب*********************************************************
+  [text-rtl-vscode#6 A]  Paste code here if prompted > ****************************************************************
+  [text-rtl-vscode#6 A]                                *************국어 ＡＢＣ
+PASS theme-vscode#1 (2591 bytes)
+PASS theme-vscode#2 (2371 bytes)
+tui-diff: pass=64 fail=0 unsettled=0

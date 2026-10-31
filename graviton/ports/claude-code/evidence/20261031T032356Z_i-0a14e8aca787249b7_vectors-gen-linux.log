@@ -1,0 +1,81 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: vectors-gen-linux
+# instance: i-0a14e8aca787249b7   region: us-west-2
+# ssm command: 52d6c3d8-cf03-4851-8ae4-d211db44a80a
+# start: 20261031T032356Z   end: 20261031T032434Z   rc: 1   log bytes: 2705
+# script sha256: f53375654d5eaabdf8e0d4130a47bd1dbde10ab0479faabc34614187ac1f2c03
+# ---- script ----
+# | set -u
+# | echo '43cfbffb952c6ba8b581d487bd4d6ef1baf0f283cfacc01a491fd19d4f2b9da9  /opt/cc/w-vec.stage/p.tgz' | sha256sum -c --quiet - || exit 1
+# | rm -rf /opt/cc/w-vec && mkdir -p /opt/cc/w-vec && tar xzf /opt/cc/w-vec.stage/p.tgz -C /opt/cc/w-vec 2>/dev/null
+# | cd /opt/cc/w-vec
+# | set -u
+# | bash tools/gen-vectors.sh /opt/cc/vec-all || exit 1
+# | bash tools/check-vectors.sh /opt/cc/vec-all /opt/node24/bin/node; rc=$?
+# | tar -czf /opt/cc/vectors.tgz -C /opt/cc vec-all && ls -l /opt/cc/vectors.tgz && sha256sum /opt/cc/vectors.tgz
+# | curl -sSf -X PUT --upload-file /opt/cc/vectors.tgz 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.amazonaws.com/claude-code-port/vectors-2.1.314.tgz?<PRESIGNED>' && echo upload-ok
+# | exit $rc
+# ---- raw output ----
+cases: 1821 bun 1.4.4 38afee6c84fcf48c0edb2466aa4b27d287a59c30
+codepoints: 1114112 cases: 68112 misc: {"undef":0,"num":5,"nul":4,"obj":15,"optStr0":1,"optStrF":1,"opt0":2,"optNull":1,"protoPolluted":1,"inherited":2}
+slice cases: 40900 strip cases: 20008
+wrap cases: 40000
+order: 40003 satisfies: 60006
+deepEquals pairs: 118
+YAML.stringify cases: 119328 divergent: 10 maxDepth: {"space=0":23405,"space=2":23405}
+edge: 664 (301 parse, 363 throw)
+bytes: 19 (2 parse, 17 throw)
+config: 17 (8 parse, 9 throw)
+coerce: 32 (17 parse, 15 throw)
+depth: 40 (31 parse, 9 throw)
+fuzz: 40000 (4795 parse, 35205 throw)
+fuzzshort: 40000 (13578 parse, 26422 throw)
+mutate: 40000 (10434 parse, 29566 throw)
+edge: 664 (301 parse, 363 throw)
+bytes: 19 (2 parse, 17 throw)
+config: 17 (8 parse, 9 throw)
+coerce: 32 (17 parse, 15 throw)
+depth: 40 (31 parse, 9 throw)
+fuzz: 40000 (4900 parse, 35100 throw)
+fuzzshort: 40000 (13519 parse, 26481 throw)
+mutate: 40000 (10406 parse, 29594 throw)
+edge: 664 (301 parse, 363 throw)
+bytes: 19 (2 parse, 17 throw)
+config: 17 (8 parse, 9 throw)
+coerce: 32 (17 parse, 15 throw)
+depth: 40 (31 parse, 9 throw)
+fuzz: 40000 (4869 parse, 35131 throw)
+fuzzshort: 40000 (13591 parse, 26409 throw)
+mutate: 40000 (10428 parse, 29572 throw)
+edge: 664 (301 parse, 363 throw)
+bytes: 19 (2 parse, 17 throw)
+config: 17 (8 parse, 9 throw)
+coerce: 32 (17 parse, 15 throw)
+depth: 40 (31 parse, 9 throw)
+fuzz: 40000 (4933 parse, 35067 throw)
+fuzzshort: 40000 (13659 parse, 26341 throw)
+mutate: 40000 (10454 parse, 29546 throw)
+edge: 664 (301 parse, 363 throw)
+bytes: 19 (2 parse, 17 throw)
+config: 17 (8 parse, 9 throw)
+coerce: 32 (17 parse, 15 throw)
+depth: 40 (31 parse, 9 throw)
+fuzz: 40000 (4809 parse, 35191 throw)
+fuzzshort: 40000 (13588 parse, 26412 throw)
+mutate: 40000 (10415 parse, 29585 throw)
+275 | const blockMap = (n) => Array.from({ length: n }, (_, i) => " ".repeat(i) + "a:").join("\n") + " 1";
+276 | for (const [g, t] of [[(n) => "[".repeat(n) + "]".repeat(n), 4723], [(n) => "{a: ".repeat(n) + "1" + "}".repeat(n), 4515],
+277 | 	[(n) => "- ".repeat(n) + "x", 4085], [blockMap, 3364]]) DEPTH_BAND.push(g(t - 3), g(t + 3));
+278 | for (const n of [2200, 2290, 2300, 2316, 2330, 2400]) DEPTH_BAND.push("[{a: ".repeat(n) + "1" + "}]".repeat(n));
+279 | 
+280 | const corpus = JSON.parse(readFileSync(new URL("./yaml-parse-corpus.json", import.meta.url), "utf8"));
+                                ^
+ENOENT: no such file or directory, open '/opt/cc/w-vec/compat/test/yaml-parse-corpus.json'
+    path: "/opt/cc/w-vec/compat/test/yaml-parse-corpus.json",
+ syscall: "open",
+   errno: -2,
+    code: "ENOENT"
+
+      at /opt/cc/w-vec/compat/test/gen-yaml-parse-vectors.js:280:27
+
+Bun v1.4.4 (Linux arm64)

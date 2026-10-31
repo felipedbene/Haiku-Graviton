@@ -1,0 +1,52 @@
+# evidence: cellseg-oracle-probe5-overflow
+# instance: i-0a14e8aca787249b7   region: us-west-2
+# ssm command: f02c48c9-7789-4982-b4d7-c14f4cec0c63
+# start: 20261031T051732Z   end: 20261031T051735Z   rc: 0   log bytes: 3788
+# script sha256: 51f40222f41d88785051f6774531d32fa50c4a475b57f8763c9715e0210df3c4
+# ---- script ----
+# | BIN=/opt/cc/v2.1.314/package/claude
+# | W=/opt/cc/w-cellseg/probe; mkdir -p $W/home; cd $W
+# | cat > pre.js <<'J'
+# | const C = Bun.ant.CellSegmenter;
+# | const E = (s) => JSON.stringify(s).replace(/\\u001b/g, "E");
+# | const run = (line, cc, rc) => { const s = new C({}); const c = new Int32Array(2*cc).fill(-7), r = new Int32Array(2*rc).fill(-7); const n = s.segment(line, c, r, false); console.log(E(line), "cap", cc, rc, "n", n, "new", E(s.graphemes.slice(98)), "keys", E(s.sgrKeys.slice(1)), "cells", Array.from(c).join(","), "runs", Array.from(r).join(",")); };
+# | for (let k = 0; k <= 6; k++) run("αβγδεζ", k, 4);
+# | for (let k = 0; k <= 4; k++) run("😀😁😂🤣😃😄", k, 4);
+# | for (let k = 0; k <= 4; k++) run("αβ\x1b[31mγδ\x1b[32mεζ\x1b[33mηθ", 10, k);
+# | for (let k = 0; k <= 4; k++) run("ab\x1b[31mcd\x1b[32mef\x1b[33mgh", 10, k);
+# | run("αβγδεζηθικλμνξοπρστυφχψω", 3, 4);
+# | run("αβγδεζηθικλμνξοπρστυφχψω", 0, 4);
+# | run("αaβbγcδdεeζf", 2, 4);
+# | run("α\x1b[31mβ\x1b[32mγ\x1b[33mδ\x1b[34mε", 10, 1);
+# | run("ααβγ", 1, 4);
+# | process.exit(0)
+# | J
+# | HOME=$W/home BUN_OPTIONS="--preload $W/pre.js" timeout 20 $BIN --version 2>&1 | head -80
+# ---- raw output ----
+"αβγδεζ" cap 0 4 n -6 new ["α"] keys [] cells  runs 0,0,-7,-7,-7,-7,-7,-7
+"αβγδεζ" cap 1 4 n -6 new ["α"] keys [] cells 98,1 runs 0,0,-7,-7,-7,-7,-7,-7
+"αβγδεζ" cap 2 4 n -6 new ["α","β"] keys [] cells 98,1,99,1 runs 0,0,-7,-7,-7,-7,-7,-7
+"αβγδεζ" cap 3 4 n -6 new ["α","β","γ"] keys [] cells 98,1,99,1,100,1 runs 0,0,-7,-7,-7,-7,-7,-7
+"αβγδεζ" cap 4 4 n -6 new ["α","β","γ","δ"] keys [] cells 98,1,99,1,100,1,101,1 runs 0,0,-7,-7,-7,-7,-7,-7
+"αβγδεζ" cap 5 4 n -6 new ["α","β","γ","δ","ε"] keys [] cells 98,1,99,1,100,1,101,1,102,1 runs 0,0,-7,-7,-7,-7,-7,-7
+"αβγδεζ" cap 6 4 n 6 new ["α","β","γ","δ","ε","ζ"] keys [] cells 98,1,99,1,100,1,101,1,102,1,103,1 runs 0,0,-7,-7,-7,-7,-7,-7
+"😀😁😂🤣😃😄" cap 0 4 n -6 new ["😀"] keys [] cells  runs 0,0,-7,-7,-7,-7,-7,-7
+"😀😁😂🤣😃😄" cap 1 4 n -6 new ["😀","😁"] keys [] cells 98,2 runs 0,0,-7,-7,-7,-7,-7,-7
+"😀😁😂🤣😃😄" cap 2 4 n -6 new ["😀","😁","😂"] keys [] cells 98,2,99,2 runs 0,0,-7,-7,-7,-7,-7,-7
+"😀😁😂🤣😃😄" cap 3 4 n -6 new ["😀","😁","😂","🤣"] keys [] cells 98,2,99,2,100,2 runs 0,0,-7,-7,-7,-7,-7,-7
+"😀😁😂🤣😃😄" cap 4 4 n -6 new ["😀","😁","😂","🤣","😃"] keys [] cells 98,2,99,2,100,2,101,2 runs 0,0,-7,-7,-7,-7,-7,-7
+"αβE[31mγδE[32mεζE[33mηθ" cap 10 0 n -8 new ["α","γ","ε","η"] keys ["E[31m","E[32m","E[33m"] cells -7,-7,-7,-7,-7,-7,-7,-7,-7,-7,-7,-7,-7,-7,-7,-7,-7,-7,-7,-7 runs 
+"αβE[31mγδE[32mεζE[33mηθ" cap 10 1 n -8 new ["α","β","γ","ε","η"] keys ["E[31m","E[32m","E[33m"] cells 98,1,99,1,-7,-7,-7,-7,-7,-7,-7,-7,-7,-7,-7,-7,-7,-7,-7,-7 runs 0,0
+"αβE[31mγδE[32mεζE[33mηθ" cap 10 2 n -8 new ["α","β","γ","δ","ε","η"] keys ["E[31m","E[32m","E[33m"] cells 98,1,99,1,100,1025,101,1025,-7,-7,-7,-7,-7,-7,-7,-7,-7,-7,-7,-7 runs 0,0,1,0
+"αβE[31mγδE[32mεζE[33mηθ" cap 10 3 n -8 new ["α","β","γ","δ","ε","ζ","η"] keys ["E[31m","E[32m","E[33m"] cells 98,1,99,1,100,1025,101,1025,102,2049,103,2049,-7,-7,-7,-7,-7,-7,-7,-7 runs 0,0,1,0,2,0
+"αβE[31mγδE[32mεζE[33mηθ" cap 10 4 n 8 new ["α","β","γ","δ","ε","ζ","η","θ"] keys ["E[31m","E[32m","E[33m"] cells 98,1,99,1,100,1025,101,1025,102,2049,103,2049,104,3073,105,3073,-7,-7,-7,-7 runs 0,0,1,0,2,0,3,0
+"abE[31mcdE[32mefE[33mgh" cap 10 0 n -8 new [] keys ["E[31m","E[32m","E[33m"] cells -7,-7,-7,-7,-7,-7,-7,-7,-7,-7,-7,-7,-7,-7,-7,-7,-7,-7,-7,-7 runs 
+"abE[31mcdE[32mefE[33mgh" cap 10 1 n -8 new [] keys ["E[31m","E[32m","E[33m"] cells 66,1,67,1,-7,-7,-7,-7,-7,-7,-7,-7,-7,-7,-7,-7,-7,-7,-7,-7 runs 0,0
+"abE[31mcdE[32mefE[33mgh" cap 10 2 n -8 new [] keys ["E[31m","E[32m","E[33m"] cells 66,1,67,1,68,1025,69,1025,-7,-7,-7,-7,-7,-7,-7,-7,-7,-7,-7,-7 runs 0,0,1,0
+"abE[31mcdE[32mefE[33mgh" cap 10 3 n -8 new [] keys ["E[31m","E[32m","E[33m"] cells 66,1,67,1,68,1025,69,1025,70,2049,71,2049,-7,-7,-7,-7,-7,-7,-7,-7 runs 0,0,1,0,2,0
+"abE[31mcdE[32mefE[33mgh" cap 10 4 n 8 new [] keys ["E[31m","E[32m","E[33m"] cells 66,1,67,1,68,1025,69,1025,70,2049,71,2049,72,3073,73,3073,-7,-7,-7,-7 runs 0,0,1,0,2,0,3,0
+"αβγδεζηθικλμνξοπρστυφχψω" cap 3 4 n -24 new ["α","β","γ"] keys [] cells 98,1,99,1,100,1 runs 0,0,-7,-7,-7,-7,-7,-7
+"αβγδεζηθικλμνξοπρστυφχψω" cap 0 4 n -24 new ["α"] keys [] cells  runs 0,0,-7,-7,-7,-7,-7,-7
+"αaβbγcδdεeζf" cap 2 4 n -12 new ["α","β","γ","δ","ε","ζ"] keys [] cells 98,1,66,1 runs 0,0,-7,-7,-7,-7,-7,-7
+"αE[31mβE[32mγE[33mδE[34mε" cap 10 1 n -5 new ["α","β","ε"] keys ["E[31m","E[32m","E[33m","E[34m"] cells 98,1,-7,-7,-7,-7,-7,-7,-7,-7,-7,-7,-7,-7,-7,-7,-7,-7,-7,-7 runs 0,0
+"ααβγ" cap 1 4 n -4 new ["α"] keys [] cells 98,1 runs 0,0,-7,-7,-7,-7,-7,-7

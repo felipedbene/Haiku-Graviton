@@ -1,0 +1,24 @@
+# evidence: node24-gyp-addon-cxx
+# instance: i-0e7bed4928e0f7bf7   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261031T135458Z   end: 20261031T135720Z   rc: 0
+# script sha256: aa07b0ce24ea29e4d691ffc439e3ee8fb17a29bb44db160e49279663e92589c3
+# ---- script ----
+# | set -u
+# | W=/boot/home/node-accept; G=$W/package/node_modules/node-gyp/bin/node-gyp.js
+# | node -p 'JSON.stringify(Object.fromEntries(Object.entries(process.config.variables).filter(([k,v])=>/(^cc$|^cxx$|ld|link|host_arch|target_arch|clang)/i.test(k))))'
+# | grep -n "aarch64-unknown-haiku" ~/.cache/node-gyp/24.21.0/include/node/config.gypi 2>/dev/null | head -5
+# | ls ~/.cache/node-gyp/24.21.0/include/node/config.gypi 2>&1
+# | grep -rn "aarch64-unknown-haiku" $W/node-accept/addon/build/*.mk $W/node-accept/addon/build/Makefile 2>/dev/null | head -5
+# | echo "== with CC=gcc CXX=g++"
+# | cd $W/node-accept/addon && rm -rf build
+# | CC=gcc CXX=g++ node $G rebuild 2>&1 | grep -E 'CC|CXX|SOLINK|ERR|error' | tail -10; echo "gyp rc=${PIPESTATUS[0]}"
+# | node -e 'const a=require("./build/Release/accept_addon.node"); console.log("addon add(2,40) =", a.add(2,40))'; echo "addon rc=$?"
+# ---- raw output ----
+{"clang":0,"host_arch":"arm64","target_arch":"arm64","napi_build_version":"10","v8_promise_internal_field_count":1}
+/boot/home/.cache/node-gyp/24.21.0/include/node/config.gypi
+== with CC=gcc CXX=g++
+  CC(target) Release/obj.target/accept_addon/addon.o
+  SOLINK_MODULE(target) Release/obj.target/accept_addon.node
+gyp rc=0
+addon add(2,40) = 42
+addon rc=0

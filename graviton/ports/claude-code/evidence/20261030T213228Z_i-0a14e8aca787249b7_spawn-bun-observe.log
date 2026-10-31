@@ -1,0 +1,1573 @@
+# evidence: spawn-bun-observe
+# instance: i-0a14e8aca787249b7   region: us-west-2
+# ssm command: 45918c6c-46ed-43ea-a8ef-2ef026bdcd84
+# start: 20261030T213228Z   end: 20261030T213249Z   rc: 0   log bytes: 27104
+# script sha256: 7ec165a3c5443ee41f044a328b2f0f4d0a5711e10eb3145cd10dabe3a9abf4db
+# ---- script ----
+# | set -u
+# | echo 'a89a6a10536f59d317edb56afe30b0ca75d2665c011e65b840bb19f216ff2034  /opt/cc/w-spawn.stage/p.tgz' | sha256sum -c --quiet - || exit 1
+# | rm -rf /opt/cc/w-spawn && mkdir -p /opt/cc/w-spawn && tar xzf /opt/cc/w-spawn.stage/p.tgz -C /opt/cc/w-spawn 2>/dev/null
+# | cd /opt/cc/w-spawn
+# | cd compat/test
+# | timeout 300 bun spawn-scenarios.mjs /opt/cc/w-spawn/bun.json /opt/cc/w-spawn-work; echo rc=$?
+# | cat /opt/cc/w-spawn/bun.json
+# ---- raw output ----
+bun: 140 scenarios -> /opt/cc/w-spawn/bun.json
+rc=0
+[
+ [
+  "validate no args",
+  {
+   "threw": true,
+   "ctor": "TypeError",
+   "name": "TypeError",
+   "message": "cmd must be an array",
+   "code": "ERR_INVALID_ARG_TYPE",
+   "isError": true,
+   "isTypeError": true
+  }
+ ],
+ [
+  "validate null",
+  {
+   "threw": true,
+   "ctor": "TypeError",
+   "name": "TypeError",
+   "message": "cmd must be an array",
+   "code": "ERR_INVALID_ARG_TYPE",
+   "isError": true,
+   "isTypeError": true
+  }
+ ],
+ [
+  "validate string cmd",
+  {
+   "threw": true,
+   "ctor": "TypeError",
+   "name": "TypeError",
+   "message": "cmd must be an array",
+   "code": "ERR_INVALID_ARG_TYPE",
+   "isError": true,
+   "isTypeError": true
+  }
+ ],
+ [
+  "validate number cmd",
+  {
+   "threw": true,
+   "ctor": "TypeError",
+   "name": "TypeError",
+   "message": "cmd must be an array",
+   "code": "ERR_INVALID_ARG_TYPE",
+   "isError": true,
+   "isTypeError": true
+  }
+ ],
+ [
+  "validate empty array",
+  {
+   "threw": true,
+   "ctor": "TypeError",
+   "name": "TypeError",
+   "message": "cmd must not be empty",
+   "code": "ERR_INVALID_ARG_TYPE",
+   "isError": true,
+   "isTypeError": true
+  }
+ ],
+ [
+  "validate object no cmd",
+  {
+   "threw": true,
+   "ctor": "TypeError",
+   "name": "TypeError",
+   "message": "cmd must be an array",
+   "code": "ERR_INVALID_ARG_TYPE",
+   "isError": true,
+   "isTypeError": true
+  }
+ ],
+ [
+  "validate object cmd empty",
+  {
+   "threw": true,
+   "ctor": "TypeError",
+   "name": "TypeError",
+   "message": "cmd must not be empty",
+   "code": "ERR_INVALID_ARG_TYPE",
+   "isError": true,
+   "isTypeError": true
+  }
+ ],
+ [
+  "validate object cmd string",
+  {
+   "threw": true,
+   "ctor": "Error",
+   "name": "Error",
+   "message": "Executable not found in $PATH: \"e\"",
+   "code": "ENOENT",
+   "errno": -2,
+   "path": "e",
+   "isError": true,
+   "isTypeError": false
+  }
+ ],
+ [
+  "validate env string",
+  {
+   "threw": true,
+   "ctor": "TypeError",
+   "name": "TypeError",
+   "message": "env must be an object",
+   "code": "ERR_INVALID_ARG_TYPE",
+   "isError": true,
+   "isTypeError": true
+  }
+ ],
+ [
+  "validate env number",
+  {
+   "threw": true,
+   "ctor": "TypeError",
+   "name": "TypeError",
+   "message": "env must be an object",
+   "code": "ERR_INVALID_ARG_TYPE",
+   "isError": true,
+   "isTypeError": true
+  }
+ ],
+ [
+  "validate stdio string",
+  {
+   "threw": true,
+   "ctor": "TypeError",
+   "name": "TypeError",
+   "message": "stdio must be an array",
+   "code": "ERR_INVALID_ARG_TYPE",
+   "isError": true,
+   "isTypeError": true
+  }
+ ],
+ [
+  "validate stdio bogus entry",
+  {
+   "threw": true,
+   "ctor": "TypeError",
+   "name": "TypeError",
+   "message": "stdio must be an array of 'inherit', 'pipe', 'ignore', Bun.file(pathOrFd), number, or null",
+   "code": "ERR_INVALID_ARG_TYPE",
+   "isError": true,
+   "isTypeError": true
+  }
+ ],
+ [
+  "validate stdout bogus",
+  {
+   "threw": true,
+   "ctor": "TypeError",
+   "name": "TypeError",
+   "message": "stdio must be an array of 'inherit', 'pipe', 'ignore', Bun.file(pathOrFd), number, or null",
+   "code": "ERR_INVALID_ARG_TYPE",
+   "isError": true,
+   "isTypeError": true
+  }
+ ],
+ [
+  "validate stdout object",
+  {
+   "threw": true,
+   "ctor": "TypeError",
+   "name": "TypeError",
+   "message": "stdio must be an array of 'inherit', 'ignore', or null",
+   "code": "ERR_INVALID_ARG_TYPE",
+   "isError": true,
+   "isTypeError": true
+  }
+ ],
+ [
+  "validate stdout negative fd",
+  {
+   "threw": true,
+   "ctor": "TypeError",
+   "name": "TypeError",
+   "message": "file descriptor must be a positive integer",
+   "code": "ERR_INVALID_ARG_TYPE",
+   "isError": true,
+   "isTypeError": true
+  }
+ ],
+ [
+  "validate stdin fd 1",
+  {
+   "threw": true,
+   "ctor": "TypeError",
+   "name": "TypeError",
+   "message": "stdout and stderr cannot be used for stdin",
+   "code": "ERR_INVALID_ARG_TYPE",
+   "isError": true,
+   "isTypeError": true
+  }
+ ],
+ [
+  "validate stdout fd 0",
+  {
+   "threw": true,
+   "ctor": "TypeError",
+   "name": "TypeError",
+   "message": "stdin cannot be used for stdout or stderr",
+   "code": "ERR_INVALID_ARG_TYPE",
+   "isError": true,
+   "isTypeError": true
+  }
+ ],
+ [
+  "validate socket-fd at 1",
+  {
+   "threw": true,
+   "ctor": "TypeError",
+   "name": "TypeError",
+   "message": "stdio: 'socket-fd' is only supported at indices >= 3",
+   "code": "ERR_INVALID_ARG_TYPE",
+   "isError": true,
+   "isTypeError": true
+  }
+ ],
+ [
+  "validate null byte arg0",
+  {
+   "threw": true,
+   "ctor": "TypeError",
+   "name": "TypeError",
+   "message": "The argument 'args[0]' must be a string without null bytes. Received \"tr\\u0000ue\"",
+   "code": "ERR_INVALID_ARG_VALUE",
+   "isError": true,
+   "isTypeError": true
+  }
+ ],
+ [
+  "validate null byte arg1",
+  {
+   "threw": true,
+   "ctor": "TypeError",
+   "name": "TypeError",
+   "message": "The argument 'args[1]' must be a string without null bytes. Received \"a\u0000b\"",
+   "code": "ERR_INVALID_ARG_VALUE",
+   "isError": true,
+   "isTypeError": true
+  }
+ ],
+ [
+  "validate null byte argv0",
+  {
+   "threw": true,
+   "ctor": "TypeError",
+   "name": "TypeError",
+   "message": "The property 'options.argv0' must be a string without null bytes. Received \"a\\u0000b\"",
+   "code": "ERR_INVALID_ARG_VALUE",
+   "isError": true,
+   "isTypeError": true
+  }
+ ],
+ [
+  "validate null byte cwd",
+  {
+   "threw": true,
+   "ctor": "TypeError",
+   "name": "TypeError",
+   "message": "The property 'options.cwd' must be a string without null bytes. Received \"/tmp\\u0000x\"",
+   "code": "ERR_INVALID_ARG_VALUE",
+   "isError": true,
+   "isTypeError": true
+  }
+ ],
+ [
+  "validate null byte env value",
+  {
+   "threw": true,
+   "ctor": "TypeError",
+   "name": "TypeError",
+   "message": "The property 'options.env['A']' must be a string without null bytes. Received \"x\u0000y\"",
+   "code": "ERR_INVALID_ARG_VALUE",
+   "isError": true,
+   "isTypeError": true
+  }
+ ],
+ [
+  "validate terminal number",
+  {
+   "threw": true,
+   "ctor": "TypeError",
+   "name": "TypeError",
+   "message": "terminal must be a Terminal object or options object",
+   "code": "ERR_INVALID_ARG_TYPE",
+   "isError": true,
+   "isTypeError": true
+  }
+ ],
+ [
+  "validate terminal string",
+  {
+   "threw": true,
+   "ctor": "TypeError",
+   "name": "TypeError",
+   "message": "terminal must be a Terminal object or options object",
+   "code": "ERR_INVALID_ARG_TYPE",
+   "isError": true,
+   "isTypeError": true
+  }
+ ],
+ [
+  "validate onExit not fn",
+  {
+   "threw": true,
+   "ctor": "TypeError",
+   "name": "TypeError",
+   "message": "onExit must be a function or undefined",
+   "code": "ERR_INVALID_ARG_TYPE",
+   "isError": true,
+   "isTypeError": true
+  }
+ ],
+ [
+  "validate killSignal 0",
+  {
+   "threw": true,
+   "ctor": "TypeError",
+   "name": "TypeError",
+   "message": "Unknown signal: 0",
+   "code": "ERR_UNKNOWN_SIGNAL",
+   "isError": true,
+   "isTypeError": true
+  }
+ ],
+ [
+  "validate killSignal bogus",
+  {
+   "threw": true,
+   "ctor": "TypeError",
+   "name": "TypeError",
+   "message": "signal must be one of 'SIGHUP', 'SIGINT', 'SIGQUIT', 'SIGILL', 'SIGTRAP', 'SIGABRT', 'SIGBUS', 'SIGFPE', 'SIGKILL', 'SIGUSR1', 'SIGSEGV', 'SIGUSR2', 'SIGPIPE', 'SIGALRM', 'SIGTERM', 'SIGSTKFLT', 'SIGCHLD', 'SIGCONT', 'SIGSTOP', 'SIGTSTP', 'SIGTTIN', 'SIGTTOU', 'SIGURG', 'SIGXCPU', 'SIGXFSZ', 'SIGVTALRM', 'SIGPROF', 'SIGWINCH', 'SIGIO', 'SIGPWR' or 'SIGSYS'",
+   "code": "ERR_INVALID_ARG_TYPE",
+   "isError": true,
+   "isTypeError": true
+  }
+ ],
+ [
+  "validate timeout NaN",
+  {
+   "threw": true,
+   "ctor": "RangeError",
+   "name": "RangeError",
+   "message": "The value of \"timeout\" is out of range. It must be a non-negative integer. Received NaN",
+   "code": "ERR_OUT_OF_RANGE",
+   "isError": true,
+   "isTypeError": false
+  }
+ ],
+ [
+  "validate timeout negative",
+  {
+   "threw": true,
+   "ctor": "RangeError",
+   "name": "RangeError",
+   "message": "The value of \"timeout\" is out of range. It must be >= 0 and <= 9007199254740991. Received -1",
+   "code": "ERR_OUT_OF_RANGE",
+   "isError": true,
+   "isTypeError": false
+  }
+ ],
+ [
+  "validate signal not AbortSignal",
+  {
+   "threw": true,
+   "ctor": "TypeError",
+   "name": "TypeError",
+   "message": "The \"signal\" argument must be of type AbortSignal. Received an instance of Object",
+   "code": "ERR_INVALID_ARG_TYPE",
+   "isError": true,
+   "isTypeError": true
+  }
+ ],
+ [
+  "validate aborted signal",
+  {
+   "threw": true,
+   "ctor": "Error",
+   "name": "AbortError",
+   "message": "The operation was aborted",
+   "code": "ABORT_ERR",
+   "isError": true,
+   "isTypeError": false
+  }
+ ],
+ [
+  "validate blob stdout",
+  {
+   "threw": true,
+   "ctor": "TypeError",
+   "name": "TypeError",
+   "message": "Blobs are immutable, and cannot be used for stdout/stderr",
+   "code": "ERR_INVALID_ARG_TYPE",
+   "isError": true,
+   "isTypeError": true
+  }
+ ],
+ [
+  "echo via Response",
+  {
+   "o": "hello world\n",
+   "e": "",
+   "x": 0,
+   "exitCode": 0,
+   "signalCode": null,
+   "killed": true,
+   "pidOk": true
+  }
+ ],
+ [
+  "stdout.text direct",
+  {
+   "o": "a\nb",
+   "e": "err",
+   "x": 0
+  }
+ ],
+ [
+  "stream methods",
+  {
+   "proto": [
+    "function",
+    "function",
+    "function",
+    "undefined",
+    "function"
+   ],
+   "json": {
+    "a": 1
+   },
+   "x": 0
+  }
+ ],
+ [
+  "bytes chunks",
+  {
+   "ctor": "Uint8Array",
+   "len": 3,
+   "s": "xyz"
+  }
+ ],
+ [
+  "reader chunks Uint8Array",
+  {
+   "ctor": "Uint8Array",
+   "total": "xyz"
+  }
+ ],
+ [
+  "defaults",
+  {
+   "o": "rc=0\n",
+   "stdin": "undefined",
+   "stdout": "ReadableStream",
+   "stderr": "undefined",
+   "stdio": [
+    null,
+    null,
+    null
+   ],
+   "terminal": "undefined",
+   "x": 0
+  }
+ ],
+ [
+  "ignore and inherit getters",
+  {
+   "stdin": "undefined",
+   "stdout": "undefined",
+   "stderr": "undefined",
+   "readable": "undefined",
+   "x": 0
+  }
+ ],
+ [
+  "same stream object",
+  {
+   "same": true
+  }
+ ],
+ [
+  "object form",
+  {
+   "o": "obj\n",
+   "x": 0
+  }
+ ],
+ [
+  "coerced args",
+  {
+   "o": "1 true null undefined\n"
+  }
+ ],
+ [
+  "toStringTag",
+  {
+   "tag": "[object Subprocess]",
+   "ctor": "Object",
+   "kinds": [
+    true,
+    true,
+    true,
+    true,
+    true,
+    true,
+    true,
+    true,
+    true
+   ]
+  }
+ ],
+ [
+  "nonzero exit",
+  {
+   "before": {
+    "exitCode": null,
+    "signalCode": null,
+    "killed": false
+   },
+   "x": 7,
+   "after": {
+    "exitCode": 7,
+    "signalCode": null,
+    "killed": true
+   }
+  }
+ ],
+ [
+  "exited identity",
+  {
+   "pendingSame": true,
+   "v": 3,
+   "again": 3,
+   "afterSame": false
+  }
+ ],
+ [
+  "large output unread until exit",
+  {
+   "x": 0,
+   "len": 3000000,
+   "allA": true
+  }
+ ],
+ [
+  "large stderr unread until exit",
+  {
+   "x": 0,
+   "len": 1000000
+  }
+ ],
+ [
+  "stdin pipe",
+  {
+   "w": 3,
+   "w2": 2,
+   "o": "abcde",
+   "x": 0
+  }
+ ],
+ [
+  "stdin from Bun.file",
+  {
+   "o": "from-file\n",
+   "x": 0
+  }
+ ],
+ [
+  "stdin from fd",
+  {
+   "o": "from-fd\n",
+   "x": 0
+  }
+ ],
+ [
+  "kill default",
+  {
+   "before": {
+    "exitCode": null,
+    "signalCode": null,
+    "killed": false
+   },
+   "x": 143,
+   "after": {
+    "exitCode": null,
+    "signalCode": "SIGTERM",
+    "killed": true
+   }
+  }
+ ],
+ [
+  "kill \"SIGKILL\" string",
+  {
+   "x": 137,
+   "after": {
+    "exitCode": null,
+    "signalCode": "SIGKILL",
+    "killed": true
+   }
+  }
+ ],
+ [
+  "kill 9 number",
+  {
+   "x": 137,
+   "after": {
+    "exitCode": null,
+    "signalCode": "SIGKILL",
+    "killed": true
+   }
+  }
+ ],
+ [
+  "kill \"SIGINT\" string",
+  {
+   "x": 130,
+   "after": {
+    "exitCode": null,
+    "signalCode": "SIGINT",
+    "killed": true
+   }
+  }
+ ],
+ [
+  "kill 15 number",
+  {
+   "x": 143,
+   "after": {
+    "exitCode": null,
+    "signalCode": "SIGTERM",
+    "killed": true
+   }
+  }
+ ],
+ [
+  "kill \"SIGHUP\" string",
+  {
+   "x": 129,
+   "after": {
+    "exitCode": null,
+    "signalCode": "SIGHUP",
+    "killed": true
+   }
+  }
+ ],
+ [
+  "kill \"\" string",
+  {
+   "x": 143,
+   "after": {
+    "exitCode": null,
+    "signalCode": "SIGTERM",
+    "killed": true
+   }
+  }
+ ],
+ [
+  "kill null number",
+  {
+   "x": 143,
+   "after": {
+    "exitCode": null,
+    "signalCode": "SIGTERM",
+    "killed": true
+   }
+  }
+ ],
+ [
+  "kill invalid SIGBOGUS",
+  {
+   "r": {
+    "threw": true,
+    "ctor": "TypeError",
+    "name": "TypeError",
+    "message": "signal must be one of 'SIGHUP', 'SIGINT', 'SIGQUIT', 'SIGILL', 'SIGTRAP', 'SIGABRT', 'SIGBUS', 'SIGFPE', 'SIGKILL', 'SIGUSR1', 'SIGSEGV', 'SIGUSR2', 'SIGPIPE', 'SIGALRM', 'SIGTERM', 'SIGSTKFLT', 'SIGCHLD', 'SIGCONT', 'SIGSTOP', 'SIGTSTP', 'SIGTTIN', 'SIGTTOU', 'SIGURG', 'SIGXCPU', 'SIGXFSZ', 'SIGVTALRM', 'SIGPROF', 'SIGWINCH', 'SIGIO', 'SIGPWR' or 'SIGSYS'",
+    "code": "ERR_INVALID_ARG_TYPE",
+    "isError": true,
+    "isTypeError": true
+   },
+   "x": 137,
+   "after": {
+    "exitCode": null,
+    "signalCode": "SIGKILL",
+    "killed": true
+   }
+  }
+ ],
+ [
+  "kill invalid 99",
+  {
+   "r": {
+    "threw": true,
+    "ctor": "TypeError",
+    "name": "TypeError",
+    "message": "Invalid signal: must be < 32",
+    "code": "ERR_INVALID_ARG_TYPE",
+    "isError": true,
+    "isTypeError": true
+   },
+   "x": 137,
+   "after": {
+    "exitCode": null,
+    "signalCode": "SIGKILL",
+    "killed": true
+   }
+  }
+ ],
+ [
+  "kill invalid -1",
+  {
+   "r": {
+    "threw": true,
+    "ctor": "TypeError",
+    "name": "TypeError",
+    "message": "Invalid signal: must be >= 0",
+    "code": "ERR_INVALID_ARG_TYPE",
+    "isError": true,
+    "isTypeError": true
+   },
+   "x": 137,
+   "after": {
+    "exitCode": null,
+    "signalCode": "SIGKILL",
+    "killed": true
+   }
+  }
+ ],
+ [
+  "kill invalid 1.5",
+  {
+   "r": {
+    "threw": true,
+    "ctor": "TypeError",
+    "name": "TypeError",
+    "message": "Unknown signal",
+    "code": "ERR_INVALID_ARG_TYPE",
+    "isError": true,
+    "isTypeError": true
+   },
+   "x": 137,
+   "after": {
+    "exitCode": null,
+    "signalCode": "SIGKILL",
+    "killed": true
+   }
+  }
+ ],
+ [
+  "kill invalid Infinity",
+  {
+   "r": {
+    "threw": true,
+    "ctor": "TypeError",
+    "name": "TypeError",
+    "message": "Unknown signal",
+    "code": "ERR_INVALID_ARG_TYPE",
+    "isError": true,
+    "isTypeError": true
+   },
+   "x": 137,
+   "after": {
+    "exitCode": null,
+    "signalCode": "SIGKILL",
+    "killed": true
+   }
+  }
+ ],
+ [
+  "kill invalid [object Object]",
+  {
+   "r": {
+    "threw": true,
+    "ctor": "TypeError",
+    "name": "TypeError",
+    "message": "Invalid signal: must be a string or an integer",
+    "code": "ERR_INVALID_ARG_TYPE",
+    "isError": true,
+    "isTypeError": true
+   },
+   "x": 137,
+   "after": {
+    "exitCode": null,
+    "signalCode": "SIGKILL",
+    "killed": true
+   }
+  }
+ ],
+ [
+  "kill invalid sigterm",
+  {
+   "r": {
+    "threw": true,
+    "ctor": "TypeError",
+    "name": "TypeError",
+    "message": "signal must be one of 'SIGHUP', 'SIGINT', 'SIGQUIT', 'SIGILL', 'SIGTRAP', 'SIGABRT', 'SIGBUS', 'SIGFPE', 'SIGKILL', 'SIGUSR1', 'SIGSEGV', 'SIGUSR2', 'SIGPIPE', 'SIGALRM', 'SIGTERM', 'SIGSTKFLT', 'SIGCHLD', 'SIGCONT', 'SIGSTOP', 'SIGTSTP', 'SIGTTIN', 'SIGTTOU', 'SIGURG', 'SIGXCPU', 'SIGXFSZ', 'SIGVTALRM', 'SIGPROF', 'SIGWINCH', 'SIGIO', 'SIGPWR' or 'SIGSYS'",
+    "code": "ERR_INVALID_ARG_TYPE",
+    "isError": true,
+    "isTypeError": true
+   },
+   "x": 137,
+   "after": {
+    "exitCode": null,
+    "signalCode": "SIGKILL",
+    "killed": true
+   }
+  }
+ ],
+ [
+  "kill invalid TERM",
+  {
+   "r": {
+    "threw": true,
+    "ctor": "TypeError",
+    "name": "TypeError",
+    "message": "signal must be one of 'SIGHUP', 'SIGINT', 'SIGQUIT', 'SIGILL', 'SIGTRAP', 'SIGABRT', 'SIGBUS', 'SIGFPE', 'SIGKILL', 'SIGUSR1', 'SIGSEGV', 'SIGUSR2', 'SIGPIPE', 'SIGALRM', 'SIGTERM', 'SIGSTKFLT', 'SIGCHLD', 'SIGCONT', 'SIGSTOP', 'SIGTSTP', 'SIGTTIN', 'SIGTTOU', 'SIGURG', 'SIGXCPU', 'SIGXFSZ', 'SIGVTALRM', 'SIGPROF', 'SIGWINCH', 'SIGIO', 'SIGPWR' or 'SIGSYS'",
+    "code": "ERR_INVALID_ARG_TYPE",
+    "isError": true,
+    "isTypeError": true
+   },
+   "x": 137,
+   "after": {
+    "exitCode": null,
+    "signalCode": "SIGKILL",
+    "killed": true
+   }
+  }
+ ],
+ [
+  "kill 0 on live",
+  {
+   "mid": {
+    "exitCode": null,
+    "signalCode": null,
+    "killed": false
+   },
+   "x": 137
+  }
+ ],
+ [
+  "kill after exit",
+  {
+   "r": {},
+   "after": {
+    "exitCode": 0,
+    "signalCode": null,
+    "killed": true
+   }
+  }
+ ],
+ [
+  "self-signalled",
+  {
+   "x": 143,
+   "after": {
+    "exitCode": null,
+    "signalCode": "SIGTERM",
+    "killed": true
+   }
+  }
+ ],
+ [
+  "signalled SIGSEGV",
+  {
+   "x": 139,
+   "after": {
+    "exitCode": null,
+    "signalCode": "SIGSEGV",
+    "killed": true
+   }
+  }
+ ],
+ [
+  "exit 255",
+  {
+   "x": 255,
+   "after": {
+    "exitCode": 255,
+    "signalCode": null,
+    "killed": true
+   }
+  }
+ ],
+ [
+  "onExit callback",
+  {
+   "a": {
+    "same": true,
+    "code": 4,
+    "sig": null,
+    "err": "undefined",
+    "n": 4
+   },
+   "x": 4
+  }
+ ],
+ [
+  "onExit on kill",
+  {
+   "a": {
+    "code": null,
+    "sig": "SIGTERM"
+   },
+   "x": 143
+  }
+ ],
+ [
+  "timeout default killSignal",
+  {
+   "x": 143,
+   "after": {
+    "exitCode": null,
+    "signalCode": "SIGTERM",
+    "killed": true
+   },
+   "quick": true
+  }
+ ],
+ [
+  "timeout killSignal SIGKILL",
+  {
+   "x": 137,
+   "after": {
+    "exitCode": null,
+    "signalCode": "SIGKILL",
+    "killed": true
+   }
+  }
+ ],
+ [
+  "timeout killSignal number",
+  {
+   "x": 130,
+   "after": {
+    "exitCode": null,
+    "signalCode": "SIGINT",
+    "killed": true
+   }
+  }
+ ],
+ [
+  "abort signal",
+  {
+   "x": 143,
+   "after": {
+    "exitCode": null,
+    "signalCode": "SIGTERM",
+    "killed": true
+   }
+  }
+ ],
+ [
+  "abort signal with killSignal",
+  {
+   "x": 137,
+   "after": {
+    "exitCode": null,
+    "signalCode": "SIGKILL",
+    "killed": true
+   }
+  }
+ ],
+ [
+  "maxBuffer",
+  {
+   "x": 143,
+   "after": {
+    "exitCode": null,
+    "signalCode": "SIGTERM",
+    "killed": true
+   }
+  }
+ ],
+ [
+  "async dispose",
+  {
+   "r": 143,
+   "after": {
+    "exitCode": null,
+    "signalCode": "SIGTERM",
+    "killed": true
+   }
+  }
+ ],
+ [
+  "argv0 cmdline",
+  {
+   "c": "claude bg-pty-host\u00005\u0000"
+  }
+ ],
+ [
+  "argv0 visible as $0",
+  {
+   "o": "pretend-sh\n"
+  }
+ ],
+ [
+  "argv0 empty string ignored",
+  {
+   "o": "sh\n"
+  }
+ ],
+ [
+  "argv0 resolves real binary",
+  {
+   "o": "/usr/bin/dash\n"
+  }
+ ],
+ [
+  "no argv0 cmdline keeps cmd[0]",
+  {
+   "c": "sleep\u00005\u0000"
+  }
+ ],
+ [
+  "cwd",
+  {
+   "o": "/tmp\n"
+  }
+ ],
+ [
+  "cwd relative binary",
+  {
+   "o": "relhi\n",
+   "x": 0
+  }
+ ],
+ [
+  "PATH lookup uses env PATH",
+  {
+   "o": "found-in-env-path\n",
+   "x": 0
+  }
+ ],
+ [
+  "PATH relative segment against cwd",
+  {
+   "o": "rel-segment\n",
+   "x": 0
+  }
+ ],
+ [
+  "env replaces",
+  {
+   "o": [
+    "",
+    "B=false",
+    "E=",
+    "FOO=bar",
+    "N=null",
+    "NUM=5"
+   ]
+  }
+ ],
+ [
+  "env without PATH uses default path",
+  {
+   "o": "ONLY=1\n",
+   "x": 0
+  }
+ ],
+ [
+  "env PATH empty uses default path",
+  {
+   "o": [
+    "",
+    "PATH=",
+    "Z=1"
+   ],
+   "x": 0
+  }
+ ],
+ [
+  "env PATH no match",
+  {
+   "threw": true,
+   "ctor": "Error",
+   "name": "Error",
+   "message": "Executable not found in $PATH: \"env\"",
+   "code": "ENOENT",
+   "errno": -2,
+   "path": "env",
+   "isError": true,
+   "isTypeError": false
+  }
+ ],
+ [
+  "env inherited includes process.env mutation",
+  {
+   "o": "\n"
+  }
+ ],
+ [
+  "env inherited sees deletion",
+  {
+   "o": "[unset]\n"
+  }
+ ],
+ [
+  "env spread",
+  {
+   "o": "xterm-256color:\n"
+  }
+ ],
+ [
+  "env proto keys ignored",
+  {
+   "o": [
+    "",
+    "OWN=2"
+   ]
+  }
+ ],
+ [
+  "env symbol and nonenumerable",
+  {
+   "o": [
+    "",
+    "A=1"
+   ]
+  }
+ ],
+ [
+  "detached session",
+  {
+   "sidIsChild": true,
+   "sidIsParent": false
+  }
+ ],
+ [
+  "not detached session",
+  {
+   "sidIsChild": false,
+   "sidIsParent": true
+  }
+ ],
+ [
+  "detached non-boolean ignored",
+  {
+   "sidIsChild": false,
+   "sidIsParent": true
+  }
+ ],
+ [
+  "stdio Bun.file stderr",
+  {
+   "x": 0,
+   "content": "to-err\n",
+   "mode": "644",
+   "stdout": "undefined",
+   "stderr": "undefined"
+  }
+ ],
+ [
+  "stdio Bun.file existing not truncated",
+  {
+   "content": "xy23456789ABCDEF\n",
+   "mode": "600"
+  }
+ ],
+ [
+  "stdio Bun.file stdout",
+  {
+   "content": "into-file\n",
+   "stdout": "undefined"
+  }
+ ],
+ [
+  "stdout option Bun.file",
+  {
+   "content": "opt-file\n"
+  }
+ ],
+ [
+  "stdio Bun.file missing dir",
+  {
+   "threw": true,
+   "ctor": "Error",
+   "name": "Error",
+   "message": "ENOENT: no such file or directory, posix_spawn 'echo'",
+   "code": "ENOENT",
+   "errno": -2,
+   "syscall": "posix_spawn",
+   "path": "echo",
+   "isError": true,
+   "isTypeError": false
+  }
+ ],
+ [
+  "stdio Bun.file missing dir with argv0",
+  {
+   "threw": true,
+   "ctor": "Error",
+   "name": "Error",
+   "message": "ENOENT: no such file or directory, posix_spawn 'claude bg-pty-host'",
+   "code": "ENOENT",
+   "errno": -2,
+   "syscall": "posix_spawn",
+   "path": "claude bg-pty-host",
+   "isError": true,
+   "isTypeError": false
+  }
+ ],
+ [
+  "stdio Bun.file is a directory",
+  {
+   "threw": true,
+   "ctor": "Error",
+   "name": "Error",
+   "message": "EISDIR: illegal operation on a directory, posix_spawn 'echo'",
+   "code": "EISDIR",
+   "errno": -21,
+   "syscall": "posix_spawn",
+   "path": "echo",
+   "isError": true,
+   "isTypeError": false
+  }
+ ],
+ [
+  "stdio Bun.file read-only fs",
+  {
+   "threw": true,
+   "ctor": "Error",
+   "name": "Error",
+   "message": "EROFS: read-only file system, posix_spawn 'echo'",
+   "code": "EROFS",
+   "errno": -30,
+   "syscall": "posix_spawn",
+   "path": "echo",
+   "isError": true,
+   "isTypeError": false
+  }
+ ],
+ [
+  "stdio missing dir and bad cwd",
+  {
+   "threw": true,
+   "ctor": "Error",
+   "name": "Error",
+   "message": "ENOENT: no such file or directory, posix_spawn 'echo'",
+   "code": "ENOENT",
+   "errno": -2,
+   "syscall": "posix_spawn",
+   "path": "echo",
+   "isError": true,
+   "isTypeError": false
+  }
+ ],
+ [
+  "stdio numeric fd",
+  {
+   "content": "via-fd\n",
+   "stderr": "number"
+  }
+ ],
+ [
+  "stdio fd closed by parent right after spawn",
+  {
+   "content": "late\n"
+  }
+ ],
+ [
+  "stdio inherit fd 2 number",
+  {
+   "stderr": "undefined",
+   "x": 0
+  }
+ ],
+ [
+  "stdio short array keeps defaults",
+  {
+   "stdout": "ReadableStream",
+   "o": "short\n",
+   "stderr": "undefined"
+  }
+ ],
+ [
+  "stdio null entries",
+  {
+   "stdout": "undefined",
+   "x": 0
+  }
+ ],
+ [
+  "stdio extra ignore slot",
+  {
+   "o": "0 1 2 3 4 ",
+   "stdio": 5
+  }
+ ],
+ [
+  "stdio extra Bun.file slot",
+  {
+   "content": "extra\n"
+  }
+ ],
+ [
+  "stdio overrides stdout option",
+  {
+   "stdout": "undefined"
+  }
+ ],
+ [
+  "missing bare binary",
+  {
+   "threw": true,
+   "ctor": "Error",
+   "name": "Error",
+   "message": "Executable not found in $PATH: \"definitely-not-a-cmd-xyz\"",
+   "code": "ENOENT",
+   "errno": -2,
+   "path": "definitely-not-a-cmd-xyz",
+   "isError": true,
+   "isTypeError": false
+  }
+ ],
+ [
+  "missing bare binary with argv0",
+  {
+   "threw": true,
+   "ctor": "Error",
+   "name": "Error",
+   "message": "Executable not found in $PATH: \"definitely-not-a-cmd-xyz\"",
+   "code": "ENOENT",
+   "errno": -2,
+   "path": "definitely-not-a-cmd-xyz",
+   "isError": true,
+   "isTypeError": false
+  }
+ ],
+ [
+  "missing absolute binary",
+  {
+   "threw": true,
+   "ctor": "Error",
+   "name": "Error",
+   "message": "ENOENT: no such file or directory, posix_spawn '/nonexistent/bin/tool'",
+   "code": "ENOENT",
+   "errno": -2,
+   "syscall": "posix_spawn",
+   "path": "/nonexistent/bin/tool",
+   "isError": true,
+   "isTypeError": false
+  }
+ ],
+ [
+  "missing absolute binary with argv0",
+  {
+   "threw": true,
+   "ctor": "Error",
+   "name": "Error",
+   "message": "ENOENT: no such file or directory, posix_spawn 'claude bg-pty-host'",
+   "code": "ENOENT",
+   "errno": -2,
+   "syscall": "posix_spawn",
+   "path": "claude bg-pty-host",
+   "isError": true,
+   "isTypeError": false
+  }
+ ],
+ [
+  "missing relative binary",
+  {
+   "threw": true,
+   "ctor": "Error",
+   "name": "Error",
+   "message": "ENOENT: no such file or directory, posix_spawn './nope-here'",
+   "code": "ENOENT",
+   "errno": -2,
+   "syscall": "posix_spawn",
+   "path": "./nope-here",
+   "isError": true,
+   "isTypeError": false
+  }
+ ],
+ [
+  "non-executable file",
+  {
+   "threw": true,
+   "ctor": "Error",
+   "name": "Error",
+   "message": "EACCES: permission denied, posix_spawn '/opt/cc/w-spawn-work/noexec.sh'",
+   "code": "EACCES",
+   "errno": -13,
+   "syscall": "posix_spawn",
+   "path": "/opt/cc/w-spawn-work/noexec.sh",
+   "isError": true,
+   "isTypeError": false
+  }
+ ],
+ [
+  "directory as binary",
+  {
+   "threw": true,
+   "ctor": "Error",
+   "name": "Error",
+   "message": "EACCES: permission denied, posix_spawn '/opt/cc/w-spawn-work'",
+   "code": "EACCES",
+   "errno": -13,
+   "syscall": "posix_spawn",
+   "path": "/opt/cc/w-spawn-work",
+   "isError": true,
+   "isTypeError": false
+  }
+ ],
+ [
+  "cwd missing",
+  {
+   "threw": true,
+   "ctor": "Error",
+   "name": "Error",
+   "message": "ENOENT: no such file or directory, posix_spawn 'true'",
+   "code": "ENOENT",
+   "errno": -2,
+   "syscall": "posix_spawn",
+   "path": "true",
+   "isError": true,
+   "isTypeError": false
+  }
+ ],
+ [
+  "cwd is a file",
+  {
+   "threw": true,
+   "ctor": "Error",
+   "name": "Error",
+   "message": "ENOTDIR: not a directory, posix_spawn 'true'",
+   "code": "ENOTDIR",
+   "errno": -20,
+   "syscall": "posix_spawn",
+   "path": "true",
+   "isError": true,
+   "isTypeError": false
+  }
+ ],
+ [
+  "cwd is a file with argv0",
+  {
+   "threw": true,
+   "ctor": "Error",
+   "name": "Error",
+   "message": "ENOTDIR: not a directory, posix_spawn 'pretend'",
+   "code": "ENOTDIR",
+   "errno": -20,
+   "syscall": "posix_spawn",
+   "path": "pretend",
+   "isError": true,
+   "isTypeError": false
+  }
+ ],
+ [
+  "cwd empty string ignored",
+  {
+   "returned": true,
+   "x": 0
+  }
+ ],
+ [
+  "bad interpreter",
+  {
+   "threw": true,
+   "ctor": "Error",
+   "name": "Error",
+   "message": "ENOENT: no such file or directory, posix_spawn '/opt/cc/w-spawn-work/badinterp.sh'",
+   "code": "ENOENT",
+   "errno": -2,
+   "syscall": "posix_spawn",
+   "path": "/opt/cc/w-spawn-work/badinterp.sh",
+   "isError": true,
+   "isTypeError": false
+  }
+ ],
+ [
+  "missing binary with code check like the bundle",
+  {
+   "f": "ENOENT",
+   "inList": true
+  }
+ ],
+ [
+  "terminal options object",
+  {
+   "returned": true,
+   "terminal": "object",
+   "x": 129
+  }
+ ],
+ [
+  "terminal falsy ignored",
+  {
+   "scenarioThrew": {
+    "threw": true,
+    "ctor": "TypeError",
+    "name": "TypeError",
+    "message": "terminal must be a Terminal object or options object",
+    "code": "ERR_INVALID_ARG_TYPE",
+    "isError": true,
+    "isTypeError": true
+   }
+  }
+ ],
+ [
+  "keepalive ref",
+  {
+   "o": "spawned ref\n",
+   "e": "",
+   "x": 0,
+   "waitedForChild": true
+  }
+ ],
+ [
+  "keepalive unref",
+  {
+   "o": "spawned unref\n",
+   "e": "",
+   "x": 0,
+   "waitedForChild": true
+  }
+ ],
+ [
+  "keepalive unref-pipe",
+  {
+   "o": "spawned unref-pipe\n",
+   "e": "",
+   "x": 0,
+   "waitedForChild": true
+  }
+ ],
+ [
+  "keepalive unref-pipe-read",
+  {
+   "o": "spawned unref-pipe-read\n",
+   "e": "",
+   "x": 0,
+   "waitedForChild": true
+  }
+ ],
+ [
+  "keepalive unref-ignore",
+  {
+   "o": "spawned unref-ignore\n",
+   "e": "",
+   "x": 0,
+   "waitedForChild": false
+  }
+ ],
+ [
+  "keepalive ref-after-unref",
+  {
+   "o": "spawned ref-after-unref\n",
+   "e": "",
+   "x": 0,
+   "waitedForChild": true
+  }
+ ]
+]

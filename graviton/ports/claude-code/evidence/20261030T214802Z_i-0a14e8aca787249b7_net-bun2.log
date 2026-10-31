@@ -1,0 +1,1831 @@
+# evidence: net-bun2
+# instance: i-0a14e8aca787249b7   region: us-west-2
+# ssm command: 9cb1e690-91b8-4a54-9479-d5460cb98bf3
+# start: 20261030T214802Z   end: 20261030T214835Z   rc: 0   log bytes: 31708
+# script sha256: f1c67e58854091b75e9f6473c7c9075397dbc709c68b7bd456aa974b7c358213
+# ---- script ----
+# | set -u
+# | echo 'a4bbb4268fb1c1ff99c77d8ce6fe975a4ca416872a099676b76b42d22d7f00f6  /opt/cc/w-net.stage/p.tgz' | sha256sum -c --quiet - || exit 1
+# | rm -rf /opt/cc/w-net && mkdir -p /opt/cc/w-net && tar xzf /opt/cc/w-net.stage/p.tgz -C /opt/cc/w-net 2>/dev/null
+# | cd /opt/cc/w-net
+# | # Record stock Bun 1.4.4 observations for the net scenarios (loopback, port 0 only).
+# | set -u
+# | bun --version; /opt/node24/bin/node --version
+# | T=/opt/cc/w-net.tls; rm -rf $T; mkdir -p $T
+# | openssl req -x509 -newkey rsa:2048 -nodes -keyout $T/key.pem -out $T/cert.pem -days 2 -subj /CN=localhost 2>/dev/null && echo tls-ok
+# | O=/opt/cc/w-net.out; rm -rf $O; mkdir -p $O
+# | cd compat/test
+# | NET_TLS_DIR=$T timeout 600 bun gen-net-vectors.js $O; echo "gen rc=$?"
+# | cat $O/net.cases.json; echo; echo "--- box facts"; cat /etc/hosts; grep hosts /etc/nsswitch.conf; getent ahosts localhost; /opt/node24/bin/node -e "require(\"dns\").lookup(\"localhost\",{all:true},(e,a)=>console.log(\"node lookup localhost\",JSON.stringify(a)))"
+# | echo "listeners still held by bun after the run:"; ss -ltnp | grep "\"bun\"" ; echo "grep rc=$? (1 = none)"
+# ---- raw output ----
+1.4.4
+v24.22.2
+tls-ok
+282 | 		const errs = [];
+283 | 		const s = track(t, api.serve({
+284 | 			hostname: H, port: 0,
+285 | 			fetch(req) {
+286 | 				const u = new URL(req.url).pathname;
+287 | 				if (u === "/sync") throw new Error("boom-sync");
+                                       ^
+error: boom-sync
+      at fetch (/opt/cc/w-net/compat/test/net-scenarios.js:287:34)
+GET - /sync failed
+283 | 		const s = track(t, api.serve({
+284 | 			hostname: H, port: 0,
+285 | 			fetch(req) {
+286 | 				const u = new URL(req.url).pathname;
+287 | 				if (u === "/sync") throw new Error("boom-sync");
+288 | 				if (u === "/async") return Promise.reject(new Error("boom-async"));
+                                                        ^
+error: boom-async
+      at fetch (/opt/cc/w-net/compat/test/net-scenarios.js:288:51)
+GET - /async failed
+error: Expected a Response object, but received 'undefined'
+303 | 	add("serve: fetch throws / returns undefined with development:false", async (t) => {
+304 | 		const s = track(t, api.serve({
+305 | 			hostname: H, port: 0, development: false,
+306 | 			fetch(req) {
+307 | 				const u = new URL(req.url).pathname;
+308 | 				if (u === "/sync") throw new Error("boom-sync");
+                                       ^
+error: boom-sync
+      at fetch (/opt/cc/w-net/compat/test/net-scenarios.js:308:34)
+304 | 		const s = track(t, api.serve({
+305 | 			hostname: H, port: 0, development: false,
+306 | 			fetch(req) {
+307 | 				const u = new URL(req.url).pathname;
+308 | 				if (u === "/sync") throw new Error("boom-sync");
+309 | 				if (u === "/async") return Promise.reject(new Error("boom-async"));
+                                                        ^
+error: boom-async
+      at fetch (/opt/cc/w-net/compat/test/net-scenarios.js:309:51)
+error: Expected a Response object, but received 'undefined'
+327 | 			fetch(req) { throw new Error("E:" + new URL(req.url).pathname); },
+328 | 			error(e) {
+329 | 				calls.push([this === s, e instanceof Error, e.message]);
+330 | 				if (e.message === "E:/a") return new Response("handled-a", { status: 503, headers: { "content-type": "text/plain" } });
+331 | 				if (e.message === "E:/b") return (async () => new Response("handled-b", { status: 502, headers: { "content-type": "text/plain" } }))();
+332 | 				throw new Error("handler-threw");
+                    ^
+error: handler-threw
+      at error (/opt/cc/w-net/compat/test/net-scenarios.js:332:15)
+net scenarios: 41
+gen rc=0
+[
+ [
+  "serve: shape and members",
+  {
+   "portType": "number",
+   "portPositive": true,
+   "port3000": false,
+   "hostname": "127.0.0.1",
+   "url": "http://127.0.0.1:PORT/",
+   "urlIsURL": true,
+   "protocol": "http",
+   "development": true,
+   "pendingRequests": 0,
+   "fns": [
+    [
+     "stop",
+     "function"
+    ],
+    [
+     "unref",
+     "function"
+    ],
+    [
+     "ref",
+     "function"
+    ],
+    [
+     "requestIP",
+     "function"
+    ]
+   ],
+   "unrefReturnsSelf": true,
+   "refReturnsSelf": true
+  }
+ ],
+ [
+  "serve: GET round trip, request shape, second argument",
+  {
+   "seen": {
+    "same": true,
+    "thisIsServer": true,
+    "method": "GET",
+    "url": "http://127.0.0.1/a/b?c=d&e",
+    "isRequest": true,
+    "xa": "one",
+    "xm": "1, 2",
+    "host": "127.0.0.1",
+    "pending": 1,
+    "signal": "object",
+    "aborted": false,
+    "ip": {
+     "address": "127.0.0.1",
+     "family": "IPv4",
+     "port": true,
+     "keys": [
+      "address",
+      "family",
+      "port"
+     ]
+    },
+    "bodyUsed": false,
+    "body": null
+   },
+   "res": {
+    "version": "HTTP/1.1",
+    "status": 201,
+    "reason": "Created",
+    "headers": [
+     [
+      "content-type",
+      "text/plain"
+     ],
+     [
+      "x-out",
+      "1"
+     ],
+     [
+      "content-length",
+      "5"
+     ]
+    ],
+    "hasDate": true,
+    "framing": "content-length",
+    "complete": true,
+    "body": "hello"
+   },
+   "after": 0
+  }
+ ],
+ [
+  "serve: default content-type and framing of Response kinds",
+  {
+   "/str": {
+    "version": "HTTP/1.1",
+    "status": 200,
+    "reason": "OK",
+    "headers": [
+     [
+      "content-type",
+      "text/plain;charset=utf-8"
+     ],
+     [
+      "content-length",
+      "9"
+     ]
+    ],
+    "hasDate": true,
+    "framing": "content-length",
+    "complete": true,
+    "body": "text body"
+   },
+   "/json": {
+    "version": "HTTP/1.1",
+    "status": 200,
+    "reason": "OK",
+    "headers": [
+     [
+      "etag",
+      "\"x\""
+     ],
+     [
+      "content-type",
+      "application/json;charset=utf-8"
+     ],
+     [
+      "content-length",
+      "7"
+     ]
+    ],
+    "hasDate": true,
+    "framing": "content-length",
+    "complete": true,
+    "body": "{\"a\":1}"
+   },
+   "/null": {
+    "version": "HTTP/1.1",
+    "status": 200,
+    "reason": "OK",
+    "headers": [
+     [
+      "content-length",
+      "0"
+     ]
+    ],
+    "hasDate": true,
+    "framing": "content-length",
+    "complete": true,
+    "body": ""
+   },
+   "/304": {
+    "version": "HTTP/1.1",
+    "status": 304,
+    "reason": "Not Modified",
+    "headers": [
+     [
+      "etag",
+      "\"x\""
+     ]
+    ],
+    "hasDate": true,
+    "framing": "none",
+    "complete": true,
+    "body": ""
+   },
+   "/204": {
+    "version": "HTTP/1.1",
+    "status": 204,
+    "reason": "No Content",
+    "headers": [],
+    "hasDate": true,
+    "framing": "none",
+    "complete": true,
+    "body": ""
+   },
+   "/bytes": {
+    "version": "HTTP/1.1",
+    "status": 200,
+    "reason": "OK",
+    "headers": [
+     [
+      "content-type",
+      "application/octet-stream"
+     ],
+     [
+      "content-length",
+      "3"
+     ]
+    ],
+    "hasDate": true,
+    "framing": "content-length",
+    "complete": true,
+    "body": "\u0001\u0002\u0003"
+   },
+   "/blob": {
+    "version": "HTTP/1.1",
+    "status": 200,
+    "reason": "OK",
+    "headers": [
+     [
+      "content-type",
+      "text/x-blob"
+     ],
+     [
+      "content-length",
+      "6"
+     ]
+    ],
+    "hasDate": true,
+    "framing": "content-length",
+    "complete": true,
+    "body": "blobby"
+   },
+   "/stream-now": {
+    "version": "HTTP/1.1",
+    "status": 200,
+    "reason": "OK",
+    "headers": [
+     [
+      "content-type",
+      "text/plain"
+     ],
+     [
+      "content-length",
+      "4"
+     ]
+    ],
+    "hasDate": true,
+    "framing": "content-length",
+    "complete": true,
+    "body": "abcd"
+   },
+   "/stream-slow": {
+    "version": "HTTP/1.1",
+    "status": 200,
+    "reason": "OK",
+    "headers": [
+     [
+      "content-type",
+      "text/plain"
+     ],
+     [
+      "transfer-encoding",
+      "chunked"
+     ]
+    ],
+    "hasDate": true,
+    "framing": "chunked",
+    "complete": true,
+    "body": "z1z2z3"
+   },
+   "/stream-partial": {
+    "version": "HTTP/1.1",
+    "status": 200,
+    "reason": "OK",
+    "headers": [
+     [
+      "content-type",
+      "text/plain"
+     ],
+     [
+      "transfer-encoding",
+      "chunked"
+     ]
+    ],
+    "hasDate": true,
+    "framing": "chunked",
+    "complete": true,
+    "body": "abcd"
+   },
+   "/stream-cl": {
+    "version": "HTTP/1.1",
+    "status": 200,
+    "reason": "OK",
+    "headers": [
+     [
+      "content-type",
+      "text/plain"
+     ],
+     [
+      "content-length",
+      "4"
+     ]
+    ],
+    "hasDate": true,
+    "framing": "content-length",
+    "complete": true,
+    "body": "wxyz"
+   },
+   "/proxy": {
+    "version": "HTTP/1.1",
+    "status": 200,
+    "reason": "OK",
+    "headers": [
+     [
+      "content-type",
+      "text/plain"
+     ],
+     [
+      "x-up",
+      "1"
+     ],
+     [
+      "content-length",
+      "13"
+     ]
+    ],
+    "hasDate": true,
+    "framing": "content-length",
+    "complete": true,
+    "body": "upstream-body"
+   },
+   "/proxy-body": {
+    "version": "HTTP/1.1",
+    "status": 200,
+    "reason": "OK",
+    "headers": [
+     [
+      "content-type",
+      "text/plain"
+     ],
+     [
+      "content-length",
+      "13"
+     ]
+    ],
+    "hasDate": true,
+    "framing": "content-length",
+    "complete": true,
+    "body": "upstream-body"
+   },
+   "/cl": {
+    "version": "HTTP/1.1",
+    "status": 200,
+    "reason": "OK",
+    "headers": [
+     [
+      "content-type",
+      "text/plain"
+     ],
+     [
+      "content-length",
+      "5"
+     ]
+    ],
+    "hasDate": true,
+    "framing": "content-length",
+    "complete": true,
+    "body": "12345"
+   },
+   "/cookies": {
+    "version": "HTTP/1.1",
+    "status": 200,
+    "reason": "OK",
+    "headers": [
+     [
+      "set-cookie",
+      "a=1"
+     ],
+     [
+      "set-cookie",
+      "b=2"
+     ],
+     [
+      "content-type",
+      "text/plain"
+     ],
+     [
+      "content-length",
+      "1"
+     ]
+    ],
+    "hasDate": true,
+    "framing": "content-length",
+    "complete": true,
+    "body": "c"
+   },
+   "/missing": {
+    "version": "HTTP/1.1",
+    "status": 404,
+    "reason": "Not Found",
+    "headers": [
+     [
+      "content-type",
+      "text/plain;charset=utf-8"
+     ],
+     [
+      "content-length",
+      "2"
+     ]
+    ],
+    "hasDate": true,
+    "framing": "content-length",
+    "complete": true,
+    "body": "nf"
+   },
+   "HEAD /str": {
+    "version": "HTTP/1.1",
+    "status": 200,
+    "reason": "OK",
+    "headers": [
+     [
+      "content-length",
+      "9"
+     ]
+    ],
+    "hasDate": false,
+    "framing": "none",
+    "complete": true,
+    "body": ""
+   },
+   "HEAD /cookies": {
+    "version": "HTTP/1.1",
+    "status": 200,
+    "reason": "OK",
+    "headers": [
+     [
+      "set-cookie",
+      "a=1"
+     ],
+     [
+      "set-cookie",
+      "b=2"
+     ],
+     [
+      "content-type",
+      "text/plain"
+     ],
+     [
+      "content-length",
+      "1"
+     ]
+    ],
+    "hasDate": false,
+    "framing": "none",
+    "complete": true,
+    "body": ""
+   },
+   "HEAD /json": {
+    "version": "HTTP/1.1",
+    "status": 200,
+    "reason": "OK",
+    "headers": [
+     [
+      "etag",
+      "\"x\""
+     ],
+     [
+      "content-type",
+      "application/json;charset=utf-8"
+     ],
+     [
+      "content-length",
+      "7"
+     ]
+    ],
+    "hasDate": false,
+    "framing": "none",
+    "complete": true,
+    "body": ""
+   },
+   "HEAD /null": {
+    "version": "HTTP/1.1",
+    "status": 200,
+    "reason": "OK",
+    "headers": [
+     [
+      "content-length",
+      "0"
+     ]
+    ],
+    "hasDate": false,
+    "framing": "none",
+    "complete": true,
+    "body": ""
+   },
+   "HEAD /204": {
+    "version": "HTTP/1.1",
+    "status": 204,
+    "reason": "No Content",
+    "headers": [],
+    "hasDate": true,
+    "framing": "none",
+    "complete": true,
+    "body": ""
+   },
+   "HEAD /stream-slow": {
+    "version": "HTTP/1.1",
+    "status": 200,
+    "reason": "OK",
+    "headers": [
+     [
+      "content-type",
+      "text/plain"
+     ],
+     [
+      "transfer-encoding",
+      "chunked"
+     ]
+    ],
+    "hasDate": false,
+    "framing": "none",
+    "complete": true,
+    "body": ""
+   },
+   "HEAD /cl": {
+    "version": "HTTP/1.1",
+    "status": 200,
+    "reason": "OK",
+    "headers": [
+     [
+      "content-type",
+      "text/plain"
+     ],
+     [
+      "content-length",
+      "5"
+     ]
+    ],
+    "hasDate": false,
+    "framing": "none",
+    "complete": true,
+    "body": ""
+   }
+  }
+ ],
+ [
+  "serve: no Host header (HTTP/1.0) and absolute paths",
+  {
+   "urls": [
+    "/p?q=1",
+    "http://example.test:81/x"
+   ],
+   "a": {
+    "version": "HTTP/1.1",
+    "status": 200,
+    "reason": "OK",
+    "headers": [
+     [
+      "content-type",
+      "text/plain"
+     ],
+     [
+      "content-length",
+      "2"
+     ]
+    ],
+    "hasDate": true,
+    "framing": "content-length",
+    "complete": true,
+    "body": "ok"
+   },
+   "b": {
+    "version": "HTTP/1.1",
+    "status": 200,
+    "reason": "OK",
+    "headers": [
+     [
+      "content-type",
+      "text/plain"
+     ],
+     [
+      "content-length",
+      "2"
+     ]
+    ],
+    "hasDate": true,
+    "framing": "content-length",
+    "complete": true,
+    "body": "ok"
+   },
+   "c": {
+    "version": "HTTP/1.1",
+    "status": 400,
+    "reason": "Bad Request",
+    "headers": [
+     [
+      "connection",
+      "close"
+     ]
+    ],
+    "hasDate": false,
+    "framing": "eof",
+    "complete": true,
+    "body": ""
+   }
+  }
+ ],
+ [
+  "serve: POST bodies (small, 1 MiB chunked, json)",
+  {
+   "small": {
+    "version": "HTTP/1.1",
+    "status": 200,
+    "reason": "OK",
+    "headers": [
+     [
+      "content-type",
+      "text/plain"
+     ],
+     [
+      "content-length",
+      "66"
+     ]
+    ],
+    "hasDate": true,
+    "framing": "content-length",
+    "complete": true,
+    "body": "2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824:5"
+   },
+   "big": {
+    "version": "HTTP/1.1",
+    "status": 200,
+    "reason": "OK",
+    "headers": [
+     [
+      "content-type",
+      "text/plain"
+     ],
+     [
+      "content-length",
+      "72"
+     ]
+    ],
+    "hasDate": true,
+    "framing": "content-length",
+    "complete": true,
+    "body": "51b12eb838732b786b4d45c660a974ddf3860ae09084fd293fa6e5df46581a6c:1048576"
+   },
+   "expectBig": "51b12eb838732b786b4d45c660a974ddf3860ae09084fd293fa6e5df46581a6c",
+   "json": {
+    "version": "HTTP/1.1",
+    "status": 200,
+    "reason": "OK",
+    "headers": [
+     [
+      "content-type",
+      "application/json;charset=utf-8"
+     ],
+     [
+      "content-length",
+      "41"
+     ]
+    ],
+    "hasDate": true,
+    "framing": "content-length",
+    "complete": true,
+    "body": "{\"got\":{\"k\":[1]},\"ct\":\"application/json\"}"
+   }
+  }
+ ],
+ [
+  "serve: runtime fetch() client round trip",
+  {
+   "status": 200,
+   "xk": "v",
+   "body": "POST payload",
+   "viaUrl": [
+    200,
+    "GET "
+   ]
+  }
+ ],
+ [
+  "serve: fetch throws / rejects / returns undefined (default development)",
+  {
+   "development": true,
+   "/sync": {
+    "status": 500,
+    "ct": "text/html;charset=utf-8",
+    "framing": "content-length",
+    "bodyIsHtml": "large",
+    "bodyStart": null
+   },
+   "/async": {
+    "status": 500,
+    "ct": "text/html;charset=utf-8",
+    "framing": "content-length",
+    "bodyIsHtml": "large",
+    "bodyStart": null
+   },
+   "/undef": {
+    "status": 200,
+    "ct": "text/plain;charset=utf-8",
+    "framing": "content-length",
+    "bodyIsHtml": false,
+    "bodyStart": "Welcome to Bun! To get started, return a Response object."
+   }
+  }
+ ],
+ [
+  "serve: fetch throws / returns undefined with development:false",
+  {
+   "development": false,
+   "/sync": {
+    "version": "HTTP/1.1",
+    "status": 500,
+    "reason": "Internal Server Error",
+    "headers": [
+     [
+      "content-type",
+      "text/plain"
+     ],
+     [
+      "content-length",
+      "21"
+     ]
+    ],
+    "hasDate": true,
+    "framing": "content-length",
+    "complete": true,
+    "body": "Something went wrong!"
+   },
+   "/async": {
+    "version": "HTTP/1.1",
+    "status": 500,
+    "reason": "Internal Server Error",
+    "headers": [
+     [
+      "content-type",
+      "text/plain"
+     ],
+     [
+      "content-length",
+      "21"
+     ]
+    ],
+    "hasDate": true,
+    "framing": "content-length",
+    "complete": true,
+    "body": "Something went wrong!"
+   },
+   "/undef": {
+    "version": "HTTP/1.1",
+    "status": 204,
+    "reason": "No Content",
+    "headers": [],
+    "hasDate": true,
+    "framing": "none",
+    "complete": true,
+    "body": ""
+   }
+  }
+ ],
+ [
+  "serve: error handler (sync Response, async Response, throws)",
+  {
+   "out": {
+    "/a": {
+     "version": "HTTP/1.1",
+     "status": 503,
+     "reason": "Service Unavailable",
+     "headers": [
+      [
+       "content-type",
+       "text/plain"
+      ],
+      [
+       "content-length",
+       "9"
+      ]
+     ],
+     "hasDate": true,
+     "framing": "content-length",
+     "complete": true,
+     "body": "handled-a"
+    },
+    "/b": {
+     "version": "HTTP/1.1",
+     "status": 502,
+     "reason": "Bad Gateway",
+     "headers": [
+      [
+       "content-type",
+       "text/plain"
+      ],
+      [
+       "content-length",
+       "9"
+      ]
+     ],
+     "hasDate": true,
+     "framing": "content-length",
+     "complete": true,
+     "body": "handled-b"
+    },
+    "/c": {
+     "version": "HTTP/1.1",
+     "status": 500,
+     "reason": "Internal Server Error",
+     "headers": [
+      [
+       "content-type",
+       "text/plain"
+      ],
+      [
+       "content-length",
+       "21"
+      ]
+     ],
+     "hasDate": true,
+     "framing": "content-length",
+     "complete": true,
+     "body": "Something went wrong!"
+    }
+   },
+   "calls": [
+    [
+     true,
+     true,
+     "E:/a"
+    ],
+    [
+     true,
+     true,
+     "E:/b"
+    ],
+    [
+     true,
+     true,
+     "E:/c"
+    ]
+   ]
+  }
+ ],
+ [
+  "serve: ::1 binding, dual 127.0.0.1 + ::1 on one port (xf)",
+  {
+   "samePort": true,
+   "hostname6": "::1",
+   "url6": "http://[::1]:PORT/",
+   "r4": "IPv4 127.0.0.1",
+   "r6": "IPv6 ::1"
+  }
+ ],
+ [
+  "serve: EADDRINUSE error shape",
+  {
+   "sameServeTwice": {
+    "isError": true,
+    "name": "Error",
+    "message": "Failed to start server. Is port PORT in use?",
+    "keys": [
+     "code",
+     "errno",
+     "syscall"
+    ],
+    "code": "EADDRINUSE",
+    "errno": 0,
+    "syscall": "listen"
+   },
+   "nodeHolder": {
+    "isError": true,
+    "name": "Error",
+    "message": "Failed to start server. Is port PORT in use?",
+    "keys": [
+     "code",
+     "errno",
+     "syscall"
+    ],
+    "code": "EADDRINUSE",
+    "errno": 0,
+    "syscall": "listen"
+   }
+  }
+ ],
+ [
+  "serve: development:false sets SO_REUSEPORT (second bind succeeds)",
+  {
+   "prodTwice": "bound",
+   "explicitNoReuse": {
+    "isError": true,
+    "name": "Error",
+    "message": "Failed to start server. Is port PORT in use?",
+    "keys": [
+     "code",
+     "errno",
+     "syscall"
+    ],
+    "code": "EADDRINUSE",
+    "errno": 0,
+    "syscall": "listen"
+   }
+  }
+ ],
+ [
+  "serve: invalid options",
+  {
+   "idleTimeout 256": {
+    "isError": true,
+    "name": "TypeError",
+    "message": "Bun.serve expects idleTimeout to be 255 or less",
+    "keys": [],
+    "code": "ERR_INVALID_ARG_TYPE"
+   },
+   "idleTimeout 1.5": {
+    "isError": true,
+    "name": "TypeError",
+    "message": "Bun.serve expects idleTimeout to be an integer",
+    "keys": [],
+    "code": "ERR_INVALID_ARG_TYPE"
+   },
+   "port -1": {
+    "isError": true,
+    "name": "RangeError",
+    "message": "The value of \"options.port\" is out of range. It must be >= 0 and <= 65535. Received -1",
+    "keys": [],
+    "code": "ERR_OUT_OF_RANGE"
+   },
+   "port 1.5": {
+    "isError": true,
+    "name": "RangeError",
+    "message": "The value of \"options.port\" is out of range. It must be an integer. Received 1.5",
+    "keys": [],
+    "code": "ERR_OUT_OF_RANGE"
+   },
+   "fetch not fn": {
+    "isError": true,
+    "name": "TypeError",
+    "message": "Expected fetch() to be a function",
+    "keys": [],
+    "code": "ERR_INVALID_ARG_TYPE"
+   },
+   "error not fn": {
+    "isError": true,
+    "name": "TypeError",
+    "message": "Expected error to be a function",
+    "keys": [],
+    "code": "ERR_INVALID_ARG_TYPE"
+   }
+  }
+ ],
+ [
+  "serve: stop(true) — refused afterwards, promise, idempotent",
+  {
+   "isP": true,
+   "v": "__undef",
+   "v2": "__undef",
+   "after": "ECONNREFUSED",
+   "portAfter": 0,
+   "pending": 0
+  }
+ ],
+ [
+  "serve: stop(false) drains an in-flight request",
+  {
+   "log": [
+    "fetch pending=1",
+    "after stop pending=1",
+    "connect after stop: ECONNREFUSED",
+    "resolved before release: false",
+    "released",
+    "stop resolved"
+   ],
+   "res": {
+    "version": "HTTP/1.1",
+    "status": 200,
+    "reason": "OK",
+    "headers": [
+     [
+      "content-type",
+      "text/plain"
+     ],
+     [
+      "content-length",
+      "4"
+     ]
+    ],
+    "hasDate": true,
+    "framing": "content-length",
+    "complete": true,
+    "body": "late"
+   },
+   "closedByServer": true,
+   "pending": 0
+  }
+ ],
+ [
+  "serve: stop(true) aborts an in-flight request",
+  {
+   "log": [
+    "fetch",
+    "abort event",
+    "after stop",
+    "stop resolved",
+    "handler done aborted=true"
+   ],
+   "res": {
+    "noResponse": true,
+    "err": null
+   },
+   "aborted": true,
+   "reasonName": "AbortError",
+   "pending": 0
+  }
+ ],
+ [
+  "serve: client disconnect aborts req.signal, pendingRequests returns to 0",
+  {
+   "log": [
+    "fetch pending=1",
+    "pending while streaming=1",
+    "abort pending=1",
+    "pending end=0"
+   ]
+  }
+ ],
+ [
+  "serve: keep-alive reuse and idleTimeout",
+  {
+   "idle1": {
+    "first": 200,
+    "second": 200,
+    "after2600ms": "open"
+   },
+   "idle0": {
+    "first": 200,
+    "second": 200,
+    "after2600ms": "open"
+   }
+  }
+ ],
+ [
+  "serve: idle connection and slow request vs idleTimeout (12.5 s)",
+  {
+   "idle d": {
+    "status": 200,
+    "closedAfterS": 12
+   },
+   "slow d": {
+    "status": 200,
+    "closedAfterS": 12
+   },
+   "idle i0": {
+    "status": 200,
+    "closedAfterS": "open"
+   },
+   "slow i0": {
+    "status": 200,
+    "closedAfterS": "open"
+   },
+   "idle i1": {
+    "status": 200,
+    "closedAfterS": 4
+   },
+   "slow i1": {
+    "status": 200,
+    "closedAfterS": 4
+   },
+   "idle i3": {
+    "status": 200,
+    "closedAfterS": 4
+   },
+   "slow i3": {
+    "status": 200,
+    "closedAfterS": 4
+   }
+  }
+ ],
+ [
+  "serve: request header size limit and node:http maxHeaderSize",
+  {
+   "before": 16384,
+   "set": 262144,
+   "defaultLimit": {
+    "version": "HTTP/1.1",
+    "status": 431,
+    "reason": "Request Header Fields Too Large",
+    "headers": [
+     [
+      "connection",
+      "close"
+     ]
+    ],
+    "hasDate": false,
+    "framing": "eof",
+    "complete": true,
+    "body": ""
+   },
+   "raisedNewServer": {
+    "version": "HTTP/1.1",
+    "status": 200,
+    "reason": "OK",
+    "headers": [
+     [
+      "content-type",
+      "text/plain"
+     ],
+     [
+      "content-length",
+      "5"
+     ]
+    ],
+    "hasDate": true,
+    "framing": "content-length",
+    "complete": true,
+    "body": "20000"
+   },
+   "raisedOldServer": {
+    "version": "HTTP/1.1",
+    "status": 200,
+    "reason": "OK",
+    "headers": [
+     [
+      "content-type",
+      "text/plain"
+     ],
+     [
+      "content-length",
+      "5"
+     ]
+    ],
+    "hasDate": true,
+    "framing": "content-length",
+    "complete": true,
+    "body": "20000"
+   }
+  }
+ ],
+ [
+  "serve: maxRequestBodySize",
+  {
+   "ok": {
+    "version": "HTTP/1.1",
+    "status": 200,
+    "reason": "OK",
+    "headers": [
+     [
+      "content-type",
+      "text/plain"
+     ],
+     [
+      "content-length",
+      "1"
+     ]
+    ],
+    "hasDate": true,
+    "framing": "content-length",
+    "complete": true,
+    "body": "5"
+   },
+   "big": {
+    "version": "HTTP/1.1",
+    "status": 413,
+    "reason": "Request Entity Too Large",
+    "headers": [],
+    "hasDate": false,
+    "framing": "eof",
+    "complete": true,
+    "body": ""
+   },
+   "called": 1,
+   "chunkedOver": {
+    "version": "HTTP/1.1",
+    "status": 413,
+    "reason": "Payload Too Large",
+    "headers": [],
+    "hasDate": false,
+    "framing": "eof",
+    "complete": true,
+    "body": ""
+   },
+   "msgs": [
+    [
+     "Error",
+     "Request body exceeded maxRequestBodySize",
+     "__undef"
+    ]
+   ]
+  }
+ ],
+ [
+  "serve: hostname localhost",
+  {
+   "hostname": "localhost",
+   "url": "http://localhost:PORT/",
+   "v4": "connected",
+   "v6": "ECONNREFUSED"
+  }
+ ],
+ [
+  "serve: tls {cert,key}",
+  {
+   "protocol": "https",
+   "url": "https://127.0.0.1:PORT/",
+   "res": {
+    "version": "HTTP/1.1",
+    "status": 200,
+    "reason": "OK",
+    "headers": [
+     [
+      "content-type",
+      "text/plain"
+     ],
+     [
+      "content-length",
+      "26"
+     ]
+    ],
+    "hasDate": true,
+    "framing": "content-length",
+    "complete": true,
+    "body": "https://127.0.0.1/sec IPv4"
+   },
+   "plainToTls": [
+    "noResponse",
+    "err"
+   ]
+  }
+ ],
+ [
+  "serve: unref'd server lets the process exit (child)",
+  {
+   "serve-unref-idle": {
+    "exited": 0,
+    "stderr": ""
+   },
+   "serve-unref-keepalive": {
+    "exited": 0,
+    "stderr": ""
+   },
+   "serve-ref": {
+    "exited": false,
+    "stderr": ""
+   },
+   "listen-unref-conn": {
+    "exited": 0,
+    "stderr": ""
+   },
+   "listen-unref-idle": {
+    "exited": 0,
+    "stderr": ""
+   }
+  }
+ ],
+ [
+  "listen: shape, accept, data type, members, peer end",
+  {
+   "shape": {
+    "port": true,
+    "hostname": "127.0.0.1",
+    "fns": [
+     [
+      "stop",
+      "function"
+     ],
+     [
+      "ref",
+      "function"
+     ],
+     [
+      "unref",
+      "function"
+     ]
+    ],
+    "data": "__undef"
+   },
+   "members": {
+    "data": "__undef",
+    "readyState": 1,
+    "remoteAddress": "127.0.0.1",
+    "remoteFamily": "IPv4",
+    "localAddress": "127.0.0.1",
+    "localPortIsListener": true,
+    "remotePort": true,
+    "fns": [
+     [
+      "write",
+      "function"
+     ],
+     [
+      "end",
+      "function"
+     ],
+     [
+      "terminate",
+      "function"
+     ],
+     [
+      "pause",
+      "function"
+     ],
+     [
+      "resume",
+      "function"
+     ],
+     [
+      "ref",
+      "function"
+     ],
+     [
+      "unref",
+      "function"
+     ]
+    ]
+   },
+   "log": [
+    "open",
+    [
+     "data",
+     "Buffer",
+     true,
+     true,
+     "ping",
+     1,
+     true
+    ],
+    [
+     "write",
+     9,
+     1,
+     1
+    ],
+    "end-handler-should-not-exist",
+    [
+     "close",
+     "undefined",
+     "__undef",
+     -1
+    ]
+   ],
+   "got": "pong:ping!\n"
+  }
+ ],
+ [
+  "listen: open handler that writes immediately; end() ordering",
+  {
+   "log": [
+    [
+     "w",
+     2
+    ],
+    "before end",
+    [
+     "close",
+     "undefined"
+    ],
+    [
+     "end",
+     0
+    ],
+    "after end",
+    [
+     "write after end",
+     -1,
+     "end again",
+     -1,
+     "readyState",
+     -1
+    ]
+   ],
+   "got": "hi",
+   "ended": true
+  }
+ ],
+ [
+  "listen: end(data) and terminate() as seen by the peer",
+  {
+   "end-data": {
+    "log": [
+     "data go",
+     [
+      "close",
+      "undefined",
+      "__undef"
+     ],
+     [
+      "end",
+      3
+     ],
+     "after end"
+    ],
+    "got": "bye",
+    "cerr": null,
+    "cend": true
+   },
+   "terminate": {
+    "log": [
+     "data go",
+     "before terminate",
+     [
+      "close",
+      "undefined",
+      "__undef"
+     ],
+     [
+      "terminate",
+      "__undef"
+     ],
+     "after terminate",
+     [
+      "write",
+      -1
+     ]
+    ],
+    "got": "partial",
+    "cerr": "ECONNRESET",
+    "cend": false
+   }
+  }
+ ],
+ [
+  "listen: peer reset delivers close(err) / error",
+  {
+   "log": [
+    "open",
+    "data x",
+    [
+     "close",
+     "object",
+     {
+      "isError": true,
+      "name": "Error",
+      "message": "ECONNRESET: connection reset by peer, read",
+      "keys": [
+       "code",
+       "errno",
+       "syscall"
+      ],
+      "code": "ECONNRESET",
+      "errno": -104,
+      "syscall": "read"
+     }
+    ]
+   ]
+  }
+ ],
+ [
+  "listen: back-pressure, partial write, drain (relay pattern)",
+  {
+   "received": 25165824,
+   "total": 25165824,
+   "intact": true,
+   "sawPartial": true,
+   "sawDrain": true,
+   "negative": 0,
+   "retOverLen": false,
+   "nonInt": false,
+   "err": null
+  }
+ ],
+ [
+  "listen: pause() / resume()",
+  {
+   "log": [
+    [
+     "pause",
+     "__undef"
+    ],
+    "after 300ms",
+    [
+     "resume",
+     "__undef"
+    ],
+    "data abc",
+    "close"
+   ]
+  }
+ ],
+ [
+  "listen: handler throws -> error(socket, err)",
+  {
+   "log": [
+    "data",
+    [
+     "error",
+     true,
+     "data-threw",
+     "function"
+    ],
+    "socket still open: true",
+    "close"
+   ]
+  }
+ ],
+ [
+  "listen: stop(true) closes accepted sockets; stop() keeps them",
+  {
+   "force": {
+    "log": [
+     "before stop",
+     [
+      "close",
+      "undefined"
+     ],
+     [
+      "stop",
+      "__undef"
+     ],
+     "after stop",
+     "new connect: ECONNREFUSED",
+     "client: closed",
+     [
+      "port after stop",
+      true,
+      "hostname",
+      "127.0.0.1"
+     ]
+    ],
+    "got": ""
+   },
+   "graceful": {
+    "log": [
+     "before stop",
+     [
+      "stop",
+      "__undef"
+     ],
+     "after stop",
+     "new connect: ECONNREFUSED",
+     "data still",
+     [
+      "close",
+      "undefined"
+     ],
+     "client: closed",
+     [
+      "port after stop",
+      true,
+      "hostname",
+      "127.0.0.1"
+     ]
+    ],
+    "got": "echo still"
+   }
+  }
+ ],
+ [
+  "listen: EADDRINUSE error shape, ::1, missing handlers",
+  {
+   "inUse": {
+    "isError": true,
+    "name": "Error",
+    "message": "Failed to listen at 127.0.0.1",
+    "keys": [
+     "address",
+     "code",
+     "errno",
+     "port",
+     "syscall"
+    ],
+    "code": "EADDRINUSE",
+    "errno": 98,
+    "syscall": "listen",
+    "address": "127.0.0.1",
+    "port": "port>0"
+   },
+   "v6": {
+    "port": true,
+    "hostname": "::1",
+    "connect": "connected"
+   },
+   "noData": {
+    "isError": true,
+    "name": "TypeError",
+    "message": "Expected at least \"data\" or \"drain\" callback",
+    "keys": [],
+    "code": "ERR_INVALID_ARG_TYPE"
+   },
+   "noSocket": {
+    "isError": true,
+    "name": "TypeError",
+    "message": "SocketOptions.socket is required",
+    "keys": [],
+    "code": "ERR_INVALID_ARG_TYPE"
+   }
+  }
+ ],
+ [
+  "listen: WebSocket handshake over raw TCP (bufferedAmount probe pattern)",
+  {
+   "opened": "open",
+   "log": [
+    "request line: GET / HTTP/1.1",
+    [
+     "101 write",
+     true
+    ],
+    "frame bytes>=1000: true",
+    "server close"
+   ]
+  }
+ ],
+ [
+  "connect: open/promise ordering, members, data, peer end",
+  {
+   "log": [
+    [
+     "returns promise",
+     true
+    ],
+    [
+     "open",
+     "127.0.0.1",
+     true,
+     true,
+     1,
+     "__undef"
+    ],
+    [
+     "write",
+     5
+    ],
+    [
+     "resolved",
+     "function",
+     "127.0.0.1"
+    ],
+    "peer got hello",
+    [
+     "data",
+     "Buffer",
+     true,
+     "bye"
+    ],
+    [
+     "close",
+     "undefined"
+    ]
+   ]
+  }
+ ],
+ [
+  "connect: data option, binaryType, end() from client",
+  {
+   "log": [
+    [
+     "open data",
+     "{\"k\":1}"
+    ],
+    "close",
+    [
+     "end",
+     0
+    ],
+    [
+     "after end readyState",
+     -1,
+     "write",
+     -1
+    ]
+   ],
+   "peerGot": "abc"
+  }
+ ],
+ [
+  "connect: refused -> promise rejects (no connectError)",
+  {
+   "e": {
+    "isError": true,
+    "name": "Error",
+    "message": "Failed to connect",
+    "keys": [
+     "code",
+     "errno",
+     "syscall"
+    ],
+    "code": "ECONNREFUSED",
+    "errno": -111,
+    "syscall": "connect"
+   },
+   "log": []
+  }
+ ],
+ [
+  "connect: refused with connectError handler",
+  {
+   "e": {
+    "isError": true,
+    "name": "Error",
+    "message": "Failed to connect",
+    "keys": [
+     "code",
+     "errno",
+     "syscall"
+    ],
+    "code": "ECONNREFUSED",
+    "errno": -111,
+    "syscall": "connect"
+   },
+   "log": [
+    [
+     "connectError",
+     "ECONNREFUSED",
+     "object"
+    ]
+   ]
+  }
+ ],
+ [
+  "connect: ENOTFOUND",
+  {
+   "e": {
+    "isError": true,
+    "name": "Error",
+    "message": "getaddrinfo ENOTFOUND no-such-host.invalid",
+    "keys": [
+     "code",
+     "errno",
+     "hostname",
+     "syscall"
+    ],
+    "code": "ENOTFOUND",
+    "errno": 4,
+    "syscall": "getaddrinfo",
+    "hostname": "no-such-host.invalid"
+   },
+   "log": []
+  }
+ ],
+ [
+  "connect: E_ ::1 probe (open then end) and localhost resolution",
+  {
+   "yes": true,
+   "no": false,
+   "localhostRemote": "::1",
+   "dualBound": true
+  }
+ ],
+ [
+  "connect: Bun.connect to Bun.listen (relay direct-dial shape)",
+  {
+   "log": [
+    "cli close",
+    "cli data R:q",
+    "srv close",
+    "srv data q",
+    "srv open",
+    [
+     "cli open",
+     "127.0.0.1"
+    ],
+    [
+     "write",
+     1
+    ]
+   ]
+  }
+ ]
+]
+--- box facts
+127.0.0.1 localhost
+
+# The following lines are desirable for IPv6 capable hosts
+::1 ip6-localhost ip6-loopback
+fe00::0 ip6-localnet
+ff00::0 ip6-mcastprefix
+ff02::1 ip6-allnodes
+ff02::2 ip6-allrouters
+ff02::3 ip6-allhosts
+hosts:          files dns
+127.0.0.1       STREAM localhost
+127.0.0.1       DGRAM  
+127.0.0.1       RAW    
+node lookup localhost [{"address":"127.0.0.1","family":4}]
+listeners still held by bun after the run:
+grep rc=1 (1 = none)

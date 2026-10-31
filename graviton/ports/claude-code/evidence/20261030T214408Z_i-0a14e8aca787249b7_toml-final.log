@@ -1,0 +1,82 @@
+# evidence: toml-final
+# instance: i-0a14e8aca787249b7   region: us-west-2
+# ssm command: 04af212c-e10d-4f24-8550-7766ae8812fd
+# start: 20261030T214408Z   end: 20261030T214423Z   rc: 0   log bytes: 5036
+# script sha256: 6082bfff4f8f7840757cd2ccef6cca062574f35b708da6bbe5d62ac65b7adf90
+# ---- script ----
+# | set -u
+# | echo '05260678c9fc53111cd87abda2f38dbcd1f4f2c21e2709eb6102255784df9b28  /opt/cc/w-toml-parse.stage/p.tgz' | sha256sum -c --quiet - || exit 1
+# | rm -rf /opt/cc/w-toml-parse && mkdir -p /opt/cc/w-toml-parse && tar xzf /opt/cc/w-toml-parse.stage/p.tgz -C /opt/cc/w-toml-parse 2>/dev/null
+# | cd /opt/cc/w-toml-parse
+# | rm -f /tmp/w-toml-probe.js; ls /tmp/w-toml-probe.js 2>&1
+# | mkdir -p out
+# | cd compat/test
+# | echo "== bun $(bun --version) gen"; time bun gen-toml-vectors.js ../../out || exit 1
+# | ls -la ../../out
+# | echo "== node $(/opt/node24/bin/node --version) check"; time /opt/node24/bin/node check-toml.mjs ../../out
+# | echo "check rc=$?"
+# ---- raw output ----
+ls: cannot access '/tmp/w-toml-probe.js': No such file or directory
+== bun 1.4.4 gen
+edge: 664 (301 parse, 363 throw)
+bytes: 19 (2 parse, 17 throw)
+config: 17 (8 parse, 9 throw)
+coerce: 32 (17 parse, 15 throw)
+depth: 40 (31 parse, 9 throw)
+fuzz: 40000 (4795 parse, 35205 throw)
+fuzzshort: 40000 (13578 parse, 26422 throw)
+mutate: 40000 (10434 parse, 29566 throw)
+
+real	0m4.705s
+user	0m5.162s
+sys	0m0.359s
+total 23148
+drwxr-xr-x 2 root root     4096 Oct 30 21:44 .
+drwxr-xr-x 5 root root     4096 Oct 30 21:44 ..
+-rw-r--r-- 1 root root 23694799 Oct 30 21:44 toml.cases.json
+== node v24.22.2 check
+toml.edge: 664 match / 0 mismatch
+toml.bytes: 19 match / 0 mismatch
+toml.config: 17 match / 0 mismatch
+KNOWN coerce:blob -- Bun reads a Blob synchronously; Node cannot, so the port throws a TypeError instead 
+  got {"e":{"e":"TypeError","m":"Bun.TOML.parse: a Blob cannot be read synchronously on Node; pass await blob.text()","c":null}} 
+  exp {"v":{"o":[["a",{"n":"3ff0000000000000"}]]}}
+toml.coerce: 31 match / 0 mismatch
+KNOWN depth:inline-20000 -- Bun overflows its native stack at this depth; the port has no recursion and parses it 
+  got {"v":"{\"a\":{\"b\":{\"b\":{\"b\":{\"b\":{\"b\":{\"b\":{\"b\":{\"b\":{\"b\":{\"b\":{\"b\":{\"b\":{\"b\":{\"b\":{\"b\":{\"b\":{\"b\":{\"b\":{\"b\":{\"b\":{\"b\":{\"b\":{\"b\":{\"b\":{\"b\":{\"b\":{\"b\ 
+  exp {"e":{"e":"RangeError","m":"Maximum call stack size exceeded.","c":null}}
+KNOWN depth:array-30000 -- Bun overflows its native stack at this depth; the port has no recursion and parses it 
+  got {"v":"{\"a\":[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[ 
+  exp {"e":{"e":"RangeError","m":"Maximum call stack size exceeded.","c":null}}
+KNOWN depth:inline-30000 -- Bun overflows its native stack at this depth; the port has no recursion and parses it 
+  got {"v":"{\"a\":{\"b\":{\"b\":{\"b\":{\"b\":{\"b\":{\"b\":{\"b\":{\"b\":{\"b\":{\"b\":{\"b\":{\"b\":{\"b\":{\"b\":{\"b\":{\"b\":{\"b\":{\"b\":{\"b\":{\"b\":{\"b\":{\"b\":{\"b\":{\"b\":{\"b\":{\"b\":{\"b\ 
+  exp {"e":{"e":"RangeError","m":"Maximum call stack size exceeded.","c":null}}
+KNOWN depth:array-50000 -- Bun overflows its native stack at this depth; the port has no recursion and parses it 
+  got {"v":"{\"a\":[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[ 
+  exp {"e":{"e":"RangeError","m":"Maximum call stack size exceeded.","c":null}}
+KNOWN depth:inline-50000 -- Bun overflows its native stack at this depth; the port has no recursion and parses it 
+  got {"v":"{\"a\":{\"b\":{\"b\":{\"b\":{\"b\":{\"b\":{\"b\":{\"b\":{\"b\":{\"b\":{\"b\":{\"b\":{\"b\":{\"b\":{\"b\":{\"b\":{\"b\":{\"b\":{\"b\":{\"b\":{\"b\":{\"b\":{\"b\":{\"b\":{\"b\":{\"b\":{\"b\":{\"b\ 
+  exp {"e":{"e":"RangeError","m":"Maximum call stack size exceeded.","c":null}}
+KNOWN depth:array-100000 -- Bun overflows its native stack at this depth; the port has no recursion and parses it 
+  got {"v":"{\"a\":[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[ 
+  exp {"e":{"e":"RangeError","m":"Maximum call stack size exceeded.","c":null}}
+KNOWN depth:inline-100000 -- Bun overflows its native stack at this depth; the port has no recursion and parses it 
+  got {"v":"{\"a\":{\"b\":{\"b\":{\"b\":{\"b\":{\"b\":{\"b\":{\"b\":{\"b\":{\"b\":{\"b\":{\"b\":{\"b\":{\"b\":{\"b\":{\"b\":{\"b\":{\"b\":{\"b\":{\"b\":{\"b\":{\"b\":{\"b\":{\"b\":{\"b\":{\"b\":{\"b\":{\"b\ 
+  exp {"e":{"e":"RangeError","m":"Maximum call stack size exceeded.","c":null}}
+KNOWN depth:header-100000 -- Bun overflows its native stack at this depth; the port has no recursion and parses it 
+  got {"v":"{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\ 
+  exp {"e":{"e":"RangeError","m":"Maximum call stack size exceeded.","c":null}}
+KNOWN depth:dotted-100000 -- Bun overflows its native stack at this depth; the port has no recursion and parses it 
+  got {"v":"{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\":{\"a\ 
+  exp {"e":{"e":"RangeError","m":"Maximum call stack size exceeded.","c":null}}
+toml.depth: 31 match / 0 mismatch
+toml.fuzz: 40000 match / 0 mismatch
+toml.fuzzshort: 40000 match / 0 mismatch
+toml.mutate: 40000 match / 0 mismatch
+toml: 3842 vectors contain date/times (Temporal objects in Bun; strings equal to their String() from parse(), type-checked through parseWith)
+toml: 10 known difference(s), listed above
+
+real	0m6.601s
+user	0m7.130s
+sys	0m0.601s
+check rc=0

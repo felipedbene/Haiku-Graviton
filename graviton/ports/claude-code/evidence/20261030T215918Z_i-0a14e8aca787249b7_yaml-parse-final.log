@@ -1,0 +1,181 @@
+# evidence: yaml-parse-final
+# instance: i-0a14e8aca787249b7   region: us-west-2
+# ssm command: b64c2fe8-15cf-420c-b905-2d35c4bc39ab
+# start: 20261030T215918Z   end: 20261030T220038Z   rc: 0   log bytes: 8408
+# script sha256: 48a41067dcb47b27c50a6b3f7617349d7a95015ddccc3747d05beb0698e591a5
+# ---- script ----
+# | set -u
+# | echo 'dc16aa39b41b1bb55622dcfe6d7adad1c6467afa333d93639151a35a401c2f10  /opt/cc/w-yaml-parse.stage/p.tgz' | sha256sum -c --quiet - || exit 1
+# | rm -rf /opt/cc/w-yaml-parse && mkdir -p /opt/cc/w-yaml-parse && tar xzf /opt/cc/w-yaml-parse.stage/p.tgz -C /opt/cc/w-yaml-parse 2>/dev/null
+# | cd /opt/cc/w-yaml-parse
+# | cd compat/test
+# | bun --version; /opt/node24/bin/node --version
+# | fail=0
+# | for seed in 0 11 22 33 44 55; do
+# | 	d=/opt/cc/w-yaml-parse-vec/s$seed; mkdir -p $d
+# | 	if [ $seed = 0 ]; then bun gen-yaml-parse-vectors.js $d > $d/gen.log; else bun gen-yaml-parse-vectors.js $d $seed > $d/gen.log; fi || { echo "gen failed seed $seed"; fail=1; continue; }
+# | 	echo "== seed $seed $(sha256sum $d/yaml-parse.cases.json | cut -c1-16)"; cat $d/gen.log
+# | 	/opt/node24/bin/node check-yaml-parse.mjs $d; rc=$?; echo "checker exit: $rc"; [ $rc = 0 ] || fail=1
+# | done
+# | /opt/node24/bin/node -e '
+# | const V=JSON.parse(require("fs").readFileSync("/opt/cc/w-yaml-parse-vec/s0/yaml-parse.cases.json","utf8"));
+# | for (const [d,r] of [...V.edge, ...V.depth]) if (typeof d==="string" && d.length>1500) console.log("big-edge", d.length, JSON.stringify(d.slice(0,40)), "->", r.slice(0,90));'
+# | echo "overall: $fail"
+# ---- raw output ----
+1.4.4
+v24.22.2
+== seed 0 eb05a3c4bbf86b71
+edge: 366 vectors (101 throw)
+depth: 19 vectors (3 throw)
+depthBand: 14 vectors (7 throw)
+frontmatter: 25 vectors (0 throw)
+markdownHead: 154 vectors (150 throw)
+yamlTestSuite: 1954 vectors (440 throw)
+grammar: 30000 vectors (21556 throw)
+grammarClean: 20000 vectors (12295 throw)
+mutation: 40000 vectors (27391 throw)
+frontmatterMutation: 5000 vectors (1551 throw)
+yaml-parse.edge: 366 match / 0 mismatch
+yaml-parse.depth: 19 match / 0 mismatch
+yaml-parse.depthBand: 14 match / 0 mismatch
+yaml-parse.frontmatter: 25 match / 0 mismatch
+yaml-parse.markdownHead: 154 match / 0 mismatch
+yaml-parse.yamlTestSuite: 1954 match / 0 mismatch
+yaml-parse.grammar: 30000 match / 0 mismatch
+yaml-parse.grammarClean: 20000 match / 0 mismatch
+yaml-parse.mutation: 40000 match / 0 mismatch
+yaml-parse.frontmatterMutation: 5000 match / 0 mismatch
+checker exit: 0
+== seed 11 8235c3949fce3814
+edge: 366 vectors (101 throw)
+depth: 19 vectors (3 throw)
+depthBand: 14 vectors (7 throw)
+frontmatter: 25 vectors (0 throw)
+markdownHead: 154 vectors (150 throw)
+yamlTestSuite: 1954 vectors (440 throw)
+grammar: 30000 vectors (21540 throw)
+grammarClean: 20000 vectors (12422 throw)
+mutation: 40000 vectors (27417 throw)
+frontmatterMutation: 5000 vectors (1517 throw)
+yaml-parse.edge: 366 match / 0 mismatch
+yaml-parse.depth: 19 match / 0 mismatch
+yaml-parse.depthBand: 14 match / 0 mismatch
+yaml-parse.frontmatter: 25 match / 0 mismatch
+yaml-parse.markdownHead: 154 match / 0 mismatch
+yaml-parse.yamlTestSuite: 1954 match / 0 mismatch
+yaml-parse.grammar: 30000 match / 0 mismatch
+yaml-parse.grammarClean: 20000 match / 0 mismatch
+yaml-parse.mutation: 40000 match / 0 mismatch
+yaml-parse.frontmatterMutation: 5000 match / 0 mismatch
+checker exit: 0
+== seed 22 37a2bd6570c8c4ae
+edge: 366 vectors (101 throw)
+depth: 19 vectors (3 throw)
+depthBand: 14 vectors (7 throw)
+frontmatter: 25 vectors (0 throw)
+markdownHead: 154 vectors (150 throw)
+yamlTestSuite: 1954 vectors (440 throw)
+grammar: 30000 vectors (21608 throw)
+grammarClean: 20000 vectors (12568 throw)
+mutation: 40000 vectors (27639 throw)
+frontmatterMutation: 5000 vectors (1499 throw)
+yaml-parse.edge: 366 match / 0 mismatch
+yaml-parse.depth: 19 match / 0 mismatch
+yaml-parse.depthBand: 14 match / 0 mismatch
+yaml-parse.frontmatter: 25 match / 0 mismatch
+yaml-parse.markdownHead: 154 match / 0 mismatch
+yaml-parse.yamlTestSuite: 1954 match / 0 mismatch
+yaml-parse.grammar: 30000 match / 0 mismatch
+yaml-parse.grammarClean: 20000 match / 0 mismatch
+yaml-parse.mutation: 40000 match / 0 mismatch
+yaml-parse.frontmatterMutation: 5000 match / 0 mismatch
+checker exit: 0
+== seed 33 47db29011d6c7772
+edge: 366 vectors (101 throw)
+depth: 19 vectors (3 throw)
+depthBand: 14 vectors (7 throw)
+frontmatter: 25 vectors (0 throw)
+markdownHead: 154 vectors (150 throw)
+yamlTestSuite: 1954 vectors (440 throw)
+grammar: 30000 vectors (21472 throw)
+grammarClean: 20000 vectors (12338 throw)
+mutation: 40000 vectors (27716 throw)
+frontmatterMutation: 5000 vectors (1529 throw)
+yaml-parse.edge: 366 match / 0 mismatch
+yaml-parse.depth: 19 match / 0 mismatch
+yaml-parse.depthBand: 14 match / 0 mismatch
+yaml-parse.frontmatter: 25 match / 0 mismatch
+yaml-parse.markdownHead: 154 match / 0 mismatch
+yaml-parse.yamlTestSuite: 1954 match / 0 mismatch
+yaml-parse.grammar: 30000 match / 0 mismatch
+yaml-parse.grammarClean: 20000 match / 0 mismatch
+yaml-parse.mutation: 40000 match / 0 mismatch
+yaml-parse.frontmatterMutation: 5000 match / 0 mismatch
+checker exit: 0
+== seed 44 256788f39059abac
+edge: 366 vectors (101 throw)
+depth: 19 vectors (3 throw)
+depthBand: 14 vectors (7 throw)
+frontmatter: 25 vectors (0 throw)
+markdownHead: 154 vectors (150 throw)
+yamlTestSuite: 1954 vectors (440 throw)
+grammar: 30000 vectors (21523 throw)
+grammarClean: 20000 vectors (12414 throw)
+mutation: 40000 vectors (27490 throw)
+frontmatterMutation: 5000 vectors (1480 throw)
+yaml-parse.edge: 366 match / 0 mismatch
+yaml-parse.depth: 19 match / 0 mismatch
+yaml-parse.depthBand: 14 match / 0 mismatch
+yaml-parse.frontmatter: 25 match / 0 mismatch
+yaml-parse.markdownHead: 154 match / 0 mismatch
+yaml-parse.yamlTestSuite: 1954 match / 0 mismatch
+yaml-parse.grammar: 30000 match / 0 mismatch
+yaml-parse.grammarClean: 20000 match / 0 mismatch
+yaml-parse.mutation: 40000 match / 0 mismatch
+yaml-parse.frontmatterMutation: 5000 match / 0 mismatch
+checker exit: 0
+== seed 55 5ae33b1e1c9e6fd9
+edge: 366 vectors (101 throw)
+depth: 19 vectors (3 throw)
+depthBand: 14 vectors (7 throw)
+frontmatter: 25 vectors (0 throw)
+markdownHead: 154 vectors (150 throw)
+yamlTestSuite: 1954 vectors (440 throw)
+grammar: 30000 vectors (21550 throw)
+grammarClean: 20000 vectors (12404 throw)
+mutation: 40000 vectors (27556 throw)
+frontmatterMutation: 5000 vectors (1521 throw)
+yaml-parse.edge: 366 match / 0 mismatch
+yaml-parse.depth: 19 match / 0 mismatch
+yaml-parse.depthBand: 14 match / 0 mismatch
+yaml-parse.frontmatter: 25 match / 0 mismatch
+yaml-parse.markdownHead: 154 match / 0 mismatch
+yaml-parse.yamlTestSuite: 1954 match / 0 mismatch
+yaml-parse.grammar: 30000 match / 0 mismatch
+yaml-parse.grammarClean: 20000 match / 0 mismatch
+yaml-parse.mutation: 40000 match / 0 mismatch
+yaml-parse.frontmatterMutation: 5000 match / 0 mismatch
+checker exit: 0
+big-edge 2501 "{a: {a: {a: {a: {a: {a: {a: {a: {a: {a: " -> @0{"a":@1{"a":@2{"a":@3{"a":@4{"a":@5{"a":@6{"a":@7{"a":@8{"a":@9{"a":@10{"a":@11{"a":@12{
+big-edge 26376 "a: &a {k0: 0, k1: 1, k2: 2, k3: 3, k4: 4" -> !RangeError: Out of memory
+big-edge 26076 "a: &a {k0: 0, k1: 1, k2: 2, k3: 3, k4: 4" -> @0{"a":@1{"k0":0,"k1":1,"k2":2,"k3":3,"k4":4,"k5":5,"k6":6,"k7":7,"k8":8,"k9":9,"k10":10,"
+big-edge 1600 "[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[" -> @0[@1[@2[@3[@4[@5[@6[@7[@8[@9[@10[@11[@12[@13[@14[@15[@16[@17[@18[@19[@20[@21[@22[@23[@24[
+big-edge 1601 "- - - - - - - - - - - - - - - - - - - - " -> @0[@1[@2[@3[@4[@5[@6[@7[@8[@9[@10[@11[@12[@13[@14[@15[@16[@17[@18[@19[@20[@21[@22[@23[@24[
+big-edge 4001 "{a: {a: {a: {a: {a: {a: {a: {a: {a: {a: " -> @0{"a":@1{"a":@2{"a":@3{"a":@4{"a":@5{"a":@6{"a":@7{"a":@8{"a":@9{"a":@10{"a":@11{"a":@12{
+big-edge 2000 "[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[" -> @0[@1[@2[@3[@4[@5[@6[@7[@8[@9[@10[@11[@12[@13[@14[@15[@16[@17[@18[@19[@20[@21[@22[@23[@24[
+big-edge 2001 "- - - - - - - - - - - - - - - - - - - - " -> @0[@1[@2[@3[@4[@5[@6[@7[@8[@9[@10[@11[@12[@13[@14[@15[@16[@17[@18[@19[@20[@21[@22[@23[@24[
+big-edge 5001 "{a: {a: {a: {a: {a: {a: {a: {a: {a: {a: " -> @0{"a":@1{"a":@2{"a":@3{"a":@4{"a":@5{"a":@6{"a":@7{"a":@8{"a":@9{"a":@10{"a":@11{"a":@12{
+big-edge 3000 "[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[" -> @0[@1[@2[@3[@4[@5[@6[@7[@8[@9[@10[@11[@12[@13[@14[@15[@16[@17[@18[@19[@20[@21[@22[@23[@24[
+big-edge 3001 "- - - - - - - - - - - - - - - - - - - - " -> @0[@1[@2[@3[@4[@5[@6[@7[@8[@9[@10[@11[@12[@13[@14[@15[@16[@17[@18[@19[@20[@21[@22[@23[@24[
+big-edge 7501 "{a: {a: {a: {a: {a: {a: {a: {a: {a: {a: " -> @0{"a":@1{"a":@2{"a":@3{"a":@4{"a":@5{"a":@6{"a":@7{"a":@8{"a":@9{"a":@10{"a":@11{"a":@12{
+big-edge 4000 "[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[" -> @0[@1[@2[@3[@4[@5[@6[@7[@8[@9[@10[@11[@12[@13[@14[@15[@16[@17[@18[@19[@20[@21[@22[@23[@24[
+big-edge 4001 "- - - - - - - - - - - - - - - - - - - - " -> @0[@1[@2[@3[@4[@5[@6[@7[@8[@9[@10[@11[@12[@13[@14[@15[@16[@17[@18[@19[@20[@21[@22[@23[@24[
+big-edge 10001 "{a: {a: {a: {a: {a: {a: {a: {a: {a: {a: " -> @0{"a":@1{"a":@2{"a":@3{"a":@4{"a":@5{"a":@6{"a":@7{"a":@8{"a":@9{"a":@10{"a":@11{"a":@12{
+big-edge 6000 "[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[" -> @0[@1[@2[@3[@4[@5[@6[@7[@8[@9[@10[@11[@12[@13[@14[@15[@16[@17[@18[@19[@20[@21[@22[@23[@24[
+big-edge 6001 "- - - - - - - - - - - - - - - - - - - - " -> @0[@1[@2[@3[@4[@5[@6[@7[@8[@9[@10[@11[@12[@13[@14[@15[@16[@17[@18[@19[@20[@21[@22[@23[@24[
+big-edge 15001 "{a: {a: {a: {a: {a: {a: {a: {a: {a: {a: " -> @0{"a":@1{"a":@2{"a":@3{"a":@4{"a":@5{"a":@6{"a":@7{"a":@8{"a":@9{"a":@10{"a":@11{"a":@12{
+big-edge 12000 "[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[" -> !RangeError: Maximum call stack size exceeded.
+big-edge 12001 "- - - - - - - - - - - - - - - - - - - - " -> !RangeError: Maximum call stack size exceeded.
+big-edge 30001 "{a: {a: {a: {a: {a: {a: {a: {a: {a: {a: " -> !RangeError: Maximum call stack size exceeded.
+big-edge 9501 "a: &a [[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[" -> @0{"a":@1[@2[@3[@4[@5[@6[@7[@8[@9[@10[@11[@12[@13[@14[@15[@16[@17[@18[@19[@20[@21[@22[@23[
+overall: 0

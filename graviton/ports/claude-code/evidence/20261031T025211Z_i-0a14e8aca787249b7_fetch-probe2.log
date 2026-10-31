@@ -1,0 +1,57 @@
+# evidence: fetch-probe2
+# instance: i-0a14e8aca787249b7   region: us-west-2
+# ssm command: 654d1b08-bd13-4a1b-bddd-62de5ffb12b6
+# start: 20261031T025211Z   end: 20261031T025220Z   rc: 0   log bytes: 914
+# script sha256: 72d4842da200befc1003e4399dfd91d142d7bbb9dfaabe8ac464c160cc90887f
+# ---- script ----
+# | set -u
+# | echo '15a9ef7d3ff2e9675209cdcc2d1a82e80fa95b59ea6d1aa45f7070bf8a2d6748  /opt/cc/w-fetch.stage/p.tgz' | sha256sum -c --quiet - || exit 1
+# | rm -rf /opt/cc/w-fetch && mkdir -p /opt/cc/w-fetch && tar xzf /opt/cc/w-fetch.stage/p.tgz -C /opt/cc/w-fetch 2>/dev/null
+# | cd /opt/cc/w-fetch
+# | npm view undici@7.30.1 dist.integrity dist.tarball dependencies engines 2>&1 | head
+# | cd /opt/cc/bun-src && (git describe --tags 2>/dev/null; git log -1 --format=%H%n%cd 2>/dev/null; ls | head -30)
+# | grep -rn "FetchSession" --include=*.zig --include=*.ts --include=*.cpp -l . 2>/dev/null | head -20
+# | grep -rln "respectNoProxy\|respect_no_proxy" . 2>/dev/null | head
+# ---- raw output ----
+dist.integrity = 'sha512-03KrMbjIFDWQR5RNPrSw3bd1r12JpyFQl9/yxjUbJtqkjmllqC5lFjZh6ujeuJCKr8EOQvRW872Oy/az+nLYxg=='
+dist.tarball = 'https://registry.npmjs.org/undici/-/undici-7.30.1.tgz'
+engines = { node: '>=20.18.1' }
+bun-v1.4.4
+38afee6c84fcf48c0edb2466aa4b27d287a59c30
+Thu Oct 22 01:31:12 2026 -0700
+AGENTS.md
+CLAUDE.md
+CODE_OF_CONDUCT.md
+CONTRIBUTING.md
+Cargo.lock
+Cargo.toml
+LATEST
+LICENSE.md
+README.md
+REVIEW.md
+SECURITY.md
+bun.lock
+bunfig.node-test.toml
+bunfig.toml
+clippy.toml
+entitlements.debug.plist
+entitlements.plist
+flake.lock
+flake.nix
+hawk.toml
+mordant-baseline.toml
+mordant.toml
+oxlint.json
+package.json
+rust-toolchain.toml
+rustfmt.toml
+shell.nix
+src
+tsconfig.base.json
+tsconfig.json
+./src/jsc/bindings/BunObject.cpp
+./src/runtime/webcore/FetchSession.classes.ts
+./src/http/lib.rs
+./src/runtime/webcore/fetch/FetchSession.rs
+./src/runtime/webcore/fetch/FetchTasklet.rs
+./src/runtime/webcore/fetch.rs

@@ -1,0 +1,21 @@
+# evidence: spawn-probe
+# instance: i-0a14e8aca787249b7   region: us-west-2
+# ssm command: b97794ca-d69a-457f-8ad0-ec759ba7a8f8
+# start: 20261030T212915Z   end: 20261030T212918Z   rc: 0   log bytes: 227
+# script sha256: 74a742352e6f9b6d337579c1c138ccf0107d0a779e51a8f3ba85bbd4753045f6
+# ---- script ----
+# | set -u
+# | echo '988e592990767bab5385784b68eda500146195b3462219becb11debbff2a272e  /opt/cc/w-spawn.stage/p.tgz' | sha256sum -c --quiet - || exit 1
+# | rm -rf /opt/cc/w-spawn && mkdir -p /opt/cc/w-spawn && tar xzf /opt/cc/w-spawn.stage/p.tgz -C /opt/cc/w-spawn 2>/dev/null
+# | cd /opt/cc/w-spawn
+# | id; umask; which bun; bun --version; /opt/node24/bin/node --version; uname -a; ls; cat /proc/self/stat | cut -d' ' -f6
+# ---- raw output ----
+uid=0(root) gid=0(root) groups=0(root)
+0022
+/usr/local/bin/bun
+1.4.4
+v24.22.2
+Linux ip-10-128-5-103 7.0.0-1014-aws #14~24.04.1-Ubuntu SMP PREEMPT Fri Sep 18 21:50:22 UTC 2026 aarch64 aarch64 aarch64 GNU/Linux
+compat
+tools
+4539

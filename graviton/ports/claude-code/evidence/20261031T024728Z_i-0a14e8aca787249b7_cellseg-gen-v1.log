@@ -1,0 +1,24 @@
+# evidence: cellseg-gen-v1
+# instance: i-0a14e8aca787249b7   region: us-west-2
+# ssm command: d9e0ca78-1996-4f19-beb0-6ddc1c74fbaa
+# start: 20261031T024728Z   end: 20261031T024737Z   rc: 0   log bytes: 513
+# script sha256: 4a5d0f947c9bba7bdaa3c01242d0a6b5f457a27a4e8dbd62423ab07195c5b071
+# ---- script ----
+# | set -u
+# | echo '7813c16e38d98a337ebf4840cc3a8ffee3bdebd511ab07e065ee611fef7f4e73  /opt/cc/w-cellseg/stage.stage/p.tgz' | sha256sum -c --quiet - || exit 1
+# | rm -rf /opt/cc/w-cellseg/stage && mkdir -p /opt/cc/w-cellseg/stage && tar xzf /opt/cc/w-cellseg/stage.stage/p.tgz -C /opt/cc/w-cellseg/stage 2>/dev/null
+# | cd /opt/cc/w-cellseg/stage
+# | BIN=/opt/cc/v2.1.314/package/claude
+# | V=/opt/cc/w-cellseg-vec; mkdir -p $V /tmp/cshome
+# | mkdir -p /opt/cc/w-cellseg/port && cp -r compat tools /opt/cc/w-cellseg/port/ 2>/dev/null
+# | HOME=/tmp/cshome CELLSEG_OUT=$V BUN_OPTIONS="--preload $PWD/compat/test/gen-cellseg-vectors.mjs" $BIN --version 2>&1 | tail -3
+# | ls -la $V; sha256sum $V/*
+# ---- raw output ----
+cellseg vectors: sessions 4000 edge 94 runtime 1.4.4 object
+total 12024
+drwxr-xr-x  2 root root     4096 Oct 31 02:47 .
+drwxr-xr-x 41 root root     4096 Oct 31 02:47 ..
+-rw-r--r--  1 root root 12290375 Oct 31 02:47 cellseg.cases.jsonl
+-rw-r--r--  1 root root     8419 Oct 31 02:47 cellseg.edge.json
+634b2f9eac287f683dbf3dc166fa22a8383406d8003eadfbf91a11b68fc84551  /opt/cc/w-cellseg-vec/cellseg.cases.jsonl
+64e121c369ac7422baf9421cbc08bc4aaade3ca0f32de53d145d572b72470a5f  /opt/cc/w-cellseg-vec/cellseg.edge.json

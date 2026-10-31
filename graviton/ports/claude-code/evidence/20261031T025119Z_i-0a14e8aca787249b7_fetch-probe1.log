@@ -1,0 +1,83 @@
+# evidence: fetch-probe1
+# instance: i-0a14e8aca787249b7   region: us-west-2
+# ssm command: 6a1321dc-1056-4b24-b8b3-2e2d0465d4ff
+# start: 20261031T025119Z   end: 20261031T025128Z   rc: 0   log bytes: 1892
+# script sha256: 2fab7458fb269a9ba08c8dc05aeb8c6b2326768b43953dd9b90c6ccd2b310882
+# ---- script ----
+# | set -u
+# | echo 'e8b9cf2e94ba02ab861a8c51762408b495b76286ca18616c44d67d9861964cf3  /opt/cc/w-fetch.stage/p.tgz' | sha256sum -c --quiet - || exit 1
+# | rm -rf /opt/cc/w-fetch && mkdir -p /opt/cc/w-fetch && tar xzf /opt/cc/w-fetch.stage/p.tgz -C /opt/cc/w-fetch 2>/dev/null
+# | cd /opt/cc/w-fetch
+# | N=/opt/node24/bin/node
+# | echo "node $($N --version) undici $($N -p process.versions.undici) bun $(bun --version)"
+# | $N -e 'try{require("undici");console.log("require undici ok")}catch(e){console.log("no undici:",e.code)}'
+# | $N -p 'Object.keys(globalThis).filter(k=>/Agent|Dispatcher|undici/i.test(k)).join(",")||"none"'
+# | $N -p 'typeof globalThis[Symbol.for("undici.globalDispatcher.1")]'
+# | $N -e 'const d=globalThis[Symbol.for("undici.globalDispatcher.1")]; console.log(d&&d.constructor.name)'
+# | $N -e 'fetch("http://127.0.0.1:1").catch(()=>{}).then(()=>{const d=globalThis[Symbol.for("undici.globalDispatcher.1")]; console.log("after fetch:",d&&d.constructor.name, Object.getOwnPropertySymbols(d||{}).map(String).slice(0,30).join(" "))})'
+# | ls /opt/cc/ ; ls /opt/cc/v2.1.314/package/ | head
+# | npm view undici versions --json 2>/dev/null | tr -d ' \n' | tail -c 400; echo
+# | which openssl ss; ss -ltnp | head -20
+# ---- raw output ----
+node v24.22.2 undici 7.30.1 bun 1.4.4
+no undici: MODULE_NOT_FOUND
+none
+undefined
+undefined
+after fetch: Agent Symbol(shapeMode) Symbol(kCapture) Symbol(nodejs.stream.destroyed) Symbol(onDestroyed) Symbol(closed) Symbol(onClosed) Symbol(webSocketOptions) Symbol(eventSourceOptions) Symbol(options) Symbol(factory) Symbol(clients) Symbol(origins) Symbol(onDrain) Symbol(onConnect) Symbol(onDisconnect) Symbol(onConnectionError)
+bun-src
+cases.txt
+compat
+deps
+dl
+hash.vectors.json
+npmcache
+port
+port.stage
+requires.json
+stage
+tools
+tui-home
+v2.1.112
+v2.1.314
+vec
+w-cellseg
+w-cellseg-vec
+w-fetch
+w-fetch.stage
+w-folds
+w-folds.stage
+w-int
+w-int.stage
+w-net
+w-net.compile
+w-net.out
+w-net.out1
+w-net.out2
+w-net.stage
+w-reexec
+w-reexec.stage
+w-spawn
+w-spawn.stage
+w-toml-parse
+w-toml-parse.stage
+w-worker
+w-worker.stage
+w-yaml-parse
+w-yaml-parse-vec
+w-yaml-parse.stage
+w-yaml-stringify
+w-yaml-stringify-vec
+w-yaml-stringify.stage
+LICENSE.md
+README.md
+claude
+package.json
+"7.21.0","7.22.0","7.23.0","7.24.0","7.24.1","7.24.2","7.24.3","7.24.4","7.24.5","7.24.6","7.24.7","7.24.8","7.25.0","7.26.0","7.27.0","7.27.1","7.27.2","7.28.0","7.29.0","7.29.1","7.30.0","7.30.1","8.0.0","8.0.1","8.0.2","8.0.3","8.1.0","8.2.0","8.3.0","8.4.0","8.4.1","8.5.0","8.6.0","8.7.0","8.8.0","8.9.0","8.10.0","8.10.1","8.10.2","8.11.0","8.11.1","8.11.2","8.12.0","8.12.1","8.12.2","8.12.3"]
+/usr/bin/openssl
+/usr/bin/ss
+State  Recv-Q Send-Q Local Address:Port Peer Address:PortProcess                                   
+LISTEN 0      4096   127.0.0.53%lo:53        0.0.0.0:*    users:(("systemd-resolve",pid=455,fd=15))
+LISTEN 0      4096      127.0.0.54:53        0.0.0.0:*    users:(("systemd-resolve",pid=455,fd=17))
+LISTEN 0      4096         0.0.0.0:22        0.0.0.0:*    users:(("systemd",pid=1,fd=87))          
+LISTEN 0      4096            [::]:22           [::]:*    users:(("systemd",pid=1,fd=88))          

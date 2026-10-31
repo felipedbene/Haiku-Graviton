@@ -1,0 +1,26 @@
+# evidence: node-system-ca
+# instance: i-0e90d4b253c8134b3   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261031T115522Z   end: 20261031T115544Z   rc: 0
+# script sha256: da87c9a1d4c813a8e1f80a6c82ee841a8a3674801780c2f1b8912aecb54e26a7
+# ---- script ----
+# | openssl version -d 2>&1; ls -la /boot/system/non-packaged/data/ssl/ /boot/system/data/ssl/ 2>&1 | head -20
+# | node -e 'const t=require("tls"); for (const s of ["default","bundled","system"]) { try { console.log(s, t.getCACertificates(s).length) } catch (e) { console.log(s, "THREW", e.message) } }' 2>&1
+# ---- raw output ----
+OPENSSLDIR: "/packages/openssl3-3.5.9-2/.self/data/ssl"
+ls: cannot access '/boot/system/non-packaged/data/ssl/': No such file or directory
+/boot/system/data/ssl/:
+total 209
+dr-xr-xr-x 1 baron root      0 Oct 17 12:41 .
+dr-xr-xr-x 1 baron root      0 Oct 19 21:13 ..
+-r--r--r-- 1 baron root 186446 Aug 24 04:18 CARootCertificates.pem
+dr-xr-xr-x 1 baron root      0 Oct 17 12:41 certs
+-r--r--r-- 1 baron root    412 Oct 17 12:41 ct_log_list.cnf
+-r--r--r-- 1 baron root    412 Oct 17 12:41 ct_log_list.cnf.dist
+dr-xr-xr-x 1 baron root      0 Oct 17 12:41 misc
+-r--r--r-- 1 baron root  12419 Oct 17 12:41 openssl.cnf
+-r--r--r-- 1 baron root  12419 Oct 17 12:41 openssl.cnf.dist
+dr-x------ 1 baron root      0 Oct 17 12:41 private
+default 121
+bundled 121
+Cannot open directory /boot/system/non-packaged/data/ssl/certs/ to load OpenSSL certificates.
+system 119

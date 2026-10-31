@@ -1,0 +1,122 @@
+# evidence: folds-validate
+# instance: i-0a14e8aca787249b7   region: us-west-2
+# ssm command: 31b9f3aa-a5d6-46e0-bc4c-4be8c126ad69
+# start: 20261030T220815Z   end: 20261030T221222Z   rc: 0   log bytes: 2901
+# script sha256: 4f30e329e28486be59a089d8fbbd3a03cb0f3e405ad4ce8612022322cdcdb7aa
+# ---- script ----
+# | set -u
+# | echo '3a01f911ce0cc45dcdb69baac13b337c7657c1b48f8b876f5043277c628454e7  /opt/cc/w-folds.stage/p.tgz' | sha256sum -c --quiet - || exit 1
+# | rm -rf /opt/cc/w-folds && mkdir -p /opt/cc/w-folds && tar xzf /opt/cc/w-folds.stage/p.tgz -C /opt/cc/w-folds 2>/dev/null
+# | cd /opt/cc/w-folds
+# | # runs from $REMOTE_DIR (/opt/cc/w-folds) with tools/ and compat/ unpacked
+# | set -u
+# | W=/opt/cc/w-folds
+# | N=/opt/node24/bin/node
+# | BIN=/opt/cc/v2.1.314/package/claude
+# | echo "== env"; uname -m; command -v bun; bun --version; $N --version; sha256sum $BIN
+# | echo "== deps"; bash tools/fetch-deps.sh $W/deps || exit 1
+# | echo "== extractor: ELF output unchanged (manifest vs committed reference hashes)"
+# | rm -rf $W/ex && python3 -I tools/extract-bun-bundle.py $BIN $W/ex && sha256sum $W/ex/manifest.json
+# | for T in base tree; do
+# | 	rm -rf $W/$T
+# | 	echo "== build-tree $T"
+# | 	bash tools/build-tree.sh $BIN $W/$T $W/$T $N $W/deps || exit 1
+# | done
+# | echo "== apply-folds on tree (P1/P2 already applied by relocate -> skipped)"
+# | python3 -I tools/apply-folds.py $W/tree compat/test/folds-2.1.314.json --acorn $W/deps/acorn --node $N || exit 1
+# | python3 -I -c "import json;print(json.load(open('$W/tree/RELOCATION.json'))['rule_totals'])"
+# | echo "== acorn parse of every JS module in the folded tree"
+# | cat > $W/parse-all.mjs <<'EOF'
+# | import { readFileSync, readdirSync } from "node:fs";
+# | import { join } from "node:path";
+# | import { pathToFileURL } from "node:url";
+# | const [root, deps] = process.argv.slice(2);
+# | const acorn = await import(pathToFileURL(join(deps, "acorn/dist/acorn.mjs")).href);
+# | const L = JSON.parse(readFileSync(join(root, "LOADERS.json"), "utf8"));
+# | const P = JSON.parse(readFileSync(join(root, "RELOCATION.json"), "utf8")).prefix + "/";
+# | const notCode = new Set([...L.text, ...L.file, ...L.napi].map((p) => p.slice(P.length)));
+# | const files = readdirSync(root).filter((f) => (f.endsWith(".js") || f === "cli") && !notCode.has(f));
+# | let bad = 0;
+# | for (const f of files) { try { acorn.parse(readFileSync(join(root, f), "utf8"), { ecmaVersion: "latest", sourceType: "module", allowHashBang: true }); } catch (e) { bad++; console.log("FAIL", f, e.message); } }
+# | console.log("parsed", files.length, "failed", bad);
+# | EOF
+# | $N $W/parse-all.mjs $W/tree $W/deps
+# | echo "== node --check on the 56 rewritten modules"
+# | python3 -I -c "
+# | import json;r=json.load(open('$W/tree/RELOCATION.json'));print('\n'.join(sorted({s[0] for s in r['rule_sites']['P4']})))" > $W/p4mods.txt
+# | nc=0; nf=0; while read -r m; do if $N --check $W/tree/$m 2>$W/check.err; then nc=$((nc+1)); else nf=$((nf+1)); echo "CHECK-FAIL $m"; head -3 $W/check.err; fi; done < $W/p4mods.txt; echo "node --check ok=$nc fail=$nf"
+# | echo "== --help diff: stock bun vs node+compat on the folded tree"
+# | sed -e "s#^P=/opt/claude-code/2.1.314#P=$W/tree#" -e "s#/tmp/cchome-#$W/home-#g" -e "s#^D=/tmp/ccdiff#D=$W/diff-tree#" tools/linux-diff.sh > $W/diff-tree.sh
+# | CASES=compat/cases-help.txt bash $W/diff-tree.sh
+# | echo "== folded vs unfolded (node+compat), same cases"
+# | sed -e "s#^P=/opt/claude-code/2.1.314#P=$W/base#" -e "s#/tmp/cchome-#$W/home-#g" -e "s#^D=/tmp/ccdiff#D=$W/diff-base#" tools/linux-diff.sh > $W/diff-base.sh
+# | CASES=compat/cases-help.txt bash $W/diff-base.sh | tail -1
+# | s=0; d=0; for f in $W/diff-tree/B-*.out; do b=$W/diff-base/$(basename $f); if cmp -s $f $b && cmp -s ${f%.out}.err ${b%.out}.err && cmp -s ${f%.out}.rc ${b%.out}.rc; then s=$((s+1)); else d=$((d+1)); echo "FOLD-CHANGED $(basename $f)"; diff $b $f | head -6; fi; done; echo "folded-vs-unfolded node: same=$s diff=$d"
+# | s=0; d=0; for f in $W/diff-tree/A-*.out; do b=$W/diff-base/$(basename $f); if cmp -s $f $b && cmp -s ${f%.out}.err ${b%.out}.err && cmp -s ${f%.out}.rc ${b%.out}.rc; then s=$((s+1)); else d=$((d+1)); echo "FOLD-CHANGED $(basename $f)"; diff $b $f | head -6; fi; done; echo "folded-vs-unfolded bun: same=$s diff=$d"
+# | echo "== runtime check: restored sites evaluate to this host's values"
+# | cd /tmp && HOME=$W/home-X timeout 60 $N --zero-fill-buffers --import $W/tree/bun-compat.mjs $W/tree/cli --version; echo rc=$?
+# ---- raw output ----
+== env
+aarch64
+/usr/local/bin/bun
+1.4.4
+v24.22.2
+a66c0a8f5d0c87a439953d797985192bbcbaefbce2e0d7b2eaa8df30ef0f3ef2  /opt/cc/v2.1.314/package/claude
+== deps
+fetch-deps: ws 8.22.0 OK (sha512-Ydggc987+RO0AnWtZ/7Wq9FtNvcrL1b/RO0ud9mWjUPgDrsAAwQSF51sm2hm1XofbU/4jkpGEsLFsZZxU+1DOg==)
+fetch-deps: acorn 8.19.0 OK (sha512-oJlA3XiRm7Cyk6qFD2Jn8ak9B7jSy0qy00ADO3+8dpT0LSjFihQYv4C02LFCSYJV3Q37xYwwRy5m+IpIiUzqWw==)
+== extractor: ELF output unchanged (manifest vs committed reference hashes)
+modules=2871 entry=/$bunfs/root/cli argv='--zero-fill-buffers'
+contents=54.3MB sourcemap=0.0MB module_info=0.0MB bytecode_region=102.9MB (not extracted)
+7fc07c4626993594743530fd36b4222b683041f25eae49c9490b744694f2ba3a  /opt/cc/w-folds/ex/manifest.json
+== build-tree base
+modules=2871 entry=/$bunfs/root/cli argv='--zero-fill-buffers'
+contents=54.3MB sourcemap=0.0MB module_info=0.0MB bytecode_region=102.9MB (not extracted)
+relocated 2871 files to /opt/cc/w-folds/base (prefix /opt/cc/w-folds/base)
+rule totals: {"R1": 250476, "R2": 547, "R3": 9, "P1": 9, "P2": 1, "P3": 1}
+R4 applied: [['chunk-zy2k3hny.js', 'chunk-vgzpjjhb.js']]
+build-tree: /opt/cc/w-folds/base ready (prefix /opt/cc/w-folds/base)
+== build-tree tree
+modules=2871 entry=/$bunfs/root/cli argv='--zero-fill-buffers'
+contents=54.3MB sourcemap=0.0MB module_info=0.0MB bytecode_region=102.9MB (not extracted)
+relocated 2871 files to /opt/cc/w-folds/tree (prefix /opt/cc/w-folds/tree)
+rule totals: {"R1": 250476, "R2": 547, "R3": 9, "P1": 9, "P2": 1, "P3": 1}
+R4 applied: [['chunk-zy2k3hny.js', 'chunk-vgzpjjhb.js']]
+build-tree: /opt/cc/w-folds/tree ready (prefix /opt/cc/w-folds/tree)
+== apply-folds on tree (P1/P2 already applied by relocate -> skipped)
+parsed 56 modules, 0 failed
+P4 applied 116 sites in 56 modules; skipped 10 already rewritten by P1,P2
+{'R1': 250476, 'R2': 547, 'R3': 9, 'P1': 9, 'P2': 1, 'P3': 1, 'R4': 1, 'P4': 116, 'P4_skipped': 10}
+== acorn parse of every JS module in the folded tree
+parsed 2638 failed 0
+== node --check on the 56 rewritten modules
+node --check ok=56 fail=0
+== --help diff: stock bun vs node+compat on the folded tree
+SAME  [--version] rc=0
+SAME  [--help] rc=0
+SAME  [agents --help] rc=0
+SAME  [attach --help] rc=0
+SAME  [auth --help] rc=0
+SAME  [auto-mode --help] rc=0
+SAME  [doctor --help] rc=0
+SAME  [gateway --help] rc=0
+SAME  [import --help] rc=0
+SAME  [install --help] rc=0
+SAME  [logs --help] rc=0
+SAME  [mcp --help] rc=0
+SAME  [plugin --help] rc=0
+SAME  [purge --help] rc=0
+SAME  [respawn --help] rc=0
+SAME  [rm --help] rc=0
+SAME  [setup-token --help] rc=0
+SAME  [stop --help] rc=0
+SAME  [ultrareview --help] rc=0
+SAME  [update --help] rc=0
+summary: same=20 diff=0
+== folded vs unfolded (node+compat), same cases
+summary: same=20 diff=0
+folded-vs-unfolded node: same=20 diff=0
+folded-vs-unfolded bun: same=20 diff=0
+== runtime check: restored sites evaluate to this host's values
+2.1.314 (Claude Code)
+rc=0

@@ -1,0 +1,43 @@
+# evidence: yaml-parse-check2
+# instance: i-0a14e8aca787249b7   region: us-west-2
+# ssm command: 2e3c4b8f-f0f2-4fdf-854b-832aa815f544
+# start: 20261030T215050Z   end: 20261030T215105Z   rc: 0   log bytes: 899
+# script sha256: ea9c5bb06b199f210477a91109b64dd3c325aed905f09af14f1c3d97a2791d63
+# ---- script ----
+# | set -u
+# | echo '7375bc70383850390efb89388ed96e245ed5f95cb67c36230ad2b9c293db1e3e  /opt/cc/w-yaml-parse.stage/p.tgz' | sha256sum -c --quiet - || exit 1
+# | rm -rf /opt/cc/w-yaml-parse && mkdir -p /opt/cc/w-yaml-parse && tar xzf /opt/cc/w-yaml-parse.stage/p.tgz -C /opt/cc/w-yaml-parse 2>/dev/null
+# | cd /opt/cc/w-yaml-parse
+# | set -e
+# | mkdir -p /opt/cc/w-yaml-parse-vec
+# | cd compat/test
+# | bun --version
+# | /opt/node24/bin/node --version
+# | bun gen-yaml-parse-vectors.js /opt/cc/w-yaml-parse-vec
+# | sha256sum /opt/cc/w-yaml-parse-vec/yaml-parse.cases.json
+# | set +e
+# | /opt/node24/bin/node check-yaml-parse.mjs /opt/cc/w-yaml-parse-vec
+# | echo "checker exit: $?"
+# ---- raw output ----
+1.4.4
+v24.22.2
+edge: 366 vectors (101 throw)
+depth: 19 vectors (3 throw)
+frontmatter: 25 vectors (0 throw)
+markdownHead: 154 vectors (150 throw)
+yamlTestSuite: 1954 vectors (440 throw)
+grammar: 30000 vectors (21556 throw)
+grammarClean: 20000 vectors (12295 throw)
+mutation: 40000 vectors (27391 throw)
+frontmatterMutation: 5000 vectors (1551 throw)
+f768176ee96b0b26e7c7d9107b171142eccbb00c1f27da3c494ed9bdd280c916  /opt/cc/w-yaml-parse-vec/yaml-parse.cases.json
+yaml-parse.edge: 366 match / 0 mismatch
+yaml-parse.depth: 19 match / 0 mismatch
+yaml-parse.frontmatter: 25 match / 0 mismatch
+yaml-parse.markdownHead: 154 match / 0 mismatch
+yaml-parse.yamlTestSuite: 1954 match / 0 mismatch
+yaml-parse.grammar: 30000 match / 0 mismatch
+yaml-parse.grammarClean: 20000 match / 0 mismatch
+yaml-parse.mutation: 40000 match / 0 mismatch
+yaml-parse.frontmatterMutation: 5000 match / 0 mismatch
+checker exit: 0

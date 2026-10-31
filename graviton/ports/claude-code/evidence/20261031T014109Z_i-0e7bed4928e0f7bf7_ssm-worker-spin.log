@@ -1,0 +1,28 @@
+# evidence: ssm-worker-spin
+# instance: i-0e7bed4928e0f7bf7   region: us-west-2
+# ssm command: 12aeb629-be7c-417a-b224-57bd9e80e602
+# start: 20261031T014109Z   end: 20261031T014225Z   rc: 0   log bytes: 1248
+# script sha256: c0543aeae7f975bf053316542f3d09fd3ef0bb063e53f109f6612b0c93c00896
+# ---- script ----
+# | uptime
+# | top -n 1 -d 2>/dev/null | head -12
+# | echo "== worker teams"; ps -o team,id,cmd 2>/dev/null | grep ssm-document-worker || ps | grep ssm-document-worker | grep -v grep
+# ---- raw output ----
+ 01:41:09  up   3:14,  0 users,  load average: 4.00, 4.08, 4.07
+Starting: 1 interval of 5 seconds each
+  THID   TOTAL    USER  KERNEL %CPU        TEAM NAME THREAD NAME      
+  1850 4999.85 1508.00 3491.00  6.2 ssm-document-wor ssm-document-wor 
+  1601 4999.11 4981.00   17.00  6.2 ssm-document-wor ssm-document-wor 
+  1663 4996.69 1501.00 3495.00  6.2 ssm-document-wor ssm-document-wor 
+  1593 4995.73 1497.00 3497.00  6.2 ssm-document-wor ssm-document-wor 
+  1660  261.80   12.00  249.00  0.3 ssm-document-wor ssm-document-wor 
+    22    7.96    0.00    7.00  0.0      kernel_team page daemon 
+    48    4.75    3.00    0.00  0.0 debeos-cloudwatc debeos-cloudwatc 
+  1592    2.89    1.00    1.00  0.0 ssm-document-wor ssm-document-wor 
+   219    2.17    1.00    0.00  0.0          Deskbar w>Deskbar 
+  1659    2.00    0.00    1.00  0.0 ssm-document-wor ssm-document-wor 
+== worker teams
+/boot/system/bin/ssm-document-worker 4532d436-b5d9-44d0-b249-5b  1591       15    0    0 
+/boot/system/bin/ssm-document-worker 89cd6603-038d-47d0-9c94-26  1658        9    0    0 
+/boot/system/bin/ssm-document-worker 3eb2b739-ed25-4d1e-86d4-3a  1847        4    0    0 
+/boot/system/bin/ssm-document-worker 12aeb629-be7c-417a-b224-57  3130       13    0    0 

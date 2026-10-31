@@ -1,0 +1,80 @@
+# evidence: linux-analyze-requires
+# instance: i-0a14e8aca787249b7   region: us-west-2
+# ssm command: 99a6b661-40ae-43ba-98d1-e80991292617
+# start: 20261030T183823Z   end: 20261030T183832Z   rc: 0   log bytes: 3324
+# script sha256: 06888c7e2935bb80fd1bb6cc0c45a7a0da79240fd66c4d49093874eedda73b85
+# ---- script ----
+# | set -u
+# | mkdir -p /opt/cc/tools && cd /opt/cc/tools && echo Ly8gYW5hbHl6ZS1yZXF1aXJlcy5tanMgPHJlbG9jYXRlZC10cmVlPiA8aW5zdGFsbC1wcmVmaXg+ID4gcmVxdWlyZXMuanNvbgovLwovLyBGaW5kcyBldmVyeSBfX2NjUmVxdWlyZSgiPHByZWZpeD4vY2h1bmsuanMiKSBjYWxsIHRoYXQgcnVucyB3aGlsZSBpdHMgbW9kdWxlIGlzCi8vIGJlaW5nIEVWQUxVQVRFRCAodG9wIGxldmVsLCBvciBpbnNpZGUgYSBmdW5jdGlvbiBpbnZva2VkIG9uIHRoZSBzcG90KSwgYXMgb3Bwb3NlZAovLyB0byBpbnNpZGUgYSBmdW5jdGlvbiB0aGF0IHJ1bnMgbGF0ZXIuIE5vZGUncyByZXF1aXJlKGVzbSkgcmVmdXNlcyB0byBsb2FkIGEgbW9kdWxlCi8vIHdob3NlIHN0YXRpYyBpbXBvcnRzIGxlYWQgYmFjayBpbnRvIGEgbW9kdWxlIHRoYXQgaXMgc3RpbGwgZXZhbHVhdGluZwovLyAoRVJSX1JFUVVJUkVfQ1lDTEVfTU9EVUxFKTsgQnVuJ3MgaW1wb3J0Lm1ldGEucmVxdWlyZSB0b2xlcmF0ZXMgdGhhdC4gT25seSBhbgovLyBldmFsdWF0aW9uLXRpbWUgcmVxdWlyZSBjYW4gaGl0IGl0LCBzbyB0aG9zZSBhcmUgdGhlIHNpdGVzIHJlbG9jYXRlLWJ1bmRsZS5weQovLyBydWxlIFI0IGhhcyB0byB0dXJuIGludG8gc3RhdGljIGltcG9ydHMgLS0gYW5kIG9ubHkgdGhlIGN5Y2xlLWNhcGFibGUgb25lcyAodGhlCi8vIHRhcmdldCBzdGF0aWNhbGx5IHJlYWNoZXMgdGhlIHJlcXVpcmluZyBtb2R1bGUpLCBzbyBsYXppbmVzcyBlbHNld2hlcmUgaXMga2VwdC4KLy8KLy8gVXNlcyBhY29ybiAocGlubmVkLCBzZWUgdG9vbHMvUkVBRE1FKTogbWluaWZpZWQgY29kZSBkZWZlYXRzIGJyYWNlIGNvdW50aW5nLgppbXBvcnQgeyByZWFkRmlsZVN5bmMsIHJlYWRkaXJTeW5jIH0gZnJvbSAibm9kZTpmcyI7CmltcG9ydCB7IGpvaW4gfSBmcm9tICJub2RlOnBhdGgiOwppbXBvcnQgKiBhcyBhY29ybiBmcm9tICJhY29ybiI7Cgpjb25zdCBbcm9vdCwgcHJlZml4XSA9IHByb2Nlc3MuYXJndi5zbGljZSgyKTsKY29uc3QgUCA9IHByZWZpeCArICIvIjsKY29uc3QgZmlsZXMgPSByZWFkZGlyU3luYyhyb290KS5maWx0ZXIoKGYpID0+IGYuZW5kc1dpdGgoIi5qcyIpIHx8IGYgPT09ICJjbGkiKTsKY29uc3QgaXNGbiA9IChuKSA9PiBuICYmIChuLnR5cGUgPT09ICJGdW5jdGlvbkV4cHJlc3Npb24iIHx8IG4udHlwZSA9PT0gIkFycm93RnVuY3Rpb25FeHByZXNzaW9uIgoJfHwgbi50eXBlID09PSAiRnVuY3Rpb25EZWNsYXJhdGlvbiIpOwoKY29uc3Qgc3RhdGljRWRnZXMgPSBuZXcgTWFwKCk7CmNvbnN0IGV2YWxSZXF1aXJlcyA9IFtdOwkvLyB7bW9kdWxlLCB0YXJnZXQsIHN0YXJ0LCBlbmR9CmxldCBsYXRlclJlcXVpcmVzID0gMDsKZm9yIChjb25zdCBmIG9mIGZpbGVzKSB7Cgljb25zdCBzcmMgPSByZWFkRmlsZVN5bmMoam9pbihyb290LCBmKSwgInV0ZjgiKTsKCWNvbnN0IGFzdCA9IGFjb3JuLnBhcnNlKHNyYywgeyBlY21hVmVyc2lvbjogImxhdGVzdCIsIHNvdXJjZVR5cGU6ICJtb2R1bGUiLCBhbGxvd0hhc2hCYW5nOiB0cnVlIH0pOwoJY29uc3QgZGVwcyA9IG5ldyBTZXQoKTsKCWZvciAoY29uc3QgbiBvZiBhc3QuYm9keSkgewoJCWlmICgobi50eXBlID09PSAiSW1wb3J0RGVjbGFyYXRpb24iIHx8IG4udHlwZSA9PT0gIkV4cG9ydE5hbWVkRGVjbGFyYXRpb24iCgkJCXx8IG4udHlwZSA9PT0gIkV4cG9ydEFsbERlY2xhcmF0aW9uIikgJiYgbi5zb3VyY2U/LnZhbHVlPy5zdGFydHNXaXRoKFApKQoJCQlkZXBzLmFkZChuLnNvdXJjZS52YWx1ZS5zbGljZShQLmxlbmd0aCkpOwoJfQoJc3RhdGljRWRnZXMuc2V0KGYsIGRlcHMpOwoJLy8gV2FsayB3aXRoIGFuICJldmFsdWF0ZWQgbm93IiBmbGFnLiBGdW5jdGlvbiBib2RpZXMgYXJlIGRlZmVycmVkLCBleGNlcHQgYQoJLy8gZnVuY3Rpb24gdGhhdCBpcyBpdHNlbGYgdGhlIGNhbGxlZSBvZiBhIGNhbGwgZXZhbHVhdGVkIG5vdyAoYW4gSUlGRSkuCgljb25zdCB3YWxrID0gKG5vZGUsIG5vdykgPT4gewoJCWlmICghbm9kZSB8fCB0eXBlb2Ygbm9kZS50eXBlICE9PSAic3RyaW5nIikgcmV0dXJuOwoJCWlmIChub2RlLnR5cGUgPT09ICJDYWxsRXhwcmVzc2lvbiIgJiYgbm9kZS5jYWxsZWUudHlwZSA9PT0gIklkZW50aWZpZXIiCgkJCSYmIG5vZGUuY2FsbGVlLm5hbWUgPT09ICJfX2NjUmVxdWlyZSIgJiYgbm9kZS5hcmd1bWVudHNbMF0/LnR5cGUgPT09ICJMaXRlcmFsIgoJCQkmJiB0eXBlb2Ygbm9kZS5hcmd1bWVudHNbMF0udmFsdWUgPT09ICJzdHJpbmciICYmIG5vZGUuYXJndW1lbnRzWzBdLnZhbHVlLnN0YXJ0c1dpdGgoUCkpIHsKCQkJY29uc3QgdGFyZ2V0ID0gbm9kZS5hcmd1bWVudHNbMF0udmFsdWUuc2xpY2UoUC5sZW5ndGgpOwoJCQlpZiAobm93KSBldmFsUmVxdWlyZXMucHVzaCh7IG1vZHVsZTogZiwgdGFyZ2V0LCBzdGFydDogbm9kZS5zdGFydCwgZW5kOiBub2RlLmVuZCB9KTsKCQkJZWxzZSBsYXRlclJlcXVpcmVzKys7CgkJfQoJCWZvciAoY29uc3Qga2V5IG9mIE9iamVjdC5rZXlzKG5vZGUpKSB7CgkJCWlmIChrZXkgPT09ICJ0eXBlIiB8fCBrZXkgPT09ICJzdGFydCIgfHwga2V5ID09PSAiZW5kIikgY29udGludWU7CgkJCWNvbnN0IHYgPSBub2RlW2tleV07CgkJCWNvbnN0IHZpc2l0ID0gKGMpID0+IHsKCQkJCWlmICghYyB8fCB0eXBlb2YgYy50eXBlICE9PSAic3RyaW5nIikgcmV0dXJuOwoJCQkJbGV0IGNoaWxkTm93ID0gbm93OwoJCQkJaWYgKGlzRm4oYykpIGNoaWxkTm93ID0gbm93ICYmIG5vZGUudHlwZSA9PT0gIkNhbGxFeHByZXNzaW9uIiAmJiBrZXkgPT09ICJjYWxsZWUiOwoJCQkJLy8gQ2xhc3MgYm9kaWVzOiBtZXRob2RzL2dldHRlcnMgYXJlIGRlZmVycmVkLCBzdGF0aWMgYmxvY2tzL2ZpZWxkcyBydW4gbm93LgoJCQkJaWYgKGMudHlwZSA9PT0gIk1ldGhvZERlZmluaXRpb24iIHx8IGMudHlwZSA9PT0gIlByb3BlcnR5IiAmJiAoYy5raW5kID09PSAiZ2V0IgoJCQkJCXx8IGMua2luZCA9PT0gInNldCIgfHwgYy5tZXRob2QpKSBjaGlsZE5vdyA9IGZhbHNlOwoJCQkJd2FsayhjLCBjaGlsZE5vdyk7CgkJCX07CgkJCUFycmF5LmlzQXJyYXkodikgPyB2LmZvckVhY2godmlzaXQpIDogdmlzaXQodik7CgkJfQoJfTsKCXdhbGsoYXN0LCB0cnVlKTsKfQpjb25zdCByZWFjaCA9IChzdGFydCkgPT4gewoJY29uc3Qgc2VlbiA9IG5ldyBTZXQoW3N0YXJ0XSksIHN0YWNrID0gW3N0YXJ0XTsKCXdoaWxlIChzdGFjay5sZW5ndGgpIGZvciAoY29uc3QgZCBvZiBzdGF0aWNFZGdlcy5nZXQoc3RhY2sucG9wKCkpID8/IFtdKSBpZiAoIXNlZW4uaGFzKGQpKSB7IHNlZW4uYWRkKGQpOyBzdGFjay5wdXNoKGQpOyB9CglyZXR1cm4gc2VlbjsKfTsKY29uc3QgY3ljID0gZXZhbFJlcXVpcmVzLmZpbHRlcigocikgPT4gcmVhY2goci50YXJnZXQpLmhhcyhyLm1vZHVsZSkpOwpwcm9jZXNzLnN0ZG91dC53cml0ZShKU09OLnN0cmluZ2lmeSh7Cgltb2R1bGVzOiBmaWxlcy5sZW5ndGgsIGV2YWxfdGltZV9yZXF1aXJlczogZXZhbFJlcXVpcmVzLmxlbmd0aCwgZGVmZXJyZWRfcmVxdWlyZXM6IGxhdGVyUmVxdWlyZXMsCglyNF9zaXRlczogY3ljLCBvdGhlcl9ldmFsX3RpbWU6IGV2YWxSZXF1aXJlcy5maWx0ZXIoKHIpID0+ICFjeWMuaW5jbHVkZXMocikpLAp9LCBudWxsLCAxKSArICJcbiIpOwo= | base64 -d > analyze-requires.mjs
+# | AV=$(npm view acorn@8 version --json | tr -d '"[] \n' | tr ',' '\n' | tail -1); echo "acorn $AV $(npm view acorn@$AV dist.integrity)"
+# | rm -rf node_modules/acorn package acorn-*.tgz && npm pack --silent acorn@$AV >/dev/null && mkdir -p node_modules && tar xzf acorn-$AV.tgz && mv package node_modules/acorn
+# | /opt/node24/bin/node analyze-requires.mjs /opt/claude-code/2.1.314 /opt/claude-code/2.1.314 > /opt/cc/requires.json; echo "rc=$?"
+# | python3 -I -c "
+# | import json; r=json.load(open('/opt/cc/requires.json'))
+# | print({k:v for k,v in r.items() if not isinstance(v,list)})
+# | print('R4 sites:', len(r['r4_sites'])); [print('  ',x['module'],'->',x['target']) for x in r['r4_sites']]
+# | print('other eval-time requires (not cycle-capable):', len(r['other_eval_time']))"
+# | exit 0
+# ---- raw output ----
+acorn 8.19.0 sha512-oJlA3XiRm7Cyk6qFD2Jn8ak9B7jSy0qy00ADO3+8dpT0LSjFihQYv4C02LFCSYJV3Q37xYwwRy5m+IpIiUzqWw==
+file:///opt/cc/tools/node_modules/acorn/dist/acorn.mjs:3835
+  var err = new SyntaxError(message);
+            ^
+
+SyntaxError: Unexpected character '�' (1:1)
+    at pp$4.raise (file:///opt/cc/tools/node_modules/acorn/dist/acorn.mjs:3835:13)
+    at pp.getTokenFromCode (file:///opt/cc/tools/node_modules/acorn/dist/acorn.mjs:5868:8)
+    at pp.readToken (file:///opt/cc/tools/node_modules/acorn/dist/acorn.mjs:5551:15)
+    at pp.nextToken (file:///opt/cc/tools/node_modules/acorn/dist/acorn.mjs:5542:15)
+    at pp.next (file:///opt/cc/tools/node_modules/acorn/dist/acorn.mjs:5503:8)
+    at pp$5.parseParenAndDistinguishExpression (file:///opt/cc/tools/node_modules/acorn/dist/acorn.mjs:3273:10)
+    at pp$5.parseExprAtom (file:///opt/cc/tools/node_modules/acorn/dist/acorn.mjs:3126:41)
+    at pp$5.parseExprSubscripts (file:///opt/cc/tools/node_modules/acorn/dist/acorn.mjs:2945:19)
+    at pp$5.parseMaybeUnary (file:///opt/cc/tools/node_modules/acorn/dist/acorn.mjs:2897:17)
+    at pp$5.parseExprOps (file:///opt/cc/tools/node_modules/acorn/dist/acorn.mjs:2825:19) {
+  pos: 1,
+  loc: Position { line: 1, column: 1 },
+  raisedAt: 1
+}
+
+Node.js v24.22.2
+rc=1
+Traceback (most recent call last):
+  File "<string>", line 2, in <module>
+  File "/usr/lib/python3.12/json/__init__.py", line 293, in load
+    return loads(fp.read(),
+           ^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/json/__init__.py", line 346, in loads
+    return _default_decoder.decode(s)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/json/decoder.py", line 337, in decode
+    obj, end = self.raw_decode(s, idx=_w(s, 0).end())
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/json/decoder.py", line 355, in raw_decode
+    raise JSONDecodeError("Expecting value", s, err.value) from None
+json.decoder.JSONDecodeError: Expecting value: line 1 column 1 (char 0)
+Error in sys.excepthook:
+Traceback (most recent call last):
+  File "/usr/lib/python3/dist-packages/apport_python_hook.py", line 228, in partial_apport_excepthook
+    return apport_excepthook(binary, exc_type, exc_obj, exc_tb)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3/dist-packages/apport_python_hook.py", line 114, in apport_excepthook
+    report["ExecutableTimestamp"] = str(int(os.stat(binary).st_mtime))
+                                            ^^^^^^^^^^^^^^^
+FileNotFoundError: [Errno 2] No such file or directory: '/opt/cc/tools/-c'
+
+Original exception was:
+Traceback (most recent call last):
+  File "<string>", line 2, in <module>
+  File "/usr/lib/python3.12/json/__init__.py", line 293, in load
+    return loads(fp.read(),
+           ^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/json/__init__.py", line 346, in loads
+    return _default_decoder.decode(s)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/json/decoder.py", line 337, in decode
+    obj, end = self.raw_decode(s, idx=_w(s, 0).end())
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/json/decoder.py", line 355, in raw_decode
+    raise JSONDecodeError("Expecting value", s, err.value) from None
+json.decoder.JSONDecodeError: Expecting value: line 1 column 1 (char 0)

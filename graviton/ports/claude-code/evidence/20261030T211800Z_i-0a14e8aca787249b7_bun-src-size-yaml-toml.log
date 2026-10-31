@@ -1,0 +1,42 @@
+# evidence: bun-src-size-yaml-toml
+# instance: i-0a14e8aca787249b7   region: us-west-2
+# ssm command: 9140822e-5f70-4664-b7dd-a3680413ecec
+# start: 20261030T211800Z   end: 20261030T211804Z   rc: 0   log bytes: 499
+# script sha256: 48d3bfe34208a36c431b4b7df6353e6a4ad8d36488f7adb189fedb72704f110e
+# ---- script ----
+# | cd /opt/cc/bun-src/src && wc -l parsers/yaml.rs parsers/toml.rs format/yaml/*.rs 2>/dev/null; ls parsers format/yaml 2>/dev/null | head -30; grep -rln 'YAMLObject\|fn yaml_object\|YAML.stringify\|fn stringify' --include='*.rs' runtime | head -5
+# | exit 0
+# ---- raw output ----
+  6469 parsers/yaml.rs
+  2124 parsers/toml.rs
+  1628 format/yaml/ast.rs
+   215 format/yaml/mod.rs
+  1390 format/yaml/printer.rs
+   183 format/yaml/scalar.rs
+ 12009 total
+format/yaml:
+ast.rs
+mod.rs
+printer.rs
+scalar.rs
+
+parsers:
+Cargo.toml
+benches
+build.rs
+error.rs
+json.rs
+json5.rs
+json_index.rs
+json_stage2.rs
+lib.rs
+native_test_shims.rs
+toml.rs
+xml.rs
+xml_index.rs
+yaml.rs
+runtime/api.rs
+runtime/test_runner/expect.rs
+runtime/api/JSON5Object.rs
+runtime/api/YAMLObject.rs
+runtime/api/TOMLObject.rs

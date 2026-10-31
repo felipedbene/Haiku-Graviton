@@ -1,0 +1,61 @@
+# evidence: cellseg-tui-diff-flow
+# instance: i-0a14e8aca787249b7   region: us-west-2
+# ssm command: aca79684-cea7-48bf-b073-0a809bd60d3a
+# start: 20261031T113302Z   end: 20261031T113341Z   rc: 0   log bytes: 3418
+# script sha256: d2b730dfaf7f39152485d618b0a896f471095b4039e8e0fbd81acb31a4d668ed
+# ---- script ----
+# | set -u
+# | echo 'efa45d9d8a3e85a78df73505a53dedb3012951d4cb130fb2180ea16148e70409  /opt/cc/w-cellseg/port.stage/p.tgz' | sha256sum -c --quiet - || exit 1
+# | rm -rf /opt/cc/w-cellseg/port && mkdir -p /opt/cc/w-cellseg/port && tar xzf /opt/cc/w-cellseg/port.stage/p.tgz -C /opt/cc/w-cellseg/port 2>/dev/null
+# | cd /opt/cc/w-cellseg/port
+# | W=/opt/cc/w-cellseg
+# | if ! cmp -s compat/lib/cellseg.mjs $W/tree/lib/cellseg.mjs || ! cmp -s compat/bun-compat.mjs $W/tree/bun-compat.mjs; then
+# |   mkdir -p $W/deps && bash tools/fetch-deps.sh $W/deps >/dev/null
+# |   rm -rf $W/tree; bash tools/build-tree.sh /opt/cc/v2.1.314/package/claude $W/tree $W/tree /opt/node24/bin/node $W/deps > $W/build.log 2>&1; tail -1 $W/build.log
+# | fi
+# | SHOW=25 bash tools/tui-diff.sh /opt/cc/v2.1.314/package/claude /opt/node24/bin/node $W/tree flow 2>&1 | head -200
+# ---- raw output ----
+PASS flow#1 (2591 bytes)
+PASS flow#2 (2204 bytes)
+FAIL flow#3
+20c20
+< ^[[38;5;246m^[]8;id=14j7zrn;https://claude.com/cai/oauth/authorize?code=true&client_id=9d1c250a-e61b-44d9-88ed-5944d1962f5e&response_type=code&redirect_uri=https%3A%2F%2Fplatform.claude.com%2Foauth%2F
+---
+> ^[[38;5;246m^[]8;id=1p3yr5p;https://claude.com/cai/oauth/authorize?code=true&client_id=9d1c250a-e61b-44d9-88ed-5944d1962f5e&response_type=code&redirect_uri=https%3A%2F%2Fplatform.claude.com%2Foauth%2F
+23,24c23,24
+< %3Afile_upload+user%3Aplugins&code_challenge=ZFqLlxVoZU_Dnqm9S0rEhVJ7Dv2DsRxDyyO3fZKYa3M&code_challe
+< nge_method=S256&state=BPoS-UObl-M0oXe5BzQiLPQyOxeCgUv8DMHFePqyqLk^[[39m
+---
+FAIL flow#4
+20c20
+< ^[[38;5;246m^[]8;id=14j7zrn;https://claude.com/cai/oauth/authorize?code=true&client_id=9d1c250a-e61b-44d9-88ed-5944d1962f5e&response_type=code&redirect_uri=https%3A%2F%2Fplatform.claude.com%2Foauth%2F
+---
+> ^[[38;5;246m^[]8;id=1p3yr5p;https://claude.com/cai/oauth/authorize?code=true&client_id=9d1c250a-e61b-44d9-88ed-5944d1962f5e&response_type=code&redirect_uri=https%3A%2F%2Fplatform.claude.com%2Foauth%2F
+23,24c23,24
+< %3Afile_upload+user%3Aplugins&code_challenge=ZFqLlxVoZU_Dnqm9S0rEhVJ7Dv2DsRxDyyO3fZKYa3M&code_challe
+< nge_method=S256&state=BPoS-UObl-M0oXe5BzQiLPQyOxeCgUv8DMHFePqyqLk^[[39m
+---
+--- flow last screen (A, text only):
+Welcome to Claude Code v2.1.314
+..........................................................
+     *                                       █████▓▓░
+                                 *         ███▓░     ░░
+            ░░░░░░                        ███▓░
+    ░░░   ░░░░░░░░░░                      ███▓░
+   ░░░░░░░░░░░░░░░░░░░    *                ██▓░░      ▓
+                                             ░▓▓███▓▓░
+ *                                 ░░░░
+                                 ░░░░░░░░
+                               ░░░░░░░░░░░░░░░░
+       █████████                                        *
+      ██▄█████▄██                        *
+       █████████      *
+.......█ █   █ █..........................................
+ Browser didn't open? Use the url below to sign in (c to copy)
+]8;id=14j7zrn;https://claude.com/cai/oauth/authorize?code=true&client_id=9d1c250a-e61b-44d9-88ed-5944d1962f5e&response_type=code&redirect_uri=https%3A%2F%2Fplatform.claude.com%2Foauth%2Fcode%2Fcallback&scope=org%3Acreate_api_key+user%3Aprofile+user%3Ainference+user%3Asessions%3Aclaude_code+user%3Amcp_servers+user%3Afile_upload+user%3Aplugins&code_challenge=ZFqLlxVoZU_Dnqm9S0rEhVJ7Dv2DsRxDyyO3fZKYa3M&code_challenge_method=S256&state=BPoS-UObl-M0oXe5BzQiLPQyOxeCgUv8DMHFePqyqLk\https://claude.com/cai/oauth/authorize?code=true&client_id=9d1c250a-e61b-44d9-88ed-5944d1962f5e&resp]8;;\
+onse_type=code&redirect_uri=https%3A%2F%2Fplatform.claude.com%2Foauth%2Fcode%2Fcallback&scope=org%3A
+create_api_key+user%3Aprofile+user%3Ainference+user%3Asessions%3Aclaude_code+user%3Amcp_servers+user
+%3Afile_upload+user%3Aplugins&code_challenge=ZFqLlxVoZU_Dnqm9S0rEhVJ7Dv2DsRxDyyO3fZKYa3M&code_challe
+nge_method=S256&state=BPoS-UObl-M0oXe5BzQiLPQyOxeCgUv8DMHFePqyqLk
+ Paste code here if prompted >
+tui-diff: pass=2 fail=2 unsettled=0

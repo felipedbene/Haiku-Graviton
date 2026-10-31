@@ -1,0 +1,48 @@
+# evidence: yaml-parse-depth
+# instance: i-0a14e8aca787249b7   region: us-west-2
+# ssm command: 2a3d92fb-cea7-4062-8b90-289914cae5b8
+# start: 20261030T215353Z   end: 20261030T215421Z   rc: 0   log bytes: 1475
+# script sha256: 0cdde82b2c913748681f744d6200dfe345613088c60c448176e4a40804198ea5
+# ---- script ----
+# | set -u
+# | echo '0085aa920fc3fe79011d138a2581c2e0431f5e11f874d2ca07115814ff611a12  /opt/cc/w-yaml-parse.stage/p.tgz' | sha256sum -c --quiet - || exit 1
+# | rm -rf /opt/cc/w-yaml-parse && mkdir -p /opt/cc/w-yaml-parse && tar xzf /opt/cc/w-yaml-parse.stage/p.tgz -C /opt/cc/w-yaml-parse 2>/dev/null
+# | cd /opt/cc/w-yaml-parse
+# | cd compat/test
+# | /opt/node24/bin/node -e '
+# | const V=JSON.parse(require("fs").readFileSync("/opt/cc/w-yaml-parse-vec/s0/yaml-parse.cases.json","utf8"));
+# | for (const [d,r] of V.edge) if (typeof d==="string" && (/^a: &a \[x,x/.test(d) || /<<: \*a\}|Out of|^&a \[\{<</.test(d) || /toString|valueOf/.test(d))) console.log("edge", JSON.stringify(d.slice(0,50)), "->", r.slice(0,80));'
+# | cat > /opt/cc/w-yaml-parse/depthprobe.mjs <<'JS'
+# | const parse = globalThis.Bun ? Bun.YAML.parse : (await import("/opt/cc/w-yaml-parse/compat/lib/yaml-parse.mjs")).parse;
+# | const ok = (s) => { try { parse(s); return true; } catch (e) { if (e instanceof RangeError) return false; return "E:" + e.message; } };
+# | const gens = { flowseq: (n) => "[".repeat(n) + "]".repeat(n), flowmap: (n) => "{a: ".repeat(n) + "1" + "}".repeat(n), compactseq: (n) => "- ".repeat(n) + "x",
+# | 	blockmap: (n) => Array.from({length: n}, (_, i) => " ".repeat(i) + "a:").join("\n") + " 1" };
+# | const res = [];
+# | for (const [name, g] of Object.entries(gens)) {
+# | 	let lo = 1, hi = name === "blockmap" ? 8000 : 12000;
+# | 	if (ok(g(hi)) === true) { res.push(name + ">=" + hi); continue; }
+# | 	while (hi - lo > 1) { const m = (lo + hi) >> 1; if (ok(g(m)) === true) lo = m; else hi = m; }
+# | 	res.push(name + "=" + lo);
+# | }
+# | console.log(globalThis.Bun ? "bun " : "port", res.join(" "));
+# | JS
+# | for i in 1 2 3; do bun /opt/cc/w-yaml-parse/depthprobe.mjs; done
+# | for i in 1 2; do /opt/node24/bin/node /opt/cc/w-yaml-parse/depthprobe.mjs; done
+# ---- raw output ----
+edge "? {toString: 1}\n: x" -> !TypeError: No default value
+edge "? {valueOf: 1}\n: x" -> @0{"[object Object]":"x"}
+edge "? {toString: 1, valueOf: 2}\n: x" -> !TypeError: No default value
+edge "? [[{toString: 1}]]\n: x" -> !TypeError: No default value
+edge "&a {<<: *a}" -> !SyntaxError: YAML Parse error: Merge key cannot reference an enclosing node
+edge "&a [{<<: *a}]" -> !SyntaxError: YAML Parse error: Merge key cannot reference an enclosing node
+edge "&a {b: {<<: *a}}" -> !SyntaxError: YAML Parse error: Merge key cannot reference an enclosing node
+edge "constructor: 1\ntoString: 2\nvalueOf: 3\nhasOwnProper" -> @0{"constructor":1,"toString":2,"valueOf":3,"hasOwnProperty":4}
+edge "a: &a {k0: 0, k1: 1, k2: 2, k3: 3, k4: 4, k5: 5, k" -> !RangeError: Out of memory
+edge "a: &a {k0: 0, k1: 1, k2: 2, k3: 3, k4: 4, k5: 5, k" -> @0{"a":@1{"k0":0,"k1":1,"k2":2,"k3":3,"k4":4,"k5":5,"k6":6,"k7":7,"k8":8,"k9":9,
+edge "a: &a [x,x,x,x,x,x,x,x,x,x]\nb: &b [*a,*a,*a,*a,*a," -> !SyntaxError: YAML Parse error: Excessive aliasing
+edge "a: &a [x,x,x,x,x,x,x,x,x,x]\nb: &b [*a,*a,*a,*a,*a," -> @0{"a":@1["x","x","x","x","x","x","x","x","x","x"],"b":@2[#1,#1,#1,#1,#1,#1,#1,#
+bun  flowseq=4724 flowmap=4516 compactseq=4086 blockmap=3364
+bun  flowseq=4723 flowmap=4515 compactseq=4085 blockmap=3364
+bun  flowseq=4723 flowmap=4515 compactseq=4085 blockmap=3364
+port flowseq=5000 flowmap=4999 compactseq=4999 blockmap=4999
+port flowseq=5000 flowmap=4999 compactseq=4999 blockmap=4999

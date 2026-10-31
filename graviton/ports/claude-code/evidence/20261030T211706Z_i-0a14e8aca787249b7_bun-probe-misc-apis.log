@@ -1,0 +1,54 @@
+# evidence: bun-probe-misc-apis
+# instance: i-0a14e8aca787249b7   region: us-west-2
+# ssm command: 33d3e9ed-cb79-417d-ad13-c9f462f5f958
+# start: 20261030T211706Z   end: 20261030T211709Z   rc: 0   log bytes: 1859
+# script sha256: 13b97fc9393ec9ba58fbc13087fa97ee34268085180cbfe3cbc41d7cdd278c8f
+# ---- script ----
+# | cat > /tmp/probe3.js << 'JS'
+# | const j = (x) => { try { return JSON.stringify(x, (_, v) => typeof v === "bigint" ? v + "n" : v instanceof Uint8Array ? "U8[" + v.length + "]" : v); } catch (e) { return String(x); } };
+# | const T = (n, f) => { try { const v = f(); console.log(n.padEnd(40), typeof v, v?.constructor?.name, j(v)?.slice(0, 120)); } catch (e) { console.log(n.padEnd(40), "THROW", e.message); } };
+# | T("gc(true)", () => Bun.gc(true)); T("gc()", () => Bun.gc());
+# | T("sleepSync(5)", () => { const t = performance.now(); Bun.sleepSync(5); return performance.now() - t >= 4.5; });
+# | T("SHA256.hash(str,base64)", () => Bun.SHA256.hash("abc", "base64"));
+# | T("SHA256.hash(u8,base64)", () => Bun.SHA256.hash(new Uint8Array([1, 2]), "base64"));
+# | T("SHA256.hash(str,hex)", () => Bun.SHA256.hash("abc", "hex"));
+# | T("SHA256.hash(str)", () => Bun.SHA256.hash("abc"));
+# | T("typeof SHA256", () => typeof Bun.SHA256 + " " + Object.getOwnPropertyNames(Bun.SHA256).join(","));
+# | const z = Bun.zstdCompressSync(Buffer.from("hello zstd"));
+# | T("zstdDecompressSync", () => Bun.zstdDecompressSync(z).toString());
+# | T("zstdDecompressSync type", () => Bun.zstdDecompressSync(z));
+# | T("zstdDecompress", () => Bun.zstdDecompress(z));
+# | Bun.zstdDecompress(z).then((r) => console.log("zstdDecompress resolved".padEnd(40), r.constructor.name, r.toString()));
+# | T("zstdDecompressSync(garbage)", () => Bun.zstdDecompressSync(Buffer.from("nope")));
+# | T("main", () => Bun.main);
+# | T("generateHeapSnapshot(v8,arraybuffer)", () => { const s = Bun.generateHeapSnapshot("v8", "arraybuffer"); return [s.constructor.name, s.byteLength > 1000, new TextDecoder().decode(new Uint8Array(s, 0, 20))]; });
+# | T("stdin", () => [typeof Bun.stdin, Bun.stdin.constructor.name, typeof Bun.stdin.stream]);
+# | T("stdin.stream()", () => Bun.stdin.stream().constructor.name);
+# | T("file(path)", () => { const f = Bun.file("/tmp/x.txt"); return [f.constructor.name, f.name, typeof f.text, typeof f.exists]; });
+# | T("YAML.parse", () => Bun.YAML.parse("a: 1\nb: [x, y]\nc: yes\nd: 0o17\ne: ~\nf: 2001-12-14\n"));
+# | T("YAML.stringify", () => Bun.YAML.stringify({ a: 1, b: ["x", "y"], c: "yes", d: null, e: { f: "multi\nline" } }, null, 2));
+# | T("TOML.parse", () => Bun.TOML.parse('a = 1\n[b]\nc = "x"\nd = 1979-05-27T07:32:00Z\n'));
+# | JS
+# | bun /tmp/probe3.js < /dev/null; exit 0
+# ---- raw output ----
+gc(true)                                 number Number 152445
+gc()                                     number Number 152445
+sleepSync(5)                             boolean Boolean true
+SHA256.hash(str,base64)                  string String "ungWv48Bz+pBQUDeXa4iI7ADYaOWF3qctBD/YfIAFa0="
+SHA256.hash(u8,base64)                   string String "oShx/uIQ+4YZKR6uoZRYHL0lMeSyN1nSJfaAaSP2MiI="
+SHA256.hash(str,hex)                     string String "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"
+SHA256.hash(str)                         object Uint8Array "U8[32]"
+typeof SHA256                            string String "function length,name,byteLength,hash,prototype"
+zstdDecompressSync                       string String "hello zstd"
+zstdDecompressSync type                  object Buffer {"type":"Buffer","data":[104,101,108,108,111,32,122,115,116,100]}
+zstdDecompress                           object Promise {}
+zstdDecompressSync(garbage)              THROW Decompression failed: InvalidZstdData
+main                                     string String "/tmp/probe3.js"
+generateHeapSnapshot(v8,arraybuffer)     object Array ["ArrayBuffer",true,"{\"snapshot\":{\"meta\":"]
+stdin                                    object Array ["object","Blob","function"]
+stdin.stream()                           string String "ReadableStream"
+file(path)                               object Array ["Blob","/tmp/x.txt","function","function"]
+YAML.parse                               object Object {"a":1,"b":["x","y"],"c":"yes","d":15,"e":null,"f":"2001-12-14"}
+YAML.stringify                           string String "a: 1\nb:\n  - x\n  - \"y\"\nc: \"yes\"\nd: null\ne:\n  f: \"multi\\nline\""
+TOML.parse                               object Object {"a":1,"b":{"c":"x","d":"1979-05-27T07:32:00Z"}}
+zstdDecompress resolved                  Buffer hello zstd

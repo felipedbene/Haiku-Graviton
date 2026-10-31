@@ -1,0 +1,11 @@
+# evidence: fetch-ps
+# instance: i-0a14e8aca787249b7   region: us-west-2
+# ssm command: 8ccadda8-efac-4f24-a920-b1c3ee1dd3ef
+# start: 20261031T043614Z   end: 20261031T043616Z   rc: 0   log bytes: 163
+# script sha256: d3a1cd948106a066ced61c87d81a894a5b6970623bd1caafd8ce23bafb31d70e
+# ---- script ----
+# | ps -eo pid,etime,args | grep -E 'run.js|fixture.js|diff-step|build-tree' | grep -v grep
+# | ss -ltn | wc -l
+# ---- raw output ----
+  25701       00:23 bash tools/build-tree.sh /opt/cc/v2.1.314/package/claude /opt/cc/w-fetch/tree /opt/cc/w-fetch/tree /opt/node24/bin/node /opt/cc/w-fetch/deps
+5

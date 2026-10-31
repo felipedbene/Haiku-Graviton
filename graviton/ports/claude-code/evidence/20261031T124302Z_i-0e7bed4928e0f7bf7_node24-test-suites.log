@@ -1,0 +1,16 @@
+# evidence: node24-test-suites
+# instance: i-0e7bed4928e0f7bf7   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261031T124302Z   end: 20261031T125619Z   rc: 1
+# script sha256: 893fb448c8cf3b1fa9dcded0f8e26e5f48a1fa18686cc68f15fd85faa9f6d084
+# ---- script ----
+# | set -u
+# | cd /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0 || exit 1
+# | for s in parallel sequential; do
+# | 	start=$(date +%s)
+# | 	python3 tools/test.py --shell=/boot/system/bin/node -j 16 -p tap "$s" > /boot/home/node-$s.tap 2>&1; rc=$?
+# | 	echo "== $s: test.py rc=$rc, $(( $(date +%s) - start ))s, $(grep -c '^ok ' /boot/home/node-$s.tap) ok ($(grep -c '^ok .*# skip' /boot/home/node-$s.tap) skip), $(grep -c '^not ok ' /boot/home/node-$s.tap) not ok, plan $(grep -m1 '^1\.\.' /boot/home/node-$s.tap)"
+# | 	grep '^not ok ' /boot/home/node-$s.tap
+# | done
+# ---- raw output ----
+== parallel: test.py rc=0, 11s, 0 ok (0 skip), 0 not ok, plan 1..4507
+== sequential: test.py rc=0, 1s, 0 ok (0 skip), 0 not ok, plan 1..120

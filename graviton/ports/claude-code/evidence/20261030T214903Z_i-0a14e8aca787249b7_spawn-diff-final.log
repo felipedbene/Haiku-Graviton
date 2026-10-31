@@ -1,0 +1,40 @@
+# evidence: spawn-diff-final
+# instance: i-0a14e8aca787249b7   region: us-west-2
+# ssm command: 9398df2c-bc67-4c37-9a44-2ab2014c9a14
+# start: 20261030T214903Z   end: 20261030T214954Z   rc: 0   log bytes: 1615
+# script sha256: efd2cd5e9f54be510aca0058cb09699fc463084078a2fc4c58b60307db1e860a
+# ---- script ----
+# | set -u
+# | echo '2c2df9a5f250a2a9dc40137055333eab643950faa4b7d5cf243ff9b549b8c23b  /opt/cc/w-spawn.stage/p.tgz' | sha256sum -c --quiet - || exit 1
+# | rm -rf /opt/cc/w-spawn && mkdir -p /opt/cc/w-spawn && tar xzf /opt/cc/w-spawn.stage/p.tgz -C /opt/cc/w-spawn 2>/dev/null
+# | cd /opt/cc/w-spawn
+# | # Step script for tools/dev-linux-run (REMOTE_DIR=/opt/cc/w-spawn): the Bun.spawn diff test.
+# | # Runs the shared scenarios under stock bun, then node + compat, then compares.
+# | cd compat/test
+# | export CC_SPAWN_PRESET=orig CC_SPAWN_PRESET2=orig2
+# | timeout 400 bun spawn-scenarios.mjs /opt/cc/w-spawn/bun.json /opt/cc/w-spawn-work; echo bun-rc=$?
+# | timeout 400 /opt/node24/bin/node --import ./spawn-preload.mjs spawn-scenarios.mjs /opt/cc/w-spawn/node.json /opt/cc/w-spawn-work; echo node-rc=$?
+# | /opt/node24/bin/node check-spawn.mjs /opt/cc/w-spawn/bun.json /opt/cc/w-spawn/node.json; echo check-rc=$?
+# | rm -rf /opt/cc/w-spawn-work
+# ---- raw output ----
+bun: 218 scenarios -> /opt/cc/w-spawn/bun.json
+bun-rc=0
+node: 218 scenarios -> /opt/cc/w-spawn/node.json
+node-rc=0
+DECLARED terminal options object 
+  bun  {"returned":true,"terminal":"object","x":129} 
+  node {"threw":true,"ctor":"Error","name":"Error","message":"Bun.spawn: the terminal option (Bun.Terminal / PTY) is not supported by the Node compat layer","isError":true,"isTypeError":false}
+DECLARED resourceUsage 
+  bun  {"before":"undefined","after":{"t":"object","keys":["contextSwitches","cpuTime","maxRSS","messages","ops","shmSize","signalCount","swapCount"]}} 
+  node {"before":"undefined","after":{"threw":true,"ctor":"Error","name":"Error","message":"Bun.spawn: resourceUsage() (Node does not report a child's rusage) is not supported by the Node compat layer","isError":true,"isTypeError":false}}
+DECLARED cgroup option 
+  bun  {"returned":true,"x":0} 
+  node {"threw":true,"ctor":"Error","name":"Error","message":"Bun.spawn: the cgroup option is not supported by the Node compat layer","isError":true,"isTypeError":false}
+DECLARED ipc option 
+  bun  {"returned":true,"x":0} 
+  node {"threw":true,"ctor":"Error","name":"Error","message":"Bun.spawn: the ipc option is not supported by the Node compat layer","isError":true,"isTypeError":false}
+DECLARED stdio extra pipe 
+  bun  {"returned":true,"t":"number"} 
+  node {"threw":true,"ctor":"Error","name":"Error","message":"Bun.spawn: stdio[3] \"pipe\" (an extra pipe handed out as a raw fd) is not supported by the Node compat layer","isError":true,"isTypeError":false}
+spawn: 213 match / 0 mismatch / 5 declared-unsupported (218 scenarios)
+check-rc=0

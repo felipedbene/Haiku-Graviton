@@ -1,0 +1,131 @@
+# evidence: cellseg-oracle-probe3
+# instance: i-0a14e8aca787249b7   region: us-west-2
+# ssm command: cbbb7e5d-382c-417b-829a-ac952c5ecbda
+# start: 20261031T024131Z   end: 20261031T024133Z   rc: 0   log bytes: 4569
+# script sha256: 73a7d50cb4b05d63864ecba226cf65a8042e8b6b6f38c602cda4f9d60127109a
+# ---- script ----
+# | set -u
+# | BIN=/opt/cc/v2.1.314/package/claude
+# | W=/opt/cc/w-cellseg/probe; mkdir -p $W/home; cd $W
+# | cat > pre.js <<'J'
+# | const C = Bun.ant.CellSegmenter;
+# | const show = (x) => JSON.stringify(x, (k, v) => ArrayBuffer.isView(v) ? Array.from(v) : v);
+# | const tryit = (f) => { try { return show(f()); } catch (e) { return "THROW " + e.constructor.name + ": " + e.message + (e.code ? " code=" + e.code : ""); } };
+# | const scr = {widthMask:3,narrow:0,wide:1,spacerTail:2,spacerHead:3,emptyCharIndex:0,spacerCharIndex:1,emptyWord:0,tabWidth:8};
+# | const sub = [[1564,1564],[8234,8238],[8294,8297]];
+# | console.log("ctor()", tryit(() => new C()));
+# | console.log("ctor({})", tryit(() => { const s = new C({}); return [s.graphemes.length, s.sgrKeys]; }));
+# | console.log("call", tryit(() => C({})));
+# | console.log("sub bad", tryit(() => new C({substitute: [[1]]})));
+# | console.log("sub bad2", tryit(() => new C({substitute: 5})));
+# | console.log("sub bad3", tryit(() => new C({substitute: [[5,"a"]]})));
+# | console.log("sub rev", tryit(() => new C({substitute: [[10,5]]}).graphemes.length));
+# | console.log("repl empty", tryit(() => new C({replacement: ""})));
+# | console.log("repl X", tryit(() => { const s = new C({replacement: "XY", substitute: sub}); const c = new Int32Array(8); const n = s.segment("a‮b", c, new Int32Array(8), false); return [n, c, s.graphemes.slice(90)]; }));
+# | console.log("repl 5", tryit(() => new C({replacement: 5})));
+# | console.log("screen bad", tryit(() => new C({screen: {}})));
+# | console.log("screen part", tryit(() => new C({screen: {widthMask:3}})));
+# | console.log("amb wide", tryit(() => { const s = new C({ambiguousIsNarrow:false}); const c = new Int32Array(8); return [s.segment("α·", c, new Int32Array(8), false), c]; }));
+# | console.log("amb default", tryit(() => { const s = new C({}); const c = new Int32Array(8); return [s.segment("α·", c, new Int32Array(8), false), c]; }));
+# | const s = new C({ambiguousIsNarrow:true, substitute: sub, screen: scr});
+# | console.log("small", tryit(() => s.segment("abcdef", new Int32Array(4), new Int32Array(64), false)));
+# | console.log("small runs", tryit(() => s.segment("\x1b[31ma\x1b[32mb\x1b[33mc", new Int32Array(64), new Int32Array(2), false)));
+# | console.log("small runs2", tryit(() => s.segment("\x1b[31ma\x1b[32mb\x1b[33mc", new Int32Array(64), new Int32Array(4), false)));
+# | console.log("odd", tryit(() => s.segment("abc", new Int32Array(5), new Int32Array(64), false)));
+# | console.log("overlap", tryit(() => { const b = new Int32Array(64); return s.segment("abc", b, b, false); }));
+# | console.log("notarr", tryit(() => s.segment("abc", [], new Int32Array(4), false)));
+# | console.log("nonstr", tryit(() => s.segment(5, new Int32Array(8), new Int32Array(8), false)));
+# | console.log("noflag", tryit(() => s.segment("ab", new Int32Array(8), new Int32Array(8))));
+# | console.log("u8", tryit(() => s.segment("ab", new Uint32Array(8), new Int32Array(8), false)));
+# | // paint
+# | const W = 10;
+# | const scrbuf = () => { const a = new Int32Array(W*2*2); for (let i=0;i<a.length;i+=2){a[i]=0;a[i+1]=0;} return a; };
+# | const charMap = new Int32Array(200); for (let i=0;i<200;i++) charMap[i]=1000+i;
+# | const words = new Int32Array(8); for (let i=0;i<8;i++) words[i]=(i+5)<<17;
+# | const dec = (r) => [r % 1048576, Math.floor(r/1048576)%65536, Math.floor(r/68719476736)];
+# | const paint = (label, text, x, y, pre, w = W) => {
+# |   const c = new Int32Array(64), r = new Int32Array(64);
+# |   const n = s.segment(text, c, r, false);
+# |   const sc = pre ? pre() : scrbuf();
+# |   console.log("paint", label, tryit(() => { const ret = s.paint(sc, w, x, y, c, n, undefined, charMap, words); return [ret, dec(ret), sc]; }));
+# | };
+# | paint("abc@0", "abc", 0, 0);
+# | paint("abc@8", "abc", 8, 0);
+# | paint("abc@-1", "abc", -1, 0);
+# | paint("tab@1", "a\tb", 1, 1);
+# | paint("wide@0", "日本", 0, 0);
+# | paint("wide@9", "a日", 8, 0);
+# | paint("sub", "a‮b", 0, 0);
+# | paint("styled", "\x1b[31mab\x1b[0mc", 0, 0);
+# | paint("y oob", "abc", 0, 5);
+# | paint("x oob", "abc", 12, 0);
+# | // over existing wide
+# | const preWide = () => { const a = scrbuf(); a[2]=500; a[3]=1; a[4]=1; a[5]=2; a[6]=501; a[7]=1; a[8]=1; a[9]=2; return a; };
+# | paint("overwide head", "z", 1, 0, preWide);
+# | paint("overwide tail", "z", 2, 0, preWide);
+# | paint("wide over wide offset", "日", 2, 0, preWide);
+# | paint("same", "abc", 0, 0, () => { const a = scrbuf(); a[0]=1066;a[1]=5<<17; a[2]=1067;a[3]=5<<17; a[4]=1068;a[5]=5<<17; return a; });
+# | // setCell
+# | const sc = (label, pre, x, y, ci, word, w=W) => console.log("setCell", label, tryit(() => { const a = pre ? pre() : scrbuf(); const ret = s.setCell(a, w, x, y, ci, word); return [ret, dec(ret), a]; }));
+# | sc("plain", null, 3, 0, 77, 9<<17);
+# | sc("wide", null, 3, 0, 77, (9<<17)|1);
+# | sc("wide@last", null, 9, 0, 77, (9<<17)|1);
+# | sc("over head", preWide, 1, 0, 77, 9<<17);
+# | sc("over tail", preWide, 2, 0, 77, 9<<17);
+# | sc("spacertail word", null, 3, 0, 77, (9<<17)|2);
+# | sc("oob", null, 30, 0, 77, 0);
+# | sc("same", () => { const a = scrbuf(); a[6]=77; a[7]=9<<17; return a; }, 3, 0, 77, 9<<17);
+# | const s2 = new C({});
+# | console.log("paint noscreen", tryit(() => s2.paint(scrbuf(), W, 0, 0, new Int32Array(4), 0, undefined, charMap, words)));
+# | console.log("setCell noscreen", tryit(() => s2.setCell(scrbuf(), W, 0, 0, 1, 0)));
+# | process.exit(0)
+# | J
+# | HOME=$W/home BUN_OPTIONS="--preload $W/pre.js" timeout 20 $BIN --version 2>&1 | head -120
+# ---- raw output ----
+ctor() {}
+ctor({}) [98,[""]]
+call THROW TypeError: CellSegmenter constructor cannot be invoked without 'new' code=ERR_ILLEGAL_CONSTRUCTOR
+sub bad THROW TypeError: Expected options.substitute[] to be a [first, last] pair for 'CellSegmenter'. code=ERR_INVALID_ARG_TYPE
+sub bad2 THROW TypeError: Expected options.substitute to be a list of [first, last] pairs for 'CellSegmenter'. code=ERR_INVALID_ARG_TYPE
+sub bad3 THROW RangeError: The value of "substitute[][0]" is out of range. It must be >= 128 and <= 1114111. Received 5 code=ERR_OUT_OF_RANGE
+sub rev THROW RangeError: The value of "substitute[][0]" is out of range. It must be >= 128 and <= 1114111. Received 10 code=ERR_OUT_OF_RANGE
+repl empty THROW TypeError: CellSegmenter: options.replacement must not be empty code=ERR_INVALID_ARG_TYPE
+repl X [3,[66,1,97,514,67,1,0,0],["y","z","{","|","}","~","\t","XY"]]
+repl 5 THROW TypeError: Expected options.replacement to be a string for 'CellSegmenter'. code=ERR_INVALID_ARG_TYPE
+screen bad {}
+screen part {}
+amb wide [2,[98,2,99,2,0,0,0,0]]
+amb default [2,[98,1,99,1,0,0,0,0]]
+small -6
+small runs -3
+small runs2 -3
+odd -3
+overlap THROW TypeError: segment: cells and runs must not overlap code=ERR_INVALID_ARG_TYPE
+notarr THROW TypeError: Expected cells to be a non-shared, fixed-length, 4-byte-aligned Int32Array for 'CellSegmenter'. code=ERR_INVALID_ARG_TYPE
+nonstr THROW TypeError: Expected line to be a string for 'segment'. code=ERR_INVALID_ARG_TYPE
+noflag 2
+u8 THROW TypeError: Expected cells to be a non-shared, fixed-length, 4-byte-aligned Int32Array for 'CellSegmenter'. code=ERR_INVALID_ARG_TYPE
+paint abc@0 [206158430211,[3,0,3],[1066,655360,1067,655360,1068,655360,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]]
+paint abc@8 [687203155979,[11,8,10],[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1066,655360,1067,655360,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]]
+paint abc@-1 [137438953474,[2,0,2],[1067,655360,1068,655360,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]]
+paint tab@1 [618476339209,[9,1,9],[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1066,655360,0,0,0,0,0,0,0,0,0,0,0,0,1067,655360,0,0]]
+paint wide@0 [274877906948,[4,0,4],[1098,655361,1,2,1099,655361,1,2,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]]
+paint wide@9 [687203155978,[10,8,10],[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1066,655360,0,3,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]]
+paint sub [206158430211,[3,0,3],[1066,655360,1097,655360,1067,655360,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]]
+paint styled [206158430211,[3,0,3],[1066,655360,1067,655360,1068,786432,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]]
+paint y oob [68718428163,[3,65535,0],[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]]
+paint x oob [68718428175,[15,65535,0],[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]]
+paint overwide head [206159478786,[2,1,3],[0,0,1091,655360,0,0,501,1,1,2,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]]
+paint overwide tail [206159478787,[3,1,3],[0,0,0,0,1091,655360,501,1,1,2,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]]
+paint wide over wide offset [343598432260,[4,1,5],[0,0,0,0,1098,655361,1,2,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]]
+paint same [206158430211,[3,0,3],[1066,655360,1067,655360,1068,655360,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]]
+setCell plain [274881052676,[4,3,4],[0,0,0,0,0,0,77,1179648,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]]
+setCell wide [343600529412,[4,3,5],[0,0,0,0,0,0,77,1179649,1,2,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]]
+setCell wide@last [687204204554,[10,9,10],[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,77,1179649,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]]
+setCell over head [206159478786,[2,1,3],[0,0,77,1179648,0,0,501,1,1,2,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]]
+setCell over tail [206159478787,[3,1,3],[0,0,0,0,77,1179648,501,1,1,2,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]]
+setCell spacertail word [274881052676,[4,3,4],[0,0,0,0,0,0,77,1179650,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]]
+setCell oob [68718428191,[31,65535,0],[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]]
+setCell same [274881052676,[4,3,4],[0,0,0,0,0,0,77,1179648,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]]
+paint noscreen 68718428160
+setCell noscreen 68719476737

@@ -1,0 +1,14 @@
+# evidence: bun-src-grep-which-binding
+# instance: i-0a14e8aca787249b7   region: us-west-2
+# ssm command: 3611d1be-fa18-4290-a6ee-27db62c08470
+# start: 20261030T211341Z   end: 20261030T211343Z   rc: 0   log bytes: 150
+# script sha256: ef969bb8d4d42f5be6d23c8b34f175d3bcfbbba89fe8ac866467f7754d1e7f2a
+# ---- script ----
+# | cd /opt/cc/bun-src/src && grep -rln -E 'which::which|bun_which::' --include='*.rs' runtime | head -5; grep -rn -B3 -A40 'fn which.*JSGlobalObject\|pub fn which(global' --include='*.rs' runtime | head -80
+# | exit 0
+# ---- raw output ----
+runtime/webview/ChromeProcess.rs
+runtime/api/bun/js_bun_spawn_bindings.rs
+runtime/api/BunObject.rs
+runtime/api/cron.rs
+runtime/shell/builtin/which.rs

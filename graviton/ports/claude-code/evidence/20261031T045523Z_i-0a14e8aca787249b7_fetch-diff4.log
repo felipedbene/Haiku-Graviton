@@ -1,0 +1,148 @@
+# evidence: fetch-diff4
+# instance: i-0a14e8aca787249b7   region: us-west-2
+# ssm command: 01a7e9c0-fca1-48e3-9561-9b8d00dcedb6
+# start: 20261031T045523Z   end: 20261031T045903Z   rc: 0   log bytes: 7877
+# script sha256: 04db328db0204eeb725075f5043835505cfed8e243cd4f22903245372208ed13
+# ---- script ----
+# | set -u
+# | echo 'ec75c2e4c476b254b4b5b4bb37bbb34f3b1838b73cb113e9d135560f33e4f26d  /opt/cc/w-fetch.stage/p.tgz' | sha256sum -c --quiet - || exit 1
+# | rm -rf /opt/cc/w-fetch && mkdir -p /opt/cc/w-fetch && tar xzf /opt/cc/w-fetch.stage/p.tgz -C /opt/cc/w-fetch 2>/dev/null
+# | cd /opt/cc/w-fetch
+# | # Step script for tools/dev-linux-run (REMOTE_DIR=/opt/cc/w-fetch): the fetch diff test.
+# | # Builds a tree (fetch-deps + build-tree), records the scenarios under stock bun,
+# | # checks them under node + the tree's compat preload, compares, and verifies that
+# | # no listener is left behind. ONLY=<regex> limits the scenarios.
+# | set -u
+# | W=/opt/cc/w-fetch N=/opt/node24/bin/node
+# | bash tools/fetch-deps.sh $W/deps > $W/deps.log 2>&1 || { cat $W/deps.log; exit 1; }
+# | grep undici $W/deps.log
+# | rm -rf $W/tree && bash tools/build-tree.sh /opt/cc/v2.1.314/package/claude $W/tree $W/tree $N $W/deps > $W/build.log 2>&1 || { tail -20 $W/build.log; exit 1; }
+# | tail -1 $W/build.log; ls $W/tree/node_modules
+# | cd compat/test/fetch
+# | WK=$(mktemp -d /tmp/ccfetch.XXXXXX); mkdir -p $WK/sock
+# | bash gen-certs.sh $WK/certs > /dev/null
+# | ss -ltn | awk 'NR>1{print $4}' | sort > $WK/ss-before
+# | export FIXTURE_NODE=$N
+# | timeout 600 bun run.js $WK/bun.json $WK/certs $WK/sock "${ONLY:-}"; echo bun-rc=$?
+# | timeout 600 $N --import $W/tree/bun-compat.mjs run.js $WK/node.json $WK/certs $WK/sock "${ONLY:-}"; echo node-rc=$?
+# | $N check.mjs $WK/bun.json $WK/node.json; echo check-rc=$?
+# | ss -ltn | awk 'NR>1{print $4}' | sort > $WK/ss-after
+# | echo "listeners left: $(comm -13 $WK/ss-before $WK/ss-after | wc -l)"; comm -13 $WK/ss-before $WK/ss-after
+# | echo "--- ss -ltnp"; ss -ltnp
+# | mkdir -p $W.out && cp $WK/bun.json $WK/node.json $W.out/
+# | rm -rf $WK
+# ---- raw output ----
+fetch-deps: undici 7.30.1 OK (sha512-03KrMbjIFDWQR5RNPrSw3bd1r12JpyFQl9/yxjUbJtqkjmllqC5lFjZh6ujeuJCKr8EOQvRW872Oy/az+nLYxg==)
+build-tree: /opt/cc/w-fetch/tree ready (prefix /opt/cc/w-fetch/tree)
+node-fetch
+undici
+ws
+ HTTP/1.1 GET http://127.0.0.1:40275/echo
+ Connection: keep-alive
+ User-Agent: Bun/1.4.4
+ Accept: */*
+ Host: 127.0.0.1:40275
+ Accept-Encoding: gzip, deflate, br, zstd
+< 200 OK
+< connection: close
+< content-type: application/json
+< Date: Sat, 31 Oct 2026 04:56:36 GMT
+< Transfer-Encoding: chunked
+
+scenarios: 62
+bun-rc=0
+scenarios: 62
+node-rc=0
+SAME FetchSession surface
+SAME FetchSession constructor argument errors
+SAME fetch option argument errors
+SAME proxy string, https target: CONNECT
+SAME proxy {url, headers}, https target: CONNECT carries the headers
+SAME proxy {url, headers: Headers}, https target
+SAME proxy URL with userinfo: generated Proxy-Authorization
+SAME proxy string, http target: absolute-form forward
+SAME proxy refuses CONNECT with 407: error shape
+SAME proxy answers 407 to a forwarded http request: a response
+SAME proxy refuses an unknown target (403)
+SAME proxy URL is https: (no TLS proxy listening): fails
+SAME* https: proxy (TLS to the proxy)
+  KNOWN .c.rejected: bun UNABLE_TO_VERIFY_LEAF_SIGNATURE "unable to verify the first certificate" | node cause UNABLE_TO_VERIFY_LEAF_SIGNATURE "unable to verify the first certificate; if the root CA is installed locally, try running Node.js with --use-system-ca"
+SAME proxy option with redirect: each hop through the proxy
+SAME env HTTPS_PROXY set at runtime: plain fetch https goes through it
+SAME* env HTTPS_PROXY: plain fetch without tls option
+  KNOWN .r.rejected: bun UNABLE_TO_VERIFY_LEAF_SIGNATURE "unable to verify the first certificate" | node cause UNABLE_TO_VERIFY_LEAF_SIGNATURE "unable to verify the first certificate; if the root CA is installed locally, try running Node.js with --use-system-ca"
+SAME env HTTP_PROXY: plain fetch http goes through it
+SAME env HTTPS_PROXY only: http target is direct
+SAME env lowercase https_proxy wins; empty lowercase falls through
+SAME env ALL_PROXY fallback
+SAME proxy:false with HTTPS_PROXY set: direct
+SAME proxy:'' and proxy:null with HTTPS_PROXY set: env applies
+SAME unix with HTTP_PROXY set: env proxy not used
+SAME NO_PROXY matrix (env proxy)
+SAME explicit proxy respects NO_PROXY by default; respectNoProxy:false does not
+SAME env HTTPS_PROXY given at spawn
+SAME tls ca: custom CA trusted
+SAME tls ca replaces the default roots (public host)
+SAME* tls: no ca, wrong ca: fails
+  KNOWN .none.rejected: bun UNABLE_TO_VERIFY_LEAF_SIGNATURE "unable to verify the first certificate" | node cause UNABLE_TO_VERIFY_LEAF_SIGNATURE "unable to verify the first certificate; if the root CA is installed locally, try running Node.js with --use-system-ca"
+  KNOWN .wrong.rejected: bun UNABLE_TO_VERIFY_LEAF_SIGNATURE "unable to verify the first certificate" | node cause UNABLE_TO_VERIFY_LEAF_SIGNATURE "unable to verify the first certificate; if the root CA is installed locally, try running Node.js with --use-system-ca"
+  KNOWN .emptyTls.rejected: bun UNABLE_TO_VERIFY_LEAF_SIGNATURE "unable to verify the first certificate" | node cause UNABLE_TO_VERIFY_LEAF_SIGNATURE "unable to verify the first certificate; if the root CA is installed locally, try running Node.js with --use-system-ca"
+SAME tls rejectUnauthorized:false
+SAME* tls hostname mismatch: 127.0.0.1 against a localhost-only cert
+  KNOWN .plain.rejected: bun ERR_TLS_CERT_ALTNAME_INVALID "ERR_TLS_CERT_ALTNAME_INVALID fetching "https://127.0.0.1:<hsn>/echo". For more information, pass `verbose: true` in the second argument to fetch()" | node cause ERR_TLS_CERT_ALTNAME_INVALID "Hostname/IP does not match certificate's altnames: IP: 127.0.0.1 is not in the cert's list: "
+SAME* tls serverName + host header + checkServerIdentity (gateway pattern)
+  KNOWN .r.res.json.headers.connection: Connection header bun (none) | node close
+SAME* tls servername (lowercase) is accepted
+  KNOWN .res.json.headers.connection: Connection header bun (none) | node close
+SAME tls checkServerIdentity returning an Error rejects
+SAME* tls checkServerIdentity returning undefined skips the name check
+  KNOWN .r.res.json.headers.connection: Connection header bun (none) | node close
+SAME* mTLS: client cert accepted, required
+  KNOWN .without.rejected: bun EPROTO "EPROTO: The TLS handshake failed. Does the server speak TLS on this port?" | node cause UND_ERR_SOCKET "other side closed" (alias)
+  KNOWN .badPass.rejected: bun FailedToOpenSocket "FailedToOpenSocket: Was there a typo in the url or port?" | node cause ERR_OSSL_BAD_DECRYPT "error:1C800064:Provider routines::bad decrypt" (alias)
+SAME* tls through a proxy: CA applies to the origin
+  KNOWN .bad.rejected: bun UNABLE_TO_VERIFY_LEAF_SIGNATURE "unable to verify the first certificate" | node cause UNABLE_TO_VERIFY_LEAF_SIGNATURE "unable to verify the first certificate; if the root CA is installed locally, try running Node.js with --use-system-ca"
+SAME Request input with a tls init
+SAME unix socket: http
+SAME* unix socket: missing path
+  KNOWN .rejected: bun ENOENT "ENOENT: Was there a typo in the url or port?" | node cause ENOENT "connect ENOENT /tmp/ccfetch.ZsrWPQ/certs/nope.sock"
+SAME keepalive default: sequential requests reuse connections
+SAME* keepalive:false: a connection per request
+  KNOWN .a: Connection header bun (none) | node close
+  KNOWN .b: Connection header bun (none) | node close
+  KNOWN .e: Connection header bun (none) | node close
+SAME timeout:false and default with a body stalled 6 s
+DIFF BUN_CONFIG_HTTP_IDLE_TIMEOUT=2: default times out, timeout:false does not
+  .out: bun "[\"err:TimeoutError:23:5.5-11s\",\"ok:ab\"]" | node "[\"err:TypeError::5.5-11s\",\"ok:ab\"]"
+DIFF numeric timeout: 2000 ms idle times out a 12 s stall, 30000 does not
+  .short.err: bun "TimeoutError:23" | node "TypeError:"
+SAME decompress default and false
+SAME* FetchSession tls: session CA used, plain fetch unaffected
+  KNOWN .b.rejected: bun UNABLE_TO_VERIFY_LEAF_SIGNATURE "unable to verify the first certificate" | node cause UNABLE_TO_VERIFY_LEAF_SIGNATURE "unable to verify the first certificate; if the root CA is installed locally, try running Node.js with --use-system-ca"
+  KNOWN .d.rejected: bun UNABLE_TO_VERIFY_LEAF_SIGNATURE "unable to verify the first certificate" | node cause UNABLE_TO_VERIFY_LEAF_SIGNATURE "unable to verify the first certificate; if the root CA is installed locally, try running Node.js with --use-system-ca"
+SAME FetchSession reuse, separate pool, close, fetch after close
+SAME FetchSession close while a request is in flight
+SAME* FetchSession keepAlive:false
+  KNOWN .a: Connection header bun (none) | node close
+  KNOWN .b: Connection header bun (none) | node close
+SAME FetchSession proxy and unix options
+SAME FetchSession analytics post() pattern
+SAME FetchSession fetch with a detached this
+SAME FetchSession in instanceof checks of Response/Request
+REFUSED refuse: verbose
+SAME s3 option on an http: URL is not read (as in Bun)
+REFUSED refuse: s3:// URL
+REFUSED refuse: compress
+REFUSED refuse: maxRedirects
+REFUSED refuse: protocol h2
+REFUSED refuse: tls minVersion
+REFUSED refuse: FetchSession keepAlive.maxIdleSockets
+fetch: 40 identical + 13 identical but for named differences / 7 refused as required / 2 mismatch (62 scenarios)
+check-rc=1
+listeners left: 0
+--- ss -ltnp
+State  Recv-Q Send-Q Local Address:Port Peer Address:PortProcess                                   
+LISTEN 0      4096   127.0.0.53%lo:53        0.0.0.0:*    users:(("systemd-resolve",pid=455,fd=15))
+LISTEN 0      4096      127.0.0.54:53        0.0.0.0:*    users:(("systemd-resolve",pid=455,fd=17))
+LISTEN 0      4096         0.0.0.0:22        0.0.0.0:*    users:(("systemd",pid=1,fd=87))          
+LISTEN 0      4096            [::]:22           [::]:*    users:(("systemd",pid=1,fd=88))          

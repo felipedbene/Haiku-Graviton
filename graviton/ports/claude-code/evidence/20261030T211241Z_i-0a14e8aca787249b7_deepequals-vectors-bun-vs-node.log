@@ -1,0 +1,15 @@
+# evidence: deepequals-vectors-bun-vs-node
+# instance: i-0a14e8aca787249b7   region: us-west-2
+# ssm command: bbcbcfa8-99d2-48cb-8614-a0cbb90c6e98
+# start: 20261030T211241Z   end: 20261030T211244Z   rc: 0   log bytes: 90
+# script sha256: e6b2d8a5c454ef363cfcf61448df315ba1a3743be9a892f21ffea93b8b27c197
+# ---- script ----
+# | set -u
+# | echo 'a870cd9e613f85afcddbddd665a2e8dcbf95aac25c24bce7feb4d44cad6d72f0  /opt/cc/stage/p.tgz' | sha256sum -c --quiet - || exit 1
+# | rm -rf /opt/cc/port && mkdir -p /opt/cc/port && tar xzf /opt/cc/stage/p.tgz -C /opt/cc/port 2>/dev/null
+# | cd /opt/cc/port
+# | mkdir -p /opt/cc/vec && cd compat/test && bun gen-deepequals-vectors.js /opt/cc/vec && /opt/node24/bin/node check-deepequals.mjs /opt/cc/vec; echo "check rc=$?"; exit 0
+# ---- raw output ----
+deepEquals pairs: 118
+deepEquals: 354 match / 0 mismatch (118 pairs x 3 modes)
+check rc=0

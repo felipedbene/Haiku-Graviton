@@ -1,0 +1,10 @@
+# evidence: icu-availability
+# instance: i-0e7bed4928e0f7bf7   region: us-west-2
+# ssm command: 38780965-5398-46b2-b589-091cbbc4b75e
+# start: 20261030T225538Z   end: 20261030T225647Z   rc: 0   log bytes: 4011
+# script sha256: 52334f18ae291b7559f54294118d19bb4f72fd3e07a60f035a70fa45a502911e
+# ---- script ----
+# | pkgman search -a icu 2>&1 | head -20
+# | grep -n -i "icu\|attempt\|installing" /boot/home/n24-nb.log | head -20
+# | ls /boot/home/haikuports/dev-libs/icu* -d 2>/dev/null
+# ---- raw output ----

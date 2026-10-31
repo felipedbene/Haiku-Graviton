@@ -1,0 +1,20 @@
+# evidence: bun-internal-oracle-probe
+# instance: i-0a14e8aca787249b7   region: us-west-2
+# ssm command: b1f244b4-f9f7-4942-9bc7-4c478cb10271
+# start: 20261031T022517Z   end: 20261031T022526Z   rc: 0   log bytes: 228
+# script sha256: 27a21299434dfa486365c4dcb8384b777b04544d49fac8c86a8d84338ee2a296
+# ---- script ----
+# | BIN=/opt/cc/v2.1.314/package/claude
+# | cd /tmp && echo 'console.log(JSON.stringify({v:Bun.version, rev:Bun.revision, ant: typeof Bun.ant, keys: Bun.ant ? Object.keys(Bun.ant) : null, cs: typeof Bun.ant?.CellSegmenter}))' > /tmp/bb.js
+# | echo "== BUN_BE_BUN"; BUN_BE_BUN=1 timeout 20 $BIN /tmp/bb.js; echo rc=$?
+# | echo "== BUN_BE_BUN --version"; BUN_BE_BUN=1 timeout 20 $BIN --version; echo rc=$?
+# | echo "== stock bun"; bun /tmp/bb.js
+# ---- raw output ----
+== BUN_BE_BUN
+Not logged in · Please run /login
+rc=1
+== BUN_BE_BUN --version
+2.1.314 (Claude Code)
+rc=0
+== stock bun
+{"v":"1.4.4","rev":"38afee6c84fcf48c0edb2466aa4b27d287a59c30","ant":"undefined","keys":null,"cs":"undefined"}

@@ -1,0 +1,7 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>
+haiku-bake-builder: resolved canonical base from tag: ami-058776e58bd902fba
+haiku-bake-builder: base AMI: ami-058776e58bd902fba ; provision=1 ; work bucket: haiku-graviton-<ACCOUNT_ID>-us-west-2
+haiku-bake-builder: network: subnet subnet-0d4f6b196024e9b92 (vpc-0249d1b95a3deb8d4) sg sg-0efc97cc673949063 type c8g.large
+haiku-bake-builder: REFUSING: /Users/benfelip/Projects/hg-claude-code is at 2d8568553d but origin/graviton is at d31f20fba8.
+haiku-bake-builder: A bake from a stale tree bakes stale scripts into the AMI and still reports success.
+haiku-bake-builder: Fast-forward the checkout, or set HAIKU_BAKE_ALLOW_STALE_TREE=1 if that is deliberate.

@@ -1,0 +1,37 @@
+# evidence: linux-B0-help
+# instance: i-0a14e8aca787249b7   region: us-west-2
+# ssm command: cf162cc5-e6db-4e2c-8761-2f7ff67eb58d
+# start: 20261030T182350Z   end: 20261030T182353Z   rc: 0   log bytes: 1332
+# script sha256: c5e19af721e551c1df542ec449d0a6050319a016e1195e6243f06b163c4c0c51
+# ---- script ----
+# | cat /tmp/B0.txt
+# | echo "=== commands in --help ==="; sed -n '/^Commands:/,$p' /tmp/A-help.txt | grep -E '^  [a-z]' | awk '{print $1}' | tr '\n' ' '; echo
+# | echo "=== B0 --help under node ==="; cd /tmp && /opt/node24/bin/node /opt/claude-code/2.1.314/cli --help > /tmp/B0-help.txt 2>&1; echo "rc=$?"; diff /tmp/A-help.txt /tmp/B0-help.txt > /dev/null && echo "help IDENTICAL to bun" || { echo "help DIFFERS"; diff /tmp/A-help.txt /tmp/B0-help.txt | head -20; }
+# | exit 0
+# ---- raw output ----
+2.1.314 (Claude Code)
+=== commands in --help ===
+agents attach auth auto-mode doctor gateway import install logs mcp plugin|plugins purge respawn rm setup-token stop|kill ultrareview update|upgrade 
+=== B0 --help under node ===
+rc=1
+help DIFFERS
+1c1,3
+< Usage: claude [options] [command] [prompt]
+---
+> node:internal/modules/package_json_reader:331
+>   throw new ERR_MODULE_NOT_FOUND(packageName, fileURLToPath(base), null);
+>         ^
+3,4c5,17
+< Claude Code - starts an interactive session by default, use -p/--print for
+< non-interactive output
+---
+> Error [ERR_MODULE_NOT_FOUND]: Cannot find package 'ws' imported from /opt/claude-code/2.1.314/chunk-me430jrr.js
+>     at Object.getPackageJSONURL (node:internal/modules/package_json_reader:331:9)
+>     at packageResolve (node:internal/modules/esm/resolve:784:25)
+>     at moduleResolve (node:internal/modules/esm/resolve:873:18)
+>     at defaultResolve (node:internal/modules/esm/resolve:1006:11)
+>     at #cachedDefaultResolve (node:internal/modules/esm/loader:705:20)
+>     at #resolveAndMaybeBlockOnLoaderThread (node:internal/modules/esm/loader:725:38)
+>     at ModuleLoader.resolveSync (node:internal/modules/esm/loader:763:56)
+>     at #resolve (node:internal/modules/esm/loader:687:17)
+>     at ModuleLoader.getOrCreateModuleJob (node:internal/modules/esm/loader:607:35)

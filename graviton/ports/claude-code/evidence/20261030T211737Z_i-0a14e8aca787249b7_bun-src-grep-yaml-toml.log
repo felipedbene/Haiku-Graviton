@@ -1,0 +1,44 @@
+# evidence: bun-src-grep-yaml-toml
+# instance: i-0a14e8aca787249b7   region: us-west-2
+# ssm command: e5813add-7011-4ee8-b239-5045874e379b
+# start: 20261030T211737Z   end: 20261030T211740Z   rc: 0   log bytes: 747
+# script sha256: 25e1bfc50cd4a9ae79a9e4506cd6893082a246d5e1c4d7f9ff1956d5350c0a55
+# ---- script ----
+# | cd /opt/cc/bun-src/src && for k in 'YAML' 'TOML'; do echo "== $k"; grep -rln "${k}Object\|fn ${k,,}_parse\|${k}::parse\|mod ${k,,}" --include='*.rs' --include='*.zig' . | head -6; done
+# | find . -iname '*yaml*' -o -iname '*toml*' | grep -v node_modules | head -20 | while read f; do echo "$(wc -l < $f 2>/dev/null || echo dir) $f"; done
+# | exit 0
+# ---- raw output ----
+== YAML
+./format/lib.rs
+./format/yaml/mod.rs
+./parsers/lib.rs
+./parsers/yaml.rs
+./bun_core/Global.rs
+./lint/json.rs
+== TOML
+./format/lib.rs
+./bunfig/bunfig.rs
+./parsers/lib.rs
+./parsers/toml.rs
+./lint/json.rs
+./bundler/transpiler.rs
+27 ./js_parser_jsc/Cargo.toml
+32 ./sql_jsc/Cargo.toml
+14 ./highway/Cargo.toml
+12 ./simdutf_sys/Cargo.toml
+20 ./md/Cargo.toml
+13 ./brotli_sys/Cargo.toml
+26 ./watcher/Cargo.toml
+27 ./css/Cargo.toml
+17 ./zlib/Cargo.toml
+23 ./patch/Cargo.toml
+20 ./shell_parser/Cargo.toml
+26 ./sema/standalone/Cargo.toml
+19 ./sema/baselines/Cargo.toml
+19 ./sema/parser/Cargo.toml
+32 ./sema/Cargo.toml
+21 ./sema/driver/Cargo.toml
+16 ./resolve_builtins/Cargo.toml
+37 ./sys/Cargo.toml
+18 ./transpiler/Cargo.toml
+19 ./libuv_sys/Cargo.toml

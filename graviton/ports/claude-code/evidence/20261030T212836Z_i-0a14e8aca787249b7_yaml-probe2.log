@@ -1,0 +1,38 @@
+# evidence: yaml-probe2
+# instance: i-0a14e8aca787249b7   region: us-west-2
+# ssm command: 5e2af86e-288c-49e1-b355-a4c2b98afc5d
+# start: 20261030T212836Z   end: 20261030T212903Z   rc: 137   log bytes: 466
+# script sha256: ddb964cd0ed6d6fcff903f14f48e5b20c41c64189c964c4a8e454e44b6baf2df
+# ---- script ----
+# | set -u
+# | echo '773a03d6312a23edff75687854708760f999379f219017cfded27fe4f3bf5b20  /opt/cc/w-yaml-parse.stage/p.tgz' | sha256sum -c --quiet - || exit 1
+# | rm -rf /opt/cc/w-yaml-parse && mkdir -p /opt/cc/w-yaml-parse && tar xzf /opt/cc/w-yaml-parse.stage/p.tgz -C /opt/cc/w-yaml-parse 2>/dev/null
+# | cd /opt/cc/w-yaml-parse
+# | cat > /opt/cc/w-yaml-parse/probe2.js <<'JS'
+# | const ok = (s) => { try { Bun.YAML.parse(s); return true; } catch (e) { if (e instanceof RangeError) return false; return "E:" + e.message; } };
+# | const gens = {
+# |   flowseq: (n) => "[".repeat(n) + "]".repeat(n),
+# |   flowmap: (n) => "{a: ".repeat(n) + "1" + "}".repeat(n),
+# |   compactseq: (n) => "- ".repeat(n) + "x",
+# |   blockmap: (n) => Array.from({length: n}, (_, i) => " ".repeat(i) + "a:").join("\n") + " 1",
+# |   blockseq: (n) => Array.from({length: n}, (_, i) => " ".repeat(i) + "-").join("\n") + " 1",
+# |   flowseq_in_map: (n) => "a: " + "[".repeat(n) + "]".repeat(n),
+# | };
+# | for (const [name, g] of Object.entries(gens)) {
+# |   let lo = 1, hi = 200000;
+# |   if (ok(g(hi)) === true) { console.log(name, "no overflow at", hi); continue; }
+# |   const r1 = ok(g(lo)); if (r1 !== true) { console.log(name, "fails at 1", r1); continue; }
+# |   while (hi - lo > 1) { const m = (lo + hi) >> 1; const r = ok(g(m)); if (r === true) lo = m; else if (r === false) hi = m; else { console.log(name, "other err at", m, r); hi = m; } }
+# |   console.log(name, "max ok depth", lo, "recheck", ok(g(lo)), ok(g(lo+1)));
+# | }
+# | JS
+# | bun probe2.js; bun probe2.js
+# ---- raw output ----
+flowseq max ok depth 4723 recheck false false
+flowmap max ok depth 4514 recheck true false
+compactseq max ok depth 4084 recheck true false
+/tmp/ccrun/cc-20261030T212836Z-53871.sh: line 23:  4429 Killed                  bun probe2.js
+flowseq max ok depth 4723 recheck false false
+flowmap max ok depth 4514 recheck true false
+compactseq max ok depth 4084 recheck true false
+/tmp/ccrun/cc-20261030T212836Z-53871.sh: line 23:  4521 Killed                  bun probe2.js

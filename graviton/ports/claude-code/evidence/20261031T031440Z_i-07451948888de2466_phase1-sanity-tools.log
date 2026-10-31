@@ -1,0 +1,86 @@
+# evidence: phase1-sanity-tools
+# instance: i-07451948888de2466   region: us-west-2
+# ssm command: 58d1b96c-ec75-4864-81af-e07abd79b009
+# start: 20261031T031440Z   end: 20261031T031547Z   rc: 0   log bytes: 1298
+# script sha256: 6d9ed1efae894e607f1833ef67343696351f0746a72f12c0e8b85c88809acce2
+# ---- script ----
+# | set -u
+# | uname -a
+# | for c in bash git rg sh curl ps tar gzip; do printf '%-5s %s\n' $c "$(command -v $c || echo MISSING)"; done
+# | bash --version | head -1; git --version; rg --version | head -1
+# | T=$(mktemp -d /tmp/p1.XXXX); cd $T
+# | echo "== bash: features the Bash tool's shell snapshot and commands use"
+# | bash -c 'set -o pipefail; false | true; echo "pipefail rc=$?"'
+# | bash -c 'shopt -s extglob; x=abc; echo "${x//+(b)/B}"; cat <(echo procsubst); read -r a <<< "here string"; echo "$a"; declare -f >/dev/null && echo declare-f ok; alias ll="ls -l"; shopt -p | wc -l; set -o | wc -l'
+# | bash -c 'eval "echo eval ok"; printf "%q\n" "a b'"'"'c"; trap "echo trap ok" EXIT'
+# | bash -c 'cd /tmp && pwd -P; echo "$((2**40))"; [[ "abc" =~ ^a(.)c$ ]] && echo "regex ${BASH_REMATCH[1]}"'
+# | echo "== git"
+# | git init -q repo && cd repo && git config user.email t@t && git config user.name t
+# | printf 'hello\nwörld 日本\n' > a.txt && git add a.txt && git commit -qm "first" && echo change >> a.txt
+# | git status --porcelain=v1; git diff --stat; git log --oneline | wc -l
+# | git worktree add -q ../wt -b side && git -C ../wt branch --show-current
+# | git rev-parse --show-toplevel; git ls-files; git check-ignore -q a.txt; echo "check-ignore rc=$? (1 = not ignored)"
+# | echo "== rg"
+# | mkdir -p sub/.hidden && printf 'needle one\nNeedle two\n' > sub/x.js && printf 'needle hidden\n' > sub/.hidden/y.js && printf 'wörld 日本 needle\n' > u.md && echo 'sub/ignored.txt' > .gitignore && echo needle > sub/ignored.txt
+# | rg -n needle | sort; echo "rc=$?"
+# | rg -i -c needle --sort path; rg --files --sort path; rg --files --hidden --sort path | wc -l
+# | rg -l '日本'; rg --json needle u.md | head -c 300; echo
+# | rg -n 'needle' --glob '*.js' --no-ignore --hidden --sort path; rg nomatch; echo "nomatch rc=$?"
+# | rg -n -U 'one\nNeedle' sub/x.js
+# | cd /; rm -rf $T
+# ---- raw output ----
+Haiku ip-10-128-14-31.us-west-2.compu R1~beta6+development hrev59996 Oct 19 2026 21:09:42 arm64 other Haiku
+bash  /boot/system/bin/bash
+git   /boot/system/bin/git
+rg    /boot/system/bin/rg
+sh    /boot/system/bin/sh
+curl  /boot/system/bin/curl
+ps    /boot/system/bin/ps
+tar   /boot/system/bin/tar
+gzip  /boot/system/bin/gzip
+GNU bash, version 5.3.0(1)-release (aarch64-unknown-haiku)
+git version 2.54.0
+ripgrep 15.2.0
+== bash: features the Bash tool's shell snapshot and commands use
+pipefail rc=1
+aBc
+cat: /dev/fd/63: No such file or directory
+here string
+declare-f ok
+59
+27
+eval ok
+a\ b\'c
+trap ok
+/boot/system/cache/tmp
+1099511627776
+regex b
+== git
+ M a.txt
+ a.txt | 1 +
+ 1 file changed, 1 insertion(+)
+1
+side
+/boot/system/cache/tmp/p1.P1M0/repo
+a.txt
+check-ignore rc=1 (1 = not ignored)
+== rg
+sub/x.js:1:needle one
+u.md:1:wörld 日本 needle
+rc=0
+sub/x.js:2
+u.md:1
+a.txt
+sub/x.js
+u.md
+39
+u.md
+a.txt
+{"type":"begin","data":{"path":{"text":"u.md"}}}
+{"type":"match","data":{"path":{"text":"u.md"},"lines":{"text":"wörld 日本 needle\n"},"line_number":1,"absolute_offset":0,"submatches":[{"match":{"text":"needle"},"start":14,"end":20}]}}
+{"type":"end","data":{"path":{"text":"u.md"},"binary_offset":
+sub/.hidden/y.js:1:needle hidden
+sub/x.js:1:needle one
+nomatch rc=1
+1:needle one
+2:Needle two

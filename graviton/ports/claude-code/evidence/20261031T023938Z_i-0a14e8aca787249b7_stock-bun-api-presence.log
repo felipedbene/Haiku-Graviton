@@ -1,0 +1,10 @@
+# evidence: stock-bun-api-presence
+# instance: i-0a14e8aca787249b7   region: us-west-2
+# ssm command: 98e9697f-14d0-4548-a1e6-2ff45862ab1c
+# start: 20261031T023938Z   end: 20261031T023941Z   rc: 0   log bytes: 217
+# script sha256: caec39210e46ba92cd5697c7069b57f9d7a9c2900a00f98a20607662fc5fe877
+# ---- script ----
+# | bun -e 'const k=["FetchSession","Image","Terminal","WebView","Transpiler","JSONL","isStandaloneExecutable","ant"]; console.log(JSON.stringify(Object.fromEntries(k.map(n=>[n, n in Bun ? typeof Bun[n] : "absent"])))); if (Bun.FetchSession) { console.log(Object.getOwnPropertyNames(Bun.FetchSession.prototype)); }'
+# ---- raw output ----
+{"FetchSession":"function","Image":"function","Terminal":"function","WebView":"function","Transpiler":"function","JSONL":"object","isStandaloneExecutable":"boolean","ant":"absent"}
+[ "close", "fetch", "constructor" ]

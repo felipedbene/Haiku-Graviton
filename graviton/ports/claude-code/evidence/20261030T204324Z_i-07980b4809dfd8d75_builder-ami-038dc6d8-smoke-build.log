@@ -1,0 +1,20 @@
+# evidence: builder-ami-038dc6d8-smoke-build
+# instance: i-07980b4809dfd8d75   region: us-west-2
+# ssm command: 06484ebe-1b2d-4b56-b9f6-34ca77658bfa
+# start: 20261030T204324Z   end: 20261030T204431Z   rc: 0   log bytes: 263
+# script sha256: ecab78f2481bd3ddc2ac662de2e56e8e159ad353f2da73d303c3bafb1c1f68d0
+# ---- script ----
+# | set -u
+# | HP=$(ls /boot/home/config/non-packaged/bin/haikuporter /boot/system/non-packaged/bin/haikuporter 2>/dev/null | head -1); echo "wrapper: $HP"
+# | export PATH="$(dirname "$HP"):$PATH"
+# | cd /boot/home/haikuports && timeout 1500 haikuporter --no-dependencies -j4 lzip > /tmp/smoke-lzip.log 2>&1; rc=$?
+# | tail -12 /tmp/smoke-lzip.log; echo "lzip rc=$rc"
+# | ls -la /boot/home/haikuports/packages/lzip-*.hpkg 2>&1 | tail -2
+# | exit 0
+# ---- raw output ----
+wrapper: /boot/home/config/non-packaged/bin/haikuporter
+Usage: haikuporter [options] portname[-portversion]
+
+haikuporter: error: no such option: --no-dependencies
+lzip rc=2
+ls: cannot access '/boot/home/haikuports/packages/lzip-*.hpkg': No such file or directory

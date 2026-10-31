@@ -1,0 +1,63 @@
+# evidence: nodejs24-build-start
+# instance: i-0e7bed4928e0f7bf7   region: us-west-2
+# ssm command: a2d9ea01-c416-49a5-9a6b-ad6477f9fb88
+# start: 20261030T224250Z   end: 20261030T224418Z   rc: 0   log bytes: 1475
+# script sha256: 55007f14a7f9a221fc6835e8b52a89b3baedeacd46ef19d9dea22c1e959f0236
+# ---- script ----
+# | set -u
+# | HP=/boot/home/haikuports; D=$HP/net-libs/nodejs; echo "port dir: $D"; [ -f $D/nodejs24-24.21.0.recipe ] || exit 1
+# | git -C $HP rev-parse HEAD; ls $D
+# | printf '%s' 'U1VNTUFSWT0iQSBKYXZhU2NyaXB0IHJ1bnRpbWUgYnVpbHQgb24gQ2hyb21lJ3MgVjggRW5naW5lIgpERVNDUklQVElPTj0iTm9kZS5qcyBpcyBhIEphdmFTY3JpcHQgcnVudGltZSBidWlsdCBvbiBDaHJvbWUncyBWOCBKYXZhU2NyaXB0IGVuZ2luZS4gXApBcyBhbiBhc3luY2hyb25vdXMgZXZlbnQgZHJpdmVuIEphdmFTY3JpcHQgcnVudGltZSwgTm9kZSBpcyBkZXNpZ25lZCB0byBidWlsZCBzY2FsYWJsZSBcCm5ldHdvcmsgYXBwbGljYXRpb25zLiBJbiB0aGUgZm9sbG93aW5nIFwiaGVsbG8gd29ybGRcIiBleGFtcGxlLCBtYW55IGNvbm5lY3Rpb25zIGNhbiBiZSBcCmhhbmRsZWQgY29uY3VycmVudGx5LiBVcG9uIGVhY2ggY29ubmVjdGlvbiB0aGUgY2FsbGJhY2sgaXMgZmlyZWQsIGJ1dCBpZiB0aGVyZSBpcyBubyB3b3JrIFwKdG8gYmUgZG9uZSwgTm9kZSB3aWxsIHNsZWVwLiIKSE9NRVBBR0U9Imh0dHBzOi8vbm9kZWpzLm9yZy8iCkNPUFlSSUdIVD0iMjAwNi0yMDE5IFRoZSBOb2RlLmpzIEZvdW5kYXRpb24iCkxJQ0VOU0U9IkJTRCAoMi1jbGF1c2UpIgpSRVZJU0lPTj0iMSIKU09VUkNFX1VSST0iaHR0cHM6Ly9ub2RlanMub3JnL2Rpc3QvdiRwb3J0VmVyc2lvbi9ub2RlLXYkcG9ydFZlcnNpb24udGFyLmd6IgpDSEVDS1NVTV9TSEEyNTY9IjYyMjQyNGVmYjVkYzBjMjZjOTNmYmI2MTlmZjEwNzM3ZWUyODljNjA1YjgzN2M4ODc3OGUxODY5MjVkODI3NzciClNPVVJDRV9ESVI9Im5vZGUtdiRwb3J0VmVyc2lvbiIKUEFUQ0hFUz0ibm9kZWpzLSRwb3J0VmVyc2lvbi5wYXRjaHNldCIKCkFSQ0hJVEVDVFVSRVM9ImFsbCAheDg2X2djYzIiClNFQ09OREFSWV9BUkNISVRFQ1RVUkVTPSI/eDg2IgoKUFJPVklERVM9IgoJbm9kZWpzMjQkc2Vjb25kYXJ5QXJjaFN1ZmZpeCA9ICRwb3J0VmVyc2lvbgoJY21kOm5vZGUgPSAkcG9ydFZlcnNpb24gY29tcGF0ID49IDI0CgkiClJFUVVJUkVTPSIKCWhhaWt1JHNlY29uZGFyeUFyY2hTdWZmaXgKCWxpYjpsaWJicm90bGlkZWMkc2Vjb25kYXJ5QXJjaFN1ZmZpeAoJbGliOmxpYmJyb3RsaWVuYyRzZWNvbmRhcnlBcmNoU3VmZml4CglsaWI6bGliY2FyZXMkc2Vjb25kYXJ5QXJjaFN1ZmZpeAoJbGliOmxpYmNyeXB0byRzZWNvbmRhcnlBcmNoU3VmZml4CglsaWI6bGliZXhlY2luZm8kc2Vjb25kYXJ5QXJjaFN1ZmZpeAoJbGliOmxpYmljdWRhdGEkc2Vjb25kYXJ5QXJjaFN1ZmZpeAoJbGliOmxpYmljdWkxOG4kc2Vjb25kYXJ5QXJjaFN1ZmZpeAoJbGliOmxpYmljdXVjJHNlY29uZGFyeUFyY2hTdWZmaXgKCWxpYjpsaWJuZ2h0dHAyJHNlY29uZGFyeUFyY2hTdWZmaXgKCWxpYjpsaWJzc2wkc2Vjb25kYXJ5QXJjaFN1ZmZpeAoJbGliOmxpYnV2JHNlY29uZGFyeUFyY2hTdWZmaXgKCWxpYjpsaWJ6JHNlY29uZGFyeUFyY2hTdWZmaXgKCSIKClBST1ZJREVTX2RldmVsPSIKCW5vZGVqczI0JHtzZWNvbmRhcnlBcmNoU3VmZml4fV9kZXZlbAoJIgpSRVFVSVJFU19kZXZlbD0iCglub2RlanMyNCRzZWNvbmRhcnlBcmNoU3VmZml4ID09ICRwb3J0VmVyc2lvbiBiYXNlCgkiCgpCVUlMRF9SRVFVSVJFUz0iCgloYWlrdSR7c2Vjb25kYXJ5QXJjaFN1ZmZpeH1fZGV2ZWwKCWRldmVsOmxpYmJyb3RsaWRlYyRzZWNvbmRhcnlBcmNoU3VmZml4CglkZXZlbDpsaWJicm90bGllbmMkc2Vjb25kYXJ5QXJjaFN1ZmZpeAoJZGV2ZWw6bGliY2FyZXMkc2Vjb25kYXJ5QXJjaFN1ZmZpeAoJZGV2ZWw6bGliZXhlY2luZm8kc2Vjb25kYXJ5QXJjaFN1ZmZpeAoJZGV2ZWw6bGliaWN1ZGF0YSRzZWNvbmRhcnlBcmNoU3VmZml4ID49IDc4CglkZXZlbDpsaWJpY3VpMThuJHNlY29uZGFyeUFyY2hTdWZmaXggPj0gNzgKCWRldmVsOmxpYmljdXVjJHNlY29uZGFyeUFyY2hTdWZmaXggPj0gNzgKCWRldmVsOmxpYm5naHR0cDIkc2Vjb25kYXJ5QXJjaFN1ZmZpeAoJZGV2ZWw6bGlic3NsJHNlY29uZGFyeUFyY2hTdWZmaXgKCWRldmVsOmxpYnV2JHNlY29uZGFyeUFyY2hTdWZmaXgKCWRldmVsOmxpYnokc2Vjb25kYXJ5QXJjaFN1ZmZpeAoJIgpCVUlMRF9QUkVSRVFVSVJFUz0iCgljbWQ6ZmluZAoJY21kOmdjYyRzZWNvbmRhcnlBcmNoU3VmZml4CgljbWQ6bGQkc2Vjb25kYXJ5QXJjaFN1ZmZpeAoJY21kOm1ha2UKCWNtZDpuaW5qYQoJY21kOnBrZ19jb25maWckc2Vjb25kYXJ5QXJjaFN1ZmZpeAoJY21kOnB5dGhvbjMuMTQKCWNtZDp3aGljaAoJIgoKQlVJTEQoKQp7CgkuL2NvbmZpZ3VyZSAtLXdpdGgtaW50bD1zeXN0ZW0taWN1IC0tZGVzdC1vcz1oYWlrdSBcCgkJLS1uaW5qYSBcCgkJLS1zaGFyZWQtYnJvdGxpIFwKCQktLXNoYXJlZC1jYXJlcyBcCgkJLS1zaGFyZWQtbGlidXYgXAoJCS0tc2hhcmVkLW5naHR0cDIgXAoJCS0tc2hhcmVkLW9wZW5zc2wgXAoJCS0tc2hhcmVkLXpsaWIgXAoJCS0td2l0aG91dC1ucG0gXAoJCS0td2l0aG91dC1jb3JlcGFjayBcCgkJLS1wcmVmaXg9JHByZWZpeAoJbWFrZSAkam9iQXJncwp9CgpJTlNUQUxMKCkKewoJbWFrZSBpbnN0YWxsCgoJbWtkaXIgLXAgJChkaXJuYW1lICRkb2NEaXIgJGluY2x1ZGVEaXIgJG1hbkRpcikKCW12ICRwcmVmaXgvaW5jbHVkZSAkaW5jbHVkZURpcgoJbXYgJHByZWZpeC9zaGFyZS9tYW4gJG1hbkRpcgoJbXYgJHByZWZpeC9zaGFyZS9kb2MgJGRvY0RpcgoKCXBhY2thZ2VFbnRyaWVzIGRldmVsIFwKCQkkZGV2ZWxvcERpcgoKCXN0cmlwICRwcmVmaXgvYmluL25vZGUKCXJtIC1yZiAkcHJlZml4L3NoYXJlCn0KClRFU1QoKQp7CgkjIGNjdGVzdCAxIGZhaWx1cmUKCSMganN0ZXN0IDQ0NiBmYWlsdXJlLCA1MTc4IHN1Y2Nlc3MKCW1ha2UgdGVzdC1vbmx5Cn0K' | base64 -d > /tmp/nodejs24-24.21.0.recipe
+# | echo '6b0b14e7bb2d0397b7c17763be61deb243bd044e741bde77ecf2892be5cbfe2f  /tmp/nodejs24-24.21.0.recipe' | sha256sum -c - || exit 1
+# | echo "== upstream vs overlay"; diff $D/nodejs24-24.21.0.recipe /tmp/nodejs24-24.21.0.recipe; echo "diff rc=$?"
+# | cp /tmp/nodejs24-24.21.0.recipe $D/nodejs24-24.21.0.recipe
+# | df -k /boot; sysinfo -cpu 2>/dev/null | head -3; uname -a
+# | HPB=/boot/home/config/non-packaged/bin/haikuporter; ls -l $HPB
+# | cd $HP && nohup sh -c "$HPB -y -j16 --no-source-packages nodejs24 > /boot/home/n24-build.log 2>&1; echo rc=\$? >> /boot/home/n24-build.log" > /dev/null 2>&1 &
+# | sleep 20; tail -5 /boot/home/n24-build.log
+# ---- raw output ----
+port dir: /boot/home/haikuports/net-libs/nodejs
+fdb507a2290123e23c351e78975b0a1033d9fea8
+nodejs20-20.15.1.recipe
+nodejs22-22.23.3.recipe
+nodejs24-24.21.0.recipe
+patches
+work-20.15.1
+work-22.23.3
+work-24.21.0
+/tmp/nodejs24-24.21.0.recipe: OK
+== upstream vs overlay
+52,54c52,54
+< 	devel:libicudata$secondaryArchSuffix >= 74
+< 	devel:libicui18n$secondaryArchSuffix >= 74
+< 	devel:libicuuc$secondaryArchSuffix >= 74
+---
+> 	devel:libicudata$secondaryArchSuffix >= 78
+> 	devel:libicui18n$secondaryArchSuffix >= 78
+> 	devel:libicuuc$secondaryArchSuffix >= 78
+diff rc=1
+   Device No.: 3
+   Mounted at: /boot
+  Volume Name: "Haiku"
+  File System: bfs
+       Device: /dev/disk/nvme/0/1
+        Flags: QAM-P-W
+     I/O Size:   64.0 KiB (65536 byte)
+   Block Size:    2.0 KiB (2048 byte)
+ Total Blocks:  120.0 GiB (62896119 blocks)
+  Used Blocks:   30.5 GiB (15987007 blocks)
+  Free Blocks:   89.5 GiB (46909112 blocks)
+      Usage %:   25.4 %
+  Total Nodes: 0
+   Used Nodes: 0
+   Free Nodes: 0
+   Root Inode: 524288
+16 ARM Neoverse-V2, revision 410fd4f1 running at 2798MHz
+
+Haiku ip-10-128-9-142.us-west-2.compu R1~beta6+development hrev59996 Oct 19 2026 21:09:42 arm64 arm64 Haiku
+-rwxr-xr-x 1 baron root 245 Oct 30 19:56 /boot/home/config/non-packaged/bin/haikuporter
+net-libs::nodejs24-24.21.0
+	/boot/home/haikuports/net-libs/nodejs/nodejs24-24.21.0.recipe
+----------------------------------------------------------------------
+Error: 'wget' is not available, please install it
+rc=1

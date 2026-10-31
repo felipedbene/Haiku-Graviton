@@ -1,0 +1,90 @@
+# evidence: cellseg-tui-diff-v2
+# instance: i-0a14e8aca787249b7   region: us-west-2
+# ssm command: 858e8717-d179-4043-bf4e-6adac46a8b33
+# start: 20261031T113516Z   end: 20261031T115217Z   rc: 0   log bytes: 4134
+# script sha256: c1d75c7f8978adc6a35d085c719cda7c1c4b017c660e108dd3bdf72601564cc6
+# ---- script ----
+# | set -u
+# | echo '993ca9293c0b12bbe81c67776815fc18516d13cf8d6277a9d4f6dd1beacaef26  /opt/cc/w-cellseg/port.stage/p.tgz' | sha256sum -c --quiet - || exit 1
+# | rm -rf /opt/cc/w-cellseg/port && mkdir -p /opt/cc/w-cellseg/port && tar xzf /opt/cc/w-cellseg/port.stage/p.tgz -C /opt/cc/w-cellseg/port 2>/dev/null
+# | cd /opt/cc/w-cellseg/port
+# | W=/opt/cc/w-cellseg
+# | if ! cmp -s compat/lib/cellseg.mjs $W/tree/lib/cellseg.mjs || ! cmp -s compat/bun-compat.mjs $W/tree/bun-compat.mjs; then
+# |   mkdir -p $W/deps && bash tools/fetch-deps.sh $W/deps >/dev/null
+# |   rm -rf $W/tree; bash tools/build-tree.sh /opt/cc/v2.1.314/package/claude $W/tree $W/tree /opt/node24/bin/node $W/deps > $W/build.log 2>&1; tail -1 $W/build.log
+# | fi
+# | SHOW= bash tools/tui-diff.sh /opt/cc/v2.1.314/package/claude /opt/node24/bin/node $W/tree 2>&1 | head -200
+# ---- raw output ----
+PASS theme-100x30#1 (2591 bytes)
+PASS theme-80x24#1 (1802 bytes)
+PASS theme-40x20#1 (1350 bytes)
+PASS theme-200x50#1 (3971 bytes)
+PASS theme-120x40#1 (3331 bytes)
+PASS theme-60x16#1 (1369 bytes)
+PASS theme-arrows#1 (2591 bytes)
+PASS theme-arrows#2 (2371 bytes)
+PASS theme-arrows#3 (2381 bytes)
+PASS theme-arrows#4 (2369 bytes)
+PASS theme-arrows#5 (2109 bytes)
+PASS theme-arrows#6 (2075 bytes)
+PASS theme-arrows#7 (2075 bytes)
+PASS theme-arrows#8 (2075 bytes)
+PASS theme-arrows#9 (2109 bytes)
+PASS theme-arrows#10 (2321 bytes)
+PASS theme-arrows#11 (2333 bytes)
+PASS theme-resize#1 (2591 bytes)
+PASS theme-resize#2 (1522 bytes)
+PASS theme-resize#3 (3491 bytes)
+PASS theme-resize#4 (865 bytes)
+PASS theme-resize#5 (2591 bytes)
+FAIL theme-arrow-resize#1
+1,22c1
+< ^[[B^[[38;5;174mWelctoeClaude^[[39m ^[[38;5;174mCode^[[39m ^[[38;5;246mv2.1.314^[[39m
+< 
+<  Let's get started.
+< 
+<  ^[[1mChoose^[[0m ^[[1mthe^[[0m ^[[1mtext^[[0m ^[[1mstyle^[[0m ^[[1mthat^[[0m ^[[1mlooks^[[0m ^[[1mbest^[[0m ^[[1mwith^[[0m ^[[1myour^[[0m ^[[1mterminal^[[0m
+<  ^[[38;5;246mTo^[[39m ^[[38;5;246mchange^[[39m ^[[38;5;246mthis^[[39m ^[[38;5;246mlater,^[[39m ^[[38;5;246mrun^[[39m ^[[38;5;246m/theme^[[39m
+< 
+PASS theme-arrow-resize#2 (1291 bytes)
+PASS theme-arrow-resize#3 (1294 bytes)
+PASS login-flow#1 (2591 bytes)
+PASS login-flow#2 (2204 bytes)
+FAIL login-flow#3
+20c20
+< ^[[38;5;246m^[]8;id=10appjx;https://claude.com/cai/oauth/authorize?code=true&client_id=9d1c250a-e61b-44d9-88ed-5944d1962f5e&response_type=code&redirect_uri=https%3A%2F%2Fplatform.claude.com%2Foauth%2F
+---
+> ^[[38;5;246m^[]8;id=1j3apvi;https://claude.com/cai/oauth/authorize?code=true&client_id=9d1c250a-e61b-44d9-88ed-5944d1962f5e&response_type=code&redirect_uri=https%3A%2F%2Fplatform.claude.com%2Foauth%2F
+23,24c23,24
+< %3Afile_upload+user%3Aplugins&code_challenge=mFuduLPgCfHAGpUj60U4EDHIx-UcRo_V9ewo_TteJr8&code_challe
+< nge_method=S256&state=YWQNtGdbZiWPO6-VJrhOfJhHgkkzBoGQlxejLujYn4Y^[[39m
+---
+PASS text-100x30#1 (2591 bytes)
+PASS text-100x30#2 (2204 bytes, masked: /Browser didn.t open/,/Paste code/{/Paste code/!d})
+PASS text-100x30#3 (2204 bytes, masked: /Browser didn.t open/,/Paste code/{/Paste code/!d})
+PASS text-100x30#4 (2204 bytes, masked: /Browser didn.t open/,/Paste code/{/Paste code/!d})
+PASS text-100x30#5 (2204 bytes, masked: /Browser didn.t open/,/Paste code/{/Paste code/!d})
+PASS text-100x30#6 (2204 bytes, masked: /Browser didn.t open/,/Paste code/{/Paste code/!d})
+PASS text-100x30#7 (2204 bytes, masked: /Browser didn.t open/,/Paste code/{/Paste code/!d})
+PASS text-40x20#1 (1350 bytes)
+PASS text-40x20#2 (967 bytes, masked: /Browser didn.t open/,/Paste code/{/Paste code/!d})
+PASS text-40x20#3 (967 bytes, masked: /Browser didn.t open/,/Paste code/{/Paste code/!d})
+PASS text-40x20#4 (967 bytes, masked: /Browser didn.t open/,/Paste code/{/Paste code/!d})
+PASS text-40x20#5 (967 bytes, masked: /Browser didn.t open/,/Paste code/{/Paste code/!d})
+PASS text-40x20#6 (967 bytes, masked: /Browser didn.t open/,/Paste code/{/Paste code/!d})
+PASS text-40x20#7 (967 bytes, masked: /Browser didn.t open/,/Paste code/{/Paste code/!d})
+PASS text-resize#1 (1803 bytes)
+PASS text-resize#2 (595 bytes, masked: /Browser didn.t open/,/Paste code/{/Paste code/!d})
+PASS text-resize#3 (595 bytes, masked: /Browser didn.t open/,/Paste code/{/Paste code/!d})
+PASS text-resize#4 (1027 bytes, masked: /Browser didn.t open/,/Paste code/{/Paste code/!d})
+PASS text-resize#5 (2203 bytes, masked: /Browser didn.t open/,/Paste code/{/Paste code/!d})
+PASS text-rtl#1 (2591 bytes)
+PASS text-rtl#2 (2204 bytes, masked: /Browser didn.t open/,/Paste code/{/Paste code/!d})
+PASS text-rtl#3 (2204 bytes, masked: /Browser didn.t open/,/Paste code/{/Paste code/!d})
+PASS text-rtl-vscode#1 (2591 bytes)
+PASS text-rtl-vscode#2 (2204 bytes, masked: /Browser didn.t open/,/Paste code/{/Paste code/!d})
+PASS text-rtl-vscode#3 (2204 bytes, masked: /Browser didn.t open/,/Paste code/{/Paste code/!d})
+PASS text-rtl-vscode#4 (2204 bytes, masked: /Browser didn.t open/,/Paste code/{/Paste code/!d})
+PASS theme-vscode#1 (2591 bytes)
+PASS theme-vscode#2 (2371 bytes)
+tui-diff: pass=54 fail=2 unsettled=0

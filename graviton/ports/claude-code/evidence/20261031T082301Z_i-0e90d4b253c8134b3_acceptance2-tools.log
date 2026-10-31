@@ -1,0 +1,20 @@
+# evidence: acceptance2-tools
+# instance: i-0e90d4b253c8134b3   region: us-west-2
+# ssm command: bb8fb1c3-f569-4459-bfa7-967ec7b8e671 (agent status: detached)
+# start: 20261031T082301Z   end: 20261031T085211Z   rc: 0   log bytes: 357
+# script sha256: a9cf22baedb9948e515e92c0d06a462c025c32ad4419ab68838a834ad846b37b
+# ---- script ----
+# | pkgman install -y git ripgrep curl tar gzip 2>&1 | tail -3
+# | for c in git rg curl tar gzip sha256sum python3 gcc; do printf "%-9s %s\n" $c "$(command -v $c || echo MISSING)"; done
+# ---- raw output ----
+[system] Changes applied. Old activation state backed up in "state_2026-10-31_08:23:05"
+[system] Cleaning up ...
+[system] Done.
+git       /boot/system/bin/git
+rg        /boot/system/bin/rg
+curl      /boot/system/bin/curl
+tar       /boot/system/bin/tar
+gzip      /boot/system/bin/gzip
+sha256sum /boot/system/bin/sha256sum
+python3   MISSING
+gcc       MISSING

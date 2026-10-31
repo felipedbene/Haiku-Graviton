@@ -1,0 +1,29 @@
+# evidence: cellseg-tui-probe2
+# instance: i-0a14e8aca787249b7   region: us-west-2
+# ssm command: 0085ab40-cbf4-4fd5-899b-514b0dbf9c74
+# start: 20261031T112609Z   end: 20261031T112635Z   rc: 0   log bytes: 737
+# script sha256: e73463cc05670b18765d2e41df1465fd98154877e86b9c128a62ced84b6ff8a9
+# ---- script ----
+# | set -u
+# | N=/opt/node24/bin/node; W=/opt/cc/w-cellseg
+# | H=/tmp/tuih; rm -rf $H; mkdir -p $H/.claude; echo '{"prefersReducedMotion":true}' > $H/.claude/settings.json
+# | cd /tmp && HOME=$H timeout 20 $N --zero-fill-buffers $W/tree/claude.mjs --version 2>&1 | tail -3
+# | HOME=$H $N --import $W/tree/bun-compat.mjs -e 'console.log(typeof Bun.ant.CellSegmenter, Object.isFrozen(Bun.ant))'
+# | tmux kill-session -t t 2>/dev/null
+# | tmux new-session -d -s t -x 100 -y 30 "cd /tmp && HOME=$H TERM=xterm-256color CLAUDE_COMPAT_TRACE=/tmp/tui-trace.txt $N --zero-fill-buffers $W/tree/claude.mjs 2>/tmp/tui-B.err; echo EXIT=\$? >> /tmp/tui-B.err; sleep 30"
+# | for t in 3 8 15 25; do sleep 5; echo "== t~$t"; tmux capture-pane -t t -p | grep -v '^$' | head -12; done
+# | tmux kill-session -t t 2>/dev/null
+# | echo "== err"; head -c 3000 /tmp/tui-B.err; echo "== trace"; sort -u /tmp/tui-trace.txt | cut -c1-200 | head -30
+# ---- raw output ----
+2.1.314 (Claude Code)
+function true
+== t~3
+== t~8
+== t~15
+== t~25
+== err
+== trace
+30746 absent Bun.FetchSession @ at nIn (file:///opt/cc/w-cellseg/tree/chunk-ffffjxsk.js:22:11933) <- at $g.post (file:///opt/cc/w-cellseg/tree/chunk-fgccedbt.js:109:8238)
+30746 absent Bun.JSONL @ at yps (file:///opt/cc/w-cellseg/tree/chunk-41hx5waz.js:19:11117) <- at c1e (file:///opt/cc/w-cellseg/tree/chunk-41hx5waz.js:21:136)
+30746 absent Bun.isStandaloneExecutable @ at rp (file:///opt/cc/w-cellseg/tree/chunk-4hr1rwfw.js:6:46474) <- at L9o (file:///opt/cc/w-cellseg/tree/chunk-ttv8g58m.js:5:142)
+30746 absent Bun.unsafe.setJITPolicy @ at Timeout._onTimeout (file:///opt/cc/w-cellseg/tree/cli:6:5383) <- at listOnTimeout (node:internal/timers:685:17)
