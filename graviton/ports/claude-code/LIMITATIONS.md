@@ -287,3 +287,39 @@ don't handle. `M()`/`getPlatform()` (P5) is the helper that reports `haiku`.
 - **Effect:** `No terminal emulator detected`.
 - **Fix would need:** a haiku case that launches `/boot/system/apps/Terminal` (the command
   form is unverified).
+
+### Path-held directories instead of fd-held ones (P14, P15) — AUDIT S11, S12
+- **What:** on Linux, the served-file folder (`chunk-12xea136.js`) and the private
+  directory chain (`chunk-m6kk55rf.js`) keep working through `/proc/self/fd/N`, a path
+  that stays bound to the opened directory even if someone renames or replaces it. On
+  Haiku they work through the real path, re-checked by dev/ino (P14: `fstat` of the
+  handle equals `lstat` of the path).
+- **Why:** Haiku has no `/proc` and no fd-relative path, and Node exposes no `openat`.
+- **Effect:** if a directory is swapped between the check and the use, the swap is
+  caught at the next re-check rather than prevented. `wqn` ("does a held handle follow a
+  rename?") answers `holds_do_not_follow` on Haiku, so the desktop attachments-in-user-data
+  folder is reported `not_used`.
+- **Fix would need:** `openat`/`mkdirat`-relative operations from JS (an addon), or
+  `/dev/fd`-style directory paths in Haiku.
+
+### Clipboard needs a desktop session (P10) — AUDIT S18
+- **What:** copy and paste use Haiku's `clipboard` CLI.
+- **Why:** it is a BApplication and needs the registrar/app_server.
+- **Effect:** on a headless instance the command fails. Claude Code logs
+  `clipboard: Haiku 'clipboard -i' failed (exit N): … -- it needs a running
+  registrar/app_server` at error level. Copy still emits OSC 52 to the terminal. Paste
+  returns empty. Not yet run on DeBeOS.
+- **Fix would need:** nothing for desktop sessions. Headless sessions have no clipboard.
+
+### Team identity helper (P17) — AUDIT S06, S21, S32
+- **What:** process start tokens, ancestry, the process table and command lines come from
+  `<prefix>/bin/cc-teaminfo` (`native/cc-teaminfo.c`).
+- **Why:** Haiku has no `/proc`, and its `ps` has no `ppid`/`lstart` columns.
+  `team_info` carries both values.
+- **Effect:** built and verified on Haiku: **pending** (it is written against this
+  tree's `headers/os/kernel/OS.h` and syntax-checked only). If the binary is missing,
+  Claude Code prints one `ClaudeCodeHaiku` warning and the identity checks fail closed,
+  as before P17. The command line (`mas`) is `team_info.args`, which the kernel cuts to
+  63 bytes. Zombie state isn't read: `qno` (`/proc/<pid>/stat` state) stays Linux-only.
+- **Fix would need:** build it in the Haiku package recipe and install it at
+  `<prefix>/bin/cc-teaminfo`.

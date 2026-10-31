@@ -58,6 +58,39 @@ addon is a Linux ELF and stays absent on Haiku either way), `chunk-3c6t0j11.js`'
 macOS-only message, and `chunk-szzxb7zd.js` `te()` (an `Fv` result folded in place, not a
 raw platform value). Code the bundler deleted is in the audit (LIMITATIONS.md).
 
+### Haiku implementations (P8–P17, `tools/apply-haiku-impl.py`)
+
+These are the class (b) sites from AUDIT.md. Each one is an exact, count-asserted
+substitution that adds a branch taken only when `process.platform==="haiku"` (or the
+local `M()` value is `"haiku"`). The Linux expression stays in place on the other side
+of the test. The script refuses a second run, records `rule_totals`/`rule_sites` and the
+new file sha256s in RELOCATION.json, and acorn-parses every module it rewrote.
+`build-tree.sh` runs it after `apply-haiku-names.py`.
+
+| ID | File · function (sites) | What | Why | Upstream-able |
+|---|---|---|---|---|
+| P8 | `chunk-hv6m45s7.js` · `iqn` (1) | `case"haiku":` joins `case"unknown"`, giving `{unavailable:"unsupported_platform"}` | AUDIT S20. With P5 the switch had no case for `"haiku"` and no default, so it returned `undefined` and every `openTreeAnchor` caller threw a TypeError | n |
+| P9 | `chunk-aa47jmf3.js` · `s`, `h`, `Zvn`, `m` (4) | URLs and files open with `/bin/open`; "reveal" opens the parent folder in Tracker | S15. `xdg-open`/`dbus-send` don't exist. Haiku's `open` takes URLs (`BUrl::OpenWithPreferredApplication`, `src/bin/open.cpp`) and paths | n |
+| P10 | `chunk-9deh4a76.js` · `Sbe`, `Z`, `xGt` (3) | copy with `clipboard -i`, paste with `clipboard -p` (one trailing newline stripped). A non-zero exit is logged at error level, naming the registrar | S18. `src/bin/clipboard.cpp`. It is a BApplication, so a headless box without a registrar fails, and that failure is logged | n |
+| P11 | `chunk-wg6ymv3p.js` · daemon re-auth (1) | `notify --title Claude "<message>"`; a failure is logged | S23. Haiku has no `notify-send`; `src/bin/notify.cpp` | n |
+| P12 | `chunk-ddrd3r4k.js` · `ir` (1) | `haiku:1024` | S24. `PATH_MAX` is 1024 (`headers/posix/limits.h:44`) | n |
+| P13 | `chunk-k1pd3pap.js` · `wIn` (1), `chunk-v5xftfk7.js` · `Me` (1), `chunk-s7yyd1p6.js` · `kio`, `vio` (2) | `wIn` skips the `/proc/self/fd` readlink and falls through to its existing realpath tail. `Me` uses `realpath` plus a `stat` dev/ino match against the handle. A token fd is read directly (`t9e`), the path sockets already take | S10. Without `/proc` these failed closed every time and gave no reason | n |
+| P14 | `chunk-12xea136.js` · `ye`, `qo` (2) | the held folder's path is the verified real path, re-checked as `fstat(handle)`==`lstat(path)` by dev/ino | S11. `/proc/self/fd/N` paths don't exist on Haiku | n |
+| P15 | `chunk-m6kk55rf.js` · `s` + its 4 opens (5) | directory handles record the path they were opened at (`O_DIRECTORY\|O_NOFOLLOW`, unchanged); `s()` returns it on Haiku | S12. See LIMITATIONS for the weaker guarantee | n |
+| P16 | `chunk-szzxb7zd.js` · `Bo`, `y9` (1); `chunk-zy2k3hny.js` · `sfr` (1) | on Haiku `Bo`/`sfr` = 64 (`O_CLOEXEC`) and `y9` = 0 | S38. The Linux build bakes in Linux flag numbers: 524288 (`O_CLOEXEC`) is Haiku's `O_NOFOLLOW` and 2097152 (`O_PATH`) is Haiku's `O_DIRECTORY` (`headers/posix/fcntl.h`). So every `\|Bo` open in the 26 modules that import it would have refused a symlink as the last path component (ELOOP). `y9`=0 is the darwin value and is already handled (`fejj39g0`: `if(y9===0…)return"not_held"`) | n |
+| P17 | `chunk-6h8148nz.js` · `QOe`, `fas`, `tgr`, `mas`, `G3e`, `b`, `eIe` (7); `chunk-fgccedbt.js` · `HL` (1); `chunk-2hxx68dq.js` · `Wn` (1); `chunk-s0dw5891.js` lock `procStart` (1) | start token, ancestry, process table and command line come from `<prefix>/bin/cc-teaminfo` (`native/cc-teaminfo.c`, `get_team_info`). The helper functions are appended to the three modules that run it. A missing helper produces one `ClaudeCodeHaiku` warning on stderr | S06/S21/S32. With no `/proc`, and a `ps` that has no `ppid`/`lstart` columns, pid-reuse protection and kill-tree enumeration failed silently | n |
+
+`chunk-xyt7m0qn.js` `rjn` (AUDIT S22) is **not** rewritten. On Haiku it runs for every
+daemon-lock check (`rE`), and `/proc/<pid>/cmdline` is never readable there, so
+answering false would reject every live daemon. With P17 the daemon lock records
+`procStart` (`nle(cS())`), and `uon` then proves identity by start token. That makes
+`rjn`'s "can't tell, say yes" answer safe. `team_info.args` is cut to 63 bytes, so it
+can't stand in for the cmdline match.
+
+`native/cc-teaminfo.c` is built on Haiku (`cc -O2 -o cc-teaminfo cc-teaminfo.c`, libroot
+only) and installed with `CC_TEAMINFO=<binary> build-tree.sh …`. Its output format is
+documented in the source header.
+
 ## B. Runtime support installed next to the bundle
 
 | ID | File | What | Why | Upstream-able |
