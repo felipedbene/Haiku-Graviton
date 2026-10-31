@@ -20,17 +20,25 @@ rid="cc-$start-$$"
 out="$here/evidence/${start}_${inst}_${label}.log"
 
 port=$(python3 -I -c 'import socket;s=socket.socket();s.bind(("127.0.0.1",0));print(s.getsockname()[1])')
-aws ec2-instance-connect open-tunnel --region "$region" --instance-id "$inst" \
-	--remote-port 22 --local-port "$port" > /dev/null 2>&1 &
-tun=$!
-trap 'kill $tun 2>/dev/null || :' EXIT
-for _ in $(seq 1 30); do
-	nc -z 127.0.0.1 "$port" 2>/dev/null && break
-	sleep 1
-done
-nc -z 127.0.0.1 "$port" || { echo "ssh-run: tunnel to $inst did not open" >&2; exit 1; }
+tun=""
+trap '[ -n "$tun" ] && kill $tun 2>/dev/null || :' EXIT
+tunnel() {	# (re)open the EICE tunnel if it is not listening; long runs outlive one
+	nc -z 127.0.0.1 "$port" 2>/dev/null && return 0
+	[ -n "$tun" ] && kill $tun 2>/dev/null
+	aws ec2-instance-connect open-tunnel --region "$region" --instance-id "$inst" \
+		--remote-port 22 --local-port "$port" > /dev/null 2>&1 &
+	tun=$!
+	for _ in $(seq 1 30); do
+		nc -z 127.0.0.1 "$port" 2>/dev/null && return 0
+		sleep 1
+	done
+	echo "ssh-run: tunnel to $inst did not open" >&2
+	return 1
+}
+tunnel || exit 1
 
 sh_() {	# sh_ <remote command>: one SSH round trip
+	tunnel || return 1
 	timeout 100 "$repo/graviton/scripts/haiku-ssh" -p "$port" -o StrictHostKeyChecking=no \
 		-o UserKnownHostsFile=/dev/null -o LogLevel=ERROR -o ConnectTimeout=30 \
 		baron@127.0.0.1 "$1"

@@ -1,0 +1,55 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: claude_code-recipe-build
+# instance: i-0e7bed4928e0f7bf7   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261031T174014Z   end: 20261031T174221Z   rc: 0
+# script sha256: b14d424a352509e552d3ed8239afce6d2ae6796db0627ac2bd280b9aa98ffc11
+# ---- script ----
+# | set -u
+# | C=/boot/system/bin/curl
+# | cd /boot/home && $C -sSfo claude_code-recipe.tgz 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.amazonaws.com/claude-code-port/claude_code-recipe.tgz?<PRESIGNED>' || exit 1
+# | echo '03383302134316f4e9f1e0e0f024c9ec93309de4aca4339d92ff13f1020534bf  claude_code-recipe.tgz' | sha256sum -c - || exit 1
+# | rm -rf /boot/home/haikuports/dev-util/claude_code /boot/home/haikuports/packages/claude_code-*.hpkg
+# | tar xzf claude_code-recipe.tgz -C /boot/home/haikuports
+# | node --version; python3 --version
+# | sh /boot/home/haiku-nativebuild claude_code > /boot/home/cc-nb.log 2>&1; echo "nativebuild rc=$?"
+# | grep -E "BUILD_OK|FAILED" /boot/home/cc-nb.log | tail -3
+# | echo "== deterministic pass"
+# | grep -E "contents=|R4 applied|parsed [0-9]+ modules|P[0-9]+ applied|build-tree:" /boot/home/nb-claude_code.log
+# | cd /boot/home/haikuports/packages && ls -l claude_code-*.hpkg && sha256sum claude_code-*.hpkg || exit 1
+# | $C -sSf -X PUT --upload-file claude_code-2.1.314-1-arm64.hpkg 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.amazonaws.com/claude-code-port/claude_code-2.1.314-1-arm64.hpkg?<PRESIGNED>' && echo upload-ok
+# ---- raw output ----
+claude_code-recipe.tgz: OK
+v24.21.0
+Python 3.14.7
+nativebuild rc=1
+claude_code: BUILD_OK (attempt 1)
+===== HARVEST FAILED: these ports BUILT but their packages are NOT in the pool:  claude_code =====
+== deterministic pass
+contents=54.3MB sourcemap=0.0MB module_info=0.0MB bytecode_region=102.9MB (not extracted)
+R4 applied: [['chunk-zy2k3hny.js', 'chunk-vgzpjjhb.js']]
+parsed 56 modules, 0 failed
+P4 applied 116 sites in 56 modules; skipped 10 already rewritten by P1,P2
+P5 applied in chunk-8dvz2fjk.js
+P6 applied in chunk-8dvz2fjk.js
+P7 applied in chunk-yt5m1rse.js
+parsed 16 modules, 0 failed
+P8 applied in chunk-hv6m45s7.js (1 sites)
+P9 applied in chunk-aa47jmf3.js (4 sites)
+P10 applied in chunk-9deh4a76.js (3 sites)
+P11 applied in chunk-wg6ymv3p.js (1 sites)
+P12 applied in chunk-ddrd3r4k.js (1 sites)
+P13 applied in chunk-k1pd3pap.js (1 sites)
+P13 applied in chunk-v5xftfk7.js (1 sites)
+P13 applied in chunk-s7yyd1p6.js (2 sites)
+P14 applied in chunk-12xea136.js (2 sites)
+P15 applied in chunk-m6kk55rf.js (5 sites)
+P16 applied in chunk-szzxb7zd.js (1 sites)
+P16 applied in chunk-zy2k3hny.js (1 sites)
+P17 applied in chunk-6h8148nz.js (7 sites, + teaminfo helper)
+P17 applied in chunk-fgccedbt.js (1 sites, + teaminfo helper)
+P17 applied in chunk-2hxx68dq.js (1 sites, + teaminfo helper)
+P17 applied in chunk-s0dw5891.js (1 sites)
+build-tree: /sources/package/tree ready (prefix /boot/system/lib/claude-code)
+-rw-r--r-- 1 baron 20 19594717 Oct 31 17:42 claude_code-2.1.314-1-arm64.hpkg
+72e25e5bd9e4cc827ea4340a452c0bcfffa1ec186d866b70047200609bb6a15a  claude_code-2.1.314-1-arm64.hpkg
+upload-ok

@@ -1,0 +1,239 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: claude-accept-install
+# instance: i-0e90d4b253c8134b3   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261031T174249Z   end: 20261031T174442Z   rc: 0
+# script sha256: a0617d961405162eb83a1a662c831ab30a59504a9be79748769b72f23559e04f
+# ---- script ----
+# | set -u
+# | W=/boot/home/cc-accept; rm -rf $W; mkdir -p $W; cd $W; C=/boot/system/bin/curl
+# | $C -sSfo nodejs24-24.21.0-1-arm64.hpkg 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.amazonaws.com/claude-code-port/nodejs24-24.21.0-1-arm64.hpkg?<PRESIGNED>' || exit 1
+# | echo 'e2d2412dac826912daf8af623c262a10ac6f621e46203a562d89bb611003378b  nodejs24-24.21.0-1-arm64.hpkg' | sha256sum -c - || exit 1
+# | $C -sSfo claude_code-2.1.314-1-arm64.hpkg 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.amazonaws.com/claude-code-port/claude_code-2.1.314-1-arm64.hpkg?<PRESIGNED>' || exit 1
+# | echo '72e25e5bd9e4cc827ea4340a452c0bcfffa1ec186d866b70047200609bb6a15a  claude_code-2.1.314-1-arm64.hpkg' | sha256sum -c - || exit 1
+# | $C -sSfo vectors-2.1.314.tgz 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.amazonaws.com/claude-code-port/vectors-2.1.314.tgz?<PRESIGNED>' || exit 1
+# | echo 'bb1b89ec5923981f1bca7306fab1d3157faf7058d91de0e0d04f04597843d2f3  vectors-2.1.314.tgz' | sha256sum -c - || exit 1
+# | $C -sSfo port-tools.tgz 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.amazonaws.com/claude-code-port/port-tools.tgz?<PRESIGNED>' || exit 1
+# | echo 'a5ccef01e0d2f280de3f61b220675254d6a4f3e38e49d85fe341b1c773fa3b41  port-tools.tgz' | sha256sum -c - || exit 1
+# | echo "== install"
+# | N=$W/nodejs24-24.21.0-1-arm64.hpkg; [ -e /boot/system/packages/nodejs24-24.21.0-1-arm64.hpkg ] && N=""
+# | pkgman uninstall -y claude_code 2>&1 | tail -1
+# | pkgman install -y tmux $N $W/claude_code-2.1.314-1-arm64.hpkg 2>&1 | tail -3
+# | command -v node claude; node --version; ls /boot/system/lib/claude-code | head -20
+# | echo "== claude --version"; claude --version; echo "rc=$?"
+# | echo "== claude doctor (no TTY)"; HOME=$W/home-doctor timeout 120 claude doctor < /dev/null 2>&1 | head -60; echo "rc=$?"
+# | echo "== cc-teaminfo"; /boot/system/lib/claude-code/bin/cc-teaminfo $$; /boot/system/lib/claude-code/bin/cc-teaminfo -a | wc -l
+# | echo "== compat vectors on Haiku"
+# | mkdir -p port && tar xzf port-tools.tgz -C port && tar xzf vectors-2.1.314.tgz
+# | bash port/tools/check-vectors.sh vec-all /boot/system/bin/node; echo "vectors rc=$?"
+# ---- raw output ----
+nodejs24-24.21.0-1-arm64.hpkg: OK
+claude_code-2.1.314-1-arm64.hpkg: OK
+vectors-2.1.314.tgz: OK
+port-tools.tgz: OK
+== install
+[system] Done.
+[system] Changes applied. Old activation state backed up in "state_2026-10-31_17:43:00"
+[system] Cleaning up ...
+[system] Done.
+/boot/system/bin/node
+/boot/system/bin/claude
+v24.21.0
+LOADERS.json
+NOTICE-chm3rwx9.txt
+README-0a1b121e.md.zst
+README-18458fac.md.zst
+README-3e67ddbd.md.zst
+README-4f0b5262.md.zst
+README-54b776b1.md
+README-74802ac4.md.zst
+README-7f1026fd.md.zst
+README-953f3461.md.zst
+README-97a573bf.md.zst
+README-9ed2461c.md.zst
+README-9fa39165.md.zst
+README-c729f2c2.md.zst
+README-qjqxhy5f.md
+RELOCATION.json
+REQUIRES.json
+SCHEMA-7cf439b0.md.zst
+SKILL-0vb5xk0r.md
+SKILL-15dc2cc1.md.zst
+== claude --version
+2.1.314 (Claude Code)
+rc=0
+== claude doctor (no TTY)
+Cannot open directory /boot/system/non-packaged/data/ssl/certs/ to load OpenSSL certificates.
+Claude Code doctor
+
+Running: unknown (2.1.314)
+Commit: 5c99a5b63997
+Platform: haiku-arm64
+Path: /boot/system/bin/node
+Invoked: /boot/system/lib/claude-code/claude.mjs
+Config install method: unknown
+Search: OK (/boot/system/bin/rg)
+Auto-updates: enabled
+Auto-update channel: latest
+Last update attempt: none recorded
+Managed settings (remote): not fetched — no usable credentials for the settings fetch
+Organization policy: not fetched: no API key or claude.ai sign-in for the policy lookup (apiKeyHelper keys are not used for it)
+
+Remote Control
+Remote Control requires a claude.ai subscription. Run claude auth login to sign in with your claude.ai account.
+- Not signed in to claude.ai
+- claude.ai subscription auth not active
+- Sign-in is missing the user:profile scope
+- Organization not resolved
+- Remote Control availability could not be verified (no server response this session)
+
+No installation issues found.
+
+For a full setup checkup that can also fix issues, run /doctor in a Claude Code session.
+rc=0
+== cc-teaminfo
+14602 14601 14600 14600 0 38192858297 1793468578543996 /boot/system/bin/bash /tmp/ccrun/cc-20261031T174249Z-96072.sh
+25
+== compat vectors on Haiku
+node v24.21.0 on Haiku arm64; vectors from bun 1.4.4
+[hash] hash vectors (bun 1.4.4 38afee6c84fcf48c0edb2466aa4b27d287a59c30): 3353 match, 0 mismatch
+[hash] rc=0
+[width] stringWidth: codepoints 3336192 match / 0 mismatch; total 3608650 match / 0 mismatch
+[width] rc=0
+[slice] sliceAnsi: 40900 match / 0 mismatch; stripANSI: 20008 match / 0 mismatch
+[slice] rc=0
+[wrap] wrapAnsi: 40000 match / 0 mismatch
+[wrap] rc=0
+[semver] semver.order: 40003 match / 0 mismatch
+[semver] semver.satisfies: 60006 match / 0 mismatch
+[semver] rc=0
+[deepequals] deepEquals: 354 match / 0 mismatch (118 pairs x 3 modes)
+[deepequals] rc=0
+[yaml-stringify] YAML.stringify corpus: 47328 match / 0 mismatch
+[yaml-stringify] YAML.stringify fuzz: 72000 match / 0 mismatch
+[yaml-stringify] YAML.stringify total: 119328 match / 0 mismatch
+[yaml-stringify] known divergences (not counted; Bun output depends on JSC value representation or engine error text):
+[yaml-stringify] max nesting depth: node {"space=0":1954,"space=2":1954} bun {"space=0":23407,"space=2":23407}
+[yaml-stringify] rc=0
+[toml-0xC0FFEE] toml.edge: 664 match / 0 mismatch
+[toml-0xC0FFEE] toml.bytes: 19 match / 0 mismatch
+[toml-0xC0FFEE] toml.config: 17 match / 0 mismatch
+[toml-0xC0FFEE] toml.coerce: 31 match / 0 mismatch
+[toml-0xC0FFEE] toml.depth: 31 match / 0 mismatch
+[toml-0xC0FFEE] toml.fuzz: 40000 match / 0 mismatch
+[toml-0xC0FFEE] toml.fuzzshort: 40000 match / 0 mismatch
+[toml-0xC0FFEE] toml.mutate: 40000 match / 0 mismatch
+[toml-0xC0FFEE] toml: 3850 vectors contain date/times (Temporal objects in Bun; strings equal to their String() from parse(), type-checked through parseWith)
+[toml-0xC0FFEE] toml: 10 known difference(s), listed above
+[toml-0xC0FFEE] rc=0
+[toml-0xDEADBEEF12345] toml.edge: 664 match / 0 mismatch
+[toml-0xDEADBEEF12345] toml.bytes: 19 match / 0 mismatch
+[toml-0xDEADBEEF12345] toml.config: 17 match / 0 mismatch
+[toml-0xDEADBEEF12345] toml.coerce: 31 match / 0 mismatch
+[toml-0xDEADBEEF12345] toml.depth: 31 match / 0 mismatch
+[toml-0xDEADBEEF12345] toml.fuzz: 40000 match / 0 mismatch
+[toml-0xDEADBEEF12345] toml.fuzzshort: 40000 match / 0 mismatch
+[toml-0xDEADBEEF12345] toml.mutate: 40000 match / 0 mismatch
+[toml-0xDEADBEEF12345] toml: 3772 vectors contain date/times (Temporal objects in Bun; strings equal to their String() from parse(), type-checked through parseWith)
+[toml-0xDEADBEEF12345] toml: 10 known difference(s), listed above
+[toml-0xDEADBEEF12345] rc=0
+[toml-1] toml.edge: 664 match / 0 mismatch
+[toml-1] toml.bytes: 19 match / 0 mismatch
+[toml-1] toml.config: 17 match / 0 mismatch
+[toml-1] toml.coerce: 31 match / 0 mismatch
+[toml-1] toml.depth: 31 match / 0 mismatch
+[toml-1] toml.fuzz: 40000 match / 0 mismatch
+[toml-1] toml.fuzzshort: 40000 match / 0 mismatch
+[toml-1] toml.mutate: 40000 match / 0 mismatch
+[toml-1] toml: 3883 vectors contain date/times (Temporal objects in Bun; strings equal to their String() from parse(), type-checked through parseWith)
+[toml-1] toml: 10 known difference(s), listed above
+[toml-1] rc=0
+[toml-987654321] toml.edge: 664 match / 0 mismatch
+[toml-987654321] toml.bytes: 19 match / 0 mismatch
+[toml-987654321] toml.config: 17 match / 0 mismatch
+[toml-987654321] toml.coerce: 31 match / 0 mismatch
+[toml-987654321] toml.depth: 31 match / 0 mismatch
+[toml-987654321] toml.fuzz: 40000 match / 0 mismatch
+[toml-987654321] toml.fuzzshort: 40000 match / 0 mismatch
+[toml-987654321] toml.mutate: 40000 match / 0 mismatch
+[toml-987654321] toml: 3876 vectors contain date/times (Temporal objects in Bun; strings equal to their String() from parse(), type-checked through parseWith)
+[toml-987654321] toml: 10 known difference(s), listed above
+[toml-987654321] rc=0
+[toml-default] toml.edge: 664 match / 0 mismatch
+[toml-default] toml.bytes: 19 match / 0 mismatch
+[toml-default] toml.config: 17 match / 0 mismatch
+[toml-default] toml.coerce: 31 match / 0 mismatch
+[toml-default] toml.depth: 31 match / 0 mismatch
+[toml-default] toml.fuzz: 40000 match / 0 mismatch
+[toml-default] toml.fuzzshort: 40000 match / 0 mismatch
+[toml-default] toml.mutate: 40000 match / 0 mismatch
+[toml-default] toml: 3842 vectors contain date/times (Temporal objects in Bun; strings equal to their String() from parse(), type-checked through parseWith)
+[toml-default] toml: 10 known difference(s), listed above
+[toml-default] rc=0
+[yaml-parse-0] yaml-parse.edge: 366 match / 0 mismatch
+[yaml-parse-0] yaml-parse.depth: 19 match / 0 mismatch
+[yaml-parse-0] yaml-parse.depthBand: 14 match / 0 mismatch
+[yaml-parse-0] yaml-parse.frontmatter: 25 match / 0 mismatch
+[yaml-parse-0] yaml-parse.markdownHead: 154 match / 0 mismatch
+[yaml-parse-0] yaml-parse.yamlTestSuite: 1954 match / 0 mismatch
+[yaml-parse-0] yaml-parse.grammar: 30000 match / 0 mismatch
+[yaml-parse-0] yaml-parse.grammarClean: 20000 match / 0 mismatch
+[yaml-parse-0] yaml-parse.mutation: 40000 match / 0 mismatch
+[yaml-parse-0] yaml-parse.frontmatterMutation: 5000 match / 0 mismatch
+[yaml-parse-0] rc=0
+[yaml-parse-11] yaml-parse.edge: 366 match / 0 mismatch
+[yaml-parse-11] yaml-parse.depth: 19 match / 0 mismatch
+[yaml-parse-11] yaml-parse.depthBand: 14 match / 0 mismatch
+[yaml-parse-11] yaml-parse.frontmatter: 25 match / 0 mismatch
+[yaml-parse-11] yaml-parse.markdownHead: 154 match / 0 mismatch
+[yaml-parse-11] yaml-parse.yamlTestSuite: 1954 match / 0 mismatch
+[yaml-parse-11] yaml-parse.grammar: 30000 match / 0 mismatch
+[yaml-parse-11] yaml-parse.grammarClean: 20000 match / 0 mismatch
+[yaml-parse-11] yaml-parse.mutation: 40000 match / 0 mismatch
+[yaml-parse-11] yaml-parse.frontmatterMutation: 5000 match / 0 mismatch
+[yaml-parse-11] rc=0
+[yaml-parse-22] yaml-parse.edge: 366 match / 0 mismatch
+[yaml-parse-22] yaml-parse.depth: 19 match / 0 mismatch
+[yaml-parse-22] yaml-parse.depthBand: 14 match / 0 mismatch
+[yaml-parse-22] yaml-parse.frontmatter: 25 match / 0 mismatch
+[yaml-parse-22] yaml-parse.markdownHead: 154 match / 0 mismatch
+[yaml-parse-22] yaml-parse.yamlTestSuite: 1954 match / 0 mismatch
+[yaml-parse-22] yaml-parse.grammar: 30000 match / 0 mismatch
+[yaml-parse-22] yaml-parse.grammarClean: 20000 match / 0 mismatch
+[yaml-parse-22] yaml-parse.mutation: 40000 match / 0 mismatch
+[yaml-parse-22] yaml-parse.frontmatterMutation: 5000 match / 0 mismatch
+[yaml-parse-22] rc=0
+[yaml-parse-33] yaml-parse.edge: 366 match / 0 mismatch
+[yaml-parse-33] yaml-parse.depth: 19 match / 0 mismatch
+[yaml-parse-33] yaml-parse.depthBand: 14 match / 0 mismatch
+[yaml-parse-33] yaml-parse.frontmatter: 25 match / 0 mismatch
+[yaml-parse-33] yaml-parse.markdownHead: 154 match / 0 mismatch
+[yaml-parse-33] yaml-parse.yamlTestSuite: 1954 match / 0 mismatch
+[yaml-parse-33] yaml-parse.grammar: 30000 match / 0 mismatch
+[yaml-parse-33] yaml-parse.grammarClean: 20000 match / 0 mismatch
+[yaml-parse-33] yaml-parse.mutation: 40000 match / 0 mismatch
+[yaml-parse-33] yaml-parse.frontmatterMutation: 5000 match / 0 mismatch
+[yaml-parse-33] rc=0
+[yaml-parse-44] yaml-parse.edge: 366 match / 0 mismatch
+[yaml-parse-44] yaml-parse.depth: 19 match / 0 mismatch
+[yaml-parse-44] yaml-parse.depthBand: 14 match / 0 mismatch
+[yaml-parse-44] yaml-parse.frontmatter: 25 match / 0 mismatch
+[yaml-parse-44] yaml-parse.markdownHead: 154 match / 0 mismatch
+[yaml-parse-44] yaml-parse.yamlTestSuite: 1954 match / 0 mismatch
+[yaml-parse-44] yaml-parse.grammar: 30000 match / 0 mismatch
+[yaml-parse-44] yaml-parse.grammarClean: 20000 match / 0 mismatch
+[yaml-parse-44] yaml-parse.mutation: 40000 match / 0 mismatch
+[yaml-parse-44] yaml-parse.frontmatterMutation: 5000 match / 0 mismatch
+[yaml-parse-44] rc=0
+[yaml-parse-55] yaml-parse.edge: 366 match / 0 mismatch
+[yaml-parse-55] yaml-parse.depth: 19 match / 0 mismatch
+[yaml-parse-55] yaml-parse.depthBand: 14 match / 0 mismatch
+[yaml-parse-55] yaml-parse.frontmatter: 25 match / 0 mismatch
+[yaml-parse-55] yaml-parse.markdownHead: 154 match / 0 mismatch
+[yaml-parse-55] yaml-parse.yamlTestSuite: 1954 match / 0 mismatch
+[yaml-parse-55] yaml-parse.grammar: 30000 match / 0 mismatch
+[yaml-parse-55] yaml-parse.grammarClean: 20000 match / 0 mismatch
+[yaml-parse-55] yaml-parse.mutation: 40000 match / 0 mismatch
+[yaml-parse-55] yaml-parse.frontmatterMutation: 5000 match / 0 mismatch
+[yaml-parse-55] rc=0
+check-vectors: ALL PASS
+vectors rc=0

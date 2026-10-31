@@ -1,0 +1,491 @@
+# evidence: node24-test-suites-results
+# instance: i-0e7bed4928e0f7bf7   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261031T174513Z   end: 20261031T174535Z   rc: 0
+# script sha256: aa637917317ffe818ee97c4f715eee6cda4b097478fe6977a4fd26a3506ac0e3
+# ---- script ----
+# | set -u
+# | cd /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0 || exit 1
+# | echo "node $(/boot/system/bin/node --version); suites run by tools/test.py -j 16 -p tap, stdin a pipe (#870)"
+# | ls -l --time-style=+%FT%T /boot/home/node-parallel.tap /boot/home/node-sequential.tap
+# | for s in parallel sequential; do f=/boot/home/node-$s.tap
+# | 	echo "== $s: plan $(grep -m1 '^1\.\.' $f), $(grep -c '^ok ' $f) ok (of which $(grep -c '^ok .*# skip' $f) skip), $(grep -c '^not ok ' $f) not ok (of which $(grep -c '^    timeout$' $f) timeout)"
+# | 	echo "-- not ok by area"; grep '^not ok ' $f | sed -E 's/^not ok [0-9]+ [a-z]+\/test-//; s/-.*//' | sort | uniq -c | sort -rn
+# | 	echo "-- every failing test"; grep '^not ok ' $f
+# | done
+# ---- raw output ----
+node v24.21.0; suites run by tools/test.py -j 16 -p tap, stdin a pipe (#870)
+-rw-r--r-- 1 baron root 641993 2026-10-31T16:20:27 /boot/home/node-parallel.tap
+-rw-r--r-- 1 baron root  75890 2026-10-31T16:52:26 /boot/home/node-sequential.tap
+== parallel: plan 1..4507, 4110 ok (of which 323 skip), 397 not ok (of which 275 timeout)
+-- not ok by area
+    190 http2
+     42 fs
+     37 net
+     16 diagnostics
+     13 tls
+     13 http
+     12 domain
+     10 process
+      7 cluster
+      7 child
+      6 dgram
+      5 watch
+      5 inspector
+      4 worker
+      4 runner
+      3 trace
+      3 https
+      3 debugger
+      2 util
+      2 os
+      1 v8
+      1 timers
+      1 tick
+      1 tcp
+      1 stdout
+      1 setproctitle
+      1 set
+      1 repl
+      1 permission
+      1 h2
+      1 cwd
+      1 crypto
+      1 cli
+-- every failing test
+not ok 171 parallel/test-child-process-default-options
+not ok 176 parallel/test-child-process-env
+not ok 182 parallel/test-child-process-exec-env
+not ok 283 parallel/test-cli-node-print-help
+not ok 310 parallel/test-cluster-concurrent-disconnect
+not ok 335 parallel/test-cluster-listen-pipe-readable-writable
+not ok 341 parallel/test-cluster-net-listen-ipv6only-false
+not ok 380 parallel/test-cluster-worker-kill-signal
+not ok 529 parallel/test-crypto-no-algorithm
+not ok 564 parallel/test-cwd-enoent-improved-message
+not ok 680 parallel/test-dgram-connect-send-empty-buffer
+not ok 691 parallel/test-dgram-error-message-address
+not ok 700 parallel/test-dgram-multicast-set-interface
+not ok 741 parallel/test-debugger-profile
+not ok 742 parallel/test-debugger-profile-command
+not ok 744 parallel/test-child-process-disconnect
+not ok 745 parallel/test-child-process-fork-net
+not ok 746 parallel/test-child-process-fork-net-socket
+not ok 749 parallel/test-child-process-send-keep-open
+not ok 750 parallel/test-cluster-dgram-1
+not ok 751 parallel/test-cluster-disconnect
+not ok 752 parallel/test-cluster-shared-leak
+not ok 753 parallel/test-debugger-unavailable-port
+not ok 754 parallel/test-dgram-connect-send-empty-array
+not ok 755 parallel/test-dgram-send-empty-array
+not ok 756 parallel/test-dgram-send-empty-buffer
+not ok 757 parallel/test-diagnostics-channel-http2-client-stream-body-multiple-buffers
+not ok 758 parallel/test-diagnostics-channel-http2-client-stream-body-multiple-buffers-and-strings
+not ok 798 parallel/test-diagnostics-channel-http2-client-stream-body-no-chunks
+not ok 800 parallel/test-diagnostics-channel-http2-client-stream-body-single-buffer
+not ok 834 parallel/test-diagnostics-channel-http2-client-stream-body-single-string
+not ok 852 parallel/test-domain-no-error-handler-abort-on-uncaught-1
+not ok 853 parallel/test-domain-no-error-handler-abort-on-uncaught-0
+not ok 854 parallel/test-domain-no-error-handler-abort-on-uncaught-2
+not ok 855 parallel/test-domain-no-error-handler-abort-on-uncaught-3
+not ok 856 parallel/test-domain-no-error-handler-abort-on-uncaught-4
+not ok 857 parallel/test-domain-no-error-handler-abort-on-uncaught-5
+not ok 858 parallel/test-domain-no-error-handler-abort-on-uncaught-6
+not ok 859 parallel/test-domain-no-error-handler-abort-on-uncaught-7
+not ok 860 parallel/test-domain-no-error-handler-abort-on-uncaught-8
+not ok 864 parallel/test-domain-no-error-handler-abort-on-uncaught-9
+not ok 872 parallel/test-domain-throw-error-then-throw-from-uncaught-exception-handler
+not ok 880 parallel/test-domain-with-abort-on-uncaught-exception
+not ok 1092 parallel/test-fs-error-messages
+not ok 1109 parallel/test-fs-link
+not ok 1130 parallel/test-fs-options-immutable
+not ok 1131 parallel/test-fs-promises
+not ok 1162 parallel/test-fs-promises-watch
+not ok 1163 parallel/test-fs-promises-watch-ignore-function
+not ok 1164 parallel/test-fs-promises-watch-ignore-glob
+not ok 1166 parallel/test-fs-promises-watch-ignore-mixed
+not ok 1167 parallel/test-fs-promises-watch-ignore-regexp
+not ok 1168 parallel/test-fs-promises-watch-iterator
+not ok 1212 parallel/test-fs-readfile-eof
+not ok 1218 parallel/test-fs-readfile-pipe
+not ok 1219 parallel/test-fs-readfile-pipe-large
+not ok 1221 parallel/test-fs-readfilesync-pipe-large
+not ok 1235 parallel/test-fs-realpath-pipe
+not ok 1281 parallel/test-fs-watch-close-when-destroyed
+not ok 1282 parallel/test-fs-watch-abort-signal
+not ok 1283 parallel/test-fs-watch-encoding
+not ok 1284 parallel/test-fs-watch-enoent
+not ok 1286 parallel/test-fs-watch-ignore-function
+not ok 1287 parallel/test-fs-watch-ignore-glob
+not ok 1289 parallel/test-fs-watch-ignore-recursive-glob
+not ok 1290 parallel/test-fs-watch-ignore-mixed
+not ok 1291 parallel/test-fs-watch-ignore-recursive-glob-subdirectories
+not ok 1292 parallel/test-fs-watch-ignore-recursive-mixed
+not ok 1293 parallel/test-fs-watch-ignore-regexp
+not ok 1294 parallel/test-fs-watch-ignore-recursive-regexp
+not ok 1295 parallel/test-fs-watch-recursive-add-file-with-url
+not ok 1296 parallel/test-fs-watch-recursive-add-folder
+not ok 1297 parallel/test-fs-watch-recursive-add-file
+not ok 1298 parallel/test-fs-watch-recursive-add-file-to-existing-subfolder
+not ok 1299 parallel/test-fs-watch-recursive-add-file-to-new-folder
+not ok 1300 parallel/test-fs-watch-recursive-delete-race
+not ok 1302 parallel/test-fs-watch-recursive-assert-leaks
+not ok 1303 parallel/test-fs-watch-recursive-symlink
+not ok 1304 parallel/test-fs-watch-recursive-delete
+not ok 1307 parallel/test-fs-watch-recursive-update-file
+not ok 1308 parallel/test-fs-watch-ref-unref
+not ok 1327 parallel/test-fs-write-sigxfsz
+not ok 1422 parallel/test-http-autoselectfamily
+not ok 1425 parallel/test-fs-watch-recursive-sync-write
+not ok 1532 parallel/test-diagnostics-channel-http2-client-stream-close
+not ok 1533 parallel/test-diagnostics-channel-http2-client-stream-created
+not ok 1535 parallel/test-diagnostics-channel-http2-client-stream-finish
+not ok 1542 parallel/test-diagnostics-channel-http2-client-stream-start
+not ok 1594 parallel/test-diagnostics-channel-http2-server-stream-close
+not ok 1600 parallel/test-diagnostics-channel-http2-server-stream-close-error
+not ok 1614 parallel/test-diagnostics-channel-http2-server-stream-created
+not ok 1705 parallel/test-diagnostics-channel-http2-server-stream-created-start-timing
+not ok 1715 parallel/test-diagnostics-channel-http2-server-stream-error
+not ok 1724 parallel/test-diagnostics-channel-http2-server-stream-start
+not ok 1725 parallel/test-diagnostics-channel-http2-server-stream-finish
+not ok 1777 parallel/test-http-writable-true-after-close
+not ok 1790 parallel/test-fs-watch-recursive-promise
+not ok 1791 parallel/test-fs-watch-recursive-watch-file
+not ok 1794 parallel/test-h2-large-header-cause-client-to-hangup
+not ok 1795 parallel/test-http-client-parse-error
+not ok 1797 parallel/test-http-extra-response
+not ok 1798 parallel/test-http-max-http-headers
+not ok 1800 parallel/test-http-multi-line-headers
+not ok 1801 parallel/test-http-no-content-length
+not ok 1804 parallel/test-http-response-no-headers
+not ok 1806 parallel/test-http-response-status-message
+not ok 1807 parallel/test-http-should-keep-alive
+not ok 1808 parallel/test-http-socket-encoding-error
+not ok 1810 parallel/test-http-upgrade-advertise
+not ok 1811 parallel/test-http-upgrade-server
+not ok 1812 parallel/test-http2-altsvc
+not ok 1814 parallel/test-http2-async-local-storage
+not ok 1815 parallel/test-http2-autoselect-protocol
+not ok 1816 parallel/test-http2-buffersize
+not ok 1817 parallel/test-http2-byteswritten-server
+not ok 1820 parallel/test-http2-capture-rejection
+not ok 1821 parallel/test-http2-clean-output
+not ok 1822 parallel/test-http2-client-data-end
+not ok 1823 parallel/test-http2-client-destroy
+not ok 1824 parallel/test-http2-client-onconnect-errors
+not ok 1825 parallel/test-http2-client-priority-before-connect
+not ok 1828 parallel/test-http2-client-promisify-connect
+not ok 1829 parallel/test-http2-client-proxy-over-http2
+not ok 1830 parallel/test-http2-client-request-listeners-warning
+not ok 1831 parallel/test-http2-client-request-options-errors
+not ok 1832 parallel/test-http2-client-rststream-before-connect
+not ok 1833 parallel/test-http2-client-set-priority
+not ok 1834 parallel/test-http2-client-setLocalWindowSize
+not ok 1835 parallel/test-http2-client-setNextStreamID-errors
+not ok 1836 parallel/test-http2-client-settings-before-connect
+not ok 1837 parallel/test-http2-client-stream-destroy-before-connect
+not ok 1838 parallel/test-http2-client-unescaped-path
+not ok 1839 parallel/test-http2-client-upload
+not ok 1840 parallel/test-http2-client-upload-reject
+not ok 1841 parallel/test-http2-client-write-before-connect
+not ok 1842 parallel/test-http2-client-write-empty-string
+not ok 1844 parallel/test-http2-compat-client-upload-reject
+not ok 1845 parallel/test-http2-compat-errors
+not ok 1846 parallel/test-http2-compat-expect-continue
+not ok 1847 parallel/test-http2-compat-expect-continue-check
+not ok 1848 parallel/test-http2-compat-expect-handling
+not ok 1849 parallel/test-http2-compat-method-connect
+not ok 1850 parallel/test-http2-compat-serverrequest
+not ok 1851 parallel/test-http2-compat-serverrequest-end
+not ok 1852 parallel/test-http2-compat-serverrequest-headers
+not ok 1853 parallel/test-http2-compat-serverrequest-host
+not ok 1854 parallel/test-http2-compat-serverrequest-pause
+not ok 1855 parallel/test-http2-compat-serverrequest-pipe
+not ok 1856 parallel/test-http2-compat-serverrequest-settimeout
+not ok 1857 parallel/test-http2-compat-serverrequest-trailers
+not ok 1858 parallel/test-http2-compat-serverresponse
+not ok 1859 parallel/test-http2-compat-serverresponse-createpushresponse
+not ok 1860 parallel/test-http2-compat-serverresponse-destroy
+not ok 1861 parallel/test-http2-compat-serverresponse-drain
+not ok 1862 parallel/test-http2-compat-serverresponse-end
+not ok 1863 parallel/test-http2-compat-serverresponse-end-after-statuses-without-body
+not ok 1864 parallel/test-http2-compat-serverresponse-finished
+not ok 1865 parallel/test-http2-compat-serverresponse-flushheaders
+not ok 1866 parallel/test-http2-compat-serverresponse-headers
+not ok 1867 parallel/test-http2-compat-serverresponse-headers-after-destroy
+not ok 1870 parallel/test-http2-compat-serverresponse-headers-send-date
+not ok 1871 parallel/test-http2-compat-serverresponse-settimeout
+not ok 1872 parallel/test-http2-compat-serverresponse-statuscode
+not ok 1873 parallel/test-http2-compat-serverresponse-statusmessage
+not ok 1874 parallel/test-http2-connect
+not ok 1875 parallel/test-http2-compat-serverresponse-statusmessage-property
+not ok 1876 parallel/test-http2-compat-serverresponse-statusmessage-property-set
+not ok 1877 parallel/test-http2-compat-serverresponse-trailers
+not ok 1880 parallel/test-http2-compat-serverresponse-write
+not ok 1882 parallel/test-http2-compat-serverresponse-writehead
+not ok 1883 parallel/test-http2-compat-serverresponse-writehead-array
+not ok 1886 parallel/test-http2-compat-short-stream-client-server
+not ok 1887 parallel/test-http2-compat-socket
+not ok 1888 parallel/test-http2-compat-socket-destroy-delayed
+not ok 1889 parallel/test-http2-compat-socket-set
+not ok 1891 parallel/test-http2-compat-write-early-hints
+not ok 1892 parallel/test-http2-compat-write-early-hints-invalid-header
+not ok 1893 parallel/test-http2-compat-write-head-after-close
+not ok 1895 parallel/test-http2-compat-write-head-destroyed
+not ok 1896 parallel/test-http2-compat-write-information
+not ok 1901 parallel/test-http2-connect-method
+not ok 1902 parallel/test-http2-connect-method-extended
+not ok 1903 parallel/test-http2-connect-method-extended-cant-turn-off
+not ok 1906 parallel/test-http2-cookies
+not ok 1907 parallel/test-http2-create-client-secure-session
+not ok 1909 parallel/test-http2-create-client-session
+not ok 1910 parallel/test-http2-createwritereq
+not ok 1911 parallel/test-http2-date-header
+not ok 1912 parallel/test-http2-debug
+not ok 1913 parallel/test-http2-ip-address-host
+not ok 1919 parallel/test-http2-destroy-after-write
+not ok 1920 parallel/test-http2-dont-override
+not ok 1921 parallel/test-http2-max-invalid-frames
+not ok 1922 parallel/test-http2-empty-frame-without-eof
+not ok 1924 parallel/test-http2-endafterheaders
+not ok 1925 parallel/test-http2-misbehaving-flow-control
+not ok 1926 parallel/test-http2-misbehaving-flow-control-paused
+not ok 1929 parallel/test-http2-exceeds-server-trailer-size
+not ok 1930 parallel/test-http2-forget-closed-streams
+not ok 1931 parallel/test-http2-goaway-opaquedata
+not ok 1932 parallel/test-http2-graceful-close
+not ok 1933 parallel/test-http2-head-request
+not ok 1935 parallel/test-http2-info-headers
+not ok 1936 parallel/test-http2-info-headers-errors
+not ok 1937 parallel/test-http2-invalidargtypes-errors
+not ok 1938 parallel/test-http2-invalidheaderfield
+not ok 1940 parallel/test-http2-invalidheaderfields-client
+not ok 1941 parallel/test-http2-large-write-multiple-requests
+not ok 1942 parallel/test-http2-max-concurrent-streams
+not ok 1943 parallel/test-http2-max-session-memory-leak
+not ok 1945 parallel/test-http2-max-session-memory-stalled-headers
+not ok 1947 parallel/test-http2-methods
+not ok 1949 parallel/test-http2-misused-pseudoheaders
+not ok 1952 parallel/test-http2-multi-content-length
+not ok 1955 parallel/test-http2-multiheaders
+not ok 1956 parallel/test-http2-multiheaders-raw
+not ok 1958 parallel/test-http2-multiplex
+not ok 1959 parallel/test-http2-no-more-streams
+not ok 1960 parallel/test-http2-no-wanttrailers-listener
+not ok 1961 parallel/test-http2-onping
+not ok 1963 parallel/test-http2-options-max-headers-block-length
+not ok 1964 parallel/test-http2-options-max-reserved-streams
+not ok 1965 parallel/test-http2-options-server-request
+not ok 1967 parallel/test-http2-options-server-response
+not ok 1968 parallel/test-http2-origin
+not ok 1969 parallel/test-http2-pack-end-stream-flag
+not ok 1970 parallel/test-http2-perf_hooks
+not ok 1971 parallel/test-http2-ping
+not ok 1972 parallel/test-http2-pipe
+not ok 1973 parallel/test-http2-priority-cycle-
+not ok 1974 parallel/test-http2-priority-event
+not ok 1975 parallel/test-http2-raw-headers
+not ok 1976 parallel/test-http2-raw-headers-defaults
+not ok 1977 parallel/test-http2-removed-header-stays-removed
+not ok 1978 parallel/test-http2-request-remove-connect-listener
+not ok 1979 parallel/test-http2-res-corked
+not ok 1980 parallel/test-http2-res-writable-properties
+not ok 1981 parallel/test-http2-respond-errors
+not ok 1982 parallel/test-http2-respond-file
+not ok 1983 parallel/test-http2-respond-file-204
+not ok 1984 parallel/test-http2-respond-file-304
+not ok 1985 parallel/test-http2-respond-file-404
+not ok 1986 parallel/test-http2-respond-file-compat
+not ok 1988 parallel/test-http2-respond-file-error-dir
+not ok 1991 parallel/test-http2-respond-file-error-pipe-offset
+not ok 1994 parallel/test-http2-respond-file-errors
+not ok 1995 parallel/test-http2-respond-file-fd
+not ok 1996 parallel/test-http2-respond-file-fd-errors
+not ok 1998 parallel/test-http2-respond-file-fd-invalid
+not ok 1999 parallel/test-http2-respond-file-fd-leak
+not ok 2000 parallel/test-http2-respond-file-fd-range
+not ok 2001 parallel/test-http2-respond-file-filehandle
+not ok 2002 parallel/test-http2-respond-file-push
+not ok 2005 parallel/test-http2-respond-file-range
+not ok 2006 parallel/test-http2-respond-file-with-pipe
+not ok 2007 parallel/test-http2-respond-nghttperrors
+not ok 2009 parallel/test-http2-respond-no-data
+not ok 2010 parallel/test-http2-respond-with-fd-errors
+not ok 2012 parallel/test-http2-response-splitting
+not ok 2016 parallel/test-http2-sent-headers
+not ok 2018 parallel/test-http2-server-close-callback
+not ok 2023 parallel/test-http2-server-close-idle-connection
+not ok 2024 parallel/test-http2-server-errors
+not ok 2025 parallel/test-http2-server-push-disabled
+not ok 2026 parallel/test-http2-server-push-stream
+not ok 2027 parallel/test-http2-server-push-stream-errors
+not ok 2029 parallel/test-http2-server-push-stream-errors-args
+not ok 2030 parallel/test-http2-server-push-stream-head
+not ok 2032 parallel/test-http2-server-rst-before-respond
+not ok 2035 parallel/test-http2-server-rst-stream
+not ok 2037 parallel/test-http2-server-session-destroy
+not ok 2038 parallel/test-http2-server-set-header
+not ok 2039 parallel/test-http2-server-setLocalWindowSize
+not ok 2040 parallel/test-http2-server-shutdown-before-respond
+not ok 2042 parallel/test-http2-server-startup
+not ok 2044 parallel/test-http2-server-timeout
+not ok 2045 parallel/test-http2-session-graceful-close
+not ok 2047 parallel/test-http2-session-reuse-different-authority
+not ok 2048 parallel/test-http2-session-settings
+not ok 2049 parallel/test-http2-session-stream-state
+not ok 2050 parallel/test-http2-session-timeout
+not ok 2057 parallel/test-http2-settings-unsolicited-ack
+not ok 2059 parallel/test-http2-short-stream-client-server
+not ok 2060 parallel/test-http2-single-headers-validation-disabled
+not ok 2063 parallel/test-http2-socket-proxy-destroy
+not ok 2083 parallel/test-https-autoselectfamily
+not ok 2092 parallel/test-https-connect-address-family
+not ok 2095 parallel/test-http2-status-code
+not ok 2101 parallel/test-http2-status-code-invalid
+not ok 2138 parallel/test-http2-stream-client
+not ok 2143 parallel/test-http2-stream-destroy-event-order
+not ok 2160 parallel/test-inspector-contexts
+not ok 2169 parallel/test-http2-timeouts
+not ok 2176 parallel/test-inspector-has-idle
+not ok 2199 parallel/test-inspector-promises
+not ok 2200 parallel/test-http2-too-large-headers
+not ok 2206 parallel/test-inspector-stop-profile-after-done
+not ok 2311 parallel/test-net-autoselectfamily
+not ok 2315 parallel/test-net-autoselectfamily-ipv4first
+not ok 2323 parallel/test-net-boundsocket
+not ok 2343 parallel/test-http2-too-many-headers
+not ok 2346 parallel/test-net-connect-options-ipv6
+not ok 2348 parallel/test-http2-too-many-streams
+not ok 2354 parallel/test-net-dns-custom-lookup
+not ok 2356 parallel/test-http2-trailers
+not ok 2357 parallel/test-net-dns-lookup-skip
+not ok 2362 parallel/test-http2-trailers-after-session-close
+not ok 2370 parallel/test-http2-unbound-socket-proxy
+not ok 2384 parallel/test-http2-window-size
+not ok 2385 parallel/test-http2-write-callbacks
+not ok 2387 parallel/test-http2-write-empty-string
+not ok 2389 parallel/test-http2-zero-length-write
+not ok 2390 parallel/test-https-eof-for-eom
+not ok 2391 parallel/test-inspector-network-websocket
+not ok 2392 parallel/test-net-pingpong
+not ok 2393 parallel/test-net-pipe-connect-errors
+not ok 2411 parallel/test-net-server-listen-path
+not ok 2413 parallel/test-net-after-close
+not ok 2414 parallel/test-net-allow-half-open
+not ok 2418 parallel/test-net-autoselectfamily-default
+not ok 2425 parallel/test-net-bytes-written-large
+not ok 2428 parallel/test-net-connect-options-allowhalfopen
+not ok 2429 parallel/test-net-connect-options-port
+not ok 2435 parallel/test-net-dns-lookup
+not ok 2437 parallel/test-net-keepalive
+not ok 2443 parallel/test-net-listen-after-destroying-stdin
+not ok 2451 parallel/test-net-normalize-args
+not ok 2455 parallel/test-net-onread-static-buffer
+not ok 2457 parallel/test-net-pause-resume-connecting
+not ok 2463 parallel/test-net-persistent-keepalive
+not ok 2467 parallel/test-net-persistent-nodelay
+not ok 2487 parallel/test-os
+not ok 2493 parallel/test-os-process-priority
+not ok 2544 parallel/test-net-persistent-ref-unref
+not ok 2587 parallel/test-permission-fs-symlink-target-write
+not ok 2641 parallel/test-process-dlopen-error-message-crash
+not ok 2656 parallel/test-process-euid-egid
+not ok 2678 parallel/test-process-external-stdio-close-spawn
+not ok 2679 parallel/test-process-external-stdio-close
+not ok 2710 parallel/test-process-threadCpuUsage-main-thread
+not ok 2711 parallel/test-process-threadCpuUsage-worker-threads
+not ok 2712 parallel/test-process-title-cli
+not ok 2715 parallel/test-process-umask-mask
+not ok 2810 parallel/test-net-server-max-connections
+not ok 2985 parallel/test-net-server-pause-on-connect
+not ok 2995 parallel/test-net-socket-byteswritten
+not ok 3011 parallel/test-net-socket-close-after-end
+not ok 3019 parallel/test-net-socket-connect-without-cb
+not ok 3070 parallel/test-net-socket-connecting
+not ok 3138 parallel/test-repl-underscore
+not ok 3178 parallel/test-net-socket-local-address
+not ok 3195 parallel/test-net-socket-ready-without-cb
+not ok 3253 parallel/test-setproctitle
+not ok 3261 parallel/test-runner-worker-id
+not ok 3269 parallel/test-runner-watch-mode-complex
+not ok 3348 parallel/test-stdout-close-catch
+not ok 3611 parallel/test-tcp-wrap-listen
+not ok 3620 parallel/test-tick-processor-arguments
+not ok 3724 parallel/test-tls-connect-address-family
+not ok 3751 parallel/test-tls-enable-keylog-cli
+not ok 3783 parallel/test-net-socket-tos
+not ok 3796 parallel/test-net-throttle
+not ok 3812 parallel/test-net-writable
+not ok 3841 parallel/test-net-write-after-end-nt
+not ok 3886 parallel/test-net-write-slow
+not ok 3887 parallel/test-process-getactivehandles
+not ok 3889 parallel/test-process-getactiveresources-track-active-handles
+not ok 3913 parallel/test-trace-events-fs-async
+not ok 3914 parallel/test-trace-events-fs-sync
+not ok 3917 parallel/test-trace-events-metadata
+not ok 3968 parallel/test-util-exception-with-host-port
+not ok 3983 parallel/test-util-promisify
+not ok 4003 parallel/test-v8-cpu-profile
+not ok 4008 parallel/test-runner-complex-dependencies
+not ok 4018 parallel/test-runner-global-setup-watch-mode
+not ok 4124 parallel/test-watch-file-shared-dependency
+not ok 4125 parallel/test-watch-mode-files_watcher-clear
+not ok 4126 parallel/test-watch-mode-files_watcher
+not ok 4128 parallel/test-set-http-max-http-headers
+not ok 4187 parallel/test-timers-socket-timeout-removes-other-socket-unref-timer
+not ok 4205 parallel/test-tls-client-cert-resumption
+not ok 4211 parallel/test-tls-client-mindhsize
+not ok 4292 parallel/test-tls-env-extra-ca
+not ok 4293 parallel/test-tls-env-extra-ca-with-options
+not ok 4297 parallel/test-worker-cpu-usage
+not ok 4328 parallel/test-worker-init-failure
+not ok 4380 parallel/test-worker-node-options
+not ok 4388 parallel/test-tls-inception
+not ok 4394 parallel/test-worker-memory
+not ok 4483 parallel/test-tls-max-send-fragment
+not ok 4501 parallel/test-tls-on-empty-socket
+not ok 4502 parallel/test-tls-session-reuse-different-servername
+not ok 4503 parallel/test-tls-wrap-econnreset
+not ok 4504 parallel/test-tls-wrap-econnreset-localaddress
+not ok 4505 parallel/test-tls-wrap-econnreset-socket
+not ok 4506 parallel/test-watch-mode-kill-signal-default
+not ok 4507 parallel/test-watch-mode-kill-signal-override
+== sequential: plan 1..120, 94 ok (of which 0 skip), 26 not ok (of which 5 timeout)
+-- not ok by area
+     10 cpu
+      4 watch
+      4 net
+      1 worker
+      1 tls
+      1 process
+      1 module
+      1 http2
+      1 fs
+      1 diagnostic
+      1 child
+-- every failing test
+not ok 3 sequential/test-child-process-emfile
+not ok 16 sequential/test-cpu-prof-default
+not ok 17 sequential/test-cpu-prof-dir-absolute
+not ok 18 sequential/test-cpu-prof-dir-and-name
+not ok 19 sequential/test-cpu-prof-dir-relative
+not ok 20 sequential/test-cpu-prof-dir-worker
+not ok 21 sequential/test-cpu-prof-drained
+not ok 22 sequential/test-cpu-prof-exit
+not ok 24 sequential/test-cpu-prof-kill
+not ok 25 sequential/test-cpu-prof-name
+not ok 26 sequential/test-cpu-prof-worker-argv
+not ok 39 sequential/test-diagnostic-dir-cpu-prof
+not ok 45 sequential/test-fs-watch
+not ok 60 sequential/test-http2-large-file
+not ok 72 sequential/test-module-loading
+not ok 77 sequential/test-net-connect-local-error
+not ok 80 sequential/test-net-localport
+not ok 83 sequential/test-net-server-address
+not ok 85 sequential/test-net-server-listen-ipv6-link-local
+not ok 90 sequential/test-process-title
+not ok 102 sequential/test-tls-psk-client
+not ok 108 sequential/test-watch-mode
+not ok 109 sequential/test-watch-mode-inspect
+not ok 110 sequential/test-watch-mode-restart-esm-loading-error
+not ok 112 sequential/test-watch-mode-worker
+not ok 118 sequential/test-worker-prof

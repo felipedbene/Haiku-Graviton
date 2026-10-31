@@ -12,7 +12,7 @@ Linux reference `i-0a14e8aca787249b7` (Ubuntu arm64, stock Bun 1.4.4, Node 24.22
 | nodejs24 24.21.0 built natively (full ICU 78.3) | built, **not published** | `20261031T043619Z_i-0e7bed4928e0f7bf7_nodejs24-harvest-teaminfo.log` |
 | Node acceptance on Haiku (Intl, zstd, execve, workers, TLS) | 21/23 pass; `fs.watch` ENOSYS ×2 | `20261031T113433Z_i-0e7bed4928e0f7bf7_node24-accept-haiku-v2.log` |
 | node-gyp N-API addon on Haiku | builds + loads (`add(2,40) = 42`) with `CC=gcc CXX=g++` | `20261031T135458Z_i-0e7bed4928e0f7bf7_node24-gyp-addon-cxx.log` |
-| Node test suites on Haiku | see "Node test suites" (in progress when written) | — |
+| Node test suites on Haiku (`parallel` + `sequential`) | parallel 4110 ok (323 skip) / 397 not ok (275 timeout); sequential 94 ok / 26 not ok (5 timeout) | `20261031T174513Z_i-0e7bed4928e0f7bf7_node24-test-suites-results.log` |
 | claude_code hpkg built natively by haikuporter | BUILD_OK, deterministic pass asserted on Haiku | `20261031T141546Z_i-0e7bed4928e0f7bf7_claude_code-recipe-build.log` |
 | `claude --version`, `claude doctor` on Haiku | pass (`Platform: haiku-arm64`, rg found) | `20261031T142235Z_i-0e90d4b253c8134b3_claude-accept-install.log` |
 | Compat layer vs stock Bun, replayed **on Haiku** | all pure suites pass (hash, width 3.6M, slice, wrap, semver, deepEquals, YAML, TOML) | same log |
@@ -48,6 +48,19 @@ substitution**: `cat <(…)` fails on a nonexistent `/dev/fd` (#868).
   on the builder because the builder's environment names the triplet compiler.
 - npm is not packaged (`--without-npm` in the recipe); node-gyp came from npm 12.2.1,
   integrity-pinned.
+
+## Node test suites
+
+`tools/test.py -j 16 -p tap parallel sequential` on the builder, stdin a pipe. Under
+`/dev/null` stdin every test raised in test.py's per-test `F_SETFL` and was dropped
+silently, printing a false "All tests passed" with zero results (#870); the numbers
+above are from the run that actually executed them. Failures by area (parallel):
+http2 190 (185 timeouts), fs 42, net 37 (28 timeouts), diagnostics 16, tls 13, http 13,
+domain 12, process 10, cluster 7, child 7, dgram 6, watch 5, inspector 5, others ≤4;
+sequential: cpu-prof 10, watch 4, net 4, others 1 each. The http2/net/tls/http
+timeouts are consistent with #871 (accepted sockets never see the peer's EOF) and the
+fs/watch failures with `fs.watch` ENOSYS; each failing test is listed in the log.
+Individual root causes beyond those two are not yet triaged.
 
 ## Claude Code on Haiku
 
