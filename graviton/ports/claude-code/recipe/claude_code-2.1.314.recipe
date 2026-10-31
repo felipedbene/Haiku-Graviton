@@ -59,7 +59,12 @@ BUILD_PREREQUIRES="
 	cmd:tar
 	"
 
+# Where the files are packaged ($libDir is the packaging location while building) and
+# where they are at run time. R1 bakes absolute module paths into the bundle, so the
+# relocation prefix must be the run-time path: the package is for system-wide install.
 installDir=$libDir/claude-code
+runtimeDir=/boot/system/lib/claude-code
+runtimeNode=/boot/system/bin/node
 
 BUILD()
 {
@@ -81,7 +86,7 @@ BUILD()
 
 	rm -rf "$sourceDir/tree"
 	CC_TEAMINFO="$sourceDir/cc-teaminfo" bash "$port/tools/build-tree.sh" \
-		"$sourceDir/claude" "$sourceDir/tree" "$installDir" "$(command -v node)" "$deps"
+		"$sourceDir/claude" "$sourceDir/tree" "$runtimeDir" "$(command -v node)" "$deps"
 }
 
 INSTALL()
@@ -91,7 +96,12 @@ INSTALL()
 
 	cat > "$binDir/claude" <<EOF
 #!/bin/sh
-exec $binDir/node --zero-fill-buffers $installDir/claude.mjs "\$@"
+# The bundle's module paths are absolute under $runtimeDir (PATCHES.md R1).
+if [ ! -f $runtimeDir/claude.mjs ]; then
+	echo "claude: $runtimeDir/claude.mjs not found; the claude_code package must be installed system-wide" >&2
+	exit 1
+fi
+exec $runtimeNode --zero-fill-buffers $runtimeDir/claude.mjs "\$@"
 EOF
 	chmod 755 "$binDir/claude"
 
@@ -104,6 +114,8 @@ TEST()
 	# Smoke test of the built tree. The compat suites compare against vectors
 	# recorded from stock Bun 1.4.4 on Linux, so they run in the acceptance pass
 	# (RESULTS.md), not here.
-	"$(command -v node)" --zero-fill-buffers "$sourceDir/tree/claude.mjs" --version
+	# The tree's module paths point at $runtimeDir, so it is exercised once installed
+	# (RESULTS.md); here, the helper and the relocation record.
 	"$sourceDir/tree/bin/cc-teaminfo" $$ > /dev/null
+	grep -q "\"prefix\": \"$runtimeDir\"" "$sourceDir/tree/RELOCATION.json"
 }
