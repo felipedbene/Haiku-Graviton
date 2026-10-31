@@ -8,10 +8,13 @@ MIN=${1:-30} IV=${2:-30}
 S=soak; H=/tmp/soak-home; rm -rf $H; mkdir -p $H/.claude
 echo '{"prefersReducedMotion":true}' > $H/.claude/settings.json
 tmux -L $S kill-server 2>/dev/null
+trap 'tmux -L $S kill-server 2>/dev/null' EXIT
+before=$(ps | awk '/bin\/node --zero-fill-buffers \/boot\/system\/lib\/clau/ { print $(NF-3) }' | sort -n | tail -1)
 tmux -L $S new-session -d -s $S -x 120 -y 40 "cd /tmp && HOME=$H TERM=xterm-256color claude"
 sleep 15
-# Haiku ps: the team's args, then Id, #Threads, Gid, Uid.
-team=$(ps | awk '/[c]laude-code\/claude.mjs/ { print $(NF-3); exit }')
+# Haiku ps: the team's args (truncated to 63 chars), then Id, #Threads, Gid, Uid. The
+# newest matching team that did not exist before the launch is ours.
+team=$(ps | awk -v b="${before:-0}" '/bin\/node --zero-fill-buffers \/boot\/system\/lib\/clau/ && $(NF-3) > b { print $(NF-3) }' | sort -n | tail -1)
 echo "node team: ${team:-NOT FOUND}"; [ -n "$team" ] || { tmux -L $S capture-pane -t $S -p | head -20; exit 1; }
 rss() { listarea "$team" | awk 'NF >= 10 && $(NF-5) ~ /^[0-9a-f]+$/ { s += strtonum("0x" $(NF-5)) } END { printf "%d", s / 1024 }'; }
 threads() { ps | awk -v t="$team" '$(NF-3) == t { print $(NF-2); exit }'; }
@@ -28,4 +31,3 @@ for i in $(seq 0 $n); do
 done
 echo "soak: first=${first}KB last=${last}KB min=${min}KB max=${max}KB growth=$(( last - first ))KB over ${MIN}min"
 echo "--- final screen"; tmux -L $S capture-pane -t $S -p | grep -v '^ *$' | head -15
-tmux -L $S kill-server
