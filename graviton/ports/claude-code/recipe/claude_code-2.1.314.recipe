@@ -29,6 +29,9 @@ SOURCE_DIR_3="package"
 SOURCE_URI_4="https://registry.npmjs.org/undici/-/undici-7.30.1.tgz"
 CHECKSUM_SHA256_4="c98bd3881137c11341e8be8d2ec509ebf973b6f8b36d0a4c6d2afcda15e0d712"
 SOURCE_DIR_4="package"
+SOURCE_URI_5="https://registry.npmjs.org/bidi-js/-/bidi-js-1.1.0.tgz"
+CHECKSUM_SHA256_5="8a89fce4e2b00c5141929ecde8336e955901e8fa2c7f01c6b5c9732639dd4175"
+SOURCE_DIR_5="package"
 # The port tooling, compat layer and native helper (graviton/ports/claude-code),
 # staged as additional-files/claude-code-port.tar by tools/stage-recipe.sh. Only files
 # listed here are copied into the build chroot.
@@ -78,6 +81,7 @@ BUILD()
 	cp -R "$sourceDir2" "$deps/ws"
 	cp -R "$sourceDir3" "$deps/acorn"
 	cp -R "$sourceDir4" "$deps/undici"
+	cp -R "$sourceDir5" "$deps/bidi-js"
 
 	# The deterministic pass: extract, relocate to $installDir, restore folds,
 	# haiku cases, compat files. Every step asserts its own counts.
