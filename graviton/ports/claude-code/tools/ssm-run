@@ -55,10 +55,26 @@ ssm_read() {	# ssm_read <shell command>
 # The agent's own status for this command is reported but not trusted: the
 # script's exit code is read back from its rc file below.
 agent_status=Success
+if [ "${DETACH:-0}" = 1 ]; then
+	# DETACH=1: start the script under nohup and return at once, then poll for its rc
+	# file with short commands. Long-lived Run Commands are what leave spinning
+	# ssm-document-workers behind on Haiku (#843 comment), so long steps use this.
+	ssm 120 "mkdir -p /tmp/ccrun && echo $b64 | base64 -d > /tmp/ccrun/$rid.sh && \
+		nohup sh -c 'bash /tmp/ccrun/$rid.sh > /tmp/ccrun/$rid.log 2>&1; echo \$? > /tmp/ccrun/$rid.rc' \
+		< /dev/null > /dev/null 2>&1 & echo started" > /dev/null || { echo "ssm-run: detached start failed" >&2; exit 1; }
+	run_cid=$(cat "$here/evidence/.last-cid")
+	deadline=$(( $(date +%s) + tmo ))
+	until [ -n "$(ssm_read "cat /tmp/ccrun/$rid.rc 2>/dev/null || :" | tr -dc 0-9)" ]; do
+		[ "$(date +%s)" -lt "$deadline" ] || { echo "ssm-run: $rid did not finish within ${tmo}s" >&2; exit 1; }
+		sleep 30
+	done
+	agent_status="detached"
+else
 ssm "$tmo" "mkdir -p /tmp/ccrun && echo $b64 | base64 -d > /tmp/ccrun/$rid.sh && \
 	{ bash /tmp/ccrun/$rid.sh > /tmp/ccrun/$rid.log 2>&1; echo \$? > /tmp/ccrun/$rid.rc; }; \
 	wc -c < /tmp/ccrun/$rid.log" > /dev/null || agent_status=non-Success
 run_cid=$(cat "$here/evidence/.last-cid")
+fi
 end=$(date -u +%Y%m%dT%H%M%SZ)
 
 # Fetch the log in 16 KB chunks (base64 keeps each reply under SSM's 24 KB cap).
