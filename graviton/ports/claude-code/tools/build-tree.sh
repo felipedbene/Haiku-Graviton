@@ -6,7 +6,7 @@
 # The whole deterministic pass, in order: extract the Bun module graph, relocate
 # (R1-R3, P1-P3), analyze evaluation-time requires, apply R4, restore the
 # build-time platform/arch folds (P4, sites in folds-<version>.json), add haiku cases to the platform-name
-# maps (P5-P7), then install the
+# maps (P5-P7), give the Linux-only sites Haiku branches (P8-P17), then install the
 # runtime support files (compat preload, the pinned ws package, node-fetch).
 # Each step asserts its own counts; any change in upstream shape stops the build.
 set -euo pipefail
@@ -20,10 +20,17 @@ python3 -I "$here/relocate-bundle.py" "$work/bunfs" "$out" "$prefix"
 python3 -I "$here/apply-r4.py" "$out" "$work/requires.json"
 python3 -I "$here/apply-folds.py" "$out" "$here/folds-2.1.314.json" --acorn "$deps/acorn" --node "$node"
 python3 -I "$here/apply-haiku-names.py" "$out"
+python3 -I "$here/apply-haiku-impl.py" "$out" --acorn "$deps/acorn" --node "$node"
 cp "$work/requires.json" "$out/REQUIRES.json"
 cp "$here/../compat/bun-compat.mjs" "$here/../compat/claude.mjs" "$out/"
 mkdir -p "$out/lib" && cp "$here/../compat/lib/"*.mjs "$out/lib/"
 mkdir -p "$out/node_modules"
 cp -R "$here/../compat/node_modules/node-fetch" "$out/node_modules/"
 cp -R "$deps/ws" "$out/node_modules/ws"
+# P17's native helper, built on Haiku from native/cc-teaminfo.c. Optional here
+# (the Linux reference build never runs it); on Haiku the bundle warns once on
+# stderr if <prefix>/bin/cc-teaminfo is missing.
+if [ -n "${CC_TEAMINFO:-}" ]; then
+	mkdir -p "$out/bin" && install -m 755 "$CC_TEAMINFO" "$out/bin/cc-teaminfo"
+fi
 echo "build-tree: $out ready (prefix $prefix)"

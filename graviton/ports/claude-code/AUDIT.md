@@ -21,8 +21,29 @@ marked unverified.
 | Class | Sites |
 |---|---|
 | a | 13 (S05, S07, S09, S13, S14, S19, S26, S28, S29, S30, S31, S33, S34) |
-| b | 13 (S06, S10, S11, S12, S15, S18, S20, S21, S22, S23, S24, S25, S32) |
+| b | 14 (S06, S10, S11, S12, S15, S18, S20, S21, S22, S23, S24, S25, S32, S38) |
 | c | 11 (S01, S02, S03, S04, S08, S16, S17, S27, S35, S36, S37) |
+
+S38 (Linux open-flag numbers baked into the bundle) was found while implementing the
+class (b) fixes and was added afterwards.
+
+**Status of class (b):** all of them are implemented by `tools/apply-haiku-impl.py`
+(PATCHES.md P8–P17), except two:
+- S25 (`Bun.ant.CellSegmenter`) is owned separately.
+- S22 (`rjn`) is kept on purpose, made safe by P17's lock `procStart` (see PATCHES.md).
+
+| Site | Rule |
+|---|---|
+| S20 | P8 |
+| S15 | P9 |
+| S18 | P10 |
+| S23 | P11 |
+| S24 | P12 |
+| S10 | P13 |
+| S11 | P14 |
+| S12 | P15 |
+| S38 | P16 |
+| S06/S21/S32 | P17 (`native/cc-teaminfo.c`; building and verifying it on Haiku is still pending) |
 
 S20 is a regression that P5 itself introduced. S25 isn't Haiku-specific: it applies to
 the Node compat layer on every OS.
@@ -116,6 +137,7 @@ setup-issue counter.
 | S35 | `chunk-74z2fna5.js` (literal) | tells the model to use `printf … \| nc -N -U "$CLAUDE_CODE_MESSAGING_SOCKET"` | no `nc -U` on Haiku, so inter-agent UDS messaging from the shell doesn't work. Whether `socat` is installed is unknown | c | `${"nc -N -U"} "$CLAUDE_CODE_MESSAGING_SOCKET"` (darwin build: `"nc -U"`) |
 | S36 | `chunk-fejj39g0.js` · `Rw`, `chunk-xjn8qbfw.js` · `NYo`/`AYr`/open | Claude in Chrome: browser profiles, native-messaging paths | `switch(process.platform)` has no haiku case, so the profile list is empty: `[Claude in Chrome] Unsupported platform for extension detection: haiku` | c | `switch(process.platform){case"darwin":h=s.macos;break;case"linux":h=s.linux;break;case"win32":{…}}` |
 | S37 | `chunk-bfxj2kma.js` · `M`, `y` | launches a deep link in a terminal emulator | `default:return null`, so the log says `No terminal emulator detected` | c | `switch(process.platform){case"darwin":return S();case"linux":return F();case"win32":return A();default:return null}` |
+| S38 | `chunk-szzxb7zd.js` `Bo`, `y9` (26 / 6 importing modules); `chunk-zy2k3hny.js` `sfr` | Linux `open(2)` flag numbers baked in: `Bo`=524288 (`O_CLOEXEC`), `y9`=2097152 (`O_PATH`) | on Haiku 0x80000 is `O_NOFOLLOW` and 0x200000 is `O_DIRECTORY` (`headers/posix/fcntl.h:57,61`), so every `\|Bo` open refuses a symlink as its last path component and every `\|y9` open refuses a regular file. The darwin build has `Bo=16777216` (its own `O_CLOEXEC`) | b | `var Bo=524288,GIe=0,y9=2097152,Lxi=Q.O_NOATIME??0` (report: `changed-code` vs darwin `16777216,ihe=536870912`) |
 
 ## Swallowed errors that would hide Haiku breakage
 
@@ -500,7 +522,11 @@ folding, `O_NOFOLLOW` flags, shell-profile choice, `PATH` key, IPC length,
 | `setDumpable` | `chunk-xn5zep1w.js` | `try…catch` → `prctl unavailable: …` | not dumpable-protected (logged) |
 | `windowsFolderSecurity`, `windowsSandboxDeniesArg` | `chunk-v0b8hfja.js` `uM`, `kM` | `M()==="windows"` and `?.` | not reached |
 
-## Proposed haiku implementations (class b), described and not implemented
+## Proposed haiku implementations (class b)
+
+These are now implemented as PATCHES.md P8–P17. P13–P15 follow the descriptions
+below. P17's helper prints `team parent group session uid start_us start_epoch_us args`.
+The original proposals are kept for the record.
 
 Each one is a build-time rewrite in the style of `tools/apply-haiku-names.py`: an exact
 match count per site, then an acorn parse.
