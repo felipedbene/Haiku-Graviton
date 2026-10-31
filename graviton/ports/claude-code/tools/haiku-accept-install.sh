@@ -18,7 +18,9 @@ aws s3 cp --quiet --region us-west-2 "$T/port.tgz" "$B/port-tools.tgz"
 	done
 	cat <<'STEP'
 echo "== install"
-pkgman uninstall -y claude_code 2>/dev/null | tail -1; pkgman install -y tmux $W/nodejs24-24.21.0-1-arm64.hpkg $W/claude_code-2.1.314-1-arm64.hpkg 2>&1 | tail -3
+N=$W/nodejs24-24.21.0-1-arm64.hpkg; [ -e /boot/system/packages/nodejs24-24.21.0-1-arm64.hpkg ] && N=""
+pkgman uninstall -y claude_code 2>&1 | tail -1
+pkgman install -y tmux $N $W/claude_code-2.1.314-1-arm64.hpkg 2>&1 | tail -3
 command -v node claude; node --version; ls /boot/system/lib/claude-code | head -20
 echo "== claude --version"; claude --version; echo "rc=$?"
 echo "== claude doctor (no TTY)"; HOME=$W/home-doctor timeout 120 claude doctor < /dev/null 2>&1 | head -60; echo "rc=$?"
