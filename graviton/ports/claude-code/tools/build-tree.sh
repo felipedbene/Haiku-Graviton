@@ -39,4 +39,5 @@ pinned=$("$node" -p 'require(process.argv[1]).version' "$deps/undici/package.jso
 if [ -n "${CC_TEAMINFO:-}" ]; then
 	mkdir -p "$out/bin" && install -m 755 "$CC_TEAMINFO" "$out/bin/cc-teaminfo"
 fi
+cp -R "$deps/bidi-js" "$out/node_modules/bidi-js"
 echo "build-tree: $out ready (prefix $prefix)"
