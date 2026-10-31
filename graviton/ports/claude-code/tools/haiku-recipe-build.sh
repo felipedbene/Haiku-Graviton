@@ -21,7 +21,7 @@ echo '$S  claude_code-recipe.tgz' | sha256sum -c - || exit 1
 rm -rf /boot/home/haikuports/dev-util/claude_code /boot/home/haikuports/packages/claude_code-*.hpkg
 tar xzf claude_code-recipe.tgz -C /boot/home/haikuports
 node --version; python3 --version
-sh /boot/home/haiku-nativebuild claude_code > /boot/home/cc-nb.log 2>&1; echo "nativebuild rc=\\\$?"
+sh /boot/home/haiku-nativebuild claude_code > /boot/home/cc-nb.log 2>&1; echo "nativebuild rc=\$?"
 grep -E "BUILD_OK|FAILED" /boot/home/cc-nb.log | tail -3
 echo "== deterministic pass"
 grep -E "contents=|R4 applied|parsed [0-9]+ modules|P[0-9]+ applied|build-tree:" /boot/home/nb-claude_code.log
