@@ -29,8 +29,10 @@ SOURCE_DIR_3="package"
 SOURCE_URI_4="https://registry.npmjs.org/undici/-/undici-7.30.1.tgz"
 CHECKSUM_SHA256_4="c98bd3881137c11341e8be8d2ec509ebf973b6f8b36d0a4c6d2afcda15e0d712"
 SOURCE_DIR_4="package"
-# The port tooling, compat layer and native helper (graviton/ports/claude-code) are
-# staged as additional-files/claude-code-port.tar by tools/stage-recipe.sh.
+# The port tooling, compat layer and native helper (graviton/ports/claude-code),
+# staged as additional-files/claude-code-port.tar by tools/stage-recipe.sh. Only files
+# listed here are copied into the build chroot.
+ADDITIONAL_FILES="claude-code-port.tar"
 
 ARCHITECTURES="!x86_gcc2 !x86 !x86_64 arm64"
 
