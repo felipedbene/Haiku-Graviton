@@ -1,0 +1,173 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: scen-haiku-node-v1
+# instance: i-0e90d4b253c8134b3   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261031T154205Z   end: 20261031T154307Z   rc: 0
+# script sha256: 529da29b0c6dd210203a739cf260fd64cfe7af1cf1a55358bf7f31c9bded0e8d
+# ---- script ----
+# | set -u
+# | R=/boot/home/cc-scen/port; rm -rf $R && mkdir -p $R && cd $R || exit 1
+# | /boot/system/bin/curl -sSfo p.tgz 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.amazonaws.com/claude-code-port/port-scen-1e032eebfd447e7975f3293af13248faf34dd1dc2993e2e7b95bbfbb877b5d82.tgz?<PRESIGNED>' || exit 1
+# | echo '1e032eebfd447e7975f3293af13248faf34dd1dc2993e2e7b95bbfbb877b5d82  p.tgz' | sha256sum -c - || exit 1
+# | tar xzf p.tgz && rm p.tgz || exit 1
+# | REC_URL='https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.amazonaws.com/claude-code-port/bun-recordings-scen.tgz?<PRESIGNED>'
+# | REC_SHA=94455a531b98a061790183cb8f0e14016d97f66faf0f5a4d9e4f6bd6aafa1b6c
+# | # Step script for tools/haiku-compat-run: the Bun.spawn and Bun.serve/listen/
+# | # connect diff tests on Haiku, against stock Bun recorded on Linux by
+# | # spawn-diff-step.sh / net-diff-step.sh. Needs REC_URL (a GET for the recordings
+# | # tarball) and REC_SHA set before it. Runs Node + the shipped compat/lib;
+# | # loopback and port 0 only, and the TCP listeners are listed before and after.
+# | N=/boot/system/bin/node
+# | $N --version
+# | REC=/boot/home/cc-scen/rec; rm -rf $REC; mkdir -p $REC
+# | /boot/system/bin/curl -sSfo $REC/rec.tgz "$REC_URL" || exit 1
+# | echo "$REC_SHA  $REC/rec.tgz" | sha256sum -c - || exit 1
+# | tar xzf $REC/rec.tgz -C $REC && sha256sum $REC/spawn-bun.json $REC/net.cases.json
+# | echo "== TCP listeners before"; netstat -n -t -l
+# | cd compat/test
+# | echo "######## spawn"
+# | export CC_SPAWN_PRESET=orig CC_SPAWN_PRESET2=orig2
+# | timeout 600 $N --import ./spawn-preload.mjs spawn-scenarios.mjs $REC/spawn-node-haiku.json /tmp/cc-scen-spawn-work; echo node-rc=$?
+# | $N check-spawn.mjs $REC/spawn-bun.json $REC/spawn-node-haiku.json; echo check-rc=$?
+# | rm -rf /tmp/cc-scen-spawn-work
+# | echo "######## net"
+# | T=/tmp/cc-scen-tls; rm -rf $T; mkdir -p $T
+# | openssl req -x509 -newkey rsa:2048 -nodes -keyout $T/key.pem -out $T/cert.pem -days 2 -subj /CN=localhost 2>/dev/null && echo tls-ok
+# | NET_TLS_DIR=$T timeout 900 $N check-net.mjs $REC 2> $REC/net-node-haiku.stderr; echo "check rc=$?"
+# | echo "stderr lines: $(wc -l < $REC/net-node-haiku.stderr)"
+# | rm -rf $T
+# | echo "== TCP listeners after"; netstat -n -t -l
+# | echo "== node teams left"; ps | grep -E '^/boot/system/bin/node|^/bin/sleep|sleep ' | grep -v grep; echo "grep rc=$? (1 = none)"
+# ---- raw output ----
+runtime_loader: Cannot open file /no/such/interp (needed by <NULL>): No such file or directory
+86b7b781a287348393cb7ca  /boot/home/cc-scen/rec/spawn-bun.json
+35b857e6ffa859283b3536537bff93a5abd3e5a714a80d5f4f86276e51f694c4  /boot/home/cc-scen/rec/net.cases.json
+== TCP listeners before
+Proto  Recv-Q Send-Q Local Address         Foreign Address       State        Program
+tcp         0      0 *:10902               *:0                   listen       55/remote_broker
+tcp         0      0 *:22                  *:0                   listen       83/sshd
+tcp         0      0 [127.0.0.1]:10900     *:0                   listen       139/app_server
+######## spawn
+node: 218 scenarios -> /boot/home/cc-scen/rec/spawn-node-haiku.json
+node-rc=0
+reference: bun on linux; compared: node on haiku (cross-platform: named platform differences apply)
+PLATFORM [errno-value] validate object cmd string
+    errno-value at .errno: {"code":"ENOENT","convention":"libuv","ref":-2,"got":-2147459069}
+PLATFORM [signal-table] validate killSignal bogus
+    signal-table at .message: {"ref":"signal must be one of 'SIGHUP', 'SIGINT', 'SIGQUIT', 'SIGILL', 'SIGTRAP', 'SIGABRT', 'SIGBUS', 'SIGFPE', 'SIGKILL', 'SIGUSR1', 'SIGSEGV', 'SIGUSR2', 'SIGPIPE', 'SIGALRM', 'SIGTERM', 'SIGSTKFLT', 'SIGCHLD', 'SIGCONT', 'SIGSTOP', 'SIGTSTP', 'SIGTTIN', 'SIGTTOU', 'SIGURG', 'SIGXCPU', 'SIGXFSZ', 'SIGVTALRM', 'SIGPROF', 'SIGWINCH', 'SIGIO', 'SIGPWR' or 'SIGSYS'","got":"signal must be one of 'SIGHUP', 'SIGINT', 'SIGQUIT', 'SIGILL', 'SIGCHLD', 'SIGABRT', 'SIGPIPE', 'SIGFPE', 'SIGKILL', 'SIGSTOP', 'SIGSEGV', 'SIGCONT', 'SIGTSTP', 'SIGALRM', 'SIGTERM', 'SIGTTIN', 'SIGTTOU', 'SIGUSR1', 'SIGUSR2', 'SIGWINCH', 'SIGTRAP', 'SIGPOLL', 'SIGPROF', 'SIGSYS', 'SIGURG', 'SIGVTALRM', 'SIGXCPU', 'SIGXFSZ' or 'SIGBUS'"}
+PLATFORM [signal-table] kill invalid SIGBOGUS
+    signal-table at .r.message: {"ref":"signal must be one of 'SIGHUP', 'SIGINT', 'SIGQUIT', 'SIGILL', 'SIGTRAP', 'SIGABRT', 'SIGBUS', 'SIGFPE', 'SIGKILL', 'SIGUSR1', 'SIGSEGV', 'SIGUSR2', 'SIGPIPE', 'SIGALRM', 'SIGTERM', 'SIGSTKFLT', 'SIGCHLD', 'SIGCONT', 'SIGSTOP', 'SIGTSTP', 'SIGTTIN', 'SIGTTOU', 'SIGURG', 'SIGXCPU', 'SIGXFSZ', 'SIGVTALRM', 'SIGPROF', 'SIGWINCH', 'SIGIO', 'SIGPWR' or 'SIGSYS'","got":"signal must be one of 'SIGHUP', 'SIGINT', 'SIGQUIT', 'SIGILL', 'SIGCHLD', 'SIGABRT', 'SIGPIPE', 'SIGFPE', 'SIGKILL', 'SIGSTOP', 'SIGSEGV', 'SIGCONT', 'SIGTSTP', 'SIGALRM', 'SIGTERM', 'SIGTTIN', 'SIGTTOU', 'SIGUSR1', 'SIGUSR2', 'SIGWINCH', 'SIGTRAP', 'SIGPOLL', 'SIGPROF', 'SIGSYS', 'SIGURG', 'SIGVTALRM', 'SIGXCPU', 'SIGXFSZ' or 'SIGBUS'"}
+PLATFORM [signal-table] kill invalid sigterm
+    signal-table at .r.message: {"ref":"signal must be one of 'SIGHUP', 'SIGINT', 'SIGQUIT', 'SIGILL', 'SIGTRAP', 'SIGABRT', 'SIGBUS', 'SIGFPE', 'SIGKILL', 'SIGUSR1', 'SIGSEGV', 'SIGUSR2', 'SIGPIPE', 'SIGALRM', 'SIGTERM', 'SIGSTKFLT', 'SIGCHLD', 'SIGCONT', 'SIGSTOP', 'SIGTSTP', 'SIGTTIN', 'SIGTTOU', 'SIGURG', 'SIGXCPU', 'SIGXFSZ', 'SIGVTALRM', 'SIGPROF', 'SIGWINCH', 'SIGIO', 'SIGPWR' or 'SIGSYS'","got":"signal must be one of 'SIGHUP', 'SIGINT', 'SIGQUIT', 'SIGILL', 'SIGCHLD', 'SIGABRT', 'SIGPIPE', 'SIGFPE', 'SIGKILL', 'SIGSTOP', 'SIGSEGV', 'SIGCONT', 'SIGTSTP', 'SIGALRM', 'SIGTERM', 'SIGTTIN', 'SIGTTOU', 'SIGUSR1', 'SIGUSR2', 'SIGWINCH', 'SIGTRAP', 'SIGPOLL', 'SIGPROF', 'SIGSYS', 'SIGURG', 'SIGVTALRM', 'SIGXCPU', 'SIGXFSZ' or 'SIGBUS'"}
+PLATFORM [signal-table] kill invalid TERM
+    signal-table at .r.message: {"ref":"signal must be one of 'SIGHUP', 'SIGINT', 'SIGQUIT', 'SIGILL', 'SIGTRAP', 'SIGABRT', 'SIGBUS', 'SIGFPE', 'SIGKILL', 'SIGUSR1', 'SIGSEGV', 'SIGUSR2', 'SIGPIPE', 'SIGALRM', 'SIGTERM', 'SIGSTKFLT', 'SIGCHLD', 'SIGCONT', 'SIGSTOP', 'SIGTSTP', 'SIGTTIN', 'SIGTTOU', 'SIGURG', 'SIGXCPU', 'SIGXFSZ', 'SIGVTALRM', 'SIGPROF', 'SIGWINCH', 'SIGIO', 'SIGPWR' or 'SIGSYS'","got":"signal must be one of 'SIGHUP', 'SIGINT', 'SIGQUIT', 'SIGILL', 'SIGCHLD', 'SIGABRT', 'SIGPIPE', 'SIGFPE', 'SIGKILL', 'SIGSTOP', 'SIGSEGV', 'SIGCONT', 'SIGTSTP', 'SIGALRM', 'SIGTERM', 'SIGTTIN', 'SIGTTOU', 'SIGUSR1', 'SIGUSR2', 'SIGWINCH', 'SIGTRAP', 'SIGPOLL', 'SIGPROF', 'SIGSYS', 'SIGURG', 'SIGVTALRM', 'SIGXCPU', 'SIGXFSZ' or 'SIGBUS'"}
+UNOBSERVABLE [unobservable] argv0 cmdline
+    unobservable at .c[0]: {"reason":"team_info.args starts with the exec path, not argv[0] (team.cpp Team::SetArgs); argv[0] is checked by 'argv0 visible as $0'","got":{"unobservable-on-haiku":"team_info.args starts with the exec path, not argv[0] (team.cpp Team::SetArgs); argv[0] is checked by 'argv0 visible as $0'","kernelShows":"/boot/system/bin/sleep"},"ref":"claude bg-pty-host"}
+MISMATCH argv0 resolves real binary 
+  bun  {"exeIsRealSh":true} 
+  node {"exeIsRealSh":false,"exe":"/boot/system/lib/claude-code/bin/cc-teaminfo","real":"/boot/system/lib/claude-code/bin/cc-teaminfo","sh":"/boot/system/bin/sh"}
+    MISMATCH at (root): {"ref":{"exeIsRealSh":true},"got":{"exeIsRealSh":false,"exe":"/boot/system/lib/claude-code/bin/cc-teaminfo","real":"/boot/system/lib/claude-code/bin/cc-teaminfo","sh":"/boot/system/bin/sh"}}
+UNOBSERVABLE [unobservable] no argv0 cmdline keeps cmd[0]
+    unobservable at .c[0]: {"reason":"team_info.args starts with the exec path, not argv[0] (team.cpp Team::SetArgs); argv[0] is checked by 'argv0 visible as $0'","got":{"unobservable-on-haiku":"team_info.args starts with the exec path, not argv[0] (team.cpp Team::SetArgs); argv[0] is checked by 'argv0 visible as $0'","kernelShows":"/boot/system/bin/sleep"},"ref":"sleep"}
+PLATFORM [errno-value] env PATH no match
+    errno-value at .errno: {"code":"ENOENT","convention":"libuv","ref":-2,"got":-2147459069}
+MISMATCH env spread 
+  bun  {"o":"xterm-256color:\n"} 
+  node {"o":"xterm-256color:<HOME>\n","home":"<HOME>"}
+    MISMATCH at (root): {"ref":{"o":"xterm-256color:\n"},"got":{"o":"xterm-256color:<HOME>\n","home":"<HOME>"}}
+PLATFORM [errno-value] stdio Bun.file missing dir
+    errno-value at .errno: {"code":"ENOENT","convention":"libuv","ref":-2,"got":-2147459069}
+PLATFORM [errno-value] stdio Bun.file missing dir with argv0
+    errno-value at .errno: {"code":"ENOENT","convention":"libuv","ref":-2,"got":-2147459069}
+PLATFORM [errno-value] stdio Bun.file is a directory
+    errno-value at .errno: {"code":"EISDIR","convention":"libuv","ref":-21,"got":-2147459063}
+PLATFORM [errno-value] stdio Bun.file read-only fs
+    errno-value at .errno: {"code":"EROFS","convention":"libuv","ref":-30,"got":-2147459064}
+PLATFORM [errno-value] stdio missing dir and bad cwd
+    errno-value at .errno: {"code":"ENOTDIR","convention":"libuv","ref":-20,"got":-2147459067}
+PLATFORM [errno-value] missing bare binary
+    errno-value at .errno: {"code":"ENOENT","convention":"libuv","ref":-2,"got":-2147459069}
+PLATFORM [errno-value] missing bare binary with argv0
+    errno-value at .errno: {"code":"ENOENT","convention":"libuv","ref":-2,"got":-2147459069}
+PLATFORM [errno-value] missing absolute binary
+    errno-value at .errno: {"code":"ENOENT","convention":"libuv","ref":-2,"got":-2147459069}
+PLATFORM [errno-value] missing absolute binary with argv0
+    errno-value at .errno: {"code":"ENOENT","convention":"libuv","ref":-2,"got":-2147459069}
+PLATFORM [errno-value] missing relative binary
+    errno-value at .errno: {"code":"ENOENT","convention":"libuv","ref":-2,"got":-2147459069}
+PLATFORM [errno-value] non-executable file
+    errno-value at .errno: {"code":"EACCES","convention":"libuv","ref":-13,"got":-2147483646}
+MISMATCH directory as binary 
+  bun  {"threw":true,"ctor":"Error","name":"Error","message":"EACCES: permission denied, posix_spawn '<WORK>'","code":"EACCES","errno":-13,"syscall":"posix_spawn","path":"<WORK>","isError":true,"isTypeError":false} 
+  node {"threw":true,"ctor":"Error","name":"Error","message":"EISDIR: illegal operation on a directory, posix_spawn '<WORK>'","code":"EISDIR","errno":-2147459063,"syscall":"posix_spawn","path":"<WORK>","isError":true,"isTypeError":false}
+    MISMATCH at .message: {"ref":"EACCES: permission denied, posix_spawn '<WORK>'","got":"EISDIR: illegal operation on a directory, posix_spawn '<WORK>'"}
+    MISMATCH at .code: {"ref":"EACCES","got":"EISDIR"}
+    MISMATCH at .errno: {"ref":-13,"got":-2147459063}
+PLATFORM [errno-value] cwd missing
+    errno-value at .errno: {"code":"ENOENT","convention":"libuv","ref":-2,"got":-2147459069}
+PLATFORM [errno-value] cwd is a file
+    errno-value at .errno: {"code":"ENOTDIR","convention":"libuv","ref":-20,"got":-2147459067}
+PLATFORM [errno-value] cwd is a file with argv0
+    errno-value at .errno: {"code":"ENOTDIR","convention":"libuv","ref":-20,"got":-2147459067}
+MISMATCH bad interpreter 
+  bun  {"threw":true,"ctor":"Error","name":"Error","message":"ENOENT: no such file or directory, posix_spawn '<WORK>/badinterp.sh'","code":"ENOENT","errno":-2,"syscall":"posix_spawn","path":"<WORK>/badinterp.sh","isError":true,"isTypeError":false} 
+  node {"returned":true,"x":3}
+    MISMATCH at (root): {"ref":{"threw":true,"ctor":"Error","name":"Error","message":"ENOENT: no such file or directory, posix_spawn '<WORK>/badinterp.sh'","code":"ENOENT","errno":-2,"syscall":"posix_spawn","path":"<WORK>/badinterp.sh","isError":true,"isTypeError":false},"got":{"returned":true,"x":3}}
+DECLARED terminal options object 
+  bun  {"returned":true,"terminal":"object","x":129} 
+  node {"threw":true,"ctor":"Error","name":"Error","message":"Bun.spawn: the terminal option (Bun.Terminal / PTY) is not supported by the Node compat layer","isError":true,"isTypeError":false}
+PLATFORM [errno-value] validate2 cwd number
+    errno-value at .errno: {"code":"ENOENT","convention":"libuv","ref":-2,"got":-2147459069}
+PLATFORM [errno-value] env snapshot: PATH lookup uses changed PATH
+    errno-value at .errno: {"code":"ENOENT","convention":"libuv","ref":-2,"got":-2147459069}
+DECLARED resourceUsage 
+  bun  {"before":"undefined","after":{"t":"object","keys":["contextSwitches","cpuTime","maxRSS","messages","ops","shmSize","signalCount","swapCount"]}} 
+  node {"before":"undefined","after":{"threw":true,"ctor":"Error","name":"Error","message":"Bun.spawn: resourceUsage() (Node does not report a child's rusage) is not supported by the Node compat layer","isError":true,"isTypeError":false}}
+DECLARED ipc option 
+  bun  {"returned":true,"x":0} 
+  node {"threw":true,"ctor":"Error","name":"Error","message":"Bun.spawn: the ipc option is not supported by the Node compat layer","isError":true,"isTypeError":false}
+DECLARED stdio extra pipe 
+  bun  {"returned":true,"t":"number"} 
+  node {"threw":true,"ctor":"Error","name":"Error","message":"Bun.spawn: stdio[3] \"pipe\" (an extra pipe handed out as a raw fd) is not supported by the Node compat layer","isError":true,"isTypeError":false}
+spawn: 186 match / 22 platform-difference / 2 unobservable-on-haiku / 4 mismatch / 4 declared-unsupported (218 scenarios)
+check-rc=1
+######## net
+tls-ok
+reference: bun on linux; compared: node on haiku (cross-platform: named platform differences apply)
+MISMATCH Response class defaults on the wire (outside net.mjs)
+  node: {"GET /str":[["content-type","text/plain;charset=UTF-8"],["content-length","9"]],"GET /json":[["content-type","application/json"],["content-length","7"]],"GET /404":[["content-type","text/plain;charset=UTF-8"],["content-length","2"]],"HEAD /str":[["content-type","text/plain;charset=UTF-8"],["content-length","9"]],"HEAD /json":[["content-type","application/json"],["content-length","7"]]}
+  bun:  {"GET /str":[["content-type","text/plain;charset=utf-8"],["content-length","9"]],"GET /json":[["content-type","application/json;charset=utf-8"],["content-length","7"]],"GET /404":[["content-type","text/plain;charset=utf-8"],["content-length","2"]],"HEAD /str":[["content-length","9"]],"HEAD /json":[["content-type","application/json;charset=utf-8"],["content-length","7"]]}
+    MISMATCH at .GET /str[0][1]: {"ref":"text/plain;charset=utf-8","got":"text/plain;charset=UTF-8"}
+    MISMATCH at .GET /json[0][1]: {"ref":"application/json;charset=utf-8","got":"application/json"}
+    MISMATCH at .GET /404[0][1]: {"ref":"text/plain;charset=utf-8","got":"text/plain;charset=UTF-8"}
+    MISMATCH at .HEAD /str: {"ref":[["content-length","9"]],"got":[["content-type","text/plain;charset=UTF-8"],["content-length","9"]]}
+    MISMATCH at .HEAD /json[0][1]: {"ref":"application/json;charset=utf-8","got":"application/json"}
+MISMATCH serve: development:false sets SO_REUSEPORT (second bind succeeds)
+  node: {"prodTwice":{"isError":true,"name":"Error","message":"Failed to start server. Is port PORT in use?","keys":["code","errno","syscall"],"code":"EADDRINUSE","errno":0,"syscall":"listen"},"explicitNoReuse":{"isError":true,"name":"Error","message":"Failed to start server. Is port PORT in use?","keys":["code","errno","syscall"],"code":"EADDRINUSE","errno":0,"syscall":"listen"}}
+  bun:  {"prodTwice":"bound","explicitNoReuse":{"isError":true,"name":"Error","message":"Failed to start server. Is port PORT in use?","keys":["code","errno","syscall"],"code":"EADDRINUSE","errno":0,"syscall":"listen"}}
+    MISMATCH at .prodTwice: {"ref":"bound","got":{"isError":true,"name":"Error","message":"Failed to start server. Is port PORT in use?","keys":["code","errno","syscall"],"code":"EADDRINUSE","errno":0,"syscall":"listen"}}
+MISMATCH serve: hostname localhost
+  node: {"hostname":"localhost","url":"http://localhost:PORT/","v4":"ECONNREFUSED","v6":"connected"}
+  bun:  {"hostname":"localhost","url":"http://localhost:PORT/","v4":"connected","v6":"ECONNREFUSED"}
+    MISMATCH at .v4: {"ref":"connected","got":"ECONNREFUSED"}
+    MISMATCH at .v6: {"ref":"ECONNREFUSED","got":"connected"}
+PLATFORM [errno-value] listen: peer reset delivers close(err) / error
+    errno-value at .log[2][2].errno: {"code":"ECONNRESET","convention":"libuv","ref":-104,"got":-2147454948}
+MISMATCH listen: EADDRINUSE error shape, ::1, missing handlers
+  node: {"inUse":{"isError":true,"name":"Error","message":"Failed to listen at 127.0.0.1","keys":["address","code","errno","port","syscall"],"code":"EADDRINUSE","errno":-2147454954,"syscall":"listen","address":"127.0.0.1","port":"port>0"},"v6":{"port":true,"hostname":"::1","connect":"connected"},"noData":{"isError":true,"name":"TypeError","message":"Expected at least \"data\" or \"drain\" callback","keys":[],"code":"ERR_INVALID_ARG_TYPE"},"noSocket":{"isError":true,"name":"TypeError","message":"SocketOptions.socket is required","keys":[],"code":"ERR_INVALID_ARG_TYPE"}}
+  bun:  {"inUse":{"isError":true,"name":"Error","message":"Failed to listen at 127.0.0.1","keys":["address","code","errno","port","syscall"],"code":"EADDRINUSE","errno":98,"syscall":"listen","address":"127.0.0.1","port":"port>0"},"v6":{"port":true,"hostname":"::1","connect":"connected"},"noData":{"isError":true,"name":"TypeError","message":"Expected at least \"data\" or \"drain\" callback","keys":[],"code":"ERR_INVALID_ARG_TYPE"},"noSocket":{"isError":true,"name":"TypeError","message":"SocketOptions.socket is required","keys":[],"code":"ERR_INVALID_ARG_TYPE"}}
+    MISMATCH at .inUse.errno: {"code":"EADDRINUSE","ref":98,"refConvention":"native","got":-2147454954,"gotConvention":"libuv"}
+PLATFORM [errno-value] connect: refused -> promise rejects (no connectError)
+    errno-value at .e.errno: {"code":"ECONNREFUSED","convention":"libuv","ref":-111,"got":-2147454944}
+PLATFORM [errno-value] connect: refused with connectError handler
+    errno-value at .e.errno: {"code":"ECONNREFUSED","convention":"libuv","ref":-111,"got":-2147454944}
+net: 35 match / 3 platform-difference / 0 unobservable-on-haiku / 4 mismatch (42 scenarios)
+check rc=1
+stderr lines: 40
+== TCP listeners after
+Proto  Recv-Q Send-Q Local Address         Foreign Address       State        Program
+tcp         0      0 *:10902               *:0                   listen       55/remote_broker
+tcp         0      0 *:22                  *:0                   listen       83/sshd
+tcp         0      0 [127.0.0.1]:10900     *:0                   listen       139/app_server
+== node teams left
+/bin/sleep 30                                      12465        1    0    0 
+grep rc=0 (1 = none)

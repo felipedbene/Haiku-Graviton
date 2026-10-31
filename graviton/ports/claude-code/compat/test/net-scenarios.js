@@ -19,6 +19,7 @@ import http from "node:http";
 import { createHash } from "node:crypto";
 import { spawn } from "node:child_process";
 import { readFileSync } from "node:fs";
+import dns from "node:dns/promises";
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 function deferred() {
@@ -142,12 +143,15 @@ function freePort(host = "127.0.0.1") {
 		s.listen({ port: 0, host }, () => { const p = s.address().port; s.close(() => resolve(p)); });
 	});
 }
-// A plain node:net peer for the Bun.connect scenarios.
+// A plain node:net peer for the Bun.connect scenarios. An IPv6 peer is bound
+// v6-only: a ::1 socket never accepts IPv4 anyway, so this changes nothing on
+// Linux, and it is the only way Node binds IPv6 on Haiku, whose IPv6 sockets
+// are always v6-only and refuse IPV6_V6ONLY=0 (libuv sets it to 0 by default).
 function peerServer(onConn, host = "127.0.0.1", port = 0) {
 	return new Promise((resolve, reject) => {
 		const s = net.createServer(onConn);
 		s.on("error", reject);
-		s.listen({ port, host }, () => resolve(s));
+		s.listen({ port, host, ...(net.isIP(host) === 6 ? { ipv6Only: true } : {}) }, () => resolve(s));
 	});
 }
 const closeServer = (s) => new Promise((r) => s.close(() => r()));
@@ -529,7 +533,11 @@ export function scenarios(api, env) {
 	add("serve: hostname localhost", async (t) => {
 		const s = track(t, api.serve({ hostname: "localhost", port: 0, fetch: (req, srv) => new Response(srv.requestIP(req).address, { headers: { "content-type": "text/plain" } }) }));
 		const v4 = await tryConnect(s.port, "127.0.0.1"), v6 = await tryConnect(s.port, "::1");
-		return { hostname: s.hostname, url: P(s.url.href, s.port), v4, v6 };
+		// The listener goes to the system resolver's first IPv6 answer, else its
+		// first IPv4 one (uSockets bsd_create_listen_socket), so what the host's
+		// resolver says for localhost is recorded next to it.
+		const resolved = (await dns.lookup("localhost", { all: true })).map((a) => a.address);
+		return { hostname: s.hostname, url: P(s.url.href, s.port), v4, v6, resolved };
 	});
 
 	if (env.tlsDir) add("serve: tls {cert,key}", async (t) => {

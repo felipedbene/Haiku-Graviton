@@ -1,0 +1,37 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: half-close-haiku
+# instance: i-0e90d4b253c8134b3   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261031T154751Z   end: 20261031T154812Z   rc: 0
+# script sha256: 5f9e70fee8635231ddd191680db3b21d2b3ac3eecec34bddd64e7eb9046fcf64
+# ---- script ----
+# | set -u
+# | R=/boot/home/cc-scen/port; rm -rf $R && mkdir -p $R && cd $R || exit 1
+# | /boot/system/bin/curl -sSfo p.tgz 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.amazonaws.com/claude-code-port/port-scen-a87fc08715748de73993d80ef9ca942a1b10b47ec5d830c4bb4b6e82f02dcc57.tgz?<PRESIGNED>' || exit 1
+# | echo 'a87fc08715748de73993d80ef9ca942a1b10b47ec5d830c4bb4b6e82f02dcc57  p.tgz' | sha256sum -c - || exit 1
+# | tar xzf p.tgz && rm p.tgz || exit 1
+# | cd compat/test/platform-repro && timeout 60 /boot/system/bin/node half-close.mjs 5000; echo rc=$?
+# | echo "== TCP table after"; netstat -n -t
+# ---- raw output ----
+p.tgz: OK
+{"host":"127.0.0.1","log":["7ms server: connection","8ms client: data hi","8ms client: end","9ms client: close","117ms tcp table 100ms after client close: [\"tcp 0 0 [127.0.0.1]:19880 *:0 listen 12728/node\",\"tcp 0 0 [127.0.0.1]:19880 [127.0.0.1]:19898 time-wait 12728/node\"]","5002ms TIMEOUT: no server close after 5000 ms"]}
+{"host":"::1","log":["3ms server: connection","3ms client: data hi","3ms client: end","3ms client: close","110ms tcp table 100ms after client close: [\"tcp 0 0 [::1]:40372 [::]:0 listen 12728/node\",\"tcp 0 0 [::1]:40372 [::1]:40374 time-wait 12728/node\"]","5003ms TIMEOUT: no server close after 5000 ms"]}
+rc=0
+== TCP table after
+Proto  Recv-Q Send-Q Local Address         Foreign Address       State        Program
+tcp         0      0 *:10902               *:0                   listen       55/remote_broker
+tcp         0      0 *:22                  *:0                   listen       83/sshd
+tcp         0      0 [127.0.0.1]:10900     *:0                   listen       139/app_server
+tcp         0      0 [10.128.13.44]:9195   [44.254.15.127]:443   established  178/ssm-agent-worker
+tcp         0      0 [10.128.13.44]:22     [10.128.7.248]:22766  time-wait    83/sshd
+tcp         0      0 [10.128.13.44]:22     [10.128.7.248]:19736  time-wait    83/sshd
+tcp         0      0 [127.0.0.1]:19748     [127.0.0.1]:19750     time-wait    12637
+tcp         0      0 [::1]:40366           [::1]:40367           time-wait    12637
+tcp        24      0 [10.128.13.44]:19770  [18.246.220.21]:443   time-wait    37/debeos-cloudwatch
+tcp         0      0 [10.128.13.44]:22     [10.128.7.248]:52390  time-wait    83/sshd
+tcp         0      0 [10.128.13.44]:22     [10.128.7.248]:26183  time-wait    83/sshd
+tcp         0      0 [10.128.13.44]:22     [10.128.7.248]:44331  time-wait    83/sshd
+tcp        24      0 [10.128.13.44]:19851  [18.246.151.38]:443   time-wait    37/debeos-cloudwatch
+tcp         0      0 [10.128.13.44]:22     [10.128.7.248]:29683  time-wait    83/sshd
+tcp         0      0 [10.128.13.44]:22     [10.128.7.248]:62674  time-wait    83/sshd
+tcp         0      0 [127.0.0.1]:19880     [127.0.0.1]:19898     time-wait    12728
+tcp         0      0 [::1]:40372           [::1]:40374           time-wait    12728

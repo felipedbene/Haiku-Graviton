@@ -1,0 +1,34 @@
+# evidence: bun-spawn-fd3-probe
+# instance: i-0a14e8aca787249b7   region: us-west-2
+# ssm command: 6d888360-5a06-4d34-b206-e4bea34cd4b5 (agent status: Success)
+# start: 20261031T153720Z   end: 20261031T153729Z   rc: 0   log bytes: 697
+# script sha256: ba7391dc02d8394a04f81c1a745a5995b6a1fca76b8cc2811f3ac5f5aa2f3396
+# ---- script ----
+# | cat > /tmp/fd3probe.mjs <<'JS'
+# | import { readdirSync, readlinkSync } from "node:fs";
+# | const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+# | for (const [label, cmd, stdio] of [
+# | 	["sleep, stdio ignore x4", ["sleep", "3"], ["ignore", "pipe", "ignore", "ignore"]],
+# | 	["sleep, stdio 3 slots", ["sleep", "3"], ["ignore", "pipe", "ignore"]],
+# | 	["sh, stdio ignore x4", ["sh", "-c", "sleep 3"], ["ignore", "pipe", "ignore", "ignore"]],
+# | ]) {
+# | 	const p = Bun.spawn(cmd, { stdio });
+# | 	await sleep(400);
+# | 	const fds = readdirSync(`/proc/${p.pid}/fd`).map((f) => [f, (() => { try { return readlinkSync(`/proc/${p.pid}/fd/${f}`); } catch (e) { return e.code; } })()]);
+# | 	console.log(label, JSON.stringify(fds));
+# | 	const ls = Bun.spawn(["sh", "-c", "ls -l /proc/self/fd | tail -n +2 | awk '{print $9, $11}' | tr '\\n' ';'"], { stdio });
+# | 	console.log("  ls via sh:", await ls.stdout.text());
+# | 	p.kill(9); await p.exited;
+# | }
+# | console.log("parent fds:", JSON.stringify(readdirSync("/proc/self/fd").map((f) => [f, (() => { try { return readlinkSync(`/proc/self/fd/${f}`); } catch (e) { return e.code; } })()])));
+# | JS
+# | bun /tmp/fd3probe.mjs; echo rc=$?
+# ---- raw output ----
+sleep, stdio ignore x4 [["0","/dev/null"],["1","socket:[192246]"],["2","/dev/null"]]
+  ls via sh: 0 /dev/null;1 pipe:[191035];2 /dev/null;3 /proc/57135/fd;
+sleep, stdio 3 slots [["0","/dev/null"],["1","socket:[192257]"],["2","/dev/null"]]
+  ls via sh: 0 /dev/null;1 pipe:[192730];2 /dev/null;3 /proc/57143/fd;
+sh, stdio ignore x4 [["0","/dev/null"],["1","socket:[192268]"],["2","/dev/null"]]
+  ls via sh: 0 /dev/null;1 pipe:[191048];2 /dev/null;3 /proc/57153/fd;
+parent fds: [["0","/dev/null"],["1","/tmp/ccrun/cc-20261031T153720Z-43334.log"],["2","/tmp/ccrun/cc-20261031T153720Z-43334.log"],["3","anon_inode:[eventpoll]"],["4","anon_inode:[eventfd]"],["5","socket:[192267]"],["6","ENOENT"]]
+rc=0

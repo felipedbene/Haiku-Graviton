@@ -85,6 +85,44 @@ behaviour; the diff test (213/218 match) requires exactly that throw for these f
   (`ChildProcess.prototype.spawn` for a synchronous spawn errno, `child._handle.kill`).
   Pinned by the Node version; re-check on a Node upgrade.
 
+### `Bun.spawn` on Haiku, against stock Bun on Linux
+`compat/test/scenarios-haiku-step.sh` runs the 218 scenarios with Node 24.21.0 on Haiku
+and compares them with the Bun 1.4.4 recording from Linux (`spawn-diff-step.sh`). The
+scenarios observe children through `/proc` on Linux and through `cc-teaminfo` (team,
+session, exec path, args) and `fdinfo` (open fds) on Haiku, in the same shape.
+`check-spawn.mjs` accepts only the named differences of `compat/test/platform-diff.mjs`
+and prints each one. Last run (`evidence/*_scen-haiku-node-v2.log`): **188 match / 23
+platform-difference / 2 unobservable-on-haiku / 1 mismatch / 4 declared-unsupported**.
+- **errno-value (18 scenarios):** the same error code, each side with its own platform's
+  number in the same convention (ENOENT is -2 on Linux and -2147459069 on Haiku). The
+  checker refuses a number that is in neither convention for that code.
+- **signal-table (4):** Bun's "signal must be one of …" message lists the platform's
+  signals 1..31 in number order. Haiku numbers them differently (SIGCHLD 5, SIGBUS 30),
+  and has no SIGSTKFLT/SIGPWR.
+- **exec-directory-errno (`directory as binary`):** exec of a directory is EACCES on
+  Linux. On Haiku libroot tests the file before `_kern_exec` (`exec.cpp`
+  `__test_executable` → `runtime_loader.cpp` `open_executable`, B_IS_A_DIRECTORY), so it
+  is EISDIR. Bun's `posix_spawn` goes through the same libroot. Reproduced with plain
+  Node: `compat/test/platform-repro/exec-dir.mjs`.
+- **unobservable-on-haiku (`argv0 cmdline`, `no argv0 cmdline keeps cmd[0]`):** Haiku's
+  kernel keeps a team's command line as `<exec path> <argv[1]> …`
+  (`team.cpp` `Team::SetArgs(path, args + 1, …)`), so argv[0] isn't visible from outside
+  the child (`ps`, `team_info`). The rest of argv is compared. The argv[0] that the child
+  receives is checked from inside by `argv0 visible as $0`, which matches. Effect: a
+  `claude bg-pty-host` process shows up as its binary's path in `ps`.
+- **cgroup:** Bun ignores the option off Linux, and so does compat, so on Haiku it is an
+  ordinary scenario (it matches) and not one of the declared refusals.
+- **The mismatch is a Haiku defect (`bad interpreter`):** exec of a script whose `#!`
+  interpreter is missing succeeds on Haiku. The child then dies in runtime_loader
+  ("Cannot open file /no/such/interp", exit 3). On Linux, execve fails with ENOENT and
+  Bun.spawn throws. libroot's `do_exec` (`src/system/libroot/posix/unistd/exec.cpp`
+  84-106) checks the script but not the interpreter it names, and the kernel's
+  `exec_team` doesn't check the path before the point of no return. Bun-on-Haiku would
+  behave the same way. Effect: the Bash tool gets exit status 3 and that stderr line
+  where Linux has a spawn error. Reproduced with plain Node and with bash:
+  `compat/test/platform-repro/shebang.mjs`, `evidence/*_platform-repro-haiku.log`. The
+  checker keeps this a mismatch and labels it (`KNOWN_DEFECTS`).
+
 ### `Bun.serve` / `listen` / `connect`
 - **Response defaults (the 1 of 42 mismatch):** Node's `Response` sets its default
   `content-type` when the object is built: `text/plain;charset=UTF-8` vs Bun's
@@ -100,8 +138,33 @@ behaviour; the diff test (213/218 match) requires exactly that throw for these f
   instead of guessing. Every bundle call site passes it.
 - **Dev error page / stderr wording**: status, content-type and the fact that a page is
   served match; the HTML and Bun's stderr formatting are not byte-identical.
-- **Not yet run on Haiku:** the `SO_REUSEPORT` fallback (`development:false`; libuv
-  ENOTSUP expected on Haiku → bind without it, as uSockets does), dual-stack requestIP.
+- **On Haiku** (Node 24.21.0, against the Linux Bun recording;
+  `evidence/*_scen-haiku-node-v2.log`): **35 match / 6 platform-difference / 1 mismatch**.
+  The mismatch is the Response defaults above, the same as on Linux. The named
+  differences (`compat/test/platform-diff.mjs`, each printed by `check-net.mjs`):
+  - errno-value (4): ECONNRESET, EADDRINUSE (Bun.listen reports the native errno, 98 on
+    Linux), ECONNREFUSED ×2.
+  - **no-reuseport-sharing** (`development:false`): Haiku has no SO_REUSEPORT port
+    sharing. libuv answers ENOTSUP (`platform-repro/reuseport.mjs`), and Haiku's TCP bind
+    ignores the option (`EndpointManager::_BindToAddress`: a listening user of the port
+    is EADDRINUSE unless SO_REUSEADDR and TIME_WAIT/CLOSED). So the second server fails
+    with the same EADDRINUSE error as `reusePort:false`, which Bun-on-Haiku would show
+    too. Effect: none for the bundle, which never binds one port twice.
+  - **localhost-resolution** (`hostname:"localhost"`): Haiku's hosts file maps localhost
+    to 127.0.0.1 and ::1; Ubuntu's maps it to 127.0.0.1 only (`platform-repro/localhost.mjs`).
+    The listener takes the first IPv6 answer, as uSockets does, so on Haiku it serves
+    ::1.
+- **IPv6 on Haiku (fixed in compat):** Haiku's IPv6 sockets are always v6-only, and
+  `setsockopt(IPV6_V6ONLY, 0)` fails with EINVAL (`ipv6.cpp` `ipv6_setsockopt`). libuv sets
+  that option on every IPv6 bind, so plain Node can't listen on `::1` or `::` without
+  `ipv6Only:true` (`platform-repro/v6only.mjs`). uSockets ignores the setsockopt result,
+  so Bun binds. `net.mjs` asks libuv for v6-only on Haiku, which is what the socket is
+  anyway. Before the fix, `Bun.serve`/`Bun.listen` on `::1` threw EINVAL.
+- **Haiku TCP defect, not a compat difference:** an accepted socket that sends its FIN
+  first never sees the peer's FIN through poll(). The kernel reaches TIME_WAIT, but Node
+  gets no `end`/`close` (`platform-repro/half-close.mjs`,
+  `evidence/*_half-close-haiku.log`). `net.mjs` destroys the socket on `end()`, so the
+  scenarios don't hit this. A plain Node server that `end()`s first leaks the socket.
 - **Absent members** (never touched by the bundle): Server `fetch`/`upgrade`/`publish`/
   `reload`/`timeout`/…, Listener `reload`/`fd`/…, Socket `flush`/`shutdown`/TLS getters/….
   The full list is in `compat/lib/net.mjs`'s header.

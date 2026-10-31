@@ -1,0 +1,65 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: scen-linux-bun-node-v1
+# instance: i-0a14e8aca787249b7   region: us-west-2
+# ssm command: ee0698c5-677b-43ed-8330-636f773854b1 (agent status: Success)
+# start: 20261031T153503Z   end: 20261031T153648Z   rc: 0   log bytes: 3200
+# script sha256: e1d263f48a8242a02c97f6530f6b66ef16221555f6b62fd50bb58955d01a8536
+# ---- script ----
+# | set -u
+# | echo '390b4c2bd3402584ae5c4630472fdee462bce16d223c4efcac7af5033f77ffe1  /opt/cc/w-scen.stage/p.tgz' | sha256sum -c --quiet - || exit 1
+# | rm -rf /opt/cc/w-scen && mkdir -p /opt/cc/w-scen && tar xzf /opt/cc/w-scen.stage/p.tgz -C /opt/cc/w-scen 2>/dev/null
+# | cd /opt/cc/w-scen
+# | export REC_DIR=/opt/cc/w-scen.rec; rm -rf $REC_DIR; mkdir -p $REC_DIR
+# | echo "######## spawn"
+# | ( . compat/test/spawn-diff-step.sh )
+# | echo "######## net"
+# | ( . compat/test/net-diff-step.sh )
+# | echo "######## upload Bun recordings"
+# | cd $REC_DIR && tar czf /opt/cc/w-scen.rec.tgz spawn-bun.json net.cases.json && sha256sum spawn-bun.json net.cases.json /opt/cc/w-scen.rec.tgz
+# | curl -sSf -T /opt/cc/w-scen.rec.tgz 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.amazonaws.com/claude-code-port/bun-recordings-scen.tgz?<PRESIGNED>' && echo uploaded
+# ---- raw output ----
+######## spawn
+1.4.4
+v24.22.2
+bun: 218 scenarios -> /opt/cc/w-scen.rec/spawn-bun.json
+bun-rc=0
+node: 218 scenarios -> /opt/cc/w-scen.rec/spawn-node.json
+node-rc=0
+reference: bun on linux; compared: node on linux
+MISMATCH stdio extra ignore slot 
+  bun  {"exec":"exec'd","fds":[0,1,2,3],"stdio":4} 
+  node {"exec":"exec'd","fds":[0,1,2],"stdio":4}
+DECLARED terminal options object 
+  bun  {"returned":true,"terminal":"object","x":129} 
+  node {"threw":true,"ctor":"Error","name":"Error","message":"Bun.spawn: the terminal option (Bun.Terminal / PTY) is not supported by the Node compat layer","isError":true,"isTypeError":false}
+DECLARED resourceUsage 
+  bun  {"before":"undefined","after":{"t":"object","keys":["contextSwitches","cpuTime","maxRSS","messages","ops","shmSize","signalCount","swapCount"]}} 
+  node {"before":"undefined","after":{"threw":true,"ctor":"Error","name":"Error","message":"Bun.spawn: resourceUsage() (Node does not report a child's rusage) is not supported by the Node compat layer","isError":true,"isTypeError":false}}
+DECLARED cgroup option 
+  bun  {"returned":true,"x":0} 
+  node {"threw":true,"ctor":"Error","name":"Error","message":"Bun.spawn: the cgroup option is not supported by the Node compat layer","isError":true,"isTypeError":false}
+DECLARED ipc option 
+  bun  {"returned":true,"x":0} 
+  node {"threw":true,"ctor":"Error","name":"Error","message":"Bun.spawn: the ipc option is not supported by the Node compat layer","isError":true,"isTypeError":false}
+DECLARED stdio extra pipe 
+  bun  {"returned":true,"t":"number"} 
+  node {"threw":true,"ctor":"Error","name":"Error","message":"Bun.spawn: stdio[3] \"pipe\" (an extra pipe handed out as a raw fd) is not supported by the Node compat layer","isError":true,"isTypeError":false}
+spawn: 212 match / 1 mismatch / 5 declared-unsupported (218 scenarios)
+check-rc=1
+######## net
+tls-ok
+gen rc=0
+net scenarios: 42
+reference: bun on linux; compared: node on linux
+MISMATCH Response class defaults on the wire (outside net.mjs)
+  node: {"GET /str":[["content-type","text/plain;charset=UTF-8"],["content-length","9"]],"GET /json":[["content-type","application/json"],["content-length","7"]],"GET /404":[["content-type","text/plain;charset=UTF-8"],["content-length","2"]],"HEAD /str":[["content-type","text/plain;charset=UTF-8"],["content-length","9"]],"HEAD /json":[["content-type","application/json"],["content-length","7"]]}
+  bun:  {"GET /str":[["content-type","text/plain;charset=utf-8"],["content-length","9"]],"GET /json":[["content-type","application/json;charset=utf-8"],["content-length","7"]],"GET /404":[["content-type","text/plain;charset=utf-8"],["content-length","2"]],"HEAD /str":[["content-length","9"]],"HEAD /json":[["content-type","application/json;charset=utf-8"],["content-length","7"]]}
+net: 41 match / 1 mismatch (42 scenarios)
+check rc=1
+=== listeners left by bun or node after the run:
+grep rc=1 (1 = none)
+######## upload Bun recordings
+67b14319a1ce1f354d43f8be275f2a15a5e47b0dda900a97ceafe552bede67fb  spawn-bun.json
+35b857e6ffa859283b3536537bff93a5abd3e5a714a80d5f4f86276e51f694c4  net.cases.json
+b268da1b7634314faa9e50be2cbfb74beef25b30640de6d4e5af34932728f947  /opt/cc/w-scen.rec.tgz
+uploaded

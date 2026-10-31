@@ -1,0 +1,53 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: platform-repro-haiku
+# instance: i-0e90d4b253c8134b3   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261031T154635Z   end: 20261031T154655Z   rc: 0
+# script sha256: 403d54e868e26b2ea17f52f7580f1b0343149f03a8b65e3d97ec6987faeb24a0
+# ---- script ----
+# | set -u
+# | R=/boot/home/cc-scen/port; rm -rf $R && mkdir -p $R && cd $R || exit 1
+# | /boot/system/bin/curl -sSfo p.tgz 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.amazonaws.com/claude-code-port/port-scen-4df5eb5983a334962b892960a685e70adc1ae4e42874732c020fc0d313d950ed.tgz?<PRESIGNED>' || exit 1
+# | echo '4df5eb5983a334962b892960a685e70adc1ae4e42874732c020fc0d313d950ed  p.tgz' | sha256sum -c - || exit 1
+# | tar xzf p.tgz && rm p.tgz || exit 1
+# | cd compat/test/platform-repro && sh run.sh /boot/system/bin/node /tmp/cc-repro
+# ---- raw output ----
+runtime_loader: Cannot open file /no/such/interp (needed by <NULL>): No such file or directory
+2026 21:09:42 arm64 other Haiku
+== v6only
+{"opts":{"host":"::1","port":0},"error":{"code":"EINVAL","errno":-2147483643,"syscall":"listen","message":"listen EINVAL: invalid argument ::1"}}
+{"opts":{"host":"::1","port":0,"ipv6Only":true},"listening":{"address":"::1","family":"IPv6"}}
+{"opts":{"host":"::","port":0},"error":{"code":"EINVAL","errno":-2147483643,"syscall":"listen","message":"listen EINVAL: invalid argument ::"}}
+{"opts":{"host":"::","port":0,"ipv6Only":true},"listening":{"address":"::","family":"IPv6"}}
+{"opts":{"host":"127.0.0.1","port":0},"listening":{"address":"127.0.0.1","family":"IPv4"}}
+{"platform":"haiku","node":"v24.21.0"}
+rc=0
+== reuseport
+{"first":{"code":"ENOTSUP","errno":-2147454920,"syscall":"listen"}}
+{"secondSamePortReusePort":{"code":"ENOTSUP","errno":-2147454920,"syscall":"listen"}}
+{"secondSamePortPlain":{"code":"EADDRINUSE","errno":-2147454954,"syscall":"listen"}}
+rc=0
+== localhost
+{"platform":"haiku","localhost":[{"address":"127.0.0.1","family":4},{"address":"::1","family":6}]}
+rc=0
+== half-close
+{"host":"127.0.0.1","log":["7ms server: connection","9ms client: data hi","9ms client: end","9ms client: close"]}
+{"host":"::1","log":["3ms server: connection","3ms client: data hi","3ms client: end","3ms client: close"]}
+rc=0
+== exec-dir
+{"platform":"haiku","error":{"code":"EISDIR","errno":-2147459063,"syscall":"spawnSync /tmp"}}
+rc=0
+== shebang
+{"spawnSync":{"status":3,"signal":null,"stdout":"","stderr":"runtime_loader: Cannot open file /no/such/interp (needed by <NULL>): No such file or directory\n"}}
+{"spawn":{"pid":"number","exitCode":3,"signal":null,"stderr":"runtime_loader: Cannot open file /no/such/interp (needed by <NULL>): No such file or directory\n"}}
+rc=0
+== same, from bash
+bash-saw-rc=3
+== hosts file
+-- /boot/system/settings/network/hosts
+127.0.0.1   localhost.localdomain localhost
+::1         localhost.localdomain localhost
+== TCP listeners
+Proto  Recv-Q Send-Q Local Address         Foreign Address       State        Program
+tcp         0      0 *:10902               *:0                   listen       55/remote_broker
+tcp         0      0 *:22                  *:0                   listen       83/sshd
+tcp         0      0 [127.0.0.1]:10900     *:0                   listen       139/app_server

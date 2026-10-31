@@ -1,0 +1,14 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: scen-linux-upload-rec
+# instance: i-0a14e8aca787249b7   region: us-west-2
+# ssm command: b92db17c-9ed7-4f6d-a9f6-d877bb69e496 (agent status: Success)
+# start: 20261031T154132Z   end: 20261031T154135Z   rc: 0   log bytes: 260
+# script sha256: e4fe7fdec035d896ff6472634cbee2055286b08abcbf4f9278407121bcaca37c
+# ---- script ----
+# | cd /opt/cc/w-scen.rec && sha256sum spawn-bun.json net.cases.json /opt/cc/w-scen.rec.tgz
+# | curl -sSf -T /opt/cc/w-scen.rec.tgz 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.amazonaws.com/claude-code-port/bun-recordings-scen.tgz?<PRESIGNED>' && echo uploaded
+# ---- raw output ----
+1c6cd46abd45c784f101f8c209da19b9a62550d2886b7b781a287348393cb7ca  spawn-bun.json
+35b857e6ffa859283b3536537bff93a5abd3e5a714a80d5f4f86276e51f694c4  net.cases.json
+94455a531b98a061790183cb8f0e14016d97f66faf0f5a4d9e4f6bd6aafa1b6c  /opt/cc/w-scen.rec.tgz
+uploaded

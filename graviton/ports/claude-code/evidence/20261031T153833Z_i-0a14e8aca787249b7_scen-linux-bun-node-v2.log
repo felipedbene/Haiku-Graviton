@@ -1,0 +1,98 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: scen-linux-bun-node-v2
+# instance: i-0a14e8aca787249b7   region: us-west-2
+# ssm command: e6ec6a01-a151-44dd-a28a-3414d4441fa0 (agent status: Success)
+# start: 20261031T153833Z   end: 20261031T154024Z   rc: 127   log bytes: 15091
+# script sha256: 7e43045b1610f080c91c7f216a4b2d7d43d37574260e8a5919dacc621a381900
+# ---- script ----
+# | set -u
+# | echo 'c2e5e518fb9b51292d2b504ec3233cec61d0b625527bbc971d0001943ea36fe3  /opt/cc/w-scen.stage/p.tgz' | sha256sum -c --quiet - || exit 1
+# | rm -rf /opt/cc/w-scen && mkdir -p /opt/cc/w-scen && tar xzf /opt/cc/w-scen.stage/p.tgz -C /opt/cc/w-scen 2>/dev/null
+# | cd /opt/cc/w-scen
+# | export REC_DIR=/opt/cc/w-scen.rec; rm -rf $REC_DIR; mkdir -p $REC_DIR
+# | echo "######## spawn"
+# | ( . compat/test/spawn-diff-step.sh )
+# | echo "######## net"
+# | ( . compat/test/net-diff-step.sh )
+# | echo "######## upload Bun recordings"
+# | cd $REC_DIR && tar czf /opt/cc/w-scen.rec.tgz spawn-bun.json net.cases.json && sha256sum spawn-bun.json net.cases.json /opt/cc/w-scen.rec.tgz
+# | curl -sSf -T /opt/cc/w-scen.rec.tgz 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.amazonaws.com/claude-code-port/bun-recordings-scen.tgz?<PRESIGNED> -sSf -T /opt/cc/w-scen.rec.tgz 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.amazonaws.com/claude-code-port/bun-recordings-scen.tgz?<PRESIGNED>'X-Amz-Credential=<PRESIGNED> -sSf -T /opt/cc/w-scen.rec.tgz 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.amazonaws.com/claude-code-port/bun-recordings-scen.tgz?<PRESIGNED>'X-Amz-Date=<PRESIGNED> -sSf -T /opt/cc/w-scen.rec.tgz 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.amazonaws.com/claude-code-port/bun-recordings-scen.tgz?<PRESIGNED>'X-Amz-Expires=<PRESIGNED> -sSf -T /opt/cc/w-scen.rec.tgz 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.amazonaws.com/claude-code-port/bun-recordings-scen.tgz?<PRESIGNED>'X-Amz-SignedHeaders=<PRESIGNED> -sSf -T /opt/cc/w-scen.rec.tgz 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.amazonaws.com/claude-code-port/bun-recordings-scen.tgz?<PRESIGNED>'X-Amz-Security-Token=<PRESIGNED> -sSf -T /opt/cc/w-scen.rec.tgz 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.amazonaws.com/claude-code-port/bun-recordings-scen.tgz?<PRESIGNED>'X-Amz-Signature=<PRESIGNED>' && echo uploaded
+# ---- raw output ----
+######## spawn
+1.4.4
+v24.22.2
+bun: 218 scenarios -> /opt/cc/w-scen.rec/spawn-bun.json
+bun-rc=0
+node: 218 scenarios -> /opt/cc/w-scen.rec/spawn-node.json
+node-rc=0
+reference: bun on linux; compared: node on linux
+DECLARED terminal options object 
+  bun  {"returned":true,"terminal":"object","x":129} 
+  node {"threw":true,"ctor":"Error","name":"Error","message":"Bun.spawn: the terminal option (Bun.Terminal / PTY) is not supported by the Node compat layer","isError":true,"isTypeError":false}
+DECLARED resourceUsage 
+  bun  {"before":"undefined","after":{"t":"object","keys":["contextSwitches","cpuTime","maxRSS","messages","ops","shmSize","signalCount","swapCount"]}} 
+  node {"before":"undefined","after":{"threw":true,"ctor":"Error","name":"Error","message":"Bun.spawn: resourceUsage() (Node does not report a child's rusage) is not supported by the Node compat layer","isError":true,"isTypeError":false}}
+DECLARED cgroup option 
+  bun  {"returned":true,"x":0} 
+  node {"threw":true,"ctor":"Error","name":"Error","message":"Bun.spawn: the cgroup option is not supported by the Node compat layer","isError":true,"isTypeError":false}
+DECLARED ipc option 
+  bun  {"returned":true,"x":0} 
+  node {"threw":true,"ctor":"Error","name":"Error","message":"Bun.spawn: the ipc option is not supported by the Node compat layer","isError":true,"isTypeError":false}
+DECLARED stdio extra pipe 
+  bun  {"returned":true,"t":"number"} 
+  node {"threw":true,"ctor":"Error","name":"Error","message":"Bun.spawn: stdio[3] \"pipe\" (an extra pipe handed out as a raw fd) is not supported by the Node compat layer","isError":true,"isTypeError":false}
+spawn: 213 match / 0 mismatch / 5 declared-unsupported (218 scenarios)
+check-rc=0
+######## net
+tls-ok
+gen rc=0
+net scenarios: 42
+reference: bun on linux; compared: node on linux
+MISMATCH Response class defaults on the wire (outside net.mjs)
+  node: {"GET /str":[["content-type","text/plain;charset=UTF-8"],["content-length","9"]],"GET /json":[["content-type","application/json"],["content-length","7"]],"GET /404":[["content-type","text/plain;charset=UTF-8"],["content-length","2"]],"HEAD /str":[["content-type","text/plain;charset=UTF-8"],["content-length","9"]],"HEAD /json":[["content-type","application/json"],["content-length","7"]]}
+  bun:  {"GET /str":[["content-type","text/plain;charset=utf-8"],["content-length","9"]],"GET /json":[["content-type","application/json;charset=utf-8"],["content-length","7"]],"GET /404":[["content-type","text/plain;charset=utf-8"],["content-length","2"]],"HEAD /str":[["content-length","9"]],"HEAD /json":[["content-type","application/json;charset=utf-8"],["content-length","7"]]}
+net: 41 match / 1 mismatch (42 scenarios)
+check rc=1
+=== listeners left by bun or node after the run:
+grep rc=1 (1 = none)
+######## upload Bun recordings
+1c6cd46abd45c784f101f8c209da19b9a62550d2886b7b781a287348393cb7ca  spawn-bun.json
+35b857e6ffa859283b3536537bff93a5abd3e5a714a80d5f4f86276e51f694c4  net.cases.json
+94455a531b98a061790183cb8f0e14016d97f66faf0f5a4d9e4f6bd6aafa1b6c  /opt/cc/w-scen.rec.tgz
+/tmp/ccrun/cc-20261031T153833Z-43746.sh: line 12: X-Amz-Credential=<PRESIGNED>: command not found
+/tmp/ccrun/cc-20261031T153833Z-43746.sh: line 12: X-Amz-Date=<PRESIGNED>: command not found
+/tmp/ccrun/cc-20261031T153833Z-43746.sh: line 12: X-Amz-SignedHeaders=<PRESIGNED>: command not found
+/tmp/ccrun/cc-20261031T153833Z-43746.sh: line 12: X-Amz-Security-Token=<PRESIGNED>: command not found
+/tmp/ccrun/cc-20261031T153833Z-43746.sh: line 12: X-Amz-Credential=<PRESIGNED>: command not found
+/tmp/ccrun/cc-20261031T153833Z-43746.sh: line 12: X-Amz-Date=<PRESIGNED>: command not found
+/tmp/ccrun/cc-20261031T153833Z-43746.sh: line 12: X-Amz-SignedHeaders=<PRESIGNED>: command not found
+/tmp/ccrun/cc-20261031T153833Z-43746.sh: line 12: X-Amz-Security-Token=<PRESIGNED>: command not found
+/tmp/ccrun/cc-20261031T153833Z-43746.sh: line 12: X-Amz-Signature=<PRESIGNED> -sSf -T /opt/cc/w-scen.rec.tgz https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.amazonaws.com/claude-code-port/bun-recordings-scen.tgz?<PRESIGNED> No such file or directory
+/tmp/ccrun/cc-20261031T153833Z-43746.sh: line 12: X-Amz-Date=<PRESIGNED>: command not found
+/tmp/ccrun/cc-20261031T153833Z-43746.sh: line 12: X-Amz-Credential=<PRESIGNED>: command not found
+/tmp/ccrun/cc-20261031T153833Z-43746.sh: line 12: X-Amz-Expires=<PRESIGNED>: command not found
+/tmp/ccrun/cc-20261031T153833Z-43746.sh: line 12: X-Amz-Signature=<PRESIGNED> -sSf -T /opt/cc/w-scen.rec.tgz https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.amazonaws.com/claude-code-port/bun-recordings-scen.tgz?<PRESIGNED> No such file or directory
+/tmp/ccrun/cc-20261031T153833Z-43746.sh: line 12: X-Amz-Expires=<PRESIGNED>: command not found
+/tmp/ccrun/cc-20261031T153833Z-43746.sh: line 12: X-Amz-Expires=<PRESIGNED>: command not found
+/tmp/ccrun/cc-20261031T153833Z-43746.sh: line 12: X-Amz-SignedHeaders=<PRESIGNED>: command not found
+/tmp/ccrun/cc-20261031T153833Z-43746.sh: line 12: X-Amz-Signature=<PRESIGNED> -sSf -T /opt/cc/w-scen.rec.tgz https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.amazonaws.com/claude-code-port/bun-recordings-scen.tgz?<PRESIGNED> No such file or directory
+/tmp/ccrun/cc-20261031T153833Z-43746.sh: line 12: X-Amz-Credential=<PRESIGNED>: command not found
+/tmp/ccrun/cc-20261031T153833Z-43746.sh: line 12: X-Amz-Expires=<PRESIGNED>: command not found
+/tmp/ccrun/cc-20261031T153833Z-43746.sh: line 12: X-Amz-Security-Token=<PRESIGNED>: command not found
+/tmp/ccrun/cc-20261031T153833Z-43746.sh: line 12: X-Amz-Signature=<PRESIGNED> -sSf -T /opt/cc/w-scen.rec.tgz https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.amazonaws.com/claude-code-port/bun-recordings-scen.tgz?<PRESIGNED> No such file or directory
+/tmp/ccrun/cc-20261031T153833Z-43746.sh: line 12: X-Amz-Credential=<PRESIGNED>: command not found
+/tmp/ccrun/cc-20261031T153833Z-43746.sh: line 12: X-Amz-Expires=<PRESIGNED>: command not found
+/tmp/ccrun/cc-20261031T153833Z-43746.sh: line 12: X-Amz-SignedHeaders=<PRESIGNED>: command not found
+/tmp/ccrun/cc-20261031T153833Z-43746.sh: line 12: X-Amz-Security-Token=<PRESIGNED>: command not found
+/tmp/ccrun/cc-20261031T153833Z-43746.sh: line 12: X-Amz-Signature=<PRESIGNED> -sSf -T /opt/cc/w-scen.rec.tgz https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.amazonaws.com/claude-code-port/bun-recordings-scen.tgz?<PRESIGNED> File name too long
+/tmp/ccrun/cc-20261031T153833Z-43746.sh: line 12: X-Amz-Date=<PRESIGNED>: command not found
+/tmp/ccrun/cc-20261031T153833Z-43746.sh: line 12: X-Amz-Credential=<PRESIGNED>: command not found
+/tmp/ccrun/cc-20261031T153833Z-43746.sh: line 12: X-Amz-SignedHeaders=<PRESIGNED>: command not found
+/tmp/ccrun/cc-20261031T153833Z-43746.sh: line 12: X-Amz-Security-Token=<PRESIGNED>: command not found
+/tmp/ccrun/cc-20261031T153833Z-43746.sh: line 12: X-Amz-Date=<PRESIGNED>: command not found
+/tmp/ccrun/cc-20261031T153833Z-43746.sh: line 12: X-Amz-Date=<PRESIGNED>: command not found
+/tmp/ccrun/cc-20261031T153833Z-43746.sh: line 12: X-Amz-Expires=<PRESIGNED>: command not found
+/tmp/ccrun/cc-20261031T153833Z-43746.sh: line 12: X-Amz-SignedHeaders=<PRESIGNED>: command not found
+/tmp/ccrun/cc-20261031T153833Z-43746.sh: line 12: X-Amz-Security-Token=<PRESIGNED>: command not found
+/tmp/ccrun/cc-20261031T153833Z-43746.sh: line 12: X-Amz-Signature=<PRESIGNED>: command not found
+curl: (3) URL using bad/illegal format or missing URL

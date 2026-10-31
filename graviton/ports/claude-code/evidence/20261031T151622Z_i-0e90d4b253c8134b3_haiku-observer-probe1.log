@@ -1,0 +1,86 @@
+# evidence: haiku-observer-probe1
+# instance: i-0e90d4b253c8134b3   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261031T151622Z   end: 20261031T151644Z   rc: 0
+# script sha256: c79f0fd72a1593d4a502ab0d792db1711b12346f3e9ee8a0a981d88ec1be8f49
+# ---- script ----
+# | set -u
+# | T=/boot/system/lib/claude-code
+# | echo "== cc-teaminfo self"; $T/bin/cc-teaminfo $$
+# | echo "== cc-teaminfo -a (head)"; $T/bin/cc-teaminfo -a | head -5
+# | echo "== exec child args: sleep with argv0 via node"
+# | /boot/system/bin/node -e '
+# | const {spawn}=require("child_process"),{execFileSync}=require("child_process");
+# | const c=spawn("/bin/sleep",["5"],{argv0:"claude bg-pty-host"});
+# | setTimeout(()=>{console.log(JSON.stringify(execFileSync("'$T'/bin/cc-teaminfo",[String(c.pid)],{encoding:"latin1"})));c.kill(9)},300);'
+# | echo "== fdinfo usage"; fdinfo --help 2>&1 | head -20
+# | echo "== fdinfo self"; sh -c 'fdinfo $$' 2>&1 | head -30
+# | echo "== fdinfo -t"; sh -c 'fdinfo -t $$ 2>&1 | head -30'
+# | echo "== which"; which sh env sleep cat true printf pwd tr head; ls -la /usr/bin/env /bin/sh /bin 2>&1 | head
+# | echo "== signals"; /boot/system/bin/node -p 'JSON.stringify(require("os").constants.signals)'
+# | echo "== errno sample"; /boot/system/bin/node -p 'const e=require("os").constants.errno;JSON.stringify({ENOENT:e.ENOENT,EACCES:e.EACCES,ECONNREFUSED:e.ECONNREFUSED,EADDRINUSE:e.EADDRINUSE,ENOTDIR:e.ENOTDIR,ENOEXEC:e.ENOEXEC,EISDIR:e.EISDIR,ENOTSUP:e.ENOTSUP,ESRCH:e.ESRCH})'
+# | echo "== PATH"; echo "$PATH"; echo "== env -i env"; env -i /bin/env 2>&1 | head
+# | echo "== realpath sh"; realpath /bin/sh; readlink -f $(which sh)
+# | echo "== listeners"; netstat -an 2>&1 | head -30
+# ---- raw output ----
+== cc-teaminfo self
+11437 11436 11435 11435 0 29406129339 1793459791815038 /boot/system/bin/bash /tmp/ccrun/cc-20261031T151622Z-36049.sh
+== cc-teaminfo -a (head)
+1 -1 1 1 0 3286186 1793430388971885 kernel_team
+34 1 1 1 0 9660945 1793430395346644 /boot/system/servers/launch_daemon
+37 34 1 1 0 11755807 1793430397441506 /boot/system/bin/debeos-cloudwatch
+38 34 1 1 0 11756102 1793430397441801 /boot/system/bin/amazon-ssm-agent
+42 34 1 1 0 11781788 1793430397467487 /boot/system/servers/debug_server
+== exec child args: sleep with argv0 via node
+"11448 11441 11435 11435 0 29406182679 1793459791868378 /bin/sleep 5\n"
+== fdinfo usage
+Usage: fdinfo <id/pattern> or -[dD] <path-to-device> or -[fF] <file>
+  Shows info about the used file descriptors in the system.
+
+  -d	Only shows accesses to the given device
+  -D	Likewise, but only shows the teams that access it
+  -f	Only shows accesses to the given file
+  -F	Likewise, but only shows the teams that access it
+== fdinfo self
+Team: (11452) /boot/system/bin/fdinfo 11452
+ -100  R   3:1048579
+    0  R   2:154
+    1    W 1:8614
+    2    W 1:8614
+== fdinfo -t
+Usage: fdinfo <id/pattern> or -[dD] <path-to-device> or -[fF] <file>
+  Shows info about the used file descriptors in the system.
+
+  -d	Only shows accesses to the given device
+  -D	Likewise, but only shows the teams that access it
+  -f	Only shows accesses to the given file
+  -F	Likewise, but only shows the teams that access it
+== which
+/tmp/ccrun/cc-20261031T151622Z-36049.sh: line 13: which: command not found
+ls: cannot access '/usr/bin/env': No such file or directory
+lrwxrwxrwx 1 baron root 16 Oct 31 07:06 /bin -> /boot/system/bin
+lr-xr-xr-x 1 baron root  4 Oct 19 21:11 /bin/sh -> bash
+== signals
+{"SIGHUP":1,"SIGINT":2,"SIGQUIT":3,"SIGILL":4,"SIGTRAP":22,"SIGABRT":6,"SIGBUS":30,"SIGFPE":8,"SIGKILL":9,"SIGUSR1":18,"SIGSEGV":11,"SIGUSR2":19,"SIGPIPE":7,"SIGALRM":14,"SIGTERM":15,"SIGCHLD":5,"SIGCONT":12,"SIGSTOP":10,"SIGTSTP":13,"SIGTTIN":16,"SIGTTOU":17,"SIGURG":26,"SIGXCPU":28,"SIGXFSZ":29,"SIGVTALRM":27,"SIGPROF":24,"SIGWINCH":20,"SIGPOLL":23,"SIGSYS":25}
+== errno sample
+{"ENOENT":-2147459069,"EACCES":-2147483646,"ECONNREFUSED":-2147454944,"EADDRINUSE":-2147454954,"ENOTDIR":-2147459067,"ENOEXEC":-2147478782,"EISDIR":-2147459063,"ENOTSUP":-2147454920,"ESRCH":-2147454963}
+== PATH
+/boot/home/config/non-packaged/bin:/boot/home/config/bin:/boot/system/non-packaged/bin:/boot/system/bin:/boot/system/apps:/boot/system/preferences
+== env -i env
+== realpath sh
+/boot/system/bin/bash
+/tmp/ccrun/cc-20261031T151622Z-36049.sh: line 17: which: command not found
+readlink: missing operand
+Try 'readlink --help' for more information.
+== listeners
+netstat: invalid option -- 'a'
+Usage: netstat [-nh]
+Options:
+	-n	don't resolve names
+	-h	this help
+Filter options:
+	-4	IPv4
+	-6	IPv6
+	-x	Unix
+	-t	TCP
+	-u	UDP
+	-l	listen state
