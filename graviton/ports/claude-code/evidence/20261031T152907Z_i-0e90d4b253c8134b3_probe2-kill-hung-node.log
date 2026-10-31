@@ -1,0 +1,8 @@
+# evidence: probe2-kill-hung-node
+# instance: i-0e90d4b253c8134b3   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261031T152907Z   end: 20261031T152930Z   rc: 0
+# script sha256: 7a636ee9c7d5d28c96bb832235cf86f6279cd6d79cd98b990d17e4b7c785e9cf
+# ---- script ----
+# | kill 11701 && echo killed-probe-node-11701
+# ---- raw output ----
+killed-probe-node-11701

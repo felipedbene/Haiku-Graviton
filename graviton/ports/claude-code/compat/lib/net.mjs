@@ -107,12 +107,21 @@ function bindOnce(server, ip, port, flags) {
 	return err;
 }
 
+// Haiku's IPv6 sockets are always IPv6-only: getsockopt(IPV6_V6ONLY) is
+// hard-wired to 1 and setsockopt(IPV6_V6ONLY, 0) fails with EINVAL
+// (src/add-ons/kernel/network/protocols/ipv6/ipv6.cpp, ipv6_getsockopt /
+// ipv6_setsockopt). libuv's bind always sets the option, to 0 unless asked for
+// UV_TCP_IPV6ONLY, so on Haiku every IPv6 bind fails with EINVAL. uSockets
+// ignores that setsockopt's result, so Bun would bind. Asking for v6-only there
+// is what the socket is anyway, so it changes nothing but the failed call.
+const IPV6_ALWAYS_ONLY = process.platform === "haiku";
+
 // Bind `server` to `ip`:`port` now. SO_REUSEPORT is asked for like uSockets does:
 // where the platform has no load-balancing SO_REUSEPORT, libuv answers ENOTSUP,
 // and uSockets (which only sets it #ifdef SO_REUSEPORT) binds without it.
 function bindSync(server, ip, port, { reusePort = false, ipv6Only = false } = {}) {
 	let flags = 0;
-	if (ipv6Only && net.isIP(ip) === 6) flags |= UV_TCP_IPV6ONLY;
+	if ((ipv6Only || IPV6_ALWAYS_ONLY) && net.isIP(ip) === 6) flags |= UV_TCP_IPV6ONLY;
 	if (reusePort) flags |= UV_TCP_REUSEPORT;
 	let err = bindOnce(server, ip, port, flags);
 	if (err && reusePort && err.code === "ENOTSUP") err = bindOnce(server, ip, port, flags & ~UV_TCP_REUSEPORT);
@@ -1068,7 +1077,9 @@ function connectError(e, hostname) {
 	const c = CONNECT_KEEP.has(code) ? code : "ECONNREFUSED";
 	const err = new Error("Failed to connect");
 	err.code = c;
-	err.errno = -nativeErrno(c);
+	// libuv's number for the code (-111 on Linux). Not -errno: Haiku's errno
+	// constants are already negative, and negating them gave a positive errno.
+	err.errno = uvErrno(c);
 	err.syscall = "connect";
 	return err;
 }

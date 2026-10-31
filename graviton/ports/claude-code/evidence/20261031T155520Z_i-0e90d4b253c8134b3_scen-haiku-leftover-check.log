@@ -1,0 +1,16 @@
+# evidence: scen-haiku-leftover-check
+# instance: i-0e90d4b253c8134b3   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261031T155520Z   end: 20261031T155542Z   rc: 0
+# script sha256: 0aa141d03efb4a2070fa9527fede7a0acfd93de8604565f6b1bb6ce352c58e35
+# ---- script ----
+# | echo "== sleep teams now"; ps | grep -E 'sleep' | grep -v grep; echo "grep rc=$?"
+# | echo "== TCP listeners"; netstat -n -t -l
+# ---- raw output ----
+== sleep teams now
+/bin/sleep 30                                      13586        1    0    0 
+grep rc=0
+== TCP listeners
+Proto  Recv-Q Send-Q Local Address         Foreign Address       State        Program
+tcp         0      0 *:10902               *:0                   listen       55/remote_broker
+tcp         0      0 *:22                  *:0                   listen       83/sshd
+tcp         0      0 [127.0.0.1]:10900     *:0                   listen       139/app_server

@@ -1,0 +1,77 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: net-haiku-detail1
+# instance: i-0e90d4b253c8134b3   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261031T151900Z   end: 20261031T151948Z   rc: 0
+# script sha256: 2927d8cdcad3fdc278abc34774bded358dc2933c65b8fe7ba770d8980716bb79
+# ---- script ----
+# | set -u
+# | R=/boot/home/cc-scen/port; rm -rf $R && mkdir -p $R && cd $R || exit 1
+# | /boot/system/bin/curl -sSfo p.tgz 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.amazonaws.com/claude-code-port/port-scen-5e3d14271888279d7debd1b6be56517edfea77df9628b908109520efe5f61a88.tgz?<PRESIGNED>' || exit 1
+# | echo '5e3d14271888279d7debd1b6be56517edfea77df9628b908109520efe5f61a88  p.tgz' | sha256sum -c - || exit 1
+# | tar xzf p.tgz && rm p.tgz || exit 1
+# | N=/boot/system/bin/node
+# | echo "== listeners before"; netstat -n -t -l
+# | TL=/tmp/net-tls; rm -rf $TL; mkdir -p $TL; openssl req -x509 -newkey rsa:2048 -nodes -keyout $TL/key.pem -out $TL/cert.pem -days 2 -subj /CN=localhost 2>/dev/null && echo tls-ok
+# | cd compat/test && NET_TLS_DIR=$TL timeout 900 $N check-net.mjs /boot/home/cc-accept/rec 2>/tmp/net.err; echo "net check rc=$?"
+# | echo "== stderr (tail)"; tail -20 /tmp/net.err
+# | echo "== listeners after"; netstat -n -t -l
+# ---- raw output ----
+p.tgz: OK
+== listeners before
+Proto  Recv-Q Send-Q Local Address         Foreign Address       State        Program
+tcp         0      0 *:10902               *:0                   listen       55/remote_broker
+tcp         0      0 *:22                  *:0                   listen       83/sshd
+tcp         0      0 [127.0.0.1]:10900     *:0                   listen       139/app_server
+tls-ok
+MISMATCH Response class defaults on the wire (outside net.mjs)
+  node: {"GET /str":[["content-type","text/plain;charset=UTF-8"],["content-length","9"]],"GET /json":[["content-type","application/json"],["content-length","7"]],"GET /404":[["content-type","text/plain;charset=UTF-8"],["content-length","2"]],"HEAD /str":[["content-type","text/plain;charset=UTF-8"],["content-length","9"]],"HEAD /json":[["content-type","application/json"],["content-length","7"]]}
+  bun:  {"GET /str":[["content-type","text/plain;charset=utf-8"],["content-length","9"]],"GET /json":[["content-type","application/json;charset=utf-8"],["content-length","7"]],"GET /404":[["content-type","text/plain;charset=utf-8"],["content-length","2"]],"HEAD /str":[["content-length","9"]],"HEAD /json":[["content-type","application/json;charset=utf-8"],["content-length","7"]]}
+MISMATCH serve: ::1 binding, dual 127.0.0.1 + ::1 on one port (xf)
+  node: {"THREW":"EINVAL: invalid argument, listen"}
+  bun:  {"samePort":true,"hostname6":"::1","url6":"http://[::1]:PORT/","r4":"IPv4 127.0.0.1","r6":"IPv6 ::1"}
+MISMATCH serve: development:false sets SO_REUSEPORT (second bind succeeds)
+  node: {"prodTwice":{"isError":true,"name":"Error","message":"Failed to start server. Is port PORT in use?","keys":["code","errno","syscall"],"code":"EADDRINUSE","errno":0,"syscall":"listen"},"explicitNoReuse":{"isError":true,"name":"Error","message":"Failed to start server. Is port PORT in use?","keys":["code","errno","syscall"],"code":"EADDRINUSE","errno":0,"syscall":"listen"}}
+  bun:  {"prodTwice":"bound","explicitNoReuse":{"isError":true,"name":"Error","message":"Failed to start server. Is port PORT in use?","keys":["code","errno","syscall"],"code":"EADDRINUSE","errno":0,"syscall":"listen"}}
+MISMATCH listen: peer reset delivers close(err) / error
+  node: {"log":["open","data x",["close","object",{"isError":true,"name":"Error","message":"ECONNRESET: connection reset by peer, read","keys":["code","errno","syscall"],"code":"ECONNRESET","errno":-2147454948,"syscall":"read"}]]}
+  bun:  {"log":["open","data x",["close","object",{"isError":true,"name":"Error","message":"ECONNRESET: connection reset by peer, read","keys":["code","errno","syscall"],"code":"ECONNRESET","errno":-104,"syscall":"read"}]]}
+MISMATCH listen: EADDRINUSE error shape, ::1, missing handlers
+  node: {"THREW":"Failed to listen at ::1"}
+  bun:  {"inUse":{"isError":true,"name":"Error","message":"Failed to listen at 127.0.0.1","keys":["address","code","errno","port","syscall"],"code":"EADDRINUSE","errno":98,"syscall":"listen","address":"127.0.0.1","port":"port>0"},"v6":{"port":true,"hostname":"::1","connect":"connected"},"noData":{"isError":true,"name":"TypeError","message":"Expected at least \"data\" or \"drain\" callback","keys":[],"code":"ERR_INVALID_ARG_TYPE"},"noSocket":{"isError":true,"name":"TypeError","message":"SocketOptions.socket is required","keys":[],"code":"ERR_INVALID_ARG_TYPE"}}
+MISMATCH connect: refused -> promise rejects (no connectError)
+  node: {"e":{"isError":true,"name":"Error","message":"Failed to connect","keys":["code","errno","syscall"],"code":"ECONNREFUSED","errno":2147454944,"syscall":"connect"},"log":[]}
+  bun:  {"e":{"isError":true,"name":"Error","message":"Failed to connect","keys":["code","errno","syscall"],"code":"ECONNREFUSED","errno":-111,"syscall":"connect"},"log":[]}
+MISMATCH connect: refused with connectError handler
+  node: {"e":{"isError":true,"name":"Error","message":"Failed to connect","keys":["code","errno","syscall"],"code":"ECONNREFUSED","errno":2147454944,"syscall":"connect"},"log":[["connectError","ECONNREFUSED","object"]]}
+  bun:  {"e":{"isError":true,"name":"Error","message":"Failed to connect","keys":["code","errno","syscall"],"code":"ECONNREFUSED","errno":-111,"syscall":"connect"},"log":[["connectError","ECONNREFUSED","object"]]}
+MISMATCH connect: E_ ::1 probe (open then end) and localhost resolution
+  node: {"THREW":"listen EINVAL: invalid argument ::1"}
+  bun:  {"yes":true,"no":false,"localhostRemote":"::1","dualBound":true}
+net: 34 match / 8 mismatch (42 scenarios)
+net check rc=1
+== stderr (tail)
+    at Server.<anonymous> (file:///boot/home/cc-scen/port/compat/lib/net.mjs:334:51)
+    at Server.emit (node:events:514:28)
+    at parserOnIncoming (node:_http_server:1293:12)
+    at HTTPParser.parserOnHeadersComplete (node:_http_common:125:17)
+error: Error: boom-async
+    at BunServer.fetch (file:///boot/home/cc-scen/port/compat/test/net-scenarios.js:327:47)
+    at #onRequest (file:///boot/home/cc-scen/port/compat/lib/net.mjs:565:25)
+    at Server.<anonymous> (file:///boot/home/cc-scen/port/compat/lib/net.mjs:334:51)
+    at Server.emit (node:events:514:28)
+    at parserOnIncoming (node:_http_server:1293:12)
+    at HTTPParser.parserOnHeadersComplete (node:_http_common:125:17)
+error: Expected a Response object, but received 'undefined'
+error: Error: handler-threw
+    at BunServer.error (file:///boot/home/cc-scen/port/compat/test/net-scenarios.js:350:11)
+    at #handleError (file:///boot/home/cc-scen/port/compat/lib/net.mjs:607:28)
+    at #onRequest (file:///boot/home/cc-scen/port/compat/lib/net.mjs:567:21)
+    at Server.<anonymous> (file:///boot/home/cc-scen/port/compat/lib/net.mjs:334:51)
+    at Server.emit (node:events:514:28)
+    at parserOnIncoming (node:_http_server:1293:12)
+    at HTTPParser.parserOnHeadersComplete (node:_http_common:125:17)
+== listeners after
+Proto  Recv-Q Send-Q Local Address         Foreign Address       State        Program
+tcp         0      0 *:10902               *:0                   listen       55/remote_broker
+tcp         0      0 *:22                  *:0                   listen       83/sshd
+tcp         0      0 [127.0.0.1]:10900     *:0                   listen       139/app_server

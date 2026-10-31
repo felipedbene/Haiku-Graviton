@@ -1,0 +1,15 @@
+# evidence: half-close-linux
+# instance: i-0a14e8aca787249b7   region: us-west-2
+# ssm command: 367907d3-5f79-406e-bc2c-a420ffe8f0bd (agent status: Success)
+# start: 20261031T154814Z   end: 20261031T154817Z   rc: 0   log bytes: 309
+# script sha256: 0362a25dbf4ea86d1ee085769ebcbb5f6d95f6d8f99620a58fd4d2a2c6bffbad
+# ---- script ----
+# | set -u
+# | echo 'c4f57f3f944a1fdba4a19e0ca2e7b87fa808bb47094f5a659cd46b70d6abbd67  /opt/cc/w-repro.stage/p.tgz' | sha256sum -c --quiet - || exit 1
+# | rm -rf /opt/cc/w-repro && mkdir -p /opt/cc/w-repro && tar xzf /opt/cc/w-repro.stage/p.tgz -C /opt/cc/w-repro 2>/dev/null
+# | cd /opt/cc/w-repro
+# | cd compat/test/platform-repro && timeout 60 /opt/node24/bin/node half-close.mjs 5000; echo rc=$?
+# ---- raw output ----
+{"host":"127.0.0.1","log":["11ms server: connection","12ms client: data hi","13ms client: end","14ms client: close","14ms server: end","14ms server: close"]}
+{"host":"::1","log":["4ms server: connection","4ms client: data hi","4ms client: end","4ms client: close","4ms server: end","4ms server: close"]}
+rc=0

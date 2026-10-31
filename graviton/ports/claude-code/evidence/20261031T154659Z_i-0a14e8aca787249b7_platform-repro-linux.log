@@ -1,0 +1,56 @@
+# evidence: platform-repro-linux
+# instance: i-0a14e8aca787249b7   region: us-west-2
+# ssm command: eff94890-a1b9-4384-b995-8c05f8afd9e7 (agent status: Success)
+# start: 20261031T154659Z   end: 20261031T154708Z   rc: 0   log bytes: 2166
+# script sha256: d1118adf5d4586a2ec0e4e6a9814097ce35663fbc382ac1a8d966cb2450c4c2e
+# ---- script ----
+# | set -u
+# | echo '4df5eb5983a334962b892960a685e70adc1ae4e42874732c020fc0d313d950ed  /opt/cc/w-repro.stage/p.tgz' | sha256sum -c --quiet - || exit 1
+# | rm -rf /opt/cc/w-repro && mkdir -p /opt/cc/w-repro && tar xzf /opt/cc/w-repro.stage/p.tgz -C /opt/cc/w-repro 2>/dev/null
+# | cd /opt/cc/w-repro
+# | cd compat/test/platform-repro && sh run.sh /opt/node24/bin/node /tmp/cc-repro
+# ---- raw output ----
+v24.22.2
+Linux ip-10-128-5-103 7.0.0-1014-aws #14~24.04.1-Ubuntu SMP PREEMPT Fri Sep 18 21:50:22 UTC 2026 aarch64 aarch64 aarch64 GNU/Linux
+== v6only
+{"opts":{"host":"::1","port":0},"listening":{"address":"::1","family":"IPv6"}}
+{"opts":{"host":"::1","port":0,"ipv6Only":true},"listening":{"address":"::1","family":"IPv6"}}
+{"opts":{"host":"::","port":0},"listening":{"address":"::","family":"IPv6"}}
+{"opts":{"host":"::","port":0,"ipv6Only":true},"listening":{"address":"::","family":"IPv6"}}
+{"opts":{"host":"127.0.0.1","port":0},"listening":{"address":"127.0.0.1","family":"IPv4"}}
+{"platform":"linux","node":"v24.22.2"}
+rc=0
+== reuseport
+{"first":"listening"}
+{"secondSamePortReusePort":"listening"}
+{"secondSamePortPlain":{"code":"EADDRINUSE","errno":-98,"syscall":"listen"}}
+rc=0
+== localhost
+{"platform":"linux","localhost":[{"address":"127.0.0.1","family":4}]}
+rc=0
+== half-close
+{"host":"127.0.0.1","log":["12ms server: connection","13ms client: data hi","14ms client: end","15ms client: close","15ms server: end","15ms server: close"]}
+{"host":"::1","log":["5ms server: connection","5ms client: data hi","5ms client: end","5ms client: close","5ms server: end","5ms server: close"]}
+rc=0
+== exec-dir
+{"platform":"linux","error":{"code":"EACCES","errno":-13,"syscall":"spawnSync /tmp"}}
+rc=0
+== shebang
+{"spawnSync":{"error":{"code":"ENOENT","errno":-2,"syscall":"spawnSync /tmp/cc-repro/badinterp.sh"},"status":null,"signal":null}}
+{"spawn":{"errorEvent":{"code":"ENOENT","errno":-2,"syscall":"spawn /tmp/cc-repro/badinterp.sh"}}}
+{"spawn":{"pid":"undefined","exitCode":-2,"signal":null,"stderr":""}}
+rc=0
+== same, from bash
+bash: line 1: /tmp/cc-repro/b.sh: cannot execute: required file not found
+bash-saw-rc=127
+== hosts file
+-- /etc/hosts
+127.0.0.1 localhost
+::1 ip6-localhost ip6-loopback
+ff02::1 ip6-allnodes
+== TCP listeners
+State  Recv-Q Send-Q Local Address:Port Peer Address:PortProcess
+LISTEN 0      4096   127.0.0.53%lo:53        0.0.0.0:*          
+LISTEN 0      4096      127.0.0.54:53        0.0.0.0:*          
+LISTEN 0      4096         0.0.0.0:22        0.0.0.0:*          
+LISTEN 0      4096            [::]:22           [::]:*          

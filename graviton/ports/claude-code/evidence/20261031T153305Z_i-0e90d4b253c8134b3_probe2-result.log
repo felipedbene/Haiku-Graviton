@@ -1,0 +1,61 @@
+# evidence: probe2-result
+# instance: i-0e90d4b253c8134b3   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261031T153305Z   end: 20261031T153326Z   rc: 0
+# script sha256: 7132a2308db17b1357fc0882cca89c9e34dc3e9014b60430b3a8055a20fc7505
+# ---- script ----
+# | cat /tmp/ccrun/cc-20261031T152136Z-37733.log
+# | echo "== teams"; ps | grep -E "node|perl|sleep|env" | grep -v grep
+# ---- raw output ----
+== node listen ::1 default
+error EINVAL -2147483643 listen listen EINVAL: invalid argument ::1
+== node listen ::1 ipv6Only:true
+listening { address: '::1', family: 'IPv6', port: 40073 }
+== node listen :: default
+error EINVAL -2147483643 listen listen EINVAL: invalid argument ::
+== node connect ::1 to v6only listener
+got hi ::1 IPv6
+Termination requested      $N -e 'const net=require("net");const s=net.createServer(c=>{c.end("hi")});s.listen({host:"::1",port:0,ipv6Only:true},()=>{const c=net.connect({host:"::1",port:s.address().port});c.on("data",d=>console.log("got",String(d),c.remoteAddress,c.remoteFamily));c.on("close",()=>s.close());c.on("error",e=>console.log("cerr",e.code))})'
+== node reusePort
+error ENOTSUP -2147454920 listen listen ENOTSUP: operation not supported on socket 127.0.0.1
+== perl
+ls: cannot access '/boot/system/bin/perl': No such file or directory
+/tmp/ccrun/cc-20261031T152136Z-37733.sh: line 7: perl: command not found
+== perl SO_REUSEPORT double bind
+/tmp/ccrun/cc-20261031T152136Z-37733.sh: line 8: perl: command not found
+== perl IPV6_V6ONLY 0 on AF_INET6
+/tmp/ccrun/cc-20261031T152136Z-37733.sh: line 11: perl: command not found
+== read-only dirs
+/boot/system/bin EROFS -2147459064
+/boot/system/lib EROFS -2147459064
+/boot/system EROFS -2147459064
+[1mVolume[0m
+ Type        Total      Free      Flags   Used%  Device
+----------- ---------- --------- ------- ------ -------------------
+[1m/boot             [0m
+        bfs   60.0 GiB  44.1 GiB QAM-P-W    26% /dev/disk/nvme/0/1      
+[1m/boot/system      [0m
+  packagefs          0         0 QAM-P--   100%                         
+[1m/boot/home/config [0m
+  packagefs          0         0 QAM-P--   100%                         
+== fdinfo of child from parent
+Team: (11983) /bin/sleep 3
+ -100  R   3:1048579
+    0  R   2:154
+    1  R/W 792140804:-281474184569616
+    2  R/W 2:154
+
+== sh argv0
+"pretend-sh\n"
+== env
+-r-xr-xr-x 1 baron root 245384 Apr 21  2026 /bin/env
+rc=0
+== tmp
+lrwxrwxrwx 1 baron root 22 Oct 31 07:06 /tmp -> /boot/system/cache/tmp
+/boot/system/cache/tmp
+== listeners after
+Proto  Recv-Q Send-Q Local Address         Foreign Address       State        Program
+tcp         0      0 *:10902               *:0                   listen       55/remote_broker
+tcp         0      0 *:22                  *:0                   listen       83/sshd
+tcp         0      0 [127.0.0.1]:10900     *:0                   listen       139/app_server
+== teams
+/bin/sleep 30                                      12042        1    0    0 

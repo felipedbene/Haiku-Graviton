@@ -1,0 +1,29 @@
+#!/bin/bash
+# haiku-compat-run <instance> <label> <step-script> [timeout]: the Haiku twin of
+# dev-linux-run. Ships this port's tools/ and compat/ to $REMOTE_DIR (default
+# /boot/home/cc-scen/port) on a Haiku box through a presigned S3 GET (Haiku has
+# no S3 client), checks its sha256 there, then runs <step-script> from that
+# directory through ssh-run, so every run leaves an evidence log naming the
+# exact payload. The installed package (/boot/system/lib/claude-code) is not
+# touched; steps choose whether to test it or the shipped compat/lib.
+set -euo pipefail
+here=$(cd "$(dirname "$0")/.." && pwd)
+inst=$1 label=$2 step=$3 tmo=${4:-1800}
+R=${REMOTE_DIR:-/boot/home/cc-scen/port}
+B=s3://haiku-graviton-$(aws sts get-caller-identity --query Account --output text)-us-west-2/claude-code-port
+tmp=$(mktemp -d)
+trap 'rm -rf "$tmp"' EXIT
+COPYFILE_DISABLE=1 tar --no-xattrs -czf "$tmp/p.tgz" -C "$here" tools compat 2>/dev/null
+sum=$(shasum -a 256 "$tmp/p.tgz" | cut -d' ' -f1)
+key="port-scen-$sum.tgz"
+aws s3 cp --quiet --region us-west-2 "$tmp/p.tgz" "$B/$key"
+url=$("$here/tools/presign" get "$B/$key" 3600)
+{
+	echo 'set -u'
+	echo "R=$R; rm -rf \$R && mkdir -p \$R && cd \$R || exit 1"
+	echo "/boot/system/bin/curl -sSfo p.tgz '$url' || exit 1"
+	echo "echo '$sum  p.tgz' | sha256sum -c - || exit 1"
+	echo "tar xzf p.tgz && rm p.tgz || exit 1"
+	cat "$step"
+} > "$tmp/step.sh"
+"$here/tools/ssh-run" "$inst" "$label" "$tmp/step.sh" "$tmo"

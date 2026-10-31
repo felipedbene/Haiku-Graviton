@@ -5,16 +5,108 @@
 // Each scenario records only run-independent observations: PIDs are reduced to
 // relations (sid == child pid, sid == parent sid, cmdline read via the pid) and
 // timings to buckets, so the two JSON files compare with plain equality.
-import { mkdirSync, rmSync, writeFileSync, readFileSync, statSync, openSync, closeSync, readdirSync, chmodSync, existsSync } from "node:fs";
-import { join } from "node:path";
+import { mkdirSync, rmSync, writeFileSync, readFileSync, statSync, openSync, closeSync, readdirSync, chmodSync, existsSync, realpathSync, accessSync, constants as FSC } from "node:fs";
+import { join, delimiter } from "node:path";
+import { execFileSync } from "node:child_process";
+import os from "node:os";
 
-const [OUT, WORK] = process.argv.slice(2);
-rmSync(WORK, { recursive: true, force: true });
-mkdirSync(WORK, { recursive: true });
+const [OUT, WORK_ARG] = process.argv.slice(2);
+rmSync(WORK_ARG, { recursive: true, force: true });
+mkdirSync(WORK_ARG, { recursive: true });
+// The real path, so a symlinked /tmp (Haiku: /tmp -> /boot/system/cache/tmp) is
+// never seen half-resolved; both spellings are normalised away at write time.
+const WORK = realpathSync(WORK_ARG);
 const HERE = new URL(".", import.meta.url).pathname;
 const isBun = typeof process.versions.bun === "string";
 // The child runtime for the unref scenarios: the same runtime, with compat for node.
 const SELF = isBun ? [process.execPath] : [process.execPath, "--import", join(HERE, "spawn-preload.mjs")];
+
+// ---- platform observers ----
+// What the scenarios observe from outside a child (its session, its argv as
+// the process table shows it, its executable, its open fds) comes from /proc on
+// Linux. Haiku has no /proc: there the kernel's team_info (through the port's
+// cc-teaminfo helper, native/cc-teaminfo.c) and fdinfo answer the same
+// questions. Each observer returns the same shape on both platforms. Where the
+// Haiku kernel does not keep a value at all, the observation is an explicit
+// UNOBSERVABLE marker with the reason, which check-spawn.mjs counts and prints
+// as a documented gap (never as a match).
+const PLATFORM = process.platform;
+const UNOBS_KEY = "unobservable-on-" + PLATFORM;
+const unobservable = (reason, extra = {}) => ({ [UNOBS_KEY]: reason, ...extra });
+const TEAMINFO = process.env.CC_TEAMINFO || "/boot/system/lib/claude-code/bin/cc-teaminfo";
+function teamLine(pid) {
+	// team parent group session uid start_us start_epoch_us args (args is the rest of the line)
+	const out = execFileSync(TEAMINFO, [String(pid)], { encoding: "latin1" });
+	if (out === "") return null;
+	const line = out.replace(/\n$/, "");
+	const f = line.split(" ");
+	if (f.length < 8 || f[0] !== String(pid)) throw new Error(`cc-teaminfo ${pid}: unexpected output ${JSON.stringify(out)}`);
+	return { team: f[0], parent: f[1], session: f[3], args: f.slice(7).join(" ") };
+}
+// team_info.args holds at most 63 bytes (B_OS_NAME_LENGTH - 1 of a 64-byte field).
+const HAIKU_ARGS_MAX = 63;
+const OBS = PLATFORM === "linux" ? {
+	// /proc/<pid>/stat field 6 is the session id (after "pid (comm) state ppid pgrp").
+	sessionOf: (statText) => statText.slice(statText.lastIndexOf(")") + 2).split(" ")[3],
+	selfSid: () => OBS.sessionOf(readFileSync("/proc/self/stat", "utf8")),
+	// Raw process-table text for a pid, "" when not readable yet.
+	argsText: (pid) => { try { return readFileSync(`/proc/${pid}/cmdline`, "latin1"); } catch { return ""; } },
+	argv: (text) => { const a = text.split("\0"); if (a.at(-1) === "") a.pop(); return a; },
+	// A shell snippet that prints the shell's own session on stdout, and its parser.
+	childSessionCmd: "cat /proc/$$/stat",
+	parseChildSession: (out) => OBS.sessionOf(out),
+	childExeCmd: "readlink /proc/$$/exe",
+	parseChildExe: (out) => out.replace(/\n$/, ""),
+	fdsOf: (pid) => readdirSync(`/proc/${pid}/fd`).map(Number).sort((a, b) => a - b),
+	envBin: "/usr/bin/env",
+	readOnlyDir() {
+		try { for (const s of readdirSync("/snap")) { const c = `/snap/${s}/current`; if (existsSync(join(c, "meta"))) return c; } } catch {}
+		return null;
+	},
+} : PLATFORM === "haiku" ? {
+	selfSid: () => teamLine(process.pid).session,
+	argsText: (pid) => teamLine(pid)?.args ?? "",
+	// The kernel builds team_info.args as "<exec path> <argv[1]> <argv[2]> ..."
+	// (src/system/kernel/team.cpp, Team::SetArgs(path, args + 1, argc - 1)):
+	// argv[0] is replaced by the path given to exec, so it is not observable from
+	// outside the child; argv[0] itself is checked from inside the child by
+	// "argv0 visible as $0". The remaining words are argv[1..] joined by single
+	// spaces, which these scenarios keep free of spaces, so splitting is exact.
+	argv(text) {
+		if (Buffer.byteLength(text, "latin1") >= HAIKU_ARGS_MAX) throw new Error(`team_info.args is truncated (${text.length} bytes), argv not observable: ${JSON.stringify(text)}`);
+		const [path, ...rest] = text.split(" ");
+		return [unobservable("team_info.args starts with the exec path, not argv[0] (team.cpp Team::SetArgs); argv[0] is checked by 'argv0 visible as $0'", { kernelShows: path }), ...rest];
+	},
+	// "; :" keeps the shell from exec'ing the helper in its own place (bash does
+	// that for a lone command after -c), which would make $$ name the helper.
+	childSessionCmd: `${TEAMINFO} $$; :`,
+	parseChildSession: (out) => out.split(" ")[3],
+	// The exec path is the first word of team_info.args (see argv above): Haiku's
+	// counterpart of /proc/<pid>/exe.
+	childExeCmd: `${TEAMINFO} $$; :`,
+	parseChildExe: (out) => out.replace(/\n$/, "").split(" ")[7],
+	fdsOf(pid) {
+		// fdinfo <team>: "Team: (<id>) <args>", then " <fd>  <R|W>  <dev>:<ino>" per fd;
+		// negative numbers are the team's cwd/root entries, not descriptors.
+		const out = execFileSync("fdinfo", [String(pid)], { encoding: "latin1" });
+		const head = /^Team: \((\d+)\)/m.exec(out);
+		if (!head || head[1] !== String(pid) || (out.match(/^Team: /gm) || []).length !== 1) throw new Error(`fdinfo ${pid}: unexpected output ${JSON.stringify(out)}`);
+		return [...out.matchAll(/^\s*(-?\d+)\s/gm)].map((m) => +m[1]).filter((n) => n >= 0).sort((a, b) => a - b);
+	},
+	envBin: "/bin/env",
+	// packagefs is mounted read-only: creating a file there fails with EROFS.
+	readOnlyDir: () => "/boot/system/bin",
+} : null;
+if (!OBS) throw new Error(`spawn-scenarios: no process observers for platform ${PLATFORM}`);
+// The executable PATH lookup a shell would do, for "which binary is sh".
+function onPath(name) {
+	for (const d of (process.env.PATH ?? "").split(delimiter)) {
+		if (!d) continue;
+		const f = join(d, name);
+		try { accessSync(f, FSC.X_OK); if (statSync(f).isFile()) return f; } catch {}
+	}
+	return null;
+}
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const errShape = (e) => {
@@ -26,20 +118,19 @@ const errShape = (e) => {
 	};
 };
 const typeOf = (v) => (v === null ? "null" : v instanceof ReadableStream ? "ReadableStream" : typeof v);
-const sessionOf = (statText) => statText.slice(statText.lastIndexOf(")") + 2).split(" ")[3];
-const selfSid = sessionOf(readFileSync("/proc/self/stat", "utf8"));
+const selfSid = OBS.selfSid();
 const status = (p) => ({ exitCode: p.exitCode, signalCode: p.signalCode, killed: p.killed });
+// Waits until the child has exec'd (its process-table entry stops being the
+// parent's) and returns its argv as the process table shows it, as an array.
 async function cmdlineOf(pid, notEqual) {
-	// The child may not have exec'd yet when spawn returns; wait for its image to change.
 	for (let i = 0; i < 200; i++) {
-		let c = "";
-		try { c = readFileSync(`/proc/${pid}/cmdline`, "latin1"); } catch {}
-		if (c !== "" && c !== notEqual) return c;
+		const c = OBS.argsText(pid);
+		if (c !== "" && c !== notEqual) return OBS.argv(c);
 		await sleep(10);
 	}
 	return "TIMEOUT";
 }
-const ownCmdline = readFileSync("/proc/self/cmdline", "latin1");
+const ownCmdline = OBS.argsText(process.pid);
 
 const S = [];
 const add = (name, fn) => S.push([name, fn]);
@@ -299,8 +390,16 @@ add("argv0 empty string ignored", async () => {
 	return { o: await p.stdout.text() };
 });
 add("argv0 resolves real binary", async () => {
-	const p = Bun.spawn(["sh", "-c", "readlink /proc/$$/exe"], { argv0: "nonexistent-name" });
-	return { o: await p.stdout.text() };
+	// The exec'd image is the real sh found on PATH, whatever argv[0] says. The
+	// path itself is host-specific (dash on Ubuntu, bash on Haiku), so the
+	// observation is the relation, with the raw output kept when it fails.
+	const p = Bun.spawn(["sh", "-c", OBS.childExeCmd], { argv0: "nonexistent-name" });
+	const exe = OBS.parseChildExe(await p.stdout.text());
+	let real = null;
+	try { real = realpathSync(exe); } catch {}
+	const sh = onPath("sh");
+	const isSh = real !== null && sh !== null && real === realpathSync(sh);
+	return isSh ? { exeIsRealSh: true } : { exeIsRealSh: false, exe, real, sh };
 });
 add("no argv0 cmdline keeps cmd[0]", async () => {
 	const p = Bun.spawn(["sleep", "5"]);
@@ -311,7 +410,9 @@ add("no argv0 cmdline keeps cmd[0]", async () => {
 });
 add("cwd", async () => {
 	const p = Bun.spawn(["pwd"], { cwd: "/tmp" });
-	return { o: await p.stdout.text() };
+	// pwd prints the physical directory; /tmp is a symlink on Haiku.
+	const o = await p.stdout.text();
+	return { o: o === realpathSync("/tmp") + "\n" ? "<realpath /tmp>\n" : o };
 });
 add("cwd relative binary", async () => {
 	const d = join(WORK, "bin");
@@ -338,7 +439,7 @@ add("PATH relative segment against cwd", async () => {
 	return { o: await p.stdout.text(), x: await p.exited };
 });
 add("env replaces", async () => {
-	const p = Bun.spawn(["/usr/bin/env"], { env: { FOO: "bar", NUM: 5, U: undefined, N: null, B: false, E: "" } });
+	const p = Bun.spawn([OBS.envBin], { env: { FOO: "bar", NUM: 5, U: undefined, N: null, B: false, E: "" } });
 	return { o: (await p.stdout.text()).split("\n").sort() };
 });
 add("env without PATH uses default path", async () => {
@@ -367,35 +468,35 @@ add("env inherited sees deletion", async () => {
 });
 add("env spread", async () => {
 	const p = Bun.spawn(["sh", "-c", "echo $TERM:$HOME"], { env: { ...process.env, TERM: "xterm-256color" } });
-	return { o: await p.stdout.text(), home: process.env.HOME };
+	// HOME is the host's (/root, /boot/home); it is compared as a placeholder.
+	const home = process.env.HOME;
+	return { o: (await p.stdout.text()).split(home).join("<HOME>"), home: home ? "<HOME>" : home };
 });
 add("env proto keys ignored", async () => {
 	const env = Object.create({ INHERITED: "1" });
 	env.OWN = "2";
-	const p = Bun.spawn(["/usr/bin/env"], { env });
+	const p = Bun.spawn([OBS.envBin], { env });
 	return { o: (await p.stdout.text()).split("\n").sort() };
 });
 add("env symbol and nonenumerable", async () => {
 	const env = { A: "1", [Symbol("s")]: "x" };
 	Object.defineProperty(env, "HIDDEN", { value: "h", enumerable: false });
-	const p = Bun.spawn(["/usr/bin/env"], { env });
+	const p = Bun.spawn([OBS.envBin], { env });
 	return { o: (await p.stdout.text()).split("\n").sort() };
 });
 add("detached session", async () => {
-	const p = Bun.spawn(["sh", "-c", "cat /proc/$$/stat"], { detached: true });
-	const st = await p.stdout.text();
-	const sid = sessionOf(st);
+	const p = Bun.spawn(["sh", "-c", OBS.childSessionCmd], { detached: true });
+	const sid = OBS.parseChildSession(await p.stdout.text());
 	return { sidIsChild: sid === String(p.pid), sidIsParent: sid === selfSid };
 });
 add("not detached session", async () => {
-	const p = Bun.spawn(["sh", "-c", "cat /proc/$$/stat"], { detached: false });
-	const st = await p.stdout.text();
-	const sid = sessionOf(st);
+	const p = Bun.spawn(["sh", "-c", OBS.childSessionCmd], { detached: false });
+	const sid = OBS.parseChildSession(await p.stdout.text());
 	return { sidIsChild: sid === String(p.pid), sidIsParent: sid === selfSid };
 });
 add("detached non-boolean ignored", async () => {
-	const p = Bun.spawn(["sh", "-c", "cat /proc/$$/stat"], { detached: 1 });
-	const sid = sessionOf(await p.stdout.text());
+	const p = Bun.spawn(["sh", "-c", OBS.childSessionCmd], { detached: 1 });
+	const sid = OBS.parseChildSession(await p.stdout.text());
 	return { sidIsChild: sid === String(p.pid), sidIsParent: sid === selfSid };
 });
 
@@ -445,13 +546,13 @@ add("stdio Bun.file is a directory", async () => {
 	} catch (e) { return errShape(e); }
 });
 add("stdio Bun.file read-only fs", async () => {
-	let dir = null;
-	try { for (const s of readdirSync("/snap")) { const c = `/snap/${s}/current`; if (existsSync(join(c, "meta"))) { dir = c; break; } } } catch {}
-	if (!dir) return { skipped: "no squashfs snap" };
+	// A read-only mount: a squashfs snap on Ubuntu, packagefs on Haiku.
+	const dir = OBS.readOnlyDir();
+	if (!dir) throw new Error("no read-only filesystem found on this host");
 	try {
 		const p = Bun.spawn(["echo", "x"], { stdio: ["ignore", "ignore", Bun.file(join(dir, "cc-spawn-new.log"))] });
 		return { returned: true, x: await p.exited };
-	} catch (e) { const s = errShape(e); s.message = s.message?.replace(dir, "<snap>"); s.path = s.path?.replace(dir, "<snap>"); return s; }
+	} catch (e) { const s = errShape(e); s.message = s.message?.replace(dir, "<rofs>"); s.path = s.path?.replace(dir, "<rofs>"); return s; }
 });
 add("stdio missing dir and bad cwd", async () => {
 	try {
@@ -489,9 +590,18 @@ add("stdio null entries", async () => {
 	return { stdout: typeOf(p.stdout), x: await p.exited };
 });
 add("stdio extra ignore slot", async () => {
-	// A closed slot 3 is where ls's own directory fd lands; a /dev/null there would push it to 4.
-	const p = Bun.spawn(["sh", "-c", "ls /proc/self/fd | sort -n | tr '\\n' ' '"], { stdio: ["ignore", "pipe", "ignore", "ignore"] });
-	return { o: await p.stdout.text(), stdio: p.stdio.length };
+	// An "ignore" slot past stderr is left closed in the child (a /dev/null there
+	// would show as fd 3). The child's fd table is read from outside while it runs.
+	const p = Bun.spawn(["sleep", "5"], { stdio: ["ignore", "pipe", "ignore", "ignore"] });
+	const c = await cmdlineOf(p.pid, ownCmdline);
+	// Both kernels publish the new argv before they close the close-on-exec fds
+	// (Linux begin_new_exec: exec_mmap, then do_close_on_exec; Haiku exec_team:
+	// SetArgs, then vfs_exec_io_context), so the table is read once exec settled.
+	await sleep(300);
+	const fds = OBS.fdsOf(p.pid);
+	p.kill(9);
+	await p.exited;
+	return { exec: c === "TIMEOUT" ? c : "exec'd", fds, stdio: p.stdio.length };
 });
 add("stdio extra Bun.file slot", async () => {
 	const f = join(WORK, "extra.log");
@@ -733,5 +843,14 @@ for (const [name, fn] of S) {
 	try { r = await fn(); } catch (e) { r = { scenarioThrew: errShape(e) }; }
 	out.push([name, r]);
 }
-writeFileSync(OUT, JSON.stringify(out, null, 1));
+// Host-specific absolute paths (the work dir, this directory) become placeholders,
+// both as given and fully resolved; longest first so a prefix never wins.
+const hereDir = HERE.replace(/\/$/, "");
+const places = [[WORK, "<WORK>"], [WORK_ARG.replace(/\/$/, ""), "<WORK>"], [hereDir, "<HERE>"], [realpathSync(hereDir), "<HERE>"]].sort((a, b) => b[0].length - a[0].length);
+let text = JSON.stringify(out, null, 1);
+for (const [from, to] of places) text = text.split(from).join(to);
+// What the checker needs to tell a platform difference from a defect: the
+// platform, and its own errno and signal tables (as this runtime reports them).
+const meta = ["__platform", { platform: PLATFORM, runtime: isBun ? "bun" : "node", errno: os.constants.errno, signals: os.constants.signals }];
+writeFileSync(OUT, JSON.stringify([meta, ...JSON.parse(text)], null, 1));
 console.log(`${isBun ? "bun" : "node"}: ${out.length} scenarios -> ${OUT}`);

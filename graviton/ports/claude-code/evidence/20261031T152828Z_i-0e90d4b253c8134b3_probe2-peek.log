@@ -1,0 +1,19 @@
+# evidence: probe2-peek
+# instance: i-0e90d4b253c8134b3   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261031T152828Z   end: 20261031T152850Z   rc: 0
+# script sha256: 7132a2308db17b1357fc0882cca89c9e34dc3e9014b60430b3a8055a20fc7505
+# ---- script ----
+# | cat /tmp/ccrun/cc-20261031T152136Z-37733.log
+# | echo "== teams"; ps | grep -E "node|perl|sleep|env" | grep -v grep
+# ---- raw output ----
+== node listen ::1 default
+error EINVAL -2147483643 listen listen EINVAL: invalid argument ::1
+== node listen ::1 ipv6Only:true
+listening { address: '::1', family: 'IPv6', port: 40073 }
+== node listen :: default
+error EINVAL -2147483643 listen listen EINVAL: invalid argument ::
+== node connect ::1 to v6only listener
+got hi ::1 IPv6
+== teams
+/boot/system/bin/node -e const net=require("net");const s=net.c 11701        7    0    0 
+/bin/sleep 30                                      11881        1    0    0 
