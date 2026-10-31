@@ -114,6 +114,53 @@ the one site passing Bun's `--smol` (`chunk-7hh7yp6n.js`) belongs to a `Bun.buil
 (`hF`). No module calls `Bun.build`, and it is absent in compat, so the site is
 unreachable. `process.execve` on Haiku has to be confirmed on the Node 24.21.0 build.
 
+### `fetch` options and `Bun.FetchSession` (compat/lib/fetch.mjs)
+Diff test: `compat/test/fetch/` (servers in a Node fixture process on 127.0.0.1 and a
+unix socket in a temp dir; the checker names each accepted difference as KNOWN).
+- **Error objects:** Bun rejects a failed request with `TypeError{code}` (code and
+  message of the failure: `UNABLE_TO_VERIFY_LEAF_SIGNATURE`, `ENOENT`, …); Node's fetch
+  with `TypeError("fetch failed")` whose `cause` has the code. True for every fetch,
+  with or without this layer. The layer gives Bun's own shape only to errors it raises:
+  `ERR_PROXY_TUNNEL` (status, statusText, headers) for a refused CONNECT, the error a
+  `tls.checkServerIdentity` returns, and the idle-timeout `TimeoutError`. Two Bun codes
+  have different Node causes: a handshake the server ends for want of a client
+  certificate (`EPROTO` vs `UND_ERR_SOCKET`), a wrong key passphrase
+  (`FailedToOpenSocket` vs `ERR_OSSL_BAD_DECRYPT`). Code that reads `e.code` on a
+  connection failure sees `undefined` under Node; `e.cause.code` has it.
+- **Connection header** on a request whose connection won't be reused
+  (`keepalive:false`, a per-request `checkServerIdentity`, a `keepAlive:false`
+  session): Bun sends none and closes after the response; Node's HTTP client always
+  writes one, so it sends `Connection: close`. Same connections, one extra header.
+- **Connection reuse count:** undici 7.30.1 validates an idle keep-alive socket on a
+  `setImmediate` before reuse (GHSA-35p6-xmwp-9g52) and its pool opens a second
+  connection meanwhile, so sequential requests use up to two connections where Bun
+  uses one. Pools are still per session, `close()` still drops idle sockets.
+- **Timeout phases:** Bun's idle timer covers connect, TLS and the header block as one
+  absolute window, then body idleness. Here: connect timeout, then `headersTimeout`,
+  then `bodyTimeout`, each the same (Bun-padded) length, so before the first body byte
+  a request can wait up to twice as long. Plain `fetch` calls without Bun options keep
+  Node's defaults (10 s connect, 300 s headers/body) unless `BUN_CONFIG_HTTP_IDLE_TIMEOUT`
+  is set, which routes them through the layer.
+- **Rebuilt responses** (`decompress:false`, a forwarding proxy's 407, or any routed
+  response with an idle timer): a new global `Response` with the original status,
+  headers, body, `url` and `redirected` (own properties). `type` is `"default"` (Bun's
+  value; Node's fetch says `"basic"`), and `clone()` of one loses `url`.
+- **Plain fetch outside this layer** (no Bun option, no env proxy, no `Host` header):
+  Node's own behaviour: `type:"basic"`, a 407 is a network error, the fetch-spec "bad
+  ports" (e.g. 9, 6000) are refused, a `fetch({url})` object input is not read as init.
+- **Refused explicitly** (rejection "… is not supported by the Node compat layer"):
+  `verbose` (true/"curl"), `compress`, `maxRedirects`, `protocol` h2/h3, `s3://` URLs,
+  `tls` keys `minVersion`/`maxVersion`/`secureOptions`/`ALPNProtocols`/`crl`/
+  `dhParamsFile`/`ecdhCurve`/`sigalgs`/`sessionTimeout`/`clientRenegotiation*`/
+  `allowPartialTrustChain`/`requestCert`/`lowMemoryMode` when not default, a Blob or
+  `Bun.file()` as `tls.ca`/`cert`/`key`, `ca` together with `caFile` (same for
+  cert/key), a non-http(s) proxy URL, a `dispatcher` together with Bun options, and
+  `FetchSession` `keepAlive.idleTimeout`/`maxIdleSockets`. No bundle call site uses them.
+- **Version-sensitive internals:** the dispatch handler wrapper relies on Node's
+  fetch handing dispatchers a legacy-API handler (`onHeaders(status, rawHeaders, …)`),
+  true of undici 7.x. Node 24.21.0 (the Haiku build) must bundle undici 7.x too
+  (`build-tree.sh` checks the major); not yet run on Haiku.
+
 ### Global `Worker`
 - **Uncaught-error message:** Bun's `ErrorEvent.message` embeds a formatted source excerpt
   and stack; the port's is `Name: message`. Type, class, and the fact that the worker

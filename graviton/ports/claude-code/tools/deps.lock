@@ -1,5 +1,10 @@
 # name version tarball-url npm-integrity (sha512, from `npm view <name>@<version> dist.integrity`)
 # ws: runtime -- Bun ships "ws" built in; Node does not. Pure JS, no dependencies.
 ws 8.22.0 https://registry.npmjs.org/ws/-/ws-8.22.0.tgz sha512-Ydggc987+RO0AnWtZ/7Wq9FtNvcrL1b/RO0ud9mWjUPgDrsAAwQSF51sm2hm1XofbU/4jkpGEsLFsZZxU+1DOg==
+# undici: runtime -- the dispatchers behind compat/lib/fetch.mjs (Bun's fetch proxy/unix/tls/timeout
+# options). Node 24 bundles undici but does not export Agent; this npm build matches the bundled one
+# (process.versions.undici on Node 24.22.2 is 7.30.1), so Node's fetch drives it through the same
+# handler API. Pure JS, no dependencies.
+undici 7.30.1 https://registry.npmjs.org/undici/-/undici-7.30.1.tgz sha512-03KrMbjIFDWQR5RNPrSw3bd1r12JpyFQl9/yxjUbJtqkjmllqC5lFjZh6ujeuJCKr8EOQvRW872Oy/az+nLYxg==
 # acorn: build-time only (analyze-requires.mjs); not installed into the tree.
 acorn 8.19.0 https://registry.npmjs.org/acorn/-/acorn-8.19.0.tgz sha512-oJlA3XiRm7Cyk6qFD2Jn8ak9B7jSy0qy00ADO3+8dpT0LSjFihQYv4C02LFCSYJV3Q37xYwwRy5m+IpIiUzqWw==

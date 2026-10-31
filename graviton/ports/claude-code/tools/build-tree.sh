@@ -1,13 +1,13 @@
 #!/bin/bash
 # build-tree.sh <claude-binary> <outdir> <install-prefix> <node> <depsdir>
 #
-# <depsdir> holds fetch-deps.sh output (integrity-verified ws + acorn).
+# <depsdir> holds fetch-deps.sh output (integrity-verified ws, undici + acorn).
 #
 # The whole deterministic pass, in order: extract the Bun module graph, relocate
 # (R1-R3, P1-P3), analyze evaluation-time requires, apply R4, restore the
 # build-time platform/arch folds (P4, sites in folds-<version>.json), add haiku cases to the platform-name
 # maps (P5-P7), give the Linux-only sites Haiku branches (P8-P17), then install the
-# runtime support files (compat preload, the pinned ws package, node-fetch).
+# runtime support files (compat preload, the pinned ws and undici packages, node-fetch).
 # Each step asserts its own counts; any change in upstream shape stops the build.
 set -euo pipefail
 bin=$1 out=$2 prefix=$3 node=$4 deps=$5
@@ -27,6 +27,12 @@ mkdir -p "$out/lib" && cp "$here/../compat/lib/"*.mjs "$out/lib/"
 mkdir -p "$out/node_modules"
 cp -R "$here/../compat/node_modules/node-fetch" "$out/node_modules/"
 cp -R "$deps/ws" "$out/node_modules/ws"
+cp -R "$deps/undici" "$out/node_modules/undici"
+# Node's fetch drives the npm undici dispatchers through its bundled undici's
+# handler API, which is stable within a major: refuse a tree whose majors differ.
+bundled=$("$node" -p 'process.versions.undici')
+pinned=$("$node" -p 'require(process.argv[1]).version' "$deps/undici/package.json")
+[ "${bundled%%.*}" = "${pinned%%.*}" ] || { echo "build-tree: node bundles undici $bundled, deps pin $pinned (majors differ)" >&2; exit 1; }
 # P17's native helper, built on Haiku from native/cc-teaminfo.c. Optional here
 # (the Linux reference build never runs it); on Haiku the bundle warns once on
 # stderr if <prefix>/bin/cc-teaminfo is missing.
