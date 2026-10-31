@@ -6,7 +6,7 @@ set -u
 P=${TREE:-/opt/claude-code/2.1.314}; N=${NODE:-/opt/node24/bin/node}; W=${WORK:-/tmp}
 run() { local side=$1 of=$2; shift 2; local h=$W/cchome-$side; rm -rf $h; mkdir -p $h
 	if [ $side = A ]; then (cd $W && HOME=$h timeout 60 bun --zero-fill-buffers $P/cli "$@" > $of.out 2> $of.err < /dev/null; echo $? > $of.rc)
-	else (cd $W && HOME=$h timeout 60 $N --zero-fill-buffers --import $P/bun-compat.mjs $P/cli "$@" > $of.out 2> $of.err < /dev/null; echo $? > $of.rc); fi
+	else (cd $W && HOME=$h timeout 60 $N --zero-fill-buffers $P/claude.mjs "$@" > $of.out 2> $of.err < /dev/null; echo $? > $of.rc); fi
 	sed -i "s#$W/cchome-$side#\$HOME#g" $of.out $of.err; }
 D=$W/ccdiff; rm -rf $D; mkdir -p $D; same=0; dif=0
 while IFS= read -r line; do [ -z "$line" ] && continue; t=$(echo "$line" | tr ' /' '__'); eval "set -- $line"

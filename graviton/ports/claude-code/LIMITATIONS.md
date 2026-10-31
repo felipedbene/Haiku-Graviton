@@ -106,12 +106,13 @@ behaviour; the diff test (213/218 match) requires exactly that throw for these f
   `reload`/`timeout`/…, Listener `reload`/`fd`/…, Socket `flush`/`shutdown`/TLS getters/….
   The full list is in `compat/lib/net.mjs`'s header.
 
-### Self re-exec under Node (open, integration item)
-26 bundle modules re-exec Claude Code via `process.execPath`. Outside a standalone
-binary they pass `process.argv[1]`, so on Node they start `node <prefix>/cli …`, which
-doesn't carry the compat preload or `--zero-fill-buffers`. One site also passes Bun's
-`--smol` flag to `process.execPath` (plugin hook build, `chunk-7hh7yp6n.js`), which node
-rejects. Design pending; see PATCHES.md once decided.
+### Self re-exec under Node: resolved (PATCHES.md L1)
+The 26 relaunch sites now come back through `claude.mjs`, which loads compat and
+restores `--zero-fill-buffers`. Verified on the Linux box: flag-less relaunches of
+`--version`, `doctor --help` and `mcp --help` give output identical to Bun's. Left over:
+the one site passing Bun's `--smol` (`chunk-7hh7yp6n.js`) belongs to a `Bun.build` plugin
+(`hF`). No module calls `Bun.build`, and it is absent in compat, so the site is
+unreachable. `process.execve` on Haiku has to be confirmed on the Node 24.21.0 build.
 
 ### `Bun.YAML.parse`: depth limits and inputs over 2 GiB
 - **Depth:** Bun's nesting limit is a native-stack check that differs per construct (deepest

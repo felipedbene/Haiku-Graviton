@@ -5,6 +5,7 @@ import { zstdDecompressSync as zDecSync, zstdDecompress as zDec } from "node:zli
 import { readFileSync, statSync, writeFileSync, unlinkSync, openSync, fstatSync, createReadStream, existsSync } from "node:fs";
 import { Readable } from "node:stream";
 import { resolve, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { tmpdir } from "node:os";
 import v8 from "node:v8";
 import vm from "node:vm";
@@ -90,5 +91,6 @@ export class BunFile {
 export const file = (p, opts) => new BunFile(p, opts?.type ?? "");
 export const stdin = new BunFile(0);
 
-// Bun.main: the absolute path of the entry module.
-export const main = resolve(process.argv[1] ?? "");
+// Bun.main: the absolute path of the entry module. That is the bundle's `cli`
+// (Bun's /$bunfs/root/cli after R1), not the claude.mjs wrapper that imports it.
+export const main = fileURLToPath(new URL("../cli", import.meta.url));

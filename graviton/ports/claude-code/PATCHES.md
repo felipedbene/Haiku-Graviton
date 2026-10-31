@@ -89,6 +89,10 @@ the vector counts are the last run's. Anything not listed is absent, never a stu
 | C18 | `http.maxHeaderSize` setter · `net.mjs` `installHttpMaxHeaderSize` | the gateway assigns it; Node's property is getter-only, so the assignment throws in strict ESM | covered by C17's header-limit scenario | n |
 | C19 | `unsafe: {}` (namespace, no members) | `Bun.unsafe.setJITPolicy?.()` is guarded only by `typeof Bun`; the JSC JIT knob itself has no V8 counterpart and stays absent | — | n |
 
+| ID | File | What | Why | Upstream-able |
+|---|---|---|---|---|
+| L1 | `claude.mjs` (the entry the launcher runs) | imports `bun-compat.mjs`, then `cli`. Without `--zero-fill-buffers` in `execArgv`, it first `process.execve`s itself with it (same pid and stdio) | Outside a standalone binary, the bundle relaunches as `process.execPath process.argv[1] …` (26 modules). With `argv[1]` = this file, every relaunch gets the compat layer and Bun's baked-in compile flag. `NODE_OPTIONS` was rejected because it would leak into the user's own node processes. | n |
+
 ## C. Recipes
 
 | ID | File | What | Why | Upstream-able |
