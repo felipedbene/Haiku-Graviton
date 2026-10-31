@@ -1,0 +1,39 @@
+# evidence: tui-ctrlc-real-linux
+# instance: i-0a14e8aca787249b7   region: us-west-2
+# ssm command: 085af995-ea6d-4197-9bb1-4e7853f779ba (agent status: Success)
+# start: 20261031T150818Z   end: 20261031T150845Z   rc: 0   log bytes: 1289
+# script sha256: 0c43e0657e4934059dda17cd96fcc7486e81fce7863c7748cce6c623fe6dee78
+# ---- script ----
+# | set -u
+# | echo '0b19521f751684e93bb12378bb5d60c245e3fb4e6566ed665f642898e26e3d8f  /opt/cc/w-ctrlc.stage/p.tgz' | sha256sum -c --quiet - || exit 1
+# | rm -rf /opt/cc/w-ctrlc && mkdir -p /opt/cc/w-ctrlc && tar xzf /opt/cc/w-ctrlc.stage/p.tgz -C /opt/cc/w-ctrlc 2>/dev/null
+# | cd /opt/cc/w-ctrlc
+# | set -u
+# | S=cc; H=/tmp/ctrlc-home; rm -rf $H; mkdir -p $H/.claude; echo '{"prefersReducedMotion":true}' > $H/.claude/settings.json
+# | tmux -L $S kill-server 2>/dev/null
+# | tmux -L $S new-session -d -s $S -x 100 -y 30 "cd /tmp && HOME=$H TERM=xterm-256color /opt/cc/v2.1.314/package/claude; echo CLAUDE-EXITED rc=\$?; sleep 30"
+# | sleep 15
+# | echo "== before: node teams $(ps | grep -c 'package/claude')"
+# | tmux -L $S send-keys -t $S C-c; sleep 1; echo "--- after first Ctrl-C:"; tmux -L $S capture-pane -t $S -p | grep -v '^ *$' | tail -3
+# | tmux -L $S send-keys -t $S C-c; sleep 3; echo "--- after second Ctrl-C:"; tmux -L $S capture-pane -t $S -p | grep -v '^ *$' | tail -3
+# | echo "== after: node teams $(ps | grep -c 'package/claude')"
+# | tmux -L $S kill-server
+# | echo "== headless -p without credentials"
+# | cd /tmp && HOME=$H timeout 60 /opt/cc/v2.1.314/package/claude -p "hello" < /dev/null; echo "rc=$?"
+# | HOME=$H timeout 60 /opt/cc/v2.1.314/package/claude -p --output-format json "hello" < /dev/null | head -c 400; echo; echo "rc=$?"
+# ---- raw output ----
+== before: node teams 0
+--- after first Ctrl-C:
+  3  }
+ ╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌
+  Syntax theme: Monokai Extended (ctrl+t to disable)
+--- after second Ctrl-C:
+  3  }
+ ╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌
+  Syntax theme: Monokai Extended (ctrl+t to disable)
+== after: node teams 0
+== headless -p without credentials
+Not logged in · Please run /login
+rc=1
+{"duration_api_ms":0,"stop_reason":"stop_sequence","session_id":"5b7686e8-7b60-4fc0-99a5-3fe5720a6371","total_cost_usd":0,"usage":{"output_tokens_details":{"thinking_tokens":0},"input_tokens":0,"cache_creation_input_tokens":0,"cache_read_input_tokens":0,"output_tokens":0,"server_tool_use":{"web_search_requests":0,"web_fetch_requests":0},"service_tier":"standard","cache_creation":{"ephemeral_1h_inp
+rc=0

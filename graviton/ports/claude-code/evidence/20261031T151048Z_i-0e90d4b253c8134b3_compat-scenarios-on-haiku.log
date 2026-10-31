@@ -1,0 +1,62 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: compat-scenarios-on-haiku
+# instance: i-0e90d4b253c8134b3   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261031T151048Z   end: 20261031T151137Z   rc: 0
+# script sha256: 9b6bf831568cbbb86a582a1cb3d286e2e36e67cb325fe8d7d4c718b1d7107cd2
+# ---- script ----
+# | set -u
+# | C=/boot/system/bin/curl; N=/boot/system/bin/node; P=/boot/home/cc-accept/port; T=/boot/system/lib/claude-code
+# | cd /boot/home/cc-accept && $C -sSfo rec.tgz 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.amazonaws.com/claude-code-port/bun-recordings.tgz?<PRESIGNED>' && tar xzf rec.tgz && sha256sum rec/*
+# | echo "== worker (vs Bun recording)"
+# | cd $P/compat/test/worker && timeout 300 $N --zero-fill-buffers --import $T/bun-compat.mjs run.js /tmp/wk-haiku.json && $N check.mjs /boot/home/cc-accept/rec/worker-bun.json /tmp/wk-haiku.json; echo "worker rc=$?"
+# | echo "== spawn (vs Bun recording)"
+# | cd $P/compat/test && rm -rf /tmp/spawn-work && CC_SPAWN_PRESET=orig CC_SPAWN_PRESET2=orig2 timeout 600 $N --import ./spawn-preload.mjs spawn-scenarios.mjs /tmp/spawn-haiku.json /tmp/spawn-work > /tmp/spawn.out 2>&1; echo "scenarios rc=$?"; tail -3 /tmp/spawn.out
+# | $N check-spawn.mjs /boot/home/cc-accept/rec/spawn-bun.json /tmp/spawn-haiku.json 2>&1 | grep -v '^  ' | tail -40; echo "spawn check rc=${PIPESTATUS[0]}"
+# | echo "== net (vs Bun recording)"
+# | TL=/tmp/net-tls; rm -rf $TL; mkdir -p $TL; openssl req -x509 -newkey rsa:2048 -nodes -keyout $TL/key.pem -out $TL/cert.pem -days 2 -subj /CN=localhost 2>/dev/null && echo tls-ok
+# | cd $P/compat/test && NET_TLS_DIR=$TL timeout 900 $N check-net.mjs /boot/home/cc-accept/rec 2>/tmp/net.err | grep -v '^  ' | tail -30; echo "net check rc=${PIPESTATUS[0]}"
+# ---- raw output ----
+2e986f6758d8c29e689ab9bfb89b4cba3af4b3f88ed6a840b16cf54567baaae6  rec/net.cases.json
+e5556dd4a1442a5e56bb6fa24f8607420c1d9aedcf12ae404c47c0a5812f12f2  rec/spawn-bun.json
+e6fa950c374290e3712f958122c475c565a4d88dda8472604202f88fc48e0fb3  rec/worker-bun.json
+== worker (vs Bun recording)
+scenarios: 13
+SAME globals
+SAME blob CommonJS script with require and onmessage assignment
+SAME file ESM worker, workerData, self.onmessage
+SAME string path to ESM file
+SAME MessagePort transfer and port.onmessage
+SAME SharedArrayBuffer + Atomics across threads
+SAME Uint8Array slice clones by value
+SAME addEventListener('message')
+SAME uncaught throw in worker -> error event
+SAME syntax error in blob -> error event
+SAME self.close() stops the worker
+SAME terminate stops delivery
+SAME constructor errors
+worker: 13 match / 0 mismatch (13 scenarios)
+worker rc=0
+== spawn (vs Bun recording)
+scenarios rc=1
+}
+
+Node.js v24.21.0
+node:fs:483
+
+Error: ENOENT: no such file or directory, open '/tmp/spawn-haiku.json'
+}
+
+Node.js v24.21.0
+spawn check rc=1
+== net (vs Bun recording)
+tls-ok
+MISMATCH Response class defaults on the wire (outside net.mjs)
+MISMATCH serve: ::1 binding, dual 127.0.0.1 + ::1 on one port (xf)
+MISMATCH serve: development:false sets SO_REUSEPORT (second bind succeeds)
+MISMATCH listen: peer reset delivers close(err) / error
+MISMATCH listen: EADDRINUSE error shape, ::1, missing handlers
+MISMATCH connect: refused -> promise rejects (no connectError)
+MISMATCH connect: refused with connectError handler
+MISMATCH connect: E_ ::1 probe (open then end) and localhost resolution
+net: 34 match / 8 mismatch (42 scenarios)
+net check rc=1

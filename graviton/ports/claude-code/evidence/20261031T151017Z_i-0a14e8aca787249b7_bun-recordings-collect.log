@@ -1,0 +1,29 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: bun-recordings-collect
+# instance: i-0a14e8aca787249b7   region: us-west-2
+# ssm command: 16a4b3c2-26e8-4407-8023-509ada2d2271 (agent status: Success)
+# start: 20261031T151017Z   end: 20261031T151020Z   rc: 0   log bytes: 637
+# script sha256: c9142b653f9cf74658a29e93bafde13221d6acf1dda26b1762dbee5feb49f0cb
+# ---- script ----
+# | set -u
+# | echo '6781aa8a8e857af196ca7a18a3bd81f99e064c4d9f84b9c4a25fc6d0fbe2ed09  /opt/cc/w-rec.stage/p.tgz' | sha256sum -c --quiet - || exit 1
+# | rm -rf /opt/cc/w-rec && mkdir -p /opt/cc/w-rec && tar xzf /opt/cc/w-rec.stage/p.tgz -C /opt/cc/w-rec 2>/dev/null
+# | cd /opt/cc/w-rec
+# | set -u
+# | mkdir -p /opt/cc/rec && cd /opt/cc/rec && rm -rf *
+# | ls -l /opt/cc/w-spawn/bun.json /opt/cc/w-net.out2/net.cases.json /tmp/wk-bun.json 2>&1
+# | cp /opt/cc/w-spawn/bun.json spawn-bun.json 2>/dev/null; cp /opt/cc/w-net.out2/net.cases.json net.cases.json 2>/dev/null; cp /tmp/wk-bun.json worker-bun.json 2>/dev/null
+# | ls -l; sha256sum *
+# | tar czf /opt/cc/rec.tgz -C /opt/cc rec && curl -sSf -X PUT --upload-file /opt/cc/rec.tgz 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.amazonaws.com/claude-code-port/bun-recordings.tgz?<PRESIGNED>' && echo upload-ok
+# ---- raw output ----
+-rw-r--r-- 1 root root 29540 Oct 30 22:11 /opt/cc/w-net.out2/net.cases.json
+-rw-r--r-- 1 root root 41367 Oct 30 21:49 /opt/cc/w-spawn/bun.json
+-rw-r--r-- 1 root root  2391 Oct 31 02:35 /tmp/wk-bun.json
+total 80
+-rw-r--r-- 1 root root 29540 Oct 31 15:10 net.cases.json
+-rw-r--r-- 1 root root 41367 Oct 31 15:10 spawn-bun.json
+-rw-r--r-- 1 root root  2391 Oct 31 15:10 worker-bun.json
+2e986f6758d8c29e689ab9bfb89b4cba3af4b3f88ed6a840b16cf54567baaae6  net.cases.json
+e5556dd4a1442a5e56bb6fa24f8607420c1d9aedcf12ae404c47c0a5812f12f2  spawn-bun.json
+e6fa950c374290e3712f958122c475c565a4d88dda8472604202f88fc48e0fb3  worker-bun.json
+upload-ok

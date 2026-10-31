@@ -18,7 +18,10 @@ Linux reference `i-0a14e8aca787249b7` (Ubuntu arm64, stock Bun 1.4.4, Node 24.22
 | Compat layer vs stock Bun, replayed **on Haiku** | all pure suites pass (hash, width 3.6M, slice, wrap, semver, deepEquals, YAML, TOML) | same log |
 | Interactive TUI, Haiku vs real binary on Linux | 60/64 byte-identical; 4 = tmux 3.4 vs 3.7c keycap rendering | `20261031T143250Z_workstation_tui-compare-linuxA-haikuB.log`, `…tmux-keycap-{haiku,linux}.log` |
 | Headless `-p` with Read/Grep/Bash; edit, bash, /compact in TUI; Grep timing | **not run**: needs `ANTHROPIC_API_KEY` | — |
-| 30-min soak with RSS | see "Soak" | — |
+| 30-min soak with RSS (idle TUI) | alive throughout, 11 threads; RSS 323 MB → 185 MB after GC, then flat (184.8–185.1 MB) | `20261031T143535Z_i-0e90d4b253c8134b3_tui-soak-30min.log` |
+| Ctrl-C at onboarding; headless `-p` without credentials | identical to the real binary on Linux (picker ignores Ctrl-C; `Not logged in · Please run /login`, rc 1) | `20261031T150644Z_i-0e90d4b253c8134b3_tui-ctrlc-and-headless.log`, `20261031T150818Z_i-0a14e8aca787249b7_tui-ctrlc-real-linux.log` |
+| Global Worker scenarios replayed on Haiku | 13/13 match the Bun recording | `20261031T151048Z_i-0e90d4b253c8134b3_compat-scenarios-on-haiku.log` |
+| Bun.spawn / Bun.serve scenarios on Haiku | spawn harness needs Haiku observers (it reads /proc); net 34/42 — being classified | same log |
 
 ## Phase 1 — tool sanity on the canonical image
 
