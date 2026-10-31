@@ -1,0 +1,104 @@
+SUMMARY="Anthropic's agentic coding tool, running on Node.js"
+DESCRIPTION="Claude Code is Anthropic's agentic coding tool for the terminal. \
+This package runs its JavaScript bundle, extracted from the official \
+linux-arm64 release, on Haiku's Node.js 24, with a compatibility layer for \
+the Bun runtime APIs it expects. Nothing Linux-specific executes: the bundle's \
+platform checks report Haiku, and features that need Linux kernel facilities \
+are disabled and documented.
+
+The port's own changes are listed in PATCHES.md and its known limitations in \
+LIMITATIONS.md, both installed with the documentation."
+HOMEPAGE="https://code.claude.com/"
+COPYRIGHT="Anthropic PBC (Claude Code)
+	2026 DeBeOS (port tooling and compatibility layer)"
+LICENSE="Claude Code Commercial Terms"
+REVISION="1"
+# The official linux-arm64 npm package; only the JavaScript and asset contents of
+# its embedded module graph are used (tools/extract-bun-bundle.py), never the ELF.
+SOURCE_URI="https://registry.npmjs.org/@anthropic-ai/claude-code-linux-arm64/-/claude-code-linux-arm64-$portVersion.tgz"
+CHECKSUM_SHA256="5a8087f6b0df5796326bb8e58c6e89637c58f28a16aea45434a7e914e854b0dc"
+SOURCE_FILENAME="claude-code-linux-arm64-$portVersion.tgz"
+SOURCE_DIR="package"
+# Pinned runtime/build dependencies (tools/deps.lock).
+SOURCE_URI_2="https://registry.npmjs.org/ws/-/ws-8.22.0.tgz"
+CHECKSUM_SHA256_2="ca9b3798b2e11ce8fac6713f50ef0501aa12b09b330623c1dc409dff94e7abc8"
+SOURCE_DIR_2="package"
+SOURCE_URI_3="https://registry.npmjs.org/acorn/-/acorn-8.19.0.tgz"
+CHECKSUM_SHA256_3="c6fad21ffa1f2ba20338bf1dde1de911c2093c1aaf7b3af17c477661bd3bfaaf"
+SOURCE_DIR_3="package"
+# The port tooling, compat layer and native helper (graviton/ports/claude-code) are
+# staged as additional-files/claude-code-port.tar by tools/stage-recipe.sh.
+
+ARCHITECTURES="!x86_gcc2 !x86 !x86_64 arm64"
+
+PROVIDES="
+	claude_code = $portVersion
+	cmd:claude = $portVersion
+	"
+REQUIRES="
+	haiku
+	nodejs24 >= 24.21
+	cmd:bash
+	cmd:git
+	cmd:rg
+	"
+
+BUILD_REQUIRES="
+	haiku_devel
+	"
+BUILD_PREREQUIRES="
+	cmd:gcc
+	cmd:node >= 24
+	cmd:openssl
+	cmd:python3
+	cmd:tar
+	"
+
+installDir=$libDir/claude-code
+
+BUILD()
+{
+	local port=$sourceDir/claude-code-port
+	rm -rf "$port" && mkdir -p "$port"
+	tar -xf "$portDir/additional-files/claude-code-port.tar" -C "$port"
+
+	# The same layout tools/fetch-deps.sh produces, from the checksummed sources.
+	local deps=$sourceDir/deps
+	rm -rf "$deps" && mkdir -p "$deps"
+	cp -R "$sourceDir2" "$deps/ws"
+	cp -R "$sourceDir3" "$deps/acorn"
+
+	# The deterministic pass: extract, relocate to $installDir, restore folds,
+	# haiku cases, compat files. Every step asserts its own counts.
+	rm -rf "$sourceDir/tree"
+	bash "$port/tools/build-tree.sh" "$sourceDir/claude" "$sourceDir/tree" \
+		"$installDir" "$(command -v node)" "$deps"
+
+	mkdir -p "$sourceDir/tree/bin"
+	gcc -O2 -Wall -Werror -o "$sourceDir/tree/bin/cc-teaminfo" \
+		"$port/native/cc-teaminfo.c"
+}
+
+INSTALL()
+{
+	mkdir -p "$installDir" "$binDir" "$docDir"
+	cp -a "$sourceDir/tree/." "$installDir/"
+
+	cat > "$binDir/claude" <<EOF
+#!/bin/sh
+exec $binDir/node --zero-fill-buffers $installDir/claude.mjs "\$@"
+EOF
+	chmod 755 "$binDir/claude"
+
+	local port=$sourceDir/claude-code-port
+	cp "$port/PATCHES.md" "$port/LIMITATIONS.md" "$port/AUDIT.md" "$docDir/"
+}
+
+TEST()
+{
+	# Smoke test of the built tree. The compat suites compare against vectors
+	# recorded from stock Bun 1.4.4 on Linux, so they run in the acceptance pass
+	# (RESULTS.md), not here.
+	"$(command -v node)" --zero-fill-buffers "$sourceDir/tree/claude.mjs" --version
+	"$sourceDir/tree/bin/cc-teaminfo" $$ > /dev/null
+}
