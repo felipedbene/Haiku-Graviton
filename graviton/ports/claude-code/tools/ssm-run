@@ -24,8 +24,8 @@ ssm() {	# ssm <timeout> <shell command> -> prints StandardOutputContent; dies on
 		--document-name AWS-RunShellScript --timeout-seconds "$1" \
 		--parameters "$(python3 -I -c 'import json,sys;print(json.dumps({"commands":[sys.argv[1]],"executionTimeout":[sys.argv[2]]}))' "$2" "$1")" \
 		--query Command.CommandId --output text) || cid=""
-	# The caller's `|| true` disables set -e in here, so a failed send must be
-	# caught explicitly or the poll below would wait on an empty id forever.
+	# Callers test this function's status, which disables set -e in here, so a
+	# failed send must be caught explicitly or the poll would wait forever.
 	[ -n "$cid" ] || { echo "ssm-run: send-command to $inst failed" >&2; exit 1; }
 	while :; do
 		st=$(aws ssm get-command-invocation --region "$region" --command-id "$cid" \
@@ -38,20 +38,37 @@ ssm() {	# ssm <timeout> <shell command> -> prints StandardOutputContent; dies on
 	[ "$st" = Success ] || { echo "ssm-run: command $cid ended $st" >&2; return 1; }
 }
 
+# Idempotent reads are retried: the Haiku agent sometimes reports a finished
+# command as Failed ("no such process") after returning its output.
+ssm_read() {	# ssm_read <shell command>
+	local n o
+	for n in 1 2 3; do
+		if o=$(ssm 120 "$1"); then printf '%s\n' "$o"; return 0; fi
+		echo "ssm-run: read attempt $n failed, retrying" >&2
+		sleep 5
+	done
+	echo "ssm-run: read failed 3 times: $1" >&2
+	return 1
+}
+
 # Run: script output (stdout+stderr) goes to a file on the instance; rc is recorded.
+# The agent's own status for this command is reported but not trusted: the
+# script's exit code is read back from its rc file below.
+agent_status=Success
 ssm "$tmo" "mkdir -p /tmp/ccrun && echo $b64 | base64 -d > /tmp/ccrun/$rid.sh && \
 	{ bash /tmp/ccrun/$rid.sh > /tmp/ccrun/$rid.log 2>&1; echo \$? > /tmp/ccrun/$rid.rc; }; \
-	wc -c < /tmp/ccrun/$rid.log" > /dev/null || true
+	wc -c < /tmp/ccrun/$rid.log" > /dev/null || agent_status=non-Success
 run_cid=$(cat "$here/evidence/.last-cid")
 end=$(date -u +%Y%m%dT%H%M%SZ)
 
 # Fetch the log in 16 KB chunks (base64 keeps each reply under SSM's 24 KB cap).
-size=$(ssm 120 "wc -c < /tmp/ccrun/$rid.log" | tr -dc 0-9)
-rc=$(ssm 120 "cat /tmp/ccrun/$rid.rc" | tr -dc 0-9)
+size=$(ssm_read "wc -c < /tmp/ccrun/$rid.log" | tr -dc 0-9)
+rc=$(ssm_read "cat /tmp/ccrun/$rid.rc" | tr -dc 0-9)
+[ -n "$size" ] && [ -n "$rc" ] || { echo "ssm-run: no log/rc for $rid (agent status $agent_status)" >&2; exit 1; }
 {
 	echo "# evidence: $label"
 	echo "# instance: $inst   region: $region"
-	echo "# ssm command: $run_cid"
+	echo "# ssm command: $run_cid (agent status: $agent_status)"
 	echo "# start: $start   end: $end   rc: $rc   log bytes: $size"
 	echo "# script sha256: $(shasum -a 256 "$script" | cut -d' ' -f1)"
 	echo "# ---- script ----"
@@ -60,7 +77,7 @@ rc=$(ssm 120 "cat /tmp/ccrun/$rid.rc" | tr -dc 0-9)
 } > "$out"
 off=0
 while [ "$off" -lt "$size" ]; do
-	ssm 120 "dd if=/tmp/ccrun/$rid.log bs=16384 skip=$((off / 16384)) count=1 2>/dev/null | base64" \
+	ssm_read "dd if=/tmp/ccrun/$rid.log bs=16384 skip=$((off / 16384)) count=1 2>/dev/null | base64" \
 		| tr -d '\n\r' | base64 -d >> "$out"
 	off=$((off + 16384))
 done
