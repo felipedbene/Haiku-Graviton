@@ -174,3 +174,116 @@ maps every OS other than Windows/macOS to `linux` there (and `CLAUDE_CODE_HOST_P
 accepts only win32/darwin/linux). Telemetry and the host-platform hint therefore say
 `linux` on Haiku. Not patched: changing it would invent a value upstream's consumers
 don't handle. `M()`/`getPlatform()` (P5) is the helper that reports `haiku`.
+
+### Bash tool sandbox (bubblewrap/seccomp) — AUDIT S02
+- **What:** the Bash sandbox has no Haiku backend. `chunk-v0b8hfja.js`
+  `function dI(){let e=Fv();if(e==="linux")return Tsi()!=="1";return e==="macos"||e==="windows"}`
+  is false for `haiku`, so `isSandboxingEnabled()` is false and initialisation never runs.
+- **Why:** the Linux backend is built on bubblewrap, user namespaces and seccomp. Haiku
+  has none of these.
+- **Effect:** with `sandbox.enabled: true`, commands run **unsandboxed**. `-p` and
+  `mcp serve` print `⚠ Sandbox disabled: sandbox is enabled but haiku is not supported
+  (requires macOS, Linux, or WSL2)` / `Commands will run WITHOUT sandboxing…` to stderr.
+  The interactive UI only logs it at warn level and sets a setup-issue counter.
+  `autoAllowBashIfSandboxed` does not apply (it is gated on `isSandboxingEnabled()`), so
+  the normal permission prompts stay. With `sandbox.failIfUnavailable: true` (set
+  automatically by the SDK path whenever `enabled` is true), Claude Code refuses to start:
+  `Error: sandbox required but unavailable: … refusing to start without a working sandbox.`
+  It never crashes, and it never claims a command was sandboxed.
+- **Fix would need:** a Haiku confinement mechanism the kernel doesn't offer today: per-team
+  filesystem and network restriction, plus a backend in `chunk-v0b8hfja.js`'s
+  `Qt`/`fI`/`yK` dispatch.
+
+### Subprocess env scrubbing (`CLAUDE_CODE_SUBPROCESS_ENV_SCRUB=1`) — AUDIT S01
+- **What:** `chunk-0ane94zt.js` `was()` needs a `bwrap` binary (`YAn()`).
+- **Why:** the scrubbing isolates subprocesses with bubblewrap, which Haiku doesn't have.
+- **Effect:** with the variable set, startup throws `bubblewrap is required for subprocess
+  env scrubbing and isolation. Install with: sudo apt-get install -y bubblewrap, …` (the
+  apt hint is wrong for Haiku). With it unset, which is the default, nothing happens.
+- **Fix would need:** the same confinement mechanism as the Bash sandbox.
+
+### Daemon service install (systemd) — AUDIT S03
+- **What:** `claude daemon install|start|stop|restart` as a managed service.
+- **Why:** the only service backend left in the Linux build is systemd
+  (`~/.config/systemd/user/com.anthropic.claude-daemon.service`, `systemctl --user`).
+  Haiku has neither systemd nor launchd.
+- **Effect:** `uXe()` (stat of `/run/user/<uid>/systemd`) fails, so the user sees
+  `Service install isn't available on haiku — the daemon still runs on demand when a
+  client connects.` (exit 1). The daemon still starts on demand. The hub UI's uninstall
+  (`G0t`) is not gated: it ignores `systemctl`'s exit code and reports success.
+- **Fix would need:** a backend for Haiku's launch_daemon user jobs, which is unverified
+  here, wired into the `ven`/`ft`/`G0t`/`xre` functions in place of the systemd block, plus a
+  `uXe` equivalent.
+
+### Voice input — AUDIT S04
+- **What:** voice mode (`chunk-w6mjdp2k.js`).
+- **Why:** it records through Anthropic's native `audio-capture.node` (the loader in
+  `chunk-wfe5p2va.js` returns null for platforms other than darwin, linux and win32), then
+  falls back to `arecord`, then SoX `rec`. None of these exists on DeBeOS, and Graviton
+  has no audio hardware.
+- **Effect:** `Voice mode requires SoX for audio recording. Install SoX manually: macOS:
+  brew install sox / Ubuntu/Debian: sudo apt-get install sox …`.
+- **Fix would need:** a Haiku capture path (a Media Kit addon or a SoX port with a Haiku
+  backend) and a microphone. On Graviton only the error path can be verified.
+
+### Proxy client-process attribution — AUDIT S08
+- **What:** `chunk-m3w7djw9.js` `qt`/`Gr`/`Ur` name the local process behind each proxy
+  connection.
+- **Why:** they read `/proc/net/tcp{,6}`, `/proc/<pid>/fd` and `/proc/<pid>/comm`, and
+  Haiku has no `/proc`.
+- **Effect:** `clientProcess` is recorded as `<proc-net-unreadable>` in proxy connection
+  data. Traffic is unaffected.
+- **Fix would need:** a socket→team lookup on Haiku. `fdinfo` (`src/bin/fdinfo.cpp`) lists
+  a team's fds as dev:ino, not sockets by port.
+
+### Claude Desktop deep links — AUDIT S16
+- **What:** opening Claude Desktop (`claude://`) from the CLI (`chunk-wj68m7s3.js`) and
+  registering the scheme (`chunk-nyjcftf8.js`).
+- **Why:** Claude Desktop doesn't exist for Haiku. The Linux path uses `xdg-mime` and
+  `xdg-open`.
+- **Effect:** Desktop is reported as `not-installed`. Registration returns early
+  (`if(!["darwin","linux","win32"].includes(process.platform))return;`).
+- **Fix would need:** a Claude Desktop for Haiku.
+
+### Clipboard images and screenshots — AUDIT S17
+- **What:** pasting an image from the clipboard and screenshot-to-clipboard
+  (`chunk-ef9gz064.js`, `chunk-dz91hxpc.js` `cm`).
+- **Why:** the table falls back to the Linux entry (`I[process.platform]||I.linux`),
+  which uses `xclip`/`wl-paste`. Haiku's `clipboard` tool handles `text/plain` only
+  (`src/bin/clipboard.cpp`).
+- **Effect:** no image is ever found in the clipboard. Text paste is covered separately
+  (AUDIT S18, class b).
+- **Fix would need:** a small helper that reads or writes a BClipboard `image/png` entry.
+  How Haiku apps store images on the clipboard wasn't checked.
+
+### `/restart` command — AUDIT S27
+- **What:** `/restart` (`/update`) is hidden.
+- **Why:** `chunk-zy2k3hny.js` `kon`: `if(e!=="macos"&&e!=="linux")return!1;`.
+  Self-relaunch is only enabled on those two platforms.
+- **Effect:** the command isn't offered on Haiku.
+- **Fix would need:** a confirmed `process.execve` relaunch on Haiku's Node 24 (also
+  pending for L1), then `haiku` added to the gate.
+
+### Inter-agent messaging over a Unix socket from the shell — AUDIT S35
+- **What:** the prompt text in `chunk-74z2fna5.js` tells the model to send messages with
+  `printf … | nc -N -U "$CLAUDE_CODE_MESSAGING_SOCKET"` or with socat.
+- **Why:** Haiku has no `nc -U`, and whether `socat` is available is unknown.
+- **Effect:** the model's suggested command fails. Messaging through Claude Code's own
+  tools is unaffected.
+- **Fix would need:** a Unix-socket client available on DeBeOS, and the prompt text naming it.
+
+### Claude in Chrome — AUDIT S36
+- **What:** browser-extension detection and native-messaging setup (`chunk-fejj39g0.js`
+  `Rw`, `chunk-xjn8qbfw.js`).
+- **Why:** the switches have no case for Haiku browsers. Chrome, Edge and Brave don't
+  exist on Haiku.
+- **Effect:** `[Claude in Chrome] Unsupported platform for extension detection: haiku`.
+- **Fix would need:** a Chromium-family browser on Haiku that supports native messaging.
+
+### Launching a terminal from a deep link — AUDIT S37
+- **What:** `chunk-bfxj2kma.js` `M`/`y` pick a terminal emulator.
+- **Why:** `switch(process.platform){…default:return null}` only knows macOS, Linux and
+  Windows terminals.
+- **Effect:** `No terminal emulator detected`.
+- **Fix would need:** a haiku case that launches `/boot/system/apps/Terminal` (the command
+  form is unverified).
