@@ -33,19 +33,31 @@ check("zstd compresses", c.length < raw.length / 10, true);
 check("process.execve present", typeof process.execve, "function");
 check("worker_threads", await new Promise((ok) => { const w = new Worker("require('worker_threads').parentPort.postMessage(6*7)", { eval: true }); w.once("message", (m) => { ok(m); w.terminate(); }); }), 42);
 const d = fs.mkdtempSync(path.join(os.tmpdir(), "acc-"));
-const watched = await new Promise((ok) => {
+// fs.watch is reported as observed, never skipped: a throw is a FAIL with its code.
+const watchOnce = (target, poke) => new Promise((ok) => {
+	let w;
+	try {
+		w = fs.watch(target, (ev, f) => { clearTimeout(t); w.close(); ok(`${ev}:${f}`); });
+	} catch (e) {
+		ok(`THREW ${e.code}`);
+		return;
+	}
 	const t = setTimeout(() => { w.close(); ok("no event within 5s"); }, 5000);
-	const w = fs.watch(d, (ev, f) => { clearTimeout(t); w.close(); ok(`${ev}:${f}`); });
-	setTimeout(() => fs.writeFileSync(path.join(d, "x.txt"), "1"), 300);
+	setTimeout(poke, 300);
 });
-console.log(`INFO fs.watch dir: ${watched}`);
+const wDir = await watchOnce(d, () => fs.writeFileSync(path.join(d, "x.txt"), "1"));
+check("fs.watch dir", wDir.startsWith("rename:") || wDir.startsWith("change:"), true);
+console.log(`INFO fs.watch dir: ${wDir}`);
 const wf = path.join(d, "f.txt"); fs.writeFileSync(wf, "a");
-const watchedFile = await new Promise((ok) => {
-	const t = setTimeout(() => { w.close(); ok("no event within 5s"); }, 5000);
-	const w = fs.watch(wf, (ev) => { clearTimeout(t); w.close(); ok(ev); });
-	setTimeout(() => fs.appendFileSync(wf, "b"), 300);
+const wFile = await watchOnce(wf, () => fs.appendFileSync(wf, "b"));
+check("fs.watch file", wFile.startsWith("change:"), true);
+console.log(`INFO fs.watch file: ${wFile}`);
+const polled = await new Promise((ok) => {
+	const t = setTimeout(() => { fs.unwatchFile(wf); ok("no change within 6s"); }, 6000);
+	fs.watchFile(wf, { interval: 200 }, (cur, prev) => { clearTimeout(t); fs.unwatchFile(wf); ok(cur.size - prev.size); });
+	setTimeout(() => fs.appendFileSync(wf, "cc"), 500);
 });
-console.log(`INFO fs.watch file: ${watchedFile}`);
+check("fs.watchFile (stat polling)", polled, 2);
 const r = await fetch("https://registry.npmjs.org/ws/8.22.0").then((x) => x.json()).then((j) => j.dist.integrity, (e) => "ERR " + (e.cause?.code || e.message));
 check("https fetch + TLS roots", r, "sha512-Ydggc987+RO0AnWtZ/7Wq9FtNvcrL1b/RO0ud9mWjUPgDrsAAwQSF51sm2hm1XofbU/4jkpGEsLFsZZxU+1DOg==");
 console.log(`node-accept: ${fail === 0 ? "ALL PASS" : fail + " FAIL"}`);

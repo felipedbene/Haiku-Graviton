@@ -1,0 +1,66 @@
+#!/bin/bash
+# ssh-run <instance-id> <label> <script> [timeout-secs]
+#
+# Like tools/ssm-run, but over SSH through an EC2 Instance Connect tunnel, for Haiku
+# targets whose SSM agent is slow to start commands (#847, #843 comment). Same
+# evidence format: evidence/<utc-start>_<instance>_<label>.log with instance, start/
+# end, rc, script sha256, the script, then the complete raw output.
+#
+# The script runs detached on the target (nohup) and is polled, so a dropped SSH
+# connection never kills or truncates it. Uses graviton/scripts/haiku-ssh for the key.
+set -euo pipefail
+[ $# -ge 3 ] || { echo "usage: ssh-run <instance-id> <label> <script> [timeout]" >&2; exit 2; }
+inst=$1 label=$2 script=$3 tmo=${4:-3600}
+region=${AWS_REGION:-us-west-2}
+here=$(cd "$(dirname "$0")/.." && pwd)
+repo=$(cd "$here/../../.." && pwd)
+mkdir -p "$here/evidence"
+start=$(date -u +%Y%m%dT%H%M%SZ)
+rid="cc-$start-$$"
+out="$here/evidence/${start}_${inst}_${label}.log"
+
+port=$(python3 -I -c 'import socket;s=socket.socket();s.bind(("127.0.0.1",0));print(s.getsockname()[1])')
+aws ec2-instance-connect open-tunnel --region "$region" --instance-id "$inst" \
+	--remote-port 22 --local-port "$port" > /dev/null 2>&1 &
+tun=$!
+trap 'kill $tun 2>/dev/null || :' EXIT
+for _ in $(seq 1 30); do
+	nc -z 127.0.0.1 "$port" 2>/dev/null && break
+	sleep 1
+done
+nc -z 127.0.0.1 "$port" || { echo "ssh-run: tunnel to $inst did not open" >&2; exit 1; }
+
+sh_() {	# sh_ <remote command>: one SSH round trip
+	timeout 100 "$repo/graviton/scripts/haiku-ssh" -p "$port" -o StrictHostKeyChecking=no \
+		-o UserKnownHostsFile=/dev/null -o LogLevel=ERROR -o ConnectTimeout=30 \
+		baron@127.0.0.1 "$1"
+}
+
+sh_ "mkdir -p /tmp/ccrun && cat > /tmp/ccrun/$rid.sh" < "$script"
+sh_ "nohup sh -c 'bash /tmp/ccrun/$rid.sh > /tmp/ccrun/$rid.log 2>&1; echo \$? > /tmp/ccrun/$rid.rc' \
+	< /dev/null > /dev/null 2>&1 & echo started" > /dev/null
+deadline=$(( $(date +%s) + tmo ))
+rc=""
+while [ -z "$rc" ]; do
+	[ "$(date +%s)" -lt "$deadline" ] || { echo "ssh-run: $rid did not finish within ${tmo}s" >&2; exit 1; }
+	sleep 10
+	rc=$(sh_ "cat /tmp/ccrun/$rid.rc 2>/dev/null || :" | tr -dc 0-9) || rc=""
+done
+end=$(date -u +%Y%m%dT%H%M%SZ)
+{
+	echo "# evidence: $label"
+	echo "# instance: $inst   region: $region   transport: ssh via EC2 Instance Connect"
+	echo "# start: $start   end: $end   rc: $rc"
+	echo "# script sha256: $(shasum -a 256 "$script" | cut -d' ' -f1)"
+	echo "# ---- script ----"
+	sed 's/^/# | /' "$script"
+	echo "# ---- raw output ----"
+} > "$out"
+size=$(sh_ "wc -c < /tmp/ccrun/$rid.log" | tr -dc 0-9)
+before=$(wc -c < "$out")
+sh_ "cat /tmp/ccrun/$rid.log" >> "$out"
+got=$(( $(wc -c < "$out") - before ))
+[ "$got" -eq "$size" ] || { echo "ssh-run: fetched $got of $size bytes" >&2; exit 1; }
+"$here/tools/redact-evidence" "$out" > /dev/null
+echo "$out (rc=$rc, $size bytes)"
+exit "$rc"

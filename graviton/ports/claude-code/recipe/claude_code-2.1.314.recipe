@@ -11,7 +11,7 @@ LIMITATIONS.md, both installed with the documentation."
 HOMEPAGE="https://code.claude.com/"
 COPYRIGHT="Anthropic PBC (Claude Code)
 	2026 DeBeOS (port tooling and compatibility layer)"
-LICENSE="Claude Code Commercial Terms"
+LICENSE="Anthropic Legal Agreements"
 REVISION="1"
 # The official linux-arm64 npm package; only the JavaScript and asset contents of
 # its embedded module graph are used (tools/extract-bun-bundle.py), never the ELF.
