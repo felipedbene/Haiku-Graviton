@@ -141,6 +141,29 @@ so it isn't offered as a substitute.
   Not yet run on Haiku (needs `worker_threads` and a 32 MB thread stack there).
 - **> 2 GiB input:** Bun throws a `RangeError` naming `input.byteLength`; not implemented.
 
+## Bun APIs left absent (stock Bun 1.4.4 has them; measured on the Linux box)
+
+Each is absent from compat, so the bundle's own feature detection sees the truth.
+Call sites and the behaviour that follows, from the relocated tree:
+
+- **`Bun.Image`** (decode/resize/re-encode). `chunk-9vt0p3th.js` `je()` checks
+  `typeof Bun.Image!=="function"` and returns an image whose every operation rejects with
+  `ERR_IMAGE_UNAVAILABLE`. Bridge attachments (`chunk-nmdw6kba.js`) log "could not make a
+  preview copy … uploading the original". The effect on the Read tool for images over the
+  API size limit is **to be measured** in acceptance (needs the API key). A fix would need
+  image codecs (JPEG/PNG/WebP decode and encode, resize). On Node that means a native
+  library (libvips/sharp) built for Haiku, or pure-JS codecs, whose output can't be
+  byte-identical to Bun's.
+- **`Bun.WebView`**: guarded by `"WebView" in Bun` (`chunk-n77pfb2e.js`); the web-browser
+  view is unavailable.
+- **`Bun.JSONL`**: `chunk-41hx5waz.js` `c1e()` uses the bundle's own JS JSONL parser when
+  `Bun.JSONL?.parseChunk` is absent; both skip unparseable lines. No observable difference
+  is expected; not separately diff-tested.
+- **`Bun.isStandaloneExecutable`**: absent, so `rp()` is false, which is true: Claude Code
+  isn't a standalone binary here. That selects the bundle's non-compiled paths
+  (relaunch via `argv[1]`, PATCHES.md L1).
+- **`Bun.Terminal`**, **`Bun.Transpiler`**: see the spawn and function-hook entries above.
+
 ## Platform audit (in progress)
 
 ### Environment metadata reports `linux` on Haiku, by upstream design
