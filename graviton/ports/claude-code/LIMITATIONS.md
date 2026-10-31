@@ -124,6 +124,65 @@ unreachable. `process.execve` on Haiku has to be confirmed on the Node 24.21.0 b
   Not yet run on Haiku (needs `worker_threads` and a 32 MB thread stack there).
 - **> 2 GiB input:** Bun throws a `RangeError` naming `input.byteLength`; not implemented.
 
+### `Bun.ant.CellSegmenter`: a contract port of closed native code
+- **What:** the class is native code in Anthropic's internal Bun with no source. The port
+  reproduces what the real 2.1.314 runtime does on 4,000 random sessions and 94 edge cases
+  (`test/check-cellseg.mjs`, vectors made inside the binary by `gen-cellseg-vectors.mjs`),
+  not a specification. Inputs far outside that corpus (other screen layouts, scripts the
+  corpus lacks) rest on the same rules but are not individually measured.
+- **Fix would need:** the source, or more vectors.
+
+### `Bun.ant.CellSegmenter`: grapheme table after an overflow (named difference)
+- **What:** when `segment()` returns `-count` (arrays too small), the real runtime has
+  interned some of the line's new graphemes and not others, by a rule the vectors did not
+  pin down (it depends on run boundaries and UTF-16 length). The port interns those it
+  wrote and stops. Grapheme *indices* handed out afterwards then differ; the strings they
+  name, cells, runs, styles, links and screens do not. 173/4,000 sessions differ only so.
+- **Effect:** none on screen: indices are opaque handles that `pf` resolves through
+  `graphemes[]` and the char pool, by string. `graphemes.length` can differ by a few entries,
+  so the renderer's table reset (`> 65,536` entries) can fire a little earlier or later.
+- **Fix would need:** the native interning order.
+
+### `Bun.ant.CellSegmenter`: bidi reordering (`reordered=true`), 7 of 4,000 sessions differ
+- **What:** visual reordering is used only when Claude Code thinks the terminal will not
+  reorder itself (`WT_SESSION` set or `TERM_PROGRAM=vscode`). The port runs UAX #9
+  (npm `bidi-js`, classes from Unicode 17 `DerivedBidiClass.txt`) plus the measured
+  adjustments (no reordering without a strong R/AL letter other than RLM/ALM; controls
+  excluded; Prepend-led clusters analysed by their Prepend marks; boundary neutrals take
+  the next character's level). The native code is probably ICU's `ubidi`; 7 random sessions
+  still order a few cells differently, all on lines mixing Prepend marks (U+0600..),
+  Arabic-Indic digits and neutrals.
+- **Effect:** only in Windows Terminal / VS Code terminals (not the case on Haiku's own
+  Terminal), only for such mixed lines: a few cells in another visual order. The E2E
+  harness's Hebrew/Arabic prompt under `TERM_PROGRAM=vscode` matches the real binary.
+- **Fix would need:** ICU `ubidi` (not exposed by Node) or the native source.
+
+### `tools/tui-diff.sh`: what the screen diff does not see
+- Animation is held still with Claude Code's own `prefersReducedMotion` setting; snapshots
+  are taken once the pane is unchanged for 3 s.
+- The only pre-login screen that echoes input is "Paste code here if prompted >", and it
+  masks input with `*`, showing only the tail. Wide/emoji/ZWJ/combining/RTL text is
+  therefore seen as the tail of each typed string (the run log prints what was visible).
+  On that screen only the prompt line and below are compared: the OAuth URL above it carries
+  a random PKCE challenge, state and link id per run.
+- Screens after login (the conversation, tool output, diffs) are not covered: they need an
+  account.
+
+### `Bun.ant` exists now: other members' call sites
+Defining the namespace changes nothing for members that stay absent, except the text of
+one log line. Every bundle use of `Bun.ant` (2.1.314), checked:
+- guarded on the member (`typeof Bun.ant?.X === "function"`, `Bun.ant?.X`, `?.()`): same
+  result as before — `windowsProcessList` (2 sites), `getPeerPid` feature check (`DV`),
+  `windowsFolderSecurity`, `windowsSandboxDeniesArg`, `posixFsAt` (`globalThis.Bun?.ant?.posixFsAt`,
+  `typeof e?.openat`), `CellSegmenter` (`d7n`).
+- unguarded but inside `try/catch` (they threw `TypeError` before and still do):
+  `getPeerUid` (daemon peer check -> `null`, warn), `getPeerPid` (-> undefined, warn),
+  `setDumpable` (reports "prctl unavailable"), `loginTty` (-> `"ffi_unavailable"`), `ttyName`
+  (-> undefined), `memoryPressureLevel` (macOS only), `windowsProcessCreationTime`. The caught
+  message changes from "Cannot read properties of undefined (reading 'X')" to
+  "Bun.ant.X is not a function"; it only appears in debug/warn log lines.
+- No site tests `typeof Bun.ant` or `"ant" in Bun` by itself.
+
 ## Platform audit (in progress)
 
 ### Environment metadata reports `linux` on Haiku, by upstream design

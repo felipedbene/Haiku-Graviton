@@ -7,12 +7,12 @@ import { isEscapeCharacter } from "./ansi.mjs";
 import { SgrStyleState, applySgrToState, parseSgrParams, shouldIncludeSgrAfterEnd } from "./sgr.mjs";
 
 const SIZE_MAX = Number.MAX_SAFE_INTEGER;
-const CHARACTER = 0, SGR = 1, HYPERLINK = 2, CONTROL = 3;
+export const CHARACTER = 0, SGR = 1, HYPERLINK = 2, CONTROL = 3;
 
 const codepointWidth = (cp, amb) => (cp > 0x10ffff ? 1 : widthFromFused(fusedClassify(cp), amb));
 const isEmojiPresentation = (cp) => cp <= 0x10ffff && (fusedClassify(cp) & 0x80) !== 0;
 
-class GraphemeWidthState {
+export class GraphemeWidthState {
 	constructor() { this.count = 0; }
 	reset(cp, amb) {
 		this.firstCp = cp; this.lastCp = cp; this.count = 1;
@@ -52,7 +52,7 @@ class GraphemeWidthState {
 }
 
 // U16_NEXT: a lone surrogate decodes as itself, one unit long.
-function decodeUTF16(s, p, end) {
+export function decodeUTF16(s, p, end) {
 	const u = s.charCodeAt(p);
 	if (u >= 0xd800 && u <= 0xdbff && p + 1 < end) {
 		const v = s.charCodeAt(p + 1);
@@ -177,7 +177,7 @@ function parseControlString(s, start, end) {
 }
 
 // tryParseAnsi -> {end, type, hl?} or null.
-function tryParseAnsi(s, start, end) {
+export function tryParseAnsi(s, start, end) {
 	const c = s.charCodeAt(start);
 	if (c === 0x1b || c === 0x9d) {
 		const h = parseHyperlink(s, start, end);
@@ -209,7 +209,7 @@ function resolveSliceBounds(startD, endD, totalW) {
 }
 
 // Shared CR/LF handling in front of the table-driven break.
-function clusterBreak(st, prevCp, cp) {
+export function clusterBreak(st, prevCp, cp) {
 	if (!st.hasPrev) return true;
 	if (prevCp === 0x0d && cp === 0x0a) return false;
 	if (prevCp === 0x0d || prevCp === 0x0a || cp === 0x0d || cp === 0x0a) { st.breakState = 0; return true; }

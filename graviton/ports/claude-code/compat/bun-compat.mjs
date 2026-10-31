@@ -52,6 +52,7 @@ import { parse as yamlParse } from "./lib/yaml-parse.mjs";
 import { stringify as yamlStringify } from "./lib/yaml-stringify.mjs";
 import http from "node:http";
 import { serve, listen, connect, installHttpMaxHeaderSize } from "./lib/net.mjs";
+import { CellSegmenter } from "./lib/cellseg.mjs";
 
 // Bun lets `http.maxHeaderSize = n` raise the header limit of its servers; the
 // gateway does exactly that before Bun.serve. Node's property is getter-only, so
@@ -86,6 +87,10 @@ const Bun = {
 	// on a timer guarded only by `typeof Bun`, so the namespace must exist; its one
 	// member used, a JavaScriptCore JIT knob, has no V8 counterpart and is absent.
 	unsafe: {},
+	// `ant` is @anthropic-ai/bun-internal's namespace. Only CellSegmenter (the TUI
+	// renderer's cell segmenter, d7n) is implemented; every other Bun.ant member
+	// stays absent. cellseg vectors from the real 2.1.314 runtime: see PATCHES.md C20.
+	ant: Object.freeze({ CellSegmenter }),
 };
 // Diagnostics only: CLAUDE_COMPAT_TRACE=<file> records every read of a member
 // this module does NOT define (behaviour unchanged: the read still yields

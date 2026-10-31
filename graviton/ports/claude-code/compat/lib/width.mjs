@@ -92,7 +92,7 @@ export function graphemeBreak(cp1, cp2, state) {
 	return [(v & 1) === 1, v >> 1];
 }
 
-class GraphemeState {
+export class GraphemeState {
 	constructor() { this.count = 0; }
 	reset(cp, packed, amb) {
 		this.firstCp = cp;
