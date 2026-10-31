@@ -370,3 +370,36 @@ don't handle. `M()`/`getPlatform()` (P5) is the helper that reports `haiku`.
   63 bytes. Zombie state isn't read: `qno` (`/proc/<pid>/stat` state) stays Linux-only.
 - **Fix would need:** build it in the Haiku package recipe and install it at
   `<prefix>/bin/cc-teaminfo`.
+
+### Native file watching (`fs.watch`) is unavailable — AUDIT S29, W1–W18
+- **What:** on Haiku, Node 24.21.0's `fs.watch(dir)` throws synchronously:
+  `Error: ENOSYS: function not implemented, watch '<path>'` (errno -2147454967, syscall
+  `watch`). Measured on builder i-0e7bed4928e0f7bf7
+  (`evidence/20261031T080733Z_i-0e7bed4928e0f7bf7_node24-accept-haiku.log`).
+  `fs.watchFile` (stat polling) is not measured yet.
+- **Why:** libuv has no fs-event backend for Haiku.
+- **Effect:** nothing crashes. Bundled chokidar catches the throw and emits `"error"` only to
+  attached listeners, and every site attaches one or wraps the call in try/catch. Per feature:
+  - **Settings hot reload: silently off.** `settings.json` edits made outside Claude Code apply
+    only after a restart. The watcher's fallback to polling only covers
+    `EMFILE`/`ENFILE`/`ENOSPC`, and the fs.watch probe calls ENOSYS `"unprobed"`, then
+    records the watcher as started (W1).
+  - **Off, with a log line:**
+    - `FileChanged` hooks never fire (W2).
+    - The daemon misses background dispatches queued after it started (W3, logged at error level).
+    - Daemon config edits need a daemon restart (W4).
+    - Custom theme edits need a restart (W5).
+    - Bash edit diffs / outside-write attribution are gone (W7).
+  - **Degraded:** scheduled tasks are picked up on the periodic rescan only (W6).
+  - **Silently off:**
+    - Live sync of background-job names (W8) and of background-session PR links (W9).
+    - Task-list updates from other processes (W10, `catch{}`).
+  - **Unaffected, as long as `fs.watchFile` works:**
+    - Already polling: skills, keybindings, plugin dirs, dev mods and memory files
+      (W13–W17; memory polls because the compat layer defines `globalThis.Bun`).
+    - Fall back to `fs.watchFile`: the file-event watcher and `~/.claude.json` freshness (W11, W12).
+  - The upstream switch `CHOKIDAR_USEPOLLING=1` makes chokidar poll for W2–W6, but not for the
+    raw `fs.watch` sites W7–W10.
+- **Fix would need:** either a Haiku `uv_fs_event` backend in libuv (over node monitoring,
+  `watch_node`/`B_WATCH_DIRECTORY`), or polling in the compat layer. That is an owner
+  decision. Nothing is implemented in the meantime.
