@@ -21,9 +21,14 @@
 # SCEN_ENV="VAR=VAL ..." in the environment of a scenario call is exported to
 # both sides (TERM_PROGRAM=vscode selects the renderer's bidi-reordering path).
 # Prints PASS/FAIL per snapshot and "tui-diff: pass=N fail=M unsettled=U".
+#
+# Cross-host mode: TUI_ONLY=A or TUI_ONLY=B runs just that side, keeps every capture
+# in $OUT (default /tmp/tuidiff) with <name>.n holding the snap count, and compares
+# nothing; tools/tui-compare.sh then diffs an A capture dir from one host against a
+# B capture dir from another (the real binary on Linux vs the package on Haiku).
 set -u
 BIN=$1 NODE=$2 TREE=$3 FILTER=${4:-}
-H=/tmp/tuidiff-home S=tuidiff OUT=/tmp/tuidiff
+H=/tmp/tuidiff-home S=tuidiff OUT=${OUT:-/tmp/tuidiff}
 rm -rf $OUT; mkdir -p $OUT
 pass=0 fail=0 unsettled=0
 
@@ -65,6 +70,11 @@ run_side() {	# run_side A|B <name> <cwd> <cols> <rows> <steps...>
 scenario() {	# scenario <name> <cwd> <cols> <rows> <steps...>
 	local name=$1
 	[ -n "$FILTER" ] && [[ $name != $FILTER* ]] && return
+	if [ -n "${TUI_ONLY:-}" ]; then
+		run_side "$TUI_ONLY" "$@" | tail -1 > $OUT/$name.n
+		echo "captured $name ($(cat $OUT/$name.n) snaps, side $TUI_ONLY)"
+		return
+	fi
 	local n; n=$(run_side A "$@" | tail -1); run_side B "$@" > /dev/null
 	local k
 	for k in $(seq 1 $n); do
@@ -114,5 +124,6 @@ T6='123 abc (x) שלום עולם مرحبا ١٢٣'
 scenario text-rtl /tmp/tuidiff-cwd 100 30 "${to_prompt[@]}" "text:$T5" snap "text: $T6" snap
 SCEN_ENV="TERM_PROGRAM=vscode" scenario text-rtl-vscode /tmp/tuidiff-cwd 100 30 "${to_prompt[@]}" "text:$T5" snap "text: $T6" snap "text: $T1" snap
 SCEN_ENV="TERM_PROGRAM=vscode" scenario theme-vscode /tmp/tuidiff-cwd 100 30 snap key:Down snap
+if [ -n "${TUI_ONLY:-}" ]; then echo "tui-diff: captured side $TUI_ONLY into $OUT"; exit 0; fi
 echo "tui-diff: pass=$pass fail=$fail unsettled=$unsettled"
 [ $fail -eq 0 ] && [ $unsettled -eq 0 ]
