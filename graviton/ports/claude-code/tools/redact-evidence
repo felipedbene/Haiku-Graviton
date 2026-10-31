@@ -10,7 +10,7 @@ acct=$(aws sts get-caller-identity --query Account --output text)
 for f in "$@"; do
 	[ -f "$f" ] || continue
 	if LC_ALL=C grep -aqE "$acct|X-Amz-(Credential|Signature)=" "$f"; then
-		LC_ALL=C sed -i '' -E "s/$acct/<ACCOUNT_ID>/g; s/\?([^\"' ]*&)?X-Amz-[^\"' ]*/?<PRESIGNED>/g" "$f"
+		LC_ALL=C sed -i '' -E "s/$acct/<ACCOUNT_ID>/g; s/\?([^\"' ]*&)?([Xx]-[Aa][Mm][Zz]-|AWSAccessKeyId=|Signature=)[^\"' ]*/?<PRESIGNED>/g" "$f"
 		grep -q '^# redacted: ' "$f" || { printf '# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>\n' | cat - "$f" > "$f.tmp" && mv "$f.tmp" "$f"; }
 		echo "redacted: $f"
 	fi

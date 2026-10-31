@@ -1,0 +1,15 @@
+#!/bin/bash
+# presign get|put <s3://bucket/key> [ttl-seconds]: print a short-lived presigned URL.
+# Haiku boxes have no S3 client (#728/#867); they move files with curl against these.
+# The query string is a credential: evidence logs redact it (tools/redact-evidence).
+set -euo pipefail
+op=$1 uri=$2 ttl=${3:-900}
+python3 -I - "$op" "$uri" "$ttl" <<'PY'
+import sys, boto3
+from botocore.config import Config
+op, uri, ttl = sys.argv[1], sys.argv[2], int(sys.argv[3])
+if not uri.startswith("s3://"): sys.exit("presign: need s3://bucket/key")
+bucket, key = uri[5:].split("/", 1)
+method = {"get": "get_object", "put": "put_object"}.get(op) or sys.exit("presign: get|put")
+print(boto3.client("s3", region_name="us-west-2", config=Config(signature_version="s3v4")).generate_presigned_url(method, Params={"Bucket": bucket, "Key": key}, ExpiresIn=ttl))
+PY
