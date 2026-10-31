@@ -20,9 +20,9 @@ marked unverified.
 
 | Class | Sites |
 |---|---|
-| a | 13 (S05, S07, S09, S13, S14, S19, S26, S28, S29, S30, S31, S33, S34) |
+| a | 12 (S05, S07, S09, S13, S14, S19, S26, S28, S30, S31, S33, S34) |
 | b | 14 (S06, S10, S11, S12, S15, S18, S20, S21, S22, S23, S24, S25, S32, S38) |
-| c | 11 (S01, S02, S03, S04, S08, S16, S17, S27, S35, S36, S37) |
+| c | 12 (S01, S02, S03, S04, S08, S16, S17, S27, S29, S35, S36, S37) |
 
 S38 (Linux open-flag numbers baked into the bundle) was found while implementing the
 class (b) fixes and was added afterwards.
@@ -128,7 +128,7 @@ setup-issue counter.
 | S26 | `chunk-2tvmykr7.js` · `x`, `chunk-zy2k3hny.js` · `sBo` (tmux install hints) | apt/dnf text | `default:` gives the generic `install tmux using your system's package manager` | a | `default:return"Install tmux using your system package manager."` |
 | S27 | `chunk-zy2k3hny.js` · `kon` (`/restart`) | enabled on macos+linux | hidden on Haiku | c | `let e=M();if(e!=="macos"&&e!=="linux")return!1;` |
 | S28 | memory/cgroup: `chunk-zy2k3hny.js` `_En`, `e2n`, `Gan`; `chunk-pbrfzy56.js` `Wn`, cgroup dir; `chunk-fgccedbt.js` statm | `/proc/meminfo`, cgroup v2 | guarded by `M()` (`e2n`: `{scarce:!0,detail:\`${e}: kernel verdict taken as is\`}`) or caught, so the values are absent | a | `async function _En(e=PRr()){if(e.platform!=="linux"&&e.platform!=="wsl")return;…` |
-| S29 | file watching: `chunk-zy2k3hny.js` `sVn`/`uRs` vs `iRs`, `chunk-x42qr0ry.js`, `chunk-fgccedbt.js` `Gh`, `chunk-9ch9n4ez.js` `QDi` | inotify-specific paths on Linux | Haiku takes the non-Linux watcher path. That relies on Node `fs.watch` working on Haiku's libuv, which is **unverified** (open question 1) | a | `function sVn(){return M()==="linux"}` / `let s=M()==="linux"?uRs:dRs` |
+| S29 | file watching: every `fs.watch` / `fs.watchFile` / chokidar site (table in "File watching on Haiku" below) | native fs events (inotify on Linux) | **measured:** Node 24.21.0 on Haiku throws `Error: ENOSYS: function not implemented, watch '<path>'` synchronously from `fs.watch` (libuv has no Haiku fs-event backend). Sites that poll (chokidar `usePolling`, `fs.watchFile`) are unaffected, as far as `watchFile` works (unmeasured). The rest lose live reload. One site, settings, does it silently, and no site crashes | c | `function tt(t,e,i,s,r){…try{return xt(t,{persistent:e.persistent},a)}catch(o){s(o);return}}` (chokidar, `chunk-9a0z9ab4.js`) |
 | S30 | `chunk-a6cj61xj.js` · `Bke` | managed-settings platform chain `["linux"]` | chain is `["haiku"]`: settings keyed by `linux` don't apply, unkeyed ones do | a | `function zo(e){return e==="wsl"?["wsl","linux"]:[e]}` |
 | S31 | `chunk-xrt4j2zq.js` · `Lt` (SDK native binary) | `@anthropic-ai/claude-agent-sdk-linux-arm64[-musl]` | the only caller (`chunk-tnczr922.js` scheduled worker) passes `pathToClaudeCodeExecutable:g.cmd` (`$u({pinToCurrentBinary:!0})`), so `Lt` is never reached | a | `pathToClaudeCodeExecutable:g.cmd,executableArgs:g.prefixArgs` |
 | S32 | process-start & identity users: `chunk-6h8148nz.js` `yke`, `P`, `qv`, `cge`; consumers `chunk-g8415bcb.js`, `chunk-yeqe6mfj.js`, `chunk-zv5y38vw.js` | kill or adopt a background REPL/PTY host only after proving its identity | see S06 and "Swallowed errors": identity is never proven | b | `async function yke(e,t,n="SIGTERM"){…if(await f(e,t)==="other")return!1;…` |
@@ -138,6 +138,44 @@ setup-issue counter.
 | S36 | `chunk-fejj39g0.js` · `Rw`, `chunk-xjn8qbfw.js` · `NYo`/`AYr`/open | Claude in Chrome: browser profiles, native-messaging paths | `switch(process.platform)` has no haiku case, so the profile list is empty: `[Claude in Chrome] Unsupported platform for extension detection: haiku` | c | `switch(process.platform){case"darwin":h=s.macos;break;case"linux":h=s.linux;break;case"win32":{…}}` |
 | S37 | `chunk-bfxj2kma.js` · `M`, `y` | launches a deep link in a terminal emulator | `default:return null`, so the log says `No terminal emulator detected` | c | `switch(process.platform){case"darwin":return S();case"linux":return F();case"win32":return A();default:return null}` |
 | S38 | `chunk-szzxb7zd.js` `Bo`, `y9` (26 / 6 importing modules); `chunk-zy2k3hny.js` `sfr` | Linux `open(2)` flag numbers baked in: `Bo`=524288 (`O_CLOEXEC`), `y9`=2097152 (`O_PATH`) | on Haiku 0x80000 is `O_NOFOLLOW` and 0x200000 is `O_DIRECTORY` (`headers/posix/fcntl.h:57,61`), so every `\|Bo` open refuses a symlink as its last path component and every `\|y9` open refuses a regular file. The darwin build has `Bo=16777216` (its own `O_CLOEXEC`) | b | `var Bo=524288,GIe=0,y9=2097152,Lxi=Q.O_NOATIME??0` (report: `changed-code` vs darwin `16777216,ihe=536870912`) |
+
+
+## File watching on Haiku (S29): per-site effect of `fs.watch` → ENOSYS
+
+Bundled chokidar (`chunk-9a0z9ab4.js`) catches the throw:
+`try{return xt(t,{persistent:e.persistent},a)}catch(o){s(o);return}`. It forwards the
+error to the watcher's `"error"` event only if a listener is attached:
+`_handleError(t){…if(t&&!this.closed&&this.listenerCount(m.ERROR)>0&&e!=="ENOENT"&&e!=="ENOTDIR"…)this.emit(m.ERROR,t)…}`.
+With `usePolling:!0` it uses `fs.watchFile` and never calls `fs.watch`. `CHOKIDAR_USEPOLLING=1`
+forces polling for every chokidar watcher that doesn't pass `usePolling` itself; that is
+upstream behaviour, not a port fix. Non-filesystem `watch(` methods (`chunk-z5vf16gh.js`
+preview DOM observer and `watch.call` tool, `chunk-t5jayd9k.js`/`chunk-2bjf1wyg.js` `cr.watch`
+response timer, `chunk-x65c4var.js` event-loop lag, `chunk-9rabqmrv.js` watchdog) are out of scope.
+
+| # | Site | Feature | Mechanism → on ENOSYS | Effect on Haiku |
+|---|---|---|---|---|
+| W1 | `chunk-x42qr0ry.js` `Gi` (`kE.watch(Se,{…usePolling:!1})`), probe `$s`/`bu`, `md` (`Cu`) | settings hot reload (`settings.json`, the drop-in dir, files that appear later) | chokidar logs ``[settings] watcher error: ENOSYS…``. The switch to polling only happens for `EMFILE`/`ENFILE`/`ENOSPC` (`wu=new Set(["EMFILE","ENFILE","ENOSPC"])`, `io`). The probe sees `watch() threw` and answers `"unprobed"`, which `ud` treats as healthy and records `settings_watcher_start` as started | **silent**: edits made outside Claude Code (editor, another session, managed settings) take effect only after a restart. Nothing reaches the user |
+| W2 | `chunk-zy2k3hny.js` FileChanged (`kE.watch(Ge,…)`, native) | `FileChanged` hooks | caught, warn ``FileChanged: watcher error``, telemetry `file_watcher_start`/`fs_error` | FileChanged hooks never fire |
+| W3 | `chunk-zv5y38vw.js` `sr` bg-dispatch (`usePolling` only on macOS) | daemon picks up queued background-session dispatches | caught, logged at error level ``[bg-dispatch] watcher error``, telemetry `tengu_bg_dispatch_watcher_failed`. A cold-start drain (`ar`) runs once | dispatches queued after the daemon started aren't noticed until the next drain (daemon restart) |
+| W4 | `chunk-kdwj4kwy.js` `Lvr` (`usePolling:M()==="macos"`) | daemon config reload | caught, warn ``[daemon-config] watcher error`` | daemon config edits need a daemon restart |
+| W5 | `chunk-kg7g93yq.js` `f0r` (native) | custom theme files | caught, warn ``[theme] watcher error`` | theme edits need a restart |
+| W6 | `chunk-1hkvhg4r.js` ScheduledTasks (`r.watch(c,{persistent:!1…})`) | scheduled-task file changes | caught, warn; the periodic `setInterval(ae,Je)` rescan keeps running | degrades to the rescan interval |
+| W7 | `chunk-zy2k3hny.js` writeObserver `dRs`/`lRs` (`Lpt`, non-Linux path) | detecting files a Bash command changed (Bash edit diff) | the throw rejects `dRs`, and `iVn`'s `.catch` logs ``writeObserver: <root>: Error: ENOSYS…`` and records `bash_edit_diff`/`watch_failed`. Sentinels: ``writeObserver: sentinels: …`` | no Bash edit diffs or outside-write attribution |
+| W8 | `chunk-2bjf1wyg.js` jobStateNameSync (`lHt`) | live sync of a background job's name | `catch(Xe){return t(…"[jobStateNameSync] watch skipped: "…),()=>{}}`: debug log only | **silent**: the name is read once, then never updated |
+| W9 | `chunk-2bjf1wyg.js` useBgSessionPr (`Beo`) | live PR link of a background session | same pattern: debug log ``watch skipped`` | **silent**: the PR link is read once |
+| W10 | `chunk-qk3r1ha0.js` task-list watcher (`b`) | task list updated by other processes (teammates/agents) | `try{let e=b(i,this.#h);…}catch{}`: **swallowed**. In-process updates still arrive through `Vri` | **silent**: other processes' task-list changes never show |
+| W11 | `chunk-fgccedbt.js` `Zd` file-event watcher | event watch with poll fallback | `catch(r){this.pollInstead(void 0,d(r));return}` → `fs.watchFile` | works if `watchFile` works |
+| W12 | `chunk-fgccedbt.js` `fc` config freshness (`~/.claude.json`) | config refresh from other sessions | `fs.watchFile` (`SJt`) by default; the event path is Linux-only (`Gh`) | works if `watchFile` works |
+| W13 | `chunk-zdsa7zt3.js` skills (`usePolling:ie`, `ie=!0`) | skills/commands reload | polling | works if `watchFile` works |
+| W14 | `chunk-pyn8k20s.js` keybindings (`usePolling:!0`) | keybindings reload | polling | same |
+| W15 | `chunk-zy2k3hny.js` plugin dirs ×3 (`tOe(…)`: `usePolling:!0`; `jUn` `usePolling:!0`) | plugin reload | polling | same |
+| W16 | `chunk-bh2kkzyk.js` `Lo` (`usePolling:!0`) | dev mods reload | polling | same |
+| W17 | `chunk-fejj39g0.js` memory-watcher (`usePolling:gC`, `gC=typeof Bun<"u"`) | memory files sync | polling, because `bun-compat.mjs` defines `globalThis.Bun` | same. Without the compat global it would be W5-like |
+| W18 | `chunk-9ch9n4ez.js` `QDi` (`M()==="linux"&&…?He:null`) | working-sync watch | Linux only | not reached |
+
+No site crashes. W1, W8, W9 and W10 are the silent ones; W1 is the one that matters.
+Fixing this (a Haiku `uv_fs_event` backend over node monitoring in libuv, or polling in
+the compat layer) is an owner decision and is not implemented here.
 
 ## Swallowed errors that would hide Haiku breakage
 
@@ -584,8 +622,11 @@ match count per site, then an acorn parse.
 
 ## Open questions (need a DeBeOS run)
 
-1. Does Node 24's `fs.watch` work on Haiku? libuv's Haiku support level for fs events
-   wasn't checked here. S29 depends on it, and so does settings reload.
+1. ~~Does `fs.watch` work on Haiku?~~ **Answered (measured): no.** It throws ENOSYS
+   (`errno -2147454967`, syscall `watch`), evidence
+   `evidence/20261031T080733Z_i-0e7bed4928e0f7bf7_node24-accept-haiku.log`. Per-site effects
+   are in "File watching on Haiku". Still open: does `fs.watchFile` (stat polling) work?
+   The polling sites depend on it.
 2. Does `clipboard` work without a desktop session (SSM-only Graviton)?
 3. Is the interactive TUI reachable at all without `Bun.ant.CellSegmenter` (S25)? Run it
    on the Linux reference box under Node first.
