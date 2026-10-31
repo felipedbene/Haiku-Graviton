@@ -26,6 +26,9 @@ SOURCE_DIR_2="package"
 SOURCE_URI_3="https://registry.npmjs.org/acorn/-/acorn-8.19.0.tgz"
 CHECKSUM_SHA256_3="c6fad21ffa1f2ba20338bf1dde1de911c2093c1aaf7b3af17c477661bd3bfaaf"
 SOURCE_DIR_3="package"
+SOURCE_URI_4="https://registry.npmjs.org/undici/-/undici-7.30.1.tgz"
+CHECKSUM_SHA256_4="c98bd3881137c11341e8be8d2ec509ebf973b6f8b36d0a4c6d2afcda15e0d712"
+SOURCE_DIR_4="package"
 # The port tooling, compat layer and native helper (graviton/ports/claude-code) are
 # staged as additional-files/claude-code-port.tar by tools/stage-recipe.sh.
 
@@ -67,6 +70,7 @@ BUILD()
 	rm -rf "$deps" && mkdir -p "$deps"
 	cp -R "$sourceDir2" "$deps/ws"
 	cp -R "$sourceDir3" "$deps/acorn"
+	cp -R "$sourceDir4" "$deps/undici"
 
 	# The deterministic pass: extract, relocate to $installDir, restore folds,
 	# haiku cases, compat files. Every step asserts its own counts.
