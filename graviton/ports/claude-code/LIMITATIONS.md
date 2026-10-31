@@ -114,6 +114,23 @@ the one site passing Bun's `--smol` (`chunk-7hh7yp6n.js`) belongs to a `Bun.buil
 (`hF`). No module calls `Bun.build`, and it is absent in compat, so the site is
 unreachable. `process.execve` on Haiku has to be confirmed on the Node 24.21.0 build.
 
+### Global `Worker`
+- **Uncaught-error message:** Bun's `ErrorEvent.message` embeds a formatted source excerpt
+  and stack; the port's is `Name: message`. Type, class, and the fact that the worker
+  keeps running all match (the diff test compares the message by that line).
+- **Refused explicitly:** options other than `name`/`workerData`/`type` (Bun's `preload`,
+  `smol`, `env`, `argv`, …) and relative or non-`file:` URLs. No bundle call site uses
+  them, except node-forge's optional prime-generation workers (`forge/prime.worker.js`,
+  relative), which are reached only when a caller passes `workers`. The bundle doesn't.
+
+### Function hooks written in TypeScript
+`chunk-7hh7yp6n.js` `our()` transpiles `.ts` hook modules with `new Bun.Transpiler({loader})`,
+which is absent. It throws inside a try and is re-raised as the hook's load error, so a
+TypeScript function hook fails to load with "Bun.Transpiler is not a constructor". JS hooks
+are unaffected. A fix would need Bun's transpiler semantics (TS, TSX, decorators).
+Node's `module.stripTypeScriptTypes` covers only part of that and isn't output-compatible,
+so it isn't offered as a substitute.
+
 ### `Bun.YAML.parse`: depth limits and inputs over 2 GiB
 - **Depth:** Bun's nesting limit is a native-stack check that differs per construct (deepest
   accepted: flow seq 4723, flow map 4515, compact seq 4085, block map 3364). The port

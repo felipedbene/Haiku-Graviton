@@ -115,4 +115,10 @@ if (TRACE) {
 	});
 	exposed = wrap(Bun, "");
 }
+// Bun's global Web Worker (Node has only worker_threads). Defined like Bun's: a
+// writable, configurable global.
+import { Worker } from "./lib/worker.mjs";
+if (typeof globalThis.Worker === "undefined") {
+	Object.defineProperty(globalThis, "Worker", { value: Worker, writable: true, configurable: true, enumerable: false });
+}
 Object.defineProperty(globalThis, "Bun", { value: exposed, writable: false, enumerable: false, configurable: false });
