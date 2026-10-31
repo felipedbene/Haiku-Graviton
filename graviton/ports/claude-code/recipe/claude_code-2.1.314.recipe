@@ -70,13 +70,12 @@ BUILD()
 
 	# The deterministic pass: extract, relocate to $installDir, restore folds,
 	# haiku cases, compat files. Every step asserts its own counts.
-	rm -rf "$sourceDir/tree"
-	bash "$port/tools/build-tree.sh" "$sourceDir/claude" "$sourceDir/tree" \
-		"$installDir" "$(command -v node)" "$deps"
+	# Native team-info helper (team parent/start time; Haiku has no /proc).
+	gcc -O2 -Wall -Werror -o "$sourceDir/cc-teaminfo" "$port/native/cc-teaminfo.c"
 
-	mkdir -p "$sourceDir/tree/bin"
-	gcc -O2 -Wall -Werror -o "$sourceDir/tree/bin/cc-teaminfo" \
-		"$port/native/cc-teaminfo.c"
+	rm -rf "$sourceDir/tree"
+	CC_TEAMINFO="$sourceDir/cc-teaminfo" bash "$port/tools/build-tree.sh" \
+		"$sourceDir/claude" "$sourceDir/tree" "$installDir" "$(command -v node)" "$deps"
 }
 
 INSTALL()
