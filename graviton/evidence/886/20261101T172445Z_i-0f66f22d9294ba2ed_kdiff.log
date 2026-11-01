@@ -1,0 +1,36 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: kdiff
+# instance: i-0f66f22d9294ba2ed   region: us-west-2   transport: ssm (ssm-run)
+# start: 20261101T172445Z   end: 20261101T172457Z   rc: 0
+# script sha256: ebe503466322b06cdaabe9374add72d6e38e2b4bb4ba1a74ae5de13ae9e00030
+# ---- script ----
+# | cd /opt/tnet
+# | python3 - canonical-kernel_arm64 out2/base/kernel_arm64 <<'PY'
+# | import sys
+# | a = open(sys.argv[1], "rb").read(); b = open(sys.argv[2], "rb").read()
+# | offs = [i for i in range(len(a)) if a[i] != b[i]]
+# | print("differing offsets:", offs)
+# | for o in sorted(set(x - x % 16 for x in offs)):
+# |     s, e = max(0, o - 32), o + 48
+# |     print(hex(o)); print("  canon:", a[s:e]); print("  build:", b[s:e])
+# | PY
+# | cd /opt/tnet/hg/generated
+# | grep -rn 'debeos-r\|DEBEOS_REVISION\|HAIKU_REVISION' build/BuildConfig 2>/dev/null | head
+# | grep -rn 'haiku-revision\|debeos-revision\|HAIKU_REVISION' ../build/jam/*Rules* ../src/system/kernel/Jamfile 2>/dev/null | head
+# ---- raw output ----
+ssm-run: command 74e24fae-ff60-40e9-9262-94c38739c3ad on i-0f66f22d9294ba2ed (s3://haiku-graviton-<ACCOUNT_ID>-us-west-2/ssm-out/run-67427-168259)
+differing offsets: [2016776, 2016777, 2016778, 2016779, 2016780, 2016781, 2016782, 2016783, 2016784]
+0x1ec600
+  canon: b'\xe8\xc4\x1f\x00\x00\x00\xff\xffX\xc5\x1f\x00\x00\x00\xff\xff\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00hrev59996\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00'
+  build: b'\xe8\xc4\x1f\x00\x00\x00\xff\xffX\xc5\x1f\x00\x00\x00\xff\xff\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00'
+0x1ec610
+  canon: b'\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00hrev59996\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00'
+  build: b'\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00'
+../build/jam/FileRules:376:	local revisionFile = <haiku-rootdir>haiku-revision ;
+../build/jam/FileRules:381:		if $(HAIKU_REVISION) {
+../build/jam/FileRules:407:			# making the caller invent one with -sHAIKU_REVISION -- an invented
+../build/jam/FileRules:411:			# delete $(HAIKU_BUILD_OUTPUT_DIR)/haiku-revision (or `jam clean`).
+../build/jam/FileRules:421:				"HAIKU_REVISION is not set, GIT_DIR is \"$(GIT_DIR)\", and the"
+../build/jam/FileRules:425:				"instead: -sHAIKU_REVISION=<revision>." ;
+../build/jam/FileRules:441:	echo $(HAIKU_REVISION) > $(1)
+ssm-run: Success

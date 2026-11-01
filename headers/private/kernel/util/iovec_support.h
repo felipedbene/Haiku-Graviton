@@ -62,6 +62,11 @@ get_iovecs_from_user(const iovec* userVecs, size_t vecCount, iovec* vecs,
 	for (size_t i = 0; i < vecCount; i++) {
 		if (permitNull && vecs[i].iov_base == NULL)
 			continue;
+		// A zero-length vector addresses no memory, so its base does not
+		// matter, and is often NULL: libuv sends an empty datagram as
+		// { NULL, 0 }. is_user_address_range() would refuse that NULL.
+		if (vecs[i].iov_len == 0)
+			continue;
 		if (!is_user_address_range(vecs[i].iov_base, vecs[i].iov_len)) {
 			return B_BAD_ADDRESS;
 		}

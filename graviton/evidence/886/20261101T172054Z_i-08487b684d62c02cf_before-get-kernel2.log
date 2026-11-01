@@ -1,0 +1,17 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: before-get-kernel2
+# instance: i-08487b684d62c02cf   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261101T172054Z   end: 20261101T172059Z   rc: 0
+# script sha256: d5e78585802a36acbf9185d1a416da468df3a8f3b4cb7986936253937cd1eec8
+# ---- script ----
+# | cd /boot/home/tnet
+# | python3 -I - 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/tnet/canonical/kernel_arm64?<PRESIGNED>' /boot/system/kernel_arm64 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/tnet/canonical/haiku.hpkg?<PRESIGNED>' /boot/system/packages/haiku-r1~beta6_hrev59996-1-arm64.hpkg <<'PY'
+# | import sys, urllib.request
+# | for url, path in ((sys.argv[1], sys.argv[2]), (sys.argv[3], sys.argv[4])):
+# |     data = open(path, "rb").read()
+# |     r = urllib.request.urlopen(urllib.request.Request(url, data=data, method="PUT"))
+# |     print(path, len(data), r.status)
+# | PY
+# ---- raw output ----
+/boot/system/kernel_arm64 2539425 200
+/boot/system/packages/haiku-r1~beta6_hrev59996-1-arm64.hpkg 20644552 200

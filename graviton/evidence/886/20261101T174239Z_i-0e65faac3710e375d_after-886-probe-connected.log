@@ -1,0 +1,77 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: after-886-probe-connected
+# instance: i-0e65faac3710e375d   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261101T174239Z   end: 20261101T174247Z   rc: 0
+# script sha256: fe471f678009164d888434f8fd1f0775ae059e5d6f97082b5f4aca436a38d671
+# ---- script ----
+# | cd /boot/home/tnet
+# | sha256sum /boot/system/kernel_arm64
+# | cat > p886.mjs <<'JS'
+# | import dgram from "node:dgram";
+# | for (const [label, payload, bindAddr] of [["Buffer.alloc(0)", Buffer.alloc(0), undefined], ["[]", [], undefined], ["Buffer.from('x')", Buffer.from("x"), undefined], ["Buffer.alloc(0), bound 127.0.0.1", Buffer.alloc(0), "127.0.0.1"]]) {
+# | 	await new Promise((resolve) => {
+# | 		const c = dgram.createSocket("udp4");
+# | 		const t = setTimeout(() => { console.log(label, "connected: NOTHING received in 1000 ms"); c.close(); resolve(); }, 1000);
+# | 		c.on("message", (m, r) => { console.log(label, "connected: received", m.length, "bytes from", r.address + ":" + r.port); clearTimeout(t); c.close(); resolve(); });
+# | 		c.bind(0, bindAddr, () => {
+# | 			const port = c.address().port;
+# | 			c.connect(port, () => {
+# | 				console.log(label, "local", JSON.stringify(c.address()), "remote", JSON.stringify(c.remoteAddress()));
+# | 				c.send(payload, (e) => console.log(label, "send cb err=", e ? e.code : "none"));
+# | 			});
+# | 		});
+# | 	});
+# | }
+# | JS
+# | node p886.mjs
+# | cat > c886.c <<'C'
+# | #include <arpa/inet.h>
+# | #include <errno.h>
+# | #include <netinet/in.h>
+# | #include <poll.h>
+# | #include <stdio.h>
+# | #include <string.h>
+# | #include <sys/socket.h>
+# | #include <unistd.h>
+# | int main() {
+# | 	for (int bindAny = 1; bindAny >= 0; bindAny--) for (int len = 0; len <= 1; len++) {
+# | 		int fd = socket(AF_INET, SOCK_DGRAM, 0);
+# | 		struct sockaddr_in a; memset(&a, 0, sizeof(a)); a.sin_family = AF_INET;
+# | 		a.sin_addr.s_addr = bindAny ? 0 : htonl(INADDR_LOOPBACK);
+# | 		socklen_t l = sizeof(a);
+# | 		bind(fd, (struct sockaddr*)&a, sizeof(a)); getsockname(fd, (struct sockaddr*)&a, &l);
+# | 		a.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+# | 		int c = connect(fd, (struct sockaddr*)&a, sizeof(a));
+# | 		struct sockaddr_in local; l = sizeof(local); getsockname(fd, (struct sockaddr*)&local, &l);
+# | 		char x = 'x'; struct iovec v = { len ? &x : NULL, len }; struct msghdr m; memset(&m, 0, sizeof(m)); m.msg_iov = &v; m.msg_iovlen = 1;
+# | 		errno = 0; ssize_t r = sendmsg(fd, &m, 0); int e = errno;
+# | 		struct pollfd p = { fd, POLLIN, 0 }; int ready = poll(&p, 1, 500);
+# | 		struct sockaddr_in from; char buf[8]; struct iovec rv = { buf, sizeof(buf) }; struct msghdr rm; memset(&rm, 0, sizeof(rm));
+# | 		rm.msg_name = &from; rm.msg_namelen = sizeof(from); rm.msg_iov = &rv; rm.msg_iovlen = 1;
+# | 		ssize_t got = ready > 0 ? recvmsg(fd, &rm, MSG_DONTWAIT) : -2;
+# | 		printf("bound %s local %s:%d connect=%d len=%d sendmsg r=%zd errno=%d poll=%d revents=0x%x recvmsg=%zd namelen=%d\n",
+# | 			bindAny ? "0.0.0.0" : "127.0.0.1", inet_ntoa(local.sin_addr), ntohs(local.sin_port), c, len, r, e, ready, p.revents, got, (int)rm.msg_namelen);
+# | 		close(fd);
+# | 	}
+# | 	return 0;
+# | }
+# | C
+# | gcc -O2 -o c886 c886.c -lnetwork && ./c886
+# ---- raw output ----
+0a0ef4d21f9bf776f78bdd011614b52846f6c4cbc514062e114dbb5550f6f0f7  /boot/system/kernel_arm64
+Buffer.alloc(0) local {"address":"127.0.0.1","family":"IPv4","port":49520} remote {"address":"127.0.0.1","family":"IPv4","port":49520}
+Buffer.alloc(0) send cb err= none
+Buffer.alloc(0) connected: NOTHING received in 1000 ms
+[] local {"address":"127.0.0.1","family":"IPv4","port":49521} remote {"address":"127.0.0.1","family":"IPv4","port":49521}
+[] send cb err= none
+[] connected: NOTHING received in 1000 ms
+Buffer.from('x') local {"address":"127.0.0.1","family":"IPv4","port":49522} remote {"address":"127.0.0.1","family":"IPv4","port":49522}
+Buffer.from('x') send cb err= none
+Buffer.from('x') connected: received 1 bytes from 127.0.0.1:49522
+Buffer.alloc(0), bound 127.0.0.1 local {"address":"127.0.0.1","family":"IPv4","port":49523} remote {"address":"127.0.0.1","family":"IPv4","port":49523}
+Buffer.alloc(0), bound 127.0.0.1 send cb err= none
+Buffer.alloc(0), bound 127.0.0.1 connected: NOTHING received in 1000 ms
+bound 0.0.0.0 local 127.0.0.1:49524 connect=0 len=0 sendmsg r=0 errno=0 poll=1 revents=0x1 recvmsg=0 namelen=32
+bound 0.0.0.0 local 127.0.0.1:49525 connect=0 len=1 sendmsg r=1 errno=0 poll=1 revents=0x1 recvmsg=1 namelen=32
+bound 127.0.0.1 local 127.0.0.1:49526 connect=0 len=0 sendmsg r=0 errno=0 poll=1 revents=0x1 recvmsg=0 namelen=32
+bound 127.0.0.1 local 127.0.0.1:49527 connect=0 len=1 sendmsg r=1 errno=0 poll=1 revents=0x1 recvmsg=1 namelen=32

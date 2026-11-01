@@ -1,0 +1,133 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: after-886-regress-sys2
+# instance: i-0e65faac3710e375d   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261101T181533Z   end: 20261101T181628Z   rc: 127
+# script sha256: ed77d4f2c7e82d77da3cafee3c210c75260cfd851f2454b621ff8259d0e8bae6
+# ---- script ----
+# | echo "--- stale python from the earlier run"
+# | for p in $(ps | grep 'python3 -I -' | grep -v grep | awk '{print $4}'); do kill -9 $p && echo "killed $p"; done
+# | cd /boot/home/tnet
+# | echo "--- loaded modules / kernel"
+# | sha256sum /boot/system/kernel_arm64 /boot/home/config/non-packaged/add-ons/kernel/network/protocols/* 2>/dev/null
+# | listimage 1 2>/dev/null | grep -E 'protocols/(unix|udp|ipv6|tcp)' | awk '{print $NF}' | sort -u
+# | echo "--- sshd: this session is ssh; peer: $SSH_CONNECTION"
+# | ps 2>/dev/null | grep -E 'sshd|ssm' | grep -v grep | awk '{print $1}' | sort -u
+# | echo "--- HTTPS + DNS (python urllib) and curl"
+# | python3 -I - <<'PY'
+# | import time, urllib.request
+# | for u in ("https://nodejs.org/dist/index.json", "https://packages.debene.dev/", "https://www.haiku-os.org/", "https://github.com/"):
+# |     t = time.time()
+# |     try:
+# |         r = urllib.request.urlopen(u, timeout=30); n = len(r.read())
+# |         print(f"{u}: {r.status} {n} bytes {time.time()-t:.2f}s")
+# |     except Exception as e:
+# |         print(f"{u}: ERROR {e!r}")
+# | PY
+# | command -v curl && curl -sS -o /dev/null -w 'curl nodejs.org %{http_code} %{size_download}B %{time_total}s\n' https://nodejs.org/dist/index.json
+# | echo "--- pkgman over HTTPS"
+# | pkgman refresh 2>&1 | tail -2
+# | pkgman search -a nodejs24 2>&1 | tail -2
+# | echo "--- loopback TCP bulk through an accepted socket: ipv4 512 MiB each way; ipv6 64 KiB writes (1 MiB writes stall on canonical too, filed separately)"
+# | timeout 300 python3 -u -I - <<'PY'
+# | import socket, threading, time
+# | def bulk(family, host, direction, total, chunk):
+# |     l = socket.socket(family); l.bind((host, 0)); l.listen(1)
+# |     res = {"got": 0}
+# |     def server():
+# |         s, _ = l.accept(); s.settimeout(20)
+# |         try:
+# |             if direction == "up":
+# |                 while True:
+# |                     b = s.recv(1 << 20)
+# |                     if not b: break
+# |                     res["got"] += len(b)
+# |             else:
+# |                 buf = b"x" * chunk
+# |                 for _ in range(total // chunk): s.sendall(buf)
+# |         except Exception as e:
+# |             res["err"] = repr(e)
+# |         s.close()
+# |     t = threading.Thread(target=server); t.start()
+# |     c = socket.socket(family); c.connect(l.getsockname()[:2]); c.settimeout(20)
+# |     start = time.time(); got = 0; err = None
+# |     try:
+# |         if direction == "up":
+# |             buf = b"x" * chunk
+# |             for _ in range(total // chunk): c.sendall(buf)
+# |             c.shutdown(socket.SHUT_WR)
+# |         else:
+# |             while True:
+# |                 b = c.recv(1 << 20)
+# |                 if not b: break
+# |                 got += len(b)
+# |     except Exception as e:
+# |         err = repr(e)
+# |     t.join(); dt = time.time() - start
+# |     if direction == "up": got = res["got"]
+# |     c.close(); l.close()
+# |     print(f"{host} {direction} {total >> 20} MiB in {chunk}-byte writes: {got} bytes ok={got == total} {got / dt / (1 << 20):.0f} MiB/s err={err or res.get('err')}", flush=True)
+# | for d in ("up", "down"):
+# |     for i in range(3):
+# |         bulk(socket.AF_INET, "127.0.0.1", d, 512 << 20, 1 << 20)
+# | for d in ("up", "down"):
+# |     bulk(socket.AF_INET6, "::1", d, 64 << 20, 64 << 10)
+# | PY
+# | echo "--- reset/abort: refused port, close with unread data"
+# | timeout 60 python3 -u -I - <<'PY'
+# | import socket, time
+# | s = socket.socket()
+# | try:
+# |     s.connect(("127.0.0.1", 1)); print("connect to closed port: connected?!")
+# | except OSError as e:
+# |     print("connect to closed port:", e.strerror)
+# | l = socket.socket(); l.bind(("127.0.0.1", 0)); l.listen(1)
+# | c = socket.socket(); c.connect(l.getsockname()); a, _ = l.accept()
+# | c.sendall(b"unread"); time.sleep(0.1); a.close(); time.sleep(0.1); c.settimeout(5)
+# | try:
+# |     c.sendall(b"x"); time.sleep(0.1); print("recv after peer closed with unread data:", c.recv(10))
+# | except OSError as e:
+# |     print("after peer closed with unread data:", e.strerror)
+# | PY
+# | echo "--- kernel log: panics/asserts"
+# | grep -ciE 'panic|assert|kernel debugger|KDL' /var/log/syslog 2>/dev/null; grep -iE 'panic|assert' /var/log/syslog 2>/dev/null | tail -3
+# | uptime
+# ---- raw output ----
+--- stale python from the earlier run
+killed 642
+--- loaded modules / kernel
+0a0ef4d21f9bf776f78bdd011614b52846f6c4cbc514062e114dbb5550f6f0f7  /boot/system/kernel_arm64
+/boot/system/add-ons/kernel/network/datalink_protocols/ipv6_datagram
+/boot/system/add-ons/kernel/network/protocols/ipv6
+/boot/system/add-ons/kernel/network/protocols/tcp
+/boot/system/add-ons/kernel/network/protocols/udp
+/boot/system/add-ons/kernel/network/protocols/unix
+--- sshd: this session is ssh; peer: 10.128.7.248 25875 10.128.9.100 22
+/boot/system/bin/amazon-ssm-agent
+/boot/system/bin/sshd
+/boot/system/bin/ssm-agent-worker
+/boot/system/lib/openssh/sshd-session
+--- HTTPS + DNS (python urllib) and curl
+https://nodejs.org/dist/index.json: 200 336201 bytes 0.07s
+https://packages.debene.dev/: 200 23747 bytes 0.17s
+https://www.haiku-os.org/: 200 27700 bytes 0.18s
+https://github.com/: 200 529880 bytes 0.12s
+--- pkgman over HTTPS
+Fetching repository checksum from http://packages.debene.dev/arm64 ...
+Validating checksum for DeBeOS ...
+        zziplib_doc                              The zziplib extract data from archives in a single zip (documentation)                              
+        zziplib_tools                            The zziplib extract data from archives in a single zip                                              
+--- loopback TCP bulk through an accepted socket: ipv4 512 MiB each way; ipv6 64 KiB writes (1 MiB writes stall on canonical too, filed separately)
+127.0.0.1 up 512 MiB in 1048576-byte writes: 536870912 bytes ok=True 433 MiB/s err=None
+127.0.0.1 up 512 MiB in 1048576-byte writes: 536870912 bytes ok=True 395 MiB/s err=None
+127.0.0.1 up 512 MiB in 1048576-byte writes: 536870912 bytes ok=True 434 MiB/s err=None
+127.0.0.1 down 512 MiB in 1048576-byte writes: 536870912 bytes ok=True 365 MiB/s err=None
+127.0.0.1 down 512 MiB in 1048576-byte writes: 536870912 bytes ok=True 458 MiB/s err=None
+127.0.0.1 down 512 MiB in 1048576-byte writes: 536870912 bytes ok=True 400 MiB/s err=None
+::1 up 64 MiB in 65536-byte writes: 0 bytes ok=False 0 MiB/s err=TimeoutError('timed out')
+::1 down 64 MiB in 65536-byte writes: 0 bytes ok=False 0 MiB/s err=TimeoutError('timed out')
+--- reset/abort: refused port, close with unread data
+connect to closed port: Connection refused
+after peer closed with unread data: Connection reset by peer
+--- kernel log: panics/asserts
+10
+bash: line 87: uptime: command not found

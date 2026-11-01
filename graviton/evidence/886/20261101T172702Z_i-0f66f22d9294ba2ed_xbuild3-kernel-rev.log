@@ -1,0 +1,92 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: xbuild3-kernel-rev
+# instance: i-0f66f22d9294ba2ed   region: us-west-2   transport: ssm (ssm-run)
+# start: 20261101T172702Z   end: 20261101T172818Z   rc: 0
+# script sha256: d0d56ac2660786b9ec89188e5e6b5a204233350afaf915557aa14f47ccabd46d
+# ---- script ----
+# | OUT=s3://haiku-graviton-<ACCOUNT_ID>-us-west-2/tnet
+# | export SOURCE_DATE_EPOCH=1792444182
+# | cd /opt/tnet/hg/generated
+# | rm -rf /opt/tnet/out3
+# | 
+# | path_of() {
+# | 	case $1 in
+# | 		"<revisioned>kernel_arm64") echo objects/haiku/arm64/release/system/kernel/revisioned/kernel_arm64 ;;
+# | 		*) echo objects/haiku/arm64/release/add-ons/kernel/network/protocols/$1/$1 ;;
+# | 	esac
+# | }
+# | objdir_of() {
+# | 	case $1 in
+# | 		"<revisioned>kernel_arm64") echo objects/haiku/arm64/release/system/kernel ;;
+# | 		*) echo objects/haiku/arm64/release/add-ons/kernel/network/protocols/$1 ;;
+# | 	esac
+# | }
+# | 
+# | # build <label> <ref> <targets...>: a clean build of each target's objects
+# | build() {
+# | 	local label=$1 ref=$2; shift 2
+# | 	sleep 2
+# | 	git -C .. checkout -q --detach "$ref" || { echo "checkout $ref failed"; return 1; }
+# | 	sleep 2
+# | 	for t in "$@"; do rm -rf "$(objdir_of "$t")"; done
+# | 	local s=$(date +%s)
+# | 	jam -q -j32 -sHAIKU_REVISION=hrev59996 "$@" > jam3-$label.log 2>&1
+# | 	local rc=$?
+# | 	echo "JAM $label ref=$ref head=$(git -C .. rev-parse --short HEAD) rc=$rc wall=$(( $(date +%s) - s ))s failed=$(grep -cE '\.\.\.failed' jam3-$label.log)"
+# | 	[ $rc = 0 ] || tail -30 jam3-$label.log
+# | 	mkdir -p /opt/tnet/out3/$label
+# | 	for t in "$@"; do
+# | 		cp "$(path_of "$t")" /opt/tnet/out3/$label/kernel_arm64 && sha256sum /opt/tnet/out3/$label/kernel_arm64 | sed "s|/opt/tnet/out3/||"
+# | 	done
+# | }
+# | 
+# | aws s3 cp --quiet $OUT/canonical/kernel_arm64 /opt/tnet/canonical-kernel_arm64
+# | sha256sum /opt/tnet/canonical-kernel_arm64 | sed "s|/opt/tnet/||"
+# | 
+# | rm -f haiku-revision
+# | build base a9d5585b19 '<revisioned>kernel_arm64'
+# | build trunk graviton '<revisioned>kernel_arm64'
+# | build 886 fix/886-sendmsg-zero-length-iovec '<revisioned>kernel_arm64'
+# | build 886-on-canonical t886-on-canonical '<revisioned>kernel_arm64'
+# | build base-again a9d5585b19 '<revisioned>kernel_arm64'
+# | cat haiku-revision 2>/dev/null
+# | echo "--- source diff"
+# | git -C .. diff --stat graviton fix/886-sendmsg-zero-length-iovec --
+# | echo "t886-on-canonical vs canonical source:"; git -C .. diff --stat a9d5585b19 t886-on-canonical --
+# | echo "--- kernel: canonical vs builds"
+# | python3 - /opt/tnet/canonical-kernel_arm64 /opt/tnet/out3/base/kernel_arm64 /opt/tnet/out3/base-again/kernel_arm64 /opt/tnet/out3/886-on-canonical/kernel_arm64 /opt/tnet/out3/trunk/kernel_arm64 /opt/tnet/out3/886/kernel_arm64 <<'PY'
+# | import sys
+# | c = open(sys.argv[1], "rb").read()
+# | for p in sys.argv[2:]:
+# |     d = open(p, "rb").read()
+# |     print(f"{p}: size {len(d)} vs {len(c)}; identical={d == c}")
+# | PY
+# | for d in /opt/tnet/out3/*; do
+# | 	for f in $d/*; do aws s3 cp --quiet "$f" "$OUT/mod3/$(basename $d)/$(basename $f)"; done
+# | done
+# ---- raw output ----
+ssm-run: command b77019b7-dcc0-4e23-baca-ff9244f1d8ef on i-0f66f22d9294ba2ed (s3://haiku-graviton-<ACCOUNT_ID>-us-west-2/ssm-out/run-68358-087dad)
+85737000e917732cf7399ec29d0dd98bb51322c2651d5f35622af61a029c3240  canonical-kernel_arm64
+JAM base ref=a9d5585b19 head=a9d5585b rc=0 wall=9s failed=0
+85737000e917732cf7399ec29d0dd98bb51322c2651d5f35622af61a029c3240  base/kernel_arm64
+JAM trunk ref=graviton head=e7979ac2 rc=0 wall=9s failed=0
+a6ce90925d244022dd7713fab05473149916f4945ca5080cc37236f80e90e282  trunk/kernel_arm64
+JAM 886 ref=fix/886-sendmsg-zero-length-iovec head=5e114860 rc=0 wall=9s failed=0
+07ffa870ac135d99f71caa7ba131ad9675729218af9813ae5afea03a7f04cc42  886/kernel_arm64
+JAM 886-on-canonical ref=t886-on-canonical head=560b6808 rc=0 wall=9s failed=0
+0a0ef4d21f9bf776f78bdd011614b52846f6c4cbc514062e114dbb5550f6f0f7  886-on-canonical/kernel_arm64
+JAM base-again ref=a9d5585b19 head=a9d5585b rc=0 wall=8s failed=0
+85737000e917732cf7399ec29d0dd98bb51322c2651d5f35622af61a029c3240  base-again/kernel_arm64
+--- source diff
+ headers/private/kernel/util/iovec_support.h | 5 +++++
+ 1 file changed, 5 insertions(+)
+t886-on-canonical vs canonical source:
+ headers/private/kernel/util/iovec_support.h | 5 +++++
+ 1 file changed, 5 insertions(+)
+--- kernel: canonical vs builds
+/opt/tnet/out3/base/kernel_arm64: size 2539425 vs 2539425; identical=True
+/opt/tnet/out3/base-again/kernel_arm64: size 2539425 vs 2539425; identical=True
+/opt/tnet/out3/886-on-canonical/kernel_arm64: size 2539425 vs 2539425; identical=False
+/opt/tnet/out3/trunk/kernel_arm64: size 2539473 vs 2539425; identical=False
+/opt/tnet/out3/886/kernel_arm64: size 2539473 vs 2539425; identical=False
+ssm-run: Success

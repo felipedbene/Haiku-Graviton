@@ -1,0 +1,30 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: stage-886c
+# instance: i-0fe3490807c90146f   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261101T173315Z   end: 20261101T173320Z   rc: 0
+# script sha256: 165b5e7df8842098882b5f58e64b59b132bf3617705fb4678bf259107b1b7f5b
+# ---- script ----
+# | cd /boot/home/hk
+# | OLD=$(ls -d /boot/system/packages/administrative/state_*/haiku-r1~beta6_hrev59996-1-arm64.hpkg 2>/dev/null | head -1)
+# | echo "old package now at: $OLD"
+# | package list -p "$OLD" | sort > l1; package list -p /boot/system/packages/haiku-r1~beta6_hrev59996-2-arm64.hpkg | sort > l2
+# | wc -l l1 l2; sha256sum l1 l2
+# | ls /boot/system/packages/administrative/
+# | cat /boot/system/packages/administrative/activated-packages 2>/dev/null | grep '^haiku'
+# | sync
+# ---- raw output ----
+old package now at: /boot/system/packages/administrative/state_2026-11-01_17:30:54-1/haiku-r1~beta6_hrev59996-1-arm64.hpkg
+  3340 l1
+  3340 l2
+  6680 total
+47072a4bd25777b9e60f3cfe4e07247618539122e73d1b8a66d29b6ecfed84f1  l1
+47072a4bd25777b9e60f3cfe4e07247618539122e73d1b8a66d29b6ecfed84f1  l2
+activated-packages
+queued-scripts
+state_2026-11-01_17:30:54
+state_2026-11-01_17:30:54-1
+writable-files
+haiku_datatranslators-r1~beta6_hrev59996-1-arm64.hpkg
+haiku_loader-r1~beta6_hrev59996-1-arm64.hpkg
+haiku-r1~beta6_hrev59996-2-arm64.hpkg
+haiku_devel-r1~beta6_hrev59996-2-arm64.hpkg
