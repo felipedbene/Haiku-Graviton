@@ -1,0 +1,11 @@
+# evidence: tmux-recipe-source
+# instance: i-0e7bed4928e0f7bf7   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261101T055307Z   end: 20261101T055329Z   rc: 0
+# script sha256: ca22699b93f0ad123f210bcf6cf2b8d5c0973837f33b39716cd1c1e279059af5
+# ---- script ----
+# | f=$(ls /boot/home/haikuports/*/tmux/tmux-*.recipe 2>/dev/null | tail -1); echo $f; grep -E "^SOURCE_URI|^CHECKSUM_SHA256|^SOURCE_DIR|^PATCHES" $f; ls $(dirname $f)/patches 2>/dev/null
+# ---- raw output ----
+/boot/home/haikuports/app-misc/tmux/tmux-3.7c.recipe
+SOURCE_URI="https://github.com/tmux/tmux/releases/download/$portVersion/tmux-$portVersion.tar.gz"
+CHECKSUM_SHA256="7c60cae9a0e25288e2e24750aafc9e8800fc7fd4555e447e1b29ee4201cfb3bf"
+tmux-3.1c.patchset

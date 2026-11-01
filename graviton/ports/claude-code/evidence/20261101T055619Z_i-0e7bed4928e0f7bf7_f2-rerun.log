@@ -1,0 +1,1137 @@
+# evidence: f2-rerun
+# instance: i-0e7bed4928e0f7bf7   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261101T055619Z   end: 20261101T055640Z   rc: 1
+# script sha256: bae69d40468b0948de49c902e21908b19b3a030772cfb9f79c2f0224ec9eb8bf
+# ---- script ----
+# | cd /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0 || exit 1
+# | id; uname -a; node --version; ulimit -a
+# | : | python3 tools/test.py --shell=/boot/system/bin/node -j 1 -p tap -v parallel/test-child-process-exec-env parallel/test-cli-node-print-help parallel/test-cluster-worker-kill-signal parallel/test-crypto-no-algorithm parallel/test-cwd-enoent-improved-message parallel/test-domain-no-error-handler-abort-on-uncaught-0 parallel/test-domain-no-error-handler-abort-on-uncaught-1 parallel/test-domain-no-error-handler-abort-on-uncaught-2 parallel/test-domain-no-error-handler-abort-on-uncaught-3 parallel/test-domain-no-error-handler-abort-on-uncaught-4 parallel/test-domain-no-error-handler-abort-on-uncaught-5 parallel/test-domain-no-error-handler-abort-on-uncaught-6 parallel/test-domain-no-error-handler-abort-on-uncaught-7 parallel/test-domain-no-error-handler-abort-on-uncaught-8 parallel/test-domain-no-error-handler-abort-on-uncaught-9 parallel/test-domain-throw-error-then-throw-from-uncaught-exception-handler parallel/test-domain-with-abort-on-uncaught-exception parallel/test-fs-promises parallel/test-fs-write-sigxfsz parallel/test-process-dlopen-error-message-crash parallel/test-process-external-stdio-close parallel/test-process-external-stdio-close-spawn parallel/test-repl-underscore parallel/test-runner-worker-id parallel/test-stdout-close-catch parallel/test-util-exception-with-host-port parallel/test-util-promisify parallel/test-worker-init-failure parallel/test-worker-memory sequential/test-child-process-emfile sequential/test-module-loading
+# ---- raw output ----
+uid=0(baron) gid=0(root) groups=0(root)
+Haiku ip-10-128-9-142.us-west-2.compu R1~beta6+development hrev59996 Oct 19 2026 21:09:42 arm64 arm64 Haiku
+v24.21.0
+core file size              (blocks, -c) 0
+data seg size               (kbytes, -d) unlimited
+open files                          (-n) 256
+pipe size                (512 bytes, -p) 8
+stack size                  (kbytes, -s) 65536
+max user processes                  (-u) 1024
+virtual memory              (kbytes, -v) 18014398509481983
+# /boot/system/bin/node -p process.arch
+# /boot/system/bin/node -p process.versions.openssl
+# /boot/system/bin/node -p process.config.variables.asan
+# /boot/system/bin/node -p process.config.variables.v8_enable_pointer_compression
+# /boot/system/bin/node -p process.features.inspector
+# /boot/system/bin/node -p process.versions.openssl
+TAP version 13
+1..31
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-child-process-exec-env.js
+not ok 1 parallel/test-child-process-exec-env
+  ---
+  duration_ms: 115.48300
+  severity: fail
+  exitcode: 1
+  stack: |-
+    node:assert:152
+      throw new AssertionError(obj);
+      ^
+    
+    AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+    
+    0 !== 1
+    
+        at process.<anonymous> (/boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-child-process-exec-env.js:61:10)
+        at process.emit (node:events:526:24) {
+      generatedMessage: true,
+      code: 'ERR_ASSERTION',
+      actual: 0,
+      expected: 1,
+      operator: 'strictEqual',
+      diff: 'simple'
+    }
+    
+    Node.js v24.21.0
+  ...
+# /boot/system/bin/node --expose-internals /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-cli-node-print-help.js
+not ok 2 parallel/test-cli-node-print-help
+  ---
+  duration_ms: 264.25400
+  severity: fail
+  exitcode: 1
+  stack: |-
+    node:internal/process/promises:394
+        triggerUncaughtException(err, true /* fromPromise */);
+        ^
+    
+    AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+    
+    null !== 0
+    
+        at /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-cli-node-print-help.js:64:10
+        at process.processTicksAndRejections (node:internal/process/task_queues:104:5) {
+      generatedMessage: true,
+      code: 'ERR_ASSERTION',
+      actual: null,
+      expected: 0,
+      operator: 'strictEqual',
+      diff: 'simple'
+    }
+    
+    Node.js v24.21.0
+  ...
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-cluster-worker-kill-signal.js
+not ok 3 parallel/test-cluster-worker-kill-signal
+  ---
+  duration_ms: 220.24300
+  severity: fail
+  exitcode: 1
+  stack: |-
+    node:assert:152
+      throw new AssertionError(obj);
+      ^
+    
+    AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+    
+    1 !== 0
+    
+        at Worker.<anonymous> (/boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-cluster-worker-kill-signal.js:44:12)
+        at Worker.<anonymous> (/boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/common/index.js:481:15)
+        at Worker.wrapper (node:events:639:12)
+        at Worker.emit (node:events:514:28)
+        at ChildProcess.<anonymous> (node:internal/cluster/primary:187:12)
+        at ChildProcess.wrapper (node:events:639:12)
+        at ChildProcess.emit (node:events:514:28)
+        at ChildProcess._handle.onexit (node:internal/child_process:295:12) {
+      generatedMessage: true,
+      code: 'ERR_ASSERTION',
+      actual: 1,
+      expected: 0,
+      operator: 'strictEqual',
+      diff: 'simple'
+    }
+    
+    Node.js v24.21.0
+  ...
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-crypto-no-algorithm.js
+not ok 4 parallel/test-crypto-no-algorithm
+  ---
+  duration_ms: 264.16500
+  severity: fail
+  exitcode: 1
+  stack: |-
+    node:internal/assert/utils:77
+        throw err;
+        ^
+    
+    AssertionError [ERR_ASSERTION]: process did not abort, code:null signal:
+        at Object.<anonymous> (/boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-crypto-no-algorithm.js:56:3)
+        at Module._compile (node:internal/modules/cjs/loader:1929:14)
+        at Object..js (node:internal/modules/cjs/loader:2060:10)
+        at Module.load (node:internal/modules/cjs/loader:1651:32)
+        at Module._load (node:internal/modules/cjs/loader:1443:12)
+        at wrapModuleLoad (node:internal/modules/cjs/loader:261:19)
+        at Module.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:154:5)
+        at node:internal/main/run_main_module:33:47 {
+      generatedMessage: false,
+      code: 'ERR_ASSERTION',
+      actual: false,
+      expected: true,
+      operator: '==',
+      diff: 'simple'
+    }
+    
+    Node.js v24.21.0
+  ...
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-cwd-enoent-improved-message.js
+not ok 5 parallel/test-cwd-enoent-improved-message
+  ---
+  duration_ms: 100.43400
+  severity: fail
+  exitcode: 1
+  stack: |-
+    node:assert:152
+      throw new AssertionError(obj);
+      ^
+    
+    AssertionError [ERR_ASSERTION]: Missing expected exception.
+        at Object.<anonymous> (/boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-cwd-enoent-improved-message.js:25:8)
+        at Module._compile (node:internal/modules/cjs/loader:1929:14)
+        at Object..js (node:internal/modules/cjs/loader:2060:10)
+        at Module.load (node:internal/modules/cjs/loader:1651:32)
+        at Module._load (node:internal/modules/cjs/loader:1443:12)
+        at wrapModuleLoad (node:internal/modules/cjs/loader:261:19)
+        at Module.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:154:5)
+        at node:internal/main/run_main_module:33:47 {
+      generatedMessage: false,
+      code: 'ERR_ASSERTION',
+      actual: undefined,
+      expected: {
+        code: 'ENOENT',
+        message: 'ENOENT: process.cwd failed with error no such file or directory, the current working directory was likely removed without changing the working directory, uv_cwd'
+      },
+      operator: 'throws',
+      diff: 'simple'
+    }
+    
+    Node.js v24.21.0
+  ...
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-domain-no-error-handler-abort-on-uncaught-0.js
+not ok 6 parallel/test-domain-no-error-handler-abort-on-uncaught-0
+  ---
+  duration_ms: 408.97300
+  severity: fail
+  exitcode: 1
+  stack: |-
+    node:internal/assert/utils:77
+        throw err;
+        ^
+    
+    AssertionError [ERR_ASSERTION]: Test should have aborted but instead exited with exit code 0 and signal null
+        at ChildProcess.onExit (/boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/common/index.js:280:5)
+        at ChildProcess.emit (node:events:514:28)
+        at ChildProcess.emit (node:domain:489:12)
+        at ChildProcess._handle.onexit (node:internal/child_process:295:12) {
+      generatedMessage: false,
+      code: 'ERR_ASSERTION',
+      actual: false,
+      expected: true,
+      operator: '==',
+      diff: 'simple'
+    }
+    
+    Node.js v24.21.0
+  ...
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-domain-no-error-handler-abort-on-uncaught-1.js
+not ok 7 parallel/test-domain-no-error-handler-abort-on-uncaught-1
+  ---
+  duration_ms: 409.97300
+  severity: fail
+  exitcode: 1
+  stack: |-
+    node:internal/assert/utils:77
+        throw err;
+        ^
+    
+    AssertionError [ERR_ASSERTION]: Test should have aborted but instead exited with exit code 0 and signal null
+        at ChildProcess.onExit (/boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/common/index.js:280:5)
+        at ChildProcess.emit (node:events:514:28)
+        at ChildProcess.emit (node:domain:489:12)
+        at ChildProcess._handle.onexit (node:internal/child_process:295:12) {
+      generatedMessage: false,
+      code: 'ERR_ASSERTION',
+      actual: false,
+      expected: true,
+      operator: '==',
+      diff: 'simple'
+    }
+    
+    Node.js v24.21.0
+  ...
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-domain-no-error-handler-abort-on-uncaught-2.js
+not ok 8 parallel/test-domain-no-error-handler-abort-on-uncaught-2
+  ---
+  duration_ms: 337.16600
+  severity: fail
+  exitcode: 1
+  stack: |-
+    node:internal/assert/utils:77
+        throw err;
+        ^
+    
+    AssertionError [ERR_ASSERTION]: Test should have aborted but instead exited with exit code 0 and signal null
+        at ChildProcess.onExit (/boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/common/index.js:280:5)
+        at ChildProcess.emit (node:events:514:28)
+        at ChildProcess.emit (node:domain:489:12)
+        at ChildProcess._handle.onexit (node:internal/child_process:295:12) {
+      generatedMessage: false,
+      code: 'ERR_ASSERTION',
+      actual: false,
+      expected: true,
+      operator: '==',
+      diff: 'simple'
+    }
+    
+    Node.js v24.21.0
+  ...
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-domain-no-error-handler-abort-on-uncaught-3.js
+not ok 9 parallel/test-domain-no-error-handler-abort-on-uncaught-3
+  ---
+  duration_ms: 409.75500
+  severity: fail
+  exitcode: 1
+  stack: |-
+    node:internal/assert/utils:77
+        throw err;
+        ^
+    
+    AssertionError [ERR_ASSERTION]: Test should have aborted but instead exited with exit code 0 and signal null
+        at ChildProcess.onExit (/boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/common/index.js:280:5)
+        at ChildProcess.emit (node:events:514:28)
+        at ChildProcess.emit (node:domain:489:12)
+        at ChildProcess._handle.onexit (node:internal/child_process:295:12) {
+      generatedMessage: false,
+      code: 'ERR_ASSERTION',
+      actual: false,
+      expected: true,
+      operator: '==',
+      diff: 'simple'
+    }
+    
+    Node.js v24.21.0
+  ...
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-domain-no-error-handler-abort-on-uncaught-4.js
+not ok 10 parallel/test-domain-no-error-handler-abort-on-uncaught-4
+  ---
+  duration_ms: 336.05600
+  severity: fail
+  exitcode: 1
+  stack: |-
+    node:internal/assert/utils:77
+        throw err;
+        ^
+    
+    AssertionError [ERR_ASSERTION]: Test should have aborted but instead exited with exit code 0 and signal null
+        at ChildProcess.onExit (/boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/common/index.js:280:5)
+        at ChildProcess.emit (node:events:514:28)
+        at ChildProcess.emit (node:domain:489:12)
+        at ChildProcess._handle.onexit (node:internal/child_process:295:12) {
+      generatedMessage: false,
+      code: 'ERR_ASSERTION',
+      actual: false,
+      expected: true,
+      operator: '==',
+      diff: 'simple'
+    }
+    
+    Node.js v24.21.0
+  ...
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-domain-no-error-handler-abort-on-uncaught-5.js
+not ok 11 parallel/test-domain-no-error-handler-abort-on-uncaught-5
+  ---
+  duration_ms: 410.83400
+  severity: fail
+  exitcode: 1
+  stack: |-
+    node:internal/assert/utils:77
+        throw err;
+        ^
+    
+    AssertionError [ERR_ASSERTION]: Test should have aborted but instead exited with exit code 0 and signal null
+        at ChildProcess.onExit (/boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/common/index.js:280:5)
+        at ChildProcess.emit (node:events:514:28)
+        at ChildProcess.emit (node:domain:489:12)
+        at ChildProcess._handle.onexit (node:internal/child_process:295:12) {
+      generatedMessage: false,
+      code: 'ERR_ASSERTION',
+      actual: false,
+      expected: true,
+      operator: '==',
+      diff: 'simple'
+    }
+    
+    Node.js v24.21.0
+  ...
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-domain-no-error-handler-abort-on-uncaught-6.js
+not ok 12 parallel/test-domain-no-error-handler-abort-on-uncaught-6
+  ---
+  duration_ms: 337.04300
+  severity: fail
+  exitcode: 1
+  stack: |-
+    node:internal/assert/utils:77
+        throw err;
+        ^
+    
+    AssertionError [ERR_ASSERTION]: Test should have aborted but instead exited with exit code 0 and signal null
+        at ChildProcess.onExit (/boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/common/index.js:280:5)
+        at ChildProcess.emit (node:events:514:28)
+        at ChildProcess.emit (node:domain:489:12)
+        at ChildProcess._handle.onexit (node:internal/child_process:295:12) {
+      generatedMessage: false,
+      code: 'ERR_ASSERTION',
+      actual: false,
+      expected: true,
+      operator: '==',
+      diff: 'simple'
+    }
+    
+    Node.js v24.21.0
+  ...
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-domain-no-error-handler-abort-on-uncaught-7.js
+not ok 13 parallel/test-domain-no-error-handler-abort-on-uncaught-7
+  ---
+  duration_ms: 409.94600
+  severity: fail
+  exitcode: 1
+  stack: |-
+    node:internal/assert/utils:77
+        throw err;
+        ^
+    
+    AssertionError [ERR_ASSERTION]: Test should have aborted but instead exited with exit code 0 and signal null
+        at ChildProcess.onExit (/boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/common/index.js:280:5)
+        at ChildProcess.emit (node:events:514:28)
+        at ChildProcess.emit (node:domain:489:12)
+        at ChildProcess._handle.onexit (node:internal/child_process:295:12) {
+      generatedMessage: false,
+      code: 'ERR_ASSERTION',
+      actual: false,
+      expected: true,
+      operator: '==',
+      diff: 'simple'
+    }
+    
+    Node.js v24.21.0
+  ...
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-domain-no-error-handler-abort-on-uncaught-8.js
+not ok 14 parallel/test-domain-no-error-handler-abort-on-uncaught-8
+  ---
+  duration_ms: 332.59700
+  severity: fail
+  exitcode: 1
+  stack: |-
+    node:internal/assert/utils:77
+        throw err;
+        ^
+    
+    AssertionError [ERR_ASSERTION]: Test should have aborted but instead exited with exit code 0 and signal null
+        at ChildProcess.onExit (/boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/common/index.js:280:5)
+        at ChildProcess.emit (node:events:514:28)
+        at ChildProcess.emit (node:domain:489:12)
+        at ChildProcess._handle.onexit (node:internal/child_process:295:12) {
+      generatedMessage: false,
+      code: 'ERR_ASSERTION',
+      actual: false,
+      expected: true,
+      operator: '==',
+      diff: 'simple'
+    }
+    
+    Node.js v24.21.0
+  ...
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-domain-no-error-handler-abort-on-uncaught-9.js
+not ok 15 parallel/test-domain-no-error-handler-abort-on-uncaught-9
+  ---
+  duration_ms: 409.93500
+  severity: fail
+  exitcode: 1
+  stack: |-
+    node:internal/assert/utils:77
+        throw err;
+        ^
+    
+    AssertionError [ERR_ASSERTION]: Test should have aborted but instead exited with exit code 0 and signal null
+        at ChildProcess.onExit (/boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/common/index.js:280:5)
+        at ChildProcess.emit (node:events:514:28)
+        at ChildProcess.emit (node:domain:489:12)
+        at ChildProcess._handle.onexit (node:internal/child_process:295:12) {
+      generatedMessage: false,
+      code: 'ERR_ASSERTION',
+      actual: false,
+      expected: true,
+      operator: '==',
+      diff: 'simple'
+    }
+    
+    Node.js v24.21.0
+  ...
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-domain-throw-error-then-throw-from-uncaught-exception-handler.js
+not ok 16 parallel/test-domain-throw-error-then-throw-from-uncaught-exception-handler
+  ---
+  duration_ms: 412.60600
+  severity: fail
+  exitcode: 1
+  stack: |-
+    /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-domain-throw-error-then-throw-from-uncaught-exception-handler.js:76
+        assert.notStrictEqual(err.code, RAN_UNCAUGHT_EXCEPTION_HANDLER_EXIT_CODE,
+                                  ^
+    
+    TypeError: Cannot read properties of null (reading 'code')
+        at onTestDone (/boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-domain-throw-error-then-throw-from-uncaught-exception-handler.js:76:31)
+        at onTestDone (/boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/common/index.js:481:15)
+        at ChildProcess.exithandler (node:child_process:410:7)
+        at ChildProcess.emit (node:events:514:28)
+        at ChildProcess.emit (node:domain:489:12)
+        at maybeClose (node:internal/child_process:1141:16)
+        at Socket.<anonymous> (node:internal/child_process:498:11)
+        at Socket.emit (node:events:514:28)
+        at Socket.emit (node:domain:489:12)
+        at Pipe.<anonymous> (node:net:362:12)
+    
+    Node.js v24.21.0
+  ...
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-domain-with-abort-on-uncaught-exception.js
+not ok 17 parallel/test-domain-with-abort-on-uncaught-exception
+  ---
+  duration_ms: 421.53300
+  severity: fail
+  exitcode: 1
+  stack: |-
+    node:internal/assert/utils:77
+        throw err;
+        ^
+    
+    AssertionError [ERR_ASSERTION]: process should have aborted, but did not
+        at ChildProcess.onChildExited (/boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-domain-with-abort-on-uncaught-exception.js:112:13)
+        at ChildProcess.onChildExited (/boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/common/index.js:481:15)
+        at ChildProcess.emit (node:events:514:28)
+        at ChildProcess._handle.onexit (node:internal/child_process:295:12) {
+      generatedMessage: false,
+      code: 'ERR_ASSERTION',
+      actual: false,
+      expected: true,
+      operator: '==',
+      diff: 'simple'
+    }
+    
+    Node.js v24.21.0
+  ...
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-fs-promises.js
+not ok 18 parallel/test-fs-promises
+  ---
+  duration_ms: 150.56400
+  severity: fail
+  exitcode: 1
+  stack: |-
+    node:internal/process/promises:394
+        triggerUncaughtException(err, true /* fromPromise */);
+        ^
+    
+    AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+    + actual - expected
+    
+    + 'Sun Nov 01 2026 05:55:32 GMT+0000 (GMT+00:00)'
+    - 'Sun Nov 01 2026 05:56:32 GMT+0000 (GMT+00:00)'
+    
+        at doTest (/boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-fs-promises.js:298:14) {
+      generatedMessage: true,
+      code: 'ERR_ASSERTION',
+      actual: 'Sun Nov 01 2026 05:55:32 GMT+0000 (GMT+00:00)',
+      expected: 'Sun Nov 01 2026 05:56:32 GMT+0000 (GMT+00:00)',
+      operator: 'strictEqual',
+      diff: 'simple'
+    }
+    
+    Node.js v24.21.0
+  ...
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-fs-write-sigxfsz.js
+not ok 19 parallel/test-fs-write-sigxfsz
+  ---
+  duration_ms: 138.64900
+  severity: fail
+  exitcode: 1
+  stack: |-
+    /bin/sh: line 1: ulimit: file size: cannot get limit: Invalid Argument
+    
+    node:internal/assert/utils:77
+        throw err;
+        ^
+    
+    AssertionError [ERR_ASSERTION]: The expression evaluated to a falsy value:
+    
+      assert(ok)
+    
+        at Object.<anonymous> (/boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-fs-write-sigxfsz.js:28:3)
+        at Module._compile (node:internal/modules/cjs/loader:1929:14)
+        at Object..js (node:internal/modules/cjs/loader:2060:10)
+        at Module.load (node:internal/modules/cjs/loader:1651:32)
+        at Module._load (node:internal/modules/cjs/loader:1443:12)
+        at wrapModuleLoad (node:internal/modules/cjs/loader:261:19)
+        at Module.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:154:5)
+        at node:internal/main/run_main_module:33:47 {
+      generatedMessage: true,
+      code: 'ERR_ASSERTION',
+      actual: false,
+      expected: true,
+      operator: '==',
+      diff: 'simple'
+    }
+    
+    Node.js v24.21.0
+  ...
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-process-dlopen-error-message-crash.js
+not ok 20 parallel/test-process-dlopen-error-message-crash
+  ---
+  duration_ms: 111.97600
+  severity: fail
+  exitcode: 1
+  stack: |-
+    node:assert:885
+        throw err;
+        ^
+    
+    AssertionError [ERR_ASSERTION]: The input did not match the regular expression /foo-%s\.node/. Input:
+    
+    'No such file or directory'
+    
+        at Object.<anonymous> (/boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-process-dlopen-error-message-crash.js:21:12)
+        at expectedException (node:assert:578:17)
+        at expectsError (node:assert:703:21)
+        at ok.throws (node:assert:759:3)
+        at Object.<anonymous> (/boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-process-dlopen-error-message-crash.js:15:8)
+        at Module._compile (node:internal/modules/cjs/loader:1929:14)
+        at Object..js (node:internal/modules/cjs/loader:2060:10)
+        at Module.load (node:internal/modules/cjs/loader:1651:32)
+        at Module._load (node:internal/modules/cjs/loader:1443:12)
+        at wrapModuleLoad (node:internal/modules/cjs/loader:261:19) {
+      generatedMessage: true,
+      code: 'ERR_ASSERTION',
+      actual: 'No such file or directory',
+      expected: /foo-%s\.node/,
+      operator: 'match',
+      diff: 'simple'
+    }
+    
+    Node.js v24.21.0
+  ...
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-process-external-stdio-close.js
+not ok 21 parallel/test-process-external-stdio-close
+  ---
+  duration_ms: 229.80300
+  severity: fail
+  exitcode: 1
+  stack: |-
+    node:assert:152
+      throw new AssertionError(obj);
+      ^
+    
+    AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+    
+    null !== 0
+    
+        at ChildProcess.<anonymous> (/boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-process-external-stdio-close.js:20:12)
+        at ChildProcess.<anonymous> (/boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/common/index.js:481:15)
+        at ChildProcess.emit (node:events:514:28)
+        at maybeClose (node:internal/child_process:1141:16)
+        at Socket.<anonymous> (node:internal/child_process:498:11)
+        at Socket.emit (node:events:514:28)
+        at Pipe.<anonymous> (node:net:362:12) {
+      generatedMessage: true,
+      code: 'ERR_ASSERTION',
+      actual: null,
+      expected: 0,
+      operator: 'strictEqual',
+      diff: 'simple'
+    }
+    
+    Node.js v24.21.0
+  ...
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-process-external-stdio-close-spawn.js
+not ok 22 parallel/test-process-external-stdio-close-spawn
+  ---
+  duration_ms: 219.79200
+  severity: fail
+  exitcode: 1
+  stack: |-
+    node:assert:152
+      throw new AssertionError(obj);
+      ^
+    
+    AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+    
+    null !== 0
+    
+        at ChildProcess.<anonymous> (/boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-process-external-stdio-close-spawn.js:25:12)
+        at ChildProcess.<anonymous> (/boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/common/index.js:481:15)
+        at ChildProcess.emit (node:events:514:28)
+        at maybeClose (node:internal/child_process:1141:16)
+        at Socket.<anonymous> (node:internal/child_process:498:11)
+        at Socket.emit (node:events:514:28)
+        at Pipe.<anonymous> (node:net:362:12) {
+      generatedMessage: true,
+      code: 'ERR_ASSERTION',
+      actual: null,
+      expected: 0,
+      operator: 'strictEqual',
+      diff: 'simple'
+    }
+    
+    Node.js v24.21.0
+  ...
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-repl-underscore.js
+not ok 23 parallel/test-repl-underscore
+  ---
+  duration_ms: 183.78700
+  severity: fail
+  exitcode: 1
+  stack: |-
+    node:assert:885
+        throw err;
+        ^
+    
+    AssertionError [ERR_ASSERTION]: The input did not match the regular expression /^ {2}errno: -(2|4058),$/. Input:
+    
+    '  errno: -2147459069,'
+    
+        at Immediate.<anonymous> (/boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-repl-underscore.js:189:16)
+        at Immediate._onImmediate (/boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/common/index.js:481:15)
+        at process.processImmediate (node:internal/timers:574:21)
+        at process.topLevelDomainCallback (node:domain:161:15)
+        at process.callbackTrampoline (node:internal/async_hooks:129:24) {
+      generatedMessage: true,
+      code: 'ERR_ASSERTION',
+      actual: '  errno: -2147459069,',
+      expected: /^ {2}errno: -(2|4058),$/,
+      operator: 'match',
+      diff: 'simple'
+    }
+    
+    Node.js v24.21.0
+  ...
+# /boot/system/bin/node --test-reporter=./test/common/test-error-reporter.js --test-reporter-destination=stdout /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-runner-worker-id.js
+ok 24 parallel/test-runner-worker-id
+  ---
+  duration_ms: 1816.19700
+  ...
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-stdout-close-catch.js
+not ok 25 parallel/test-stdout-close-catch
+  ---
+  duration_ms: 264.90000
+  severity: fail
+  exitcode: 1
+  stack: |-
+    <anonymous_script>:1
+    
+    
+    SyntaxError: Unexpected end of JSON input
+        at JSON.parse (<anonymous>)
+        at ChildProcess.<anonymous> (/boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-stdout-close-catch.js:21:17)
+        at ChildProcess.<anonymous> (/boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/common/index.js:481:15)
+        at ChildProcess.emit (node:events:526:24)
+        at maybeClose (node:internal/child_process:1141:16)
+        at Socket.<anonymous> (node:internal/child_process:498:11)
+        at Socket.emit (node:events:514:28)
+        at Pipe.<anonymous> (node:net:362:12)
+    
+    Node.js v24.21.0
+  ...
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-util-exception-with-host-port.js
+not ok 26 parallel/test-util-exception-with-host-port
+  ---
+  duration_ms: 102.53500
+  severity: fail
+  exitcode: 1
+  stack: |-
+    node:util:455
+        throw new ERR_OUT_OF_RANGE('err', 'a negative integer', err);
+        ^
+    
+    [RangeError [ERR_OUT_OF_RANGE]: The value of "err" is out of range. It must be a negative integer. Received 2147459069] {
+      code: 'ERR_OUT_OF_RANGE'
+    }
+    
+    Node.js v24.21.0
+  ...
+# /boot/system/bin/node --expose-internals /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-util-promisify.js
+not ok 27 parallel/test-util-promisify
+  ---
+  duration_ms: 113.46100
+  severity: fail
+  exitcode: 1
+  stack: |-
+    (node:199109) [DEP0174] DeprecationWarning: Calling promisify on a function that returns a Promise is likely a mistake.
+    (Use `node --trace-deprecation ...` to show where the warning was created)
+    (node:199109) [DEP0174] DeprecationWarning: Calling promisify on a function that returns a Promise is likely a mistake.
+    node:internal/process/promises:394
+        triggerUncaughtException(err, true /* fromPromise */);
+        ^
+    
+    AssertionError [ERR_ASSERTION]: Expected values to be strictly deep-equal:
+    + actual - expected
+    
+      Stats {
+    +   atimeMs: 1793512596046.952,
+    -   atimeMs: 1793512596052.151,
+        birthtimeMs: 1793400549504.365,
+        blksize: 65536,
+        blocks: 16,
+        ctimeMs: 1793400549504.365,
+        dev: 3,
+    
+        at /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-util-promisify.js:39:12
+        at /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/common/index.js:481:15 {
+      generatedMessage: true,
+      code: 'ERR_ASSERTION',
+      actual: Stats {
+        dev: 3,
+        mode: 33188,
+        nlink: 1,
+        uid: 0,
+        gid: 0,
+        rdev: 18446744073709552000,
+        blksize: 65536,
+        ino: 5315312,
+        size: 5384,
+        blocks: 16,
+        atimeMs: 1793512596046.952,
+        mtimeMs: 1788826204000,
+        ctimeMs: 1793400549504.365,
+        birthtimeMs: 1793400549504.365
+      },
+      expected: Stats {
+        dev: 3,
+        mode: 33188,
+        nlink: 1,
+        uid: 0,
+        gid: 0,
+        rdev: 18446744073709552000,
+        blksize: 65536,
+        ino: 5315312,
+        size: 5384,
+        blocks: 16,
+        atimeMs: 1793512596052.151,
+        mtimeMs: 1788826204000,
+        ctimeMs: 1793400549504.365,
+        birthtimeMs: 1793400549504.365
+      },
+      operator: 'deepStrictEqual',
+      diff: 'simple'
+    }
+    
+    Node.js v24.21.0
+  ...
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-worker-init-failure.js
+not ok 28 parallel/test-worker-init-failure
+  ---
+  duration_ms: 138.82100
+  severity: fail
+  exitcode: 1
+  stack: |-
+    child stdout: 
+    
+    child stderr: /bin/sh: line 1: ulimit: open files: cannot modify limit: Operation not allowed
+    
+    
+    node:assert:152
+      throw new AssertionError(obj);
+      ^
+    
+    AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+    
+    1 !== 0
+    
+        at ChildProcess.<anonymous> (/boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-worker-init-failure.js:67:12)
+        at ChildProcess.<anonymous> (/boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/common/index.js:481:15)
+        at ChildProcess.emit (node:events:514:28)
+        at ChildProcess._handle.onexit (node:internal/child_process:295:12) {
+      generatedMessage: true,
+      code: 'ERR_ASSERTION',
+      actual: 1,
+      expected: 0,
+      operator: 'strictEqual',
+      diff: 'simple'
+    }
+    
+    Node.js v24.21.0
+  ...
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-worker-memory.js
+not ok 29 parallel/test-worker-memory
+  ---
+  duration_ms: 1811.19800
+  severity: fail
+  exitcode: 1
+  stack: |-
+    run() called with n=3.75 (numWorkers=16)
+    run() called with n=3.75 (numWorkers=16)
+    run() called with n=3.75 (numWorkers=16)
+    run() called with n=3.75 (numWorkers=16)
+    run() called with n=3.75 (numWorkers=16)
+    run() called with n=3.75 (numWorkers=16)
+    run() called with n=3.75 (numWorkers=16)
+    run() called with n=3.75 (numWorkers=16)
+    run() called with n=3.75 (numWorkers=16)
+    run() called with n=3.75 (numWorkers=16)
+    run() called with n=3.75 (numWorkers=16)
+    run() called with n=3.75 (numWorkers=16)
+    run() called with n=3.75 (numWorkers=16)
+    run() called with n=3.75 (numWorkers=16)
+    run() called with n=3.75 (numWorkers=16)
+    run() called with n=3.75 (numWorkers=16)
+    run() called with n=2.75 (numWorkers=16)
+    run() called with n=2.75 (numWorkers=16)
+    run() called with n=2.75 (numWorkers=16)
+    run() called with n=2.75 (numWorkers=16)
+    run() called with n=2.75 (numWorkers=16)
+    run() called with n=2.75 (numWorkers=16)
+    run() called with n=2.75 (numWorkers=16)
+    run() called with n=2.75 (numWorkers=16)
+    run() called with n=2.75 (numWorkers=16)
+    run() called with n=2.75 (numWorkers=16)
+    run() called with n=2.75 (numWorkers=16)
+    run() called with n=2.75 (numWorkers=16)
+    run() called with n=2.75 (numWorkers=16)
+    run() called with n=2.75 (numWorkers=16)
+    run() called with n=2.75 (numWorkers=16)
+    run() called with n=2.75 (numWorkers=16)
+    run() called with n=1.75 (numWorkers=16)
+    run() called with n=1.75 (numWorkers=16)
+    run() called with n=1.75 (numWorkers=16)
+    run() called with n=1.75 (numWorkers=16)
+    run() called with n=1.75 (numWorkers=16)
+    run() called with n=1.75 (numWorkers=16)
+    run() called with n=1.75 (numWorkers=16)
+    run() called with n=1.75 (numWorkers=16)
+    run() called with n=0.75 (numWorkers=16)
+    run() called with n=1.75 (numWorkers=16)
+    run() called with n=1.75 (numWorkers=16)
+    run() called with n=1.75 (numWorkers=16)
+    run() called with n=1.75 (numWorkers=16)
+    run() called with n=1.75 (numWorkers=16)
+    run() called with n=1.75 (numWorkers=16)
+    run() called with n=0.75 (numWorkers=16)
+    run() called with n=1.75 (numWorkers=16)
+    run() called with n=1.75 (numWorkers=16)
+    run() called with n=0.75 (numWorkers=16)
+    run() called with n=0.75 (numWorkers=16)
+    run() called with n=0.75 (numWorkers=16)
+    run() called with n=0.75 (numWorkers=16)
+    run() called with n=0.75 (numWorkers=16)
+    run() called with n=0.75 (numWorkers=16)
+    run() called with n=0.75 (numWorkers=16)
+    run() called with n=0.75 (numWorkers=16)
+    run() called with n=0.75 (numWorkers=16)
+    run() called with n=0.75 (numWorkers=16)
+    run() called with n=-0.25 (numWorkers=16)
+    done() called (finished=0)
+    run() called with n=0.75 (numWorkers=16)
+    run() called with n=-0.25 (numWorkers=16)
+    done() called (finished=1)
+    run() called with n=0.75 (numWorkers=16)
+    run() called with n=0.75 (numWorkers=16)
+    run() called with n=0.75 (numWorkers=16)
+    run() called with n=-0.25 (numWorkers=16)
+    done() called (finished=2)
+    run() called with n=-0.25 (numWorkers=16)
+    done() called (finished=3)
+    run() called with n=-0.25 (numWorkers=16)
+    done() called (finished=4)
+    run() called with n=-0.25 (numWorkers=16)
+    done() called (finished=5)
+    run() called with n=-0.25 (numWorkers=16)
+    done() called (finished=6)
+    run() called with n=-0.25 (numWorkers=16)
+    done() called (finished=7)
+    run() called with n=-0.25 (numWorkers=16)
+    done() called (finished=8)
+    run() called with n=-0.25 (numWorkers=16)
+    done() called (finished=9)
+    run() called with n=-0.25 (numWorkers=16)
+    done() called (finished=10)
+    run() called with n=-0.25 (numWorkers=16)
+    done() called (finished=11)
+    run() called with n=-0.25 (numWorkers=16)
+    done() called (finished=12)
+    run() called with n=-0.25 (numWorkers=16)
+    done() called (finished=13)
+    run() called with n=-0.25 (numWorkers=16)
+    done() called (finished=14)
+    run() called with n=-0.25 (numWorkers=16)
+    done() called (finished=15)
+    node:internal/assert/utils:77
+        throw err;
+        ^
+    
+    AssertionError [ERR_ASSERTION]: Unexpected memory overhead: [
+      {
+        rss: 15085568,
+        heapTotal: 7921664,
+        heapUsed: 5522520,
+        external: 2599131,
+        arrayBuffers: 143651
+      },
+      {
+        rss: 138362880,
+        heapTotal: 11853824,
+        heapUsed: 6944136,
+        external: 2599171,
+        arrayBuffers: 143651
+      }
+    ]
+        at /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-worker-memory.js:46:14
+        at /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/common/index.js:481:15
+        at run (/boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-worker-memory.js:23:12)
+        at Worker.<anonymous> (/boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-worker-memory.js:31:5)
+        at Worker.<anonymous> (/boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/common/index.js:481:15)
+        at Worker.emit (node:events:514:28)
+        at [kOnExit] (node:internal/worker:400:10)
+        at Worker.<computed>.onexit (node:internal/worker:295:20) {
+      generatedMessage: false,
+      code: 'ERR_ASSERTION',
+      actual: false,
+      expected: true,
+      operator: '==',
+      diff: 'simple'
+    }
+    
+    Node.js v24.21.0
+  ...
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/sequential/test-child-process-emfile.js
+not ok 30 sequential/test-child-process-emfile
+  ---
+  duration_ms: 138.29500
+  severity: fail
+  exitcode: 1
+  stack: |-
+    node:assert:152
+      throw new AssertionError(obj);
+      ^
+    
+    AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+    + actual - expected
+    
+    + '/bin/sh: line 1: ulimit: open files: cannot modify limit: Operation not allowed\n'
+    - ''
+    
+        at Object.<anonymous> (/boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/sequential/test-child-process-emfile.js:43:10)
+        at Module._compile (node:internal/modules/cjs/loader:1929:14)
+        at Object..js (node:internal/modules/cjs/loader:2060:10)
+        at Module.load (node:internal/modules/cjs/loader:1651:32)
+        at Module._load (node:internal/modules/cjs/loader:1443:12)
+        at wrapModuleLoad (node:internal/modules/cjs/loader:261:19)
+        at Module.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:154:5)
+        at node:internal/main/run_main_module:33:47 {
+      generatedMessage: true,
+      code: 'ERR_ASSERTION',
+      actual: '/bin/sh: line 1: ulimit: open files: cannot modify limit: Operation not allowed\n',
+      expected: '',
+      operator: 'strictEqual',
+      diff: 'simple'
+    }
+    
+    Node.js v24.21.0
+  ...
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/sequential/test-module-loading.js
+not ok 31 sequential/test-module-loading
+  ---
+  duration_ms: 118.74900
+  severity: fail
+  exitcode: 1
+  stack: |-
+    b/c.js exit
+    load test-module-loading.js
+    load fixtures/b/d.js
+    load package/index.js
+    load fixtures/b/c.js
+    load fixtures/a.js
+    test index.js modules ids and relative loading
+    test index.js in a folder with a trailing slash
+    test cycles containing a .. path
+    test node_modules folders
+    /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/fixtures/node_modules/foo.js
+    /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/fixtures/node_modules
+    /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/node_modules
+    /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/node_modules
+    /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node_modules
+    /boot/home/haikuports/net-libs/nodejs/work-24.21.0/node_modules
+    /boot/home/haikuports/net-libs/nodejs/node_modules
+    /boot/home/haikuports/net-libs/node_modules
+    /boot/home/haikuports/node_modules
+    /boot/home/node_modules
+    /boot/node_modules
+    /node_modules
+    
+    /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/fixtures/node_modules/baz/index.js
+    /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/fixtures/node_modules/baz/node_modules
+    /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/fixtures/node_modules
+    /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/node_modules
+    /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/node_modules
+    /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node_modules
+    /boot/home/haikuports/net-libs/nodejs/work-24.21.0/node_modules
+    /boot/home/haikuports/net-libs/nodejs/node_modules
+    /boot/home/haikuports/net-libs/node_modules
+    /boot/home/haikuports/node_modules
+    /boot/home/node_modules
+    /boot/node_modules
+    /node_modules
+    
+    /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/fixtures/node_modules/bar.js
+    /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/fixtures/node_modules
+    /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/node_modules
+    /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/node_modules
+    /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node_modules
+    /boot/home/haikuports/net-libs/nodejs/work-24.21.0/node_modules
+    /boot/home/haikuports/net-libs/nodejs/node_modules
+    /boot/home/haikuports/net-libs/node_modules
+    /boot/home/haikuports/node_modules
+    /boot/home/node_modules
+    /boot/node_modules
+    /node_modules
+    
+    /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/fixtures/node_modules/baz/node_modules/asdf.js
+    /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/fixtures/node_modules/baz/node_modules
+    /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/fixtures/node_modules
+    /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/node_modules
+    /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/node_modules
+    /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node_modules
+    /boot/home/haikuports/net-libs/nodejs/work-24.21.0/node_modules
+    /boot/home/haikuports/net-libs/nodejs/node_modules
+    /boot/home/haikuports/net-libs/node_modules
+    /boot/home/haikuports/node_modules
+    /boot/home/node_modules
+    /boot/node_modules
+    /node_modules
+    
+    test name clashes
+    load custom file types with extensions
+    load custom file types that return non-strings
+    load order
+    node:assert:885
+        throw err;
+        ^
+    
+    AssertionError [ERR_ASSERTION]: The input did not match the regular expression /file3\.node/. Input:
+    
+    'Not an executable'
+    
+        at Object.<anonymous> (/boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/sequential/test-module-loading.js:219:16)
+        at expectedException (node:assert:578:17)
+        at expectsError (node:assert:703:21)
+        at ok.throws (node:assert:759:3)
+        at Object.<anonymous> (/boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/sequential/test-module-loading.js:212:10)
+        at Module._compile (node:internal/modules/cjs/loader:1929:14)
+        at Object.<anonymous> (node:internal/modules/cjs/loader:2060:10)
+        at Module.load (node:internal/modules/cjs/loader:1651:32)
+        at Module._load (node:internal/modules/cjs/loader:1443:12)
+        at wrapModuleLoad (node:internal/modules/cjs/loader:261:19) {
+      generatedMessage: true,
+      code: 'ERR_ASSERTION',
+      actual: 'Not an executable',
+      expected: /file3\.node/,
+      operator: 'match',
+      diff: 'simple'
+    }
+    
+    Node.js v24.21.0
+  ...
+
+Failed tests:
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-child-process-exec-env.js
+/boot/system/bin/node --expose-internals /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-cli-node-print-help.js
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-cluster-worker-kill-signal.js
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-crypto-no-algorithm.js
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-cwd-enoent-improved-message.js
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-domain-no-error-handler-abort-on-uncaught-0.js
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-domain-no-error-handler-abort-on-uncaught-1.js
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-domain-no-error-handler-abort-on-uncaught-2.js
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-domain-no-error-handler-abort-on-uncaught-3.js
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-domain-no-error-handler-abort-on-uncaught-4.js
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-domain-no-error-handler-abort-on-uncaught-5.js
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-domain-no-error-handler-abort-on-uncaught-6.js
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-domain-no-error-handler-abort-on-uncaught-7.js
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-domain-no-error-handler-abort-on-uncaught-8.js
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-domain-no-error-handler-abort-on-uncaught-9.js
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-domain-throw-error-then-throw-from-uncaught-exception-handler.js
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-domain-with-abort-on-uncaught-exception.js
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-fs-promises.js
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-fs-write-sigxfsz.js
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-process-dlopen-error-message-crash.js
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-process-external-stdio-close.js
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-process-external-stdio-close-spawn.js
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-repl-underscore.js
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-stdout-close-catch.js
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-util-exception-with-host-port.js
+/boot/system/bin/node --expose-internals /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-util-promisify.js
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-worker-init-failure.js
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-worker-memory.js
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/sequential/test-child-process-emfile.js
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/sequential/test-module-loading.js

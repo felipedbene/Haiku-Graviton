@@ -1,0 +1,652 @@
+# evidence: f3-test-sources
+# instance: i-0e7bed4928e0f7bf7   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261101T055705Z   end: 20261101T055726Z   rc: 0
+# script sha256: 26a6e60ecff287f36002bb4a04cdc53ade8871bbacec20f579315feb03ab2658
+# ---- script ----
+# | cd /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0 || exit 1
+# | for t in process-euid-egid process-umask-mask os-process-priority setproctitle process-title-cli; do echo "=== test/parallel/test-$t.js"; cat -n test/parallel/test-$t.js; done
+# | echo "=== sequential/test-process-title.js"; cat -n test/sequential/test-process-title.js
+# | echo "=== worker-node-options"; cat -n test/parallel/test-worker-node-options.js
+# | echo "=== tls-enable-keylog-cli"; cat -n test/parallel/test-tls-enable-keylog-cli.js
+# | echo "=== trace-events-metadata"; cat -n test/parallel/test-trace-events-metadata.js
+# | echo "=== inspector-contexts grep"; grep -n -B3 -A3 "process.title\|\[\${process.pid}\]\|pid}\]" test/parallel/test-inspector-contexts.js
+# | echo "=== test-os grep"; grep -n -B4 -A4 "10)\|, 10\|priority\|homedir\|machine\|userInfo" test/parallel/test-os.js | head -120
+# | echo "=== uv process title (haiku)"; ls deps/uv/src/unix/ | grep -i -E "haiku|proctitle|no-proctitle"; grep -n -i "haiku\|proctitle" deps/uv/uv.gyp node.gyp 2>/dev/null | head -30
+# | grep -rn "uv_set_process_title\|uv_get_process_title" deps/uv/src/unix/*.c | head
+# ---- raw output ----
+=== test/parallel/test-process-euid-egid.js
+     1	'use strict';
+     2	
+     3	const common = require('../common');
+     4	const assert = require('assert');
+     5	
+     6	const { isMainThread } = require('worker_threads');
+     7	
+     8	if (common.isWindows) {
+     9	  assert.strictEqual(process.geteuid, undefined);
+    10	  assert.strictEqual(process.getegid, undefined);
+    11	  assert.strictEqual(process.seteuid, undefined);
+    12	  assert.strictEqual(process.setegid, undefined);
+    13	  return;
+    14	}
+    15	
+    16	if (!isMainThread) {
+    17	  return;
+    18	}
+    19	
+    20	assert.throws(() => {
+    21	  process.seteuid({});
+    22	}, {
+    23	  code: 'ERR_INVALID_ARG_TYPE',
+    24	  message: 'The "id" argument must be one of type number or string. ' +
+    25	    'Received an instance of Object'
+    26	});
+    27	
+    28	assert.throws(() => {
+    29	  process.seteuid('fhqwhgadshgnsdhjsdbkhsdabkfabkveyb');
+    30	}, {
+    31	  code: 'ERR_UNKNOWN_CREDENTIAL',
+    32	  message: 'User identifier does not exist: fhqwhgadshgnsdhjsdbkhsdabkfabkveyb'
+    33	});
+    34	
+    35	// IBMi does not support below operations.
+    36	if (common.isIBMi)
+    37	  return;
+    38	
+    39	// If we're not running as super user...
+    40	if (process.getuid() !== 0) {
+    41	  // Should not throw.
+    42	  process.getegid();
+    43	  process.geteuid();
+    44	
+    45	  assert.throws(() => {
+    46	    process.setegid('nobody');
+    47	  }, /(?:EPERM, .+|Group identifier does not exist: nobody)$/);
+    48	
+    49	  assert.throws(() => {
+    50	    process.seteuid('nobody');
+    51	  }, /^Error: (?:EPERM, .+|User identifier does not exist: nobody)$/);
+    52	
+    53	  return;
+    54	}
+    55	
+    56	// If we are running as super user...
+    57	const oldgid = process.getegid();
+    58	try {
+    59	  process.setegid('nobody');
+    60	} catch (err) {
+    61	  if (err.message !== 'Group identifier does not exist: nobody') {
+    62	    throw err;
+    63	  } else {
+    64	    process.setegid('nogroup');
+    65	  }
+    66	}
+    67	const newgid = process.getegid();
+    68	assert.notStrictEqual(newgid, oldgid);
+    69	
+    70	const olduid = process.geteuid();
+    71	process.seteuid('nobody');
+    72	const newuid = process.geteuid();
+    73	assert.notStrictEqual(newuid, olduid);
+=== test/parallel/test-process-umask-mask.js
+     1	'use strict';
+     2	
+     3	// This tests that the lower bits of mode > 0o777 still works in
+     4	// process.umask()
+     5	
+     6	const common = require('../common');
+     7	const assert = require('assert');
+     8	const { isMainThread } = require('worker_threads');
+     9	
+    10	if (!isMainThread)
+    11	  common.skip('Setting process.umask is not supported in Workers');
+    12	
+    13	let mask;
+    14	
+    15	if (common.isWindows) {
+    16	  mask = 0o600;
+    17	} else {
+    18	  mask = 0o664;
+    19	}
+    20	
+    21	const maskToIgnore = 0o10000;
+    22	
+    23	const old = process.umask();
+    24	
+    25	function test(input, output) {
+    26	  process.umask(input);
+    27	  assert.strictEqual(process.umask(), output);
+    28	
+    29	  process.umask(old);
+    30	}
+    31	
+    32	test(mask | maskToIgnore, mask);
+    33	test((mask | maskToIgnore).toString(8), mask);
+=== test/parallel/test-os-process-priority.js
+     1	'use strict';
+     2	const common = require('../common');
+     3	// IBMi process priority is different.
+     4	if (common.isIBMi)
+     5	  common.skip('IBMi has a different process priority');
+     6	
+     7	const assert = require('assert');
+     8	const os = require('os');
+     9	const {
+    10	  PRIORITY_LOW,
+    11	  PRIORITY_BELOW_NORMAL,
+    12	  PRIORITY_NORMAL,
+    13	  PRIORITY_ABOVE_NORMAL,
+    14	  PRIORITY_HIGH,
+    15	  PRIORITY_HIGHEST
+    16	} = os.constants.priority;
+    17	
+    18	// Validate priority constants.
+    19	assert.strictEqual(typeof PRIORITY_LOW, 'number');
+    20	assert.strictEqual(typeof PRIORITY_BELOW_NORMAL, 'number');
+    21	assert.strictEqual(typeof PRIORITY_NORMAL, 'number');
+    22	assert.strictEqual(typeof PRIORITY_ABOVE_NORMAL, 'number');
+    23	assert.strictEqual(typeof PRIORITY_HIGH, 'number');
+    24	assert.strictEqual(typeof PRIORITY_HIGHEST, 'number');
+    25	
+    26	// Test pid type validation.
+    27	[null, true, false, 'foo', {}, [], /x/].forEach((pid) => {
+    28	  const errObj = {
+    29	    code: 'ERR_INVALID_ARG_TYPE',
+    30	    message: /The "pid" argument must be of type number\./
+    31	  };
+    32	
+    33	  assert.throws(() => {
+    34	    os.setPriority(pid, PRIORITY_NORMAL);
+    35	  }, errObj);
+    36	
+    37	  assert.throws(() => {
+    38	    os.getPriority(pid);
+    39	  }, errObj);
+    40	});
+    41	
+    42	// Test pid range validation.
+    43	[NaN, Infinity, -Infinity, 3.14, 2 ** 32].forEach((pid) => {
+    44	  const errObj = {
+    45	    code: 'ERR_OUT_OF_RANGE',
+    46	    message: /The value of "pid" is out of range\./
+    47	  };
+    48	
+    49	  assert.throws(() => {
+    50	    os.setPriority(pid, PRIORITY_NORMAL);
+    51	  }, errObj);
+    52	
+    53	  assert.throws(() => {
+    54	    os.getPriority(pid);
+    55	  }, errObj);
+    56	});
+    57	
+    58	// Test priority type validation.
+    59	[null, true, false, 'foo', {}, [], /x/].forEach((priority) => {
+    60	  assert.throws(() => {
+    61	    os.setPriority(0, priority);
+    62	  }, {
+    63	    code: 'ERR_INVALID_ARG_TYPE',
+    64	    message: /The "priority" argument must be of type number\./
+    65	  });
+    66	});
+    67	
+    68	// Test priority range validation.
+    69	[
+    70	  NaN,
+    71	  Infinity,
+    72	  -Infinity,
+    73	  3.14,
+    74	  2 ** 32,
+    75	  PRIORITY_HIGHEST - 1,
+    76	  PRIORITY_LOW + 1,
+    77	].forEach((priority) => {
+    78	  assert.throws(() => {
+    79	    os.setPriority(0, priority);
+    80	  }, {
+    81	    code: 'ERR_OUT_OF_RANGE',
+    82	    message: /The value of "priority" is out of range\./
+    83	  });
+    84	});
+    85	
+    86	// Verify that valid values work.
+    87	for (let i = PRIORITY_HIGHEST; i <= PRIORITY_LOW; i++) {
+    88	  // A pid of 0 corresponds to the current process.
+    89	  try {
+    90	    os.setPriority(0, i);
+    91	  } catch (err) {
+    92	    // The current user might not have sufficient permissions to set this
+    93	    // specific priority level. Skip this priority, but keep trying lower
+    94	    // priorities.
+    95	    if (err.info.code === 'EACCES')
+    96	      continue;
+    97	
+    98	    assert(err);
+    99	  }
+   100	
+   101	  checkPriority(0, i);
+   102	
+   103	  // An undefined pid corresponds to the current process.
+   104	  os.setPriority(i);
+   105	  checkPriority(undefined, i);
+   106	
+   107	  // Specifying the actual pid works.
+   108	  os.setPriority(process.pid, i);
+   109	  checkPriority(process.pid, i);
+   110	}
+   111	
+   112	{
+   113	  assert.throws(() => { os.getPriority(-1); }, {
+   114	    code: 'ERR_SYSTEM_ERROR',
+   115	    message: /A system error occurred: uv_os_getpriority returned /,
+   116	    name: 'SystemError'
+   117	  });
+   118	}
+   119	
+   120	
+   121	function checkPriority(pid, expected) {
+   122	  const priority = os.getPriority(pid);
+   123	
+   124	  // Verify that the priority values match on Unix, and are range mapped on
+   125	  // Windows.
+   126	  if (!common.isWindows) {
+   127	    assert.strictEqual(priority, expected);
+   128	    return;
+   129	  }
+   130	
+   131	  // On Windows setting PRIORITY_HIGHEST will only work for elevated user,
+   132	  // for others it will be silently reduced to PRIORITY_HIGH
+   133	  if (expected < PRIORITY_HIGH)
+   134	    assert.ok(priority === PRIORITY_HIGHEST || priority === PRIORITY_HIGH);
+   135	  else if (expected < PRIORITY_ABOVE_NORMAL)
+   136	    assert.strictEqual(priority, PRIORITY_HIGH);
+   137	  else if (expected < PRIORITY_NORMAL)
+   138	    assert.strictEqual(priority, PRIORITY_ABOVE_NORMAL);
+   139	  else if (expected < PRIORITY_BELOW_NORMAL)
+   140	    assert.strictEqual(priority, PRIORITY_NORMAL);
+   141	  else if (expected < PRIORITY_LOW)
+   142	    assert.strictEqual(priority, PRIORITY_BELOW_NORMAL);
+   143	  else
+   144	    assert.strictEqual(priority, PRIORITY_LOW);
+   145	}
+=== test/parallel/test-setproctitle.js
+     1	'use strict';
+     2	// Original test written by Jakub Lekstan <kuebzky@gmail.com>
+     3	const common = require('../common');
+     4	const { isMainThread } = require('worker_threads');
+     5	
+     6	// FIXME add sunos support
+     7	if (common.isSunOS || common.isIBMi || common.isWindows) {
+     8	  common.skip(`Unsupported platform [${process.platform}]`);
+     9	}
+    10	
+    11	if (!isMainThread) {
+    12	  common.skip('Setting the process title from Workers is not supported');
+    13	}
+    14	
+    15	const assert = require('assert');
+    16	const { exec, execSync } = require('child_process');
+    17	const path = require('path');
+    18	
+    19	// The title shouldn't be too long; libuv's uv_set_process_title() out of
+    20	// security considerations no longer overwrites envp, only argv, so the
+    21	// maximum title length is possibly quite short.
+    22	let title = String(process.pid);
+    23	
+    24	assert.notStrictEqual(process.title, title);
+    25	process.title = title;
+    26	assert.strictEqual(process.title, title);
+    27	
+    28	try {
+    29	  execSync('command -v ps');
+    30	} catch (err) {
+    31	  if (err.status === 1 || err.status === 127) {
+    32	    common.skip('The "ps" utility is not available');
+    33	  }
+    34	  throw err;
+    35	}
+    36	
+    37	// To pass this test on alpine, since Busybox `ps` does not
+    38	// support `-p` switch, use `ps -o` and `grep` instead.
+    39	const cmd = common.isLinux ?
+    40	  `ps -o pid,args | grep '${process.pid} ${title}' | grep -v grep` :
+    41	  `ps -p ${process.pid} -o args=`;
+    42	
+    43	exec(cmd, common.mustSucceed((stdout, stderr) => {
+    44	  assert.strictEqual(stderr, '');
+    45	
+    46	  // Freebsd always add ' (procname)' to the process title
+    47	  if (common.isFreeBSD || common.isOpenBSD)
+    48	    title += ` (${path.basename(process.execPath)})`;
+    49	
+    50	  // Omitting trailing whitespace and \n
+    51	  assert.ok(stdout.trimEnd().endsWith(title));
+    52	}));
+=== test/parallel/test-process-title-cli.js
+     1	// Flags: --title=foo
+     2	'use strict';
+     3	
+     4	const common = require('../common');
+     5	
+     6	if (common.isSunOS)
+     7	  common.skip(`Unsupported platform [${process.platform}]`);
+     8	
+     9	if (common.isIBMi)
+    10	  common.skip('Unsupported platform IBMi');
+    11	
+    12	const assert = require('assert');
+    13	
+    14	// Verifies that the --title=foo command line flag set the process
+    15	// title on startup.
+    16	assert.strictEqual(process.title, 'foo');
+=== sequential/test-process-title.js
+     1	'use strict';
+     2	const common = require('../common');
+     3	const { spawnSync } = require('child_process');
+     4	const assert = require('assert');
+     5	
+     6	// FIXME add sunos support
+     7	if (common.isSunOS)
+     8	  common.skip(`Unsupported platform [${process.platform}]`);
+     9	// FIXME add IBMi support
+    10	if (common.isIBMi)
+    11	  common.skip('Unsupported platform IBMi');
+    12	
+    13	// Explicitly assigning to process.title before starting the child process
+    14	// is necessary otherwise *its* process.title is whatever the last
+    15	// SetConsoleTitle() call in our process tree set it to.
+    16	// Can be removed when https://github.com/libuv/libuv/issues/2667 is fixed.
+    17	if (common.isWindows)
+    18	  process.title = process.execPath;
+    19	
+    20	const xs = 'x'.repeat(1024);
+    21	const proc = spawnSync(process.execPath, ['-p', 'process.title', xs]);
+    22	assert.strictEqual(proc.stdout.toString().trim(), process.execPath);
+=== worker-node-options
+     1	'use strict';
+     2	
+     3	const common = require('../common');
+     4	const {
+     5	  spawnSyncAndExitWithoutError,
+     6	  spawnSyncAndAssert,
+     7	} = require('../common/child_process');
+     8	
+     9	if (process.config.variables.node_without_node_options) {
+    10	  common.skip('missing NODE_OPTIONS support');
+    11	}
+    12	
+    13	const fixtures = require('../common/fixtures');
+    14	spawnSyncAndExitWithoutError(
+    15	  process.execPath,
+    16	  [
+    17	    fixtures.path('spawn-worker-with-copied-env'),
+    18	  ],
+    19	  {
+    20	    env: {
+    21	      ...process.env,
+    22	      NODE_OPTIONS: '--title=foo'
+    23	    }
+    24	  }
+    25	);
+    26	
+    27	spawnSyncAndAssert(
+    28	  process.execPath,
+    29	  [
+    30	    fixtures.path('spawn-worker-with-trace-exit'),
+    31	  ],
+    32	  {
+    33	    env: {
+    34	      ...process.env,
+    35	    }
+    36	  },
+    37	  {
+    38	    stderr: /spawn-worker-with-trace-exit\.js:17/
+    39	  }
+    40	);
+=== tls-enable-keylog-cli
+     1	'use strict';
+     2	const common = require('../common');
+     3	if (!common.hasCrypto) common.skip('missing crypto');
+     4	const fixtures = require('../common/fixtures');
+     5	
+     6	// Test --tls-keylog CLI flag.
+     7	
+     8	const assert = require('assert');
+     9	const fs = require('fs');
+    10	const { fork } = require('child_process');
+    11	
+    12	if (process.argv[2] === 'test')
+    13	  return test();
+    14	
+    15	const tmpdir = require('../common/tmpdir');
+    16	tmpdir.refresh();
+    17	const file = tmpdir.resolve('keylog.log');
+    18	
+    19	const child = fork(__filename, ['test'], {
+    20	  execArgv: ['--tls-keylog=' + file]
+    21	});
+    22	
+    23	child.on('close', common.mustCall((code, signal) => {
+    24	  assert.strictEqual(code, 0);
+    25	  assert.strictEqual(signal, null);
+    26	  const log = fs.readFileSync(file, 'utf8').trim().split('\n');
+    27	  // Both client and server should log their secrets,
+    28	  // so we should have two identical lines in the log
+    29	  assert.strictEqual(log.length, 2);
+    30	  assert.strictEqual(log[0], log[1]);
+    31	}));
+    32	
+    33	function test() {
+    34	  const {
+    35	    connect, keys
+    36	  } = require(fixtures.path('tls-connect'));
+    37	
+    38	  connect({
+    39	    client: {
+    40	      checkServerIdentity: (servername, cert) => { },
+    41	      ca: `${keys.agent1.cert}\n${keys.agent6.ca}`,
+    42	    },
+    43	    server: {
+    44	      cert: keys.agent6.cert,
+    45	      key: keys.agent6.key,
+    46	      // Number of keylog events is dependent on protocol version
+    47	      maxVersion: 'TLSv1.2',
+    48	    },
+    49	  }, common.mustCall((err, pair, cleanup) => {
+    50	    if (pair.server.err) {
+    51	      console.trace('server', pair.server.err);
+    52	    }
+    53	    if (pair.client.err) {
+    54	      console.trace('client', pair.client.err);
+    55	    }
+    56	    assert.ifError(pair.server.err);
+    57	    assert.ifError(pair.client.err);
+    58	
+    59	    return cleanup();
+    60	  }));
+    61	}
+=== trace-events-metadata
+     1	'use strict';
+     2	const common = require('../common');
+     3	const assert = require('assert');
+     4	const cp = require('child_process');
+     5	const fs = require('fs');
+     6	
+     7	const CODE =
+     8	  'setTimeout(() => { for (let i = 0; i < 100000; i++) { "test" + i } }, 1);' +
+     9	  'process.title = "foo"';
+    10	
+    11	const tmpdir = require('../common/tmpdir');
+    12	tmpdir.refresh();
+    13	const FILE_NAME = tmpdir.resolve('node_trace.1.log');
+    14	
+    15	const proc = cp.spawn(process.execPath,
+    16	                      [ '--trace-event-categories', 'node.perf.usertiming',
+    17	                        '--title=bar',
+    18	                        '-e', CODE ],
+    19	                      { cwd: tmpdir.path });
+    20	proc.once('exit', common.mustCall(() => {
+    21	  assert(fs.existsSync(FILE_NAME));
+    22	  fs.readFile(FILE_NAME, common.mustCall((err, data) => {
+    23	    const traces = JSON.parse(data.toString()).traceEvents
+    24	      .filter((trace) => trace.cat === '__metadata');
+    25	    assert(traces.length > 0);
+    26	    assert(traces.some((trace) =>
+    27	      trace.name === 'thread_name' &&
+    28	        trace.args.name === 'JavaScriptMainThread'));
+    29	    assert(traces.some((trace) =>
+    30	      trace.name === 'thread_name' &&
+    31	        trace.args.name === 'PlatformWorkerThread'));
+    32	    assert(traces.some((trace) =>
+    33	      trace.name === 'version' &&
+    34	        trace.args.node === process.versions.node));
+    35	
+    36	    assert(traces.some((trace) =>
+    37	      trace.name === 'node' &&
+    38	        trace.args.process.versions.http_parser ===
+    39	          process.versions.http_parser &&
+    40	        trace.args.process.versions.llhttp ===
+    41	          process.versions.llhttp &&
+    42	        trace.args.process.versions.node ===
+    43	          process.versions.node &&
+    44	        trace.args.process.versions.v8 ===
+    45	          process.versions.v8 &&
+    46	        trace.args.process.versions.uv ===
+    47	          process.versions.uv &&
+    48	        trace.args.process.versions.zlib ===
+    49	          process.versions.zlib &&
+    50	        trace.args.process.versions.ares ===
+    51	          process.versions.ares &&
+    52	        trace.args.process.versions.modules ===
+    53	          process.versions.modules &&
+    54	        trace.args.process.versions.nghttp2 ===
+    55	          process.versions.nghttp2 &&
+    56	        trace.args.process.versions.napi ===
+    57	          process.versions.napi &&
+    58	        trace.args.process.versions.openssl ===
+    59	          process.versions.openssl &&
+    60	        trace.args.process.arch === process.arch &&
+    61	        trace.args.process.platform === process.platform &&
+    62	        trace.args.process.release.name === process.release.name &&
+    63	        (!process.release.lts ||
+    64	          trace.args.process.release.lts === process.release.lts)));
+    65	
+    66	    if (!common.isSunOS && !common.isIBMi) {
+    67	      // Changing process.title is currently unsupported on SunOS/SmartOS
+    68	      // and IBMi
+    69	      assert(traces.some((trace) =>
+    70	        trace.name === 'process_name' && trace.args.name === 'foo'));
+    71	      assert(traces.some((trace) =>
+    72	        trace.name === 'process_name' && trace.args.name === 'bar'));
+    73	    }
+    74	  }));
+    75	}));
+=== inspector-contexts grep
+28-    const contextCreated = await mainContextPromise;
+29-    const { name, origin, auxData } = contextCreated.params.context;
+30-    if (common.isSunOS || common.isWindows || common.isIBMi) {
+31:      // uv_get_process_title() is unimplemented on Solaris-likes and IBMi,
+32-      // it returns an empty string.  On the Windows CI buildbots it returns
+33-      // "Administrator: Windows PowerShell[42]" because of a GetConsoleTitle()
+34-      // quirk. Not much we can do about either, just verify that it contains
+35-      // the PID.
+36:      assert.strictEqual(name.includes(`[${process.pid}]`), true);
+37-    } else {
+38:      let expects = `${process.argv0}[${process.pid}]`;
+39-      if (!isMainThread) {
+40-        expects = `Worker[${require('worker_threads').threadId}]`;
+41-      }
+=== test-os grep
+80-const hostname = os.hostname();
+81-is.string(hostname);
+82-assert.ok(hostname.length > 0);
+83-
+84:// IBMi process priority is different.
+85-if (!common.isIBMi) {
+86:  const { PRIORITY_BELOW_NORMAL, PRIORITY_LOW } = os.constants.priority;
+87:  // Priority means niceness: higher numeric value <=> lower priority
+88-  const LOWER_PRIORITY = os.getPriority() < PRIORITY_BELOW_NORMAL ? PRIORITY_BELOW_NORMAL : PRIORITY_LOW;
+89-  os.setPriority(LOWER_PRIORITY);
+90:  const priority = os.getPriority();
+91:  is.number(priority);
+92:  assert.strictEqual(priority, LOWER_PRIORITY);
+93-}
+94-
+95-// On IBMi, os.uptime() returns 'undefined'
+96-if (!common.isIBMi) {
+--
+195-} else {
+196-  assert.strictEqual(EOL, '\n');
+197-}
+198-
+199:const home = os.homedir();
+200-is.string(home);
+201-assert.ok(home.includes(path.sep));
+202-
+203-const version = os.version();
+--
+206-
+207-if (common.isWindows && process.env.USERPROFILE) {
+208-  assert.strictEqual(home, process.env.USERPROFILE);
+209-  delete process.env.USERPROFILE;
+210:  assert.ok(os.homedir().includes(path.sep));
+211-  process.env.USERPROFILE = home;
+212-} else if (!common.isWindows && process.env.HOME) {
+213-  assert.strictEqual(home, process.env.HOME);
+214-  delete process.env.HOME;
+215:  assert.ok(os.homedir().includes(path.sep));
+216-  process.env.HOME = home;
+217-}
+218-
+219:const pwd = os.userInfo();
+220-is.object(pwd);
+221:const pwdBuf = os.userInfo({ encoding: 'buffer' });
+222-
+223-if (common.isWindows) {
+224-  assert.strictEqual(pwd.uid, -1);
+225-  assert.strictEqual(pwd.gid, -1);
+--
+240-  assert.strictEqual(pwd.shell, pwdBuf.shell.toString('utf8'));
+241-}
+242-
+243-is.string(pwd.username);
+244:assert.ok(pwd.homedir.includes(path.sep));
+245-assert.strictEqual(pwd.username, pwdBuf.username.toString('utf8'));
+246:assert.strictEqual(pwd.homedir, pwdBuf.homedir.toString('utf8'));
+247-
+248-assert.strictEqual(`${os.hostname}`, os.hostname());
+249:assert.strictEqual(`${os.homedir}`, os.homedir());
+250-assert.strictEqual(`${os.release}`, os.release());
+251-assert.strictEqual(`${os.type}`, os.type());
+252-assert.strictEqual(`${os.endianness}`, os.endianness());
+253-assert.strictEqual(`${os.tmpdir}`, os.tmpdir());
+254-assert.strictEqual(`${os.arch}`, os.arch());
+255-assert.strictEqual(`${os.platform}`, os.platform());
+256-assert.strictEqual(`${os.version}`, os.version());
+257:assert.strictEqual(`${os.machine}`, os.machine());
+258-assert.strictEqual(+os.totalmem, os.totalmem());
+259-
+260-// Assert that the following values are coercible to numbers.
+261-// On IBMi, os.uptime() returns 'undefined'
+=== uv process title (haiku)
+bsd-proctitle.c
+darwin-proctitle.c
+haiku.c
+no-proctitle.c
+os390-proctitle.c
+proctitle.c
+deps/uv/uv.gyp:127:      'src/unix/darwin-proctitle.c',
+deps/uv/uv.gyp:144:      'src/unix/no-proctitle.c',
+deps/uv/uv.gyp:258:          'sources': [ 'src/unix/proctitle.c' ],
+deps/uv/uv.gyp:338:                'src/unix/no-proctitle.c',
+deps/uv/uv.gyp:361:            'src/unix/no-proctitle.c',
+deps/uv/uv.gyp:391:            'src/unix/bsd-proctitle.c'
+deps/uv/src/unix/aix.c:929:int uv_set_process_title(const char* title) {
+deps/uv/src/unix/aix.c:964:int uv_get_process_title(char* buffer, size_t size) {
+deps/uv/src/unix/bsd-proctitle.c:53:int uv_set_process_title(const char* title) {
+deps/uv/src/unix/bsd-proctitle.c:73:int uv_get_process_title(char* buffer, size_t size) {
+deps/uv/src/unix/ibmi.c:527:int uv_set_process_title(const char* title) {
+deps/uv/src/unix/ibmi.c:531:int uv_get_process_title(char* buffer, size_t size) {
+deps/uv/src/unix/no-proctitle.c:35:int uv_set_process_title(const char* title) {
+deps/uv/src/unix/no-proctitle.c:39:int uv_get_process_title(char* buffer, size_t size) {
+deps/uv/src/unix/os390-proctitle.c:77:int uv_set_process_title(const char* title) {
+deps/uv/src/unix/os390-proctitle.c:105:int uv_get_process_title(char* buffer, size_t size) {

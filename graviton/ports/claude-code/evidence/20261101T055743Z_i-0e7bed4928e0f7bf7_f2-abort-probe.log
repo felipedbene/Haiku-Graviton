@@ -1,0 +1,59 @@
+# evidence: f2-abort-probe
+# instance: i-0e7bed4928e0f7bf7   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261101T055743Z   end: 20261101T055804Z   rc: 0
+# script sha256: 6e4171e1b68cac0d607c859abc00946568ec49447e3b9e49dbb9cda6817302e5
+# ---- script ----
+# | cd /tmp
+# | cat > ab.c <<'C'
+# | #include <stdlib.h>
+# | int main(){ abort(); }
+# | C
+# | gcc -o ab ab.c
+# | echo "== C abort():"; ./ab; echo "rc=$?"
+# | echo "== C abort() via sh -c:"; sh -c './ab'; echo "rc=$?"
+# | echo "== node process.abort():"; node -e 'process.abort()'; echo "rc=$?"
+# | echo "== node --abort-on-uncaught-exception throw:"; node --abort-on-uncaught-exception -e 'throw new Error("x")' 2>&1 | tail -3; echo "rc=${PIPESTATUS[0]}"
+# | echo "== same, from node spawn:"; node -e '
+# | const cp=require("child_process");
+# | let r=cp.spawnSync(process.execPath,["--abort-on-uncaught-exception","-e","throw new Error(1)"]);
+# | console.log("spawnSync status",r.status,"signal",r.signal);
+# | r=cp.spawnSync("/bin/sh",["-c","ulimit -c 0 && "+process.execPath+" --abort-on-uncaught-exception -e \"throw new Error(1)\""]);
+# | console.log("via sh: status",r.status,"signal",r.signal, String(r.stderr).split("\n").slice(-4).join("|"));
+# | r=cp.spawnSync("/tmp/ab"); console.log("C abort spawnSync status",r.status,"signal",r.signal);
+# | '
+# ---- raw output ----
+== C abort():
+Abort
+/tmp/ccrun/cc-20261101T055743Z-77637.sh: line 7: 201551 Kill Thread                ./ab
+rc=149
+== C abort() via sh -c:
+Abort
+/tmp/ccrun/cc-20261101T055743Z-77637.sh: line 8: 201554 Kill Thread                sh -c './ab'
+rc=149
+== node process.abort():
+----- Native stack trace -----
+
+
+----- JavaScript stack trace -----
+
+1: [eval]:1:9
+2: runScriptInThisContext (node:internal/vm:219:10)
+3: node:internal/process/execution:451:12
+4: [eval]-wrapper:6:24
+5: runScriptInContext (node:internal/process/execution:449:60)
+6: evalFunction (node:internal/process/execution:283:30)
+7: evalTypeScript (node:internal/process/execution:295:3)
+8: node:internal/main/eval_string:71:3
+
+
+Abort
+/tmp/ccrun/cc-20261101T055743Z-77637.sh: line 9: 201559 Kill Thread                node -e 'process.abort()'
+rc=149
+== node --abort-on-uncaught-exception throw:
+evalFunction (node:internal/process/execution:283:30)
+evalTypeScript (node:internal/process/execution:295:3)
+node:internal/main/eval_string:71:3rc=149
+== same, from node spawn:
+spawnSync status null signal 
+via sh: status null signal  runScriptInContext (node:internal/process/execution:449:60)|evalFunction (node:internal/process/execution:283:30)|evalTypeScript (node:internal/process/execution:295:3)|node:internal/main/eval_string:71:3
+C abort spawnSync status null signal 

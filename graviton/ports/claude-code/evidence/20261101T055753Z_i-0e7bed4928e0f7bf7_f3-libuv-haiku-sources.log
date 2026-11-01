@@ -1,0 +1,111 @@
+# evidence: f3-libuv-haiku-sources
+# instance: i-0e7bed4928e0f7bf7   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261101T055753Z   end: 20261101T055813Z   rc: 0
+# script sha256: ba192e4a0a814cd56e3df825b5c854d4979c69f16670558f0af2c11b61f8376b
+# ---- script ----
+# | cd /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0 || exit 1
+# | echo "== libuv source in node tree: which files build on haiku (uv.gyp haiku stanza)"
+# | grep -n -B2 -A14 "OS==\"haiku\"" deps/uv/uv.gyp
+# | echo "== no-proctitle.c"; sed -n 25,60p deps/uv/src/unix/no-proctitle.c
+# | echo "== haiku.c priority/proctitle"; grep -n "priority\|title" deps/uv/src/unix/haiku.c
+# | echo "== uv_os_setpriority/getpriority core.c"; grep -n -A30 "^int uv_os_getpriority" deps/uv/src/unix/core.c | head -70
+# | echo "== umask in node"; grep -rn "umask" src/node_process_methods.cc | head
+# | echo "== installed libuv"; pkgman search -i -D libuv 2>&1 | head; ls -l /boot/system/lib/libuv*
+# | echo "== node linked libuv"; objdump -p /boot/system/bin/node 2>/dev/null | grep NEEDED
+# | echo "== libuv recipe/source on builder"; ls -d /boot/home/haikuports/dev-libs/libuv* 2>/dev/null; ls /boot/home/haikuports/dev-libs/libuv/ 2>/dev/null; ls -d /boot/home/haikuports/dev-libs/libuv/work-*/sources/* 2>/dev/null
+# ---- raw output ----
+== libuv source in node tree: which files build on haiku (uv.gyp haiku stanza)
+== no-proctitle.c
+#include <errno.h>
+#include <stddef.h>
+
+char** uv_setup_args(int argc, char** argv) {
+  return argv;
+}
+
+void uv__process_title_cleanup(void) {
+}
+
+int uv_set_process_title(const char* title) {
+  return 0;
+}
+
+int uv_get_process_title(char* buffer, size_t size) {
+  if (buffer == NULL || size == 0)
+    return UV_EINVAL;
+
+  buffer[0] = '\0';
+  return 0;
+}
+== haiku.c priority/proctitle
+== uv_os_setpriority/getpriority core.c
+1683:int uv_os_getpriority(uv_pid_t pid, int* priority) {
+1684-#if defined(__QNX__)
+1685-  /* QNX priority is not process-based */
+1686-  return UV_ENOSYS;
+1687-#else
+1688-  int r;
+1689-
+1690-  if (priority == NULL)
+1691-    return UV_EINVAL;
+1692-
+1693-  errno = 0;
+1694-  r = getpriority(PRIO_PROCESS, (int) pid);
+1695-
+1696-  if (r == -1 && errno != 0)
+1697-    return UV__ERR(errno);
+1698-
+1699-  *priority = r;
+1700-  return 0;
+1701-#endif
+1702-}
+1703-
+1704-
+1705-int uv_os_setpriority(uv_pid_t pid, int priority) {
+1706-#if defined(__QNX__)
+1707-  /* QNX priority is not process-based */
+1708-  return UV_ENOSYS;
+1709-#else
+1710-  if (priority < UV_PRIORITY_HIGHEST || priority > UV_PRIORITY_LOW)
+1711-    return UV_EINVAL;
+1712-
+1713-  if (setpriority(PRIO_PROCESS, (int) pid, priority) != 0)
+== umask in node
+31:#define umask _umask
+64:Mutex umask_mutex;
+275:  Mutex::ScopedLock scoped_lock(per_process::umask_mutex);
+279:    old = umask(0);
+280:    umask(static_cast<mode_t>(old));
+283:    old = umask(static_cast<mode_t>(oct));
+775:  SetMethod(isolate, target, "umask", Umask);
+== installed libuv
+Repository  Name         Version   Arch 
+----------------------------------------
+<system>    libuv        1.52.1-2  arm64
+<system>    libuv_devel  1.52.1-2  arm64
+lr-xr-xr-x 1 baron root     14 Nov  1 01:29 /boot/system/lib/libuv.so.1 -> libuv.so.1.0.0
+-r-xr-xr-x 1 baron root 249576 Nov  1 01:29 /boot/system/lib/libuv.so.1.0.0
+== node linked libuv
+  NEEDED               libroot.so
+  NEEDED               libbsd.so
+  NEEDED               libstdc++.so.6
+  NEEDED               libnetwork.so
+  NEEDED               libz.so.1
+  NEEDED               libuv.so.1
+  NEEDED               libbrotlidec.so.1
+  NEEDED               libbrotlienc.so.1
+  NEEDED               libcares.so.2
+  NEEDED               libnghttp2.so.14
+  NEEDED               libcrypto.so.3
+  NEEDED               libssl.so.3
+  NEEDED               libicui18n.so.78
+  NEEDED               libicuuc.so.78
+  NEEDED               libexecinfo.so.1.1
+  NEEDED               libgcc_s.so.1
+== libuv recipe/source on builder
+/boot/home/haikuports/dev-libs/libuv
+download
+libuv-1.52.1.recipe
+patches
+work-1.52.1
+/boot/home/haikuports/dev-libs/libuv/work-1.52.1/sources/libuv-1.52.1

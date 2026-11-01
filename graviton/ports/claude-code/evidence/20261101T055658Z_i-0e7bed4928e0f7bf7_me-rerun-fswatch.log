@@ -1,0 +1,336 @@
+# evidence: me-rerun-fswatch
+# instance: i-0e7bed4928e0f7bf7   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261101T055658Z   end: 20261101T055733Z   rc: 0
+# script sha256: b5323870099190683287d7f4ab044b76c317fabad0c3ca7cc0535f80870df7f3
+# ---- script ----
+# | # Re-run the fswatch group of failing tests from the 2026-10-31 TAP run, now (libuv $(pkgman search -i -D libuv 2>/dev/null | grep -m1 libuv)).
+# | cd /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0 || exit 1
+# | echo "node $(/boot/system/bin/node --version); uname: $(uname -a); cpus: $(sysinfo -cpu 2>/dev/null | grep -c 'CPU #')"
+# | ls /boot/system/packages | grep -i -E '^(libuv|nodejs)'
+# | grep -n "'--timeout'" -A2 tools/test.py | head -5
+# | J=4
+# | : | python3 tools/test.py --shell=/boot/system/bin/node -j $J -p tap -v parallel/test-fs-options-immutable parallel/test-fs-promises-watch parallel/test-fs-promises-watch-ignore-function parallel/test-fs-promises-watch-ignore-glob parallel/test-fs-promises-watch-ignore-mixed parallel/test-fs-promises-watch-ignore-regexp parallel/test-fs-promises-watch-iterator parallel/test-fs-watch-close-when-destroyed parallel/test-fs-watch-abort-signal parallel/test-fs-watch-encoding parallel/test-fs-watch-enoent parallel/test-fs-watch-ignore-function parallel/test-fs-watch-ignore-glob parallel/test-fs-watch-ignore-recursive-glob parallel/test-fs-watch-ignore-mixed parallel/test-fs-watch-ignore-recursive-glob-subdirectories parallel/test-fs-watch-ignore-recursive-mixed parallel/test-fs-watch-ignore-regexp parallel/test-fs-watch-ignore-recursive-regexp parallel/test-fs-watch-recursive-add-file-with-url parallel/test-fs-watch-recursive-add-folder parallel/test-fs-watch-recursive-add-file parallel/test-fs-watch-recursive-add-file-to-existing-subfolder parallel/test-fs-watch-recursive-add-file-to-new-folder parallel/test-fs-watch-recursive-delete-race parallel/test-fs-watch-recursive-assert-leaks parallel/test-fs-watch-recursive-symlink parallel/test-fs-watch-recursive-delete parallel/test-fs-watch-recursive-update-file parallel/test-fs-watch-ref-unref parallel/test-fs-watch-recursive-sync-write parallel/test-fs-watch-recursive-promise parallel/test-fs-watch-recursive-watch-file parallel/test-runner-watch-mode-complex parallel/test-runner-complex-dependencies parallel/test-runner-global-setup-watch-mode parallel/test-watch-file-shared-dependency parallel/test-watch-mode-files_watcher-clear parallel/test-watch-mode-files_watcher parallel/test-watch-mode-kill-signal-default parallel/test-watch-mode-kill-signal-override sequential/test-fs-watch sequential/test-watch-mode sequential/test-watch-mode-inspect sequential/test-watch-mode-restart-esm-loading-error sequential/test-watch-mode-worker > /tmp/rerun-fswatch.tap 2>&1
+# | echo "== summary: $(grep -c '^ok ' /tmp/rerun-fswatch.tap) ok, $(grep -c '^not ok ' /tmp/rerun-fswatch.tap) not ok, $(grep -c '^    timeout$' /tmp/rerun-fswatch.tap) timeout"
+# | grep -E '^(not )?ok ' /tmp/rerun-fswatch.tap
+# | echo "== full TAP"; cat /tmp/rerun-fswatch.tap
+# ---- raw output ----
+node v24.21.0; uname: Haiku ip-10-128-9-142.us-west-2.compu R1~beta6+development hrev59996 Oct 19 2026 21:09:42 arm64 arm64 Haiku; cpus: 0
+libuv-1.52.1-2-arm64.hpkg
+libuv_devel-1.52.1-2-arm64.hpkg
+nodejs24-24.21.0-1-arm64.hpkg
+nodejs24_devel-24.21.0-1-arm64.hpkg
+== summary: 45 ok, 1 not ok, 0 timeout
+ok 1 parallel/test-fs-promises-watch-ignore-function
+ok 2 parallel/test-fs-options-immutable
+ok 3 parallel/test-fs-promises-watch-ignore-glob
+ok 4 parallel/test-fs-promises-watch
+ok 5 parallel/test-fs-promises-watch-ignore-mixed
+ok 6 parallel/test-fs-promises-watch-ignore-regexp
+ok 7 parallel/test-fs-watch-abort-signal
+ok 8 parallel/test-fs-watch-close-when-destroyed
+ok 9 parallel/test-fs-watch-enoent
+ok 10 parallel/test-fs-watch-ignore-function
+ok 11 parallel/test-fs-watch-encoding
+ok 12 parallel/test-fs-watch-ignore-glob
+ok 13 parallel/test-fs-watch-ignore-recursive-glob
+ok 14 parallel/test-fs-promises-watch-iterator
+ok 15 parallel/test-fs-watch-ignore-mixed
+ok 16 parallel/test-fs-watch-ignore-recursive-glob-subdirectories
+ok 17 parallel/test-fs-watch-ignore-recursive-regexp
+ok 18 parallel/test-fs-watch-ignore-regexp
+ok 19 parallel/test-fs-watch-ignore-recursive-mixed
+ok 20 parallel/test-fs-watch-recursive-add-file-with-url
+ok 21 parallel/test-fs-watch-recursive-add-folder
+ok 22 parallel/test-fs-watch-recursive-delete-race
+ok 23 parallel/test-fs-watch-recursive-add-file
+ok 24 parallel/test-fs-watch-recursive-add-file-to-existing-subfolder
+ok 25 parallel/test-fs-watch-recursive-add-file-to-new-folder
+ok 26 parallel/test-fs-watch-recursive-symlink
+ok 27 parallel/test-fs-watch-recursive-assert-leaks
+ok 28 parallel/test-fs-watch-recursive-update-file
+ok 29 parallel/test-fs-watch-ref-unref
+ok 30 parallel/test-fs-watch-recursive-delete
+ok 31 parallel/test-fs-watch-recursive-watch-file
+ok 32 parallel/test-fs-watch-recursive-sync-write
+ok 33 parallel/test-fs-watch-recursive-promise
+ok 34 parallel/test-watch-file-shared-dependency
+ok 35 parallel/test-watch-mode-files_watcher-clear
+ok 36 parallel/test-runner-complex-dependencies
+ok 37 parallel/test-runner-global-setup-watch-mode
+ok 38 parallel/test-runner-watch-mode-complex
+ok 39 parallel/test-watch-mode-kill-signal-default
+ok 40 parallel/test-watch-mode-kill-signal-override
+not ok 41 sequential/test-fs-watch
+ok 42 parallel/test-watch-mode-files_watcher
+ok 43 sequential/test-watch-mode # TODO : Fix flaky test
+ok 44 sequential/test-watch-mode-inspect # TODO : Fix flaky test
+ok 45 sequential/test-watch-mode-restart-esm-loading-error
+ok 46 sequential/test-watch-mode-worker
+== full TAP
+# /boot/system/bin/node -p process.arch
+# /boot/system/bin/node -p process.versions.openssl
+# /boot/system/bin/node -p process.config.variables.asan
+# /boot/system/bin/node -p process.config.variables.v8_enable_pointer_compression
+# /boot/system/bin/node -p process.features.inspector
+# /boot/system/bin/node -p process.versions.openssl
+TAP version 13
+1..46
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-fs-options-immutable.js
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-fs-promises-watch.js
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-fs-promises-watch-ignore-function.mjs
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-fs-promises-watch-ignore-glob.mjs
+ok 1 parallel/test-fs-promises-watch-ignore-function
+  ---
+  duration_ms: 143.15900
+  ...
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-fs-promises-watch-ignore-mixed.mjs
+ok 2 parallel/test-fs-options-immutable
+  ---
+  duration_ms: 157.06500
+  ...
+ok 3 parallel/test-fs-promises-watch-ignore-glob
+  ---
+  duration_ms: 149.98200
+  ...
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-fs-promises-watch-ignore-regexp.mjs
+ok 4 parallel/test-fs-promises-watch
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-fs-promises-watch-iterator.js
+  ---
+  duration_ms: 164.97400
+  ...
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-fs-watch-close-when-destroyed.js
+ok 5 parallel/test-fs-promises-watch-ignore-mixed
+  ---
+  duration_ms: 125.59800
+  ...
+# /boot/system/bin/node --expose-internals /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-fs-watch-abort-signal.js
+ok 6 parallel/test-fs-promises-watch-ignore-regexp
+  ---
+  duration_ms: 144.95400
+  ...
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-fs-watch-encoding.js
+ok 7 parallel/test-fs-watch-abort-signal
+  ---
+  duration_ms: 122.88300
+  ...
+# /boot/system/bin/node --expose-internals /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-fs-watch-enoent.js
+ok 8 parallel/test-fs-watch-close-when-destroyed
+  ---
+  duration_ms: 239.80900
+  ...
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-fs-watch-ignore-function.js
+ok 9 parallel/test-fs-watch-enoent
+  ---
+  duration_ms: 122.49000
+  ...
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-fs-watch-ignore-glob.js
+ok 10 parallel/test-fs-watch-ignore-function
+  ---
+  duration_ms: 112.51200
+  ...
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-fs-watch-ignore-recursive-glob.js
+ok 11 parallel/test-fs-watch-encoding
+  ---
+  duration_ms: 269.11100
+  ...
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-fs-watch-ignore-mixed.js
+ok 12 parallel/test-fs-watch-ignore-glob
+  ---
+  duration_ms: 147.03200
+  ...
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-fs-watch-ignore-recursive-glob-subdirectories.js
+ok 13 parallel/test-fs-watch-ignore-recursive-glob
+  ---
+  duration_ms: 152.08200
+  ...
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-fs-watch-ignore-recursive-mixed.js
+ok 14 parallel/test-fs-promises-watch-iterator
+  ---
+  duration_ms: 549.05800
+  ...
+ok 15 parallel/test-fs-watch-ignore-mixed
+  ---
+  duration_ms: 138.16700
+  ...
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-fs-watch-ignore-regexp.js
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-fs-watch-ignore-recursive-regexp.js
+ok 16 parallel/test-fs-watch-ignore-recursive-glob-subdirectories
+  ---
+  duration_ms: 136.64800
+  ...
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-fs-watch-recursive-add-file-with-url.js
+ok 17 parallel/test-fs-watch-ignore-recursive-regexp
+  ---
+  duration_ms: 178.31500
+  ...
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-fs-watch-recursive-add-folder.js
+ok 18 parallel/test-fs-watch-ignore-regexp
+  ---
+  duration_ms: 197.16500
+  ...
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-fs-watch-recursive-add-file.js
+ok 19 parallel/test-fs-watch-ignore-recursive-mixed
+  ---
+  duration_ms: 236.52000
+  ...
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-fs-watch-recursive-add-file-to-existing-subfolder.js
+ok 20 parallel/test-fs-watch-recursive-add-file-with-url
+  ---
+  duration_ms: 287.81300
+  ...
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-fs-watch-recursive-add-file-to-new-folder.js
+ok 21 parallel/test-fs-watch-recursive-add-folder
+  ---
+  duration_ms: 280.24700
+  ...
+# /boot/system/bin/node --expose-internals /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-fs-watch-recursive-delete-race.js
+ok 22 parallel/test-fs-watch-recursive-delete-race
+  ---
+  duration_ms: 115.61000
+  ...
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-fs-watch-recursive-assert-leaks.js
+ok 23 parallel/test-fs-watch-recursive-add-file
+  ---
+  duration_ms: 423.68600
+  ...
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-fs-watch-recursive-symlink.js
+ok 24 parallel/test-fs-watch-recursive-add-file-to-existing-subfolder
+  ---
+  duration_ms: 418.66300
+  ...
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-fs-watch-recursive-delete.js
+ok 25 parallel/test-fs-watch-recursive-add-file-to-new-folder
+  ---
+  duration_ms: 420.24600
+  ...
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-fs-watch-recursive-update-file.js
+ok 26 parallel/test-fs-watch-recursive-symlink
+  ---
+  duration_ms: 414.55200
+  ...
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-fs-watch-ref-unref.js
+ok 27 parallel/test-fs-watch-recursive-assert-leaks
+  ---
+  duration_ms: 611.87300
+  ...
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-fs-watch-recursive-sync-write.js
+ok 28 parallel/test-fs-watch-recursive-update-file
+  ---
+  duration_ms: 412.01900
+  ...
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-fs-watch-recursive-promise.js
+ok 29 parallel/test-fs-watch-ref-unref
+  ---
+  duration_ms: 264.59300
+  ...
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-fs-watch-recursive-watch-file.js
+ok 30 parallel/test-fs-watch-recursive-delete
+  ---
+  duration_ms: 710.83200
+  ...
+# /boot/system/bin/node --test-reporter=./test/common/test-error-reporter.js --test-reporter-destination=stdout /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-runner-watch-mode-complex.mjs
+ok 31 parallel/test-fs-watch-recursive-watch-file
+  ---
+  duration_ms: 139.77500
+  ...
+# /boot/system/bin/node --expose-internals --test-reporter=./test/common/test-error-reporter.js --test-reporter-destination=stdout /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-runner-complex-dependencies.mjs
+ok 32 parallel/test-fs-watch-recursive-sync-write
+  ---
+  duration_ms: 415.94800
+  ...
+# /boot/system/bin/node --test-reporter=./test/common/test-error-reporter.js --test-reporter-destination=stdout /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-runner-global-setup-watch-mode.mjs
+ok 33 parallel/test-fs-watch-recursive-promise
+  ---
+  duration_ms: 710.60600
+  ...
+# /boot/system/bin/node --expose-internals --test-reporter=./test/common/test-error-reporter.js --test-reporter-destination=stdout /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-watch-file-shared-dependency.mjs
+ok 34 parallel/test-watch-file-shared-dependency
+  ---
+  duration_ms: 415.64600
+  ...
+# /boot/system/bin/node --expose-internals /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-watch-mode-files_watcher-clear.mjs
+ok 35 parallel/test-watch-mode-files_watcher-clear
+  ---
+  duration_ms: 214.53900
+  ...
+# /boot/system/bin/node --expose-internals --test-reporter=./test/common/test-error-reporter.js --test-reporter-destination=stdout /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-watch-mode-files_watcher.mjs
+ok 36 parallel/test-runner-complex-dependencies
+  ---
+  duration_ms: 1416.01200
+  ...
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-watch-mode-kill-signal-default.mjs
+ok 37 parallel/test-runner-global-setup-watch-mode
+  ---
+  duration_ms: 1312.50300
+  ...
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-watch-mode-kill-signal-override.mjs
+ok 38 parallel/test-runner-watch-mode-complex
+  ---
+  duration_ms: 2519.49300
+  ...
+ok 39 parallel/test-watch-mode-kill-signal-default
+  ---
+  duration_ms: 1611.52100
+  ...
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/sequential/test-fs-watch.js
+ok 40 parallel/test-watch-mode-kill-signal-override
+  ---
+  duration_ms: 1615.31500
+  ...
+not ok 41 sequential/test-fs-watch
+  ---
+  duration_ms: 111.89300
+  severity: fail
+  exitcode: 1
+  stack: |-
+    node:assert:152
+      throw new AssertionError(obj);
+      ^
+    
+    AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+    + actual - expected
+    
+    + 'newfile.txt'
+    - null
+    
+        at FSWatcher.<anonymous> (/boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/sequential/test-fs-watch.js:108:18)
+        at FSWatcher.<anonymous> (/boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/common/index.js:481:15)
+        at FSWatcher.emit (node:events:514:28)
+        at FSWatcher._handle.onchange (node:internal/fs/watchers:281:12) {
+      generatedMessage: true,
+      code: 'ERR_ASSERTION',
+      actual: 'newfile.txt',
+      expected: null,
+      operator: 'strictEqual',
+      diff: 'simple'
+    }
+    
+    Node.js v24.21.0
+  ...
+# /boot/system/bin/node --test-reporter=./test/common/test-error-reporter.js --test-reporter-destination=stdout /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/sequential/test-watch-mode.mjs
+ok 42 parallel/test-watch-mode-files_watcher
+  ---
+  duration_ms: 3212.23800
+  ...
+ok 43 sequential/test-watch-mode # TODO : Fix flaky test
+  ---
+  duration_ms: 11511.45500
+  ...
+# /boot/system/bin/node --test-reporter=./test/common/test-error-reporter.js --test-reporter-destination=stdout /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/sequential/test-watch-mode-inspect.mjs
+ok 44 sequential/test-watch-mode-inspect # TODO : Fix flaky test
+  ---
+  duration_ms: 1410.36100
+  ...
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/sequential/test-watch-mode-restart-esm-loading-error.mjs
+ok 45 sequential/test-watch-mode-restart-esm-loading-error
+  ---
+  duration_ms: 2410.42900
+  ...
+# /boot/system/bin/node --test-reporter=./test/common/test-error-reporter.js --test-reporter-destination=stdout /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/sequential/test-watch-mode-worker.mjs
+ok 46 sequential/test-watch-mode-worker
+  ---
+  duration_ms: 3211.00500
+  ...
+
+Failed tests:
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/sequential/test-fs-watch.js

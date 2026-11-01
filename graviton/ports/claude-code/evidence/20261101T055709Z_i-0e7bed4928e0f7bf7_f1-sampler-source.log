@@ -1,0 +1,339 @@
+# evidence: f1-sampler-source
+# instance: i-0e7bed4928e0f7bf7   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261101T055709Z   end: 20261101T055730Z   rc: 0
+# script sha256: 1df5730b880bff1bcb6c8c1da83266eabf7f131c99e87f101444e7bd67a7eeab
+# ---- script ----
+# | N=/boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0
+# | cd $N/deps/v8/src/libsampler
+# | sed -n 1,60p sampler.cc; echo ----; sed -n 183,266p sampler.cc; echo ----; sed -n 324,420p sampler.cc; echo ----; sed -n 520,535p sampler.cc; echo ----; sed -n 585,615p sampler.cc
+# | echo "== patchset touching sampler/platform-haiku"; grep -n "^diff\|^Subject" /boot/home/haikuports/net-libs/nodejs/patches/nodejs-24.21.0.patchset | head -80
+# ---- raw output ----
+// Copyright 2016 the V8 project authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+#include "src/libsampler/sampler.h"
+
+#include "include/v8-isolate.h"
+#include "include/v8-platform.h"
+#include "include/v8-unwinder.h"
+
+#ifdef USE_SIGNALS
+
+#include <errno.h>
+#include <pthread.h>
+#include <signal.h>
+#include <sys/time.h>
+#include <atomic>
+
+#if !V8_OS_QNX && !V8_OS_AIX && !V8_OS_ZOS && !V8_OS_HAIKU
+#include <sys/syscall.h>
+#endif
+
+#if V8_OS_AIX || V8_TARGET_ARCH_S390X
+
+#include "src/base/platform/time.h"
+
+#elif V8_OS_DARWIN
+#include <mach/mach.h>
+// OpenBSD doesn't have <ucontext.h>. ucontext_t lives in <signal.h>
+// and is a typedef for struct sigcontext. There is no uc_mcontext.
+#elif !V8_OS_OPENBSD && !V8_OS_HAIKU
+#include <ucontext.h>
+#endif
+
+#include <unistd.h>
+
+#elif V8_OS_WIN || V8_OS_CYGWIN
+
+#include <windows.h>
+
+#elif V8_OS_FUCHSIA
+
+#include <zircon/process.h>
+#include <zircon/syscalls.h>
+#include <zircon/syscalls/debug.h>
+#include <zircon/types.h>
+
+// TODO(wez): Remove this once the Fuchsia SDK has rolled.
+#if defined(ZX_THREAD_STATE_REGSET0)
+#define ZX_THREAD_STATE_GENERAL_REGS ZX_THREAD_STATE_REGSET0
+zx_status_t zx_thread_read_state(zx_handle_t h, uint32_t k, void* b, size_t l) {
+  uint32_t dummy_out_len = 0;
+  return zx_thread_read_state(h, k, b, static_cast<uint32_t>(l),
+                              &dummy_out_len);
+}
+#if defined(__x86_64__)
+using zx_thread_state_general_regs_t = zx_x86_64_general_regs_t;
+#else
+using zx_thread_state_general_regs_t = zx_arm64_general_regs_t;
+#endif
+----
+#if defined(USE_SIGNALS)
+
+AtomicGuard::AtomicGuard(AtomicMutex* atomic, bool is_blocking)
+    : atomic_(atomic), is_success_(false) {
+  do {
+    bool expected = false;
+    // We have to use the strong version here for the case where is_blocking
+    // is false, and we will only attempt the exchange once.
+    is_success_ = atomic->compare_exchange_strong(expected, true);
+  } while (is_blocking && !is_success_);
+}
+
+AtomicGuard::~AtomicGuard() {
+  if (!is_success_) return;
+  atomic_->store(false);
+}
+
+bool AtomicGuard::is_success() const { return is_success_; }
+
+class Sampler::PlatformData {
+ public:
+  PlatformData()
+      : vm_tid_(base::OS::GetCurrentThreadId()), vm_tself_(pthread_self()) {}
+  int vm_tid() const { return vm_tid_; }
+  pthread_t vm_tself() const { return vm_tself_; }
+
+ private:
+  int vm_tid_;
+  pthread_t vm_tself_;
+};
+
+void SamplerManager::AddSampler(Sampler* sampler) {
+  AtomicGuard atomic_guard(&samplers_access_counter_);
+  DCHECK(sampler->IsActive());
+  int thread_id = sampler->platform_data()->vm_tid();
+  auto it = sampler_map_.find(thread_id);
+  if (it == sampler_map_.end()) {
+    SamplerList samplers;
+    samplers.push_back(sampler);
+    sampler_map_.emplace(thread_id, std::move(samplers));
+  } else {
+    SamplerList& samplers = it->second;
+    auto sampler_it = std::find(samplers.begin(), samplers.end(), sampler);
+    if (sampler_it == samplers.end()) samplers.push_back(sampler);
+  }
+}
+
+void SamplerManager::RemoveSampler(Sampler* sampler) {
+  AtomicGuard atomic_guard(&samplers_access_counter_);
+  DCHECK(sampler->IsActive());
+  int thread_id = sampler->platform_data()->vm_tid();
+  auto it = sampler_map_.find(thread_id);
+  DCHECK_NE(it, sampler_map_.end());
+  SamplerList& samplers = it->second;
+  samplers.erase(std::remove(samplers.begin(), samplers.end(), sampler),
+                 samplers.end());
+  if (samplers.empty()) {
+    sampler_map_.erase(it);
+  }
+}
+
+void SamplerManager::DoSample(const v8::RegisterState& state) {
+  AtomicGuard atomic_guard(&samplers_access_counter_, false);
+  // TODO(petermarshall): Add stat counters for the bailouts here.
+  if (!atomic_guard.is_success()) return;
+  int thread_id = base::OS::GetCurrentThreadId();
+  auto it = sampler_map_.find(thread_id);
+  if (it == sampler_map_.end()) return;
+  SamplerList& samplers = it->second;
+
+  for (Sampler* sampler : samplers) {
+    if (!sampler->ShouldRecordSample()) continue;
+    Isolate* isolate = sampler->isolate();
+    // We require a fully initialized and entered isolate.
+    if (isolate == nullptr || !isolate->IsInUse()) continue;
+    sampler->SampleStack(state);
+  }
+}
+
+SamplerManager* SamplerManager::instance() {
+  static base::LeakyObject<SamplerManager> instance;
+  return instance.get();
+}
+
+----
+#if defined(USE_SIGNALS)
+class SignalHandler {
+ public:
+  static void IncreaseSamplerCount() {
+    base::RecursiveMutexGuard lock_guard(mutex_.Pointer());
+    if (++client_count_ == 1) Install();
+  }
+
+  static void DecreaseSamplerCount() {
+    base::RecursiveMutexGuard lock_guard(mutex_.Pointer());
+    if (--client_count_ == 0) Restore();
+  }
+
+  static bool Installed() {
+    // mutex_ will also be used in Sampler::DoSample to guard the state below.
+    base::RecursiveMutexGuard lock_guard(mutex_.Pointer());
+    return signal_handler_installed_;
+  }
+
+  static v8::base::RecursiveMutex* mutex() { return mutex_.Pointer(); }
+
+ private:
+  static void Install() {
+    struct sigaction sa;
+    sa.sa_sigaction = &HandleProfilerSignal;
+    sigemptyset(&sa.sa_mask);
+#if V8_OS_QNX
+    sa.sa_flags = SA_SIGINFO | SA_ONSTACK;
+#else
+    sa.sa_flags = SA_RESTART | SA_SIGINFO | SA_ONSTACK;
+#endif
+    signal_handler_installed_ =
+        (sigaction(SIGPROF, &sa, &old_signal_handler_) == 0);
+  }
+
+  static void Restore() {
+    if (signal_handler_installed_) {
+      signal_handler_installed_ = false;
+#if V8_OS_AIX || V8_TARGET_ARCH_S390X
+      // On Aix, IBMi & zLinux SIGPROF can sometimes arrive after the
+      // default signal handler is restored, resulting in intermittent test
+      // failure when profiling is enabled (https://crbug.com/v8/12952)
+      base::OS::Sleep(base::TimeDelta::FromMicroseconds(10));
+#endif
+      sigaction(SIGPROF, &old_signal_handler_, nullptr);
+    }
+  }
+
+  static void FillRegisterState(void* context, RegisterState* regs);
+  static void HandleProfilerSignal(int signal, siginfo_t* info, void* context);
+
+  // Protects the process wide state below.
+  static base::LazyRecursiveMutex mutex_;
+  static int client_count_;
+  static bool signal_handler_installed_;
+  static struct sigaction old_signal_handler_;
+};
+
+base::LazyRecursiveMutex SignalHandler::mutex_ =
+    LAZY_RECURSIVE_MUTEX_INITIALIZER;
+
+int SignalHandler::client_count_ = 0;
+struct sigaction SignalHandler::old_signal_handler_;
+bool SignalHandler::signal_handler_installed_ = false;
+
+void SignalHandler::HandleProfilerSignal(int signal, siginfo_t* info,
+                                         void* context) {
+  v8::ThreadIsolatedAllocator::SetDefaultPermissionsForSignalHandler();
+  USE(info);
+  if (signal != SIGPROF) return;
+  v8::RegisterState state;
+  FillRegisterState(context, &state);
+  SamplerManager::instance()->DoSample(state);
+}
+
+void SignalHandler::FillRegisterState(void* context, RegisterState* state) {
+  // Extracting the sample from the context is extremely machine dependent.
+  ucontext_t* ucontext = reinterpret_cast<ucontext_t*>(context);
+#if !(V8_OS_OPENBSD || V8_OS_ZOS || \
+      (V8_OS_LINUX && (V8_HOST_ARCH_S390X || V8_HOST_ARCH_PPC64)))
+  mcontext_t& mcontext = ucontext->uc_mcontext;
+#elif V8_OS_ZOS
+  __mcontext_t_* mcontext = reinterpret_cast<__mcontext_t_*>(context);
+#endif
+#if V8_OS_LINUX
+#if V8_HOST_ARCH_IA32
+  state->pc = reinterpret_cast<void*>(mcontext.gregs[REG_EIP]);
+  state->sp = reinterpret_cast<void*>(mcontext.gregs[REG_ESP]);
+  state->fp = reinterpret_cast<void*>(mcontext.gregs[REG_EBP]);
+#elif V8_HOST_ARCH_X64
+  state->pc = reinterpret_cast<void*>(mcontext.gregs[REG_RIP]);
+  state->sp = reinterpret_cast<void*>(mcontext.gregs[REG_RSP]);
+  state->fp = reinterpret_cast<void*>(mcontext.gregs[REG_RBP]);
+#elif V8_HOST_ARCH_ARM
+#if V8_LIBC_GLIBC && !V8_GLIBC_PREREQ(2, 4)
+  // Old GLibc ARM versions used a gregs[] array to access the register
+  // values from mcontext_t.
+----
+  state->pc = reinterpret_cast<void*>(mcontext.__gregs[_REG_PC]);
+  state->sp = reinterpret_cast<void*>(mcontext.__gregs[_REG_SP]);
+  state->fp = reinterpret_cast<void*>(mcontext.__gregs[_REG_FP]);
+#endif  // V8_HOST_ARCH_*
+#elif V8_OS_HAIKU
+#if V8_HOST_ARCH_IA32
+  state->pc = reinterpret_cast<void*>(mcontext.eip);
+  state->sp = reinterpret_cast<void*>(mcontext.esp);
+  state->fp = reinterpret_cast<void*>(mcontext.ebp);
+#elif V8_HOST_ARCH_X64
+  state->pc = reinterpret_cast<void*>(mcontext.rip);
+  state->sp = reinterpret_cast<void*>(mcontext.rsp);
+  state->fp = reinterpret_cast<void*>(mcontext.rbp);
+#endif  // V8_HOST_ARCH_*
+#elif V8_OS_NETBSD
+#if V8_HOST_ARCH_IA32
+----
+Sampler::~Sampler() { DCHECK(!IsActive()); }
+
+void Sampler::Start() {
+  DCHECK(!IsActive());
+  SetActive(true);
+#if defined(USE_SIGNALS)
+  SignalHandler::IncreaseSamplerCount();
+  SamplerManager::instance()->AddSampler(this);
+#endif
+}
+
+void Sampler::Stop() {
+#if defined(USE_SIGNALS)
+  SamplerManager::instance()->RemoveSampler(this);
+  SignalHandler::DecreaseSamplerCount();
+#endif
+  DCHECK(IsActive());
+  SetActive(false);
+}
+
+#if defined(USE_SIGNALS)
+
+void Sampler::DoSample() {
+  base::RecursiveMutexGuard lock_guard(SignalHandler::mutex());
+  if (!SignalHandler::Installed()) return;
+  SetShouldRecordSample();
+  pthread_kill(platform_data()->vm_tself(), SIGPROF);
+}
+
+#elif V8_OS_WIN || V8_OS_CYGWIN
+
+== patchset touching sampler/platform-haiku
+4:Subject: Initial support for Node.js
+7:diff --git a/common.gypi b/common.gypi
+76:diff --git a/configure.py b/configure.py
+89:diff --git a/deps/openssl/config/archs/linux-x86_64/no-asm/openssl-cl.gypi b/deps/openssl/config/archs/linux-x86_64/no-asm/openssl-cl.gypi
+103:diff --git a/deps/openssl/config/archs/linux-x86_64/no-asm/openssl.gypi b/deps/openssl/config/archs/linux-x86_64/no-asm/openssl.gypi
+120:diff --git a/deps/openssl/openssl/providers/implementations/rands/seeding/rand_unix.c b/deps/openssl/openssl/providers/implementations/rands/seeding/rand_unix.c
+133:diff --git a/deps/openssl/openssl_common.gypi b/deps/openssl/openssl_common.gypi
+153:diff --git a/node.gypi b/node.gypi
+174:diff --git a/src/node.cc b/src/node.cc
+191:diff --git a/src/node_os.cc b/src/node_os.cc
+234:diff --git a/src/node_report.cc b/src/node_report.cc
+258:diff --git a/tools/utils.py b/tools/utils.py
+278:Subject: Haiku v8 patches
+281:diff --git a/deps/v8/BUILD.gn b/deps/v8/BUILD.gn
+340:diff --git a/deps/v8/include/v8config.h b/deps/v8/include/v8config.h
+364:diff --git a/deps/v8/src/base/debug/stack_trace_posix.cc b/deps/v8/src/base/debug/stack_trace_posix.cc
+386:diff --git a/deps/v8/src/base/export-template.h b/deps/v8/src/base/export-template.h
+405:diff --git a/deps/v8/src/base/platform/memory.h b/deps/v8/src/base/platform/memory.h
+418:diff --git a/deps/v8/src/base/platform/platform-haiku.cc b/deps/v8/src/base/platform/platform-haiku.cc
+489:diff --git a/deps/v8/src/base/platform/platform-posix.cc b/deps/v8/src/base/platform/platform-posix.cc
+535:diff --git a/deps/v8/src/libsampler/sampler.cc b/deps/v8/src/libsampler/sampler.cc
+574:diff --git a/deps/v8/tools/mb/mb.py b/deps/v8/tools/mb/mb.py
+602:Subject: v8 gyp build for Haiku
+605:diff --git a/tools/v8_gypfiles/features.gypi b/tools/v8_gypfiles/features.gypi
+621:diff --git a/tools/v8_gypfiles/v8.gyp b/tools/v8_gypfiles/v8.gyp
+650:Subject: ares compat
+653:diff --git a/deps/v8/src/trap-handler/trap-handler.h b/deps/v8/src/trap-handler/trap-handler.h
+666:diff --git a/src/cares_wrap.h b/src/cares_wrap.h
+689:Subject: abseil-cpp: sysinfo haiku
+692:diff --git a/deps/v8/third_party/abseil-cpp/absl/base/internal/sysinfo.cc b/deps/v8/third_party/abseil-cpp/absl/base/internal/sysinfo.cc
+725:Subject: Haiku: patch for 24
+728:diff --git a/deps/v8/src/base/platform/platform-haiku.cc b/deps/v8/src/base/platform/platform-haiku.cc
+753:diff --git a/deps/v8/src/base/platform/platform-posix.cc b/deps/v8/src/base/platform/platform-posix.cc
+772:diff --git a/deps/v8/src/common/thread-local-storage.h b/deps/v8/src/common/thread-local-storage.h
+785:diff --git a/deps/v8/src/execution/isolate.cc b/deps/v8/src/execution/isolate.cc
+798:diff --git a/src/tcp_wrap.cc b/src/tcp_wrap.cc

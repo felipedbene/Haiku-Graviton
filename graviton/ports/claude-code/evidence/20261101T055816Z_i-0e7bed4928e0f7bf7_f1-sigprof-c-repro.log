@@ -1,0 +1,19 @@
+# evidence: f1-sigprof-c-repro
+# instance: i-0e7bed4928e0f7bf7   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261101T055816Z   end: 20261101T055836Z   rc: 0
+# script sha256: b14d674f06f1cc835d693689059721099f5bc72209648dbe5267134b6df8f24f
+# ---- script ----
+# | cd /tmp && mkdir -p f1c && cd f1c
+# | base64 -d > s.c <<'B64'
+# | LyogTWltaWMgVjggbGlic2FtcGxlcjogU0lHUFJPRiBoYW5kbGVyIChTQV9SRVNUQVJUfFNBX1NJR0lORk98U0FfT05TVEFDSywgbm8KICAgc2lnYWx0c3RhY2spLCBhIHNhbXBsZXIgdGhyZWFkIHB0aHJlYWRfa2lsbCgpcyB0aGUgbWFpbiB0aHJlYWQgZXZlcnkgMSBtcy4gKi8KI2luY2x1ZGUgPHB0aHJlYWQuaD4KI2luY2x1ZGUgPHNpZ25hbC5oPgojaW5jbHVkZSA8c3RkaW8uaD4KI2luY2x1ZGUgPHN0ZGxpYi5oPgojaW5jbHVkZSA8c3RyaW5nLmg+CiNpbmNsdWRlIDx0aW1lLmg+CiNpbmNsdWRlIDx1bmlzdGQuaD4Kc3RhdGljIHZvbGF0aWxlIGxvbmcgaGl0czsKc3RhdGljIHB0aHJlYWRfdCBtYWluVDsKc3RhdGljIGludCBmbGFnczsKc3RhdGljIHZvaWQgaChpbnQgcywgc2lnaW5mb190ICppLCB2b2lkICpjKSB7ICh2b2lkKXM7ICh2b2lkKWk7ICh2b2lkKWM7IGhpdHMrKzsgfQpzdGF0aWMgdm9pZCAqc2FtcGxlcih2b2lkICphKSB7Cgkodm9pZClhOwoJc3RydWN0IHRpbWVzcGVjIHRzID0gezAsIDEwMDAwMDB9OwoJZm9yIChpbnQgbiA9IDA7IG4gPCAyMDAwOyBuKyspIHsgcHRocmVhZF9raWxsKG1haW5ULCBTSUdQUk9GKTsgbmFub3NsZWVwKCZ0cywgTlVMTCk7IH0KCXJldHVybiBOVUxMOwp9CmludCBtYWluKGludCBhcmdjLCBjaGFyICoqYXJndikgewoJZmxhZ3MgPSBTQV9SRVNUQVJUIHwgU0FfU0lHSU5GTzsKCWlmIChhcmdjID4gMSAmJiBzdHJjaHIoYXJndlsxXSwgJ28nKSkgZmxhZ3MgfD0gU0FfT05TVEFDSzsKCXN0cnVjdCBzaWdhY3Rpb24gc2E7IG1lbXNldCgmc2EsIDAsIHNpemVvZiBzYSk7CglzYS5zYV9zaWdhY3Rpb24gPSBoOyBzaWdlbXB0eXNldCgmc2Euc2FfbWFzayk7IHNhLnNhX2ZsYWdzID0gZmxhZ3M7CglpZiAoc2lnYWN0aW9uKFNJR1BST0YsICZzYSwgTlVMTCkpIHsgcGVycm9yKCJzaWdhY3Rpb24iKTsgcmV0dXJuIDE7IH0KCW1haW5UID0gcHRocmVhZF9zZWxmKCk7CglwdGhyZWFkX3QgdDsgcHRocmVhZF9jcmVhdGUoJnQsIE5VTEwsIHNhbXBsZXIsIE5VTEwpOwoJdm9sYXRpbGUgZG91YmxlIHggPSAwOyB0aW1lX3QgZW5kID0gdGltZShOVUxMKSArIDM7Cgl3aGlsZSAodGltZShOVUxMKSA8IGVuZCkgeyBmb3IgKGludCBpID0gMDsgaSA8IDEwMDAwMDsgaSsrKSB4ICs9IGk7IH0KCXB0aHJlYWRfam9pbih0LCBOVUxMKTsKCXByaW50ZigiZmxhZ3M9JSN4IGhpdHM9JWxkIE9LXG4iLCBmbGFncywgaGl0cyk7CglyZXR1cm4gMDsKfQo=
+# | B64
+# | gcc -O1 -o s s.c -lpthread 2>&1 || exit 1
+# | echo "== no SA_ONSTACK"; ./s; echo "rc=$?"
+# | echo "== SA_ONSTACK"; ./s o; echo "rc=$?"
+# ---- raw output ----
+== no SA_ONSTACK
+flags=0x50 hits=2000 OK
+rc=0
+== SA_ONSTACK
+flags=0x70 hits=2000 OK
+rc=0

@@ -1,0 +1,87 @@
+# evidence: f3-probe-umask-priority-title
+# instance: i-0e7bed4928e0f7bf7   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261101T055836Z   end: 20261101T055857Z   rc: 0
+# script sha256: 5ea81e05a054eaabcdfbebd548d64820ae167c42046796083dacd06cc7c07053
+# ---- script ----
+# | U=/boot/home/haikuports/dev-libs/libuv/work-1.52.1/sources/libuv-1.52.1
+# | echo "== libuv CMakeLists Haiku stanza"; grep -n -A14 'CMAKE_SYSTEM_NAME STREQUAL "Haiku"' $U/CMakeLists.txt
+# | echo "== libuv haiku.c title/priority"; grep -n "title\|priority" $U/src/unix/haiku.c
+# | echo "== node probes"
+# | node -e 'console.log("title=",JSON.stringify(process.title)); process.title="abc"; console.log("after set:",JSON.stringify(process.title)); console.log("argv0",process.argv0)'
+# | node --title=foo -p 'JSON.stringify(process.title)'
+# | node -e 'const o=process.umask(); process.umask(0o10664); console.log("umask read back", process.umask().toString(8), "dec", process.umask(o))'
+# | node -e 'const os=require("os"); for (const p of [19,10,0,-7,-14,-20]) { try { os.setPriority(0,p); console.log("set",p,"get",os.getPriority(0)); } catch(e){console.log("set",p,"err",e.message)} }'
+# | node -e 'console.log("uid",process.getuid(),"euid",process.geteuid(),"gid",process.getgid(),"egid",process.getegid())'
+# | echo "== passwd/group"; cat /etc/passwd 2>&1; echo ---; cat /etc/group 2>&1; ls -l /etc/passwd /etc/group 2>&1
+# | echo "== C probes"
+# | cat > /tmp/f3p.c <<'C'
+# | #include <stdio.h>
+# | #include <sys/stat.h>
+# | #include <sys/resource.h>
+# | #include <errno.h>
+# | #include <string.h>
+# | #include <unistd.h>
+# | #include <pwd.h>
+# | #include <grp.h>
+# | int main(void){
+# |   mode_t old = umask(0);
+# |   mode_t r = umask(010664);         /* bits above 0777 must be ignored (POSIX: only file permission bits) */
+# |   mode_t back = umask(old);
+# |   printf("umask(010664) then umask() -> %o (expected 664)\n", back);
+# |   for (int p = 19; p >= -20; p -= 13) {
+# |     errno = 0; int s = setpriority(PRIO_PROCESS, 0, p); int e1 = errno;
+# |     errno = 0; int g = getpriority(PRIO_PROCESS, 0); int e2 = errno;
+# |     printf("setpriority(%d)=%d (%s)  getpriority=%d (%s)\n", p, s, strerror(e1), g, strerror(e2));
+# |   }
+# |   printf("getpwnam(nobody)=%p getgrnam(nobody)=%p getgrnam(nogroup)=%p\n", (void*)getpwnam("nobody"), (void*)getgrnam("nobody"), (void*)getgrnam("nogroup"));
+# |   return 0;
+# | }
+# | C
+# | gcc -o /tmp/f3p /tmp/f3p.c && /tmp/f3p
+# ---- raw output ----
+== libuv CMakeLists Haiku stanza
+413:if(CMAKE_SYSTEM_NAME STREQUAL "Haiku")
+414-  list(APPEND uv_defines _BSD_SOURCE)
+415-  list(APPEND uv_libraries bsd network)
+416-  list(APPEND uv_sources
+417-	  src/unix/haiku.c
+418-	  src/unix/haiku-fsevents.c
+419-	  src/unix/bsd-ifaddrs.c
+420-	  src/unix/no-proctitle.c
+421-	  src/unix/posix-hrtime.c
+422-	  src/unix/posix-poll.c)
+423-endif()
+424-
+425-if(CMAKE_SYSTEM_NAME STREQUAL "QNX")
+426-  list(APPEND uv_sources
+427-    src/unix/posix-hrtime.c
+== libuv haiku.c title/priority
+== node probes
+title= ""
+after set: ""
+argv0 node
+""
+umask read back 10664 dec 4532
+set 19 get 19
+set 10 get 9
+set 0 get 0
+set -7 get -7
+set -14 get -14
+set -20 get -20
+uid 0 euid 0 gid 0 egid 0
+== passwd/group
+baron:x:0:0:Root User:/boot/home:/bin/bash
+sshd:x:999:999:sshd privilege separation user:/boot/system/var/empty:/bin/true
+---
+root:x:0:
+users:x:100:
+sshd:x:999:
+-rw-r--r-- 1 baron root  35 Oct 19 21:14 /etc/group
+-rw-r--r-- 1 baron root 122 Oct 19 21:14 /etc/passwd
+== C probes
+umask(010664) then umask() -> 10664 (expected 664)
+setpriority(19)=0 (No error)  getpriority=19 (No error)
+setpriority(6)=0 (No error)  getpriority=5 (No error)
+setpriority(-7)=0 (No error)  getpriority=-7 (No error)
+setpriority(-20)=0 (No error)  getpriority=-20 (No error)
+getpwnam(nobody)=(nil) getgrnam(nobody)=(nil) getgrnam(nogroup)=(nil)

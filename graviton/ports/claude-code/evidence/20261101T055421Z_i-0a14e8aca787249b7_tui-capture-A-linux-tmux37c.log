@@ -1,0 +1,36 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: tui-capture-A-linux-tmux37c
+# instance: i-0a14e8aca787249b7   region: us-west-2
+# ssm command: 283fa298-d1c8-4163-bc24-89bb5c447e47 (agent status: Success)
+# start: 20261101T055421Z   end: 20261101T055716Z   rc: 0   log bytes: 328
+# script sha256: 8cdbe7259af7bc108707ec5f5bee463c961bc60359cb172a944ac0c057a2629e
+# ---- script ----
+# | set -u
+# | echo 'f087c2dd3c935cfffa68119c11f7f155ea1ffbff279978543690a1db598d31ce  /opt/cc/w-tuiA37.stage/p.tgz' | sha256sum -c --quiet - || exit 1
+# | rm -rf /opt/cc/w-tuiA37 && mkdir -p /opt/cc/w-tuiA37 && tar xzf /opt/cc/w-tuiA37.stage/p.tgz -C /opt/cc/w-tuiA37 2>/dev/null
+# | cd /opt/cc/w-tuiA37
+# | set -u
+# | export DEBIAN_FRONTEND=noninteractive
+# | apt-get install -y -qq libevent-dev libncurses-dev bison pkg-config build-essential > /tmp/apt.log 2>&1; echo "apt rc=$?"
+# | B=/opt/cc/tmux37c; rm -rf $B; mkdir -p $B && cd $B
+# | curl -sSfLo tmux.tgz https://github.com/tmux/tmux/releases/download/3.7c/tmux-3.7c.tar.gz || exit 1
+# | echo '7c60cae9a0e25288e2e24750aafc9e8800fc7fd4555e447e1b29ee4201cfb3bf  tmux.tgz' | sha256sum -c - || exit 1
+# | tar xzf tmux.tgz && cd tmux-3.7c && ./configure --prefix=$B/inst > /tmp/tmux-conf.log 2>&1 && make -j4 > /tmp/tmux-make.log 2>&1 && make install > /dev/null 2>&1; echo "build rc=$?"
+# | export PATH=$B/inst/bin:$PATH; tmux -V
+# | echo "== bare keycap check"; tmux -L kc kill-server 2>/dev/null; tmux -L kc new-session -d -s kc -x 60 -y 5 "printf 'A 1\357\270\217\342\203\243 B\n'; sleep 30"; sleep 2; tmux -L kc capture-pane -t kc -p | head -1; tmux -L kc kill-server
+# | cd /opt/cc/w-tuiA37 && TUI_ONLY=A OUT=/opt/cc/tui-A37 bash tools/tui-diff.sh /opt/cc/v2.1.314/package/claude /opt/node24/bin/node /nonexistent text- 2>&1 | tail -8
+# | tar -czf /opt/cc/tui-A37.tgz -C /opt/cc tui-A37 && curl -sSf -X PUT --upload-file /opt/cc/tui-A37.tgz 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.amazonaws.com/claude-code-port/tui-A-linux-tmux37c.tgz?<PRESIGNED>' && echo upload-ok
+# ---- raw output ----
+apt rc=0
+tmux.tgz: OK
+build rc=0
+tmux 3.7c
+== bare keycap check
+A 1️⃣ B
+captured text-100x30 (8 snaps, side A)
+captured text-40x20 (8 snaps, side A)
+captured text-resize (6 snaps, side A)
+captured text-rtl (5 snaps, side A)
+captured text-rtl-vscode (6 snaps, side A)
+tui-diff: captured side A into /opt/cc/tui-A37
+upload-ok

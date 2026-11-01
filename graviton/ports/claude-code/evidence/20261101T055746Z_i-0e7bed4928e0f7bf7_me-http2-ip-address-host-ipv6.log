@@ -1,0 +1,23 @@
+# evidence: me-http2-ip-address-host-ipv6
+# instance: i-0e7bed4928e0f7bf7   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261101T055746Z   end: 20261101T055808Z   rc: 0
+# script sha256: a07efcb92dee611be9c2163506d0a8d34a6ec6785ed6c6a9a50aa0bb88890bd3
+# ---- script ----
+# | cd /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0 || exit 1
+# | echo "--- test source (listen / connect lines)"; grep -n -E "listen|connect|hasIPv6|::1" test/parallel/test-http2-ip-address-host.js
+# | echo "--- what does a default listen(0) bind to on this host?"
+# | /boot/system/bin/node -e 'const s=require("net").createServer().listen(0,()=>{console.log(JSON.stringify(s.address()));s.close()})'
+# | echo "--- explicit listen on :: (dual-stack) "
+# | /boot/system/bin/node -e 'const s=require("net").createServer().on("error",e=>console.log("error",e.code,e.syscall)).listen(0,"::",()=>{console.log(JSON.stringify(s.address()));s.close()})'
+# ---- raw output ----
+--- test source (listen / connect lines)
+17:const hasIPv6 = common.hasIPv6;
+18:const testCount = hasIPv6 ? 2 : 1;
+33:server.listen(0, common.mustCall(() => {
+35:    const client = h2.connect(url,
+50:  const ipv6Url = `https://[::1]:${server.address().port}`;
+52:  if (hasIPv6) handleRequest(ipv6Url);
+--- what does a default listen(0) bind to on this host?
+{"address":"0.0.0.0","family":"IPv4","port":39881}
+--- explicit listen on :: (dual-stack) 
+error EINVAL listen

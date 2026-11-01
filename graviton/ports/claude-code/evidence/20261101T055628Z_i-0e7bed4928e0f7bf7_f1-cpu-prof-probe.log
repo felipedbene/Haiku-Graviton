@@ -1,0 +1,91 @@
+# evidence: f1-cpu-prof-probe
+# instance: i-0e7bed4928e0f7bf7   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261101T055628Z   end: 20261101T055649Z   rc: 0
+# script sha256: 926c95d74194d69dee2bc7d1af2f4daf9fe371216b9ce0d65276c8ba287b430e
+# ---- script ----
+# | N=/boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0
+# | cd $N
+# | echo "== sampler.cc platform branches"
+# | grep -n "V8_OS_\|USE_SIGNALS\|pthread_kill\|SIGPROF\|kill(" deps/v8/src/libsampler/sampler.cc | head -60
+# | echo "== V8 Haiku platform files"; ls deps/v8/src/base/platform/ | grep -i -E "haiku|posix"
+# | echo "== repro 1: --cpu-prof -e"
+# | cd /tmp; rm -rf f1p; mkdir f1p; cd f1p
+# | /boot/system/bin/node --cpu-prof -e 'let s=0;for(let i=0;i<3e7;i++)s+=i;console.log("done",s)'; echo "rc=$?"; ls -la
+# | echo "== repro 2: --prof -p 42"
+# | /boot/system/bin/node --prof -p 42; echo "rc=$?"; ls -la
+# | echo "== repro 3: inspector Profiler.start in-process"
+# | /boot/system/bin/node -e '
+# | const {Session}=require("inspector");const s=new Session();s.connect();
+# | s.post("Profiler.enable",()=>s.post("Profiler.start",()=>{let x=0;for(let i=0;i<3e7;i++)x+=i;
+# | s.post("Profiler.stop",(e,r)=>{console.log("stop",e,r&&r.profile.nodes.length)})}))'; echo "rc=$?"
+# ---- raw output ----
+== sampler.cc platform branches
+11:#ifdef USE_SIGNALS
+19:#if !V8_OS_QNX && !V8_OS_AIX && !V8_OS_ZOS && !V8_OS_HAIKU
+23:#if V8_OS_AIX || V8_TARGET_ARCH_S390X
+27:#elif V8_OS_DARWIN
+31:#elif !V8_OS_OPENBSD && !V8_OS_HAIKU
+37:#elif V8_OS_WIN || V8_OS_CYGWIN
+41:#elif V8_OS_FUCHSIA
+72:#if V8_OS_ZOS
+77:#if V8_OS_ANDROID && !defined(__BIONIC_HAVE_UCONTEXT_T)
+178:#endif  // V8_OS_ANDROID && !defined(__BIONIC_HAVE_UCONTEXT_T)
+183:#if defined(USE_SIGNALS)
+267:#elif V8_OS_WIN || V8_OS_CYGWIN
+301:#elif V8_OS_FUCHSIA
+322:#endif  // USE_SIGNALS
+324:#if defined(USE_SIGNALS)
+350:#if V8_OS_QNX
+356:        (sigaction(SIGPROF, &sa, &old_signal_handler_) == 0);
+362:#if V8_OS_AIX || V8_TARGET_ARCH_S390X
+363:      // On Aix, IBMi & zLinux SIGPROF can sometimes arrive after the
+368:      sigaction(SIGPROF, &old_signal_handler_, nullptr);
+393:  if (signal != SIGPROF) return;
+402:#if !(V8_OS_OPENBSD || V8_OS_ZOS || \
+403:      (V8_OS_LINUX && (V8_HOST_ARCH_S390X || V8_HOST_ARCH_PPC64)))
+405:#elif V8_OS_ZOS
+408:#if V8_OS_LINUX
+472:#elif V8_OS_ZOS
+477:#elif V8_OS_IOS
+493:#elif V8_OS_DARWIN
+510:#elif V8_OS_FREEBSD
+524:#elif V8_OS_HAIKU
+534:#elif V8_OS_NETBSD
+544:#elif V8_OS_OPENBSD
+554:#elif V8_OS_SOLARIS
+558:#elif V8_OS_QNX
+568:#elif V8_OS_AIX
+573:#endif  // V8_OS_AIX
+576:#endif  // USE_SIGNALS
+590:#if defined(USE_SIGNALS)
+597:#if defined(USE_SIGNALS)
+605:#if defined(USE_SIGNALS)
+611:  pthread_kill(platform_data()->vm_tself(), SIGPROF);
+614:#elif V8_OS_WIN || V8_OS_CYGWIN
+647:#elif V8_OS_FUCHSIA
+695:#endif  // USE_SIGNALS
+== V8 Haiku platform files
+platform-haiku.cc
+platform-posix-time.cc
+platform-posix-time.h
+platform-posix.cc
+platform-posix.h
+== repro 1: --cpu-prof -e
+/tmp/ccrun/cc-20261101T055628Z-75865.sh: line 8: 198874 Kill Thread                /boot/system/bin/node --cpu-prof -e 'let s=0;for(let i=0;i<3e7;i++)s+=i;console.log("done",s)'
+rc=149
+total 16
+drwxr-xr-x 1 baron root 2048 Nov  1 05:56 .
+drwxrwxrwx 1 baron root 7168 Nov  1 05:56 ..
+== repro 2: --prof -p 42
+/tmp/ccrun/cc-20261101T055628Z-75865.sh: line 10: 198928 Kill Thread                /boot/system/bin/node --prof -p 42
+rc=149
+total 196
+drwxr-xr-x 1 baron root   2048 Nov  1 05:56 .
+drwxrwxrwx 1 baron root   7168 Nov  1 05:56 ..
+-rw-r--r-- 1 baron root 180439 Nov  1 05:56 isolate-0x7ad47f5000-198928-v8.log
+== repro 3: inspector Profiler.start in-process
+/tmp/ccrun/cc-20261101T055628Z-75865.sh: line 15: 198966 Kill Thread                /boot/system/bin/node -e '
+const {Session}=require("inspector");const s=new Session();s.connect();
+s.post("Profiler.enable",()=>s.post("Profiler.start",()=>{let x=0;for(let i=0;i<3e7;i++)x+=i;
+s.post("Profiler.stop",(e,r)=>{console.log("stop",e,r&&r.profile.nodes.length)})}))'
+rc=149

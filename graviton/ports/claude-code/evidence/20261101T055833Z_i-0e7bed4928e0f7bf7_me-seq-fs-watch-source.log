@@ -1,0 +1,47 @@
+# evidence: me-seq-fs-watch-source
+# instance: i-0e7bed4928e0f7bf7   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261101T055833Z   end: 20261101T055853Z   rc: 0
+# script sha256: 0453a4aee7c7914bc936a0100d8746205e22aab19835591578c7d556b8bfa138
+# ---- script ----
+# | cd /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0 || exit 1
+# | sed -n 90,115p test/sequential/test-fs-watch.js
+# | grep -n "expectFilePath\|common.isLinux\|isMacOS\|isWindows\|isAIX\|isIBMi\|isSunOS\|isFreeBSD" test/sequential/test-fs-watch.js | head -20
+# ---- raw output ----
+      watcher.close();
+    }));
+
+  const interval = repeat(() => { fs.writeFileSync(filepathAbs, 'pardner'); });
+}
+
+{
+  const testsubdir = fs.mkdtempSync(testDir + path.sep);
+  const filepath = path.join(testsubdir, 'newfile.txt');
+
+  function doWatch() {
+    const watcher =
+      fs.watch(testsubdir, common.mustCall(function(event, filename) {
+        const renameEv = common.isSunOS || common.isAIX ? 'change' : 'rename';
+        assert.strictEqual(event, renameEv);
+        if (expectFilePath) {
+          assert.strictEqual(filename, 'newfile.txt');
+        } else {
+          assert.strictEqual(filename, null);
+        }
+        clearInterval(interval);
+        watcher.close();
+      }));
+
+    const interval = repeat(() => {
+      fs.rmSync(filepath, { force: true });
+24:if (common.isIBMi)
+38:const expectFilePath = common.isWindows ||
+39:                       common.isLinux ||
+40:                       common.isMacOS ||
+41:                       common.isAIX;
+65:    if (expectFilePath) {
+86:      if (expectFilePath) {
+103:        const renameEv = common.isSunOS || common.isAIX ? 'change' : 'rename';
+105:        if (expectFilePath) {
+121:  if (common.isMacOS) {
+139:  if (common.isMacOS || common.isWindows) {
+159:  if (common.isMacOS || common.isWindows) {

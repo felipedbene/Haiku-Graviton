@@ -1,0 +1,135 @@
+# evidence: f4-libuv-src-probe
+# instance: i-0e7bed4928e0f7bf7   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261101T055741Z   end: 20261101T055803Z   rc: 0
+# script sha256: 14d47a865f6f9548c9e126a04af69020096ae8cfc231ba1841366d8ccbe4c383
+# ---- script ----
+# | ls -d /boot/home/haikuports/dev-libs/libuv/work-*/sources/* 2>&1
+# | pkgman search -i -D libuv nghttp2 2>&1 | head; 
+# | ls /boot/system/lib/libuv* /boot/system/lib/libnghttp2*
+# | U=$(ls -d /boot/home/haikuports/dev-libs/libuv/work-*/sources/libuv-* | head -1); echo "U=$U"
+# | cd $U && grep -n "uv_pipe_chmod" -A45 src/unix/pipe.c | head -70
+# | grep -n "uv_udp_set_multicast_interface" -A60 src/unix/udp.c | head -80
+# ---- raw output ----
+/boot/home/haikuports/dev-libs/libuv/work-1.52.1/sources/libuv-1.52.1
+Usage: pkgman search ( <search-string> | --all | -a )
+Searches for packages matching <search-string>.
+
+Options:
+  -a, --all
+    List all packages. Specified instead of <search-string>.
+  --debug <level>
+    Print debug output. <level> should be between 0 (no debug output,
+    the default) and 10 (most debug output).
+  -D, --details
+/boot/system/lib/libnghttp2.so.14
+/boot/system/lib/libnghttp2.so.14.28.2
+/boot/system/lib/libuv.so.1
+/boot/system/lib/libuv.so.1.0.0
+U=/boot/home/haikuports/dev-libs/libuv/work-1.52.1/sources/libuv-1.52.1
+448:int uv_pipe_chmod(uv_pipe_t* handle, int mode) {
+449-  char name_buffer[1 + UV__PATH_MAX];
+450-  int desired_mode;
+451-  size_t name_len;
+452-  const char* name;
+453-  int fd;
+454-  int r;
+455-
+456-  if (handle == NULL)
+457-    return UV_EBADF;
+458-
+459-  fd = uv__stream_fd(handle);
+460-  if (fd == -1)
+461-    return UV_EBADF;
+462-
+463-  if (mode != UV_READABLE &&
+464-      mode != UV_WRITABLE &&
+465-      mode != (UV_WRITABLE | UV_READABLE))
+466-    return UV_EINVAL;
+467-
+468-  desired_mode = 0;
+469-  if (mode & UV_READABLE)
+470-    desired_mode |= S_IRUSR | S_IRGRP | S_IROTH;
+471-  if (mode & UV_WRITABLE)
+472-    desired_mode |= S_IWUSR | S_IWGRP | S_IWOTH;
+473-
+474-  /* fchmod on macOS and (Free|Net|Open)BSD does not support UNIX sockets. */
+475-  if (fchmod(fd, desired_mode))
+476-    if (errno != EINVAL && errno != EOPNOTSUPP)
+477-      return UV__ERR(errno);
+478-
+479-  /* Fall back to chmod. */
+480-  name_len = sizeof(name_buffer);
+481-  r = uv_pipe_getsockname(handle, name_buffer, &name_len);
+482-  if (r != 0)
+483-    return r;
+484-  name = name_buffer;
+485-
+486-  /* On some platforms, getsockname returns an empty string, and we try with pipe_fname. */
+487-  if (name_len == 0 && handle->pipe_fname != NULL)
+488-    name = handle->pipe_fname;
+489-
+490-  if (chmod(name, desired_mode))
+491-    return UV__ERR(errno);
+492-
+493-  return 0;
+1235:int uv_udp_set_multicast_interface(uv_udp_t* handle, const char* interface_addr) {
+1236-  struct sockaddr_storage addr_st;
+1237-  struct sockaddr_in* addr4;
+1238-  struct sockaddr_in6* addr6;
+1239-
+1240-  addr4 = (struct sockaddr_in*) &addr_st;
+1241-  addr6 = (struct sockaddr_in6*) &addr_st;
+1242-
+1243-  if (!interface_addr) {
+1244-    memset(&addr_st, 0, sizeof addr_st);
+1245-    if (handle->flags & UV_HANDLE_IPV6) {
+1246-      addr_st.ss_family = AF_INET6;
+1247-      addr6->sin6_scope_id = 0;
+1248-    } else {
+1249-      addr_st.ss_family = AF_INET;
+1250-      addr4->sin_addr.s_addr = htonl(INADDR_ANY);
+1251-    }
+1252-  } else if (uv_ip4_addr(interface_addr, 0, addr4) == 0) {
+1253-    /* nothing, address was parsed */
+1254-  } else if (uv_ip6_addr(interface_addr, 0, addr6) == 0) {
+1255-    /* nothing, address was parsed */
+1256-  } else {
+1257-    return UV_EINVAL;
+1258-  }
+1259-
+1260-  if (addr_st.ss_family == AF_INET) {
+1261-    if (setsockopt(handle->io_watcher.fd,
+1262-                   IPPROTO_IP,
+1263-                   IP_MULTICAST_IF,
+1264-                   (void*) &addr4->sin_addr,
+1265-                   sizeof(addr4->sin_addr)) == -1) {
+1266-      return UV__ERR(errno);
+1267-    }
+1268-  } else if (addr_st.ss_family == AF_INET6) {
+1269-    if (setsockopt(handle->io_watcher.fd,
+1270-                   IPPROTO_IPV6,
+1271-                   IPV6_MULTICAST_IF,
+1272-                   &addr6->sin6_scope_id,
+1273-                   sizeof(addr6->sin6_scope_id)) == -1) {
+1274-      return UV__ERR(errno);
+1275-    }
+1276-  } else {
+1277-    assert(0 && "unexpected address family");
+1278-    abort();
+1279-  }
+1280-
+1281-  return 0;
+1282-}
+1283-
+1284-int uv_udp_getpeername(const uv_udp_t* handle,
+1285-                       struct sockaddr* name,
+1286-                       int* namelen) {
+1287-
+1288-  return uv__getsockpeername((const uv_handle_t*) handle,
+1289-                             getpeername,
+1290-                             name,
+1291-                             namelen);
+1292-}
+1293-
+1294-int uv_udp_getsockname(const uv_udp_t* handle,
+1295-                       struct sockaddr* name,

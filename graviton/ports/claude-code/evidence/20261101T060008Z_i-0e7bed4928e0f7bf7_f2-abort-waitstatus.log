@@ -1,0 +1,63 @@
+# evidence: f2-abort-waitstatus
+# instance: i-0e7bed4928e0f7bf7   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261101T060008Z   end: 20261101T060029Z   rc: 0
+# script sha256: fb9ed471cc85030382c56b19361ad324c44b34fa675adeef3751bdf0d2b588e5
+# ---- script ----
+# | cd /tmp
+# | cat > sg.c <<'C'
+# | #include <signal.h>
+# | #include <stdio.h>
+# | #include <stdlib.h>
+# | #include <string.h>
+# | #include <sys/wait.h>
+# | #include <unistd.h>
+# | static void run(const char *what, int mode){
+# |   pid_t p=fork();
+# |   if(p==0){ if(mode==0) abort(); if(mode==1) raise(SIGABRT); if(mode==2){ volatile int *z=0; *z=1;} if(mode==3){signal(SIGABRT,SIG_IGN); abort();} _exit(0);}
+# |   int st; waitpid(p,&st,0);
+# |   printf("%-28s WIFSIGNALED=%d WTERMSIG=%d (%s)  WIFEXITED=%d\n",what,WIFSIGNALED(st),WIFSIGNALED(st)?WTERMSIG(st):-1,WIFSIGNALED(st)?strsignal(WTERMSIG(st)):"-",WIFEXITED(st));
+# | }
+# | int main(){ printf("SIGABRT=%d SIGKILLTHR=%d SIGSEGV=%d\n",SIGABRT,SIGKILLTHR,SIGSEGV);
+# |  run("abort()",0); run("raise(SIGABRT)",1); run("NULL store (SIGSEGV)",2); run("abort() with SIGABRT ignored",3); return 0;}
+# | C
+# | gcc -o sg sg.c && ./sg 2>&1
+# | echo "== syslog tail (debug_server):"; tail -n 400 /boot/system/var/log/syslog | grep -i "debug_server" | tail -6
+# | cd /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0
+# | echo "== node signo_string:"; grep -rn "signo_string" src/*.cc src/*.h | head -5
+# | grep -n "SIGPOLL\|SIGKILLTHR" src/util.cc src/node_constants.cc deps/uv/src/unix/*.c | head
+# | grep -n "signalCode\|exitCode = " lib/internal/child_process.js | head -12
+# ---- raw output ----
+Abort
+Abort
+SIGABRT=6 SIGKILLTHR=21 SIGSEGV=11
+abort()                      WIFSIGNALED=1 WTERMSIG=21 (Kill Thread)  WIFEXITED=0
+raise(SIGABRT)               WIFSIGNALED=1 WTERMSIG=6 (Abort)  WIFEXITED=0
+NULL store (SIGSEGV)         WIFSIGNALED=1 WTERMSIG=21 (Kill Thread)  WIFEXITED=0
+SIGABRT=6 SIGKILLTHR=21 SIGSEGV=11
+abort()                      WIFSIGNALED=1 WTERMSIG=21 (Kill Thread)  WIFEXITED=0
+raise(SIGABRT)               WIFSIGNALED=1 WTERMSIG=6 (Abort)  WIFEXITED=0
+NULL store (SIGSEGV)         WIFSIGNALED=1 WTERMSIG=21 (Kill Thread)  WIFEXITED=0
+abort() with SIGABRT ignored WIFSIGNALED=0 WTERMSIG=-1 (-)  WIFEXITED=1
+== syslog tail (debug_server):
+KERN: debug_server: Thread 202331 entered the debugger: Segment violation
+KERN: debug_server: Failed to start debugger: No such file or directory
+KERN: debug_server: Killing team 202331 (./sg)
+KERN: debug_server: TeamDebugHandler::Init(): Failed to get info for team 202331: Operation on invalid team
+KERN: debug_server: KillTeam(): Error getting info for team 202331: Operation on invalid team
+KERN: debug_server: Killing team 202331 ()
+== node signo_string:
+src/node_report_utils.cc:217:      writer->json_keyvalue("signal", signo_string(handle->signal.signum));
+src/process_wrap.cc:374:      OneByteString(env->isolate(), signo_string(term_signal))
+src/spawn_sync.cc:732:                  OneByteString(env()->isolate(), signo_string(term_signal_)))
+src/node.h:1307:const char* signo_string(int errorno);
+src/node_constants.cc:802:#ifdef SIGPOLL
+src/node_constants.cc:803:  NODE_DEFINE_CONSTANT(target, SIGPOLL);
+deps/uv/src/unix/process.c:307:    if (n == SIGKILLTHR)
+263:  this.signalCode = null;
+264:  this.exitCode = null;
+271:  this._handle.onexit = (exitCode, signalCode) => {
+272:    if (signalCode) {
+273:      this.signalCode = signalCode;
+275:      this.exitCode = exitCode;
+295:      this.emit('exit', this.exitCode, this.signalCode);
+1141:    subprocess.emit('close', subprocess.exitCode, subprocess.signalCode);

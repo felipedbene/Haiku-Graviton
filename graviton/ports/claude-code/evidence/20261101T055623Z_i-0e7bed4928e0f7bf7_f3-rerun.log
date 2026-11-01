@@ -1,0 +1,1069 @@
+# evidence: f3-rerun
+# instance: i-0e7bed4928e0f7bf7   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261101T055623Z   end: 20261101T055643Z   rc: 1
+# script sha256: a57d3e48ec1889e8208d7ee0f30b1b4ee54b20d6643f618c8bad45f427e1dd18
+# ---- script ----
+# | cd /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0 || exit 1
+# | echo "id: $(id)"; uname -a
+# | T="parallel/test-process-euid-egid parallel/test-process-umask-mask parallel/test-os-process-priority parallel/test-setproctitle parallel/test-process-title-cli sequential/test-process-title parallel/test-os parallel/test-inspector-contexts parallel/test-worker-node-options parallel/test-tls-enable-keylog-cli parallel/test-trace-events-fs-async parallel/test-trace-events-fs-sync parallel/test-trace-events-metadata parallel/test-permission-fs-symlink-target-write parallel/test-fs-link parallel/test-fs-error-messages parallel/test-fs-readfile-eof parallel/test-fs-readfile-pipe parallel/test-fs-readfile-pipe-large parallel/test-fs-readfilesync-pipe-large parallel/test-fs-realpath-pipe"
+# | : | python3 tools/test.py --shell=/boot/system/bin/node -j 1 -p tap -v $T
+# ---- raw output ----
+id: uid=0(baron) gid=0(root) groups=0(root)
+Haiku ip-10-128-9-142.us-west-2.compu R1~beta6+development hrev59996 Oct 19 2026 21:09:42 arm64 arm64 Haiku
+# /boot/system/bin/node -p process.arch
+# /boot/system/bin/node -p process.versions.openssl
+# /boot/system/bin/node -p process.config.variables.asan
+# /boot/system/bin/node -p process.config.variables.v8_enable_pointer_compression
+# /boot/system/bin/node -p process.features.inspector
+# /boot/system/bin/node -p process.versions.openssl
+TAP version 13
+1..21
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-process-euid-egid.js
+not ok 1 parallel/test-process-euid-egid
+  ---
+  duration_ms: 118.15500
+  severity: fail
+  exitcode: 1
+  stack: |-
+    node:internal/bootstrap/switches/does_own_process_state:88
+            throw new ERR_UNKNOWN_CREDENTIAL(type, id);
+            ^
+    
+    Error [ERR_UNKNOWN_CREDENTIAL]: Group identifier does not exist: nogroup
+        at process.setegid (node:internal/bootstrap/switches/does_own_process_state:88:15)
+        at Object.<anonymous> (/boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-process-euid-egid.js:64:13)
+        at Module._compile (node:internal/modules/cjs/loader:1929:14)
+        at Object..js (node:internal/modules/cjs/loader:2060:10)
+        at Module.load (node:internal/modules/cjs/loader:1651:32)
+        at Module._load (node:internal/modules/cjs/loader:1443:12)
+        at wrapModuleLoad (node:internal/modules/cjs/loader:261:19)
+        at Module.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:154:5)
+        at node:internal/main/run_main_module:33:47 {
+      code: 'ERR_UNKNOWN_CREDENTIAL'
+    }
+    
+    Node.js v24.21.0
+  ...
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-process-umask-mask.js
+not ok 2 parallel/test-process-umask-mask
+  ---
+  duration_ms: 99.69200
+  severity: fail
+  exitcode: 1
+  stack: |-
+    node:assert:152
+      throw new AssertionError(obj);
+      ^
+    
+    AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+    
+    4532 !== 436
+    
+        at test (/boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-process-umask-mask.js:27:10)
+        at Object.<anonymous> (/boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-process-umask-mask.js:32:1)
+        at Module._compile (node:internal/modules/cjs/loader:1929:14)
+        at Object..js (node:internal/modules/cjs/loader:2060:10)
+        at Module.load (node:internal/modules/cjs/loader:1651:32)
+        at Module._load (node:internal/modules/cjs/loader:1443:12)
+        at wrapModuleLoad (node:internal/modules/cjs/loader:261:19)
+        at Module.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:154:5)
+        at node:internal/main/run_main_module:33:47 {
+      generatedMessage: true,
+      code: 'ERR_ASSERTION',
+      actual: 4532,
+      expected: 436,
+      operator: 'strictEqual',
+      diff: 'simple'
+    }
+    
+    Node.js v24.21.0
+  ...
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-os-process-priority.js
+not ok 3 parallel/test-os-process-priority
+  ---
+  duration_ms: 113.58800
+  severity: fail
+  exitcode: 1
+  stack: |-
+    node:assert:152
+      throw new AssertionError(obj);
+      ^
+    
+    AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+    
+    0 !== 1
+    
+        at checkPriority (/boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-os-process-priority.js:127:12)
+        at Object.<anonymous> (/boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-os-process-priority.js:101:3)
+        at Module._compile (node:internal/modules/cjs/loader:1929:14)
+        at Object..js (node:internal/modules/cjs/loader:2060:10)
+        at Module.load (node:internal/modules/cjs/loader:1651:32)
+        at Module._load (node:internal/modules/cjs/loader:1443:12)
+        at wrapModuleLoad (node:internal/modules/cjs/loader:261:19)
+        at Module.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:154:5)
+        at node:internal/main/run_main_module:33:47 {
+      generatedMessage: true,
+      code: 'ERR_ASSERTION',
+      actual: 0,
+      expected: 1,
+      operator: 'strictEqual',
+      diff: 'simple'
+    }
+    
+    Node.js v24.21.0
+  ...
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-setproctitle.js
+not ok 4 parallel/test-setproctitle
+  ---
+  duration_ms: 113.68800
+  severity: fail
+  exitcode: 1
+  stack: |-
+    node:assert:152
+      throw new AssertionError(obj);
+      ^
+    
+    AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+    
+    '' !== '198038'
+    
+        at Object.<anonymous> (/boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-setproctitle.js:26:8)
+        at Module._compile (node:internal/modules/cjs/loader:1929:14)
+        at Object..js (node:internal/modules/cjs/loader:2060:10)
+        at Module.load (node:internal/modules/cjs/loader:1651:32)
+        at Module._load (node:internal/modules/cjs/loader:1443:12)
+        at wrapModuleLoad (node:internal/modules/cjs/loader:261:19)
+        at Module.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:154:5)
+        at node:internal/main/run_main_module:33:47 {
+      generatedMessage: true,
+      code: 'ERR_ASSERTION',
+      actual: '',
+      expected: '198038',
+      operator: 'strictEqual',
+      diff: 'simple'
+    }
+    
+    Node.js v24.21.0
+  ...
+# /boot/system/bin/node --title=foo /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-process-title-cli.js
+not ok 5 parallel/test-process-title-cli
+  ---
+  duration_ms: 100.63900
+  severity: fail
+  exitcode: 1
+  stack: |-
+    node:assert:152
+      throw new AssertionError(obj);
+      ^
+    
+    AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+    
+    '' !== 'foo'
+    
+        at Object.<anonymous> (/boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-process-title-cli.js:16:8)
+        at Module._compile (node:internal/modules/cjs/loader:1929:14)
+        at Object..js (node:internal/modules/cjs/loader:2060:10)
+        at Module.load (node:internal/modules/cjs/loader:1651:32)
+        at Module._load (node:internal/modules/cjs/loader:1443:12)
+        at wrapModuleLoad (node:internal/modules/cjs/loader:261:19)
+        at Module.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:154:5)
+        at node:internal/main/run_main_module:33:47 {
+      generatedMessage: true,
+      code: 'ERR_ASSERTION',
+      actual: '',
+      expected: 'foo',
+      operator: 'strictEqual',
+      diff: 'simple'
+    }
+    
+    Node.js v24.21.0
+  ...
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-os.js
+not ok 6 parallel/test-os
+  ---
+  duration_ms: 111.65700
+  severity: fail
+  exitcode: 1
+  stack: |-
+    node:assert:152
+      throw new AssertionError(obj);
+      ^
+    
+    AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+    
+    9 !== 10
+    
+        at Object.<anonymous> (/boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-os.js:92:10)
+        at Module._compile (node:internal/modules/cjs/loader:1929:14)
+        at Object..js (node:internal/modules/cjs/loader:2060:10)
+        at Module.load (node:internal/modules/cjs/loader:1651:32)
+        at Module._load (node:internal/modules/cjs/loader:1443:12)
+        at wrapModuleLoad (node:internal/modules/cjs/loader:261:19)
+        at Module.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:154:5)
+        at node:internal/main/run_main_module:33:47 {
+      generatedMessage: true,
+      code: 'ERR_ASSERTION',
+      actual: 9,
+      expected: 10,
+      operator: 'strictEqual',
+      diff: 'simple'
+    }
+    
+    Node.js v24.21.0
+  ...
+# /boot/system/bin/node --expose-gc /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-inspector-contexts.js
+not ok 7 parallel/test-inspector-contexts
+  ---
+  duration_ms: 141.27600
+  severity: fail
+  exitcode: 1
+  stack: |-
+    Testing context created/destroyed notifications
+    node:internal/process/promises:394
+        triggerUncaughtException(err, true /* fromPromise */);
+        ^
+    
+    AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+    + actual - expected
+    
+    + '/boot/system/bin/node[198075]'
+    - '[198075]'
+    
+        at testContextCreatedAndDestroyed (/boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-inspector-contexts.js:42:14)
+        at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+        at async /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-inspector-contexts.js:165:3 {
+      generatedMessage: true,
+      code: 'ERR_ASSERTION',
+      actual: '/boot/system/bin/node[198075]',
+      expected: '[198075]',
+      operator: 'strictEqual',
+      diff: 'simple'
+    }
+    
+    Node.js v24.21.0
+  ...
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-worker-node-options.js
+not ok 8 parallel/test-worker-node-options
+  ---
+  duration_ms: 212.54900
+  severity: fail
+  exitcode: 1
+  stack: |-
+    [process 198101]: --- stderr ---
+    node:assert:152
+      throw new AssertionError(obj);
+      ^
+    
+    AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+    
+    '' !== 'foo'
+    
+        at Object.<anonymous> (/boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/fixtures/spawn-worker-with-copied-env.js:6:10)
+        at Module._compile (node:internal/modules/cjs/loader:1929:14)
+        at Object..js (node:internal/modules/cjs/loader:2060:10)
+        at Module.load (node:internal/modules/cjs/loader:1651:32)
+        at Module._load (node:internal/modules/cjs/loader:1443:12)
+        at wrapModuleLoad (node:internal/modules/cjs/loader:261:19)
+        at Module.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:154:5)
+        at node:internal/main/run_main_module:33:47 {
+      generatedMessage: true,
+      code: 'ERR_ASSERTION',
+      actual: '',
+      expected: 'foo',
+      operator: 'strictEqual',
+      diff: 'simple'
+    }
+    
+    Node.js v24.21.0
+    
+    [process 198101]: --- stdout ---
+    
+    [process 198101]: status = 1, signal = null
+    /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/common/child_process.js:112
+        throw error;
+        ^
+    
+    Error: - process terminated with status 1, expected 0
+        at Object.<anonymous> (/boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-worker-node-options.js:14:1)
+        at Module._compile (node:internal/modules/cjs/loader:1929:14)
+        at Object..js (node:internal/modules/cjs/loader:2060:10)
+        at Module.load (node:internal/modules/cjs/loader:1651:32)
+        at Module._load (node:internal/modules/cjs/loader:1443:12)
+        at wrapModuleLoad (node:internal/modules/cjs/loader:261:19)
+        at Module.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:154:5)
+        at node:internal/main/run_main_module:33:47 {
+      options: { env: { NODE_OPTIONS: '--title=foo' } },
+      command: '/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/fixtures/spawn-worker-with-copied-env'
+    }
+    
+    Node.js v24.21.0
+  ...
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-tls-enable-keylog-cli.js
+not ok 9 parallel/test-tls-enable-keylog-cli
+  ---
+  duration_ms: 329.40700
+  severity: fail
+  exitcode: 1
+  stack: |-
+    (node:198126) [DEP0060] DeprecationWarning: The `util._extend` API is deprecated. Please use Object.assign() instead.
+    (Use `node --trace-deprecation ...` to show where the warning was created)
+    (node:198126) Warning: Using --tls-keylog makes TLS connections insecure by writing secret key material to file /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/.tmp.8/keylog.log
+    node:assert:152
+      throw new AssertionError(obj);
+      ^
+    
+    AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+    
+    1 !== 2
+    
+        at ChildProcess.<anonymous> (/boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-tls-enable-keylog-cli.js:29:10)
+        at ChildProcess.<anonymous> (/boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/common/index.js:481:15)
+        at ChildProcess.emit (node:events:514:28)
+        at maybeClose (node:internal/child_process:1141:16)
+        at ChildProcess._handle.onexit (node:internal/child_process:306:5) {
+      generatedMessage: true,
+      code: 'ERR_ASSERTION',
+      actual: 1,
+      expected: 2,
+      operator: 'strictEqual',
+      diff: 'simple'
+    }
+    
+    Node.js v24.21.0
+  ...
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-trace-events-fs-async.js
+not ok 10 parallel/test-trace-events-fs-async
+  ---
+  duration_ms: 1411.10200
+  severity: fail
+  exitcode: 1
+  stack: |-
+    /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-trace-events-fs-async.js:321
+        throw new Error(`${tr}:\n${util.inspect(proc)}`);
+        ^
+    
+    Error: link:
+    {
+      status: 1,
+      signal: null,
+      output: [
+        null,
+        '',
+        'node:fs:2000\n' +
+          '  binding.unlink(getValidatedPath(path));\n' +
+          '          ^\n' +
+          '\n' +
+          "Error: ENOENT: no such file or directory, unlink 'fs14.txt'\n" +
+          '    at Object.unlinkSync (node:fs:2000:11)\n' +
+          '    at [eval]:6:8\n' +
+          '    at FSReqCallback.oncomplete (node:fs:187:23) {\n' +
+          '  errno: -2147459069,\n' +
+          "  code: 'ENOENT',\n" +
+          "  syscall: 'unlink',\n" +
+          "  path: 'fs14.txt'\n" +
+          '}\n' +
+          '\n' +
+          'Node.js v24.21.0\n'
+      ],
+      pid: 198386,
+      stdout: '',
+      stderr: 'node:fs:2000\n' +
+        '  binding.unlink(getValidatedPath(path));\n' +
+        '          ^\n' +
+        '\n' +
+        "Error: ENOENT: no such file or directory, unlink 'fs14.txt'\n" +
+        '    at Object.unlinkSync (node:fs:2000:11)\n' +
+        '    at [eval]:6:8\n' +
+        '    at FSReqCallback.oncomplete (node:fs:187:23) {\n' +
+        '  errno: -2147459069,\n' +
+        "  code: 'ENOENT',\n" +
+        "  syscall: 'unlink',\n" +
+        "  path: 'fs14.txt'\n" +
+        '}\n' +
+        '\n' +
+        'Node.js v24.21.0\n'
+    }
+        at Object.<anonymous> (/boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-trace-events-fs-async.js:321:11)
+        at Module._compile (node:internal/modules/cjs/loader:1929:14)
+        at Object..js (node:internal/modules/cjs/loader:2060:10)
+        at Module.load (node:internal/modules/cjs/loader:1651:32)
+        at Module._load (node:internal/modules/cjs/loader:1443:12)
+        at wrapModuleLoad (node:internal/modules/cjs/loader:261:19)
+        at Module.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:154:5)
+        at node:internal/main/run_main_module:33:47
+    
+    Node.js v24.21.0
+  ...
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-trace-events-fs-sync.js
+not ok 11 parallel/test-trace-events-fs-sync
+  ---
+  duration_ms: 1310.89900
+  severity: fail
+  exitcode: 1
+  stack: |-
+    /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-trace-events-fs-sync.js:132
+        throw new Error(`${tr}:\n${util.inspect(proc)}`);
+        ^
+    
+    Error: fs.sync.link:
+    {
+      status: 1,
+      signal: null,
+      output: [
+        null,
+        '',
+        'node:fs:1975\n' +
+          '  binding.link(\n' +
+          '          ^\n' +
+          '\n' +
+          "Error: EPERM: operation not permitted, link 'fs13.txt' -> 'fs14.txt'\n" +
+          '    at Object.linkSync (node:fs:1975:11)\n' +
+          '    at [eval]:1:48\n' +
+          '    at runScriptInThisContext (node:internal/vm:219:10)\n' +
+          '    at node:internal/process/execution:451:12\n' +
+          '    at [eval]-wrapper:6:24\n' +
+          '    at runScriptInContext (node:internal/process/execution:449:60)\n' +
+          '    at evalFunction (node:internal/process/execution:283:30)\n' +
+          '    at evalTypeScript (node:internal/process/execution:295:3)\n' +
+          '    at node:internal/main/eval_string:71:3 {\n' +
+          '  errno: -2147483633,\n' +
+          "  code: 'EPERM',\n" +
+          "  syscall: 'link',\n" +
+          "  path: 'fs13.txt',\n" +
+          "  dest: 'fs14.txt'\n" +
+          '}\n' +
+          '\n' +
+          'Node.js v24.21.0\n'
+      ],
+      pid: 198704,
+      stdout: '',
+      stderr: 'node:fs:1975\n' +
+        '  binding.link(\n' +
+        '          ^\n' +
+        '\n' +
+        "Error: EPERM: operation not permitted, link 'fs13.txt' -> 'fs14.txt'\n" +
+        '    at Object.linkSync (node:fs:1975:11)\n' +
+        '    at [eval]:1:48\n' +
+        '    at runScriptInThisContext (node:internal/vm:219:10)\n' +
+        '    at node:internal/process/execution:451:12\n' +
+        '    at [eval]-wrapper:6:24\n' +
+        '    at runScriptInContext (node:internal/process/execution:449:60)\n' +
+        '    at evalFunction (node:internal/process/execution:283:30)\n' +
+        '    at evalTypeScript (node:internal/process/execution:295:3)\n' +
+        '    at node:internal/main/eval_string:71:3 {\n' +
+        '  errno: -2147483633,\n' +
+        "  code: 'EPERM',\n" +
+        "  syscall: 'link',\n" +
+        "  path: 'fs13.txt',\n" +
+        "  dest: 'fs14.txt'\n" +
+        '}\n' +
+        '\n' +
+        'Node.js v24.21.0\n'
+    }
+        at Object.<anonymous> (/boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-trace-events-fs-sync.js:132:11)
+        at Module._compile (node:internal/modules/cjs/loader:1929:14)
+        at Object..js (node:internal/modules/cjs/loader:2060:10)
+        at Module.load (node:internal/modules/cjs/loader:1651:32)
+        at Module._load (node:internal/modules/cjs/loader:1443:12)
+        at wrapModuleLoad (node:internal/modules/cjs/loader:261:19)
+        at Module.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:154:5)
+        at node:internal/main/run_main_module:33:47
+    
+    Node.js v24.21.0
+  ...
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-trace-events-metadata.js
+not ok 12 parallel/test-trace-events-metadata
+  ---
+  duration_ms: 265.86600
+  severity: fail
+  exitcode: 1
+  stack: |-
+    node:internal/assert/utils:77
+        throw err;
+        ^
+    
+    AssertionError [ERR_ASSERTION]: The expression evaluated to a falsy value:
+    
+      assert(traces.some((trace) =>
+    
+        at /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-trace-events-metadata.js:71:7
+        at /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/common/index.js:481:15
+        at FSReqCallback.readFileAfterClose [as oncomplete] (node:internal/fs/read/context:96:3) {
+      generatedMessage: true,
+      code: 'ERR_ASSERTION',
+      actual: false,
+      expected: true,
+      operator: '==',
+      diff: 'simple'
+    }
+    
+    Node.js v24.21.0
+  ...
+# /boot/system/bin/node --permission --allow-fs-read=* --allow-fs-write=* --allow-child-process /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-permission-fs-symlink-target-write.js
+not ok 13 parallel/test-permission-fs-symlink-target-write
+  ---
+  duration_ms: 226.75900
+  severity: fail
+  exitcode: 1
+  stack: |-
+    node:assert:152
+      throw new AssertionError(obj);
+      ^
+    
+    AssertionError [ERR_ASSERTION]: node:assert:849
+        throw newErr;
+        ^
+    
+    AssertionError [ERR_ASSERTION]: ifError got unwanted exception: EPERM: operation not permitted, link '/boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/.tmp.12/read-write/file' -> '/boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/.tmp.12/write-only/link-to-read-write2'
+        at /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/fixtures/permission/fs-symlink-target-write.js:40:12
+        at FSReqCallback.oncomplete (node:fs:187:23) {
+      generatedMessage: false,
+      code: 'ERR_ASSERTION',
+      actual: [Error: EPERM: operation not permitted, link '/boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/.tmp.12/read-write/file' -> '/boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/.tmp.12/write-only/link-to-read-write2'] {
+        errno: -2147483633,
+        code: 'EPERM',
+        syscall: 'link',
+        path: '/boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/.tmp.12/read-write/file',
+        dest: '/boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/.tmp.12/write-only/link-to-read-write2'
+      },
+      expected: null,
+      operator: 'ifError',
+      diff: 'simple'
+    }
+    
+    Node.js v24.21.0
+    
+    
+    1 !== 0
+    
+        at Object.<anonymous> (/boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-permission-fs-symlink-target-write.js:58:10)
+        at Module._compile (node:internal/modules/cjs/loader:1929:14)
+        at Object..js (node:internal/modules/cjs/loader:2060:10)
+        at Module.load (node:internal/modules/cjs/loader:1651:32)
+        at Module._load (node:internal/modules/cjs/loader:1443:12)
+        at wrapModuleLoad (node:internal/modules/cjs/loader:261:19)
+        at Module.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:154:5)
+        at node:internal/main/run_main_module:33:47 {
+      generatedMessage: false,
+      code: 'ERR_ASSERTION',
+      actual: 1,
+      expected: 0,
+      operator: 'strictEqual',
+      diff: 'simple'
+    }
+    
+    Node.js v24.21.0
+  ...
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-fs-link.js
+not ok 14 parallel/test-fs-link
+  ---
+  duration_ms: 112.95000
+  severity: fail
+  exitcode: 1
+  stack: |-
+    node:assert:849
+        throw newErr;
+        ^
+    
+    AssertionError [ERR_ASSERTION]: ifError got unwanted exception: EPERM: operation not permitted, link '/boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/.tmp.13/hardlink-target.txt' -> '/boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/.tmp.13/link1.js'
+        at callback (/boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-fs-link.js:15:10)
+        at callback (/boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/common/index.js:481:15)
+        at FSReqCallback.oncomplete (node:fs:187:23) {
+      generatedMessage: false,
+      code: 'ERR_ASSERTION',
+      actual: [Error: EPERM: operation not permitted, link '/boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/.tmp.13/hardlink-target.txt' -> '/boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/.tmp.13/link1.js'] {
+        errno: -2147483633,
+        code: 'EPERM',
+        syscall: 'link',
+        path: '/boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/.tmp.13/hardlink-target.txt',
+        dest: '/boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/.tmp.13/link1.js'
+      },
+      expected: null,
+      operator: 'ifError',
+      diff: 'simple'
+    }
+    
+    Node.js v24.21.0
+  ...
+# /boot/system/bin/node --expose-internals /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-fs-error-messages.js
+not ok 15 parallel/test-fs-error-messages
+  ---
+  duration_ms: 123.94300
+  severity: fail
+  exitcode: 1
+  stack: |-
+    node:assert:152
+      throw new AssertionError(obj);
+      ^
+    
+    AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+    + actual - expected
+    
+    + "EPERM: operation not permitted, link '/boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/.tmp.14/existingFile.js' -> '/boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/.tmp.14/existingFile2.js'"
+    - "EEXIST: file already exists, link '/boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/.tmp.14/existingFile.js' -> '/boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/.tmp.14/existingFile2.js'"
+    
+        at Object.<anonymous> (/boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-fs-error-messages.js:221:12)
+        at Object.<anonymous> (/boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/common/index.js:481:15)
+        at expectedException (node:assert:578:17)
+        at expectsError (node:assert:703:21)
+        at ok.throws (node:assert:759:3)
+        at Object.<anonymous> (/boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-fs-error-messages.js:233:10)
+        at Module._compile (node:internal/modules/cjs/loader:1929:14)
+        at Object..js (node:internal/modules/cjs/loader:2060:10)
+        at Module.load (node:internal/modules/cjs/loader:1651:32)
+        at Module._load (node:internal/modules/cjs/loader:1443:12) {
+      generatedMessage: true,
+      code: 'ERR_ASSERTION',
+      actual: "EPERM: operation not permitted, link '/boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/.tmp.14/existingFile.js' -> '/boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/.tmp.14/existingFile2.js'",
+      expected: "EEXIST: file already exists, link '/boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/.tmp.14/existingFile.js' -> '/boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/.tmp.14/existingFile2.js'",
+      operator: 'strictEqual',
+      diff: 'simple'
+    }
+    
+    Node.js v24.21.0
+  ...
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-fs-readfile-eof.js
+not ok 16 parallel/test-fs-readfile-eof
+  ---
+  duration_ms: 721.66500
+  severity: fail
+  exitcode: 1
+  stack: |-
+    node:assert:849
+        throw newErr;
+        ^
+    
+    AssertionError [ERR_ASSERTION]: ifError got unwanted exception: Command failed: (echo "${ESCAPED_0}"; sleep 0.5; echo "${ESCAPED_1}") | "${ESCAPED_2}" "${ESCAPED_3}" "${ESCAPED_4}"
+    node:internal/fs/promises:1345
+      return new FileHandle(await PromisePrototypeThen(
+                            ^
+    
+    Error: ENOENT: no such file or directory, open '/dev/stdin'
+        at async open (node:internal/fs/promises:1345:25)
+        at async Object.readFile (node:internal/fs/promises:1996:14) {
+      errno: -2147459069,
+      code: 'ENOENT',
+      syscall: 'open',
+      path: '/dev/stdin'
+    }
+    
+    Node.js v24.21.0
+    
+        at genericNodeError (node:internal/errors:986:15)
+        at wrappedFn (node:internal/errors:540:14)
+        at ChildProcess.exithandler (node:child_process:417:12)
+        at ChildProcess.emit (node:events:514:28)
+        at maybeClose (node:internal/child_process:1141:16)
+        at Socket.<anonymous> (node:internal/child_process:498:11)
+        at Socket.emit (node:events:514:28)
+        at Pipe.<anonymous> (node:net:362:12) {
+      generatedMessage: false,
+      code: 'ERR_ASSERTION',
+      actual: Error: Command failed: (echo "${ESCAPED_0}"; sleep 0.5; echo "${ESCAPED_1}") | "${ESCAPED_2}" "${ESCAPED_3}" "${ESCAPED_4}"
+      node:internal/fs/promises:1345
+        return new FileHandle(await PromisePrototypeThen(
+                              ^
+      
+      Error: ENOENT: no such file or directory, open '/dev/stdin'
+          at async open (node:internal/fs/promises:1345:25)
+          at async Object.readFile (node:internal/fs/promises:1996:14) {
+        errno: -2147459069,
+        code: 'ENOENT',
+        syscall: 'open',
+        path: '/dev/stdin'
+      }
+      
+      Node.js v24.21.0
+      
+          at genericNodeError (node:internal/errors:986:15)
+          at wrappedFn (node:internal/errors:540:14)
+          at ChildProcess.exithandler (node:child_process:417:12)
+          at ChildProcess.emit (node:events:514:28)
+          at maybeClose (node:internal/child_process:1141:16)
+          at Socket.<anonymous> (node:internal/child_process:498:11)
+          at Socket.emit (node:events:514:28)
+          at Pipe.<anonymous> (node:net:362:12) {
+        code: 1,
+        killed: false,
+        signal: null,
+        cmd: '(echo "${ESCAPED_0}"; sleep 0.5; echo "${ESCAPED_1}") | "${ESCAPED_2}" "${ESCAPED_3}" "${ESCAPED_4}"'
+      },
+      expected: null,
+      operator: 'ifError',
+      diff: 'simple'
+    }
+    
+    Node.js v24.21.0
+  ...
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-fs-readfile-pipe.js
+not ok 17 parallel/test-fs-readfile-pipe
+  ---
+  duration_ms: 222.16900
+  severity: fail
+  exitcode: 1
+  stack: |-
+    node:assert:849
+        throw newErr;
+        ^
+    
+    AssertionError [ERR_ASSERTION]: ifError got unwanted exception: Command failed: "${ESCAPED_0}" "${ESCAPED_1}" child < "${ESCAPED_2}"
+    node:assert:849
+        throw newErr;
+        ^
+    
+    AssertionError [ERR_ASSERTION]: ifError got unwanted exception: ENOENT: no such file or directory, open '/dev/stdin'
+        at ReadFileContext.<anonymous> (/boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/common/index.js:444:12)
+        at ReadFileContext.callback (/boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/common/index.js:481:15)
+        at FSReqCallback.readFileAfterOpen [as oncomplete] (node:fs:300:13) {
+      generatedMessage: false,
+      code: 'ERR_ASSERTION',
+      actual: [Error: ENOENT: no such file or directory, open '/dev/stdin'] {
+        errno: -2147459069,
+        code: 'ENOENT',
+        syscall: 'open',
+        path: '/dev/stdin'
+      },
+      expected: null,
+      operator: 'ifError',
+      diff: 'simple'
+    }
+    
+    Node.js v24.21.0
+    
+        at genericNodeError (node:internal/errors:986:15)
+        at wrappedFn (node:internal/errors:540:14)
+        at ChildProcess.exithandler (node:child_process:417:12)
+        at ChildProcess.emit (node:events:514:28)
+        at maybeClose (node:internal/child_process:1141:16)
+        at Socket.<anonymous> (node:internal/child_process:498:11)
+        at Socket.emit (node:events:514:28)
+        at Pipe.<anonymous> (node:net:362:12) {
+      generatedMessage: false,
+      code: 'ERR_ASSERTION',
+      actual: Error: Command failed: "${ESCAPED_0}" "${ESCAPED_1}" child < "${ESCAPED_2}"
+      node:assert:849
+          throw newErr;
+          ^
+      
+      AssertionError [ERR_ASSERTION]: ifError got unwanted exception: ENOENT: no such file or directory, open '/dev/stdin'
+          at ReadFileContext.<anonymous> (/boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/common/index.js:444:12)
+          at ReadFileContext.callback (/boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/common/index.js:481:15)
+          at FSReqCallback.readFileAfterOpen [as oncomplete] (node:fs:300:13) {
+        generatedMessage: false,
+        code: 'ERR_ASSERTION',
+        actual: [Error: ENOENT: no such file or directory, open '/dev/stdin'] {
+          errno: -2147459069,
+          code: 'ENOENT',
+          syscall: 'open',
+          path: '/dev/stdin'
+        },
+        expected: null,
+        operator: 'ifError',
+        diff: 'simple'
+      }
+      
+      Node.js v24.21.0
+      
+          at genericNodeError (node:internal/errors:986:15)
+          at wrappedFn (node:internal/errors:540:14)
+          at ChildProcess.exithandler (node:child_process:417:12)
+          at ChildProcess.emit (node:events:514:28)
+          at maybeClose (node:internal/child_process:1141:16)
+          at Socket.<anonymous> (node:internal/child_process:498:11)
+          at Socket.emit (node:events:514:28)
+          at Pipe.<anonymous> (node:net:362:12) {
+        code: 1,
+        killed: false,
+        signal: null,
+        cmd: '"${ESCAPED_0}" "${ESCAPED_1}" child < "${ESCAPED_2}"'
+      },
+      expected: null,
+      operator: 'ifError',
+      diff: 'simple'
+    }
+    
+    Node.js v24.21.0
+  ...
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-fs-readfile-pipe-large.js
+not ok 18 parallel/test-fs-readfile-pipe-large
+  ---
+  duration_ms: 264.72100
+  severity: fail
+  exitcode: 1
+  stack: |-
+    node:assert:849
+        throw newErr;
+        ^
+    
+    AssertionError [ERR_ASSERTION]: ifError got unwanted exception: Command failed: "${ESCAPED_0}" "${ESCAPED_1}" child < "${ESCAPED_2}"
+    node:assert:849
+        throw newErr;
+        ^
+    
+    AssertionError [ERR_ASSERTION]: ifError got unwanted exception: ENOENT: no such file or directory, open '/dev/stdin'
+        at ReadFileContext.<anonymous> (/boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/common/index.js:444:12)
+        at ReadFileContext.callback (/boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/common/index.js:481:15)
+        at FSReqCallback.readFileAfterOpen [as oncomplete] (node:fs:300:13) {
+      generatedMessage: false,
+      code: 'ERR_ASSERTION',
+      actual: [Error: ENOENT: no such file or directory, open '/dev/stdin'] {
+        errno: -2147459069,
+        code: 'ENOENT',
+        syscall: 'open',
+        path: '/dev/stdin'
+      },
+      expected: null,
+      operator: 'ifError',
+      diff: 'simple'
+    }
+    
+    Node.js v24.21.0
+    
+        at genericNodeError (node:internal/errors:986:15)
+        at wrappedFn (node:internal/errors:540:14)
+        at ChildProcess.exithandler (node:child_process:417:12)
+        at ChildProcess.emit (node:events:514:28)
+        at maybeClose (node:internal/child_process:1141:16)
+        at Socket.<anonymous> (node:internal/child_process:498:11)
+        at Socket.emit (node:events:514:28)
+        at Pipe.<anonymous> (node:net:362:12) {
+      generatedMessage: false,
+      code: 'ERR_ASSERTION',
+      actual: Error: Command failed: "${ESCAPED_0}" "${ESCAPED_1}" child < "${ESCAPED_2}"
+      node:assert:849
+          throw newErr;
+          ^
+      
+      AssertionError [ERR_ASSERTION]: ifError got unwanted exception: ENOENT: no such file or directory, open '/dev/stdin'
+          at ReadFileContext.<anonymous> (/boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/common/index.js:444:12)
+          at ReadFileContext.callback (/boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/common/index.js:481:15)
+          at FSReqCallback.readFileAfterOpen [as oncomplete] (node:fs:300:13) {
+        generatedMessage: false,
+        code: 'ERR_ASSERTION',
+        actual: [Error: ENOENT: no such file or directory, open '/dev/stdin'] {
+          errno: -2147459069,
+          code: 'ENOENT',
+          syscall: 'open',
+          path: '/dev/stdin'
+        },
+        expected: null,
+        operator: 'ifError',
+        diff: 'simple'
+      }
+      
+      Node.js v24.21.0
+      
+          at genericNodeError (node:internal/errors:986:15)
+          at wrappedFn (node:internal/errors:540:14)
+          at ChildProcess.exithandler (node:child_process:417:12)
+          at ChildProcess.emit (node:events:514:28)
+          at maybeClose (node:internal/child_process:1141:16)
+          at Socket.<anonymous> (node:internal/child_process:498:11)
+          at Socket.emit (node:events:514:28)
+          at Pipe.<anonymous> (node:net:362:12) {
+        code: 1,
+        killed: false,
+        signal: null,
+        cmd: '"${ESCAPED_0}" "${ESCAPED_1}" child < "${ESCAPED_2}"'
+      },
+      expected: null,
+      operator: 'ifError',
+      diff: 'simple'
+    }
+    
+    Node.js v24.21.0
+  ...
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-fs-readfilesync-pipe-large.js
+not ok 19 parallel/test-fs-readfilesync-pipe-large
+  ---
+  duration_ms: 265.81300
+  severity: fail
+  exitcode: 1
+  stack: |-
+    node:assert:849
+        throw newErr;
+        ^
+    
+    AssertionError [ERR_ASSERTION]: ifError got unwanted exception: Command failed: "${ESCAPED_0}" "${ESCAPED_1}" child < "${ESCAPED_2}"
+    node:fs:483
+        return binding.readFileUtf8(path, stringToFlags(options.flag));
+                       ^
+    
+    Error: ENOENT: no such file or directory, open '/dev/stdin'
+        at Object.readFileSync (node:fs:483:20)
+        at Object.<anonymous> (/boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-fs-readfilesync-pipe-large.js:13:27)
+        at Module._compile (node:internal/modules/cjs/loader:1929:14)
+        at Object..js (node:internal/modules/cjs/loader:2060:10)
+        at Module.load (node:internal/modules/cjs/loader:1651:32)
+        at Module._load (node:internal/modules/cjs/loader:1443:12)
+        at wrapModuleLoad (node:internal/modules/cjs/loader:261:19)
+        at Module.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:154:5)
+        at node:internal/main/run_main_module:33:47 {
+      errno: -2147459069,
+      code: 'ENOENT',
+      syscall: 'open',
+      path: '/dev/stdin'
+    }
+    
+    Node.js v24.21.0
+    
+        at genericNodeError (node:internal/errors:986:15)
+        at wrappedFn (node:internal/errors:540:14)
+        at ChildProcess.exithandler (node:child_process:417:12)
+        at ChildProcess.emit (node:events:514:28)
+        at maybeClose (node:internal/child_process:1141:16)
+        at Socket.<anonymous> (node:internal/child_process:498:11)
+        at Socket.emit (node:events:514:28)
+        at Pipe.<anonymous> (node:net:362:12) {
+      generatedMessage: false,
+      code: 'ERR_ASSERTION',
+      actual: Error: Command failed: "${ESCAPED_0}" "${ESCAPED_1}" child < "${ESCAPED_2}"
+      node:fs:483
+          return binding.readFileUtf8(path, stringToFlags(options.flag));
+                         ^
+      
+      Error: ENOENT: no such file or directory, open '/dev/stdin'
+          at Object.readFileSync (node:fs:483:20)
+          at Object.<anonymous> (/boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-fs-readfilesync-pipe-large.js:13:27)
+          at Module._compile (node:internal/modules/cjs/loader:1929:14)
+          at Object..js (node:internal/modules/cjs/loader:2060:10)
+          at Module.load (node:internal/modules/cjs/loader:1651:32)
+          at Module._load (node:internal/modules/cjs/loader:1443:12)
+          at wrapModuleLoad (node:internal/modules/cjs/loader:261:19)
+          at Module.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:154:5)
+          at node:internal/main/run_main_module:33:47 {
+        errno: -2147459069,
+        code: 'ENOENT',
+        syscall: 'open',
+        path: '/dev/stdin'
+      }
+      
+      Node.js v24.21.0
+      
+          at genericNodeError (node:internal/errors:986:15)
+          at wrappedFn (node:internal/errors:540:14)
+          at ChildProcess.exithandler (node:child_process:417:12)
+          at ChildProcess.emit (node:events:514:28)
+          at maybeClose (node:internal/child_process:1141:16)
+          at Socket.<anonymous> (node:internal/child_process:498:11)
+          at Socket.emit (node:events:514:28)
+          at Pipe.<anonymous> (node:net:362:12) {
+        code: 1,
+        killed: false,
+        signal: null,
+        cmd: '"${ESCAPED_0}" "${ESCAPED_1}" child < "${ESCAPED_2}"'
+      },
+      expected: null,
+      operator: 'ifError',
+      diff: 'simple'
+    }
+    
+    Node.js v24.21.0
+  ...
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-fs-realpath-pipe.js
+not ok 20 parallel/test-fs-realpath-pipe
+  ---
+  duration_ms: 213.36300
+  severity: fail
+  exitcode: 1
+  stack: |-
+    require('fs').realpath('/dev/stdin', (err, resolvedPath) => {
+        if (err) {
+          console.error(err);
+          process.exit(1);
+        }
+        if (resolvedPath) {
+          process.exit(2);
+        }
+      });
+    [Error: ENOENT: no such file or directory, lstat '/dev/stdin'] {
+      errno: -2147459069,
+      code: 'ENOENT',
+      syscall: 'lstat',
+      path: '/dev/stdin'
+    }
+    
+    node:assert:152
+      throw new AssertionError(obj);
+      ^
+    
+    AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+    
+    1 !== 2
+    
+        at Object.<anonymous> (/boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-fs-realpath-pipe.js:38:10)
+        at Module._compile (node:internal/modules/cjs/loader:1929:14)
+        at Object..js (node:internal/modules/cjs/loader:2060:10)
+        at Module.load (node:internal/modules/cjs/loader:1651:32)
+        at Module._load (node:internal/modules/cjs/loader:1443:12)
+        at wrapModuleLoad (node:internal/modules/cjs/loader:261:19)
+        at Module.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:154:5)
+        at node:internal/main/run_main_module:33:47 {
+      generatedMessage: true,
+      code: 'ERR_ASSERTION',
+      actual: 1,
+      expected: 2,
+      operator: 'strictEqual',
+      diff: 'simple'
+    }
+    
+    Node.js v24.21.0
+  ...
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/sequential/test-process-title.js
+not ok 21 sequential/test-process-title
+  ---
+  duration_ms: 214.21000
+  severity: fail
+  exitcode: 1
+  stack: |-
+    node:assert:152
+      throw new AssertionError(obj);
+      ^
+    
+    AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+    + actual - expected
+    
+    + ''
+    - '/boot/system/bin/node'
+    
+        at Object.<anonymous> (/boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/sequential/test-process-title.js:22:8)
+        at Module._compile (node:internal/modules/cjs/loader:1929:14)
+        at Object..js (node:internal/modules/cjs/loader:2060:10)
+        at Module.load (node:internal/modules/cjs/loader:1651:32)
+        at Module._load (node:internal/modules/cjs/loader:1443:12)
+        at wrapModuleLoad (node:internal/modules/cjs/loader:261:19)
+        at Module.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:154:5)
+        at node:internal/main/run_main_module:33:47 {
+      generatedMessage: true,
+      code: 'ERR_ASSERTION',
+      actual: '',
+      expected: '/boot/system/bin/node',
+      operator: 'strictEqual',
+      diff: 'simple'
+    }
+    
+    Node.js v24.21.0
+  ...
+
+Failed tests:
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-process-euid-egid.js
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-process-umask-mask.js
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-os-process-priority.js
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-setproctitle.js
+/boot/system/bin/node --title=foo /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-process-title-cli.js
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-os.js
+/boot/system/bin/node --expose-gc /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-inspector-contexts.js
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-worker-node-options.js
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-tls-enable-keylog-cli.js
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-trace-events-fs-async.js
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-trace-events-fs-sync.js
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-trace-events-metadata.js
+/boot/system/bin/node --permission --allow-fs-read=* --allow-fs-write=* --allow-child-process /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-permission-fs-symlink-target-write.js
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-fs-link.js
+/boot/system/bin/node --expose-internals /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-fs-error-messages.js
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-fs-readfile-eof.js
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-fs-readfile-pipe.js
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-fs-readfile-pipe-large.js
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-fs-readfilesync-pipe-large.js
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-fs-realpath-pipe.js
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/sequential/test-process-title.js

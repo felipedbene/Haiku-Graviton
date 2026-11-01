@@ -1,0 +1,68 @@
+# evidence: f2-abort-domain-child
+# instance: i-0e7bed4928e0f7bf7   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261101T055841Z   end: 20261101T055901Z   rc: 0
+# script sha256: 8ad95d3475a58ca4a33e42f73236e67bb6ad06aadc32b8089d54116f360a5be8
+# ---- script ----
+# | cd /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0 || exit 1
+# | grep -n "function childShouldThrowAndAbort" -A 25 test/common/index.js
+# | echo "== direct child run:"
+# | ulimit -c 0 && node --abort-on-uncaught-exception test/parallel/test-domain-no-error-handler-abort-on-uncaught-0.js child > /tmp/f2o 2>&1; echo "rc=$?"; tail -5 /tmp/f2o
+# | echo "== test itself:"; node test/parallel/test-domain-no-error-handler-abort-on-uncaught-0.js; echo "rc=$?"
+# | echo "== node getting signal name/code for status 149:"; node -e 'const r=require("child_process").spawnSync("/bin/sh",["-c","exit 149"]);console.log(r.status,r.signal); console.log(require("os").constants.signals.SIGKILLTHR, Object.keys(require("os").constants.signals).join(","))'
+# ---- raw output ----
+267:function childShouldThrowAndAbort() {
+268-  const escapedArgs = escapePOSIXShell`"${process.argv[0]}" --abort-on-uncaught-exception "${process.argv[1]}" child`;
+269-  if (!isWindows) {
+270-    // Do not create core files, as it can take a lot of disk space on
+271-    // continuous testing and developers' machines
+272-    escapedArgs[0] = 'ulimit -c 0 && ' + escapedArgs[0];
+273-  }
+274-  const { exec } = require('child_process');
+275-  const child = exec(...escapedArgs);
+276-  child.on('exit', function onExit(exitCode, signal) {
+277-    const errMsg = 'Test should have aborted ' +
+278-                   `but instead exited with exit code ${exitCode}` +
+279-                   ` and signal ${signal}`;
+280-    assert(nodeProcessAborted(exitCode, signal), errMsg);
+281-  });
+282-}
+283-
+284-const pwdCommand = isWindows ?
+285-  ['cmd.exe', ['/d', '/c', 'cd']] :
+286-  ['pwd', []];
+287-
+288-
+289-function platformTimeout(ms) {
+290-  const multipliers = typeof ms === 'bigint' ?
+291-    { two: 2n, four: 4n, seven: 7n } : { two: 2, four: 4, seven: 7 };
+292-
+== direct child run:
+/tmp/ccrun/cc-20261101T055841Z-78931.sh: line 4: 201967 Kill Thread                node --abort-on-uncaught-exception test/parallel/test-domain-no-error-handler-abort-on-uncaught-0.js child > /tmp/f2o 2>&1
+rc=149
+Module.load (node:internal/modules/cjs/loader:1651:32)
+Module._load (node:internal/modules/cjs/loader:1443:12)
+wrapModuleLoad (node:internal/modules/cjs/loader:261:19)
+Module.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:154:5)
+node:internal/main/run_main_module:33:47== test itself:
+node:internal/assert/utils:77
+    throw err;
+    ^
+
+AssertionError [ERR_ASSERTION]: Test should have aborted but instead exited with exit code 0 and signal null
+    at ChildProcess.onExit (/boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/common/index.js:280:5)
+    at ChildProcess.emit (node:events:514:28)
+    at ChildProcess.emit (node:domain:489:12)
+    at ChildProcess._handle.onexit (node:internal/child_process:295:12) {
+  generatedMessage: false,
+  code: 'ERR_ASSERTION',
+  actual: false,
+  expected: true,
+  operator: '==',
+  diff: 'simple'
+}
+
+Node.js v24.21.0
+rc=1
+== node getting signal name/code for status 149:
+149 null
+undefined SIGHUP,SIGINT,SIGQUIT,SIGILL,SIGTRAP,SIGABRT,SIGBUS,SIGFPE,SIGKILL,SIGUSR1,SIGSEGV,SIGUSR2,SIGPIPE,SIGALRM,SIGTERM,SIGCHLD,SIGCONT,SIGSTOP,SIGTSTP,SIGTTIN,SIGTTOU,SIGURG,SIGXCPU,SIGXFSZ,SIGVTALRM,SIGPROF,SIGWINCH,SIGPOLL,SIGSYS

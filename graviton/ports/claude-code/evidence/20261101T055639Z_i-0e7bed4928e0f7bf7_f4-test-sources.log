@@ -1,0 +1,2108 @@
+# evidence: f4-test-sources
+# instance: i-0e7bed4928e0f7bf7   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261101T055639Z   end: 20261101T055659Z   rc: 0
+# script sha256: 684942ba550ac4366010f4cd64544670abecfaaf1fafaaaa4598bc2c6bc75e10
+# ---- script ----
+# | cd /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0 || exit 1
+# | for f in test/parallel/test-child-process-disconnect.js test/parallel/test-child-process-fork-net.js test/parallel/test-child-process-fork-net-socket.js test/parallel/test-child-process-send-keep-open.js test/parallel/test-cluster-concurrent-disconnect.js test/parallel/test-cluster-dgram-1.js test/parallel/test-cluster-disconnect.js test/parallel/test-cluster-listen-pipe-readable-writable.js test/parallel/test-cluster-shared-leak.js test/parallel/test-dgram-connect-send-empty-array.js test/parallel/test-dgram-connect-send-empty-buffer.js test/parallel/test-dgram-error-message-address.js test/parallel/test-dgram-multicast-set-interface.js test/parallel/test-dgram-send-empty-array.js test/parallel/test-dgram-send-empty-buffer.js test/parallel/test-http-writable-true-after-close.js test/parallel/test-http2-max-invalid-frames.js test/parallel/test-http2-misbehaving-flow-control.js test/parallel/test-http2-misbehaving-flow-control-paused.js test/parallel/test-net-pipe-connect-errors.js test/parallel/test-net-server-listen-path.js test/parallel/test-process-getactivehandles.js test/parallel/test-process-getactiveresources-track-active-handles.js test/parallel/test-set-http-max-http-headers.js test/parallel/test-tcp-wrap-listen.js test/parallel/test-timers-socket-timeout-removes-other-socket-unref-timer.js test/sequential/test-net-connect-local-error.js test/sequential/test-net-server-address.js; do echo "=================== $f"; cat -n $f; done
+# ---- raw output ----
+=================== test/parallel/test-child-process-disconnect.js
+     1	// Copyright Joyent, Inc. and other Node contributors.
+     2	//
+     3	// Permission is hereby granted, free of charge, to any person obtaining a
+     4	// copy of this software and associated documentation files (the
+     5	// "Software"), to deal in the Software without restriction, including
+     6	// without limitation the rights to use, copy, modify, merge, publish,
+     7	// distribute, sublicense, and/or sell copies of the Software, and to permit
+     8	// persons to whom the Software is furnished to do so, subject to the
+     9	// following conditions:
+    10	//
+    11	// The above copyright notice and this permission notice shall be included
+    12	// in all copies or substantial portions of the Software.
+    13	//
+    14	// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
+    15	// OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+    16	// MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN
+    17	// NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM,
+    18	// DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR
+    19	// OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
+    20	// USE OR OTHER DEALINGS IN THE SOFTWARE.
+    21	
+    22	'use strict';
+    23	const common = require('../common');
+    24	const assert = require('assert');
+    25	const fork = require('child_process').fork;
+    26	const net = require('net');
+    27	
+    28	// child
+    29	if (process.argv[2] === 'child') {
+    30	
+    31	  // Check that the 'disconnect' event is deferred to the next event loop tick.
+    32	  const disconnect = process.disconnect;
+    33	  process.disconnect = common.mustCall(function() {
+    34	    disconnect.apply(this, arguments);
+    35	    // If the event is emitted synchronously, we're too late by now.
+    36	    process.once('disconnect', common.mustCall(disconnectIsNotAsync));
+    37	    // The funky function name makes it show up legible in mustCall errors.
+    38	    function disconnectIsNotAsync() {}
+    39	  });
+    40	
+    41	  const server = net.createServer();
+    42	
+    43	  server.on('connection', function(socket) {
+    44	
+    45	    socket.resume();
+    46	
+    47	    process.on('disconnect', function() {
+    48	      socket.end((process.connected).toString());
+    49	    });
+    50	
+    51	    // When the socket is closed, we will close the server
+    52	    // allowing the process to self terminate
+    53	    socket.on('end', function() {
+    54	      server.close();
+    55	    });
+    56	
+    57	    socket.write('ready');
+    58	  });
+    59	
+    60	  // When the server is ready tell parent
+    61	  server.on('listening', function() {
+    62	    process.send({ msg: 'ready', port: server.address().port });
+    63	  });
+    64	
+    65	  server.listen(0);
+    66	
+    67	} else {
+    68	  // testcase
+    69	  const child = fork(process.argv[1], ['child']);
+    70	
+    71	  let childFlag = false;
+    72	  let parentFlag = false;
+    73	
+    74	  // When calling .disconnect the event should emit
+    75	  // and the disconnected flag should be true.
+    76	  child.on('disconnect', common.mustCall(function() {
+    77	    parentFlag = child.connected;
+    78	  }));
+    79	
+    80	  // The process should also self terminate without using signals
+    81	  child.on('exit', common.mustCall());
+    82	
+    83	  // When child is listening
+    84	  child.on('message', common.mustCallAtLeast((obj) => {
+    85	    if (obj && obj.msg === 'ready') {
+    86	
+    87	      // Connect to child using TCP to know if disconnect was emitted
+    88	      const socket = net.connect(obj.port);
+    89	
+    90	      socket.on('data', common.mustCallAtLeast((data) => {
+    91	        data = data.toString();
+    92	
+    93	        // Ready to be disconnected
+    94	        if (data === 'ready') {
+    95	          child.disconnect();
+    96	          assert.throws(
+    97	            child.disconnect.bind(child),
+    98	            {
+    99	              code: 'ERR_IPC_DISCONNECTED'
+   100	            });
+   101	          return;
+   102	        }
+   103	
+   104	        // 'disconnect' is emitted
+   105	        childFlag = (data === 'true');
+   106	      }));
+   107	
+   108	    }
+   109	  }));
+   110	
+   111	  process.on('exit', function() {
+   112	    assert.strictEqual(childFlag, false);
+   113	    assert.strictEqual(parentFlag, false);
+   114	  });
+   115	}
+=================== test/parallel/test-child-process-fork-net.js
+     1	// Copyright Joyent, Inc. and other Node contributors.
+     2	//
+     3	// Permission is hereby granted, free of charge, to any person obtaining a
+     4	// copy of this software and associated documentation files (the
+     5	// "Software"), to deal in the Software without restriction, including
+     6	// without limitation the rights to use, copy, modify, merge, publish,
+     7	// distribute, sublicense, and/or sell copies of the Software, and to permit
+     8	// persons to whom the Software is furnished to do so, subject to the
+     9	// following conditions:
+    10	//
+    11	// The above copyright notice and this permission notice shall be included
+    12	// in all copies or substantial portions of the Software.
+    13	//
+    14	// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
+    15	// OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+    16	// MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN
+    17	// NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM,
+    18	// DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR
+    19	// OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
+    20	// USE OR OTHER DEALINGS IN THE SOFTWARE.
+    21	
+    22	// This tests that a socket sent to the forked process works.
+    23	// See https://github.com/nodejs/node/commit/dceebbfa
+    24	
+    25	'use strict';
+    26	const {
+    27	  mustCall,
+    28	  mustCallAtLeast,
+    29	  platformTimeout,
+    30	} = require('../common');
+    31	const assert = require('assert');
+    32	const fork = require('child_process').fork;
+    33	const net = require('net');
+    34	const debug = require('util').debuglog('test');
+    35	const count = 12;
+    36	
+    37	if (process.argv[2] === 'child') {
+    38	  const needEnd = [];
+    39	  const id = process.argv[3];
+    40	
+    41	  process.on('message', mustCall((m, socket) => {
+    42	    if (!socket) return;
+    43	
+    44	    debug(`[${id}] got socket ${m}`);
+    45	
+    46	    // Will call .end('end') or .write('write');
+    47	    socket[m](m);
+    48	
+    49	    socket.resume();
+    50	
+    51	    socket.on('data', mustCallAtLeast(() => {
+    52	      debug(`[${id}] socket.data ${m}`);
+    53	    }));
+    54	
+    55	    socket.on('end', mustCall(() => {
+    56	      debug(`[${id}] socket.end ${m}`);
+    57	    }));
+    58	
+    59	    // Store the unfinished socket
+    60	    if (m === 'write') {
+    61	      needEnd.push(socket);
+    62	    }
+    63	
+    64	    socket.on('close', mustCall((had_error) => {
+    65	      debug(`[${id}] socket.close ${had_error} ${m}`);
+    66	    }));
+    67	
+    68	    socket.on('finish', mustCall(() => {
+    69	      debug(`[${id}] socket finished ${m}`);
+    70	    }));
+    71	  }, 4));
+    72	
+    73	  process.on('message', mustCall((m) => {
+    74	    if (m !== 'close') return;
+    75	    debug(`[${id}] got close message`);
+    76	    needEnd.forEach((endMe, i) => {
+    77	      debug(`[${id}] ending ${i}/${needEnd.length}`);
+    78	      endMe.end('end');
+    79	    });
+    80	  }, 4));
+    81	
+    82	  process.on('disconnect', mustCall(() => {
+    83	    debug(`[${id}] process disconnect, ending`);
+    84	    needEnd.forEach((endMe, i) => {
+    85	      debug(`[${id}] ending ${i}/${needEnd.length}`);
+    86	      endMe.end('end');
+    87	    });
+    88	  }));
+    89	
+    90	} else {
+    91	
+    92	  const child1 = fork(process.argv[1], ['child', '1']);
+    93	  const child2 = fork(process.argv[1], ['child', '2']);
+    94	  const child3 = fork(process.argv[1], ['child', '3']);
+    95	
+    96	  const server = net.createServer();
+    97	
+    98	  let connected = 0;
+    99	  let closed = 0;
+   100	  server.on('connection', function(socket) {
+   101	    switch (connected % 6) {
+   102	      case 0:
+   103	        child1.send('end', socket); break;
+   104	      case 1:
+   105	        child1.send('write', socket); break;
+   106	      case 2:
+   107	        child2.send('end', socket); break;
+   108	      case 3:
+   109	        child2.send('write', socket); break;
+   110	      case 4:
+   111	        child3.send('end', socket); break;
+   112	      case 5:
+   113	        child3.send('write', socket); break;
+   114	    }
+   115	    connected += 1;
+   116	
+   117	    // TODO(@jasnell): This is not actually being called.
+   118	    // It is not clear if it is needed.
+   119	    socket.once('close', () => {
+   120	      debug(`[m] socket closed, total ${++closed}`);
+   121	    });
+   122	
+   123	    if (connected === count) {
+   124	      closeServer();
+   125	    }
+   126	  });
+   127	
+   128	  let disconnected = 0;
+   129	  server.on('listening', mustCall(() => {
+   130	
+   131	    let j = count;
+   132	    while (j--) {
+   133	      const client = net.connect(server.address().port, '127.0.0.1');
+   134	      client.on('error', () => {
+   135	        // This can happen if we kill the subprocess too early.
+   136	        // The client should still get a close event afterwards.
+   137	        // It likely won't so don't wrap in a mustCall.
+   138	        debug('[m] CLIENT: error event');
+   139	      });
+   140	      client.on('close', mustCall(() => {
+   141	        debug('[m] CLIENT: close event');
+   142	        disconnected += 1;
+   143	      }));
+   144	      client.resume();
+   145	    }
+   146	  }));
+   147	
+   148	  let closeEmitted = false;
+   149	  server.on('close', mustCall(function() {
+   150	    closeEmitted = true;
+   151	
+   152	    // Clean up child processes.
+   153	    try {
+   154	      child1.kill();
+   155	    } catch {
+   156	      debug('child process already terminated');
+   157	    }
+   158	    try {
+   159	      child2.kill();
+   160	    } catch {
+   161	      debug('child process already terminated');
+   162	    }
+   163	    try {
+   164	      child3.kill();
+   165	    } catch {
+   166	      debug('child process already terminated');
+   167	    }
+   168	  }));
+   169	
+   170	  server.listen(0, '127.0.0.1');
+   171	
+   172	  function closeServer() {
+   173	    server.close();
+   174	
+   175	    setTimeout(mustCall(() => {
+   176	      assert(!closeEmitted);
+   177	      child1.send('close');
+   178	      child2.send('close');
+   179	      child3.disconnect();
+   180	    }), platformTimeout(200));
+   181	  }
+   182	
+   183	  process.on('exit', function() {
+   184	    assert.strictEqual(server._workers.length, 0);
+   185	    assert.strictEqual(disconnected, count);
+   186	    assert.strictEqual(connected, count);
+   187	  });
+   188	}
+=================== test/parallel/test-child-process-fork-net-socket.js
+     1	// Copyright Joyent, Inc. and other Node contributors.
+     2	//
+     3	// Permission is hereby granted, free of charge, to any person obtaining a
+     4	// copy of this software and associated documentation files (the
+     5	// "Software"), to deal in the Software without restriction, including
+     6	// without limitation the rights to use, copy, modify, merge, publish,
+     7	// distribute, sublicense, and/or sell copies of the Software, and to permit
+     8	// persons to whom the Software is furnished to do so, subject to the
+     9	// following conditions:
+    10	//
+    11	// The above copyright notice and this permission notice shall be included
+    12	// in all copies or substantial portions of the Software.
+    13	//
+    14	// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
+    15	// OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+    16	// MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN
+    17	// NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM,
+    18	// DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR
+    19	// OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
+    20	// USE OR OTHER DEALINGS IN THE SOFTWARE.
+    21	
+    22	'use strict';
+    23	const {
+    24	  mustCall,
+    25	  mustCallAtLeast,
+    26	} = require('../common');
+    27	const assert = require('assert');
+    28	const fork = require('child_process').fork;
+    29	const net = require('net');
+    30	const debug = require('util').debuglog('test');
+    31	
+    32	if (process.argv[2] === 'child') {
+    33	
+    34	  const onSocket = mustCall((msg, socket) => {
+    35	    if (msg.what !== 'socket') return;
+    36	    process.removeListener('message', onSocket);
+    37	    socket.end('echo');
+    38	    debug('CHILD: got socket');
+    39	  });
+    40	
+    41	  process.on('message', onSocket);
+    42	
+    43	  process.send({ what: 'ready' });
+    44	} else {
+    45	
+    46	  const child = fork(process.argv[1], ['child']);
+    47	
+    48	  child.on('exit', mustCall((code, signal) => {
+    49	    const message = `CHILD: died with ${code}, ${signal}`;
+    50	    assert.strictEqual(code, 0, message);
+    51	  }));
+    52	
+    53	  // Send net.Socket to child.
+    54	  function testSocket() {
+    55	
+    56	    // Create a new server and connect to it,
+    57	    // but the socket will be handled by the child.
+    58	    const server = net.createServer();
+    59	    server.on('connection', mustCall((socket) => {
+    60	      // TODO(@jasnell): Close does not seem to actually be called.
+    61	      // It is not clear if it is needed.
+    62	      socket.on('close', () => {
+    63	        debug('CLIENT: socket closed');
+    64	      });
+    65	      child.send({ what: 'socket' }, socket);
+    66	    }));
+    67	    server.on('close', mustCall(() => {
+    68	      debug('PARENT: server closed');
+    69	    }));
+    70	
+    71	    server.listen(0, mustCall(() => {
+    72	      debug('testSocket, listening');
+    73	      const connect = net.connect(server.address().port);
+    74	      let store = '';
+    75	      connect.on('data', mustCallAtLeast((chunk) => {
+    76	        store += chunk;
+    77	        debug('CLIENT: got data');
+    78	      }));
+    79	      connect.on('close', mustCall(() => {
+    80	        debug('CLIENT: closed');
+    81	        assert.strictEqual(store, 'echo');
+    82	        server.close();
+    83	      }));
+    84	    }));
+    85	  }
+    86	
+    87	  const onReady = mustCall((msg) => {
+    88	    if (msg.what !== 'ready') return;
+    89	    child.removeListener('message', onReady);
+    90	
+    91	    testSocket();
+    92	  });
+    93	
+    94	  // Create socket and send it to child.
+    95	  child.on('message', onReady);
+    96	}
+=================== test/parallel/test-child-process-send-keep-open.js
+     1	'use strict';
+     2	const common = require('../common');
+     3	const assert = require('assert');
+     4	const cp = require('child_process');
+     5	const net = require('net');
+     6	
+     7	if (process.argv[2] !== 'child') {
+     8	  // The parent process forks a child process, starts a TCP server, and connects
+     9	  // to the server. The accepted connection is passed to the child process,
+    10	  // where the socket is written. Then, the child signals the parent process to
+    11	  // write to the same socket.
+    12	  let result = '';
+    13	
+    14	  process.on('exit', () => {
+    15	    assert.strictEqual(result, 'childparent');
+    16	  });
+    17	
+    18	  const child = cp.fork(__filename, ['child']);
+    19	
+    20	  // Verify that the child exits successfully
+    21	  child.on('exit', common.mustCall((exitCode, signalCode) => {
+    22	    assert.strictEqual(exitCode, 0);
+    23	    assert.strictEqual(signalCode, null);
+    24	  }));
+    25	
+    26	  const server = net.createServer(common.mustCall((socket) => {
+    27	    child.on('message', common.mustCall((msg) => {
+    28	      assert.strictEqual(msg, 'child_done');
+    29	      socket.end('parent', () => {
+    30	        server.close();
+    31	        child.disconnect();
+    32	      });
+    33	    }));
+    34	
+    35	    child.send('socket', socket, { keepOpen: true }, common.mustSucceed());
+    36	  }));
+    37	
+    38	  server.listen(0, () => {
+    39	    const socket = net.connect(server.address().port, common.localhostIPv4);
+    40	    socket.setEncoding('utf8');
+    41	    socket.on('data', (data) => result += data);
+    42	  });
+    43	} else {
+    44	  // The child process receives the socket from the parent, writes data to
+    45	  // the socket, then signals the parent process to write
+    46	  process.on('message', common.mustCall((msg, socket) => {
+    47	    assert.strictEqual(msg, 'socket');
+    48	    socket.write('child', () => process.send('child_done'));
+    49	  }));
+    50	}
+=================== test/parallel/test-cluster-concurrent-disconnect.js
+     1	'use strict';
+     2	
+     3	// Ref: https://github.com/nodejs/node/issues/32106
+     4	
+     5	const common = require('../common');
+     6	
+     7	const assert = require('assert');
+     8	const cluster = require('cluster');
+     9	const os = require('os');
+    10	
+    11	if (cluster.isPrimary) {
+    12	  const workers = [];
+    13	  const numCPUs = os.availableParallelism();
+    14	  let waitOnline = numCPUs;
+    15	  for (let i = 0; i < numCPUs; i++) {
+    16	    const worker = cluster.fork();
+    17	    workers[i] = worker;
+    18	    worker.once('online', common.mustCall(() => {
+    19	      if (--waitOnline === 0)
+    20	        for (const worker of workers)
+    21	          if (worker.isConnected())
+    22	            worker.send(i % 2 ? 'disconnect' : 'destroy');
+    23	    }));
+    24	
+    25	    // These errors can occur due to the nature of the test, we might be trying
+    26	    // to send messages when the worker is disconnecting.
+    27	    worker.on('error', common.mustCallAtLeast((err) => {
+    28	      assert.strictEqual(err.syscall, 'write');
+    29	      if (common.isMacOS) {
+    30	        assert(['EPIPE', 'ENOTCONN'].includes(err.code), err);
+    31	      } else {
+    32	        assert(['EPIPE', 'ECONNRESET'].includes(err.code), err);
+    33	      }
+    34	    }, 0));
+    35	
+    36	    worker.once('disconnect', common.mustCall(() => {
+    37	      for (const worker of workers)
+    38	        if (worker.isConnected())
+    39	          worker.send('disconnect');
+    40	    }));
+    41	
+    42	    worker.once('exit', common.mustCall((code, signal) => {
+    43	      assert.strictEqual(code, 0);
+    44	      assert.strictEqual(signal, null);
+    45	    }));
+    46	  }
+    47	} else {
+    48	  process.on('message', (msg) => {
+    49	    if (cluster.worker.isConnected())
+    50	      cluster.worker[msg]();
+    51	  });
+    52	}
+=================== test/parallel/test-cluster-dgram-1.js
+     1	// Copyright Joyent, Inc. and other Node contributors.
+     2	//
+     3	// Permission is hereby granted, free of charge, to any person obtaining a
+     4	// copy of this software and associated documentation files (the
+     5	// "Software"), to deal in the Software without restriction, including
+     6	// without limitation the rights to use, copy, modify, merge, publish,
+     7	// distribute, sublicense, and/or sell copies of the Software, and to permit
+     8	// persons to whom the Software is furnished to do so, subject to the
+     9	// following conditions:
+    10	//
+    11	// The above copyright notice and this permission notice shall be included
+    12	// in all copies or substantial portions of the Software.
+    13	//
+    14	// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
+    15	// OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+    16	// MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN
+    17	// NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM,
+    18	// DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR
+    19	// OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
+    20	// USE OR OTHER DEALINGS IN THE SOFTWARE.
+    21	
+    22	'use strict';
+    23	const common = require('../common');
+    24	if (common.isWindows)
+    25	  common.skip('dgram clustering is currently not supported on Windows.');
+    26	
+    27	const NUM_WORKERS = 4;
+    28	const PACKETS_PER_WORKER = 10;
+    29	
+    30	const assert = require('assert');
+    31	const cluster = require('cluster');
+    32	const dgram = require('dgram');
+    33	
+    34	if (cluster.isPrimary)
+    35	  primary();
+    36	else
+    37	  worker();
+    38	
+    39	
+    40	function primary() {
+    41	  let listening = 0;
+    42	
+    43	  // Fork 4 workers.
+    44	  for (let i = 0; i < NUM_WORKERS; i++)
+    45	    cluster.fork();
+    46	
+    47	  // Wait until all workers are listening.
+    48	  cluster.on('listening', common.mustCall((worker, address) => {
+    49	    if (++listening < NUM_WORKERS)
+    50	      return;
+    51	
+    52	    // Start sending messages.
+    53	    const buf = Buffer.from('hello world');
+    54	    const socket = dgram.createSocket('udp4');
+    55	    let sent = 0;
+    56	    doSend();
+    57	
+    58	    function doSend() {
+    59	      socket.send(buf, 0, buf.length, address.port, address.address, afterSend);
+    60	    }
+    61	
+    62	    function afterSend() {
+    63	      sent++;
+    64	      if (sent < NUM_WORKERS * PACKETS_PER_WORKER) {
+    65	        doSend();
+    66	      } else {
+    67	        socket.close();
+    68	      }
+    69	    }
+    70	  }, NUM_WORKERS));
+    71	
+    72	  // Set up event handlers for every worker. Each worker sends a message when
+    73	  // it has received the expected number of packets. After that it disconnects.
+    74	  for (const key in cluster.workers) {
+    75	    if (Object.hasOwn(cluster.workers, key))
+    76	      setupWorker(cluster.workers[key]);
+    77	  }
+    78	
+    79	  function setupWorker(worker) {
+    80	    let received = 0;
+    81	
+    82	    worker.on('message', common.mustCall((msg) => {
+    83	      received = msg.received;
+    84	      worker.disconnect();
+    85	    }));
+    86	
+    87	    worker.on('exit', common.mustCall(() => {
+    88	      assert.strictEqual(received, PACKETS_PER_WORKER);
+    89	    }));
+    90	  }
+    91	}
+    92	
+    93	
+    94	function worker() {
+    95	  let received = 0;
+    96	
+    97	  // Create udp socket and start listening.
+    98	  const socket = dgram.createSocket('udp4');
+    99	
+   100	  socket.on('message', common.mustCall((data, info) => {
+   101	    received++;
+   102	
+   103	    // Every 10 messages, notify the primary.
+   104	    if (received === PACKETS_PER_WORKER) {
+   105	      process.send({ received });
+   106	      socket.close();
+   107	    }
+   108	  }, PACKETS_PER_WORKER));
+   109	
+   110	  socket.bind(0);
+   111	}
+=================== test/parallel/test-cluster-disconnect.js
+     1	// Copyright Joyent, Inc. and other Node contributors.
+     2	//
+     3	// Permission is hereby granted, free of charge, to any person obtaining a
+     4	// copy of this software and associated documentation files (the
+     5	// "Software"), to deal in the Software without restriction, including
+     6	// without limitation the rights to use, copy, modify, merge, publish,
+     7	// distribute, sublicense, and/or sell copies of the Software, and to permit
+     8	// persons to whom the Software is furnished to do so, subject to the
+     9	// following conditions:
+    10	//
+    11	// The above copyright notice and this permission notice shall be included
+    12	// in all copies or substantial portions of the Software.
+    13	//
+    14	// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
+    15	// OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+    16	// MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN
+    17	// NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM,
+    18	// DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR
+    19	// OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
+    20	// USE OR OTHER DEALINGS IN THE SOFTWARE.
+    21	
+    22	'use strict';
+    23	const common = require('../common');
+    24	const assert = require('assert');
+    25	const cluster = require('cluster');
+    26	const net = require('net');
+    27	
+    28	if (cluster.isWorker) {
+    29	  net.createServer((socket) => {
+    30	    socket.end('echo');
+    31	  }).listen(0, '127.0.0.1');
+    32	
+    33	  net.createServer((socket) => {
+    34	    socket.end('echo');
+    35	  }).listen(0, '127.0.0.1');
+    36	} else if (cluster.isPrimary) {
+    37	  const servers = 2;
+    38	  const serverPorts = new Set();
+    39	
+    40	  // Test a single TCP server
+    41	  const testConnection = common.mustCallAtLeast((port, cb) => {
+    42	    const socket = net.connect(port, '127.0.0.1', common.mustCall(() => {
+    43	      // buffer result
+    44	      let result = '';
+    45	      socket.on('data', (chunk) => { result += chunk; });
+    46	
+    47	      // check result
+    48	      socket.on('end', common.mustCall(() => {
+    49	        cb(result === 'echo');
+    50	        serverPorts.delete(port);
+    51	      }));
+    52	    }));
+    53	  });
+    54	
+    55	  // Test both servers created in the cluster
+    56	  const testCluster = common.mustCallAtLeast((cb) => {
+    57	    let done = 0;
+    58	    const portsArray = Array.from(serverPorts);
+    59	
+    60	    for (let i = 0; i < servers; i++) {
+    61	      testConnection(portsArray[i], common.mustCall((success) => {
+    62	        assert.ok(success);
+    63	        done += 1;
+    64	        if (done === servers) {
+    65	          cb();
+    66	        }
+    67	      }));
+    68	    }
+    69	  });
+    70	
+    71	  // Start two workers and execute callback when both is listening
+    72	  const startCluster = common.mustCallAtLeast((cb) => {
+    73	    const workers = 8;
+    74	    let online = 0;
+    75	
+    76	    for (let i = 0, l = workers; i < l; i++) {
+    77	      cluster.fork().on('listening', common.mustCall((address) => {
+    78	        serverPorts.add(address.port);
+    79	
+    80	        online += 1;
+    81	        if (online === workers * servers) {
+    82	          cb();
+    83	        }
+    84	      }, servers));
+    85	    }
+    86	  });
+    87	
+    88	  const test = common.mustCall((again) => {
+    89	    // 1. start cluster
+    90	    startCluster(common.mustCall(() => {
+    91	      // 2. test cluster
+    92	      testCluster(common.mustCall(() => {
+    93	        // 3. disconnect cluster
+    94	        cluster.disconnect(common.mustCall(() => {
+    95	          // Run test again to confirm cleanup
+    96	          if (again) {
+    97	            test();
+    98	          }
+    99	        }));
+   100	      }));
+   101	    }));
+   102	  }, 2);
+   103	
+   104	  test(true);
+   105	}
+=================== test/parallel/test-cluster-listen-pipe-readable-writable.js
+     1	'use strict';
+     2	const common = require('../common');
+     3	
+     4	if (common.isWindows) {
+     5	  common.skip('skip on Windows');
+     6	  return;
+     7	}
+     8	
+     9	const assert = require('assert');
+    10	const cluster = require('cluster');
+    11	const net = require('net');
+    12	const fs = require('fs');
+    13	
+    14	if (cluster.isPrimary) {
+    15	  cluster.fork();
+    16	} else {
+    17	  const tmpdir = require('../common/tmpdir');
+    18	  tmpdir.refresh();
+    19	  const server = net.createServer().listen({
+    20	    path: common.PIPE,
+    21	    readableAll: true,
+    22	    writableAll: true,
+    23	  }, common.mustCall(() => {
+    24	    const stat = fs.statSync(common.PIPE);
+    25	    assert.strictEqual(stat.mode & 0o777, 0o777);
+    26	    server.close();
+    27	    process.disconnect();
+    28	  }));
+    29	}
+=================== test/parallel/test-cluster-shared-leak.js
+     1	// In Node 4.2.1 on operating systems other than Linux, this test triggers an
+     2	// assertion in cluster.js. The assertion protects against memory leaks.
+     3	// https://github.com/nodejs/node/pull/3510
+     4	
+     5	'use strict';
+     6	const common = require('../common');
+     7	const assert = require('assert');
+     8	const net = require('net');
+     9	const cluster = require('cluster');
+    10	cluster.schedulingPolicy = cluster.SCHED_NONE;
+    11	
+    12	if (cluster.isPrimary) {
+    13	  let conn, worker2;
+    14	
+    15	  const worker1 = cluster.fork();
+    16	  worker1.on('listening', common.mustCall(function(address) {
+    17	    worker2 = cluster.fork();
+    18	    worker2.on('online', common.mustCall(() => {
+    19	      conn = net.connect(address.port, common.mustCall(function() {
+    20	        worker1.disconnect();
+    21	        worker2.disconnect();
+    22	      }));
+    23	      conn.on('error', function(e) {
+    24	        // ECONNRESET is OK
+    25	        if (e.code !== 'ECONNRESET')
+    26	          throw e;
+    27	      });
+    28	    }));
+    29	  }));
+    30	
+    31	  cluster.on('exit', common.mustCall((worker, exitCode, signalCode) => {
+    32	    assert(worker === worker1 || worker === worker2);
+    33	    assert.strictEqual(exitCode, 0);
+    34	    assert.strictEqual(signalCode, null);
+    35	    if (Object.keys(cluster.workers).length === 0)
+    36	      conn.destroy();
+    37	  }, 2));
+    38	
+    39	  return;
+    40	}
+    41	
+    42	const server = net.createServer(function(c) {
+    43	  c.on('error', function(e) {
+    44	    // ECONNRESET is OK, so we don't exit with code !== 0
+    45	    if (e.code !== 'ECONNRESET')
+    46	      throw e;
+    47	  });
+    48	  c.end('bye');
+    49	});
+    50	
+    51	server.listen(0);
+=================== test/parallel/test-dgram-connect-send-empty-array.js
+     1	'use strict';
+     2	
+     3	const common = require('../common');
+     4	
+     5	const assert = require('assert');
+     6	const dgram = require('dgram');
+     7	
+     8	const client = dgram.createSocket('udp4');
+     9	
+    10	client.on('message', common.mustCall((buf, info) => {
+    11	  const expected = Buffer.alloc(0);
+    12	  assert.ok(buf.equals(expected), `Expected empty message but got ${buf}`);
+    13	  client.close();
+    14	}));
+    15	
+    16	client.on('listening', common.mustCall(() => {
+    17	  client.connect(client.address().port,
+    18	                 common.localhostIPv4,
+    19	                 common.mustCall(() => client.send([])));
+    20	}));
+    21	
+    22	client.bind(0);
+=================== test/parallel/test-dgram-connect-send-empty-buffer.js
+     1	'use strict';
+     2	const common = require('../common');
+     3	
+     4	const assert = require('assert');
+     5	const dgram = require('dgram');
+     6	
+     7	const client = dgram.createSocket('udp4');
+     8	
+     9	client.bind(0, common.mustCall(function() {
+    10	  const port = this.address().port;
+    11	  client.connect(port, common.mustCall(() => {
+    12	    const buf = Buffer.alloc(0);
+    13	    client.send(buf, 0, 0, common.mustSucceed());
+    14	  }));
+    15	
+    16	  client.on('message', common.mustCall((buffer) => {
+    17	    assert.strictEqual(buffer.length, 0);
+    18	    client.close();
+    19	  }));
+    20	}));
+=================== test/parallel/test-dgram-error-message-address.js
+     1	// Copyright Joyent, Inc. and other Node contributors.
+     2	//
+     3	// Permission is hereby granted, free of charge, to any person obtaining a
+     4	// copy of this software and associated documentation files (the
+     5	// "Software"), to deal in the Software without restriction, including
+     6	// without limitation the rights to use, copy, modify, merge, publish,
+     7	// distribute, sublicense, and/or sell copies of the Software, and to permit
+     8	// persons to whom the Software is furnished to do so, subject to the
+     9	// following conditions:
+    10	//
+    11	// The above copyright notice and this permission notice shall be included
+    12	// in all copies or substantial portions of the Software.
+    13	//
+    14	// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
+    15	// OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+    16	// MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN
+    17	// NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM,
+    18	// DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR
+    19	// OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
+    20	// USE OR OTHER DEALINGS IN THE SOFTWARE.
+    21	
+    22	'use strict';
+    23	const common = require('../common');
+    24	const assert = require('assert');
+    25	const dgram = require('dgram');
+    26	
+    27	// IPv4 Test
+    28	const socket_ipv4 = dgram.createSocket('udp4');
+    29	
+    30	socket_ipv4.on('listening', common.mustNotCall());
+    31	
+    32	socket_ipv4.on('error', common.mustCall(function(e) {
+    33	  assert.strictEqual(e.port, undefined);
+    34	  assert.strictEqual(e.message, 'bind EADDRNOTAVAIL 1.1.1.1');
+    35	  assert.strictEqual(e.address, '1.1.1.1');
+    36	  assert.strictEqual(e.code, 'EADDRNOTAVAIL');
+    37	  socket_ipv4.close();
+    38	}));
+    39	
+    40	socket_ipv4.bind(0, '1.1.1.1');
+    41	
+    42	// IPv6 Test
+    43	const socket_ipv6 = dgram.createSocket('udp6');
+    44	
+    45	socket_ipv6.on('listening', common.mustNotCall());
+    46	
+    47	socket_ipv6.on('error', common.mustCall(function(e) {
+    48	  // EAFNOSUPPORT or EPROTONOSUPPORT means IPv6 is disabled on this system.
+    49	  const allowed = ['EADDRNOTAVAIL', 'EAFNOSUPPORT', 'EPROTONOSUPPORT'];
+    50	  assert(allowed.includes(e.code), `'${e.code}' was not one of ${allowed}.`);
+    51	  assert.strictEqual(e.port, undefined);
+    52	  assert.strictEqual(e.message, `bind ${e.code} 111::1`);
+    53	  assert.strictEqual(e.address, '111::1');
+    54	  socket_ipv6.close();
+    55	}));
+    56	
+    57	socket_ipv6.bind(0, '111::1');
+=================== test/parallel/test-dgram-multicast-set-interface.js
+     1	'use strict';
+     2	const common = require('../common');
+     3	const assert = require('assert');
+     4	const dgram = require('dgram');
+     5	
+     6	{
+     7	  const socket = dgram.createSocket('udp4');
+     8	
+     9	  socket.bind(0);
+    10	  socket.on('listening', common.mustCall(() => {
+    11	    // Explicitly request default system selection
+    12	    socket.setMulticastInterface('0.0.0.0');
+    13	
+    14	    socket.close();
+    15	  }));
+    16	}
+    17	
+    18	{
+    19	  const socket = dgram.createSocket('udp4');
+    20	
+    21	  socket.bind(0);
+    22	  socket.on('listening', common.mustCall(() => {
+    23	    socket.close(common.mustCall(() => {
+    24	      assert.throws(() => { socket.setMulticastInterface('0.0.0.0'); },
+    25	                    /Not running/);
+    26	    }));
+    27	  }));
+    28	}
+    29	
+    30	{
+    31	  const socket = dgram.createSocket('udp4');
+    32	
+    33	  socket.bind(0);
+    34	  socket.on('listening', common.mustCall(() => {
+    35	    // Try to set with an invalid interfaceAddress (wrong address class)
+    36	    //
+    37	    // This operation succeeds on some platforms, throws `EINVAL` on some
+    38	    // platforms, and throws `ENOPROTOOPT` on others. This is unpleasant, but
+    39	    // we should at least test for it.
+    40	    try {
+    41	      socket.setMulticastInterface('::');
+    42	    } catch (e) {
+    43	      assert(e.code === 'EINVAL' || e.code === 'ENOPROTOOPT');
+    44	    }
+    45	
+    46	    socket.close();
+    47	  }));
+    48	}
+    49	
+    50	{
+    51	  const socket = dgram.createSocket('udp4');
+    52	
+    53	  socket.bind(0);
+    54	  socket.on('listening', common.mustCall(() => {
+    55	    // Try to set with an invalid interfaceAddress (wrong Type)
+    56	    assert.throws(() => {
+    57	      socket.setMulticastInterface(1);
+    58	    }, /TypeError/);
+    59	
+    60	    socket.close();
+    61	  }));
+    62	}
+    63	
+    64	{
+    65	  const socket = dgram.createSocket('udp4');
+    66	
+    67	  socket.bind(0);
+    68	  socket.on('listening', common.mustCall(() => {
+    69	    // Try to set with an invalid interfaceAddress (non-unicast)
+    70	    assert.throws(() => {
+    71	      socket.setMulticastInterface('224.0.0.2');
+    72	    }, /Error/);
+    73	
+    74	    socket.close();
+    75	  }));
+    76	}
+    77	
+    78	// If IPv6 is not supported, skip the rest of the test. However, don't call
+    79	// common.skip(), which calls process.exit() while there is outstanding
+    80	// common.mustCall() activity.
+    81	if (!common.hasIPv6)
+    82	  return;
+    83	
+    84	{
+    85	  const socket = dgram.createSocket('udp6');
+    86	
+    87	  socket.bind(0);
+    88	  socket.on('listening', common.mustCall(() => {
+    89	    // Try to set with an invalid interfaceAddress ('undefined')
+    90	    assert.throws(() => {
+    91	      socket.setMulticastInterface(String(undefined));
+    92	    }, /EINVAL/);
+    93	
+    94	    socket.close();
+    95	  }));
+    96	}
+    97	
+    98	{
+    99	  const socket = dgram.createSocket('udp6');
+   100	
+   101	  socket.bind(0);
+   102	  socket.on('listening', common.mustCall(() => {
+   103	    // Try to set with an invalid interfaceAddress ('')
+   104	    assert.throws(() => {
+   105	      socket.setMulticastInterface('');
+   106	    }, /EINVAL/);
+   107	
+   108	    socket.close();
+   109	  }));
+   110	}
+   111	
+   112	{
+   113	  const socket = dgram.createSocket('udp6');
+   114	
+   115	  socket.bind(0);
+   116	  socket.on('listening', common.mustCall(() => {
+   117	    // Using lo0 for OsX, on all other OSes, an invalid Scope gets
+   118	    // turned into #0 (default selection) which is also acceptable.
+   119	    socket.setMulticastInterface('::%lo0');
+   120	
+   121	    socket.close();
+   122	  }));
+   123	}
+=================== test/parallel/test-dgram-send-empty-array.js
+     1	'use strict';
+     2	
+     3	const common = require('../common');
+     4	
+     5	const assert = require('assert');
+     6	const dgram = require('dgram');
+     7	
+     8	const client = dgram.createSocket('udp4');
+     9	
+    10	let interval;
+    11	
+    12	client.on('message', common.mustCall(function onMessage(buf, info) {
+    13	  const expected = Buffer.alloc(0);
+    14	  assert.ok(buf.equals(expected), `Expected empty message but got ${buf}`);
+    15	  clearInterval(interval);
+    16	  client.close();
+    17	}));
+    18	
+    19	client.on('listening', common.mustCall(function() {
+    20	  interval = setInterval(function() {
+    21	    client.send([], client.address().port, common.localhostIPv4);
+    22	  }, 10);
+    23	}));
+    24	
+    25	client.bind(0);
+=================== test/parallel/test-dgram-send-empty-buffer.js
+     1	// Copyright Joyent, Inc. and other Node contributors.
+     2	//
+     3	// Permission is hereby granted, free of charge, to any person obtaining a
+     4	// copy of this software and associated documentation files (the
+     5	// "Software"), to deal in the Software without restriction, including
+     6	// without limitation the rights to use, copy, modify, merge, publish,
+     7	// distribute, sublicense, and/or sell copies of the Software, and to permit
+     8	// persons to whom the Software is furnished to do so, subject to the
+     9	// following conditions:
+    10	//
+    11	// The above copyright notice and this permission notice shall be included
+    12	// in all copies or substantial portions of the Software.
+    13	//
+    14	// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
+    15	// OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+    16	// MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN
+    17	// NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM,
+    18	// DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR
+    19	// OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
+    20	// USE OR OTHER DEALINGS IN THE SOFTWARE.
+    21	
+    22	'use strict';
+    23	const common = require('../common');
+    24	
+    25	const assert = require('assert');
+    26	const dgram = require('dgram');
+    27	
+    28	const client = dgram.createSocket('udp4');
+    29	
+    30	client.bind(0, common.mustCall(function() {
+    31	  const port = this.address().port;
+    32	
+    33	  client.on('message', common.mustCall(function onMessage(buffer) {
+    34	    assert.strictEqual(buffer.length, 0);
+    35	    clearInterval(interval);
+    36	    client.close();
+    37	  }));
+    38	
+    39	  const buf = Buffer.alloc(0);
+    40	  const interval = setInterval(common.mustCallAtLeast(() => {
+    41	    client.send(buf, 0, 0, port, '127.0.0.1', common.mustCall());
+    42	  }), 10);
+    43	}));
+=================== test/parallel/test-http-writable-true-after-close.js
+     1	'use strict';
+     2	
+     3	const common = require('../common');
+     4	const assert = require('assert');
+     5	const { get, createServer } = require('http');
+     6	
+     7	// res.writable should not be set to false after it has finished sending
+     8	// Ref: https://github.com/nodejs/node/issues/15029
+     9	
+    10	let internal;
+    11	let external;
+    12	
+    13	// Proxy server
+    14	const server = createServer(common.mustCall((req, res) => {
+    15	  const listener = common.mustCall(() => {
+    16	    assert.strictEqual(res.writable, true);
+    17	  });
+    18	
+    19	  // on CentOS 5, 'finish' is emitted
+    20	  res.on('finish', listener);
+    21	  // Everywhere else, 'close' is emitted
+    22	  res.on('close', listener);
+    23	
+    24	  get(`http://127.0.0.1:${internal.address().port}`, common.mustCall((inner) => {
+    25	    inner.pipe(res);
+    26	  }));
+    27	})).listen(0, common.mustCall(() => {
+    28	  // Http server
+    29	  internal = createServer(common.mustCallAtLeast((req, res) => {
+    30	    res.writeHead(200);
+    31	    setImmediate(common.mustCall(() => {
+    32	      external.abort();
+    33	      res.end('Hello World\n');
+    34	    }));
+    35	  })).listen(0, common.mustCall(() => {
+    36	    external = get(`http://127.0.0.1:${server.address().port}`);
+    37	    external.on('error', common.mustCall(() => {
+    38	      server.close();
+    39	      internal.close();
+    40	    }));
+    41	  }));
+    42	}));
+=================== test/parallel/test-http2-max-invalid-frames.js
+     1	'use strict';
+     2	const common = require('../common');
+     3	if (!common.hasCrypto)
+     4	  common.skip('missing crypto');
+     5	
+     6	const assert = require('assert');
+     7	const http2 = require('http2');
+     8	const net = require('net');
+     9	
+    10	// Verify that creating a number of invalid HTTP/2 streams will
+    11	// result in the peer closing the session within maxSessionInvalidFrames
+    12	// frames.
+    13	
+    14	const maxSessionInvalidFrames = 100;
+    15	const server = http2.createServer({ maxSessionInvalidFrames });
+    16	server.on('stream', (stream) => {
+    17	  stream.respond({
+    18	    'content-type': 'text/plain',
+    19	    ':status': 200
+    20	  });
+    21	  stream.end('Hello, world!\n');
+    22	});
+    23	
+    24	server.listen(0, common.mustCall(() => {
+    25	  const h2header = Buffer.alloc(9);
+    26	  const conn = net.connect({
+    27	    port: server.address().port,
+    28	    allowHalfOpen: true
+    29	  });
+    30	
+    31	  conn.write('PRI * HTTP/2.0\r\n\r\nSM\r\n\r\n');
+    32	
+    33	  h2header[3] = 4;  // Send a settings frame.
+    34	  conn.write(Buffer.from(h2header));
+    35	
+    36	  let inbuf = Buffer.alloc(0);
+    37	  let state = 'settingsHeader';
+    38	  let settingsFrameLength;
+    39	  conn.on('data', (chunk) => {
+    40	    inbuf = Buffer.concat([inbuf, chunk]);
+    41	    switch (state) {
+    42	      case 'settingsHeader':
+    43	        if (inbuf.length < 9) return;
+    44	        settingsFrameLength = inbuf.readIntBE(0, 3);
+    45	        inbuf = inbuf.slice(9);
+    46	        state = 'readingSettings';
+    47	        // Fallthrough
+    48	      case 'readingSettings':
+    49	        if (inbuf.length < settingsFrameLength) return;
+    50	        inbuf = inbuf.slice(settingsFrameLength);
+    51	        h2header[3] = 4;  // Send a settings ACK.
+    52	        h2header[4] = 1;
+    53	        conn.write(Buffer.from(h2header));
+    54	        state = 'ignoreInput';
+    55	        writeRequests();
+    56	    }
+    57	  });
+    58	
+    59	  let gotError = false;
+    60	  let streamId = 1;
+    61	  let reqCount = 0;
+    62	
+    63	  function writeRequests() {
+    64	    for (let i = 1; i < 10 && !gotError; i++) {
+    65	      h2header[3] = 1;  // HEADERS
+    66	      h2header[4] = 0x5;  // END_HEADERS|END_STREAM
+    67	      h2header.writeIntBE(1, 0, 3);  // Length: 1
+    68	      h2header.writeIntBE(streamId, 5, 4);  // Stream ID
+    69	      streamId += 2;
+    70	      // 0x88 = :status: 200
+    71	      if (!conn.write(Buffer.concat([h2header, Buffer.from([0x88])]))) {
+    72	        break;
+    73	      }
+    74	      reqCount++;
+    75	    }
+    76	    // Timeout requests to slow down the rate so we get more accurate reqCount.
+    77	    if (!gotError)
+    78	      setTimeout(writeRequests, 10);
+    79	  }
+    80	
+    81	  conn.once('error', common.mustCall(() => {
+    82	    gotError = true;
+    83	    assert.ok(Math.abs(reqCount - maxSessionInvalidFrames) < 100,
+    84	              `Request count (${reqCount}) must be around (±100)` +
+    85	      ` maxSessionInvalidFrames option (${maxSessionInvalidFrames})`);
+    86	    conn.destroy();
+    87	    server.close();
+    88	  }));
+    89	}));
+=================== test/parallel/test-http2-misbehaving-flow-control.js
+     1	'use strict';
+     2	
+     3	const common = require('../common');
+     4	
+     5	if (!common.hasCrypto)
+     6	  common.skip('missing crypto');
+     7	
+     8	const h2 = require('http2');
+     9	const net = require('net');
+    10	
+    11	const preamble = Buffer.from([
+    12	  0x50, 0x52, 0x49, 0x20, 0x2a, 0x20, 0x48, 0x54, 0x54, 0x50, 0x2f,
+    13	  0x32, 0x2e, 0x30, 0x0d, 0x0a, 0x0d, 0x0a, 0x53, 0x4d, 0x0d, 0x0a,
+    14	  0x0d, 0x0a, 0x00, 0x00, 0x0c, 0x04, 0x00, 0x00, 0x00, 0x00, 0x00,
+    15	  0x00, 0x03, 0x00, 0x00, 0x00, 0x64, 0x00, 0x04, 0x00, 0x00, 0xff,
+    16	  0xff, 0x00, 0x00, 0x00, 0x04, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00,
+    17	  0x00, 0x05, 0x02, 0x00, 0x00, 0x00, 0x00, 0x03, 0x00, 0x00, 0x00,
+    18	  0x00, 0xc8, 0x00, 0x00, 0x05, 0x02, 0x00, 0x00, 0x00, 0x00, 0x05,
+    19	  0x00, 0x00, 0x00, 0x00, 0x64, 0x00, 0x00, 0x05, 0x02, 0x00, 0x00,
+    20	  0x00, 0x00, 0x07, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x05,
+    21	  0x02, 0x00, 0x00, 0x00, 0x00, 0x09, 0x00, 0x00, 0x00, 0x07, 0x00,
+    22	  0x00, 0x00, 0x05, 0x02, 0x00, 0x00, 0x00, 0x00, 0x0b, 0x00, 0x00,
+    23	  0x00, 0x03, 0x00, 0x00, 0x00, 0x2c, 0x01, 0x24, 0x00, 0x00, 0x00,
+    24	  0x0d, 0x00, 0x00, 0x00, 0x0b, 0x0f, 0x83, 0x84, 0x86, 0x41, 0x8a,
+    25	  0xa0, 0xe4, 0x1d, 0x13, 0x9d, 0x09, 0xb8, 0xf0, 0x1e, 0x07, 0x53,
+    26	  0x03, 0x2a, 0x2f, 0x2a, 0x90, 0x7a, 0x8a, 0xaa, 0x69, 0xd2, 0x9a,
+    27	  0xc4, 0xc0, 0x57, 0x0b, 0xcb, 0x87, 0x0f, 0x0d, 0x83, 0x08, 0x00,
+    28	  0x0f,
+    29	]);
+    30	
+    31	const data = Buffer.from([
+    32	  0x00, 0x00, 0x12, 0x00, 0x00, 0x00, 0x00, 0x00, 0x0d,
+    33	  0x68, 0x65, 0x6c, 0x6c, 0x6f, 0x0a, 0x68, 0x65, 0x6c,
+    34	  0x6c, 0x6f, 0x0a, 0x68, 0x65, 0x6c, 0x6c, 0x6f, 0x0a,
+    35	  0x00, 0x00, 0x12, 0x00, 0x00, 0x00, 0x00, 0x00, 0x0d,
+    36	  0x68, 0x65, 0x6c, 0x6c, 0x6f, 0x0a, 0x68, 0x65, 0x6c,
+    37	  0x6c, 0x6f, 0x0a, 0x68, 0x65, 0x6c, 0x6c, 0x6f, 0x0a,
+    38	  0x00, 0x00, 0x12, 0x00, 0x00, 0x00, 0x00, 0x00, 0x0d,
+    39	  0x68, 0x65, 0x6c, 0x6c, 0x6f, 0x0a, 0x68, 0x65, 0x6c,
+    40	  0x6c, 0x6f, 0x0a, 0x68, 0x65, 0x6c, 0x6c, 0x6f, 0x0a,
+    41	  0x00, 0x00, 0x12, 0x00, 0x00, 0x00, 0x00, 0x00, 0x0d,
+    42	  0x68, 0x65, 0x6c, 0x6c, 0x6f, 0x0a, 0x68, 0x65, 0x6c,
+    43	  0x6c, 0x6f, 0x0a, 0x68, 0x65, 0x6c, 0x6c, 0x6f, 0x0a,
+    44	  0x00, 0x00, 0x12, 0x00, 0x00, 0x00, 0x00, 0x00, 0x0d,
+    45	  0x68, 0x65, 0x6c, 0x6c, 0x6f, 0x0a, 0x68, 0x65, 0x6c,
+    46	  0x6c, 0x6f, 0x0a, 0x68, 0x65, 0x6c, 0x6c, 0x6f, 0x0a,
+    47	  0x00, 0x00, 0x12, 0x00, 0x00, 0x00, 0x00, 0x00, 0x0d,
+    48	  0x68, 0x65, 0x6c, 0x6c, 0x6f, 0x0a, 0x68, 0x65, 0x6c,
+    49	  0x6c, 0x6f, 0x0a, 0x68, 0x65, 0x6c, 0x6c, 0x6f, 0x0a,
+    50	]);
+    51	
+    52	// This is testing the case of a misbehaving client that is not paying
+    53	// attention to flow control. The initial window size is set to data
+    54	// payload, which in this case is 18, the stream is set to flowing so
+    55	// WINDOW_UPDATE frames are being sent, but the client is writing
+    56	// faster than those can be read.
+    57	//
+    58	// Bad client! Bad!
+    59	//
+    60	// Fortunately, nghttp2 handles this situation for us by keeping track
+    61	// of the flow control window and sending GOAWAY to end the session.
+    62	
+    63	let client;
+    64	const server = h2.createServer({ settings: { initialWindowSize: 18 } });
+    65	
+    66	server.on('session', common.mustCall((session) => {
+    67	  session.on('error', common.expectsError({
+    68	    code: 'ERR_HTTP2_ERROR',
+    69	    name: 'Error',
+    70	    message: 'Protocol error'
+    71	  }));
+    72	}));
+    73	
+    74	server.on('stream', common.mustCall((stream) => {
+    75	  stream.on('error', common.expectsError({
+    76	    code: 'ERR_HTTP2_ERROR',
+    77	    name: 'Error',
+    78	    message: 'Protocol error'
+    79	  }));
+    80	  stream.on('close', common.mustCall(() => {
+    81	    server.close(common.mustCall());
+    82	    client.destroy();
+    83	  }));
+    84	  stream.resume();
+    85	  stream.respond();
+    86	  stream.end('ok');
+    87	}));
+    88	
+    89	server.on('close', common.mustCall());
+    90	
+    91	server.listen(0, common.mustCall(() => {
+    92	  client = net.connect(server.address().port, common.mustCall(() => {
+    93	    client.write(preamble);
+    94	    client.write(data);
+    95	    client.write(data);
+    96	
+    97	    // TCP connection is closed by the server
+    98	    client.on('close', common.mustCall());
+    99	  }));
+   100	}));
+=================== test/parallel/test-http2-misbehaving-flow-control-paused.js
+     1	'use strict';
+     2	
+     3	const common = require('../common');
+     4	
+     5	if (!common.hasCrypto)
+     6	  common.skip('missing crypto');
+     7	
+     8	const h2 = require('http2');
+     9	const net = require('net');
+    10	
+    11	const preamble = Buffer.from([
+    12	  0x50, 0x52, 0x49, 0x20, 0x2a, 0x20, 0x48, 0x54, 0x54, 0x50, 0x2f,
+    13	  0x32, 0x2e, 0x30, 0x0d, 0x0a, 0x0d, 0x0a, 0x53, 0x4d, 0x0d, 0x0a,
+    14	  0x0d, 0x0a, 0x00, 0x00, 0x0c, 0x04, 0x00, 0x00, 0x00, 0x00, 0x00,
+    15	  0x00, 0x03, 0x00, 0x00, 0x00, 0x64, 0x00, 0x04, 0x00, 0x00, 0xff,
+    16	  0xff, 0x00, 0x00, 0x00, 0x04, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00,
+    17	  0x00, 0x05, 0x02, 0x00, 0x00, 0x00, 0x00, 0x03, 0x00, 0x00, 0x00,
+    18	  0x00, 0xc8, 0x00, 0x00, 0x05, 0x02, 0x00, 0x00, 0x00, 0x00, 0x05,
+    19	  0x00, 0x00, 0x00, 0x00, 0x64, 0x00, 0x00, 0x05, 0x02, 0x00, 0x00,
+    20	  0x00, 0x00, 0x07, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x05,
+    21	  0x02, 0x00, 0x00, 0x00, 0x00, 0x09, 0x00, 0x00, 0x00, 0x07, 0x00,
+    22	  0x00, 0x00, 0x05, 0x02, 0x00, 0x00, 0x00, 0x00, 0x0b, 0x00, 0x00,
+    23	  0x00, 0x03, 0x00, 0x00, 0x00, 0x2c, 0x01, 0x24, 0x00, 0x00, 0x00,
+    24	  0x0d, 0x00, 0x00, 0x00, 0x0b, 0x0f, 0x83, 0x84, 0x86, 0x41, 0x8a,
+    25	  0xa0, 0xe4, 0x1d, 0x13, 0x9d, 0x09, 0xb8, 0xf0, 0x1e, 0x07, 0x53,
+    26	  0x03, 0x2a, 0x2f, 0x2a, 0x90, 0x7a, 0x8a, 0xaa, 0x69, 0xd2, 0x9a,
+    27	  0xc4, 0xc0, 0x57, 0x0b, 0xcb, 0x87, 0x0f, 0x0d, 0x83, 0x08, 0x00,
+    28	  0x0f,
+    29	]);
+    30	
+    31	const data = Buffer.from([
+    32	  0x00, 0x00, 0x12, 0x00, 0x00, 0x00, 0x00, 0x00, 0x0d,
+    33	  0x68, 0x65, 0x6c, 0x6c, 0x6f, 0x0a, 0x68, 0x65, 0x6c,
+    34	  0x6c, 0x6f, 0x0a, 0x68, 0x65, 0x6c, 0x6c, 0x6f, 0x0a,
+    35	]);
+    36	
+    37	// This is testing the case of a misbehaving client that is not paying
+    38	// attention to flow control. The initial window size is set to data
+    39	// payload * 2, which in this case is 36, the stream is paused so
+    40	// WINDOW_UPDATE frames are not being sent, which means the window
+    41	// size is not being updated. A well behaved client is supposed to
+    42	// stop sending until the window size is expanded again.
+    43	//
+    44	// However, our malicious client keeps sending data beyond the flow
+    45	// control window!
+    46	//
+    47	// Bad client! Bad!
+    48	//
+    49	// Fortunately, nghttp2 handles this situation for us by keeping track
+    50	// of the flow control window and sending GOAWAY to end the session.
+    51	
+    52	let client;
+    53	
+    54	const server = h2.createServer({ settings: { initialWindowSize: 36 } });
+    55	
+    56	server.on('session', common.mustCall((session) => {
+    57	  session.on('error', common.expectsError({
+    58	    code: 'ERR_HTTP2_ERROR',
+    59	    name: 'Error',
+    60	    message: 'Protocol error'
+    61	  }));
+    62	}));
+    63	
+    64	server.on('stream', common.mustCall((stream) => {
+    65	  // Set the high water mark to zero, since otherwise we still accept
+    66	  // reads from the source stream (if we can consume them).
+    67	  stream._readableState.highWaterMark = 0;
+    68	  stream.pause();
+    69	  stream.on('error', common.expectsError({
+    70	    code: 'ERR_HTTP2_ERROR',
+    71	    name: 'Error',
+    72	    message: 'Protocol error'
+    73	  }));
+    74	  stream.on('close', common.mustCall(() => {
+    75	    server.close();
+    76	    client.destroy();
+    77	  }));
+    78	  stream.on('end', common.mustNotCall());
+    79	}));
+    80	
+    81	server.listen(0, common.mustCall(() => {
+    82	  client = net.connect(server.address().port, common.mustCall(() => {
+    83	    client.write(preamble);
+    84	    client.write(data);
+    85	    client.write(data);
+    86	    client.write(data);
+    87	
+    88	    // TCP connection is closed by the server
+    89	    client.on('close', common.mustCall());
+    90	  }));
+    91	}));
+=================== test/parallel/test-net-pipe-connect-errors.js
+     1	// Copyright Joyent, Inc. and other Node contributors.
+     2	//
+     3	// Permission is hereby granted, free of charge, to any person obtaining a
+     4	// copy of this software and associated documentation files (the
+     5	// "Software"), to deal in the Software without restriction, including
+     6	// without limitation the rights to use, copy, modify, merge, publish,
+     7	// distribute, sublicense, and/or sell copies of the Software, and to permit
+     8	// persons to whom the Software is furnished to do so, subject to the
+     9	// following conditions:
+    10	//
+    11	// The above copyright notice and this permission notice shall be included
+    12	// in all copies or substantial portions of the Software.
+    13	//
+    14	// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
+    15	// OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+    16	// MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN
+    17	// NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM,
+    18	// DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR
+    19	// OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
+    20	// USE OR OTHER DEALINGS IN THE SOFTWARE.
+    21	
+    22	'use strict';
+    23	const common = require('../common');
+    24	const fixtures = require('../common/fixtures');
+    25	const fs = require('fs');
+    26	const net = require('net');
+    27	const path = require('path');
+    28	const assert = require('assert');
+    29	
+    30	// Test if ENOTSOCK is fired when trying to connect to a file which is not
+    31	// a socket.
+    32	
+    33	let emptyTxt;
+    34	
+    35	if (common.isWindows) {
+    36	  // On Win, common.PIPE will be a named pipe, so we use an existing empty
+    37	  // file instead
+    38	  emptyTxt = fixtures.path('empty.txt');
+    39	} else {
+    40	  const tmpdir = require('../common/tmpdir');
+    41	  tmpdir.refresh();
+    42	  // Use a short relative path so that we don't exceed the 108 byte limit for
+    43	  // Unix socket paths in long or multibyte CI workspaces. Even though this
+    44	  // isn't actually a socket file, the error will be different from the one we
+    45	  // are expecting if the path is too long.
+    46	  emptyTxt = path.join(path.relative(process.cwd(), tmpdir.path), '0.txt');
+    47	
+    48	  function cleanup() {
+    49	    try {
+    50	      fs.unlinkSync(emptyTxt);
+    51	    } catch (e) {
+    52	      assert.strictEqual(e.code, 'ENOENT');
+    53	    }
+    54	  }
+    55	  process.on('exit', cleanup);
+    56	  cleanup();
+    57	  fs.writeFileSync(emptyTxt, '');
+    58	}
+    59	
+    60	const notSocketClient = net.createConnection(emptyTxt, function() {
+    61	  assert.fail('connection callback should not run');
+    62	});
+    63	
+    64	notSocketClient.on('error', common.mustCall(function(err) {
+    65	  assert(err.code === 'ENOTSOCK' || err.code === 'ECONNREFUSED',
+    66	         `received ${err.code} instead of ENOTSOCK or ECONNREFUSED`);
+    67	}));
+    68	
+    69	
+    70	// Trying to connect to not-existing socket should result in ENOENT error
+    71	const noEntSocketClient = net.createConnection('no-ent-file', function() {
+    72	  assert.fail('connection to non-existent socket, callback should not run');
+    73	});
+    74	
+    75	noEntSocketClient.on('error', common.mustCall(function(err) {
+    76	  assert.strictEqual(err.code, 'ENOENT');
+    77	}));
+    78	
+    79	
+    80	// On Windows or IBMi or when running as root,
+    81	// a chmod has no effect on named pipes
+    82	if (!common.isWindows && !common.isIBMi && process.getuid() !== 0) {
+    83	  // Trying to connect to a socket one has no access to should result in EACCES
+    84	  const accessServer = net.createServer(
+    85	    common.mustNotCall('server callback should not run'));
+    86	  accessServer.listen(common.PIPE, common.mustCall(function() {
+    87	    fs.chmodSync(common.PIPE, 0);
+    88	
+    89	    const accessClient = net.createConnection(common.PIPE, function() {
+    90	      assert.fail('connection should get EACCES, callback should not run');
+    91	    });
+    92	
+    93	    accessClient.on('error', common.mustCall(function(err) {
+    94	      assert.strictEqual(err.code, 'EACCES');
+    95	      accessServer.close();
+    96	    }));
+    97	  }));
+    98	}
+=================== test/parallel/test-net-server-listen-path.js
+     1	'use strict';
+     2	
+     3	const common = require('../common');
+     4	const net = require('net');
+     5	const assert = require('assert');
+     6	const fs = require('fs');
+     7	
+     8	const tmpdir = require('../common/tmpdir');
+     9	tmpdir.refresh();
+    10	
+    11	function closeServer() {
+    12	  return common.mustCall(function() {
+    13	    this.close();
+    14	  });
+    15	}
+    16	
+    17	let counter = 0;
+    18	
+    19	// Avoid conflict with listen-handle
+    20	function randomPipePath() {
+    21	  return `${common.PIPE}-listen-path-${counter++}`;
+    22	}
+    23	
+    24	// Test listen(path)
+    25	{
+    26	  const handlePath = randomPipePath();
+    27	  net.createServer()
+    28	    .listen(handlePath)
+    29	    .on('listening', closeServer());
+    30	}
+    31	
+    32	// Test listen({path})
+    33	{
+    34	  const handlePath = randomPipePath();
+    35	  net.createServer()
+    36	    .listen({ path: handlePath })
+    37	    .on('listening', closeServer());
+    38	}
+    39	
+    40	// Test listen(path, cb)
+    41	{
+    42	  const handlePath = randomPipePath();
+    43	  net.createServer()
+    44	    .listen(handlePath, closeServer());
+    45	}
+    46	
+    47	// Test listen(path, cb)
+    48	{
+    49	  const handlePath = randomPipePath();
+    50	  net.createServer()
+    51	    .listen({ path: handlePath }, closeServer());
+    52	}
+    53	
+    54	// Test pipe chmod
+    55	{
+    56	  const handlePath = randomPipePath();
+    57	
+    58	  const server = net.createServer()
+    59	    .listen({
+    60	      path: handlePath,
+    61	      readableAll: true,
+    62	      writableAll: true
+    63	    }, common.mustCall(() => {
+    64	      if (process.platform !== 'win32') {
+    65	        const mode = fs.statSync(handlePath).mode;
+    66	        assert.notStrictEqual(mode & fs.constants.S_IROTH, 0);
+    67	        assert.notStrictEqual(mode & fs.constants.S_IWOTH, 0);
+    68	      }
+    69	      server.close();
+    70	    }));
+    71	}
+    72	
+    73	// Test should emit "error" events when listening fails.
+    74	{
+    75	  const handlePath = randomPipePath();
+    76	  const server1 = net.createServer().listen({ path: handlePath }, common.mustCall(() => {
+    77	    // As the handlePath is in use, binding to the same address again should
+    78	    // make the server emit an 'EADDRINUSE' error.
+    79	    const server2 = net.createServer()
+    80	      .listen({
+    81	        path: handlePath,
+    82	        writableAll: true,
+    83	      }, common.mustNotCall());
+    84	
+    85	    server2.on('error', common.mustCall((err) => {
+    86	      server1.close();
+    87	      assert.strictEqual(err.code, 'EADDRINUSE');
+    88	      assert.match(err.message, /^listen EADDRINUSE: address already in use/);
+    89	    }));
+    90	  }));
+    91	}
+=================== test/parallel/test-process-getactivehandles.js
+     1	'use strict';
+     2	
+     3	require('../common');
+     4	const assert = require('assert');
+     5	const net = require('net');
+     6	const NUM = 8;
+     7	const connections = [];
+     8	const clients = [];
+     9	let clients_counter = 0;
+    10	
+    11	const server = net.createServer(function listener(c) {
+    12	  connections.push(c);
+    13	}).listen(0, makeConnection);
+    14	
+    15	
+    16	function makeConnection() {
+    17	  if (clients_counter >= NUM) return;
+    18	  net.connect(server.address().port, function connected() {
+    19	    clientConnected(this);
+    20	    makeConnection();
+    21	  });
+    22	}
+    23	
+    24	
+    25	function clientConnected(client) {
+    26	  clients.push(client);
+    27	  if (++clients_counter >= NUM)
+    28	    checkAll();
+    29	}
+    30	
+    31	
+    32	function checkAll() {
+    33	  const handles = process._getActiveHandles();
+    34	
+    35	  clients.forEach(function(item) {
+    36	    assert.ok(handles.includes(item));
+    37	    item.destroy();
+    38	  });
+    39	
+    40	  connections.forEach(function(item) {
+    41	    assert.ok(handles.includes(item));
+    42	    item.end();
+    43	  });
+    44	
+    45	  assert.ok(handles.includes(server));
+    46	  server.close();
+    47	}
+=================== test/parallel/test-process-getactiveresources-track-active-handles.js
+     1	'use strict';
+     2	
+     3	require('../common');
+     4	const assert = require('assert');
+     5	const net = require('net');
+     6	const NUM = 8;
+     7	const connections = [];
+     8	const clients = [];
+     9	let clients_counter = 0;
+    10	
+    11	const server = net.createServer(function listener(c) {
+    12	  connections.push(c);
+    13	}).listen(0, makeConnection);
+    14	
+    15	
+    16	function makeConnection() {
+    17	  if (clients_counter >= NUM) return;
+    18	  net.connect(server.address().port, function connected() {
+    19	    clientConnected(this);
+    20	    makeConnection();
+    21	  });
+    22	}
+    23	
+    24	
+    25	function clientConnected(client) {
+    26	  clients.push(client);
+    27	  if (++clients_counter >= NUM)
+    28	    checkAll();
+    29	}
+    30	
+    31	
+    32	function checkAll() {
+    33	  assert.strictEqual(process.getActiveResourcesInfo().filter(
+    34	    (type) => type === 'TCPSocketWrap').length,
+    35	                     clients.length + connections.length);
+    36	
+    37	  clients.forEach((item) => item.destroy());
+    38	  connections.forEach((item) => item.end());
+    39	
+    40	  assert.strictEqual(process.getActiveResourcesInfo().filter(
+    41	    (type) => type === 'TCPServerWrap').length, 1);
+    42	
+    43	  server.close();
+    44	}
+=================== test/parallel/test-set-http-max-http-headers.js
+     1	'use strict';
+     2	
+     3	const common = require('../common');
+     4	const assert = require('assert');
+     5	const { spawn } = require('child_process');
+     6	const path = require('path');
+     7	const { suite, test } = require('node:test');
+     8	const testName = path.join(__dirname, 'test-http-max-http-headers.js');
+     9	
+    10	test(function(_, cb) {
+    11	  console.log('running subtest expecting failure');
+    12	
+    13	  // Validate that the test fails if the max header size is too small.
+    14	  const args = ['--expose-internals',
+    15	                '--max-http-header-size=1024',
+    16	                testName];
+    17	  const cp = spawn(process.execPath, args, { stdio: 'inherit' });
+    18	
+    19	  cp.on('close', common.mustCall((code, signal) => {
+    20	    assert.strictEqual(code, 1);
+    21	    assert.strictEqual(signal, null);
+    22	    cb();
+    23	  }));
+    24	});
+    25	
+    26	test(function(_, cb) {
+    27	  console.log('running subtest expecting success');
+    28	
+    29	  const env = Object.assign({}, process.env, {
+    30	    NODE_DEBUG: 'http'
+    31	  });
+    32	
+    33	  // Validate that the test now passes if the same limit is large enough.
+    34	  const args = ['--expose-internals',
+    35	                '--max-http-header-size=1024',
+    36	                testName,
+    37	                '1024'];
+    38	  const cp = spawn(process.execPath, args, {
+    39	    env,
+    40	    stdio: 'inherit'
+    41	  });
+    42	
+    43	  cp.on('close', common.mustCall((code, signal) => {
+    44	    assert.strictEqual(code, 0);
+    45	    assert.strictEqual(signal, null);
+    46	    cb();
+    47	  }));
+    48	});
+    49	
+    50	const skip = process.config.variables.node_without_node_options;
+    51	suite('same checks using NODE_OPTIONS if it is supported', { skip }, () => {
+    52	  const env = Object.assign({}, process.env, {
+    53	    NODE_OPTIONS: '--max-http-header-size=1024'
+    54	  });
+    55	
+    56	  test(function(_, cb) {
+    57	    console.log('running subtest expecting failure');
+    58	
+    59	    // Validate that the test fails if the max header size is too small.
+    60	    const args = ['--expose-internals', testName];
+    61	    const cp = spawn(process.execPath, args, { env, stdio: 'inherit' });
+    62	
+    63	    cp.on('close', common.mustCall((code, signal) => {
+    64	      assert.strictEqual(code, 1);
+    65	      assert.strictEqual(signal, null);
+    66	      cb();
+    67	    }));
+    68	  });
+    69	
+    70	  test(function(_, cb) {
+    71	    // Validate that the test now passes if the same limit is large enough.
+    72	    const args = ['--expose-internals', testName, '1024'];
+    73	    const cp = spawn(process.execPath, args, { env, stdio: 'inherit' });
+    74	
+    75	    cp.on('close', common.mustCall((code, signal) => {
+    76	      assert.strictEqual(code, 0);
+    77	      assert.strictEqual(signal, null);
+    78	      cb();
+    79	    }));
+    80	  });
+    81	});
+=================== test/parallel/test-tcp-wrap-listen.js
+     1	// Flags: --expose-internals
+     2	'use strict';
+     3	const common = require('../common');
+     4	const assert = require('assert');
+     5	
+     6	const { internalBinding } = require('internal/test/binding');
+     7	const { TCP, constants: TCPConstants } = internalBinding('tcp_wrap');
+     8	const {
+     9	  WriteWrap,
+    10	  kReadBytesOrError,
+    11	  kArrayBufferOffset,
+    12	  streamBaseState
+    13	} = internalBinding('stream_wrap');
+    14	
+    15	const server = new TCP(TCPConstants.SOCKET);
+    16	
+    17	const r = (common.hasIPv6 ?
+    18	  server.bind6('::', 0) :
+    19	  server.bind('0.0.0.0', 0));
+    20	assert.strictEqual(r, 0);
+    21	
+    22	const port = {};
+    23	server.getsockname(port);
+    24	
+    25	server.listen(128);
+    26	
+    27	server.onconnection = common.mustCall((err, client) => {
+    28	  assert.strictEqual(client.writeQueueSize, 0);
+    29	  console.log('got connection');
+    30	
+    31	  const maybeCloseClient = () => {
+    32	    if (client.pendingWrites.length === 0 && client.gotEOF) {
+    33	      console.log('close client');
+    34	      client.close();
+    35	    }
+    36	  };
+    37	
+    38	  client.readStart();
+    39	  client.pendingWrites = [];
+    40	  client.onread = common.mustCall((arrayBuffer) => {
+    41	    if (arrayBuffer) {
+    42	      const offset = streamBaseState[kArrayBufferOffset];
+    43	      const nread = streamBaseState[kReadBytesOrError];
+    44	      const buffer = Buffer.from(arrayBuffer, offset, nread);
+    45	      assert.ok(buffer.length > 0);
+    46	
+    47	      assert.strictEqual(client.writeQueueSize, 0);
+    48	
+    49	      const req = new WriteWrap();
+    50	      req.async = false;
+    51	      const returnCode = client.writeBuffer(req, buffer);
+    52	      assert.strictEqual(returnCode, 0);
+    53	      client.pendingWrites.push(req);
+    54	
+    55	      console.log(`client.writeQueueSize: ${client.writeQueueSize}`);
+    56	      // 11 bytes should flush
+    57	      assert.strictEqual(client.writeQueueSize, 0);
+    58	
+    59	      if (req.async)
+    60	        req.oncomplete = common.mustCall(done);
+    61	      else
+    62	        process.nextTick(done.bind(null, 0, client, req));
+    63	
+    64	      function done(status, client_, req_) {
+    65	        assert.strictEqual(client.pendingWrites.shift(), req);
+    66	
+    67	        // Check parameters.
+    68	        assert.strictEqual(status, 0);
+    69	        assert.strictEqual(client_, client);
+    70	        assert.strictEqual(req_, req);
+    71	
+    72	        console.log(`client.writeQueueSize: ${client.writeQueueSize}`);
+    73	        assert.strictEqual(client.writeQueueSize, 0);
+    74	
+    75	        maybeCloseClient();
+    76	      }
+    77	
+    78	    } else {
+    79	      console.log('eof');
+    80	      client.gotEOF = true;
+    81	      server.close();
+    82	      maybeCloseClient();
+    83	    }
+    84	  }, 2);
+    85	});
+    86	
+    87	const net = require('net');
+    88	
+    89	const c = net.createConnection(port);
+    90	
+    91	c.on('connect', common.mustCall(() => { c.end('hello world'); }));
+    92	
+    93	c.setEncoding('utf8');
+    94	c.on('data', common.mustCall((d) => {
+    95	  assert.strictEqual(d, 'hello world');
+    96	}));
+    97	
+    98	c.on('close', () => {
+    99	  console.error('client closed');
+   100	});
+=================== test/parallel/test-timers-socket-timeout-removes-other-socket-unref-timer.js
+     1	'use strict';
+     2	
+     3	// Regression test for https://github.com/nodejs/node-v0.x-archive/issues/8897.
+     4	
+     5	const common = require('../common');
+     6	const net = require('net');
+     7	const Countdown = require('../common/countdown');
+     8	
+     9	const clients = [];
+    10	
+    11	const server = net.createServer(function onClient(client) {
+    12	  clients.push(client);
+    13	
+    14	  if (clients.length === 2) {
+    15	    // Enroll two timers, and make the one supposed to fire first
+    16	    // unenroll the other one supposed to fire later. This mutates
+    17	    // the list of unref timers when traversing it, and exposes the
+    18	    // original issue in joyent/node#8897.
+    19	    clients[0].setTimeout(1, () => {
+    20	      clients[1].setTimeout(0);
+    21	      clients[0].end();
+    22	      clients[1].end();
+    23	    });
+    24	
+    25	    // Use a delay that is higher than the lowest timer resolution across all
+    26	    // supported platforms, so that the two timers don't fire at the same time.
+    27	    clients[1].setTimeout(50);
+    28	  }
+    29	});
+    30	
+    31	server.listen(0, common.mustCall(() => {
+    32	  const countdown = new Countdown(2, () => server.close());
+    33	
+    34	  {
+    35	    const client = net.connect({ port: server.address().port });
+    36	    client.on('end', () => countdown.dec());
+    37	  }
+    38	
+    39	  {
+    40	    const client = net.connect({ port: server.address().port });
+    41	    client.on('end', () => countdown.dec());
+    42	  }
+    43	}));
+=================== test/sequential/test-net-connect-local-error.js
+     1	'use strict';
+     2	const common = require('../common');
+     3	const assert = require('assert');
+     4	const net = require('net');
+     5	
+     6	// EADDRINUSE is expected to occur on FreeBSD
+     7	// Ref: https://github.com/nodejs/node/issues/13055
+     8	const expectedErrorCodes = ['ECONNREFUSED', 'EADDRINUSE'];
+     9	
+    10	const optionsIPv4 = {
+    11	  port: common.PORT,
+    12	  family: 4,
+    13	  localPort: common.PORT + 1,
+    14	  localAddress: common.localhostIPv4,
+    15	};
+    16	
+    17	const optionsIPv6 = {
+    18	  host: '::1',
+    19	  family: 6,
+    20	  port: common.PORT + 2,
+    21	  localPort: common.PORT + 3,
+    22	  localAddress: '::1',
+    23	};
+    24	
+    25	function onError(err, options) {
+    26	  assert.ok(expectedErrorCodes.includes(err.code));
+    27	  assert.strictEqual(err.syscall, 'connect');
+    28	  assert.strictEqual(err.localPort, options.localPort);
+    29	  assert.strictEqual(err.localAddress, options.localAddress);
+    30	  assert.strictEqual(
+    31	    err.message,
+    32	    `connect ${err.code} ${err.address}:${err.port} ` +
+    33	    `- Local (${err.localAddress}:${err.localPort})`
+    34	  );
+    35	}
+    36	
+    37	const clientIPv4 = net.connect(optionsIPv4);
+    38	clientIPv4.on('error', common.mustCall((err) => onError(err, optionsIPv4)));
+    39	
+    40	if (!common.hasIPv6) {
+    41	  common.printSkipMessage('ipv6 part of test, no IPv6 support');
+    42	  return;
+    43	}
+    44	
+    45	const clientIPv6 = net.connect(optionsIPv6);
+    46	clientIPv6.on('error', common.mustCall((err) => onError(err, optionsIPv6)));
+=================== test/sequential/test-net-server-address.js
+     1	// Copyright Joyent, Inc. and other Node contributors.
+     2	//
+     3	// Permission is hereby granted, free of charge, to any person obtaining a
+     4	// copy of this software and associated documentation files (the
+     5	// "Software"), to deal in the Software without restriction, including
+     6	// without limitation the rights to use, copy, modify, merge, publish,
+     7	// distribute, sublicense, and/or sell copies of the Software, and to permit
+     8	// persons to whom the Software is furnished to do so, subject to the
+     9	// following conditions:
+    10	//
+    11	// The above copyright notice and this permission notice shall be included
+    12	// in all copies or substantial portions of the Software.
+    13	//
+    14	// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
+    15	// OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+    16	// MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN
+    17	// NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM,
+    18	// DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR
+    19	// OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
+    20	// USE OR OTHER DEALINGS IN THE SOFTWARE.
+    21	
+    22	'use strict';
+    23	const common = require('../common');
+    24	const assert = require('assert');
+    25	const net = require('net');
+    26	
+    27	// Test on IPv4 Server
+    28	{
+    29	  const family = 'IPv4';
+    30	  const server = net.createServer();
+    31	
+    32	  server.on('error', common.mustNotCall());
+    33	
+    34	  server
+    35	    .listen(common.PORT + 1, common.localhostIPv4, common.mustCall(() => {
+    36	      const address4 = server.address();
+    37	      assert.strictEqual(address4.address, common.localhostIPv4);
+    38	      assert.strictEqual(address4.port, common.PORT + 1);
+    39	      assert.strictEqual(address4.family, family);
+    40	      server.close();
+    41	    }));
+    42	}
+    43	
+    44	if (!common.hasIPv6) {
+    45	  common.printSkipMessage('ipv6 part of test, no IPv6 support');
+    46	  return;
+    47	}
+    48	
+    49	const family6 = 'IPv6';
+    50	const anycast6 = '::';
+    51	
+    52	// Test on IPv6 Server
+    53	{
+    54	  const localhost = '::1';
+    55	
+    56	  const server = net.createServer();
+    57	
+    58	  server.on('error', common.mustNotCall());
+    59	
+    60	  server.listen(common.PORT + 2, localhost, common.mustCall(() => {
+    61	    const address = server.address();
+    62	    assert.strictEqual(address.address, localhost);
+    63	    assert.strictEqual(address.port, common.PORT + 2);
+    64	    assert.strictEqual(address.family, family6);
+    65	    server.close();
+    66	  }));
+    67	}
+    68	
+    69	// Test without hostname or ip
+    70	{
+    71	  const server = net.createServer();
+    72	
+    73	  server.on('error', common.mustNotCall());
+    74	
+    75	  // Specify the port number
+    76	  server.listen(common.PORT + 3, common.mustCall(() => {
+    77	    const address = server.address();
+    78	    assert.strictEqual(address.address, anycast6);
+    79	    assert.strictEqual(address.port, common.PORT + 3);
+    80	    assert.strictEqual(address.family, family6);
+    81	    server.close();
+    82	  }));
+    83	}
+    84	
+    85	// Test without hostname or port
+    86	{
+    87	  const server = net.createServer();
+    88	
+    89	  server.on('error', common.mustNotCall());
+    90	
+    91	  // Don't specify the port number
+    92	  server.listen(common.mustCall(() => {
+    93	    const address = server.address();
+    94	    assert.strictEqual(address.address, anycast6);
+    95	    assert.strictEqual(address.family, family6);
+    96	    server.close();
+    97	  }));
+    98	}
+    99	
+   100	// Test without hostname, but with a false-y port
+   101	{
+   102	  const server = net.createServer();
+   103	
+   104	  server.on('error', common.mustNotCall());
+   105	
+   106	  // Specify a false-y port number
+   107	  server.listen(0, common.mustCall(() => {
+   108	    const address = server.address();
+   109	    assert.strictEqual(address.address, anycast6);
+   110	    assert.strictEqual(address.family, family6);
+   111	    server.close();
+   112	  }));
+   113	}

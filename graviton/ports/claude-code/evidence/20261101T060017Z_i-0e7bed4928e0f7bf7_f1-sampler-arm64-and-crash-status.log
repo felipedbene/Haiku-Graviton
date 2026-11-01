@@ -1,0 +1,58 @@
+# evidence: f1-sampler-arm64-and-crash-status
+# instance: i-0e7bed4928e0f7bf7   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261101T060017Z   end: 20261101T060037Z   rc: 0
+# script sha256: 8dde18af12cd7be9617f1fe0e86cd75c1ea2739d3361968b77b526cd846f1633
+# ---- script ----
+# | N=/boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0
+# | cd $N
+# | grep -n "V8_HOST_ARCH_ARM64" -A5 deps/v8/src/libsampler/sampler.cc | head -40
+# | echo "== tick-sample sp/fp checks"; grep -n "sp == nullptr\|fp == nullptr\|regs->sp\|regs->fp\|IsNoFrameRegion\|kFP\|fp - " deps/v8/src/profiler/tick-sample.cc | head -30
+# | echo "== build tree"; ls out 2>&1 | head; ls -la out/Release/node 2>&1; ls out/Release/obj.target/v8_libsampler/deps/v8/src/libsampler/ 2>&1; find out -name 'sampler.o' 2>/dev/null | head
+# | echo "== C segfault exit status"
+# | cd /tmp/f1c && printf '#include <stdio.h>\nint main(){volatile int*p=(int*)-16;return *p;}\n' > sv.c && gcc -o sv sv.c && ./sv; echo "rc=$?"
+# | /boot/system/bin/node -e 'const r=require("child_process").spawnSync("/tmp/f1c/sv");console.log("status",r.status,"signal",r.signal)'
+# ---- raw output ----
+431:#elif V8_HOST_ARCH_ARM64
+432-  state->pc = reinterpret_cast<void*>(mcontext.pc);
+433-  state->sp = reinterpret_cast<void*>(mcontext.sp);
+434-  // FP is an alias for x29.
+435-  state->fp = reinterpret_cast<void*>(mcontext.regs[29]);
+436-  // LR is an alias for x30.
+--
+502:#elif V8_HOST_ARCH_ARM64
+503-  state->pc =
+504-      reinterpret_cast<void*>(arm_thread_state64_get_pc(mcontext->__ss));
+505-  state->sp =
+506-      reinterpret_cast<void*>(arm_thread_state64_get_sp(mcontext->__ss));
+507-  state->fp =
+--
+633:#elif V8_HOST_ARCH_ARM64
+634-    state.pc = reinterpret_cast<void*>(context.Pc);
+635-    state.sp = reinterpret_cast<void*>(context.Sp);
+636-    state.fp = reinterpret_cast<void*>(context.Fp);
+637-#else
+638-    state.pc = reinterpret_cast<void*>(context.Eip);
+--
+679:#elif V8_HOST_ARCH_ARM64
+680-    state.pc = reinterpret_cast<void*>(thread_state.pc);
+681-    state.sp = reinterpret_cast<void*>(thread_state.sp);
+682-    state.fp = reinterpret_cast<void*>(thread_state.r[29]);
+683-#endif
+684-    SampleStack(state);
+== tick-sample sp/fp checks
+32:bool IsNoFrameRegion(i::Address address) {
+285:  DCHECK(regs->sp);
+290:  // IsNoFrameRegion will never actually run there.
+294:      IsNoFrameRegion(reinterpret_cast<i::Address>(regs->pc))) {
+334:      reinterpret_cast<i::Address>(regs->fp),
+335:      reinterpret_cast<i::Address>(regs->sp),
+== build tree
+Debug
+Release
+tools
+-rwxr-xr-x 1 baron root 67868440 Oct 31 04:08 out/Release/node
+ls: cannot access 'out/Release/obj.target/v8_libsampler/deps/v8/src/libsampler/': No such file or directory
+== C segfault exit status
+/tmp/ccrun/cc-20261101T060017Z-81056.sh: line 7: 202391 Kill Thread                ./sv
+rc=149
+status null signal 

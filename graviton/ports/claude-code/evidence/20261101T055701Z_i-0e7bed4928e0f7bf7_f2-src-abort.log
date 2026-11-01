@@ -1,0 +1,98 @@
+# evidence: f2-src-abort
+# instance: i-0e7bed4928e0f7bf7   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261101T055701Z   end: 20261101T055723Z   rc: 0
+# script sha256: 6e89e97c46fea117e2d1dce7dd9c0518b5b0d489c461c09b7e9ed2e288fe3720
+# ---- script ----
+# | cd /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0 || exit 1
+# | grep -n "function nodeProcessAborted" -A 40 test/common/index.js
+# | echo ----; sed -n 1,400p test/parallel/test-domain-no-error-handler-abort-on-uncaught-0.js | grep -n -v "^\s*$" | tail -30
+# | echo ----; grep -n "process should have aborted" -B30 test/parallel/test-domain-with-abort-on-uncaught-exception.js | head -60
+# ---- raw output ----
+604:function nodeProcessAborted(exitCode, signal) {
+605-  // Depending on the compiler used, node will exit with either
+606-  // exit code 132 (SIGILL), 133 (SIGTRAP) or 134 (SIGABRT).
+607-  let expectedExitCodes = [132, 133, 134];
+608-
+609-  // On platforms using KSH as the default shell (like SmartOS),
+610-  // when a process aborts, KSH exits with an exit code that is
+611-  // greater than 256, and thus the exit code emitted with the 'exit'
+612-  // event is null and the signal is set to either SIGILL, SIGTRAP,
+613-  // or SIGABRT (depending on the compiler).
+614-  const expectedSignals = ['SIGILL', 'SIGTRAP', 'SIGABRT'];
+615-
+616-  // On Windows, 'aborts' are of 2 types, depending on the context:
+617-  // (i) Exception breakpoint, if --abort-on-uncaught-exception is on
+618-  // which corresponds to exit code 2147483651 (0x80000003)
+619-  // (ii) Otherwise, _exit(134) which is called in place of abort() due to
+620-  // raising SIGABRT exiting with ambiguous exit code '3' by default
+621-  if (isWindows)
+622-    expectedExitCodes = [0x80000003, 134];
+623-
+624-  // When using --abort-on-uncaught-exception, V8 will use
+625-  // base::OS::Abort to terminate the process.
+626-  // Depending on the compiler used, the shell or other aspects of
+627-  // the platform used to build the node binary, this will actually
+628-  // make V8 exit by aborting or by raising a signal. In any case,
+629-  // one of them (exit code or signal) needs to be set to one of
+630-  // the expected exit codes or signals.
+631-  if (signal !== null) {
+632-    return expectedSignals.includes(signal);
+633-  }
+634-  return expectedExitCodes.includes(exitCode);
+635-}
+636-
+637-function isAlive(pid) {
+638-  try {
+639-    process.kill(pid, 'SIGCONT');
+640-    return true;
+641-  } catch {
+642-    return false;
+643-  }
+644-}
+----
+1:'use strict';
+3:const common = require('../common');
+4:const domain = require('domain');
+6:function test() {
+7:  const d = domain.create();
+9:  d.run(function() {
+10:    throw new Error('boom!');
+11:  });
+12:}
+14:if (process.argv[2] === 'child') {
+15:  test();
+16:} else {
+17:  common.childShouldThrowAndAbort();
+18:}
+----
+83-
+84-  function testDomainExceptionHandling(cmdLineOption, options) {
+85-    if (typeof cmdLineOption === 'object') {
+86-      options = cmdLineOption;
+87-      cmdLineOption = undefined;
+88-    }
+89-
+90-    let throwInDomainErrHandlerOpt;
+91-    if (options.throwInDomainErrHandler)
+92-      throwInDomainErrHandlerOpt = 'throwInDomainErrHandler';
+93-
+94-    let useTryCatchOpt;
+95-    if (options.useTryCatch)
+96-      useTryCatchOpt = 'useTryCatch';
+97-
+98-    const escapedArgs = common.escapePOSIXShell`"${process.execPath}" ${cmdLineOption || ''} "${__filename}" child ${throwInDomainErrHandlerOpt || ''} ${useTryCatchOpt || ''}`;
+99-    if (!common.isWindows) {
+100-      // Do not create core files, as it can take a lot of disk space on
+101-      // continuous testing and developers' machines
+102-      escapedArgs[0] = 'ulimit -c 0 && ' + escapedArgs[0];
+103-    }
+104-    const child = exec(...escapedArgs);
+105-
+106-    if (child) {
+107-      child.on('exit', common.mustCall(function onChildExited(exitCode, signal) {
+108-        // When throwing errors from the top-level domain error handler
+109-        // outside of a try/catch block, the process should not exit gracefully
+110-        if (!options.useTryCatch && options.throwInDomainErrHandler) {
+111-          if (cmdLineOption === '--abort_on_uncaught_exception') {
+112-            assert(common.nodeProcessAborted(exitCode, signal),
+113:                   'process should have aborted, but did not');

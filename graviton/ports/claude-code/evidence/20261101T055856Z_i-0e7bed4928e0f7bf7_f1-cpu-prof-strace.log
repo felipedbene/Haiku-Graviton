@@ -1,0 +1,113 @@
+# evidence: f1-cpu-prof-strace
+# instance: i-0e7bed4928e0f7bf7   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261101T055856Z   end: 20261101T055917Z   rc: 0
+# script sha256: a8d9cc18abf01ee3f436e3854e9b083d5abc3d4e733b03105012bb02ec4346e5
+# ---- script ----
+# | cd /tmp && rm -rf f1s && mkdir f1s && cd f1s
+# | strace --help 2>&1 | head -40
+# | strace -T -o tr.txt /boot/system/bin/node --cpu-prof -e 'let s=0;for(let i=0;i<3e7;i++)s+=i;console.log("done",s)'; echo "rc=$?"
+# | wc -l tr.txt
+# | echo "== kill/signal syscalls"; grep -n -E "send_signal|kill_thread|exit_thread|exit_team|sigaction|signal|SIG" tr.txt | head -80
+# | echo "== tail"; tail -40 tr.txt
+# ---- raw output ----
+Usage: strace [ <options> ] [ <thread or team ID> | <executable with args> ]
+
+Traces the syscalls of a thread or a team. If an executable with
+arguments is supplied, it is loaded and it's main thread traced.
+
+Options:
+  -a             - Don't print syscall arguments.
+  -c             - Record and dump syscall usage statistics.
+  -C             - Same as -c, but also print syscalls as usual.
+  -d <name>      - Filter the types that have their contents retrieved.
+                   <name> is one of: strings, enums, simple, complex or
+                                     pointer_values
+  -e <names>     - Filter the syscalls.
+                   <names> is a comma-separated list of names which can be:
+                       * a syscall name
+                       * %memory for memory mapping related syscalls
+                       * %network or %net for network related syscalls
+  -f             - Fast mode. Syscall arguments contents aren't retrieved.
+  -h, --help     - Print this text.
+  -i             - Print integers in decimal format instead of hexadecimal.
+  -l             - Also trace loading the executable. Only considered when
+                   an executable is provided.
+  --no-color     - Don't colorize output.
+  -r             - Don't print syscall return values.
+  -s             - Also trace all threads spawned by the supplied thread,
+                   respectively the loaded executable's main thread.
+  -t             - Also recursively trace all teams created by a traced
+                   thread or team.
+  -T             - Trace all threads of the supplied or loaded executable's
+                   team. If an ID is supplied, it is interpreted as a team
+                   ID.
+  -o <file>      - directs output into the specified file.
+  -S             - prints output to serial debug line.
+  -g             - turns off signal tracing.
+strace: Failed to run thread 202108: Bad port ID
+strace: Failed to run thread 202107: Bad port ID
+strace: Failed to run thread 202105: Bad port ID
+strace: Failed to run thread 202109: Bad port ID
+strace: Failed to run thread 202106: Bad port ID
+rc=0
+605 tr.txt
+== kill/signal syscalls
+70:[202101] set_signal_mask(SIG_SETMASK, [USR1]) = 0x0 No error ((nil)) (1 us)
+80:[202101] sigaction(SIGINT, 0x189fe196db0, (nil)) = 0x0 No error (0 us)
+81:[202101] sigaction(SIGTERM, 0x189fe196db0, (nil)) = 0x0 No error (0 us)
+154:[202101] set_signal_mask(SIG_SETMASK, ~[0]) = 0x0 No error ([USR1]) (1 us)
+155:[202101] set_signal_mask(SIG_SETMASK, [USR1]) = 0x0 No error ((nil)) (0 us)
+421:[202101] set_signal_mask(SIG_SETMASK, ~[0]) = 0x0 No error ([USR1]) (1 us)
+425:[202101] sigaction(SIGUSR1, 0x189fe1969b0, (nil)) <unfinished ...>
+427:[202101] <... sigaction resumed>  = 0x0 No error (1 us)
+429:[202101] set_signal_mask(SIG_SETMASK, [USR1]) = 0x0 No error ((nil)) (1 us)
+430:[202101] set_signal_mask(SIG_UNBLOCK, [USR1]) = 0x0 No error ((nil)) (1 us)
+552:[202101] sigaction(SIGPROF, 0x189fe196220, 0x24a32d32ff0) = 0x0 No error (1 us)
+584:[202111] set_signal_mask(SIG_SETMASK, ~[0]) <unfinished ...>
+586:[202111] <... set_signal_mask resumed>  = 0x0 No error ([0]) (0 us)
+588:[202111] set_signal_mask(SIG_SETMASK, [0]) <unfinished ...>
+590:[202111] <... set_signal_mask resumed>  = 0x0 No error ((nil)) (0 us)
+596:[202111] send_signal(0x31575, SIGPROF, (nil), 0x20000) = 0x0 No error (2 us)
+597:[202101] --- SIGPROF (Profiling timer expired) {si_signo=SIGPROF, si_code=SI_USER, si_pid=202101, si_uid=0, si_value=(nil)} ---
+598:[202111] mutex_switch_lock(0x810c41e744 [B_USER_MUTEX_LOCKED], 0, 0x810c41e76c [B_USER_MUTEX_LOCKED], "pthread condition", B_ABSOLUTE_TIMEOUT|B_TIMEOUT_REAL_TIME_BASE, 0x65f30b9f270f5)[202101] --- SIGSEGV (Segmentation violation) {si_signo=SIGSEGV, si_code=SEGV_MAPERR, si_errno=0x80001301, si_pid=202101, si_uid=0, si_addr=0xfffffffffffffff0, si_value=(nil)} ---
+== tail
+[202111] cpu_enabled(0x7) = true (0 us)
+[202111] cpu_enabled(0x8) = true (0 us)
+[202111] cpu_enabled(0x9) = true (0 us)
+[202111] cpu_enabled(0xa) = true (0 us)
+[202111] cpu_enabled(0xb) = true (0 us)
+[202111] cpu_enabled(0xc) = true (0 us)
+[202111] cpu_enabled(0xd) = true (0 us)
+[202111] cpu_enabled(0xe) = true (0 us)
+[202111] cpu_enabled(0xf) = true (0 us)
+[202111] mutex_sem_release([0xffffffffffffffff], 0) = 0x0 No error (3 us)
+[202101] <... mutex_sem_acquire resumed>  = 0x0 No error (943 us)
+[202111] resize_area(0xcaf7bb, 0x5c7000) = 0x0 No error (3 us)
+[202111] resize_area(0xcaf7bb, 0x607000) = 0x0 No error (2 us)
+[202101] write(0x11, 0xffffffffffffffff, 0x693167ed20, 0x1) <unfinished ...>
+[202111] resize_area(0xcaf7bb, 0x608000) <unfinished ...>
+[202101] <... write resumed>  = 0x1 (3 us)
+[202111] <... resize_area resumed>  = 0x0 No error (1 us)
+[202101] getresuid([0x0], (nil), (nil)) <unfinished ...>
+[202111] set_signal_mask(SIG_SETMASK, ~[0]) <unfinished ...>
+[202101] <... getresuid resumed>  = 0x0 No error (1 us)
+[202111] <... set_signal_mask resumed>  = 0x0 No error ([0]) (0 us)
+[202101] getresuid((nil), [0x0], (nil)) <unfinished ...>
+[202111] set_signal_mask(SIG_SETMASK, [0]) <unfinished ...>
+[202101] <... getresuid resumed>  = 0x0 No error (0 us)
+[202111] <... set_signal_mask resumed>  = 0x0 No error ((nil)) (0 us)
+[202101] getresgid([0x0], (nil), (nil)) <unfinished ...>
+[202111] mutex_switch_lock(0x810c41e744 [B_USER_MUTEX_LOCKED], 0, 0x810c41e76c [B_USER_MUTEX_LOCKED], "pthread condition", B_ABSOLUTE_TIMEOUT|B_TIMEOUT_REAL_TIME_BASE, 0x65f30b9f26ca5) <unfinished ...>
+[202101] <... getresgid resumed>  = 0x0 No error (0 us)
+[202101] getresgid((nil), [0x0], (nil)) = 0x0 No error (0 us)
+[202111] <... mutex_switch_lock resumed>  = 0xffffffff80000009 Operation timed out (423 us)
+[202111] send_signal(0x31575, SIGPROF, (nil), 0x20000) = 0x0 No error (2 us)
+[202101] --- SIGPROF (Profiling timer expired) {si_signo=SIGPROF, si_code=SI_USER, si_pid=202101, si_uid=0, si_value=(nil)} ---
+[202111] mutex_switch_lock(0x810c41e744 [B_USER_MUTEX_LOCKED], 0, 0x810c41e76c [B_USER_MUTEX_LOCKED], "pthread condition", B_ABSOLUTE_TIMEOUT|B_TIMEOUT_REAL_TIME_BASE, 0x65f30b9f270f5)[202101] --- SIGSEGV (Segmentation violation) {si_signo=SIGSEGV, si_code=SEGV_MAPERR, si_errno=0x80001301, si_pid=202101, si_uid=0, si_addr=0xfffffffffffffff0, si_value=(nil)} ---
+ = 0xffffffff8000000a Interrupted system call (65 us)
+[202110] <... mutex_sem_acquire resumed>  = 0xffffffff8000000a Interrupted system call (42155 us)
+[202108] <... mutex_switch_lock resumed>  = 0xffffffff8000000a Interrupted system call (68835 us)
+[202107] <... mutex_switch_lock resumed>  = 0xffffffff8000000a Interrupted system call (68999 us)
+[202105] <... poll resumed>  = 0xffffffff8000000a Interrupted system call (0x7c88606000) (70571 us)
+[202109] <... mutex_switch_lock resumed>  = 0xffffffff8000000a Interrupted system call (68689 us)
+[202106] <... mutex_switch_lock resumed>  = 0xffffffff8000000a Interrupted system call (69178 us)

@@ -1,0 +1,723 @@
+# evidence: me-rerun-ipv6-env-rusage
+# instance: i-0e7bed4928e0f7bf7   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261101T055700Z   end: 20261101T055720Z   rc: 0
+# script sha256: b627322f71e4d36725f3cdaabb9e6d83b6d3a651272f3571e9f1b1a91c38803c
+# ---- script ----
+# | # Re-run the ipv6 group of failing tests from the 2026-10-31 TAP run, now (libuv $(pkgman search -i -D libuv 2>/dev/null | grep -m1 libuv)).
+# | cd /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0 || exit 1
+# | echo "node $(/boot/system/bin/node --version); uname: $(uname -a); cpus: $(sysinfo -cpu 2>/dev/null | grep -c 'CPU #')"
+# | ls /boot/system/packages | grep -i -E '^(libuv|nodejs)'
+# | grep -n "'--timeout'" -A2 tools/test.py | head -5
+# | J=${J:-1}
+# | : | python3 tools/test.py --shell=/boot/system/bin/node -j $J -p tap -v parallel/test-cluster-net-listen-ipv6only-false parallel/test-http-autoselectfamily parallel/test-http2-connect parallel/test-http2-ip-address-host parallel/test-https-autoselectfamily parallel/test-https-connect-address-family parallel/test-net-autoselectfamily parallel/test-net-autoselectfamily-ipv4first parallel/test-net-boundsocket parallel/test-net-connect-options-ipv6 parallel/test-net-dns-custom-lookup parallel/test-net-dns-lookup-skip parallel/test-net-pingpong parallel/test-tls-connect-address-family sequential/test-net-server-listen-ipv6-link-local parallel/test-child-process-default-options parallel/test-child-process-env parallel/test-process-threadCpuUsage-main-thread parallel/test-process-threadCpuUsage-worker-threads parallel/test-worker-cpu-usage > /tmp/rerun-ipv6.tap 2>&1
+# | echo "== summary: $(grep -c '^ok ' /tmp/rerun-ipv6.tap) ok, $(grep -c '^not ok ' /tmp/rerun-ipv6.tap) not ok, $(grep -c '^    timeout$' /tmp/rerun-ipv6.tap) timeout"
+# | grep -E '^(not )?ok ' /tmp/rerun-ipv6.tap
+# | echo "== full TAP"; cat /tmp/rerun-ipv6.tap
+# ---- raw output ----
+node v24.21.0; uname: Haiku ip-10-128-9-142.us-west-2.compu R1~beta6+development hrev59996 Oct 19 2026 21:09:42 arm64 arm64 Haiku; cpus: 0
+libuv-1.52.1-2-arm64.hpkg
+libuv_devel-1.52.1-2-arm64.hpkg
+nodejs24-24.21.0-1-arm64.hpkg
+nodejs24_devel-24.21.0-1-arm64.hpkg
+== summary: 0 ok, 20 not ok, 0 timeout
+not ok 1 parallel/test-cluster-net-listen-ipv6only-false
+not ok 2 parallel/test-http-autoselectfamily
+not ok 3 parallel/test-http2-connect
+not ok 4 parallel/test-http2-ip-address-host
+not ok 5 parallel/test-https-autoselectfamily
+not ok 6 parallel/test-https-connect-address-family
+not ok 7 parallel/test-net-autoselectfamily
+not ok 8 parallel/test-net-autoselectfamily-ipv4first
+not ok 9 parallel/test-net-boundsocket
+not ok 10 parallel/test-net-connect-options-ipv6
+not ok 11 parallel/test-net-dns-custom-lookup
+not ok 12 parallel/test-net-dns-lookup-skip
+not ok 13 parallel/test-net-pingpong
+not ok 14 parallel/test-tls-connect-address-family
+not ok 15 parallel/test-child-process-default-options
+not ok 16 parallel/test-child-process-env
+not ok 17 parallel/test-process-threadCpuUsage-main-thread
+not ok 18 parallel/test-process-threadCpuUsage-worker-threads
+not ok 19 parallel/test-worker-cpu-usage
+not ok 20 sequential/test-net-server-listen-ipv6-link-local
+== full TAP
+# /boot/system/bin/node -p process.arch
+# /boot/system/bin/node -p process.versions.openssl
+# /boot/system/bin/node -p process.config.variables.asan
+# /boot/system/bin/node -p process.config.variables.v8_enable_pointer_compression
+# /boot/system/bin/node -p process.features.inspector
+# /boot/system/bin/node -p process.versions.openssl
+TAP version 13
+1..20
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-cluster-net-listen-ipv6only-false.js
+not ok 1 parallel/test-cluster-net-listen-ipv6only-false
+  ---
+  duration_ms: 268.73000
+  severity: fail
+  exitcode: 1
+  stack: |-
+    node:events:505
+        throw er; // Unhandled 'error' event
+        ^
+    
+    Error: bind EINVAL ::
+        at listenOnPrimaryHandle (node:net:2461:18)
+        at rr (node:internal/cluster/child:164:12)
+        at Worker.<anonymous> (node:internal/cluster/child:114:7)
+        at process.onInternalMessage (node:internal/cluster/utils:49:5)
+        at process.emit (node:events:526:24)
+        at emit (node:internal/child_process:989:14)
+        at process.processTicksAndRejections (node:internal/process/task_queues:91:21)
+    Emitted 'error' event on Server instance at:
+        at listenOnPrimaryHandle (node:net:2462:21)
+        at rr (node:internal/cluster/child:164:12)
+        at Worker.<anonymous> (node:internal/cluster/child:114:7)
+        at process.onInternalMessage (node:internal/cluster/utils:49:5)
+        at process.emit (node:events:526:24)
+        at emit (node:internal/child_process:989:14)
+        at process.processTicksAndRejections (node:internal/process/task_queues:91:21) {
+      errno: -2147483643,
+      code: 'EINVAL',
+      syscall: 'bind',
+      address: '::'
+    }
+    
+    Node.js v24.21.0
+    node:events:505
+        throw er; // Unhandled 'error' event
+        ^
+    
+    Error: bind EINVAL ::
+        at listenOnPrimaryHandle (node:net:2461:18)
+        at rr (node:internal/cluster/child:164:12)
+        at Worker.<anonymous> (node:internal/cluster/child:114:7)
+        at process.onInternalMessage (node:internal/cluster/utils:49:5)
+        at process.emit (node:events:526:24)
+        at emit (node:internal/child_process:989:14)
+        at process.processTicksAndRejections (node:internal/process/task_queues:91:21)
+    Emitted 'error' event on Server instance at:
+        at listenOnPrimaryHandle (node:net:2462:21)
+        at rr (node:internal/cluster/child:164:12)
+        at Worker.<anonymous> (node:internal/cluster/child:114:7)
+        at process.onInternalMessage (node:internal/cluster/utils:49:5)
+        at process.emit (node:events:526:24)
+        at emit (node:internal/child_process:989:14)
+        at process.processTicksAndRejections (node:internal/process/task_queues:91:21) {
+      errno: -2147483643,
+      code: 'EINVAL',
+      syscall: 'bind',
+      address: '::'
+    }
+    
+    Node.js v24.21.0
+    node:events:505
+        throw er; // Unhandled 'error' event
+        ^
+    
+    Error: bind EINVAL ::
+        at listenOnPrimaryHandle (node:net:2461:18)
+        at rr (node:internal/cluster/child:164:12)
+        at Worker.<anonymous> (node:internal/cluster/child:114:7)
+        at process.onInternalMessage (node:internal/cluster/utils:49:5)
+        at process.emit (node:events:526:24)
+        at emit (node:internal/child_process:989:14)
+        at process.processTicksAndRejections (node:internal/process/task_queues:91:21)
+    Emitted 'error' event on Server instance at:
+        at listenOnPrimaryHandle (node:net:2462:21)
+        at rr (node:internal/cluster/child:164:12)
+        at Worker.<anonymous> (node:internal/cluster/child:114:7)
+        at process.onInternalMessage (node:internal/cluster/utils:49:5)
+        at process.emit (node:events:526:24)
+        at emit (node:internal/child_process:989:14)
+        at process.processTicksAndRejections (node:internal/process/task_queues:91:21) {
+      errno: -2147483643,
+      code: 'EINVAL',
+      syscall: 'bind',
+      address: '::'
+    }
+    
+    Node.js v24.21.0
+    node:assert:152
+      throw new AssertionError(obj);
+      ^
+    
+    AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+    
+    1 !== 0
+    
+        at Worker.<anonymous> (/boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-cluster-net-listen-ipv6only-false.js:23:16)
+        at Worker.<anonymous> (/boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/common/index.js:481:15)
+        at Worker.emit (node:events:514:28)
+        at ChildProcess.<anonymous> (node:internal/cluster/primary:187:12)
+        at ChildProcess.wrapper (node:events:639:12)
+        at ChildProcess.emit (node:events:514:28)
+        at ChildProcess._handle.onexit (node:internal/child_process:295:12) {
+      generatedMessage: true,
+      code: 'ERR_ASSERTION',
+      actual: 1,
+      expected: 0,
+      operator: 'strictEqual',
+      diff: 'simple'
+    }
+    
+    Node.js v24.21.0
+  ...
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http-autoselectfamily.js
+not ok 2 parallel/test-http-autoselectfamily
+  ---
+  duration_ms: 167.64700
+  severity: fail
+  exitcode: 1
+  stack: |-
+    node:events:505
+        throw er; // Unhandled 'error' event
+        ^
+    
+    Error: listen EINVAL: invalid argument ::1:38903
+        at Server.setupListenHandle [as _listen2] (node:net:2306:21)
+        at listenInCluster (node:net:2437:12)
+        at node:net:2666:7
+        at process.processTicksAndRejections (node:internal/process/task_queues:90:21)
+    Emitted 'error' event on Server instance at:
+        at emitErrorNT (node:net:2416:8)
+        at process.processTicksAndRejections (node:internal/process/task_queues:90:21) {
+      code: 'EINVAL',
+      errno: -2147483643,
+      syscall: 'listen',
+      address: '::1',
+      port: 38903
+    }
+    
+    Node.js v24.21.0
+  ...
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-connect.js
+not ok 3 parallel/test-http2-connect
+  ---
+  duration_ms: 152.23300
+  severity: fail
+  exitcode: 1
+  stack: |-
+    node:events:505
+        throw er; // Unhandled 'error' event
+        ^
+    
+    Error: listen EINVAL: invalid argument ::1
+        at Http2Server.setupListenHandle [as _listen2] (node:net:2306:21)
+        at listenInCluster (node:net:2437:12)
+        at node:net:2666:7
+        at process.processTicksAndRejections (node:internal/process/task_queues:90:21)
+    Emitted 'error' event on Http2Server instance at:
+        at emitErrorNT (node:net:2416:8)
+        at process.processTicksAndRejections (node:internal/process/task_queues:90:21) {
+      code: 'EINVAL',
+      errno: -2147483643,
+      syscall: 'listen',
+      address: '::1'
+    }
+    
+    Node.js v24.21.0
+  ...
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-ip-address-host.js
+not ok 4 parallel/test-http2-ip-address-host
+  ---
+  duration_ms: 176.31900
+  severity: fail
+  exitcode: 1
+  stack: |-
+    node:events:505
+        throw er; // Unhandled 'error' event
+        ^
+    
+    Error [ERR_HTTP2_STREAM_CANCEL]: The pending stream has been canceled (caused by: connect ECONNREFUSED ::1:38948)
+        at closeSession (node:internal/http2/core:1243:20)
+        at ClientHttp2Session.destroy (node:internal/http2/core:1623:5)
+        at TLSSocket.socketOnError (node:internal/http2/core:3310:13)
+        at TLSSocket.emit (node:events:514:28)
+        at emitErrorNT (node:internal/streams/destroy:170:8)
+        at emitErrorCloseNT (node:internal/streams/destroy:129:3)
+        at process.processTicksAndRejections (node:internal/process/task_queues:90:21)
+    Emitted 'error' event on ClientHttp2Stream instance at:
+        at emitErrorNT (node:internal/streams/destroy:170:8)
+        at emitErrorCloseNT (node:internal/streams/destroy:129:3)
+        at process.processTicksAndRejections (node:internal/process/task_queues:90:21) {
+      code: 'ERR_HTTP2_STREAM_CANCEL',
+      cause: Error: connect ECONNREFUSED ::1:38948
+          at TCPConnectWrap.afterConnect [as oncomplete] (node:net:2021:16) {
+        errno: -2147454944,
+        code: 'ECONNREFUSED',
+        syscall: 'connect',
+        address: '::1',
+        port: 38948
+      }
+    }
+    
+    Node.js v24.21.0
+  ...
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-https-autoselectfamily.js
+not ok 5 parallel/test-https-autoselectfamily
+  ---
+  duration_ms: 171.52900
+  severity: fail
+  exitcode: 1
+  stack: |-
+    node:events:505
+        throw er; // Unhandled 'error' event
+        ^
+    
+    Error: listen EINVAL: invalid argument ::1:38984
+        at Server.setupListenHandle [as _listen2] (node:net:2306:21)
+        at listenInCluster (node:net:2437:12)
+        at node:net:2666:7
+        at process.processTicksAndRejections (node:internal/process/task_queues:90:21)
+    Emitted 'error' event on Server instance at:
+        at emitErrorNT (node:net:2416:8)
+        at process.processTicksAndRejections (node:internal/process/task_queues:90:21) {
+      code: 'EINVAL',
+      errno: -2147483643,
+      syscall: 'listen',
+      address: '::1',
+      port: 38984
+    }
+    
+    Node.js v24.21.0
+  ...
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-https-connect-address-family.js
+not ok 6 parallel/test-https-connect-address-family
+  ---
+  duration_ms: 153.00900
+  severity: fail
+  exitcode: 1
+  stack: |-
+    node:events:505
+        throw er; // Unhandled 'error' event
+        ^
+    
+    Error: listen EINVAL: invalid argument ::1
+        at Server.setupListenHandle [as _listen2] (node:net:2306:21)
+        at listenInCluster (node:net:2437:12)
+        at node:net:2666:7
+        at process.processTicksAndRejections (node:internal/process/task_queues:90:21)
+    Emitted 'error' event on Server instance at:
+        at emitErrorNT (node:net:2416:8)
+        at process.processTicksAndRejections (node:internal/process/task_queues:90:21) {
+      code: 'EINVAL',
+      errno: -2147483643,
+      syscall: 'listen',
+      address: '::1'
+    }
+    
+    Node.js v24.21.0
+  ...
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-net-autoselectfamily.js
+not ok 7 parallel/test-net-autoselectfamily
+  ---
+  duration_ms: 140.01700
+  severity: fail
+  exitcode: 1
+  stack: |-
+    node:events:505
+        throw er; // Unhandled 'error' event
+        ^
+    
+    Error: listen EINVAL: invalid argument ::1:39038
+        at Server.setupListenHandle [as _listen2] (node:net:2306:21)
+        at listenInCluster (node:net:2437:12)
+        at node:net:2666:7
+        at process.processTicksAndRejections (node:internal/process/task_queues:90:21)
+    Emitted 'error' event on Server instance at:
+        at emitErrorNT (node:net:2416:8)
+        at process.processTicksAndRejections (node:internal/process/task_queues:90:21) {
+      code: 'EINVAL',
+      errno: -2147483643,
+      syscall: 'listen',
+      address: '::1',
+      port: 39038
+    }
+    
+    Node.js v24.21.0
+  ...
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-net-autoselectfamily-ipv4first.js
+not ok 8 parallel/test-net-autoselectfamily-ipv4first
+  ---
+  duration_ms: 117.97200
+  severity: fail
+  exitcode: 1
+  stack: |-
+    node:events:505
+        throw er; // Unhandled 'error' event
+        ^
+    
+    Error: listen EINVAL: invalid argument ::1:39059
+        at Server.setupListenHandle [as _listen2] (node:net:2306:21)
+        at listenInCluster (node:net:2437:12)
+        at node:net:2666:7
+        at process.processTicksAndRejections (node:internal/process/task_queues:90:21)
+    Emitted 'error' event on Server instance at:
+        at emitErrorNT (node:net:2416:8)
+        at process.processTicksAndRejections (node:internal/process/task_queues:90:21) {
+      code: 'EINVAL',
+      errno: -2147483643,
+      syscall: 'listen',
+      address: '::1',
+      port: 39059
+    }
+    
+    Node.js v24.21.0
+  ...
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-net-boundsocket.js
+not ok 9 parallel/test-net-boundsocket
+  ---
+  duration_ms: 133.98100
+  severity: fail
+  exitcode: 1
+  stack: |-
+    node:net:455
+          throw new ExceptionWithHostPort(err, 'bind', host, port);
+          ^
+    
+    Error: bind EINVAL ::1
+        at new BoundSocket (node:net:455:13)
+        at Object.<anonymous> (/boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-net-boundsocket.js:430:19)
+        at Module._compile (node:internal/modules/cjs/loader:1929:14)
+        at Object..js (node:internal/modules/cjs/loader:2060:10)
+        at Module.load (node:internal/modules/cjs/loader:1651:32)
+        at Module._load (node:internal/modules/cjs/loader:1443:12)
+        at wrapModuleLoad (node:internal/modules/cjs/loader:261:19)
+        at Module.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:154:5)
+        at node:internal/main/run_main_module:33:47 {
+      errno: -2147483643,
+      code: 'EINVAL',
+      syscall: 'bind',
+      address: '::1'
+    }
+    
+    Node.js v24.21.0
+  ...
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-net-connect-options-ipv6.js
+not ok 10 parallel/test-net-connect-options-ipv6
+  ---
+  duration_ms: 125.94800
+  severity: fail
+  exitcode: 1
+  stack: |-
+    node:events:505
+        throw er; // Unhandled 'error' event
+        ^
+    
+    Error: listen EINVAL: invalid argument ::1
+        at Server.setupListenHandle [as _listen2] (node:net:2306:21)
+        at listenInCluster (node:net:2437:12)
+        at node:net:2666:7
+        at process.processTicksAndRejections (node:internal/process/task_queues:90:21)
+    Emitted 'error' event on Server instance at:
+        at emitErrorNT (node:net:2416:8)
+        at process.processTicksAndRejections (node:internal/process/task_queues:90:21) {
+      code: 'EINVAL',
+      errno: -2147483643,
+      syscall: 'listen',
+      address: '::1'
+    }
+    
+    Node.js v24.21.0
+  ...
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-net-dns-custom-lookup.js
+not ok 11 parallel/test-net-dns-custom-lookup
+  ---
+  duration_ms: 128.04400
+  severity: fail
+  exitcode: 1
+  stack: |-
+    node:events:505
+        throw er; // Unhandled 'error' event
+        ^
+    
+    Error: listen EINVAL: invalid argument ::1
+        at Server.setupListenHandle [as _listen2] (node:net:2306:21)
+        at listenInCluster (node:net:2437:12)
+        at node:net:2666:7
+        at process.processTicksAndRejections (node:internal/process/task_queues:90:21)
+    Emitted 'error' event on Server instance at:
+        at emitErrorNT (node:net:2416:8)
+        at process.processTicksAndRejections (node:internal/process/task_queues:90:21) {
+      code: 'EINVAL',
+      errno: -2147483643,
+      syscall: 'listen',
+      address: '::1'
+    }
+    
+    Node.js v24.21.0
+  ...
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-net-dns-lookup-skip.js
+not ok 12 parallel/test-net-dns-lookup-skip
+  ---
+  duration_ms: 119.09200
+  severity: fail
+  exitcode: 1
+  stack: |-
+    node:events:505
+        throw er; // Unhandled 'error' event
+        ^
+    
+    Error: listen EINVAL: invalid argument ::1
+        at Server.setupListenHandle [as _listen2] (node:net:2306:21)
+        at listenInCluster (node:net:2437:12)
+        at node:net:2666:7
+        at process.processTicksAndRejections (node:internal/process/task_queues:90:21)
+    Emitted 'error' event on Server instance at:
+        at emitErrorNT (node:net:2416:8)
+        at process.processTicksAndRejections (node:internal/process/task_queues:90:21) {
+      code: 'EINVAL',
+      errno: -2147483643,
+      syscall: 'listen',
+      address: '::1'
+    }
+    
+    Node.js v24.21.0
+  ...
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-net-pingpong.js
+not ok 13 parallel/test-net-pingpong
+  ---
+  duration_ms: 138.45600
+  severity: fail
+  exitcode: 1
+  stack: |-
+    node:events:505
+        throw er; // Unhandled 'error' event
+        ^
+    
+    Error: listen EINVAL: invalid argument ::1
+        at Server.setupListenHandle [as _listen2] (node:net:2306:21)
+        at listenInCluster (node:net:2437:12)
+        at node:net:2666:7
+        at process.processTicksAndRejections (node:internal/process/task_queues:90:21)
+    Emitted 'error' event on Server instance at:
+        at emitErrorNT (node:net:2416:8)
+        at process.processTicksAndRejections (node:internal/process/task_queues:90:21) {
+      code: 'EINVAL',
+      errno: -2147483643,
+      syscall: 'listen',
+      address: '::1'
+    }
+    
+    Node.js v24.21.0
+  ...
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-tls-connect-address-family.js
+not ok 14 parallel/test-tls-connect-address-family
+  ---
+  duration_ms: 126.39800
+  severity: fail
+  exitcode: 1
+  stack: |-
+    node:events:505
+        throw er; // Unhandled 'error' event
+        ^
+    
+    Error: listen EINVAL: invalid argument ::1
+        at Server.setupListenHandle [as _listen2] (node:net:2306:21)
+        at listenInCluster (node:net:2437:12)
+        at node:net:2666:7
+        at process.processTicksAndRejections (node:internal/process/task_queues:90:21)
+    Emitted 'error' event on Server instance at:
+        at emitErrorNT (node:net:2416:8)
+        at process.processTicksAndRejections (node:internal/process/task_queues:90:21) {
+      code: 'EINVAL',
+      errno: -2147483643,
+      syscall: 'listen',
+      address: '::1'
+    }
+    
+    Node.js v24.21.0
+  ...
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-child-process-default-options.js
+not ok 15 parallel/test-child-process-default-options
+  ---
+  duration_ms: 133.01300
+  severity: fail
+  exitcode: 1
+  stack: |-
+    node:events:505
+        throw er; // Unhandled 'error' event
+        ^
+    
+    Error: spawn /usr/bin/env ENOENT
+        at ChildProcess._handle.onexit (node:internal/child_process:287:19)
+        at onErrorNT (node:internal/child_process:525:16)
+        at process.processTicksAndRejections (node:internal/process/task_queues:90:21)
+    Emitted 'error' event on ChildProcess instance at:
+        at ChildProcess._handle.onexit (node:internal/child_process:293:12)
+        at onErrorNT (node:internal/child_process:525:16)
+        at process.processTicksAndRejections (node:internal/process/task_queues:90:21) {
+      errno: -2147459069,
+      code: 'ENOENT',
+      syscall: 'spawn /usr/bin/env',
+      path: '/usr/bin/env',
+      spawnargs: []
+    }
+    
+    Node.js v24.21.0
+  ...
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-child-process-env.js
+not ok 16 parallel/test-child-process-env
+  ---
+  duration_ms: 116.32500
+  severity: fail
+  exitcode: 1
+  stack: |-
+    node:events:505
+        throw er; // Unhandled 'error' event
+        ^
+    
+    Error: spawn /usr/bin/env ENOENT
+        at ChildProcess._handle.onexit (node:internal/child_process:287:19)
+        at onErrorNT (node:internal/child_process:525:16)
+        at process.processTicksAndRejections (node:internal/process/task_queues:90:21)
+    Emitted 'error' event on ChildProcess instance at:
+        at ChildProcess._handle.onexit (node:internal/child_process:293:12)
+        at onErrorNT (node:internal/child_process:525:16)
+        at process.processTicksAndRejections (node:internal/process/task_queues:90:21) {
+      errno: -2147459069,
+      code: 'ENOENT',
+      syscall: 'spawn /usr/bin/env',
+      path: '/usr/bin/env',
+      spawnargs: []
+    }
+    
+    Node.js v24.21.0
+  ...
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-process-threadCpuUsage-main-thread.js
+not ok 17 parallel/test-process-threadCpuUsage-main-thread
+  ---
+  duration_ms: 115.33600
+  severity: fail
+  exitcode: 1
+  stack: |-
+    node:internal/process/per_thread:190
+        _threadCpuUsage(threadCpuValues);
+        ^
+    
+    Error: ENOTSUP: operation not supported on socket, uv_getrusage_thread
+        at process.threadCpuUsage (node:internal/process/per_thread:190:5)
+        at Object.<anonymous> (/boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-process-threadCpuUsage-main-thread.js:21:26)
+        at Module._compile (node:internal/modules/cjs/loader:1929:14)
+        at Object..js (node:internal/modules/cjs/loader:2060:10)
+        at Module.load (node:internal/modules/cjs/loader:1651:32)
+        at Module._load (node:internal/modules/cjs/loader:1443:12)
+        at wrapModuleLoad (node:internal/modules/cjs/loader:261:19)
+        at Module.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:154:5)
+        at node:internal/main/run_main_module:33:47 {
+      errno: -2147454920,
+      code: 'ENOTSUP',
+      syscall: 'uv_getrusage_thread'
+    }
+    
+    Node.js v24.21.0
+  ...
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-process-threadCpuUsage-worker-threads.js
+not ok 18 parallel/test-process-threadCpuUsage-worker-threads
+  ---
+  duration_ms: 6315.21600
+  severity: fail
+  exitcode: 1
+  stack: |-
+    node:internal/process/per_thread:190
+        _threadCpuUsage(threadCpuValues);
+        ^
+    
+    Error: ENOTSUP: operation not supported on socket, uv_getrusage_thread
+        at process.threadCpuUsage (node:internal/process/per_thread:190:5)
+        at getUsages (/boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-process-threadCpuUsage-worker-threads.js:34:57)
+        at Timeout.<anonymous> (/boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-process-threadCpuUsage-worker-threads.js:68:22)
+        at Timeout._onTimeout (/boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/common/index.js:481:15)
+        at listOnTimeout (node:internal/timers:685:17)
+        at process.processTimers (node:internal/timers:618:7) {
+      errno: -2147454920,
+      code: 'ENOTSUP',
+      syscall: 'uv_getrusage_thread'
+    }
+    
+    Node.js v24.21.0
+  ...
+# /boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-worker-cpu-usage.js
+not ok 19 parallel/test-worker-cpu-usage
+  ---
+  duration_ms: 145.08700
+  severity: fail
+  exitcode: 1
+  stack: |-
+    node:internal/process/promises:394
+        triggerUncaughtException(err, true /* fromPromise */);
+        ^
+    
+    [Error: ENOTSUP: operation not supported on socket, uv_getrusage_thread] {
+      errno: -2147454920,
+      code: 'ENOTSUP',
+      syscall: 'uv_getrusage_thread'
+    }
+    
+    Node.js v24.21.0
+  ...
+# /boot/system/bin/node --test-reporter=./test/common/test-error-reporter.js --test-reporter-destination=stdout /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/sequential/test-net-server-listen-ipv6-link-local.js
+not ok 20 sequential/test-net-server-listen-ipv6-link-local
+  ---
+  duration_ms: 119.92200
+  severity: fail
+  exitcode: 1
+  stack: |-
+    node:assert:204
+      throw err;
+      ^
+    
+    AssertionError [ERR_ASSERTION]: function should not have been called at /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/sequential/test-net-server-listen-ipv6-link-local.js:122
+    called with arguments: Error: listen EINVAL: invalid argument ::1:12350
+        at Server.setupListenHandle [as _listen2] (node:net:2306:21)
+        at listenInCluster (node:net:2437:12)
+        at node:net:2666:7
+        at Object.<anonymous> (/boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/sequential/test-net-server-listen-ipv6-link-local.js:111:7)
+        at Object.apply (node:internal/test_runner/mock/mock:805:20)
+        at lookupAndListen (node:net:2656:7)
+        at Server.listen (node:net:2558:7)
+        at Object.<anonymous> (/boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/sequential/test-net-server-listen-ipv6-link-local.js:124:10)
+        at Module._compile (node:internal/modules/cjs/loader:1929:14)
+        at Object..js (node:internal/modules/cjs/loader:2060:10) {
+      code: 'EINVAL',
+      errno: -2147483643,
+      syscall: 'listen',
+      address: '::1',
+      port: 12350
+    }
+        at Server.mustNotCall (/boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/common/index.js:539:12)
+        at Server.emit (node:events:514:28)
+        at emitErrorNT (node:net:2416:8)
+        at process.processTicksAndRejections (node:internal/process/task_queues:90:21) {
+      generatedMessage: false,
+      code: 'ERR_ASSERTION',
+      actual: undefined,
+      expected: undefined,
+      operator: 'fail',
+      diff: 'simple'
+    }
+    
+    Node.js v24.21.0
+  ...
+
+Failed tests:
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-cluster-net-listen-ipv6only-false.js
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http-autoselectfamily.js
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-connect.js
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-http2-ip-address-host.js
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-https-autoselectfamily.js
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-https-connect-address-family.js
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-net-autoselectfamily.js
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-net-autoselectfamily-ipv4first.js
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-net-boundsocket.js
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-net-connect-options-ipv6.js
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-net-dns-custom-lookup.js
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-net-dns-lookup-skip.js
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-net-pingpong.js
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-tls-connect-address-family.js
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-child-process-default-options.js
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-child-process-env.js
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-process-threadCpuUsage-main-thread.js
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-process-threadCpuUsage-worker-threads.js
+/boot/system/bin/node /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/parallel/test-worker-cpu-usage.js
+/boot/system/bin/node --test-reporter=./test/common/test-error-reporter.js --test-reporter-destination=stdout /boot/home/haikuports/net-libs/nodejs/work-24.21.0/sources/node-v24.21.0/test/sequential/test-net-server-listen-ipv6-link-local.js
