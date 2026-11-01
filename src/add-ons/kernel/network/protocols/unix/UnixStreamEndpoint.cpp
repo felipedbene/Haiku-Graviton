@@ -731,6 +731,10 @@ UnixStreamEndpoint::_Spawn(UnixStreamEndpoint* connectingEndpoint,
 	fCredentials = listeningEndpoint->fCredentials;
 
 	fState = unix_stream_endpoint_state::Connected;
+	fWasConnected = true;
+		// Like the connecting end: once the peer is gone, a write here must
+		// fail with EPIPE, not ENOTCONN (see _LockConnectedEndpoints()). This
+		// is also the socketpair() end that net_socket accept()s.
 
 	gSocketModule->set_connected(Socket());
 }
