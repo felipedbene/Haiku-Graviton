@@ -1,0 +1,157 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: linux-reference
+# instance: i-01e08091fb5a20f82   region: us-west-2
+# ssm command: ee8ed55d-ae7d-4d7e-9a14-0fb04164a9d7 (agent status: Success)
+# start: 20261101T174236Z   end: 20261101T174245Z   rc: 0   log bytes: 8977
+# script sha256: 7af09f70e222de9e679f0d56670a7ca77918699ab31e072f4272b65329a5bd36
+# ---- script ----
+# | set -x
+# | B=s3://haiku-graviton-<ACCOUNT_ID>-us-west-2/tdeffs/repro
+# | mkdir -p /opt/ref && cd /opt/ref && aws s3 cp --quiet --recursive $B/ . && sha256sum *.c
+# | uname -a; df -T /tmp . | tail -2
+# | for f in *.c; do cc -O2 -Wall -o ${f%.c} $f -lpthread || echo "COMPILE FAIL $f"; done
+# | set +x
+# | for t in setfl870 fchmod884 "link882 /tmp /opt/ref" devfd883 "append892 /tmp 2000 2" atime879; do echo "=== $t"; ./$t; echo "rc=$?"; done
+# ---- raw output ----
++ B=s3://haiku-graviton-<ACCOUNT_ID>-us-west-2/tdeffs/repro
++ mkdir -p /opt/ref
++ cd /opt/ref
++ aws s3 cp --quiet --recursive s3://haiku-graviton-<ACCOUNT_ID>-us-west-2/tdeffs/repro/ .
++ sha256sum append892.c atime879.c devfd883.c fchmod884.c link882.c setfl870.c
+f42dd402f44a2e95a357e88ca66456e72e8d99ea5b39dcc9a4e88b4f60ec1a26  append892.c
+514f370a62ba5ba3fc99241dc7a62850247b7ff7e242a9af4034ae8122a44e5d  atime879.c
+65c77a16e3308ac577eb63a7c2ea1de2a42394c2d4e315589ef836bf0073d7de  devfd883.c
+a55ec44f73b3381afec0b64942e1b6539d97db1eed9176efe82588baaf1e9850  fchmod884.c
+65810c8d7f200240fdc39c409285a305f966c487f5499dbf1374cac0308e2c8a  link882.c
+a418bd59113b0690f8949e684bafcb5f067e4fcb237e47b8ca6e7e9eb099ade0  setfl870.c
++ uname -a
+Linux ip-10-128-15-106 7.0.0-1014-aws #14~24.04.1-Ubuntu SMP PREEMPT Fri Sep 18 21:50:22 UTC 2026 aarch64 aarch64 aarch64 GNU/Linux
++ df -T /tmp .
++ tail -2
+/dev/root      ext4  80162804 6203344  73943076   8% /
+/dev/root      ext4  80162804 6203344  73943076   8% /
++ for f in *.c
++ cc -O2 -Wall -o append892 append892.c -lpthread
++ for f in *.c
++ cc -O2 -Wall -o atime879 atime879.c -lpthread
+atime879.c: In function ‘main’:
+atime879.c:46:9: warning: ignoring return value of ‘write’ declared with attribute ‘warn_unused_result’ [-Wunused-result]
+   46 |         write(fd, "x", 1);
+      |         ^~~~~~~~~~~~~~~~~
+atime879.c:95:9: warning: ignoring return value of ‘write’ declared with attribute ‘warn_unused_result’ [-Wunused-result]
+   95 |         write(fd, "y", 1);
+      |         ^~~~~~~~~~~~~~~~~
+atime879.c:107:9: warning: ignoring return value of ‘read’ declared with attribute ‘warn_unused_result’ [-Wunused-result]
+  107 |         read(fd, &c, 1);
+      |         ^~~~~~~~~~~~~~~
++ for f in *.c
++ cc -O2 -Wall -o devfd883 devfd883.c -lpthread
+devfd883.c: In function ‘main’:
+devfd883.c:142:9: warning: ignoring return value of ‘pipe’ declared with attribute ‘warn_unused_result’ [-Wunused-result]
+  142 |         pipe(p);
+      |         ^~~~~~~
+devfd883.c:155:9: warning: ignoring return value of ‘pipe’ declared with attribute ‘warn_unused_result’ [-Wunused-result]
+  155 |         pipe(q);
+      |         ^~~~~~~
+devfd883.c:183:9: warning: ignoring return value of ‘write’ declared with attribute ‘warn_unused_result’ [-Wunused-result]
+  183 |         write(f, "0123456789", 10);
+      |         ^~~~~~~~~~~~~~~~~~~~~~~~~~
+devfd883.c:188:9: warning: ignoring return value of ‘read’ declared with attribute ‘warn_unused_result’ [-Wunused-result]
+  188 |         read(dupFD, &c, 1);
+      |         ^~~~~~~~~~~~~~~~~~
++ for f in *.c
++ cc -O2 -Wall -o fchmod884 fchmod884.c -lpthread
++ for f in *.c
++ cc -O2 -Wall -o link882 link882.c -lpthread
+link882.c: In function ‘run’:
+link882.c:51:9: warning: ignoring return value of ‘symlink’ declared with attribute ‘warn_unused_result’ [-Wunused-result]
+   51 |         symlink("does-not-exist", dangling);
+      |         ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
++ for f in *.c
++ cc -O2 -Wall -o setfl870 setfl870.c -lpthread
++ set +x
+=== setfl870
+PASS  /dev/null (rdonly)         getfl=0x20000 clear-NB=ok set-NB=ok set-APPEND=ok restore=ok
+PASS  /dev/null (rdwr)           getfl=0x20002 clear-NB=ok set-NB=ok set-APPEND=ok restore=ok
+PASS  /dev/null (wronly)         getfl=0x20001 clear-NB=ok set-NB=ok set-APPEND=ok restore=ok
+PASS  /dev/zero (rdonly)         getfl=0x20000 clear-NB=ok set-NB=ok set-APPEND=ok restore=ok
+PASS  /dev/zero (rdwr)           getfl=0x20002 clear-NB=ok set-NB=ok set-APPEND=ok restore=ok
+PASS  /dev/full (rdwr)           getfl=0x20002 clear-NB=ok set-NB=ok set-APPEND=ok restore=ok
+PASS  pipe read end (control)    getfl=0x0 clear-NB=ok set-NB=ok set-APPEND=ok restore=ok
+PASS  regular file (control)     getfl=0x20002 clear-NB=ok set-NB=ok set-APPEND=ok restore=ok
+INFO  /dev/random (rdonly)       getfl=0x20000 clear-NB=ok set-NB=ok set-APPEND=ok restore=ok
+INFO  /dev/urandom (rdonly)      getfl=0x20000 clear-NB=ok set-NB=ok set-APPEND=ok restore=ok
+setfl870: 0 failed
+rc=0
+=== fchmod884
+EINVAL=22 EOPNOTSUPP=95
+PASS fchmod(listening AF_UNIX socket, 0777)     r=0 errno=0 (ok)
+PASS fchown(listening AF_UNIX socket, uid, gid) r=0 errno=0 (ok)
+PASS futimens(listening AF_UNIX socket, NULL)   r=0 errno=0 (ok)
+PASS chmod(socket path, 0777) (control)         r=0 errno=0 (ok)
+     socket path mode after chmod: 777
+PASS fchmod(unbound AF_INET socket, 0777)       r=0 errno=0 (ok)
+PASS fchown(unbound AF_INET socket, uid, gid)   r=0 errno=0 (ok)
+PASS futimens(unbound AF_INET socket, NULL)     r=0 errno=0 (ok)
+PASS fchmod(regular file, 0640) (control)       r=0 errno=0 (ok)
+fchmod884: 0 failed
+rc=0
+=== link882 /tmp /opt/ref
+PASS /tmp       link(file, existing file)                    r=-1 errno=17 (File exists)
+PASS /tmp       link(file, itself)                           r=-1 errno=17 (File exists)
+PASS /tmp       link(file, existing dir/)                    r=-1 errno=17 (File exists)
+PASS /tmp       link(file, dangling symlink)                 r=-1 errno=17 (File exists)
+PASS /tmp       linkat(file, existing file)                  r=-1 errno=17 (File exists)
+PASS /tmp       link(file, /dev/null) (other volume)         r=-1 errno=17 (File exists)
+PASS /tmp       link(missing, existing file)                 r=-1 errno=2 (No such file or directory)
+PASS /tmp       link(file, new name on other volume)         r=-1 errno=18 (Invalid cross-device link)
+INFO /tmp       link(file, new name)                         r=0 errno=0 (ok)
+PASS /opt/ref   link(file, existing file)                    r=-1 errno=17 (File exists)
+PASS /opt/ref   link(file, itself)                           r=-1 errno=17 (File exists)
+PASS /opt/ref   link(file, existing dir/)                    r=-1 errno=17 (File exists)
+PASS /opt/ref   link(file, dangling symlink)                 r=-1 errno=17 (File exists)
+PASS /opt/ref   linkat(file, existing file)                  r=-1 errno=17 (File exists)
+PASS /opt/ref   link(file, /dev/null) (other volume)         r=-1 errno=17 (File exists)
+PASS /opt/ref   link(missing, existing file)                 r=-1 errno=2 (No such file or directory)
+PASS /opt/ref   link(file, new name on other volume)         r=-1 errno=18 (Invalid cross-device link)
+INFO /opt/ref   link(file, new name)                         r=0 errno=0 (ok)
+link882: 0 failed
+rc=0
+=== devfd883
+PASS stat(/dev/fd) is a directory                 ok
+PASS /dev/stdin                                   lstat=ok link=/proc/self/fd/0
+PASS /dev/stdout                                  lstat=ok link=/proc/self/fd/1
+PASS /dev/stderr                                  lstat=ok link=/proc/self/fd/2
+PASS realpath(/dev/stdin)                         /dev/null
+PASS readdir(/dev/fd) lists 0 and a new fd        entries=7 has0=1 has3=1
+PASS stat(/dev/fd/<open /dev/null>)               ok mode=020666
+PASS stat(/dev/fd/<closed fd>)                    No such file or directory
+PASS open(/dev/fd/9999)                           No such file or directory
+PASS pipe write end via /dev/fd                   open(/dev/fd/4)=5 type=fifo write=9 read=9
+PASS pipe read end via /dev/fd                    open(/dev/fd/3)=5 type=fifo write=9 read=9
+PASS pipe via /dev/fd, O_CREAT|O_TRUNC            open(/dev/fd/4)=5 type=fifo write=9 read=9
+PASS /dev/stdin with stdin a pipe                 open(/dev/stdin)=6 type=fifo write=9 read=9
+INFO socket via /dev/fd                           open: No such device or address
+INFO file via /dev/fd shares the offset           fd=7 read='0' original offset=0
+INFO O_RDWR of an O_RDONLY fd via /dev/fd         opened
+PASS O_CLOEXEC applies to the new fd              fd=8 F_GETFD=1
+PASS no O_CLOEXEC, no FD_CLOEXEC                  fd=9 F_GETFD=0
+devfd883: 0 failed
+rc=0
+=== append892 /tmp 2000 2
+PASS pre-created rounds 2000 threads 2 records/thread 1: rounds with a lost append 0, records lost 0
+PASS created     rounds 2000 threads 2 records/thread 1: rounds with a lost append 0, records lost 0
+PASS burst       rounds 101 threads 8 records/thread 200: rounds with a lost append 0, records lost 0
+append892: 0 failed
+rc=0
+=== atime879
+PASS stable across two stat()s                      atime 1793554960.025836 then 1793554960.025836
+PASS unset atime is not 'now'                       atime 1793554960.025836 mtime 1793554960.025836 now 1793554960
+PASS utimes(atime=1e9, mtime=1e9+5)                 atime 1000000000.000000 mtime 1000000005.000000
+PASS utimensat(atime only, mtime UTIME_OMIT)        r=0 atime 1234567890.123456789 mtime 1000000005.000000
+PASS futimens(atime=1.5e9)                          r=0 atime 1500000000.000000 mtime 1500000001.000000
+PASS write keeps the explicit atime                 atime 1500000000.000000 mtime 1793554961.226817
+INFO read leaves it unchanged                       atime 1793554961.229817
+INFO utimensat(atime UTIME_NOW)                     r=0 atime 1793554961.229817 now 1793554961
+atime879: 0 failed
+rc=0

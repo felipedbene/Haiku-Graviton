@@ -1,0 +1,66 @@
+# evidence: extra883
+# instance: i-0218cd7c60202a9a4   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261101T181232Z   end: 20261101T181323Z   rc: 0
+# script sha256: 95fd33edda0ee17ab6ad779260fc76a9330d2da1df2800c8e56d54f031eecf2b
+# ---- script ----
+# | set +e
+# | echo "== shell"
+# | echo hi-stdin | cat /dev/stdin
+# | echo hi-tee | tee /dev/stderr 2>&1 >/dev/null
+# | ( echo to-stdout > /dev/stdout ) | cat
+# | ( echo to-stderr > /dev/stderr ) 2>&1 | cat
+# | echo "process substitution: $(cat <(echo via-procsubst) 2>&1)"
+# | ls -la /dev/stdin /dev/stdout /dev/stderr
+# | ls -l /dev/fd/ 3</dev/null
+# | stat /dev/fd | head -3
+# | node -e "process.stdout.write(require('fs').readFileSync('/dev/stdin','utf8'))" < /etc/hosts 2>&1 | head -2
+# | printf 'abc' | node -e "console.log(JSON.stringify(require('fs').readFileSync('/dev/stdin','utf8')), require('fs').realpathSync('/dev/stdin'))"
+# | echo "== open/close loop"
+# | cat > /tmp/loop883.c <<'C'
+# | #include <fcntl.h>
+# | #include <stdio.h>
+# | #include <unistd.h>
+# | int main(void) {
+# | 	int bad = 0, maxfd = 0;
+# | 	for (int i = 0; i < 200000; i++) {
+# | 		int fd = open(i % 2 ? "/dev/stdin" : "/dev/fd/1", i % 2 ? O_RDONLY : O_WRONLY);
+# | 		if (fd < 0) { bad++; continue; }
+# | 		if (fd > maxfd) maxfd = fd;
+# | 		close(fd);
+# | 	}
+# | 	int probe = open("/dev/null", O_RDONLY);
+# | 	printf("loop: 200000 opens, failures %d, highest fd %d, next fd %d\n", bad, maxfd, probe);
+# | 	return bad != 0;
+# | }
+# | C
+# | gcc -O2 -o /tmp/loop883 /tmp/loop883.c && /tmp/loop883 < /dev/null > /tmp/loop.out 2>&1; cat /tmp/loop.out
+# | echo "== kernel log"
+# | grep -iE "panic|assert|fdescfs|could not mount|vnode" /var/log/syslog | tail -5
+# | echo EXTRA_DONE
+# ---- raw output ----
+== shell
+hi-stdin
+hi-tee
+to-stdout
+to-stderr
+process substitution: via-procsubst
+lrwxrwxrwx 1 baron root 4 Nov  1 18:10 /dev/stderr -> fd/2
+lrwxrwxrwx 1 baron root 4 Nov  1 18:10 /dev/stdin -> fd/0
+lrwxrwxrwx 1 baron root 4 Nov  1 18:10 /dev/stdout -> fd/1
+total 132
+crw-r--r-- 1 baron root      0 Nov  1 18:10 0
+-rw-r--r-- 1 baron root    257 Nov  1 18:13 1
+-rw-r--r-- 1 baron root    257 Nov  1 18:13 2
+crw-r--r-- 1 baron root      0 Nov  1 18:10 3
+dr-xr-xr-x 2 baron root      0 Nov  1 18:10 4
+  File: /dev/fd
+  Size: 0         	Blocks: 0          IO Block: 512    directory
+Device: 0,6	Inode: 1           Links: 2
+/tmp/ccrun/cc-20261101T181232Z-3216.sh: line 11: /etc/hosts: No such file or directory
+"abc" /dev/fd/0
+== open/close loop
+loop: 200000 opens, failures 0, highest fd 3, next fd 3
+== kernel log
+KERN: vnode 3:3145766 is busy!
+KERN: vnode 3:3145763 is busy!
+EXTRA_DONE
