@@ -1,0 +1,14 @@
+# evidence: usr-bin-env-probe
+# instance: i-0e7bed4928e0f7bf7   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261101T004810Z   end: 20261101T004831Z   rc: 0
+# script sha256: 32632571f013e192ebeba534e55ec252d15bd877cd59e4c5c1d26622ff0ebcc0
+# ---- script ----
+# | ls -ld /usr /usr/bin /usr/bin/env /bin /bin/env 2>&1; printf "#!/usr/bin/env sh\necho shebang-ok\n" > /tmp/sb.sh; chmod +x /tmp/sb.sh; /tmp/sb.sh; echo "rc=$?"
+# ---- raw output ----
+ls: cannot access '/usr': No such file or directory
+ls: cannot access '/usr/bin': No such file or directory
+ls: cannot access '/usr/bin/env': No such file or directory
+lrwxrwxrwx 1 baron root     16 Oct 30 22:26 /bin -> /boot/system/bin
+-r-xr-xr-x 1 baron root 154088 Aug 30 22:33 /bin/env
+shebang-ok
+rc=0

@@ -1,0 +1,168 @@
+# evidence: libuv-probe
+# instance: i-0e7bed4928e0f7bf7   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261101T004732Z   end: 20261101T004752Z   rc: 0
+# script sha256: cd5a60c0b3ea6670e2336ab9387d124c6309bc128f9f8c8ad3792a482eac3595
+# ---- script ----
+# | uname -a
+# | ls /boot/home/haikuports/dev-libs/libuv/ /boot/home/haikuports/dev-libs/libuv/patches 2>&1
+# | cat /boot/home/haikuports/dev-libs/libuv/libuv-1.52.1.recipe
+# | for p in /boot/home/haikuports/dev-libs/libuv/patches/*; do echo "== $p"; cat $p; done
+# | ls /boot/home/haikuports/dev-libs/libuv/work-* 2>&1 | head
+# | ls /boot/home/haikuports/packages | grep -i uv
+# | pkgman search -i -D libuv 2>&1 | head
+# | ls /boot/system/lib | grep uv
+# | ls /boot/home/haikuports/input-source-packages 2>&1 | head
+# ---- raw output ----
+Haiku ip-10-128-9-142.us-west-2.compu R1~beta6+development hrev59996 Oct 19 2026 21:09:42 arm64 arm64 Haiku
+/boot/home/haikuports/dev-libs/libuv/:
+libuv-1.52.1.recipe
+patches
+work-1.52.1
+
+/boot/home/haikuports/dev-libs/libuv/patches:
+libuv-1.52.1.patchset
+SUMMARY="Cross-platform asynchronous I/O"
+DESCRIPTION="libuv is a multi-platform support library with a focus on \
+asynchronous I/O. It was primarily developed for use by Node.js, but it's also \
+used by Luvit, Julia, pyuv, and others."
+HOMEPAGE="https://libuv.org/"
+COPYRIGHT="2015-present libuv project contributors"
+LICENSE="MIT"
+REVISION="1"
+SOURCE_URI="https://github.com/libuv/libuv/archive/v$portVersion/libuv-$portVersion.tar.gz"
+CHECKSUM_SHA256="478baf2599bfbc882c355288c9cb6f92e0e7dda435fa04031fa5b607cf3f414c"
+PATCHES="libuv-$portVersion.patchset"
+
+ARCHITECTURES="all !x86_gcc2"
+SECONDARY_ARCHITECTURES="x86"
+
+libVersion="1.0.0"
+libVersionCompat="$libVersion compat >= ${libVersion%%.*}"
+
+PROVIDES="
+	libuv$secondaryArchSuffix = $portVersion
+	lib:libuv$secondaryArchSuffix = $libVersionCompat
+	"
+REQUIRES="
+	haiku$secondaryArchSuffix
+	"
+
+PROVIDES_devel="
+	libuv${secondaryArchSuffix}_devel = $portVersion
+	devel:libuv$secondaryArchSuffix = $libVersionCompat
+	"
+REQUIRES_devel="
+	libuv$secondaryArchSuffix == $portVersion
+	"
+
+BUILD_REQUIRES="
+	haiku${secondaryArchSuffix}_devel
+	"
+BUILD_PREREQUIRES="
+	cmd:awk
+	cmd:autoconf
+	cmd:automake
+	cmd:gcc$secondaryArchSuffix
+	cmd:ld$secondaryArchSuffix
+	cmd:libtoolize$secondaryArchSuffix
+	cmd:make
+	cmd:pkg_config$secondaryArchSuffix
+	"
+
+defineDebugInfoPackage libuv$secondaryArchSuffix \
+	"$libDir"/libuv.so.$libVersion
+
+BUILD()
+{
+	./autogen.sh
+
+	LDFLAGS="-lnetwork" runConfigure ./configure \
+		--disable-static
+	make $jobArgs
+}
+
+INSTALL()
+{
+	make install
+
+	# remove libtool file
+	rm -f $libDir/libuv.la
+
+	prepareInstalledDevelLib libuv
+
+	fixPkgconfig
+
+	packageEntries devel \
+		$developDir
+}
+
+TEST()
+{
+	make check
+}
+== /boot/home/haikuports/dev-libs/libuv/patches/libuv-1.52.1.patchset
+From 43d05c38cad943c6677f92e902454b9225887c5f Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Zolt=C3=A1n=20Mizsei?= <zmizsei@extrowerk.com>
+Date: Thu, 29 Oct 2020 07:40:26 +0100
+Subject: Test will not run as root
+
+
+diff --git a/test/run-tests.c b/test/run-tests.c
+index 9c2574e..78a6941 100644
+--- a/test/run-tests.c
++++ b/test/run-tests.c
+@@ -66,7 +66,7 @@ typedef BOOL (WINAPI *sCompareObjectHandles)(_In_ HANDLE, _In_ HANDLE);
+ 
+ 
+ int main(int argc, char **argv) {
+-#ifndef _WIN32
++#if !defined(_WIN32) && !defined(__HAIKU__)
+   if (0 == geteuid() && NULL == getenv("UV_RUN_AS_ROOT")) {
+     fprintf(stderr, "The libuv test suite cannot be run as root.\n");
+     return EXIT_FAILURE;
+-- 
+2.54.0
+
+
+From e071608573a5a3483fcd843b16bbf828d2526201 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?J=C3=A9r=C3=B4me=20Duval?= <jerome.duval@gmail.com>
+Date: Thu, 9 Jul 2026 21:32:20 +0200
+Subject: Haiku: build tests with libbsd
+
+
+diff --git a/Makefile.am b/Makefile.am
+index cc70ffe..54b30e2 100644
+--- a/Makefile.am
++++ b/Makefile.am
+@@ -473,6 +473,7 @@ libuv_la_SOURCES += src/unix/bsd-ifaddrs.c \
+                     src/unix/no-proctitle.c \
+                     src/unix/posix-hrtime.c \
+                     src/unix/posix-poll.c
++test_run_tests_LDFLAGS += -lbsd
+ endif
+ 
+ if HURD
+diff --git a/test/test-tty.c b/test/test-tty.c
+index 9ecb3ae..5569ac0 100644
+--- a/test/test-tty.c
++++ b/test/test-tty.c
+@@ -34,6 +34,8 @@
+ #  include <util.h>
+ # elif defined(__FreeBSD__) || defined(__DragonFly__)
+ #  include <libutil.h>
++# elif defined(__HAIKU__)
++#  include <pty.h>
+ # endif
+ #endif
+ 
+-- 
+2.54.0
+
+port.recipe
+Repository  Name         Version   Arch 
+----------------------------------------
+<system>    libuv        1.52.1-1  arm64
+<system>    libuv_devel  1.52.1-1  arm64
+libuv.so.1
+libuv.so.1.0.0
+ls: cannot access '/boot/home/haikuports/input-source-packages': No such file or directory

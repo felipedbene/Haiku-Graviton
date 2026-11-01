@@ -60,7 +60,19 @@ domain 12, process 10, cluster 7, child 7, dgram 6, watch 5, inspector 5, others
 sequential: cpu-prof 10, watch 4, net 4, others 1 each. The http2/net/tls/http
 timeouts are consistent with #871 (accepted sockets never see the peer's EOF) and the
 fs/watch failures with `fs.watch` ENOSYS; each failing test is listed in the log.
-Individual root causes beyond those two are not yet triaged.
+Triage of the remaining failures (`20261101T004721Z_i-0e7bed4928e0f7bf7_node-failure-triage.log`, first diagnostic line per test):
+
+| Cause | Tests (examples) | Status |
+|---|---|---|
+| accepted sockets never see the peer's EOF | http2 ×185 timeouts, net/http/tls timeouts | #871 |
+| `fs.watch` ENOSYS (libuv) | fs-watch*, watch-mode*, runner-watch | libuv Haiku backend in progress (owner's choice) |
+| IPv6 bind without v6-only refused | http/https/tls `*-autoselectfamily`, `*-connect-address-family`, cluster ipv6only | #873 |
+| `/usr/bin/env` absent (Haiku has no `/usr`; `#!/usr/bin/env` shebangs still work, measured `20261101T004810Z_i-0e7bed4928e0f7bf7_usr-bin-env-probe.log`) | child-process-default-options, child-process-env | Haiku layout; the bundle only *names* `/usr/bin/env` in its shebang parser |
+| `uv_getrusage_thread` ENOTSUP | process-threadCpuUsage*, worker-cpu-usage | libuv lacks a Haiku implementation |
+| CPU profiler / inspector exit -21 | v8-cpu-profile, sequential cpu-prof ×10, inspector-has-idle/promises | not yet root-caused |
+| abort-on-uncaught / exit-code semantics | domain-no-error-handler-abort-on-uncaught ×10 | not yet root-caused |
+| credentials, umask, priority, proctitle | process-euid-egid, process-umask-mask, os-process-priority, setproctitle | Haiku semantics differ; not yet classified one by one |
+| other single failures | dgram multicast, uv_pipe_chmod, stdout-close-catch, … | listed in the log |
 
 ## Claude Code on Haiku
 
