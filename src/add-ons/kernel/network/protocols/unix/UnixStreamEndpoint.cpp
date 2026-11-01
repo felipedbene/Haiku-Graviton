@@ -259,8 +259,10 @@ UnixStreamEndpoint::Connect(const struct sockaddr* _address)
 		if (error != B_OK)
 			RETURN_ERROR(error);
 
+		// A path that is not a socket has nobody listening behind it, as
+		// Linux reads it too; EINVAL would blame the caller's arguments.
 		if (!S_ISSOCK(st.st_mode))
-			RETURN_ERROR(B_BAD_VALUE);
+			RETURN_ERROR(ECONNREFUSED);
 
 		unixAddress.SetTo(st.st_dev, st.st_ino, NULL);
 	}
