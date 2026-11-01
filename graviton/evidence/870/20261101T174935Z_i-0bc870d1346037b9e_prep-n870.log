@@ -1,0 +1,98 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: prep-n870
+# instance: i-0bc870d1346037b9e   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261101T174935Z   end: 20261101T175014Z   rc: 0
+# script sha256: b1f75ade92852faa39b6d9a83d08f31415656fe3e190f88e7f74aff4d5b11133
+# ---- script ----
+# | MODE=null
+# | URL='https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/tdeffs/out/f870/null?<PRESIGNED>'
+# | SHA=58677eaec9a0c16dfcd3cf6f1227fffed8a681e1372cac345029dd3a858633c4
+# | # prepended: MODE (kernel|bfs|null), URL, SHA
+# | set -x
+# | mkdir -p /boot/home/prep && cd /boot/home/prep
+# | curl -sSfL -o bin "$URL" || python3 -I -c 'import sys,urllib.request; urllib.request.urlretrieve(sys.argv[1], "bin")' "$URL"
+# | sha256sum bin
+# | echo "$SHA  bin" | sha256sum -c || exit 5
+# | case $MODE in
+# | kernel)
+# | 	P=$(ls /boot/system/packages/haiku-*.hpkg); echo "system package: $P"
+# | 	sha256sum $P /boot/system/kernel_arm64
+# | 	cp $P h.hpkg
+# | 	mkdir -p st && cp bin st/kernel_arm64 && chmod 755 st/kernel_arm64
+# | 	package add -f -C st h.hpkg kernel_arm64 || exit 6
+# | 	rm -rf x && mkdir x && package extract -C x h.hpkg kernel_arm64 && sha256sum x/kernel_arm64
+# | 	echo "$SHA  x/kernel_arm64" | sha256sum -c || exit 7
+# | 	package list -p $P | sort > before.lst; package list -p h.hpkg | sort > after.lst
+# | 	wc -l before.lst after.lst; diff before.lst after.lst && echo "entry list identical"
+# | 	package info h.hpkg | head -5
+# | 	mv h.hpkg $P && sha256sum $P
+# | 	;;
+# | bfs)
+# | 	D=/boot/home/config/non-packaged/add-ons/kernel/boot
+# | 	mkdir -p $D && cp bin $D/bfs.new && chmod 755 $D/bfs.new && mv $D/bfs.new $D/bfs
+# | 	ls -la $D; sha256sum $D/bfs
+# | 	;;
+# | null)
+# | 	D=/boot/home/config/non-packaged/add-ons/kernel/drivers
+# | 	mkdir -p $D/bin $D/dev && cp bin $D/bin/null.new && chmod 755 $D/bin/null.new && mv $D/bin/null.new $D/bin/null
+# | 	ln -sf ../bin/null $D/dev/null
+# | 	ls -la $D/bin $D/dev; sha256sum $D/bin/null
+# | 	;;
+# | esac
+# | sync; sleep 15; sync
+# | grep -i "package" /var/log/syslog | tail -15
+# | echo PREP_DONE
+# ---- raw output ----
++ mkdir -p /boot/home/prep
++ cd /boot/home/prep
++ curl -sSfL -o bin 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/tdeffs/out/f870/null?<PRESIGNED>'
+/tmp/ccrun/cc-20261101T174935Z-82327.sh: line 7: curl: command not found
++ python3 -I -c 'import sys,urllib.request; urllib.request.urlretrieve(sys.argv[1], "bin")' 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/tdeffs/out/f870/null?<PRESIGNED>'
++ sha256sum bin
+58677eaec9a0c16dfcd3cf6f1227fffed8a681e1372cac345029dd3a858633c4  bin
++ echo '58677eaec9a0c16dfcd3cf6f1227fffed8a681e1372cac345029dd3a858633c4  bin'
++ sha256sum -c
+bin: OK
++ case $MODE in
++ D=/boot/home/config/non-packaged/add-ons/kernel/drivers
++ mkdir -p /boot/home/config/non-packaged/add-ons/kernel/drivers/bin /boot/home/config/non-packaged/add-ons/kernel/drivers/dev
++ cp bin /boot/home/config/non-packaged/add-ons/kernel/drivers/bin/null.new
++ chmod 755 /boot/home/config/non-packaged/add-ons/kernel/drivers/bin/null.new
++ mv /boot/home/config/non-packaged/add-ons/kernel/drivers/bin/null.new /boot/home/config/non-packaged/add-ons/kernel/drivers/bin/null
++ ln -sf ../bin/null /boot/home/config/non-packaged/add-ons/kernel/drivers/dev/null
++ ls -la /boot/home/config/non-packaged/add-ons/kernel/drivers/bin /boot/home/config/non-packaged/add-ons/kernel/drivers/dev
+/boot/home/config/non-packaged/add-ons/kernel/drivers/bin:
+total 22
+drwxr-xr-x 1 baron root  2048 Nov  1 17:49 .
+drwxr-xr-x 1 baron root  2048 Oct 19 21:14 ..
+-rwxr-xr-x 1 baron root 10467 Nov  1 17:49 null
+
+/boot/home/config/non-packaged/add-ons/kernel/drivers/dev:
+total 10
+drwxr-xr-x 1 baron root 2048 Nov  1 17:49 .
+drwxr-xr-x 1 baron root 2048 Oct 19 21:14 ..
+lrwxrwxrwx 1 baron root   11 Nov  1 17:49 null -> ../bin/null
++ sha256sum /boot/home/config/non-packaged/add-ons/kernel/drivers/bin/null
+58677eaec9a0c16dfcd3cf6f1227fffed8a681e1372cac345029dd3a858633c4  /boot/home/config/non-packaged/add-ons/kernel/drivers/bin/null
++ sync
++ sleep 15
++ sync
++ grep -i package /var/log/syslog
++ tail -15
+KERN: unknown: [2405235:    17] Adding packages from "/boot/system/packages"
+KERN: unknown: [4771319:    17] Adding packages from "/boot/home/config/packages"
+KERN: unknown: [4772947:    17] Failed to open packages activation file: No such file or directory
+KERN: unknown: [4773865:    17] Loading packages from activation file failed. Loading all packages in packages directory.
+KERN: package_daemon: [6359200:    43] root at "/boot" (device: 3, node: 524288) registered
+KERN: package_daemon: [6360707:    43] volume at "/boot/system" registered
+KERN: package_daemon: [6361669:    43] register_domain(9, unix)
+KERN: package_daemon: [6551193:    72] The latest volume state is also the currently active one
+KERN: package_daemon: [6552452:    72] Volume::InitialVerify((nil), (nil))
+KERN: package_daemon: [6573906:    72] Volume::InitialVerify(): volume at "/boot/system" is consistent
+KERN: package_daemon: [6575149:    72] Failed to open packages activation file /boot/home/config/packages/administrative/activated-packages: No such file or directory
+KERN: package_daemon: [6576904:    72] Failed to get activated packages info from activated packages file. Assuming all package files in package directory are activated.
+KERN: package_daemon: [6578848:    72] The latest volume state is also the currently active one
+KERN: package_daemon: [6579932:    72] Volume::InitialVerify(0x4336735200, (nil))
+KERN: package_daemon: [6581381:    72] KERN: Volume::InitialVerify(): volume at "/boot/home/config" is consistent
++ echo PREP_DONE
+PREP_DONE
