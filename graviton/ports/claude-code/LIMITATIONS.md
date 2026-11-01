@@ -490,10 +490,19 @@ don't handle. `M()`/`getPlatform()` (P5) is the helper that reports `haiku`.
   Claude Code prints one `ClaudeCodeHaiku` warning and the identity checks fail closed,
   as before P17. The command line (`mas`) is `team_info.args`, which the kernel cuts to
   63 bytes. Zombie state isn't read: `qno` (`/proc/<pid>/stat` state) stays Linux-only.
-- **Fix would need:** build it in the Haiku package recipe and install it at
-  `<prefix>/bin/cc-teaminfo`.
+- **Resolved:** the claude_code recipe builds `native/cc-teaminfo.c` on Haiku and installs
+  it at `<prefix>/bin/cc-teaminfo` (published in claude_code 2.1.314-1 and later).
 
-### Native file watching (`fs.watch`) is unavailable — AUDIT S29, W1–W18
+### Native file watching (`fs.watch`) — RESOLVED by DeBeOS libuv 1.52.1-3 (AUDIT S29, W1–W18)
+- **Resolved 2026-11-01:** libuv now has a Haiku fs-event backend (node monitoring; branch
+  `feat/libuv-haiku-fs-event`). It is published as libuv 1.52.1-3, which provides
+  `libuv_fs_event`, and claude_code 2.1.314-2 requires that, so a repo install pulls it in
+  (`evidence/20261101T034345Z_i-0e90d4b253c8134b3_enduser-fresh-install-3.log`). Measured in Claude Code itself: with the old libuv
+  `FileChanged: watcher error: ENOSYS` and the hook never fires; with the new one
+  `fs.watch probe: delivers` and the hook fires for each external edit (`evidence/20261101T024050Z_i-0e90d4b253c8134b3_filechanged-before-after-libuv.log`).
+  Remaining backend semantics (BFS reports writes at close or ≤1/s; a deleted watched
+  entry is reported once) are in libuv's `docs/src/fs_event.rst` on that branch. The
+  entry below is the original measurement, kept for the record.
 - **What:** on Haiku, Node 24.21.0's `fs.watch(dir)` throws synchronously:
   `Error: ENOSYS: function not implemented, watch '<path>'` (errno -2147454967, syscall
   `watch`). Measured on builder i-0e7bed4928e0f7bf7

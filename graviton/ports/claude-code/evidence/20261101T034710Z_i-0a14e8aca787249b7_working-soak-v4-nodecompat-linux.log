@@ -1,0 +1,12 @@
+# evidence: working-soak-v4-nodecompat-linux
+# instance: i-0a14e8aca787249b7   region: us-west-2
+# ssm command: 4bea10c5-114b-47c9-90aa-3ec988c29e81 (agent status: Success)
+# start: 20261101T034710Z   end: 20261101T051759Z   rc: 0   log bytes: 12104
+# script sha256: a5f1a877821fa30a37d2810248178efc4e650647cf72c5a99f8ed0bb9105ea4c
+# ---- script ----
+# | set -u
+# | echo '14df59bd6ea32e5ed4b3c6751d02aee48916af40625e336a4e8f2a5eb61481ce  /opt/cc/w-ws.stage/p.tgz' | sha256sum -c --quiet - || exit 1
+# | rm -rf /opt/cc/w-ws && mkdir -p /opt/cc/w-ws && tar xzf /opt/cc/w-ws.stage/p.tgz -C /opt/cc/w-ws 2>/dev/null
+# | cd /opt/cc/w-ws
+# | W=/opt/cc/w-ct; bash tools/working-soak.sh nodecompat 30 /opt/node24/bin/node --zero-fill-buffers $W/tree/claude.mjs; echo "rc=$?"
+# ---- raw output ----
