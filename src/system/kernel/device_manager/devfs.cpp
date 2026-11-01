@@ -346,6 +346,8 @@ devfs_delete_vnode(struct devfs* fs, struct devfs_vnode* vnode,
 		}
 	} else if (S_ISDIR(vnode->stream.type)) {
 		mutex_destroy(&vnode->stream.u.dir.scan_lock);
+	} else if (S_ISLNK(vnode->stream.type)) {
+		free((char*)vnode->stream.u.symlink.path);
 	}
 
 	free(vnode->name);
@@ -685,6 +687,32 @@ publish_directory(struct devfs* fs, const char* path)
 
 out:
 	return status;
+}
+
+
+static status_t
+publish_symlink(struct devfs* fs, const char* name, const char* target)
+{
+	ASSERT_LOCKED_RECURSIVE(&fs->lock);
+
+	if (devfs_find_in_dir(fs->root_vnode, name) != NULL)
+		return B_FILE_EXISTS;
+
+	struct devfs_vnode* vnode = devfs_create_vnode(fs, fs->root_vnode, name);
+	if (vnode == NULL)
+		return B_NO_MEMORY;
+
+	vnode->stream.type = S_IFLNK | 0777;
+	vnode->stream.u.symlink.path = strdup(target);
+	if (vnode->stream.u.symlink.path == NULL) {
+		free(vnode->name);
+		free(vnode);
+		return B_NO_MEMORY;
+	}
+	vnode->stream.u.symlink.length = strlen(target);
+
+	publish_node(fs, fs->root_vnode, vnode);
+	return B_OK;
 }
 
 
@@ -2200,6 +2228,18 @@ devfs_publish_directory(const char* path)
 	RecursiveLocker locker(&sDeviceFileSystem->lock);
 
 	return publish_directory(sDeviceFileSystem, path);
+}
+
+
+/*!	Publishes a symbolic link \a name in the root of devfs that points to
+	\a target.
+*/
+extern "C" status_t
+devfs_publish_symlink(const char* name, const char* target)
+{
+	RecursiveLocker locker(&sDeviceFileSystem->lock);
+
+	return publish_symlink(sDeviceFileSystem, name, target);
 }
 
 

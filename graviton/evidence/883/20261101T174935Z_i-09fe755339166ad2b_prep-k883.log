@@ -1,0 +1,121 @@
+# redacted: AWS account ID -> <ACCOUNT_ID>, presigned URL query -> <PRESIGNED>
+# evidence: prep-k883
+# instance: i-09fe755339166ad2b   region: us-west-2   transport: ssh via EC2 Instance Connect
+# start: 20261101T174935Z   end: 20261101T175015Z   rc: 0
+# script sha256: 1f0fc6ea47fe6ec941596964c4d95473d605e239c883320202ee8295e87d0244
+# ---- script ----
+# | MODE=kernel
+# | URL='https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/tdeffs/out/f883/kernel_arm64?<PRESIGNED>'
+# | SHA=75da565ce8325a1364eec728f0d6de2c3524369650c42768045506719c641181
+# | # prepended: MODE (kernel|bfs|null), URL, SHA
+# | set -x
+# | mkdir -p /boot/home/prep && cd /boot/home/prep
+# | curl -sSfL -o bin "$URL" || python3 -I -c 'import sys,urllib.request; urllib.request.urlretrieve(sys.argv[1], "bin")' "$URL"
+# | sha256sum bin
+# | echo "$SHA  bin" | sha256sum -c || exit 5
+# | case $MODE in
+# | kernel)
+# | 	P=$(ls /boot/system/packages/haiku-*.hpkg); echo "system package: $P"
+# | 	sha256sum $P /boot/system/kernel_arm64
+# | 	cp $P h.hpkg
+# | 	mkdir -p st && cp bin st/kernel_arm64 && chmod 755 st/kernel_arm64
+# | 	package add -f -C st h.hpkg kernel_arm64 || exit 6
+# | 	rm -rf x && mkdir x && package extract -C x h.hpkg kernel_arm64 && sha256sum x/kernel_arm64
+# | 	echo "$SHA  x/kernel_arm64" | sha256sum -c || exit 7
+# | 	package list -p $P | sort > before.lst; package list -p h.hpkg | sort > after.lst
+# | 	wc -l before.lst after.lst; diff before.lst after.lst && echo "entry list identical"
+# | 	package info h.hpkg | head -5
+# | 	mv h.hpkg $P && sha256sum $P
+# | 	;;
+# | bfs)
+# | 	D=/boot/home/config/non-packaged/add-ons/kernel/boot
+# | 	mkdir -p $D && cp bin $D/bfs.new && chmod 755 $D/bfs.new && mv $D/bfs.new $D/bfs
+# | 	ls -la $D; sha256sum $D/bfs
+# | 	;;
+# | null)
+# | 	D=/boot/home/config/non-packaged/add-ons/kernel/drivers
+# | 	mkdir -p $D/bin $D/dev && cp bin $D/bin/null.new && chmod 755 $D/bin/null.new && mv $D/bin/null.new $D/bin/null
+# | 	ln -sf ../bin/null $D/dev/null
+# | 	ls -la $D/bin $D/dev; sha256sum $D/bin/null
+# | 	;;
+# | esac
+# | sync; sleep 15; sync
+# | grep -i "package" /var/log/syslog | tail -15
+# | echo PREP_DONE
+# ---- raw output ----
++ mkdir -p /boot/home/prep
++ cd /boot/home/prep
++ curl -sSfL -o bin 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/tdeffs/out/f883/kernel_arm64?<PRESIGNED>'
+/tmp/ccrun/cc-20261101T174935Z-82331.sh: line 7: curl: command not found
++ python3 -I -c 'import sys,urllib.request; urllib.request.urlretrieve(sys.argv[1], "bin")' 'https://haiku-graviton-<ACCOUNT_ID>-us-west-2.s3.us-west-2.amazonaws.com/tdeffs/out/f883/kernel_arm64?<PRESIGNED>'
++ sha256sum bin
+75da565ce8325a1364eec728f0d6de2c3524369650c42768045506719c641181  bin
++ echo '75da565ce8325a1364eec728f0d6de2c3524369650c42768045506719c641181  bin'
++ sha256sum -c
+bin: OK
++ case $MODE in
+++ ls /boot/system/packages/haiku-r1~beta6_hrev59996-1-arm64.hpkg
++ P=/boot/system/packages/haiku-r1~beta6_hrev59996-1-arm64.hpkg
++ echo 'system package: /boot/system/packages/haiku-r1~beta6_hrev59996-1-arm64.hpkg'
+system package: /boot/system/packages/haiku-r1~beta6_hrev59996-1-arm64.hpkg
++ sha256sum /boot/system/packages/haiku-r1~beta6_hrev59996-1-arm64.hpkg /boot/system/kernel_arm64
+422bf6c0ec6b0603ca9250dd0525f518f92fd7f973bb045148875250eb48cae4  /boot/system/packages/haiku-r1~beta6_hrev59996-1-arm64.hpkg
+85737000e917732cf7399ec29d0dd98bb51322c2651d5f35622af61a029c3240  /boot/system/kernel_arm64
++ cp /boot/system/packages/haiku-r1~beta6_hrev59996-1-arm64.hpkg h.hpkg
++ mkdir -p st
++ cp bin st/kernel_arm64
++ chmod 755 st/kernel_arm64
++ package add -f -C st h.hpkg kernel_arm64
+----- Package Info ----------------
+header size:                     80
+heap size:                 20635311
+TOC size:                    321941
+package attributes size:       1100
+total size:                20635391
+-----------------------------------
++ rm -rf x
++ mkdir x
++ package extract -C x h.hpkg kernel_arm64
++ sha256sum x/kernel_arm64
+75da565ce8325a1364eec728f0d6de2c3524369650c42768045506719c641181  x/kernel_arm64
++ echo '75da565ce8325a1364eec728f0d6de2c3524369650c42768045506719c641181  x/kernel_arm64'
++ sha256sum -c
+x/kernel_arm64: OK
++ package list -p /boot/system/packages/haiku-r1~beta6_hrev59996-1-arm64.hpkg
++ sort
++ package list -p h.hpkg
++ sort
++ wc -l before.lst after.lst
+  3340 before.lst
+  3340 after.lst
+  6680 total
++ diff before.lst after.lst
+/tmp/ccrun/cc-20261101T174935Z-82331.sh: line 20: diff: command not found
++ package info h.hpkg
++ head -5
+name: haiku  version: r1~beta6_hrev59996-1
++ mv h.hpkg /boot/system/packages/haiku-r1~beta6_hrev59996-1-arm64.hpkg
++ sha256sum /boot/system/packages/haiku-r1~beta6_hrev59996-1-arm64.hpkg
+d49eee3051db89ca115cbc38d1130f1bd6686dc1289e54de30cd76140e54a02e  /boot/system/packages/haiku-r1~beta6_hrev59996-1-arm64.hpkg
++ sync
++ sleep 15
++ sync
++ grep -i package /var/log/syslog
++ tail -15
+KERN: unknown: [4825035:    17] Loading packages from activation file failed. Loading all packages in packages directory.
+KERN: package_daemon: [6339856:    43] net stack: receive FIFO sojourn discipline active (codel target 500 us, interval 10000 us, min 65536 bytes)
+KERN: package_daemon: [6350089:    43] volume at "/boot/system" registered
+KERN: package_daemon: [6352697:    43] register_domain(5, internet6)
+KERN: package_daemon: [6508505:    68] The latest volume state is also the currently active one
+KERN: package_daemon: [6509538:    68] Volume::InitialVerify((nil), (nil))
+KERN: package_daemon: [6547757:    68] Volume::InitialVerify(): volume at "/boot/system" is consistent
+KERN: package_daemon: [6549026:    68] Failed to open packages activation file /boot/home/config/packages/administrative/activated-packages: No such file or directory
+KERN: package_daemon: [6550776:    68] KERN: Failed to get activated packages info from activated packages file. Assuming all package files in package directory are activated.
+KERN: package_daemon: [6553739:    68] KERN: The latest volume state is also the currently active one
+KERN: package_daemon: [6558011:    68] KERN: Volume::InitialVerify(0x4d7f532200, (nil))
+KERN: package_daemon: [6562605:    68] KERN: Volume::InitialVerify(): volume at "/boot/home/config" is consistent
+KERN: package_daemon: [61638609:    68] Volume::_PackagesEntryRemoved("haiku-r1~beta6_hrev59996-1-arm64.hpkg")
+KERN: package_daemon: [61639739:    68] Volume::_PackagesEntryCreated("haiku-r1~beta6_hrev59996-1-arm64.hpkg")
+KERN: package_daemon: [61640967:    68] node monitoring created event for already known entry "haiku-r1~beta6_hrev59996-1-arm64.hpkg"
++ echo PREP_DONE
+PREP_DONE
